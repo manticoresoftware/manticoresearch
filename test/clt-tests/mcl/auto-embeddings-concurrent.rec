@@ -73,13 +73,10 @@ grep -c "duplicate id" /tmp/race_test.err
 ––– comment –––
 Verify only one record inserted despite race (first one wins)
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_concurrent WHERE id = 999"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM test_concurrent WHERE id = 999"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
+*************************** 1. row ***************************
+1
 ––– comment –––
 Test concurrent REPLACE with auto-embeddings regeneration
 ––– input –––

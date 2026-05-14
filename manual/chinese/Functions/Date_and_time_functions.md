@@ -1103,7 +1103,7 @@ POST /sql?mode=raw -d "select DATE_FORMAT(NOW(), 'year %Y and time %T')"
 
 ### DATE_HISTOGRAM()
 <!-- example DATE_HISTOGRAM -->
-`DATE_HISTOGRAM(expr, {calendar_interval='unit_name'})` 接受一个以单位名称为单位的桶大小，并返回该值对应的桶编号。值会被四舍五入到最接近的桶。关键函数为：
+`DATE_HISTOGRAM(expr, {calendar_interval='unit_name'})` 或 `DATE_HISTOGRAM(expr, {fixed_interval='interval'})` 接受一个以单位名称或固定间隔表示的桶大小，并返回该值的桶编号。值会四舍五入到最近的桶。关键函数是：
 ```sql
 key_of_the_bucket = interval * floor ( value / interval )
 ```
@@ -1120,11 +1120,15 @@ key_of_the_bucket = interval * floor ( value / interval )
 
 `fixed_interval` 合法的间隔包括：
 
+- `ms`, `1000ms`
+- `s`, `30s`
 - `minute`, `2m`
 - `hour`, `3h`
 - `day`, `5d`
 
 用于聚合、`FACET` 和分组。
+
+JSON `date_histogram` 聚合还支持 `time_zone` 和 `offset` 与 `calendar_interval`；参见 [Facet over histogram date values](../Searching/Faceted_search.md#Facet-over-histogram-date-values)。
 
 示例：
 
@@ -1180,4 +1184,3 @@ GROUP BY points ORDER BY points ASC;
 - `2010-04-20||+2M/d` 表示2010年6月20日，按天取整。
 
 <!-- proofread -->
-

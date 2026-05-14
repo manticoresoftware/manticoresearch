@@ -56,10 +56,10 @@ bool			HasImplicitGrouping ( const CSphQuery & tQuery );
 bool			sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema ); // check query for expressions
 int				GetAliasedAttrIndex ( const CSphString & sAttr, const CSphQuery & tQuery, const ISphSchema & tSchema );
 bool			IsGroupbyMagic ( const CSphString & s );
+bool			IsGroupbyOnlyMagic ( const CSphString & s );
 ESphAttr		DetermineNullMaskType ( int iNumAttrs );
 const char *	GetInternalAttrPrefix();
 const char *	GetInternalJsonPrefix();
 bool			IsSortStringInternal ( const CSphString & sColumnName );
 bool			IsSortJsonInternal ( const CSphString & sColumnName );
 CSphString		SortJsonInternalSet ( const CSphString & sColumnName );
-

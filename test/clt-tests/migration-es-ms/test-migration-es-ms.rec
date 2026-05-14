@@ -116,13 +116,10 @@ NODE_OPTIONS="--no-warnings" timeout 300 elasticdump --input=http://localhost:92
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | Total Writes: 464
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | dump complete
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM ms_index;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM ms_index"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|      464 |
-+----------+
+*************************** 1. row ***************************
+464
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "DESCRIBE ms_index;"
 ––– output –––

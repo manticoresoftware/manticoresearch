@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>facet filter mode SQL review coverage</name>
+
+<requires>
+<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>create table facet_sql_review ( title text, brand_id integer, color_id integer, color_name string, size_id integer, size_name string, sku string )</sphinxql>
+<sphinxql>insert into facet_sql_review ( id, title, brand_id, color_id, color_name, size_id, size_name, sku ) values
+(1,'p1',7,1,'red',10,'small','sku1'),
+(2,'p2',7,1,'red',20,'large','sku2'),
+(3,'p3',7,2,'blue',10,'small','sku3'),
+(4,'p4',7,3,'green',30,'xlarge','sku4'),
+(5,'p5',8,1,'red',10,'small','sku5'),
+(6,'p6',8,4,'black',20,'large','sku6'),
+(7,'p7',9,5,'white',10,'small','sku7')</sphinxql>
+
+<sphinxql>
+<!-- Legacy/default and explicit strict must stay strict and keep the facet multi-query multiplier. -->
+SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 LIMIT 0 FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC; SHOW META LIKE 'multiplier';
+SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='strict' FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC; SHOW META LIKE 'multiplier';
+
+<!-- Auto removes only the current facet's own filters, and keeps the other flat filters. -->
+SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 AND size_id=10 LIMIT 0 OPTION facet_filter_mode='auto' FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC; SHOW META LIKE 'multiplier';
+
+<!-- Max should be auto + status, not a global facet. color_id 4/5 are outside brand_id=7 and should not appear. -->
+SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC; SHOW META LIKE 'multiplier';
+
+<!-- Empty strict availability should still label broad auto buckets as unavailable. -->
+SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=99 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC;;
+
+<!-- Max status should also work when the visible facet is name BY id. -->
+SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='max' FACET color_name BY color_id ORDER BY FACET() ASC;;
+
+<!-- Clause order: FILTERS/EXCLUDE FILTERS before MODE, then ORDER/LIMIT. -->
+SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 AND size_id=10 LIMIT 0 OPTION facet_filter_mode='strict' FACET color_id FILTERS brand_id MODE max ORDER BY COUNT(*) DESC LIMIT 2 FACET size_id EXCLUDE FILTERS color_id MODE auto ORDER BY FACET() ASC FACET brand_id ALL FILTERS MODE max ORDER BY FACET() ASC;;
+</sphinxql>
+
+<!-- Complex boolean filter trees should fail clearly for facet-local rewrite modes in V1. -->
+<sphinxql>SELECT count(*) FROM facet_sql_review WHERE brand_id=7 OR color_id=1 LIMIT 0 OPTION facet_filter_mode='auto' FACET color_id</sphinxql>
+<sphinxql>SELECT count(*) FROM facet_sql_review WHERE brand_id=7 OR color_id=1 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id</sphinxql>
+
+<!-- Flat excluded filters are also unsupported for facet-local rewrites in V1; strict copying remains allowed. -->
+<sphinxql>SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id NOT IN (4) LIMIT 0 OPTION facet_filter_mode='strict' FACET color_id ORDER BY FACET() ASC;</sphinxql>
+<sphinxql>SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id NOT IN (4) LIMIT 0 OPTION facet_filter_mode='auto' FACET color_id ORDER BY FACET() ASC</sphinxql>
+
+<sphinxql>
+<!-- Main query pagination must not affect explicit facet bucket pagination under auto. -->
+SELECT id FROM facet_sql_review WHERE brand_id=7 AND color_id=1 ORDER BY id ASC LIMIT 1,1 OPTION facet_filter_mode='auto' FACET color_id ORDER BY FACET() ASC LIMIT 0,3;;
+
+<!-- Facet LIMIT offset,count should page auto buckets after removing only the facet's own filter. -->
+SELECT id FROM facet_sql_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='auto' FACET color_id ORDER BY FACET() ASC LIMIT 1,2;;
+
+<!-- Facet LIMIT offset,count should page max buckets and keep status for the returned page. -->
+SELECT id FROM facet_sql_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC LIMIT 1,2;;
+
+<!-- A low max_matches should still bound the number of facet buckets under auto. -->
+SELECT id FROM facet_sql_review WHERE brand_id=7 LIMIT 0 OPTION facet_filter_mode='auto', max_matches=2 FACET color_id ORDER BY FACET() ASC LIMIT 0,5;;
+</sphinxql>
+
+<sphinxql>DROP TABLE facet_sql_review</sphinxql>
+</queries>
+
+</test>

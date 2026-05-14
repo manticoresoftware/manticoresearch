@@ -95,7 +95,7 @@ static bool IsModelBackedEmbedding ( const SqlStmt_t & tStmt )
 	return ( tStmt.m_eAlterColType==SPH_ATTR_FLOAT_VECTOR && !!( tStmt.m_uAttrFlags & CSphColumnInfo::ATTR_INDEXED_KNN ) && !tStmt.m_tAlterKNNModel.m_sModelName.empty() );
 }
 
-static bool RunEmbeddingPopulateLoop ( const CSphRefcountedPtr<const ServedIndex_c> & pServed, const CSphString & sAttr, EmbeddingPopulate_e eMode, CSphString & sWarning, CSphString & sError )
+static bool RunEmbeddingPopulateLoop ( const CSphRefcountedPtr<const ServedIndex_c> & pServed, const CSphString & sAttr, EmbeddingPopulate_e eMode, CSphString & sWarning, CSphString & sError ) NO_THREAD_SAFETY_ANALYSIS
 {
 	sWarning = "";
 

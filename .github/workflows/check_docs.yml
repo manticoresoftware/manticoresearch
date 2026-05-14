@@ -15,6 +15,7 @@ jobs:
     outputs:
       repo: ${{ steps.repo-check.outputs.repo }}
       ref: ${{ steps.repo-check.outputs.ref }}
+      skip_translate: ${{ steps.repo-check.outputs.skip_translate }}
     permissions:
       contents: write
       pull-requests: read
@@ -30,19 +31,39 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           name: pr_repo
           path: .
+      - name: Download translate mode
+        if: github.event_name == 'workflow_run'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+          name: skip_translate
+          path: .
       - name: Check origin repository
         id: repo-check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
         run: |
-          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+          if [ "$EVENT_NAME" == "workflow_run" ]; then
             PR_REPO=$(cat ./pr_repo.txt)
             repo=$(head -n 1 <<< "$PR_REPO")
             ref=$(tail -n 1 <<< "$PR_REPO")
+            if [ -f ./skip_translate.txt ]; then
+              skip_translate=$(tr -d '\r\n' < ./skip_translate.txt)
+            else
+              skip_translate="false"
+            fi
           else
-            repo="${{ github.repository }}"
-            ref="${{ github.head_ref }}"
+            repo="$GITHUB_REPOSITORY"
+            ref="$GITHUB_HEAD_REF"
+            skip_translate="false"
           fi
           echo "repo=$repo" >> $GITHUB_OUTPUT
           echo "ref=$ref" >> $GITHUB_OUTPUT
+          echo "skip_translate=${skip_translate:-false}" >> $GITHUB_OUTPUT
       - name: Checkout
         uses: actions/checkout@v3
         with:
@@ -60,6 +81,7 @@ jobs:
           extensions: curl
 
       - name: Run auto-translate
+        if: steps.repo-check.outputs.skip_translate != 'true'
         env:
           OPENROUTER_TRANSLATOR_API_KEY: ${{ secrets.OPENROUTER_TRANSLATOR_API_KEY }}
         run: |
@@ -109,16 +131,24 @@ jobs:
     steps:
       - name: Check origin repository
         id: repo-check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TRANSLATE_DOCS_REPO: ${{ needs.translate_docs.outputs.repo }}
+          TRANSLATE_DOCS_REF: ${{ needs.translate_docs.outputs.ref }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          DEFAULT_REF: ${{ github.head_ref || github.ref_name }}
         run: |
-          if [ "${{ github.event_name }}" == "workflow_run" ]; then
-            repo="${{ needs.translate_docs.outputs.repo }}"
-            ref="${{ needs.translate_docs.outputs.ref }}"
-          elif [ "${{ github.event_name }}" == "pull_request" ]; then
-            repo="${{ github.event.pull_request.head.repo.full_name }}"
-            ref="${{ github.head_ref }}"
+          if [ "$EVENT_NAME" == "workflow_run" ]; then
+            repo="$TRANSLATE_DOCS_REPO"
+            ref="$TRANSLATE_DOCS_REF"
+          elif [ "$EVENT_NAME" == "pull_request" ]; then
+            repo="$PR_HEAD_REPO"
+            ref="$GITHUB_HEAD_REF"
           else
-            repo="${{ github.repository }}"
-            ref="${{ github.head_ref || github.ref_name }}"
+            repo="$GITHUB_REPOSITORY"
+            ref="$DEFAULT_REF"
           fi
           echo "repo=$repo" >> $GITHUB_OUTPUT
           echo "ref=$ref" >> $GITHUB_OUTPUT
@@ -134,33 +164,49 @@ jobs:
 
       - name: Fetch master and get changed files
         id: changed-files
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           git config --global --add safe.directory /__w/manticoresearch/manticoresearch
           # Update local master only if we're not currently on it
-          if [ "${{ github.ref_name }}" != "master" -a "${{ github.event_name }}" != "pull_request" ]; then
+          if [ "$REF_NAME" != "master" -a "$EVENT_NAME" != "pull_request" ]; then
             git fetch origin master:master
           fi
-          git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD | xargs
-          echo "changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD | xargs)" >> $GITHUB_OUTPUT
+          CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD)
+          printf '%s\n' "$CHANGED_FILES"
+          {
+            echo "changed_files<<EOF"
+            printf '%s\n' "$CHANGED_FILES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Get changed doc filepathes
         id: doc-filepathes
+        env:
+          CHANGED_FILES: ${{ steps.changed-files.outputs.changed_files }}
         run: |
-          filepathes=""
-          for file in ${{ steps.changed-files.outputs.changed_files }}; do
-            case "$file" in 
-              "$COMMIT_DIR/"*) 
-                 filepathes="$file $filepathes"
+          filepathes=()
+          while IFS= read -r file; do
+            case "$file" in
+              "$COMMIT_DIR/"*)
+                filepathes+=("$file")
               ;;
-             esac  
-          done
-          echo "$filepathes"
-          echo "filepathes=$filepathes" >> $GITHUB_OUTPUT
+            esac
+          done <<< "$CHANGED_FILES"
+          printf '%s\n' "${filepathes[@]}"
+          {
+            echo "filepathes<<EOF"
+            printf '%s\n' "${filepathes[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
       - name: Check docs
         id: check
+        env:
+          DOC_FILEPATHES: ${{ steps.doc-filepathes.outputs.filepathes }}
         run: |
-          docs_errors=$(php "/Deploy/check_docs_validity.php"  "${{ steps.doc-filepathes.outputs.filepathes }}" "$COMMIT_DIR/" "$DOCS_ERRORS_DIR" | xargs)
-          echo $docs_errors
+          docs_errors=$(php "/Deploy/check_docs_validity.php" "$DOC_FILEPATHES" "$COMMIT_DIR/" "$DOCS_ERRORS_DIR" | xargs)
+          echo "$docs_errors"
           echo "errors=$docs_errors" >> $GITHUB_OUTPUT
       - name: Check docs translations
         run: |

@@ -105,13 +105,10 @@ mysql -h0 -P9306 -e "select name, count(*), sum(price), max(price), min(price), 
 ––– comment –––
 Test COUNT(DISTINCT) on string attribute with duplicates - should show unique count
 ––– input –––
-mysql -h0 -P9306 -e "select count(distinct name) from t_str_rowwise;"
+mysql -NE -h0 -P9306 -e "select count(distinct name) from t_str_rowwise"
 ––– output –––
-+----------------------+
-| count(distinct name) |
-+----------------------+
-|                    4 |
-+----------------------+
+*************************** 1. row ***************************
+4
 ––– comment –––
 === Test 3: MAX/MIN on string attributes when grouping BY numeric fields (columnar storage) ===
 ––– comment –––

@@ -35,6 +35,9 @@ struct JsonAggr_t : public AggrSettings_t
 	CSphString	m_sCol;
 	int			m_iSize = 0;
 	CSphString	m_sSort;
+	FacetFilterTrait_t m_tFacetFilter;
+	int				m_iResult = -1;
+	int				m_iStrictResult = -1;
 	CSphVector<AggrComposite_t> m_dComposite;
 	CSphVector<CSphFilterSettings> m_dCompositeAfterKey;
 	struct MadDeviationEntry_t
@@ -108,4 +111,3 @@ bool ParseJsonInsertSource ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, bool bR
 bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );
 
 #endif
-

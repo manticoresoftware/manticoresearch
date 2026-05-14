@@ -394,11 +394,24 @@ void FormatDate ( time_t tDate, CSphString & sRes )
 }
 
 
+void FormatDate ( time_t tDate, const cctz::time_zone & tTZ, CSphString & sRes )
+{
+	sRes = FormatTime ( tDate, g_sCompatDateFormat, tTZ );
+}
+
+
 void FormatDate ( time_t tDate, StringBuilder_c & sRes )
 {
 	char sBuf[128];
 	FormatDate  ( tDate, sBuf, sizeof(sBuf)-1 );
 	sRes.Appendf ( "%s", sBuf );
+}
+
+
+void FormatDate ( time_t tDate, const cctz::time_zone & tTZ, StringBuilder_c & sRes )
+{
+	CSphString sDate = FormatTime ( tDate, g_sCompatDateFormat, tTZ );
+	sRes.Appendf ( "%s", sDate.cstr() );
 }
 
 static void FormatKeyDate ( const DateRangeSetting_t & tRange, int iNow, RangeKeyDesc_t & tDesc )
@@ -489,7 +502,13 @@ static CSphString DumpAggrHist ( const CSphString & sCol, const AggrDateHistSett
 	if ( tHist.m_bFixed )
 		sRes.Appendf ( "fixed_interval='%s'", tHist.m_sInterval.cstr() );
 	else
+	{
 		sRes.Appendf ( "calendar_interval='%s'", tHist.m_sInterval.cstr() );
+		if ( !tHist.m_sTimeZone.IsEmpty() )
+			sRes.Appendf ( ", calendar_interval_time_zone='%s'", tHist.m_sTimeZone.cstr() );
+		if ( tHist.m_iOffsetSeconds )
+			sRes.Appendf ( ", calendar_interval_offset='%s'", tHist.m_sOffset.cstr() );
+	}
 	sRes += "})";
 	return CSphString ( sRes );
 }
@@ -568,6 +587,100 @@ bool ParseAggrHistogram ( const VecTraits_T < CSphNamedVariant > & dVariants, Ag
 	return true;
 }
 
+bool LoadAggrDateHistogramTimeZone ( const CSphString & sTimeZone, cctz::time_zone & tTZ, CSphString & sError )
+{
+	if ( sTimeZone.IsEmpty() )
+	{
+		sError = "date_histogram time_zone missed";
+		return false;
+	}
+
+	if ( *sTimeZone.cstr()=='+' || *sTimeZone.cstr()=='-' )
+	{
+		sError.SetSprintf ( "date_histogram time_zone [%s] must be an IANA time zone name", sTimeZone.cstr() );
+		return false;
+	}
+
+	return LoadTimeZone ( sTimeZone.cstr(), tTZ, sError );
+}
+
+
+static bool DateIntervalToSeconds ( DateUnit_e eUnit, int iMulti, const CSphString & sExpr, int64_t & iSeconds, CSphString & sError )
+{
+	switch ( eUnit )
+	{
+	case DateUnit_e::ms:
+		if ( iMulti % 1000 )
+		{
+			sError.SetSprintf ( "date_histogram offset [%s] must be a whole number of seconds", sExpr.cstr() );
+			return false;
+		}
+		iSeconds = iMulti / 1000;
+		return true;
+
+	case DateUnit_e::sec:
+		iSeconds = iMulti;
+		return true;
+
+	case DateUnit_e::minute:
+		iSeconds = int64_t ( iMulti ) * 60;
+		return true;
+
+	case DateUnit_e::hour:
+		iSeconds = int64_t ( iMulti ) * 3600;
+		return true;
+
+	case DateUnit_e::day:
+		iSeconds = int64_t ( iMulti ) * 86400;
+		return true;
+
+	default:
+		sError.SetSprintf ( "The supplied offset [%s] could not be parsed as a fixed interval", sExpr.cstr() );
+		return false;
+	}
+}
+
+
+bool ParseAggrDateHistogramOffset ( const CSphString & sExpr, int64_t & iOffsetSeconds, CSphString & sError )
+{
+	if ( sExpr.IsEmpty() )
+	{
+		sError = "date_histogram offset missed";
+		return false;
+	}
+
+	const char * sStart = sExpr.cstr();
+	bool bNegative = false;
+	if ( *sStart=='+' || *sStart=='-' )
+	{
+		bNegative = ( *sStart=='-' );
+		++sStart;
+	}
+
+	if ( !*sStart )
+	{
+		sError.SetSprintf ( "unknown interval [%s]", sExpr.cstr() );
+		return false;
+	}
+
+	CSphString sInterval;
+	int iSignOffset = sStart - sExpr.cstr();
+	sInterval.SetBinary ( sStart, sExpr.Length() - iSignOffset );
+
+	auto [ eUnit, iMulti ] = ParseDateInterval ( sInterval, true, sError );
+	if ( eUnit==DateUnit_e::total_units )
+		return false;
+
+	if ( !DateIntervalToSeconds ( eUnit, iMulti, sExpr, iOffsetSeconds, sError ) )
+		return false;
+
+	if ( bNegative )
+		iOffsetSeconds = -iOffsetSeconds;
+
+	return true;
+}
+
+
 bool ParseAggrDateHistogram ( const VecTraits_T < CSphNamedVariant > & dVariants, AggrDateHistSetting_t & tHist, CSphString & sError )
 {
 	for ( const auto & tPair : dVariants )
@@ -583,6 +696,14 @@ bool ParseAggrDateHistogram ( const VecTraits_T < CSphNamedVariant > & dVariants
 			tHist.m_sInterval = tPair.m_sValue;
 			tHist.m_bFixed = ( tPair.m_sKey=="fixed_interval" );
 
+		} else if ( tPair.m_sKey=="calendar_interval_time_zone" )
+		{
+			tHist.m_sTimeZone = tPair.m_sValue;
+
+		} else if ( tPair.m_sKey=="calendar_interval_offset" )
+		{
+			tHist.m_sOffset = tPair.m_sValue;
+
 		} else
 		{
 			sError.SetSprintf ( "unknow value '%s'", tPair.m_sKey.cstr() );
@@ -596,8 +717,24 @@ bool ParseAggrDateHistogram ( const VecTraits_T < CSphNamedVariant > & dVariants
 		return false;
 	}
 
+	if ( tHist.m_bFixed && ( !tHist.m_sTimeZone.IsEmpty() || !tHist.m_sOffset.IsEmpty() ) )
+	{
+		sError.SetSprintf ( "date_histogram time_zone and offset are only supported with calendar_interval" );
+		return false;
+	}
+
 	DateUnit_e eUnit = ParseDateInterval ( tHist.m_sInterval, tHist.m_bFixed, sError ).first;
 	if ( eUnit==DateUnit_e::total_units )
+		return false;
+
+	if ( !tHist.m_sTimeZone.IsEmpty() )
+	{
+		cctz::time_zone tTimeZone;
+		if ( !LoadAggrDateHistogramTimeZone ( tHist.m_sTimeZone, tTimeZone, sError ) )
+			return false;
+	}
+
+	if ( !tHist.m_sOffset.IsEmpty() && !ParseAggrDateHistogramOffset ( tHist.m_sOffset, tHist.m_iOffsetSeconds, sError ) )
 		return false;
 
 	return true;
@@ -682,6 +819,7 @@ class AggrDateHistExpr_T : public Expr_ArgVsSet_T<int>
 	AggrDateHistSetting_t m_tHist;
 	DateUnit_e m_eUnit = DateUnit_e::total_units;
 	int m_iMulti = 1;
+	cctz::time_zone m_tTimeZone;
 
 public:
 	AggrDateHistExpr_T ( ISphExpr * pAttr, const AggrDateHistSetting_t & tHist )
@@ -694,6 +832,9 @@ public:
 		assert ( eUnit!=DateUnit_e::total_units );
 		m_eUnit = eUnit;
 		m_iMulti = iMulti;
+
+		if ( !m_tHist.m_sTimeZone.IsEmpty() )
+			Verify ( LoadAggrDateHistogramTimeZone ( m_tHist.m_sTimeZone, m_tTimeZone, sError ) );
 	}
 
 	int IntEval ( const CSphMatch & tMatch ) const final
@@ -710,7 +851,16 @@ protected:
 		if_const ( FIXED_INTERVAL ) 
 			RoundDate ( m_eUnit, m_iMulti, iVal );
 		else
-			RoundDate ( m_eUnit, iVal );
+		{
+			iVal -= m_tHist.m_iOffsetSeconds;
+
+			if ( !m_tHist.m_sTimeZone.IsEmpty() )
+				RoundDate ( m_eUnit, iVal, m_tTimeZone );
+			else
+				RoundDate ( m_eUnit, iVal );
+
+			iVal += m_tHist.m_iOffsetSeconds;
+		}
 
 		return iVal;
 	}
@@ -718,7 +868,12 @@ protected:
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
 	{
 		EXPR_CLASS_NAME("AggrDateHistExpr_T");
-		CALC_POD_HASH ( m_tHist );
+		CALC_STR_HASH ( m_tHist.m_sInterval, m_tHist.m_sInterval.Length() );
+		CALC_STR_HASH ( m_tHist.m_sTimeZone, m_tHist.m_sTimeZone.Length() );
+		CALC_STR_HASH ( m_tHist.m_sOffset, m_tHist.m_sOffset.Length() );
+		CALC_POD_HASH ( m_tHist.m_iOffsetSeconds );
+		CALC_POD_HASH ( m_tHist.m_bKeyed );
+		CALC_POD_HASH ( m_tHist.m_bFixed );
 		CALC_POD_HASH ( m_eUnit );
 		CALC_POD_HASH ( m_iMulti );
 		return CALC_DEP_HASHES();
@@ -735,6 +890,7 @@ private:
 		, m_tHist ( rhs.m_tHist )
 		, m_eUnit ( rhs.m_eUnit )
 		, m_iMulti ( rhs.m_iMulti )
+		, m_tTimeZone ( rhs.m_tTimeZone )
 	{
 	}
 };

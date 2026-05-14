@@ -184,7 +184,7 @@ uint64_t CSphTokenizerBase::GetSettingsFNV() const noexcept
 	DWORD uFlags = 0;
 	if ( m_bHasBlend )
 		uFlags |= 1 << 0;
-	uHash = sphFNV64 ( &uFlags, sizeof ( uFlags ), uHash );
+	uHash = sphFNV64 ( uFlags, uHash );
 
 	return uHash;
 }

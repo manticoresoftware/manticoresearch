@@ -15,6 +15,130 @@
 #include "sphinxexpr.h"
 #include <cmath>
 
+static constexpr double HAVERSINE_EARTH_RADIUS = 6384000.0;
+constexpr float ADAPTIVE_EARTH_RADIUS = 6371000.0f;
+
+constexpr double PI = 3.14159265358979323846;
+constexpr double TO_RAD = PI / 180.0;
+constexpr double TO_RAD2 = PI / 360.0;
+constexpr float TO_RADF = (float)( PI / 180.0 );
+constexpr float TO_RADF2 = (float)( PI / 360.0 );
+
+constexpr int GEODIST_TABLE_K		= 1024;
+constexpr int GEODIST_TABLE_ASIN	= 512;
+constexpr int GEODIST_TABLE_COS		= 1024; // maxerr 0.00063%
+
+static float g_GeoCos[GEODIST_TABLE_COS+1];		///< cos(x) table
+static float g_GeoAsin[GEODIST_TABLE_ASIN+1];	///< asin(sqrt(x)) table
+static float g_GeoFlatK[GEODIST_TABLE_K+1][2];	///< GeodistAdaptive() flat ellipsoid method k1,k2 coeffs table
+
+/// double argument squared
+static FORCE_INLINE double sqr ( double v )
+{
+	return v * v;
+}
+
+inline float GeodistSphereDeg ( float lat1, float lon1, float lat2, float lon2 )
+{
+	static const double D = 2*HAVERSINE_EARTH_RADIUS;
+	double dlat2 = TO_RAD2*( lat1 - lat2 );
+	double dlon2 = TO_RAD2*( lon1 - lon2 );
+	double a = sqr ( sin(dlat2) ) + cos ( TO_RAD*lat1 )*cos ( TO_RAD*lat2 )*sqr ( sin(dlon2) );
+	double c = asin ( Min ( 1.0, sqrt(a) ) );
+	return (float)(D*c);
+}
+
+static FORCE_INLINE float GeodistDegDiff ( float f )
+{
+	f = (float)fabs(f);
+	while ( f>360 )
+		f -= 360;
+	if ( f>180 )
+		f = 360-f;
+	return f;
+}
+
+float GeodistFlatDeg ( float fLat1, float fLon1, float fLat2, float fLon2 );
+
+static FORCE_INLINE float GeodistFastCos ( float x )
+{
+	auto y = (float)(fabs(x)*GEODIST_TABLE_COS/PI/2);
+	auto i = int(y);
+	y -= i;
+	i &= ( GEODIST_TABLE_COS-1 );
+	return g_GeoCos[i] + ( g_GeoCos[i+1]-g_GeoCos[i] )*y;
+}
+
+static FORCE_INLINE float GeodistFastSin ( float x )
+{
+	auto y = float(fabs(x)*GEODIST_TABLE_COS/PI/2);
+	auto i = int(y);
+	y -= i;
+	i = ( i - GEODIST_TABLE_COS/4 ) & ( GEODIST_TABLE_COS-1 ); // cos(x-pi/2)=sin(x), costable/4=pi/2
+	return g_GeoCos[i] + ( g_GeoCos[i+1]-g_GeoCos[i] )*y;
+}
+
+/// fast implementation of asin(sqrt(x))
+/// max error in floats 0.00369%, in doubles 0.00072%
+static inline float GeodistFastAsinSqrt ( float x )
+{
+	if ( x<0.122 )
+	{
+		// distance under 4546km, Taylor error under 0.00072%
+		auto y = (float)sqrt(x);
+		return y + x*y*0.166666666666666f + x*x*y*0.075f + x*x*x*y*0.044642857142857f;
+	}
+	if ( x<0.948 )
+	{
+		// distance under 17083km, 512-entry LUT error under 0.00072%
+		x *= GEODIST_TABLE_ASIN;
+		auto i = int(x);
+		return g_GeoAsin[i] + ( g_GeoAsin[i+1] - g_GeoAsin[i] )*( x-i );
+	}
+	return (float)asin ( sqrt(x) ); // distance over 17083km, just compute honestly
+}
+
+inline float GeodistAdaptiveDeg ( float lat1, float lon1, float lat2, float lon2 )
+{
+	const float dlat = GeodistDegDiff ( lat1-lat2 );
+	const float dlon = GeodistDegDiff ( lon1-lon2 );
+
+	if ( dlon<13 )
+	{
+		// points are close enough; use flat ellipsoid model
+		// interpolate sqr(k1), sqr(k2) coefficients using latitudes midpoint
+		const float m = ( lat1+lat2+180 )*GEODIST_TABLE_K/360; // [-90, 90] degrees -> [0, KTABLE] indexes
+		auto i = int(m);
+		i &= ( GEODIST_TABLE_K-1 );
+		const float kk1 = g_GeoFlatK[i][0] + ( g_GeoFlatK[i+1][0] - g_GeoFlatK[i][0] )*( m-i );
+		const float kk2 = g_GeoFlatK[i][1] + ( g_GeoFlatK[i+1][1] - g_GeoFlatK[i][1] )*( m-i );
+		return (float)sqrt ( ( dlat * dlat ) * kk1 + ( dlon * dlon ) * kk2 ); // note! order is important
+	}
+
+	// points too far away; use haversine
+	constexpr float D = 2.0f*ADAPTIVE_EARTH_RADIUS;
+	const float GeodistFastSindlat = GeodistFastSin ( dlat * TO_RADF2 );
+	const float GeodistFastSindlon = GeodistFastSin ( dlon * TO_RADF2 );
+	// notice sequence of calculation: that is important, since floating-point arithmetic is not transitive
+	// just changing sequence of multipliers cause different result produced, in some cases (test 125) 1m far from reference on arm64 vs x64
+	const float d = (GeodistFastSindlon * GeodistFastSindlon) * GeodistFastCos ( lat1 * TO_RADF ) * GeodistFastCos ( lat2 * TO_RADF );
+
+	// select geodist(2.2,2.2,0.0,0.0) a;
+	// gives 7754368.500000 on arm64
+	// gives 7754367.500000 on x64
+	//
+	// const float a = GeodistFastSindlat * GeodistFastSindlat + d;
+	// = 0.326833007591961793912669481665389525915 ( reference 128bit float with sollya - www.sollya.org )
+	// = 0.32683298 on x64
+	// = 0.32683301 on arm64
+	//
+	// split into following steps gives 0.32683298 on both x64 and arm64; let's use this as universal solution
+	const float GeodistFastSindlatSqr = GeodistFastSindlat * GeodistFastSindlat;
+	const float a = GeodistFastSindlatSqr + d;
+
+	return D * GeodistFastAsinSqrt ( a );
+}
+
 // conversion between degrees and radians
 static const double MY_PI = 3.14159265358979323846;
 static const double TO_RADD = MY_PI / 180.0;

@@ -53,6 +53,23 @@ void operator>> ( InputBuffer_c & dIn, CSphNamedInt & tValue )
 	tValue.second = dIn.GetInt ();
 }
 
+static void SendStringVec ( ISphOutputBuffer & tOut, const StrVec_t & dStrings )
+{
+	tOut.SendInt ( dStrings.GetLength() );
+	for ( const auto & sValue : dStrings )
+		tOut.SendString ( sValue.cstr() );
+}
+
+static void SendFacetFilterTrait ( ISphOutputBuffer & tOut, const FacetFilterTrait_t & tTrait )
+{
+	tOut.SendByte ( tTrait.m_tMode.has_value() );
+	if ( tTrait.m_tMode )
+		tOut.SendByte ( (BYTE)*tTrait.m_tMode );
+
+	tOut.SendByte ( (BYTE)tTrait.m_eClause );
+	SendStringVec ( tOut, tTrait.m_dAttrs );
+}
+
 void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, int iWeight ) const
 {
 	bool bAgentWeight = ( iWeight!=-1 );
@@ -319,6 +336,10 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	}
 
 	tOut.SendString ( q.m_sExpandBlended.cstr() );
+
+	tOut.SendByte ( q.m_bFacetMaxRef );
+	SendFacetFilterTrait ( tOut, q.m_tFacetFilter );
+	SendStringVec ( tOut, q.m_dFacetOwnFilterAttrs );
 }
 
 
@@ -598,6 +619,25 @@ extern int g_iMaxFilters;
 extern int g_iMaxFilterValues;
 extern bool	g_bIOStats;
 static auto& g_bCpuStats 	= sphGetbCpuStat ();
+
+static void ParseStringVec ( InputBuffer_c & tReq, StrVec_t & dStrings )
+{
+	int iCount = tReq.GetInt();
+	dStrings.Resize ( iCount );
+	for ( auto & sValue : dStrings )
+		sValue = tReq.GetString();
+}
+
+static void ParseFacetFilterTrait ( InputBuffer_c & tReq, FacetFilterTrait_t & tTrait )
+{
+	tTrait.m_tMode.reset();
+	bool bHasMode = !!tReq.GetByte();
+	if ( bHasMode )
+		tTrait.m_tMode = (FacetFilterMode_e)tReq.GetByte();
+
+	tTrait.m_eClause = (FacetFilterClause_e)tReq.GetByte();
+	ParseStringVec ( tReq, tTrait.m_dAttrs );
+}
 
 
 static bool ParseSearchFilter ( CSphFilterSettings & tFilter, InputBuffer_c & tReq, ISphOutputBuffer & tOut, int iMasterVer, DWORD uVer )
@@ -1194,6 +1234,13 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 	if ( uMasterVer>=27 )
 		tQuery.m_sExpandBlended = tReq.GetString();
+
+	if ( uMasterVer>=30 )
+	{
+		tQuery.m_bFacetMaxRef = !!tReq.GetByte();
+		ParseFacetFilterTrait ( tReq, tQuery.m_tFacetFilter );
+		ParseStringVec ( tReq, tQuery.m_dFacetOwnFilterAttrs );
+	}
 
 	/////////////////////
 	// additional checks

@@ -69,8 +69,9 @@ manticore-load --quiet --json --batch-size=1000 --threads=8 --total=30000 --init
     }
 }
 ––– input –––
-mysql -N -h0 -P9306 -e "select count(*) from test3;" | grep -Eo '[0-9]+' | tail -n1
+mysql -NE -h0 -P9306 -e "select count(*) from test3"
 ––– output –––
+*************************** 1. row ***************************
 30000
 ––– comment –––
 For both operators below, the untimed result set is the reference answer.

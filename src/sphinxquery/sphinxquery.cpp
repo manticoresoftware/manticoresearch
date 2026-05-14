@@ -40,7 +40,7 @@ void XQLimitSpec_t::SetFieldSpec ( const FieldMask_t & uMask, int iMaxPos )
 uint64_t XQLimitSpec_t::Hash () const noexcept
 {
 	uint64_t uHash = sphFNV64 ( &m_dFieldMask, sizeof ( m_dFieldMask ) );
-	uHash = sphFNV64 ( &m_iFieldMaxPos, sizeof ( m_iFieldMaxPos ), uHash );
+	uHash = sphFNV64 ( m_iFieldMaxPos, uHash );
 	if ( m_bZoneSpan )
 		++uHash;
 	if ( !m_dZones.IsEmpty() )

@@ -22,13 +22,15 @@ INSERT INTO t2 (title, content) VALUES ('Local Title 3', 'Local Content 3'), ('L
 mysql -h0 -P1306 -e " CREATE TABLE dist_table type='distributed' local='t1' agent='127.0.0.1:2312:t2' "
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "SELECT COUNT(*) FROM dist_table\G" | grep count
+mysql -NE -h0 -P1306 -e "SELECT COUNT(*) FROM dist_table"
 ––– output –––
-count(*): 4
+*************************** 1. row ***************************
+4
 ––– input –––
 mysql -h0 -P1306 -e "TRUNCATE TABLE dist_table"
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "SELECT COUNT(*) FROM dist_table\G" | grep count
+mysql -NE -h0 -P1306 -e "SELECT COUNT(*) FROM dist_table"
 ––– output –––
-count(*): 0
+*************************** 1. row ***************************
+0

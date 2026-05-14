@@ -24,13 +24,10 @@ mysql -h0 -P9306 -e "SHOW CREATE TABLE name;" | grep "min_infix_len='2'" | sed "
 ––– output –––
 )min_infix_len='2'expand_keywords='1' |
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM name"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|  1000000 |
-+----------+
+*************************** 1. row ***************************
+1000000
 ––– input –––
 mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1;"
 ––– output –––

@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>facet filter mode distributed review coverage</name>
+
+<requires>
+<force-rt/>
+<http/>
+</requires>
+
+<skip_indexer/>
+<num_agents>2</num_agents>
+
+<config>
+<agent0>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</agent0>
+<agent1>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data1"/>
+}
+</agent1>
+</config>
+
+<queries>
+<sphinxql d="0">
+create table facet_local_a ( title text, brand_id integer, color_id integer, color_name string, size_id integer, size_name string, sku string );
+insert into facet_local_a ( id, title, brand_id, color_id, color_name, size_id, size_name, sku ) values
+(1,'p1',7,1,'red',10,'small','sku1'),
+(3,'p3',7,2,'blue',10,'small','sku3'),
+(5,'p5',8,1,'red',10,'small','sku5');
+
+create table facet_local_b ( title text, brand_id integer, color_id integer, color_name string, size_id integer, size_name string, sku string );
+insert into facet_local_b ( id, title, brand_id, color_id, color_name, size_id, size_name, sku ) values
+(2,'p2',7,1,'red',20,'large','sku2'),
+(4,'p4',7,3,'green',30,'xlarge','sku4'),
+(6,'p6',8,4,'black',20,'large','sku6'),
+(7,'p7',9,5,'white',10,'small','sku7');
+
+create table facet_dist_local type='distributed' local='facet_local_a' local='facet_local_b';
+</sphinxql>
+
+<sphinxql d="1">
+create table facet_agent_a ( title text, brand_id integer, color_id integer, color_name string, size_id integer, size_name string, sku string );
+insert into facet_agent_a ( id, title, brand_id, color_id, color_name, size_id, size_name, sku ) values
+(1,'p1',7,1,'red',10,'small','sku1'),
+(3,'p3',7,2,'blue',10,'small','sku3'),
+(5,'p5',8,1,'red',10,'small','sku5');
+
+create table facet_agent_b ( title text, brand_id integer, color_id integer, color_name string, size_id integer, size_name string, sku string );
+insert into facet_agent_b ( id, title, brand_id, color_id, color_name, size_id, size_name, sku ) values
+(2,'p2',7,1,'red',20,'large','sku2'),
+(4,'p4',7,3,'green',30,'xlarge','sku4'),
+(6,'p6',8,4,'black',20,'large','sku6'),
+(7,'p7',9,5,'white',10,'small','sku7');
+</sphinxql>
+
+<sphinxql d="0">
+create table facet_dist_agent type='distributed' agent='<agent1_address/>:facet_agent_a' agent='<agent1_address/>:facet_agent_b';
+</sphinxql>
+
+<sphinxql d="0">
+<!-- Distributed locals: legacy/default strict should keep all filters. -->
+SELECT count(*) FROM facet_dist_local WHERE brand_id=7 AND color_id=1 LIMIT 0 FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC;;
+
+<!-- Distributed locals: auto should remove only the current facet's own filter. -->
+SELECT count(*) FROM facet_dist_local WHERE brand_id=7 AND color_id=1 AND size_id=10 LIMIT 0 OPTION facet_filter_mode='auto' FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC;;
+
+<!-- Distributed locals: max should be auto plus strict availability status. -->
+SELECT count(*) FROM facet_dist_local WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC;;
+
+<!-- Distributed locals: empty strict availability should mark broad buckets unavailable. -->
+SELECT count(*) FROM facet_dist_local WHERE brand_id=7 AND color_id=99 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC;;
+
+<!-- Distributed locals: hidden availability helpers must not corrupt a later statement. -->
+SELECT count(*) FROM facet_dist_local WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC; SELECT count(*) FROM facet_dist_local WHERE brand_id=7;;
+
+<!-- Distributed agents: legacy/default strict should keep all filters. -->
+SELECT count(*) FROM facet_dist_agent WHERE brand_id=7 AND color_id=1 LIMIT 0 FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC;;
+
+<!-- Distributed agents: auto should remove only the current facet's own filter. -->
+SELECT count(*) FROM facet_dist_agent WHERE brand_id=7 AND color_id=1 AND size_id=10 LIMIT 0 OPTION facet_filter_mode='auto' FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC;;
+
+<!-- Distributed agents: max should be auto plus strict availability status. -->
+SELECT count(*) FROM facet_dist_agent WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC;;
+
+<!-- Distributed agents: empty strict availability should mark broad buckets unavailable. -->
+SELECT count(*) FROM facet_dist_agent WHERE brand_id=7 AND color_id=99 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC;;
+
+<!-- Distributed agents: hidden availability helpers must not corrupt a later statement. -->
+SELECT count(*) FROM facet_dist_agent WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC; SELECT count(*) FROM facet_dist_agent WHERE brand_id=7;;
+</sphinxql>
+<!-- JSON over distributed locals: top-level auto should remove only the aggregation's own filter. -->
+<query endpoint="search">{
+  "table": "facet_dist_local",
+  "limit": 0,
+  "facet_filter_mode": "auto",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } }, { "equals": { "size_id": 10 } } ] } },
+  "aggs": {
+    "color_auto_dist_local": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } },
+    "size_auto_dist_local": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } } }
+  }
+}</query>
+
+<!-- JSON over distributed locals: top-level max should include availability status. -->
+<query endpoint="search">{
+  "table": "facet_dist_local",
+  "limit": 0,
+  "facet_filter_mode": "max",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
+  "aggs": {
+    "color_max_dist_local": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } },
+    "size_max_dist_local": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } } }
+  }
+}</query>
+
+<!-- JSON over distributed locals: empty strict availability should mark broad buckets unavailable. -->
+<query endpoint="search">{
+  "table": "facet_dist_local",
+  "limit": 0,
+  "facet_filter_mode": "max",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 99 } } ] } },
+  "aggs": {
+    "color_empty_dist_local": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } }
+  }
+}</query>
+
+<!-- JSON over distributed agents: top-level auto should remove only the aggregation's own filter. -->
+<query endpoint="search">{
+  "table": "facet_dist_agent",
+  "limit": 0,
+  "facet_filter_mode": "auto",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } }, { "equals": { "size_id": 10 } } ] } },
+  "aggs": {
+    "color_auto_dist_agent": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } },
+    "size_auto_dist_agent": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } } }
+  }
+}</query>
+
+<!-- JSON over distributed agents: top-level max should include availability status. -->
+<query endpoint="search">{
+  "table": "facet_dist_agent",
+  "limit": 0,
+  "facet_filter_mode": "max",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
+  "aggs": {
+    "color_max_dist_agent": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } },
+    "size_max_dist_agent": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } } }
+  }
+}</query>
+
+<!-- JSON over distributed agents: empty strict availability should mark broad buckets unavailable. -->
+<query endpoint="search">{
+  "table": "facet_dist_agent",
+  "limit": 0,
+  "facet_filter_mode": "max",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 99 } } ] } },
+  "aggs": {
+    "color_empty_dist_agent": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } }
+  }
+}</query>
+
+<sphinxql d="0">
+drop table facet_dist_agent;
+drop table facet_dist_local;
+drop table facet_local_a;
+drop table facet_local_b;
+</sphinxql>
+
+<sphinxql d="1">
+drop table facet_agent_a;
+drop table facet_agent_b;
+</sphinxql>
+</queries>
+
+</test>

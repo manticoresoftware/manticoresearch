@@ -88,13 +88,10 @@ timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/se
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       57 |
-+----------+
+*************************** 1. row ***************************
+57
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka ORDER BY id ASC;"
 ––– output –––
@@ -199,13 +196,10 @@ timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/se
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_metadata;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_metadata"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       46 |
-+----------+
+*************************** 1. row ***************************
+46
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_metadata ORDER BY id ASC;"
 ––– output –––
@@ -253,13 +247,10 @@ timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/se
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_tags;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_tags"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       23 |
-+----------+
+*************************** 1. row ***************************
+23
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_tags ORDER BY id ASC;"
 ––– output –––
@@ -285,7 +276,7 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_tags 
 |   41 | Don't Count Your Chickens Before They Hatch | ISO 97531:24680 | %{DATETIME} | 20,25,30 | ["test","data","item1"] |
 |   42 | Every Dog Has His Day                       | ISO 56789:86420 | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
 |   46 | Money Doesn't Grow On "Trees                | ISO 97531:86420 | %{DATETIME} | 20,25,30 | ["test","data","item1"] |
-|   47 | No Pain, No Gain                            | ISO 13579:86420 | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
+|   47 | No Pain, No \Gain                           | ISO 13579:86420 | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
 +------+---------------------------------------------+-----------------+---------------------+----------+-------------------------+
 ––– input –––
 CONSUMER_GROUP="manticore_alter"
@@ -311,21 +302,15 @@ docker exec manticore mysql -h0 -P9306 -e "ALTER MATERIALIZED VIEW view_table_al
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_alter;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_alter"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       50 |
-+----------+
+*************************** 1. row ***************************
+50
 ––– input –––
-sleep 10; docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_alter;"
+sleep 10; docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_alter"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       50 |
-+----------+
+*************************** 1. row ***************************
+50
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "ALTER MATERIALIZED VIEW view_table_alter suspended=0;"; echo $?
 ––– output –––
@@ -335,13 +320,10 @@ timeout 120 bash -c 'while [[ $(docker exec manticore mysql -h0 -P9306 -e "SELEC
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_alter;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_alter"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       57 |
-+----------+
+*************************** 1. row ***************************
+57
 ––– input –––
 CONSUMER_GROUP="manticore_ts"
 ––– block: ../../base/kafka-reset-consumer-offsets –––
@@ -362,13 +344,10 @@ timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/se
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_ts;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_ts"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       26 |
-+----------+
+*************************** 1. row ***************************
+26
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_ts ORDER BY id ASC;"
 ––– output –––
@@ -391,7 +370,7 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_ts OR
 |   44 | Ignorance Is Bliss                            | ISO 97531:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
 |   45 | The Best Things In Life Are Free              | ISO 24680:1357  | %{DATETIME} | 20,25,30 |      1690761600 |
 |   46 | Money Doesn't Grow On "Trees                  | ISO 97531:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
-|   47 | No Pain, No Gain                              | ISO 13579:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
+|   47 | No Pain, No \Gain                             | ISO 13579:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
 |   48 | When In Rome, Do As The Romans Do             | ISO 56789:12345 | %{DATETIME} | 20,25,30 |      1690761600 |
 |   49 | Better Late Than Never                        | ISO 86420:97531 | %{DATETIME} | 20,25,30 |      1690761600 |
 |   50 | All's Well That Ends Well                     | ISO 13579:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
@@ -416,13 +395,10 @@ timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/se
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_combined;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_combined"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        5 |
-+----------+
+*************************** 1. row ***************************
+5
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_combined ORDER BY id ASC;"
 ––– output –––
@@ -432,7 +408,7 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_combi
 |   36 | A Penny For Your Thoughts                     | ISO 86420:97531 | %{DATETIME} | Extra data for item 36 | 20,25,30 | 54.000000 | 8.000000 |  3600 | ["test","data","item1"] |         1690761600 |
 |   37 | Bite The Bullet                               | ISO 13579:86420 | %{DATETIME} | Extra data for item 37 | 20,25,30 | 55.000000 | 9.000000 |  3700 | ["test","data","item2"] |         1690761600 |
 |   46 | Money Doesn't Grow On "Trees                  | ISO 97531:86420 | %{DATETIME} | Extra data for item 46 | 20,25,30 | 54.000000 | 8.000000 |  4600 | ["test","data","item1"] |         1690761600 |
-|   47 | No Pain, No Gain                              | ISO 13579:86420 | %{DATETIME} | Extra data for item 47 | 20,25,30 | 55.000000 | 9.000000 |  4700 | ["test","data","item2"] |         1690761600 |
+|   47 | No Pain, No \Gain                             | ISO 13579:86420 | %{DATETIME} | Extra data for item 47 | 20,25,30 | 55.000000 | 9.000000 |  4700 | ["test","data","item2"] |         1690761600 |
 |   56 | The Grass Is Always Greener On The Other Side | ISO 97531:86420 | %{DATETIME} | Extra data for item 56 | 20,25,30 | 54.000000 | 8.000000 |  5600 | ["test","data","item1"] |         1690761600 |
 +------+-----------------------------------------------+-----------------+---------------------+------------------------+----------+-----------+----------+-------+-------------------------+--------------------+
 ––– input –––
@@ -455,13 +431,10 @@ timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/se
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_stop;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_stop"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       50 |
-+----------+
+*************************** 1. row ***************************
+50
 ––– input –––
 sleep 1; docker exec manticore stdbuf -oL searchd --stopwait
 ––– output –––
@@ -480,13 +453,10 @@ timeout 120 bash -c 'while [[ $(docker exec manticore mysql -h0 -P9306 -e "SELEC
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_stop;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_stop"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       57 |
-+----------+
+*************************** 1. row ***************************
+57
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE invalid-source (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_invalid' num_consumers='1' batch=50;"
 ––– output –––
@@ -535,13 +505,10 @@ timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/se
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_drop_source;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_drop_source"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       57 |
-+----------+
+*************************** 1. row ***************************
+57
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "ALTER MATERIALIZED VIEW view_drop_source suspended=1"; echo $?
 ––– output –––

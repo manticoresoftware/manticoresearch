@@ -32,25 +32,19 @@ mysql -h0 -P9306 -e "SET GLOBAL qcache_max_bytes=16000000; SET GLOBAL qcache_thr
 ––– comment –––
 Baseline: count documents with MATCH('hard') - result will be cached
 ––– input –––
-mysql -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard');"
+mysql -NE -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard')"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|   229322 |
-+----------+
+*************************** 1. row ***************************
+229322
 ––– comment –––
 Critical: same MATCH + type=5 filter + SecondaryIndex hint
 Bug: returned 183114 (wrong cache hit), correct: 2252
 After fix: cache is disabled when hint is used
 ––– input –––
-mysql -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5 /*+ SecondaryIndex(type) */;"
+mysql -NE -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5 /*+ SecondaryIndex(type) */"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|     2252 |
-+----------+
+*************************** 1. row ***************************
+2252
 ––– comment –––
 Verify cache was NOT used for query with hint (qcache_hits should be 0)
 ––– input –––
@@ -63,13 +57,10 @@ Counter: qcache_hits
 Control: same filter WITHOUT hint - should return same result (2252)
 Query without hint SHOULD use cache
 ––– input –––
-mysql -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5;"
+mysql -NE -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|     2252 |
-+----------+
+*************************** 1. row ***************************
+2252
 ––– comment –––
 Verify cache WAS used for query without hint (qcache_hits should increase)
 ––– input –––
@@ -104,30 +95,21 @@ mysql -h0 -P9306 -e "SET GLOBAL qcache_max_bytes=0;"
 ––– comment –––
 Re-run baseline without cache - expect 229322
 ––– input –––
-mysql -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard');"
+mysql -NE -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard')"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|   229322 |
-+----------+
+*************************** 1. row ***************************
+229322
 ––– comment –––
 Re-run with hint without cache - proves bug was in cache, not SecondaryIndex
 ––– input –––
-mysql -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5 /*+ SecondaryIndex(type) */;"
+mysql -NE -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5 /*+ SecondaryIndex(type) */"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|     2252 |
-+----------+
+*************************** 1. row ***************************
+2252
 ––– comment –––
 Re-run without hint - verify consistency (2252)
 ––– input –––
-mysql -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5;"
+mysql -NE -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|     2252 |
-+----------+
+*************************** 1. row ***************************
+2252

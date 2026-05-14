@@ -144,13 +144,10 @@ ERROR 1064 (42000) at line 1: P01: syntax error, unexpected null near 'NULL)'
 ––– comment –––
 Test 14: Verify only valid record was inserted
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_empty"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM test_empty"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
+*************************** 1. row ***************************
+1
 ––– comment –––
 === ENGINE CONFIGURATION TESTS ===
 ––– comment –––

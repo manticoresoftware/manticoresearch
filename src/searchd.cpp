@@ -55,6 +55,7 @@
 #include "std/tdigest.h"
 #include "std/tdigest_runtime.h"
 #include "daemon/notifier.h"
+#include "facetutils.h"
 #include "daemon/daemon_ipc.h"
 
 // services
@@ -163,9 +164,8 @@ CSphString				g_sBannerVersion { szMANTICORE_NAME };
 CSphString				g_sBanner;
 CSphString				g_sStatusVersion = szMANTICORE_VERSION;
 CSphString				g_sSecondaryError;
-static CSphString		g_sBuddyPath;
+static std::optional<CSphString>		g_sBuddyPath;
 static bool				g_bTelemetry = env_bool ( "MANTICORE_TELEMETRY" ).value_or ( true );
-static bool				g_bHasBuddyPath = false;
 static bool				g_bAutoSchema = true;
 static bool				g_bNoChangeCwd = env_exists ( "MANTICORE_NO_CHANGE_CWD" );
 static bool				g_bCwdChanged = false;
@@ -609,9 +609,7 @@ static int sphCreateUnixSocket ( const char * sPath ) REQUIRES ( MainThread )
 	static struct sockaddr_un uaddr;
 	size_t len = strlen ( sPath );
 
-	if ( len + 1 > sizeof( uaddr.sun_path ) )
-		sphFatal ( "UNIX socket path is too long (len=%d)", (int)len );
-
+	assert ( len + 1 <= sizeof( uaddr.sun_path ) );
 	sphInfo ( "listening on UNIX socket %s", sPath );
 
 	memset ( &uaddr, 0, sizeof(uaddr) );
@@ -3759,7 +3757,7 @@ static void SendMysqlPercolateReply ( RowBuffer_i & tOut, const CPqResult & tRes
 	StringBuilder_c sDocs;
 	for ( const auto &tDesc : tRes.m_dQueryDesc )
 	{
-		tOut.PutNumAsString ( tDesc.m_iQUID );
+		tOut.PutInt64 ( tDesc.m_iQUID );
 		if ( bDumpDocs )
 		{
 			sDocs.StartBlock ( "," );
@@ -7016,12 +7014,12 @@ void HandleShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	{
 		if ( !bAll && dThd.m_eTaskState==TaskState_e::UNKNOWN )
 			continue;
-		tOut.PutNumAsString ( dThd.m_iThreadID ); // TID
+		tOut.PutDWORD ( dThd.m_iThreadID ); // TID
 		tOut.PutString ( dThd.m_sThreadName ); // Name
 		tOut.PutString ( dThd.m_sProto ); // Proto
 		tOut.PutString ( TaskStateName ( dThd.m_eTaskState ) ); // State
 		tOut.PutString ( dThd.m_sClientName ); // Connection from
-		tOut.PutNumAsString ( dThd.m_iConnID ); // ConnID
+		tOut.PutInt64 ( dThd.m_iConnID ); // ConnID
 		int64_t tmNow = sphMicroTimer (); // short-term cache
 //		tOut.PutMicrosec ( tmNow-dThd.m_tmStart.value_or(tmNow) ); // time
 //		tOut.PutTimeAsString ( dThd.m_tmTotalWorkedTimeUS ); // work time
@@ -7039,7 +7037,7 @@ void HandleShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 //			tOut.PutTimeAsString ( dThd.m_tmTotalWorkedCPUTimeUS ); // work CPU time
 			tOut.PutPercentAsString ( dThd.m_tmTotalWorkedCPUTimeUS, dThd.m_tmTotalWorkedTimeUS ); // CPU activity as integer
 		}
-		tOut.PutNumAsString ( dThd.m_iTotalJobsDone ); // jobs done
+		tOut.PutDWORD ( dThd.m_iTotalJobsDone ); // jobs done
 		if ( dThd.m_tmLastJobStartTimeUS<0 )
 		{
 			tOut.PutString ( "idling" ); // idle for
@@ -7113,7 +7111,7 @@ void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt )
 		tOut.PutString ( dThd.m_sProto );
 		tOut.PutString ( TaskStateName ( dThd.m_eTaskState ) );
 		tOut.PutString ( dThd.m_sClientName );												   // Host
-		tOut.PutNumAsString ( dThd.m_iConnID );												   // ConnID
+		tOut.PutInt64 ( dThd.m_iConnID );												   // ConnID
 		tOut.PutNumAsString ( dThd.m_bKilled ? 1 : 0);
 		if ( bAll )
 			tOut.PutString ( dThd.m_sChain ); // Chain
@@ -7797,7 +7795,15 @@ static void ReturnZeroCount ( const CSphSchema & tSchema, const CSphBitvec & tAt
 		// @count or its alias or count(distinct attr_name)
 		if ( dCounts.Contains ( tCol.m_sName ) )
 		{
-			dRows.PutNumAsString ( 0 );
+			switch (ESphAttr2MysqlColumn(tCol.m_eAttrType)) {
+			case MYSQL_COL_LONG: dRows.PutDWORD(0); break;
+			case MYSQL_COL_FLOAT: dRows.PutFloat(0.0); break;
+			case MYSQL_COL_DOUBLE: dRows.PutDouble(0.0); break;
+			case MYSQL_COL_LONGLONG: dRows.PutInt64(0LL); break;
+			case MYSQL_COL_UINT64: dRows.PutUint64(0ULL); break;
+			case MYSQL_COL_STRING:
+				default: dRows.PutNumAsString(0);
+			}
 		} else
 		{
 			// essentially the same as SELECT_DUAL, parse and print constant expressions
@@ -7821,9 +7827,9 @@ static void ReturnZeroCount ( const CSphSchema & tSchema, const CSphBitvec & tAt
 					dRows.PutString ( (const char *)pStr );
 					SafeDelete ( pStr );
 					break;
-				case SPH_ATTR_INTEGER:	dRows.PutNumAsString ( pExpr->IntEval ( tMatch ) ); break;
-				case SPH_ATTR_BIGINT:	dRows.PutNumAsString ( pExpr->Int64Eval ( tMatch ) ); break;
-				case SPH_ATTR_FLOAT:	dRows.PutFloatAsString ( pExpr->Eval ( tMatch ) ); break;
+				case SPH_ATTR_INTEGER:	dRows.PutDWORD ( pExpr->IntEval ( tMatch ) ); break;
+				case SPH_ATTR_BIGINT:	dRows.PutInt64 ( pExpr->Int64Eval ( tMatch ) ); break;
+				case SPH_ATTR_FLOAT:	dRows.PutFloat ( pExpr->Eval ( tMatch ) ); break;
 				default:
 					dRows.PutNULL();
 					break;
@@ -7993,21 +7999,6 @@ static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrs
 {
 	SphAttr_t tNullMask = pNullBitmaskAttr ? tMatch.GetAttr ( pNullBitmaskAttr->m_tLocator ) : 0;
 	const int iAttrs = tSchema.GetAttrsCount();
-	const BYTE* pBitmask = nullptr;
-	if ( pNullBitmaskAttr )
-	{
-		if ( pNullBitmaskAttr->m_eAttrType==SPH_ATTR_STRINGPTR )
-		{
-			ByteBlob_t tBlob = sphUnpackPtrAttr ( (const BYTE*)tNullMask );
-			assert ( iAttrs <= tBlob.second*8 );
-			pBitmask = tBlob.first;
-		} else
-		{
-			pBitmask = (const BYTE*) &tNullMask;
-			assert ( iAttrs < 64 );
-		}
-	}
-	dRows.DataStart ( pBitmask );
 
 	for ( int i=0; i < iAttrs; i++ )
 	{
@@ -8153,7 +8144,7 @@ static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrs
 }
 
 // returns N of matches in resultset
-uint64_t SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn, const CSphString * pQueryColumn, QueryProfile_c * pProfile )
+static uint64_t SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn, const CSphString * pQueryColumn, QueryProfile_c * pProfile, facet::FacetStatusSources_t tStatus = {} )
 {
 	CSphScopedProfile tProf ( pProfile, SPH_QSTATE_NET_WRITE );
 
@@ -8196,6 +8187,9 @@ uint64_t SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes,
 	if ( bAddQueryColumn )
 		dRows.HeadColumn ( "query" );
 
+	if ( tStatus.HasStatus() )
+		dRows.HeadColumn ( "status" );
+
 	// EOF packet is sent explicitly due to non-default params.
 	auto iWarns = tRes.m_sWarning.IsEmpty() ? 0 : 1;
 	dRows.HeadEnd ( bMoreResultsFollow, iWarns );
@@ -8216,6 +8210,9 @@ uint64_t SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes,
 			assert ( pQueryColumn );
 			dRows.PutString ( *pQueryColumn );
 		}
+
+		if ( tStatus.HasStatus() )
+			dRows.PutString ( facet::GetBucketStatus ( tMatch, tRes.m_tSchema, tStatus ) );
 
 		if ( !dRows.Commit() )
 			return uMatches;
@@ -8603,28 +8600,123 @@ Profile_e ParseProfileFormat ( const SqlStmt_t & tStmt )
 	return NONE;
 }
 
-void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta, RowBuffer_i & dRows,
-		const CSphString & sWarning )
+static bool TryRemapSelectedFilterToGroupBy ( const CSphFilterSettings & tFilter, const CSphQuery & tFacetQuery, const ISphSchema & tBucketSchema, CSphFilterSettings & tRemapped )
+{
+	if ( tFacetQuery.m_sGroupBy.IsEmpty() )
+		return false;
+
+	if ( tFilter.m_eType!=SPH_FILTER_VALUES || tFilter.m_sAttrName!=tFacetQuery.m_sGroupBy )
+		return false;
+
+	const CSphColumnInfo * pGroupby = facet::GetGroupbyOnlyMagicAttr ( tBucketSchema );
+	if ( !pGroupby )
+		return false;
+
+	tRemapped = tFilter;
+	tRemapped.m_sAttrName = pGroupby->m_sName;
+	return true;
+}
+
+static facet::FacetStatusSources_t CollectFacetSelectedStatus ( const CSphQuery & tHeadQuery, const CSphQuery & tFacetQuery, const ISphSchema & tBucketSchema, const AggrResult_t * pStrictRes, CSphVector<CSphFilterSettings> & dSelected, facet::FacetBucketSet_t & tSelectedBuckets )
+{
+	facet::FacetStatusSources_t tStatus;
+	if ( !tFacetQuery.m_bFacet || tFacetQuery.m_dFacetOwnFilterAttrs.IsEmpty() )
+		return tStatus;
+
+	bool bNeedStrictSelected = false;
+	for ( const auto & tFilter : tHeadQuery.m_dFilters )
+		if ( facet::IsSelectedFilterType ( tFilter ) && facet::AttrNameInList ( tFacetQuery.m_dFacetOwnFilterAttrs, tFilter.m_sAttrName ) )
+		{
+			CSphFilterSettings tRemapped;
+			if ( TryRemapSelectedFilterToGroupBy ( tFilter, tFacetQuery, tBucketSchema, tRemapped ) )
+				dSelected.Add ( tRemapped );
+			else if ( tBucketSchema.GetAttr ( tFilter.m_sAttrName.cstr() ) )
+				dSelected.Add ( tFilter );
+			else
+				bNeedStrictSelected = true;
+		}
+
+	if ( bNeedStrictSelected && pStrictRes )
+	{
+		dSelected.Reset();
+		tStatus.m_pSelectedBuckets = facet::CollectFacetStatusValuesFilter ( tFacetQuery, tBucketSchema, *pStrictRes, tSelectedBuckets );
+		return tStatus;
+	}
+
+	tStatus.m_pSelectedFilters = dSelected.IsEmpty() ? nullptr : &dSelected;
+	return tStatus;
+}
+
+static bool MysqlStmtHasVisibleResultAfter ( const CSphVector<SqlStmt_t> & dStmt, int iStmt )
+{
+	for ( int iNext=iStmt+1; iNext<dStmt.GetLength(); ++iNext )
+	{
+		if ( dStmt[iNext].m_eStmt!=STMT_SELECT )
+			return true;
+		if ( !dStmt[iNext].m_tQuery.m_bFacetMaxRef )
+			return true;
+	}
+
+	return false;
+}
+
+static int GetMysqlSelectGroupEnd ( const CSphVector<SqlStmt_t> & dStmt, int iStart )
+{
+	assert ( dStmt[iStart].m_eStmt==STMT_SELECT );
+
+	int iEnd = iStart + 1;
+	const CSphQuery & tFirstQuery = dStmt[iStart].m_tQuery;
+
+	if ( tFirstQuery.m_bFacetHead )
+	{
+		while ( iEnd<dStmt.GetLength() && dStmt[iEnd].m_eStmt==STMT_SELECT && ( dStmt[iEnd].m_tQuery.m_bFacet || dStmt[iEnd].m_tQuery.m_bFacetMaxRef ) )
+			++iEnd;
+
+		return iEnd;
+	}
+
+	if ( tFirstQuery.m_bFacet || tFirstQuery.m_bFacetMaxRef )
+	{
+		while ( iEnd<dStmt.GetLength() && dStmt[iEnd].m_eStmt==STMT_SELECT && dStmt[iEnd].m_tQuery.m_bFacetMaxRef )
+			++iEnd;
+
+		return iEnd;
+	}
+
+	while ( iEnd<dStmt.GetLength() && dStmt[iEnd].m_eStmt==STMT_SELECT && !dStmt[iEnd].m_tQuery.m_bFacetHead && !dStmt[iEnd].m_tQuery.m_bFacet && !dStmt[iEnd].m_tQuery.m_bFacetMaxRef )
+		++iEnd;
+
+	return iEnd;
+}
+
+static void ApplyMysqlMultiStmtSet ( const SqlStmt_t & tStmt )
+{
+	if ( tStmt.m_eSet!=SET_LOCAL )
+		return;
+
+	CSphString sSetName ( tStmt.m_sSetName );
+	sSetName.ToLower();
+	if ( sSetName=="profiling" )
+		session::Info().SetProfile ( ParseProfileFormat ( tStmt ) );
+}
+
+static bool HandleMysqlSelectStmtGroup ( CSphVector<SqlStmt_t> & dStmt, int iStart, int iEnd, CSphQueryResultMeta & tLastMeta, RowBuffer_i & dRows,
+	const CSphString & sWarning, QueryProfile_c & tProfile )
 {
 	auto& tSess = session::Info();
 
-	// select count
-	int iSelect = dStmt.count_of ( [] ( const auto& tStmt ) { return tStmt.m_eStmt == STMT_SELECT; } );
-
-	CSphQueryResultMeta tPrevMeta = tLastMeta;
-
-	myinfo::SetCommand ( SqlStmt2Str(STMT_SELECT) );
-	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
-	for ( int i=0; i<iSelect; i++ )
-		StatCountCommand ( SEARCHD_COMMAND_SEARCH );
+	int iSelect = 0;
+	for ( int i=iStart; i<iEnd; ++i )
+		if ( dStmt[i].m_eStmt==STMT_SELECT )
+			++iSelect;
 
 	// setup query for searching
 	SearchHandler_c tHandler ( iSelect, sphCreatePlainQueryParser(), QUERY_SQL, true );
-	QueryProfile_c tProfile;
 
 	iSelect = 0;
-	for ( auto & tStmt : dStmt )
+	for ( int i=iStart; i<iEnd; ++i )
 	{
+		SqlStmt_t & tStmt = dStmt[i];
 		switch ( tStmt.m_eStmt )
 		{
 		case STMT_SELECT:
@@ -8662,6 +8754,8 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	bool bSearchOK = true;
 	if ( iSelect )
 	{
+		myinfo::SetCommand ( SqlStmt2Str(STMT_SELECT) );
+		AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 		bSearchOK = HandleMysqlSelect ( dRows, tHandler );
 
 		// save meta for SHOW *
@@ -8680,18 +8774,20 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	}
 
 	if ( !bSearchOK )
-		return;
+		return false;
 
 	// send multi-result set
 	iSelect = 0;
-	ARRAY_FOREACH ( i, dStmt )
+	CSphVector<CSphFilterSettings> dSelectedFilters;
+	facet::FacetBucketSet_t dSelectedBuckets;
+	facet::FacetBucketSet_t dAvailableBuckets;
+	for ( int i=iStart; i<iEnd; ++i )
 	{
 		SqlStmt_e eStmt = dStmt[i].m_eStmt;
 		myinfo::SetCommand ( SqlStmt2Str(eStmt) );
 		AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
-		const CSphQueryResultMeta & tMeta = bUseFirstMeta ? tHandler.m_dAggrResults[0] : ( iSelect-1>=0 ? tHandler.m_dAggrResults[iSelect-1] : tPrevMeta );
-		bool bMoreResultsFollow = (i+1)<dStmt.GetLength();
+		bool bMoreResultsFollow = MysqlStmtHasVisibleResultAfter ( dStmt, i );
 		bool bBreak = false;
 
 		switch ( eStmt )
@@ -8707,23 +8803,87 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			if ( bBreak )
 				bMoreResultsFollow = false;
 
-			auto uMatches = SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ) );
+			const int iQueryIdx = iSelect-1;
+			if ( iQueryIdx>=0 && tHandler.m_dQueries[iQueryIdx].m_bFacetMaxRef )
+				break;
+
+			dSelectedFilters.Resize ( 0 );
+			dSelectedBuckets.Reset();
+			dAvailableBuckets.Reset();
+			facet::FacetStatusSources_t tStatus;
+
+			if ( iQueryIdx>=0 && tHandler.m_dQueries[iQueryIdx].m_bFacet && facet::GetFilterMode ( tHandler.m_dQueries[0], tHandler.m_dQueries[iQueryIdx] )==FacetFilterMode_e::Max )
+			{
+				const AggrResult_t * pRes = &tRes;
+				if ( iQueryIdx+1<tHandler.m_dQueries.GetLength() && tHandler.m_dQueries[iQueryIdx+1].m_bFacetMaxRef )
+					pRes = &tHandler.m_dAggrResults[iQueryIdx+1];
+				tStatus = CollectFacetSelectedStatus ( tHandler.m_dQueries[0], tHandler.m_dQueries[iQueryIdx], tRes.m_tSchema, pRes, dSelectedFilters, dSelectedBuckets );
+				tStatus.m_pAvailableBuckets = facet::CollectFacetAvailableFilters ( tHandler.m_dQueries[iQueryIdx], tRes.m_tSchema, *pRes, dAvailableBuckets );
+			}
+
+			auto uMatches = SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ), tStatus );
 			
 			if ( !session::GetBuddy() )
 				gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, tRes.GetQueryTimeUs() );
 			break;
 		}
+		}
+
+		if ( bBreak )
+			return false;
+
+		if ( sphInterrupted() )
+		{
+			sphLogDebug ( "HandleMultiStmt: got SIGTERM, sending the packet MYSQL_ERR_SERVER_SHUTDOWN" );
+			dRows.Error ( "Server shutdown in progress", EMYSQL_ERR::SERVER_SHUTDOWN );
+			return false;
+		}
+	}
+
+	return true;
+}
+
+void HandleMysqlMultiStmt ( CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta, RowBuffer_i & dRows,
+		const CSphString & sWarning )
+{
+	// select count
+	int iSelect = dStmt.count_of ( [] ( const auto& tStmt ) { return tStmt.m_eStmt == STMT_SELECT; } );
+
+	for ( int i=0; i<iSelect; i++ )
+		StatCountCommand ( SEARCHD_COMMAND_SEARCH );
+
+	QueryProfile_c tProfile;
+	for ( int i=0; i<dStmt.GetLength(); )
+	{
+		if ( dStmt[i].m_eStmt==STMT_SELECT )
+		{
+			int iEnd = GetMysqlSelectGroupEnd ( dStmt, i );
+			if ( !HandleMysqlSelectStmtGroup ( dStmt, i, iEnd, tLastMeta, dRows, sWarning, tProfile ) )
+				return;
+
+			i = iEnd;
+			continue;
+		}
+
+		SqlStmt_e eStmt = dStmt[i].m_eStmt;
+		myinfo::SetCommand ( SqlStmt2Str(eStmt) );
+		AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
+
+		bool bMoreResultsFollow = MysqlStmtHasVisibleResultAfter ( dStmt, i );
+		switch ( eStmt )
+		{
 		case STMT_SHOW_WARNINGS:
-			HandleMysqlWarning ( tMeta, dRows, bMoreResultsFollow );
+			HandleMysqlWarning ( tLastMeta, dRows, bMoreResultsFollow );
 			break;
 		case STMT_SHOW_STATUS:
 		case STMT_SHOW_AGENT_STATUS:
 			HandleMysqlStatus ( dRows, dStmt[i], bMoreResultsFollow ); // FIXME!!! add prediction counters
 			break;
 		case STMT_SHOW_META:
-			HandleMysqlMeta ( dRows, dStmt[i], tMeta, bMoreResultsFollow ); // FIXME!!! add prediction counters
+			HandleMysqlMeta ( dRows, dStmt[i], tLastMeta, bMoreResultsFollow ); // FIXME!!! add prediction counters
 			break;
 		case STMT_SET: // TODO implement all set statements and make them handle bMoreResultsFollow flag
+			ApplyMysqlMultiStmtSet ( dStmt[i] );
 			dRows.Ok ( 0, 0, NULL, bMoreResultsFollow );
 			break;
 		case STMT_SHOW_PROFILE:
@@ -8731,12 +8891,10 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			break;
 		case STMT_SHOW_PLAN:
 			HandleMysqlShowPlan ( dRows, tProfile, bMoreResultsFollow, ::IsDot ( dStmt[i] ) );
+			break;
 		default:
 			break;
 		}
-
-		if ( bBreak )
-			break;
 
 		if ( sphInterrupted() )
 		{
@@ -8744,6 +8902,8 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			dRows.Error ( "Server shutdown in progress", EMYSQL_ERR::SERVER_SHUTDOWN );
 			return;
 		}
+
+		++i;
 	}
 }
 
@@ -9439,7 +9599,7 @@ void HandleMysqlFlush ( RowBuffer_i & tOut, const SqlStmt_t & )
 	tOut.HeadEnd ();
 
 	// data packet, var value
-	tOut.PutNumAsString ( iTag );
+	tOut.PutInt ( iTag );
 	tOut.Commit();
 
 	// done
@@ -9473,7 +9633,7 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const CSphString & sIndex, const CS
 		{
 			tOut.PutString ( dFiles[i] );
 			tOut.PutString ( RealPath ( dFiles[i] ) );
-			tOut.PutNumAsString ( sphGetFileSize ( dFiles[i], nullptr ) );
+			tOut.PutInt64 ( sphGetFileSize ( dFiles[i], nullptr ) );
 			if ( !tOut.Commit () )
 				return;
 		}
@@ -9485,7 +9645,7 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const CSphString & sIndex, const CS
 		{
 			tOut.PutString ( dExt[i] );
 			tOut.PutString ( RealPath ( dExt[i] ) );
-			tOut.PutNumAsString ( sphGetFileSize ( dExt[i], nullptr ) );
+			tOut.PutInt64 ( sphGetFileSize ( dExt[i], nullptr ) );
 			if ( !tOut.Commit () )
 				return;
 		}
@@ -9684,22 +9844,22 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 	{
 		const MysqlColumnType_e m_eType;
 		const char* m_szName;
-		std::function<CSphString ( void )> m_fnValue;
+		std::function<void()> m_fnValue;
 	};
 
 	const SysVar_t dSysvars[] =
 	{
-		{ MYSQL_COL_STRING,	nullptr, [] { return "<empty>"; } }, // stub
-		{ MYSQL_COL_LONG,	"@@session.auto_increment_increment",	[] {return "1";}},
-		{ MYSQL_COL_STRING,	"@@character_set_client", [] {return "utf8";}},
-		{ MYSQL_COL_STRING,	"@@character_set_connection", [] {return "utf8";}},
-		{ MYSQL_COL_LONG,	"@@max_allowed_packet", [] { StringBuilder_c s; s << g_iMaxPacketSize; return CSphString(s); }},
-		{ MYSQL_COL_LONG,	"@@wait_timeout", [] { StringBuilder_c s; s << GetActiveSessionWaitTimeoutS (); return CSphString(s); }},
-		{ MYSQL_COL_LONG,	"@@interactive_timeout", [] { StringBuilder_c s; s << GetActiveSessionTimeoutS (); return CSphString(s); }},
-		{ MYSQL_COL_STRING,	"@@version_comment", [] { return szGIT_BRANCH_ID;}},
-		{ MYSQL_COL_LONG,	"@@lower_case_table_names", [] { return "1"; }},
-		{ MYSQL_COL_STRING,	"@@session.last_insert_id", [pSession] { return GetLastInsertId ( pSession ); } },
-		{ MYSQL_COL_LONG, "@@autocommit", [pSession] { return pSession->m_bAutoCommit ? "1" : "0"; } },
+		{ MYSQL_COL_STRING,	nullptr, [&tOut] {tOut.PutString ("<empty>");}}, // stub
+		{ MYSQL_COL_LONG,	"@@session.auto_increment_increment", [&tOut] {tOut.PutDWORD(1);}},
+		{ MYSQL_COL_STRING,	"@@character_set_client", [&tOut] {tOut.PutString ("utf8");}},
+		{ MYSQL_COL_STRING,	"@@character_set_connection", [&tOut] {tOut.PutString ("utf8");}},
+		{ MYSQL_COL_LONG,	"@@max_allowed_packet", [&tOut] { tOut.PutDWORD (g_iMaxPacketSize);}},
+		{ MYSQL_COL_LONG,	"@@wait_timeout", [&tOut] { tOut.PutDWORD (GetActiveSessionWaitTimeoutS ());}},
+		{ MYSQL_COL_LONG,	"@@interactive_timeout", [&tOut] { tOut.PutDWORD (GetActiveSessionTimeoutS ());}},
+		{ MYSQL_COL_STRING,	"@@version_comment", [&tOut] { tOut.PutString (szGIT_BRANCH_ID);}},
+		{ MYSQL_COL_LONG,	"@@lower_case_table_names", [&tOut] { tOut.PutDWORD(1);}},
+		{ MYSQL_COL_STRING,	"@@session.last_insert_id", [pSession,&tOut] { tOut.PutString ( GetLastInsertId ( pSession ) );}},
+		{ MYSQL_COL_LONG, "@@autocommit", [pSession,&tOut] { tOut.PutDWORD ( pSession->m_bAutoCommit ? 1 : 0);}},
 	};
 
 	auto fnVarIdxByName = [&dSysvars] ( const CSphString& sName ) noexcept -> int
@@ -9814,18 +9974,18 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 					FreeDataPtr ( *pExpr, pStr );
 					break;
 				}
-			case SPH_ATTR_INTEGER:	tOut.PutNumAsString ( pExpr->IntEval ( tMatch ) ); break;
-			case SPH_ATTR_BIGINT:	tOut.PutNumAsString ( pExpr->Int64Eval ( tMatch ) ); break;
-			case SPH_ATTR_UINT64:	tOut.PutNumAsString ( (uint64_t)pExpr->Int64Eval ( tMatch ) ); break;
-			case SPH_ATTR_FLOAT:	tOut.PutFloatAsString ( pExpr->Eval ( tMatch ) ); break;
-			case SPH_ATTR_DOUBLE:	tOut.PutDoubleAsString ( pExpr->Eval ( tMatch ) ); break;
+			case SPH_ATTR_INTEGER:	tOut.PutDWORD ( pExpr->IntEval ( tMatch ) ); break;
+			case SPH_ATTR_BIGINT:	tOut.PutInt64 ( pExpr->Int64Eval ( tMatch ) ); break;
+			case SPH_ATTR_UINT64:	tOut.PutUint64 ( (uint64_t)pExpr->Int64Eval ( tMatch ) ); break;
+			case SPH_ATTR_FLOAT:	tOut.PutFloat ( pExpr->Eval ( tMatch ) ); break;
+			case SPH_ATTR_DOUBLE:	tOut.PutDouble ( pExpr->Eval ( tMatch ) ); break;
 			default:
 				tOut.PutNULL();
 				break;
 			}
 		}
 		else
-			tOut.PutString ( dSysvars[dColumn.m_iSysvarIdx].m_fnValue() );
+			dSysvars[dColumn.m_iSysvarIdx].m_fnValue();
 	}
 
 	// finalize
@@ -9850,7 +10010,7 @@ void HandleMysqlShowCollations ( RowBuffer_i & tOut )
 	// data packets
 	tOut.PutString ( "utf8_general_ci" );
 	tOut.PutString ( "utf8" );
-	tOut.PutString ( "33" );
+	tOut.PutInt64 ( 33 );
 	tOut.PutString ( "Yes" );
 	tOut.PutString ( "Yes" );
 	tOut.PutString ( "1" );
@@ -10309,20 +10469,20 @@ void PutIndexStatus ( RowBuffer_i & tOut, const CSphIndex * pIndex )
 	tOut.PutString ( pIndex->GetFilebase () );
 
 	auto & tStats = pIndex->GetStats ();
-	tOut.PutNumAsString ( tStats.m_iTotalDocuments );
-	tOut.PutNumAsString ( tStats.m_iTotalBytes );
+	tOut.PutDWORD ( tStats.m_iTotalDocuments );
+	tOut.PutInt64 ( tStats.m_iTotalBytes );
 
 	CSphIndexStatus tStatus;
 	pIndex->GetStatus ( &tStatus );
-	tOut.PutNumAsString ( tStatus.m_iRamUse );
-	tOut.PutNumAsString ( tStatus.m_iDiskUse );
-	tOut.PutNumAsString ( tStatus.m_iMapped );
-	tOut.PutNumAsString ( tStatus.m_iMappedResident );
-	tOut.PutNumAsString ( tStatus.m_iMappedDocs );
-	tOut.PutNumAsString ( tStatus.m_iMappedResidentDocs );
-	tOut.PutNumAsString ( tStatus.m_iMappedHits );
-	tOut.PutNumAsString ( tStatus.m_iMappedResidentHits );
-	tOut.PutNumAsString ( tStatus.m_iDead );
+	tOut.PutInt64 ( tStatus.m_iRamUse );
+	tOut.PutInt64 ( tStatus.m_iDiskUse );
+	tOut.PutInt64 ( tStatus.m_iMapped );
+	tOut.PutInt64 ( tStatus.m_iMappedResident );
+	tOut.PutInt64 ( tStatus.m_iMappedDocs );
+	tOut.PutInt64 ( tStatus.m_iMappedResidentDocs );
+	tOut.PutInt64 ( tStatus.m_iMappedHits );
+	tOut.PutInt64 ( tStatus.m_iMappedResidentHits );
+	tOut.PutInt64 ( tStatus.m_iDead );
 }
 
 void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
@@ -10368,21 +10528,18 @@ void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 					bKeepIteration = false;
 					return;
 				}
-				tOut.PutNumAsString ( pChunk->m_iChunk );
+				tOut.PutDWORD ( pChunk->m_iChunk );
 				PutIndexStatus ( tOut, pChunk );
-				tOut.PutNumAsString ( bOptimizing ? 1 : 0 );
+				tOut.PutDWORD ( bOptimizing ? 1 : 0 );
 				if ( !tOut.Commit () )
-				{
 					bKeepIteration = false;
-					return;
-				}
 			});
 			++iChunk;
 		}
 	} else {
-		tOut.PutNumAsString ( 0 ); // dummy 'chunk' of non-rt
+		tOut.PutDWORD ( 0 ); // dummy 'chunk' of non-rt
 		PutIndexStatus ( tOut, pIndex );
-		tOut.PutNumAsString ( 0 );
+		tOut.PutDWORD ( 0 );
 		tOut.Commit ();
 	}
 	tOut.Eof();
@@ -13943,6 +14100,7 @@ void ShowHelp ()
 		"-q, --quiet\t\tonly print errors on startup\n"
 		"-c, --config <file>\tread configuration from specified file\n"
 		"\t\t\t(default is manticore.conf)\n"
+		"--check\t\t\tcheck config and exit\n"
 		"--stop\t\t\tsend SIGTERM to currently running searchd\n"
 		"--stopwait\t\tsend SIGTERM and wait until actual exit\n"
 		"--status\t\tget ant print status variables\n"
@@ -13994,16 +14152,6 @@ void ShowHelp ()
 #endif
 		);
 }
-
-static bool HasQuietFlag ( int argc, char ** argv )
-{
-	for ( int i = 1; i < argc; ++i )
-		if ( !strcmp ( argv[i], "-q" ) || !strcmp ( argv[i], "--quiet" ) )
-			return true;
-
-	return false;
-}
-
 
 void InitSharedBuffer ()
 {
@@ -14646,8 +14794,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 	else
 		sphWarning ( "%s", sWarning.cstr() );
 
-	g_bHasBuddyPath = hSearchd.Exists ( "buddy_path" );
-	g_sBuddyPath = hSearchd.GetStr ( "buddy_path" );
+	g_sBuddyPath = hSearchd.OptStr ( "buddy_path" );
 	g_bTelemetry = ( hSearchd.GetInt ( "telemetry", g_bTelemetry ? 1 : 0 )!=0 );
 	g_bAutoSchema = ( hSearchd.GetInt ( "auto_schema", g_bAutoSchema ? 1 : 0 )!=0 );
 
@@ -15049,62 +15196,23 @@ static void InitBanner()
 	g_sStatusVersion.SetSprintf ( "%s%s%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr(), sKNN.cstr(), sKNNEmb.cstr() );
 }
 
-
-static void CheckAddSSL ( bool bForced, CSphConfigSection & hSearchd )
+static bool CheckSSL ( const CSphVector<ListenerDesc_t> & dListeners, bool bForced )
 {
+	// check for SSL inited well
+	if ( !bForced && dListeners.none_of ([] ( const auto& tListener ) { return tListener.m_eProto==Proto_e::HTTPS; }) )
+		return true;
+
 	CSphString sError;
-	bool bGotSSL = CheckWeCanUseSSL ( &sError );
-	if ( !bGotSSL )
+	if ( !CheckWeCanUseSSL ( &sError ) )
 	{
-		// iff SSL is mandatory - fatal error
 		if ( bForced )
-		{
 			sphFatal ( "SSL initialization failed but is required for Manticore Buddy: %s", sError.cstr() );
-		}
-		else // otherwise just a warning and HTTPS listener does not work
-		{
-			for ( const auto & tListener : g_dListeners )
-			{
-				if ( tListener.m_eProto==Proto_e::HTTPS )
-				{
-					sphWarning ( "SSL initialization failed: %s. HTTPS listeners will not be available", sError.cstr() );
-					return;
-				}
-			}
-		}
+
+		sphWarning ( "SSL init error: %s", sError.cstr() );
+		return false;
 	}
-	
-	// add an HTTPS listener for Buddy if none exists
-	// Buddy can connect HTTPS even if the user did not configure it
-	if ( bForced && bGotSSL )
-	{
-		// add default loopback-only HTTPS listener for Buddy
-		for ( const auto & tListener : g_dListeners )
-		{
-			if ( tListener.m_eProto==Proto_e::HTTPS )
-				return;
-		}
 
-		int iMaxPort = -1;
-		for ( CSphVariant * v = hSearchd ( "listen" ); v; v = v->m_pNext )
-		{
-			auto tDesc = ParseListener ( v->cstr () );
-			iMaxPort = Max ( iMaxPort, tDesc.m_iPort + tDesc.m_iPortsCount );
-		}
-
-		if ( iMaxPort!=-1 )
-			iMaxPort++;
-		else
-			iMaxPort = SPHINXAPI_PORT + 1;
-
-		// new listener port
-		AddGlobalListener ( MakeLocalhostListener ( iMaxPort, Proto_e::HTTPS ) );
-		// entry for the show status
-		CSphString sHttps;
-		sHttps.SetSprintf ( "127.0.0.1:%d:HTTPS", iMaxPort );
-		hSearchd.AddEntry ( "listen", sHttps.cstr() );
-		sphLogDebug ( "no HTTPS listener configured, added '%s' for Buddy communication", sHttps.cstr() );
-	}
+	return true;
 }
 
 
@@ -15152,30 +15260,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	bool bKNNError = !InitKNN ( sKNNError );
 	sphCollationInit ();
 
-	InitBanner();
-
-	g_bOptQuiet = HasQuietFlag ( argc, argv );
 	ESphLogLevel eQuietRestoreLevel = g_eLogLevel;
-	if ( g_bOptQuiet )
-		g_eLogLevel = SPH_LOG_FATAL;
-
-	if ( !WinService() && !g_bOptQuiet )
-		fprintf ( stdout, "%s",  g_sBanner.cstr() );
-
-	if ( bColumnarError )
-		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
-
-	if ( bSecondaryError )
-		sphWarning ( "Error initializing secondary index: %s", g_sSecondaryError.cstr() );
-
-	if ( bKNNError )
-		sphWarning ( "Error initializing knn index: %s", sKNNError.cstr() );
-
-	if ( !sError.IsEmpty() )
-		sError = "";
-
-	if ( !sKNNError.IsEmpty() )
-		sKNNError = "";
 
 	CSphString sTZWarning;
 	{
@@ -15197,12 +15282,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	bool			bHasPIDFile = false;
 	StrVec_t		dOptIndexes; // indexes explicitly pointed in cmdline options
 
-	int				iOptPort = 0;
-	bool			bOptPort = false;
-
-	CSphString		sOptListen;
-	bool			bOptListen = false;
+	std::optional<int>				iOptPort;
+	std::optional<CSphString>		sOptListen;
 	bool			bTestMode = false;
+	bool			bConfigTest = false;
+	std::optional<bool>			bWithBuddy;
 	bool			bOptDebugQlog = true;
 	bool			bForcedPreread = false;
 	bool			bNewCluster = false;
@@ -15210,6 +15294,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	bool			bForcePseudoSharding = false;
 	const char*		szCmdConfigFile = nullptr;
 	bool			bMeasureStack = false;
+	bool			bQuietRequested = false;
 	bool			bOptAuth = false;
 	bool			bOptAuthNonInteractive = false;
 
@@ -15218,9 +15303,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	#define OPT(_a1,_a2)	else if ( !strcmp(argv[i],_a1) || !strcmp(argv[i],_a2) )
 	#define OPT1(_a1)		else if ( !strcmp(argv[i],_a1) )
 
-	auto UpdateLogLevel = [&eQuietRestoreLevel] ( ESphLogLevel eLevel )
+	auto UpdateLogLevel = [&eQuietRestoreLevel, &bQuietRequested, &bConfigTest] ( ESphLogLevel eLevel )
 	{
-		if ( g_bOptQuiet )
+		if ( bQuietRequested || bConfigTest )
 			eQuietRestoreLevel = Max ( eQuietRestoreLevel, eLevel );
 		else
 			g_eLogLevel = Max ( g_eLogLevel, eLevel );
@@ -15235,8 +15320,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		// handle no-arg options
 		OPT ( "-h", "--help" )		{ ShowHelp(); return 0; }
 		OPT ( "-?", "--?" )		{ ShowHelp(); return 0; }
-		OPT ( "-v", "--version" )	{ return 0; }
-		OPT ( "-q", "--quiet" )		g_bOptQuiet = true;
+		OPT ( "-v", "--version" )	{ InitBanner(); fprintf ( stdout, "%s", g_sBanner.cstr() ); return 0; }
+		OPT ( "-q", "--quiet" )		bQuietRequested = true;
 		OPT1 ( "--console" )		{ g_bOptNoLock = true; g_bOptNoDetach = true; bTestMode = true; }
 		OPT1 ( "--stop" )			bOptStop = true;
 		OPT1 ( "--stopwait" )		{ bOptStop = true; bOptStopWait = true; }
@@ -15261,6 +15346,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--logdebugvv" )		UpdateLogLevel ( SPH_LOG_VERY_VERBOSE_DEBUG );
 		OPT1 ( "--logreplication" )	UpdateLogLevel ( SPH_LOG_RPL_DEBUG );
 		OPT1 ( "--safetrace" )		CrashLogger::SetSafeTrace ( true );
+		OPT1 ( "--check" )			bConfigTest = true;
 		OPT1 ( "--test" )			{ bTestMode = true; } // internal option, do NOT document
 		OPT1 ( "--force-pseudo-sharding" ) { bForcePseudoSharding = true; } // internal option, do NOT document
 		OPT1 ( "--strip-path" )		g_bStripPath = true;
@@ -15271,6 +15357,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--new-cluster" )	bNewCluster = true;
 		OPT1 ( "--new-cluster-force" )	bNewClusterForce = true;
 		OPT1 ( "--no_change_cwd" )	g_bNoChangeCwd = true;
+		OPT1 ( "--with-buddy" )	bWithBuddy = true;
 		OPT1 ( "--auth" )			{ bOptAuth = true; g_bOptNoLock = true; g_bOptNoDetach = true; }
 		OPT1 ( "--auth-non-interactive" )	{ bOptAuth = true; bOptAuthNonInteractive = true; g_bOptNoLock = true; g_bOptNoDetach = true; }
 
@@ -15283,8 +15370,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		// handle 1-arg options
 		else if ( (i+1)>=argc )		break;
 		OPT ( "-c", "--config" )	szCmdConfigFile = argv[++i];
-		OPT ( "-p", "--port" )		{ bOptPort = true; iOptPort = atoi ( argv[++i] ); }
-		OPT ( "-l", "--listen" )	{ bOptListen = true; sOptListen = argv[++i]; }
+		OPT ( "-p", "--port" )		{ iOptPort = atoi ( argv[++i] ); }
+		OPT ( "-l", "--listen" )	{ sOptListen = argv[++i]; }
 		OPT ( "-i", "--index" )		dOptIndexes.Add ( argv[++i] ); // FIXME!!! remove depricated cli option
 		OPT ( "-t", "--table" )		dOptIndexes.Add ( argv[++i] );
 #if _WIN32
@@ -15298,20 +15385,43 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( i!=argc )
 		sphFatal ( "malformed or unknown option near '%s'; use '-h' or '--help' to see available options.", argv[i] );
 
+	InitBanner();
+
+	g_bOptQuiet = bQuietRequested || bConfigTest;
+
+	if ( g_bOptQuiet )
+		g_eLogLevel = SPH_LOG_FATAL;
+
 	StringBuilder_c sStack;
 	DetermineNodeItemStackSize ( sStack );
 	DetermineFilterItemStackSize ( sStack );
 	DetermineMatchStackSize ( sStack );
 
-	if ( bMeasureStack )
+	if ( !WinService() )
 	{
-		if ( !WinService() )
+		if ( !g_bOptQuiet )
+			fprintf ( stdout, "%s",  g_sBanner.cstr() );
+
+		if ( bMeasureStack )
 		{
 			sStack << "export NO_STACK_CALCULATION=1\n";
 			fprintf ( stdout, "%s", sStack.cstr() );
+			return 0;
 		}
-		return 0;
 	}
+
+	if ( bColumnarError )
+		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
+
+	if ( bSecondaryError )
+		sphWarning ( "Error initializing secondary index: %s", g_sSecondaryError.cstr() );
+
+	if ( bKNNError )
+		sphWarning ( "Error initializing knn index: %s", sKNNError.cstr() );
+
+	sError = {};
+	sKNNError = {};
+
 	SetupLemmatizerBase();
 	g_sConfigFile = sphGetConfigFile ( szCmdConfigFile );
 #if _WIN32
@@ -15341,21 +15451,22 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		bOptPIDFile = !g_bOptNoLock;
 
 	// check port and listen arguments early
-	if ( !g_bOptNoDetach && ( bOptPort || bOptListen ) )
+	if ( !g_bOptNoDetach && ( iOptPort || sOptListen ) )
 	{
 		sphWarning ( "--listen and --port are only allowed in --nodetach or --console debug mode; switch ignored" );
-		bOptPort = bOptListen = false;
+		iOptPort = std::nullopt;
+		sOptListen = std::nullopt;
 	}
 
 	if ( g_bOptNoDetach && g_tWatchdog.value_or ( false ) )
 		sphWarning ( "--watchdog is not allowed in foreground mode (--console, --nodetach); switch ignored" );
 
-	if ( bOptPort )
+	if ( iOptPort )
 	{
-		if ( bOptListen )
+		if ( sOptListen )
 			sphFatal ( "please specify either --port or --listen, not both" );
 
-		CheckPort ( iOptPort );
+		CheckPort ( iOptPort.value() );
 	}
 
 	/////////////////////
@@ -15437,6 +15548,111 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	if ( g_iMaxFilterValues<1 || g_iMaxFilterValues>10485760 )
 		sphFatal ( "max_filter_values out of bounds (1..10485760)" );
+
+	CSphVector<ListenerDesc_t> dListenerDescs;
+
+	auto InitCheckListeners = [&] ( CSphConfigSection & hDaemonConfig, auto fnAddGlobal, bool bUpdateConfig ) REQUIRES ( MainThread )
+	{
+		dListenerDescs.Reset();
+		auto AddCheck = [&] (const ListenerDesc_t& tDesc) REQUIRES ( MainThread )
+		{
+			fnAddGlobal ( tDesc );
+#if !_WIN32
+			if ( tDesc.m_sUnix.IsEmpty () )
+				return;
+
+			size_t len = tDesc.m_sUnix.Length();
+			[[maybe_unused]] struct sockaddr_un uaddr;
+			if ( tDesc.m_sUnix.Length() + 1 > sizeof ( uaddr.sun_path ) )
+				sphFatal ( "UNIX socket path is too long (len=%d)", (int)len );
+#endif
+		};
+
+
+		// command line arguments override config (but only in --console)
+		if ( sOptListen )
+		{
+			auto tDesc = ParseListener ( sOptListen->cstr() );
+			dListenerDescs.Add ( tDesc );
+			AddCheck ( tDesc );
+		} else if ( iOptPort )
+			AddCheck (  MakeAnyListener ( iOptPort.value() ) );
+		else
+		{
+			// listen directives in configuration file
+			for ( CSphVariant * v = hDaemonConfig("listen"); v; v = v->m_pNext )
+			{
+				auto tDesc = ParseListener ( v->cstr () );
+				dListenerDescs.Add ( tDesc );
+				AddCheck ( tDesc );
+			}
+
+			// default is to listen on our two ports
+			if ( dListenerDescs.IsEmpty() )
+			{
+				auto tDesc = MakeLocalhostListener ( SPHINXAPI_PORT, Proto_e::SPHINX );
+				dListenerDescs.Add ( tDesc );
+				AddCheck ( tDesc );
+				AddCheck ( MakeLocalhostListener ( SPHINXQL_PORT, Proto_e::MYSQL41 ) );
+			}
+		}
+
+		if ( !ValidateListenerRanges ( dListenerDescs, sError ) )
+			sphFatal ( "%s", sError.cstr() );
+
+		auto sSslCert = hDaemonConfig.GetStr ( "ssl_cert" );
+		auto sSslKey = hDaemonConfig.GetStr ( "ssl_key" );
+		auto sSslCa = hDaemonConfig.GetStr ( "ssl_ca" );
+		FixPathAbsolute ( sSslCert );
+		FixPathAbsolute ( sSslKey );
+		FixPathAbsolute ( sSslCa );
+		SetServerSSLKeys ( sSslCert, sSslKey, sSslCa );
+
+		bool bForcedSsl = IsAuthEnabled() && HasBuddyConfigured ( g_sBuddyPath );
+		if ( bForcedSsl )
+			ForceSsl();
+
+		bool bGotSSL = CheckSSL ( dListenerDescs, bForcedSsl );
+		if ( !bForcedSsl || !bGotSSL )
+			return;
+
+		// add an HTTPS listener for Buddy if none exists
+		// Buddy can connect HTTPS even if the user did not configure it
+		if ( dListenerDescs.any_of ([] ( const auto & tListener ) { return tListener.m_eProto==Proto_e::HTTPS; }) )
+			return;
+
+		int iMaxPort = -1;
+		for ( CSphVariant * v = hDaemonConfig ( "listen" ); v; v = v->m_pNext )
+		{
+			auto tDesc = ParseListener ( v->cstr () );
+			iMaxPort = Max ( iMaxPort, tDesc.m_iPort + tDesc.m_iPortsCount );
+		}
+
+		if ( iMaxPort!=-1 )
+			iMaxPort++;
+		else
+			iMaxPort = SPHINXAPI_PORT + 1;
+
+		auto tDesc = MakeLocalhostListener ( iMaxPort, Proto_e::HTTPS );
+		dListenerDescs.Add ( tDesc );
+		AddCheck ( tDesc );
+
+		CSphString sHttps;
+		sHttps.SetSprintf ( "127.0.0.1:%d:HTTPS", iMaxPort );
+		if ( bUpdateConfig )
+			hDaemonConfig.AddEntry ( "listen", sHttps.cstr() );
+		sphLogDebug ( "no HTTPS listener configured, added '%s' for Buddy communication", sHttps.cstr() );
+	};
+
+	if ( bConfigTest )
+	{
+		CSphVector<ListenerDesc_t> dConfigTestListeners;
+		CSphConfigSection hConfigTest = hSearchdpre;
+		InitCheckListeners (hConfigTest, [&] (const ListenerDesc_t& tDesc ) { dConfigTestListeners.Add (tDesc); }, false);
+		fprintf ( stdout, "OK\n" );
+		fflush ( stdout );
+		return 0;
+	}
 
 	bool bVisualLoad = true;
 	bool bWatched = false;
@@ -15568,52 +15784,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	////////////////////
 	// network startup
 	////////////////////
-	CSphVector<ListenerDesc_t> dListenerDescs;
 
-	// command line arguments override config (but only in --console)
-	if ( bOptListen )
-	{
-		auto tDesc = ParseListener ( sOptListen.cstr() );
-		dListenerDescs.Add ( tDesc );
-		AddGlobalListener ( tDesc );
-	} else if ( bOptPort )
-	{
-		AddGlobalListener ( MakeAnyListener ( iOptPort ) );
-	} else
-	{
-		// listen directives in configuration file
-		for ( CSphVariant * v = hSearchd("listen"); v; v = v->m_pNext )
-		{
-			auto tDesc = ParseListener ( v->cstr () );
-			dListenerDescs.Add ( tDesc );
-			AddGlobalListener ( tDesc );
-		}
-
-		// default is to listen on our two ports
-		if ( g_dListeners.IsEmpty() )
-		{
-			AddGlobalListener ( MakeLocalhostListener ( SPHINXAPI_PORT, Proto_e::SPHINX ) );
-			AddGlobalListener ( MakeLocalhostListener ( SPHINXQL_PORT, Proto_e::MYSQL41 ) );
-		}
-	}
-
-	if ( !ValidateListenerRanges ( dListenerDescs, sError ) )
-		sphFatal ( "%s", sError.cstr() );
-
-	CSphString sSslCert ( hSearchd.GetStr ( "ssl_cert" ) );
-	CSphString sSslKey ( hSearchd.GetStr ( "ssl_key" ) );
-	CSphString sSslCa ( hSearchd.GetStr ( "ssl_ca" ) );
-	FixPathAbsolute ( sSslCert );
-	FixPathAbsolute ( sSslKey );
-	FixPathAbsolute ( sSslCa );
-	SetServerSSLKeys ( sSslCert, sSslKey, sSslCa );
-	bool bForcedSsl = false;
-	if ( IsAuthEnabled() && HasBuddyConfigured ( g_sBuddyPath, g_bHasBuddyPath ) )
-	{
-		ForceSsl();
-		bForcedSsl = true;
-	}
-	CheckAddSSL ( bForcedSsl, hSearchd );
+	InitCheckListeners (hSearchd, [&] (const ListenerDesc_t& tDesc ) REQUIRES ( MainThread ) { AddGlobalListener (tDesc); }, true);
 
 	// set up ping service (if necessary) before loading indexes
 	// (since loading ha-mirrors of distributed already assumes ping is usable).
@@ -15882,8 +16054,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	searchd::AddShutdownCb ( BuddyShutdown );
 	// --test should not guess buddy path
 	// otherwise daemon generates warning message that counts as bad daemon restart by ubertest
-	if ( !bTestMode )
-		BuddyStart ( g_sBuddyPath, PluginGetDir(), g_bHasBuddyPath, dListenerDescs, g_bTelemetry, MaxChildrenThreads(), g_sConfigFile, RealPath ( GetDataDirInt() ) );
+	if ( bWithBuddy.value_or (!bTestMode) )
+		BuddyStart ( g_sBuddyPath, PluginGetDir(), dListenerDescs, g_bTelemetry, MaxChildrenThreads(), g_sConfigFile, RealPath ( GetDataDirInt() ) );
 
 	g_bJsonConfigLoadedOk = true;
 

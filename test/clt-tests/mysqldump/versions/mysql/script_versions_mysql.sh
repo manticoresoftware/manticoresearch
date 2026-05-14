@@ -4,7 +4,7 @@ set -e
 # Check for new major.minor versions
 echo "🔍 Checking for new MySQL major.minor versions..."
 
-LATEST_MYSQL="9.6"
+LATEST_MYSQL="9.7"
 
 if command -v curl >/dev/null 2>&1; then
     found_new=false
@@ -43,7 +43,7 @@ fi
 echo ""
 
 # MySQL versions
-versions=("mysql:5.6" "mysql:5.7" "mysql:8.0" "mysql:8.2" "mysql:8.3" "mysql:8.4" "mysql:9.0" "mysql:9.1" "mysql:9.2" "mysql:9.3" "mysql:9.4" "mysql:9.5" "mysql:9.6" "mysql:latest")
+versions=("mysql:5.6" "mysql:5.7" "mysql:8.0" "mysql:8.2" "mysql:8.3" "mysql:8.4" "mysql:9.0" "mysql:9.1" "mysql:9.2" "mysql:9.3" "mysql:9.4" "mysql:9.5" "mysql:9.6" "mysql:9.7" "mysql:latest")
 
 # Going through all the versions
 for version in "${versions[@]}"; do
@@ -58,7 +58,7 @@ for version in "${versions[@]}"; do
     sleep 5
 
     # Executing dump
-    docker exec db-test $dump_command -hmanticore -P9306 manticore t > dump.sql 2> >(grep -E -v "Warning: column statistics|Warning: version string returned by server is incorrect." >&2)
+    docker exec db-test $dump_command -hmanticore -P9306 manticore t > dump.sql 2> >(grep -E -v "Warning: column statistics|Warning: version string returned by server is incorrect.|No such table performance_schema\.column_masking_policy" >&2)
     docker exec manticore mysql -h0 -P9306 -e "DROP TABLE t;"
 
     # Restore dump
@@ -108,7 +108,7 @@ for version in "${versions[@]}"; do
     
     # Test 2: mysqldump WITH --skip-lock-tables should succeed
     echo "  Testing WITH --skip-lock-tables (should succeed)..."
-    if docker exec db-test $dump_command -hmanticore -P9306 -ucluster -t --skip-lock-tables --compact manticore test_c:test_repl > cluster_dump_ok.sql 2> >(grep -E -v "Warning: column statistics|Warning: version string returned by server is incorrect." >&2); then
+    if docker exec db-test $dump_command -hmanticore -P9306 -ucluster -t --skip-lock-tables --compact manticore test_c:test_repl > cluster_dump_ok.sql 2> >(grep -E -v "Warning: column statistics|Warning: version string returned by server is incorrect.|No such table performance_schema\.column_masking_policy" >&2); then
         if grep -q "cluster_data" cluster_dump_ok.sql; then
             echo "  ✅ Workaround successful: dump contains data with --skip-lock-tables"
         else

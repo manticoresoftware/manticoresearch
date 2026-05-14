@@ -31,13 +31,10 @@ mysql -h0 -P9306 -e "select * from test where knn ( image_vector, 5, 1 );"
 |    2 | white bag | -0.148894,0.748278,0.091892,-0.095406 | #!/ *1\.147[0-9]*/!# |
 +------+-----------+---------------------------------------+------------+
 ––– input –––
-mysql -h0 -P9306 -e "select count(*) from test where knn ( image_vector, 5, 1 );"
+mysql -NE -h0 -P9306 -e "select count(*) from test where knn ( image_vector, 5, 1 )"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        2 |
-+----------+
+*************************** 1. row ***************************
+2
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE knn_test (id BIGINT, model TEXT, color TEXT, sold BOOL, date_added BIGINT, storage_capacity UINT, release_year UINT, price FLOAT, discounted_price FLOAT, product_codes JSON, values JSON, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');"
 ––– output –––
@@ -215,10 +212,7 @@ discounted_price: 883.900024
           vector: 0.700000,-0.800000,0.100000,-0.200000
        @knn_dist: #!/1\.759[0-9]*/!#
 ––– input –––
-mysql -h0 -P9306 -e "SELECT count(*) FROM knn_test WHERE knn(vector, 5, 1);"
+mysql -NE -h0 -P9306 -e "SELECT count(*) FROM knn_test WHERE knn(vector, 5, 1)"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       10 |
-+----------+
+*************************** 1. row ***************************
+10

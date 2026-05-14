@@ -58,13 +58,10 @@ curl -s -X POST http://localhost:9308/bulk -H "Content-Type: application/x-ndjso
 ––– comment –––
 Verify bulk inserted documents have auto-generated embeddings
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json_columnar WHERE id IN (2,3)"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM test_json_columnar WHERE id IN (2,3)"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        2 |
-+----------+
+*************************** 1. row ***************************
+2
 ––– comment –––
 Replace document via JSON API (embedding regenerated automatically)
 ––– input –––
@@ -98,13 +95,10 @@ Vectors identical
 ––– comment –––
 Verify total document count
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json_columnar"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM test_json_columnar"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        5 |
-+----------+
+*************************** 1. row ***************************
+5
 ––– comment –––
 Optimize table for oversampling behavior in disk chunks
 ––– input –––
@@ -185,13 +179,10 @@ curl -s -X POST http://localhost:9308/bulk -H "Content-Type: application/x-ndjso
 ––– comment –––
 Verify bulk inserted documents have auto-generated embeddings
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json_rowwise WHERE id IN (2,3)"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM test_json_rowwise WHERE id IN (2,3)"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        2 |
-+----------+
+*************************** 1. row ***************************
+2
 ––– comment –––
 Replace document via JSON API (embedding regenerated automatically)
 ––– input –––
@@ -225,13 +216,10 @@ Vectors identical
 ––– comment –––
 Verify total document count
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json_rowwise"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM test_json_rowwise"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        5 |
-+----------+
+*************************** 1. row ***************************
+5
 ––– comment –––
 Optimize table for oversampling behavior in disk chunks
 ––– input –––

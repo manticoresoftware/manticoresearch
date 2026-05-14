@@ -537,6 +537,7 @@ To be put in the `searchd {}` section of the configuration file:
 ```bash
 searchd [OPTIONS]
 ```
+* [--check](Starting_the_server/Manually.md#searchd-command-line-options) - Checks the configuration file and exits
 * [--config, -c](Starting_the_server/Manually.md#searchd-command-line-options) - Specifies the path to the configuration file
 * [--console](Starting_the_server/Manually.md#searchd-command-line-options) - Forces the server to run in console mode
 * [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - Enables core dump saving upon crash
@@ -565,10 +566,6 @@ searchd [OPTIONS]
 * [--stop](Starting_the_server/Manually.md#searchd-command-line-options) - Stops the Manticore server
 * [--stopwait](Starting_the_server/Manually.md#searchd-command-line-options) - Stops the Manticore server gracefully
 * [--strip-path](Starting_the_server/Manually.md#searchd-command-line-options) - Removes path names from all file names referenced in the table
-* [--watchdog](Starting_the_server/Manually.md#searchd-command-line-options) - Force internal watchdog
-* [--no-watchdog](Starting_the_server/Manually.md#searchd-command-line-options) - Disable internal watchdog
-* [--systemd](Starting_the_server/Manually.md#searchd-command-line-options) - Force systemd mode
-* [--no-systemd](Starting_the_server/Manually.md#searchd-command-line-options) - Force standalone mode (ignores systemd)
 * [-v](Starting_the_server/Manually.md#searchd-command-line-options) - Displays version information
 
 ##### Searchd environment variables

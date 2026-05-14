@@ -35,13 +35,13 @@ sudo apt update
 sudo apt install manticore
 ```
 
-如果您是从旧版本升级到 Manticore 6，建议先删除旧包以避免由于包结构更新导致的冲突：
+如果您是从旧版本升级到 Manticore 6，建议先删除旧包以避免因更新的包结构导致的冲突：
 
 ```bash
 sudo apt remove manticore*
 ```
 
-它不会删除您的数据和配置文件。
+这不会删除您的数据和配置文件。
 
 ###### 开发包
 如果您更喜欢使用“Nightly”（开发）版本，请执行以下操作：
@@ -57,7 +57,7 @@ sudo apt -y install manticore
 
 ### 您可能需要的其他包
 #### 对于 indexer
-Manticore 包依赖于 zlib 和 ssl 库，其他内容不是必需的。但是，如果您计划使用 [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 从外部存储创建表，您需要安装适当的客户端库。要找出 `indexer` 需要的具体库，请运行它并查看输出顶部的内容：
+Manticore 包依赖于 zlib 和 ssl 库，除此之外没有其他严格要求。但是，如果您计划使用 [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 从外部存储创建表，您需要安装适当的客户端库。要找出 `indexer` 需要的具体库，请运行它并查看输出的顶部：
 
 ```bash
 $ sudo -u manticore indexer
@@ -73,9 +73,9 @@ Built on Linux runner-0277ea0f-project-3858465-concurrent-0 4.19.78-coreos #1 SM
 Configured by CMake with these definitions: -DCMAKE_BUILD_TYPE=RelWithDebInfo -DDISTR_BUILD=xenial -DUSE_SSL=ON -DDL_UNIXODBC=1 -DUNIXODBC_LIB=libodbc.so.2 -DDL_EXPAT=1 -DEXPAT_LIB=libexpat.so.1 -DUSE_LIBICONV=1 -DDL_MYSQL=1 -DMYSQL_LIB=libmysqlclient.so.20 -DDL_PGSQL=1 -DPGSQL_LIB=libpq.so.5 -DLOCALDATADIR=/var/data -DFULL_SHARE_DIR=/usr/share/manticore -DUSE_ICU=1 -DUSE_BISON=ON -DUSE_FLEX=ON -DUSE_SYSLOG=1 -DWITH_EXPAT=1 -DWITH_ICONV=ON -DWITH_MYSQL=1 -DWITH_ODBC=ON -DWITH_POSTGRESQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 -DWITH_ZLIB=ON -DGALERA_SOVERSION=31 -DSYSCONFDIR=/etc/manticoresearch
 ```
 
-这里可以看到 **libodbc.so.2**、**libexpat.so.1**、**libmysqlclient.so.20** 和 **libpq.so.5** 的提及。
+在这里可以看到 **libodbc.so.2**、**libexpat.so.1**、**libmysqlclient.so.20** 和 **libpq.so.5** 的提及。
 
-以下是不同 Debian/Ubuntu 版本的所有客户端库列表的参考表：
+下面是不同 Debian/Ubuntu 版本的所有客户端库列表的参考表：
 
 | Distr | MySQL | PostgreSQL | XMLpipe | UnixODBC |
 | - | - | - | - | - |
@@ -98,7 +98,7 @@ libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20.2.0
 libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20.3.6
 ```
 
-请注意，您只需要为将要使用的存储类型安装库。因此，如果您计划仅从 MySQL 构建表，可能只需安装 MySQL 库（在上述情况下为 `libmysqlclient20`）。
+请注意，您只需要为将要使用的存储类型安装库。因此，如果您计划仅从 MySQL 构建表，那么您可能只需要安装 MySQL 库（在上述情况下为 `libmysqlclient20`）。
 
 最后，安装所需的包：
 
@@ -108,38 +108,5 @@ sudo apt-get install libmysqlclient20 libodbc1 libpq5 libexpat1
 
 如果您根本不会使用 `indexer` 工具，则不需要查找和安装任何库。
 
-要启用 CJK 分词支持，官方包中包含嵌入式 ICU 库的二进制文件，并包含 ICU 数据文件。它们与系统上可能可用的任何 ICU 运行时库无关，且无法升级。
-
-#### 乌克兰语词形还原器
-词形还原器需要 Python 3.9+。**确保您已安装并使用 `--enable-shared` 进行配置。**
-
-以下是 Debian 和 Ubuntu 上安装 Python 3.9 和乌克兰语词形还原器的方法：
-
-```bash
-# install Manticore Search and UK lemmatizer from APT repository
-cd ~
-wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
-sudo apt -y update
-sudo apt -y install manticore manticore-lemmatizer-uk
-
-# install packages needed for building Python
-sudo apt -y update
-sudo apt -y install wget build-essential libreadline-dev libncursesw5-dev libssl-dev libsqlite3-dev tk-dev libgdbm-dev libc6-dev libbz2-dev libffi-dev zlib1g-dev
-
-# download, build and install Python 3.9
-cd ~
-wget https://www.python.org/ftp/python/3.9.4/Python-3.9.4.tgz
-tar xzf Python-3.9.4.tgz
-cd Python-3.9.4
-./configure --enable-optimizations --enable-shared
-sudo make -j8 altinstall
-
-# update linker cache
-sudo ldconfig
-
-# install pymorphy2 and UK dictionary
-sudo LD_LIBRARY_PATH=~/Python-3.9.4 pip3.9 install pymorphy2[fast]
-sudo LD_LIBRARY_PATH=~/Python-3.9.4 pip3.9 install pymorphy2-dicts-uk
-```
+要启用 CJK 分词支持，官方包包含嵌入式 ICU 库的二进制文件，并包含 ICU 数据文件。它们独立于系统上可能可用的任何 ICU 运行时库，且无法升级。
 <!-- proofread -->

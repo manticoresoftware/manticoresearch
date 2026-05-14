@@ -189,4 +189,4 @@ private:
 	bool							SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, GlobalSorters_c & tGlobalSorters, LocalSearchRef_t & tCtx, int64_t & iCpuTime, int iQuery, int iLocal, int64_t tmLocalCallUs, const CSphQueryResultMeta & tMqMeta, const CSphQueryResult & tMqRes );
 };
 
- SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, ParsedJsonQuery_t & tParsed );
+ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, ParsedJsonQuery_t & tParsed, CSphString & sError );

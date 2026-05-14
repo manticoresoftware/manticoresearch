@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>facet filter mode optimizer review coverage</name>
+
+<requires>
+<force-rt/>
+<http/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>create table facet_opt_review ( title text, brand_id integer, color_id integer, size_id integer )</sphinxql>
+<sphinxql>insert into facet_opt_review ( id, title, brand_id, color_id, size_id ) values
+(1,'p1',7,1,10),
+(2,'p2',7,1,20),
+(3,'p3',7,2,10),
+(4,'p4',8,1,10),
+(5,'p5',8,3,20)</sphinxql>
+
+<sphinxql>
+<!-- Legacy SQL facets: default, top-level strict, and per-facet MODE strict should keep the facet queue multiplier. -->
+SELECT count(*) FROM facet_opt_review WHERE brand_id=7 AND color_id=1 LIMIT 0 FACET color_id FACET size_id; SHOW META LIKE 'multiplier';
+SELECT count(*) FROM facet_opt_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='strict' FACET color_id FACET size_id; SHOW META LIKE 'multiplier';
+SELECT count(*) FROM facet_opt_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='auto' FACET color_id MODE strict FACET size_id MODE strict; SHOW META LIKE 'multiplier';
+
+<!-- New filter scopes can legitimately disable the legacy single-search facet queue. -->
+SELECT count(*) FROM facet_opt_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='auto' FACET color_id FACET size_id; SHOW META LIKE 'multiplier';
+SELECT count(*) FROM facet_opt_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id FACET size_id; SHOW META LIKE 'multiplier';
+
+<!-- Hidden max availability queries must not leak as extra visible result sets before SHOW META or the following SELECT. -->
+SELECT count(*) FROM facet_opt_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id FACET size_id; SHOW META LIKE 'multiplier'; SELECT count(*) FROM facet_opt_review WHERE brand_id=7;
+</sphinxql>
+</queries>
+
+<httpqueries>
+<!-- Legacy JSON aggs default/strict output should stay compatible while query log can be checked for x3 optimization. -->
+<query endpoint="search">{
+  "table": "facet_opt_review",
+  "limit": 0,
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
+  "aggs": {
+    "color_default": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } },
+    "size_default": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } } }
+  }
+}</query>
+
+<query endpoint="search">{
+  "table": "facet_opt_review",
+  "limit": 0,
+  "facet_filter_mode": "strict",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
+  "aggs": {
+    "color_strict": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } },
+    "size_strict": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } } }
+  }
+}</query>
+
+<!-- Single-agg limit=0 group-emulation path should remain enabled for legacy default/top-level strict. -->
+<query endpoint="search">{
+  "table": "facet_opt_review",
+  "limit": 0,
+  "facet_filter_mode": "strict",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } } ] } },
+  "aggs": {
+    "color_single_strict": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } }
+  }
+}</query>
+
+<!-- Explicit per-agg strict is new syntax; output should match strict, but optimization may differ. -->
+<query endpoint="search">{
+  "table": "facet_opt_review",
+  "limit": 0,
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } } ] } },
+  "aggs": {
+    "color_single_mode_strict": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "mode": "strict" }
+  }
+}</query>
+
+<query endpoint="sql" method="post">mode=raw&amp;query=drop table facet_opt_review</query>
+</httpqueries>
+
+</test>

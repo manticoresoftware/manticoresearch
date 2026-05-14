@@ -20,6 +20,7 @@ The options available to `searchd` in all operating systems are:
 * `--config <file>` (`-c <file>` for short) tells `searchd` to use the specified file as its configuration.
 * `--auth` runs interactive [authentication bootstrap](../Security/Authentication_and_authorization.md#Creating-the-first-administrator) mode. Use it after starting `searchd` with authentication enabled to create the first administrator.
 * `--auth-non-interactive` runs authentication bootstrap mode with the administrator name, password, and password confirmation read from stdin.
+* `--check` checks the configuration file, verifies that the server can start with it, then exits. It prints `OK` and exits with code 0 if the check succeeds. If the check fails, it exits with code 1 and prints the same error that `searchd` would print during a regular startup.
 * `--stop` is used to asynchronously stop `searchd`, using the details of the PID file as specified in the Manticore configuration file. Therefore, you may also need to confirm to `searchd` which configuration file to use with the `--config` option. Example:
 
     ```bash
@@ -135,14 +136,6 @@ The options available to `searchd` in all operating systems are:
 * `--safetrace` forces `searchd` to only use the system's backtrace() call in crash reports. In certain (rare) scenarios, this might be a "safer" way to get that report. This is a debugging option.
 
 *   `--nodetach` (Linux only): Prevents `searchd` from detaching into the background. In this mode, log entries are printed directly to the console. Query processing remains unaffected. This option is intended for debugging or for capturing output when running Manticore in a Docker container.
-
-*   `--watchdog` (Linux only): Enables the internal [watchdog](Server_settings/Searchd.md#watchdog), overriding any settings in the configuration file. Note that `--watchdog` is incompatible with foreground mode; if `--console` or `--nodetach` is used, the watchdog is implicitly disabled, and a warning is issued.
-
-*   `--no-watchdog` (Linux only): Disables the internal [watchdog](Server_settings/Searchd.md#watchdog). This overrides any settings in the configuration file and is equivalent to setting `watchdog=0` in the config.
-
-*   `--systemd` (Linux only): Forces `searchd` to operate as if it were managed by systemd. By default, `searchd` checks whether it can notify systemd of its state; if communication is possible, it assumes systemd management. In this mode, the watchdog is disabled (unless explicitly enabled) and the `pid_file` configuration is not strictly required. This option explicitly forces systemd management mode.
-
-*   `--no-systemd` (Linux only): Disables systemd management mode and prevents `searchd` from assuming any external management. Consequently, the process runs with the watchdog enabled (unless explicitly disabled) and writes its PID to the file specified by the `pid_file` option in the configuration.
 
 ### Windows options
 

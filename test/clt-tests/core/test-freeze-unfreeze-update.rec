@@ -38,13 +38,10 @@ mysql -h0 -P9306 -e "SHOW TABLES"
 | test  | rt   |
 +-------+------+
 ––– input –––
-mysql -P9306 -h0 -e "SELECT COUNT(*) FROM test;"
+mysql -P9306 -NE -h0 -e "SELECT COUNT(*) FROM test"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|  1000000 |
-+----------+
+*************************** 1. row ***************************
+1000000
 ––– input –––
 mysql -P9306 -h0 -e "DESCRIBE test;"
 ––– output –––

@@ -22,14 +22,21 @@ jobs:
         env:
           PR_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           PR_REF: ${{ github.event.pull_request.head.ref }}
+          PR_HAS_DRAFT_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'draft') }}
         run: |
           echo $PR_REPO > pr_repo.txt
           echo $PR_REF >> pr_repo.txt
+          echo $PR_HAS_DRAFT_LABEL > skip_translate.txt
       - name: Upload PR repo name
         uses: actions/upload-artifact@v4
         with:
           name: pr_repo
           path: ./pr_repo.txt
+      - name: Upload translate mode
+        uses: actions/upload-artifact@v4
+        with:
+          name: skip_translate
+          path: ./skip_translate.txt
       - name: Trigger doc check
         run: |
           echo "Doc check triggered"

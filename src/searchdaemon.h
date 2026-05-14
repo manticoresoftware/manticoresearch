@@ -136,7 +136,7 @@ SearchdCommand_e ParseCommand ( const CSphString & sCommand );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 29
+	VER_COMMAND_SEARCH_MASTER = 30
 };
 
 
@@ -1466,6 +1466,7 @@ inline constexpr MysqlColumnType_e ESphAttr2MysqlColumn ( ESphAttr eAttrType )
 	{
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_TIMESTAMP:
+	case SPH_ATTR_TOKENCOUNT:
 	case SPH_ATTR_BOOL: return MYSQL_COL_LONG;
 	case SPH_ATTR_FLOAT: return MYSQL_COL_FLOAT;
 	case SPH_ATTR_DOUBLE: return MYSQL_COL_DOUBLE;
@@ -1515,6 +1516,11 @@ public:
 		else
 			sTime << "100%";
 		PutString ( sTime );
+	}
+
+	virtual MysqlColumnType_e ESphAttr2MysqlColumnStreamed ( ESphAttr eAttrType ) const noexcept
+	{
+		return ::ESphAttr2MysqlColumnStreamed ( eAttrType );
 	}
 
 	virtual void PutNumAsString ( int64_t iVal ) = 0;
@@ -1702,11 +1708,8 @@ public:
 		return HeadEnd();
 	}
 
-	virtual void DataStart ( const BYTE* ) {}
-
 	bool DataRow ( const VecTraits_T<CSphString>& dRow )
 	{
-		DataStart (nullptr);
 		for ( const auto& dValue : dRow )
 			PutString ( dValue );
 		return Commit();
@@ -1728,7 +1731,7 @@ public:
 		HeadBegin();
 		HeadColumn (szTitle, MYSQL_COL_LONG);
 		HeadEnd();
-		PutNumAsString ( iValue );
+		PutDWORD ( iValue );
 		Commit();
 		Eof();
 		return true;
@@ -1741,6 +1744,15 @@ public:
 	{
 		m_bError = false;
 		m_sError = "";
+	}
+
+	virtual void StoreCurrentPositionState() noexcept
+	{
+	};
+
+	virtual void RestoreLastPositionState () noexcept
+	{
+		Reset();
 	}
 
 protected:

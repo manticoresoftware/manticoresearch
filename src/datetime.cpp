@@ -152,13 +152,22 @@ void InitTimeZones ( StrVec_t & dWarnings )
 }
 
 
-bool SetTimeZone ( const char * szTZ, CSphString & sError )
+bool LoadTimeZone ( const char * szTZ, cctz::time_zone & tTZ, CSphString & sError )
 {
-	if ( !cctz::load_time_zone ( szTZ, &g_hTimeZone ) )
+	if ( !cctz::load_time_zone ( szTZ, &tTZ ) )
 	{
 		sError.SetSprintf ( "Unable to set time zone '%s'", szTZ );
 		return false;
 	}
+
+	return true;
+}
+
+
+bool SetTimeZone ( const char * szTZ, CSphString & sError )
+{
+	if ( !LoadTimeZone ( szTZ, g_hTimeZone, sError ) )
+		return false;
 
 	g_bTimeZoneSet = !g_hTimeZone.name().empty() && strcasecmp ( g_hTimeZone.name().c_str(), "UTC" );
 
@@ -197,6 +206,12 @@ cctz::civil_second ConvertTime ( time_t tTime )
 }
 
 
+cctz::civil_second ConvertTime ( time_t tTime, const cctz::time_zone & tTZ )
+{
+	return cctz::convert ( std::chrono::system_clock::from_time_t(tTime), tTZ );
+}
+
+
 cctz::civil_second ConvertTimeLocal ( time_t tTime )
 {
 	return cctz::convert ( std::chrono::system_clock::from_time_t(tTime), g_hTimeZoneLocal );
@@ -212,6 +227,12 @@ cctz::civil_second ConvertTimeUTC ( time_t tTime )
 time_t ConvertTime ( const cctz::civil_second & tCS )
 {
 	return std::chrono::system_clock::to_time_t ( cctz::convert ( tCS, g_hTimeZone ) );
+}
+
+
+time_t ConvertTime ( const cctz::civil_second & tCS, const cctz::time_zone & tTZ )
+{
+	return std::chrono::system_clock::to_time_t ( cctz::convert ( tCS, tTZ ) );
 }
 
 
@@ -275,6 +296,13 @@ int	CalcNumYearDays ( const cctz::civil_second & tTime )
 CSphString FormatTime ( time_t tTime, const char * szFmt )
 {
 	std::string sRes = cctz::format ( szFmt, std::chrono::system_clock::from_time_t(tTime), g_hTimeZone );
+	return sRes.c_str();
+}
+
+
+CSphString FormatTime ( time_t tTime, const char * szFmt, const cctz::time_zone & tTZ )
+{
+	std::string sRes = cctz::format ( szFmt, std::chrono::system_clock::from_time_t(tTime), tTZ );
 	return sRes.c_str();
 }
 

@@ -431,6 +431,9 @@ void SendMysqlEofPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns, b
 }
 
 
+// from https://dev.mysql.com/doc/dev/mysql-server/latest/group__group__cs__column__definition__flags.html
+#define UNSIGNED_FLAG   32
+
 
 //////////////////////////////////////////////////////////////////////////
 // Mysql row buffer and command handler
@@ -446,6 +449,34 @@ struct SqlRowBufferTraits_t : RowBuffer_i
 	CSphVector<std::pair<CSphString, MysqlColumnType_e>> m_dHead;
 	LazyVector_T<BYTE> m_tBuf {0};
 	CSphString m_sTable;
+
+	int m_iStoredPosition = -1;
+	BYTE m_uStoredPacketID = 0;
+
+	bool m_bRowStarted = false;
+	bool m_bHeadFinished = false;
+	int m_iCurrentColumn = 0;
+
+private:
+	virtual void StartNewRow() noexcept {};
+	virtual void CommitStarted() noexcept {};
+
+public:
+	inline void StartRow() noexcept
+	{
+		assert ( m_bHeadFinished && "Should not be called before head finished");
+		if (m_bRowStarted)
+			return;
+		m_bRowStarted = true;
+
+		StartNewRow();
+	}
+
+	inline void NewColumn() noexcept
+	{
+		StartRow();
+		++m_iCurrentColumn;
+	}
 
 	void SendSqlInt ( int iVal )
 	{
@@ -475,11 +506,15 @@ struct SqlRowBufferTraits_t : RowBuffer_i
 		switch ( eType )
 		{
 		case MYSQL_COL_LONG: iColLen = 11;
+			uFlags |= UNSIGNED_FLAG;
 			break;
+		case MYSQL_COL_UINT64:
+			uFlags |= UNSIGNED_FLAG;
+			eType = MYSQL_COL_LONGLONG;
+			// no break
 		case MYSQL_COL_DECIMAL:
 		case MYSQL_COL_FLOAT:
 		case MYSQL_COL_DOUBLE:
-		case MYSQL_COL_UINT64:
 		case MYSQL_COL_LONGLONG: iColLen = 20;
 			break;
 		case MYSQL_COL_STRING:
@@ -503,7 +538,7 @@ struct SqlRowBufferTraits_t : RowBuffer_i
 		m_tOut.SendWord ( uCollation ); // charset_nr, 0x21 is utf8
 		m_tOut.SendLSBDword ( iColLen ); // length
 		m_tOut.SendByte ( BYTE ( eType ) ); // type (0=decimal)
-		m_tOut.SendWord ( uFlags );
+		m_tOut.SendLSBWord ( uFlags );
 		m_tOut.SendByte ( 0 ); // decimals
 		m_tOut.SendWord ( 0 ); // filler
 		if ( bFromFieldList )
@@ -523,6 +558,7 @@ struct SqlRowBufferTraits_t : RowBuffer_i
 	template<typename NUM>
 	void PutNumAsStringT ( NUM iVal )
 	{
+		NewColumn();
 		m_tBuf.ReserveGap ( SPH_MAX_NUMERIC_STR );
 		auto pSize = (char*) m_tBuf.End();
 #if __has_include ( <charconv> )
@@ -536,6 +572,7 @@ struct SqlRowBufferTraits_t : RowBuffer_i
 
 	void PutFloatAsString ( float fVal, const char * sFormat ) override
 	{
+		NewColumn();
 		m_tBuf.ReserveGap ( SPH_MAX_NUMERIC_STR );
 		auto pSize = m_tBuf.End();
 		int iLen = sFormat
@@ -547,6 +584,7 @@ struct SqlRowBufferTraits_t : RowBuffer_i
 
 	void PutDoubleAsString ( double fVal, const char * szFormat ) override
 	{
+		NewColumn();
 		m_tBuf.ReserveGap ( SPH_MAX_NUMERIC_STR );
 		auto pSize = m_tBuf.End();
 		int iLen = szFormat
@@ -588,6 +626,7 @@ struct SqlRowBufferTraits_t : RowBuffer_i
 			return;
 		}
 
+		NewColumn();
 		auto pSpace = m_tBuf.AddN ( dBlob.second + 9 ); // 9 is taken from MysqlPack() implementation (max possible offset)
 		auto iNumLen = MysqlPackInt ( pSpace, dBlob.second );
 		if ( dBlob.second )
@@ -603,6 +642,7 @@ struct SqlRowBufferTraits_t : RowBuffer_i
 
 	void PutMicrosec ( int64_t iUsec ) override
 	{
+		NewColumn();
 		iUsec = Max ( iUsec, 0 );
 
 		m_tBuf.ReserveGap ( SPH_MAX_NUMERIC_STR+1 );
@@ -614,6 +654,7 @@ struct SqlRowBufferTraits_t : RowBuffer_i
 
 	void PutNULL () override
 	{
+		NewColumn();
 		Add ( 0xfb ); // MySQL NULL is 0xfb at VLB length
 	}
 
@@ -621,6 +662,14 @@ struct SqlRowBufferTraits_t : RowBuffer_i
 	// sends collected data, then reset
 	bool Commit() override
 	{
+
+		assert ( !m_bRowStarted || m_dHead.GetLength() == m_iCurrentColumn );
+		if ( m_bRowStarted ) {
+			m_bRowStarted = false;
+			CommitStarted();
+			m_iCurrentColumn = 0;
+		}
+
 		if ( m_bError )
 			return false;
 
@@ -693,6 +742,7 @@ struct SqlRowBufferTraits_t : RowBuffer_i
 
 	bool HeadEnd ( bool bMoreResults, int iWarns ) override
 	{
+		m_bHeadFinished = true;
 		{
 			SQLPacketHeader_c dHead { m_tOut, m_uPacketID++ };
 			SendSqlInt ( m_dHead.GetLength() );
@@ -718,14 +768,16 @@ struct SqlRowBufferTraits_t : RowBuffer_i
 
 	[[nodiscard]] bool WasFlushed() const noexcept { return m_bWasFlushed; }
 
-	[[nodiscard]] std::pair<int, BYTE> GetCurrentPositionState() noexcept
+
+	void StoreCurrentPositionState() noexcept override
 	{
 		// we track flushes just for current position (that is - flushing invalidates position)
 		m_bWasFlushed = false;
-		return { m_tOut.GetSentCount(), m_uPacketID };
+		m_iStoredPosition = m_tOut.GetSentCount();
+		m_uStoredPacketID = m_uPacketID;
 	};
 
-	void ResetToPositionState ( std::pair<int, BYTE> tPoint )
+	void RestoreLastPositionState () noexcept override
 	{
 		assert ( !m_bWasFlushed && "Can't rewind already flushed stream!");
 
@@ -739,8 +791,14 @@ struct SqlRowBufferTraits_t : RowBuffer_i
 
 		// rewind stream and packetID
 		assert ( !m_bError );
-		m_tOut.Rewind ( tPoint.first );
-		m_uPacketID = tPoint.second;
+		assert ( m_iStoredPosition>=0 && "RestoreLastPosition called without previously StoreCurrentPositionState");
+		m_tOut.Rewind ( m_iStoredPosition );
+		m_uPacketID = m_uStoredPacketID;
+	}
+
+	void SkipNULL() override
+	{
+		PutNULL();
 	}
 
 protected:
@@ -763,37 +821,38 @@ public:
 
 	void PutFloat ( float fVal ) override
 	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_FLOAT );
 		PutFloatAsString ( fVal, nullptr );
 	}
 
 	void PutDouble ( double fVal ) override
 	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_DOUBLE );
 		PutDoubleAsString ( fVal, nullptr );
 	}
 
 	void PutInt ( int iVal ) override
 	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_LONG );
 		PutNumAsStringT ( iVal );
 	}
 
 	void PutInt64 ( int64_t iVal ) override
 	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_LONGLONG );
 		PutNumAsStringT ( iVal );
 	}
 
 	void PutDWORD ( DWORD uVal ) override
 	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_LONG );
 		PutNumAsStringT ( uVal );
 	}
 
 	void PutUint64 ( uint64_t uVal ) override
 	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_UINT64 );
 		PutNumAsStringT ( uVal );
-	}
-
-	void SkipNULL() override
-	{
-		PutNULL();
 	}
 
 	using SqlRowBufferTraits_t::HeadBegin;
@@ -801,53 +860,111 @@ public:
 
 class SqlBinaryRowBuffer_c final : public SqlRowBufferTraits_t
 {
+
+	BitVec_T<BYTE,64>		m_dNullMap;
+	int m_iNullMapPos = 0;
+
+	inline void StartNewRow() noexcept final
+	{
+		Add(0); // msg 'OK'
+		m_iNullMapPos = m_tBuf.GetLengthBytes();
+		m_tBuf.AddN ( m_dNullMap.GetSizeBytes() );
+		m_dNullMap.Clear();
+	}
+
+	inline void CommitStarted() noexcept final
+	{
+		memcpy ( m_tBuf.Begin() + m_iNullMapPos, m_dNullMap.Begin(), m_dNullMap.GetSizeBytes() );
+	}
+
 public:
 	SqlBinaryRowBuffer_c ( BYTE * pPacketID, GenericOutputBuffer_c * pOut )
 		: SqlRowBufferTraits_t ( &*pPacketID, pOut )
 	{}
 
+	MysqlColumnType_e ESphAttr2MysqlColumnStreamed ( ESphAttr eAttrType ) const noexcept override
+	{
+		switch ( eAttrType )
+		{
+
+		case SPH_ATTR_INTEGER:
+		case SPH_ATTR_TIMESTAMP:
+		case SPH_ATTR_BOOL: return MYSQL_COL_LONG;
+		case SPH_ATTR_FLOAT: return MYSQL_COL_FLOAT;
+		case SPH_ATTR_DOUBLE: return MYSQL_COL_DOUBLE;
+		case SPH_ATTR_BIGINT: return MYSQL_COL_LONGLONG;
+		case SPH_ATTR_UINT64: return MYSQL_COL_UINT64;
+// binary proto doesn't support arrays, only strings.
+//		case SPH_ATTR_UINT32SET:
+//		case SPH_ATTR_UINT32SET_PTR:
+//		case SPH_ATTR_FLOAT_VECTOR:
+//		case SPH_ATTR_FLOAT_VECTOR_PTR:
+//		case SPH_ATTR_INT64SET:
+//		case SPH_ATTR_INT64SET_PTR:
+//		case SPH_ATTR_JSON:
+//		case SPH_ATTR_JSON_PTR:
+		default: return MYSQL_COL_STRING;
+		}
+	}
+
+	bool HeadEnd (bool bMoreResults, int iWarns) override
+	{
+		m_dNullMap.Init ( 2+m_dHead.GetLength()); // 2+ is feature of binary mysql proto
+		return SqlRowBufferTraits_t::HeadEnd ( bMoreResults, iWarns );
+	}
+
+	void PutNULL () override
+	{
+		NewColumn();
+		m_dNullMap.BitSet ( m_iCurrentColumn+1 ); // +1 is (m_iCurrentColumn-1) +2, +2 is feature of binary mysql proto
+	}
+
 	void PutFloat ( float fVal ) final
 	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_FLOAT );
+		NewColumn();
 		auto pSpace = m_tBuf.AddN (sizeof(float));
 		memcpy ( pSpace, &fVal, sizeof(float) );
 	}
 
 	void PutDouble ( double fVal ) final
 	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_DOUBLE );
+		NewColumn();
 		auto pSpace = m_tBuf.AddN (sizeof(double));
 		memcpy ( pSpace, &fVal, sizeof(double) );
 	}
 
 	void PutInt ( int iVal ) final
 	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_LONG );
+		NewColumn();
 		auto pSpace = m_tBuf.AddN (sizeof(DWORD));
 		memcpy ( pSpace, &iVal, sizeof(DWORD) );
 	}
 
 	void PutInt64 ( int64_t iVal ) final
 	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_LONGLONG );
+		NewColumn();
 		auto pSpace = m_tBuf.AddN (sizeof(int64_t));
 		memcpy ( pSpace, &iVal, sizeof(int64_t) );
 	}
 
 	void PutDWORD ( DWORD uVal ) final
 	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_LONG );
+		NewColumn();
 		auto pSpace = m_tBuf.AddN (sizeof(DWORD));
 		memcpy ( pSpace, &uVal, sizeof(DWORD) );
 	}
 
 	void PutUint64 ( uint64_t uVal ) final
 	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_UINT64 );
+		NewColumn();
 		auto pSpace = m_tBuf.AddN (sizeof(uint64_t));
 		memcpy ( pSpace, &uVal, sizeof(uint64_t) );
-	}
-
-	void DataStart ( const BYTE* pBitmap ) final
-	{
-		const int iNullMaskSize = ( m_dHead.GetLength() + 7 ) / 8;
-		Add(0); // msg 'OK'
-		for ( int i = 0; i < iNullMaskSize; ++i )
-			Add(pBitmap?pBitmap[i]:0);
 	}
 
 	// wrappers for popular packets
@@ -1242,7 +1359,7 @@ using SqlEscapedBuilder_c = EscapedStringBuilder_T<BaseQuotation_T<SqlQuotator_t
 bool ParseBinaryParameters ( InputBuffer_c& tIn, const BinaryPreparedStmt_t& tStmt, VecTraits_T<QueryParam_t>& dValues, CSphString& sError )
 {
 	tIn.GetByte(); // uFlags, not used
-	DWORD uIterationCount = tIn.GetLSBDword();
+	[[maybe_unused]] DWORD uIterationCount = tIn.GetLSBDword();
 	assert (uIterationCount==1);
 
 	const DWORD uParams = tStmt.dParamsPositions.GetLength();
@@ -1412,15 +1529,42 @@ bool ParseBinaryParameters ( InputBuffer_c& tIn, const BinaryPreparedStmt_t& tSt
 	return true;
 }
 
+static bool ExecuteSqlQuery ( SqlRowBufferTraits_t * pRows, BYTE uMysqlCmd, Str_t tSrcQueryReference )
+{
+	auto& tSess = session::Info();
+	myinfo::SetDescription ( CSphString ( tSrcQueryReference ), tSrcQueryReference.second ); // OPTIMIZE? could be huge, but string is hazard.
+	AT_SCOPE_EXIT ( []() { myinfo::SetDescription ( {}, 0 ); } );
+
+	sphLogDebugv ( "ExecuteSqlQuery command %d, '%s'", uMysqlCmd, myinfo::UnsafeDescription().first );
+	tSess.SetTaskState ( TaskState_e::QUERY );
+
+	tSess.m_pSqlRowBuffer = pRows;
+	pRows->StoreCurrentPositionState();
+	bool bKeepProfile = session::Execute ( myinfo::UnsafeDescription(), *pRows );
+	if ( !pRows->IsError() )
+		return bKeepProfile;
+
+	if ( !HasBuddy() || pRows->WasFlushed() || SqlSkipBuddy() )
+	{
+		LogSphinxqlError ( myinfo::UnsafeDescription().first, FromStr ( pRows->GetError() ) );
+		if ( pRows->WasFlushed() )
+			sphLogDebug ( "Can't invoke buddy, because output socket was flushed; unable to rewind/overwrite anything" );
+	} else
+	{
+		ProcessSqlQueryBuddy ( tSrcQueryReference, pRows );
+	}
+	return bKeepProfile;
+}
+
 // Handle COM_STMT_EXECUTE
-void HandleComStmtExecute ( GenericOutputBuffer_c& tOut, BYTE& uPacketID, InputBuffer_c& tIn, int iPacketLen )
+bool HandleComStmtExecute ( GenericOutputBuffer_c& tOut, BYTE& uPacketID, InputBuffer_c& tIn, int iPacketLen, BYTE uMysqlCmd )
 {
 //	sphWarning ("COM_STMT_EXECUTE");
 	// Need at least 9 bytes: stmt_id (4) + flags (1) + iteration_count (4)
 	if ( iPacketLen < 10 || tIn.HasBytes() < 9 )
 	{
 		SendMysqlErrorPacket ( tOut, uPacketID, FROMS("Invalid COM_STMT_EXECUTE packet"), EMYSQL_ERR::UNKNOWN_COM_ERROR );
-		return;
+		return false;
 	}
 
 	DWORD uStmtID = tIn.GetLSBDword();
@@ -1433,7 +1577,7 @@ void HandleComStmtExecute ( GenericOutputBuffer_c& tOut, BYTE& uPacketID, InputB
 		CSphString sError;
 		sError.SetSprintf ( "Unknown prepared statement handler (%u)", uStmtID );
 		SendMysqlErrorPacket ( tOut, uPacketID, FromStr(sError), EMYSQL_ERR::UNKNOWN_COM_ERROR );
-		return;
+		return false;
 	}
 
 	// Parse parameter values
@@ -1441,7 +1585,7 @@ void HandleComStmtExecute ( GenericOutputBuffer_c& tOut, BYTE& uPacketID, InputB
 	if ( !ParseBinaryParameters ( tIn, *pStmt, pStmt->m_dParams, sError ) )
 	{
 		SendMysqlErrorPacket ( tOut, uPacketID, FromStr ( sError ), EMYSQL_ERR::UNKNOWN_COM_ERROR );
-		return;
+		return false;
 	}
 
 	// Build the actual query by substituting parameters
@@ -1471,13 +1615,11 @@ void HandleComStmtExecute ( GenericOutputBuffer_c& tOut, BYTE& uPacketID, InputB
 	tBuilder.Add('\0');
 	tBuilder.Add('\0'); // two zero bytes, because bison parser needs it.
 	tBuilder.Resize(tBuilder.GetLength()-2);
+	Str_t tSrcQueryReference ( tBuilder.begin(), tBuilder.GetLength() );
 
 	// Execute the query using the same mechanism as COM_QUERY
-	SqlBinaryRowBuffer_c tRows ( &uPacketID, &tOut ); // stub! Should be binary!
-	auto& tSess = session::Info();
-	tSess.m_pSqlRowBuffer = &tRows;
-//	sphWarning("Execute %d: %s", uStmtID, tBuilder.begin() );
-	session::Execute ( tBuilder, tRows );
+	SqlBinaryRowBuffer_c tRows ( &uPacketID, &tOut );
+	return ExecuteSqlQuery ( &tRows, uMysqlCmd, tSrcQueryReference );
 }
 
 // Handle COM_STMT_CLOSE
@@ -1616,30 +1758,11 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 			// handle query packet
 			Str_t tSrcQueryReference ( nullptr, iPacketLen-1 );
 			tIn.GetBytesZerocopy ( ( const BYTE ** )( &tSrcQueryReference.first ), tSrcQueryReference.second );
-
-			// string created from the tSrcQueryReference data got moved into myinfo then could be changed during query parsing
-			myinfo::SetDescription ( CSphString ( tSrcQueryReference ), tSrcQueryReference.second ); // OPTIMIZE? could be huge, but string is hazard.
-			AT_SCOPE_EXIT ( []() { myinfo::SetDescription ( {}, 0 ); } );
 			assert ( !tIn.GetError() );
-			sphLogDebug ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, myinfo::UnsafeDescription().first );
-			tSess.SetTaskState ( TaskState_e::QUERY );
-
+			// string created from the tSrcQueryReference data got moved into myinfo then could be changed during query parsing
 			SqlRowBuffer_c tRows ( &uPacketID, &tOut );
-			tSess.m_pSqlRowBuffer = &tRows;
-			auto tStoredPos = tRows.GetCurrentPositionState();
-			bKeepProfile = session::Execute ( myinfo::UnsafeDescription(), tRows );
-			if ( tRows.IsError() )
-			{
-				if ( !HasBuddy() || tRows.WasFlushed() || SqlSkipBuddy() )
-				{
-					LogSphinxqlError ( myinfo::UnsafeDescription().first, FromStr ( tRows.GetError() ) );
-					if ( tRows.WasFlushed() )
-						sphLogDebug ( "Can't invoke buddy, because output socket was flushed; unable to rewind/overwrite anything" );
-				} else
-				{
-					ProcessSqlQueryBuddy ( tSrcQueryReference, FromStr ( tRows.GetError() ), tStoredPos, uPacketID, tOut );
-				}
-			}
+
+			bKeepProfile = ExecuteSqlQuery ( &tRows, uMysqlCmd, tSrcQueryReference );
 			break;
 		}
 		case MYSQL_COM_FIELD_LIST:
@@ -1661,7 +1784,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 
 		case MYSQL_COM_STMT_EXECUTE:
 		{
-			HandleComStmtExecute ( tOut, uPacketID, tIn, iPacketLen );
+			bKeepProfile = HandleComStmtExecute ( tOut, uPacketID, tIn, iPacketLen, uMysqlCmd );
 			break;
 		}
 
@@ -1708,7 +1831,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 	// finalize query profile
 	if ( pProfile )
 		pProfile->Stop();
-	if ( uMysqlCmd==MYSQL_COM_QUERY && bKeepProfile )
+	if ( bKeepProfile && ( uMysqlCmd==MYSQL_COM_QUERY || uMysqlCmd==MYSQL_COM_STMT_EXECUTE ) )
 		session::SaveLastProfile();
 	tOut.SetProfiler ( nullptr );
 	return true;

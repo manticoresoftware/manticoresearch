@@ -1,7 +1,7 @@
 #!/bin/bash
 # Download morphology and Jieba language pack files into OUT_DIR.
 # Layout matches manticoresearch-language-packs package.yml so files end up
-# in the same paths as when installing manticore-language-packs (share/manticore/de, en, ru, jieba).
+# in the same paths as when installing manticore-language-packs (share/manticore/de, en, ru, uk, jieba).
 # Usage: ./dist/download_bundle_language_packs.sh <output_dir>
 set -e
 
@@ -13,8 +13,8 @@ JIEBA_EXTRA="https://raw.githubusercontent.com/manticoresoftware/jieba/refs/head
 mkdir -p "$OUT_DIR"
 cd "$OUT_DIR"
 
-# Morphology packs (de, en, ru) - same URLs as language-packs package.yml
-for lang in de en ru; do
+# Morphology packs (de, en, ru, uk) - same URLs as language-packs package.yml
+for lang in de en ru uk; do
   echo "Downloading morphology ${lang}.pak.tgz..."
   curl -sSL "${MORPHOLOGY_URL}/${lang}.pak.tgz" | tar -xzf -
 done

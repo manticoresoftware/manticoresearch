@@ -1103,7 +1103,7 @@ This example formats the current date and time, displaying the four-digit year a
 
 ### DATE_HISTOGRAM()
 <!-- example DATE_HISTOGRAM -->
-`DATE_HISTOGRAM(expr, {calendar_interval='unit_name'})` Takes a bucket size as a unit name and returns the bucket number for the value. Values are rounded to the closest bucket. The key function is:
+`DATE_HISTOGRAM(expr, {calendar_interval='unit_name'})` or `DATE_HISTOGRAM(expr, {fixed_interval='interval'})` takes a bucket size as a unit name or fixed interval and returns the bucket number for the value. Values are rounded to the closest bucket. The key function is:
 ```sql
 key_of_the_bucket = interval * floor ( value / interval )
 ```
@@ -1120,11 +1120,15 @@ The valid intervals for `calendar_interval` are:
 
 The valid intervals for `fixed_interval` are:
 
+- `ms`, `1000ms`
+- `s`, `30s`
 - `minute`, `2m`
 - `hour`, `3h`
 - `day`, `5d`
 
 Used in aggregation, `FACET`, and grouping.
+
+The JSON `date_histogram` aggregate also supports `time_zone` and `offset` with `calendar_interval`; see [Facet over histogram date values](../Searching/Faceted_search.md#Facet-over-histogram-date-values).
 
 Example:
 
@@ -1180,4 +1184,3 @@ Here are some examples of how you might use date math:
 - `2010-04-20||+2M/d` is June 20, 2010, rounded to the nearest day.
 
 <!-- proofread -->
-

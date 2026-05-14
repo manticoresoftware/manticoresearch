@@ -298,6 +298,9 @@ bool SqlSkipBuddy()
 	if ( !pSession )
 		return false;
 
+	if ( pSession->m_bAuthAllowBuddy )
+		return false;
+
 	switch ( pSession->m_eLastStmt )
 	{
 	case STMT_SHOW_USERS:

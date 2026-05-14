@@ -38,4 +38,4 @@ void HandleMysqlShowToken ( const CSphString & sUser, RowBuffer_i & tOut );
 void HandleMysqlCreateUser ( RowBuffer_i & tOut, SqlStmt_t & tCreate, CSphString & sError );
 void HandleMysqlDropUser ( RowBuffer_i & tOut, const SqlStmt_t & tDrop );
 void HandleMysqlGrant ( RowBuffer_i & tOut, const SqlStmt_t & tGrantStmt, CSphString & sError );
-void HandleMysqlRevoke ( RowBuffer_i & tOut, const SqlStmt_t & tRevokeStmt );
+void HandleMysqlRevoke ( RowBuffer_i & tOut, const SqlStmt_t & tRevokeStmt, CSphString & sError );

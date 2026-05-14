@@ -59,6 +59,7 @@ public:
 	bool m_bDeprecatedEOF = false;
 	StrVec_t m_dLockedTables;
 	PreparedStatements m_dPreparedStatements;
+	bool m_bAuthAllowBuddy = false;
 
 public:
 	NONCOPYMOVABLE ( ClientSession_c );

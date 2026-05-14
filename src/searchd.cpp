@@ -11606,6 +11606,8 @@ static void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tO
 bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 {
 	auto& tSess = session::Info();
+	// reset per query buddy auth fallback
+	m_bAuthAllowBuddy = false;
 
 	// set on query guard
 	tSess.SetTaskState ( TaskState_e::QUERY );
@@ -12253,7 +12255,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return true;
 
 	case STMT_REVOKE:
-		HandleMysqlRevoke ( tOut, *pStmt );
+		HandleMysqlRevoke ( tOut, *pStmt, m_sError );
 		return true;
 
 	default:

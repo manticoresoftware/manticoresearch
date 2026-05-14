@@ -15,6 +15,7 @@
 #include "sphinxql_debug.h"
 #include "searchdreplication.h"
 #include "searchdssl.h"
+#include "client_session.h"
 
 #include "auth_common.h"
 #include "auth_log.h"
@@ -1523,8 +1524,29 @@ static SqlStmt_t BuildRevokeDelete ( const SqlStmt_t & tRevoke )
 	return tDelete;
 }
 
+static bool CheckAuthTargetForBuddy ( RowBuffer_i & tOut, const CSphString & sTarget, CSphString & sError )
+{
+	if ( sTarget.IsEmpty() )
+		return false;
+
+	if ( !strchr ( sTarget.cstr(), '/' ) )
+		return false;
+
+	sError = "unsupported auth target";
+
+	auto * pSession = session::GetClientSession();
+	if ( pSession )
+		pSession->m_bAuthAllowBuddy = true;
+
+	tOut.Error ( "unsupported auth target" );
+	return true;
+}
+
 void HandleMysqlGrant ( RowBuffer_i & tOut, const SqlStmt_t & tGrantStmt, CSphString & sError )
 {
+	if ( CheckAuthTargetForBuddy ( tOut, tGrantStmt.m_sAuthTarget, sError ) )
+		return;
+
 	SqlStmt_t tGrant = BuildGrantInsert ( tGrantStmt );
 	if ( !InsertAuthDocuments ( tGrant, sError ) )
 		tOut.Error ( sError.cstr() );
@@ -1532,8 +1554,11 @@ void HandleMysqlGrant ( RowBuffer_i & tOut, const SqlStmt_t & tGrantStmt, CSphSt
 		tOut.Ok ( tGrant.m_iRowsAffected );
 }
 
-void HandleMysqlRevoke ( RowBuffer_i & tOut, const SqlStmt_t & tRevokeStmt )
+void HandleMysqlRevoke ( RowBuffer_i & tOut, const SqlStmt_t & tRevokeStmt, CSphString & sError )
 {
+	if ( CheckAuthTargetForBuddy ( tOut, tRevokeStmt.m_sAuthTarget, sError ) )
+		return;
+
 	SqlStmt_t tRevoke = BuildRevokeDelete ( tRevokeStmt );
 	MysqlAuthDelete ( tOut, tRevoke );
 }

@@ -47,6 +47,28 @@ Create a configuration file such as `fluent-bit.conf`:
 
 Run Fluent Bit with this configuration and it will tail `dpkg.log`, then forward each line to Manticore.
 
+## Avoiding duplicate records on retries
+
+If your pipeline can resend the same batch after a network error or restart, enable Fluent Bit's generated document IDs and set the write mode explicitly:
+
+```
+[OUTPUT]
+    name es
+    match *
+    host 127.0.0.1
+    port 9308
+    index dpkg_log
+    generate_id On
+    write_operation index
+```
+
+This combination is recommended when you want retries to be idempotent:
+
+- `generate_id On` makes Fluent Bit assign an `_id` to each outgoing document so the same retried record keeps the same identifier.
+- `write_operation index` inserts new documents and replaces existing documents with the same `_id`, which prevents duplicates when the same batch is sent again.
+
+Do not combine `generate_id On` with `write_operation upsert` for this use case. With generated IDs, Fluent Bit may try to update documents that do not exist yet, which can produce `document_missing_exception` errors.
+
 ## Running Fluent Bit
 
 Store the configuration as `fluent-bit.conf`, then launch Fluent Bit:

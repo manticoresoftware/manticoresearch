@@ -75,6 +75,7 @@ When creating a table for auto embeddings, specify:
 - `API_TIMEOUT`: Optional. HTTP timeout in seconds for API requests. Default is 10 seconds. Set to `'0'` to use the default timeout. Applies to both validation requests during table creation and embedding generation during INSERT operations.
 
 **Supported embedding models:**
+
 | Model Type | Example | API Key Required | Notes |
 |------------|---------|-----------------|-------|
 | **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | No | Local BERT-based models, auto-downloaded |

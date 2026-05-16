@@ -11232,6 +11232,10 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 
 void RtIndex_c::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* pParentFilenameBuilder ) const
 {
+	std::unique_ptr<ScopedScheduler_c> pSerialFiber;
+	if ( Threads::IsInsideCoroutine() )
+		pSerialFiber = std::make_unique<ScopedScheduler_c> ( m_tWorkers.SerialChunkAccess() );
+
 	auto fnAddFile = [this, &dFiles] ( const auto tExt ) {
 		auto sFile = GetFilename ( tExt );
 		if ( sphIsReadable ( sFile ) )

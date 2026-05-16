@@ -9576,7 +9576,10 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const CSphString & sIndex, const CS
 
 	StrVec_t dFiles;
 	StrVec_t dExt;
-	RIdx_c ( pServed )->GetIndexFiles ( dFiles, dExt );
+	if ( ServedDesc_t::IsMutable ( pServed ) )
+		static_cast<const CSphIndex *> ( UnlockedHazardIdxFromServed ( *pServed ) )->GetIndexFiles ( dFiles, dExt );
+	else
+		RIdx_c ( pServed )->GetIndexFiles ( dFiles, dExt );
 
 	auto sFormat = sThreadFormat;
 	if ( sFormat!="external" )

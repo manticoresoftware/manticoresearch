@@ -260,7 +260,10 @@ void HandleMysqlfiles ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 
 	StrVec_t dFiles;
 	StrVec_t dExt;
-	RIdx_c ( pIndex )->GetIndexFiles ( dFiles, dExt );
+	if ( ServedDesc_t::IsMutable ( pIndex ) )
+		static_cast<const CSphIndex *> ( UnlockedHazardIdxFromServed ( *pIndex ) )->GetIndexFiles ( dFiles, dExt );
+	else
+		RIdx_c ( pIndex )->GetIndexFiles ( dFiles, dExt );
 
 	VectorLike dOut ( 0 );
 	dOut.SetColNames ( { "file" } );

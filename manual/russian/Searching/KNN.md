@@ -254,7 +254,7 @@ INSERT INTO products (title, embedding_vector) VALUES
 <!-- request SQL -->
 
 ```sql
-SELECT id, knn_dist() FROM products WHERE knn(embedding_vector, 3, 'machine learning');
+SELECT id, knn_dist() FROM products WHERE knn(embedding_vector, 'machine learning');
 ```
 
 <!-- response SQL -->
@@ -281,8 +281,7 @@ POST /search
     "table": "products",
     "knn": {
         "field": "embedding_vector",
-        "query": "machine learning",
-        "k": 3
+        "query": "machine learning"
     }
 }
 ```
@@ -294,8 +293,7 @@ POST /search
     "table": "products",
     "knn": {
         "field": "embedding_vector",
-        "query": [0.1, 0.2, 0.3, 0.4],
-        "k": 3
+        "query": [0.1, 0.2, 0.3, 0.4]
     }
 }
 ```

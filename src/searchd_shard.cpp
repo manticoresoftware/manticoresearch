@@ -116,11 +116,6 @@ static bool InvalidateChangedShardTxn ( ShardTxnState_t & tShardTxn, CSphString 
 	return false;
 }
 
-static bool IsShardWriteStmt ( SqlStmt_e eStmt )
-{
-	return eStmt==STMT_INSERT || eStmt==STMT_REPLACE;
-}
-
 static bool EnsureShardTxnScope ( ClientSession_c & tSession, const CSphString & sShard, const ShardIndex_c * pShard, SqlStmt_e eStmt, CSphString & sError )
 {
 	auto * pRtIndex = tSession.m_tAcc.GetIndex();
@@ -144,12 +139,11 @@ static bool EnsureShardTxnScope ( ClientSession_c & tSession, const CSphString &
 	else if ( tSession.m_tShardTxn.m_pShardInstance!=pShard )
 		return InvalidateChangedShardTxn ( tSession.m_tShardTxn, sError, false );
 
-	if ( IsShardWriteStmt ( eStmt ) && tSession.m_tShardTxn.m_eWriteStmt!=STMT_DUMMY && tSession.m_tShardTxn.m_eWriteStmt!=eStmt )
-	{
-		sError.SetSprintf ( "current txn can not mix INSERT and REPLACE for table '%s'", sShard.cstr() );
-		return false;
-	}
-
+	// INSERT and REPLACE may be freely mixed within one shard txn: each row
+	// carries its own m_bReplace flag (set by StoreRow / consumed by the
+	// per-row apply path), so the underlying mechanism handles either kind
+	// of write independently. This matches plain RT semantics.
+	(void)eStmt;
 	return true;
 }
 

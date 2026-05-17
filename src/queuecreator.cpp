@@ -1708,6 +1708,8 @@ bool QueueCreator_c::AddKNNRescoreColumn()
 		return true;
 
 	auto pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
+	if ( !pAttr )
+		return Err ( "KNN rescore: attribute '%s' not found in sorter schema", tKNN.m_sAttr.cstr() );
 
 	CSphColumnInfo tKNNDistRescored ( GetKnnDistRescoreAttrName(), SPH_ATTR_FLOAT );
 	tKNNDistRescored.m_eStage = SPH_EVAL_FINAL;

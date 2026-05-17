@@ -1076,8 +1076,10 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc ) NO_THREAD_SAFETY_ANALYSIS
 	}
 
 	cServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );
-	if ( !pServed || !ServedDesc_t::IsMutable ( pServed ) )
-		return TlsMsg::Err ( "wrong type of table '%s' for replication, command %d", tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
+	if ( !pServed )
+		return TlsMsg::Err ( "unknown table '%s' for replication, command %d, cluster '%s'", tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand, tCmd.m_sCluster.cstr() );
+	if ( !ServedDesc_t::IsMutable ( pServed ) )
+		return TlsMsg::Err ( "wrong type of table '%s' for replication, command %d, cluster '%s'", tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand, tCmd.m_sCluster.cstr() );
 
 	CSphString sError;
 	// special path with wlocked index for truncate

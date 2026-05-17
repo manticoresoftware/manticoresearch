@@ -492,6 +492,10 @@ volatile int & MergeChunksPerJob() noexcept;
 volatile int AutoOptimizeCutoff() noexcept;
 volatile int AutoOptimizeCutoffKNN() noexcept;
 
+volatile int & KNNParallelBuild() noexcept;
+int  SimultaneousSaveLimit() noexcept;
+void SetSimultaneousSaveLimit ( int iValue ) noexcept;
+
 void SetRtFlushDiskPeriod ( int iFlushWrite, int iFlushSearch );
 
 #endif // _sphinxrt_

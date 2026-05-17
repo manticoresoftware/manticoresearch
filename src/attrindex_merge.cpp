@@ -156,6 +156,7 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 {
 	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
 	CSphVector<int64_t> dTmp;
+	knn::BuildContext_t tBuildCtx;
 
 	int iColumnarIdLoc = PURE_COLUMNAR ? 0 : ( tIndex.GetMatchSchema ().GetAttr ( 0 ).IsColumnar () ? 0 : -1 );
 	const CSphRowitem * pRow = tIndex.GetRawAttrs ();
@@ -232,7 +233,7 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 		}
 
 		if constexpr ( WITH_KNN )
-			if ( !BuildStoreKNN ( tRowID, m_tResultRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder ) )
+			if ( !BuildStoreKNN ( tRowID, m_tResultRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder, tBuildCtx ) )
 			{
 				m_sError = m_pKNNBuilder->GetError().c_str();
 				return false;
@@ -291,6 +292,17 @@ bool AttrMerger_c::Impl_c::CopyAttributes ( const CSphIndex & tIndex, const VecT
 {
 	if ( !uAlive )
 		return true;
+
+	// first point where we transition from training to storing
+	if ( m_pKNNBuilder )
+	{
+		std::string sErrSTL;
+		if ( !m_pKNNBuilder->FinalizeTraining ( sErrSTL ) )
+		{
+			m_sError = sErrSTL.c_str();
+			return false;
+		}
+	}
 
 	// that is very empyric, however is better than nothing.
 	m_iTotalBytes += tIndex.GetStats().m_iTotalBytes * ( (float)uAlive / (float)dRowMap.GetLength64() );

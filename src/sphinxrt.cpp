@@ -87,20 +87,25 @@ constexpr int64_t MAX_SEGMENT_VECTOR_LEN		= INT_MAX;
 constexpr double INITIAL_SAVE_RATE_LIMIT		= 0.5;		///< we start rate limiting from this value.
 constexpr double SAVE_RATE_LIMIT_EMERGENCY_STEP	= 0.05;		///< emergency back-off.
 
-int SIMULTANEOUS_SAVE_LIMIT			= 2;		///< how many save ops we allow a time
-int MAX_TOLERATE_LOAD_SEGMENTS		= MAX_SEGMENTS * ( SIMULTANEOUS_SAVE_LIMIT + 1 );	///< if on load N of segments exceedes this value - perform safe loading
-double MIN_SAVE_RATE_LIMIT			= 1.0/(SIMULTANEOUS_SAVE_LIMIT+1.0);	///< minimal rate limit. Calculated value will never be less that that bound
+int g_iSimultaneousSaveLimit		= 2;		///< how many save ops we allow a time
+int MAX_TOLERATE_LOAD_SEGMENTS		= MAX_SEGMENTS * ( g_iSimultaneousSaveLimit + 1 );	///< if on load N of segments exceedes this value - perform safe loading
+double MIN_SAVE_RATE_LIMIT			= 1.0/(g_iSimultaneousSaveLimit+1.0);	///< minimal rate limit. Calculated value will never be less that that bound
 double MAX_SAVE_RATE_LIMIT			= 0.95;		///< maximal rate limit. It most probably may be reached with very low insertion rate
 
+
+static void ApplySimultaneousSaveLimit ( int iValue )
+{
+	g_iSimultaneousSaveLimit	= Max ( 1, iValue );
+	MAX_TOLERATE_LOAD_SEGMENTS	= MAX_SEGMENTS * ( g_iSimultaneousSaveLimit + 1 );
+	MIN_SAVE_RATE_LIMIT			= 1.0 / ( g_iSimultaneousSaveLimit + 1.0 );
+}
 
 // in test mode - forcibly invoke high-concurrency pattern to reveal possibly races (like #4207)
 static void SetTightConcurrencyLimits()
 {
-	sphInfo("Test mode: set SIMULTANEOUS_SAVE_LIMIT = 4");
-	SIMULTANEOUS_SAVE_LIMIT			= 4;
-	MAX_TOLERATE_LOAD_SEGMENTS		= MAX_SEGMENTS * ( SIMULTANEOUS_SAVE_LIMIT + 1 );
-	MIN_SAVE_RATE_LIMIT				= 1.0/(SIMULTANEOUS_SAVE_LIMIT+1.0);
-	MAX_SAVE_RATE_LIMIT				= MIN_SAVE_RATE_LIMIT;
+	sphInfo ( "Test mode: set simultaneous_save_limit = 4" );
+	ApplySimultaneousSaveLimit ( 4 );
+	MAX_SAVE_RATE_LIMIT = MIN_SAVE_RATE_LIMIT;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -164,6 +169,22 @@ volatile int &MergeChunksPerJob() noexcept
 {
 	static int iMergeChunksPerJob = 2;
 	return iMergeChunksPerJob;
+}
+
+volatile int &KNNParallelBuild() noexcept
+{
+	static int iKNNParallelBuild = -1;	// -1=disabled (default), 0=uncapped, >0=thread cap
+	return iKNNParallelBuild;
+}
+
+int SimultaneousSaveLimit() noexcept
+{
+	return g_iSimultaneousSaveLimit;
+}
+
+void SetSimultaneousSaveLimit ( int iValue ) noexcept
+{
+	ApplySimultaneousSaveLimit ( iValue );
 }
 
 volatile int AutoOptimizeCutoff() noexcept
@@ -1616,6 +1637,7 @@ private:
 	bool						WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, CSphString & sError ) const;
 	void						WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, SaveDiskDataTimings_t * pTimings = nullptr ) const;
 	static bool					WriteDeadRowMap ( SaveDiskDataContext_t & tCtx, CSphString & sError );
+	bool						StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i & tBuilder, const VecTraits_T<PlainOrColumnar_t> & dAttrsForKNN, int iStride, CSphString & sError ) const;
 
 	void						GetPrefixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const final;
 	void						GetInfixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const final;
@@ -3438,7 +3460,7 @@ bool RtIndex_c::MergeSegmentsStep ( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.Seri
 		// here it might be no race, as we're in serial worker.
 		TRACE_SCHED ( "wait", "MergeSegmentsStep-wait-save" );
 		auto iOldGen = m_iSavedGeneration;
-		m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal < SIMULTANEOUS_SAVE_LIMIT; } );
+		m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal < g_iSimultaneousSaveLimit; } );
 
 		// if a save finished during wait - limits and conditions may be changed, will restart to check whether save is still necessary
 		if ( m_iSavedGeneration != iOldGen )
@@ -3968,29 +3990,8 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 		}
 	}
 
-	if ( pKNNBuilder )
-	{
-		RowID_t tRowIDForKNN = 0;
-		ARRAY_FOREACH ( i, tCtx.m_tRamSegments )
-		{
-			const auto & tSeg = *tCtx.m_tRamSegments[i];
-
-			SccRL_t rLock ( tSeg.m_tLock );
-			tSeg.m_bAttrsBusy.store ( true, std::memory_order_release );
-
-			auto dColumnarIterators = CreateAllColumnarIterators ( tSeg.m_pColumnar.get(), m_tSchema );
-
-			for ( auto tRowID : RtLiveRows_c(tSeg) )
-			{
-				const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID*iStride;
-				if ( !BuildStoreKNN ( tRowID, tRowIDForKNN++, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder ) )
-				{
-					sError = pKNNBuilder->GetError().c_str();
-					return false;
-				}
-			}
-		}
-	}
+	if ( pKNNBuilder && !StoreKNNParallel ( tCtx, *pKNNBuilder, dAttrsForKNN, iStride, sError ) )
+		return false;
 
 	// rows could be killed during index save and tNextRowID could be less than tCtx.m_iTotalDocuments \ initial count
 	assert ( tNextRowID<=(RowID_t)dRawLookup.GetLength() );
@@ -4050,6 +4051,91 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 
 	if ( pJsonSIBuilder && !pJsonSIBuilder->Done(sError) )
 		return false;
+
+	return true;
+}
+
+
+bool RtIndex_c::StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i & tBuilder, const VecTraits_T<PlainOrColumnar_t> & dAttrsForKNN, int iStride, CSphString & sError ) const
+{
+	{
+		std::string sErrSTL;
+		if ( !tBuilder.FinalizeTraining ( sErrSTL ) )
+		{
+			sError = sErrSTL.c_str();
+			return false;
+		}
+	}
+
+	// per-segment HNSW store loop
+	const int iNumSegs = tCtx.m_tRamSegments.GetLength();
+	const int iParallelBuild = KNNParallelBuild();
+	int iConcurrency = 1;
+	if ( iParallelBuild>=0 && iNumSegs > 1 )
+	{
+		int iBusyWorkers = Max ( GlobalWorkPool()->CurTasks() - 1, 0 ); // ignore the current save fiber
+		int iAvailable = Max ( Coro::CurrentScheduler()->WorkingThreads() - iBusyWorkers, 1 );
+		iConcurrency = Max ( 1, Min ( iAvailable, iNumSegs ) );
+		if ( iParallelBuild > 0 )
+			iConcurrency = Min ( iConcurrency, iParallelBuild );
+
+		RTSAVELOG << "parallel KNN build: concurrency=" << iConcurrency
+				  << " (knn_parallel_build=" << iParallelBuild
+				  << " budget=" << iAvailable
+				  << " segments=" << iNumSegs << ")";
+	}
+
+	auto pDispatcher = Dispatcher::MakeTrivial ( iNumSegs, iConcurrency );
+	std::atomic<bool> bError { false };
+	CSphFixedVector<CSphString> dErrors(iNumSegs);
+
+	Coro::ExecuteN ( iConcurrency, [&]
+	{
+		Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
+
+		auto pSource = pDispatcher->MakeSource();
+		knn::BuildContext_t tBuildCtx;
+		int iSeg = -1;
+		while ( !bError.load ( std::memory_order_relaxed ) && pSource->FetchTask(iSeg) )
+		{
+			const auto & tSeg = *tCtx.m_tRamSegments[iSeg];
+
+			SccRL_t rLock ( tSeg.m_tLock );
+			tSeg.m_bAttrsBusy.store ( true, std::memory_order_release );
+
+			auto dColumnarIterators = CreateAllColumnarIterators ( tSeg.m_pColumnar.get(), m_tSchema );
+
+			for ( auto tRowID : RtLiveRows_c(tSeg) )
+			{
+				RowID_t tRowOut = tCtx.m_dRowMaps[iSeg][tRowID];
+				assert ( tRowOut!=INVALID_ROWID );
+
+				const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID * iStride;
+				if ( !BuildStoreKNN ( tRowID, tRowOut, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, tBuilder, tBuildCtx ) )
+				{
+					dErrors[iSeg] = tBuilder.GetError().c_str();
+					if ( dErrors[iSeg].IsEmpty() )
+						dErrors[iSeg].SetSprintf ( "HNSW save: BuildStoreKNN failed for segment %d row %u (no detail)", iSeg, tRowID );
+
+					bError.store ( true, std::memory_order_relaxed );
+					break;
+				}
+			}
+
+			iSeg = -1; // mark consumed so FetchTask advances
+		}
+	});
+
+	if ( bError.load() )
+	{
+		StringBuilder_c sJoined ( "; " );
+		for ( const auto & s : dErrors )
+			if ( !s.IsEmpty() )
+				sJoined << s.cstr();
+
+		sError = sJoined.IsEmpty() ? "HNSW save failed (no error details)" : sJoined.cstr();
+		return false;
+	}
 
 	return true;
 }
@@ -4595,7 +4681,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 
 	RTSAVELOG << "SaveDiskChunk (" << ( bForced ? "forced, " : "not forced, " ) << ( bEmergent ? "emergent, " : "not emergent " ) << ")";
 
-	m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal < SIMULTANEOUS_SAVE_LIMIT; } );
+	m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal < g_iSimultaneousSaveLimit; } );
 
 	// we're in serial worker - no concurrency, no race between wait() and modify()
 	m_tNSavesNow.ModifyValue ( [] ( int& iVal ) { ++iVal; } );

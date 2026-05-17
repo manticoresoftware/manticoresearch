@@ -235,7 +235,7 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 		if constexpr ( WITH_KNN )
 			if ( !BuildStoreKNN ( tRowID, m_tResultRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder, tBuildCtx ) )
 			{
-				m_sError = m_pKNNBuilder->GetError().c_str();
+				m_sError = tBuildCtx.m_sError.c_str();
 				return false;
 			}
 

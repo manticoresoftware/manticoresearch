@@ -4113,7 +4113,7 @@ bool RtIndex_c::StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i 
 				const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID * iStride;
 				if ( !BuildStoreKNN ( tRowID, tRowOut, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, tBuilder, tBuildCtx ) )
 				{
-					dErrors[iSeg] = tBuilder.GetError().c_str();
+					dErrors[iSeg] = tBuildCtx.m_sError.c_str();
 					if ( dErrors[iSeg].IsEmpty() )
 						dErrors[iSeg].SetSprintf ( "HNSW save: BuildStoreKNN failed for segment %d row %u (no detail)", iSeg, tRowID );
 

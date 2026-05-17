@@ -1,0 +1,25 @@
+––– comment –––
+Regression: FAIL_008 (daemon) — KNN query against a public sharded table
+with a float_vector knn attr used to crash searchd via SIGSEGV inside
+Expr_KNNDist_c. Daemon now returns a clean SQL error and stays up.
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "create table t8(title text, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2') shards='2' rf='1';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "insert into t8(id,title,vector) values(1,'one',(0.1,0.2,0.3,0.4)),(2,'two',(0.2,0.1,0.4,0.3));"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "select id, knn_dist() from t8 where knn(vector, 2, (0.1,0.2,0.3,0.4)) order by knn_dist() asc;" 2>&1 | head -1
+––– output –––
+ERROR 1064 (42000) at line 1: KNN rescore: attribute 'vector' not found in sorter schema
+––– input –––
+sleep 1; mysql -h0 -P1306 -e "show status like 'uptime';" | grep uptime | awk '{print ($2 > 0) ? "uptime_positive" : "uptime_zero"}'
+––– output –––
+uptime_positive

@@ -1257,6 +1257,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		return false;
 	}
 
+	if ( tQuery.HasKnn() && tQuery.m_iLimit>=0 )
+		tQuery.m_iLimit = Min ( tQuery.m_iLimit, Max ( tQuery.m_iMaxMatches - tQuery.m_iOffset, 0 ) );
+
 	CheckQuery ( tQuery, sError );
 	if ( !sError.IsEmpty() )
 	{

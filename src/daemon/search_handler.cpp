@@ -236,9 +236,19 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 		LogQuery ( m_dQueries[0], m_dJoinQueryOptions[0], m_dAggrResults[0], m_dAgentTimes[0] );
 }
 
+static void ClampKnnLimitByMaxMatches ( CSphQuery & tQuery )
+{
+	if ( !tQuery.HasKnn() || tQuery.m_iLimit<0 )
+		return;
+
+	int iWindow = Max ( tQuery.m_iMaxMatches - tQuery.m_iOffset, 0 );
+	tQuery.m_iLimit = Min ( tQuery.m_iLimit, iWindow );
+}
+
 void SearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc )
 {
 	m_dQueries[iQuery] = tQuery;
+	ClampKnnLimitByMaxMatches ( m_dQueries[iQuery] );
 	m_dQueries[iQuery].m_pQueryParser = m_pQueryParser.get();
 	m_dQueries[iQuery].m_eQueryType = m_eQueryType;
 	m_dTables[iQuery] = std::move ( pTableFunc );

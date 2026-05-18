@@ -1096,6 +1096,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "attr_autoconv_strict",	0, NULL },
 	{ "parallel_chunk_merges",	0, nullptr },
 	{ "merge_chunks_per_job",	0, nullptr },
+	{ "knn_parallel_build",		0, nullptr },
 	{ NULL,						0, NULL }
 };
 

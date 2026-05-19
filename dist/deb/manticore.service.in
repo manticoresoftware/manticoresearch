@@ -25,4 +25,3 @@ NotifyAccess=all
 WantedBy=multi-user.target
 Alias=manticore.service
 Alias=searchd.service
-

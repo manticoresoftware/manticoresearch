@@ -67,134 +67,134 @@
 * [IMPORT TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md) - 将先前创建的 RT 或 PQ 表导入正在 RT 模式运行的服务器
 
 ##### 复制
-* [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) - 加入复制集群
-* [ALTER CLUSTER](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - 向复制集群添加/删除表
+* [加入复制集群](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) - 加入复制集群
+* [管理复制节点](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - 向复制集群添加/删除表
 * [退出集群](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - 将当前节点从复制集群分离
-* [SET CLUSTER](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Cluster-parameters) - 更改复制集群设置
-* [DELETE CLUSTER](Creating_a_cluster/Setting_up_replication/Deleting_a_replication_cluster.md) - 删除复制集群
+* [设置集群](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Cluster-parameters) - 更改复制集群设置
+* [删除集群](Creating_a_cluster/Setting_up_replication/Deleting_a_replication_cluster.md) - 删除复制集群
 
-##### 普通表轮换
-* [RELOAD TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLE) - 轮换普通表
-* [RELOAD TABLES](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLE) - 轮换所有普通表
+##### 平面表轮转
+* [重新加载表](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLE) - 轮转平面表
+* [重新加载所有表](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLE) - 轮转所有平面表
 
 ##### 事务
-* [BEGIN](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - 开始一个事务
-* [COMMIT](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - 完成一个事务
-* [ROLLBACK](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - 回滚一个事务
+* [BEGIN](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - 开始事务
+* [COMMIT](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - 完成事务
+* [ROLLBACK](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - 回滚事务
 
 ##### CALL
-* [CALL SUGGEST, CALL QSUGGEST](Searching/Spell_correction.md#CALL-QSUGGEST,-CALL-SUGGEST) - 建议拼写纠正单词
-* [CALL SNIPPETS](Searching/Highlighting.md) - 根据提供的数据和查询构建高亮结果摘要
-* [CALL PQ](Searching/Percolate_query.md) - 运行反向查询
-* [CALL KEYWORDS](Searching/Autocomplete.md#CALL-KEYWORDS) - 用于检查关键词的分词方式。并允许获取给定关键词的分词形式
-* [CALL AUTOCOMPLETE](Searching/Autocomplete.md#CALL-AUTOCOMPLETE) - 自动完成搜索查询
+* [CALL SUGGEST, CALL QSUGGEST](Searching/Spell_correction.md#CALL-QSUGGEST,-CALL-SUGGEST) - 建议拼写更正后的单词
+* [CALL SNIPPETS](Searching/Highlighting.md) - 从提供的数据和查询中构建高亮结果片段
+* [CALL PQ](Searching/Percolate_query.md) - 运行一个渗透查询
+* [CALL KEYWORDS](Searching/Autocomplete.md#CALL-KEYWORDS) - 用于检查关键字的分词方式。还可以获取提供的关键字的分词形式
+* [CALL AUTOCOMPLETE](Searching/Autocomplete.md#CALL-AUTOCOMPLETE) - 自动补全搜索查询
 
 ##### 插件
-* [CREATE FUNCTION](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md) - 安装用户定义函数（UDF）
-* [DROP FUNCTION](Extensions/UDFs_and_Plugins/UDF/Deleting_a_function.md) - 删除用户定义函数（UDF）
-* [CREATE PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md) - 安装插件
-* [CREATE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md#CREATE-BUDDY-PLUGIN) - 安装 Buddy 插件
-* [DROP PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md#DELETE-PLUGIN) - 删除插件
-* [DROP BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md#DELETE-BUDDY-PLUGIN) - 删除 Buddy 插件
-* [RELOAD PLUGINS](Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md) - 从指定库重新加载所有插件
-* [ENABLE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#ENABLE-BUDDY-PLUGIN) - 重新激活先前禁用的 Buddy 插件
-* [DISABLE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#DISABLE-BUDDY-PLUGIN) - 停用已激活的 Buddy 插件
+* [创建函数](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md) - 安装用户定义函数（UDF）
+* [删除函数](Extensions/UDFs_and_Plugins/UDF/Deleting_a_function.md) - 删除用户定义函数（UDF）
+* [创建插件](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md) - 安装插件
+* [创建Buddy插件](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md#CREATE-BUDDY-PLUGIN) - 安装Buddy插件
+* [删除插件](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md#DELETE-PLUGIN) - 删除插件
+* [删除Buddy插件](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md#DELETE-BUDDY-PLUGIN) - 删除Buddy插件
+* [重新加载插件](Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md) - 从给定库重新加载所有插件
+* [启用Buddy插件](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#ENABLE-BUDDY-PLUGIN) - 重新激活之前禁用的Buddy插件
+* [禁用Buddy插件](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#DISABLE-BUDDY-PLUGIN) - 禁用活动的Buddy插件
 
 ##### 服务器状态
-* [SHOW STATUS](Node_info_and_management/Node_status.md#SHOW-STATUS) - 显示多个有用的性能计数器
-* [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) - 列出所有当前活动的客户端线程
-* [SHOW VARIABLES](Node_info_and_management/SHOW_VARIABLES.md) - 列出服务器范围内的变量及其值
-* [SHOW VERSION](Node_info_and_management/SHOW_VERSION.md#SHOW-VERSION) - 提供实例各种组件的详细版本信息
+* [显示状态](Node_info_and_management/Node_status.md#SHOW-STATUS) - 显示一些有用的性能计数器
+* [显示线程](Node_info_and_management/SHOW_THREADS.md) - 列出所有当前活动的客户端线程
+* [显示变量](Node_info_and_management/SHOW_VARIABLES.md) - 列出服务器范围的变量及其值
+* [显示版本](Node_info_and_management/SHOW_VERSION.md#SHOW-VERSION) - 提供实例各个组件的详细版本信息。
 
-### HTTP 端点
-* [/sql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) - 通过 HTTP JSON 执行 SQL 语句
-* [/cli](Connecting_to_the_server/HTTP.md#/cli) - 提供 HTTP 命令行界面
-* [/insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - 向实时表插入文档
-* [/pq/tbl_name/doc](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - 向反向查询表添加 PQ 规则
+### HTTP端点
+* [/sql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) - 通过HTTP JSON执行SQL语句
+* [/cli](Connecting_to_the_server/HTTP.md#/cli) - 提供HTTP命令行界面
+* [/insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - 将文档插入实时表
+* [/pq/tbl_name/doc](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - 向渗透表添加PQ规则
 * [/update](Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON) - 更新实时表中的文档
-* [/replace](Data_creation_and_modification/Updating_documents/REPLACE.md) - 替换实时表中已存在的文档，若不存在则插入
-* [/pq/tbl_name/doc/N?refresh=1](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - 替换反向查询表中的 PQ 规则
+* [/replace](Data_creation_and_modification/Updating_documents/REPLACE.md) - 替换实时表中现有的文档或插入不存在的文档
+* [/pq/tbl_name/doc/N?refresh=1](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - 替换渗透表中的PQ规则
 * [/delete](Data_creation_and_modification/Deleting_documents.md) - 从表中删除文档
-* [/bulk](Data_creation_and_modification/Updating_documents/UPDATE.md#Bulk-updates) - 在单次调用中执行多个插入、更新或删除操作。更多批量插入内容请见[这里](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)。
+* [/bulk](Data_creation_and_modification/Updating_documents/UPDATE.md#Bulk-updates) - 在单个调用中执行多个插入、更新或删除操作。有关批量插入的更多信息，请参见[此处](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)。
 * [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - 执行搜索
-* [/search -> knn](Searching/KNN.md) - 执行 KNN 向量搜索
-* [/pq/tbl_name/search](Searching/Percolate_query.md) - 在反向查询表中执行反向搜索
-* [/tbl_name/_mapping](Creating_a_table/Local_tables/Real-time_table.md#_mapping-API:) - 以 Elasticsearch 风格创建表模式
+* [/search -> knn](Searching/KNN.md) - 执行KNN向量搜索
+* [/pq/tbl_name/search](Searching/Percolate_query.md) - 在渗透表中执行反向搜索
+* [/tbl_name/_mapping](Creating_a_table/Local_tables/Real-time_table.md#_mapping-API:) - 以Elasticsearch风格创建表模式
 
-### 常用内容
+### 常见事项
 * [字段名称语法](Creating_a_table/Data_types.md#Field-name-syntax)
 * [数据类型](Creating_a_table/Data_types.md)
 * [引擎](Creating_a_table/Data_types.md)
-* [普通模式](Read_this_first.md#Real-time-mode-vs-plain-mode)
+* [平面模式](Read_this_first.md#Real-time-mode-vs-plain-mode)
 * [实时模式](Read_this_first.md#Real-time-mode-vs-plain-mode)
 
 ##### 常见表设置
-* [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs)
-* [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs)
-* [access_doclists](Server_settings/Searchd.md#access_doclists)
-* [access_hitlists](Server_settings/Searchd.md#access_hitlists)
-* [access_dict](Server_settings/Searchd.md#access_dict)
-* [attr_update_reserve](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_update_reserve)
+* [访问普通属性](Server_settings/Searchd.md#access_plain_attrs)
+* [访问二进制属性](Server_settings/Searchd.md#access_blob_attrs)
+* [访问文档列表](Server_settings/Searchd.md#access_doclists)
+* [访问命中列表](Server_settings/Searchd.md#access_hitlists)
+* [访问字典](Server_settings/Searchd.md#access_dict)
+* [属性更新保留](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_update_reserve)
 * [二元组分隔符](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_delimiter)
-* [bigram_freq_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [bigram_index](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
-* [blend_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)
-* [blend_mode](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
-* [charset_table](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)
-* [dict](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)
-* [docstore_block_size](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [docstore_compression](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [docstore_compression_level](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [embedded_limit](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)
-* [exceptions](Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions)
-* [exceptions_list](Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions_list)
-* [expand_keywords](Searching/Options.md#expand_keywords)
-* [global_idf](Searching/Options.md#global_idf)
-* [hitless_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words)
-* [hitless_words_list](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words_list)
-* [html_index_attrs](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_index_attrs)
-* [html_remove_elements](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_remove_elements)
-* [html_strip](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip)
-* [ignore_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ignore_chars)
-* [index_exact_words](Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words)
-* [index_field_lengths](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths)
-* [index_sp](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_sp)
-* [index_token_filter](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_token_filter)
-* [index_zones](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_zones)
-* [infix_fields](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#infix_fields)
-* [inplace_enable](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [inplace_hit_gap](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [inplace_reloc_factor](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [inplace_write_factor](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [jieba_hmm](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_hmm)
-* [jieba_mode](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_mode)
-* [jieba_user_dict_path](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_user_dict_path)
-* [killlist_target](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [max_substring_len](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#max_substring_len)
-* [min_infix_len](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)
-* [min_prefix_len](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len)
-* [min_stemming_len](Creating_a_table/NLP_and_tokenization/Morphology.md#min_stemming_len)
-* [min_word_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#min_word_len)
-* [morphology](Searching/Options.md#morphology)
-* [morphology_skip_fields](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology_skip_fields)
-* [ngram_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
-* [ngram_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len)
-* [overshort_step](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#overshort_step)
-* [path](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [phrase_boundary](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary)
-* [phrase_boundary_step](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary_step)
-* [prefix_fields](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#prefix_fields)
-* [preopen](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [read_buffer_docs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [read_buffer_hits](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [regexp_filter](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)
-* [stopwords](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)
-* [stopwords_list](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_list)
-* [stopword_step](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step)
-* [stopwords_unstemmed](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed)
-* [type](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [wordforms](Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms)
-* [wordforms_list](Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms_list)
+* [二元组高频词](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [二元组索引](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
+* [混合字符](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)
+* [混合模式](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
+* [字符集表](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)
+* [字典](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)
+* [文档存储块大小](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [文档存储压缩](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [文档存储压缩级别](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [嵌入限制](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)
+* [例外](Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions)
+* [例外列表](Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions_list)
+* [扩展关键词](Searching/Options.md#expand_keywords)
+* [全局IDF](Searching/Options.md#global_idf)
+* [无命中词](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words)
+* [无命中词列表](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words_list)
+* [HTML索引属性](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_index_attrs)
+* [HTML移除元素](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_remove_elements)
+* [HTML剥离](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip)
+* [忽略字符](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ignore_chars)
+* [精确词索引](Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words)
+* [索引字段长度](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths)
+* [HTML索引空格](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_sp)
+* [索引词过滤器](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_token_filter)
+* [索引区域](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_zones)
+* [通配符字段](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#infix_fields)
+* [原地启用](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [原地命中间隙](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [原地重定位因子](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [原地写入因子](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [jieba隐马尔可夫模型](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_hmm)
+* [jieba模式](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_mode)
+* [jieba用户词典路径](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_user_dict_path)
+* [killlist目标](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [最大子串长度](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#max_substring_len)
+* [最小通配符长度](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)
+* [最小前缀长度](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len)
+* [最小词干长度](Creating_a_table/NLP_and_tokenization/Morphology.md#min_stemming_len)
+* [最小词长](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#min_word_len)
+* [词形](Searching/Options.md#morphology)
+* [跳过词形字段](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology_skip_fields)
+* [ngram字符](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
+* [ngram长度](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len)
+* [过短步长](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#overshort_step)
+* [路径](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [短语边界](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary)
+* [短语边界步长](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary_step)
+* [前缀字段](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#prefix_fields)
+* [预打开](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [读取文档缓冲区](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [读取命中缓冲区](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [正则表达式过滤器](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)
+* [停用词](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)
+* [停用词列表](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_list)
+* [停用词步长](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step)
+* [未词干停用词](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed)
+* [类型](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [词形映射](Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms)
+* [词形映射列表](Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms_list)
 
 ##### 平凡表设置
 * [json_secondary_indexes](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#json_secondary_indexes)
@@ -428,10 +428,10 @@ index_converter {--config /path/to/config|--path}
 `searchd` 是 Manticore 服务器。
 
 ##### 配置文件中的 searchd 设置
-应放在配置文件的 `searchd {}` 部分中：
+应放在配置文件的 `searchd {}` 部分：
   * [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs) - 定义如何访问表的 blob 属性文件
-  * [access_doclists](Server_settings/Searchd.md#access_doclists) - 定义如何访问表的 doclists 文件
-  * [access_hitlists](Server_settings/Searchd.md#access_hitlists) - 定义如何访问表的 hitlists 文件
+  * [access_doclists](Server_settings/Searchd.md#access_doclists) - 定义如何访问表的文档列表文件
+  * [access_hitlists](Server_settings/Searchd.md#access_hitlists) - 定义如何访问表的命中列表文件
   * [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs) - 定义搜索服务器如何访问表的普通属性
   * [access_dict](Server_settings/Searchd.md#access_dict) - 定义如何访问表的字典文件
   * [agent_connect_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - 远程代理连接超时
@@ -448,12 +448,12 @@ index_converter {--config /path/to/config|--path}
   * [client_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 使用持久连接时在请求之间等待的最大时间
   * [collation_libc_locale](Server_settings/Searchd.md#collation_libc_locale) - 服务器 libc 区域设置
   * [collation_server](Server_settings/Searchd.md#collation_server) - 默认服务器排序规则
-  * [data_dir](Server_settings/Searchd.md#data_dir) - Manticore 存储所有内容的数据目录路径 ([RT 模式](Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29))
-  * [diskchunk_flush_write_timeout](Server_settings/Searchd.md#diskchunk_flush_write_timeout) - 如果没有写入操作，RAM 块自动刷新的超时时间
-  * [diskchunk_flush_search_timeout](Server_settings/Searchd.md#diskchunk_flush_search_timeout) - 如果表中没有搜索操作，防止 RAM 块自动刷新的超时时间
-  * [docstore_cache_size](Server_settings/Searchd.md#docstore_cache_size) - 文档存储中保留在内存中的文档块最大大小
+  * [data_dir](Server_settings/Searchd.md#data_dir) - Manticore 存储所有数据的数据目录路径 ([RT 模式](Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29))
+  * [diskchunk_flush_write_timeout](Server_settings/Searchd.md#diskchunk_flush_write_timeout) - 如果没有写入操作，自动刷新 RAM 块的超时时间
+  * [diskchunk_flush_search_timeout](Server_settings/Searchd.md#diskchunk_flush_search_timeout) - 如果表中没有搜索操作，防止自动刷新 RAM 块的超时时间
+  * [docstore_cache_size](Server_settings/Searchd.md#docstore_cache_size) - 内存中保存的文档存储文档块的最大大小
   * [expansion_limit](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) - 单个通配符的最大扩展关键字数量
-  * [grouping_in_utc](Server_settings/Searchd.md#grouping_in_utc) - 启用 UTC 时区用于按时间字段分组
+  * [grouping_in_utc](Server_settings/Searchd.md#grouping_in_utc) - 启用 UTC 时区用于分组时间字段
   * [ha_period_karma](Server_settings/Searchd.md#ha_period_karma) - 代理镜像统计窗口大小
   * [ha_ping_interval](Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_ping_interval) - 代理镜像 ping 间隔
   * [hostname_lookup](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 主机名更新策略
@@ -462,7 +462,7 @@ index_converter {--config /path/to/config|--path}
   * [join_cache_size](Searching/Joining.md#Join-caching) - 定义用于重用 JOIN 查询结果的缓存大小
   * [kibana_version_string](Server_settings/Searchd.md#kibana_version_string) – 发送给 Kibana 请求的服务器版本字符串
   * [listen](Server_settings/Searchd.md#listen) - 指定 searchd 监听的 IP 地址和端口或 Unix 域套接字路径
-  * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - TCP 监听 backlog
+  * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - TCP 监听队列
   * [listen_tfo](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 为所有监听器启用 TCP_FASTOPEN 标志
   * [log](Server_settings/Searchd.md#log) - Manticore 服务器日志文件路径
   * [max_batch_queries](Server_settings/Searchd.md#max_batch_queries) - 限制每批查询的数量
@@ -473,9 +473,9 @@ index_converter {--config /path/to/config|--path}
   * [max_open_files](Server_settings/Searchd.md#max_open_files) - 服务器允许打开的最大文件数
   * [max_packet_size](Server_settings/Searchd.md#max_packet_size) - 允许的最大网络数据包大小
   * [mysql_version_string](Server_settings/Searchd.md#mysql_version_string) - 通过 MySQL 协议返回的服务器版本字符串
-  * [net_throttle_accept](Server_settings/Searchd.md#net_throttle_accept) - 定义网络循环的每次迭代中接受的客户端数量
-  * [net_throttle_action](Server_settings/Searchd.md#net_throttle_action)  - 定义网络循环的每次迭代中处理的请求数量
-  * [net_wait_tm](Server_settings/Searchd.md#net_wait_tm) - 控制网络线程的繁忙循环间隔
+  * [net_throttle_accept](Server_settings/Searchd.md#net_throttle_accept) - 定义每次网络循环迭代中接受的客户端数量
+  * [net_throttle_action](Server_settings/Searchd.md#net_throttle_action)  - 定义每次网络循环迭代中处理的请求数量
+  * [net_wait_tm](Server_settings/Searchd.md#net_wait_tm) - 控制网络线程的忙循环间隔
   * [net_workers](Server_settings/Searchd.md#net_workers) - 网络线程数量
   * [network_timeout](Server_settings/Searchd.md#network_timeout) - 客户端请求的网络超时
   * [node_address](Server_settings/Searchd.md#node_address) - 指定节点的网络地址
@@ -483,9 +483,9 @@ index_converter {--config /path/to/config|--path}
   * [parallel_chunk_merges](Server_settings/Searchd.md#parallel_chunk_merges) - 在 OPTIMIZE 期间可以并行运行的 RT 磁盘块合并数量
   * [pid_file](Server_settings/Searchd.md#pid_file) - Manticore 服务器 pid 文件路径
   * [preopen_tables](Server_settings/Searchd.md#preopen_tables) - 确定是否在启动时强制预打开所有表
-  * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - 为对普通表和实时表的搜索查询启用伪分片
+  * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - 为搜索查询启用对普通表和实时表的伪分片
   * [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes) - 为缓存结果集分配的最大 RAM
-  * [qcache_thresh_msec](Server_settings/Searchd.md#qcache_thresh_msec) - 查询结果缓存的最小墙时间阈值
+  * [qcache_thresh_msec](Server_settings/Searchd.md#qcache_thresh_msec) - 查询结果被缓存的最小墙时间阈值
   * [qcache_ttl_sec](Server_settings/Searchd.md#qcache_ttl_sec) - 缓存结果集的过期时间
   * [query_log](Server_settings/Searchd.md#query_log) - 查询日志文件路径
   * [query_log_format](Server_settings/Searchd.md#query_log_format) - 查询日志格式
@@ -494,18 +494,18 @@ index_converter {--config /path/to/config|--path}
   * [read_buffer_docs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) - 每个关键字的文档列表读取缓冲区大小
   * [read_buffer_hits](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) - 每个关键字的命中列表读取缓冲区大小
   * [read_unhinted](Server_settings/Searchd.md#read_unhinted) - 未提示的读取大小
-  * [rt_flush_period](Server_settings/Searchd.md#rt_flush_period) - Manticore 刷新实时表的 RAM 块到磁盘的频率
+  * [rt_flush_period](Server_settings/Searchd.md#rt_flush_period) - Manticore 将实时表的 RAM 块刷新到磁盘的频率
   * [rt_merge_iops](Server_settings/Searchd.md#rt_merge_iops) - 实时块合并线程允许执行的最大 I/O 操作数（每秒）
   * [rt_merge_maxiosize](Server_settings/Searchd.md#rt_merge_maxiosize) - 实时块合并线程允许执行的最大 I/O 操作大小
-  * [seamless_rotate](Server_settings/Searchd.md#seamless_rotate) - 在旋转包含大量数据的表以预缓存时防止 searchd 停滞
+  * [seamless_rotate](Server_settings/Searchd.md#seamless_rotate) - 在旋转包含大量数据的表时防止 searchd 停滞
   * [secondary_indexes](Server_settings/Searchd.md#secondary_indexes) - 启用使用二级索引进行搜索查询
   * [server_id](Server_settings/Searchd.md#server_id) - 用作生成唯一文档 ID 的种子的服务器标识符
   * [shutdown_timeout](Server_settings/Searchd.md#shutdown_timeout) - Searchd `--stopwait` 超时
   * [shutdown_token](Server_settings/Searchd.md#shutdown_token) - 从 VIP SQL 连接调用 `shutdown` 命令所需的密码的 SHA1 哈希
-  * [skiplist_cache_size](Server_settings/Searchd.md#skiplist_cache_size) - 解压后的跳过列表的内存缓存最大大小
+  * [skiplist_cache_size](Server_settings/Searchd.md#skiplist_cache_size) - 解压跳过列表的内存缓存最大大小
   * [snippets_file_prefix](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 在 `load_files` 模式下生成片段时添加到本地文件名前的前缀
   * [sphinxql_state](Server_settings/Searchd.md#sphinxql_state) - 当前 SQL 状态将被序列化的文件路径
-  * [sphinxql_timeout](Server_settings/Searchd.md#sphinxql_timeout) - 等待来自 MySQL 客户端请求的最大时间
+  * [sphinxql_timeout](Server_settings/Searchd.md#sphinxql_timeout) - 等待 MySQL 客户端请求之间的最大时间
   * [ssl_ca](Server_settings/Searchd.md#ssl_ca) - SSL 证书颁发机构证书文件路径
   * [ssl_cert](Server_settings/Searchd.md#ssl_cert) - 服务器的 SSL 证书路径
   * [ssl_key](Server_settings/Searchd.md#ssl_key) - 服务器的 SSL 证书密钥路径
@@ -520,27 +520,28 @@ index_converter {--config /path/to/config|--path}
 ```bash
 searchd [OPTIONS]
 ```
+* [--check](Starting_the_server/Manually.md#searchd-command-line-options) - 检查配置文件并退出
 * [--config, -c](Starting_the_server/Manually.md#searchd-command-line-options) - 指定配置文件的路径
-* [--console](Starting_the_server/Manually.md#searchd-command-line-options) - 强制服务器以控制台模式运行
+* [--console](Starting_the_server/Manually.md#searchd-command-line-options) - 强制服务器在控制台模式下运行
 * [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - 在崩溃时启用核心转储保存
 * [--cpustats](Starting_the_server/Manually.md#searchd-command-line-options) - 启用CPU时间报告
 * [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - 从Microsoft管理控制台和其他服务注册位置删除Manticore服务
-* [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - 在表文件预读完成前阻止服务器处理传入连接
+* [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - 在表文件预读完成之前阻止服务器处理传入连接
 * [--help, -h](Starting_the_server/Manually.md#searchd-command-line-options) - 显示所有可用参数
 * [--quiet, -q](Starting_the_server/Manually.md#searchd-command-line-options) - 仅在启动时打印错误
 * [--table (--index)](Starting_the_server/Manually.md#searchd-command-line-options) - 限制服务器仅服务指定的表
 * [--install](Starting_the_server/Manually.md#searchd-command-line-options) - 在Microsoft管理控制台中将searchd安装为服务
 * [--iostats](Starting_the_server/Manually.md#searchd-command-line-options) - 启用输入/输出报告
 * [--listen, -l](Starting_the_server/Manually.md#searchd-command-line-options) - 覆盖配置文件中的[listen](Server_settings/Searchd.md#listen)
-* [--logdebug, --logdebugv, --logdebugvv](Starting_the_server/Manually.md#searchd-command-line-options) - 在服务器日志中启用额外的调试输出
+* [--logdebug, --logdebugv, --logdebugvv](Starting_the_server/Manually.md#searchd-command-line-options) - 在服务器日志中启用附加调试输出
 * [--logreplication](Starting_the_server/Manually.md#searchd-command-line-options) - 在服务器日志中启用额外的复制调试输出
-* [--new-cluster](Starting_the_server/Manually.md#searchd-command-line-options) - 初始化复制集群并设置服务器作为参考节点，带有[集群重启](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)保护
-* [--new-cluster-force](Starting_the_server/Manually.md#searchd-command-line-options) - 初始化复制集群并设置服务器作为参考节点，绕过[集群重启](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)保护
+* [--new-cluster](Starting_the_server/Manually.md#searchd-command-line-options) - 初始化复制集群并将服务器设置为参考节点，带有[集群重启](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)保护
+* [--new-cluster-force](Starting_the_server/Manually.md#searchd-command-line-options) - 初始化复制集群并将服务器设置为参考节点，绕过[集群重启](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)保护
 * [--nodetach](Starting_the_server/Manually.md#searchd-command-line-options) - 保持searchd在前台运行
 * [--ntservice](Starting_the_server/Manually.md#searchd-command-line-options) - 由Microsoft管理控制台用于在Windows平台将searchd作为服务启动
 * [--pidfile](Starting_the_server/Manually.md#searchd-command-line-options) - 覆盖配置文件中的[pid_file](Server_settings/Searchd.md#pid_file)
 * [--port, p](Starting_the_server/Manually.md#searchd-command-line-options) - 指定searchd应监听的端口，忽略配置文件中指定的端口
-* [--replay-flags](Starting_the_server/Manually.md#searchd-command-line-options) - 设置额外的二进制日志重放选项
+* [--replay-flags](Starting_the_server/Manually.md#searchd-command-line-options) - 设置附加的二进制日志重放选项
 * [--servicename](Starting_the_server/Manually.md#searchd-command-line-options) - 在安装或删除服务时为searchd分配给定名称，如Microsoft管理控制台中显示的名称
 * [--status](Starting_the_server/Manually.md#searchd-command-line-options) - 查询正在运行的搜索服务以返回其状态
 * [--stop](Starting_the_server/Manually.md#searchd-command-line-options) - 停止Manticore服务器
@@ -671,6 +672,6 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [13.13.0](https://manual.manticoresearch.com/manticore-13-13-0/). [安装页面](https://manticoresearch.com/install-13.13.0/)
 * [14.1.0](https://manual.manticoresearch.com/manticore-14-1-0/). [安装页面](https://manticoresearch.com/install-14.1.0/)
 * [15.1.0](https://manual.manticoresearch.com/manticore-15-1-0/). [安装页面](https://manticoresearch.com/install-15.1.0/)
-* [17.5.1版](https://manual.manticoresearch.com/manticore-17-5-1/). [安装页面](https://manticoresearch.com/install-17.5.1/)
+* [17.5.1](https://manual.manticoresearch.com/manticore-17-5-1/). [安装页面](https://manticoresearch.com/install-17.5.1/)
 * [25.0.0](https://manual.manticoresearch.com/manticore-25-0-0/). [安装页面](https://manticoresearch.com/install-25.0.0/)
 <!-- proofread -->

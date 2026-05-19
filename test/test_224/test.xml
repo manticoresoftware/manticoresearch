@@ -3,6 +3,9 @@
 
 <name>Smart attribute deletes</name>
 
+<requires>
+	<force-rt/>
+</requires>
 <skip_indexer/>
 <config>
 indexer

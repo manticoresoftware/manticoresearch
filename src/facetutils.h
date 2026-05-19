@@ -26,6 +26,7 @@ struct FacetBucketSet_t
 
 struct FacetStatusSources_t
 {
+	bool m_bEmitStatus = false;
 	const CSphVector<CSphFilterSettings> * m_pSelectedFilters = nullptr;
 	const FacetBucketSet_t * m_pSelectedBuckets = nullptr;
 	const FacetBucketSet_t * m_pAvailableBuckets = nullptr;

@@ -48,7 +48,7 @@ where:
 * optional per-aggregation `mode` overrides the inherited mode for that aggregation. Supported values are `strict`, `auto`, and `max`. `filter_mode` is kept as a backward-compatible alias.
 * optional per-aggregation `filters` explicitly lists which main-query attribute filters should be applied to that aggregation.
 * optional per-aggregation `exclude_filters` explicitly lists which main-query attribute filters should not be applied to that aggregation.
-* facet result sets can include a `status` bucket marker. Values are `selected`, `available`, and `unavailable`.
+* `auto` and `max` facet result sets can include a `status` bucket marker. Returned values are `available` and `unavailable`.
 
 The result set will contain an `aggregations` node with the returned facets, where `key` is the aggregated value and `doc_count` is the aggregation count.
 
@@ -2396,13 +2396,16 @@ Before counting buckets for a facet, Manticore first decides which filters from 
 
 Built-in modes:
 - `strict`
-  - apply all filters from the main query
+  - apply all filters from the main query and keep regular facet output
 - `auto`
   - apply all filters from the main query except filters on this same facet
+  - add a `status` marker; returned buckets are `available`
 - `max`
-  - same as `auto`, but also return unavailable buckets with `status`
+  - count buckets from the broad base query and add a `status` marker for each bucket
 
 Manual overrides:
+- `all filters` (SQL only)
+  - apply all main-query filters to this facet
 - `filters`
   - apply only the listed main-query filters to this facet
 - `exclude_filters`
@@ -2410,15 +2413,16 @@ Manual overrides:
 
 Short version:
 - `strict` = apply everything
-- `auto` = apply everything except this facet's own filters
-- `max` = `auto` + unavailable buckets
+- `auto` = apply everything except this facet's own filters + `status`
+- `max` = broad base-query counts + `status`
+- `all filters` (SQL only) = apply everything
 - `filters` = apply only these filters
 - `exclude_filters` = apply everything except these filters
 
 Performance note:
-- `max` is the most expensive facet mode because it has to discover and label unavailable buckets in addition to the normal facet counts
+- `max` is the most expensive facet mode because it has to collect broad facet counts and strict/current availability metadata
 - on large datasets or queries with many facets, `max` can be much slower than `strict` or `auto`
-- prefer `strict` or `auto` by default, and enable `max` only when the UI really needs unavailable buckets
+- use `auto` when the UI needs selectable buckets from the current filter scope, and `max` when it also needs broad bucket lists with unavailable values
 
 Example
 
@@ -2433,9 +2437,10 @@ and we calculate `FACET color`, then:
   - apply `brand + color + size`
 - `auto`
   - apply `brand + size`
+  - and return color buckets with `status=available`
 - `max`
-  - apply `brand + size`
-  - and also return unavailable color buckets with `status`
+  - apply the broad base query without `brand`, `color`, or `size`
+  - and return color buckets with `status`
 - `filters=["brand"]`
   - apply only `brand`
 - `exclude_filters=["size"]`
@@ -2458,9 +2463,9 @@ FACET size_id;
 ```
 
 In this example:
-- `FACET color_id` uses the `size_id=42` filter, but not `color_id=1`
-- `FACET size_id` uses the `color_id=1` filter, but not `size_id=42`
-- in `max` mode the returned buckets also include `status` values
+- `FACET color_id` counts buckets from the broad base query, without the `color_id=1` or `size_id=42` filters
+- `FACET size_id` counts buckets from the broad base query, without the `color_id=1` or `size_id=42` filters
+- the returned buckets also include `status` values
 
 You can also override the default rule for each facet:
 
@@ -2482,7 +2487,9 @@ The per-facet clauses mean:
 - `FILTERS color_id, size_id` — apply only `color_id` and `size_id` filters to this facet
 - `EXCLUDE FILTERS color_id` — apply all main-query filters except `color_id` to this facet
 
-In `max` mode SQL facet results add a `status` column. This mode is also the most expensive one, so on large datasets or facet-heavy queries you should enable it only when you need unavailable buckets in the response. For example, with `size='small'` and `facet_filter_mode='max'`, a `FACET size` result can look like this:
+These clauses override the filter scope that would otherwise come from `facet_filter_mode` or `MODE`. For example, `FACET color_id ALL FILTERS MODE max` still emits `status`, but its counts use all main-query filters instead of the broad default `max` scope.
+
+In `auto` and `max` modes SQL facet results add a `status` column. `available` means the bucket is currently selectable, including values already selected in the main query. In `max` mode, `unavailable` means the bucket exists in the broad count scope but is not available in the strict/current result set. `max` is the most expensive mode, so on large datasets or facet-heavy queries you should enable it only when you need broad buckets with unavailable values. For example, with `size='small'` and `facet_filter_mode='max'`, a `FACET size` result can look like this:
 
 <!-- response SQL -->
 
@@ -2490,7 +2497,7 @@ In `max` mode SQL facet results add a `status` column. This mode is also the mos
 +-------+----------+-------------+
 | size  | count(*) | status      |
 +-------+----------+-------------+
-| small |        1 | selected    |
+| small |        1 | available   |
 | large |        1 | unavailable |
 +-------+----------+-------------+
 ```
@@ -2526,7 +2533,7 @@ POST /search -d '
 }'
 ```
 
-In `max` mode JSON facet buckets include a `status` field. As with SQL, this is the most expensive facet mode, so use it with care on large datasets or when many facets are requested:
+In `auto` and `max` modes, status-capable JSON bucket aggregations include a `status` field. As with SQL, `available` means the bucket is currently selectable, including values already selected in the main query. In `max` mode, `unavailable` means the bucket exists in the broad count scope but is not available in the strict/current result set. `max` is the most expensive facet mode, so use it with care on large datasets or when many facets are requested:
 
 <!-- response JSON -->
 
@@ -2534,7 +2541,7 @@ In `max` mode JSON facet buckets include a `status` field. As with SQL, this is 
 "aggregations": {
   "sizes": {
     "buckets": [
-      { "key": "small", "doc_count": 1, "status": "selected" },
+      { "key": "small", "doc_count": 1, "status": "available" },
       { "key": "large", "doc_count": 1, "status": "unavailable" }
     ]
   }
@@ -2579,8 +2586,8 @@ POST /search -d '
 Notes:
 - in SQL, `MODE` overrides the query-level `facet_filter_mode` for one facet
 - in JSON, `mode` or `filter_mode` overrides the top-level `facet_filter_mode` for one aggregation
-- `status=selected` is currently derived from explicit value filters such as `=` and `IN` on the facet field.
-- unsupported same-field filters such as ranges do not currently mark buckets as `selected`.
+- selected values are reported as `status=available` so UI clients can treat them as selectable values.
+- unsupported same-field filters such as ranges do not currently participate in selected-value detection.
 - facet-local filter scope supports conjunction-only attribute filters. Complex boolean filter trees are not rewritten per facet.
 
 <!-- end -->

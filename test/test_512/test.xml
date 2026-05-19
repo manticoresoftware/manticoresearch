@@ -33,7 +33,7 @@ SELECT count(*) FROM facet_opt_review WHERE brand_id=7 AND color_id=1 LIMIT 0 FA
 SELECT count(*) FROM facet_opt_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='strict' FACET color_id FACET size_id; SHOW META LIKE 'multiplier';
 SELECT count(*) FROM facet_opt_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='auto' FACET color_id MODE strict FACET size_id MODE strict; SHOW META LIKE 'multiplier';
 
-<!-- New filter scopes can legitimately disable the legacy single-search facet queue. -->
+<!-- Auto emits available status without hidden helpers; max emits availability status and can legitimately disable the legacy single-search facet queue. -->
 SELECT count(*) FROM facet_opt_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='auto' FACET color_id FACET size_id; SHOW META LIKE 'multiplier';
 SELECT count(*) FROM facet_opt_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id FACET size_id; SHOW META LIKE 'multiplier';
 

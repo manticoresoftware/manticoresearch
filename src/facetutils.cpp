@@ -23,7 +23,7 @@ void FacetBucketSet_t::Reset()
 
 bool FacetStatusSources_t::HasStatus() const
 {
-	return m_pSelectedFilters || m_pSelectedBuckets || m_pAvailableBuckets;
+	return m_bEmitStatus || m_pSelectedFilters || m_pSelectedBuckets || m_pAvailableBuckets;
 }
 
 bool AttrNameInList ( const StrVec_t & dAttrs, const CSphString & sAttr )
@@ -309,12 +309,8 @@ const FacetBucketSet_t * CollectFacetStatusValuesFilter ( const CSphQuery & tFac
 
 const FacetBucketSet_t * CollectFacetAvailableFilters ( const AggrResult_t & tRes, const CSphString & sAttr, const VecTraits_T<CSphMatch> & dMatches, FacetBucketSet_t & tAvailable )
 {
-	if ( tRes.m_dResults.IsEmpty() )
-	{
-		tAvailable.Reset();
-		tAvailable.m_sAttr = sAttr;
-		return &tAvailable;
-	}
+	if ( tRes.m_dResults.IsEmpty() || !tRes.m_iTotalMatches )
+		return nullptr;
 
 	return CollectBucketSet ( dMatches, tRes.m_tSchema, sAttr, tAvailable );
 }
@@ -322,15 +318,8 @@ const FacetBucketSet_t * CollectFacetAvailableFilters ( const AggrResult_t & tRe
 const FacetBucketSet_t * CollectFacetAvailableFilters ( const CSphQuery & tFacetQuery, const ISphSchema & tBucketSchema, const AggrResult_t & tRes, FacetBucketSet_t & tAvailable )
 {
 	CSphString sAttr;
-	if ( tRes.m_dResults.IsEmpty() )
-	{
-		if ( !GetFacetStatusAttr ( tFacetQuery, nullptr, tBucketSchema, sAttr ) )
-			return nullptr;
-
-		tAvailable.Reset();
-		tAvailable.m_sAttr = sAttr;
-		return &tAvailable;
-	}
+	if ( tRes.m_dResults.IsEmpty() || !tRes.m_iTotalMatches )
+		return nullptr;
 
 	if ( !GetFacetStatusAttr ( tFacetQuery, &tRes.m_tSchema, tBucketSchema, sAttr ) )
 		return nullptr;
@@ -355,10 +344,10 @@ const char * GetBucketStatus ( const CSphMatch & tMatch, const ISphSchema & tSch
 	}
 
 	if ( bSelected )
-		return "selected";
+		return "available";
 
 	if ( tStatus.m_pSelectedBuckets && MatchBucketSet ( tMatch, tSchema, *tStatus.m_pSelectedBuckets ) )
-		return "selected";
+		return "available";
 
 	if ( tStatus.m_pAvailableBuckets && MatchBucketSet ( tMatch, tSchema, *tStatus.m_pAvailableBuckets ) )
 		return "available";

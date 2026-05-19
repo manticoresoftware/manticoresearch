@@ -520,6 +520,7 @@ To be put in the `searchd {}` section of the configuration file:
 ```bash
 searchd [OPTIONS]
 ```
+* [--check](Starting_the_server/Manually.md#searchd-command-line-options) - Checks the configuration file and exits
 * [--config, -c](Starting_the_server/Manually.md#searchd-command-line-options) - Specifies the path to the configuration file
 * [--console](Starting_the_server/Manually.md#searchd-command-line-options) - Forces the server to run in console mode
 * [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - Enables core dump saving upon crash

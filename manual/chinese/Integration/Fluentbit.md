@@ -47,6 +47,28 @@
 
 使用此配置运行 Fluent Bit，它将跟踪 `dpkg.log`，然后将每一行转发到 Manticore。
 
+## 重试时避免重复记录
+
+如果您的管道在发生网络错误或重启后可以重新发送相同的批次，请启用 Fluent Bit 的生成文档 ID 并显式设置写入模式：
+
+```
+[OUTPUT]
+    name es
+    match *
+    host 127.0.0.1
+    port 9308
+    index dpkg_log
+    generate_id On
+    write_operation index
+```
+
+当您希望重试操作具有幂等性时，建议使用此组合：
+
+- `generate_id On` 使 Fluent Bit 为每个传出文档分配一个 `_id`，因此重试的相同记录会保留相同的标识符。
+- `write_operation index` 插入新文档并替换具有相同 `_id` 的现有文档，这可以防止再次发送相同批次时出现重复。
+
+不要将 `generate_id On` 与 `write_operation upsert` 结合使用。使用生成的 ID 时，Fluent Bit 可能会尝试更新尚未存在的文档，这可能导致 `document_missing_exception` 错误。
+
 ## 运行 Fluent Bit
 
 将配置保存为 `fluent-bit.conf`，然后启动 Fluent Bit：

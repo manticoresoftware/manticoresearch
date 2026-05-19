@@ -516,7 +516,7 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM information_schema.tables"
 +----------+
 | COUNT(*) |
 +----------+
-| 5        |
+|        5 |
 +----------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@isolation"

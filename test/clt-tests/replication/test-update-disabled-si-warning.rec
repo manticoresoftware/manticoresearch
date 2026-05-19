@@ -1,5 +1,5 @@
 ––– comment –––
-GH-4460: replicated UPDATE that disables secondary indexes must not break the cluster
+GH-4460/GH-4564: replicated UPDATE warnings must not break the cluster
 ––– input –––
 export INSTANCE=1
 ––– output –––
@@ -16,7 +16,7 @@ export INSTANCE=3
 export CLUSTER_NAME=gh4460
 ––– output –––
 ––– input –––
-cluster_state() { mysql -h0 -P$1 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_node_state'" 2>/dev/null | grep "cluster_${CLUSTER_NAME}_node_state" | tr -s ' ' | cut -d' ' -f4; }; wait_synced() { port=$1; for i in `seq 1 60`; do [ "$(cluster_state $port)" = synced ] && return 0; sleep 0.5; done; return 1; }; index_enabled() { mysql -h0 -P$1 -e "SHOW TABLE products_gh4460 INDEXES" | grep '| *active ' | tr -s ' ' | cut -d' ' -f6; }
+cluster_state() { mysql -h0 -P$1 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_node_state'" 2>/dev/null | grep "cluster_${CLUSTER_NAME}_node_state" | tr -s ' ' | cut -d' ' -f4; }; wait_synced() { port=$1; for i in `seq 1 60`; do [ "$(cluster_state $port)" = synced ] && return 0; sleep 0.5; done; return 1; }; index_enabled() { mysql -h0 -P$1 -e "SHOW TABLE products_gh4460 INDEXES" | grep '| *active ' | tr -s ' ' | cut -d' ' -f6; }; fail_markers() { for inst in 1 2 3; do grep -E 'Failed to apply trx|Node consistency compromised|FATAL|committed 0|abort from replication provider' /var/log/manticore-${inst}/searchd.log || true; done; }
 ––– output –––
 ––– block: ../base/replication/create-cluster –––
 ––– input –––
@@ -56,7 +56,7 @@ printf '%s\n' '{"update":{"cluster":"gh4460","index":"products_gh4460","id":1,"d
 ––– output –––
 bulk update accepted
 ––– input –––
-for port in 1306 2306 3306; do wait_synced ${port} && echo "port ${port} synced" || { echo "port ${port} not synced"; for inst in 1 2 3; do grep -E 'secondary index disabled|Failed to apply trx|Node consistency compromised|FATAL|committed 0' /var/log/manticore-${inst}/searchd.log || true; done; false; }; done
+for port in 1306 2306 3306; do wait_synced ${port} && echo "port ${port} synced" || { echo "port ${port} not synced"; fail_markers; false; }; done
 ––– output –––
 port 1306 synced
 port 2306 synced
@@ -67,3 +67,35 @@ for port in 1306 2306 3306; do count=$(mysql -h0 -P${port} -e "SELECT COUNT(*) F
 port 1306 count=3
 port 2306 count=3
 port 3306 count=3
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE bug_repro_4564 (id bigint, name string indexed attribute)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER ${CLUSTER_NAME} ADD bug_repro_4564"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO ${CLUSTER_NAME}:bug_repro_4564 (id, name) VALUES (1, 'foo')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "UPDATE ${CLUSTER_NAME}:bug_repro_4564 SET name='bar' WHERE id=1"; echo $?
+––– output –––
+0
+––– input –––
+for port in 1306 2306 3306; do wait_synced ${port} && echo "port ${port} synced" || { echo "port ${port} not synced"; fail_markers; false; }; done
+––– output –––
+port 1306 synced
+port 2306 synced
+port 3306 synced
+––– input –––
+for port in 1306 2306 3306; do name=$(mysql -h0 -P${port} -e "SELECT name FROM bug_repro_4564 WHERE id=1" | grep '| *bar *|' | tr -d ' |'); echo "port ${port} name=${name}"; done
+––– output –––
+port 1306 name=bar
+port 2306 name=bar
+port 3306 name=bar
+––– input –––
+fail_markers | wc -l
+––– output –––
+0

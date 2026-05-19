@@ -73,7 +73,7 @@ Required flags: -ucluster, -t, --skip-lock-tables
 ––– input –––
 mysqldump -h0 -P9306 -ucluster --no-tablespaces --skip-lock-tables -t --compact manticore test_cluster:repl_table 2>&1 | grep "INSERT INTO"
 ––– output –––
-INSERT INTO `test_cluster:repl_table` VALUES ('1','replicated_data');
+INSERT INTO `test_cluster:repl_table` VALUES (1,'replicated_data');
 ––– comment –––
 Test regular (non-replicated) table for comparison
 Create regular table
@@ -110,7 +110,7 @@ Verify mysqldump works on regular table (should include INSERT statement)
 ––– input –––
 mysqldump -h0 -P9306 --no-tablespaces --compact manticore regular_table 2>&1 | grep -E "INSERT" | head -1
 ––– output –––
-INSERT INTO `regular_table` VALUES ('1','regular_data');
+INSERT INTO `regular_table` VALUES (1,'regular_data');
 ––– comment –––
 Test SHOW LOCKS with regular table (must be in same session)
 ––– input –––

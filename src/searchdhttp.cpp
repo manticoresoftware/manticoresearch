@@ -1715,15 +1715,14 @@ void ConvertJsonDataset ( const JsonObj_c & tRoot, const char * sStmt, RowBuffer
 		{
 			assert ( tDataRow.IsObj() ); // like {"id":2,"proto":"http","state":"query","host":"127.0.0.1:50787","connid":9,"killed":"0","last cmd":"select"}
 			int iCol = 0;
-			tOut.DataStart ( nullptr ); // fixme! Here should be nullmask instead of nullptr, and following null columns should be skipped.
 			for ( const auto & tDataCol : tDataRow )
 			{
 				assert ( iCol < dSqlColumns.GetLength() );
 				switch ( dSqlColumns[iCol].second ) {
-					case MYSQL_COL_LONG : assert ( tDataCol.IsInt() ); tOut.PutDWORD (NumberAsInt(tDataCol)); break;
-					case MYSQL_COL_LONGLONG : assert ( tDataCol.IsInt() ); tOut.PutInt64 (NumberAsInt(tDataCol)); break;
-					case MYSQL_COL_FLOAT : assert ( tDataCol.IsDbl() ); tOut.PutFloat (NumberAsDouble(tDataCol)); break;
-					case MYSQL_COL_DOUBLE : assert ( tDataCol.IsDbl() ); tOut.PutDouble (NumberAsDouble(tDataCol)); break;
+					case MYSQL_COL_LONG : tOut.PutDWORD (NumberAsInt(tDataCol)); break;
+					case MYSQL_COL_LONGLONG : tOut.PutInt64 (NumberAsInt(tDataCol)); break;
+					case MYSQL_COL_FLOAT : tOut.PutFloat (NumberAsDouble(tDataCol)); break;
+					case MYSQL_COL_DOUBLE : tOut.PutDouble (NumberAsDouble(tDataCol)); break;
 					default: PutAnyValAsString ( tOut, tDataCol );
 				}
 				++iCol;

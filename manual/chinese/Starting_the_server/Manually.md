@@ -18,6 +18,7 @@ searchd [OPTIONS]
 * `--version`（简写为 `-v`）显示 Manticore Search 的版本信息。
 * `--quiet`（简写为 `-q`）抑制启动输出，仅显示错误（横幅和预加载消息）。
 * `--config <file>`（简写为 `-c <file>`）告诉 `searchd` 使用指定的文件作为其配置。
+* `--check` 检查配置文件，验证服务器是否可以使用它启动，然后退出。如果检查成功，它会打印 `OK` 并以代码 0 退出。如果检查失败，它会以代码 1 退出并打印与 `searchd` 在常规启动期间打印的相同错误。
 * `--stop` 用于异步停止 `searchd`，使用 Manticore 配置文件中指定的 PID 文件详细信息。因此，您可能还需要通过 `--config` 选项向 `searchd` 确认要使用的配置文件。示例：
 
     ```bash

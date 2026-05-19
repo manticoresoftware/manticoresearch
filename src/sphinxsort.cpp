@@ -681,12 +681,12 @@ void SendSqlSchema ( const ISphSchema& tSchema, RowBuffer_i* pRows, const VecTra
 		if ( i == 0 )
 		{
 			assert (tCol.m_sName == "id");
-			pRows->HeadColumn ( "id", ESphAttr2MysqlColumnStreamed ( SPH_ATTR_UINT64 ) );
+			pRows->HeadColumn ( "id", pRows->ESphAttr2MysqlColumnStreamed ( SPH_ATTR_UINT64 ) );
 			continue;
 		}
 		if ( ( iFirstFieldLen>=0 && iAttr>=iFirstFieldLen && iAttr<=iLastFieldLen ) || tCol.m_eAttrType==SPH_ATTR_TOKENCOUNT )
 			continue;
-		pRows->HeadColumn ( tCol.m_sName.cstr(), ESphAttr2MysqlColumnStreamed ( tCol.m_eAttrType ) );
+		pRows->HeadColumn ( tCol.m_sName.cstr(), pRows->ESphAttr2MysqlColumnStreamed ( tCol.m_eAttrType ) );
 	}
 
 	pRows->HeadEnd ( false, 0 );
@@ -749,25 +749,26 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 		case SPH_ATTR_INTEGER:
 		case SPH_ATTR_TIMESTAMP:
 		case SPH_ATTR_BOOL:
-			dRows.PutNumAsString ( (DWORD)tMatch.GetAttr ( tLoc ) );
+			dRows.PutDWORD ( (DWORD)tMatch.GetAttr ( tLoc ) );
 			break;
 
 		case SPH_ATTR_BIGINT:
-			dRows.PutNumAsString ( tMatch.GetAttr ( tLoc ) );
+			dRows.PutInt64 ( tMatch.GetAttr ( tLoc ) );
 			break;
 
 		case SPH_ATTR_UINT64:
-			dRows.PutNumAsString ( (uint64_t)tMatch.GetAttr ( tLoc ) );
+			dRows.PutUint64 ( (uint64_t)tMatch.GetAttr ( tLoc ) );
 			break;
 
 		case SPH_ATTR_FLOAT:
-			dRows.PutFloatAsString ( tMatch.GetAttrFloat ( tLoc ) );
+			dRows.PutFloat ( tMatch.GetAttrFloat ( tLoc ) );
 			break;
 
 		case SPH_ATTR_DOUBLE:
-			dRows.PutDoubleAsString ( tMatch.GetAttrDouble ( tLoc ) );
+			dRows.PutDouble ( tMatch.GetAttrDouble ( tLoc ) );
 			break;
 
+			// fixme! all multivalues (vectors, mva, etc) are not compatible with binary proto
 		case SPH_ATTR_INT64SET:
 		case SPH_ATTR_UINT32SET:
 			{

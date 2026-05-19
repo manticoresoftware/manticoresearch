@@ -1402,6 +1402,7 @@ function HttpFormatResultSet ( $result, $nquery, $keep_json_ctrls=false )
 	$matches = array();
 	$meta = array();
 	$agent = '';
+	$response_headers = array();
 
 	if ( array_key_exists ( 'http_endpoint', $result ) )
 		$http_endpoint = $result['http_endpoint'];
@@ -1429,12 +1430,18 @@ function HttpFormatResultSet ( $result, $nquery, $keep_json_ctrls=false )
 	if ( array_key_exists ("agent", $result ) )
 		$agent =" (agent-" . $result["agent"] . ")" ;
 
+	if ( array_key_exists ( 'response_headers', $result ) )
+		$response_headers = $result['response_headers'];
+
 	$request = json_encode ( $http_request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 	$request = stripcslashes ( $request );
 
 	$str .= "http-$nquery$agent> /$http_endpoint\n";
 	$str .= "Status: $http_code\n";
 	$str .= "$http_method ". $request . "\n";
+	if ( count ( $response_headers ) )
+		foreach ( $response_headers as $hdr )
+			$str .= "Header: $hdr\n";
 
 	if ( count ( $rows ) )
 		$str .= ( $keep_json_ctrls ? $json_handler->Encode ( $rows, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) : json_encode ( $rows, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) )."\n";
@@ -1445,15 +1452,37 @@ function HttpFormatResultSet ( $result, $nquery, $keep_json_ctrls=false )
 }
 
 
-function RunCurl ( $curl_desc, &$rows )
+function RunCurl ( $curl_desc, &$rows, &$response_headers=array(), $capture_headers=array(), $normalize_headers=false )
 {
 	$con = curl_init();
 
+	if ( !empty($capture_headers) )
+		$curl_desc[CURLOPT_HEADER] = 1;
+
 	curl_setopt_array ( $con, $curl_desc );
 	$rows = curl_exec ( $con );
-	$rows = preg_replace('/"time":\d+(\.\d+)*,/', '"time":0.000,', $rows);
 	$http_code = curl_getinfo ( $con, CURLINFO_HTTP_CODE );
 
+	if ( !empty($capture_headers) && $rows!==false )
+	{
+		$header_size = curl_getinfo ( $con, CURLINFO_HEADER_SIZE );
+		$header = substr ( $rows, 0, $header_size );
+		$rows = substr ( $rows, $header_size );
+		foreach ( preg_split('/\r\n/', $header) as $hdr )
+		{
+			foreach ( $capture_headers as $needle )
+			{
+				if ( stripos ( $hdr, $needle.':' )===0 )
+				{
+					if ( $normalize_headers )
+						$hdr = preg_replace ( '/^('.preg_quote($needle,'/').':)\s*(.*)$/i', '$1 <value>', $hdr );
+					$response_headers[] = $hdr;
+				}
+			}
+		}
+	}
+
+	$rows = preg_replace('/"time":\d+(\.\d+)*,/', '"time":0.000,', $rows);
 	curl_close($con);
 
 	return $http_code;
@@ -1469,7 +1498,7 @@ function CurlDesc ( $http_endpoint, $use_agent=0, $use_ssl=false )
 	return array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => $ssl . "127.0.0.1:$http_port/" . $http_endpoint );
 }
 
-function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_query, $use_agent, $use_ssl, $use_gzip, $testdir )
+function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_query, $use_agent, $use_ssl, $use_gzip, $testdir, $capture_headers=array(), $normalize_headers=false )
 {
 	$curl_desc = CurlDesc ( $http_endpoint, $use_agent, $use_ssl );
 	if ( $http_method=="POST" )
@@ -1513,8 +1542,12 @@ function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_quer
     }
 
 	$rows = "";
-	$http_code = RunCurl( $curl_desc, $rows );
-	return array ( 'http_endpoint'=>$http_endpoint, 'http_method'=>$http_method, 'http_request'=>$http_query, 'rows'=>$rows, 'http_code'=>$http_code, 'http'=>1 );
+	$response_headers = array();
+	$http_code = RunCurl( $curl_desc, $rows, $response_headers, $capture_headers, $normalize_headers );
+	$result = array ( 'http_endpoint'=>$http_endpoint, 'http_method'=>$http_method, 'http_request'=>$http_query, 'rows'=>$rows, 'http_code'=>$http_code, 'http'=>1 );
+	if ( !empty($response_headers) )
+		$result['response_headers'] = $response_headers;
+	return $result;
 }
 
 // these two used from custom tests
@@ -2563,6 +2596,8 @@ class SphinxConfig
         $http_content=ArrVal ($attrs, "content", NULL);
         $use_agent = ArrVal ($attrs, "d", 0);
         $use_gzip = ArrVal ($attrs, "gzip", 0);
+        $capture_headers = array_filter ( array_map ( 'trim', explode ( ',', ArrVal ( $attrs, "response_headers", "" ) ) ) );
+        $normalize_headers = (int)ArrVal ( $attrs, "normalize_response_headers", 0 );
 
 
 		if ( !is_array($query) || !$attrs )
@@ -2580,7 +2615,7 @@ class SphinxConfig
             return false;
         }
 
-		$query_result = HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $query, $use_agent, $this->Requires("https"), $use_gzip, $this->_testdir );
+		$query_result = HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $query, $use_agent, $this->Requires("https"), $use_gzip, $this->_testdir, $capture_headers, $normalize_headers );
 
 		if ( $use_agent>0 )
 			$query_result['agent'] = $use_agent;

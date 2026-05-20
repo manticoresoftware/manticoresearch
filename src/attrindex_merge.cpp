@@ -21,7 +21,12 @@
 #include "jsonsi.h"
 #include "attrindex_merge.h"
 #include "tracer.h"
+#include "sphinxrt.h"
+#include "coroutine.h"
+#include "client_task_info.h"
 
+#include <atomic>
+#include <algorithm>
 #include <boost/preprocessor/repetition/repeat.hpp>
 
 class AttrMerger_c::Impl_c
@@ -50,11 +55,22 @@ class AttrMerger_c::Impl_c
 
 	StrVec_t &								m_dCreatedFiles;
 
+	struct KNNInputRef_t
+	{
+		const CSphIndex *		m_pIndex;
+		VecTraits_T<RowID_t>	m_dRowMap;
+		DWORD					m_uAlive;	// pre-counted by the caller of CopyAttributes
+	};
+
+	CSphVector<KNNInputRef_t>		m_dKNNInputs;
+
 private:
 	template <bool WITH_BLOB, bool WITH_STRIDE, bool WITH_DOCSTORE, bool WITH_SI, bool WITH_KNN, bool PURE_COLUMNAR>
 	bool CopyMixedAttributes_T ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap );
 
 	bool AnalyzeMixedAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap );
+	bool ParallelStoreKNN();
+	void RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWorkerEnd, const CSphFixedVector<int64_t> & dInputStarts, std::atomic<bool> & bError, std::atomic<bool> & bInterrupted, CSphString & sWorkerError );
 
 	CSphString GetTmpFilename ( const CSphIndex* pIdx, ESphExt eExt )
 	{
@@ -156,7 +172,6 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 {
 	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
 	CSphVector<int64_t> dTmp;
-	knn::BuildContext_t tBuildCtx;
 
 	int iColumnarIdLoc = PURE_COLUMNAR ? 0 : ( tIndex.GetMatchSchema ().GetAttr ( 0 ).IsColumnar () ? 0 : -1 );
 	const CSphRowitem * pRow = tIndex.GetRawAttrs ();
@@ -232,12 +247,7 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 			BuildStoreSI ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
 		}
 
-		if constexpr ( WITH_KNN )
-			if ( !BuildStoreKNN ( tRowID, m_tResultRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder, tBuildCtx ) )
-			{
-				m_sError = tBuildCtx.m_sError.c_str();
-				return false;
-			}
+		// KNN is built in a separate pass
 
 		m_dDocidLookup[m_tResultRowID] = { tDocID, m_tResultRowID };
 		++m_tResultRowID;
@@ -293,16 +303,8 @@ bool AttrMerger_c::Impl_c::CopyAttributes ( const CSphIndex & tIndex, const VecT
 	if ( !uAlive )
 		return true;
 
-	// first point where we transition from training to storing
 	if ( m_pKNNBuilder )
-	{
-		std::string sErrSTL;
-		if ( !m_pKNNBuilder->FinalizeTraining ( sErrSTL ) )
-		{
-			m_sError = sErrSTL.c_str();
-			return false;
-		}
-	}
+		m_dKNNInputs.Add ( { &tIndex, dRowMap, uAlive } );
 
 	// that is very empyric, however is better than nothing.
 	m_iTotalBytes += tIndex.GetStats().m_iTotalBytes * ( (float)uAlive / (float)dRowMap.GetLength64() );
@@ -329,8 +331,174 @@ bool AttrMerger_c::Impl_c::CopyAttributes ( const CSphIndex & tIndex, const VecT
 }
 
 
+void AttrMerger_c::Impl_c::RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWorkerEnd, const CSphFixedVector<int64_t> & dInputStarts, std::atomic<bool> & bError, std::atomic<bool> & bInterrupted, CSphString & sWorkerError )
+{
+	Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
+
+	const int iNumInputs = m_dKNNInputs.GetLength();
+
+	knn::BuildContext_t tBuildCtx;
+	CSphFixedVector<CSphVector<ScopedTypedIterator_t>> dWorkerIters (iNumInputs);
+	CSphFixedVector<bool> dWorkerItersInited(iNumInputs);
+	dWorkerItersInited.Fill(false);
+
+	// find starting input
+	int iInput = (int)( std::upper_bound ( dInputStarts.Begin(), dInputStarts.End(), iWorkerStart ) - dInputStarts.Begin() ) - 1;
+
+	const CSphIndex * pIndex = nullptr;
+	const CSphRowitem *	pRawAttrs = nullptr;
+	const BYTE * pRawBlobs = nullptr;
+	int iStride = 0;
+	const RowID_t * pRowMap = nullptr;
+	int64_t iRowMapLen = 0;
+
+	auto Rebind = [&]
+	{
+		pIndex		= m_dKNNInputs[iInput].m_pIndex;
+		pRawAttrs	= pIndex->GetRawAttrs();
+		pRawBlobs	= pRawAttrs ? pIndex->GetRawBlobAttrs() : nullptr;
+		iStride		= pRawAttrs ? pIndex->GetMatchSchema().GetRowSize() : 0;
+		pRowMap		= m_dKNNInputs[iInput].m_dRowMap.Begin();
+		iRowMapLen	= m_dKNNInputs[iInput].m_dRowMap.GetLength64();
+	};
+
+	Rebind();
+
+	// skip alive alive rows belonging to earlier workers
+	int64_t iScan = 0;
+	for ( int64_t iAliveToSkip = iWorkerStart - dInputStarts[iInput]; iAliveToSkip > 0; iScan++ )
+	{
+		assert ( iScan < iRowMapLen );
+		if ( pRowMap[iScan]!=INVALID_ROWID )
+			iAliveToSkip--;
+	}
+
+	for ( int64_t iRow = iWorkerStart; iRow< iWorkerEnd; iRow++ )
+	{
+		if ( bError.load ( std::memory_order_relaxed ) || bInterrupted.load ( std::memory_order_relaxed ) )
+			return;
+
+		if ( m_tMonitor.NeedStop() )
+		{
+			bInterrupted.store ( true, std::memory_order_relaxed );
+			return;
+		}
+
+		// find next alive row, crossing input/table boundaries forward as needed
+		while ( true )
+		{
+			while ( iScan < iRowMapLen && pRowMap[iScan]==INVALID_ROWID )
+				iScan++;
+
+			if ( iScan < iRowMapLen )
+				break;
+
+			iInput++;
+			assert ( iInput < iNumInputs );
+			Rebind();
+			iScan = 0;
+		}
+
+		if ( !dWorkerItersInited[iInput] )
+		{
+			dWorkerIters[iInput] = CreateAllColumnarIterators ( pIndex->GetColumnar(), pIndex->GetMatchSchema() );
+			dWorkerItersInited[iInput] = true;
+		}
+
+		RowID_t tSrc = (RowID_t)iScan;
+		RowID_t tDst = pRowMap[iScan];
+		assert ( tDst != INVALID_ROWID );
+		const CSphRowitem * pRow = pRawAttrs ? pRawAttrs + (int64_t)tSrc * iStride : nullptr;
+		if ( !BuildStoreKNN ( tSrc, tDst, pRow, pRawBlobs, dWorkerIters[iInput], m_dAttrsForKNN, *m_pKNNBuilder, tBuildCtx ) )
+		{
+			sWorkerError = tBuildCtx.m_sError.c_str();
+			if ( sWorkerError.IsEmpty() )
+				sWorkerError.SetSprintf ( "KNN index construction failed at input %d row %u", iInput, tSrc );
+
+			bError.store ( true, std::memory_order_relaxed );
+			return;
+		}
+
+		iScan++;
+	}
+}
+
+
+bool AttrMerger_c::Impl_c::ParallelStoreKNN()
+{
+	if ( !m_pKNNBuilder )
+		return true;
+
+	{
+		std::string sErrSTL;
+		if ( !m_pKNNBuilder->FinalizeTraining ( sErrSTL ) )
+		{
+			m_sError = sErrSTL.c_str();
+			return false;
+		}
+	}
+
+	int iNumInputs = m_dKNNInputs.GetLength();
+	if ( !iNumInputs )
+		return true;
+
+	// split only alive rows between workers, not total rows
+	CSphFixedVector<int64_t> dInputStarts ( iNumInputs + 1 );
+	dInputStarts[0] = 0;
+	for ( int i = 0; i < iNumInputs; i++ )
+		dInputStarts[i+1] = dInputStarts[i] + (int64_t)m_dKNNInputs[i].m_uAlive;
+
+	int64_t iTotalAlive = dInputStarts[iNumInputs];
+	if ( !iTotalAlive )
+		return true;
+
+	const int64_t MIN_ROWS_PER_WORKER = 1024;
+	const int64_t iByRows  = Max<int64_t> ( 1, iTotalAlive / MIN_ROWS_PER_WORKER );
+	const int64_t iByConf  = Min<int64_t> ( KNNParallelBuild(), iTotalAlive );
+	const int iConcurrency = (int)Max ( 1, Min ( iByConf, iByRows ) );
+	const int64_t iRangeSize = ( iTotalAlive + iConcurrency - 1 ) / iConcurrency;
+
+	std::atomic<bool> bError { false }, bInterrupted { false };
+	std::atomic<int> iWorkerSeq { 0 };
+	CSphFixedVector<CSphString> dErrors(iConcurrency);
+
+	Threads::Coro::ExecuteN ( iConcurrency, [&]
+	{
+		int iWorkerIdx = iWorkerSeq.fetch_add ( 1, std::memory_order_relaxed );
+		int64_t iWorkerStart = (int64_t)iWorkerIdx * iRangeSize;
+		int64_t iWorkerEnd = Min ( iWorkerStart + iRangeSize, iTotalAlive );
+		if ( iWorkerStart >= iWorkerEnd )
+			return; // last worker may have an empty range
+
+		RunKNNStoreWorker ( iWorkerStart, iWorkerEnd, dInputStarts, bError, bInterrupted, dErrors[iWorkerIdx] );
+	} );
+
+	if ( bInterrupted.load ( std::memory_order_relaxed ) )
+	{
+		m_sError = "KNN merge cancelled";
+		return false;
+	}
+
+	if ( bError.load ( std::memory_order_relaxed ) )
+	{
+		StringBuilder_c sJoined ( "; " );
+		for ( const auto & s : dErrors )
+			if ( !s.IsEmpty() )
+				sJoined << s.cstr();
+
+		m_sError = sJoined.IsEmpty() ? "parallel KNN store failed (no error details)" : sJoined.cstr();
+		return false;
+	}
+
+	return true;
+}
+
+
 bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t & tBuildHeader )
 {
+	if ( !ParallelStoreKNN() )
+		return false;
+
 	m_tMinMax.FinishCollect();
 	assert ( m_tResultRowID==m_iTotalDocs );
 	tBuildHeader.m_iDocinfo = m_iTotalDocs;

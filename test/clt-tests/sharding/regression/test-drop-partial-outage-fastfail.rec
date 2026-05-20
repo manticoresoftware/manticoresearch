@@ -20,7 +20,7 @@ export CLUSTER_NAME=c
 ––– block: ../../base/replication/create-cluster –––
 ––– block: ../../base/replication/join-cluster-on-all-nodes –––
 ––– input –––
-mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:t20(id bigint, body text) shards='2' rf='2';"; echo $?
+mysql -h0 -P1306 -e "create table c:t20(id bigint, body text) shards='2' rf='2';"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -32,17 +32,21 @@ export INSTANCE=2
 ––– output –––
 ––– block: ../../base/replication/stop-searchd –––
 ––– input –––
-for _ in $(seq 1 30); do s=$(mysql -h0 -P1306 -sN -e "show status like 'cluster_${CLUSTER_NAME}_size'" 2>/dev/null | awk '{print $2}'); [ "$s" = 1 ] && break; sleep 1; done; echo "cluster_size=$s"
+for _ in $(seq 1 60); do v=$(mysql -h0 -P1306 -e "show status like 'cluster_c_size'" | awk 'NR==4{print $4}'); [ "$v" = "1" ] && break; sleep 1; done; echo "size=$v"
 ––– output –––
-cluster_size=1
+size=1
 ––– input –––
-mysql -h0 -P1306 -e "drop table ${CLUSTER_NAME}:t20;"
+mysql -h0 -P1306 -e "drop table c:t20;"
 ––– output –––
 ERROR 1064 (42000) at line 1: cluster 'c' has unreachable members (1 of 2 alive): refusing to DROP — retry when all cluster members are reachable
 ––– input –––
-mysql -h0 -P1306 -sN -e "select count(*) from system.sharding_table where \`table\`='t20'"
+mysql -h0 -P1306 -e "select count(*) c from system.sharding_table where table='t20'"
 ––– output –––
-2
++------+
+| c    |
++------+
+|    2 |
++------+
 ––– input –––
 mysql -h0 -P1306 -e "show tables like 't20';"
 ––– output –––

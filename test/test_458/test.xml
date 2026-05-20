@@ -31,7 +31,7 @@ SELECT * FROM test1 WHERE @timestamp NOT IN @uvar;
 SELECT * FROM test1 WHERE @version IN('20');
 SELECT * FROM test1 group by @timestamp;
 
-<!-- facet filter modes and per-facet overrides. Max emits availability status; selected values are reported as available. -->
+<!-- facet filter modes and per-facet overrides. Max emits status; selected values are reported as selected. -->
 SELECT count(*) FROM test1 WHERE @timestamp IN (10,20) AND @version IN('20') LIMIT 0 OPTION facet_filter_mode='max' FACET @timestamp FACET @version;;
 SELECT count(*) FROM test1 WHERE @timestamp IN (10,20) AND @version IN('20') LIMIT 0 OPTION facet_filter_mode='strict' FACET @timestamp MODE max FACET @version MODE strict;;
 SELECT count(*) FROM test1 WHERE @timestamp IN (10) AND @version IN('20') LIMIT 0 OPTION facet_filter_mode='max' FACET idd;;
@@ -59,7 +59,7 @@ SELECT count(*) FROM test1 WHERE @timestamp IN (10) AND @version IN('20') LIMIT 
 <!-- order of the aggs and FACET result sets should match -->
 <query endpoint="search">{ "table": "test1", "aggs":{ "gr1": { "terms": { "field": "@timestamp" } }, "gr2": { "terms": { "field": "@version" } }} }</query>
 
-<!-- facet filter modes and per-aggregation overrides. Max emits availability status; selected values are reported as available. -->
+<!-- facet filter modes and per-aggregation overrides. Max emits status; selected values are reported as selected. -->
 <query endpoint="search">{
   "table": "test1",
   "query": {

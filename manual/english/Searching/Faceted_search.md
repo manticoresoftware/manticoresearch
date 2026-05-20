@@ -48,7 +48,7 @@ where:
 * optional per-aggregation `mode` overrides the inherited mode for that aggregation. Supported values are `strict`, `auto`, and `max`. `filter_mode` is kept as a backward-compatible alias.
 * optional per-aggregation `filters` explicitly lists which main-query attribute filters should be applied to that aggregation.
 * optional per-aggregation `exclude_filters` explicitly lists which main-query attribute filters should not be applied to that aggregation.
-* `auto` and `max` facet result sets can include a `status` bucket marker. Returned values are `available` and `unavailable`.
+* `auto` and `max` facet result sets can include a `status` bucket marker. Returned values are `selected`, `available`, and `unavailable`.
 
 The result set will contain an `aggregations` node with the returned facets, where `key` is the aggregated value and `doc_count` is the aggregation count.
 
@@ -2399,7 +2399,7 @@ Built-in modes:
   - apply all filters from the main query and keep regular facet output
 - `auto`
   - apply all filters from the main query except filters on this same facet
-  - add a `status` marker; returned buckets are `available`
+  - add a `status` marker; selected buckets are `selected`, sibling buckets are `available`
 - `max`
   - count buckets from the broad base query and add a `status` marker for each bucket
 
@@ -2437,7 +2437,7 @@ and we calculate `FACET color`, then:
   - apply `brand + color + size`
 - `auto`
   - apply `brand + size`
-  - and return color buckets with `status=available`
+  - and return selected color buckets with `status=selected` and sibling color buckets with `status=available`
 - `max`
   - apply the broad base query without `brand`, `color`, or `size`
   - and return color buckets with `status`
@@ -2489,7 +2489,9 @@ The per-facet clauses mean:
 
 These clauses override the filter scope that would otherwise come from `facet_filter_mode` or `MODE`. For example, `FACET color_id ALL FILTERS MODE max` still emits `status`, but its counts use all main-query filters instead of the broad default `max` scope.
 
-In `auto` and `max` modes SQL facet results add a `status` column. `available` means the bucket is currently selectable, including values already selected in the main query. In `max` mode, `unavailable` means the bucket exists in the broad count scope but is not available in the strict/current result set. `max` is the most expensive mode, so on large datasets or facet-heavy queries you should enable it only when you need broad buckets with unavailable values. For example, with `size='small'` and `facet_filter_mode='max'`, a `FACET size` result can look like this:
+In `auto` and `max` modes SQL facet results add a `status` column. `selected` means the bucket value is already present in a same-facet value filter. `available` means selecting the bucket can produce results; this includes sibling values that expand an existing same-facet filter. In `max` mode, `unavailable` means the bucket exists in the broad count scope but selecting it would produce no results. `max` is the most expensive mode, so on large datasets or facet-heavy queries you should enable it only when you need broad buckets with unavailable values.
+
+For example, with `size='small'` and `facet_filter_mode='max'`, a `FACET size` result can look like this. The `large` bucket is available because selecting it would expand the same facet filter to `size IN ('small','large')`:
 
 <!-- response SQL -->
 
@@ -2497,10 +2499,12 @@ In `auto` and `max` modes SQL facet results add a `status` column. `available` m
 +-------+----------+-------------+
 | size  | count(*) | status      |
 +-------+----------+-------------+
-| small |        1 | available   |
-| large |        1 | unavailable |
+| small |        1 | selected    |
+| large |        1 | available   |
 +-------+----------+-------------+
 ```
+
+A bucket from another facet can be `unavailable` when it is present in the broad `max` counts but has no rows under the current strict filter set.
 
 <!-- intro -->
 ##### JSON:
@@ -2533,7 +2537,7 @@ POST /search -d '
 }'
 ```
 
-In `auto` and `max` modes, status-capable JSON bucket aggregations include a `status` field. As with SQL, `available` means the bucket is currently selectable, including values already selected in the main query. In `max` mode, `unavailable` means the bucket exists in the broad count scope but is not available in the strict/current result set. `max` is the most expensive facet mode, so use it with care on large datasets or when many facets are requested:
+In `auto` and `max` modes, status-capable JSON bucket aggregations include a `status` field. As with SQL, `selected` means the bucket value is already present in a same-facet value filter, `available` means selecting the bucket can produce results, and `unavailable` means a `max` bucket would produce no results if selected. Same-facet sibling buckets are `available` because selecting them expands the filter. `max` is the most expensive facet mode, so use it with care on large datasets or when many facets are requested:
 
 <!-- response JSON -->
 
@@ -2541,8 +2545,8 @@ In `auto` and `max` modes, status-capable JSON bucket aggregations include a `st
 "aggregations": {
   "sizes": {
     "buckets": [
-      { "key": "small", "doc_count": 1, "status": "available" },
-      { "key": "large", "doc_count": 1, "status": "unavailable" }
+      { "key": "small", "doc_count": 1, "status": "selected" },
+      { "key": "large", "doc_count": 1, "status": "available" }
     ]
   }
 }
@@ -2586,7 +2590,7 @@ POST /search -d '
 Notes:
 - in SQL, `MODE` overrides the query-level `facet_filter_mode` for one facet
 - in JSON, `mode` or `filter_mode` overrides the top-level `facet_filter_mode` for one aggregation
-- selected values are reported as `status=available` so UI clients can treat them as selectable values.
+- selected values are reported as `status=selected` for explicit value filters such as `=` and `IN`.
 - unsupported same-field filters such as ranges do not currently participate in selected-value detection.
 - facet-local filter scope supports conjunction-only attribute filters. Complex boolean filter trees are not rewritten per facet.
 

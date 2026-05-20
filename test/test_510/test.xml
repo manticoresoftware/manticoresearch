@@ -33,16 +33,16 @@ searchd
 SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 LIMIT 0 FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC; SHOW META LIKE 'multiplier';
 SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='strict' FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC; SHOW META LIKE 'multiplier';
 
-<!-- Auto removes only the current facet's own filters, keeps the other flat filters, and marks returned buckets available. -->
+<!-- Auto removes only the current facet's own filters, keeps the other flat filters, marks selected buckets selected, and marks siblings available. -->
 SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 AND size_id=10 LIMIT 0 OPTION facet_filter_mode='auto' FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC; SHOW META LIKE 'multiplier';
 
-<!-- Max should use broad base-query counts plus status. Selected buckets are available; color_id 4/5 are outside brand_id=7 and should still appear. -->
+<!-- Max should use broad base-query counts plus status. Selected buckets are selected, same-facet siblings are available, and other broad-only buckets can be unavailable. -->
 SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC; SHOW META LIKE 'multiplier';
 
-<!-- Empty strict availability should fall back to available for non-selected broad buckets. -->
-SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=99 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC;;
+<!-- Empty strict availability should mark same-facet siblings available and non-selected facet buckets unavailable. -->
+SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=99 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC;;
 
-<!-- Max status should also work when the visible facet is name BY id, with selected buckets reported as available. -->
+<!-- Max status should also work when the visible facet is name BY id, with selected buckets reported as selected. -->
 SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='max' FACET color_name BY color_id ORDER BY FACET() ASC;;
 
 <!-- Clause order: FILTERS/EXCLUDE FILTERS before MODE, then ORDER/LIMIT. -->
@@ -58,10 +58,10 @@ SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 AND size_i
 <sphinxql>SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id NOT IN (4) LIMIT 0 OPTION facet_filter_mode='auto' FACET color_id ORDER BY FACET() ASC</sphinxql>
 
 <sphinxql>
-<!-- Main query pagination must not affect explicit facet bucket pagination under auto; returned buckets keep available status. -->
+<!-- Main query pagination must not affect explicit facet bucket pagination under auto; returned buckets keep selected/available status. -->
 SELECT id FROM facet_sql_review WHERE brand_id=7 AND color_id=1 ORDER BY id ASC LIMIT 1,1 OPTION facet_filter_mode='auto' FACET color_id ORDER BY FACET() ASC LIMIT 0,3;;
 
-<!-- Facet LIMIT offset,count should page auto buckets after removing only the facet's own filter and keep available status. -->
+<!-- Facet LIMIT offset,count should page auto buckets after removing only the facet's own filter and keep selected/available status. -->
 SELECT id FROM facet_sql_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='auto' FACET color_id ORDER BY FACET() ASC LIMIT 1,2;;
 
 <!-- Facet LIMIT offset,count should page max buckets and keep status for the returned page. -->

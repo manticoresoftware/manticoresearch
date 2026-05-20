@@ -310,7 +310,11 @@ const FacetBucketSet_t * CollectFacetStatusValuesFilter ( const CSphQuery & tFac
 const FacetBucketSet_t * CollectFacetAvailableFilters ( const AggrResult_t & tRes, const CSphString & sAttr, const VecTraits_T<CSphMatch> & dMatches, FacetBucketSet_t & tAvailable )
 {
 	if ( tRes.m_dResults.IsEmpty() || !tRes.m_iTotalMatches )
-		return nullptr;
+	{
+		tAvailable.Reset();
+		tAvailable.m_sAttr = sAttr;
+		return &tAvailable;
+	}
 
 	return CollectBucketSet ( dMatches, tRes.m_tSchema, sAttr, tAvailable );
 }
@@ -319,7 +323,14 @@ const FacetBucketSet_t * CollectFacetAvailableFilters ( const CSphQuery & tFacet
 {
 	CSphString sAttr;
 	if ( tRes.m_dResults.IsEmpty() || !tRes.m_iTotalMatches )
-		return nullptr;
+	{
+		if ( !GetFacetStatusAttr ( tFacetQuery, nullptr, tBucketSchema, sAttr ) )
+			return nullptr;
+
+		tAvailable.Reset();
+		tAvailable.m_sAttr = sAttr;
+		return &tAvailable;
+	}
 
 	if ( !GetFacetStatusAttr ( tFacetQuery, &tRes.m_tSchema, tBucketSchema, sAttr ) )
 		return nullptr;
@@ -330,7 +341,8 @@ const FacetBucketSet_t * CollectFacetAvailableFilters ( const CSphQuery & tFacet
 
 const char * GetBucketStatus ( const CSphMatch & tMatch, const ISphSchema & tSchema, const FacetStatusSources_t & tStatus )
 {
-	bool bSelected = tStatus.m_pSelectedFilters && !tStatus.m_pSelectedFilters->IsEmpty();
+	const bool bHasSelected = tStatus.m_pSelectedFilters && !tStatus.m_pSelectedFilters->IsEmpty();
+	bool bSelected = bHasSelected;
 	if ( bSelected )
 	{
 		for ( const auto & tFilter : *tStatus.m_pSelectedFilters )
@@ -344,9 +356,12 @@ const char * GetBucketStatus ( const CSphMatch & tMatch, const ISphSchema & tSch
 	}
 
 	if ( bSelected )
-		return "available";
+		return "selected";
 
 	if ( tStatus.m_pSelectedBuckets && MatchBucketSet ( tMatch, tSchema, *tStatus.m_pSelectedBuckets ) )
+		return "selected";
+
+	if ( bHasSelected || tStatus.m_pSelectedBuckets )
 		return "available";
 
 	if ( tStatus.m_pAvailableBuckets && MatchBucketSet ( tMatch, tSchema, *tStatus.m_pAvailableBuckets ) )

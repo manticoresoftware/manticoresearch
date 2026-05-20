@@ -69,14 +69,14 @@ create table facet_dist_agent type='distributed' agent='<agent1_address/>:facet_
 <!-- Distributed locals: legacy/default strict should keep all filters. -->
 SELECT count(*) FROM facet_dist_local WHERE brand_id=7 AND color_id=1 LIMIT 0 FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC;;
 
-<!-- Distributed locals: auto should remove only the current facet's own filter and mark returned buckets available. -->
+<!-- Distributed locals: auto should remove only the current facet's own filter, mark selected buckets selected, and mark siblings available. -->
 SELECT count(*) FROM facet_dist_local WHERE brand_id=7 AND color_id=1 AND size_id=10 LIMIT 0 OPTION facet_filter_mode='auto' FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC;;
 
-<!-- Distributed locals: max should use broad base-query counts plus availability status; selected buckets are available. -->
+<!-- Distributed locals: max should use broad base-query counts plus status; selected buckets are selected and same-facet siblings are available. -->
 SELECT count(*) FROM facet_dist_local WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC;;
 
-<!-- Distributed locals: empty strict availability should fall back to available for non-selected broad buckets. -->
-SELECT count(*) FROM facet_dist_local WHERE brand_id=7 AND color_id=99 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC;;
+<!-- Distributed locals: empty strict availability should mark same-facet siblings available and non-selected facet buckets unavailable. -->
+SELECT count(*) FROM facet_dist_local WHERE brand_id=7 AND color_id=99 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC;;
 
 <!-- Distributed locals: hidden availability helpers must not corrupt a later statement. -->
 SELECT count(*) FROM facet_dist_local WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC; SELECT count(*) FROM facet_dist_local WHERE brand_id=7;;
@@ -84,19 +84,19 @@ SELECT count(*) FROM facet_dist_local WHERE brand_id=7 AND color_id=1 LIMIT 0 OP
 <!-- Distributed agents: legacy/default strict should keep all filters. -->
 SELECT count(*) FROM facet_dist_agent WHERE brand_id=7 AND color_id=1 LIMIT 0 FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC;;
 
-<!-- Distributed agents: auto should remove only the current facet's own filter and mark returned buckets available. -->
+<!-- Distributed agents: auto should remove only the current facet's own filter, mark selected buckets selected, and mark siblings available. -->
 SELECT count(*) FROM facet_dist_agent WHERE brand_id=7 AND color_id=1 AND size_id=10 LIMIT 0 OPTION facet_filter_mode='auto' FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC;;
 
-<!-- Distributed agents: max should use broad base-query counts plus availability status; selected buckets are available. -->
+<!-- Distributed agents: max should use broad base-query counts plus status; selected buckets are selected and same-facet siblings are available. -->
 SELECT count(*) FROM facet_dist_agent WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC;;
 
-<!-- Distributed agents: empty strict availability should fall back to available for non-selected broad buckets. -->
-SELECT count(*) FROM facet_dist_agent WHERE brand_id=7 AND color_id=99 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC;;
+<!-- Distributed agents: empty strict availability should mark same-facet siblings available and non-selected facet buckets unavailable. -->
+SELECT count(*) FROM facet_dist_agent WHERE brand_id=7 AND color_id=99 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC FACET size_id ORDER BY FACET() ASC;;
 
 <!-- Distributed agents: hidden availability helpers must not corrupt a later statement. -->
 SELECT count(*) FROM facet_dist_agent WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='max' FACET color_id ORDER BY FACET() ASC; SELECT count(*) FROM facet_dist_agent WHERE brand_id=7;;
 </sphinxql>
-<!-- JSON over distributed locals: top-level auto should remove only the aggregation's own filter and mark returned buckets available. -->
+<!-- JSON over distributed locals: top-level auto should remove only the aggregation's own filter, mark selected buckets selected, and mark siblings available. -->
 <query endpoint="search">{
   "table": "facet_dist_local",
   "limit": 0,
@@ -108,7 +108,7 @@ SELECT count(*) FROM facet_dist_agent WHERE brand_id=7 AND color_id=1 LIMIT 0 OP
   }
 }</query>
 
-<!-- JSON over distributed locals: top-level max should include availability status; selected buckets are available. -->
+<!-- JSON over distributed locals: top-level max should include status; selected buckets are selected and same-facet siblings are available. -->
 <query endpoint="search">{
   "table": "facet_dist_local",
   "limit": 0,
@@ -120,18 +120,19 @@ SELECT count(*) FROM facet_dist_agent WHERE brand_id=7 AND color_id=1 LIMIT 0 OP
   }
 }</query>
 
-<!-- JSON over distributed locals: empty strict availability should fall back to available for non-selected broad buckets. -->
+<!-- JSON over distributed locals: empty strict availability should mark same-facet siblings available and non-selected aggregation buckets unavailable. -->
 <query endpoint="search">{
   "table": "facet_dist_local",
   "limit": 0,
   "facet_filter_mode": "max",
   "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 99 } } ] } },
   "aggs": {
-    "color_empty_dist_local": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } }
+    "color_empty_dist_local": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } },
+    "size_empty_dist_local": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } } }
   }
 }</query>
 
-<!-- JSON over distributed agents: top-level auto should remove only the aggregation's own filter and mark returned buckets available. -->
+<!-- JSON over distributed agents: top-level auto should remove only the aggregation's own filter, mark selected buckets selected, and mark siblings available. -->
 <query endpoint="search">{
   "table": "facet_dist_agent",
   "limit": 0,
@@ -143,7 +144,7 @@ SELECT count(*) FROM facet_dist_agent WHERE brand_id=7 AND color_id=1 LIMIT 0 OP
   }
 }</query>
 
-<!-- JSON over distributed agents: top-level max should include availability status; selected buckets are available. -->
+<!-- JSON over distributed agents: top-level max should include status; selected buckets are selected and same-facet siblings are available. -->
 <query endpoint="search">{
   "table": "facet_dist_agent",
   "limit": 0,
@@ -155,14 +156,15 @@ SELECT count(*) FROM facet_dist_agent WHERE brand_id=7 AND color_id=1 LIMIT 0 OP
   }
 }</query>
 
-<!-- JSON over distributed agents: empty strict availability should fall back to available for non-selected broad buckets. -->
+<!-- JSON over distributed agents: empty strict availability should mark same-facet siblings available and non-selected aggregation buckets unavailable. -->
 <query endpoint="search">{
   "table": "facet_dist_agent",
   "limit": 0,
   "facet_filter_mode": "max",
   "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 99 } } ] } },
   "aggs": {
-    "color_empty_dist_agent": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } }
+    "color_empty_dist_agent": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } },
+    "size_empty_dist_agent": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } } }
   }
 }</query>
 

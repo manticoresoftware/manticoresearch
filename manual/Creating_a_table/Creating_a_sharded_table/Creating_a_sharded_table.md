@@ -68,7 +68,9 @@ DROP TABLE IF EXISTS c:cluster_sharded
 
 #### Inspecting Sharded Tables
 
-`DESC <table>` and `SHOW CREATE TABLE <table>` work on sharded tables and show the resolved structure (including `type='shard'` and the underlying shard locations).
+`DESC <table>` returns the user-facing field schema of a sharded table (the columns you declared).
+
+`SHOW CREATE TABLE <table>` returns the user-facing definition with `shards='N' rf='M'` — the internal `type='shard'` topology (the per-shard `local=`/`agent=` clauses and md5-named replication cluster) is intentionally hidden. To inspect the resolved internal topology for diagnostics, use `SHOW CREATE TABLE <table> OPTION force=1`.
 
 Two extra commands are provided to inspect the state of the sharding subsystem:
 

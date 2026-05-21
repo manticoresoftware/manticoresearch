@@ -38,7 +38,7 @@ size=1
 ––– input –––
 mysql -h0 -P1306 -e "drop table c:t20;"
 ––– output –––
-ERROR 1064 (42000) at line 1: cluster 'c' has unreachable members (1 of 2 alive): refusing to DROP — retry when all cluster members are reachable
+ERROR 1064 (42000) at line 1: cluster 'c' has unreachable members (1 of 2 alive): refusing to DROP — retry when the cluster is fully synced
 ––– input –––
 mysql -h0 -P1306 -e "select count(*) c from system.sharding_table where table='t20'"
 ––– output –––

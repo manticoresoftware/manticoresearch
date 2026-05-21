@@ -461,6 +461,7 @@ index_converter {--config /path/to/config|--path}
   * [join_batch_size](Searching/Joining.md#Join-batching) - 定义表连接的批处理大小以平衡性能和内存使用
   * [join_cache_size](Searching/Joining.md#Join-caching) - 定义用于重用 JOIN 查询结果的缓存大小
   * [kibana_version_string](Server_settings/Searchd.md#kibana_version_string) – 发送给 Kibana 请求的服务器版本字符串
+  * [knn_parallel_build](Server_settings/Searchd.md#knn_parallel_build) - 在 RT 块保存、OPTIMIZE / 自动优化块合并以及 `ALTER TABLE` KNN 重建期间用于构建 HNSW 图的工作者线程数
   * [listen](Server_settings/Searchd.md#listen) - 指定 searchd 监听的 IP 地址和端口或 Unix 域套接字路径
   * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - TCP 监听队列
   * [listen_tfo](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 为所有监听器启用 TCP_FASTOPEN 标志

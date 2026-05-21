@@ -26,6 +26,8 @@ Manticore Search 使用 HNSW 库启用 k-最近邻（KNN）向量搜索。此功
 * `hnsw_m`: 可选设置，定义图中出边的最大数量。默认值为 16。
 * `hnsw_ef_construction`: 可选设置，定义构建时间/准确性权衡。默认值为 200。
 
+> 注意：在 RT 块保存期间，HNSW 图构建、`OPTIMIZE TABLE` / 自动优化块合并以及 `ALTER TABLE ... ADD/DROP/REBUILD` KNN 重建默认在多核主机上并行运行；工作线程数由 [`knn_parallel_build`](../Server_settings/Searchd.md#knn_parallel_build) searchd 设置控制（将其设置为 `1` 以强制串行路径）。这仅影响构建时间性能；查询语法和搜索时间设置保持不变。由于并行 HNSW 构建可能会以不同顺序插入向量，因此生成的图可能与串行构建不完全相同。
+
 <!-- intro -->
 ##### SQL
 

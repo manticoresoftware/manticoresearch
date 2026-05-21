@@ -156,6 +156,41 @@ merge_chunks_per_job = 4
 
 <!-- end -->
 
+### knn_parallel_build
+
+<!-- example conf knn_parallel_build -->
+此设置控制在对包含 `float_vector` 属性且具有 KNN 索引的表进行 HNSW 强度操作时，用于构建 HNSW 图的工作者线程数量。多个路径使用此控件：
+* **分块保存存储阶段**：当 RAM 分块刷新到磁盘时，工作者将分块的 RAM 段分配给彼此，并并行调用 hnswlib 的 `addPoint`。
+* **分块合并存储阶段**：`OPTIMIZE TABLE` 和自动优化合并并行构建目标分块的 HNSW 图，将所有输入分块的存活行范围分配给工作者。
+* **ALTER KNN 重建**：在 `float_vector` 属性上执行 `ALTER TABLE ... ADD COLUMN`/`DROP COLUMN` 和 `ALTER TABLE ... REBUILD KNN`，并行重新生成磁盘分块的 `.spknn` 文件。
+
+这仅影响具有 KNN 属性的表的 HNSW 图构建。
+
+将其设置为 `1` 以禁用并行 KNN 构建（所有存储阶段串行运行）。较高的值会加快分块保存、`OPTIMIZE` 和 ALTER 重建的速度，特别是在 HNSW 图构建主导操作总耗时的表上。
+
+并行 HNSW 构建可能以不同的顺序插入向量，因此生成的 `.spknn` 图不保证与使用 `knn_parallel_build = 1` 构建的图完全相同。
+
+请注意，当 [`parallel_chunk_merges`](#parallel_chunk_merges) > 1 时，多个合并可以并行运行，每个合并最多消耗 `knn_parallel_build` 个工作者。
+
+默认情况下，Manticore 从 [threads](../Server_settings/Searchd.md#threads) 设置中推导出该值：`max(1, min(4, threads/4))`。也就是说，当 `threads` 低于 8 时为 `1`（串行），当 `threads` <= 11 时为 `2`，当 `threads` <= 15 时为 `3`，当 `threads` 为 16 或更高时为 `4`（默认上限为 4）。拥有更大主机的运营商如需更多并行性，可以显式设置该值。
+
+此值可以通过 `SET GLOBAL knn_parallel_build = N` 在运行时更改，并通过 `SHOW VARIABLES` 查看。
+
+<!-- intro -->
+##### 示例：
+
+<!-- request Disable -->
+```ini
+knn_parallel_build = 1
+```
+
+<!-- request Increase -->
+```ini
+knn_parallel_build = 4
+```
+
+<!-- end -->
+
 ### auto_schema
 
 <!-- example conf auto_schema -->

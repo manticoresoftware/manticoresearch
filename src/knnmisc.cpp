@@ -746,6 +746,54 @@ void RecordKNNBuildError ( CSphString & sSlot, const knn::BuildContext_t & tBuil
 }
 
 
+bool RunParallelKNNStore ( int64_t iTotalUnits, CSphString & sError, KNNStoreWorkerFn_t fnWorker )
+{
+	if ( iTotalUnits<=0 )
+		return true;
+
+	const int iConcurrency = GetKNNBuildConcurrency ( iTotalUnits );
+
+	// serial fallback when concurrency is 1 OR we're not in a coroutine
+	if ( iConcurrency==1 || !Threads::IsInsideCoroutine() )
+	{
+		std::atomic<bool> bStop { false };
+		fnWorker ( 0, 0, iTotalUnits, sError, bStop );
+		return sError.IsEmpty();
+	}
+
+	const int64_t iRangeSize = ( iTotalUnits + iConcurrency - 1 ) / iConcurrency;
+	std::atomic<bool> bStop { false };
+	std::atomic<int>  iWorkerSeq { 0 };
+	CSphFixedVector<CSphString> dErrors ( iConcurrency );
+
+	// caller (ALTER, REBUILD KNN, etc.) typically runs on a per-client single-thread scheduler
+	// switch to the multi-thread global pool for the parallel section, same pattern as RtIndex_c::SaveDiskChunk
+	Threads::ScopedScheduler_c tParallel { GlobalWorkPool() };
+
+	Threads::Coro::ExecuteN ( iConcurrency, [&]
+	{
+		int iIdx = iWorkerSeq.fetch_add ( 1, std::memory_order_relaxed );
+		int64_t iStart = (int64_t)iIdx * iRangeSize;
+		int64_t iEnd   = Min ( iStart + iRangeSize, iTotalUnits );
+		if ( iStart>=iEnd )
+			return;
+
+		Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
+
+		fnWorker ( iIdx, iStart, iEnd, dErrors[iIdx], bStop );
+	} );
+
+	if ( dErrors.any_of ( [] ( const CSphString & s ) { return !s.IsEmpty(); } ) )
+	{
+		sError = ConcatKNNBuildErrors ( dErrors );
+		return false;
+	}
+
+	// bStop set with no specific error -> caller-side cancellation
+	return !bStop.load ( std::memory_order_relaxed );
+}
+
+
 std::unique_ptr<knn::Builder_i> BuildCreateKNN ( const ISphSchema & tSchema, int64_t iNumElements, CSphVector<std::pair<PlainOrColumnar_t,int>> & dAttrs, const CSphString & sTmpFilename, CSphString & sError )
 {
 	std::unique_ptr<knn::Builder_i> pBuilder = CreateKNNBuilder ( tSchema, iNumElements, sTmpFilename, sError );
@@ -797,76 +845,36 @@ bool BuildStoreKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowitem * p
 }
 
 
+static void RunDiskIndexKNNStoreWorker ( int64_t iStart, int64_t iEnd, const CSphIndex & tIndex, knn::Builder_i & tBuilder, const VecTraits_T<PlainOrColumnar_t> & dAttrs, const CSphRowitem * pRawAttrs, const BYTE * pRawBlobs, int iStride, CSphString & sWorkerError, std::atomic<bool> & bStop )
+{
+	knn::BuildContext_t tBuildCtx;
+	auto dIters = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
+	for ( int64_t i = iStart; i<iEnd; i++ )
+	{
+		if ( bStop.load ( std::memory_order_relaxed ) )
+			return;
+
+		RowID_t tRow = (RowID_t)i;
+		const CSphRowitem * pRow = pRawAttrs ? pRawAttrs + i * iStride : nullptr;
+		if ( !BuildStoreKNN ( tRow, tRow, pRow, pRawBlobs, dIters, dAttrs, tBuilder, tBuildCtx ) )
+		{
+			RecordKNNBuildError ( sWorkerError, tBuildCtx, "KNN construction failed at row %u", tRow );
+			bStop.store ( true, std::memory_order_relaxed );
+			return;
+		}
+	}
+}
+
+
 bool BuildStoreKNNParallelDiskIndex ( const CSphIndex & tIndex, knn::Builder_i & tBuilder, const VecTraits_T<PlainOrColumnar_t> & dAttrs, int64_t iTotalRows, CSphString & sError )
 {
 	if ( iTotalRows<=0 )
 		return true;
 
-	const int iConcurrency = GetKNNBuildConcurrency ( iTotalRows );
-
-	const CSphRowitem *	pRawAttrs = tIndex.GetRawAttrs();
+	const CSphRowitem * pRawAttrs = tIndex.GetRawAttrs();
 	const BYTE * pRawBlobs = pRawAttrs ? tIndex.GetRawBlobAttrs() : nullptr;
 	const int iStride = pRawAttrs ? tIndex.GetMatchSchema().GetRowSize() : 0;
-
-	// serial fallback when concurrency is 1 OR we're not in a coroutine
-	if ( iConcurrency==1 || !Threads::IsInsideCoroutine() )
-	{
-		knn::BuildContext_t tBuildCtx;
-		auto dIters = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
-		for ( RowID_t tRow = 0; tRow<(RowID_t)iTotalRows; tRow++ )
-		{
-			const CSphRowitem * pRow = pRawAttrs ? pRawAttrs + (int64_t)tRow * iStride : nullptr;
-			if ( !BuildStoreKNN ( tRow, tRow, pRow, pRawBlobs, dIters, dAttrs, tBuilder, tBuildCtx ) )
-			{
-				RecordKNNBuildError ( sError, tBuildCtx, "KNN construction failed at row %u", tRow );
-				return false;
-			}
-		}
-		return true;
-	}
-
-	const int64_t iRangeSize = ( iTotalRows + iConcurrency - 1 ) / iConcurrency;
-	std::atomic<bool> bError { false };
-	std::atomic<int>  iWorkerSeq { 0 };
-	CSphFixedVector<CSphString> dErrors ( iConcurrency );
-
-	// caller (ALTER, REBUILD KNN, etc.) typically runs on a per-client single-thread scheduler
-	// switch to the multi-thread global pool for the parallel section, same pattern as RtIndex_c::SaveDiskChunk 
-	Threads::ScopedScheduler_c tParallel { GlobalWorkPool() };
-
-	Threads::Coro::ExecuteN ( iConcurrency, [&]
-	{
-		int iIdx = iWorkerSeq.fetch_add ( 1, std::memory_order_relaxed );
-		int64_t	iStart = (int64_t)iIdx * iRangeSize;
-		int64_t	iEnd = Min ( iStart + iRangeSize, iTotalRows );
-		if ( iStart>=iEnd )
-			return;
-
-		Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
-
-		knn::BuildContext_t tBuildCtx;
-		auto dIters = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
-		for ( int64_t i = iStart; i<iEnd; i++ )
-		{
-			if ( bError.load ( std::memory_order_relaxed ) )
-				return;
-
-			RowID_t tRow = (RowID_t)i;
-			const CSphRowitem * pRow = pRawAttrs ? pRawAttrs + (int64_t)tRow * iStride : nullptr;
-			if ( !BuildStoreKNN ( tRow, tRow, pRow, pRawBlobs, dIters, dAttrs, tBuilder, tBuildCtx ) )
-			{
-				RecordKNNBuildError ( dErrors[iIdx], tBuildCtx, "KNN construction failed at row %u", tRow );
-				bError.store ( true, std::memory_order_relaxed );
-				return;
-			}
-		}
-	} );
-
-	if ( !bError.load() )
-		return true;
-
-	sError = ConcatKNNBuildErrors ( dErrors );
-	return false;
+	return RunParallelKNNStore ( iTotalRows, sError, [&] ( int iIdx, int64_t iStart, int64_t iEnd, CSphString & sErr, std::atomic<bool> & bStop ) { RunDiskIndexKNNStoreWorker ( iStart, iEnd, tIndex, tBuilder, dAttrs, pRawAttrs, pRawBlobs, iStride, sErr, bStop ); } );
 }
 
 

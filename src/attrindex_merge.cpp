@@ -70,7 +70,7 @@ private:
 
 	bool AnalyzeMixedAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap );
 	bool ParallelStoreKNN();
-	void RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWorkerEnd, const CSphFixedVector<int64_t> & dInputStarts, std::atomic<bool> & bError, std::atomic<bool> & bInterrupted, CSphString & sWorkerError );
+	void RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWorkerEnd, const CSphFixedVector<int64_t> & dInputStarts, std::atomic<bool> & bStop, std::atomic<bool> & bInterrupted, CSphString & sWorkerError );
 
 	CSphString GetTmpFilename ( const CSphIndex* pIdx, ESphExt eExt )
 	{
@@ -331,7 +331,7 @@ bool AttrMerger_c::Impl_c::CopyAttributes ( const CSphIndex & tIndex, const VecT
 }
 
 
-void AttrMerger_c::Impl_c::RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWorkerEnd, const CSphFixedVector<int64_t> & dInputStarts, std::atomic<bool> & bError, std::atomic<bool> & bInterrupted, CSphString & sWorkerError )
+void AttrMerger_c::Impl_c::RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWorkerEnd, const CSphFixedVector<int64_t> & dInputStarts, std::atomic<bool> & bStop, std::atomic<bool> & bInterrupted, CSphString & sWorkerError )
 {
 	Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
 
@@ -375,12 +375,13 @@ void AttrMerger_c::Impl_c::RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWo
 
 	for ( int64_t iRow = iWorkerStart; iRow< iWorkerEnd; iRow++ )
 	{
-		if ( bError.load ( std::memory_order_relaxed ) || bInterrupted.load ( std::memory_order_relaxed ) )
+		if ( bStop.load ( std::memory_order_relaxed ) )
 			return;
 
 		if ( m_tMonitor.NeedStop() )
 		{
 			bInterrupted.store ( true, std::memory_order_relaxed );
+			bStop.store ( true, std::memory_order_relaxed );
 			return;
 		}
 
@@ -412,7 +413,7 @@ void AttrMerger_c::Impl_c::RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWo
 		if ( !BuildStoreKNN ( tSrc, tDst, pRow, pRawBlobs, dWorkerIters[iInput], m_dAttrsForKNN, *m_pKNNBuilder, tBuildCtx ) )
 		{
 			RecordKNNBuildError ( sWorkerError, tBuildCtx, "KNN index construction failed at input %d row %u", iInput, tSrc );
-			bError.store ( true, std::memory_order_relaxed );
+			bStop.store ( true, std::memory_order_relaxed );
 			return;
 		}
 
@@ -449,37 +450,15 @@ bool AttrMerger_c::Impl_c::ParallelStoreKNN()
 	if ( !iTotalAlive )
 		return true;
 
-	const int iConcurrency = GetKNNBuildConcurrency ( iTotalAlive );
-	const int64_t iRangeSize = ( iTotalAlive + iConcurrency - 1 ) / iConcurrency;
-
-	std::atomic<bool> bError { false }, bInterrupted { false };
-	std::atomic<int> iWorkerSeq { 0 };
-	CSphFixedVector<CSphString> dErrors(iConcurrency);
-
-	Threads::Coro::ExecuteN ( iConcurrency, [&]
-	{
-		int iWorkerIdx = iWorkerSeq.fetch_add ( 1, std::memory_order_relaxed );
-		int64_t iWorkerStart = (int64_t)iWorkerIdx * iRangeSize;
-		int64_t iWorkerEnd = Min ( iWorkerStart + iRangeSize, iTotalAlive );
-		if ( iWorkerStart >= iWorkerEnd )
-			return; // last worker may have an empty range
-
-		RunKNNStoreWorker ( iWorkerStart, iWorkerEnd, dInputStarts, bError, bInterrupted, dErrors[iWorkerIdx] );
-	} );
-
+	std::atomic<bool> bInterrupted { false };
+	bool bOk = RunParallelKNNStore ( iTotalAlive, m_sError, [&] ( int iIdx, int64_t iStart, int64_t iEnd, CSphString & sErr, std::atomic<bool> & bStop ) { RunKNNStoreWorker ( iStart, iEnd, dInputStarts, bStop, bInterrupted, sErr ); } );
 	if ( bInterrupted.load ( std::memory_order_relaxed ) )
 	{
 		m_sError = "KNN merge cancelled";
 		return false;
 	}
 
-	if ( bError.load ( std::memory_order_relaxed ) )
-	{
-		m_sError = ConcatKNNBuildErrors ( dErrors );
-		return false;
-	}
-
-	return true;
+	return bOk;
 }
 
 

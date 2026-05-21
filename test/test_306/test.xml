@@ -63,6 +63,18 @@ searchd
 	DELETE FROM products WHERE id = 1;
 	DROP TABLE products;
 
+	<!-- regression for issue #4579: multi-table KNN query crashed while building the merge queue -->
+	create table issue4579_t1 ( f text, v float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='f' );
+	create table issue4579_t2 ( f text, v float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='f' );
+	insert into issue4579_t1 (id, f) values (1, 'dog');
+	insert into issue4579_t2 (id, f) values (2, 'cat');
+	select id, f, knn_dist() from issue4579_t1, issue4579_t2 where knn(v, 'puppy');
+	create table issue4579_d type='distributed' agent='<agent0_address/>:issue4579_t1' agent='<agent0_address/>:issue4579_t2';
+	select id, f, knn_dist() from issue4579_d where knn(v, 'puppy');
+	drop table issue4579_d;
+	drop table issue4579_t1;
+	drop table issue4579_t2;
+
 	<!-- setup for json embeddings -->
 	create table test (title text, vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name = 'sentence-transformers/all-MiniLM-L6-v2' from = 'title');
 	insert into test(id, title) values (1, 'green banana');

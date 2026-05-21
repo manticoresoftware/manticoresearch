@@ -1707,7 +1707,15 @@ bool QueueCreator_c::AddKNNRescoreColumn()
 	if ( !tKNN.m_bRescore )
 		return true;
 
+	if ( m_tSettings.m_bGrouped )
+		return true;
+
 	auto pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
+	if ( !pAttr )
+	{
+		m_sError.SetSprintf ( "requested KNN search attribute '%s' not found", tKNN.m_sAttr.cstr() );
+		return false;
+	}
 
 	CSphColumnInfo tKNNDistRescored ( GetKnnDistRescoreAttrName(), SPH_ATTR_FLOAT );
 	tKNNDistRescored.m_eStage = SPH_EVAL_FINAL;
@@ -2636,7 +2644,7 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	if ( !pSorter )
 		return nullptr;
 
-	if ( !m_tQuery.m_bHybridSearch )
+	if ( !m_tQuery.m_bHybridSearch && !m_tSettings.m_bGrouped )
 	{
 		pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.HasKnn() ? m_tQuery.SingleKnnSettings() : KnnSearchSettings_t() );
 		if ( !pSorter )

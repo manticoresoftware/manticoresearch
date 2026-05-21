@@ -2638,7 +2638,7 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 
 	if ( !m_tQuery.m_bHybridSearch )
 	{
-		pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.HasKnn() ? m_tQuery.SingleKnnSettings() : KnnSearchSettings_t() );
+		pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.HasKnn() ? m_tQuery.SingleKnnSettings() : KnnSearchSettings_t(), m_eMatchFunc );
 		if ( !pSorter )
 			return nullptr;
 	}

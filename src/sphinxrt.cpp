@@ -4088,10 +4088,7 @@ bool RtIndex_c::StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i 
 				const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID * iStride;
 				if ( !BuildStoreKNN ( tRowID, tRowOut, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, tBuilder, tBuildCtx ) )
 				{
-					dErrors[iSeg] = tBuildCtx.m_sError.c_str();
-					if ( dErrors[iSeg].IsEmpty() )
-						dErrors[iSeg].SetSprintf ( "HNSW save: BuildStoreKNN failed for segment %d row %u (no detail)", iSeg, tRowID );
-
+					RecordKNNBuildError ( dErrors[iSeg], tBuildCtx, "HNSW save: BuildStoreKNN failed for segment %d row %u (no detail)", iSeg, tRowID );
 					bError.store ( true, std::memory_order_relaxed );
 					break;
 				}
@@ -4103,12 +4100,7 @@ bool RtIndex_c::StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i 
 
 	if ( bError.load() )
 	{
-		StringBuilder_c sJoined ( "; " );
-		for ( const auto & s : dErrors )
-			if ( !s.IsEmpty() )
-				sJoined << s.cstr();
-
-		sError = sJoined.IsEmpty() ? "HNSW save failed (no error details)" : sJoined.cstr();
+		sError = ConcatKNNBuildErrors ( dErrors );
 		return false;
 	}
 

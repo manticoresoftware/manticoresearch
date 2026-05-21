@@ -411,10 +411,7 @@ void AttrMerger_c::Impl_c::RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWo
 		const CSphRowitem * pRow = pRawAttrs ? pRawAttrs + (int64_t)tSrc * iStride : nullptr;
 		if ( !BuildStoreKNN ( tSrc, tDst, pRow, pRawBlobs, dWorkerIters[iInput], m_dAttrsForKNN, *m_pKNNBuilder, tBuildCtx ) )
 		{
-			sWorkerError = tBuildCtx.m_sError.c_str();
-			if ( sWorkerError.IsEmpty() )
-				sWorkerError.SetSprintf ( "KNN index construction failed at input %d row %u", iInput, tSrc );
-
+			RecordKNNBuildError ( sWorkerError, tBuildCtx, "KNN index construction failed at input %d row %u", iInput, tSrc );
 			bError.store ( true, std::memory_order_relaxed );
 			return;
 		}
@@ -452,10 +449,7 @@ bool AttrMerger_c::Impl_c::ParallelStoreKNN()
 	if ( !iTotalAlive )
 		return true;
 
-	const int64_t MIN_ROWS_PER_WORKER = 1024;
-	const int64_t iByRows  = Max<int64_t> ( 1, iTotalAlive / MIN_ROWS_PER_WORKER );
-	const int64_t iByConf  = Min<int64_t> ( KNNParallelBuild(), iTotalAlive );
-	const int iConcurrency = (int)Max ( 1, Min ( iByConf, iByRows ) );
+	const int iConcurrency = GetKNNBuildConcurrency ( iTotalAlive );
 	const int64_t iRangeSize = ( iTotalAlive + iConcurrency - 1 ) / iConcurrency;
 
 	std::atomic<bool> bError { false }, bInterrupted { false };
@@ -481,12 +475,7 @@ bool AttrMerger_c::Impl_c::ParallelStoreKNN()
 
 	if ( bError.load ( std::memory_order_relaxed ) )
 	{
-		StringBuilder_c sJoined ( "; " );
-		for ( const auto & s : dErrors )
-			if ( !s.IsEmpty() )
-				sJoined << s.cstr();
-
-		m_sError = sJoined.IsEmpty() ? "parallel KNN store failed (no error details)" : sJoined.cstr();
+		m_sError = ConcatKNNBuildErrors ( dErrors );
 		return false;
 	}
 

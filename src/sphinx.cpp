@@ -7656,10 +7656,8 @@ bool CSphIndex_VLN::AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSph
 			}
 		}
 
-		pRow = GetRawAttrs();
-		knn::BuildContext_t tBuildCtx;
-		for ( RowID_t tRowID = 0; tRowID < RowID_t(m_iDocinfo); ++tRowID, pRow += iStride )
-			BuildStoreKNN ( tRowID, tRowID, pRow, pBlobs, dColumnarIterators, dOldAttrsForKNN, *pKNNBuilder, tBuildCtx );
+		if ( !BuildStoreKNNParallelDiskIndex ( *this, *pKNNBuilder, dOldAttrsForKNN, m_iDocinfo, sError ) )
+			return false;
 
 		BuildBufferSettings_t tSettings; // use default buffer settings
 
@@ -12519,15 +12517,13 @@ bool CSphIndex_VLN::AlterKNN ( CSphString & sError )
 	ARRAY_FOREACH ( i, dAllAttrsForKNN )
 		dAttrs[i] = dAllAttrsForKNN[i].first;
 
-	int iStride = m_tSchema.GetRowSize();
+	const CSphRowitem * pCur = GetRawAttrs();
+	int iStride = pCur ? m_tSchema.GetRowSize() : 0;
+	const BYTE * pBlobs = pCur ? GetRawBlobAttrs() : nullptr;
 	RowID_t tRows = RowID_t ( m_iDocinfo );
 
-	const CSphRowitem * pCur = GetRawAttrs();
-	for ( RowID_t tRowID=0; tRowID<tRows; ++tRowID )
-	{
-		BuildTrainKNN ( tRowID, tRowID, pCur, GetRawBlobAttrs(), dColumnarIterators, dAttrs, *pKNNBuilder );
-		pCur += iStride;
-	}
+	for ( RowID_t tRowID=0; tRowID<tRows; ++tRowID, pCur += iStride )
+		BuildTrainKNN ( tRowID, tRowID, pCur, pBlobs, dColumnarIterators, dAttrs, *pKNNBuilder );
 
 	{
 		std::string sErrSTL;
@@ -12538,13 +12534,8 @@ bool CSphIndex_VLN::AlterKNN ( CSphString & sError )
 		}
 	}
 
-	pCur = GetRawAttrs();
-	knn::BuildContext_t tBuildCtx;
-	for ( RowID_t tRowID=0; tRowID<tRows; ++tRowID )
-	{
-		BuildStoreKNN ( tRowID, tRowID, pCur, GetRawBlobAttrs(), dColumnarIterators, dAttrs, *pKNNBuilder, tBuildCtx );
-		pCur += iStride;
-	}
+	if ( !BuildStoreKNNParallelDiskIndex ( *this, *pKNNBuilder, dAttrs, m_iDocinfo, sError ) )
+		return false;
 
 	BuildBufferSettings_t tSettings; // Use default buffer settings
 	std::string sStdErr;

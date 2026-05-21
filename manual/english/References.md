@@ -461,7 +461,7 @@ To be put in the `searchd {}` section of the configuration file:
   * [join_batch_size](Searching/Joining.md#Join-batching) - Defines batch size for table joins to balance performance and memory usage
   * [join_cache_size](Searching/Joining.md#Join-caching) - Defines cache size for reusing JOIN query results
   * [kibana_version_string](Server_settings/Searchd.md#kibana_version_string) – The server version string that's sent in response to Kibana requests
-  * [knn_parallel_build](Server_settings/Searchd.md#knn_parallel_build) - Number of worker threads used to build the HNSW graph during RT chunk saves and `OPTIMIZE` / auto-optimize chunk merges
+  * [knn_parallel_build](Server_settings/Searchd.md#knn_parallel_build) - Number of worker threads used to build the HNSW graph during RT chunk saves, `OPTIMIZE` / auto-optimize chunk merges, and `ALTER TABLE` KNN rebuilds
   * [listen](Server_settings/Searchd.md#listen) - Specifies IP address and port or Unix-domain socket path for searchd to listen on
   * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - TCP listen backlog
   * [listen_tfo](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Enables TCP_FASTOPEN flag for all listeners

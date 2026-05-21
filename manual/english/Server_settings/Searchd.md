@@ -159,13 +159,14 @@ merge_chunks_per_job = 4
 ### knn_parallel_build
 
 <!-- example conf knn_parallel_build -->
-This setting controls how many worker threads are used to build the HNSW graph during HNSW-heavy operations on real-time tables that contain a `float_vector` attribute with a KNN index. Two paths use this knob:
-* The **chunk-save store pass**:  when a RAM chunk is flushed to disk, workers split the chunk's RAM segments between them and call hnswlib's `addPoint` in parallel.
+This setting controls how many worker threads are used to build the HNSW graph during HNSW-heavy operations on tables that contain a `float_vector` attribute with a KNN index. Several paths use this knob:
+* The **chunk-save store pass**: when a RAM chunk is flushed to disk, workers split the chunk's RAM segments between them and call hnswlib's `addPoint` in parallel.
 * The **chunk-merge store pass**: `OPTIMIZE TABLE` and auto-optimize merges build the destination chunk's HNSW graph in parallel, splitting the alive-row range from all input chunks across workers.
+* The **ALTER KNN rebuild**: `ALTER TABLE ... ADD COLUMN`/`DROP COLUMN` on a `float_vector` attribute, and `ALTER TABLE ... REBUILD KNN`, regenerate the `.spknn` file in parallel for disk chunks.
 
 This affects only HNSW graph construction for tables with KNN attributes.
 
-Set it to `1` to disable parallel KNN build (both store passes run serially). Higher values speed up chunk saves and `OPTIMIZE` on tables where HNSW graph construction dominates the operation's wall time.
+Set it to `1` to disable parallel KNN build (all store passes run serially). Higher values speed up chunk saves, `OPTIMIZE`, and ALTER rebuilds on tables where HNSW graph construction dominates the operation's wall time.
 
 Parallel HNSW construction can insert vectors in a different order than the serial path, so the resulting `.spknn` graph is not guaranteed to be bit-identical to a graph built with `knn_parallel_build = 1`.
 

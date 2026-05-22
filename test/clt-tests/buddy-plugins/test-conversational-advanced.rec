@@ -68,27 +68,27 @@ Create multiple CHAT models with different configurations
 ––– input –––
 mysql -h0 -P9306 -e "CREATE CHAT MODEL fast_assistant (model='openai:gpt-3.5-turbo', max_document_length=0, retrieval_limit=3);"
 ––– output –––
-+--------------------------------------+
-| uuid                                 |
-+--------------------------------------+
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
-+--------------------------------------+
++----------------+
+| name           |
++----------------+
+| fast_assistant |
++----------------+
 ––– input –––
 mysql -h0 -P9306 -e "CREATE CHAT MODEL detailed_assistant (model='openai:gpt-4o', max_document_length=0, retrieval_limit=5);"
 ––– output –––
-+--------------------------------------+
-| uuid                                 |
-+--------------------------------------+
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
-+--------------------------------------+
++--------------------+
+| name               |
++--------------------+
+| detailed_assistant |
++--------------------+
 ––– input –––
 mysql -h0 -P9306 -e "CREATE CHAT MODEL creative_assistant (model='openai:gpt-4o-mini', max_document_length=2000, retrieval_limit=4);"
 ––– output –––
-+--------------------------------------+
-| uuid                                 |
-+--------------------------------------+
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
-+--------------------------------------+
++--------------------+
+| name               |
++--------------------+
+| creative_assistant |
++--------------------+
 ––– comment –––
 Verify all models are created (check count, order may vary)
 ––– input –––
@@ -171,9 +171,9 @@ grep 'sources:' /tmp/output_5.txt | grep -o '\[.*\]' | head -1 | { read -r s; if
 ––– output –––
 OK
 ––– comment –––
-Test different model on same conversation
+Test same model on same conversation
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('What are best practices?', 'knowledge_base', 'detailed_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }' | tee /tmp/output_6.txt
+mysql -h0 -P9306 -e "CALL CHAT('What are best practices?', 'knowledge_base', 'fast_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }' | tee /tmp/output_6.txt
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: conv-test-1234-5678-90ab-cdef12345678

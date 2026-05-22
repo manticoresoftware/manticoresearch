@@ -66,11 +66,11 @@ CREATE CHAT MODEL test_assistant (
 );
 EOF
 ––– output –––
-+--------------------------------------+
-| uuid                                 |
-+--------------------------------------+
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
-+--------------------------------------+
++----------------+
+| name           |
++----------------+
+| test_assistant |
++----------------+
 ––– comment –––
 Test CREATE CHAT MODEL - advanced configuration with custom settings
 ––– input –––
@@ -84,22 +84,22 @@ CREATE CHAT MODEL advanced_assistant (
 );
 EOF
 ––– output –––
-+--------------------------------------+
-| uuid                                 |
-+--------------------------------------+
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
-+--------------------------------------+
++--------------------+
+| name               |
++--------------------+
+| advanced_assistant |
++--------------------+
 ––– comment –––
 Test SHOW CHAT MODELS - should display created models
 ––– input –––
 mysql -h0 -P9306 -e "SHOW CHAT MODELS"
 ––– output –––
-+--------------------------------------+--------------------+--------------------+------------+
-| uuid                                 | name               | model              | created_at |
-+--------------------------------------+--------------------+--------------------+------------+
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# | advanced_assistant | openai:gpt-4o      | %{NUMBER} |
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# | test_assistant     | openai:gpt-4o-mini | %{NUMBER} |
-+--------------------------------------+--------------------+--------------------+------------+
++--------------------+--------------------+------------+
+| name               | model              | created_at |
++--------------------+--------------------+------------+
+| advanced_assistant | openai:gpt-4o      | %{NUMBER} |
+| test_assistant     | openai:gpt-4o-mini | %{NUMBER} |
++--------------------+--------------------+------------+
 ––– comment –––
 Test DESCRIBE CHAT MODEL - verify model configuration
 ––– input –––
@@ -109,24 +109,21 @@ mysql -h0 -P9306 -e "DESCRIBE CHAT MODEL test_assistant\G"
 property: id
    value: %{NUMBER}
 *************************** 2. row ***************************
-property: uuid
-   value: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
-*************************** 3. row ***************************
-property: name
-   value: test_assistant
-*************************** 4. row ***************************
 property: description
    value: Chat GPT cheap reasoning model
-*************************** 5. row ***************************
+*************************** 3. row ***************************
 property: model
    value: openai:gpt-4o-mini
-*************************** 6. row ***************************
+*************************** 4. row ***************************
+property: name
+   value: test_assistant
+*************************** 5. row ***************************
 property: settings.max_document_length
    value: %{NUMBER}
-*************************** 7. row ***************************
+*************************** 6. row ***************************
 property: created_at
    value: %{NUMBER}
-*************************** 8. row ***************************
+*************************** 7. row ***************************
 property: updated_at
    value: %{NUMBER}
 ––– input –––
@@ -136,30 +133,27 @@ mysql -h0 -P9306 -e "DESCRIBE CHAT MODEL advanced_assistant\G"
 property: id
    value: %{NUMBER}
 *************************** 2. row ***************************
-property: uuid
-   value: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
-*************************** 3. row ***************************
-property: name
-   value: advanced_assistant
-*************************** 4. row ***************************
 property: description
    value: Chat GPT v4 reasoning model
-*************************** 5. row ***************************
+*************************** 3. row ***************************
 property: model
    value: openai:gpt-4o
-*************************** 6. row ***************************
+*************************** 4. row ***************************
+property: name
+   value: advanced_assistant
+*************************** 5. row ***************************
 property: settings.timeout
    value: 60
-*************************** 7. row ***************************
+*************************** 6. row ***************************
 property: settings.retrieval_limit
    value: 5
-*************************** 8. row ***************************
+*************************** 7. row ***************************
 property: settings.max_document_length
    value: 3000
-*************************** 9. row ***************************
+*************************** 8. row ***************************
 property: created_at
    value: %{NUMBER}
-*************************** 10. row ***************************
+*************************** 9. row ***************************
 property: updated_at
    value: %{NUMBER}
 ––– comment –––

@@ -640,12 +640,6 @@ int NumOfRestarts() noexcept
 
 } // namespace Coro
 
-Resumer_fn MakeCoroExecutor ( Handler fnHandler )
-{
-	auto* pWorker = Coro::Worker ()->MakeWorker ( std::move ( fnHandler ) );
-	return [pWorker] () -> bool { return pWorker->Resume(); };
-}
-
 void CallPlainCoroutine ( Handler fnHandler, Scheduler_i* pScheduler )
 {
 	if ( !pScheduler )

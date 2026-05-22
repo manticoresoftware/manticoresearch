@@ -640,12 +640,6 @@ int NumOfRestarts() noexcept
 
 } // namespace Coro
 
-Resumer_fn MakeCoroExecutor ( Handler fnHandler )
-{
-	auto* pWorker = Coro::Worker ()->MakeWorker ( std::move ( fnHandler ) );
-	return [pWorker] () -> bool { return pWorker->Resume(); };
-}
-
 void CallPlainCoroutine ( Handler fnHandler, Scheduler_i* pScheduler )
 {
 	if ( !pScheduler )
@@ -914,15 +908,15 @@ Event_c::~Event_c ()
 // else atomically set flag 'signaled'
 void Event_c::SetEvent()
 {
-	BYTE uState = m_uState.load ( std::memory_order_relaxed );
+	BYTE uState = m_uState.load ( std::memory_order_acquire );
 	do
 	{
 		if ( uState & Waited_e )
 		{
-			m_uState.store ( Signaled_e ); // memory_order_sec_cst - to ensure that next call will not resume again
+			m_uState.store ( Signaled_e, std::memory_order_release );
 			return fnResume ( m_pCtx );
 		}
-	} while ( !m_uState.compare_exchange_weak ( uState, uState | Signaled_e, std::memory_order_relaxed ) );
+	} while ( !m_uState.compare_exchange_weak ( uState, uState | Signaled_e, std::memory_order_release, std::memory_order_acquire ) );
 }
 
 // if 'signaled' state detected, clean all flags and return.
@@ -930,22 +924,22 @@ void Event_c::SetEvent()
 // on resume clean all flags.
 void Event_c::WaitEvent()
 {
-	if ( !( m_uState.load ( std::memory_order_relaxed ) & Signaled_e ) )
+	if ( !( m_uState.load ( std::memory_order_acquire ) & Signaled_e ) )
 	{
 		if ( m_pCtx != Worker() )
 			m_pCtx = Worker();
 		YieldWith ( [this] {
-			BYTE uState = m_uState.load ( std::memory_order_relaxed );
+			BYTE uState = m_uState.load ( std::memory_order_acquire );
 			do
 			{
 				if ( uState & Signaled_e )
 					return fnResume ( m_pCtx );
-			} while ( !m_uState.compare_exchange_weak ( uState, uState | Waited_e, std::memory_order_relaxed ) );
+			} while ( !m_uState.compare_exchange_weak ( uState, uState | Waited_e, std::memory_order_acq_rel, std::memory_order_acquire ) );
 		} );
 	}
 
-	m_uState.store ( 0, std::memory_order_relaxed );
-	std::atomic_thread_fence ( std::memory_order_release );
+	std::atomic_thread_fence ( std::memory_order_acquire );
+	m_uState.store ( 0, std::memory_order_release );
 }
 
 

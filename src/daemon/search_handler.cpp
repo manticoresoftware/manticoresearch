@@ -2500,7 +2500,8 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 		tQuery.m_dFacetOwnFilterAttrs.Add ( tBucket.m_sCol );
 		tQuery.m_tFacetFilter = tBucket.m_tFacetFilter;
 
-		if ( !facet::CopyFilters ( tHeadFacetQuery, tQuery, sError, true ) )
+		const bool bUseOwnExclusion = facet::GetFilterMode ( tHeadFacetQuery, tQuery.m_tFacetFilter )!=FacetFilterMode_e::Max;
+		if ( !facet::CopyFilters ( tHeadFacetQuery, tQuery, sError, bUseOwnExclusion ) )
 		{
 			tQuery = tHeadFacetQuery;
 			return tHandler;

@@ -2646,7 +2646,8 @@ static bool SetupFacets ( CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
 				tStmt.m_tQuery.m_dFacetOwnFilterAttrs.Add ( tStmt.m_tQuery.m_sGroupBy );
 			if ( !tStmt.m_tQuery.m_sFacetBy.IsEmpty() && !facet::AttrNameInList ( tStmt.m_tQuery.m_dFacetOwnFilterAttrs, tStmt.m_tQuery.m_sFacetBy ) )
 				tStmt.m_tQuery.m_dFacetOwnFilterAttrs.Add ( tStmt.m_tQuery.m_sFacetBy );
-			if ( !facet::CopyFilters ( tHeadQuery, tStmt.m_tQuery, sError, true ) )
+			const bool bUseOwnExclusion = facet::GetFilterMode ( tHeadQuery, tStmt.m_tQuery )!=FacetFilterMode_e::Max;
+			if ( !facet::CopyFilters ( tHeadQuery, tStmt.m_tQuery, sError, bUseOwnExclusion ) )
 				return false;
 
 			SqlStmt_t tStrict;

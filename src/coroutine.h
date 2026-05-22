@@ -202,12 +202,6 @@ private:
 	std::enable_if_t<ORD == ECONTEXT::ORDERED> ForAll ( FNPROCESSOR fnProcess, bool bIncludeRoot );
 };
 
-// create context and return resuming functor.
-// calling resumer will run handler until it finishes or yields.
-// returns flag of how coroutine interrupted: finished(true) or yielded(false)
-using Resumer_fn = std::function<bool()>;
-Resumer_fn MakeCoroExecutor ( Handler fnHandler );
-
 bool IsInsideCoroutine();
 
 namespace Coro

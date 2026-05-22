@@ -92,6 +92,7 @@ table test_vec {
 - `API_TIMEOUT`: 可选。API 请求的 HTTP 超时时间（以秒为单位）。默认为 10 秒。设置为 `'0'` 以使用默认超时。适用于表创建期间的验证请求和插入操作期间的嵌入生成。
 
 **支持的嵌入模型：**
+
 | 模型类型 | 示例 | 需要 API 密钥 | 说明 |
 |------------|---------|-----------------|-------|
 | **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | 否 | 本地 BERT 基模型，自动下载 |
@@ -299,7 +300,7 @@ POST /sql?mode=raw -d "INSERT INTO products (title, embedding_vector) VALUES ('n
 <!-- request SQL -->
 
 ```sql
-SELECT id, knn_dist() FROM products WHERE knn(embedding_vector, 3, 'machine learning');
+SELECT id, knn_dist() FROM products WHERE knn(embedding_vector, 'machine learning');
 ```
 
 <!-- response SQL -->
@@ -326,8 +327,7 @@ POST /search
     "table": "products",
     "knn": {
         "field": "embedding_vector",
-        "query": "machine learning",
-        "k": 3
+        "query": "machine learning"
     }
 }
 ```
@@ -339,8 +339,7 @@ POST /search
     "table": "products",
     "knn": {
         "field": "embedding_vector",
-        "query": [0.1, 0.2, 0.3, 0.4],
-        "k": 3
+        "query": [0.1, 0.2, 0.3, 0.4]
     }
 }
 ```

@@ -64,7 +64,7 @@ safe_to_bootstrap: 1
 - 它具有最先进 `seqno`
 - 它具有 `safe_to_bootstrap: 1`
 
-使用 [`--new-cluster`](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) 启动该节点。这会告诉 Manticore 从该节点启动集群的新副本。在 Linux 上，`manticore_new_cluster` 通过 systemd 以 `--new-cluster` 模式启动 Manticore。
+使用 [`--new-cluster`](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) 启动该节点。这会告诉 Manticore 从此节点开始一个新的集群副本。如果您通过 Linux 上的 systemd 运行 Manticore，请使用 `manticore_new_cluster`。它会为您以 `--new-cluster` 模式启动 Manticore。
 
 之后，正常启动其余节点并让它们重新加入。通过 `SHOW STATUS LIKE 'cluster_<name>_status'`、`SHOW STATUS LIKE 'cluster_<name>_node_state'` 和 `SHOW STATUS LIKE 'cluster_<name>_size'` 验证恢复。
 
@@ -125,7 +125,7 @@ SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 - `seqno: -1`
 - `safe_to_bootstrap: 0`
 
-在这种情况下，选择数据最新的节点，并使用 [`--new-cluster-force`](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) 启动它。这会强制 Manticore 从该节点启动一个新的集群副本，即使通常的干净关闭元数据不可靠。在 Linux 上，`manticore_new_cluster --force` 通过 systemd 以 `--new-cluster-force` 模式启动 Manticore。
+在这种情况下，选择数据最新的节点，并使用[`--new-cluster-force`](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)启动它。这会强制Manticore从该节点启动一个新的集群副本，即使通常的干净关闭元数据不可靠。如果你在Linux上通过systemd运行Manticore，请使用`manticore_new_cluster --force`。它会为你以`--new-cluster-force`模式启动Manticore。
 
 然后正常启动其余节点并让它们重新加入。使用 `SHOW STATUS LIKE 'cluster_<name>_status'`、`SHOW STATUS LIKE 'cluster_<name>_node_state'` 和 `SHOW STATUS LIKE 'cluster_<name>_size'` 验证恢复。
 

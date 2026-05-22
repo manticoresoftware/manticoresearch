@@ -64,7 +64,7 @@ On clean shutdown, each node writes its last transaction number to `grastate.dat
 - it has the most advanced `seqno`
 - it has `safe_to_bootstrap: 1`
 
-Start that node with [`--new-cluster`](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md). This tells Manticore to start a new copy of the cluster from that node. On Linux, `manticore_new_cluster` starts Manticore in `--new-cluster` mode via systemd.
+Start that node with [`--new-cluster`](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md). This tells Manticore to start a new copy of the cluster from that node. If you run Manticore via systemd on Linux, use `manticore_new_cluster`. It starts Manticore in `--new-cluster` mode for you.
 
 After that, start the remaining nodes normally and let them rejoin. Verify recovery with `SHOW STATUS LIKE 'cluster_<name>_status'`, `SHOW STATUS LIKE 'cluster_<name>_node_state'`, and `SHOW STATUS LIKE 'cluster_<name>_size'`.
 
@@ -125,7 +125,7 @@ If every node crashed, `grastate.dat` is typically no longer trustworthy for nor
 - `seqno: -1`
 - `safe_to_bootstrap: 0`
 
-In this situation, choose the node with the most recent data and start it with [`--new-cluster-force`](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md). This forces Manticore to start a new copy of the cluster from that node even though the usual clean-shutdown metadata is not trustworthy. On Linux, `manticore_new_cluster --force` starts Manticore in `--new-cluster-force` mode via systemd.
+In this situation, choose the node with the most recent data and start it with [`--new-cluster-force`](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md). This forces Manticore to start a new copy of the cluster from that node even though the usual clean-shutdown metadata is not trustworthy. If you run Manticore via systemd on Linux, use `manticore_new_cluster --force`. It starts Manticore in `--new-cluster-force` mode for you.
 
 Then start the remaining nodes normally and let them rejoin. Verify recovery with `SHOW STATUS LIKE 'cluster_<name>_status'`, `SHOW STATUS LIKE 'cluster_<name>_node_state'`, and `SHOW STATUS LIKE 'cluster_<name>_size'`.
 

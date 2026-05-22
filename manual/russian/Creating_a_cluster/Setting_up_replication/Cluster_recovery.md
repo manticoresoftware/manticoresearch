@@ -64,7 +64,7 @@ safe_to_bootstrap: 1
 - он имеет наиболее продвинутый `seqno`
 - он имеет `safe_to_bootstrap: 1`
 
-Запустите этот узел с [`--new-cluster`](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md). Это сообщает Manticore начать новую копию кластера с этого узла. На Linux, `manticore_new_cluster` запускает Manticore в режиме `--new-cluster` через systemd.
+Запустите этот узел с [`--new-cluster`](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md). Это указывает Manticore запустить новую копию кластера с этого узла. Если вы запускаете Manticore через systemd в Linux, используйте `manticore_new_cluster`. Он запускает Manticore в режиме `--new-cluster` за вас.
 
 После этого запустите остальные узлы нормально и позвольте им присоединиться. Проверьте восстановление с помощью `SHOW STATUS LIKE 'cluster_<name>_status'`, `SHOW STATUS LIKE 'cluster_<name>_node_state'`, и `SHOW STATUS LIKE 'cluster_<name>_size'`.
 
@@ -125,7 +125,7 @@ SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 - `seqno: -1`
 - `safe_to_bootstrap: 0`
 
-В этой ситуации выберите узел с самыми свежими данными и запустите его с параметром [`--new-cluster-force`](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md). Это заставляет Manticore запустить новую копию кластера с этого узла, даже если обычные метаданные чистого завершения работы не заслуживают доверия. В Linux `manticore_new_cluster --force` запускает Manticore в режиме `--new-cluster-force` через systemd.
+В этой ситуации выберите узел с самыми свежими данными и запустите его с [`--new-cluster-force`](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md). Это заставляет Manticore запустить новую копию кластера с этого узла, даже несмотря на то, что обычные метаданные чистого завершения работы не заслуживают доверия. Если вы запускаете Manticore через systemd в Linux, используйте `manticore_new_cluster --force`. Он запускает Manticore в режиме `--new-cluster-force` для вас.
 
 Затем запустите оставшиеся узлы в обычном режиме и позвольте им повторно присоединиться. Проверьте восстановление с помощью `SHOW STATUS LIKE 'cluster_<name>_status'`, `SHOW STATUS LIKE 'cluster_<name>_node_state'` и `SHOW STATUS LIKE 'cluster_<name>_size'`.
 

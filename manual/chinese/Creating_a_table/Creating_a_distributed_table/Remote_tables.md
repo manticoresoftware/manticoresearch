@@ -10,7 +10,7 @@ agent = address1 [ | address2 [...] ][:table-list]
 agent = address1[:table-list [ | address2[:table-list [...] ] ] ]
 ```
 
-`agent` 指令声明每次搜索包含的分布式表时都会被搜索的远程代理。这些代理本质上是指向网络表的指针。指定的值包括地址，也可以包括多个备选（代理镜像），用于仅地址或地址和表列表。
+`agent` 指令声明了每次搜索包含该分布式表时搜索的远程代理。这些代理本质上是指向网络表的指针。指定的值包括地址，还可以包括地址或地址和表列表的多个替代方案（代理镜像）。有关镜像语法，请参阅 [镜像](../../Creating_a_cluster/Remote_nodes/Mirroring.md)，有关如何选择镜像代理，请参阅 [负载均衡](../../Creating_a_cluster/Remote_nodes/Load_balancing.md)。
 
 地址规范必须是以下之一：
 
@@ -19,7 +19,7 @@ address = hostname[:port] # eg. server2:9312
 address = /absolute/unix/socket/path # eg. /var/run/manticore2.sock
 ```
 
-`hostname` 是远程主机名，`port` 是远程 TCP 端口号，`table-list` 是用逗号分隔的表名列表，方括号 [] 表示可选子句。
+`hostname` 是远程主机名，`port` 是远程 TCP 端口号，`table-list` 是逗号分隔的表名列表，方括号 [] 表示可选子句。对于 TCP 连接，此端口是远程代理/API 端口（通常为 `9312`），而不是 MySQL 端口（`9306`）。
 
 如果省略表名，假定为定义该行的同一表。换句话说，当为分布式表 'mycoolindex' 定义代理时，可以简单指向地址，默认查询该代理端点上的 mycoolindex 表。
 
@@ -27,8 +27,12 @@ address = /absolute/unix/socket/path # eg. /var/run/manticore2.sock
 
 可以将每个代理指向一个或多个位于一个或多个网络服务器上的远程表，没有限制。这使得几种不同的使用模式成为可能：
 * 在多个代理服务器上分片并创建任意的集群拓扑
-* 在多个代理服务器上分片并进行镜像，以实现高可用性和负载均衡
+* 在多个代理服务器上分片以实现高可用性和负载均衡（请参阅 [镜像](../../Creating_a_cluster/Remote_nodes/Mirroring.md) 和 [负载均衡](../../Creating_a_cluster/Remote_nodes/Load_balancing.md)）
 * 在本地主机中分片以利用多个核心（不过，更简单的是使用多个本地表）
+
+为了避免混淆：
+* 一个 `agent='host1|host2:table'` 条目表示一个具有镜像后端的远程分片。
+* 多个 `agent='...'` 条目表示多个远程分片。
 
 所有代理都是并行搜索的。索引列表直接传递给远程代理。该列表在代理内具体如何搜索（顺序或并行）完全取决于代理的配置（参见[threads](../../Server_settings/Searchd.md#threads)设置）。主控无法远程控制此行为。
 
@@ -49,7 +53,7 @@ SELECT * FROM user LIMIT 0,1000
 ```
 
 另外，值可以为每个单独代理指定选项，例如：
-* [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) - `random`, `roundrobin`, `nodeads`, `noerrors`（针对特定代理覆盖全局 `ha_strategy` 设置）
+* [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) - `random`, `roundrobin`, `nodeads`, `noerrors`（覆盖特定代理的全局 `ha_strategy` 设置；另请参阅 [镜像](../../Creating_a_cluster/Remote_nodes/Mirroring.md)）
 * `conn` - `pconn`，持久连接（相当于在表级设置 `agent_persistent`）
 * `blackhole` `0`,`1`（与代理的 [agent_blackhole](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_blackhole) 设置相同）
 * `retry_count` 整数值（对应 [agent_retry_count](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_retry_count) ，但提供的值不会乘以镜像数量）
@@ -85,6 +89,98 @@ agent = test:9312|box2:9312|box3:9312:any2[retry_count=2]
 agent = test:9312|box2:9312:any2[retry_count=2,conn=pconn,ha_strategy=noerrors]
 ```
 
+## 定义远程表
+
+<!-- example remote-table-definition -->
+远程表可以在配置文件中定义，也可以在分布式表上使用 SQL 定义。
+
+<!-- intro -->
+##### 配置：
+
+<!-- request Config -->
+```ini
+table products_dist {
+  type  = distributed
+  agent = 127.0.0.1:9312|127.0.0.1:9313:products
+}
+```
+
+<!-- intro -->
+##### SQL：
+
+<!-- request SQL -->
+```sql
+CREATE TABLE products_dist type='distributed'
+  agent='127.0.0.1:9312:products|127.0.0.1:9313:products';
+```
+<!-- end -->
+
+<!-- example remote-table-setup -->
+假设远程表已经存在，例如：
+
+<!-- intro -->
+##### 远程节点 1 上的 SQL：
+
+<!-- request SQL -->
+```sql
+CREATE TABLE products(id bigint, title text, node string);
+INSERT INTO products(id,title,node) VALUES(1,'same title','node1');
+```
+
+<!-- intro -->
+##### 远程节点 2 上的 SQL：
+
+<!-- request SQL -->
+```sql
+CREATE TABLE products(id bigint, title text, node string);
+INSERT INTO products(id,title,node) VALUES(1,'same title','node2');
+```
+
+<!-- intro -->
+##### SQL on the master:
+
+<!-- request SQL -->
+```sql
+CREATE TABLE products_dist type='distributed'
+  agent='127.0.0.1:9312:products|127.0.0.1:9313:products'
+  ha_strategy='roundrobin'
+  agent_connect_timeout='200ms'
+  agent_query_timeout='500ms'
+  mirror_retry_count='2';
+```
+<!-- end -->
+
+<!-- example remote-table-sql-usage-and-verification -->
+使用主服务器上的分布式表，就像使用其他任何表一样，然后验证它是如何存储的。
+
+<!-- intro -->
+##### SQL request:
+
+<!-- request SQL -->
+```sql
+SELECT id, title, node FROM products_dist;
+SHOW CREATE TABLE products_dist;
+```
+
+<!-- intro -->
+##### SQL response:
+
+<!-- response SQL -->
+```sql
++------+------------+-------+
+| id   | title      | node  |
++------+------------+-------+
+|    1 | same title | node1 |
++------+------------+-------+
+
++---------------+----------------------------------------------------------------------------------+
+| Table         | Create Table                                                                     |
++---------------+----------------------------------------------------------------------------------+
+| products_dist | CREATE TABLE products_dist type='distributed' agent='127.0.0.1:9312:products|... |
++---------------+----------------------------------------------------------------------------------+
+```
+<!-- end -->
+
 为了获得最佳性能，建议将位于同一服务器上的远程表置于相同记录中。例如，不要：
 ```ini
 agent = remote:9312:idx1
@@ -97,9 +193,15 @@ agent = remote:9312:idx1,idx2
 
 ## agent_persistent
 
+<!-- example agent-persistent -->
+<!-- intro -->
+##### Config:
+
+<!-- request Config -->
 ```ini
 agent_persistent = remotebox:9312:index2
 ```
+<!-- end -->
 
 `agent_persistent` 选项允许你持久连接到代理，即查询执行后连接不会断开。该指令语法与 `agent` 指令相同。但不同的是，主控不会为每个查询打开新连接然后关闭，而是保持连接并重用以进行后续查询。每个代理主机的最大持久连接数由 searchd 部分的 [persistent_connections_limit](../../Server_settings/Searchd.md#persistent_connections_limit) 选项定义。
 
@@ -109,69 +211,182 @@ agent_persistent = remotebox:9312:index2
 
 ## agent_blackhole
 
+<!-- example agent-blackhole -->
+`agent_blackhole` 指令允许您将查询转发到远程代理，而无需等待或处理它们的响应。这对于调试或测试生产集群很有用，因为您可以设置一个独立的调试/测试实例，并从生产主（聚合器）实例将其请求转发到它，而不会干扰生产工作。主 searchd 将尝试连接到黑洞代理并像平常一样发送查询，但不会等待或处理任何响应，黑洞代理上的所有网络错误都将被忽略。值的格式与常规 `agent` 指令的格式相同。
+
+<!-- intro -->
+##### Config:
+
+<!-- request Config -->
 ```ini
 agent_blackhole = testbox:9312:testindex1,testindex2
-````
+```
+<!-- end -->
 
-`agent_blackhole` 指令允许你将查询转发到远程代理，而无需等待或处理它们的响应。这对于调试或测试生产集群非常有用，因为你可以设置一个单独的调试/测试实例，并从生产主服务器（聚合器）实例转发请求到该实例，而不干扰生产工作。主 searchd 将尝试连接到黑洞代理并像往常一样发送查询，但不会等待或处理任何响应，所有黑洞代理的网络错误将被忽略。该值的格式与常规的 `agent` 指令相同。
+## 相关选项和支持的作用域
 
-## agent_connect_timeout
+并非所有与远程代理相关的选项都在相同的作用域中得到支持。本页重点介绍远程表和每代理语义。有关镜像特定行为的信息，请参阅 [镜像](../../Creating_a_cluster/Remote_nodes/Mirroring.md) 和 [负载均衡](../../Creating_a_cluster/Remote_nodes/Load_balancing.md)。有关完整的守护进程级别行为，请使用 [Searchd 设置](../../Server_settings/Searchd.md) 中的链接参考页面。
 
+| 选项 | 实例范围 | 每表 | 每查询 | 每代理 | 详细信息 |
+|---|---|---|---|---|---|
+| `ha_strategy` | 是 | 是 | 否 | 是 | [负载均衡](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy), [远程表：代理](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) |
+| `agent_connect_timeout` | 是 | 是 | 否 | 否 | [Searchd：agent_connect_timeout](../../Server_settings/Searchd.md#agent_connect_timeout) |
+| `agent_query_timeout` | 是 | 是 | 是 | 否 | [Searchd：agent_query_timeout](../../Server_settings/Searchd.md#agent_query_timeout) |
+| `agent_retry_count` / `mirror_retry_count` / `retry_count` | 是（`agent_retry_count`） | 是（`agent_retry_count` 或 `mirror_retry_count`） | 是（`OPTION retry_count=...`） | 是（`agent=...[retry_count=...]`） | [Searchd：agent_retry_count](../../Server_settings/Searchd.md#agent_retry_count), [远程表：mirror_retry_count](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#mirror_retry_count), [远程表：agent](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) |
+| `agent_retry_delay` | 是 | 否 | 是 | 否 | [Searchd：agent_retry_delay](../../Server_settings/Searchd.md#agent_retry_delay) |
+| 每代理 `conn` | 否 | 否 | 否 | 是 | [远程表：agent](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) |
+| 每代理 `blackhole` | 否 | 否 | 否 | 是 | [远程表：agent_blackhole](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_blackhole) |
+
+### agent_connect_timeout
+
+<!-- example remote-agent-connect-timeout -->
+`agent_connect_timeout` 定义 Manticore 等待建立与远程代理连接的时间。它支持作为实例范围的默认值和每分布式表。完整的守护进程级别详细信息请参阅 [Searchd：agent_connect_timeout](../../Server_settings/Searchd.md#agent_connect_timeout)。
+
+<!-- intro -->
+##### Config:
+
+<!-- request Config -->
 ```ini
-agent_connect_timeout = 300
-````
+agent_connect_timeout = 300ms
+```
 
-`agent_connect_timeout` 指令定义了连接远程代理的超时时间。默认情况下，该值以毫秒为单位，但可以有[其他后缀](../../Server_settings/Special_suffixes.md))。默认值为 1000（1 秒）。
+<!-- intro -->
+##### SQL:
 
-连接远程代理时，`searchd` 最多等待此时间以成功完成连接。如果超时到达但连接未建立，并且启用了 `retries`，则会进行重试。
+<!-- request SQL -->
+```sql
+CREATE TABLE products_dist type='distributed'
+  agent='127.0.0.1:9312:products|127.0.0.1:9313:products'
+  agent_connect_timeout='300ms';
+```
+<!-- end -->
 
-## agent_query_timeout
+### agent_query_timeout
 
+<!-- example remote-agent-query-timeout -->
+`agent_query_timeout` 定义 Manticore 等待已连接的远程代理完成查询的时间。它支持作为实例范围的默认值、每分布式表和每查询作为 `OPTION agent_query_timeout=...`。完整的守护进程级别详细信息请参阅 [Searchd：agent_query_timeout](../../Server_settings/Searchd.md#agent_query_timeout)。
+
+如果达到 `agent_query_timeout`，查询不会自动重试；而是会生成警告。行为还受 [reset_network_timeout_on_packet](../../Server_settings/Searchd.md#reset_network_timeout_on_packet) 的影响。
+
+<!-- intro -->
+##### Config:
+
+<!-- request Config -->
 ```ini
 agent_query_timeout = 10000 # our query can be long, allow up to 10 sec
 ```
 
-`agent_query_timeout` 设置 searchd 等待远程代理完成查询的时间。默认值为 3000 毫秒（3 秒），但可以通过添加后缀指示不同时间单位。
+<!-- intro -->
+##### SQL:
 
-建立连接后，`searchd` 将等待最多 agent_query_timeout 时间来完成远程查询。请注意，此超时与 `agent_connection_timeout` 是独立的，远程代理可能导致的延迟总和为两者之和。如果达到 agent_query_timeout，查询将**不会**重试，而是产生警告。
+<!-- request SQL -->
+```sql
+CREATE TABLE products_dist type='distributed'
+  agent='127.0.0.1:9312:products|127.0.0.1:9313:products'
+  agent_query_timeout='10000';
+```
 
-请注意，行为还受到[reset_network_timeout_on_packet](../../Server_settings/Searchd.md#reset_network_timeout_on_packet)的影响。
+<!-- intro -->
+##### SQL 查询选项：
 
-## agent_retry_count
+<!-- request SQL -->
+```sql
+SELECT * FROM products_dist OPTION agent_query_timeout=750;
+```
+<!-- end -->
 
-`agent_retry_count` 是一个整数，指定 Manticore 在报告致命查询错误之前，将尝试连接和查询分布式表中的远程代理的次数。它的工作方式类似于配置文件中 “searchd” 部分定义的 `agent_retry_count`，但专门应用于该表。
+### agent_retry_count
 
-## mirror_retry_count
+`agent_retry_count` 指定了 Manticore 在分布式表中尝试连接和查询远程代理的次数，直到报告致命查询错误。名称根据作用域而变化：使用
+- `agent_retry_count` 作为实例范围的设置，
+- 在分布式表中使用 `agent_retry_count` 或其别名 `mirror_retry_count`，
+- 每个查询使用 `OPTION retry_count=...`，
+- 以及在单个 `agent=...` 声明中使用 `[retry_count=...]`。
 
-`mirror_retry_count` 的作用与 `agent_retry_count` 相同。如果两个值都提供，`mirror_retry_count` 优先，并且会发出警告。
+完整的守护进程级别详情请参见 [Searchd: agent_retry_count](../../Server_settings/Searchd.md#agent_retry_count)。
 
-## 实例范围选项
+如果您使用 **agent mirrors**，服务器会在每次连接尝试之前根据 [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) 选择不同的镜像，并且 `agent_retry_count` 会在镜像之间汇总。
 
-以下选项管理远程代理的整体行为，并在**配置文件的 searchd 部分**指定。它们为整个 Manticore 实例设置默认值。
+### mirror_retry_count
 
-* `agent_connect_timeout` — `agent_connect_timeout` 参数的默认值。
-* `agent_query_timeout` — `agent_query_timeout` 参数的默认值。此值也可以在分布式（网络）表中使用相同设置名称按查询单独覆盖。
-* `agent_retry_count` 是一个整数，指定 Manticore 在报告致命查询错误之前，将尝试连接和查询分布式表中的远程代理的次数。默认值为 0（即不重试）。此值也可以通过查询选项 'OPTION retry_count=XXX' 单独指定。若提供了此查询选项，将优先于配置中的值。
+<!-- example remote-agent-retry-count -->
+`mirror_retry_count` 与 `agent_retry_count` 的作用相同，但仅作为分布式表设置。如果提供了两个值，`mirror_retry_count` 会优先。
 
-注意，如果你在定义分布式表时使用**代理镜像**，服务器将在每次连接尝试之前根据指定的[ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy)选择不同的镜像。在这种情况下，[agent_retry_count](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_retry_count) 将对该集合中所有镜像进行汇总。
+<!-- intro -->
+##### 配置:
 
-例如，如果你有 10 个镜像并设置 `agent_retry_count=5`，服务器最多尝试 50 次重试（假设每 10 个镜像平均尝试 5 次）。如果选择 `ha_strategy = roundrobin`，实际上每个镜像会尝试 5 次。
+<!-- request Config -->
+```ini
+agent_retry_count = 2
+```
 
-与此同时，在 `agent` 定义中作为 [retry_count](../../Searching/Options.md#retry_count) 选项提供的值作为绝对限制。换言之，代理定义中的 `[retry_count=2]` 选项意味着最多会尝试 2 次，无论是否有 1 个或 10 个镜像。
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+```sql
+CREATE TABLE products_dist type='distributed'
+  agent='127.0.0.1:9312:products|127.0.0.1:9313:products'
+  mirror_retry_count='2';
+```
+
+<!-- intro -->
+##### SQL 查询选项:
+
+<!-- request SQL -->
+```sql
+SELECT * FROM products_dist OPTION retry_count=1;
+```
+
+<!-- intro -->
+##### 每个代理的配置上限:
+
+<!-- request Config -->
+```ini
+table products_dist {
+  type = distributed
+  agent = 127.0.0.1:9312|127.0.0.1:9313:products[retry_count=2]
+}
+```
+<!-- end -->
 
 ### agent_retry_delay
 
-`agent_retry_delay` 是一个整数值，表示 Manticore Search 在远程代理查询失败后等待重试的时间（毫秒）。可以在 searchd 全局配置中指定，也可以在查询中通过 `OPTION retry_delay=XXX` 语句单独指定。如果两者都存在，则查询级别选项优先。默认值为 500 毫秒（0.5 秒）。如果 `agent_retry_count` 或查询选项 `OPTION retry_count` 为零，则该选项无效。
+<!-- example remote-agent-retry-delay -->
+`agent_retry_delay` 定义了重试尝试之间的延迟。它支持作为实例范围的默认值和每个查询的 `OPTION retry_delay=...`，但不支持每个分布式表。完整的守护进程级别详情请参见 [Searchd: agent_retry_delay](../../Server_settings/Searchd.md#agent_retry_delay)。
+
+当通过 `agent_retry_count` 或 `OPTION retry_count=...` 启用重试时，此选项才相关。
+
+<!-- intro -->
+##### 配置:
+
+<!-- request Config -->
+```ini
+agent_retry_delay = 500ms
+```
+
+<!-- intro -->
+##### SQL 查询选项:
+
+<!-- request SQL -->
+```sql
+SELECT * FROM products_dist OPTION retry_count=2, retry_delay=300;
+```
+<!-- end -->
 
 ### client_timeout
 
-`client_timeout` 选项设置使用持久连接时请求间的最大等待时间。该值以秒或带时间后缀的形式表示。默认值为 5 分钟。
+<!-- example client-timeout -->
+`client_timeout` 选项设置在使用持久连接时请求之间的最大等待时间。这是一个实例范围的 `searchd` 设置，而不是每个表的选项。该值以秒或带时间后缀的形式表示。默认值为 5 分钟。完整的守护进程级别详情请参见 [Searchd: client_timeout](../../Server_settings/Searchd.md#client_timeout)。
 
-示例：
+<!-- intro -->
+##### 配置:
 
+<!-- request Config -->
 ```ini
 client_timeout = 1h
 ```
+<!-- end -->
 
 ### hostname_lookup
 

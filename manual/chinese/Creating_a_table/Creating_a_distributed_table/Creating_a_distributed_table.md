@@ -4,6 +4,8 @@ Manticore 允许创建**分布式表**，它们的行为类似普通的普通表
 
 从客户端的角度来看，感觉就像是在查询一个单一的表。
 
+<!-- example distributed-table-definition -->
+
 分布式表可以由以下任意组合的表组成：
 
 * 本地存储表（[普通表](../../Creating_a_table/Local_tables/Plain_table.md) 和 [实时表](../../Creating_a_table/Local_tables/Real-time_table.md)）
@@ -14,10 +16,12 @@ Manticore 允许创建**分布式表**，它们的行为类似普通的普通表
 
 不建议将 percolate 和模板表与普通表和实时表混合使用。
 
-分布式表在配置文件中定义为类型 'distributed'，或者通过 SQL 子句 `CREATE TABLE` 定义。
+分布式表在配置文件中或通过 SQL 子句 `CREATE TABLE` 定义为类型 'distributed'。
 
-#### 在配置文件中
+<!-- intro -->
+##### 配置：
 
+<!-- request Config -->
 ```ini
 table foo {
     type = distributed
@@ -30,13 +34,18 @@ table foo {
 }
 ```
 
-#### 通过 SQL
+<!-- intro -->
+##### SQL：
 
+<!-- request SQL -->
 ```sql
-CREATE TABLE distributed_index type='distributed' local='local_index' agent='127.0.0.1:9312:remote_table'
+CREATE TABLE distributed_index type='distributed'
+  local='local_index'
+  agent='127.0.0.1:9312:remote_table';
 ```
+<!-- end -->
 
-#### 子表
+## 子表
 
 分布式表的核心在于其所指向的子表列表。分布式表中有两种类型的子表：
 

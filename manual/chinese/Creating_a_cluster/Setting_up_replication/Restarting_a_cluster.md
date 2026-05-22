@@ -27,10 +27,61 @@ safe_to_bootstrap: 1
 - 最先进的 `seqno`
 - `safe_to_bootstrap: 1`
 
-的节点。首先使用 `--new-cluster` 命令行选项启动该节点，或在 Linux 系统上通过 systemd 运行 `manticore_new_cluster`。这会告诉 Manticore 从此节点启动一个新的集群副本。之后，正常启动其余节点以便它们可以重新加入。
+的节点。首先启动该节点。这会告诉 Manticore 从该节点启动一个新的集群副本。之后，正常启动其余节点，以便它们可以重新加入。
 
-如果在没有必要干净关闭状态的情况下首先启动另一个节点，启动将被拒绝，以防止集群从旧副本恢复。`--new-cluster-force` 选项会覆盖此保护，强制集群从选定节点启动。在 Linux 上，您可以使用 `manticore_new_cluster --force`。
+<!-- example restart-cluster-clean -->
+在干净的完整集群关闭后使用此方法。
 
-如果所有节点都崩溃或未干净关闭，则 `grastate.dat` 可能不再适合用于正常启动选择。在这种情况下，找到具有最新数据的节点（通常是 `seqno` 最大的节点），并使用 `--new-cluster-force` 启动它。
+
+<!-- intro -->
+##### 命令行：
+如果直接启动 Manticore，请使用：
+
+<!-- request Bash -->
+
+```bash
+searchd --new-cluster
+```
+
+<!-- intro -->
+##### systemd：
+如果在 Linux 上通过 systemd 运行 Manticore，请使用：
+
+<!-- request Systemd -->
+
+```bash
+manticore_new_cluster
+```
+<!-- end -->
+
+如果其他节点在没有必要干净关闭状态的情况下首先启动，启动将被拒绝，以保护集群不从旧副本恢复。
+
+如果所有节点崩溃或未干净关闭，`grastate.dat` 可能不再适合用于正常引导选择。在这种情况下，找到具有最新数据的节点，通常是具有最大 `seqno` 的节点，并使用 `--new-cluster-force` 启动它。这会覆盖正常保护，强制集群从选定节点启动。
+
+<!-- example restart-cluster-force -->
+在崩溃或未干净的完整集群关闭后使用此方法。
+
+
+<!-- intro -->
+##### 命令行：
+如果直接启动 Manticore，请使用：
+
+<!-- request Bash -->
+
+```bash
+searchd --new-cluster-force
+```
+
+<!-- intro -->
+
+##### systemd：
+如果在 Linux 上通过 systemd 运行 Manticore，请使用：
+
+<!-- request Systemd -->
+
+```bash
+manticore_new_cluster --force
+```
+<!-- end -->
 
 <!-- proofread -->

@@ -27,10 +27,61 @@ If the whole cluster was shut down cleanly, start the node that was stopped last
 - the most advanced `seqno`
 - `safe_to_bootstrap: 1`
 
-Start that node first with the `--new-cluster` command-line option, or run `manticore_new_cluster` on Linux through systemd. This tells Manticore to start a new copy of the cluster from that node. After that, start the remaining nodes normally so they can rejoin.
+Start that node first. This tells Manticore to start a new copy of the cluster from that node. After that, start the remaining nodes normally so they can rejoin.
 
-If another node is started first without the required clean-shutdown state, startup is refused to protect the cluster from being restored from an older copy. The `--new-cluster-force` option overrides that protection and forces the cluster to start from the chosen node. On Linux, you can use `manticore_new_cluster --force`.
+<!-- example restart-cluster-clean -->
+Use this after a clean full cluster shutdown.
 
-If all nodes crashed or were shut down uncleanly, `grastate.dat` may no longer be trustworthy for normal bootstrap selection. In that case, find the node with the most recent data, usually the one with the largest `seqno`, and start it with `--new-cluster-force`.
+
+<!-- intro -->
+##### Command line:
+If you start Manticore directly, use:
+
+<!-- request Bash -->
+
+```bash
+searchd --new-cluster
+```
+
+<!-- intro -->
+##### systemd:
+If you run Manticore via systemd on Linux, use:
+
+<!-- request Systemd -->
+
+```bash
+manticore_new_cluster
+```
+<!-- end -->
+
+If another node is started first without the required clean-shutdown state, startup is refused to protect the cluster from being restored from an older copy.
+
+If all nodes crashed or were shut down uncleanly, `grastate.dat` may no longer be trustworthy for normal bootstrap selection. In that case, find the node with the most recent data, usually the one with the largest `seqno`, and start it with `--new-cluster-force`. This overrides the normal protection and forces the cluster to start from the chosen node.
+
+<!-- example restart-cluster-force -->
+Use this after a crash or unclean full cluster shutdown.
+
+
+<!-- intro -->
+##### Command line:
+If you start Manticore directly, use:
+
+<!-- request Bash -->
+
+```bash
+searchd --new-cluster-force
+```
+
+<!-- intro -->
+
+##### systemd:
+If you run Manticore via systemd on Linux, use:
+
+<!-- request Systemd -->
+
+```bash
+manticore_new_cluster --force
+```
+<!-- end -->
 
 <!-- proofread -->

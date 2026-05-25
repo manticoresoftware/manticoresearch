@@ -26,6 +26,8 @@ To run KNN searches, you must first configure your table. Float vectors and KNN 
 * `hnsw_m`: An optional setting that defines the maximum number of outgoing connections in the graph. The default is 16.
 * `hnsw_ef_construction`: An optional setting that defines a construction time/accuracy trade-off. The default is 200.
 
+> NOTE: HNSW graph construction during RT chunk saves, `OPTIMIZE TABLE` / auto-optimize chunk merges, and `ALTER TABLE ... ADD/DROP/REBUILD` KNN rebuilds runs in parallel by default on multi-core hosts; the worker count is controlled by the [`knn_parallel_build`](../Server_settings/Searchd.md#knn_parallel_build) searchd setting (set it to `1` to force the serial path). This affects build-time performance only. Because parallel HNSW construction may insert vectors in a different order, the resulting graph may not be bit-identical to a serial build.
+
 <!-- intro -->
 ##### SQL
 

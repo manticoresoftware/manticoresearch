@@ -5407,12 +5407,10 @@ static VecTraits_T<const BYTE> GetAttrForDocstore ( DocID_t tDocID, int iAttr, c
 	case SPH_ATTR_UINT32SET:
 	{
 		const CSphVector<int64_t> * pMva = FetchMVA ( tDocID, iAttr, tAttr, tMvaContainer, tSource, false );
-		if ( !pMva )
-			return { nullptr, 0 };
-
-		dTmpStorage.Resize ( pMva->GetLength()*sizeof(DWORD) );
+		const int iMvaLen = pMva ? pMva->GetLength() : 0;
+		dTmpStorage.Resize ( iMvaLen*sizeof(DWORD) );
 		DWORD * pAttrs = (DWORD*)dTmpStorage.Begin();
-		for ( int iValue = 0; iValue < pMva->GetLength(); iValue++ )
+		for ( int iValue = 0; iValue < iMvaLen; iValue++ )
 			pAttrs[iValue] = (DWORD)(*pMva)[iValue];
 
 		return dTmpStorage;

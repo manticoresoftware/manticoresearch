@@ -205,7 +205,11 @@ public:
 };
 
 /// stack of a thread (that is NOT stack of the coroutine!)
-static const DWORD STACK_SIZE = 128 * 1024;
+/// Bumped from 128 KiB to 1 MiB to match DEFAULT_CORO_STACK_SIZE — debug
+/// builds have fat frames and any C dep (e.g. embeddings BERT forward via
+/// dlopen) blows the smaller budget. 64-bit page-on-touch makes the extra
+/// VA range free in practice.
+static const DWORD STACK_SIZE = 1024 * 1024;
 
 /// get the pointer to my thread's stack
 const void * TopOfStack ();

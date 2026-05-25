@@ -53,7 +53,7 @@ searchd
   }
 }</query>
 
-<!-- Auto removes only the aggregation's own filters, and keeps the other flat filters. -->
+<!-- Auto removes only the aggregation's own filters, keeps the other flat filters, marks selected buckets selected, and marks siblings available. -->
 <query endpoint="search">{
   "table": "facet_json_review",
   "limit": 0,
@@ -65,7 +65,7 @@ searchd
   }
 }</query>
 
-<!-- Top-level max must be inherited by aggs and emit status. color_id 4/5 are outside brand_id=7 and should not appear. -->
+<!-- Top-level max must be inherited by aggs and emit status. Selected buckets are selected, same-facet siblings are available, and broad-only other-facet buckets can be unavailable. -->
 <query endpoint="search">{
   "table": "facet_json_review",
   "limit": 0,
@@ -77,7 +77,7 @@ searchd
   }
 }</query>
 
-<!-- Explicit per-agg max should produce unavailable status for broad auto buckets. -->
+<!-- Explicit per-agg max should produce broad base-query buckets with status. -->
 <query endpoint="search">{
   "table": "facet_json_review",
   "limit": 0,
@@ -89,18 +89,19 @@ searchd
   }
 }</query>
 
-<!-- Empty strict availability should still label broad auto buckets as unavailable. -->
+<!-- Empty strict availability should mark same-facet siblings available and non-selected aggregation buckets unavailable. -->
 <query endpoint="search">{
   "table": "facet_json_review",
   "limit": 0,
   "facet_filter_mode": "max",
   "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 99 } } ] } },
   "aggs": {
-    "color_empty_availability": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } }
+    "color_empty_availability": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } },
+    "size_empty_availability": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } } }
   }
 }</query>
 
-<!-- Status labeling for string buckets and selected string filters. -->
+<!-- Status labeling for string buckets and selected string filters; selected values are reported as selected. -->
 <query endpoint="search">{
   "table": "facet_json_review",
   "limit": 0,
@@ -163,7 +164,7 @@ searchd
   }
 }</query>
 
-<!-- Main hit pagination must not affect explicitly sized aggregation buckets under auto. -->
+<!-- Main hit pagination must not affect explicitly sized aggregation buckets under auto; returned buckets keep selected/available status. -->
 <query endpoint="search">{
   "table": "facet_json_review",
   "limit": 1,

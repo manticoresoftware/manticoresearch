@@ -673,7 +673,7 @@ ha_ping_interval = 3s
 
 ### hostname_lookup
 
-The `hostname_lookup` option defines the strategy for renewing hostnames. By default, the IP addresses of agent host names are cached at server start to avoid excessive access to DNS. However, in some cases, the IP can change dynamically (e.g. cloud hosting) and it may be desirable to not cache the IPs. Setting this option to `request` disables the caching and queries the DNS for each query. The IP addresses can also be manually renewed using the `FLUSH HOSTNAMES` command.
+The `hostname_lookup` option defines the strategy for renewing hostnames. By default, the IP addresses of agent host names are cached at server start to avoid excessive access to DNS. However, in some cases, the IP can change dynamically (e.g. cloud hosting) and it may be desirable to not cache the IPs. Setting this option to `request` disables the caching and queries the DNS for each query. The IP addresses can also be manually renewed using the [`FLUSH HOSTNAMES`](../Securing_and_compacting_a_table/Flushing_hostnames.md) command.
 
 ### jobs_queue_size
 
@@ -689,11 +689,11 @@ This option allows you to adjust the batch size. The default value is `1000`, an
 
 A larger batch size may improve performance; however, for some queries, it can lead to excessive memory consumption.
 
+<!-- example conf join_batch_size -->
 <!-- intro -->
-##### Example:
+##### Config:
 
-<!-- request Example -->
-
+<!-- request Config -->
 ```ini
 join_batch_size = 2000
 ```
@@ -709,11 +709,11 @@ This option allows you to configure the size of this cache. The default value is
 
 Note that each thread maintains its own cache, so you should account for the number of threads executing queries when estimating total memory usage.
 
+<!-- example conf join_cache_size -->
 <!-- intro -->
-##### Example:
+##### Config:
 
-<!-- request Example -->
-
+<!-- request Config -->
 ```ini
 join_cache_size = 10M
 ```

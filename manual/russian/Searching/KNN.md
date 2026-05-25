@@ -94,6 +94,7 @@ table test_vec {
 - `API_TIMEOUT`: Опционально. HTTP-таймаут в секундах для API-запросов. По умолчанию 10 секунд. Установите `'0'`, чтобы использовать таймаут по умолчанию. Применяется как к запросам проверки при создании таблицы, так и к генерации эмбеддингов во время операций INSERT.
 
 **Поддерживаемые модели эмбеддингов:**
+
 | Тип модели | Пример | Требуется API-ключ | Примечания |
 |------------|---------|-----------------|-------|
 | **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | Нет | Локальные модели на основе BERT, автоматически загружаются |
@@ -301,7 +302,7 @@ POST /sql?mode=raw -d "INSERT INTO products (title, embedding_vector) VALUES ('n
 <!-- request SQL -->
 
 ```sql
-SELECT id, knn_dist() FROM products WHERE knn(embedding_vector, 3, 'machine learning');
+SELECT id, knn_dist() FROM products WHERE knn(embedding_vector, 'machine learning');
 ```
 
 <!-- response SQL -->
@@ -328,8 +329,7 @@ POST /search
     "table": "products",
     "knn": {
         "field": "embedding_vector",
-        "query": "machine learning",
-        "k": 3
+        "query": "machine learning"
     }
 }
 ```
@@ -341,8 +341,7 @@ POST /search
     "table": "products",
     "knn": {
         "field": "embedding_vector",
-        "query": [0.1, 0.2, 0.3, 0.4],
-        "k": 3
+        "query": [0.1, 0.2, 0.3, 0.4]
     }
 }
 ```

@@ -94,6 +94,7 @@ When creating a table for auto embeddings, specify:
 - `API_TIMEOUT`: Optional. HTTP timeout in seconds for API requests. Default is 10 seconds. Set to `'0'` to use the default timeout. Applies to both validation requests during table creation and embedding generation during INSERT operations.
 
 **Supported embedding models:**
+
 | Model Type | Example | API Key Required | Notes |
 |------------|---------|-----------------|-------|
 | **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | No | Local BERT-based models, auto-downloaded |
@@ -301,7 +302,7 @@ Search works the same way - provide your query text and Manticore will generate 
 <!-- request SQL -->
 
 ```sql
-SELECT id, knn_dist() FROM products WHERE knn(embedding_vector, 3, 'machine learning');
+SELECT id, knn_dist() FROM products WHERE knn(embedding_vector, 'machine learning');
 ```
 
 <!-- response SQL -->
@@ -328,8 +329,7 @@ POST /search
     "table": "products",
     "knn": {
         "field": "embedding_vector",
-        "query": "machine learning",
-        "k": 3
+        "query": "machine learning"
     }
 }
 ```
@@ -341,8 +341,7 @@ POST /search
     "table": "products",
     "knn": {
         "field": "embedding_vector",
-        "query": [0.1, 0.2, 0.3, 0.4],
-        "k": 3
+        "query": [0.1, 0.2, 0.3, 0.4]
     }
 }
 ```

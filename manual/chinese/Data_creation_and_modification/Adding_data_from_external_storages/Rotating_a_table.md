@@ -49,6 +49,17 @@ RELOAD TABLES;
 
 此命令的功能类似于 HUP 系统信号，触发表的旋转。但它并不完全等同于典型的 HUP 信号（例如通过 `kill -HUP` 命令或 `indexer --rotate` 触发）。该命令会主动查找需要旋转的表，并能重新读取配置。比如，若以配置文件启动的 Manticore 处于 Plain 模式，但配置指向一个不存在的 Plain 表，之后执行 `indexer --rotate` 不会让服务器识别新表，需执行 `RELOAD TABLES` 或重启服务器。
 
+`RELOAD TABLES` 应被视为异步请求。该语句在安排重新加载/旋转工作后返回，而实际的表发现和旋转工作将在守护进程循环中稍后完成。因此，使用 `indexer --rotate` 重建的普通表在 `RELOAD TABLES` 返回后可能仍会暂时不可用。
+
+这在立即在下一个语句中使用普通表的工作流程中最为明显，例如：
+
+```sql
+RELOAD TABLES;
+ATTACH TABLE plain_table TO TABLE rt_table WITH TRUNCATE;
+```
+
+在这种情况下，如果 `ATTACH` 语句在普通表变得可见之前运行，可能会失败并显示 `no such table`。作为解决方法，可以轮询 `SHOW TABLES`，直到普通表出现，然后再继续执行 `ATTACH` 或其他相关语句。
+
 根据 [seamless_rotate](../../Server_settings/Searchd.md#seamless_rotate) 设置的值，新查询可能会被短暂挂起，客户端会收到临时错误。
 
 ```sql

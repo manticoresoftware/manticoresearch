@@ -40,6 +40,11 @@ public:
 	{}
 
 	bool Wake ( bool bVip = false ) const noexcept;
+
+	friend bool operator== ( Waker_c const& lhs, Waker_c const& rhs ) noexcept
+	{
+		return &lhs == &rhs;
+	}
 };
 
 class AtomicWaker_c
@@ -69,11 +74,6 @@ public:
 	bool is_linked() const noexcept
 	{
 		return m_tWakerQueueHook.is_linked();
-	}
-
-	friend bool operator== ( Waker_c const& lhs, Waker_c const& rhs ) noexcept
-	{
-		return &lhs == &rhs;
 	}
 
 public:

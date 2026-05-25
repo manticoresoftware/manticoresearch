@@ -507,38 +507,6 @@ int release_resource ( int N, essence_t* presource, int i )
 
 }*/
 
-TEST ( ThreadPool, CoroPromiceFutureConcept )
-{
-	using namespace Threads;
-	CallCoroutine ( [&] {
-	volatile int iData;
-	auto fnCoro = MakeCoroExecutor ( [&iData]() {
-		iData = 1;
-		Coro::Yield_();
-		iData = 2;
-		Coro::Yield_();
-		iData = 10;
-		Coro::Yield_();
-		iData = 16;
-	} );
-
-	auto fnCondition = [fnCoro = std::move ( fnCoro ), &iData] ( int& iData2 ) -> bool {
-		bool bRes = !fnCoro();
-		iData2 = iData;
-		return bRes;
-	};
-
-	int iCheck;
-	ASSERT_TRUE ( fnCondition ( iCheck ) );
-	ASSERT_EQ ( iCheck, 1 );
-	ASSERT_TRUE ( fnCondition ( iCheck ) );
-	ASSERT_EQ ( iCheck, 2 );
-	ASSERT_TRUE ( fnCondition ( iCheck ) );
-	ASSERT_EQ ( iCheck, 10 );
-	ASSERT_FALSE ( fnCondition ( iCheck ) );
-	ASSERT_EQ ( iCheck, 16 );
-	});
-}
 
 TEST ( Dispatcher, Trivial )
 {

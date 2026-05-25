@@ -8764,13 +8764,25 @@ static bool HandleMysqlSelectStmtGroup ( CSphVector<SqlStmt_t> & dStmt, int iSta
 			dAvailableBuckets.Reset();
 			facet::FacetStatusSources_t tStatus;
 
-			if ( iQueryIdx>=0 && tHandler.m_dQueries[iQueryIdx].m_bFacet && facet::GetFilterMode ( tHandler.m_dQueries[0], tHandler.m_dQueries[iQueryIdx] )==FacetFilterMode_e::Max )
+			if ( iQueryIdx>=0 && tHandler.m_dQueries[iQueryIdx].m_bFacet )
 			{
-				const AggrResult_t * pRes = &tRes;
-				if ( iQueryIdx+1<tHandler.m_dQueries.GetLength() && tHandler.m_dQueries[iQueryIdx+1].m_bFacetMaxRef )
-					pRes = &tHandler.m_dAggrResults[iQueryIdx+1];
-				tStatus = CollectFacetSelectedStatus ( tHandler.m_dQueries[0], tHandler.m_dQueries[iQueryIdx], tRes.m_tSchema, pRes, dSelectedFilters, dSelectedBuckets );
-				tStatus.m_pAvailableBuckets = facet::CollectFacetAvailableFilters ( tHandler.m_dQueries[iQueryIdx], tRes.m_tSchema, *pRes, dAvailableBuckets );
+				FacetFilterMode_e eMode = facet::GetFilterMode ( tHandler.m_dQueries[0], tHandler.m_dQueries[iQueryIdx] );
+				if ( eMode!=FacetFilterMode_e::Strict )
+				{
+					tStatus.m_bEmitStatus = true;
+					const AggrResult_t * pStrictRes = nullptr;
+					if ( eMode==FacetFilterMode_e::Max )
+					{
+						pStrictRes = &tRes;
+						if ( iQueryIdx+1<tHandler.m_dQueries.GetLength() && tHandler.m_dQueries[iQueryIdx+1].m_bFacetMaxRef )
+							pStrictRes = &tHandler.m_dAggrResults[iQueryIdx+1];
+					}
+
+					tStatus = CollectFacetSelectedStatus ( tHandler.m_dQueries[0], tHandler.m_dQueries[iQueryIdx], tRes.m_tSchema, pStrictRes, dSelectedFilters, dSelectedBuckets );
+					tStatus.m_bEmitStatus = true;
+					if ( pStrictRes )
+						tStatus.m_pAvailableBuckets = facet::CollectFacetAvailableFilters ( tHandler.m_dQueries[iQueryIdx], tRes.m_tSchema, *pStrictRes, dAvailableBuckets );
+				}
 			}
 
 			auto uMatches = SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ), tStatus );

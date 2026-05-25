@@ -17,14 +17,56 @@
 #include <stdlib.h>
 #include <set>
 
-#if defined(__x86_64__) || defined(__i386__)
+#if defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86)
+	#define SPH_CPU_X86 1
+#else
+	#define SPH_CPU_X86 0
+#endif
+
+#if SPH_CPU_X86 && !defined(_MSC_VER)
 	#include <cpuid.h>
+#endif
+
+#if SPH_CPU_X86 && defined(_MSC_VER)
+	#include <intrin.h>
 #endif
 
 #if _WIN32
 	#include <immintrin.h>
 #else
 	#include <unistd.h>
+#endif
+
+
+#if SPH_CPU_X86
+static void GetCPUID ( uint32_t uLeaf, uint32_t dInfo[4] )
+{
+#if defined(_MSC_VER)
+	int dCPUInfo[4];
+	__cpuidex ( dCPUInfo, (int)uLeaf, 0 );
+	dInfo[0] = (uint32_t)dCPUInfo[0];
+	dInfo[1] = (uint32_t)dCPUInfo[1];
+	dInfo[2] = (uint32_t)dCPUInfo[2];
+	dInfo[3] = (uint32_t)dCPUInfo[3];
+#else
+	__cpuid ( uLeaf, dInfo[0], dInfo[1], dInfo[2], dInfo[3] );
+#endif
+}
+
+
+static void GetCPUID ( uint32_t uLeaf, uint32_t uSubLeaf, uint32_t dInfo[4] )
+{
+#if defined(_MSC_VER)
+	int dCPUInfo[4];
+	__cpuidex ( dCPUInfo, (int)uLeaf, (int)uSubLeaf );
+	dInfo[0] = (uint32_t)dCPUInfo[0];
+	dInfo[1] = (uint32_t)dCPUInfo[1];
+	dInfo[2] = (uint32_t)dCPUInfo[2];
+	dInfo[3] = (uint32_t)dCPUInfo[3];
+#else
+	__cpuid_count ( uLeaf, uSubLeaf, dInfo[0], dInfo[1], dInfo[2], dInfo[3] );
+#endif
+}
 #endif
 
 
@@ -116,9 +158,9 @@ int GetNumPhysicalCPUs()
 
 static bool IsSSE42SupportedImpl()
 {
-#if defined(__x86_64__) || defined(__i386__)
+#if SPH_CPU_X86
 	uint32_t dInfo[4];
-	__cpuid ( 1, dInfo[0], dInfo[1], dInfo[2], dInfo[3] );
+	GetCPUID ( 1, dInfo );
 	return (dInfo[2] & (1 << 20)) != 0;
 #else
 	return true;	// assumes that it's ARM and simde is used
@@ -135,9 +177,9 @@ bool IsSSE42Supported()
 
 static bool IsAVX512SupportedImpl()
 {
-#if defined(__x86_64__) || defined(__i386__)
+#if SPH_CPU_X86
 	uint32_t dInfo[4];
-	__cpuid ( 1, dInfo[0], dInfo[1], dInfo[2], dInfo[3] );
+	GetCPUID ( 1, dInfo );
 	bool bHasAVX = (dInfo[2] & (1 << 28)) != 0;
 	bool bHasOSXSAVE = (dInfo[2] & (1 << 27)) != 0;
 	if ( !bHasAVX || !bHasOSXSAVE )
@@ -153,10 +195,23 @@ static bool IsAVX512SupportedImpl()
 	if ( ( uXcrFeatureMask & 0xe6 ) != 0xe6 )
 		return false;
 
-	__cpuid_count ( 7, 0, dInfo[0], dInfo[1], dInfo[2], dInfo[3] );
-	bool bHasAVX512F = ( dInfo[1] & ( 1 << 16 ) ) != 0;
-	bool bHasAVX512VPOPCNTDQ = ( dInfo[2] & ( 1 << 14 ) ) != 0;
+	GetCPUID ( 7, 0, dInfo );
+	bool bHasAVX512F = ( dInfo[1] & ( 1u << 16 ) ) != 0;
+	bool bHasAVX512VPOPCNTDQ = ( dInfo[2] & ( 1u << 14 ) ) != 0;
+#if _WIN32
+	bool bHasAVX512DQ = ( dInfo[1] & ( 1u << 17 ) ) != 0;
+	bool bHasAVX512CD = ( dInfo[1] & ( 1u << 28 ) ) != 0;
+	bool bHasAVX512BW = ( dInfo[1] & ( 1u << 30 ) ) != 0;
+	bool bHasAVX512VL = ( dInfo[1] & ( 1u << 31 ) ) != 0;
+	return bHasAVX512F
+		&& bHasAVX512DQ
+		&& bHasAVX512CD
+		&& bHasAVX512BW
+		&& bHasAVX512VL
+		&& bHasAVX512VPOPCNTDQ;
+#else
 	return bHasAVX512F && bHasAVX512VPOPCNTDQ;
+#endif
 #else
 	return true;	// assumes that it's ARM and simde is used
 #endif
@@ -172,9 +227,9 @@ bool IsAVX512Supported()
 
 static bool IsAVX2SupportedImpl()
 {
-#if defined(__x86_64__) || defined(__i386__)
+#if SPH_CPU_X86
     uint32_t dInfo[4];
-    __cpuid ( 1, dInfo[0], dInfo[1], dInfo[2], dInfo[3] );
+	GetCPUID ( 1, dInfo );
     bool bHasAVX = (dInfo[2] & (1 << 28)) != 0;
     bool bHasOSXSAVE = (dInfo[2] & (1 << 27)) != 0;
     if ( !bHasAVX || !bHasOSXSAVE )
@@ -190,7 +245,7 @@ static bool IsAVX2SupportedImpl()
     if ( ( uXcrFeatureMask & 0x6 ) != 0x6 )
         return false;
 
-    __cpuid_count ( 7, 0, dInfo[0], dInfo[1], dInfo[2], dInfo[3] );
+	GetCPUID ( 7, 0, dInfo );
     return (dInfo[1] & (1 << 5)) != 0;
 #else
     return true;	// assumes that it's ARM and simde is used
@@ -207,9 +262,9 @@ bool IsAVX2Supported()
 
 static bool IsPOPCNTSupportedImpl()
 {
-#if defined(__x86_64__) || defined(__i386__)
+#if SPH_CPU_X86
 	uint32_t dInfo[4];
-	__cpuid ( 1, dInfo[0], dInfo[1], dInfo[2], dInfo[3] );
+	GetCPUID ( 1, dInfo );
 	return (dInfo[2] & (1 << 23)) != 0;
 #else
 	return true;	// assumes that it's ARM and simde is used

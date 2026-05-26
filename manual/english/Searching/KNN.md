@@ -97,7 +97,8 @@ When creating a table for auto embeddings, specify:
 
 | Model Type | Example | API Key Required | Notes |
 |------------|---------|-----------------|-------|
-| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | No | Local BERT-based models, auto-downloaded |
+| **ONNX (recommended)** | `Xenova/all-MiniLM-L6-v2` | No | Local models from any Hugging Face repo that ships an `.onnx` file. Runs on Manticore's fast ONNX Runtime backend. Browse the list: [feature-extraction ONNX models](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm). |
+| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | No | Local BERT-based models, auto-downloaded. Still supported — use ONNX above when available. |
 | **Qwen** | `Qwen/Qwen3-Embedding-0.6B` | No | Local Qwen family models |
 | **Llama** | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | No | Local Llama family models |
 | **Mistral** | `Locutusque/TinyMistral-248M-v2` | No | Local Mistral family models |
@@ -119,9 +120,19 @@ More information about setting up a `float_vector` attribute can be found [here]
 
 <!-- request SQL -->
 
-Using sentence-transformers (no API key needed)
+Using a local [ONNX model](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) — recommended (no API key needed)
 ```sql
 CREATE TABLE products (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+Using sentence-transformers (no API key needed; runs on the Candle path — use ONNX above when available)
+```sql
+CREATE TABLE products_st (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
@@ -166,7 +177,7 @@ CREATE TABLE products_all (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM=''
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM=''
 );
 ```
 
@@ -181,7 +192,7 @@ table products {
     rt_field = title
     rt_field = description
     rt_attr_float_vector = embedding_vector
-    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":"title"}]}
 }
 ```
 
@@ -205,7 +216,7 @@ table products_all {
     rt_field = title
     rt_field = description
     rt_attr_float_vector = embedding_vector
-    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":""}]}
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":""}]}
 }
 ```
 
@@ -223,9 +234,9 @@ table products_all {
 data for the following example:
 
 DROP TABLE IF EXISTS products;
-CREATE TABLE products(title text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title');
+CREATE TABLE products(title text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='Xenova/all-MiniLM-L6-v2' from='title');
 DROP TABLE IF EXISTS products_openai;
-CREATE TABLE products_openai(title text, description text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title,description');
+CREATE TABLE products_openai(title text, description text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='Xenova/all-MiniLM-L6-v2' from='title,description');
 -->
 
 <!-- example inserting_embeddings -->

@@ -30,7 +30,6 @@ bool ValidateSettingModel ( const CreateTableAttr_t & tAttr, CSphString & sError
 }
 
 
-
 static void ParseEmbeddingSourcesAll ( CSphVector<std::pair<int,bool>> & dFrom, const ISphSchema & tSchema )
 {
 	for ( int i=0; i < tSchema.GetFieldsCount(); ++i )

@@ -1,0 +1,21 @@
+PACKAGE_NAME="manticore"
+DEB_FALLBACK_VERSIONED_PACKAGE_NAMES="manticore manticore-server manticore-server-core manticore-tools manticore-dev manticore-common"
+RPM_FALLBACK_VERSIONED_PACKAGE_NAMES="manticore manticore-server manticore-server-core manticore-tools manticore-devel manticore-common"
+SERVICE_NAME="manticore"
+BREW_PACKAGE_NAME="manticoresoftware/tap/manticore"
+BREW_SERVICE_NAME="manticore"
+
+DEB_REPO_PACKAGE_NAME="manticore-repo"
+RPM_REPO_PACKAGE_NAME="manticore-repo"
+
+DEB_REPO_PACKAGE_URL="https://repo.manticoresearch.com/manticore-repo.noarch.deb"
+RPM_REPO_PACKAGE_URL="https://repo.manticoresearch.com/manticore-repo.noarch.rpm"
+
+# Keep in sync with listen directives in ../manticore.conf.in.
+DEFAULT_PORTS="9306 9308 9312"
+
+CONF_DIR="/etc/manticore"
+DATA_DIR="/var/lib/manticore"
+LOG_DIR="/var/log/manticore"
+
+BACKUP_DIR="/var/backups/manticore"

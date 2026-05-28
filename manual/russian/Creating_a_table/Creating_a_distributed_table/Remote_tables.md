@@ -10,7 +10,7 @@ agent = address1 [ | address2 [...] ][:table-list]
 agent = address1[:table-list [ | address2[:table-list [...] ] ] ]
 ```
 
-Директива `agent` объявляет удалённых агентов, которые опрашиваются каждый раз при поиске в окружающей распределённой таблице. Эти агенты фактически являются указателями на сетевые таблицы. Значение, указанное в директиве, включает адрес и может также содержать несколько альтернатив (зеркал агентов) либо только для адреса, либо для адреса вместе со списком таблиц.
+Директива `agent` объявляет удаленные агенты, которые опрашиваются каждый раз при поиске по охватывающей распределенной таблице. Эти агенты, по сути, являются указателями на сетевые таблицы. Указанное значение включает адрес и также может включать несколько альтернатив (зеркала агента) либо только для адреса, либо для адреса и списка таблиц. См. [Зеркалирование](../../Creating_a_cluster/Remote_nodes/Mirroring.md) для синтаксиса зеркал и [Балансировка нагрузки](../../Creating_a_cluster/Remote_nodes/Load_balancing.md) для информации о том, как выбираются зеркальные агенты.
 
 Спецификация адреса должна быть одной из следующих:
 
@@ -19,7 +19,7 @@ address = hostname[:port] # eg. server2:9312
 address = /absolute/unix/socket/path # eg. /var/run/manticore2.sock
 ```
 
-`hostname` — это имя удалённого хоста, `port` — удалённый TCP-порт, `table-list` — это список имён таблиц, разделённых запятыми, а квадратные скобки [] обозначают необязательное условие.
+`hostname` — это имя удаленного хоста, `port` — номер удаленного TCP-порта, `table-list` — это список имен таблиц, разделенных запятыми, а квадратные скобки [] обозначают необязательную часть. Для TCP-соединений этот порт является портом удаленного агента/API (обычно `9312`), а не портом MySQL (`9306`).
 
 Если имя таблицы опущено, предполагается, что это та же таблица, где определена эта строка. Другими словами, при определении агентов для распределённой таблицы 'mycoolindex' можно просто указать адрес, и будет предполагаться, что запрос идёт к таблице mycoolindex на конечных точках агента.
 
@@ -27,8 +27,12 @@ address = /absolute/unix/socket/path # eg. /var/run/manticore2.sock
 
 Вы можете направлять каждого агента к одной или нескольким удалённым таблицам, расположенным на одном или нескольких сетевых серверах без ограничений. Это позволяет несколько различных режимов использования:
 * Шардинг по нескольким серверам агентов и создание произвольной топологии кластера
-* Шардинг по нескольким серверам агентов, зеркалированным для высокой доступности и балансировки нагрузки
+* Шардирование по нескольким серверам-агентам с зеркалированием для обеспечения высокой доступности и балансировки нагрузки (см. [Зеркалирование](../../Creating_a_cluster/Remote_nodes/Mirroring.md) и [Балансировка нагрузки](../../Creating_a_cluster/Remote_nodes/Load_balancing.md))
 * Шардинг внутри localhost для использования нескольких ядер (хотя проще использовать несколько локальных таблиц)
+
+Чтобы избежать путаницы:
+* Одна запись `agent='host1|host2:table'` означает один удаленный шард с зеркальными бэкендами.
+* Несколько записей `agent='...'` означают несколько удаленных шардов.
 
 Все агенты опрашиваются параллельно. Список индексов передаётся удалённому агенту без изменений. Точный способ поиска по этому списку в агенте (последовательно или параллельно) зависит только от конфигурации агента (см. настройку [threads](../../Server_settings/Searchd.md#threads)). Мастер не управляет этим удалённо.
 
@@ -49,7 +53,7 @@ SELECT * FROM user LIMIT 0,1000
 ```
 
 Кроме того, значение может содержать опции для каждого отдельного агента, такие как:
-* [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) - `random`, `roundrobin`, `nodeads`, `noerrors` (переопределяет глобальную настройку `ha_strategy` для конкретного агента)
+* [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) - `random`, `roundrobin`, `nodeads`, `noerrors` (переопределяет глобальную настройку `ha_strategy` для конкретного агента; см. также [Зеркалирование](../../Creating_a_cluster/Remote_nodes/Mirroring.md))
 * `conn` - `pconn`, persistent (эквивалентно установке `agent_persistent` на уровне таблицы)
 * `blackhole` `0`,`1` (идентично настройке [agent_blackhole](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_blackhole) для агента)
 * `retry_count` целочисленное значение (соответствует [agent_retry_count](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_retry_count), но заданное значение не умножается на число зеркал)
@@ -85,6 +89,98 @@ agent = test:9312|box2:9312|box3:9312:any2[retry_count=2]
 agent = test:9312|box2:9312:any2[retry_count=2,conn=pconn,ha_strategy=noerrors]
 ```
 
+## Определение удаленных таблиц
+
+<!-- example remote-table-definition -->
+Удаленные таблицы могут быть определены либо в конфигурационном файле, либо с помощью SQL на распределенной таблице.
+
+<!-- intro -->
+##### Конфигурационный файл:
+
+<!-- request Config -->
+```ini
+table products_dist {
+  type  = distributed
+  agent = 127.0.0.1:9312|127.0.0.1:9313:products
+}
+```
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+```sql
+CREATE TABLE products_dist type='distributed'
+  agent='127.0.0.1:9312:products|127.0.0.1:9313:products';
+```
+<!-- end -->
+
+<!-- example remote-table-setup -->
+Предположим, что удаленные таблицы уже существуют, например:
+
+<!-- intro -->
+##### SQL на удаленном узле 1:
+
+<!-- request SQL -->
+```sql
+CREATE TABLE products(id bigint, title text, node string);
+INSERT INTO products(id,title,node) VALUES(1,'same title','node1');
+```
+
+<!-- intro -->
+##### SQL на удаленном узле 2:
+
+<!-- request SQL -->
+```sql
+CREATE TABLE products(id bigint, title text, node string);
+INSERT INTO products(id,title,node) VALUES(1,'same title','node2');
+```
+
+<!-- intro -->
+##### SQL на мастере:
+
+<!-- request SQL -->
+```sql
+CREATE TABLE products_dist type='distributed'
+  agent='127.0.0.1:9312:products|127.0.0.1:9313:products'
+  ha_strategy='roundrobin'
+  agent_connect_timeout='200ms'
+  agent_query_timeout='500ms'
+  mirror_retry_count='2';
+```
+<!-- end -->
+
+<!-- example remote-table-sql-usage-and-verification -->
+Используйте распределенную таблицу на мастере точно так же, как любую другую таблицу, а затем проверьте, как она была сохранена.
+
+<!-- intro -->
+##### SQL запрос:
+
+<!-- request SQL -->
+```sql
+SELECT id, title, node FROM products_dist;
+SHOW CREATE TABLE products_dist;
+```
+
+<!-- intro -->
+##### SQL ответ:
+
+<!-- response SQL -->
+```sql
++------+------------+-------+
+| id   | title      | node  |
++------+------------+-------+
+|    1 | same title | node1 |
++------+------------+-------+
+
++---------------+----------------------------------------------------------------------------------+
+| Table         | Create Table                                                                     |
++---------------+----------------------------------------------------------------------------------+
+| products_dist | CREATE TABLE products_dist type='distributed' agent='127.0.0.1:9312:products|... |
++---------------+----------------------------------------------------------------------------------+
+```
+<!-- end -->
+
 Для оптимальной производительности рекомендуется помещать удалённые таблицы, расположенные на одном сервере, в одну запись. Например, вместо:
 ```ini
 agent = remote:9312:idx1
@@ -97,9 +193,15 @@ agent = remote:9312:idx1,idx2
 
 ## agent_persistent
 
+<!-- example agent-persistent -->
+<!-- intro -->
+##### Конфигурация:
+
+<!-- request Config -->
 ```ini
 agent_persistent = remotebox:9312:index2
 ```
+<!-- end -->
 
 Опция `agent_persistent` позволяет устанавливать постоянное соединение с агентом, то есть соединение не закрывается после выполнения запроса. Синтаксис этой директивы такой же, как у директивы `agent`. Однако вместо открытия нового соединения с агентом для каждого запроса и последующего его закрытия мастер будет поддерживать открытое соединение и повторно использовать его для последующих запросов. Максимальное количество постоянных соединений на хост агента задаётся опцией [persistent_connections_limit](../../Server_settings/Searchd.md#persistent_connections_limit) в секции searchd.
 
@@ -109,69 +211,182 @@ agent_persistent = remotebox:9312:index2
 
 ## agent_blackhole
 
+<!-- example agent-blackhole -->
+Директива `agent_blackhole` позволяет перенаправлять запросы удаленным агентам без ожидания или обработки их ответов. Это полезно для отладки или тестирования рабочих кластеров, так как вы можете настроить отдельный экземпляр для отладки/тестирования и перенаправлять ему запросы с рабочего мастера (агрегатора), не мешая рабочему процессу. Master searchd попытается подключиться к агенту-черной дыре и отправить запросы как обычно, но не будет ждать или обрабатывать никакие ответы, а все сетевые ошибки на агентах-черных дырах будут игнорироваться. Формат значения идентичен формату обычной директивы `agent`.
+
+<!-- intro -->
+##### Конфигурация:
+
+<!-- request Config -->
 ```ini
 agent_blackhole = testbox:9312:testindex1,testindex2
-````
+```
+<!-- end -->
 
-Директива `agent_blackhole` позволяет пересылать запросы к удалённым агентам без ожидания или обработки их ответов. Это полезно для отладки или тестирования продакшн-кластеров, так как можно настроить отдельный экземпляр для отладки/тестирования и пересылать запросы к нему с продакшн-мастера (агрегатора) без вмешательства в продакшн-работу. Мастер searchd будет пытаться подключиться к агенту-черной дыре и отправлять запросы как обычно, но не будет ждать и обрабатывать ответы, а все сетевые ошибки на агентах-черных дырах будут игнорироваться. Формат значения идентичен директиве `agent`.
+## Связанные опции и поддерживаемые области видимости
 
-## agent_connect_timeout
+Опции, связанные с удаленными агентами, поддерживаются не во всех областях видимости одновременно. На этой странице основное внимание уделяется семантике удаленных таблиц и отдельных агентов. Для поведения, специфичного для зеркал, см. [Зеркалирование](../../Creating_a_cluster/Remote_nodes/Mirroring.md) и [Балансировка нагрузки](../../Creating_a_cluster/Remote_nodes/Load_balancing.md). Для полного поведения на уровне демона используйте связанные справочные страницы в [Настройках Searchd](../../Server_settings/Searchd.md).
 
+| Опция | Для всего экземпляра | На таблицу | На запрос | На агента | Полные детали |
+|---|---|---|---|---|---|
+| `ha_strategy` | да | да | нет | да | [Балансировка нагрузки](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy), [Удаленные таблицы: agent](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) |
+| `agent_connect_timeout` | да | да | нет | нет | [Searchd: agent_connect_timeout](../../Server_settings/Searchd.md#agent_connect_timeout) |
+| `agent_query_timeout` | да | да | да | нет | [Searchd: agent_query_timeout](../../Server_settings/Searchd.md#agent_query_timeout) |
+| `agent_retry_count` / `mirror_retry_count` / `retry_count` | да (`agent_retry_count`) | да (`agent_retry_count` или `mirror_retry_count`) | да (`OPTION retry_count=...`) | да (`agent=...[retry_count=...]`) | [Searchd: agent_retry_count](../../Server_settings/Searchd.md#agent_retry_count), [Удаленные таблицы: mirror_retry_count](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#mirror_retry_count), [Удаленные таблицы: agent](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) |
+| `agent_retry_delay` | да | нет | да | нет | [Searchd: agent_retry_delay](../../Server_settings/Searchd.md#agent_retry_delay) |
+| per-agent `conn` | нет | нет | нет | да | [Удаленные таблицы: agent](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) |
+| per-agent `blackhole` | нет | нет | нет | да | [Удаленные таблицы: agent_blackhole](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_blackhole) |
+
+### agent_connect_timeout
+
+<!-- example remote-agent-connect-timeout -->
+`agent_connect_timeout` определяет, сколько времени Manticore ждет установления соединения с удаленным агентом. Поддерживается как глобальная настройка по умолчанию для экземпляра и для каждой распределенной таблицы. Полные детали на уровне демона находятся в [Searchd: agent_connect_timeout](../../Server_settings/Searchd.md#agent_connect_timeout).
+
+<!-- intro -->
+##### Конфигурация:
+
+<!-- request Config -->
 ```ini
-agent_connect_timeout = 300
-````
+agent_connect_timeout = 300ms
+```
 
-Директива `agent_connect_timeout` задает таймаут подключения к удалённым агентам. По умолчанию значение считается в миллисекундах, но может иметь [другой суффикс](../../Server_settings/Special_suffixes.md)). Значение по умолчанию — 1000 (1 секунда).
+<!-- intro -->
+##### SQL:
 
-При подключении к удалённым агентам `searchd` будет ждать максимум это время, чтобы успешно установить соединение. Если таймаут достигнут, но соединение так и не установлено, и включены `retries`, будет выполнена попытка повторного подключения.
+<!-- request SQL -->
+```sql
+CREATE TABLE products_dist type='distributed'
+  agent='127.0.0.1:9312:products|127.0.0.1:9313:products'
+  agent_connect_timeout='300ms';
+```
+<!-- end -->
 
-## agent_query_timeout
+### agent_query_timeout
 
+<!-- example remote-agent-query-timeout -->
+`agent_query_timeout` определяет, сколько времени Manticore ждет, пока подключенный удаленный агент завершит выполнение запроса. Поддерживается как глобальная настройка по умолчанию для экземпляра, для каждой распределенной таблицы и для каждого запроса как `OPTION agent_query_timeout=...`. Полные детали на уровне демона находятся в [Searchd: agent_query_timeout](../../Server_settings/Searchd.md#agent_query_timeout).
+
+Если достигается `agent_query_timeout`, запрос не повторяется автоматически; вместо этого выводится предупреждение. Поведение также зависит от [reset_network_timeout_on_packet](../../Server_settings/Searchd.md#reset_network_timeout_on_packet).
+
+<!-- intro -->
+##### Конфигурация:
+
+<!-- request Config -->
 ```ini
 agent_query_timeout = 10000 # our query can be long, allow up to 10 sec
 ```
 
-`agent_query_timeout` устанавливает время, в течение которого searchd будет ждать завершения запроса от удалённого агента. Значение по умолчанию — 3000 миллисекунд (3 секунды), но оно может иметь `суффикс` для указания другой единицы времени.
+<!-- intro -->
+##### SQL:
 
-После установления соединения `searchd` будет ждать максимум agent_query_timeout для выполнения удалённых запросов. Обратите внимание, что этот таймаут отличается от `agent_connect_timeout`, и общая задержка, вызванная удалённым агентом, будет суммой обоих значений. Если время agent_query_timeout истечёт, запрос **не** будет повторяться, вместо этого будет выведено предупреждение.
+<!-- request SQL -->
+```sql
+CREATE TABLE products_dist type='distributed'
+  agent='127.0.0.1:9312:products|127.0.0.1:9313:products'
+  agent_query_timeout='10000';
+```
 
-Также поведение зависит от [reset_network_timeout_on_packet](../../Server_settings/Searchd.md#reset_network_timeout_on_packet)
+<!-- intro -->
+##### Опция SQL запроса:
 
-## agent_retry_count
+<!-- request SQL -->
+```sql
+SELECT * FROM products_dist OPTION agent_query_timeout=750;
+```
+<!-- end -->
 
-`agent_retry_count` — целое число, определяющее, сколько раз Manticore попытается подключиться и выполнить запрос удалённым агентам в распределённой таблице до сообщения о фатальной ошибке запроса. Работает аналогично `agent_retry_count`, заданному в разделе "searchd" конфигурационного файла, но применяется конкретно для таблицы.
+### agent_retry_count
 
-## mirror_retry_count
+`agent_retry_count` определяет, сколько раз Manticore попытается подключиться к удаленным агентам и выполнить запросы в распределенной таблице, прежде чем сообщить о фатальной ошибке запроса. Имя параметра зависит от области применения: используйте
+- `agent_retry_count` как настройку уровня экземпляра,
+- `agent_retry_count` или его псевдоним `mirror_retry_count` для распределенной таблицы,
+- `OPTION retry_count=...` для каждого запроса,
+- и `[retry_count=...]` внутри отдельного объявления `agent=...`.
 
-`mirror_retry_count` выполняет ту же функцию, что и `agent_retry_count`. Если заданы оба значения, приоритет будет у `mirror_retry_count`, и будет выведено предупреждение.
+Полные детали на уровне демона приведены в разделе [Searchd: agent_retry_count](../../Server_settings/Searchd.md#agent_retry_count).
 
-## Параметры уровня экземпляра
+Если вы используете **зеркала агентов**, сервер выбирает другое зеркало перед каждой попыткой подключения в соответствии с [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy), а `agent_retry_count` суммируется по всем зеркалам.
 
-Следующие параметры управляют общим поведением удалённых агентов и задаются **в разделе searchd конфигурационного файла**. Они устанавливают значения по умолчанию для всего экземпляра Manticore.
+### mirror_retry_count
 
-* `agent_connect_timeout` — значение по умолчанию для параметра `agent_connect_timeout`.
-* `agent_query_timeout` — значение по умолчанию для параметра `agent_query_timeout`. Также может быть переопределено для каждого запроса с использованием того же имени параметра в распределённой (сетевой) таблице.
-* `agent_retry_count` — целое число, указывающее, сколько раз Manticore будет пытаться подключаться и выполнять запросы удалённым агентам в распределённой таблице до сообщения о фатальной ошибке. Значение по умолчанию — 0 (т.е. без повторных попыток). Это значение также можно задать для каждого запроса с помощью опции 'OPTION retry_count=XXX'. Если задан параметр для отдельного запроса, он будет иметь приоритет над значением из конфига.
+<!-- example remote-agent-retry-count -->
+`mirror_retry_count` служит той же цели, что и `agent_retry_count`, но только как настройка распределенной таблицы. Если указаны оба значения, приоритет имеет `mirror_retry_count`.
 
-Обратите внимание, что при использовании **зеркал агентов** в определении распределённой таблицы сервер будет выбирать другое зеркало перед каждой попыткой подключения в соответствии с указанной [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy). В этом случае [agent_retry_count](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_retry_count) агрегируется для всех зеркал в наборе.
+<!-- intro -->
+##### Конфигурация:
 
-Например, если у вас есть 10 зеркал и установлено `agent_retry_count=5`, сервер сделает до 50 попыток (приблизительно 5 попыток на каждые 10 зеркал). В случае опции `ha_strategy = roundrobin` это будет ровно по 5 попыток на каждое зеркало.
+<!-- request Config -->
+```ini
+agent_retry_count = 2
+```
 
-При этом значение, заданное в опции [retry_count](../../Searching/Options.md#retry_count) в определении `agent` служит абсолютным лимитом. Другими словами, опция `[retry_count=2]` в определении агента означает максимум 2 попытки, независимо от того, сколько зеркал (1 или 10) в строке.
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+```sql
+CREATE TABLE products_dist type='distributed'
+  agent='127.0.0.1:9312:products|127.0.0.1:9313:products'
+  mirror_retry_count='2';
+```
+
+<!-- intro -->
+##### Опция SQL-запроса:
+
+<!-- request SQL -->
+```sql
+SELECT * FROM products_dist OPTION retry_count=1;
+```
+
+<!-- intro -->
+##### Ограничение на агента в конфигурации:
+
+<!-- request Config -->
+```ini
+table products_dist {
+  type = distributed
+  agent = 127.0.0.1:9312|127.0.0.1:9313:products[retry_count=2]
+}
+```
+<!-- end -->
 
 ### agent_retry_delay
 
-`agent_retry_delay` — целочисленное значение, определяющее время в миллисекундах, которое Manticore Search будет ждать перед повторной попыткой запросить удалённого агента в случае сбоя. Это значение можно указать глобально в конфигурации searchd или для каждого запроса с помощью директивы `OPTION retry_delay=XXX`. Если обе опции заданы, приоритет будет у параметра для отдельного запроса. Значение по умолчанию — 500 миллисекунд (0,5 секунды). Этот параметр актуален только если `agent_retry_count` или параметр `OPTION retry_count` для запроса больше нуля.
+<!-- example remote-agent-retry-delay -->
+`agent_retry_delay` определяет задержку между повторными попытками. Он поддерживается как глобальная настройка экземпляра по умолчанию и как `OPTION retry_delay=...` для каждого запроса, но не для распределенной таблицы. Полные детали на уровне демона приведены в разделе [Searchd: agent_retry_delay](../../Server_settings/Searchd.md#agent_retry_delay).
+
+Эта опция актуальна только тогда, когда повторные попытки включены через `agent_retry_count` или `OPTION retry_count=...`.
+
+<!-- intro -->
+##### Конфигурация:
+
+<!-- request Config -->
+```ini
+agent_retry_delay = 500ms
+```
+
+<!-- intro -->
+##### Опция SQL-запроса:
+
+<!-- request SQL -->
+```sql
+SELECT * FROM products_dist OPTION retry_count=2, retry_delay=300;
+```
+<!-- end -->
 
 ### client_timeout
 
-Опция `client_timeout` устанавливает максимальное время ожидания между запросами при использовании постоянных соединений. Значение задаётся в секундах или с суффиксом времени. Значение по умолчанию — 5 минут.
+<!-- example client-timeout -->
+Опция `client_timeout` устанавливает максимальное время ожидания между запросами при использовании постоянных соединений. Это глобальная настройка `searchd` уровня экземпляра, а не настройка отдельной таблицы. Значение выражается в секундах или с временным суффиксом. Значение по умолчанию составляет 5 минут. Полные детали на уровне демона приведены в разделе [Searchd: client_timeout](../../Server_settings/Searchd.md#client_timeout).
 
-Пример:
+<!-- intro -->
+##### Конфигурация:
 
+<!-- request Config -->
 ```ini
 client_timeout = 1h
 ```
+<!-- end -->
 
 ### hostname_lookup
 

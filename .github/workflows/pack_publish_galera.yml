@@ -5,7 +5,7 @@ run-name: 📦 Pack and publish Galera ${{ github.sha }}
 
 on:
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
     types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
       - 'cmake/GetGALERA.cmake'
@@ -17,11 +17,11 @@ on:
       - '.github/workflows/pack_publish_galera.yml'
       - 'galera_packaging/**'
     branches:
-      - master
+      - main
       - maintenance-release
       - manticore-*
 
-# cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
+# cancels the previous workflow run when a new one appears in the same branch (e.g. main or a PR's branch)
 concurrency:
   group: pack_galera_${{ github.ref }}
   cancel-in-progress: true

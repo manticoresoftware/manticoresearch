@@ -15,8 +15,7 @@
 * ⚠️ [v18.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/18.0.0) [ Issue #4261](https://github.com/manticoresoftware/manticoresearch/issues/4261) **重大变更**：引入了 **索引格式版本 68** 以修复 [`hitless_words`](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words) 字典布局处理。如果您重建或新写入索引后需要使用旧版 Manticore 打开它们，则会受到影响：现有旧版索引仍可读取，但任何以新格式重建或新写入的索引与旧版 Manticore 不兼容，因此降级仅在这些索引未被重写前才安全。
 
 ### 与打包相关的更改
-* 🆕 [v25.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.0.0) [ PR #4357](https://github.com/manticoresoftware/manticoresearch/pull/4357) 打包更改：`manticore` 现在是 deb 和 rpm 的捆绑包。它包括守护进程、工具、转换器、开发头文件、ICU 数据、捆绑依赖包（`manticore-columnar-lib`、`manticore-backup`、`manticore-buddy`、`manticore-executor`、`manticore-load`、`manticore-galera` 和 `manticore-tzdata` 适用时），以及内置的德语、英语和俄语语言包，还有 Jieba 支持。乌克兰词形还原器未捆绑；请使用 [Debian/Ubuntu](Installation/Debian_and_Ubuntu.md#Ukrainian-lemmatizer) 或 [RHEL/CentOS](Installation/RHEL_and_Centos.md#Ukrainian-lemmatizer) 指南单独安装。
-  从之前的包布局升级时，通常只需安装 `manticore` 包。如果旧的拆分包导致冲突，请使用 `apt remove 'manticore*'` 或 `yum remove 'manticore*'` 删除它们，然后安装 `manticore`。此清理不会删除您现有的数据或配置。
+* 🆕 [v25.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.0.0) [ PR #4357](https://github.com/manticoresoftware/manticoresearch/pull/4357) 打包更改：`manticore` 现在是 deb 和 rpm 的捆绑包。它包括守护进程、工具、转换器、开发头文件、ICU 数据、捆绑依赖包（`manticore-columnar-lib`、`manticore-backup`、`manticore-buddy`、`manticore-executor`、`manticore-load`、`manticore-galera` 和 `manticore-tzdata` 适用时），以及内置的德语、英语和俄语语言包，还有 Jieba 支持。乌克兰词形还原器未捆绑；请单独安装。从之前的包布局升级时，通常只需安装 `manticore` 包。如果旧的拆分包导致冲突，请使用 `apt remove 'manticore*'` 或 `yum remove 'manticore*'` 删除它们，然后安装 `manticore`。此清理不会删除您现有的数据或配置。
 
 ## 新功能和改进
 * 🆕 [v24.4.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.4.0) [ PR #4091](https://github.com/manticoresoftware/manticoresearch/pull/4091) 通过添加 N 路磁盘块合并和并行 `OPTIMIZE` 任务来改进 RT 表压缩，减少合并许多磁盘块所需的时间，并公开了新的 [`merge_chunks_per_job`](Server_settings/Searchd.md#merge_chunks_per_job) 和 [`parallel_chunk_merges`](Server_settings/Searchd.md#parallel_chunk_merges) 设置。
@@ -1505,7 +1504,7 @@
   - 之前每个子查询构成单独的事务并产生单独的响应
   - 现在整个批次被视为单个事务，返回单个响应
 * ⚠️ 搜索选项 `low_priority` 和 `boolean_simplify` 现在需要指定值（`0/1`）：之前您可以使用 `SELECT ... OPTION low_priority, boolean_simplify`，现在需要使用 `SELECT ... OPTION low_priority=1, boolean_simplify=1`。
-* ⚠️ 如果您使用旧版 [php](https://github.com/manticoresoftware/manticoresearch/blob/master/api/sphinxapi.php)、[python](https://github.com/manticoresoftware/manticoresearch/blob/master/api/sphinxapi.py) 或 [java](https://github.com/manticoresoftware/manticoresearch/tree/master/api/java) 客户端，请遵循相应链接查找更新版本。**旧版本与 Manticore 5 不完全兼容。**
+* ⚠️ 如果您使用旧版 [php](https://github.com/manticoresoftware/manticoresearch/blob/main/api/sphinxapi.php)、[python](https://github.com/manticoresoftware/manticoresearch/blob/main/api/sphinxapi.py) 或 [java](https://github.com/manticoresoftware/manticoresearch/tree/main/api/java) 客户端，请遵循相应链接查找更新版本。**旧版本与 Manticore 5 不完全兼容。**
 * ⚠️ HTTP JSON 请求现在在 `query_log_format=sphinxql` 模式下以不同格式记录。之前仅记录全文部分，现在按原样记录。
 
 ### 新包

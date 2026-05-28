@@ -5407,9 +5407,10 @@ static VecTraits_T<const BYTE> GetAttrForDocstore ( DocID_t tDocID, int iAttr, c
 	case SPH_ATTR_UINT32SET:
 	{
 		const CSphVector<int64_t> * pMva = FetchMVA ( tDocID, iAttr, tAttr, tMvaContainer, tSource, false );
-		dTmpStorage.Resize ( pMva->GetLength()*sizeof(DWORD) );
+		const int iMvaLen = pMva ? pMva->GetLength() : 0;
+		dTmpStorage.Resize ( iMvaLen*sizeof(DWORD) );
 		DWORD * pAttrs = (DWORD*)dTmpStorage.Begin();
-		for ( int iValue = 0; iValue < pMva->GetLength(); iValue++ )
+		for ( int iValue = 0; iValue < iMvaLen; iValue++ )
 			pAttrs[iValue] = (DWORD)(*pMva)[iValue];
 
 		return dTmpStorage;
@@ -7647,9 +7648,17 @@ bool CSphIndex_VLN::AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSph
 		for ( RowID_t tRowID = 0; tRowID < RowID_t(m_iDocinfo); ++tRowID, pRow += iStride )
 			BuildTrainKNN ( tRowID, tRowID, pRow, pBlobs, dColumnarIterators, dOldAttrsForKNN, *pKNNBuilder );
 
-		pRow = GetRawAttrs();
-		for ( RowID_t tRowID = 0; tRowID < RowID_t(m_iDocinfo); ++tRowID, pRow += iStride )
-			BuildStoreKNN ( tRowID, tRowID, pRow, pBlobs, dColumnarIterators, dOldAttrsForKNN, *pKNNBuilder );
+		{
+			std::string sErrSTL;
+			if ( !pKNNBuilder->FinalizeTraining ( sErrSTL ) )
+			{
+				sError = sErrSTL.c_str();
+				return false;
+			}
+		}
+
+		if ( !BuildStoreKNNParallelDiskIndex ( *this, *pKNNBuilder, dOldAttrsForKNN, m_iDocinfo, sError ) )
+			return false;
 
 		BuildBufferSettings_t tSettings; // use default buffer settings
 
@@ -12509,22 +12518,25 @@ bool CSphIndex_VLN::AlterKNN ( CSphString & sError )
 	ARRAY_FOREACH ( i, dAllAttrsForKNN )
 		dAttrs[i] = dAllAttrsForKNN[i].first;
 
-	int iStride = m_tSchema.GetRowSize();
+	const CSphRowitem * pCur = GetRawAttrs();
+	int iStride = pCur ? m_tSchema.GetRowSize() : 0;
+	const BYTE * pBlobs = pCur ? GetRawBlobAttrs() : nullptr;
 	RowID_t tRows = RowID_t ( m_iDocinfo );
 
-	const CSphRowitem * pCur = GetRawAttrs();
-	for ( RowID_t tRowID=0; tRowID<tRows; ++tRowID )
+	for ( RowID_t tRowID=0; tRowID<tRows; ++tRowID, pCur += iStride )
+		BuildTrainKNN ( tRowID, tRowID, pCur, pBlobs, dColumnarIterators, dAttrs, *pKNNBuilder );
+
 	{
-		BuildTrainKNN ( tRowID, tRowID, pCur, GetRawBlobAttrs(), dColumnarIterators, dAttrs, *pKNNBuilder );
-		pCur += iStride;
+		std::string sErrSTL;
+		if ( !pKNNBuilder->FinalizeTraining ( sErrSTL ) )
+		{
+			sError = sErrSTL.c_str();
+			return false;
+		}
 	}
 
-	pCur = GetRawAttrs();
-	for ( RowID_t tRowID=0; tRowID<tRows; ++tRowID )
-	{
-		BuildStoreKNN ( tRowID, tRowID, pCur, GetRawBlobAttrs(), dColumnarIterators, dAttrs, *pKNNBuilder );
-		pCur += iStride;
-	}
+	if ( !BuildStoreKNNParallelDiskIndex ( *this, *pKNNBuilder, dAttrs, m_iDocinfo, sError ) )
+		return false;
 
 	BuildBufferSettings_t tSettings; // Use default buffer settings
 	std::string sStdErr;

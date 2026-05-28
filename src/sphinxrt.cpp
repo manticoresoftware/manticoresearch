@@ -166,6 +166,12 @@ volatile int &MergeChunksPerJob() noexcept
 	return iMergeChunksPerJob;
 }
 
+volatile int &KNNParallelBuild() noexcept
+{
+	static int iKNNParallelBuild = 1;	// 1=serial (default); larger value = fixed worker count
+	return iKNNParallelBuild;
+}
+
 volatile int AutoOptimizeCutoff() noexcept
 {
 	static int iAutoOptimizeCutoff = GetNumLogicalCPUs() * 2;
@@ -1616,6 +1622,7 @@ private:
 	bool						WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, CSphString & sError ) const;
 	void						WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, SaveDiskDataTimings_t * pTimings = nullptr ) const;
 	static bool					WriteDeadRowMap ( SaveDiskDataContext_t & tCtx, CSphString & sError );
+	bool						StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i & tBuilder, const VecTraits_T<PlainOrColumnar_t> & dAttrsForKNN, int iStride, CSphString & sError ) const;
 
 	void						GetPrefixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const final;
 	void						GetInfixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const final;
@@ -3968,29 +3975,8 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 		}
 	}
 
-	if ( pKNNBuilder )
-	{
-		RowID_t tRowIDForKNN = 0;
-		ARRAY_FOREACH ( i, tCtx.m_tRamSegments )
-		{
-			const auto & tSeg = *tCtx.m_tRamSegments[i];
-
-			SccRL_t rLock ( tSeg.m_tLock );
-			tSeg.m_bAttrsBusy.store ( true, std::memory_order_release );
-
-			auto dColumnarIterators = CreateAllColumnarIterators ( tSeg.m_pColumnar.get(), m_tSchema );
-
-			for ( auto tRowID : RtLiveRows_c(tSeg) )
-			{
-				const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID*iStride;
-				if ( !BuildStoreKNN ( tRowID, tRowIDForKNN++, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder ) )
-				{
-					sError = pKNNBuilder->GetError().c_str();
-					return false;
-				}
-			}
-		}
-	}
+	if ( pKNNBuilder && !StoreKNNParallel ( tCtx, *pKNNBuilder, dAttrsForKNN, iStride, sError ) )
+		return false;
 
 	// rows could be killed during index save and tNextRowID could be less than tCtx.m_iTotalDocuments \ initial count
 	assert ( tNextRowID<=(RowID_t)dRawLookup.GetLength() );
@@ -4050,6 +4036,73 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 
 	if ( pJsonSIBuilder && !pJsonSIBuilder->Done(sError) )
 		return false;
+
+	return true;
+}
+
+
+bool RtIndex_c::StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i & tBuilder, const VecTraits_T<PlainOrColumnar_t> & dAttrsForKNN, int iStride, CSphString & sError ) const
+{
+	{
+		std::string sErrSTL;
+		if ( !tBuilder.FinalizeTraining ( sErrSTL ) )
+		{
+			sError = sErrSTL.c_str();
+			return false;
+		}
+	}
+
+	// per-segment HNSW store loop
+	const int iNumSegs = tCtx.m_tRamSegments.GetLength();
+	const int iConcurrency = Max ( 1, Min ( KNNParallelBuild(), iNumSegs ) );
+
+	RTSAVELOG << "parallel KNN build: concurrency=" << iConcurrency
+			  << " (knn_parallel_build=" << KNNParallelBuild()
+			  << " segments=" << iNumSegs << ")";
+
+	auto pDispatcher = Dispatcher::MakeTrivial ( iNumSegs, iConcurrency );
+	std::atomic<bool> bError { false };
+	CSphFixedVector<CSphString> dErrors(iNumSegs);
+
+	Coro::ExecuteN ( iConcurrency, [&]
+	{
+		Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
+
+		auto pSource = pDispatcher->MakeSource();
+		knn::BuildContext_t tBuildCtx;
+		int iSeg = -1;
+		while ( !bError.load ( std::memory_order_relaxed ) && pSource->FetchTask(iSeg) )
+		{
+			const auto & tSeg = *tCtx.m_tRamSegments[iSeg];
+
+			SccRL_t rLock ( tSeg.m_tLock );
+			tSeg.m_bAttrsBusy.store ( true, std::memory_order_release );
+
+			auto dColumnarIterators = CreateAllColumnarIterators ( tSeg.m_pColumnar.get(), m_tSchema );
+
+			for ( auto tRowID : RtLiveRows_c(tSeg) )
+			{
+				RowID_t tRowOut = tCtx.m_dRowMaps[iSeg][tRowID];
+				assert ( tRowOut!=INVALID_ROWID );
+
+				const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID * iStride;
+				if ( !BuildStoreKNN ( tRowID, tRowOut, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, tBuilder, tBuildCtx ) )
+				{
+					RecordKNNBuildError ( dErrors[iSeg], tBuildCtx, "HNSW save: BuildStoreKNN failed for segment %d row %u (no detail)", iSeg, tRowID );
+					bError.store ( true, std::memory_order_relaxed );
+					break;
+				}
+			}
+
+			iSeg = -1; // mark consumed so FetchTask advances
+		}
+	});
+
+	if ( bError.load() )
+	{
+		sError = ConcatKNNBuildErrors ( dErrors );
+		return false;
+	}
 
 	return true;
 }

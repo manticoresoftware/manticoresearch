@@ -119,6 +119,7 @@ static bool				g_bJsonConfigLoadedOk = false;
 static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
 static auto&			g_iParallelChunkMerges = ParallelChunkMergesLimit();
 static auto&			g_iMergeChunksPerJob = MergeChunksPerJob();
+static auto&			g_iKNNParallelBuild = KNNParallelBuild();
 static constexpr bool	AUTOOPTIMIZE_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 static constexpr bool	THREAD_EX_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 
@@ -8809,13 +8810,25 @@ static bool HandleMysqlSelectStmtGroup ( CSphVector<SqlStmt_t> & dStmt, int iSta
 			dAvailableBuckets.Reset();
 			facet::FacetStatusSources_t tStatus;
 
-			if ( iQueryIdx>=0 && tHandler.m_dQueries[iQueryIdx].m_bFacet && facet::GetFilterMode ( tHandler.m_dQueries[0], tHandler.m_dQueries[iQueryIdx] )==FacetFilterMode_e::Max )
+			if ( iQueryIdx>=0 && tHandler.m_dQueries[iQueryIdx].m_bFacet )
 			{
-				const AggrResult_t * pRes = &tRes;
-				if ( iQueryIdx+1<tHandler.m_dQueries.GetLength() && tHandler.m_dQueries[iQueryIdx+1].m_bFacetMaxRef )
-					pRes = &tHandler.m_dAggrResults[iQueryIdx+1];
-				tStatus = CollectFacetSelectedStatus ( tHandler.m_dQueries[0], tHandler.m_dQueries[iQueryIdx], tRes.m_tSchema, pRes, dSelectedFilters, dSelectedBuckets );
-				tStatus.m_pAvailableBuckets = facet::CollectFacetAvailableFilters ( tHandler.m_dQueries[iQueryIdx], tRes.m_tSchema, *pRes, dAvailableBuckets );
+				FacetFilterMode_e eMode = facet::GetFilterMode ( tHandler.m_dQueries[0], tHandler.m_dQueries[iQueryIdx] );
+				if ( eMode!=FacetFilterMode_e::Strict )
+				{
+					tStatus.m_bEmitStatus = true;
+					const AggrResult_t * pStrictRes = nullptr;
+					if ( eMode==FacetFilterMode_e::Max )
+					{
+						pStrictRes = &tRes;
+						if ( iQueryIdx+1<tHandler.m_dQueries.GetLength() && tHandler.m_dQueries[iQueryIdx+1].m_bFacetMaxRef )
+							pStrictRes = &tHandler.m_dAggrResults[iQueryIdx+1];
+					}
+
+					tStatus = CollectFacetSelectedStatus ( tHandler.m_dQueries[0], tHandler.m_dQueries[iQueryIdx], tRes.m_tSchema, pStrictRes, dSelectedFilters, dSelectedBuckets );
+					tStatus.m_bEmitStatus = true;
+					if ( pStrictRes )
+						tStatus.m_pAvailableBuckets = facet::CollectFacetAvailableFilters ( tHandler.m_dQueries[iQueryIdx], tRes.m_tSchema, *pStrictRes, dAvailableBuckets );
+				}
 			}
 
 			auto uMatches = SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ), tStatus );
@@ -9285,6 +9298,13 @@ static bool HandleSetGlobal ( CSphString & sError, const CSphString & sName, int
 	{
 		g_iMergeChunksPerJob = Max ( 2, iSetValue );
 		sphInfo ( "set global merge_chunks_per_job=%d", g_iMergeChunksPerJob );
+		return true;
+	}
+
+	if ( sName == "knn_parallel_build" )
+	{
+		g_iKNNParallelBuild = Max ( 1, iSetValue );
+		sphInfo ( "set global knn_parallel_build=%d", g_iKNNParallelBuild );
 		return true;
 	}
 
@@ -10088,6 +10108,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		dTable.MatchTupletf ( "auto_optimize", "%d", g_iAutoOptimizeCutoffMultiplier );
 		dTable.MatchTupletf ( "parallel_chunk_merges", "%d", g_iParallelChunkMerges );
 		dTable.MatchTupletf ( "merge_chunks_per_job", "%d", g_iMergeChunksPerJob );
+		dTable.MatchTupletf ( "knn_parallel_build", "%d", g_iKNNParallelBuild );
 		dTable.MatchTupletf ( "optimize_cutoff", "%d", MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff );
 		dTable.MatchTuplet ( "collation_connection", sphCollationToName ( session::GetCollation() ) );
 		dTable.MatchTuplet ( "query_log_format", LogFormat()==LOG_FORMAT::_PLAIN ? "plain" : "sphinxql" );
@@ -14476,6 +14497,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 	int iDefaultParallelMerges = Max ( 1, Min ( 2, iThreads / 2 ) );
 	g_iParallelChunkMerges = Max ( 1, hSearchd.GetInt ( "parallel_chunk_merges", iDefaultParallelMerges ) );
 	g_iMergeChunksPerJob = Max ( 2, hSearchd.GetInt ( "merge_chunks_per_job", 2 ) );
+	g_iKNNParallelBuild = Max ( 1, hSearchd.GetInt ( "knn_parallel_build", GetDefaultKNNParallelBuild(iThreads) ) );
 	g_iThdQueueMax = hSearchd.GetInt ( "jobs_queue_size", g_iThdQueueMax );
 
 	g_iPersistentPoolSize = hSearchd.GetInt ("persistent_connections_limit");

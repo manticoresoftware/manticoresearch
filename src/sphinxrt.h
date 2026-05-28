@@ -492,6 +492,7 @@ volatile int & ParallelChunkMergesLimit() noexcept;
 volatile int & MergeChunksPerJob() noexcept;
 volatile int AutoOptimizeCutoff() noexcept;
 volatile int AutoOptimizeCutoffKNN() noexcept;
+volatile int & KNNParallelBuild() noexcept;
 
 void SetRtFlushDiskPeriod ( int iFlushWrite, int iFlushSearch );
 

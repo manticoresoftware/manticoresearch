@@ -6,7 +6,7 @@ on:
     - cron: '00 20 * * *'
   workflow_dispatch:
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
     paths:
       - 'test/clt-tests/integrations/**'
       - '.github/workflows/nightly_integrations.yml'

@@ -48,7 +48,7 @@ FACET {expr_list} [BY {expr_list}] [ALL FILTERS | FILTERS {expr_list} | EXCLUDE 
 * 可选的每个聚合`mode`覆盖该聚合继承的模式。支持的值为`strict`、`auto`和`max`。`filter_mode`保留为向后兼容的别名。
 * 可选的每个聚合`filters`明确列出应应用于该聚合的主查询属性过滤器。
 * 可选的每个聚合`exclude_filters`明确列出不应应用于该聚合的主查询属性过滤器。
-* 属性结果集可以包含一个`status`桶标记。值为`selected`、`available`和`unavailable`。
+* `auto`和`max`属性结果集可以包含一个`status`桶标记。返回的值为`selected`、`available`和`unavailable`。
 
 结果集将包含一个 `aggregations` 节点，其中包含返回的分面，`key` 是聚合值，`doc_count` 是聚合计数。
 
@@ -2396,13 +2396,16 @@ POST /search -d '
 
 内置模式：
 - `strict`
-  - 应用主查询的所有过滤器
+  - 应用主查询的所有过滤器并保留常规分面输出
 - `auto`
   - 应用主查询的所有过滤器，但排除该分面本身的过滤器
+  - 添加一个 `status` 标记；选中的桶为 `selected`，同级桶为 `available`
 - `max`
-  - 与 `auto` 相同，但还会返回带有 `status` 的不可用桶
+  - 从宽泛的基础查询中统计桶，并为每个桶添加 `status` 标记
 
 手动覆盖：
+- `all filters`（仅限 SQL）
+  - 将主查询的所有过滤器应用于该分面
 - `filters`
   - 仅应用列出的主查询过滤器到该分面
 - `exclude_filters`
@@ -2410,15 +2413,16 @@ POST /search -d '
 
 简要说明：
 - `strict` = 应用所有内容
-- `auto` = 应用所有内容，但排除该分面的过滤器
-- `max` = `auto` + 不可用桶
+- `auto` = 应用所有内容，但排除该分面的过滤器 + `status`
+- `max` = 宽泛的基础查询统计 + `status`
+- `all filters`（仅限 SQL）= 应用所有内容
 - `filters` = 仅应用这些过滤器
 - `exclude_filters` = 应用所有内容，但排除这些过滤器
 
 性能说明：
-- `max` 是最昂贵的分面模式，因为它需要发现并标记不可用桶，而不仅仅是正常的分面计数
+- `max` 是最昂贵的分面模式，因为它需要收集宽泛的分面统计和严格/当前可用性元数据
 - 在大型数据集或包含许多分面的查询中，`max` 可能比 `strict` 或 `auto` 慢得多
-- 默认情况下优先使用 `strict` 或 `auto`，仅在 UI 确实需要不可用桶时启用 `max`
+- 当 UI 需要从当前过滤范围中选择桶时，使用 `auto`；当还需要包含不可用值的宽泛桶列表时，使用 `max`
 
 示例
 
@@ -2433,9 +2437,10 @@ POST /search -d '
   - 应用 `brand + color + size`
 - `auto`
   - 应用 `brand + size`
+  - 并返回带有 `status=selected` 的选中颜色桶和带有 `status=available` 的同级颜色桶
 - `max`
-  - 应用 `brand + size`
-  - 还会返回带有 `status` 的不可用颜色桶
+  - 应用不带 `brand`、`color` 或 `size` 的宽泛基础查询
+  - 并返回带有 `status` 的 color 桶
 - `filters=["brand"]`
   - 仅应用 `brand`
 - `exclude_filters=["size"]`
@@ -2458,9 +2463,9 @@ FACET size_id;
 ```
 
 在此示例中：
-- `FACET color_id` 使用 `size_id=42` 过滤器，但不使用 `color_id=1`
-- `FACET size_id` 使用 `color_id=1` 过滤器，但不使用 `size_id=42`
-- 在 `max` 模式下，返回的桶还包括 `status` 值
+- `FACET color_id` 从不带 `color_id=1` 或 `size_id=42` 过滤器的宽泛基础查询中统计桶
+- `FACET size_id` 从不带 `color_id=1` 或 `size_id=42` 过滤器的宽泛基础查询中统计桶
+- 返回的桶还包括 `status` 值
 
 您也可以为每个分面覆盖默认规则：
 
@@ -2482,7 +2487,11 @@ FACET brand_id EXCLUDE FILTERS color_id;
 - `FILTERS color_id, size_id` — 仅将 `color_id` 和 `size_id` 过滤器应用于该分面
 - `EXCLUDE FILTERS color_id` — 将主查询的所有过滤器（除了 `color_id`）应用于该分面
 
-在 `max` 模式下，SQL 分面结果会添加一个 `status` 列。此模式也是最昂贵的，因此在大型数据集或分面密集的查询中，应仅在需要响应中包含不可用桶时启用它。例如，使用 `size='small'` 和 `facet_filter_mode='max'`，`FACET size` 的结果可能如下所示：
+这些子句会覆盖来自 `facet_filter_mode` 或 `MODE` 的过滤范围。例如，`FACET color_id ALL FILTERS MODE max` 仍会发出 `status`，但其计数使用所有主查询过滤器，而不是宽泛默认的 `max` 范围。
+
+在 `auto` 和 `max` 模式下，SQL 分面结果会添加一个 `status` 列。`selected` 表示该桶值已经在同分面值过滤器中存在。`available` 表示选择该桶可以产生结果；这包括扩展现有同分面过滤器的同级值。在 `max` 模式下，`unavailable` 表示该桶在宽泛计数范围内存在，但选择它将不会产生结果。`max` 是最昂贵的模式，因此在大型数据集或分面密集的查询中，仅在需要包含不可用值的宽泛桶时才启用它。
+
+例如，当 `size='small'` 且 `facet_filter_mode='max'` 时，`FACET size` 的结果可能如下所示。`large` 桶是 `available`，因为选择它会将同分面过滤器扩展为 `size IN ('small','large')`：
 
 <!-- response SQL -->
 
@@ -2491,9 +2500,11 @@ FACET brand_id EXCLUDE FILTERS color_id;
 | size  | count(*) | status      |
 +-------+----------+-------------+
 | small |        1 | selected    |
-| large |        1 | unavailable |
+| large |        1 | available   |
 +-------+----------+-------------+
 ```
+
+来自其他分面的桶可能在宽泛的 `max` 计数中存在，但在当前严格过滤器下没有行时，可能为 `unavailable`。
 
 <!-- intro -->
 ##### JSON:
@@ -2526,7 +2537,7 @@ POST /search -d '
 }'
 ```
 
-在 `max` 模式下，JSON 分面桶包含一个 `status` 字段。与 SQL 一样，这是最昂贵的分面模式，因此在大型数据集或请求许多分面时应谨慎使用：
+在 `auto` 和 `max` 模式下，支持状态的 JSON 桶聚合会包含一个 `status` 字段。与 SQL 一样，`selected` 表示该桶值已经在同分面值过滤器中存在，`available` 表示选择该桶可以产生结果，`unavailable` 表示如果选择该 `max` 桶将不会产生结果。同分面的同级桶为 `available`，因为选择它们会扩展过滤器。`max` 是最昂贵的分面模式，因此在大型数据集或请求许多分面时应谨慎使用：
 
 <!-- response JSON -->
 
@@ -2535,7 +2546,7 @@ POST /search -d '
   "sizes": {
     "buckets": [
       { "key": "small", "doc_count": 1, "status": "selected" },
-      { "key": "large", "doc_count": 1, "status": "unavailable" }
+      { "key": "large", "doc_count": 1, "status": "available" }
     ]
   }
 }
@@ -2579,8 +2590,8 @@ POST /search -d '
 注：
 - 在 SQL 中，`MODE` 会覆盖查询级别的 `facet_filter_mode`，适用于一个分面
 - 在 JSON 中，`mode` 或 `filter_mode` 会覆盖顶层的 `facet_filter_mode`，适用于一个聚合
-- `status=selected` 目前是根据显式的值过滤器（如 `=` 和 `IN`）推导出来的，这些过滤器作用于分面字段
-- 当前不支持的同字段过滤器（如范围）不会将桶标记为 `selected`
+- 对于显式值过滤器（如 `=` 和 `IN`），所选值会以 `status=selected` 报告。
+- 当前不支持的同字段过滤器（如范围）不会参与已选值检测
 - 分面本地的过滤器作用域支持仅连接的属性过滤器。复杂的布尔过滤树不会按分面重写。
 
 <!-- end -->

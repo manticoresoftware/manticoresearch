@@ -162,16 +162,16 @@ jobs:
           submodules: true
           ref: ${{ steps.repo-check.outputs.ref }}
 
-      - name: Fetch master and get changed files
+      - name: Fetch main and get changed files
         id: changed-files
         env:
           REF_NAME: ${{ github.ref_name }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
           git config --global --add safe.directory /__w/manticoresearch/manticoresearch
-          # Update local master only if we're not currently on it
-          if [ "$REF_NAME" != "master" -a "$EVENT_NAME" != "pull_request" ]; then
-            git fetch origin master:master
+          # Update local main only if we're not currently on it
+          if [ "$REF_NAME" != "main" -a "$EVENT_NAME" != "pull_request" ]; then
+            git fetch origin main:main
           fi
           CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD)
           printf '%s\n' "$CHANGED_FILES"

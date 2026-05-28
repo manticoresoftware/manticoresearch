@@ -34,7 +34,7 @@ fi
 
 hub_repo="ghcr.io/${REPO_OWNER}/manticoresearch"
 img_url="${hub_repo}:test-kit-${BUILD_COMMIT}"
-[[ $current_branch == "master" ]] \
+[[ $current_branch == "main" ]] \
   && img_url_latest="${hub_repo}:test-kit-latest" \
   || img_url_latest=""
 
@@ -47,7 +47,7 @@ if [ -n "$latest_tag" ]; then
 	img_url_tag="${hub_repo}:test-kit-$(sanitize_tag "$latest_tag")"
 fi
 
-if [ "$current_branch" != "master" ]; then
+if [ "$current_branch" != "main" ]; then
 	img_url_branch="${hub_repo}:test-kit-$(sanitize_tag "$current_branch")"
 fi
 

@@ -442,7 +442,14 @@ debian_same_version_dependency_package_names() {
             gsub(/^[[:space:]]+|[[:space:]]+$/, "")
             if ($0 !~ /^manticore-/) next
             name = $0
-            sub(/[[:space:](].*/, "", name)
+            cut = length(name) + 1
+            space_pos = index(name, " ")
+            tab_pos = index(name, "	")
+            paren_pos = index(name, "(")
+            if (space_pos > 0 && space_pos < cut) cut = space_pos
+            if (tab_pos > 0 && tab_pos < cut) cut = tab_pos
+            if (paren_pos > 0 && paren_pos < cut) cut = paren_pos
+            name = substr(name, 1, cut - 1)
             constraint = ""
             if (match($0, /\([^)]+\)/)) {
                 constraint = substr($0, RSTART + 1, RLENGTH - 2)
@@ -564,7 +571,14 @@ debian_dependency_constraints_for_package_version() {
             gsub(/^[[:space:]]+|[[:space:]]+$/, "")
             if ($0 !~ /^manticore-/) next
             name = $0
-            sub(/[[:space:](].*/, "", name)
+            cut = length(name) + 1
+            space_pos = index(name, " ")
+            tab_pos = index(name, "	")
+            paren_pos = index(name, "(")
+            if (space_pos > 0 && space_pos < cut) cut = space_pos
+            if (tab_pos > 0 && tab_pos < cut) cut = tab_pos
+            if (paren_pos > 0 && paren_pos < cut) cut = paren_pos
+            name = substr(name, 1, cut - 1)
             constraint = ""
             if (match($0, /\([^)]+\)/)) {
                 constraint = substr($0, RSTART + 1, RLENGTH - 2)

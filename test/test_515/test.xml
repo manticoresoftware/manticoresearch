@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>KNN result window</name>
+
+<requires>
+<knn/>
+<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	create table knn_window_520 (title text, vec float_vector knn_type='hnsw' knn_dims='2' hnsw_similarity='L2');
+	insert into knn_window_520 (id, title, vec) values
+		(1, 'doc 1', (1.0, 0.0)),
+		(2, 'doc 2', (2.0, 0.0)),
+		(3, 'doc 3', (3.0, 0.0)),
+		(4, 'doc 4', (4.0, 0.0)),
+		(5, 'doc 5', (5.0, 0.0)),
+		(6, 'doc 6', (6.0, 0.0)),
+		(7, 'doc 7', (7.0, 0.0)),
+		(8, 'doc 8', (8.0, 0.0)),
+		(9, 'doc 9', (9.0, 0.0)),
+		(10, 'doc 10', (10.0, 0.0)),
+		(11, 'doc 11', (11.0, 0.0)),
+		(12, 'doc 12', (12.0, 0.0)),
+		(13, 'doc 13', (13.0, 0.0)),
+		(14, 'doc 14', (14.0, 0.0)),
+		(15, 'doc 15', (15.0, 0.0)),
+		(16, 'doc 16', (16.0, 0.0)),
+		(17, 'doc 17', (17.0, 0.0)),
+		(18, 'doc 18', (18.0, 0.0)),
+		(19, 'doc 19', (19.0, 0.0)),
+		(20, 'doc 20', (20.0, 0.0)),
+		(21, 'doc 21', (21.0, 0.0)),
+		(22, 'doc 22', (22.0, 0.0)),
+		(23, 'doc 23', (23.0, 0.0)),
+		(24, 'doc 24', (24.0, 0.0)),
+		(25, 'doc 25', (25.0, 0.0));
+	flush ramchunk knn_window_520;
+
+	select id from knn_window_520 where knn(vec,(1.0,0.0), {oversampling=1.0});
+	select id from knn_window_520 where knn(vec,(1.0,0.0), {oversampling=1.0}) limit 10 offset 10;
+	select id from knn_window_520 where knn(vec,(1.0,0.0), {oversampling=1.0}) limit 5 offset 5;
+	select id from knn_window_520 where knn(vec,(1.0,0.0)) limit 10 offset 10;
+	select id from knn_window_520 where knn(vec,(1.0,0.0), {oversampling=1.0}) limit 10 offset 10 option max_matches=15;
+	select id from knn_window_520 where knn(vec,25,(1.0,0.0)) limit 20 option max_matches=5;
+
+	drop table knn_window_520;
+</sphinxql>
+</queries>
+
+</test>

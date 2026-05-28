@@ -2523,6 +2523,9 @@ int QueueCreator_c::ReduceOrIncreaseMaxMatches() const
 	assert ( !m_bGotGroupby );
 	if ( m_tQuery.HasKnn() )
 	{
+		if ( m_tQuery.m_bExplicitMaxMatches )
+			return Max ( m_tSettings.m_iMaxMatches, 1 );
+
 		int64_t iMaxRequested = 0;
 		for ( const auto & tKNN : m_tQuery.m_dKnnSettings )
 			if ( tKNN.m_fOversampling > 1.0f )

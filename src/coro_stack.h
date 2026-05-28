@@ -48,7 +48,7 @@ static constexpr size_t STACK_ALIGN = 16;					  // stack align - let it be 16 by
 #ifdef NDEBUG
 static constexpr size_t DEFAULT_CORO_STACK_SIZE = 1024 * 128; // 128 KiB (release)
 #else
-static constexpr size_t DEFAULT_CORO_STACK_SIZE = 1024 * 1024; // 1 MiB (debug)
+static constexpr size_t DEFAULT_CORO_STACK_SIZE = 256 * 1024; // 1 MiB (debug)
 #endif
 
 enum class StackFlavour_E { fixedsize, protected_fixedsize, mocked_prealloc }; // what allocator is in game

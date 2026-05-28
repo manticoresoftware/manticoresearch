@@ -213,7 +213,7 @@ public:
 #ifdef NDEBUG
 static const DWORD STACK_SIZE = 128 * 1024;    // 128 KiB (release)
 #else
-static const DWORD STACK_SIZE = 1024 * 1024;   // 1 MiB (debug)
+static const DWORD STACK_SIZE = 256 * 1024;   // 1 MiB (debug)
 #endif
 
 /// get the pointer to my thread's stack

@@ -1504,7 +1504,7 @@
   - ранее каждый подзапрос составлял отдельную транзакцию и приводил к отдельному ответу
   - теперь весь пакет считается одной транзакцией, которая возвращает один ответ
 * ⚠️ Параметры поиска `low_priority` и `boolean_simplify` теперь требуют значения (`0/1`): ранее вы могли делать `SELECT ... OPTION low_priority, boolean_simplify`, теперь вам нужно делать `SELECT ... OPTION low_priority=1, boolean_simplify=1`.
-* ⚠️ Если вы используете старые клиенты [php](https://github.com/manticoresoftware/manticoresearch/blob/master/api/sphinxapi.php), [python](https://github.com/manticoresoftware/manticoresearch/blob/master/api/sphinxapi.py) или [java](https://github.com/manticoresoftware/manticoresearch/tree/master/api/java), пожалуйста, перейдите по соответствующей ссылке и найдите обновленную версию. **Старые версии не полностью совместимы с Manticore 5.**
+* ⚠️ Если вы используете старые клиенты [php](https://github.com/manticoresoftware/manticoresearch/blob/main/api/sphinxapi.php), [python](https://github.com/manticoresoftware/manticoresearch/blob/main/api/sphinxapi.py) или [java](https://github.com/manticoresoftware/manticoresearch/tree/main/api/java), пожалуйста, перейдите по соответствующей ссылке и найдете обновленную версию. **Старые версии не полностью совместимы с Manticore 5.**
 * ⚠️ HTTP JSON запросы теперь записываются в другом формате в режиме `query_log_format=sphinxql`. Ранее записывалась только часть с полным текстом, теперь записывается как есть.
 
 ### Новые пакеты

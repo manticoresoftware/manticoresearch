@@ -8,7 +8,7 @@
 错误和功能请求都在[Github](https://github.com/manticoresoftware/manticore/issues)上跟踪。欢迎您创建新的工单并详细描述您的错误，以节省您和开发人员的时间。
 
 ### 文档更新
-文档的更新（您正在阅读的内容）也在[Github](https://github.com/manticoresoftware/manticoresearch/tree/master/manual)中进行。
+文档（您现在正在阅读的内容）的更新也通过 [Github](https://github.com/manticoresoftware/manticoresearch/tree/main/manual) 进行。
 
 ### 崩溃
 

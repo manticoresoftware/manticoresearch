@@ -1,7 +1,7 @@
 # Contributing to Manticore Search
 
 We're happy you want to contribute!
-This project adheres to the Manticore Search [Code of Conduct](https://github.com/manticoresoftware/manticore/blob/master/CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. 
+This project adheres to the Manticore Search [Code of Conduct](https://github.com/manticoresoftware/manticore/blob/main/CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. 
 There are many ways to cotribute, from helping others, spread the word, submitting bug reports and feature requests or writing code.
 
 
@@ -20,7 +20,7 @@ To make things easier and fix it faster, try to provide a small test case which 
 
 If you can provide sample data, but it's big, we have a [Write-only FTP](https://github.com/manticoresoftware/manticore/wiki/Write-only-FTP) for uploading larger data on one of our servers.
 
-Follow the [issue template](https://github.com/manticoresoftware/manticore/blob/master/ISSUE_TEMPLATE.md) guideline about the information the bug report should include.
+Follow the [issue template](https://github.com/manticoresoftware/manticore/blob/main/ISSUE_TEMPLATE.md) guideline about the information the bug report should include.
 
 
 ## Feature requests
@@ -32,14 +32,14 @@ A lot of features in Manticore Search come from user's requests. To make a featu
 We recommend opening first a github issue describing your proposed changed and check if they fit with what maintainers are doing and have planned. 
 
 ### Fork/clone the repository
-Clone/fork the master branch via Github or 'git clone'.
-Don't work directly on the master branch, but create a branch.
+Clone/fork the main branch via Github or 'git clone'.
+Don't work directly on the main branch, but create a branch.
 
 ### Testing and submiting changes
 
-Manticore Search code comes with a test suite which must be run to ensure your changes don't create any regression. Read the [TESTING](https://github.com/manticoresoftware/manticore/blob/master/TESTING.md) guide for how to run the tests.
+Manticore Search code comes with a test suite which must be run to ensure your changes don't create any regression. Read the [TESTING](https://github.com/manticoresoftware/manticore/blob/main/TESTING.md) guide for how to run the tests.
 
-We recommend to update your local repository with the latest code from the official repository and rebase the branch on top of the latest master branch.
+We recommend to update your local repository with the latest code from the official repository and rebase the branch on top of the latest main branch.
 If later changes are needed, you can add them as separate commits. 
 
 If you are fixing a regression, add/update a functional test.

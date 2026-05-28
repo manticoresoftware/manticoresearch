@@ -1504,7 +1504,7 @@
   - 之前每个子查询构成单独的事务并产生单独的响应
   - 现在整个批次被视为单个事务，返回单个响应
 * ⚠️ 搜索选项 `low_priority` 和 `boolean_simplify` 现在需要指定值（`0/1`）：之前您可以使用 `SELECT ... OPTION low_priority, boolean_simplify`，现在需要使用 `SELECT ... OPTION low_priority=1, boolean_simplify=1`。
-* ⚠️ 如果您使用旧版 [php](https://github.com/manticoresoftware/manticoresearch/blob/master/api/sphinxapi.php)、[python](https://github.com/manticoresoftware/manticoresearch/blob/master/api/sphinxapi.py) 或 [java](https://github.com/manticoresoftware/manticoresearch/tree/master/api/java) 客户端，请遵循相应链接查找更新版本。**旧版本与 Manticore 5 不完全兼容。**
+* ⚠️ 如果您使用旧版 [php](https://github.com/manticoresoftware/manticoresearch/blob/main/api/sphinxapi.php)、[python](https://github.com/manticoresoftware/manticoresearch/blob/main/api/sphinxapi.py) 或 [java](https://github.com/manticoresoftware/manticoresearch/tree/main/api/java) 客户端，请遵循相应链接查找更新版本。**旧版本与 Manticore 5 不完全兼容。**
 * ⚠️ HTTP JSON 请求现在在 `query_log_format=sphinxql` 模式下以不同格式记录。之前仅记录全文部分，现在按原样记录。
 
 ### 新包

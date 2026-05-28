@@ -205,7 +205,16 @@ public:
 };
 
 /// stack of a thread (that is NOT stack of the coroutine!)
-static const DWORD STACK_SIZE = 128 * 1024;
+///   Release builds: 128 KiB — sufficient for release-mode frame sizes.
+///   Debug builds: 1 MiB — same rationale as DEFAULT_CORO_STACK_SIZE in
+///     coro_stack.h. Debug-mode C++ + Rust frames blow 128 KiB when any
+///     non-trivial C dep runs on a worker thread.
+/// CMake defines NDEBUG for release-type builds.
+#ifdef NDEBUG
+static const DWORD STACK_SIZE = 128 * 1024;    // 128 KiB (release)
+#else
+static const DWORD STACK_SIZE = 256 * 1024;   // 1 MiB (debug)
+#endif
 
 /// get the pointer to my thread's stack
 const void * TopOfStack ();

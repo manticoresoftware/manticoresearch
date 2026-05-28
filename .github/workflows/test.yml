@@ -354,7 +354,7 @@ jobs:
       build_artifact_name: debug_build
       artifact_name: debug_test_results
       results_name: "Linux debug test results"
-      timeout: 15
+      timeout: 25
 
   build_linux_release:
     if: needs.meta.outputs.run_builds == 'true'

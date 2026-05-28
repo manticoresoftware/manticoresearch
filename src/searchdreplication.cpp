@@ -314,6 +314,8 @@ static bool SendClusterIndexes ( ReplicationCluster_t * pCluster, const CSphStri
 
 static bool ValidateUpdate ( const ReplicationCommand_t & tCmd );
 
+static bool CanReplaceIndexes ( const CSphString & sCluster, const VecTraits_T<CSphString> & dIndexes ) EXCLUDES ( g_tClustersLock );
+
 static bool DoClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, NODES_E eUpdate );
 static bool IsSameVector ( StrVec_t & dSrc, StrVec_t & dDst );
 
@@ -1473,6 +1475,9 @@ static bool ReplicatedIndexes ( const VecTraits_T<CSphString> & dIndexes, const 
 		iClusterEpoch = 1;
 	sphLogDebugRpl ( "ReplicatedIndexes '%s': current epoch " INT64_FMT ", current indexes '%s' -> received epoch " INT64_FMT ", indexes '%s'", sCluster.cstr(), pCluster->m_iClusterEpoch, Vec2Str ( pCluster->GetIndexes() ).cstr(), iClusterEpoch, Vec2Str ( dIndexes ).cstr() );
 
+	if ( !CanReplaceIndexes ( sCluster, dIndexes ) )
+		return false;
+
 	sph::StringSet hIndexes ( dIndexes );
 
 	StrVec_t hCurrentIndexes ( pCluster->GetIndexes() );
@@ -1480,32 +1485,6 @@ static bool ReplicatedIndexes ( const VecTraits_T<CSphString> & dIndexes, const 
 	for ( const auto & sIndex : hCurrentIndexes )
 		if ( !hIndexes[sIndex] )
 			dStaleIndexes.Add ( sIndex );
-
-	// scope for check of cluster data
-	{
-		Threads::SccRL_t rLock( g_tClustersLock );
-
-		// indexes should be new or from same cluster
-		for ( const auto& tCluster : g_hClusters )
-		{
-			const ReplicationCluster_t * pOrigCluster = tCluster.second;
-			if ( pOrigCluster==pCluster.CPtr() )
-				continue;
-			
-			bool bHasCluster = pOrigCluster->WithRlockedIndexes([&hIndexes,pOrigCluster]( const auto & hOrigIndexes )
-			{
-				for ( const auto & tIndex : hOrigIndexes )
-				{
-					if ( hIndexes[tIndex.first] )
-						return TlsMsg::Err ( "table '%s' is already a part of cluster '%s'", tIndex.first.cstr(), pOrigCluster->m_sName.cstr() );
-				}
-
-				return true;
-			});
-			if ( !bHasCluster )
-				return false;
-		}
-	}
 
 	bool bOk = AssignClusterToIndexes ( dStaleIndexes, "" );
 	bOk &= AssignClusterToIndexes ( dIndexes, sCluster );
@@ -1533,14 +1512,61 @@ static bool ReplicatedIndexes ( const VecTraits_T<CSphString> & dIndexes, const 
 	return SaveConfigInt ( sError );
 }
 
-// create string by join cluster path and given path
-std::optional<CSphString> GetClusterPath ( const CSphString & sCluster ) EXCLUDES ( g_tClustersLock )
+bool CanReplaceIndex ( const CSphString & sCluster, const CSphString & sIndex ) EXCLUDES ( g_tClustersLock )
 {
-	std::optional<CSphString> tRes;
-	auto pCluster = ClusterByName ( sCluster );
-	if ( pCluster )
-		tRes = GetDatadirPath ( pCluster->m_sPath );
-	return tRes;
+	{
+		cServedIndexRefPtr_c pServed = GetServed ( sIndex );
+		if ( ServedDesc_t::IsMutable ( pServed ) && !pServed->m_sCluster.IsEmpty() && pServed->m_sCluster!=sCluster )
+			return TlsMsg::Err ( "table '%s' is already a part of cluster '%s'", sIndex.cstr(), pServed->m_sCluster.cstr() );
+	}
+
+	{
+		cDistributedIndexRefPtr_t pDist = GetDistr ( sIndex );
+		if ( pDist && !pDist->m_sCluster.IsEmpty() && pDist->m_sCluster!=sCluster )
+			return TlsMsg::Err ( "table '%s' is already a part of cluster '%s'", sIndex.cstr(), pDist->m_sCluster.cstr() );
+	}
+
+	StrVec_t dIndexes;
+	dIndexes.Add ( sIndex );
+	return CanReplaceIndexes ( sCluster, dIndexes );
+}
+
+bool CanReplaceIndexes ( const CSphString & sCluster, const VecTraits_T<CSphString> & dIndexes ) EXCLUDES ( g_tClustersLock )
+{
+	CSphVector<ReplicationClusterRefPtr_c> dOtherClusters;
+	{
+		Threads::SccRL_t rLock ( g_tClustersLock );
+		if ( !g_hClusters.Exists ( sCluster ) )
+			return TlsMsg::Err ( "unknown cluster '%s'", sCluster.cstr() );
+
+		dOtherClusters.Reserve ( g_hClusters.GetLength() );
+		for ( const auto & tCluster : g_hClusters )
+		{
+			if ( tCluster.first==sCluster )
+				continue;
+
+			dOtherClusters.Add ( tCluster.second );
+		}
+	}
+
+	for ( const auto & pCluster : dOtherClusters )
+	{
+		const CSphString & sClusterName = pCluster->m_sName;
+		bool bCanReplace = pCluster->WithRlockedAllIndexes ( [&dIndexes,&sClusterName] ( const auto & hOrigIndexes, const auto & hOrigIndexesLoaded )
+		{
+			for ( const auto & sIndex : dIndexes )
+			{
+				if ( hOrigIndexes[sIndex] || hOrigIndexesLoaded[sIndex] )
+					return TlsMsg::Err ( "table '%s' is already a part of cluster '%s'", sIndex.cstr(), sClusterName.cstr() );
+			}
+
+			return true;
+		});
+		if ( !bCanReplace )
+			return false;
+	}
+
+	return true;
 }
 
 // validate clusters paths

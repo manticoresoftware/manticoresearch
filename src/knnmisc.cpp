@@ -116,9 +116,13 @@ bool IsKnnDist ( const CSphString & sExpr )
 
 void SetupKNNLimit ( CSphQuery & tQuery )
 {
+	int64_t iKnnLimit = tQuery.m_iLimit<0
+		? tQuery.m_iMaxMatches
+		: Min ( int64_t(tQuery.m_iLimit) + tQuery.m_iOffset, int64_t(tQuery.m_iMaxMatches) );
+
 	for ( auto & tKNN : tQuery.m_dKnnSettings )
 		if ( tKNN.m_iK < 0 )
-			tKNN.m_iK = tQuery.m_iLimit;
+			tKNN.m_iK = int(iKnnLimit);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

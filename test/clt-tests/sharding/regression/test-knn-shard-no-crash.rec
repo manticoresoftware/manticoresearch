@@ -1,7 +1,10 @@
 ––– comment –––
 Regression: FAIL_008 (daemon) — KNN query against a public sharded table
-with a float_vector knn attr used to crash searchd via SIGSEGV inside
-Expr_KNNDist_c. Daemon now returns a clean SQL error and stays up.
+with a float_vector knn attr. The distributed head must NOT rescore (it has
+no local KNN settings); each shard returns a comparable knn_dist() and the
+head merges them. This used to crash searchd (SIGSEGV in Expr_KNNDist_c) or
+error with "attribute 'vector' not found". Now the query returns the
+nearest neighbours ordered by distance and searchd stays up.
 
 ––– input –––
 export INSTANCE=1
@@ -12,13 +15,18 @@ mysql -h0 -P1306 -e "create table t8(title text, vector float_vector knn_type='h
 ––– output –––
 0
 ––– input –––
+for i in $(seq 1 30); do s=$(mysql -h0 -P1306 -N -B -e "show sharding status t8" 2>/dev/null); echo "$s" | grep -q active && ! echo "$s" | grep -q pending && break; sleep 1; done; sleep 2; echo waited
+––– output –––
+waited
+––– input –––
 mysql -h0 -P1306 -e "insert into t8(id,title,vector) values(1,'one',(0.1,0.2,0.3,0.4)),(2,'two',(0.2,0.1,0.4,0.3));"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "select id, knn_dist() from t8 where knn(vector, 2, (0.1,0.2,0.3,0.4)) order by knn_dist() asc;" 2>&1 | head -1
+mysql -h0 -P1306 -N -B -e "select id from t8 where knn(vector, 2, (0.1,0.2,0.3,0.4)) order by knn_dist() asc;" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: KNN rescore: attribute 'vector' not found in sorter schema
+1
+2
 ––– input –––
 sleep 1; mysql -h0 -P1306 -e "show status like 'uptime';" | grep uptime | awk '{print ($2 > 0) ? "uptime_positive" : "uptime_zero"}'
 ––– output –––

@@ -23,7 +23,7 @@ mysql -h0 -P1306 -e "insert into t8(id,title,vector) values(1,'one',(0.1,0.2,0.3
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -N -B -e "select id from t8 where knn(vector, 2, (0.1,0.2,0.3,0.4)) order by knn_dist() asc;" 2>&1
+mysql -h0 -P1306 -N -B -e "select id from t8 where knn(vector, 2, (0.1,0.2,0.3,0.4)) order by knn_dist() asc;" 2>&1 | tr -d ' |+-' | grep -v '^$'
 ––– output –––
 1
 2

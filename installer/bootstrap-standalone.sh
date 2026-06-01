@@ -882,10 +882,51 @@ repair_debian_repo_package() {
     delete_file_if_present "$deb_path"
 }
 
-apt_output_indicates_repo_auth_error() {
+apt_output_indicates_auth_error() {
     local output_file=$1
 
     grep -Eiq 'NO_PUBKEY|EXPKEYSIG|BADSIG|GPG error|invalid signature|The following signatures were invalid|signatures couldn.t be verified|public key is not available|repository .* is not signed|InRelease is not signed|Release file is not signed|unauthenticated packages|cannot be authenticated|There is no public key available' "$output_file"
+}
+
+apt_update_output_indicates_manticore_repo_issue() {
+    local output_file=$1
+    local issue_pattern=$2
+
+    awk -v issue_pattern="$issue_pattern" '
+        BEGIN {
+            manticore = "(repo[.]manticoresearch[.]com|manticoresearch_|manticore-repo)"
+        }
+        {
+            line = $0
+            line_lower = tolower(line)
+            has_issue = line_lower ~ tolower(issue_pattern)
+            has_manticore = line ~ manticore
+
+            if (has_issue && (has_manticore || previous_has_manticore)) {
+                found = 1
+                exit
+            }
+
+            previous_has_manticore = has_manticore
+        }
+        END { exit found ? 0 : 1 }
+    ' "$output_file"
+}
+
+apt_update_auth_issue_pattern() {
+    printf '%s\n' '(NO_PUBKEY|EXPKEYSIG|BADSIG|GPG error|invalid signature|The following signatures were invalid|signatures couldn.t be verified|public key is not available|repository .* is not signed|InRelease is not signed|Release file is not signed|There is no public key available)'
+}
+
+apt_update_repo_problem_pattern() {
+    printf '%s\n' '(^Err:|^E:|Failed to fetch|Could not|Temporary failure|Connection failed|Connection timed out|404|does not have a Release file|not signed|NO_PUBKEY|EXPKEYSIG|BADSIG|GPG error|invalid signature|The following signatures were invalid|signatures couldn.t be verified|public key is not available|There is no public key available)'
+}
+
+apt_update_output_indicates_manticore_repo_auth_error() {
+    apt_update_output_indicates_manticore_repo_issue "$1" "$(apt_update_auth_issue_pattern)"
+}
+
+apt_update_output_indicates_manticore_repo_problem() {
+    apt_update_output_indicates_manticore_repo_issue "$1" "$(apt_update_repo_problem_pattern)"
 }
 
 run_with_output_capture() {
@@ -908,7 +949,7 @@ refresh_debian_package_metadata() {
 
     output_file=$(mktemp /tmp/manticore-apt-update.XXXXXX.log)
     if run_with_output_capture "$output_file" refresh_debian_package_metadata_once; then
-        if apt_output_indicates_repo_auth_error "$output_file"; then
+        if apt_update_output_indicates_manticore_repo_auth_error "$output_file"; then
             print_warn "Apt repository authentication warning detected. Reinstalling the repository bootstrap package and retrying metadata refresh."
             repair_debian_repo_package
             delete_file_if_present "$output_file"
@@ -919,13 +960,19 @@ refresh_debian_package_metadata() {
         return 0
     fi
 
-    if apt_output_indicates_repo_auth_error "$output_file"; then
+    if apt_update_output_indicates_manticore_repo_auth_error "$output_file"; then
         print_warn "Apt repository authentication failed. Reinstalling the repository bootstrap package and retrying metadata refresh."
         repair_debian_repo_package
         delete_file_if_present "$output_file"
         sudo_exec apt-get update
         return $?
     fi
+    if ! apt_update_output_indicates_manticore_repo_problem "$output_file"; then
+        print_warn "Apt metadata refresh failed for unrelated repositories. Continuing because the Manticore repository did not report an error."
+        delete_file_if_present "$output_file"
+        return 0
+    fi
+
 
     delete_file_if_present "$output_file"
     return 1
@@ -940,7 +987,7 @@ apt_get_install_with_repo_repair() {
         return 0
     fi
 
-    if apt_output_indicates_repo_auth_error "$output_file"; then
+    if apt_output_indicates_auth_error "$output_file"; then
         print_warn "Apt package authentication failed. Reinstalling the repository bootstrap package and retrying install."
         repair_debian_repo_package
         sudo_exec apt-get update
@@ -1650,9 +1697,44 @@ MANTICORE_BACKUP_DATA=no
 MANTICORE_BACKUP_DIR=""
 LIST_VERSIONS_OUTPUT_FILE=""
 
+print_usage() {
+    cat <<'USAGE'
+Manticore Search Installer
+
+Usage:
+  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap.sh" | bash -s -- [options]
+  wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
+
+Common options:
+  -h, --help, -?              Show this help and exit.
+  -s, --silent, -y, --yes     Non-interactive mode; assume defaults.
+  --upgrade                   Upgrade an installed Manticore package.
+  -v, --version <version>     Install or switch to a specific version.
+  --list-versions [path]      Print available versions, or write them to path.
+  --list-versions-file <path> Write available versions to path.
+  --no-start                  Do not start the service after install/upgrade.
+  --backup-data               Include data directory in upgrade backup.
+  --no-backup-data            Skip data directory backup (default).
+  --backup-dir <path>         Override backup directory for upgrades.
+  -u, --uninstall             Remove packages, keep config/data/repo state.
+  --purge                     Remove packages and repository bootstrap package.
+  --purge-all                 Purge packages, repo state, config, and data.
+
+Examples:
+  bash bootstrap.sh --list-versions
+  bash bootstrap.sh --version 25.0.0 --no-start
+  bash bootstrap.sh --upgrade --backup-data
+USAGE
+}
+
+
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case $1 in
+            -h|--help|-\?)
+                print_usage
+                exit 0
+                ;;
             -s|--silent|-y|--yes)
                 SILENT=true
                 shift
@@ -1879,12 +1961,12 @@ execute_action() {
 }
 
 main() {
+    parse_args "$@"
     if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
         print_log "Initializing self-contained Manticore Search Installer..."
         print_log "Logs are being written to $INSTALL_LOG"
     fi
 
-    parse_args "$@"
     export SILENT MANTICORE_START_SERVICE MANTICORE_BACKUP_DATA MANTICORE_BACKUP_DIR
     detect_os
     detect_arch

@@ -17,9 +17,44 @@ MANTICORE_BACKUP_DATA=no
 MANTICORE_BACKUP_DIR=""
 LIST_VERSIONS_OUTPUT_FILE=""
 
+print_usage() {
+    cat <<'USAGE'
+Manticore Search Installer
+
+Usage:
+  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap.sh" | bash -s -- [options]
+  wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
+
+Common options:
+  -h, --help, -?              Show this help and exit.
+  -s, --silent, -y, --yes     Non-interactive mode; assume defaults.
+  --upgrade                   Upgrade an installed Manticore package.
+  -v, --version <version>     Install or switch to a specific version.
+  --list-versions [path]      Print available versions, or write them to path.
+  --list-versions-file <path> Write available versions to path.
+  --no-start                  Do not start the service after install/upgrade.
+  --backup-data               Include data directory in upgrade backup.
+  --no-backup-data            Skip data directory backup (default).
+  --backup-dir <path>         Override backup directory for upgrades.
+  -u, --uninstall             Remove packages, keep config/data/repo state.
+  --purge                     Remove packages and repository bootstrap package.
+  --purge-all                 Purge packages, repo state, config, and data.
+
+Examples:
+  bash bootstrap.sh --list-versions
+  bash bootstrap.sh --version 25.0.0 --no-start
+  bash bootstrap.sh --upgrade --backup-data
+USAGE
+}
+
+
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case $1 in
+            -h|--help|-\?)
+                print_usage
+                exit 0
+                ;;
             -s|--silent|-y|--yes)
                 SILENT=true
                 shift
@@ -251,12 +286,12 @@ execute_action() {
 }
 
 main() {
+    parse_args "$@"
     if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
         print_log "Initializing self-contained Manticore Search Installer..."
         print_log "Logs are being written to $INSTALL_LOG"
     fi
 
-    parse_args "$@"
     export SILENT MANTICORE_START_SERVICE MANTICORE_BACKUP_DATA MANTICORE_BACKUP_DIR
     detect_os
     detect_arch

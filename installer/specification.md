@@ -108,7 +108,7 @@ Install repository bootstrap package:
 dpkg -i manticore-repo.noarch.deb
 ```
 
-When the installer downloads `manticore-repo.noarch.deb`, it must inspect the downloaded package metadata with `dpkg-deb -f`. If the installed `manticore-repo` package has the same version, skip `dpkg -i`; otherwise install the downloaded package. This avoids unnecessary repository-package reinstall work during refresh/upgrade flows while still allowing a newer bootstrap package to replace the old one.
+When the installer downloads `manticore-repo.noarch.deb`, it must inspect the downloaded package metadata with `dpkg-deb -f`. If the installed `manticore-repo` package has the same version, skip `dpkg -i` during the initial healthy path; otherwise install the downloaded package. The installer should stay agnostic about repository-package internals. If Debian metadata refresh or package installation reports apt authentication/signature problems, including `NO_PUBKEY` warnings that may still leave `apt-get update` with exit code 0 and stale indexes, force reinstall the same repository package version and retry the failed apt operation once. This avoids unnecessary repository-package reinstall work during healthy refresh/upgrade flows while still allowing the repository package to repair its own source/keyring state.
 
 Refresh metadata:
 

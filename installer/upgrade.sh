@@ -117,10 +117,10 @@ upgrade_package() {
     if [[ "$OS_FAMILY" == "debian" ]]; then
         if [[ -n "$package_version" ]]; then
             mapfile -t package_specs < <(versioned_debian_package_specs "$package_version")
-            sudo_exec apt-get install -y --allow-downgrades "${package_specs[@]}"
+            apt_get_install_with_repo_repair -y --allow-downgrades "${package_specs[@]}"
             mark_debian_split_packages_auto_for_thin_version "$package_version"
         else
-            sudo_exec apt-get install -y --only-upgrade "$PACKAGE_NAME"
+            apt_get_install_with_repo_repair -y --only-upgrade "$PACKAGE_NAME"
         fi
     elif [[ "$OS_FAMILY" == "rpm" ]]; then
         if command -v dnf >/dev/null 2>&1; then

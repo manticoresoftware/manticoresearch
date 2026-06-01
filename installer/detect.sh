@@ -181,6 +181,7 @@ download_with_available_tool() {
 
 install_debian_repo_package_file() {
     local deb_path=$1
+    local force=${2:-no}
     local downloaded_package downloaded_version installed_version
 
     downloaded_package=$(dpkg-deb -f "$deb_path" Package 2>/dev/null || true)
@@ -192,12 +193,100 @@ install_debian_repo_package_file() {
     fi
 
     installed_version=$(dpkg-query -W -f='${Version}\n' "$DEB_REPO_PACKAGE_NAME" 2>/dev/null || true)
-    if [[ -n "$installed_version" && "$installed_version" == "$downloaded_version" ]]; then
+    if [[ "$force" != "force" && -n "$installed_version" && "$installed_version" == "$downloaded_version" ]]; then
         print_info "Repository bootstrap package ${DEB_REPO_PACKAGE_NAME} ${installed_version} is already installed."
         return 0
     fi
 
     sudo_exec dpkg -i "$deb_path"
+}
+
+delete_file_if_present() {
+    local path=$1
+    [[ -n "$path" && -f "$path" ]] && rm -f "$path"
+}
+
+repair_debian_repo_package() {
+    local deb_path
+
+    [[ "$OS_FAMILY" == "debian" ]] || return 0
+
+    print_step "Repairing Repository Bootstrap Package"
+    deb_path=$(mktemp /tmp/manticore-repo.XXXXXX.deb)
+    download_with_available_tool "$DEB_REPO_PACKAGE_URL" "$deb_path"
+    install_debian_repo_package_file "$deb_path" force
+    delete_file_if_present "$deb_path"
+}
+
+apt_output_indicates_repo_auth_error() {
+    local output_file=$1
+
+    grep -Eiq 'NO_PUBKEY|EXPKEYSIG|BADSIG|GPG error|invalid signature|The following signatures were invalid|signatures couldn.t be verified|public key is not available|repository .* is not signed|InRelease is not signed|Release file is not signed|unauthenticated packages|cannot be authenticated|There is no public key available' "$output_file"
+}
+
+run_with_output_capture() {
+    local output_file=$1
+    shift
+
+    set +e
+    "$@" 2>&1 | tee "$output_file"
+    local status=${PIPESTATUS[0]}
+    set -e
+    return "$status"
+}
+
+refresh_debian_package_metadata_once() {
+    sudo_exec apt-get update
+}
+
+refresh_debian_package_metadata() {
+    local output_file
+
+    output_file=$(mktemp /tmp/manticore-apt-update.XXXXXX.log)
+    if run_with_output_capture "$output_file" refresh_debian_package_metadata_once; then
+        if apt_output_indicates_repo_auth_error "$output_file"; then
+            print_warn "Apt repository authentication warning detected. Reinstalling the repository bootstrap package and retrying metadata refresh."
+            repair_debian_repo_package
+            delete_file_if_present "$output_file"
+            sudo_exec apt-get update
+            return $?
+        fi
+        delete_file_if_present "$output_file"
+        return 0
+    fi
+
+    if apt_output_indicates_repo_auth_error "$output_file"; then
+        print_warn "Apt repository authentication failed. Reinstalling the repository bootstrap package and retrying metadata refresh."
+        repair_debian_repo_package
+        delete_file_if_present "$output_file"
+        sudo_exec apt-get update
+        return $?
+    fi
+
+    delete_file_if_present "$output_file"
+    return 1
+}
+
+apt_get_install_with_repo_repair() {
+    local output_file
+
+    output_file=$(mktemp /tmp/manticore-apt-install.XXXXXX.log)
+    if run_with_output_capture "$output_file" sudo_exec apt-get install "$@"; then
+        delete_file_if_present "$output_file"
+        return 0
+    fi
+
+    if apt_output_indicates_repo_auth_error "$output_file"; then
+        print_warn "Apt package authentication failed. Reinstalling the repository bootstrap package and retrying install."
+        repair_debian_repo_package
+        sudo_exec apt-get update
+        delete_file_if_present "$output_file"
+        sudo_exec apt-get install "$@"
+        return $?
+    fi
+
+    delete_file_if_present "$output_file"
+    return 1
 }
 
 ensure_repo_package_installed() {
@@ -871,7 +960,7 @@ desired_version_installed() {
 
 refresh_package_metadata() {
     if [[ "$OS_FAMILY" == "debian" ]]; then
-        sudo_exec apt-get update
+        refresh_debian_package_metadata
     elif [[ "$OS_FAMILY" == "rpm" ]]; then
         if command -v dnf >/dev/null 2>&1; then
             sudo_exec dnf makecache

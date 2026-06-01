@@ -7,8 +7,8 @@ print_usage() {
 Manticore Search Installer
 
 Usage:
-  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap.sh" | bash -s -- [options]
   wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
+  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap.sh" | bash -s -- [options]
 
 Common options:
   -h, --help, -?              Show this help and exit.
@@ -26,20 +26,58 @@ Common options:
   --purge-all                 Purge packages, repo state, config, and data.
 
 Examples:
-  bash bootstrap.sh --list-versions
-  bash bootstrap.sh --version 25.0.0 --no-start
-  bash bootstrap.sh --upgrade --backup-data
+  bash bootstrap-standalone.sh --list-versions
+  bash bootstrap-standalone.sh --version 25.0.0 --no-start
+  bash bootstrap-standalone.sh --upgrade --backup-data
 USAGE
 }
 
-for arg in "$@"; do
-    case "$arg" in
+ORIGINAL_ARGS=("$@")
+while [[ $# -gt 0 ]]; do
+    case "$1" in
         -h|--help|-\?)
             print_usage
             exit 0
             ;;
+        -s|--silent|-y|--yes|--no-start|--backup-data|--no-backup-data|-u|--uninstall|--purge|--purge-all|--upgrade|--list-versions)
+            if [[ "$1" == "--list-versions" && -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+                shift
+            fi
+            shift
+            ;;
+        -v|--version|--backup-dir|--list-versions-file)
+            if [[ -z "${2:-}" || "${2:0:1}" == "-" ]]; then
+                echo "[ERROR] $1 requires a value." >&2
+                echo "Run with --help to see supported options." >&2
+                exit 2
+            fi
+            shift 2
+            ;;
+        --list-versions=*)
+            if [[ -z "${1#*=}" ]]; then
+                echo "[ERROR] --list-versions requires a non-empty path when used with =." >&2
+                echo "Run with --help to see supported options." >&2
+                exit 2
+            fi
+            shift
+            ;;
+        --list-versions-file=*)
+            if [[ -z "${1#*=}" ]]; then
+                echo "[ERROR] --list-versions-file requires a value." >&2
+                echo "Run with --help to see supported options." >&2
+                exit 2
+            fi
+            shift
+            ;;
+        *)
+            echo "[ERROR] Unknown option: $1" >&2
+            echo "Run with --help to see supported options." >&2
+            exit 2
+            ;;
     esac
 done
+set -- "${ORIGINAL_ARGS[@]}"
+unset ORIGINAL_ARGS
 
 DEFAULT_REPO_URL="https://repo.manticoresearch.com/repository/install"
 REPO_URL="${MANTICORE_INSTALLER_REPO_URL:-$DEFAULT_REPO_URL}"

@@ -94,6 +94,8 @@ https://repo.manticoresearch.com/manticore-repo.noarch.deb
 https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 ```
 
+Runtime rule: `bootstrap-standalone.sh` is the primary public execution path. It must validate `--help`, `-h`, `-?`, unknown options, and malformed option values before setting up installer logging, OS detection, repository setup, downloads, or package operations.
+
 Maintenance rule: the modular installer is the source of truth. `installer/build.sh` builds `bootstrap-standalone.sh` from `constants.sh`, `ui.sh`, `detect.sh`, `install.sh`, `upgrade.sh`, `uninstall.sh`, and `main.sh` by concatenating them with a small standalone logging prologue and stripping module-local boilerplate such as shebangs, `set -euo pipefail`, `SCRIPT_DIR` setup, and `source` lines. The generated standalone script sets `MANTICORE_STANDALONE=1`; module self-test/direct-execution guards must check that flag so they do not run during standalone execution. Whenever modular behavior changes, run `installer/build.sh`, then verify `bootstrap-standalone.sh` with `bash -n` and at least a lightweight `--list-versions` smoke test. Avoid manual edits to `bootstrap-standalone.sh`; move changes into modules and regenerate it.
 
 ## Supported Package Families
@@ -218,7 +220,7 @@ Supported flags:
 - `--purge`: stop and remove Manticore, then remove the repository bootstrap package when applicable.
 - `--purge-all`: same as `--purge`, then remove configured Manticore config and data directories after explicit confirmation unless `--silent` is set.
 
-Unknown arguments should be warned about and ignored unless strict argument handling is added later.
+Unknown options or malformed option values must abort before OS detection, repository setup, or package operations. The installer should print an error plus a `--help` hint and exit with status `2`.
 
 ## Installation Flow
 

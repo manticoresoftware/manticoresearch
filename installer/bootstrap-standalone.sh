@@ -4,6 +4,83 @@ set -euo pipefail
 
 MANTICORE_STANDALONE=1
 
+standalone_print_usage() {
+    cat <<'USAGE'
+Manticore Search Installer
+
+Usage:
+  wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
+  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap.sh" | bash -s -- [options]
+
+Common options:
+  -h, --help, -?              Show this help and exit.
+  -s, --silent, -y, --yes     Non-interactive mode; assume defaults.
+  --upgrade                   Upgrade an installed Manticore package.
+  -v, --version <version>     Install or switch to a specific version.
+  --list-versions [path]      Print available versions, or write them to path.
+  --list-versions-file <path> Write available versions to path.
+  --no-start                  Do not start the service after install/upgrade.
+  --backup-data               Include data directory in upgrade backup.
+  --no-backup-data            Skip data directory backup (default).
+  --backup-dir <path>         Override backup directory for upgrades.
+  -u, --uninstall             Remove packages, keep config/data/repo state.
+  --purge                     Remove packages and repository bootstrap package.
+  --purge-all                 Purge packages, repo state, config, and data.
+
+Examples:
+  bash bootstrap-standalone.sh --list-versions
+  bash bootstrap-standalone.sh --version 25.0.0 --no-start
+  bash bootstrap-standalone.sh --upgrade --backup-data
+USAGE
+}
+
+standalone_usage_error() {
+    echo "[ERROR] $1" >&2
+    echo "Run with --help to see supported options." >&2
+    exit 2
+}
+
+standalone_validate_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help|-\?)
+                standalone_print_usage
+                exit 0
+                ;;
+            -s|--silent|-y|--yes|--no-start|--backup-data|--no-backup-data|-u|--uninstall|--purge|--purge-all|--upgrade|--list-versions)
+                if [[ "$1" == "--list-versions" && -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+                    shift
+                fi
+                shift
+                ;;
+            -v|--version|--backup-dir|--list-versions-file)
+                if [[ -z "${2:-}" || "${2:0:1}" == "-" ]]; then
+                    standalone_usage_error "$1 requires a value."
+                fi
+                shift 2
+                ;;
+            --list-versions=*)
+                if [[ -z "${1#*=}" ]]; then
+                    standalone_usage_error "--list-versions requires a non-empty path when used with =."
+                fi
+                shift
+                ;;
+            --list-versions-file=*)
+                if [[ -z "${1#*=}" ]]; then
+                    standalone_usage_error "--list-versions-file requires a value."
+                fi
+                shift
+                ;;
+            *)
+                standalone_usage_error "Unknown option: $1"
+                ;;
+        esac
+    done
+}
+
+standalone_validate_args "$@"
+unset -f standalone_validate_args standalone_usage_error standalone_print_usage
+
 # ---- constants.sh ----
 PACKAGE_NAME="manticore"
 DEB_FALLBACK_VERSIONED_PACKAGE_NAMES="manticore manticore-server manticore-server-core manticore-tools manticore-dev manticore-common"
@@ -1702,8 +1779,8 @@ print_usage() {
 Manticore Search Installer
 
 Usage:
-  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap.sh" | bash -s -- [options]
   wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
+  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap.sh" | bash -s -- [options]
 
 Common options:
   -h, --help, -?              Show this help and exit.
@@ -1721,11 +1798,17 @@ Common options:
   --purge-all                 Purge packages, repo state, config, and data.
 
 Examples:
-  bash bootstrap.sh --list-versions
-  bash bootstrap.sh --version 25.0.0 --no-start
-  bash bootstrap.sh --upgrade --backup-data
+  bash bootstrap-standalone.sh --list-versions
+  bash bootstrap-standalone.sh --version 25.0.0 --no-start
+  bash bootstrap-standalone.sh --upgrade --backup-data
 USAGE
 }
+usage_error() {
+    print_error "$1"
+    echo "Run with --help to see supported options." >&2
+    exit 2
+}
+
 
 
 parse_args() {
@@ -1752,17 +1835,15 @@ parse_args() {
                 shift
                 ;;
             --backup-dir)
-                if [[ -z "${2:-}" ]]; then
-                    print_error "--backup-dir requires a value."
-                    exit 1
+                if [[ -z "${2:-}" || "${2:0:1}" == "-" ]]; then
+                    usage_error "--backup-dir requires a value."
                 fi
                 MANTICORE_BACKUP_DIR="$2"
                 shift 2
                 ;;
             -v|--version)
-                if [[ -z "${2:-}" ]]; then
-                    print_error "--version requires a value."
-                    exit 1
+                if [[ -z "${2:-}" || "${2:0:1}" == "-" ]]; then
+                    usage_error "--version requires a value."
                 fi
                 SPECIFIC_VERSION="$2"
                 shift 2
@@ -1795,12 +1876,14 @@ parse_args() {
             --list-versions=*)
                 ACTION="list-versions"
                 LIST_VERSIONS_OUTPUT_FILE="${1#*=}"
+                if [[ -z "$LIST_VERSIONS_OUTPUT_FILE" ]]; then
+                    usage_error "--list-versions requires a non-empty path when used with =."
+                fi
                 shift
                 ;;
             --list-versions-file)
-                if [[ -z "${2:-}" ]]; then
-                    print_error "$1 requires a value."
-                    exit 1
+                if [[ -z "${2:-}" || "${2:0:1}" == "-" ]]; then
+                    usage_error "$1 requires a value."
                 fi
                 ACTION="list-versions"
                 LIST_VERSIONS_OUTPUT_FILE="$2"
@@ -1809,15 +1892,18 @@ parse_args() {
             --list-versions-file=*)
                 ACTION="list-versions"
                 LIST_VERSIONS_OUTPUT_FILE="${1#*=}"
+                if [[ -z "$LIST_VERSIONS_OUTPUT_FILE" ]]; then
+                    usage_error "--list-versions-file requires a value."
+                fi
                 shift
                 ;;
             *)
-                print_warn "Ignoring unknown argument: $1"
-                shift
+                usage_error "Unknown option: $1"
                 ;;
         esac
     done
 }
+
 
 get_target_version() {
     if [[ -n "$SPECIFIC_VERSION" ]]; then

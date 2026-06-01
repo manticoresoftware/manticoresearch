@@ -104,13 +104,8 @@ purge_state_dirs() {
     done
 }
 
-main() {
-    detect_os
-
-    if [[ "$OS_FAMILY" == "unknown" ]]; then
-        print_unsupported_os
-        exit 1
-    fi
+uninstall_flow() {
+    ACTION_MODE=${1:-$ACTION_MODE}
 
     confirm_purge_all
     ensure_service_stopped
@@ -127,4 +122,17 @@ main() {
     print_success "Uninstall completed."
 }
 
-main "$@"
+uninstall_main() {
+    detect_os
+
+    if [[ "$OS_FAMILY" == "unknown" ]]; then
+        print_unsupported_os
+        exit 1
+    fi
+
+    uninstall_flow "$ACTION_MODE"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" && "${MANTICORE_STANDALONE:-0}" != "1" ]]; then
+    uninstall_main "$@"
+fi

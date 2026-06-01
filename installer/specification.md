@@ -94,7 +94,7 @@ https://repo.manticoresearch.com/manticore-repo.noarch.deb
 https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 ```
 
-Maintenance rule: `bootstrap-standalone.sh` duplicates the modular implementation. Whenever behavior in `constants.sh`, `detect.sh`, `ui.sh`, `install.sh`, `upgrade.sh`, `uninstall.sh`, or `main.sh` changes, the standalone script must be reviewed and updated to stay equivalent. If the default `listen` directives in `manticore.conf.in` change, update `DEFAULT_PORTS` in both `constants.sh` and `bootstrap-standalone.sh`.
+Maintenance rule: the modular installer is the source of truth. `installer/build.sh` builds `bootstrap-standalone.sh` from `constants.sh`, `ui.sh`, `detect.sh`, `install.sh`, `upgrade.sh`, `uninstall.sh`, and `main.sh` by concatenating them with a small standalone logging prologue and stripping module-local boilerplate such as shebangs, `set -euo pipefail`, `SCRIPT_DIR` setup, and `source` lines. The generated standalone script sets `MANTICORE_STANDALONE=1`; module self-test/direct-execution guards must check that flag so they do not run during standalone execution. Whenever modular behavior changes, run `installer/build.sh`, then verify `bootstrap-standalone.sh` with `bash -n` and at least a lightweight `--list-versions` smoke test. Avoid manual edits to `bootstrap-standalone.sh`; move changes into modules and regenerate it.
 
 ## Supported Package Families
 

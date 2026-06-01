@@ -2,6 +2,11 @@
 
 set -euo pipefail
 
+MANTICORE_STANDALONE=1
+SCRIPT_DIR=$(dirname -- "${BASH_SOURCE[0]}")
+SCRIPT_DIR=$(cd "$SCRIPT_DIR" && pwd)
+
+# ---- constants.sh ----
 PACKAGE_NAME="manticore"
 DEB_FALLBACK_VERSIONED_PACKAGE_NAMES="manticore manticore-server manticore-server-core manticore-tools manticore-dev manticore-common"
 RPM_FALLBACK_VERSIONED_PACKAGE_NAMES="manticore manticore-server manticore-server-core manticore-tools manticore-devel manticore-common"
@@ -15,13 +20,16 @@ RPM_REPO_PACKAGE_NAME="manticore-repo"
 DEB_REPO_PACKAGE_URL="https://repo.manticoresearch.com/manticore-repo.noarch.deb"
 RPM_REPO_PACKAGE_URL="https://repo.manticoresearch.com/manticore-repo.noarch.rpm"
 
-# Keep in sync with listen directives in manticore.conf.in.
+# Keep in sync with listen directives in ../manticore.conf.in.
 DEFAULT_PORTS="9306 9308 9312"
 
 CONF_DIR="/etc/manticore"
 DATA_DIR="/var/lib/manticore"
+LOG_DIR="/var/log/manticore"
+
 BACKUP_DIR="/var/backups/manticore"
 
+# ---- standalone logging ----
 DEFAULT_INSTALL_LOG="/var/log/manticore_install.log"
 if [[ -n "${MANTICORE_INSTALL_LOG:-}" ]]; then
     INSTALL_LOG="$MANTICORE_INSTALL_LOG"
@@ -40,6 +48,12 @@ else
     exec > >(tee -a "$INSTALL_LOG") 2>&1
 fi
 
+print_log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# ---- ui.sh ----
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -47,19 +61,6 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
-
-SILENT=false
-SPECIFIC_VERSION=""
-ACTION=""
-UPGRADE_REQUESTED=false
-MANTICORE_START_SERVICE=true
-MANTICORE_BACKUP_DATA=no
-MANTICORE_BACKUP_DIR=""
-LIST_VERSIONS_OUTPUT_FILE=""
-
-print_log() {
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"
-}
 
 use_color() {
     [[ -t 1 && "${SILENT:-false}" != "true" ]]
@@ -79,16 +80,27 @@ emit_line() {
 }
 
 log_info() { emit_line "DETECT" "$GREEN" "[DETECT]" "$1"; }
-print_success() { emit_line "SUCCESS" "$GREEN" "[SUCCESS]" "$1"; }
-print_warn() { emit_line "WARNING" "$YELLOW" "[WARNING]" "$1"; }
-print_info() { emit_line "INFO" "$CYAN" "[INFO]" "$1"; }
+log_warn() { emit_line "DETECT" "$YELLOW" "[DETECT]" "$1"; }
+log_err()  { emit_line "DETECT" "$RED" "[DETECT]" "$1"; }
+
+print_success() {
+    emit_line "SUCCESS" "$GREEN" "✔ ${BOLD}[SUCCESS]" "$1"
+}
 
 print_error() {
     if use_color; then
-        echo -e "${RED}${BOLD}[ERROR]${NC} $1" >&2
+        echo -e "${RED}✘ ${BOLD}[ERROR]${NC} $1" >&2
     else
         echo "[ERROR] $1" >&2
     fi
+}
+
+print_warn() {
+    emit_line "WARNING" "$YELLOW" "⚠ ${BOLD}[WARNING]" "$1"
+}
+
+print_info() {
+    emit_line "INFO" "$CYAN" "ℹ ${BOLD}[INFO]" "$1"
 }
 
 print_step() {
@@ -111,17 +123,23 @@ ask_confirm() {
         return 1
     fi
 
-    local prompt=$1
+    local prompt="$1"
     local response
 
     while true; do
-        read -r -p "$(echo -e "${YELLOW}[?] ${NC}${prompt} [y/N] ")" -n 1 response
+        read -p "$(echo -e "${YELLOW}[?] ${NC}${prompt} [y/N] ")" -n 1 response
         echo ""
 
         case "$response" in
-            [yY][eE][sS]|[yY]) return 0 ;;
-            [nN][oO]|[nN]|"") return 1 ;;
-            *) echo -e "${RED}  Please answer with 'y' or 'n'.${NC}" ;;
+            [yY][eE][sS]|[yY])
+                return 0
+                ;;
+            [nN][oO]|[nN]|"")
+                return 1
+                ;;
+            *)
+                echo -e "${RED}  Please answer with 'y' or 'n'.${NC}"
+                ;;
         esac
     done
 }
@@ -140,6 +158,695 @@ sudo_exec() {
     fi
 }
 
+if [[ "${BASH_SOURCE[0]}" == "${0}" && "${MANTICORE_STANDALONE:-0}" != "1" ]]; then
+    print_step "Testing UI Components"
+    print_info "This is an info message."
+    print_success "This is a success message."
+    print_warn "This is a warning message."
+    print_error "This is an error message."
+fi
+
+# ---- upgrade.sh ----
+
+
+if [[ "${MANTICORE_UPGRADE_MODULE:-0}" != "1" && "${MANTICORE_STANDALONE:-0}" != "1" ]]; then
+    DEFAULT_REPO_URL="https://repo.manticoresearch.com/repository/install"
+    REPO_URL="${MANTICORE_INSTALLER_REPO_URL:-$DEFAULT_REPO_URL}"
+    TEMP_DIR=$(mktemp -d /tmp/manticore-upgrade.XXXXXX)
+
+    cleanup() {
+        rm -rf "$TEMP_DIR"
+    }
+
+    trap cleanup EXIT
+
+    download_bootstrap() {
+        local url=$1
+        local dest=$2
+
+        if command -v curl >/dev/null 2>&1; then
+            curl -fsSL "$url" -o "$dest"
+        elif command -v wget >/dev/null 2>&1; then
+            wget -qO "$dest" "$url"
+        else
+            echo "Neither curl nor wget was found on this system." >&2
+            exit 1
+        fi
+    }
+
+    download_bootstrap "${REPO_URL}/bootstrap.sh" "${TEMP_DIR}/bootstrap.sh"
+    exec bash "${TEMP_DIR}/bootstrap.sh" --upgrade "$@"
+fi
+
+
+REQUESTED_VERSION="${1:-}"
+MANTICORE_START_SERVICE="${MANTICORE_START_SERVICE:-true}"
+BACKUP_DATA="${MANTICORE_BACKUP_DATA:-${2:-no}}"
+CURRENT_BACKUP_PATH=""
+
+upgrade_repo_package() {
+    if [[ "$OS_FAMILY" == "brew" ]]; then
+        print_info "Homebrew installation does not require the Manticore repository package."
+        return 0
+    fi
+
+    print_step "Refreshing Repository Bootstrap Package"
+
+    if [[ "$OS_FAMILY" == "debian" ]]; then
+        local deb_path
+        deb_path=$(mktemp /tmp/manticore-repo.XXXXXX.deb)
+        download_with_available_tool "$DEB_REPO_PACKAGE_URL" "$deb_path"
+        install_debian_repo_package_file "$deb_path"
+        rm -f "$deb_path"
+    else
+        if command -v dnf >/dev/null 2>&1; then
+            sudo_exec dnf install -y "$RPM_REPO_PACKAGE_URL"
+        else
+            sudo_exec yum install -y "$RPM_REPO_PACKAGE_URL"
+        fi
+    fi
+}
+
+ensure_backup() {
+    if [[ -d "$CURRENT_BACKUP_PATH" ]]; then
+        print_info "Backup already exists at ${CURRENT_BACKUP_PATH}."
+        return 0
+    fi
+
+    print_step "Backing Up Existing Installation"
+    sudo_exec mkdir -p "$CURRENT_BACKUP_PATH"
+
+    if [[ -d "$CONF_DIR" ]]; then
+        sudo_exec cp -a "$CONF_DIR" "$CURRENT_BACKUP_PATH/"
+    fi
+
+    if [[ -d "$DATA_DIR" ]]; then
+        if [[ "$BACKUP_DATA" == "yes" ]]; then
+            ensure_service_stopped
+            sudo_exec cp -a "$DATA_DIR" "$CURRENT_BACKUP_PATH/"
+        else
+            print_info "Data directory was not backed up. Rerun with --backup-data if you want a data backup before upgrading."
+        fi
+    fi
+
+    print_success "Backup created at ${CURRENT_BACKUP_PATH}"
+}
+
+ensure_service_stopped() {
+    if service_is_active; then
+        print_step "Stopping Manticore Service"
+        stop_service
+    fi
+}
+
+upgrade_package() {
+    local target_version=${1:-}
+    local package_version=""
+    local package_specs=()
+
+    if [[ -n "$target_version" && "$OS_FAMILY" != "brew" ]]; then
+        package_version=$(resolve_requested_version "$target_version") || return 1
+        ensure_versioned_package_set_available "$package_version" || return 1
+    elif [[ "$OS_FAMILY" == "debian" ]]; then
+        package_version=$(get_latest_available_version || true)
+        if [[ -n "$package_version" ]]; then
+            ensure_versioned_package_set_available "$package_version" || return 1
+        fi
+    fi
+
+    print_step "Upgrading Manticore"
+
+    if [[ "$OS_FAMILY" == "debian" ]]; then
+        if [[ -n "$package_version" ]]; then
+            mapfile -t package_specs < <(versioned_debian_package_specs "$package_version")
+            apt_get_install_with_repo_repair -y --allow-downgrades "${package_specs[@]}"
+            mark_debian_split_packages_auto_for_thin_version "$package_version"
+        else
+            apt_get_install_with_repo_repair -y --only-upgrade "$PACKAGE_NAME"
+        fi
+    elif [[ "$OS_FAMILY" == "rpm" ]]; then
+        if command -v dnf >/dev/null 2>&1; then
+            if [[ -n "$package_version" ]]; then
+                prepare_rpm_packages_for_version "$package_version"
+                mapfile -t package_specs < <(versioned_rpm_package_specs "$package_version")
+                sudo_exec dnf install -y "${package_specs[@]}"
+            else
+                sudo_exec dnf upgrade -y "$PACKAGE_NAME"
+            fi
+        else
+            if [[ -n "$package_version" ]]; then
+                prepare_rpm_packages_for_version "$package_version"
+                mapfile -t package_specs < <(versioned_rpm_package_specs "$package_version")
+                sudo_exec yum install -y "${package_specs[@]}"
+            else
+                sudo_exec yum update -y "$PACKAGE_NAME"
+            fi
+        fi
+    elif [[ "$OS_FAMILY" == "brew" ]]; then
+        if [[ -n "$target_version" ]]; then
+            print_error "--version is not supported for Homebrew upgrades."
+            return 1
+        fi
+        brew upgrade "$BREW_SERVICE_NAME" || brew install "$BREW_PACKAGE_NAME"
+    fi
+}
+
+
+ensure_service_started() {
+    if [[ "$MANTICORE_START_SERVICE" != "true" ]]; then
+        print_info "Skipping service start because --no-start was requested."
+        return 0
+    fi
+
+    if service_is_active; then
+        print_info "Service is already running."
+        return 0
+    fi
+
+    ensure_default_port_available
+    start_service
+}
+
+verify_upgrade() {
+    print_step "Verification"
+
+    if ! command -v searchd >/dev/null 2>&1; then
+        print_error "Binary 'searchd' not found after upgrade."
+        return 1
+    fi
+
+    if service_is_active; then
+        print_success "Upgrade successful. Service is running."
+    else
+        print_warn "Upgrade finished but service is not active."
+    fi
+}
+
+upgrade_flow() {
+    local requested_version=${1:-$REQUESTED_VERSION}
+    local installed_version backup_suffix
+
+    if ! package_installed; then
+        print_error "Manticore is not installed."
+        exit 1
+    fi
+
+    installed_version=$(get_installed_version)
+    backup_suffix=$(echo "${installed_version:-unknown}" | tr '/: ' '___')
+    CURRENT_BACKUP_PATH="${MANTICORE_BACKUP_DIR:-$BACKUP_DIR}/manticore_backup_${backup_suffix}"
+
+    ensure_backup
+    upgrade_repo_package
+    refresh_package_metadata
+    upgrade_package "$requested_version"
+    ensure_service_started
+    verify_upgrade
+}
+
+upgrade_main() {
+    detect_os
+    detect_arch
+
+    if [[ "$OS_FAMILY" == "unknown" ]]; then
+        print_unsupported_os
+        exit 1
+    fi
+
+    upgrade_flow "$REQUESTED_VERSION"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" && "${MANTICORE_STANDALONE:-0}" != "1" ]]; then
+    upgrade_main "$@"
+fi
+
+# ---- install.sh ----
+
+
+
+SILENT=false
+REQUESTED_VERSION="${1:-}"
+MANTICORE_START_SERVICE="${MANTICORE_START_SERVICE:-true}"
+
+download_with_available_tool() {
+    local url=$1
+    local dest=$2
+
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$url" -o "$dest"
+    else
+        wget -qO "$dest" "$url"
+    fi
+}
+
+install_repo_package() {
+    if [[ "$OS_FAMILY" == "brew" ]]; then
+        print_info "Homebrew installation does not require the Manticore repository package."
+        return 0
+    fi
+
+    if repo_package_installed; then
+        print_info "Repository bootstrap package already installed."
+        return 0
+    fi
+
+    print_step "Installing Repository Bootstrap Package"
+
+    if [[ "$OS_FAMILY" == "debian" ]]; then
+        local deb_path
+        deb_path=$(mktemp /tmp/manticore-repo.XXXXXX.deb)
+        download_with_available_tool "$DEB_REPO_PACKAGE_URL" "$deb_path"
+        install_debian_repo_package_file "$deb_path"
+        rm -f "$deb_path"
+    else
+        if command -v dnf >/dev/null 2>&1; then
+            sudo_exec dnf install -y "$RPM_REPO_PACKAGE_URL"
+        else
+            sudo_exec yum install -y "$RPM_REPO_PACKAGE_URL"
+        fi
+    fi
+
+    print_success "Repository bootstrap package installed."
+}
+
+install_manticore_package() {
+    local target_version=${1:-}
+    local package_version=""
+    local package_specs=()
+
+    if desired_version_installed "$target_version"; then
+        if [[ -n "$target_version" ]]; then
+            print_info "Requested version $target_version is already installed."
+        else
+            print_info "Manticore is already installed."
+        fi
+        return 0
+    fi
+
+    if [[ -n "$target_version" && "$OS_FAMILY" != "brew" ]]; then
+        package_version=$(resolve_requested_version "$target_version") || return 1
+        ensure_versioned_package_set_available "$package_version" || return 1
+    fi
+
+    print_step "Installing Manticore"
+
+    if [[ "$OS_FAMILY" == "debian" ]]; then
+        if [[ -n "$package_version" ]]; then
+            mapfile -t package_specs < <(versioned_debian_package_specs "$package_version")
+            apt_get_install_with_repo_repair -y --allow-downgrades "${package_specs[@]}"
+            mark_debian_split_packages_auto_for_thin_version "$package_version"
+        else
+            apt_get_install_with_repo_repair -y "$PACKAGE_NAME"
+        fi
+    elif [[ "$OS_FAMILY" == "rpm" ]]; then
+        if command -v dnf >/dev/null 2>&1; then
+            if [[ -n "$package_version" ]]; then
+                prepare_rpm_packages_for_version "$package_version"
+                mapfile -t package_specs < <(versioned_rpm_package_specs "$package_version")
+                sudo_exec dnf install -y "${package_specs[@]}"
+            else
+                sudo_exec dnf install -y "$PACKAGE_NAME"
+            fi
+        else
+            if [[ -n "$package_version" ]]; then
+                prepare_rpm_packages_for_version "$package_version"
+                mapfile -t package_specs < <(versioned_rpm_package_specs "$package_version")
+                sudo_exec yum install -y "${package_specs[@]}"
+            else
+                sudo_exec yum install -y "$PACKAGE_NAME"
+            fi
+        fi
+    elif [[ "$OS_FAMILY" == "brew" ]]; then
+        if [[ -n "$target_version" ]]; then
+            print_error "--version is not supported for Homebrew installs."
+            return 1
+        fi
+        brew install "$BREW_PACKAGE_NAME"
+    fi
+
+    print_success "Manticore package is installed."
+}
+
+
+ensure_service_started() {
+    if [[ "$MANTICORE_START_SERVICE" != "true" ]]; then
+        print_info "Skipping service start because --no-start was requested."
+        return 0
+    fi
+
+    if service_is_active; then
+        print_info "Service is already running."
+        return 0
+    fi
+
+    ensure_default_port_available
+    print_step "Starting Manticore Service"
+    start_service
+    print_success "Service started."
+}
+
+verify_installation() {
+    print_step "Verification"
+
+    if ! command -v searchd >/dev/null 2>&1; then
+        print_error "Binary 'searchd' not found after installation."
+        return 1
+    fi
+
+    if service_is_active; then
+        print_success "Manticore is running."
+    else
+        print_warn "Manticore package is installed but service is not active."
+    fi
+}
+
+install_flow() {
+    local requested_version=${1:-$REQUESTED_VERSION}
+
+    warn_about_manual_installation
+    install_repo_package
+    refresh_package_metadata
+    install_manticore_package "$requested_version"
+    ensure_service_started
+    verify_installation
+}
+
+install_main() {
+    detect_os
+    detect_arch
+
+    if [[ "$OS_FAMILY" == "unknown" ]]; then
+        print_unsupported_os
+        exit 1
+    fi
+
+    if ! is_supported_arch; then
+        print_error "Unsupported architecture: $(uname -m)"
+        exit 1
+    fi
+
+    install_flow "$REQUESTED_VERSION"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" && "${MANTICORE_STANDALONE:-0}" != "1" ]]; then
+    install_main "$@"
+fi
+
+# ---- uninstall.sh ----
+
+
+
+ACTION_MODE="${1:-uninstall}"
+
+ensure_service_stopped() {
+    if service_is_active; then
+        print_step "Stopping Manticore Service"
+        stop_service
+    else
+        print_info "Manticore service is already stopped."
+    fi
+}
+
+remove_package() {
+    local package_specs=()
+
+    if ! package_installed; then
+        print_info "Manticore package is already absent."
+        return 0
+    fi
+
+    print_step "Removing Manticore Package"
+
+    if [[ "$OS_FAMILY" == "debian" ]]; then
+        read -r -a package_specs <<< "$DEB_FALLBACK_VERSIONED_PACKAGE_NAMES"
+        sudo_exec apt-get remove -y "${package_specs[@]}"
+    elif [[ "$OS_FAMILY" == "rpm" ]]; then
+        read -r -a package_specs <<< "$RPM_FALLBACK_VERSIONED_PACKAGE_NAMES"
+        if command -v dnf >/dev/null 2>&1; then
+            sudo_exec dnf remove -y "${package_specs[@]}"
+        else
+            sudo_exec yum remove -y "${package_specs[@]}"
+        fi
+    elif [[ "$OS_FAMILY" == "brew" ]]; then
+        brew uninstall "$BREW_SERVICE_NAME"
+    fi
+}
+
+remove_repo_package() {
+    if [[ "$OS_FAMILY" == "brew" ]]; then
+        print_info "Homebrew installation has no Manticore repository package to remove."
+        return 0
+    fi
+
+    if ! repo_package_installed; then
+        print_info "Repository bootstrap package is already absent."
+        return 0
+    fi
+
+    print_step "Removing Repository Bootstrap Package"
+
+    if [[ "$OS_FAMILY" == "debian" ]]; then
+        sudo_exec apt-get remove -y "$DEB_REPO_PACKAGE_NAME"
+    elif [[ "$OS_FAMILY" == "rpm" ]]; then
+        if command -v dnf >/dev/null 2>&1; then
+            sudo_exec dnf remove -y "$RPM_REPO_PACKAGE_NAME"
+        else
+            sudo_exec yum remove -y "$RPM_REPO_PACKAGE_NAME"
+        fi
+    fi
+}
+
+confirm_purge_all() {
+    if [[ "$ACTION_MODE" != "purge-all" || "${SILENT:-false}" == "true" ]]; then
+        return 0
+    fi
+
+    if [[ ! -t 0 ]]; then
+        print_error "--purge-all removes $CONF_DIR and $DATA_DIR. Rerun with --silent to confirm this non-interactively."
+        return 1
+    fi
+
+    local response
+    echo "This will remove Manticore configuration and data directories:"
+    echo "  $CONF_DIR"
+    echo "  $DATA_DIR"
+    read -r -p "Type DELETE to continue: " response
+
+    if [[ "$response" != "DELETE" ]]; then
+        print_info "Purge cancelled."
+        exit 0
+    fi
+}
+
+purge_state_dirs() {
+    local path
+
+    print_step "Purging Manticore State"
+    for path in "$DATA_DIR" "$CONF_DIR"; do
+        if [[ -e "$path" ]]; then
+            sudo_exec rm -rf "$path"
+            print_info "Removed $path"
+        else
+            print_info "$path is already absent."
+        fi
+    done
+}
+
+uninstall_flow() {
+    ACTION_MODE=${1:-$ACTION_MODE}
+
+    confirm_purge_all
+    ensure_service_stopped
+    remove_package
+
+    if [[ "$ACTION_MODE" == "purge" || "$ACTION_MODE" == "purge-all" ]]; then
+        remove_repo_package
+    fi
+
+    if [[ "$ACTION_MODE" == "purge-all" ]]; then
+        purge_state_dirs
+    fi
+
+    print_success "Uninstall completed."
+}
+
+uninstall_main() {
+    detect_os
+
+    if [[ "$OS_FAMILY" == "unknown" ]]; then
+        print_unsupported_os
+        exit 1
+    fi
+
+    uninstall_flow "$ACTION_MODE"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" && "${MANTICORE_STANDALONE:-0}" != "1" ]]; then
+    uninstall_main "$@"
+fi
+
+# ---- detect.sh ----
+
+
+detect_os() {
+    OS_ID="unknown"
+    OS_VERSION="unknown"
+    OS_LIKE=""
+    OS_FAMILY="unknown"
+
+    if [[ -f /etc/os-release ]]; then
+        . /etc/os-release
+        OS_ID=${ID:-unknown}
+        OS_VERSION=${VERSION_ID:-unknown}
+        OS_LIKE=${ID_LIKE:-}
+
+        if [[ "$OS_ID" == "debian" || "$OS_ID" == "ubuntu" || "$OS_ID" == "linuxmint" || "$OS_LIKE" == *debian* ]]; then
+            OS_FAMILY="debian"
+        elif [[ "$OS_ID" == "rhel" || "$OS_ID" == "centos" || "$OS_ID" == "fedora" || "$OS_ID" == "rocky" || "$OS_ID" == "almalinux" || "$OS_ID" == "amzn" || "$OS_LIKE" == *rhel* || "$OS_LIKE" == *fedora* ]]; then
+            OS_FAMILY="rpm"
+        fi
+    else
+        local kernel
+        kernel=$(uname -s 2>/dev/null || echo unknown)
+        case "$kernel" in
+            Darwin)
+                OS_ID="macos"
+                if command -v sw_vers >/dev/null 2>&1; then
+                    OS_VERSION=$(sw_vers -productVersion)
+                fi
+                ;;
+            *)
+                OS_ID="$kernel"
+                ;;
+        esac
+    fi
+
+    if command -v brew >/dev/null 2>&1 && ! command -v apt-get >/dev/null 2>&1 && ! command -v yum >/dev/null 2>&1 && ! command -v dnf >/dev/null 2>&1; then
+        OS_FAMILY="brew"
+    fi
+
+    log_info "OS: $OS_ID $OS_VERSION ($OS_FAMILY)"
+}
+
+detect_arch() {
+    local arch_raw
+    arch_raw=$(uname -m)
+
+    case "$arch_raw" in
+        x86_64|amd64)
+            MANTICORE_ARCH="amd64"
+            ;;
+        aarch64|arm64)
+            MANTICORE_ARCH="arm64"
+            ;;
+        *)
+            MANTICORE_ARCH="unsupported"
+            ;;
+    esac
+
+    log_info "Architecture: $MANTICORE_ARCH"
+}
+
+is_supported_arch() {
+    [[ "$MANTICORE_ARCH" != "unsupported" ]]
+}
+
+print_unsupported_os() {
+    local install_url="https://manticoresearch.com/install/"
+    local docker_url="https://github.com/manticoresoftware/docker#production-use"
+    local os_label="$OS_ID"
+
+    case "$OS_ID" in
+        macos)
+            os_label="macOS"
+            ;;
+        unknown|"")
+            os_label="this OS"
+            ;;
+        *)
+            if [[ "$OS_VERSION" != "unknown" ]]; then
+                os_label="$OS_ID $OS_VERSION"
+            fi
+            ;;
+    esac
+
+    print_error "${os_label} is not supported by this installer. See ${install_url} for supported installation methods."
+    if command -v docker >/dev/null 2>&1; then
+        print_info "Docker is available on this host. Manticore can also be run with Docker; see ${docker_url}."
+    fi
+}
+
+is_interactive_session() {
+    [[ -t 0 && -t 1 ]]
+}
+
+
+searchd_owned_by_package() {
+    local searchd_path
+    searchd_path=$(command -v searchd 2>/dev/null || true)
+
+    if [[ -z "$searchd_path" ]]; then
+        return 1
+    fi
+
+    if [[ "$OS_FAMILY" == "debian" ]]; then
+        dpkg -S "$searchd_path" 2>/dev/null | grep -q '^manticore'
+    elif [[ "$OS_FAMILY" == "rpm" ]]; then
+        rpm -qf "$searchd_path" 2>/dev/null | grep -q '^manticore'
+    elif [[ "$OS_FAMILY" == "brew" ]]; then
+        brew list --formula "$BREW_SERVICE_NAME" >/dev/null 2>&1
+    else
+        return 1
+    fi
+}
+
+warn_about_manual_installation() {
+    if package_installed || ! command -v searchd >/dev/null 2>&1 || searchd_owned_by_package; then
+        return 0
+    fi
+
+    print_warn "Found an existing searchd binary outside the Manticore package manager install."
+    print_warn "Continuing may leave multiple Manticore installations on this host."
+}
+
+port_in_use() {
+    local port=$1
+
+    if command -v ss >/dev/null 2>&1; then
+        ss -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "(^|:)${port}$"
+    elif command -v netstat >/dev/null 2>&1; then
+        netstat -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "(^|:)${port}$"
+    else
+        return 1
+    fi
+}
+
+ensure_default_port_available() {
+    local port
+
+    if service_is_active; then
+        return 0
+    fi
+
+    for port in $DEFAULT_PORTS; do
+        if port_in_use "$port"; then
+            print_error "Port ${port} is already in use. Stop the conflicting service or adjust /etc/manticoresearch/manticore.conf before starting Manticore."
+            return 1
+        fi
+    done
+}
+
+repo_package_installed() {
+    if [[ "$OS_FAMILY" == "debian" ]]; then
+        dpkg-query -W -f='${Status}\n' "$DEB_REPO_PACKAGE_NAME" 2>/dev/null | grep -q "install ok installed"
+    elif [[ "$OS_FAMILY" == "rpm" ]]; then
+        rpm -q "$RPM_REPO_PACKAGE_NAME" >/dev/null 2>&1
+    elif [[ "$OS_FAMILY" == "brew" ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 download_with_available_tool() {
     local url=$1
     local dest=$2
@@ -150,7 +857,7 @@ download_with_available_tool() {
         wget -qO "$dest" "$url"
     else
         print_error "Neither curl nor wget was found on this system."
-        return 127
+        return 1
     fi
 }
 
@@ -264,92 +971,33 @@ apt_get_install_with_repo_repair() {
     return 1
 }
 
-detect_os() {
-    OS_ID="unknown"
-    OS_VERSION="unknown"
-    OS_LIKE=""
-    OS_FAMILY="unknown"
-
-    if [[ -f /etc/os-release ]]; then
-        . /etc/os-release
-        OS_ID=${ID:-unknown}
-        OS_VERSION=${VERSION_ID:-unknown}
-        OS_LIKE=${ID_LIKE:-}
-
-        if [[ "$OS_ID" == "debian" || "$OS_ID" == "ubuntu" || "$OS_ID" == "linuxmint" || "$OS_LIKE" == *debian* ]]; then
-            OS_FAMILY="debian"
-        elif [[ "$OS_ID" == "rhel" || "$OS_ID" == "centos" || "$OS_ID" == "fedora" || "$OS_ID" == "rocky" || "$OS_ID" == "almalinux" || "$OS_ID" == "amzn" || "$OS_LIKE" == *rhel* || "$OS_LIKE" == *fedora* ]]; then
-            OS_FAMILY="rpm"
-        fi
-    else
-        local kernel
-        kernel=$(uname -s 2>/dev/null || echo unknown)
-        case "$kernel" in
-            Darwin)
-                OS_ID="macos"
-                if command -v sw_vers >/dev/null 2>&1; then
-                    OS_VERSION=$(sw_vers -productVersion)
-                fi
-                ;;
-            *) OS_ID="$kernel" ;;
-        esac
-    fi
-
-    if command -v brew >/dev/null 2>&1 && ! command -v apt-get >/dev/null 2>&1 && ! command -v yum >/dev/null 2>&1 && ! command -v dnf >/dev/null 2>&1; then
-        OS_FAMILY="brew"
-    fi
-
-    log_info "OS: $OS_ID $OS_VERSION ($OS_FAMILY)"
-}
-
-detect_arch() {
-    local arch_raw
-    arch_raw=$(uname -m)
-
-    case "$arch_raw" in
-        x86_64|amd64) MANTICORE_ARCH="amd64" ;;
-        aarch64|arm64) MANTICORE_ARCH="arm64" ;;
-        *) MANTICORE_ARCH="unsupported" ;;
-    esac
-
-    log_info "Architecture: $MANTICORE_ARCH"
-}
-
-is_supported_arch() {
-    [[ "$MANTICORE_ARCH" != "unsupported" ]]
-}
-
-print_unsupported_os() {
-    local install_url="https://manticoresearch.com/install/"
-    local docker_url="https://github.com/manticoresoftware/docker#production-use"
-    local os_label="$OS_ID"
-
-    case "$OS_ID" in
-        macos) os_label="macOS" ;;
-        unknown|"") os_label="this OS" ;;
-        *)
-            if [[ "$OS_VERSION" != "unknown" ]]; then
-                os_label="$OS_ID $OS_VERSION"
-            fi
-            ;;
-    esac
-
-    print_error "${os_label} is not supported by this installer. See ${install_url} for supported installation methods."
-    if command -v docker >/dev/null 2>&1; then
-        print_info "Docker is available on this host. Manticore can also be run with Docker; see ${docker_url}."
-    fi
-}
-
-repo_package_installed() {
-    if [[ "$OS_FAMILY" == "debian" ]]; then
-        dpkg-query -W -f='${Status}\n' "$DEB_REPO_PACKAGE_NAME" 2>/dev/null | grep -q "install ok installed"
-    elif [[ "$OS_FAMILY" == "rpm" ]]; then
-        rpm -q "$RPM_REPO_PACKAGE_NAME" >/dev/null 2>&1
-    elif [[ "$OS_FAMILY" == "brew" ]]; then
+ensure_repo_package_installed() {
+    if [[ "$OS_FAMILY" == "brew" ]]; then
         return 0
-    else
-        return 1
     fi
+
+    if repo_package_installed; then
+        print_info "Repository bootstrap package already installed."
+        return 0
+    fi
+
+    print_step "Installing Repository Bootstrap Package"
+
+    if [[ "$OS_FAMILY" == "debian" ]]; then
+        local deb_path
+        deb_path=$(mktemp /tmp/manticore-repo.XXXXXX.deb)
+        download_with_available_tool "$DEB_REPO_PACKAGE_URL" "$deb_path"
+        install_debian_repo_package_file "$deb_path"
+        rm -f "$deb_path"
+    elif [[ "$OS_FAMILY" == "rpm" ]]; then
+        if command -v dnf >/dev/null 2>&1; then
+            sudo_exec dnf install -y "$RPM_REPO_PACKAGE_URL"
+        else
+            sudo_exec yum install -y "$RPM_REPO_PACKAGE_URL"
+        fi
+    fi
+
+    print_success "Repository bootstrap package installed."
 }
 
 package_installed() {
@@ -940,50 +1588,6 @@ version_gt() {
 
     [[ "$(printf '%s\n%s\n' "$right" "$left" | sort -V | tail -n 1)" == "$left" && "$left" != "$right" ]]
 }
-searchd_owned_by_package() {
-    local searchd_path
-    searchd_path=$(command -v searchd 2>/dev/null || true)
-
-    if [[ -z "$searchd_path" ]]; then
-        return 1
-    fi
-
-    if [[ "$OS_FAMILY" == "debian" ]]; then
-        dpkg -S "$searchd_path" 2>/dev/null | grep -q '^manticore'
-    elif [[ "$OS_FAMILY" == "rpm" ]]; then
-        rpm -qf "$searchd_path" 2>/dev/null | grep -q '^manticore'
-    elif [[ "$OS_FAMILY" == "brew" ]]; then
-        brew list --formula "$BREW_SERVICE_NAME" >/dev/null 2>&1
-    else
-        return 1
-    fi
-}
-
-warn_about_manual_installation() {
-    if package_installed || ! command -v searchd >/dev/null 2>&1 || searchd_owned_by_package; then
-        return 0
-    fi
-
-    print_warn "Found an existing searchd binary outside the Manticore package manager install."
-    print_warn "Continuing may leave multiple Manticore installations on this host."
-}
-
-port_in_use() {
-    local port=$1
-
-    if command -v ss >/dev/null 2>&1; then
-        ss -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "(^|:)${port}$"
-    elif command -v netstat >/dev/null 2>&1; then
-        netstat -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "(^|:)${port}$"
-    else
-        return 1
-    fi
-}
-
-systemctl_usable() {
-    command -v systemctl >/dev/null 2>&1 && systemctl show >/dev/null 2>&1
-}
-
 service_is_active() {
     if [[ "$OS_FAMILY" == "brew" ]]; then
         brew services list 2>/dev/null | awk -v svc="$BREW_SERVICE_NAME" '$1 == svc && $2 == "started" {found=1} END {exit found ? 0 : 1}'
@@ -994,19 +1598,8 @@ service_is_active() {
     fi
 }
 
-ensure_default_port_available() {
-    local port
-
-    if service_is_active; then
-        return 0
-    fi
-
-    for port in $DEFAULT_PORTS; do
-        if port_in_use "$port"; then
-            print_error "Port ${port} is already in use. Stop the conflicting service or adjust /etc/manticoresearch/manticore.conf before starting Manticore."
-            return 1
-        fi
-    done
+systemctl_usable() {
+    command -v systemctl >/dev/null 2>&1 && systemctl show >/dev/null 2>&1
 }
 
 start_service() {
@@ -1061,385 +1654,23 @@ refresh_package_metadata() {
     fi
 }
 
-install_repo_package() {
-    if [[ "$OS_FAMILY" == "brew" ]]; then
-        print_info "Homebrew installation does not require the Manticore repository package."
-        return 0
-    fi
+if [[ "${BASH_SOURCE[0]}" == "${0}" && "${MANTICORE_STANDALONE:-0}" != "1" ]]; then
+    detect_os
+    detect_arch
+fi
 
-    if repo_package_installed; then
-        print_info "Repository bootstrap package already installed."
-        return 0
-    fi
-
-    print_step "Installing Repository Bootstrap Package"
-
-    if [[ "$OS_FAMILY" == "debian" ]]; then
-        local deb_path
-        deb_path=$(mktemp /tmp/manticore-repo.XXXXXX.deb)
-        download_with_available_tool "$DEB_REPO_PACKAGE_URL" "$deb_path"
-        install_debian_repo_package_file "$deb_path"
-        rm -f "$deb_path"
-    else
-        if command -v dnf >/dev/null 2>&1; then
-            sudo_exec dnf install -y "$RPM_REPO_PACKAGE_URL"
-        else
-            sudo_exec yum install -y "$RPM_REPO_PACKAGE_URL"
-        fi
-    fi
-
-    print_success "Repository bootstrap package installed."
-}
-
-install_manticore_package() {
-    local target_version=${1:-}
-    local package_version=""
-    local package_specs=()
-
-    if desired_version_installed "$target_version"; then
-        if [[ -n "$target_version" ]]; then
-            print_info "Requested version $target_version is already installed."
-        else
-            print_info "Manticore is already installed."
-        fi
-        return 0
-    fi
-
-    if [[ -n "$target_version" && "$OS_FAMILY" != "brew" ]]; then
-        package_version=$(resolve_requested_version "$target_version") || return 1
-        ensure_versioned_package_set_available "$package_version" || return 1
-    fi
-
-    print_step "Installing Manticore"
-
-    if [[ "$OS_FAMILY" == "debian" ]]; then
-        if [[ -n "$package_version" ]]; then
-            mapfile -t package_specs < <(versioned_debian_package_specs "$package_version")
-            apt_get_install_with_repo_repair -y --allow-downgrades "${package_specs[@]}"
-            mark_debian_split_packages_auto_for_thin_version "$package_version"
-        else
-            apt_get_install_with_repo_repair -y "$PACKAGE_NAME"
-        fi
-    elif [[ "$OS_FAMILY" == "rpm" ]]; then
-        if command -v dnf >/dev/null 2>&1; then
-            if [[ -n "$package_version" ]]; then
-                prepare_rpm_packages_for_version "$package_version"
-                mapfile -t package_specs < <(versioned_rpm_package_specs "$package_version")
-                sudo_exec dnf install -y "${package_specs[@]}"
-            else
-                sudo_exec dnf install -y "$PACKAGE_NAME"
-            fi
-        else
-            if [[ -n "$package_version" ]]; then
-                prepare_rpm_packages_for_version "$package_version"
-                mapfile -t package_specs < <(versioned_rpm_package_specs "$package_version")
-                sudo_exec yum install -y "${package_specs[@]}"
-            else
-                sudo_exec yum install -y "$PACKAGE_NAME"
-            fi
-        fi
-    elif [[ "$OS_FAMILY" == "brew" ]]; then
-        if [[ -n "$target_version" ]]; then
-            print_error "--version is not supported for Homebrew installs."
-            return 1
-        fi
-        brew install "$BREW_PACKAGE_NAME"
-    fi
-
-    print_success "Manticore package is installed."
-}
+# ---- main.sh ----
 
 
-ensure_service_started() {
-    if [[ "$MANTICORE_START_SERVICE" != "true" ]]; then
-        print_info "Skipping service start because --no-start was requested."
-        return 0
-    fi
 
-    if service_is_active; then
-        print_info "Service is already running."
-        return 0
-    fi
-
-    ensure_default_port_available
-    print_step "Starting Manticore Service"
-    start_service
-    print_success "Service started."
-}
-
-verify_installation() {
-    print_step "Verification"
-
-    if ! command -v searchd >/dev/null 2>&1; then
-        print_error "Binary 'searchd' not found after installation."
-        return 1
-    fi
-
-    if service_is_active; then
-        print_success "Manticore is running."
-    else
-        print_warn "Manticore package is installed but service is not active."
-    fi
-}
-
-install_flow() {
-    warn_about_manual_installation
-    install_repo_package
-    refresh_package_metadata
-    install_manticore_package "$SPECIFIC_VERSION"
-    ensure_service_started
-    verify_installation
-}
-
-upgrade_repo_package() {
-    if [[ "$OS_FAMILY" == "brew" ]]; then
-        print_info "Homebrew installation does not require the Manticore repository package."
-        return 0
-    fi
-
-    print_step "Refreshing Repository Bootstrap Package"
-
-    if [[ "$OS_FAMILY" == "debian" ]]; then
-        local deb_path
-        deb_path=$(mktemp /tmp/manticore-repo.XXXXXX.deb)
-        download_with_available_tool "$DEB_REPO_PACKAGE_URL" "$deb_path"
-        install_debian_repo_package_file "$deb_path"
-        rm -f "$deb_path"
-    else
-        if command -v dnf >/dev/null 2>&1; then
-            sudo_exec dnf install -y "$RPM_REPO_PACKAGE_URL"
-        else
-            sudo_exec yum install -y "$RPM_REPO_PACKAGE_URL"
-        fi
-    fi
-}
-
-ensure_backup() {
-    local installed_version backup_suffix current_backup_path
-    installed_version=$(get_installed_version)
-    backup_suffix=$(echo "${installed_version:-unknown}" | tr '/: ' '___')
-    current_backup_path="${MANTICORE_BACKUP_DIR:-$BACKUP_DIR}/manticore_backup_${backup_suffix}"
-
-    if [[ -d "$current_backup_path" ]]; then
-        print_info "Backup already exists at ${current_backup_path}."
-        return 0
-    fi
-
-    print_step "Backing Up Existing Installation"
-    sudo_exec mkdir -p "$current_backup_path"
-
-    if [[ -d "$CONF_DIR" ]]; then
-        sudo_exec cp -a "$CONF_DIR" "$current_backup_path/"
-    fi
-
-    if [[ -d "$DATA_DIR" ]]; then
-        if [[ "$MANTICORE_BACKUP_DATA" == "yes" ]]; then
-            ensure_service_stopped
-            sudo_exec cp -a "$DATA_DIR" "$current_backup_path/"
-        else
-            print_info "Data directory was not backed up. Rerun with --backup-data if you want a data backup before upgrading."
-        fi
-    fi
-
-    print_success "Backup created at ${current_backup_path}"
-}
-
-ensure_service_stopped() {
-    if service_is_active; then
-        print_step "Stopping Manticore Service"
-        stop_service
-    fi
-}
-
-upgrade_package() {
-    local target_version=${1:-}
-    local package_version=""
-    local package_specs=()
-
-    if [[ -n "$target_version" && "$OS_FAMILY" != "brew" ]]; then
-        package_version=$(resolve_requested_version "$target_version") || return 1
-        ensure_versioned_package_set_available "$package_version" || return 1
-    elif [[ "$OS_FAMILY" == "debian" ]]; then
-        package_version=$(get_latest_available_version || true)
-        if [[ -n "$package_version" ]]; then
-            ensure_versioned_package_set_available "$package_version" || return 1
-        fi
-    fi
-
-    print_step "Upgrading Manticore"
-
-    if [[ "$OS_FAMILY" == "debian" ]]; then
-        if [[ -n "$package_version" ]]; then
-            mapfile -t package_specs < <(versioned_debian_package_specs "$package_version")
-            apt_get_install_with_repo_repair -y --allow-downgrades "${package_specs[@]}"
-            mark_debian_split_packages_auto_for_thin_version "$package_version"
-        else
-            apt_get_install_with_repo_repair -y --only-upgrade "$PACKAGE_NAME"
-        fi
-    elif [[ "$OS_FAMILY" == "rpm" ]]; then
-        if command -v dnf >/dev/null 2>&1; then
-            if [[ -n "$package_version" ]]; then
-                prepare_rpm_packages_for_version "$package_version"
-                mapfile -t package_specs < <(versioned_rpm_package_specs "$package_version")
-                sudo_exec dnf install -y "${package_specs[@]}"
-            else
-                sudo_exec dnf upgrade -y "$PACKAGE_NAME"
-            fi
-        else
-            if [[ -n "$package_version" ]]; then
-                prepare_rpm_packages_for_version "$package_version"
-                mapfile -t package_specs < <(versioned_rpm_package_specs "$package_version")
-                sudo_exec yum install -y "${package_specs[@]}"
-            else
-                sudo_exec yum update -y "$PACKAGE_NAME"
-            fi
-        fi
-    elif [[ "$OS_FAMILY" == "brew" ]]; then
-        if [[ -n "$target_version" ]]; then
-            print_error "--version is not supported for Homebrew upgrades."
-            return 1
-        fi
-        brew upgrade "$BREW_SERVICE_NAME" || brew install "$BREW_PACKAGE_NAME"
-    fi
-}
-
-
-verify_upgrade() {
-    print_step "Verification"
-
-    if ! command -v searchd >/dev/null 2>&1; then
-        print_error "Binary 'searchd' not found after upgrade."
-        return 1
-    fi
-
-    if service_is_active; then
-        print_success "Upgrade successful. Service is running."
-    else
-        print_warn "Upgrade finished but service is not active."
-    fi
-}
-
-upgrade_flow() {
-    if ! package_installed; then
-        print_error "Manticore is not installed."
-        exit 1
-    fi
-
-    ensure_backup
-    upgrade_repo_package
-    refresh_package_metadata
-    upgrade_package "$SPECIFIC_VERSION"
-    ensure_service_started
-    verify_upgrade
-}
-
-remove_package() {
-    local package_specs=()
-
-    if ! package_installed; then
-        print_info "Manticore package is already absent."
-        return 0
-    fi
-
-    print_step "Removing Manticore Package"
-
-    if [[ "$OS_FAMILY" == "debian" ]]; then
-        read -r -a package_specs <<< "$DEB_FALLBACK_VERSIONED_PACKAGE_NAMES"
-        sudo_exec apt-get remove -y "${package_specs[@]}"
-    elif [[ "$OS_FAMILY" == "rpm" ]]; then
-        read -r -a package_specs <<< "$RPM_FALLBACK_VERSIONED_PACKAGE_NAMES"
-        if command -v dnf >/dev/null 2>&1; then
-            sudo_exec dnf remove -y "${package_specs[@]}"
-        else
-            sudo_exec yum remove -y "${package_specs[@]}"
-        fi
-    elif [[ "$OS_FAMILY" == "brew" ]]; then
-        brew uninstall "$BREW_SERVICE_NAME"
-    fi
-}
-
-remove_repo_package() {
-    if [[ "$OS_FAMILY" == "brew" ]]; then
-        print_info "Homebrew installation has no Manticore repository package to remove."
-        return 0
-    fi
-
-    if ! repo_package_installed; then
-        print_info "Repository bootstrap package is already absent."
-        return 0
-    fi
-
-    print_step "Removing Repository Bootstrap Package"
-
-    if [[ "$OS_FAMILY" == "debian" ]]; then
-        sudo_exec apt-get remove -y "$DEB_REPO_PACKAGE_NAME"
-    elif [[ "$OS_FAMILY" == "rpm" ]]; then
-        if command -v dnf >/dev/null 2>&1; then
-            sudo_exec dnf remove -y "$RPM_REPO_PACKAGE_NAME"
-        else
-            sudo_exec yum remove -y "$RPM_REPO_PACKAGE_NAME"
-        fi
-    fi
-}
-
-confirm_purge_all() {
-    if [[ "$ACTION" != "purge-all" || "${SILENT:-false}" == "true" ]]; then
-        return 0
-    fi
-
-    if [[ ! -t 0 ]]; then
-        print_error "--purge-all removes $CONF_DIR and $DATA_DIR. Rerun with --silent to confirm this non-interactively."
-        return 1
-    fi
-
-    local response
-    echo "This will remove Manticore configuration and data directories:"
-    echo "  $CONF_DIR"
-    echo "  $DATA_DIR"
-    read -r -p "Type DELETE to continue: " response
-
-    if [[ "$response" != "DELETE" ]]; then
-        print_info "Purge cancelled."
-        exit 0
-    fi
-}
-
-purge_state_dirs() {
-    local path
-
-    print_step "Purging Manticore State"
-    for path in "$DATA_DIR" "$CONF_DIR"; do
-        if [[ -e "$path" ]]; then
-            sudo_exec rm -rf "$path"
-            print_info "Removed $path"
-        else
-            print_info "$path is already absent."
-        fi
-    done
-}
-
-uninstall_flow() {
-    confirm_purge_all
-
-    if service_is_active; then
-        print_step "Stopping Manticore Service"
-        stop_service
-    else
-        print_info "Manticore service is already stopped."
-    fi
-
-    remove_package
-
-    if [[ "$ACTION" == "purge" || "$ACTION" == "purge-all" ]]; then
-        remove_repo_package
-    fi
-
-    if [[ "$ACTION" == "purge-all" ]]; then
-        purge_state_dirs
-    fi
-
-    print_success "Uninstall completed."
-}
+SILENT=false
+SPECIFIC_VERSION=""
+ACTION=""
+UPGRADE_REQUESTED=false
+MANTICORE_START_SERVICE=true
+MANTICORE_BACKUP_DATA=no
+MANTICORE_BACKUP_DIR=""
+LIST_VERSIONS_OUTPUT_FILE=""
 
 parse_args() {
     while [[ $# -gt 0 ]]; do
@@ -1560,7 +1791,7 @@ write_versions_output_file() {
 list_versions_action() {
     local versions
 
-    install_repo_package
+    ensure_repo_package_installed
     refresh_package_metadata
     versions=$(list_available_versions | refine_version_list || true)
     if [[ -z "$versions" ]]; then
@@ -1633,11 +1864,55 @@ determine_action() {
     fi
 }
 
+execute_action() {
+    if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
+        case "$ACTION" in
+            install) install_flow "$SPECIFIC_VERSION" ;;
+            upgrade) upgrade_flow "$SPECIFIC_VERSION" ;;
+            uninstall|purge|purge-all) uninstall_flow "$ACTION" ;;
+            list-versions) list_versions_action ;;
+            *)
+                print_error "No action selected."
+                exit 1
+                ;;
+        esac
+        return 0
+    fi
+
+    case "$ACTION" in
+        install)
+            bash "$SCRIPT_DIR/install.sh" "$SPECIFIC_VERSION"
+            ;;
+        upgrade)
+            MANTICORE_UPGRADE_MODULE=1 bash "$SCRIPT_DIR/upgrade.sh" "$SPECIFIC_VERSION"
+            ;;
+        uninstall)
+            bash "$SCRIPT_DIR/uninstall.sh" uninstall
+            ;;
+        purge)
+            bash "$SCRIPT_DIR/uninstall.sh" purge
+            ;;
+        purge-all)
+            bash "$SCRIPT_DIR/uninstall.sh" purge-all
+            ;;
+        list-versions)
+            list_versions_action
+            ;;
+        *)
+            print_error "No action selected."
+            exit 1
+            ;;
+    esac
+}
+
 main() {
-    print_log "Initializing self-contained Manticore Search Installer..."
-    print_log "Logs are being written to $INSTALL_LOG"
+    if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
+        print_log "Initializing self-contained Manticore Search Installer..."
+        print_log "Logs are being written to $INSTALL_LOG"
+    fi
 
     parse_args "$@"
+    export SILENT MANTICORE_START_SERVICE MANTICORE_BACKUP_DATA MANTICORE_BACKUP_DIR
     detect_os
     detect_arch
 
@@ -1652,19 +1927,11 @@ main() {
     fi
 
     determine_action
+    execute_action
 
-    case "$ACTION" in
-        install) install_flow ;;
-        upgrade) upgrade_flow ;;
-        uninstall|purge|purge-all) uninstall_flow ;;
-        list-versions) list_versions_action ;;
-        *)
-            print_error "No action selected."
-            exit 1
-            ;;
-    esac
-
-    print_log "Installer log saved to $INSTALL_LOG"
+    if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
+        print_log "Installer log saved to $INSTALL_LOG"
+    fi
 }
 
 main "$@"

@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-if [[ "${MANTICORE_UPGRADE_MODULE:-0}" != "1" ]]; then
+if [[ "${MANTICORE_UPGRADE_MODULE:-0}" != "1" && "${MANTICORE_STANDALONE:-0}" != "1" ]]; then
     DEFAULT_REPO_URL="https://repo.manticoresearch.com/repository/install"
     REPO_URL="${MANTICORE_INSTALLER_REPO_URL:-$DEFAULT_REPO_URL}"
     TEMP_DIR=$(mktemp -d /tmp/manticore-upgrade.XXXXXX)
@@ -180,16 +180,9 @@ verify_upgrade() {
     fi
 }
 
-main() {
+upgrade_flow() {
+    local requested_version=${1:-$REQUESTED_VERSION}
     local installed_version backup_suffix
-
-    detect_os
-    detect_arch
-
-    if [[ "$OS_FAMILY" == "unknown" ]]; then
-        print_unsupported_os
-        exit 1
-    fi
 
     if ! package_installed; then
         print_error "Manticore is not installed."
@@ -203,9 +196,23 @@ main() {
     ensure_backup
     upgrade_repo_package
     refresh_package_metadata
-    upgrade_package "$REQUESTED_VERSION"
+    upgrade_package "$requested_version"
     ensure_service_started
     verify_upgrade
 }
 
-main "$@"
+upgrade_main() {
+    detect_os
+    detect_arch
+
+    if [[ "$OS_FAMILY" == "unknown" ]]; then
+        print_unsupported_os
+        exit 1
+    fi
+
+    upgrade_flow "$REQUESTED_VERSION"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" && "${MANTICORE_STANDALONE:-0}" != "1" ]]; then
+    upgrade_main "$@"
+fi

@@ -144,7 +144,18 @@ verify_installation() {
     fi
 }
 
-main() {
+install_flow() {
+    local requested_version=${1:-$REQUESTED_VERSION}
+
+    warn_about_manual_installation
+    install_repo_package
+    refresh_package_metadata
+    install_manticore_package "$requested_version"
+    ensure_service_started
+    verify_installation
+}
+
+install_main() {
     detect_os
     detect_arch
 
@@ -158,12 +169,9 @@ main() {
         exit 1
     fi
 
-    warn_about_manual_installation
-    install_repo_package
-    refresh_package_metadata
-    install_manticore_package "$REQUESTED_VERSION"
-    ensure_service_started
-    verify_installation
+    install_flow "$REQUESTED_VERSION"
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" && "${MANTICORE_STANDALONE:-0}" != "1" ]]; then
+    install_main "$@"
+fi

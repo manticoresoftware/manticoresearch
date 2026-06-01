@@ -104,7 +104,7 @@ sudo_exec() {
     fi
 }
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+if [[ "${BASH_SOURCE[0]}" == "${0}" && "${MANTICORE_STANDALONE:-0}" != "1" ]]; then
     print_step "Testing UI Components"
     print_info "This is an info message."
     print_success "This is a success message."

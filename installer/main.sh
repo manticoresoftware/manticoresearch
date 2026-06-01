@@ -210,6 +210,20 @@ determine_action() {
 }
 
 execute_action() {
+    if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
+        case "$ACTION" in
+            install) install_flow "$SPECIFIC_VERSION" ;;
+            upgrade) upgrade_flow "$SPECIFIC_VERSION" ;;
+            uninstall|purge|purge-all) uninstall_flow "$ACTION" ;;
+            list-versions) list_versions_action ;;
+            *)
+                print_error "No action selected."
+                exit 1
+                ;;
+        esac
+        return 0
+    fi
+
     case "$ACTION" in
         install)
             bash "$SCRIPT_DIR/install.sh" "$SPECIFIC_VERSION"
@@ -237,6 +251,11 @@ execute_action() {
 }
 
 main() {
+    if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
+        print_log "Initializing self-contained Manticore Search Installer..."
+        print_log "Logs are being written to $INSTALL_LOG"
+    fi
+
     parse_args "$@"
     export SILENT MANTICORE_START_SERVICE MANTICORE_BACKUP_DATA MANTICORE_BACKUP_DIR
     detect_os
@@ -254,6 +273,10 @@ main() {
 
     determine_action
     execute_action
+
+    if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
+        print_log "Installer log saved to $INSTALL_LOG"
+    fi
 }
 
 main "$@"

@@ -16,10 +16,12 @@ append_module() {
     local module_path=$1
 
     awk '
+        skip_self_run && /^[[:space:]]*fi[[:space:]]*$/ { skip_self_run=0; next }
+        skip_self_run { next }
         NR == 1 && /^#!/ { next }
         /^set -euo pipefail$/ { next }
-        /^SCRIPT_DIR=/ { next }
-        /^source "\$SCRIPT_DIR\// { next }
+        /SCRIPT_DIR/ { next }
+        /BASH_SOURCE/ { skip_self_run=1; next }
         { print }
     ' "$module_path"
 }
@@ -31,8 +33,6 @@ append_module() {
 set -euo pipefail
 
 MANTICORE_STANDALONE=1
-SCRIPT_DIR=$(dirname -- "${BASH_SOURCE[0]}")
-SCRIPT_DIR=$(cd "$SCRIPT_DIR" && pwd)
 HEADER
 
     echo ""

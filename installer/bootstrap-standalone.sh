@@ -3,8 +3,6 @@
 set -euo pipefail
 
 MANTICORE_STANDALONE=1
-SCRIPT_DIR=$(dirname -- "${BASH_SOURCE[0]}")
-SCRIPT_DIR=$(cd "$SCRIPT_DIR" && pwd)
 
 # ---- constants.sh ----
 PACKAGE_NAME="manticore"
@@ -158,13 +156,6 @@ sudo_exec() {
     fi
 }
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" && "${MANTICORE_STANDALONE:-0}" != "1" ]]; then
-    print_step "Testing UI Components"
-    print_info "This is an info message."
-    print_success "This is a success message."
-    print_warn "This is a warning message."
-    print_error "This is an error message."
-fi
 
 # ---- upgrade.sh ----
 
@@ -375,9 +366,6 @@ upgrade_main() {
     upgrade_flow "$REQUESTED_VERSION"
 }
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" && "${MANTICORE_STANDALONE:-0}" != "1" ]]; then
-    upgrade_main "$@"
-fi
 
 # ---- install.sh ----
 
@@ -547,9 +535,6 @@ install_main() {
     install_flow "$REQUESTED_VERSION"
 }
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" && "${MANTICORE_STANDALONE:-0}" != "1" ]]; then
-    install_main "$@"
-fi
 
 # ---- uninstall.sh ----
 
@@ -680,9 +665,6 @@ uninstall_main() {
     uninstall_flow "$ACTION_MODE"
 }
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" && "${MANTICORE_STANDALONE:-0}" != "1" ]]; then
-    uninstall_main "$@"
-fi
 
 # ---- detect.sh ----
 
@@ -1654,10 +1636,6 @@ refresh_package_metadata() {
     fi
 }
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" && "${MANTICORE_STANDALONE:-0}" != "1" ]]; then
-    detect_os
-    detect_arch
-fi
 
 # ---- main.sh ----
 
@@ -1881,19 +1859,14 @@ execute_action() {
 
     case "$ACTION" in
         install)
-            bash "$SCRIPT_DIR/install.sh" "$SPECIFIC_VERSION"
             ;;
         upgrade)
-            MANTICORE_UPGRADE_MODULE=1 bash "$SCRIPT_DIR/upgrade.sh" "$SPECIFIC_VERSION"
             ;;
         uninstall)
-            bash "$SCRIPT_DIR/uninstall.sh" uninstall
             ;;
         purge)
-            bash "$SCRIPT_DIR/uninstall.sh" purge
             ;;
         purge-all)
-            bash "$SCRIPT_DIR/uninstall.sh" purge-all
             ;;
         list-versions)
             list_versions_action

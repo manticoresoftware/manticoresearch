@@ -182,7 +182,7 @@ download_with_available_tool() {
 install_debian_repo_package_file() {
     local deb_path=$1
     local force=${2:-no}
-    local downloaded_package downloaded_version installed_version
+    local downloaded_package downloaded_version installed_version installed_status
 
     downloaded_package=$(dpkg-deb -f "$deb_path" Package 2>/dev/null || true)
     downloaded_version=$(dpkg-deb -f "$deb_path" Version 2>/dev/null || true)
@@ -192,13 +192,28 @@ install_debian_repo_package_file() {
         return 1
     fi
 
-    installed_version=$(dpkg-query -W -f='${Version}\n' "$DEB_REPO_PACKAGE_NAME" 2>/dev/null || true)
-    if [[ "$force" != "force" && -n "$installed_version" && "$installed_version" == "$downloaded_version" ]]; then
+    installed_version=$(dpkg-query -W -f='${Version}' "$DEB_REPO_PACKAGE_NAME" 2>/dev/null || true)
+    installed_status=$(dpkg-query -W -f='${Status}' "$DEB_REPO_PACKAGE_NAME" 2>/dev/null || true)
+    if [[ "$force" != "force" && "$installed_status" == "install ok installed" && -n "$installed_version" && "$installed_version" == "$downloaded_version" ]]; then
         print_info "Repository bootstrap package ${DEB_REPO_PACKAGE_NAME} ${installed_version} is already installed."
         return 0
     fi
 
-    sudo_exec dpkg -i "$deb_path"
+    if [[ -n "$installed_version" && "$installed_status" != "install ok installed" ]]; then
+        print_warn "Repository bootstrap package ${DEB_REPO_PACKAGE_NAME} ${installed_version} is present but not fully configured. Reinstalling it with dependencies."
+        sudo_exec apt-get install -f -y
+        installed_version=$(dpkg-query -W -f='${Version}' "$DEB_REPO_PACKAGE_NAME" 2>/dev/null || true)
+        installed_status=$(dpkg-query -W -f='${Status}' "$DEB_REPO_PACKAGE_NAME" 2>/dev/null || true)
+
+        if [[ "$force" != "force" && "$installed_status" == "install ok installed" && -n "$installed_version" && "$installed_version" == "$downloaded_version" ]]; then
+            return 0
+        fi
+    fi
+
+    if [[ -z "$installed_version" ]]; then
+        sudo_exec apt-get update
+    fi
+    sudo_exec apt-get install -y "$deb_path"
 }
 
 delete_file_if_present() {

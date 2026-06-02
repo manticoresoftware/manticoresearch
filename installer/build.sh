@@ -40,14 +40,14 @@ Manticore Search Installer
 
 Usage:
   wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
-  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap.sh" | bash -s -- [options]
+  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
 
 Common options:
   -h, --help, -?              Show this help and exit.
   -s, --silent, -y, --yes     Non-interactive mode; assume defaults.
   --upgrade                   Upgrade an installed Manticore package.
   -v, --version <version>     Install or switch to a specific version.
-  --list-versions [path]      Print available versions, or write them to path.
+  --list-versions             Print available versions.
   --list-versions-file <path> Write available versions to path.
   --no-start                  Do not start the service after install/upgrade.
   --backup-data               Include data directory in upgrade backup.
@@ -64,10 +64,24 @@ Examples:
 USAGE
 }
 
+standalone_drain_stdin_if_piped() {
+    if [[ ! -t 0 ]]; then
+        while IFS= read -r _manticore_unused; do
+            :
+        done
+    fi
+}
+
+standalone_exit_after_pipe_drain() {
+    local status=$1
+    standalone_drain_stdin_if_piped
+    exit "$status"
+}
+
 standalone_usage_error() {
     echo "[ERROR] $1" >&2
     echo "Run with --help to see supported options." >&2
-    exit 2
+    standalone_exit_after_pipe_drain 2
 }
 
 standalone_validate_args() {
@@ -75,12 +89,9 @@ standalone_validate_args() {
         case "$1" in
             -h|--help|-\?)
                 standalone_print_usage
-                exit 0
+                standalone_exit_after_pipe_drain 0
                 ;;
             -s|--silent|-y|--yes|--no-start|--backup-data|--no-backup-data|-u|--uninstall|--purge|--purge-all|--upgrade|--list-versions)
-                if [[ "$1" == "--list-versions" && -n "${2:-}" && "${2:0:1}" != "-" ]]; then
-                    shift
-                fi
                 shift
                 ;;
             -v|--version|--backup-dir|--list-versions-file)
@@ -88,12 +99,6 @@ standalone_validate_args() {
                     standalone_usage_error "$1 requires a value."
                 fi
                 shift 2
-                ;;
-            --list-versions=*)
-                if [[ -z "${1#*=}" ]]; then
-                    standalone_usage_error "--list-versions requires a non-empty path when used with =."
-                fi
-                shift
                 ;;
             --list-versions-file=*)
                 if [[ -z "${1#*=}" ]]; then
@@ -109,7 +114,7 @@ standalone_validate_args() {
 }
 
 standalone_validate_args "$@"
-unset -f standalone_validate_args standalone_usage_error standalone_print_usage
+unset -f standalone_validate_args standalone_usage_error standalone_print_usage standalone_exit_after_pipe_drain standalone_drain_stdin_if_piped
 HEADER
 
     echo ""

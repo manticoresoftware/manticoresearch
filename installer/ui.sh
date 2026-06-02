@@ -60,12 +60,17 @@ print_step() {
     fi
 }
 
+prompt_tty_available() {
+    [[ -e /dev/tty ]] || return 1
+    { true < /dev/tty > /dev/tty; } 2>/dev/null
+}
+
 ask_confirm() {
     if [[ "${SILENT:-false}" == "true" ]]; then
         return 0
     fi
 
-    if [[ ! -t 0 ]]; then
+    if ! prompt_tty_available; then
         return 1
     fi
 
@@ -73,18 +78,31 @@ ask_confirm() {
     local response
 
     while true; do
-        read -p "$(echo -e "${YELLOW}[?] ${NC}${prompt} [y/N] ")" -n 1 response
-        echo ""
+        if use_color; then
+            printf "%b" "${YELLOW}[?] ${NC}${prompt} [y/N] " > /dev/tty
+        else
+            printf "%s" "[?] ${prompt} [y/N] " > /dev/tty
+        fi
+
+        if ! IFS= read -r -n 1 response < /dev/tty; then
+            printf "\n" > /dev/tty
+            return 1
+        fi
+        printf "\n" > /dev/tty
 
         case "$response" in
-            [yY][eE][sS]|[yY])
+            [yY])
                 return 0
                 ;;
-            [nN][oO]|[nN]|"")
+            [nN]|"")
                 return 1
                 ;;
             *)
-                echo -e "${RED}  Please answer with 'y' or 'n'.${NC}"
+                if use_color; then
+                    printf "%b\n" "${RED}  Please answer with 'y' or 'n'.${NC}" > /dev/tty
+                else
+                    printf "%s\n" "  Please answer with 'y' or 'n'." > /dev/tty
+                fi
                 ;;
         esac
     done

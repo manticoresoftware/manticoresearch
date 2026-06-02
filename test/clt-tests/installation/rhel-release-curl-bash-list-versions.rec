@@ -7,7 +7,7 @@ yum install -y -q --skip-broken wget curl which procps > /dev/null 2>&1; echo $?
 0
 ––– block: installer-url –––
 ––– input –––
-set -o pipefail; (wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap.sh" | bash -s -- --list-versions /tmp/manticore-list-versions.txt) > /tmp/manticore-list-versions.out 2>&1; echo $?
+set -o pipefail; (wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap.sh" | bash -s -- --list-versions-file /tmp/manticore-list-versions.txt) > /tmp/manticore-list-versions.out 2>&1; echo $?
 ––– output –––
 0
 ––– input –––

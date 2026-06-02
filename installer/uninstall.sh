@@ -77,16 +77,23 @@ confirm_purge_all() {
         return 0
     fi
 
-    if [[ ! -t 0 ]]; then
+    if ! prompt_tty_available; then
         print_error "--purge-all removes $CONF_DIR and $DATA_DIR. Rerun with --silent to confirm this non-interactively."
         return 1
     fi
 
     local response
-    echo "This will remove Manticore configuration and data directories:"
-    echo "  $CONF_DIR"
-    echo "  $DATA_DIR"
-    read -r -p "Type DELETE to continue: " response
+    {
+        echo "This will remove Manticore configuration and data directories:"
+        echo "  $CONF_DIR"
+        echo "  $DATA_DIR"
+        printf "%s" "Type DELETE to continue: "
+    } > /dev/tty
+
+    if ! IFS= read -r response < /dev/tty; then
+        print_error "Could not read confirmation from terminal."
+        return 1
+    fi
 
     if [[ "$response" != "DELETE" ]]; then
         print_info "Purge cancelled."

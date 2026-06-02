@@ -10,14 +10,14 @@ Manticore Search Installer
 
 Usage:
   wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
-  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap.sh" | bash -s -- [options]
+  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
 
 Common options:
   -h, --help, -?              Show this help and exit.
   -s, --silent, -y, --yes     Non-interactive mode; assume defaults.
   --upgrade                   Upgrade an installed Manticore package.
   -v, --version <version>     Install or switch to a specific version.
-  --list-versions [path]      Print available versions, or write them to path.
+  --list-versions             Print available versions.
   --list-versions-file <path> Write available versions to path.
   --no-start                  Do not start the service after install/upgrade.
   --backup-data               Include data directory in upgrade backup.
@@ -34,10 +34,24 @@ Examples:
 USAGE
 }
 
+standalone_drain_stdin_if_piped() {
+    if [[ ! -t 0 ]]; then
+        while IFS= read -r _manticore_unused; do
+            :
+        done
+    fi
+}
+
+standalone_exit_after_pipe_drain() {
+    local status=$1
+    standalone_drain_stdin_if_piped
+    exit "$status"
+}
+
 standalone_usage_error() {
     echo "[ERROR] $1" >&2
     echo "Run with --help to see supported options." >&2
-    exit 2
+    standalone_exit_after_pipe_drain 2
 }
 
 standalone_validate_args() {
@@ -45,12 +59,9 @@ standalone_validate_args() {
         case "$1" in
             -h|--help|-\?)
                 standalone_print_usage
-                exit 0
+                standalone_exit_after_pipe_drain 0
                 ;;
             -s|--silent|-y|--yes|--no-start|--backup-data|--no-backup-data|-u|--uninstall|--purge|--purge-all|--upgrade|--list-versions)
-                if [[ "$1" == "--list-versions" && -n "${2:-}" && "${2:0:1}" != "-" ]]; then
-                    shift
-                fi
                 shift
                 ;;
             -v|--version|--backup-dir|--list-versions-file)
@@ -58,12 +69,6 @@ standalone_validate_args() {
                     standalone_usage_error "$1 requires a value."
                 fi
                 shift 2
-                ;;
-            --list-versions=*)
-                if [[ -z "${1#*=}" ]]; then
-                    standalone_usage_error "--list-versions requires a non-empty path when used with =."
-                fi
-                shift
                 ;;
             --list-versions-file=*)
                 if [[ -z "${1#*=}" ]]; then
@@ -79,7 +84,7 @@ standalone_validate_args() {
 }
 
 standalone_validate_args "$@"
-unset -f standalone_validate_args standalone_usage_error standalone_print_usage
+unset -f standalone_validate_args standalone_usage_error standalone_print_usage standalone_exit_after_pipe_drain standalone_drain_stdin_if_piped
 
 # ---- constants.sh ----
 PACKAGE_NAME="manticore"
@@ -189,12 +194,17 @@ print_step() {
     fi
 }
 
+prompt_tty_available() {
+    [[ -e /dev/tty ]] || return 1
+    { true < /dev/tty > /dev/tty; } 2>/dev/null
+}
+
 ask_confirm() {
     if [[ "${SILENT:-false}" == "true" ]]; then
         return 0
     fi
 
-    if [[ ! -t 0 ]]; then
+    if ! prompt_tty_available; then
         return 1
     fi
 
@@ -202,18 +212,31 @@ ask_confirm() {
     local response
 
     while true; do
-        read -p "$(echo -e "${YELLOW}[?] ${NC}${prompt} [y/N] ")" -n 1 response
-        echo ""
+        if use_color; then
+            printf "%b" "${YELLOW}[?] ${NC}${prompt} [y/N] " > /dev/tty
+        else
+            printf "%s" "[?] ${prompt} [y/N] " > /dev/tty
+        fi
+
+        if ! IFS= read -r -n 1 response < /dev/tty; then
+            printf "\n" > /dev/tty
+            return 1
+        fi
+        printf "\n" > /dev/tty
 
         case "$response" in
-            [yY][eE][sS]|[yY])
+            [yY])
                 return 0
                 ;;
-            [nN][oO]|[nN]|"")
+            [nN]|"")
                 return 1
                 ;;
             *)
-                echo -e "${RED}  Please answer with 'y' or 'n'.${NC}"
+                if use_color; then
+                    printf "%b\n" "${RED}  Please answer with 'y' or 'n'.${NC}" > /dev/tty
+                else
+                    printf "%s\n" "  Please answer with 'y' or 'n'." > /dev/tty
+                fi
                 ;;
         esac
     done
@@ -675,16 +698,23 @@ confirm_purge_all() {
         return 0
     fi
 
-    if [[ ! -t 0 ]]; then
+    if ! prompt_tty_available; then
         print_error "--purge-all removes $CONF_DIR and $DATA_DIR. Rerun with --silent to confirm this non-interactively."
         return 1
     fi
 
     local response
-    echo "This will remove Manticore configuration and data directories:"
-    echo "  $CONF_DIR"
-    echo "  $DATA_DIR"
-    read -r -p "Type DELETE to continue: " response
+    {
+        echo "This will remove Manticore configuration and data directories:"
+        echo "  $CONF_DIR"
+        echo "  $DATA_DIR"
+        printf "%s" "Type DELETE to continue: "
+    } > /dev/tty
+
+    if ! IFS= read -r response < /dev/tty; then
+        print_error "Could not read confirmation from terminal."
+        return 1
+    fi
 
     if [[ "$response" != "DELETE" ]]; then
         print_info "Purge cancelled."
@@ -916,7 +946,7 @@ download_with_available_tool() {
 install_debian_repo_package_file() {
     local deb_path=$1
     local force=${2:-no}
-    local downloaded_package downloaded_version installed_version
+    local downloaded_package downloaded_version installed_version installed_status
 
     downloaded_package=$(dpkg-deb -f "$deb_path" Package 2>/dev/null || true)
     downloaded_version=$(dpkg-deb -f "$deb_path" Version 2>/dev/null || true)
@@ -926,13 +956,28 @@ install_debian_repo_package_file() {
         return 1
     fi
 
-    installed_version=$(dpkg-query -W -f='${Version}\n' "$DEB_REPO_PACKAGE_NAME" 2>/dev/null || true)
-    if [[ "$force" != "force" && -n "$installed_version" && "$installed_version" == "$downloaded_version" ]]; then
+    installed_version=$(dpkg-query -W -f='${Version}' "$DEB_REPO_PACKAGE_NAME" 2>/dev/null || true)
+    installed_status=$(dpkg-query -W -f='${Status}' "$DEB_REPO_PACKAGE_NAME" 2>/dev/null || true)
+    if [[ "$force" != "force" && "$installed_status" == "install ok installed" && -n "$installed_version" && "$installed_version" == "$downloaded_version" ]]; then
         print_info "Repository bootstrap package ${DEB_REPO_PACKAGE_NAME} ${installed_version} is already installed."
         return 0
     fi
 
-    sudo_exec dpkg -i "$deb_path"
+    if [[ -n "$installed_version" && "$installed_status" != "install ok installed" ]]; then
+        print_warn "Repository bootstrap package ${DEB_REPO_PACKAGE_NAME} ${installed_version} is present but not fully configured. Reinstalling it with dependencies."
+        sudo_exec apt-get install -f -y
+        installed_version=$(dpkg-query -W -f='${Version}' "$DEB_REPO_PACKAGE_NAME" 2>/dev/null || true)
+        installed_status=$(dpkg-query -W -f='${Status}' "$DEB_REPO_PACKAGE_NAME" 2>/dev/null || true)
+
+        if [[ "$force" != "force" && "$installed_status" == "install ok installed" && -n "$installed_version" && "$installed_version" == "$downloaded_version" ]]; then
+            return 0
+        fi
+    fi
+
+    if [[ -z "$installed_version" ]]; then
+        sudo_exec apt-get update
+    fi
+    sudo_exec apt-get install -y "$deb_path"
 }
 
 delete_file_if_present() {
@@ -1796,14 +1841,14 @@ Manticore Search Installer
 
 Usage:
   wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
-  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap.sh" | bash -s -- [options]
+  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
 
 Common options:
   -h, --help, -?              Show this help and exit.
   -s, --silent, -y, --yes     Non-interactive mode; assume defaults.
   --upgrade                   Upgrade an installed Manticore package.
   -v, --version <version>     Install or switch to a specific version.
-  --list-versions [path]      Print available versions, or write them to path.
+  --list-versions             Print available versions.
   --list-versions-file <path> Write available versions to path.
   --no-start                  Do not start the service after install/upgrade.
   --backup-data               Include data directory in upgrade backup.
@@ -1882,19 +1927,6 @@ parse_args() {
                 ;;
             --list-versions)
                 ACTION="list-versions"
-                if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
-                    LIST_VERSIONS_OUTPUT_FILE="$2"
-                    shift 2
-                else
-                    shift
-                fi
-                ;;
-            --list-versions=*)
-                ACTION="list-versions"
-                LIST_VERSIONS_OUTPUT_FILE="${1#*=}"
-                if [[ -z "$LIST_VERSIONS_OUTPUT_FILE" ]]; then
-                    usage_error "--list-versions requires a non-empty path when used with =."
-                fi
                 shift
                 ;;
             --list-versions-file)

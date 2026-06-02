@@ -23,14 +23,14 @@ Manticore Search Installer
 
 Usage:
   wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
-  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap.sh" | bash -s -- [options]
+  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
 
 Common options:
   -h, --help, -?              Show this help and exit.
   -s, --silent, -y, --yes     Non-interactive mode; assume defaults.
   --upgrade                   Upgrade an installed Manticore package.
   -v, --version <version>     Install or switch to a specific version.
-  --list-versions [path]      Print available versions, or write them to path.
+  --list-versions             Print available versions.
   --list-versions-file <path> Write available versions to path.
   --no-start                  Do not start the service after install/upgrade.
   --backup-data               Include data directory in upgrade backup.
@@ -109,19 +109,6 @@ parse_args() {
                 ;;
             --list-versions)
                 ACTION="list-versions"
-                if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
-                    LIST_VERSIONS_OUTPUT_FILE="$2"
-                    shift 2
-                else
-                    shift
-                fi
-                ;;
-            --list-versions=*)
-                ACTION="list-versions"
-                LIST_VERSIONS_OUTPUT_FILE="${1#*=}"
-                if [[ -z "$LIST_VERSIONS_OUTPUT_FILE" ]]; then
-                    usage_error "--list-versions requires a non-empty path when used with =."
-                fi
                 shift
                 ;;
             --list-versions-file)
@@ -273,7 +260,7 @@ execute_action() {
             bash "$SCRIPT_DIR/install.sh" "$SPECIFIC_VERSION"
             ;;
         upgrade)
-            MANTICORE_UPGRADE_MODULE=1 bash "$SCRIPT_DIR/upgrade.sh" "$SPECIFIC_VERSION"
+            bash "$SCRIPT_DIR/upgrade.sh" "$SPECIFIC_VERSION"
             ;;
         uninstall)
             bash "$SCRIPT_DIR/uninstall.sh" uninstall

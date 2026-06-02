@@ -1,3 +1,19 @@
+#!/bin/sh
+set -eu
+
+if ! command -v bash >/dev/null 2>&1; then
+    echo "[ERROR] bash is required to run this installer." >&2
+    exit 1
+fi
+
+payload_path=$(mktemp "${TMPDIR:-/tmp}/manticore-standalone.XXXXXX.sh")
+
+cleanup_payload() {
+    rm -f "$payload_path"
+}
+trap cleanup_payload EXIT HUP INT TERM
+
+cat > "$payload_path" <<'MANTICORE_STANDALONE_BASH_PAYLOAD'
 #!/bin/bash
 
 set -euo pipefail
@@ -9,6 +25,8 @@ standalone_print_usage() {
 Manticore Search Installer
 
 Usage:
+  wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | sh -s -- [options]
+  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | sh -s -- [options]
   wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
   curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
 
@@ -2124,3 +2142,6 @@ main() {
 }
 
 main "$@"
+MANTICORE_STANDALONE_BASH_PAYLOAD
+
+bash "$payload_path" "$@"

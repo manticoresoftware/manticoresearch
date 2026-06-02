@@ -6,9 +6,11 @@ SCRIPT_DIR=$(dirname -- "${BASH_SOURCE[0]}")
 SCRIPT_DIR=$(cd "$SCRIPT_DIR" && pwd)
 OUTPUT_PATH=${1:-"$SCRIPT_DIR/bootstrap-standalone.sh"}
 TMP_PATH=$(mktemp "${OUTPUT_PATH}.XXXXXX")
+BASH_TMP_PATH=$(mktemp "${OUTPUT_PATH}.bash.XXXXXX")
 
 cleanup() {
     rm -f "$TMP_PATH"
+    rm -f "$BASH_TMP_PATH"
 }
 trap cleanup EXIT
 
@@ -39,6 +41,8 @@ standalone_print_usage() {
 Manticore Search Installer
 
 Usage:
+  wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | sh -s -- [options]
+  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | sh -s -- [options]
   wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
   curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
 
@@ -152,11 +156,42 @@ LOGGING
         echo "# ---- ${module} ----"
         append_module "$SCRIPT_DIR/$module"
     done
+} > "$BASH_TMP_PATH"
+
+bash -n "$BASH_TMP_PATH"
+
+{
+    cat <<'SH_WRAPPER'
+#!/bin/sh
+set -eu
+
+if ! command -v bash >/dev/null 2>&1; then
+    echo "[ERROR] bash is required to run this installer." >&2
+    exit 1
+fi
+
+payload_path=$(mktemp "${TMPDIR:-/tmp}/manticore-standalone.XXXXXX.sh")
+
+cleanup_payload() {
+    rm -f "$payload_path"
+}
+trap cleanup_payload EXIT HUP INT TERM
+
+cat > "$payload_path" <<'MANTICORE_STANDALONE_BASH_PAYLOAD'
+SH_WRAPPER
+
+    cat "$BASH_TMP_PATH"
+
+    cat <<'SH_WRAPPER'
+MANTICORE_STANDALONE_BASH_PAYLOAD
+
+bash "$payload_path" "$@"
+SH_WRAPPER
 } > "$TMP_PATH"
 
 chmod +x "$TMP_PATH"
-bash -n "$TMP_PATH"
+sh -n "$TMP_PATH"
 mv "$TMP_PATH" "$OUTPUT_PATH"
 trap - EXIT
-
+rm -f "$TMP_PATH" "$BASH_TMP_PATH"
 echo "Built $OUTPUT_PATH"

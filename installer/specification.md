@@ -5,13 +5,13 @@
 The installer provides a zero-touch way to install, upgrade, start, and remove Manticore Search from a single shell pipeline:
 
 ```sh
-wget -qO- https://repo.manticoresearch.com/repository/install/bootstrap-standalone.sh | bash
+wget -qO- https://repo.manticoresearch.com/repository/install/bootstrap-standalone.sh | sh
 ```
 
 or:
 
 ```sh
-curl -sSL https://repo.manticoresearch.com/repository/install/bootstrap-standalone.sh | bash
+curl -sSL https://repo.manticoresearch.com/repository/install/bootstrap-standalone.sh | sh
 ```
 
 The installer must keep the common path short: detect the host package family, configure the official Manticore repository when needed, install the `manticore` package, start the service, and print a clear result. It should avoid duplicating logic already owned by the `manticore-repo.noarch.deb` and `manticore-repo.noarch.rpm` packages.
@@ -21,7 +21,7 @@ The installer must keep the common path short: detect the host package family, c
 - Default install is fully automatic and starts Manticore by default.
 - Interactive prompts are used only for destructive or ambiguous cases.
 - Non-interactive mode must remain readable and must not depend on colors or TTY behavior.
-- Prompt input must use the controlling terminal (`/dev/tty`) when available, not pipeline stdin, so interactive `curl|bash` and `wget|bash` runs can still ask confirmations. If no controlling terminal is available, prompts must not block; they should take the safe non-interactive path.
+- Prompt input must use the controlling terminal (`/dev/tty`) when available, not pipeline stdin, so interactive `curl|sh`, `wget|sh`, `curl|bash`, and `wget|bash` runs can still ask confirmations. If no controlling terminal is available, prompts must not block; they should take the safe non-interactive path.
 - Critical privileged commands use `sudo` only at the command boundary. The whole script should not require being run through `sudo`.
 - Scripts may live in `/tmp`, including on `noexec` filesystems, so downloaded modules are invoked as `bash module.sh` rather than executed directly.
 - Package managers remain the source of truth for package contents, systemd units, config files, data directories, GPG keys, and repository definitions.
@@ -35,16 +35,16 @@ The installer must keep the common path short: detect the host package family, c
 Primary public command:
 
 ```sh
-wget -qO- https://repo.manticoresearch.com/repository/install/bootstrap-standalone.sh | bash
+wget -qO- https://repo.manticoresearch.com/repository/install/bootstrap-standalone.sh | sh
 ```
 
 or:
 
 ```sh
-curl -sSL https://repo.manticoresearch.com/repository/install/bootstrap-standalone.sh | bash
+curl -sSL https://repo.manticoresearch.com/repository/install/bootstrap-standalone.sh | sh
 ```
 
-`bootstrap-standalone.sh` is the primary public execution path. It contains the install, upgrade, uninstall, detection, logging, and UI logic in one file. Because the script is self-contained, it does not need to know the URL it was downloaded from and does not download sibling modules. It still downloads Manticore repository packages from the canonical package URLs:
+`bootstrap-standalone.sh` is the primary public execution path. Its outer wrapper is POSIX `sh` compatible, so it supports both `curl|sh` and `curl|bash`. The wrapper requires `bash` on the target host, writes the embedded Bash payload to a temporary file, and invokes it with `bash`; if `bash` is missing, it fails clearly before installer work. The embedded payload contains the install, upgrade, uninstall, detection, logging, and UI logic in one file. Because the script is self-contained, it does not need to know the URL it was downloaded from and does not download sibling modules. It still downloads Manticore repository packages from the canonical package URLs:
 
 ```sh
 https://repo.manticoresearch.com/manticore-repo.noarch.deb
@@ -80,7 +80,7 @@ Responsibilities:
 6. Remove the temporary directory on exit.
 
 
-Maintenance rule: the modular installer is the source of truth. `installer/build.sh` builds `bootstrap-standalone.sh` from `constants.sh`, `ui.sh`, `detect.sh`, `install.sh`, `upgrade.sh`, `uninstall.sh`, and `main.sh` by concatenating them with a small standalone logging prologue and stripping module-local boilerplate such as shebangs, `set -euo pipefail`, `SCRIPT_DIR` setup, and `source` lines. The generated standalone script sets `MANTICORE_STANDALONE=1`; module self-test/direct-execution guards must check that flag so they do not run during standalone execution. Whenever modular behavior changes, run `installer/build.sh`, then verify `bootstrap-standalone.sh` with `bash -n` and at least a lightweight `--list-versions` smoke test. Avoid manual edits to `bootstrap-standalone.sh`; move changes into modules and regenerate it.
+Maintenance rule: the modular installer is the source of truth. `installer/build.sh` builds `bootstrap-standalone.sh` from `constants.sh`, `ui.sh`, `detect.sh`, `install.sh`, `upgrade.sh`, `uninstall.sh`, and `main.sh` by concatenating them with a small standalone logging prologue and stripping module-local boilerplate such as shebangs, `set -euo pipefail`, `SCRIPT_DIR` setup, and `source` lines. It syntax-checks the embedded Bash payload, then wraps it in a POSIX `sh` launcher. The generated Bash payload sets `MANTICORE_STANDALONE=1`; module self-test/direct-execution guards must check that flag so they do not run during standalone execution. Whenever modular behavior changes, run `installer/build.sh`, then verify `bootstrap-standalone.sh` with `sh -n`, a piped `sh -s -- --help` smoke test, and at least a lightweight `--list-versions` smoke test. Avoid manual edits to `bootstrap-standalone.sh`; move changes into modules and regenerate it.
 
 ## Internal Modules
 
@@ -371,7 +371,8 @@ The installer must have CLT coverage for:
 Focused script validation should include:
 
 ```sh
-bash -n installer/bootstrap.sh installer/bootstrap-standalone.sh installer/main.sh installer/install.sh installer/upgrade.sh installer/uninstall.sh installer/detect.sh installer/ui.sh
+sh -n installer/bootstrap-standalone.sh
+bash -n installer/bootstrap.sh installer/build.sh installer/main.sh installer/install.sh installer/upgrade.sh installer/uninstall.sh installer/detect.sh installer/ui.sh
 ```
 
 Homebrew behavior should be tested on a host or image where Homebrew is available and apt/yum/dnf are absent or hidden from `PATH`.

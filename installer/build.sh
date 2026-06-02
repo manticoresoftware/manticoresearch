@@ -46,25 +46,25 @@ Usage:
   wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
   curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
 
-Common options:
-  -h, --help, -?              Show this help and exit.
-  -s, --silent, -y, --yes     Non-interactive mode; assume defaults.
-  --upgrade                   Upgrade an installed Manticore package.
-  -v, --version <version>     Install or switch to a specific version.
-  --list-versions             Print available versions.
-  --list-versions-file <path> Write available versions to path.
-  --no-start                  Do not start the service after install/upgrade.
-  --backup-data               Include data directory in upgrade backup.
-  --no-backup-data            Skip data directory backup (default).
-  --backup-dir <path>         Override backup directory for upgrades.
-  -u, --uninstall             Remove packages, keep config/data/repo state.
-  --purge                     Remove packages and repository bootstrap package.
-  --purge-all                 Purge packages, repo state, config, and data.
+Common commands/options:
+  help, --help, -h, -?        Show this help and exit.
+  silent, -s, yes, -y         Non-interactive mode; assume defaults.
+  upgrade                     Upgrade an installed Manticore package.
+  version <version>, -v <v>   Install or switch to a specific version.
+  list-versions               Print available versions.
+  list-versions-file <path>   Write available versions to path.
+  no-start                    Do not start the service after install/upgrade.
+  backup-data                 Include data directory in upgrade backup.
+  no-backup-data              Skip data directory backup (default).
+  backup-dir <path>           Override backup directory for upgrades.
+  uninstall, -u               Remove packages, keep config/data/repo state.
+  purge                       Remove packages and repository bootstrap package.
+  purge-all                   Purge packages, repo state, config, and data.
 
 Examples:
-  bash bootstrap-standalone.sh --list-versions
-  bash bootstrap-standalone.sh --version 25.0.0 --no-start
-  bash bootstrap-standalone.sh --upgrade --backup-data
+  sh bootstrap-standalone.sh list-versions
+  sh bootstrap-standalone.sh version 25.0.0 no-start
+  sh bootstrap-standalone.sh upgrade backup-data
 USAGE
 }
 
@@ -91,22 +91,22 @@ standalone_usage_error() {
 standalone_validate_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            -h|--help|-\?)
+            -h|--help|-\?|help)
                 standalone_print_usage
                 standalone_exit_after_pipe_drain 0
                 ;;
-            -s|--silent|-y|--yes|--no-start|--backup-data|--no-backup-data|-u|--uninstall|--purge|--purge-all|--upgrade|--list-versions)
+            -s|-y|silent|yes|no-start|backup-data|no-backup-data|-u|uninstall|purge|purge-all|upgrade|list-versions)
                 shift
                 ;;
-            -v|--version|--backup-dir|--list-versions-file)
+            -v|version|backup-dir|list-versions-file)
                 if [[ -z "${2:-}" || "${2:0:1}" == "-" ]]; then
                     standalone_usage_error "$1 requires a value."
                 fi
                 shift 2
                 ;;
-            --list-versions-file=*)
+            list-versions-file=*)
                 if [[ -z "${1#*=}" ]]; then
-                    standalone_usage_error "--list-versions-file requires a value."
+                    standalone_usage_error "list-versions-file requires a value."
                 fi
                 shift
                 ;;

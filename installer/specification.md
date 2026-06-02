@@ -80,7 +80,7 @@ Responsibilities:
 6. Remove the temporary directory on exit.
 
 
-Maintenance rule: the modular installer is the source of truth. `installer/build.sh` builds `bootstrap-standalone.sh` from `constants.sh`, `ui.sh`, `detect.sh`, `install.sh`, `upgrade.sh`, `uninstall.sh`, and `main.sh` by concatenating them with a small standalone logging prologue and stripping module-local boilerplate such as shebangs, `set -euo pipefail`, `SCRIPT_DIR` setup, and `source` lines. It syntax-checks the embedded Bash payload, then wraps it in a POSIX `sh` launcher. The generated Bash payload sets `MANTICORE_STANDALONE=1`; module self-test/direct-execution guards must check that flag so they do not run during standalone execution. Whenever modular behavior changes, run `installer/build.sh`, then verify `bootstrap-standalone.sh` with `sh -n`, a piped `sh -s -- --help` smoke test, and at least a lightweight `--list-versions` smoke test. Avoid manual edits to `bootstrap-standalone.sh`; move changes into modules and regenerate it.
+Maintenance rule: the modular installer is the source of truth. `installer/build.sh` builds `bootstrap-standalone.sh` from `constants.sh`, `ui.sh`, `detect.sh`, `install.sh`, `upgrade.sh`, `uninstall.sh`, and `main.sh` by concatenating them with a small standalone logging prologue and stripping module-local boilerplate such as shebangs, `set -euo pipefail`, `SCRIPT_DIR` setup, and `source` lines. It syntax-checks the embedded Bash payload, then wraps it in a POSIX `sh` launcher. The generated Bash payload sets `MANTICORE_STANDALONE=1`; module self-test/direct-execution guards must check that flag so they do not run during standalone execution. Whenever modular behavior changes, run `installer/build.sh`, then verify `bootstrap-standalone.sh` with `sh -n`, a piped `sh -s -- --help` smoke test, and at least a lightweight `list-versions` smoke test. Avoid manual edits to `bootstrap-standalone.sh`; move changes into modules and regenerate it.
 
 ## Internal Modules
 
@@ -178,7 +178,7 @@ Start Manticore:
 brew services start manticore
 ```
 
-There is no repository bootstrap package in the Homebrew flow. `--version` is not supported for Homebrew installs or upgrades unless Homebrew support for this is explicitly designed later.
+There is no repository bootstrap package in the Homebrew flow. `version` is not supported for Homebrew installs or upgrades unless Homebrew support for this is explicitly designed later.
 
 ### Unsupported Platforms
 
@@ -193,25 +193,25 @@ When Homebrew is available and no apt/yum/dnf package manager is present, macOS 
 Unsupported platforms with Docker available should print Docker guidance or keep the generic install-guide URL.
 Guidance is referenced from https://manticoresearch.com/install/ and located at `https://github.com/manticoresoftware/docker#production-use`
 
-## Command-Line Flags
+## Command Syntax
 
-Supported flags:
+Supported commands/options:
 
-- `--help`, `-h`, `-?`: print a concise usage summary and exit successfully before OS detection, repository setup, or package operations.
-- `--upgrade`: upgrade an existing installation. When routed through `bootstrap.sh`, a host without Manticore may fall back to the installation flow; when `upgrade.sh` runs as the internal upgrade module, it requires an existing installation.
-- `--version <version>` or `-v <version>`: install or switch to the requested version when the package family supports version selection. This flag is explicit user intent and does not ask for an additional confirmation when changing or downgrading an existing installation. For Debian/RPM, a short product version such as `25.0.0` must resolve to an available package version with the same prefix, such as `25.0.0-...` or `25.0.0_...`, before calling the package manager. If multiple matching package versions are available, use the highest one according to version sort. Versioned Debian/RPM installs must verify that the required exact-version package set is available. Debian must choose that set from the resolved `manticore` package metadata: transitive same-version `manticore-*` dependencies for thin/meta versions, plus any bounded same-repo `Depends:` packages whose installed versions do not satisfy the target constraints, followed by `apt-mark auto` for split/dependency packages; but only `manticore=<version>` for fat versions that provide and break the split packages. RPM should likewise derive the same-version `manticore-*` requirement closure from repoquery metadata when available, with a known-name fallback for older/minimal systems. RPM version switches must prepare package-shape changes by removing installed split packages, or an installed fat package when switching to split, using no-script/no-dependency rpm erasure before invoking DNF/YUM for the requested target set.
-- `--list-versions`: ensure the repository bootstrap package is installed when applicable, refresh package metadata, print available Manticore package versions one per line, and exit without installing, upgrading, or removing Manticore itself. The printed version list must be built from package-manager version fields, with blank lines removed, and sorted uniquely from oldest to newest so Debian and RPM output order is uniform. Debian epoch prefixes such as `1:` must not cause versions to be filtered out.
-- `--list-versions-file <path>`, `--list-versions-file=<path>`: perform the same action as `--list-versions` but write the refined version list to the given file. Normal installer progress may still be printed to stdout/stderr, but the file must contain only available version strings, one per line, with no log prefixes or status messages.
-- `--silent`, `-s`, `-y`, `--yes`: non-interactive mode. Assume defaults and do not prompt.
-- `--no-start`: install or upgrade packages but do not start Manticore.
-- `--backup-data`: include the data directory in upgrade backup.
-- `--no-backup-data`: skip data directory backup. This is the default.
-- `--backup-dir <path>`: override the default backup directory.
-- `--uninstall` or `-u`: stop and remove Manticore, preserving repository configuration and data/config state.
-- `--purge`: stop and remove Manticore, then remove the repository bootstrap package when applicable.
-- `--purge-all`: same as `--purge`, then remove configured Manticore config and data directories after explicit confirmation unless `--silent` is set.
+- `help`, `--help`, `-h`, `-?`: print a concise usage summary and exit successfully before OS detection, repository setup, or package operations. `--help` is the only supported double-dash long option.
+- `upgrade`: upgrade an existing installation. When routed through `bootstrap.sh`, a host without Manticore may fall back to the installation flow; when `upgrade.sh` runs as the internal upgrade module, it requires an existing installation.
+- `version <version>` or `-v <version>`: install or switch to the requested version when the package family supports version selection. This command is explicit user intent and does not ask for an additional confirmation when changing or downgrading an existing installation. For Debian/RPM, a short product version such as `25.0.0` must resolve to an available package version with the same prefix, such as `25.0.0-...` or `25.0.0_...`, before calling the package manager. If multiple matching package versions are available, use the highest one according to version sort. Versioned Debian/RPM installs must verify that the required exact-version package set is available. Debian must choose that set from the resolved `manticore` package metadata: transitive same-version `manticore-*` dependencies for thin/meta versions, plus any bounded same-repo `Depends:` packages whose installed versions do not satisfy the target constraints, followed by `apt-mark auto` for split/dependency packages; but only `manticore=<version>` for fat versions that provide and break the split packages. RPM should likewise derive the same-version `manticore-*` requirement closure from repoquery metadata when available, with a known-name fallback for older/minimal systems. RPM version switches must prepare package-shape changes by removing installed split packages, or an installed fat package when switching to split, using no-script/no-dependency rpm erasure before invoking DNF/YUM for the requested target set.
+- `list-versions`: ensure the repository bootstrap package is installed when applicable, refresh package metadata, print available Manticore package versions one per line, and exit without installing, upgrading, or removing Manticore itself. The printed version list must be built from package-manager version fields, with blank lines removed, and sorted uniquely from oldest to newest so Debian and RPM output order is uniform. Debian epoch prefixes such as `1:` must not cause versions to be filtered out.
+- `list-versions-file <path>`, `list-versions-file=<path>`: perform the same action as `list-versions` but write the refined version list to the given file. Normal installer progress may still be printed to stdout/stderr, but the file must contain only available version strings, one per line, with no log prefixes or status messages.
+- `silent`, `-s`, `yes`, `-y`: non-interactive mode. Assume defaults and do not prompt.
+- `no-start`: install or upgrade packages but do not start Manticore.
+- `backup-data`: include the data directory in upgrade backup.
+- `no-backup-data`: skip data directory backup. This is the default.
+- `backup-dir <path>`: override the default backup directory.
+- `uninstall` or `-u`: stop and remove Manticore, preserving repository configuration and data/config state.
+- `purge`: stop and remove Manticore, then remove the repository bootstrap package when applicable.
+- `purge-all`: same as `purge`, then remove configured Manticore config and data directories after explicit confirmation unless `silent` is set.
 
-Unknown options or malformed option values must abort before OS detection, repository setup, or package operations. The installer should print an error plus a `--help` hint and exit with status `2`.
+Unknown options/commands or malformed values must abort before OS detection, repository setup, or package operations. The installer should print an error plus a `--help` hint and exit with status `2`.
 
 ## Installation Flow
 
@@ -222,7 +222,7 @@ Unknown options or malformed option values must abort before OS detection, repos
 5. Install repository bootstrap package unless the package family is Homebrew.
 6. Refresh package metadata.
 7. Install `manticore` or the requested version.
-8. If `--no-start` is not set:
+8. If `no-start` is not set:
    - Check whether the service is already active.
    - Check that ports `9306`, `9308`, and `9312` are not already occupied before starting a stopped service.
    - Start the service.
@@ -238,42 +238,42 @@ The default happy path should end with Manticore installed and running on ports 
 3. Require an existing Manticore installation.
 4. Create a backup directory under `${MANTICORE_BACKUP_DIR:-/var/backups/manticore}/manticore_backup_<installed-version>`.
 5. Always back up configuration when the config directory exists.
-6. Back up the data directory only when `--backup-data` is set. In this case manticore must be stopped, otherwise backup may be damaged.
+6. Back up the data directory only when `backup-data` is set. In this case manticore must be stopped, otherwise backup may be damaged.
 7. Refresh or reinstall the repository bootstrap package unless the package family is Homebrew.
 8. Refresh package metadata.
 9. Stop Manticore if it is running. Upgrade should not stop on all platforms, but rely on package-manager hooks and restart afterward.
 10. Upgrade the package:
-    - Debian: for plain `--upgrade`, resolve the latest available package version and use the metadata-derived exact-version package set with `--allow-downgrades`; this handles split-only installed states where the real `manticore` package is absent. If the latest version cannot be resolved, fall back to `apt-get install -y --only-upgrade manticore`.
+    - Debian: for plain `upgrade`, resolve the latest available package version and use the metadata-derived exact-version package set with `--allow-downgrades`; this handles split-only installed states where the real `manticore` package is absent. If the latest version cannot be resolved, fall back to `apt-get install -y --only-upgrade manticore`.
     - RPM: `dnf upgrade -y manticore` / `yum update -y manticore` or requested exact-version package set.
     - Homebrew: `brew upgrade manticore || brew install manticoresoftware/tap/manticore`.
-11. If `--no-start` is not set, start Manticore.
+11. If `no-start` is not set, start Manticore.
 12. Verify that `searchd` exists and report whether the service is running.
 
 Rollback is not part of the current implementation because package-level rollback is more complex than restoring a single binary. This needs a separate design.
 
 ## Uninstall and Purge Flow
 
-`--uninstall`:
+`uninstall`:
 
 1. Detect OS family.
 2. Stop Manticore if active.
 3. Remove the `manticore` package.
 4. Preserve repository package, config, and data.
 
-`--purge`:
+`purge`:
 
 1. Perform uninstall.
 2. Remove the repository bootstrap package when applicable.
 3. Preserve config and data.
 
-`--purge-all`:
+`purge-all`:
 
 1. Require typed `DELETE` confirmation in interactive mode.
-2. In non-interactive mode, require `--silent` to confirm destructive cleanup.
+2. In non-interactive mode, require `silent` to confirm destructive cleanup.
 3. Perform purge.
 4. Remove Manticore config and data directories.
 
-Repository configuration and signing-key cleanup are encapsulated in the repository bootstrap packages. The installer removes the `manticore-repo` package for `--purge` and `--purge-all`; it must not duplicate package-internal cleanup paths. If a bootstrap package leaves repository files or keys behind after package removal, fix that package instead of adding installer-side cleanup.
+Repository configuration and signing-key cleanup are encapsulated in the repository bootstrap packages. The installer removes the `manticore-repo` package for `purge` and `purge-all`; it must not duplicate package-internal cleanup paths. If a bootstrap package leaves repository files or keys behind after package removal, fix that package instead of adding installer-side cleanup.
 
 The default behavior must preserve user data.
 
@@ -348,7 +348,7 @@ If an unmanaged `searchd` binary is found before package installation, the insta
 Minimum verification after install or upgrade:
 
 - `searchd` exists in `PATH`.
-- Service is active, unless `--no-start` was requested.
+- Service is active, unless `no-start` was requested.
 
 Target verification for future improvement:
 
@@ -359,12 +359,12 @@ Target verification for future improvement:
 The installer must have CLT coverage for:
 
 - Debian/RPM release install through existing repository package flow.
-- Debian/RPM `curl | bash` bootstrap flow.
-- Debian/RPM `--list-versions` through the bootstrap flow on a clean host, including repository bootstrap setup without installing Manticore.
-- Debian/RPM `--list-versions-file <path>` through the bootstrap flow, verifying that the file contains only refined version lines in uniform oldest-to-newest order and no installer logs.
-- RPM `--list-versions` output without awk escape warnings.
-- Debian explicit `--version` switch/downgrade through the bootstrap flow without an extra prompt, including split-package detection after downgrade.
-- Debian `--upgrade` from an older thin/split installed state to the latest version, including the case where the real `manticore` package is absent and only split packages are installed.
+- Debian/RPM `curl | sh` and `curl | bash` bootstrap flow.
+- Debian/RPM `list-versions` through the bootstrap flow on a clean host, including repository bootstrap setup without installing Manticore.
+- Debian/RPM `list-versions-file <path>` through the bootstrap flow, verifying that the file contains only refined version lines in uniform oldest-to-newest order and no installer logs.
+- RPM `list-versions` output without awk escape warnings.
+- Debian explicit `version` switch/downgrade through the bootstrap flow without an extra prompt, including split-package detection after downgrade.
+- Debian `upgrade` from an older thin/split installed state to the latest version, including the case where the real `manticore` package is absent and only split packages are installed.
 - Service start behavior in systemd and non-systemd environments where practical.
 - Cleanup after install.
 

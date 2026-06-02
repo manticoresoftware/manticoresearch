@@ -59,7 +59,7 @@ ensure_backup() {
             ensure_service_stopped
             sudo_exec cp -a "$DATA_DIR" "$CURRENT_BACKUP_PATH/"
         else
-            print_info "Data directory was not backed up. Rerun with --backup-data if you want a data backup before upgrading."
+            print_info "Data directory was not backed up. Rerun with backup-data if you want a data backup before upgrading."
         fi
     fi
 
@@ -118,7 +118,7 @@ upgrade_package() {
         fi
     elif [[ "$OS_FAMILY" == "brew" ]]; then
         if [[ -n "$target_version" ]]; then
-            print_error "--version is not supported for Homebrew upgrades."
+            print_error "version is not supported for Homebrew upgrades."
             return 1
         fi
         brew upgrade "$BREW_SERVICE_NAME" || brew install "$BREW_PACKAGE_NAME"
@@ -128,7 +128,7 @@ upgrade_package() {
 
 ensure_service_started() {
     if [[ "$MANTICORE_START_SERVICE" != "true" ]]; then
-        print_info "Skipping service start because --no-start was requested."
+        print_info "Skipping service start because no-start was requested."
         return 0
     fi
 
@@ -160,7 +160,7 @@ verify_upgrade() {
 
 upgrade_flow() {
     local requested_version=${1:-$REQUESTED_VERSION}
-    validate_requested_version_argument "$requested_version" --version
+    validate_requested_version_argument "$requested_version" version
     BACKUP_DATA="${MANTICORE_BACKUP_DATA:-$BACKUP_DATA}"
     local installed_version backup_suffix
 
@@ -182,7 +182,7 @@ upgrade_flow() {
 }
 
 upgrade_main() {
-    validate_requested_version_argument "$REQUESTED_VERSION" --version
+    validate_requested_version_argument "$REQUESTED_VERSION" version
     detect_os
     detect_arch
 

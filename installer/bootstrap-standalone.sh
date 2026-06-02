@@ -30,25 +30,25 @@ Usage:
   wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
   curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
 
-Common options:
-  -h, --help, -?              Show this help and exit.
-  -s, --silent, -y, --yes     Non-interactive mode; assume defaults.
-  --upgrade                   Upgrade an installed Manticore package.
-  -v, --version <version>     Install or switch to a specific version.
-  --list-versions             Print available versions.
-  --list-versions-file <path> Write available versions to path.
-  --no-start                  Do not start the service after install/upgrade.
-  --backup-data               Include data directory in upgrade backup.
-  --no-backup-data            Skip data directory backup (default).
-  --backup-dir <path>         Override backup directory for upgrades.
-  -u, --uninstall             Remove packages, keep config/data/repo state.
-  --purge                     Remove packages and repository bootstrap package.
-  --purge-all                 Purge packages, repo state, config, and data.
+Common commands/options:
+  help, --help, -h, -?        Show this help and exit.
+  silent, -s, yes, -y         Non-interactive mode; assume defaults.
+  upgrade                     Upgrade an installed Manticore package.
+  version <version>, -v <v>   Install or switch to a specific version.
+  list-versions               Print available versions.
+  list-versions-file <path>   Write available versions to path.
+  no-start                    Do not start the service after install/upgrade.
+  backup-data                 Include data directory in upgrade backup.
+  no-backup-data              Skip data directory backup (default).
+  backup-dir <path>           Override backup directory for upgrades.
+  uninstall, -u               Remove packages, keep config/data/repo state.
+  purge                       Remove packages and repository bootstrap package.
+  purge-all                   Purge packages, repo state, config, and data.
 
 Examples:
-  bash bootstrap-standalone.sh --list-versions
-  bash bootstrap-standalone.sh --version 25.0.0 --no-start
-  bash bootstrap-standalone.sh --upgrade --backup-data
+  sh bootstrap-standalone.sh list-versions
+  sh bootstrap-standalone.sh version 25.0.0 no-start
+  sh bootstrap-standalone.sh upgrade backup-data
 USAGE
 }
 
@@ -75,22 +75,22 @@ standalone_usage_error() {
 standalone_validate_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            -h|--help|-\?)
+            -h|--help|-\?|help)
                 standalone_print_usage
                 standalone_exit_after_pipe_drain 0
                 ;;
-            -s|--silent|-y|--yes|--no-start|--backup-data|--no-backup-data|-u|--uninstall|--purge|--purge-all|--upgrade|--list-versions)
+            -s|-y|silent|yes|no-start|backup-data|no-backup-data|-u|uninstall|purge|purge-all|upgrade|list-versions)
                 shift
                 ;;
-            -v|--version|--backup-dir|--list-versions-file)
+            -v|version|backup-dir|list-versions-file)
                 if [[ -z "${2:-}" || "${2:0:1}" == "-" ]]; then
                     standalone_usage_error "$1 requires a value."
                 fi
                 shift 2
                 ;;
-            --list-versions-file=*)
+            list-versions-file=*)
                 if [[ -z "${1#*=}" ]]; then
-                    standalone_usage_error "--list-versions-file requires a value."
+                    standalone_usage_error "list-versions-file requires a value."
                 fi
                 shift
                 ;;
@@ -330,7 +330,7 @@ ensure_backup() {
             ensure_service_stopped
             sudo_exec cp -a "$DATA_DIR" "$CURRENT_BACKUP_PATH/"
         else
-            print_info "Data directory was not backed up. Rerun with --backup-data if you want a data backup before upgrading."
+            print_info "Data directory was not backed up. Rerun with backup-data if you want a data backup before upgrading."
         fi
     fi
 
@@ -389,7 +389,7 @@ upgrade_package() {
         fi
     elif [[ "$OS_FAMILY" == "brew" ]]; then
         if [[ -n "$target_version" ]]; then
-            print_error "--version is not supported for Homebrew upgrades."
+            print_error "version is not supported for Homebrew upgrades."
             return 1
         fi
         brew upgrade "$BREW_SERVICE_NAME" || brew install "$BREW_PACKAGE_NAME"
@@ -399,7 +399,7 @@ upgrade_package() {
 
 ensure_service_started() {
     if [[ "$MANTICORE_START_SERVICE" != "true" ]]; then
-        print_info "Skipping service start because --no-start was requested."
+        print_info "Skipping service start because no-start was requested."
         return 0
     fi
 
@@ -431,7 +431,7 @@ verify_upgrade() {
 
 upgrade_flow() {
     local requested_version=${1:-$REQUESTED_VERSION}
-    validate_requested_version_argument "$requested_version" --version
+    validate_requested_version_argument "$requested_version" version
     BACKUP_DATA="${MANTICORE_BACKUP_DATA:-$BACKUP_DATA}"
     local installed_version backup_suffix
 
@@ -453,7 +453,7 @@ upgrade_flow() {
 }
 
 upgrade_main() {
-    validate_requested_version_argument "$REQUESTED_VERSION" --version
+    validate_requested_version_argument "$REQUESTED_VERSION" version
     detect_os
     detect_arch
 
@@ -568,7 +568,7 @@ install_manticore_package() {
         fi
     elif [[ "$OS_FAMILY" == "brew" ]]; then
         if [[ -n "$target_version" ]]; then
-            print_error "--version is not supported for Homebrew installs."
+            print_error "version is not supported for Homebrew installs."
             return 1
         fi
         brew install "$BREW_PACKAGE_NAME"
@@ -580,7 +580,7 @@ install_manticore_package() {
 
 ensure_service_started() {
     if [[ "$MANTICORE_START_SERVICE" != "true" ]]; then
-        print_info "Skipping service start because --no-start was requested."
+        print_info "Skipping service start because no-start was requested."
         return 0
     fi
 
@@ -614,7 +614,7 @@ verify_installation() {
 
 install_flow() {
     local requested_version=${1:-$REQUESTED_VERSION}
-    validate_requested_version_argument "$requested_version" --version
+    validate_requested_version_argument "$requested_version" version
 
     warn_about_manual_installation
     install_repo_package
@@ -625,7 +625,7 @@ install_flow() {
 }
 
 install_main() {
-    validate_requested_version_argument "$REQUESTED_VERSION" --version
+    validate_requested_version_argument "$REQUESTED_VERSION" version
     detect_os
     detect_arch
 
@@ -717,7 +717,7 @@ confirm_purge_all() {
     fi
 
     if ! prompt_tty_available; then
-        print_error "--purge-all removes $CONF_DIR and $DATA_DIR. Rerun with --silent to confirm this non-interactively."
+        print_error "purge-all removes $CONF_DIR and $DATA_DIR. Rerun with silent to confirm this non-interactively."
         return 1
     fi
 
@@ -1017,7 +1017,7 @@ repair_debian_repo_package() {
 
 validate_requested_version_argument() {
     local value=${1:-}
-    local option_name=${2:-"--version"}
+    local option_name=${2:-"version"}
 
     if [[ -n "$value" && "${value:0:1}" == "-" ]]; then
         print_error "$option_name requires a value."
@@ -1749,7 +1749,7 @@ ensure_versioned_package_set_available() {
     fi
 
     if [[ "$missing" -ne 0 ]]; then
-        print_error "The requested Manticore version has an incomplete package set for this OS/repository. Try --list-versions or choose another version."
+        print_error "The requested Manticore version has an incomplete package set for this OS/repository. Try list-versions or choose another version."
         return 1
     fi
 }
@@ -1861,25 +1861,25 @@ Usage:
   wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
   curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
 
-Common options:
-  -h, --help, -?              Show this help and exit.
-  -s, --silent, -y, --yes     Non-interactive mode; assume defaults.
-  --upgrade                   Upgrade an installed Manticore package.
-  -v, --version <version>     Install or switch to a specific version.
-  --list-versions             Print available versions.
-  --list-versions-file <path> Write available versions to path.
-  --no-start                  Do not start the service after install/upgrade.
-  --backup-data               Include data directory in upgrade backup.
-  --no-backup-data            Skip data directory backup (default).
-  --backup-dir <path>         Override backup directory for upgrades.
-  -u, --uninstall             Remove packages, keep config/data/repo state.
-  --purge                     Remove packages and repository bootstrap package.
-  --purge-all                 Purge packages, repo state, config, and data.
+Common commands/options:
+  help, --help, -h, -?        Show this help and exit.
+  silent, -s, yes, -y         Non-interactive mode; assume defaults.
+  upgrade                     Upgrade an installed Manticore package.
+  version <version>, -v <v>   Install or switch to a specific version.
+  list-versions               Print available versions.
+  list-versions-file <path>   Write available versions to path.
+  no-start                    Do not start the service after install/upgrade.
+  backup-data                 Include data directory in upgrade backup.
+  no-backup-data              Skip data directory backup (default).
+  backup-dir <path>           Override backup directory for upgrades.
+  uninstall, -u               Remove packages, keep config/data/repo state.
+  purge                       Remove packages and repository bootstrap package.
+  purge-all                   Purge packages, repo state, config, and data.
 
 Examples:
-  bash bootstrap-standalone.sh --list-versions
-  bash bootstrap-standalone.sh --version 25.0.0 --no-start
-  bash bootstrap-standalone.sh --upgrade --backup-data
+  sh bootstrap-standalone.sh list-versions
+  sh bootstrap-standalone.sh version 25.0.0 no-start
+  sh bootstrap-standalone.sh upgrade backup-data
 USAGE
 }
 usage_error() {
@@ -1893,61 +1893,61 @@ usage_error() {
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case $1 in
-            -h|--help|-\?)
+            -h|--help|-\?|help)
                 print_usage
                 exit 0
                 ;;
-            -s|--silent|-y|--yes)
+            -s|-y|silent|yes)
                 SILENT=true
                 shift
                 ;;
-            --no-start)
+            no-start)
                 MANTICORE_START_SERVICE=false
                 shift
                 ;;
-            --backup-data)
+            backup-data)
                 MANTICORE_BACKUP_DATA=yes
                 shift
                 ;;
-            --no-backup-data)
+            no-backup-data)
                 MANTICORE_BACKUP_DATA=no
                 shift
                 ;;
-            --backup-dir)
+            backup-dir)
                 if [[ -z "${2:-}" || "${2:0:1}" == "-" ]]; then
-                    usage_error "--backup-dir requires a value."
+                    usage_error "backup-dir requires a value."
                 fi
                 MANTICORE_BACKUP_DIR="$2"
                 shift 2
                 ;;
-            -v|--version)
+            -v|version)
                 if [[ -z "${2:-}" || "${2:0:1}" == "-" ]]; then
-                    usage_error "--version requires a value."
+                    usage_error "version requires a value."
                 fi
                 SPECIFIC_VERSION="$2"
                 shift 2
                 ;;
-            -u|--uninstall)
+            -u|uninstall)
                 ACTION="uninstall"
                 shift
                 ;;
-            --purge)
+            purge)
                 ACTION="purge"
                 shift
                 ;;
-            --purge-all)
+            purge-all)
                 ACTION="purge-all"
                 shift
                 ;;
-            --upgrade)
+            upgrade)
                 UPGRADE_REQUESTED=true
                 shift
                 ;;
-            --list-versions)
+            list-versions)
                 ACTION="list-versions"
                 shift
                 ;;
-            --list-versions-file)
+            list-versions-file)
                 if [[ -z "${2:-}" || "${2:0:1}" == "-" ]]; then
                     usage_error "$1 requires a value."
                 fi
@@ -1955,11 +1955,11 @@ parse_args() {
                 LIST_VERSIONS_OUTPUT_FILE="$2"
                 shift 2
                 ;;
-            --list-versions-file=*)
+            list-versions-file=*)
                 ACTION="list-versions"
                 LIST_VERSIONS_OUTPUT_FILE="${1#*=}"
                 if [[ -z "$LIST_VERSIONS_OUTPUT_FILE" ]]; then
-                    usage_error "--list-versions-file requires a value."
+                    usage_error "list-versions-file requires a value."
                 fi
                 shift
                 ;;
@@ -2064,7 +2064,7 @@ determine_action() {
     fi
 
     if [[ "$SILENT" == "true" ]]; then
-        print_info "Newer version $target_version is available. Rerun with --upgrade to apply it."
+        print_info "Newer version $target_version is available. Rerun with upgrade to apply it."
         exit 0
     fi
 

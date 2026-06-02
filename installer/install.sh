@@ -106,7 +106,7 @@ install_manticore_package() {
         fi
     elif [[ "$OS_FAMILY" == "brew" ]]; then
         if [[ -n "$target_version" ]]; then
-            print_error "--version is not supported for Homebrew installs."
+            print_error "version is not supported for Homebrew installs."
             return 1
         fi
         brew install "$BREW_PACKAGE_NAME"
@@ -118,7 +118,7 @@ install_manticore_package() {
 
 ensure_service_started() {
     if [[ "$MANTICORE_START_SERVICE" != "true" ]]; then
-        print_info "Skipping service start because --no-start was requested."
+        print_info "Skipping service start because no-start was requested."
         return 0
     fi
 
@@ -152,7 +152,7 @@ verify_installation() {
 
 install_flow() {
     local requested_version=${1:-$REQUESTED_VERSION}
-    validate_requested_version_argument "$requested_version" --version
+    validate_requested_version_argument "$requested_version" version
 
     warn_about_manual_installation
     install_repo_package
@@ -163,7 +163,7 @@ install_flow() {
 }
 
 install_main() {
-    validate_requested_version_argument "$REQUESTED_VERSION" --version
+    validate_requested_version_argument "$REQUESTED_VERSION" version
     detect_os
     detect_arch
 

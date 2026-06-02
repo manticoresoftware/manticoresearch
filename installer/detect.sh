@@ -235,7 +235,7 @@ repair_debian_repo_package() {
 
 validate_requested_version_argument() {
     local value=${1:-}
-    local option_name=${2:-"--version"}
+    local option_name=${2:-"version"}
 
     if [[ -n "$value" && "${value:0:1}" == "-" ]]; then
         print_error "$option_name requires a value."
@@ -967,7 +967,7 @@ ensure_versioned_package_set_available() {
     fi
 
     if [[ "$missing" -ne 0 ]]; then
-        print_error "The requested Manticore version has an incomplete package set for this OS/repository. Try --list-versions or choose another version."
+        print_error "The requested Manticore version has an incomplete package set for this OS/repository. Try list-versions or choose another version."
         return 1
     fi
 }

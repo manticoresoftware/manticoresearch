@@ -78,7 +78,7 @@ confirm_purge_all() {
     fi
 
     if ! prompt_tty_available; then
-        print_error "--purge-all removes $CONF_DIR and $DATA_DIR. Rerun with --silent to confirm this non-interactively."
+        print_error "purge-all removes $CONF_DIR and $DATA_DIR. Rerun with silent to confirm this non-interactively."
         return 1
     fi
 

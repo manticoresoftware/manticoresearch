@@ -237,35 +237,6 @@ sudo_exec() {
 # ---- upgrade.sh ----
 
 
-if [[ "${MANTICORE_UPGRADE_MODULE:-0}" != "1" && "${MANTICORE_STANDALONE:-0}" != "1" ]]; then
-    DEFAULT_REPO_URL="https://repo.manticoresearch.com/repository/install"
-    REPO_URL="${MANTICORE_INSTALLER_REPO_URL:-$DEFAULT_REPO_URL}"
-    TEMP_DIR=$(mktemp -d /tmp/manticore-upgrade.XXXXXX)
-
-    cleanup() {
-        rm -rf "$TEMP_DIR"
-    }
-
-    trap cleanup EXIT
-
-    download_bootstrap() {
-        local url=$1
-        local dest=$2
-
-        if command -v curl >/dev/null 2>&1; then
-            curl -fsSL "$url" -o "$dest"
-        elif command -v wget >/dev/null 2>&1; then
-            wget -qO "$dest" "$url"
-        else
-            echo "Neither curl nor wget was found on this system." >&2
-            exit 1
-        fi
-    }
-
-    download_bootstrap "${REPO_URL}/bootstrap.sh" "${TEMP_DIR}/bootstrap.sh"
-    exec bash "${TEMP_DIR}/bootstrap.sh" --upgrade "$@"
-fi
-
 
 if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
     REQUESTED_VERSION=""

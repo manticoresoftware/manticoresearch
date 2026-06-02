@@ -218,6 +218,17 @@ repair_debian_repo_package() {
     delete_file_if_present "$deb_path"
 }
 
+validate_requested_version_argument() {
+    local value=${1:-}
+    local option_name=${2:-"--version"}
+
+    if [[ -n "$value" && "${value:0:1}" == "-" ]]; then
+        print_error "$option_name requires a value."
+        echo "Run with --help to see supported options." >&2
+        exit 2
+    fi
+}
+
 apt_output_indicates_auth_error() {
     local output_file=$1
 
@@ -958,10 +969,22 @@ service_is_active() {
         brew services list 2>/dev/null | awk -v svc="$BREW_SERVICE_NAME" '$1 == svc && $2 == "started" {found=1} END {exit found ? 0 : 1}'
     elif systemctl_usable; then
         systemctl is-active --quiet "$SERVICE_NAME" >/dev/null 2>&1
-    else
+    elif command -v pgrep >/dev/null 2>&1; then
+        pgrep -x searchd >/dev/null 2>&1
+    elif command -v ps >/dev/null 2>&1; then
         ps aux | grep -q '[s]earchd'
+    else
+        return 1
     fi
 }
+service_status_observable() {
+    [[ "$OS_FAMILY" == "brew" ]] && return 0
+    systemctl_usable && return 0
+    command -v pgrep >/dev/null 2>&1 && return 0
+    command -v ps >/dev/null 2>&1 && return 0
+    return 1
+}
+
 
 systemctl_usable() {
     command -v systemctl >/dev/null 2>&1 && systemctl show >/dev/null 2>&1

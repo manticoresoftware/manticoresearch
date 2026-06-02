@@ -267,9 +267,14 @@ if [[ "${MANTICORE_UPGRADE_MODULE:-0}" != "1" && "${MANTICORE_STANDALONE:-0}" !=
 fi
 
 
-REQUESTED_VERSION="${1:-}"
+if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
+    REQUESTED_VERSION=""
+    BACKUP_DATA="${MANTICORE_BACKUP_DATA:-no}"
+else
+    REQUESTED_VERSION="${1:-}"
+    BACKUP_DATA="${MANTICORE_BACKUP_DATA:-${2:-no}}"
+fi
 MANTICORE_START_SERVICE="${MANTICORE_START_SERVICE:-true}"
-BACKUP_DATA="${MANTICORE_BACKUP_DATA:-${2:-no}}"
 CURRENT_BACKUP_PATH=""
 
 upgrade_repo_package() {
@@ -405,13 +410,17 @@ verify_upgrade() {
 
     if service_is_active; then
         print_success "Upgrade successful. Service is running."
-    else
+    elif service_status_observable; then
         print_warn "Upgrade finished but service is not active."
+    else
+        print_warn "Upgrade finished, but service state could not be checked because this system lacks systemd, pgrep, and ps."
     fi
 }
 
 upgrade_flow() {
     local requested_version=${1:-$REQUESTED_VERSION}
+    validate_requested_version_argument "$requested_version" --version
+    BACKUP_DATA="${MANTICORE_BACKUP_DATA:-$BACKUP_DATA}"
     local installed_version backup_suffix
 
     if ! package_installed; then
@@ -432,6 +441,7 @@ upgrade_flow() {
 }
 
 upgrade_main() {
+    validate_requested_version_argument "$REQUESTED_VERSION" --version
     detect_os
     detect_arch
 
@@ -449,7 +459,11 @@ upgrade_main() {
 
 
 SILENT=false
-REQUESTED_VERSION="${1:-}"
+if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
+    REQUESTED_VERSION=""
+else
+    REQUESTED_VERSION="${1:-}"
+fi
 MANTICORE_START_SERVICE="${MANTICORE_START_SERVICE:-true}"
 
 download_with_available_tool() {
@@ -579,13 +593,16 @@ verify_installation() {
 
     if service_is_active; then
         print_success "Manticore is running."
-    else
+    elif service_status_observable; then
         print_warn "Manticore package is installed but service is not active."
+    else
+        print_warn "Manticore package is installed, but service state could not be checked because this system lacks systemd, pgrep, and ps."
     fi
 }
 
 install_flow() {
     local requested_version=${1:-$REQUESTED_VERSION}
+    validate_requested_version_argument "$requested_version" --version
 
     warn_about_manual_installation
     install_repo_package
@@ -596,6 +613,7 @@ install_flow() {
 }
 
 install_main() {
+    validate_requested_version_argument "$REQUESTED_VERSION" --version
     detect_os
     detect_arch
 
@@ -617,7 +635,11 @@ install_main() {
 
 
 
-ACTION_MODE="${1:-uninstall}"
+if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
+    ACTION_MODE="uninstall"
+else
+    ACTION_MODE="${1:-uninstall}"
+fi
 
 ensure_service_stopped() {
     if service_is_active; then
@@ -957,6 +979,17 @@ repair_debian_repo_package() {
     download_with_available_tool "$DEB_REPO_PACKAGE_URL" "$deb_path"
     install_debian_repo_package_file "$deb_path" force
     delete_file_if_present "$deb_path"
+}
+
+validate_requested_version_argument() {
+    local value=${1:-}
+    local option_name=${2:-"--version"}
+
+    if [[ -n "$value" && "${value:0:1}" == "-" ]]; then
+        print_error "$option_name requires a value."
+        echo "Run with --help to see supported options." >&2
+        exit 2
+    fi
 }
 
 apt_output_indicates_auth_error() {
@@ -1699,10 +1732,22 @@ service_is_active() {
         brew services list 2>/dev/null | awk -v svc="$BREW_SERVICE_NAME" '$1 == svc && $2 == "started" {found=1} END {exit found ? 0 : 1}'
     elif systemctl_usable; then
         systemctl is-active --quiet "$SERVICE_NAME" >/dev/null 2>&1
-    else
+    elif command -v pgrep >/dev/null 2>&1; then
+        pgrep -x searchd >/dev/null 2>&1
+    elif command -v ps >/dev/null 2>&1; then
         ps aux | grep -q '[s]earchd'
+    else
+        return 1
     fi
 }
+service_status_observable() {
+    [[ "$OS_FAMILY" == "brew" ]] && return 0
+    systemctl_usable && return 0
+    command -v pgrep >/dev/null 2>&1 && return 0
+    command -v ps >/dev/null 2>&1 && return 0
+    return 1
+}
+
 
 systemctl_usable() {
     command -v systemctl >/dev/null 2>&1 && systemctl show >/dev/null 2>&1

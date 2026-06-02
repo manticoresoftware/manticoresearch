@@ -8,7 +8,11 @@ source "$SCRIPT_DIR/constants.sh"
 source "$SCRIPT_DIR/detect.sh"
 source "$SCRIPT_DIR/ui.sh"
 
-ACTION_MODE="${1:-uninstall}"
+if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
+    ACTION_MODE="uninstall"
+else
+    ACTION_MODE="${1:-uninstall}"
+fi
 
 ensure_service_stopped() {
     if service_is_active; then

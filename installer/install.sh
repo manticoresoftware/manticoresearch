@@ -9,7 +9,11 @@ source "$SCRIPT_DIR/detect.sh"
 source "$SCRIPT_DIR/ui.sh"
 
 SILENT=false
-REQUESTED_VERSION="${1:-}"
+if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
+    REQUESTED_VERSION=""
+else
+    REQUESTED_VERSION="${1:-}"
+fi
 MANTICORE_START_SERVICE="${MANTICORE_START_SERVICE:-true}"
 
 download_with_available_tool() {
@@ -139,13 +143,16 @@ verify_installation() {
 
     if service_is_active; then
         print_success "Manticore is running."
-    else
+    elif service_status_observable; then
         print_warn "Manticore package is installed but service is not active."
+    else
+        print_warn "Manticore package is installed, but service state could not be checked because this system lacks systemd, pgrep, and ps."
     fi
 }
 
 install_flow() {
     local requested_version=${1:-$REQUESTED_VERSION}
+    validate_requested_version_argument "$requested_version" --version
 
     warn_about_manual_installation
     install_repo_package
@@ -156,6 +163,7 @@ install_flow() {
 }
 
 install_main() {
+    validate_requested_version_argument "$REQUESTED_VERSION" --version
     detect_os
     detect_arch
 

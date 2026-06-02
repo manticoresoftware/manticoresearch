@@ -37,9 +37,14 @@ source "$SCRIPT_DIR/constants.sh"
 source "$SCRIPT_DIR/detect.sh"
 source "$SCRIPT_DIR/ui.sh"
 
-REQUESTED_VERSION="${1:-}"
+if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
+    REQUESTED_VERSION=""
+    BACKUP_DATA="${MANTICORE_BACKUP_DATA:-no}"
+else
+    REQUESTED_VERSION="${1:-}"
+    BACKUP_DATA="${MANTICORE_BACKUP_DATA:-${2:-no}}"
+fi
 MANTICORE_START_SERVICE="${MANTICORE_START_SERVICE:-true}"
-BACKUP_DATA="${MANTICORE_BACKUP_DATA:-${2:-no}}"
 CURRENT_BACKUP_PATH=""
 
 upgrade_repo_package() {
@@ -175,13 +180,17 @@ verify_upgrade() {
 
     if service_is_active; then
         print_success "Upgrade successful. Service is running."
-    else
+    elif service_status_observable; then
         print_warn "Upgrade finished but service is not active."
+    else
+        print_warn "Upgrade finished, but service state could not be checked because this system lacks systemd, pgrep, and ps."
     fi
 }
 
 upgrade_flow() {
     local requested_version=${1:-$REQUESTED_VERSION}
+    validate_requested_version_argument "$requested_version" --version
+    BACKUP_DATA="${MANTICORE_BACKUP_DATA:-$BACKUP_DATA}"
     local installed_version backup_suffix
 
     if ! package_installed; then
@@ -202,6 +211,7 @@ upgrade_flow() {
 }
 
 upgrade_main() {
+    validate_requested_version_argument "$REQUESTED_VERSION" --version
     detect_os
     detect_arch
 

@@ -85,7 +85,16 @@ jobs:
           docs_errors=$(php "/Deploy/check_docs_validity.php" "$DOC_FILEPATHES" "$COMMIT_DIR/" "$DOCS_ERRORS_DIR" | xargs)
           echo "$docs_errors"
           echo "errors=$docs_errors" >> "$GITHUB_OUTPUT"
+      - name: Check docs artifact presence
+        id: docs-artifact
+        run: |
+          if [ -d "$DOCS_ERRORS_DIR" ] && find "$DOCS_ERRORS_DIR" -type f | grep -q .; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Upload artifact
+        if: steps.docs-artifact.outputs.exists == 'true'
         uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: Docs error artifact

@@ -4,7 +4,7 @@
 
 <!-- example CA 1 -->
 
-要启用HTTPS，至少应在配置的[searchd](../Server_settings/Searchd.md)部分设置以下两个指令，并且至少应有一个监听器设置为`https`
+要启用 HTTPS，配置文件的 [searchd](../Server_settings/Searchd.md) 部分至少应设置以下两个指令，并且至少要有一个 [listener](../Server_settings/Searchd.md#listen) 设置为 `https`
 
 * [ssl_cert](../Server_settings/Searchd.md#ssl_cert) 证书文件
 * [ssl_key](../Server_settings/Searchd.md#ssl_key) 密钥文件

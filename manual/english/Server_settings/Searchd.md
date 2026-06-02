@@ -170,7 +170,7 @@ Set it to `1` to disable parallel KNN build (all store passes run serially). Hig
 
 Parallel HNSW construction can insert vectors in a different order than the serial path, so the resulting `.spknn` graph is not guaranteed to be bit-identical to a graph built with `knn_parallel_build = 1`.
 
-Note that with [`parallel_chunk_merges`](#parallel_chunk_merges) > 1, multiple merges can run concurrently and each one consumes up to `knn_parallel_build` workers.
+Note that with [`parallel_chunk_merges`](../Server_settings/Searchd.md#parallel_chunk_merges) > 1, multiple merges can run concurrently and each one consumes up to `knn_parallel_build` workers.
 
 By default, Manticore derives the value from the [threads](../Server_settings/Searchd.md#threads) setting: `max(1, min(4, threads/4))`. That is, `1` (serial) when `threads` is below 8, `2` when `threads` <= 11, `3` when `threads` <= 15, and `4` when 16 or higher (capped at 4 by default). Operators with larger hosts who want more parallelism can set the value explicitly.
 

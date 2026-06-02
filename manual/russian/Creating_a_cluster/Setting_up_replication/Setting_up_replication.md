@@ -39,7 +39,9 @@
 
 ### path
 
-Опция path задаёт каталог данных для [кэша набора записей для репликации](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) и для входящих таблиц с других узлов. Это значение должно быть уникальным среди всех кластеров системы и указываться как относительный путь к каталогу [data_dir](../../Server_settings/Searchd.md#data_dir). По умолчанию оно совпадает со значением [data_dir](../../Server_settings/Searchd.md#data_dir).
+Параметр `path` задаёт каталог данных для [репликации кэша write-set](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) и других файлов провайдера кластера. Он не влияет на место хранения реплицируемых таблиц. Входящие реплицируемые таблицы сохраняются в обычном каталоге таблицы внутри [data_dir](../../Server_settings/Searchd.md#data_dir). Это значение должно быть уникальным среди всех кластеров в системе и задаваться как относительный путь к каталогу [data_dir](../../Server_settings/Searchd.md#data_dir). По умолчанию оно равно значению [data_dir](../../Server_settings/Searchd.md#data_dir).
+
+> **Критическое изменение:** В более старых версиях входящие файлы реплицируемых таблиц тоже сохранялись по пути кластера. Если вы использовали собственный `path` кластера, обновляйтесь осторожно, потому что реплицируемые таблицы, полученные старыми версиями, может потребоваться переместить или повторно синхронизировать в обычную структуру `data_dir/<table>`.
 
 ### nodes
 
@@ -284,7 +286,7 @@ SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 ## Репликация и кластер
 
 <!-- example replication and cluster 1 -->
-Для использования репликации необходимо определить один порт [listen](../../Server_settings/Searchd.md#listen) для протокола SphinxAPI и один [listen](../../Server_settings/Searchd.md#listen) для адреса репликации и диапазона портов в файле конфигурации. Также укажите папку [data_dir](../../Server_settings/Searchd.md#data_dir) для получения входящих таблиц.
+Чтобы использовать репликацию, в конфигурационном файле нужно определить один порт [listen](../../Server_settings/Searchd.md#listen) для протокола SphinxAPI и один [listen](../../Server_settings/Searchd.md#listen) для адреса репликации и диапазона портов. Также укажите каталог [data_dir](../../Server_settings/Searchd.md#data_dir) для хранения входящих реплицируемых таблиц.
 
 
 <!-- intro -->
@@ -696,4 +698,3 @@ let insert_res = index_api.insert(insert_req).await;
 
 Все запросы, которые изменяют таблицы в кластере, теперь реплицируются на все узлы в кластере.
 <!-- proofread -->
-

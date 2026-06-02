@@ -38,7 +38,10 @@ enum
 	QFLAG_JSON_QUERY			= 1UL << 11,
 	QFLAG_NOT_ONLY_ALLOWED		= 1UL << 12,
 	QFLAG_LOCAL_DF_SET			= 1UL << 13,
-	QFLAG_SIMPLIFY_SET			= 1UL << 14
+	QFLAG_SIMPLIFY_SET			= 1UL << 14,
+	QFLAG_EXPLICIT_RANKER		= 1UL << 15,
+	QFLAG_EXPLICIT_BOOLEAN_MODE	= 1UL << 16,
+	QFLAG_DEFAULT_BOOL_OR		= 1UL << 17
 };
 
 void operator<< ( ISphOutputBuffer & tOut, const CSphNamedInt & tValue )
@@ -88,6 +91,9 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	uFlags |= QFLAG_NOT_ONLY_ALLOWED * q.m_bNotOnlyAllowed;
 	uFlags |= QFLAG_LOCAL_DF_SET * q.m_bLocalDF.has_value();
 	uFlags |= QFLAG_SIMPLIFY_SET * q.m_bSimplify.has_value();
+	uFlags |= QFLAG_EXPLICIT_RANKER * q.m_bExplicitRanker;
+	uFlags |= QFLAG_EXPLICIT_BOOLEAN_MODE * q.m_bExplicitBooleanMode;
+	uFlags |= QFLAG_DEFAULT_BOOL_OR * q.m_bDefaultBoolOr;
 
 	if ( q.m_eQueryType==QUERY_JSON )
 		uFlags |= QFLAG_JSON_QUERY;
@@ -833,6 +839,12 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	tQuery.m_iLimit = tReq.GetInt ();
 	tQuery.m_eMode = (ESphMatchMode) tReq.GetInt ();
 	tQuery.m_eRanker = (ESphRankMode) tReq.GetInt ();
+	tQuery.m_bExplicitRanker = !!( uFlags & QFLAG_EXPLICIT_RANKER );
+	if ( uMasterVer>=32 )
+	{
+		tQuery.m_bExplicitBooleanMode = !!( uFlags & QFLAG_EXPLICIT_BOOLEAN_MODE );
+		tQuery.m_bDefaultBoolOr = !!( uFlags & QFLAG_DEFAULT_BOOL_OR );
+	}
 	if ( tQuery.m_eRanker==SPH_RANK_EXPR || tQuery.m_eRanker==SPH_RANK_EXPORT )
 		tQuery.m_sRankerExpr = tReq.GetString();
 

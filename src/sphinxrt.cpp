@@ -8382,9 +8382,9 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	QueryProfile_c * pProfiler = tMeta.m_pProfile;
 	CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_DICT_SETUP );
 
-	// force ext2 mode for them
-	// FIXME! eliminate this const breakage
-	const_cast<CSphQuery*> ( &tQuery )->m_eMode = SPH_MATCH_EXTENDED2;
+	CSphQuery tEffectiveQuery = tQuery;
+	if ( !ApplyMutableQueryDefaults ( tEffectiveQuery, m_tMutableSettings, tMeta.m_sError ) )
+		return false;
 
 	auto tRtData = RtData();
 
@@ -8392,7 +8392,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	if_const( MODELING )
 		tRtData.m_pSegs = new RtSegVec_c;
 
-	tRtData = FilterReaderChunks ( tRtData, tQuery.m_dIntSubkeys );
+	tRtData = FilterReaderChunks ( tRtData, tEffectiveQuery.m_dIntSubkeys );
 	RtGuard_t tGuard ( std::move ( tRtData ) );
 	auto& dDiskChunks = tGuard.m_dDiskChunks;
 
@@ -8406,9 +8406,9 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 		SetupExactDict ( pDict );
 
 
-	const QueryParser_i * pQueryParser = tQuery.m_pQueryParser;
+	const QueryParser_i * pQueryParser = tEffectiveQuery.m_pQueryParser;
 	assert ( pQueryParser );
-	const bool bFullscan = pQueryParser->IsFullscan ( tQuery );
+	const bool bFullscan = pQueryParser->IsFullscan ( tEffectiveQuery );
 
 	// calculate local idf for RT with disk chunks
 	// in case of local_idf set but no external hash no full-scan query and RT has disk chunks
@@ -8418,7 +8418,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	// already might local df calculated and set by distributed index
 	bool bGotLocalDF = ( tArgs.m_bLocalDF && tArgs.m_pLocalDocs );
 	// if not explicitly disbled lets calculate local_idf per disk chunks if it not was already calculated per distributed index
-	if ( !bGotLocalDF && !bFullscan && tQuery.m_eRanker!=SPH_RANK_NONE && tQuery.m_bLocalDF.value_or ( true ) && dDiskChunks.GetLength()>1 )
+	if ( !bGotLocalDF && !bFullscan && tEffectiveQuery.m_eRanker!=SPH_RANK_NONE && tEffectiveQuery.m_bLocalDF.value_or ( true ) && dDiskChunks.GetLength()>1 )
 	{
 		SwitchProfile ( pProfiler, SPH_QSTATE_LOCAL_DF );
 		GetKeywordsSettings_t tSettings;
@@ -8427,7 +8427,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 		tSettings.m_bAllowExpansion = false;
 
 		CSphVector < CSphKeywordInfo > dKeywords;
-		DoGetKeywords ( dKeywords, tQuery.m_sQuery.cstr(), tSettings, false, nullptr, tGuard );
+		DoGetKeywords ( dKeywords, tEffectiveQuery.m_sQuery.cstr(), tSettings, false, nullptr, tGuard );
 		for ( auto & tKw : dKeywords )
 			if ( !hLocalDocs.Exists ( tKw.m_sNormalized ) ) // skip dupes
 				hLocalDocs.Add ( tKw.m_iDocs, tKw.m_sNormalized );
@@ -8451,7 +8451,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	auto dSorterSchemas = SorterSchemas ( dSorters, iMaxSchemaIndex );
 
 	CSphQuery tUpdatedQuery;
-	const CSphQuery * pQueryToRun = SetupAutoEmbeddings ( tQuery, tUpdatedQuery, tMaxSorterSchema, tMeta.m_sError );
+	const CSphQuery * pQueryToRun = SetupAutoEmbeddings ( tEffectiveQuery, tUpdatedQuery, tMaxSorterSchema, tMeta.m_sError );
 	if ( !pQueryToRun )
 		return false;
 

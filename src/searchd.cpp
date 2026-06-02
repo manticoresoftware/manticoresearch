@@ -6539,6 +6539,26 @@ static bool CheckExistingTables ( const SqlStmt_t & tStmt, CSphString & sError )
 	return true;
 }
 
+static bool CheckExistingTables ( const CSphString & sIndex, bool bIfNotExists, CSphString & sError )
+{
+	if ( g_pLocalIndexes->Contains ( sIndex ) || g_pDistIndexes->Contains ( sIndex ) )
+	{
+		if ( bIfNotExists )
+			return true;
+
+		sError.SetSprintf ( "table '%s' already exists", sIndex.cstr() );
+		return false;
+	}
+
+	if ( CSphSchema::IsReserved ( sIndex.cstr() ) )
+	{
+		sError.SetSprintf ( "'%s' is a reserved keyword", sIndex.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
 static int CheckShardIntOpt ( const char * sName, const SqlStmt_t & tStmt, CSphString & sError )
 {
 	int iPos = tStmt.m_tCreateTable.m_dOpts.GetFirst ( [&]( const auto & tItem ) { return tItem.m_sName==sName; } );
@@ -6602,12 +6622,72 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 	return true;
 }
 
+static bool CheckCreateTable ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, CSphString & sError )
+{
+	if ( !CheckExistingTables ( sIndex, tCreateTable.m_bIfNotExists, sError ) )
+		return false;
+
+	if ( !CheckAttrs ( tCreateTable.m_dAttrs, []( const CreateTableAttr_t & tAttr ) { return tAttr.m_tAttr.m_sName; }, sError ) )
+		return false;
+
+	if ( !CheckAttrs ( tCreateTable.m_dFields, []( const CSphColumnInfo & tAttr ) { return tAttr.m_sName; }, sError ) )
+		return false;
+
+	for ( auto & i : tCreateTable.m_dAttrs )
+		if ( i.m_bKNN && !i.m_tKNNModel.m_sModelName.empty() && !IsKNNEmbeddingsLibLoaded() )
+		{
+			sError.SetSprintf ( "model_name specified for '%s', but embeddings library is not loaded", i.m_tAttr.m_sName.cstr() );
+			return false;
+		}
+
+	for ( const auto & i : tCreateTable.m_dAttrs )
+		for ( const auto & j : tCreateTable.m_dFields )
+			if ( i.m_tAttr.m_sName==j.m_sName && i.m_tAttr.m_eAttrType!=SPH_ATTR_STRING )
+			{
+				sError.SetSprintf ( "duplicate attribute name '%s'", i.m_tAttr.m_sName.cstr() );
+				return false;
+			}
+
+	const CSphVector<NameValueStr_t> & dOpts = tCreateTable.m_dOpts;
+	if ( dOpts.GetLength() )
+	{
+		auto CheckShardIntOptLocal = [&] ( const char * sName ) -> int
+		{
+			int iPos = dOpts.GetFirst ( [&]( const auto & tItem ) { return tItem.m_sName==sName; } );
+			if ( iPos==-1 )
+				return iPos;
+
+			CSphVariant tVal ( dOpts[iPos].m_sValue.cstr() );
+			if ( tVal.int64val()<0 )
+				sError.SetSprintf ( "table '%s': CREATE TABLE failed: negative '%s' option is not allowed", sIndex.cstr(), sName );
+
+			return iPos;
+		};
+
+		int iShardsPos = CheckShardIntOptLocal ( "shards" );
+		if ( !sError.IsEmpty() )
+			return false;
+		int iRfPos = CheckShardIntOptLocal ( "rf" );
+		if ( !sError.IsEmpty() )
+			return false;
+
+		if ( iShardsPos!=-1 || iRfPos!=-1 )
+		{
+			sError.SetSprintf ( "table '%s': CREATE TABLE failed: 'shards' and 'rf' options require Buddy", sIndex.cstr() );
+			return false;
+		}
+	}
+
+	return true;
+}
+
 static Threads::Coro::Mutex_c g_tCreateTableMutex;
 
 static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	SearchFailuresLog_c dErrors;
 	CSphString sError;
+	CreateTableSettings_t tExpandedSettings = tStmt.m_tCreateTable;
 
 	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
@@ -6621,8 +6701,14 @@ static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 
 	// only one create table at the time allowed and multiple concurent CREATE TABLE if not exists passes well
 	Threads::ScopedCoroMutex_t tCreateTableLock ( g_tCreateTableMutex );
+	if ( !ExpandCreateTableProfiles ( tExpandedSettings, sError ) )
+	{
+		sError.SetSprintf ( "table '%s': CREATE TABLE failed: %s", tStmt.m_sIndex.cstr(), sError.cstr() );
+		tOut.Error ( sError.cstr() );
+		return;
+	}
 
-	if ( !CheckCreateTable ( tStmt, sError ) )
+	if ( !CheckCreateTable ( tStmt.m_sIndex, tExpandedSettings, sError ) )
 	{
 		sError.SetSprintf ( "table '%s': CREATE TABLE failed: %s", tStmt.m_sIndex.cstr(), sError.cstr() );
 		tOut.Error ( sError.cstr() );
@@ -6630,7 +6716,7 @@ static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	}
 
 	StrVec_t dWarnings;
-	bool bCreatedOk = CreateNewIndexConfigless ( tStmt.m_sIndex, tStmt.m_tCreateTable, dWarnings, sError );
+	bool bCreatedOk = CreateNewIndexConfigless ( tStmt.m_sIndex, tExpandedSettings, dWarnings, sError );
 	sWarning = ConcatWarnings(dWarnings);
 
 	if ( !bCreatedOk )
@@ -11210,6 +11296,22 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 		return;
 	}
 
+	CreateTableSettings_t tAlterSettings = tStmt.m_tCreateTable;
+	for ( const auto & i : tAlterSettings.m_dOpts )
+	{
+		if ( i.m_sName=="profile" )
+		{
+			tOut.Error ( "profile=... is only supported in CREATE TABLE" );
+			return;
+		}
+	}
+
+	if ( !ExpandCreateTableProfiles ( tAlterSettings, sError ) )
+	{
+		tOut.Error ( sError.cstr() );
+		return;
+	}
+
 	int iSuffix = pRtIndex->GetChunkId();
 	CSphString sIndexPath = GetPathOnly ( pRtIndex->GetFilebase() );
 
@@ -11218,13 +11320,13 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	pContainer->Populate ( dCreateTableStmts[0].m_tCreateTable, false );
 
 	// force override for old options options from alter should override currect options
-	for ( const auto & i : tStmt.m_tCreateTable.m_dOpts )
+	for ( const auto & i : tAlterSettings.m_dOpts )
 	{
 		pContainer->RemoveKeys ( i.m_sName );
 	}
 
 	// should be able to remove settings with the empty option or remove the prev options by the last empty option
-	for ( const auto & i : tStmt.m_tCreateTable.m_dOpts )
+	for ( const auto & i : tAlterSettings.m_dOpts )
 	{
 		pContainer->AddOption ( i.m_sName, i.m_sValue, true );
 	}

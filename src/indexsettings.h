@@ -328,6 +328,8 @@ enum class MutableName_e
 	EXPAND_KEYWORDS,
 	RT_MEM_LIMIT,
 	PREOPEN,
+	RANKER,
+	BOOLEAN_MODE,
 	ACCESS_PLAIN_ATTRS,
 	ACCESS_BLOB_ATTRS,
 	ACCESS_DOCLISTS,
@@ -368,6 +370,8 @@ public:
 	int			m_iExpandKeywords;
 	int64_t		m_iMemLimit;
 	bool		m_bPreopen = false;
+	CSphString	m_sRanker;
+	bool		m_bDefaultBoolOr = false;
 	FileAccessSettings_t m_tFileAccess;
 	int			m_iOptimizeCutoff;
 	int			m_iOptimizeCutoffKNN;
@@ -436,6 +440,8 @@ struct CreateTableSettings_t
 	CSphVector<CSphColumnInfo>		m_dFields;
 	CSphVector<NameValueStr_t>		m_dOpts;
 };
+
+bool ExpandCreateTableProfiles ( CreateTableSettings_t & tCreateTable, CSphString & sError );
 
 class IndexSettingsContainer_i
 {

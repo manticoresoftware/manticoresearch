@@ -2,6 +2,8 @@
 
 查询字符串可以包含特定的操作符，用于定义查询字符串中的单词应该如何匹配的条件。
 
+关于**不使用**显式运算符的多关键字查询默认行为，请参见 [`boolean_mode`](../../Searching/Options.md#boolean_mode)。
+
 ### 布尔操作符
 
 #### AND 操作符
@@ -215,7 +217,7 @@ REGEX(/t.?e/)
 
 与[通配符操作符](../../Searching/Full_text_matching/Operators.md#Wildcard-operators)类似，REGEX操作符尝试找到所有匹配所提供模式的词项，每个扩展都作为匹配命中记录。注意，这可能对查询搜索时间产生显著影响，因为会扫描整个字典，字典中每个词项都要与REGEX模式进行匹配。
 
-模式应遵循[RE2 语法](https://github.com/google/re2/wiki/Syntax)。REGEX表达式的定界符是开括号后的第一个符号。换句话说，开括号后跟定界符与定界符和闭括号之间的所有文本都被视为RE2表达式。  
+模式应遵循[RE2 语法](https://github.com/google/re2/wiki/Syntax)。REGEX表达式的定界符是开括号后的第一个符号。换句话说，开括号后跟定界符与定界符和闭括号之间的所有文本都被视为RE2表达式。
 请注意，存储在字典中的词项会经过 `charset_table` 转换，这意味着例如如果所有字符根据 `charset_table`（默认）被转为小写，REGEX 可能无法匹配大写字符。要成功用 REGEX 表达式匹配词项，模式必须对应整个词项。若要实现部分匹配，请在模式开头和/或结尾添加 `.*`。
 
 ```sql

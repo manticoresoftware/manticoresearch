@@ -94,6 +94,7 @@ public:
 	XQNode_t *		AddKeyword ( const char * sKeyword, int iSkippedPosBeforeToken=0 );
 	XQNode_t *		AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight );
 	XQNode_t *		AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pRight, int iOpArg=0 );
+	XQNode_t *		AddDefaultOp ( XQNode_t * pLeft, XQNode_t * pRight );
 	void			SetPhrase ( XQNode_t * pNode, bool bSetExact, XQOperator_e eOp );
 	void			PhraseShiftQpos ( XQNode_t * pNode );
 	XQNode_t *		AddPhraseKeyword ( XQNode_t * pLeft, XQNode_t * pRight );
@@ -144,6 +145,7 @@ public:
 	bool					m_bEmpty = false;
 	bool					m_bWasFullText = false;
 	bool					m_bQuoted = false;
+	bool					m_bDefaultBoolOr = false;
 	int						m_iOvershortStep = 0;
 
 	int						m_iQuorumQuote = -1;
@@ -881,6 +883,27 @@ XQNode_t * XQParser_t::AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight )
 }
 
 
+static bool NeedsAndAroundExplicitOperator ( const XQNode_t * pNode )
+{
+	if ( !pNode )
+		return false;
+
+	switch ( pNode->GetOp() )
+	{
+	case SPH_QUERY_NOT:
+	case SPH_QUERY_ANDNOT:
+		return !pNode->dChildren().IsEmpty();
+	default:
+		return false;
+	}
+}
+
+XQNode_t * XQParser_t::AddDefaultOp ( XQNode_t * pLeft, XQNode_t * pRight )
+{
+	const bool bForceAnd = NeedsAndAroundExplicitOperator ( pLeft ) || NeedsAndAroundExplicitOperator ( pRight );
+	return AddOp ( ( m_bDefaultBoolOr && !bForceAnd ) ? SPH_QUERY_OR : SPH_QUERY_AND, pLeft, pRight );
+}
+
 XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pRight, int iOpArg )
 {
 	/////////
@@ -1070,6 +1093,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	DictRefPtr_c pMyDict = GetStatelessDict ( pDict );
 
 	Setup ( pSchema, pTokenizer->Clone ( SPH_CLONE ), pMyDict, &tParsed, tSettings );
+	m_bDefaultBoolOr = pQuery && pQuery->m_bDefaultBoolOr;
 	
 	// blend variants if blended_expand option used
 	if ( pQuery && !pQuery->m_sExpandBlended.IsEmpty() )

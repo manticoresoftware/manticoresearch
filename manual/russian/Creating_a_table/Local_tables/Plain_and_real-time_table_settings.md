@@ -65,6 +65,30 @@ table <table name> {
 
 ### Общие настройки для обычных таблиц и таблиц реального времени
 
+#### profile
+
+`profile` — это только SQL-ярлык для применения заранее определенного набора настроек таблицы только в `CREATE TABLE`. В `ALTER TABLE` он не поддерживается. Само имя профиля **не** хранится в метаданных таблицы; Manticore сохраняет только развернутые настройки, поэтому `SHOW CREATE TABLE` выводит итоговые параметры, а не `profile=...`.
+
+Сейчас поддерживаются такие значения:
+
+* `relevance` — разворачивается в:
+  * [`min_infix_len='2'`](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)
+  * [`index_field_lengths='1'`](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths)
+  * [`index_exact_words='1'`](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_exact_words)
+  * [`ranker=expr('1000*bm25a(1.2,0.75,256)')`](../../Searching/Options.md#ranker)
+  * [`morphology='stem_en'`](../../Creating_a_table/NLP_and_tokenization/Morphology.md#morphology)
+  * [`boolean_mode='or'`](../../Searching/Options.md#boolean_mode)
+
+Профиль `relevance` может улучшить ранжирование и полноту выдачи для многих англоязычных полнотекстовых нагрузок, но он также увеличивает объем работы при индексировании и выполнении запросов, поэтому по сравнению с настройками по умолчанию может потребовать больше CPU, места на диске и памяти.
+
+Если вы также явно укажете один из этих параметров, `profile` подчиняется тем же правилам обработки дублирующихся опций, что и обычные настройки `CREATE TABLE`: действует первое вхождение. Поскольку профиль разворачивается в обычные настройки в момент создания, `profile='relevance' ranker='bm25'` сохраняет рангер из профиля, и полностью развернутая явная форма ведет себя так же. Аналогично, `ranker='bm25' profile='relevance'` сохранит `ranker='bm25'`.
+
+Расширенные настройки сохраняются в метаданных таблицы. `OPTION ranker=...` на уровне запроса по-прежнему переопределяет любой сохраненный ранкер таблицы. Если запрос ищет по нескольким таблицам и не указывает ранкер, каждая таблица продолжает использовать свой сохраненный ранкер по умолчанию, включая локальные и удаленные распределенные таблицы. В этом случае Manticore объединяет результаты, используя необработанные возвращенные веса; он **не** нормализует веса между разными ранкерами или выражениями, поэтому смешение разных ранкеров на уровне таблиц может дать глобальный порядок, который нельзя напрямую сравнивать.
+
+```sql
+CREATE TABLE products(title text) profile='relevance';
+```
+
 #### type
 
 ```ini
@@ -83,7 +107,7 @@ type = rt
 path = path/to/table
 ```
 
-Путь к месту хранения или расположения таблицы, абсолютный или относительный, без расширения.
+Путь, по которому таблица будет храниться или находиться, полный или относительный, без расширения.
 
 Значение: Путь к таблице, **обязательный параметр**
 
@@ -994,6 +1018,7 @@ table products {
 * [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
 * [blend_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)
 * [blend_mode](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
+* [boolean_mode](../../Searching/Options.md#boolean_mode)
 * [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)
 * [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)
 * [embedded_limit](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)

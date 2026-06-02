@@ -418,7 +418,7 @@ data for the following examples:
 
 DROP TABLE IF EXISTS tbl;
 CREATE TABLE tbl(title text indexed stored) charset_table='non_cont,cont' morphology='icu_chinese';
---> 
+-->
 
 <!-- example name_table -->
 您还可以通过执行查询 `select * from <table_name>.@table` 查看表模式。此方法的优点是您可以使用 `WHERE` 子句进行过滤：
@@ -480,6 +480,8 @@ SHOW CREATE TABLE table_name [ OPTION output_words = 'list' | 'file' ]
 ```
 
 打印用于创建指定表的 `CREATE TABLE` 语句。
+
+如果该表是使用 SQL `profile=...` 快捷方式创建的，`SHOW CREATE TABLE` 打印的是展开后的设置，而不是 profile 名称本身。
 
 `output_words` 选项允许您控制外部文件设置（如 `stopwords`、`exceptions`、`wordforms`、`hitless_words`）的显示方式：
 

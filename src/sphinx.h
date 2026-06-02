@@ -578,6 +578,8 @@ struct CSphQuery
 	CSphVector<DWORD>	m_dWeights;		///< user-supplied per-field weights. may be NULL. default is NULL
 	ESphMatchMode	m_eMode = SPH_MATCH_EXTENDED;		///< match mode. default is "match all"
 	ESphRankMode	m_eRanker = SPH_RANK_DEFAULT;		///< ranking mode, default is proximity+BM25
+	bool			m_bExplicitRanker = false;	///< whether ranker was explicitly specified by the client
+	bool			m_bExplicitBooleanMode = false;	///< whether boolean_mode was explicitly specified by the client
 	CSphString		m_sRankerExpr;		///< ranking expression for SPH_RANK_EXPR
 	CSphString		m_sUDRanker;		///< user-defined ranker name
 	CSphString		m_sUDRankerOpts;	///< user-defined ranker options
@@ -599,6 +601,7 @@ struct CSphQuery
 	bool			m_bZSlist = false;			///< whether the ranker has to fetch the zonespanlist with this query
 	std::optional<bool> m_bSimplify;			///< whether to apply boolean simplification
 	static constexpr bool m_bDefaultSimplify = true;
+	bool			m_bDefaultBoolOr = false;	///< whether implicit full-text whitespace should parse as OR
 	bool			m_bPlainIDF = false;		///< whether to use PlainIDF=log(N/n) or NormalizedIDF=log((N-n+1)/n)
 	bool			m_bGlobalIDF = false;		///< whether to use local indexes or a global idf file
 	bool			m_bNormalizedTFIDF = true;	///< whether to scale IDFs by query word count, so that TF*IDF is normalized
@@ -717,6 +720,7 @@ void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitl
 bool ParseSelectList ( CSphString & sError, CSphQuery &pResult );
 
 void SetQueryDefaultsExt2 ( CSphQuery & tQuery );
+bool ApplyMutableQueryDefaults ( CSphQuery & tQuery, const MutableIndexSettings_c & tSettings, CSphString & sError );
 
 /// some low-level query stats
 struct CSphQueryStats

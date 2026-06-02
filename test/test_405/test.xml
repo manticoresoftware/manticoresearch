@@ -33,9 +33,327 @@ ALTER TABLE test11 ignore_chars='.';
 SHOW INDEX test11 SETTINGS;
 SHOW INDEX test12 SETTINGS;
 
+CREATE TABLE test13 (title TEXT) profile='relevance';
+SHOW CREATE TABLE test13;
+SHOW TABLE test13 SETTINGS;
+INSERT INTO test13 VALUES (1, 'running');
+INSERT INTO test13 VALUES (2, 'cat');
+INSERT INTO test13 VALUES (3, 'run cat');
+SELECT id FROM test13 WHERE MATCH('running cat') ORDER BY id ASC;
+SELECT id FROM test13 WHERE MATCH('*unn*') ORDER BY id ASC;
+
+<!-- profile order and override semantics on CREATE TABLE -->
+CREATE TABLE test14 (title TEXT) profile='relevance' ranker='bm25';
+SHOW CREATE TABLE test14;
+SHOW TABLE test14 SETTINGS;
+
+CREATE TABLE test15 (title TEXT) ranker='bm25' profile='relevance';
+SHOW CREATE TABLE test15;
+SHOW TABLE test15 SETTINGS;
+
+<!-- profile order and override semantics for boolean_mode and morphology on CREATE TABLE -->
+CREATE TABLE test15b (title TEXT) profile='relevance' boolean_mode='and';
+SHOW CREATE TABLE test15b;
+SHOW TABLE test15b SETTINGS;
+INSERT INTO test15b VALUES (1, 'running');
+INSERT INTO test15b VALUES (2, 'cat');
+INSERT INTO test15b VALUES (3, 'run cat');
+SELECT id FROM test15b WHERE MATCH('running cat') ORDER BY id ASC;
+
+CREATE TABLE test15c (title TEXT) boolean_mode='and' profile='relevance';
+SHOW CREATE TABLE test15c;
+SHOW TABLE test15c SETTINGS;
+INSERT INTO test15c VALUES (1, 'running');
+INSERT INTO test15c VALUES (2, 'cat');
+INSERT INTO test15c VALUES (3, 'run cat');
+SELECT id FROM test15c WHERE MATCH('running cat') ORDER BY id ASC;
+
+CREATE TABLE test15d (title TEXT) profile='relevance' morphology='';
+SHOW CREATE TABLE test15d;
+SHOW TABLE test15d SETTINGS;
+INSERT INTO test15d VALUES (1, 'walking');
+SELECT id FROM test15d WHERE MATCH('walk') ORDER BY id ASC;
+
+CREATE TABLE test15e (title TEXT) morphology='' profile='relevance';
+SHOW CREATE TABLE test15e;
+SHOW TABLE test15e SETTINGS;
+INSERT INTO test15e VALUES (1, 'walking');
+SELECT id FROM test15e WHERE MATCH('walk') ORDER BY id ASC;
+
+<!-- invalid normalization/case-sensitive values should fail -->
+CREATE TABLE test15f (title TEXT) profile='Relevance';
+CREATE TABLE test15g (title TEXT) boolean_mode='OR';
+CREATE TABLE test15h (title TEXT) profile='relevance' min_infix_len='4';
+SHOW CREATE TABLE test15h;
+SHOW TABLE test15h SETTINGS;
+INSERT INTO test15h VALUES (1, 'running');
+SELECT id FROM test15h WHERE MATCH('*unn*') ORDER BY id ASC;
+
+CREATE TABLE test15i (title TEXT) min_infix_len='4' profile='relevance';
+SHOW CREATE TABLE test15i;
+SHOW TABLE test15i SETTINGS;
+INSERT INTO test15i VALUES (1, 'running');
+SELECT id FROM test15i WHERE MATCH('*unn*') ORDER BY id ASC;
+
+<!-- ordinary duplicate semantics should stay first-wins even without profile -->
+CREATE TABLE test15j (title TEXT) boolean_mode='and' boolean_mode='or';
+SHOW CREATE TABLE test15j;
+SHOW TABLE test15j SETTINGS;
+INSERT INTO test15j VALUES (1, 'running');
+INSERT INTO test15j VALUES (2, 'cat');
+INSERT INTO test15j VALUES (3, 'run cat');
+SELECT id FROM test15j WHERE MATCH('running cat') ORDER BY id ASC;
+
+<!-- failed create must not leave a partially created table behind -->
+CREATE TABLE test15k (title TEXT) profile='relevance' boolean_mode='OR';
+SHOW CREATE TABLE test15k;
+
+<!-- duplicate/empty profile forms should follow ordinary settings semantics or fail cleanly -->
+CREATE TABLE test15l (title TEXT) profile='relevance' profile='relevance';
+SHOW CREATE TABLE test15l;
+SHOW TABLE test15l SETTINGS;
+CREATE TABLE test15m (title TEXT) profile='';
+SHOW CREATE TABLE test15m;
+
+CREATE TABLE test15n (title TEXT) profile='relevance' profile='relevance' boolean_mode='and';
+SHOW CREATE TABLE test15n;
+SHOW TABLE test15n SETTINGS;
+INSERT INTO test15n VALUES (1, 'running');
+INSERT INTO test15n VALUES (2, 'cat');
+INSERT INTO test15n VALUES (3, 'run cat');
+SELECT id FROM test15n WHERE MATCH('running cat') ORDER BY id ASC;
+
+CREATE TABLE test15o (title TEXT) boolean_mode='and' profile='relevance' profile='relevance';
+SHOW CREATE TABLE test15o;
+SHOW TABLE test15o SETTINGS;
+INSERT INTO test15o VALUES (1, 'running');
+INSERT INTO test15o VALUES (2, 'cat');
+INSERT INTO test15o VALUES (3, 'run cat');
+SELECT id FROM test15o WHERE MATCH('running cat') ORDER BY id ASC;
+
+<!-- ALTER TABLE must reject profile -->
+CREATE TABLE test16 (title TEXT);
+ALTER TABLE test16 profile='relevance';
+SHOW CREATE TABLE test16;
+SHOW TABLE test16 SETTINGS;
+
+CREATE TABLE test17 (title TEXT);
+ALTER TABLE test17 profile='relevance' ranker='bm25';
+SHOW CREATE TABLE test17;
+SHOW TABLE test17 SETTINGS;
+ALTER TABLE test17 ranker='bm25' profile='relevance';
+SHOW CREATE TABLE test17;
+SHOW TABLE test17 SETTINGS;
+
+<!-- invalid/unsupported profile usage should fail -->
+CREATE TABLE test18 (title TEXT) profile='unknown_profile';
+CREATE TABLE test19 (title TEXT);
+ALTER TABLE test19 profile='unknown_profile';
+
+<!-- direct CREATE TABLE defaults should work without profile -->
+CREATE TABLE test20_direct (title TEXT, score INT) ranker='expr(\'sum(score)\')' morphology='stem_en' boolean_mode='or';
+SHOW CREATE TABLE test20_direct;
+SHOW TABLE test20_direct SETTINGS;
+INSERT INTO test20_direct VALUES (1, 'running', 0);
+INSERT INTO test20_direct VALUES (2, 'cat', 0);
+INSERT INTO test20_direct VALUES (3, 'run cat', 0);
+INSERT INTO test20_direct VALUES (4, 'alpha', 100);
+INSERT INTO test20_direct VALUES (5, 'alpha alpha alpha', 1);
+SELECT id FROM test20_direct WHERE MATCH('running cat') ORDER BY id ASC;
+SELECT id, weight() AS w FROM test20_direct WHERE MATCH('alpha') ORDER BY w DESC, id ASC;
+SELECT id, weight() AS w FROM test20_direct WHERE MATCH('alpha') ORDER BY w DESC, id ASC OPTION ranker=expr('1');
+
+<!-- explicit query ranker must override stored profile ranker -->
+CREATE TABLE test20 (title TEXT, score INT) profile='relevance';
+INSERT INTO test20 VALUES (1, 'alpha', 100);
+INSERT INTO test20 VALUES (2, 'alpha alpha alpha', 1);
+SELECT id, weight() AS w FROM test20 WHERE MATCH('alpha') ORDER BY w DESC, id ASC;
+SELECT id, weight() AS w FROM test20 WHERE MATCH('alpha') ORDER BY w DESC, id ASC OPTION ranker=expr('sum(score)');
+
+<!-- CREATE TABLE LIKE should preserve expanded profile settings and behavior -->
+CREATE TABLE test20_like LIKE test20;
+SHOW CREATE TABLE test20_like;
+SHOW TABLE test20_like SETTINGS;
+INSERT INTO test20_like VALUES (1, 'running', 0);
+INSERT INTO test20_like VALUES (2, 'cat', 0);
+INSERT INTO test20_like VALUES (3, 'run cat', 0);
+SELECT id FROM test20_like WHERE MATCH('running cat') ORDER BY id ASC;
+
+<!-- ALTER TABLE full-text/query-default changes should be validated on documents inserted after ALTER -->
+CREATE TABLE test21 (title TEXT, score INT) profile='relevance';
+ALTER TABLE test21 ranker='expr(sum(score))';
+SHOW CREATE TABLE test21;
+SHOW TABLE test21 SETTINGS;
+INSERT INTO test21 VALUES (1, 'cat', 1);
+INSERT INTO test21 VALUES (2, 'cat', 10);
+SELECT id, weight() AS w FROM test21 WHERE MATCH('cat') ORDER BY w DESC, id ASC;
+SELECT id, weight() AS w FROM test21 WHERE MATCH('cat') ORDER BY w DESC, id ASC OPTION ranker=expr('1');
+
+<!-- CREATE TABLE LIKE should preserve altered mutable settings too -->
+CREATE TABLE test21_like LIKE test21;
+SHOW CREATE TABLE test21_like;
+SHOW TABLE test21_like SETTINGS;
+INSERT INTO test21_like VALUES (1, 'cat', 1);
+INSERT INTO test21_like VALUES (2, 'cat', 10);
+SELECT id, weight() AS w FROM test21_like WHERE MATCH('cat') ORDER BY w DESC, id ASC;
+
+<!-- ALTER TABLE should be able to override boolean_mode before newly inserted documents are queried -->
+CREATE TABLE test22 (title TEXT) profile='relevance';
+ALTER TABLE test22 boolean_mode='and';
+SHOW CREATE TABLE test22;
+SHOW TABLE test22 SETTINGS;
+INSERT INTO test22 VALUES (1, 'running');
+INSERT INTO test22 VALUES (2, 'cat');
+INSERT INTO test22 VALUES (3, 'run cat');
+SELECT id FROM test22 WHERE MATCH('running cat') ORDER BY id ASC;
+
+<!-- CREATE TABLE LIKE should preserve altered boolean_mode -->
+CREATE TABLE test22_like LIKE test22;
+SHOW CREATE TABLE test22_like;
+SHOW TABLE test22_like SETTINGS;
+INSERT INTO test22_like VALUES (1, 'running');
+INSERT INTO test22_like VALUES (2, 'cat');
+INSERT INTO test22_like VALUES (3, 'run cat');
+SELECT id FROM test22_like WHERE MATCH('running cat') ORDER BY id ASC;
+
+<!-- profile must behave like explicit expanded settings in conflict cases -->
+CREATE TABLE test24 (title TEXT) min_infix_len='2' index_field_lengths='1' ranker='expr(\'1000*bm25a(1.2,0.75,256)\')' morphology='stem_en' boolean_mode='or' ranker='bm25';
+SHOW CREATE TABLE test24;
+SHOW TABLE test24 SETTINGS;
+
+CREATE TABLE test25 (title TEXT) min_infix_len='2' index_field_lengths='1' ranker='expr(\'1000*bm25a(1.2,0.75,256)\')' morphology='stem_en' boolean_mode='or' boolean_mode='and';
+SHOW CREATE TABLE test25;
+SHOW TABLE test25 SETTINGS;
+
+<!-- ALTER TABLE should be able to override morphology after profile-created defaults -->
+CREATE TABLE test23 (title TEXT) profile='relevance';
+INSERT INTO test23 VALUES (1, 'walking');
+SELECT id FROM test23 WHERE MATCH('walk') ORDER BY id ASC;
+ALTER TABLE test23 morphology='';
+SHOW CREATE TABLE test23;
+SHOW TABLE test23 SETTINGS;
+INSERT INTO test23 VALUES (2, 'jogging');
+SELECT id FROM test23 WHERE MATCH('jog') ORDER BY id ASC;
+
+<!-- mixed table defaults: each table keeps its own stored ranker unless the query sets one explicitly -->
+CREATE TABLE test26_a (title TEXT, score INT) ranker='expr(\'sum(score)\')';
+CREATE TABLE test26_b (title TEXT, score INT) ranker='expr(\'1\')';
+INSERT INTO test26_a VALUES (1, 'alpha', 100);
+INSERT INTO test26_a VALUES (2, 'alpha alpha alpha', 1);
+INSERT INTO test26_b VALUES (11, 'alpha', 100);
+INSERT INTO test26_b VALUES (12, 'alpha alpha alpha', 1);
+CREATE TABLE test26_local_dist type='distributed' local='test26_a' local='test26_b';
+CREATE TABLE test26_remote_dist type='distributed' agent='<agent0_address/>:test26_a' agent='<agent0_address/>:test26_b';
+SELECT id, weight() AS w FROM test26_a, test26_b WHERE MATCH('alpha') ORDER BY w DESC, id ASC;
+SELECT id, weight() AS w FROM test26_a, test26_b WHERE MATCH('alpha') ORDER BY w DESC, id ASC OPTION ranker=expr('sum(score)');
+SELECT id, weight() AS w FROM test26_a, test26_b WHERE MATCH('alpha') ORDER BY w DESC, id ASC OPTION ranker=expr('1');
+SELECT id, weight() AS w FROM test26_local_dist WHERE MATCH('alpha') ORDER BY w DESC, id ASC;
+SELECT id, weight() AS w FROM test26_local_dist WHERE MATCH('alpha') ORDER BY w DESC, id ASC OPTION ranker=expr('sum(score)');
+SELECT id, weight() AS w FROM test26_local_dist WHERE MATCH('alpha') ORDER BY w DESC, id ASC OPTION ranker=expr('1');
+SELECT id, weight() AS w FROM test26_remote_dist WHERE MATCH('alpha') ORDER BY w DESC, id ASC;
+SELECT id, weight() AS w FROM test26_remote_dist WHERE MATCH('alpha') ORDER BY w DESC, id ASC OPTION ranker=expr('sum(score)');
+SELECT id, weight() AS w FROM test26_remote_dist WHERE MATCH('alpha') ORDER BY w DESC, id ASC OPTION ranker=expr('1');
+DROP TABLE test26_remote_dist;
+DROP TABLE test26_local_dist;
+DROP TABLE test26_a;
+DROP TABLE test26_b;
+
+<!-- explicit query boolean_mode should override stored table defaults, including distributed remote agents -->
+CREATE TABLE test27_or (title TEXT) boolean_mode='or';
+INSERT INTO test27_or VALUES (1, 'alpha beta');
+INSERT INTO test27_or VALUES (2, 'alpha');
+INSERT INTO test27_or VALUES (3, 'beta');
+SELECT id FROM test27_or WHERE MATCH('alpha beta') ORDER BY id ASC;
+SELECT id FROM test27_or WHERE MATCH('alpha beta') ORDER BY id ASC OPTION boolean_mode='and';
+
+CREATE TABLE test28_a (title TEXT) boolean_mode='and';
+CREATE TABLE test28_b (title TEXT) boolean_mode='and';
+INSERT INTO test28_a VALUES (1, 'alpha beta');
+INSERT INTO test28_a VALUES (2, 'alpha');
+INSERT INTO test28_b VALUES (11, 'alpha beta');
+INSERT INTO test28_b VALUES (12, 'beta');
+CREATE TABLE test28_local_dist type='distributed' local='test28_a' local='test28_b';
+CREATE TABLE test28_remote_dist type='distributed' agent='<agent0_address/>:test28_a' agent='<agent0_address/>:test28_b';
+SELECT id FROM test28_local_dist WHERE MATCH('alpha beta') ORDER BY id ASC;
+SELECT id FROM test28_local_dist WHERE MATCH('alpha beta') ORDER BY id ASC OPTION boolean_mode='or';
+SELECT id FROM test28_remote_dist WHERE MATCH('alpha beta') ORDER BY id ASC;
+SELECT id FROM test28_remote_dist WHERE MATCH('alpha beta') ORDER BY id ASC OPTION boolean_mode='or';
+DROP TABLE test28_remote_dist;
+DROP TABLE test28_local_dist;
+DROP TABLE test28_a;
+DROP TABLE test28_b;
+DROP TABLE test27_or;
+
+<!-- mixed stored boolean defaults should stay table-local unless query option overrides them -->
+CREATE TABLE test28_mix_or (title TEXT) boolean_mode='or';
+CREATE TABLE test28_mix_and (title TEXT) boolean_mode='and';
+INSERT INTO test28_mix_or VALUES (1, 'alpha beta');
+INSERT INTO test28_mix_or VALUES (2, 'alpha');
+INSERT INTO test28_mix_or VALUES (3, 'beta');
+INSERT INTO test28_mix_and VALUES (11, 'alpha beta');
+INSERT INTO test28_mix_and VALUES (12, 'beta');
+CREATE TABLE test28_mix_local_dist type='distributed' local='test28_mix_or' local='test28_mix_and';
+CREATE TABLE test28_mix_remote_dist type='distributed' agent='<agent0_address/>:test28_mix_or' agent='<agent0_address/>:test28_mix_and';
+SELECT id FROM test28_mix_local_dist WHERE MATCH('alpha beta') ORDER BY id ASC;
+SELECT id FROM test28_mix_local_dist WHERE MATCH('alpha beta') ORDER BY id ASC OPTION boolean_mode='and';
+SELECT id FROM test28_mix_local_dist WHERE MATCH('alpha beta') ORDER BY id ASC OPTION boolean_mode='or';
+SELECT id FROM test28_mix_remote_dist WHERE MATCH('alpha beta') ORDER BY id ASC;
+SELECT id FROM test28_mix_remote_dist WHERE MATCH('alpha beta') ORDER BY id ASC OPTION boolean_mode='and';
+SELECT id FROM test28_mix_remote_dist WHERE MATCH('alpha beta') ORDER BY id ASC OPTION boolean_mode='or';
+DROP TABLE test28_mix_remote_dist;
+DROP TABLE test28_mix_local_dist;
+DROP TABLE test28_mix_or;
+DROP TABLE test28_mix_and;
+
+<!-- explicit full-text operators should keep their own semantics even when boolean_mode='or' -->
+CREATE TABLE test29_ops (title TEXT) boolean_mode='or';
+INSERT INTO test29_ops VALUES (1, 'gamma alpha');
+INSERT INTO test29_ops VALUES (2, 'gamma beta');
+INSERT INTO test29_ops VALUES (3, 'alpha');
+INSERT INTO test29_ops VALUES (4, 'beta');
+INSERT INTO test29_ops VALUES (5, 'alpha beta');
+INSERT INTO test29_ops VALUES (6, 'alpha x beta');
+INSERT INTO test29_ops VALUES (7, 'alpha beta gamma');
+INSERT INTO test29_ops VALUES (8, 'gamma');
+SELECT id FROM test29_ops WHERE MATCH('gamma alpha | beta') ORDER BY id ASC;
+SELECT id FROM test29_ops WHERE MATCH('alpha !beta') ORDER BY id ASC;
+SELECT id FROM test29_ops WHERE MATCH('"alpha beta"') ORDER BY id ASC;
+SELECT id FROM test29_ops WHERE MATCH('"alpha beta gamma"/2') ORDER BY id ASC;
+SELECT id FROM test29_ops WHERE MATCH('gamma alpha MAYBE beta') ORDER BY id ASC;
+<![CDATA[SELECT id FROM test29_ops WHERE MATCH('gamma alpha << beta') ORDER BY id ASC;]]>
+SELECT id FROM test29_ops WHERE MATCH('gamma alpha NEAR/2 beta') ORDER BY id ASC;
+SELECT id FROM test29_ops WHERE MATCH('gamma alpha NOTNEAR/2 beta') ORDER BY id ASC;
+SELECT id FROM test29_ops WHERE MATCH('(alpha | beta) gamma') ORDER BY id ASC;
+SELECT id FROM test29_ops WHERE MATCH('(alpha | beta) | gamma') ORDER BY id ASC;
+SELECT id FROM test29_ops WHERE MATCH('("alpha beta") gamma') ORDER BY id ASC;
+SELECT id FROM test29_ops WHERE MATCH('(alpha NEAR/2 beta) gamma') ORDER BY id ASC;
+SELECT id FROM test29_ops WHERE MATCH('!beta alpha') ORDER BY id ASC;
+DROP TABLE test29_ops;
+
 drop table test1;
 drop table test11;
 drop table test12;
+drop table test13;
+drop table test14;
+drop table test15;
+drop table test15b;
+drop table test15c;
+drop table test15d;
+drop table test15e;
+drop table test15h;
+drop table test15i;
+drop table test15j;
+drop table test15l;
+drop table test15n;
+drop table test15o;
+drop table test16;
+drop table test17;
+drop table test19;
+drop table test20_like;
+drop table test21_like;
+drop table test22_like;
+drop table test24;
+drop table test25;
 
 CREATE TABLE test1 (title text) rt_mem_limit='2G';
 CREATE TABLE test2 LIKE test1;
@@ -49,6 +367,30 @@ drop table test1;
 drop table test2;
 
 ALTER TABLE test1 RECONFIGURE;
+</sphinxql>
+
+<sphinxql system="restart-daemon"/>
+
+<sphinxql>
+<!-- persistence of direct and altered profile-derived settings across restart -->
+SHOW CREATE TABLE test20_direct;
+SHOW TABLE test20_direct SETTINGS;
+SELECT id FROM test20_direct WHERE MATCH('running cat') ORDER BY id ASC;
+SELECT id, weight() AS w FROM test20_direct WHERE MATCH('alpha') ORDER BY w DESC, id ASC;
+SHOW TABLE test21 SETTINGS;
+SELECT id, weight() AS w FROM test21 WHERE MATCH('cat') ORDER BY w DESC, id ASC;
+SHOW TABLE test22 SETTINGS;
+SELECT id FROM test22 WHERE MATCH('running cat') ORDER BY id ASC;
+SHOW CREATE TABLE test23;
+SELECT id FROM test23 WHERE MATCH('jog') ORDER BY id ASC;
+DROP TABLE test20_direct;
+DROP TABLE test20_like;
+DROP TABLE test21_like;
+DROP TABLE test22_like;
+DROP TABLE test20;
+DROP TABLE test21;
+DROP TABLE test22;
+DROP TABLE test23;
 </sphinxql>
 
 <sphinxql>

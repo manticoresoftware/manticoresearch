@@ -680,14 +680,45 @@ struct DistributedIndex_t : public ISphRefcountedMT
 	int GetAgentQueryTimeoutMs ( bool bRaw=false ) const;
 	void SetAgentConnectTimeoutMs ( int iAgentConnectTimeoutMs );
 	void SetAgentQueryTimeoutMs ( int iAgentQueryTimeoutMs );
-	DistributedIndex_t * Clone() const;
+	virtual IndexType_e GetType() const { return IndexType_e::DISTR; }
+	virtual DistributedIndex_t * Clone() const;
 
-private:
+protected:
 	~DistributedIndex_t() override;
 
 	int m_iAgentConnectTimeoutMs	= 0;	///< in msec, 0 means g_iAgentConnectTimeoutMs
 	int m_iAgentQueryTimeoutMs		= 0;	///< in msec, 0 means g_iAgentQueryTimeoutMs
 };
+
+struct ShardIndex_c : public DistributedIndex_t
+{
+	struct RouteTarget_t
+	{
+		CSphString				m_sName;
+		MultiAgentDescRefPtr_c	m_pAgent;
+		int						m_iOrderId = -1;
+		int						m_iRouteId = -1;
+		int64_t					m_iLocalIndexId = 0;
+		int						m_iLocalAlterGeneration = 0;
+		bool					m_bLocal = true;
+
+		bool IsLocal () const { return m_bLocal; }
+	};
+
+	CSphString				m_sIndexPath;
+	CSphSchema				m_tSchema;
+	CSphIndexSettings		m_tSettings;
+	CSphTokenizerSettings	m_tTokenizerSettings;
+	CSphDictSettings		m_tDictSettings;
+	CSphFieldFilterSettings	m_tFieldFilterSettings;
+	CSphVector<RouteTarget_t> m_dRouteTargets; // shard-only runtime order used for write routing
+
+	IndexType_e GetType() const override { return IndexType_e::SHARD; }
+	DistributedIndex_t * Clone() const override;
+};
+
+const ShardIndex_c * AsShard ( const DistributedIndex_t * pIndex );
+ShardIndex_c * AsShard ( DistributedIndex_t * pIndex );
 
 using DistributedIndexRefPtr_t = CSphRefcountedPtr<DistributedIndex_t>;
 using cDistributedIndexRefPtr_t = CSphRefcountedPtr<const DistributedIndex_t>;
@@ -778,12 +809,13 @@ bool sphNBSockEof ( int iSock );
 class SphinxqlRequestBuilder_c : public RequestBuilder_i
 {
 public:
-			SphinxqlRequestBuilder_c ( Str_t sQuery, const SqlStmt_t & tStmt );
+			SphinxqlRequestBuilder_c ( Str_t sQuery, const SqlStmt_t & tStmt, DWORD uApiFlags );
 	void	BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final;
 
 protected:
 	const Str_t m_sBegin;
 	const Str_t m_sEnd;
+	DWORD		m_uApiFlags = 0;
 };
 
 class SphinxqlReplyParser_c : public ReplyParser_i

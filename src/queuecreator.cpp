@@ -303,6 +303,7 @@ private:
 	bool	MaybeAddGroupbyMagic ( bool bGotDistinct );
 	bool	AddKNNDistColumn();
 	bool	AddKNNRescoreColumn();
+	bool	CanRescoreKNN() const;
 	bool	AddHybridScoreColumn();
 	bool	AddJoinAttrs();
 	bool	CheckJoinOnTypeCast ( const CSphString & sIdx, const CSphString & sAttr, ESphAttr eTypeCast );
@@ -1692,22 +1693,35 @@ bool QueueCreator_c::AddKNNDistColumn()
 }
 
 
+// Whether an exact KNN rescore can run against this sorter schema.
+// Rescore recomputes exact distances from the stored vectors, which needs the
+// attribute's own KNN index settings (m_tKNN). On a distributed/sharded head the
+// merged sorter schema carries the vector attribute without those settings —
+// agents never transmit m_tKNN, so m_iDims is 0 here even if ATTR_INDEXED_KNN
+// survived the wire. Each shard already rescored locally and returned @knn_dist;
+// the head only merges those comparable distances. Trying to build a distance
+// calc here yields a null calc and crashes, so rescore must be skipped.
+bool QueueCreator_c::CanRescoreKNN() const
+{
+	if ( m_tQuery.m_bHybridSearch || !m_tQuery.HasKnn() )
+		return false;
+
+	const auto & tKNN = m_tQuery.SingleKnnSettings();
+	if ( tKNN.m_sAttr.IsEmpty() || !tKNN.m_bRescore )
+		return false;
+
+	const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
+	return pAttr && pAttr->IsIndexedKNN() && pAttr->m_tKNN.m_iDims>0;
+}
+
+
 bool QueueCreator_c::AddKNNRescoreColumn()
 {
-	if ( m_tQuery.m_bHybridSearch )
-		return true;
-
-	if ( !m_tQuery.HasKnn() )
+	if ( !CanRescoreKNN() )
 		return true;
 
 	const auto & tKNN = m_tQuery.SingleKnnSettings();
-	if ( tKNN.m_sAttr.IsEmpty() )
-		return true;
-
-	if ( !tKNN.m_bRescore )
-		return true;
-
-	auto pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
+	const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
 
 	CSphColumnInfo tKNNDistRescored ( GetKnnDistRescoreAttrName(), SPH_ATTR_FLOAT );
 	tKNNDistRescored.m_eStage = SPH_EVAL_FINAL;
@@ -2639,9 +2653,12 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	if ( !pSorter )
 		return nullptr;
 
-	if ( !m_tQuery.m_bHybridSearch )
+	// Only wrap in the rescore sorter when the rescore column was actually added
+	// (see AddKNNRescoreColumn). On a distributed head we skip both, otherwise the
+	// wrapper would look up a missing @knn_dist_rescore attr and crash on flatten.
+	if ( CanRescoreKNN() )
 	{
-		pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.HasKnn() ? m_tQuery.SingleKnnSettings() : KnnSearchSettings_t() );
+		pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.SingleKnnSettings() );
 		if ( !pSorter )
 			return nullptr;
 	}

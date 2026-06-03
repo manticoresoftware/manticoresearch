@@ -1,0 +1,115 @@
+Test node rejoin with stale cluster metadata cleanup - validates ALTER CLUSTER DROP clears local m_sCluster on returning node
+––– comment –––
+Start 3-node cluster
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c TABLE_NAME=t
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– comment –––
+Create table with RF=2 - 2 shards across 3 nodes
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE ${CLUSTER_NAME}:${TABLE_NAME} (id bigint, value string) shards='2' rf='2'"; echo $?
+––– output –––
+0
+––– comment –––
+Insert test data
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO ${TABLE_NAME} (id, value) VALUES (1, 'alpha'), (2, 'beta')"; echo $?
+––– output –––
+0
+––– comment –––
+Verify initial shard layout
+––– input –––
+show_shards 1306 "$TABLE_NAME"
+––– output –––
+system.t_s0: 127.0.0.1:1312 127.0.0.1:2312
+system.t_s1: 127.0.0.1:2312 127.0.0.1:3312
+––– comment –––
+Kill node 1
+––– input –––
+export INSTANCE=1; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; echo "Node 1 killed"
+––– output –––
+Node 1 killed
+––– comment –––
+Wait for port to be released
+––– input –––
+timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
+––– output –––
+––– comment –––
+Wait for rebalancing to complete on node 2
+––– input –––
+timeout 60 grep -qm1 'Rebalancing completed' <(tail -n 100 -f /var/log/manticore-2/searchd.log); echo $?
+––– output –––
+0
+––– comment –––
+Verify remaining nodes maintain quorum
+––– input –––
+for i in 2 3; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq
+––– output –––
+OK
+––– comment –––
+Verify shards redistributed to nodes 2 and 3
+––– input –––
+show_shards 2306 "$TABLE_NAME"
+––– output –––
+system.t_s0: 127.0.0.1:2312 127.0.0.1:3312
+system.t_s1: 127.0.0.1:2312 127.0.0.1:3312
+––– comment –––
+Verify data accessible
+––– input –––
+mysql -h0 -P2306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
+––– output –––
++------+
+|    2 |
++------+
+––– comment –––
+Clean logs before restart so we can grep fresh
+––– input –––
+truncate -s 0 /var/log/manticore-2/searchd.log
+––– output –––
+––– comment –––
+Restart node 1 - it has stale per-shard cluster metadata that must be cleaned up
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– comment –––
+Wait for rebalancing to complete after node 1 rejoins
+––– input –––
+timeout 90 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-2/searchd.log); echo $?
+––– output –––
+0
+––– comment –––
+Check all 3 nodes are synced
+––– input –––
+for i in 1 2 3; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq
+––– output –––
+OK
+––– comment –––
+Verify shards back to RF=2 balanced distribution
+––– input –––
+show_shards 1306 "$TABLE_NAME"
+––– output –––
+system.t_s0: 127.0.0.1:1312 127.0.0.1:2312
+system.t_s1: 127.0.0.1:2312 127.0.0.1:3312
+––– comment –––
+Verify data integrity
+––– input –––
+mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
+––– output –––
++------+
+|    2 |
++------+

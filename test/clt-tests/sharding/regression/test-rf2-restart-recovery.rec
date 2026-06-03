@@ -1,0 +1,50 @@
+––– comment –––
+Regression: FAIL_010-A / FAIL_010-B (daemon #4431) — after searchd --stopwait
+and restart of a node holding clustered RF=2 sharded shards, the shard tables
+used to fail prealloc (files lived under the internal cluster dir while
+manticore.json recorded a bare path) -> NOT SERVING -> "consistency
+compromised" abort. Replicated tables are now stored under data_dir, so the
+restarted node recovers and serves its local shards. The restarted node must
+answer SELECT with the full row count after rejoin.
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "create table c:rr(id bigint, body text) shards='2' rf='2';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "insert into rr(id,body) values(1,'a'),(2,'b'),(3,'c'),(4,'d');"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P2306 -N -B -e "select count(*) from rr;" 2>&1 | tr -d ' |+-' | grep -v '^$'
+––– output –––
+4
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/stop-searchd –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+for i in $(seq 1 40); do c=$(mysql -h0 -P2306 -N -B -e "select count(*) from rr" 2>/dev/null | tr -d ' |+-' | grep -v '^$'); [ "$c" = "4" ] && break; sleep 1; done; echo "count=$c"
+––– output –––
+count=4
+––– input –––
+grep -cE "NOT SERVING|Node consistency compromised" /var/log/manticore-2/searchd.log
+––– output –––
+0

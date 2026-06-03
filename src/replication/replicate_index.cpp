@@ -338,9 +338,8 @@ static bool AddDistIndex ( const DistIndexSendRequest_t & tCmd )
 {
 	TLS_MSG_STRING ( sError );
 
-	cDistributedIndexRefPtr_t pDist ( GetDistr ( tCmd.m_sIndex ) );
-	if ( pDist && !pDist->m_sCluster.IsEmpty() )
-		return TlsMsg::Err ( "distributed table '%s:%s' is already the part of the cluster %s, remove it first", tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr(), pDist->m_sCluster.cstr() );
+	if ( !CanReplaceIndex ( tCmd.m_sCluster, tCmd.m_sIndex ) )
+		return false;
 
 	CSphVector<BYTE> dBsonParsed;
 	if ( !sphJsonParse ( dBsonParsed, (char *)tCmd.m_sDesc.cstr(), false, false, false, sError ) )
@@ -359,6 +358,9 @@ static bool AddDistIndex ( const DistIndexSendRequest_t & tCmd )
 	if ( !sWarning.IsEmpty() )
 		sphWarning ( "table '%s' create warning: %s", tCmd.m_sIndex.cstr(), sWarning.cstr() );
 
+	if ( tIndexDesc.m_eType != IndexType_e::DISTR )
+		return TlsMsg::Err ( "unsupported distributed table type '%s' for '%s:%s'", GetIndexTypeName ( tIndexDesc.m_eType ), tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr() );
+
 	CSphConfigSection hConf;
 	tIndexDesc.Save ( hConf );
 
@@ -375,6 +377,9 @@ static bool AddDistIndex ( const DistIndexSendRequest_t & tCmd )
 	}
 
 	// finally, check and add a new or replace an existed distributed index to global table
+	if ( !CanReplaceIndex ( tCmd.m_sCluster, tCmd.m_sIndex ) )
+		return false;
+
 	g_pDistIndexes->AddOrReplace ( pIdx, tCmd.m_sIndex );
 
 	return true;

@@ -1,0 +1,62 @@
+Test that new nodes can join a cluster with existing sharded tables
+
+––– comment –––
+Start nodes 1, 2
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– comment –––
+Create RF=2 table on 2-node cluster - auto-sharding creates cluster c
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE c:existing_table (id bigint, data string) shards='2' rf='2'"; echo $?
+––– output –––
+0
+––– comment –––
+Verify shards exist on both nodes (2 nodes, RF=2 - each node holds both shards)
+––– input –––
+for i in 1 2; do mysql -h0 -P${i}306 -sN -e "SELECT COUNT(*) FROM system.sharding_table WHERE table = 'existing_table'"; done
+––– output –––
+2
+2
+––– comment –––
+Start node 3
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– comment –––
+Join node 3 to cluster c
+––– input –––
+mysql -h0 -P3306 -e "JOIN CLUSTER c at '127.0.0.1:1312'"; echo $?
+––– output –––
+0
+––– comment –––
+Verify all 3 nodes synced
+––– input –––
+for port in 1306 2306 3306; do timeout 30 mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_c_status'\G" > /tmp/status_$port.log && grep -q "Value: primary" /tmp/status_$port.log && echo "Port $port: Node synced"; done
+––– output –––
+Port 1306: Node synced
+Port 2306: Node synced
+Port 3306: Node synced
+––– comment –––
+Verify cluster now has 3 nodes
+––– input –––
+mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM system.sharding_state"
+––– output –––
+3
+––– comment –––
+Wait for cluster to stabilize before cleanup
+––– input –––
+sleep 15; echo "Cluster stabilized"
+––– output –––
+Cluster stabilized
+––– comment –––
+Cleanup - drop table without cluster prefix
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS existing_table"
+––– output –––

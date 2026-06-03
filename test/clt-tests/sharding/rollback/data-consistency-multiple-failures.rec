@@ -75,7 +75,7 @@ export INSTANCE=1
 ––– comment –––
 Wait for node 1 to rejoin
 ––– input –––
-sleep 2
+sleep 15
 ––– output –––
 ––– comment –––
 Check that cluster is synced
@@ -115,7 +115,7 @@ export INSTANCE=2
 ––– comment –––
 Wait for node 2 to rejoin and verify all nodes synced
 ––– input –––
-sleep 2
+sleep 15
 ––– output –––
 ––– comment –––
 Check that cluster is synced

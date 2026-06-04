@@ -78,9 +78,7 @@ Verify data still accessible after first failure
 ––– input –––
 mysql --no-defaults -h0 -P2306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
 ––– output –––
-+------+
-|    3 |
-+------+
+3
 ––– comment –––
 Kill node 2 - second sequential failure
 ––– input –––
@@ -109,9 +107,7 @@ Verify data still accessible - RF=3 but only 2 nodes left, degraded but readable
 ––– input –––
 mysql --no-defaults -h0 -P3306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
 ––– output –––
-+------+
-|    3 |
-+------+
+3
 ––– comment –––
 Clean logs before restart so we can grep fresh
 ––– input –––
@@ -154,6 +150,4 @@ Verify full data integrity
 ––– input –––
 mysql --no-defaults -h0 -P1306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
 ––– output –––
-+------+
-|    3 |
-+------+
+3

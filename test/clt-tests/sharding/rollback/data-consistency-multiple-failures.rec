@@ -128,18 +128,18 @@ CRITICAL: Verify data consistency - all records present, no data loss
 ––– input –––
 mysql --no-defaults -h0 -P1306 -sN -e "SELECT COUNT(*), SUM(amount) FROM ${TABLE_NAME}"
 ––– output –––
-7	1402.75
+7	1402.750000
 ––– comment –––
 Verify data consistency across all nodes
 ––– input –––
 for port in 1306 2306 3306; do echo "Node $port:"; mysql --no-defaults -h0 -P$port -sN -e "SELECT COUNT(*), SUM(amount) FROM ${TABLE_NAME}"; done
 ––– output –––
 Node 1306:
-7	1402.75
+7	1402.750000
 Node 2306:
-7	1402.75
+7	1402.750000
 Node 3306:
-7	1402.75
+7	1402.750000
 ––– comment –––
 Cleanup
 ––– input –––

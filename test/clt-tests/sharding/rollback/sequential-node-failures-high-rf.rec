@@ -56,7 +56,7 @@ timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
 ––– comment –––
 Wait for rebalancing to complete on node 2 (new master)
 ––– input –––
-timeout 60 grep -qm1 'Rebalancing completed' <(tail -n 100 -f /var/log/manticore-2/searchd.log); echo $?
+timeout 60 grep -qm1 'Rebalancing completed' <(tail -n 100 -f /var/log/manticore-2/searchd.log 2>/dev/null); echo $?
 ––– output –––
 0
 ––– comment –––
@@ -95,7 +95,7 @@ timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
 ––– comment –––
 Wait for new master to detect the failure
 ––– input –––
-timeout 20 grep -qm1 'Skipping rebalance for table' <(tail -n 100 -f /var/log/manticore-{3,4}/searchd.log); echo $?
+timeout 20 grep -qm1 'Skipping rebalance for table' <(tail -n 100 -f /var/log/manticore-{3,4}/searchd.log 2>/dev/null); echo $?
 ––– output –––
 0
 ––– comment –––
@@ -132,7 +132,7 @@ export INSTANCE=2
 ––– comment –––
 Wait for rebalancing to complete after both nodes rejoin
 ––– input –––
-timeout 60 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-3/searchd.log); echo $?
+timeout 60 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-3/searchd.log 2>/dev/null); echo $?
 ––– output –––
 0
 ––– comment –––

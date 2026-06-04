@@ -66,11 +66,11 @@ timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
 ––– comment –––
 Wait for master to process the failure - RF=1 should skip, RF=2 should rebalance
 ––– input –––
-timeout 60 grep -qm1 'Skipping rebalance for table norep' <(tail -n 100 -f /var/log/manticore-2/searchd.log); echo $?
+timeout 60 grep -qm1 'Skipping rebalance for table norep' <(tail -n 100 -f /var/log/manticore-2/searchd.log 2>/dev/null); echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 grep -qm1 'Rebalancing completed' <(tail -n 100 -f /var/log/manticore-2/searchd.log); echo $?
+timeout 60 grep -qm1 'Rebalancing completed' <(tail -n 100 -f /var/log/manticore-2/searchd.log 2>/dev/null); echo $?
 ––– output –––
 0
 ––– comment –––
@@ -113,7 +113,7 @@ export INSTANCE=1
 ––– comment –––
 Wait for rebalancing to complete for RF=2 table
 ––– input –––
-timeout 90 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-2/searchd.log); echo $?
+timeout 90 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-2/searchd.log 2>/dev/null); echo $?
 ––– output –––
 0
 ––– comment –––

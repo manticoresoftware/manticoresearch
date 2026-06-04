@@ -54,7 +54,7 @@ timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
 ––– comment –––
 Wait until master detects the failure and starts rebalancing
 ––– input –––
-timeout 20 grep -qm1 'Rebalancing due to inactive nodes' <(tail -n 100 -f /var/log/manticore-1/searchd.log); echo $?
+timeout 20 grep -qm1 'Rebalancing due to inactive nodes' <(tail -n 100 -f /var/log/manticore-1/searchd.log 2>/dev/null); echo $?
 ––– output –––
 0
 ––– comment –––
@@ -70,7 +70,7 @@ timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
 ––– comment –––
 Wait for new master election on remaining nodes
 ––– input –––
-timeout 30 grep -qm1 'becoming master' <(tail -n 100 -f /var/log/manticore-{2,3}/searchd.log); echo $?
+timeout 30 grep -qm1 'becoming master' <(tail -n 100 -f /var/log/manticore-{2,3}/searchd.log 2>/dev/null); echo $?
 ––– output –––
 0
 ––– comment –––
@@ -108,7 +108,7 @@ export INSTANCE=1
 ––– comment –––
 Wait for rebalancing to complete with all nodes back
 ––– input –––
-timeout 90 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-{2,3}/searchd.log); echo $?
+timeout 90 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-{2,3}/searchd.log 2>/dev/null); echo $?
 ––– output –––
 0
 ––– comment –––

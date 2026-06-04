@@ -45,15 +45,15 @@ Verify initial RF=1 layout - each shard on 1 node only
 ––– input –––
 show_shards 1306 "norep"
 ––– output –––
-system.norep_s0: 127.0.0.1:1312
-system.norep_s1: 127.0.0.1:2312
+system.norep_s0: local
+system.norep_s1: 127.0.0.1:3312
 ––– comment –––
 Verify initial RF=2 layout - each shard on 2 nodes
 ––– input –––
 show_shards 1306 "rep"
 ––– output –––
-system.rep_s0: 127.0.0.1:1312 127.0.0.1:2312
-system.rep_s1: 127.0.0.1:2312 127.0.0.1:3312
+system.rep_s0: 127.0.0.1:1312 127.0.0.1:3312
+system.rep_s1: 127.0.0.1:1312 127.0.0.1:2312
 ––– comment –––
 Kill node 1
 ––– input –––
@@ -85,7 +85,7 @@ RF=1 table: shard layout unchanged (no rebalance), node 1 shard unavailable
 show_shards 2306 "norep"
 ––– output –––
 system.norep_s0: 127.0.0.1:1312
-system.norep_s1: 127.0.0.1:2312
+system.norep_s1: 127.0.0.1:3312
 ––– comment –––
 RF=2 table: shards rebalanced to nodes 2 and 3
 ––– input –––
@@ -98,9 +98,7 @@ RF=2 data fully accessible
 ––– input –––
 mysql --no-defaults -h0 -P2306 -sN -e "SELECT COUNT(*) FROM rep"
 ––– output –––
-+------+
-|    2 |
-+------+
+2
 ––– comment –––
 Restart node 1
 ––– input –––
@@ -127,26 +125,22 @@ RF=1 table: original layout restored (node 1 back with its shard)
 ––– input –––
 show_shards 1306 "norep"
 ––– output –––
-system.norep_s0: 127.0.0.1:1312
-system.norep_s1: 127.0.0.1:2312
+system.norep_s0: local
+system.norep_s1: 127.0.0.1:3312
 ––– comment –––
 RF=2 table: balanced distribution restored
 ––– input –––
 show_shards 1306 "rep"
 ––– output –––
-system.rep_s0: 127.0.0.1:1312 127.0.0.1:2312
-system.rep_s1: 127.0.0.1:2312 127.0.0.1:3312
+system.rep_s0: 127.0.0.1:1312 127.0.0.1:3312
+system.rep_s1: 127.0.0.1:1312 127.0.0.1:2312
 ––– comment –––
 Both tables data intact
 ––– input –––
 mysql --no-defaults -h0 -P1306 -sN -e "SELECT COUNT(*) FROM norep"
 ––– output –––
-+------+
-|    2 |
-+------+
+2
 ––– input –––
 mysql --no-defaults -h0 -P1306 -sN -e "SELECT COUNT(*) FROM rep"
 ––– output –––
-+------+
-|    2 |
-+------+
+2

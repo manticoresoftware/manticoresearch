@@ -10,6 +10,11 @@ export INSTANCE=1
 export INSTANCE=2
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
 ––– comment –––
 Create RF=2 table on 2-node cluster - auto-sharding creates cluster c
 ––– input –––
@@ -56,7 +61,7 @@ sleep 15; echo "Cluster stabilized"
 ––– output –––
 Cluster stabilized
 ––– comment –––
-Cleanup - drop table without cluster prefix
+Cleanup - drop table with cluster prefix
 ––– input –––
-mysql -h0 -P1306 -e "DROP TABLE IF EXISTS existing_table"
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS c:existing_table"
 ––– output –––

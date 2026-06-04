@@ -14,6 +14,11 @@ export INSTANCE=2
 export INSTANCE=3
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
 ––– comment –––
 Create table with RF=2 for HA - auto-sharding creates cluster c
 ––– input –––

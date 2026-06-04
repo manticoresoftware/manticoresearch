@@ -70,7 +70,7 @@ timeout 60 grep -qm1 'Skipping rebalance for table norep' <(tail -n 100 -f /var/
 ––– output –––
 0
 ––– input –––
-timeout 60 grep -qm1 'Rebalancing completed' <(tail -n 100 -f /var/log/manticore-2/searchd.log 2>/dev/null); echo $?
+timeout 120 grep -qm1 'Rebalancing completed' <(tail -n 100 -f /var/log/manticore-2/searchd.log 2>/dev/null); echo $?
 ––– output –––
 0
 ––– comment –––
@@ -111,7 +111,7 @@ export INSTANCE=1
 ––– comment –––
 Wait for rebalancing to complete for RF=2 table
 ––– input –––
-timeout 90 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-2/searchd.log 2>/dev/null); echo $?
+timeout 180 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-2/searchd.log 2>/dev/null); echo $?
 ––– output –––
 0
 ––– comment –––

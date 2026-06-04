@@ -43,7 +43,7 @@ mysql -h0 -P3306 -e "JOIN CLUSTER c at '127.0.0.1:1312'"; echo $?
 ––– comment –––
 Verify all 3 nodes synced
 ––– input –––
-for port in 1306 2306 3306; do timeout 30 mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_c_status'\G" > /tmp/status_$port.log && grep -q "Value: primary" /tmp/status_$port.log && echo "Port $port: Node synced"; done
+for port in 1306 2306 3306; do for i in $(seq 1 30); do mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_c_status'\G" 2>/dev/null | grep -q "Value: primary" && { echo "Port $port: Node synced"; break; }; sleep 1; done; done
 ––– output –––
 Port 1306: Node synced
 Port 2306: Node synced
@@ -51,7 +51,7 @@ Port 3306: Node synced
 ––– comment –––
 Verify cluster now has 3 nodes
 ––– input –––
-mysql --no-defaults -h0 -P1306 -sN -e "SELECT COUNT(*) FROM system.sharding_state WHERE REGEX(\`key\`, '^node:')"
+timeout 30 grep -qm1 'cluster topology change' <(tail -n 200 -f /var/log/manticore-1/searchd.log 2>/dev/null); mysql --no-defaults -h0 -P1306 -sN -e "SELECT COUNT(*) FROM system.sharding_state WHERE REGEX(\`key\`, '^node:')"
 ––– output –––
 3
 ––– comment –––

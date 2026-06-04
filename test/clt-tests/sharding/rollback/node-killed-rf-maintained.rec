@@ -68,11 +68,11 @@ Counter: cluster_c_status
 ––– comment –––
 Verify all 3 records visible on both nodes after rejoin (RF=2 replication)
 ––– input –––
-mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM data"
+mysql --no-defaults -h0 -P1306 -sN -e "SELECT COUNT(*) FROM data"
 ––– output –––
 3
 ––– input –––
-mysql -h0 -P2306 -sN -e "SELECT COUNT(*) FROM data"
+mysql --no-defaults -h0 -P2306 -sN -e "SELECT COUNT(*) FROM data"
 ––– output –––
 3
 ––– comment –––

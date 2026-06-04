@@ -34,7 +34,7 @@ mysql -h0 -P1306 -e "INSERT INTO ${TABLE_NAME} (id, account, amount, ts) VALUES 
 ––– comment –––
 Record initial data state
 ––– input –––
-mysql -h0 -P1306 -sN -e "SELECT COUNT(*), SUM(amount) FROM ${TABLE_NAME}"
+mysql --no-defaults -h0 -P1306 -sN -e "SELECT COUNT(*), SUM(amount) FROM ${TABLE_NAME}"
 ––– output –––
 5	1002.000000
 ––– comment –––
@@ -126,13 +126,13 @@ OK
 ––– comment –––
 CRITICAL: Verify data consistency - all records present, no data loss
 ––– input –––
-mysql -h0 -P1306 -sN -e "SELECT COUNT(*), SUM(amount) FROM ${TABLE_NAME}"
+mysql --no-defaults -h0 -P1306 -sN -e "SELECT COUNT(*), SUM(amount) FROM ${TABLE_NAME}"
 ––– output –––
 7	1402.75
 ––– comment –––
 Verify data consistency across all nodes
 ––– input –––
-for port in 1306 2306 3306; do echo "Node $port:"; mysql -h0 -P$port -sN -e "SELECT COUNT(*), SUM(amount) FROM ${TABLE_NAME}"; done
+for port in 1306 2306 3306; do echo "Node $port:"; mysql --no-defaults -h0 -P$port -sN -e "SELECT COUNT(*), SUM(amount) FROM ${TABLE_NAME}"; done
 ––– output –––
 Node 1306:
 7	1402.75
@@ -143,7 +143,7 @@ Node 3306:
 ––– comment –––
 Cleanup
 ––– input –––
-mysql -h0 -P1306 -e "DROP TABLE IF EXISTS ${TABLE_NAME}"; echo $?
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS ${CLUSTER_NAME}:${TABLE_NAME}"; echo $?
 ––– output –––
 0
 

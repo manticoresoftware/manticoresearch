@@ -19,7 +19,7 @@ mysql -h0 -P1306 -e "CREATE TABLE c:existing_table (id bigint, data string) shar
 ––– comment –––
 Verify shards exist on both nodes (2 nodes, RF=2 - each node holds both shards)
 ––– input –––
-for i in 1 2; do mysql -h0 -P${i}306 -sN -e "SELECT COUNT(*) FROM system.sharding_table WHERE table = 'existing_table'"; done
+for i in 1 2; do mysql --no-defaults -h0 -P${i}306 -sN -e "SELECT COUNT(*) FROM system.sharding_table WHERE table = 'existing_table'"; done
 ––– output –––
 2
 2
@@ -46,7 +46,7 @@ Port 3306: Node synced
 ––– comment –––
 Verify cluster now has 3 nodes
 ––– input –––
-mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM system.sharding_state"
+mysql --no-defaults -h0 -P1306 -sN -e "SELECT COUNT(*) FROM system.sharding_state"
 ––– output –––
 3
 ––– comment –––

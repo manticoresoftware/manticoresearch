@@ -70,7 +70,7 @@ system.t_s1: 127.0.0.1:2312 127.0.0.1:3312
 ––– comment –––
 Verify data accessible
 ––– input –––
-mysql -h0 -P2306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
+mysql --no-defaults -h0 -P2306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
 ––– output –––
 +------+
 |    2 |
@@ -108,7 +108,7 @@ system.t_s1: 127.0.0.1:2312 127.0.0.1:3312
 ––– comment –––
 Verify data integrity
 ––– input –––
-mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
+mysql --no-defaults -h0 -P1306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
 ––– output –––
 +------+
 |    2 |

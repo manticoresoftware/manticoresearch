@@ -87,7 +87,7 @@ OK
 ––– comment –––
 Data should still be accessible on surviving nodes
 ––– input –––
-mysql -h0 -P2306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
+mysql --no-defaults -h0 -P2306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
 ––– output –––
 +------+
 |    3 |
@@ -130,7 +130,7 @@ system.t_s2: 127.0.0.1:3312 127.0.0.1:2312
 ––– comment –––
 Verify full data integrity after recovery
 ––– input –––
-mysql -h0 -P2306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
+mysql --no-defaults -h0 -P2306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
 ––– output –––
 +------+
 |    3 |

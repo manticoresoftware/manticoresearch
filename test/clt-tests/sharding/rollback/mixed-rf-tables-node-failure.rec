@@ -96,7 +96,7 @@ system.rep_s1: 127.0.0.1:2312 127.0.0.1:3312
 ––– comment –––
 RF=2 data fully accessible
 ––– input –––
-mysql -h0 -P2306 -sN -e "SELECT COUNT(*) FROM rep"
+mysql --no-defaults -h0 -P2306 -sN -e "SELECT COUNT(*) FROM rep"
 ––– output –––
 +------+
 |    2 |
@@ -139,13 +139,13 @@ system.rep_s1: 127.0.0.1:2312 127.0.0.1:3312
 ––– comment –––
 Both tables data intact
 ––– input –––
-mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM norep"
+mysql --no-defaults -h0 -P1306 -sN -e "SELECT COUNT(*) FROM norep"
 ––– output –––
 +------+
 |    2 |
 +------+
 ––– input –––
-mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM rep"
+mysql --no-defaults -h0 -P1306 -sN -e "SELECT COUNT(*) FROM rep"
 ––– output –––
 +------+
 |    2 |

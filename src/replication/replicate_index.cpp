@@ -22,6 +22,7 @@
 #include "cluster_index_add_local.h"
 #include "cluster_recv_state_cleanup.h"
 #include "cluster_sst_progress.h"
+#include "searchdreplication.h"
 
 #include <cmath>
 

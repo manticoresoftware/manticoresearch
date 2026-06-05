@@ -8,6 +8,11 @@ export INSTANCE=1
 export INSTANCE=2
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
 ––– comment –––
 Create table with RF=2 - auto-sharding creates cluster c
 ––– input –––
@@ -68,16 +73,16 @@ Counter: cluster_c_status
 ––– comment –––
 Verify all 3 records visible on both nodes after rejoin (RF=2 replication)
 ––– input –––
-mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM data"
+mysql --no-defaults -h0 -P1306 -sN -e "SELECT COUNT(*) FROM data"
 ––– output –––
 3
 ––– input –––
-mysql -h0 -P2306 -sN -e "SELECT COUNT(*) FROM data"
+mysql --no-defaults -h0 -P2306 -sN -e "SELECT COUNT(*) FROM data"
 ––– output –––
 3
 ––– comment –––
 Cleanup
 ––– input –––
-mysql -h0 -P1306 -e "DROP TABLE IF EXISTS data"; echo $?
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS c:data"; echo $?
 ––– output –––
 0

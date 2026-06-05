@@ -15,6 +15,13 @@ export INSTANCE=3
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
 ––– comment –––
+Create replication cluster c across all 3 nodes
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– comment –––
 Start table creation and kill node 2 mid-operation
 ––– input –––
 mysql -h0 -P1306 -e "CREATE TABLE c:test_products (id bigint, name string, price float) shards='2' rf='2'" & sleep 3; export INSTANCE=2; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; sleep 1; echo "Node 2 killed"

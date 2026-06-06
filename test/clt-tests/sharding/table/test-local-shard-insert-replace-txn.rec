@@ -73,5 +73,5 @@ mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_phase2_mix_modes WHERE id=3
 +------+
 | c    |
 +------+
-|    0 |
+|    1 |
 +------+

@@ -521,21 +521,7 @@ void SstProgress_c::SetDonor4Joiner ( int iFilesCount, SstProgressContext_t & tC
 
 	tCtx.m_fTotalBefore = tStatus.m_fTotal;
 
-	// m_iTable can be -1 here if the per-table progress slot was never set up or a concurrent
-	// Reset() cleared it (observed during chaotic multi-cluster node rejoins, where one SST is
-	// torn down while another's ALTER CLUSTER ADD reaches this point). The assert above is
-	// compiled out in release builds, and GetTableStage(-1) then returns an out-of-bounds pointer
-	// whose dereference below segfaults the donor — taking the cluster non-primary and losing
-	// data. Guard it: use a neutral stage weight instead of crashing.
-	if ( m_iTable<0 || m_iTable>=m_dTables.GetLength() )
-	{
-		sphWarning ( "SST SetDonor4Joiner: invalid table index %d (tables=%d); using neutral stage weight",
-			m_iTable, m_dTables.GetLength() );
-		tCtx.m_fStageWeight = 0.0f;
-		tCtx.m_uStageTotal = iFilesCount;
-		return;
-	}
-
+	assert ( m_iTable!=-1 );
 	const SstStageProgress_t * pTableStages = GetTableStage ( m_iTable );
 	// FIXME!!! make it work for all other stages
 	const SstStageProgress_t & tReserve = pTableStages[(int)SstStage_e::RESERVE_FILES];

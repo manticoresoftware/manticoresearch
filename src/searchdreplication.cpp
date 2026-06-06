@@ -926,8 +926,28 @@ CSphVector<ClusterDesc_t> ReplicationCollectClusters ()  EXCLUDES ( g_tClustersL
 	{
 		// should save all clusters on start
 		// but skip cluster that just joining from user request
-		if ( tCluster.second->GetState() != ClusterState_e::JOINING || !tCluster.second->m_bUserRequest )
-			dClusters.Add ( *tCluster.second );
+		if ( tCluster.second->GetState() == ClusterState_e::JOINING && tCluster.second->m_bUserRequest )
+			continue;
+
+		// Copy m_hIndexes and m_tOptions under the per-cluster locks that guard them, not via the bare
+		// ClusterDesc_t copy ctor. That ctor re-hashes both string hashes while only g_tClustersLock is
+		// held, racing a concurrent ALTER CLUSTER ADD/DROP that mutates them under m_tIndexLock /
+		// m_tOptsLock; the race relocates a key mid-copy and crashes in CSphStrHashFunc::Hash on a freed
+		// CSphString (observed as a SIGSEGV in ReplicationCollectClusters during chaotic node rejoins).
+		ClusterDesc_t & tDesc = dClusters.Add();
+		tDesc.m_sName = tCluster.second->m_sName;
+		tDesc.m_sPath = tCluster.second->m_sPath;
+		tDesc.m_dClusterNodes = tCluster.second->m_dClusterNodes;
+		tDesc.m_iClusterEpoch = tCluster.second->m_iClusterEpoch;
+		tCluster.second->WithRlockedIndexes ( [&tDesc] ( const auto & hIndexes )
+		{
+			for ( const auto & tIndex : hIndexes )
+				tDesc.m_hIndexes.Add ( tIndex.first );
+		} );
+		tCluster.second->WithRlockedOptions ( [&tDesc] ( const auto & tOptions )
+		{
+			tDesc.m_tOptions = tOptions;
+		} );
 	}
 	return dClusters;
 }

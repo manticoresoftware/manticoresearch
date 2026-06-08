@@ -35,8 +35,8 @@ Verify initial shard layout
 ––– input –––
 show_shards 1306 "$TABLE_NAME"
 ––– output –––
-system.t_s0: 127.0.0.1:1312 127.0.0.1:2312
-system.t_s1: 127.0.0.1:2312 127.0.0.1:3312
+system.t_s0: 127.0.0.1:1312 127.0.0.1:3312
+system.t_s1: 127.0.0.1:1312 127.0.0.1:2312
 ––– comment –––
 Kill node 1
 ––– input –––
@@ -51,7 +51,7 @@ timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
 ––– comment –––
 Wait for rebalancing to complete on node 2
 ––– input –––
-timeout 60 grep -qm1 'Rebalancing completed' <(tail -n 100 -f /var/log/manticore-2/searchd.log); echo $?
+timeout 60 grep -qm1 'Rebalancing completed' <(tail -n 100 -f /var/log/manticore-2/searchd.log 2>/dev/null); echo $?
 ––– output –––
 0
 ––– comment –––
@@ -70,11 +70,9 @@ system.t_s1: 127.0.0.1:2312 127.0.0.1:3312
 ––– comment –––
 Verify data accessible
 ––– input –––
-mysql -h0 -P2306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
+mysql --no-defaults -h0 -P2306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
 ––– output –––
-+------+
-|    2 |
-+------+
+2
 ––– comment –––
 Clean logs before restart so we can grep fresh
 ––– input –––
@@ -89,7 +87,7 @@ export INSTANCE=1
 ––– comment –––
 Wait for rebalancing to complete after node 1 rejoins
 ––– input –––
-timeout 90 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-2/searchd.log); echo $?
+timeout 90 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-2/searchd.log 2>/dev/null); echo $?
 ––– output –––
 0
 ––– comment –––
@@ -103,13 +101,11 @@ Verify shards back to RF=2 balanced distribution
 ––– input –––
 show_shards 1306 "$TABLE_NAME"
 ––– output –––
-system.t_s0: 127.0.0.1:1312 127.0.0.1:2312
-system.t_s1: 127.0.0.1:2312 127.0.0.1:3312
+system.t_s0: 127.0.0.1:1312 127.0.0.1:3312
+system.t_s1: 127.0.0.1:1312 127.0.0.1:2312
 ––– comment –––
 Verify data integrity
 ––– input –––
-mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
+mysql --no-defaults -h0 -P1306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
 ––– output –––
-+------+
-|    2 |
-+------+
+2

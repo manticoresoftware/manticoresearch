@@ -11,6 +11,8 @@
 #include <algorithm>
 #include <atomic>
 #include "knnmisc.h"
+#include "sortsetup.h"
+#include "sortcomp.h"
 #include "knnlib.h"
 #include "exprtraits.h"
 #include "sphinxint.h"
@@ -974,24 +976,48 @@ RowIteratorsWithEstimates_t CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQu
 
 ///////////////////////////////////////////////////////////////////////////////
 
-struct MatchSortRescore_fn : CSphMatchComparatorState
+struct MatchSortRescore_fn
 {
-	const CSphAttrLocator & m_tLocator;
+	const ISphMatchComparator * m_pComp = nullptr;
+	const CSphMatchComparatorState & m_tState;
 
-	MatchSortRescore_fn ( const CSphAttrLocator & tLoc ) : m_tLocator(tLoc) {}
+	MatchSortRescore_fn ( const ISphMatchComparator * pComp, const CSphMatchComparatorState & tState )
+		: m_pComp ( pComp )
+		, m_tState ( tState )
+	{
+		assert ( m_pComp );
+	}
 
 	bool IsLess ( const CSphMatch * a, const CSphMatch * b ) const
 	{
 		assert ( a && b );
-		return a->GetAttrFloat(m_tLocator) < b->GetAttrFloat(m_tLocator);
+		// CSphMatchComparatorState comparators report whether a match is worse.
+		// sphSort() needs the opposite: whether a match must be emitted earlier.
+		return m_pComp->VirtualIsLess ( *b, *a, m_tState );
 	}
 };
+
+static ISphMatchComparator * CreateMatchComparator ( ESphSortFunc eFunc )
+{
+	switch ( eFunc )
+	{
+		case FUNC_REL_DESC:		return new MatchRelevanceLt_fn();
+		case FUNC_TIMESEGS:		return new MatchTimeSegments_fn();
+		case FUNC_GENERIC1:		return new MatchGeneric1_fn();
+		case FUNC_GENERIC2:		return new MatchGeneric2_fn();
+		case FUNC_GENERIC3:		return new MatchGeneric3_fn();
+		case FUNC_GENERIC4:		return new MatchGeneric4_fn();
+		case FUNC_GENERIC5:		return new MatchGeneric5_fn();
+		case FUNC_EXPR:			return new MatchExpr_fn();
+		default:				return nullptr;
+	}
+}
 
 
 class RescoreSorter_c : public ISphMatchSorter
 {
 public:
-			RescoreSorter_c ( ISphMatchSorter * pSorter ) : m_pSorter ( pSorter ) {}
+			RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp ) : m_pSorter ( pSorter ), m_pComp ( std::move ( pComp ) ) {}
 
 	bool	Push ( const CSphMatch & tEntry ) final							{ return m_pSorter->Push(tEntry); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) override	{ for ( auto & i : dMatches ) m_pSorter->Push(i); }
@@ -1030,6 +1056,7 @@ public:
 
 private:
 	std::unique_ptr<ISphMatchSorter> m_pSorter;
+	CSphRefcountedPtr<ISphMatchComparator> m_pComp;
 };
 
 
@@ -1054,13 +1081,17 @@ int RescoreSorter_c::Flatten ( CSphMatch * pTo )
 	auto * pKNNDistRescore = m_pSorter->GetSchema()->GetAttr ( GetKnnDistRescoreAttrName() );
 	assert(pKNNDistRescore);
 
-	MatchSortRescore_fn tRescore ( pKNNDistRescore->m_tLocator );
-	sphSort ( dMatches.Begin(), dMatches.GetLength(), tRescore, MatchSortAccessor_t() );
-
-	// copy rescored dist to old dist
+	// Copy rescored dist to old dist first, then re-apply the original sorter.
+	// The original sorter state starts with knn_dist() (unless the user explicitly
+	// sorted by knn_dist()) and then contains user ORDER BY tie-breakers.
+	// Sorting by rescored distance only, even stably, can keep stale approximate
+	// distance order ahead of explicit tie-breakers for exact-distance ties.
 	for ( auto & tMatch : dMatches )
 		for ( const auto & tLocator : dOldKnnDistLoc )
 			tMatch.SetAttrFloat ( tLocator, tMatch.GetAttrFloat ( pKNNDistRescore->m_tLocator ) );
+
+	MatchSortRescore_fn tRescore ( m_pComp, m_pSorter->GetState() );
+	sphSort ( dMatches.Begin(), dMatches.GetLength(), tRescore, MatchSortAccessor_t() );
 
 	for ( auto & i : dMatches )
 		Swap ( i, *pTo++ );
@@ -1071,7 +1102,7 @@ int RescoreSorter_c::Flatten ( CSphMatch * pTo )
 
 ISphMatchSorter * RescoreSorter_c::Clone() const
 {
-	auto pClone = new RescoreSorter_c ( m_pSorter->Clone() );
+	auto pClone = new RescoreSorter_c ( m_pSorter->Clone(), m_pComp );
 	CloneTo(pClone);
 	return pClone;
 }
@@ -1085,12 +1116,16 @@ void RescoreSorter_c::CloneTo ( ISphMatchSorter * pTrg ) const
 }
 
 
-ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings )
+ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings, ESphSortFunc eMatchFunc )
 {
 	if ( tSettings.m_sAttr.IsEmpty() || !tSettings.m_bRescore )
 		return pSorter;
 
-	return new RescoreSorter_c(pSorter);
+	CSphRefcountedPtr<ISphMatchComparator> pComp ( CreateMatchComparator ( eMatchFunc ) );
+	if ( !pComp )
+		return nullptr;
+
+	return new RescoreSorter_c ( pSorter, std::move ( pComp ) );
 }
 
 bool ValidateEmbeddingsAPITimeout ( const CSphString & sValue, int & iTimeout, CSphString & sError )

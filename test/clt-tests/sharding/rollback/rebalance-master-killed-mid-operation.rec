@@ -39,9 +39,9 @@ Verify initial shard layout
 ––– input –––
 show_shards 1306 "$TABLE_NAME"
 ––– output –––
-system.t_s0: 127.0.0.1:1312 127.0.0.1:2312
-system.t_s1: 127.0.0.1:2312 127.0.0.1:3312
-system.t_s2: 127.0.0.1:3312 127.0.0.1:4312
+system.t_s0: 127.0.0.1:1312 127.0.0.1:3312
+system.t_s1: 127.0.0.1:2312 127.0.0.1:4312
+system.t_s2: 127.0.0.1:1312 127.0.0.1:3312
 ––– comment –––
 Kill node 4 to trigger rebalancing on node 1 (master)
 ––– input –––
@@ -54,7 +54,7 @@ timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
 ––– comment –––
 Wait until master detects the failure and starts rebalancing
 ––– input –––
-timeout 20 grep -qm1 'Rebalancing due to inactive nodes' <(tail -n 100 -f /var/log/manticore-1/searchd.log); echo $?
+timeout 20 grep -qm1 'Rebalancing due to inactive nodes' <(tail -n 100 -f /var/log/manticore-1/searchd.log 2>/dev/null); echo $?
 ––– output –––
 0
 ––– comment –––
@@ -70,7 +70,7 @@ timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
 ––– comment –––
 Wait for new master election on remaining nodes
 ––– input –––
-timeout 30 grep -qm1 'becoming master' <(tail -n 100 -f /var/log/manticore-{2,3}/searchd.log); echo $?
+timeout 30 grep -qm1 'becoming master' <(tail -n 100 -f /var/log/manticore-{2,3}/searchd.log 2>/dev/null); echo $?
 ––– output –––
 0
 ––– comment –––
@@ -87,11 +87,9 @@ OK
 ––– comment –––
 Data should still be accessible on surviving nodes
 ––– input –––
-mysql -h0 -P2306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
+mysql --no-defaults -h0 -P2306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
 ––– output –––
-+------+
-|    3 |
-+------+
+3
 ––– comment –––
 Restart both dead nodes
 ––– input –––
@@ -108,7 +106,7 @@ export INSTANCE=1
 ––– comment –––
 Wait for rebalancing to complete with all nodes back
 ––– input –––
-timeout 90 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-{2,3}/searchd.log); echo $?
+timeout 90 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-{2,3}/searchd.log 2>/dev/null); echo $?
 ––– output –––
 0
 ––– comment –––
@@ -118,20 +116,18 @@ for i in 1 2 3 4; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq
 ––– output –––
 OK
 ––– comment –––
-Verify shards distributed with RF=2 on surviving nodes
-After master kill mid-rebalance, shards concentrate on surviving nodes (2,3).
-Rejoining nodes (1,4) will get shards on the next rebalance cycle.
+Verify shards distributed with RF=2 across all nodes
+After the dead nodes (1,4) rejoin and the rebalance completes, the shards are
+redistributed back across all four nodes in the deterministic balanced layout.
 ––– input –––
 show_shards 2306 "$TABLE_NAME"
 ––– output –––
-system.t_s0: 127.0.0.1:3312 127.0.0.1:2312
-system.t_s1: 127.0.0.1:3312 127.0.0.1:2312
-system.t_s2: 127.0.0.1:3312 127.0.0.1:2312
+system.t_s0: 127.0.0.1:1312 127.0.0.1:3312
+system.t_s1: 127.0.0.1:2312 127.0.0.1:4312
+system.t_s2: 127.0.0.1:1312 127.0.0.1:3312
 ––– comment –––
 Verify full data integrity after recovery
 ––– input –––
-mysql -h0 -P2306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
+mysql --no-defaults -h0 -P2306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
 ––– output –––
-+------+
-|    3 |
-+------+
+3

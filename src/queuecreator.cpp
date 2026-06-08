@@ -2658,7 +2658,7 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	// wrapper would look up a missing @knn_dist_rescore attr and crash on flatten.
 	if ( CanRescoreKNN() )
 	{
-		pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.SingleKnnSettings() );
+		pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.SingleKnnSettings(), m_eMatchFunc );
 		if ( !pSorter )
 			return nullptr;
 	}

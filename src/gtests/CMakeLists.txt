@@ -29,9 +29,11 @@ target_link_libraries ( gmanticoretest PRIVATE
 		GTest::gmock_main
 		lmanticore
 		lsearchd
+		lui
 		searchd_ssl
 		source_svpipe
 		daemon
+		lui
 )
 
 if (WITH_EXPAT)

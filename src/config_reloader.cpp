@@ -102,7 +102,7 @@ private:
 	void LoadNewLocalFromConfig ( const CSphString& sIndex, const CSphConfigSection& hIndex )
 	{
 		CSphString sError;
-		auto [ eAdd, pFreshLocal ] = AddIndex ( sIndex.cstr(), hIndex, false, false, nullptr, sError );
+		auto [ eAdd, pFreshLocal ] = AddIndex ( sIndex.cstr(), hIndex, false, false, true, nullptr, sError );
 		assert ( eAdd != ADD_DISTR && "internal error: distr table should not be here!" );
 
 		switch ( eAdd )

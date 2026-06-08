@@ -45,8 +45,8 @@
 * [≫ Создание кластера](Creating_a_cluster/Creating_a_cluster.md)
     * [Добавление нового узла](Creating_a_cluster/Adding_a_new_node.md)
     * [≫ Удаленные узлы](Creating_a_cluster/Remote_nodes.md)
-        * [Зеркалирование](Creating_a_cluster/Remote_nodes/Mirroring.md)
         * [Балансировка нагрузки](Creating_a_cluster/Remote_nodes/Load_balancing.md)
+        * [Зеркалирование](Creating_a_cluster/Remote_nodes/Mirroring.md)
     * [≫ Настройка репликации](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md)
         * [Создание кластера репликации](Creating_a_cluster/Setting_up_replication/Creating_a_replication_cluster.md)
         * [Присоединение к кластеру репликации](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md)
@@ -193,7 +193,7 @@
     * [≫ UDF и плагины](Extensions/UDFs_and_Plugins/UDFs_and_Plugins.md)
         * [UDF](Extensions/UDFs_and_Plugins/UDF.md)
         * [Список плагинов](Extensions/UDFs_and_Plugins/Listing_plugins.md)
-        * [≫ UDF]
+        * [≫ UDF](Extensions/UDFs_and_Plugins/UDF.md)
             * [Создание функции](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md)
             * [Удаление функции](Extensions/UDFs_and_Plugins/UDF/Deleting_a_function.md)
         * [≫ Плагины]

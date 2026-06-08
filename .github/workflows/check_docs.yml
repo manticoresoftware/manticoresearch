@@ -3,118 +3,18 @@ run-name: 📖 Check docs ${{ github.sha }}
 
 on:
   workflow_call:
-  workflow_run:
-    workflows: 
-      - 📖 Trigger doc check
-    types:
-      - completed
+  pull_request:
+    paths:
+      - 'manual/**'
+    branches:
+      - main
+      - manticore-*
 
 jobs:
-  translate_docs:
-    runs-on: ubuntu-24.04
-    outputs:
-      repo: ${{ steps.repo-check.outputs.repo }}
-      ref: ${{ steps.repo-check.outputs.ref }}
-      skip_translate: ${{ steps.repo-check.outputs.skip_translate }}
-    permissions:
-      contents: write
-      pull-requests: read
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: Download an artifact with PR repo name
-        if: github.event_name == 'workflow_run'
-        uses: actions/download-artifact@v4
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
-          name: pr_repo
-          path: .
-      - name: Download translate mode
-        if: github.event_name == 'workflow_run'
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
-          name: skip_translate
-          path: .
-      - name: Check origin repository
-        id: repo-check
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_HEAD_REF: ${{ github.head_ref }}
-        run: |
-          if [ "$EVENT_NAME" == "workflow_run" ]; then
-            PR_REPO=$(cat ./pr_repo.txt)
-            repo=$(head -n 1 <<< "$PR_REPO")
-            ref=$(tail -n 1 <<< "$PR_REPO")
-            if [ -f ./skip_translate.txt ]; then
-              skip_translate=$(tr -d '\r\n' < ./skip_translate.txt)
-            else
-              skip_translate="false"
-            fi
-          else
-            repo="$GITHUB_REPOSITORY"
-            ref="$GITHUB_HEAD_REF"
-            skip_translate="false"
-          fi
-          echo "repo=$repo" >> $GITHUB_OUTPUT
-          echo "ref=$ref" >> $GITHUB_OUTPUT
-          echo "skip_translate=${skip_translate:-false}" >> $GITHUB_OUTPUT
-      - name: Checkout
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          repository: ${{ steps.repo-check.outputs.repo }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          submodules: true
-          ref: ${{ steps.repo-check.outputs.ref }}
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.2'
-          tools: composer
-          extensions: curl
-
-      - name: Run auto-translate
-        if: steps.repo-check.outputs.skip_translate != 'true'
-        env:
-          OPENROUTER_TRANSLATOR_API_KEY: ${{ secrets.OPENROUTER_TRANSLATOR_API_KEY }}
-        run: |
-          set -e
-          # Install PHP dependencies for translator
-          cd translator
-          composer install --no-dev --no-interaction --prefer-dist
-          cd ..
-
-          # Configure git for commits
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Run auto-translate
-          ./translator/bin/auto-translate
-
-          # Check if there are any changes to commit (including untracked files)
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "Auto-translate made changes, committing them..."
-            git add -A
-            git commit -m "docs: Auto-translate documentation changes by ${{ github.actor }}"
-            git push
-            echo "Changes committed and pushed successfully"
-          else
-            echo "No changes made by auto-translate"
-          fi
-
   docs_check:
-    needs: translate_docs
     runs-on: ubuntu-22.04
     permissions:
-      contents: write
-      pull-requests: read
+      contents: read
     defaults:
       run:
         shell: bash
@@ -129,49 +29,24 @@ jobs:
         GH_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
 
     steps:
-      - name: Check origin repository
-        id: repo-check
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          TRANSLATE_DOCS_REPO: ${{ needs.translate_docs.outputs.repo }}
-          TRANSLATE_DOCS_REF: ${{ needs.translate_docs.outputs.ref }}
-          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
-          GITHUB_HEAD_REF: ${{ github.head_ref }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          DEFAULT_REF: ${{ github.head_ref || github.ref_name }}
-        run: |
-          if [ "$EVENT_NAME" == "workflow_run" ]; then
-            repo="$TRANSLATE_DOCS_REPO"
-            ref="$TRANSLATE_DOCS_REF"
-          elif [ "$EVENT_NAME" == "pull_request" ]; then
-            repo="$PR_HEAD_REPO"
-            ref="$GITHUB_HEAD_REF"
-          else
-            repo="$GITHUB_REPOSITORY"
-            ref="$DEFAULT_REF"
-          fi
-          echo "repo=$repo" >> $GITHUB_OUTPUT
-          echo "ref=$ref" >> $GITHUB_OUTPUT
-
       - name: Checkout
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          repository: ${{ steps.repo-check.outputs.repo }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
           token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
-          ref: ${{ steps.repo-check.outputs.ref }}
+          ref: ${{ github.head_ref || github.ref_name }}
 
-      - name: Fetch master and get changed files
+      - name: Fetch main and get changed files
         id: changed-files
         env:
           REF_NAME: ${{ github.ref_name }}
-          EVENT_NAME: ${{ github.event_name }}
         run: |
           git config --global --add safe.directory /__w/manticoresearch/manticoresearch
-          # Update local master only if we're not currently on it
-          if [ "$REF_NAME" != "master" -a "$EVENT_NAME" != "pull_request" ]; then
-            git fetch origin master:master
+          # Update local main only if we're not currently on it.
+          if [ "$REF_NAME" != "main" ]; then
+            git fetch origin main:main
           fi
           CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD)
           printf '%s\n' "$CHANGED_FILES"
@@ -195,24 +70,31 @@ jobs:
             esac
           done <<< "$CHANGED_FILES"
           printf '%s\n' "${filepathes[@]}"
-          {
-            echo "filepathes<<EOF"
-            printf '%s\n' "${filepathes[@]}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          joined_filepathes="${filepathes[*]}"
+          echo "filepathes=$joined_filepathes" >> "$GITHUB_OUTPUT"
       - name: Check docs
         id: check
         env:
           DOC_FILEPATHES: ${{ steps.doc-filepathes.outputs.filepathes }}
         run: |
+          if [ -z "$DOC_FILEPATHES" ]; then
+            echo "No changed doc files under $COMMIT_DIR/, skipping validation."
+            echo "errors=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           docs_errors=$(php "/Deploy/check_docs_validity.php" "$DOC_FILEPATHES" "$COMMIT_DIR/" "$DOCS_ERRORS_DIR" | xargs)
           echo "$docs_errors"
-          echo "errors=$docs_errors" >> $GITHUB_OUTPUT
-      - name: Check docs translations
+          echo "errors=$docs_errors" >> "$GITHUB_OUTPUT"
+      - name: Check docs artifact presence
+        id: docs-artifact
         run: |
-          set -e
-          ./misc/compare_manuals.sh
+          if [ -d "$DOCS_ERRORS_DIR" ] && find "$DOCS_ERRORS_DIR" -type f | grep -q .; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Upload artifact
+        if: steps.docs-artifact.outputs.exists == 'true'
         uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: Docs error artifact

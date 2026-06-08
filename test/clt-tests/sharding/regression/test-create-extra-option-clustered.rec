@@ -1,0 +1,38 @@
+––– comment –––
+Regression: FAIL_029 — clustered sharded CREATE used to accept an extra
+table-level option (e.g. min_infix_len='3') but drop it from the public
+definition. Now the wrapper preserves the option and the create completes.
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:t29(title text) min_infix_len='3' shards='2' rf='2';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "show create table t29\G" | grep -E "min_infix_len|shards="
+––– output –––
+) min_infix_len='3' shards='2' rf='2'
+––– input –––
+mysql -h0 -P1306 -e "insert into t29(id,title) values(1,'one');"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "select count(*) c from t29 where id>0;"
+––– output –––
++------+
+| c    |
++------+
+|    1 |
++------+

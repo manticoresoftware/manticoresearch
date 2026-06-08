@@ -3,14 +3,14 @@
 Compiling Manticore Search from sources enables custom build configurations, such as disabling certain features or adding new patches for testing. For example, you may want to compile from sources and disable the embedded ICU in order to use a different version installed on your system that can be upgraded independently of Manticore. This is also useful if you are interested in contributing to the Manticore Search project.
 
 ## Building using CI Docker
-To prepare [official release and development packages](https://repo.manticoresearch.com/), we use Docker and a special building image. This image includes essential tooling and is designed to be used with external sysroots, so one container can build packages for all operating systems. You can build the image using the [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/cross/external_toolchain/Dockerfile) and [README](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/README.md) or use an image from [Docker Hub](https://hub.docker.com/r/manticoresearch/external_toolchain/tags). This is the easiest way to create binaries for any supported operating system and architecture. You'll also need to specify the following environment variables when running the container:
+To prepare [official release and development packages](https://repo.manticoresearch.com/), we use Docker and a special building image. This image includes essential tooling and is designed to be used with external sysroots, so one container can build packages for all operating systems. You can build the image using the [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/main/dist/build_dockers/cross/external_toolchain/Dockerfile) and [README](https://github.com/manticoresoftware/manticoresearch/blob/main/dist/build_dockers/README.md) or use an image from [Docker Hub](https://hub.docker.com/r/manticoresearch/external_toolchain/tags). This is the easiest way to create binaries for any supported operating system and architecture. You'll also need to specify the following environment variables when running the container:
 
 * `DISTR`: the target platform: `bionic`, `focal`, `jammy`, `buster`, `bullseye`, `bookworm`, `rhel8`, `rhel9`, `rhel10`, `macos`, `windows`, `freebsd13`
 * `arch`: the architecture: `x86_64`, `x64` (for Windows), `aarch64`, `arm64` (for Macos)
-* `SYSROOT_URL`: the URL to the system roots archives. You can use https://repo.manticoresearch.com/repository/sysroots unless you are building the sysroots yourself (instructions can be found [here](https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers/cross/sysroots)).
+* `SYSROOT_URL`: the URL to the system roots archives. You can use https://repo.manticoresearch.com/repository/sysroots unless you are building the sysroots yourself (instructions can be found [here](https://github.com/manticoresoftware/manticoresearch/tree/main/dist/build_dockers/cross/sysroots)).
 * Use the CI workflow files as a reference to find the other environment variables you might need to use:
-  - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/pack_publish.yml
-  - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/build_template.yml
+  - https://github.com/manticoresoftware/manticoresearch/blob/main/.github/workflows/pack_publish.yml
+  - https://github.com/manticoresoftware/manticoresearch/blob/main/.github/workflows/build_template.yml
 
 To find possible values for `DISTR` and `arch`, you can use the directory https://repo.manticoresearch.com/repository/sysroots/roots_with_zstd/ as a reference, as it includes sysroots for all supported combinations.
 
@@ -131,7 +131,7 @@ Compiling Manticore without using the building Docker is **not recommended**, bu
 #### From git
 
 Manticore source code is [hosted on GitHub](https://github.com/manticoresoftware/manticoresearch).
-To obtain the source code, clone the repository and then check out the desired branch or tag. The branch `master` represents the main development branch. Upon release, a versioned tag is created, such as `3.6.0` and a new branch for the current release is started, in this case `manticore-3.6.0`. The head of the versioned branch after all changes is used as source to build all binary releases. For example, to take sources of version 3.6.0 you can run:
+To obtain the source code, clone the repository and then check out the desired branch or tag. The branch `main` represents the main development branch. Upon release, a versioned tag is created, such as `3.6.0` and a new branch for the current release is started, in this case `manticore-3.6.0`. The head of the versioned branch after all changes is used as source to build all binary releases. For example, to take sources of version 3.6.0 you can run:
 
 ```bash
 git clone https://github.com/manticoresoftware/manticoresearch.git

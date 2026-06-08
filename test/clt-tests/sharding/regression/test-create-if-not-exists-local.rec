@@ -1,0 +1,28 @@
+––– comment –––
+Regression: FAIL_002 — CREATE TABLE IF NOT EXISTS on a sharded local table
+should be quiet on second invocation, not return "already exists".
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "create table t2(id bigint, body text) shards='2' rf='1';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "create table t2(id bigint, body text) shards='2' rf='1';"
+––– output –––
+ERROR 1064 (42000) at line 1: table 't2': CREATE TABLE failed: table 't2' already exists
+––– input –––
+mysql -h0 -P1306 -e "create table if not exists t2(id bigint, body text) shards='2' rf='1';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "show tables like 't2';"
+––– output –––
++-------+-------+
+| Table | Type  |
++-------+-------+
+| t2    | shard |
++-------+-------+

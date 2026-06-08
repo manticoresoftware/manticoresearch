@@ -3,14 +3,14 @@
 Компиляция Manticore Search из исходных кодов позволяет настраивать сборку, например, отключать определенные функции или добавлять патчи для тестирования. Например, вы можете захотеть скомпилировать из исходных кодов и отключить встроенную ICU, чтобы использовать другую версию, установленную в вашей системе, которую можно обновлять независимо от Manticore. Это также полезно, если вы заинтересованы в участии в проекте Manticore Search.
 
 ## Сборка с использованием Docker CI
-Для подготовки [официальных релизных и разрабатываемых пакетов](https://repo.manticoresearch.com/) мы используем Docker и специальный образ для сборки. Этот образ включает основные инструменты и предназначен для использования с внешними системными корнями (sysroots), поэтому один контейнер может собирать пакеты для всех операционных систем. Вы можете собрать образ, используя [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/cross/external_toolchain/Dockerfile) и [README](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/README.md), или использовать образ из [Docker Hub](https://hub.docker.com/r/manticoresearch/external_toolchain/tags). Это самый простой способ создания бинарных файлов для любой поддерживаемой операционной системы и архитектуры. При запуске контейнера также необходимо указать следующие переменные окружения:
+Для подготовки [официальных релизных и development-пакетов](https://repo.manticoresearch.com/) мы используем Docker и специальный образ для сборки. Этот образ включает в себя необходимый инструментарий и предназначен для работы с внешними sysroot, поэтому один контейнер может собирать пакеты для всех операционных систем. Вы можете собрать образ, используя [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/main/dist/build_dockers/cross/external_toolchain/Dockerfile) и [README](https://github.com/manticoresoftware/manticoresearch/blob/main/dist/build_dockers/README.md), или использовать образ из [Docker Hub](https://hub.docker.com/r/manticoresearch/external_toolchain/tags). Это самый простой способ создания бинарных файлов для любой поддерживаемой операционной системы и архитектуры. Вам также потребуется указать следующие переменные окружения при запуске контейнера:
 
 * `DISTR`: целевая платформа: `bionic`, `focal`, `jammy`, `buster`, `bullseye`, `bookworm`, `rhel8`, `rhel9`, `rhel10`, `macos`, `windows`, `freebsd13`
 * `arch`: архитектура: `x86_64`, `x64` (для Windows), `aarch64`, `arm64` (для Macos)
-* `SYSROOT_URL`: URL архива системных корней. Вы можете использовать https://repo.manticoresearch.com/repository/sysroots, если вы не собираете системные корни самостоятельно (инструкции можно найти [здесь](https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers/cross/sysroots)).
+* `SYSROOT_URL`: URL-адрес архивов системных корней. Вы можете использовать https://repo.manticoresearch.com/repository/sysroots, если не собираете sysroot самостоятельно (инструкции можно найти [здесь](https://github.com/manticoresoftware/manticoresearch/tree/main/dist/build_dockers/cross/sysroots)).
 * Используйте файлы рабочих процессов CI в качестве справочника, чтобы найти другие переменные окружения, которые могут вам понадобиться:
-  - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/pack_publish.yml
-  - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/build_template.yml
+  - https://github.com/manticoresoftware/manticoresearch/blob/main/.github/workflows/pack_publish.yml
+  - https://github.com/manticoresoftware/manticoresearch/blob/main/.github/workflows/build_template.yml
 
 Чтобы найти возможные значения для `DISTR` и `arch`, вы можете использовать каталог https://repo.manticoresearch.com/repository/sysroots/roots_with_zstd/ в качестве справочника, так как он включает системные корни для всех поддерживаемых комбинаций.
 
@@ -131,7 +131,7 @@ ls ~/rpmbuild/RPMS/*/manticore*
 #### Из git
 
 Исходный код Manticore [размещен на GitHub](https://github.com/manticoresoftware/manticoresearch).
-Чтобы получить исходный код, клонируйте репозиторий, а затем проверьте нужную ветку или тег. Ветка `master` представляет основную ветку разработки. При выпуске создается версионный тег, например `3.6.0`, и начинается новая ветка для текущего релиза, в данном случае `manticore-3.6.0`. Голова версионной ветки после всех изменений используется как исходник для сборки всех бинарных релизов. Например, чтобы взять исходники версии 3.6.0, вы можете выполнить:
+Чтобы получить исходный код, клонируйте репозиторий, а затем переключитесь на нужную ветку или тег. Ветка `main` представляет основную ветку разработки. При выпуске релиза создаётся версионный тег, например `3.6.0`, и начинается новая ветка для текущего релиза, в данном случае `manticore-3.6.0`. Голова версионной ветки после всех изменений используется в качестве источника для сборки всех бинарных релизов. Например, чтобы взять исходники версии 3.6.0, вы можете выполнить:
 
 ```bash
 git clone https://github.com/manticoresoftware/manticoresearch.git

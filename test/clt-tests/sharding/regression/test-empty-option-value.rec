@@ -1,0 +1,15 @@
+––– comment –––
+Regression: FAIL_021 — sharded CREATE TABLE with an empty option value
+must fail up-front, not silently create an orphan table.
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "create table t21(id bigint, body text) shards='' rf='1';"
+––– output –––
+ERROR 1064 (42000) at line 1: Parameter 'shards' requires to have a value
+––– input –––
+mysql -h0 -P1306 -e "show tables like 't21';"
+––– output –––

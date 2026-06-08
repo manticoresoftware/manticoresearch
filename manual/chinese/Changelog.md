@@ -15,8 +15,7 @@
 * ⚠️ [v18.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/18.0.0) [ Issue #4261](https://github.com/manticoresoftware/manticoresearch/issues/4261) **重大变更**：引入了 **索引格式版本 68** 以修复 [`hitless_words`](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words) 字典布局处理。如果您重建或新写入索引后需要使用旧版 Manticore 打开它们，则会受到影响：现有旧版索引仍可读取，但任何以新格式重建或新写入的索引与旧版 Manticore 不兼容，因此降级仅在这些索引未被重写前才安全。
 
 ### 与打包相关的更改
-* 🆕 [v25.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.0.0) [ PR #4357](https://github.com/manticoresoftware/manticoresearch/pull/4357) 打包更改：`manticore` 现在是 deb 和 rpm 的捆绑包。它包括守护进程、工具、转换器、开发头文件、ICU 数据、捆绑依赖包（`manticore-columnar-lib`、`manticore-backup`、`manticore-buddy`、`manticore-executor`、`manticore-load`、`manticore-galera` 和 `manticore-tzdata` 适用时），以及内置的德语、英语和俄语语言包，还有 Jieba 支持。乌克兰词形还原器未捆绑；请使用 [Debian/Ubuntu](Installation/Debian_and_Ubuntu.md#Ukrainian-lemmatizer) 或 [RHEL/CentOS](Installation/RHEL_and_Centos.md#Ukrainian-lemmatizer) 指南单独安装。
-  从之前的包布局升级时，通常只需安装 `manticore` 包。如果旧的拆分包导致冲突，请使用 `apt remove 'manticore*'` 或 `yum remove 'manticore*'` 删除它们，然后安装 `manticore`。此清理不会删除您现有的数据或配置。
+* 🆕 [v25.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.0.0) [ PR #4357](https://github.com/manticoresoftware/manticoresearch/pull/4357) 打包更改：`manticore` 现在是 deb 和 rpm 的捆绑包。它包括守护进程、工具、转换器、开发头文件、ICU 数据、捆绑依赖包（`manticore-columnar-lib`、`manticore-backup`、`manticore-buddy`、`manticore-executor`、`manticore-load`、`manticore-galera` 和 `manticore-tzdata` 适用时），以及内置的德语、英语和俄语语言包，还有 Jieba 支持。乌克兰词形还原器未捆绑；请单独安装。从之前的包布局升级时，通常只需安装 `manticore` 包。如果旧的拆分包导致冲突，请使用 `apt remove 'manticore*'` 或 `yum remove 'manticore*'` 删除它们，然后安装 `manticore`。此清理不会删除您现有的数据或配置。
 
 ## 新功能和改进
 * 🆕 [v24.4.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.4.0) [ PR #4091](https://github.com/manticoresoftware/manticoresearch/pull/4091) 通过添加 N 路磁盘块合并和并行 `OPTIMIZE` 任务来改进 RT 表压缩，减少合并许多磁盘块所需的时间，并公开了新的 [`merge_chunks_per_job`](Server_settings/Searchd.md#merge_chunks_per_job) 和 [`parallel_chunk_merges`](Server_settings/Searchd.md#parallel_chunk_merges) 设置。
@@ -564,7 +563,7 @@
   - 首先，干净地停止所有节点
   - 然后，使用工具`manticore_new_cluster`在Linux中以`--new-cluster`选项启动最后一个停止的节点。
   - 请参阅[重启集群](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster)以获取更多详细信息。
-* ⚠️ BREAKING [Issue #2308](https://github.com/manticoresoftware/manticoresearch/issues/2308) 添加了对`ALTER CLUSTER ADD`和`DROP`中多个表的支持。此更改也影响了复制协议。请参阅上一节以了解如何处理此更新。
+* ⚠️ 破坏性变更 [Issue #2308](https://github.com/manticoresoftware/manticoresearch/issues/2308) 现已支持在 [`ALTER CLUSTER ADD` and `DROP`](Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md#Adding-and-removing-a-table-from-a-replication-cluster) 中处理多个表。此变更也会影响复制协议。请参考上一节了解如何处理这次更新。
 * [Issue #2997](https://github.com/manticoresoftware/manticoresearch/issues/2997) 修复了Macos上的dlopen问题。
 * [Commit 4954](https://github.com/manticoresoftware/manticoresearch/commit/4954b5de7341a29902a9b8fbb9a040f7942c77c4) 将具有KNN索引的表的OPTIMIZE TABLE的默认截止值更改为提高搜索性能。
 * [Commit cfc8](https://github.com/manticoresoftware/manticoresearch/commit/cfc87ecb6e33a8163c2235243b6b40e699dbf526) 为`FACET`和`GROUP BY`中的`ORDER BY`添加了`COUNT(DISTINCT)`支持。
@@ -589,7 +588,7 @@
 * [Issue #2584](https://github.com/manticoresoftware/manticoresearch/pull/2584) 在[SHOW STATUS](Node_info_and_management/Node_status.md#Query-Time-Statistics)中添加了新的性能指标：过去1、5和15分钟内按查询类型划分的最小值/最大值/平均值/95th/99th百分位。
 * [Issue #2639](https://github.com/manticoresoftware/manticoresearch/pull/2639) 将所有实例中的`index`替换为`table`。
 * [Issue #2643](https://github.com/manticoresoftware/manticoresearch/issues/2643) 为HTTP `/sql`端点聚合结果添加了`distinct`列。
-* [Issue #268
+* [Issue #268](https://github.com/manticoresoftware/manticoresearch-buddy/issues/268) 实现了对从 Elasticsearch 导入的数据类型的自动检测。
 * [Issue #2744](https://github.com/manticoresoftware/manticoresearch/issues/2744) Added collation support for string JSON field comparison expressions.
 * [Issue #2752](https://github.com/manticoresoftware/manticoresearch/issues/2752) Added support for `uuid_short` expression in the select list.
 * [Issue #2783](https://github.com/manticoresoftware/manticoresearch/issues/2783) Manticore Search now runs Buddy directly without the `manticore-buddy` wrapper.
@@ -799,7 +798,7 @@
 * [Issue #1448](https://github.com/manticoresoftware/manticoresearch/issues/1448) 实现了 [ALTER TABLE](Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode) 用于 int->bigint 转换。
 * [Issue #1456](https://github.com/manticoresoftware/manticoresearch/issues/1456) MySQL 响应中的元信息。
 * [Issue #1494](https://github.com/manticoresoftware/manticoresearch/issues/1494) [SHOW VERSION](Node_info_and_management/SHOW_VERSION.md#SHOW-VERSION)。
-* [Issue #1582](https://github.com/manticoresoftware/manticoresearch/issues/1582) 通过 JSON 支持按 ID 数组删除文档 [Deleting-documents]。
+* [Issue #1582](https://github.com/manticoresoftware/manticoresearch/issues/1582) 通过 JSON 支持[按 id 数组删除文档](Data_creation_and_modification/Deleting_documents.md?client=JSON#Deleting-documents)。
 * [Issue #1589](https://github.com/manticoresoftware/manticoresearch/issues/1589) 改进错误 "unsupported value type"。
 * [Issue #1634](https://github.com/manticoresoftware/manticoresearch/issues/1634) 在 `SHOW STATUS` 中添加 Buddy 版本。
 * [Issue #1641](https://github.com/manticoresoftware/manticoresearch/issues/1641) 在零文档情况下优化匹配请求。
@@ -1076,7 +1075,7 @@
 * [Issue #1318](https://github.com/manticoresoftware/manticoresearch/issues/1318) "columnar: 将迭代器接口更改为单次调用"：列式迭代器现在使用单个`Get`调用，取代了之前的两步`AdvanceTo` + `Get`调用以检索值。
 * [Issue #1319](https://github.com/manticoresoftware/manticoresearch/issues/1319) "聚合计算加速（移除CheckReplaceEntry？）"：已从组排序器中移除`CheckReplaceEntry`调用，以加快聚合函数的计算速度。
 * [Issue #1320](https://github.com/manticoresoftware/manticoresearch/issues/1320) "create table read_buffer_docs/hits不理解k/m/g语法"：`CREATE TABLE`选项`read_buffer_docs`和`read_buffer_hits`现在支持k/m/g语法。
-* 英语、德语和俄语的语言包现在可以通过在Linux上执行命令`apt/yum install manticore-language-packs`轻松安装。在macOS上，使用命令`brew install manticoresoftware/tap/manticore-language-packs`。
+* 现在可在 Linux 上通过执行命令 `apt/yum install manticore-language-packs` 轻松安装适用于英语、德语和俄语的[语言包](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology)。在 macOS 上，请使用命令 `brew install manticoresoftware/tap/manticore-language-packs`。
 * `SHOW CREATE TABLE`和`DESC`操作之间的字段和属性顺序现在一致。
 * 如果在执行`INSERT`查询时磁盘空间不足，新的`INSERT`查询将失败，直到有足够的磁盘空间可用。
 * 已添加[UINT64()](Functions/Type_casting_functions.md#UINT64%28%29)类型转换函数。
@@ -1275,9 +1274,9 @@
 * [问题 #924](https://github.com/manticoresoftware/manticoresearch/issues/924) Debian Bookworm支持。
 * [问题 #636](https://github.com/manticoresoftware/manticoresearch/issues/636) 打包：为Linux和MacOS提供arm64构建。
 * [PR #26](https://github.com/manticoresoftware/docker/pull/26) 多架构（x86_64 / arm64）Docker镜像。
-* 现在可以使用APT安装特定版本。
-* [提交 a6b8](https://github.com/manticoresoftware/manticoresearch/commit/51fddca5c2a3ebb8576fae4c18660656ba22de0f) Windows安装程序（之前我们只提供归档文件）。
-* 切换为使用CLang 15进行编译。
+* [为贡献者简化了包构建](Installation/Compiling_from_sources.md#Building-using-CI-Docker)。
+* 现在可以通过 APT 安装特定版本。
+* [Commit a6b8](https://github.com/manticoresoftware/manticoresearch/commit/51fddca5c2a3ebb8576fae4c18660656ba22de0f) Windows 安装程序（之前我们只提供归档包）。
 * **⚠️ 破坏性变更**: 自定义Homebrew配方，包括Manticore列式库的配方。要安装Manticore、MCL和任何其他必要组件，请使用以下命令 `brew install manticoresoftware/manticore/manticoresearch manticoresoftware/manticore/manticore-extra`。
 * **⚠️ BREAKING CHANGE**: Custom Homebrew formulas including the formula for Manticore Columnar Library. To install Manticore, MCL and any other necessary components, use the following command `brew install manticoresoftware/manticore/manticoresearch manticoresoftware/manticore/manticore-extra`.
 
@@ -1505,7 +1504,7 @@
   - 之前每个子查询构成单独的事务并产生单独的响应
   - 现在整个批次被视为单个事务，返回单个响应
 * ⚠️ 搜索选项 `low_priority` 和 `boolean_simplify` 现在需要指定值（`0/1`）：之前您可以使用 `SELECT ... OPTION low_priority, boolean_simplify`，现在需要使用 `SELECT ... OPTION low_priority=1, boolean_simplify=1`。
-* ⚠️ 如果您使用旧版 [php](https://github.com/manticoresoftware/manticoresearch/blob/master/api/sphinxapi.php)、[python](https://github.com/manticoresoftware/manticoresearch/blob/master/api/sphinxapi.py) 或 [java](https://github.com/manticoresoftware/manticoresearch/tree/master/api/java) 客户端，请遵循相应链接查找更新版本。**旧版本与 Manticore 5 不完全兼容。**
+* ⚠️ 如果您使用旧版 [php](https://github.com/manticoresoftware/manticoresearch/blob/main/api/sphinxapi.php)、[python](https://github.com/manticoresoftware/manticoresearch/blob/main/api/sphinxapi.py) 或 [java](https://github.com/manticoresoftware/manticoresearch/tree/main/api/java) 客户端，请遵循相应链接查找更新版本。**旧版本与 Manticore 5 不完全兼容。**
 * ⚠️ HTTP JSON 请求现在在 `query_log_format=sphinxql` 模式下以不同格式记录。之前仅记录全文部分，现在按原样记录。
 
 ### 新包
@@ -2079,7 +2078,7 @@ status of the query, not the server status
 27. [提交 cb15](https://github.com/manticoresoftware/manticoresearch/commit/cb153228) HTTP JSON 响应中的 "highlight" 空标题
 28. [问题 #318](https://github.com/manticoresoftware/manticoresearch/issues/318) `CREATE TABLE LIKE` 内嵌错误
 29. [提交 9040](https://github.com/manticoresoftware/manticoresearch/commit/9040d22c) RT 在负载下崩溃
-30. [cd512c7d ](https://github.com/manticoresoftware/manticoresearch/commit/cd512c7d) RT 磁盘块崩溃时丢失崩溃日志
+30. [cd512c7d ](https://github.com/manticoresoftware/manticoresearch/commit/cd512c7d ) RT 磁盘分片崩溃时丢失崩溃日志
 31. [问题 #323](https://github.com/manticoresoftware/manticoresearch/issues/323) 导入表失败并关闭连接
 32. [提交 6275](https://github.com/manticoresoftware/manticoresearch/commit/6275316a) `ALTER reconfigure` 破坏 PQ 索引
 33. [提交 9c1d](https://github.com/manticoresoftware/manticoresearch/commit/9c1d221e) 更改索引类型后 searchd 重新加载问题

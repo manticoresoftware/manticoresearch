@@ -2165,6 +2165,18 @@ static void FormatAllSettings ( const CSphIndex & tIndex, SettingsFormatter_c & 
 }
 
 
+static void FormatAllSettings ( const CSphIndexSettings & tSettings, const CSphFieldFilterSettings & tFieldFilterSettings, const CSphTokenizerSettings & tTokenizerSettings, const CSphDictSettings & tDictSettings, const MutableIndexSettings_c & tMutableSettings, SettingsFormatter_c & tFormatter, FilenameBuilder_i * pFilenameBuilder )
+{
+	tSettings.Format ( tFormatter, pFilenameBuilder );
+	tFieldFilterSettings.Format ( tFormatter, pFilenameBuilder );
+	tTokenizerSettings.Format ( tFormatter, pFilenameBuilder );
+	tDictSettings.Format ( tFormatter, pFilenameBuilder );
+	tMutableSettings.Format ( tFormatter, pFilenameBuilder );
+	if ( !tSettings.m_bBinlog )
+		tFormatter.Add ( "binlog", "0", true );
+}
+
+
 // fixme! this is basically a duplicate of the above function, but has extra code due to embedded
 void DumpReadable ( FILE * fp, const CSphIndex & tIndex, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder )
 {
@@ -2216,6 +2228,14 @@ static void DumpCreateTable ( StringBuilder_c & tBuf, const CSphIndex & tIndex, 
 	// all ext files should be in the _list format by default
 	SettingsFormatter_c tFormatter ( tState, "", "='", "'", " ", false, true, eExt );
 	FormatAllSettings ( tIndex, tFormatter, pFilenameBuilder );
+}
+
+
+static void DumpCreateTable ( StringBuilder_c & tBuf, const CSphIndexSettings & tSettings, const CSphFieldFilterSettings & tFieldFilterSettings, const CSphTokenizerSettings & tTokenizerSettings, const CSphDictSettings & tDictSettings, const MutableIndexSettings_c & tMutableSettings, FilenameBuilder_i * pFilenameBuilder, ExtFilesFormat_e eExt )
+{
+	SettingsFormatterState_t tState(tBuf);
+	SettingsFormatter_c tFormatter ( tState, "", "='", "'", " ", false, true, eExt );
+	FormatAllSettings ( tSettings, tFieldFilterSettings, tTokenizerSettings, tDictSettings, tMutableSettings, tFormatter, pFilenameBuilder );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -2367,12 +2387,12 @@ static void AddFieldSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tF
 }
 
 
-static void AddStorageSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr, const CSphIndex & tIndex, bool bField, int iNumColumnar )
+static void AddStorageSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr, const CSphIndexSettings & tSettings, bool bField, int iNumColumnar )
 {
 	if ( !bField && tAttr.m_eAttrType==SPH_ATTR_STRING )
 		sRes << " attribute";
 
-	bool bColumnar = CombineEngines ( tIndex.GetSettings().m_eEngine, tAttr.m_eEngine )==AttrEngine_e::COLUMNAR;
+	bool bColumnar = CombineEngines ( tSettings.m_eEngine, tAttr.m_eEngine )==AttrEngine_e::COLUMNAR;
 	if ( bColumnar )
 	{
 		if ( tAttr.m_eAttrType!=SPH_ATTR_JSON && !tAttr.IsStored() && iNumColumnar>1 )
@@ -2461,7 +2481,7 @@ static bool IsDDLToken ( const CSphString & sTok )
 }
 
 
-static CSphString FormatCreateTableAttr ( const CSphColumnInfo & tAttr, const CSphIndex * pIndex, int iNumColumnar, bool bQuote )
+static CSphString FormatCreateTableAttr ( const CSphColumnInfo & tAttr, const CSphIndexSettings & tSettings, int iNumColumnar, bool bQuote )
 {
 	StringBuilder_c sRes;
 
@@ -2474,7 +2494,7 @@ static CSphString FormatCreateTableAttr ( const CSphColumnInfo & tAttr, const CS
 
 	sRes << sQuotedName << " " << GetAttrTypeName(tAttr);
 
-	AddStorageSettings ( sRes, tAttr, *pIndex, false, iNumColumnar );
+	AddStorageSettings ( sRes, tAttr, tSettings, false, iNumColumnar );
 	AddEngineSettings ( sRes, tAttr );
 	AddKNNSettings ( sRes, tAttr );
 	AddSISettings ( sRes, tAttr );
@@ -2483,7 +2503,7 @@ static CSphString FormatCreateTableAttr ( const CSphColumnInfo & tAttr, const CS
 }
 
 
-static CSphString FormatCreateTableField ( const CSphColumnInfo & tField, const CSphIndex * pIndex, const CSphSchema & tSchema, int iNumColumnar, bool bQuote )
+static CSphString FormatCreateTableField ( const CSphColumnInfo & tField, const CSphIndexSettings & tSettings, const CSphSchema & tSchema, int iNumColumnar, bool bQuote )
 {
 	StringBuilder_c sRes;
 
@@ -2504,7 +2524,7 @@ static CSphString FormatCreateTableField ( const CSphColumnInfo & tField, const 
 	{
 		sRes << " attribute";
 
-		AddStorageSettings ( sRes, *pAttr, *pIndex, true, iNumColumnar );
+		AddStorageSettings ( sRes, *pAttr, tSettings, true, iNumColumnar );
 		AddEngineSettings ( sRes, *pAttr );
 	}
 
@@ -2512,17 +2532,13 @@ static CSphString FormatCreateTableField ( const CSphColumnInfo & tField, const 
 }
 
 
-CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema, ExtFilesFormat_e eExt )
+template <typename DUMP_SETTINGS>
+static CSphString BuildCreateTableImpl ( const CSphString & sName, const CSphSchema & tSchema, const CSphIndexSettings & tSettings, DUMP_SETTINGS && fnDumpSettings )
 {
-	assert ( pIndex );
-
 	auto& tSess = session::Info();
 	bool bQuote = tSess.GetSqlQuoteShowCreate();
 
-	int iNumColumnar = 0;
-	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
-		if ( tSchema.GetAttr(i).IsColumnar() )
-			iNumColumnar++;
+	int iNumColumnar = tSchema.GetColumnarAttrsCount();
 
 	StringBuilder_c sRes;
 	sRes << "CREATE TABLE " << ( bQuote ? SphSprintf ( "`%s`", sName.cstr() ) : sName) << " (\n";
@@ -2541,12 +2557,12 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 	const CSphColumnInfo * pId = tSchema.GetAttr("id");
 	assert(pId);
 
-	sRes << FormatCreateTableAttr ( *pId, pIndex, iNumColumnar, bQuote );
+	sRes << FormatCreateTableAttr ( *pId, tSettings, iNumColumnar, bQuote );
 
 	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
 	{
 		sRes << ",\n";
-		sRes << FormatCreateTableField ( tSchema.GetField(i), pIndex, tSchema, iNumColumnar, bQuote );
+		sRes << FormatCreateTableField ( tSchema.GetField(i), tSettings, tSchema, iNumColumnar, bQuote );
 	}
 
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
@@ -2559,24 +2575,37 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 			continue;
 
 		sRes << ",\n";
-		sRes << FormatCreateTableAttr ( tAttr, pIndex, iNumColumnar, bQuote );
+		sRes << FormatCreateTableAttr ( tAttr, tSettings, iNumColumnar, bQuote );
 	}
 
 	sRes << "\n)";
 
 	StringBuilder_c tBuf;
-
-	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
-	if ( g_fnCreateFilenameBuilder )
-		pFilenameBuilder = g_fnCreateFilenameBuilder ( pIndex->GetName() );
-
-	DumpCreateTable ( tBuf, *pIndex, pFilenameBuilder.get(), eExt );
+	fnDumpSettings ( tBuf );
 
 	if ( tBuf.GetLength() )
 		sRes << " " << tBuf.cstr();
 
 	CSphString sResult = sRes.cstr();
 	return sResult;
+}
+
+
+CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema, ExtFilesFormat_e eExt )
+{
+	assert ( pIndex );
+
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
+	if ( g_fnCreateFilenameBuilder )
+		pFilenameBuilder = g_fnCreateFilenameBuilder ( pIndex->GetName() );
+
+	return BuildCreateTableImpl ( sName, tSchema, pIndex->GetSettings(), [&] ( StringBuilder_c & tBuf ) { DumpCreateTable ( tBuf, *pIndex, pFilenameBuilder.get(), eExt ); } );
+}
+
+
+CSphString BuildCreateTable ( const CSphString & sName, const CSphSchema & tSchema, const CSphIndexSettings & tSettings, const CSphFieldFilterSettings & tFieldFilterSettings, const CSphTokenizerSettings & tTokenizerSettings, const CSphDictSettings & tDictSettings, const MutableIndexSettings_c & tMutableSettings, ExtFilesFormat_e eExt, FilenameBuilder_i * pFilenameBuilder )
+{
+	return BuildCreateTableImpl ( sName, tSchema, tSettings, [&] ( StringBuilder_c & tBuf ) { DumpCreateTable ( tBuf, tSettings, tFieldFilterSettings, tTokenizerSettings, tDictSettings, tMutableSettings, pFilenameBuilder, eExt ); } );
 }
 
 

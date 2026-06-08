@@ -502,11 +502,13 @@ knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2",
 - `hnsw_ef_construction`: Construction time/accuracy trade-off (default: 200)
 
 **Auto-embeddings parameters** (when using `model_name`):
-- `model_name`: The embedding model to use (e.g., `"sentence-transformers/all-MiniLM-L6-v2"`, `"openai/text-embedding-ada-002"`). When specified, `dims` must be omitted as the model determines the dimensions automatically.
+- `model_name`: The embedding model to use (e.g., `"sentence-transformers/all-MiniLM-L6-v2"`, `"openai/text-embedding-ada-002"`, `"openai:text-embedding-ada-002"`). When specified, `dims` must be omitted as the model determines the dimensions automatically.
 - `from`: Comma-separated list of field names to use for embedding generation, or empty string `""` to use all text/string fields. This parameter is required when `model_name` is specified.
 - `api_key`: API key for API-based models (OpenAI, Voyage, Jina). Only required for API-based embedding services.
 - `cache_path`: Optional path for caching downloaded models (for sentence-transformers models).
 - `use_gpu`: Optional boolean to enable GPU acceleration if available.
+
+For custom remote endpoints, you can use `provider:model` syntax in `model_name`. In that form, the part before `:` selects the request format, while the part after `:` is sent to the remote endpoint unchanged.
 
 **Important:** You cannot specify both `dims` and `model_name` in the same configuration - they are mutually exclusive. Use `dims` for manual vector insertion, or `model_name` for auto-embeddings. Use `dims` for manual vector insertion, or `model_name` for auto-embeddings.
 

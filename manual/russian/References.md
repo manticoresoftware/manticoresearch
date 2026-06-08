@@ -150,7 +150,7 @@
 * [exceptions_list](Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions_list)
 * [expand_keywords](Searching/Options.md#expand_keywords)
 * [global_idf](Searching/Options.md#global_idf)
-* [hitless_wordsbbab.png:CREATING_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words)
+* [hitless_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words)
 * [hitless_words_list](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words_list)
 * [html_index_attrs](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_index_attrs)
 * [html_remove_elements](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_remove_elements)
@@ -461,6 +461,7 @@ index_converter {--config /path/to/config|--path}
   * [join_batch_size](Searching/Joining.md#Join-batching) - Определяет размер пакета для соединения таблиц для баланса производительности и использования памяти
   * [join_cache_size](Searching/Joining.md#Join-caching) - Определяет размер кэша для повторного использования результатов запросов JOIN
   * [kibana_version_string](Server_settings/Searchd.md#kibana_version_string) – Строка версии сервера, отправляемая в ответ на запросы Kibana
+  * [knn_parallel_build](Server_settings/Searchd.md#knn_parallel_build) - Количество рабочих потоков, используемых для построения графа HNSW во время сохранения RT-чанков, слияний `OPTIMIZE` / автооптимизации чанков и перестроек KNN через `ALTER TABLE`
   * [listen](Server_settings/Searchd.md#listen) - Определяет IP-адрес и порт или путь к Unix-доменному сокету для прослушивания searchd
   * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - Размер очереди прослушивания TCP
   * [listen_tfo](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Включает флаг TCP_FASTOPEN для всех слушателей

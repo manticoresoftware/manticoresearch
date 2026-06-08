@@ -11,7 +11,7 @@ Copyright:
 Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 All rights reserved
 ```
-Manticore Search is released under [GPL v3 or later](https://raw.githubusercontent.com/manticoresoftware/manticoresearch/master/LICENSE).
+Manticore Search is released under [GPL v3 or later](https://raw.githubusercontent.com/manticoresoftware/manticoresearch/main/LICENSE).
 
 Manticore Search redistributes or is based on the following open source software:
 

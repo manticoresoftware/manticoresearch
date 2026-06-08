@@ -25,30 +25,28 @@ standalone_print_usage() {
 Manticore Search Installer
 
 Usage:
-  wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | sh -s -- [options]
-  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | sh -s -- [options]
-  wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
-  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
+  wget -O- https://manticoresearch.com | sh -s [options]
+  curl https://manticoresearch.com | sh -s [options]
 
 Common commands/options:
-  help, --help, -h, -?        Show this help and exit.
-  silent, -s, yes, -y         Non-interactive mode; assume defaults.
+  help                        Show this help and exit.
+  silent                      Non-interactive mode; assume defaults.
   upgrade                     Upgrade an installed Manticore package.
-  version <version>, -v <v>   Install or switch to a specific version.
+  version <version>           Install or switch to a specific version.
   list-versions               Print available versions.
   list-versions-file <path>   Write available versions to path.
   no-start                    Do not start the service after install/upgrade.
   backup-data                 Include data directory in upgrade backup.
   no-backup-data              Skip data directory backup (default).
   backup-dir <path>           Override backup directory for upgrades.
-  uninstall, -u               Remove packages, keep config/data/repo state.
+  uninstall                   Remove packages, keep config/data/repo state.
   purge                       Remove packages and repository bootstrap package.
   purge-all                   Purge packages, repo state, config, and data.
 
 Examples:
-  sh bootstrap-standalone.sh list-versions
-  sh bootstrap-standalone.sh version 25.0.0 no-start
-  sh bootstrap-standalone.sh upgrade backup-data
+  curl https://manticoresearch.com | sh -s list-versions
+  curl https://manticoresearch.com | sh -s version 25.0.0 no-start
+  curl https://manticoresearch.com | sh -s upgrade backup-data
 USAGE
 }
 

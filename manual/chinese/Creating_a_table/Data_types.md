@@ -2553,10 +2553,12 @@ let search_res = search_api.search(search_req).await;
 - `API_URL`：可选。自定义 API 端点 URL。如果未指定，使用默认提供者端点（例如，OpenAI 的 `https://api.openai.com/v1/embeddings`）。
 - `API_TIMEOUT`：可选。API 请求的 HTTP 超时时间（以秒为单位）。默认为 10 秒。设置为 `'0'` 以使用默认超时。适用于表创建时的验证请求和插入操作时的嵌入生成。
 
+对于远程模型，`MODEL_NAME` 可以使用传统的 `provider/model` 格式或显式的 `provider:model` 格式。当使用 `API_URL` 并希望将 `:` 后的部分原样转发到自定义提供方兼容端点时，请使用 `provider:model`。
+
 **支持的嵌入模型：**
 - **Sentence Transformers**：任何 [适合的 BERT 基础 Hugging Face 模型](https://huggingface.co/sentence-transformers/models)（例如，`sentence-transformers/all-MiniLM-L6-v2`）——无需 API 密钥。Manticore 在创建表时下载模型。
 - **Qwen 本地嵌入**：Qwen 嵌入模型，如 `Qwen/Qwen3-Embedding-0.6B`——不需要 API 密钥。Manticore 在您创建表时下载模型。
-- **OpenAI、Voyage、Jina**：远程嵌入模型（例如，`openai/text-embedding-ada-002`，`voyage/voyage-3.5-lite`，`jina/jina-embeddings-v2-base-en`）- 需要 `API_KEY='<API_KEY>'` 参数。可选地指定 `API_URL='<CUSTOM_URL>'` 以使用自定义 API 端点，并指定 `API_TIMEOUT='<SECONDS>'` 以配置 HTTP 超时（默认为 10 秒）。
+- **OpenAI、Voyage、Jina**：远程嵌入模型（例如，`openai/text-embedding-ada-002`、`openai:text-embedding-ada-002`、`voyage/voyage-3.5-lite`、`jina/jina-embeddings-v2-base-en`）- 需要 `API_KEY='***'` 参数。可选地指定 `API_URL='<CUSTOM_URL>'` 以使用自定义 API 端点，并使用 `API_TIMEOUT='<SECONDS>'` 配置 HTTP 超时（默认为 10 秒）。
 
 <!-- intro -->
 ##### SQL：
@@ -2591,15 +2593,25 @@ CREATE TABLE products_openai (
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='<OPENAI_API_KEY>'
 );
 ```
-
 使用 OpenAI 与自定义 API URL 和超时（可选）
 ```sql
 CREATE TABLE products_openai_custom (
     title TEXT,
     content TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
-    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content'
-    API_KEY='<OPENAI_API_KEY>' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+    MODEL_NAME='openai:text-embedding-ada-002' FROM='title,content'
+    API_KEY='***' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+);
+```
+
+使用 OpenRouter 与提供方限定的模型 ID
+```sql
+CREATE TABLE products_openrouter (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='openai:openai/text-embedding-ada-002' FROM='title,content'
+    API_KEY='***' API_URL='https://openrouter.ai/api/v1/embeddings' API_TIMEOUT='30'
 );
 ```
 

@@ -254,6 +254,41 @@ merge_chunks_per_job = 4
 
 <!-- end -->
 
+### knn_parallel_build
+
+<!-- example conf knn_parallel_build -->
+This setting controls how many worker threads are used to build the HNSW graph during HNSW-heavy operations on tables that contain a `float_vector` attribute with a KNN index. Several paths use this knob:
+* The **chunk-save store pass**: when a RAM chunk is flushed to disk, workers split the chunk's RAM segments between them and add vectors to the destination HNSW graph in parallel.
+* The **chunk-merge store pass**: `OPTIMIZE TABLE` and auto-optimize merges build the destination chunk's HNSW graph in parallel, splitting the alive-row range from all input chunks across workers.
+* The **ALTER KNN rebuild**: `ALTER TABLE ... ADD COLUMN`/`DROP COLUMN` on a `float_vector` attribute, and `ALTER TABLE ... REBUILD KNN`, rebuild the HNSW graph in parallel for disk chunks.
+
+This affects only HNSW graph construction for tables with KNN attributes.
+
+Set it to `1` to disable parallel KNN build (all store passes run serially). Higher values speed up chunk saves, `OPTIMIZE`, and ALTER rebuilds on tables where HNSW graph construction dominates the operation's wall time.
+
+Parallel HNSW construction can insert vectors in a different order than the serial path, so the resulting `.spknn` graph is not guaranteed to be bit-identical to a graph built with `knn_parallel_build = 1`.
+
+Note that with [`parallel_chunk_merges`](../Server_settings/Searchd.md#parallel_chunk_merges) > 1, multiple merges can run concurrently and each one consumes up to `knn_parallel_build` workers.
+
+By default, Manticore derives the value from the [threads](../Server_settings/Searchd.md#threads) setting: `max(1, min(4, threads/4))`. That is, `1` (serial) when `threads` is below 8, `2` when `threads` <= 11, `3` when `threads` <= 15, and `4` when 16 or higher (capped at 4 by default). Operators with larger hosts who want more parallelism can set the value explicitly.
+
+This value can be changed at runtime using `SET GLOBAL knn_parallel_build = N` and inspected via `SHOW VARIABLES`.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Disable -->
+```ini
+knn_parallel_build = 1
+```
+
+<!-- request Increase -->
+```ini
+knn_parallel_build = 4
+```
+
+<!-- end -->
+
 ### auto_schema
 
 <!-- example conf auto_schema -->

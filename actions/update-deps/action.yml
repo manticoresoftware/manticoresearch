@@ -78,7 +78,7 @@ runs:
       run: |
         echo "branch=update-${{ inputs.name }}-version" >> $GITHUB_OUTPUT
         echo "source_branch=${{ github.head_ref }}" >> $GITHUB_OUTPUT
-        echo "target=master" >> $GITHUB_OUTPUT
+        echo "target=main" >> $GITHUB_OUTPUT
 
     - name: Prepare update version branch
       shell: bash
@@ -88,7 +88,7 @@ runs:
         # Fetch branch or create it
         git fetch origin
         if ! git ls-remote --exit-code --heads origin refs/heads/${{ steps.branch.outputs.branch }}; then
-          git checkout -b ${{ steps.branch.outputs.branch }} origin/master
+          git checkout -b ${{ steps.branch.outputs.branch }} origin/main
         else
           git checkout ${{ steps.branch.outputs.branch }}
         fi

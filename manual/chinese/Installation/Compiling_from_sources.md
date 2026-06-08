@@ -3,14 +3,14 @@
 从源代码编译 Manticore Search 可以启用自定义构建配置，例如禁用某些功能或添加新补丁进行测试。例如，您可能希望从源代码编译并禁用嵌入式 ICU，以便使用系统上安装的不同版本，该版本可以独立于 Manticore 进行升级。如果您有兴趣为 Manticore Search 项目做出贡献，这也非常有用。
 
 ## 使用 CI Docker 构建
-为了准备 [官方发布和开发包](https://repo.manticoresearch.com/)，我们使用 Docker 和一个特殊的构建镜像。此镜像包含必要的工具，并设计为与外部 sysroots 一起使用，因此一个容器可以为所有操作系统构建包。您可以使用 [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/cross/external_toolchain/Dockerfile) 和 [README](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/README.md) 构建该镜像，或使用来自 [Docker Hub](https://hub.docker.com/r/manticoresearch/external_toolchain/tags) 的镜像。这是为任何受支持的操作系统和架构创建二进制文件的最简单方法。运行容器时，您还需要指定以下环境变量：
+为了准备 [官方发布和开发包](https://repo.manticoresearch.com/)，我们使用 Docker 和一个特殊的构建镜像。此镜像包含必要的工具，并设计为与外部 sysroots 一起使用，因此一个容器可以为所有操作系统构建包。您可以使用 [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/main/dist/build_dockers/cross/external_toolchain/Dockerfile) 和 [README](https://github.com/manticoresoftware/manticoresearch/blob/main/dist/build_dockers/README.md) 构建该镜像，或使用 [Docker Hub](https://hub.docker.com/r/manticoresearch/external_toolchain/tags) 上的镜像。这是为任何受支持的操作系统和架构创建二进制文件的最简单方法。运行容器时，您还需要指定以下环境变量：
 
 * `DISTR`：目标平台：`bionic`，`focal`，`jammy`，`buster`，`bullseye`，`bookworm`，`rhel8`，`rhel9`，`rhel10`，`macos`，`windows`，`freebsd13`
 * `arch`：架构：`x86_64`，`x64`（用于 Windows），`aarch64`，`arm64`（用于 Macos）
-* `SYSROOT_URL`：系统根存档的 URL。您可以使用 https://repo.manticoresearch.com/repository/sysroots，除非您自己构建 sysroots（说明可在 [此处](https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers/cross/sysroots) 找到）。
+* `SYSROOT_URL`：系统根存档的 URL。除非您自己构建 sysroots（可在 [此处](https://github.com/manticoresoftware/manticoresearch/tree/main/dist/build_dockers/cross/sysroots) 找到说明），否则可以使用 https://repo.manticoresearch.com/repository/sysroots
 * 使用 CI 工作流文件作为参考，找到您可能需要使用的其他环境变量：
-  - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/pack_publish.yml
-  - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/build_template.yml
+  - https://github.com/manticoresoftware/manticoresearch/blob/main/.github/workflows/pack_publish.yml
+  - https://github.com/manticoresoftware/manticoresearch/blob/main/.github/workflows/build_template.yml
 
 要找到 `DISTR` 和 `arch` 的可能值，您可以使用目录 https://repo.manticoresearch.com/repository/sysroots/roots_with_zstd/ 作为参考，因为它包含所有受支持组合的 sysroots。
 
@@ -131,7 +131,7 @@ ls ~/rpmbuild/RPMS/*/manticore*
 #### 从 git
 
 Manticore 源代码 [托管在 GitHub](https://github.com/manticoresoftware/manticoresearch)。
-要获取源代码，请克隆仓库，然后检出所需的分支或标签。分支 `master` 表示主开发分支。发布时，会创建一个版本标签，例如 `3.6.0`，并开始一个新的当前发布分支，即 `manticore-3.6.0`。在所有更改之后，版本分支的头部将用作构建所有二进制发布版本的源代码。例如，要获取 3.6.0 版本的源代码，您可以运行：
+要获取源代码，请克隆仓库，然后检出所需的分支或标签。分支 `main` 表示主开发分支。发布时，会创建一个版本标签，例如 `3.6.0`，并开始一个新的当前发布分支，即 `manticore-3.6.0`。在所有更改完成后，版本分支的头部将用作构建所有二进制发布版本的源代码。例如，要获取 3.6.0 版本的源代码，您可以运行：
 
 ```bash
 git clone https://github.com/manticoresoftware/manticoresearch.git

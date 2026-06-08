@@ -323,6 +323,7 @@ command_json: 0
 command_callpq: 0
 command_cluster: 0
 command_getfield: 0
+command_shard_write: 0
 agent_connect: 1
 agent_retry: 0
 queries: 17

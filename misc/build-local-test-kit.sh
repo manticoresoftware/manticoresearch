@@ -2,7 +2,7 @@
 # Build a local test-kit Docker image with your code changes
 #
 # This script compiles Manticore Search and creates a Docker image for CLT testing.
-# The image is based on test-kit-latest (contains latest dev from master) with your
+# The image is based on test-kit-latest (contains latest dev from main) with your
 # compiled binaries replacing the originals.
 #
 # Usage:
@@ -63,7 +63,7 @@ fi
 mkdir -p "$BUILD_DIR"
 mkdir -p "$REPO_ROOT/cache"
 
-# Pull base image (contains latest dev from master)
+# Pull base image (contains latest dev from main)
 echo "==> Pulling base image: $BASE_IMAGE"
 if ! docker pull "$BASE_IMAGE"; then
     echo "ERROR: Failed to pull base image. Check your internet connection."

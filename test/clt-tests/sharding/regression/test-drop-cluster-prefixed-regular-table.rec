@@ -1,0 +1,31 @@
+––– comment –––
+Regression: FAIL_023 — DROP TABLE c:t for a REGULAR (non-sharded) RT
+table that was added to cluster c via ALTER CLUSTER ADD must not route
+through the sharded drop path. Buddy now returns a clear hint pointing
+to ALTER CLUSTER c DROP t first.
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "create table plain_rt(id bigint, body text);"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "alter cluster ${CLUSTER_NAME} add plain_rt;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "drop table ${CLUSTER_NAME}:plain_rt;"
+––– output –––
+ERROR 1064 (42000) at line 1: table 'plain_rt' is a regular table in cluster 'c': use ALTER CLUSTER c DROP plain_rt to remove it from the cluster, then DROP TABLE plain_rt

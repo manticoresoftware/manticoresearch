@@ -26,6 +26,7 @@ command_insert 0
 command_keywords 0
 command_replace 0
 command_search 0
+command_shard_write 0
 command_status %{NUMBER}
 command_suggest 0
 command_update 0
@@ -148,6 +149,7 @@ command_insert 2
 command_keywords 0
 command_replace 1
 command_search 3
+command_shard_write 0
 command_status %{NUMBER}
 command_suggest 0
 command_update 1
@@ -165,6 +167,7 @@ command_insert 2
 command_keywords 0
 command_replace 1
 command_search 2
+command_shard_write 0
 command_status %{NUMBER}
 command_suggest 0
 command_update 1
@@ -209,6 +212,7 @@ command_insert 2
 command_keywords 0
 command_replace 1
 command_search 3
+command_shard_write 0
 command_status %{NUMBER}
 command_suggest 0
 command_update 1
@@ -291,6 +295,7 @@ command_insert 2
 command_keywords 1
 command_replace 1
 command_search 4
+command_shard_write 0
 command_status %{NUMBER}
 command_suggest 0
 command_update 1
@@ -308,6 +313,7 @@ command_insert 2
 command_keywords 1
 command_replace 1
 command_search 2
+command_shard_write 0
 command_status %{NUMBER}
 command_suggest 0
 command_update 1

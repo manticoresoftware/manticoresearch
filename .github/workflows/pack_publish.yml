@@ -6,9 +6,9 @@ on:
   workflow_run:
     workflows: [ 🔬 Test ]
     types: [ completed ]
-    branches: [ master ]
+    branches: [ main ]
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
     types: [opened, synchronize, reopened, labeled, unlabeled]
     paths-ignore:
       - 'manual/**'
@@ -25,7 +25,7 @@ on:
       - 'release*'
       - 'pack_publish'
 
-# cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
+# cancels the previous workflow run when a new one appears in the same branch (e.g. main or a PR's branch)
 concurrency:
   group: pack_${{ github.ref }}
   cancel-in-progress: true
@@ -39,7 +39,7 @@ jobs:
     steps:
       - name: Check if branch exists in manticoresoftware/manticoresearch
         id: check_branch
-        if: github.ref_name != 'master'
+        if: github.ref_name != 'main'
         env:
           EVENT_NAME: ${{ github.event_name }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
@@ -67,7 +67,7 @@ jobs:
           BRANCH_EXISTS: ${{ steps.check_branch.outputs.branch_exists }}
           BRANCH_NAME: ${{ steps.check_branch.outputs.branch_name }}
         run: |
-          if [[ "$REF_NAME" != "master" && "$BRANCH_EXISTS" == "true" ]]; then
+          if [[ "$REF_NAME" != "main" && "$BRANCH_EXISTS" == "true" ]]; then
             echo "columnar_locator=GIT_REPOSITORY https://github.com/manticoresoftware/columnar.git GIT_TAG $BRANCH_NAME" >> $GITHUB_OUTPUT
           else
             echo "columnar_locator=" >> $GITHUB_OUTPUT
@@ -102,7 +102,7 @@ jobs:
         &&
         github.event.workflow_run.conclusion == 'success'
         &&
-        github.ref == 'refs/heads/master'
+        github.ref == 'refs/heads/main'
       )
       ||
       (

@@ -49,7 +49,9 @@ This option specifies the name of the cluster. It should be unique among all the
 
 ### path
 
-The path option specifies the data directory for [write-set cache replication](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) and incoming tables from other nodes. This value should be unique among all the clusters in the system and should be specified as a relative path to the [data_dir](../../Server_settings/Searchd.md#data_dir). directory. By default, it is set to the value of [data_dir](../../Server_settings/Searchd.md#data_dir).
+The path option specifies the data directory for [write-set cache replication](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) and other cluster provider files. It does not change where replicated tables are stored. Incoming replicated tables are stored in their normal table directory under [data_dir](../../Server_settings/Searchd.md#data_dir). This value should be unique among all the clusters in the system and should be specified as a relative path to the [data_dir](../../Server_settings/Searchd.md#data_dir) directory. By default, it is set to the value of [data_dir](../../Server_settings/Searchd.md#data_dir).
+
+> **Breaking change:** Older versions also stored incoming replicated table files under the cluster path. If you used a custom cluster `path`, upgrade carefully because replicated tables received by older versions might need to be moved or re-synchronized into the normal `data_dir/<table>` layout.
 
 ### nodes
 
@@ -294,7 +296,7 @@ SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 ## Replication and cluster
 
 <!-- example replication and cluster 1 -->
-To use replication, you need to define one [listen](../../Server_settings/Searchd.md#listen) port for SphinxAPI protocol and one  [listen](../../Server_settings/Searchd.md#listen) for replication address and port range in the configuration file. Also, specify the  [data_dir](../../Server_settings/Searchd.md#data_dir) folder to receive incoming tables.
+To use replication, you need to define one [listen](../../Server_settings/Searchd.md#listen) port for SphinxAPI protocol and one  [listen](../../Server_settings/Searchd.md#listen) for replication address and port range in the configuration file. Also, specify the  [data_dir](../../Server_settings/Searchd.md#data_dir) folder to store incoming replicated tables.
 
 
 <!-- intro -->

@@ -1,6 +1,6 @@
 # 匹配
 
-`MATCH` 子句允许在文本字段中进行全文搜索。输入查询字符串使用与索引文本时相同的设置进行分词。除了输入文本的分词外，查询字符串还支持一系列的 [全文操作符](../../Searching/Full_text_matching/Operators.md)，这些操作符会强制执行各种规则，以确保关键词能够提供有效的匹配。
+`MATCH` 子句允许对文本字段进行全文检索。输入的查询字符串会使用与索引时应用于文本相同的设置进行 [分词](../../Creating_a_table/NLP_and_tokenization/Data_tokenization.md)。除了对输入文本进行分词之外，查询字符串还支持多种 [全文运算符](../../Searching/Full_text_matching/Operators.md)，用于强制规定关键字应如何形成有效匹配。
 
 全文匹配子句可以与属性 [过滤器](../../Searching/Filters.md) 结合使用，作为 AND 布尔运算。**全文匹配和属性过滤器之间的 OR 关系不被支持**。
 

@@ -11,6 +11,7 @@
 #include "cluster_index_add_local.h"
 #include "api_command_cluster.h"
 #include "cluster_commands.h"
+#include "searchdreplication.h"
 
 #include "digest_sha1.h"
 #include "recv_state.h"
@@ -81,7 +82,7 @@ struct RollbackFilesGuard_t
 	FilesTrait_t m_tFiles;
 };
 
-static void RemoveFiles ( const sph::StringSet& hActiveFiles, const StrVec_t& dFiles )
+static void RemoveFiles ( const sph::StringSet& hActiveFiles, const VecTraits_T<CSphString>& dFiles )
 {
 	for ( const auto& sFile : dFiles )
 	{
@@ -104,6 +105,25 @@ static void RemoveFiles ( const FilesTrait_t& tIndexFiles, const StrVec_t& dRena
 
 	RemoveFiles ( hActiveFiles, tIndexFiles.m_dOld );
 	RemoveFiles ( hActiveFiles, dRenamedOld );
+}
+
+static void RemoveStagedFiles ( const MergeState_t& tMerge )
+{
+	for ( int iFile = 0; iFile < tMerge.m_dFilesNew.GetLength(); iFile++ )
+	{
+		if ( tMerge.m_dMergeMask.BitGet ( iFile ) )
+			continue;
+
+		const CSphString& sFile = tMerge.m_dFilesNew[iFile];
+		if ( sFile.IsEmpty() )
+			continue;
+
+		if ( !sphFileExists ( sFile.cstr() ) )
+			continue;
+
+		if ( ::unlink ( sFile.cstr() ) )
+			sphWarning ( "failed to unlink file %s, error %s (%d)", sFile.cstr(), strerrorm ( errno ), errno );
+	}
 }
 
 static bool RotateFiles ( const std::unique_ptr<MergeState_t>& pState, FilesTrait_t& tFilesGuard )
@@ -174,7 +194,7 @@ static ServedIndexRefPtr_c LoadNewIndex ( const CSphString & sIndexPath, IndexTy
 
 	TLS_MSG_STRING ( sError );
 	ServedIndexRefPtr_c pResult;
-	auto [eAdd, pNewServed] = AddIndex ( szIndexName, hIndex, false, true, nullptr, sError );
+	auto [eAdd, pNewServed] = AddIndex ( szIndexName, hIndex, false, true, true, nullptr, sError );
 
 	assert ( eAdd == ADD_NEEDLOAD || eAdd == ADD_ERROR );
 	if ( eAdd != ADD_NEEDLOAD )
@@ -233,6 +253,12 @@ static bool AddReceivedIndex ( const ClusterIndexAddLocalRequest_t& tAddCmd )
 
 	if ( tAddCmd.m_eIndex!=IndexType_e::PERCOLATE && tAddCmd.m_eIndex!=IndexType_e::RT )
 		return TlsMsg::Err ( "unsupported type '%s' in index '%s'", GetIndexTypeName ( tAddCmd.m_eIndex ), tAddCmd.m_sIndex.cstr() );
+
+	if ( !CanReplaceIndex ( tAddCmd.m_sCluster, tAddCmd.m_sIndex ) )
+	{
+		RemoveStagedFiles ( *pMerge );
+		return false;
+	}
 
 	sphLogDebugRpl ( "rotating table '%s' content from %s", tAddCmd.m_sIndex.cstr(), pMerge->m_sIndexPath.cstr() );
 	RollbackFilesGuard_t tFilesGuard;

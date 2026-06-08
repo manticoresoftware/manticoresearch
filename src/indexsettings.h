@@ -481,6 +481,7 @@ void		DumpReadable ( FILE * fp, const CSphIndex & tIndex, const CSphEmbeddedFile
 /// try to set dictionary, tokenizer and misc settings for an index (if not already set)
 bool		sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, bool bStripFile, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError );
 CSphString	BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema, ExtFilesFormat_e eExt );
+CSphString	BuildCreateTable ( const CSphString & sName, const CSphSchema & tSchema, const CSphIndexSettings & tSettings, const CSphFieldFilterSettings & tFieldFilterSettings, const CSphTokenizerSettings & tTokenizerSettings, const CSphDictSettings & tDictSettings, const MutableIndexSettings_c & tMutableSettings, ExtFilesFormat_e eExt, FilenameBuilder_i * pFilenameBuilder );
 
 // daemon-level callback
 using CreateFilenameBuilder_fn = std::unique_ptr<FilenameBuilder_i> (*) ( const char * szIndex );

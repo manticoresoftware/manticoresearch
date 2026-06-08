@@ -1,0 +1,29 @@
+––– comment –––
+Regression: FAIL_024 — OPTIMIZE TABLE on a public sharded table (type='shard')
+must fan out to physical shards instead of failing with
+"OPTIMIZE TABLE requires an existing RT table".
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "create table t24(id bigint, title text) shards='2' rf='1';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "insert into t24(id,title) values(1,'a'),(2,'b'),(3,'c');"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "optimize table t24;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "select count(*) c from t24 where id>0;"
+––– output –––
++------+
+| c    |
++------+
+|    3 |
++------+

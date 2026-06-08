@@ -716,7 +716,7 @@ curl -s localhost:9312/cli_json -d "CALL PQ ('pq', ('{"title":"angry", "gid":3 }
 
 curl -s localhost:9312/cli_json -d "CALL PQ ('pq', ('{"title":"angry", "gid":3 }')); show meta"
 ```
-这是因为 Manticore 将分号分隔的 SQL 批处理视为 [多查询](../Searching/Multi-queries.md)，它有自己的行为和限制。
+curl -s localhost:9312/cli_json -d "CALL PQ ('pq', ('{"title":"angry", "gid":3 }')); show meta"
 ```
 
 This is because Manticore treats a semicolon-separated SQL batch as a [multi-query](../Searching/Multi-queries.md), which has its own behavior and limitations.

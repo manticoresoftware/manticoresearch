@@ -115,6 +115,7 @@ Known global server variables are:
 * `EXPANSION_MERGE_THRESHOLD_HITS`: Changes the value of the config's [expansion_merge_threshold_hits](../Server_settings/Searchd.md#expansion_merge_threshold_hits) setting on-the-fly.
 * `GROUPING_IN_UTC = {0 | 1}` When set to 1, causes timed grouping functions (day(), month(), year(), yearmonth(), yearmonthday()) to be calculated in UTC. Read the doc for [grouping_in_utc](../Server_settings/Searchd.md) config params for more details.
 * `IOSTATS = {0 | 1}` Enables or disables I/O operations (except for attributes) reporting in the query log.
+* `KNN_PARALLEL_BUILD = <positive integer>` Changes [knn_parallel_build](../Server_settings/Searchd.md#knn_parallel_build) at runtime. The value controls how many worker threads can be used to build HNSW graphs during RT chunk saves and `OPTIMIZE` / auto-optimize chunk merges.
 * `LOG_DEBUG_FILTER = <string value>` Filters out redundant log messages. If the value is set, then all logs with level > INFO (i.e., `DEBUG`, `DEBUGV`, etc.) will be compared with the string and output only in the case they start with the given value.
 * `LOG_LEVEL = {info | debug | replication | debugv | debugvv}` Changes the current log verboseness level.
 * `MAINTENANCE = {0 | 1}` When set to 1, puts the server in maintenance mode. Only clients with VIP connections can execute queries in this mode. All new non-VIP incoming connections are refused. Existing connections are left intact.
@@ -150,4 +151,3 @@ Query OK, 0 rows affected (0.01 sec)
 
 To make user variables persistent, make sure [sphinxql_state](../Server_settings/Searchd.md#sphinxql_state) is enabled.
 <!-- proofread -->
-

@@ -9,6 +9,7 @@
 //
 
 #include <algorithm>
+#include <atomic>
 #include "knnmisc.h"
 #include "knnlib.h"
 #include "exprtraits.h"
@@ -20,6 +21,9 @@
 #include "sphinxjson.h"
 #include "sphinxsort.h"
 #include "conversion.h"
+#include "sphinxrt.h"
+#include "coroutine.h"
+#include "client_task_info.h"
 
 
 const char * GetAPITimeoutErrorMsg()
@@ -112,9 +116,13 @@ bool IsKnnDist ( const CSphString & sExpr )
 
 void SetupKNNLimit ( CSphQuery & tQuery )
 {
+	int64_t iKnnLimit = tQuery.m_iLimit<0
+		? tQuery.m_iMaxMatches
+		: Min ( int64_t(tQuery.m_iLimit) + tQuery.m_iOffset, int64_t(tQuery.m_iMaxMatches) );
+
 	for ( auto & tKNN : tQuery.m_dKnnSettings )
 		if ( tKNN.m_iK < 0 )
-			tKNN.m_iK = tQuery.m_iLimit;
+			tKNN.m_iK = int(iKnnLimit);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -698,6 +706,98 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 }
 
 
+int GetDefaultKNNParallelBuild ( int iThreads )
+{
+	return Max ( 1, Min ( 4, iThreads / 4 ) );
+}
+
+
+int GetKNNBuildConcurrency ( int64_t iTotalRows )
+{
+	static constexpr int64_t MIN_ROWS_PER_WORKER = 1024;
+	if ( iTotalRows<=0 )
+		return 1;
+
+	int64_t iByRows = Max<int64_t> ( 1, iTotalRows / MIN_ROWS_PER_WORKER );
+	int64_t iByConf = Min ( KNNParallelBuild(), iTotalRows );
+	return (int)Max ( 1, Min ( iByConf, iByRows ) );
+}
+
+
+CSphString ConcatKNNBuildErrors ( const VecTraits_T<CSphString> & dErrors )
+{
+	StringBuilder_c sJoined ( "; " );
+	for ( const auto & s : dErrors )
+		if ( !s.IsEmpty() )
+			sJoined << s.cstr();
+
+	CSphString sResult;
+	sResult = sJoined.IsEmpty() ? "parallel KNN build failed (no error details)" : sJoined.cstr();
+	return sResult;
+}
+
+
+void RecordKNNBuildError ( CSphString & sSlot, const knn::BuildContext_t & tBuildCtx, const char * szFallbackFmt, ... )
+{
+	sSlot = tBuildCtx.m_sError.c_str();
+	if ( !sSlot.IsEmpty() )
+		return;
+
+	va_list ap;
+	va_start ( ap, szFallbackFmt );
+	sSlot.SetSprintfVa ( szFallbackFmt, ap );
+	va_end ( ap );
+}
+
+
+bool RunParallelKNNStore ( int64_t iTotalUnits, CSphString & sError, KNNStoreWorkerFn_t fnWorker )
+{
+	if ( iTotalUnits<=0 )
+		return true;
+
+	const int iConcurrency = GetKNNBuildConcurrency ( iTotalUnits );
+
+	// serial fallback when concurrency is 1 OR we're not in a coroutine
+	if ( iConcurrency==1 || !Threads::IsInsideCoroutine() )
+	{
+		std::atomic<bool> bStop { false };
+		fnWorker ( 0, 0, iTotalUnits, sError, bStop );
+		return sError.IsEmpty();
+	}
+
+	const int64_t iRangeSize = ( iTotalUnits + iConcurrency - 1 ) / iConcurrency;
+	std::atomic<bool> bStop { false };
+	std::atomic<int>  iWorkerSeq { 0 };
+	CSphFixedVector<CSphString> dErrors ( iConcurrency );
+
+	// caller (ALTER, REBUILD KNN, etc.) typically runs on a per-client single-thread scheduler
+	// switch to the multi-thread global pool for the parallel section, same pattern as RtIndex_c::SaveDiskChunk
+	Threads::ScopedScheduler_c tParallel { GlobalWorkPool() };
+
+	Threads::Coro::ExecuteN ( iConcurrency, [&]
+	{
+		int iIdx = iWorkerSeq.fetch_add ( 1, std::memory_order_relaxed );
+		int64_t iStart = (int64_t)iIdx * iRangeSize;
+		int64_t iEnd   = Min ( iStart + iRangeSize, iTotalUnits );
+		if ( iStart>=iEnd )
+			return;
+
+		Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
+
+		fnWorker ( iIdx, iStart, iEnd, dErrors[iIdx], bStop );
+	} );
+
+	if ( dErrors.any_of ( [] ( const CSphString & s ) { return !s.IsEmpty(); } ) )
+	{
+		sError = ConcatKNNBuildErrors ( dErrors );
+		return false;
+	}
+
+	// bStop set with no specific error -> caller-side cancellation
+	return !bStop.load ( std::memory_order_relaxed );
+}
+
+
 std::unique_ptr<knn::Builder_i> BuildCreateKNN ( const ISphSchema & tSchema, int64_t iNumElements, CSphVector<std::pair<PlainOrColumnar_t,int>> & dAttrs, const CSphString & sTmpFilename, CSphString & sError )
 {
 	std::unique_ptr<knn::Builder_i> pBuilder = CreateKNNBuilder ( tSchema, iNumElements, sTmpFilename, sError );
@@ -743,9 +843,42 @@ void BuildTrainKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowitem * p
 }
 
 
-bool BuildStoreKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const VecTraits_T<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder )
+bool BuildStoreKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const VecTraits_T<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder, knn::BuildContext_t & tBuildCtx )
 {
-	return BuildProcessKNN ( tRowIDSrc, pRow, pPool, dIterators, dAttrs, [&tBuilder, tRowIDDst]( int iAttr, const util::Span_T<float> & tValues ) { return tBuilder.SetAttr ( iAttr, tRowIDDst, tValues ); } );
+	return BuildProcessKNN ( tRowIDSrc, pRow, pPool, dIterators, dAttrs, [&tBuilder, &tBuildCtx, tRowIDDst]( int iAttr, const util::Span_T<float> & tValues ) { return tBuilder.SetAttr ( iAttr, tRowIDDst, tValues, tBuildCtx ); } );
+}
+
+
+static void RunDiskIndexKNNStoreWorker ( int64_t iStart, int64_t iEnd, const CSphIndex & tIndex, knn::Builder_i & tBuilder, const VecTraits_T<PlainOrColumnar_t> & dAttrs, const CSphRowitem * pRawAttrs, const BYTE * pRawBlobs, int iStride, CSphString & sWorkerError, std::atomic<bool> & bStop )
+{
+	knn::BuildContext_t tBuildCtx;
+	auto dIters = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
+	for ( int64_t i = iStart; i<iEnd; i++ )
+	{
+		if ( bStop.load ( std::memory_order_relaxed ) )
+			return;
+
+		RowID_t tRow = (RowID_t)i;
+		const CSphRowitem * pRow = pRawAttrs ? pRawAttrs + i * iStride : nullptr;
+		if ( !BuildStoreKNN ( tRow, tRow, pRow, pRawBlobs, dIters, dAttrs, tBuilder, tBuildCtx ) )
+		{
+			RecordKNNBuildError ( sWorkerError, tBuildCtx, "KNN construction failed at row %u", tRow );
+			bStop.store ( true, std::memory_order_relaxed );
+			return;
+		}
+	}
+}
+
+
+bool BuildStoreKNNParallelDiskIndex ( const CSphIndex & tIndex, knn::Builder_i & tBuilder, const VecTraits_T<PlainOrColumnar_t> & dAttrs, int64_t iTotalRows, CSphString & sError )
+{
+	if ( iTotalRows<=0 )
+		return true;
+
+	const CSphRowitem * pRawAttrs = tIndex.GetRawAttrs();
+	const BYTE * pRawBlobs = pRawAttrs ? tIndex.GetRawBlobAttrs() : nullptr;
+	const int iStride = pRawAttrs ? tIndex.GetMatchSchema().GetRowSize() : 0;
+	return RunParallelKNNStore ( iTotalRows, sError, [&] ( int iIdx, int64_t iStart, int64_t iEnd, CSphString & sErr, std::atomic<bool> & bStop ) { RunDiskIndexKNNStoreWorker ( iStart, iEnd, tIndex, tBuilder, dAttrs, pRawAttrs, pRawBlobs, iStride, sErr, bStop ); } );
 }
 
 

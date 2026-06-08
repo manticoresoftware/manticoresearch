@@ -58,7 +58,7 @@ EXPECTED: Error - user lacks replication permission
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE CLUSTER badcluster 'norepluser' AS user;" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: Permission denied for user 'norepluser'
+ERROR 1045 (42000) at line 1: Permission denied for user 'norepluser'
 ––– comment –––
 ––– 8.2.3 CREATE CLUSTER with explicit effective user: unknown user (permission denied) –––
 EXPECTED: Error - user lacks replication permission
@@ -66,7 +66,7 @@ EXPECTED: Error - user lacks replication permission
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE CLUSTER fakecluster 'nonexistent' AS user;" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: Permission denied for user 'nonexistent'
+ERROR 1045 (42000) at line 1: Permission denied for user 'nonexistent'
 ––– comment –––
 ––– 8.2.4 ALTER CLUSTER UPDATE user: change assigned user –––
 EXPECTED: Command accepted for valid user
@@ -81,7 +81,7 @@ EXPECTED: Error - user lacks replication permission
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "JOIN CLUSTER testcluster AT '127.0.0.1:9312' 'norepluser' AS user;" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: Permission denied for user 'norepluser'
+ERROR 1045 (42000) at line 1: Permission denied for user 'norepluser'
 ––– comment –––
 ––– 8.2.6 DELETE CLUSTER with explicit user option is rejected (unsupported syntax) –––
 EXPECTED: Syntax error
@@ -132,7 +132,7 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE replication ON * FROM 'r
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "ALTER CLUSTER mycluster UPDATE nodes;" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: Permission denied for user 'repluser2'
+ERROR 1045 (42000) at line 1: Permission denied for user 'repluser2'
 ––– comment –––
 ––– 8.2.12 Persisted cluster user is used for ALTER ADD (not session user) –––
 EXPECTED: Fails for repluser2 before operation-specific checks
@@ -140,7 +140,7 @@ EXPECTED: Fails for repluser2 before operation-specific checks
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "ALTER CLUSTER mycluster ADD testtable;" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: Permission denied for user 'repluser2'
+ERROR 1045 (42000) at line 1: Permission denied for user 'repluser2'
 ––– comment –––
 ––– 8.2.13 Persisted cluster user is used for ALTER DROP (not session user) –––
 EXPECTED: Fails for repluser2 before operation-specific checks
@@ -148,7 +148,7 @@ EXPECTED: Fails for repluser2 before operation-specific checks
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "ALTER CLUSTER mycluster DROP testtable;" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: Permission denied for user 'repluser2'
+ERROR 1045 (42000) at line 1: Permission denied for user 'repluser2'
 ––– comment –––
 ––– 8.2.14 Persisted cluster user is used for DELETE CLUSTER (not session user) –––
 EXPECTED: Fails for repluser2
@@ -156,7 +156,7 @@ EXPECTED: Fails for repluser2
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "DELETE CLUSTER mycluster;" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: Permission denied for user 'repluser2'
+ERROR 1045 (42000) at line 1: Permission denied for user 'repluser2'
 ––– comment –––
 ––– 8.2.15 Cleanup: restore repluser2 replication permission –––
 EXPECTED: Command accepted

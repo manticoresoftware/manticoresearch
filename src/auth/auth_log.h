@@ -32,6 +32,7 @@ enum class AccessMethod_e
 
 enum class AuthLogLevel_e
 {
+	TRACE,
 	ALL,
 	INFO,
 	WARNING,
@@ -103,4 +104,3 @@ public:
 AuthLogger_i & AuthLog();
 
 AuthActionContext_t AuthLogGetSessionCtx();
-

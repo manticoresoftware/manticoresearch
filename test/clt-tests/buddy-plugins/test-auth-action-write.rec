@@ -47,7 +47,7 @@ EXPECTED: Permission denied
 ––– input –––
 MYSQL_PWD=nopermpass1 mysql -unoperm -h0 -P9306 -e "INSERT INTO writetest(id, content, tag) VALUES(3, 'blocked', 30);" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: Permission denied for user 'noperm'
+ERROR 1045 (42000) at line 1: Permission denied for user 'noperm'
 ––– comment –––
 ––– 4.2.3 UPDATE with WRITE — success –––
 EXPECTED: Success (GRANT should apply immediately)

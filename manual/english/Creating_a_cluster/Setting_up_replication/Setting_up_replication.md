@@ -29,7 +29,9 @@ If [authentication and authorization](../../Security/Authentication_and_authoriz
 GRANT replication ON 'posts' TO 'repl_user';
 ```
 
-`CREATE CLUSTER` and `JOIN CLUSTER` can specify that user with `'<user>' AS user`. Later `ALTER CLUSTER ... ADD`, `ALTER CLUSTER ... DROP`, `ALTER CLUSTER ... UPDATE nodes`, and `DELETE CLUSTER` use the stored cluster user. Joining a cluster can replace local authentication data with the donor cluster's authentication data.
+`CREATE CLUSTER` and `JOIN CLUSTER` can specify that user with `'<user>' AS user`. The user must exist with matching stored authentication data on the nodes that take part in the operation. Creating the same user name and password independently on each node is not enough, because the stored authentication data can differ. If you change auth data outside the daemon, run `RELOAD AUTH` on the affected nodes before using the cluster operation.
+
+Later `ALTER CLUSTER ... ADD`, `ALTER CLUSTER ... DROP`, `ALTER CLUSTER ... UPDATE nodes`, and `DELETE CLUSTER` use the stored cluster user. When authentication is enabled, a successful `JOIN CLUSTER` replaces all local authentication data on the joining node with the donor cluster's authentication data.
 
 If there is no `replication` [listen](../../Server_settings/Searchd.md#listen) directive set, Manticore will use the first two free ports in the range of 200 ports after the default protocol listening port for each created cluster. To set replication ports manually, the [listen](../../Server_settings/Searchd.md#listen) directive (of `replication` type) port range must be defined and the address/port range pairs must not intersect between different nodes on the same server. As a rule of thumb, the port range should specify at least two ports per cluster. When you define a replication listener with a port range (e.g., `listen = 192.168.0.1:9320-9328:replication`), Manticore doesn't immediately start listening on these ports. Instead, it will take random free ports from the specified range only when you start using replication.
 

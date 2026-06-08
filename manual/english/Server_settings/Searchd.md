@@ -83,9 +83,9 @@ Enables [authentication and authorization](../Security/Authentication_and_author
 
 In [RT mode](../Read_this_first.md#Real-time-mode-vs-plain-mode), use `auth = 1` to enable authentication. Manticore stores authentication data in `auth.json` under [data_dir](../Server_settings/Searchd.md#data_dir). Use `auth = 0` or omit the setting to disable authentication.
 
-In [plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode), set `auth` to the authentication file path.
+In [plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode), set `auth` to the authentication file path. Do not use `auth = 1` in plain mode.
 
-When authentication is enabled, the daemon creates the authentication file if it is missing and validates it on startup.
+When authentication is enabled, the daemon creates the authentication file if it is missing. Before the first bootstrap, missing or empty storage is valid, including a zero-byte file, whitespace-only file, empty JSON object, or empty users and permissions arrays. Full authentication JSON is written after bootstrap. On startup, the daemon rejects invalid paths, unreadable files, group- or world-readable files, malformed JSON, duplicate stored secrets, and invalid auth data shape. Keep the file private; files created by the daemon use mode `600`.
 
 <!-- intro -->
 ##### RT mode:
@@ -129,8 +129,13 @@ Supported values:
 * `disabled` - do not log authentication events.
 * `error` - log permission denials and critical failures.
 * `warning` - log errors and failed authentication attempts.
-* `info` - log warnings and successful authentication management changes.
-* `all` - log `info` events and successful authentication events.
+* `info` - log warnings, successful authentication management changes, and cluster join auth-data backups.
+* `all` - log `info` events and successful user-facing authentication events.
+* `trace` - log `all` events plus successful internal transport authentication, such as Manticore Buddy and daemon-to-daemon API authentication.
+
+Successful authorization allow checks are not logged at any level. Permission denials are logged, but allow checks can happen for every query and would make the authentication log noisy even in `trace` mode.
+
+When `JOIN CLUSTER` replaces local authentication data, `info`, `all`, and `trace` logging write a JSON backup of the previous local auth data to `searchd.log.auth`. This backup can contain usernames, salts, password hashes, and bearer hashes. Treat the authentication log as sensitive operational data and redact it before sharing.
 
 <!-- request Example -->
 ```ini

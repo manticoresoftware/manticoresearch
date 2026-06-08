@@ -51,7 +51,7 @@ EXPECTED: Permission denied
 ––– input –––
 MYSQL_PWD=nopermpass1 mysql -unoperm -h0 -P9306 -e "SELECT * FROM readtest;" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: Permission denied for user 'noperm'
+ERROR 1045 (42000) at line 1: Permission denied for user 'noperm'
 ––– comment –––
 ––– 4.1.3 DESCRIBE with READ — success –––
 EXPECTED: Success

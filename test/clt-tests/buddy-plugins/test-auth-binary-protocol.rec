@@ -67,7 +67,7 @@ remote user recreated
 ––– input –––
 MYSQL_PWD=distpass1234 mysql -NB -udistreader -h0 -P1306 -e "SELECT COUNT(*) FROM dist_bp;"
 ––– output –––
-#!/ERROR 1064 \(42000\) at line 1: table dist_bp: agent 127\.0\.0\.1:2312: remote error: GCM authentication failed \(bad tag\)/!#
+#!/ERROR 1045 \(42000\) at line 1: table dist_bp: agent 127\.0\.0\.1:2312: remote error: GCM authentication failed \(bad tag\)/!#
 ––– input –––
 timeout 5 bash -c 'until grep -q "distreader.*GCM authentication failed (bad tag)" /var/log/manticore-2/searchd.log.auth; do sleep 0.1; done'; echo $?
 ––– output –––
@@ -83,7 +83,7 @@ remote user dropped
 ––– input –––
 MYSQL_PWD=distpass1234 mysql -NB -udistreader -h0 -P1306 -e "SELECT COUNT(*) FROM dist_bp;"
 ––– output –––
-#!/ERROR 1064 \(42000\) at line 1: table dist_bp: agent 127\.0\.0\.1:2312: remote error: (unknown|unknow) user 'distreader'/!#
+#!/ERROR 1045 \(42000\) at line 1: table dist_bp: agent 127\.0\.0\.1:2312: remote error: unknown user 'distreader'/!#
 ––– comment –––
 ––– 8.3.4 Auth succeeds but remote READ permission denied –––
 EXPECTED: Query fails with explicit remote permission denied error
@@ -95,7 +95,7 @@ remote permissions narrowed
 ––– input –––
 MYSQL_PWD=distpass1234 mysql -NB -udistreader -h0 -P1306 -e "SELECT COUNT(*) FROM dist_bp;"
 ––– output –––
-#!/ERROR 1064 \(42000\) at line 1: table dist_bp: agent 127\.0\.0\.1:2312: remote error: Permission denied for user 'distreader'/!#
+#!/ERROR 1045 \(42000\) at line 1: table dist_bp: agent 127\.0\.0\.1:2312: remote error: Permission denied for user 'distreader'/!#
 ––– comment –––
 ––– 8.3.5 Recovery: sync auth back and query succeeds again –––
 EXPECTED: Previously failing distributed query succeeds after auth sync

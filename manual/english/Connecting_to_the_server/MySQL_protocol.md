@@ -49,6 +49,12 @@ When authentication is enabled, specify a user and password:
 MYSQL_PWD=StrongPass#2026 mysql -P9306 -h0 -uadmin
 ```
 
+If your client requires the authentication plugin explicitly, set it to `mysql_native_password`:
+
+```shell
+MYSQL_PWD=StrongPass#2026 mysql -P9306 -h0 -uadmin --default-auth=mysql_native_password
+```
+
 ## Secured MySQL connection
 
 The MySQL protocol supports [SSL encryption](../Security/SSL.md). Secure connections can be made on the same `mysql` listening port.

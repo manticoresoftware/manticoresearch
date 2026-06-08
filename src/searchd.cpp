@@ -7669,6 +7669,30 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		tOut.Ok ( iUpdated, sWarning, 0 );
 }
 
+static bool IsDistributedRemoteAuthError ( const char * sError )
+{
+	if ( !sError )
+		return false;
+
+	return strstr ( sError, "remote error: unknown user '" )!=nullptr
+		|| strstr ( sError, "remote error: Permission denied for user '" )!=nullptr
+		|| strstr ( sError, "remote error: GCM authentication failed (bad tag)" )!=nullptr;
+}
+
+
+static EMYSQL_ERR GetMysqlSelectErrorCode ( const char * sError )
+{
+	if ( !IsDistributedRemoteAuthError ( sError ) )
+		return EMYSQL_ERR::PARSE_ERROR;
+
+	ClientSession_c * pSession = session::Info().GetClientSession();
+	if ( pSession )
+		pSession->m_bAuthErrorSkipBuddy = true;
+
+	return EMYSQL_ERR::ACCESS_DENIED_ERROR;
+}
+
+
 bool HandleMysqlSelect ( RowBuffer_i & dRows, SearchHandler_c & tHandler )
 {
 	// lets check all query for errors
@@ -7690,7 +7714,7 @@ bool HandleMysqlSelect ( RowBuffer_i & dRows, SearchHandler_c & tHandler )
 	if ( !sError.IsEmpty() )
 	{
 		// stmt is intentionally NULL, as we did all the reporting just above
-		dRows.Error ( sError.cstr() );
+		dRows.Error ( sError.cstr(), GetMysqlSelectErrorCode ( sError.cstr() ) );
 		return false;
 	}
 
@@ -8153,7 +8177,7 @@ static uint64_t SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t 
 		if ( !tRes.m_sError.IsEmpty() )
 		{
 			// at this point, SELECT error logging should have been handled, so pass a NULL stmt to logger
-			dRows.Error ( tRes.m_sError.cstr() );
+			dRows.Error ( tRes.m_sError.cstr(), GetMysqlSelectErrorCode ( tRes.m_sError.cstr() ) );
 			return 0;
 		}
 		assert ( tRes.m_sError.IsEmpty() );
@@ -11777,6 +11801,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	auto& tSess = session::Info();
 	// reset per query buddy auth fallback
 	m_bAuthAllowBuddy = false;
+	m_bAuthErrorSkipBuddy = false;
 
 	// set on query guard
 	tSess.SetTaskState ( TaskState_e::QUERY );
@@ -11836,6 +11861,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	if ( bParsedOK && !SqlCheckPerms ( session::GetUser(), dStmt, m_sError ) )
 	{
 		FreezeLastMeta();
+		m_bAuthErrorSkipBuddy = true;
 		tOut.Error ( m_sError.cstr(), EMYSQL_ERR::ACCESS_DENIED_ERROR );
 		return true;
 	}

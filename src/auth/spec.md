@@ -56,7 +56,7 @@ This document provides the specifications for implementing authentication and au
 - A command-line bootstrap mode (`searchd --auth`) for secure initial administrator setup.
 - Easy ongoing user management through SQL commands.
 - File-based authentication storage for plain mode (no replication). When replication is used, authentication/authorization data must be stored in dedicated system tables.
-- Permissions-based access control defined by records indicating which user can perform which action on which target, optionally with usage budgets.
+- Permissions-based access control defined by records indicating which user can perform which action on which target, optionally with budget metadata reserved for future use.
 
 #### Security
 
@@ -78,7 +78,7 @@ This document provides the specifications for implementing authentication and au
 Authentication data is split into two parts:
 
 1. **Users**: Credentials (username, password hash, and a unique salt).
-2. **Permissions**: One record per permission, indicating which user can perform which action, on which target, and with what optional budget.
+2. **Permissions**: One record per permission, indicating which user can perform which action, on which target, and with what optional budget metadata.
 
 #### Plain Mode (File-Based)
 
@@ -139,6 +139,8 @@ Structure:
   ]
 }
 ```
+
+The `budget` examples above are stored reference metadata only. They are not enforced as quotas or rate limits in this version.
 
 #### RT Mode (Table-Based)
 
@@ -290,6 +292,8 @@ Authentication supports the following mechanisms:
    - **Validation**:
      - The server looks for a user by matching the provided token with `bearer_sha256`. If a match is found, the request is considered authorized.
 
+The HTTP `Authorization` header name and the `Basic` and `Bearer` scheme names are matched case-insensitively. Usernames are exact-case: `app_user` and `App_User` are different users.
+
 ### Authentication via Binary Protocol
 
 
@@ -333,9 +337,9 @@ Permissions are defined as individual records. Each record specifies:
 - `action`: One of the defined actions (`read`, `write`, `schema`, `admin`, `replication`).
 - `target`: The object the action applies to (e.g., a table name). `*` can be used as a wildcard to apply to all targets.
 - `allow`: A boolean indicating if the action is permitted (`true`) or denied (`false`).
-- `budget`: An optional JSON object specifying resource usage limits (e.g., `queries_per_minute`, `queries_per_day`, `cpu_time_per_hour`, etc.).
+- `budget`: An optional JSON object stored as reference metadata for possible future resource-limit controls (e.g., `queries_per_minute`, `queries_per_day`, `cpu_time_per_hour`, etc.).
 
-If multiple records apply to the same user/action/target, a record with `allow = false` will deny that action. If `allow = true`, the action is permitted as long as the budget is not exceeded.
+If multiple records apply to the same user/action/target, a record with `allow = false` will deny that action. If `allow = true`, the action is permitted unless a matching deny exists. Budget data is stored and displayed, but it does not affect authorization enforcement in this version.
 
 #### Granular Permissions
 
@@ -468,57 +472,64 @@ The actions `read`, `write`, `schema`, `replication` and `admin` map to specific
 - Commands not explicitly listed under any permission are denied by default.
 - Users with the `admin` action are restricted to managing users and permissions. For other actions, such as `read`, `write`, or `schema`, explicit grants are required.
 - This list should be reviewed and updated regularly to ensure all possible SQL commands and endpoints are included.
-- Direct writes to `system.auth_users` and `system.auth_permissions` are restricted to daemon-internal auth handlers. Even users with the `admin` privilege should not be able to modify these tables directly to prevent corruption.
+- Direct reads and writes to `system.auth_users` and `system.auth_permissions` are restricted to daemon-internal auth handlers. Users should inspect and manage authentication data through `SHOW USERS`, `SHOW PERMISSIONS`, `SHOW TOKEN`, `CREATE USER`, `DROP USER`, `GRANT`, `REVOKE`, `SET PASSWORD`, `TOKEN`, and `RELOAD AUTH`. Even users with the `admin` privilege should not be able to access these tables directly to prevent credential exposure or storage corruption.
 
 #### Rule Resolution Strategy
 
-1. **Explicit Deny Takes Precedence**:
-   - If a user has a rule explicitly denying access to an action/target, that rule overrides all other rules that allow access. This ensures security by default.
+1. **Matching rules**:
+   - A rule matches when it has the same action as the attempted operation and its target matches the operation target.
+   - Target matching can be exact (for example, `restricted_table`) or wildcard-based (for example, `logs_*` or `*`).
+   - Exact and wildcard rules are both matching rules. Exactness does not let an allow rule bypass a matching deny rule.
 
-   **Example**:
-   - Rule 1: User `admin` is allowed to `read` on `*`.
-   - Rule 2: User `admin` is denied `read` on `restricted_table`.
-   - Result: Access to `restricted_table` is denied for `admin`.
+2. **Explicit deny takes precedence**:
+   - If any matching rule has `allow = false`, the action is denied.
+   - A matching wildcard deny also denies a more specific target, even if there is an exact allow for that target.
+   - This makes deny rules conservative and prevents accidental access through overlapping allow rules.
 
-2. **Specificity Takes Precedence Over Wildcards**:
-   - Rules targeting a specific object (e.g., `restricted_table`) take precedence over wildcard rules (e.g., `*`).
-
-   **Example**:
+   **Examples**:
    - Rule 1: User `readonly` is allowed to `read` on `*`.
    - Rule 2: User `readonly` is denied `read` on `sensitive_table`.
-   - Result: Access to `sensitive_table` is denied for `readonly`, but access to all other tables is allowed.
+   - Result: Access to `sensitive_table` is denied, but access to other tables is allowed.
 
-3. **Most Restrictive Rule Wins in Ties**:
-   - When two rules are equally specific, the more restrictive rule (deny) takes precedence. If both rules allow access, the one with the stricter budget (if applicable) applies.
+   - Rule 1: User `auditor` is denied `read` on `logs_*`.
+   - Rule 2: User `auditor` is allowed `read` on `logs_public`.
+   - Result: Access to `logs_public` is denied because the wildcard deny matches.
+
+3. **Allow applies only when no matching deny exists**:
+   - If no matching deny exists and one or more matching rules have `allow = true`, the action is allowed.
+   - Multiple matching allow rules do not change the authorization result. Budget data, when present, is metadata and does not affect authorization enforcement in this version.
 
    **Example**:
-   - Rule 1: User `custom_user` is allowed `write` on `mytable` with a budget of 500 queries/minute.
-   - Rule 2: User `custom_user` is allowed `write` on `mytable` with a budget of 1000 queries/minute.
-   - Result: The 500 queries/minute limit applies.
+   - Rule 1: User `reporter` is allowed to `read` on `reports_*`.
+   - Rule 2: User `reporter` is allowed to `read` on `reports_public`.
+   - Result: Access to `reports_public` is allowed.
 
-4. **Default Deny**:
-   - If no rules match for a given user, action, and target, access is denied by default.
+4. **Default deny**:
+   - If no matching rules exist for a given user, action, and target, access is denied by default.
 
 #### Rule Evaluation Algorithm
 
 When a user attempts an action, evaluate permissions in the following order:
 
 1. **Collect All Matching Rules**:
-   Identify all rules that apply to the user's action and target, including wildcard rules (e.g., `*`).
+   Identify all rules that apply to the user's action and target, including exact and wildcard target rules.
 
-2. **Sort Rules by Specificity**:
-   - Rules targeting specific objects (e.g., `table/mytable`) come before wildcards (`*`).
-   - Explicit denies (`allow = false`) come before allows (`allow = true`).
+2. **Apply Matching Denies First**:
+   - If any matching rule has `allow = false`, deny the action.
+   - Do not allow a more specific allow rule to override a matching wildcard deny.
 
-3. **Apply the First Matching Rule**:
-   - Process the sorted list of rules and stop at the first rule that applies. This ensures predictable and efficient resolution.
+3. **Apply Matching Allows**:
+   - If no matching deny exists and at least one matching rule has `allow = true`, allow the action.
+
+4. **Default Deny**:
+   - If neither a matching deny nor a matching allow exists, deny the action.
 
 #### Documentation and Transparency
 
 To help administrators understand the system, we should document the rule resolution strategy clearly. Examples and edge cases, such as the following should be included:
 
 1. Conflicting rules between `allow` and `deny`.
-2. Multiple budgets applying to the same user and action.
+2. Multiple matching allow rules with budget metadata.
 3. Behavior when no matching rules exist.
 
 ---
@@ -672,6 +683,7 @@ Please refer to the section **"SQL Commands for Authentication and Authorization
    - Any authenticated user can update their own password.
    - Updating another user's password requires `admin` permission.
    - The provided password must satisfy the password policy rules defined in the **Configuration / Password Policy Model** section.
+   - `SET PASSWORD` does not rotate or revoke existing bearer tokens. Use `TOKEN` or `TOKEN '<username>'` to rotate bearer access.
    - **Examples:**
      ```sql
      SET PASSWORD 'abcdef' FOR 'justin';
@@ -707,7 +719,7 @@ Please refer to the section **"SQL Commands for Authentication and Authorization
    - `ALLOW` is optional and accepts only `0` or `1`:
      - Omitted means `allow=1`.
      - `WITH ALLOW 0` creates an explicit deny rule.
-   - `<json_budget>`: Optional JSON specifying resource limits.
+   - `<json_budget>`: Optional JSON reference metadata reserved for future resource-limit controls. It is stored and shown with the permission, but not enforced in this version.
    - Example:
      ```sql
      GRANT READ ON * TO 'readonly' WITH BUDGET '{"queries_per_day": 10000}';
@@ -1167,7 +1179,11 @@ This setting controls the verbosity of the authentication log.
     *   `disabled`: No authentication events are logged.
     *   `error`: Logs only critical failures and permission denials.
     *   `warning`: Logs errors plus failed authentication attempts.
-    *   `info`: Logs warnings plus all successful administrative changes and successful logins. This is the recommended level for most production environments.
+    *   `info`: Logs warnings plus all successful administrative changes. This is the recommended level for most production environments.
+    *   `all`: Logs `info` events plus successful user-facing authentication events.
+    *   `trace`: Logs `all` events plus successful internal transport authentication, such as Manticore Buddy and daemon-to-daemon API authentication.
+
+Successful authorization allow checks are intentionally not logged at any level. Permission denials are logged, but allow checks can happen for every query and would make the authentication log noisy even in `trace` mode.
 
 #### **Log Entry Format**
 
@@ -1177,7 +1193,7 @@ Each line in the authentication log follows a consistent format, providing clear
 
 *   **Timestamp:** The date and time of the event, with microsecond precision.
 *   **ThreadID:** The internal ID of the worker thread that handled the event.
-*   **LEVEL:** The severity of the event (`INFO`, `WARN`, `ERROR`, `CRITICAL`).
+*   **LEVEL:** The severity of the event (`TRACE`, `ALL`, `INFO`, `WARN`, `ERROR`, `CRITICAL`).
 *   **Log Message:** A detailed, human-readable description of the event.
 
 #### **Logged Events**
@@ -1194,8 +1210,10 @@ Tracks all administrative changes to the authentication system, always including
 
 **2. Security and Access Events**
 Tracks real-time access attempts and the enforcement of permissions.
-*   **Successful authentication (`INFO`):** Records when a user successfully logs in, including the method (HTTP, MySQL, etc.) and source IP.
-    *Example:* `[...][INFO] user 'admin' successfully authenticated via HTTP Basic from 127.0.0.1`
+*   **Successful user-facing authentication (`ALL`):** Records when a user successfully logs in, including the method (HTTP, MySQL, etc.) and source IP.
+    *Example:* `[...][ALL] user 'admin' successfully authenticated via HTTP Basic from 127.0.0.1`
+*   **Successful internal transport authentication (`TRACE`):** Records successful Manticore Buddy and daemon-to-daemon API authentication. Failed internal authentication attempts stay at `WARN`.
+*   **Successful authorization allow checks:** Not logged. Only permission denials are logged.
 *   **Failed authentication (`WARN`):** Records any failed login attempt, including the reason (e.g., unknown user, invalid password).
     *Example:* `[...][WARN] failed authentication attempt for user 'admin' via HTTP Basic from 192.168.1.50: invalid password`
 *   **Permission denied (`ERROR`):** Records when an authenticated user is denied access to a resource due to insufficient permissions.
@@ -1207,7 +1225,7 @@ Tracks high-level changes to the authentication state.
 *   **Cluster join (`CRITICAL`):** A high-priority message is logged when a node joins a cluster and its local authentication data is about to be overwritten.
 *   **Local auth data backup (`INFO`):** When joining a cluster, the node's original authentication data is dumped to the log as a JSON backup before being replaced.
 *   **Failed Actions (`WARN`):** Any administrative action that fails (e.g., trying to create a duplicate user) is logged with an error reason.
-*   **Replication API auth mismatch (`WARN`):** If internal replication API auth fails because nodes have inconsistent auth material for the same username, a warning is logged (for example, `GCM authentication failed (bad tag)`), and related cluster operation failures are expected.
+*   **Replication API auth mismatch (`WARN`):** If internal replication API auth fails because nodes have inconsistent auth material for the same username, a warning is logged (for example, `GCM authentication failed (bad tag)`), and related cluster operation failures are expected. When authentication is enabled, donor-user fetch failures include a safe client-facing hint to verify the replication user and matching auth data on donor nodes and inspect `searchd.log.auth`.
 
 ---
 

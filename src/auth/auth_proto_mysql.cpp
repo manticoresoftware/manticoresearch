@@ -29,7 +29,7 @@ static void Crypt ( BYTE * pBuf, const BYTE * pS1, const BYTE * pS2, int iLen )
 }
 
 /////////////////////////////////////////////////////////////////////////////
-/// SphixnQL
+/// SphinxQL
 
 MySQLAuth_t GetMySQLAuth()
 {
@@ -123,6 +123,51 @@ static CSphString GetCallPermTarget ( const SqlStmt_t & tStmt )
 	return sIndex;
 }
 
+
+static bool IsMysqlCompatSelectColumn ( const CSphString & sExpr )
+{
+	// Keep this list narrow. Unknown sysvars and expressions must still require read permission.
+	const char * dSafeSysvars[] =
+	{
+		"@@version_comment",
+		"@@character_set_client",
+		"@@character_set_connection",
+		"@@max_allowed_packet",
+		"@@lower_case_table_names",
+		"@@autocommit"
+	};
+
+	for ( const char * szSysvar : dSafeSysvars )
+		if ( sExpr==szSysvar )
+			return true;
+
+	return false;
+}
+
+
+static bool IsMysqlCompatSelect ( const SqlStmt_t & tStmt )
+{
+	if ( !tStmt.m_sIndex.IsEmpty() || tStmt.m_tQuery.m_dItems.IsEmpty() )
+		return false;
+
+	for ( const CSphQueryItem & tItem : tStmt.m_tQuery.m_dItems )
+		if ( tItem.m_eAggrFunc!=SPH_AGGR_NONE || !IsMysqlCompatSelectColumn ( tItem.m_sExpr ) )
+			return false;
+
+	return true;
+}
+
+
+static bool DenyInternalAuthStorageTarget ( const CSphString & sUser, const CSphString & sTarget, CSphString & sError )
+{
+	if ( !strstr ( sTarget.cstr(), GetPrefixAuth().cstr() ) )
+		return false;
+
+	sError.SetSprintf ( "Permission denied for user '%s'", sUser.cstr() );
+	return true;
+}
+
+
 bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
 {
 	if ( !IsAuthEnabled() )
@@ -148,7 +193,13 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	case STMT_SHOW_INDEX_SETTINGS:
 	case STMT_EXPLAIN:
 	case STMT_SHOW_TABLE_INDEXES:
-		return CheckPerms ( sUser, AuthAction_e::READ, ( tStmt.m_sIndex.IsEmpty() ? tStmt.m_tQuery.m_sIndexes : tStmt.m_sIndex ), false, sError );
+	{
+		const CSphString & sTarget = tStmt.m_sIndex.IsEmpty() ? tStmt.m_tQuery.m_sIndexes : tStmt.m_sIndex;
+		if ( DenyInternalAuthStorageTarget ( sUser, sTarget, sError ) )
+			return false;
+
+		return CheckPerms ( sUser, AuthAction_e::READ, sTarget, false, sError );
+	}
 
 	case STMT_CALL:
 	{
@@ -160,10 +211,14 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	case STMT_SHOW_WARNINGS:
 	case STMT_SHOW_META:
 	case STMT_SHOW_TABLES:
-	case STMT_SELECT_COLUMNS:
 	case STMT_SHOW_PROFILE:
 	case STMT_SHOW_PLAN:
 	case STMT_SHOW_SCROLL:
+		return CheckPerms ( sUser, AuthAction_e::READ, tStmt.m_sIndex, true, sError );
+
+	case STMT_SELECT_COLUMNS:
+		if ( IsMysqlCompatSelect ( tStmt ) )
+			return true;
 		return CheckPerms ( sUser, AuthAction_e::READ, tStmt.m_sIndex, true, sError );
 
 	case STMT_INSERT:
@@ -179,11 +234,9 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	case STMT_ALTER_KLIST_TARGET:
 	case STMT_FREEZE:
 	case STMT_UNFREEZE:
-		if ( tStmt.m_sIndex.Begins ( GetPrefixAuth().cstr() ) )
-		{
-			sError.SetSprintf ( "Permission denied for user '%s'", sUser.cstr() );
+		if ( DenyInternalAuthStorageTarget ( sUser, tStmt.m_sIndex, sError ) )
 			return false;
-		}
+
 		return CheckPerms ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, false, sError );
 
 	// special write actions without index
@@ -300,6 +353,9 @@ bool SqlSkipBuddy()
 
 	if ( pSession->m_bAuthAllowBuddy )
 		return false;
+
+	if ( pSession->m_bAuthErrorSkipBuddy )
+		return true;
 
 	switch ( pSession->m_eLastStmt )
 	{

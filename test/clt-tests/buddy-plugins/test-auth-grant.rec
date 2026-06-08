@@ -79,12 +79,10 @@ EXPECTED: Success with explicit deny rule and budget saved
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON 'denied_tbl' TO 'budgetuser' WITH ALLOW 0 BUDGET '{\"queries_per_minute\":7}';"
 ––– output –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT action, target, allow, budget FROM system.auth_permissions WHERE username='budgetuser' AND target='denied_tbl';"
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW PERMISSIONS FOR 'budgetuser';" | sed 's/^[[:space:]]*//' | grep -A3 "^target: denied_tbl$" | grep -E "^(target|allow|budget):"
 ––– output –––
-*************************** 1. row ***************************
-action: read
 target: denied_tbl
- allow: 0
+allow: 0
 budget: {"queries_per_minute":7}
 ––– comment –––
 ––– 2.5.6.2 GRANT WITH ALLOW 1 –––
@@ -168,7 +166,6 @@ ERROR 1064 (42000) at line 1: P01: syntax error, unexpected '=', expecting integ
 ––– Verify permissions were granted –––
 ––– comment –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT COUNT(*) AS cnt FROM system.auth_permissions WHERE username='grantuser';"
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW PERMISSIONS FOR 'grantuser';" | grep -Ec "username: grantuser"
 ––– output –––
-*************************** 1. row ***************************
-cnt: 5
+5

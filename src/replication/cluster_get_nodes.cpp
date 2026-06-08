@@ -309,6 +309,9 @@ bool CheckRemotesVersions ( const ClusterDesc_t & tDesc, CSphString & sUser, int
 	if ( !iSuccess )
 	{
 		TlsMsg::ResetErr();
+		if ( IsAuthEnabled() )
+			return TlsMsg::Err ( "cluster '%s', failed to fetch donor user from any node; verify the replication user and matching auth data on donor nodes, and inspect searchd.log.auth", tDesc.m_sName.cstr() );
+
 		return TlsMsg::Err ( "cluster '%s', failed to fetch donor user from any node", tDesc.m_sName.cstr() );
 	}
 

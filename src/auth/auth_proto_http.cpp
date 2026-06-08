@@ -56,6 +56,11 @@ static Str_t GetTokenFromAuth ( const CSphString & sSrcAuth, int iPrefixLen )
 	return Str_t ( sCur, iSrcAuthLen - ( sCur - sSrcAuth.cstr() ) );
 }
 
+static bool StrBeginsN ( const char * sValue, const char * sPrefix )
+{
+	return sValue && sPrefix && strncasecmp ( sValue, sPrefix, strlen ( sPrefix ) )==0;
+}
+
 static bool CheckAuthBasic ( const Str_t & sSrcUserPwd, HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply, CSphString & sUser )
 {
 	CSphVector<BYTE> dSrcUserPwd;
@@ -82,7 +87,7 @@ static bool CheckAuthBasic ( const Str_t & sSrcUserPwd, HttpProcessResult_t & tR
 	const AuthUserCred_t * pUser = pUsers->m_hUserToken ( sUser );
 	if ( !pUser || sPwd.IsEmpty() )
 	{
-		tRes.m_sError.SetSprintf ( "Access denied for user '%s' (using password: NO)", sUser.cstr() );
+		tRes.m_sError.SetSprintf ( "Access denied for user '%s' (using password: %s)", sUser.cstr(), ( sPwd.IsEmpty() ? "NO" : "YES" ) );
 		if ( !pUser )
 			AuthLog().AuthFailure ( sUser, AccessMethod_e::HTTP_BASIC, session::szClientName(), "user does not exist" );
 		else
@@ -191,8 +196,8 @@ bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResu
 
 	const char sAuthPrefixBasic[] = "Basic";
 	const char sAuthPrefixBearer[] = "Bearer";
-	const bool bBasicToken = ( pSrcAuth->Begins ( sAuthPrefixBasic ) );
-	const bool bBearerToken = ( !bBasicToken && pSrcAuth->Begins ( sAuthPrefixBearer ) );
+	const bool bBasicToken = StrBeginsN ( pSrcAuth->cstr(), sAuthPrefixBasic );
+	const bool bBearerToken = ( !bBasicToken && StrBeginsN ( pSrcAuth->cstr(), sAuthPrefixBearer ) );
 	if ( !bBasicToken && !bBearerToken )
 	{
 		tRes.m_sError = "Only Basic and Bearer authorization supported";

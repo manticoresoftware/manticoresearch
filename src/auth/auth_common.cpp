@@ -113,6 +113,28 @@ static bool ReadPerms ( const CSphString & sFile, bson::Bson_c & tBson, AuthUser
 AuthUsersMutablePtr_t ReadAuth ( char * sSrc, const CSphString & sSrcName, CSphString & sError );
 static bool CheckFileIsPrivate ( const CSphString & sFile, CSphString & sError );
 
+static bool IsEmptyAuthJson ( const char * sSrc, int iLen )
+{
+	if ( !sSrc || iLen<=0 )
+		return true;
+
+	const char * pCur = sSrc;
+	const char * pEnd = sSrc + iLen;
+	while ( pCur<pEnd && sphIsSpace ( *pCur ) )
+		pCur++;
+
+	return pCur==pEnd;
+}
+
+static void SetEmptyAuthJson ( CSphFixedVector<char> & dRawJson )
+{
+	dRawJson.Reset ( 4 );
+	dRawJson[0] = '{';
+	dRawJson[1] = '}';
+	dRawJson[2] = '\0';
+	dRawJson[3] = '\0';
+}
+
 bool ReadAuthFile ( const CSphString & sFile, CSphFixedVector<char> & dRawJson, CSphString & sError )
 {
 	if ( !sphIsReadable ( sFile, &sError ) )
@@ -136,7 +158,7 @@ bool ReadAuthFile ( const CSphString & sFile, CSphFixedVector<char> & dRawJson, 
 	// means authentication enabled but no users created
 	if ( iSize==0 )
 	{
-		dRawJson.Reset ( 0 );
+		SetEmptyAuthJson ( dRawJson );
 		return true;
 	}
 
@@ -155,6 +177,12 @@ bool ReadAuthFile ( const CSphString & sFile, CSphFixedVector<char> & dRawJson, 
 
 	dRawJson[iSize] = '\0'; // safe gap
 	dRawJson[iSize+1] = '\0';
+
+	if ( IsEmptyAuthJson ( dRawJson.Begin(), iSize ) )
+	{
+		SetEmptyAuthJson ( dRawJson );
+	}
+
 	return true;
 }
 
@@ -170,6 +198,9 @@ AuthUsersMutablePtr_t ReadAuthFile ( const CSphString & sFile, CSphString & sErr
 AuthUsersMutablePtr_t ReadAuth ( char * sSrc, const CSphString & sSrcName, CSphString & sError )
 {
 	assert ( sSrc );
+
+	if ( IsEmptyAuthJson ( sSrc, (int)strlen ( sSrc ) ) )
+		return AuthUsersMutablePtr_t { new AuthUsers_t() };
 
 	CSphVector<BYTE> tRawBson;
 	if ( !sphJsonParse ( tRawBson, sSrc, false, false, false, sError ) )
@@ -451,19 +482,19 @@ bool SaveAuthFile ( const AuthUsers_t & tAuth, const CSphString & sFile, CSphStr
 	return true;
 }
 
+#ifdef _WIN32
+
 static bool SaveEmptyAuth ( const CSphString & sFile, CSphString & sError )
 {
 	CSphWriter tWriter;
 	if ( !tWriter.OpenFile ( sFile, sError ) )
 		return false;
-	char sBuf[] = "{}";
-	tWriter.PutBytes ( sBuf, sizeof ( sBuf ) );
+	tWriter.PutBytes ( "{}", 2 );
 	tWriter.CloseFile();
 
 	return !tWriter.IsError();
 }
 
-#ifdef _WIN32
 static CSphFixedVector<BYTE> GetCurUserSid()
 {
 	auto dUserSid = CSphFixedVector<BYTE> ( 0 );
@@ -724,8 +755,15 @@ bool CreateAuthFile ( const CSphString & sFile, CSphString & sError )
 		return false;
 	}
 
+	if ( ::write ( iFD, "{}", 2 )!=2 )
+	{
+		sError.SetSprintf ( "failed to write %s: %s", sFile.cstr(), strerrorm(errno) );
+		SafeClose ( iFD );
+		return false;
+	}
+
 	SafeClose ( iFD );
-	return SaveEmptyAuth ( sFile, sError );;
+	return true;
 }
 
 #endif

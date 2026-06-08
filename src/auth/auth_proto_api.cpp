@@ -163,7 +163,7 @@ public:
 		const AuthUserCred_t * pUser = pUsers->m_hUserToken ( sUser );
 		if ( !pUser )
 		{
-			sError.SetSprintf ( "unknow user '%s'", sUser.cstr() );
+			sError.SetSprintf ( "unknown user '%s'", sUser.cstr() );
 			return std::nullopt;
 		}
 

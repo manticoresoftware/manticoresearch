@@ -112,9 +112,11 @@ GRANT replication ON 'posts' TO 'repl_user';
 JOIN CLUSTER posts AT '10.12.1.35:9312' 'repl_user' AS user;
 ```
 
+The joining node and donor nodes must have the same user with matching stored authentication data. Creating the same user name and password independently on each node is not enough, because the stored authentication data can differ.
+
 If no user is specified, the current session user is used for the join operation. After a successful join, the stored cluster user is taken from the donor cluster metadata.
 
-> NOTE: Joining a cluster can replace local authentication data with the donor cluster's authentication data.
+> NOTE: When authentication is enabled, a successful `JOIN CLUSTER` replaces all local authentication data on the joining node with the donor cluster's authentication data. If authentication logging is at `info` or higher, Manticore writes the previous local auth data to `searchd.log.auth` as a JSON backup before replacement. This backup includes salts and credential hashes, so keep the auth log private and redact it before sharing. If `JOIN CLUSTER` cannot fetch the donor user, verify the replication user and matching auth data on donor nodes, and check `searchd.log.auth` on the donor nodes for API authentication failures.
 
 <!-- example joining a replication cluster 1_1 -->
 In most cases, the above is sufficient when there is a single replication cluster. However, if you are creating multiple replication clusters, you must also set the [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) and ensure that the directory is available.

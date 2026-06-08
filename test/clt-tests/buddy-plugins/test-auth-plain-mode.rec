@@ -12,15 +12,13 @@ Format: {"users":[...], "permissions":[...]}
 EXPECTED: Admin user from auth.json is loaded
 ––– comment –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT COUNT(*) AS cnt FROM system.auth_users WHERE username='admin';"
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW USERS;" | grep -Ec "username: admin"
 ––– output –––
-*************************** 1. row ***************************
-cnt: 1
+1
 ––– input –––
-MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT COUNT(*) AS cnt FROM system.auth_permissions WHERE username='admin';"
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW PERMISSIONS FOR 'admin';" | grep -Ec "username: admin"
 ––– output –––
-*************************** 1. row ***************************
-cnt: 4
+4
 ––– comment –––
 ––– 6.3.2 JSON format matches specification –––
 EXPECTED: auth.json has users array and permissions array

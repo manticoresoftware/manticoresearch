@@ -47,10 +47,9 @@ Buddy started!
 EXPECTED: persist_user still visible in SHOW USERS
 ––– comment –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT COUNT(*) AS cnt FROM system.auth_users WHERE username='persist_user';"
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW USERS;" | grep -Ec "username: persist_user"
 ––– output –––
-*************************** 1. row ***************************
-cnt: 1
+1
 ––– comment –––
 ––– 6.2.2 Permissions saved after restart –––
 EXPECTED: persist_user can still SELECT (has read permission)

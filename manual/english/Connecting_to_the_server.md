@@ -7,7 +7,7 @@ With default configuration, Manticore is waiting for your connections on:
   * port 9308 for HTTP/HTTPS connections
   * port 9312 for HTTP/HTTPS, and connections from other Manticore nodes and clients based on Manticore binary API
 
-If [authentication and authorization](Security/Authentication_and_authorization.md) is enabled, MySQL clients must connect with a Manticore user name and password, and HTTP/HTTPS clients must use Basic authentication or a bearer token.
+If [authentication and authorization](Security/Authentication_and_authorization.md) is enabled, MySQL clients must connect with a Manticore user name and password, and HTTP/HTTPS clients must use Basic authentication or a bearer token. User names are exact-case. See [Authentication and authorization](Security/Authentication_and_authorization.md) for bootstrap and bearer token creation or rotation.
 
 <!-- intro -->
 ##### Connect via MySQL:

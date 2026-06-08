@@ -35,10 +35,9 @@ EXPECTED: Success (empty output)
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE read ON * FROM 'revokeuser';"
 ––– output –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT COUNT(*) AS cnt FROM system.auth_permissions WHERE username='revokeuser' AND action='read';"
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW PERMISSIONS FOR 'revokeuser';" | grep -Ec "action: read"
 ––– output –––
-*************************** 1. row ***************************
-cnt: 0
+0
 ––– comment –––
 ––– 2.6.2 Error on non-existent permission –––
 EXPECTED: Error — does not have permission

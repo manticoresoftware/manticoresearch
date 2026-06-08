@@ -28,7 +28,7 @@ Users ready
 ––– input –––
 MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P1306 -e "CREATE CLUSTER badcluster 'norepluser' AS user;" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: Permission denied for user 'norepluser'
+ERROR 1045 (42000) at line 1: Permission denied for user 'norepluser'
 ––– comment –––
 ––– Node1: create cluster as norepluser, delegate replication to repluser –––
 ––– comment –––
@@ -90,7 +90,7 @@ MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P1306 -e "CREATE CLUSTER badkeyclu
 ––– input –––
 MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P2306 -e "JOIN CLUSTER badkeycluster AT '127.0.0.1:1312' 'repli2' AS user;" 2>&1
 ––– output –––
-#!/cluster 'badkeycluster', failed to fetch donor user from any node/!#
+#!/cluster 'badkeycluster', failed to fetch donor user from any node; verify the replication user and matching auth data on donor nodes, and inspect searchd\.log\.auth/!#
 ––– input –––
 timeout 5 bash -c 'until grep -q "repli2.*GCM authentication failed (bad tag)" /var/log/manticore-1/searchd.log.auth; do sleep 0.1; done'; echo $?
 ––– output –––

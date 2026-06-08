@@ -136,6 +136,8 @@ CREATE CLUSTER posts 'repl_user' AS user;
 
 If no user is specified, the current session user is used for the statement and stored as the cluster user after successful creation.
 
+Before other auth-enabled nodes join or manage the cluster, provision the stored cluster user with matching authentication data and `replication` permission on those nodes.
+
 If the [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option is not specified when creating a cluster, the first node that joins the cluster will be saved as the [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option.
 
 <!-- proofread -->

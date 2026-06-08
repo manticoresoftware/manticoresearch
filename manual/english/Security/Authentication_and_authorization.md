@@ -36,7 +36,7 @@ searchd {
 }
 ```
 
-When authentication is enabled, Manticore creates the authentication file if it is missing. If an authentication file already exists, Manticore validates it during startup and refuses to start if the file is invalid.
+When authentication is enabled, Manticore creates the authentication file if it is missing. Before the first bootstrap, missing or empty storage is valid, including a zero-byte file, whitespace-only file, empty JSON object, or empty users and permissions arrays. Full authentication JSON is written after bootstrap. If an authentication file already exists, Manticore validates it during startup and refuses to start if the file is invalid, unreadable, or group- or world-readable.
 
 ## Creating the first administrator
 
@@ -86,6 +86,8 @@ curl -u admin:StrongPass#2026 -X POST http://127.0.0.1:9308/token -d "{}"
 
 The endpoint returns the raw token once. Store it securely.
 
+HTTP header names and the `Basic` and `Bearer` scheme names are accepted case-insensitively. User names are exact-case: `app_user` and `App_User` are different users.
+
 ## Users and tokens
 
 After the first administrator exists, manage users with SQL commands.
@@ -111,6 +113,8 @@ TOKEN;
 ```
 
 `TOKEN 'api_user'` creates or rotates a token for the specified user and requires `admin` permission unless the target is the current user. `TOKEN` without a user creates or rotates the current user's token.
+
+`SET PASSWORD` changes SQL/MySQL and HTTP Basic authentication only. It does not rotate or revoke existing bearer tokens. To invalidate a bearer token, run `TOKEN` or `TOKEN '<user>'` to rotate it.
 
 `SHOW TOKEN` displays the stored token hash, not the raw bearer token:
 
@@ -153,9 +157,9 @@ When several permission rules can match the same request, Manticore resolves the
 
 Rules are matched for the requested action only. A grant for `admin`, for example, does not satisfy `read`, `write`, `schema`, or `replication`.
 
-For targets, exact names are more specific than wildcard rules. If no rule matches the requested user, action, and target, access is denied.
+For targets, exact names and wildcards are both matching rules. If no rule matches the requested user, action, and target, access is denied.
 
-`WITH ALLOW 0` creates an explicit deny rule. An explicit deny rule overrides an allow rule that also matches the request.
+`WITH ALLOW 0` creates an explicit deny rule. Any matching deny rule overrides matching allow rules, including more specific allow rules.
 
 ```sql
 GRANT read ON * TO 'analyst';
@@ -164,14 +168,14 @@ GRANT read ON 'private_logs' TO 'analyst' WITH ALLOW 0;
 
 In this example, `analyst` can read other tables, but cannot read `private_logs`.
 
-A more specific allow can grant access inside a broader default deny pattern:
+A matching wildcard deny also blocks a more specific allow:
 
 ```sql
 GRANT read ON 'logs_*' TO 'auditor' WITH ALLOW 0;
 GRANT read ON 'logs_public' TO 'auditor';
 ```
 
-In this example, `auditor` can read `logs_public`, but cannot read other tables matching `logs_*`.
+In this example, `auditor` cannot read `logs_public` or any other table matching `logs_*`, because the wildcard deny matches the request.
 
 `REVOKE` removes a rule. It does not create a deny rule:
 
@@ -201,7 +205,7 @@ SHOW USAGE FOR 'api_user';
 
 `SHOW USAGE` currently returns placeholder usage counters. It is intended for future usage and budget reporting.
 
-Manage authentication data with the SQL commands above. The underlying authentication storage is internal and is not a user-facing management interface.
+Manage authentication data with the SQL commands above. The underlying authentication storage is internal and is not a user-facing management or inspection interface.
 
 If the authentication file was changed outside the daemon, reload it with:
 
@@ -232,9 +236,14 @@ The [auth_log_level](../Server_settings/Searchd.md#auth_log_level) setting contr
 * `error` - log permission denials and critical failures.
 * `warning` - log errors and failed authentication attempts.
 * `info` - log warnings and successful authentication management changes.
-* `all` - log `info` events and successful authentication events.
+* `all` - log `info` events and successful user-facing authentication events.
+* `trace` - log `all` events plus successful internal transport authentication, such as Manticore Buddy and daemon-to-daemon API authentication.
+
+Successful authorization allow checks are not logged at any level. Permission denials are logged, but allow checks can happen for every query and would make the authentication log noisy even in `trace` mode.
 
 The default is `info`.
+
+At `info`, `all`, and `trace`, a successful `JOIN CLUSTER` that replaces local authentication data writes a JSON backup of the previous local auth data to `searchd.log.auth`. This backup contains usernames, salts, password hashes, and bearer hashes. It does not contain plaintext passwords or bearer tokens, but it is still credential material. Treat `searchd.log.auth` as sensitive operational data: restrict access, secure retention and log shipping, and redact it before sharing logs.
 
 ## Distributed remote agents
 
@@ -270,6 +279,6 @@ ALTER CLUSTER posts UPDATE user 'repl_user';
 
 Later cluster operations such as `ALTER CLUSTER ... ADD`, `ALTER CLUSTER ... DROP`, `ALTER CLUSTER ... UPDATE nodes`, and `DELETE CLUSTER` use the stored cluster user, not the current session user.
 
-> NOTE: Joining a cluster can replace the local authentication data with the donor cluster's authentication data. Make sure the replication user and auth data are consistent across nodes before joining.
+> NOTE: When authentication is enabled, a successful `JOIN CLUSTER` replaces all local authentication data on the joining node with the donor cluster's authentication data. If authentication logging is at `info` or higher, Manticore writes the previous local auth data to `searchd.log.auth` as a JSON backup before replacement. This backup includes salts and credential hashes, so keep the auth log private and redact it before sharing. Make sure the replication user and auth data are consistent across nodes before joining. If `JOIN CLUSTER` cannot fetch the donor user, verify the replication user and matching auth data on donor nodes, and check `searchd.log.auth` on the donor nodes for API authentication failures.
 
 Daemon-to-daemon traffic uses authentication material when authentication is enabled. This is handled by Manticore internally and is not a client protocol.

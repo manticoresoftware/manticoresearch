@@ -110,6 +110,8 @@ If [authentication and authorization](../../Security/Authentication_and_authoriz
 ALTER CLUSTER posts UPDATE user 'repl_user'
 ```
 
+The new stored user must be provisioned with matching authentication data on the nodes that will participate in later cluster operations. Those operations fail if the stored user is missing, has different auth data, or loses `replication` permission.
+
 For instance, when the cluster was initially established, the list of nodes used to rejoin the cluster was `10.10.0.1:9312,10.10.1.1:9312`. Since then, other nodes joined the cluster and now the active nodes are `10.10.0.1:9312,10.10.1.1:9312,10.15.0.1:9312,10.15.0.3:9312`.However, the list of nodes used to rejoin the cluster has not been updated.
 
 To rectify this, you can run the `ALTER CLUSTER ... UPDATE nodes` statement to copy the list of active nodes to the list of nodes used to rejoin the cluster. After this, the list of nodes used to rejoin the cluster will include all the active nodes in the cluster.

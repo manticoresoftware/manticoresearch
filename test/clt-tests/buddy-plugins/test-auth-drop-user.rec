@@ -32,10 +32,9 @@ EXPECTED: Success, user removed
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "DROP USER 'droptest';"
 ––– output –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT COUNT(*) AS cnt FROM system.auth_users WHERE username='droptest';"
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW USERS;" | grep -Ec "username: droptest"
 ––– output –––
-*************************** 1. row ***************************
-cnt: 0
+0
 ––– comment –––
 ––– 2.2.2 Cascade delete permissions –––
 Create user, grant permission, drop user, check permissions removed
@@ -58,10 +57,9 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT WRITE ON * TO 'cascade';"
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "DROP USER 'cascade';"
 ––– output –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT COUNT(*) AS cnt FROM system.auth_permissions WHERE username='cascade';"
+python3 -c "import json; d=json.load(open('/var/lib/manticore/auth.json')); print(sum(1 for p in d.get('permissions', []) if p.get('username')=='cascade'))"
 ––– output –––
-*************************** 1. row ***************************
-cnt: 0
+0
 ––– comment –––
 ––– 2.2.3 Error on non-existent user –––
 EXPECTED: Error — user does not exist

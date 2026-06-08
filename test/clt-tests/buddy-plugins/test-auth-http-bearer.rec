@@ -4,10 +4,8 @@ Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/aut
 Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
 Admin credentials: admin / adminpass (bootstrap via auth.json)
 
-Per spec: Token via POST /token endpoint, then use Authorization: Bearer <token>
-
-BUG CRITICAL: POST /token returns Access denied — cannot get token via HTTP API
-     (depends on HTTP Basic Auth which is broken)
+Per spec: Token via POST /token endpoint, then use Authorization: Bearer <token>.
+Regression coverage: valid Bearer auth succeeds, Bearer scheme casing is accepted case-insensitively, invalid tokens fail, and token rotation invalidates the previous token.
 ––– comment –––
 ––– block: ../base/start-searchd-with-auth –––
 ––– comment –––
@@ -25,6 +23,24 @@ EXPECTED: 200 OK with JSON result
 ––– input –––
 TOK=$(curl -s -u admin:adminpass -X POST http://127.0.0.1:9308/token -d "{}" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
 curl -s -H "Authorization: Bearer $TOK" -X POST http://127.0.0.1:9308/token -d "{}"
+––– output –––
+#!/\s*\{"token":"[0-9a-f]{64}"\}/!#
+––– comment –––
+––– 1.3.2a Successful request with lowercase Bearer scheme –––
+EXPECTED: 200 OK with JSON result
+––– comment –––
+––– input –––
+TOK=$(curl -s -u admin:adminpass -X POST http://127.0.0.1:9308/token -d "{}" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+curl -s -H "Authorization: bearer $TOK" -X POST http://127.0.0.1:9308/token -d "{}"
+––– output –––
+#!/\s*\{"token":"[0-9a-f]{64}"\}/!#
+––– comment –––
+––– 1.3.2b Successful request with uppercase Bearer scheme –––
+EXPECTED: 200 OK with JSON result
+––– comment –––
+––– input –––
+TOK=$(curl -s -u admin:adminpass -X POST http://127.0.0.1:9308/token -d "{}" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+curl -s -H "Authorization: BEARER $TOK" -X POST http://127.0.0.1:9308/token -d "{}"
 ––– output –––
 #!/\s*\{"token":"[0-9a-f]{64}"\}/!#
 ––– comment –––

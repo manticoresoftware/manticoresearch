@@ -46,7 +46,7 @@ struct ErrorPathGuard_t
 class QueryTreeBuilder_c : public XQParseHelper_c
 {
 public:
-					QueryTreeBuilder_c ( const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizerQL, const CSphIndexSettings & tSettings );
+					QueryTreeBuilder_c ( const CSphQuery * pQuery, const QueryExecutionSettings_t & tExecutionSettings, TokenizerRefPtr_c pQueryTokenizerQL, const CSphIndexSettings & tSettings );
 
 	void			CollectKeywords ( const char * szStr, XQNode_t * pNode, const XQLimitSpec_t & tLimitSpec, float fBoost );
 
@@ -59,6 +59,7 @@ public:
 	const TokenizerRefPtr_c &	GetQLTokenizer() { return m_pQueryTokenizerQL; }
 	const CSphIndexSettings &	GetIndexSettings() { return m_tSettings; }
 	const CSphQuery *			GetQuery() { return m_pQuery; }
+	const QueryExecutionSettings_t & GetExecutionSettings() { return m_tExecutionSettings; }
 
 	bool m_bHasFulltext = false;
 	bool m_bHasFilter = false;
@@ -70,6 +71,7 @@ public:
 
 private:
 	const CSphQuery *			m_pQuery {nullptr};
+	const QueryExecutionSettings_t & m_tExecutionSettings;
 	const TokenizerRefPtr_c		m_pQueryTokenizerQL;
 	const CSphIndexSettings &	m_tSettings;
 
@@ -81,8 +83,9 @@ private:
 };
 
 
-QueryTreeBuilder_c::QueryTreeBuilder_c ( const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizerQL, const CSphIndexSettings & tSettings )
+QueryTreeBuilder_c::QueryTreeBuilder_c ( const CSphQuery * pQuery, const QueryExecutionSettings_t & tExecutionSettings, TokenizerRefPtr_c pQueryTokenizerQL, const CSphIndexSettings & tSettings )
 	: m_pQuery ( pQuery )
+	, m_tExecutionSettings ( tExecutionSettings )
 	, m_pQueryTokenizerQL ( std::move (pQueryTokenizerQL) )
 	, m_tSettings ( tSettings )
 {}
@@ -244,7 +247,7 @@ void QueryTreeBuilder_c::ErrorPrintPath ( QueryTreeBuilder_c & tOrig )
 
 QueryTreeBuilder_c QueryTreeBuilder_c::CreateCollectPath ( const CSphSchema * pSchema )
 {
-	QueryTreeBuilder_c tOther ( m_pQuery, std::move ( m_pQueryTokenizerQL ), m_tSettings );
+	QueryTreeBuilder_c tOther ( m_pQuery, m_tExecutionSettings, std::move ( m_pQueryTokenizerQL ), m_tSettings );
 	tOther.Setup ( pSchema, m_pTokenizer->Clone ( SPH_CLONE ), std::move ( m_pDict ), m_pParsed, m_tSettings );
 
 	tOther.m_bErrorCollectPath = true;
@@ -276,7 +279,7 @@ class QueryParserJson_c : public QueryParser_i
 {
 public:
 	bool	IsFullscan ( const CSphQuery & tQuery ) const final;
-	bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const final;
+	bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const QueryExecutionSettings_t & tExecutionSettings, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const final;
 	QueryParser_i * Clone() const final { return new QueryParserJson_c; }
 
 private:
@@ -382,7 +385,7 @@ static bool HasFulltext ( const XQNode_t * pRoot )
 	return false;
 }
 
-bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizerQL, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c & pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const
+bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, const CSphQuery * pQuery, const QueryExecutionSettings_t & tExecutionSettings, TokenizerRefPtr_c pQueryTokenizerQL, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c & pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const
 {
 	JsonObj_c tRoot ( szQuery );
 
@@ -399,7 +402,7 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 	assert ( pQueryTokenizerJson->IsQueryTok() );
 	DictRefPtr_c pMyDict = GetStatelessDict ( pDict );
 
-	QueryTreeBuilder_c tBuilder ( pQuery, std::move ( pQueryTokenizerQL ), tSettings );
+	QueryTreeBuilder_c tBuilder ( pQuery, tExecutionSettings, std::move ( pQueryTokenizerQL ), tSettings );
 	tBuilder.Setup ( pSchema, pQueryTokenizerJson->Clone ( SPH_CLONE ), pMyDict, &tParsed, tSettings );
 
 	const JsonObj_c tFtNode = FindFullTextQueryNode ( tRoot );
@@ -833,7 +836,7 @@ XQNode_t * QueryParserJson_c::ConstructQLNode ( const JsonObj_c & tJson, QueryTr
 	XQQuery_t tParsed;
 	tParsed.m_dZones = tBuilder.GetZone(); // should keep the same zone list for whole tree
 	// no need to pass morph fields here as upper level does fixup
-	if ( !sphParseExtendedQuery ( tParsed, sQueryString.cstr(), tBuilder.GetQuery(), tBuilder.GetQLTokenizer(), tBuilder.GetSchema(), tBuilder.GetDict(), tBuilder.GetIndexSettings(), nullptr ) )
+	if ( !sphParseExtendedQuery ( tParsed, sQueryString.cstr(), tBuilder.GetQuery(), tBuilder.GetExecutionSettings(), tBuilder.GetQLTokenizer(), tBuilder.GetSchema(), tBuilder.GetDict(), tBuilder.GetIndexSettings(), nullptr ) )
 	{
 		tBuilder.Error ( "%s", tParsed.m_sParseError.cstr() );
 		return nullptr;

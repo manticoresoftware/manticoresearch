@@ -74,7 +74,7 @@ Currently supported values:
 * `relevance` - expands to:
   * [`min_infix_len='2'`](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)
   * [`index_field_lengths='1'`](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths)
-  * [`index_exact_words='1'`](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_exact_words)
+  * [`index_exact_words='1'`](../../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words)
   * [`ranker=expr('1000*bm25a(1.2,0.75,256)')`](../../Searching/Options.md#ranker)
   * [`morphology='stem_en'`](../../Creating_a_table/NLP_and_tokenization/Morphology.md#morphology)
   * [`boolean_mode='or'`](../../Searching/Options.md#boolean_mode)

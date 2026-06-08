@@ -714,13 +714,40 @@ struct CSphQuery
 	const KnnSearchSettings_t &	SingleKnnSettings() const	{ return m_dKnnSettings[0]; }
 };
 
+struct QueryExecutionSettings_t
+{
+	ESphRankMode	m_eRanker = SPH_RANK_DEFAULT;
+	CSphString		m_sRankerExpr;
+	CSphString		m_sUDRanker;
+	CSphString		m_sUDRankerOpts;
+	bool			m_bDefaultBoolOr = false;
+
+	QueryExecutionSettings_t() = default;
+	explicit QueryExecutionSettings_t ( const CSphQuery & tQuery )
+		: m_eRanker ( tQuery.m_eRanker )
+		, m_sRankerExpr ( tQuery.m_sRankerExpr )
+		, m_sUDRanker ( tQuery.m_sUDRanker )
+		, m_sUDRankerOpts ( tQuery.m_sUDRankerOpts )
+		, m_bDefaultBoolOr ( tQuery.m_bDefaultBoolOr )
+	{}
+
+	void SetRanker ( const QueryExecutionSettings_t & tOther )
+	{
+		m_eRanker = tOther.m_eRanker;
+		m_sRankerExpr = tOther.m_sRankerExpr;
+		m_sUDRanker = tOther.m_sUDRanker;
+		m_sUDRankerOpts = tOther.m_sUDRankerOpts;
+	}
+};
+
 void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitless = false );
 
 /// parse select list string into items
 bool ParseSelectList ( CSphString & sError, CSphQuery &pResult );
 
 void SetQueryDefaultsExt2 ( CSphQuery & tQuery );
-bool ApplyMutableQueryDefaults ( CSphQuery & tQuery, const MutableIndexSettings_c & tSettings, CSphString & sError );
+bool ParseStoredRanker ( const CSphString & sRanker, QueryExecutionSettings_t & tSettings, CSphString & sError );
+bool BuildQueryExecutionSettings ( const CSphQuery & tQuery, const MutableIndexSettings_c & tSettings, QueryExecutionSettings_t & tEffectiveSettings, CSphString & sError );
 
 /// some low-level query stats
 struct CSphQueryStats

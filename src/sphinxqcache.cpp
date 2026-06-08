@@ -40,13 +40,13 @@ public:
 								~Qcache_c();
 
 	void						Setup ( int64_t iMaxBytes, int iThreshMsec, int iTtlSec );
-	void						Add ( const CSphQuery & q, QcacheEntry_c * pResult, const ISphSchema & tSorterSchema );
-	QcacheEntry_c *				Find ( int64_t iIndexId, const CSphQuery & q, const ISphSchema & tSorterSchema );
+	void						Add ( const CSphQuery & q, const QueryExecutionSettings_t & tQuerySettings, QcacheEntry_c * pResult, const ISphSchema & tSorterSchema );
+	QcacheEntry_c *				Find ( int64_t iIndexId, const CSphQuery & q, const QueryExecutionSettings_t & tQuerySettings, const ISphSchema & tSorterSchema );
 	void						ClearByIndexId ( int64_t iIndexId ) EXCLUDES ( m_tLock );
 	void						ClearAll() EXCLUDES ( m_tLock );
 
 private:
-	static uint64_t				GetKey ( int64_t iIndexId, const CSphQuery & q );
+	static uint64_t				GetKey ( int64_t iIndexId, const CSphQuery & q, const QueryExecutionSettings_t & tQuerySettings );
 	bool						IsValidEntry ( int i ) { return m_hData[i]!=QCACHE_NO_ENTRY && m_hData[i]!=QCACHE_DEAD_ENTRY; }
 	void						EnforceLimits ( bool bSizeOnly ) EXCLUDES ( m_tLock );
 	void						MruToHead ( int iRes );
@@ -348,7 +348,7 @@ static bool CalcFilterHashes ( CSphVector<uint64_t> & dFilters, const CSphQuery 
 }
 
 
-void Qcache_c::Add ( const CSphQuery & q, QcacheEntry_c * pResult, const ISphSchema & tSorterSchema )
+void Qcache_c::Add ( const CSphQuery & q, const QueryExecutionSettings_t & tQuerySettings, QcacheEntry_c * pResult, const ISphSchema & tSorterSchema )
 {
 	pResult->Finish();
 
@@ -364,7 +364,7 @@ void Qcache_c::Add ( const CSphQuery & q, QcacheEntry_c * pResult, const ISphSch
 		return;	// this query can't be cached because of the nature of expressions in filters
 
 	pResult->AddRef();
-	pResult->m_Key = GetKey ( pResult->m_iIndexId, q );
+	pResult->m_Key = GetKey ( pResult->m_iIndexId, q, tQuerySettings );
 
 	ScopedMutex_t dLock (m_tLock);
 
@@ -419,7 +419,7 @@ void Qcache_c::Add ( const CSphQuery & q, QcacheEntry_c * pResult, const ISphSch
 	EnforceLimits ( true );
 }
 
-QcacheEntry_c * Qcache_c::Find ( int64_t iIndexId, const CSphQuery & q, const ISphSchema & tSorterSchema )
+QcacheEntry_c * Qcache_c::Find ( int64_t iIndexId, const CSphQuery & q, const QueryExecutionSettings_t & tQuerySettings, const ISphSchema & tSorterSchema )
 {
 	if ( m_iMaxBytes<=0 )
 		return nullptr;
@@ -427,7 +427,7 @@ QcacheEntry_c * Qcache_c::Find ( int64_t iIndexId, const CSphQuery & q, const IS
 	if ( !CanCacheQuery(q) )
 		return nullptr;
 
-	uint64_t k = GetKey ( iIndexId, q );
+	uint64_t uKey = GetKey ( iIndexId, q, tQuerySettings );
 
 	bool bFilterHashesCalculated = false;
 	CSphVector<uint64_t> dFilters;
@@ -438,7 +438,7 @@ QcacheEntry_c * Qcache_c::Find ( int64_t iIndexId, const CSphQuery & q, const IS
 	int iLenMask = m_hData.GetLength() - 1;
 	int iLoop = m_hData.GetLength();
 	int iRes = -1;
-	for ( int i = k & iLenMask; m_hData[i]!=QCACHE_NO_ENTRY && iLoop--!=0; i = ( i+1 ) & iLenMask )
+	for ( int i = uKey & iLenMask; m_hData[i]!=QCACHE_NO_ENTRY && iLoop--!=0; i = ( i+1 ) & iLenMask )
 	{
 		// check that entry is alive
 		QcacheEntry_c * e = m_hData[i]; // shortcut
@@ -453,7 +453,7 @@ QcacheEntry_c * Qcache_c::Find ( int64_t iIndexId, const CSphQuery & q, const IS
 		}
 
 		// check that key matches
-		if ( e->m_Key!=k )
+		if ( e->m_Key!=uKey )
 			continue;
 
 		// check that filters are compatible (ie. that entry filters are a subset of query filters)
@@ -490,7 +490,7 @@ QcacheEntry_c * Qcache_c::Find ( int64_t iIndexId, const CSphQuery & q, const IS
 	return p;
 }
 
-uint64_t Qcache_c::GetKey ( int64_t iIndexId, const CSphQuery & q )
+uint64_t Qcache_c::GetKey ( int64_t iIndexId, const CSphQuery & q, const QueryExecutionSettings_t & tQuerySettings )
 {
 	// query cache key combines a bunch of data affecting things:
 	// - index id
@@ -498,13 +498,13 @@ uint64_t Qcache_c::GetKey ( int64_t iIndexId, const CSphQuery & q )
 	// - ranker
 	uint64_t k = sphFNV64 ( &iIndexId, sizeof(iIndexId) );
 	k = sphFNV64cont ( q.m_sQuery.cstr(), k );
-	k = sphFNV64 ( &q.m_eRanker, 1, k );
-	if ( q.m_eRanker==SPH_RANK_EXPR )
-		k = sphFNV64cont ( q.m_sRankerExpr.cstr(), k );
-	if ( q.m_eRanker==SPH_RANK_PLUGIN )
+	k = sphFNV64 ( &tQuerySettings.m_eRanker, 1, k );
+	if ( tQuerySettings.m_eRanker==SPH_RANK_EXPR )
+		k = sphFNV64cont ( tQuerySettings.m_sRankerExpr.cstr(), k );
+	if ( tQuerySettings.m_eRanker==SPH_RANK_PLUGIN )
 	{
-		k = sphFNV64cont ( q.m_sUDRanker.cstr(), k );
-		k = sphFNV64cont ( q.m_sUDRankerOpts.cstr(), k );
+		k = sphFNV64cont ( tQuerySettings.m_sUDRanker.cstr(), k );
+		k = sphFNV64cont ( tQuerySettings.m_sUDRankerOpts.cstr(), k );
 	}
 	return k;
 }
@@ -681,14 +681,14 @@ int QcacheRanker_c::GetMatches()
 
 //////////////////////////////////////////////////////////////////////////
 
-void QcacheAdd ( const CSphQuery & q, QcacheEntry_c * pResult, const ISphSchema & tSorterSchema )
+void QcacheAdd ( const CSphQuery & q, const QueryExecutionSettings_t & tQuerySettings, QcacheEntry_c * pResult, const ISphSchema & tSorterSchema )
 {
-	return g_Qcache.Add ( q, pResult, tSorterSchema );
+	return g_Qcache.Add ( q, tQuerySettings, pResult, tSorterSchema );
 }
 
-QcacheEntry_c * QcacheFind ( int64_t iIndexId, const CSphQuery & q, const ISphSchema & tSorterSchema )
+QcacheEntry_c * QcacheFind ( int64_t iIndexId, const CSphQuery & q, const QueryExecutionSettings_t & tQuerySettings, const ISphSchema & tSorterSchema )
 {
-	return g_Qcache.Find ( iIndexId, q, tSorterSchema );
+	return g_Qcache.Find ( iIndexId, q, tQuerySettings, tSorterSchema );
 }
 
 std::unique_ptr<ISphRanker> QcacheRanker ( QcacheEntry_c * pEntry, const ISphQwordSetup & tSetup )

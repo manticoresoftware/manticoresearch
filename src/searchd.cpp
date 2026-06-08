@@ -6559,69 +6559,6 @@ static bool CheckExistingTables ( const CSphString & sIndex, bool bIfNotExists, 
 	return true;
 }
 
-static int CheckShardIntOpt ( const char * sName, const SqlStmt_t & tStmt, CSphString & sError )
-{
-	int iPos = tStmt.m_tCreateTable.m_dOpts.GetFirst ( [&]( const auto & tItem ) { return tItem.m_sName==sName; } );
-	if ( iPos==-1 )
-		return iPos;
-
-	CSphVariant tVal ( tStmt.m_tCreateTable.m_dOpts[iPos].m_sValue.cstr() );
-	if ( tVal.int64val()<0 )
-		sError.SetSprintf ( "table '%s': CREATE TABLE failed: negative '%s' option is not allowed", tStmt.m_sIndex.cstr(), sName );
-
-	return iPos;
-}
-
-static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
-{
-	if ( !CheckExistingTables ( tStmt, sError ) )
-		return false;
-
-	if ( !CheckAttrs ( tStmt.m_tCreateTable.m_dAttrs, []( const CreateTableAttr_t & tAttr ) { return tAttr.m_tAttr.m_sName; }, sError ) )
-		return false;
-
-	if ( !CheckAttrs ( tStmt.m_tCreateTable.m_dFields, []( const CSphColumnInfo & tAttr ) { return tAttr.m_sName; }, sError ) )
-		return false;
-
-	for ( auto & i : tStmt.m_tCreateTable.m_dAttrs )
-		if ( i.m_bKNN && !i.m_tKNNModel.m_sModelName.empty() && !IsKNNEmbeddingsLibLoaded() )
-		{
-			sError.SetSprintf ( "model_name specified for '%s', but embeddings library is not loaded", i.m_tAttr.m_sName.cstr() );
-			return false;
-		}
-
-
-	// cross-checks attrs and fields
-	for ( const auto & i : tStmt.m_tCreateTable.m_dAttrs )
-		for ( const auto & j : tStmt.m_tCreateTable.m_dFields )
-			if ( i.m_tAttr.m_sName==j.m_sName && i.m_tAttr.m_eAttrType!=SPH_ATTR_STRING )
-			{
-				sError.SetSprintf ( "duplicate attribute name '%s'", i.m_tAttr.m_sName.cstr() );
-				return false;
-			}
-
-	// shard related options
-	const CSphVector<NameValueStr_t> & dOpts = tStmt.m_tCreateTable.m_dOpts;
-	if ( dOpts.GetLength() )
-	{
-		int iShardsPos = CheckShardIntOpt ("shards", tStmt, sError );
-		if ( !sError.IsEmpty() )
-			return false;
-		int iRfPos = CheckShardIntOpt ( "rf", tStmt, sError );
-		if ( !sError.IsEmpty() )
-			return false;
-
-		// should be routerd into buddy with good error message
-		if ( iShardsPos!=-1 || iRfPos!=-1 )
-		{
-			sError.SetSprintf ( "table '%s': CREATE TABLE failed: 'shards' and 'rf' options require Buddy", tStmt.m_sIndex.cstr() );
-			return false;
-		}
-	}
-
-	return true;
-}
-
 static bool CheckCreateTable ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, CSphString & sError )
 {
 	if ( !CheckExistingTables ( sIndex, tCreateTable.m_bIfNotExists, sError ) )
@@ -11081,7 +11018,8 @@ static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection &
 		tSettings.m_tTokenizer.Setup ( hIndex, sWarning );
 		tSettings.m_tDict.Setup ( hIndex, pFilenameBuilder.get(), sWarning );
 		tSettings.m_tFieldFilter.Setup ( hIndex, sWarning );
-		tSettings.m_tMutableSettings.Load ( hIndex, false, nullptr );
+		if ( !tSettings.m_tMutableSettings.Load ( hIndex, false, nullptr, &sError ) )
+			return false;
 
 		if ( pWarnings && !sWarning.IsEmpty() )
 			pWarnings->Add(sWarning);
@@ -11304,12 +11242,6 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 			tOut.Error ( "profile=... is only supported in CREATE TABLE" );
 			return;
 		}
-	}
-
-	if ( !ExpandCreateTableProfiles ( tAlterSettings, sError ) )
-	{
-		tOut.Error ( sError.cstr() );
-		return;
 	}
 
 	int iSuffix = pRtIndex->GetChunkId();

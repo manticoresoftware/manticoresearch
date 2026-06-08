@@ -30,6 +30,25 @@ class CSphWriter;
 class CSphReader;
 class FilenameBuilder_i;
 
+struct StoredQueryExecutionSettings_t
+{
+	ESphRankMode	m_eRanker = SPH_RANK_DEFAULT;
+	CSphString		m_sRankerExpr;
+	CSphString		m_sUDRanker;
+	CSphString		m_sUDRankerOpts;
+	bool			m_bDefaultBoolOr = false;
+
+	void SetRanker ( const StoredQueryExecutionSettings_t & tOther )
+	{
+		m_eRanker = tOther.m_eRanker;
+		m_sRankerExpr = tOther.m_sRankerExpr;
+		m_sUDRanker = tOther.m_sUDRanker;
+		m_sUDRankerOpts = tOther.m_sUDRankerOpts;
+	}
+};
+
+bool ParseStoredRanker ( const CSphString & sRanker, StoredQueryExecutionSettings_t & tSettings, CSphString & sError );
+
 enum
 {
 	// where was TOKENIZER_SBCS=1 once
@@ -370,8 +389,8 @@ public:
 	int			m_iExpandKeywords;
 	int64_t		m_iMemLimit;
 	bool		m_bPreopen = false;
-	CSphString	m_sRanker;
-	bool		m_bDefaultBoolOr = false;
+	CSphString	m_sRanker; ///< persisted user-visible value for SHOW CREATE/SETTINGS and sidecar save
+	StoredQueryExecutionSettings_t m_tQueryExecutionSettings; ///< prepared table-owned execution defaults
 	FileAccessSettings_t m_tFileAccess;
 	int			m_iOptimizeCutoff;
 	int			m_iOptimizeCutoffKNN;
@@ -385,7 +404,7 @@ public:
 	static MutableIndexSettings_c & GetDefaults();
 
 	bool Load ( const char * sFileName, const char * sIndexName );
-	void Load ( const CSphConfigSection & hIndex, bool bNeedSave, StrVec_t * pWarnings );
+	bool Load ( const CSphConfigSection & hIndex, bool bNeedSave, StrVec_t * pWarnings, CSphString * pError=nullptr );
 	bool Save ( CSphString & sBuf ) const;
 
 	bool NeedSave() const { return m_bNeedSave; }
@@ -397,6 +416,8 @@ public:
 	void Combine ( const MutableIndexSettings_c & tOther );
 
 private:
+	bool		SetStoredRanker ( const CSphString & sRanker, CSphString & sError );
+	bool		SetStoredBooleanMode ( const CSphString & sValue, CSphString & sError );
 	CSphBitvec	m_dLoaded;
 	bool		m_bNeedSave = false;
 };

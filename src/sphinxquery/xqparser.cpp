@@ -81,7 +81,7 @@ public:
 					~XQParser_t() override;
 
 public:
-	bool			Parse ( XQQuery_t & tQuery, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c & pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c & pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields );
+	bool			Parse ( XQQuery_t & tQuery, const char * sQuery, const CSphQuery * pQuery, const QueryExecutionSettings_t & tExecutionSettings, const TokenizerRefPtr_c & pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c & pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields );
 	int				ParseZone ( const char * pZone );
 
 	bool			IsSpecial ( char c );
@@ -1050,7 +1050,7 @@ void XQParser_t::CreateSpPhraseNode ( XQNode_t* pNode )
 	SetPhrase ( pNode, false, SPH_QUERY_PHRASE  );
 }
 
-bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields )
+bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const QueryExecutionSettings_t & tExecutionSettings, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields )
 {
 	// FIXME? might wanna verify somehow that pTokenizer has all the specials etc from sphSetupQueryTokenizer
 	assert ( pTokenizer->IsQueryTok() );
@@ -1093,7 +1093,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	DictRefPtr_c pMyDict = GetStatelessDict ( pDict );
 
 	Setup ( pSchema, pTokenizer->Clone ( SPH_CLONE ), pMyDict, &tParsed, tSettings );
-	m_bDefaultBoolOr = pQuery && pQuery->m_bDefaultBoolOr;
+	m_bDefaultBoolOr = tExecutionSettings.m_bDefaultBoolOr;
 	
 	// blend variants if blended_expand option used
 	if ( pQuery && !pQuery->m_sExpandBlended.IsEmpty() )
@@ -1164,10 +1164,10 @@ bool XQParser_t::HandleFieldBlockStart ( const char * & pPtr )
 	return false;
 }
 
-bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields )
+bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const QueryExecutionSettings_t & tExecutionSettings, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields )
 {
 	XQParser_t qp;
-	bool bRes = qp.Parse ( tParsed, sQuery, pQuery, pTokenizer, pSchema, pDict, tSettings, pMorphFields );
+	bool bRes = qp.Parse ( tParsed, sQuery, pQuery, tExecutionSettings, pTokenizer, pSchema, pDict, tSettings, pMorphFields );
 
 #ifndef NDEBUG
 	if ( bRes && tParsed.m_pRoot )
@@ -1196,18 +1196,26 @@ bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSp
 	return bRes;
 }
 
+bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields )
+{
+	QueryExecutionSettings_t tExecutionSettings;
+	if ( pQuery )
+		tExecutionSettings = QueryExecutionSettings_t ( *pQuery );
+	return sphParseExtendedQuery ( tParsed, sQuery, pQuery, tExecutionSettings, pTokenizer, pSchema, pDict, tSettings, pMorphFields );
+}
+
 class QueryParserPlain_c : public QueryParser_i
 {
 public:
 	bool IsFullscan ( const XQQuery_t & tQuery ) const override { return false; }
-	bool ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const override;
+	bool ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const QueryExecutionSettings_t & tExecutionSettings, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const override;
 	QueryParser_i * Clone() const final { return new QueryParserPlain_c; }
 };
 
 
-bool QueryParserPlain_c::ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const
+bool QueryParserPlain_c::ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const QueryExecutionSettings_t & tExecutionSettings, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const
 {
-	return sphParseExtendedQuery ( tParsed, sQuery, pQuery, pQueryTokenizer, pSchema, pDict, tSettings, pMorphFields );
+	return sphParseExtendedQuery ( tParsed, sQuery, pQuery, tExecutionSettings, pQueryTokenizer, pSchema, pDict, tSettings, pMorphFields );
 }
 
 

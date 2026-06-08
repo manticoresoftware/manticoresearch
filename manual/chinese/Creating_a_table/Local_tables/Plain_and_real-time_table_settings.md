@@ -74,7 +74,7 @@ table <table name> {
 * `relevance` - 展开为：
   * [`min_infix_len='2'`](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)
   * [`index_field_lengths='1'`](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths)
-  * [`index_exact_words='1'`](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_exact_words)
+  * [`index_exact_words='1'`](../../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words)
   * [`ranker=expr('1000*bm25a(1.2,0.75,256)')`](../../Searching/Options.md#ranker)
   * [`morphology='stem_en'`](../../Creating_a_table/NLP_and_tokenization/Morphology.md#morphology)
   * [`boolean_mode='or'`](../../Searching/Options.md#boolean_mode)
@@ -107,7 +107,7 @@ type = rt
 path = path/to/table
 ```
 
-表将被存储或定位的路径，可以是绝对路径或相对路径，不包含扩展名。
+表将被存储或定位的路径，绝对路径或相对路径均可，但不包含扩展名。
 
 值：表的路径，**必填**
 

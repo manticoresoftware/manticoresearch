@@ -1031,7 +1031,8 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 			sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
 		MutableIndexSettings_c tMutableSettings;
-		tMutableSettings.Load ( hIndex, false, nullptr );
+		if ( !tMutableSettings.Load ( hIndex, false, nullptr, &sError ) )
+			sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
 		bool bNeedExact = ( pDict->HasMorphology() || pDict->GetWordformsFileInfos().GetLength() || tMutableSettings.m_iExpandKeywords );
 		if ( tSettings.m_bIndexExactWords && !bNeedExact )

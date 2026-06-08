@@ -783,7 +783,7 @@ void ExtRanker_c::FinalizeCache ( const ISphSchema & tSorterSchema )
 	if ( m_pQcacheEntry )
 	{
 		CSphScopedProfile tProf ( m_pCtx->m_pProfile, SPH_QSTATE_QCACHE_FINAL );
-		QcacheAdd ( m_pCtx->m_tQuery, m_pQcacheEntry, tSorterSchema );
+		QcacheAdd ( m_pCtx->m_tQuery, m_pCtx->m_tQuerySettings, m_pQcacheEntry, tSorterSchema );
 	}
 
 	SafeReleaseAndZero ( m_pQcacheEntry );
@@ -4527,7 +4527,7 @@ static bool HasQwordDupes ( XQNode_t * pNode )
 }
 
 
-std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery & tQuery, CSphQueryResultMeta & tMeta, const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx, const ISphSchema & tSorterSchema )
+std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResultMeta & tMeta, const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx, const ISphSchema & tSorterSchema )
 {
 	// shortcut
 	const CSphIndex * pIndex = tTermSetup.m_pIndex;
@@ -4545,7 +4545,7 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 	// can we serve this from cache?
 	QcacheEntryRefPtr_t pCached;
 	if ( !tRankerSettings.m_bSkipQCache )
-		pCached = QcacheFind ( pIndex->GetIndexId(), tQuery, tSorterSchema );
+		pCached = QcacheFind ( pIndex->GetIndexId(), tQuery, tQuerySettings, tSorterSchema );
 
 	if ( pCached )
 		return QcacheRanker ( pCached, tTermSetup );
@@ -4557,7 +4557,7 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 
 	// setup eval-tree
 	std::unique_ptr<ExtRanker_c> pRanker;
-	switch ( tQuery.m_eRanker )
+	switch ( tQuerySettings.m_eRanker )
 	{
 		case SPH_RANK_PROXIMITY_BM25:
 			if ( uPayloadMask )
@@ -4615,13 +4615,13 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 				tTermSetup.m_bSetQposMask = true;
 				bool bNeedFactors = !!( tCtx.GetPackedFactor() & SPH_FACTOR_ENABLE );
 				if ( bNeedFactors && bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <true, true>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
+					pRanker = std::make_unique < ExtRanker_Expr_T <true, true>> ( tXQ, tTermSetup, tQuerySettings.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
 				else if ( bNeedFactors && !bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <true, false>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
+					pRanker = std::make_unique < ExtRanker_Expr_T <true, false>> ( tXQ, tTermSetup, tQuerySettings.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
 				else if ( !bNeedFactors && bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <false, true>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
+					pRanker = std::make_unique < ExtRanker_Expr_T <false, true>> ( tXQ, tTermSetup, tQuerySettings.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
 				else if ( !bNeedFactors && !bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <false, false>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
+					pRanker = std::make_unique < ExtRanker_Expr_T <false, false>> ( tXQ, tTermSetup, tQuerySettings.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
 			}
 			break;
 
@@ -4629,13 +4629,13 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 			// TODO: replace Export ranker to Expression ranker to remove duplicated code
 			tTermSetup.m_bSetQposMask = true;
 			if ( bGotDupes )
-				pRanker = std::make_unique <ExtRanker_Export_T<true>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
+				pRanker = std::make_unique <ExtRanker_Export_T<true>> ( tXQ, tTermSetup, tQuerySettings.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
 			else
-				pRanker = std::make_unique <ExtRanker_Export_T<false>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
+				pRanker = std::make_unique <ExtRanker_Export_T<false>> ( tXQ, tTermSetup, tQuerySettings.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
 			break;
 
 		default:
-			tMeta.m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int) tQuery.m_eRanker );
+			tMeta.m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int) tQuerySettings.m_eRanker );
 			if ( bGotDupes )
 				pRanker = std::make_unique < ExtRanker_State_T < RankerState_Proximity_fn<true,true>, true >> ( tXQ, tTermSetup, tRankerSettings );
 			else
@@ -4644,17 +4644,17 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 
 		case SPH_RANK_PLUGIN:
 			{
-				auto p = PluginGet<PluginRanker_c> ( PLUGIN_RANKER, tQuery.m_sUDRanker.cstr() );
+				auto p = PluginGet<PluginRanker_c> ( PLUGIN_RANKER, tQuerySettings.m_sUDRanker.cstr() );
 				// might be a case for query to distributed index
 				if ( p )
 				{
 					pRanker = std::make_unique < ExtRanker_State_T < RankerState_Plugin_fn, true >> ( tXQ, tTermSetup, tRankerSettings );
 					pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN, (void**)&p );
-					pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN_OPTS, (void**) tQuery.m_sUDRankerOpts.cstr() );
+					pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN_OPTS, (void**) tQuerySettings.m_sUDRankerOpts.cstr() );
 				} else
 				{
 					// create default ranker in case of missed plugin
-					tMeta.m_sWarning.SetSprintf ( "unknown ranker plugin '%s'; using default", tQuery.m_sUDRanker.cstr() );
+					tMeta.m_sWarning.SetSprintf ( "unknown ranker plugin '%s'; using default", tQuerySettings.m_sUDRanker.cstr() );
 					if ( bGotDupes )
 						pRanker = std::make_unique < ExtRanker_State_T < RankerState_Proximity_fn<true,true>, true >> ( tXQ, tTermSetup, tRankerSettings );
 					else

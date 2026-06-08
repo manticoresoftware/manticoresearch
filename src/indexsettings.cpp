@@ -1396,6 +1396,51 @@ void IndexSettingsContainer_c::ResetCleanup()
 	m_dCleanupFiles.Reset();
 }
 
+static bool ParseStoredBooleanMode ( const CSphString & sValue, bool & bDefaultBoolOr, CSphString & sError )
+{
+	if ( sValue=="or" )
+	{
+		bDefaultBoolOr = true;
+		return true;
+	}
+
+	if ( sValue=="and" )
+	{
+		bDefaultBoolOr = false;
+		return true;
+	}
+
+	sError.SetSprintf ( "unknown boolean_mode='%s' (must be and or or)", sValue.cstr() );
+	return false;
+}
+
+static bool ValidateStoredRanker ( const CSphString & sValue, CSphString & sError )
+{
+	StoredQueryExecutionSettings_t tSettings;
+	return ParseStoredRanker ( sValue, tSettings, sError );
+}
+
+bool MutableIndexSettings_c::SetStoredRanker ( const CSphString & sRanker, CSphString & sError )
+{
+	StoredQueryExecutionSettings_t tRankerSettings;
+	if ( !ParseStoredRanker ( sRanker, tRankerSettings, sError ) )
+		return false;
+
+	m_sRanker = sRanker;
+	m_tQueryExecutionSettings.SetRanker ( tRankerSettings );
+	return true;
+}
+
+bool MutableIndexSettings_c::SetStoredBooleanMode ( const CSphString & sValue, CSphString & sError )
+{
+	bool bDefaultBoolOr = false;
+	if ( !ParseStoredBooleanMode ( sValue, bDefaultBoolOr, sError ) )
+		return false;
+
+	m_tQueryExecutionSettings.m_bDefaultBoolOr = bDefaultBoolOr;
+	return true;
+}
+
 bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphString & sValue, bool bExtCopy )
 {
 	if ( sName=="type" && sValue=="pq" )
@@ -1552,13 +1597,19 @@ bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphS
 		return Add ( sName, sValue );
 	}
 
+	if ( sName=="ranker" )
+	{
+		if ( !ValidateStoredRanker ( sValue, m_sError ) )
+			return false;
+
+		return Add ( sName, sValue );
+	}
+
 	if ( sName=="boolean_mode" )
 	{
-		if ( sValue!="and" && sValue!="or" )
-		{
-			m_sError.SetSprintf ( "unknown boolean_mode='%s' (must be and or or)", sValue.cstr() );
+		bool bDefaultBoolOr = false;
+		if ( !ParseStoredBooleanMode ( sValue, bDefaultBoolOr, m_sError ) )
 			return false;
-		}
 
 		return Add ( sName, sValue );
 	}
@@ -1573,7 +1624,7 @@ bool ExpandCreateTableProfiles ( CreateTableSettings_t & tCreateTable, CSphStrin
 		return true;
 
 	CSphVector<NameValueStr_t> dExpanded;
-	dExpanded.Reserve ( tCreateTable.m_dOpts.GetLength() + 5 );
+	dExpanded.Reserve ( tCreateTable.m_dOpts.GetLength() + 6 );
 
 	for ( const auto & tOpt : tCreateTable.m_dOpts )
 	{
@@ -2911,14 +2962,22 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 	JsonObj_c tRanker = tParser.GetStrItem ( GetMutableName ( MutableName_e::RANKER ), sError, true );
 	if ( tRanker )
 	{
-		m_sRanker = tRanker.StrVal();
+		if ( !SetStoredRanker ( tRanker.StrVal(), sError ) )
+		{
+			sphWarning ( "table %s, error: %s", sIndexName, sError.cstr() );
+			return false;
+		}
 		m_dLoaded.BitSet ( (int)MutableName_e::RANKER );
 	}
 
 	JsonObj_c tBooleanMode = tParser.GetStrItem ( GetMutableName ( MutableName_e::BOOLEAN_MODE ), sError, true );
 	if ( tBooleanMode )
 	{
-		m_bDefaultBoolOr = ( tBooleanMode.StrVal()=="or" );
+		if ( !SetStoredBooleanMode ( tBooleanMode.StrVal(), sError ) )
+		{
+			sphWarning ( "table %s, error: %s", sIndexName, sError.cstr() );
+			return false;
+		}
 		m_dLoaded.BitSet ( (int)MutableName_e::BOOLEAN_MODE );
 	}
 
@@ -2979,7 +3038,7 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 	return true;
 }
 
-void MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeedSave, StrVec_t * pWarnings )
+bool MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeedSave, StrVec_t * pWarnings, CSphString * pError )
 {
 	m_bNeedSave |= bNeedSave;
 
@@ -3004,13 +3063,29 @@ void MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeed
 
 	if ( hIndex.Exists ( GetMutableName ( MutableName_e::RANKER ) ) )
 	{
-		m_sRanker = hIndex.GetStr ( GetMutableName ( MutableName_e::RANKER ) );
+		CSphString sLocalError;
+		if ( !SetStoredRanker ( hIndex.GetStr ( GetMutableName ( MutableName_e::RANKER ) ), sLocalError ) )
+		{
+			if ( pError )
+				*pError = sLocalError;
+			else
+				sphWarning ( "%s", sLocalError.cstr() );
+			return false;
+		}
 		m_dLoaded.BitSet ( (int)MutableName_e::RANKER );
 	}
 
 	if ( hIndex.Exists ( GetMutableName ( MutableName_e::BOOLEAN_MODE ) ) )
 	{
-		m_bDefaultBoolOr = ( hIndex.GetStr ( GetMutableName ( MutableName_e::BOOLEAN_MODE ) )=="or" );
+		CSphString sLocalError;
+		if ( !SetStoredBooleanMode ( hIndex.GetStr ( GetMutableName ( MutableName_e::BOOLEAN_MODE ) ), sLocalError ) )
+		{
+			if ( pError )
+				*pError = sLocalError;
+			else
+				sphWarning ( "%s", sLocalError.cstr() );
+			return false;
+		}
 		m_dLoaded.BitSet ( (int)MutableName_e::BOOLEAN_MODE );
 	}
 
@@ -3083,6 +3158,7 @@ void MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeed
 		m_dLoaded.BitSet ( (int)MutableName_e::DISKCHUNK_FLUSH_SEARCH_TIMEOUT );
 	}
 
+	return true;
 }
 
 static void AddStr ( const CSphBitvec & dLoaded, MutableName_e eName, JsonObj_c & tRoot, const char * sVal )
@@ -3128,7 +3204,7 @@ bool MutableIndexSettings_c::Save ( CSphString & sBuf ) const
 	if ( m_dLoaded.BitGet ( (int)MutableName_e::PREOPEN ) )
 		tRoot.AddBool ( "preopen", m_bPreopen );
 	AddStr ( m_dLoaded, MutableName_e::RANKER, tRoot, m_sRanker.cstr() );
-	AddStr ( m_dLoaded, MutableName_e::BOOLEAN_MODE, tRoot, m_bDefaultBoolOr ? "or" : "and" );
+	AddStr ( m_dLoaded, MutableName_e::BOOLEAN_MODE, tRoot, m_tQueryExecutionSettings.m_bDefaultBoolOr ? "or" : "and" );
 
 	AddStr ( m_dLoaded, MutableName_e::ACCESS_PLAIN_ATTRS, tRoot, FileAccessName ( m_tFileAccess.m_eAttr ) );
 	AddStr ( m_dLoaded, MutableName_e::ACCESS_BLOB_ATTRS, tRoot, FileAccessName ( m_tFileAccess.m_eBlob ) );
@@ -3172,12 +3248,13 @@ void MutableIndexSettings_c::Combine ( const MutableIndexSettings_c & tOther )
 	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::RANKER ) )
 	{
 		m_sRanker = tOther.m_sRanker;
+		m_tQueryExecutionSettings.SetRanker ( tOther.m_tQueryExecutionSettings );
 		m_dLoaded.BitSet ( (int)MutableName_e::RANKER );
 	}
 
 	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::BOOLEAN_MODE ) )
 	{
-		m_bDefaultBoolOr = tOther.m_bDefaultBoolOr;
+		m_tQueryExecutionSettings.m_bDefaultBoolOr = tOther.m_tQueryExecutionSettings.m_bDefaultBoolOr;
 		m_dLoaded.BitSet ( (int)MutableName_e::BOOLEAN_MODE );
 	}
 
@@ -3268,7 +3345,7 @@ void MutableIndexSettings_c::Format ( SettingsFormatter_c & tOut, FilenameBuilde
 	FormatSetting ( this, tOut, MutableName_e::RT_MEM_LIMIT, m_iMemLimit, m_iMemLimit!=tDefaults.m_iMemLimit );
 	FormatSetting ( this, tOut, MutableName_e::PREOPEN, m_bPreopen, m_bPreopen!=tDefaults.m_bPreopen );
 	FormatSetting ( this, tOut, MutableName_e::RANKER, m_sRanker, IsSet ( MutableName_e::RANKER ) );
-	FormatSetting ( this, tOut, MutableName_e::BOOLEAN_MODE, m_bDefaultBoolOr ? "or" : "and", IsSet ( MutableName_e::BOOLEAN_MODE ) );
+	FormatSetting ( this, tOut, MutableName_e::BOOLEAN_MODE, m_tQueryExecutionSettings.m_bDefaultBoolOr ? "or" : "and", IsSet ( MutableName_e::BOOLEAN_MODE ) );
 
 	FormatSetting ( this, tOut, MutableName_e::ACCESS_PLAIN_ATTRS, FileAccessName ( m_tFileAccess.m_eAttr ), m_tFileAccess.m_eAttr!=tDefaults.m_tFileAccess.m_eAttr );
 	FormatSetting ( this, tOut, MutableName_e::ACCESS_BLOB_ATTRS, FileAccessName ( m_tFileAccess.m_eBlob ), m_tFileAccess.m_eBlob!=tDefaults.m_tFileAccess.m_eBlob );

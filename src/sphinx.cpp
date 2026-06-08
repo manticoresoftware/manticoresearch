@@ -1346,8 +1346,8 @@ private:
 private:
 	void						GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* = nullptr ) const override;
 
-	bool						ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tXQ, DictRefPtr_c pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const;
-	bool						RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, bool bCloneDict, const CSphQuery & tQuery, CSphQueryResult & tResult, VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tParsed, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
+	bool						ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tXQ, DictRefPtr_c pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const;
+	bool						RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, bool bCloneDict, const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResult & tResult, VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tParsed, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
 
 	template <bool ROWID_LIMITS>
 	bool						ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResultMeta & tMeta, const VecTraits_T<ISphMatchSorter *> & dSorters, CSphMatch & tMatch, int iCutoff, bool bRandomize, int iIndexWeight, int64_t tmMaxTimer, const RowIdBoundaries_t * pBoundaries = nullptr ) const;
@@ -1927,7 +1927,7 @@ void SetQueryDefaultsExt2 ( CSphQuery & tQuery )
 	tQuery.m_iRetryDelay = DEFAULT_QUERY_RETRY;
 }
 
-static bool ParseStoredRanker ( const CSphString & sRanker, CSphQuery & tQuery, CSphString & sError )
+bool ParseStoredRanker ( const CSphString & sRanker, QueryExecutionSettings_t & tSettings, CSphString & sError )
 {
 	if ( sRanker.IsEmpty() )
 		return true;
@@ -1936,10 +1936,10 @@ static bool ParseStoredRanker ( const CSphString & sRanker, CSphQuery & tQuery, 
 	for ( int iRanker = SPH_RANK_PROXIMITY_BM25; iRanker<=SPH_RANK_SPH04; iRanker++ )
 		if ( !strcasecmp ( sRankerCstr, sphGetRankerName ( ESphRankMode ( iRanker ) ) ) )
 		{
-			tQuery.m_eRanker = ESphRankMode ( iRanker );
-			tQuery.m_sRankerExpr = "";
-			tQuery.m_sUDRanker = "";
-			tQuery.m_sUDRankerOpts = "";
+			tSettings.m_eRanker = ESphRankMode ( iRanker );
+			tSettings.m_sRankerExpr = "";
+			tSettings.m_sUDRanker = "";
+			tSettings.m_sUDRankerOpts = "";
 			return true;
 		}
 
@@ -1957,10 +1957,10 @@ static bool ParseStoredRanker ( const CSphString & sRanker, CSphQuery & tQuery, 
 				sExpr = sExpr.SubString ( 1, sExpr.Length()-2 );
 		}
 
-		tQuery.m_eRanker = eRanker;
-		tQuery.m_sRankerExpr = sExpr;
-		tQuery.m_sUDRanker = "";
-		tQuery.m_sUDRankerOpts = "";
+		tSettings.m_eRanker = eRanker;
+		tSettings.m_sRankerExpr = sExpr;
+		tSettings.m_sUDRanker = "";
+		tSettings.m_sUDRankerOpts = "";
 		return true;
 	};
 
@@ -1972,9 +1972,10 @@ static bool ParseStoredRanker ( const CSphString & sRanker, CSphQuery & tQuery, 
 
 	if ( sphPluginExists ( PLUGIN_RANKER, sRankerCstr ) )
 	{
-		tQuery.m_eRanker = SPH_RANK_PLUGIN;
-		tQuery.m_sUDRanker = sRanker;
-		tQuery.m_sRankerExpr = "";
+		tSettings.m_eRanker = SPH_RANK_PLUGIN;
+		tSettings.m_sUDRanker = sRanker;
+		tSettings.m_sRankerExpr = "";
+		tSettings.m_sUDRankerOpts = "";
 		return true;
 	}
 
@@ -1982,15 +1983,36 @@ static bool ParseStoredRanker ( const CSphString & sRanker, CSphQuery & tQuery, 
 	return false;
 }
 
-bool ApplyMutableQueryDefaults ( CSphQuery & tQuery, const MutableIndexSettings_c & tSettings, CSphString & sError )
+bool ParseStoredRanker ( const CSphString & sRanker, StoredQueryExecutionSettings_t & tSettings, CSphString & sError )
 {
-	if ( !tQuery.m_bExplicitBooleanMode )
-		tQuery.m_bDefaultBoolOr = tSettings.IsSet ( MutableName_e::BOOLEAN_MODE ) && tSettings.m_bDefaultBoolOr;
+	QueryExecutionSettings_t tQuerySettings;
+	if ( !ParseStoredRanker ( sRanker, tQuerySettings, sError ) )
+		return false;
 
-	if ( tQuery.m_bExplicitRanker || !tSettings.IsSet ( MutableName_e::RANKER ) || tSettings.m_sRanker.IsEmpty() )
-		return true;
+	tSettings.m_eRanker = tQuerySettings.m_eRanker;
+	tSettings.m_sRankerExpr = tQuerySettings.m_sRankerExpr;
+	tSettings.m_sUDRanker = tQuerySettings.m_sUDRanker;
+	tSettings.m_sUDRankerOpts = tQuerySettings.m_sUDRankerOpts;
+	return true;
+}
 
-	return ParseStoredRanker ( tSettings.m_sRanker, tQuery, sError );
+bool BuildQueryExecutionSettings ( const CSphQuery & tQuery, const MutableIndexSettings_c & tSettings, QueryExecutionSettings_t & tEffectiveSettings, CSphString & sError )
+{
+	(void)sError;
+	tEffectiveSettings = QueryExecutionSettings_t ( tQuery );
+
+	if ( !tQuery.m_bExplicitBooleanMode && tSettings.IsSet ( MutableName_e::BOOLEAN_MODE ) )
+		tEffectiveSettings.m_bDefaultBoolOr = tSettings.m_tQueryExecutionSettings.m_bDefaultBoolOr;
+
+	if ( !tQuery.m_bExplicitRanker && tSettings.IsSet ( MutableName_e::RANKER ) && !tSettings.m_sRanker.IsEmpty() )
+	{
+		tEffectiveSettings.m_eRanker = tSettings.m_tQueryExecutionSettings.m_eRanker;
+		tEffectiveSettings.m_sRankerExpr = tSettings.m_tQueryExecutionSettings.m_sRankerExpr;
+		tEffectiveSettings.m_sUDRanker = tSettings.m_tQueryExecutionSettings.m_sUDRanker;
+		tEffectiveSettings.m_sUDRankerOpts = tSettings.m_tQueryExecutionSettings.m_sUDRankerOpts;
+	}
+
+	return true;
 }
 
 void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitless )
@@ -11482,7 +11504,7 @@ bool CSphIndex_VLN::SplitQuery ( RUN && tRun, CSphQueryResult & tResult, const C
 }
 
 
-bool CSphIndex_VLN::RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, bool bCloneDict, const CSphQuery & tQuery, CSphQueryResult & tResult, VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tParsed, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const
+bool CSphIndex_VLN::RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, bool bCloneDict, const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResult & tResult, VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tParsed, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const
 {
 	return Threads::Coro::ContinueBool ( iStackNeed, [&] {
 
@@ -11511,7 +11533,7 @@ bool CSphIndex_VLN::RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, 
 			SetupExactDict ( pClonedDict );
 		}
 
-		bool bResult = ParsedMultiQuery ( tQuery, tResult, dSorters, *pTree, bCloneDict ? std::move (pClonedDict) : std::move (pDict), tArgs, &tNodeCache, tmMaxTimer );
+		bool bResult = ParsedMultiQuery ( tQuery, tQuerySettings, tResult, dSorters, *pTree, bCloneDict ? std::move (pClonedDict) : std::move (pDict), tArgs, &tNodeCache, tmMaxTimer );
 
 		PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), tArgs.m_bFinalizeSorters, tResult.m_pMeta->m_pProfile, tArgs.m_bModifySorterSchemas );
 
@@ -11524,19 +11546,19 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 {
 	auto & tMeta = *tResult.m_pMeta;
 	QueryProfile_c * pProfile = tMeta.m_pProfile;
-	CSphQuery tEffectiveQuery = tQuery;
-	if ( !ApplyMutableQueryDefaults ( tEffectiveQuery, m_tMutableSettings, tMeta.m_sError ) )
+	QueryExecutionSettings_t tQuerySettings;
+	if ( !BuildQueryExecutionSettings ( tQuery, m_tMutableSettings, tQuerySettings, tMeta.m_sError ) )
 		return false;
 
 	int64_t	tmMaxTimer = 0;
 	std::unique_ptr<MiniTimer_c> pTimerGuard;
-	if ( tEffectiveQuery.m_uMaxQueryMsec> 0 )
+	if ( tQuery.m_uMaxQueryMsec> 0 )
 	{
 		pTimerGuard = std::make_unique<MiniTimer_c>();
-		tmMaxTimer = pTimerGuard->Engage ( tEffectiveQuery.m_uMaxQueryMsec ); // max_query_time
+		tmMaxTimer = pTimerGuard->Engage ( tQuery.m_uMaxQueryMsec ); // max_query_time
 	}
 
-	const QueryParser_i * pQueryParser = tEffectiveQuery.m_pQueryParser;
+	const QueryParser_i * pQueryParser = tQuery.m_pQueryParser;
 	assert ( pQueryParser );
 
 	MEMORY ( MEM_DISK_QUERY );
@@ -11555,16 +11577,16 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 		dSorters.Sort ( CmpPSortersByRandom_fn() );
 
 	// fast path for scans
-	if ( pQueryParser->IsFullscan ( tEffectiveQuery ) )
+	if ( pQueryParser->IsFullscan ( tQuery ) )
 	{
 		if ( tArgs.m_iThreads>1 )
 			return SplitQuery (
 				[this, &tmMaxTimer]
 				( CSphQueryResult & tChunkResult, const CSphQuery & tQuery, VecTraits_T<ISphMatchSorter *> dLocalSorters, const CSphMultiQueryArgs & tMultiArgs )
 				{ return MultiScan ( tChunkResult, tQuery, dLocalSorters, tMultiArgs, tmMaxTimer ); },
-				tResult, tEffectiveQuery, dAllSorters, tArgs, tmMaxTimer );
+				tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
 
-		return MultiScan ( tResult, tEffectiveQuery, dSorters, tArgs, tmMaxTimer );
+		return MultiScan ( tResult, tQuery, dSorters, tArgs, tmMaxTimer );
 	}
 
 	SwitchProfile ( pProfile, SPH_QSTATE_DICT_SETUP );
@@ -11574,8 +11596,8 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	SetupExactDict ( pDict );
 
 	CSphVector<BYTE> dFiltered;
-	const BYTE * sModifiedQuery = (const BYTE *)tEffectiveQuery.m_sQuery.cstr();
-	FieldFilterOptions_t tFFOptions { tEffectiveQuery.m_eJiebaMode };
+	const BYTE * sModifiedQuery = (const BYTE *)tQuery.m_sQuery.cstr();
+	FieldFilterOptions_t tFFOptions { tQuery.m_eJiebaMode };
 
 	if ( m_pFieldFilter && sModifiedQuery && m_pFieldFilter->Clone ( &tFFOptions )->Apply ( sModifiedQuery, dFiltered, true ) )
 		sModifiedQuery = dFiltered.Begin();
@@ -11585,7 +11607,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 
 	assert ( m_pQueryTokenizer.Ptr() && m_pQueryTokenizerJson.Ptr() );
 	XQQuery_t tParsed;
-	if ( !pQueryParser->ParseQuery ( tParsed, (const char*)sModifiedQuery, &tEffectiveQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
+	if ( !pQueryParser->ParseQuery ( tParsed, (const char*)sModifiedQuery, &tQuery, tQuerySettings, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
 	{
 		// FIXME? might wanna reset profile to unknown state
 		tMeta.m_sError = tParsed.m_sParseError;
@@ -11600,9 +11622,9 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 				[this, &tmMaxTimer]
 				( CSphQueryResult & tChunkResult, const CSphQuery & tQuery, VecTraits_T<ISphMatchSorter *> dLocalSorters, const CSphMultiQueryArgs & tMultiArgs )
 				{ return MultiScan ( tChunkResult, tQuery, dLocalSorters, tMultiArgs, tmMaxTimer ); },
-				tResult, tEffectiveQuery, dAllSorters, tArgs, tmMaxTimer );
+				tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
 
-		return MultiScan ( tResult, tEffectiveQuery, dSorters, tArgs, tmMaxTimer );
+		return MultiScan ( tResult, tQuery, dSorters, tArgs, tmMaxTimer );
 	}
 
 	if ( !tParsed.m_sParseWarning.IsEmpty() )
@@ -11610,12 +11632,12 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 
 	// transform query if needed (quorum transform, etc.)
 	SwitchProfile ( pProfile, SPH_QSTATE_TRANSFORMS );
-	TransformExtendedQueryArgs_t tTranformArgs { GetBooleanSimplify ( tEffectiveQuery ), tParsed.m_bNeedPhraseTransform, this };
+	TransformExtendedQueryArgs_t tTranformArgs { GetBooleanSimplify ( tQuery ), tParsed.m_bNeedPhraseTransform, this };
 	if ( !sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, tMeta.m_sError, tTranformArgs, tMeta.m_sWarning ) )
 		return false;
 
 	bool bWordDict = pDict->GetSettings().m_bWordDict;
-	int iExpandKeywords = ExpandKeywords ( m_tMutableSettings.m_iExpandKeywords, tEffectiveQuery.m_eExpandKeywords, m_tSettings, bWordDict );
+	int iExpandKeywords = ExpandKeywords ( m_tMutableSettings.m_iExpandKeywords, tQuery.m_eExpandKeywords, m_tSettings, bWordDict );
 	if ( iExpandKeywords!=KWE_DISABLED )
 	{
 		sphQueryExpandKeywords ( &tParsed.m_pRoot, m_tSettings, iExpandKeywords, bWordDict );
@@ -11627,12 +11649,12 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 
 	// expanding prefix in word dictionary case
 	CSphScopedPayload tPayloads;
-	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, tMeta, &tPayloads, tEffectiveQuery.m_uDebugFlags, tEffectiveQuery.m_iExpansionLimit );
+	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, tMeta, &tPayloads, tQuery.m_uDebugFlags, tQuery.m_iExpansionLimit );
 	if ( !pPrefixed )
 		return false;
 
 	tParsed.m_pRoot = pPrefixed;
-	tParsed.m_bNeedSZlist = tEffectiveQuery.m_bZSlist;
+	tParsed.m_bNeedSZlist = tQuery.m_bZSlist;
 
 	int iStackNeed = ConsiderStack ( tParsed.m_pRoot, tMeta.m_sError );
 	if ( !iStackNeed  )
@@ -11640,12 +11662,12 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 
 	if ( tArgs.m_iThreads>1 )
 		return SplitQuery (
-			[this, iStackNeed, &pDict, &tParsed, &tmMaxTimer]
+			[this, iStackNeed, &pDict, &tParsed, &tQuerySettings, &tmMaxTimer]
 			( CSphQueryResult & tChunkResult, const CSphQuery & tQuery, VecTraits_T<ISphMatchSorter *> dLocalSorters, const CSphMultiQueryArgs & tMultiArgs )
-			{ return RunParsedMultiQuery ( iStackNeed, pDict, true, tQuery, tChunkResult, dLocalSorters, tParsed, tMultiArgs, tmMaxTimer ); },
-			tResult, tEffectiveQuery, dAllSorters, tArgs, tmMaxTimer );
+			{ return RunParsedMultiQuery ( iStackNeed, pDict, true, tQuery, tQuerySettings, tChunkResult, dLocalSorters, tParsed, tMultiArgs, tmMaxTimer ); },
+			tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
 
-	return RunParsedMultiQuery ( iStackNeed, pDict, false, tEffectiveQuery, tResult, dSorters, tParsed, tArgs, tmMaxTimer );
+	return RunParsedMultiQuery ( iStackNeed, pDict, false, tQuery, tQuerySettings, tResult, dSorters, tParsed, tArgs, tmMaxTimer );
 }
 
 
@@ -11661,6 +11683,14 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 
 	assert ( ppSorters );
 
+	CSphFixedVector<QueryExecutionSettings_t> dQuerySettings ( iQueries );
+	for ( int i=0; i<iQueries; ++i )
+	{
+		auto & tMeta = *pResults[i].m_pMeta;
+		if ( !BuildQueryExecutionSettings ( pQueries[i], m_tMutableSettings, dQuerySettings[i], tMeta.m_sError ) )
+			tMeta.m_iMultiplier = -1;
+	}
+
 	DictRefPtr_c pDict = GetStatelessDict ( m_pDict );
 	SetupStarDict ( pDict );
 	SetupExactDict ( pDict );
@@ -11674,8 +11704,12 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 	for ( int i=0; i<iQueries; ++i )
 	{
 		const auto & tCurQuery = pQueries[i];
+		const auto & tCurQuerySettings = dQuerySettings[i];
 		auto & tCurResult = pResults[i];
 		auto & tMeta = *tCurResult.m_pMeta;
+
+		if ( tMeta.m_iMultiplier==-1 )
+			continue;
 
 		// nothing to do without a sorter
 		if ( !ppSorters[i] )
@@ -11703,7 +11737,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 		const QueryParser_i * pQueryParser = tCurQuery.m_pQueryParser;
 		assert ( pQueryParser );
 
-		if ( pQueryParser->ParseQuery ( dXQ[i], tCurQuery.m_sQuery.cstr(), &tCurQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
+		if ( pQueryParser->ParseQuery ( dXQ[i], tCurQuery.m_sQuery.cstr(), &tCurQuery, tCurQuerySettings, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
 		{
 			// transform query if needed (quorum transform, keyword expansion, etc.)
 			TransformExtendedQueryArgs_t tTranformArgs { GetBooleanSimplify ( tCurQuery ), dXQ[i].m_bNeedPhraseTransform, this };
@@ -11766,8 +11800,12 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 		for ( int j=0; j<iQueries; ++j )
 		{
 			const auto & tCurQuery = pQueries[j];
+			const auto & tCurQuerySettings = dQuerySettings[j];
 			auto & tCurResult = pResults[j];
 			auto & tMeta = *tCurResult.m_pMeta;
+
+			if ( tMeta.m_iMultiplier==-1 )
+				continue;
 
 			// fullscan case
 			if ( tCurQuery.m_sQuery.IsEmpty() )
@@ -11778,7 +11816,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 			MiniTimer_c tTimerGuard;
 			int64_t tmMaxTimer = tTimerGuard.Engage ( tCurQuery.m_uMaxQueryMsec ); // max_query_time
 
-			if ( dXQ[j].m_pRoot && ppSorters[j] && ParsedMultiQuery ( tCurQuery, tCurResult, { ppSorters+j, 1 }, dXQ[j], pDict, tArgs, &tNodeCache, tmMaxTimer ) )
+			if ( dXQ[j].m_pRoot && ppSorters[j] && ParsedMultiQuery ( tCurQuery, tCurQuerySettings, tCurResult, { ppSorters+j, 1 }, dXQ[j], pDict, tArgs, &tNodeCache, tmMaxTimer ) )
 			{
 				bResult = true;
 				tMeta.m_iMultiplier = iCommonSubtrees ? iQueries : 1;
@@ -11866,7 +11904,7 @@ static void SetupRowIdBoundaries ( const CSphVector<CSphFilterSettings> & dFilte
 }
 
 
-bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter *> & dSorters, const XQQuery_t & tXQ, DictRefPtr_c pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const
+bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter *> & dSorters, const XQQuery_t & tXQ, DictRefPtr_c pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const
 {
 	assert ( !tQuery.m_sQuery.IsEmpty() && tQuery.m_eMode!=SPH_MATCH_FULLSCAN ); // scans must go through MultiScan()
 	assert ( tArgs.m_iTag>=0 );
@@ -11897,7 +11935,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 		return false;
 	}
 
-	CSphQueryContext tCtx(tQuery);
+	CSphQueryContext tCtx ( tQuery, tQuerySettings );
 	CreateFilterContext_t tFlx;
 	const ISphSchema * pMaxSorterSchema = nullptr;
 	CSphVector<const ISphSchema *> dSorterSchemas;
@@ -11962,11 +12000,11 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tXQ, tQuery, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
+	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tXQ, tQuery, tQuerySettings, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
 	if ( !pRanker )
 		return false;
 
-	if ( ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE ) && tQuery.m_eRanker!=SPH_RANK_EXPR )
+	if ( ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE ) && tQuerySettings.m_eRanker!=SPH_RANK_EXPR )
 		tMeta.m_sWarning.SetSprintf ( "packedfactors() and bm25f() requires using an expression ranker" );
 
 	tCtx.SetupExtraData ( pRanker.get(), dSorters.GetLength()==1 ? dSorters[0] : nullptr );

@@ -764,7 +764,10 @@ static void AddDocids ( CSphVector<CSphQueryItem> & dItems )
 void PrepareQueryEmulation ( CSphQuery * pQuery )
 {
 	if ( pQuery->m_eMode == SPH_MATCH_BOOLEAN )
+	{
 		pQuery->m_eRanker = SPH_RANK_NONE;
+		pQuery->m_bExplicitRanker = true;
+	}
 
 	if ( pQuery->m_eMode == SPH_MATCH_FULLSCAN )
 		pQuery->m_sQuery = "";
@@ -782,10 +785,27 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 	if ( pQuery->m_eMode==SPH_MATCH_ANY || pQuery->m_eMode==SPH_MATCH_PHRASE )
 		*szRes++ = '\"';
 
+	const bool bMatchAll = ( pQuery->m_eMode==SPH_MATCH_ALL );
+	bool bNeedAndSep = false;
+
 	if ( iQueryLen )
 	{
 		while ( ( c = *szQuery++ )!=0 )
 		{
+			if ( bMatchAll && isspace ( static_cast<unsigned char>(c) ) )
+			{
+				bNeedAndSep = true;
+				continue;
+			}
+
+			if ( bMatchAll && bNeedAndSep && szRes!=(char*)pQuery->m_sQuery.cstr() )
+			{
+				*szRes++ = ' ';
+				*szRes++ = '&';
+				*szRes++ = ' ';
+				bNeedAndSep = false;
+			}
+
 			// must be in sync with EscapeString (php api)
 			const char sMagics[] = "<\\()|-!@~\"&/^$=";
 			for ( const char * s = sMagics; *s; s++ )
@@ -798,11 +818,14 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 		}
 	}
 
+	pQuery->m_bExplicitBooleanMode = true;
+	pQuery->m_bDefaultBoolOr = false;
+
 	switch ( pQuery->m_eMode )
 	{
-		case SPH_MATCH_ALL:		pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes = '\0'; break;
-		case SPH_MATCH_ANY:		pQuery->m_eRanker = SPH_RANK_MATCHANY; strncpy ( szRes, "\"/1", 8 ); break;
-		case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes++ = '\"'; *szRes = '\0'; break;
+		case SPH_MATCH_ALL:		pQuery->m_eRanker = SPH_RANK_PROXIMITY; pQuery->m_bExplicitRanker = true; *szRes = '\0'; break;
+		case SPH_MATCH_ANY:		pQuery->m_eRanker = SPH_RANK_MATCHANY; pQuery->m_bExplicitRanker = true; strncpy ( szRes, "\"/1", 8 ); break;
+		case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; pQuery->m_bExplicitRanker = true; *szRes++ = '\"'; *szRes = '\0'; break;
 		default:				return;
 	}
 }
@@ -840,6 +863,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	tQuery.m_eMode = (ESphMatchMode) tReq.GetInt ();
 	tQuery.m_eRanker = (ESphRankMode) tReq.GetInt ();
 	tQuery.m_bExplicitRanker = !!( uFlags & QFLAG_EXPLICIT_RANKER );
+	if ( !tQuery.m_bExplicitRanker && uMasterVer<32 )
+		tQuery.m_bExplicitRanker = ( tQuery.m_eRanker!=SPH_RANK_DEFAULT );
 	if ( uMasterVer>=32 )
 	{
 		tQuery.m_bExplicitBooleanMode = !!( uFlags & QFLAG_EXPLICIT_BOOLEAN_MODE );

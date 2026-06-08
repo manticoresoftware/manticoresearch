@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>invalid config defaults must fail at indexer load time</name>
+<skip_db/>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+}
+
+source src_ok
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data.xml
+	xmlpipe_field = title
+}
+
+index ok_idx
+{
+	source = src_ok
+	path = <data_path/>/ok_idx
+}
+</config>
+
+<custom_test><![CDATA[
+$results = array();
+$orig_conf = implode ( '', file ( testdir_config() ) );
+
+global $index_data_path;
+$runInvalidIndexer = function ( $name, $extraBlock, $target ) use ( &$results, $orig_conf )
+{
+	file_put_contents ( testdir_config(), $orig_conf . "\n" . $extraBlock . "\n" );
+	$error = '';
+	$ret = RunIndexer ( $error, $target );
+	$results[] = $name;
+	$results[] = "ret=$ret";
+	$results[] = trim ( $error );
+	file_put_contents ( testdir_config(), $orig_conf );
+};
+
+$runInvalidIndexer (
+	'invalid ranker in config',
+	"index bad_ranker\n{\n\tsource = src_ok\n\tpath = $index_data_path/bad_ranker\n\tranker = typo\n}\n",
+	'bad_ranker'
+);
+
+$runInvalidIndexer (
+	'invalid uppercase boolean_mode in config',
+	"index bad_boolean_upper\n{\n\tsource = src_ok\n\tpath = $index_data_path/bad_boolean_upper\n\tboolean_mode = OR\n}\n",
+	'bad_boolean_upper'
+);
+
+$runInvalidIndexer (
+	'invalid typo boolean_mode in config',
+	"index bad_boolean_typo\n{\n\tsource = src_ok\n\tpath = $index_data_path/bad_boolean_typo\n\tboolean_mode = typo\n}\n",
+	'bad_boolean_typo'
+);
+
+]]></custom_test>
+
+</test>

@@ -8382,9 +8382,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	QueryProfile_c * pProfiler = tMeta.m_pProfile;
 	CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_DICT_SETUP );
 
-	QueryExecutionSettings_t tQuerySettings;
-	if ( !BuildQueryExecutionSettings ( tQuery, m_tMutableSettings, tQuerySettings, tMeta.m_sError ) )
-		return false;
+	QueryExecutionSettings_t tQuerySettings = BuildQueryExecutionSettings ( tQuery, m_tMutableSettings );
 
 	CSphQuery tEffectiveQuery = tQuery;
 	tEffectiveQuery.m_eMode = SPH_MATCH_EXTENDED2;

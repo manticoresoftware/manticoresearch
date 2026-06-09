@@ -1983,23 +1983,9 @@ bool ParseStoredRanker ( const CSphString & sRanker, QueryExecutionSettings_t & 
 	return false;
 }
 
-bool ParseStoredRanker ( const CSphString & sRanker, StoredQueryExecutionSettings_t & tSettings, CSphString & sError )
+QueryExecutionSettings_t BuildQueryExecutionSettings ( const CSphQuery & tQuery, const MutableIndexSettings_c & tSettings )
 {
-	QueryExecutionSettings_t tQuerySettings;
-	if ( !ParseStoredRanker ( sRanker, tQuerySettings, sError ) )
-		return false;
-
-	tSettings.m_eRanker = tQuerySettings.m_eRanker;
-	tSettings.m_sRankerExpr = tQuerySettings.m_sRankerExpr;
-	tSettings.m_sUDRanker = tQuerySettings.m_sUDRanker;
-	tSettings.m_sUDRankerOpts = tQuerySettings.m_sUDRankerOpts;
-	return true;
-}
-
-bool BuildQueryExecutionSettings ( const CSphQuery & tQuery, const MutableIndexSettings_c & tSettings, QueryExecutionSettings_t & tEffectiveSettings, CSphString & sError )
-{
-	(void)sError;
-	tEffectiveSettings = QueryExecutionSettings_t ( tQuery );
+	QueryExecutionSettings_t tEffectiveSettings ( tQuery );
 
 	if ( !tQuery.m_bExplicitBooleanMode && tSettings.IsSet ( MutableName_e::BOOLEAN_MODE ) )
 		tEffectiveSettings.m_bDefaultBoolOr = tSettings.m_tQueryExecutionSettings.m_bDefaultBoolOr;
@@ -2012,7 +1998,7 @@ bool BuildQueryExecutionSettings ( const CSphQuery & tQuery, const MutableIndexS
 		tEffectiveSettings.m_sUDRankerOpts = tSettings.m_tQueryExecutionSettings.m_sUDRankerOpts;
 	}
 
-	return true;
+	return tEffectiveSettings;
 }
 
 void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitless )
@@ -11546,9 +11532,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 {
 	auto & tMeta = *tResult.m_pMeta;
 	QueryProfile_c * pProfile = tMeta.m_pProfile;
-	QueryExecutionSettings_t tQuerySettings;
-	if ( !BuildQueryExecutionSettings ( tQuery, m_tMutableSettings, tQuerySettings, tMeta.m_sError ) )
-		return false;
+	QueryExecutionSettings_t tQuerySettings = BuildQueryExecutionSettings ( tQuery, m_tMutableSettings );
 
 	int64_t	tmMaxTimer = 0;
 	std::unique_ptr<MiniTimer_c> pTimerGuard;
@@ -11685,11 +11669,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 
 	CSphFixedVector<QueryExecutionSettings_t> dQuerySettings ( iQueries );
 	for ( int i=0; i<iQueries; ++i )
-	{
-		auto & tMeta = *pResults[i].m_pMeta;
-		if ( !BuildQueryExecutionSettings ( pQueries[i], m_tMutableSettings, dQuerySettings[i], tMeta.m_sError ) )
-			tMeta.m_iMultiplier = -1;
-	}
+		dQuerySettings[i] = BuildQueryExecutionSettings ( pQueries[i], m_tMutableSettings );
 
 	DictRefPtr_c pDict = GetStatelessDict ( m_pDict );
 	SetupStarDict ( pDict );

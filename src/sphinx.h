@@ -747,7 +747,7 @@ bool ParseSelectList ( CSphString & sError, CSphQuery &pResult );
 
 void SetQueryDefaultsExt2 ( CSphQuery & tQuery );
 bool ParseStoredRanker ( const CSphString & sRanker, QueryExecutionSettings_t & tSettings, CSphString & sError );
-bool BuildQueryExecutionSettings ( const CSphQuery & tQuery, const MutableIndexSettings_c & tSettings, QueryExecutionSettings_t & tEffectiveSettings, CSphString & sError );
+QueryExecutionSettings_t BuildQueryExecutionSettings ( const CSphQuery & tQuery, const MutableIndexSettings_c & tSettings );
 
 /// some low-level query stats
 struct CSphQueryStats

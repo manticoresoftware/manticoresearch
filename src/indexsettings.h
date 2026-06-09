@@ -47,8 +47,6 @@ struct StoredQueryExecutionSettings_t
 	}
 };
 
-bool ParseStoredRanker ( const CSphString & sRanker, StoredQueryExecutionSettings_t & tSettings, CSphString & sError );
-
 enum
 {
 	// where was TOKENIZER_SBCS=1 once

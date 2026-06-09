@@ -1416,18 +1416,21 @@ static bool ParseStoredBooleanMode ( const CSphString & sValue, bool & bDefaultB
 
 static bool ValidateStoredRanker ( const CSphString & sValue, CSphString & sError )
 {
-	StoredQueryExecutionSettings_t tSettings;
+	QueryExecutionSettings_t tSettings;
 	return ParseStoredRanker ( sValue, tSettings, sError );
 }
 
 bool MutableIndexSettings_c::SetStoredRanker ( const CSphString & sRanker, CSphString & sError )
 {
-	StoredQueryExecutionSettings_t tRankerSettings;
+	QueryExecutionSettings_t tRankerSettings;
 	if ( !ParseStoredRanker ( sRanker, tRankerSettings, sError ) )
 		return false;
 
 	m_sRanker = sRanker;
-	m_tQueryExecutionSettings.SetRanker ( tRankerSettings );
+	m_tQueryExecutionSettings.m_eRanker = tRankerSettings.m_eRanker;
+	m_tQueryExecutionSettings.m_sRankerExpr = tRankerSettings.m_sRankerExpr;
+	m_tQueryExecutionSettings.m_sUDRanker = tRankerSettings.m_sUDRanker;
+	m_tQueryExecutionSettings.m_sUDRankerOpts = tRankerSettings.m_sUDRankerOpts;
 	return true;
 }
 

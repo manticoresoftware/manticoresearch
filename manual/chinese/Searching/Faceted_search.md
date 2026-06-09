@@ -15,7 +15,7 @@
 分面值可以来自属性、JSON 属性内的 JSON 属性或表达式。分面值也可以使用别名，但**别名在所有结果集（主查询结果集和其他分面结果集）中必须是唯一的**。分面值源自聚合的属性/表达式，但也可以来自另一个属性/表达式。
 
 ```sql
-FACET {expr_list} [BY {expr_list}] [ALL FILTERS | FILTERS {expr_list} | EXCLUDE FILTERS {expr_list}] [MODE {strict | auto | max}] [DISTINCT {field_name}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
+FACET {expr_list} [BY {expr_list}] [ALL FILTERS | FILTERS {expr_list} | EXCLUDE FILTERS {expr_list}] [ZEROES] [MODE {strict | auto | max}] [DISTINCT {field_name}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
 ```
 
 多个分面声明必须用空格分隔。
@@ -44,10 +44,11 @@ FACET {expr_list} [BY {expr_list}] [ALL FILTERS | FILTERS {expr_list} | EXCLUDE 
 * `field` 值必须包含要进行分面的属性或表达式的名称
 * 可选的 `size` 指定结果中包含的最大桶数。未指定时，继承主查询的限制。更多详细信息可以在[分面结果大小](../Searching/Faceted_search.md#Size-of-facet-result)部分找到。
 * 可选的 `sort` 指定一个属性数组和/或附加属性，使用与[主查询中的"sort"参数](../Searching/Sorting_and_ranking.md#Sorting-via-JSON)相同的语法。
-* 可选的顶级`facet_filter_mode`控制所有聚合如何继承主查询的过滤器。支持的值为`strict`、`auto`和`max`。
-* 可选的每个聚合`mode`覆盖该聚合继承的模式。支持的值为`strict`、`auto`和`max`。`filter_mode`保留为向后兼容的别名。
-* 可选的每个聚合`filters`明确列出应应用于该聚合的主查询属性过滤器。
-* 可选的每个聚合`exclude_filters`明确列出不应应用于该聚合的主查询属性过滤器。
+* 可选的顶层 `facet_filter_mode` 用于控制所有聚合如何继承主查询中的过滤条件。支持的值是 `strict`、`auto` 和 `max`。这是 SQL 中的查询级设置（`OPTION facet_filter_mode='...'`），也是 JSON 中的顶层设置。
+* 可选的按聚合级别 `filter_mode` 用于覆盖该聚合继承到的模式。支持的值是 `strict`、`auto` 和 `max`。这个键只在 JSON 中使用，不是 `facet_filter_mode` 的别名。在 SQL 中，对应的按 facet 覆盖方式是在 `FACET` 子句里使用 `MODE` 关键字。
+* 可选的按聚合级别 `filters` 用于显式列出哪些主查询属性过滤条件应该应用到该聚合。在 SQL 中，对应的子句是 `FILTERS ...`。
+* 可选的按聚合级别 `exclude_filters` 用于显式列出哪些主查询属性过滤条件不应该应用到该聚合。这个键只在 JSON 中使用；在 SQL 中，对应的子句是 `EXCLUDE FILTERS ...`。
+* 可选的按聚合级别 `zeroes` 用于在 `max` 模式下启用零计数 bucket。在 SQL 中，对应的按 facet 关键字是 `ZEROES`。如果你想在 SQL `max` 模式下显示过滤后的可见计数，同时又想保留更宽泛的零计数 bucket，请使用 `OPTION facet_filter_mode='max' ... FACET ... ALL FILTERS ZEROES`。
 * `auto`和`max`属性结果集可以包含一个`status`桶标记。返回的值为`selected`、`available`和`unavailable`。
 
 结果集将包含一个 `aggregations` 节点，其中包含返回的分面，`key` 是聚合值，`doc_count` 是聚合计数。
@@ -779,7 +780,7 @@ INSERT INTO facetdemo(price, brand_id, title, brand_name, property, j, categorie
 (400, 10, 'Product Three One', 'Brand Ten', 'Four_Three', '{"prop1":69,"prop2":19,"prop3":"One"}', (13,14)),
 (855, 1, 'Product Seven Two', 'Brand One', 'Eight_Seven', '{"prop1":63,"prop2":78,"prop3":"One"}', (10,11,12)),
 (31, 9, 'Product Four One', 'Brand Nine', 'Ten_Four', '{"prop1":79,"prop2":42,"prop3":"One"}', (12,13,14));
---> 
+-->
 
 <!-- intro -->
 ##### SQL:
@@ -2404,20 +2405,20 @@ POST /search -d '
   - 从宽泛的基础查询中统计桶，并为每个桶添加 `status` 标记
 
 手动覆盖：
-- `all filters`（仅限 SQL）
+- SQL `ALL FILTERS`
   - 将主查询的所有过滤器应用于该分面
-- `filters`
+- SQL `FILTERS ...` / JSON `filters`
   - 仅应用列出的主查询过滤器到该分面
-- `exclude_filters`
+- SQL `EXCLUDE FILTERS ...` / JSON `exclude_filters`
   - 应用主查询的所有过滤器，但排除列出的过滤器
 
 简要说明：
 - `strict` = 应用所有内容
 - `auto` = 应用所有内容，但排除该分面的过滤器 + `status`
 - `max` = 宽泛的基础查询统计 + `status`
-- `all filters`（仅限 SQL）= 应用所有内容
-- `filters` = 仅应用这些过滤器
-- `exclude_filters` = 应用所有内容，但排除这些过滤器
+- SQL `ALL FILTERS` = 应用全部
+- SQL `FILTERS` = 只应用这些过滤条件
+- JSON `exclude_filters` / SQL `EXCLUDE FILTERS` = 应用除这些之外的全部过滤条件
 
 性能说明：
 - `max` 是最昂贵的分面模式，因为它需要收集宽泛的分面统计和严格/当前可用性元数据
@@ -2482,12 +2483,22 @@ FACET sku FILTERS color_id, size_id
 FACET brand_id EXCLUDE FILTERS color_id;
 ```
 
-每个分面的子句含义：
+按 facet 的 SQL 子句含义如下：
 - `ALL FILTERS` — 将主查询的所有过滤器应用于该分面
 - `FILTERS color_id, size_id` — 仅将 `color_id` 和 `size_id` 过滤器应用于该分面
 - `EXCLUDE FILTERS color_id` — 将主查询的所有过滤器（除了 `color_id`）应用于该分面
+- `MODE max` — 覆盖这个 SQL facet 继承来的 facet 模式
+- `ZEROES` — 在 SQL `max` 模式下，即使可见的 facet 计数为 `0`，也保留更大 `max` bucket 集合中的 bucket；在 JSON 中，对应的按聚合级别键是 `"zeroes": true`
 
-这些子句会覆盖来自 `facet_filter_mode` 或 `MODE` 的过滤范围。例如，`FACET color_id ALL FILTERS MODE max` 仍会发出 `status`，但其计数使用所有主查询过滤器，而不是宽泛默认的 `max` 范围。
+SQL 和 JSON 的命名略有不同：
+- SQL 使用查询选项 `facet_filter_mode`、按 facet 关键字 `MODE`，以及子句 `FILTERS` / `EXCLUDE FILTERS`
+- JSON 使用顶层键 `facet_filter_mode`、按聚合级别键 `filter_mode` / `zeroes`，以及键 `filters` / `exclude_filters`
+
+没有查询级别的 `filter_mode` 别名。请使用 `facet_filter_mode` 作为继承的查询/顶层默认值，使用 `MODE` 作为单个 SQL facet 的设置，使用 `filter_mode` 作为单个 JSON 聚合的设置。
+
+`ZEROES` 不是 `MODE max` 的替代；它是与 `max` 模式配合使用的。所以如果查询已经设置了 `OPTION facet_filter_mode='max'`，SQL 写法就是 `FACET color_id ALL FILTERS ZEROES`。如果查询默认仍是 `strict` 或 `auto`，就需要在该 facet 上显式启用 `max`，写成 `FACET color_id ALL FILTERS ZEROES MODE max`。
+
+这些子句会覆盖原本会来自 `facet_filter_mode` 或 SQL `MODE` 的过滤范围。例如，在 `OPTION facet_filter_mode='max'` 下，`FACET color_id ALL FILTERS ZEROES` 仍然会输出 `status`，其可见计数会使用主查询的所有过滤条件，而 `ZEROES` 会保留那些在过滤后计数中缺失的、更宽泛的 `max` bucket，并将它们显示为 `count(*) = 0` 的行。
 
 在 `auto` 和 `max` 模式下，SQL 分面结果会添加一个 `status` 列。`selected` 表示该桶值已经在同分面值过滤器中存在。`available` 表示选择该桶可以产生结果；这包括扩展现有同分面过滤器的同级值。在 `max` 模式下，`unavailable` 表示该桶在宽泛计数范围内存在，但选择它将不会产生结果。`max` 是最昂贵的模式，因此在大型数据集或分面密集的查询中，仅在需要包含不可用值的宽泛桶时才启用它。
 
@@ -2573,7 +2584,7 @@ POST /search -d '
   "aggs": {
     "colors": {
       "terms": { "field": "color_id" },
-      "mode": "strict"
+      "filter_mode": "strict"
     },
     "sku": {
       "terms": { "field": "sku" },
@@ -2588,8 +2599,8 @@ POST /search -d '
 ```
 
 注：
-- 在 SQL 中，`MODE` 会覆盖查询级别的 `facet_filter_mode`，适用于一个分面
-- 在 JSON 中，`mode` 或 `filter_mode` 会覆盖顶层的 `facet_filter_mode`，适用于一个聚合
+- 在 SQL 中，`MODE` 会覆盖单个 facet 的查询级 `facet_filter_mode`，而 `ZEROES` 会让该 facet 的零计数 `max` bucket 继续可见
+- 在 JSON 中，`filter_mode` 会覆盖单个聚合的顶层 `facet_filter_mode`，而 `"zeroes": true` 会为该聚合启用相同的零计数 `max` bucket 行为
 - 对于显式值过滤器（如 `=` 和 `IN`），所选值会以 `status=selected` 报告。
 - 当前不支持的同字段过滤器（如范围）不会参与已选值检测
 - 分面本地的过滤器作用域支持仅连接的属性过滤器。复杂的布尔过滤树不会按分面重写。

@@ -2930,16 +2930,6 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 		if ( !SetupFacetDistinct ( dStmt, sError ) )
 			return false;
 	}
-	else
-	{
-		// need to keep same wide result set schema
-		if ( dStmt.GetLength()>1 )
-		{
-			const CSphString & sDistinct = dStmt[0].m_tQuery.m_sGroupDistinct;
-			for ( int i=1; i<dStmt.GetLength(); i++ )
-				dStmt[i].m_tQuery.m_sGroupDistinct = sDistinct;
-		}
-	}
 
 	return true;
 }

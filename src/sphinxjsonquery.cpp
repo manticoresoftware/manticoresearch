@@ -2718,7 +2718,17 @@ static const CSphColumnInfo * GetJsonFacetStatusAttr ( const JsonAggr_t & tAggr,
 	return tKey.m_pKey;
 }
 
-static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, ResultSetFormat_e eFormat, const sph::StringSet & hDatetime, int iNow, const CSphString & sDistinctName, facet::FacetStatusSources_t tStatus, JsonEscapedBuilder & tOut )
+static void ZeroJsonFacetCountColumns ( CSphMatch & tMatch, const ISphSchema & tSchema )
+{
+	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
+	{
+		const auto & tAttr = tSchema.GetAttr(i);
+		if ( tAttr.m_sName=="count(*)" || tAttr.m_sName=="@groupbycount" || tAttr.m_sName=="distinct" || tAttr.m_sName=="_@distinct" )
+			tMatch.SetAttr ( tAttr.m_tLocator, 0 );
+	}
+}
+
+static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, ResultSetFormat_e eFormat, const sph::StringSet & hDatetime, int iNow, const CSphString & sDistinctName, facet::FacetStatusSources_t tStatus, JsonEscapedBuilder & tOut, const AggrResult_t * pZeroesRes = nullptr )
 {
 	if ( tAggr.m_eAggrFunc==Aggr_e::COUNT )
 		return;
@@ -2770,8 +2780,7 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 		{
 			JsonEscapedBuilder tPrefixBucketBlock;
 			JsonEscapedBuilder tBufMatch;
-
-			for ( const CSphMatch & tMatch : dMatches )
+			auto fnEncodeBucket = [&] ( const CSphMatch & tMatch )
 			{
 				RangeKeyDesc_t * pRange = nullptr;
 				if ( tAggr.m_eAggrFunc==Aggr_e::RANGE || tAggr.m_eAggrFunc==Aggr_e::DATE_RANGE )
@@ -2780,7 +2789,7 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 					pRange = tKey.m_tRangeNames ( iBucket );
 					// lets skip bucket with out of ranges index, ie _all
 					if ( !pRange )
-						continue;
+						return;
 				}
 
 				// bucket item is array item or dict item
@@ -2799,6 +2808,27 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 				}
 				if ( pDistinct )
 					JsonObjAddAttr ( tOut, pDistinct->m_eAttrType, pDistinct->m_sName.cstr(), tMatch, pDistinct->m_tLocator );
+			};
+
+			for ( const CSphMatch & tMatch : dMatches )
+				fnEncodeBucket ( tMatch );
+
+			if ( pZeroesRes && !pZeroesRes->m_dResults.IsEmpty() )
+			{
+				facet::FacetBucketSet_t tVisibleBuckets;
+				const auto * pVisibleBuckets = facet::CollectFacetAvailableFilters ( tRes, tKey.m_pKey->m_sName, dMatches, tVisibleBuckets );
+				auto dZeroMatches = GetResultMatches ( pZeroesRes->m_dResults.First().m_dMatches, pZeroesRes->m_tSchema, pZeroesRes->m_iOffset, pZeroesRes->m_iCount, tAggr );
+				for ( const auto & tZeroMatch : dZeroMatches )
+				{
+					if ( pVisibleBuckets && facet::MatchBucketSet ( tZeroMatch, pZeroesRes->m_tSchema, *pVisibleBuckets ) )
+						continue;
+
+					CSphMatch tOutMatch;
+					tOutMatch.Reset ( tRes.m_tSchema.GetDynamicSize() );
+					tOutMatch.Combine ( tZeroMatch, tRes.m_tSchema.GetDynamicSize() );
+					ZeroJsonFacetCountColumns ( tOutMatch, tRes.m_tSchema );
+					fnEncodeBucket ( tOutMatch );
+				}
 			}
 		}
 	
@@ -3293,7 +3323,10 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 					}
 				}
 
-				EncodeAggr ( tAggr, i, dRes[iResultSet], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tStatus, tOut );
+				const AggrResult_t * pZeroesRes = nullptr;
+				if ( tAggr.m_iZeroesResult>=0 && tAggr.m_iZeroesResult<dRes.GetLength() )
+					pZeroesRes = &dRes[tAggr.m_iZeroesResult];
+				EncodeAggr ( tAggr, i, dRes[iResultSet], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tStatus, tOut, pZeroesRes );
 			}
 			tOut.FinishBlock ( false ); // aggregations obj
 		}
@@ -4912,13 +4945,19 @@ static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<Js
 				continue;
 			}
 
-			if ( strcmp ( tAggsItem.Name(), "filter_mode" )==0 || strcmp ( tAggsItem.Name(), "mode" )==0 )
+			if ( strcmp ( tAggsItem.Name(), "filter_mode" )==0 )
 			{
 				FacetFilterMode_e eMode = FacetFilterMode_e::Strict;
 				if ( !ParseFacetFilterMode ( tAggsItem, eMode, sError, tAggsItem.Name() ) )
 					return false;
 				tItem.m_tFacetFilter.m_tMode = eMode;
 				continue;
+			}
+
+			if ( strcmp ( tAggsItem.Name(), "mode" )==0 )
+			{
+				sError = R"("mode" is not supported in JSON aggregations; use "filter_mode" instead)";
+				return false;
 			}
 
 			if ( strcmp ( tAggsItem.Name(), "filters" )==0 )
@@ -4946,6 +4985,17 @@ static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<Js
 					return false;
 				bGotExcludeFilters = true;
 				tItem.m_tFacetFilter.m_eClause = FacetFilterClause_e::Exclude;
+				continue;
+			}
+
+			if ( strcmp ( tAggsItem.Name(), "zeroes" )==0 )
+			{
+				if ( !tAggsItem.IsBool() )
+				{
+					sError.SetSprintf ( "\"%s\" property should be a boolean", tAggsItem.Name() );
+					return false;
+				}
+				tItem.m_tFacetFilter.m_bZeroes = tAggsItem.IntVal()!=0;
 				continue;
 			}
 

@@ -132,8 +132,10 @@ jobs:
   # Pre-warm a shared HuggingFace model cache once, so the 20-way CLT matrix below
   # doesn't re-download embedding models on every test container. The cache is keyed by
   # the set of local model names referenced in the .rec files, so it auto-invalidates
-  # when that set changes. Each matrix chunk restores this cache read-only and mounts it
-  # into the test container at the data_dir-relative path Manticore uses for models.
+  # when that set changes. Each matrix chunk restores this cache and mounts it at
+  # /opt/manticore-model-cache, which the test-kit image symlinks from the default model
+  # cache path (/var/lib/manticore/.cache) — mounting outside /var/lib/manticore keeps
+  # `rm -rf /var/lib/manticore` tests working (the mount isn't a child mountpoint).
   prepare_models:
     name: Prepare model cache
     runs-on: ubuntu-22.04
@@ -204,7 +206,7 @@ jobs:
           # Run searchd in a detached container with the host cache mounted at the path
           # Manticore resolves from data_dir; creating a table + inserting forces a download.
           CID=$(docker run -d --rm \
-            -v "$CACHE_DIR:/var/lib/manticore/.cache/manticore" \
+            -v "$CACHE_DIR:/opt/manticore-model-cache" \
             --entrypoint /bin/bash "$IMAGE" \
             -c 'searchd --stopwait >/dev/null 2>&1 || true; searchd >/dev/null 2>&1 || true; tail -f /dev/null')
           echo "Warm container: $CID"
@@ -226,7 +228,7 @@ jobs:
           done <<< "$WARM_MODELS"
 
           echo "=== cached models ==="
-          docker exec "$CID" ls -la /var/lib/manticore/.cache/manticore/ || true
+          docker exec "$CID" ls -la /opt/manticore-model-cache/manticore/ || true
           docker stop "$CID" >/dev/null 2>&1 || true
 
           # Container writes blobs as root with mode 600; make them readable so the
@@ -273,5 +275,5 @@ jobs:
           ref: ${{ inputs.ref }}
           test_prefix: ${{ matrix.chunk.test_prefix }}
           comment_mode: failures
-          run_args: "-e OPENAI_API_KEY -e VOYAGE_API_KEY -e JINA_API_KEY -v ${{ runner.temp }}/clt-model-cache:/var/lib/manticore/.cache/manticore"
+          run_args: "-e OPENAI_API_KEY -e VOYAGE_API_KEY -e JINA_API_KEY -v ${{ runner.temp }}/clt-model-cache:/opt/manticore-model-cache"
           ui_host: "https://clt.manticoresearch.com"

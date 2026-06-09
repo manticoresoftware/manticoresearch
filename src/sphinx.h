@@ -457,6 +457,7 @@ struct FacetFilterTrait_t
 	std::optional<FacetFilterMode_e> m_tMode;
 	FacetFilterClause_e m_eClause = FacetFilterClause_e::None;
 	StrVec_t m_dAttrs;
+	bool m_bZeroes = false;
 };
 
 /// table function interface
@@ -690,7 +691,7 @@ struct CSphQuery
 
 	bool			m_bFacet = false;			///< whether this a facet query
 	bool			m_bFacetHead = false;
-	bool			m_bFacetMaxRef = false;	///< internal strict helper for max facet status
+	bool			m_bFacetMaxRef = false;	///< internal hidden facet helper query/result
 	FacetFilterTrait_t m_tFacetFilter;
 	StrVec_t		m_dFacetOwnFilterAttrs;
 

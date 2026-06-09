@@ -420,6 +420,7 @@ public:
 	bool			SetupFacetStmt();
 	void			AddFacetFilterAttr ( const SqlNode_t & tAttr );
 	void			SetFacetFilterClause ( FacetFilterClause_e eClause );
+	void			SetFacetZeroes ();
 	bool			SetFacetFilterMode ( const SqlNode_t & tMode );
 
 	void			FilterGroup ( SqlNode_t & tNode, SqlNode_t & tExpr );
@@ -1675,6 +1676,12 @@ void SqlParser_c::SetFacetFilterClause ( FacetFilterClause_e eClause )
 }
 
 
+void SqlParser_c::SetFacetZeroes ()
+{
+	m_pQuery->m_tFacetFilter.m_bZeroes = true;
+}
+
+
 bool SqlParser_c::SetFacetFilterMode ( const SqlNode_t & tMode )
 {
 	CSphString sMode;
@@ -2662,12 +2669,15 @@ static bool SetupFacets ( CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
 				tStmt.m_tQuery.m_dFacetOwnFilterAttrs.Add ( tStmt.m_tQuery.m_sGroupBy );
 			if ( !tStmt.m_tQuery.m_sFacetBy.IsEmpty() && !facet::AttrNameInList ( tStmt.m_tQuery.m_dFacetOwnFilterAttrs, tStmt.m_tQuery.m_sFacetBy ) )
 				tStmt.m_tQuery.m_dFacetOwnFilterAttrs.Add ( tStmt.m_tQuery.m_sFacetBy );
-			const bool bUseOwnExclusion = facet::GetFilterMode ( tHeadQuery, tStmt.m_tQuery )!=FacetFilterMode_e::Max;
+			FacetFilterMode_e eMode = facet::GetFilterMode ( tHeadQuery, tStmt.m_tQuery );
+			const bool bUseOwnExclusion = eMode!=FacetFilterMode_e::Max;
 			if ( !facet::CopyFilters ( tHeadQuery, tStmt.m_tQuery, sError, bUseOwnExclusion ) )
 				return false;
 
 			SqlStmt_t tStrict;
-			bool bNeedStrict = ( facet::GetFilterMode ( tHeadQuery, tStmt.m_tQuery )==FacetFilterMode_e::Max );
+			SqlStmt_t tZeroes;
+			bool bNeedStrict = ( eMode==FacetFilterMode_e::Max );
+			bool bNeedZeroes = bNeedStrict && tStmt.m_tQuery.m_tFacetFilter.m_bZeroes;
 			if ( bNeedStrict )
 			{
 				tStrict.m_eStmt = STMT_SELECT;
@@ -2681,9 +2691,24 @@ static bool SetupFacets ( CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
 					return false;
 			}
 
+			if ( bNeedZeroes )
+			{
+				tZeroes.m_eStmt = STMT_SELECT;
+				tZeroes.m_tQuery = tStmt.m_tQuery;
+				tZeroes.m_tQuery.m_bFacetMaxRef = true;
+				tZeroes.m_tQuery.m_tFacetFilter.m_eClause = FacetFilterClause_e::None;
+				tZeroes.m_tQuery.m_tFacetFilter.m_dAttrs.Reset();
+				tZeroes.m_tQuery.m_dFilters.Reset();
+				tZeroes.m_tQuery.m_dFilterTree.Reset();
+				if ( !facet::CopyFilters ( tHeadQuery, tZeroes.m_tQuery, sError, false ) )
+					return false;
+			}
+
 			dOut.Add ( std::move ( tStmt ) );
 			if ( bNeedStrict )
 				dOut.Add ( std::move ( tStrict ) );
+			if ( bNeedZeroes )
+				dOut.Add ( std::move ( tZeroes ) );
 		}
 
 		i = iFacetStart - 1;

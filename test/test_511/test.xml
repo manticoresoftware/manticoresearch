@@ -77,15 +77,15 @@ searchd
   }
 }</query>
 
-<!-- Explicit per-agg max should produce broad base-query buckets with status. -->
+<!-- Explicit per-agg filter_mode should produce broad base-query buckets with status. -->
 <query endpoint="search">{
   "table": "facet_json_review",
   "limit": 0,
   "facet_filter_mode": "strict",
   "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
   "aggs": {
-    "color_mode_max": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "mode": "max" },
-    "size_mode_strict": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } }, "mode": "strict" }
+    "color_mode_max": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "filter_mode": "max" },
+    "size_mode_strict": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } }, "filter_mode": "strict" }
   }
 }</query>
 
@@ -112,15 +112,37 @@ searchd
   }
 }</query>
 
-<!-- Manual scopes and filter_mode alias. -->
+<!-- Manual scopes via filters/exclude_filters plus per-agg filter_mode. -->
 <query endpoint="search">{
   "table": "facet_json_review",
   "limit": 0,
   "facet_filter_mode": "strict",
   "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } }, { "equals": { "size_id": 10 } } ] } },
   "aggs": {
-    "color_filters_brand_max": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "filters": [ "brand_id" ], "mode": "max" },
+    "color_filters_brand_max": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "filters": [ "brand_id" ], "filter_mode": "max" },
     "size_exclude_color_auto": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } }, "exclude_filters": [ "color_id" ], "filter_mode": "auto" }
+  }
+}</query>
+
+<!-- zeroes=true should keep broad max buckets that are missing from the filtered counts. -->
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 0,
+  "facet_filter_mode": "strict",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
+  "aggs": {
+    "size_filters_zeroes": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } }, "filters": [ "brand_id", "color_id" ], "filter_mode": "max", "zeroes": true }
+  }
+}</query>
+
+<!-- Legacy JSON agg key mode should be rejected with a clear error. -->
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 0,
+  "facet_filter_mode": "strict",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
+  "aggs": {
+    "legacy_mode_rejected": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "mode": "max" }
   }
 }</query>
 

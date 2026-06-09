@@ -7836,6 +7836,89 @@ static void ReturnZeroCount ( const CSphSchema & tSchema, const CSphBitvec & tAt
 	dRows.Commit();
 }
 
+static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrsToSend, const ISphSchema & tSchema, RowBuffer_i & dRows, const CSphColumnInfo * pNullBitmaskAttr );
+
+static bool IsFacetCountColumn ( const CSphColumnInfo & tCol )
+{
+	return tCol.m_sName=="@count"
+		|| tCol.m_sName=="count(*)"
+		|| tCol.m_sName=="@distinct"
+		|| tCol.m_sName.Begins ( "count(distinct " );
+}
+
+static void ZeroFacetCountColumns ( CSphMatch & tMatch, const ISphSchema & tSchema )
+{
+	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
+	{
+		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
+		if ( !IsFacetCountColumn ( tCol ) )
+			continue;
+
+		switch ( tCol.m_eAttrType )
+		{
+		case SPH_ATTR_INTEGER:
+		case SPH_ATTR_TIMESTAMP:
+		case SPH_ATTR_BOOL:
+		case SPH_ATTR_TOKENCOUNT:
+		case SPH_ATTR_BIGINT:
+		case SPH_ATTR_UINT64:
+			tMatch.SetAttr ( tCol.m_tLocator, 0 );
+			break;
+
+		case SPH_ATTR_FLOAT:
+			tMatch.SetAttrFloat ( tCol.m_tLocator, 0.0f );
+			break;
+
+		case SPH_ATTR_DOUBLE:
+			tMatch.SetAttrDouble ( tCol.m_tLocator, 0.0 );
+			break;
+
+		default:
+			break;
+		}
+	}
+}
+
+static bool SendMysqlFacetZeroes ( RowBuffer_i & dRows, const AggrResult_t & tRes, const AggrResult_t & tZeroesRes,
+	const CSphBitvec & tAttrsToSend, const CSphColumnInfo * pNullBitmaskAttr, bool bAddQueryColumn, const CSphString * pQueryColumn,
+	const CSphQuery & tFacetQuery, const facet::FacetStatusSources_t & tStatus )
+{
+	assert ( tRes.m_bSingle && tZeroesRes.m_bSingle );
+
+	facet::FacetBucketSet_t tVisibleBuckets;
+	const facet::FacetBucketSet_t * pVisibleBuckets = facet::CollectFacetAvailableFilters ( tFacetQuery, tRes.m_tSchema, tRes, tVisibleBuckets );
+	if ( !pVisibleBuckets )
+		return true;
+
+	auto dZeroMatches = tZeroesRes.m_dResults.First().m_dMatches.Slice ( tZeroesRes.m_iOffset, tZeroesRes.m_iCount );
+	for ( const auto & tZeroMatch : dZeroMatches )
+	{
+		if ( facet::MatchBucketSet ( tZeroMatch, tZeroesRes.m_tSchema, *pVisibleBuckets ) )
+			continue;
+
+		CSphMatch tOutMatch;
+		tOutMatch.Reset ( tRes.m_tSchema.GetDynamicSize() );
+		tOutMatch.Combine ( tZeroMatch, tRes.m_tSchema.GetDynamicSize() );
+		ZeroFacetCountColumns ( tOutMatch, tRes.m_tSchema );
+
+		SendMysqlMatch ( tOutMatch, tAttrsToSend, tRes.m_tSchema, dRows, pNullBitmaskAttr );
+
+		if ( bAddQueryColumn )
+		{
+			assert ( pQueryColumn );
+			dRows.PutString ( *pQueryColumn );
+		}
+
+		if ( tStatus.HasStatus() )
+			dRows.PutString ( facet::GetBucketStatus ( tOutMatch, tRes.m_tSchema, tStatus ) );
+
+		if ( !dRows.Commit() )
+			return false;
+	}
+
+	return true;
+}
+
 CSphString BuildMetaOneline ( const CSphQueryResultMeta & tMeta )
 {
 	// --- 0 out of 1115 results in 115ms ---
@@ -8141,7 +8224,9 @@ static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrs
 }
 
 // returns N of matches in resultset
-static uint64_t SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn, const CSphString * pQueryColumn, QueryProfile_c * pProfile, facet::FacetStatusSources_t tStatus = {} )
+static uint64_t SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn,
+	const CSphString * pQueryColumn, QueryProfile_c * pProfile, facet::FacetStatusSources_t tStatus = {}, const CSphQuery * pFacetQuery = nullptr,
+	const AggrResult_t * pZeroesRes = nullptr )
 {
 	CSphScopedProfile tProf ( pProfile, SPH_QSTATE_NET_WRITE );
 
@@ -8214,6 +8299,10 @@ static uint64_t SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t 
 		if ( !dRows.Commit() )
 			return uMatches;
 	}
+
+	if ( pFacetQuery && pZeroesRes )
+		if ( !SendMysqlFacetZeroes ( dRows, tRes, *pZeroesRes, tAttrsToSend, pNullBitmaskAttr, bAddQueryColumn, pQueryColumn, *pFacetQuery, tStatus ) )
+			return uMatches;
 
 	if ( bReturnZeroCount )
 		ReturnZeroCount ( tRes.m_tSchema, tAttrsToSend, tRes.m_dZeroCount, dRows );
@@ -8832,6 +8921,7 @@ static bool HandleMysqlSelectStmtGroup ( CSphVector<SqlStmt_t> & dStmt, int iSta
 			dSelectedBuckets.Reset();
 			dAvailableBuckets.Reset();
 			facet::FacetStatusSources_t tStatus;
+			const AggrResult_t * pZeroesRes = nullptr;
 
 			if ( iQueryIdx>=0 && tHandler.m_dQueries[iQueryIdx].m_bFacet )
 			{
@@ -8843,8 +8933,14 @@ static bool HandleMysqlSelectStmtGroup ( CSphVector<SqlStmt_t> & dStmt, int iSta
 					if ( eMode==FacetFilterMode_e::Max )
 					{
 						pStrictRes = &tRes;
-						if ( iQueryIdx+1<tHandler.m_dQueries.GetLength() && tHandler.m_dQueries[iQueryIdx+1].m_bFacetMaxRef )
-							pStrictRes = &tHandler.m_dAggrResults[iQueryIdx+1];
+						int iHelperIdx = iQueryIdx + 1;
+						if ( iHelperIdx<tHandler.m_dQueries.GetLength() && tHandler.m_dQueries[iHelperIdx].m_bFacetMaxRef )
+						{
+							pStrictRes = &tHandler.m_dAggrResults[iHelperIdx];
+							++iHelperIdx;
+						}
+						if ( iHelperIdx<tHandler.m_dQueries.GetLength() && tHandler.m_dQueries[iHelperIdx].m_bFacetMaxRef )
+							pZeroesRes = &tHandler.m_dAggrResults[iHelperIdx];
 					}
 
 					tStatus = CollectFacetSelectedStatus ( tHandler.m_dQueries[0], tHandler.m_dQueries[iQueryIdx], tRes.m_tSchema, pStrictRes, dSelectedFilters, dSelectedBuckets );
@@ -8854,7 +8950,8 @@ static bool HandleMysqlSelectStmtGroup ( CSphVector<SqlStmt_t> & dStmt, int iSta
 				}
 			}
 
-			auto uMatches = SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ), tStatus );
+			auto uMatches = SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ),
+				tStatus, ( iQueryIdx>=0 && tHandler.m_dQueries[iQueryIdx].m_bFacet ? &tHandler.m_dQueries[iQueryIdx] : nullptr ), pZeroesRes );
 			
 			if ( !session::GetBuddy() )
 				gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, tRes.GetQueryTimeUs() );

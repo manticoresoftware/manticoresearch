@@ -282,7 +282,7 @@ static const FacetBucketSet_t * CollectBucketSet ( const VecTraits_T<CSphMatch> 
 	return &tBuckets;
 }
 
-static bool MatchBucketSet ( const CSphMatch & tMatch, const ISphSchema & tSchema, const FacetBucketSet_t & tBuckets )
+bool MatchBucketSet ( const CSphMatch & tMatch, const ISphSchema & tSchema, const FacetBucketSet_t & tBuckets )
 {
 	const CSphColumnInfo * pAttr = tSchema.GetAttr ( tBuckets.m_sAttr.cstr() );
 	if ( !pAttr )

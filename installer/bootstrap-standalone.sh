@@ -139,8 +139,10 @@ COLOR_STRIP_REGEX='s/\x1b\[[0-9;]*m//g'
 : > "$INSTALL_LOG"
 
 if [[ -t 1 ]]; then
+    export MANTICORE_COLOR_TTY=true
     exec > >(tee /dev/tty | sed "$COLOR_STRIP_REGEX" >> "$INSTALL_LOG") 2>&1
 else
+    export MANTICORE_COLOR_TTY=false
     exec > >(tee -a "$INSTALL_LOG") 2>&1
 fi
 
@@ -159,7 +161,15 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 use_color() {
-    [[ -t 1 && "${SILENT:-false}" != "true" ]]
+    [[ "${SILENT:-false}" != "true" ]] || return 1
+    [[ -z "${NO_COLOR:-}" ]] || return 1
+
+    if [[ "${MANTICORE_FORCE_COLOR:-}" == "1" || "${CLICOLOR_FORCE:-}" == "1" ]]; then
+        return 0
+    fi
+
+    [[ -t 1 ]] && return 0
+    [[ "${MANTICORE_COLOR_TTY:-false}" == "true" ]]
 }
 
 emit_line() {

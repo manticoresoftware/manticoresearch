@@ -139,8 +139,10 @@ COLOR_STRIP_REGEX='s/\x1b\[[0-9;]*m//g'
 : > "$INSTALL_LOG"
 
 if [[ -t 1 ]]; then
+    export MANTICORE_COLOR_TTY=true
     exec > >(tee /dev/tty | sed "$COLOR_STRIP_REGEX" >> "$INSTALL_LOG") 2>&1
 else
+    export MANTICORE_COLOR_TTY=false
     exec > >(tee -a "$INSTALL_LOG") 2>&1
 fi
 

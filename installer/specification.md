@@ -313,7 +313,11 @@ If that path is not writable, fallback path:
 ${TMPDIR:-/tmp}/manticore_installer.log
 ```
 
-Interactive TTY output may use color and symbols. Non-TTY output must be plain text. Log output should not include color escape sequences.
+Interactive TTY output may use color and symbols. Color eligibility must be detected before stdout and stderr are redirected into logging pipelines, because after redirection `-t 1` may no longer describe the original terminal. The result should be preserved in an internal flag such as `MANTICORE_COLOR_TTY` and used by UI helpers. Non-TTY output must be plain text. Log output should not include color escape sequences.
+
+The installer must honor `NO_COLOR` by disabling ANSI color. `MANTICORE_FORCE_COLOR=1` or `CLICOLOR_FORCE=1` may force colored UI output for diagnostics or tests. These force flags should affect only user-facing output; the log file must still be written without ANSI escape sequences.
+
+Prompts must read from and write to `/dev/tty` when available. Normal stdout/stderr may be mirrored through the logging pipeline, but prompt input must not consume piped installer script bytes from `curl|sh` or `wget|sh`.
 
 ## Privilege Escalation
 

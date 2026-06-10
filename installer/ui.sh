@@ -9,7 +9,15 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 use_color() {
-    [[ -t 1 && "${SILENT:-false}" != "true" ]]
+    [[ "${SILENT:-false}" != "true" ]] || return 1
+    [[ -z "${NO_COLOR:-}" ]] || return 1
+
+    if [[ "${MANTICORE_FORCE_COLOR:-}" == "1" || "${CLICOLOR_FORCE:-}" == "1" ]]; then
+        return 0
+    fi
+
+    [[ -t 1 ]] && return 0
+    [[ "${MANTICORE_COLOR_TTY:-false}" == "true" ]]
 }
 
 emit_line() {

@@ -214,16 +214,6 @@ docker exec manticore-test-kit bash -c "grep -q 'log = /var/log/manticore/search
 
 docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
 
-# Relocate the embedding-model cache out of data_dir. By default Manticore caches
-# downloaded HuggingFace models under <data_dir>/.cache/manticore (i.e.
-# /var/lib/manticore/.cache/manticore). CLT can bind-mount a host model cache to avoid
-# re-downloading per test, but mounting under /var/lib/manticore turns it into a
-# mountpoint that breaks tests doing `rm -rf /var/lib/manticore` ("device or resource
-# busy"). Symlinking .cache to an external dir lets CLT mount there instead: `rm -rf`
-# only unlinks the symlink (not a mountpoint), and models still resolve to the mount.
-docker exec manticore-test-kit bash -c \
-    "mkdir -p /opt/manticore-model-cache && rm -rf /var/lib/manticore/.cache && ln -sfn /opt/manticore-model-cache /var/lib/manticore/.cache"
-
 docker exec manticore-test-kit bash -c \
     "md5sum /etc/manticoresearch/manticore.conf | awk '{print \$1}' > /manticore.conf.md5"
 

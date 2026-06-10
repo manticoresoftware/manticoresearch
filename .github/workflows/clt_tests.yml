@@ -143,11 +143,11 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
     steps:
-      # Reuse the embedding-model cache from a previous run if one exists. It is mounted
-      # at /opt/manticore-model-cache, which the test-kit image symlinks from the default
-      # model cache path (/var/lib/manticore/.cache) — mounting outside /var/lib/manticore
-      # keeps `rm -rf /var/lib/manticore` tests working (the mount isn't a child mountpoint).
+      # Reuse the embedding-model cache from a previous run if one exists. It is bind-mounted
+      # at /var/lib/manticore/.cache, where Manticore caches downloaded HuggingFace models.
       # After the tests, whatever the chunk downloaded is saved for the next run.
+      # NOTE: this makes .cache a mountpoint, so tests must never `rm -rf /var/lib/manticore`
+      # itself — wipe its contents instead (`rm -rf /var/lib/manticore/*` leaves .cache alone).
       - id: model_cache
         name: Restore model cache
         uses: actions/cache/restore@v4
@@ -167,7 +167,7 @@ jobs:
           ref: ${{ inputs.ref }}
           test_prefix: ${{ matrix.chunk.test_prefix }}
           comment_mode: failures
-          run_args: "-e OPENAI_API_KEY -e VOYAGE_API_KEY -e JINA_API_KEY -v ${{ runner.temp }}/clt-model-cache:/opt/manticore-model-cache"
+          run_args: "-e OPENAI_API_KEY -e VOYAGE_API_KEY -e JINA_API_KEY -v ${{ runner.temp }}/clt-model-cache:/var/lib/manticore/.cache"
           ui_host: "https://clt.manticoresearch.com"
 
       # Containers write model blobs as root with mode 600; make them readable so the

@@ -38,7 +38,6 @@ struct JsonAggr_t : public AggrSettings_t
 	FacetFilterTrait_t m_tFacetFilter;
 	int				m_iResult = -1;
 	int				m_iStrictResult = -1;
-	int				m_iZeroesResult = -1;
 	CSphVector<AggrComposite_t> m_dComposite;
 	CSphVector<CSphFilterSettings> m_dCompositeAfterKey;
 	struct MadDeviationEntry_t

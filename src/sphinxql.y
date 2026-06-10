@@ -71,7 +71,6 @@
 %token	TOK_FILTERS
 %token	TOK_FLOAT
 %token	TOK_MODE
-%token	TOK_ZEROES
 %token	TOK_FOR
 %token	TOK_FORCE
 %token	TOK_FROM
@@ -299,7 +298,7 @@ names_transaction_collate:
     ;
 
 ident_without_option:
-	TOK_IDENT | reserved_tokens_without_option | TOK_EXCLUDE | TOK_FILTERS | TOK_MODE | TOK_ZEROES
+	TOK_IDENT | reserved_tokens_without_option | TOK_EXCLUDE | TOK_FILTERS | TOK_MODE
 	;
 
 ident_for_set_stmt:
@@ -2149,16 +2148,8 @@ opt_facet_mode:
 		}
 	;
 
-opt_facet_zeroes:
-	// empty
-	| TOK_ZEROES
-		{
-			pParser->SetFacetZeroes();
-		}
-	;
-
 facet_stmt:
-	TOK_FACET facet_items_list opt_facet_by_items_list opt_facet_filters opt_facet_zeroes opt_facet_mode opt_distinct_item opt_order_clause opt_limit_clause
+	TOK_FACET facet_items_list opt_facet_by_items_list opt_facet_filters opt_facet_mode opt_distinct_item opt_order_clause opt_limit_clause
 		{
 			if ( !pParser->SetupFacetStmt() )
 				YYERROR;

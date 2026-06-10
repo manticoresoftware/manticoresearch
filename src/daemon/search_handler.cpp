@@ -2325,14 +2325,9 @@ static ESphAggrFunc GetAggr ( Aggr_e eAggrFunc )
 	}
 }
 
-static bool NeedJsonStrictQuery ( const JsonQuery_c & tQuery, const JsonAggr_t & tAggr )
+static bool NeedJsonQuery ( const JsonQuery_c & tQuery, const JsonAggr_t & tAggr )
 {
 	return facet::GetFilterMode ( tQuery, tAggr.m_tFacetFilter )==FacetFilterMode_e::Max && facet::IsJsonFacetStatusBucket ( tAggr.m_eAggrFunc );
-}
-
-static bool NeedJsonZeroesQuery ( const JsonQuery_c & tQuery, const JsonAggr_t & tAggr )
-{
-	return NeedJsonStrictQuery ( tQuery, tAggr ) && tAggr.m_tFacetFilter.m_bZeroes;
 }
 
 static int SetupJsonFacetResultSets ( JsonQuery_c & tQuery )
@@ -2341,8 +2336,7 @@ static int SetupJsonFacetResultSets ( JsonQuery_c & tQuery )
 	for ( auto & tAggr : tQuery.m_dAggs )
 	{
 		tAggr.m_iResult = iQueries++;
-		tAggr.m_iStrictResult = NeedJsonStrictQuery ( tQuery, tAggr ) ? iQueries++ : -1;
-		tAggr.m_iZeroesResult = NeedJsonZeroesQuery ( tQuery, tAggr ) ? iQueries++ : -1;
+		tAggr.m_iStrictResult = NeedJsonQuery ( tQuery, tAggr ) ? iQueries++ : -1;
 	}
 
 	return iQueries;
@@ -2402,7 +2396,6 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 		JsonAggr_t & tAggs = tQuery.m_dAggs[0];
 		tAggs.m_iResult = 0;
 		tAggs.m_iStrictResult = -1;
-		tAggs.m_iZeroesResult = -1;
 		tQuery.m_iLimit = tAggs.m_iSize;
 		tQuery.m_sGroupBy = tAggs.m_sCol;
 		if ( tAggs.m_sSort.IsEmpty() )
@@ -2655,23 +2648,6 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 			}
 
 			tHandler.SetQuery ( tBucket.m_iStrictResult, tStrictQuery, nullptr );
-		}
-
-		if ( tBucket.m_iZeroesResult>=0 )
-		{
-			JsonQuery_c tZeroesQuery = tQuery;
-			tZeroesQuery.m_bFacetMaxRef = true;
-			tZeroesQuery.m_tFacetFilter.m_eClause = FacetFilterClause_e::None;
-			tZeroesQuery.m_tFacetFilter.m_dAttrs.Reset();
-			tZeroesQuery.m_dFilters.Reset();
-			tZeroesQuery.m_dFilterTree.Reset();
-			if ( !facet::CopyFilters ( tHeadFacetQuery, tZeroesQuery, sError, false ) )
-			{
-				tQuery = tHeadFacetQuery;
-				return tHandler;
-			}
-
-			tHandler.SetQuery ( tBucket.m_iZeroesResult, tZeroesQuery, nullptr );
 		}
 	}
 

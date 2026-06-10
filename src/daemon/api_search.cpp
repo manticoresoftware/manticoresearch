@@ -68,7 +68,6 @@ static void SendFacetFilterTrait ( ISphOutputBuffer & tOut, const FacetFilterTra
 
 	tOut.SendByte ( (BYTE)tTrait.m_eClause );
 	SendStringVec ( tOut, tTrait.m_dAttrs );
-	tOut.SendByte ( tTrait.m_bZeroes );
 }
 
 void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, int iWeight ) const
@@ -638,7 +637,6 @@ static void ParseFacetFilterTrait ( InputBuffer_c & tReq, FacetFilterTrait_t & t
 
 	tTrait.m_eClause = (FacetFilterClause_e)tReq.GetByte();
 	ParseStringVec ( tReq, tTrait.m_dAttrs );
-	tTrait.m_bZeroes = !!tReq.GetByte();
 }
 
 

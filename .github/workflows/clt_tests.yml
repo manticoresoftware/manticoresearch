@@ -129,123 +129,9 @@ jobs:
               fh.write(f"matrix={json.dumps(matrix)}\n")
           PY2
 
-  # Pre-warm a shared HuggingFace model cache once, so the 20-way CLT matrix below
-  # doesn't re-download embedding models on every test container. The cache is keyed by
-  # the set of local model names referenced in the .rec files, so it auto-invalidates
-  # when that set changes. Each matrix chunk restores this cache and mounts it at
-  # /opt/manticore-model-cache, which the test-kit image symlinks from the default model
-  # cache path (/var/lib/manticore/.cache) — mounting outside /var/lib/manticore keeps
-  # `rm -rf /var/lib/manticore` tests working (the mount isn't a child mountpoint).
-  prepare_models:
-    name: Prepare model cache
-    runs-on: ubuntu-22.04
-    timeout-minutes: 25
-    outputs:
-      cache_key: ${{ steps.key.outputs.key }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.repository }}
-          ref: ${{ inputs.ref }}
-
-      - id: key
-        name: Compute model cache key
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Extract distinct local (HuggingFace) model names used by the tests.
-          # Remote provider models (openai/voyage/jina) are API-only and never downloaded.
-          list=$(grep -rhoiE "model_name[[:space:]]*=[[:space:]]*'[^']+'" test/clt-tests --include='*.rec' 2>/dev/null \
-            | sed -E "s/.*=[[:space:]]*'([^']+)'.*/\1/" \
-            | grep -iE '^(sentence-transformers|Qwen|jinaai|onnx-models)/' \
-            | sort -u || true)
-          hash=$(printf '%s' "$list" | sha256sum | cut -c1-12)
-          echo "key=clt-models-v1-${hash}" >> "$GITHUB_OUTPUT"
-          {
-            echo "models<<MODELS_EOF"
-            printf '%s\n' "$list"
-            echo "MODELS_EOF"
-          } >> "$GITHUB_OUTPUT"
-          echo "Cache key: clt-models-v1-${hash}"
-          echo "Models to warm:"; printf '%s\n' "$list"
-
-      - id: cache
-        name: Restore model cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/clt-model-cache
-          key: ${{ steps.key.outputs.key }}
-
-      - name: Download test-kit image artifact
-        if: ${{ steps.cache.outputs.cache-hit != 'true' && inputs.artifact_name != '' }}
-        uses: manticoresoftware/download_artifact_with_retries@main
-        with:
-          name: ${{ inputs.artifact_name }}
-          path: .
-
-      - name: Warm model cache
-        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
-        shell: bash
-        env:
-          WARM_MODELS: ${{ steps.key.outputs.models }}
-        run: |
-          set -euo pipefail
-          CACHE_DIR="${{ runner.temp }}/clt-model-cache"
-          IMAGE="${{ inputs.docker_image }}"
-          ART="${{ inputs.artifact_name }}"
-          mkdir -p "$CACHE_DIR" && chmod 777 "$CACHE_DIR"
-
-          if [ -n "$ART" ] && [ -f "$ART" ]; then
-            echo "Importing test-kit image from artifact: $ART"
-            docker import - "$IMAGE" < "$ART"
-          else
-            echo "Pulling image: $IMAGE"
-            docker pull "$IMAGE"
-          fi
-
-          # Run searchd in a detached container with the host cache mounted at the path
-          # Manticore resolves from data_dir; creating a table + inserting forces a download.
-          CID=$(docker run -d --rm \
-            -v "$CACHE_DIR:/opt/manticore-model-cache" \
-            --entrypoint /bin/bash "$IMAGE" \
-            -c 'searchd --stopwait >/dev/null 2>&1 || true; searchd >/dev/null 2>&1 || true; tail -f /dev/null')
-          echo "Warm container: $CID"
-
-          up=0
-          for i in $(seq 1 60); do
-            if docker exec "$CID" mysql -h0 -P9306 -e "SELECT 1" >/dev/null 2>&1; then up=1; echo "searchd up after ${i}s"; break; fi
-            sleep 1
-          done
-          [ "$up" = 1 ] || echo "WARNING: searchd did not come up; warm may be incomplete"
-
-          n=0
-          while IFS= read -r m; do
-            [ -z "$m" ] && continue
-            n=$((n+1))
-            echo "Warming model: $m"
-            docker exec "$CID" mysql -h0 -P9306 -e "CREATE TABLE warm_$n (t text, v float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='$m' from='t')" || { echo "create failed: $m"; continue; }
-            docker exec "$CID" mysql -h0 -P9306 -e "INSERT INTO warm_$n(t) VALUES('warmup')" || echo "insert failed: $m"
-          done <<< "$WARM_MODELS"
-
-          echo "=== cached models ==="
-          docker exec "$CID" ls -la /opt/manticore-model-cache/manticore/ || true
-          docker stop "$CID" >/dev/null 2>&1 || true
-
-          # Container writes blobs as root with mode 600; make them readable so the
-          # runner user can pack them into the cache.
-          sudo chmod -R a+rX "$CACHE_DIR" || true
-
-      - name: Save model cache
-        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
-        continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ runner.temp }}/clt-model-cache
-          key: ${{ steps.key.outputs.key }}
-
   clt:
     name: CLT
-    needs: [discover, prepare_models]
+    needs: [discover]
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     continue-on-error: ${{ inputs.continue_on_error }}
@@ -257,11 +143,17 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
     steps:
-      - name: Restore model cache
+      # Reuse the embedding-model cache from a previous run if one exists. It is mounted
+      # at /opt/manticore-model-cache, which the test-kit image symlinks from the default
+      # model cache path (/var/lib/manticore/.cache) — mounting outside /var/lib/manticore
+      # keeps `rm -rf /var/lib/manticore` tests working (the mount isn't a child mountpoint).
+      # After the tests, whatever the chunk downloaded is saved for the next run.
+      - id: model_cache
+        name: Restore model cache
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/clt-model-cache
-          key: ${{ needs.prepare_models.outputs.cache_key }}
+          key: clt-models-v1-chunk-${{ matrix.chunk.id }}
 
       - name: Ensure model cache dir
         shell: bash
@@ -277,3 +169,18 @@ jobs:
           comment_mode: failures
           run_args: "-e OPENAI_API_KEY -e VOYAGE_API_KEY -e JINA_API_KEY -v ${{ runner.temp }}/clt-model-cache:/opt/manticore-model-cache"
           ui_host: "https://clt.manticoresearch.com"
+
+      # Containers write model blobs as root with mode 600; make them readable so the
+      # runner user can pack them into the cache.
+      - name: Fix model cache permissions
+        if: ${{ always() && steps.model_cache.outputs.cache-hit != 'true' }}
+        shell: bash
+        run: sudo chmod -R a+rX "${{ runner.temp }}/clt-model-cache" || true
+
+      - name: Save model cache
+        if: ${{ always() && steps.model_cache.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/clt-model-cache
+          key: clt-models-v1-chunk-${{ matrix.chunk.id }}

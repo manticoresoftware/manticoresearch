@@ -68,27 +68,27 @@ Create multiple CHAT models with different configurations
 ––– input –––
 mysql -h0 -P9306 -e "CREATE CHAT MODEL fast_assistant (model='openai:gpt-3.5-turbo', max_document_length=0, retrieval_limit=3);"
 ––– output –––
-+----------------+
-| name           |
-+----------------+
-| fast_assistant |
-+----------------+
++--------------------------------------+
+| uuid                                 |
++--------------------------------------+
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
++--------------------------------------+
 ––– input –––
 mysql -h0 -P9306 -e "CREATE CHAT MODEL detailed_assistant (model='openai:gpt-4o', max_document_length=0, retrieval_limit=5);"
 ––– output –––
-+--------------------+
-| name               |
-+--------------------+
-| detailed_assistant |
-+--------------------+
++--------------------------------------+
+| uuid                                 |
++--------------------------------------+
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
++--------------------------------------+
 ––– input –––
 mysql -h0 -P9306 -e "CREATE CHAT MODEL creative_assistant (model='openai:gpt-4o-mini', max_document_length=2000, retrieval_limit=4);"
 ––– output –––
-+--------------------+
-| name               |
-+--------------------+
-| creative_assistant |
-+--------------------+
++--------------------------------------+
+| uuid                                 |
++--------------------------------------+
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
++--------------------------------------+
 ––– comment –––
 Verify all models are created (check count, order may vary)
 ––– input –––

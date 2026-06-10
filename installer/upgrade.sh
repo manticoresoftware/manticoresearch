@@ -19,26 +19,7 @@ MANTICORE_START_SERVICE="${MANTICORE_START_SERVICE:-true}"
 CURRENT_BACKUP_PATH=""
 
 upgrade_repo_package() {
-    if [[ "$OS_FAMILY" == "brew" ]]; then
-        print_info "Homebrew installation does not require the Manticore repository package."
-        return 0
-    fi
-
-    print_step "Refreshing Repository Bootstrap Package"
-
-    if [[ "$OS_FAMILY" == "debian" ]]; then
-        local deb_path
-        deb_path=$(mktemp /tmp/manticore-repo.XXXXXX.deb)
-        download_with_available_tool "$DEB_REPO_PACKAGE_URL" "$deb_path"
-        install_debian_repo_package_file "$deb_path"
-        rm -f "$deb_path"
-    else
-        if command -v dnf >/dev/null 2>&1; then
-            sudo_exec dnf install -y "$RPM_REPO_PACKAGE_URL"
-        else
-            sudo_exec yum install -y "$RPM_REPO_PACKAGE_URL"
-        fi
-    fi
+    ensure_repo_channel
 }
 
 ensure_backup() {
@@ -103,17 +84,17 @@ upgrade_package() {
             if [[ -n "$package_version" ]]; then
                 prepare_rpm_packages_for_version "$package_version"
                 mapfile -t package_specs < <(versioned_rpm_package_specs "$package_version")
-                sudo_exec dnf install -y "${package_specs[@]}"
+                rpm_sudo_run dnf install -y "${package_specs[@]}"
             else
-                sudo_exec dnf upgrade -y "$PACKAGE_NAME"
+                rpm_sudo_run dnf upgrade -y "$PACKAGE_NAME"
             fi
         else
             if [[ -n "$package_version" ]]; then
                 prepare_rpm_packages_for_version "$package_version"
                 mapfile -t package_specs < <(versioned_rpm_package_specs "$package_version")
-                sudo_exec yum install -y "${package_specs[@]}"
+                rpm_sudo_run yum install -y "${package_specs[@]}"
             else
-                sudo_exec yum update -y "$PACKAGE_NAME"
+                rpm_sudo_run yum update -y "$PACKAGE_NAME"
             fi
         fi
     elif [[ "$OS_FAMILY" == "brew" ]]; then
@@ -174,7 +155,7 @@ upgrade_flow() {
     CURRENT_BACKUP_PATH="${MANTICORE_BACKUP_DIR:-$BACKUP_DIR}/manticore_backup_${backup_suffix}"
 
     ensure_backup
-    upgrade_repo_package
+    ensure_repo_channel
     refresh_package_metadata
     upgrade_package "$requested_version"
     ensure_service_started

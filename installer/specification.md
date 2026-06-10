@@ -193,9 +193,82 @@ When Homebrew is available and no apt/yum/dnf package manager is present, macOS 
 Unsupported platforms with Docker available should print Docker guidance or keep the generic install-guide URL.
 Guidance is referenced from https://manticoresearch.com/install/ and located at `https://github.com/manticoresoftware/docker#production-use`
 
+## Debian repositories
+
+'Release' repository, set by installing repository package
+```sh
+https://repo.manticoresearch.com/manticore-repo.noarch.deb
+```
+
+'Dev' repository, set by installing repository package
+```sh
+https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb
+```
+
+All repository package files provide the package named 'manticore-repo', so when need to uninstall the package, you can always remove 'manticore-repo', and it will remove any existing, despite whether it is release or dev.
+
+All repository packages are mutually exclusive, installing one over another will overwrite files from another one. So, when need to switch from one to another, first remove 'manticore-repo', then install target one.
+
+All repository packages emit file `/etc/apt/sources.list.d/manticoresearch.list`. So, if the file present, it is one of the signs that 'manticore-repo' is installed; if not, it might be set up manually by user and so, might be warned.
+
+'Release' repository creates file with contain like this:
+```txt
+deb http://repo.manticoresearch.com/repository/manticoresearch_DISTR DISTR main
+```
+
+'Dev' repository creates file with contain like this:
+```txt
+deb http://repo.manticoresearch.com/repository/manticoresearch_DISTR_dev DISTR main
+```
+
+the 'DISTR' in the file is not literal word, but is name of distribution, like 'buster', 'focal', etc.
+Notice different suffixes in the repo url: 'Dev' repo has '_dev' at the end, and 'Release' has no suffix.
+
+So, if you see 'manticore-repo' is installed, and see, file `/etc/apt/sources.list.d/manticoresearch.list` is exist and non empty, you can look to the suffix of the 2-nd word (which is the url), and if you see '_dev', it seems, that 'Dev' repository is now active, and if you se no '_dev', - it sigh, you deal with default 'Release' repository.
+
+If user wants explicitly switch into concrete repository, you may detect, which one is already installed, and behave from this detection (say, if target is already the one requested, may be no need to download/reinstall repository package then).
+
+## RPM repositories
+
+You need to install this package:
+```sh
+https://repo.manticoresearch.com/manticore-repo.noarch.rpm
+```
+
+It will install three repositories:
+```txt
+manticore
+manticore-dev
+manticore-release-candidate
+```
+
+Repository 'manticore' is enabled by default, that is 'Release' repository.
+
+Repository 'manticore-dev' is disabled by default, that is 'Dev' repository.
+
+Repository 'manticore-release-candidate' is disabled by default, and mentioned here just because it exists. We're not going to expose it as an installer channel or activate it implicitly.
+
+For RPM, the repository package enables the release repository by default, so release uses the package defaults without extra repository flags. If user explicitly selects dev, use package-manager command flags for that installer command: '--enablerepo' for 'manticore-dev' and '--disablerepo' for 'manticore'. For example, manticore's documentation provides this method to install and run dev version:
+
+```bash
+sudo yum -y --disablerepo=manticore --enablerepo manticore-dev install manticore
+```
+Use these flags per command rather than manually editing the package-owned repository file.
+
+## Choose repository
+
+On clean system where no manticore repository package installed, if user doesn't ask for specific repository, assume, he wants to deal with 'Release'. Behave according to it.
+
+However, when a repo is already installed/choosen, assume user doesn't want to unexpectedly change it. For example, if 'Dev' repository was chosen and set up, and user wants to upgrade, or list available versions, it should not be changed.
+
+If user explicitly provides a supported repository channel, behave according to it. That may imply reinstalling the correct repository package for Debian, or passing per-command repository flags for RPM dev installs. RPM release uses the repository package defaults.
+
 ## Command Syntax
 
 Supported commands/options:
+
+The documented public syntax is command-style: `upgrade`, `version 25.0.0`, `silent`, `purge-all`, `dev`, and similar commands without double-dash long option names. `--help` is the only documented double-dash long option. Other historical double-dash aliases may be accepted temporarily for compatibility, but new examples, tests, and user-facing documentation should use command-style syntax. Once compatibility aliases are removed from code, unknown double-dash options must fail during pre-validation.
+
 
 - `help`, `--help`, `-h`, `-?`: print a concise usage summary and exit successfully before OS detection, repository setup, or package operations. `--help` is the only supported double-dash long option.
 - `upgrade`: upgrade an existing installation. When routed through `bootstrap.sh`, a host without Manticore may fall back to the installation flow; when `upgrade.sh` runs as the internal upgrade module, it requires an existing installation.
@@ -210,6 +283,11 @@ Supported commands/options:
 - `uninstall` or `-u`: stop and remove Manticore, preserving repository configuration and data/config state.
 - `purge`: stop and remove Manticore, then remove the repository bootstrap package when applicable.
 - `purge-all`: same as `purge`, then remove configured Manticore config and data directories after explicit confirmation unless `silent` is set.
+- `dev`: explicitly switch to 'Dev' repository
+- `release`: explicitly switch to 'Release' repository
+
+If different `dev`, `release` exist in one command, it should be treated as error. (if user selects one and
+same repo, i.e. `dev` more than once - that is not error).
 
 Unknown options/commands or malformed values must abort before OS detection, repository setup, or package operations. The installer should print an error plus a `--help` hint and exit with status `2`.
 

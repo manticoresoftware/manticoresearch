@@ -15,9 +15,42 @@ UPGRADE_REQUESTED=false
 MANTICORE_START_SERVICE=true
 MANTICORE_BACKUP_DATA=no
 MANTICORE_BACKUP_DIR=""
+MANTICORE_REPO_CHANNEL=""
 LIST_VERSIONS_OUTPUT_FILE=""
 
-print_usage() {
+print_standalone_usage() {
+    cat <<'USAGE'
+Manticore Search Installer
+
+Usage:
+  wget -O- https://manticoresearch.com | sh -s [options]
+  curl https://manticoresearch.com | sh -s [options]
+
+Common commands/options:
+  help, --help, -h, -?        Show this help and exit.
+  silent, -s, yes, -y         Non-interactive mode; assume defaults.
+  upgrade                     Upgrade an installed Manticore package.
+  version <version>, -v <v>   Install or switch to a specific version.
+  list-versions               Print available versions.
+  list-versions-file <path>   Write available versions to path.
+  no-start                    Do not start the service after install/upgrade.
+  backup-data                 Include data directory in upgrade backup.
+  no-backup-data              Skip data directory backup (default).
+  backup-dir <path>           Override backup directory for upgrades.
+  release, dev                Select Manticore repository channel.
+  uninstall, -u               Remove packages, keep config/data/repo state.
+  purge                       Remove packages and repository bootstrap package.
+  purge-all                   Purge packages, repo state, config, and data.
+
+Examples:
+  curl https://manticoresearch.com | sh -s list-versions
+  curl https://manticoresearch.com | sh -s dev list-versions
+  curl https://manticoresearch.com | sh -s version 25.0.0 no-start
+  curl https://manticoresearch.com | sh -s upgrade backup-data
+USAGE
+}
+
+print_modular_usage() {
     cat <<'USAGE'
 Manticore Search Installer
 
@@ -36,15 +69,25 @@ Common commands/options:
   backup-data                 Include data directory in upgrade backup.
   no-backup-data              Skip data directory backup (default).
   backup-dir <path>           Override backup directory for upgrades.
+  release, dev                Select Manticore repository channel.
   uninstall, -u               Remove packages, keep config/data/repo state.
   purge                       Remove packages and repository bootstrap package.
   purge-all                   Purge packages, repo state, config, and data.
 
 Examples:
   sh bootstrap-standalone.sh list-versions
+  sh bootstrap-standalone.sh dev list-versions
   sh bootstrap-standalone.sh version 25.0.0 no-start
   sh bootstrap-standalone.sh upgrade backup-data
 USAGE
+}
+
+print_usage() {
+    if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
+        print_standalone_usage
+    else
+        print_modular_usage
+    fi
 }
 usage_error() {
     print_error "$1"
@@ -53,6 +96,16 @@ usage_error() {
 }
 
 
+
+set_requested_repo_channel() {
+    local normalized
+
+    normalized="$1" || usage_error "Unknown repository channel: $1"
+    if [[ -n "$MANTICORE_REPO_CHANNEL" && "$MANTICORE_REPO_CHANNEL" != "$normalized" ]]; then
+        usage_error "Conflicting repository channels: $MANTICORE_REPO_CHANNEL and $normalized"
+    fi
+    MANTICORE_REPO_CHANNEL="$normalized"
+}
 
 parse_args() {
     while [[ $# -gt 0 ]]; do
@@ -75,6 +128,10 @@ parse_args() {
                 ;;
             no-backup-data)
                 MANTICORE_BACKUP_DATA=no
+                shift
+                ;;
+            release|dev)
+                set_requested_repo_channel "$1"
                 shift
                 ;;
             backup-dir)
@@ -167,7 +224,7 @@ write_versions_output_file() {
 list_versions_action() {
     local versions
 
-    ensure_repo_package_installed
+    ensure_repo_channel
     refresh_package_metadata
     versions=$(list_available_versions | refine_version_list || true)
     if [[ -z "$versions" ]]; then
@@ -196,6 +253,7 @@ determine_action() {
         return 0
     fi
 
+    ensure_repo_channel
     refresh_package_metadata
     current_version=$(get_installed_version || true)
     target_version=$(get_target_version || true)
@@ -240,21 +298,20 @@ determine_action() {
     fi
 }
 
-execute_action() {
-    if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
-        case "$ACTION" in
-            install) install_flow "$SPECIFIC_VERSION" ;;
-            upgrade) upgrade_flow "$SPECIFIC_VERSION" ;;
-            uninstall|purge|purge-all) uninstall_flow "$ACTION" ;;
-            list-versions) list_versions_action ;;
-            *)
-                print_error "No action selected."
-                exit 1
-                ;;
-        esac
-        return 0
-    fi
+execute_standalone_action() {
+    case "$ACTION" in
+        install) install_flow "$SPECIFIC_VERSION" ;;
+        upgrade) upgrade_flow "$SPECIFIC_VERSION" ;;
+        uninstall|purge|purge-all) uninstall_flow "$ACTION" ;;
+        list-versions) list_versions_action ;;
+        *)
+            print_error "No action selected."
+            exit 1
+            ;;
+    esac
+}
 
+execute_modular_action() {
     case "$ACTION" in
         install)
             bash "$SCRIPT_DIR/install.sh" "$SPECIFIC_VERSION"
@@ -281,6 +338,13 @@ execute_action() {
     esac
 }
 
+execute_action() {
+    if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
+        execute_standalone_action
+    else
+        execute_modular_action
+    fi
+}
 main() {
     parse_args "$@"
     if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
@@ -288,7 +352,7 @@ main() {
         print_log "Logs are being written to $INSTALL_LOG"
     fi
 
-    export SILENT MANTICORE_START_SERVICE MANTICORE_BACKUP_DATA MANTICORE_BACKUP_DIR
+    export SILENT MANTICORE_START_SERVICE MANTICORE_BACKUP_DATA MANTICORE_BACKUP_DIR MANTICORE_REPO_CHANNEL
     detect_os
     detect_arch
 

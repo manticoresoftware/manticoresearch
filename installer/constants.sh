@@ -9,7 +9,13 @@ DEB_REPO_PACKAGE_NAME="manticore-repo"
 RPM_REPO_PACKAGE_NAME="manticore-repo"
 
 DEB_REPO_PACKAGE_URL="https://repo.manticoresearch.com/manticore-repo.noarch.deb"
+DEB_RELEASE_REPO_PACKAGE_URL="$DEB_REPO_PACKAGE_URL"
+DEB_DEV_REPO_PACKAGE_URL="https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb"
 RPM_REPO_PACKAGE_URL="https://repo.manticoresearch.com/manticore-repo.noarch.rpm"
+
+DEB_REPO_FILE="/etc/apt/sources.list.d/manticoresearch.list"
+RPM_RELEASE_REPO_ID="manticore"
+RPM_DEV_REPO_ID="manticore-dev"
 
 # Keep in sync with listen directives in ../manticore.conf.in.
 DEFAULT_PORTS="9306 9308 9312"

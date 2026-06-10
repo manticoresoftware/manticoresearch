@@ -17,13 +17,34 @@ trap cleanup EXIT
 append_module() {
     local module_path=$1
 
-    awk '
+    awk -v module_path="$module_path" '
         skip_self_run && /^[[:space:]]*fi[[:space:]]*$/ { skip_self_run=0; next }
         skip_self_run { next }
+        skip_function_depth > 0 {
+            if ($0 ~ /\{/) skip_function_depth++
+            if ($0 ~ /\}/) skip_function_depth--
+            next
+        }
         NR == 1 && /^#!/ { next }
         /^set -euo pipefail$/ { next }
         /SCRIPT_DIR/ { next }
         /BASH_SOURCE/ { skip_self_run=1; next }
+        module_path ~ /main[.]sh$/ && /^print_modular_usage\(\)/ { skip_function_depth=1; next }
+        module_path ~ /main[.]sh$/ && /^print_usage\(\)/ {
+            print "print_usage() {"
+            print "    print_standalone_usage"
+            print "}"
+            skip_function_depth=1
+            next
+        }
+        module_path ~ /main[.]sh$/ && /^execute_modular_action\(\)/ { skip_function_depth=1; next }
+        module_path ~ /main[.]sh$/ && /^execute_action\(\)/ {
+            print "execute_action() {"
+            print "    execute_standalone_action"
+            print "}"
+            skip_function_depth=1
+            next
+        }
         { print }
     ' "$module_path"
 }
@@ -35,88 +56,6 @@ append_module() {
 set -euo pipefail
 
 MANTICORE_STANDALONE=1
-
-standalone_print_usage() {
-    cat <<'USAGE'
-Manticore Search Installer
-
-Usage:
-  wget -O- https://manticoresearch.com | sh -s [options]
-  curl https://manticoresearch.com | sh -s [options]
-
-Common commands/options:
-  help                        Show this help and exit.
-  silent                      Non-interactive mode; assume defaults.
-  upgrade                     Upgrade an installed Manticore package.
-  version <version>           Install or switch to a specific version.
-  list-versions               Print available versions.
-  list-versions-file <path>   Write available versions to path.
-  no-start                    Do not start the service after install/upgrade.
-  backup-data                 Include data directory in upgrade backup.
-  no-backup-data              Skip data directory backup (default).
-  backup-dir <path>           Override backup directory for upgrades.
-  uninstall                   Remove packages, keep config/data/repo state.
-  purge                       Remove packages and repository bootstrap package.
-  purge-all                   Purge packages, repo state, config, and data.
-
-Examples:
-  curl https://manticoresearch.com | sh -s list-versions
-  curl https://manticoresearch.com | sh -s version 25.0.0 no-start
-  curl https://manticoresearch.com | sh -s upgrade backup-data
-USAGE
-}
-
-standalone_drain_stdin_if_piped() {
-    if [[ ! -t 0 ]]; then
-        while IFS= read -r _manticore_unused; do
-            :
-        done
-    fi
-}
-
-standalone_exit_after_pipe_drain() {
-    local status=$1
-    standalone_drain_stdin_if_piped
-    exit "$status"
-}
-
-standalone_usage_error() {
-    echo "[ERROR] $1" >&2
-    echo "Run with --help to see supported options." >&2
-    standalone_exit_after_pipe_drain 2
-}
-
-standalone_validate_args() {
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            -h|--help|-\?|help)
-                standalone_print_usage
-                standalone_exit_after_pipe_drain 0
-                ;;
-            -s|-y|silent|yes|no-start|backup-data|no-backup-data|-u|uninstall|purge|purge-all|upgrade|list-versions)
-                shift
-                ;;
-            -v|version|backup-dir|list-versions-file)
-                if [[ -z "${2:-}" || "${2:0:1}" == "-" ]]; then
-                    standalone_usage_error "$1 requires a value."
-                fi
-                shift 2
-                ;;
-            list-versions-file=*)
-                if [[ -z "${1#*=}" ]]; then
-                    standalone_usage_error "list-versions-file requires a value."
-                fi
-                shift
-                ;;
-            *)
-                standalone_usage_error "Unknown option: $1"
-                ;;
-        esac
-    done
-}
-
-standalone_validate_args "$@"
-unset -f standalone_validate_args standalone_usage_error standalone_print_usage standalone_exit_after_pipe_drain standalone_drain_stdin_if_piped
 HEADER
 
     echo ""

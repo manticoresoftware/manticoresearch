@@ -21,12 +21,14 @@ Common commands/options:
   backup-data                 Include data directory in upgrade backup.
   no-backup-data              Skip data directory backup (default).
   backup-dir <path>           Override backup directory for upgrades.
+  release, dev,               Select Manticore repository channel.
   uninstall, -u               Remove packages, keep config/data/repo state.
   purge                       Remove packages and repository bootstrap package.
   purge-all                   Purge packages, repo state, config, and data.
 
 Examples:
   sh bootstrap-standalone.sh list-versions
+  sh bootstrap-standalone.sh dev list-versions
   sh bootstrap-standalone.sh version 25.0.0 no-start
   sh bootstrap-standalone.sh upgrade backup-data
 USAGE
@@ -53,7 +55,7 @@ while [[ $# -gt 0 ]]; do
             print_usage
             exit_after_pipe_drain 0
             ;;
-        -s|-y|silent|yes|no-start|backup-data|no-backup-data|-u|uninstall|purge|purge-all|upgrade|list-versions)
+        -s|-y|silent|yes|no-start|backup-data|no-backup-data|-u|uninstall|purge|purge-all|upgrade|list-versions|release|dev)
             shift
             ;;
         -v|version|backup-dir|list-versions-file)

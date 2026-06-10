@@ -20,88 +20,6 @@ set -euo pipefail
 
 MANTICORE_STANDALONE=1
 
-standalone_print_usage() {
-    cat <<'USAGE'
-Manticore Search Installer
-
-Usage:
-  wget -O- https://manticoresearch.com | sh -s [options]
-  curl https://manticoresearch.com | sh -s [options]
-
-Common commands/options:
-  help                        Show this help and exit.
-  silent                      Non-interactive mode; assume defaults.
-  upgrade                     Upgrade an installed Manticore package.
-  version <version>           Install or switch to a specific version.
-  list-versions               Print available versions.
-  list-versions-file <path>   Write available versions to path.
-  no-start                    Do not start the service after install/upgrade.
-  backup-data                 Include data directory in upgrade backup.
-  no-backup-data              Skip data directory backup (default).
-  backup-dir <path>           Override backup directory for upgrades.
-  uninstall                   Remove packages, keep config/data/repo state.
-  purge                       Remove packages and repository bootstrap package.
-  purge-all                   Purge packages, repo state, config, and data.
-
-Examples:
-  curl https://manticoresearch.com | sh -s list-versions
-  curl https://manticoresearch.com | sh -s version 25.0.0 no-start
-  curl https://manticoresearch.com | sh -s upgrade backup-data
-USAGE
-}
-
-standalone_drain_stdin_if_piped() {
-    if [[ ! -t 0 ]]; then
-        while IFS= read -r _manticore_unused; do
-            :
-        done
-    fi
-}
-
-standalone_exit_after_pipe_drain() {
-    local status=$1
-    standalone_drain_stdin_if_piped
-    exit "$status"
-}
-
-standalone_usage_error() {
-    echo "[ERROR] $1" >&2
-    echo "Run with --help to see supported options." >&2
-    standalone_exit_after_pipe_drain 2
-}
-
-standalone_validate_args() {
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            -h|--help|-\?|help)
-                standalone_print_usage
-                standalone_exit_after_pipe_drain 0
-                ;;
-            -s|-y|silent|yes|no-start|backup-data|no-backup-data|-u|uninstall|purge|purge-all|upgrade|list-versions)
-                shift
-                ;;
-            -v|version|backup-dir|list-versions-file)
-                if [[ -z "${2:-}" || "${2:0:1}" == "-" ]]; then
-                    standalone_usage_error "$1 requires a value."
-                fi
-                shift 2
-                ;;
-            list-versions-file=*)
-                if [[ -z "${1#*=}" ]]; then
-                    standalone_usage_error "list-versions-file requires a value."
-                fi
-                shift
-                ;;
-            *)
-                standalone_usage_error "Unknown option: $1"
-                ;;
-        esac
-    done
-}
-
-standalone_validate_args "$@"
-unset -f standalone_validate_args standalone_usage_error standalone_print_usage standalone_exit_after_pipe_drain standalone_drain_stdin_if_piped
-
 # ---- constants.sh ----
 PACKAGE_NAME="manticore"
 DEB_FALLBACK_VERSIONED_PACKAGE_NAMES="manticore manticore-server manticore-server-core manticore-tools manticore-dev manticore-common"
@@ -114,7 +32,13 @@ DEB_REPO_PACKAGE_NAME="manticore-repo"
 RPM_REPO_PACKAGE_NAME="manticore-repo"
 
 DEB_REPO_PACKAGE_URL="https://repo.manticoresearch.com/manticore-repo.noarch.deb"
+DEB_RELEASE_REPO_PACKAGE_URL="$DEB_REPO_PACKAGE_URL"
+DEB_DEV_REPO_PACKAGE_URL="https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb"
 RPM_REPO_PACKAGE_URL="https://repo.manticoresearch.com/manticore-repo.noarch.rpm"
+
+DEB_REPO_FILE="/etc/apt/sources.list.d/manticoresearch.list"
+RPM_RELEASE_REPO_ID="manticore"
+RPM_DEV_REPO_ID="manticore-dev"
 
 # Keep in sync with listen directives in ../manticore.conf.in.
 DEFAULT_PORTS="9306 9308 9312"
@@ -298,26 +222,7 @@ MANTICORE_START_SERVICE="${MANTICORE_START_SERVICE:-true}"
 CURRENT_BACKUP_PATH=""
 
 upgrade_repo_package() {
-    if [[ "$OS_FAMILY" == "brew" ]]; then
-        print_info "Homebrew installation does not require the Manticore repository package."
-        return 0
-    fi
-
-    print_step "Refreshing Repository Bootstrap Package"
-
-    if [[ "$OS_FAMILY" == "debian" ]]; then
-        local deb_path
-        deb_path=$(mktemp /tmp/manticore-repo.XXXXXX.deb)
-        download_with_available_tool "$DEB_REPO_PACKAGE_URL" "$deb_path"
-        install_debian_repo_package_file "$deb_path"
-        rm -f "$deb_path"
-    else
-        if command -v dnf >/dev/null 2>&1; then
-            sudo_exec dnf install -y "$RPM_REPO_PACKAGE_URL"
-        else
-            sudo_exec yum install -y "$RPM_REPO_PACKAGE_URL"
-        fi
-    fi
+    ensure_repo_channel
 }
 
 ensure_backup() {
@@ -382,17 +287,17 @@ upgrade_package() {
             if [[ -n "$package_version" ]]; then
                 prepare_rpm_packages_for_version "$package_version"
                 mapfile -t package_specs < <(versioned_rpm_package_specs "$package_version")
-                sudo_exec dnf install -y "${package_specs[@]}"
+                rpm_sudo_run dnf install -y "${package_specs[@]}"
             else
-                sudo_exec dnf upgrade -y "$PACKAGE_NAME"
+                rpm_sudo_run dnf upgrade -y "$PACKAGE_NAME"
             fi
         else
             if [[ -n "$package_version" ]]; then
                 prepare_rpm_packages_for_version "$package_version"
                 mapfile -t package_specs < <(versioned_rpm_package_specs "$package_version")
-                sudo_exec yum install -y "${package_specs[@]}"
+                rpm_sudo_run yum install -y "${package_specs[@]}"
             else
-                sudo_exec yum update -y "$PACKAGE_NAME"
+                rpm_sudo_run yum update -y "$PACKAGE_NAME"
             fi
         fi
     elif [[ "$OS_FAMILY" == "brew" ]]; then
@@ -453,7 +358,7 @@ upgrade_flow() {
     CURRENT_BACKUP_PATH="${MANTICORE_BACKUP_DIR:-$BACKUP_DIR}/manticore_backup_${backup_suffix}"
 
     ensure_backup
-    upgrade_repo_package
+    ensure_repo_channel
     refresh_package_metadata
     upgrade_package "$requested_version"
     ensure_service_started
@@ -498,33 +403,7 @@ download_with_available_tool() {
 }
 
 install_repo_package() {
-    if [[ "$OS_FAMILY" == "brew" ]]; then
-        print_info "Homebrew installation does not require the Manticore repository package."
-        return 0
-    fi
-
-    if repo_package_installed; then
-        print_info "Repository bootstrap package already installed."
-        return 0
-    fi
-
-    print_step "Installing Repository Bootstrap Package"
-
-    if [[ "$OS_FAMILY" == "debian" ]]; then
-        local deb_path
-        deb_path=$(mktemp /tmp/manticore-repo.XXXXXX.deb)
-        download_with_available_tool "$DEB_REPO_PACKAGE_URL" "$deb_path"
-        install_debian_repo_package_file "$deb_path"
-        rm -f "$deb_path"
-    else
-        if command -v dnf >/dev/null 2>&1; then
-            sudo_exec dnf install -y "$RPM_REPO_PACKAGE_URL"
-        else
-            sudo_exec yum install -y "$RPM_REPO_PACKAGE_URL"
-        fi
-    fi
-
-    print_success "Repository bootstrap package installed."
+    ensure_repo_channel
 }
 
 install_manticore_package() {
@@ -561,17 +440,17 @@ install_manticore_package() {
             if [[ -n "$package_version" ]]; then
                 prepare_rpm_packages_for_version "$package_version"
                 mapfile -t package_specs < <(versioned_rpm_package_specs "$package_version")
-                sudo_exec dnf install -y "${package_specs[@]}"
+                rpm_sudo_run dnf install -y "${package_specs[@]}"
             else
-                sudo_exec dnf install -y "$PACKAGE_NAME"
+                rpm_sudo_run dnf install -y "$PACKAGE_NAME"
             fi
         else
             if [[ -n "$package_version" ]]; then
                 prepare_rpm_packages_for_version "$package_version"
                 mapfile -t package_specs < <(versioned_rpm_package_specs "$package_version")
-                sudo_exec yum install -y "${package_specs[@]}"
+                rpm_sudo_run yum install -y "${package_specs[@]}"
             else
-                sudo_exec yum install -y "$PACKAGE_NAME"
+                rpm_sudo_run yum install -y "$PACKAGE_NAME"
             fi
         fi
     elif [[ "$OS_FAMILY" == "brew" ]]; then
@@ -625,7 +504,7 @@ install_flow() {
     validate_requested_version_argument "$requested_version" version
 
     warn_about_manual_installation
-    install_repo_package
+    ensure_repo_channel
     refresh_package_metadata
     install_manticore_package "$requested_version"
     ensure_service_started
@@ -1012,17 +891,146 @@ delete_file_if_present() {
 }
 
 repair_debian_repo_package() {
-    local deb_path
+    local deb_path channel repo_url
 
     [[ "$OS_FAMILY" == "debian" ]] || return 0
 
+    channel="${MANTICORE_REPO_CHANNEL:-$(detect_debian_repo_channel || echo release)}"
+    repo_url=$(deb_repo_package_url_for_channel "$channel") || return 1
+
     print_step "Repairing Repository Bootstrap Package"
+    print_info "Reinstalling Manticore ${channel} repository package."
     deb_path=$(mktemp /tmp/manticore-repo.XXXXXX.deb)
-    download_with_available_tool "$DEB_REPO_PACKAGE_URL" "$deb_path"
+    download_with_available_tool "$repo_url" "$deb_path"
     install_debian_repo_package_file "$deb_path" force
     delete_file_if_present "$deb_path"
 }
 
+deb_repo_package_url_for_channel() {
+    case "$1" in
+        release) echo "$DEB_RELEASE_REPO_PACKAGE_URL" ;;
+        dev) echo "$DEB_DEV_REPO_PACKAGE_URL" ;;
+        *) return 1 ;;
+    esac
+}
+
+rpm_repo_args_for_channel() {
+    local channel="${1:-${MANTICORE_REPO_CHANNEL:-}}"
+
+    [[ "$channel" == "dev" ]] || return 0
+    printf '%s\n' "--enablerepo=${RPM_DEV_REPO_ID}" "--disablerepo=${RPM_RELEASE_REPO_ID}"
+}
+
+rpm_run() {
+    local command=$1
+    local repo_args=()
+    shift
+
+    mapfile -t repo_args < <(rpm_repo_args_for_channel)
+    "$command" "${repo_args[@]}" "$@"
+}
+
+rpm_sudo_run() {
+    local command=$1
+    local repo_args=()
+    shift
+
+    mapfile -t repo_args < <(rpm_repo_args_for_channel)
+    sudo_exec "$command" "${repo_args[@]}" "$@"
+}
+
+detect_debian_repo_channel() {
+    local repo_url
+
+    [[ -s "$DEB_REPO_FILE" ]] || return 1
+    repo_url=$(awk 'NF && $1 == "deb" {print $2; exit}' "$DEB_REPO_FILE")
+    [[ -n "$repo_url" ]] || return 1
+
+    case "$repo_url" in
+        *_dev)
+            echo dev
+            ;;
+        *)
+            echo release
+            ;;
+    esac
+}
+
+detect_repo_channel() {
+    case "$OS_FAMILY" in
+        debian) detect_debian_repo_channel ;;
+        *) return 1 ;;
+    esac
+}
+
+ensure_repo_channel() {
+    case "$OS_FAMILY" in
+        debian)
+            ensure_debian_repo_channel
+            ;;
+        rpm)
+            ensure_rpm_repo_channel
+            ;;
+        brew)
+            if [[ -n "${MANTICORE_REPO_CHANNEL:-}" ]]; then
+                print_error "Repository channels are not supported for Homebrew installs."
+                return 1
+            fi
+            ;;
+    esac
+}
+ensure_debian_repo_channel() {
+    local target="${MANTICORE_REPO_CHANNEL:-}"
+    local current="" repo_url deb_path
+
+    current=$(detect_debian_repo_channel || true)
+
+    if [[ -z "$target" ]]; then
+        if [[ -n "$current" ]]; then
+            if repo_package_installed; then
+                print_info "Preserving active Manticore ${current} repository."
+            else
+                print_warn "${DEB_REPO_FILE} already points to the Manticore ${current} repository, but ${DEB_REPO_PACKAGE_NAME} is not installed. Preserving this manual repository configuration."
+            fi
+            return 0
+        fi
+        if repo_package_installed && [[ -z "$current" ]]; then
+            print_warn "Manticore repository package is installed, but ${DEB_REPO_FILE} does not identify a known channel. Preserving existing repository state."
+            return 0
+        fi
+        target=release
+    fi
+
+    if [[ "$current" == "$target" && repo_package_installed ]]; then
+        print_info "Manticore ${target} repository is already active."
+        return 0
+    fi
+
+    repo_url=$(deb_repo_package_url_for_channel "$target") || return 1
+    print_step "Switching Manticore Repository Channel"
+    print_info "Activating Manticore ${target} repository."
+
+    deb_path=$(mktemp /tmp/manticore-repo.XXXXXX.deb)
+    download_with_available_tool "$repo_url" "$deb_path"
+    if repo_package_installed; then
+        sudo_exec apt-get remove -y "$DEB_REPO_PACKAGE_NAME"
+    fi
+    install_debian_repo_package_file "$deb_path" force
+    delete_file_if_present "$deb_path"
+}
+
+ensure_rpm_repo_channel() {
+    local target="${MANTICORE_REPO_CHANNEL:-}"
+
+    ensure_repo_package_installed
+    if [[ "$target" == "dev" ]]; then
+        print_info "Using Manticore dev repository for RPM package-manager commands."
+    elif [[ "$target" == "release" ]]; then
+        print_info "Using default Manticore release repository for RPM package-manager commands."
+    else
+        print_info "Using RPM repository configuration from the Manticore repository package."
+    fi
+}
 validate_requested_version_argument() {
     local value=${1:-}
     local option_name=${2:-"version"}
@@ -1064,7 +1072,6 @@ apt_update_output_indicates_manticore_repo_issue() {
         END { exit found ? 0 : 1 }
     ' "$output_file"
 }
-
 apt_update_auth_issue_pattern() {
     printf '%s\n' '(NO_PUBKEY|EXPKEYSIG|BADSIG|GPG error|invalid signature|The following signatures were invalid|signatures couldn.t be verified|public key is not available|repository .* is not signed|InRelease is not signed|Release file is not signed|There is no public key available)'
 }
@@ -1165,9 +1172,11 @@ ensure_repo_package_installed() {
     print_step "Installing Repository Bootstrap Package"
 
     if [[ "$OS_FAMILY" == "debian" ]]; then
-        local deb_path
+        local deb_path repo_channel repo_url
+        repo_channel="${MANTICORE_REPO_CHANNEL:-release}"
+        repo_url=$(deb_repo_package_url_for_channel "$repo_channel") || return 1
         deb_path=$(mktemp /tmp/manticore-repo.XXXXXX.deb)
-        download_with_available_tool "$DEB_REPO_PACKAGE_URL" "$deb_path"
+        download_with_available_tool "$repo_url" "$deb_path"
         install_debian_repo_package_file "$deb_path"
         rm -f "$deb_path"
     elif [[ "$OS_FAMILY" == "rpm" ]]; then
@@ -1231,9 +1240,9 @@ get_latest_available_version() {
 
     if [[ "$OS_FAMILY" == "rpm" ]]; then
         if command -v dnf >/dev/null 2>&1; then
-            dnf --showduplicates list "$PACKAGE_NAME" 2>/dev/null | awk -v pkg="$PACKAGE_NAME" '$1 ~ ("^" pkg "[.]") {print $2}' | tail -n 1
+            rpm_run dnf --showduplicates list "$PACKAGE_NAME" 2>/dev/null | awk -v pkg="$PACKAGE_NAME" '$1 ~ ("^" pkg "[.]") {print $2}' | tail -n 1
         else
-            yum --showduplicates list "$PACKAGE_NAME" 2>/dev/null | awk -v pkg="$PACKAGE_NAME" '$1 ~ ("^" pkg "[.]") {print $2}' | tail -n 1
+            rpm_run yum --showduplicates list "$PACKAGE_NAME" 2>/dev/null | awk -v pkg="$PACKAGE_NAME" '$1 ~ ("^" pkg "[.]") {print $2}' | tail -n 1
         fi
         return 0
     fi
@@ -1272,9 +1281,9 @@ list_available_versions() {
 
     if [[ "$OS_FAMILY" == "rpm" ]]; then
         if command -v dnf >/dev/null 2>&1; then
-            dnf --showduplicates list "$PACKAGE_NAME" 2>/dev/null | awk -v pkg="$PACKAGE_NAME" '$1 ~ ("^" pkg "[.]") {print $2}'
+            rpm_run dnf --showduplicates list "$PACKAGE_NAME" 2>/dev/null | awk -v pkg="$PACKAGE_NAME" '$1 ~ ("^" pkg "[.]") {print $2}'
         else
-            yum --showduplicates list "$PACKAGE_NAME" 2>/dev/null | awk -v pkg="$PACKAGE_NAME" '$1 ~ ("^" pkg "[.]") {print $2}'
+            rpm_run yum --showduplicates list "$PACKAGE_NAME" 2>/dev/null | awk -v pkg="$PACKAGE_NAME" '$1 ~ ("^" pkg "[.]") {print $2}'
         fi
         return 0
     fi
@@ -1602,11 +1611,11 @@ rpm_repoquery_requires() {
     local version=$2
 
     if command -v dnf >/dev/null 2>&1; then
-        dnf -q repoquery --requires "${package}-${version}" 2>/dev/null
+        rpm_run dnf -q repoquery --requires "${package}-${version}" 2>/dev/null
     elif command -v repoquery >/dev/null 2>&1; then
-        repoquery --requires "${package}-${version}" 2>/dev/null
+        rpm_run repoquery --requires "${package}-${version}" 2>/dev/null
     elif command -v yum >/dev/null 2>&1; then
-        yum -q repoquery --requires "${package}-${version}" 2>/dev/null
+        rpm_run yum -q repoquery --requires "${package}-${version}" 2>/dev/null
     else
         return 1
     fi
@@ -1719,9 +1728,9 @@ package_version_available() {
 
     if [[ "$OS_FAMILY" == "rpm" ]]; then
         if command -v dnf >/dev/null 2>&1; then
-            dnf --showduplicates list "$package" 2>/dev/null | awk -v pkg="$package" -v version="$version" '$1 ~ ("^" pkg "[.]") && $2 == version {found=1} END {exit found ? 0 : 1}'
+            rpm_run dnf --showduplicates list "$package" 2>/dev/null | awk -v pkg="$package" -v version="$version" '$1 ~ ("^" pkg "[.]") && $2 == version {found=1} END {exit found ? 0 : 1}'
         else
-            yum --showduplicates list "$package" 2>/dev/null | awk -v pkg="$package" -v version="$version" '$1 ~ ("^" pkg "[.]") && $2 == version {found=1} END {exit found ? 0 : 1}'
+            rpm_run yum --showduplicates list "$package" 2>/dev/null | awk -v pkg="$package" -v version="$version" '$1 ~ ("^" pkg "[.]") && $2 == version {found=1} END {exit found ? 0 : 1}'
         fi
         return $?
     fi
@@ -1838,9 +1847,9 @@ refresh_package_metadata() {
         refresh_debian_package_metadata
     elif [[ "$OS_FAMILY" == "rpm" ]]; then
         if command -v dnf >/dev/null 2>&1; then
-            sudo_exec dnf makecache
+            rpm_sudo_run dnf makecache
         else
-            sudo_exec yum makecache
+            rpm_sudo_run yum makecache
         fi
     elif [[ "$OS_FAMILY" == "brew" ]]; then
         brew update
@@ -1859,15 +1868,16 @@ UPGRADE_REQUESTED=false
 MANTICORE_START_SERVICE=true
 MANTICORE_BACKUP_DATA=no
 MANTICORE_BACKUP_DIR=""
+MANTICORE_REPO_CHANNEL=""
 LIST_VERSIONS_OUTPUT_FILE=""
 
-print_usage() {
+print_standalone_usage() {
     cat <<'USAGE'
 Manticore Search Installer
 
 Usage:
-  wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
-  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
+  wget -O- https://manticoresearch.com | sh -s [options]
+  curl https://manticoresearch.com | sh -s [options]
 
 Common commands/options:
   help, --help, -h, -?        Show this help and exit.
@@ -1880,15 +1890,22 @@ Common commands/options:
   backup-data                 Include data directory in upgrade backup.
   no-backup-data              Skip data directory backup (default).
   backup-dir <path>           Override backup directory for upgrades.
+  release, dev                Select Manticore repository channel.
   uninstall, -u               Remove packages, keep config/data/repo state.
   purge                       Remove packages and repository bootstrap package.
   purge-all                   Purge packages, repo state, config, and data.
 
 Examples:
-  sh bootstrap-standalone.sh list-versions
-  sh bootstrap-standalone.sh version 25.0.0 no-start
-  sh bootstrap-standalone.sh upgrade backup-data
+  curl https://manticoresearch.com | sh -s list-versions
+  curl https://manticoresearch.com | sh -s dev list-versions
+  curl https://manticoresearch.com | sh -s version 25.0.0 no-start
+  curl https://manticoresearch.com | sh -s upgrade backup-data
 USAGE
+}
+
+
+print_usage() {
+    print_standalone_usage
 }
 usage_error() {
     print_error "$1"
@@ -1897,6 +1914,16 @@ usage_error() {
 }
 
 
+
+set_requested_repo_channel() {
+    local normalized
+
+    normalized="$1" || usage_error "Unknown repository channel: $1"
+    if [[ -n "$MANTICORE_REPO_CHANNEL" && "$MANTICORE_REPO_CHANNEL" != "$normalized" ]]; then
+        usage_error "Conflicting repository channels: $MANTICORE_REPO_CHANNEL and $normalized"
+    fi
+    MANTICORE_REPO_CHANNEL="$normalized"
+}
 
 parse_args() {
     while [[ $# -gt 0 ]]; do
@@ -1919,6 +1946,10 @@ parse_args() {
                 ;;
             no-backup-data)
                 MANTICORE_BACKUP_DATA=no
+                shift
+                ;;
+            release|dev)
+                set_requested_repo_channel "$1"
                 shift
                 ;;
             backup-dir)
@@ -2011,7 +2042,7 @@ write_versions_output_file() {
 list_versions_action() {
     local versions
 
-    ensure_repo_package_installed
+    ensure_repo_channel
     refresh_package_metadata
     versions=$(list_available_versions | refine_version_list || true)
     if [[ -z "$versions" ]]; then
@@ -2040,6 +2071,7 @@ determine_action() {
         return 0
     fi
 
+    ensure_repo_channel
     refresh_package_metadata
     current_version=$(get_installed_version || true)
     target_version=$(get_target_version || true)
@@ -2084,35 +2116,12 @@ determine_action() {
     fi
 }
 
-execute_action() {
-    if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
-        case "$ACTION" in
-            install) install_flow "$SPECIFIC_VERSION" ;;
-            upgrade) upgrade_flow "$SPECIFIC_VERSION" ;;
-            uninstall|purge|purge-all) uninstall_flow "$ACTION" ;;
-            list-versions) list_versions_action ;;
-            *)
-                print_error "No action selected."
-                exit 1
-                ;;
-        esac
-        return 0
-    fi
-
+execute_standalone_action() {
     case "$ACTION" in
-        install)
-            ;;
-        upgrade)
-            ;;
-        uninstall)
-            ;;
-        purge)
-            ;;
-        purge-all)
-            ;;
-        list-versions)
-            list_versions_action
-            ;;
+        install) install_flow "$SPECIFIC_VERSION" ;;
+        upgrade) upgrade_flow "$SPECIFIC_VERSION" ;;
+        uninstall|purge|purge-all) uninstall_flow "$ACTION" ;;
+        list-versions) list_versions_action ;;
         *)
             print_error "No action selected."
             exit 1
@@ -2120,6 +2129,10 @@ execute_action() {
     esac
 }
 
+
+execute_action() {
+    execute_standalone_action
+}
 main() {
     parse_args "$@"
     if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
@@ -2127,7 +2140,7 @@ main() {
         print_log "Logs are being written to $INSTALL_LOG"
     fi
 
-    export SILENT MANTICORE_START_SERVICE MANTICORE_BACKUP_DATA MANTICORE_BACKUP_DIR
+    export SILENT MANTICORE_START_SERVICE MANTICORE_BACKUP_DATA MANTICORE_BACKUP_DIR MANTICORE_REPO_CHANNEL
     detect_os
     detect_arch
 

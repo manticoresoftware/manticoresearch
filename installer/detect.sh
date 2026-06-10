@@ -222,17 +222,146 @@ delete_file_if_present() {
 }
 
 repair_debian_repo_package() {
-    local deb_path
+    local deb_path channel repo_url
 
     [[ "$OS_FAMILY" == "debian" ]] || return 0
 
+    channel="${MANTICORE_REPO_CHANNEL:-$(detect_debian_repo_channel || echo release)}"
+    repo_url=$(deb_repo_package_url_for_channel "$channel") || return 1
+
     print_step "Repairing Repository Bootstrap Package"
+    print_info "Reinstalling Manticore ${channel} repository package."
     deb_path=$(mktemp /tmp/manticore-repo.XXXXXX.deb)
-    download_with_available_tool "$DEB_REPO_PACKAGE_URL" "$deb_path"
+    download_with_available_tool "$repo_url" "$deb_path"
     install_debian_repo_package_file "$deb_path" force
     delete_file_if_present "$deb_path"
 }
 
+deb_repo_package_url_for_channel() {
+    case "$1" in
+        release) echo "$DEB_RELEASE_REPO_PACKAGE_URL" ;;
+        dev) echo "$DEB_DEV_REPO_PACKAGE_URL" ;;
+        *) return 1 ;;
+    esac
+}
+
+rpm_repo_args_for_channel() {
+    local channel="${1:-${MANTICORE_REPO_CHANNEL:-}}"
+
+    [[ "$channel" == "dev" ]] || return 0
+    printf '%s\n' "--enablerepo=${RPM_DEV_REPO_ID}" "--disablerepo=${RPM_RELEASE_REPO_ID}"
+}
+
+rpm_run() {
+    local command=$1
+    local repo_args=()
+    shift
+
+    mapfile -t repo_args < <(rpm_repo_args_for_channel)
+    "$command" "${repo_args[@]}" "$@"
+}
+
+rpm_sudo_run() {
+    local command=$1
+    local repo_args=()
+    shift
+
+    mapfile -t repo_args < <(rpm_repo_args_for_channel)
+    sudo_exec "$command" "${repo_args[@]}" "$@"
+}
+
+detect_debian_repo_channel() {
+    local repo_url
+
+    [[ -s "$DEB_REPO_FILE" ]] || return 1
+    repo_url=$(awk 'NF && $1 == "deb" {print $2; exit}' "$DEB_REPO_FILE")
+    [[ -n "$repo_url" ]] || return 1
+
+    case "$repo_url" in
+        *_dev)
+            echo dev
+            ;;
+        *)
+            echo release
+            ;;
+    esac
+}
+
+detect_repo_channel() {
+    case "$OS_FAMILY" in
+        debian) detect_debian_repo_channel ;;
+        *) return 1 ;;
+    esac
+}
+
+ensure_repo_channel() {
+    case "$OS_FAMILY" in
+        debian)
+            ensure_debian_repo_channel
+            ;;
+        rpm)
+            ensure_rpm_repo_channel
+            ;;
+        brew)
+            if [[ -n "${MANTICORE_REPO_CHANNEL:-}" ]]; then
+                print_error "Repository channels are not supported for Homebrew installs."
+                return 1
+            fi
+            ;;
+    esac
+}
+ensure_debian_repo_channel() {
+    local target="${MANTICORE_REPO_CHANNEL:-}"
+    local current="" repo_url deb_path
+
+    current=$(detect_debian_repo_channel || true)
+
+    if [[ -z "$target" ]]; then
+        if [[ -n "$current" ]]; then
+            if repo_package_installed; then
+                print_info "Preserving active Manticore ${current} repository."
+            else
+                print_warn "${DEB_REPO_FILE} already points to the Manticore ${current} repository, but ${DEB_REPO_PACKAGE_NAME} is not installed. Preserving this manual repository configuration."
+            fi
+            return 0
+        fi
+        if repo_package_installed && [[ -z "$current" ]]; then
+            print_warn "Manticore repository package is installed, but ${DEB_REPO_FILE} does not identify a known channel. Preserving existing repository state."
+            return 0
+        fi
+        target=release
+    fi
+
+    if [[ "$current" == "$target" && repo_package_installed ]]; then
+        print_info "Manticore ${target} repository is already active."
+        return 0
+    fi
+
+    repo_url=$(deb_repo_package_url_for_channel "$target") || return 1
+    print_step "Switching Manticore Repository Channel"
+    print_info "Activating Manticore ${target} repository."
+
+    deb_path=$(mktemp /tmp/manticore-repo.XXXXXX.deb)
+    download_with_available_tool "$repo_url" "$deb_path"
+    if repo_package_installed; then
+        sudo_exec apt-get remove -y "$DEB_REPO_PACKAGE_NAME"
+    fi
+    install_debian_repo_package_file "$deb_path" force
+    delete_file_if_present "$deb_path"
+}
+
+ensure_rpm_repo_channel() {
+    local target="${MANTICORE_REPO_CHANNEL:-}"
+
+    ensure_repo_package_installed
+    if [[ "$target" == "dev" ]]; then
+        print_info "Using Manticore dev repository for RPM package-manager commands."
+    elif [[ "$target" == "release" ]]; then
+        print_info "Using default Manticore release repository for RPM package-manager commands."
+    else
+        print_info "Using RPM repository configuration from the Manticore repository package."
+    fi
+}
 validate_requested_version_argument() {
     local value=${1:-}
     local option_name=${2:-"version"}
@@ -274,7 +403,6 @@ apt_update_output_indicates_manticore_repo_issue() {
         END { exit found ? 0 : 1 }
     ' "$output_file"
 }
-
 apt_update_auth_issue_pattern() {
     printf '%s\n' '(NO_PUBKEY|EXPKEYSIG|BADSIG|GPG error|invalid signature|The following signatures were invalid|signatures couldn.t be verified|public key is not available|repository .* is not signed|InRelease is not signed|Release file is not signed|There is no public key available)'
 }
@@ -375,9 +503,11 @@ ensure_repo_package_installed() {
     print_step "Installing Repository Bootstrap Package"
 
     if [[ "$OS_FAMILY" == "debian" ]]; then
-        local deb_path
+        local deb_path repo_channel repo_url
+        repo_channel="${MANTICORE_REPO_CHANNEL:-release}"
+        repo_url=$(deb_repo_package_url_for_channel "$repo_channel") || return 1
         deb_path=$(mktemp /tmp/manticore-repo.XXXXXX.deb)
-        download_with_available_tool "$DEB_REPO_PACKAGE_URL" "$deb_path"
+        download_with_available_tool "$repo_url" "$deb_path"
         install_debian_repo_package_file "$deb_path"
         rm -f "$deb_path"
     elif [[ "$OS_FAMILY" == "rpm" ]]; then
@@ -441,9 +571,9 @@ get_latest_available_version() {
 
     if [[ "$OS_FAMILY" == "rpm" ]]; then
         if command -v dnf >/dev/null 2>&1; then
-            dnf --showduplicates list "$PACKAGE_NAME" 2>/dev/null | awk -v pkg="$PACKAGE_NAME" '$1 ~ ("^" pkg "[.]") {print $2}' | tail -n 1
+            rpm_run dnf --showduplicates list "$PACKAGE_NAME" 2>/dev/null | awk -v pkg="$PACKAGE_NAME" '$1 ~ ("^" pkg "[.]") {print $2}' | tail -n 1
         else
-            yum --showduplicates list "$PACKAGE_NAME" 2>/dev/null | awk -v pkg="$PACKAGE_NAME" '$1 ~ ("^" pkg "[.]") {print $2}' | tail -n 1
+            rpm_run yum --showduplicates list "$PACKAGE_NAME" 2>/dev/null | awk -v pkg="$PACKAGE_NAME" '$1 ~ ("^" pkg "[.]") {print $2}' | tail -n 1
         fi
         return 0
     fi
@@ -482,9 +612,9 @@ list_available_versions() {
 
     if [[ "$OS_FAMILY" == "rpm" ]]; then
         if command -v dnf >/dev/null 2>&1; then
-            dnf --showduplicates list "$PACKAGE_NAME" 2>/dev/null | awk -v pkg="$PACKAGE_NAME" '$1 ~ ("^" pkg "[.]") {print $2}'
+            rpm_run dnf --showduplicates list "$PACKAGE_NAME" 2>/dev/null | awk -v pkg="$PACKAGE_NAME" '$1 ~ ("^" pkg "[.]") {print $2}'
         else
-            yum --showduplicates list "$PACKAGE_NAME" 2>/dev/null | awk -v pkg="$PACKAGE_NAME" '$1 ~ ("^" pkg "[.]") {print $2}'
+            rpm_run yum --showduplicates list "$PACKAGE_NAME" 2>/dev/null | awk -v pkg="$PACKAGE_NAME" '$1 ~ ("^" pkg "[.]") {print $2}'
         fi
         return 0
     fi
@@ -812,11 +942,11 @@ rpm_repoquery_requires() {
     local version=$2
 
     if command -v dnf >/dev/null 2>&1; then
-        dnf -q repoquery --requires "${package}-${version}" 2>/dev/null
+        rpm_run dnf -q repoquery --requires "${package}-${version}" 2>/dev/null
     elif command -v repoquery >/dev/null 2>&1; then
-        repoquery --requires "${package}-${version}" 2>/dev/null
+        rpm_run repoquery --requires "${package}-${version}" 2>/dev/null
     elif command -v yum >/dev/null 2>&1; then
-        yum -q repoquery --requires "${package}-${version}" 2>/dev/null
+        rpm_run yum -q repoquery --requires "${package}-${version}" 2>/dev/null
     else
         return 1
     fi
@@ -929,9 +1059,9 @@ package_version_available() {
 
     if [[ "$OS_FAMILY" == "rpm" ]]; then
         if command -v dnf >/dev/null 2>&1; then
-            dnf --showduplicates list "$package" 2>/dev/null | awk -v pkg="$package" -v version="$version" '$1 ~ ("^" pkg "[.]") && $2 == version {found=1} END {exit found ? 0 : 1}'
+            rpm_run dnf --showduplicates list "$package" 2>/dev/null | awk -v pkg="$package" -v version="$version" '$1 ~ ("^" pkg "[.]") && $2 == version {found=1} END {exit found ? 0 : 1}'
         else
-            yum --showduplicates list "$package" 2>/dev/null | awk -v pkg="$package" -v version="$version" '$1 ~ ("^" pkg "[.]") && $2 == version {found=1} END {exit found ? 0 : 1}'
+            rpm_run yum --showduplicates list "$package" 2>/dev/null | awk -v pkg="$package" -v version="$version" '$1 ~ ("^" pkg "[.]") && $2 == version {found=1} END {exit found ? 0 : 1}'
         fi
         return $?
     fi
@@ -1048,9 +1178,9 @@ refresh_package_metadata() {
         refresh_debian_package_metadata
     elif [[ "$OS_FAMILY" == "rpm" ]]; then
         if command -v dnf >/dev/null 2>&1; then
-            sudo_exec dnf makecache
+            rpm_sudo_run dnf makecache
         else
-            sudo_exec yum makecache
+            rpm_sudo_run yum makecache
         fi
     elif [[ "$OS_FAMILY" == "brew" ]]; then
         brew update

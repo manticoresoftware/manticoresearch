@@ -28,33 +28,7 @@ download_with_available_tool() {
 }
 
 install_repo_package() {
-    if [[ "$OS_FAMILY" == "brew" ]]; then
-        print_info "Homebrew installation does not require the Manticore repository package."
-        return 0
-    fi
-
-    if repo_package_installed; then
-        print_info "Repository bootstrap package already installed."
-        return 0
-    fi
-
-    print_step "Installing Repository Bootstrap Package"
-
-    if [[ "$OS_FAMILY" == "debian" ]]; then
-        local deb_path
-        deb_path=$(mktemp /tmp/manticore-repo.XXXXXX.deb)
-        download_with_available_tool "$DEB_REPO_PACKAGE_URL" "$deb_path"
-        install_debian_repo_package_file "$deb_path"
-        rm -f "$deb_path"
-    else
-        if command -v dnf >/dev/null 2>&1; then
-            sudo_exec dnf install -y "$RPM_REPO_PACKAGE_URL"
-        else
-            sudo_exec yum install -y "$RPM_REPO_PACKAGE_URL"
-        fi
-    fi
-
-    print_success "Repository bootstrap package installed."
+    ensure_repo_channel
 }
 
 install_manticore_package() {
@@ -91,17 +65,17 @@ install_manticore_package() {
             if [[ -n "$package_version" ]]; then
                 prepare_rpm_packages_for_version "$package_version"
                 mapfile -t package_specs < <(versioned_rpm_package_specs "$package_version")
-                sudo_exec dnf install -y "${package_specs[@]}"
+                rpm_sudo_run dnf install -y "${package_specs[@]}"
             else
-                sudo_exec dnf install -y "$PACKAGE_NAME"
+                rpm_sudo_run dnf install -y "$PACKAGE_NAME"
             fi
         else
             if [[ -n "$package_version" ]]; then
                 prepare_rpm_packages_for_version "$package_version"
                 mapfile -t package_specs < <(versioned_rpm_package_specs "$package_version")
-                sudo_exec yum install -y "${package_specs[@]}"
+                rpm_sudo_run yum install -y "${package_specs[@]}"
             else
-                sudo_exec yum install -y "$PACKAGE_NAME"
+                rpm_sudo_run yum install -y "$PACKAGE_NAME"
             fi
         fi
     elif [[ "$OS_FAMILY" == "brew" ]]; then
@@ -155,7 +129,7 @@ install_flow() {
     validate_requested_version_argument "$requested_version" version
 
     warn_about_manual_installation
-    install_repo_package
+    ensure_repo_channel
     refresh_package_metadata
     install_manticore_package "$requested_version"
     ensure_service_started

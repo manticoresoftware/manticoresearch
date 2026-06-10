@@ -656,6 +656,7 @@ enum class Option_e : BYTE
 	FUSION_WEIGHTS,
 	TOPOLOGY,
 	FACET_FILTER_MODE,
+	EMBEDDINGS_THREADS,
 
 	INVALID_OPTION
 };
@@ -671,7 +672,8 @@ void InitParserOption()
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
 		"not_terms_only_allowed", "store", "accurate_aggregation", "max_matches_increase_threshold", "distinct_precision_threshold",
 		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size", "force", "output_words", "expand_blended",
-		"fusion_method", "rank_constant", "window_size", "fusion_weights", "topology", "facet_filter_mode" };
+		"fusion_method", "rank_constant", "window_size", "fusion_weights", "topology", "facet_filter_mode",
+		"embeddings_threads" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -707,7 +709,7 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 			Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::THREADS_EX, Option_e::EXPANSION_LIMIT,
 			Option_e::JIEBA_MODE, Option_e::SCROLL, Option_e::JOIN_BATCH_SIZE, Option_e::EXPAND_BLENDED,
 			Option_e::FUSION_METHOD, Option_e::RANK_CONSTANT, Option_e::WINDOW_SIZE, Option_e::FUSION_WEIGHTS,
-			Option_e::FACET_FILTER_MODE };
+			Option_e::FACET_FILTER_MODE, Option_e::EMBEDDINGS_THREADS };
 
 	static Option_e dInsertOptions[] = { Option_e::TOKEN_FILTER_OPTIONS };
 
@@ -820,7 +822,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 		Option_e::THREADS, Option_e::NOT_ONLY_ALLOWED, Option_e::LOW_PRIORITY, Option_e::DEBUG_NO_PAYLOAD,
 		Option_e::ACCURATE_AGG, Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::SWITCHOVER,
 		Option_e::EXPANSION_LIMIT, Option_e::SCROLL, Option_e::JOIN_BATCH_SIZE,
-		Option_e::RANK_CONSTANT, Option_e::WINDOW_SIZE
+		Option_e::RANK_CONSTANT, Option_e::WINDOW_SIZE, Option_e::EMBEDDINGS_THREADS
 	};
 
 	bool bFound = ::any_of ( dIntegerOptions, [eOpt] ( auto i ) { return i == eOpt; } );
@@ -871,6 +873,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 	case Option_e::EXPANSION_LIMIT:				tQuery.m_iExpansionLimit = (int)iValue; break;
 	case Option_e::SCROLL:						tQuery.m_tScrollSettings.m_bRequested = !!iValue; break;
 	case Option_e::JOIN_BATCH_SIZE:				tQuery.m_iJoinBatchSize = (int)iValue; break;
+	case Option_e::EMBEDDINGS_THREADS:			tQuery.m_iEmbeddingsThreads = Max ( 0, (int)iValue ); break;
 	case Option_e::RANK_CONSTANT:
 		if ( iValue < 0 )
 			return FAILED ( "rank_constant must be non-negative" );

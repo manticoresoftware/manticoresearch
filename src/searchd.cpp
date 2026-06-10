@@ -125,6 +125,7 @@ static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
 static auto&			g_iParallelChunkMerges = ParallelChunkMergesLimit();
 static auto&			g_iMergeChunksPerJob = MergeChunksPerJob();
 static auto&			g_iKNNParallelBuild = KNNParallelBuild();
+static auto&			g_iEmbeddingsThreads = EmbeddingsThreads();
 static constexpr bool	AUTOOPTIMIZE_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 static constexpr bool	THREAD_EX_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 
@@ -9410,6 +9411,13 @@ static bool HandleSetGlobal ( CSphString & sError, const CSphString & sName, int
 		return true;
 	}
 
+	if ( sName == "embeddings_threads" )
+	{
+		g_iEmbeddingsThreads = Max ( 0, iSetValue );
+		sphInfo ( "set global embeddings_threads=%d", g_iEmbeddingsThreads );
+		return true;
+	}
+
 	if ( sName == "optimize_cutoff" )
 	{
 		if ( iSetValue < 1 )
@@ -10211,6 +10219,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		dTable.MatchTupletf ( "parallel_chunk_merges", "%d", g_iParallelChunkMerges );
 		dTable.MatchTupletf ( "merge_chunks_per_job", "%d", g_iMergeChunksPerJob );
 		dTable.MatchTupletf ( "knn_parallel_build", "%d", g_iKNNParallelBuild );
+		dTable.MatchTupletf ( "embeddings_threads", "%d", g_iEmbeddingsThreads );
 		dTable.MatchTupletf ( "optimize_cutoff", "%d", MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff );
 		dTable.MatchTuplet ( "collation_connection", sphCollationToName ( session::GetCollation() ) );
 		dTable.MatchTuplet ( "query_log_format", LogFormat()==LOG_FORMAT::_PLAIN ? "plain" : "sphinxql" );
@@ -14754,6 +14763,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 	g_iParallelChunkMerges = Max ( 1, hSearchd.GetInt ( "parallel_chunk_merges", iDefaultParallelMerges ) );
 	g_iMergeChunksPerJob = Max ( 2, hSearchd.GetInt ( "merge_chunks_per_job", 2 ) );
 	g_iKNNParallelBuild = Max ( 1, hSearchd.GetInt ( "knn_parallel_build", GetDefaultKNNParallelBuild(iThreads) ) );
+	g_iEmbeddingsThreads = Max ( 0, hSearchd.GetInt ( "embeddings_threads", 4 ) );
 	g_iThdQueueMax = hSearchd.GetInt ( "jobs_queue_size", g_iThdQueueMax );
 
 	g_iPersistentPoolSize = hSearchd.GetInt ("persistent_connections_limit");

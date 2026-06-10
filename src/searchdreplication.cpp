@@ -946,13 +946,58 @@ CSphVector<ClusterDesc_t> ReplicationCollectClusters ()  EXCLUDES ( g_tClustersL
 	if ( !ReplicationEnabled() )
 		return dClusters;
 
-	Threads::SccRL_t tLock ( g_tClustersLock );
-	for ( const auto& tCluster : g_hClusters )
+	struct ClusterSnapshot_t
 	{
-		// should save all clusters on start
-		// but skip cluster that just joining from user request
-		if ( tCluster.second->GetState() != ClusterState_e::JOINING || !tCluster.second->m_bUserRequest )
-			dClusters.Add ( *tCluster.second );
+		ReplicationClusterRefPtr_c m_pCluster;
+		CSphString m_sName;
+		CSphString m_sPath;
+		StrVec_t m_dClusterNodes;
+	};
+
+	CSphVector<ClusterSnapshot_t> dSnapshot;
+	{
+		Threads::SccRL_t tLock ( g_tClustersLock );
+		dSnapshot.Reserve ( g_hClusters.GetLength() );
+		for ( const auto& tCluster : g_hClusters )
+		{
+			// should save all clusters on start
+			// but skip cluster that just joining from user request
+			if ( tCluster.second->GetState() == ClusterState_e::JOINING && tCluster.second->m_bUserRequest )
+				continue;
+
+			ClusterSnapshot_t & tSnapshot = dSnapshot.Add();
+			tSnapshot.m_pCluster = tCluster.second;
+			tSnapshot.m_sName = tCluster.second->m_sName;
+			tSnapshot.m_sPath = tCluster.second->m_sPath;
+			tSnapshot.m_dClusterNodes = tCluster.second->m_dClusterNodes;
+		}
+	}
+
+	dClusters.Reserve ( dSnapshot.GetLength() );
+	for ( const auto& tSnapshot : dSnapshot )
+	{
+		const auto & pCluster = tSnapshot.m_pCluster;
+
+		// Copy m_hIndexes and m_tOptions under the per-cluster locks that guard them, not via the bare
+		// ClusterDesc_t copy ctor. That ctor re-hashes both string hashes while not holding the
+		// corresponding per-cluster locks, racing a concurrent ALTER CLUSTER ADD/DROP that mutates them
+		// under m_tIndexLock / m_tOptsLock; the race relocates a key mid-copy and crashes in
+		// CSphStrHashFunc::Hash on a freed CSphString (observed as a SIGSEGV in
+		// ReplicationCollectClusters during chaotic node rejoins).
+		ClusterDesc_t & tDesc = dClusters.Add();
+		tDesc.m_sName = tSnapshot.m_sName;
+		tDesc.m_sPath = tSnapshot.m_sPath;
+		tDesc.m_dClusterNodes = tSnapshot.m_dClusterNodes;
+		pCluster->WithRlockedIndexes ( [&tDesc,pCluster] ( const auto & hIndexes )
+		{
+			tDesc.m_iClusterEpoch = pCluster->m_iClusterEpoch;
+			for ( const auto & tIndex : hIndexes )
+				tDesc.m_hIndexes.Add ( tIndex.first );
+		} );
+		pCluster->WithRlockedOptions ( [&tDesc] ( const auto & tOptions )
+		{
+			tDesc.m_tOptions = tOptions;
+		} );
 	}
 	return dClusters;
 }

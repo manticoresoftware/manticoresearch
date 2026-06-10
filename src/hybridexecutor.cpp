@@ -646,7 +646,10 @@ void HybridExecutor_c::PushSingleFusedMatch ( const RRFEntry_t & tEntry, ISphMat
 		return;
 	}
 
-	pSorter->Push ( tNewMatch );
+	if ( pSorter->IsGroupby() )
+		pSorter->PushGrouped ( tNewMatch, false );
+	else
+		pSorter->Push ( tNewMatch );
 	pDstSchema->FreeDataPtrs ( tNewMatch );
 	tNewMatch.ResetDynamic();
 }

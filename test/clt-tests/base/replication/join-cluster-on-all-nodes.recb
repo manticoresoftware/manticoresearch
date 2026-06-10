@@ -11,16 +11,19 @@ Counter: #!/cluster_[a-z0-9_]+_status/!#
 Some helpful methods to avoid duplications when we testing various sharding scenarios
 ––– input –––
 show_shards() {
-	shards=$(mysql -h0 -P$1 -e "show create table $2 option force=1\G" | grep "Create Table" | cut -d: -f2-)
+	# Capture the whole SHOW CREATE TABLE output: the render is multi-line, so the agent=
+	# clauses live on a later line than "Create Table:" — filtering to that line drops them.
+	shards=$(mysql -h0 -P$1 -e "show create table $2 option force=1\G")
 
 	(
 		# Handle local shards
-		echo $shards | grep -oP "local='[^']*'" | sed "s/local='//g; s/'//g" | tr ',' '\n' | while read -r tbl; do
+		echo "$shards" | grep -oP "local='[^']*'" | sed "s/local='//g; s/'//g" | tr ',' '\n' | while read -r tbl; do
 			[ -n "$tbl" ] && echo "$tbl: local"
 		done
 
-		# Handle agent shards
-		echo $shards | grep -oP "agent='[^']*'" | sed "s/agent='//g; s/'//g" | tr '|' '\n' | awk -F: '{agents[$3] = agents[$3] ? agents[$3] " " $1 ":" $2 : $1 ":" $2} END {for (t in agents) print t ": " agents[t]}'
+		# Handle agent shards. Strip the [retry_count=...,ha_strategy=...] options suffix so all
+		# mirrors of a shard group under the same table name instead of a polluted awk key.
+		echo "$shards" | grep -oP "agent='[^']*'" | sed "s/agent='//g; s/'//g; s/\[[^]]*\]//g" | tr '|' '\n' | awk -F: '{agents[$3] = agents[$3] ? agents[$3] " " $1 ":" $2 : $1 ":" $2} END {for (t in agents) print t ": " agents[t]}'
 	) | sort
 }
 ––– output –––

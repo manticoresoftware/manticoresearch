@@ -234,6 +234,22 @@ searchd
 	select * from t where knn(vec, 5, (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8), {rescore=0} );
 	drop table t;
 
+	<!-- regression for equal rescored KNN distances preserving the full ORDER BY comparator -->
+	create table t_order (tag integer, f float_vector knn_type='hnsw' knn_dims='2' hnsw_similarity='l2');
+	insert into t_order values (1, 30, (0.2,0.3)), (2, 10, (0.2,0.7)), (3, 20, (0.7,0.2));
+	select id, knn_dist() from t_order where knn(f, (0.5,0.5));
+	select id, knn_dist() from t_order where knn(f, (0.5,0.5)) order by id asc;
+	select id, knn_dist() from t_order where knn(f, (0.5,0.5)) order by id desc;
+	select id, tag, knn_dist() from t_order where knn(f, (0.5,0.5)) order by tag asc, id desc;
+	select id, tag, knn_dist() from t_order where knn(f, (0.5,0.5)) order by tag desc, id asc;
+	flush ramchunk t_order;
+	select id, knn_dist() from t_order where knn(f, (0.5,0.5));
+	select id, knn_dist() from t_order where knn(f, (0.5,0.5)) order by id asc;
+	select id, knn_dist() from t_order where knn(f, (0.5,0.5)) order by id desc;
+	select id, tag, knn_dist() from t_order where knn(f, (0.5,0.5)) order by tag asc, id desc;
+	select id, tag, knn_dist() from t_order where knn(f, (0.5,0.5)) order by tag desc, id asc;
+	drop table t_order;
+
 </sphinxql>
 </queries>
 

@@ -43,7 +43,7 @@ timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
 ––– comment –––
 If grep fails due to missing string or timeout, return non-zero
 ––– input –––
-timeout 10 grep -qm1 'becoming master' <(tail -n 1000 -f /var/log/manticore-{2,3}/searchd.log); echo $?
+timeout 10 grep -qm1 'becoming master' <(tail -n 1000 -f /var/log/manticore-{2,3}/searchd.log 2>/dev/null); echo $?
 ––– output –––
 0
 ––– comment –––

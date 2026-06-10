@@ -172,6 +172,25 @@ volatile int &KNNParallelBuild() noexcept
 	return iKNNParallelBuild;
 }
 
+volatile int &EmbeddingsThreads() noexcept
+{
+	static int iEmbeddingsThreads = 4;	// max threads the embeddings lib may use; clamped by free workers at call time
+	return iEmbeddingsThreads;
+}
+
+int GetEmbeddingsThreadsToUse ( int iMaxOverride )
+{
+	auto * pPool = GlobalWorkPool();
+	int iWorkers = pPool ? pPool->WorkingThreads() : 1;
+	int iBusy = pPool ? Max ( pPool->CurTasks() - 1, 0 ) : 0; // ignore current task
+	int iFree = Max ( iWorkers - iBusy, 1 );
+
+	int iMax = ( iMaxOverride >= 0 ) ? iMaxOverride : EmbeddingsThreads();
+	if ( iMax > 0 )
+		iFree = Min ( iFree, iMax );
+	return iFree;
+}
+
 volatile int AutoOptimizeCutoff() noexcept
 {
 	static int iAutoOptimizeCutoff = GetNumLogicalCPUs() * 2;
@@ -8621,7 +8640,7 @@ const CSphQuery * RtIndex_c::SetupAutoEmbeddings ( const CSphQuery & tQuery, CSp
 		dTexts.push_back( tKNN.m_sEmbStr->cstr() );
 
 		std::string sConvertError;
-		if ( !pModel->Convert ( dTexts, dEmbeddings, sConvertError ) )
+		if ( !pModel->Convert ( dTexts, dEmbeddings, sConvertError, GetEmbeddingsThreadsToUse ( tQuery.m_iEmbeddingsThreads ) ) )
 		{
 			sError.SetSprintf ( "Error generating embeddings for attribute '%s' : %s", tKNN.m_sAttr.cstr(), sConvertError.c_str() );
 			return nullptr;

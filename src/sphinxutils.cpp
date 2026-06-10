@@ -1214,6 +1214,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "auth_log_level",			0, NULL },
 	{ "auth_password_policy",	0, NULL },
 	{ "auth_password_min_length",	0, NULL },
+	{ "embeddings_threads",		0, nullptr },
 	{ NULL,						0, NULL }
 };
 

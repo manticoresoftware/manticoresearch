@@ -20,7 +20,7 @@ RPM_DEV_REPO_ID="manticore-dev"
 # Keep in sync with listen directives in ../manticore.conf.in.
 DEFAULT_PORTS="9306 9308 9312"
 
-CONF_DIR="/etc/manticore"
+CONF_DIR="/etc/manticoresearch"
 DATA_DIR="/var/lib/manticore"
 LOG_DIR="/var/log/manticore"
 

@@ -21,7 +21,7 @@ sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 sudo yum install manticore
 ```
 
-Если вы обновляетесь до Manticore 6 с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновленной структурой пакетов:
+Если вы обновляетесь до Manticore 6 или новее с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновлённой структурой пакетов:
 
 ```bash
 sudo yum remove manticore*
@@ -33,8 +33,8 @@ sudo yum remove manticore*
 Если вы предпочитаете "Ночные" (разрабатываемые) версии, выполните:
 
 ```bash
-sudo yum -y install https://repo.manticoresearch.com/manticore-repo.noarch.rpm && \
-sudo yum -y --disablerepo=manticore --enablerepo manticore-dev install manticore
+sudo yum -y install https://repo.manticoresearch.com/manticore-dev-repo.noarch.rpm && \
+sudo yum -y install manticore
 ```
 
 ### Автономные RPM-пакеты

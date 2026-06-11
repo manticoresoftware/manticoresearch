@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>JSON bool minimum_should_match</name>
+
+<requires>
+<force-rt/>
+<http/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>create table msm_json ( title text, gid integer, tag integer )</sphinxql>
+<sphinxql>insert into msm_json ( id, title, gid, tag ) values
+(1,'yellow dog hello world tropical',1,10),
+(2,'yellow dog only',1,20),
+(3,'hello world only',2,10),
+(4,'tropical only',2,20),
+(5,'yellow dog and tropical',1,10),
+(6,'hello world and tropical',2,10),
+(7,'dog world tropical',1,30),
+(8,'yellow dog hello',1,20),
+(9,'yellow dog',3,10),
+(10,'hello world',3,20)</sphinxql>
+</queries>
+
+<httpqueries>
+<!-- Without minimum_should_match, bool.should keeps the historical OR behavior. -->
+<query endpoint="search">{
+  "table": "msm_json",
+  "limit": 20,
+  "sort": [ { "id": "asc" } ],
+  "query": { "bool": { "should": [
+    { "match_phrase": { "_all": "yellow dog" } },
+    { "match_phrase": { "_all": "hello world" } },
+    { "match": { "_all": "tropical" } }
+  ] } }
+}</query>
+
+<!-- Exact 2 of 3: phrase clauses count as clauses, not as individual words. -->
+<query endpoint="search">{
+  "table": "msm_json",
+  "limit": 20,
+  "sort": [ { "id": "asc" } ],
+  "query": { "bool": { "should": [
+    { "match_phrase": { "_all": "yellow dog" } },
+    { "match_phrase": { "_all": "hello world" } },
+    { "match": { "_all": "tropical" } }
+  ], "minimum_should_match": 2 } }
+}</query>
+
+<!-- Elasticsearch-style string forms: negative integers and percentages. -->
+<query endpoint="search">{
+  "table": "msm_json",
+  "limit": 20,
+  "sort": [ { "id": "asc" } ],
+  "query": { "bool": { "should": [
+    { "match_phrase": { "_all": "yellow dog" } },
+    { "match_phrase": { "_all": "hello world" } },
+    { "match": { "_all": "tropical" } }
+  ], "minimum_should_match": "-1" } }
+}</query>
+
+<query endpoint="search">{
+  "table": "msm_json",
+  "limit": 20,
+  "sort": [ { "id": "asc" } ],
+  "query": { "bool": { "should": [
+    { "match_phrase": { "_all": "yellow dog" } },
+    { "match_phrase": { "_all": "hello world" } },
+    { "match": { "_all": "tropical" } }
+  ], "minimum_should_match": "67%" } }
+}</query>
+
+<!-- Explicit zero makes should clauses optional. With no required clause, this is equivalent to match_all. -->
+<query endpoint="search">{
+  "table": "msm_json",
+  "limit": 20,
+  "sort": [ { "id": "asc" } ],
+  "query": { "bool": { "should": [
+    { "match_phrase": { "_all": "yellow dog" } }
+  ], "minimum_should_match": 0 } }
+}</query>
+
+<!-- With must present, explicit positive minimum_should_match makes should required. -->
+<query endpoint="search">{
+  "table": "msm_json",
+  "limit": 20,
+  "sort": [ { "id": "asc" } ],
+  "query": { "bool": {
+    "must": { "match": { "_all": "yellow" } },
+    "should": [
+      { "match": { "_all": "tropical" } },
+      { "match_phrase": { "_all": "hello world" } }
+    ],
+    "minimum_should_match": 1
+  } }
+}</query>
+
+<!-- Filter-only bool.should supports minimum_should_match too. -->
+<query endpoint="search">{
+  "table": "msm_json",
+  "limit": 20,
+  "sort": [ { "id": "asc" } ],
+  "query": { "bool": { "should": [
+    { "equals": { "gid": 1 } },
+    { "equals": { "tag": 10 } },
+    { "equals": { "tag": 20 } }
+  ], "minimum_should_match": 2 } }
+}</query>
+
+<query endpoint="sql" method="post">mode=raw&amp;query=drop table msm_json</query>
+</httpqueries>
+
+</test>

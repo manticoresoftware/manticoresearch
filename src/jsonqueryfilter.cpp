@@ -14,6 +14,7 @@
 #include "geodist.h"
 #include <time.h>
 #include "datetime.h"
+#include "sphinxjsonquery.h"
 
 static const char * g_szFilter = "_@filter_";
 
@@ -365,12 +366,109 @@ static int CreateFilterTree ( std::unique_ptr<FilterTreeNode_t> & pRoot, CSphVec
 }
 
 
+static std::unique_ptr<FilterTreeNode_t> ConcatFilterTreeItems ( std::vector<std::unique_ptr<FilterTreeNode_t>> & dAdded, DWORD uStart, bool bOr );
+
 static void ConcatTrees ( std::unique_ptr<FilterTreeNode_t> & pLeft, std::unique_ptr<FilterTreeNode_t> & pRight )
 {
 	auto pRoot = std::make_unique<FilterTreeNode_t>();
 	pRoot->m_pLeft  = std::move(pLeft);
 	pRoot->m_pRight = std::move(pRight);
 	pLeft = std::move(pRoot);
+}
+
+
+static std::unique_ptr<FilterTreeNode_t> CloneFilterTree ( const FilterTreeNode_t * pNode )
+{
+	if ( !pNode )
+		return nullptr;
+
+	auto pNew = std::make_unique<FilterTreeNode_t>();
+	pNew->m_bOr = pNode->m_bOr;
+	if ( pNode->m_pFilter )
+		pNew->m_pFilter = std::make_unique<CSphFilterSettings> ( *pNode->m_pFilter );
+	pNew->m_pLeft = CloneFilterTree ( pNode->m_pLeft.get() );
+	pNew->m_pRight = CloneFilterTree ( pNode->m_pRight.get() );
+
+	return pNew;
+}
+
+
+static void CollectFilterTreeLeaves ( std::unique_ptr<FilterTreeNode_t> pNode, std::vector<std::unique_ptr<FilterTreeNode_t>> & dLeaves )
+{
+	if ( !pNode )
+		return;
+
+	if ( !pNode->m_pFilter && pNode->m_bOr )
+	{
+		CollectFilterTreeLeaves ( std::move ( pNode->m_pLeft ), dLeaves );
+		CollectFilterTreeLeaves ( std::move ( pNode->m_pRight ), dLeaves );
+		return;
+	}
+
+	dLeaves.emplace_back ( std::move ( pNode ) );
+}
+
+
+static std::unique_ptr<FilterTreeNode_t> CreateFilterAndTreeFromSelection ( const std::vector<std::unique_ptr<FilterTreeNode_t>> & dItems, const CSphVector<int> & dSelected )
+{
+	std::vector<std::unique_ptr<FilterTreeNode_t>> dAdded;
+	dAdded.reserve ( dSelected.GetLength() );
+	for ( int iItem : dSelected )
+		dAdded.emplace_back ( CloneFilterTree ( dItems[iItem].get() ) );
+
+	return ConcatFilterTreeItems ( dAdded, 0, false );
+}
+
+
+static void AddMinimumShouldMatchFilterCombinations ( const std::vector<std::unique_ptr<FilterTreeNode_t>> & dItems, int iRequired, int iStart, CSphVector<int> & dSelected, std::vector<std::unique_ptr<FilterTreeNode_t>> & dCombinations )
+{
+	if ( dSelected.GetLength()==iRequired )
+	{
+		dCombinations.emplace_back ( CreateFilterAndTreeFromSelection ( dItems, dSelected ) );
+		return;
+	}
+
+	int iNeed = iRequired - dSelected.GetLength();
+	for ( int i=iStart; i<=(int)dItems.size()-iNeed; ++i )
+	{
+		dSelected.Add(i);
+		AddMinimumShouldMatchFilterCombinations ( dItems, iRequired, i+1, dSelected, dCombinations );
+		dSelected.Pop();
+	}
+}
+
+
+static std::unique_ptr<FilterTreeNode_t> ApplyMinimumShouldMatchToFilterTree ( std::unique_ptr<FilterTreeNode_t> pShouldTreeRoot, int iRequired )
+{
+	if ( iRequired<=1 )
+		return pShouldTreeRoot;
+
+	std::vector<std::unique_ptr<FilterTreeNode_t>> dItems;
+	CollectFilterTreeLeaves ( std::move ( pShouldTreeRoot ), dItems );
+
+	if ( dItems.empty() )
+		return nullptr;
+
+	if ( iRequired>=(int)dItems.size() )
+		return ConcatFilterTreeItems ( dItems, 0, false );
+
+	std::vector<std::unique_ptr<FilterTreeNode_t>> dCombinations;
+	CSphVector<int> dSelected;
+	AddMinimumShouldMatchFilterCombinations ( dItems, iRequired, 0, dSelected, dCombinations );
+
+	return ConcatFilterTreeItems ( dCombinations, 0, true );
+}
+
+
+static int CountFilterTreeItems ( const FilterTreeNode_t * pNode )
+{
+	if ( !pNode )
+		return 0;
+
+	if ( !pNode->m_pFilter && pNode->m_bOr )
+		return CountFilterTreeItems ( pNode->m_pLeft.get() ) + CountFilterTreeItems ( pNode->m_pRight.get() );
+
+	return 1;
 }
 
 
@@ -446,6 +544,8 @@ std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::Cons
 	}
 
 	bool bOk = false;
+	bool bHasMinimumShouldMatch = false;
+	int iMinimumShouldMatch = 0;
 	std::unique_ptr<FilterTreeNode_t> pMustTreeRoot, pShouldTreeRoot, pMustNotTreeRoot, pFilterTreeRoot;
 	CSphVector<CSphQueryItem> dMustQI, dShouldQI, dMustNotQI;
 
@@ -475,14 +575,31 @@ std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::Cons
 			std::tie ( bOk, pFilterTreeRoot ) = ConstructBoolNodeFilters ( tClause, dMustQI, false );
 			if ( !bOk )
 				return { false, nullptr };
-		} else if ( sName=="minimum_should_match" ) // FIXME!!! add to should as option
+		} else if ( sName=="minimum_should_match" )
 		{
+			bHasMinimumShouldMatch = true;
 			continue;
 		} else
 		{
 			m_sError.SetSprintf ( "unknown bool query type: \"%s\"", sName.cstr() );
 			return { false, nullptr };
 		}
+	}
+
+	if ( bHasMinimumShouldMatch )
+	{
+		int iShouldCount = CountFilterTreeItems ( pShouldTreeRoot.get() );
+		CSphString sError;
+		if ( !sphParseJsonMinimumShouldMatch ( tBool.GetItem ( "minimum_should_match" ), iShouldCount, iMinimumShouldMatch, sError ) )
+		{
+			m_sError = sError;
+			return { false, nullptr };
+		}
+
+		if ( iMinimumShouldMatch>0 )
+			pShouldTreeRoot = ApplyMinimumShouldMatchToFilterTree ( std::move ( pShouldTreeRoot ), iMinimumShouldMatch );
+		else
+			pShouldTreeRoot.reset();
 	}
 
 	if ( pFilterTreeRoot )
@@ -513,6 +630,17 @@ std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::Cons
 			ConcatTrees ( pMustTreeRoot, pMustNotTreeRoot );
 		else
 			pMustTreeRoot = std::move ( pMustNotTreeRoot );
+	}
+
+	if ( pShouldTreeRoot && bHasMinimumShouldMatch && iMinimumShouldMatch>0 )
+	{
+		for ( auto & i : dShouldQI )
+			dMustQI.Add(i);
+
+		if ( pMustTreeRoot )
+			ConcatTrees ( pMustTreeRoot, pShouldTreeRoot );
+		else
+			pMustTreeRoot = std::move ( pShouldTreeRoot );
 	}
 
 	if ( pMustTreeRoot )

@@ -640,6 +640,189 @@ bool QueryParserJson_c::ConstructBoolNodeItems ( const JsonObj_c & tClause, CSph
 }
 
 
+static bool ParseMinimumShouldMatchAtom ( const char * szSpec, int iShouldCount, int & iRequired )
+{
+	if ( !szSpec || !*szSpec )
+		return false;
+
+	int iLen = (int)strlen(szSpec);
+	bool bPercent = szSpec[iLen-1]=='%';
+	char * pEnd = nullptr;
+	long iValue = strtol ( szSpec, &pEnd, 10 );
+
+	if ( bPercent )
+	{
+		if ( pEnd!=szSpec+iLen-1 )
+			return false;
+
+		int iPercent = (int)( iValue<0 ? -iValue : iValue );
+		int iCount = ( iShouldCount*iPercent ) / 100;
+		iRequired = iValue<0 ? iShouldCount - iCount : iCount;
+	} else
+	{
+		if ( pEnd!=szSpec+iLen )
+			return false;
+
+		iRequired = iValue<0 ? iShouldCount + (int)iValue : (int)iValue;
+	}
+
+	iRequired = Max ( 0, Min ( iRequired, iShouldCount ) );
+	return true;
+}
+
+
+bool sphParseJsonMinimumShouldMatch ( const JsonObj_c & tClause, int iShouldCount, int & iRequired, CSphString & sError )
+{
+	if ( tClause.IsInt() )
+	{
+		int iValue = (int)tClause.IntVal();
+		iRequired = iValue<0 ? iShouldCount + iValue : iValue;
+		iRequired = Max ( 0, Min ( iRequired, iShouldCount ) );
+		return true;
+	}
+
+	if ( !tClause.IsStr() )
+	{
+		sError = "\"minimum_should_match\" value should be an integer or a string";
+		return false;
+	}
+
+	iRequired = iShouldCount;
+	StrVec_t dRules = sphSplit ( tClause.SzVal(), " 	" );
+	if ( dRules.IsEmpty() )
+	{
+		sError = "\"minimum_should_match\" value should not be empty";
+		return false;
+	}
+
+	for ( const auto & sRule : dRules )
+	{
+		const char * szRule = sRule.cstr();
+		const char * pSep = strchr ( szRule, '<' );
+		if ( pSep )
+		{
+			CSphString sLimit;
+			sLimit.SetBinary ( szRule, pSep-szRule );
+			char * pEnd = nullptr;
+			long iLimit = strtol ( sLimit.cstr(), &pEnd, 10 );
+			if ( pEnd!=sLimit.cstr()+sLimit.Length() || iLimit<0 )
+			{
+				sError = "invalid \"minimum_should_match\" conditional rule";
+				return false;
+			}
+
+			if ( iShouldCount<=iLimit )
+				break;
+
+			if ( !ParseMinimumShouldMatchAtom ( pSep+1, iShouldCount, iRequired ) )
+			{
+				sError = "invalid \"minimum_should_match\" rule";
+				return false;
+			}
+		} else if ( !ParseMinimumShouldMatchAtom ( szRule, iShouldCount, iRequired ) )
+		{
+			sError = "invalid \"minimum_should_match\" rule";
+			return false;
+		}
+	}
+
+	return true;
+}
+
+
+static XQNode_t * CreateBoolOpNode ( CSphVector<XQNode_t *> & dItems, XQOperator_e eOp, QueryTreeBuilder_c & tBuilder )
+{
+	if ( dItems.IsEmpty() )
+		return nullptr;
+
+	if ( dItems.GetLength()==1 )
+		return dItems[0];
+
+	XQLimitSpec_t tLimitSpec;
+	XQNode_t * pNode = tBuilder.CreateNode ( tLimitSpec );
+	pNode->SetOp ( eOp );
+	for ( auto & pItem : dItems )
+		pNode->AddNewChild ( pItem );
+
+	return pNode;
+}
+
+
+static XQNode_t * CloneNodeForBuilder ( const XQNode_t * pSrc, QueryTreeBuilder_c & tBuilder )
+{
+	XQLimitSpec_t tSpec = pSrc->m_dSpec;
+	XQNode_t * pDst = tBuilder.CreateNode ( tSpec );
+	pDst->SetOp ( pSrc->GetOp() );
+	pDst->m_iOpArg = pSrc->m_iOpArg;
+	pDst->m_iAtomPos = pSrc->m_iAtomPos;
+	pDst->m_iUser = pSrc->m_iUser;
+	pDst->m_bVirtuallyPlain = pSrc->m_bVirtuallyPlain;
+	pDst->m_bNotWeighted = pSrc->m_bNotWeighted;
+	pDst->m_bPercentOp = pSrc->m_bPercentOp;
+
+	for ( const auto & tWord : pSrc->dWords() )
+		pDst->AddDirtyWord ( tWord );
+
+	for ( const auto * pChild : pSrc->dChildren() )
+		pDst->AddNewChild ( CloneNodeForBuilder ( pChild, tBuilder ) );
+
+	return pDst;
+}
+
+
+static XQNode_t * CreateAndNodeFromSelection ( const CSphVector<XQNode_t *> & dItems, const CSphVector<int> & dSelected, QueryTreeBuilder_c & tBuilder )
+{
+	if ( dSelected.GetLength()==1 )
+		return CloneNodeForBuilder ( dItems[dSelected[0]], tBuilder );
+
+	XQLimitSpec_t tLimitSpec;
+	XQNode_t * pAndNode = tBuilder.CreateNode ( tLimitSpec );
+	pAndNode->SetOp ( SPH_QUERY_AND );
+	for ( int iItem : dSelected )
+		pAndNode->AddNewChild ( CloneNodeForBuilder ( dItems[iItem], tBuilder ) );
+
+	return pAndNode;
+}
+
+
+static void AddMinimumShouldMatchCombinations ( const CSphVector<XQNode_t *> & dItems, int iRequired, int iStart, CSphVector<int> & dSelected, CSphVector<XQNode_t *> & dCombinations, QueryTreeBuilder_c & tBuilder )
+{
+	if ( dSelected.GetLength()==iRequired )
+	{
+		dCombinations.Add ( CreateAndNodeFromSelection ( dItems, dSelected, tBuilder ) );
+		return;
+	}
+
+	int iNeed = iRequired - dSelected.GetLength();
+	for ( int i=iStart; i<=dItems.GetLength()-iNeed; ++i )
+	{
+		dSelected.Add(i);
+		AddMinimumShouldMatchCombinations ( dItems, iRequired, i+1, dSelected, dCombinations, tBuilder );
+		dSelected.Pop();
+	}
+}
+
+
+static XQNode_t * CreateMinimumShouldMatchNode ( CSphVector<XQNode_t *> & dItems, int iRequired, QueryTreeBuilder_c & tBuilder )
+{
+	if ( iRequired<=1 )
+		return CreateBoolOpNode ( dItems, SPH_QUERY_OR, tBuilder );
+
+	if ( iRequired>=dItems.GetLength() )
+		return CreateBoolOpNode ( dItems, SPH_QUERY_AND, tBuilder );
+
+	CSphVector<XQNode_t *> dCombinations;
+	CSphVector<int> dSelected;
+	AddMinimumShouldMatchCombinations ( dItems, iRequired, 0, dSelected, dCombinations, tBuilder );
+
+	for ( auto & pItem : dItems )
+		tBuilder.DeleteSpawned ( pItem );
+	dItems.Reset();
+
+	return CreateBoolOpNode ( dCombinations, SPH_QUERY_OR, tBuilder );
+}
+
+
 XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const
 {
 	ErrorPathGuard_t tGuard = tBuilder.ErrorAddPath ( tJson );
@@ -650,6 +833,8 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 	}
 
 	CSphVector<XQNode_t *> dMust, dShould, dMustNot;
+	bool bHasMinimumShouldMatch = false;
+	int iMinimumShouldMatch = 0;
 
 	for ( const auto & tClause : tJson )
 	{
@@ -677,12 +862,23 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 		{
 			if ( !ConstructBoolNodeItems ( tClause, dMust, tBuilder ) )
 				return nullptr;
-		} else if ( sName=="minimum_should_match" ) // FIXME!!! add to should as option
+		} else if ( sName=="minimum_should_match" )
 		{
+			bHasMinimumShouldMatch = true;
 			continue;
 		} else
 		{
 			tBuilder.Error ( "unknown bool query type: \"%s\"", sName.cstr() );
+			return nullptr;
+		}
+	}
+
+	if ( bHasMinimumShouldMatch )
+	{
+		CSphString sError;
+		if ( !sphParseJsonMinimumShouldMatch ( tJson.GetItem ( "minimum_should_match" ), dShould.GetLength(), iMinimumShouldMatch, sError ) )
+		{
+			tBuilder.Error ( "%s", sError.cstr() );
 			return nullptr;
 		}
 	}
@@ -712,18 +908,11 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 
 	if ( dShould.GetLength() )
 	{
-		if ( dShould.GetLength()==1 )
-			pShouldNode = dShould[0];
-		else
-		{
-			XQNode_t * pOrNode = tBuilder.CreateNode ( tLimitSpec );
-			pOrNode->SetOp ( SPH_QUERY_OR );
-
-			for ( auto & i : dShould )
-				pOrNode->AddNewChild (i);
-
-			pShouldNode = pOrNode;
-		}
+		int iShouldRequired = bHasMinimumShouldMatch ? iMinimumShouldMatch : ( ( dMust.GetLength() || dMustNot.GetLength() ) ? 0 : 1 );
+		if ( iShouldRequired>0 )
+			pShouldNode = CreateMinimumShouldMatchNode ( dShould, iShouldRequired, tBuilder );
+		else if ( !bHasMinimumShouldMatch || dMust.GetLength() || dMustNot.GetLength() )
+			pShouldNode = CreateBoolOpNode ( dShould, SPH_QUERY_OR, tBuilder );
 	}
 
 	// slightly different case - we need to construct the NOT node anyway
@@ -757,7 +946,7 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 	XQNode_t * pResultNode = nullptr;
 
 	if ( !iTotalNodes )
-		return nullptr;
+		return ( bHasMinimumShouldMatch && iMinimumShouldMatch==0 ) ? ConstructMatchAllNode ( tBuilder ) : nullptr;
 	else if ( iTotalNodes==1 )
 	{
 		if ( pMustNode )
@@ -784,15 +973,15 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 			pResultNode = pAndNode;
 		}
 
-		// combine 'result' node and 'should' node with MAYBE
+		// combine 'result' node and 'should' node; explicit positive minimum_should_match makes should required, otherwise it is optional when must/filter/must_not exist
 		if ( pShouldNode )
 		{
-			XQNode_t * pMaybeNode = tBuilder.CreateNode ( tLimitSpec );
-			pMaybeNode->SetOp ( SPH_QUERY_MAYBE );
-			pMaybeNode->AddNewChild ( pResultNode );
-			pMaybeNode->AddNewChild ( pShouldNode );
+			XQNode_t * pCombinedNode = tBuilder.CreateNode ( tLimitSpec );
+			pCombinedNode->SetOp ( bHasMinimumShouldMatch && iMinimumShouldMatch>0 ? SPH_QUERY_AND : SPH_QUERY_MAYBE );
+			pCombinedNode->AddNewChild ( pResultNode );
+			pCombinedNode->AddNewChild ( pShouldNode );
 
-			pResultNode = pMaybeNode;
+			pResultNode = pCombinedNode;
 		}
 	}
 

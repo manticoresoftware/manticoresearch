@@ -727,12 +727,13 @@ resolve_requested_version() {
 debian_manticore_package_is_fat() {
     local version=$1
 
-    apt-cache show "${PACKAGE_NAME}=${version}" 2>/dev/null | awk '
-        /^Breaks:/ || /^Provides:/ { field = $0; capture = 1; next }
+    apt-cache show --no-all-versions "${PACKAGE_NAME}=${version}" 2>/dev/null | awk '
+        /^Breaks:/ || /^Provides:/ { field = field " " $0; capture = 1; next }
         capture && /^[[:space:]]/ { field = field " " $0; next }
         capture { capture = 0 }
         END {
-            exit field ~ /manticore-(common|server-core|server|tools|dev)/ ? 0 : 1
+            if (field ~ /manticore-(common|server-core|server|tools|dev)/) exit 0
+            exit 1
         }
     '
 }
@@ -741,14 +742,14 @@ debian_dependency_fields_for_package_version() {
     local package=$1
     local version=$2
 
-    apt-cache show "${package}=${version}" 2>/dev/null | awk '
+    apt-cache show --no-all-versions "${package}=${version}" 2>/dev/null | awk '
         /^Depends:/ {
+            sub(/^Depends:[ \t]*/, "")
             line = $0
-            sub(/^Depends:[[:space:]]*/, "", line)
             capture = 1
             next
         }
-        capture && /^[[:space:]]/ {
+        capture && /^[ \t]/ {
             line = line " " $0
             next
         }
@@ -766,9 +767,11 @@ debian_same_version_dependency_package_names() {
     local package=$1
     local version=$2
 
-    debian_dependency_fields_for_package_version "$package" "$version" | tr ',' '\n' | awk -v version="$version" '
+    debian_dependency_fields_for_package_version "$package" "$version" | tr ',' '
+' | awk -v version="$version" '
         {
-            gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+            sub(/^Depends:[ \t]*/, "")
+            gsub(/^[ \t]+|[ \t]+$/, "")
             if ($0 !~ /^manticore-/) next
             name = $0
             cut = length(name) + 1
@@ -779,13 +782,11 @@ debian_same_version_dependency_package_names() {
             if (tab_pos > 0 && tab_pos < cut) cut = tab_pos
             if (paren_pos > 0 && paren_pos < cut) cut = paren_pos
             name = substr(name, 1, cut - 1)
-            constraint = ""
             if (match($0, /\([^)]+\)/)) {
                 constraint = substr($0, RSTART + 1, RLENGTH - 2)
-                gsub(/^[[:space:]]+|[[:space:]]+$/, "", constraint)
-                gsub(/[[:space:]]+/, " ", constraint)
+                split(constraint, parts, /[ \t]+/)
+                if (parts[1] == "=" && parts[2] == version) print name
             }
-            if (constraint == "= " version) print name
         }
     '
 }
@@ -897,7 +898,7 @@ debian_dependency_constraints_for_package_version() {
 
     debian_dependency_fields_for_package_version "$package" "$version" | tr ',' '\n' | awk '
         {
-            gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+            gsub(/^[ \t]+|[ \t]+$/, "")
             if ($0 !~ /^manticore-/) next
             name = $0
             cut = length(name) + 1

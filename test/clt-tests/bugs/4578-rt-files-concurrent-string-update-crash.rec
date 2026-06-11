@@ -11,8 +11,6 @@ if grep -q "FATAL: CRASH DUMP" /var/log/manticore/searchd.log 2>/dev/null; then 
 ––– output –––
 not_crashed
 ––– input –––
-mysql -N -B -h0 -P9306 -e "select 1;"
+mysql -h0 -P9306 -EN -e "select 1"|grep -v row
 ––– output –––
-+------+
-|    1 |
-+------+
+1

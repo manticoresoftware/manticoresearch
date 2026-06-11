@@ -100,6 +100,7 @@ JsonObj_c		sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iIn
 
 bool			sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate, CSphString & sError );
 
+bool			sphParseJsonMinimumShouldMatch ( const JsonObj_c & tClause, int iShouldCount, int & iRequired, CSphString & sError );
 bool			NonEmptyQuery ( const JsonObj_c & tQuery );
 bool			CheckRootNode ( const JsonObj_c & tRoot, CSphString & sError );
 

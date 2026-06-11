@@ -13,6 +13,7 @@
 #include "facetutils.h"
 #include "sortcomp.h"
 #include "sortsetup.h"
+#include "schema/rset.h"
 #include "std/fnv64.h"
 
 namespace facet
@@ -424,12 +425,63 @@ static CSphString NormalizeFacetSortClause ( const CSphQuery & tFacetQuery, cons
 	return sOut;
 }
 
+static const CSphColumnInfo * GetFacetCountSortAttr ( const ISphSchema & tSchema )
+{
+	for ( int i = 0; i<tSchema.GetAttrsCount(); ++i )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+		if ( IsFacetCountColumn ( tAttr ) )
+			return &tAttr;
+	}
+
+	return nullptr;
+}
+
+static const CSphColumnInfo * GetFacetValueSortAttr ( const CSphQuery & tFacetQuery, const ISphSchema & tSchema )
+{
+	CSphString sAttr;
+	if ( GetFacetStatusAttr ( tFacetQuery, &tSchema, tSchema, sAttr ) )
+		return tSchema.GetAttr ( sAttr.cstr() );
+
+	return GetGroupbyOnlyMagicAttr ( tSchema );
+}
+
+static void AddSortAliasAttr ( CSphVector<CSphColumnInfo> & dAttrs, const char * szAlias, const CSphColumnInfo * pAttr )
+{
+	if ( !pAttr || dAttrs.any_of ( [szAlias] ( const auto & tAttr ) { return tAttr.m_sName==szAlias; } ) )
+		return;
+
+	CSphColumnInfo tAlias = *pAttr;
+	tAlias.m_sName = szAlias;
+	dAttrs.Add ( tAlias );
+}
+
+static const ISphSchema & SetupFacetSortSchema ( const CSphQuery & tFacetQuery, const ISphSchema & tSchema, CSphRsetSchema & tSortSchema )
+{
+	CSphVector<CSphColumnInfo> dAttrs;
+	for ( int i = 0; i<tSchema.GetAttrsCount(); ++i )
+		dAttrs.Add ( tSchema.GetAttr(i) );
+
+	AddSortAliasAttr ( dAttrs, "@count", GetFacetCountSortAttr ( tSchema ) );
+	AddSortAliasAttr ( dAttrs, "@groupby", GetFacetValueSortAttr ( tFacetQuery, tSchema ) );
+
+	if ( dAttrs.GetLength()==tSchema.GetAttrsCount() )
+		return tSchema;
+
+	tSortSchema = tSchema;
+	tSortSchema.SwapAttrs ( dAttrs );
+	return tSortSchema;
+}
+
 static bool SortFacetMatches ( const CSphQuery & tFacetQuery, const ISphSchema & tSchema, CSphSwapVector<CSphMatch> & dMatches )
 {
 	if ( dMatches.GetLength()<=1 )
 		return true;
 
-	CSphString sSort = NormalizeFacetSortClause ( tFacetQuery, tSchema, !tFacetQuery.m_sGroupSortBy.IsEmpty() ? tFacetQuery.m_sGroupSortBy.cstr() : tFacetQuery.m_sOrderBy.cstr() );
+	const char * szRawSort = !tFacetQuery.m_sGroupSortBy.IsEmpty() ? tFacetQuery.m_sGroupSortBy.cstr() : tFacetQuery.m_sOrderBy.cstr();
+	CSphRsetSchema tSortSchema;
+	const ISphSchema & tSchemaForSort = SetupFacetSortSchema ( tFacetQuery, tSchema, tSortSchema );
+	CSphString sSort = NormalizeFacetSortClause ( tFacetQuery, tSchemaForSort, szRawSort );
 	const char * szSort = sSort.cstr();
 	if ( !szSort || !*szSort )
 		return true;
@@ -438,7 +490,7 @@ static bool SortFacetMatches ( const CSphQuery & tFacetQuery, const ISphSchema &
 	CSphMatchComparatorState tState;
 	CSphVector<ExtraSortExpr_t> dExtraExprs;
 	CSphString sError;
-	if ( sphParseSortClause ( tFacetQuery, szSort, tSchema, eFunc, tState, dExtraExprs, nullptr, sError )!=SORT_CLAUSE_OK )
+	if ( sphParseSortClause ( tFacetQuery, szSort, tSchemaForSort, eFunc, tState, dExtraExprs, nullptr, sError )!=SORT_CLAUSE_OK )
 		return false;
 
 	CSphRefcountedPtr<ISphMatchComparator> pComp ( CreateMatchComparator ( eFunc ) );

@@ -5,13 +5,7 @@
 The installer provides a zero-touch way to install, upgrade, start, and remove Manticore Search from a single shell pipeline:
 
 ```sh
-wget -qO- https://repo.manticoresearch.com/repository/install/bootstrap-standalone.sh | sh
-```
-
-or:
-
-```sh
-curl -sSL https://repo.manticoresearch.com/repository/install/bootstrap-standalone.sh | sh
+curl https://manticoresearch.com | sh
 ```
 
 The installer must keep the common path short: detect the host package family, configure the official Manticore repository when needed, install the `manticore` package, start the service, and print a clear result. It should avoid duplicating logic already owned by the `manticore-repo.noarch.deb` and `manticore-repo.noarch.rpm` packages.
@@ -26,6 +20,7 @@ The installer must keep the common path short: detect the host package family, c
 - Scripts may live in `/tmp`, including on `noexec` filesystems, so downloaded modules are invoked as `bash module.sh` rather than executed directly.
 - Package managers remain the source of truth for package contents, systemd units, config files, data directories, GPG keys, and repository definitions.
 - Unsupported platforms must fail clearly and point to `https://manticoresearch.com/install/`.
+- Public documentation should prefer the shortest useful command. Avoid extra flags such as `curl -sSL` unless they solve a specific problem in that context.
 
 
 ## Entrypoints
@@ -35,16 +30,19 @@ The installer must keep the common path short: detect the host package family, c
 Primary public command:
 
 ```sh
-wget -qO- https://repo.manticoresearch.com/repository/install/bootstrap-standalone.sh | sh
+curl https://manticoresearch.com | sh
 ```
 
-or:
+Command examples use `sh -s command args` without an inserted `--`:
 
 ```sh
-curl -sSL https://repo.manticoresearch.com/repository/install/bootstrap-standalone.sh | sh
+curl https://manticoresearch.com | sh -s help
+curl https://manticoresearch.com | sh -s version 25.0.0
+curl https://manticoresearch.com | sh -s dev
+curl https://manticoresearch.com | sh -s upgrade
 ```
 
-`bootstrap-standalone.sh` is the primary public execution path. Its outer wrapper is POSIX `sh` compatible, so it supports both `curl|sh` and `curl|bash`. The wrapper requires `bash` on the target host, writes the embedded Bash payload to a temporary file, and invokes it with `bash`; if `bash` is missing, it fails clearly before installer work. The embedded payload contains the install, upgrade, uninstall, detection, logging, and UI logic in one file. Because the script is self-contained, it does not need to know the URL it was downloaded from and does not download sibling modules. It still downloads Manticore repository packages from the canonical package URLs:
+`bootstrap-standalone.sh` is the primary public execution path. Its outer wrapper is POSIX `sh` compatible, so it supports both `curl|sh` and `curl|bash`. The wrapper requires `bash` on the target host, writes the embedded Bash payload to a temporary file, and invokes it with `bash`; if `bash` is missing, it fails clearly before installer work. The embedded payload contains the install, upgrade, uninstall, detection, logging, and UI logic in one file. Because the script is self-contained, it does not need to know the URL it was downloaded from and does not download sibling modules. The final public release should expose this script through `https://manticoresearch.com`. Longer repository-hosted URLs are acceptable as temporary publishing bypasses or staging/debugging endpoints, but should not be treated as the long-term public interface. The standalone script still downloads Manticore repository packages from the canonical package URLs:
 
 ```sh
 https://repo.manticoresearch.com/manticore-repo.noarch.deb
@@ -80,7 +78,7 @@ Responsibilities:
 6. Remove the temporary directory on exit.
 
 
-Maintenance rule: the modular installer is the source of truth. `installer/build.sh` builds `bootstrap-standalone.sh` from `constants.sh`, `ui.sh`, `detect.sh`, `install.sh`, `upgrade.sh`, `uninstall.sh`, and `main.sh` by concatenating them with a small standalone logging prologue. The generator may strip only module-local prologue boilerplate: shebangs, `set -euo pipefail`, the initial `SCRIPT_DIR` assignment block, and top-level `source "$SCRIPT_DIR/..."` lines. It must not use broad filters such as removing every line containing `SCRIPT_DIR`, because valid function bodies may need to reference module paths in the modular flow. It syntax-checks the embedded Bash payload, then wraps it in a POSIX `sh` launcher. The generated Bash payload sets `MANTICORE_STANDALONE=1`; module self-test/direct-execution guards must check that flag so they do not run during standalone execution. Whenever modular behavior changes, run `installer/build.sh`, then verify `bootstrap-standalone.sh` with `sh -n`, a piped `sh -s -- help` smoke test, and at least a lightweight `list-versions` smoke test. Avoid manual edits to `bootstrap-standalone.sh`; move changes into modules and regenerate it.
+Maintenance rule: the modular installer is the source of truth. `installer/build.sh` builds `bootstrap-standalone.sh` from `constants.sh`, `ui.sh`, `detect.sh`, `install.sh`, `upgrade.sh`, `uninstall.sh`, and `main.sh` by concatenating them with a small standalone logging prologue. The generator may strip only module-local prologue boilerplate: shebangs, `set -euo pipefail`, the initial `SCRIPT_DIR` assignment block, and top-level `source "$SCRIPT_DIR/..."` lines. It must not use broad filters such as removing every line containing `SCRIPT_DIR`, because valid function bodies may need to reference module paths in the modular flow. It syntax-checks the embedded Bash payload, then wraps it in a POSIX `sh` launcher. The generated Bash payload sets `MANTICORE_STANDALONE=1`; module self-test/direct-execution guards must check that flag so they do not run during standalone execution. Whenever modular behavior changes, run `installer/build.sh`, then verify `bootstrap-standalone.sh` with `sh -n`, a piped `sh -s help` smoke test, and at least a lightweight `list-versions` smoke test. Avoid manual edits to `bootstrap-standalone.sh`; move changes into modules and regenerate it.
 
 ## Internal Modules
 
@@ -119,6 +117,8 @@ Specific versions use the exact package version after resolver expansion and all
 
 - Thin/meta versions must build the exact-version package set from the resolved `manticore` package metadata. Start with `manticore=<resolved-package-version>`, then follow transitive `Depends:` entries for `manticore-* (= <resolved-package-version>)` packages and request that exact same-version set together. The installer must also inspect bounded same-repository `Depends:` entries from those selected packages, such as `manticore-buddy`, `manticore-tzdata`, or similar `manticore-*` dependencies. If the currently installed dependency package is absent or does not satisfy the target constraints, add the highest available version satisfying those constraints to the same apt transaction. After the transaction, mark split and derived dependency packages as automatically installed with `apt-mark auto`, leaving only the `manticore` meta package as the user-requested manual package.
 - Fat versions whose `manticore` package `Provides`/`Breaks` split packages must request only `manticore=<resolved-package-version>`. Apt must be allowed to remove older real split packages that are broken/replaced by the fat package.
+
+Version metadata parsing must remain compatible with old supported distributions such as Ubuntu 18.04. Prefer `apt-cache show --no-all-versions "${package}=${version}"` when inspecting a specific package version, use portable awk/sed expressions, and avoid ambiguous awk exits such as `exit expr ? 0 : 1`. A concrete regression to preserve is `version 17 no-start` on Ubuntu 18.04: `manticore=17.5.1-...` is a thin/meta package and must be installed together with its same-version split dependencies, otherwise apt reports unmet dependencies.
 
 Distribution-specific repository details are delegated to the `manticore-repo.noarch.deb` package, including Linux Mint handling.
 
@@ -165,6 +165,8 @@ Distribution-specific repository and GPG-key details are delegated to the `manti
 ### Homebrew
 
 If `brew` is available and `apt-get`, `yum`, and `dnf` are not available, the installer uses Homebrew.
+
+Homebrew detection is intentionally package-manager based, not OS-name based. Homebrew can exist on Linux, and macOS can exist without Homebrew installed. Native apt/rpm package managers take precedence when present; Homebrew is the fallback only when `brew` is available and no supported native package manager is detected.
 
 Install Manticore:
 
@@ -266,6 +268,7 @@ Supported commands/options:
 
 The documented public syntax is command-style: `upgrade`, `version 25.0.0`, `silent`, `purge-all`, `dev`, and similar commands without double-dash long option names. `--help` is the only documented double-dash long option. Other historical double-dash aliases may be accepted temporarily for compatibility, but new examples, tests, and user-facing documentation should use command-style syntax. Once compatibility aliases are removed from code, unknown double-dash options must fail during pre-validation.
 
+Public pipe examples should pass commands as `sh -s command args`, not `sh -s -- command args`. The latter may work as shell syntax, but it is not the documented installer UX.
 
 - `help`, `--help`: print a concise usage summary and exit successfully before OS detection, repository setup, or package operations. `--help` is the only supported double-dash long option.
 - `upgrade`: upgrade an existing installation. When routed through `bootstrap.sh`, a host without Manticore may fall back to the installation flow; when `upgrade.sh` runs as the internal upgrade module, it requires an existing installation.
@@ -305,6 +308,17 @@ Unknown options/commands or malformed values must abort before OS detection, rep
 10. Report whether Manticore is running.
 
 The default happy path should end with Manticore installed and running on ports `9306`, `9308`, `9312`. This port list comes from the default `listen` directives in the repository root `manticore.conf.in` template.
+
+## Filesystem Paths
+
+The installer should use the package-managed filesystem layout:
+
+- Config directory: `/etc/manticoresearch`.
+- Data directory: `/var/lib/manticore`.
+- Log directory: `/var/log/manticore`.
+- Default installer/upgrade backup root: `/var/backups/manticore`.
+
+The installer may create temporary files in `${TMPDIR:-/tmp}` or user-writable locations without privilege escalation. Root privileges should be requested only for critical package-manager, service, `/etc`, and `/var` operations.
 
 ## Upgrade Flow
 
@@ -392,6 +406,8 @@ Interactive TTY output may use color and symbols. Color eligibility must be dete
 
 The installer must honor `NO_COLOR` by disabling ANSI color. `MANTICORE_FORCE_COLOR=1` or `CLICOLOR_FORCE=1` may force colored UI output for diagnostics or tests. These force flags should affect only user-facing output; the log file must still be written without ANSI escape sequences.
 
+Usage output should be generated from a single formatter rather than separate colored and non-colored copies. Non-colored output is produced by leaving style variables empty. Usage headings may use cyan/bold. Command labels and example lines use bold/bright styling only. Argument placeholders in `[]` and `<>` are cyan in both usage lines and example lines. Keep these rules in the specification so future changes do not accidentally fork multiple help texts.
+
 Prompts must read from and write to `/dev/tty` when available. Normal stdout/stderr may be mirrored through the logging pipeline, but prompt input must not consume piped installer script bytes from `curl|sh` or `wget|sh`.
 
 ## Privilege Escalation
@@ -443,7 +459,11 @@ The installer must have CLT coverage for:
 - Debian/RPM `list-versions-file <path>` through the bootstrap flow, verifying that the file contains only refined version lines in uniform oldest-to-newest order and no installer logs.
 - RPM `list-versions` output without awk escape warnings.
 - Debian explicit `version` switch/downgrade through the bootstrap flow without an extra prompt, including split-package detection after downgrade.
+- Debian explicit `version 17 no-start` through the bootstrap flow on Ubuntu 18.04, proving that thin/meta package dependencies are expanded correctly.
 - Debian `upgrade` from an older thin/split installed state to the latest version, including the case where the real `manticore` package is absent and only split packages are installed.
+- RPM explicit `dev` and `release` channel switches, proving that config-manager tools persistently enable/disable only `manticore` and `manticore-dev`, while leaving `manticore-release-candidate` untouched.
+- Public pipe command syntax using `sh -s help`, `sh -s list-versions`, and `sh -s version <version>` without a double-dash separator.
+- Colored and non-colored help output, including `NO_COLOR=1` and forced color through `MANTICORE_FORCE_COLOR=1` or `CLICOLOR_FORCE=1`.
 - Service start behavior in systemd and non-systemd environments where practical.
 - Cleanup after install.
 

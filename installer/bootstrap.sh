@@ -2,36 +2,112 @@
 
 set -euo pipefail
 
+BOOTSTRAP_CYAN='\033[0;36m'
+BOOTSTRAP_BOLD='\033[1m'
+BOOTSTRAP_NC='\033[0m'
+
+bootstrap_use_color() {
+    [[ -z "${NO_COLOR:-}" ]] || return 1
+
+    if [[ "${MANTICORE_FORCE_COLOR:-}" == "1" || "${CLICOLOR_FORCE:-}" == "1" ]]; then
+        return 0
+    fi
+
+    [[ -t 1 ]]
+}
+
+bootstrap_usage_init_styles() {
+    if bootstrap_use_color; then
+        BOOTSTRAP_USAGE_TITLE_STYLE="$BOOTSTRAP_BOLD"
+        BOOTSTRAP_USAGE_SECTION_STYLE="${BOOTSTRAP_BOLD}${BOOTSTRAP_CYAN}"
+        BOOTSTRAP_USAGE_COMMAND_STYLE="$BOOTSTRAP_BOLD"
+        BOOTSTRAP_USAGE_EXAMPLE_STYLE="$BOOTSTRAP_USAGE_COMMAND_STYLE"
+        BOOTSTRAP_USAGE_PARAM_STYLE="$BOOTSTRAP_CYAN"
+        BOOTSTRAP_USAGE_RESET="$BOOTSTRAP_NC"
+    else
+        BOOTSTRAP_USAGE_TITLE_STYLE=""
+        BOOTSTRAP_USAGE_SECTION_STYLE=""
+        BOOTSTRAP_USAGE_COMMAND_STYLE=""
+        BOOTSTRAP_USAGE_EXAMPLE_STYLE=""
+        BOOTSTRAP_USAGE_PARAM_STYLE=""
+        BOOTSTRAP_USAGE_RESET=""
+    fi
+}
+
+bootstrap_usage_title() {
+    printf "%b%s%b\n\n" "$BOOTSTRAP_USAGE_TITLE_STYLE" "$1" "$BOOTSTRAP_USAGE_RESET"
+}
+
+bootstrap_usage_section() {
+    printf "%b%s%b\n" "$BOOTSTRAP_USAGE_SECTION_STYLE" "$1" "$BOOTSTRAP_USAGE_RESET"
+}
+
+bootstrap_usage_print_styled_text() {
+    local text=$1
+    local base_style=$2
+    local remaining prefix token
+
+    if [[ -z "$BOOTSTRAP_USAGE_RESET" ]]; then
+        printf "%s" "$text"
+        return 0
+    fi
+
+    remaining=$text
+    printf "%b" "$base_style"
+    while [[ "$remaining" =~ ^([^<[]*)(<[^>]+>|\[[^]]+\])(.*)$ ]]; do
+        prefix=${BASH_REMATCH[1]}
+        token=${BASH_REMATCH[2]}
+        remaining=${BASH_REMATCH[3]}
+        printf "%s%b%s%b" "$prefix" "$BOOTSTRAP_USAGE_PARAM_STYLE" "$token" "$base_style"
+    done
+    printf "%s%b" "$remaining" "$BOOTSTRAP_USAGE_RESET"
+}
+
+bootstrap_usage_line() {
+    local left=$1
+    local right=$2
+    local padding=$((27 - ${#left}))
+    [[ $padding -lt 0 ]] && padding=0
+
+    printf "  "
+    bootstrap_usage_print_styled_text "$left" "$BOOTSTRAP_USAGE_COMMAND_STYLE"
+    printf "%*s %s\n" "$padding" "" "$right"
+}
+
+bootstrap_usage_example() {
+    printf "  "
+    bootstrap_usage_print_styled_text "$1" "$BOOTSTRAP_USAGE_EXAMPLE_STYLE"
+    printf "\n"
+}
+
 print_usage() {
-    cat <<'USAGE'
-Manticore Search Installer
-
-Usage:
-  wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
-  curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
-
-Common commands/options:
-  help                        Show this help and exit.
-  silent, yes                 Non-interactive mode; assume defaults.
-  upgrade                     Upgrade an installed Manticore package.
-  version <version>           Install or switch to a specific version.
-  list-versions               Print available versions.
-  list-versions-file <path>   Write available versions to path.
-  no-start                    Do not start the service after install/upgrade.
-  backup-data                 Include data directory in upgrade backup.
-  no-backup-data              Skip data directory backup (default).
-  backup-dir <path>           Override backup directory for upgrades.
-  release, dev,               Select Manticore repository channel.
-  uninstall                   Remove packages, keep config/data/repo state.
-  purge                       Remove packages and repository bootstrap package.
-  purge-all                   Purge packages, repo state, config, and data.
-
-Examples:
-  sh bootstrap-standalone.sh list-versions
-  sh bootstrap-standalone.sh dev list-versions
-  sh bootstrap-standalone.sh version 25.0.0 no-start
-  sh bootstrap-standalone.sh upgrade backup-data
-USAGE
+    bootstrap_usage_init_styles
+    bootstrap_usage_title "Manticore Search Installer"
+    bootstrap_usage_section "Usage:"
+    bootstrap_usage_example 'wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]'
+    bootstrap_usage_example 'curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]'
+    printf "\n"
+    bootstrap_usage_section "Common commands/options:"
+    bootstrap_usage_line "help" "Show this help and exit."
+    bootstrap_usage_line "silent, yes" "Non-interactive mode; assume defaults."
+    bootstrap_usage_line "upgrade" "Upgrade an installed Manticore package."
+    bootstrap_usage_line "version <version>" "Install or switch to a specific version."
+    bootstrap_usage_line "list-versions" "Print available versions."
+    bootstrap_usage_line "list-versions-file <path>" "Write available versions to path."
+    bootstrap_usage_line "no-start" "Do not start the service after install/upgrade."
+    bootstrap_usage_line "backup-data" "Include data directory in upgrade backup."
+    bootstrap_usage_line "no-backup-data" "Skip data directory backup (default)."
+    bootstrap_usage_line "backup-dir <path>" "Override backup directory for upgrades."
+    bootstrap_usage_line "release, dev" "Select Manticore repository channel."
+    bootstrap_usage_line "uninstall" "Remove packages, keep config/data/repo state."
+    bootstrap_usage_line "purge" "Remove packages and repository bootstrap package."
+    bootstrap_usage_line "purge-all" "Purge packages, repo state, config, and data."
+    printf "\n"
+    bootstrap_usage_section "Examples:"
+    bootstrap_usage_example "sh bootstrap-standalone.sh list-versions"
+    bootstrap_usage_example "sh bootstrap-standalone.sh dev list-versions"
+    bootstrap_usage_example "sh bootstrap-standalone.sh version 25.0.0 no-start"
+    bootstrap_usage_example "sh bootstrap-standalone.sh upgrade backup-data"
 }
 drain_stdin_if_piped() {
     if [[ ! -t 0 ]]; then

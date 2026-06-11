@@ -1937,36 +1937,102 @@ MANTICORE_BACKUP_DIR=""
 MANTICORE_REPO_CHANNEL=""
 LIST_VERSIONS_OUTPUT_FILE=""
 
+usage_init_styles() {
+    if use_color; then
+        USAGE_TITLE_STYLE="$BOLD"
+        USAGE_SECTION_STYLE="${BOLD}${CYAN}"
+        USAGE_COMMAND_STYLE="$BOLD"
+        USAGE_EXAMPLE_STYLE="$USAGE_COMMAND_STYLE"
+        USAGE_PARAM_STYLE="$CYAN"
+        USAGE_RESET="$NC"
+    else
+        USAGE_TITLE_STYLE=""
+        USAGE_SECTION_STYLE=""
+        USAGE_COMMAND_STYLE=""
+        USAGE_EXAMPLE_STYLE=""
+        USAGE_PARAM_STYLE=""
+        USAGE_RESET=""
+    fi
+}
+
+usage_title() {
+    printf "%b%s%b\n\n" "$USAGE_TITLE_STYLE" "$1" "$USAGE_RESET"
+}
+
+usage_section() {
+    printf "%b%s%b\n" "$USAGE_SECTION_STYLE" "$1" "$USAGE_RESET"
+}
+
+usage_print_styled_text() {
+    local text=$1
+    local base_style=$2
+    local remaining prefix token
+
+    if [[ -z "$USAGE_RESET" ]]; then
+        printf "%s" "$text"
+        return 0
+    fi
+
+    remaining=$text
+    printf "%b" "$base_style"
+    while [[ "$remaining" =~ ^([^<[]*)(<[^>]+>|\[[^]]+\])(.*)$ ]]; do
+        prefix=${BASH_REMATCH[1]}
+        token=${BASH_REMATCH[2]}
+        remaining=${BASH_REMATCH[3]}
+        printf "%s%b%s%b" "$prefix" "$USAGE_PARAM_STYLE" "$token" "$base_style"
+    done
+    printf "%s%b" "$remaining" "$USAGE_RESET"
+}
+
+usage_line() {
+    local left=$1
+    local right=$2
+    local padding=$((27 - ${#left}))
+    [[ $padding -lt 0 ]] && padding=0
+
+    printf "  "
+    usage_print_styled_text "$left" "$USAGE_COMMAND_STYLE"
+    printf "%*s %s\n" "$padding" "" "$right"
+}
+
+usage_example() {
+    printf "  "
+    usage_print_styled_text "$1" "$USAGE_EXAMPLE_STYLE"
+    printf "\n"
+}
+
+print_common_usage_body() {
+    usage_section "Common commands/options:"
+    usage_line "help" "Show this help and exit."
+    usage_line "silent, yes" "Non-interactive mode; assume defaults."
+    usage_line "upgrade" "Upgrade an installed Manticore package."
+    usage_line "version <version>" "Install or switch to a specific version."
+    usage_line "list-versions" "Print available versions."
+    usage_line "list-versions-file <path>" "Write available versions to path."
+    usage_line "no-start" "Do not start the service after install/upgrade."
+    usage_line "backup-data" "Include data directory in upgrade backup."
+    usage_line "no-backup-data" "Skip data directory backup (default)."
+    usage_line "backup-dir <path>" "Override backup directory for upgrades."
+    usage_line "release, dev" "Select Manticore repository channel."
+    usage_line "uninstall" "Remove packages, keep config/data/repo state."
+    usage_line "purge" "Remove packages and repository bootstrap package."
+    usage_line "purge-all" "Purge packages, repo state, config, and data."
+}
+
 print_standalone_usage() {
-    cat <<'USAGE'
-Manticore Search Installer
-
-Usage:
-  wget -O- https://manticoresearch.com | sh -s [options]
-  curl https://manticoresearch.com | sh -s [options]
-
-Common commands/options:
-  help                        Show this help and exit.
-  silent, yes                 Non-interactive mode; assume defaults.
-  upgrade                     Upgrade an installed Manticore package.
-  version <version>           Install or switch to a specific version.
-  list-versions               Print available versions.
-  list-versions-file <path>   Write available versions to path.
-  no-start                    Do not start the service after install/upgrade.
-  backup-data                 Include data directory in upgrade backup.
-  no-backup-data              Skip data directory backup (default).
-  backup-dir <path>           Override backup directory for upgrades.
-  release, dev                Select Manticore repository channel.
-  uninstall                   Remove packages, keep config/data/repo state.
-  purge                       Remove packages and repository bootstrap package.
-  purge-all                   Purge packages, repo state, config, and data.
-
-Examples:
-  curl https://manticoresearch.com | sh -s list-versions
-  curl https://manticoresearch.com | sh -s dev list-versions
-  curl https://manticoresearch.com | sh -s version 25.0.0 no-start
-  curl https://manticoresearch.com | sh -s upgrade backup-data
-USAGE
+    usage_init_styles
+    usage_title "Manticore Search Installer"
+    usage_section "Usage:"
+    usage_example "wget -O- https://manticoresearch.com | sh -s [options]"
+    usage_example "curl https://manticoresearch.com | sh -s [options]"
+    printf "\n"
+    print_common_usage_body
+    printf "\n"
+    usage_section "Examples:"
+    usage_example "curl https://manticoresearch.com | sh -s list-versions"
+    usage_example "curl https://manticoresearch.com | sh -s dev list-versions"
+    usage_example "curl https://manticoresearch.com | sh -s version 25.0.0 no-start"
+    usage_example "curl https://manticoresearch.com | sh -s upgrade backup-data"
 }
 
 

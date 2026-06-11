@@ -1180,6 +1180,17 @@ version_gt() {
 
     [[ "$(printf '%s\n%s\n' "$right" "$left" | sort -V | tail -n 1)" == "$left" && "$left" != "$right" ]]
 }
+ensure_service_stopped() {
+    local mode=${1:-}
+
+    if service_is_active; then
+        print_step "Stopping Manticore Service"
+        stop_service
+    elif [[ "$mode" != "quiet" ]]; then
+        print_info "Manticore service is already stopped."
+    fi
+}
+
 service_is_active() {
     if [[ "$OS_FAMILY" == "brew" ]]; then
         brew services list 2>/dev/null | awk -v svc="$BREW_SERVICE_NAME" '$1 == svc && $2 == "started" {found=1} END {exit found ? 0 : 1}'

@@ -37,7 +37,7 @@ ensure_backup() {
 
     if [[ -d "$DATA_DIR" ]]; then
         if [[ "$BACKUP_DATA" == "yes" ]]; then
-            ensure_service_stopped
+            ensure_service_stopped quiet
             sudo_exec cp -a "$DATA_DIR" "$CURRENT_BACKUP_PATH/"
         else
             print_info "Data directory was not backed up. Rerun with backup-data if you want a data backup before upgrading."
@@ -45,13 +45,6 @@ ensure_backup() {
     fi
 
     print_success "Backup created at ${CURRENT_BACKUP_PATH}"
-}
-
-ensure_service_stopped() {
-    if service_is_active; then
-        print_step "Stopping Manticore Service"
-        stop_service
-    fi
 }
 
 upgrade_package() {

@@ -14,15 +14,6 @@ else
     ACTION_MODE="${1:-uninstall}"
 fi
 
-ensure_service_stopped() {
-    if service_is_active; then
-        print_step "Stopping Manticore Service"
-        stop_service
-    else
-        print_info "Manticore service is already stopped."
-    fi
-}
-
 remove_package() {
     local package_specs=()
 

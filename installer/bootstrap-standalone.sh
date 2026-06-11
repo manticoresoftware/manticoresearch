@@ -240,7 +240,7 @@ ensure_backup() {
 
     if [[ -d "$DATA_DIR" ]]; then
         if [[ "$BACKUP_DATA" == "yes" ]]; then
-            ensure_service_stopped
+            ensure_service_stopped quiet
             sudo_exec cp -a "$DATA_DIR" "$CURRENT_BACKUP_PATH/"
         else
             print_info "Data directory was not backed up. Rerun with backup-data if you want a data backup before upgrading."
@@ -248,13 +248,6 @@ ensure_backup() {
     fi
 
     print_success "Backup created at ${CURRENT_BACKUP_PATH}"
-}
-
-ensure_service_stopped() {
-    if service_is_active; then
-        print_step "Stopping Manticore Service"
-        stop_service
-    fi
 }
 
 upgrade_package() {
@@ -539,15 +532,6 @@ if [[ "${MANTICORE_STANDALONE:-0}" == "1" ]]; then
 else
     ACTION_MODE="${1:-uninstall}"
 fi
-
-ensure_service_stopped() {
-    if service_is_active; then
-        print_step "Stopping Manticore Service"
-        stop_service
-    else
-        print_info "Manticore service is already stopped."
-    fi
-}
 
 remove_package() {
     local package_specs=()
@@ -1849,6 +1833,17 @@ version_gt() {
 
     [[ "$(printf '%s\n%s\n' "$right" "$left" | sort -V | tail -n 1)" == "$left" && "$left" != "$right" ]]
 }
+ensure_service_stopped() {
+    local mode=${1:-}
+
+    if service_is_active; then
+        print_step "Stopping Manticore Service"
+        stop_service
+    elif [[ "$mode" != "quiet" ]]; then
+        print_info "Manticore service is already stopped."
+    fi
+}
+
 service_is_active() {
     if [[ "$OS_FAMILY" == "brew" ]]; then
         brew services list 2>/dev/null | awk -v svc="$BREW_SERVICE_NAME" '$1 == svc && $2 == "started" {found=1} END {exit found ? 0 : 1}'

@@ -248,12 +248,9 @@ Repository 'manticore-dev' is disabled by default, that is 'Dev' repository.
 
 Repository 'manticore-release-candidate' is disabled by default, and mentioned here just because it exists. We're not going to expose it as an installer channel or activate it implicitly.
 
-For RPM, the repository package enables the release repository by default, so release uses the package defaults without extra repository flags. If user explicitly selects dev, use package-manager command flags for that installer command: '--enablerepo' for 'manticore-dev' and '--disablerepo' for 'manticore'. For example, manticore's documentation provides this method to install and run dev version:
+For RPM, the repository package enables the release repository by default, so a clean release install uses the package defaults. If the user explicitly selects `dev` or `release`, persistently switch the enabled repository with package-manager configuration tools rather than manually editing the package-owned repository file. Use `dnf config-manager --set-enabled/--set-disabled` when available, or `yum-config-manager --enable/--disable` on yum systems. If those tools are missing for an explicit channel switch, install the standard plugin package (`dnf-plugins-core` or `yum-utils`) and retry.
 
-```bash
-sudo yum -y --disablerepo=manticore --enablerepo manticore-dev install manticore
-```
-Use these flags per command rather than manually editing the package-owned repository file.
+`dev` must enable `manticore-dev` and disable `manticore`. `release` must enable `manticore` and disable `manticore-dev`. Do not enable or disable `manticore-release-candidate`.
 
 ## Choose repository
 
@@ -261,7 +258,7 @@ On clean system where no manticore repository package installed, if user doesn't
 
 However, when a repo is already installed/choosen, assume user doesn't want to unexpectedly change it. For example, if 'Dev' repository was chosen and set up, and user wants to upgrade, or list available versions, it should not be changed.
 
-If user explicitly provides a supported repository channel, behave according to it. That may imply reinstalling the correct repository package for Debian, or passing per-command repository flags for RPM dev installs. RPM release uses the repository package defaults.
+If user explicitly provides a supported repository channel, behave according to it. That may imply reinstalling the correct repository package for Debian, or persistently switching the enabled RPM repository with config-manager tools. Without an explicit RPM channel, preserve the repository package defaults/current repository state.
 
 ## Command Syntax
 

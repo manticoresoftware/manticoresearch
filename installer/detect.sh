@@ -245,29 +245,18 @@ deb_repo_package_url_for_channel() {
     esac
 }
 
-rpm_repo_args_for_channel() {
-    local channel="${1:-${MANTICORE_REPO_CHANNEL:-}}"
-
-    [[ "$channel" == "dev" ]] || return 0
-    printf '%s\n' "--enablerepo=${RPM_DEV_REPO_ID}" "--disablerepo=${RPM_RELEASE_REPO_ID}"
-}
-
 rpm_run() {
     local command=$1
-    local repo_args=()
     shift
 
-    mapfile -t repo_args < <(rpm_repo_args_for_channel)
-    "$command" "${repo_args[@]}" "$@"
+    "$command" "$@"
 }
 
 rpm_sudo_run() {
     local command=$1
-    local repo_args=()
     shift
 
-    mapfile -t repo_args < <(rpm_repo_args_for_channel)
-    sudo_exec "$command" "${repo_args[@]}" "$@"
+    sudo_exec "$command" "$@"
 }
 
 detect_debian_repo_channel() {
@@ -355,12 +344,94 @@ ensure_rpm_repo_channel() {
 
     ensure_repo_package_installed
     if [[ "$target" == "dev" ]]; then
-        print_info "Using Manticore dev repository for RPM package-manager commands."
+        print_step "Switching Manticore Repository Channel"
+        print_info "Activating Manticore dev repository."
+        set_rpm_repo_channel dev
     elif [[ "$target" == "release" ]]; then
-        print_info "Using default Manticore release repository for RPM package-manager commands."
+        print_step "Switching Manticore Repository Channel"
+        print_info "Activating Manticore release repository."
+        set_rpm_repo_channel release
     else
         print_info "Using RPM repository configuration from the Manticore repository package."
     fi
+}
+
+detect_rpm_config_manager() {
+    RPM_CONFIG_MANAGER=""
+
+    if command -v dnf >/dev/null 2>&1 && dnf -q config-manager --help >/dev/null 2>&1; then
+        RPM_CONFIG_MANAGER="dnf"
+        return 0
+    fi
+
+    if command -v yum-config-manager >/dev/null 2>&1; then
+        RPM_CONFIG_MANAGER="yum"
+        return 0
+    fi
+
+    return 1
+}
+
+ensure_rpm_config_manager() {
+    detect_rpm_config_manager && return 0
+
+    print_step "Installing RPM Repository Configuration Tools"
+    if command -v dnf >/dev/null 2>&1; then
+        if ! sudo_exec dnf install -y dnf-plugins-core; then
+            print_error "Failed to install dnf-plugins-core, which provides 'dnf config-manager'."
+            return 1
+        fi
+    elif command -v yum >/dev/null 2>&1; then
+        if ! sudo_exec yum install -y yum-utils; then
+            print_error "Failed to install yum-utils, which provides 'yum-config-manager'."
+            return 1
+        fi
+    else
+        print_error "Neither dnf nor yum is available to configure RPM repositories."
+        return 1
+    fi
+
+    if ! detect_rpm_config_manager; then
+        print_error "RPM repository configuration tool is unavailable. Install dnf-plugins-core or yum-utils and retry."
+        return 1
+    fi
+}
+
+set_rpm_repo_enabled() {
+    local repo_id=$1
+    local state=$2
+
+    ensure_rpm_config_manager
+
+    if [[ "$RPM_CONFIG_MANAGER" == "dnf" ]]; then
+        if [[ "$state" == "enabled" ]]; then
+            sudo_exec dnf config-manager --set-enabled "$repo_id"
+        else
+            sudo_exec dnf config-manager --set-disabled "$repo_id"
+        fi
+    else
+        if [[ "$state" == "enabled" ]]; then
+            sudo_exec yum-config-manager --enable "$repo_id"
+        else
+            sudo_exec yum-config-manager --disable "$repo_id"
+        fi
+    fi
+}
+
+set_rpm_repo_channel() {
+    case "$1" in
+        dev)
+            set_rpm_repo_enabled "$RPM_DEV_REPO_ID" enabled
+            set_rpm_repo_enabled "$RPM_RELEASE_REPO_ID" disabled
+            ;;
+        release)
+            set_rpm_repo_enabled "$RPM_RELEASE_REPO_ID" enabled
+            set_rpm_repo_enabled "$RPM_DEV_REPO_ID" disabled
+            ;;
+        *)
+            return 1
+            ;;
+    esac
 }
 validate_requested_version_argument() {
     local value=${1:-}

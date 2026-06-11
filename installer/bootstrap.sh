@@ -11,10 +11,10 @@ Usage:
   curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | bash -s -- [options]
 
 Common commands/options:
-  help, --help, -h, -?        Show this help and exit.
-  silent, -s, yes, -y         Non-interactive mode; assume defaults.
+  help                        Show this help and exit.
+  silent, yes                 Non-interactive mode; assume defaults.
   upgrade                     Upgrade an installed Manticore package.
-  version <version>, -v <v>   Install or switch to a specific version.
+  version <version>           Install or switch to a specific version.
   list-versions               Print available versions.
   list-versions-file <path>   Write available versions to path.
   no-start                    Do not start the service after install/upgrade.
@@ -22,7 +22,7 @@ Common commands/options:
   no-backup-data              Skip data directory backup (default).
   backup-dir <path>           Override backup directory for upgrades.
   release, dev,               Select Manticore repository channel.
-  uninstall, -u               Remove packages, keep config/data/repo state.
+  uninstall                   Remove packages, keep config/data/repo state.
   purge                       Remove packages and repository bootstrap package.
   purge-all                   Purge packages, repo state, config, and data.
 

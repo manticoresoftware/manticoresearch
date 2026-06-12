@@ -1,0 +1,5 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM manticore WHERE \`m\`=1 LIMIT 1,1 OPTION max_matches = 1"
+––– output –––
+ERROR 1064 (42000): offset out of bounds (offset=1, max_matches=1)

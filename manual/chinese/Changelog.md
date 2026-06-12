@@ -1,31 +1,121 @@
 # 更新日志
 
+## 开发版本
+
+即将推出。
+
+### 新功能与改进
+* 🆕 [v26.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/26.2.0) [ PR #4606](https://github.com/manticoresoftware/manticoresearch/pull/4606) 将 Buddy 更新到 3.47.0，加入了与新分片功能相关的分片回滚、升级、测试和修复。
+* 🆕 [v26.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/26.1.0) [ PR #4537](https://github.com/manticoresoftware/manticoresearch/pull/4537) 新增原生 `type='sharding'` 表，支持分布式插入，并带来覆盖创建、路由、回滚、故障转移和运维行为的重大分片升级。
+* 🆕 [v25.15.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.15.0) [ PR #4590](https://github.com/manticoresoftware/manticoresearch/pull/4590) 将 [MCL](https://github.com/manticoresoftware/columnar) 更新到 13.5.0，加入并行 HNSW 构建所需的库支持。
+* 🆕 [v25.14.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.14.0) [ PR #4589](https://github.com/manticoresoftware/manticoresearch/pull/4589) 新增多线程 HNSW 构建支持，加快初始构建、块合并以及 `ALTER TABLE ... REBUILD KNN` 期间的 KNN 索引构建速度。
+* 🆕 [v25.13.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.13.0) [ PR #4475](https://github.com/manticoresoftware/manticoresearch/pull/4475) 新增 `searchd --check`，可在启动前无副作用地验证配置。
+* 🆕 [v25.12.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.12.0) [ Issue #4531](https://github.com/manticoresoftware/manticoresearch/issues/4531) 新增用于分面搜索的 `facet_filter_mode`，可在活跃过滤条件下构建更丰富的电商式筛选，并保留和控制可替代的 facet 分桶。
+* 🆕 [v25.11.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.11.0) [ PR #4558](https://github.com/manticoresoftware/manticoresearch/pull/4558) 将 Buddy 更新到 3.46.0，新增对话式 RAG / 聊天搜索支持。
+* 🆕 [v25.10.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.10.0) [ PR #4555](https://github.com/manticoresoftware/manticoresearch/pull/4555) 将 Buddy 更新到 3.45.0，新增对 OpenSearch Dashboards 的支持。
+* 🆕 [v25.9.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.9.0) [ PR #4549](https://github.com/manticoresoftware/manticoresearch/pull/4549) 将 `manticore-load` 更新到 1.25.0，新增多查询支持。
+* 🆕 [v25.8.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.8.0) [ PR #4414](https://github.com/manticoresoftware/manticoresearch/pull/4414) 新增内置乌克兰语词形还原器，扩展了乌克兰语文本搜索的原生形态学支持。
+* 🆕 [v25.7.18](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.18) [ Issue #4461](https://github.com/manticoresoftware/manticoresearch/issues/4461) 为 [`date_histogram`](Functions/Date_and_time_functions.md#DATE_HISTOGRAM%28%29) 新增 `time_zone` 和 `offset` 支持，使聚合查询中可按时区感知的日历分桶成为可能。
+* 🆕 [v25.7.16](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.16) [ PR #4503](https://github.com/manticoresoftware/manticoresearch/pull/4503) 将 [MCL](https://github.com/manticoresoftware/columnar) 更新到 13.2.5，提升 ONNX embedding 性能。
+* 🆕 [v25.7.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.0) [ Issue #3280](https://github.com/manticoresoftware/manticoresearch/issues/3280) 新增类 Elasticsearch 的统计聚合，包括 `percentiles`、`percentile_ranks` 和 `mad`，可直接在聚合查询中计算百分位分布和中位绝对偏差。
+* 🆕 [v25.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.6.0) [ PR #4407](https://github.com/manticoresoftware/manticoresearch/pull/4407) 扩展了 `expr` ranker 中的 [`bm25a()`](Functions/Searching_and_ranking_functions.md#BM25A%28%29)，新增可选第三个 `avgdl` 参数，允许查询覆盖 BM25A 评分所使用的平均文档长度。
+* 🆕 [v25.4.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.4.0) [ Issue #4060](https://github.com/manticoresoftware/manticoresearch/issues/4060) 新增 systemd 状态通知，并将打包的 Linux 服务切换为 `Type=notify`，改善启动、重载和关闭处理，避免长时间关闭工作被误判为卡住的守护进程。
+* 🆕 [v25.3.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.3.0) [ PR #4326](https://github.com/manticoresoftware/manticoresearch/pull/4326) 新增对在 `JOIN` 查询中显式为左表列加前缀的支持，使使用表限定列名时的 JOIN 条件和过滤更一致。
+* 🆕 [v25.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.2.0) [ PR #146](https://github.com/manticoresoftware/columnar/pull/146) 将 [MCL](https://github.com/manticoresoftware/columnar) 更新到 13.2.2，新增本地 ONNX embedding 支持，并通过更快的 embedding 推理和 HNSW 距离计算提升向量搜索性能，在支持的环境下还包含 AVX-512 优化。
+* 🆕 [v25.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.1.0) [ PR #4454](https://github.com/manticoresoftware/manticoresearch/pull/4454) 通过优化距离计算并在支持时加载 AVX-512 columnar 库提升了 KNN 性能，降低了向量搜索负载的开销。
+* 🆕 [v25.0.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.0.5) [ Issue #1514](https://github.com/manticoresoftware/manticoresearch/issues/1514) 新增 [`EXIT CLUSTER`](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md#EXIT-CLUSTER)，允许当前节点在线从复制集群中脱离，而无需重启守护进程，同时保留其本地表为普通本地表。
+
+## 破坏性变更
+* ⚠️ **26.0.0** [ Issue #4431](https://github.com/manticoresoftware/manticoresearch/issues/4431) [ PR #4598](https://github.com/manticoresoftware/manticoresearch/pull/4598) **破坏性变更**：传入的复制表现在存储在标准 [`data_dir`](Server_settings/Searchd.md#data_dir)/`<table>` 结构下，而不是集群 `path` 下。如果你使用带自定义 `path` 的 **复制集群**，这会影响你：旧版本可能会把接收到的复制表文件放在集群路径下，因此升级后你可能需要把这些表迁移或重新同步到标准 `data_dir` 结构中。只有在采用新的复制表布局之前，降级才是安全的。
+
+### Bug 修复
+* 🪲 [v26.3.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/26.3.2) [ PR #4620](https://github.com/manticoresoftware/manticoresearch/pull/4620) 将 [MCL](https://github.com/manticoresoftware/columnar) 更新到 13.5.3，纳入随附 columnar 库中的量化器类型不匹配修复。
+* 🪲 [v26.3.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/26.3.1) 回滚了 `26.3.0` 中的 `zeroes` facet 功能，移除了误发布的 SQL/JSON 零计数 facet 分桶支持。
+* 🪲 [v26.2.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/26.2.4) [ Issue #4320](https://github.com/manticoresoftware/manticoresearch/issues/4320) 修复了重评分后的 KNN 结果排序问题，因此在重评分距离相同的情况下，显式 `ORDER BY` 绑定规则会正确生效。
+* 🪲 [v26.2.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/26.2.3) [ PR #4614](https://github.com/manticoresoftware/manticoresearch/pull/4614) 将 Buddy 更新到 3.47.2，修复了多个复制和节点重新加入时的崩溃路径，包括无效表索引处理和复制快照锁定。
+* 🪲 [v26.2.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/26.2.2) [ Issue #4603](https://github.com/manticoresoftware/manticoresearch/issues/4603) 修复了在使用 columnar 属性的表上执行带 `GROUP BY` 的混合融合查询时的崩溃。
+* 🪲 [v26.2.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/26.2.1) [ Issue #4534](https://github.com/manticoresoftware/manticoresearch/issues/4534) 将 Buddy 更新到 3.47.1，使基于 `doc_id` 的 HTTP KNN 搜索保留 `offset` 和 `max_matches`。
+* 🪲 [v26.0.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/26.0.3) [ PR #4604](https://github.com/manticoresoftware/manticoresearch/pull/4604) 将 [MCL](https://github.com/manticoresoftware/columnar) 更新到 13.5.2，纳入随附 columnar 库中的堆栈相关稳定性修复。
+* 🪲 [v26.0.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/26.0.2) [ Issue #4534](https://github.com/manticoresoftware/manticoresearch/issues/4534) 修复了 KNN 搜索对 `max_matches` 的遵循问题，纠正了结果窗口处理，避免返回错误的固定命中数。
+* 🪲 [v26.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/26.0.1) [ PR #4592](https://github.com/manticoresoftware/manticoresearch/pull/4592) 修复了调试构建中的堆栈大小设置，防止因协程和线程栈帧过大导致的内存破坏。
+* 🪲 [v25.13.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.13.5) [ Issue #4489](https://github.com/manticoresoftware/manticoresearch/issues/4489) 修复了在构建带 columnar 属性的普通索引时，由 MVA/docstore 空缺引起的 indexer 崩溃。
+* 🪲 [v25.13.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.13.4) [ PR #4583](https://github.com/manticoresoftware/manticoresearch/pull/4583) 修复了 `auto` 和 `max` 模式下 `facet_filter_mode` 的分桶状态行为，使已选、可用和不可用 facet 分桶与预期的分面搜索体验保持一致。
+* 🪲 [v25.13.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.13.3) [ Issue #4578](https://github.com/manticoresoftware/manticoresearch/issues/4578) 通过重构动态表内部数据流修复了 RT `.@files` 在写入负载下的崩溃，避免内部文件列表查询期间出现同步相关故障。
+* 🪲 [v25.13.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.13.2) [ Issue #660](https://github.com/manticoresoftware/manticoresearch-buddy/issues/660) 将 Buddy 更新到 3.46.3，修复了基于 `doc_id` 的 KNN 自命中处理，并恢复了 Logstash 7.17 模板探测兼容性。
+* 🪲 [v25.13.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.13.1) [ Issue #168](https://github.com/manticoresoftware/columnar/issues/168) 修复了 Windows 上 AVX-512 模块加载问题，防止在不支持的系统上选中打包的 [MCL](https://github.com/manticoresoftware/columnar) AVX-512 DLL，从而导致守护进程或 indexer 崩溃。
+* 🪲 [v25.12.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.12.1) [ PR #4563](https://github.com/manticoresoftware/manticoresearch/pull/4563) 修复了二进制 MySQL 协议支持，包括特殊列、空值和有类型的数值，使预处理/二进制协议查询重新正常工作。
+* 🪲 [v25.11.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.11.2) [ PR #4566](https://github.com/manticoresoftware/manticoresearch/pull/4566) 通过规范化 `Content-Length` 头格式修复了 Fluent Bit 批量导入互操作性，防止成功的批量响应被回放成重复插入。
+* 🪲 [v25.11.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.11.1) [ Issue #4560](https://github.com/manticoresoftware/manticoresearch/issues/4560) 将 Buddy 更新到 3.46.1，修复了 `information_schema.tables` 的有类型 `COUNT(*)` 处理，并恢复了预期的集成行为。
+* 🪲 [v25.9.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.9.1) [ Issue #4464](https://github.com/manticoresoftware/manticoresearch/issues/4464) 修复了需要 Buddy 参与处理的预处理语句，包括模糊 `MATCH(?)` 查询，并更正了 Buddy 返回的 bool、multi 和 JSON 值的严格有类型结果处理。
+* 🪲 [v25.8.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.8.5) [ PR #4554](https://github.com/manticoresoftware/manticoresearch/pull/4554) 修复了 AOT 语言包相关的打包和 CI，确保 Docker 镜像包含所有语言包，且词形还原器/AOT 测试覆盖不再被跳过。
+* 🪲 [v25.8.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.8.4) [ PR #4553](https://github.com/manticoresoftware/manticoresearch/pull/4553) 修复了乌克兰语词形还原器的加载和原始形式生成，增强了新的内置乌克兰语形态学支持。
+* 🪲 [v25.8.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.8.3) [ Issue #4490](https://github.com/manticoresoftware/manticoresearch/issues/4490) 修复了 `CALL KEYWORDS` 中阿拉伯语混合 token 的词干提取，防止某些包含阿拉伯语和数字的短输入报出通用的 `Something went wrong` 错误。
+* 🪲 [v25.8.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.8.2) [ Issue #4509](https://github.com/manticoresoftware/manticoresearch/issues/4509) 修复了在使用较长 `data_dir` 路径创建集群时的复制崩溃，纠正了长目录名下的 cluster-binlog 处理。
+* 🪲 [v25.8.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.8.1) [ PR #4535](https://github.com/manticoresoftware/manticoresearch/pull/4535) 修复了混合模式下的 `knn_dist` 输出，因此哨兵值 `FLT_MAX` 不再在 JSON 结果中被序列化为虚假的距离。
+* 🪲 [v25.7.21](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.21) [ Issue #4525](https://github.com/manticoresoftware/manticoresearch/issues/4525) 通过正确释放重映射后的字符串属性修复了 scroll 处理中的内存泄漏。
+* 🪲 [v25.7.20](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.20) [ Issue #4466](https://github.com/manticoresoftware/manticoresearch/issues/4466) 修复了当 JSON 数组聚合是请求中唯一的聚合时的处理问题，因此数组项会按各自分桶，而不是把整个数组作为每个 key 重复一遍。
+* 🪲 [v25.7.19](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.19) [ PR #4533](https://github.com/manticoresoftware/manticoresearch/pull/4533) 将 [MCL](https://github.com/manticoresoftware/columnar) 更新到 13.2.6，修复了在使用 1-bit 量化向量运行多线程 KNN 查询时可能出现的崩溃。
+* 🪲 [v25.7.17](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.17) [ PR #4529](https://github.com/manticoresoftware/manticoresearch/pull/4529) 打包了若干小修复和清理，包括另一处 [`ATTACH TABLE`](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) 正确性修复以及一些运行时/构建改进。
+* 🪲 [v25.7.15](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.15) [ PR #4526](https://github.com/manticoresoftware/manticoresearch/pull/4526) 通过正确读取 columnar docid 修复了 columnar 模式下 [`ATTACH TABLE`](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) 的 kill-list 处理，完成了针对 [MCL](https://github.com/manticoresoftware/columnar)/columnar 环境的近期 attach 修复。
+* 🪲 [v25.7.14](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.14) [ Issue #4459](https://github.com/manticoresoftware/manticoresearch/issues/4459) 修复了聚合参数中 [`DATE_HISTOGRAM()`](Functions/Date_and_time_functions.md#DATE_HISTOGRAM%28%29) 的间隔解析，因此 `fixed_interval` 值如 `1h`、`2m` 等现在会按正确单位工作，而不是被当作原始秒数。
+* 🪲 [v25.7.13](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.13) [ Issue #4522](https://github.com/manticoresoftware/manticoresearch/issues/4522) 修复了 JOIN 排序器/分组输出中多出的空字符，因此分组和分面 JOIN 值不再包含损坏的尾随 `\0` 字节。
+* 🪲 [v25.7.12](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.12) [ Issue #4516](https://github.com/manticoresoftware/manticoresearch/issues/4516) 修复了 [`ATTACH TABLE`](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) 后目标表的文档计数器，因此 `indexed_documents` 和相关元数据现在会反映 attach 后的实际行数。
+* 🪲 [v25.7.11](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.11) [ Issue #4515](https://github.com/manticoresoftware/manticoresearch/issues/4515) 修复了 [`ATTACH TABLE`](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) 对已被 kill 的文档的处理，因此目标表中的重复 ID 在 attach 过程中不再被错误删除。
+* 🪲 [v25.7.10](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.10) [ Issue #4514](https://github.com/manticoresoftware/manticoresearch/issues/4514) 修复了 [`ATTACH TABLE`](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) 后源表的 `indexed_documents`，因此当一个磁盘块被移动到另一张表时，文档计数现在会正确下降。
+* 🪲 [v25.7.9](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.9) [ Issue #4513](https://github.com/manticoresoftware/manticoresearch/issues/4513) 修复了已附加索引的元数据，因此通过 [`ATTACH TABLE`](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) 创建的表可以保留正确的块状态，并且在重启后不再损坏。
+* 🪲 [v25.7.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.8) [ Issue #4512](https://github.com/manticoresoftware/manticoresearch/issues/4512) 修复了脏重启后启动时的 `indexed_documents` 元数据，因此当恢复已删除行时，RT 表不再报告膨胀的文档数。
+* 🪲 [v25.7.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.7) [ Issue #159](https://github.com/manticoresoftware/columnar/issues/159) 修复了 embedding 库缺失或配置错误时的 KNN 启动诊断，因此 Manticore 在初始化期间不再报告误导性的 `(null)` 警告/错误。
+* 🪲 [v25.7.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.6) [ Issue #4460](https://github.com/manticoresoftware/manticoresearch/issues/4460) 修复了当 [`UPDATE`](Data_creation_and_modification/Updating_documents/UPDATE.md) 禁用二级索引时的复制处理，因此该警告在复制环境中不再被升级为会破坏集群的错误。
+* 🪲 [v25.7.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.5) [ Issue #4345](https://github.com/manticoresoftware/manticoresearch/issues/4345) 修复了二级索引无法生成迭代器时的 JSON 过滤回退，因此复合过滤树会保留预期过滤条件，而不是返回错误结果。
+* 🪲 [v25.7.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.4) [ PR #662](https://github.com/manticoresoftware/manticoresearch-buddy/pull/662) 将 Buddy 更新到 3.44.5，包含一个 Composer 安全修复。
+* 🪲 [v25.7.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.3) [ Issue #4404](https://github.com/manticoresoftware/manticoresearch/issues/4404) 修复了带 `scroll` 的 [hybrid search](Searching/Hybrid_search.md)，因此基于 scroll 的分页在使用 [hybrid search](Searching/Hybrid_search.md) 时现在可以正常工作，而不会失败或崩溃。
+* 🪲 [v25.7.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.2) [ Issue #4491](https://github.com/manticoresoftware/manticoresearch/issues/4491) 修复了 RT 块重命名和 [`OPTIMIZE`](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 之后的二级索引状态，因此被 [`UPDATE`](Data_creation_and_modification/Updating_documents/UPDATE.md) 禁用的索引在守护进程重启后仍会保持禁用，而不会被意外重新启用。
+* 🪲 [v25.7.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.7.1) [ PR #4502](https://github.com/manticoresoftware/manticoresearch/pull/4502) 修复了在 [hybrid search](Searching/Hybrid_search.md) 中按 `knn_dist()` 和 `hybrid_score()` 过滤的问题，因此查询现在可以正确对向量距离和混合排名分数应用条件。
+* 🪲 [v25.6.9](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.6.9) [ Issue #4473](https://github.com/manticoresoftware/manticoresearch/issues/4473) 通过在 `join.on` 中规范化表引用，修复了混合大小写表名的 HTTP JSON JOIN 解析，因此 JOIN 不再会因为表名包含大写字母而失败。
+* 🪲 [v25.6.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.6.8) [ Issue #4444](https://github.com/manticoresoftware/manticoresearch/issues/4444) 修复了 columnar 表在混合字段长度处理下剩余的 expr-ranker 崩溃，完成了 [`index_field_lengths`](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths)='1' 场景下 [`bm25a()`](Functions/Searching_and_ranking_functions.md#BM25A%28%29)/[`bm25f()`](Functions/Searching_and_ranking_functions.md#BM25F%28%29) 的修复。
+* 🪲 [v25.6.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.6.7) [ Issue #4484](https://github.com/manticoresoftware/manticoresearch/issues/4484) 修复了 MySQL `COM_FIELD_LIST` 元数据路径中的模板表处理，防止客户端请求模板表字段元数据时崩溃。
+* 🪲 [v25.6.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.6.6) [ Issue #4497](https://github.com/manticoresoftware/manticoresearch/issues/4497) 修复了模板表元数据路径上的崩溃，包括 `SHOW FIELDS` 和相关字段列表处理，这些路径此前可能导致守护进程崩溃。
+* 🪲 [v25.6.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.6.5) [ Issue #2](https://github.com/manticoresoftware/telemetry-lib/issues/2) 将 Buddy 更新到 3.44.4，修复了 PHP 8.4 下的遥测传递，因此遥测快照现在可以成功发送，而不会在 HTTP POST 请求期间失败。
+* 🪲 [v25.6.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.6.4) [ Issue #4469](https://github.com/manticoresoftware/manticoresearch/issues/4469) 修复了 [`ALTER TABLE ... REBUILD SECONDARY`](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) 在 [`OPTIMIZE`](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 合并 RT 磁盘块之后的行为，因此二级索引文件会与重命名后的优化块保持同步，并且不再报 `secondary index file ... not loaded`。
+* 🪲 [v25.6.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.6.3) [ Issue #4418](https://github.com/manticoresoftware/manticoresearch/issues/4418) 修复了 [hybrid search](Searching/Hybrid_search.md) 中的崩溃及相关 JOIN 处理问题，包括此前在结合全文检索和 KNN 结果时可能失败的 `LEFT JOIN` 查询。
+* 🪲 [v25.6.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.6.2) [ PR #658](https://github.com/manticoresoftware/manticoresearch-buddy/pull/658) 将 Buddy 更新到 3.44.3，在 `binlog_path` 为空时修复了卷遥测，因此 `volume_size_bytes` 不再被错误地报告为 0。
+* 🪲 [v25.6.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.6.1) [ Issue #4476](https://github.com/manticoresoftware/manticoresearch/issues/4476) 修复了 systemd 下的启动，因此当守护进程由 systemd 托管时不再需要 `pid_file`，因为 systemd 已经知道并控制进程 ID。
+* 🪲 [v25.5.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.5.1) [ Issue #4444](https://github.com/manticoresoftware/manticoresearch/issues/4444) 修复了在带 [`index_field_lengths`](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths)='1' 的 columnar 表上使用 [`bm25a()`](Functions/Searching_and_ranking_functions.md#BM25A%28%29) 或 [`bm25f()`](Functions/Searching_and_ranking_functions.md#BM25F%28%29) 的 expr ranker 崩溃，因此自定义排序不再从错误的存储中解引用字段长度属性。
+* 🪲 [v25.5.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.5.0) [ Issue #4007](https://github.com/manticoresoftware/manticoresearch/issues/4007) 修复了 SphinxQL、HTTP 和 `JOIN` 查询中混合大小写表名处理不一致的问题，因此表名现在会统一规范化，而不是在使用大写字母时失败或表现不同。
+* 🪲 [v25.2.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.2.1) [ Issue #4428](https://github.com/manticoresoftware/manticoresearch/issues/4428) 修复了 [hybrid search](Searching/Hybrid_search.md) 查询中使用 `GROUP BY` 时的崩溃，包括同时结合全文检索和 KNN 搜索的查询。
+* 🪲 [v25.1.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.1.1) [ Issue #4455](https://github.com/manticoresoftware/manticoresearch/issues/4455) 回滚了最近将缺失的 `knn_embeddings` 库转为显式 KNN 初始化错误的改动，恢复了该可选 embedding 库缺失时的旧行为。
+* 🪲 [v25.0.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.0.6) [ Issue #4437](https://github.com/manticoresoftware/manticoresearch/issues/4437) 修复了 `ALTER CLUSTER ... DROP` 之后的集群重新加入处理，因此在删除期间离线的节点不再保留过时的本地集群表元数据，避免该已删除表在重新加入后卡住且无法移除。
+* 🪲 [v25.0.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.0.4) [ PR #4405](https://github.com/manticoresoftware/manticoresearch/pull/4405) 修复了针对词干化或其他方式归一化后的查询词的 BM25A 排名，因此诸如 `looking` 和 `look` 这样的等价查询现在会使用相同的局部/全局 IDF 统计，而不会产生不同的相关性分数。
+* 🪲 [v25.0.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.0.3) [ PR #85](https://github.com/manticoresoftware/executor/pull/85) 将 Executor 更新到 1.4.3，通过使用预构建的、按架构区分的产物代替在镜像流水线中构建二进制文件，简化了其 Docker 打包流程。
+* 🪲 [v25.0.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.0.2) [ Issue #4395](https://github.com/manticoresoftware/manticoresearch/issues/4395) 修复了在自动优化已经运行时的 [`OPTIMIZE TABLE ... OPTION sync=1, cutoff=N`](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE)，因此手动 optimize 请求现在会等待其请求的块缩减目标，而不是绑定到其他正在进行的 optimize 运行。
+* 🪲 [v25.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.0.1) [ Issue #4398](https://github.com/manticoresoftware/manticoresearch/issues/4398) 修复了守护进程的查询时间统计，因此 HTTP `/search`、分布式更新查询以及从 master 路由到 agent 的 API 搜索请求都能正确报告全局计数器和各表耗时。
+
 ## 版本 25.0.0
 **发布日期**：2026 年 3 月 30 日
 
-此版本带来了更广泛的打包改进，新增了用于自动嵌入模型的 `API_URL` 和 `API_TIMEOUT` 选项，混合搜索功能，S3 兼容的备份和恢复支持，更快的 RT 表维护（支持 N 路合并和并行 `OPTIMIZE`），KNN 预过滤，以及 MySQL 兼容的预处理语句。
+此次发布带来了更广泛的打包改造、用于自动 embedding 模型的全新 `API_URL` 和 `API_TIMEOUT` 选项、[hybrid search](Searching/Hybrid_search.md)、兼容 S3 的备份与恢复支持、通过 N 路合并和并行 [`OPTIMIZE`](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 提升的 RT 表维护速度、KNN 预过滤，以及 MySQL 兼容的预处理语句。
 
 ## 重大变更
-* ⚠️ [v25.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.0.0) [ PR #123](https://github.com/manticoresoftware/columnar/pull/123) **重大变更**：将 **MCL** 更新至 13.0.0 版本，新增了 [`API_URL`](Searching/KNN.md#Creating-a-table-with-auto-embeddings) 和 [`API_TIMEOUT`](Searching/KNN.md#Creating-a-table-with-auto-embeddings) 以支持 [**自动嵌入模型**](Searching/KNN.md#Auto-Embeddings-%28Recommended%29)。如果您使用 [**自动嵌入模型**](Searching/KNN.md#Auto-Embeddings-%28Recommended%29) 或单独管理 **MCL**，则会受到影响，因为 Manticore 25.0.0 需要 **MCL 13.0.0**，且与旧版 MCL 不兼容；请同时升级守护进程和 MCL，降级仅在同时恢复匹配的旧版 MCL 时才安全。
+* ⚠️ [v25.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.0.0) [ PR #123](https://github.com/manticoresoftware/columnar/pull/123) **破坏性变更**：将 **[MCL](https://github.com/manticoresoftware/columnar)** 更新到 13.0.0，为 [**auto-embedding models**](Searching/KNN.md#Auto-Embeddings-%28Recommended%29) 新增 [`API_URL`](Searching/KNN.md#Creating-a-table-with-auto-embeddings) 和 [`API_TIMEOUT`](Searching/KNN.md#Creating-a-table-with-auto-embeddings)。如果你使用 [**auto-embedding models**](Searching/KNN.md#Auto-Embeddings-%28Recommended%29) 或者将 **[MCL](https://github.com/manticoresoftware/columnar)** 独立于守护进程管理，这会影响你，因为 Manticore 25.0.0 需要 **[MCL](https://github.com/manticoresoftware/columnar) 13.0.0**，且不兼容更早的 [MCL](https://github.com/manticoresoftware/columnar) 版本；升级守护进程和 [MCL](https://github.com/manticoresoftware/columnar) 时应同时进行，而降级只有在你也恢复到匹配的旧版 [MCL](https://github.com/manticoresoftware/columnar) 时才安全。
 * ⚠️ [v24.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.0.0) [ Issue #4343](https://github.com/manticoresoftware/manticoresearch/issues/4343) **重大变更**：内部 **复制协议** 版本已升级，并新增了集群纪元跟踪功能，使离线节点在恢复时能够检测到集群表成员变更并使用 SST 而不是在 IST 恢复期间失败。此变更仅影响使用 **复制集群** 的用户：跨此变更的混合版本复制集群不兼容，因此请同时升级集群节点，降级仅在集群中未使用新复制协议时才安全。
 * ⚠️ [v23.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/23.0.0) [ Issue #4364](https://github.com/manticoresoftware/manticoresearch/issues/4364) **重大变更**：引入了 **索引格式版本 69** 以支持新的大写分词选项，包括 [`bigram_delimiter`](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_delimiter) 模式和数字感知的 [`bigram_index`](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index) 模式。如果您使用这些大写分词选项，或在重建索引后需要使用旧版 Manticore 打开重写后的索引，则会受到影响：现有旧版索引仍可读取，但以格式 69 重建或新写入的索引与旧版 Manticore 不兼容，因此降级仅在这些索引未被重写前才安全。
 * ⚠️ [v22.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/22.0.0) [ Issue #4301](https://github.com/manticoresoftware/manticoresearch/issues/4301) **重大变更**：**RT 表的嵌入生成** 已从提交阶段移出，并作为向量数据进行复制。如果您使用带有 `model_name` 的 **RT 表** 的 **复制集群**，则会受到影响：它保留用户提供的向量，防止副本重新生成不同的嵌入，并在与复制一起使用时提高 **自动嵌入** 的性能，但跨此变更的混合版本复制集群不兼容。请同时升级集群节点；降级仅在集群中未使用新复制协议时才安全。
-* ⚠️ [v21.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/21.0.0) [ PR #138](https://github.com/manticoresoftware/columnar/pull/138) **重大变更**：将 **MCL** 更新至 12.0.0 版本，并提升了所需的 **KNN API** 以支持 HNSW 遍历期间的自适应 [**KNN 早期终止**](Searching/KNN.md#Early-termination)。如果您单独管理 **MCL** 或运行依赖于先前候选探索行为或边界结果选择的 **KNN 查询**，则会受到影响：Manticore 21.0.0 需要 **MCL 12.0.0** 和更新的 KNN 接口，使用该库后 KNN 搜索可在找到足够候选后提前终止，这可能会改变探索和返回的候选对象。现有数据仍兼容，无需特殊迁移，但请同时升级守护进程和 MCL；降级仅在同时恢复匹配的旧版 MCL 时才安全。
+* ⚠️ [v21.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/21.0.0) [ PR #138](https://github.com/manticoresoftware/columnar/pull/138) **破坏性变更**：将 **[MCL](https://github.com/manticoresoftware/columnar)** 更新到 12.0.0，并提升所需的 **KNN API** 版本，以支持在 HNSW 遍历期间自适应的 [**KNN 早停**](Searching/KNN.md#Early-termination)。如果你将 **[MCL](https://github.com/manticoresoftware/columnar)** 独立于守护进程管理，或者运行依赖先前候选探索行为或边界结果选择的 **KNN 查询**，这会影响你：Manticore 21.0.0 需要带有新 KNN 接口的 **[MCL](https://github.com/manticoresoftware/columnar) 12.0.0**，并且借助该库，当找到足够候选项后 KNN 搜索可以更早停止，这可能改变被探索和返回的候选项。现有数据仍然兼容，无需特殊迁移，但升级守护进程和 [MCL](https://github.com/manticoresoftware/columnar) 时应同时进行；只有在你也恢复到匹配的旧版 [MCL](https://github.com/manticoresoftware/columnar) 时，降级才安全。
 * ⚠️ [v19.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.0.0) [ Issue #4103](https://github.com/manticoresoftware/manticoresearch/issues/4103) **重大变更**：新增了 [**KNN 预过滤**](Searching/KNN.md#Filtering-strategies:-prefilter-vs.-postfilter)。如果您运行 **KNN 查询** 并同时使用属性过滤器，则会受到影响，因为现在可以在 KNN 搜索期间应用过滤器，而不仅仅是在候选选择之后。这会通过优先选择过滤后的最近邻来改变过滤 KNN 查询的结果选择行为；无需特殊迁移，但依赖于先前后过滤结果行为的查询在升级后可能会返回不同结果。由于此功能未引入索引或协议格式变更，因此可以降级。
-* ⚠️ [v18.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/18.0.0) [ Issue #4261](https://github.com/manticoresoftware/manticoresearch/issues/4261) **重大变更**：引入了 **索引格式版本 68** 以修复 [`hitless_words`](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words) 字典布局处理。如果您重建或新写入索引后需要使用旧版 Manticore 打开它们，则会受到影响：现有旧版索引仍可读取，但任何以新格式重建或新写入的索引与旧版 Manticore 不兼容，因此降级仅在这些索引未被重写前才安全。
+* ⚠️ [v18.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/18.0.0) [ Issue #4261](https://github.com/manticoresoftware/manticoresearch/issues/4261) **破坏性变更**：引入 **索引格式版本 68**，用于修复 [`hitless_words`](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words) 词典布局处理。如果你重建或新写入索引，之后又需要用旧版 Manticore 打开这些重写后的索引，这会影响你：现有旧索引仍可读取，但任何在新格式下重建或新写入的索引都与旧版 Manticore 不兼容，因此只有在这些索引尚未被重写之前，降级才是安全的。
 
 ### 与打包相关的更改
 * 🆕 [v25.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.0.0) [ PR #4357](https://github.com/manticoresoftware/manticoresearch/pull/4357) 打包更改：`manticore` 现在是 deb 和 rpm 的捆绑包。它包括守护进程、工具、转换器、开发头文件、ICU 数据、捆绑依赖包（`manticore-columnar-lib`、`manticore-backup`、`manticore-buddy`、`manticore-executor`、`manticore-load`、`manticore-galera` 和 `manticore-tzdata` 适用时），以及内置的德语、英语和俄语语言包，还有 Jieba 支持。乌克兰词形还原器未捆绑；请单独安装。从之前的包布局升级时，通常只需安装 `manticore` 包。如果旧的拆分包导致冲突，请使用 `apt remove 'manticore*'` 或 `yum remove 'manticore*'` 删除它们，然后安装 `manticore`。此清理不会删除您现有的数据或配置。
 
 ## 新功能和改进
-* 🆕 [v24.4.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.4.0) [ PR #4091](https://github.com/manticoresoftware/manticoresearch/pull/4091) 通过添加 N 路磁盘块合并和并行 `OPTIMIZE` 任务来改进 RT 表压缩，减少合并许多磁盘块所需的时间，并公开了新的 [`merge_chunks_per_job`](Server_settings/Searchd.md#merge_chunks_per_job) 和 [`parallel_chunk_merges`](Server_settings/Searchd.md#parallel_chunk_merges) 设置。
+* 🆕 [v24.4.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.4.0) [ PR #4091](https://github.com/manticoresoftware/manticoresearch/pull/4091) 通过新增 N 路磁盘块合并和并行 [`OPTIMIZE`](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 任务改进了 RT 表压缩，缩短了合并大量磁盘块所需的时间，并暴露了新的 [`merge_chunks_per_job`](Server_settings/Searchd.md#merge_chunks_per_job) 和 [`parallel_chunk_merges`](Server_settings/Searchd.md#parallel_chunk_merges) 设置。
 * 🆕 [v24.3.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.3.0) [ PR #133](https://github.com/manticoresoftware/manticoresearch-backup/pull/133) 将 Manticore Backup 更新到 1.10.0，添加了 S3 兼容的备份和恢复支持，包括 AWS S3、MinIO、Wasabi 和 Cloudflare R2。
 * 🆕 [v24.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.2.0) [ Issue #2079](https://github.com/manticoresoftware/manticoresearch/issues/2079) 添加了 [混合搜索](Searching/Hybrid_search.md)（Reciprocal Rank Fusion，`fusion_method='rrf'`），允许 SQL 和 JSON 查询结合全文和 KNN 结果，使用 `hybrid_score()` 进行排序，并支持在单个融合结果集中包含多个 KNN 子查询。
-* 🆕 [v24.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.1.0) [ PR #141](https://github.com/manticoresoftware/columnar/pull/141) 将 MCL 更新到 12.4.1，添加了对 GGUF 量化本地嵌入模型、T5 编码器模型以及通过令牌认证下载的门控 Hugging Face 模型的支持。
+* 🆕 [v24.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.1.0) [ PR #141](https://github.com/manticoresoftware/columnar/pull/141) 将 [MCL](https://github.com/manticoresoftware/columnar) 更新到 12.4.1，新增对 GGUF 量化本地 embedding 模型、T5 编码器模型以及通过令牌认证下载的受限 Hugging Face 模型的支持。
 * 🆕 [v23.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/23.2.0) [ PR #4372](https://github.com/manticoresoftware/manticoresearch-buddy/pull/648) 将 Buddy 更新到 3.44.0，添加了对涉及多个表的查询的模糊搜索支持。
 * 🆕 [v23.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/23.1.0) [ PR #4357](https://github.com/manticoresoftware/manticoresearch/pull/4357) 添加了新的 Manticore 捆绑包用于 deb 和 rpm，取代之前的元包以简化捆绑组件的安装和分发。
-* 🆕 [v21.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/21.1.0) [ PR #4352](https://github.com/manticoresoftware/columnar/pull/140) 将 MCL 更新到 12.1.0，改进了 KNN 早期终止性能，并添加了更高效的 64 位值编码。
-* 🆕 [v19.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.2.0) [ PR #4306](https://github.com/manticoresoftware/manticoresearch/pull/4306) 将 MCL 更新到 11.1.0，添加了编码器缓存支持。
+* 🆕 [v21.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/21.1.0) [ PR #4352](https://github.com/manticoresoftware/columnar/pull/140) 将 [MCL](https://github.com/manticoresoftware/columnar) 更新到 12.1.0，提升了 KNN 早停性能，并增加了更高效的 64 位值编码。
+* 🆕 [v19.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.2.0) [ PR #4306](https://github.com/manticoresoftware/manticoresearch/pull/4306) 将 [MCL](https://github.com/manticoresoftware/columnar) 更新到 11.1.0，新增 codec 缓存支持。
 * 🆕 [v19.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.1.0) [ PR #4271](https://github.com/manticoresoftware/manticoresearch-buddy/pull/644) 将 Buddy 更新到 3.43.0，包括改进的指标处理。
 * 🆕 [v19.0.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.0.3) [ Issue #4303](https://github.com/manticoresoftware/manticoresearch/issues/4303) 为 SQL 连接添加了单独的 [`interactive_timeout`](Server_settings/Setting_variables_online.md#SET) 和 [`wait_timeout`](Server_settings/Setting_variables_online.md#SET) 处理，使交互式客户端和非交互式客户端可以使用不同的空闲超时，如 MySQL。
 * 🆕 [v17.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.6.0) [ Issue #1124](https://github.com/manticoresoftware/manticoresearch/issues/1124) 添加了 MySQL 兼容的预处理语句支持，包括二进制协议的预处理/执行处理和绑定参数验证。
@@ -37,8 +127,8 @@
 * 🪲 [v24.1.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.1.3) [ PR #4396](https://github.com/manticoresoftware/manticoresearch/pull/4396) 修复了 macOS 上手动启动 `searchd` 的问题，Buddy 支持的 SQL 命令不再因加载较旧的系统 `libcurl` 而失败；运行时查找现在会自动优先使用 Homebrew curl，`MANTICORE_CURL_LIB` 仍可作为显式覆盖。
 * 🪲 [v24.1.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.1.2) [ PR #4394](https://github.com/manticoresoftware/manticoresearch/pull/4394) 修复了 macOS 打包构建的问题，Buddy 支持的 SQL 命令不再因 `searchd` 链接至不兼容的 `libcurl` 而失败；该包现在优先使用 Homebrew curl，并支持 `MANTICORE_CURL_LIB` 运行时覆盖。
 * 🪲 [v24.1.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.1.1) [ Issue #4388](https://github.com/manticoresoftware/manticoresearch/issues/4388) 修复了集群中事务包含重复文档 ID 时的复制问题，因此副本不再在供体正确删除重复项时丢失行。
-* 🪲 [v24.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.0.1) [ Issue #4354](https://github.com/manticoresoftware/manticoresearch/issues/4354) 修复了更改属性时也需要禁用其二级索引的 `UPDATE` 处理，防止出现不正确的警告和不一致的二级索引状态。
-* 🪲 [v23.0.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/23.0.2) [ PR #4370](https://github.com/manticoresoftware/columnar/issues/125) 将 MCL 更新到 12.1.1，修复了在生成自动嵌入时文本包含无效 UTF-8 时的崩溃，包括插入 `html_strip=1` 的表。
+* 🪲 [v24.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.0.1) [ Issue #4354](https://github.com/manticoresoftware/manticoresearch/issues/4354) 修复了当属性变更还需要禁用其二级索引时的 [`UPDATE`](Data_creation_and_modification/Updating_documents/UPDATE.md) 处理，避免错误警告和不一致的二级索引状态。
+* 🪲 [v23.0.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/23.0.2) [ PR #4370](https://github.com/manticoresoftware/columnar/issues/125) 将 [MCL](https://github.com/manticoresoftware/columnar) 更新到 12.1.1，修复了文本包含无效 UTF-8 时自动 embedding 生成期间的崩溃，包括插入到 `html_strip=1` 表中的场景。
 * 🪲 [v23.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/23.0.1) [ PR #4371](https://github.com/manticoresoftware/manticoresearch/pull/4371) 修复了嵌入验证期间缺失的 RT 段锁，防止嵌入相关操作中的崩溃和竞态条件。
 * 🪲 [v21.0.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/21.0.3) [ Issue #4315](https://github.com/manticoresoftware/manticoresearch/issues/4315) 修复了插入包含自动嵌入列的表时，MVA 值被保留而不是存储为空的问题。
 * 🪲 [v21.0.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/21.0.2) [ PR #4277](https://github.com/manticoresoftware/manticoresearch-buddy/pull/649) 将 Buddy 更新到 3.43.1，修复了对带有数字前缀和通配符星号的术语的自动完成和模糊搜索处理。
@@ -50,7 +140,7 @@
 * 🪲 [v19.2.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.2.1) [ Issue #4229](https://github.com/manticoresoftware/manticoresearch/issues/4229) 修复了 `LEFT JOIN` 结果以发出正确的 MySQL `NULL` 值而不是字符串 `NULL`，从而提高与原生 MySQL 客户端和驱动程序的兼容性。
 * 🪲 [v19.0.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.0.4) [ Issue #4308](https://github.com/manticoresoftware/manticoresearch/issues/4308) 修复了因在存储/全文字段（如 `WHERE title='test'`）上进行过滤而导致的守护进程崩溃；这些查询现在返回错误而不是崩溃。
 * 🪲 [v19.0.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.0.2) [ PR #4311](https://github.com/manticoresoftware/manticoresearch/issues/4307) 修复了 HTTP `/sql?mode=raw` 多语句请求中使用 `.@files` 后跟 `SHOW META` 的崩溃。
-* 🪲 [v19.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.0.1) [ Issue #4103](https://github.com/manticoresoftware/manticoresearch/issues/4103) 将 MCL 更新到 11.0.0 以支持 KNN 预过滤。
+* 🪲 [v19.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.0.1) [ Issue #4103](https://github.com/manticoresoftware/manticoresearch/issues/4103) 将 [MCL](https://github.com/manticoresoftware/columnar) 更新到 11.0.0，以支持 KNN 预过滤。
 * 🪲 [v18.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/18.0.1) [ Issue #4293](https://github.com/manticoresoftware/manticoresearch/issues/4293) 修复了自动嵌入 `float_vector` 列的 `ALTER TABLE ... ADD COLUMN`，使 `model_name` 和 `FROM` 正确保留而不是被替换为 `knn_dims='0'`。
 * 🪲 [v17.6.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.6.6) [ Issue #4264](https://github.com/manticoresoftware/manticoresearch/issues/4264) 修复了 macOS 上的 kqueue EOF 处理，以防止在请求处理期间出现诸如 `Resource temporarily unavailable` 的虚假 HTTP 接收警告。
 * 🪲 [v17.6.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.6.5) [ PR #4296](https://github.com/manticoresoftware/manticoresearch/pull/4296) 修复了全文 `AND` 节点的文档计数和成本估计，提高了对交集全文条件的查询规划器决策。
@@ -58,13 +148,13 @@
 * 🪲 [v17.6.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.6.3) [ Issue #4284](https://github.com/manticoresoftware/manticoresearch/issues/4284) 修复了在插入带有自动嵌入的集群表时副本节点的崩溃，通过在复制提交期间保留生成嵌入所需源文本来解决。
 * 🪲 [v17.6.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.6.2) [ Issue #4257](https://github.com/manticoresoftware/manticoresearch/issues/4257) 通过确保解析器输入缓冲区正确终止，修复了 Valgrind 检测到的预处理语句执行中的无效读取。
 * 🪲 [v17.6.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.6.1) [ Issue #4207](https://github.com/manticoresoftware/manticoresearch/issues/4207) 添加了回归修复和测试覆盖率，以解决 RT 磁盘块保存期间可能导致文档删除和合并后出现重复行的竞态条件。
-* 🪲 [v17.5.10](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.10) [ Issue #4207](https://github.com/manticoresoftware/columnar/issues/133) 将 MCL 更新到 10.2.2，通过在本地模型使用周围添加并发保护，修复了在向带有本地嵌入模型的表插入数据时运行搜索的崩溃。
+* 🪲 [v17.5.10](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.10) [ Issue #4207](https://github.com/manticoresoftware/columnar/issues/133) 将 [MCL](https://github.com/manticoresoftware/columnar) 更新到 10.2.2，通过在本地模型使用周围增加并发保护，修复了在带本地 embedding 模型的表中插入数据时执行搜索会崩溃的问题。
 * 🪲 [v17.5.9](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.9) [ PR #4247](https://github.com/manticoresoftware/manticoresearch/pull/4247) 修复了 RT 磁盘块保存期间的竞态条件，该竞态条件可能导致文档删除并在合并或保存后产生重复行。
 * 🪲 [v17.5.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.8) [ PR #4241](https://github.com/manticoresoftware/manticoresearch/pull/4247) 修复了连接表中错误的后限制属性评估，包括在将 RAM 块刷新到磁盘后 `LEFT JOIN` 查询。
 * 🪲 [v17.5.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.7) [ PR #4239](https://github.com/manticoresoftware/manticoresearch/pull/4239) 明确了日志和状态文档中查询时间和墙时间的定义。
 * 🪲 [v17.5.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.6) [ PR #4245](https://github.com/manticoresoftware/manticoresearch/pull/4245) 修复了全局 `search_stats_ms_*` 指标因双重计数本地执行时间而高估搜索时间的问题；这些统计信息现在与实际查询执行时间匹配。
 * 🪲 [v17.5.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.5) [ Issue #858](https://github.com/manticoresoftware/manticoresearch/issues/858) 修复了 CJK 文本的 `HIGHLIGHT()` 和片段生成中在单词之间添加不必要的空格的问题；高亮摘录现在保留原始文本间距而不是分词间距。
-* 🪲 [v17.5.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.4) [ Issue #1166](https://github.com/manticoresoftware/manticoresearch/issues/1166) 修复了在 `TRUNCATE TABLE ... WITH RECONFIGURE` 后对 RT 表（`index_field_lengths=1`）进行插入时的崩溃，特别是在字段和字符串属性混合时；重新配置期间现在正确设置字段长度属性。
+* 🪲 [v17.5.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.4) [ Issue #1166](https://github.com/manticoresoftware/manticoresearch/issues/1166) 修复了对 `index_field_lengths`=1 的 RT 表在 `TRUNCATE TABLE ... WITH RECONFIGURE` 之后 INSERT 时的崩溃，尤其是在字段与字符串属性混用时；现在会在重新配置期间正确设置字段长度属性。
 * 🪲 [v17.5.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.3) 修复了手册中损坏的 Wordforms 文档内容。
 * 🪲 [v17.5.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.2) [ Issue #3213](https://github.com/manticoresoftware/manticoresearch/issues/3213) 修复了在连接表的列别名构建的表达式上进行过滤的 JOIN 查询，例如 `SELECT t2.i al, (al*0.1) pct ... WHERE pct > 0`，这可能会因 `incoming-schema expression missing evaluator` 而失败；这些过滤器现在在连接后正确评估。
 
@@ -80,13 +170,13 @@
 ❤️ 我们想感谢 [@pakud](https://github.com/pakud) 在 [PR #4075](https://github.com/manticoresoftware/manticoresearch/pull/4075) 上的工作。
 
 ## 突破性变更
-* ⚠️ [v17.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.0.0) [ Issue #4120](https://github.com/manticoresoftware/manticoresearch/issues/4120) MCL 10.0.0: 添加了对 `DROP CACHE` 的支持。这更新了守护进程与 MCL 之间的接口。旧版 Manticore Search 不支持较新的 MCL。
+* ⚠️ [v17.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.0.0) [ Issue #4120](https://github.com/manticoresoftware/manticoresearch/issues/4120) [MCL](https://github.com/manticoresoftware/columnar) 10.0.0：新增对 `DROP CACHE` 的支持。这更新了守护进程与 [MCL](https://github.com/manticoresoftware/columnar) 之间的接口。旧版 Manticore Search 无法加载新版 [MCL](https://github.com/manticoresoftware/columnar)。
 * ⚠️ [v16.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/16.0.0) [ Issue #4019](https://github.com/manticoresoftware/manticoresearch/issues/4019) Percolate 查询的 JSON 响应现在将 hit 的 `_id` 和 `_score` 作为数字而不是字符串返回，与常规搜索一致；这对于依赖这些字段字符串类型的客户端来说是一个破坏性变更。
 
 ## 新功能和改进
-* 🆕 [v17.5.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.0) [ PR #130](https://github.com/manticoresoftware/columnar/pull/130) MCL 更新至 10.2.0: 修复了 QWEN 模型支持并添加了对其他模型的支持。
+* 🆕 [v17.5.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.0) [ PR #130](https://github.com/manticoresoftware/columnar/pull/130) [MCL](https://github.com/manticoresoftware/columnar) 更新到 10.2.0：修复了 QWEN 模型支持，并新增对更多模型的支持。
 * 🆕 [v17.3.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.3.0) [ PR #4186](https://github.com/manticoresoftware/manticoresearch/pull/4186) Executor 更新至 1.4.0，包括更新的 PHP 版本和 llm-php-ext 扩展。
-* 🆕 [v17.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.2.0) [ PR #4195](https://github.com/manticoresoftware/manticoresearch/pull/4195) 更新 MCL 至 10.1.0；添加了对 Qwen 本地嵌入模型的支持。
+* 🆕 [v17.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.2.0) [ PR #4195](https://github.com/manticoresoftware/manticoresearch/pull/4195) 将 [MCL](https://github.com/manticoresoftware/columnar) 更新到 10.1.0；新增对 Qwen 本地 embedding 模型的支持。
 * 🆕 [v17.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.1.0) [ Issue #3826](https://github.com/manticoresoftware/manticoresearch/issues/3826) Jieba 形态学实例现在在相同配置（模式、HMM 标志、用户字典路径）的表之间共享，当许多表使用 Jieba 时（例如许多空表不再导致约 20 GB 的内存使用），大大减少了内存使用。
 * 🆕 [v17.0.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.0.7) [ Issue #2046](https://github.com/manticoresoftware/manticoresearch/issues/2046) 在 RT 模式下，停用词、词形变化、异常词和无命中词现在可以在 `CREATE TABLE` 中内联设置（分号分隔的值；词形变化/异常词使用 `>` 或 `=>` 表示对，`\` 用于转义），因此可以在不使用外部文件的情况下创建表；`SHOW CREATE TABLE` 返回这些内联值。
 * 🆕 [v16.3.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/16.3.0) KNN 搜索现在默认使用 oversampling=3 和 rescore=1，并支持省略 k 以使查询限制作为有效的 k；这减少了不必要的 oversampling，并改进了在列式表上使用 `SELECT *` 时的行为。
@@ -100,10 +190,10 @@
 * 🪲 [v17.2.10](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.2.10) [ 问题 #425](https://github.com/manticoresoftware/manticoresearch-buddy/issues/425) 自动表创建（自动模式）现在也适用于 `REPLACE INTO`，而不仅仅是 `INSERT INTO`，因此当缺少表时会按需创建表。
 * 🪲 [v17.2.9](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.2.9) [ 问题 #3226](https://github.com/manticoresoftware/manticoresearch/issues/3226) 修复了在具有多个 GROUP BY 列的列式 MVA 上返回错误的 `GROUP BY` 结果的问题，通过与行式处理相同的方式拒绝此类查询（"MVA 值不能在多个 group-by 中使用"）。
 * 🪲 [v17.2.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.2.7) [ 问题 #1737](https://github.com/manticoresoftware/manticoresearch/issues/1737) 修复了 `highlight()` 在 `html_strip_mode=strip` 模式下损坏内容的问题，通过解码实体和修改标签；现在高亮输出中保留原始实体形式。
-* 🪲 [v17.2.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.2.6) [ 问题 #3203](https://github.com/manticoresoftware/manticoresearch/issues/3203) 修复了当表具有多个磁盘块时 `ALTER TABLE REBUILD SECONDARY` 失败并报错 `failed to rename … .tmp.spjidx` 的问题。
+* 🪲 [v17.2.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.2.6) [ Issue #3203](https://github.com/manticoresoftware/manticoresearch/issues/3203) 修复了 [`ALTER TABLE REBUILD SECONDARY`](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) 在表有多个磁盘块时因 `failed to rename … .tmp.spjidx` 而失败的问题。
 * 🪲 [v17.2.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.2.5) [ 问题 #3226](https://github.com/manticoresoftware/manticoresearch/issues/3226) 修复了在具有多个 GROUP BY 列的列式 MVA 上返回错误的 GROUP BY 结果的问题，通过与行式处理相同的方式拒绝此类查询（"MVA 值不能在多个 group-by 中使用"）。
 * 🪲 [v17.2.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.2.4) [ 问题 #4148](https://github.com/manticoresoftware/manticoresearch/issues/4148) 修复了在代理表包含重复文档 ID 时分布式查询返回错误本地索引存储字段的问题；现在存储字段遵循索引顺序，重复时使用第一个匹配的索引。
-* 🪲 [v17.2.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.2.3) [ 问题 #4176](https://github.com/manticoresoftware/manticoresearch/issues/4176) 修复了表重命名破坏使用外部停用词、词形变化或异常的表的问题：`ATTACH TABLE` 现在将这些文件迁移到新的基于块的格式并更新磁盘块头，因此在 `ALTER TABLE RENAME` 之后，守护进程在重启时不再报告缺失的外部文件。
+* 🪲 [v17.2.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.2.3) [ Issue #4176](https://github.com/manticoresoftware/manticoresearch/issues/4176) 修复了表重命名会破坏使用外部 stopwords、wordforms 或 exceptions 的表：[`ATTACH TABLE`](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) 现在会把这些文件迁移到新的基于块的格式并更新磁盘块头，因此在 `ALTER TABLE RENAME` 之后，守护进程重启时不再报告缺少外部文件。
 * 🪲 [v17.2.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.2.2) [ 问题 #1065](https://github.com/manticoresoftware/manticoresearch/issues/1065) 添加了 expand_blended 搜索选项，使得查询分词应用表的混合规则并扩展混合变体（例如 "well-being" → "well-being" | "wellbeing" | "well" "being"），允许一个查询匹配以任何这些形式索引的文档。
 * 🪲 [v17.1.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.1.3) [ 问题 #1618](https://github.com/manticoresoftware/manticoresearch/issues/1618) 将 Buddy 升级到 3.40.7。通过 Manticore Buddy 支持使用 Manticore 与 HikariCP 和 JPA/MyBatis（Spring Boot），它实现了所需的 MySQL 协议行为。
 * 🪲 [v17.1.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.1.2) [ 问题 #4128](https://github.com/manticoresoftware/manticoresearch/issues/4128) 修复了在不同字段中使用相同短语的 OR 匹配（例如 `(@name ="^New York$") | (@ascii_name ="^New York$")`）返回其他字段匹配项的问题；布尔简化不再在此情况下丢弃字段限制。
@@ -135,7 +225,7 @@
 * 🪲 [v16.0.9](https://github.com/manticoresoftware/manticoresearch/releases/tag/16.0.9) [ 问题 #3905](https://github.com/manticoresoftware/manticoresearch/issues/3905) 修复了当索引旋转与主节点上的 SIGHUP（例如配置重新加载）同时发生时的间歇性崩溃：使用动态配置时，fork() 会复制套接字，epoll 后续可能会报告一个其关联数据已释放的 fd。现在在关闭前使用 EPOLL_CTL_DEL 从 epoll 兴趣列表中移除套接字，防止 `LazyNetEvents_c::EventTick()` 中的使用后释放。
 * 🪲 [v16.0.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/16.0.8) [ 问题 #3418](https://github.com/manticoresoftware/manticoresearch/issues/3418) 将 Buddy 要求升级到 3.40.4，其中包括改进的处理错误日志格式：当查询失败（例如“未知本地表(s) 'index'”）时，Buddy 现在记录守护进程的失败原因，而不仅仅是“Failed to handle query”且没有上下文。
 * 🪲 [v16.0.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/16.0.7) [ 问题 #2281](https://github.com/manticoresoftware/manticoresearch/issues/2281) 解决了 percolate 表中多值属性的不一致类型名称问题：mva 和 mva64 现在被接受为 multi 和 multi64 的同义词，因此在定义表时可以使用任一命名（例如 `CREATE TABLE t (id bigint, tags mva64, ...) type='pq'`）。模式输出（例如 `DESC table`）继续使用现有类型名称以保持兼容性。
-* 🪲 [v16.0.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/16.0.4) [ PR #4047](https://github.com/manticoresoftware/manticoresearch/pull/4047) 将 MCL 版本更新到 9.0.1。修复了当 block_size 为 1 时 KNN 浮点向量处理的问题，通过在此情况下禁用表压缩（block size 为 1 时不使用压缩）。
+* 🪲 [v16.0.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/16.0.4) [ PR #4047](https://github.com/manticoresoftware/manticoresearch/pull/4047) 将 [MCL](https://github.com/manticoresoftware/columnar) 版本更新到 9.0.1。修复了 `block_size` 为 1 时的 KNN 浮点向量处理，在这种情况下禁用表压缩（因为 block size 1 不使用压缩）。
 * 🪲 [v16.0.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/16.0.3) [ 问题 #4042](https://github.com/manticoresoftware/manticoresearch/issues/4042) 修复了 rejoined 节点在 joiner 重启并重新加入后运行 `ALTER CLUSTER ... ADD TABLE` 的另一个节点时的崩溃问题。
 * 🪲 [v15.1.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.1.5) [ 问题 #4009](https://github.com/manticoresoftware/manticoresearch/issues/4009) 修复了当通过提示强制使用二级索引时查询缓存仍被使用的问题；现在缓存被禁用，强制 SI 始终被尊重。
 * 🪲 [v15.1.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.1.4) [ 问题 #2591](https://github.com/manticoresoftware/manticoresearch/issues/2591) 修复了 `NOTNEAR` 全文操作符，使其在右项在指定距离内出现在左项之前或之后时正确排除匹配项（对称/反向匹配）。之前 NOTNEAR 仅考虑右项在左项之后出现的情况，例如 `d NOTNEAR/3 a` 可能错误匹配包含 "a b c d" 的文档。NEAR 现在在距离为 0 时也返回错误。
@@ -152,7 +242,7 @@
 如果你遵循 [官方安装指南](https://manticoresearch.com/install/)，则无需担心此问题。
 
 ## 突破性变更
-* ⚠️ [v15.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.0.0) [ PR #4003](https://github.com/manticoresoftware/manticoresearch/pull/4003) 将 MCL 要求更新到 9.0.0，引入了非压缩浮点向量存储、KNN 向量的块大小更改以及非缓冲读取。此更新更改了数据格式。旧版 MCL 将无法读取，但新版本仍能无问题地读取您现有的列式表。
+* ⚠️ [v15.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.0.0) [ PR #4003](https://github.com/manticoresoftware/manticoresearch/pull/4003) 将 [MCL](https://github.com/manticoresoftware/columnar) 要求更新到 9.0.0，带来未压缩浮点向量存储、KNN 向量的块大小变更以及非缓冲读取。此更新会改变数据格式。旧版 [MCL](https://github.com/manticoresoftware/columnar) 无法读取，但新版仍可正常读取你现有的 columnar 表。
 
 ### 新功能和改进
 * 🆕 [v15.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.1.0) [ PR #3990](https://github.com/manticoresoftware/manticoresearch/pull/3990) 通过将总时间拆分为更清晰的部分，改进了磁盘块刷新日志记录。
@@ -175,7 +265,7 @@
 * 🪲 [v14.7.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.7.4) [ Issue #3977](https://github.com/manticoresoftware/manticoresearch/issues/3977) 在Windows上有时会产生.mdmp崩溃转储——修复了“ubertests”不再在完成后留下最小转储。
 * 🪲 [v14.7.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.7.3) [ Issue #3832](https://github.com/manticoresoftware/manticoresearch/issues/3832) 修复了一个bug，即通过`/cli_json`进行的多查询请求包含分号（例如，组合SQL语句）时失败——分号现在在处理前不会被替换为空字符。
 * 🪲 [v14.7.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.7.2) [ Issue #1613](https://github.com/manticoresoftware/manticoresearch/issues/1613) 描述了用于计数短语/接近/NEAR操作符的排名因素内部32位掩码及其如何可能低估第31个关键字之后的术语。
-* 🪲 [v14.7.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.7.1) [ PR #3992](https://github.com/manticoresoftware/manticoresearch/pull/3992) 修复了分布式表通过代理处理的HTTP UPDATE和DELETE请求缺少错误消息的问题，因此客户端现在在操作失败时会收到正确的错误。
+* 🪲 [v14.7.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.7.1) [ PR #3992](https://github.com/manticoresoftware/manticoresearch/pull/3992) 修复了通过 agent 处理的分布式表上 HTTP [UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md) 和 DELETE 请求缺少错误消息的问题，因此操作失败时客户端现在可以正确收到错误。
 * 🪲 [v14.6.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.6.4) [ Issue #3478](https://github.com/manticoresoftware/manticoresearch/issues/3478) 提升了更新验证，检查更新的属性是否与全文字段冲突；更新现在拒绝修改如果它们针对全文字段。
 * 🪲 [v14.6.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.6.3) [ Issue #2352](https://github.com/manticoresoftware/manticoresearch/issues/2352) 修复了使用带有`persistent_connections_limit`的分布式表时的内部错误。
 * 🪲 [v14.6.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.6.2) [ Issue #3757](https://github.com/manticoresoftware/manticoresearch/issues/3757) 修复了一个bug，其中表状态计数器错误地标记为以 "_sec" 结尾（例如 `query_time_1min`），实际上报告的是毫秒而不是秒。
@@ -259,17 +349,17 @@
 由于配置文件已更新，**在 Linux 系统升级过程中可能会出现警告，询问您是要保留当前版本还是使用包中的新版本**。如果您使用的是自定义（非默认）配置，建议保留当前版本，并将 `pid_file` 路径更新为 `/run/manticore/searchd.pid`。即使不更改路径，它仍应正常工作。
 
 ### 新功能与改进
-* 🆕 [v13.13.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.0) 添加了对 MCL 8.1.0 和 SI 块缓存的支持。
+* 🆕 [v13.13.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.0) 新增对带 SI 块缓存的 [MCL](https://github.com/manticoresoftware/columnar) 8.1.0 的支持。
 * 🆕 [v13.12.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.12.0) 实现了 [secondary_index_block_cache](../Server_settings/Searchd.md#secondary_index_block_cache) 选项，更新了二级索引 API，并内联了排序访问器。
 
 ### 错误修复
 * 🪲 [v13.11.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.8) [ Issue #3791](https://github.com/manticoresoftware/manticoresearch/issues/3791) 修复了检查和触发定时器之间的竞态条件。
 * 🪲 [v13.11.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.7) [ Issue #1045](https://github.com/manticoresoftware/manticoresearch/issues/1045) 在 systemd 更新期间通过将过时路径 `/var/run/manticore` 替换为正确的 `/run/manticore` 修复了 RHEL 8 上的 systemctl 警告。由于配置文件已更新，您可能在升级过程中看到警告，询问您是要保留当前版本还是使用包中的新版本。如果您使用的是自定义（非默认）配置，建议保留当前版本，并将 `pid_file` 路径更新为 `/run/manticore/searchd.pid`。
-* 🪲 [v13.11.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.6) [ PR #3766](https://github.com/manticoresoftware/manticoresearch/pull/3766) 添加了对 MCL 版本 8.0.6 的支持。
+* 🪲 [v13.11.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.6) [ PR #3766](https://github.com/manticoresoftware/manticoresearch/pull/3766) 新增对 [MCL](https://github.com/manticoresoftware/columnar) 8.0.6 版本的支持。
 * 🪲 [v13.11.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.5) [ PR #3767](https://github.com/manticoresoftware/manticoresearch/pull/3767) 改进了中文文档翻译并更新了子模块。
 * 🪲 [v13.11.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.4) [ PR #3765](https://github.com/manticoresoftware/manticoresearch/pull/3765) 修复了别名连接属性的处理。
 * 🪲 [v13.11.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.3) [ PR #3763](https://github.com/manticoresoftware/manticoresearch/pull/3763) 修复了在字符串属性上进行批量连接时可能发生崩溃的问题，并解决了 LEFT JOIN 中有时过滤器无法正常工作的问题。
-* 🪲 [v13.11.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.2) [ Issue #3065](https://github.com/manticoresoftware/manticoresearch/issues/3065) 修复了在启用 index_field_lengths 时向列式表插入数据时的崩溃问题。
+* 🪲 [v13.11.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.2) [ Issue #3065](https://github.com/manticoresoftware/manticoresearch/issues/3065) 修复了在启用 [index_field_lengths](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths) 的 columnar 表中插入数据时的崩溃。
 * 🪲 [v13.11.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.1) [ Issue #3751](https://github.com/manticoresoftware/manticoresearch/issues/3751) 修复了在启用嵌入时删除文档时的崩溃问题。
 
 ## 版本 13.11.1
@@ -286,19 +376,19 @@
 
 ### Auto Embeddings 提供的功能
 
-- **直接从文本生成嵌入**  
-- **理解语义而非仅关键词的自然语言查询**  
-- **支持多种模型**（OpenAI、Hugging Face、Voyage、Jina）  
+- **直接从文本生成嵌入**
+- **理解语义而非仅关键词的自然语言查询**
+- **支持多种模型**（OpenAI、Hugging Face、Voyage、Jina）
 - **与 SQL 和 JSON API 的无缝集成**
 
 ### 推荐库
-- 推荐 [MCL](https://github.com/manticoresoftware/columnar) 版本：8.0.3  
-- 推荐 [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) 版本：3.35.1  
+- 推荐 [MCL](https://github.com/manticoresoftware/columnar) 版本：8.0.3
+- 推荐 [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) 版本：3.35.1
 
 如果您遵循 [官方安装指南](https://manticoresearch.com/install/)，则无需担心此问题。
 
-推荐 [MCL](https://github.com/manticoresoftware/columnar) 版本：8.0.1  
-推荐 [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) 版本：3.34.2  
+推荐 [MCL](https://github.com/manticoresoftware/columnar) 版本：8.0.1
+推荐 [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) 版本：3.34.2
 
 ### 新功能与改进
 * 🆕 [v13.11.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.0) [ PR #3746](https://github.com/manticoresoftware/manticoresearch/pull/3746) 在 JSON 查询中添加了对嵌入生成的 "query" 支持。
@@ -350,7 +440,7 @@
 * 🪲 [v13.6.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.2) 修复了 transform_phrase 中的内存泄漏问题。
 * 🪲 [v13.6.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.1) 修复了 13.6.0 版本中的内存泄漏问题。
 * 🪲 [v13.5.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.5.2) [ Issue #3651](https://github.com/manticoresoftware/manticoresearch/issues/3651) 修复了与全文搜索模糊测试相关的更多问题。
-* 🪲 [v13.5.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.5.1) [ Issue #3560](https://github.com/manticoresoftware/manticoresearch/issues/3560) 修复了 OPTIMIZE TABLE 在 KNN 数据情况下可能无限挂起的情况。
+* 🪲 [v13.5.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.5.1) [ Issue #3560](https://github.com/manticoresoftware/manticoresearch/issues/3560) 修复了 [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 在 KNN 数据下可能无限期挂起的问题。
 * 🪲 [v13.4.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.4.2) [ Issue #2544](https://github.com/manticoresoftware/manticoresearch/issues/2544) 修复了添加 float_vector 列可能导致索引损坏的问题。
 * 🪲 [v13.4.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.4.1) [ Issue #3651](https://github.com/manticoresoftware/manticoresearch/issues/3651) 为全文解析添加了模糊测试并修复了测试中发现的多个问题。
 * 🪲 [v13.3.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.3.1) [ Issue #3583](https://github.com/manticoresoftware/manticoresearch/issues/3583) 修复了使用复杂布尔过滤器和高亮时的崩溃问题。
@@ -364,8 +454,8 @@
 
 ### 突破性变更
 * ⚠️ [PR #3586](https://github.com/manticoresoftware/manticoresearch/pull/3586) 已停止对 Debian 10（Buster）的支持。Debian 10 于 2024 年 6 月 30 日达到生命周期终点。建议用户升级到 Debian 11（Bullseye）或 Debian 12（Bookworm）。
-* ⚠️ [v13.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.0.0) 更新了 KNN 库 API 以支持空 [float_vector](https://manual.manticoresearch.com/Creating_a_table/Data_types#Float-vector) 值。此更新不会改变数据格式，但会增加 Manticore Search / MCL API 版本。
-* ⚠️ [v12.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/12.0.0) [ PR #3516](https://github.com/manticoresoftware/manticoresearch/pull/3516) 修复了 KNN 索引训练和构建期间源和目标行 ID 不正确的问题。此更新不会改变数据格式，但会增加 Manticore Search / MCL API 版本。
+* ⚠️ [v13.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.0.0) 更新了 KNN 库 API，以支持空的 [float_vector](https://manual.manticoresearch.com/Creating_a_table/Data_types#Float-vector) 值。此更新不会改变数据格式，但会提高 Manticore Search / [MCL](https://github.com/manticoresoftware/columnar) 的 API 版本。
+* ⚠️ [v12.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/12.0.0) [ PR #3516](https://github.com/manticoresoftware/manticoresearch/pull/3516) 修复了 KNN 索引训练和构建期间源行 ID 与目标行 ID 不正确的 bug。此更新不会改变数据格式，但会提高 Manticore Search / [MCL](https://github.com/manticoresoftware/columnar) 的 API 版本。
 * ⚠️ [v11.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/11.0.0) 添加了新的 KNN 向量搜索功能支持，如量化、重评分和过采样。此版本更改了 KNN 数据格式和 [KNN_DIST() SQL 语法](https://manual.manticoresearch.com/Searching/KNN?client=SQL#KNN-vector-search)。新版本可以读取旧数据，但旧版本无法读取新格式。
 
 ### 新功能和改进
@@ -384,7 +474,7 @@
 * 🪲 [v11.0.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/11.0.3) [ Issue #3502](https://github.com/manticoresoftware/manticoresearch/issues/3502) 解决了与向量搜索量化相关的崩溃问题
 * 🪲 [v11.0.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/11.0.2) [ Issue #3493](https://github.com/manticoresoftware/manticoresearch/issues/3493) 将`SHOW THREADS`改为显示CPU利用率作为整数
 * 🪲 [v11.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/11.0.1) 解决了列式和次要库路径问题
-* 🪲 [v10.2.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.2.7) 支持MCL 5.0.5，包括嵌入式库文件名的修复
+* 🪲 [v10.2.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.2.7) 新增对 [MCL](https://github.com/manticoresoftware/columnar) 5.0.5 的支持，包括 embeddings 库文件名修复
 * 🪲 [v10.2.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.2.6) [ Issue #3469](https://github.com/manticoresoftware/manticoresearch/issues/3469) 应用了另一个与issue #3469相关的修复
 * 🪲 [v10.2.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.2.4) [ Issue #3469](https://github.com/manticoresoftware/manticoresearch/issues/3469) 解决了一个问题，即带有bool查询的HTTP请求返回空结果
 * 🪲 [v10.2.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.2.5) 更改了嵌入式库的默认文件名，并为KNN向量的'from'字段添加了检查
@@ -416,8 +506,8 @@
 
 ### 错误修复
 * 🪲 [v10.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.0.1)  修复词形处理：用户定义的词形现在会覆盖自动生成的词形；为测试22添加了测试用例
-* 🪲 [v9.8.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.8.2)  修复：再次更新 deps.txt 以包含与嵌入库相关的 MCL 打包修复
-* 🪲 [v9.8.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.8.1)  修复：使用 MCL 和嵌入库的打包修复更新 deps.txt
+* 🪲 [v9.8.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.8.2) 修复：再次更新 deps.txt，纳入 [MCL](https://github.com/manticoresoftware/columnar) 中与 embeddings 库相关的打包修复
+* 🪲 [v9.8.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.8.1) 修复：更新 deps.txt，加入 [MCL](https://github.com/manticoresoftware/columnar) 和 embeddings 库的打包修复
 * 🪲 [v9.7.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.7.3) [ 问题 #3306](https://github.com/manticoresoftware/manticoresearch/issues/3306) 修复在索引期间信号11导致的崩溃
 * 🪲 [v9.7.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.7.2) [ 问题 #3109](https://github.com/manticoresoftware/manticoresearch/issues/3109) 修复非存在的 `@@variables` 总是返回0的问题
 * 🪲 [v9.7.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.7.1) [ 问题 #3377](https://github.com/manticoresoftware/manticoresearch/issues/3377) 修复与 [remove_repeats()](Functions/Searching_and_ranking_functions.md#REMOVE_REPEATS%28%29) 相关的崩溃
@@ -508,7 +598,7 @@
 * [Issue #3151](https://github.com/manticoresoftware/manticoresearch/issues/3151) 修复：`fuzzy=1` 选项无法与 `ranker` 或 `field_weights` 一起使用。
 * [Issue #3163](https://github.com/manticoresoftware/manticoresearch/issues/3163) 修复了 `SET GLOBAL timezone` 无效果的错误。
 * [Issue #3181](https://github.com/manticoresoftware/manticoresearch/issues/3181) 修复了使用大于 2^63 的 ID 时文本字段值可能丢失的问题。
-* [Issue #3189](https://github.com/manticoresoftware/manticoresearch/issues/3189) 修复：`UPDATE` 语句现在正确尊重 `query_log_min_msec` 设置。
+* [Issue #3189](https://github.com/manticoresoftware/manticoresearch/issues/3189) 修复：[`UPDATE`](Data_creation_and_modification/Updating_documents/UPDATE.md) 语句现在会正确遵守 `query_log_min_msec` 设置。
 * [Issue #3247](https://github.com/manticoresoftware/manticoresearch/issues/3247) 修复了保存实时磁盘块时可能导致 `JOIN CLUSTER` 失败的竞态条件。
 
 
@@ -534,7 +624,7 @@
 * [Issue #3038](https://github.com/manticoresoftware/manticoresearch/issues/3038) 在 7.0.0 版本中设置 `max_iops` / `max_iosize` 可能降低索引性能；现在已修复。
 * [Issue #3042](https://github.com/manticoresoftware/manticoresearch/issues/3042) 修复了连接查询缓存中的内存泄漏问题。
 * [Issue #3052](https://github.com/manticoresoftware/manticoresearch/issues/3052) 修复了连接 JSON 查询中的查询选项处理。
-* [Issue #3054](https://github.com/manticoresoftware/manticoresearch/issues/3054) 修复了 ATTACH TABLE 命令的问题。
+* [Issue #3054](https://github.com/manticoresoftware/manticoresearch/issues/3054) 修复了 [ATTACH TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) 命令的一个问题。
 * [Issue #3079](https://github.com/manticoresoftware/manticoresearch/issues/3079) 修复了错误信息中的不一致问题。
 * [Issue #3087](https://github.com/manticoresoftware/manticoresearch/issues/3087) 按表设置 `diskchunk_flush_write_timeout=-1` 无法禁用索引刷新；现在已修复。
 * [Issue #3088](https://github.com/manticoresoftware/manticoresearch/issues/3088) 解决了批量替换大 ID 后的重复条目问题。
@@ -565,7 +655,7 @@
   - 请参阅[重启集群](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster)以获取更多详细信息。
 * ⚠️ 破坏性变更 [Issue #2308](https://github.com/manticoresoftware/manticoresearch/issues/2308) 现已支持在 [`ALTER CLUSTER ADD` and `DROP`](Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md#Adding-and-removing-a-table-from-a-replication-cluster) 中处理多个表。此变更也会影响复制协议。请参考上一节了解如何处理这次更新。
 * [Issue #2997](https://github.com/manticoresoftware/manticoresearch/issues/2997) 修复了Macos上的dlopen问题。
-* [Commit 4954](https://github.com/manticoresoftware/manticoresearch/commit/4954b5de7341a29902a9b8fbb9a040f7942c77c4) 将具有KNN索引的表的OPTIMIZE TABLE的默认截止值更改为提高搜索性能。
+* [Commit 4954](https://github.com/manticoresoftware/manticoresearch/commit/4954b5de7341a29902a9b8fbb9a040f7942c77c4) 更改了带 KNN 索引表上 [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 的默认 cutoff，以提升搜索性能。
 * [Commit cfc8](https://github.com/manticoresoftware/manticoresearch/commit/cfc87ecb6e33a8163c2235243b6b40e699dbf526) 为`FACET`和`GROUP BY`中的`ORDER BY`添加了`COUNT(DISTINCT)`支持。
 * [Issue #1103](https://github.com/manticoresoftware/manticoresearch/issues/1103) 改进了[日志记录](Logging/Server_logging.md#Server-logging)中的块合并的清晰度。
 * [Issue #1130](https://github.com/manticoresoftware/manticoresearch/issues/1130) 为[DBeaver](Integration/DBeaver.md)添加了支持。
@@ -625,13 +715,13 @@
 * [问题 #1019](https://github.com/manticoresoftware/manticoresearch/issues/1019) 改进了对 DbForge MySQL 工具查询的处理。
 * [问题 #1107](https://github.com/manticoresoftware/manticoresearch/issues/1107) 修复了 `CREATE TABLE` 和 `ALTER TABLE` 中特殊字符转义问题。❤️ 感谢 [@subnix](https://github.com/subnix) 的 PR。
 * [问题 #116](https://github.com/manticoresoftware/manticoresearch-backup/issues/116#issuecomment-2216597206) 修复了在冻结索引中更新 blob 属性时的死锁。死锁发生在尝试解冻索引时锁冲突，可能也导致 manticore-backup 失败。
-* [问题 #1818](https://github.com/manticoresoftware/manticoresearch/issues/1818) `OPTIMIZE` 现在在表被冻结时抛出错误。
+* [Issue #1818](https://github.com/manticoresoftware/manticoresearch/issues/1818) 当表被冻结时，[`OPTIMIZE`](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 现在会报错。
 * [问题 #2001](https://github.com/manticoresoftware/manticoresearch/issues/2001) 允许函数名用作列名。
 * [问题 #2153](https://github.com/manticoresoftware/manticoresearch/issues/2153) 修复了查询带有未知磁盘块的表设置时守护进程崩溃的问题。
 * [问题 #2184](https://github.com/manticoresoftware/manticoresearch/issues/2184) 修复了执行 `FREEZE` 和 `FLUSH RAMCHUNK` 后 `searchd` 停止时挂起的问题。
 * [问题 #2228](https://github.com/manticoresoftware/manticoresearch/issues/2228) 从保留字中移除了日期/时间相关的标记（和正则表达式）。
 * [问题 #2255](https://github.com/manticoresoftware/manticoresearch/issues/2255) 修复了 `FACET` 超过 5 个排序字段时崩溃的问题。
-* [问题 #2265](https://github.com/manticoresoftware/manticoresearch/issues/2265) 修正了启用 `index_field_lengths` 时恢复 `mysqldump` 失败的问题。
+* [Issue #2265](https://github.com/manticoresoftware/manticoresearch/issues/2265) 修复了在启用 [`index_field_lengths`](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths) 时恢复 `mysqldump` 失败的问题。
 * [问题 #2291](https://github.com/manticoresoftware/manticoresearch/issues/2291) 修复了执行 `ALTER TABLE` 命令时崩溃的问题。
 * [问题 #2333](https://github.com/manticoresoftware/manticoresearch/issues/2333) 修复了 Windows 包中 MySQL DLL 使索引器正常工作的错误。
 * [问题 #2393](https://github.com/manticoresoftware/manticoresearch/issues/2393) 修复了 GCC 编译错误。❤️ 感谢 [@animetosho](https://github.com/animetosho) 的 PR。
@@ -936,7 +1026,7 @@
 * [问题 #1811](https://github.com/manticoresoftware/manticoresearch/issues/1811) 对 `/pq/{table}/*` 请求的处理不正确。
 * [问题 #1816](https://github.com/manticoresoftware/manticoresearch/issues/1816) `UNFREEZE` 在某些情况下不起作用。
 * [问题 #183](https://github.com/manticoresoftware/manticoresearch-buddy/pull/183) 修复了某些情况下 MVA 恢复的问题。
-* [问题 #1849](https://github.com/manticoresoftware/manticoresearch/issues/1849) 修复了与 MCL 一起使用时，indextool 在关闭时的崩溃问题。
+* [Issue #1849](https://github.com/manticoresoftware/manticoresearch/issues/1849) 修复了与 [MCL](https://github.com/manticoresoftware/columnar) 一起使用时 indextool 在关闭阶段崩溃的问题。
 * [问题 #1866](https://github.com/manticoresoftware/manticoresearch/issues/1866) 修复了对 `/cli_json` 请求进行不必要的 URL 解码的问题。
 * [问题 #1872](https://github.com/manticoresoftware/manticoresearch/issues/1872) 更改了守护进程启动时 plugin_dir 的设置逻辑。
 * [问题 #1874](https://github.com/manticoresoftware/manticoresearch/issues/1874) alter table ... exceptions 失败。
@@ -981,7 +1071,7 @@
 * [Issue #91](https://github.com/manticoresoftware/manticoresearch-backup/pull/91) 添加 defattr 以防止在 RHEL 上安装后文件出现异常用户权限。
 * [Issue #91](https://github.com/manticoresoftware/manticoresearch-backup/pull/91) 添加额外的 chown 以确保在 Ubuntu 上文件默认属于 root 用户。
 
-### 与 MCL（列式、二级、knn 库）相关
+### 与 [MCL](https://github.com/manticoresoftware/columnar) 相关（columnar、secondary、knn 库）
 * [Commit f104](https://github.com/manticoresoftware/columnar/commit/f104a4709bbb144140d09a09bc0fc1db1895e331) 向量搜索支持。
 * [Commit 2169](https://github.com/manticoresoftware/columnar/commit/216953beef6676f7e34c9f6f1a30c5980d746710) 修复在二级索引构建中断期间临时文件的清理。这解决了在创建 `tmp.spidx` 文件时守护进程超出打开文件限制的问题。
 * [Commit 709b](https://github.com/manticoresoftware/columnar/commit/709b9acaaac97d9a1ca8796892f9ad432021c785) 为列式和 SI 使用单独的 streamvbyte 库。
@@ -1023,7 +1113,7 @@
 ### 小改动
 * [Commit 4f91](https://github.com/manticoresoftware/manticoresearch/commit/4f913a36e84e01f950b2797051222b0b1094d6fe) 更新了手册中关于 `/bulk` 端点的信息。
 
-### MCL
+### [MCL](https://github.com/manticoresoftware/columnar)
 * 支持 [Manticore Columnar Library](https://github.com/manticoresoftware/columnar) v2.2.4
 
 ## 版本 6.2.0
@@ -1049,7 +1139,7 @@
 * [Commit 2bb9](https://github.com/manticoresoftware/manticoresearch/commit/2bb92765)：对于`count(*)`查询，现在返回预计算值，而不是扫描索引。
 * [Commit 3c84](https://github.com/manticoresoftware/manticoresearch/commit/3c84091f)：现在可以使用`SELECT`进行任意计算并显示`@@sysvars`。与之前不同，您不再仅限于一个计算。因此，类似`select user(), database(), @@version_comment, version(), 1+1 as a limit 10`的查询将返回所有列。请注意，可选的'limit'将始终被忽略。
 * [Commit 6aca](https://github.com/manticoresoftware/manticoresearch/commit/6aca32f0)：实现了`CREATE DATABASE`的存根查询。
-* [Commit 9dc1](https://github.com/manticoresoftware/manticoresearch/commit/9dc12334)：执行`ALTER TABLE table REBUILD SECONDARY`时，现在即使属性未更新，也会始终重建二级索引。
+* [Commit 9dc1](https://github.com/manticoresoftware/manticoresearch/commit/9dc12334)：执行 `[ALTER TABLE table REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)` 时，即使属性未更新，二级索引也会始终重建。
 * [Commit 46ed](https://github.com/manticoresoftware/manticoresearch/commit/46edb089)：在使用CBO之前，现在会先识别使用预计算数据的排序器，以避免不必要的CBO计算。
 * [Commit 102a](https://github.com/manticoresoftware/manticoresearch/commit/102ac604)：实现模拟并利用全文表达式堆栈以防止守护进程崩溃。
 * [Commit 979f](https://github.com/manticoresoftware/manticoresearch/commit/979fa27c)：为不使用字符串/mvas/json属性的匹配添加了快速代码路径以进行匹配克隆。
@@ -1089,7 +1179,7 @@
 * ⚠️ 查询优化器提示的语法已更新。新格式为`/*+ SecondaryIndex(uid) */`。请注意，旧语法不再受支持。
 * ⚠️ [Issue #1160](https://github.com/manticoresoftware/manticoresearch/issues/1160)：为防止语法冲突，禁止在表名中使用`@`。
 * ⚠️ 标记为`indexed`和`attribute`的字符串字段/属性现在在INSERT、DESC和ALTER操作期间被视为单个字段。
-* ⚠️ [Issue #1057](https://github.com/manticoresoftware/manticoresearch/issues/1057)：不支持SSE 4.2的系统将不再加载MCL库。
+* ⚠️ [Issue #1057](https://github.com/manticoresoftware/manticoresearch/issues/1057)：[MCL](https://github.com/manticoresoftware/columnar) 库将不再在不支持 SSE 4.2 的系统上加载。
 * ⚠️ [Issue #1143](https://github.com/manticoresoftware/manticoresearch/issues/1143)：[agent_query_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_query_timeout)之前已损坏。现已修复并生效。
 
 ### Bugfixes
@@ -1225,21 +1315,21 @@
   - `SHOW INDEX STATUS` => `SHOW TABLE STATUS`，
   - `SHOW INDEX SETTINGS` => `SHOW TABLE SETTINGS`，
   - `FLUSH RTINDEX` => `FLUSH TABLE`，
-  - `OPTIMIZE INDEX` => `OPTIMIZE TABLE`，
-  - `ATTACH TABLE plain TO RTINDEX rt` => `ATTACH TABLE plain TO TABLE rt`，
+  - `OPTIMIZE INDEX` => [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE),
+  - [`ATTACH TABLE`](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) `plain TO RTINDEX rt` => [`ATTACH TABLE`](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) `plain TO TABLE rt`,
   - `RELOAD INDEX` => `RELOAD TABLE`，
   - `RELOAD INDEXES` => `RELOAD TABLES`。
 
-我们并不打算使旧的表单过时，但为了确保与文档的兼容性，我们建议在您的应用程序中更改名称。在未来的版本中，将更改的是各种SQL和JSON命令输出中"index"到"table"的重命名。
+  我们并不打算使旧的表单过时，但为了确保与文档的兼容性，我们建议在您的应用程序中更改名称。在未来的版本中，将更改的是各种SQL和JSON命令输出中"index"到"table"的重命名。
 * 包含状态化UDF的查询现在必须强制在单线程中执行。
 * [Issue #1011](https://github.com/manticoresoftware/manticoresearch/issues/1011) 重构所有与时间调度相关的内容，作为并行分块合并的前提条件。
 * **⚠️ 突破性变更**：列式存储格式已更改。您需要重建那些具有列式属性的表。
 * **⚠️ 突破性变更**：二级索引文件格式已更改，因此如果您使用二级索引进行搜索，并且配置文件中包含`searchd.secondary_indexes = 1`，请注意新版本的Manticore将**跳过加载具有二级索引的表**。建议您：
   - 在升级之前，将配置文件中的`searchd.secondary_indexes`更改为0。
   - 运行实例。Manticore将加载表并发出警告。
-  - 对每个索引运行`ALTER TABLE <table name> REBUILD SECONDARY`以重建二级索引。
+  - 对每个索引运行 [`ALTER TABLE <table name> REBUILD SECONDARY`](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) 以重建二级索引。
 
-  如果您正在运行复制集群，则需要在所有节点上运行`ALTER TABLE <table name> REBUILD SECONDARY`，或按照[此说明](Securing_and_compacting_a_table/Compacting_a_table.md#Optimizing-clustered-tables)操作，只需更改：运行`ALTER .. REBUILD SECONDARY`而不是`OPTIMIZE`。
+  如果你运行的是复制集群，就需要在所有节点上运行 [`ALTER TABLE <table name> REBUILD SECONDARY`](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)，或者仅作如下改动并参考[这条说明](Securing_and_compacting_a_table/Compacting_a_table.md#Optimizing-clustered-tables)：改为运行 [`ALTER .. REBUILD SECONDARY`](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)，而不是 [`OPTIMIZE`](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE)。
 * **⚠️ 突破性变更**：binlog版本已更新，因此任何旧版本的binlog将不会被重放。在升级过程中确保Manticore Search干净关闭非常重要。这意味着在停止旧实例后，`/var/lib/manticore/binlog/`目录中除了`binlog.meta`外不应有其他binlog文件。
 * [Issue #849](https://github.com/manticoresoftware/manticoresearch/issues/849) `SHOW SETTINGS`：现在可以从Manticore内部查看配置文件中的设置。
 * [Issue #1007](https://github.com/manticoresoftware/manticoresearch/issues/1007) [SET GLOBAL CPUSTATS=1/0](Server_settings/Setting_variables_online.md#SET) 开启/关闭CPU时间跟踪；[SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) 现在在CPU时间跟踪关闭时不再显示CPU统计信息。
@@ -1261,12 +1351,12 @@
 ### 与Manticore列式库相关的更改
 * 对二级索引与列式存储集成的重构。
 * [提交 efe2](https://github.com/manticoresoftware/columnar/commit/efe26b2a) Manticore列式库优化，可通过部分初步的最小/最大评估降低响应时间。
-* [提交 2757](https://github.com/manticoresoftware/columnar/commit/2757b99b) 如果磁盘块合并被中断，守护进程现在会清理与MCL相关的临时文件。
+* [Commit 2757](https://github.com/manticoresoftware/columnar/commit/2757b99b) 如果磁盘块合并被中断，守护进程现在会清理与 [MCL](https://github.com/manticoresoftware/columnar) 相关的 tmp 文件。
 * [提交 e9c6](https://github.com/manticoresoftware/manticoresearch/commit/e9c672014b63e2b49e7a5a53880583af86c3ab4e) 在崩溃时将列式和二级库版本记录到日志中。
 * [提交 f5e8](https://github.com/manticoresoftware/columnar/commit/f5e84eeb8b6cb102f13e3468246702427527fef9) 为二级索引添加快速文档列表回退支持。
-* [提交 06df](https://github.com/manticoresoftware/manticoresearch/commit/06dfdd2e668933495dd6cb52d5ba2e0aa9b26e58) 对于类似 `select attr, count(*) from plain_index`（无过滤）的查询，如果使用MCL现在会更快。
+* [Commit 06df](https://github.com/manticoresoftware/manticoresearch/commit/06dfdd2e668933495dd6cb52d5ba2e0aa9b26e58) 类似 `select attr, count(*) from plain_index` 这样的查询（无过滤）在你使用 [MCL](https://github.com/manticoresoftware/columnar) 时现在会更快。
 * [提交 0a76](https://github.com/manticoresoftware/manticoresearch/commit/0a76ecb9adbe886868b962dd425de5f475bbf55e) HandleMysqlSelectSysvar中的@@autocommit用于与mysql 8.25以上版本的.net连接器兼容
-* **⚠️ 破坏性变更**: [MCL问题 #17](https://github.com/manticoresoftware/columnar/issues/17) MCL: 向列式扫描添加SSE代码。MCL现在需要至少SSE4.2。
+* **⚠️ BREAKING CHANGE**: [MCL Issue #17](https://github.com/manticoresoftware/columnar/issues/17) [MCL](https://github.com/manticoresoftware/columnar): 为 columnar 扫描添加 SSE 代码。[MCL](https://github.com/manticoresoftware/columnar) 现在至少需要 SSE4.2。
 
 ### 与打包相关的更改
 * [提交 4d19](https://github.com/manticoresoftware/manticoresearch/commit/4d19f5cbe49a31228aa09253f061165bfe80e51b) **⚠️ 破坏性变更**: 已停止对Debian Stretch和Ubuntu Xenial的支持。
@@ -1278,7 +1368,7 @@
 * 现在可以通过 APT 安装特定版本。
 * [Commit a6b8](https://github.com/manticoresoftware/manticoresearch/commit/51fddca5c2a3ebb8576fae4c18660656ba22de0f) Windows 安装程序（之前我们只提供归档包）。
 * **⚠️ 破坏性变更**: 自定义Homebrew配方，包括Manticore列式库的配方。要安装Manticore、MCL和任何其他必要组件，请使用以下命令 `brew install manticoresoftware/manticore/manticoresearch manticoresoftware/manticore/manticore-extra`。
-* **⚠️ BREAKING CHANGE**: Custom Homebrew formulas including the formula for Manticore Columnar Library. To install Manticore, MCL and any other necessary components, use the following command `brew install manticoresoftware/manticore/manticoresearch manticoresoftware/manticore/manticore-extra`.
+* **⚠️ BREAKING CHANGE**: 包含 Manticore Columnar Library 的自定义 Homebrew formula。要安装 Manticore、[MCL](https://github.com/manticoresoftware/columnar) 以及其他必要组件，请使用以下命令 `brew install manticoresoftware/manticore/manticoresearch manticoresoftware/manticore/manticore-extra`。
 
 ### Bugfixes
 * [Issue #479](https://github.com/manticoresoftware/manticoresearch/issues/479) Field with name `text`
@@ -1288,7 +1378,7 @@
 * ❗[Issue #827](https://github.com/manticoresoftware/manticoresearch/issues/827) 在高强度负载下searchd挂起或崩溃
 * ❗[Issue #996](https://github.com/manticoresoftware/manticoresearch/issues/996) PQ索引内存不足
 * ❗[Commit 1041](https://github.com/manticoresoftware/manticoresearch/commit/10416ef7dddf06c0d759e32ccd6ebaa2468f7cbf) `binlog_flush = 1` 从Sphinx以来一直被破坏。已修复。
-* [MCL Issue #14](https://github.com/manticoresoftware/columnar/issues/14) MCL：在选择时因字段过多而崩溃
+* [MCL Issue #14](https://github.com/manticoresoftware/columnar/issues/14) [MCL](https://github.com/manticoresoftware/columnar)：当 ft 字段过多时，select 会崩溃
 * [Issue #470](https://github.com/manticoresoftware/manticoresearch/issues/470) sql_joined_field 不能存储
 * [Issue #713](https://github.com/manticoresoftware/manticoresearch/issues/713) 使用LEVENSHTEIN()时崩溃
 * [Issue #743](https://github.com/manticoresoftware/manticoresearch/issues/743) Manticore意外崩溃且无法正常重启
@@ -1298,11 +1388,11 @@
 * [Issue #797](https://github.com/manticoresoftware/manticoresearch/issues/797) 在使用ZONESPAN通过api进行搜索时Manticore崩溃
 * [Issue #799](https://github.com/manticoresoftware/manticoresearch/issues/799) 使用多个索引和facet distinct时权重错误
 * [Issue #801](https://github.com/manticoresoftware/manticoresearch/issues/801) SphinxQL分组查询在SQL索引重新处理后挂起
-* [Issue #802](https://github.com/manticoresoftware/manticoresearch/issues/802) MCL：在5.0.2和manticore-columnar-lib 1.15.4中索引器崩溃
+* [Issue #802](https://github.com/manticoresoftware/manticoresearch/issues/802) [MCL](https://github.com/manticoresoftware/columnar)：5.0.2 和 manticore-columnar-lib 1.15.4 中的 Indexer 崩溃
 * [Issue #813](https://github.com/manticoresoftware/manticoresearch/issues/813) Manticore 5.0.2 FEDERATED返回空集（MySQL 8.0.28）
 * [Issue #824](https://github.com/manticoresoftware/manticoresearch/issues/824) 在两个索引上使用COUNT DISTINCT当结果为零时抛出内部错误
 * [Issue #826](https://github.com/manticoresoftware/manticoresearch/issues/826) 删除查询时崩溃
-* [Issue #843](https://github.com/manticoresoftware/manticoresearch/issues/843) MCL：长文本字段存在bug
+* [Issue #843](https://github.com/manticoresoftware/manticoresearch/issues/843) [MCL](https://github.com/manticoresoftware/columnar)：长文本字段问题
 * [Issue #856](https://github.com/manticoresoftware/manticoresearch/issues/856) 5.0.2 rtindex：聚合搜索限制行为不符合预期
 * [Issue #863](https://github.com/manticoresoftware/manticoresearch/issues/863) 即使搜索应该返回多个结果，返回的结果也是NoneType对象
 * [Issue #870](https://github.com/manticoresoftware/manticoresearch/issues/870) 使用Attribute和Stored Field在SELECT表达式中时崩溃
@@ -1316,7 +1406,7 @@
 * [Issue #900](https://github.com/manticoresoftware/manticoresearch/issues/900) group by j.a, smth 工作不正确
 * [Issue #913](https://github.com/manticoresoftware/manticoresearch/issues/913) 使用expr在ranker中时searchd崩溃，但仅限于包含两个proximity的查询
 * [Issue #916](https://github.com/manticoresoftware/manticoresearch/issues/916) net_throttle_action 破坏
-* [Issue #919](https://github.com/manticoresoftware/manticoresearch/issues/919) MCL：在查询执行期间Manticore崩溃，在集群恢复期间其他崩溃。
+* [Issue #919](https://github.com/manticoresoftware/manticoresearch/issues/919) [MCL](https://github.com/manticoresoftware/columnar)：Manticore 在查询执行时崩溃，且其他进程在集群恢复期间崩溃。
 * [Issue #925](https://github.com/manticoresoftware/manticoresearch/issues/925) SHOW CREATE TABLE 输出无反引号
 * [Issue #930](https://github.com/manticoresoftware/manticoresearch/issues/930) 现在可以通过Java JDBC连接器从Java查询Manticore
 * [Issue #933](https://github.com/manticoresoftware/manticoresearch/issues/933) bm25f排名问题
@@ -1329,7 +1419,7 @@
 * [PR #985](https://github.com/manticoresoftware/manticoresearch/issues/953) 修复RT索引中的线程-切片分布
 * [Issue #985](https://github.com/manticoresoftware/manticoresearch/issues/955) 修复RT索引中的线程-切片分布
 * [Issue #986](https://github.com/manticoresoftware/manticoresearch/issues/963) 错误的默认max_query_time
-* [Issue #987](https://github.com/manticoresoftware/manticoresearch/issues/982) 使用正则表达式在多线程执行时崩溃
+* [Issue #982](https://github.com/manticoresoftware/manticoresearch/issues/982) [MCL](https://github.com/manticoresoftware/columnar)：来自二级索引的 5.0.3 崩溃
 * [Issue #988](https://github.com/manticoresoftware/manticoresearch/pull/984) 向后索引兼容性损坏
 * [Issue #989](https://github.com/manticoresoftware/manticoresearch/pull/985) indextool在检查columnar属性时报告错误
 * [Issue #990](https://github.com/manticoresoftware/manticoresearch/issues/985) json分组器克隆的内存泄漏
@@ -1342,11 +1432,11 @@
 * [Issue #998](https://github.com/manticoresoftware/manticoresearch/issues/992) 次级任务有时会在当前调度程序上运行并导致异常副作用
 * [Issue #999](https://github.com/manticoresoftware/manticoresearch/issues/993) 使用不同的模式时facet distinct和不同模式崩溃
 * [Issue #1000](https://github.com/manticoresoftware/manticoresearch/issues/994) MCL：在没有columnar库的情况下运行后columnar rt索引损坏
-* [Issue #1001](https://github.com/manticoresoftware/manticoresearch/issues/995) 在json中隐式截断不起作用
+* [Issue #995](https://github.com/manticoresoftware/manticoresearch/issues/995) [MCL](https://github.com/manticoresoftware/columnar)：taxi1 中的 min(pickup_datetime) 崩溃
 * [Issue #1002](https://github.com/manticoresoftware/manticoresearch/issues/997) columnar分组器问题
 * [Issue #1003](https://github.com/manticoresoftware/manticoresearch/issues/998) 无法从索引中删除最后一个字段
 * [Issue #1004](https://github.com/manticoresoftware/manticoresearch/issues/999) 使用--new-cluster后行为错误
-* [Issue #1005](https://github.com/manticoresoftware/manticoresearch/issues/1000) "columnar库未加载"，但实际上不需要
+* [Issue #1000](https://github.com/manticoresoftware/manticoresearch/issues/1000) [MCL](https://github.com/manticoresoftware/columnar)：在未加载 columnar 库的情况下运行后，Columnar rt 索引损坏
 * [Issue #1006](https://github.com/manticoresoftware/manticoresearch/issues/1001) 删除查询没有错误
 * [Issue #1010](https://github.com/manticoresoftware/manticoresearch/issues/1002) 在Windows构建中修复ICU数据文件位置
 * [PR #1018](https://github.com/manticoresoftware/manticoresearch/issues/1003) 解决握手发送问题
@@ -1669,7 +1759,7 @@ sys	0m0.047s
 * ❗[Commit 22f4](https://github.com/manticoresoftware/manticoresearch/commit/22f4141bed1411c83684ae6e0bae832071cce3df) 在高强度 REPLACE 负载下，RT 索引可能会损坏，或者导致崩溃
 * [Commit 03be](https://github.com/manticoresoftware/manticoresearch/commit/03be91e4f720a3f20bee0278dd8f0d44abd3ef0e) 修复了合并分组器和分组 N 排序器的平均值；修复了聚合的合并
 * [Commit 2ea5](https://github.com/manticoresoftware/manticoresearch/commit/2ea575d34efe38661f14d858f2b552456f29fe42) `indextool --check` 可能会崩溃
-* [Commit 7ec7](https://github.com/manticoresoftware/manticoresearch/commit/7ec76d4abf01b5fca6f10a0000fe64d5d8e5fa52) 由 UPDATE 引起的内存耗尽问题
+* [Commit 7ec7](https://github.com/manticoresoftware/manticoresearch/commit/7ec76d4abf01b5fca6f10a0000fe64d5d8e5fa52) 由 [UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md) 引起的 RAM 耗尽问题
 * [Commit 658a](https://github.com/manticoresoftware/manticoresearch/commit/658a727e41f3c3fbcde9754149528f34ed76ba19) 在 INSERT 时守护进程可能会挂起
 * [Commit 46e4](https://github.com/manticoresoftware/manticoresearch/commit/46e42b9b386e31e53247ed634e158b533e28063e) 在关闭时守护进程可能会挂起
 * [Commit f8d7](https://github.com/manticoresoftware/manticoresearch/commit/f8d7d5177cc83d250b493b4cfc619732b29cf072) 在关闭时守护进程可能会崩溃
@@ -1691,38 +1781,38 @@ sys	0m0.047s
 
 ### 重大新功能
 - **[Manticore Columnar Library](https://github.com/manticoresoftware/columnar) 的完整支持**。之前 Manticore Columnar Library 仅支持普通索引。现在支持：
-  - 在实时索引中用于 `INSERT`、`REPLACE`、`DELETE`、`OPTIMIZE`
+  - 适用于实时索引中的 `INSERT`、`REPLACE`、`DELETE`、[`OPTIMIZE`](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE)
   - 在复制中
   - 在 `ALTER` 中
   - 在 `indextool --check` 中
-- **自动索引压缩** ([Issue #478](https://github.com/manticoresoftware/manticoresearch/issues/478))。终于，您无需手动调用 OPTIMIZE 或通过 cron 任务或其他自动化方式。Manticore 现在会自动为您执行此操作，默认情况下也是如此。您可以通过 [optimize_cutoff](Server_settings/Setting_variables_online.md) 全局变量设置默认压缩阈值。
+- **自动索引压缩**（[Issue #478](https://github.com/manticoresoftware/manticoresearch/issues/478)）。你终于不必再手动、或通过 crontask/其他自动化来调用 [OPTIMIZE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 了。Manticore 现在会默认自动替你完成。你可以通过全局变量 [optimize_cutoff](Server_settings/Setting_variables_online.md) 设置默认压缩阈值。
 - **块快照和锁系统改进**。这些更改乍看之下可能对外部不可见，但它们显著改善了实时索引中许多操作的行为。简而言之，之前大多数 Manticore 数据操作依赖于锁，现在我们改用磁盘块快照。
 - **实时索引中批量 INSERT 性能显著提升**。例如在 [Hetzner 的服务器 AX101](https://www.hetzner.com/dedicated-rootserver/ax101) 上，配备 SSD、128 GB 内存和 AMD 的 Ryzen™ 9 5950X（16*2 核心）**使用 3.6.0 版本每秒可插入 236K 文档**到具有模式 `name text, email string, description text, age int, active bit(1)` 的表中（默认 `rt_mem_limit`，批量大小 25000，16 个并发插入工作线程，总共插入 1600 万文档）。在 4.0.2 中，相同的并发/批量/数量可达到 **每秒 357K 文档**。
 
   <details>
 
-  - 读取操作（例如 SELECT、复制）通过快照执行  
-  - 仅更改内部索引结构而不修改模式/文档的操作（例如合并 RAM 段、保存磁盘块、合并磁盘块）通过只读快照执行，并最终替换现有块  
-  - UPDATE 和 DELETE 针对现有块执行，但在合并的情况下，写入会被收集，然后应用于新块  
-  - UPDATE 为每个块按顺序获取独占锁。合并在从块收集属性的阶段获取共享锁。因此，同一时间只有一个（合并或更新）操作可以访问块的属性。  
-  - 当合并进入需要属性的阶段时，会设置一个特殊标志。当 UPDATE 完成时，它会检查该标志，如果已设置，则整个更新会被存储到一个特殊集合中。最后，当合并完成时，它会将设置的更新应用到新生成的磁盘块上。  
-  - ALTER 通过独占锁运行  
-  - 复制作为常规读取操作运行，但除此之外还会在 SST 之前保存属性，并在 SST 期间禁止更新  
+  - 读取操作（例如 SELECT、复制）通过快照执行
+  - 仅更改内部索引结构而不修改模式/文档的操作（例如合并 RAM 段、保存磁盘块、合并磁盘块）通过只读快照执行，并最终替换现有块
+  - [UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md) 和 DELETE 会针对现有块执行，但对于可能正在发生的合并，写入会先收集起来，然后再应用到新的块上
+  - [UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md) 会对每个块按顺序获取独占锁。合并在进入从块收集属性的阶段时会获取共享锁。因此同一时间只有一个操作（合并或更新）可以访问该块的属性。
+  - 当合并进入需要属性的阶段时，它会设置一个特殊标志。[UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md) 完成后会检查该标志，如果已设置，就把整个更新存入一个特殊集合。最后，当合并结束时，它会将这些更新应用到新生成的磁盘块。
+  - ALTER 通过独占锁运行
+  - 复制作为常规读取操作运行，但除此之外还会在 SST 之前保存属性，并在 SST 期间禁止更新
 
   </details>
 
-- **[ALTER](Updating_table_schema_and_settings.md) 可以添加/移除一个全文字段**（在 RT 模式下）。之前只能添加/移除一个属性。  
-- 🔬 **实验性功能：全扫描查询的伪分片** - 允许并行执行任何非全文搜索查询。现在无需手动准备分片，只需启用新选项 [searchd.pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding)，即可期待非全文搜索查询的响应时间降低至 `CPU 核心数` 的水平。请注意，它可能会轻松占用所有现有 CPU 核心，因此如果您不仅关注延迟，还关注吞吐量，请谨慎使用。  
+- **[ALTER](Updating_table_schema_and_settings.md) 可以添加/移除一个全文字段**（在 RT 模式下）。之前只能添加/移除一个属性。
+- 🔬 **实验性功能：全扫描查询的伪分片** - 允许并行执行任何非全文搜索查询。现在无需手动准备分片，只需启用新选项 [searchd.pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding)，即可期待非全文搜索查询的响应时间降低至 `CPU 核心数` 的水平。请注意，它可能会轻松占用所有现有 CPU 核心，因此如果您不仅关注延迟，还关注吞吐量，请谨慎使用。
 
-### 小型变更  
+### 小型变更
 <!-- example -->
-- Linux Mint 和 Ubuntu Hirsute Hippo 通过 [APT 仓库](Installation/Debian_and_Ubuntu.md#APT-repository) 支持  
-- 在某些情况下，通过 HTTP 在大型索引中通过 ID 更新更快（取决于 ID 分布）  
-- [671e65a2](https://github.com/manticoresoftware/lemmatizer-uk/commit/671e65a296800537123a3f8b324eeaa3f58b9632) - 为 lemmatizer-uk 添加了缓存  
+- Linux Mint 和 Ubuntu Hirsute Hippo 通过 [APT 仓库](Installation/Debian_and_Ubuntu.md#APT-repository) 支持
+- 在某些情况下，通过 HTTP 在大型索引中通过 ID 更新更快（取决于 ID 分布）
+- [671e65a2](https://github.com/manticoresoftware/lemmatizer-uk/commit/671e65a296800537123a3f8b324eeaa3f58b9632) - 为 lemmatizer-uk 添加了缓存
 
 
 <!-- intro -->
-#### 3.6.0  
+#### 3.6.0
 
 <!-- request 3.6.0 -->
 ```
@@ -1734,7 +1824,7 @@ sys     0m0.007s
 ```
 
 <!-- intro -->
-#### 4.0.2  
+#### 4.0.2
 
 <!-- request 4.0.2 -->
 ```
@@ -1745,31 +1835,31 @@ user    0m0.004s
 sys     0m0.001s
 ```
 <!-- end -->
-- [systemd 的自定义启动标志](Starting_the_server/Linux.md#Custom-startup-flags-using-systemd)。现在，如果您需要以特定启动标志运行 Manticore，无需手动启动 searchd  
-- 新增函数 [LEVENSHTEIN()](Functions/String_functions.md#LEVENSHTEIN%28%29) 用于计算 Levenshtein 距离  
-- 新增 [searchd 启动标志](Starting_the_server/Manually.md#searchd-command-line-options) `--replay-flags=ignore-trx-errors` 和 `--replay-flags=ignore-all-errors`，以便在 binlog 被损坏时仍可启动 searchd  
-- [Issue #621](https://github.com/manticoresoftware/manticoresearch/issues/621) - 暴露 RE2 的错误  
-- 更精确的 [COUNT(DISTINCT)](Searching/Grouping.md#COUNT%28DISTINCT-field%29) 用于由本地普通索引组成的分布式索引  
-- [FACET DISTINCT](Searching/Faceted_search.md#Faceting-without-duplicates) 用于在进行分面搜索时去除重复项  
-- [精确形式修饰符](Searching/Full_text_matching/Operators.md#Exact-form-modifier) 现在不再需要 [形态](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology)，并且适用于启用了 [前缀/中缀](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology) 搜索的索引  
+- [systemd 的自定义启动标志](Starting_the_server/Linux.md#Custom-startup-flags-using-systemd)。现在，如果您需要以特定启动标志运行 Manticore，无需手动启动 searchd
+- 新增函数 [LEVENSHTEIN()](Functions/String_functions.md#LEVENSHTEIN%28%29) 用于计算 Levenshtein 距离
+- 新增 [searchd 启动标志](Starting_the_server/Manually.md#searchd-command-line-options) `--replay-flags=ignore-trx-errors` 和 `--replay-flags=ignore-all-errors`，以便在 binlog 被损坏时仍可启动 searchd
+- [Issue #621](https://github.com/manticoresoftware/manticoresearch/issues/621) - 暴露 RE2 的错误
+- 更精确的 [COUNT(DISTINCT)](Searching/Grouping.md#COUNT%28DISTINCT-field%29) 用于由本地普通索引组成的分布式索引
+- [FACET DISTINCT](Searching/Faceted_search.md#Faceting-without-duplicates) 用于在进行分面搜索时去除重复项
+- [精确形式修饰符](Searching/Full_text_matching/Operators.md#Exact-form-modifier) 现在不再需要 [形态](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology)，并且适用于启用了 [前缀/中缀](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology) 搜索的索引
 
-### 突破性变更  
-- 新版本可以读取旧版索引，但旧版无法读取 Manticore 4 的索引  
-- 移除了隐式的按 ID 排序。如果需要，请显式排序  
-- `charset_table` 的默认值从 `0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451` 更改为 `non_cjk`  
-- `OPTIMIZE` 会自动执行。如果您不需要，请确保在配置文件的 `searchd` 部分设置 `auto_optimize=0`  
-- [Issue #616](https://github.com/manticoresoftware/manticoresearch/issues/616) `ondisk_attrs_default` 已弃用，现在已被移除  
-- 对于贡献者：我们现在使用 Clang 编译器进行 Linux 构建，根据我们的测试，它能够构建更快的 Manticore Search 和 Manticore Columnar Library  
-- 如果在搜索查询中未指定 [max_matches](Searching/Options.md#max_matches)，则会隐式更新为新列式存储性能所需的最低值。这可能会影响 [SHOW META](Node_info_and_management/SHOW_META.md#SHOW-META) 中的 `total` 指标，但不会影响 `total_found`，后者是实际找到的文档数量。  
+### 突破性变更
+- 新版本可以读取旧版索引，但旧版无法读取 Manticore 4 的索引
+- 移除了隐式的按 ID 排序。如果需要，请显式排序
+- `charset_table` 的默认值从 `0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451` 更改为 `non_cjk`
+- [`OPTIMIZE`](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 会自动执行。如果你不需要它，请确保在配置文件的 `searchd` 段中设置 `auto_optimize=0`
+- [Issue #616](https://github.com/manticoresoftware/manticoresearch/issues/616) `ondisk_attrs_default` 已弃用，现在已被移除
+- 对于贡献者：我们现在使用 Clang 编译器进行 Linux 构建，根据我们的测试，它能够构建更快的 Manticore Search 和 Manticore Columnar Library
+- 如果在搜索查询中未指定 [max_matches](Searching/Options.md#max_matches)，则会隐式更新为新列式存储性能所需的最低值。这可能会影响 [SHOW META](Node_info_and_management/SHOW_META.md#SHOW-META) 中的 `total` 指标，但不会影响 `total_found`，后者是实际找到的文档数量。
 
-### 从 Manticore 3 迁移  
-- 确保您干净地停止 Manticore 3：  
-  - `/var/lib/manticore/binlog/` 目录中不应有 binlog 文件（目录中仅应包含 `binlog.meta`）  
-  - 否则，Manticore 4 将无法为未运行的 binlog 执行索引  
-- 新版本可以读取旧版索引，但旧版无法读取 Manticore 4 的索引，因此如果您希望轻松回滚新版本，请确保进行备份  
-- 如果您运行复制集群，请确保：  
-  - 首先干净地停止所有节点  
-  - 然后使用 `--new-cluster` 启动最后停止的节点（在 Linux 中运行工具 `manticore_new_cluster`）  
+### 从 Manticore 3 迁移
+- 确保您干净地停止 Manticore 3：
+  - `/var/lib/manticore/binlog/` 目录中不应有 binlog 文件（目录中仅应包含 `binlog.meta`）
+  - 否则，Manticore 4 将无法为未运行的 binlog 执行索引
+- 新版本可以读取旧版索引，但旧版无法读取 Manticore 4 的索引，因此如果您希望轻松回滚新版本，请确保进行备份
+- 如果您运行复制集群，请确保：
+  - 首先干净地停止所有节点
+  - 然后使用 `--new-cluster` 启动最后停止的节点（在 Linux 中运行工具 `manticore_new_cluster`）
   - 有关更多详细信息，请阅读 [重启集群](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster)
 
 ### 修复
@@ -1810,7 +1900,7 @@ sys     0m0.001s
 - [新模式](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology) `blend_mode='trim_all'`
 - 添加了使用反引号的 [JSON路径转义](Searching/Full_text_matching/Escaping.md#Escaping-json-node-names-in-SQL)
 - [indextool --check](Miscellaneous_tools.md#indextool) 可以在RT模式下工作
-- [FORCE/IGNORE INDEX(id)](Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-SQL) 用于 SELECT/UPDATE
+- 用于 SELECT/[UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md) 的 [FORCE/IGNORE INDEX(id)](Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-SQL)
 - 合并磁盘块的块id现在是唯一的
 - [indextool --check-disk-chunk CHUNK_NAME](Miscellaneous_tools.md#indextool)
 
@@ -1895,7 +1985,7 @@ status of the query, not the server status
 
 ### 新功能
 
-* OPTIMIZE 将磁盘块减少到一定数量的块（默认是 `2* 核心数`）而不是一个。可以通过 [cutoff](Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks) 选项控制最佳块数。
+* [OPTIMIZE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 会把磁盘块减少到若干个块（默认是 `2* 核心数`），而不是一个。最优块数可通过 [cutoff](Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks) 选项控制。
 * NOT 运算符现在可以单独使用。默认情况下它是禁用的，因为意外的单个 NOT 查询可能很慢。可以通过将新的 searchd 指令 [not_terms_only_allowed](Server_settings/Searchd.md#not_terms_only_allowed) 设置为 `0` 来启用它。
 * 新设置 [max_threads_per_query](Server_settings/Searchd.md#max_threads_per_query) 设置查询可以使用的线程数。如果未设置该指令，查询可以使用的线程数最多为 [threads](Server_settings/Searchd.md#threads) 的值。
 每个 `SELECT` 查询可以通过 [OPTION threads=N](Searching/Options.md#threads) 限制线程数，覆盖全局的 `max_threads_per_query`。
@@ -2229,7 +2319,7 @@ status of the query, not the server status
 ### 改进和变更
 * 改进的SSL支持
 * 更新了非CJK内置字符集
-* 禁用UPDATE/DELETE语句在查询日志中记录SELECT
+* 在查询日志中禁用了 [UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md)/DELETE 语句对 SELECT 的记录
 * RHEL/CentOS 8软件包
 
 ### 修复
@@ -2255,7 +2345,7 @@ status of the query, not the server status
 * [Commit 0a1a](https://github.com/manticoresoftware/manticoresearch/commit/0a1a2c81038794983b4e30c8aefc7cc20e89b03f) 修复了将RT索引复制到存在相同RT索引但路径不同的节点的问题
 * [Commit 4adc](https://github.com/manticoresoftware/manticoresearch/commit/4adc075294ac823289f745e2cc419f18c7dcf2e2) 修复了对无活动索引的刷新重新调度
 * [Commit d6c0](https://github.com/manticoresoftware/manticoresearch/commit/d6c00a6f750c04021747e9c99e0f77707a4cbfc3) 改进了RT/PQ索引的刷新重新调度
-* [Commit d0a7](https://github.com/manticoresoftware/manticoresearch/commit/d0a7c95906b9b5ba33c98267d54501cfe27508d6) 修复了\#250 index_field_lengths索引选项对TSV和CSV管道源的问题
+* [Commit d0a7](https://github.com/manticoresoftware/manticoresearch/commit/d0a7c95906b9b5ba33c98267d54501cfe27508d6) 修复 #250 [index_field_lengths](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths) 索引选项在 TSV 和 CSV 管道源中的问题
 * [Commit 1266](https://github.com/manticoresoftware/manticoresearch/commit/1266d54800242709fbe2c34e72eb69b6595b23bd) 修复了indextool在空索引上进行块索引检查时的错误报告
 * [Commit 553c](https://github.com/manticoresoftware/manticoresearch/commit/553ca73ca111f28e0888d59cd48b0d6df181ecd6) 修复了Manticore SQL查询日志中的空选择列表
 * [Commit 56c8](https://github.com/manticoresoftware/manticoresearch/commit/56c8584456293665ddd4ce4c94307d74473a78b9) 修复了indexer -h/--help响应
@@ -2277,7 +2367,7 @@ status of the query, not the server status
 
 ### 移除
 * 支持RLP库已被弃用，所有rlp\*指令已移除
-* 禁用使用UPDATE更新文档ID
+* 通过 [UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md) 更新文档 ID 已被禁用
 
 ### 修复
 * [Commit f047](https://github.com/manticoresoftware/manticoresearch/commit/f047222339fd0e62a07e9ca8b2a829297d5db861) 修复concat和group_concat中的缺陷
@@ -2320,7 +2410,7 @@ status of the query, not the server status
 ### 功能和改进
 * 新的索引存储。非标量属性不再限制为每个索引4GB大小
 * attr_update_reserve指令
-* 字符串、JSON和MVAs可以使用UPDATE更新
+* 可以使用 [UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md) 更新 String、JSON 和 MVA
 * killlist在索引加载时应用
 * killlist_target指令
 * 多AND搜索加速
@@ -2328,7 +2418,7 @@ status of the query, not the server status
 * 用于升级2.x创建的索引的转换工具
 * CONCAT()函数
 * JOIN CLUSTER cluster AT 'nodeaddress:port'
-* ALTER CLUSTER posts UPDATE nodes
+* ALTER CLUSTER 会发布 [UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md) 节点
 * node_address指令
 * 在SHOW STATUS中打印节点列表
 
@@ -2447,7 +2537,7 @@ Cmake 的最低版本现在为 3.13。编译需要 boost 和 libssl
 * [Commit f974](https://github.com/manticoresoftware/manticoresearch/commit/f974f20bda3214a56877c393a192be1a77150958) 修复了 CALL KEYWORDS 结果集中单词内部特殊符号的问题
 * [Commit 0920](https://github.com/manticoresoftware/manticoresearch/commit/092083282ea8ae0b2e72fb6989c57ccec81e74ac) 修复了通过 API 或远程代理调用 CALL KEYWORDS 时分布式索引损坏的问题
 * [Commit fd68](https://github.com/manticoresoftware/manticoresearch/commit/fd686bfe88b720ffd7642e36897ba45161cbd7d2) 修复了分布式索引 agent_query_timeout 传播到代理作为 max_query_time 的问题
-* [Commit 4ffa](https://github.com/manticoresoftware/manticoresearch/commit/4ffa623e9d357a3b0b441615089e211f92f8de32) 修复了磁盘分片的总文档计数器受 OPTIMIZE 命令影响并破坏权重计算的问题
+* [Commit 4ffa](https://github.com/manticoresoftware/manticoresearch/commit/4ffa623e9d357a3b0b441615089e211f92f8de32) 修复了磁盘块上的总文档计数器受 [OPTIMIZE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 命令影响并破坏权重计算的问题
 * [Commit dcaf](https://github.com/manticoresoftware/manticoresearch/commit/dcaf4e0e3c8e9b0fbec47bbf3307feddec0936a6) 修复了从混合索引中获取 RT 索引的多个尾部命中问题
 * [Commit eee3](https://github.com/manticoresoftware/manticoresearch/commit/eee381754e902a43a8f499e1c950198a2a3e6ee0) 修复了旋转时的死锁问题
 
@@ -2613,7 +2703,7 @@ Cmake 的最低版本现在为 3.13。编译需要 boost 和 libssl
 ### 错误修复
 * [Commit 85a6](https://github.com/manticoresoftware/manticoresearch/commit/85a6d7e3db75f28c491042409bb677ed39eba07b) 修复了将 expand_keywords 选项记录到 Manticore SQL 查询日志中
 * [Commit caaa](https://github.com/manticoresoftware/manticoresearch/commit/caaa3842f4dbd8507fd9e20bf3371a0c8ec0c087) 修复了 HTTP 接口正确处理大尺寸查询的问题
-* [Commit e386](https://github.com/manticoresoftware/manticoresearch/commit/e386d842b36195719e459b2db1fb20e402f9a51f) 修复了在启用 index_field_lengths 时对 RT 索引执行 DELETE 的服务器崩溃问题
+* [Commit e386](https://github.com/manticoresoftware/manticoresearch/commit/e386d842b36195719e459b2db1fb20e402f9a51f) 修复了在启用 [index_field_lengths](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths) 的 RT 索引上执行 DELETE 时服务器崩溃的问题
 * [Commit cd53](https://github.com/manticoresoftware/manticoresearch/commit/ce528f37eb5d8284661928f6f3b340a4a1985253) 修复了 cpustats searchd 命令行选项在不支持的系统上工作的问题
 * [Commit 8740](https://github.com/manticoresoftware/manticoresearch/commit/8740fd63ae842c2ab0e51a8fcd6180d787ed57ec) 修复了定义最小长度时的 UTF8 子字符串匹配问题
 

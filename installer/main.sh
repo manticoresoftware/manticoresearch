@@ -298,7 +298,7 @@ determine_action() {
         return 0
     fi
 
-    if [[ "$UPGRADE_REQUESTED" == "true" && -z "$SPECIFIC_VERSION" ]]; then
+    if [[ "$UPGRADE_REQUESTED" == "true" && -z "$SPECIFIC_VERSION" && -z "$MANTICORE_REPO_CHANNEL" ]]; then
         ACTION="upgrade"
         return 0
     fi
@@ -323,6 +323,27 @@ determine_action() {
         print_warn "Could not determine the latest available version."
         print_info "Installed version is $current_version."
         exit 0
+    fi
+
+    if desired_version_installed "$target_version"; then
+        if [[ -n "$MANTICORE_REPO_CHANNEL" ]]; then
+            print_info "Installed version $current_version is already the latest available in the ${MANTICORE_REPO_CHANNEL} repository."
+        else
+            print_info "Installed version $current_version is already up to date."
+        fi
+        exit 0
+    fi
+
+    if [[ -n "$MANTICORE_REPO_CHANNEL" ]]; then
+        if [[ "$UPGRADE_REQUESTED" == "true" ]] || ask_confirm "Latest ${MANTICORE_REPO_CHANNEL} repository version is $target_version. Switch from $current_version?"; then
+            print_info "Switching from version $current_version to latest ${MANTICORE_REPO_CHANNEL} repository version $target_version."
+            SPECIFIC_VERSION="$target_version"
+            ACTION="upgrade"
+            return 0
+        else
+            print_info "Leaving version $current_version installed."
+            exit 0
+        fi
     fi
 
     if ! version_gt "$target_version" "$current_version"; then

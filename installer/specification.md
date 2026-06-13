@@ -267,7 +267,7 @@ On clean system where no manticore repository package installed, if user doesn't
 
 However, when a repo is already installed/choosen, assume user doesn't want to unexpectedly change it. For example, if 'Dev' repository was chosen and set up, and user wants to upgrade, or list available versions, it should not be changed.
 
-If user explicitly provides a supported repository channel, behave according to it. That may imply reinstalling the correct repository package for Debian, or persistently switching the enabled RPM repository with config-manager tools. Without an explicit RPM channel, preserve the repository package defaults/current repository state.
+If user explicitly provides a supported repository channel, behave according to it. That may imply reinstalling the correct repository package for Debian, persistently switching the enabled RPM repository with config-manager tools when they are already available, or replacing the RPM repository bootstrap package with the requested channel package when config-manager tools are absent. Without an explicit RPM channel, preserve the repository package defaults/current repository state. If Manticore is already installed and the explicit channel selection changes the latest available version, prompt in interactive mode and then route the change through the normal upgrade flow using that channel latest version as an exact target; this may upgrade or downgrade. If `upgrade` is also present, treat it as explicit confirmation.
 
 ## Command Syntax
 
@@ -290,8 +290,8 @@ Public pipe examples should pass commands as `sh -s command args`, not `sh -s --
 - `uninstall`: stop and remove Manticore, preserving repository configuration and data/config state.
 - `purge`: stop and remove Manticore, then remove the repository bootstrap package when applicable.
 - `purge-all`: same as `purge`, then remove configured Manticore config and data directories after explicit confirmation unless `silent` is set.
-- `dev`: explicitly switch to 'Dev' repository
-- `release`: explicitly switch to 'Release' repository
+- `dev`: explicitly switch to the `Dev` repository. If Manticore is already installed, align it to the latest version available from that channel through the upgrade flow after confirmation unless `upgrade` is also present.
+- `release`: explicitly switch to the `Release` repository. If Manticore is already installed, align it to the latest version available from that channel through the upgrade flow after confirmation unless `upgrade` is also present.
 
 If different `dev`, `release` exist in one command, it should be treated as error. (if user selects one and
 same repo, i.e. `dev` more than once - that is not error).
@@ -340,7 +340,7 @@ The installer may create temporary files in `${TMPDIR:-/tmp}` or user-writable l
 9. Stop Manticore if it is running. Upgrade should not stop on all platforms, but rely on package-manager hooks and restart afterward.
 10. Upgrade the package:
     - Debian: for plain `upgrade`, resolve the latest available package version and use the metadata-derived exact-version package set with `--allow-downgrades`; this handles split-only installed states where the real `manticore` package is absent. If the latest version cannot be resolved, fall back to `apt-get install -y --only-upgrade manticore`.
-    - RPM: `dnf upgrade -y manticore` / `yum update -y manticore` or requested exact-version package set.
+    - RPM: `dnf upgrade -y manticore` / `yum update -y manticore` for plain upgrades, or the requested/channel-selected exact-version package set when a target version has been resolved.
     - Homebrew: `brew upgrade manticore || brew install manticoresoftware/tap/manticore`.
 11. If `no-start` is not set, start Manticore.
 12. Verify that `searchd` exists and report whether the service is running.
@@ -469,6 +469,7 @@ The installer must have CLT coverage for:
 - Debian explicit `version 17 no-start` through the bootstrap flow on Ubuntu 18.04, proving that thin/meta package dependencies are expanded correctly.
 - Debian `upgrade` from an older thin/split installed state to the latest version, including the case where the real `manticore` package is absent and only split packages are installed.
 - RPM explicit `dev` and `release` channel switches, covering both the config-manager path when available and the repository-package replacement fallback when config-manager tools are absent; both paths must enable/disable only `manticore` and `manticore-dev`, while leaving `manticore-release-candidate` untouched.
+- Debian/RPM explicit channel switch on an installed host where the channel latest differs from the installed version, including downgrade from dev latest to release latest through the normal backup/upgrade flow.
 - Public pipe command syntax using `sh -s help`, `sh -s list-versions`, and `sh -s version <version>` without a double-dash separator.
 - Colored and non-colored help output, including `NO_COLOR=1` and forced color through `MANTICORE_FORCE_COLOR=1` or `CLICOLOR_FORCE=1`.
 - Service start behavior in systemd and non-systemd environments where practical.

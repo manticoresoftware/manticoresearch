@@ -157,7 +157,7 @@ repo_package_installed() {
     if [[ "$OS_FAMILY" == "debian" ]]; then
         dpkg-query -W -f='${Status}\n' "$DEB_REPO_PACKAGE_NAME" 2>/dev/null | grep -q "install ok installed"
     elif [[ "$OS_FAMILY" == "rpm" ]]; then
-        rpm -q "$RPM_REPO_PACKAGE_NAME" >/dev/null 2>&1
+        rpm -q "$RPM_REPO_PACKAGE_NAME" >/dev/null 2>&1 || rpm -q "$RPM_DEV_REPO_PACKAGE_NAME" >/dev/null 2>&1
     elif [[ "$OS_FAMILY" == "brew" ]]; then
         return 0
     else
@@ -245,6 +245,14 @@ deb_repo_package_url_for_channel() {
     esac
 }
 
+rpm_repo_package_url_for_channel() {
+    case "$1" in
+        release) echo "$RPM_RELEASE_REPO_PACKAGE_URL" ;;
+        dev) echo "$RPM_DEV_REPO_PACKAGE_URL" ;;
+        *) return 1 ;;
+    esac
+}
+
 rpm_run() {
     local command=$1
     shift
@@ -257,6 +265,56 @@ rpm_sudo_run() {
     shift
 
     sudo_exec "$command" "$@"
+}
+
+installed_rpm_repo_package_names() {
+    local package
+
+    for package in "$RPM_REPO_PACKAGE_NAME" "$RPM_DEV_REPO_PACKAGE_NAME"; do
+        if rpm -q "$package" >/dev/null 2>&1; then
+            printf "%s\n" "$package"
+        fi
+    done
+}
+
+remove_rpm_repo_packages() {
+    local package_names=()
+
+    mapfile -t package_names < <(installed_rpm_repo_package_names)
+    [[ ${#package_names[@]} -eq 0 ]] && return 0
+
+    if command -v dnf >/dev/null 2>&1; then
+        sudo_exec dnf remove -y "${package_names[@]}"
+    elif command -v yum >/dev/null 2>&1; then
+        sudo_exec yum remove -y "${package_names[@]}"
+    else
+        print_error "Neither dnf nor yum is available to remove RPM repository packages."
+        return 1
+    fi
+}
+
+install_rpm_repo_package_url() {
+    local repo_url=$1
+
+    if command -v dnf >/dev/null 2>&1; then
+        sudo_exec dnf install -y "$repo_url"
+    elif command -v yum >/dev/null 2>&1; then
+        sudo_exec yum install -y "$repo_url"
+    else
+        print_error "Neither dnf nor yum is available to install RPM repository packages."
+        return 1
+    fi
+}
+
+install_rpm_repo_package_for_channel() {
+    local channel=$1
+    local repo_url
+
+    repo_url=$(rpm_repo_package_url_for_channel "$channel") || return 1
+    if repo_package_installed; then
+        remove_rpm_repo_packages
+    fi
+    install_rpm_repo_package_url "$repo_url"
 }
 
 detect_debian_repo_channel() {
@@ -342,17 +400,24 @@ ensure_debian_repo_channel() {
 ensure_rpm_repo_channel() {
     local target="${MANTICORE_REPO_CHANNEL:-}"
 
-    ensure_repo_package_installed
-    if [[ "$target" == "dev" ]]; then
-        print_step "Switching Manticore Repository Channel"
-        print_info "Activating Manticore dev repository."
-        set_rpm_repo_channel dev
-    elif [[ "$target" == "release" ]]; then
-        print_step "Switching Manticore Repository Channel"
-        print_info "Activating Manticore release repository."
-        set_rpm_repo_channel release
-    else
+    if [[ -z "$target" ]]; then
+        ensure_repo_package_installed
         print_info "Using RPM repository configuration from the Manticore repository package."
+        return 0
+    fi
+
+    print_step "Switching Manticore Repository Channel"
+    print_info "Activating Manticore ${target} repository."
+
+    if repo_package_installed && detect_rpm_config_manager; then
+        set_rpm_repo_channel "$target"
+    else
+        if repo_package_installed; then
+            print_info "RPM repository configuration tool is unavailable; replacing the repository package with the Manticore ${target} repository package."
+        else
+            print_info "Installing the Manticore ${target} repository package."
+        fi
+        install_rpm_repo_package_for_channel "$target"
     fi
 }
 
@@ -374,27 +439,8 @@ detect_rpm_config_manager() {
 
 ensure_rpm_config_manager() {
     detect_rpm_config_manager && return 0
-
-    print_step "Installing RPM Repository Configuration Tools"
-    if command -v dnf >/dev/null 2>&1; then
-        if ! sudo_exec dnf install -y dnf-plugins-core; then
-            print_error "Failed to install dnf-plugins-core, which provides 'dnf config-manager'."
-            return 1
-        fi
-    elif command -v yum >/dev/null 2>&1; then
-        if ! sudo_exec yum install -y yum-utils; then
-            print_error "Failed to install yum-utils, which provides 'yum-config-manager'."
-            return 1
-        fi
-    else
-        print_error "Neither dnf nor yum is available to configure RPM repositories."
-        return 1
-    fi
-
-    if ! detect_rpm_config_manager; then
-        print_error "RPM repository configuration tool is unavailable. Install dnf-plugins-core or yum-utils and retry."
-        return 1
-    fi
+    print_error "RPM repository configuration tool is unavailable."
+    return 1
 }
 
 set_rpm_repo_enabled() {
@@ -582,11 +628,7 @@ ensure_repo_package_installed() {
         install_debian_repo_package_file "$deb_path"
         rm -f "$deb_path"
     elif [[ "$OS_FAMILY" == "rpm" ]]; then
-        if command -v dnf >/dev/null 2>&1; then
-            sudo_exec dnf install -y "$RPM_REPO_PACKAGE_URL"
-        else
-            sudo_exec yum install -y "$RPM_REPO_PACKAGE_URL"
-        fi
+        install_rpm_repo_package_url "$RPM_RELEASE_REPO_PACKAGE_URL"
     fi
 
     print_success "Repository bootstrap package installed."

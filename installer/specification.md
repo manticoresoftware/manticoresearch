@@ -232,27 +232,34 @@ If user wants explicitly switch into concrete repository, you may detect, which 
 
 ## RPM repositories
 
-You need to install this package:
+'Release' repository, set by installing repository package
+
 ```sh
 https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 ```
 
-It will install three repositories:
+'Dev' repository, set by installing repository package
+
+```sh
+https://repo.manticoresearch.com/manticore-dev-repo.noarch.rpm
+```
+
+Both packages install three repositories:
 ```txt
 manticore
 manticore-dev
 manticore-release-candidate
 ```
 
-Repository 'manticore' is enabled by default, that is 'Release' repository.
+In case of 'Release' package, 'manticore' is enabled by default, 'manticore-dev' is disabled.
 
-Repository 'manticore-dev' is disabled by default, that is 'Dev' repository.
+In case of 'Dev' package, 'manticore-dev' is enabled by default, and 'manticore' is disabled.
 
 Repository 'manticore-release-candidate' is disabled by default, and mentioned here just because it exists. We're not going to expose it as an installer channel or activate it implicitly.
 
-For RPM, the repository package enables the release repository by default, so a clean release install uses the package defaults. If the user explicitly selects `dev` or `release`, persistently switch the enabled repository with package-manager configuration tools rather than manually editing the package-owned repository file. Use `dnf config-manager --set-enabled/--set-disabled` when available, or `yum-config-manager --enable/--disable` on yum systems. If those tools are missing for an explicit channel switch, install the standard plugin package (`dnf-plugins-core` or `yum-utils`) and retry.
+For RPM, the repository package enables the release repository by default, so a clean release install uses the package defaults. If the user explicitly selects `dev` or `release`, persistently switch the enabled repository without manually editing package-owned repository files. Use `dnf config-manager --set-enabled/--set-disabled` when already available, or `yum-config-manager --enable/--disable` on yum systems. If those tools are missing, do not install `dnf-plugins-core` or `yum-utils` solely for channel switching; instead remove the installed RPM repository bootstrap package when present and install the repository package for the requested channel, because those packages encode the desired enabled/disabled repository defaults.
 
-`dev` must enable `manticore-dev` and disable `manticore`. `release` must enable `manticore` and disable `manticore-dev`. Do not enable or disable `manticore-release-candidate`.
+`dev` must result in `manticore-dev` enabled and `manticore` disabled. `release` must result in `manticore` enabled and `manticore-dev` disabled. Do not enable or disable `manticore-release-candidate`. The installer should treat both `manticore-repo` and `manticore-dev-repo` as RPM repository bootstrap packages for idempotency and purge cleanup.
 
 ## Choose repository
 
@@ -461,7 +468,7 @@ The installer must have CLT coverage for:
 - Debian explicit `version` switch/downgrade through the bootstrap flow without an extra prompt, including split-package detection after downgrade.
 - Debian explicit `version 17 no-start` through the bootstrap flow on Ubuntu 18.04, proving that thin/meta package dependencies are expanded correctly.
 - Debian `upgrade` from an older thin/split installed state to the latest version, including the case where the real `manticore` package is absent and only split packages are installed.
-- RPM explicit `dev` and `release` channel switches, proving that config-manager tools persistently enable/disable only `manticore` and `manticore-dev`, while leaving `manticore-release-candidate` untouched.
+- RPM explicit `dev` and `release` channel switches, covering both the config-manager path when available and the repository-package replacement fallback when config-manager tools are absent; both paths must enable/disable only `manticore` and `manticore-dev`, while leaving `manticore-release-candidate` untouched.
 - Public pipe command syntax using `sh -s help`, `sh -s list-versions`, and `sh -s version <version>` without a double-dash separator.
 - Colored and non-colored help output, including `NO_COLOR=1` and forced color through `MANTICORE_FORCE_COLOR=1` or `CLICOLOR_FORCE=1`.
 - Service start behavior in systemd and non-systemd environments where practical.

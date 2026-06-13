@@ -55,11 +55,7 @@ remove_repo_package() {
     if [[ "$OS_FAMILY" == "debian" ]]; then
         sudo_exec apt-get remove -y "$DEB_REPO_PACKAGE_NAME"
     elif [[ "$OS_FAMILY" == "rpm" ]]; then
-        if command -v dnf >/dev/null 2>&1; then
-            sudo_exec dnf remove -y "$RPM_REPO_PACKAGE_NAME"
-        else
-            sudo_exec yum remove -y "$RPM_REPO_PACKAGE_NAME"
-        fi
+        remove_rpm_repo_packages
     fi
 }
 

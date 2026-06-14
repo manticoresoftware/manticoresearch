@@ -1187,9 +1187,14 @@ bool SearchHandler_c::AllowsMulti() const
 	if ( m_bFacetQueue )
 		return true;
 
+	const CSphQuery & tFirstQuery = m_dNQueries.First();
+	for ( int i=1; i<m_dNQueries.GetLength(); ++i )
+		if ( m_dNQueries[i].m_sGroupDistinct!=tFirstQuery.m_sGroupDistinct )
+			return false;
+
 	// in some cases the same select list allows queries to be multi query optimized
 	// but we need to check dynamic parts size equality and we do it later in RunLocalSearches()
-	const CSphVector<CSphQueryItem> & tFirstQueryItems = m_dNQueries.First().m_dItems;
+	const CSphVector<CSphQueryItem> & tFirstQueryItems = tFirstQuery.m_dItems;
 	bool bItemsSameLen = true;
 	for ( int i=1; i<m_dNQueries.GetLength() && bItemsSameLen; ++i )
 		bItemsSameLen = ( tFirstQueryItems.GetLength()==m_dNQueries[i].m_dItems.GetLength() );

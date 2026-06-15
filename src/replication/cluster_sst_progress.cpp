@@ -521,7 +521,21 @@ void SstProgress_c::SetDonor4Joiner ( int iFilesCount, SstProgressContext_t & tC
 
 	tCtx.m_fTotalBefore = tStatus.m_fTotal;
 
-	assert ( m_iTable!=-1 );
+	// m_pSstProgress is shared per-cluster and reporting-only. During a chaotic rejoin a concurrent
+	// Galera SST Init() can clear m_iTable (->-1) and empty m_dProgress/m_dTables between this donor's
+	// SetTable() and the call below. The asserts are compiled out in release, so GetTableStage(-1) then
+	// returns an out-of-bounds pointer whose deref SIGSEGVs the donor mid ALTER CLUSTER ADD -> the node
+	// dies, the cluster drops to non-primary and the rollback test fails. Guard it: the progress weight
+	// is non-critical, so on a torn read just use a neutral weight instead of crashing.
+	if ( m_iTable<0 || m_iTable>=m_dTables.GetLength() )
+	{
+		sphWarning ( "SST SetDonor4Joiner: invalid table index %d (tables=%d); using neutral stage weight",
+			m_iTable, m_dTables.GetLength() );
+		tCtx.m_fStageWeight = 0.0f;
+		tCtx.m_uStageTotal = iFilesCount;
+		return;
+	}
+
 	const SstStageProgress_t * pTableStages = GetTableStage ( m_iTable );
 	// FIXME!!! make it work for all other stages
 	const SstStageProgress_t & tReserve = pTableStages[(int)SstStage_e::RESERVE_FILES];

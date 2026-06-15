@@ -150,7 +150,7 @@
 * [exceptions_list](Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions_list)
 * [expand_keywords](Searching/Options.md#expand_keywords)
 * [global_idf](Searching/Options.md#global_idf)
-* [hitless_wordsbbab.png:CREATING_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words)
+* [hitless_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words)
 * [hitless_words_list](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words_list)
 * [html_index_attrs](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_index_attrs)
 * [html_remove_elements](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_remove_elements)

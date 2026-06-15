@@ -1,32 +1,32 @@
-# K近邻向量搜索
+# K 近邻向量搜索
 
-Manticore Search 支持将机器学习模型生成的嵌入向量添加到每个文档中，然后对它们进行最近邻搜索。这使您可以基于NLP算法构建相似性搜索、推荐、语义搜索和相关性排序等功能，包括图像、视频和声音搜索等。
+Manticore Search 支持为每个文档添加由机器学习模型生成的嵌入，然后对其执行最近邻搜索。这让你可以构建相似性搜索、推荐、语义搜索，以及基于 NLP 算法的相关性排序等功能，还包括图像、视频和声音搜索。
 
-要将KNN向量搜索与全文搜索结合以获得更好的相关性，请参阅[混合搜索](../Searching/Hybrid_search.md)。
+要将 KNN 向量搜索与全文搜索结合以获得更好的相关性，请参阅 [混合搜索](../Searching/Hybrid_search.md)。
 
 ## 什么是嵌入？
 
-嵌入是一种表示数据的方法 - 例如文本、图像或声音 - 作为高维空间中的向量。这些向量的构造是为了确保它们之间的距离反映了它们所代表的数据的相似性。此过程通常使用诸如词嵌入（例如Word2Vec、BERT）用于文本或神经网络用于图像的算法。向量空间的高维特性，每个向量有多个分量，允许表示项目之间复杂而细致的关系。它们的相似性通过这些向量之间的距离来衡量，通常使用欧几里得距离或余弦相似度等方法进行测量。
+嵌入是一种将文本、图像或声音等数据表示为高维空间中向量的方法。这些向量的设计目标是让它们之间的距离能够反映所代表数据的相似度。这个过程通常会使用词嵌入算法（例如 Word2Vec、BERT）处理文本，或使用神经网络处理图像。向量空间具有高维特性，每个向量包含许多分量，因此能够表示对象之间复杂而细微的关系。它们的相似度通过这些向量之间的距离来衡量，通常使用欧氏距离或余弦相似度等方法。
 
-Manticore Search 使用 HNSW 库启用 k-最近邻（KNN）向量搜索。此功能是 [Manticore Columnar Library](https://github.com/manticoresoftware/columnar) 的一部分。
+Manticore Search 使用 HNSW 库支持 k 近邻（KNN）向量搜索。该功能属于 [Manticore Columnar Library](https://github.com/manticoresoftware/columnar)。
 
 <!-- example KNN -->
 
 ### 为 KNN 搜索配置表
 
-要运行 KNN 搜索，您必须首先配置您的表。浮点向量和 KNN 搜索仅支持实时表（不支持普通表）。表需要至少一个 [float_vector](../Creating_a_table/Data_types.md#Float-vector) 属性，作为数据向量。您需要指定以下属性：
+要运行 KNN 搜索，首先必须配置你的表。浮点向量和 KNN 搜索仅支持实时表（不支持普通表）。表中需要至少有一个 [float_vector](../Creating_a_table/Data_types.md#Float-vector) 属性，它充当数据向量。你需要指定以下属性：
 * `knn_type`：必填设置；目前仅支持 `hnsw`。
-* `knn_dims`：必填设置，指定要索引的向量的维度。
-* `hnsw_similarity`：必填设置，指定 HNSW 索引使用的距离函数。可接受的值为：
+* `knn_dims`：必填设置，用于指定被索引向量的维度。
+* `hnsw_similarity`：必填设置，用于指定 HNSW 索引使用的距离函数。可接受的值有：
   - `L2` - 平方 L2
-  - `IP` - 点积
+  - `IP` - 内积
   - `COSINE` - 余弦相似度
 
-  **注意：** 使用 `COSINE` 相似度时，插入时向量会自动归一化。这意味着存储的向量值可能与原始输入值不同，因为它们将被转换为单位向量（具有数学长度/幅度为 1.0 的向量），以实现高效的余弦相似度计算。这种归一化保留了向量的方向，同时标准化了其长度。
-* `hnsw_m`：可选设置，定义图中出边的最大数量。默认值为 16。
-* `hnsw_ef_construction`：可选设置，定义构建时间/准确性权衡。默认值为 200。
+  **注意：** 当使用 `COSINE` 相似度时，向量会在插入时自动归一化。这意味着存储的向量值可能与原始输入值不同，因为它们会被转换为单位向量（数学长度/模长为 1.0 的向量），以便高效计算余弦相似度。该归一化过程会保留向量方向，同时标准化其长度。
+* `hnsw_m`：可选设置，定义图中最大出边数。默认值为 16。
+* `hnsw_ef_construction`：可选设置，定义构建时间与精度之间的权衡。默认值为 200。
 
-> 注意：在 RT 块保存期间，HNSW 图构建，`OPTIMIZE TABLE` / 自动优化块合并，以及 `ALTER TABLE ... ADD/DROP/REBUILD` KNN 重建默认在多核主机上并行运行；工作线程数由 [`knn_parallel_build`](../Server_settings/Searchd.md#knn_parallel_build) searchd 设置控制（将其设置为 `1` 以强制串行路径）。这仅影响构建时间性能。由于并行 HNSW 构建可能会以不同顺序插入向量，因此生成的图可能与串行构建不完全相同。
+> 注意：在多核主机上，RT chunk 保存、`OPTIMIZE TABLE` / 自动优化 chunk 合并，以及 `ALTER TABLE ... ADD/DROP/REBUILD` KNN 重建期间的 HNSW 图构建默认会并行运行；工作线程数由 searchd 设置 [`knn_parallel_build`](../Server_settings/Searchd.md#knn_parallel_build) 控制（将其设为 `1` 可强制走串行路径）。这只影响构建阶段性能。由于并行 HNSW 构建可能以不同顺序插入向量，生成的图可能不会与串行构建在位级别完全一致。
 
 <!-- intro -->
 ##### SQL
@@ -72,7 +72,7 @@ table test_vec {
 }
 ```
 
-**注意：** 有关普通模式中的自动嵌入，请参阅下面的示例，该示例展示了如何在 `knn` 配置中使用 `model_name` 和 `from` 参数。
+**注意：** 关于普通模式下的自动嵌入，请参见下面的示例，其中展示了如何在 `knn` 配置中使用 `model_name` 和 `from` 参数。
 
 <!-- end -->
 
@@ -82,40 +82,46 @@ table test_vec {
 
 #### 自动嵌入（推荐）
 
-使用向量数据最简单的方法是使用 **自动嵌入**。使用此功能时，您创建一个带有 `MODEL_NAME` 和 `FROM` 参数的表，然后只需插入您的文本数据 - Manticore 会为您自动生成嵌入。
+处理向量数据最简单的方法是使用**自动嵌入**。使用此功能时，你创建一个带有 `MODEL_NAME` 和 `FROM` 参数的表，然后只需插入文本数据即可，Manticore 会自动为你生成嵌入。
 
-##### 创建带有自动嵌入的表
+##### 创建带自动嵌入的表
 
-创建自动嵌入表时，请指定：
-- `MODEL_NAME`：使用的嵌入模型
+创建用于自动嵌入的表时，请指定：
+- `MODEL_NAME`：要使用的嵌入模型
 - `FROM`：用于生成嵌入的字段（留空表示所有文本/字符串字段）
-- `API_KEY`：对于远程模型（OpenAI、Voyage、Jina）是必需的。在表创建期间通过实际 API 请求验证 API 密钥。
-- `API_URL`：可选。自定义 API 端点 URL。如果未指定，则使用默认提供程序端点（例如，OpenAI 的 `https://api.openai.com/v1/embeddings`）。
-- `API_TIMEOUT`：可选。API 请求的 HTTP 超时时间（以秒为单位）。默认值为 10 秒。设置为 `'0'` 以使用默认超时。适用于表创建期间的验证请求和插入操作期间的嵌入生成。
+- `API_KEY`：远程模型（OpenAI、Voyage、Jina）必需。API 密钥会在建表期间通过发起真实 API 请求进行验证。
+- `API_URL`：可选。自定义 API 端点 URL。如果未指定，则使用默认提供方端点（例如 OpenAI 使用 `https://api.openai.com/v1/embeddings`）。
+- `API_TIMEOUT`：可选。API 请求的 HTTP 超时时间，单位为秒。默认值为 10 秒。设为 `'0'` 可使用默认超时。此设置同时适用于建表期间的验证请求和 INSERT 操作期间的嵌入生成。
+
+对于远程模型，`MODEL_NAME` 可以写成两种形式：
+- 传统的带提供方前缀形式：`openai/text-embedding-ada-002`、`voyage/voyage-3.5-lite`、`jina/jina-embeddings-v4`
+- 用于自定义端点的显式提供方标识形式：`openai:text-embedding-ada-002`、`openai:openai/text-embedding-ada-002`、`voyage:custom-model`、`jina:custom-model`
+
+当你把 `provider:model` 形式与 `API_URL` 一起使用时，冒号前的部分只用于选择请求格式。冒号后的部分会原样发送到远程端点。这对 OpenAI 兼容网关很有用，例如 OpenRouter 或 LiteLLM。
 
 **支持的嵌入模型：**
 
 | 模型类型 | 示例 | 需要 API 密钥 | 说明 |
 |------------|---------|-----------------|-------|
-| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | 否 | 本地基于 BERT 的模型，自动下载 |
-| **Qwen** | `Qwen/Qwen3-Embedding-0.6B` | 否 | 本地 Qwen 家族模型 |
-| **Llama** | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | 否 | 本地 Llama 家族模型 |
-| **Mistral** | `Locutusque/TinyMistral-248M-v2` | 否 | 本地 Mistral 家族模型 |
-| **Gemma** | `h2oai/embeddinggemma-300m` | 否 | 本地 Gemma 家族模型 |
-| **OpenAI** | `openai/text-embedding-ada-002` | 是 | `API_KEY='<OPENAI_API_KEY>'` |
-| **Voyage** | Voyage AI 模型 | 是 | `API_KEY='<VOYAGE_API_KEY>'` |
-| **Jina** | Jina AI 模型 | 是 | `API_KEY='<JINA_API_KEY>'` |
+| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | 否 | 本地 BERT 基础模型，自动下载 |
+| **Qwen** | `Qwen/Qwen3-Embedding-0.6B` | 否 | 本地 Qwen 系列模型 |
+| **Llama** | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | 否 | 本地 Llama 系列模型 |
+| **Mistral** | `Locutusque/TinyMistral-248M-v2` | 否 | 本地 Mistral 系列模型 |
+| **Gemma** | `h2oai/embeddinggemma-300m` | 否 | 本地 Gemma 系列模型 |
+| **OpenAI** | `openai/text-embedding-ada-002` 或 `openai:text-embedding-ada-002` | 是 | `API_KEY='***'` |
+| **Voyage** | `voyage/voyage-3.5-lite` 或 `voyage:voyage-3.5-lite` | 是 | `API_KEY='***'` |
+| **Jina** | `jina/jina-embeddings-v4` 或 `jina:jina-embeddings-v4` | 是 | `API_KEY='***'` |
 
 **本地模型格式要求：**
 - 必须以 `safetensors` 格式保存（仅单文件）
-- 支持的家族：Qwen、Llama、Mistral、Gemma
-- 测试过的模型：`TinyLlama/TinyLlama-1.1B-Chat-v1.0`、`Locutusque/TinyMistral-248M-v2`、`Qwen/Qwen3-Embedding-0.6B`、`h2oai/embeddinggemma-300m`
-- 其他 `safetensors` 模型可能也有效，但不保证
+- 支持的系列：Qwen、Llama、Mistral、Gemma
+- 已测试模型：`TinyLlama/TinyLlama-1.1B-Chat-v1.0`、`Locutusque/TinyMistral-248M-v2`、`Qwen/Qwen3-Embedding-0.6B`、`h2oai/embeddinggemma-300m`
+- 其他 `safetensors` 模型也可能可用，但不作保证
 
-有关设置 `float_vector` 属性的更多信息，请参见 [此处](../Creating_a_table/Data_types.md#Float-vector)。
+关于配置 `float_vector` 属性的更多信息，请参见[这里](../Creating_a_table/Data_types.md#Float-vector)。
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -148,19 +154,29 @@ CREATE TABLE products_openai (
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description' API_KEY='...'
 );
 ```
-
-使用 OpenAI 与自定义 API URL 和超时（可选）
+使用 OpenAI 搭配自定义 API URL 和超时设置（可选）
 ```sql
 CREATE TABLE products_openai_custom (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description'
-    API_KEY='...' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+    MODEL_NAME='openai:text-embedding-ada-002' FROM='title,description'
+    API_KEY='***' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
 );
 ```
 
-使用所有文本字段进行嵌入（FROM 为空）
+使用期望提供方限定模型 ID 的 OpenAI 兼容网关
+```sql
+CREATE TABLE products_openrouter (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='openai:openai/text-embedding-ada-002' FROM='title,description'
+    API_KEY='***' API_URL='https://openrouter.ai/api/v1/embeddings' API_TIMEOUT='30'
+);
+```
+
+使用所有文本字段生成嵌入（FROM 为空）
 ```sql
 CREATE TABLE products_all (
     title TEXT,
@@ -171,7 +187,7 @@ CREATE TABLE products_all (
 ```
 
 <!-- intro -->
-##### Plain mode (使用配置文件):
+##### 普通模式（使用配置文件）：
 
 <!-- request Config -->
 ```ini
@@ -185,7 +201,7 @@ table products {
 }
 ```
 
-在 plain mode 中使用 OpenAI：
+在普通模式下使用带 API 密钥的 OpenAI：
 ```ini
 table products_openai {
     type = rt
@@ -197,7 +213,7 @@ table products_openai {
 }
 ```
 
-使用所有文本字段（FROM 为空）：
+使用所有文本字段（空 FROM）：
 ```ini
 table products_all {
     type = rt
@@ -209,11 +225,11 @@ table products_all {
 }
 ```
 
-**plain mode 的重要说明：**
-- 当使用 `model_name` 时，**不得**指定 `dims` - 模型会自动确定向量维度。`dims` 和 `model_name` 参数是互斥的。
-- 当 **不**使用 `model_name`（手动插入向量）时，**必须**指定 `dims` 以指示向量维度。
-- `from` 参数指定用于生成嵌入的字段（逗号分隔列表，或空字符串表示所有文本/字符串字段）。当使用 `model_name` 时，此参数是必需的。
-- 对于基于 API 的模型（OpenAI、Voyage、Jina），在 knn 配置中包含 `api_key` 参数
+**普通模式重要说明：**
+- 使用 `model_name` 时，**不能**指定 `dims` - 模型会自动决定向量维度。`dims` 和 `model_name` 参数互斥。
+- 当**不**使用 `model_name`（手动插入向量）时，**必须**指定 `dims` 来说明向量维度。
+- `from` 参数指定用于生成嵌入的字段（以逗号分隔的列表，或留空字符串表示所有文本/字符串字段）。使用 `model_name` 时必须提供此参数。
+- 对于基于 API 的模型（OpenAI、Voyage、Jina），请在 knn 配置中包含 `api_key` 参数
 
 <!-- end -->
 
@@ -230,20 +246,20 @@ CREATE TABLE products_openai(title text, description text, embedding_vector floa
 
 <!-- example inserting_embeddings -->
 
-使用自动嵌入时，您可以：
+使用自动嵌入时，你可以：
 
-- 省略向量字段，让 Manticore 从 `FROM` 中列出的字段生成嵌入
-- 为某一行显式提供自己的向量
+- 省略向量字段，让 Manticore 根据 `FROM` 中列出的字段生成嵌入
+- 为某一行显式提供你自己的向量
 - 提供 `()` 以跳过生成并存储全零向量
 
-如果您之后运行 `ALTER TABLE ... REBUILD EMBEDDINGS`，当前通过 `()` 生成的零向量行也会被重新生成。
+如果你之后运行 `ALTER TABLE ... REBUILD EMBEDDINGS`，当前包含来自 `()` 的零向量的行也会被重新生成。
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
-仅插入文本数据 - 自动生成嵌入
+仅插入文本数据 - 嵌入会自动生成
 ```sql
 INSERT INTO products (title) VALUES
 ('machine learning artificial intelligence'),
@@ -256,7 +272,7 @@ INSERT INTO products (title, embedding_vector) VALUES
 ('machine learning artificial intelligence', (0.653448,0.192478,0.017971,0.339821));
 ```
 
-插入多个字段 - 如果 FROM='title,description'，两者都会用于嵌入
+插入多个字段 - 如果 FROM='title,description'，两者都会用于生成嵌入
 ```sql
 INSERT INTO products_openai (title, description) VALUES
 ('smartphone', 'latest mobile device with advanced features'),
@@ -270,21 +286,21 @@ INSERT INTO products (title, embedding_vector) VALUES
 ```
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 
 <!-- request JSON -->
 
-仅插入文本数据 - 自动生成嵌入
+仅插入文本数据 - 嵌入会自动生成
 ```JSON
 POST /sql?mode=raw -d "INSERT INTO products (title) VALUES ('machine learning artificial intelligence'),('banana fruit sweet yellow')"
 ```
 
-插入多个字段 - 如果 FROM='title,description'，两者都会用于嵌入  
+插入多个字段 - 如果 FROM='title,description'，两者都会用于生成嵌入
 ```JSON
 POST /sql?mode=raw -d "INSERT INTO products_openai (title, description) VALUES ('smartphone', 'latest mobile device with advanced features'), ('laptop', 'portable computer for work and gaming')"
 ```
 
-插入空向量（文档将被排除在向量搜索之外）
+插入空向量（文档被排除在向量搜索之外）
 ```JSON
 POST /sql?mode=raw -d "INSERT INTO products (title, embedding_vector) VALUES ('no embedding item', ())"
 ```
@@ -294,10 +310,10 @@ POST /sql?mode=raw -d "INSERT INTO products (title, embedding_vector) VALUES ('n
 ##### 使用自动嵌入进行搜索
 
 <!-- example embeddings_search -->
-搜索方式相同 - 提供查询文本，Manticore 会生成嵌入并查找相似文档：
+搜索方式相同 - 提供查询文本，Manticore 会生成嵌入并找到相似文档：
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -318,11 +334,11 @@ SELECT id, knn_dist() FROM products WHERE knn(embedding_vector, 'machine learnin
 ```
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 
 <!-- request JSON -->
 
-使用文本查询与自动嵌入
+使用文本查询和自动嵌入
 ```json
 POST /search
 {
@@ -379,15 +395,15 @@ POST /search
 
 <!-- end -->
 
-#### 手动向量插入
+#### 手动插入向量
 
 <!-- example manual_vector -->
-或者，您可以手动插入预计算的向量数据，确保其与创建表时指定的维度匹配。您也可以插入空向量；这意味着文档将被排除在向量搜索结果之外。
+或者，你也可以手动插入预先计算好的向量数据，确保它与创建表时指定的维度一致。你也可以插入空向量；这意味着该文档将被排除在向量搜索结果之外。
 
-**重要：** 当使用 `hnsw_similarity='cosine'` 时，插入时向量会自动归一化为单位向量（数学长度/幅度为 1.0 的向量）。这种归一化保留了向量的方向，同时标准化其长度，这是高效余弦相似度计算所必需的。这意味着存储的值将与您原始输入值不同。
+**重要：** 当使用 `hnsw_similarity='cosine'` 时，向量会在插入时自动归一化为单位向量（数学长度/模长为 1.0 的向量）。这种归一化会保留向量方向，同时标准化其长度，这对于高效计算余弦相似度是必需的。这意味着存储值会与你的原始输入值不同。
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -401,7 +417,7 @@ Query OK, 2 rows affected (0.00 sec)
 ```
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 
 <!-- request JSON -->
 
@@ -447,10 +463,10 @@ POST /insert
 
 ### KNN 向量搜索
 
-现在，您可以使用 SQL 或 JSON 格式中的 `knn` 子句执行 KNN 搜索。两种接口支持相同的本质参数，无论您选择哪种格式，都能确保一致的体验：
+现在，你可以在 SQL 或 JSON 格式中使用 `knn` 子句执行 KNN 搜索。两种接口支持相同的核心参数，无论你选择哪种格式，都能获得一致的体验：
 
 - SQL: `select ... from <table name> where knn ( <field>, <query vector> [,<options>] )`
-- JSON:
+- JSON：
   ```
   POST /search
   {
@@ -466,23 +482,23 @@ POST /insert
   }
   ```
 
-参数包括：
-* `field`：这是包含向量数据的浮点向量属性的名称。
-* `k`：已弃用的选项。请改用查询 `limit`。它曾用于指定单个 HNSW 索引应返回的文档数量。然而，最终结果中包含的文档实际数量可能会有所不同。例如，如果系统处理的是划分为磁盘块的实时表，每个块可能返回 `k` 个文档，导致总数超过指定的 `k`（因为累计数量将是 `num_chunks * k`）。另一方面，如果在请求 `k` 个文档后，根据特定属性过滤掉一些文档，最终文档数量可能少于 `k`。需要注意的是，参数 `k` 不适用于 ramchunks。在 ramchunks 的上下文中，检索过程的工作方式不同，因此 `k` 参数对返回文档数量的影响不适用。
+参数如下：
+* `field`：包含向量数据的 float vector 属性名称。
+* `k`：已弃用选项。请改用查询 `limit`。它用于指定单个 HNSW 索引应返回的文档数量。不过，最终结果中包含的文档总数可能会变化。例如，如果系统处理的是按磁盘 chunk 划分的实时表，每个 chunk 都可能返回 `k` 个文档，从而使总数超过指定的 `k`（因为累计数量为 `num_chunks * k`）。另一方面，如果在请求 `k` 个文档后，其中一些又根据特定属性被过滤掉，那么最终文档数量也可能少于 `k`。需要注意的是，`k` 参数不适用于 ramchunks。在 ramchunks 场景下，检索过程的工作方式不同，因此 `k` 参数对返回文档数量的影响不适用。
 * `query`：（推荐参数）搜索查询，可以是：
-  - 文本字符串：如果字段已配置自动嵌入，则会自动转换为嵌入。如果字段未配置自动嵌入，将返回错误。
-  - 向量数组：与 `query_vector` 的工作方式相同。
-* `query_vector`：（旧版参数）作为数字数组的搜索向量。仍为向后兼容性提供支持。
-  **注意**：在同一个请求中使用 `query` 或 `query_vector`，不要同时使用两者。
-* `ef`：搜索期间使用的动态列表的可选大小。较高的 `ef` 会导致更准确但更慢的搜索。默认值为 10。
-* `rescore`：启用 KNN 重排序（默认启用）。在 SQL 中设置为 `0` 或在 JSON 中设置为 `false` 以禁用重排序。在使用量化向量完成 KNN 搜索（可能有过采样）后，距离将使用原始（全精度）向量重新计算，结果将重新排序以提高排名准确性。
-* `oversampling`：在执行 KNN 搜索时，设置一个乘数因子（浮点值），导致使用量化向量检索的候选对象数量超过所需数量。默认应用 `oversampling=3.0`。如果启用了重排序，这些候选对象可以稍后重新评估。过采样也适用于非量化向量。由于它会增加 `k`，这会影响 HNSW 索引的工作方式，可能会导致结果准确性的小幅变化。
-* `early_termination`：启用或禁用 HNSW 图遍历期间的自适应早期终止。默认启用。在 SQL 中设置为 `0` 或在 JSON 中设置为 `false` 以禁用。有关详细信息，请参阅 [早期终止](../Searching/KNN.md#Early-termination)。
+  - 文本字符串：如果该字段配置了自动嵌入，则会自动转换为嵌入。如果该字段没有自动嵌入，则会返回错误。
+  - 向量数组：工作方式与 `query_vector` 相同。
+* `query_vector`：（旧参数）作为数字数组的搜索向量。为向后兼容仍然支持。
+  **注意：** 同一请求中只能使用 `query` 或 `query_vector` 其中之一，不能同时使用。
+* `ef`：搜索过程中使用的动态列表大小，可选。`ef` 越大，搜索越准确，但速度越慢。默认值为 10。
+* `rescore`：启用 KNN 重新评分（默认启用）。在 SQL 中设为 `0` 或在 JSON 中设为 `false` 可禁用重新评分。KNN 搜索在使用量化向量完成后（可能伴随过采样），会使用原始（全精度）向量重新计算距离并重新排序结果，以提高排序准确性。
+* `oversampling`：设置一个因子（浮点值），在执行 KNN 搜索时将 `k` 乘以该因子，从而使用量化向量检索出比所需更多的候选结果。默认应用 `oversampling=3.0`。如果启用了重新评分，这些候选结果之后可以重新评估。过采样也适用于非量化向量。由于它会增大 `k`，进而影响 HNSW 索引的工作方式，因此可能会使结果精度略有变化。
+* `early_termination`：启用或禁用 HNSW 图遍历期间的自适应提前终止。默认启用。设为 SQL 中的 `0` 或 JSON 中的 `false` 可禁用。详情参见[提前终止](../Searching/KNN.md#Early-termination)。
 
-文档始终按其与搜索向量的距离进行排序。您指定的任何其他排序条件将在此主排序条件之后应用。要获取距离，有一个内置函数称为 [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29)。
+文档总是按其与搜索向量的距离排序。你指定的任何附加排序条件都会在这个主排序条件之后应用。若要获取距离，有一个内置函数 [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29)。
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -502,7 +518,7 @@ select id, knn_dist() from test where knn ( image_vector, (0.286569,-0.031816,0.
 ```
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 
 <!-- request JSON -->
 
@@ -564,15 +580,15 @@ POST /search
 
 ### 向量量化
 
-HNSW 索引需要完全加载到内存中才能执行 KNN 搜索，这可能导致显著的内存消耗。为了减少内存使用，可以应用标量量化——一种通过用有限数量的离散值表示每个组件（维度）来压缩高维向量的技术。Manticore 支持 8 位和 1 位量化，这意味着每个向量组件从 32 位浮点数压缩为 8 位甚至 1 位，分别减少内存使用量 4 倍或 32 倍。这些压缩表示还允许更快的距离计算，因为可以在单个 SIMD 指令中处理更多向量组件。尽管标量量化会引入一些近似误差，但通常这是在搜索准确性和资源效率之间值得权衡的。为了获得更好的准确性，量化可以与重排序和过采样结合使用：检索的候选对象数量超过请求的数量，并使用原始 32 位浮点向量重新计算这些候选对象的距离。
+HNSW 索引必须完整加载到内存中才能执行 KNN 搜索，这可能导致较高的内存消耗。为了降低内存占用，可以应用标量量化 - 这是一种通过用有限数量的离散值表示每个分量（维度）来压缩高维向量的技术。Manticore 支持 8 位和 1 位量化，这意味着每个向量分量都会从 32 位浮点压缩为 8 位甚至 1 位，分别将内存占用降低 4 倍或 32 倍。这些压缩表示还可以加快距离计算，因为更多的向量分量可以在单条 SIMD 指令中处理。虽然标量量化会引入一定的近似误差，但它通常是在搜索精度与资源效率之间值得接受的权衡。若要获得更高精度，可以将量化与重新评分和过采样结合使用：检索出的候选数量会多于请求数量，然后使用原始 32 位浮点向量重新计算这些候选的距离。
 
 支持的量化类型包括：
-* `8bit`：每个向量组件量化为 8 位。
-* `1bit`：每个向量组件量化为 1 位。使用非对称量化，查询向量量化为 4 位，存储向量量化为 1 位。这种方法比简单方法提供更高的精度，但有一些性能权衡。
-* `1bitsimple`：每个向量组件量化为 1 位。此方法比 `1bit` 快，但通常精度较低。
+* `8bit`：每个向量分量都会量化为 8 位。
+* `1bit`：每个向量分量都会量化为 1 位。这里使用非对称量化，查询向量量化为 4 位，存储向量量化为 1 位。与更简单的方法相比，这种方式提供了更高的精度，但会带来一定的性能权衡。
+* `1bitsimple`：每个向量分量都会量化为 1 位。该方法比 `1bit` 更快，但通常精度更低。
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 ```sql
@@ -586,7 +602,7 @@ Query OK, 0 rows affected (0.01 sec)
 ```
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 
 <!-- request JSON -->
 ```json
@@ -609,13 +625,13 @@ POST /sql?mode=raw -d "create table test ( title text, image_vector float_vector
 
 <!-- Example knn_similar_docs -->
 
-### 通过 ID 查找相似文档
+### 按 id 查找相似文档
 
-> 注意：通过 ID 查找相似文档需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果不起作用，请确保已安装 Buddy。
+> 注意：按 id 查找相似文档需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果无法工作，请确认已安装 Buddy。
 
-根据特定文档的唯一 ID 查找相似文档是一项常见任务。例如，当用户查看某个特定项目时，Manticore Search 可以高效地识别并显示在向量空间中与该项目最相似的项目列表。以下是实现方法：
+根据唯一 ID 查找与某个文档相似的文档是一个常见任务。例如，当用户查看某个特定条目时，Manticore Search 可以高效地识别并显示在向量空间中与之最相似的一组条目。做法如下：
 
-- SQL：`select ... from <table name> where knn ( <field>, <k>, <document id> )`
+- SQL: `select ... from <table name> where knn ( <field>, <k>, <document id> )`
 - JSON：
   ```
   POST /search
@@ -630,14 +646,14 @@ POST /sql?mode=raw -d "create table test ( title text, image_vector float_vector
   }
   ```
 
-参数包括：
-* `field`：这是包含向量数据的浮点向量属性的名称。
-* `k`：这表示要返回的文档数量，是分层可导航小世界（HNSW）索引的关键参数。它指定单个HNSW索引应返回的文档数量。然而，最终结果中包含的实际文档数量可能会有所不同。例如，如果系统处理的是被划分为磁盘块的实时表，每个块可能返回`k`个文档，导致总数超过指定的`k`（因为累积数量将是`num_chunks * k`）。另一方面，如果在请求`k`个文档后，根据特定属性过滤掉一些文档，最终的文档数量可能少于`k`。需要注意的是，参数`k`不适用于ramchunks。在ramchunks的上下文中，检索过程的运作方式不同，因此`k`参数对返回文档数量的影响不适用。
-* `document id`：KNN相似性搜索的文档ID。
+参数如下：
+* `field`：包含向量数据的 float vector 属性名称。
+* `k`：表示要返回的文档数量，是分层可导航小世界（HNSW）索引的关键参数。它指定单个 HNSW 索引应返回的文档数量。不过，最终结果中包含的文档总数可能会变化。例如，如果系统处理的是按磁盘 chunk 划分的实时表，每个 chunk 都可能返回 `k` 个文档，从而使总数超过指定的 `k`（因为累计数量为 `num_chunks * k`）。另一方面，如果在请求 `k` 个文档后，其中一些又根据特定属性被过滤掉，那么最终文档数量也可能少于 `k`。需要注意的是，`k` 参数不适用于 ramchunks。在 ramchunks 场景下，检索过程的工作方式不同，因此 `k` 参数对返回文档数量的影响不适用。
+* `document id`：用于 KNN 相似度搜索的文档 ID。
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -656,7 +672,7 @@ select id, knn_dist() from test where knn ( image_vector, 5, 1 );
 ```
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 
 <!-- request JSON -->
 
@@ -704,12 +720,12 @@ POST /search
 
 <!-- Example knn_filtering -->
 
-### 过滤KNN向量搜索结果
+### 过滤 KNN 向量搜索结果
 
-Manticore还支持通过全文匹配、属性过滤或两者的组合来进一步过滤KNN搜索返回的文档。
+Manticore 还支持对 KNN 搜索返回的文档进行额外过滤，可以通过全文匹配、属性过滤，或两者同时进行。
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -728,7 +744,7 @@ select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816
 ```
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 
 <!-- request JSON -->
 
@@ -787,20 +803,20 @@ POST /search
 
 <!-- example knn_filtering_strategies -->
 
-### 过滤策略：预过滤 vs. 后过滤
+### 过滤策略：预过滤 vs 后过滤
 
-在将KNN向量搜索与属性过滤结合使用时，Manticore支持两种策略，它们的区别在于过滤相对于HNSW图遍历的应用时机。
+当将 KNN 向量搜索与属性过滤结合时，Manticore 支持两种策略，它们的区别在于过滤条件相对于 HNSW 图遍历的应用时机。
 
-* 预过滤（默认；SQL中为`prefilter=1`或JSON中为`"prefilter": true`（默认））将过滤器直接传递到HNSW遍历过程中。在将候选文档添加到结果堆之前，会检查其是否符合过滤条件——只有匹配的文档才会贡献到最终的`k`个结果中。这减少了浪费的距离计算，并保证恰好返回`k`个匹配文档（假设存在`k`个匹配文档）。
+* 预过滤（默认；SQL 中为 `prefilter=1`，JSON 中为 `"prefilter": true`，默认）会把过滤条件直接传入 HNSW 遍历过程。每个候选项在加入结果堆之前都会先检查是否满足过滤条件 - 只有匹配的文档才会计入最终的 `k` 个结果。这减少了无效的距离计算，并保证最终返回恰好 `k` 个匹配文档（前提是确实存在 `k` 个匹配文档）。
 
-* 后过滤（SQL中为`prefilter=0`或JSON中为`"prefilter": false`）首先在完整数据集上执行KNN搜索，然后对结果应用过滤器。这种方法是安全且可预测的：HNSW图的遍历不受干扰，过滤器仅影响返回给客户端的结果。缺点是图可能会在最终被丢弃的候选文档上耗费精力。当过滤器匹配的文档比例很小时，返回的`k`个结果可能显著少于请求的数量，因为大多数KNN候选文档会失败过滤。
+* 后过滤（SQL 中为 `prefilter=0`，JSON 中为 `"prefilter": false`）会先在完整数据集上执行 KNN 搜索，然后再对结果应用过滤条件。这种方式安全且可预测：HNSW 图在不受干扰的情况下遍历，过滤器只影响哪些结果会返回给客户端。缺点是图可能会在最终会被丢弃的候选项上耗费精力。当过滤条件非常严格、只匹配极少部分文档时，返回的 `k` 个结果可能会明显少于请求数量，因为大多数 KNN 候选都会被过滤掉。
 
-内部而言，Manticore使用基于ACORN-1的算法进行预过滤。一种简单的预过滤方法仅跳过不匹配的节点，这可能会丢失连接HNSW图中其他分离部分的“桥接”节点，导致随着过滤器变得更严格，召回率崩溃。ACORN-1避免了这种情况：当节点不通过过滤时，其邻居仍会被添加到探索队列中。这使遍历能够绕过被过滤的节点并保持图的连通性。当通过过滤的文档少于总数的60%时，ACORN-1探索会自动激活。
+在内部，Manticore 在预过滤中使用了基于 ACORN-1 的算法。朴素的预过滤只会简单跳过不匹配的节点，这会有丢失连接原本分离部分 HNSW 图的“桥接”节点的风险，从而在过滤条件越来越严格时导致召回率崩溃。ACORN-1 避免了这一点：当某个节点不满足过滤条件时，它的邻居仍会被加入探索队列。这样遍历就可以绕过被过滤掉的节点，并维持图的连通性。当通过过滤条件的文档少于总文档数的 60% 时，会自动启用 ACORN-1 探索。
 
-**自动暴力扫描回退：** 当启用预过滤时，Manticore会估算是否比遍历HNSW图更便宜地对过滤后的子集执行暴力距离扫描。估算会比较HNSW预期访问的节点数与通过过滤的文档数。如果过滤后的集合足够小，直接扫描会更快，Manticore会自动切换到暴力扫描，完全跳过HNSW。这确保了即使在极端选择性下也能保证正确性和良好性能。
+**自动暴力回退：** 当启用预过滤时，Manticore 会估算在过滤后的子集上执行暴力距离扫描是否比遍历 HNSW 图更便宜。该估算会比较 HNSW 预计访问的节点数与通过过滤的文档数。如果过滤后的集合足够小，直接扫描更快，Manticore 会自动切换到暴力方式，完全跳过 HNSW。这样即使在极高选择性条件下，也能保证正确性和良好性能。
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -817,7 +833,7 @@ AND price < 100;
 ```
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 
 <!-- request JSON -->
 
@@ -854,17 +870,17 @@ POST /search
 
 ### 提前终止
 
-默认情况下，Manticore在HNSW图遍历期间使用自适应提前终止算法。它不会始终探索由`ef`定义的完整候选集，而是监控新候选对结果集的改进速度，并在该速度持续低于阈值时提前停止。这减少了距离计算的数量，而不会显著影响结果质量。
+默认情况下，Manticore 在 HNSW 图遍历期间使用自适应提前终止算法。它不会始终探索由 `ef` 定义的完整候选集，而是监控新候选项改进结果集的速率，并在该速率持续低于阈值时提前停止。这样可以减少距离计算次数，同时不会显著影响结果质量。
 
-默认启用提前终止，并且当`k`小于或等于10时会自动禁用，因为在这种小结果集上算法的开销不值得。性能收益随着`k`的增大而增加——结果集越大，通过提前终止节省的距离计算越多。
+提前终止默认启用，并且当 `k` 为 10 或更少时会自动禁用，因为对于这么小的结果集，该算法的开销不值得。性能收益会随着 `k` 增大而提升 - 结果集越大，通过提前停止就能节省越多距离计算。
 
-请注意，过采样会乘以HNSW遍历期间使用的有效`k`，因此提前终止也能从过采样中受益：更高的有效`k`意味着更多可能跳过的候选。
+请注意，过采样会乘大 HNSW 遍历期间使用的有效 `k`，因此提前终止也会从过采样中受益：更高的有效 `k` 意味着可能跳过更多候选项。
 
 <!-- example knn_early_termination -->
-要显式控制提前终止，请使用`early_termination`选项：
+若要显式控制提前终止，请使用 `early_termination` 选项：
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -877,7 +893,7 @@ SELECT id, knn_dist() FROM test WHERE knn ( image_vector, (0.286569,-0.031816,0.
 ```
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 
 <!-- request JSON -->
 
@@ -897,8 +913,8 @@ POST /search
 
 <!-- end -->
 
-何时禁用提前终止：
-* 当结果集的精度至关重要，且您无法承受HNSW本身之外的任何近似。
-* 当使用较低的`k`值（约30或更少）时，提前终止提供的性能收益较小，但可能会降低精度。
+何时应禁用提前终止：
+* 当结果集精度至关重要，且你无法接受超出 HNSW 已提供范围的任何近似时。
+* 当使用较低的 `k` 值（大约 30 或更少）时，此时提前终止带来的性能收益很小，但可能降低精度。
 
 <!-- proofread -->

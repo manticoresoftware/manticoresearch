@@ -84,6 +84,10 @@ jobs:
               "test/clt-tests/sharding/functional",
               "test/clt-tests/sharding/replication",
               "test/clt-tests/sharding/syntax",
+              "test/clt-tests/sharding/rollback",
+              "test/clt-tests/sharding/regression",
+              "test/clt-tests/sharding/table",
+              "test/clt-tests/sharding/drop",
               "test/clt-tests/test-configuration",
               "test/clt-tests/vector-knn",
           ]
@@ -139,6 +143,22 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
     steps:
+      # Reuse the embedding-model cache from a previous run if one exists. It is bind-mounted
+      # at /var/lib/manticore/.cache, where Manticore caches downloaded HuggingFace models.
+      # After the tests, whatever the chunk downloaded is saved for the next run.
+      # NOTE: this makes .cache a mountpoint, so tests must never `rm -rf /var/lib/manticore`
+      # itself — wipe its contents instead (`rm -rf /var/lib/manticore/*` leaves .cache alone).
+      - id: model_cache
+        name: Restore model cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/clt-model-cache
+          key: clt-models-v1-chunk-${{ matrix.chunk.id }}
+
+      - name: Ensure model cache dir
+        shell: bash
+        run: mkdir -p "${{ runner.temp }}/clt-model-cache" && chmod 777 "${{ runner.temp }}/clt-model-cache"
+
       - uses: manticoresoftware/clt@0.7.8
         with:
           artifact: ${{ inputs.artifact_name }}
@@ -147,5 +167,20 @@ jobs:
           ref: ${{ inputs.ref }}
           test_prefix: ${{ matrix.chunk.test_prefix }}
           comment_mode: failures
-          run_args: "-e OPENAI_API_KEY -e VOYAGE_API_KEY -e JINA_API_KEY"
+          run_args: "-e OPENAI_API_KEY -e VOYAGE_API_KEY -e JINA_API_KEY -v ${{ runner.temp }}/clt-model-cache:/var/lib/manticore/.cache"
           ui_host: "https://clt.manticoresearch.com"
+
+      # Containers write model blobs as root with mode 600; make them readable so the
+      # runner user can pack them into the cache.
+      - name: Fix model cache permissions
+        if: ${{ always() && steps.model_cache.outputs.cache-hit != 'true' }}
+        shell: bash
+        run: sudo chmod -R a+rX "${{ runner.temp }}/clt-model-cache" || true
+
+      - name: Save model cache
+        if: ${{ always() && steps.model_cache.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/clt-model-cache
+          key: clt-models-v1-chunk-${{ matrix.chunk.id }}

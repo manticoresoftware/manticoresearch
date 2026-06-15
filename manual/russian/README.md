@@ -39,6 +39,8 @@
     * [≫ Создание распределенной таблицы](Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md)
         * [• Создание локальной распределенной таблицы](Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)
         * [• Удаленные таблицы](Creating_a_table/Creating_a_distributed_table/Remote_tables.md)
+    * [⪢ Создание шардинговой таблицы](Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md)
+        * [• Шардирование таблиц: текущие ограничения](Creating_a_table/Creating_a_sharded_table/Table_sharding_current_limitations.md)
 * [• Список таблиц](Listing_tables.md)
 * [• Удаление таблицы](Deleting_a_table.md)
 * [• Очистка таблицы](Emptying_a_table.md)
@@ -193,7 +195,7 @@
     * [≫ UDF и плагины](Extensions/UDFs_and_Plugins/UDFs_and_Plugins.md)
         * [UDF](Extensions/UDFs_and_Plugins/UDF.md)
         * [Список плагинов](Extensions/UDFs_and_Plugins/Listing_plugins.md)
-        * [≫ UDF]
+        * [≫ UDF](Extensions/UDFs_and_Plugins/UDF.md)
             * [Создание функции](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md)
             * [Удаление функции](Extensions/UDFs_and_Plugins/UDF/Deleting_a_function.md)
         * [≫ Плагины]

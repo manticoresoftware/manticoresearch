@@ -337,6 +337,7 @@ public:
 	int						m_iIntParam = -1;
 
 	bool					m_bJson = false;
+	bool					m_bShardPhysicalUpdate = false;
 	CSphString				m_sEndpoint;
 	CSphString				m_sRawQuery;
 	CSphString				m_sFullUrl;
@@ -344,6 +345,7 @@ public:
 	CSphVector<CSphString>	m_dStringSubkeys;
 	CSphVector<int64_t>		m_dIntSubkeys;
 	bool					m_bForce = false;
+	bool					m_bDescTopo = false;
 	bool					m_bFormatOutWordsFile = false;
 
 	std::unique_ptr<DebugCmd::DebugCommand_t> m_pDebugCmd;

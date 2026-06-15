@@ -6,7 +6,7 @@ run-name: 🔬 Test ${{ github.sha }}
 on:
   push:
     branches:
-      - master
+      - main
       - manticore-*
     paths-ignore:
       - 'manual/**'
@@ -15,7 +15,7 @@ on:
       - 'cmake/GetGALERA.cmake'
       - 'galera_packaging/**'
   pull_request:
-    branches: [ master, update-buddy-version ]
+    branches: [ main, update-buddy-version ]
     paths-ignore:
       - 'manual/**'
       - '!manual/References.md'
@@ -24,7 +24,7 @@ on:
       - 'galera_packaging/**'
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
-# cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
+# cancels the previous workflow run when a new one appears in the same branch (e.g. main or a PR's branch)
 concurrency:
   group: test_${{ github.ref }}
   cancel-in-progress: true
@@ -142,7 +142,7 @@ jobs:
           BRANCH_EXISTS: ${{ steps.check_branch.outputs.branch_exists }}
           BRANCH_NAME: ${{ steps.check_branch.outputs.branch_name }}
         run: |
-          if [[ "$REF_NAME" != "master" && "$BRANCH_EXISTS" == "true" ]]; then
+          if [[ "$REF_NAME" != "main" && "$BRANCH_EXISTS" == "true" ]]; then
             echo "columnar_locator=GIT_REPOSITORY https://github.com/manticoresoftware/columnar.git GIT_TAG $BRANCH_NAME" >> $GITHUB_OUTPUT
           else
             echo "columnar_locator=" >> $GITHUB_OUTPUT
@@ -354,7 +354,7 @@ jobs:
       build_artifact_name: debug_build
       artifact_name: debug_test_results
       results_name: "Linux debug test results"
-      timeout: 15
+      timeout: 25
 
   build_linux_release:
     if: needs.meta.outputs.run_builds == 'true'

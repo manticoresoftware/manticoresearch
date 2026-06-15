@@ -2769,8 +2769,8 @@ bool sphDumpGdb (int iFD, const char* sName, const char* sPid )
 	if ( iRes==-1 || iRes==0 )
 		return false;
 
-	// master branch is mirrored on github, so could generate more info here.
-	if ( strncmp ( szGIT_BRANCH_ID, "git branch master", 17 ) == 0 ) {
+	// main branch is mirrored on github, so could generate more info here.
+	if ( strncmp ( szGIT_BRANCH_ID, "git branch main", 15 ) == 0 ) {
 		sphSafeInfo ( iFD, "You can obtain the sources of this version from https://github.com/manticoresoftware/manticoresearch/archive/%s.zip\n"
 			"and set up debug env with this shippet (select wget or curl version below):\n\n"
    "  wget https://codeload.github.com/manticoresoftware/manticoresearch/zip/%s -O manticore.zip\n"

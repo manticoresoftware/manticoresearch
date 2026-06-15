@@ -2553,11 +2553,13 @@ When creating a table with auto embeddings, specify these additional parameters:
 - `API_URL`: Optional. Custom API endpoint URL. If not specified, uses the default provider endpoint (e.g., `https://api.openai.com/v1/embeddings` for OpenAI).
 - `API_TIMEOUT`: Optional. HTTP timeout in seconds for API requests. Default is 10 seconds. Set to `'0'` to use the default timeout. Applies to both validation requests during table creation and embedding generation during INSERT operations.
 
+For remote models, `MODEL_NAME` can use either the legacy `provider/model` form or the explicit `provider:model` form. Use `provider:model` with `API_URL` when you want the part after `:` to be forwarded to a custom provider-compatible endpoint exactly as written.
+
 **Supported embedding models:**
 - **ONNX (recommended)**: Any Hugging Face model that ships an `.onnx` file — e.g. `Xenova/all-MiniLM-L6-v2`, `Xenova/all-MiniLM-L12-v2`, `Xenova/bge-small-en-v1.5`, `Xenova/multilingual-e5-small`. No API key needed. Runs on Manticore's fast ONNX Runtime backend (~14× faster than the SentenceTransformers path on the same hardware — see [14× faster embeddings](https://manticoresearch.com/blog/onnx-embeddings-speedup/)). Both [Xenova](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) and [onnx-models](https://huggingface.co/onnx-models/models?pipeline_tag=feature-extraction) publish a lot of ONNX-converted models; for embeddings, look for ones tagged with the **feature-extraction** task.
 - **Sentence Transformers**: Any [suitable BERT-based Hugging Face model](https://huggingface.co/sentence-transformers/models) (e.g., `sentence-transformers/all-MiniLM-L6-v2`) — no API key needed. Still supported; use this if the model you want isn't published as ONNX.
 - **Qwen local embeddings**: Qwen embedding models such as `Qwen/Qwen3-Embedding-0.6B` — no API key needed. Manticore downloads the model when you create the table.
-- **OpenAI, Voyage, Jina**: Remote embedding models (e.g., `openai/text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v2-base-en`) - require `API_KEY='<API_KEY>'` parameter. Optionally specify `API_URL='<CUSTOM_URL>'` to use a custom API endpoint, and `API_TIMEOUT='<SECONDS>'` to configure HTTP timeout (default is 10 seconds).
+- **OpenAI, Voyage, Jina**: Remote embedding models (e.g., `openai/text-embedding-ada-002`, `openai:text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v2-base-en`) - require `API_KEY='***'` parameter. Optionally specify `API_URL='<CUSTOM_URL>'` to use a custom API endpoint, and `API_TIMEOUT='<SECONDS>'` to configure HTTP timeout (default is 10 seconds).
 
 <!-- intro -->
 ##### SQL:
@@ -2602,15 +2604,25 @@ CREATE TABLE products_openai (
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='<OPENAI_API_KEY>'
 );
 ```
-
 Using OpenAI with custom API URL and timeout (optional)
 ```sql
 CREATE TABLE products_openai_custom (
     title TEXT,
     content TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
-    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content'
-    API_KEY='<OPENAI_API_KEY>' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+    MODEL_NAME='openai:text-embedding-ada-002' FROM='title,content'
+    API_KEY='***' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+);
+```
+
+Using OpenRouter with a provider-qualified model ID
+```sql
+CREATE TABLE products_openrouter (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='openai:openai/text-embedding-ada-002' FROM='title,content'
+    API_KEY='***' API_URL='https://openrouter.ai/api/v1/embeddings' API_TIMEOUT='30'
 );
 ```
 

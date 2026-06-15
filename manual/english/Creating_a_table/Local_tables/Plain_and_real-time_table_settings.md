@@ -508,6 +508,8 @@ knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2",
 - `cache_path`: Optional path for caching downloaded models (for sentence-transformers models).
 - `use_gpu`: Optional boolean to enable GPU acceleration if available.
 
+For custom remote endpoints, you can use `provider:model` syntax in `model_name`. In that form, the part before `:` selects the request format, while the part after `:` is sent to the remote endpoint unchanged.
+
 **Important:** You cannot specify both `dims` and `model_name` in the same configuration - they are mutually exclusive. Use `dims` for manual vector insertion, or `model_name` for auto-embeddings. Use `dims` for manual vector insertion, or `model_name` for auto-embeddings.
 
 For more details on KNN vector search and auto-embeddings, see the [KNN documentation](../../Searching/KNN.md).

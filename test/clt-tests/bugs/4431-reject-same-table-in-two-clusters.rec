@@ -1,0 +1,52 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}; stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore-${INSTANCE}/searchd.log; fi
+––– output –––
+Buddy started!
+––– input –––
+export INSTANCE=2
+––– output –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}; stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore-${INSTANCE}/searchd.log; fi
+––– output –––
+Buddy started!
+––– input –––
+export INSTANCE=3
+––– output –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}; stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore-${INSTANCE}/searchd.log; fi
+––– output –––
+Buddy started!
+––– input –––
+mkdir -p /var/log/manticore-1/c1_4431 /var/log/manticore-2/c1_4431 /var/log/manticore-2/c2_4431 /var/log/manticore-3/c2_4431
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE CLUSTER c1_4431 'c1_4431' AS path;" && mysql -h0 -P1306 -e "CREATE TABLE t_4431_same(id bigint, marker string);" && mysql -h0 -P1306 -e "INSERT INTO t_4431_same VALUES(1,'c1');" && mysql -h0 -P1306 -e "ALTER CLUSTER c1_4431 ADD t_4431_same;" && sleep 2
+––– output –––
+––– input –––
+mysql -h0 -P3306 -e "CREATE CLUSTER c2_4431 'c2_4431' AS path;" && mysql -h0 -P3306 -e "CREATE TABLE t_4431_same(id bigint, marker string);" && mysql -h0 -P3306 -e "INSERT INTO t_4431_same VALUES(2,'c2');" && mysql -h0 -P3306 -e "ALTER CLUSTER c2_4431 ADD t_4431_same;" && sleep 2
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "JOIN CLUSTER c1_4431 AT '127.0.0.1:1312' 'c1_4431' AS path;"
+––– output –––
+––– input –––
+bash -c 'end=$((SECONDS+90)); while [ $SECONDS -lt $end ]; do mysql -h0 -P2306 -N -B -e "SHOW STATUS LIKE '\''cluster_c1_4431_node_state'\''" 2>/dev/null | grep -qw synced && { echo "NODE2_C1_SYNCED=yes"; exit 0; }; sleep 1; done; echo "NODE2_C1_SYNCED=no"; exit 0'
+––– output –––
+NODE2_C1_SYNCED=yes
+––– input –––
+bash -c 'end=$((SECONDS+30)); while [ $SECONDS -lt $end ]; do mysql -h0 -P2306 -e "SELECT COUNT(*) FROM t_4431_same WHERE id=1;" 2>/tmp/node2_t_4431.err | grep -E "^[|][[:space:]]+1[[:space:]]+[|]$" >/dev/null && { echo "NODE2_C1_TABLE=ok"; exit 0; }; sleep 1; done; echo "NODE2_C1_TABLE=failed"; cat /tmp/node2_t_4431.err; mysql -h0 -P2306 -e "SELECT * FROM t_4431_same;" 2>&1 || true; mysql -h0 -P2306 -e "SHOW TABLES;" 2>&1 || true'
+––– output –––
+NODE2_C1_TABLE=ok
+––– input –––
+bash -c 'if mysql -h0 -P2306 -e "JOIN CLUSTER c2_4431 AT '\''127.0.0.1:3312'\'' '\''c2_4431'\'' AS path;" >/tmp/join_c2_4431_collision.out 2>&1; then echo "JOIN_C2_COLLISION=unexpected_success"; cat /tmp/join_c2_4431_collision.out; else grep -F "table '\''t_4431_same'\'' is already a part of cluster '\''c1_4431'\''" /tmp/join_c2_4431_collision.out >/dev/null && echo "JOIN_C2_COLLISION=rejected" || { echo "JOIN_C2_COLLISION=unexpected_error"; cat /tmp/join_c2_4431_collision.out; }; fi'
+––– output –––
+JOIN_C2_COLLISION=rejected
+––– input –––
+bash -c 'mysql -h0 -P2306 -e "SELECT COUNT(*) FROM t_4431_same WHERE id=2;" 2>/tmp/node2_t_4431_after.err | grep -E "^[|][[:space:]]+0[[:space:]]+[|]$" >/dev/null && echo "NODE2_C2_ROW_ABSENT=ok" || { echo "NODE2_C2_ROW_ABSENT=failed"; cat /tmp/node2_t_4431_after.err; mysql -h0 -P2306 -e "SELECT * FROM t_4431_same;" 2>&1 || true; mysql -h0 -P2306 -e "SHOW TABLES;" 2>&1 || true; }'
+––– output –––
+NODE2_C2_ROW_ABSENT=ok
+––– input –––
+export INSTANCE=3; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null 2>&1 || true; export INSTANCE=2; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null 2>&1 || true; export INSTANCE=1; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null 2>&1 || true
+––– output –––

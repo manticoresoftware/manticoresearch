@@ -18,8 +18,7 @@
 #include "searchdsql.h"
 #include <optional>
 
-// return path to given cluster, or empty and error
-std::optional<CSphString> GetClusterPath ( const CSphString& sCluster );
+bool CanReplaceIndex ( const CSphString & sCluster, const CSphString & sIndex );
 
 class SstProgress_i;
 CSphRefcountedPtr<SstProgress_i> GetClusterProgress ( const CSphString & sCluster );
@@ -71,6 +70,7 @@ bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdat
 void ReplicateClustersStatus ( VectorLike & dStatus );
 
 // validate that SphinxQL statement could be run for this cluster:index
+bool ValidateClusterStatement ( const CSphString & sIndexName, const CSphString & sIndexCluster, const CSphString & sStmtCluster, bool bHTTP );
 bool ValidateClusterStatement ( const CSphString & sIndexName, const ServedDesc_t & tDesc, const CSphString & sStmtCluster, bool bHTTP );
 
 std::optional<CSphString> IsPartOfCluster ( const ServedDesc_t* pDesc );

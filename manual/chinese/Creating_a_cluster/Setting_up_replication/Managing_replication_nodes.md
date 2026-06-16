@@ -104,6 +104,13 @@ utils_api.sql("ALTER CLUSTER posts UPDATE nodes", Some(true)).await;
 
 <!-- end -->
 
+如果启用了[身份验证和授权](../../Security/Authentication_and_authorization.md)，`ALTER CLUSTER ... UPDATE nodes`、`ALTER CLUSTER ... ADD` 和 `ALTER CLUSTER ... DROP` 会使用已存储的集群用户。要更改已存储的集群用户，请为新用户授予 `replication` 权限并运行：
+
+```sql
+ALTER CLUSTER posts UPDATE user 'repl_user'
+```
+
+新的已存储用户必须在后续参与集群操作的节点上配置匹配的身份验证数据。如果已存储用户缺失、身份验证数据不同，或者失去了 `replication` 权限，这些操作都会失败。
 
 例如，当集群最初建立时，用于重新加入集群的节点列表是 `10.10.0.1:9312,10.10.1.1:9312`。此后，其他节点加入了集群，现在活动节点是 `10.10.0.1:9312,10.10.1.1:9312,10.15.0.1:9312,10.15.0.3:9312`。然而，用于重新加入集群的节点列表没有更新。
 

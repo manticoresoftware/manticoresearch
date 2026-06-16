@@ -11,6 +11,7 @@
 //
 
 #include "netreceive_api.h"
+#include "auth/auth.h"
 
 extern int g_iClientTimeoutS; // from searchd.cpp
 extern volatile bool g_bMaintenance;
@@ -52,9 +53,9 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	}
 	auto uHandshake = tIn.GetDword();
 	sphLogDebugv ( "conn %s(%d): got handshake, major v.%d", sClientIP, iCID, uHandshake );
-	if ( uHandshake!=SPHINX_CLIENT_VERSION && uHandshake!=0x01000000UL )
+	if ( uHandshake!=SPHINX_CLIENT_VERSION && uHandshake!=1 && uHandshake!=0x01000000UL )
 	{
-		sphLogDebugv ( "conn %s(%d): got handshake, major v.%d", sClientIP, iCID, uHandshake );
+		sphLogDebugv ( "conn %s(%d): got invalid handshake, major v.%d", sClientIP, iCID, uHandshake );
 		return;
 	}
 	// legacy client - sends us exactly 4 bytes of handshake, so we have to flush our handshake also before continue.
@@ -76,6 +77,8 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	// main loop for one or more commands (if persist)
 	do
 	{
+		int iPacketOff = tOut.GetSentCount();
+
 		if ( !tIn.HasBytes ())
 			tIn.DiscardProcessed ();
 
@@ -132,11 +135,22 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 		iPconnIdleS = 0;
 
-		auto eCommand = (SearchdCommand_e)  tIn.GetWord ();
+		auto eCommand = (SearchdCommand_e)tIn.GetWord ();
 		auto uVer = tIn.GetWord ();
 		auto iReplySize = tIn.GetInt ();
 		sphLogDebugv ( "read command %d, version %d, reply size %d", eCommand, uVer, iReplySize );
+		
+		CSphString sUser;
+		CSphString sError;
+		if ( !ApiDecrypt ( eCommand, uVer, tIn, iReplySize, sUser, sError ) )
+		{
+			SendErrorReply ( tOut, "%s", sError.cstr() );
+			tOut.Flush(); // no need to check return code since we anyway break
+			break;
+		}
 
+		// should set client user to pass it further into distributed index
+		session::SetUser ( sUser );
 
 		bool bCheckLen = ( eCommand!= SEARCHD_COMMAND_CLUSTER );
 		bool bBadCommand = ( eCommand>=SEARCHD_COMMAND_WRONG );
@@ -185,7 +199,7 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		{
 			sphWarning ( "%s", g_sMaxedOutMessage.first );
 			{
-				auto tHdr = APIHeader ( tOut, SEARCHD_RETRY );
+				auto tHdr = APIAnswer ( tOut, 0, SEARCHD_RETRY );
 				tOut.SendString ( g_sMaxedOutMessage );
 			}
 			tOut.Flush(); // no need to check return code since we anyway break
@@ -201,6 +215,14 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			tSess.SetPersistent ( bPersist );
 		}
 		ExecuteApiCommand ( eCommand, uVer, iReplySize, tIn, tOut );
+
+		if ( !ApiEncryptReply ( sUser, tOut, iPacketOff, sError ) )
+		{
+			tOut.Rewind ( 0 );
+			SendErrorReply ( tOut, "%s", sError.cstr() );
+			tOut.Flush(); // no need to check return code since we anyway break
+			break;
+		}
 
 		if ( !tOut.Flush () )
 			break;

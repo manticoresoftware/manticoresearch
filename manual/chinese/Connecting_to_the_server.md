@@ -7,6 +7,8 @@
   * 为 HTTP/HTTPS 连接开放端口 9308
   * 为 HTTP/HTTPS 以及来自其他 Manticore 节点和基于 Manticore 二进制 API 的客户端开放端口 9312
 
+如果已启用[认证和授权](Security/Authentication_and_authorization.md)，MySQL 客户端必须使用 Manticore 用户名和密码连接，而 HTTP/HTTPS 客户端必须使用 Basic 认证或 bearer token。用户名区分大小写且必须完全匹配。有关 bootstrap 以及 bearer token 的创建或轮换，请参见[认证和授权](Security/Authentication_and_authorization.md)。
+
 <!-- intro -->
 ##### 通过 MySQL 连接：
 
@@ -140,4 +142,3 @@ docker run --name manticore -d manticoresearch/manticore && docker exec -it mant
 ```
 <!-- end -->
 <!-- proofread -->
-

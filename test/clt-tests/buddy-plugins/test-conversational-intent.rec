@@ -55,11 +55,11 @@ Create CHAT model
 ––– input –––
 mysql -h0 -P9306 -e "CREATE CHAT MODEL test_assistant (model='openai:gpt-4o-mini');"
 ––– output –––
-+--------------------------------------+
-| uuid                                 |
-+--------------------------------------+
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
-+--------------------------------------+
++----------------+
+| name           |
++----------------+
+| test_assistant |
++----------------+
 ––– comment –––
 Test 1: Initial question about RAG (NEW_SEARCH intent)
 Expected: Search for RAG/AI-related documents, response contains RAG keywords

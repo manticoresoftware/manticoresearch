@@ -11,11 +11,12 @@
 //
 
 #include "searchdssl.h"
-#include <filesystem>
 #include <cstring>
 
 #ifdef _WIN32
 #include <aclapi.h>
+#else
+#include <sys/stat.h>
 #endif
 
 #include "auth_common.h"
@@ -736,8 +737,14 @@ bool CreateAuthFile ( const CSphString & sFile, CSphString & sError )
 
 bool CheckFileIsPrivate ( const CSphString & sFile, CSphString & sError )
 {
-	auto tPerms = std::filesystem::status ( sFile.cstr() ).permissions();
-	if ( ( tPerms & ( std::filesystem::perms::group_all | std::filesystem::perms::others_all ) )!=std::filesystem::perms::none )
+	struct stat tStat;
+	if ( ::stat ( sFile.cstr(), &tStat )!=0 )
+	{
+		sError.SetSprintf ( "failed to stat %s: %s", sFile.cstr(), strerrorm(errno) );
+		return false;
+	}
+
+	if ( tStat.st_mode & ( S_IRWXG | S_IRWXO ) )
 	{
 		sError.SetSprintf ( "file '%s' has permissions to all", sFile.cstr() );
 		return false;

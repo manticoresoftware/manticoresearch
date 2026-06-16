@@ -16,5 +16,5 @@
 
 enum class NODES_E : bool;
 
-bool SendClusterUpdateNodes ( const CSphString& sCluster, NODES_E eNodes, const VecTraits_T<CSphString>& dNodes );
-bool SendClusterExitUpdateNodes ( const CSphString& sCluster, const CSphString& sLeavingNode, int64_t iWaitTimeoutMs, const VecTraits_T<CSphString>& dNodes );
+bool SendClusterUpdateNodes ( const CSphString & sCluster, const CSphString & sUser, NODES_E eNodes, const VecTraits_T<CSphString> & dNodes );
+bool SendClusterExitUpdateNodes ( const CSphString & sCluster, const CSphString & sUser, const CSphString & sLeavingNode, int64_t iWaitTimeoutMs, const VecTraits_T<CSphString> & dNodes );

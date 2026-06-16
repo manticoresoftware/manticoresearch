@@ -103,7 +103,8 @@ table test_vec {
 
 | Тип модели | Пример | Требуется API-ключ | Примечания |
 |------------|---------|-----------------|-------|
-| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | Нет | Локальные модели на базе BERT, загружаются автоматически |
+| **ONNX (рекомендуется)** | `Xenova/all-MiniLM-L6-v2` | Нет | Локальные модели из любого репозитория Hugging Face, который содержит файл `.onnx`. Работают на быстром бэкенде Manticore ONNX Runtime. Список: [модели feature-extraction ONNX](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm). |
+| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | Нет | Локальные модели на основе BERT, загружаются автоматически. По-прежнему поддерживаются — если доступно, используйте ONNX выше. |
 | **Qwen** | `Qwen/Qwen3-Embedding-0.6B` | Нет | Локальные модели семейства Qwen |
 | **Llama** | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | Нет | Локальные модели семейства Llama |
 | **Mistral** | `Locutusque/TinyMistral-248M-v2` | Нет | Локальные модели семейства Mistral |
@@ -125,9 +126,19 @@ table test_vec {
 
 <!-- request SQL -->
 
-Использование sentence-transformers (API-ключ не нужен)
+Использование локальной [ONNX-модели](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) — рекомендуется (ключ API не нужен)
 ```sql
 CREATE TABLE products (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+Использование sentence-transformers (ключ API не нужен; работает через путь Candle — если доступно, используйте ONNX выше)
+```sql
+CREATE TABLE products_st (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
@@ -182,7 +193,7 @@ CREATE TABLE products_all (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM=''
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM=''
 );
 ```
 
@@ -197,7 +208,7 @@ table products {
     rt_field = title
     rt_field = description
     rt_attr_float_vector = embedding_vector
-    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":"title"}]}
 }
 ```
 
@@ -221,7 +232,7 @@ table products_all {
     rt_field = title
     rt_field = description
     rt_attr_float_vector = embedding_vector
-    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":""}]}
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":""}]}
 }
 ```
 
@@ -239,9 +250,9 @@ table products_all {
 данные для следующего примера:
 
 DROP TABLE IF EXISTS products;
-CREATE TABLE products(title text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title');
+CREATE TABLE products(title text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='Xenova/all-MiniLM-L6-v2' from='title');
 DROP TABLE IF EXISTS products_openai;
-CREATE TABLE products_openai(title text, description text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title,description');
+CREATE TABLE products_openai(title text, description text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='Xenova/all-MiniLM-L6-v2' from='title,description');
 -->
 
 <!-- example inserting_embeddings -->

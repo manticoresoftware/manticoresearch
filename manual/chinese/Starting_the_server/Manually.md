@@ -18,6 +18,8 @@ searchd [OPTIONS]
 * `--version`（简写为 `-v`）显示 Manticore Search 的版本信息。
 * `--quiet`（简写为 `-q`）抑制启动输出，仅显示错误（横幅和预加载消息）。
 * `--config <file>`（简写为 `-c <file>`）告诉 `searchd` 使用指定的文件作为其配置。
+* `--auth` 运行交互式 [身份验证引导](../Security/Authentication_and_authorization.md#Creating-the-first-administrator) 模式。请在启用身份验证后启动 `searchd` 之后使用它来创建第一个管理员。正在运行的守护进程必须使用相同的配置文件，`pid_file` 必须已配置且可读，身份验证存储必须不存在或为空。引导过程会拒绝非空的身份验证存储，将所有操作权限授予第一个管理员，并且不会返回 bearer token。如果管理员需要 bearer 访问，请在引导完成后使用 `TOKEN` 或 HTTP `POST /token`。
+* `--auth-non-interactive` 运行身份验证引导模式，管理员名称、密码和密码确认从 stdin 读取。它与 `--auth` 具有相同的守护进程、`pid_file`、空存储和不返回 token 的行为。
 * `--check` 检查配置文件，验证服务器是否可以使用它启动，然后退出。如果检查成功，它会打印 `OK` 并以代码 0 退出。如果检查失败，它会以代码 1 退出并打印与 `searchd` 在常规启动期间打印的相同错误。
 * `--stop` 用于异步停止 `searchd`，使用 Manticore 配置文件中指定的 PID 文件详细信息。因此，您可能还需要通过 `--config` 选项向 `searchd` 确认要使用的配置文件。示例：
 
@@ -117,7 +119,7 @@ searchd [OPTIONS]
   Copyright (c) 2001-2016, Andrew Aksyonoff
   Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
   Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
-  
+
   export MANTICORE_KNOWN_CREATE_SIZE=200
   export MANTICORE_START_KNOWN_CREATE_SIZE=4504
   export MANTICORE_KNOWN_EXPR_SIZE=16
@@ -177,11 +179,11 @@ Manticore 利用 [plugin_dir](../Server_settings/Common.md#plugin_dir) 来存储
 
 `searchd` 支持多个信号：
 
-* `SIGTERM` - 初始清理关闭。新查询将不会被处理，但已启动的查询不会被强制中断。  
-* `SIGHUP` - 启动表的旋转。根据 [seamless_rotate](../Server_settings/Searchd.md#seamless_rotate) 设置值，新查询可能会短暂卡住；客户端将收到临时错误。  
-* `SIGUSR1` - 强制重开搜索d日志和查询日志文件，允许日志文件旋转。  
+* `SIGTERM` - 初始清理关闭。新查询将不会被处理，但已启动的查询不会被强制中断。
+* `SIGHUP` - 启动表的旋转。根据 [seamless_rotate](../Server_settings/Searchd.md#seamless_rotate) 设置值，新查询可能会短暂卡住；客户端将收到临时错误。
+* `SIGUSR1` - 强制重开搜索d日志和查询日志文件，允许日志文件旋转。
 
-## 环境变量  
+## 环境变量
 
-* `MANTICORE_TRACK_DAEMON_SHUTDOWN=1` 启用详细日志，当搜索d关闭时会记录详细信息。这在某些关闭问题中非常有用，例如当Manticore长时间关闭或在关闭过程中冻结时。  
+* `MANTICORE_TRACK_DAEMON_SHUTDOWN=1` 启用详细日志，当搜索d关闭时会记录详细信息。这在某些关闭问题中非常有用，例如当Manticore长时间关闭或在关闭过程中冻结时。
 <!-- proofread -->

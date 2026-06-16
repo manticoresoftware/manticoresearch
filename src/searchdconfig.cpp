@@ -214,6 +214,8 @@ bool ClusterDesc_t::Parse ( const bson::Bson_c& tBson, const CSphString& sName, 
 
 	m_iClusterEpoch = Int ( tBson.ChildByName ( "cluster_epoch" ) );
 	m_sPath = String ( tBson.ChildByName ( "path" ) );
+	m_sUser = String ( tBson.ChildByName ( "user" ) );
+
 	return true;
 }
 
@@ -250,6 +252,7 @@ void ClusterDesc_t::Save ( JsonEscapedBuilder& tOut ) const
 	if ( m_iClusterEpoch > 0 )
 		tOut.NamedVal ( "cluster_epoch", m_iClusterEpoch );
 	tOut.NamedStringNonEmpty ( "path", m_sPath );
+	tOut.NamedStringNonEmpty ( "user", m_sUser );
 }
 
 //////////////////////////////////////////////////////////////////////////

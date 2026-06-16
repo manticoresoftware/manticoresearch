@@ -148,6 +148,7 @@
     * [• Сброс имен хостов](Securing_and_compacting_a_table/Flushing_hostnames.md)
 * [≫ Безопасность]
     * [• SSL](Security/SSL.md)
+    * [• Аутентификация и авторизация](Security/Authentication_and_authorization.md)
     * [• Только для чтения](Security/Read_only.md)
 * [≫ Логирование]
     * [• Логирование запросов](Logging/Query_logging.md)
@@ -213,4 +214,3 @@
 * [📖 Ссылки](References.md)
     * [• Предыдущие версии](References.md#Documentation-for-old-Manticore-versions)
 <!-- proofread -->
-

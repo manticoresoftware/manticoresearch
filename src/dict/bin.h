@@ -46,15 +46,15 @@ protected:
 	int m_iLeft = 0;
 	int m_iDone = 0;
 	ESphBinState m_eState { BIN_POS };
-	bool m_bWordDict;
+	DictFormat_e m_eDictFormat = DictFormat_e::CRC;
 	bool m_bError = false; // FIXME? sort of redundant, but states are a mess
 
 	AggregateHit_t m_tHit;				///< currently decoded hit
-	std::array<BYTE, MAX_KEYWORD_BYTES> m_sKeyword; ///< currently decoded hit keyword (in keywords dict mode)
+	CSphFixedVector<BYTE> m_dKeyword { 0 }; ///< currently decoded hit keyword (in keywords dict mode)
 
 #ifndef NDEBUG
 	SphWordID_t m_iLastWordID = 0;
-	std::array<BYTE, MAX_KEYWORD_BYTES> m_sLastKeyword;
+	CSphFixedVector<BYTE> m_dLastKeyword { 0 };
 #endif
 
 	int m_iFile = -1;				   ///< my file
@@ -65,9 +65,10 @@ public:
 	int m_iFileLeft = 0;		///< how much data is still unread from the file
 
 public:
-	explicit CSphBin ( ESphHitless eMode = SPH_HITLESS_NONE, bool bWordDict = false );
+	explicit CSphBin ( ESphHitless eMode = SPH_HITLESS_NONE, DictFormat_e eDictFormat = DictFormat_e::CRC );
 
 	static int CalcBinSize ( int iMemoryLimit, int iBlocks, const char* sPhase );
+	bool IsWordDict() const { return m_eDictFormat!=DictFormat_e::CRC; }
 	void Init ( int iFD, SphOffset_t* pSharedOffset, const int iBinSize );
 
 	SphWordID_t ReadVLB();

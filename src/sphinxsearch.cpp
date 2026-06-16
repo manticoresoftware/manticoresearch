@@ -682,7 +682,7 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup,
 
 	DictRefPtr_c pZonesDict;
 	// workaround for a particular case with following conditions
-	if ( !m_pIndex->GetDictionary()->GetSettings().m_bWordDict && m_dZones.GetLength() )
+	if ( !m_pIndex->GetDictionary()->GetSettings().IsWordDict() && m_dZones.GetLength() )
 		pZonesDict = m_pIndex->GetDictionary()->Clone();
 
 	ARRAY_FOREACH ( i, m_dZones )

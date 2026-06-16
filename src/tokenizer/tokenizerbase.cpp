@@ -18,9 +18,16 @@
 #include "exceptions_trie.h"
 #include "fileio.h"
 
-CSphTokenizerBase::CSphTokenizerBase()
+CSphTokenizerBase::CSphTokenizerBase ( int iTokenBytes )
+	: m_dAccum ( Max ( iTokenBytes, SPH_LEGACY_TOKEN_BYTES ) + 1 + SPH_MAX_UTF8_BYTES )
+	, m_dAccumBlend ( Max ( iTokenBytes, SPH_LEGACY_TOKEN_BYTES ) + 1 + SPH_MAX_UTF8_BYTES )
 {
-	m_pAccum = m_sAccum;
+	m_iTokenBytes = Max ( iTokenBytes, SPH_LEGACY_TOKEN_BYTES );
+	m_iTokenCodepoints = m_iTokenBytes>SPH_LEGACY_TOKEN_BYTES ? m_iTokenBytes : SPH_MAX_WORD_LEN;
+	m_bSkipOverLimit = m_iTokenBytes>SPH_LEGACY_TOKEN_BYTES;
+	m_pAccum = Accum();
+	Accum()[0] = '\0';
+	AccumBlend()[0] = '\0';
 }
 
 CSphTokenizerBase::~CSphTokenizerBase()
@@ -194,8 +201,7 @@ void CSphTokenizerBase::SetBufferPtr ( const char* sNewPtr )
 {
 	assert ( (const BYTE*)sNewPtr >= m_pBuffer && (const BYTE*)sNewPtr <= m_pBufferMax );
 	m_pCur = Min ( m_pBufferMax, Max ( m_pBuffer, (const BYTE*)sNewPtr ) );
-	m_iAccum = 0;
-	m_pAccum = m_sAccum;
+	ResetAccum();
 	m_pTokenStart = m_pTokenEnd = nullptr;
 	m_pBlendStart = m_pBlendEnd = nullptr;
 	m_bBlended = false;
@@ -203,6 +209,39 @@ void CSphTokenizerBase::SetBufferPtr ( const char* sNewPtr )
 	m_bBlendAdd = false;
 	m_uBlendVariantsPending = 0;
 	m_bBlendedHead = false;
+	m_bAccumOverLimit = false;
+	m_bLastTokenOverLimit = false;
+}
+
+
+bool CSphTokenizerBase::ConsumeLastTokenOverLimit() noexcept
+{
+	bool bRes = m_bLastTokenOverLimit;
+	m_bLastTokenOverLimit = false;
+	if ( bRes )
+	{
+		++m_iOversizedTokenCount;
+		m_bBlended = false;
+		m_bNonBlended = true;
+		m_pBlendStart = nullptr;
+		m_bBlendAdd = false;
+		m_uBlendVariantsPending = 0;
+	}
+
+	return bRes;
+}
+
+void WarnAppendSkipped ( CSphString & sWarning, int iSkipped )
+{
+	if ( iSkipped<=0 )
+		return;
+
+	StringBuilder_c sBuf;
+	if ( !sWarning.IsEmpty() )
+		sBuf << sWarning << "; ";
+
+	sBuf << "dict=keywords_v2: skipped " << iSkipped << ( iSkipped==1 ? " token" : " tokens" ) << " over " << SPH_V2_MAX_TOKEN_BYTES << " bytes";
+	sBuf.MoveTo ( sWarning );
 }
 
 /// adjusts blending magic when we're about to return a token (any token)
@@ -328,7 +367,7 @@ int CSphTokenizerBase::CodepointArbitrationI ( int iCode )
 		case 3:
 			// preceded by a known 3-byte token (MRS, DRS)
 			// example: Survived by Mrs. Doe ...
-			if ( ( m_sAccum[0] == 'm' || m_sAccum[0] == 'd' ) && m_sAccum[1] == 'r' && m_sAccum[2] == 's' )
+			if ( ( Accum()[0] == 'm' || Accum()[0] == 'd' ) && Accum()[1] == 'r' && Accum()[2] == 's' )
 				bMiddleName = true;
 			break;
 		}
@@ -376,7 +415,7 @@ int CSphTokenizerBase::CodepointArbitrationQ ( int iCode, bool bWasEscaped, BYTE
 	// escaped specials are not special
 	// dash and dollar inside the word are not special (however, single opening modifier is not a word!)
 	// non-modifier specials within phrase are not special
-	bool bDashInside = ( m_iAccum && iSymbol == '-' && !( m_iAccum == 1 && sphIsModifier ( m_sAccum[0] ) ) );
+	bool bDashInside = ( m_iAccum && iSymbol == '-' && !( m_iAccum == 1 && sphIsModifier ( Accum()[0] ) ) );
 	if ( iCode & FLAG_CODEPOINT_SPECIAL )
 		if ( bWasEscaped
 				|| bDashInside

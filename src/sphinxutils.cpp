@@ -361,8 +361,95 @@ static bool sphWildcardMatchRec ( const T1 * sString, const T2 * sPattern )
 		|| ( p[0]=='%' && p[1]=='\0' );
 }
 
-template < typename T1, typename T2 >
-static bool sphWildcardMatchDP ( const T1 * sString, const T2 * sPattern )
+WildcardBuf_t::WildcardBuf_t ( WildcardBufMode_e eMode )
+	: m_eMode ( eMode )
+{}
+
+
+static const int * DecodeWildcardUtf8 ( const char * sText, int * pStatic, CSphVector<int> & dDynamic, WildcardBufMode_e eMode, int * pLen=nullptr )
+{
+	if ( pLen )
+		*pLen = 0;
+
+	if ( !sphIsUTF8 ( sText ) )
+		return nullptr;
+
+	int iLen = 0;
+	if ( eMode==WildcardBufMode_e::Legacy )
+	{
+		iLen = sphUTF8ToWideChar ( sText, pStatic, SPH_MAX_WORD_LEN );
+		if ( pLen )
+			*pLen = iLen;
+		return iLen ? pStatic : nullptr;
+	}
+
+	const int iBytes = (int)strlen ( sText );
+	if ( iBytes<=SPH_MAX_WORD_LEN )
+	{
+		iLen = sphUTF8ToWideChar ( sText, pStatic, SPH_MAX_WORD_LEN );
+		if ( pLen )
+			*pLen = iLen;
+		return iLen ? pStatic : nullptr;
+	}
+
+	dDynamic.Resize ( iBytes+1 );
+	iLen = sphUTF8ToWideChar ( sText, dDynamic.Begin(), iBytes );
+	if ( pLen )
+		*pLen = iLen;
+	return iLen ? dDynamic.Begin() : nullptr;
+}
+
+
+const int * WildcardBuf_t::DecodePattern ( const char * sPattern )
+{
+	return DecodeWildcardUtf8 ( sPattern, m_dPattern, m_dPatternExt, m_eMode );
+}
+
+
+struct WildcardDpBufFixed_t
+{
+	int & Get ( int iBuf, int iPos )
+	{
+		return m_dTmp[iBuf][iPos];
+	}
+
+private:
+	int m_dTmp[2][MAX_KEYWORD_BYTES+1];
+};
+
+
+struct WildcardDpBufDynamic_t
+{
+	explicit WildcardDpBufDynamic_t ( CSphVector<int> & dTmp, int iBufCount, int iBufLen )
+		: m_dTmp ( dTmp )
+		, m_iBufLen ( iBufLen )
+	{
+		m_dTmp.Resize ( iBufCount*iBufLen );
+	}
+
+	int & Get ( int iBuf, int iPos )
+	{
+		return m_dTmp[iBuf*m_iBufLen+iPos];
+	}
+
+private:
+	CSphVector<int> & m_dTmp;
+	const int m_iBufLen = 0;
+};
+
+template < typename T >
+static int sphWildcardStrLen ( const T * sString )
+{
+	const T * s = sString;
+	while ( *s )
+		++s;
+
+	return int ( s-sString );
+}
+
+
+template < typename T1, typename T2, typename DPBUF >
+static bool sphWildcardMatchDPImpl ( const T1 * sString, const T2 * sPattern, DPBUF & tTmp, int iBufLenMax )
 {
 	assert ( sString && sPattern && *sString && *sPattern );
 
@@ -372,12 +459,11 @@ static bool sphWildcardMatchDP ( const T1 * sString, const T2 * sPattern )
 	int iEsc = 0;
 
 	const int iBufCount = 2;
-	const int iBufLenMax = SPH_MAX_WORD_LEN*3+4+1;
-	int dTmp [iBufCount][iBufLenMax];
-	dTmp[0][0] = 1;
-	dTmp[1][0] = 0;
+
+	tTmp.Get ( 0, 0 ) = 1;
+	tTmp.Get ( 1, 0 ) = 0;
 	for ( int i=0; i<iBufLenMax; i++ )
-		dTmp[0][i] = 1;
+		tTmp.Get ( 0, i ) = 1;
 
 	while ( *p )
 	{
@@ -398,31 +484,31 @@ static bool sphWildcardMatchDP ( const T1 * sString, const T2 * sPattern )
 		// check the 1st wildcard
 		if ( !bEsc && ( *p=='*' || *p=='%' ) )
 		{
-			dTmp[iCur][0] = dTmp[iPrev][0];
+			tTmp.Get ( iCur, 0 ) = tTmp.Get ( iPrev, 0 );
 
 		} else
 		{
-			dTmp[iCur][0] = 0;
+			tTmp.Get ( iCur, 0 ) = 0;
 		}
 
 		while ( *s )
 		{
 			const int j = int (s - sString) + 1;
-			if ( j >= iBufLenMax )
+			if ( j>=iBufLenMax )
 				return false;
 
 			if ( !bEsc && *p=='*' )
 			{
-				dTmp[iCur][j] = dTmp[iPrev][j-1] || dTmp[iCur][j-1] || dTmp[iPrev][j];
+				tTmp.Get ( iCur, j ) = tTmp.Get ( iPrev, j-1 ) || tTmp.Get ( iCur, j-1 ) || tTmp.Get ( iPrev, j );
 			} else if ( !bEsc && *p=='%' )
 			{
-				dTmp[iCur][j] = dTmp[iPrev][j-1] || dTmp[iPrev][j];
+				tTmp.Get ( iCur, j ) = tTmp.Get ( iPrev, j-1 ) || tTmp.Get ( iPrev, j );
 			} else if ( *p==*s || ( !bEsc && *p=='?' ) )
 			{
-				dTmp[iCur][j] = dTmp[iPrev][j-1];
+				tTmp.Get ( iCur, j ) = tTmp.Get ( iPrev, j-1 );
 			} else
 			{
-				dTmp[iCur][j] = 0;
+				tTmp.Get ( iCur, j ) = 0;
 			}
 			s++;
 		}
@@ -430,12 +516,31 @@ static bool sphWildcardMatchDP ( const T1 * sString, const T2 * sPattern )
 		bEsc = false;
 	}
 
-	return ( dTmp[( p-sPattern-iEsc ) % iBufCount][s-sString]!=0 );
+	return ( tTmp.Get ( ( p-sPattern-iEsc ) % iBufCount, (int)( s-sString ) )!=0 );
 }
 
 
 template < typename T1, typename T2 >
-bool sphWildcardMatchSpec ( const T1 * sString, const T2 * sPattern )
+static bool sphWildcardMatchDPLegacy ( const T1 * sString, const T2 * sPattern )
+{
+	WildcardDpBufFixed_t tTmp;
+	return sphWildcardMatchDPImpl ( sString, sPattern, tTmp, MAX_KEYWORD_BYTES+1 );
+}
+
+
+template < typename T1, typename T2 >
+static bool sphWildcardMatchDPExtended ( const T1 * sString, const T2 * sPattern, WildcardBuf_t & tBuf, int iStringLen )
+{
+	assert ( iStringLen>0 );
+
+	const int iBufCount = 2;
+	WildcardDpBufDynamic_t tTmp ( tBuf.m_dDpExt, iBufCount, iStringLen+1 );
+	return sphWildcardMatchDPImpl ( sString, sPattern, tTmp, iStringLen+1 );
+}
+
+
+template < typename T1, typename T2 >
+bool sphWildcardMatchSpec ( const T1 * sString, const T2 * sPattern, WildcardBuf_t & tBuf, int iStringLen=0 )
 {
 	int iLen = 0;
 	int iStars = 0;
@@ -448,12 +553,18 @@ bool sphWildcardMatchSpec ( const T1 * sString, const T2 * sPattern )
 	}
 
 	if ( iStars>10 || ( iStars>5 && iLen>17 ) )
-		return sphWildcardMatchDP ( sString, sPattern );
+	{
+		if ( tBuf.IsExtended() )
+			return sphWildcardMatchDPExtended ( sString, sPattern, tBuf, iStringLen ? iStringLen : sphWildcardStrLen ( sString ) );
+
+		return sphWildcardMatchDPLegacy ( sString, sPattern );
+	}
+
 	return sphWildcardMatchRec ( sString, sPattern );
 }
 
 
-bool sphWildcardMatch ( const char * sString, const char * sPattern, const int * pPattern )
+bool sphWildcardMatch ( const char * sString, const char * sPattern, const int * pPattern, WildcardBuf_t * pExtBuf )
 {
 	if ( !sString || !sPattern || !*sString || !*sPattern )
 		return false;
@@ -461,20 +572,22 @@ bool sphWildcardMatch ( const char * sString, const char * sPattern, const int *
 	// there are basically 4 codepaths, because both string and pattern may or may not contain utf-8 chars
 	// pPattern and pString are pointers to unpacked utf-8, pPattern can be precalculated (default is NULL)
 
-	int dString [ SPH_MAX_WORD_LEN + 1 ];
-	const int * pString = ( sphIsUTF8 ( sString ) && sphUTF8ToWideChar ( sString, dString, SPH_MAX_WORD_LEN ) ) ? dString : nullptr;
+	WildcardBuf_t tIntBuf;
+	WildcardBuf_t & tBuf = pExtBuf ? *pExtBuf : tIntBuf;
+	int iStringLen = 0;
+	const int * pString = DecodeWildcardUtf8 ( sString, tBuf.m_dString, tBuf.m_dStringExt, tBuf.m_eMode, &iStringLen );
 
 	if ( !pString && !pPattern )
-		return sphWildcardMatchSpec ( sString, sPattern ); // ascii vs ascii
+		return sphWildcardMatchSpec ( sString, sPattern, tBuf ); // ascii vs ascii
 
 	if ( pString && !pPattern )
-		return sphWildcardMatchSpec ( pString, sPattern ); // utf-8 vs ascii
+		return sphWildcardMatchSpec ( pString, sPattern, tBuf, iStringLen ); // utf-8 vs ascii
 
 	if ( !pString && pPattern )
-		return sphWildcardMatchSpec ( sString, pPattern ); // ascii vs utf-8
+		return sphWildcardMatchSpec ( sString, pPattern, tBuf ); // ascii vs utf-8
 
 //	if ( pString && pPattern )
-	return sphWildcardMatchSpec ( pString, pPattern ); // utf-8 vs utf-8
+	return sphWildcardMatchSpec ( pString, pPattern, tBuf, iStringLen ); // utf-8 vs utf-8
 
 //	return false; // dead, but causes warn either by compiler, either by analysis. Leave as is.
 }

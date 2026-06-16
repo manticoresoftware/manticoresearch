@@ -494,6 +494,7 @@ public:
 	FullTextStackSize_c()
 	{
 		CSphDictSettings tDictSettings;
+		tDictSettings.SetDictFormat ( DictFormat_e::CRC );
 
 		auto pTok = Tokenizer::Detail::CreateUTF8Tokenizer();
 		CSphSchema tSrcSchema;
@@ -510,7 +511,7 @@ public:
 		tSchema.AddField ( "text" );
 		tSchema.AddAttr ( tCol, false );
 
-		m_pRtIndex = sphCreateIndexRT ( "testrt", "fake", tSchema, 32 * 1024 * 1024, false );
+		m_pRtIndex = sphCreateIndexRT ( "testrt", "fake", tSchema, 32 * 1024 * 1024 );
 
 		m_pRtIndex->SetTokenizer ( pTok->Clone ( SPH_CLONE_INDEX ) );
 		m_pRtIndex->SetDictionary ( pDict->Clone() );
@@ -689,4 +690,3 @@ void DetermineMatchStackSize(StringBuilder_c& sExport)
 #endif
 		(sExport);
 }
-

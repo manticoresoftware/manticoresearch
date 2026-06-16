@@ -26,6 +26,11 @@ int DoclistHintUnpack ( DWORD uDocs, BYTE uHint )
 		return (int)Min ( 4*(int64_t)uDocs+( int64_t(uDocs)*uHint/64 ), INT_MAX );
 }
 
+static int GetReaderSizeHint ( int64_t iSize )
+{
+	return ( iSize>0 && iSize<=INT_MAX ) ? (int)iSize : READ_NO_SIZE_HINT;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 DiskIndexQwordTraits_c::DiskIndexQwordTraits_c ( bool bUseMini, bool bExcluded )
@@ -119,6 +124,7 @@ struct MappedCheckpoint_fn : public ISphNoncopyable
 struct DiskExpandedEntry_t
 {
 	int		m_iNameOff;
+	int		m_iNameLen;
 	int		m_iDocs;
 	int		m_iHits;
 };
@@ -174,11 +180,11 @@ struct DictEntryDiskPayload_t : public DictTerm2Expanded_i
 
 			int iOff = m_dWordBuf.GetLength();
 			tExpand.m_iNameOff = iOff;
+			tExpand.m_iNameLen = iWordLen;
 			tExpand.m_iDocs = tWord.m_iDocs;
 			tExpand.m_iHits = tWord.m_iHits;
-			m_dWordBuf.Resize ( iOff + iWordLen + 1 );
-			memcpy ( m_dWordBuf.Begin() + iOff + 1, tWord.m_szKeyword, iWordLen );
-			m_dWordBuf[iOff] = (BYTE)iWordLen;
+			m_dWordBuf.Resize ( iOff + iWordLen );
+			memcpy ( m_dWordBuf.Begin() + iOff, tWord.m_szKeyword, iWordLen );
 
 		} else
 		{
@@ -210,7 +216,7 @@ struct DictEntryDiskPayload_t : public DictTerm2Expanded_i
 				if ( m_eHitless==SPH_HITLESS_SOME )
 					iDocs = ( tCur.m_iDocs & HITLESS_DOC_MASK );
 
-				tArgs.AddExpanded ( sBase + tCur.m_iNameOff + 1, sBase[tCur.m_iNameOff], iDocs, tCur.m_iHits );
+				tArgs.AddExpanded ( sBase + tCur.m_iNameOff, tCur.m_iNameLen, iDocs, tCur.m_iHits );
 
 				iTotalDocs += iDocs;
 				iTotalHits += tCur.m_iHits;
@@ -278,17 +284,18 @@ void CWordlist::Reset ()
 {
 	m_tBuf.Reset ();
 	m_dCheckpoints.Reset ( 0 );
-	m_pWords.Reset ( 0 );
+	m_dWords.Reset ( 0 );
 	SafeDeleteArray ( m_pInfixBlocksWords );
 	SafeDelete ( m_pCpReader );
 }
 
 
-bool CWordlist::Preread ( const CSphString & sName, bool bWordDict, int iSkiplistBlockSize, CSphString & sError )
+bool CWordlist::Preread ( const CSphString & sName, DictFormat_e eDictFormat, int iSkiplistBlockSize, CSphString & sError )
 {
 	assert ( m_iDictCheckpointsOffset>0 );
 
-	m_bWordDict = bWordDict;
+	m_eDictFormat = eDictFormat;
+	m_bWordDict = eDictFormat!=DictFormat_e::CRC;
 	m_iWordsEnd = m_iDictCheckpointsOffset; // set wordlist end
 	m_iSkiplistBlockSize = iSkiplistBlockSize;
 
@@ -298,7 +305,7 @@ bool CWordlist::Preread ( const CSphString & sName, bool bWordDict, int iSkiplis
 
 	////////////////////////////
 	// fast path for CRC checkpoints - just maps data and use inplace CP reader
-	if ( !bWordDict )
+	if ( !m_bWordDict )
 	{
 		if ( !m_tBuf.Setup ( sName, sError ) )
 			return false;
@@ -316,40 +323,63 @@ bool CWordlist::Preread ( const CSphString & sName, bool bWordDict, int iSkiplis
 
 	int64_t iFileSize = tReader.GetFilesize();
 
-	int iCheckpointOnlySize = (int)(iFileSize-m_iDictCheckpointsOffset);
+	int64_t iCheckpointOnlySize = iFileSize - m_iDictCheckpointsOffset;
 	if ( m_iInfixCodepointBytes && m_iInfixBlocksOffset )
-		iCheckpointOnlySize = (int)(m_iInfixBlocksOffset - g_sTagInfixBlocks.second - m_iDictCheckpointsOffset);
+		iCheckpointOnlySize = m_iInfixBlocksOffset - g_sTagInfixBlocks.second - m_iDictCheckpointsOffset;
 
-	if ( iFileSize-m_iDictCheckpointsOffset>=UINT_MAX )
+	if ( m_eDictFormat!=DictFormat_e::KEYWORDS_V2 && iFileSize-m_iDictCheckpointsOffset>=UINT_MAX )
 	{
 		sError.SetSprintf ( "dictionary meta overflow: meta size=" INT64_FMT ", total size=" INT64_FMT ", meta offset=" INT64_FMT,
 			iFileSize-m_iDictCheckpointsOffset, iFileSize, (int64_t)m_iDictCheckpointsOffset );
 		return false;
 	}
 
-	tReader.SeekTo ( m_iDictCheckpointsOffset, iCheckpointOnlySize );
+	tReader.SeekTo ( m_iDictCheckpointsOffset, GetReaderSizeHint ( iCheckpointOnlySize ) );
 
 	assert ( m_bWordDict );
-	int iArenaSize = iCheckpointOnlySize
-		- (sizeof(DWORD)+sizeof(SphOffset_t))*m_dCheckpoints.GetLength()
-		+ sizeof(BYTE)*m_dCheckpoints.GetLength();
-	assert ( iArenaSize>=0 );
-	m_pWords.Reset ( iArenaSize );
+	const bool bKeywordsV2 = m_eDictFormat==DictFormat_e::KEYWORDS_V2;
+	int64_t iArenaSize = 0;
+	if ( bKeywordsV2 )
+	{
+		iArenaSize = iCheckpointOnlySize - (int64_t)sizeof(SphOffset_t)*m_dCheckpoints.GetLength64();
+		assert ( iArenaSize>=0 );
+	} else
+	{
+		int iCheckpointOnlySizeLegacy = (int)iCheckpointOnlySize;
+		iArenaSize = iCheckpointOnlySizeLegacy
+			- (sizeof(DWORD)+sizeof(SphOffset_t))*m_dCheckpoints.GetLength()
+			+ sizeof(BYTE)*m_dCheckpoints.GetLength();
+		assert ( iArenaSize>=0 );
+	}
+	m_dWords.Reset ( iArenaSize );
 
-	BYTE * pWord = m_pWords.Begin();
+	int64_t iWordOffset = 0;
 	for ( auto & dCheckpoint : m_dCheckpoints )
 	{
-		dCheckpoint.m_szWord = (char *)pWord;
+		dCheckpoint.m_uWordID = iWordOffset;
 
-		const int iLen = tReader.GetDword();
+		const int iLen = bKeywordsV2 ? tReader.UnzipInt() : tReader.GetDword();
+		if ( bKeywordsV2 && ( iLen<=0 || iLen>GetKeywordMaxStoredBytes ( m_eDictFormat ) ) )
+		{
+			sError.SetSprintf ( "invalid keywords_v2 checkpoint keyword length %d", iLen );
+			return false;
+		}
+
 		assert ( iLen>0 );
-		assert ( iLen + 1 + ( pWord - m_pWords.Begin() )<=iArenaSize );
+
+		int64_t iNextWordOffset = iWordOffset + iLen + 1;
+		assert ( iNextWordOffset<=iArenaSize );
+
+		BYTE * pWord = m_dWords.Begin() + iWordOffset;
 		tReader.GetBytes ( pWord, iLen );
 		pWord[iLen] = '\0';
-		pWord += iLen+1;
+		iWordOffset = iNextWordOffset;
 
 		dCheckpoint.m_iWordlistOffset = tReader.GetOffset();
 	}
+
+	for ( auto & dCheckpoint : m_dCheckpoints )
+		dCheckpoint.m_szWord = (const char*)m_dWords.Begin()+dCheckpoint.m_uWordID;
 
 	////////////////////////
 	// preload infix blocks
@@ -359,22 +389,27 @@ bool CWordlist::Preread ( const CSphString & sName, bool bWordDict, int iSkiplis
 	{
 		// reading to vector as old version doesn't store total infix words length
 		CSphTightVector<BYTE> dInfixWords;
-		dInfixWords.Reserve ( (int)m_iInfixBlocksWordsSize );
+		dInfixWords.Reserve ( m_iInfixBlocksWordsSize );
 
-		tReader.SeekTo ( m_iInfixBlocksOffset, (int)(iFileSize-m_iInfixBlocksOffset) );
-		m_dInfixBlocks.Resize ( tReader.UnzipInt() );
+		tReader.SeekTo ( m_iInfixBlocksOffset, GetReaderSizeHint ( iFileSize-m_iInfixBlocksOffset ) );
+		m_dInfixBlocks.Resize ( m_eDictFormat==DictFormat_e::KEYWORDS_V2 ? (int64_t)tReader.UnzipOffset() : (int64_t)tReader.UnzipInt() );
 		for ( auto & dInfixBlock : m_dInfixBlocks )
 		{
 			int iBytes = tReader.UnzipInt();
 
-			int iOff = dInfixWords.GetLength();
-			dInfixBlock.m_iInfixOffset = (DWORD) iOff; /// FIXME! name convention of m_iInfixOffset
+			int64_t iOff = dInfixWords.GetLength64();
+			dInfixBlock.m_iInfixOffset = iOff; /// FIXME! name convention of m_iInfixOffset
 			dInfixWords.Resize ( iOff+iBytes+1 );
 
 			tReader.GetBytes ( dInfixWords.Begin()+iOff, iBytes );
 			dInfixWords[iOff+iBytes] = '\0';
 
-			dInfixBlock.m_iOffset = tReader.UnzipInt();
+			dInfixBlock.m_iOffset = m_eDictFormat==DictFormat_e::KEYWORDS_V2 ? (SphOffset_t)tReader.UnzipOffset() : (SphOffset_t)tReader.UnzipInt();
+			if ( m_eDictFormat==DictFormat_e::KEYWORDS_V2 && dInfixBlock.m_iOffset < (SphOffset_t)g_sTagInfixEntries.second )
+			{
+				sError.SetSprintf ( "invalid keywords_v2 infix block offset " INT64_FMT, (int64_t)dInfixBlock.m_iOffset );
+				return false;
+			}
 		}
 
 		// fix-up offset to pointer
@@ -520,21 +555,22 @@ void CWordlist::GetPrefixedWords ( const char * sSubstring, int iSubLen, const c
 
 	DictEntryDiskPayload_t tDict2Payload ( tArgs.m_bPayload, tArgs.m_eHitless );
 
-	int dWildcard [ SPH_MAX_WORD_LEN + 1 ];
-	int * pWildcard = ( sphIsUTF8 ( sWildcard ) && sphUTF8ToWideChar ( sWildcard, dWildcard, SPH_MAX_WORD_LEN ) ) ? dWildcard : NULL;
+	WildcardBuf_t tWildcardBuf ( m_eDictFormat==DictFormat_e::KEYWORDS_V2 ? WildcardBufMode_e::Extended : WildcardBufMode_e::Legacy );
+	const int * pWildcard = tWildcardBuf.DecodePattern ( sWildcard );
 
 	// assume dict=crc never has word with wordid=0, however just don't consider it and explicitly set nullptr.
 	const CSphWordlistCheckpoint * pCheckpoint = m_bWordDict ? FindCheckpointWrd ( sSubstring, iSubLen, true ) : nullptr;
 	const int iSkipMagic = ( BYTE(*sSubstring)<0x20 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
+	auto pDictReader = pCheckpoint ? CreateKeywordsBlockReader ( nullptr, m_iSkiplistBlockSize, m_eDictFormat ) : nullptr;
 	while ( pCheckpoint )
 	{
 		// decode wordlist chunk
-		KeywordsBlockReader_c tDictReader ( AcquireDict ( pCheckpoint ), m_iSkiplistBlockSize );
-		while ( tDictReader.UnpackWord() )
+		pDictReader->Reset ( AcquireDict ( pCheckpoint ) );
+		while ( pDictReader->UnpackWord() )
 		{
 			// block is sorted
 			// so once keywords are greater than the prefix, no more matches
-			int iCmp = sphDictCmp ( sSubstring, iSubLen, (const char *)tDictReader.m_szKeyword, tDictReader.GetWordLen() );
+			int iCmp = sphDictCmp ( sSubstring, iSubLen, pDictReader->GetWord(), pDictReader->GetWordLen() );
 			if ( iCmp<0 )
 				break;
 
@@ -542,8 +578,8 @@ void CWordlist::GetPrefixedWords ( const char * sSubstring, int iSubLen, const c
 				break;
 
 			// does it match the prefix *and* the entire wildcard?
-			if ( iCmp==0 && sphWildcardMatch ( (const char *)tDictReader.m_szKeyword + iSkipMagic, sWildcard, pWildcard ) )
-				tDict2Payload.Add ( tDictReader, tDictReader.GetWordLen() );
+			if ( iCmp==0 && sphWildcardMatch ( pDictReader->GetWord() + iSkipMagic, sWildcard, pWildcard, &tWildcardBuf ) )
+				tDict2Payload.Add ( *pDictReader, pDictReader->GetWordLen() );
 		}
 
 		if ( sphInterrupted () )
@@ -565,7 +601,7 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 {
 	// dict must be of keywords type, and fully cached
 	// mmap()ed in the worst case, should we ever banish it to disk again
-	if ( m_tBuf.IsEmpty() || !m_dCheckpoints.GetLength() )
+	if ( !m_bWordDict || m_tBuf.IsEmpty() || !m_dCheckpoints.GetLength() )
 		return;
 
 	assert ( !m_pCpReader );
@@ -576,31 +612,32 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 	// lookup key1
 	// OPTIMIZE? maybe lookup key2 and reduce checkpoint set size, if possible?
 	CSphVector<DWORD> dPoints;
-	if ( !sphLookupInfixCheckpoints ( sSubstring, iBytes1, m_tBuf.GetReadPtr(), m_dInfixBlocks, m_iInfixCodepointBytes, dPoints ) )
+	if ( !sphLookupInfixCheckpoints ( sSubstring, iBytes1, m_tBuf.GetReadPtr(), m_dInfixBlocks, m_iInfixCodepointBytes, dPoints, m_eDictFormat ) )
 		return;
 
 	DictEntryDiskPayload_t tDict2Payload ( tArgs.m_bPayload, tArgs.m_eHitless );
 	const int iSkipMagic = ( tArgs.m_bHasExactForms ? 1 : 0 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
 
-	int dWildcard [ SPH_MAX_WORD_LEN + 1 ];
-	int * pWildcard = ( sphIsUTF8 ( sWildcard ) && sphUTF8ToWideChar ( sWildcard, dWildcard, SPH_MAX_WORD_LEN ) ) ? dWildcard : NULL;
+	WildcardBuf_t tWildcardBuf ( m_eDictFormat==DictFormat_e::KEYWORDS_V2 ? WildcardBufMode_e::Extended : WildcardBufMode_e::Legacy );
+	const int * pWildcard = tWildcardBuf.DecodePattern ( sWildcard );
+	auto pDictReader = CreateKeywordsBlockReader ( nullptr, m_iSkiplistBlockSize, m_eDictFormat );
 
 	// walk those checkpoints, check all their words
 	ARRAY_FOREACH ( i, dPoints )
 	{
 		// OPTIMIZE? add a quicker path than a generic wildcard for "*infix*" case?
-		KeywordsBlockReader_c tDictReader ( m_tBuf.GetReadPtr() + m_dCheckpoints[dPoints[i]-1].m_iWordlistOffset, m_iSkiplistBlockSize );
-		while ( tDictReader.UnpackWord() )
+		pDictReader->Reset ( m_tBuf.GetReadPtr() + m_dCheckpoints[dPoints[i]-1].m_iWordlistOffset );
+		while ( pDictReader->UnpackWord() )
 		{
 			if ( sphInterrupted () )
 				break;
 
 			// stemmed terms should not match suffixes
-			if ( tArgs.m_bHasExactForms && *tDictReader.m_szKeyword!=MAGIC_WORD_HEAD_NONSTEMMED )
+			if ( tArgs.m_bHasExactForms && *pDictReader->GetWord()!=MAGIC_WORD_HEAD_NONSTEMMED )
 				continue;
 
-			if ( sphWildcardMatch ( (const char *)tDictReader.m_szKeyword+iSkipMagic, sWildcard, pWildcard ) )
-				tDict2Payload.Add ( tDictReader, tDictReader.GetWordLen() );
+			if ( sphWildcardMatch ( pDictReader->GetWord()+iSkipMagic, sWildcard, pWildcard, &tWildcardBuf ) )
+				tDict2Payload.Add ( *pDictReader, pDictReader->GetWordLen() );
 		}
 
 		if ( sphInterrupted () )
@@ -620,6 +657,9 @@ struct RegexMatch_t
 
 void CWordlist::ScanRegexWords ( const VecTraits_T<RegexTerm_t> & dTerms, const ISphWordlist::Args_t & tArgs, const VecExpandConv_t & dConverters ) const
 {
+	if ( !m_bWordDict || m_eDictFormat==DictFormat_e::KEYWORDS_V2 )
+		return;
+
 	// dict must be of keywords type, and fully cached
 	// mmap()ed in the worst case, should we ever banish it to disk again
 	if ( m_tBuf.IsEmpty() || !m_dCheckpoints.GetLength() )
@@ -640,29 +680,30 @@ void CWordlist::ScanRegexWords ( const VecTraits_T<RegexTerm_t> & dTerms, const 
 	}
 
 	const int iSkipMagic = ( tArgs.m_bHasExactForms ? 1 : 0 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
+	auto pDictReader = CreateKeywordsBlockReader ( nullptr, m_iSkiplistBlockSize, m_eDictFormat );
 
 	// walk those checkpoints, check all their words
 	ARRAY_FOREACH ( i, m_dCheckpoints )
 	{
 		const auto & tCP = m_dCheckpoints[i];
 
-		KeywordsBlockReader_c tDictReader ( m_tBuf.GetReadPtr() + tCP.m_iWordlistOffset, m_iSkiplistBlockSize );
-		while ( tDictReader.UnpackWord() )
+		pDictReader->Reset ( m_tBuf.GetReadPtr() + tCP.m_iWordlistOffset );
+		while ( pDictReader->UnpackWord() )
 		{
 			if ( sphInterrupted () )
 				break;
 
 			// stemmed terms should not match suffixes
-			if ( tArgs.m_bHasExactForms && *tDictReader.m_szKeyword!=MAGIC_WORD_HEAD_NONSTEMMED )
+			if ( tArgs.m_bHasExactForms && *pDictReader->GetWord()!=MAGIC_WORD_HEAD_NONSTEMMED )
 				continue;
 
-			int iLen = tDictReader.GetWordLen();
-			re2::StringPiece sDictToken ( (const char *)tDictReader.m_szKeyword+iSkipMagic, iLen );
+			int iLen = pDictReader->GetWordLen();
+			re2::StringPiece sDictToken ( pDictReader->GetWord()+iSkipMagic, iLen );
 
 			ARRAY_FOREACH ( i, dRegex )
 			{
 				if ( RE2::FullMatchN ( sDictToken, *dRegex[i].m_pRe, nullptr, 0 ) )
-					dRegex[i].m_pPayload->Add ( tDictReader, iLen );
+					dRegex[i].m_pPayload->Add ( *pDictReader, iLen );
 			}
 		}
 
@@ -677,21 +718,21 @@ void CWordlist::ScanRegexWords ( const VecTraits_T<RegexTerm_t> & dTerms, const 
 
 void CWordlist::SuffixGetChekpoints ( const SuggestResult_t & , const char * sSuffix, int iLen, CSphVector<DWORD> & dCheckpoints ) const
 {
-	sphLookupInfixCheckpoints ( sSuffix, iLen, m_tBuf.GetReadPtr(), m_dInfixBlocks, m_iInfixCodepointBytes, dCheckpoints );
+	sphLookupInfixCheckpoints ( sSuffix, iLen, m_tBuf.GetReadPtr(), m_dInfixBlocks, m_iInfixCodepointBytes, dCheckpoints, m_eDictFormat );
 }
 
 
 void CWordlist::SetCheckpoint ( SuggestResult_t & tRes, DWORD iCP ) const
 {
 	assert ( tRes.m_pWordReader );
-	KeywordsBlockReader_c * pReader = (KeywordsBlockReader_c *)tRes.m_pWordReader;
+	ISphKeywordsBlockReader * pReader = (ISphKeywordsBlockReader *)tRes.m_pWordReader;
 	pReader->Reset ( m_tBuf.GetReadPtr() + m_dCheckpoints[iCP-1].m_iWordlistOffset );
 }
 
 
 bool CWordlist::ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) const
 {
-	KeywordsBlockReader_c * pReader = (KeywordsBlockReader_c *)tRes.m_pWordReader;
+	ISphKeywordsBlockReader * pReader = (ISphKeywordsBlockReader *)tRes.m_pWordReader;
 	if ( !pReader->UnpackWord() )
 		return false;
 
@@ -703,8 +744,36 @@ bool CWordlist::ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) cons
 
 //////////////////////////////////////////////////////////////////////////
 
+/// dict=keywords block reader
+class KeywordsBlockReader_c final : public ISphKeywordsBlockReader
+{
+public:
+					KeywordsBlockReader_c ( const BYTE * pBuf, int iSkiplistBlockSize );
+
+	void			Reset ( const BYTE * pBuf ) override;
+	bool			UnpackWord() override;
+
+private:
+	std::array<BYTE, MAX_KEYWORD_BYTES>	m_sWord;
+};
+
+
+/// dict=keywords_v2 block reader
+class KeywordsBlockReaderV2_c final : public ISphKeywordsBlockReader
+{
+public:
+					KeywordsBlockReaderV2_c ( const BYTE * pBuf, int iSkiplistBlockSize );
+
+	void			Reset ( const BYTE * pBuf ) override;
+	bool			UnpackWord() override;
+
+private:
+	CSphVector<BYTE> m_dWord;
+};
+
+
 KeywordsBlockReader_c::KeywordsBlockReader_c ( const BYTE * pBuf, int iSkiplistBlockSize )
-	: m_iSkiplistBlockSize ( iSkiplistBlockSize )
+	: ISphKeywordsBlockReader ( iSkiplistBlockSize )
 {
 	Reset ( pBuf );
 }
@@ -732,7 +801,7 @@ bool KeywordsBlockReader_c::UnpackWord()
 	if ( !uPack )
 	{
 		// ok, this block is over
-		m_pBuf = NULL;
+		m_pBuf = nullptr;
 		m_iLen = 0;
 		return false;
 	}
@@ -762,8 +831,8 @@ bool KeywordsBlockReader_c::UnpackWord()
 	m_iDocs = UnzipIntBE ( m_pBuf );
 	m_iHits = UnzipIntBE ( m_pBuf );
 	const DWORD uLayoutDocs = (DWORD)( m_iDocs & HITLESS_DOC_MASK );
-	m_uHint = ( uLayoutDocs>=(DWORD)DOCLIST_HINT_THRESH ) ? *m_pBuf++ : 0;
-	m_iDoclistHint = DoclistHintUnpack ( uLayoutDocs, m_uHint );
+	const BYTE uHint = ( uLayoutDocs>=(DWORD)DOCLIST_HINT_THRESH ) ? *m_pBuf++ : 0;
+	m_iDoclistHint = DoclistHintUnpack ( uLayoutDocs, uHint );
 	if ( uLayoutDocs>(DWORD)m_iSkiplistBlockSize )
 		m_iSkiplistOffset = UnzipOffsetBE ( m_pBuf );
 	else
@@ -771,6 +840,102 @@ bool KeywordsBlockReader_c::UnpackWord()
 
 	assert ( m_iLen>0 );
 	return true;
+}
+
+
+KeywordsBlockReaderV2_c::KeywordsBlockReaderV2_c ( const BYTE * pBuf, int iSkiplistBlockSize )
+	: ISphKeywordsBlockReader ( iSkiplistBlockSize )
+{
+	m_dWord.Resize ( GetKeywordBufSize ( DictFormat_e::KEYWORDS_V2 ) );
+	Reset ( pBuf );
+}
+
+
+void KeywordsBlockReaderV2_c::Reset ( const BYTE * pBuf )
+{
+	m_pBuf = pBuf;
+	m_dWord[0] = '\0';
+	m_iLen = 0;
+	m_szKeyword = m_dWord.Begin();
+}
+
+
+bool KeywordsBlockReaderV2_c::UnpackWord()
+{
+	if ( !m_pBuf )
+		return false;
+
+	assert ( m_iSkiplistBlockSize>0 );
+
+	BYTE uPack = *m_pBuf++;
+	if ( !uPack )
+	{
+		// ok, this block is over
+		m_pBuf = nullptr;
+		m_iLen = 0;
+		return false;
+	}
+
+	int iMatch = 0;
+	int iDelta = 0;
+	if ( uPack & 0x80 )
+	{
+		iDelta = ( ( uPack>>4 ) & 7 ) + 1;
+		iMatch = uPack & 15;
+	} else if ( uPack==0x7f )
+	{
+		iDelta = (int)UnzipIntBE ( m_pBuf );
+		iMatch = (int)UnzipIntBE ( m_pBuf );
+	} else
+	{
+		iDelta = uPack;
+		iMatch = *m_pBuf++;
+	}
+
+	assert ( iDelta>0 );
+	assert ( iMatch>=0 );
+	assert ( iMatch<=m_iLen );
+	assert ( iMatch+iDelta<=GetKeywordMaxStoredBytes ( DictFormat_e::KEYWORDS_V2 ) );
+
+	memcpy ( m_dWord.Begin()+iMatch, m_pBuf, iDelta );
+	m_pBuf += iDelta;
+
+	m_iLen = iMatch+iDelta;
+	m_dWord[m_iLen] = '\0';
+	m_szKeyword = m_dWord.Begin();
+
+	m_iDoclistOffset = UnzipOffsetBE ( m_pBuf );
+	m_iDocs = UnzipIntBE ( m_pBuf );
+	m_iHits = UnzipIntBE ( m_pBuf );
+	const DWORD uLayoutDocs = (DWORD)( m_iDocs & HITLESS_DOC_MASK );
+	const BYTE uHint = ( uLayoutDocs>=(DWORD)DOCLIST_HINT_THRESH ) ? *m_pBuf++ : 0;
+	m_iDoclistHint = DoclistHintUnpack ( uLayoutDocs, uHint );
+	if ( uLayoutDocs>(DWORD)m_iSkiplistBlockSize )
+		m_iSkiplistOffset = UnzipOffsetBE ( m_pBuf );
+	else
+		m_iSkiplistOffset = 0;
+
+	assert ( m_iLen>0 );
+	return true;
+}
+
+
+std::unique_ptr<ISphKeywordsBlockReader> CreateKeywordsBlockReader ( const BYTE * pBuf, int iSkiplistBlockSize, DictFormat_e eDictFormat )
+{
+	switch ( eDictFormat )
+	{
+	case DictFormat_e::KEYWORDS:
+		return std::make_unique<KeywordsBlockReader_c> ( pBuf, iSkiplistBlockSize );
+
+	case DictFormat_e::KEYWORDS_V2:
+		return std::make_unique<KeywordsBlockReaderV2_c> ( pBuf, iSkiplistBlockSize );
+
+	case DictFormat_e::CRC:
+		break;
+	}
+
+	assert ( 0 && "unsupported dictionary format for keywords block reader" );
+	return std::make_unique<KeywordsBlockReader_c> ( pBuf, iSkiplistBlockSize );
 }
 
 static int g_iExpandMergeDocs = 32;

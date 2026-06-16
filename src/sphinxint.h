@@ -35,7 +35,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-const DWORD		INDEX_FORMAT_VERSION		= 69;				///< hitless dict layout versioning
+const DWORD		INDEX_FORMAT_VERSION		= 70;				///< keywords_v2 dictionary layout versioning
 
 const char		MAGIC_CODE_SENTENCE			= '\x02';				// emitted from tokenizer on sentence boundary
 const char		MAGIC_CODE_PARAGRAPH		= '\x03';				// emitted from stripper (and passed via tokenizer) on paragraph boundary
@@ -455,7 +455,6 @@ inline int sphUTF8Encode ( BYTE * pBuf, int iCode )
 	pBuf[3] = (BYTE)( ( iCode & 0x3F ) | 0x80 );
 	return 4;
 }
-
 
 /// compute UTF-8 string length in codepoints
 inline int sphUTF8Len ( const char * pStr )
@@ -1218,6 +1217,7 @@ struct GetKeywordsSettings_t
 	int		m_iCutoff = -1;
 	bool	m_bAllowExpansion = true;
 	JiebaMode_e m_eJiebaMode = JiebaMode_e::DEFAULT;
+	CSphString * m_pWarning = nullptr;
 };
 
 XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx );
@@ -1243,14 +1243,18 @@ struct ExpandedOrderDesc_T
 };
 
 
-class CSphKeywordDeltaWriter
+template <bool BKEYWORDS_V2>
+class CSphKeywordDeltaWriter_T
 {
 private:
-	BYTE m_sLastKeyword [SPH_MAX_WORD_LEN*3+4];
-	int m_iLastLen;
+	static constexpr int KEYWORD_BUFFER_BYTES = GetKeywordBufSize ( BKEYWORDS_V2 ? DictFormat_e::KEYWORDS_V2 : DictFormat_e::KEYWORDS );
+
+	CSphFixedVector<BYTE> m_dLastKeyword;
+	int m_iLastLen = 0;
 
 public:
-	CSphKeywordDeltaWriter ()
+	CSphKeywordDeltaWriter_T()
+		: m_dLastKeyword ( KEYWORD_BUFFER_BYTES )
 	{
 		Reset();
 	}
@@ -1261,39 +1265,89 @@ public:
 	}
 
 	template <typename F>
-	void PutDelta ( F & WRITER, const BYTE * pWord, int iLen )
-	{
-		assert ( pWord && iLen );
-
-		// how many bytes of a previous keyword can we reuse?
-		BYTE iMatch = 0;
-		int iMinLen = Min ( m_iLastLen, iLen );
-		assert ( iMinLen<(int)sizeof(m_sLastKeyword) );
-		while ( iMatch<iMinLen && m_sLastKeyword[iMatch]==pWord[iMatch] )
-			++iMatch;
-
-		BYTE iDelta = (BYTE)( iLen - iMatch );
-		assert ( iDelta>0 );
-
-		assert ( iLen < (int)sizeof(m_sLastKeyword) );
-		memcpy ( m_sLastKeyword, pWord, iLen );
-		m_iLastLen = iLen;
-
-		// match and delta are usually tiny, pack them together in 1 byte
-		// tricky bit, this byte leads the entry so it must never be 0 (aka eof mark)!
-		if ( iDelta<=8 && iMatch<=15 )
-		{
-			BYTE uPacked = BYTE ( 0x80 + ( (iDelta-1)<<4 ) + iMatch );
-			WRITER.PutBytes ( &uPacked, 1 );
-		} else
-		{
-			WRITER.PutBytes ( &iDelta, 1 ); // always greater than 0
-			WRITER.PutBytes ( &iMatch, 1 );
-		}
-
-		WRITER.PutBytes ( pWord + iMatch, iDelta );
-	}
+	void PutDelta ( F & WRITER, const BYTE * pWord, int iLen );
 };
+
+template <>
+template <typename F>
+void CSphKeywordDeltaWriter_T<false>::PutDelta ( F & WRITER, const BYTE * pWord, int iLen )
+{
+	assert ( pWord && iLen );
+
+	// how many bytes of a previous keyword can we reuse?
+	BYTE iMatch = 0;
+	int iMinLen = Min ( m_iLastLen, iLen );
+	assert ( iMinLen<m_dLastKeyword.GetLength() );
+	while ( iMatch<iMinLen && m_dLastKeyword[iMatch]==pWord[iMatch] )
+		++iMatch;
+
+	BYTE iDelta = (BYTE)( iLen - iMatch );
+	assert ( iDelta>0 );
+
+	assert ( iLen < m_dLastKeyword.GetLength() );
+	memcpy ( m_dLastKeyword.Begin(), pWord, iLen );
+	m_iLastLen = iLen;
+
+	// match and delta are usually tiny, pack them together in 1 byte
+	// tricky bit, this byte leads the entry so it must never be 0 (aka eof mark)!
+	if ( iDelta<=8 && iMatch<=15 )
+	{
+		BYTE uPacked = BYTE ( 0x80 + ( (iDelta-1)<<4 ) + iMatch );
+		WRITER.PutBytes ( &uPacked, 1 );
+	} else
+	{
+		WRITER.PutBytes ( &iDelta, 1 ); // always greater than 0
+		WRITER.PutBytes ( &iMatch, 1 );
+	}
+
+	WRITER.PutBytes ( pWord + iMatch, iDelta );
+}
+
+
+template <>
+template <typename F>
+void CSphKeywordDeltaWriter_T<true>::PutDelta ( F & WRITER, const BYTE * pWord, int iLen )
+{
+	assert ( pWord && iLen );
+	assert ( iLen<=GetKeywordMaxStoredBytes ( DictFormat_e::KEYWORDS_V2 ) );
+
+	int iMatch = 0;
+	int iMinLen = Min ( m_iLastLen, iLen );
+	assert ( iMinLen<m_dLastKeyword.GetLength() );
+	while ( iMatch<iMinLen && m_dLastKeyword[iMatch]==pWord[iMatch] )
+		++iMatch;
+
+	int iDelta = iLen - iMatch;
+	assert ( iDelta>0 );
+
+	assert ( iLen<m_dLastKeyword.GetLength() );
+	memcpy ( m_dLastKeyword.Begin(), pWord, iLen );
+	m_iLastLen = iLen;
+
+	if ( iDelta<=8 && iMatch<=15 )
+	{
+		BYTE uPacked = BYTE ( 0x80 + ( ( iDelta-1 ) << 4 ) + iMatch );
+		WRITER.PutBytes ( &uPacked, 1 );
+	} else if ( iDelta<=0x7e && iMatch<=0xff )
+	{
+		BYTE uDelta = (BYTE)iDelta;
+		BYTE uMatch = (BYTE)iMatch;
+		WRITER.PutBytes ( &uDelta, 1 );
+		WRITER.PutBytes ( &uMatch, 1 );
+	} else
+	{
+		BYTE uEsc = 0x7f;
+		BYTE dPacked[10];
+		WRITER.PutBytes ( &uEsc, 1 );
+		WRITER.PutBytes ( dPacked, ZipToPtrBE ( dPacked, iDelta ) );
+		WRITER.PutBytes ( dPacked, ZipToPtrBE ( dPacked, iMatch ) );
+	}
+
+	WRITER.PutBytes ( pWord + iMatch, iDelta );
+}
+
+using CSphKeywordDeltaWriter = CSphKeywordDeltaWriter_T<false>;
+using CSphKeywordDeltaWriterV2 = CSphKeywordDeltaWriter_T<true>;
 
 BYTE sphDoclistHintPack ( SphOffset_t iDocs, SphOffset_t iLen );
 

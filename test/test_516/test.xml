@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>keywords_v2 medium long tokens</name>
+
+<requires>
+<http/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source plain_v2_main_src
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT document_id AS id, body, gid FROM sph_kwv2_docs WHERE gid = 1
+	sql_attr_uint = gid
+}
+
+source plain_v2_delta_src
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT document_id AS id, body, gid FROM sph_kwv2_docs WHERE gid = 2
+	sql_attr_uint = gid
+}
+
+index plain_v2_main
+{
+	source = plain_v2_main_src
+	path = <data_path/>/plain_v2_main
+	charset_table = 0..9, A..Z->a..z, _, a..z
+	dict = keywords_v2
+	index_exact_words = 1
+	min_prefix_len = 2
+	min_infix_len = 2
+}
+
+index plain_v2_delta
+{
+	source = plain_v2_delta_src
+	path = <data_path/>/plain_v2_delta
+	charset_table = 0..9, A..Z->a..z, _, a..z
+	dict = keywords_v2
+	index_exact_words = 1
+	min_prefix_len = 2
+	min_infix_len = 2
+}
+
+index rt_v2
+{
+	type = rt
+	path = <data_path/>/rt_v2
+	rt_field = body
+	rt_attr_uint = gid
+	charset_table = 0..9, A..Z->a..z, _, a..z
+	dict = keywords_v2
+	index_exact_words = 1
+	min_prefix_len = 2
+	min_infix_len = 2
+}
+</config>
+
+<indexer>
+	<run>--merge plain_v2_main plain_v2_delta</run>
+</indexer>
+
+<db_create>
+CREATE TABLE sph_kwv2_docs
+(
+	document_id INTEGER NOT NULL PRIMARY KEY,
+	gid INTEGER NOT NULL,
+	body TEXT NOT NULL
+) ENGINE=MYISAM
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS sph_kwv2_docs;
+</db_drop>
+
+<db_insert>
+INSERT INTO sph_kwv2_docs VALUES
+	( 1, 1, 'plainmain_only kv2shared_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_middleprobealpha_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_tail' ),
+	( 2, 2, 'plaindelta_only kv2shared_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_middleprobebeta_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc_tail' )
+</db_insert>
+
+<queries>
+<sphinxql>
+	SELECT id, gid FROM plain_v2_main WHERE MATCH('=kv2shared_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_middleprobealpha_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_tail') ORDER BY id ASC;
+	SELECT id, gid FROM plain_v2_main WHERE MATCH('=kv2shared_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_middleprobebeta_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc_tail') ORDER BY id ASC;
+	SELECT id, gid FROM plain_v2_main WHERE MATCH('kv2shared*') ORDER BY id ASC;
+	SELECT id, gid FROM plain_v2_main WHERE MATCH('*middleprobealpha*') ORDER BY id ASC;
+	SELECT id, gid FROM plain_v2_main WHERE MATCH('*middleprobebeta*') ORDER BY id ASC;
+	SELECT id, gid FROM plain_v2_main WHERE MATCH('=kv2shared_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_middleprobeomega_dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd_tail') ORDER BY id ASC;
+	SELECT id, gid FROM plain_v2_main WHERE MATCH('plaindelta_only') ORDER BY id ASC;
+
+	INSERT INTO rt_v2 ( id, body, gid ) VALUES
+		( 101, 'rtmain_only kv2shared_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_middleprobealpha_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_tail', 11 ),
+		( 102, 'rtdelta_only kv2shared_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_middleprobebeta_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc_tail', 12 );
+
+	SELECT id, gid FROM rt_v2 WHERE MATCH('=kv2shared_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_middleprobealpha_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_tail') ORDER BY id ASC;
+	SELECT id, gid FROM rt_v2 WHERE MATCH('kv2shared*') ORDER BY id ASC;
+	SELECT id, gid FROM rt_v2 WHERE MATCH('*middleprobealpha*') ORDER BY id ASC;
+	SELECT id, gid FROM rt_v2 WHERE MATCH('=kv2shared_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_middleprobeomega_dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd_tail') ORDER BY id ASC;
+
+	FLUSH RAMCHUNK rt_v2;
+
+	SELECT id, gid FROM rt_v2 WHERE MATCH('=kv2shared_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_middleprobealpha_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_tail') ORDER BY id ASC;
+	SELECT id, gid FROM rt_v2 WHERE MATCH('kv2shared*') ORDER BY id ASC;
+	SELECT id, gid FROM rt_v2 WHERE MATCH('*middleprobebeta*') ORDER BY id ASC;
+</sphinxql>
+
+<query endpoint="json/search">
+{
+	"table": "plain_v2_main",
+	"query": { "match": { "body": "kv2shared_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_middleprobealpha_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_tail" } },
+	"sort": [ { "id": "asc" } ]
+}
+</query>
+</queries>
+
+</test>

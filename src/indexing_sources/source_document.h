@@ -97,6 +97,7 @@ public:
 
 	/// get stats
 	virtual const CSphSourceStats &		GetStats ();
+	const CSphString &					GetLastWarning () const { return m_sLastWarning; }
 
 	/// updates schema fields and attributes
 	/// updates pInfo if it's empty; checks for match if it's not
@@ -199,6 +200,7 @@ protected:
 
 protected:
 	ISphHits				m_tHits;				///< my hitvector
+	CSphString				m_sLastWarning;
 
 protected:
 	char *					m_pReadFileBuffer = nullptr;
@@ -224,6 +226,7 @@ protected:
 		CSphVector<BYTE*> m_dTmpFieldStorage;
 		CSphVector<BYTE*> m_dTmpFieldPtrs;
 		CSphVector<BYTE> m_dFiltered;
+		CSphFixedVector<BYTE> m_dTokenBuf { 0 };
 
 		int m_iStartPos;
 		Hitpos_t m_iHitPos;

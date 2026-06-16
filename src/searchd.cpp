@@ -5386,9 +5386,26 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 	return bOk;
 }
 
+static void AppendKeywordCallWarning ( CSphString & sWarning, const CSphString & sMore )
+{
+	if ( sMore.IsEmpty() )
+		return;
+
+	if ( sWarning.IsEmpty() )
+	{
+		sWarning = sMore;
+		return;
+	}
+
+	StringBuilder_c sBuf;
+	sBuf << sWarning << "; " << sMore;
+	sBuf.MoveTo ( sWarning );
+}
+
 void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	StatCountCommand ( SEARCHD_COMMAND_KEYWORDS );
+	sWarning = "";
 	CSphString sError;
 
 	// string query, string index, [bool hits] || [value as option_name, ...]
@@ -5466,6 +5483,7 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 	const CSphString & sIndex = tStmt.m_dInsertValues[1].m_sVal;
 	CSphVector<CSphKeywordInfo> dKeywords;
 	SearchFailuresLog_c tFailureLog;
+	tSettings.m_pWarning = &sWarning;
 
 	if ( !DoGetKeywords ( sIndex, sTerm, tSettings, dKeywords, sError, tFailureLog ) )
 	{
@@ -5506,15 +5524,17 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 	}
 
 	// put network errors and warnings to meta as warning
-	int iWarnings = 0;
+	int iWarnings = sWarning.IsEmpty() ? 0 : 1;
 	if ( !tFailureLog.IsEmpty() )
 	{
-		iWarnings = tFailureLog.GetReportsCount();
+		iWarnings += tFailureLog.GetReportsCount();
 
 		StringBuilder_c sErrorBuf;
 		tFailureLog.BuildReport ( sErrorBuf );
-		sErrorBuf.MoveTo ( sWarning );
-		sphWarning ( "%s", sWarning.cstr() );
+		CSphString sFailureWarning;
+		sErrorBuf.MoveTo ( sFailureWarning );
+		AppendKeywordCallWarning ( sWarning, sFailureWarning );
+		sphWarning ( "%s", sFailureWarning.cstr() );
 	}
 
 	tOut.Eof ( false, iWarnings );
@@ -5769,7 +5789,13 @@ static bool SuggestLocalIndexGet ( const cServedIndexRefPtr_c & pServed, const S
 	pServed->m_pStats->IncCmd ( SEARCHD_COMMAND_SUGGEST );
 
 	RIdx_c pIdx { pServed };
-	if ( !pIdx->GetSettings().m_iMinInfixLen || !pIdx->GetDictionary()->GetSettings().m_bWordDict )
+	if ( pIdx->GetDictionary()->GetSettings().IsKeywordsV2() )
+	{
+		sError.SetSprintf ( "SUGGEST/QSUGGEST is not supported for dict=keywords_v2 yet" );
+		return false;
+	}
+
+	if ( !pIdx->GetSettings().m_iMinInfixLen || !pIdx->GetDictionary()->GetSettings().IsWordDict() )
 	{
 		sError.SetSprintf ( "suggests work only for keywords dictionary with infix enabled" );
 		return false;
@@ -13743,19 +13769,20 @@ bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSettings,
 ///////////////////////////////////////////////
 static ResultAndIndex_t LoadRTPercolate ( bool bRT, const char* szIndexName, const CSphConfigSection& hIndex, bool bMutableOpt, StrVec_t* pWarnings, CSphString& sError )
 {
-	bool bWordDict = true;
-	if ( bRT )
+	auto sIndexType = hIndex.GetStr ( "dict", "keywords" );
+	DictFormat_e eDictFormat = DictFormat_e::KEYWORDS;
+	if ( !ParseDictFormat ( sIndexType, eDictFormat ) )
 	{
-		auto sIndexType = hIndex.GetStr ( "dict", "keywords" );
-		bWordDict = true;
-		if ( sIndexType=="crc" )
-			bWordDict = false;
-		else if ( sIndexType!="keywords" )
-		{
-			sError.SetSprintf ( "table '%s': unknown dict=%s; only 'keywords' or 'crc' values allowed", szIndexName, sIndexType.cstr() );
-			return { ADD_ERROR, nullptr };
-		}
+		sError.SetSprintf ( "table '%s': unknown dict=%s; only 'keywords', 'keywords_v2' or 'crc' values allowed", szIndexName, sIndexType.cstr() );
+		return { ADD_ERROR, nullptr };
 	}
+	if ( eDictFormat==DictFormat_e::KEYWORDS_V2 && !bRT )
+	{
+		sError.SetSprintf ( "table '%s': dict=keywords_v2 is recognized, but PQ keywords_v2 storage is not implemented yet", szIndexName );
+		return { ADD_ERROR, nullptr };
+	}
+
+	bool bWordDict = ( eDictFormat!=DictFormat_e::CRC );
 
 	CSphSchema tSchema ( szIndexName );
 	CSphIndexSettings tSettings;
@@ -13771,7 +13798,7 @@ static ResultAndIndex_t LoadRTPercolate ( bool bRT, const char* szIndexName, con
 	std::unique_ptr<CSphIndex> pIdx;
 	if ( bRT )
 	{
-		pIdx = sphCreateIndexRT ( szIndexName, pServed->m_sIndexPath, std::move ( tSchema ), pServed->m_tSettings.m_iMemLimit, bWordDict );
+		pIdx = sphCreateIndexRT ( szIndexName, pServed->m_sIndexPath, std::move ( tSchema ), pServed->m_tSettings.m_iMemLimit );
 		pServed->m_eType = IndexType_e::RT;
 		tSettings.m_bBinlog = bNeedBinlog;
 		if ( !bNeedBinlog )

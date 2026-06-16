@@ -220,15 +220,15 @@ static SegmentReject_t SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuild
 		tReject.m_dWilds.Fill ( 0 );
 	}
 
-	RtWordReader_c tDict ( pSeg, true, PERCOLATE_WORDS_PER_CP, eHitless );
+	RtWordReader_c tDict ( pSeg, DictFormat_e::KEYWORDS, PERCOLATE_WORDS_PER_CP, eHitless );
 	BloomGenTraits_t tBloom0 ( tReject.m_dWilds.Begin() );
 	BloomGenTraits_t tBloom1 ( tReject.m_dWilds.Begin() + PERCOLATE_BLOOM_WILD_COUNT );
 
 	while ( tDict.UnzipWord() )
 	{
 		const auto* pWord = (const RtWord_t*)tDict;
-		const BYTE * pDictWord = pWord->m_sWord + 1;
-		int iLen = pWord->m_sWord[0];
+		const BYTE * pDictWord = pWord->m_sWord;
+		int iLen = pWord->m_iWordLen;
 
 		uint64_t uHash = sphFNV64 ( pDictWord, iLen );
 		tReject.m_dTerms.Add ( uHash );
@@ -759,7 +759,7 @@ PercolateIndex_c::~PercolateIndex_c ()
 
 bool PercolateIndex_c::BindAccum ( RtAccum_t * pAccExt, CSphString* pError )
 {
-	return PrepareAccum ( pAccExt, true, pError );
+	return PrepareAccum ( pAccExt, DictFormat_e::KEYWORDS, pError );
 }
 
 
@@ -962,7 +962,7 @@ bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 	CSphVector<Slice_t> dDictWords;
 	ARRAY_FOREACH ( i, dDictLoc )
 	{
-		RtWordReader_c tReader ( m_pSeg, true, PERCOLATE_WORDS_PER_CP, m_eHitless );
+		RtWordReader_c tReader ( m_pSeg, DictFormat_e::KEYWORDS, PERCOLATE_WORDS_PER_CP, m_eHitless );
 		// locator
 		// m_uOff - Start
 		// m_uLen - End
@@ -973,27 +973,27 @@ bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 		{
 			const auto* pWord = (const RtWord_t*)tReader;
 			// stemmed terms do not match any kind of wild-cards
-			if ( ( eCmp==PERCOLATE::PREFIX || eCmp==PERCOLATE::INFIX ) && m_pDict->HasMorphology() && pWord->m_sWord[1]!=MAGIC_WORD_HEAD_NONSTEMMED )
+			if ( ( eCmp==PERCOLATE::PREFIX || eCmp==PERCOLATE::INFIX ) && m_pDict->HasMorphology() && *pWord->m_sWord!=MAGIC_WORD_HEAD_NONSTEMMED )
 				continue;
 
 			int iCmp = -1;
 			switch ( eCmp )
 			{
 			case PERCOLATE::EXACT:
-				iCmp = sphDictCmpStrictly ( (const char *)pWord->m_sWord + 1, pWord->m_sWord[0], sWord, iWordLen );
+				iCmp = sphDictCmpStrictly ( (const char *)pWord->m_sWord, pWord->m_iWordLen, sWord, iWordLen );
 				break;
 
 			case PERCOLATE::PREFIX:
-				iCmp = sphDictCmp ( (const char *)pWord->m_sWord + 1, pWord->m_sWord[0], tSubInfo.m_sSubstring, tSubInfo.m_iSubLen );
+				iCmp = sphDictCmp ( (const char *)pWord->m_sWord, pWord->m_iWordLen, tSubInfo.m_sSubstring, tSubInfo.m_iSubLen );
 				if ( iCmp==0 )
 				{
-					if ( !( tSubInfo.m_iSubLen<=pWord->m_sWord[0] && sphWildcardMatch ( (const char *)pWord->m_sWord + 1 + iSkipMagic, tSubInfo.m_sWildcard, pWildcard ) ) )
+					if ( !( tSubInfo.m_iSubLen<=pWord->m_iWordLen && sphWildcardMatch ( (const char *)pWord->m_sWord + iSkipMagic, tSubInfo.m_sWildcard, pWildcard ) ) )
 						iCmp = -1;
 				}
 				break;
 
 			case PERCOLATE::INFIX:
-				if ( sphWildcardMatch ( (const char *)pWord->m_sWord + 1 + iSkipMagic, tSubInfo.m_sWildcard, pWildcard ) )
+				if ( sphWildcardMatch ( (const char *)pWord->m_sWord + iSkipMagic, tSubInfo.m_sWildcard, pWildcard ) )
 					iCmp = 0;
 				break;
 
@@ -1489,7 +1489,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 {
 	// reject need bloom filter for either infix or prefix
 	auto tReject = SegmentGetRejects (
-		  pSeg, ( m_tSettings.m_iMinInfixLen>0 || m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().m_bWordDict )>0 ), m_iMaxCodepointLength>1, m_tSettings.m_eHitless );
+		  pSeg, ( m_tSettings.m_iMinInfixLen>0 || m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().IsWordDict() )>0 ), m_iMaxCodepointLength>1, m_tSettings.m_eHitless );
 
 	auto dStored = GetStored();
 	auto iJobs = dStored.GetLength ();
@@ -1572,7 +1572,7 @@ bool PercolateIndex_c::MatchDocuments ( RtAccum_t * pAcc, PercolateMatchResult_t
 	RtSegment_t * pSeg = CreateSegment ( pAcc, PERCOLATE_WORDS_PER_CP, m_tSettings.m_eHitless, m_dHitlessWords, sError );
 	assert ( !pSeg || pSeg->m_uRows>0 );
 	assert ( !pSeg || pSeg->m_tAliveRows>0 );
-	BuildSegmentInfixes ( pSeg, m_pDict->HasMorphology(), true, m_tSettings.m_iMinInfixLen,
+	BuildSegmentInfixes ( pSeg, m_pDict->HasMorphology(), DictFormat_e::KEYWORDS, m_tSettings.m_iMinInfixLen,
 		PERCOLATE_WORDS_PER_CP, ( m_iMaxCodepointLength>1 ), m_tSettings.m_eHitless );
 
 	DoMatchDocuments ( pSeg, tRes );
@@ -1725,7 +1725,7 @@ std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArg
 			return nullptr;
 	}
 
-	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
+	bool bWordDict = m_pDict->GetSettings().IsWordDict();
 
 	TokenizerRefPtr_c pTokenizer = sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
 	DictRefPtr_c pDict = GetStatelessDict ( m_pDict );
@@ -1835,7 +1835,7 @@ std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArg
 	if ( !sWarning.IsEmpty() )
 		sphWarning ( "%s", sWarning.cstr() );
 
-	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
+	bool bWordDict = m_pDict->GetSettings().IsWordDict();
 	if ( m_tMutableSettings.m_iExpandKeywords!=KWE_DISABLED )
 	{
 		sphQueryExpandKeywords ( &tParsed->m_pRoot, m_tSettings, m_tMutableSettings.m_iExpandKeywords, bWordDict );
@@ -2442,7 +2442,7 @@ void PercolateIndex_c::PostSetupUnl()
 		( !m_tSettings.m_sZones.IsEmpty () && !m_pTokenizerIndexing->EnableZoneIndexing ( m_sLastError )) )
 		m_pTokenizerIndexing = nullptr;
 
-	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
+	bool bWordDict = m_pDict->GetSettings().IsWordDict();
 
 	// create queries
 	TokenizerRefPtr_c pTokenizer = sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
@@ -2550,6 +2550,11 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaLegacy ( const CSphString& sM
 		return LOAD_E::GeneralError_e;
 
 	tDictSettings.Load ( rdMeta, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning );
+	if ( tDictSettings.IsKeywordsV2() )
+	{
+		m_sLastError.SetSprintf ( "table '%s' uses dict=keywords_v2, but PQ keywords_v2 storage is not implemented yet", GetName() );
+		return LOAD_E::GeneralError_e;
+	}
 
 	// initialize AOT if needed
 	DWORD uPrevAot = m_tSettings.m_uAotFilterMask;
@@ -2662,6 +2667,11 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaJson ( const CSphString& sMet
 		return LOAD_E::GeneralError_e;
 
 	tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, pFilenameBuilder, m_sLastWarning );
+	if ( tDictSettings.IsKeywordsV2() )
+	{
+		m_sLastError.SetSprintf ( "table '%s' uses dict=keywords_v2, but PQ keywords_v2 storage is not implemented yet", GetName() );
+		return LOAD_E::GeneralError_e;
+	}
 
 	// initialize AOT if needed
 	DWORD uPrevAot = m_tSettings.m_uAotFilterMask;
@@ -2985,7 +2995,7 @@ bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSp
 	CSphString sTmp;
 	bool bSameSchema = m_tSchema.CompareTo ( tSettings.m_tSchema, sTmp, false );
 
-	return CreateReconfigure ( GetName(), IsStarDict ( m_pDict->GetSettings().m_bWordDict ), m_pFieldFilter.get(), m_tSettings, m_pTokenizer->GetSettingsFNV(),
+	return CreateReconfigure ( GetName(), IsStarDict ( m_pDict->GetSettings().IsWordDict() ), m_pDict->GetSettings().GetDictFormat(), m_pFieldFilter.get(), m_tSettings, m_pTokenizer->GetSettingsFNV(),
 		  m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(), GetMemLimit(),
 		  bSameSchema, tSettings, tSetup, dWarnings, sError );
 }
@@ -3296,7 +3306,7 @@ Bson_t PercolateIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 {
 	WordlistStub_c tWordlist;
 
-	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
+	bool bWordDict = m_pDict->GetSettings().IsWordDict();
 
 	TokenizerRefPtr_c pQueryTokenizer = sphCloneAndSetupQueryTokenizer ( m_pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
 	SetupExactTokenizer ( pQueryTokenizer );

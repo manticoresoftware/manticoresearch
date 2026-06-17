@@ -69,9 +69,11 @@ run_empty_case() {
 run_rejected_start_case() {
     name="$1"
     content="$2"
+    mode="${3:-600}"
+    expected_error="$4"
     reset_auth_file
     printf '%s' "$content" > "$AUTH_JSON"
-    chmod 600 "$AUTH_JSON"
+    chmod "$mode" "$AUTH_JSON"
     if stdbuf -oL searchd ${SEARCHD_FLAGS:-} >/tmp/auth_shape_start.out 2>&1; then
         cat /tmp/auth_shape_start.out
         searchd --stopwait >/dev/null 2>&1 || true
@@ -79,7 +81,29 @@ run_rejected_start_case() {
         exit 1
     else
         echo "$name startup rejected"
+        if [ -n "$expected_error" ]; then
+            if cat /tmp/auth_shape_start.out /var/log/manticore/searchd.log 2>/dev/null | grep -q "$expected_error"; then
+                echo "$name error matched"
+            else
+                echo "$name error missing"
+                cat /tmp/auth_shape_start.out 2>/dev/null || true
+                cat /var/log/manticore/searchd.log 2>/dev/null || true
+                exit 1
+            fi
+        fi
     fi
+}
+
+run_created_file_mode_case() {
+    reset_auth_file
+    start_daemon
+    mode=$(stat -c %a "$AUTH_JSON")
+    if [ "$mode" != "600" ]; then
+        echo "missing created mode unexpected: $mode"
+        exit 1
+    fi
+    echo "missing created mode 600"
+    stop_daemon
 }
 
 run_rejected_bootstrap_case() {
@@ -97,13 +121,16 @@ run_rejected_bootstrap_case() {
     stop_daemon
 }
 
+run_created_file_mode_case
 run_empty_case missing missing
 run_empty_case zero-byte zero
 run_empty_case object object
 run_empty_case whitespace spaces
 run_rejected_start_case malformed '['
+run_rejected_start_case group-readable '{}' 640 "file '$AUTH_JSON' has permissions to all"
 run_rejected_bootstrap_case
 ––– output –––
+missing created mode 600
 missing start ok
 missing bootstrap ok
 missing admin present
@@ -117,5 +144,7 @@ whitespace start ok
 whitespace bootstrap ok
 whitespace admin present
 malformed startup rejected
+group-readable startup rejected
+group-readable error matched
 nonempty start ok
 nonempty bootstrap rejected

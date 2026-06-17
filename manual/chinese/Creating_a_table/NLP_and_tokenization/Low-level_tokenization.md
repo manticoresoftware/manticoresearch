@@ -1533,25 +1533,31 @@ table products {
 ### dict
 
 ```ini
-dict = {keywords|crc}
+dict = {keywords|keywords_32k|crc}
 ```
 
 <!-- example dict -->
-关键词字典的类型由两个已知值之一标识，'crc' 或 'keywords'。这是可选的，默认值为 'keywords'。
+所使用的关键词词典类型由三个已知值之一标识：`keywords`、`keywords_32k` 或 `crc`。这是可选项，默认值为 `keywords`。
 
-使用关键词字典模式（dict=keywords）可以显著减少索引负担，并允许在大量集合上进行子字符串搜索。此模式可用于普通表和RT表。
+`dict=keywords` 是默认的词典模式。它会把关键词存储在索引中，并在搜索时执行通配符展开。
+
+`dict=keywords_32k` 是一种可选启用的词典模式，适用于 32 KiB 的关键词 token。它支持在普通表和 RT 表中处理最多 32768 字节的标准化 token。此限制按 token 规范化后的字节数计算，而不是按字符数计算。超过该限制的 token 会被跳过并给出警告，而不会作为截断词条被索引。当启用了常规的 exact、prefix 或 infix 设置时，支持精确查找、前缀查找和中缀查找。
+
+`keywords_32k` 面向哈希、生成的 ID、消息标识符以及类似邮箱的长 token 等长的机器生成值。长 token 会按原始 token 进行索引，不会经过 stemming 或 lemmatization；较短的普通 token 仍然可以使用已配置的 morphology。`CALL SUGGEST`、`CALL QSUGGEST`、percolate 表、32 KiB 的 snippet/highlight 处理，以及 `indextool --dumpdict` 目前都不支持 `dict=keywords_32k`。
+
+使用 `dict=keywords` 或 `dict=keywords_32k` 这类词典模式，可以显著降低索引负担，并在大规模集合上启用子串搜索。该模式既可用于普通表，也可用于 RT 表。
 
 CRC字典在索引中不存储原始关键词文本。相反，在搜索和索引过程中，它们会将关键词替换为控制和值（使用FNV64计算）。该值在索引内部使用。这种方法有两个缺点：
 * 首先，不同关键词对之间存在控制和碰撞的风险。这种风险随着索引中唯一关键词数量的增长而增长。然而，这一担忧是次要的，因为在包含10亿条条目的字典中，单个FNV64碰撞的概率约为1/16或6.25％。大多数字典中的关键词数量远少于10亿，因为典型的口语人类语言有1到1000万个词形。
 * 其次，更重要的是，使用控制和进行子字符串搜索并不直观。Manticore通过预索引所有可能的子字符串作为单独的关键词解决了这个问题（参见[min_prefix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len)，[min_infix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)指令）。这种方法甚至具有匹配子字符串的最快方式的优势。然而，预索引所有子字符串会显著增加索引大小（通常增加3-10倍或更多），从而影响索引时间，使得在大型索引上进行子字符串搜索变得不太实际。
 
-关键词字典解决了这两个问题。它在索引中存储关键词并在搜索时执行通配符扩展。例如，对于前缀`test*`的搜索可能会根据字典内容内部扩展为'test|tests|testing'查询。这个扩展过程对应用程序来说是完全不可见的，除了每个匹配关键词的独立统计信息现在也会报告。
+词典模式可以解决这两个问题。它会把关键词存储在索引中，并在搜索时执行通配符展开。例如，对前缀 `test*` 的搜索，内部可能会基于词典内容展开为 `test|tests|testing` 查询。这个展开过程对应用完全不可见，唯一的例外是，现在也会报告所有匹配关键词各自的单独统计信息。
 
-对于子字符串（通配符）搜索，可以使用扩展通配符。特殊字符如`?`和`%`与子字符串（通配符）搜索兼容（例如，`t?st*`，`run%`，`*abc*`）。请注意，[通配符操作符](../../Searching/Full_text_matching/Operators.md#Wildcard-operators)和[REGEX](../../Searching/Full_text_matching/Operators.md#REGEX-operator)仅在`dict=keywords`时生效。
+对于子串（infix）搜索，可以使用扩展通配符。`?` 和 `%` 等特殊字符也兼容子串（infix）搜索（例如 `t?st*`、`run%`、`*abc*`）。请注意，[wildcards operators](../../Searching/Full_text_matching/Operators.md#Wildcard-operators) 可用于 `dict=keywords` 和 `dict=keywords_32k`，而 [REGEX](../../Searching/Full_text_matching/Operators.md#REGEX-operator) 运算符只能用于 `dict=keywords`。
 
-使用关键词字典的索引大约比常规非子字符串索引慢1.1倍到1.3倍，但比子字符串索引（无论是前缀还是通配符）要快得多。索引大小应仅略大于标准非子字符串表，总差异为1％至10％。常规关键词搜索所需的时间应在三种索引类型（CRC非子字符串，CRC子字符串，关键词）之间几乎相同或相同。子字符串搜索时间可以根据给定子字符串的实际关键词匹配数量（即搜索词扩展成多少关键词）显著波动。匹配关键词的最大数量受[expansion_limit](../../Server_settings/Searchd.md#expansion_limit)指令限制。
+对于普通大小的 token，使用词典进行索引大约比常规的非子串索引慢 1.1x 到 1.3x，但仍明显快于子串索引（无论是前缀还是中缀）。索引大小只会比标准的非子串表略大，总体差异约为 1..10%。常规关键词搜索的耗时，在这里讨论的三种索引类型（CRC 非子串、CRC 子串、词典）之间应当几乎相同，或完全相同。子串搜索耗时会因实际匹配该子串的关键词数量而显著波动（也就是搜索词会展开成多少个关键词）。匹配关键词的最大数量受 [expansion_limit](../../Server_settings/Searchd.md#expansion_limit) 指令限制。
 
-总之，关键词和CRC字典提供了两种不同的权衡决策以实现子字符串搜索。您可以选择牺牲索引时间和索引大小以获得最快的最坏情况搜索（CRC字典），或者最小地影响索引时间但在前缀扩展成大量关键词时牺牲最坏情况搜索时间（关键词字典）。
+总之，词典和 CRC 词典为子串搜索提供了两种不同的权衡方案。你可以选择牺牲索引时间和索引大小，以换取最快的最坏情况搜索性能（CRC 词典）；也可以尽量减少对索引时间的影响，但在前缀会展开为大量关键词时牺牲最坏情况搜索时间（词典）。
 
 <!-- request SQL -->
 

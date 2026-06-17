@@ -203,7 +203,7 @@ nation* *nation* *national
 * `?` 可以匹配任意单个字符：`t?st` 会匹配 `test`，但不匹配 `teast`
 * `%` 可以匹配零个或一个字符：`tes%` 会匹配 `tes` 或 `test`，但不匹配 `testing`
 
-内联操作符需要启用 `dict=keywords`（默认启用）且启用前缀/中缀匹配。
+内联运算符需要 `dict=keywords`（默认启用）或 `dict=keywords_32k`，并启用前缀/中缀匹配。
 
 ### REGEX 操作符
 
@@ -215,7 +215,7 @@ REGEX(/t.?e/)
 
 与[通配符操作符](../../Searching/Full_text_matching/Operators.md#Wildcard-operators)类似，REGEX操作符尝试找到所有匹配所提供模式的词项，每个扩展都作为匹配命中记录。注意，这可能对查询搜索时间产生显著影响，因为会扫描整个字典，字典中每个词项都要与REGEX模式进行匹配。
 
-模式应遵循[RE2 语法](https://github.com/google/re2/wiki/Syntax)。REGEX表达式的定界符是开括号后的第一个符号。换句话说，开括号后跟定界符与定界符和闭括号之间的所有文本都被视为RE2表达式。  
+模式应遵循[RE2 语法](https://github.com/google/re2/wiki/Syntax)。REGEX表达式的定界符是开括号后的第一个符号。换句话说，开括号后跟定界符与定界符和闭括号之间的所有文本都被视为RE2表达式。
 请注意，存储在字典中的词项会经过 `charset_table` 转换，这意味着例如如果所有字符根据 `charset_table`（默认）被转为小写，REGEX 可能无法匹配大写字符。要成功用 REGEX 表达式匹配词项，模式必须对应整个词项。若要实现部分匹配，请在模式开头和/或结尾添加 `.*`。
 
 ```sql

@@ -210,7 +210,7 @@ CALL SUGGEST(<word or words>, <table name> [,options])
 options: N as option_name[, M as another_option, ...]
 ```
 
-Эти команды предоставляют все варианты из словаря для заданного слова. Они работают только с таблицами, где включены [infixing](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) и [dict=keywords](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict). Они не поддерживают `dict=keywords_32k`. Они возвращают предлагаемые ключевые слова, расстояние Левенштейна между предложенным и исходным ключевыми словами, а также статистику документов для предложенного ключевого слова.
+Эти команды возвращают все предложения из словаря для заданного слова. Они работают только для таблиц, где включен [infixing](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) и задан [dict=keywords](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict). Они не работают с таблицами, использующими `dict=keywords_32k`. Они возвращают предложенные ключевые слова, расстояние Левенштейна между предложенным и исходным ключевыми словами, а также статистику документов для предложенного ключевого слова.
 
 Если первый параметр содержит несколько слов, то:
 * `CALL QSUGGEST` вернёт предложения только для **последнего** слова, игнорируя остальные.
@@ -459,4 +459,3 @@ CALL QSUGGEST('test carp', 'products', 1 as sentence, 'words' as search_mode);
 
 
 <!-- proofread -->
-

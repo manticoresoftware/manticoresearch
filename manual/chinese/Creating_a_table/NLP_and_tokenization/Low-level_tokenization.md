@@ -1537,15 +1537,22 @@ dict = {keywords|keywords_32k|crc}
 ```
 
 <!-- example dict -->
-所使用的关键词词典类型由三个已知值之一标识：`keywords`、`keywords_32k` 或 `crc`。这是可选项，默认值为 `keywords`。
+词典类型由三个已知值之一标识：`keywords`、`keywords_32k` 或 `crc`。此设置是可选的；默认值是 `keywords`。
 
-`dict=keywords` 是默认的词典模式。它会把关键词存储在索引中，并在搜索时执行通配符展开。
+`dict=keywords` 和 `dict=keywords_32k` 都是词项词典。词项词典会在索引中存储原始关键字文本，并在搜索时进行通配符扩展。`dict=crc` 则改为存储关键字校验和。
 
-`dict=keywords_32k` 是一种可选启用的词典模式，适用于 32 KiB 的关键词 token。它支持在普通表和 RT 表中处理最多 32768 字节的标准化 token。此限制按 token 规范化后的字节数计算，而不是按字符数计算。超过该限制的 token 会被跳过并给出警告，而不会作为截断词条被索引。当启用了常规的 exact、prefix 或 infix 设置时，支持精确查找、前缀查找和中缀查找。
+`dict=keywords` 是默认的词项词典。
 
-`keywords_32k` 面向哈希、生成的 ID、消息标识符以及类似邮箱的长 token 等长的机器生成值。长 token 会按原始 token 进行索引，不会经过 stemming 或 lemmatization；较短的普通 token 仍然可以使用已配置的 morphology。`CALL SUGGEST`、`CALL QSUGGEST`、percolate 表、32 KiB 的 snippet/highlight 处理，以及 `indextool --dumpdict` 目前都不支持 `dict=keywords_32k`。
+`dict=keywords_32k` 是一个可选启用的词项词典，面向 32 KiB 的关键字 token。它支持普通表和 RT 表中最长 32768 字节的标准化 token。超过此限制的 token 会被跳过并给出警告，而不会被截断后作为词项编入索引。在启用了常规的 exact、prefix 或 infix 设置时，支持精确查找、前缀查找和中缀查找。关于 42 字节常规 token 限制和 32768 字节 `keywords_32k` 限制的详细信息，请参见 [Token length limit](../../Creating_a_table/NLP_and_tokenization/Data_tokenization.md#Token-length-limit)。
 
-使用 `dict=keywords` 或 `dict=keywords_32k` 这类词典模式，可以显著降低索引负担，并在大规模集合上启用子串搜索。该模式既可用于普通表，也可用于 RT 表。
+`keywords_32k` 适用于较长的机器生成值，例如哈希、生成的 ID、消息标识符，以及类似电子邮件格式的长 token。
+
+以下功能目前还不支持 `dict=keywords_32k`：
+
+* `CALL SUGGEST` 和 `CALL QSUGGEST` 不能用于使用 `dict=keywords_32k` 的表。
+* Percolate 表不能使用 `dict=keywords_32k`。
+* 片段和高亮仍然使用常规 token 限制。最长 42 字节的 token 可以被高亮；更长的 `keywords_32k` token 会在片段/高亮处理过程中被跳过。
+* `indextool --dumpdict` 目前还不能导出 `dict=keywords_32k` 词典。
 
 CRC字典在索引中不存储原始关键词文本。相反，在搜索和索引过程中，它们会将关键词替换为控制和值（使用FNV64计算）。该值在索引内部使用。这种方法有两个缺点：
 * 首先，不同关键词对之间存在控制和碰撞的风险。这种风险随着索引中唯一关键词数量的增长而增长。然而，这一担忧是次要的，因为在包含10亿条条目的字典中，单个FNV64碰撞的概率约为1/16或6.25％。大多数字典中的关键词数量远少于10亿，因为典型的口语人类语言有1到1000万个词形。

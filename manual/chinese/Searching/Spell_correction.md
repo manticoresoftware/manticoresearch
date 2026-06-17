@@ -210,7 +210,7 @@ CALL SUGGEST(<word or words>, <table name> [,options])
 options: N as option_name[, M as another_option, ...]
 ```
 
-这些命令会为给定单词提供词典中的所有建议。它们仅适用于已启用[infixing](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)且使用[dict=keywords](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)的表。不支持`dict=keywords_32k`。它们会返回建议的关键词、建议关键词与原始关键词之间的 Levenshtein 距离，以及建议关键词的文档统计信息。
+这些命令会为给定单词提供词典中的所有建议。它们只适用于启用了 [infixing](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) 和 [dict=keywords](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict) 的表。它们不适用于使用 `dict=keywords_32k` 的表。它们会返回建议的关键词、建议关键词与原始关键词之间的 Levenshtein 距离，以及建议关键词的文档统计信息。
 
 如果第一个参数包含多个单词，则：
 * `CALL QSUGGEST` 将仅返回 **最后一个** 单词的建议，忽略其余部分。
@@ -459,4 +459,3 @@ CALL QSUGGEST('test carp', 'products', 1 as sentence, 'words' as search_mode);
 
 
 <!-- proofread -->
-

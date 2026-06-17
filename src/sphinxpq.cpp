@@ -2552,7 +2552,7 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaLegacy ( const CSphString& sM
 	tDictSettings.Load ( rdMeta, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning );
 	if ( tDictSettings.IsKeywordsV2() )
 	{
-		m_sLastError.SetSprintf ( "table '%s' uses dict=keywords_v2, but PQ keywords_v2 storage is not implemented yet", GetName() );
+		m_sLastError.SetSprintf ( "table '%s' uses dict=keywords_32k, but PQ keywords_32k storage is not implemented yet", GetName() );
 		return LOAD_E::GeneralError_e;
 	}
 
@@ -2669,7 +2669,7 @@ PercolateIndex_c::LOAD_E PercolateIndex_c::LoadMetaJson ( const CSphString& sMet
 	tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, pFilenameBuilder, m_sLastWarning );
 	if ( tDictSettings.IsKeywordsV2() )
 	{
-		m_sLastError.SetSprintf ( "table '%s' uses dict=keywords_v2, but PQ keywords_v2 storage is not implemented yet", GetName() );
+		m_sLastError.SetSprintf ( "table '%s' uses dict=keywords_32k, but PQ keywords_32k storage is not implemented yet", GetName() );
 		return LOAD_E::GeneralError_e;
 	}
 

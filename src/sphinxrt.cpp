@@ -4578,7 +4578,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 					int64_t iCheckpoint = tCtx.m_dCheckpoints.GetLength64();
 					if ( bKeywordsV2 && iCheckpoint>INFIX_CHECKPOINT_ID_MAX )
 					{
-						sError.SetSprintf ( "keywords_v2 infix checkpoint id " INT64_FMT " exceeds supported limit %u; checkpoint-id widening is outside 4 GB .spi offset support",
+						sError.SetSprintf ( "keywords_32k infix checkpoint id " INT64_FMT " exceeds supported limit %u; checkpoint-id widening is outside 4 GB .spi offset support",
 							iCheckpoint, INFIX_CHECKPOINT_ID_MAX );
 						return false;
 					}
@@ -11369,7 +11369,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, DictFo
 	if ( eNewDictFormat==DictFormat_e::KEYWORDS_V2
 		&& ( tSettings.m_tIndex.RawMinPrefixLen()!=tIndexSettings.RawMinPrefixLen() || tSettings.m_tIndex.m_iMinInfixLen!=tIndexSettings.m_iMinInfixLen ) )
 	{
-		sError.SetSprintf ( "'%s': changing dict=keywords_v2 prefix or infix settings is not supported by RECONFIGURE", sIndexName.cstr() );
+		sError.SetSprintf ( "'%s': changing dict=keywords_32k prefix or infix settings is not supported by RECONFIGURE", sIndexName.cstr() );
 		return true;
 	}
 
@@ -12175,7 +12175,7 @@ void RtIndex_c::DebugDumpDict ( FILE * fp, bool bDumpOnly )
 	if ( !IsWordDict() )
 		sphDie ( "DebugDumpDict() only supports dict=keywords for now" );
 	if ( GetDictFormat()==DictFormat_e::KEYWORDS_V2 )
-		sphDie ( "DebugDumpDict() does not support dict=keywords_v2 yet" );
+		sphDie ( "DebugDumpDict() does not support dict=keywords_32k yet" );
 
 	if ( !bDumpOnly )
 		fprintf ( fp, "keyword,docs,hits,offset\n" );

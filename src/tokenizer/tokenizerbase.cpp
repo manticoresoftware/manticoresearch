@@ -240,7 +240,7 @@ void WarnAppendSkipped ( CSphString & sWarning, int iSkipped )
 	if ( !sWarning.IsEmpty() )
 		sBuf << sWarning << "; ";
 
-	sBuf << "dict=keywords_v2: skipped " << iSkipped << ( iSkipped==1 ? " token" : " tokens" ) << " over " << SPH_V2_MAX_TOKEN_BYTES << " bytes";
+	sBuf << "dict=keywords_32k: skipped " << iSkipped << ( iSkipped==1 ? " token" : " tokens" ) << " over " << SPH_V2_MAX_TOKEN_BYTES << " bytes";
 	sBuf.MoveTo ( sWarning );
 }
 

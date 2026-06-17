@@ -361,7 +361,7 @@ bool CWordlist::Preread ( const CSphString & sName, DictFormat_e eDictFormat, in
 		const int iLen = bKeywordsV2 ? tReader.UnzipInt() : tReader.GetDword();
 		if ( bKeywordsV2 && ( iLen<=0 || iLen>GetKeywordMaxStoredBytes ( m_eDictFormat ) ) )
 		{
-			sError.SetSprintf ( "invalid keywords_v2 checkpoint keyword length %d", iLen );
+			sError.SetSprintf ( "invalid keywords_32k checkpoint keyword length %d", iLen );
 			return false;
 		}
 
@@ -407,7 +407,7 @@ bool CWordlist::Preread ( const CSphString & sName, DictFormat_e eDictFormat, in
 			dInfixBlock.m_iOffset = m_eDictFormat==DictFormat_e::KEYWORDS_V2 ? (SphOffset_t)tReader.UnzipOffset() : (SphOffset_t)tReader.UnzipInt();
 			if ( m_eDictFormat==DictFormat_e::KEYWORDS_V2 && dInfixBlock.m_iOffset < (SphOffset_t)g_sTagInfixEntries.second )
 			{
-				sError.SetSprintf ( "invalid keywords_v2 infix block offset " INT64_FMT, (int64_t)dInfixBlock.m_iOffset );
+				sError.SetSprintf ( "invalid keywords_32k infix block offset " INT64_FMT, (int64_t)dInfixBlock.m_iOffset );
 				return false;
 			}
 		}

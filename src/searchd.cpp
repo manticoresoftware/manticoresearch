@@ -5791,7 +5791,7 @@ static bool SuggestLocalIndexGet ( const cServedIndexRefPtr_c & pServed, const S
 	RIdx_c pIdx { pServed };
 	if ( pIdx->GetDictionary()->GetSettings().IsKeywordsV2() )
 	{
-		sError.SetSprintf ( "SUGGEST/QSUGGEST is not supported for dict=keywords_v2 yet" );
+		sError.SetSprintf ( "SUGGEST/QSUGGEST is not supported for dict=keywords_32k yet" );
 		return false;
 	}
 
@@ -13773,12 +13773,12 @@ static ResultAndIndex_t LoadRTPercolate ( bool bRT, const char* szIndexName, con
 	DictFormat_e eDictFormat = DictFormat_e::KEYWORDS;
 	if ( !ParseDictFormat ( sIndexType, eDictFormat ) )
 	{
-		sError.SetSprintf ( "table '%s': unknown dict=%s; only 'keywords', 'keywords_v2' or 'crc' values allowed", szIndexName, sIndexType.cstr() );
+		sError.SetSprintf ( "table '%s': unknown dict=%s; only 'keywords', 'keywords_32k' or 'crc' values allowed", szIndexName, sIndexType.cstr() );
 		return { ADD_ERROR, nullptr };
 	}
 	if ( eDictFormat==DictFormat_e::KEYWORDS_V2 && !bRT )
 	{
-		sError.SetSprintf ( "table '%s': dict=keywords_v2 is recognized, but PQ keywords_v2 storage is not implemented yet", szIndexName );
+		sError.SetSprintf ( "table '%s': dict=keywords_32k is recognized, but PQ keywords_32k storage is not implemented yet", szIndexName );
 		return { ADD_ERROR, nullptr };
 	}
 

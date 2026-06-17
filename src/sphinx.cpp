@@ -4227,7 +4227,7 @@ inline int encodeKeyword ( BYTE * pBuf, const char * pKeyword, int iLen )
 inline int encodeKeywordV2 ( BYTE * pBuf, const char * pKeyword, int iLen )
 {
 	if ( iLen<=0 || iLen>GetKeywordMaxStoredBytes ( DictFormat_e::KEYWORDS_V2 ) )
-		sphDie ( "INTERNAL ERROR: keywords_v2 temp keyword length %d exceeds limit %d", iLen, GetKeywordMaxStoredBytes ( DictFormat_e::KEYWORDS_V2 ) );
+		sphDie ( "INTERNAL ERROR: keywords_32k temp keyword length %d exceeds limit %d", iLen, GetKeywordMaxStoredBytes ( DictFormat_e::KEYWORDS_V2 ) );
 
 	BYTE * pOut = pBuf;
 	pOut += ZipToPtrLE ( pOut, iLen );
@@ -9928,7 +9928,7 @@ void CSphIndex_VLN::DebugDumpDict ( FILE * fp, bool bDumpOnly )
 	}
 	if ( m_pDict->GetSettings().IsKeywordsV2() )
 	{
-		sphDie ( "DebugDumpDict() does not support dict=keywords_v2 yet" );
+		sphDie ( "DebugDumpDict() does not support dict=keywords_32k yet" );
 	}
 
 	if ( !bDumpOnly )
@@ -12823,8 +12823,8 @@ private:
 			const int iMaxLen = GetKeywordMaxStoredBytes ( m_eDictFormat );
 			if ( iLen>iMaxLen )
 			{
-				assert ( 0 && "RT keywords_v2 keyword length exceeds limit" );
-				m_sWarning.SetSprintf ( "keywords_v2 word overrun buffer, skipped!!! length=%d(%d)", iMaxLen, iLen );
+				assert ( 0 && "RT keywords_32k keyword length exceeds limit" );
+				m_sWarning.SetSprintf ( "keywords_32k word overrun buffer, skipped!!! length=%d(%d)", iMaxLen, iLen );
 				m_iKeywordsOverrun++;
 				return 0;
 			}

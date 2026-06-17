@@ -272,7 +272,7 @@ int CSphBin::ReadHit ( AggregateHit_t* pOut )
 #endif
 
 					if ( m_eDictFormat==DictFormat_e::KEYWORDS_V2 && uDelta>(SphWordID_t)GetKeywordMaxStoredBytes ( m_eDictFormat ) )
-						sphDie ( "INTERNAL ERROR: corrupted keywords_v2 keyword length (len=" UINT64_FMT ", deltapos=" UINT64_FMT ")",
+						sphDie ( "INTERNAL ERROR: corrupted keywords_32k keyword length (len=" UINT64_FMT ", deltapos=" UINT64_FMT ")",
 							(uint64_t)uDelta,
 							(uint64_t)( m_iFilePos - m_iLeft ) );
 

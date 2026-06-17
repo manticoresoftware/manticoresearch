@@ -609,7 +609,7 @@ bool DiskIndexChecker_c::Impl_c::ReadLegacyHeader ( CSphString& sError )
 	auto eDictFormat = m_tIndex.GetDictionary()->GetSettings().GetDictFormat();
 	if ( eDictFormat==DictFormat_e::KEYWORDS_V2 )
 	{
-		sError = "indexcheck for dict=keywords_v2 is not implemented yet";
+		sError = "indexcheck for dict=keywords_32k is not implemented yet";
 		return false;
 	}
 

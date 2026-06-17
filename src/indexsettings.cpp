@@ -84,7 +84,7 @@ const char * DictFormatName ( DictFormat_e eFormat )
 	{
 	case DictFormat_e::CRC:			return "crc";
 	case DictFormat_e::KEYWORDS:		return "keywords";
-	case DictFormat_e::KEYWORDS_V2:	return "keywords_v2";
+	case DictFormat_e::KEYWORDS_V2:	return "keywords_32k";
 	}
 
 	return "keywords";
@@ -105,7 +105,7 @@ bool ParseDictFormat ( const CSphString & sValue, DictFormat_e & eFormat )
 		return true;
 	}
 
-	if ( sValue=="keywords_v2" )
+	if ( sValue=="keywords_32k" )
 	{
 		eFormat = DictFormat_e::KEYWORDS_V2;
 		return true;
@@ -1138,7 +1138,7 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 	DictFormat_e eDictFormat = DictFormat_e::KEYWORDS;
 	if ( !ParseDictFormat ( sIndexType, eDictFormat ) )
 	{
-		sError.SetSprintf ( "table '%s': unknown dict=%s; only 'keywords', 'keywords_v2' or 'crc' values allowed", szIndexName, sIndexType.cstr() );
+		sError.SetSprintf ( "table '%s': unknown dict=%s; only 'keywords', 'keywords_32k' or 'crc' values allowed", szIndexName, sIndexType.cstr() );
 		return false;
 	}
 	bool bWordDict = ( eDictFormat!=DictFormat_e::CRC );
@@ -1151,7 +1151,7 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 
 	if ( bWordDict && m_iMaxSubstringLen>0 )
 	{
-		sError.SetSprintf ( "max_substring_len can not be used with dict=keywords or dict=keywords_v2" );
+		sError.SetSprintf ( "max_substring_len can not be used with dict=keywords or dict=keywords_32k" );
 		return false;
 	}
 

@@ -1841,7 +1841,7 @@ static bool ConfigureShardMetadataFromConfig ( ShardIndex_c & tShard, const char
 	DictFormat_e eDictFormat = DictFormat_e::KEYWORDS;
 	if ( !ParseDictFormat ( sDictType, eDictFormat ) )
 	{
-		sError.SetSprintf ( "table '%s': unknown dict=%s; only 'keywords', 'keywords_v2' or 'crc' values allowed", szIndexName, sDictType.cstr() );
+		sError.SetSprintf ( "table '%s': unknown dict=%s; only 'keywords', 'keywords_32k' or 'crc' values allowed", szIndexName, sDictType.cstr() );
 		return false;
 	}
 	bool bWordDict = ( eDictFormat!=DictFormat_e::CRC );

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>keywords_v2 medium long tokens</name>
+<name>keywords_32k medium long tokens</name>
 
 <requires>
 <http/>
@@ -39,7 +39,7 @@ index plain_v2_main
 	source = plain_v2_main_src
 	path = <data_path/>/plain_v2_main
 	charset_table = 0..9, A..Z->a..z, _, a..z
-	dict = keywords_v2
+	dict = keywords_32k
 	index_exact_words = 1
 	min_prefix_len = 2
 	min_infix_len = 2
@@ -50,7 +50,7 @@ index plain_v2_delta
 	source = plain_v2_delta_src
 	path = <data_path/>/plain_v2_delta
 	charset_table = 0..9, A..Z->a..z, _, a..z
-	dict = keywords_v2
+	dict = keywords_32k
 	index_exact_words = 1
 	min_prefix_len = 2
 	min_infix_len = 2
@@ -63,7 +63,7 @@ index rt_v2
 	rt_field = body
 	rt_attr_uint = gid
 	charset_table = 0..9, A..Z->a..z, _, a..z
-	dict = keywords_v2
+	dict = keywords_32k
 	index_exact_words = 1
 	min_prefix_len = 2
 	min_infix_len = 2
@@ -95,6 +95,8 @@ INSERT INTO sph_kwv2_docs VALUES
 
 <queries>
 <sphinxql>
+	SHOW CREATE TABLE rt_v2;
+
 	SELECT id, gid FROM plain_v2_main WHERE MATCH('=kv2shared_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_middleprobealpha_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_tail') ORDER BY id ASC;
 	SELECT id, gid FROM plain_v2_main WHERE MATCH('=kv2shared_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_middleprobebeta_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc_tail') ORDER BY id ASC;
 	SELECT id, gid FROM plain_v2_main WHERE MATCH('kv2shared*') ORDER BY id ASC;

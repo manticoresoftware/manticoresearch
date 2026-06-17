@@ -79,7 +79,7 @@ static bool CheckKeywordsV2InfixCheckpoint ( DictFormat_e eDictFormat, int64_t i
 	if ( eDictFormat!=DictFormat_e::KEYWORDS_V2 || iCheckpoint<=INFIX_CHECKPOINT_ID_MAX )
 		return true;
 
-	sError.SetSprintf ( "keywords_v2 infix checkpoint id " INT64_FMT " exceeds supported limit %u; checkpoint-id widening is outside 4 GB .spi offset support",
+	sError.SetSprintf ( "keywords_32k infix checkpoint id " INT64_FMT " exceeds supported limit %u; checkpoint-id widening is outside 4 GB .spi offset support",
 		iCheckpoint, INFIX_CHECKPOINT_ID_MAX );
 	return false;
 }

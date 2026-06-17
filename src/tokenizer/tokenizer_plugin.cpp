@@ -12,8 +12,16 @@
 
 #include "token_filter.h"
 
+#include "indexsettings.h"
 #include "schema/schema.h"
 #include "sphinxplugin.h"
+
+static bool ShouldBypassTokenFilter ( const ISphTokenizer & tTokenizer, const BYTE * pToken )
+{
+	const int iTokenBytes = (int)strnlen ( (const char*)pToken, SPH_LEGACY_TOKEN_BYTES+1 );
+	return tTokenizer.GetMaxTokenBytes()>SPH_LEGACY_TOKEN_BYTES
+		&& ShouldBypassMorphology ( DictFormat_e::KEYWORDS_V2, iTokenBytes );
+}
 
 class PluginFilterTokenizer_c final: public CSphTokenFilter
 {
@@ -43,9 +51,9 @@ public:
 		SetFilterSchema ( CSphSchema(), sError );
 	}
 
-	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const noexcept final
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode, int iTokenBytes=0 ) const noexcept final
 	{
-		return TokenizerRefPtr_c { new PluginFilterTokenizer_c ( m_pTokenizer->Clone ( eMode ), m_pFilter, m_sOptions.cstr() ) };
+		return TokenizerRefPtr_c { new PluginFilterTokenizer_c ( m_pTokenizer->Clone ( eMode, iTokenBytes ), m_pFilter, m_sOptions.cstr() ) };
 	}
 
 	bool SetFilterSchema ( const CSphSchema& s, CSphString& sError ) final
@@ -132,10 +140,14 @@ public:
 				GetBlended();
 				return pTok;
 			}
+			if ( ShouldBypassTokenFilter ( *this, pRaw ) )
+			{
+				SetBypassTokenState();
+				return pRaw;
+			}
 
 			// compute proper position delta
-			m_iPosDelta = ( m_bWasBlended ? 0 : 1 ) + CSphTokenFilter::GetOvershortCount();
-			m_bWasBlended = CSphTokenFilter::TokenIsBlended();
+			SetRawTokenState();
 
 			// push raw token to plugin, return a processed one, if any
 			int iExtra = 0;
@@ -153,6 +165,19 @@ public:
 	}
 
 private:
+	void SetRawTokenState()
+	{
+		m_iPosDelta = ( m_bWasBlended ? 0 : 1 ) + CSphTokenFilter::GetOvershortCount();
+		m_bWasBlended = CSphTokenFilter::TokenIsBlended();
+	}
+
+	void SetBypassTokenState()
+	{
+		SetRawTokenState();
+		m_bBlended = CSphTokenFilter::TokenIsBlended();
+		m_bBlendedPart = CSphTokenFilter::TokenIsBlendedPart();
+	}
+
 	void GetBlended()
 	{
 		if ( m_pFilter->m_fnTokenIsBlended )

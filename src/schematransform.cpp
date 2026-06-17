@@ -161,7 +161,10 @@ void TransformedSchemaBuilder_c::Finalize()
 void TransformedSchemaBuilder_c::ReplaceColumnarAttrWithExpression ( CSphColumnInfo & tAttr, int iLocator )
 {
 	assert ( tAttr.IsColumnar() );
-	assert ( !tAttr.m_pExpr );
+
+	// a columnar group-by key reused for hybrid fused matches can arrive already carrying
+	// its columnar-fetch expression; drop it so we respawn one against the standalone schema below
+	tAttr.m_pExpr = nullptr;
 
 	// temporarily add attr to new schema
 	// when result set is finalized, corresponding columnar expression (will be spawned later)

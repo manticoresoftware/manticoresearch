@@ -35,7 +35,8 @@ docker exec manticore bash -lc "cat > /var/lib/manticore/auth.json <<'JSON'
 {\"users\":[{\"username\":\"admin\",\"salt\":\"aabbccddeeff00112233aabbccddeeff00112233\",\"hashes\":{\"password_sha1_no_salt\":\"74913f5cd5f61ec0bcfdb775414c2fb3d161b620\",\"password_sha256\":\"bc723b5179630195129574a9cf534e1fa7397f9bd166dd10b1babbe37ea52589\",\"bearer_sha256\":\"4b72aa7367f065146c7a028bc739c69c8e4bdebf7fe2d1133255c51bf36d8056\"}}],\"permissions\":[{\"username\":\"admin\",\"action\":\"read\",\"target\":\"*\",\"allow\":true},{\"username\":\"admin\",\"action\":\"write\",\"target\":\"*\",\"allow\":true},{\"username\":\"admin\",\"action\":\"schema\",\"target\":\"*\",\"allow\":true},{\"username\":\"admin\",\"action\":\"admin\",\"target\":\"*\",\"allow\":true}]}
 JSON
 chmod 600 /var/lib/manticore/auth.json
-sed -i 's/searchd {/searchd {\nauth = 1/g' /etc/manticoresearch/manticore.conf
+sed -i 's/searchd {/searchd {\nauth = 1\nauth_log_level = all/g' /etc/manticoresearch/manticore.conf
+rm -f /var/log/manticore/searchd.log.auth
 echo 'Auth configured'"
 ––– output –––
 Auth configured
@@ -65,19 +66,24 @@ docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e 
 ––– output –––
 0
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW SOURCES;\" | grep -q '^kafka_auth$' && echo SOURCE_CREATED_OK"
+docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW SOURCES;\" | grep -q 'kafka_auth' && echo SOURCE_CREATED_OK"
 ––– output –––
 SOURCE_CREATED_OK
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW MVS;\" | grep -q '^view_table_auth$' && echo MVA_CREATED_OK"
+docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW MVS;\" | grep -q 'view_table_auth' && echo MVA_CREATED_OK"
 ––– output –––
 MVA_CREATED_OK
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW TABLES FROM system;\" | awk '/system\\.(source_kafka_auth|materialized_view_view_table_auth|buffer_kafka_auth_0)/ {print \$1}' | sort"
+docker exec manticore bash -lc "out=\$(MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW TABLES FROM system;\" 2>&1); echo SYSTEM_TABLES_RAW_MATCHES_BEGIN; echo \"\$out\" | grep -E 'system\\.(sources|views|buffer_kafka_auth_0)' || true; echo SYSTEM_TABLES_RAW_MATCHES_END; echo \"\$out\" | awk '{ for (i=1; i<=NF; i++) if (\$i ~ /^system\\.(sources|views|buffer_kafka_auth_0)$/) print \$i }' | sort"
 ––– output –––
+SYSTEM_TABLES_RAW_MATCHES_BEGIN
+#!/.*system\.buffer_kafka_auth_0.*/!#
+#!/.*system\.sources.*/!#
+#!/.*system\.views.*/!#
+SYSTEM_TABLES_RAW_MATCHES_END
 system.buffer_kafka_auth_0
-system.materialized_view_view_table_auth
-system.source_kafka_auth
+system.sources
+system.views
 ––– comment –––
 Verify full Kafka processing
 ––– input –––
@@ -85,7 +91,7 @@ timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/se
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SELECT COUNT(*) FROM destination_kafka_auth\""
+docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e \"SELECT COUNT(*) FROM destination_kafka_auth\" | awk '/^[| ]*[0-9]+[ |]*$/ { gsub(/[^0-9]/,\"\"); print; exit }'"
 ––– output –––
 57
 ––– comment –––
@@ -95,44 +101,44 @@ docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e 
 ––– output –––
 USERS_CREATED_OK
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -e \"SELECT * FROM system.source_kafka_auth;\" 2>&1 | grep -q \"Permission denied for user 'queue_reader'\" && echo SOURCE_READ_DENIED_BEFORE_GRANT_OK"
+docker exec manticore bash -lc "out=\$(MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -e \"SELECT * FROM system.sources;\" 2>&1); if echo \"\$out\" | grep -q \"Permission denied for user 'queue_reader'\"; then echo SOURCE_READ_DENIED_BEFORE_GRANT_OK; else echo SOURCE_READ_DENIED_BEFORE_GRANT_FAILED; echo \"Expected permission denial while selecting system.sources before read grant. Actual output:\"; echo \"\$out\"; fi"
 ––– output –––
 SOURCE_READ_DENIED_BEFORE_GRANT_OK
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -e \"SELECT * FROM system.materialized_view_view_table_auth;\" 2>&1 | grep -q \"Permission denied for user 'queue_reader'\" && echo MVA_READ_DENIED_BEFORE_GRANT_OK"
+docker exec manticore bash -lc "out=\$(MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -e \"SELECT * FROM system.views;\" 2>&1); if echo \"\$out\" | grep -q \"Permission denied for user 'queue_reader'\"; then echo MVA_READ_DENIED_BEFORE_GRANT_OK; else echo MVA_READ_DENIED_BEFORE_GRANT_FAILED; echo \"Expected permission denial while selecting system.views before read grant. Actual output:\"; echo \"\$out\"; fi"
 ––– output –––
 MVA_READ_DENIED_BEFORE_GRANT_OK
 ––– comment –––
-Grant read permissions through plugin resource syntax
+Grant read permissions on the Queue plugin system tables and show any SQL/auth error directly.
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e \"GRANT read ON source/kafka_auth TO 'queue_reader'; GRANT read ON mva/view_table_auth TO 'queue_reader'; GRANT read ON source/kafka_auth TO 'queue_writer'; GRANT read ON mva/view_table_auth TO 'queue_writer';\""; echo $?
+docker exec manticore bash -lc "sql=\"GRANT read ON 'system.sources' TO 'queue_reader'; GRANT read ON 'system.views' TO 'queue_reader'; GRANT read ON 'system.sources' TO 'queue_writer'; GRANT read ON 'system.views' TO 'queue_writer';\"; out=\$(MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e \"\$sql\" 2>&1); rc=\$?; if [ \$rc -eq 0 ]; then echo READ_GRANTS_OK; else echo READ_GRANTS_FAILED rc=\$rc; echo \"Failed SQL:\"; echo \"\$sql\"; echo \"Actual output:\"; echo \"\$out\"; fi"
 ––– output –––
-0
+READ_GRANTS_OK
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW PERMISSIONS;\" | grep queue_ | awk '{print \$1,\$2,\$3,\$4}' | sort"
+docker exec manticore bash -lc "out=\$(MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e \"SHOW PERMISSIONS;\" 2>&1); echo \"\$out\" | awk '/queue_/ { user=\"\"; action=\"\"; target=\"\"; allow=\"\"; for (i=1; i<=NF; i++) { if (\$i ~ /^queue_/) user=\$i; else if (\$i ~ /^(read|write|schema)$/) action=\$i; else if (\$i ~ /^system\\./) target=\$i; else if (\$i ~ /^[01]$/) allow=\$i } if (user && action && target && allow) print user, action, target, allow }' | sort"
 ––– output –––
-queue_reader read system.materialized_view_view_table_auth 1
-queue_reader read system.source_kafka_auth 1
-queue_writer read system.materialized_view_view_table_auth 1
-queue_writer read system.source_kafka_auth 1
+queue_reader read system.sources 1
+queue_reader read system.views 1
+queue_writer read system.sources 1
+queue_writer read system.views 1
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -N -e \"SHOW SOURCE kafka_auth;\" | grep -q '^kafka_auth' && echo READER_SHOW_SOURCE_OK"
+docker exec manticore bash -lc "out=\$(MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -e \"SHOW SOURCE kafka_auth;\" 2>&1); if echo \"\$out\" | grep -q 'kafka_auth'; then echo READER_SHOW_SOURCE_OK; else echo READER_SHOW_SOURCE_FAILED; echo \"Expected SHOW SOURCE kafka_auth to return kafka_auth after read grant. Actual output:\"; echo \"\$out\"; fi"
 ––– output –––
 READER_SHOW_SOURCE_OK
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -N -e \"SHOW MV view_table_auth;\" | grep -q '^view_table_auth' && echo READER_SHOW_MVA_OK"
+docker exec manticore bash -lc "out=\$(MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -e \"SHOW MV view_table_auth;\" 2>&1); if echo \"\$out\" | grep -q 'view_table_auth'; then echo READER_SHOW_MVA_OK; else echo READER_SHOW_MVA_FAILED; echo \"Expected SHOW MV view_table_auth to return view_table_auth after read grant. Actual output:\"; echo \"\$out\"; fi"
 ––– output –––
 READER_SHOW_MVA_OK
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -e \"ALTER MATERIALIZED VIEW view_table_auth suspended=1;\" 2>&1 | grep -q \"Permission denied for user 'queue_reader'\" && echo READER_WRITE_DENIED_OK"
+docker exec manticore bash -lc "out=\$(MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -e \"ALTER MATERIALIZED VIEW view_table_auth suspended=1;\" 2>&1); rc=\$?; if echo \"\$out\" | grep -q \"Permission denied for user 'queue_reader'\"; then echo READER_WRITE_DENIED_OK; else echo READER_WRITE_DENIED_FAILED rc=\$rc; echo \"Expected queue_reader ALTER MATERIALIZED VIEW to be denied; empty output with rc=0 means it was allowed. Actual output:\"; if [ -n \"\$out\" ]; then echo \"\$out\"; else echo \"<empty>\"; fi; echo \"Post-state SHOW MV output:\"; MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e \"SHOW MV view_table_auth;\" 2>&1; echo \"SHOW PERMISSIONS queue_* snapshot:\"; MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e \"SHOW PERMISSIONS;\" 2>&1 | grep -E \"queue_(reader|writer)|user|username\" || true; echo \"auth log file status after unexpected ALTER allowance:\"; ls -l /var/log/manticore/searchd.log.auth 2>&1 || true; echo \"auth log after unexpected ALTER allowance:\"; cat /var/log/manticore/searchd.log.auth 2>&1 || true; echo \"focused searchd.log lines after unexpected ALTER allowance:\"; grep -E \"ExecuteSqlQuery|User:|Permission denied|denied|ALTER MATERIALIZED|DROP SOURCE|DROP MV|SHOW PERMISSIONS|queue_reader|queue_writer|BUDDY\" /var/log/manticore/searchd.log 2>&1 || true; echo \"searchd.log tail after unexpected ALTER allowance:\"; tail -n 80 /var/log/manticore/searchd.log || true; fi"
 ––– output –––
 READER_WRITE_DENIED_OK
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -e \"DROP SOURCE kafka_auth;\" 2>&1 | grep -q \"Permission denied for user 'queue_reader'\" && echo READER_DROP_SOURCE_DENIED_OK"
+docker exec manticore bash -lc "out=\$(MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -e \"DROP SOURCE kafka_auth;\" 2>&1); rc=\$?; if echo \"\$out\" | grep -q \"Permission denied for user 'queue_reader'\"; then echo READER_DROP_SOURCE_DENIED_OK; else echo READER_DROP_SOURCE_DENIED_FAILED rc=\$rc; echo \"Expected queue_reader DROP SOURCE to be denied; empty output with rc=0 means it was allowed. Actual output:\"; if [ -n \"\$out\" ]; then echo \"\$out\"; else echo \"<empty>\"; fi; echo \"Post-state SHOW SOURCES/MVS output:\"; MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e \"SHOW SOURCES; SHOW MVS;\" 2>&1; echo \"SHOW TABLES FROM system snapshot:\"; MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e \"SHOW TABLES FROM system;\" 2>&1 | grep -E \"system\\.(sources|views|buffer_kafka_auth_0)|Tables\" || true; echo \"SHOW PERMISSIONS queue_* snapshot:\"; MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e \"SHOW PERMISSIONS;\" 2>&1 | grep -E \"queue_(reader|writer)|user|username\" || true; echo \"auth log file status after unexpected DROP SOURCE allowance:\"; ls -l /var/log/manticore/searchd.log.auth 2>&1 || true; echo \"auth log after unexpected DROP SOURCE allowance:\"; cat /var/log/manticore/searchd.log.auth 2>&1 || true; echo \"focused searchd.log lines after unexpected DROP SOURCE allowance:\"; grep -E \"ExecuteSqlQuery|User:|Permission denied|denied|ALTER MATERIALIZED|DROP SOURCE|DROP MV|SHOW PERMISSIONS|queue_reader|queue_writer|BUDDY\" /var/log/manticore/searchd.log 2>&1 || true; echo \"searchd.log tail after unexpected DROP SOURCE allowance:\"; tail -n 80 /var/log/manticore/searchd.log || true; fi"
 ––– output –––
 READER_DROP_SOURCE_DENIED_OK
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -e \"DROP MV view_table_auth;\" 2>&1 | grep -q \"Permission denied for user 'queue_reader'\" && echo READER_DROP_MVA_DENIED_OK"
+docker exec manticore bash -lc "out=\$(MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -e \"DROP MV view_table_auth;\" 2>&1); rc=\$?; if echo \"\$out\" | grep -q \"Permission denied for user 'queue_reader'\"; then echo READER_DROP_MVA_DENIED_OK; else echo READER_DROP_MVA_DENIED_FAILED rc=\$rc; echo \"Expected queue_reader DROP MV to be denied; empty output with rc=0 means it was allowed. Actual output:\"; if [ -n \"\$out\" ]; then echo \"\$out\"; else echo \"<empty>\"; fi; echo \"Post-state SHOW SOURCES/MVS output:\"; MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e \"SHOW SOURCES; SHOW MVS;\" 2>&1; echo \"SHOW TABLES FROM system snapshot:\"; MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e \"SHOW TABLES FROM system;\" 2>&1 | grep -E \"system\\.(sources|views|buffer_kafka_auth_0)|Tables\" || true; echo \"SHOW PERMISSIONS queue_* snapshot:\"; MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e \"SHOW PERMISSIONS;\" 2>&1 | grep -E \"queue_(reader|writer)|user|username\" || true; echo \"auth log file status after unexpected DROP MV allowance:\"; ls -l /var/log/manticore/searchd.log.auth 2>&1 || true; echo \"auth log after unexpected DROP MV allowance:\"; cat /var/log/manticore/searchd.log.auth 2>&1 || true; echo \"focused searchd.log lines after unexpected DROP MV allowance:\"; grep -E \"ExecuteSqlQuery|User:|Permission denied|denied|ALTER MATERIALIZED|DROP SOURCE|DROP MV|SHOW PERMISSIONS|queue_reader|queue_writer|BUDDY\" /var/log/manticore/searchd.log 2>&1 || true; echo \"searchd.log tail after unexpected DROP MV allowance:\"; tail -n 80 /var/log/manticore/searchd.log || true; fi"
 ––– output –––
 READER_DROP_MVA_DENIED_OK
 ––– comment –––

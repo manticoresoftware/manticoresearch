@@ -1533,25 +1533,31 @@ table products {
 ### dict
 
 ```ini
-dict = {keywords|crc}
+dict = {keywords|keywords_32k|crc}
 ```
 
 <!-- example dict -->
-The type of keywords dictionary used is identified by one of two known values, 'crc' or 'keywords'. This is optional, with 'keywords' as the default.
+The type of keywords dictionary used is identified by one of three known values: `keywords`, `keywords_32k`, or `crc`. This is optional, with `keywords` as the default.
 
-Using the keywords dictionary mode (dict=keywords) can significantly decrease the indexing burden and enable substring searches on extensive collections. This mode can be utilized for both plain and RT tables.
+`dict=keywords` is the default word dictionary. It stores keywords in the index and performs search-time wildcard expansion.
+
+`dict=keywords_32k` is an opt-in word dictionary for 32 KiB keyword tokens. It supports normalized tokens up to 32768 bytes in both plain and RT tables. The limit is measured in bytes after token normalization, not in characters. Tokens above this limit are skipped with a warning instead of being indexed as truncated terms. Exact lookup, prefix lookup, and infix lookup are supported when the usual exact, prefix, or infix settings are enabled.
+
+`keywords_32k` is intended for long machine-generated values such as hashes, generated IDs, message identifiers, and long email-like tokens. Long tokens are indexed as original tokens and do not go through stemming or lemmatization; short normal tokens can still use the configured morphology. `CALL SUGGEST` and `CALL QSUGGEST`, percolate tables, 32 KiB snippet/highlight handling, and `indextool --dumpdict` do not support `dict=keywords_32k` yet.
+
+Using a word dictionary mode such as `dict=keywords` or `dict=keywords_32k` can significantly decrease the indexing burden and enable substring searches on extensive collections. This mode can be utilized for both plain and RT tables.
 
 CRC dictionaries do not store the original keyword text in the index. Instead, they replace keywords with a control sum value (computed using FNV64) during both searching and indexing processes. This value is used internally within the index. This approach has two disadvantages:
 * Firstly, there's a risk of control sum collisions between different keywords pairs. This risk grows in proportion to the number of unique keywords in the index. Nonetheless, this concern is minor as the probability of a single FNV64 collision in a dictionary of 1 billion entries is roughly 1 in 16, or 6.25 percent. Most dictionaries will have far fewer than a billion keywords given that a typical spoken human language has between 1 and 10 million word forms.
 * Secondly, and more crucially, it's not straightforward to perform substring searches with control sums. Manticore addressed this issue by pre-indexing all possible substrings as separate keywords (see [min_prefix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len), [min_infix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) directives). This method even has an added advantage of matching substrings in the fastest way possible. Yet, pre-indexing all substrings significantly increases the index size (often by factors of 3-10x or more) and subsequently affects the indexing time, making substring searches on large indexes rather impractical.
 
-The keywords dictionary resolves both of these issues. It stores keywords in the index and performs search-time wildcard expansion. For instance, a search for a `test*` prefix could internally expand to a 'test|tests|testing' query based on the dictionary's contents. This expansion process is entirely invisible to the application, with the exception that the separate per-keyword statistics for all the matched keywords are now also reported.
+The word dictionary resolves both of these issues. It stores keywords in the index and performs search-time wildcard expansion. For instance, a search for a `test*` prefix could internally expand to a 'test|tests|testing' query based on the dictionary's contents. This expansion process is entirely invisible to the application, with the exception that the separate per-keyword statistics for all the matched keywords are now also reported.
 
-For substring (infix) searches, extended wildcards can be used. Special characters such as `?` and `%` are compatible with substring (infix) search (e.g., `t?st*`, `run%`, `*abc*`). Note that the [wildcards operators](../../Searching/Full_text_matching/Operators.md#Wildcard-operators) and the [REGEX](../../Searching/Full_text_matching/Operators.md#REGEX-operator) only function with `dict=keywords`.
+For substring (infix) searches, extended wildcards can be used. Special characters such as `?` and `%` are compatible with substring (infix) search (e.g., `t?st*`, `run%`, `*abc*`). Note that the [wildcards operators](../../Searching/Full_text_matching/Operators.md#Wildcard-operators) function with `dict=keywords` and `dict=keywords_32k`, while the [REGEX](../../Searching/Full_text_matching/Operators.md#REGEX-operator) operator only functions with `dict=keywords`.
 
-Indexing with a keywords dictionary is approximately 1.1x to 1.3x slower than regular, non-substring indexing - yet significantly faster than substring indexing (either prefix or infix). The index size should only be slightly larger than that of the standard non-substring table, with a total difference of 1..10% percent. The time it takes for regular keyword searching should be nearly the same or identical across all three index types discussed (CRC non-substring, CRC substring, keywords). Substring searching time can significantly fluctuate based on how many actual keywords match the given substring (i.e., how many keywords the search term expands into). The maximum number of matched keywords is limited by the [expansion_limit](../../Server_settings/Searchd.md#expansion_limit) directive.
+For normal-sized tokens, indexing with a word dictionary is approximately 1.1x to 1.3x slower than regular, non-substring indexing - yet significantly faster than substring indexing (either prefix or infix). The index size should only be slightly larger than that of the standard non-substring table, with a total difference of 1..10% percent. The time it takes for regular keyword searching should be nearly the same or identical across all three index types discussed (CRC non-substring, CRC substring, word dictionary). Substring searching time can significantly fluctuate based on how many actual keywords match the given substring (i.e., how many keywords the search term expands into). The maximum number of matched keywords is limited by the [expansion_limit](../../Server_settings/Searchd.md#expansion_limit) directive.
 
-In summary, keywords and CRC dictionaries offer two different trade-off decisions for substring searching. You can opt to either sacrifice indexing time and index size to achieve the fastest worst-case searches (CRC dictionary), or minimally impact indexing time but sacrifice worst-case searching time when the prefix expands into a high number of keywords (keywords dictionary).
+In summary, word and CRC dictionaries offer two different trade-off decisions for substring searching. You can opt to either sacrifice indexing time and index size to achieve the fastest worst-case searches (CRC dictionary), or minimally impact indexing time but sacrifice worst-case searching time when the prefix expands into a high number of keywords (word dictionary).
 
 <!-- request SQL -->
 

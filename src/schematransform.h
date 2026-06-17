@@ -26,7 +26,7 @@ private:
 	const ISphSchema &	m_tOldSchema;
 	CSphSchema &		m_tNewSchema;
 
-	void	ReplaceColumnarAttrWithExpression ( CSphColumnInfo & tAttr, int iLocator );
+	bool	ReplaceColumnarAttrWithExpression ( CSphColumnInfo & tAttr, int iLocator );
 };
 
 

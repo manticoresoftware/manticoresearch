@@ -4701,6 +4701,15 @@ bool CSphIndex_VLN::Build_CollectQueryMvas ( const CSphVector<CSphSource*> & dSo
 	for ( auto & pSource : dSources )
 	{
 		assert ( pSource );
+		if ( !pSource->Connect ( m_sLastError )
+			|| !pSource->IterateStart ( m_sLastError )
+			|| !pSource->UpdateSchema ( &m_tSchema, m_sLastError ) )
+		{
+			pSource->Disconnect();
+			return false;
+		}
+
+		pSource->Disconnect();
 		if ( !pSource->Connect ( m_sLastError ) )
 			return false;
 

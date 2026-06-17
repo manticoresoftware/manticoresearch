@@ -35,6 +35,7 @@ public:
 	void					WriteSynonyms ( Writer_i & tWriter ) const final						{ return m_pTokenizer->WriteSynonyms ( tWriter ); }
 	void 					WriteSynonyms ( JsonEscapedBuilder & tOut ) const final					{ return m_pTokenizer->WriteSynonyms ( tOut ); }
 	bool					SetBoundary ( const char * sConfig, CSphString & sError ) override		{ return m_pTokenizer->SetBoundary ( sConfig, sError ); }
+	bool					SetBlendMode ( const char * sMode, CSphString & sError ) override		{ return m_pTokenizer->SetBlendMode ( sMode, sError ); }
 	void					Setup ( const CSphTokenizerSettings & tSettings ) override				{ m_pTokenizer->Setup ( tSettings ); }
 	const CSphTokenizerSettings &	GetSettings () const override									{ return m_pTokenizer->GetSettings (); }
 	const CSphSavedFile &	GetSynFileInfo () const override										{ return m_pTokenizer->GetSynFileInfo (); }

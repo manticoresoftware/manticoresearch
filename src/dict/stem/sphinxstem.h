@@ -88,6 +88,8 @@ void	sphAotLemmatize ( StrVec_t & dLemmas, const BYTE * pWord, int iLang );
 /// get lemmatizer dictionary info (file name, crc)
 const CSphNamedInt &	sphAotDictinfo ( int iLang );
 
+/// add separator-stripped blended token variant needed by AOT token filters
+void					sphAotAddBlendTrimAll ( TokenizerRefPtr_c& pTokenizer );
 /// create token filter that returns all morphological hypotheses
 /// NOTE, takes over wordforms from pDict, in AOT case they must be handled by the fitler
 void					sphAotTransformFilter ( TokenizerRefPtr_c& pTokenizer, const DictRefPtr_c& pDict, bool bIndexExact, DWORD uLangMask );

@@ -85,6 +85,21 @@ index testrt2red : testrt2
 	morphology		= lemmatize_en,lemmatize_ru,lemmatize_de
 }
 
+index aot_blend
+{
+	type			= rt
+	path			= <data_path/>/aot_blend
+	rt_field		= term
+	morphology		= lemmatize_en_all, lemmatize_ru_all, lemmatize_de_all
+	min_prefix_len	= 1
+	min_infix_len	= 2
+	index_exact_words = 1
+	expand_keywords	= 1
+	charset_table	= 0..9, A..Z->a..z, _, a..z, U+00C0..U+00FF, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+0435, U+451->U+0435
+	blend_chars		= U+002D, U+002E, U+002C, +, U+0026
+	blend_mode		= trim_tail, skip_pure
+}
+
 
 index aot_plain
 {
@@ -190,6 +205,20 @@ INSERT INTO META:rt VALUES ( 5, 'as it become known', 11 );
 INSERT INTO META:rt VALUES ( 6, 'somebody indices', 11 );
 INSERT INTO META:rt VALUES ( 7, 'nobody@nowhere knew everything super', 11 );
 INSERT INTO META:rt VALUES ( 8, 'стали well-known как путин markieren', 11 );
+
+<!-- regression for issue #4641: AOT lemmatizers must index/query folded blended-token variants -->
+INSERT INTO aot_blend VALUES ( 1, 'ПЭТ-2' );
+INSERT INTO aot_blend VALUES ( 2, 'foo&amp;2' );
+INSERT INTO aot_blend VALUES ( 3, 'Auto-2' );
+INSERT INTO aot_blend VALUES ( 4, 'über-2' );
+
+CALL KEYWORDS ( 'ПЭТ-2', 'aot_blend' );
+CALL KEYWORDS ( 'foo&amp;2', 'aot_blend' );
+CALL KEYWORDS ( 'Auto-2', 'aot_blend' );
+SELECT * FROM aot_blend WHERE MATCH('пэт2');
+SELECT * FROM aot_blend WHERE MATCH('foo2');
+SELECT * FROM aot_blend WHERE MATCH('auto2');
+SELECT * FROM aot_blend WHERE MATCH('über2');
 
 SELECT * FROM META:all WHERE MATCH('wife'); SHOW META;
 SELECT * FROM META:all WHERE MATCH('wives'); SHOW META;

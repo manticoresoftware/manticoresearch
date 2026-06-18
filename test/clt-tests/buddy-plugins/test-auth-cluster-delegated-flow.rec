@@ -1,0 +1,113 @@
+––– comment –––
+Test delegated cluster flow with non-replication session user in 2-node replication setup.
+
+Scenario:
+1) Session user `norepluser` has read/write/schema but no replication.
+2) Cluster/effective replication user is `repluser` (has replication).
+3) Whole flow is executed from `norepluser`:
+   CREATE CLUSTER -> JOIN CLUSTER -> ALTER CLUSTER ADD -> INSERT -> SELECT on node2 -> DELETE CLUSTER.
+––– comment –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach-with-auth –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach-with-auth –––
+––– comment –––
+––– Setup users on both nodes –––
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "CREATE USER 'repluser' IDENTIFIED BY 'repluser1234';" >/dev/null; MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "GRANT replication ON * TO 'repluser';" >/dev/null; MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "CREATE USER 'norepluser' IDENTIFIED BY 'noreplpass1';" >/dev/null; MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "GRANT read ON * TO 'norepluser';" >/dev/null; MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "GRANT write ON * TO 'norepluser';" >/dev/null; MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "GRANT schema ON * TO 'norepluser';" >/dev/null; cp /var/log/manticore-1/auth.json /var/log/manticore-2/auth.json; MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "RELOAD AUTH;" >/dev/null; echo "Users ready"
+––– output –––
+Users ready
+––– comment –––
+––– Negative check: norepluser cannot be used as effective replication user –––
+––– comment –––
+––– input –––
+MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P1306 -e "CREATE CLUSTER badcluster 'norepluser' AS user;" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'norepluser'
+––– comment –––
+––– Node1: create cluster as norepluser, delegate replication to repluser –––
+––– comment –––
+––– input –––
+MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P1306 -e "CREATE CLUSTER mycluster 'repluser' AS user;" >/dev/null; echo $?
+––– output –––
+0
+––– comment –––
+––– Node2: join cluster as norepluser, delegate replication to repluser –––
+––– comment –––
+––– input –––
+MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P2306 -e "JOIN CLUSTER mycluster AT '127.0.0.1:1312' 'repluser' AS user;" >/dev/null; echo $?
+––– output –––
+0
+––– comment –––
+––– Node1 regular flow as norepluser –––
+––– comment –––
+––– input –––
+MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P1306 -e "CREATE TABLE t1 (id BIGINT, title TEXT);" >/dev/null; echo $?
+––– output –––
+0
+––– input –––
+MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P1306 -e "ALTER CLUSTER mycluster ADD t1;" >/dev/null; echo $?
+––– output –––
+0
+––– input –––
+MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P1306 -e "INSERT INTO mycluster:t1 VALUES (1,'delegated replication works');" >/dev/null; echo $?
+––– output –––
+0
+––– comment –––
+––– Node2 must see replicated row from node1 –––
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "debug wait mycluster like 'state' option 'timeout'=5;" >/dev/null; echo $?
+––– output –––
+0
+––– input –––
+MYSQL_PWD=noreplpass1 mysql -E -unorepluser -h0 -P2306 -e "SELECT id,title FROM mycluster:t1 ORDER BY id ASC;" | awk -F': ' '/id:/{id=$2}/title:/{print id "\t" $2}'
+––– output –––
+#!/1[[:space:]]+delegated replication works/!#
+––– comment –––
+––– Node1: delete cluster as norepluser (uses cluster user for replication auth) –––
+––– comment –––
+––– input –––
+MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P1306 -e "DELETE CLUSTER mycluster;" >/dev/null; echo $?
+––– output –––
+0
+––– comment –––
+––– Negative: same username on both nodes but different auth material must fail API auth on JOIN –––
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "CREATE USER 'repli2' IDENTIFIED BY 'repli2pass1';" >/dev/null; MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "GRANT replication ON * TO 'repli2';" >/dev/null; MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "CREATE USER 'repli2' IDENTIFIED BY 'repli2pass1';" >/dev/null; MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "GRANT replication ON * TO 'repli2';" >/dev/null; echo "repli2 users ready"
+––– output –––
+repli2 users ready
+––– input –––
+MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P1306 -e "CREATE CLUSTER badkeycluster 'repli2' AS user;" >/dev/null; echo $?
+––– output –––
+0
+––– input –––
+MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P2306 -e "JOIN CLUSTER badkeycluster AT '127.0.0.1:1312' 'repli2' AS user;" 2>&1
+––– output –––
+#!/cluster 'badkeycluster', failed to fetch donor user from any node; verify the replication user and matching auth data on donor nodes, and inspect searchd\.log\.auth/!#
+––– input –––
+timeout 5 bash -c 'until grep -q "repli2.*GCM authentication failed (bad tag)" /var/log/manticore-1/searchd.log.auth; do sleep 0.1; done'; echo $?
+––– output –––
+0
+––– input –––
+cp /var/log/manticore-1/auth.json /var/log/manticore-2/auth.json; MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "RELOAD AUTH;" >/dev/null; echo "repli2 auth synced"
+––– output –––
+repli2 auth synced
+––– input –––
+MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P2306 -e "JOIN CLUSTER badkeycluster AT '127.0.0.1:1312' 'repli2' AS user;" >/dev/null; echo $?
+––– output –––
+0
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "debug wait badkeycluster like 'state' option 'timeout'=5;" >/dev/null; echo $?
+––– output –––
+0
+––– input –––
+MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P1306 -e "DELETE CLUSTER badkeycluster;" >/dev/null; echo $?
+––– output –––
+0

@@ -109,9 +109,9 @@ public:
 		}
 	}
 
-	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const noexcept final
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode, int iTokenBytes=0 ) const noexcept final
 	{
-		return TokenizerRefPtr_c { new BigramTokenizer ( m_pTokenizer->Clone ( eMode ), this ) };
+		return TokenizerRefPtr_c { new BigramTokenizer ( m_pTokenizer->Clone ( eMode, iTokenBytes ), this ) };
 	}
 
 

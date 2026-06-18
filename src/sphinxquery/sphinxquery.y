@@ -120,7 +120,7 @@ keyword:
 	TOK_KEYWORD							{ $$ = $1; }
 	| TOK_INT							{ $$ = pParser->AddKeyword ( ( $1.iStrIndex>=0 ) ? pParser->m_dIntTokens[$1.iStrIndex].cstr() : NULL ); }
 	| TOK_FLOAT							{ $$ = pParser->AddKeyword ( ( $1.iStrIndex>=0 ) ? pParser->m_dIntTokens[$1.iStrIndex].cstr() : NULL ); }
-	| '=' keyword						{ $$ = $2; assert ( $$->dWords().GetLength()==1 ); $$->WithWord(0,[] (auto& dWord) {if (!dWord.m_sWord.IsEmpty()) dWord.m_sWord.SetSprintf ( "=%s", dWord.m_sWord.cstr() );}); }
+	| '=' keyword						{ $$ = $2; assert ( $$->dWords().GetLength()==1 ); $$->WithWord(0,[] (auto& dWord) {if (!dWord.m_sWord.IsEmpty()) SetKeywordWithMarkers ( dWord.m_sWord, "=", dWord.m_sWord );}); }
 	| TOK_REGEX							{ $$ = $1; }
 	;
 

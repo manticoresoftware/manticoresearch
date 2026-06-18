@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>columnar docstore with query MVA gaps</name>
+
+<requires>
+<columnar/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test_src
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id, guid from test_docs order by id
+	sql_field_string	= guid
+	sql_attr_multi		= uint mva from query; select id, tag from test_tags order by id, tag
+}
+
+index test_mvaq
+{
+	source			= test_src
+	path			= <data_path/>/test_mvaq
+	columnar_attrs		= *
+}
+
+index test_mvaq_explicit
+{
+	source			= test_src
+	path			= <data_path/>/test_mvaq_explicit
+	columnar_attrs		= mva
+}
+</config>
+
+<db_create>
+CREATE TABLE `test_docs` (
+  `id` int(11),
+  `guid` varchar(255)
+);
+</db_create>
+
+<db_create>
+CREATE TABLE `test_tags` (
+  `id` int(11),
+  `tag` int(11)
+);
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS test_docs;</db_drop>
+<db_drop>DROP TABLE IF EXISTS test_tags;</db_drop>
+
+<db_insert>insert into test_docs (id,guid) values
+(1,'doc1'),
+(2,'doc2'),
+(3,'doc3'),
+(4,'doc4')
+</db_insert>
+
+<db_insert>insert into test_tags (id,tag) values
+(1,10),
+(1,11),
+(2,12),
+(4,13),
+(4,14),
+(4,15)
+</db_insert>
+
+<queries><sphinxql>
+desc test_mvaq;
+select id,guid,mva,length(mva) len from test_mvaq order by id asc;
+select id from test_mvaq where any(mva)=12;
+select id,guid,mva,length(mva) len from test_mvaq where id=3;
+
+desc test_mvaq_explicit;
+select id,guid,mva,length(mva) len from test_mvaq_explicit order by id asc;
+select id from test_mvaq_explicit where any(mva)=12;
+select id,guid,mva,length(mva) len from test_mvaq_explicit where id=3;
+</sphinxql></queries>
+
+</test>

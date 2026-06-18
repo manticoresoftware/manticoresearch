@@ -57,6 +57,19 @@
 * [FLUSH HOSTNAMES](Securing_and_compacting_a_table/Flushing_hostnames.md) - Renews IPs associates to agent host names
 * [FLUSH LOGS](Logging/Rotating_query_and_server_logs.md) - Initiates reopen of searchd log and query log files (similar to USR1)
 
+##### Authentication and authorization
+* [CREATE USER](Security/Authentication_and_authorization.md#Users-and-tokens) - Creates an authentication user
+* [DROP USER](Security/Authentication_and_authorization.md#Users-and-tokens) - Deletes an authentication user
+* [SET PASSWORD](Security/Authentication_and_authorization.md#Users-and-tokens) - Changes the current or specified user's password
+* [TOKEN](Security/Authentication_and_authorization.md#Users-and-tokens) - Creates or rotates a bearer token
+* [GRANT](Security/Authentication_and_authorization.md#Permissions) - Grants an auth permission
+* [REVOKE](Security/Authentication_and_authorization.md#Permissions) - Revokes an auth permission
+* [SHOW USERS](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - Lists authentication users
+* [SHOW PERMISSIONS](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - Lists auth permissions
+* [SHOW USAGE](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - Shows auth usage counters
+* [SHOW TOKEN](Security/Authentication_and_authorization.md#Users-and-tokens) - Shows the stored token hash
+* [RELOAD AUTH](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - Reloads authentication data
+
 ##### Real-time table optimization
 * [FLUSH RAMCHUNK](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK) - Force creating a new disk chunk
 * [FLUSH TABLE](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#FLUSH-TABLE) - Flushes real-time table RAM chunk to disk
@@ -439,6 +452,10 @@ To be put in the `searchd {}` section of the configuration file:
   * [agent_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Specifies the number of times Manticore tries to connect and query remote agents
   * [agent_retry_delay](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Specifies the delay before retrying to query a remote agent in case of failure
   * [attr_flush_period](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_flush_period) - Sets the time period between flushing updated attributes to disk
+  * [auth](Server_settings/Searchd.md#auth) - Enables authentication and authorization
+  * [auth_log_level](Server_settings/Searchd.md#auth_log_level) - Controls authentication log verbosity
+  * [auth_password_policy](Server_settings/Searchd.md#auth_password_policy) - Sets password policy for authentication users
+  * [auth_password_min_length](Server_settings/Searchd.md#auth_password_min_length) - Sets minimum password length for authentication users
   * [binlog_flush](Server_settings/Searchd.md#binlog_flush) - Binary log transaction flush/sync mode
   * [binlog_max_log_size](Server_settings/Searchd.md#binlog_max_log_size) - Maximum binary log file size
   * [binlog_common](Logging/Binary_logging.md#Binary-logging-strategies) - Common binary log file for all tables
@@ -461,6 +478,7 @@ To be put in the `searchd {}` section of the configuration file:
   * [join_batch_size](Searching/Joining.md#Join-batching) - Defines batch size for table joins to balance performance and memory usage
   * [join_cache_size](Searching/Joining.md#Join-caching) - Defines cache size for reusing JOIN query results
   * [kibana_version_string](Server_settings/Searchd.md#kibana_version_string) – The server version string that's sent in response to Kibana requests
+  * [knn_parallel_build](Server_settings/Searchd.md#knn_parallel_build) - Number of worker threads used to build the HNSW graph during RT chunk saves, `OPTIMIZE` / auto-optimize chunk merges, and `ALTER TABLE` KNN rebuilds
   * [listen](Server_settings/Searchd.md#listen) - Specifies IP address and port or Unix-domain socket path for searchd to listen on
   * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - TCP listen backlog
   * [listen_tfo](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Enables TCP_FASTOPEN flag for all listeners
@@ -525,6 +543,8 @@ searchd [OPTIONS]
 * [--console](Starting_the_server/Manually.md#searchd-command-line-options) - Forces the server to run in console mode
 * [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - Enables core dump saving upon crash
 * [--cpustats](Starting_the_server/Manually.md#searchd-command-line-options) - Enables CPU time reporting
+* [--auth](Starting_the_server/Manually.md#searchd-command-line-options) - Runs interactive authentication bootstrap mode
+* [--auth-non-interactive](Starting_the_server/Manually.md#searchd-command-line-options) - Runs authentication bootstrap mode using stdin
 * [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - Removes the Manticore service from Microsoft Management Console and other locations where services are registered
 * [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - Prevents the server from serving incoming connections until table files are pre-read
 * [--help, -h](Starting_the_server/Manually.md#searchd-command-line-options) - Displays all available parameters
@@ -614,7 +634,7 @@ spelldump [options] <dictionary> <affix> [result] [locale-name]
 A comprehensive alphabetical list of keywords currently reserved in Manticore SQL syntax (thus, they cannot be used as identifiers).
 
 ```
-AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, HYBRID_MATCH, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
+AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, HYBRID_MATCH, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TOKEN, TRUE
 ```
 
 ## Documentation for old Manticore versions

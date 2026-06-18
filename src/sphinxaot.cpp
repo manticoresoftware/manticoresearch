@@ -23,6 +23,13 @@
 #include <algorithm>
 #include <array>
 #include <string>
+
+static bool ShouldBypassAotMorphology ( const ISphTokenizer & tTokenizer, const BYTE * pToken )
+{
+	const int iTokenBytes = (int)strnlen ( (const char*)pToken, SPH_LEGACY_TOKEN_BYTES+1 );
+	return tTokenizer.GetMaxTokenBytes()>SPH_LEGACY_TOKEN_BYTES
+		&& ShouldBypassMorphology ( DictFormat_e::KEYWORDS_V2, iTokenBytes );
+}
 #include <unordered_map>
 #include <vector>
 
@@ -1588,12 +1595,12 @@ public:
 		: CSphAotTokenizerTmpl ( std::move (pTok), pDict, bIndexExact, AOT_RU )
 	{}
 
-	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const noexcept final
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode, int iTokenBytes=0 ) const noexcept final
 	{
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
 		assert ( eMode==SPH_CLONE_INDEX );
-		auto * pClone = new CSphAotTokenizerRu ( m_pTokenizer->Clone ( eMode ), nullptr, m_bIndexExact );
+		auto * pClone = new CSphAotTokenizerRu ( m_pTokenizer->Clone ( eMode, iTokenBytes ), nullptr, m_bIndexExact );
 		if ( m_pWordforms )
 			pClone->m_pWordforms = m_pWordforms;
 		return TokenizerRefPtr_c { pClone };
@@ -1641,6 +1648,9 @@ public:
 		m_eTokenMorph = m_pTokenizer->GetTokenMorph();
 		if ( !pToken )
 			return nullptr;
+
+		if ( ShouldBypassAotMorphology ( *this, pToken ) )
+			return pToken;
 
 		// pass-through blended parts
 		if ( m_pTokenizer->TokenIsBlended() )
@@ -1718,12 +1728,12 @@ public:
 		, m_iLang ( AOT_LANGS(iLang) )
 	{}
 
-	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const noexcept final
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode, int iTokenBytes=0 ) const noexcept final
 	{
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
 		assert ( eMode==SPH_CLONE_INDEX );
-		auto * pClone = new CSphAotTokenizer ( m_pTokenizer->Clone ( eMode ), nullptr, m_bIndexExact, m_iLang );
+		auto * pClone = new CSphAotTokenizer ( m_pTokenizer->Clone ( eMode, iTokenBytes ), nullptr, m_bIndexExact, m_iLang );
 		if ( m_pWordforms )
 			pClone->m_pWordforms = m_pWordforms;
 		return TokenizerRefPtr_c { pClone };
@@ -1772,6 +1782,9 @@ public:
 		m_eTokenMorph = m_pTokenizer->GetTokenMorph();
 		if ( !pToken )
 			return nullptr;
+
+		if ( ShouldBypassAotMorphology ( *this, pToken ) )
+			return pToken;
 
 		// pass-through blended parts
 		if ( m_pTokenizer->TokenIsBlended() )
@@ -1877,7 +1890,7 @@ class TokenizerUk_c : public CSphAotTokenizerTmpl
 
 public:
 	TokenizerUk_c ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict, bool bIndexExact );
-	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const noexcept final;
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode, int iTokenBytes=0 ) const noexcept final;
 	BYTE * GetToken() final;
 };
 
@@ -2613,12 +2626,12 @@ TokenizerUk_c::TokenizerUk_c ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict
 {
 }
 
-TokenizerRefPtr_c TokenizerUk_c::Clone ( ESphTokenizerClone eMode ) const noexcept
+TokenizerRefPtr_c TokenizerUk_c::Clone ( ESphTokenizerClone eMode, int iTokenBytes ) const noexcept
 {
 	// this token filter must NOT be created as escaped
 	// it must only be used during indexing time, NEVER in searching time
 	assert ( eMode==SPH_CLONE_INDEX );
-	auto * pClone = new TokenizerUk_c ( m_pTokenizer->Clone ( eMode ), nullptr, m_bIndexExact );
+	auto * pClone = new TokenizerUk_c ( m_pTokenizer->Clone ( eMode, iTokenBytes ), nullptr, m_bIndexExact );
 	if ( m_pWordforms )
 		pClone->m_pWordforms = m_pWordforms;
 	return TokenizerRefPtr_c { pClone };
@@ -2665,6 +2678,9 @@ BYTE * TokenizerUk_c::GetToken()
 		m_eTokenMorph = m_pTokenizer->GetTokenMorph();
 		if ( !pToken )
 			return nullptr;
+
+		if ( ShouldBypassAotMorphology ( *this, pToken ) )
+			return pToken;
 
 		// pass-through blended parts
 		if ( m_pTokenizer->TokenIsBlended() )

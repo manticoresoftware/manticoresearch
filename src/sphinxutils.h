@@ -16,6 +16,7 @@
 #ifndef _sphinxutils_
 #define _sphinxutils_
 
+#include "sphinxdefs.h"
 #include "std/stringhash.h"
 #include "std/stringbuilder.h"
 
@@ -157,8 +158,29 @@ using StrFunctor = std::function<void ( const char*, int )>;
 void sphSplitApply ( const char * sIn, int iSize, StrFunctor &&dFunc );
 void sphSplitApply ( const char * sIn, int iSize, const char * sBounds, StrFunctor && dFunc );
 
+enum class WildcardBufMode_e
+{
+	Legacy,
+	Extended
+};
+
+struct WildcardBuf_t : ISphNoncopyable
+{
+	explicit WildcardBuf_t ( WildcardBufMode_e eMode = WildcardBufMode_e::Legacy );
+
+	const int * DecodePattern ( const char * sPattern );
+	bool IsExtended() const { return m_eMode==WildcardBufMode_e::Extended; }
+
+	int					m_dString[SPH_MAX_WORD_LEN+1];
+	int					m_dPattern[SPH_MAX_WORD_LEN+1];
+	CSphVector<int>		m_dStringExt;
+	CSphVector<int>		m_dPatternExt;
+	CSphVector<int>		m_dDpExt;
+	WildcardBufMode_e	m_eMode = WildcardBufMode_e::Legacy;
+};
+
 /// string wildcard matching (case-sensitive, supports * and ? patterns)
-bool sphWildcardMatch ( const char * sSstring, const char * sPattern, const int * pPattern = NULL );
+bool sphWildcardMatch ( const char * sSstring, const char * sPattern, const int * pPattern = NULL, WildcardBuf_t * pExtBuf = nullptr );
 
 bool HasWildcard ( const char * sVal );
 

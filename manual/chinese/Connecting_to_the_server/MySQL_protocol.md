@@ -6,7 +6,7 @@ Manticore Search 通过使用 MySQL 协议实现了 SQL 接口，允许使用任
 
 Manticore Search 支持通过 MySQL 协议的 [预处理语句](../Connecting_to_the_server/MySQL_protocol.md#Prepared-statements)。也可以使用客户端预处理语句。需要注意的是，Manticore 实现了多值 (MVA) 和 `float_vector` 数据类型，这些在 MySQL 或实现预处理语句的库中没有等价物。在这些情况下，值必须在原始查询中以逗号分隔的数字列表形式构造。
 
-一些 MySQL 客户端/连接器需要用户/密码和/或数据库名称的值。由于 Manticore Search 没有数据库的概念，也没有实现用户访问控制，这些值可以任意设置，因为 Manticore 会简单地忽略它们。
+如果已启用[身份验证和授权](../Security/Authentication_and_authorization.md)，MySQL 客户端必须使用 Manticore 用户名和密码连接。支持的 MySQL 身份验证模式是 `mysql_native_password`。如果未启用身份验证，客户端提供的用户名和密码值会被忽略。
 
 ## 配置
 
@@ -22,7 +22,7 @@ searchd {
 }
 ```
 
-请记住，Manticore 没有用户认证功能，所以请确保 MySQL 端口不会被网络外的人访问。
+如果未启用身份验证，请确保网络外部的任何人都无法访问 MySQL 端口。
 
 ### VIP 连接
 可以使用单独的 MySQL 端口执行“VIP”连接。连接到此端口时，将绕过线程池，总是创建一个新的专用线程。这在严重过载的情况下非常有用，避免服务器停滞或阻止通过常规端口的连接。
@@ -41,6 +41,18 @@ searchd {
 
 ```shell
 mysql -P9306 -h0
+```
+
+启用身份验证时，请指定用户和密码：
+
+```shell
+MYSQL_PWD=StrongPass#2026 mysql -P9306 -h0 -uadmin
+```
+
+如果客户端需要显式指定身份验证插件，请将其设置为 `mysql_native_password`：
+
+```shell
+MYSQL_PWD=StrongPass#2026 mysql -P9306 -h0 -uadmin --default-auth=mysql_native_password
 ```
 
 ## 安全的 MySQL 连接
@@ -95,7 +107,7 @@ SELECT /*! SQL_CALC_FOUND_ROWS */ col1 FROM table1 WHERE ...
 
 # 预处理语句
 
-Manticore支持通过MySQL协议的预处理语句。 
+Manticore支持通过MySQL协议的预处理语句。
 
 在数据库中，[预处理语句](https://en.wikipedia.org/wiki/Prepared_statement)是一种运行查询的方式，其中SQL代码与输入数据分开。而不是在查询中直接包含值，您使用占位符编写一次查询，然后单独提供值。
 
@@ -149,7 +161,7 @@ INSERT INTO tbl (id, str, floatvec) VALUES (0, 'I\'m a string', (0.1,0.2,0.3))
 
 ## 向量参数（MVA/浮点向量）
 
-在标准 Manticore SQL 语法中，[MVA](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) 或 [float vectors](../Creating_a_table/Data_types.md#Float-vector) 会以括号括起的值列表形式书写，例如 `(1, 2, 3)`。 
+在标准 Manticore SQL 语法中，[MVA](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) 或 [float vectors](../Creating_a_table/Data_types.md#Float-vector) 会以括号括起的值列表形式书写，例如 `(1, 2, 3)`。
 
 使用预处理语句时，请直接在查询中包含括号，并仅使用 `?VEC?` 占位符表示括号内的值。例如：
 

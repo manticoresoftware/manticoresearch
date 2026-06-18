@@ -1,0 +1,42 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=shard_update_cluster
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+for port in 1306 2306; do timeout 30 mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_status'\G" > /tmp/shard_update_status_$port.log && grep -q "Value: primary" /tmp/shard_update_status_$port.log && echo "Port $port: Node synced"; done
+––– output –––
+Port 1306: Node synced
+Port 2306: Node synced
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_update_nocluster; CREATE TABLE ${CLUSTER_NAME}:shard_update_nocluster(id BIGINT, title TEXT, gid UINT) shards='3' rf='2';"; echo $?
+––– output –––
+0
+––– input –––
+curl -s -X POST http://localhost:1308/insert -d '{"table":"shard_update_nocluster","id":1,"doc":{"title":"local candidate","gid":10}}' | sed -n 's/.*"result":"\([^"]*\)".*/\1/p'
+––– output –––
+created
+––– input –––
+curl -s -X POST http://localhost:1308/insert -d '{"table":"shard_update_nocluster","id":2,"doc":{"title":"remote candidate","gid":20}}' | sed -n 's/.*"result":"\([^"]*\)".*/\1/p'
+––– output –––
+created
+––– input –––
+curl -s -X POST http://localhost:1308/update -d '{"table":"shard_update_nocluster","id":2,"doc":{"gid":22}}' | sed -n 's/.*"result":"\([^"]*\)".*/\1/p'
+––– output –––
+updated
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, gid FROM shard_update_nocluster WHERE id=2;"
+––– output –––
++------+------+
+| id   | gid  |
++------+------+
+|    2 |   22 |
++------+------+

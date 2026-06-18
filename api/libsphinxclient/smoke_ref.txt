@@ -323,6 +323,7 @@ command_json: 0
 command_callpq: 0
 command_cluster: 0
 command_getfield: 0
+command_shard_write: 0
 agent_connect: 1
 agent_retry: 0
 queries: 17
@@ -333,6 +334,7 @@ workers_clients_buddy: 0
 work_queue_length: 3
 ag_dist_1_1_connect_failures: 0
 ag_dist_1_1_network_errors: 0
+ag_dist_1_1_wrong_query: 0
 ag_dist_1_1_wrong_replies: 0
 ag_dist_1_1_unexpected_closings: 0
 ag_dist_1_1_warnings: 0

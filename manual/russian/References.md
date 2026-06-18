@@ -57,6 +57,19 @@
 * [FLUSH HOSTNAMES](Securing_and_compacting_a_table/Flushing_hostnames.md) - Обновляет IP-адреса, связанные с именами хостов агентов
 * [FLUSH LOGS](Logging/Rotating_query_and_server_logs.md) - Инициирует переоткрытие файлов логов searchd и запросов (аналогично USR1)
 
+##### Аутентификация и авторизация
+* [CREATE USER](Security/Authentication_and_authorization.md#Users-and-tokens) - Создаёт пользователя аутентификации
+* [DROP USER](Security/Authentication_and_authorization.md#Users-and-tokens) - Удаляет пользователя аутентификации
+* [SET PASSWORD](Security/Authentication_and_authorization.md#Users-and-tokens) - Изменяет пароль текущего или указанного пользователя
+* [TOKEN](Security/Authentication_and_authorization.md#Users-and-tokens) - Создаёт или обновляет bearer-токен
+* [GRANT](Security/Authentication_and_authorization.md#Permissions) - Выдаёт разрешение аутентификации
+* [REVOKE](Security/Authentication_and_authorization.md#Permissions) - Отзывает разрешение аутентификации
+* [SHOW USERS](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - Показывает список пользователей аутентификации
+* [SHOW PERMISSIONS](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - Показывает список разрешений аутентификации
+* [SHOW USAGE](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - Показывает счётчики использования аутентификации
+* [SHOW TOKEN](Security/Authentication_and_authorization.md#Users-and-tokens) - Показывает хэш сохранённого токена
+* [RELOAD AUTH](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - Перезагружает данные аутентификации
+
 ##### Оптимизация таблиц реального времени
 * [FLUSH RAMCHUNK](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK) - Принудительно создает новый диск
 * [FLUSH TABLE](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#FLUSH-TABLE) - Сбрасывает RAM-чанк таблицы реального времени на диск
@@ -150,7 +163,7 @@
 * [exceptions_list](Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions_list)
 * [expand_keywords](Searching/Options.md#expand_keywords)
 * [global_idf](Searching/Options.md#global_idf)
-* [hitless_wordsbbab.png:CREATING_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words)
+* [hitless_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words)
 * [hitless_words_list](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words_list)
 * [html_index_attrs](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_index_attrs)
 * [html_remove_elements](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_remove_elements)
@@ -439,6 +452,10 @@ index_converter {--config /path/to/config|--path}
   * [agent_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Определяет количество попыток подключения и запроса к удаленным агентам, которые предпринимает Manticore
   * [agent_retry_delay](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Определяет задержку перед повторной попыткой запроса к удаленному агенту в случае сбоя
   * [attr_flush_period](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_flush_period) - Устанавливает период времени между сбросом обновленных атрибутов на диск
+  * [auth](Server_settings/Searchd.md#auth) - Включает аутентификацию и авторизацию
+  * [auth_log_level](Server_settings/Searchd.md#auth_log_level) - Управляет уровнем подробности журнала аутентификации
+  * [auth_password_policy](Server_settings/Searchd.md#auth_password_policy) - Задаёт политику паролей для пользователей аутентификации
+  * [auth_password_min_length](Server_settings/Searchd.md#auth_password_min_length) - Задаёт минимальную длину пароля для пользователей аутентификации
   * [binlog_flush](Server_settings/Searchd.md#binlog_flush) - Режим сброса/синхронизации транзакций бинарного лога
   * [binlog_max_log_size](Server_settings/Searchd.md#binlog_max_log_size) - Максимальный размер файла бинарного лога
   * [binlog_common](Logging/Binary_logging.md#Binary-logging-strategies) - Общий файл бинарного лога для всех таблиц
@@ -461,6 +478,7 @@ index_converter {--config /path/to/config|--path}
   * [join_batch_size](Searching/Joining.md#Join-batching) - Определяет размер пакета для соединения таблиц для баланса производительности и использования памяти
   * [join_cache_size](Searching/Joining.md#Join-caching) - Определяет размер кэша для повторного использования результатов запросов JOIN
   * [kibana_version_string](Server_settings/Searchd.md#kibana_version_string) – Строка версии сервера, отправляемая в ответ на запросы Kibana
+  * [knn_parallel_build](Server_settings/Searchd.md#knn_parallel_build) - Количество рабочих потоков, используемых для построения графа HNSW во время сохранения RT-чанков, слияний `OPTIMIZE` / автооптимизации чанков и перестроек KNN через `ALTER TABLE`
   * [listen](Server_settings/Searchd.md#listen) - Определяет IP-адрес и порт или путь к Unix-доменному сокету для прослушивания searchd
   * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - Размер очереди прослушивания TCP
   * [listen_tfo](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Включает флаг TCP_FASTOPEN для всех слушателей
@@ -525,6 +543,8 @@ searchd [OPTIONS]
 * [--console](Starting_the_server/Manually.md#searchd-command-line-options) - Принудительно запускает сервер в консольном режиме
 * [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - Включает сохранение дампа памяти при аварийном завершении
 * [--cpustats](Starting_the_server/Manually.md#searchd-command-line-options) - Включает отчетность о времени процессора
+* [--auth](Starting_the_server/Manually.md#searchd-command-line-options) - Запускает интерактивный режим инициализации аутентификации
+* [--auth-non-interactive](Starting_the_server/Manually.md#searchd-command-line-options) - Запускает режим инициализации аутентификации с использованием stdin
 * [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - Удаляет службу Manticore из консоли управления Microsoft и других мест, где зарегистрированы службы
 * [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - Запрещает серверу обслуживать входящие соединения до предварительного чтения файлов таблиц
 * [--help, -h](Starting_the_server/Manually.md#searchd-command-line-options) - Отображает все доступные параметры
@@ -614,7 +634,7 @@ spelldump [options] <dictionary> <affix> [result] [locale-name]
 Полный алфавитный список ключевых слов, в настоящее время зарезервированных в синтаксисе Manticore SQL (поэтому их нельзя использовать как идентификаторы).
 
 ```
-AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, HYBRID_MATCH, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
+AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, HYBRID_MATCH, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TOKEN, TRUE
 ```
 
 ## Документация по старым версиям Manticore

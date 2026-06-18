@@ -59,7 +59,7 @@ protected:
     pTokenizer = sphCloneAndSetupQueryTokenizer ( pBase, true, false, false );
 
     CSphDictSettings tDictSettings;
-    tDictSettings.m_bWordDict = false;
+    tDictSettings.SetDictFormat ( DictFormat_e::CRC );
     pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, "query", false, 32, nullptr, sError );
     constexpr CKeywordHits dPseudoHits[] = { { "aaa", 0 }, { "bbb", 0 }, { "ccc", 35 }, { "ddd", 63 }, { "eee", 2445 } };
 

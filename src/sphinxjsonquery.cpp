@@ -129,10 +129,7 @@ void QueryTreeBuilder_c::CollectKeywords ( const char * szStr, XQNode_t * pNode,
 
 		// check for stopword, and create that node
 		// temp buffer is required, because GetWordID() might expand (!) the keyword in-place
-		BYTE sTmp [ MAX_TOKEN_BYTES ];
-
-		strncpy ( (char*)sTmp, sToken, MAX_TOKEN_BYTES );
-		sTmp[MAX_TOKEN_BYTES-1] = '\0';
+		BYTE * sTmp = CopyQueryTokenToScratch ( sToken );
 
 		int iStopWord = 0;
 		if ( m_pPlugin && m_pPlugin->m_fnPreMorph )
@@ -3244,10 +3241,13 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 		{
 			tOut.StartBlock ( ",", R"("aggregations":{)", "}");
 			CSphVector<CSphFilterSettings> dSelectedFilters;
-			const bool bNeedStatus = facet::GetFilterMode ( tQuery, tQuery.m_dAggs[0].m_tFacetFilter )==FacetFilterMode_e::Max && facet::IsJsonFacetStatusBucket ( tQuery.m_dAggs[0].m_eAggrFunc );
+			const bool bNeedStatus = facet::GetFilterMode ( tQuery, tQuery.m_dAggs[0].m_tFacetFilter )!=FacetFilterMode_e::Strict && facet::IsJsonFacetStatusBucket ( tQuery.m_dAggs[0].m_eAggrFunc );
 			facet::FacetStatusSources_t tStatus;
 			if ( bNeedStatus )
+			{
+				tStatus.m_bEmitStatus = true;
 				tStatus.m_pSelectedFilters = facet::CollectSelectedFiltersForAttr ( tQuery.m_dFilters, tQuery.m_dAggs[0].m_sCol, dSelectedFilters );
+			}
 			EncodeAggr ( tQuery.m_dAggs[0], 1, dRes[0], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tStatus, tOut );
 			tOut.FinishBlock ( false ); // aggregations obj
 
@@ -3266,12 +3266,16 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 				dSelectedFilters.Resize ( 0 );
 				dAvailableBuckets.Reset();
 
-				const bool bNeedStatus = facet::GetFilterMode ( tQuery, tAggr.m_tFacetFilter )==FacetFilterMode_e::Max && facet::IsJsonFacetStatusBucket ( tAggr.m_eAggrFunc );
+				FacetFilterMode_e eMode = facet::GetFilterMode ( tQuery, tAggr.m_tFacetFilter );
+				const bool bNeedStatus = eMode!=FacetFilterMode_e::Strict && facet::IsJsonFacetStatusBucket ( tAggr.m_eAggrFunc );
 				facet::FacetStatusSources_t tStatus;
 				if ( bNeedStatus )
+				{
+					tStatus.m_bEmitStatus = true;
 					tStatus.m_pSelectedFilters = facet::CollectSelectedFiltersForAttr ( tQuery.m_dFilters, tAggr.m_sCol, dSelectedFilters );
+				}
 
-				if ( bNeedStatus && tAggr.m_iStrictResult>=0 && tAggr.m_iStrictResult<dRes.GetLength() )
+				if ( bNeedStatus && eMode==FacetFilterMode_e::Max && tAggr.m_iStrictResult>=0 && tAggr.m_iStrictResult<dRes.GetLength() )
 				{
 					const auto & tRes = dRes[tAggr.m_iStrictResult];
 					const CSphColumnInfo * pKey = nullptr;
@@ -3432,6 +3436,19 @@ bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings
 	if ( tAffected )
 	{
 		iAffected = (int)tAffected.IntVal();
+		return true;
+	}
+
+	JsonObj_c tResult = tJsonRoot.GetItem ( "result" );
+	if ( tResult && tResult.IsStr() )
+	{
+		if ( bUpdate )
+		{
+			iAffected = ( tResult.StrVal()=="updated" ) ? 1 : 0;
+			return true;
+		}
+
+		iAffected = ( tResult.StrVal()=="deleted" ) ? 1 : 0;
 		return true;
 	}
 

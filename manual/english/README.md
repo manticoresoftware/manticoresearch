@@ -39,6 +39,8 @@
     * [≫ Creating a distributed table](Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md)
         * [• Creating a local distributed table](Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)
         * [• Remote tables](Creating_a_table/Creating_a_distributed_table/Remote_tables.md)
+    * [⪢ Creating a sharded table](Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md)
+        * [• Table sharding: current limitations](Creating_a_table/Creating_a_sharded_table/Table_sharding_current_limitations.md)
 * [• Listing tables](Listing_tables.md)
 * [• Deleting a table](Deleting_a_table.md)
 * [• Emptying a table](Emptying_a_table.md)
@@ -146,6 +148,7 @@
     * [• Flushing hostnames](Securing_and_compacting_a_table/Flushing_hostnames.md)
 * [≫ Security]
     * [• SSL](Security/SSL.md)
+    * [• Authentication and authorization](Security/Authentication_and_authorization.md)
     * [• Read-only](Security/Read_only.md)
 * [≫ Logging]
     * [• Query logging](Logging/Query_logging.md)
@@ -211,4 +214,3 @@
 * [📖 References](References.md)
     * [• Previous versions](References.md#Documentation-for-old-Manticore-versions)
 <!-- proofread -->
-

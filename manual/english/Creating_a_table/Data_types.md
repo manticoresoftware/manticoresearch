@@ -2526,7 +2526,7 @@ When creating a table with `float_vector` attributes for KNN search, you can spe
 - `HNSW_EF_CONSTRUCTION`: Construction time/accuracy trade-off (default: 200)
 
 **Auto-embeddings parameters** (when using `MODEL_NAME`):
-- `MODEL_NAME`: The embedding model to use (e.g., `'sentence-transformers/all-MiniLM-L6-v2'`, `'openai/text-embedding-ada-002'`)
+- `MODEL_NAME`: The embedding model to use (e.g., `'Xenova/all-MiniLM-L6-v2'` for the fast ONNX path, `'sentence-transformers/all-MiniLM-L6-v2'`, or `'openai/text-embedding-ada-002'`)
 - `FROM`: Comma-separated list of field names to use for embedding generation, or empty string `''` to use all text/string fields
 - `API_KEY`: API key for API-based models (OpenAI, Voyage, Jina)
 
@@ -2541,7 +2541,7 @@ The most convenient way to work with float vectors is using **auto embeddings**.
 - **Simplified workflow**: Just insert text, embeddings are generated automatically
 - **No manual vector computation**: No need to run separate embedding models
 - **Consistent embeddings**: Same model ensures consistent vector representations
-- **Multiple model support**: Choose from [sentence-transformers](https://huggingface.co/sentence-transformers/models), [Qwen](https://huggingface.co/Qwen/models) embedding models, OpenAI, Voyage, and Jina models
+- **Multiple model support**: Choose from [ONNX models on Hugging Face](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) (recommended — runs on Manticore's fast ONNX Runtime backend), [sentence-transformers](https://huggingface.co/sentence-transformers/models), [Qwen](https://huggingface.co/Qwen/models) embedding models, OpenAI, Voyage, and Jina models
 - **Flexible field selection**: Control which fields are used for embedding generation
 
 #### Creating tables with auto embeddings
@@ -2553,18 +2553,31 @@ When creating a table with auto embeddings, specify these additional parameters:
 - `API_URL`: Optional. Custom API endpoint URL. If not specified, uses the default provider endpoint (e.g., `https://api.openai.com/v1/embeddings` for OpenAI).
 - `API_TIMEOUT`: Optional. HTTP timeout in seconds for API requests. Default is 10 seconds. Set to `'0'` to use the default timeout. Applies to both validation requests during table creation and embedding generation during INSERT operations.
 
+For remote models, `MODEL_NAME` can use either the legacy `provider/model` form or the explicit `provider:model` form. Use `provider:model` with `API_URL` when you want the part after `:` to be forwarded to a custom provider-compatible endpoint exactly as written.
+
 **Supported embedding models:**
-- **Sentence Transformers**: Any [suitable BERT-based Hugging Face model](https://huggingface.co/sentence-transformers/models) (e.g., `sentence-transformers/all-MiniLM-L6-v2`) — no API key needed. Manticore downloads the model when you create the table.
+- **ONNX (recommended)**: Any Hugging Face model that ships an `.onnx` file — e.g. `Xenova/all-MiniLM-L6-v2`, `Xenova/all-MiniLM-L12-v2`, `Xenova/bge-small-en-v1.5`, `Xenova/multilingual-e5-small`. No API key needed. Runs on Manticore's fast ONNX Runtime backend (~14× faster than the SentenceTransformers path on the same hardware — see [14× faster embeddings](https://manticoresearch.com/blog/onnx-embeddings-speedup/)). Both [Xenova](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) and [onnx-models](https://huggingface.co/onnx-models/models?pipeline_tag=feature-extraction) publish a lot of ONNX-converted models; for embeddings, look for ones tagged with the **feature-extraction** task.
+- **Sentence Transformers**: Any [suitable BERT-based Hugging Face model](https://huggingface.co/sentence-transformers/models) (e.g., `sentence-transformers/all-MiniLM-L6-v2`) — no API key needed. Still supported; use this if the model you want isn't published as ONNX.
 - **Qwen local embeddings**: Qwen embedding models such as `Qwen/Qwen3-Embedding-0.6B` — no API key needed. Manticore downloads the model when you create the table.
-- **OpenAI, Voyage, Jina**: Remote embedding models (e.g., `openai/text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v2-base-en`) - require `API_KEY='<API_KEY>'` parameter. Optionally specify `API_URL='<CUSTOM_URL>'` to use a custom API endpoint, and `API_TIMEOUT='<SECONDS>'` to configure HTTP timeout (default is 10 seconds).
+- **OpenAI, Voyage, Jina**: Remote embedding models (e.g., `openai/text-embedding-ada-002`, `openai:text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v2-base-en`) - require `API_KEY='***'` parameter. Optionally specify `API_URL='<CUSTOM_URL>'` to use a custom API endpoint, and `API_TIMEOUT='<SECONDS>'` to configure HTTP timeout (default is 10 seconds).
 
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
 
-Using [sentence-transformers model](https://huggingface.co/sentence-transformers/models) (no API key needed)
+Using a local [ONNX model](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) — recommended, runs on the fast ONNX path (no API key needed)
 ```sql
 CREATE TABLE products (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+Using a [sentence-transformers model](https://huggingface.co/sentence-transformers/models) (no API key needed; runs on the Candle path — use ONNX above when available)
+```sql
+CREATE TABLE products_st (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
@@ -2591,15 +2604,25 @@ CREATE TABLE products_openai (
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='<OPENAI_API_KEY>'
 );
 ```
-
 Using OpenAI with custom API URL and timeout (optional)
 ```sql
 CREATE TABLE products_openai_custom (
     title TEXT,
     content TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
-    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content'
-    API_KEY='<OPENAI_API_KEY>' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+    MODEL_NAME='openai:text-embedding-ada-002' FROM='title,content'
+    API_KEY='***' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+);
+```
+
+Using OpenRouter with a provider-qualified model ID
+```sql
+CREATE TABLE products_openrouter (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='openai:openai/text-embedding-ada-002' FROM='title,content'
+    API_KEY='***' API_URL='https://openrouter.ai/api/v1/embeddings' API_TIMEOUT='30'
 );
 ```
 
@@ -2610,7 +2633,7 @@ CREATE TABLE products_all_fields (
     description TEXT,
     tags TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM=''
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM=''
 );
 ```
 
@@ -2618,9 +2641,9 @@ CREATE TABLE products_all_fields (
 ##### JSON:
 <!-- request JSON -->
 
-Using [sentence-transformers model](https://huggingface.co/sentence-transformers/models) (no API key needed)
+Using a local [ONNX model](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) — recommended (no API key needed)
 ```JSON
-POST /sql?mode=raw -d "CREATE TABLE products (title TEXT, description TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title')"
+POST /sql?mode=raw -d "CREATE TABLE products (title TEXT, description TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title')"
 ```
 
 Using OpenAI model (requires API_KEY parameter)
@@ -2630,7 +2653,7 @@ POST /sql?mode=raw -d "CREATE TABLE products_openai (title TEXT, content TEXT, e
 
 Using all text fields for embeddings (FROM is empty)
 ```JSON
-POST /sql?mode=raw -d "CREATE TABLE products_all_fields (title TEXT, description TEXT, tags TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='')"
+POST /sql?mode=raw -d "CREATE TABLE products_all_fields (title TEXT, description TEXT, tags TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='')"
 ```
 
 <!-- end -->
@@ -2726,7 +2749,7 @@ INSERT INTO products (id, title, description) VALUES
 
 ALTER TABLE products
 ADD COLUMN embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title,description';
+MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title,description';
 ```
 
 For more details, see [Updating table schema](../Updating_table_schema_and_settings.md#Rebuilding-embeddings).

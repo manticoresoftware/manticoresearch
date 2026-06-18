@@ -19,6 +19,7 @@ void CSphSource::SetDict ( const DictRefPtr_c& pDict )
 {
 	assert ( pDict );
 	m_pDict = pDict;
+	m_tState.m_dTokenBuf.Reset ( GetKeywordBufSize ( m_pDict->GetSettings().GetDictFormat() ) );
 }
 
 
@@ -170,6 +171,7 @@ bool CSphSource::IterateDocument ( bool & bEOF, CSphString & sError )
 	assert ( !m_tState.m_bProcessingHits );
 
 	m_tHits.Resize ( 0 );
+	m_sLastWarning = "";
 
 	m_tState.Reset();
 	m_tState.m_iEndField = m_iPlainFieldsLength;
@@ -664,14 +666,17 @@ void CSphSource::BuildSubstringHits ( RowID_t tRowID, bool bPayload, ESphWordpar
 
 void CSphSource::BuildRegularHits ( RowID_t tRowID, bool bPayload, int & iBlendedHitsStart )
 {
-	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
+	bool bWordDict = m_pDict->GetSettings().IsWordDict();
 	bool bGlobalPartialMatch = !bWordDict && ( GetMinPrefixLen ( bWordDict ) > 0 || m_iMinInfixLen > 0 );
 
 	if ( !m_tState.m_bProcessingHits )
 		m_tState.m_iBuildLastStep = 1;
 
 	BYTE * sWord = NULL;
-	BYTE sBuf [ 16+3*SPH_MAX_WORD_LEN ];
+	const int iStoredKeywordLimit = GetKeywordMaxStoredBytes ( m_pDict->GetSettings().GetDictFormat() );
+	assert ( m_tState.m_dTokenBuf.GetLength()==GetKeywordBufSize ( m_pDict->GetSettings().GetDictFormat() ) );
+	assert ( iStoredKeywordLimit+CSphString::GetGap()<=m_tState.m_dTokenBuf.GetLength() );
+	BYTE * sBuf = m_tState.m_dTokenBuf.Begin();
 
 	// FIELDEND_MASK at last token stream should be set for HEAD token too
 	iBlendedHitsStart = -1;
@@ -698,21 +703,29 @@ void CSphSource::BuildRegularHits ( RowID_t tRowID, bool bPayload, int & iBlende
 		if ( bGlobalPartialMatch )
 		{
 			auto iBytes = strlen ( (const char*)sWord );
-			memcpy ( sBuf + 1, sWord, iBytes );
-			sBuf[0] = MAGIC_WORD_HEAD;
-			sBuf[iBytes+1] = '\0';
-			m_tHits.Add ( { tRowID, m_pDict->GetWordIDWithMarkers ( sBuf ), m_tState.m_iHitPos } );
+			if ( iBytes+1 <= (size_t)iStoredKeywordLimit )
+			{
+				memcpy ( sBuf + 1, sWord, iBytes );
+				sBuf[0] = MAGIC_WORD_HEAD;
+				sBuf[iBytes+1] = '\0';
+				m_tHits.Add ( { tRowID, m_pDict->GetWordIDWithMarkers ( sBuf ), m_tState.m_iHitPos } );
+			}
 		}
 
 		ESphTokenMorph eMorph = m_pTokenizer->GetTokenMorph();
+		bool bCanIndexExact = false;
 		if ( m_bIndexExactWords && eMorph != SPH_TOKEN_MORPH_GUESS )
 		{
 			auto iBytes = strlen ( (const char*)sWord );
-			memcpy ( sBuf + 1, sWord, iBytes );
-			sBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
-			sBuf[iBytes + 1] = '\0';
+			if ( iBytes+1 <= (size_t)iStoredKeywordLimit )
+			{
+				memcpy ( sBuf + 1, sWord, iBytes );
+				sBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
+				sBuf[iBytes + 1] = '\0';
+				bCanIndexExact = true;
+			}
 
-			if ( eMorph == SPH_TOKEN_MORPH_ORIGINAL || bMorphDisabled )
+			if ( bCanIndexExact && ( eMorph == SPH_TOKEN_MORPH_ORIGINAL || bMorphDisabled ) )
 			{
 				// can not use GetWordID here due to exception vs missed hit, ie
 				// stemmed sWord hasn't got added to hit stream but might be added as exception to dictionary
@@ -741,7 +754,7 @@ void CSphSource::BuildRegularHits ( RowID_t tRowID, bool bPayload, int & iBlende
 			iBlendedHitsStart = iLastBlendedStart;
 			m_tState.m_iBuildLastStep = m_pTokenizer->TokenIsBlended() ? 0 : 1;
 			m_tHits.Add ( { tRowID, iWord, m_tState.m_iHitPos } );
-			if ( m_bIndexExactWords && eMorph!=SPH_TOKEN_MORPH_GUESS )
+			if ( bCanIndexExact )
 				m_tHits.Add ( { tRowID, m_pDict->GetWordIDNonStemmed ( sBuf ), m_tState.m_iHitPos } );
 		} else
 		{
@@ -898,6 +911,8 @@ void CSphSource::BuildHits ( CSphString & sError )
 				BuildRegularHits ( tRowID, tField.m_bPayload, iBlendedHitsStart );
 
 			ProcessCollectedHits ( m_tHits, iHitsBegin, ( !m_tState.m_bProcessingHits && m_tHits.GetLength() ), iBlendedHitsStart, !m_pDict->GetSettings().m_sStopwords.IsEmpty(), m_pFieldLengthAttrs );
+			if ( !m_tState.m_bProcessingHits )
+				WarnAppendSkipped ( m_sLastWarning, m_pTokenizer->ResetOversizedTokenCount() );
 		}
 
 		if ( m_tState.m_bProcessingHits )

@@ -356,7 +356,9 @@ bool CSphSchema::IsReserved ( const char* szToken )
 		"FACET", "FALSE", "FORCE", "FROM", "HYBRID_MATCH", "IGNORE", "IN", "INDEXES", "INNER", "IS", "JOIN", "KNN",
 		"LEFT", "LIMIT", "MOD", "NOT", "NO_COLUMNARSCAN", "NO_DOCIDINDEX", "NO_SECONDARYINDEX", "NULL",
 		"OFFSET", "ON", "OR", "ORDER", "RELOAD", "SECONDARYINDEX", "SELECT", "SYSFILTERS",
-		"TRUE", NULL
+		"TRUE"
+		, "TOKEN"
+		, NULL
 	};
 
 	const char** p = dReserved;
@@ -669,6 +671,16 @@ bool CSphSchema::HasStoredFields() const
 bool CSphSchema::HasStoredAttrs() const
 {
 	return m_dAttrs.any_of ( []( const CSphColumnInfo & tAttr ){ return tAttr.IsStored(); } );
+}
+
+int CSphSchema::GetColumnarAttrsCount() const
+{
+	int iNumColumnar = 0;
+	for ( const auto & tAttr : m_dAttrs )
+		if ( tAttr.IsColumnar() )
+			++iNumColumnar;
+
+	return iNumColumnar;
 }
 
 

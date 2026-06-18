@@ -26,6 +26,7 @@
 #include "indexfiles.h"
 #include "tokenizer/charset_definition_parser.h"
 #include "client_session.h"
+#include "searchd_shard.h"
 #include "sphinx_alter.h"
 #include "docs_collector.h"
 #include "index_rotator.h"
@@ -56,6 +57,7 @@
 #include "std/tdigest_runtime.h"
 #include "daemon/notifier.h"
 #include "facetutils.h"
+#include "daemon/daemon_ipc.h"
 
 // services
 #include "taskping.h"
@@ -69,6 +71,10 @@
 #include "searchdbuddy.h"
 #include "detail/indexlink.h"
 #include "detail/expmeter.h"
+
+#include "auth/auth.h"
+#include "auth/auth_common.h"
+#include "auth/auth_proto_mysql.h"
 
 #include <csignal>
 #include <clocale>
@@ -118,6 +124,7 @@ static bool				g_bJsonConfigLoadedOk = false;
 static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
 static auto&			g_iParallelChunkMerges = ParallelChunkMergesLimit();
 static auto&			g_iMergeChunksPerJob = MergeChunksPerJob();
+static auto&			g_iKNNParallelBuild = KNNParallelBuild();
 static constexpr bool	AUTOOPTIMIZE_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 static constexpr bool	THREAD_EX_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 
@@ -236,14 +243,14 @@ int64_t g_iNextSystemdWatchdogTick = -1;
 static const char * g_dApiCommands[SEARCHD_COMMAND_TOTAL] =
 {
 	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs", "query", "ping", "delete", "set",  "insert", "replace", "commit", "suggest", "json",
-	"callpq", "clusterpq", "getfield"
+	"callpq", "clusterpq", "getfield", "shard_write"
 };
 
 //////////////////////////////////////////////////////////////////////////
 
 const char * sAgentStatsNames[eMaxAgentStat+ehMaxStat]=
 	{ "query_timeouts", "connect_timeouts", "connect_failures",
-		"network_errors", "wrong_replies", "unexpected_closings",
+		"network_errors", "wrong_query", "wrong_replies", "unexpected_closings",
 		"warnings", "succeeded_queries", "total_query_time",
 		"connect_count", "connect_avg", "connect_max" };
 
@@ -284,13 +291,6 @@ bool DieOrFatalCb ( bool bDie, const char * sFmt, va_list ap )
 	if ( bDie )
 		g_pLogger () ( SPH_LOG_FATAL, sFmt, ap );
 	return false; // don't lot to stdout
-}
-
-static CSphString GetNamedPipeName ( int iPid )
-{
-	CSphString sRes;
-	sRes.SetSprintf ( "/tmp/searchd_%d", iPid );
-	return sRes;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -493,6 +493,9 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	SHUTINFO << "Close persistent sockets ...";
 	ClosePersistentSockets();
 	sd::extend30s();
+
+	SHUTINFO << "Close auth log ...";
+	AuthDone();
 
 	// close pid
 	SHUTINFO << "Release (close) pid file ...";
@@ -917,7 +920,7 @@ void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... )
 	sError.SetSprintfVa ( sTemplate, ap );
 	va_end ( ap );
 
-	auto tHdr = APIHeader ( tOut, SEARCHD_ERROR );
+	auto tHdr = APIAnswer ( tOut, 0, SEARCHD_ERROR );
 	tOut.SendString ( sError.cstr() );
 
 	// --console logging
@@ -1964,6 +1967,7 @@ static void MakeRemoteScatteredSnippets ( CSphVector<ExcerptQuery_t> & dQueries,
 	// and finally most interesting remote case with possibly scattered.
 	auto dAgents = GetDistrAgents ( pDist );
 	int iRemoteAgents = dAgents.GetLength();
+	SetSessionAuth ( dAgents );
 
 	SnippetRemote_c tRemotes ( dQueries, q );
 	tRemotes.m_dTasks.Resize ( iRemoteAgents );
@@ -2005,6 +2009,7 @@ static void MakeRemoteNonScatteredSnippets ( CSphVector<ExcerptQuery_t> & dQueri
 
 	auto dAgents = GetDistrAgents ( pDist );
 	int iRemoteAgents = dAgents.GetLength();
+	SetSessionAuth ( dAgents );
 
 	SnippetRemote_c tRemotes ( dQueries, q );
 	tRemotes.m_dTasks.Resize ( iRemoteAgents );
@@ -2256,6 +2261,10 @@ void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & t
 			return;
 		}
 	}
+
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, tOut ) )
+		return;
+
 	myinfo::SetTaskInfo ( R"(api-snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr ());
 
 	if ( !MakeSnippets ( sIndex, dQueries, q, sError ) )
@@ -2308,6 +2317,9 @@ static void HandleCommandKeywords ( ISphOutputBuffer & tOut, WORD uVer, InputBuf
 
 	if ( uVer>=0x102 )
 		tSettings.m_eJiebaMode = (JiebaMode_e)tReq.GetInt();
+
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, tOut ) )
+		return;
 
 	CSphString sError;
 	SearchFailuresLog_c tFailureLog;
@@ -2616,6 +2628,9 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	if ( tReq.GetError() )
 		return SendErrorReply ( tOut, "invalid or truncated request" );
 
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::WRITE, sIndexes, tOut ) )
+		return;
+
 	// check index names
 	StrVec_t dIndexNames;
 	ParseIndexList ( sIndexes, dIndexNames );
@@ -2662,6 +2677,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 			{
 				VecRefPtrsAgentConn_t dAgents;
 				pDist->GetAllHosts ( dAgents );
+				SetSessionAuth ( dAgents );
 
 				// connect to remote agents and query them
 				UpdateRequestBuilder_c tReqBuilder ( pUpd );
@@ -3096,6 +3112,9 @@ void HandleCommandStatus ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 
 	bool bGlobalStat = tReq.GetDword ()!=0;
 
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::SCHEMA, "", tOut ) )
+		return;
+
 	VectorLike dStatus;
 
 	if ( bGlobalStat )
@@ -3119,6 +3138,9 @@ void HandleCommandStatus ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 void HandleCommandFlush ( ISphOutputBuffer & tOut, WORD uVer )
 {
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_FLUSHATTRS, tOut ) )
+		return;
+
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::WRITE, "", tOut ) )
 		return;
 
 	int iTag = CommandFlush ();
@@ -3191,6 +3213,7 @@ void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLengt
 		case SEARCHD_COMMAND_CALLPQ:	HandleCommandCallPq ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_CLUSTER:	HandleAPICommandCluster ( tOut, uCommandVer, tBuf, tSess.szClientName() ); break;
 		case SEARCHD_COMMAND_GETFIELD:	HandleCommandGetField ( tOut, uCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_SHARD_WRITE: HandleCommandShardWrite ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_SUGGEST:	HandleCommandSuggest ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_PERSIST: break; // already processes, here just for stat
 
@@ -3239,52 +3262,6 @@ public:
 
 private:
 	RowBuffer_i & m_tRowBuffer;
-};
-
-
-struct StringPtrTraits_t
-{
-	CSphVector<BYTE> m_dPackedData;
-	CSphFixedVector<int> m_dOff { 0 };
-	CSphVector<BYTE> m_dParserBuf;
-
-	// remap offsets to string pointers
-	void SavePointersTo ( VecTraits_T<const char *> &dStrings, bool bSkipInvalid=true ) const
-	{
-		if ( bSkipInvalid )
-			ARRAY_FOREACH ( i, m_dOff )
-			{
-				int iOff = m_dOff[i];
-				if ( iOff<0 )
-					continue;
-				dStrings[i] = ( const char * ) m_dPackedData.Begin () + iOff;
-			}
-		else
-			ARRAY_FOREACH ( i, m_dOff )
-			{
-				int iOff = m_dOff[i];
-				dStrings[i] = ( iOff>=0 ? ( const char * ) m_dPackedData.Begin () + iOff : nullptr );
-			}
-	}
-
-	void Reset ()
-	{
-		m_dPackedData.Resize ( 0 );
-		m_dParserBuf.Resize ( 0 );
-		m_dOff.Fill ( -1 );
-	}
-
-	BYTE * ReserveBlob ( int iBlobSize, int iOffset )
-	{
-		if ( !iBlobSize )
-			return nullptr;
-
-		m_dOff[iOffset] = m_dPackedData.GetLength ();
-
-		BYTE * pPacked = m_dPackedData.AddN ( sphCalcPackedLength(iBlobSize) );
-		pPacked += ZipToPtrBE ( pPacked, iBlobSize );
-		return pPacked;
-	}
 };
 
 static void BsonToSqlInsert ( const bson::Bson_c& dBson, SqlInsert_t& tAttr )
@@ -4022,6 +3999,8 @@ void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t
 	CSphRefcountedPtr<RemoteAgentsObserver_i> pReporter { nullptr };
 	if ( bHaveRemotes )
 	{
+		SetSessionAuth ( dAgents );
+
 		pReqBuilder = std::make_unique<PqRequestBuilder_c> ( dDocs, tOpts, iStart, iStep );
 		iStart += iStep * dAgents.GetLength ();
 		pParser = std::make_unique<PqReplyParser_c>();
@@ -4111,6 +4090,9 @@ void HandleCommandCallPq ( ISphOutputBuffer &tOut, WORD uVer, InputBuffer_c &tRe
 			SendErrorReply ( tOut, "Can't retrieve doc from input buffer" );
 			return;
 		}
+
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, tOpts.m_sIndex, tOut ) )
+		return;
 
 	// working
 	CSphSessionAccum tAcc;
@@ -4339,7 +4321,7 @@ void HandleMysqlPercolateMeta ( const CPqResult &tResult, const CSphString & sWa
 	tOut.Eof();
 }
 
-static bool IsHttpStmt ( const SqlStmt_t & tStmt )
+bool IsHttpStmt ( const SqlStmt_t & tStmt )
 {
 	return !tStmt.m_sEndpoint.IsEmpty();
 }
@@ -4371,7 +4353,7 @@ static void PopulateMapsFromIndexSchema ( CSphVector<int> & dAttrSchema, CSphVec
 }
 
 
-static bool CreateAttrMaps ( CSphVector<int> & dAttrSchema, CSphVector<int> & dFieldSchema, CSphVector<bool> & dFieldAttrs, const CSphSchema & tSchema, const StrVec_t & dStmtInsertSchema, StmtErrorReporter_i & tOut )
+bool CreateAttrMaps ( CSphVector<int> & dAttrSchema, CSphVector<int> & dFieldSchema, CSphVector<bool> & dFieldAttrs, const CSphSchema & tSchema, const StrVec_t & dStmtInsertSchema, StmtErrorReporter_i & tOut )
 {
 	ARRAY_FOREACH ( i, dFieldAttrs )
 		dFieldAttrs[i] = false;
@@ -4437,43 +4419,6 @@ static bool CreateAttrMaps ( CSphVector<int> & dAttrSchema, CSphVector<int> & dF
 }
 
 /////////////////////////////////////////////////////////////////////
-
-class AttributeConverter_c : public InsertDocData_c
-{
-public:
-				AttributeConverter_c ( const CSphSchema & tSchema, const CSphVector<bool> & dFieldAttrs, CSphString & sError, CSphString & sWarning );
-
-	bool		SetAttrValue ( int iCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx, CSphString & sError );
-	void		SetDefaultAttrValue ( int iCol );
-
-	bool		SetFieldValue ( int iField, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx );
-	void		SetDefaultFieldValue ( int iField );
-
-	void		NewRow();
-	void		Finalize();
-
-private:
-	const CSphSchema &		m_tSchema;
-	const CSphColumnInfo *	m_pDocId = nullptr;
-
-	const CSphVector<bool> & m_dFieldAttrs;
-
-	StringPtrTraits_t 		m_tStrings;
-	StrVec_t				m_dTmpFieldStorage;
-	CSphVector<float>		m_dTmpFloats;
-	CSphVector<int>			m_dColumnarRemap;
-
-	CSphString &			m_sError;
-	CSphString &			m_sWarning;
-
-	bool		String2JsonPack ( char * pStr, CSphVector<BYTE> & dBuf );
-
-	bool		CheckStrings ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iCol, int iRow );
-	bool		CheckJson ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal );
-	bool		CheckMVA ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iCol, int iRow );
-	bool		CheckInsertTypes ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx );
-};
-
 
 AttributeConverter_c::AttributeConverter_c ( const CSphSchema & tSchema, const CSphVector<bool> & dFieldAttrs, CSphString & sError, CSphString & sWarning )
 	: InsertDocData_c ( tSchema )
@@ -4822,6 +4767,16 @@ void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery )
 	auto& sError = pSession->m_sError;
 
 	MEMORY ( MEM_SQL_BEGIN );
+	if ( pSession->m_tShardTxn.HasPendingData() )
+	{
+		CSphVector<int64_t> dCommittedDocIDs;
+		if ( !CommitShardTxn ( *pSession, sError, &dCommittedDocIDs ) )
+		{
+			pSession->m_dLastIds.SwapData ( dCommittedDocIDs );
+			return tOut.Error ( "%s", sError.cstr() );
+		}
+	}
+
 	if ( tAcc.GetIndex() )
 	{
 		if ( !CheckAccIndex ( tAcc, sError, false ) )
@@ -4847,8 +4802,27 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 
 	MEMORY ( MEM_SQL_COMMIT );
 	pSession->m_bInTransaction = false;
-	RtIndex_i* pIndex = tAcc.GetIndex();
 	int iDeleted = 0;
+
+	if ( pSession->m_tShardTxn.HasPendingData() )
+	{
+		if ( bCommit )
+		{
+			CSphVector<int64_t> dCommittedDocIDs;
+			int iShardDeleted = 0;
+			if ( !CommitShardTxn ( *pSession, sError, &dCommittedDocIDs, &iShardDeleted ) )
+			{
+				pSession->m_dLastIds.SwapData ( dCommittedDocIDs );
+				tOut.Error ( "%s", sError.cstr() );
+				return;
+			}
+
+			iDeleted += iShardDeleted;
+		} else
+			RollbackShardTxn ( pSession->m_tShardTxn );
+	}
+
+	RtIndex_i* pIndex = tAcc.GetIndex();
 	if ( pIndex )
 	{
 		RtAccum_t * pAccum = tAcc.GetAcc();
@@ -4894,13 +4868,21 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		bool bDistTable = false;
-		if ( !pServed )
+		auto pDist = !pServed ? GetDistr ( tStmt.m_sIndex ) : cDistributedIndexRefPtr_t();
+		const ShardIndex_c * pShard = AsShard ( pDist.Ptr() );
+		if ( pShard )
 		{
-			bDistTable = GetDistr ( tStmt.m_sIndex );
+			GlobalCrashQueryGetRef().m_dIndex = FromStr ( tStmt.m_sIndex );
+			int iAffectedRows = 0;
+			if ( !AddDocumentShard ( tStmt, *pShard, tOut, iAffectedRows ) )
+				return;
+
+			pDist->m_tStats.AddWriteStat ( SearchdStats_t::eReplace, bReplace, iAffectedRows, tmStart );
+			gStats().AddDetailed ( SearchdStats_t::eReplace, iAffectedRows, tmStart );
+			return;
 		}
 
-		if ( pServed || bDistTable )
+		if ( pServed || pDist )
 			tOut.Error ( "table '%s' does not support INSERT", tStmt.m_sIndex.cstr ());
 		else
 			tOut.Error ( "table '%s' absent", tStmt.m_sIndex.cstr ());
@@ -4961,11 +4943,16 @@ void MaybeFixupIndexNameFromMysqldump ( SqlStmt_t & tStmt )
 static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut )
 {
 	auto * pSession = session::GetClientSession();
+	CSphString sError;
+	if ( !EnsureNoPendingShardTxn ( *pSession, sError ) )
+	{
+		tOut.ErrorEx ( EMYSQL_ERR::PARSE_ERROR, sError.cstr() );
+		return false;
+	}
+
 	auto & tAcc = pSession->m_tAcc;
 	bool bReplace = ( tStmt.m_eStmt == STMT_REPLACE );
 	auto & dLastIds = pSession->m_dLastIds;
-
-	CSphString sError;
 	auto & sWarning = pSession->m_tLastMeta.m_sWarning;
 
 	bool bPq = ( pServed->m_eType==IndexType_e::PERCOLATE );
@@ -5372,6 +5359,8 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 		int iAgentsReply = 0;
 		if ( !dAgents.IsEmpty() )
 		{
+			SetSessionAuth ( dAgents );
+
 			// connect to remote agents and query them
 			KeywordsRequestBuilder_c tReqBuilder ( tSettings, sQuery );
 			KeywordsReplyParser_c tParser ( tSettings.m_bStats, dKeywords );
@@ -5397,9 +5386,26 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 	return bOk;
 }
 
+static void AppendKeywordCallWarning ( CSphString & sWarning, const CSphString & sMore )
+{
+	if ( sMore.IsEmpty() )
+		return;
+
+	if ( sWarning.IsEmpty() )
+	{
+		sWarning = sMore;
+		return;
+	}
+
+	StringBuilder_c sBuf;
+	sBuf << sWarning << "; " << sMore;
+	sBuf.MoveTo ( sWarning );
+}
+
 void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	StatCountCommand ( SEARCHD_COMMAND_KEYWORDS );
+	sWarning = "";
 	CSphString sError;
 
 	// string query, string index, [bool hits] || [value as option_name, ...]
@@ -5477,6 +5483,7 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 	const CSphString & sIndex = tStmt.m_dInsertValues[1].m_sVal;
 	CSphVector<CSphKeywordInfo> dKeywords;
 	SearchFailuresLog_c tFailureLog;
+	tSettings.m_pWarning = &sWarning;
 
 	if ( !DoGetKeywords ( sIndex, sTerm, tSettings, dKeywords, sError, tFailureLog ) )
 	{
@@ -5517,15 +5524,17 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 	}
 
 	// put network errors and warnings to meta as warning
-	int iWarnings = 0;
+	int iWarnings = sWarning.IsEmpty() ? 0 : 1;
 	if ( !tFailureLog.IsEmpty() )
 	{
-		iWarnings = tFailureLog.GetReportsCount();
+		iWarnings += tFailureLog.GetReportsCount();
 
 		StringBuilder_c sErrorBuf;
 		tFailureLog.BuildReport ( sErrorBuf );
-		sErrorBuf.MoveTo ( sWarning );
-		sphWarning ( "%s", sWarning.cstr() );
+		CSphString sFailureWarning;
+		sErrorBuf.MoveTo ( sFailureWarning );
+		AppendKeywordCallWarning ( sWarning, sFailureWarning );
+		sphWarning ( "%s", sFailureWarning.cstr() );
 	}
 
 	tOut.Eof ( false, iWarnings );
@@ -5780,7 +5789,13 @@ static bool SuggestLocalIndexGet ( const cServedIndexRefPtr_c & pServed, const S
 	pServed->m_pStats->IncCmd ( SEARCHD_COMMAND_SUGGEST );
 
 	RIdx_c pIdx { pServed };
-	if ( !pIdx->GetSettings().m_iMinInfixLen || !pIdx->GetDictionary()->GetSettings().m_bWordDict )
+	if ( pIdx->GetDictionary()->GetSettings().IsKeywordsV2() )
+	{
+		sError.SetSprintf ( "SUGGEST/QSUGGEST is not supported for dict=keywords_32k yet" );
+		return false;
+	}
+
+	if ( !pIdx->GetSettings().m_iMinInfixLen || !pIdx->GetDictionary()->GetSettings().IsWordDict() )
 	{
 		sError.SetSprintf ( "suggests work only for keywords dictionary with infix enabled" );
 		return false;
@@ -5944,6 +5959,9 @@ void HandleCommandSuggest ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & 
 		return;
 	}
 
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, tOut ) )
+		return;
+
 	auto pServed = GetServed ( sIndex );
 	if ( !pServed )
 	{
@@ -6064,6 +6082,8 @@ static bool SuggestDistIndexGet ( const cDistributedIndexRefPtr_t & pDistributed
 	int iAgentsReply = 0;
 	if ( !dAgents.IsEmpty() )
 	{
+		SetSessionAuth ( dAgents );
+
 		SuggestResult_t tCur;
 		// connect to remote agents and query them
 		SuggestRequestBuilder_c tReqBuilder ( tArgs, sWord );
@@ -6384,12 +6404,12 @@ void HandleCmdDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 {
 	auto & tStmt = *pStmt;
 	VectorLike dOut ( tStmt.m_sStringParam, 0 );
+	bool bShowFields = tStmt.m_iIntParam == -2; // -2 emitted in parser
 
 	MaybeFixupIndexNameFromMysqldump ( tStmt );
 	FixupSystemTableName (&tStmt);
 	auto sName = tStmt.m_sIndex;
 	auto pServed = GetServed ( sName );
-	const bool bShowFields = tStmt.m_iIntParam == -2; // -2 emitted in parser
 	if ( pServed )
 	{
 		// data
@@ -6420,8 +6440,10 @@ void HandleCmdDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 			return;
 		}
 
-		CSphString sError;
-		if ( !DescribeDistributedSchema ( dOut, pDistr, tStmt.m_bForce, bShowFields ) )
+		if ( auto pShard = AsShard ( pDistr.Ptr() ); pShard && !tStmt.m_bDescTopo )
+		{
+			DescribeLocalSchema ( dOut, pShard->m_tSchema, bShowFields );
+		} else if ( !DescribeDistributedSchema ( dOut, pDistr, tStmt.m_bForce, bShowFields ) )
 		{
 			tOut.ErrorAbsent ( "can not describe table '%s' because it contains system table", tStmt.m_sIndex.cstr() );
 			return;
@@ -6486,7 +6508,7 @@ CSphVector<NamedIndexType_t> GetAllServedIndexes()
 	auto pDistSnapshot = g_pDistIndexes->GetHash();
 	for ( auto& tIt : *pDistSnapshot )
 		// no need to check distr's it, iterating guarantees index existance.
-		dIndexes.Add ( { tIt.first, IndexType_e::DISTR } );
+		dIndexes.Add ( { tIt.first, tIt.second->m_sCluster, tIt.second->GetType() } );
 
 	dIndexes.Sort ( Lesser ( [] ( const NamedIndexType_t& a, const NamedIndexType_t& b ) { return strcasecmp ( a.m_sName.cstr(), b.m_sName.cstr() ) < 0; } ) );
 	return dIndexes;
@@ -6502,12 +6524,22 @@ void HandleShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		return bSystem == bIsSystem;
 	};
 
+	CSphString sUser;
+	CSphString sPermsError;
+	bool bAuthCheck = IsAuthEnabled();
+	if ( bAuthCheck )
+		sUser = session::GetUser();
+
 	// output the results
 	VectorLike dTable ( pStmt->m_sStringParam, { "Table", "Type" } );
 	for ( auto& dPair : dIndexes )
 	{
 		if ( !fnFilter ( dPair ) )
 			continue;
+
+		if ( bAuthCheck && !CheckPerms ( sUser, AuthAction_e::READ, dPair.m_sName, false, sPermsError ) )
+			continue;
+
 		if ( bWithClusters && !dPair.m_sCluster.IsEmpty ())
 			dTable.MatchTuplet ( SphSprintf ("%s:%s", dPair.m_sCluster.cstr(), dPair.m_sName.cstr()).cstr(), szIndexType ( dPair.m_eType ) );
 		else
@@ -6741,7 +6773,9 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 	case RunIdx_e::DISTR:
 	{
 		auto pDist = GetDistr ( sLike );
-		sCreateTable = BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
+		sCreateTable = AsShard ( pDist.Ptr() )
+			? BuildCreateTableShard ( tStmt.m_sIndex, *AsShard ( pDist.Ptr() ), ExtFilesFormat_e::LIST, true )
+			: BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
 	}
 	default: break;
 	};
@@ -6832,7 +6866,10 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		return;
 	}
 
-	if ( pDist && IsDistrTableHasSystem ( *pDist, tStmt.m_bForce ) )
+	// system check rejects regular distributed tables that wrap "system.*" sub-tables;
+	// shard tables intentionally use that prefix internally, so they're exempt and
+	// produce the original "shards=/rf=" form below instead of leaking topology.
+	if ( pDist && !AsShard ( pDist.Ptr() ) && IsDistrTableHasSystem ( *pDist, tStmt.m_bForce ) )
 	{
 		tOut.ErrorAbsent ( "can not show table '%s' because it contains system table", tStmt.m_sIndex.cstr() );
 		return;
@@ -6845,8 +6882,15 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	{
 		RIdx_c pIdx { pServed };
 		sCreateTable = BuildCreateTableRt ( pIdx->GetName(), pIdx, GetSchemaForCreateTable ( pIdx ), ( tStmt.m_bFormatOutWordsFile ? ExtFilesFormat_e::FILE : ExtFilesFormat_e::LIST ) );
+
+	} else if ( auto pShard = AsShard ( pDist.Ptr() ) )
+	{
+		sCreateTable = BuildCreateTableShard ( tStmt.m_sIndex, *pShard, tStmt.m_bFormatOutWordsFile ? ExtFilesFormat_e::FILE : ExtFilesFormat_e::LIST, tStmt.m_bForce );
+
 	} else
+	{
 		sCreateTable = BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
+	}
 
 	tOut.DataTuplet ( tStmt.m_sIndex.cstr(), sCreateTable.cstr() );
 	tOut.Eof();
@@ -7168,7 +7212,7 @@ public:
 		m_iLength = pCur-m_dBuf.Begin();
 	}
 
-	void BuildRequest ( const AgentConn_t &, ISphOutputBuffer & tOut ) const final
+	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
 		// API header
 		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_UVAR, VER_COMMAND_UVAR );
@@ -7220,6 +7264,8 @@ static bool SendUserVar ( const char * sIndex, const char * sUserVarName, CSphVe
 	// connect to remote agents and query them
 	if ( !dAgents.IsEmpty() )
 	{
+		SetSessionAuth ( dAgents );
+
 		UVarRequestBuilder_c tReqBuilder ( sUserVarName, dSetValues );
 		UVarReplyParser_c tParser;
 		PerformRemoteTasks ( dAgents, &tReqBuilder, &tParser );
@@ -7250,6 +7296,9 @@ void HandleCommandUserVar ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & 
 		SendErrorReply ( tOut, "invalid or truncated request" );
 		return;
 	}
+
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::WRITE, sUserVar, tOut ) )
+		return;
 
 	SphAttr_t iLast = 0;
 	const BYTE * pCur = dBuf.Begin();
@@ -7339,9 +7388,10 @@ bool SphinxqlReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & 
 }
 
 
-SphinxqlRequestBuilder_c::SphinxqlRequestBuilder_c ( Str_t sQuery, const SqlStmt_t & tStmt )
+SphinxqlRequestBuilder_c::SphinxqlRequestBuilder_c ( Str_t sQuery, const SqlStmt_t & tStmt, DWORD uApiFlags )
 	: m_sBegin { sQuery.first, tStmt.m_iListStart }
 	, m_sEnd ( sQuery.first + tStmt.m_iListEnd, sQuery.second - tStmt.m_iListEnd )
+	, m_uApiFlags ( uApiFlags )
 {
 }
 
@@ -7352,16 +7402,19 @@ void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOu
 
 	// API header
 	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_SPHINXQL, VER_COMMAND_SPHINXQL );
-	APIBlob_c dWrapper ( tOut ); // sphinxql wrapped twice, so one more length need to be written.
-	tOut.SendBytes ( m_sBegin );
-	tOut.SendBytes ( sIndexes );
-	tOut.SendBytes ( m_sEnd );
+	{
+		APIBlob_c dWrapper ( tOut ); // sphinxql wrapped twice, so one more length need to be written.
+		tOut.SendBytes ( m_sBegin );
+		tOut.SendBytes ( sIndexes );
+		tOut.SendBytes ( m_sEnd );
+	}
+	tOut.SendDword ( m_uApiFlags );
 }
 
 
 //////////////////////////////////////////////////////////////////////////
 
-static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sIndex, const char * szDistributed, bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, CSphString & sWarning, const cServedIndexRefPtr_c & pServed )
+static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sIndex, const char * szDistributed, bool bBlobUpdate, bool bShardPhysicalUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, CSphString & sWarning, const cServedIndexRefPtr_c & pServed )
 {
 	TRACE_CORO ( "rt", "DoExtendedUpdate" );
 
@@ -7373,7 +7426,14 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 		return;
 	}
 
-	if ( !ValidateClusterStatement ( sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ) ) )
+	if ( bShardPhysicalUpdate && pServed->m_eType!=IndexType_e::RT )
+	{
+		dFails.Submit ( sIndex, szDistributed, "shard physical update target must be a real-time table" );
+		return;
+	}
+
+	const CSphString & sEffectiveCluster = bShardPhysicalUpdate ? pServed->m_sCluster : tStmt.m_sCluster;
+	if ( !ValidateClusterStatement ( sIndex, *pServed, sEffectiveCluster, IsHttpStmt ( tStmt ) ) )
 	{
 		dFails.Submit ( sIndex, szDistributed, TlsMsg::szError() );
 		return;
@@ -7387,7 +7447,7 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 	}
 
 	RtAccum_t tAcc;
-	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplCmd_e::UPDATE_JSON : ReplCmd_e::UPDATE_QL, sIndex, tStmt.m_sCluster );
+	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplCmd_e::UPDATE_JSON : ReplCmd_e::UPDATE_QL, sIndex, sEffectiveCluster );
 	assert ( pCmd );
 	pCmd->m_pUpdateAPI = tStmt.AttrUpdatePtr();
 	pCmd->m_bBlobUpdate = bBlobUpdate;
@@ -7494,6 +7554,41 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		return;
 	}
 
+	if ( tStmt.m_bShardPhysicalUpdate && ( dIndexNames.GetLength()!=1 || !GetServed ( dIndexNames[0] ) ) )
+	{
+		tOut.Error ( "shard physical update target must be a concrete local table" );
+		return;
+	}
+
+	bool bShardUpdate = false;
+	ARRAY_FOREACH ( i, dDistributed )
+	{
+		if ( dDistributed[i] && AsShard ( dDistributed[i] ) )
+		{
+			bShardUpdate = true;
+			break;
+		}
+	}
+
+	if ( bShardUpdate && dIndexNames.GetLength()!=1 )
+	{
+		tOut.Error ( "shard table update must target exactly one shard table" );
+		return;
+	}
+
+	if ( bShardUpdate )
+	{
+		const auto * pShard = AsShard ( dDistributed[0] );
+		assert ( pShard );
+		if ( !ValidateClusterStatement ( dIndexNames[0], pShard->m_sCluster, tStmt.m_sCluster, IsHttpStmt ( tStmt ) ) )
+		{
+			tOut.Error ( "%s", TlsMsg::szError() );
+			return;
+		}
+	}
+
+	const bool bShardPhysicalUpdate = tStmt.m_bShardPhysicalUpdate || bShardUpdate;
+
 	// do update
 	SearchFailuresLog_c dFails;
 	int iSuccesses = 0;
@@ -7524,7 +7619,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			int64_t tmStartIdx = sphMicroTimer();
 			int iUpdatedIdx = 0;
 
-			DoExtendedUpdate ( tStmt, sReqIndex, nullptr, bBlobUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pLocked );
+			DoExtendedUpdate ( tStmt, sReqIndex, nullptr, bBlobUpdate, bShardPhysicalUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pLocked );
 
 			iUpdated += iUpdatedIdx;
 			iUpdatedReq += iUpdatedIdx;
@@ -7542,7 +7637,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 				int iUpdatedIdx = 0;
 
 				auto pServed = GetServed ( sLocal );
-				DoExtendedUpdate ( tStmt, sLocal, sReqIndex, bBlobUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pServed );
+				DoExtendedUpdate ( tStmt, sLocal, sReqIndex, bBlobUpdate, bShardPhysicalUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pServed );
 
 				iUpdated += iUpdatedIdx;
 				iUpdatedReq += iUpdatedIdx;
@@ -7558,6 +7653,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 			VecRefPtrs_t<AgentConn_t *> dAgents;
 			pDist->GetAllHosts ( dAgents );
+			SetSessionAuth ( dAgents );
 
 			// connect to remote agents and query them
 			// validation happens on remote side; errors will be returned via dFails
@@ -7565,7 +7661,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			{
 				int iUpdatedRemote = 0;
 				int iWarnsRemote = 0;
-				std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
+				std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt, bShardPhysicalUpdate );
 				std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iUpdatedRemote, iWarnsRemote, dFails, &sWarning );
 				int iSuccessesRemote = PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
 				iSuccessesReq += iSuccessesRemote;
@@ -7621,6 +7717,30 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		tOut.Ok ( iUpdated, sWarning, 0 );
 }
 
+static bool IsDistributedRemoteAuthError ( const char * sError )
+{
+	if ( !sError )
+		return false;
+
+	return strstr ( sError, "remote error: unknown user '" )!=nullptr
+		|| strstr ( sError, "remote error: Permission denied for user '" )!=nullptr
+		|| strstr ( sError, "remote error: GCM authentication failed (bad tag)" )!=nullptr;
+}
+
+
+static EMYSQL_ERR GetMysqlSelectErrorCode ( const char * sError )
+{
+	if ( !IsDistributedRemoteAuthError ( sError ) )
+		return EMYSQL_ERR::PARSE_ERROR;
+
+	ClientSession_c * pSession = session::Info().GetClientSession();
+	if ( pSession )
+		pSession->m_bAuthErrorSkipBuddy = true;
+
+	return EMYSQL_ERR::ACCESS_DENIED_ERROR;
+}
+
+
 bool HandleMysqlSelect ( RowBuffer_i & dRows, SearchHandler_c & tHandler )
 {
 	// lets check all query for errors
@@ -7642,7 +7762,7 @@ bool HandleMysqlSelect ( RowBuffer_i & dRows, SearchHandler_c & tHandler )
 	if ( !sError.IsEmpty() )
 	{
 		// stmt is intentionally NULL, as we did all the reporting just above
-		dRows.Error ( sError.cstr() );
+		dRows.Error ( sError.cstr(), GetMysqlSelectErrorCode ( sError.cstr() ) );
 		return false;
 	}
 
@@ -8105,7 +8225,7 @@ static uint64_t SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t 
 		if ( !tRes.m_sError.IsEmpty() )
 		{
 			// at this point, SELECT error logging should have been handled, so pass a NULL stmt to logger
-			dRows.Error ( tRes.m_sError.cstr() );
+			dRows.Error ( tRes.m_sError.cstr(), GetMysqlSelectErrorCode ( tRes.m_sError.cstr() ) );
 			return 0;
 		}
 		assert ( tRes.m_sError.IsEmpty() );
@@ -8361,6 +8481,9 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 	if ( !tWriting.CanWrite() )
 		return err ( "table is locked" );
 
+	if ( !EnsureNoPendingShardTxn ( *session::GetClientSession(), sError ) )
+		return err();
+
 	RtAccum_t* pAccum = nullptr;
 
 	// goto to percolate path with unlocked index
@@ -8445,6 +8568,28 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		return;
 	}
 
+	if ( dNames.GetLength()==1 )
+	{
+		auto pDist = GetDistr ( dNames[0] );
+		if ( const auto * pShard = AsShard ( pDist.Ptr() ) )
+		{
+			GlobalCrashQueryGetRef().m_dIndex = FromStr ( tStmt.m_sIndex );
+			int iAffectedRows = 0;
+			DeleteDocumentShard ( tStmt, *pShard, tOut, iAffectedRows );
+			return;
+		}
+	} else
+	{
+		for ( const auto & sName : dNames )
+		{
+			if ( AsShard ( GetDistr ( sName ).Ptr() ) )
+			{
+				tOut.Error ( "shard DELETE must target exactly one logical table" );
+				return;
+			}
+		}
+	}
+
 	DistrPtrs_t dDistributed;
 	CSphString sMissed;
 	if ( !ExtractDistributedIndexes ( dNames, dDistributed, sMissed ) )
@@ -8498,12 +8643,13 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			const DistributedIndex_t * pDist = dDistributed[iIdx];
 			VecRefPtrsAgentConn_t dAgents;
 			pDist->GetAllHosts ( dAgents );
+			SetSessionAuth ( dAgents );
 
 			int iGot = 0;
 			int iWarns = 0;
 
 			// connect to remote agents and query them
-			std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
+			std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt, false );
 			std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iGot, iWarns, dErrors, nullptr );
 			PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
 
@@ -8763,13 +8909,25 @@ static bool HandleMysqlSelectStmtGroup ( CSphVector<SqlStmt_t> & dStmt, int iSta
 			dAvailableBuckets.Reset();
 			facet::FacetStatusSources_t tStatus;
 
-			if ( iQueryIdx>=0 && tHandler.m_dQueries[iQueryIdx].m_bFacet && facet::GetFilterMode ( tHandler.m_dQueries[0], tHandler.m_dQueries[iQueryIdx] )==FacetFilterMode_e::Max )
+			if ( iQueryIdx>=0 && tHandler.m_dQueries[iQueryIdx].m_bFacet )
 			{
-				const AggrResult_t * pRes = &tRes;
-				if ( iQueryIdx+1<tHandler.m_dQueries.GetLength() && tHandler.m_dQueries[iQueryIdx+1].m_bFacetMaxRef )
-					pRes = &tHandler.m_dAggrResults[iQueryIdx+1];
-				tStatus = CollectFacetSelectedStatus ( tHandler.m_dQueries[0], tHandler.m_dQueries[iQueryIdx], tRes.m_tSchema, pRes, dSelectedFilters, dSelectedBuckets );
-				tStatus.m_pAvailableBuckets = facet::CollectFacetAvailableFilters ( tHandler.m_dQueries[iQueryIdx], tRes.m_tSchema, *pRes, dAvailableBuckets );
+				FacetFilterMode_e eMode = facet::GetFilterMode ( tHandler.m_dQueries[0], tHandler.m_dQueries[iQueryIdx] );
+				if ( eMode!=FacetFilterMode_e::Strict )
+				{
+					tStatus.m_bEmitStatus = true;
+					const AggrResult_t * pStrictRes = nullptr;
+					if ( eMode==FacetFilterMode_e::Max )
+					{
+						pStrictRes = &tRes;
+						if ( iQueryIdx+1<tHandler.m_dQueries.GetLength() && tHandler.m_dQueries[iQueryIdx+1].m_bFacetMaxRef )
+							pStrictRes = &tHandler.m_dAggrResults[iQueryIdx+1];
+					}
+
+					tStatus = CollectFacetSelectedStatus ( tHandler.m_dQueries[0], tHandler.m_dQueries[iQueryIdx], tRes.m_tSchema, pStrictRes, dSelectedFilters, dSelectedBuckets );
+					tStatus.m_bEmitStatus = true;
+					if ( pStrictRes )
+						tStatus.m_pAvailableBuckets = facet::CollectFacetAvailableFilters ( tHandler.m_dQueries[iQueryIdx], tRes.m_tSchema, *pStrictRes, dAvailableBuckets );
+				}
 			}
 
 			auto uMatches = SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ), tStatus );
@@ -8933,6 +9091,16 @@ static bool HandleSetLocal ( CSphString& sError, const CSphString& sName, int64_
 		pSession->m_bInTransaction = false;
 
 		// commit all pending changes
+		if ( bAutoCommit && pSession->m_tShardTxn.HasPendingData() )
+		{
+			CSphVector<int64_t> dCommittedDocIDs;
+			if ( !CommitShardTxn ( *pSession, sError, &dCommittedDocIDs ) )
+			{
+				pSession->m_dLastIds.SwapData ( dCommittedDocIDs );
+				return false;
+			}
+		}
+
 		if ( bAutoCommit && tAcc.GetIndex() && !HandleCmdReplicate ( *tAcc.GetAcc() ) )
 		{
 			TlsMsg::MoveError(sError);
@@ -9229,6 +9397,13 @@ static bool HandleSetGlobal ( CSphString & sError, const CSphString & sName, int
 	{
 		g_iMergeChunksPerJob = Max ( 2, iSetValue );
 		sphInfo ( "set global merge_chunks_per_job=%d", g_iMergeChunksPerJob );
+		return true;
+	}
+
+	if ( sName == "knn_parallel_build" )
+	{
+		g_iKNNParallelBuild = Max ( 1, iSetValue );
+		sphInfo ( "set global knn_parallel_build=%d", g_iKNNParallelBuild );
 		return true;
 	}
 
@@ -10032,6 +10207,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		dTable.MatchTupletf ( "auto_optimize", "%d", g_iAutoOptimizeCutoffMultiplier );
 		dTable.MatchTupletf ( "parallel_chunk_merges", "%d", g_iParallelChunkMerges );
 		dTable.MatchTupletf ( "merge_chunks_per_job", "%d", g_iMergeChunksPerJob );
+		dTable.MatchTupletf ( "knn_parallel_build", "%d", g_iKNNParallelBuild );
 		dTable.MatchTupletf ( "optimize_cutoff", "%d", MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff );
 		dTable.MatchTuplet ( "collation_connection", sphCollationToName ( session::GetCollation() ) );
 		dTable.MatchTuplet ( "query_log_format", LogFormat()==LOG_FORMAT::_PLAIN ? "plain" : "sphinxql" );
@@ -10181,7 +10357,7 @@ void ServedStats_c::GetIndexQueryStats ( VectorLike & dStatus ) const
 	AddFoundRowsStatsToOutput ( dStatus, "found_rows", tRowsFoundStats );
 
 	// command stats
-	SearchdCommand_e dCommands[] = { SEARCHD_COMMAND_SEARCH, SEARCHD_COMMAND_EXCERPT, SEARCHD_COMMAND_UPDATE, SEARCHD_COMMAND_KEYWORDS, SEARCHD_COMMAND_STATUS, SEARCHD_COMMAND_DELETE, SEARCHD_COMMAND_INSERT, SEARCHD_COMMAND_REPLACE, SEARCHD_COMMAND_COMMIT, SEARCHD_COMMAND_SUGGEST, SEARCHD_COMMAND_CALLPQ, SEARCHD_COMMAND_GETFIELD };
+	SearchdCommand_e dCommands[] = { SEARCHD_COMMAND_SEARCH, SEARCHD_COMMAND_EXCERPT, SEARCHD_COMMAND_UPDATE, SEARCHD_COMMAND_KEYWORDS, SEARCHD_COMMAND_STATUS, SEARCHD_COMMAND_DELETE, SEARCHD_COMMAND_INSERT, SEARCHD_COMMAND_REPLACE, SEARCHD_COMMAND_COMMIT, SEARCHD_COMMAND_SUGGEST, SEARCHD_COMMAND_CALLPQ, SEARCHD_COMMAND_GETFIELD, SEARCHD_COMMAND_SHARD_WRITE };
 	for ( auto eCmd : dCommands )
 		dStatus.MatchTupletf ( szCommand ( eCmd ), "%l", m_tCommandsStats.Get ( eCmd ) );
 
@@ -10273,6 +10449,7 @@ const char * szIndexType ( IndexType_e eType )
 	case IndexType_e::RT: return "rt";
 	case IndexType_e::PERCOLATE: return "percolate";
 	case IndexType_e::DISTR: return "distributed";
+	case IndexType_e::SHARD: return "shard";
 	default: return "unknown";
 	}
 }
@@ -10298,7 +10475,7 @@ static void AddDistibutedIndexStatus ( RowBuffer_i & tOut, const cDistributedInd
 {
 	assert ( pIndex );
 	VectorLike dStatus ( sPattern );
-	dStatus.MatchTuplet( "table_type", "distributed" );
+	dStatus.MatchTuplet( "table_type", szIndexType ( pIndex->GetType() ) );
 	pIndex->m_tStats.GetIndexQueryStats ( dStatus );
 	tOut.DataTable ( dStatus );
 }
@@ -10400,7 +10577,7 @@ void HandleMysqlShowFederatedIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t &
 		if ( !tSelector.Match ( sName.cstr() ) )
 			continue;
 
-		if ( tIndex.m_eType == IndexType_e::DISTR )
+		if ( tIndex.m_eType == IndexType_e::DISTR || tIndex.m_eType == IndexType_e::SHARD )
 			AddFederatedIndexStatusLine ( tFakeStats, sName, tOut );
 		else {
 			auto pServed = GetServed ( tIndex.m_sName );
@@ -11699,6 +11876,7 @@ void ClientSession_c::FreezeLastMeta()
 
 ClientSession_c::~ClientSession_c ()
 {
+	m_tShardTxn.Cleanup();
 	UnlockTables(this);
 }
 
@@ -11714,6 +11892,9 @@ static void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tO
 bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 {
 	auto& tSess = session::Info();
+	// reset per query buddy auth fallback
+	m_bAuthAllowBuddy = false;
+	m_bAuthErrorSkipBuddy = false;
 
 	// set on query guard
 	tSess.SetTaskState ( TaskState_e::QUERY );
@@ -11751,6 +11932,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	for ( auto& tStmt : dStmt ) {
 		FixupSystemTableName ( &tStmt );
 		CanonicalizeIndexName ( tStmt.m_sIndex );
+		tStmt.m_bShardPhysicalUpdate = m_bShardPhysicalUpdate;
 	}
 	SqlStmt_t * pStmt = dStmt.Begin();
 	assert ( !bParsedOK || pStmt );
@@ -11768,6 +11950,14 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			tOut.Error ( m_sError.cstr() );
 			return true;
 		}
+	}
+
+	if ( bParsedOK && !SqlCheckPerms ( session::GetUser(), dStmt, m_sError ) )
+	{
+		FreezeLastMeta();
+		m_bAuthErrorSkipBuddy = true;
+		tOut.Error ( m_sError.cstr(), EMYSQL_ERR::ACCESS_DENIED_ERROR );
+		return true;
 	}
 
 	// handle multi SQL query
@@ -12199,7 +12389,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_CLUSTER_DELETE:
 		m_tLastMeta = CSphQueryResultMeta();
-		if ( GloballyDeleteCluster ( pStmt->m_sIndex, m_tLastMeta.m_sError ) )
+		if ( GloballyDeleteCluster ( pStmt->m_sCluster, m_tLastMeta.m_sError ) )
 			tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
 		else
 			tOut.Error ( m_tLastMeta.m_sError.cstr() );
@@ -12224,7 +12414,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_CLUSTER_ALTER_UPDATE:
 		m_tLastMeta = CSphQueryResultMeta();
-		if ( ClusterAlterUpdate ( pStmt->m_sCluster, pStmt->m_sSetName, m_tLastMeta.m_sError ) )
+		if ( ClusterAlterUpdate ( pStmt->m_sCluster, pStmt->m_sSetName, pStmt->m_sStringParam, m_tLastMeta.m_sError ) )
 			tOut.Ok();
 		else
 			tOut.Error ( m_tLastMeta.m_sError.cstr() );
@@ -12272,6 +12462,89 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_UNLOCK_TABLES:
 		HandleMysqlUnlockTables ( tOut );
+		return true;
+		
+	case STMT_RELOAD_AUTH:
+		if ( AuthReload ( m_sError ) )
+			tOut.Ok();
+		else
+			tOut.Error ( m_sError.cstr() );
+		return true;
+
+	case STMT_SHOW_PERMISSIONS:
+	{
+		const CSphString * pTargetUser = pStmt->m_dCallStrings.GetLength() ? &pStmt->m_dCallStrings[0] : nullptr;
+		HandleMysqlShowPerms ( tOut, pTargetUser );
+	}
+		return true;
+
+	case STMT_SHOW_USAGE:
+	{
+		const CSphString * pTargetUser = pStmt->m_dCallStrings.GetLength() ? &pStmt->m_dCallStrings[0] : nullptr;
+		HandleMysqlShowUsage ( tOut, pTargetUser );
+	}
+		return true;
+
+	case STMT_SHOW_USERS:
+		HandleMysqlShowUsers ( tOut );
+		return true;
+
+	case STMT_SHOW_TOKEN:
+	{
+		const CSphString & sUser = ( pStmt->m_dCallStrings.GetLength() ? pStmt->m_dCallStrings[0] : session::GetUser() );
+		HandleMysqlShowToken ( sUser, tOut );
+	}
+	return true;
+
+	case STMT_SET_PASSWORD:
+	{
+		const CSphString & sUser = ( pStmt->m_dCallStrings.GetLength() ? pStmt->m_dCallStrings[0] : session::GetUser() );
+		if ( UserSetPassword ( sUser, pStmt->m_sSetValue, m_sError ) )
+			tOut.Ok();
+		else
+			tOut.Error ( m_sError.cstr() );
+	}
+	return true;
+
+	case STMT_TOKEN:
+	{
+		const CSphString & sUser = ( pStmt->m_dCallStrings.GetLength() ? pStmt->m_dCallStrings[0] : session::GetUser() );
+		CSphString sToken;
+		if ( !UserCreateToken ( sUser, sToken, m_sError ) )
+		{
+			tOut.Error ( m_sError.cstr() );
+			return true;
+		}
+
+		tOut.HeadBegin ();
+		tOut.HeadColumn ( "username" );
+		tOut.HeadColumn ( "token" );
+		if ( !tOut.HeadEnd () )
+			return true;
+
+		tOut.PutString ( sUser );
+		tOut.PutString ( sToken );
+		if ( !tOut.Commit () )
+			return true;
+
+		tOut.Eof ( false );
+	}
+	return true;
+
+	case STMT_CREATE_USER:
+		HandleMysqlCreateUser ( tOut, *pStmt, m_sError );
+		return true;
+
+	case STMT_DROP_USER:
+		HandleMysqlDropUser ( tOut, *pStmt );
+		return true;
+
+	case STMT_GRANT:
+		HandleMysqlGrant ( tOut, *pStmt, m_sError );
+		return true;
+
+	case STMT_REVOKE:
+		HandleMysqlRevoke ( tOut, *pStmt, m_sError );
 		return true;
 
 	default:
@@ -12340,6 +12613,11 @@ void session::SetUser ( const CSphString & sUser )
 	GetClientSession()->m_sUser = sUser;
 }
 
+const CSphString & session::GetUser()
+{
+	return GetClientSession()->m_sUser;
+}
+
 void session::SetCurrentDbName ( CSphString sDb )
 {
 	GetClientSession()->m_sCurrentDbName = std::move(sDb);
@@ -12394,7 +12672,12 @@ void HandleCommandSphinxql ( GenericOutputBuffer_c & tOut, WORD uVer, InputBuffe
 	// parse and run request
 	CSphVector<BYTE> dString;
 	tReq.GetString ( dString );
+	DWORD uApiFlags = ( uVer>=0x101 ) ? tReq.GetDword() : 0;
+
+	session::GetClientSession()->m_bShardPhysicalUpdate = ( uApiFlags & API_FLAG_SHARD_PHYSICAL_UPDATE )!=0;
+
 	RunSingleSphinxqlCommand ( dString, tOut );
+	session::GetClientSession()->m_bShardPhysicalUpdate = false;
 }
 
 /// json command over API
@@ -12414,9 +12697,13 @@ void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 		hOptions.AddUnique ( "raw_query" ) = tReq.GetString ();
 		hOptions.AddUnique ( "full_url" ) = tReq.GetString ();
 	}
+	DWORD uApiFlags = ( uVer>=0x103 ) ? tReq.GetDword() : 0;
+
+	session::GetClientSession()->m_bShardPhysicalUpdate = ( uApiFlags & API_FLAG_SHARD_PHYSICAL_UPDATE )!=0;
 	
 	CSphVector<BYTE> dResult;
 	ProcessHttpJsonQuery ( sCommand, hOptions, dResult );
+	session::GetClientSession()->m_bShardPhysicalUpdate = false;
 
 	auto tReply = APIAnswer ( tOut, VER_COMMAND_JSON );
 	tOut.SendString ( sEndpoint.cstr() );
@@ -13238,7 +13525,7 @@ void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex
 
 bool ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnCheck, DistributedIndex_t & tIdx, const char * szIndexName, const CSphConfigSection & hIndex, CSphString & sError, StrVec_t * pWarnings )
 {
-	assert ( hIndex("type") && hIndex["type"]=="distributed" );
+	assert ( hIndex("type") && ( hIndex["type"]=="distributed" || hIndex["type"]=="shard" ) );
 
 	bool bSetHA = false;
 	// configure ha_strategy
@@ -13264,10 +13551,12 @@ bool ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnChec
 		sphSplit ( dLocs, pLocal->cstr(), " \t," );
 		for ( const auto & sLocal: dLocs )
 		{
+			sError = "";
 			if ( !fnCheck ( sLocal ) )
 			{
-				sphWarning ( "table '%s': no such local table '%s', SKIPPED", szIndexName, sLocal.cstr() );
-				sError.SetSprintf ( "no such local table '%s'", sLocal.cstr() );
+				if ( sError.IsEmpty() )
+					sError.SetSprintf ( "no such local table '%s'", sLocal.cstr() );
+				sphWarning ( "table '%s': %s, SKIPPED", szIndexName, sError.cstr() );
 				return false;
 			}
 			tIdx.m_dLocal.Add ( sLocal );
@@ -13378,7 +13667,7 @@ static ResultAndIndex_t AddDistributedIndex ( const char * szIndexName, const CS
 }
 
 // common preconfiguration of mutable indexes
-static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSettings, const char * szIndexName, const CSphConfigSection & hIndex, bool bWordDict, bool bPercolate, StrVec_t * pWarnings, CSphString & sError )
+bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSettings, const char * szIndexName, const CSphConfigSection & hIndex, bool bWordDict, bool bPercolate, StrVec_t * pWarnings, CSphString & sError )
 {
 	// pick config settings
 	// they should be overriden later by Preload() if needed
@@ -13480,19 +13769,20 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 ///////////////////////////////////////////////
 static ResultAndIndex_t LoadRTPercolate ( bool bRT, const char* szIndexName, const CSphConfigSection& hIndex, bool bMutableOpt, StrVec_t* pWarnings, CSphString& sError )
 {
-	bool bWordDict = true;
-	if ( bRT )
+	auto sIndexType = hIndex.GetStr ( "dict", "keywords" );
+	DictFormat_e eDictFormat = DictFormat_e::KEYWORDS;
+	if ( !ParseDictFormat ( sIndexType, eDictFormat ) )
 	{
-		auto sIndexType = hIndex.GetStr ( "dict", "keywords" );
-		bWordDict = true;
-		if ( sIndexType=="crc" )
-			bWordDict = false;
-		else if ( sIndexType!="keywords" )
-		{
-			sError.SetSprintf ( "table '%s': unknown dict=%s; only 'keywords' or 'crc' values allowed", szIndexName, sIndexType.cstr() );
-			return { ADD_ERROR, nullptr };
-		}
+		sError.SetSprintf ( "table '%s': unknown dict=%s; only 'keywords', 'keywords_32k' or 'crc' values allowed", szIndexName, sIndexType.cstr() );
+		return { ADD_ERROR, nullptr };
 	}
+	if ( eDictFormat==DictFormat_e::KEYWORDS_V2 && !bRT )
+	{
+		sError.SetSprintf ( "table '%s': dict=keywords_32k is recognized, but PQ keywords_32k storage is not implemented yet", szIndexName );
+		return { ADD_ERROR, nullptr };
+	}
+
+	bool bWordDict = ( eDictFormat!=DictFormat_e::CRC );
 
 	CSphSchema tSchema ( szIndexName );
 	CSphIndexSettings tSettings;
@@ -13508,7 +13798,7 @@ static ResultAndIndex_t LoadRTPercolate ( bool bRT, const char* szIndexName, con
 	std::unique_ptr<CSphIndex> pIdx;
 	if ( bRT )
 	{
-		pIdx = sphCreateIndexRT ( szIndexName, pServed->m_sIndexPath, std::move ( tSchema ), pServed->m_tSettings.m_iMemLimit, bWordDict );
+		pIdx = sphCreateIndexRT ( szIndexName, pServed->m_sIndexPath, std::move ( tSchema ), pServed->m_tSettings.m_iMemLimit );
 		pServed->m_eType = IndexType_e::RT;
 		tSettings.m_bBinlog = bNeedBinlog;
 		if ( !bNeedBinlog )
@@ -13614,7 +13904,7 @@ static ResultAndIndex_t LoadTemplateIndex ( const char * szIndexName, const CSph
 // ServiceMain() -> TickHead() -> CheckRotate() -> ReloadConfigAndRotateIndexes() -> AddIndex()
 // ConfigureAndPreloadIndex() -> AddIndex() // maybe from non-main thread!
 // 		ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexConfigless -> ConfiglessPreloadIndex -> ConfigureAndPreloadIndex -> AddIndex
-ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bCheckDupe, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError )
+ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bCheckDupe, bool bMutableOpt, bool bShardLoadMeta, StrVec_t * pWarnings, CSphString & sError )
 {
 	// check name
 	if ( bCheckDupe && IndexIsServed ( szIndexName ) )
@@ -13628,6 +13918,8 @@ ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & 
 	{
 		case IndexType_e::DISTR:
 			return AddDistributedIndex ( szIndexName, hIndex, sError, pWarnings );
+		case IndexType_e::SHARD:
+			return AddShardIndex ( szIndexName, hIndex, bShardLoadMeta, sError, pWarnings );
 		case IndexType_e::RT:
 			return LoadRTPercolate ( true, szIndexName, hIndex, bMutableOpt, pWarnings, sError );
 		case IndexType_e::PERCOLATE:
@@ -13928,14 +14220,18 @@ static void CheckRotate () REQUIRES ( MainThread )
 
 void CheckReopenLogs () REQUIRES ( MainThread )
 {
+	ManageIpcSession();
+
 	if ( !g_bGotSigusr1 )
+		return;
+
+	g_bGotSigusr1 = 0;
+	if ( AuthReloadSignalled ( getpid() ) )
 		return;
 
 	ReopenDaemonLog ();
 	ReopenQueryLog ();
 	ReopenHttpLog();
-
-	g_bGotSigusr1 = 0;
 }
 
 
@@ -13970,6 +14266,8 @@ void ShowHelp ()
 		"\t\t\tare 'accept-desc-timestamp' and 'ignore-open-errors')\n"
 		"--new-cluster\tbootstraps a replication cluster with cluster restart protection\n"
 		"--new-cluster-force\tbootstraps a replication cluster without cluster restart protection\n"
+		"--auth\t\t\trun interactive authentication bootstrap mode\n"
+		"--auth-non-interactive\trun authentication bootstrap mode with stdin input\n"
 		"\n"
 		"Debugging options are:\n"
 		"--console\t\trun in console mode (do not fork, do not log to files)\n"
@@ -14404,6 +14702,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 	int iDefaultParallelMerges = Max ( 1, Min ( 2, iThreads / 2 ) );
 	g_iParallelChunkMerges = Max ( 1, hSearchd.GetInt ( "parallel_chunk_merges", iDefaultParallelMerges ) );
 	g_iMergeChunksPerJob = Max ( 2, hSearchd.GetInt ( "merge_chunks_per_job", 2 ) );
+	g_iKNNParallelBuild = Max ( 1, hSearchd.GetInt ( "knn_parallel_build", GetDefaultKNNParallelBuild(iThreads) ) );
 	g_iThdQueueMax = hSearchd.GetInt ( "jobs_queue_size", g_iThdQueueMax );
 
 	g_iPersistentPoolSize = hSearchd.GetInt ("persistent_connections_limit");
@@ -14658,6 +14957,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 	SetExpansionPhraseLimit ( iExpansionPhraseLimit, bExpansionPhraseWarning );
 
 	g_bAttrAutoconvStrict = hSearchd.GetBool ( "attr_autoconv_strict", false );
+	AuthConfigure ( hSearchd );
 }
 
 static void DirMustWritable ( const CSphString & sDataDir )
@@ -14829,7 +15129,7 @@ void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut )
 ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * szIndexName, StrVec_t& dWarnings, CSphString& sError )
 {
 	sd::statusf("preloading index %s", szIndexName);
-	auto [eAdd, pJustLoadedLocal] = AddIndex ( szIndexName, hIndex, true, false, nullptr, sError );
+	auto [eAdd, pJustLoadedLocal] = AddIndex ( szIndexName, hIndex, true, false, true, nullptr, sError );
 
 	// local plain, rt, percolate added, but need to be at least preallocated before they could work.
 	switch ( eAdd )
@@ -15007,77 +15307,9 @@ int StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread 
 
 	int iExitCode = 0;
 #if _WIN32
-	WinStopOrWaitAnother(iPid, iWaitTimeout);
+	iExitCode = WinStopOrWaitAnother ( iPid, iWaitTimeout );
 #else
-	CSphString sPipeName;
-	int iPipeCreated = -1;
-	int fdPipe = -1;
-	if ( bWait )
-	{
-		sPipeName = GetNamedPipeName ( iPid );
-		::unlink ( sPipeName.cstr () ); // avoid garbage to pollute us
-                int iMask = umask ( 0 );
-		iPipeCreated = mkfifo ( sPipeName.cstr(), 0666 );
-                umask ( iMask );
-		if ( iPipeCreated!=-1 )
-			fdPipe = ::open ( sPipeName.cstr(), O_RDONLY | O_NONBLOCK );
-
-		if ( iPipeCreated==-1 )
-			sphWarning ( "mkfifo failed (path=%s, err=%d, msg=%s); will NOT wait", sPipeName.cstr(), errno, strerrorm(errno) );
-		else if ( fdPipe<0 )
-			sphWarning ( "open failed (path=%s, err=%d, msg=%s); will NOT wait", sPipeName.cstr(), errno, strerrorm(errno) );
-	}
-
-	if ( kill ( iPid, SIGTERM ) )
-		sphFatal ( "stop: kill() on pid %d failed: %s", iPid, strerrorm(errno) );
-	sphInfo ( "stop: successfully sent SIGTERM to pid %d", iPid );
-
-	iExitCode = ( bWait && ( iPipeCreated==-1 || fdPipe<0 ) ) ? 1 : 0;
-	bool bHandshake = true;
-	if ( bWait && fdPipe>=0 )
-		while ( true )
-		{
-			int iReady = sphPoll ( fdPipe, iWaitTimeout );
-
-			// error on wait
-			if ( iReady<0 )
-			{
-				iExitCode = 3;
-				sphWarning ( "stopwait%s error '%s'", ( bHandshake ? " handshake" : " " ), strerrorm(errno) );
-				break;
-			}
-
-			// timeout
-			if ( iReady==0 )
-			{
-				if ( !bHandshake )
-					continue;
-
-				iExitCode = 1;
-				break;
-			}
-
-			// reading data
-			DWORD uStatus = 0;
-			int iRead = ::read ( fdPipe, &uStatus, sizeof(DWORD) );
-			if ( iRead!=sizeof(DWORD) )
-			{
-				sphWarning ( "stopwait read fifo error '%s'", strerrorm(errno) );
-				iExitCode = 3; // stopped demon crashed during stop
-				break;
-			}
-			iExitCode = ( uStatus==1 ? 0 : 2 ); // uStatus == 1 - AttributeSave - ok, other values - error
-
-			if ( !bHandshake )
-				break;
-
-			bHandshake = false;
-		}
-	::unlink ( sPipeName.cstr () ); // is ok on linux after it is opened.
-
-	if ( fdPipe>=0 )
-		::close ( fdPipe );
-
+	iExitCode = StopDaemonAndWait ( bWait, iPid, iWaitTimeout );
 #endif
 	return iExitCode;}
 } // static namespace
@@ -15111,16 +15343,23 @@ static void InitBanner()
 	g_sStatusVersion.SetSprintf ( "%s%s%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr(), sKNN.cstr(), sKNNEmb.cstr() );
 }
 
-
-static void CheckSSL ( const CSphVector<ListenerDesc_t> & dListeners )
+static bool CheckSSL ( const CSphVector<ListenerDesc_t> & dListeners, bool bForced )
 {
 	// check for SSL inited well
-	if ( dListeners.none_of ([] ( const auto& tListener ) { return tListener.m_eProto==Proto_e::HTTPS; }) )
-		return;
+	if ( !bForced && dListeners.none_of ([] ( const auto& tListener ) { return tListener.m_eProto==Proto_e::HTTPS; }) )
+		return true;
 
 	CSphString sError;
 	if ( !CheckWeCanUseSSL ( &sError ) )
+	{
+		if ( bForced )
+			sphFatal ( "SSL initialization failed but is required for Manticore Buddy: %s", sError.cstr() );
+
 		sphWarning ( "SSL init error: %s", sError.cstr() );
+		return false;
+	}
+
+	return true;
 }
 
 
@@ -15203,6 +15442,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	const char*		szCmdConfigFile = nullptr;
 	bool			bMeasureStack = false;
 	bool			bQuietRequested = false;
+	bool			bOptAuth = false;
+	bool			bOptAuthNonInteractive = false;
 
 	DWORD			uReplayFlags = 0;
 
@@ -15264,6 +15505,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--new-cluster-force" )	bNewClusterForce = true;
 		OPT1 ( "--no_change_cwd" )	g_bNoChangeCwd = true;
 		OPT1 ( "--with-buddy" )	bWithBuddy = true;
+		OPT1 ( "--auth" )			{ bOptAuth = true; g_bOptNoLock = true; g_bOptNoDetach = true; }
+		OPT1 ( "--auth-non-interactive" )	{ bOptAuth = true; bOptAuthNonInteractive = true; g_bOptNoLock = true; g_bOptNoDetach = true; }
 
 		// FIXME! add opt=(csv)val handling here
 		OPT1 ( "--replay-flags=accept-desc-timestamp" )		uReplayFlags |= Binlog::REPLAY_ACCEPT_DESC_TIMESTAMP;
@@ -15344,11 +15587,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( !WinService() )
 		g_bOptNoDetach = true;
 
-#ifndef NDEBUG
-	// i also want my windows debug builds to skip locking by default
-	// NOTE, this also skips log files!
-	g_bOptNoLock = true;
-#endif
+//#ifndef NDEBUG
+//	// i also want my windows debug builds to skip locking by default
+//	// NOTE, this also skips log files!
+//	g_bOptNoLock = true;
+//#endif
 #endif
 
 	if ( !bOptPIDFile )
@@ -15422,6 +15665,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( !LoadConfigInt ( hConf, g_sConfigFile, sError ) )
 		sphFatal ( "%s", sError.cstr() );
 
+	////////////////////////////////
+	// auth bootstrap after configless / data_dir setup
+
+	if ( bOptAuth )
+		return AuthBootstrap ( hSearchdpre, g_sConfigFile, bOptAuthNonInteractive );
+
 	if ( g_bSystemd.has_value() )
 		sphInfo ( "Systemd assistance: explicitly set to %s", g_bSystemd?"yes":"no" );
 	else {
@@ -15449,7 +15698,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	CSphVector<ListenerDesc_t> dListenerDescs;
 
-	auto InitCheckListeners = [&] (auto hDaemonConfig, auto fnAddGlobal ) REQUIRES ( MainThread )
+	auto InitCheckListeners = [&] ( CSphConfigSection & hDaemonConfig, auto fnAddGlobal, bool bUpdateConfig ) REQUIRES ( MainThread )
 	{
 		dListenerDescs.Reset();
 		auto AddCheck = [&] (const ListenerDesc_t& tDesc) REQUIRES ( MainThread )
@@ -15505,13 +15754,48 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		FixPathAbsolute ( sSslKey );
 		FixPathAbsolute ( sSslCa );
 		SetServerSSLKeys ( sSslCert, sSslKey, sSslCa );
-		CheckSSL ( dListenerDescs );
+
+		bool bForcedSsl = IsAuthEnabled() && HasBuddyConfigured ( g_sBuddyPath );
+		if ( bForcedSsl )
+			ForceSsl();
+
+		bool bGotSSL = CheckSSL ( dListenerDescs, bForcedSsl );
+		if ( !bForcedSsl || !bGotSSL )
+			return;
+
+		// add an HTTPS listener for Buddy if none exists
+		// Buddy can connect HTTPS even if the user did not configure it
+		if ( dListenerDescs.any_of ([] ( const auto & tListener ) { return tListener.m_eProto==Proto_e::HTTPS; }) )
+			return;
+
+		int iMaxPort = -1;
+		for ( CSphVariant * v = hDaemonConfig ( "listen" ); v; v = v->m_pNext )
+		{
+			auto tDesc = ParseListener ( v->cstr () );
+			iMaxPort = Max ( iMaxPort, tDesc.m_iPort + tDesc.m_iPortsCount );
+		}
+
+		if ( iMaxPort!=-1 )
+			iMaxPort++;
+		else
+			iMaxPort = SPHINXAPI_PORT + 1;
+
+		auto tDesc = MakeLocalhostListener ( iMaxPort, Proto_e::HTTPS );
+		dListenerDescs.Add ( tDesc );
+		AddCheck ( tDesc );
+
+		CSphString sHttps;
+		sHttps.SetSprintf ( "127.0.0.1:%d:HTTPS", iMaxPort );
+		if ( bUpdateConfig )
+			hDaemonConfig.AddEntry ( "listen", sHttps.cstr() );
+		sphLogDebug ( "no HTTPS listener configured, added '%s' for Buddy communication", sHttps.cstr() );
 	};
 
 	if ( bConfigTest )
 	{
 		CSphVector<ListenerDesc_t> dConfigTestListeners;
-		InitCheckListeners (hSearchdpre, [&] (const ListenerDesc_t& tDesc ) { dConfigTestListeners.Add (tDesc); });
+		CSphConfigSection hConfigTest = hSearchdpre;
+		InitCheckListeners (hConfigTest, [&] (const ListenerDesc_t& tDesc ) { dConfigTestListeners.Add (tDesc); }, false);
 		fprintf ( stdout, "OK\n" );
 		fflush ( stdout );
 		return 0;
@@ -15603,6 +15887,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		// create http log if required
 		if ( hSearchd.Exists ( "log_http" ) )
 			SetupHttpLog ( hSearchd["log_http"] );
+
+		AuthLogInit ( hSearchd );
 	}
 
 #if !_WIN32
@@ -15646,7 +15932,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	// network startup
 	////////////////////
 
-	InitCheckListeners (hSearchd, [&] (const ListenerDesc_t& tDesc ) REQUIRES ( MainThread ) { AddGlobalListener (tDesc); });
+	InitCheckListeners (hSearchd, [&] (const ListenerDesc_t& tDesc ) REQUIRES ( MainThread ) { AddGlobalListener (tDesc); }, true);
 
 	// set up ping service (if necessary) before loading indexes
 	// (since loading ha-mirrors of distributed already assumes ping is usable).
@@ -15887,7 +16173,13 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	g_pTickPoolThread = MakeThreadPool ( g_iNetWorkers, "TickPool" );
 	WipeSchedulerOnFork ( g_pTickPoolThread );
-	PrepareClustersOnStartup ( dListenerDescs, bNewClusterForce );
+
+	RplBootstrap_e eBs = RplBootstrap_e::OFF;
+	if ( bNewClusterForce )
+		eBs = RplBootstrap_e::FORCED;
+	else if ( bNewCluster )
+		eBs = RplBootstrap_e::ON;
+	PrepareClustersOnStartup ( dListenerDescs, eBs );
 
 	g_dNetLoops.Resize ( g_iNetWorkers );
 	for ( auto & pNetLoop : g_dNetLoops )
@@ -15905,7 +16197,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	// time for replication to sync with cluster
 	searchd::AddShutdownCb ( ReplicationServiceShutdown );
-	ReplicationServiceStart ( bNewCluster || bNewClusterForce );
+	ReplicationServiceStart ( eBs );
 	searchd::AddShutdownCb ( BuddyShutdown );
 	// --test should not guess buddy path
 	// otherwise daemon generates warning message that counts as bad daemon restart by ubertest

@@ -8,7 +8,7 @@
 Ошибки и запросы на добавление функционала отслеживаются на [Github](https://github.com/manticoresoftware/manticore/issues). Вы можете создать новую задачу и подробно описать вашу ошибку, чтобы сэкономить время и себе, и разработчикам.
 
 ### Обновления документации
-Обновления документации (текущего текста), также производятся на [Github](https://github.com/manticoresoftware/manticoresearch/tree/master/manual).
+Обновления документации (то, что вы сейчас читаете) также выполняются на [Github](https://github.com/manticoresoftware/manticoresearch/tree/main/manual).
 
 ### Сбои
 

@@ -488,7 +488,7 @@ knn = {"attrs":[{"name":"image_vector","type":"hnsw","dims":768,"hnsw_similarity
 rt_attr_float_vector = embedding_vector
 rt_field = title
 rt_field = description
-knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}
+knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":"title"}]}
 ```
 
 **Required KNN parameters:**
@@ -502,11 +502,13 @@ knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2",
 - `hnsw_ef_construction`: Construction time/accuracy trade-off (default: 200)
 
 **Auto-embeddings parameters** (when using `model_name`):
-- `model_name`: The embedding model to use (e.g., `"sentence-transformers/all-MiniLM-L6-v2"`, `"openai/text-embedding-ada-002"`). When specified, `dims` must be omitted as the model determines the dimensions automatically.
+- `model_name`: The embedding model to use (e.g., `"Xenova/all-MiniLM-L6-v2"` for the fast ONNX path — browse [ONNX models on Hugging Face](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm); `"sentence-transformers/all-MiniLM-L6-v2"` is also supported; `"openai/text-embedding-ada-002"` for OpenAI). When specified, `dims` must be omitted as the model determines the dimensions automatically.
 - `from`: Comma-separated list of field names to use for embedding generation, or empty string `""` to use all text/string fields. This parameter is required when `model_name` is specified.
 - `api_key`: API key for API-based models (OpenAI, Voyage, Jina). Only required for API-based embedding services.
 - `cache_path`: Optional path for caching downloaded models (for sentence-transformers models).
 - `use_gpu`: Optional boolean to enable GPU acceleration if available.
+
+For custom remote endpoints, you can use `provider:model` syntax in `model_name`. In that form, the part before `:` selects the request format, while the part after `:` is sent to the remote endpoint unchanged.
 
 **Important:** You cannot specify both `dims` and `model_name` in the same configuration - they are mutually exclusive. Use `dims` for manual vector insertion, or `model_name` for auto-embeddings. Use `dims` for manual vector insertion, or `model_name` for auto-embeddings.
 

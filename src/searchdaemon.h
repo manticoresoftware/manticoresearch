@@ -131,6 +131,7 @@ static const int64_t S2US = I64C ( 1000000 );
 /////////////////////////////////////////////////////////////////////////////
 
 const char* szCommand ( int );
+SearchdCommand_e ParseCommand ( const CSphString & sCommand );
 
 /// master-agent API SEARCH command protocol extensions version
 enum
@@ -149,16 +150,22 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_KEYWORDS	= 0x102,
 	VER_COMMAND_STATUS		= 0x101,
 	VER_COMMAND_FLUSHATTRS	= 0x100,
-	VER_COMMAND_SPHINXQL	= 0x100,
-	VER_COMMAND_JSON		= 0x102,
+	VER_COMMAND_SPHINXQL	= 0x101,
+	VER_COMMAND_JSON		= 0x103,
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
 	VER_COMMAND_CLUSTER		= 0x10E,
 	VER_COMMAND_GETFIELD	= 0x100,
 	VER_COMMAND_SUGGEST		= 0x102,
+	VER_COMMAND_SHARD_WRITE	= 0x100,
 
 	VER_COMMAND_WRONG = 0,
+};
+
+enum ApiCommandFlags_e : DWORD
+{
+	API_FLAG_SHARD_PHYSICAL_UPDATE = 1U << 0,
 };
 
 enum UpdateType_e
@@ -427,8 +434,10 @@ public:
 	}
 };
 
+struct ApiAuthToken_t;
+
 // RAII Start Sphinx API command/request header
-APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer = 0 /* SEARCHD_OK */ );
+APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer );
 
 // RAII Sphinx API answer
 APIBlob_c APIAnswer ( ISphOutputBuffer & dBuff, WORD uVer = 0, WORD uStatus = 0 /* SEARCHD_OK */ );
@@ -446,9 +455,8 @@ public:
 //	void PrependBuf ( SmartOutputBuffer_t &dBuf );
 	size_t GetIOVec ( CSphVector<sphIovec> &dOut ) const;
 	void Reset();
-#if _WIN32
-	void LeakTo ( CSphVector<ISphOutputBuffer *> dOut );
-#endif
+	void LeakTo ( CSphVector<ISphOutputBuffer *> & dOut );
+	void SwapData ( CSphVector<ISphOutputBuffer *> & dChunks );
 };
 
 class GenericOutputBuffer_c : public ISphOutputBuffer
@@ -1131,7 +1139,7 @@ public:
 using ResultAndIndex_t = std::pair<ESphAddIndex, ServedIndexRefPtr_c>;
 
 ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError );
-ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bCheckDupe, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError );
+ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bCheckDupe, bool bMutableOpt, bool bShardLoadMeta, StrVec_t * pWarnings, CSphString & sError );
 bool PreallocNewIndex ( ServedIndex_c & tIdx, const CSphConfigSection * pConfig, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError );
 
 struct AttrUpdateArgs: public CSphAttrUpdateEx
@@ -1251,6 +1259,7 @@ public:
 // from mysqld_error.h
 enum class EMYSQL_ERR : WORD
 {
+	ACCESS_DENIED_ERROR			= 1045,
 	NO_DB_ERROR					= 1046,
 	UNKNOWN_COM_ERROR			= 1047,
 	SERVER_SHUTDOWN				= 1053,
@@ -1287,7 +1296,7 @@ class ReplyParser_i;
 class SearchFailuresLog_c;
 
 std::unique_ptr<QueryParser_i> CreateQueryParser ( bool bJson ) noexcept;
-std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt );
+std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt, bool bShardPhysicalUpdate );
 std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings, SearchFailuresLog_c & dFails, CSphString * pWarning = nullptr );
 StmtErrorReporter_i * CreateHttpErrorReporter();
 
@@ -1297,6 +1306,7 @@ enum class EHTTP_STATUS : BYTE
 	_200,
 	_206,
 	_400,
+	_401,
 	_403,
 	_404,
 	_405,
@@ -1325,6 +1335,7 @@ enum class EHTTP_ENDPOINT : BYTE
 	CLI,
 	CLI_JSON,
 	ES_BULK,
+	TOKEN,
 
 	TOTAL
 };
@@ -1347,6 +1358,7 @@ void FixPathAbsolute ( CSphString & sPath );
 using OptionsHash_t = SmallStringHash_T<CSphString>;
 void				ProcessHttpJsonQuery ( const CSphString & sQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError );
+void				sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sError, const char * sHeaderField );
 void				LoadCompatHttp ( const char * sData );
 void				SaveCompatHttp ( JsonEscapedBuilder & tOut );
 void				SetupCompatHttp();
@@ -1368,6 +1380,7 @@ namespace session {
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
 	void SetFederatedUser();
 	void SetUser ( const CSphString & sUser );
+	const CSphString & GetUser();
 	void SetCurrentDbName ( CSphString sDb );
 	const char* GetCurrentDbName ();
 	void SetAutoCommit ( bool bAutoCommit );

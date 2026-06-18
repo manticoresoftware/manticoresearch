@@ -23,6 +23,16 @@ To set up replication in Manticore Search:
 * A [listen](../../Server_settings/Searchd.md#listen)  directive must be specified, containing an IP address accessible by other nodes, or a [node_address](../../Server_settings/Searchd.md#node_address) with an accessible IP address.
 * Optionally, you can set unique values for [server_id](../../Server_settings/Searchd.md#server_id) on each cluster node. If no value is set, the node will attempt to use the MAC address or a random number to generate the `server_id`.
 
+If [authentication and authorization](../../Security/Authentication_and_authorization.md) is enabled, cluster operations require the `replication` permission. Grant it to the user that should own replication operations for the cluster:
+
+```sql
+GRANT replication ON 'posts' TO 'repl_user';
+```
+
+`CREATE CLUSTER` and `JOIN CLUSTER` can specify that user with `'<user>' AS user`. The user must exist with matching stored authentication data on the nodes that take part in the operation. Creating the same user name and password independently on each node is not enough, because the stored authentication data can differ. If you change auth data outside the daemon, run `RELOAD AUTH` on the affected nodes before using the cluster operation.
+
+Later `ALTER CLUSTER ... ADD`, `ALTER CLUSTER ... DROP`, `ALTER CLUSTER ... UPDATE nodes`, and `DELETE CLUSTER` use the stored cluster user. When authentication is enabled, a successful `JOIN CLUSTER` replaces all local authentication data on the joining node with the donor cluster's authentication data.
+
 If there is no `replication` [listen](../../Server_settings/Searchd.md#listen) directive set, Manticore will use the first two free ports in the range of 200 ports after the default protocol listening port for each created cluster. To set replication ports manually, the [listen](../../Server_settings/Searchd.md#listen) directive (of `replication` type) port range must be defined and the address/port range pairs must not intersect between different nodes on the same server. As a rule of thumb, the port range should specify at least two ports per cluster. When you define a replication listener with a port range (e.g., `listen = 192.168.0.1:9320-9328:replication`), Manticore doesn't immediately start listening on these ports. Instead, it will take random free ports from the specified range only when you start using replication.
 
 ## Replication cluster
@@ -39,7 +49,9 @@ This option specifies the name of the cluster. It should be unique among all the
 
 ### path
 
-The path option specifies the data directory for [write-set cache replication](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) and incoming tables from other nodes. This value should be unique among all the clusters in the system and should be specified as a relative path to the [data_dir](../../Server_settings/Searchd.md#data_dir). directory. By default, it is set to the value of [data_dir](../../Server_settings/Searchd.md#data_dir).
+The path option specifies the data directory for [write-set cache replication](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) and other cluster provider files. It does not change where replicated tables are stored. Incoming replicated tables are stored in their normal table directory under [data_dir](../../Server_settings/Searchd.md#data_dir). This value should be unique among all the clusters in the system and should be specified as a relative path to the [data_dir](../../Server_settings/Searchd.md#data_dir) directory. By default, it is set to the value of [data_dir](../../Server_settings/Searchd.md#data_dir).
+
+> **Breaking change:** Older versions also stored incoming replicated table files under the cluster path. If you used a custom cluster `path`, upgrade carefully because replicated tables received by older versions might need to be moved or re-synchronized into the normal `data_dir/<table>` layout.
 
 ### nodes
 
@@ -284,7 +296,7 @@ SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 ## Replication and cluster
 
 <!-- example replication and cluster 1 -->
-To use replication, you need to define one [listen](../../Server_settings/Searchd.md#listen) port for SphinxAPI protocol and one  [listen](../../Server_settings/Searchd.md#listen) for replication address and port range in the configuration file. Also, specify the  [data_dir](../../Server_settings/Searchd.md#data_dir) folder to receive incoming tables.
+To use replication, you need to define one [listen](../../Server_settings/Searchd.md#listen) port for SphinxAPI protocol and one  [listen](../../Server_settings/Searchd.md#listen) for replication address and port range in the configuration file. Also, specify the  [data_dir](../../Server_settings/Searchd.md#data_dir) folder to store incoming replicated tables.
 
 
 <!-- intro -->
@@ -696,4 +708,3 @@ let insert_res = index_api.insert(insert_req).await;
 
 All queries that modify tables in the cluster are now replicated to all nodes in the cluster.
 <!-- proofread -->
-

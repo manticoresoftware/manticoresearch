@@ -2526,7 +2526,7 @@ let search_res = search_api.search(search_req).await;
 - `HNSW_EF_CONSTRUCTION`：构建时间/准确性权衡（默认：200）
 
 **自动嵌入参数**（当使用 `MODEL_NAME` 时）：
-- `MODEL_NAME`：使用的嵌入模型（例如，`'sentence-transformers/all-MiniLM-L6-v2'`、`'openai/text-embedding-ada-002'`）
+- `MODEL_NAME`：要使用的嵌入模型（例如，快速 ONNX 路径可用 `'Xenova/all-MiniLM-L6-v2'`，也可以是 `'sentence-transformers/all-MiniLM-L6-v2'` 或 `'openai/text-embedding-ada-002'`）
 - `FROM`：用于生成嵌入的字段名列表（逗号分隔），或空字符串 `''` 表示使用所有文本/字符串字段
 - `API_KEY`：基于 API 的模型（OpenAI、Voyage、Jina）的 API 密钥
 
@@ -2541,7 +2541,7 @@ let search_res = search_api.search(search_req).await;
 - **简化的工作流程**：只需插入文本，嵌入会自动生成
 - **无需手动计算向量**：无需运行单独的嵌入模型
 - **一致的嵌入**：相同的模型确保一致的向量表示
-- **多模型支持**：可选择 [sentence-transformers](https://huggingface.co/sentence-transformers/models)、[Qwen](https://huggingface.co/Qwen/models) 嵌入模型、OpenAI、Voyage 和 Jina 模型
+- **多模型支持**：可从 [Hugging Face 上的 ONNX 模型](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) 中选择（推荐 - 运行在 Manticore 的快速 ONNX Runtime 后端上）、[sentence-transformers](https://huggingface.co/sentence-transformers/models)、[Qwen](https://huggingface.co/Qwen/models) 嵌入模型，以及 OpenAI、Voyage 和 Jina 模型
 - **灵活的字段选择**：控制用于生成嵌入的字段
 
 #### 创建带有自动嵌入的表
@@ -2553,18 +2553,31 @@ let search_res = search_api.search(search_req).await;
 - `API_URL`：可选。自定义 API 端点 URL。如果未指定，使用默认提供者端点（例如，OpenAI 的 `https://api.openai.com/v1/embeddings`）。
 - `API_TIMEOUT`：可选。API 请求的 HTTP 超时时间（以秒为单位）。默认为 10 秒。设置为 `'0'` 以使用默认超时。适用于表创建时的验证请求和插入操作时的嵌入生成。
 
+对于远程模型，`MODEL_NAME` 可以使用传统的 `provider/model` 格式或显式的 `provider:model` 格式。当使用 `API_URL` 并希望将 `:` 后的部分原样转发到自定义提供方兼容端点时，请使用 `provider:model`。
+
 **支持的嵌入模型：**
-- **Sentence Transformers**：任何 [适合的 BERT 基础 Hugging Face 模型](https://huggingface.co/sentence-transformers/models)（例如，`sentence-transformers/all-MiniLM-L6-v2`）——无需 API 密钥。Manticore 在创建表时下载模型。
+- **ONNX（推荐）**：任何带有 `.onnx` 文件的 Hugging Face 模型，例如 `Xenova/all-MiniLM-L6-v2`、`Xenova/all-MiniLM-L12-v2`、`Xenova/bge-small-en-v1.5`、`Xenova/multilingual-e5-small`。无需 API key。运行在 Manticore 的快速 ONNX Runtime 后端上（在相同硬件上约比 SentenceTransformers 路径快 14 倍 - 见 [嵌入速度提升 14 倍](https://manticoresearch.com/blog/onnx-embeddings-speedup/)）。[Xenova](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) 和 [onnx-models](https://huggingface.co/onnx-models/models?pipeline_tag=feature-extraction) 都发布了大量 ONNX 转换模型；做嵌入时，请寻找标注为 **feature-extraction** 任务的模型。
+- **Sentence Transformers**：任何 [合适的、基于 BERT 的 Hugging Face 模型](https://huggingface.co/sentence-transformers/models)（例如 `sentence-transformers/all-MiniLM-L6-v2`）- 无需 API key。仍然受支持；如果你想要的模型没有发布为 ONNX，就用这个。
 - **Qwen 本地嵌入**：Qwen 嵌入模型，如 `Qwen/Qwen3-Embedding-0.6B`——不需要 API 密钥。Manticore 在您创建表时下载模型。
-- **OpenAI、Voyage、Jina**：远程嵌入模型（例如，`openai/text-embedding-ada-002`，`voyage/voyage-3.5-lite`，`jina/jina-embeddings-v2-base-en`）- 需要 `API_KEY='<API_KEY>'` 参数。可选地指定 `API_URL='<CUSTOM_URL>'` 以使用自定义 API 端点，并指定 `API_TIMEOUT='<SECONDS>'` 以配置 HTTP 超时（默认为 10 秒）。
+- **OpenAI、Voyage、Jina**：远程嵌入模型（例如，`openai/text-embedding-ada-002`、`openai:text-embedding-ada-002`、`voyage/voyage-3.5-lite`、`jina/jina-embeddings-v2-base-en`）- 需要 `API_KEY='***'` 参数。可选地指定 `API_URL='<CUSTOM_URL>'` 以使用自定义 API 端点，并使用 `API_TIMEOUT='<SECONDS>'` 配置 HTTP 超时（默认为 10 秒）。
 
 <!-- intro -->
 ##### SQL：
 <!-- request SQL -->
 
-使用 [sentence-transformers 模型](https://huggingface.co/sentence-transformers/models)（无需 API 密钥）
+使用本地 [ONNX 模型](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) - 推荐，运行在快速 ONNX 路径上（无需 API key）
 ```sql
 CREATE TABLE products (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+使用 [sentence-transformers 模型](https://huggingface.co/sentence-transformers/models)（无需 API key；运行在 Candle 路径上 - 可用时优先使用上面的 ONNX）
+```sql
+CREATE TABLE products_st (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
@@ -2591,15 +2604,25 @@ CREATE TABLE products_openai (
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='<OPENAI_API_KEY>'
 );
 ```
-
 使用 OpenAI 与自定义 API URL 和超时（可选）
 ```sql
 CREATE TABLE products_openai_custom (
     title TEXT,
     content TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
-    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content'
-    API_KEY='<OPENAI_API_KEY>' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+    MODEL_NAME='openai:text-embedding-ada-002' FROM='title,content'
+    API_KEY='***' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+);
+```
+
+使用 OpenRouter 与提供方限定的模型 ID
+```sql
+CREATE TABLE products_openrouter (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='openai:openai/text-embedding-ada-002' FROM='title,content'
+    API_KEY='***' API_URL='https://openrouter.ai/api/v1/embeddings' API_TIMEOUT='30'
 );
 ```
 
@@ -2610,7 +2633,7 @@ CREATE TABLE products_all_fields (
     description TEXT,
     tags TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM=''
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM=''
 );
 ```
 
@@ -2618,9 +2641,9 @@ CREATE TABLE products_all_fields (
 ##### JSON:
 <!-- request JSON -->
 
-使用 [sentence-transformers 模型](https://huggingface.co/sentence-transformers/models)（不需要API密钥）
+使用本地 [ONNX 模型](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) - 推荐（无需 API key）
 ```JSON
-POST /sql?mode=raw -d "CREATE TABLE products (title TEXT, description TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title')"
+POST /sql?mode=raw -d "CREATE TABLE products (title TEXT, description TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title')"
 ```
 
 使用 OpenAI 模型（需要 API_KEY 参数）
@@ -2630,7 +2653,7 @@ POST /sql?mode=raw -d "CREATE TABLE products_openai (title TEXT, content TEXT, e
 
 使用所有文本字段进行嵌入（FROM为空）
 ```JSON
-POST /sql?mode=raw -d "CREATE TABLE products_all_fields (title TEXT, description TEXT, tags TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='')"
+POST /sql?mode=raw -d "CREATE TABLE products_all_fields (title TEXT, description TEXT, tags TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='')"
 ```
 
 <!-- end -->
@@ -2726,7 +2749,7 @@ INSERT INTO products (id, title, description) VALUES
 
 ALTER TABLE products
 ADD COLUMN embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title,description';
+MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title,description';
 ```
 
 有关详细信息，请参见 [更新表结构](../Updating_table_schema_and_settings.md#Rebuilding-embeddings)。

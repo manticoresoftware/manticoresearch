@@ -5,7 +5,7 @@ on:
   schedule:
     - cron: '00 20 * * *'
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
     paths:
       - '.github/workflows/clt_nightly.yml'
       - 'test/clt-tests/installation/**'
@@ -17,7 +17,7 @@ on:
       - 'test/clt-tests/sharding/drop/**'
       - 'test/clt-tests/tables-interaction/test-tables-interaction.rec'
 
-# cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
+# cancels the previous workflow run when a new one appears in the same branch (e.g. main or a PR's branch)
 concurrency:
   group: clt_nightly_${{ github.ref }}
   cancel-in-progress: true
@@ -127,9 +127,6 @@ jobs:
           - name: Tables interaction
             image: manticoresearch/dind:v1
             test_prefix: test/clt-tests/tables-interaction/test-tables-interaction
-          - name: Drop sharded table
-            image: manticoresearch/dind:v1
-            test_prefix: test/clt-tests/sharding/drop/test-drop-sharded-table
 
 # Disabled as it works unstable.
 #          - name: Tests performance JSON vs SQL

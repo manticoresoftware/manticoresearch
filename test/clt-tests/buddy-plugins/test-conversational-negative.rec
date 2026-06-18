@@ -30,11 +30,11 @@ Test 1: Create a valid model for testing
 ––– input –––
 mysql -h0 -P9306 -e "CREATE CHAT MODEL valid_model (model='openai:gpt-4o-mini');"
 ––– output –––
-+--------------------------------------+
-| uuid                                 |
-+--------------------------------------+
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
-+--------------------------------------+
++-------------+
+| name        |
++-------------+
+| valid_model |
++-------------+
 ––– comment –––
 Test 2: CREATE CHAT MODEL with missing required parameter
 ––– input –––
@@ -159,11 +159,11 @@ ERROR 1064 (42000) at line 1: max_document_length must be 0 or an integer betwee
 ––– input –––
 mysql -h0 -P9306 -e "CREATE CHAT MODEL invalid_temp_low_model_15 (model='openai:gpt-4o-mini', max_document_length=0);"
 ––– output –––
-+--------------------------------------+
-| uuid                                 |
-+--------------------------------------+
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
-+--------------------------------------+
++---------------------------+
+| name                      |
++---------------------------+
+| invalid_temp_low_model_15 |
++---------------------------+
 ––– input –––
 mysql -h0 -P9306 -e "CREATE CHAT MODEL invalid_temp_low_model_16 (model='openai:gpt-4o-mini', max_document_length=90990438589382393829473742987897189237);"
 ––– output –––

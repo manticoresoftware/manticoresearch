@@ -57,6 +57,19 @@
 * [FLUSH HOSTNAMES](Securing_and_compacting_a_table/Flushing_hostnames.md) - 更新与代理主机名关联的 IP
 * [FLUSH LOGS](Logging/Rotating_query_and_server_logs.md) - 重新打开 searchd 和查询日志文件（类似 USR1 信号）
 
+##### 身份验证与授权
+* [CREATE USER](Security/Authentication_and_authorization.md#Users-and-tokens) - 创建身份验证用户
+* [DROP USER](Security/Authentication_and_authorization.md#Users-and-tokens) - 删除身份验证用户
+* [SET PASSWORD](Security/Authentication_and_authorization.md#Users-and-tokens) - 更改当前用户或指定用户的密码
+* [TOKEN](Security/Authentication_and_authorization.md#Users-and-tokens) - 创建或轮换 bearer token
+* [GRANT](Security/Authentication_and_authorization.md#Permissions) - 授予身份验证权限
+* [REVOKE](Security/Authentication_and_authorization.md#Permissions) - 撤销身份验证权限
+* [SHOW USERS](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - 列出身份验证用户
+* [SHOW PERMISSIONS](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - 列出身份验证权限
+* [SHOW USAGE](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - 显示身份验证使用计数器
+* [SHOW TOKEN](Security/Authentication_and_authorization.md#Users-and-tokens) - 显示已存储的 token 哈希
+* [RELOAD AUTH](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - 重新加载身份验证数据
+
 ##### 实时表优化
 * [FLUSH RAMCHUNK](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK) - 强制创建新磁盘块
 * [FLUSH TABLE](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#FLUSH-TABLE) - 将实时表的 RAM 块刷新到磁盘
@@ -439,6 +452,10 @@ index_converter {--config /path/to/config|--path}
   * [agent_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - 指定 Manticore 尝试连接和查询远程代理的次数
   * [agent_retry_delay](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 指定在查询远程代理失败后重试的延迟时间
   * [attr_flush_period](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_flush_period) - 设置将更新的属性刷新到磁盘的时间间隔
+  * [auth](Server_settings/Searchd.md#auth) - 启用身份验证和授权
+  * [auth_log_level](Server_settings/Searchd.md#auth_log_level) - 控制身份验证日志详细程度
+  * [auth_password_policy](Server_settings/Searchd.md#auth_password_policy) - 为身份验证用户设置密码策略
+  * [auth_password_min_length](Server_settings/Searchd.md#auth_password_min_length) - 为身份验证用户设置最小密码长度
   * [binlog_flush](Server_settings/Searchd.md#binlog_flush) - 二进制日志事务刷新/同步模式
   * [binlog_max_log_size](Server_settings/Searchd.md#binlog_max_log_size) - 最大二进制日志文件大小
   * [binlog_common](Logging/Binary_logging.md#Binary-logging-strategies) - 所有表的通用二进制日志文件
@@ -461,6 +478,7 @@ index_converter {--config /path/to/config|--path}
   * [join_batch_size](Searching/Joining.md#Join-batching) - 定义表连接的批处理大小以平衡性能和内存使用
   * [join_cache_size](Searching/Joining.md#Join-caching) - 定义用于重用 JOIN 查询结果的缓存大小
   * [kibana_version_string](Server_settings/Searchd.md#kibana_version_string) – 发送给 Kibana 请求的服务器版本字符串
+  * [knn_parallel_build](Server_settings/Searchd.md#knn_parallel_build) - 在 RT 块保存、OPTIMIZE / 自动优化块合并以及 `ALTER TABLE` KNN 重建期间用于构建 HNSW 图的工作者线程数
   * [listen](Server_settings/Searchd.md#listen) - 指定 searchd 监听的 IP 地址和端口或 Unix 域套接字路径
   * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - TCP 监听队列
   * [listen_tfo](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 为所有监听器启用 TCP_FASTOPEN 标志
@@ -525,6 +543,8 @@ searchd [OPTIONS]
 * [--console](Starting_the_server/Manually.md#searchd-command-line-options) - 强制服务器在控制台模式下运行
 * [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - 在崩溃时启用核心转储保存
 * [--cpustats](Starting_the_server/Manually.md#searchd-command-line-options) - 启用CPU时间报告
+* [--auth](Starting_the_server/Manually.md#searchd-command-line-options) - 运行交互式身份验证初始化模式
+* [--auth-non-interactive](Starting_the_server/Manually.md#searchd-command-line-options) - 使用 stdin 运行身份验证初始化模式
 * [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - 从Microsoft管理控制台和其他服务注册位置删除Manticore服务
 * [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - 在表文件预读完成之前阻止服务器处理传入连接
 * [--help, -h](Starting_the_server/Manually.md#searchd-command-line-options) - 显示所有可用参数
@@ -614,7 +634,7 @@ spelldump [options] <dictionary> <affix> [result] [locale-name]
 当前在Manticore SQL语法中保留的关键字的完整字母顺序列表（因此不能用作标识符）。
 
 ```
-AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, HYBRID_MATCH, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
+AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, HYBRID_MATCH, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TOKEN, TRUE
 ```
 
 ## 旧版本Manticore文档

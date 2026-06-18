@@ -83,7 +83,7 @@ type = rt
 path = path/to/table
 ```
 
-Путь к месту хранения или расположения таблицы, абсолютный или относительный, без расширения.
+Путь, по которому таблица будет храниться или располагаться, абсолютный или относительный, без расширения.
 
 Значение: Путь к таблице, **обязательный параметр**
 
@@ -488,7 +488,7 @@ knn = {"attrs":[{"name":"image_vector","type":"hnsw","dims":768,"hnsw_similarity
 rt_attr_float_vector = embedding_vector
 rt_field = title
 rt_field = description
-knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}
+knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":"title"}]}
 ```
 
 **Обязательные параметры KNN:**
@@ -502,11 +502,13 @@ knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2",
 - `hnsw_ef_construction`: Компромисс между временем построения и точностью (по умолчанию: 200)
 
 **Параметры автоматических эмбеддингов** (при использовании `model_name`):
-- `model_name`: Модель эмбеддингов для использования (например, `"sentence-transformers/all-MiniLM-L6-v2"`, `"openai/text-embedding-ada-002"`). При указании `dims` должно быть опущено, так как модель автоматически определяет размерности.
+- `model_name`: Используемая модель эмбеддингов (например, `"Xenova/all-MiniLM-L6-v2"` для быстрого пути ONNX — см. [модели ONNX на Hugging Face](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm); также поддерживается `"sentence-transformers/all-MiniLM-L6-v2"`; для OpenAI — `"openai/text-embedding-ada-002"`). Если параметр указан, `dims` нужно опустить, поскольку модель автоматически определяет размерность.
 - `from`: Список имен полей, разделенных запятыми, для использования при генерации эмбеддингов, или пустая строка `""` для использования всех текстовых/строковых полей. Этот параметр обязателен при указании `model_name`.
 - `api_key`: API-ключ для моделей на основе API (OpenAI, Voyage, Jina). Требуется только для сервисов эмбеддингов на основе API.
 - `cache_path`: Необязательный путь для кэширования загруженных моделей (для моделей sentence-transformers).
 - `use_gpu`: Необязательный булевый флаг для включения ускорения на GPU, если доступно.
+
+Для пользовательских удаленных конечных точек, можно использовать синтаксис `provider:model` в `model_name`. В этой форме часть перед `:` выбирает формат запроса, а часть после `:` отправляется к удаленной конечной точке без изменений.
 
 **Важно:** Нельзя указывать одновременно `dims` и `model_name` в одной конфигурации — они взаимоисключающие. Используйте `dims` для ручной вставки векторов или `model_name` для автоматических эмбеддингов. Используйте `dims` для ручной вставки векторов или `model_name` для автоматических эмбеддингов.
 

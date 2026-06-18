@@ -26,6 +26,8 @@ To run KNN searches, you must first configure your table. Float vectors and KNN 
 * `hnsw_m`: An optional setting that defines the maximum number of outgoing connections in the graph. The default is 16.
 * `hnsw_ef_construction`: An optional setting that defines a construction time/accuracy trade-off. The default is 200.
 
+> NOTE: HNSW graph construction during RT chunk saves, `OPTIMIZE TABLE` / auto-optimize chunk merges, and `ALTER TABLE ... ADD/DROP/REBUILD` KNN rebuilds runs in parallel by default on multi-core hosts; the worker count is controlled by the [`knn_parallel_build`](../Server_settings/Searchd.md#knn_parallel_build) searchd setting (set it to `1` to force the serial path). This affects build-time performance only. Because parallel HNSW construction may insert vectors in a different order, the resulting graph may not be bit-identical to a serial build.
+
 <!-- intro -->
 ##### SQL
 
@@ -91,18 +93,25 @@ When creating a table for auto embeddings, specify:
 - `API_URL`: Optional. Custom API endpoint URL. If not specified, uses the default provider endpoint (e.g., `https://api.openai.com/v1/embeddings` for OpenAI).
 - `API_TIMEOUT`: Optional. HTTP timeout in seconds for API requests. Default is 10 seconds. Set to `'0'` to use the default timeout. Applies to both validation requests during table creation and embedding generation during INSERT operations.
 
+For remote models, `MODEL_NAME` can be written in two forms:
+- Legacy provider-prefixed form: `openai/text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v4`
+- Explicit provider-signal form for custom endpoints: `openai:text-embedding-ada-002`, `openai:openai/text-embedding-ada-002`, `voyage:custom-model`, `jina:custom-model`
+
+When you use the `provider:model` form together with `API_URL`, the part before `:` only selects the request format. The part after `:` is sent to the remote endpoint unchanged. This is useful for OpenAI-compatible gateways such as OpenRouter or LiteLLM.
+
 **Supported embedding models:**
 
 | Model Type | Example | API Key Required | Notes |
 |------------|---------|-----------------|-------|
-| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | No | Local BERT-based models, auto-downloaded |
+| **ONNX (recommended)** | `Xenova/all-MiniLM-L6-v2` | No | Local models from any Hugging Face repo that ships an `.onnx` file. Runs on Manticore's fast ONNX Runtime backend. Browse the list: [feature-extraction ONNX models](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm). |
+| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | No | Local BERT-based models, auto-downloaded. Still supported — use ONNX above when available. |
 | **Qwen** | `Qwen/Qwen3-Embedding-0.6B` | No | Local Qwen family models |
 | **Llama** | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | No | Local Llama family models |
 | **Mistral** | `Locutusque/TinyMistral-248M-v2` | No | Local Mistral family models |
 | **Gemma** | `h2oai/embeddinggemma-300m` | No | Local Gemma family models |
-| **OpenAI** | `openai/text-embedding-ada-002` | Yes | `API_KEY='<OPENAI_API_KEY>'` |
-| **Voyage** | Voyage AI models | Yes | `API_KEY='<VOYAGE_API_KEY>'` |
-| **Jina** | Jina AI models | Yes | `API_KEY='<JINA_API_KEY>'` |
+| **OpenAI** | `openai/text-embedding-ada-002` or `openai:text-embedding-ada-002` | Yes | `API_KEY='***'` |
+| **Voyage** | `voyage/voyage-3.5-lite` or `voyage:voyage-3.5-lite` | Yes | `API_KEY='***'` |
+| **Jina** | `jina/jina-embeddings-v4` or `jina:jina-embeddings-v4` | Yes | `API_KEY='***'` |
 
 **Local model format requirements:**
 - Must be saved in `safetensors` format (single-file only)
@@ -117,9 +126,19 @@ More information about setting up a `float_vector` attribute can be found [here]
 
 <!-- request SQL -->
 
-Using sentence-transformers (no API key needed)
+Using a local [ONNX model](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) — recommended (no API key needed)
 ```sql
 CREATE TABLE products (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+Using sentence-transformers (no API key needed; runs on the Candle path — use ONNX above when available)
+```sql
+CREATE TABLE products_st (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
@@ -146,15 +165,25 @@ CREATE TABLE products_openai (
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description' API_KEY='...'
 );
 ```
-
 Using OpenAI with custom API URL and timeout (optional)
 ```sql
 CREATE TABLE products_openai_custom (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description'
-    API_KEY='...' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+    MODEL_NAME='openai:text-embedding-ada-002' FROM='title,description'
+    API_KEY='***' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+);
+```
+
+Using an OpenAI-compatible gateway that expects a provider-qualified model ID
+```sql
+CREATE TABLE products_openrouter (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='openai:openai/text-embedding-ada-002' FROM='title,description'
+    API_KEY='***' API_URL='https://openrouter.ai/api/v1/embeddings' API_TIMEOUT='30'
 );
 ```
 
@@ -164,7 +193,7 @@ CREATE TABLE products_all (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM=''
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM=''
 );
 ```
 
@@ -179,7 +208,7 @@ table products {
     rt_field = title
     rt_field = description
     rt_attr_float_vector = embedding_vector
-    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":"title"}]}
 }
 ```
 
@@ -203,7 +232,7 @@ table products_all {
     rt_field = title
     rt_field = description
     rt_attr_float_vector = embedding_vector
-    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":""}]}
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":""}]}
 }
 ```
 
@@ -221,9 +250,9 @@ table products_all {
 data for the following example:
 
 DROP TABLE IF EXISTS products;
-CREATE TABLE products(title text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title');
+CREATE TABLE products(title text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='Xenova/all-MiniLM-L6-v2' from='title');
 DROP TABLE IF EXISTS products_openai;
-CREATE TABLE products_openai(title text, description text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title,description');
+CREATE TABLE products_openai(title text, description text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='Xenova/all-MiniLM-L6-v2' from='title,description');
 -->
 
 <!-- example inserting_embeddings -->

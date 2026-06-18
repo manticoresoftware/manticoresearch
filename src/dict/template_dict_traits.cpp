@@ -345,6 +345,10 @@ int TemplateDictTraits_c::AddMorph ( int iMorph )
 
 void TemplateDictTraits_c::ApplyStemmers ( BYTE* pWord ) const
 {
+	const int iTokenBytes = (int)strnlen ( (const char*)pWord, SPH_LEGACY_TOKEN_BYTES+1 );
+	if ( ShouldBypassMorphology ( GetSettings().GetDictFormat(), iTokenBytes ) )
+		return;
+
 	// try wordforms
 	if ( m_pWordforms && m_pWordforms->ToNormalForm ( pWord, true, m_bDisableWordforms ) )
 		return;
@@ -376,7 +380,7 @@ uint64_t TemplateDictTraits_c::GetSettingsFNV() const
 
 	uHash = sphFNV64 ( m_tSettings.m_iMinStemmingLen, uHash );
 	DWORD uFlags = 0;
-	if ( m_tSettings.m_bWordDict )
+	if ( m_tSettings.IsWordDict() )
 		uFlags |= 1 << 0;
 	if ( m_tSettings.m_bStopwordsUnstemmed )
 		uFlags |= 1 << 2;
@@ -440,7 +444,7 @@ void TemplateDictTraits_c::LoadStopwords ( const char * sFiles, FilenameBuilder_
 
 	m_dSWFileInfos.Resize ( 0 );
 
-	TokenizerRefPtr_c pTokenizerClone = pTokenizer->Clone ( SPH_CLONE_INDEX );
+	TokenizerRefPtr_c pTokenizerClone = pTokenizer->Clone ( SPH_CLONE_INDEX, SPH_LEGACY_TOKEN_BYTES );
 	CSphFixedVector<char> dList ( 1 + (int)strlen ( sFiles ) );
 	strcpy ( dList.Begin(), sFiles ); // NOLINT
 
@@ -919,7 +923,7 @@ CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CS
 	pContainer->m_uTokenizerFNV = pTokenizer->GetSettingsFNV();
 	pContainer->m_sIndexName = szIndex;
 
-	TokenizerRefPtr_c pMyTokenizer = pTokenizer->Clone ( SPH_CLONE_INDEX );
+	TokenizerRefPtr_c pMyTokenizer = pTokenizer->Clone ( SPH_CLONE_INDEX, SPH_LEGACY_TOKEN_BYTES );
 	const CSphTokenizerSettings& tSettings = pMyTokenizer->GetSettings();
 
 	CSphVector<int> dBlended;

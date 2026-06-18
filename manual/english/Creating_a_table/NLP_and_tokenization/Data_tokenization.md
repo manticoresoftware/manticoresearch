@@ -28,4 +28,10 @@ If you're indexing HTML, it's usually best not to include the HTML tags in the i
 
 ### Token length limit
 
-Keep in mind that Manticore has a **maximum token length of 42 characters**. Any word longer than this will be **truncated**. This limit applies during both indexing and searching, so it's important to ensure your data and queries account for it.
+Keep in mind that Manticore has a maximum token length of 42 bytes after token normalization. Any token longer than this will be truncated. This limit applies during both indexing and searching, so both indexed data and search queries are affected.
+
+Tables that use [`dict=keywords_32k`](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict) are the exception. They can index normalized tokens up to 32768 bytes in plain and RT tables. Tokens longer than 32768 bytes are skipped with a warning instead of being indexed as truncated terms.
+
+Long `keywords_32k` tokens are indexed as original tokens. Tokens longer than 42 bytes after normalization do not go through stemming or lemmatization. Tokens up to 42 bytes can still use the configured morphology.
+
+Snippets and highlighting still use the regular token limit. Tokens up to 42 bytes can be highlighted; longer `keywords_32k` tokens are skipped by snippet/highlight processing.

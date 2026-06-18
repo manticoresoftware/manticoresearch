@@ -8,7 +8,7 @@ To fix a bug, either it needs to be reproduced and fixed or its cause needs to b
 Bugs and feature requests are tracked on [Github](https://github.com/manticoresoftware/manticore/issues). You are welcome to create a new ticket and describe your bug in detail to save time for both you and the developers.
 
 ### Documentation updates
-Updates to the documentation (what you are reading now) are also done on [Github](https://github.com/manticoresoftware/manticoresearch/tree/master/manual).
+Updates to the documentation (what you are reading now) are also done on [Github](https://github.com/manticoresoftware/manticoresearch/tree/main/manual).
 
 ### Crashes
 

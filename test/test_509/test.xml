@@ -23,13 +23,13 @@ searchd
 <sphinxql>insert into facet_scope ( id, title, ts, gid, ver ) values (1,'a',10,110,'20'), (2,'b',10,120,'30'), (3,'c',20,120,'20'), (4,'d',30,110,'20'), (5,'e',10,130,'10'), (6,'f',20,130,'30')</sphinxql>
 
 <sphinxql>
-<!-- defaults and global facet_filter_mode -->
+<!-- defaults and global facet_filter_mode. Strict/default stay status-free; auto and max emit availability status. -->
 SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 FACET ts FACET ver;;
 SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 OPTION facet_filter_mode='strict' FACET ts FACET ver;;
 SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 OPTION facet_filter_mode='auto' FACET ts FACET ver;;
 SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 OPTION facet_filter_mode='max' FACET ts FACET ver;;
 
-<!-- per-facet mode overrides and inheritance/conflicts -->
+<!-- per-facet mode overrides and inheritance/conflicts. Selected values are reported as selected. -->
 SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 OPTION facet_filter_mode='strict' FACET ts MODE auto FACET ver MODE max FACET gid MODE strict;;
 SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 OPTION facet_filter_mode='auto' FACET ts ALL FILTERS FACET ver ALL FILTERS MODE max;;
 SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 OPTION facet_filter_mode='strict' FACET gid FILTERS ts MODE max;;
@@ -57,7 +57,7 @@ SELECT count(*) FROM facet_scope LIMIT 0 FACET ts MODE max FILTERS ver;;
 </queries>
 
 <httpqueries>
-<!-- default and top-level facet_filter_mode -->
+<!-- default and top-level facet_filter_mode. Strict/default stay status-free; auto and max emit availability status. -->
 <query endpoint="search">{
   "table": "facet_scope",
   "query": { "bool": { "must": [ { "in": { "ts": [10,20] } }, { "equals": { "ver": "20" } } ] } },
@@ -97,7 +97,7 @@ SELECT count(*) FROM facet_scope LIMIT 0 FACET ts MODE max FILTERS ver;;
   }
 }</query>
 
-<!-- per-aggregation mode and alias -->
+<!-- per-aggregation mode and alias. Selected values are reported as selected. -->
 <query endpoint="search">{
   "table": "facet_scope",
   "query": { "bool": { "must": [ { "in": { "ts": [10,20] } }, { "equals": { "ver": "20" } } ] } },

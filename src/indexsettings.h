@@ -91,6 +91,57 @@ public:
 };
 
 
+enum class DictFormat_e
+{
+	CRC,
+	KEYWORDS,
+	KEYWORDS_V2
+};
+
+const char * DictFormatName ( DictFormat_e eFormat );
+bool ParseDictFormat ( const CSphString & sValue, DictFormat_e & eFormat );
+int GetMaxTokenBytes ( DictFormat_e eFormat );
+constexpr int GetKeywordBufSize ( DictFormat_e eFormat )
+{
+	return eFormat==DictFormat_e::KEYWORDS_V2
+		? SPH_V2_MAX_TOKEN_BYTES + CSphString::GetGap()
+		: SPH_LEGACY_TOKEN_BYTES + CSphString::GetGap()*4;
+}
+constexpr int GetKeywordMaxStoredBytes ( DictFormat_e eFormat )
+{
+	return eFormat==DictFormat_e::KEYWORDS_V2
+		? SPH_V2_MAX_TOKEN_BYTES
+		: SPH_LEGACY_TOKEN_BYTES;
+}
+
+struct KeywordBuf_t : ISphNoncopyable
+{
+	BYTE				m_dBuf[GetKeywordBufSize ( DictFormat_e::KEYWORDS )];
+	CSphFixedVector<BYTE> m_dBufV2 { 0 };
+
+	explicit KeywordBuf_t ( DictFormat_e eDict = DictFormat_e::KEYWORDS )
+	{
+		Reset ( eDict );
+	}
+
+	void Reset ( DictFormat_e eDict )
+	{
+		m_dBufV2.Reset ( eDict==DictFormat_e::KEYWORDS_V2 ? GetKeywordBufSize ( DictFormat_e::KEYWORDS_V2 ) : 0 );
+	}
+
+	BYTE * Begin()
+	{
+		return m_dBufV2.GetLength() ? m_dBufV2.Begin() : m_dBuf;
+	}
+
+	int GetLength() const
+	{
+		return m_dBufV2.GetLength() ? m_dBufV2.GetLength() : (int)sizeof ( m_dBuf );
+	}
+};
+
+bool ShouldBypassMorphology ( DictFormat_e eFormat, int iTokenBytes );
+
 class CSphDictSettings : public SettingsWriter_c
 {
 public:
@@ -99,9 +150,17 @@ public:
 	CSphString		m_sStopwords;
 	StrVec_t		m_dWordforms;
 	int				m_iMinStemmingLen = 1;
-	bool			m_bWordDict = true;
+	DictFormat_e	m_eDictFormat = DictFormat_e::KEYWORDS;
 	bool			m_bStopwordsUnstemmed = false;
 	CSphString		m_sMorphFingerprint;		///< not used for creation; only for a check when loading
+
+	void			SetDictFormat ( DictFormat_e eFormat ) { m_eDictFormat = eFormat; }
+	DictFormat_e	GetDictFormat () const { return m_eDictFormat; }
+	bool			IsCRC () const { return GetDictFormat()==DictFormat_e::CRC; }
+	bool			IsKeywords () const { return GetDictFormat()==DictFormat_e::KEYWORDS; }
+	bool			IsKeywordsV2 () const { return GetDictFormat()==DictFormat_e::KEYWORDS_V2; }
+	bool			IsWordDict () const { return GetDictFormat()!=DictFormat_e::CRC; }
+	const char *	GetDictFormatName () const { return DictFormatName ( GetDictFormat() ); }
 
 	void			Setup ( const CSphConfigSection & hIndex, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
 	void			Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
@@ -481,6 +540,7 @@ void		DumpReadable ( FILE * fp, const CSphIndex & tIndex, const CSphEmbeddedFile
 /// try to set dictionary, tokenizer and misc settings for an index (if not already set)
 bool		sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, bool bStripFile, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError );
 CSphString	BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema, ExtFilesFormat_e eExt );
+CSphString	BuildCreateTable ( const CSphString & sName, const CSphSchema & tSchema, const CSphIndexSettings & tSettings, const CSphFieldFilterSettings & tFieldFilterSettings, const CSphTokenizerSettings & tTokenizerSettings, const CSphDictSettings & tDictSettings, const MutableIndexSettings_c & tMutableSettings, ExtFilesFormat_e eExt, FilenameBuilder_i * pFilenameBuilder );
 
 // daemon-level callback
 using CreateFilenameBuilder_fn = std::unique_ptr<FilenameBuilder_i> (*) ( const char * szIndex );

@@ -29,7 +29,7 @@ Manticore Search is an easy-to-use, open-source, and fast database designed for 
 
 <p align="center">
 <a href="LICENSE"><img alt="License: GPLv3 or later" src="https://img.shields.io/badge/license-GPL%20V3%2B-green?style=plastic"></a>
-<a href="https://github.com/manticoresoftware/manticoresearch/actions/workflows/test.yml?query=branch%3Amaster"><img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/manticoresoftware/manticoresearch/test.yml?branch=master&style=plastic&color=green"></a>
+<a href="https://github.com/manticoresoftware/manticoresearch/actions/workflows/test.yml?query=branch%3Amain"><img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/manticoresoftware/manticoresearch/test.yml?branch=main&style=plastic&color=green"></a>
 <a href="https://twitter.com/manticoresearch"><img alt="Twitter Follow" src="https://img.shields.io/twitter/follow/manticoresearch?color=green&logo=Twitter&style=plastic"></a>
 <a href="http://slack.manticoresearch.com/"><img alt="Slack" src="https://img.shields.io/badge/slack-manticoresearch-green.svg?logo=slack&style=plastic"></a>
 <a href="https://github.com/manticoresoftware/docker"><img alt="Docker pulls" src="https://img.shields.io/docker/pulls/manticoresearch/manticore?color=green&style=plastic"></a>

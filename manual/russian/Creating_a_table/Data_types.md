@@ -2526,7 +2526,7 @@ let search_res = search_api.search(search_req).await;
 - `HNSW_EF_CONSTRUCTION`: Компромисс между временем построения и точностью (по умолчанию: 200)
 
 **Параметры автоэмбеддингов** (при использовании `MODEL_NAME`):
-- `MODEL_NAME`: Модель эмбеддингов для использования (например, `'sentence-transformers/all-MiniLM-L6-v2'`, `'openai/text-embedding-ada-002'`)
+- `MODEL_NAME`: Модель эмбеддингов для использования (например, `'Xenova/all-MiniLM-L6-v2'` для быстрого пути ONNX, `'sentence-transformers/all-MiniLM-L6-v2'` или `'openai/text-embedding-ada-002'`)
 - `FROM`: Список названий полей, разделенных запятыми, для генерации эмбеддингов, или пустая строка `''` для использования всех текстовых/строковых полей
 - `API_KEY`: API-ключ для моделей на основе API (OpenAI, Voyage, Jina)
 
@@ -2541,7 +2541,7 @@ let search_res = search_api.search(search_req).await;
 - **Упрощенный рабочий процесс**: Просто вставляйте текст, эмбеддинги генерируются автоматически
 - **Без ручного вычисления векторов**: Не нужно запускать отдельные модели эмбеддингов
 - **Согласованные эмбеддинги**: Одна и та же модель обеспечивает согласованные векторные представления
-- **Поддержка множества моделей**: Выбирайте из моделей эмбеддингов [sentence-transformers](https://huggingface.co/sentence-transformers/models), [Qwen](https://huggingface.co/Qwen/models), OpenAI, Voyage и Jina
+- **Поддержка нескольких моделей**: выбирайте среди [моделей ONNX на Hugging Face](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) (рекомендуется — работает на быстром backend Manticore на ONNX Runtime), [sentence-transformers](https://huggingface.co/sentence-transformers/models), моделей эмбеддингов [Qwen](https://huggingface.co/Qwen/models), OpenAI, Voyage и Jina
 - **Гибкий выбор полей**: Контролируйте, какие поля используются для генерации эмбеддингов
 
 #### Создание таблиц с автоматическими эмбеддингами
@@ -2553,18 +2553,31 @@ let search_res = search_api.search(search_req).await;
 - `API_URL`: Опционально. Пользовательский URL конечной точки API. Если не указан, используется конечная точка провайдера по умолчанию (например, `https://api.openai.com/v1/embeddings` для OpenAI).
 - `API_TIMEOUT`: Опционально. HTTP-таймаут в секундах для API-запросов. По умолчанию 10 секунд. Установите `'0'`, чтобы использовать таймаут по умолчанию. Применяется как к запросам проверки при создании таблицы, так и к генерации эмбеддингов во время операций INSERT.
 
+Для удаленных моделей `MODEL_NAME` может использовать либо устаревшую форму `provider/model`, либо явную форму `provider:model`. Используйте `provider:model` с `API_URL`, когда вы хотите, чтобы часть после `:` была передана в пользовательскую совместимую с провайдером конечную точку точно так, как написано.
+
 **Поддерживаемые модели эмбеддингов:**
-- **Sentence Transformers**: Любая [подходящая модель Hugging Face на основе BERT](https://huggingface.co/sentence-transformers/models) (например, `sentence-transformers/all-MiniLM-L6-v2`) — ключ API не требуется. Manticore загружает модель при создании таблицы.
+- **ONNX (рекомендуется)**: любая модель Hugging Face, которая поставляется с файлом `.onnx`, например `Xenova/all-MiniLM-L6-v2`, `Xenova/all-MiniLM-L12-v2`, `Xenova/bge-small-en-v1.5`, `Xenova/multilingual-e5-small`. API-ключ не нужен. Работает на быстром backend Manticore на ONNX Runtime (примерно в 14× быстрее, чем путь SentenceTransformers на том же оборудовании — см. [14× faster embeddings](https://manticoresearch.com/blog/onnx-embeddings-speedup/)). И [Xenova](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm), и [onnx-models](https://huggingface.co/onnx-models/models?pipeline_tag=feature-extraction) публикуют много моделей, конвертированных в ONNX; для эмбеддингов ищите модели с задачей **feature-extraction**.
+- **Sentence Transformers**: любая [подходящая BERT-модель на Hugging Face](https://huggingface.co/sentence-transformers/models) (например, `sentence-transformers/all-MiniLM-L6-v2`) — API-ключ не нужен. По-прежнему поддерживается; используйте этот вариант, если нужная модель не опубликована в ONNX.
 - **Локальные эмбеддинги Qwen**: Модели эмбеддингов Qwen, такие как `Qwen/Qwen3-Embedding-0.6B` — API-ключ не требуется. Manticore загружает модель при создании таблицы.
-- **OpenAI, Voyage, Jina**: Удаленные модели эмбеддингов (например, `openai/text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v2-base-en`) - требуют параметр `API_KEY='<API_KEY>'`. При необходимости укажите `API_URL='<CUSTOM_URL>'` для использования пользовательской конечной точки API и `API_TIMEOUT='<SECONDS>'` для настройки HTTP-таймаута (по умолчанию 10 секунд).
+- **OpenAI, Voyage, Jina**: Удаленные модели эмбеддингов (например, `openai/text-embedding-ada-002`, `openai:text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v2-base-en`) - требуют параметр `API_KEY='***'`. При необходимости укажите `API_URL='<CUSTOM_URL>'` для использования пользовательской конечной точки API и `API_TIMEOUT='<SECONDS>'` для настройки HTTP-таймаута (по умолчанию 10 секунд).
 
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
 
-Использование [модели sentence-transformers](https://huggingface.co/sentence-transformers/models) (ключ API не требуется)
+Использование локальной [модели ONNX](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) — рекомендуется, работает на быстром пути ONNX (API-ключ не нужен)
 ```sql
 CREATE TABLE products (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+Использование [модели sentence-transformers](https://huggingface.co/sentence-transformers/models) (API-ключ не нужен; работает на пути Candle — используйте ONNX выше, если он доступен)
+```sql
+CREATE TABLE products_st (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
@@ -2591,15 +2604,25 @@ CREATE TABLE products_openai (
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='<OPENAI_API_KEY>'
 );
 ```
-
 Использование OpenAI с пользовательским URL API и таймаутом (опционально)
 ```sql
 CREATE TABLE products_openai_custom (
     title TEXT,
     content TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
-    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content'
-    API_KEY='<OPENAI_API_KEY>' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+    MODEL_NAME='openai:text-embedding-ada-002' FROM='title,content'
+    API_KEY='***' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+);
+```
+
+Использование OpenRouter с идентификатором модели с указанием провайдера
+```sql
+CREATE TABLE products_openrouter (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='openai:openai/text-embedding-ada-002' FROM='title,content'
+    API_KEY='***' API_URL='https://openrouter.ai/api/v1/embeddings' API_TIMEOUT='30'
 );
 ```
 
@@ -2610,7 +2633,7 @@ CREATE TABLE products_all_fields (
     description TEXT,
     tags TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM=''
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM=''
 );
 ```
 
@@ -2618,9 +2641,9 @@ CREATE TABLE products_all_fields (
 ##### JSON:
 <!-- request JSON -->
 
-Использование [модели sentence-transformers](https://huggingface.co/sentence-transformers/models) (API-ключ не требуется)
+Использование локальной [модели ONNX](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) — рекомендуется (API-ключ не нужен)
 ```JSON
-POST /sql?mode=raw -d "CREATE TABLE products (title TEXT, description TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title')"
+POST /sql?mode=raw -d "CREATE TABLE products (title TEXT, description TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title')"
 ```
 
 Использование модели OpenAI (требуется параметр API_KEY)
@@ -2630,7 +2653,7 @@ POST /sql?mode=raw -d "CREATE TABLE products_openai (title TEXT, content TEXT, e
 
 Использование всех текстовых полей для эмбеддингов (FROM пуст)
 ```JSON
-POST /sql?mode=raw -d "CREATE TABLE products_all_fields (title TEXT, description TEXT, tags TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='')"
+POST /sql?mode=raw -d "CREATE TABLE products_all_fields (title TEXT, description TEXT, tags TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='')"
 ```
 
 <!-- end -->
@@ -2726,7 +2749,7 @@ INSERT INTO products (id, title, description) VALUES
 
 ALTER TABLE products
 ADD COLUMN embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title,description';
+MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title,description';
 ```
 
 Для получения дополнительных сведений см. [Обновление схемы таблицы](../Updating_table_schema_and_settings.md#Rebuilding-embeddings).

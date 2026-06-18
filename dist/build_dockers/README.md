@@ -8,7 +8,7 @@ Note that Docker is **NOT** standalone and requires an internet connection to fe
 
 ## Running the docker
 
-You need to provide a few environment variables: `DISTR`, `arch`, and `SYSROOT_URL` and some others. It's best to use the CI yaml file as a reference - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/pack_publish.yml
+You need to provide a few environment variables: `DISTR`, `arch`, and `SYSROOT_URL` and some others. It's best to use the CI yaml file as a reference - https://github.com/manticoresoftware/manticoresearch/blob/main/.github/workflows/pack_publish.yml
 
 For example,
 ```bash

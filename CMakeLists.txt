@@ -131,27 +131,6 @@ if (PACK AND PACK_BUNDLE AND DISTR AND NOT WIN32)
 			message ( STATUS "PACK_BUNDLE: RPM bundle requires: ${CPACK_RPM_BUNDLE_PACKAGE_REQUIRES}" )
 		endif ()
 	endif ()
-	set ( _bundle_rpm_obsoletes
-		"manticore-common"
-		"manticore-server-core"
-		"manticore-server"
-		"manticore-tools"
-		"manticore-devel"
-		"manticore-converter"
-		"manticore-extra"
-		"manticore-icudata"
-		"manticore-language-packs"
-	)
-	if ( EXISTS "${BUNDLE_DEPS_EXTRACT_DIR}/.bundle_owned_packages.rpm" )
-		file ( STRINGS "${BUNDLE_DEPS_EXTRACT_DIR}/.bundle_owned_packages.rpm" _bundle_rpm_owned_lines )
-		if ( _bundle_rpm_owned_lines )
-			list ( APPEND _bundle_rpm_obsoletes ${_bundle_rpm_owned_lines} )
-		endif ()
-	endif ()
-	list ( REMOVE_DUPLICATES _bundle_rpm_obsoletes )
-	list ( JOIN _bundle_rpm_obsoletes ", " _bundle_rpm_obsoletes_joined )
-	set ( CPACK_RPM_BUNDLE_PACKAGE_OBSOLETES "${_bundle_rpm_obsoletes_joined}" )
-	message ( STATUS "PACK_BUNDLE: RPM bundle obsoletes: ${_bundle_rpm_obsoletes_joined}" )
 	set ( _bundle_rpm_provides
 		"manticore-common"
 		"manticore-server-core"
@@ -635,6 +614,33 @@ endif ()
 if (installed)
 	set ( only_set_paths OFF )
 	include ( SetBuildType )
+endif ()
+
+if (PACK_BUNDLE AND "${CPACK_GENERATOR}" STREQUAL "RPM" AND NOT WIN32)
+	# Keep the bundle installable as an upgrade from older split packages, but
+	# do not let DNF/YUM choose it for current standalone packages such as
+	# `yum install manticore-common`.
+	set ( _bundle_rpm_obsoletes
+		"manticore-common < ${MYVER}"
+		"manticore-server-core < ${MYVER}"
+		"manticore-server < ${MYVER}"
+		"manticore-tools < ${MYVER}"
+		"manticore-devel < ${MYVER}"
+		"manticore-converter < ${MYVER}"
+		"manticore-extra < ${MYVER}"
+		"manticore-icudata < ${MYVER}"
+		"manticore-language-packs < ${MYVER}"
+	)
+	if ( EXISTS "${BUNDLE_DEPS_EXTRACT_DIR}/.bundle_owned_packages.rpm" )
+		file ( STRINGS "${BUNDLE_DEPS_EXTRACT_DIR}/.bundle_owned_packages.rpm" _bundle_rpm_owned_lines )
+		if ( _bundle_rpm_owned_lines )
+			list ( APPEND _bundle_rpm_obsoletes ${_bundle_rpm_owned_lines} )
+		endif ()
+	endif ()
+	list ( REMOVE_DUPLICATES _bundle_rpm_obsoletes )
+	list ( JOIN _bundle_rpm_obsoletes ", " _bundle_rpm_obsoletes_joined )
+	set ( CPACK_RPM_BUNDLE_PACKAGE_OBSOLETES "${_bundle_rpm_obsoletes_joined}" )
+	message ( STATUS "PACK_BUNDLE: RPM bundle obsoletes: ${_bundle_rpm_obsoletes_joined}" )
 endif ()
 
 if ( PACK_BUNDLE AND installed AND NOT WIN32 )

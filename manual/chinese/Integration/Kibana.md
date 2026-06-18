@@ -22,6 +22,7 @@
     pid_file = /var/run/manticore/searchd.pid
     data_dir = /var/lib/manticore
  }
+```
 
 ## Supported Features
 ### Discover

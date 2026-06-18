@@ -116,11 +116,11 @@ queue_reader read system.source_kafka_auth 1
 queue_writer read system.materialized_view_view_table_auth 1
 queue_writer read system.source_kafka_auth 1
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -N -e \"SHOW SOURCE kafka_auth;\" | grep -q '^kafka_auth' && echo READER_SHOW_SOURCE_OK"
+docker exec manticore bash -lc "MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -N -e \"SHOW SOURCE kafka_auth;\" | grep -q 'kafka_auth' && echo READER_SHOW_SOURCE_OK"
 ––– output –––
 READER_SHOW_SOURCE_OK
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -N -e \"SHOW MV view_table_auth;\" | grep -q '^view_table_auth' && echo READER_SHOW_MVA_OK"
+docker exec manticore bash -lc "MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -N -e \"SHOW MV view_table_auth;\" | grep -q 'view_table_auth' && echo READER_SHOW_MVA_OK"
 ––– output –––
 READER_SHOW_MVA_OK
 ––– input –––

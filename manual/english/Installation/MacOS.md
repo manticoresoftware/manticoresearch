@@ -1,6 +1,12 @@
 # Installing Manticore on MacOS
 
-## Via Homebrew package manager
+### Quick automatized installation
+
+```bash
+curl https://manticoresearch.com | sh
+```
+
+## Manually via Homebrew package manager
 
 ```bash
 brew install manticoresoftware/tap/manticoresearch manticoresoftware/tap/manticore-extra

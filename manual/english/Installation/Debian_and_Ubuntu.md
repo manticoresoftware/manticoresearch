@@ -19,7 +19,21 @@
   * 20
   * 21
 
-### APT repository
+### Quick automatized installation
+
+```bash
+wget -O - https://manticoresearch.com | sh
+```
+
+###### Development packages
+
+If you prefer "Nightly" (development) versions do:
+
+```bash
+wget -O - https://manticoresearch.com | sh -s dev
+```
+
+### Manual installation
 The easiest way to install Manticore in Ubuntu/Debian/Mint is by using our APT repository.
 
 Install the repository:

@@ -7,7 +7,21 @@
 * CentOS 9, RHEL 9, AlmaLinux 9
 * AlmaLinux 10, other RHEL 10-based distributions
 
-### YUM repository
+### Quick automatized installation
+
+```bash
+curl https://manticoresearch.com | sh
+```
+
+###### Development packages
+
+If you prefer "Nightly" (development) versions do:
+
+```bash
+curl https://manticoresearch.com | sh -s dev
+```
+
+### Manual installation
 
 The simplest method to install Manticore on RedHat/CentOS is by using our YUM repository:
 

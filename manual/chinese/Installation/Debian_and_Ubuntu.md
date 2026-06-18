@@ -19,7 +19,21 @@
   * 20
   * 21
 
-### APT 仓库
+### 快速自动化安装
+
+```bash
+wget -O - https://manticoresearch.com | sh
+```
+
+###### 开发包
+
+如果你更喜欢“Nightly”（开发版），请执行：
+
+```bash
+wget -O - https://manticoresearch.com | sh -s dev
+```
+
+### 手动安装
 在 Ubuntu/Debian/Mint 上安装 Manticore 最简单的方法是使用我们的 APT 仓库。
 
 安装仓库：

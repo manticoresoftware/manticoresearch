@@ -6,37 +6,16 @@
 您可以在各种操作系统上轻松安装并启动 Manticore，包括 Ubuntu、Centos、Debian、Windows 和 MacOS。此外，您还可以将 Manticore 作为 Docker 容器使用。
 
 <!-- intro -->
-### Ubuntu
+### Linux/MacOS
 
-<!-- request Ubuntu -->
+<!-- request Linux -->
+
 ```bash
-wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
-sudo apt update
-sudo apt install manticore manticore-columnar-lib
-sudo systemctl start manticore
-```
+curl https://manticoresearch.com | sh
 
-<!-- intro -->
-### Debian
+# OR
 
-<!-- request Debian -->
-```bash
-wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
-sudo apt update
-sudo apt install manticore manticore-columnar-lib
-sudo systemctl start manticore
-```
-
-<!-- intro -->
-### Centos
-
-<!-- request Centos -->
-```bash
-sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-sudo yum install manticore manticore-columnar-lib
-sudo systemctl start manticore
+wget -O - https://manticoresearch.com | sh
 ```
 
 <!-- intro -->
@@ -51,14 +30,6 @@ sudo systemctl start manticore
   ```
 * 通过 Microsoft 管理控制台的“服务”管理单元启动 Manticore。
 
-<!-- intro -->
-### MacOS
-
-<!-- request MacOS -->
-```bash
-brew install manticoresearch
-brew services start manticoresearch
-```
 
 <!-- intro -->
 ### Docker

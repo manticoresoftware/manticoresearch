@@ -73,11 +73,11 @@ docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N 
 ––– output –––
 MVA_CREATED_OK
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW TABLES FROM system;\" | awk '/system\\.(source_kafka_auth|materialized_view_view_table_auth|buffer_kafka_auth_0)/ {print \$1}' | sort"
+docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW TABLES FROM system;\" | grep rt | sort"
 ––– output –––
-system.buffer_kafka_auth_0
-system.materialized_view_view_table_auth
-system.source_kafka_auth
+|                 system.source_kafka_auth |   rt |
+|               system.buffer_kafka_auth_0 |   rt |
+| system.materialized_view_view_table_auth |   rt |
 ––– comment –––
 Verify full Kafka processing
 ––– input –––
@@ -109,12 +109,12 @@ docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e 
 ––– output –––
 0
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW PERMISSIONS;\" | grep queue_ | awk '{print \$1,\$2,\$3,\$4}' | sort"
+docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW PERMISSIONS;\" | grep queue_ | awk '{print \$2,\$2,\$3,\$4,\$5,\$6}' | sort"
 ––– output –––
-queue_reader read system.materialized_view_view_table_auth 1
-queue_reader read system.source_kafka_auth 1
-queue_writer read system.materialized_view_view_table_auth 1
-queue_writer read system.source_kafka_auth 1
+queue_reader | read | system.materialized_view_view_table_auth
+queue_reader | read | system.source_kafka_auth
+queue_writer | read | system.materialized_view_view_table_auth
+queue_writer | read | system.source_kafka_auth
 ––– input –––
 docker exec manticore bash -lc "MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -N -e \"SHOW SOURCE kafka_auth;\" | grep -q '^kafka_auth' && echo READER_SHOW_SOURCE_OK"
 ––– output –––
@@ -142,7 +142,7 @@ docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e 
 ––– output –––
 0
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW PERMISSIONS;\" | grep queue_writer | awk '{print \$1,\$2,\$3,\$4}' | sort"
+docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW PERMISSIONS;\" | grep queue_writer | awk '{print \$2,\$4,\$6,\$8}' | sort"
 ––– output –––
 queue_writer read system.materialized_view_view_table_auth 1
 queue_writer read system.source_kafka_auth 1

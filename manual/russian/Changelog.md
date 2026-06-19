@@ -3,7 +3,7 @@
 ## Версия 27.1.5
 **Выпуск**: 19 июня 2026 года
 
-Этот релиз приносит встроенную аутентификацию и авторизацию, шардинг таблиц, разговорный поиск, более быструю сборку HNSW, улучшенные фасеты и агрегации, а также длинный список исправлений в KNN, репликации, совместимости протокола и других областях.
+Этот релиз приносит встроенные аутентификацию и авторизацию, шардинг таблиц, разговорный поиск, более быстрый векторный поиск, улучшенные фасеты и агрегации, а также длинный список исправлений в областях KNN, репликации, совместимости протоколов и других.
 
 ### Новые возможности и улучшения
 * 🆕 [v27.1.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/27.1.1) [ Issue #4617](https://github.com/manticoresoftware/manticoresearch/issues/4617) [ PR #4647](https://github.com/manticoresoftware/manticoresearch/pull/4647) Добавлен [dict=keywords_32k](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict) — словарь слов по выбору для токенов до 32 КиБ, что позволяет индексировать и искать длинные сгенерированные машиной значения, такие как хэши, ID сообщений и длинные токены вида email, без тихого усечения.
@@ -296,7 +296,7 @@
 
 **Выпущено**: 7 ноября 2025 г.
 
-❤️ Хотели бы выразить искреннюю благодарность [@ricardopintottrdata](https://github.com/ricardopintottrdata) за их работу над [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) и [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) — за устранение проблем с общим числом в `HAVING` и ошибкой `filter with empty name` — а также [@jdelStrother](https://github.com/jdelStrother) за вклад в [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819), который улучшает обработку `ParseCJKSegmentation`, когда поддержка Jieba недоступна.
+❤️ Мы хотели бы выразить искреннюю благодарность [@ricardopintottrdata](https://github.com/ricardopintottrdata) за его работу над [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) и [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) — за устранение проблем, связанных с общим количеством `HAVING` и ошибкой `filter with empty name` — а также [@jdelStrother](https://github.com/jdelStrother) за вклад в [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819), который улучшает обработку `ParseCJKSegmentation`, когда поддержка Jieba недоступна.
 
 Ваши усилия помогают сделать проект сильнее — большое спасибо!
 

@@ -3,7 +3,7 @@
 ## Version 27.1.5
 **Released**: June 19th 2026
 
-This release brings built-in authentication and authorization, sharded tables, conversational search, faster HNSW builds, better faceting and aggregations, and a long list of fixes across KNN, replication, protocol compatibility and other areas.
+This release brings built-in authentication and authorization, sharded tables, conversational search, faster vector search, better faceting and aggregations, and a long list of fixes across KNN, replication, protocol compatibility and other areas.
 
 ### New Features and Improvements
 * 🆕 [v27.1.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/27.1.1) [ Issue #4617](https://github.com/manticoresoftware/manticoresearch/issues/4617) [ PR #4647](https://github.com/manticoresoftware/manticoresearch/pull/4647) Added [dict=keywords_32k](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict), an opt-in word dictionary for tokens up to 32 KiB, making it possible to index and search long machine-generated values such as hashes, message IDs, and long email-like tokens without silent truncation.

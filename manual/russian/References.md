@@ -57,19 +57,6 @@
 * [FLUSH HOSTNAMES](Securing_and_compacting_a_table/Flushing_hostnames.md) - Обновляет IP-адреса, связанные с именами хостов агентов
 * [FLUSH LOGS](Logging/Rotating_query_and_server_logs.md) - Инициирует переоткрытие файлов логов searchd и запросов (аналогично USR1)
 
-##### Аутентификация и авторизация
-* [CREATE USER](Security/Authentication_and_authorization.md#Users-and-tokens) - Создаёт пользователя аутентификации
-* [DROP USER](Security/Authentication_and_authorization.md#Users-and-tokens) - Удаляет пользователя аутентификации
-* [SET PASSWORD](Security/Authentication_and_authorization.md#Users-and-tokens) - Изменяет пароль текущего или указанного пользователя
-* [TOKEN](Security/Authentication_and_authorization.md#Users-and-tokens) - Создаёт или обновляет bearer-токен
-* [GRANT](Security/Authentication_and_authorization.md#Permissions) - Выдаёт разрешение аутентификации
-* [REVOKE](Security/Authentication_and_authorization.md#Permissions) - Отзывает разрешение аутентификации
-* [SHOW USERS](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - Показывает список пользователей аутентификации
-* [SHOW PERMISSIONS](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - Показывает список разрешений аутентификации
-* [SHOW USAGE](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - Показывает счётчики использования аутентификации
-* [SHOW TOKEN](Security/Authentication_and_authorization.md#Users-and-tokens) - Показывает хэш сохранённого токена
-* [RELOAD AUTH](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - Перезагружает данные аутентификации
-
 ##### Оптимизация таблиц реального времени
 * [FLUSH RAMCHUNK](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK) - Принудительно создает новый диск
 * [FLUSH TABLE](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#FLUSH-TABLE) - Сбрасывает RAM-чанк таблицы реального времени на диск
@@ -80,68 +67,75 @@
 * [IMPORT TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md) - Импортирует ранее созданную таблицу RT или PQ в сервер, работающий в режиме RT
 
 ##### Репликация
-* [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) - присоединение к кластеру репликации
-* [ALTER CLUSTER](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - добавление/удаление таблицы в кластер репликации
+* [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) - Присоединяется к кластеру репликации
+* [ALTER CLUSTER](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - Добавляет/удаляет таблицу в кластере репликации
 * [EXIT CLUSTER](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - отключение текущего узла от кластера репликации
-* [SET CLUSTER](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Cluster-parameters) - изменение настроек кластера репликации
-* [DELETE CLUSTER](Creating_a_cluster/Setting_up_replication/Deleting_a_replication_cluster.md) - удаление кластера репликации
+* [SET CLUSTER](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Cluster-parameters) - Изменяет настройки кластера репликации
+* [DELETE CLUSTER](Creating_a_cluster/Setting_up_replication/Deleting_a_replication_cluster.md) - Удаляет кластер репликации
 
-##### Поворот обычной таблицы
-* [RELOAD TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLE) - поворот обычной таблицы
-* [RELOAD TABLES](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLE) - поворот всех обычных таблиц
+##### Вращение простой таблицы
+* [RELOAD TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLE) - Вращает простую таблицу
+* [RELOAD TABLES](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLE) - Вращает все простые таблицы
 
 ##### Транзакции
-* [BEGIN](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - начало транзакции
-* [COMMIT](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - завершение транзакции
-* [ROLLBACK](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - откат транзакции
+* [BEGIN](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - Начинает транзакцию
+* [COMMIT](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - Завершает транзакцию
+* [ROLLBACK](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - Откатывает транзакцию
 
 ##### CALL
-* [CALL SUGGEST, CALL QSUGGEST](Searching/Spell_correction.md#CALL-QSUGGEST,-CALL-SUGGEST) - предложение слов с исправленными орфографическими ошибками
-* [CALL SNIPPETS](Searching/Highlighting.md) - построение выделенного фрагмента результатов из предоставленных данных и запроса
-* [CALL PQ](Searching/Percolate_query.md) - выполнение перколатного запроса
-* [CALL KEYWORDS](Searching/Autocomplete.md#CALL-KEYWORDS) - используется для проверки токенизации ключевых слов. Также позволяет получить токенизированные формы предоставленных ключевых слов
-* [CALL AUTOCOMPLETE](Searching/Autocomplete.md#CALL-AUTOCOMPLETE) - автозавершение поискового запроса
+* [CALL SUGGEST, CALL QSUGGEST](Searching/Spell_correction.md#CALL-QSUGGEST,-CALL-SUGGEST) - Предлагает слова с исправлением орфографии
+* [CALL SNIPPETS](Searching/Highlighting.md) - Создаёт фрагмент с подсветкой результатов из предоставленных данных и запроса
+* [CALL PQ](Searching/Percolate_query.md) - Выполняет перколяционный запрос
+* [CALL KEYWORDS](Searching/Autocomplete.md#CALL-KEYWORDS) - Используется для проверки токенизации ключевых слов. Также позволяет получить токенизированные формы предоставленных ключевых слов
+* [CALL AUTOCOMPLETE](Searching/Autocomplete.md#CALL-AUTOCOMPLETE) - Автозаполняет ваш поисковый запрос
+* [CALL CHAT](Searching/Conversational_search.md#CALL-CHAT-syntax) - Выполняет поиск с усилением извлечением в разговорном режиме
+
+##### Модели чата
+* [CREATE CHAT MODEL](Searching/Conversational_search.md#Creating-a-chat-model) - Создает конфигурацию модели чата
+* [SHOW CHAT MODELS](Searching/Conversational_search.md#Model-management) - Показывает конфигурации моделей чата
+* [DESCRIBE CHAT MODEL](Searching/Conversational_search.md#Model-management) - Показывает конфигурацию модели чата
+* [DROP CHAT MODEL](Searching/Conversational_search.md#Model-management) - Удаляет конфигурацию модели чата
 
 ##### Плагины
-* [CREATE FUNCTION](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md) - установка пользовательской функции (UDF)
-* [DROP FUNCTION](Extensions/UDFs_and_Plugins/UDF/Deleting_a_function.md) - удаление пользовательской функции (UDF)
-* [CREATE PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md) - установка плагина
-* [CREATE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md#CREATE-BUDDY-PLUGIN) - установка Buddy плагина
-* [DROP PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md#DELETE-PLUGIN) - удаление плагина
-* [DROP BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md#DELETE-BUDDY-PLUGIN) - удаление Buddy плагина
-* [RELOAD PLUGINS](Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md) - перезагрузка всех плагинов из указанной библиотеки
-* [ENABLE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#ENABLE-BUDDY-PLUGIN) - повторная активация ранее отключенного Buddy плагина
-* [DISABLE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#DISABLE-BUDDY-PLUGIN) - деактивация активного Buddy плагина
+* [CREATE FUNCTION](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md) - Устанавливает пользовательскую функцию (UDF)
+* [DROP FUNCTION](Extensions/UDFs_and_Plugins/UDF/Deleting_a_function.md) - Удаляет пользовательскую функцию (UDF)
+* [CREATE PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md) - Устанавливает плагин
+* [CREATE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md#CREATE-BUDDY-PLUGIN) - Устанавливает плагин Buddy
+* [DROP PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md#DELETE-PLUGIN) - Удаляет плагин
+* [DROP BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md#DELETE-BUDDY-PLUGIN) - Удаляет плагин Buddy
+* [RELOAD PLUGINS](Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md) - Перезагружает все плагины из заданной библиотеки
+* [ENABLE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#ENABLE-BUDDY-PLUGIN) - Реактивирует ранее отключённый плагин Buddy
+* [DISABLE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#DISABLE-BUDDY-PLUGIN) - Деактивирует активный плагин Buddy
 
 ##### Статус сервера
-* [SHOW STATUS](Node_info_and_management/Node_status.md#SHOW-STATUS) - вывод ряда полезных счетчиков производительности
-* [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) - список всех текущих активных клиентских потоков
-* [SHOW VARIABLES](Node_info_and_management/SHOW_VARIABLES.md) - список переменных уровня сервера и их значений
-* [SHOW VERSION](Node_info_and_management/SHOW_VERSION.md#SHOW-VERSION) - предоставление детальной информации о версии различных компонентов экземпляра.
+* [SHOW STATUS](Node_info_and_management/Node_status.md#SHOW-STATUS) - Отображает ряд полезных счетчиков производительности
+* [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) - Перечисляет все текущие активные потоки клиентов
+* [SHOW VARIABLES](Node_info_and_management/SHOW_VARIABLES.md) - Перечисляет переменные сервера и их значения
+* [SHOW VERSION](Node_info_and_management/SHOW_VERSION.md#SHOW-VERSION) - Предоставляет подробную информацию о версиях различных компонентов инстанса.
 
-### HTTP конечные точки
-* [/sql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) - выполнение SQL-запроса через HTTP JSON
-* [/cli](Connecting_to_the_server/HTTP.md#/cli) - предоставление HTTP интерфейса командной строки
-* [/insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - добавление документа в таблицу реального времени
-* [/pq/tbl_name/doc](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - добавление правила PQ в перколатную таблицу
-* [/update](Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON) - обновление документа в таблице реального времени
-* [/replace](Data_creation_and_modification/Updating_documents/REPLACE.md) - заменяет существующий документ в таблице реального времени или добавляет его, если он не существует
-* [/pq/tbl_name/doc/N?refresh=1](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - заменяет правило PQ в перколатной таблице
-* [/delete](Data_creation_and_modification/Deleting_documents.md) - удаление документа из таблицы
-* [/bulk](Data_creation_and_modification/Updating_documents/UPDATE.md#Bulk-updates) - выполнение нескольких операций добавления, обновления или удаления в одном вызове. Подробнее о массовых добавлениях [здесь](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
-* [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - выполнение поиска
-* [/search -> knn](Searching/KNN.md) - выполнение векторного поиска KNN
-* [/pq/tbl_name/search](Searching/Percolate_query.md) - выполнение обратного поиска в перколатной таблице
-* [/tbl_name/_mapping](Creating_a_table/Local_tables/Real-time_table.md#_mapping-API:) - создание схемы таблицы в стиле Elasticsearch
+### HTTP эндпоинты
+* [/sql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) - Выполняет SQL-запрос через HTTP JSON
+* [/cli](Connecting_to_the_server/HTTP.md#/cli) - Обеспечивает HTTP интерфейс командной строки
+* [/insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Вставляет документ в таблицу реального времени
+* [/pq/tbl_name/doc](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Добавляет правило PQ в перколяционную таблицу
+* [/update](Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON) - Обновляет документ в таблице реального времени
+* [/replace](Data_creation_and_modification/Updating_documents/REPLACE.md) - Заменяет существующий документ в таблице реального времени или вставляет его, если он не существует
+* [/pq/tbl_name/doc/N?refresh=1](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Заменяет правило PQ в перколяционной таблице
+* [/delete](Data_creation_and_modification/Deleting_documents.md) - Удаляет документ из таблицы
+* [/bulk](Data_creation_and_modification/Updating_documents/UPDATE.md#Bulk-updates) - Выполняет несколько операций вставки, обновления или удаления за один вызов. Подробнее о массовых вставках [здесь](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
+* [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - Выполняет поиск
+* [/search -> knn](Searching/KNN.md) - Выполняет KNN векторный поиск
+* [/pq/tbl_name/search](Searching/Percolate_query.md) - Выполняет обратный поиск в перколяционной таблице
+* [/tbl_name/_mapping](Creating_a_table/Local_tables/Real-time_table.md#_mapping-API:) - Создаёт схему таблицы в стиле Elasticsearch
 
-### Общие понятия
-* [field name syntax](Creating_a_table/Data_types.md#Field-name-syntax)
-* [data types](Creating_a_table/Data_types.md)
-* [engine](Creating_a_table/Data_types.md)
-* [plain mode](Read_this_first.md#Real-time-mode-vs-plain-mode)
-* [real-time mode](Read_this_first.md#Real-time-mode-vs-plain-mode)
+### Общие сведения
+* [синтаксис имени поля](Creating_a_table/Data_types.md#Field-name-syntax)
+* [типы данных](Creating_a_table/Data_types.md)
+* [движок](Creating_a_table/Data_types.md)
+* [простой режим](Read_this_first.md#Real-time-mode-vs-plain-mode)
+* [режим реального времени](Read_this_first.md#Real-time-mode-vs-plain-mode)
 
-##### Общие параметры таблицы
+##### Общие настройки таблиц
 * [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs)
 * [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs)
 * [access_doclists](Server_settings/Searchd.md#access_doclists)
@@ -440,7 +434,7 @@ index_converter {--config /path/to/config|--path}
 ## [Searchd](Starting_the_server/Manually.md)
 `searchd` — это сервер Manticore.
 
-##### Настройки searchd в файле конфигурации
+##### Настройки Searchd в файле конфигурации
 Для размещения в секции `searchd {}` файла конфигурации:
   * [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs) - Определяет способ доступа к файлу blob-атрибутов таблицы
   * [access_doclists](Server_settings/Searchd.md#access_doclists) - Определяет способ доступа к файлу doclists таблицы
@@ -452,10 +446,6 @@ index_converter {--config /path/to/config|--path}
   * [agent_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Определяет количество попыток подключения и запроса к удаленным агентам, которые предпринимает Manticore
   * [agent_retry_delay](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Определяет задержку перед повторной попыткой запроса к удаленному агенту в случае сбоя
   * [attr_flush_period](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_flush_period) - Устанавливает период времени между сбросом обновленных атрибутов на диск
-  * [auth](Server_settings/Searchd.md#auth) - Включает аутентификацию и авторизацию
-  * [auth_log_level](Server_settings/Searchd.md#auth_log_level) - Управляет уровнем подробности журнала аутентификации
-  * [auth_password_policy](Server_settings/Searchd.md#auth_password_policy) - Задаёт политику паролей для пользователей аутентификации
-  * [auth_password_min_length](Server_settings/Searchd.md#auth_password_min_length) - Задаёт минимальную длину пароля для пользователей аутентификации
   * [binlog_flush](Server_settings/Searchd.md#binlog_flush) - Режим сброса/синхронизации транзакций бинарного лога
   * [binlog_max_log_size](Server_settings/Searchd.md#binlog_max_log_size) - Максимальный размер файла бинарного лога
   * [binlog_common](Logging/Binary_logging.md#Binary-logging-strategies) - Общий файл бинарного лога для всех таблиц
@@ -464,10 +454,10 @@ index_converter {--config /path/to/config|--path}
   * [binlog_path](Server_settings/Searchd.md#binlog_path) - Путь к файлам бинарного лога
   * [client_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Максимальное время ожидания между запросами при использовании постоянных соединений
   * [collation_libc_locale](Server_settings/Searchd.md#collation_libc_locale) - Локаль libc сервера
-  * [collation_server](Server_settings/Searchd.md#collation_server) - Сортировка по умолчанию на сервере
+  * [collation_server](Server_settings/Searchd.md#collation_server) - Коллация сервера по умолчанию
   * [data_dir](Server_settings/Searchd.md#data_dir) - Путь к каталогу данных, где Manticore хранит все данные ([RT-режим](Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29))
-  * [diskchunk_flush_write_timeout](Server_settings/Searchd.md#diskchunk_flush_write_timeout) - Таймаут для автоматического сброса RAM-чанка, если в него не было записей
-  * [diskchunk_flush_search_timeout](Server_settings/Searchd.md#diskchunk_flush_search_timeout) - Таймаут для предотвращения автоматического сброса RAM-чанка, если в таблице не было поисковых запросов
+  * [diskchunk_flush_write_timeout](Server_settings/Searchd.md#diskchunk_flush_write_timeout) - Таймаут автоматического сброса RAM-чанка, если в него не было записей
+  * [diskchunk_flush_search_timeout](Server_settings/Searchd.md#diskchunk_flush_search_timeout) - Таймаут предотвращения автоматического сброса RAM-чанка, если в таблице не было поисковых запросов
   * [docstore_cache_size](Server_settings/Searchd.md#docstore_cache_size) - Максимальный размер блоков документов из хранилища документов, хранящихся в памяти
   * [expansion_limit](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) - Максимальное количество расширенных ключевых слов для одного символа подстановки
   * [grouping_in_utc](Server_settings/Searchd.md#grouping_in_utc) - Включает использование часового пояса UTC для группировки временных полей
@@ -475,10 +465,9 @@ index_converter {--config /path/to/config|--path}
   * [ha_ping_interval](Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_ping_interval) - Интервал между пингами зеркал агентов
   * [hostname_lookup](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Стратегия обновления имен хостов
   * [jobs_queue_size](Server_settings/Searchd.md#jobs_queue_size) - Определяет максимальное количество "задач", разрешенных в очереди одновременно
-  * [join_batch_size](Searching/Joining.md#Join-batching) - Определяет размер пакета для соединения таблиц для баланса производительности и использования памяти
+  * [join_batch_size](Searching/Joining.md#Join-batching) - Определяет размер пакета для объединения таблиц для баланса производительности и использования памяти
   * [join_cache_size](Searching/Joining.md#Join-caching) - Определяет размер кэша для повторного использования результатов запросов JOIN
   * [kibana_version_string](Server_settings/Searchd.md#kibana_version_string) – Строка версии сервера, отправляемая в ответ на запросы Kibana
-  * [knn_parallel_build](Server_settings/Searchd.md#knn_parallel_build) - Количество рабочих потоков, используемых для построения графа HNSW во время сохранения RT-чанков, слияний `OPTIMIZE` / автооптимизации чанков и перестроек KNN через `ALTER TABLE`
   * [listen](Server_settings/Searchd.md#listen) - Определяет IP-адрес и порт или путь к Unix-доменному сокету для прослушивания searchd
   * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - Размер очереди прослушивания TCP
   * [listen_tfo](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Включает флаг TCP_FASTOPEN для всех слушателей
@@ -495,14 +484,14 @@ index_converter {--config /path/to/config|--path}
   * [net_throttle_action](Server_settings/Searchd.md#net_throttle_action)  - Определяет, сколько запросов обрабатывается на каждой итерации сетевого цикла
   * [net_wait_tm](Server_settings/Searchd.md#net_wait_tm) - Управляет интервалом активного цикла сетевого потока
   * [net_workers](Server_settings/Searchd.md#net_workers) - Количество сетевых потоков
-  * [network_timeout](Server_settings/Searchd.md#network_timeout) - Сетевой таймаут для клиентских запросов
+  * [network_timeout](Server_settings/Searchd.md#network_timeout) - Сетевой таймаут для запросов клиентов
   * [node_address](Server_settings/Searchd.md#node_address) - Определяет сетевой адрес узла
   * [persistent_connections_limit](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Максимальное количество одновременных постоянных соединений с удаленными постоянными агентами
   * [parallel_chunk_merges](Server_settings/Searchd.md#parallel_chunk_merges) - Сколько слияний RT-дисковых чанков может выполняться параллельно во время OPTIMIZE
   * [pid_file](Server_settings/Searchd.md#pid_file) - Путь к pid-файлу сервера Manticore
   * [preopen_tables](Server_settings/Searchd.md#preopen_tables) - Определяет, следует ли принудительно предварительно открывать все таблицы при запуске
-  * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - Включает псевдошардирование для поисковых запросов к обычным и реального времени таблицам
-  * [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes) - Максимальный объем ОЗУ, выделенный для кэшированных наборов результатов
+  * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - Включает псевдошардинг для поисковых запросов к обычным и реального времени таблицам
+  * [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes) - Максимальный объем оперативной памяти, выделенный для кэшированных наборов результатов
   * [qcache_thresh_msec](Server_settings/Searchd.md#qcache_thresh_msec) - Минимальный порог реального времени для кэширования результата запроса
   * [qcache_ttl_sec](Server_settings/Searchd.md#qcache_ttl_sec) - Срок действия кэшированного набора результатов
   * [query_log](Server_settings/Searchd.md#query_log) - Путь к файлу журнала запросов
@@ -528,24 +517,21 @@ index_converter {--config /path/to/config|--path}
   * [ssl_cert](Server_settings/Searchd.md#ssl_cert) - Путь к SSL-сертификату сервера
   * [ssl_key](Server_settings/Searchd.md#ssl_key) - Путь к ключу SSL-сертификата сервера
   * [subtree_docs_cache](Server_settings/Searchd.md#subtree_docs_cache) - Максимальный размер кэша документов общего поддерева
-  * [subtree_hits_cache](Server_settings/Searchd.md#subtree_hits_cache) - Максимальный размер кэша попаданий общего поддерева на запрос
+  * [subtree_hits_cache](Server_settings/Searchd.md#subtree_hits_cache) - Максимальный размер кэша попаданий общего поддерева, на запрос
   * [timezone](Server_settings/Searchd.md#timezone) - Часовой пояс, используемый функциями, связанными с датой/временем
   * [thread_stack](Server_settings/Searchd.md#thread_stack) - Максимальный размер стека для задачи
   * [unlink_old](Server_settings/Searchd.md#unlink_old) - Удалять ли копии таблиц .old при успешной ротации
-  * [watchdog](Server_settings/Searchd.md#watchdog) - Включить или отключить watchdog сервера Manticore
+  * [watchdog](Server_settings/Searchd.md#watchdog) - Включить или отключить сторожевой таймер сервера Manticore
 
 ##### Параметры запуска searchd
 ```bash
 searchd [OPTIONS]
 ```
-* [--check](Starting_the_server/Manually.md#searchd-command-line-options) - Проверяет файл конфигурации и завершает работу
-* [--config, -c](Starting_the_server/Manually.md#searchd-command-line-options) - Указывает путь к файлу конфигурации
+* [--config, -c](Starting_the_server/Manually.md#searchd-command-line-options) - Задает путь к файлу конфигурации
 * [--console](Starting_the_server/Manually.md#searchd-command-line-options) - Принудительно запускает сервер в консольном режиме
 * [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - Включает сохранение дампа памяти при аварийном завершении
 * [--cpustats](Starting_the_server/Manually.md#searchd-command-line-options) - Включает отчетность о времени процессора
-* [--auth](Starting_the_server/Manually.md#searchd-command-line-options) - Запускает интерактивный режим инициализации аутентификации
-* [--auth-non-interactive](Starting_the_server/Manually.md#searchd-command-line-options) - Запускает режим инициализации аутентификации с использованием stdin
-* [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - Удаляет службу Manticore из консоли управления Microsoft и других мест, где зарегистрированы службы
+* [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - Удаляет службу Manticore из консоли управления Microsoft и других мест, где регистрируются службы
 * [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - Запрещает серверу обслуживать входящие соединения до предварительного чтения файлов таблиц
 * [--help, -h](Starting_the_server/Manually.md#searchd-command-line-options) - Отображает все доступные параметры
 * [--quiet, -q](Starting_the_server/Manually.md#searchd-command-line-options) - Выводить только ошибки при запуске
@@ -557,15 +543,15 @@ searchd [OPTIONS]
 * [--logreplication](Starting_the_server/Manually.md#searchd-command-line-options) - Включает дополнительный отладочный вывод по репликации в журнал сервера
 * [--new-cluster](Starting_the_server/Manually.md#searchd-command-line-options) - Инициализирует кластер репликации и устанавливает сервер в качестве опорного узла с защитой от [перезапуска кластера](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)
 * [--new-cluster-force](Starting_the_server/Manually.md#searchd-command-line-options) - Инициализирует кластер репликации и устанавливает сервер в качестве опорного узла, обходя защиту от [перезапуска кластера](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)
-* [--nodetach](Starting_the_server/Manually.md#searchd-command-line-options) - Оставляет searchd работающим на переднем плане
+* [--nodetach](Starting_the_server/Manually.md#searchd-command-line-options) - Удерживает searchd работающим на переднем плане
 * [--ntservice](Starting_the_server/Manually.md#searchd-command-line-options) - Используется консолью управления Microsoft для запуска searchd как службы на платформах Windows
 * [--pidfile](Starting_the_server/Manually.md#searchd-command-line-options) - Переопределяет [pid_file](Server_settings/Searchd.md#pid_file) в файле конфигурации
-* [--port, p](Starting_the_server/Manually.md#searchd-command-line-options) - Указывает порт, на котором должен слушать searchd, игнорируя порт, указанный в файле конфигурации
-* [--replay-flags](Starting_the_server/Manually.md#searchd-command-line-options) - Устанавливает дополнительные параметры воспроизведения бинарного журнала
+* [--port, p](Starting_the_server/Manually.md#searchd-command-line-options) - Задает порт, на котором должен слушать searchd, игнорируя порт, указанный в файле конфигурации
+* [--replay-flags](Starting_the_server/Manually.md#searchd-command-line-options) - Устанавливает дополнительные параметры воспроизведения бинарного лога
 * [--servicename](Starting_the_server/Manually.md#searchd-command-line-options) - Присваивает searchd заданное имя при установке или удалении службы, как оно отображается в консоли управления Microsoft
-* [--status](Starting_the_server/Manually.md#searchd-command-line-options) - Запрашивает статус запущенной службы search
+* [--status](Starting_the_server/Manually.md#searchd-command-line-options) - Запрашивает статус у запущенной службы search
 * [--stop](Starting_the_server/Manually.md#searchd-command-line-options) - Останавливает сервер Manticore
-* [--stopwait](Starting_the_server/Manually.md#searchd-command-line-options) - Останавливает сервер Manticore корректно
+* [--stopwait](Starting_the_server/Manually.md#searchd-command-line-options) - Корректно останавливает сервер Manticore
 * [--strip-path](Starting_the_server/Manually.md#searchd-command-line-options) - Удаляет имена путей из всех имен файлов, на которые ссылается таблица
 * [-v](Starting_the_server/Manually.md#searchd-command-line-options) - Отображает информацию о версии
 
@@ -634,7 +620,7 @@ spelldump [options] <dictionary> <affix> [result] [locale-name]
 Полный алфавитный список ключевых слов, в настоящее время зарезервированных в синтаксисе Manticore SQL (поэтому их нельзя использовать как идентификаторы).
 
 ```
-AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, HYBRID_MATCH, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TOKEN, TRUE
+AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, HYBRID_MATCH, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
 ```
 
 ## Документация по старым версиям Manticore

@@ -101,6 +101,13 @@
 * [CALL PQ](Searching/Percolate_query.md) - Runs a percolate query
 * [CALL KEYWORDS](Searching/Autocomplete.md#CALL-KEYWORDS) - Used to check how keywords are tokenized. Also allows to retrieve tokenized forms of provided keywords
 * [CALL AUTOCOMPLETE](Searching/Autocomplete.md#CALL-AUTOCOMPLETE) - Autocompletes your search query
+* [CALL CHAT](Searching/Conversational_search.md#CALL-CHAT-syntax) - Runs retrieval-augmented conversational search
+
+##### Chat models
+* [CREATE CHAT MODEL](Searching/Conversational_search.md#Creating-a-chat-model) - Creates a chat model configuration
+* [SHOW CHAT MODELS](Searching/Conversational_search.md#Model-management) - Shows chat model configurations
+* [DESCRIBE CHAT MODEL](Searching/Conversational_search.md#Model-management) - Shows a chat model configuration
+* [DROP CHAT MODEL](Searching/Conversational_search.md#Model-management) - Drops a chat model configuration
 
 ##### Plugins
 * [CREATE FUNCTION](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md) - Installs a user-defined function (UDF)

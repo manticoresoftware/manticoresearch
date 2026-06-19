@@ -120,6 +120,7 @@
     * [• Оптимизатор на основе стоимости](Searching/Cost_based_optimizer.md)
     * [• Векторный поиск K-ближайших соседей](Searching/KNN.md)
     * [• Гибридный поиск](Searching/Hybrid_search.md)
+    * [• Диалоговый поиск](Searching/Conversational_search.md)
 * [• Обновление схемы и настроек таблицы](Updating_table_schema_and_settings.md)
     * [• Обновление схемы таблицы в режиме RT](Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode)
     * [• Обновление FT-настроек таблицы в режиме RT](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode)

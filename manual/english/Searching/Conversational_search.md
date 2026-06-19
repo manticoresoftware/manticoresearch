@@ -84,6 +84,13 @@ CREATE CHAT MODEL assistant (
 
 You can also set provider options and retrieval limits:
 
+<!-- example conversational_search_create_model_extended -->
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
 ```sql
 CREATE CHAT MODEL support_assistant (
     model='openai:gpt-4o-mini',
@@ -94,6 +101,7 @@ CREATE CHAT MODEL support_assistant (
     max_document_length=3000
 );
 ```
+<!-- end -->
 
 Common options:
 
@@ -172,6 +180,13 @@ CALL CHAT(
 
 To continue a conversation, pass the same conversation UUID:
 
+<!-- example conversational_search_continue_chat -->
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
 ```sql
 CALL CHAT(
     'Can you explain it with an example?',
@@ -181,7 +196,16 @@ CALL CHAT(
 );
 ```
 
+<!-- end -->
+
 To search a specific vector field, pass it as the fifth argument:
+
+<!-- example conversational_search_vector_field -->
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
 
 ```sql
 CALL CHAT(
@@ -192,6 +216,8 @@ CALL CHAT(
     'title_embedding'
 );
 ```
+
+<!-- end -->
 
 When the fifth argument is present, Buddy checks that the field exists and is a `FLOAT_VECTOR`. If the argument is omitted, Buddy detects the first `FLOAT_VECTOR` field from `SHOW CREATE TABLE`.
 
@@ -248,21 +274,48 @@ SHOW CHAT MODELS;
 
 Describe a model:
 
+<!-- example conversational_search_describe_model -->
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
 ```sql
 DESCRIBE CHAT MODEL assistant;
 ```
 
+<!-- end -->
+
 Drop a model:
+
+<!-- example conversational_search_drop_model -->
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
 
 ```sql
 DROP CHAT MODEL assistant;
 ```
 
+<!-- end -->
+
 Drop safely:
+
+<!-- example conversational_search_drop_model_if_exists -->
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
 
 ```sql
 DROP CHAT MODEL IF EXISTS assistant;
 ```
+
+<!-- end -->
 
 `SHOW CHAT MODELS` returns `name`, `model`, and `created_at`. `DESCRIBE CHAT MODEL` returns `property` and `value`; stored API keys are shown as `HIDDEN`.
 

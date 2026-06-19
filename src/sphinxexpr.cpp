@@ -4540,6 +4540,9 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp ) noe
 	case SPH_ATTR_INT64SET:
 	case SPH_ATTR_INT64SET_PTR:		iRes = TOK_ATTR_MVA64; break;
 
+	case SPH_ATTR_FLOAT_VECTOR:
+	case SPH_ATTR_FLOAT_VECTOR_PTR:	iRes = TOK_ATTR_MVA32; break; // packed blob fetch; actual type comes from the schema
+
 	case SPH_ATTR_STRING:
 	case SPH_ATTR_STRINGPTR:		iRes = TOK_ATTR_STRING; break;
 
@@ -9443,7 +9446,14 @@ int ExprParser_t::AddNodeAttr ( int iTokenType, uint64_t uAttrLocator )
 	switch ( iTokenType )
 	{
 	case TOK_ATTR_FLOAT:	tNode.m_eRetType = SPH_ATTR_FLOAT;			break;
-	case TOK_ATTR_MVA32:	tNode.m_eRetType = bPtrAttr ? SPH_ATTR_UINT32SET_PTR : SPH_ATTR_UINT32SET;	break;
+	case TOK_ATTR_MVA32:
+	{
+		ESphAttr eAttr = m_pSchema->GetAttr(tNode.m_iLocator).m_eAttrType;
+		tNode.m_eRetType = ( eAttr==SPH_ATTR_FLOAT_VECTOR || eAttr==SPH_ATTR_FLOAT_VECTOR_PTR )
+			? eAttr
+			: ( bPtrAttr ? SPH_ATTR_UINT32SET_PTR : SPH_ATTR_UINT32SET );
+		break;
+	}
 	case TOK_ATTR_MVA64:	tNode.m_eRetType = bPtrAttr ? SPH_ATTR_INT64SET_PTR : SPH_ATTR_INT64SET;	break;
 	case TOK_ATTR_STRING:	tNode.m_eRetType = SPH_ATTR_STRING;			break;
 	case TOK_ATTR_FACTORS:	tNode.m_eRetType = SPH_ATTR_FACTORS;		break;
@@ -10827,7 +10837,7 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	ESphAttr eAttrType = m_dNodes[m_iParsed].m_eRetType;
 
 	// pooled MVA/string attributes are ok to use in expressions, but storing them into schema requires their _PTR counterparts
-	if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET || eAttrType==SPH_ATTR_STRING )
+	if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET || eAttrType==SPH_ATTR_FLOAT_VECTOR || eAttrType==SPH_ATTR_STRING )
 		eAttrType = sphPlainAttrToPtrAttr(eAttrType);
 
 	// Check expression stack to fit for mutual recursive function calls.

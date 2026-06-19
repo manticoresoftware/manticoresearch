@@ -126,6 +126,18 @@ show create table test5;
 drop table test5;
 </sphinxql>
 
+<sphinxql>
+<!-- could promote to 32k dict but not back -->
+CREATE TABLE test1 (title text) dict='keywords';
+ALTER TABLE test1 dict='keywords_32k';
+SHOW CREATE TABLE test1;
+ALTER TABLE test1 dict='keywords';
+drop table test1;
+
+CREATE TABLE test1 (title text) dict='keywords_32k';
+SHOW CREATE TABLE test1;
+drop table test1;
+</sphinxql>
 
 </queries>
 

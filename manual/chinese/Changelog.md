@@ -33,6 +33,9 @@
 * ⚠️ **v26.0.0** [ Issue #4431](https://github.com/manticoresoftware/manticoresearch/issues/4431) [ PR #4598](https://github.com/manticoresoftware/manticoresearch/pull/4598) **破坏性变更**：依赖传入的复制表按集群 `path` 存储的复制集群，将不再以相同方式工作，因为接收到的表现在位于标准的 [data_dir](Server_settings/Searchd.md#data_dir)/`<table>` 布局下。现有表数据仍可使用，但如果你在复制中使用了自定义集群 `path`，迁移可能需要将复制表移动到标准 `data_dir` 布局，或重新同步到该布局。仅在采用新的复制表布局之前才可以安全降级。
 
 ### Bug 修复
+* 🪲 [v27.1.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/27.1.5) [ PR #4648](https://github.com/manticoresoftware/manticoresearch/pull/4648) 修复了在获取 columnar `float_vector` 属性时的崩溃，避免了在从 columnar 表物化向量列时出现失败。
+* 🪲 [v27.1.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/27.1.4) [ Issue #4655](https://github.com/manticoresoftware/manticoresearch/issues/4655) [ PR #4657](https://github.com/manticoresoftware/manticoresearch/pull/4657) 修复了将表从 `dict='keywords'` 升级到 [`dict=keywords_32k`](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict) 后的 `ALTER TABLE ... RECONFIGURE` 和 `SHOW CREATE TABLE`，因此单向字典升级现在可以正常工作，并且会在表定义中正确体现。
+* 🪲 [v27.1.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/27.1.3) [ PR #4652](https://github.com/manticoresoftware/manticoresearch/pull/4652) 将 [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) 更新到 4.0.1，修复了在启用认证时 Queue 插件的 mutation 权限处理问题，因此对 `source/<name>` 和 `mva/<name>` 的只读授权不再会导致 `DROP SOURCE` 或 `ALTER MATERIALIZED VIEW` 的副作用。
 * 🪲 [v27.1.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/27.1.2) [ PR #4600](https://github.com/manticoresoftware/manticoresearch/pull/4600) 修复了由多个 `source` 块构建的普通索引中的 `sql_attr_multi` 查询 MVA 收集问题，因此多源索引在索引过程中不再因空值错误而失败。
 * 🪲 [v27.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/27.1.0) [ PR #4635](https://github.com/manticoresoftware/manticoresearch/pull/4635) 将 [MCL](https://github.com/manticoresoftware/columnar) 更新到 13.6.1，避免 embeddings 库在模拟 x86 CPU 上崩溃。
 * 🪲 [v26.3.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/26.3.2) [ PR #4620](https://github.com/manticoresoftware/manticoresearch/pull/4620) 将 [MCL](https://github.com/manticoresoftware/columnar) 更新到 13.5.3，纳入随附 columnar 库中的量化器类型不匹配修复。
@@ -292,7 +295,7 @@
 
 **发布日期**：2025年11月7日
 
-❤️ 我们衷心感谢[@ricardopintottrdata](https://github.com/ricardopintottrdata)在[PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792)和[PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828)中的工作——解决了与`HAVING`总计数和`filter with empty name`错误相关的问题——以及[@jdelStrother](https://github.com/jdelStrother)在[PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819)中的贡献，该贡献改进了在未提供Jieba支持时对`ParseCJKSegmentation`的处理。
+❤️ 我们谨向 [@ricardopintottrdata](https://github.com/ricardopintottrdata) 致以衷心感谢，感谢其在 [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) 和 [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 中的工作，解决了 `HAVING` 总计数和 `filter with empty name` 错误相关的问题；同时也感谢 [@jdelStrother](https://github.com/jdelStrother) 通过 [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) 所做的贡献，它改进了在未提供 Jieba 支持时对 `ParseCJKSegmentation` 的处理。
 
 您的努力使项目更加强大——非常感谢！
 

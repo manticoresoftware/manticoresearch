@@ -221,6 +221,7 @@ CALL CHAT(
 
 当提供第五个参数时，Buddy 会检查该字段是否存在且类型为 `FLOAT_VECTOR`。如果省略该参数，Buddy 会从 `SHOW CREATE TABLE` 中检测第一个 `FLOAT_VECTOR` 字段。
 
+
 ## 搜索和上下文细节
 
 当 Buddy 需要检索时，它会在选定的向量字段上执行 KNN 搜索，并返回最多 `retrieval_limit` 行。默认距离阈值为 `0.8`。

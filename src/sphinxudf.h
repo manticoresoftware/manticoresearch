@@ -29,7 +29,7 @@ extern "C" {
 #endif
 
 /// current udf version
-#define SPH_UDF_VERSION 11
+#define SPH_UDF_VERSION 12
 
 /// error buffer size
 #define SPH_UDF_ERROR_LEN 256
@@ -48,7 +48,10 @@ enum sphinx_udf_argtype
 	SPH_UDF_TYPE_STRING			= 5,			///< non-ASCIIZ string, with a separately stored length
 	SPH_UDF_TYPE_INT64SET		= 6,			///< sorted set of signed 64-bit integers
 	SPH_UDF_TYPE_FACTORS		= 7,			///< packed ranking factors
-	SPH_UDF_TYPE_JSON			= 8				///< whole json or particular field as a string
+	SPH_UDF_TYPE_JSON			= 8,			///< whole json or particular field as a string
+	SPH_UDF_TYPE_UINT32SET_RETURN = 9,		///< return type: sorted set of unsigned 32-bit integers
+	SPH_UDF_TYPE_INT64SET_RETURN = 10,		///< return type: sorted set of signed 64-bit integers
+	SPH_UDF_TYPE_FLOAT_VECTOR_RETURN = 11	///< return type: vector of floats
 };
 
 /// our malloc() replacement type

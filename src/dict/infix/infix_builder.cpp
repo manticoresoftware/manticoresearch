@@ -163,6 +163,8 @@ class InfixBuilder_c final: public ISphInfixBuilder
 	CSphSwapVector<InfixHashEntry_t<SIZE>> m_dArena;
 	CSphVector<InfixBlock_t> m_dBlocks;
 	CSphTightVector<BYTE> m_dBlocksWords;
+	CSphVector<int> m_dCodepointBytes;
+	DictFormat_e m_eDictFormat = DictFormat_e::KEYWORDS;
 
 private:
 	void AddEntry ( const Infix_t<SIZE>& tKey, DWORD uHash, int iCheckpoint )
@@ -199,7 +201,8 @@ private:
 	}
 
 public:
-	InfixBuilder_c()
+	explicit InfixBuilder_c ( DictFormat_e eDictFormat )
+		: m_eDictFormat ( eDictFormat )
 	{
 		// init the hash
 		for ( auto& uHash : m_dHash )
@@ -211,7 +214,7 @@ public:
 	void AddWord ( const BYTE* pWord, int iWordLength, int iCheckpoint, bool bHasMorphology ) override;
 	void SaveEntries ( CSphWriter& wrDict ) override;
 	int64_t SaveEntryBlocks ( CSphWriter& wrDict ) override;
-	int GetBlocksWordsSize() const override { return m_dBlocksWords.GetLength(); }
+	int64_t GetBlocksWordsSize() const override { return m_dBlocksWords.GetLength64(); }
 };
 
 
@@ -273,12 +276,12 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE* pWord, int iWordLength, int iCh
 #ifndef NDEBUG
 	bool bInvalidTailCp = false;
 #endif
-	int iCodes = 0;					   // codepoints in current word
-	std::array<BYTE, SPH_MAX_WORD_LEN + 1> dBytes; // byte offset for each codepoints
+	int iCodes = 0; // codepoints in current word
 
 	// build an offsets table into the bytestring
-	dBytes[0] = 0;
-	for ( const BYTE* p = pWord; p < pWordMax && iCodes < SPH_MAX_WORD_LEN; )
+	m_dCodepointBytes.Resize ( 1 );
+	m_dCodepointBytes[0] = 0;
+	for ( const BYTE* p = pWord; p < pWordMax; )
 	{
 		int iLen = sphUtf8CharBytes ( *p );
 
@@ -298,10 +301,10 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE* pWord, int iWordLength, int iCh
 		assert ( iLen >= 1 && iLen <= 4 );
 		p += iLen;
 
-		dBytes[iCodes + 1] = dBytes[iCodes] + (BYTE)iLen;
+		m_dCodepointBytes.Add ( m_dCodepointBytes.Last()+iLen );
 		++iCodes;
 	}
-	assert ( pWord[dBytes[iCodes]] == 0 || iCodes == SPH_MAX_WORD_LEN || bInvalidTailCp );
+	assert ( pWord[m_dCodepointBytes[iCodes]] == 0 || bInvalidTailCp );
 
 	// generate infixes
 	Infix_t<SIZE> sKey;
@@ -311,8 +314,8 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE* pWord, int iWordLength, int iCh
 		BYTE* pKey = sKey.m_Data.data();
 		const BYTE* pKeyMax = pKey + sizeof ( sKey.m_Data );
 
-		const BYTE* s = pWord + dBytes[p];
-		const BYTE* sMax = pWord + dBytes[p + Min ( 6, iCodes - p )];
+		const BYTE* s = pWord + m_dCodepointBytes[p];
+		const BYTE* sMax = pWord + m_dCodepointBytes[p + Min ( 6, iCodes - p )];
 
 		// copy first infix codepoint
 		DWORD uHash = 0xffffffffUL;
@@ -322,7 +325,7 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE* pWord, int iWordLength, int iCh
 			*pKey++ = *s++;
 		} while ( ( *s & 0xC0 ) == 0x80 );
 
-		assert ( s - ( pWord + dBytes[p] ) == ( dBytes[p + 1] - dBytes[p] ) );
+		assert ( s - ( pWord + m_dCodepointBytes[p] ) == ( m_dCodepointBytes[p + 1] - m_dCodepointBytes[p] ) );
 
 		while ( s < sMax && pKey < pKeyMax && pKey + sphUtf8CharBytes ( *s ) <= pKeyMax )
 		{
@@ -390,12 +393,12 @@ void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter& wrDict )
 		auto iAppendBytes = (int)strnlen ( sKey, DWSIZE );
 		if ( !iBlock )
 		{
-			int iOff = m_dBlocksWords.GetLength();
+			int64_t iOff = m_dBlocksWords.GetLength64();
 			m_dBlocksWords.Resize ( iOff + iAppendBytes + 1 );
 
 			InfixBlock_t& tBlock = m_dBlocks.Add();
 			tBlock.m_iInfixOffset = iOff;
-			tBlock.m_iOffset = (DWORD)wrDict.GetPos();
+			tBlock.m_iOffset = wrDict.GetPos();
 
 			memcpy ( m_dBlocksWords.Begin() + iOff, sKey, iAppendBytes );
 			m_dBlocksWords[iOff + iAppendBytes] = '\0';
@@ -493,7 +496,7 @@ void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter& wrDict )
 	ARRAY_FOREACH ( i, m_dBlocks )
 		m_dBlocks[i].m_sInfix = pBlockWords + m_dBlocks[i].m_iInfixOffset;
 
-	if ( wrDict.GetPos() > UINT_MAX ) // FIXME!!! change to int64
+	if ( m_eDictFormat!=DictFormat_e::KEYWORDS_V2 && wrDict.GetPos() > UINT_MAX )
 		sphDie ( "INTERNAL ERROR: dictionary size " INT64_FMT " overflow at infix save", wrDict.GetPos() );
 }
 
@@ -505,30 +508,36 @@ int64_t InfixBuilder_c<SIZE>::SaveEntryBlocks ( CSphWriter& wrDict )
 	wrDict.PutBlob ( g_sTagInfixBlocks );
 
 	SphOffset_t iInfixBlocksOffset = wrDict.GetPos();
-	assert ( iInfixBlocksOffset <= INT_MAX );
+	assert ( m_eDictFormat==DictFormat_e::KEYWORDS_V2 || iInfixBlocksOffset <= INT_MAX );
 
-	wrDict.ZipInt ( m_dBlocks.GetLength() );
+	if ( m_eDictFormat==DictFormat_e::KEYWORDS_V2 )
+		wrDict.ZipOffset ( m_dBlocks.GetLength64() );
+	else
+		wrDict.ZipInt ( m_dBlocks.GetLength() );
 	ARRAY_FOREACH ( i, m_dBlocks )
 	{
 		auto iBytes = strlen ( m_dBlocks[i].m_sInfix );
 		wrDict.PutByte ( BYTE ( iBytes ) );
 		wrDict.PutBytes ( m_dBlocks[i].m_sInfix, iBytes );
-		wrDict.ZipInt ( m_dBlocks[i].m_iOffset ); // maybe delta these on top?
+		if ( m_eDictFormat==DictFormat_e::KEYWORDS_V2 )
+			wrDict.ZipOffset ( m_dBlocks[i].m_iOffset ); // maybe delta these on top?
+		else
+			wrDict.ZipInt ( (DWORD)m_dBlocks[i].m_iOffset ); // maybe delta these on top?
 	}
 
 	return iInfixBlocksOffset;
 }
 
 
-std::unique_ptr<ISphInfixBuilder> sphCreateInfixBuilder ( int iCodepointBytes, CSphString* pError )
+std::unique_ptr<ISphInfixBuilder> sphCreateInfixBuilder ( int iCodepointBytes, CSphString* pError, DictFormat_e eDictFormat )
 {
 	assert ( pError );
 	switch ( iCodepointBytes )
 	{
 	case 0: return nullptr;
-	case 1: return std::make_unique<InfixBuilder_c<2>>(); // upto 6x1 bytes, 2 dwords, sbcs
-	case 2: return std::make_unique<InfixBuilder_c<3>>(); // upto 6x2 bytes, 3 dwords, utf-8
-	case 3: return std::make_unique<InfixBuilder_c<5>>(); // upto 6x3 bytes, 5 dwords, utf-8
+	case 1: return std::make_unique<InfixBuilder_c<2>>( eDictFormat ); // upto 6x1 bytes, 2 dwords, sbcs
+	case 2: return std::make_unique<InfixBuilder_c<3>>( eDictFormat ); // upto 6x2 bytes, 3 dwords, utf-8
+	case 3: return std::make_unique<InfixBuilder_c<5>>( eDictFormat ); // upto 6x3 bytes, 5 dwords, utf-8
 	default: pError->SetSprintf ( "unhandled max infix codepoint size %d", iCodepointBytes ); return nullptr;
 	}
 }

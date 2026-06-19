@@ -19,6 +19,8 @@ Note that you do not need to add the above fields when creating a percolate tabl
 
 What you need to keep in mind when creating a new percolate table is to specify the expected schema of a document, which will be checked against the rules you will add later. This is done in the same way as for [any other local table](../../Creating_a_table/Local_tables.md).
 
+Percolate tables do not support [dict=keywords_32k](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict).
+
 
 <!-- intro -->
 ##### Creating a percolate table via SQL:

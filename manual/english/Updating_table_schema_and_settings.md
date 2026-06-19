@@ -350,7 +350,7 @@ Manticore does not persist whether the current vector in that column was generat
 
 <!-- request Example -->
 ```sql
-ALTER TABLE products ADD COLUMN embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title';
+ALTER TABLE products ADD COLUMN embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title';
 ALTER TABLE products REBUILD EMBEDDINGS embedding;
 ```
 

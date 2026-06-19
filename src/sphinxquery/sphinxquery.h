@@ -42,6 +42,8 @@ struct XQKeyword_t
 	{}
 };
 
+void SetKeywordWithMarkers ( CSphString & sDst, const char * sPrefix, const CSphString & sWord, const char * sSuffix="" );
+
 
 /// extended query operator
 enum XQOperator_e : BYTE

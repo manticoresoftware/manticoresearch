@@ -49,7 +49,6 @@ bool ShouldRewriteFilters ( const CSphQuery & tHeadQuery, const CSphQuery & tFac
 bool CopyFilters ( const CSphQuery & tHeadQuery, CSphQuery & tFacetQuery, CSphString & sError, bool bUseOwnExclusionRuleInNoneClause );
 
 const char * GetBucketStatus ( const CSphMatch & tMatch, const ISphSchema & tSchema, const FacetStatusSources_t & tStatus );
-bool MatchBucketSet ( const CSphMatch & tMatch, const ISphSchema & tSchema, const FacetBucketSet_t & tBuckets );
 const CSphVector<CSphFilterSettings> * CollectSelectedFiltersForAttr ( const CSphVector<CSphFilterSettings> & dFilters, const CSphString & sAttr, CSphVector<CSphFilterSettings> & dSelected );
 
 const FacetBucketSet_t * CollectFacetStatusValuesFilter ( const CSphQuery & tFacetQuery, const ISphSchema & tBucketSchema, const AggrResult_t & tRes, FacetBucketSet_t & tBuckets );

@@ -147,6 +147,8 @@ public:
 	bool					m_bQuoted = false;
 	bool					m_bDefaultBoolOr = false;
 	int						m_iOvershortStep = 0;
+	// GetNumber() temporarily calls SetBuffer(); keep skipped-token count across that reset.
+	int						m_iSavedOversizedTokenCount = 0;
 
 	int						m_iQuorumQuote = -1;
 	int						m_iQuorumFSlash = -1;
@@ -372,6 +374,7 @@ bool XQParser_t::GetNumber ( const char * p, const char * sRestart )
 				m_tPendingToken.tInt.iValue = atoi ( sNumberBuf );
 
 			// check if it can be used as a keyword too
+			m_iSavedOversizedTokenCount += m_pTokenizer->ResetOversizedTokenCount();
 			m_pTokenizer->SetBuffer ( (BYTE*)sNumberBuf, iNumberLen );
 			sToken = (const char*) m_pTokenizer->GetToken();
 			m_pTokenizer->SetBuffer ( m_sQuery, m_iQueryLen );
@@ -726,10 +729,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 
 		// check for stopword, and create that node
 		// temp buffer is required, because GetWordID() might expand (!) the keyword in-place
-		BYTE sTmp [ MAX_TOKEN_BYTES ];
-
-		strncpy ( (char*)sTmp, sToken, MAX_TOKEN_BYTES );
-		sTmp[MAX_TOKEN_BYTES-1] = '\0';
+		BYTE * sTmp = CopyQueryTokenToScratch ( sToken );
 
 		int iStopWord = 0;
 		if ( m_pPlugin && m_pPlugin->m_fnPreMorph )
@@ -982,7 +982,7 @@ void XQParser_t::SetPhrase ( XQNode_t * pNode, bool bSetExact, XQOperator_e eOp 
 		pNode->WithWords ( [] ( auto& dWords ) {
 			dWords.for_each ([] ( XQKeyword_t & dWord ) {
 				if ( !dWord.m_sWord.IsEmpty() )
-					dWord.m_sWord.SetSprintf ( "=%s", dWord.m_sWord.cstr() );
+					SetKeywordWithMarkers ( dWord.m_sWord, "=", dWord.m_sWord );
 			});
 		});
 	}
@@ -1080,7 +1080,8 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 			return false;
 
 		char szError [ SPH_UDF_ERROR_LEN ];
-		if ( m_pPlugin->m_fnInit && m_pPlugin->m_fnInit ( &m_pPluginData, MAX_TOKEN_BYTES, pQuery->m_sQueryTokenFilterOpts.cstr(), szError )!=0 )
+		int iQueryTokenBufferSize = GetKeywordBufSize ( pDict->GetSettings().GetDictFormat() );
+		if ( m_pPlugin->m_fnInit && m_pPlugin->m_fnInit ( &m_pPluginData, iQueryTokenBufferSize, pQuery->m_sQueryTokenFilterOpts.cstr(), szError )!=0 )
 		{
 			tParsed.m_sParseError = sError;
 			m_pPlugin = nullptr;
@@ -1113,11 +1114,14 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	m_pRoot = nullptr;
 	m_bEmpty = true;
 	m_iOvershortStep = tSettings.m_iOvershortStep;
+	m_iSavedOversizedTokenCount = 0;
 	m_iBlendedGroup = 0;
 	m_iBlendedStepDelta = 1;
 
 	m_pTokenizer->SetBuffer ( m_sQuery, m_iQueryLen );
 	int iRes = yyparse ( this );
+	int iSkippedTokens = m_iSavedOversizedTokenCount + m_pTokenizer->ResetOversizedTokenCount();
+	WarnAppendSkipped ( tParsed.m_sParseWarning, iSkippedTokens );
 
 	if ( m_pPlugin )
 	{

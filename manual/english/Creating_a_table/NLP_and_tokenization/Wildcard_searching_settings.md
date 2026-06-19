@@ -19,7 +19,7 @@ For example, if the word "example" is indexed with min_prefix_len=3, it can be f
 Note that with [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=crc min_prefix_len will affect the size of the full-text index since each word expansion will be stored additionally.
 
 Manticore can differentiate perfect word matches from prefix matches and rank the former higher if the following conditions are met:
-* [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=keywords (on by default)
+* [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=keywords (on by default) or dict=keywords_32k
 * [index_exact_words](../../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words)=1 (off by default),
 * [expand_keywords](../../Searching/Options.md#expand_keywords)=1 (also off by default)
 
@@ -133,7 +133,7 @@ The min_infix_len setting determines the minimum length of an infix prefix to in
 When enabled, infixes allow for wildcard searching with term patterns like `start*`, `*end`, `*middle*`, , and so on. It also allows you to disable too short wildcards if they are too expensive to search for.
 
 If the following conditions are met, Manticore can differentiate perfect word matches from infix matches and rank the former higher:
-* [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=keywords (on by default)
+* [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=keywords (on by default) or dict=keywords_32k
 * [index_exact_words](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=1 (off by default),
 * [expand_keywords](../../Searching/Options.md#expand_keywords)=1 (also off by default)
 
@@ -145,7 +145,7 @@ Infixes must be at least 2 characters long, and wildcards like `*a*` are not all
 
 When min_infix_len is set to a positive number, the [minimum prefix length](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len) is considered 1. For [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict) word infixing and prefixing cannot be both enabled at the same time. For [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict) and other fields to have prefixes declared with [prefix_fields](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#prefix_fields), it is forbidden to declare the same field in both lists.
 
-If dict=keywords, besides the wildcard `*` two other wildcard characters can be used:
+With dict=keywords or dict=keywords_32k, besides the wildcard `*` two other wildcard characters can be used:
 * `?` can match any (one) character:  `t?st` will match `test`, but not `teast`
 * `%` can match zero or one character:  `tes%` will match `tes` or `test`, but not `testing`
 
@@ -300,9 +300,9 @@ table products {
 max_substring_len = length
 ```
 
-The max_substring_len directive sets the maximum substring length to be indexed for either prefix or infix searches. This setting is optional, and its default value is 0 (which means that all possible substrings are indexed). It only applies to [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict).
+The max_substring_len directive sets the maximum substring length to be indexed for either prefix or infix searches. This setting is optional, and its default value is 0 (which means that all possible substrings are indexed). It only applies to [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=crc.
 
-By default, substring indexing in [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict) indexes  **all** possible substrings as separate keywords, which can result in an overly large full-text index. Therefore, the max_substring_len directive allows you to skip too-long substrings that will probably never be searched for.
+By default, substring indexing in [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=crc indexes  **all** possible substrings as separate keywords, which can result in an overly large full-text index. Therefore, the max_substring_len directive allows you to skip too-long substrings that will probably never be searched for.
 
 For example, a test table of 10,000 blog posts takes up a different amount of disk space depending on the settings:
 * 6.4 MB baseline (no substrings)
@@ -315,7 +315,7 @@ For example, a test table of 10,000 blog posts takes up a different amount of di
 
 Therefore, limiting the max substring length can save 10-15% of the table size.
 
-When using dict=keywords mode, there is no performance impact associated with substring length. Therefore, this directive is not applicable and is intentionally forbidden in that case. However, if required, you can still limit the length of a substring that you search for in the application code.
+When using dict=keywords or dict=keywords_32k mode, substring indexing is handled by the word dictionary rather than by pre-indexing CRC substrings. Therefore, this directive is not applicable and is intentionally forbidden in that case. However, if required, you can still limit the length of a substring that you search for in the application code.
 
 
 <!-- intro -->

@@ -45,11 +45,8 @@ SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=99 LIMIT 0 O
 <!-- Max status should also work when the visible facet is name BY id, with selected buckets reported as selected. -->
 SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OPTION facet_filter_mode='max' FACET color_name BY color_id ORDER BY FACET() ASC;;
 
-<!-- Clause order: FILTERS/EXCLUDE FILTERS before ZEROES/MODE, then ORDER/LIMIT. -->
+<!-- Clause order: FILTERS/EXCLUDE FILTERS before MODE, then ORDER/LIMIT. -->
 SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 AND size_id=10 LIMIT 0 OPTION facet_filter_mode='strict' FACET color_id FILTERS brand_id MODE max ORDER BY COUNT(*) DESC LIMIT 2 FACET size_id EXCLUDE FILTERS color_id MODE auto ORDER BY FACET() ASC FACET brand_id ALL FILTERS MODE max ORDER BY FACET() ASC;;
-
-<!-- ZEROES should preserve broad max buckets even when visible counts are scoped by ALL FILTERS. -->
-SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 AND size_id=10 LIMIT 0 OPTION facet_filter_mode='max' FACET size_id ALL FILTERS ZEROES ORDER BY FACET() ASC;;
 </sphinxql>
 
 <!-- Complex boolean filter trees should fail clearly for facet-local rewrite modes in V1. -->

@@ -205,7 +205,7 @@ nation* *nation* *national
 * `?` 可以匹配任意单个字符：`t?st` 会匹配 `test`，但不匹配 `teast`
 * `%` 可以匹配零个或一个字符：`tes%` 会匹配 `tes` 或 `test`，但不匹配 `testing`
 
-内联操作符需要启用 `dict=keywords`（默认启用）且启用前缀/中缀匹配。
+内联运算符需要 `dict=keywords`（默认启用）或 `dict=keywords_32k`，并启用前缀/中缀匹配。
 
 ### REGEX 操作符
 

@@ -37,15 +37,15 @@ ReplicationCommand_t* RtAccum_t::AddCommand ( ReplCmd_e eCmd, CSphString sIndex,
 	return m_dCmd.Last().get();
 }
 
-void RtAccum_t::SetupDict ( const RtIndex_i* pIndex, const DictRefPtr_c& pDict, bool bKeywordDict )
+void RtAccum_t::SetupDict ( const RtIndex_i* pIndex, const DictRefPtr_c& pDict, DictFormat_e eDictFormat )
 {
-	if ( pIndex == m_pIndex && pDict.Ptr() == m_pRefDict && bKeywordDict == m_bKeywordDict )
+	if ( pIndex == m_pIndex && pDict.Ptr() == m_pRefDict && eDictFormat == m_eDictFormat )
 		return;
 
-	m_bKeywordDict = bKeywordDict;
+	m_eDictFormat = eDictFormat;
 	m_pRefDict = pDict.Ptr();
 	m_pDict = GetStatelessDict ( pDict );
-	if ( m_bKeywordDict )
+	if ( IsKeywordDict() )
 	{
 		m_pDict = m_pDictRt = sphCreateRtKeywordsDictionaryWrapper ( m_pDict, pIndex->NeedStoreWordID() );
 	}
@@ -53,7 +53,7 @@ void RtAccum_t::SetupDict ( const RtIndex_i* pIndex, const DictRefPtr_c& pDict, 
 
 void RtAccum_t::ResetDict()
 {
-	assert ( !m_bKeywordDict || m_pDictRt );
+	assert ( !IsKeywordDict() || m_pDictRt );
 	if ( m_pDictRt )
 		m_pDictRt->ResetKeywords();
 
@@ -70,28 +70,58 @@ int RtAccum_t::GetPackedLen() const
 	return m_dPackedKeywords.IsEmpty() ? m_pDictRt->GetPackedLen() : m_dPackedKeywords.GetLength();
 }
 
+static inline bool IsEarlierHit ( const CSphWordHit & a, const CSphWordHit & b, int iWordCmp )
+{
+	return ( iWordCmp < 0 )
+		|| ( iWordCmp == 0 && a.m_tRowID < b.m_tRowID )
+		|| ( iWordCmp == 0 && a.m_tRowID == b.m_tRowID && HITMAN::GetPosWithField ( a.m_uWordPos ) < HITMAN::GetPosWithField ( b.m_uWordPos ) );
+}
+
 
 void RtAccum_t::Sort()
 {
 	TRACE_CONN ( "conn", "RtAccum_t::Sort" );
-	if ( !m_bKeywordDict )
+	switch ( m_eDictFormat )
+	{
+	case DictFormat_e::CRC:
 		m_dAccum.Sort ( Lesser ( [] ( const CSphWordHit& a, const CSphWordHit& b )
 		{
 			return 	( a.m_uWordID<b.m_uWordID ) ||
 				( a.m_uWordID==b.m_uWordID && a.m_tRowID<b.m_tRowID ) ||
 				( a.m_uWordID==b.m_uWordID && a.m_tRowID==b.m_tRowID && HITMAN::GetPosWithField ( a.m_uWordPos )<HITMAN::GetPosWithField ( b.m_uWordPos ) );
 		}));
-	else
-	{
+		return;
+
+	case DictFormat_e::KEYWORDS_V2:
 		assert ( m_pDictRt );
-		m_dAccum.Sort ( Lesser ( [pPackedKeywords = GetPackedKeywords()] ( const CSphWordHit& a, const CSphWordHit& b )
 		{
-			const BYTE* pPackedA = pPackedKeywords + a.m_uWordID;
-			const BYTE* pPackedB = pPackedKeywords + b.m_uWordID;
-			int iCmp = sphDictCmpStrictly ( (const char*)pPackedA + 1, *pPackedA, (const char*)pPackedB + 1, *pPackedB );
-			return ( iCmp < 0 ) || ( iCmp == 0 && a.m_tRowID < b.m_tRowID ) || ( iCmp == 0 && a.m_tRowID == b.m_tRowID && HITMAN::GetPosWithField ( a.m_uWordPos ) < HITMAN::GetPosWithField ( b.m_uWordPos ) );
-		}));
+			const BYTE * pPackedKeywords = GetPackedKeywords();
+			m_dAccum.Sort ( Lesser ( [pPackedKeywords] ( const CSphWordHit & a, const CSphWordHit & b )
+			{
+				ByteBlob_t tA = GetPackedKeywordV2 ( pPackedKeywords + a.m_uWordID );
+				ByteBlob_t tB = GetPackedKeywordV2 ( pPackedKeywords + b.m_uWordID );
+				int iCmp = sphDictCmpStrictly ( (const char *)tA.first, tA.second, (const char *)tB.first, tB.second );
+				return IsEarlierHit ( a, b, iCmp );
+			}));
+		}
+		return;
+
+	case DictFormat_e::KEYWORDS:
+		assert ( m_pDictRt );
+		{
+			const BYTE * pPackedKeywords = GetPackedKeywords();
+			m_dAccum.Sort ( Lesser ( [pPackedKeywords] ( const CSphWordHit & a, const CSphWordHit & b )
+			{
+				ByteBlob_t tA = GetPackedKeywordLegacy ( pPackedKeywords + a.m_uWordID );
+				ByteBlob_t tB = GetPackedKeywordLegacy ( pPackedKeywords + b.m_uWordID );
+				int iCmp = sphDictCmpStrictly ( (const char *)tA.first, tA.second, (const char *)tB.first, tB.second );
+				return IsEarlierHit ( a, b, iCmp );
+			}));
+		}
+		return;
 	}
+
+	assert ( 0 && "unknown dict format" );
 }
 
 
@@ -1040,7 +1070,7 @@ void RtAccum_t::SaveRtTrx ( MemoryWriter_c& tWriter ) const
 	SaveArray ( m_dPerDocHitsCount, tWriter );
 
 	// packed keywords default length is 1 no need to pass that
-	int iLen = ( m_bKeywordDict && m_pDictRt->GetPackedLen() > 1 ? (int)m_pDictRt->GetPackedLen() : 0 );
+	int iLen = ( IsKeywordDict() && m_pDictRt->GetPackedLen() > 1 ? (int)m_pDictRt->GetPackedLen() : 0 );
 	tWriter.PutDword ( iLen );
 	if ( iLen )
 		tWriter.PutBytes ( m_pDictRt->GetPackedKeywords(), iLen );

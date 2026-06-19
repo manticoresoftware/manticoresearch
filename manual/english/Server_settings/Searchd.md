@@ -76,6 +76,104 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 ```
 <!-- end -->
 
+### auth
+
+<!-- example conf auth -->
+Enables [authentication and authorization](../Security/Authentication_and_authorization.md). Optional, default is empty, which disables authentication.
+
+In [RT mode](../Read_this_first.md#Real-time-mode-vs-plain-mode), use `auth = 1` to enable authentication. Manticore stores authentication data in `auth.json` under [data_dir](../Server_settings/Searchd.md#data_dir). Use `auth = 0` or omit the setting to disable authentication.
+
+In [plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode), set `auth` to the authentication file path. Do not use `auth = 1` in plain mode.
+
+When authentication is enabled, the daemon creates the authentication file if it is missing. Before the first bootstrap, missing or empty storage is valid, including a zero-byte file, whitespace-only file, empty JSON object, or empty users and permissions arrays. Full authentication JSON is written after bootstrap. On startup, the daemon rejects invalid paths, unreadable files, group- or world-readable files, malformed JSON, duplicate stored secrets, and invalid auth data shape. Keep the file private; files created by the daemon use mode `600`.
+
+<!-- intro -->
+##### RT mode:
+
+<!-- request RT mode -->
+```ini
+searchd {
+    data_dir = /var/lib/manticore
+    auth = 1
+}
+```
+
+<!-- request Disable -->
+```ini
+searchd {
+    data_dir = /var/lib/manticore
+    auth = 0
+}
+```
+
+<!-- intro -->
+##### Plain mode:
+
+<!-- request Plain mode -->
+```ini
+searchd {
+    auth = /path/to/auth.json
+}
+```
+<!-- end -->
+
+### auth_log_level
+
+<!-- example conf auth_log_level -->
+Controls authentication log verbosity. Optional, default is `info`.
+
+Authentication events are written to a separate log file next to the daemon log. If [log](../Server_settings/Searchd.md#log) is `/var/log/manticore/searchd.log`, the authentication log is `/var/log/manticore/searchd.log.auth`.
+
+Supported values:
+
+* `disabled` - do not log authentication events.
+* `error` - log permission denials and critical failures.
+* `warning` - log errors and failed authentication attempts.
+* `info` - log warnings, successful authentication management changes, and cluster join auth-data backups.
+* `all` - log `info` events and successful user-facing authentication events.
+* `trace` - log `all` events plus successful internal transport authentication, such as Manticore Buddy and daemon-to-daemon API authentication.
+
+Successful authorization allow checks are not logged at any level. Permission denials are logged, but allow checks can happen for every query and would make the authentication log noisy even in `trace` mode.
+
+When `JOIN CLUSTER` replaces local authentication data, `info`, `all`, and `trace` logging write a JSON backup of the previous local auth data to `searchd.log.auth`. This backup can contain usernames, salts, password hashes, and bearer hashes. Treat the authentication log as sensitive operational data and redact it before sharing.
+
+<!-- request Example -->
+```ini
+auth_log_level = warning
+```
+<!-- end -->
+
+### auth_password_policy
+
+<!-- example conf auth_password_policy -->
+Controls password validation for authentication users. Optional, default is `LOW`.
+
+Supported values:
+
+* `LOW` - require a non-empty password that satisfies [auth_password_min_length](../Server_settings/Searchd.md#auth_password_min_length).
+* `MEDIUM` - require `LOW` plus at least one lowercase letter, one uppercase letter, one digit, and one non-alphanumeric character.
+
+The policy applies to `searchd --auth`, `CREATE USER`, and `SET PASSWORD`.
+
+<!-- request Example -->
+```ini
+auth_password_policy = MEDIUM
+```
+<!-- end -->
+
+### auth_password_min_length
+
+<!-- example conf auth_password_min_length -->
+Defines the minimum password length for authentication users. Optional, default is `8`.
+
+The minimum length applies to `searchd --auth`, `CREATE USER`, and `SET PASSWORD`.
+
+<!-- request Example -->
+```ini
+auth_password_min_length = 12
+```
+<!-- end -->
+
 ### auto_optimize
 
 <!-- example conf auto_optimize -->

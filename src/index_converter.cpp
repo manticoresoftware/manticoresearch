@@ -409,8 +409,7 @@ static void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tS
 	}
 
 	tSettings.m_iMinStemmingLen = tReader.GetDword ();
-	tSettings.m_bWordDict = false; // default to crc for old indexes
-	tSettings.m_bWordDict = ( tReader.GetByte()!=0 );
+	tSettings.SetDictFormat ( tReader.GetByte()!=0 ? DictFormat_e::KEYWORDS : DictFormat_e::CRC );
 
 	if ( uVersion>=36 )
 		tSettings.m_bStopwordsUnstemmed = ( tReader.GetByte()!=0 );
@@ -482,7 +481,7 @@ static bool SetupWordProcessors ( Index_t & tIndex, CSphString & sError )
 	if ( !pTokenizer )
 		return false;
 
-	DictRefPtr_c pDict { tIndex.m_tDictSettings.m_bWordDict
+	DictRefPtr_c pDict { tIndex.m_tDictSettings.IsWordDict()
 		? sphCreateDictionaryKeywords ( tIndex.m_tDictSettings, &tIndex.m_tEmbeddedDict, pTokenizer, tIndex.m_sName.cstr(), false, tIndex.m_tSettings.m_iSkiplistBlockSize, nullptr, sError )
 		: sphCreateDictionaryCRC ( tIndex.m_tDictSettings, &tIndex.m_tEmbeddedDict, pTokenizer, tIndex.m_sName.cstr(), false, tIndex.m_tSettings.m_iSkiplistBlockSize, nullptr, sError ) };
 
@@ -721,7 +720,7 @@ static bool LoadPlainIndexChunk ( Index_t & tIndex, CSphString & sError )
 		return false;
 
 	// only checkpoint and wordlist infixes are actually read here; dictionary itself is just mapped
-	if ( !tIndex.m_tWordlist.Preread ( GetIndexFileName ( sPath, "spi" ).cstr(), tIndex.m_uVersion, tIndex.m_tDictSettings.m_bWordDict, sError ) )
+	if ( !tIndex.m_tWordlist.Preread ( GetIndexFileName ( sPath, "spi" ).cstr(), tIndex.m_uVersion, tIndex.m_tDictSettings.IsWordDict(), sError ) )
 		return false;
 
 	{
@@ -1253,7 +1252,7 @@ bool ConverterPlain_t::ConvertDictionary ( Index_t & tIndex, CSphString & sError
 	tWriterDict.PutByte ( 1 );
 
 	const SphOffset_t iEndDict = tIndex.m_tWordlist.m_iWordsEnd;
-	const bool bWordDict = tIndex.m_tDictSettings.m_bWordDict;
+	const bool bWordDict = tIndex.m_tDictSettings.IsWordDict();
 	const bool bHasMorphology = tIndex.m_pDict->HasMorphology();
 
 	SphOffset_t uDoclistOffCurLast = 0;
@@ -1386,7 +1385,7 @@ bool ConverterPlain_t::ConvertDictionary ( Index_t & tIndex, CSphString & sError
 
 void ConverterPlain_t::WriteCheckpoints ( const Index_t & tIndex, CSphWriter & tWriterDict )
 {
-	const bool bKeywordDict = tIndex.m_tDictSettings.m_bWordDict;
+	const bool bKeywordDict = tIndex.m_tDictSettings.IsWordDict();
 
 	// flush infix hash entries, if any
 	if ( m_pInfixer )
@@ -1495,7 +1494,7 @@ void ConverterPlain_t::SaveHeader ( const Index_t & tIndex, DWORD uKillListSize 
 	tWriter.PutOffset ( m_tCheckpointsPosition );
 	tWriter.PutDword ( m_dCheckpoints.GetLength() );
 
-	int iInfixCodepointBytes = ( tIndex.m_tSettings.m_iMinInfixLen && tIndex.m_pDict->GetSettings().m_bWordDict ? tIndex.m_pTokenizer->GetMaxCodepointLength() : 0 );
+	int iInfixCodepointBytes = ( tIndex.m_tSettings.m_iMinInfixLen && tIndex.m_pDict->GetSettings().IsWordDict() ? tIndex.m_pTokenizer->GetMaxCodepointLength() : 0 );
 	tWriter.PutByte ( iInfixCodepointBytes ); // m_iInfixCodepointBytes, v.27+
 	tWriter.PutDword ( m_iInfixBlockOffset ); // m_iInfixBlocksOffset, v.27+
 	tWriter.PutDword ( m_iInfixCheckpointWordsSize ); // m_iInfixCheckpointWordsSize, v.34+
@@ -1534,7 +1533,7 @@ void ConverterPlain_t::SaveHeader ( const Index_t & tIndex, DWORD uKillListSize 
 	SaveTokenizerSettings ( tWriter, tIndex.m_pTokenizer, tIndex.m_tSettings.m_iEmbeddedLimit );
 
 	// dictionary
-	SaveDictionarySettings ( tWriter, tIndex.m_pDict, tIndex.m_pDict->GetSettings().m_bWordDict, tIndex.m_tSettings.m_iEmbeddedLimit );
+	SaveDictionarySettings ( tWriter, tIndex.m_pDict, tIndex.m_pDict->GetSettings().IsWordDict(), tIndex.m_tSettings.m_iEmbeddedLimit );
 
 	tWriter.PutOffset ( tIndex.m_iTotalDocuments );
 	tWriter.PutOffset ( m_tDocinfoIndex );
@@ -1598,7 +1597,7 @@ bool ConverterPlain_t::Init ( Index_t & tIndex, CSphString & sError )
 	// old schema to new schema
 	CopyAndUpdateSchema ( tIndex, m_tSchema );
 
-	if ( tIndex.m_tSettings.m_iMinInfixLen && tIndex.m_pDict->GetSettings().m_bWordDict )
+	if ( tIndex.m_tSettings.m_iMinInfixLen && tIndex.m_pDict->GetSettings().IsWordDict() )
 		m_pInfixer = sphCreateInfixBuilder ( tIndex.m_pTokenizer->GetMaxCodepointLength(), &sError );
 
 	return ( sError.IsEmpty() );
@@ -2047,7 +2046,7 @@ static bool SaveRtIndex ( Index_t & tIndex, CSphString & sWarning, CSphString & 
 	SaveTokenizerSettings ( wrMeta, tIndex.m_pTokenizer, tIndex.m_tSettings.m_iEmbeddedLimit );
 
 	// dictionary
-	SaveDictionarySettings ( wrMeta, tIndex.m_pDict, tIndex.m_pDict->GetSettings().m_bWordDict, tIndex.m_tSettings.m_iEmbeddedLimit );
+	SaveDictionarySettings ( wrMeta, tIndex.m_pDict, tIndex.m_pDict->GetSettings().IsWordDict(), tIndex.m_tSettings.m_iEmbeddedLimit );
 
 	// meta v.5
 	wrMeta.PutDword ( tIndex.m_iWordsCheckpoint );
@@ -2701,4 +2700,3 @@ int main ( int argc, char ** argv )
 
 	return 0;
 }
-

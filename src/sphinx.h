@@ -59,7 +59,7 @@ extern const char * szGIT_BRANCH_ID;
 extern const char * szGDB_SOURCE_DIR;
 
 #define SPHINX_SEARCHD_PROTO	1
-#define SPHINX_CLIENT_VERSION	1
+#define SPHINX_CLIENT_VERSION	2
 
 constexpr int64_t SMALL_INDEX_THRESH = 8192;
 
@@ -457,7 +457,6 @@ struct FacetFilterTrait_t
 	std::optional<FacetFilterMode_e> m_tMode;
 	FacetFilterClause_e m_eClause = FacetFilterClause_e::None;
 	StrVec_t m_dAttrs;
-	bool m_bZeroes = false;
 };
 
 /// table function interface
@@ -691,7 +690,7 @@ struct CSphQuery
 
 	bool			m_bFacet = false;			///< whether this a facet query
 	bool			m_bFacetHead = false;
-	bool			m_bFacetMaxRef = false;	///< internal hidden facet helper query/result
+	bool			m_bFacetMaxRef = false;	///< internal strict helper for max facet status
 	FacetFilterTrait_t m_tFacetFilter;
 	StrVec_t		m_dFacetOwnFilterAttrs;
 

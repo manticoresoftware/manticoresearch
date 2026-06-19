@@ -120,6 +120,7 @@
     * [• Cost-based optimizer](Searching/Cost_based_optimizer.md)
     * [• K-nearest neighbor vector search](Searching/KNN.md)
     * [• Hybrid search](Searching/Hybrid_search.md)
+    * [• Conversational search](Searching/Conversational_search.md)
 * [• Updating table schema and settings](Updating_table_schema_and_settings.md)
     * [• Updating table schema in RT mode](Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode)
     * [• Updating table FT settings in RT mode](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode)
@@ -148,6 +149,7 @@
     * [• Flushing hostnames](Securing_and_compacting_a_table/Flushing_hostnames.md)
 * [≫ Security]
     * [• SSL](Security/SSL.md)
+    * [• Authentication and authorization](Security/Authentication_and_authorization.md)
     * [• Read-only](Security/Read_only.md)
 * [≫ Logging]
     * [• Query logging](Logging/Query_logging.md)
@@ -213,4 +215,3 @@
 * [📖 References](References.md)
     * [• Previous versions](References.md#Documentation-for-old-Manticore-versions)
 <!-- proofread -->
-

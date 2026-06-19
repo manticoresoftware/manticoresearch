@@ -11359,17 +11359,12 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, DictFo
 		pFilenameBuilder = fnCreateFilenameBuilder ( sIndexName.cstr() );
 
 	DictFormat_e eNewDictFormat = tSettings.m_tDict.GetDictFormat();
-	if ( eNewDictFormat!=eCurrentDictFormat )
+	const bool bDictFormatChanged = eNewDictFormat!=eCurrentDictFormat;
+	const bool bUpgradeToKeywordsV2 = eCurrentDictFormat==DictFormat_e::KEYWORDS && eNewDictFormat==DictFormat_e::KEYWORDS_V2;
+	if ( bDictFormatChanged && !bUpgradeToKeywordsV2 )
 	{
 		sError.SetSprintf ( "'%s': changing dict from %s to %s is not supported by RECONFIGURE",
 			sIndexName.cstr(), DictFormatName ( eCurrentDictFormat ), DictFormatName ( eNewDictFormat ) );
-		return true;
-	}
-
-	if ( eNewDictFormat==DictFormat_e::KEYWORDS_V2
-		&& ( tSettings.m_tIndex.RawMinPrefixLen()!=tIndexSettings.RawMinPrefixLen() || tSettings.m_tIndex.m_iMinInfixLen!=tIndexSettings.m_iMinInfixLen ) )
-	{
-		sError.SetSprintf ( "'%s': changing dict=keywords_32k prefix or infix settings is not supported by RECONFIGURE", sIndexName.cstr() );
 		return true;
 	}
 
@@ -11470,6 +11465,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, DictFo
 	const bool tSettings_m_tMutableSettings_HasSettings = tSettings.m_tMutableSettings.HasSettings();
 	// compare options
 	if ( !bSame
+		|| bDictFormatChanged
 		|| uTokHash!=pTokenizer_GetSettingsFNV
 		|| uDictHash!=tDict_GetSettingsFNV
 		|| iMaxCodepointLength!=pTokenizer_GetMaxCodepointLength

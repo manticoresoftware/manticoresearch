@@ -3,7 +3,7 @@
 ## Версия 27.1.5
 **Выпуск**: 19 июня 2026 года
 
-Этот релиз приносит встроенную аутентификацию и авторизацию, шардированные таблицы, более быстрые сборки HNSW, улучшенные фасеты и агрегации, а также длинный список исправлений в KNN, репликации, совместимости протоколов и других областях.
+Этот релиз приносит встроенную аутентификацию и авторизацию, шардинг таблиц, разговорный поиск, более быструю сборку HNSW, улучшенные фасеты и агрегации, а также длинный список исправлений в KNN, репликации, совместимости протокола и других областях.
 
 ### Новые возможности и улучшения
 * 🆕 [v27.1.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/27.1.1) [ Issue #4617](https://github.com/manticoresoftware/manticoresearch/issues/4617) [ PR #4647](https://github.com/manticoresoftware/manticoresearch/pull/4647) Добавлен [dict=keywords_32k](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict) — словарь слов по выбору для токенов до 32 КиБ, что позволяет индексировать и искать длинные сгенерированные машиной значения, такие как хэши, ID сообщений и длинные токены вида email, без тихого усечения.
@@ -15,7 +15,7 @@
 * 🆕 [v25.14.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.14.0) [ PR #4589](https://github.com/manticoresoftware/manticoresearch/pull/4589) Добавлена поддержка многопоточной сборки HNSW, что ускоряет построение KNN-индекса при первичной сборке, слиянии чанков и `ALTER TABLE ... REBUILD KNN`.
 * 🆕 [v25.13.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.13.0) [ PR #4475](https://github.com/manticoresoftware/manticoresearch/pull/4475) Добавлен `searchd --check`, позволяющий проверять конфигурацию перед запуском без побочных эффектов.
 * 🆕 [v25.12.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.12.0) [ Issue #4531](https://github.com/manticoresoftware/manticoresearch/issues/4531) Добавлен `facet_filter_mode` для фасетного поиска, что позволяет строить более гибкие e-commerce-фильтры и сохранять, а также управлять альтернативными фасетными корзинами при активной фильтрации.
-* 🆕 [v25.11.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.11.0) [ PR #4558](https://github.com/manticoresoftware/manticoresearch/pull/4558) Обновлен Buddy до 3.46.0, добавлена поддержка разговорного RAG / chat search.
+* 🆕 [v25.11.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.11.0) [ PR #4558](https://github.com/manticoresoftware/manticoresearch/pull/4558) Добавлен [разговорный поиск](Searching/Conversational_search.md) в Manticore Search через [`CREATE CHAT MODEL`](Searching/Conversational_search.md) и [`CALL CHAT`](Searching/Conversational_search.md), так что существующие векторизованные таблицы могут отвечать на вопросы с помощью KNN-поиска, истории разговора и ответов на базе LLM.
 * 🆕 [v25.10.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.10.0) [ PR #4555](https://github.com/manticoresoftware/manticoresearch/pull/4555) Обновлен Buddy до 3.45.0, добавлена поддержка OpenSearch Dashboards.
 * 🆕 [v25.9.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.9.0) [ PR #4549](https://github.com/manticoresoftware/manticoresearch/pull/4549) Обновлен `manticore-load` до 1.25.0, добавлена поддержка нескольких запросов.
 * 🆕 [v25.8.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.8.0) [ PR #4414](https://github.com/manticoresoftware/manticoresearch/pull/4414) Добавлен [встроенный украинский лемматизатор](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology), расширяющий нативную поддержку морфологии для поиска по украинским текстам.
@@ -296,7 +296,7 @@
 
 **Выпущено**: 7 ноября 2025 г.
 
-❤️ Хотим выразить искреннюю благодарность [@ricardopintottrdata](https://github.com/ricardopintottrdata) за их работу над [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) и [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) — они устранили проблемы с общим числом в `HAVING` и ошибкой `filter with empty name` — а также [@jdelStrother](https://github.com/jdelStrother) за вклад в [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819), который улучшает обработку `ParseCJKSegmentation`, когда поддержка Jieba недоступна.
+❤️ Хотели бы выразить искреннюю благодарность [@ricardopintottrdata](https://github.com/ricardopintottrdata) за их работу над [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) и [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) — за устранение проблем с общим числом в `HAVING` и ошибкой `filter with empty name` — а также [@jdelStrother](https://github.com/jdelStrother) за вклад в [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819), который улучшает обработку `ParseCJKSegmentation`, когда поддержка Jieba недоступна.
 
 Ваши усилия помогают сделать проект сильнее — большое спасибо!
 

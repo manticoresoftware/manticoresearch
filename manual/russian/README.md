@@ -188,6 +188,7 @@
     * [Vector.dev](Integration/Vectordev.md)
     * [Grafana](Integration/Grafana.md)
     * [Kibana](Integration/Kibana.md)
+    * [Opensearch Dashboards](Integration/Opensearch_Dashboards.md)
     * [Kafka](Integration/Kafka.md)
     * [DBeaver](Integration/DBeaver.md)
     * [Apache Superset](Integration/Apache_Superset.md)

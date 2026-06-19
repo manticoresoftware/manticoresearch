@@ -2887,6 +2887,7 @@ MutableIndexSettings_c::MutableIndexSettings_c()
 	, m_iFlushWrite ( -1 )
 	, m_iFlushSearch ( -1 )
 	, m_dLoaded ( (int)MutableName_e::TOTAL )
+	, m_dRemoved ( (int)MutableName_e::TOTAL )
 {
 #if !_WIN32
 	m_bPreopen	= true;
@@ -2965,23 +2966,29 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 	JsonObj_c tRanker = tParser.GetStrItem ( GetMutableName ( MutableName_e::RANKER ), sError, true );
 	if ( tRanker )
 	{
-		if ( !SetStoredRanker ( tRanker.StrVal(), sError ) )
+		if ( tRanker.StrVal().IsEmpty() )
+			m_dRemoved.BitSet ( (int)MutableName_e::RANKER );
+		else if ( !SetStoredRanker ( tRanker.StrVal(), sError ) )
 		{
 			sphWarning ( "table %s, error: %s", sIndexName, sError.cstr() );
 			return false;
 		}
-		m_dLoaded.BitSet ( (int)MutableName_e::RANKER );
+		else
+			m_dLoaded.BitSet ( (int)MutableName_e::RANKER );
 	}
 
 	JsonObj_c tBooleanMode = tParser.GetStrItem ( GetMutableName ( MutableName_e::BOOLEAN_MODE ), sError, true );
 	if ( tBooleanMode )
 	{
-		if ( !SetStoredBooleanMode ( tBooleanMode.StrVal(), sError ) )
+		if ( tBooleanMode.StrVal().IsEmpty() )
+			m_dRemoved.BitSet ( (int)MutableName_e::BOOLEAN_MODE );
+		else if ( !SetStoredBooleanMode ( tBooleanMode.StrVal(), sError ) )
 		{
 			sphWarning ( "table %s, error: %s", sIndexName, sError.cstr() );
 			return false;
 		}
-		m_dLoaded.BitSet ( (int)MutableName_e::BOOLEAN_MODE );
+		else
+			m_dLoaded.BitSet ( (int)MutableName_e::BOOLEAN_MODE );
 	}
 
 	GetFileAccess( tParser, MutableName_e::ACCESS_PLAIN_ATTRS, false, m_tFileAccess.m_eAttr, m_dLoaded );
@@ -3041,7 +3048,7 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 	return true;
 }
 
-bool MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeedSave, StrVec_t * pWarnings, CSphString * pError )
+bool MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeedSave, StrVec_t * pWarnings, CSphString & sError )
 {
 	m_bNeedSave |= bNeedSave;
 
@@ -3066,30 +3073,24 @@ bool MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeed
 
 	if ( hIndex.Exists ( GetMutableName ( MutableName_e::RANKER ) ) )
 	{
-		CSphString sLocalError;
-		if ( !SetStoredRanker ( hIndex.GetStr ( GetMutableName ( MutableName_e::RANKER ) ), sLocalError ) )
-		{
-			if ( pError )
-				*pError = sLocalError;
-			else
-				sphWarning ( "%s", sLocalError.cstr() );
+		CSphString sRanker = hIndex.GetStr ( GetMutableName ( MutableName_e::RANKER ) );
+		if ( sRanker.IsEmpty() )
+			m_dRemoved.BitSet ( (int)MutableName_e::RANKER );
+		else if ( !SetStoredRanker ( sRanker, sError ) )
 			return false;
-		}
-		m_dLoaded.BitSet ( (int)MutableName_e::RANKER );
+		else
+			m_dLoaded.BitSet ( (int)MutableName_e::RANKER );
 	}
 
 	if ( hIndex.Exists ( GetMutableName ( MutableName_e::BOOLEAN_MODE ) ) )
 	{
-		CSphString sLocalError;
-		if ( !SetStoredBooleanMode ( hIndex.GetStr ( GetMutableName ( MutableName_e::BOOLEAN_MODE ) ), sLocalError ) )
-		{
-			if ( pError )
-				*pError = sLocalError;
-			else
-				sphWarning ( "%s", sLocalError.cstr() );
+		CSphString sBooleanMode = hIndex.GetStr ( GetMutableName ( MutableName_e::BOOLEAN_MODE ) );
+		if ( sBooleanMode.IsEmpty() )
+			m_dRemoved.BitSet ( (int)MutableName_e::BOOLEAN_MODE );
+		else if ( !SetStoredBooleanMode ( sBooleanMode, sError ) )
 			return false;
-		}
-		m_dLoaded.BitSet ( (int)MutableName_e::BOOLEAN_MODE );
+		else
+			m_dLoaded.BitSet ( (int)MutableName_e::BOOLEAN_MODE );
 	}
 
 	// DEPRICATED - remove these 2 options
@@ -3248,11 +3249,24 @@ void MutableIndexSettings_c::Combine ( const MutableIndexSettings_c & tOther )
 		m_dLoaded.BitSet ( (int)MutableName_e::PREOPEN );
 	}
 
+	if ( tOther.m_dRemoved.BitGet ( (int)MutableName_e::RANKER ) )
+	{
+		m_sRanker = "";
+		m_tQueryExecutionSettings.SetRanker ( StoredQueryExecutionSettings_t() );
+		m_dLoaded.BitClear ( (int)MutableName_e::RANKER );
+	}
+
 	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::RANKER ) )
 	{
 		m_sRanker = tOther.m_sRanker;
 		m_tQueryExecutionSettings.SetRanker ( tOther.m_tQueryExecutionSettings );
 		m_dLoaded.BitSet ( (int)MutableName_e::RANKER );
+	}
+
+	if ( tOther.m_dRemoved.BitGet ( (int)MutableName_e::BOOLEAN_MODE ) )
+	{
+		m_tQueryExecutionSettings.m_bDefaultBoolOr = false;
+		m_dLoaded.BitClear ( (int)MutableName_e::BOOLEAN_MODE );
 	}
 
 	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::BOOLEAN_MODE ) )

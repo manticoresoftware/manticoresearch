@@ -763,12 +763,41 @@ static void AddDocids ( CSphVector<CSphQueryItem> & dItems )
 }
 
 
-void PrepareQueryEmulation ( CSphQuery * pQuery )
+static void MarkEmulatedQueryRanker ( CSphQuery * pQuery, SearchQueryOrigin_e eOrigin )
+{
+	switch ( eOrigin )
+	{
+		case SearchQueryOrigin_e::ApiClient:
+		case SearchQueryOrigin_e::MasterAgent:
+			pQuery->m_bExplicitRanker = true;
+			return;
+	}
+
+	assert ( false && "unknown query origin" );
+}
+
+
+static void MarkEmulatedQueryBooleanMode ( CSphQuery * pQuery, SearchQueryOrigin_e eOrigin )
+{
+	switch ( eOrigin )
+	{
+		case SearchQueryOrigin_e::ApiClient:
+		case SearchQueryOrigin_e::MasterAgent:
+			pQuery->m_bExplicitBooleanMode = true;
+			pQuery->m_bDefaultBoolOr = false;
+			return;
+	}
+
+	assert ( false && "unknown query origin" );
+}
+
+
+void PrepareQueryEmulation ( CSphQuery * pQuery, SearchQueryOrigin_e eOrigin )
 {
 	if ( pQuery->m_eMode == SPH_MATCH_BOOLEAN )
 	{
 		pQuery->m_eRanker = SPH_RANK_NONE;
-		pQuery->m_bExplicitRanker = true;
+		MarkEmulatedQueryRanker ( pQuery, eOrigin );
 	}
 
 	if ( pQuery->m_eMode == SPH_MATCH_FULLSCAN )
@@ -777,6 +806,7 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 	if ( pQuery->m_eMode != SPH_MATCH_ALL && pQuery->m_eMode != SPH_MATCH_ANY && pQuery->m_eMode != SPH_MATCH_PHRASE )
 		return;
 
+	// Legacy match-mode text emulation is independent from the binary API request origin.
 	const char * szQuery = pQuery->m_sRawQuery.cstr();
 	int iQueryLen = szQuery ? (int) strlen ( szQuery ) : 0;
 
@@ -787,27 +817,10 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 	if ( pQuery->m_eMode==SPH_MATCH_ANY || pQuery->m_eMode==SPH_MATCH_PHRASE )
 		*szRes++ = '\"';
 
-	const bool bMatchAll = ( pQuery->m_eMode==SPH_MATCH_ALL );
-	bool bNeedAndSep = false;
-
 	if ( iQueryLen )
 	{
 		while ( ( c = *szQuery++ )!=0 )
 		{
-			if ( bMatchAll && isspace ( static_cast<unsigned char>(c) ) )
-			{
-				bNeedAndSep = true;
-				continue;
-			}
-
-			if ( bMatchAll && bNeedAndSep && szRes!=(char*)pQuery->m_sQuery.cstr() )
-			{
-				*szRes++ = ' ';
-				*szRes++ = '&';
-				*szRes++ = ' ';
-				bNeedAndSep = false;
-			}
-
 			// must be in sync with EscapeString (php api)
 			const char sMagics[] = "<\\()|-!@~\"&/^$=";
 			for ( const char * s = sMagics; *s; s++ )
@@ -820,14 +833,13 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 		}
 	}
 
-	pQuery->m_bExplicitBooleanMode = true;
-	pQuery->m_bDefaultBoolOr = false;
+	MarkEmulatedQueryBooleanMode ( pQuery, eOrigin );
 
 	switch ( pQuery->m_eMode )
 	{
-		case SPH_MATCH_ALL:		pQuery->m_eRanker = SPH_RANK_PROXIMITY; pQuery->m_bExplicitRanker = true; *szRes = '\0'; break;
-		case SPH_MATCH_ANY:		pQuery->m_eRanker = SPH_RANK_MATCHANY; pQuery->m_bExplicitRanker = true; strncpy ( szRes, "\"/1", 8 ); break;
-		case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; pQuery->m_bExplicitRanker = true; *szRes++ = '\"'; *szRes = '\0'; break;
+		case SPH_MATCH_ALL:		pQuery->m_eRanker = SPH_RANK_PROXIMITY; MarkEmulatedQueryRanker ( pQuery, eOrigin ); *szRes = '\0'; break;
+		case SPH_MATCH_ANY:		pQuery->m_eRanker = SPH_RANK_MATCHANY; MarkEmulatedQueryRanker ( pQuery, eOrigin ); strncpy ( szRes, "\"/1", 8 ); break;
+		case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; MarkEmulatedQueryRanker ( pQuery, eOrigin ); *szRes++ = '\"'; *szRes = '\0'; break;
 		default:				return;
 	}
 }
@@ -1307,7 +1319,10 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	tQuery.m_sQuery = tQuery.m_sRawQuery;
 
 	if ( tQuery.m_eQueryType!=QUERY_JSON )
-		PrepareQueryEmulation ( &tQuery );
+	{
+		SearchQueryOrigin_e eOrigin = uMasterVer>0 ? SearchQueryOrigin_e::MasterAgent : SearchQueryOrigin_e::ApiClient;
+		PrepareQueryEmulation ( &tQuery, eOrigin );
+	}
 
 	FixupQuerySettings ( tQuery );
 

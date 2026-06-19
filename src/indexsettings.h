@@ -402,11 +402,11 @@ public:
 	static MutableIndexSettings_c & GetDefaults();
 
 	bool Load ( const char * sFileName, const char * sIndexName );
-	bool Load ( const CSphConfigSection & hIndex, bool bNeedSave, StrVec_t * pWarnings, CSphString * pError=nullptr );
+	bool Load ( const CSphConfigSection & hIndex, bool bNeedSave, StrVec_t * pWarnings, CSphString & sError );
 	bool Save ( CSphString & sBuf ) const;
 
 	bool NeedSave() const { return m_bNeedSave; }
-	bool HasSettings() const { return ( m_dLoaded.BitCount()>0 ); }
+	bool HasSettings() const { return ( m_dLoaded.BitCount()>0 || m_dRemoved.BitCount()>0 ); }
 	bool IsSet ( MutableName_e eOpt ) const { return ( HasSettings() && m_dLoaded.BitGet ( (int)eOpt ) ); }
 
 	void Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * ) const override;
@@ -417,6 +417,7 @@ private:
 	bool		SetStoredRanker ( const CSphString & sRanker, CSphString & sError );
 	bool		SetStoredBooleanMode ( const CSphString & sValue, CSphString & sError );
 	CSphBitvec	m_dLoaded;
+	CSphBitvec	m_dRemoved;
 	bool		m_bNeedSave = false;
 };
 

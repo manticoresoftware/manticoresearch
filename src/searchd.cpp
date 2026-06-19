@@ -11106,6 +11106,18 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 }
 
 
+static bool ValidateStoredRankerForSchema ( const char * szIndex, const MutableIndexSettings_c & tMutableSettings, const ISphSchema & tSchema, CSphString & sError )
+{
+	CSphString sRankerError;
+	const auto & tQuerySettings = tMutableSettings.m_tQueryExecutionSettings;
+	if ( ValidateStoredRankerExpression ( tQuerySettings.m_eRanker, tQuerySettings.m_sRankerExpr, tSchema, sRankerError ) )
+		return true;
+
+	sError.SetSprintf ( "failed to validate table '%s' ranker, error: '%s'", szIndex, sRankerError.cstr() );
+	return false;
+}
+
+
 static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection & hIndex, CSphReconfigureSettings & tSettings, StrVec_t * pWarnings, CSphString & sError )
 {
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( szIndex );
@@ -11115,7 +11127,7 @@ static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection &
 		tSettings.m_tTokenizer.Setup ( hIndex, sWarning );
 		tSettings.m_tDict.Setup ( hIndex, pFilenameBuilder.get(), sWarning );
 		tSettings.m_tFieldFilter.Setup ( hIndex, sWarning );
-		if ( !tSettings.m_tMutableSettings.Load ( hIndex, false, nullptr, &sError ) )
+		if ( !tSettings.m_tMutableSettings.Load ( hIndex, false, nullptr, sError ) )
 			return false;
 
 		if ( pWarnings && !sWarning.IsEmpty() )
@@ -11145,7 +11157,13 @@ static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection &
 
 	tSettings.m_tSchema.SetupFlags ( tSettings.m_tIndex, false, nullptr );
 
-	return CheckStoredFields ( tSettings.m_tSchema, tSettings.m_tIndex, sError );
+	if ( !CheckStoredFields ( tSettings.m_tSchema, tSettings.m_tIndex, sError ) )
+		return false;
+
+	if ( !ValidateStoredRankerForSchema ( szIndex, tSettings.m_tMutableSettings, tSettings.m_tSchema, sError ) )
+		return false;
+
+	return true;
 }
 
 
@@ -11357,7 +11375,17 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	// should be able to remove settings with the empty option or remove the prev options by the last empty option
 	for ( const auto & i : tAlterSettings.m_dOpts )
 	{
-		pContainer->AddOption ( i.m_sName, i.m_sValue, true );
+		if ( i.m_sValue.IsEmpty() && ( i.m_sName=="ranker" || i.m_sName=="boolean_mode" ) )
+		{
+			pContainer->Add ( i.m_sName, i.m_sValue );
+			continue;
+		}
+
+		if ( !pContainer->AddOption ( i.m_sName, i.m_sValue, true ) )
+		{
+			tOut.Error ( pContainer->GetError().cstr() );
+			return;
+		}
 	}
 
 	if ( !pContainer->CheckPaths() )
@@ -13450,10 +13478,13 @@ bool SwitchoverIndexSeamless ( const cServedIndexRefPtr_c& pServed, const char* 
 	return LimitedParallelRotationMT ( [&]() { return DoSwitchoverIndexSeamless ( pServed, szIndex, sBase, sNewPath, dWarnings, sError ); } );
 }
 
-void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex, bool bMutableOpt, StrVec_t * pWarnings )
+bool ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError )
 {
-	pIdx->m_tSettings.Load ( hIndex, bMutableOpt, pWarnings );
+	if ( !pIdx->m_tSettings.Load ( hIndex, bMutableOpt, pWarnings, sError ) )
+		return false;
+
 	pIdx->m_sGlobalIDFPath = pIdx->m_tSettings.m_sGlobalIDFPath;
+	return true;
 }
 
 bool ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnCheck, DistributedIndex_t & tIdx, const char * szIndexName, const CSphConfigSection & hIndex, CSphString & sError, StrVec_t * pWarnings )
@@ -13723,7 +13754,11 @@ static ResultAndIndex_t LoadRTPercolate ( bool bRT, const char* szIndexName, con
 
 	// index
 	auto pServed = MakeServedIndex();
-	ConfigureLocalIndex ( pServed, hIndex, bMutableOpt, pWarnings );
+	if ( !ConfigureLocalIndex ( pServed, hIndex, bMutableOpt, pWarnings, sError ) )
+		return { ADD_ERROR, nullptr };
+	if ( !ValidateStoredRankerForSchema ( szIndexName, pServed->m_tSettings, tSchema, sError ) )
+		return { ADD_ERROR, nullptr };
+
 	pServed->m_sIndexPath = hIndex["path"].strval();
 	auto bNeedBinlog = hIndex.GetBool ( "binlog" );
 
@@ -13773,7 +13808,8 @@ static ResultAndIndex_t LoadPlainIndex ( const char * szIndexName, const CSphCon
 	ServedIndexRefPtr_c pServed = MakeServedIndex();
 	pServed->m_eType = IndexType_e::PLAIN;
 	// configure memlocking, star
-	ConfigureLocalIndex ( pServed, hIndex, bMutableOpt, pWarnings );
+	if ( !ConfigureLocalIndex ( pServed, hIndex, bMutableOpt, pWarnings, sError ) )
+		return { ADD_ERROR, nullptr };
 
 	// try to create index
 	pServed->m_sIndexPath = hIndex["path"].strval ();
@@ -13789,10 +13825,10 @@ static ResultAndIndex_t LoadPlainIndex ( const char * szIndexName, const CSphCon
 ///////////////////////////////////////////////
 /// make and configure template index
 ///////////////////////////////////////////////
-static ResultAndIndex_t LoadTemplateIndex ( const char * szIndexName, const CSphConfigSection &hIndex, bool bMutableOpt, StrVec_t * pWarnings )
+static ResultAndIndex_t LoadTemplateIndex ( const char * szIndexName, const CSphConfigSection &hIndex, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError )
 {
 	CSphIndexSettings tSettings;
-	CSphString sWarning, sError;
+	CSphString sWarning;
 	if ( !tSettings.Setup ( hIndex, szIndexName, sWarning, sError ) )
 	{
 		sphWarning ( "failed to configure table %s: %s", szIndexName, sError.cstr () );
@@ -13809,7 +13845,8 @@ static ResultAndIndex_t LoadTemplateIndex ( const char * szIndexName, const CSph
 	pServed->m_eType = IndexType_e::TEMPLATE;
 
 	// configure memlocking, star
-	ConfigureLocalIndex ( pServed, hIndex, bMutableOpt, pWarnings );
+	if ( !ConfigureLocalIndex ( pServed, hIndex, bMutableOpt, pWarnings, sError ) )
+		return { ADD_ERROR, nullptr };
 
 	pIdx->SetMutableSettings ( pServed->m_tSettings );
 	pIdx->m_iExpansionLimit = g_iExpansionLimit;
@@ -13857,7 +13894,7 @@ ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & 
 		case IndexType_e::PERCOLATE:
 			return LoadRTPercolate ( false, szIndexName, hIndex, bMutableOpt, pWarnings, sError );
 		case IndexType_e::TEMPLATE:
-			return LoadTemplateIndex ( szIndexName, hIndex, bMutableOpt, pWarnings );
+			return LoadTemplateIndex ( szIndexName, hIndex, bMutableOpt, pWarnings, sError );
 		case IndexType_e::PLAIN:
 			return LoadPlainIndex ( szIndexName, hIndex, bMutableOpt, pWarnings, sError );
 		case IndexType_e::ERROR_:

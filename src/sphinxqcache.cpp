@@ -495,11 +495,14 @@ uint64_t Qcache_c::GetKey ( int64_t iIndexId, const CSphQuery & q, const QueryEx
 	// query cache key combines a bunch of data affecting things:
 	// - index id
 	// - MATCH() part
+	// - implicit boolean operator mode
 	// - ranker
 	uint64_t k = sphFNV64 ( &iIndexId, sizeof(iIndexId) );
 	k = sphFNV64cont ( q.m_sQuery.cstr(), k );
+	BYTE uDefaultBoolOr = tQuerySettings.m_bDefaultBoolOr;
+	k = sphFNV64 ( &uDefaultBoolOr, sizeof(uDefaultBoolOr), k );
 	k = sphFNV64 ( &tQuerySettings.m_eRanker, 1, k );
-	if ( tQuerySettings.m_eRanker==SPH_RANK_EXPR )
+	if ( tQuerySettings.m_eRanker==SPH_RANK_EXPR || tQuerySettings.m_eRanker==SPH_RANK_EXPORT )
 		k = sphFNV64cont ( tQuerySettings.m_sRankerExpr.cstr(), k );
 	if ( tQuerySettings.m_eRanker==SPH_RANK_PLUGIN )
 	{

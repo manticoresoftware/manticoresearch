@@ -5624,6 +5624,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( !CheckStoredFields ( m_tSchema, m_tSettings, m_sLastError ) )
 		return 0;
 
+	const auto & tQuerySettings = m_tMutableSettings.m_tQueryExecutionSettings;
+	if ( !ValidateStoredRankerExpression ( tQuerySettings.m_eRanker, tQuerySettings.m_sRankerExpr, m_tSchema, m_sLastError ) )
+		return 0;
 
 	bool bHaveJoined = pSource0->HasJoinedFields();
 

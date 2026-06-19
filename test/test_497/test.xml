@@ -64,6 +64,12 @@ $runInvalidIndexer (
 	'bad_boolean_typo'
 );
 
+$runInvalidIndexer (
+	'invalid schema ranker expression in config',
+	"index bad_ranker_expr\n{\n\tsource = src_ok\n\tpath = $index_data_path/bad_ranker_expr\n\tranker = expr('sum(missing_score)')\n}\n",
+	'bad_ranker_expr'
+);
+
 ]]></custom_test>
 
 </test>

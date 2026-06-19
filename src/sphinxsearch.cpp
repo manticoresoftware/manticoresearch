@@ -3198,7 +3198,7 @@ public:
 		return -1;
 	}
 
-	ISphExpr * CreateNode ( int iID, ISphExpr * _pLeft, const ISphSchema *, ESphEvalStage *, bool *, CSphString & ) final
+	ISphExpr * CreateNode ( int iID, ISphExpr * _pLeft, const ISphSchema *, ESphEvalStage *, bool *, CSphString & ) override
 	{
 		SafeAddRef ( _pLeft );
 		CSphRefcountedPtr<ISphExpr> pLeft ( _pLeft );
@@ -3453,6 +3453,65 @@ public:
 	}
 };
 
+
+class ExprRankerValidateHook_c : public ExprRankerHook_T<false, false>
+{
+public:
+	ExprRankerValidateHook_c()
+		: ExprRankerHook_T<false, false> ( nullptr )
+	{}
+
+	ISphExpr * CreateNode ( int, ISphExpr *, const ISphSchema *, ESphEvalStage *, bool *, CSphString & ) override final
+	{
+		return new Expr_GetIntConst_Rank_c ( 0 );
+	}
+};
+
+
+static bool CheckRankerExpressionResult ( ESphAttr eExprType, bool bUsesWeight, const char * sCheckError, CSphString & sError )
+{
+	if ( eExprType!=SPH_ATTR_INTEGER && eExprType!=SPH_ATTR_FLOAT )
+	{
+		sError = "ranking expression must evaluate to integer or float";
+		return false;
+	}
+	if ( bUsesWeight )
+	{
+		sError = "ranking expression must not refer to WEIGHT()";
+		return false;
+	}
+	if ( sCheckError )
+	{
+		sError = sCheckError;
+		return false;
+	}
+
+	return true;
+}
+
+
+bool ValidateStoredRankerExpression ( ESphRankMode eRanker, const CSphString & sRankerExpr, const ISphSchema & tSchema, CSphString & sError )
+{
+	if ( eRanker!=SPH_RANK_EXPR && eRanker!=SPH_RANK_EXPORT )
+		return true;
+
+	ExprRankerValidateHook_c tHook;
+	bool bUsesWeight = false;
+	ESphAttr eExprType = SPH_ATTR_NONE;
+
+	ExprParseArgs_t tExprArgs;
+	tExprArgs.m_pAttrType = &eExprType;
+	tExprArgs.m_pUsesWeight = &bUsesWeight;
+	tExprArgs.m_pHook = &tHook;
+
+	ISphExprRefPtr_c pExpr ( sphExprParse ( sRankerExpr.cstr(), tSchema, sError, tExprArgs ) );
+	if ( !pExpr )
+		return false;
+
+	return CheckRankerExpressionResult ( eExprType, bUsesWeight, tHook.m_sCheckError, sError );
+}
+
+
 /// initialize ranker state
 template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
 bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, const int * pWeights, ExtRanker_T<true> * pRanker, CSphString & sError,	DWORD uFactorFlags )
@@ -3555,21 +3614,9 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, 
 	m_pExpr = sphExprParse ( m_sExpr, *m_pSchema, sError, tExprArgs ); // FIXME!!! profile UDF here too
 	if ( !m_pExpr )
 		return false;
-	if ( m_eExprType!=SPH_ATTR_INTEGER && m_eExprType!=SPH_ATTR_FLOAT )
-	{
-		sError = "ranking expression must evaluate to integer or float";
+
+	if ( !CheckRankerExpressionResult ( m_eExprType, bUsesWeight, tHook.m_sCheckError, sError ) )
 		return false;
-	}
-	if ( bUsesWeight )
-	{
-		sError = "ranking expression must not refer to WEIGHT()";
-		return false;
-	}
-	if ( tHook.m_sCheckError )
-	{
-		sError = tHook.m_sCheckError;
-		return false;
-	}
 
 	int iUniq = m_iMaxQpos;
 	if_const ( HANDLE_DUPES )

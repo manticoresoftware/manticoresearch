@@ -1010,6 +1010,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 			sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
 	DictRefPtr_c pDict;
+	MutableIndexSettings_c tMutableSettings;
 
 	// setup tokenization filters
 	if ( !g_sBuildStops )
@@ -1030,8 +1031,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 		if ( !pDict )
 			sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
-		MutableIndexSettings_c tMutableSettings;
-		if ( !tMutableSettings.Load ( hIndex, false, nullptr, &sError ) )
+		if ( !tMutableSettings.Load ( hIndex, false, nullptr, sError ) )
 			sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
 		bool bNeedExact = ( pDict->HasMorphology() || pDict->GetWordformsFileInfos().GetLength() || tMutableSettings.m_iExpandKeywords );
@@ -1262,6 +1262,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 				pIndex->SetKeepAttrs ( g_sKeepAttrsPath, g_dKeepAttrs );
 		}
 		pIndex->Setup ( tSettings );
+		pIndex->SetMutableSettings ( tMutableSettings );
 
 		ConsoleIndexProgress_t tProgress;
 		bOK = pIndex->Build ( dSources, g_iMemLimit, g_iWriteBuffer, tProgress )!=0;

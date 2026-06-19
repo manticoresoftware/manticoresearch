@@ -468,6 +468,42 @@ show create table test5;
 drop table test5;
 </sphinxql>
 
+<sphinxql>
+<!-- invalid ALTER TABLE query defaults must fail without clearing previous values -->
+create table test6 ( title text, score int ) ranker='bm25' boolean_mode='or';
+alter table test6 ranker='typo';
+show table test6 settings;
+alter table test6 boolean_mode='OR';
+show table test6 settings;
+alter table test6 boolean_mode='typo';
+show table test6 settings;
+alter table test6 ranker='';
+alter table test6 boolean_mode='';
+show table test6 settings;
+drop table test6;
+</sphinxql>
+
+<sphinxql>
+<!-- stored ranker expressions must be schema-validated before create/alter persistence -->
+create table test7_bad_create ( title text, score int ) ranker='expr(sum(missing_score))';
+create table test7_bad_weight ( title text, score int ) ranker='expr(weight())';
+create table test7_bad_export ( title text, score int ) ranker='export(sum(missing_score))';
+
+create table test7_good ( title text, score int ) ranker='expr(sum(score))';
+insert into test7_good values (1, 'alpha', 10);
+insert into test7_good values (2, 'alpha', 2);
+select id, weight() as w from test7_good where match('alpha') order by w desc, id asc;
+
+alter table test7_good ranker='expr(sum(missing_score))';
+show table test7_good settings;
+select id, weight() as w from test7_good where match('alpha') order by w desc, id asc;
+
+alter table test7_good ranker='expr(1)';
+show table test7_good settings;
+select id, weight() as w from test7_good where match('alpha') order by id asc;
+drop table test7_good;
+</sphinxql>
+
 
 </queries>
 

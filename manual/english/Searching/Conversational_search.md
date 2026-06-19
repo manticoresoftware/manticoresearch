@@ -221,6 +221,7 @@ CALL CHAT(
 
 When the fifth argument is present, Buddy checks that the field exists and is a `FLOAT_VECTOR`. If the argument is omitted, Buddy detects the first `FLOAT_VECTOR` field from `SHOW CREATE TABLE`.
 
+
 ## Search and context details
 
 When Buddy needs retrieval, it runs KNN search on the selected vector field and returns up to `retrieval_limit` rows. The default distance threshold is `0.8`.

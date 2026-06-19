@@ -29,7 +29,7 @@
 * 🆕 [v25.0.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.0.5) [ Issue #1514](https://github.com/manticoresoftware/manticoresearch/issues/1514) 新增 [EXIT CLUSTER](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md#EXIT-CLUSTER)，允许当前节点在不重启守护进程的情况下在线脱离复制集群，同时保留本地表作为普通本地表。
 
 ## 破坏性变更
-* ⚠️ **[v27.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/27.0.0)** [ Issue #2833](https://github.com/manticoresoftware/manticoresearch/issues/2833) [ PR #3648](https://github.com/manticoresoftware/manticoresearch/pull/3648) **破坏性变更**：如果启用[认证与授权](Security/Authentication_and_authorization.md)，匿名客户端访问将不再可用，而且分布式远程代理/复制操作可能失败，除非参与的守护进程为相关用户保存了匹配的认证数据。成功执行 `JOIN CLUSTER` 还会用捐赠集群的认证数据替换加入节点的本地认证数据。现有表数据仍然兼容，但迁移需要先引导创建用户、授予权限、在各节点间同步认证数据，并检查集群加入流程。仅在启用认证之前且在任何集群加入操作尚未替换本地认证数据之前，才可以安全降级。
+* ⚠️ **[v27.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/27.0.0)** [ Issue #2833](https://github.com/manticoresoftware/manticoresearch/issues/2833) [ PR #3648](https://github.com/manticoresoftware/manticoresearch/pull/3648) **破坏性变更**：默认未启用 [authentication and authorization](Security/Authentication_and_authorization.md)，但如果启用，匿名客户端访问将不再可用。升级应分阶段推进：先升级远程代理和复制对等节点，再升级对它们进行查询或管理的主节点，并且只有在整个拓扑都升级到新版本后才启用 auth。由于协议变更，新主节点可能与旧代理失败；而旧主节点仍可从新代理读取，前提是尚未启用 auth。参与的守护进程还必须为相关用户保留匹配的认证数据，而成功的 `JOIN CLUSTER` 会将加入节点的本地认证数据替换为捐赠集群的认证数据。现有表数据仍然兼容，但迁移需要先初始化用户、授予权限、在节点间同步认证数据，并重新检查集群加入流程。只有在启用 auth 之前，以及在任何集群加入操作尚未替换本地认证数据之前，降级才是安全的。
 * ⚠️ **v26.0.0** [ Issue #4431](https://github.com/manticoresoftware/manticoresearch/issues/4431) [ PR #4598](https://github.com/manticoresoftware/manticoresearch/pull/4598) **破坏性变更**：依赖传入的复制表按集群 `path` 存储的复制集群，将不再以相同方式工作，因为接收到的表现在位于标准的 [data_dir](Server_settings/Searchd.md#data_dir)/`<table>` 布局下。现有表数据仍可使用，但如果你在复制中使用了自定义集群 `path`，迁移可能需要将复制表移动到标准 `data_dir` 布局，或重新同步到该布局。仅在采用新的复制表布局之前才可以安全降级。
 
 ### Bug 修复
@@ -295,7 +295,7 @@
 
 **发布日期**：2025年11月7日
 
-❤️ 我们谨向 [@ricardopintottrdata](https://github.com/ricardopintottrdata) 致以衷心感谢，感谢其在 [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) 和 [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 中的工作，解决了 `HAVING` 总计数和 `filter with empty name` 错误相关的问题；同时也感谢 [@jdelStrother](https://github.com/jdelStrother) 通过 [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) 所做的贡献，它改进了在未提供 Jieba 支持时对 `ParseCJKSegmentation` 的处理。
+❤️ 我们谨向 [@ricardopintottrdata](https://github.com/ricardopintottrdata) 致以诚挚感谢，感谢其在 [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) 和 [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 中所做的工作，解决了 `HAVING` 总计数和 `filter with empty name` 错误相关的问题；也感谢 [@jdelStrother](https://github.com/jdelStrother) 通过 [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) 所做的贡献，该 PR 改进了在没有 Jieba 支持时对 `ParseCJKSegmentation` 的处理。
 
 您的努力使项目更加强大——非常感谢！
 

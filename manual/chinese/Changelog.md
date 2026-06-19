@@ -3,7 +3,7 @@
 ## 版本 27.1.5
 **发布时间**: 2026年6月19日
 
-此版本带来了内置认证与授权、分片表、更快的 HNSW 构建、更好的 faceting 和 aggregations，以及涵盖 KNN、复制、协议兼容性和其他领域的一长串修复。
+本次发布带来了内置认证与授权、分片表、对话式搜索、更快的 HNSW 构建、更好的 faceting 和 aggregations，以及一长串涵盖 KNN、复制、协议兼容性和其他领域的修复。
 
 ### 新功能与改进
 * 🆕 [v27.1.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/27.1.1) [ Issue #4617](https://github.com/manticoresoftware/manticoresearch/issues/4617) [ PR #4647](https://github.com/manticoresoftware/manticoresearch/pull/4647) 新增 [dict=keywords_32k](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)，这是一个可选启用的词典，支持最长 32 KiB 的 token，使得索引和搜索哈希、消息 ID 以及类似邮件的长机器生成值成为可能，而不会被静默截断。
@@ -15,7 +15,7 @@
 * 🆕 [v25.14.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.14.0) [ PR #4589](https://github.com/manticoresoftware/manticoresearch/pull/4589) 新增多线程 HNSW 构建支持，加快初始构建、块合并以及 `ALTER TABLE ... REBUILD KNN` 期间的 KNN 索引构建速度。
 * 🆕 [v25.13.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.13.0) [ PR #4475](https://github.com/manticoresoftware/manticoresearch/pull/4475) 新增 `searchd --check`，可在启动前无副作用地验证配置。
 * 🆕 [v25.12.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.12.0) [ Issue #4531](https://github.com/manticoresoftware/manticoresearch/issues/4531) 新增用于分面搜索的 `facet_filter_mode`，可在活跃过滤条件下构建更丰富的电商式筛选，并保留和控制可替代的 facet 分桶。
-* 🆕 [v25.11.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.11.0) [ PR #4558](https://github.com/manticoresoftware/manticoresearch/pull/4558) 将 Buddy 更新到 3.46.0，新增对话式 RAG / 聊天搜索支持。
+* 🆕 [v25.11.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.11.0) [ PR #4558](https://github.com/manticoresoftware/manticoresearch/pull/4558) 通过 [`CREATE CHAT MODEL`](Searching/Conversational_search.md) 和 [`CALL CHAT`](Searching/Conversational_search.md) 为 Manticore Search 增加了 [对话式搜索](Searching/Conversational_search.md)，因此现有的向量化表可以借助 KNN 检索、对话历史和由 LLM 驱动的响应来回答问题。
 * 🆕 [v25.10.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.10.0) [ PR #4555](https://github.com/manticoresoftware/manticoresearch/pull/4555) 将 Buddy 更新到 3.45.0，新增对 OpenSearch Dashboards 的支持。
 * 🆕 [v25.9.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.9.0) [ PR #4549](https://github.com/manticoresoftware/manticoresearch/pull/4549) 将 `manticore-load` 更新到 1.25.0，新增多查询支持。
 * 🆕 [v25.8.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.8.0) [ PR #4414](https://github.com/manticoresoftware/manticoresearch/pull/4414) 新增内置乌克兰语词形还原器 [built-in Ukrainian lemmatizer](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology)，扩展了对乌克兰语文本搜索的原生形态学支持。
@@ -296,7 +296,7 @@
 
 **发布日期**：2025年11月7日
 
-❤️ 我们衷心感谢 [@ricardopintottrdata](https://github.com/ricardopintottrdata) 在 [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) 和 [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 中的工作——修复了 `HAVING` 总计数和 `filter with empty name` 错误相关的问题——也感谢 [@jdelStrother](https://github.com/jdelStrother) 通过 [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) 做出的贡献，该 PR 改进了在没有 Jieba 支持时对 `ParseCJKSegmentation` 的处理。
+❤️ 我们衷心感谢 [@ricardopintottrdata](https://github.com/ricardopintottrdata) 在 [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) 和 [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 中的工作，它们解决了 `HAVING` 总计数和 `filter with empty name` 错误相关的问题；同时也感谢 [@jdelStrother](https://github.com/jdelStrother) 通过 [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) 所做的贡献，它改进了在没有 Jieba 支持时对 `ParseCJKSegmentation` 的处理。
 
 您的努力使项目更加强大——非常感谢！
 

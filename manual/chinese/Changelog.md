@@ -1,8 +1,9 @@
 # 更新日志
 
-## 开发版本
+## 版本 27.1.5
+**发布时间**: 2026年6月19日
 
-即将推出。
+此版本带来了内置认证与授权、分片表、更快的 HNSW 构建、更好的 faceting 和 aggregations，以及涵盖 KNN、复制、协议兼容性和其他领域的一长串修复。
 
 ### 新功能与改进
 * 🆕 [v27.1.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/27.1.1) [ Issue #4617](https://github.com/manticoresoftware/manticoresearch/issues/4617) [ PR #4647](https://github.com/manticoresoftware/manticoresearch/pull/4647) 新增 [dict=keywords_32k](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)，这是一个可选启用的词典，支持最长 32 KiB 的 token，使得索引和搜索哈希、消息 ID 以及类似邮件的长机器生成值成为可能，而不会被静默截断。
@@ -295,7 +296,7 @@
 
 **发布日期**：2025年11月7日
 
-❤️ 我们谨向 [@ricardopintottrdata](https://github.com/ricardopintottrdata) 致以诚挚感谢，感谢其在 [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) 和 [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 中所做的工作，解决了 `HAVING` 总计数和 `filter with empty name` 错误相关的问题；也感谢 [@jdelStrother](https://github.com/jdelStrother) 通过 [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) 所做的贡献，该 PR 改进了在没有 Jieba 支持时对 `ParseCJKSegmentation` 的处理。
+❤️ 我们衷心感谢 [@ricardopintottrdata](https://github.com/ricardopintottrdata) 在 [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) 和 [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 中的工作——修复了 `HAVING` 总计数和 `filter with empty name` 错误相关的问题——也感谢 [@jdelStrother](https://github.com/jdelStrother) 通过 [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) 做出的贡献，该 PR 改进了在没有 Jieba 支持时对 `ParseCJKSegmentation` 的处理。
 
 您的努力使项目更加强大——非常感谢！
 

@@ -135,11 +135,8 @@ void TransformedSchemaBuilder_c::AddAttr ( const CSphString & sName )
 		tAttr.m_iIndex = m_tOldSchema.GetAttrIndexOriginal ( tAttr.m_sName.cstr() );
 
 	// check if new columnar attributes were added (that were not in the select list originally)
-	// a columnar attr that can't be turned into a fetch expression (e.g. a float_vector / KNN
-	// vector) is search-only and never part of a standalone result set, so drop it; this happens
-	// for columnar tables in hybrid (RRF) searches where such attrs reach the schema transform
-	if ( tAttr.IsColumnar() && !ReplaceColumnarAttrWithExpression ( tAttr, m_tNewSchema.GetAttrsCount() ) )
-		return;
+	if ( tAttr.IsColumnar() )
+		ReplaceColumnarAttrWithExpression ( tAttr, m_tNewSchema.GetAttrsCount() );
 
 	tAttr.m_eAttrType = sphPlainAttrToPtrAttr ( tAttr.m_eAttrType );
 
@@ -161,7 +158,7 @@ void TransformedSchemaBuilder_c::Finalize()
 }
 
 
-bool TransformedSchemaBuilder_c::ReplaceColumnarAttrWithExpression ( CSphColumnInfo & tAttr, int iLocator )
+void TransformedSchemaBuilder_c::ReplaceColumnarAttrWithExpression ( CSphColumnInfo & tAttr, int iLocator )
 {
 	assert ( tAttr.IsColumnar() );
 	assert ( !tAttr.m_pExpr );
@@ -178,13 +175,10 @@ bool TransformedSchemaBuilder_c::ReplaceColumnarAttrWithExpression ( CSphColumnI
 	CSphString		 sError;
 	ExprParseArgs_t	 tExprArgs;
 	tAttr.m_pExpr = sphExprParse ( tAttr.m_sName.cstr(), m_tNewSchema, sError, tExprArgs );
+	assert ( tAttr.m_pExpr );
 
 	// now remove it from schema (it will be added later with the supplied expression)
 	m_tNewSchema.RemoveAttr( tAttr.m_sName.cstr(), true );
-
-	// some columnar types (e.g. a float_vector / KNN vector) can't be referenced by an
-	// expression; report failure so the caller drops the attr instead of asserting/crashing
-	return tAttr.m_pExpr.Ptr()!=nullptr;
 }
 
 //////////////////////////////////////////////////////////////////////////

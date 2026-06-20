@@ -14,7 +14,6 @@
 
 #include "sphinxstd.h"
 #include "sphinx.h"
-#include "tokenizer/tokenizer.h"
 #include "xqdebug.h"
 
 //////////////////////////////////////////////////////////////////////////////
@@ -389,13 +388,7 @@ public:
 
 	virtual bool	IsFullscan ( const CSphQuery & tQuery ) const { return tQuery.m_sQuery.IsEmpty(); };
 	virtual bool	IsFullscan ( const XQQuery_t & tQuery ) const { return !tQuery.m_bWasFullText; };
-	bool			ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const
-	{
-		QueryExecutionSettings_t tExecutionSettings;
-		if ( pQuery )
-			tExecutionSettings = QueryExecutionSettings_t ( *pQuery );
-		return ParseQuery ( tParsed, sQuery, pQuery, tExecutionSettings, std::move ( pQueryTokenizer ), std::move ( pQueryTokenizerJson ), pSchema, pDict, tSettings, pMorphFields );
-	}
+	bool			ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const;
 	virtual bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const QueryExecutionSettings_t & tExecutionSettings, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const = 0;
 	virtual QueryParser_i * Clone() const = 0;
 };

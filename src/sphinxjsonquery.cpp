@@ -1126,17 +1126,11 @@ static bool ParseOptions ( const JsonObj_c & tOptions, CSphQuery & tQuery, CSphS
 		else if ( i.IsStr() )
 		{
 			CSphString sRanker = i.StrVal();
-			const char * szRanker = sRanker.cstr();
-			while ( sphIsAlpha(*szRanker) )
-				szRanker++;
+			CSphString sExpr;
 
-			if ( *szRanker=='(' && sRanker.Ends(")")  )
+			if ( sphSplitRankerCall ( i.StrVal(), sRanker, sExpr ) )
 			{
-				int iRankerNameLen = szRanker-sRanker.cstr();
-				CSphString sExpr = sRanker.SubString (iRankerNameLen+1, sRanker.Length()-iRankerNameLen-2 );
 				sExpr.Unquote();
-
-				sRanker = sRanker.SubString ( 0, iRankerNameLen );
 				eAdd = ::AddOptionRanker ( tQuery, sOpt, sRanker, [sExpr]{ return sExpr; }, STMT_SELECT, sError );
 			}
 

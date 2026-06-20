@@ -1262,6 +1262,8 @@ DiskIndexQwordTraits_c * sphCreateDiskIndexQword ( bool bInlineHits );
 
 /// returns ranker name as string
 const char * sphGetRankerName ( ESphRankMode eRanker );
+bool sphParseRankerName ( const CSphString & sRanker, ESphRankMode & eRanker );
+bool sphSplitRankerCall ( const CSphString & sRanker, CSphString & sName, CSphString & sArg );
 
 struct DocstoreDoc_t
 {

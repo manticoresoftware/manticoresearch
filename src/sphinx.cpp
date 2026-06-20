@@ -191,6 +191,46 @@ const char * sphGetRankerName ( ESphRankMode eRanker )
 	return g_dRankerNames[eRanker];
 }
 
+
+bool sphParseRankerName ( const CSphString & sRanker, ESphRankMode & eRanker )
+{
+	const char * szRanker = sRanker.cstr();
+	if ( !szRanker )
+		return false;
+
+	for ( int iRanker = SPH_RANK_PROXIMITY_BM25; iRanker<SPH_RANK_TOTAL; ++iRanker )
+	{
+		const char * szName = sphGetRankerName ( ESphRankMode ( iRanker ) );
+		if ( szName && sRanker==szName )
+		{
+			eRanker = ESphRankMode ( iRanker );
+			return true;
+		}
+	}
+
+	return false;
+}
+
+
+bool sphSplitRankerCall ( const CSphString & sRanker, CSphString & sName, CSphString & sArg )
+{
+	const char * szRanker = sRanker.cstr();
+	if ( !szRanker )
+		return false;
+
+	const char * szArg = szRanker;
+	while ( sphIsAlpha ( *szArg ) )
+		++szArg;
+
+	if ( szArg==szRanker || *szArg!='(' || !sRanker.Ends ( ")" ) )
+		return false;
+
+	int iNameLen = szArg-szRanker;
+	sName = sRanker.SubString ( 0, iNameLen );
+	sArg = sRanker.SubString ( iNameLen+1, sRanker.Length()-iNameLen-2 );
+	return true;
+}
+
 /////////////////////////////////////////////////////////////////////
 
 /// everything required to setup search term
@@ -1932,23 +1972,16 @@ bool ParseStoredRanker ( const CSphString & sRanker, QueryExecutionSettings_t & 
 	if ( sRanker.IsEmpty() )
 		return true;
 
-	const char * sRankerCstr = sRanker.cstr();
-	for ( int iRanker = SPH_RANK_PROXIMITY_BM25; iRanker<=SPH_RANK_SPH04; iRanker++ )
-		if ( !strcasecmp ( sRankerCstr, sphGetRankerName ( ESphRankMode ( iRanker ) ) ) )
-		{
-			tSettings.m_eRanker = ESphRankMode ( iRanker );
-			tSettings.m_sRankerExpr = "";
-			tSettings.m_sUDRanker = "";
-			tSettings.m_sUDRankerOpts = "";
-			return true;
-		}
-
-	auto SetExprRanker = [&] ( ESphRankMode eRanker, int iPrefixLen )
+	auto SetRanker = [&] ( ESphRankMode eRanker )
 	{
-		if ( sRanker.Length()<=iPrefixLen || sRanker.cstr()[sRanker.Length()-1]!=')' )
-			return false;
+		tSettings.m_eRanker = eRanker;
+		tSettings.m_sRankerExpr = "";
+		tSettings.m_sUDRanker = "";
+		tSettings.m_sUDRankerOpts = "";
+	};
 
-		CSphString sExpr = sRanker.SubString ( iPrefixLen, sRanker.Length()-iPrefixLen-1 );
+	auto SetExprRanker = [&] ( ESphRankMode eRanker, CSphString sExpr )
+	{
 		sExpr.Trim();
 		if ( sExpr.Length()>=2 )
 		{
@@ -1957,25 +1990,54 @@ bool ParseStoredRanker ( const CSphString & sRanker, QueryExecutionSettings_t & 
 				sExpr = sExpr.SubString ( 1, sExpr.Length()-2 );
 		}
 
-		tSettings.m_eRanker = eRanker;
+		SetRanker ( eRanker );
 		tSettings.m_sRankerExpr = sExpr;
-		tSettings.m_sUDRanker = "";
-		tSettings.m_sUDRankerOpts = "";
-		return true;
 	};
 
-	if ( !strncasecmp ( sRankerCstr, "expr(", 5 ) )
-		return SetExprRanker ( SPH_RANK_EXPR, 5 );
-
-	if ( !strncasecmp ( sRankerCstr, "export(", 7 ) )
-		return SetExprRanker ( SPH_RANK_EXPORT, 7 );
-
-	if ( sphPluginExists ( PLUGIN_RANKER, sRankerCstr ) )
+	auto SetPluginRanker = [&] ( const CSphString & sName, const CSphString & sOpts )
 	{
 		tSettings.m_eRanker = SPH_RANK_PLUGIN;
-		tSettings.m_sUDRanker = sRanker;
+		tSettings.m_sUDRanker = sName;
 		tSettings.m_sRankerExpr = "";
-		tSettings.m_sUDRankerOpts = "";
+		tSettings.m_sUDRankerOpts = sOpts;
+	};
+
+	CSphString sRankerName = sRanker;
+	CSphString sRankerArg;
+	bool bHasRankerArg = sphSplitRankerCall ( sRanker, sRankerName, sRankerArg );
+
+	ESphRankMode eRanker = SPH_RANK_TOTAL;
+	if ( sphParseRankerName ( sRankerName, eRanker ) )
+	{
+		if ( eRanker==SPH_RANK_EXPR || eRanker==SPH_RANK_EXPORT )
+		{
+			if ( !bHasRankerArg )
+			{
+				sError.SetSprintf ( "missing ranker expression (use ranker='expr(1+2)' for example)" );
+				return false;
+			}
+
+			SetExprRanker ( eRanker, sRankerArg );
+			return true;
+		}
+
+		if ( bHasRankerArg )
+		{
+			sError.SetSprintf ( "unknown table ranker '%s'", sRanker.cstr() );
+			return false;
+		}
+
+		SetRanker ( eRanker );
+		return true;
+	}
+
+	if ( sphPluginExists ( PLUGIN_RANKER, sRankerName.cstr() ) )
+	{
+		CSphString sRankerOpts;
+		if ( bHasRankerArg )
+			sRankerOpts = sRankerArg;
+
+		SetPluginRanker ( sRankerName, sRankerOpts );
 		return true;
 	}
 
@@ -11819,9 +11881,6 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 		auto & tCurResult = pResults[i];
 		auto & tMeta = *tCurResult.m_pMeta;
 
-		if ( tMeta.m_iMultiplier==-1 )
-			continue;
-
 		// nothing to do without a sorter
 		if ( !ppSorters[i] )
 		{
@@ -11914,9 +11973,6 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 			const auto & tCurQuerySettings = dQuerySettings[j];
 			auto & tCurResult = pResults[j];
 			auto & tMeta = *tCurResult.m_pMeta;
-
-			if ( tMeta.m_iMultiplier==-1 )
-				continue;
 
 			// fullscan case
 			if ( tCurQuery.m_sQuery.IsEmpty() )

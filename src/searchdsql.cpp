@@ -902,18 +902,17 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 	switch ( eOpt )
 	{
 	case Option_e::RANKER:
+	{
 		tQuery.m_bExplicitRanker = true;
-		tQuery.m_eRanker = SPH_RANK_TOTAL;
-		for ( int iRanker = SPH_RANK_PROXIMITY_BM25; iRanker<=SPH_RANK_SPH04; iRanker++ )
-			if ( sVal==sphGetRankerName ( ESphRankMode ( iRanker ) ) )
-			{
-				tQuery.m_eRanker = ESphRankMode ( iRanker );
-				break;
-			}
+		ESphRankMode eRanker = SPH_RANK_TOTAL;
+		if ( sphParseRankerName ( sVal, eRanker ) && eRanker!=SPH_RANK_EXPR && eRanker!=SPH_RANK_EXPORT )
+			tQuery.m_eRanker = eRanker;
+		else
+			tQuery.m_eRanker = SPH_RANK_TOTAL;
 
 		if ( tQuery.m_eRanker==SPH_RANK_TOTAL )
 		{
-			if ( sVal==sphGetRankerName ( SPH_RANK_EXPR ) || sVal==sphGetRankerName ( SPH_RANK_EXPORT ) )
+			if ( eRanker==SPH_RANK_EXPR || eRanker==SPH_RANK_EXPORT )
 				return FAILED ( "missing ranker expression (use OPTION ranker=expr('1+2') for example)" );
 			else if ( sphPluginExists ( PLUGIN_RANKER, sVal.cstr() ) )
 			{
@@ -924,6 +923,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 			return FAILED ( "unknown ranker '%s'", sVal.cstr() );
 		}
 		break;
+	}
 
 	case Option_e::TOKEN_FILTER:    // tokfilter = hello.dll:hello:some_opts
 	{
@@ -1090,10 +1090,11 @@ AddOption_e AddOptionRanker ( CSphQuery & tQuery, const CSphString & sOpt, const
 
 	if ( eOpt==Option_e::RANKER )
 	{
-		if ( sVal=="expr" || sVal=="export" )
+		ESphRankMode eRanker = SPH_RANK_TOTAL;
+		if ( sphParseRankerName ( sVal, eRanker ) && ( eRanker==SPH_RANK_EXPR || eRanker==SPH_RANK_EXPORT ) )
 		{
 			tQuery.m_bExplicitRanker = true;
-			tQuery.m_eRanker = sVal=="expr" ? SPH_RANK_EXPR : SPH_RANK_EXPORT;
+			tQuery.m_eRanker = eRanker;
 			tQuery.m_sRankerExpr = fnGetUnescaped();
 			return AddOption_e::ADDED;
 		} else if ( sphPluginExists ( PLUGIN_RANKER, sVal.cstr() ) )

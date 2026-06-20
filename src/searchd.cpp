@@ -6587,26 +6587,6 @@ static bool CheckAttrs ( const VecTraits_T<T> & dAttrs, GETNAME && fnGetName, CS
 }
 
 
-static bool CheckExistingTables ( const SqlStmt_t & tStmt, CSphString & sError )
-{
-	if ( g_pLocalIndexes->Contains ( tStmt.m_sIndex ) || g_pDistIndexes->Contains ( tStmt.m_sIndex ) )
-	{
-		if ( tStmt.m_tCreateTable.m_bIfNotExists )
-			return true;
-
-		sError.SetSprintf ( "table '%s' already exists", tStmt.m_sIndex.cstr() );
-		return false;
-	}
-
-	if ( CSphSchema::IsReserved ( tStmt.m_sIndex.cstr() ) )
-	{
-		sError.SetSprintf ( "'%s' is a reserved keyword", tStmt.m_sIndex.cstr() );
-		return false;
-	}
-
-	return true;
-}
-
 static bool CheckExistingTables ( const CSphString & sIndex, bool bIfNotExists, CSphString & sError )
 {
 	if ( g_pLocalIndexes->Contains ( sIndex ) || g_pDistIndexes->Contains ( sIndex ) )
@@ -6625,6 +6605,19 @@ static bool CheckExistingTables ( const CSphString & sIndex, bool bIfNotExists, 
 	}
 
 	return true;
+}
+
+static int CheckShardIntOpt ( const char * sName, const CSphString & sIndex, const CSphVector<NameValueStr_t> & dOpts, CSphString & sError )
+{
+	int iPos = dOpts.GetFirst ( [&]( const auto & tItem ) { return tItem.m_sName==sName; } );
+	if ( iPos==-1 )
+		return iPos;
+
+	CSphVariant tVal ( dOpts[iPos].m_sValue.cstr() );
+	if ( tVal.int64val()<0 )
+		sError.SetSprintf ( "table '%s': CREATE TABLE failed: negative '%s' option is not allowed", sIndex.cstr(), sName );
+
+	return iPos;
 }
 
 static bool CheckCreateTable ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, CSphString & sError )
@@ -6656,23 +6649,10 @@ static bool CheckCreateTable ( const CSphString & sIndex, const CreateTableSetti
 	const CSphVector<NameValueStr_t> & dOpts = tCreateTable.m_dOpts;
 	if ( dOpts.GetLength() )
 	{
-		auto CheckShardIntOptLocal = [&] ( const char * sName ) -> int
-		{
-			int iPos = dOpts.GetFirst ( [&]( const auto & tItem ) { return tItem.m_sName==sName; } );
-			if ( iPos==-1 )
-				return iPos;
-
-			CSphVariant tVal ( dOpts[iPos].m_sValue.cstr() );
-			if ( tVal.int64val()<0 )
-				sError.SetSprintf ( "table '%s': CREATE TABLE failed: negative '%s' option is not allowed", sIndex.cstr(), sName );
-
-			return iPos;
-		};
-
-		int iShardsPos = CheckShardIntOptLocal ( "shards" );
+		int iShardsPos = CheckShardIntOpt ( "shards", sIndex, dOpts, sError );
 		if ( !sError.IsEmpty() )
 			return false;
-		int iRfPos = CheckShardIntOptLocal ( "rf" );
+		int iRfPos = CheckShardIntOpt ( "rf", sIndex, dOpts, sError );
 		if ( !sError.IsEmpty() )
 			return false;
 
@@ -6765,7 +6745,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 		return;
 	}
 
-	if ( !CheckExistingTables ( tStmt, sError ) )
+	if ( !CheckExistingTables ( tStmt.m_sIndex, tStmt.m_tCreateTable.m_bIfNotExists, sError ) )
 	{
 		sError.SetSprintf ( "table '%s': CREATE TABLE failed: %s", tStmt.m_sIndex.cstr(), sError.cstr() );
 		tOut.Error ( sError.cstr() );

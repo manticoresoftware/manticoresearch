@@ -481,6 +481,8 @@ SHOW CREATE TABLE table_name [ OPTION output_words = 'list' | 'file' ]
 
 Prints the `CREATE TABLE` statement used to create the specified table.
 
+If the table was created using a SQL `profile=...` shortcut, `SHOW CREATE TABLE` prints the expanded settings instead of the profile name itself.
+
 The `output_words` option allows you to control how external file settings (such as `stopwords`, `exceptions`, `wordforms`, `hitless_words`) are displayed:
 
 * `'list'` (default): Displays the content of the files as inline lists using the `*_list` options (e.g. `stopwords_list='word1; word2'`).

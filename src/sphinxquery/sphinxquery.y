@@ -70,7 +70,7 @@ query:
 
 expr:
 	beforelist						{ $$ = $1; }
-	| expr beforelist					{ $$ = pParser->AddOp ( SPH_QUERY_AND, $1, $2 ); }
+	| expr beforelist					{ $$ = pParser->AddDefaultOp ( $1, $2 ); }
 	;
 
 tok_limiter:

@@ -1,6 +1,6 @@
 # MATCH
 
-The `MATCH` clause allows for full-text searches in text fields. The input query string is [tokenized](../../Creating_a_table/NLP_and_tokenization/Data_tokenization.md) using the same settings applied to the text during indexing. In addition to the tokenization of input text, the query string supports a number of [full-text operators](../../Searching/Full_text_matching/Operators.md) that enforce various rules on how keywords should provide a valid match.
+The `MATCH` clause allows for full-text searches in text fields. The input query string is [tokenized](../../Creating_a_table/NLP_and_tokenization/Data_tokenization.md) using the same settings applied to the text during indexing. In addition to the tokenization of input text, the query string supports a number of [full-text operators](../../Searching/Full_text_matching/Operators.md) that enforce various rules on how keywords should provide a valid match. For multi-keyword queries without explicit boolean operators, SQL and HTTP JSON use different defaults: SQL follows [`boolean_mode`](../../Searching/Options.md#boolean_mode), which defaults to `and` unless overridden per table or query, while JSON `match` queries default to `or` unless you set `"operator"` explicitly.
 
 Full-text match clauses can be combined with attribute [filters](../../Searching/Filters.md) as an AND boolean. **OR relations between full-text matches and attribute filters are not supported**.
 
@@ -31,6 +31,7 @@ MATCH('search query' [, table_name])
 
 The [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) statement uses a [MATCH](../../Searching/Full_text_matching/Basic_usage.md) clause, which must come after WHERE, for performing full-text searches. `MATCH()` accepts an input string in which all [full-text operators](../../Searching/Full_text_matching/Operators.md) are available.
 
+For SQL-specific default keyword-combining behavior, see [`boolean_mode`](../../Searching/Options.md#boolean_mode).
 
 <!-- intro -->
 ##### SQL:

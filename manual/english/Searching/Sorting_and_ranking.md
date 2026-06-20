@@ -1043,6 +1043,8 @@ There is no single standard one-size-fits-all way to rank any document in any sc
 
 So ranking in Manticore is configurable. It has a notion of a so-called **ranker**. A ranker can formally be defined as a function that takes a document and a query as its input and produces a relevance value as output. In layman's terms, a ranker controls exactly how (using which specific algorithm) Manticore will assign weights to the documents.
 
+A ranker can be chosen per query with [`OPTION ranker=...`](../Searching/Options.md#ranker), or stored as a per-table default in `CREATE TABLE ... ranker='...'` (including via a table [profile](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#profile)). When both are present, the query option wins. When a query searches multiple tables without an explicit query ranker, each table keeps using its own stored default ranker, including local and remote distributed tables. The final merge compares raw returned weights; there is no automatic normalization layer that makes different rankers or custom expressions numerically comparable.
+
 ## Available built-in rankers
 
 Manticore ships with several built-in rankers suited for different purposes. Many of them use two factors: phrase proximity (also known as LCS) and BM25. Phrase proximity works on keyword positions, while BM25 works on keyword frequencies. Essentially, the better the degree of phrase match between the document body and the query, the higher the phrase proximity (it maxes out when the document contains the entire query as a verbatim quote). And BM25 is higher when the document contains more rare words. We'll save the detailed discussion for later.

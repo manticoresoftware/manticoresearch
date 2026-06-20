@@ -987,6 +987,8 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "stopword_step",			0, NULL },
 	{ "blend_chars",			0, NULL },
 	{ "expand_keywords",		0, NULL },
+	{ "ranker",				0, NULL },
+	{ "boolean_mode",			0, NULL },
 	{ "hitless_words",			0, NULL },
 	{ "hit_format",				KEY_HIDDEN | KEY_DEPRECATED, "default value" },
 	{ "rt_field",				KEY_LIST, NULL },

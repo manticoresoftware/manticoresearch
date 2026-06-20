@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>hybrid search group by attribute types and ordering modes</name>
+
+<skip_indexer/>
+
+<requires>
+<knn/>
+<embeddings/>
+<http/>
+<force-rt/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	create table group_types ( title text, size_vector float_vector knn_type='hnsw' hnsw_similarity='cosine' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title', a_int int, a_bigint bigint, a_float float, a_bool bool, a_timestamp timestamp, a_string string, a_json json, a_multi multi, a_multi64 multi64 );
+
+	insert into group_types (id, title, a_int, a_bigint, a_float, a_bool, a_timestamp, a_string, a_json, a_multi, a_multi64) values (1, 'nike', 10, 10000000000, 1.5, 1, 1710000000, 'red', '{"k":10,"arr":[1,2]}', (40,41), (10000000000,10000000001));
+	insert into group_types (id, title, a_int, a_bigint, a_float, a_bool, a_timestamp, a_string, a_json, a_multi, a_multi64) values (2, 'adidas', 10, 10000000000, 1.5, 1, 1710000000, 'red', '{"k":10,"arr":[2,3]}', (41,42), (10000000001,10000000002));
+	insert into group_types (id, title, a_int, a_bigint, a_float, a_bool, a_timestamp, a_string, a_json, a_multi, a_multi64) values (3, 'reebok', 20, 20000000000, 2.5, 0, 1720000000, 'blue', '{"k":20,"arr":[3]}', (42), (10000000002));
+	flush ramchunk group_types;
+
+	select groupby() gb, count(*) from group_types group by a_int order by count(*) desc, gb asc;
+	select groupby() gb, count(*) from group_types where hybrid_match('nike') group by a_int order by count(*) desc, gb asc;
+	select groupby() gb, count(*) from group_types group by a_bigint order by count(*) desc, gb asc;
+	select groupby() gb, count(*) from group_types where hybrid_match('nike') group by a_bigint order by count(*) desc, gb asc;
+	select groupby() gb, count(*) from group_types group by a_float order by count(*) desc, gb asc;
+	select groupby() gb, count(*) from group_types where hybrid_match('nike') group by a_float order by count(*) desc, gb asc;
+	select groupby() gb, count(*) from group_types group by a_bool order by count(*) desc, gb asc;
+	select groupby() gb, count(*) from group_types where hybrid_match('nike') group by a_bool order by count(*) desc, gb asc;
+	select groupby() gb, count(*) from group_types group by a_timestamp order by count(*) desc, gb asc;
+	select groupby() gb, count(*) from group_types where hybrid_match('nike') group by a_timestamp order by count(*) desc, gb asc;
+	select groupby() gb, count(*) from group_types group by a_string order by count(*) desc, gb asc;
+	select groupby() gb, count(*) from group_types where hybrid_match('nike') group by a_string order by count(*) desc, gb asc;
+	select groupby() gb, count(*) from group_types group by a_json.k order by count(*) desc, gb asc;
+	select groupby() gb, count(*) from group_types where hybrid_match('nike') group by a_json.k order by count(*) desc, gb asc;
+	select groupby() gb, count(*) from group_types group by a_json.arr order by count(*) desc, gb asc;
+	select groupby() gb, count(*) from group_types where hybrid_match('nike') group by a_json.arr order by count(*) desc, gb asc;
+	select groupby() gb, count(*) from group_types group by a_multi order by count(*) desc, gb asc;
+	select groupby() gb, count(*) from group_types where hybrid_match('nike') group by a_multi order by count(*) desc, gb asc;
+	select groupby() gb, count(*) from group_types group by a_multi64 order by count(*) desc, gb asc;
+	select groupby() gb, count(*) from group_types where hybrid_match('nike') group by a_multi64 order by count(*) desc, gb asc;
+
+
+	<!-- ordering modes: scalar group key -->
+	select groupby() gb, count(*) c from group_types group by a_int order by gb asc;
+	select groupby() gb, count(*) c from group_types where hybrid_match('nike') group by a_int order by gb asc;
+	select groupby() gb, count(*) c from group_types group by a_int order by gb desc;
+	select groupby() gb, count(*) c from group_types where hybrid_match('nike') group by a_int order by gb desc;
+	select groupby() gb, count(*) c from group_types group by a_int order by c asc, gb asc;
+	select groupby() gb, count(*) c from group_types where hybrid_match('nike') group by a_int order by c asc, gb asc;
+
+	<!-- ordering modes: string group key -->
+	select groupby() gb, count(*) c from group_types group by a_string order by gb desc;
+	select groupby() gb, count(*) c from group_types where hybrid_match('nike') group by a_string order by gb desc;
+
+	<!-- ordering modes: multivalue group key -->
+	select groupby() gb, count(*) c from group_types group by a_multi order by gb asc;
+	select groupby() gb, count(*) c from group_types where hybrid_match('nike') group by a_multi order by gb asc;
+	select groupby() gb, count(*) c from group_types group by a_multi order by gb desc;
+	select groupby() gb, count(*) c from group_types where hybrid_match('nike') group by a_multi order by gb desc;
+	select groupby() gb, count(*) c from group_types group by a_multi order by c asc, gb asc;
+	select groupby() gb, count(*) c from group_types where hybrid_match('nike') group by a_multi order by c asc, gb asc;
+
+
+	<!-- within-group representative ordering -->
+	select id, groupby() gb, count(*) c from group_types group by a_multi within group order by id asc order by gb asc;
+	select id, groupby() gb, count(*) c from group_types where hybrid_match('nike') group by a_multi within group order by id asc order by gb asc;
+	select id, groupby() gb, count(*) c from group_types group by a_multi within group order by id desc order by gb asc;
+	select id, groupby() gb, count(*) c from group_types where hybrid_match('nike') group by a_multi within group order by id desc order by gb asc;
+
+	drop table group_types;
+</sphinxql>
+</queries>
+
+</test>

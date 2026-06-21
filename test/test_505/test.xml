@@ -14,7 +14,7 @@
 searchd
 {
 	<searchd_settings/>
-	data_dir = <data_path path="data0"/>
+	data_dir = <data_path/>
 	binlog_path =
 }
 </config>
@@ -23,15 +23,13 @@ searchd
 <sphinxql>
 	drop table if exists issue4615;
 	create table issue4615(version int, meta_content text);
-	set session character_set_results = 'utf8mb4';
-	REPLACE INTO issue4615 SET version = 25, meta_content = '————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————', WHERE id = 1000;
+	<!-- line below should be correctly truncated; related code is in SendMysqlErrorPacket() -->
+	REPLACE INTO issue4615 SET version = 25, meta_content = '————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————— ——', WHERE id = 1000;
 	select count(*) from issue4615;
 </sphinxql>
-</queries>
-
-<httpqueries>
-<query endpoint="sql?mode=raw" method="post">REPLACE INTO issue4615 SET version = 25, meta_content = '————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————', WHERE id = 1000</query>
+	<!-- line below should be print in full size, overriding default 1024 chars. Related code is in SqlParserTraits_c::ProcessParsingError() -->
+<query endpoint="sql?mode=raw" method="post">REPLACE INTO issue4615 SET version = 25, meta_content = '—————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————— ——', WHERE id = 1000</query>
 <query endpoint="sql?mode=raw" method="post">DROP TABLE issue4615</query>
-</httpqueries>
+</queries>
 
 </test>

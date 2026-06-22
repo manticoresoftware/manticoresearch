@@ -8800,8 +8800,7 @@ static void ApplyMysqlMultiStmtSet ( const SqlStmt_t & tStmt )
 		session::Info().SetProfile ( ParseProfileFormat ( tStmt ) );
 }
 
-static bool HandleMysqlSelectStmtGroup ( CSphVector<SqlStmt_t> & dStmt, int iStart, int iEnd, CSphQueryResultMeta & tLastMeta, RowBuffer_i & dRows,
-	const CSphString & sWarning, QueryProfile_c & tProfile )
+static bool HandleMysqlSelectStmtGroup ( CSphVector<SqlStmt_t> & dStmt, int iStart, int iEnd, CSphQueryResultMeta & tLastMeta, RowBuffer_i & dRows, const CSphString & sWarning, QueryProfile_c & tProfile )
 {
 	auto& tSess = session::Info();
 

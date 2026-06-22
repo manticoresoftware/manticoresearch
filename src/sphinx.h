@@ -457,6 +457,7 @@ struct FacetFilterTrait_t
 	std::optional<FacetFilterMode_e> m_tMode;
 	FacetFilterClause_e m_eClause = FacetFilterClause_e::None;
 	StrVec_t m_dAttrs;
+	bool m_bZeroes = false;
 };
 
 /// table function interface
@@ -690,8 +691,10 @@ struct CSphQuery
 
 	bool			m_bFacet = false;			///< whether this a facet query
 	bool			m_bFacetHead = false;
-	bool			m_bFacetMaxRef = false;	///< internal strict helper for max facet status
+	bool			m_bFacetMaxRef = false;	///< internal hidden facet helper query/result
 	FacetFilterTrait_t m_tFacetFilter;
+	int				m_iFacetResultOffset = -1;	///< internal deferred facet paging: restore requested offset after zero-bucket merge/order
+	int				m_iFacetResultLimit = -1;	///< internal deferred facet paging: restore requested limit after zero-bucket merge/order
 	StrVec_t		m_dFacetOwnFilterAttrs;
 
 	QueryType_e		m_eQueryType {QUERY_API};		///< queries from sphinxql require special handling

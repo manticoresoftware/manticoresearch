@@ -3282,7 +3282,12 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 					{
 						VecTraits_T<CSphMatch> dMatches;
 						if ( !tRes.m_dResults.IsEmpty() )
-							dMatches = GetResultMatches ( tRes.m_dResults.First().m_dMatches, tRes.m_tSchema, tRes.m_iOffset, tRes.m_iCount, tAggr );
+						{
+							if ( tAggr.m_iZeroesResult>=0 )
+								dMatches = tRes.m_dResults.First().m_dMatches;
+							else
+								dMatches = GetResultMatches ( tRes.m_dResults.First().m_dMatches, tRes.m_tSchema, tRes.m_iOffset, tRes.m_iCount, tAggr );
+						}
 						tStatus.m_pAvailableBuckets = facet::CollectFacetAvailableFilters ( tRes, pKey->m_sName, dMatches, dAvailableBuckets );
 					}
 				}
@@ -4940,6 +4945,17 @@ static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<Js
 					return false;
 				bGotExcludeFilters = true;
 				tItem.m_tFacetFilter.m_eClause = FacetFilterClause_e::Exclude;
+				continue;
+			}
+
+			if ( strcmp ( tAggsItem.Name(), "zeroes" )==0 )
+			{
+				if ( !tAggsItem.IsBool() )
+				{
+					sError.SetSprintf ( "\"%s\" property should be a boolean", tAggsItem.Name() );
+					return false;
+				}
+				tItem.m_tFacetFilter.m_bZeroes = tAggsItem.IntVal()!=0;
 				continue;
 			}
 

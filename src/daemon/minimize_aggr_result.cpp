@@ -888,7 +888,7 @@ static void ComputePostlimit ( AggrResult_t & tRes, const CSphQuery & tQuery, bo
 }
 
 /// merges multiple result sets, remaps columns, does reorder for outer selects
-bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, const sph::StringSet & hExtraColumns, QueryProfile_c * pProfiler, const CSphFilterSettings * pAggrFilter, bool bForceRefItems, bool bMaster )
+bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, const sph::StringSet & hExtraColumns, QueryProfile_c * pProfiler, const CSphFilterSettings * pAggrFilter, bool bForceRefItems, bool bMaster, bool bForceSort )
 {
 	bool bReturnZeroCount = !tRes.m_dZeroCount.IsEmpty();
 	bool bQueryFromAPI = tQuery.m_eQueryType==QUERY_API;
@@ -946,7 +946,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	// if there's more than one result set,
 	// we now have to merge and order all the matches
 	// this is a good time to apply outer order clause, too
-	if ( tRes.m_iSuccesses>1 || pAggrFilter )
+	if ( bForceSort || tRes.m_iSuccesses>1 || pAggrFilter )
 	{
 		if ( !MergeAllMatches ( tRes, tQuery, bHaveLocals, bAllEqual, bMaster, pAggrFilter, pProfiler ) )
 			return false;

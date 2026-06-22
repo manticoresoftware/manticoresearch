@@ -24,7 +24,7 @@ When `CALL CHAT` runs, Buddy builds a retrieval-augmented answer in this order:
 4. The LLM decides how to handle the message: search again, answer from the previous search context, or answer without retrieval.
 5. Buddy runs KNN search with the selected vector field when retrieval is needed.
 6. Buddy builds the LLM context from the vector field's `from='...'` source fields.
-7. The configured LLM generates the answer.
+7. The configured LLM generates the answer with inline references in `[ref:<id>]` format when it uses retrieved sources.
 8. Buddy saves the user message and the assistant reply in the conversation history.
 
 The fifth argument of `CALL CHAT` is called `fields` internally, but for conversational search it means the vector field used by `knn(...)`. It is not a list of fields to return. Buddy selects rows with `SELECT *`, then removes vector columns from the `sources` payload so the response does not include large embedding values.
@@ -239,7 +239,8 @@ Buddy uses the retrieved rows as LLM context. The same rows are returned in `sou
 | `conversation_uuid` | Existing or generated conversation id. |
 | `user_query` | Original user query. |
 | `search_query` | Standalone search query used for retrieval. |
-| `response` | LLM answer. |
+| `response` | LLM answer with inline references removed. |
+| `response_with_refs` | LLM answer as generated, including inline `[ref:<id>]` references to rows in `sources`. |
 | `sources` | JSON string containing retrieved source rows. |
 
 Example response shape:
@@ -250,11 +251,12 @@ Example response shape:
   "user_query": "What is vector search?",
   "search_query": "vector search, embeddings, similarity search",
   "response": "Vector search finds similar items by comparing embeddings...",
+  "response_with_refs": "Vector search finds similar items by comparing embeddings... [ref:1]",
   "sources": "[{\"id\":1,\"title\":\"Vector Search\",\"content\":\"...\",\"knn_dist\":0.12}]"
 }
 ```
 
-Vector fields are not included in `sources`.
+Vector fields are not included in `sources`. Inline references use the source row `id`, not the source title or text. Use `response` for a plain answer and `response_with_refs` when you want to display citations.
 
 ## Managing chat models
 

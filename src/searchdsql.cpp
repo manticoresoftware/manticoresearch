@@ -220,11 +220,14 @@ CSphString SqlParserTraits_c::ToStringUnescape ( const SqlNode_t & tNode ) const
 	return SqlUnescape ( m_pBuf + tNode.m_iStart, tNode.m_iEnd - tNode.m_iStart );
 }
 
+static bool RouteToUser ( const char * szMessage, const char * pLastTokenStart );
+
 void SqlParserTraits_c::ProcessParsingError ( const char* szMessage )
 {
 	// 'wrong parser' is quite empiric - we fire it when from very beginning parser sees syntax error
 	// notice: szMessage here is NOT prefixed with "PXX:"
-	if ( ( m_pBuf == m_pLastTokenStart ) && ( strncmp ( szMessage, "syntax error", 12 ) == 0 ) )
+	if ( ( strncmp ( szMessage, "syntax error", 12 ) == 0 )
+		&& ( m_pBuf == m_pLastTokenStart || RouteToUser ( szMessage, m_pLastTokenStart ) ) )
 		m_bWrongParserSyntaxError = true;
 
 	m_pParseError->SetSprintf ( "%s %s near '%s'", m_sErrorHeader.cstr(), szMessage, m_pLastTokenStart ? m_pLastTokenStart : "(null)" );
@@ -622,6 +625,7 @@ enum class Option_e : BYTE
 	MAX_PREDICTED_TIME,
 	MAX_QUERY_TIME,
 	MORPHOLOGY,
+	BOOLEAN_MODE,
 	RAND_SEED,
 	RANKER,
 	RETRY_COUNT,
@@ -664,7 +668,7 @@ void InitParserOption()
 	const char * dOptions[(BYTE) Option_e::INVALID_OPTION] = { "agent_query_timeout", "boolean_simplify",
 		"columns", "comment", "cutoff", "debug_no_payload", "expand_keywords", "field_weights", "format", "global_idf",
 		"idf", "ignore_nonexistent_columns", "ignore_nonexistent_indexes", "index_weights", "local_df", "low_priority",
-		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
+		"max_matches", "max_predicted_time", "max_query_time", "morphology", "boolean_mode", "rand_seed", "ranker", "retry_count",
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
 		"not_terms_only_allowed", "store", "accurate_aggregation", "max_matches_increase_threshold", "distinct_precision_threshold",
 		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size", "force", "output_words", "expand_blended",
@@ -690,7 +694,7 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 			Option_e::GLOBAL_IDF, Option_e::IDF, Option_e::IGNORE_NONEXISTENT_COLUMNS,
 			Option_e::IGNORE_NONEXISTENT_INDEXES, Option_e::INDEX_WEIGHTS, Option_e::LOCAL_DF, Option_e::LOW_PRIORITY,
 			Option_e::MAX_MATCHES, Option_e::MAX_PREDICTED_TIME, Option_e::MAX_QUERY_TIME, Option_e::MORPHOLOGY,
-			Option_e::RAND_SEED, Option_e::RANKER, Option_e::RETRY_COUNT, Option_e::RETRY_DELAY, Option_e::REVERSE_SCAN,
+			Option_e::BOOLEAN_MODE, Option_e::RAND_SEED, Option_e::RANKER, Option_e::RETRY_COUNT, Option_e::RETRY_DELAY, Option_e::REVERSE_SCAN,
 			Option_e::SORT_METHOD, Option_e::STRICT_, Option_e::THREADS, Option_e::TOKEN_FILTER,
 			Option_e::NOT_ONLY_ALLOWED };
 
@@ -698,7 +702,7 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 			Option_e::CUTOFF, Option_e::DEBUG_NO_PAYLOAD, Option_e::EXPAND_KEYWORDS, Option_e::FIELD_WEIGHTS, Option_e::FORMAT,
 			Option_e::GLOBAL_IDF, Option_e::IDF, Option_e::IGNORE_NONEXISTENT_INDEXES, Option_e::INDEX_WEIGHTS,
 			Option_e::LOCAL_DF, Option_e::LOW_PRIORITY, Option_e::MAX_MATCHES, Option_e::MAX_PREDICTED_TIME,
-			Option_e::MAX_QUERY_TIME, Option_e::MORPHOLOGY, Option_e::RAND_SEED, Option_e::RANKER,
+			Option_e::MAX_QUERY_TIME, Option_e::MORPHOLOGY, Option_e::BOOLEAN_MODE, Option_e::RAND_SEED, Option_e::RANKER,
 			Option_e::RETRY_COUNT, Option_e::RETRY_DELAY, Option_e::REVERSE_SCAN, Option_e::SORT_METHOD,
 			Option_e::THREADS, Option_e::TOKEN_FILTER, Option_e::NOT_ONLY_ALLOWED, Option_e::ACCURATE_AGG,
 			Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::THREADS_EX, Option_e::EXPANSION_LIMIT,
@@ -899,17 +903,17 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 	switch ( eOpt )
 	{
 	case Option_e::RANKER:
-		tQuery.m_eRanker = SPH_RANK_TOTAL;
-		for ( int iRanker = SPH_RANK_PROXIMITY_BM25; iRanker<=SPH_RANK_SPH04; iRanker++ )
-			if ( sVal==sphGetRankerName ( ESphRankMode ( iRanker ) ) )
-			{
-				tQuery.m_eRanker = ESphRankMode ( iRanker );
-				break;
-			}
+	{
+		tQuery.m_bExplicitRanker = true;
+		ESphRankMode eRanker = SPH_RANK_TOTAL;
+		if ( sphParseRankerName ( sVal, eRanker ) && eRanker!=SPH_RANK_EXPR && eRanker!=SPH_RANK_EXPORT )
+			tQuery.m_eRanker = eRanker;
+		else
+			tQuery.m_eRanker = SPH_RANK_TOTAL;
 
 		if ( tQuery.m_eRanker==SPH_RANK_TOTAL )
 		{
-			if ( sVal==sphGetRankerName ( SPH_RANK_EXPR ) || sVal==sphGetRankerName ( SPH_RANK_EXPORT ) )
+			if ( eRanker==SPH_RANK_EXPR || eRanker==SPH_RANK_EXPORT )
 				return FAILED ( "missing ranker expression (use OPTION ranker=expr('1+2') for example)" );
 			else if ( sphPluginExists ( PLUGIN_RANKER, sVal.cstr() ) )
 			{
@@ -920,6 +924,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 			return FAILED ( "unknown ranker '%s'", sVal.cstr() );
 		}
 		break;
+	}
 
 	case Option_e::TOKEN_FILTER:    // tokfilter = hello.dll:hello:some_opts
 	{
@@ -977,6 +982,16 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 			tQuery.m_eExpandKeywords = QUERY_OPT_MORPH_NONE;
 		else
 			return FAILED ( "morphology could be only disabled with option none, got %s", sVal.cstr() );
+		break;
+
+	case Option_e::BOOLEAN_MODE:
+		if ( sVal=="or" )
+			tQuery.m_bDefaultBoolOr = true;
+		else if ( sVal=="and" )
+			tQuery.m_bDefaultBoolOr = false;
+		else
+			return FAILED ( "unknown boolean_mode='%s' (must be 'and' or 'or')", sVal.cstr() );
+		tQuery.m_bExplicitBooleanMode = true;
 		break;
 
 	case Option_e::EXPAND_BLENDED:
@@ -1076,13 +1091,16 @@ AddOption_e AddOptionRanker ( CSphQuery & tQuery, const CSphString & sOpt, const
 
 	if ( eOpt==Option_e::RANKER )
 	{
-		if ( sVal=="expr" || sVal=="export" )
+		ESphRankMode eRanker = SPH_RANK_TOTAL;
+		if ( sphParseRankerName ( sVal, eRanker ) && ( eRanker==SPH_RANK_EXPR || eRanker==SPH_RANK_EXPORT ) )
 		{
-			tQuery.m_eRanker = sVal=="expr" ? SPH_RANK_EXPR : SPH_RANK_EXPORT;
+			tQuery.m_bExplicitRanker = true;
+			tQuery.m_eRanker = eRanker;
 			tQuery.m_sRankerExpr = fnGetUnescaped();
 			return AddOption_e::ADDED;
 		} else if ( sphPluginExists ( PLUGIN_RANKER, sVal.cstr() ) )
 		{
+			tQuery.m_bExplicitRanker = true;
 			tQuery.m_eRanker = SPH_RANK_PLUGIN;
 			tQuery.m_sUDRanker = sVal;
 			tQuery.m_sUDRankerOpts = fnGetUnescaped();
@@ -3182,4 +3200,36 @@ bool FormatScrollSettings ( const AggrResult_t & tAggrRes, const CSphQuery & tQu
 	tJson.AddItem ( "order_by", tOrderBy );
 	sSettings = EncodeBase64 ( tJson.AsString() );
 	return true;
+}
+
+static bool AtTokenStart ( const char * pTokenStart, const char * sKeyword )
+{
+	if ( !pTokenStart || !sKeyword )
+		return false;
+
+	const int iLen = (int)strlen ( sKeyword );
+	if ( strncasecmp ( pTokenStart, sKeyword, iLen )!=0 )
+		return false;
+
+	const char cNext = pTokenStart[iLen];
+	return cNext==0 || sphIsSpace(cNext) || cNext=='`' || cNext==';';
+}
+
+bool RouteToUser ( const char * szMessage, const char * pLastTokenStart )
+{
+	if ( !pLastTokenStart )
+		return false;
+
+	// auth grammar adds CREATE/DROP USER to the main parser.
+	// CREATE/DROP TABLE then fails at TABLE with "expecting USER"
+	// (or "expecting TOK_USER"), and should be routed to DDL parser
+	// for canonical P03 diagnostics \ inportant for Buddy
+	const bool bExpectsUser = strstr ( szMessage, "expecting USER" ) || strstr ( szMessage, "expecting TOK_USER" );
+	if ( !bExpectsUser )
+		return false;
+
+	// auth grammar adds CREATE/DROP USER to the main parser.
+	// unrelated CREATE/DROP TABLE/CLUSTER should be routed to DDL parser
+	// for canonical diagnostics and Buddy fallback
+	return AtTokenStart ( pLastTokenStart, "table" ) || AtTokenStart ( pLastTokenStart, "cluster" );
 }

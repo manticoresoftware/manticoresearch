@@ -55,23 +55,24 @@ Create CHAT model
 ––– input –––
 mysql -h0 -P9306 -e "CREATE CHAT MODEL test_assistant (model='openai:gpt-4o-mini');"
 ––– output –––
-+--------------------------------------+
-| uuid                                 |
-+--------------------------------------+
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
-+--------------------------------------+
++----------------+
+| name           |
++----------------+
+| test_assistant |
++----------------+
 ––– comment –––
 Test 1: Initial question about RAG (NEW_SEARCH intent)
 Expected: Search for RAG/AI-related documents, response contains RAG keywords
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('What is RAG?', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }' | tee /tmp/output_1.txt
+mysql -h0 -P9306 -e "CALL CHAT('What is RAG?', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_1.txt
 ––– output –––
 *************************** 1. row ***************************
-conversation_uuid: test-conv-intent-001
-       user_query: What is RAG?
-     search_query: #!/.*(RAG|[Rr]etrieval|[Gg]eneration).*/!#
-         response: #!/.*(RAG|[Rr]etrieval|[Gg]eneration).*/!#
-          sources: #!/.*/!#
+#!/.*conversation_uuid: test-conv-intent-001/!#
+#!/.*user_query: What is RAG\?/!#
+#!/.*search_query: .*(RAG|[Rr]etrieval|[Gg]eneration).*/!#
+#!/.*response: .*(RAG|[Rr]etrieval|[Gg]eneration).*/!#
+#!/.*response_with_refs: .*/!#
+#!/.*sources: .*/!#
 ––– input –––
 grep 'sources:' /tmp/output_1.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([3])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––
@@ -80,26 +81,28 @@ OK
 Test 2: User expresses rejection (REJECTION intent - "Its boring")
 Expected: System acknowledges rejection, maintains conversation
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('Its boring', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }'
+mysql -h0 -P9306 -e "CALL CHAT('Its boring', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }'
 ––– output –––
 *************************** 1. row ***************************
-conversation_uuid: test-conv-intent-001
-       user_query: Its boring
-     search_query:
-         response: #!/.*/!#
-          sources: []
+#!/.*conversation_uuid: test-conv-intent-001/!#
+#!/.*user_query: Its boring/!#
+#!/.*search_query:[[:space:]]*$/!#
+#!/.*response: .*/!#
+#!/.*response_with_refs: .*/!#
+#!/.*sources: \[\]/!#
 ––– comment –––
 Test 3: Topic change to movies (TOPIC_CHANGE intent)
 Expected: Search for Entertainment category
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('what about movies?', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }' | tee /tmp/output_3.txt
+mysql -h0 -P9306 -e "CALL CHAT('what about movies?', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_3.txt
 ––– output –––
 *************************** 1. row ***************************
-conversation_uuid: test-conv-intent-001
-       user_query: what about movies?
-     search_query: #!/.*movie.*/!#
-         response: #!/.*/!#
-          sources: #!/.*/!#
+#!/.*conversation_uuid: test-conv-intent-001/!#
+#!/.*user_query: what about movies\?/!#
+#!/.*search_query: .*movie.*/!#
+#!/.*response: .*/!#
+#!/.*response_with_refs: .*/!#
+#!/.*sources: .*/!#
 ––– comment –––
 Verify sources contain Entertainment category after topic change
 ––– input –––
@@ -110,14 +113,15 @@ OK
 Test 4: User shows interest in specific show (INTEREST intent)
 Expected: Should find Breaking Bad in sources
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('I like Breaking Bad', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }' | tee /tmp/output_4.txt
+mysql -h0 -P9306 -e "CALL CHAT('I like Breaking Bad', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_4.txt
 ––– output –––
 *************************** 1. row ***************************
-conversation_uuid: test-conv-intent-001
-       user_query: I like Breaking Bad
-     search_query: #!/.*[Bb]reaking [Bb]ad.*/!#
-         response: #!/.*[Bb]reaking [Bb]ad.*/!#
-          sources: #!/.*/!#
+#!/.*conversation_uuid: test-conv-intent-001/!#
+#!/.*user_query: I like Breaking Bad/!#
+#!/.*search_query: .*[Bb]reaking [Bb]ad.*/!#
+#!/.*response: .*[Bb]reaking [Bb]ad.*/!#
+#!/.*response_with_refs: .*/!#
+#!/.*sources: .*/!#
 ––– input –––
 grep 'sources:' /tmp/output_4.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([6])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––
@@ -126,26 +130,28 @@ OK
 Test 6: Request for more content (ALTERNATIVES intent)
 Expected: Returns more entertainment results
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('show me more entertainment', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }'
+mysql -h0 -P9306 -e "CALL CHAT('show me more entertainment', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }'
 ––– output –––
 *************************** 1. row ***************************
-conversation_uuid: test-conv-intent-001
-       user_query: show me more entertainment
-     search_query: #!/.*/!#
-         response: #!/.*/!#
-          sources: #!/.*/!#
+#!/.*conversation_uuid: test-conv-intent-001/!#
+#!/.*user_query: show me more entertainment/!#
+#!/.*search_query: .*/!#
+#!/.*response: .*/!#
+#!/.*response_with_refs: .*/!#
+#!/.*sources: .*/!#
 ––– comment –––
 Test 7: New independent conversation - Programming topic
 Expected: Fresh context, should find Python
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('Tell me about Python', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }' | tee /tmp/output_7.txt
+mysql -h0 -P9306 -e "CALL CHAT('Tell me about Python', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_7.txt
 ––– output –––
 *************************** 1. row ***************************
-conversation_uuid: test-conv-intent-001
-       user_query: Tell me about Python
-     search_query: #!/.*[Pp]ython.*/!#
-         response: #!/.*[Pp]ython.*/!#
-          sources: #!/.*/!#
+#!/.*conversation_uuid: test-conv-intent-001/!#
+#!/.*user_query: Tell me about Python/!#
+#!/.*search_query: .*[Pp]ython.*/!#
+#!/.*response: .*[Pp]ython.*/!#
+#!/.*response_with_refs: .*/!#
+#!/.*sources: .*/!#
 ––– input –––
 grep 'sources:' /tmp/output_7.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––

@@ -27,7 +27,7 @@ Here are the available commands:
 * `--dumpheader FILENAME.sph` promptly dumps the given table header file without disturbing any other table files or even the config file. The report offers a detailed view of all the table settings, especially the complete attribute and field list.
 * `--dumpconfig FILENAME.sph` extracts the table definition from the specified table header file in an (almost) manticore.conf file-compliant format.
 * `--dumpheader TABLENAME` dumps table header by table name while searching for the header path in the config file.
-* `--dumpdict TABLENAME` dumps the dictionary. An extra `-stats` switch will add the total document count to the dictionary dump. This is necessary for dictionary files used in IDF file creation.
+* `--dumpdict TABLENAME` dumps the dictionary. An extra `-stats` switch will add the total document count to the dictionary dump. This is necessary for dictionary files used in IDF file creation. This command does not support `dict=keywords_32k` dictionaries yet.
 * `--dumpdocids TABLENAME` dumps document IDs by table name.
 * `--dumphitlist TABLENAME KEYWORD` dumps all instances (occurrences) of a specified keyword in a given table, with the keyword defined as text.
 * `--dumphitlist TABLENAME --wordid ID` dumps all instances (occurrences) of a specific keyword in a given table, with the keyword represented as an internal numeric ID.

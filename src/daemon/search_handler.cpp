@@ -24,6 +24,9 @@
 
 #include "std/string.h"
 
+#include "auth/auth.h"
+#include "auth/auth_common.h"
+
 static const bool LOG_LEVEL_LOCAL_SEARCH = env_exists ( "MANTICORE_LOG_LOCAL_SEARCH" ); // verbose logging local search events, ruled by this env variable
 #define LOG_COMPONENT_LOCSEARCHINFO __LINE__ << " "
 #define LOCSEARCHINFO LOGINFO ( LOCAL_SEARCH, LOCSEARCHINFO )
@@ -1392,6 +1395,31 @@ static void FixupSystemTableW ( StrVec_t & dNames, CSphQuery & tQuery ) noexcept
 ////////////////////////////////////////////////////////////////
 // check for single-query, multi-queue optimization possibility
 ////////////////////////////////////////////////////////////////
+static bool HasSameRankerIntent ( const CSphQuery & tLeft, const CSphQuery & tRight )
+{
+	if ( tLeft.m_bExplicitRanker!=tRight.m_bExplicitRanker )
+		return false;
+
+	if ( tLeft.m_eRanker!=tRight.m_eRanker )
+		return false;
+
+	if ( tLeft.m_eRanker==SPH_RANK_EXPR || tLeft.m_eRanker==SPH_RANK_EXPORT )
+		return tLeft.m_sRankerExpr==tRight.m_sRankerExpr;
+
+	if ( tLeft.m_eRanker==SPH_RANK_PLUGIN )
+		return tLeft.m_sUDRanker==tRight.m_sUDRanker && tLeft.m_sUDRankerOpts==tRight.m_sUDRankerOpts;
+
+	return true;
+}
+
+
+static bool HasSameBooleanModeIntent ( const CSphQuery & tLeft, const CSphQuery & tRight )
+{
+	return tLeft.m_bExplicitBooleanMode==tRight.m_bExplicitBooleanMode
+		&& tLeft.m_bDefaultBoolOr==tRight.m_bDefaultBoolOr;
+}
+
+
 bool SearchHandler_c::CheckMultiQuery() const
 {
 	const int iQueries = m_dNQueries.GetLength();
@@ -1410,20 +1438,20 @@ bool SearchHandler_c::CheckMultiQuery() const
 		// these parameters must be the same
 		if (
 			( qCheck.m_sRawQuery!=qFirst.m_sRawQuery ) || // query string
-				( qCheck.m_dWeights.GetLength ()!=qFirst.m_dWeights.GetLength () ) || // weights count
-				( qCheck.m_dWeights.GetLength () && memcmp ( qCheck.m_dWeights.Begin (), qFirst.m_dWeights.Begin (),
-					sizeof ( qCheck.m_dWeights[0] ) * qCheck.m_dWeights.GetLength () ) ) || // weights
-				( qCheck.m_eMode!=qFirst.m_eMode ) || // search mode
-				( qCheck.m_eRanker!=qFirst.m_eRanker ) || // ranking mode
-				( qCheck.m_dFilters.GetLength ()!=qFirst.m_dFilters.GetLength () ) || // attr filters count
-				( qCheck.m_dFilterTree.GetLength ()!=qFirst.m_dFilterTree.GetLength () ) ||
-				( qCheck.m_iCutoff!=qFirst.m_iCutoff ) || // cutoff
-				( qCheck.m_eSort==SPH_SORT_EXPR && qFirst.m_eSort==SPH_SORT_EXPR && qCheck.m_sSortBy!=qFirst.m_sSortBy )
-				|| // sort expressions
-					( qCheck.m_bGeoAnchor!=qFirst.m_bGeoAnchor ) || // geodist expression
-				( qCheck.m_bGeoAnchor && qFirst.m_bGeoAnchor
-					&& ( qCheck.m_fGeoLatitude!=qFirst.m_fGeoLatitude
-						|| qCheck.m_fGeoLongitude!=qFirst.m_fGeoLongitude ) ) ) // some geodist cases
+			( qCheck.m_dWeights.GetLength ()!=qFirst.m_dWeights.GetLength () ) || // weights count
+			( qCheck.m_dWeights.GetLength () && memcmp ( qCheck.m_dWeights.Begin (), qFirst.m_dWeights.Begin (),
+				sizeof ( qCheck.m_dWeights[0] ) * qCheck.m_dWeights.GetLength () ) ) || // weights
+			( qCheck.m_eMode!=qFirst.m_eMode ) || // search mode
+			!HasSameRankerIntent ( qCheck, qFirst ) || // ranking mode
+			!HasSameBooleanModeIntent ( qCheck, qFirst ) || // implicit boolean operator mode
+			( qCheck.m_dFilters.GetLength ()!=qFirst.m_dFilters.GetLength () ) || // attr filters count
+			( qCheck.m_dFilterTree.GetLength ()!=qFirst.m_dFilterTree.GetLength () ) ||
+			( qCheck.m_iCutoff!=qFirst.m_iCutoff ) || // cutoff
+			( qCheck.m_eSort==SPH_SORT_EXPR && qFirst.m_eSort==SPH_SORT_EXPR && qCheck.m_sSortBy!=qFirst.m_sSortBy ) || // sort expressions
+			( qCheck.m_bGeoAnchor!=qFirst.m_bGeoAnchor ) || // geodist expression
+			( qCheck.m_bGeoAnchor && qFirst.m_bGeoAnchor
+				&& ( qCheck.m_fGeoLatitude!=qFirst.m_fGeoLatitude
+					|| qCheck.m_fGeoLongitude!=qFirst.m_fGeoLongitude ) ) ) // some geodist cases
 
 			return false;
 
@@ -1772,10 +1800,11 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 	int iOrderTag = 0;
 	bool bSysVar = tQuery.m_sIndexes.Begins ( "@@" );
 //		bSysVar = bSysVar || StrEqN ( FROMS ("information_schema"), tQuery.m_sIndexes.cstr() );
+	bool bAuthTbl = tQuery.m_sIndexes.Begins ( GetPrefixAuth().cstr() );
 
 	// search through specified local indexes
 	StrVec_t dIdxNames;
-	if ( bSysVar )
+	if ( bSysVar || bAuthTbl )
 		dIdxNames.Add ( tQuery.m_sIndexes );
 	else
 	{
@@ -1859,7 +1888,7 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 	else
 		m_dLocal.SwapData ( dLocals );
 
-	return !bSysVar;
+	return !( bSysVar || bAuthTbl );
 }
 
 // generate warning about slow full text expansion for queries there
@@ -2116,6 +2145,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		tReqBuilder = std::make_unique<SearchRequestBuilder_c> ( m_dNQueries, iDivideLimits );
 		tParser = std::make_unique<SearchReplyParser_c> ( iQueries );
 		tReporter = GetObserver();
+		SetSessionAuth ( dRemotes );
 
 		// run remote queries. tReporter will tell us when they're finished.
 		// also blackholes will be removed from this flow of remotes.

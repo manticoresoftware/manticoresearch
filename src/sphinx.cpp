@@ -24,6 +24,7 @@
 #include "searchnode.h"
 #include "sphinxjson.h"
 #include "sphinxqcache.h"
+#include "sphinxplugin.h"
 #include "icu.h"
 #include "jieba.h"
 #include "attribute.h"
@@ -188,6 +189,46 @@ const char * sphGetRankerName ( ESphRankMode eRanker )
 		return NULL;
 
 	return g_dRankerNames[eRanker];
+}
+
+
+bool sphParseRankerName ( const CSphString & sRanker, ESphRankMode & eRanker )
+{
+	const char * szRanker = sRanker.cstr();
+	if ( !szRanker )
+		return false;
+
+	for ( int iRanker = SPH_RANK_PROXIMITY_BM25; iRanker<SPH_RANK_TOTAL; ++iRanker )
+	{
+		const char * szName = sphGetRankerName ( ESphRankMode ( iRanker ) );
+		if ( szName && sRanker==szName )
+		{
+			eRanker = ESphRankMode ( iRanker );
+			return true;
+		}
+	}
+
+	return false;
+}
+
+
+bool sphSplitRankerCall ( const CSphString & sRanker, CSphString & sName, CSphString & sArg )
+{
+	const char * szRanker = sRanker.cstr();
+	if ( !szRanker )
+		return false;
+
+	const char * szArg = szRanker;
+	while ( sphIsAlpha ( *szArg ) )
+		++szArg;
+
+	if ( szArg==szRanker || *szArg!='(' || !sRanker.Ends ( ")" ) )
+		return false;
+
+	int iNameLen = szArg-szRanker;
+	sName = sRanker.SubString ( 0, iNameLen );
+	sArg = sRanker.SubString ( iNameLen+1, sRanker.Length()-iNameLen-2 );
+	return true;
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -581,7 +622,7 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 
 	DictRefPtr_c pDict = GetStatelessDict ( m_pDict );
 
-	if ( IsStarDict ( pDict->GetSettings().m_bWordDict ) )
+	if ( IsStarDict ( pDict->GetSettings().IsWordDict() ) )
 	{
 		pTokenizer->AddPlainChars ( "*" );
 		SetupStarDict ( pDict, false );
@@ -627,7 +668,7 @@ std::unique_ptr<CSphIndex> sphCreateIndexTemplate ( CSphString sIndexName )
 
 Bson_t CSphTokenizerIndex::ExplainQuery ( const CSphString & sQuery ) const
 {
-	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
+	bool bWordDict = m_pDict->GetSettings().IsWordDict();
 
 	WordlistStub_c tWordlist;
 	ExplainQueryArgs_t tArgs;
@@ -1345,8 +1386,8 @@ private:
 private:
 	void						GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* = nullptr ) const override;
 
-	bool						ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tXQ, DictRefPtr_c pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const;
-	bool						RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, bool bCloneDict, const CSphQuery & tQuery, CSphQueryResult & tResult, VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tParsed, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
+	bool						ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tXQ, DictRefPtr_c pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const;
+	bool						RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, bool bCloneDict, const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResult & tResult, VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tParsed, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
 
 	template <bool ROWID_LIMITS>
 	bool						ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResultMeta & tMeta, const VecTraits_T<ISphMatchSorter *> & dSorters, CSphMatch & tMatch, int iCutoff, bool bRandomize, int iIndexWeight, int64_t tmMaxTimer, const RowIdBoundaries_t * pBoundaries = nullptr ) const;
@@ -1926,6 +1967,102 @@ void SetQueryDefaultsExt2 ( CSphQuery & tQuery )
 	tQuery.m_iRetryDelay = DEFAULT_QUERY_RETRY;
 }
 
+bool ParseStoredRanker ( const CSphString & sRanker, QueryExecutionSettings_t & tSettings, CSphString & sError )
+{
+	if ( sRanker.IsEmpty() )
+		return true;
+
+	auto SetRanker = [&] ( ESphRankMode eRanker )
+	{
+		tSettings.m_eRanker = eRanker;
+		tSettings.m_sRankerExpr = "";
+		tSettings.m_sUDRanker = "";
+		tSettings.m_sUDRankerOpts = "";
+	};
+
+	auto SetExprRanker = [&] ( ESphRankMode eRanker, CSphString sExpr )
+	{
+		sExpr.Trim();
+		if ( sExpr.Length()>=2 )
+		{
+			char cQuote = sExpr.cstr()[0];
+			if ( ( cQuote=='\'' || cQuote=='"' ) && sExpr.cstr()[sExpr.Length()-1]==cQuote )
+				sExpr = sExpr.SubString ( 1, sExpr.Length()-2 );
+		}
+
+		SetRanker ( eRanker );
+		tSettings.m_sRankerExpr = sExpr;
+	};
+
+	auto SetPluginRanker = [&] ( const CSphString & sName, const CSphString & sOpts )
+	{
+		tSettings.m_eRanker = SPH_RANK_PLUGIN;
+		tSettings.m_sUDRanker = sName;
+		tSettings.m_sRankerExpr = "";
+		tSettings.m_sUDRankerOpts = sOpts;
+	};
+
+	CSphString sRankerName = sRanker;
+	CSphString sRankerArg;
+	bool bHasRankerArg = sphSplitRankerCall ( sRanker, sRankerName, sRankerArg );
+
+	ESphRankMode eRanker = SPH_RANK_TOTAL;
+	if ( sphParseRankerName ( sRankerName, eRanker ) )
+	{
+		if ( eRanker==SPH_RANK_EXPR || eRanker==SPH_RANK_EXPORT )
+		{
+			if ( !bHasRankerArg )
+			{
+				sError.SetSprintf ( "missing ranker expression (use ranker='expr(1+2)' for example)" );
+				return false;
+			}
+
+			SetExprRanker ( eRanker, sRankerArg );
+			return true;
+		}
+
+		if ( bHasRankerArg )
+		{
+			sError.SetSprintf ( "unknown table ranker '%s'", sRanker.cstr() );
+			return false;
+		}
+
+		SetRanker ( eRanker );
+		return true;
+	}
+
+	if ( sphPluginExists ( PLUGIN_RANKER, sRankerName.cstr() ) )
+	{
+		CSphString sRankerOpts;
+		if ( bHasRankerArg )
+			sRankerOpts = sRankerArg;
+
+		SetPluginRanker ( sRankerName, sRankerOpts );
+		return true;
+	}
+
+	sError.SetSprintf ( "unknown table ranker '%s'", sRanker.cstr() );
+	return false;
+}
+
+QueryExecutionSettings_t BuildQueryExecutionSettings ( const CSphQuery & tQuery, const MutableIndexSettings_c & tSettings )
+{
+	QueryExecutionSettings_t tEffectiveSettings ( tQuery );
+
+	if ( !tQuery.m_bExplicitBooleanMode && tSettings.IsSet ( MutableName_e::BOOLEAN_MODE ) )
+		tEffectiveSettings.m_bDefaultBoolOr = tSettings.m_tQueryExecutionSettings.m_bDefaultBoolOr;
+
+	if ( !tQuery.m_bExplicitRanker && tSettings.IsSet ( MutableName_e::RANKER ) && !tSettings.m_sRanker.IsEmpty() )
+	{
+		tEffectiveSettings.m_eRanker = tSettings.m_tQueryExecutionSettings.m_eRanker;
+		tEffectiveSettings.m_sRankerExpr = tSettings.m_tQueryExecutionSettings.m_sRankerExpr;
+		tEffectiveSettings.m_sUDRanker = tSettings.m_tQueryExecutionSettings.m_sUDRanker;
+		tEffectiveSettings.m_sUDRankerOpts = tSettings.m_tQueryExecutionSettings.m_sUDRankerOpts;
+	}
+
+	return tEffectiveSettings;
+}
+
 void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitless )
 {
 	#define LOC_ERROR( ... ) do { sError.SetSprintf (__VA_ARGS__); return; } while(0)
@@ -2047,7 +2184,7 @@ void CSphIndex::SetTokenizer ( TokenizerRefPtr_c pTokenizer )
 
 void CSphIndex::SetupQueryTokenizer()
 {
-	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
+	bool bWordDict = m_pDict->GetSettings().IsWordDict();
 
 	// create and setup a master copy of query time tokenizer
 	// that we can then use to create lightweight clones
@@ -3261,7 +3398,7 @@ bool CSphIndex_VLN::IsQueryFast ( const CSphQuery & tQuery, const CSphVector<Sec
 	if ( m_tSettings.m_uAotFilterMask!=0 )
 		return false;
 
-	if ( m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().m_bWordDict )>0 )
+	if ( m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().IsWordDict() )>0 )
 		return false;
 
 	if ( m_tSettings.m_iMinInfixLen>0 )
@@ -3513,9 +3650,9 @@ public:
 
 	SphOffset_t		GetHitfilePos () const { return m_wrHitlist.GetPos (); }
 	void			CloseHitlist () { m_wrHitlist.CloseFile (); }
-	bool			IsError () const { return ( m_pDict->DictIsError() || m_wrDoclist.IsError() || m_wrHitlist.IsError() ); }
+	bool			IsError () const { return ( m_bError || m_pDict->DictIsError() || m_wrDoclist.IsError() || m_wrHitlist.IsError() ); }
 	void			HitblockBegin () { m_pDict->HitblockBegin(); }
-	bool			IsWordDict () const { return m_pDict->GetSettings().m_bWordDict; }
+	bool			IsWordDict () const { return m_pDict->GetSettings().IsWordDict(); }
 
 private:
 	void	DoclistBeginEntry ( RowID_t tDocid );
@@ -3530,7 +3667,8 @@ private:
 	AggregateHit_t				m_tLastHit;				///< hitlist entry
 	Hitpos_t					m_iPrevHitPos {0};		///< previous hit position
 	bool						m_bGotFieldEnd = false;
-	std::array<BYTE, MAX_KEYWORD_BYTES> m_sLastKeyword;
+	bool						m_bError = false;
+	CSphFixedVector<BYTE>		m_dLastKeyword;
 
 	const CSphVector<SphWordID_t> &	m_dHitlessWords;
 	DictRefPtr_c				m_pDict;
@@ -3557,6 +3695,7 @@ private:
 
 CSphHitBuilder::CSphHitBuilder ( const CSphIndexSettings & tSettings, const CSphVector<SphWordID_t> & dHitless, bool bMerging, int iBufSize, DictRefPtr_c pDict, CSphString * sError, StrVec_t * pCreatedFiles )
 	: m_dWriteBuffer ( iBufSize )
+	, m_dLastKeyword ( GetKeywordBufSize ( pDict->GetSettings().GetDictFormat() ) )
 	, m_dHitlessWords ( dHitless )
 	, m_pDict ( std::move ( pDict ) )
 	, m_pLastError ( sError )
@@ -3568,7 +3707,7 @@ CSphHitBuilder::CSphHitBuilder ( const CSphIndexSettings & tSettings, const CSph
 	, m_bMerging ( bMerging )
 #endif
 {
-	m_sLastKeyword[0] = '\0';
+	m_dLastKeyword[0] = '\0';
 	HitReset();
 	m_dLastDocFields.UnsetAll();
 	assert ( m_pDict );
@@ -3625,7 +3764,7 @@ void CSphHitBuilder::HitReset()
 	m_tLastHit.m_tRowID = INVALID_ROWID;
 	m_tLastHit.m_uWordID = 0;
 	m_tLastHit.m_iWordPos = EMPTY_HIT;
-	m_tLastHit.m_szKeyword = m_sLastKeyword.data();
+	m_tLastHit.m_szKeyword = m_dLastKeyword.Begin();
 	m_iPrevHitPos = 0;
 	m_bGotFieldEnd = false;
 }
@@ -3760,17 +3899,33 @@ static int strcmpp (const char* l, const char* r)
 	return strcmp ( l, r );
 }
 
+static bool CopyKeywordBounded ( BYTE * pDst, int iDstLen, const BYTE * pSrc )
+{
+	assert ( pDst && pSrc && iDstLen>CSphString::GetGap() );
+
+	BYTE * p = pDst;
+	BYTE * pEnd = pDst + iDstLen - CSphString::GetGap();
+	while ( p<pEnd && *pSrc )
+		*p++ = *pSrc++;
+
+	memset ( p, 0, CSphString::GetGap() );
+	return !*pSrc;
+}
+
 void CSphHitBuilder::cidxHit ( AggregateHit_t * pHit )
 {
 	assert (
 		( pHit->m_uWordID!=0 && pHit->m_iWordPos!=EMPTY_HIT && pHit->m_tRowID!=INVALID_ROWID ) || // it's either ok hit
 		( pHit->m_uWordID==0 && pHit->m_iWordPos==EMPTY_HIT ) ); // or "flush-hit"
 
+	if ( m_bError )
+		return;
+
 	/////////////
 	// next word
 	/////////////
 
-	const bool bNextWord = ( m_tLastHit.m_uWordID!=pHit->m_uWordID ||	( m_pDict->GetSettings().m_bWordDict && strcmpp ( (const char*)m_tLastHit.m_szKeyword, (const char*)pHit->m_szKeyword ) ) ); // OPTIMIZE?
+	const bool bNextWord = ( m_tLastHit.m_uWordID!=pHit->m_uWordID ||	( m_pDict->GetSettings().IsWordDict() && strcmpp ( (const char*)m_tLastHit.m_szKeyword, (const char*)pHit->m_szKeyword ) ) ); // OPTIMIZE?
 	const bool bNextDoc = bNextWord || ( m_tLastHit.m_tRowID!=pHit->m_tRowID );
 
 	if ( m_bGotFieldEnd && ( bNextWord || bNextDoc ) )
@@ -3830,16 +3985,23 @@ void CSphHitBuilder::cidxHit ( AggregateHit_t * pHit )
 		}
 #ifndef NDEBUG
 		assert ( pHit->m_uWordID > m_tLastHit.m_uWordID
-			|| ( m_pDict->GetSettings().m_bWordDict &&
+			|| ( m_pDict->GetSettings().IsWordDict() &&
 				pHit->m_uWordID==m_tLastHit.m_uWordID && strcmp ( (const char*)pHit->m_szKeyword, (const char*)m_tLastHit.m_szKeyword )>0 )
 			|| m_bMerging );
 #endif // usually assert excluded in release, but this is 'paranoid' clause
 		m_tWord.m_iDoclistOffset = m_wrDoclist.GetPos();
 		m_tLastHit.m_uWordID = pHit->m_uWordID;
-		if ( m_pDict->GetSettings().m_bWordDict )
+		if ( m_pDict->GetSettings().IsWordDict() )
 		{
-			assert ( strlen ( (const char *)pHit->m_szKeyword )<sizeof(m_sLastKeyword)-1 );
-			strncpy ( (char*)const_cast<BYTE*>(m_tLastHit.m_szKeyword), (const char*)pHit->m_szKeyword, sizeof(m_sLastKeyword) ); // OPTIMIZE?
+			const auto eDictFormat = m_pDict->GetSettings().GetDictFormat();
+			const bool bCopied = CopyKeywordBounded ( m_dLastKeyword.Begin(), m_dLastKeyword.GetLength(), pHit->m_szKeyword );
+			if ( !bCopied && eDictFormat==DictFormat_e::KEYWORDS_V2 )
+			{
+				m_bError = true;
+				m_pLastError->SetSprintf ( "keyword exceeds %s limit %d at plain index write", DictFormatName ( eDictFormat ), GetKeywordMaxStoredBytes ( eDictFormat ) );
+				return;
+			}
+			assert ( bCopied );
 		}
 	}
 
@@ -4155,6 +4317,9 @@ bool CSphHitBuilder::cidxDone ( int iMemLimit, int & iMinInfixLen, int iMaxCodep
 {
 	assert ( pDictHeader );
 
+	if ( m_bError )
+		return false;
+
 	if ( m_bGotFieldEnd )
 	{
 		HITMAN::SetEndMarker ( &m_tLastHit.m_iWordPos );
@@ -4166,7 +4331,7 @@ bool CSphHitBuilder::cidxDone ( int iMemLimit, int & iMinInfixLen, int iMaxCodep
 	// in dict=crc mode, just flushes wordlist checkpoints
 	// in dict=keyword mode, also creates infix index, if needed
 
-	if ( iMinInfixLen>0 && m_pDict->GetSettings().m_bWordDict )
+	if ( iMinInfixLen>0 && m_pDict->GetSettings().IsWordDict() )
 	{
 		pDictHeader->m_iInfixCodepointBytes = iMaxCodepointLen;
 		if ( iMinInfixLen==1 )
@@ -4187,14 +4352,42 @@ bool CSphHitBuilder::cidxDone ( int iMemLimit, int & iMinInfixLen, int iMaxCodep
 }
 
 
-inline int encodeKeyword ( BYTE * pBuf, const char * pKeyword )
+inline int encodeKeyword ( BYTE * pBuf, const char * pKeyword, int iLen )
 {
-	auto iLen = (int) strlen ( pKeyword ); // OPTIMIZE! remove this and memcpy and check if thats faster
 	assert ( iLen>0 && iLen<128 ); // so that ReadVLB()
 
 	*pBuf = (BYTE) iLen;
 	memcpy ( pBuf+1, pKeyword, iLen );
 	return 1+iLen;
+}
+
+inline int encodeKeywordV2 ( BYTE * pBuf, const char * pKeyword, int iLen )
+{
+	if ( iLen<=0 || iLen>GetKeywordMaxStoredBytes ( DictFormat_e::KEYWORDS_V2 ) )
+		sphDie ( "INTERNAL ERROR: keywords_32k temp keyword length %d exceeds limit %d", iLen, GetKeywordMaxStoredBytes ( DictFormat_e::KEYWORDS_V2 ) );
+
+	BYTE * pOut = pBuf;
+	pOut += ZipToPtrLE ( pOut, iLen );
+	memcpy ( pOut, pKeyword, iLen );
+	return (int)( pOut - pBuf ) + iLen;
+}
+
+
+static int EstimateRawHitEncodedKeywordBytes ( DictFormat_e eDictFormat, int iKeywordLen )
+{
+	constexpr int MAX_ZIPPED_DWORD_BYTES = ( sizeof(DWORD)*8 + 6 ) / 7;
+	switch ( eDictFormat )
+	{
+	case DictFormat_e::CRC:
+		return 0;
+	case DictFormat_e::KEYWORDS:
+		return 1 + iKeywordLen;
+	case DictFormat_e::KEYWORDS_V2:
+		return MAX_ZIPPED_DWORD_BYTES + iKeywordLen;
+	}
+
+	assert ( 0 && "unknown dict format" );
+	return 0;
 }
 
 
@@ -4213,9 +4406,24 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits )
 	RowID_t d2, l2 = (RowID_t)-1; // rowids start from 0 and we can't have delta=0
 	DWORD d3, l3 = 0; // !COMMIT must be wide enough
 
-	int iGap = (int)Max ( 16*sizeof(DWORD) + ( m_pDict->GetSettings().m_bWordDict ? MAX_KEYWORD_BYTES : 0 ), 128u );
+	const auto eDictFormat = m_pDict->GetSettings().GetDictFormat();
+	const bool bWordDict = m_pDict->GetSettings().IsWordDict();
+	const int iRawHitControlReserve = 16*sizeof(DWORD);
+	int iGap = (int)Max ( iRawHitControlReserve + ( bWordDict ? MAX_KEYWORD_BYTES : 0 ), 128u );
 	pBuf = m_dWriteBuffer.Begin();
 	maxP = m_dWriteBuffer.Begin() + m_dWriteBuffer.GetLength() - iGap;
+	BYTE * pBufEnd = m_dWriteBuffer.Begin() + m_dWriteBuffer.GetLength();
+
+	auto fnFlushBuffer = [&] () -> bool
+	{
+		w = (int)( pBuf - m_dWriteBuffer.Begin() );
+		assert ( w<m_dWriteBuffer.GetLength() );
+		if ( w && !sphWriteThrottled ( fd, m_dWriteBuffer.Begin(), w, "raw_hits", *m_pLastError ) )
+			return false;
+		n += w;
+		pBuf = m_dWriteBuffer.Begin();
+		return true;
+	};
 
 	// hit aggregation state
 	DWORD uHitCount = 0;
@@ -4310,6 +4518,18 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits )
 			uHitFieldMask |= 1 << HITMAN::GetField ( pHit->m_uWordPos );
 		}
 
+		const char * pKeyword = nullptr;
+		int iKeywordLen = 0;
+		if ( d1 && bWordDict )
+		{
+			pKeyword = m_pDict->HitblockGetKeyword ( pHit->m_uWordID );
+			iKeywordLen = (int)strlen ( pKeyword );
+			const int iNeeded = iRawHitControlReserve + EstimateRawHitEncodedKeywordBytes ( eDictFormat, iKeywordLen );
+			assert ( iNeeded<m_dWriteBuffer.GetLength() );
+			if ( pBuf+iNeeded>=pBufEnd && !fnFlushBuffer() )
+				return -1;
+		}
+
 		// encode enough restart markers
 		if ( d1 ) pBuf += ZipToPtrLE ( pBuf, 0 );
 		if ( d2 && !bFlushed ) pBuf += ZipToPtrLE ( pBuf, 0 );
@@ -4321,8 +4541,8 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits )
 		// encode keyword
 		if ( d1 )
 		{
-			if ( m_pDict->GetSettings().m_bWordDict )
-				pBuf += encodeKeyword ( pBuf, m_pDict->HitblockGetKeyword ( pHit->m_uWordID ) ); // keyword itself in case of keywords dict
+			if ( bWordDict )
+				pBuf += eDictFormat==DictFormat_e::KEYWORDS_V2 ? encodeKeywordV2 ( pBuf, pKeyword, iKeywordLen ) : encodeKeyword ( pBuf, pKeyword, iKeywordLen ); // keyword itself in case of keywords dict
 			else
 				pBuf += ZipToPtrLE ( pBuf, d1 ); // delta in case of CRC dict
 
@@ -4352,12 +4572,8 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits )
 
 		if ( pBuf>maxP )
 		{
-			w = (int)(pBuf - m_dWriteBuffer.Begin());
-			assert ( w<m_dWriteBuffer.GetLength() );
-			if ( !sphWriteThrottled ( fd, m_dWriteBuffer.Begin(), w, "raw_hits", *m_pLastError ) )
+			if ( !fnFlushBuffer() )
 				return -1;
-			n += w;
-			pBuf = m_dWriteBuffer.Begin();
 		}
 	}
 
@@ -4379,11 +4595,8 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits )
 	pBuf += ZipToPtrLE ( pBuf, 0 );
 	pBuf += ZipToPtrLE ( pBuf, 0 );
 	assert ( pBuf<m_dWriteBuffer.Begin() + m_dWriteBuffer.GetLength() );
-	w = (int)(pBuf - m_dWriteBuffer.Begin());
-	assert ( w<m_dWriteBuffer.GetLength() );
-	if ( !sphWriteThrottled ( fd, m_dWriteBuffer.Begin(), w, "raw_hits", *m_pLastError ) )
+	if ( !fnFlushBuffer() )
 		return -1;
-	n += w;
 
 	return n;
 }
@@ -4625,6 +4838,15 @@ bool CSphIndex_VLN::Build_CollectQueryMvas ( const CSphVector<CSphSource*> & dSo
 	for ( auto & pSource : dSources )
 	{
 		assert ( pSource );
+		if ( !pSource->Connect ( m_sLastError )
+			|| !pSource->IterateStart ( m_sLastError )
+			|| !pSource->UpdateSchema ( &m_tSchema, m_sLastError ) )
+		{
+			pSource->Disconnect();
+			return false;
+		}
+
+		pSource->Disconnect();
 		if ( !pSource->Connect ( m_sLastError ) )
 			return false;
 
@@ -5549,6 +5771,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( !CheckStoredFields ( m_tSchema, m_tSettings, m_sLastError ) )
 		return 0;
 
+	const auto & tQuerySettings = m_tMutableSettings.m_tQueryExecutionSettings;
+	if ( !ValidateStoredRankerExpression ( tQuerySettings.m_eRanker, tQuerySettings.m_sRankerExpr, m_tSchema, m_sLastError ) )
+		return 0;
 
 	bool bHaveJoined = pSource0->HasJoinedFields();
 
@@ -5612,7 +5837,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	// book at least 2 MB for keywords dict, if needed
 	int iDictSize = 0;
-	if ( m_pDict->GetSettings().m_bWordDict )
+	if ( m_pDict->GetSettings().IsWordDict() )
 		iDictSize = Max ( MIN_KEYWORDS_DICT, iMemoryLimit/8 );
 
 	// reserve for sorting docid-rowid pairs
@@ -5830,6 +6055,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				tProgress.m_iBytes = m_tStats.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
 				tProgress.Show();
 			}
+			if ( !pSource->GetLastWarning().IsEmpty() )
+				m_sLastWarning = pSource->GetLastWarning();
 
 			// update total field lengths
 			if ( iFieldLens>=0 )
@@ -6106,15 +6333,19 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		iWriteBuffer = int ( iMemoryLimit * m_fWriteFactor );
 	}
 
+	const auto eDictFormat = m_pDict->GetSettings().GetDictFormat();
+	const bool bWordDict = eDictFormat!=DictFormat_e::CRC;
 	int iBinSize = CSphBin::CalcBinSize ( int ( iMemoryLimit * fReadFactor ),
-		dHitBlocks.GetLength() + m_pDict->GetSettings().m_bWordDict, "sort_hits" );
+		dHitBlocks.GetLength() + bWordDict, "sort_hits" );
+	if ( bWordDict )
+		iBinSize = Max ( iBinSize, GetKeywordBufSize ( eDictFormat ) );
 
 	CSphFixedVector <BYTE> dRelocationBuffer ( iRelocationSize );
 	iSharedOffset = -1;
 
 	ARRAY_FOREACH ( i, dHitBlocks )
 	{
-		dBins.Emplace_back ( m_tSettings.m_eHitless, m_pDict->GetSettings().m_bWordDict );
+		dBins.Emplace_back ( m_tSettings.m_eHitless, eDictFormat );
 		dBins[i].m_iFileLeft = dHitBlocks[i];
 		dBins[i].m_iFilePos = ( i==0 ) ? iHitsGap : dBins[i-1].m_iFilePos + dBins[i-1].m_iFileLeft;
 		dBins[i].Init ( fdHits.GetFD(), &iSharedOffset, iBinSize );
@@ -6306,14 +6537,18 @@ private:
 	CSphReader *	m_pReader = nullptr;
 	SphOffset_t		m_iMaxPos = 0;
 	int				m_iSkiplistBlockSize = 0;
-	char			m_sWord[MAX_KEYWORD_BYTES];
+	CSphVector<BYTE> m_dWord;
+	int				m_iWordLen = 0;
+	DictFormat_e	m_eDictFormat = DictFormat_e::CRC;
 	int				m_iCheckpoint = 1;
 
 public:
-	CSphDictReader ( int iSkiplistBlockSize )
+	CSphDictReader ( int iSkiplistBlockSize, DictFormat_e eDictFormat )
 		: m_iSkiplistBlockSize ( iSkiplistBlockSize )
+		, m_dWord ( GetKeywordBufSize ( eDictFormat ) )
+		, m_eDictFormat ( eDictFormat )
 	{
-		m_sWord[0] = '\0';
+		m_dWord[0] = '\0';
 	}
 
 	bool Setup ( const CSphString & sFilename, SphOffset_t iMaxPos, ESphHitless eHitless, CSphString & sError )
@@ -6332,7 +6567,8 @@ public:
 
 		m_iMaxPos = iMaxPos;
 		m_eHitless = eHitless;
-		m_sWord[0] = '\0';
+		m_dWord[0] = '\0';
+		m_iWordLen = 0;
 		m_iCheckpoint = 1;
 	}
 
@@ -6353,7 +6589,8 @@ public:
 
 			m_uWordID = 0;
 			m_iDoclistOffset = 0;
-			m_sWord[0] = '\0';
+			m_dWord[0] = '\0';
+			m_iWordLen = 0;
 
 			if ( m_pReader->GetPos()>=m_iMaxPos )
 				return false;
@@ -6376,16 +6613,21 @@ public:
 			{
 				iDelta = ( ( uPack>>4 ) & 7 ) + 1;
 				iMatch = uPack & 15;
+			} else if ( m_eDictFormat==DictFormat_e::KEYWORDS_V2 && uPack==0x7f )
+			{
+				iDelta = m_pReader->UnzipInt();
+				iMatch = m_pReader->UnzipInt();
 			} else
 			{
-				iDelta = uPack & 127;
+				iDelta = uPack;
 				iMatch = m_pReader->GetByte();
 			}
-			assert ( iMatch+iDelta<(int)sizeof(m_sWord)-1 );
-			assert ( iMatch<=(int)strlen(m_sWord) );
+			if ( iDelta<=0 || iMatch<0 || iMatch>m_iWordLen || iMatch+iDelta>=m_dWord.GetLength() )
+				return false;
 
-			m_pReader->GetBytes ( m_sWord + iMatch, iDelta );
-			m_sWord [ iMatch+iDelta ] = '\0';
+			m_pReader->GetBytes ( m_dWord.Begin() + iMatch, iDelta );
+			m_iWordLen = iMatch+iDelta;
+			m_dWord[m_iWordLen] = '\0';
 
 			m_iDoclistOffset = m_pReader->UnzipOffset();
 			m_iDocs = m_pReader->UnzipInt();
@@ -6421,11 +6663,11 @@ public:
 	int CmpWord ( const CSphDictReader & tOther ) const
 	{
 		if_const ( WORDDICT )
-			return strcmp ( m_sWord, tOther.m_sWord );
+			return sphDictCmpStrictly ( (const char*)GetWord(), m_iWordLen, (const char*)tOther.GetWord(), tOther.m_iWordLen );
 		return ( m_uWordID < tOther.m_uWordID ) ? -1 : ( m_uWordID == tOther.m_uWordID ? 0 : 1 );
 	}
 
-	BYTE * GetWord() const { return (BYTE *)const_cast<char*>(m_sWord); }
+	BYTE * GetWord() const { return (BYTE *)const_cast<BYTE*>(m_dWord.Begin()); }
 
 	int GetCheckpoint() const { return m_iCheckpoint; }
 };
@@ -6587,8 +6829,8 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 	static_assert ( QWORDDST::is_worddict::value == QWORDDST::is_worddict::value, "can't merge worddict with non-worddict" );
 
-	CSphDictReader<QWORDDST::is_worddict::value> tDstReader ( pDstIndex->GetSettings().m_iSkiplistBlockSize );
-	CSphDictReader<QWORDSRC::is_worddict::value> tSrcReader ( pSrcIndex->GetSettings().m_iSkiplistBlockSize );
+	CSphDictReader<QWORDDST::is_worddict::value> tDstReader ( pDstIndex->GetSettings().m_iSkiplistBlockSize, pDstIndex->m_pDict->GetSettings().GetDictFormat() );
+	CSphDictReader<QWORDSRC::is_worddict::value> tSrcReader ( pSrcIndex->GetSettings().m_iSkiplistBlockSize, pSrcIndex->m_pDict->GetSettings().GetDictFormat() );
 
 	/// compress means: I don't want true merge, I just want to apply deadrows and filter
 	bool bCompress = pDstIndex==pSrcIndex;
@@ -6668,16 +6910,33 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 		if ( tMonitor.NeedStop () || !sError.IsEmpty () )
 			return false;
 
-		const int iCmp = bCompress ? -1 : tDstReader.CmpWord ( tSrcReader );
+		if ( !bSrcWord )
+		{
+			// transfer documents and hits from destination
+			QwordIteration::PrepareQword<QWORDDST> ( tDstQword, tDstReader );
+			tMerger.TransferData<QWORDDST> ( tDstQword, tDstReader.m_uWordID, tDstReader.GetWord(), pDstIndex, dDstRows, tMonitor );
+			bDstWord = tDstReader.Read();
+			continue;
+		}
 
-		if ( !bSrcWord || ( bDstWord && iCmp<0 ) )
+		if ( !bDstWord )
+		{
+			// transfer documents and hits from source
+			QwordIteration::PrepareQword<QWORDSRC> ( tSrcQword, tSrcReader );
+			tMerger.TransferData<QWORDSRC> ( tSrcQword, tSrcReader.m_uWordID, tSrcReader.GetWord(), pSrcIndex, dSrcRows, tMonitor );
+			bSrcWord = tSrcReader.Read();
+			continue;
+		}
+
+		const int iCmp = tDstReader.CmpWord ( tSrcReader );
+		if ( iCmp<0 )
 		{
 			// transfer documents and hits from destination
 			QwordIteration::PrepareQword<QWORDDST> ( tDstQword, tDstReader );
 			tMerger.TransferData<QWORDDST> ( tDstQword, tDstReader.m_uWordID, tDstReader.GetWord(), pDstIndex, dDstRows, tMonitor );
 			bDstWord = tDstReader.Read();
 
-		} else if ( !bDstWord || ( bSrcWord && iCmp>0 ) )
+		} else if ( iCmp>0 )
 		{
 			// transfer documents and hits from source
 			QwordIteration::PrepareQword<QWORDSRC> ( tSrcQword, tSrcReader );
@@ -6686,8 +6945,6 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 		} else // merge documents and hits inside the word
 		{
-			assert ( iCmp==0 );
-
 			bool bHitless = !tDstReader.m_bHasHitlist;
 			if ( tDstReader.m_bHasHitlist!=tSrcReader.m_bHasHitlist )
 			{
@@ -6781,8 +7038,8 @@ bool CSphIndex_VLN::MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, c
 		DataReaderFactoryPtr_c						m_tHits;
 		bool										m_bHasWord = false;
 
-		explicit Source_t ( int iSkiplistBlockSize, int64_t iIndexId )
-			: m_tReader ( iSkiplistBlockSize )
+		Source_t ( int iSkiplistBlockSize, DictFormat_e eDictFormat, int64_t iIndexId )
+			: m_tReader ( iSkiplistBlockSize, eDictFormat )
 			, m_tQword ( false, false, iIndexId )
 		{}
 	};
@@ -6793,7 +7050,7 @@ bool CSphIndex_VLN::MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, c
 	for ( int i = 0; i < iSources; ++i )
 	{
 		const auto * pIndex = dIndexes[i];
-		dSources.Add ( std::make_unique<Source_t> ( pIndex->GetSettings().m_iSkiplistBlockSize, pIndex->GetIndexId() ) );
+		dSources.Add ( std::make_unique<Source_t> ( pIndex->GetSettings().m_iSkiplistBlockSize, pIndex->m_pDict->GetSettings().GetDictFormat(), pIndex->GetIndexId() ) );
 		auto * pSrc = dSources.Last().get();
 		pSrc->m_pIndex = pIndex;
 
@@ -6822,7 +7079,7 @@ bool CSphIndex_VLN::MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, c
 	auto fnCmpReaders = [] ( const CSphDictReader<QWORD::is_worddict::value> & tA, const CSphDictReader<QWORD::is_worddict::value> & tB )
 	{
 		if_const ( QWORD::is_worddict::value )
-			return strcmp ( (const char *)tA.GetWord(), (const char *)tB.GetWord() );
+			return tA.CmpWord ( tB );
 		return ( tA.m_uWordID < tB.m_uWordID ) ? -1 : ( tA.m_uWordID == tB.m_uWordID ? 0 : 1 );
 	};
 
@@ -7051,11 +7308,11 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		return false;
 	}
 
-	if ( !bCompress && pDstIndex->m_pDict->GetSettings().m_bWordDict!=pSrcIndex->m_pDict->GetSettings().m_bWordDict )
+	if ( !bCompress && pDstIndex->m_pDict->GetSettings().GetDictFormat()!=pSrcIndex->m_pDict->GetSettings().GetDictFormat() )
 	{
 		sError.SetSprintf ( "dictionary types must be the same (dst dict=%s, src dict=%s )",
-			pDstIndex->m_pDict->GetSettings().m_bWordDict ? "keywords" : "crc",
-			pSrcIndex->m_pDict->GetSettings().m_bWordDict ? "keywords" : "crc" );
+			pDstIndex->m_pDict->GetSettings().GetDictFormatName(),
+			pSrcIndex->m_pDict->GetSettings().GetDictFormatName() );
 		return false;
 	}
 
@@ -7117,7 +7374,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, g_tMergeSettings.m_iBufferDict, pDict, &sError, &dDeleteOnInterrupt );
 
 	int iInfixCodepointBytes = 0;
-	if ( pSettings->m_tSettings.m_iMinInfixLen > 0 && pDict->GetSettings().m_bWordDict )
+	if ( pSettings->m_tSettings.m_iMinInfixLen > 0 && pDict->GetSettings().IsWordDict() )
 		iInfixCodepointBytes = pSettings->m_pTokenizer->GetMaxCodepointLength();
 
 	// FIXME? is this magic dict block constant any good?..
@@ -7125,7 +7382,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 	BEGIN_CORO ( "sph", "merge dicts, doclists and hitlists" );
 	// merge dictionaries, doclists and hitlists
-	if ( pDict->GetSettings().m_bWordDict )
+	if ( pDict->GetSettings().IsWordDict() )
 	{
 		WITH_QWORD ( pDstIndex, false, QwordDst,
 			WITH_QWORD ( pSrcIndex, false, QwordSrc,
@@ -7196,7 +7453,7 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 	assert ( pDstIndex );
 
 	const CSphSchema & tBaseSchema = pBaseIndex->m_tSchema;
-	const bool bBaseWordDict = pBaseIndex->m_pDict->GetSettings().m_bWordDict;
+	const DictFormat_e eBaseDictFormat = pBaseIndex->m_pDict->GetSettings().GetDictFormat();
 	const ESphHitless eBaseHitless = pBaseIndex->m_tSettings.m_eHitless;
 
 	for ( int i = 1; i < iIndexes; ++i )
@@ -7213,11 +7470,11 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 			return false;
 		}
 
-		if ( bBaseWordDict!=pIndex->m_pDict->GetSettings().m_bWordDict )
+		if ( eBaseDictFormat!=pIndex->m_pDict->GetSettings().GetDictFormat() )
 		{
 			sError.SetSprintf ( "dictionary types must be the same (base dict=%s, other dict=%s )",
-				bBaseWordDict ? "keywords" : "crc",
-				pIndex->m_pDict->GetSettings().m_bWordDict ? "keywords" : "crc" );
+				DictFormatName ( eBaseDictFormat ),
+				pIndex->m_pDict->GetSettings().GetDictFormatName() );
 			return false;
 		}
 	}
@@ -7296,14 +7553,14 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, g_tMergeSettings.m_iBufferDict, pDict, &sError, &dDeleteOnInterrupt );
 
 	int iInfixCodepointBytes = 0;
-	if ( pSettings->m_tSettings.m_iMinInfixLen > 0 && pDict->GetSettings().m_bWordDict )
+	if ( pSettings->m_tSettings.m_iMinInfixLen > 0 && pDict->GetSettings().IsWordDict() )
 		iInfixCodepointBytes = pSettings->m_pTokenizer->GetMaxCodepointLength();
 
 	pDict->SortedDictBegin ( tDict, g_tMergeSettings.m_iBufferDict, iInfixCodepointBytes );
 
 	BEGIN_CORO ( "sph", "merge dicts, doclists and hitlists (N-way)" );
 	int64_t tmWordsStart = sphMicroTimer();
-	const bool bWordDict = pDict->GetSettings().m_bWordDict;
+	const bool bWordDict = pDict->GetSettings().IsWordDict();
 	if ( bWordDict )
 		WITH_QWORD ( pBaseIndex, false, Qword,
 			if ( !CSphIndex_VLN::MergeWordsN<Qword> ( dIndexes, dRowMaps, &tHitBuilder, sError, tProgress ) )
@@ -7391,7 +7648,7 @@ bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder *
 	CSphAutofile tDummy;
 	pHitBuilder->CreateIndexFiles ( pIndex->GetTmpFilename ( SPH_EXT_SPD ), pIndex->GetTmpFilename ( SPH_EXT_SPP ), pIndex->GetTmpFilename ( SPH_EXT_SPE ), false, 0, tDummy );
 
-	CSphDictReader<QWORD::is_worddict::value> tWordsReader ( pIndex->GetSettings().m_iSkiplistBlockSize );
+	CSphDictReader<QWORD::is_worddict::value> tWordsReader ( pIndex->GetSettings().m_iSkiplistBlockSize, pIndex->m_pDict->GetSettings().GetDictFormat() );
 	if ( !tWordsReader.Setup ( pIndex->GetFilename ( SPH_EXT_SPI ), pIndex->m_tWordlist.GetWordsEnd(), pIndex->m_tSettings.m_eHitless, sError ) )
 		return false;
 
@@ -7488,13 +7745,13 @@ bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHe
 	// FIXME? is this magic dict block constant any good?..
 
 	int iInfixCodepointBytes = 0;
-	if ( m_tSettings.m_iMinInfixLen > 0 && pDict->GetSettings().m_bWordDict )
+	if ( m_tSettings.m_iMinInfixLen > 0 && pDict->GetSettings().IsWordDict() )
 		iInfixCodepointBytes = m_pTokenizer->GetMaxCodepointLength();
 
 	pDict->SortedDictBegin ( tNewDict, iHitBufferSize, iInfixCodepointBytes );
 
 	// merge dictionaries, doclists and hitlists
-	if ( pDict->GetSettings().m_bWordDict )
+	if ( pDict->GetSettings().IsWordDict() )
 	{
 		WITH_QWORD ( this, false, Qword,
 			if ( !CSphIndex_VLN::DeleteField <Qword> ( this, &tHitBuilder, sError, tBuildHeader, iFieldId ) )
@@ -9075,21 +9332,21 @@ bool DiskIndexQwordSetup_c::SetupWithWrd ( const DiskIndexQwordTraits_c& tWord, 
 	assert ( pBuf );
 	assert ( m_iSkiplistBlockSize>0 );
 
-	KeywordsBlockReader_c tCtx ( pBuf, m_iSkiplistBlockSize );
-	while ( tCtx.UnpackWord() )
+	auto pCtx = CreateKeywordsBlockReader ( pBuf, m_iSkiplistBlockSize, pIndex->m_pDict->GetSettings().GetDictFormat() );
+	while ( pCtx->UnpackWord() )
 	{
 		// block is sorted
 		// so once keywords are greater than the reference word, no more matches
-		assert ( tCtx.GetWordLen()>0 );
-		int iCmp = sphDictCmpStrictly ( sWord, iWordLen, tCtx.GetWord(), tCtx.GetWordLen() );
+		assert ( pCtx->GetWordLen()>0 );
+		int iCmp = sphDictCmpStrictly ( sWord, iWordLen, pCtx->GetWord(), pCtx->GetWordLen() );
 		if ( iCmp<0 )
 			return false;
 		if ( iCmp==0 )
 			break;
 	}
-	if ( tCtx.GetWordLen()<=0 )
+	if ( pCtx->GetWordLen()<=0 )
 		return false;
-	tRes = tCtx;
+	tRes = *pCtx;
 	return true;
 }
 
@@ -9132,7 +9389,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 		return false;
 
 	DictEntry_t tRes;
-	if ( pIndex->m_pDict->GetSettings().m_bWordDict )
+	if ( pIndex->m_pDict->GetSettings().IsWordDict() )
 	{
 		if ( !SetupWithWrd ( tWord, tRes ) )
 			return false;
@@ -9386,7 +9643,7 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderLegacy ( const CSphString& sHeade
 			StripPath ( tDictSettings.m_dWordforms[i] );
 	}
 
-	DictRefPtr_c pDict { tDictSettings.m_bWordDict
+	DictRefPtr_c pDict { tDictSettings.IsWordDict()
 		? sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, GetName(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError )
 		: sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, pTokenizer, GetName(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError )};
 
@@ -9504,13 +9761,12 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 	// dictionary stuff
 	CSphDictSettings tDictSettings;
 	tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, pFilenameBuilder, sWarning );
-
 	// dictionary header (wordlist checkpoints, infix blocks, etc)
 	m_tWordlist.m_iDictCheckpointsOffset = Int ( tBson.ChildByName ( "dict_checkpoints_offset" ) );
-	m_tWordlist.m_iDictCheckpoints = (int)Int ( tBson.ChildByName ( "dict_checkpoints" ) );
+	m_tWordlist.m_iDictCheckpoints = Int ( tBson.ChildByName ( "dict_checkpoints" ) );
 	m_tWordlist.m_iInfixCodepointBytes = (int)Int ( tBson.ChildByName ( "infix_codepoint_bytes" ) );
 	m_tWordlist.m_iInfixBlocksOffset = Int ( tBson.ChildByName ( "infix_blocks_offset" ) );
-	m_tWordlist.m_iInfixBlocksWordsSize = (int)Int ( tBson.ChildByName ( "infix_block_words_size" ) );
+	m_tWordlist.m_iInfixBlocksWordsSize = Int ( tBson.ChildByName ( "infix_block_words_size" ) );
 
 	m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
 
@@ -9522,11 +9778,11 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 	}
 
 	StrVec_t dWarnings;
-	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tTokSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
+	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tTokSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError, GetMaxTokenBytes ( tDictSettings.GetDictFormat() ) );
 	if ( !pTokenizer )
 		return LOAD_E::GeneralError_e;
 
-	DictRefPtr_c pDict { tDictSettings.m_bWordDict
+	DictRefPtr_c pDict { tDictSettings.IsWordDict()
 		? sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, GetName(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError )
 		: sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, pTokenizer, GetName(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError )};
 
@@ -9815,20 +10071,25 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 
 void CSphIndex_VLN::DebugDumpDict ( FILE * fp, bool bDumpOnly )
 {
-	if ( !m_pDict->GetSettings().m_bWordDict )
+	if ( !m_pDict->GetSettings().IsWordDict() )
 	{
 		sphDie ( "DebugDumpDict() only supports dict=keywords for now" );
+	}
+	if ( m_pDict->GetSettings().IsKeywordsV2() )
+	{
+		sphDie ( "DebugDumpDict() does not support dict=keywords_32k yet" );
 	}
 
 	if ( !bDumpOnly )
 		fprintf ( fp, "keyword,docs,hits,offset\n" );
 
 	m_tWordlist.DebugPopulateCheckpoints();
+	auto pCtx = CreateKeywordsBlockReader ( nullptr, m_tSettings.m_iSkiplistBlockSize, m_pDict->GetSettings().GetDictFormat() );
 	ARRAY_FOREACH ( i, m_tWordlist.m_dCheckpoints )
 	{
-		KeywordsBlockReader_c tCtx ( m_tWordlist.AcquireDict ( &m_tWordlist.m_dCheckpoints[i] ), m_tSettings.m_iSkiplistBlockSize );
-		while ( tCtx.UnpackWord() )
-			fprintf ( fp, "%s,%d,%d," INT64_FMT "\n", tCtx.GetWord(), tCtx.m_iDocs, tCtx.m_iHits, int64_t(tCtx.m_iDoclistOffset) );
+		pCtx->Reset ( m_tWordlist.AcquireDict ( &m_tWordlist.m_dCheckpoints[i] ) );
+		while ( pCtx->UnpackWord() )
+			fprintf ( fp, "%s,%d,%d," INT64_FMT "\n", pCtx->GetWord(), pCtx->m_iDocs, pCtx->m_iHits, int64_t(pCtx->m_iDoclistOffset) );
 	}
 }
 
@@ -9865,10 +10126,10 @@ bool CSphIndex_VLN::PreallocWordlist()
 		return false;
 
 	assert ( m_pDict );
-	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
+	DictFormat_e eDictFormat = m_pDict->GetSettings().GetDictFormat();
 
 	// only checkpoint and wordlist infixes are actually read here; dictionary itself is just mapped
-	if ( !m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), bWordDict, m_tSettings.m_iSkiplistBlockSize, m_sLastError ) )
+	if ( !m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), eDictFormat, m_tSettings.m_iSkiplistBlockSize, m_sLastError ) )
 		return false;
 
 	if ( ( m_tWordlist.m_tBuf.GetLengthBytes()<=18 )!=( m_tWordlist.m_dCheckpoints.GetLength()==0 ) )
@@ -10225,7 +10486,7 @@ void CSphIndex_VLN::SetupStarDict ( DictRefPtr_c &pDict ) const
 {
 	// spawn wrapper, and put it in the box
 	// wrapper type depends on version; v.8 introduced new mangling rules
-	if ( IsStarDict ( pDict->GetSettings().m_bWordDict ) )
+	if ( IsStarDict ( pDict->GetSettings().IsWordDict() ) )
 		::SetupStarDict ( pDict, m_tSettings.m_iMinInfixLen>0 );
 
 	// FIXME? might wanna verify somehow that the tokenizer has '*' as a character
@@ -10246,17 +10507,19 @@ bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, cons
 
 void CSphIndex_VLN::GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes ) const
 {
+	if ( m_pDict->GetSettings().IsKeywordsV2() )
+		return;
+
 	if ( m_tWordlist.m_tBuf.IsEmpty() || !m_tWordlist.m_dCheckpoints.GetLength() )
 		return;
 
 	assert ( !tRes.m_pWordReader );
-	tRes.m_pWordReader = new KeywordsBlockReader_c ( m_tWordlist.m_tBuf.GetReadPtr(), m_tSettings.m_iSkiplistBlockSize );
+	auto pReader = CreateKeywordsBlockReader ( m_tWordlist.m_tBuf.GetReadPtr(), m_tSettings.m_iSkiplistBlockSize, m_pDict->GetSettings().GetDictFormat() );
+	tRes.m_pWordReader = pReader.get();
 	tRes.m_bHasExactDict = m_tSettings.m_bIndexExactWords;
 
 	sphGetSuggest ( &m_tWordlist, m_tWordlist.m_iInfixCodepointBytes, tArgs, tRes );
 
-	KeywordsBlockReader_c * pReader = (KeywordsBlockReader_c *)tRes.m_pWordReader;
-	SafeDelete ( pReader );
 	tRes.m_pWordReader = NULL;
 }
 
@@ -10326,21 +10589,24 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 
 	if ( bFillOnly )
 	{
-		BYTE sWord[MAX_KEYWORD_BYTES];
+		KeywordBuf_t dWord ( pDict->GetSettings().GetDictFormat() );
 
 		ARRAY_FOREACH ( i, dKeywords )
 		{
 			CSphKeywordInfo &tInfo = dKeywords[i];
-			int iLen = Min ( MAX_KEYWORD_BYTES, tInfo.m_sTokenized.Length() );
-			memcpy ( sWord, tInfo.m_sTokenized.cstr (), iLen );
-			sWord[iLen] = '\0';
+			int iLen = tInfo.m_sTokenized.Length();
+			if ( iLen>=dWord.GetLength() )
+				continue;
 
-			SphWordID_t iWord = pDict->GetWordID ( sWord );
+			memcpy ( dWord.Begin(), tInfo.m_sTokenized.cstr (), iLen );
+			dWord.Begin()[iLen] = '\0';
+
+			SphWordID_t iWord = pDict->GetWordID ( dWord.Begin() );
 			if ( iWord )
 			{
 				tQueryWord.Reset ();
 				tQueryWord.m_sWord = tInfo.m_sTokenized;
-				tQueryWord.m_sDictWord = ( const char * ) sWord;
+				tQueryWord.m_sDictWord.SetBinary ( (const char*)dWord.Begin(), (int)strlen ( (const char*)dWord.Begin() ) );
 				tQueryWord.m_uWordID = iWord;
 				tTermSetup.QwordSetup ( &tQueryWord );
 
@@ -10351,7 +10617,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 		return true;
 	}
 
-	bool bWordDict = pDict->GetSettings ().m_bWordDict;
+	bool bWordDict = pDict->GetSettings().IsWordDict();
 
 	TokenizerRefPtr_c pTokenizer = m_pQueryTokenizer->Clone ( SPH_CLONE );
 	pTokenizer->EnableTokenizedMultiformTracking ();
@@ -10546,7 +10812,7 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 	{
 		pNode->WithWord(0,[](auto& dWord) {
 			if ( !dWord.m_sWord.Begins( "=" ) )
-				dWord.m_sWord.SetSprintf ( "=%s", dWord.m_sWord.cstr() );
+				SetKeywordWithMarkers ( dWord.m_sWord, "=", dWord.m_sWord );
 		});
 		return pNode;
 	}
@@ -10580,14 +10846,14 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 		assert ( pNode->dChildren().IsEmpty() );
 		assert ( pNode->dWords().GetLength()==1 );
 		XQNode_t * pInfix = CloneKeyword ( pNode );
-		pInfix->WithWord ( 0,[pNode](auto& dWord) { dWord.m_sWord.SetSprintf ( "*%s*", pNode->dWord(0).m_sWord.cstr() ); } );;
+		pInfix->WithWord ( 0,[pNode](auto& dWord) { SetKeywordWithMarkers ( dWord.m_sWord, "*", pNode->dWord(0).m_sWord, "*" ); } );;
 		pExpand->AddNewChild ( pInfix );
 	} else if ( bExpandPrefix )
 	{
 		assert ( pNode->dChildren().IsEmpty() );
 		assert ( pNode->dWords().GetLength()==1 );
 		XQNode_t * pPrefix = CloneKeyword ( pNode );
-		pPrefix->WithWord ( 0,[pNode](auto& dWord) { dWord.m_sWord.SetSprintf ( "%s*", pNode->dWord(0).m_sWord.cstr() ); } );;
+		pPrefix->WithWord ( 0,[pNode](auto& dWord) { SetKeywordWithMarkers ( dWord.m_sWord, "", pNode->dWord(0).m_sWord, "*" ); } );;
 		pExpand->AddNewChild ( pPrefix );
 	}
 
@@ -10602,7 +10868,7 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 				dWord.m_sWord = pNode->dWord(0).m_sWord;
 			} else
 			{
-				dWord.m_sWord.SetSprintf ( "=%s", pNode->dWord(0).m_sWord.cstr() );
+				SetKeywordWithMarkers ( dWord.m_sWord, "=", pNode->dWord(0).m_sWord );
 			}
 		});
 		pExpand->AddNewChild ( pExact );
@@ -10990,12 +11256,14 @@ bool sphExpandGetWords ( const char * sWord, const ExpansionContext_t & tCtx, IS
 
 		int iBytes = int ( sCodes - sPrefix );
 		// prefix expansion should work on nonstemmed words only
-		char sFixed[MAX_KEYWORD_BYTES];
+		CSphFixedVector<char> dFixed ( 0 );
 		if ( tCtx.m_bHasExactForms )
 		{
-			sFixed[0] = MAGIC_WORD_HEAD_NONSTEMMED;
-			memcpy ( sFixed+1, sPrefix, iBytes );
-			sPrefix = sFixed;
+			dFixed.Reset ( iBytes+2 );
+			dFixed[0] = MAGIC_WORD_HEAD_NONSTEMMED;
+			memcpy ( dFixed.Begin()+1, sPrefix, iBytes );
+			dFixed[iBytes+1] = '\0';
+			sPrefix = dFixed.Begin();
 			iBytes++;
 		}
 
@@ -11049,8 +11317,8 @@ bool sphExpandGetWords ( const char * sWord, const ExpansionContext_t & tCtx, IS
 
 XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta & tMeta, CSphScopedPayload * pPayloads, DWORD uQueryDebugFlags, int iQueryExpansionLimit ) const
 {
-	if ( !pNode || !m_pDict->GetSettings().m_bWordDict
-			|| ( m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().m_bWordDict )<=0 && m_tSettings.m_iMinInfixLen<=0 ) )
+	if ( !pNode || !m_pDict->GetSettings().IsWordDict()
+			|| ( m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().IsWordDict() )<=0 && m_tSettings.m_iMinInfixLen<=0 ) )
 		return pNode;
 
 	assert ( m_bPassedAlloc );
@@ -11059,7 +11327,7 @@ XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta &
 	ExpansionContext_t tCtx;
 	tCtx.m_pWordlist = &m_tWordlist;
 	tCtx.m_pResult = &tMeta;
-	tCtx.m_iMinPrefixLen = m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().m_bWordDict );
+	tCtx.m_iMinPrefixLen = m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().IsWordDict() );
 	tCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
 	tCtx.m_iExpansionLimit = GetExpansionLimit ( iQueryExpansionLimit, m_iExpansionLimit );
 	tCtx.m_bHasExactForms = ( m_pDict->HasMorphology() || m_tSettings.m_bIndexExactWords );
@@ -11415,7 +11683,7 @@ bool CSphIndex_VLN::SplitQuery ( RUN && tRun, CSphQueryResult & tResult, const C
 }
 
 
-bool CSphIndex_VLN::RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, bool bCloneDict, const CSphQuery & tQuery, CSphQueryResult & tResult, VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tParsed, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const
+bool CSphIndex_VLN::RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, bool bCloneDict, const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResult & tResult, VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tParsed, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const
 {
 	return Threads::Coro::ContinueBool ( iStackNeed, [&] {
 
@@ -11444,7 +11712,7 @@ bool CSphIndex_VLN::RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, 
 			SetupExactDict ( pClonedDict );
 		}
 
-		bool bResult = ParsedMultiQuery ( tQuery, tResult, dSorters, *pTree, bCloneDict ? std::move (pClonedDict) : std::move (pDict), tArgs, &tNodeCache, tmMaxTimer );
+		bool bResult = ParsedMultiQuery ( tQuery, tQuerySettings, tResult, dSorters, *pTree, bCloneDict ? std::move (pClonedDict) : std::move (pDict), tArgs, &tNodeCache, tmMaxTimer );
 
 		PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), tArgs.m_bFinalizeSorters, tResult.m_pMeta->m_pProfile, tArgs.m_bModifySorterSchemas );
 
@@ -11457,6 +11725,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 {
 	auto & tMeta = *tResult.m_pMeta;
 	QueryProfile_c * pProfile = tMeta.m_pProfile;
+	QueryExecutionSettings_t tQuerySettings = BuildQueryExecutionSettings ( tQuery, m_tMutableSettings );
 
 	int64_t	tmMaxTimer = 0;
 	std::unique_ptr<MiniTimer_c> pTimerGuard;
@@ -11515,7 +11784,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 
 	assert ( m_pQueryTokenizer.Ptr() && m_pQueryTokenizerJson.Ptr() );
 	XQQuery_t tParsed;
-	if ( !pQueryParser->ParseQuery ( tParsed, (const char*)sModifiedQuery, &tQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
+	if ( !pQueryParser->ParseQuery ( tParsed, (const char*)sModifiedQuery, &tQuery, tQuerySettings, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
 	{
 		// FIXME? might wanna reset profile to unknown state
 		tMeta.m_sError = tParsed.m_sParseError;
@@ -11544,7 +11813,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	if ( !sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, tMeta.m_sError, tTranformArgs, tMeta.m_sWarning ) )
 		return false;
 
-	bool bWordDict = pDict->GetSettings().m_bWordDict;
+	bool bWordDict = pDict->GetSettings().IsWordDict();
 	int iExpandKeywords = ExpandKeywords ( m_tMutableSettings.m_iExpandKeywords, tQuery.m_eExpandKeywords, m_tSettings, bWordDict );
 	if ( iExpandKeywords!=KWE_DISABLED )
 	{
@@ -11570,12 +11839,12 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 
 	if ( tArgs.m_iThreads>1 )
 		return SplitQuery (
-			[this, iStackNeed, &pDict, &tParsed, &tmMaxTimer]
+			[this, iStackNeed, &pDict, &tParsed, &tQuerySettings, &tmMaxTimer]
 			( CSphQueryResult & tChunkResult, const CSphQuery & tQuery, VecTraits_T<ISphMatchSorter *> dLocalSorters, const CSphMultiQueryArgs & tMultiArgs )
-			{ return RunParsedMultiQuery ( iStackNeed, pDict, true, tQuery, tChunkResult, dLocalSorters, tParsed, tMultiArgs, tmMaxTimer ); },
+			{ return RunParsedMultiQuery ( iStackNeed, pDict, true, tQuery, tQuerySettings, tChunkResult, dLocalSorters, tParsed, tMultiArgs, tmMaxTimer ); },
 			tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
 
-	return RunParsedMultiQuery ( iStackNeed, pDict, false, tQuery, tResult, dSorters, tParsed, tArgs, tmMaxTimer );
+	return RunParsedMultiQuery ( iStackNeed, pDict, false, tQuery, tQuerySettings, tResult, dSorters, tParsed, tArgs, tmMaxTimer );
 }
 
 
@@ -11591,6 +11860,10 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 
 	assert ( ppSorters );
 
+	CSphFixedVector<QueryExecutionSettings_t> dQuerySettings ( iQueries );
+	for ( int i=0; i<iQueries; ++i )
+		dQuerySettings[i] = BuildQueryExecutionSettings ( pQueries[i], m_tMutableSettings );
+
 	DictRefPtr_c pDict = GetStatelessDict ( m_pDict );
 	SetupStarDict ( pDict );
 	SetupExactDict ( pDict );
@@ -11600,10 +11873,11 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 	bool bResult = false;
 	bool bResultScan = false;
 	int iStackNeed = 0;
-	bool bWordDict = pDict->GetSettings().m_bWordDict;
+	bool bWordDict = pDict->GetSettings().IsWordDict();
 	for ( int i=0; i<iQueries; ++i )
 	{
 		const auto & tCurQuery = pQueries[i];
+		const auto & tCurQuerySettings = dQuerySettings[i];
 		auto & tCurResult = pResults[i];
 		auto & tMeta = *tCurResult.m_pMeta;
 
@@ -11633,7 +11907,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 		const QueryParser_i * pQueryParser = tCurQuery.m_pQueryParser;
 		assert ( pQueryParser );
 
-		if ( pQueryParser->ParseQuery ( dXQ[i], tCurQuery.m_sQuery.cstr(), &tCurQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
+		if ( pQueryParser->ParseQuery ( dXQ[i], tCurQuery.m_sQuery.cstr(), &tCurQuery, tCurQuerySettings, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
 		{
 			// transform query if needed (quorum transform, keyword expansion, etc.)
 			TransformExtendedQueryArgs_t tTranformArgs { GetBooleanSimplify ( tCurQuery ), dXQ[i].m_bNeedPhraseTransform, this };
@@ -11696,6 +11970,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 		for ( int j=0; j<iQueries; ++j )
 		{
 			const auto & tCurQuery = pQueries[j];
+			const auto & tCurQuerySettings = dQuerySettings[j];
 			auto & tCurResult = pResults[j];
 			auto & tMeta = *tCurResult.m_pMeta;
 
@@ -11708,7 +11983,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 			MiniTimer_c tTimerGuard;
 			int64_t tmMaxTimer = tTimerGuard.Engage ( tCurQuery.m_uMaxQueryMsec ); // max_query_time
 
-			if ( dXQ[j].m_pRoot && ppSorters[j] && ParsedMultiQuery ( tCurQuery, tCurResult, { ppSorters+j, 1 }, dXQ[j], pDict, tArgs, &tNodeCache, tmMaxTimer ) )
+			if ( dXQ[j].m_pRoot && ppSorters[j] && ParsedMultiQuery ( tCurQuery, tCurQuerySettings, tCurResult, { ppSorters+j, 1 }, dXQ[j], pDict, tArgs, &tNodeCache, tmMaxTimer ) )
 			{
 				bResult = true;
 				tMeta.m_iMultiplier = iCommonSubtrees ? iQueries : 1;
@@ -11796,7 +12071,7 @@ static void SetupRowIdBoundaries ( const CSphVector<CSphFilterSettings> & dFilte
 }
 
 
-bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter *> & dSorters, const XQQuery_t & tXQ, DictRefPtr_c pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const
+bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter *> & dSorters, const XQQuery_t & tXQ, DictRefPtr_c pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const
 {
 	assert ( !tQuery.m_sQuery.IsEmpty() && tQuery.m_eMode!=SPH_MATCH_FULLSCAN ); // scans must go through MultiScan()
 	assert ( tArgs.m_iTag>=0 );
@@ -11827,7 +12102,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 		return false;
 	}
 
-	CSphQueryContext tCtx(tQuery);
+	CSphQueryContext tCtx ( tQuery, tQuerySettings );
 	CreateFilterContext_t tFlx;
 	const ISphSchema * pMaxSorterSchema = nullptr;
 	CSphVector<const ISphSchema *> dSorterSchemas;
@@ -11892,11 +12167,11 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tXQ, tQuery, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
+	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tXQ, tQuery, tQuerySettings, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
 	if ( !pRanker )
 		return false;
 
-	if ( ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE ) && tQuery.m_eRanker!=SPH_RANK_EXPR )
+	if ( ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE ) && tQuerySettings.m_eRanker!=SPH_RANK_EXPR )
 		tMeta.m_sWarning.SetSprintf ( "packedfactors() and bm25f() requires using an expression ranker" );
 
 	tCtx.SetupExtraData ( pRanker.get(), dSorters.GetLength()==1 ? dSorters[0] : nullptr );
@@ -12375,7 +12650,7 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 		return EmptyBson ();
 	}
 
-	bool bWordDict = tArgs.m_pDict->GetSettings().m_bWordDict;
+	bool bWordDict = tArgs.m_pDict->GetSettings().IsWordDict();
 	int iExpandKeywords = ExpandKeywords ( tArgs.m_iExpandKeywords, QUERY_OPT_DEFAULT, *tArgs.m_pSettings, bWordDict );
 	if ( iExpandKeywords!=KWE_DISABLED )
 	{
@@ -12395,7 +12670,7 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 		ExpansionContext_t tExpCtx;
 		tExpCtx.m_pWordlist = tArgs.m_pWordlist;
 		tExpCtx.m_pResult = &tMeta;
-		tExpCtx.m_iMinPrefixLen = tArgs.m_pSettings->GetMinPrefixLen ( tArgs.m_pDict->GetSettings().m_bWordDict );
+		tExpCtx.m_iMinPrefixLen = tArgs.m_pSettings->GetMinPrefixLen ( tArgs.m_pDict->GetSettings().IsWordDict() );
 		tExpCtx.m_iMinInfixLen = tArgs.m_pSettings->m_iMinInfixLen;
 		tExpCtx.m_iExpansionLimit = tArgs.m_iExpansionLimit;
 		tExpCtx.m_bHasExactForms = ( tArgs.m_pDict->HasMorphology() || tArgs.m_pSettings->m_bIndexExactWords );
@@ -12424,7 +12699,7 @@ Bson_t CSphIndex_VLN::ExplainQuery ( const CSphString & sQuery ) const
 	tArgs.m_pQueryTokenizer = m_pQueryTokenizer;
 	tArgs.m_iExpandKeywords = m_tMutableSettings.m_iExpandKeywords;
 	tArgs.m_iExpansionLimit = m_iExpansionLimit;
-	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().m_bWordDict && IsStarDict ( m_pDict->GetSettings().m_bWordDict ) );
+	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().IsWordDict() && IsStarDict ( m_pDict->GetSettings().IsWordDict() ) );
 	tArgs.m_pMorphFields = &m_tMorphFields;
 
 	return Explain ( tArgs );
@@ -12569,6 +12844,37 @@ bool CSphIndex_VLN::AlterKNN ( CSphString & sError )
 // KEYWORDS STORING DICTIONARY
 //////////////////////////////////////////////////////////////////////////
 
+static int AppendPackedKeywordLegacy ( CSphVector<BYTE> & dOut, const BYTE * pWord, int iLen, bool bStoreID, SphWordID_t tWordID )
+{
+	assert ( pWord );
+	assert ( iLen>0 && iLen<=std::numeric_limits<BYTE>::max() );
+
+	int iOff = dOut.GetLength();
+	dOut.Add ( (BYTE)iLen );
+	dOut.Append ( pWord, iLen );
+	if ( bStoreID )
+		dOut.Append ( (const BYTE *)&tWordID, sizeof(tWordID) );
+
+	return iOff;
+}
+
+
+static int AppendPackedKeywordV2 ( CSphVector<BYTE> & dOut, const BYTE * pWord, int iLen, bool bStoreID, SphWordID_t tWordID )
+{
+	assert ( pWord );
+	assert ( iLen>0 && iLen<=GetKeywordMaxStoredBytes ( DictFormat_e::KEYWORDS_V2 ) );
+
+	int iOff = dOut.GetLength();
+	BYTE dPacked[10];
+	dOut.Append ( dPacked, ZipToPtrLE ( dPacked, (DWORD)iLen ) );
+	dOut.Append ( pWord, iLen );
+	if ( bStoreID )
+		dOut.Append ( (const BYTE *)&tWordID, sizeof(tWordID) );
+
+	return iOff;
+}
+
+
 class CRtDictKeywords final : public ISphRtDictWraper
 {
 private:
@@ -12581,6 +12887,7 @@ private:
 	int						m_iKeywordsOverrun = 0;
 	CSphString				m_sWord; // For allocation reuse.
 	const bool				m_bStoreID = false;
+	DictFormat_e			m_eDictFormat = DictFormat_e::KEYWORDS;
 
 protected:
 	~CRtDictKeywords () final = default; // Is here since protected. fixme! remove
@@ -12589,6 +12896,7 @@ public:
 	explicit CRtDictKeywords ( DictRefPtr_c pBase, bool bStoreID )
 		: m_pBase ( std::move ( pBase ) )
 		, m_bStoreID ( bStoreID )
+		, m_eDictFormat ( m_pBase->GetSettings().GetDictFormat() )
 	{
 		m_dPackedKeywords.Add ( 0 ); // avoid zero offset at all costs
 	}
@@ -12643,7 +12951,11 @@ public:
 	void WriteWordforms ( Writer_i & tWriter ) const final { m_pBase->WriteWordforms ( tWriter ); }
 	void WriteWordforms ( JsonEscapedBuilder & tOut ) const final { m_pBase->WriteWordforms ( tOut ); }
 	int SetMorphology ( const char * szMorph, CSphString & sMessage ) final { return m_pBase->SetMorphology ( szMorph, sMessage ); }
-	void Setup ( const CSphDictSettings & tSettings ) final { m_pBase->Setup ( tSettings ); }
+	void Setup ( const CSphDictSettings & tSettings ) final
+	{
+		m_pBase->Setup ( tSettings );
+		m_eDictFormat = m_pBase->GetSettings().GetDictFormat();
+	}
 	const CSphDictSettings & GetSettings () const final { return m_pBase->GetSettings(); }
 	const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const final { return m_pBase->GetStopwordsFileInfos(); }
 	const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const final { return m_pBase->GetWordformsFileInfos(); }
@@ -12662,7 +12974,19 @@ private:
 			return 0;
 
 		// fix of very long word (zones)
-		if ( iLen>( SPH_MAX_WORD_LEN * 3 ) )
+		if ( m_eDictFormat==DictFormat_e::KEYWORDS_V2 )
+		{
+			const int iMaxLen = GetKeywordMaxStoredBytes ( m_eDictFormat );
+			if ( iLen>iMaxLen )
+			{
+				assert ( 0 && "RT keywords_32k keyword length exceeds limit" );
+				m_sWarning.SetSprintf ( "keywords_32k word overrun buffer, skipped!!! length=%d(%d)", iMaxLen, iLen );
+				m_iKeywordsOverrun++;
+				return 0;
+			}
+
+			m_sWord.SetBinary ( ( const char * ) pWord, iLen );
+		} else if ( iLen>( SPH_MAX_WORD_LEN * 3 ) )
 		{
 			int iClippedLen = SPH_MAX_WORD_LEN * 3;
 			m_sWord.SetBinary ( ( const char * ) pWord, iClippedLen );
@@ -12688,14 +13012,10 @@ private:
 		}
 
 		int iOff = m_dPackedKeywords.GetLength ();
-		int iPackedLen = iOff + iLen + 1;
-		if ( m_bStoreID )
-			iPackedLen += sizeof ( tWordID );
-		m_dPackedKeywords.Resize ( iPackedLen );
-		m_dPackedKeywords[iOff] = ( BYTE ) ( iLen & 0xFF );
-		memcpy ( m_dPackedKeywords.Begin () + iOff + 1, pWord, iLen );
-		if ( m_bStoreID )
-			memcpy ( m_dPackedKeywords.Begin () + iOff + 1 + iLen, &tWordID, sizeof(tWordID) );
+		if ( m_eDictFormat==DictFormat_e::KEYWORDS_V2 )
+			AppendPackedKeywordV2 ( m_dPackedKeywords, (const BYTE *)m_sWord.cstr(), iLen, m_bStoreID, tWordID );
+		else
+			AppendPackedKeywordLegacy ( m_dPackedKeywords, (const BYTE *)m_sWord.cstr(), iLen, m_bStoreID, tWordID );
 
 		m_hKeywords.Add ( iOff, m_sWord );
 
@@ -13027,7 +13347,7 @@ static bool operator < ( const char * a, const InfixBlock_t & b )
 }
 
 
-bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * pInfixes, const CSphVector<InfixBlock_t> & dInfixBlocks, int iInfixCodepointBytes, CSphVector<DWORD> & dCheckpoints )
+bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * pInfixes, const CSphVector<InfixBlock_t> & dInfixBlocks, int iInfixCodepointBytes, CSphVector<DWORD> & dCheckpoints, DictFormat_e eDictFormat )
 {
 	assert ( pInfixes );
 
@@ -13082,12 +13402,14 @@ bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * p
 		if ( pOut==sKey+iBytes && memcmp ( sKey, dInfixBuf, iBytes )==0 )
 		{
 			// found you! decompress the data
-			int iLast = 0;
+			int64_t iLast = 0;
 			int iPackedLen = UnzipIntBE ( pBlock );
 			const BYTE * pMax = pBlock + iPackedLen;
 			while ( pBlock<pMax )
 			{
 				iLast += UnzipIntBE ( pBlock );
+				if ( eDictFormat==DictFormat_e::KEYWORDS_V2 && iLast>INFIX_CHECKPOINT_ID_MAX )
+					return false;
 				dCheckpoints.Add ( (DWORD)iLast );
 			}
 			return true;

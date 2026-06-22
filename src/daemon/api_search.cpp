@@ -38,7 +38,10 @@ enum
 	QFLAG_JSON_QUERY			= 1UL << 11,
 	QFLAG_NOT_ONLY_ALLOWED		= 1UL << 12,
 	QFLAG_LOCAL_DF_SET			= 1UL << 13,
-	QFLAG_SIMPLIFY_SET			= 1UL << 14
+	QFLAG_SIMPLIFY_SET			= 1UL << 14,
+	QFLAG_EXPLICIT_RANKER		= 1UL << 15,
+	QFLAG_EXPLICIT_BOOLEAN_MODE	= 1UL << 16,
+	QFLAG_DEFAULT_BOOL_OR		= 1UL << 17
 };
 
 void operator<< ( ISphOutputBuffer & tOut, const CSphNamedInt & tValue )
@@ -90,6 +93,9 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	uFlags |= QFLAG_NOT_ONLY_ALLOWED * q.m_bNotOnlyAllowed;
 	uFlags |= QFLAG_LOCAL_DF_SET * q.m_bLocalDF.has_value();
 	uFlags |= QFLAG_SIMPLIFY_SET * q.m_bSimplify.has_value();
+	uFlags |= QFLAG_EXPLICIT_RANKER * q.m_bExplicitRanker;
+	uFlags |= QFLAG_EXPLICIT_BOOLEAN_MODE * q.m_bExplicitBooleanMode;
+	uFlags |= QFLAG_DEFAULT_BOOL_OR * q.m_bDefaultBoolOr;
 
 	if ( q.m_eQueryType==QUERY_JSON )
 		uFlags |= QFLAG_JSON_QUERY;
@@ -758,10 +764,42 @@ static void AddDocids ( CSphVector<CSphQueryItem> & dItems )
 }
 
 
-void PrepareQueryEmulation ( CSphQuery * pQuery )
+static void MarkEmulatedQueryRanker ( CSphQuery * pQuery, SearchQueryOrigin_e eOrigin )
+{
+	switch ( eOrigin )
+	{
+		case SearchQueryOrigin_e::ApiClient:
+		case SearchQueryOrigin_e::MasterAgent:
+			pQuery->m_bExplicitRanker = true;
+			return;
+	}
+
+	assert ( false && "unknown query origin" );
+}
+
+
+static void MarkEmulatedQueryBooleanMode ( CSphQuery * pQuery, SearchQueryOrigin_e eOrigin )
+{
+	switch ( eOrigin )
+	{
+		case SearchQueryOrigin_e::ApiClient:
+		case SearchQueryOrigin_e::MasterAgent:
+			pQuery->m_bExplicitBooleanMode = true;
+			pQuery->m_bDefaultBoolOr = false;
+			return;
+	}
+
+	assert ( false && "unknown query origin" );
+}
+
+
+void PrepareQueryEmulation ( CSphQuery * pQuery, SearchQueryOrigin_e eOrigin )
 {
 	if ( pQuery->m_eMode == SPH_MATCH_BOOLEAN )
+	{
 		pQuery->m_eRanker = SPH_RANK_NONE;
+		MarkEmulatedQueryRanker ( pQuery, eOrigin );
+	}
 
 	if ( pQuery->m_eMode == SPH_MATCH_FULLSCAN )
 		pQuery->m_sQuery = "";
@@ -769,6 +807,7 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 	if ( pQuery->m_eMode != SPH_MATCH_ALL && pQuery->m_eMode != SPH_MATCH_ANY && pQuery->m_eMode != SPH_MATCH_PHRASE )
 		return;
 
+	// Legacy match-mode text emulation is independent from the binary API request origin.
 	const char * szQuery = pQuery->m_sRawQuery.cstr();
 	int iQueryLen = szQuery ? (int) strlen ( szQuery ) : 0;
 
@@ -795,11 +834,13 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 		}
 	}
 
+	MarkEmulatedQueryBooleanMode ( pQuery, eOrigin );
+
 	switch ( pQuery->m_eMode )
 	{
-		case SPH_MATCH_ALL:		pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes = '\0'; break;
-		case SPH_MATCH_ANY:		pQuery->m_eRanker = SPH_RANK_MATCHANY; strncpy ( szRes, "\"/1", 8 ); break;
-		case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes++ = '\"'; *szRes = '\0'; break;
+		case SPH_MATCH_ALL:		pQuery->m_eRanker = SPH_RANK_PROXIMITY; MarkEmulatedQueryRanker ( pQuery, eOrigin ); *szRes = '\0'; break;
+		case SPH_MATCH_ANY:		pQuery->m_eRanker = SPH_RANK_MATCHANY; MarkEmulatedQueryRanker ( pQuery, eOrigin ); strncpy ( szRes, "\"/1", 8 ); break;
+		case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; MarkEmulatedQueryRanker ( pQuery, eOrigin ); *szRes++ = '\"'; *szRes = '\0'; break;
 		default:				return;
 	}
 }
@@ -836,6 +877,14 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	tQuery.m_iLimit = tReq.GetInt ();
 	tQuery.m_eMode = (ESphMatchMode) tReq.GetInt ();
 	tQuery.m_eRanker = (ESphRankMode) tReq.GetInt ();
+	tQuery.m_bExplicitRanker = !!( uFlags & QFLAG_EXPLICIT_RANKER );
+	if ( !tQuery.m_bExplicitRanker && uMasterVer<32 )
+		tQuery.m_bExplicitRanker = ( tQuery.m_eRanker!=SPH_RANK_DEFAULT );
+	if ( uMasterVer>=32 )
+	{
+		tQuery.m_bExplicitBooleanMode = !!( uFlags & QFLAG_EXPLICIT_BOOLEAN_MODE );
+		tQuery.m_bDefaultBoolOr = !!( uFlags & QFLAG_DEFAULT_BOOL_OR );
+	}
 	if ( tQuery.m_eRanker==SPH_RANK_EXPR || tQuery.m_eRanker==SPH_RANK_EXPORT )
 		tQuery.m_sRankerExpr = tReq.GetString();
 
@@ -1271,7 +1320,10 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	tQuery.m_sQuery = tQuery.m_sRawQuery;
 
 	if ( tQuery.m_eQueryType!=QUERY_JSON )
-		PrepareQueryEmulation ( &tQuery );
+	{
+		SearchQueryOrigin_e eOrigin = uMasterVer>0 ? SearchQueryOrigin_e::MasterAgent : SearchQueryOrigin_e::ApiClient;
+		PrepareQueryEmulation ( &tQuery, eOrigin );
+	}
 
 	FixupQuerySettings ( tQuery );
 
@@ -1676,6 +1728,12 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 	for ( auto & dQuery: dQueries )
 		if ( !ParseSearchQuery ( tReq, tOut, dQuery, uVer, uMasterVer ) )
 			return;
+
+	CSphString sTmpIndex;
+	const CSphString & sIndex = ( dQueries.IsEmpty() ? sTmpIndex.scstr() : dQueries[0].m_sIndexes );
+	// assumes the multiple queries are to the same index
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, tOut ) )
+		return;
 
 	// run queries, send response
 	SearchHandler_c tHandler { std::move (dQueries), !bAgentMode };

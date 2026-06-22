@@ -418,7 +418,7 @@ data for the following examples:
 
 DROP TABLE IF EXISTS tbl;
 CREATE TABLE tbl(title text indexed stored) charset_table='non_cont,cont' morphology='icu_chinese';
---> 
+-->
 
 <!-- example name_table -->
 Вы также можете просмотреть схему таблицы, выполнив запрос `select * from <table_name>.@table`. Преимущество этого метода в том, что вы можете использовать предложение `WHERE` для фильтрации:
@@ -480,6 +480,8 @@ SHOW CREATE TABLE table_name [ OPTION output_words = 'list' | 'file' ]
 ```
 
 Выводит оператор `CREATE TABLE`, использованный для создания указанной таблицы.
+
+Если таблица была создана с помощью SQL-ярлыка `profile=...`, `SHOW CREATE TABLE` выводит развернутые настройки вместо самого имени профиля.
 
 Опция `output_words` позволяет управлять отображением настроек внешних файлов (таких как `stopwords`, `exceptions`, `wordforms`, `hitless_words`):
 

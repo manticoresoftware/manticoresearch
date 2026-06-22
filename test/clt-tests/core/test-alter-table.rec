@@ -1,24 +1,24 @@
 ––– input –––
-rm -rf /var/lib/manticore
+rm -rf /var/lib/manticore/*
 ––– output –––
 ––– input –––
 mkdir /tmp/test-alter/
 ––– output –––
 ––– input –––
-ln -s /tmp/test-alter/ /var/lib/manticore
+sed -i 's|^[[:space:]]*data_dir[[:space:]]*=.*|data_dir = /tmp/test-alter|' /etc/manticoresearch/manticore.conf
 ––– output –––
 ––– input –––
 echo "a > b" > /tmp/test-alter/wordforms1.txt; echo "c > d" > /tmp/test-alter/exc.txt; echo "abcstop" > /tmp/test-alter/stop.txt
 ––– output –––
 ––– input –––
-ls -1 /var/lib/manticore/
+ls -1 /tmp/test-alter/
 ––– output –––
 exc.txt
 stop.txt
 wordforms1.txt
 ––– block: ../base/start-searchd –––
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test3 (title TEXT, tag INTEGER) exceptions='/var/lib/manticore/exc.txt' wordforms='/var/lib/manticore/wordforms1.txt' stopwords='/var/lib/manticore/stop.txt';"
+mysql -h0 -P9306 -e "CREATE TABLE test3 (title TEXT, tag INTEGER) exceptions='/tmp/test-alter/exc.txt' wordforms='/tmp/test-alter/wordforms1.txt' stopwords='/tmp/test-alter/stop.txt';"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLE test3 SETTINGS\G"

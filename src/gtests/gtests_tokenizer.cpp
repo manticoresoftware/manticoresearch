@@ -693,7 +693,7 @@ protected:
 		pTokenizer = sphCloneAndSetupQueryTokenizer ( pBase, true, false, false );
 
 		CSphDictSettings tDictSettings;
-		tDictSettings.m_bWordDict = false;
+		tDictSettings.SetDictFormat ( DictFormat_e::CRC );
 		pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, "query", false, 32, nullptr, sError );
 
 		ASSERT_TRUE ( pTokenizer );

@@ -1,0 +1,87 @@
+––– comment –––
+Test direct access protection of system.auth_users and system.auth_permissions tables.
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+Admin credentials: admin / adminpass (bootstrap via auth.json)
+
+Per spec: system.auth_* tables should be internal storage only
+- Regular users CANNOT SELECT/INSERT/REPLACE/DELETE into system.auth_* tables
+- Admin also cannot directly access them (only via SQL commands like CREATE USER and SHOW USERS)
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– comment –––
+––– Setup: create a non-admin user with write permission –––
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'regular' IDENTIFIED BY 'regular1234';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: regular
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT write ON * TO 'regular';"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'regular';"
+––– output –––
+––– comment –––
+––– 6.1.1 User with READ ON * cannot SELECT from system.auth_users –––
+EXPECTED: Permission denied for user 'regular'
+––– comment –––
+––– input –––
+MYSQL_PWD=regular1234 mysql -uregular -h0 -P9306 -e "SELECT username, salt, hashes FROM system.auth_users;" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'regular'
+––– comment –––
+––– 6.1.2 User with READ ON * cannot SELECT from system.auth_permissions –––
+EXPECTED: Permission denied for user 'regular'
+––– comment –––
+––– input –––
+MYSQL_PWD=regular1234 mysql -uregular -h0 -P9306 -e "SELECT username, action, target FROM system.auth_permissions;" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'regular'
+––– comment –––
+––– 6.1.3 Admin cannot SELECT from system.auth_users –––
+EXPECTED: Permission denied for user 'admin'
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "SELECT username, salt, hashes FROM system.auth_users;" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'admin'
+––– comment –––
+––– 6.1.4 Documented SHOW commands remain available –––
+EXPECTED: admin can inspect users and regular can inspect own permissions through SHOW commands
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW USERS;" | grep "username: regular"
+––– output –––
+username: regular
+––– input –––
+MYSQL_PWD=regular1234 mysql -E -uregular -h0 -P9306 -e "SHOW PERMISSIONS;" | grep "username:" | sort | uniq
+––– output –––
+username: regular
+––– comment –––
+––– 6.1.5 User cannot INSERT into system.auth_users –––
+EXPECTED: Permission denied for user 'regular'
+––– comment –––
+––– input –––
+MYSQL_PWD=regular1234 mysql -uregular -h0 -P9306 -e "INSERT INTO system.auth_users(username, salt, hashes) VALUES('hacker', 'aabb', '{\"password_sha1_no_salt\":\"aabb\"}');" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'regular'
+––– comment –––
+––– 6.1.6 User cannot DELETE from system.auth_permissions –––
+EXPECTED: Permission denied for user 'regular'
+––– comment –––
+––– input –––
+MYSQL_PWD=regular1234 mysql -uregular -h0 -P9306 -e "DELETE FROM system.auth_permissions WHERE username='admin';" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'regular'
+––– comment –––
+––– 6.1.7 Admin cannot directly modify system.auth_users via DML –––
+EXPECTED: Permission denied for direct DML on system.auth_users (use auth SQL commands such as CREATE USER/GRANT/REVOKE/SET PASSWORD)
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "INSERT INTO system.auth_users(username, salt, hashes) VALUES('hacker', 'aabb', '{\"password_sha1_no_salt\":\"aabb\"}');" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'admin'

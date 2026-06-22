@@ -13,6 +13,7 @@
   * 21.04 (Hirsute Hippo)
   * 22.04 (Jammy)
   * 24.04 (Noble)
+  * 26.04（Resolute）
 
 * Mint
   * 19
@@ -35,7 +36,7 @@ sudo apt update
 sudo apt install manticore
 ```
 
-如果您是从旧版本升级到 Manticore 6，建议先删除旧包以避免因更新的包结构导致的冲突：
+如果你是从旧版本升级到 Manticore 6 或更高版本，建议先移除旧软件包，以避免因更新后的软件包结构引起冲突：
 
 ```bash
 sudo apt remove manticore*

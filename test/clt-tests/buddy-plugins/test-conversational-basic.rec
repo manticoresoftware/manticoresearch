@@ -66,11 +66,11 @@ CREATE CHAT MODEL test_assistant (
 );
 EOF
 ––– output –––
-+--------------------------------------+
-| uuid                                 |
-+--------------------------------------+
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
-+--------------------------------------+
++----------------+
+| name           |
++----------------+
+| test_assistant |
++----------------+
 ––– comment –––
 Test CREATE CHAT MODEL - advanced configuration with custom settings
 ––– input –––
@@ -84,22 +84,22 @@ CREATE CHAT MODEL advanced_assistant (
 );
 EOF
 ––– output –––
-+--------------------------------------+
-| uuid                                 |
-+--------------------------------------+
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
-+--------------------------------------+
++--------------------+
+| name               |
++--------------------+
+| advanced_assistant |
++--------------------+
 ––– comment –––
 Test SHOW CHAT MODELS - should display created models
 ––– input –––
 mysql -h0 -P9306 -e "SHOW CHAT MODELS"
 ––– output –––
-+--------------------------------------+--------------------+--------------------+------------+
-| uuid                                 | name               | model              | created_at |
-+--------------------------------------+--------------------+--------------------+------------+
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# | advanced_assistant | openai:gpt-4o      | %{NUMBER} |
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# | test_assistant     | openai:gpt-4o-mini | %{NUMBER} |
-+--------------------------------------+--------------------+--------------------+------------+
++--------------------+--------------------+------------+
+| name               | model              | created_at |
++--------------------+--------------------+------------+
+| advanced_assistant | openai:gpt-4o      | %{NUMBER} |
+| test_assistant     | openai:gpt-4o-mini | %{NUMBER} |
++--------------------+--------------------+------------+
 ––– comment –––
 Test DESCRIBE CHAT MODEL - verify model configuration
 ––– input –––
@@ -109,24 +109,21 @@ mysql -h0 -P9306 -e "DESCRIBE CHAT MODEL test_assistant\G"
 property: id
    value: %{NUMBER}
 *************************** 2. row ***************************
-property: uuid
-   value: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
-*************************** 3. row ***************************
-property: name
-   value: test_assistant
-*************************** 4. row ***************************
 property: description
    value: Chat GPT cheap reasoning model
-*************************** 5. row ***************************
+*************************** 3. row ***************************
 property: model
    value: openai:gpt-4o-mini
-*************************** 6. row ***************************
+*************************** 4. row ***************************
+property: name
+   value: test_assistant
+*************************** 5. row ***************************
 property: settings.max_document_length
    value: %{NUMBER}
-*************************** 7. row ***************************
+*************************** 6. row ***************************
 property: created_at
    value: %{NUMBER}
-*************************** 8. row ***************************
+*************************** 7. row ***************************
 property: updated_at
    value: %{NUMBER}
 ––– input –––
@@ -136,66 +133,66 @@ mysql -h0 -P9306 -e "DESCRIBE CHAT MODEL advanced_assistant\G"
 property: id
    value: %{NUMBER}
 *************************** 2. row ***************************
-property: uuid
-   value: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
-*************************** 3. row ***************************
-property: name
-   value: advanced_assistant
-*************************** 4. row ***************************
 property: description
    value: Chat GPT v4 reasoning model
-*************************** 5. row ***************************
+*************************** 3. row ***************************
 property: model
    value: openai:gpt-4o
-*************************** 6. row ***************************
+*************************** 4. row ***************************
+property: name
+   value: advanced_assistant
+*************************** 5. row ***************************
 property: settings.timeout
    value: 60
-*************************** 7. row ***************************
+*************************** 6. row ***************************
 property: settings.retrieval_limit
    value: 5
-*************************** 8. row ***************************
+*************************** 7. row ***************************
 property: settings.max_document_length
    value: 3000
-*************************** 9. row ***************************
+*************************** 8. row ***************************
 property: created_at
    value: %{NUMBER}
-*************************** 10. row ***************************
+*************************** 9. row ***************************
 property: updated_at
    value: %{NUMBER}
 ––– comment –––
 Test CALL CHAT - basic query without conversation UUID
 This should succeed with OPENAI_API_KEY set
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('What is vector search?', 'docs', 'test_assistant')\G" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }'
+mysql -h0 -P9306 -e "CALL CHAT('What is vector search?', 'docs', 'test_assistant')\G" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }'
 ––– output –––
 *************************** 1. row ***************************
-conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
-       user_query: What is vector search?
-     search_query: What is vector search?
-         response: #!/.*[Vv]ector.*[Ss]earch.*/!#
-          sources: [{"id":1,"content":"Vector search uses embeddings to find semantically similar documents","title":"Vector Search Guide","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}},{"id":2,"content":"Full-text search and KNN capabilities for efficient retrieval","title":"Manticore Features","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}},{"id":3,"content":"Retrieval-Augmented Generation combines search with LLM for intelligent responses","title":"RAG Introduction","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}}]
+#!/.*conversation_uuid: [a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
+#!/.*user_query: What is vector search\?/!#
+#!/.*search_query: What is vector search\?/!#
+#!/.*response: .*[Vv]ector.*[Ss]earch.*/!#
+#!/.*response_with_refs: .*/!#
+#!/.*sources: .*"id":1.*"id":2.*"id":3.*/!#
 ––– comment –––
 Test CALL CHAT - with multiple content fields
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('Tell me about RAG', 'docs', 'test_assistant')\G" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }'
+mysql -h0 -P9306 -e "CALL CHAT('Tell me about RAG', 'docs', 'test_assistant')\G" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }'
 ––– output –––
 *************************** 1. row ***************************
-conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
-       user_query: Tell me about RAG
-     search_query: #!/.*RAG.*/!#
-         response: #!/.+/!#
-          sources: [{"id":3,"content":"Retrieval-Augmented Generation combines search with LLM for intelligent responses","title":"RAG Introduction","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}}]
+#!/.*conversation_uuid: [a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
+#!/.*user_query: Tell me about RAG/!#
+#!/.*search_query: .*RAG.*/!#
+#!/.*response: .+/!#
+#!/.*response_with_refs: .*/!#
+#!/.*sources: .*"id":3.*/!#
 ––– comment –––
 Test CALL CHAT - with conversation UUID for context tracking (should fail)
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('Can you explain more?', 'docs', 'test_assistant', 'test-conv-12345678-1234-1234-1234-123456789abc')\G" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }'
+mysql -h0 -P9306 -e "CALL CHAT('Can you explain more?', 'docs', 'test_assistant', 'test-conv-12345678-1234-1234-1234-123456789abc')\G" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }'
 ––– output –––
 *************************** 1. row ***************************
-conversation_uuid: test-conv-12345678-1234-1234-1234-123456789abc
-       user_query: Can you explain more?
-     search_query: #!/.+/!#
-         response: #!/.+/!#
-          sources: []
+#!/.*conversation_uuid: test-conv-12345678-1234-1234-1234-123456789abc/!#
+#!/.*user_query: Can you explain more\?/!#
+#!/.*search_query: .+/!#
+#!/.*response: .+/!#
+#!/.*response_with_refs: .*/!#
+#!/.*sources: \[\]/!#
 ––– comment –––
 Test DROP CHAT MODEL - cleanup
 ––– input –––

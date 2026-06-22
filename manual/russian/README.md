@@ -120,6 +120,7 @@
     * [• Оптимизатор на основе стоимости](Searching/Cost_based_optimizer.md)
     * [• Векторный поиск K-ближайших соседей](Searching/KNN.md)
     * [• Гибридный поиск](Searching/Hybrid_search.md)
+    * [• Разговорный поиск](Searching/Conversational_search.md)
 * [• Обновление схемы и настроек таблицы](Updating_table_schema_and_settings.md)
     * [• Обновление схемы таблицы в режиме RT](Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode)
     * [• Обновление FT-настроек таблицы в режиме RT](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode)
@@ -148,6 +149,7 @@
     * [• Сброс имен хостов](Securing_and_compacting_a_table/Flushing_hostnames.md)
 * [≫ Безопасность]
     * [• SSL](Security/SSL.md)
+    * [• Аутентификация и авторизация](Security/Authentication_and_authorization.md)
     * [• Только для чтения](Security/Read_only.md)
 * [≫ Логирование]
     * [• Логирование запросов](Logging/Query_logging.md)
@@ -186,6 +188,7 @@
     * [Vector.dev](Integration/Vectordev.md)
     * [Grafana](Integration/Grafana.md)
     * [Kibana](Integration/Kibana.md)
+    * [Opensearch Dashboards](Integration/Opensearch_Dashboards.md)
     * [Kafka](Integration/Kafka.md)
     * [DBeaver](Integration/DBeaver.md)
     * [Apache Superset](Integration/Apache_Superset.md)
@@ -213,4 +216,3 @@
 * [📖 Ссылки](References.md)
     * [• Предыдущие версии](References.md#Documentation-for-old-Manticore-versions)
 <!-- proofread -->
-

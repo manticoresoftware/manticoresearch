@@ -1837,15 +1837,14 @@ static void AddWarning ( StrVec_t * pWarnings, const char * szIndexName, CSphStr
 
 static bool ConfigureShardMetadataFromConfig ( ShardIndex_c & tShard, const char * szIndexName, const CSphConfigSection & hIndex, StrVec_t * pWarnings, CSphString & sError )
 {
-	bool bWordDict = true;
 	auto sDictType = hIndex.GetStr ( "dict", "keywords" );
-	if ( sDictType=="crc" )
-		bWordDict = false;
-	else if ( sDictType!="keywords" )
+	DictFormat_e eDictFormat = DictFormat_e::KEYWORDS;
+	if ( !ParseDictFormat ( sDictType, eDictFormat ) )
 	{
-		sError.SetSprintf ( "table '%s': unknown dict=%s; only 'keywords' or 'crc' values allowed", szIndexName, sDictType.cstr() );
+		sError.SetSprintf ( "table '%s': unknown dict=%s; only 'keywords', 'keywords_32k' or 'crc' values allowed", szIndexName, sDictType.cstr() );
 		return false;
 	}
+	bool bWordDict = ( eDictFormat!=DictFormat_e::CRC );
 
 	if ( !ConfigureRTPercolate ( tShard.m_tSchema, tShard.m_tSettings, szIndexName, hIndex, bWordDict, false, pWarnings, sError ) )
 		return false;

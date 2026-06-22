@@ -98,7 +98,7 @@ mysql -h0 -P9306 -e "SHOW CHAT MODELS;" | grep -c "openai"
 ––– comment –––
 Test with single content field
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('Tell me about vector search', 'knowledge_base', 'fast_assistant')\G;" | awk '/^[[:space:]]+(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_1.txt
+mysql -h0 -P9306 -e "CALL CHAT('Tell me about vector search', 'knowledge_base', 'fast_assistant')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_1.txt
 ––– output –––
 *************************** 1. row ***************************
 #!/.*conversation_uuid: [a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
@@ -114,7 +114,7 @@ OK
 ––– comment –––
 Test with two content fields (title, content)
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('Explain vector search', 'knowledge_base', 'detailed_assistant')\G;" | awk '/^[[:space:]]+(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_2.txt
+mysql -h0 -P9306 -e "CALL CHAT('Explain vector search', 'knowledge_base', 'detailed_assistant')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_2.txt
 ––– output –––
 *************************** 1. row ***************************
 #!/.*conversation_uuid: [a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
@@ -130,7 +130,7 @@ OK
 ––– comment –––
 Test with multiple content fields (title, summary, content)
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('Tell me about RAG architecture', 'knowledge_base', 'creative_assistant')\G;" | awk '/^[[:space:]]+(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_3.txt
+mysql -h0 -P9306 -e "CALL CHAT('Tell me about RAG architecture', 'knowledge_base', 'creative_assistant')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_3.txt
 ––– output –––
 *************************** 1. row ***************************
 #!/.*conversation_uuid: [a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
@@ -146,7 +146,7 @@ OK
 ––– comment –––
 Test conversation tracking - first message in a new conversation
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('What is clustering?', 'knowledge_base', 'fast_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | awk '/^[[:space:]]+(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_4.txt
+mysql -h0 -P9306 -e "CALL CHAT('What is clustering?', 'knowledge_base', 'fast_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_4.txt
 ––– output –––
 *************************** 1. row ***************************
 #!/.*conversation_uuid: conv-test-1234-5678-90ab-cdef12345678/!#
@@ -162,7 +162,7 @@ OK
 ––– comment –––
 Test conversation tracking - follow-up message (should maintain context)
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('How do I configure it?', 'knowledge_base', 'fast_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | awk '/^[[:space:]]+(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_5.txt
+mysql -h0 -P9306 -e "CALL CHAT('How do I configure it?', 'knowledge_base', 'fast_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_5.txt
 ––– output –––
 *************************** 1. row ***************************
 #!/.*conversation_uuid: conv-test-1234-5678-90ab-cdef12345678/!#
@@ -178,7 +178,7 @@ OK
 ––– comment –––
 Test same model on same conversation
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('What are best practices?', 'knowledge_base', 'fast_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | awk '/^[[:space:]]+(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_6.txt
+mysql -h0 -P9306 -e "CALL CHAT('What are best practices?', 'knowledge_base', 'fast_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_6.txt
 ––– output –––
 *************************** 1. row ***************************
 #!/.*conversation_uuid: conv-test-1234-5678-90ab-cdef12345678/!#
@@ -194,7 +194,7 @@ OK
 ––– comment –––
 Test independent conversation - different context
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('Show me tutorials', 'knowledge_base', 'creative_assistant', 'conv-other-aaaa-bbbb-cccc-dddddddddddd')\G;" | awk '/^[[:space:]]+(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }'
+mysql -h0 -P9306 -e "CALL CHAT('Show me tutorials', 'knowledge_base', 'creative_assistant', 'conv-other-aaaa-bbbb-cccc-dddddddddddd')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }'
 ––– output –––
 *************************** 1. row ***************************
 #!/.*conversation_uuid: conv-other-aaaa-bbbb-cccc-dddddddddddd/!#

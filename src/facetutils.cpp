@@ -9,11 +9,8 @@
 //
 
 #include "searchdaemon.h"
-#include "queuecreator.h"
 #include "facetutils.h"
-#include "sortcomp.h"
-#include "sortsetup.h"
-#include "schema/rset.h"
+#include "queuecreator.h"
 #include "std/fnv64.h"
 
 namespace facet
@@ -205,7 +202,7 @@ const CSphColumnInfo * GetGroupbyOnlyMagicAttr ( const ISphSchema & tSchema )
 	return nullptr;
 }
 
-bool GetFacetStatusAttr ( const CSphQuery & tFacetQuery, const ISphSchema * pSchema, const ISphSchema & tBucketSchema, CSphString & sAttr )
+static bool GetFacetStatusAttr ( const CSphQuery & tFacetQuery, const ISphSchema * pSchema, const ISphSchema & tBucketSchema, CSphString & sAttr )
 {
 	auto fnHasAttr = [pSchema,&tBucketSchema] ( const char * szAttr )
 	{
@@ -280,7 +277,7 @@ static bool IsFacetCountColumn ( const CSphColumnInfo & tCol )
 		|| tCol.m_sName.Begins ( "count(distinct " );
 }
 
-void ZeroFacetCountColumns ( CSphMatch & tMatch, const ISphSchema & tSchema )
+static void ZeroFacetCountColumns ( CSphMatch & tMatch, const ISphSchema & tSchema )
 {
 	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
 	{
@@ -336,172 +333,6 @@ bool SetupHelperQuery ( const CSphQuery & tHeadQuery, CSphQuery & tFacetQuery, F
 	return false;
 }
 
-struct MatchSortReorder_fn
-{
-	const ISphMatchComparator * m_pComp = nullptr;
-	const CSphMatchComparatorState & m_tState;
-
-	MatchSortReorder_fn ( const ISphMatchComparator * pComp, const CSphMatchComparatorState & tState )
-		: m_pComp ( pComp )
-		, m_tState ( tState )
-	{
-		assert ( m_pComp );
-	}
-
-	bool IsLess ( const CSphMatch * a, const CSphMatch * b ) const
-	{
-		assert ( a && b );
-		return m_pComp->VirtualIsLess ( *b, *a, m_tState );
-	}
-};
-
-static ISphMatchComparator * CreateMatchComparator ( ESphSortFunc eFunc )
-{
-	switch ( eFunc )
-	{
-		case FUNC_REL_DESC:		return new MatchRelevanceLt_fn();
-		case FUNC_TIMESEGS:		return new MatchTimeSegments_fn();
-		case FUNC_GENERIC1:		return new MatchGeneric1_fn();
-		case FUNC_GENERIC2:		return new MatchGeneric2_fn();
-		case FUNC_GENERIC3:		return new MatchGeneric3_fn();
-		case FUNC_GENERIC4:		return new MatchGeneric4_fn();
-		case FUNC_GENERIC5:		return new MatchGeneric5_fn();
-		case FUNC_EXPR:			return new MatchExpr_fn();
-		default:				return nullptr;
-	}
-}
-
-static CSphString NormalizeFacetSortClause ( const CSphQuery & tFacetQuery, const ISphSchema & tSchema, const char * szSort )
-{
-	CSphString sOut ( szSort );
-	if ( !szSort || !*szSort || tSchema.GetAttr ( "@groupby" ) )
-		return sOut;
-
-	CSphString sFacetSortAttr;
-	if ( !tFacetQuery.m_sGroupBy.IsEmpty() && tSchema.GetAttr ( tFacetQuery.m_sGroupBy.cstr() ) )
-		sFacetSortAttr = tFacetQuery.m_sGroupBy;
-	else if ( !tFacetQuery.m_sFacetBy.IsEmpty() && tSchema.GetAttr ( tFacetQuery.m_sFacetBy.cstr() ) )
-		sFacetSortAttr = tFacetQuery.m_sFacetBy;
-	else
-		return sOut;
-
-	std::string sNorm = szSort;
-	std::string sLower = sNorm;
-	for ( auto & c : sLower )
-		c = (char)tolower ( (unsigned char)c );
-
-	auto fnIsTokenBoundary = [] ( char c )
-	{
-		return !c || !( sphIsAttr(c) || c=='@' );
-	};
-
-	auto fnReplaceAll = [&] ( const char * szNeedle )
-	{
-		std::string sNeedleLower = szNeedle;
-		for ( auto & c : sNeedleLower )
-			c = (char)tolower ( (unsigned char)c );
-
-		size_t iPos = 0;
-		while ( ( iPos = sLower.find ( sNeedleLower, iPos ) ) != std::string::npos )
-		{
-			const size_t iEnd = iPos + sNeedleLower.length();
-			const char cPrev = iPos ? sLower[iPos-1] : '\0';
-			const char cNext = iEnd<sLower.length() ? sLower[iEnd] : '\0';
-			if ( !fnIsTokenBoundary ( cPrev ) || !fnIsTokenBoundary ( cNext ) )
-			{
-				iPos = iEnd;
-				continue;
-			}
-
-			sNorm.replace ( iPos, sNeedleLower.length(), sFacetSortAttr.cstr() );
-			sLower.replace ( iPos, sNeedleLower.length(), sFacetSortAttr.cstr() );
-			iPos += sFacetSortAttr.Length();
-		}
-	};
-
-	fnReplaceAll ( "facet()" );
-	fnReplaceAll ( "@groupby" );
-	sOut = sNorm.c_str();
-	return sOut;
-}
-
-static const CSphColumnInfo * GetFacetCountSortAttr ( const ISphSchema & tSchema )
-{
-	for ( int i = 0; i<tSchema.GetAttrsCount(); ++i )
-	{
-		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
-		if ( IsFacetCountColumn ( tAttr ) )
-			return &tAttr;
-	}
-
-	return nullptr;
-}
-
-static const CSphColumnInfo * GetFacetValueSortAttr ( const CSphQuery & tFacetQuery, const ISphSchema & tSchema )
-{
-	CSphString sAttr;
-	if ( GetFacetStatusAttr ( tFacetQuery, &tSchema, tSchema, sAttr ) )
-		return tSchema.GetAttr ( sAttr.cstr() );
-
-	return GetGroupbyOnlyMagicAttr ( tSchema );
-}
-
-static void AddSortAliasAttr ( CSphVector<CSphColumnInfo> & dAttrs, const char * szAlias, const CSphColumnInfo * pAttr )
-{
-	if ( !pAttr || dAttrs.any_of ( [szAlias] ( const auto & tAttr ) { return tAttr.m_sName==szAlias; } ) )
-		return;
-
-	CSphColumnInfo tAlias = *pAttr;
-	tAlias.m_sName = szAlias;
-	dAttrs.Add ( tAlias );
-}
-
-static const ISphSchema & SetupFacetSortSchema ( const CSphQuery & tFacetQuery, const ISphSchema & tSchema, CSphRsetSchema & tSortSchema )
-{
-	CSphVector<CSphColumnInfo> dAttrs;
-	for ( int i = 0; i<tSchema.GetAttrsCount(); ++i )
-		dAttrs.Add ( tSchema.GetAttr(i) );
-
-	AddSortAliasAttr ( dAttrs, "@count", GetFacetCountSortAttr ( tSchema ) );
-	AddSortAliasAttr ( dAttrs, "@groupby", GetFacetValueSortAttr ( tFacetQuery, tSchema ) );
-
-	if ( dAttrs.GetLength()==tSchema.GetAttrsCount() )
-		return tSchema;
-
-	tSortSchema = tSchema;
-	tSortSchema.SwapAttrs ( dAttrs );
-	return tSortSchema;
-}
-
-static bool SortFacetMatches ( const CSphQuery & tFacetQuery, const ISphSchema & tSchema, CSphSwapVector<CSphMatch> & dMatches )
-{
-	if ( dMatches.GetLength()<=1 )
-		return true;
-
-	const char * szRawSort = !tFacetQuery.m_sGroupSortBy.IsEmpty() ? tFacetQuery.m_sGroupSortBy.cstr() : tFacetQuery.m_sOrderBy.cstr();
-	CSphRsetSchema tSortSchema;
-	const ISphSchema & tSchemaForSort = SetupFacetSortSchema ( tFacetQuery, tSchema, tSortSchema );
-	CSphString sSort = NormalizeFacetSortClause ( tFacetQuery, tSchemaForSort, szRawSort );
-	const char * szSort = sSort.cstr();
-	if ( !szSort || !*szSort )
-		return true;
-
-	ESphSortFunc eFunc = FUNC_REL_DESC;
-	CSphMatchComparatorState tState;
-	CSphVector<ExtraSortExpr_t> dExtraExprs;
-	CSphString sError;
-	if ( sphParseSortClause ( tFacetQuery, szSort, tSchemaForSort, eFunc, tState, dExtraExprs, nullptr, sError )!=SORT_CLAUSE_OK )
-		return false;
-
-	CSphRefcountedPtr<ISphMatchComparator> pComp ( CreateMatchComparator ( eFunc ) );
-	if ( !pComp )
-		return false;
-
-	MatchSortReorder_fn tReorder ( pComp, tState );
-	sphSort ( dMatches.Begin(), dMatches.GetLength(), tReorder, MatchSortAccessor_t() );
-	return true;
-}
-
 void DeferFacetResultPaging ( CSphQuery & tQuery )
 {
 	if ( tQuery.m_iFacetResultLimit>=0 )
@@ -544,7 +375,7 @@ static const FacetBucketSet_t * CollectBucketSet ( const VecTraits_T<CSphMatch> 
 	return &tBuckets;
 }
 
-bool MatchBucketSet ( const CSphMatch & tMatch, const ISphSchema & tSchema, const FacetBucketSet_t & tBuckets )
+static bool MatchBucketSet ( const CSphMatch & tMatch, const ISphSchema & tSchema, const FacetBucketSet_t & tBuckets )
 {
 	const CSphColumnInfo * pAttr = tSchema.GetAttr ( tBuckets.m_sAttr.cstr() );
 	if ( !pAttr )
@@ -641,83 +472,38 @@ const CSphVector<CSphFilterSettings> * CollectSelectedFiltersForAttr ( const CSp
 	return dSelected.IsEmpty() ? nullptr : &dSelected;
 }
 
-bool CollectMissingFacetZeroes ( const AggrResult_t & tRes, const CSphString & sAttr, const VecTraits_T<CSphMatch> & dVisibleMatches, const VecTraits_T<CSphMatch> & dZeroMatches, const ISphSchema & tZeroSchema, CSphSwapVector<CSphMatch> & dMissingZeroes )
+bool AppendMissingFacetZeroes ( const CSphQuery & tFacetQuery, AggrResult_t & tRes, const AggrResult_t & tZeroesRes, bool & bAppended )
 {
-	dMissingZeroes.Reset();
-
-	FacetBucketSet_t tVisibleBuckets;
-	const FacetBucketSet_t * pVisibleBuckets = CollectFacetAvailableFilters ( tRes, sAttr, dVisibleMatches, tVisibleBuckets );
-	if ( !pVisibleBuckets )
-		return false;
-
-	const int iDynamicSize = tRes.m_tSchema.GetDynamicSize();
-	dMissingZeroes.Reserve ( dZeroMatches.GetLength() );
-	for ( const auto & tZeroMatch : dZeroMatches )
-	{
-		if ( MatchBucketSet ( tZeroMatch, tZeroSchema, *pVisibleBuckets ) )
-			continue;
-
-		CSphMatch & tOutMatch = dMissingZeroes.Add();
-		tOutMatch.Reset ( iDynamicSize );
-		tOutMatch.Combine ( tZeroMatch, iDynamicSize );
-		ZeroFacetCountColumns ( tOutMatch, tRes.m_tSchema );
-	}
-
-	return true;
-}
-
-bool CollectMergedFacetZeroes ( const CSphQuery & tFacetQuery, const AggrResult_t & tRes, const AggrResult_t & tZeroesRes, CSphSwapVector<CSphMatch> & dPageMatches, int64_t & iTotalMatches )
-{
-	dPageMatches.Reset();
-	iTotalMatches = tRes.m_iTotalMatches;
+	bAppended = false;
 
 	if ( tRes.m_dResults.IsEmpty() || tZeroesRes.m_dResults.IsEmpty() )
 		return false;
 
+	auto & tVisibleResult = tRes.m_dResults.First();
+	const auto & tZeroesResult = tZeroesRes.m_dResults.First();
+
 	CSphString sAttr;
-	if ( !GetFacetStatusAttr ( tFacetQuery, &tRes.m_tSchema, tRes.m_tSchema, sAttr ) )
+	if ( !GetFacetStatusAttr ( tFacetQuery, &tVisibleResult.m_tSchema, tVisibleResult.m_tSchema, sAttr ) )
 		return false;
 
-	const auto & dVisibleMatches = tRes.m_dResults.First().m_dMatches;
-	CSphSwapVector<CSphMatch> dMissingZeroes;
-	if ( !CollectMissingFacetZeroes ( tRes, sAttr, dVisibleMatches, tZeroesRes.m_dResults.First().m_dMatches, tZeroesRes.m_tSchema, dMissingZeroes ) )
+	FacetBucketSet_t tVisibleBuckets;
+	const FacetBucketSet_t * pVisibleBuckets = CollectFacetAvailableFilters ( tRes, sAttr, tVisibleResult.m_dMatches, tVisibleBuckets );
+	if ( !pVisibleBuckets )
 		return false;
 
-	const int iDynamicSize = tRes.m_tSchema.GetDynamicSize();
-	CSphSwapVector<CSphMatch> dMerged;
-	dMerged.Reserve ( dVisibleMatches.GetLength() + dMissingZeroes.GetLength() );
-	for ( const auto & tVisibleMatch : dVisibleMatches )
+	tVisibleResult.m_dMatches.Reserve ( tVisibleResult.m_dMatches.GetLength() + tZeroesResult.m_dMatches.GetLength() );
+	for ( const auto & tZeroMatch : tZeroesResult.m_dMatches )
 	{
-		CSphMatch & tOutMatch = dMerged.Add();
-		tOutMatch.Reset ( iDynamicSize );
-		tOutMatch.Combine ( tVisibleMatch, iDynamicSize );
+		if ( MatchBucketSet ( tZeroMatch, tZeroesResult.m_tSchema, *pVisibleBuckets ) )
+			continue;
+
+		CSphMatch & tOutMatch = tVisibleResult.m_dMatches.Add();
+		tOutMatch.Reset ( tVisibleResult.m_tSchema.GetDynamicSize() );
+		tVisibleResult.m_tSchema.CloneMatch ( tOutMatch, tZeroMatch );
+		ZeroFacetCountColumns ( tOutMatch, tVisibleResult.m_tSchema );
+		bAppended = true;
 	}
 
-	for ( const auto & tZeroMatch : dMissingZeroes )
-	{
-		CSphMatch & tOutMatch = dMerged.Add();
-		tOutMatch.Reset ( iDynamicSize );
-		tOutMatch.Combine ( tZeroMatch, iDynamicSize );
-	}
-
-	if ( !SortFacetMatches ( tFacetQuery, tRes.m_tSchema, dMerged ) )
-		return false;
-
-	const int iOffset = Max ( GetFacetResultOffset ( tFacetQuery ), 0 );
-	const int iLimit = Max ( GetFacetResultLimit ( tFacetQuery ), 0 );
-	if ( iLimit>0 && iOffset<dMerged.GetLength() )
-	{
-		const int iCount = Min ( iLimit, dMerged.GetLength() - iOffset );
-		dPageMatches.Reserve ( iCount );
-		for ( int i = 0; i < iCount; ++i )
-		{
-			CSphMatch & tOutMatch = dPageMatches.Add();
-			tOutMatch.Reset ( iDynamicSize );
-			tOutMatch.Combine ( dMerged[iOffset+i], iDynamicSize );
-		}
-	}
-
-	iTotalMatches = Max<int64_t> ( tZeroesRes.m_iTotalMatches, dMerged.GetLength() );
 	return true;
 }
 }

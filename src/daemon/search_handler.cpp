@@ -1938,6 +1938,75 @@ static void FillupFacetError ( int iQueries, const VecTraits_T<CSphQuery> & dQue
 	}
 }
 
+static sph::StringSet BuildExtraSchemaSet ( const StrVec_t & dExtraSchema )
+{
+	sph::StringSet hExtra;
+	for ( const CSphString & sExtra : dExtraSchema )
+		hExtra.Add ( sExtra );
+
+	return hExtra;
+}
+
+static void ApplyFacetZeroesPaging ( const CSphQuery & tFacetQuery, AggrResult_t & tRes )
+{
+	tRes.m_iOffset = Max ( facet::GetFacetResultOffset ( tFacetQuery ), 0 );
+	const int iLimit = Max ( facet::GetFacetResultLimit ( tFacetQuery ), 0 );
+	tRes.m_iCount = Max ( Min ( iLimit, tRes.GetLength()-tRes.m_iOffset ), 0 );
+	tRes.m_iMatches = tRes.m_iCount;
+}
+
+static int FindFacetZeroesHelper ( const VecTraits_T<CSphQuery> & dQueries, int iFacet )
+{
+	if ( iFacet<0 || iFacet>=dQueries.GetLength() || !facet::HasDeferredFacetResultPaging ( dQueries[iFacet] ) )
+		return -1;
+
+	int iHelper = iFacet + 1;
+	if ( iHelper<dQueries.GetLength() && dQueries[iHelper].m_bFacetMaxRef )
+		++iHelper;
+
+	if ( iHelper<dQueries.GetLength() && dQueries[iHelper].m_bFacetMaxRef )
+		return iHelper;
+
+	return -1;
+}
+
+static void FinalizeFacetZeroes ( const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<AggrResult_t> & dResults, bool bHaveLocals, const StrVec_t & dExtraSchema, QueryProfile_c * pProfile, bool bForceRefItems, bool bMaster )
+{
+	for ( int i=0; i<dQueries.GetLength(); ++i )
+	{
+		const CSphQuery & tFacetQuery = dQueries[i];
+		if ( !tFacetQuery.m_bFacet )
+			continue;
+
+		int iZeroes = FindFacetZeroesHelper ( dQueries, i );
+		if ( iZeroes<0 )
+			continue;
+
+		AggrResult_t & tRes = dResults[i];
+		const AggrResult_t & tZeroesRes = dResults[iZeroes];
+		if ( !tRes.m_iSuccesses || !tZeroesRes.m_iSuccesses )
+		{
+			ApplyFacetZeroesPaging ( tFacetQuery, tRes );
+			continue;
+		}
+
+		bool bAppended = false;
+		bool bCanFinalize = facet::AppendMissingFacetZeroes ( tFacetQuery, tRes, tZeroesRes, bAppended );
+		if ( bCanFinalize && bAppended )
+		{
+			sph::StringSet hExtra = BuildExtraSchemaSet ( dExtraSchema );
+			if ( !MinimizeAggrResult ( tRes, tFacetQuery, bHaveLocals, hExtra, pProfile, nullptr, bForceRefItems, bMaster, true ) )
+			{
+				tRes.m_iSuccesses = 0;
+				continue;
+			}
+		}
+
+		tRes.m_iTotalMatches = Max<int64_t> ( tZeroesRes.m_iTotalMatches, tRes.GetLength() );
+		ApplyFacetZeroesPaging ( tFacetQuery, tRes );
+	}
+}
+
 // one or more queries against one and same set of indexes
 void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 {
@@ -2197,9 +2266,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 	for ( int iRes=0; iRes<iQueries; ++iRes )
 	{
-		sph::StringSet hExtra;
-		for ( const CSphString & sExtra : m_dExtraSchema )
-			hExtra.Add ( sExtra );
+		sph::StringSet hExtra = BuildExtraSchemaSet ( m_dExtraSchema );
 
 		AggrResult_t & tRes = m_dNAggrResults[iRes];
 		const CSphQuery & tQuery = m_dNQueries[iRes];
@@ -2273,6 +2340,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		for ( const auto & tLocal : m_dLocal )
 			tRes.m_dIndexNames.Add ( tLocal.m_sName );
 	}
+
+	FinalizeFacetZeroes ( m_dNQueries, m_dNAggrResults, !m_dLocal.IsEmpty(), m_dExtraSchema, m_pProfile, m_bFederatedUser, m_bMaster );
 
 	// pop up facet error from one of the query to the front
 	FillupFacetError ( iQueries, m_dQueries, m_dNAggrResults );

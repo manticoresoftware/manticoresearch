@@ -45,7 +45,7 @@ FACET {expr_list} [BY {expr_list}] [ALL FILTERS | FILTERS {expr_list} | EXCLUDE 
 * 可选的 `size` 指定结果中包含的最大桶数。未指定时，继承主查询的限制。更多详细信息可以在[分面结果大小](../Searching/Faceted_search.md#Size-of-facet-result)部分找到。
 * 可选的 `sort` 指定一个属性数组和/或附加属性，使用与[主查询中的"sort"参数](../Searching/Sorting_and_ranking.md#Sorting-via-JSON)相同的语法。
 * 可选的顶层 `facet_filter_mode` 用于控制所有聚合如何继承主查询中的过滤条件。支持的值是 `strict`、`auto` 和 `max`。这是 SQL 中的查询级设置（`OPTION facet_filter_mode='...'`），也是 JSON 中的顶层设置。
-* 可选的按聚合级别 `filter_mode` 用于覆盖该聚合继承到的模式。支持的值是 `strict`、`auto` 和 `max`。这个键只在 JSON 中使用，不是 `facet_filter_mode` 的别名。在 SQL 中，对应的按 facet 覆盖方式是在 `FACET` 子句里使用 `MODE` 关键字。
+* 可选的按聚合级别 `mode` 用于覆盖该聚合继承到的模式。支持的值是 `strict`、`auto` 和 `max`。这个键只在 JSON 中使用，不是 `facet_filter_mode` 的别名。在 SQL 中，对应的按 facet 覆盖方式是在 `FACET` 子句里使用 `MODE` 关键字。
 * 可选的按聚合级别 `filters` 用于显式列出哪些主查询属性过滤条件应该应用到该聚合。在 SQL 中，对应的子句是 `FILTERS ...`。
 * 可选的按聚合级别 `exclude_filters` 用于显式列出哪些主查询属性过滤条件不应该应用到该聚合。这个键只在 JSON 中使用；在 SQL 中，对应的子句是 `EXCLUDE FILTERS ...`。
 * 可选的按聚合级别 `zeroes` 用于在 `max` 模式下启用零计数 bucket。在 SQL 中，对应的按 facet 关键字是 `ZEROES`。如果你想在 SQL `max` 模式下显示过滤后的可见计数，同时又想保留更宽泛的零计数 bucket，请使用 `OPTION facet_filter_mode='max' ... FACET ... ALL FILTERS ZEROES`。
@@ -2492,9 +2492,9 @@ FACET brand_id EXCLUDE FILTERS color_id;
 
 SQL 和 JSON 的命名略有不同：
 - SQL 使用查询选项 `facet_filter_mode`、按 facet 关键字 `MODE`，以及子句 `FILTERS` / `EXCLUDE FILTERS`
-- JSON 使用顶层键 `facet_filter_mode`、按聚合级别键 `filter_mode` / `zeroes`，以及键 `filters` / `exclude_filters`
+- JSON 使用顶层键 `facet_filter_mode`、按聚合级别键 `mode` / `zeroes`，以及键 `filters` / `exclude_filters`
 
-没有查询级别的 `filter_mode` 别名。请使用 `facet_filter_mode` 作为继承的查询/顶层默认值，使用 `MODE` 作为单个 SQL facet 的设置，使用 `filter_mode` 作为单个 JSON 聚合的设置。
+没有查询级别的 `mode` 键。请使用 `facet_filter_mode` 作为继承的查询/顶层默认值，使用 `MODE` 作为单个 SQL facet 的设置，使用 `mode` 作为单个 JSON 聚合的设置。
 
 `ZEROES` 不是 `MODE max` 的替代；它是与 `max` 模式配合使用的。所以如果查询已经设置了 `OPTION facet_filter_mode='max'`，SQL 写法就是 `FACET color_id ALL FILTERS ZEROES`。如果查询默认仍是 `strict` 或 `auto`，就需要在该 facet 上显式启用 `max`，写成 `FACET color_id ALL FILTERS ZEROES MODE max`。
 
@@ -2584,7 +2584,7 @@ POST /search -d '
   "aggs": {
     "colors": {
       "terms": { "field": "color_id" },
-      "filter_mode": "strict"
+      "mode": "strict"
     },
     "sku": {
       "terms": { "field": "sku" },
@@ -2600,7 +2600,7 @@ POST /search -d '
 
 注：
 - 在 SQL 中，`MODE` 会覆盖单个 facet 的查询级 `facet_filter_mode`，而 `ZEROES` 会让该 facet 的零计数 `max` bucket 继续可见
-- 在 JSON 中，`filter_mode` 会覆盖单个聚合的顶层 `facet_filter_mode`，而 `"zeroes": true` 会为该聚合启用相同的零计数 `max` bucket 行为
+- 在 JSON 中，`mode` 会覆盖单个聚合的顶层 `facet_filter_mode`，而 `"zeroes": true` 会为该聚合启用相同的零计数 `max` bucket 行为
 - 对于显式值过滤器（如 `=` 和 `IN`），所选值会以 `status=selected` 报告。
 - 当前不支持的同字段过滤器（如范围）不会参与已选值检测
 - 分面本地的过滤器作用域支持仅连接的属性过滤器。复杂的布尔过滤树不会按分面重写。

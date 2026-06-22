@@ -28,11 +28,11 @@ a:1:{i:0;a:32:{i:0;a:2:{s:8:"sphinxql";s:97:"create table facet_opt_review ( tit
   "aggs": {
     "color_single_strict": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } }
   }
-}";s:4:"rows";s:171:"{"timed_out":false,"hits":{"total":2,"total_relation":"eq","hits":[]},"aggregations":{"color_single_strict":{"buckets":[{"key":1,"doc_count":2},{"key":2,"doc_count":1}]}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:30;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:274:"{
+}";s:4:"rows";s:171:"{"timed_out":false,"hits":{"total":2,"total_relation":"eq","hits":[]},"aggregations":{"color_single_strict":{"buckets":[{"key":1,"doc_count":2},{"key":2,"doc_count":1}]}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:30;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:267:"{
   "table": "facet_opt_review",
   "limit": 0,
   "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } } ] } },
   "aggs": {
-    "color_single_mode_strict": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "filter_mode": "strict" }
+    "color_single_mode_strict": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "mode": "strict" }
   }
 }";s:4:"rows";s:176:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[]},"aggregations":{"color_single_mode_strict":{"buckets":[{"key":1,"doc_count":2},{"key":2,"doc_count":1}]}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:31;a:6:{s:13:"http_endpoint";s:3:"sql";s:11:"http_method";s:4:"POST";s:12:"http_request";s:42:"mode=raw&query=drop table facet_opt_review";s:4:"rows";s:37:"[{"total":0,"error":"","warning":""}]";s:9:"http_code";i:200;s:4:"http";i:1;}}}

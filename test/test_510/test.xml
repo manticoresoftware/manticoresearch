@@ -60,8 +60,11 @@ SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 AND size_i
 <!-- ZEROES with COUNT(*) DESC must still apply LIMIT after merging, not append zero buckets after the visible page. -->
 SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 AND size_id=10 LIMIT 0 OPTION facet_filter_mode='max' FACET size_id ALL FILTERS ZEROES ORDER BY COUNT(*) DESC LIMIT 1;;
 
-<!-- ZEROES must also sort/page merged expression-facet buckets using FACET(). DESC LIMIT 1 should return only the highest broad expression bucket. -->
+<!-- ZEROES must reuse the facet sorter for expression-backed buckets. DESC LIMIT 1 should return only the highest broad zero expression bucket. -->
 SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 AND price=100 LIMIT 0 OPTION facet_filter_mode='max' FACET price/100 ALL FILTERS ZEROES ORDER BY FACET() DESC LIMIT 1;;
+
+<!-- ZEROES must sort merged string buckets with the query collation; ASC LIMIT 1 should return the broad zero string bucket. -->
+SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_name='red' AND size_id=10 LIMIT 0 OPTION facet_filter_mode='max' FACET color_name ALL FILTERS ZEROES ORDER BY FACET() ASC LIMIT 1;;
 
 <!-- Per-facet MODE max should combine with ALL FILTERS ZEROES exactly as documented. -->
 SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 AND size_id=10 LIMIT 0 OPTION facet_filter_mode='strict' FACET size_id ALL FILTERS ZEROES MODE max ORDER BY FACET() DESC LIMIT 1;;

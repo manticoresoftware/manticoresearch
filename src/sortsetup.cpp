@@ -165,6 +165,7 @@ private:
 
 	int							m_iAttr = -1;
 	ESphAttr					m_eAttrType = SPH_ATTR_NONE;
+	CSphString					m_sRemappedTok;
 
 	bool	SetupSortByRelevance();
 	void	UnifyInternalAttrNames();
@@ -215,7 +216,22 @@ void SortStateSetup_c::UnifyInternalAttrNames()
 	else if ( !strcasecmp ( m_szTok, "count(*)" ) )
 		m_szTok = "@count";
 	else if ( !strcasecmp ( m_szTok, "facet()" ) )
-		m_szTok = "@groupby"; // facet() is essentially a @groupby alias
+	{
+		if ( m_tQuery.m_bFacet && !m_tQuery.m_sGroupBy.IsEmpty() )
+		{
+			m_sRemappedTok = sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr() )
+				? SortJsonInternalSet ( m_tQuery.m_sGroupBy )
+				: m_tQuery.m_sGroupBy;
+
+			if ( m_tSchema.GetAttr ( m_sRemappedTok.cstr() ) )
+			{
+				m_szTok = m_sRemappedTok.cstr();
+				return;
+			}
+		}
+
+		m_szTok = "@groupby"; // fallback for grouped results that only expose the group key
+	}
 	else if ( strcasecmp ( m_szTok, "count" )>=0 && m_tTok.IsSparseCount ( m_szTok + sizeof ( "count" ) - 1 ) ) // epression count(*) with various spaces
 		m_szTok = "@count";
 	else if ( !strcasecmp ( m_szTok, "knn_dist()" ) )

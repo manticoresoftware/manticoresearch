@@ -60,7 +60,7 @@ static void SendStringVec ( ISphOutputBuffer & tOut, const StrVec_t & dStrings )
 		tOut.SendString ( sValue.cstr() );
 }
 
-static void SendFacetFilterTrait ( ISphOutputBuffer & tOut, const FacetFilterTrait_t & tTrait )
+static void SendFacetFilterTrait ( ISphOutputBuffer & tOut, const FacetFilterTrait_t & tTrait, WORD uMasterVer )
 {
 	tOut.SendByte ( tTrait.m_tMode.has_value() );
 	if ( tTrait.m_tMode )
@@ -68,7 +68,8 @@ static void SendFacetFilterTrait ( ISphOutputBuffer & tOut, const FacetFilterTra
 
 	tOut.SendByte ( (BYTE)tTrait.m_eClause );
 	SendStringVec ( tOut, tTrait.m_dAttrs );
-	tOut.SendByte ( tTrait.m_bZeroes );
+	if ( uMasterVer>=31 )
+		tOut.SendByte ( tTrait.m_bZeroes );
 }
 
 void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, int iWeight ) const
@@ -339,7 +340,7 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	tOut.SendString ( q.m_sExpandBlended.cstr() );
 
 	tOut.SendByte ( q.m_bFacetMaxRef );
-	SendFacetFilterTrait ( tOut, q.m_tFacetFilter );
+	SendFacetFilterTrait ( tOut, q.m_tFacetFilter, VER_COMMAND_SEARCH_MASTER );
 	SendStringVec ( tOut, q.m_dFacetOwnFilterAttrs );
 }
 
@@ -629,7 +630,7 @@ static void ParseStringVec ( InputBuffer_c & tReq, StrVec_t & dStrings )
 		sValue = tReq.GetString();
 }
 
-static void ParseFacetFilterTrait ( InputBuffer_c & tReq, FacetFilterTrait_t & tTrait )
+static void ParseFacetFilterTrait ( InputBuffer_c & tReq, FacetFilterTrait_t & tTrait, WORD uMasterVer )
 {
 	tTrait.m_tMode.reset();
 	bool bHasMode = !!tReq.GetByte();
@@ -638,7 +639,7 @@ static void ParseFacetFilterTrait ( InputBuffer_c & tReq, FacetFilterTrait_t & t
 
 	tTrait.m_eClause = (FacetFilterClause_e)tReq.GetByte();
 	ParseStringVec ( tReq, tTrait.m_dAttrs );
-	tTrait.m_bZeroes = !!tReq.GetByte();
+	tTrait.m_bZeroes = uMasterVer>=31 && !!tReq.GetByte();
 }
 
 
@@ -1240,7 +1241,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	if ( uMasterVer>=30 )
 	{
 		tQuery.m_bFacetMaxRef = !!tReq.GetByte();
-		ParseFacetFilterTrait ( tReq, tQuery.m_tFacetFilter );
+		ParseFacetFilterTrait ( tReq, tQuery.m_tFacetFilter, uMasterVer );
 		ParseStringVec ( tReq, tQuery.m_dFacetOwnFilterAttrs );
 	}
 

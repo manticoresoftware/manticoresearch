@@ -77,15 +77,15 @@ searchd
   }
 }</query>
 
-<!-- Explicit per-agg filter_mode should produce broad base-query buckets with status. -->
+<!-- Explicit per-agg max should produce broad base-query buckets with status. -->
 <query endpoint="search">{
   "table": "facet_json_review",
   "limit": 0,
   "facet_filter_mode": "strict",
   "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
   "aggs": {
-    "color_mode_max": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "filter_mode": "max" },
-    "size_mode_strict": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } }, "filter_mode": "strict" }
+    "color_mode_max": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "mode": "max" },
+    "size_mode_strict": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } }, "mode": "strict" }
   }
 }</query>
 
@@ -112,14 +112,14 @@ searchd
   }
 }</query>
 
-<!-- Manual scopes via filters/exclude_filters plus per-agg filter_mode. -->
+<!-- Manual scopes and filter_mode alias. -->
 <query endpoint="search">{
   "table": "facet_json_review",
   "limit": 0,
   "facet_filter_mode": "strict",
   "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } }, { "equals": { "size_id": 10 } } ] } },
   "aggs": {
-    "color_filters_brand_max": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "filters": [ "brand_id" ], "filter_mode": "max" },
+    "color_filters_brand_max": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "filters": [ "brand_id" ], "mode": "max" },
     "size_exclude_color_auto": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } }, "exclude_filters": [ "color_id" ], "filter_mode": "auto" }
   }
 }</query>
@@ -131,7 +131,7 @@ searchd
   "facet_filter_mode": "strict",
   "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
   "aggs": {
-    "size_filters_zeroes": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } }, "filters": [ "brand_id", "color_id" ], "filter_mode": "max", "zeroes": true }
+    "size_filters_zeroes": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } }, "filters": [ "brand_id", "color_id" ], "mode": "max", "zeroes": true }
   }
 }</query>
 
@@ -142,18 +142,18 @@ searchd
   "facet_filter_mode": "strict",
   "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } }, { "equals": { "size_id": 10 } } ] } },
   "aggs": {
-    "size_filters_zeroes_desc_top1": { "terms": { "field": "size_id", "size": 1, "order": { "size_id": "desc" } }, "filters": [ "brand_id", "color_id" ], "filter_mode": "max", "zeroes": true }
+    "size_filters_zeroes_desc_top1": { "terms": { "field": "size_id", "size": 1, "order": { "size_id": "desc" } }, "filters": [ "brand_id", "color_id" ], "mode": "max", "zeroes": true }
   }
 }</query>
 
-<!-- Legacy JSON agg key mode should be rejected with a clear error. -->
+<!-- zeroes=true must sort merged string buckets with the query collation; size=1 ascending should return the broad zero string bucket. -->
 <query endpoint="search">{
   "table": "facet_json_review",
   "limit": 0,
   "facet_filter_mode": "strict",
-  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_name": "red" } }, { "equals": { "size_id": 10 } } ] } },
   "aggs": {
-    "legacy_mode_rejected": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "mode": "max" }
+    "color_name_zeroes_asc_top1": { "terms": { "field": "color_name", "size": 1, "order": { "color_name": "asc" } }, "filters": [ "brand_id", "color_name", "size_id" ], "mode": "max", "zeroes": true }
   }
 }</query>
 

@@ -40,14 +40,14 @@ a:1:{i:0;a:21:{i:0;a:2:{s:8:"sphinxql";s:147:"create table facet_json_review ( t
     "color_top_max": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } },
     "size_top_max": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } } }
   }
-}";s:4:"rows";s:510:"{"timed_out":false,"hits":{"total":2,"total_relation":"eq","hits":[]},"aggregations":{"color_top_max":{"buckets":[{"key":1,"doc_count":3,"status":"selected"},{"key":2,"doc_count":1,"status":"available"},{"key":3,"doc_count":1,"status":"available"},{"key":4,"doc_count":1,"status":"available"},{"key":5,"doc_count":1,"status":"available"}]},"size_top_max":{"buckets":[{"key":10,"doc_count":4,"status":"available"},{"key":20,"doc_count":2,"status":"available"},{"key":30,"doc_count":1,"status":"unavailable"}]}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:6;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:457:"{
+}";s:4:"rows";s:510:"{"timed_out":false,"hits":{"total":2,"total_relation":"eq","hits":[]},"aggregations":{"color_top_max":{"buckets":[{"key":1,"doc_count":3,"status":"selected"},{"key":2,"doc_count":1,"status":"available"},{"key":3,"doc_count":1,"status":"available"},{"key":4,"doc_count":1,"status":"available"},{"key":5,"doc_count":1,"status":"available"}]},"size_top_max":{"buckets":[{"key":10,"doc_count":4,"status":"available"},{"key":20,"doc_count":2,"status":"available"},{"key":30,"doc_count":1,"status":"unavailable"}]}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:6;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:443:"{
   "table": "facet_json_review",
   "limit": 0,
   "facet_filter_mode": "strict",
   "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
   "aggs": {
-    "color_mode_max": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "filter_mode": "max" },
-    "size_mode_strict": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } }, "filter_mode": "strict" }
+    "color_mode_max": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "mode": "max" },
+    "size_mode_strict": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } }, "mode": "strict" }
   }
 }";s:4:"rows";s:425:"{"timed_out":false,"hits":{"total":2,"total_relation":"eq","hits":[]},"aggregations":{"color_mode_max":{"buckets":[{"key":1,"doc_count":3,"status":"selected"},{"key":2,"doc_count":1,"status":"available"},{"key":3,"doc_count":1,"status":"available"},{"key":4,"doc_count":1,"status":"available"},{"key":5,"doc_count":1,"status":"available"}]},"size_mode_strict":{"buckets":[{"key":10,"doc_count":1},{"key":20,"doc_count":1}]}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:7;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:425:"{
   "table": "facet_json_review",
@@ -66,40 +66,40 @@ a:1:{i:0;a:21:{i:0;a:2:{s:8:"sphinxql";s:147:"create table facet_json_review ( t
   "aggs": {
     "color_name_top_max": { "terms": { "field": "color_name", "size": 10, "order": { "color_name": "asc" } } }
   }
-}";s:4:"rows";s:373:"{"timed_out":false,"hits":{"total":2,"total_relation":"eq","hits":[]},"aggregations":{"color_name_top_max":{"buckets":[{"key":"black","doc_count":1,"status":"available"},{"key":"blue","doc_count":1,"status":"available"},{"key":"green","doc_count":1,"status":"available"},{"key":"red","doc_count":3,"status":"selected"},{"key":"white","doc_count":1,"status":"available"}]}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:9;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:566:"{
+}";s:4:"rows";s:373:"{"timed_out":false,"hits":{"total":2,"total_relation":"eq","hits":[]},"aggregations":{"color_name_top_max":{"buckets":[{"key":"black","doc_count":1,"status":"available"},{"key":"blue","doc_count":1,"status":"available"},{"key":"green","doc_count":1,"status":"available"},{"key":"red","doc_count":3,"status":"selected"},{"key":"white","doc_count":1,"status":"available"}]}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:9;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:559:"{
   "table": "facet_json_review",
   "limit": 0,
   "facet_filter_mode": "strict",
   "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } }, { "equals": { "size_id": 10 } } ] } },
   "aggs": {
-    "color_filters_brand_max": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "filters": [ "brand_id" ], "filter_mode": "max" },
+    "color_filters_brand_max": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "filters": [ "brand_id" ], "mode": "max" },
     "size_exclude_color_auto": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } }, "exclude_filters": [ "color_id" ], "filter_mode": "auto" }
   }
-}";s:4:"rows";s:346:"{"timed_out":false,"hits":{"total":1,"total_relation":"eq","hits":[]},"aggregations":{"color_filters_brand_max":{"buckets":[{"key":1,"doc_count":2,"status":"selected"},{"key":2,"doc_count":1,"status":"available"},{"key":3,"doc_count":1,"status":"available"}]},"size_exclude_color_auto":{"buckets":[{"key":10,"doc_count":2,"status":"selected"}]}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:10;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:386:"{
+}";s:4:"rows";s:346:"{"timed_out":false,"hits":{"total":1,"total_relation":"eq","hits":[]},"aggregations":{"color_filters_brand_max":{"buckets":[{"key":1,"doc_count":2,"status":"selected"},{"key":2,"doc_count":1,"status":"available"},{"key":3,"doc_count":1,"status":"available"}]},"size_exclude_color_auto":{"buckets":[{"key":10,"doc_count":2,"status":"selected"}]}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:10;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:379:"{
   "table": "facet_json_review",
   "limit": 0,
   "facet_filter_mode": "strict",
   "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
   "aggs": {
-    "size_filters_zeroes": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } }, "filters": [ "brand_id", "color_id" ], "filter_mode": "max", "zeroes": true }
+    "size_filters_zeroes": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } }, "filters": [ "brand_id", "color_id" ], "mode": "max", "zeroes": true }
   }
-}";s:4:"rows";s:263:"{"timed_out":false,"hits":{"total":2,"total_relation":"eq","hits":[]},"aggregations":{"size_filters_zeroes":{"buckets":[{"key":10,"doc_count":1,"status":"available"},{"key":20,"doc_count":1,"status":"available"},{"key":30,"doc_count":0,"status":"unavailable"}]}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:11;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:429:"{
+}";s:4:"rows";s:263:"{"timed_out":false,"hits":{"total":2,"total_relation":"eq","hits":[]},"aggregations":{"size_filters_zeroes":{"buckets":[{"key":10,"doc_count":1,"status":"available"},{"key":20,"doc_count":1,"status":"available"},{"key":30,"doc_count":0,"status":"unavailable"}]}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:11;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:422:"{
   "table": "facet_json_review",
   "limit": 0,
   "facet_filter_mode": "strict",
   "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } }, { "equals": { "size_id": 10 } } ] } },
   "aggs": {
-    "size_filters_zeroes_desc_top1": { "terms": { "field": "size_id", "size": 1, "order": { "size_id": "desc" } }, "filters": [ "brand_id", "color_id" ], "filter_mode": "max", "zeroes": true }
+    "size_filters_zeroes_desc_top1": { "terms": { "field": "size_id", "size": 1, "order": { "size_id": "desc" } }, "filters": [ "brand_id", "color_id" ], "mode": "max", "zeroes": true }
   }
-}";s:4:"rows";s:179:"{"timed_out":false,"hits":{"total":1,"total_relation":"eq","hits":[]},"aggregations":{"size_filters_zeroes_desc_top1":{"buckets":[{"key":30,"doc_count":0,"status":"available"}]}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:12;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:327:"{
+}";s:4:"rows";s:179:"{"timed_out":false,"hits":{"total":1,"total_relation":"eq","hits":[]},"aggregations":{"size_filters_zeroes_desc_top1":{"buckets":[{"key":30,"doc_count":0,"status":"available"}]}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:12;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:443:"{
   "table": "facet_json_review",
   "limit": 0,
   "facet_filter_mode": "strict",
-  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_name": "red" } }, { "equals": { "size_id": 10 } } ] } },
   "aggs": {
-    "legacy_mode_rejected": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "mode": "max" }
+    "color_name_zeroes_asc_top1": { "terms": { "field": "color_name", "size": 1, "order": { "color_name": "asc" } }, "filters": [ "brand_id", "color_name", "size_id" ], "mode": "max", "zeroes": true }
   }
-}";s:4:"rows";s:87:"{"error":"\"mode\" is not supported in JSON aggregations; use \"filter_mode\" instead"}";s:9:"http_code";i:400;s:4:"http";i:1;}i:13;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:226:"{
+}";s:4:"rows";s:181:"{"timed_out":false,"hits":{"total":1,"total_relation":"eq","hits":[]},"aggregations":{"color_name_zeroes_asc_top1":{"buckets":[{"key":"black","doc_count":0,"status":"available"}]}}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:13;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:226:"{
   "table": "facet_json_review",
   "limit": 0,
   "query": { "match_all": {} },

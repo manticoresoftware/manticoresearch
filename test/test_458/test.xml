@@ -91,11 +91,11 @@ SELECT count(*) FROM test1 WHERE @timestamp IN (10) AND @version IN('20') LIMIT 
   "aggs": {
     "ts_mode_max": {
       "terms": { "field": "@timestamp" },
-      "filter_mode": "max"
+      "mode": "max"
     },
     "ver_mode_strict": {
       "terms": { "field": "@version" },
-      "filter_mode": "strict"
+      "mode": "strict"
     }
   }
 }</query>

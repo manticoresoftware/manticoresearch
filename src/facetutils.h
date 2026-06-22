@@ -54,17 +54,13 @@ FacetFilterMode_e GetFilterMode ( const CSphQuery & tHeadQuery, const CSphQuery 
 bool ShouldRewriteFilters ( const CSphQuery & tHeadQuery, const CSphQuery & tFacetQuery );
 bool CopyFilters ( const CSphQuery & tHeadQuery, CSphQuery & tFacetQuery, CSphString & sError, bool bUseOwnExclusionRuleInNoneClause );
 bool SetupHelperQuery ( const CSphQuery & tHeadQuery, CSphQuery & tFacetQuery, FacetHelperQuery_e eHelper, CSphString & sError );
-bool GetFacetStatusAttr ( const CSphQuery & tFacetQuery, const ISphSchema * pSchema, const ISphSchema & tBucketSchema, CSphString & sAttr );
-void ZeroFacetCountColumns ( CSphMatch & tMatch, const ISphSchema & tSchema );
 void DeferFacetResultPaging ( CSphQuery & tQuery );
 bool HasDeferredFacetResultPaging ( const CSphQuery & tQuery );
 int GetFacetResultOffset ( const CSphQuery & tQuery );
 int GetFacetResultLimit ( const CSphQuery & tQuery );
-bool CollectMissingFacetZeroes ( const AggrResult_t & tRes, const CSphString & sAttr, const VecTraits_T<CSphMatch> & dVisibleMatches, const VecTraits_T<CSphMatch> & dZeroMatches, const ISphSchema & tZeroSchema, CSphSwapVector<CSphMatch> & dMissingZeroes );
-bool CollectMergedFacetZeroes ( const CSphQuery & tFacetQuery, const AggrResult_t & tRes, const AggrResult_t & tZeroesRes, CSphSwapVector<CSphMatch> & dPageMatches, int64_t & iTotalMatches );
+bool AppendMissingFacetZeroes ( const CSphQuery & tFacetQuery, AggrResult_t & tRes, const AggrResult_t & tZeroesRes, bool & bAppended );
 
 const char * GetBucketStatus ( const CSphMatch & tMatch, const ISphSchema & tSchema, const FacetStatusSources_t & tStatus );
-bool MatchBucketSet ( const CSphMatch & tMatch, const ISphSchema & tSchema, const FacetBucketSet_t & tBuckets );
 const CSphVector<CSphFilterSettings> * CollectSelectedFiltersForAttr ( const CSphVector<CSphFilterSettings> & dFilters, const CSphString & sAttr, CSphVector<CSphFilterSettings> & dSelected );
 
 const FacetBucketSet_t * CollectFacetStatusValuesFilter ( const CSphQuery & tFacetQuery, const ISphSchema & tBucketSchema, const AggrResult_t & tRes, FacetBucketSet_t & tBuckets );

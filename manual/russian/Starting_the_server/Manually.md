@@ -119,7 +119,7 @@ searchd [OPTIONS]
   Copyright (c) 2001-2016, Andrew Aksyonoff
   Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
   Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
-
+  
   export MANTICORE_KNOWN_CREATE_SIZE=200
   export MANTICORE_START_KNOWN_CREATE_SIZE=4504
   export MANTICORE_KNOWN_EXPR_SIZE=16

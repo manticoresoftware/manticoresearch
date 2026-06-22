@@ -60,6 +60,8 @@ What distinguishes it from other solutions is:
 * Manticore is SQL-first, utilizing SQL as its native syntax, and offers compatibility with the MySQL protocol, allowing you to use your preferred MySQL client.
 * With clients available in [PHP](https://github.com/manticoresoftware/manticoresearch-php), [Python](https://github.com/manticoresoftware/manticoresearch-python), [Python asyncio](https://github.com/manticoresoftware/manticoresearch-python-asyncio) [JavaScript](https://github.com/manticoresoftware/manticoresearch-javascript), [Typescript](https://github.com/manticoresoftware/manticoresearch-typescript), [Java](https://github.com/manticoresoftware/manticoresearch-java), [Elixir](https://github.com/manticoresoftware/manticoresearch-elixir), [Go](https://github.com/manticoresoftware/manticoresearch-go), and [Rust](https://github.com/manticoresoftware/manticoresearch-rust), integration with Manticore Search becomes easy.
 * Manticore also provides a programmatic HTTP JSON protocol for more versatile data and schema management, with Elasticsearch-compatible writes support.
+* [Sharded tables](https://manual.manticoresearch.com/Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table) transparently distribute reads and writes across multiple physical shards on one node or across a replication cluster.
+* Built-in [authentication and authorization](https://manual.manticoresearch.com/Security/Authentication_and_authorization) secures MySQL, HTTP/HTTPS, distributed remote agents, and replication-related operations with users, bearer tokens, and fine-grained permissions.
 * Built in C++, Manticore Search starts quickly and uses minimal RAM (around 40MB RSS for an empty instance), with low-level optimizations contributing to its impressive performance.
 * With real-time inserts, newly added or updated documents are immediately accessible.
 * Interactive courses are available through [Interactive courses](https://play.manticoresearch.com/) to make learning a breeze.
@@ -100,10 +102,12 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [using a "percolate" table](https://play.manticoresearch.com/pq/)
   - or the [Kafka integration](https://manual.manticoresearch.com/Integration/Kafka)
 * High-availability:
+  - [Sharded tables](https://manual.manticoresearch.com/Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table)
   - Data can be distributed across servers and data-centers
   - [Synchronous replication](https://play.manticoresearch.com/replication/)
   - Built-in load balancing
 * Security:
+  - [Authentication and authorization](https://manual.manticoresearch.com/Security/Authentication_and_authorization)
   - [https support](https://play.manticoresearch.com/https/)
   - [read-only mode](https://manual.manticoresearch.com/Security/Read_only)
 * Data safety:

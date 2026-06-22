@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>binary api defaults on rt profile tables</name>
+<skip_db/>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<custom_test><![CDATA[
+$results = array();
+$ql->Reconnect();
+
+global $sd_address, $sd_port;
+$makeClient = function() use ( $sd_address, $sd_port )
+{
+	$cl = new APIClient();
+	$cl->SetServer ( $sd_address, $sd_port );
+	$cl->SetArrayResult ( true );
+	return $cl;
+};
+
+$simplify = function ( $res )
+{
+	if ( $res===false )
+		return array ( 'error' => 'query failed' );
+
+	$out = array();
+	if ( isset($res['warning']) && $res['warning'] )
+		$out['warning'] = $res['warning'];
+	if ( isset($res['error']) && $res['error'] )
+		$out['error'] = $res['error'];
+
+	$hits = array();
+	if ( isset($res['matches']) && is_array($res['matches']) )
+	{
+		foreach ( $res['matches'] as $match )
+		{
+			$id = isset($match['id']) ? (int)$match['id'] : 0;
+			$hits[$id] = isset($match['weight']) ? (int)$match['weight'] : null;
+		}
+	}
+	ksort ( $hits );
+	$out['hits'] = $hits;
+	$out['total'] = isset($res['total']) ? (int)$res['total'] : 0;
+	$out['total_found'] = isset($res['total_found']) ? (int)$res['total_found'] : 0;
+	return $out;
+};
+
+$results[] = 'rt setup';
+$results[] = "\n" . $ql->Query ( "DROP TABLE IF EXISTS api_rt_plain" );
+$results[] = "\n" . $ql->Query ( "DROP TABLE IF EXISTS api_rt_profile" );
+global $index_data_path;
+exec ( 'rm -rf ' . escapeshellarg ( $index_data_path . '/api_rt_plain' ) . ' ' . escapeshellarg ( $index_data_path . '/api_rt_profile' ) );
+$results[] = "\n" . $ql->Query ( "CREATE TABLE api_rt_plain ( title TEXT )" );
+$results[] = "\n" . $ql->Query ( "CREATE TABLE api_rt_profile ( title TEXT ) profile='relevance'" );
+$results[] = "\n" . $ql->Query ( "INSERT INTO api_rt_plain VALUES ( 1, 'running cat' ), ( 2, 'running' ), ( 3, 'cat' ), ( 4, 'alpha' ), ( 5, 'alpha alpha alpha' )" );
+$results[] = "\n" . $ql->Query ( "INSERT INTO api_rt_profile VALUES ( 1, 'running cat' ), ( 2, 'running' ), ( 3, 'cat' ), ( 4, 'alpha' ), ( 5, 'alpha alpha alpha' )" );
+
+$results[] = 'binary api direct ranker override on profile table';
+$cl = $makeClient();
+$results[] = $simplify ( $cl->Query ( 'alpha', 'api_rt_profile' ) );
+$cl = $makeClient();
+$cl->SetRankingMode ( SPH_RANK_EXPR, '1' );
+$results[] = $simplify ( $cl->Query ( 'alpha', 'api_rt_profile' ) );
+
+$results[] = 'binary api legacy match modes on rt tables';
+$cl = $makeClient();
+$cl->SetMatchMode ( SPH_MATCH_ALL );
+$results[] = $simplify ( $cl->Query ( 'running cat', 'api_rt_plain' ) );
+$cl = $makeClient();
+$cl->SetMatchMode ( SPH_MATCH_ALL );
+$results[] = $simplify ( $cl->Query ( 'running cat', 'api_rt_profile' ) );
+$cl = $makeClient();
+$cl->SetMatchMode ( SPH_MATCH_PHRASE );
+$results[] = $simplify ( $cl->Query ( 'running cat', 'api_rt_profile' ) );
+
+]]></custom_test>
+
+</test>

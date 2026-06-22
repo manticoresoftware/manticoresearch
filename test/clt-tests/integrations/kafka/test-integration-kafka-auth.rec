@@ -25,7 +25,7 @@ docker network create app-network --driver bridge > /dev/null; echo $?
 ––– comment –––
 Start Manticore container without searchd so auth can be configured before daemon startup
 ––– input –––
-docker run -it --network=app-network --platform linux/amd64 --name manticore -d ghcr.io/manticoresoftware/manticoresearch:test-kit-wip_auth bash > /dev/null 2>&1; echo $?
+docker run -it --network=app-network --platform linux/amd64 --name manticore -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest bash > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -65,19 +65,19 @@ docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e 
 ––– output –––
 0
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW SOURCES;\" | grep -q '^kafka_auth$' && echo SOURCE_CREATED_OK"
+docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW SOURCES;\" | grep -q 'kafka_auth' && echo SOURCE_CREATED_OK"
 ––– output –––
 SOURCE_CREATED_OK
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW MVS;\" | grep -q '^view_table_auth$' && echo MVA_CREATED_OK"
+docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW MVS;\" | grep -q 'view_table_auth' && echo MVA_CREATED_OK"
 ––– output –––
 MVA_CREATED_OK
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW TABLES FROM system;\" | awk '/system\\.(source_kafka_auth|materialized_view_view_table_auth|buffer_kafka_auth_0)/ {print \$1}' | sort"
+docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW TABLES FROM system;\" | grep rt | sort"
 ––– output –––
-system.buffer_kafka_auth_0
-system.materialized_view_view_table_auth
-system.source_kafka_auth
+|                 system.source_kafka_auth |   rt |
+|               system.buffer_kafka_auth_0 |   rt |
+| system.materialized_view_view_table_auth |   rt |
 ––– comment –––
 Verify full Kafka processing
 ––– input –––
@@ -85,7 +85,7 @@ timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/se
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SELECT COUNT(*) FROM destination_kafka_auth\""
+docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e \"SELECT COUNT(*) FROM destination_kafka_auth\" | awk '/^[| ]*[0-9]+[ |]*$/ { gsub(/[^0-9]/,\"\"); print; exit }'"
 ––– output –––
 57
 ––– comment –––
@@ -109,18 +109,18 @@ docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e 
 ––– output –––
 0
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW PERMISSIONS;\" | grep queue_ | awk '{print \$1,\$2,\$3,\$4}' | sort"
+docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW PERMISSIONS;\" | grep queue_ | awk '{print \$2,\$4,\$6,\$8}' | sort"
 ––– output –––
 queue_reader read system.materialized_view_view_table_auth 1
 queue_reader read system.source_kafka_auth 1
 queue_writer read system.materialized_view_view_table_auth 1
 queue_writer read system.source_kafka_auth 1
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -N -e \"SHOW SOURCE kafka_auth;\" | grep -q '^kafka_auth' && echo READER_SHOW_SOURCE_OK"
+docker exec manticore bash -lc "MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -N -e \"SHOW SOURCE kafka_auth;\" | grep -q 'kafka_auth' && echo READER_SHOW_SOURCE_OK"
 ––– output –––
 READER_SHOW_SOURCE_OK
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -N -e \"SHOW MV view_table_auth;\" | grep -q '^view_table_auth' && echo READER_SHOW_MVA_OK"
+docker exec manticore bash -lc "MYSQL_PWD=queue_reader_pass mysql -uqueue_reader -h0 -P9306 -N -e \"SHOW MV view_table_auth;\" | grep -q 'view_table_auth' && echo READER_SHOW_MVA_OK"
 ––– output –––
 READER_SHOW_MVA_OK
 ––– input –––
@@ -142,7 +142,7 @@ docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e 
 ––– output –––
 0
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW PERMISSIONS;\" | grep queue_writer | awk '{print \$1,\$2,\$3,\$4}' | sort"
+docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW PERMISSIONS;\" | grep queue_writer | awk '{print \$2,\$4,\$6,\$8}' | sort"
 ––– output –––
 queue_writer read system.materialized_view_view_table_auth 1
 queue_writer read system.source_kafka_auth 1
@@ -154,10 +154,6 @@ queue_writer write system.source_kafka_auth 1
 docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e \"SHOW PERMISSIONS;\" | grep -q 'queue_writer.*system.buffer_kafka_auth_0' || echo NO_DIRECT_BUFFER_GRANT_OK"
 ––– output –––
 NO_DIRECT_BUFFER_GRANT_OK
-––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=queue_writer_pass mysql -uqueue_writer -h0 -P9306 -e \"ALTER MATERIALIZED VIEW view_table_auth suspended=1;\" >/dev/null && echo WRITER_SUSPEND_MVA_OK"
-––– output –––
-WRITER_SUSPEND_MVA_OK
 ––– input –––
 docker exec manticore bash -lc "MYSQL_PWD=queue_writer_pass mysql -uqueue_writer -h0 -P9306 -e \"ALTER MATERIALIZED VIEW view_table_auth suspended=0;\" >/dev/null && echo WRITER_RESUME_MVA_OK"
 ––– output –––

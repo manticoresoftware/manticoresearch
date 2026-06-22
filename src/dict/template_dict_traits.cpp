@@ -385,6 +385,7 @@ uint64_t TemplateDictTraits_c::GetSettingsFNV() const
 	if ( m_tSettings.m_bStopwordsUnstemmed )
 		uFlags |= 1 << 2;
 	uHash = sphFNV64 ( uFlags, uHash );
+	uHash = sphFNV64 ( static_cast<int> ( m_tSettings.GetDictFormat() ), uHash );
 
 	uHash = sphFNV64 ( m_dMorph.Begin(), m_dMorph.GetLength() * sizeof ( m_dMorph[0] ), uHash );
 #if WITH_STEMMER

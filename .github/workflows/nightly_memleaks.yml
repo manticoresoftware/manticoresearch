@@ -4,13 +4,17 @@ run-name: 🌙 Nightly valgrind checks ${{ github.sha }}
 on:
   schedule:
     - cron: '00 20 * * *'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/nightly_memleaks.yml'
   push:
     branches:
       - '**'
     paths:
-      - '.github/workflows/nightly_memleaks.yml'    
-      
-  
+      - '.github/workflows/nightly_memleaks.yml'
+
 # cancels the previous workflow run when a new one appears in the same branch (e.g. main or a PR's branch)
 concurrency:
   group: nightly_memleaks_${{ github.ref }}
@@ -19,6 +23,7 @@ concurrency:
 jobs:
   memleaks:
     name: Memleak tests
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.ref == 'fix/rt478-memcheck-leaks' }}
     runs-on: ubuntu-22.04
     defaults:
       run:

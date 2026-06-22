@@ -217,16 +217,17 @@ void SortStateSetup_c::UnifyInternalAttrNames()
 		m_szTok = "@count";
 	else if ( !strcasecmp ( m_szTok, "facet()" ) )
 	{
-		if ( m_tQuery.m_bFacet && !m_tQuery.m_sGroupBy.IsEmpty() )
+		if ( m_tQuery.m_bFacet && m_tQuery.m_iFacetResultLimit>=0 && !m_tQuery.m_sGroupBy.IsEmpty() )
 		{
-			m_sRemappedTok = sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr() )
-				? SortJsonInternalSet ( m_tQuery.m_sGroupBy )
-				: m_tQuery.m_sGroupBy;
-
-			if ( m_tSchema.GetAttr ( m_sRemappedTok.cstr() ) )
+			if ( !sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr() ) )
 			{
-				m_szTok = m_sRemappedTok.cstr();
-				return;
+				m_sRemappedTok = m_tQuery.m_sGroupBy;
+				const CSphColumnInfo * pAttr = m_tSchema.GetAttr ( m_sRemappedTok.cstr() );
+				if ( pAttr && !IsMvaAttr ( pAttr->m_eAttrType ) )
+				{
+					m_szTok = m_sRemappedTok.cstr();
+					return;
+				}
 			}
 		}
 

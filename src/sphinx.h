@@ -457,6 +457,7 @@ struct FacetFilterTrait_t
 	std::optional<FacetFilterMode_e> m_tMode;
 	FacetFilterClause_e m_eClause = FacetFilterClause_e::None;
 	StrVec_t m_dAttrs;
+	bool m_bZeroes = false;
 };
 
 /// table function interface
@@ -690,8 +691,10 @@ struct CSphQuery
 
 	bool			m_bFacet = false;			///< whether this a facet query
 	bool			m_bFacetHead = false;
-	bool			m_bFacetMaxRef = false;	///< internal strict helper for max facet status
+	bool			m_bFacetMaxRef = false;	///< internal hidden facet helper query/result
 	FacetFilterTrait_t m_tFacetFilter;
+	int				m_iFacetResultOffset = -1;	///< internal deferred facet paging: restore requested offset after zero-bucket merge/order
+	int				m_iFacetResultLimit = -1;	///< internal deferred facet paging: restore requested limit after zero-bucket merge/order
 	StrVec_t		m_dFacetOwnFilterAttrs;
 
 	QueryType_e		m_eQueryType {QUERY_API};		///< queries from sphinxql require special handling
@@ -703,6 +706,7 @@ struct CSphQuery
 	const void*		m_pCookie = nullptr;	///< opaque mark, used to manage lifetime of the vec of queries
 
 	int				m_iConcurrency = 0;    ///< limit N of threads to run query with. 0 means 'no limit'
+	int				m_iEmbeddingsThreads = -1; ///< per-query override for embeddings_threads. -1 means 'use global setting'
 	CSphVector<CSphString>	m_dStringSubkeys;
 	CSphVector<int64_t>		m_dIntSubkeys;
 	Dispatcher::Template_t	m_tMainDispatcher;

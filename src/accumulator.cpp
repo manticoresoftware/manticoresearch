@@ -281,7 +281,7 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 
 	std::string sErrorSTL;
 	std::vector<std::vector<float>> dEmbeddingsForAttrTmp;
-	if ( uNumSkipped!=m_uAccumDocs && !tAttrWithModel.m_pModel->Convert ( dTexts, uNumSkipped ? dEmbeddingsForAttrTmp : dEmbeddingsForAttr, sErrorSTL ) )
+	if ( uNumSkipped!=m_uAccumDocs && !tAttrWithModel.m_pModel->Convert ( dTexts, uNumSkipped ? dEmbeddingsForAttrTmp : dEmbeddingsForAttr, sErrorSTL, GetEmbeddingsThreadsToUse() ) )
 	{
 		sError = sErrorSTL.c_str();
 		return false;

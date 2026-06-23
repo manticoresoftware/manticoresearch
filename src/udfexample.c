@@ -224,10 +224,22 @@ DLLEXPORT double avgmva ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error
 // - keep emails to domain 'space.io' and transform them to 'mailto:any@space.io' then searching for query with 'mailto:*' should return all documents with emails
 // - deletes all other emails, ie returns NULL for 'test@gmail.com'
 
+typedef struct hideemail_data
+{
+	char * buffer;
+	int buffer_len;
+} hideemail_data;
+
 DLLEXPORT int hideemail_init ( void ** userdata, int num_fields, const char ** field_names, const char * options, char * error_message )
 {
 	UdfLog ( "Called hideemail_init" );
-	*userdata = (void*) malloc ( sizeof(char) * SPH_UDF_ERROR_LEN );
+	hideemail_data * data = (hideemail_data *) calloc ( 1, sizeof ( hideemail_data ) );
+	if ( !data )
+	{
+		snprintf ( error_message, SPH_UDF_ERROR_LEN, "failed to allocate hideemail userdata" );
+		return 1;
+	}
+	*userdata = data;
 	return 0;
 }
 
@@ -235,16 +247,16 @@ DLLEXPORT int hideemail_init ( void ** userdata, int num_fields, const char ** f
 DLLEXPORT char * hideemail_push_token ( void * userdata, char * token, int * extra, int * delta )
 {
 	UdfLog ( "Called hideemail_push_token" );
-	char * dst = (char *)userdata;
+	hideemail_data * data = (hideemail_data *)userdata;
 	char domain[] = "space.io";
 	char prefix[] = "mailto:";
 	char * pos0;
 	char * pos1;
-	int len0, len1 = ( sizeof(domain)-1 ), lenprefix = ( sizeof(prefix)-1 );
+	int len0, len1 = ( sizeof(domain)-1 ), lenprefix = ( sizeof(prefix)-1 ), needed;
 
 	*delta = 1;
 
-	if ( !token || !*token )
+	if ( !data || !token || !*token )
 		return token;
 
 	pos0 = strchr ( token, '@' );
@@ -264,11 +276,21 @@ DLLEXPORT char * hideemail_push_token ( void * userdata, char * token, int * ext
 	if ( strncmp ( pos0 + 1, domain, len1 )!=0 )
 		return 0;
 
-	strcpy ( dst, prefix );
-	strcpy ( dst + lenprefix, token );
-	dst[lenprefix+len0] = '\0';
+	needed = lenprefix + len0 + 1;
+	if ( data->buffer_len<needed )
+	{
+		char * buffer = (char *) realloc ( data->buffer, needed );
+		if ( !buffer )
+			return token;
 
-	return dst;
+		data->buffer = buffer;
+		data->buffer_len = needed;
+	}
+
+	memcpy ( data->buffer, prefix, lenprefix );
+	memcpy ( data->buffer + lenprefix, token, len0 + 1 );
+
+	return data->buffer;
 }
 
 DLLEXPORT char * hideemail_get_extra_token ( void * userdata, int * delta )
@@ -289,11 +311,12 @@ DLLEXPORT void hideemail_deinit ( void * userdata )
 	UdfLog ( "Called hideemail_deinit" );
 	if ( userdata )
 	{
-		free ( userdata );
+		hideemail_data * data = (hideemail_data *)userdata;
+		free ( data->buffer );
+		free ( data );
 	}
 }
 
 
 // FIXME! add a string function example?
 // FIXME! add a ranker plugin example?
-

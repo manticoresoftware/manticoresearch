@@ -495,6 +495,8 @@ volatile int & MergeChunksPerJob() noexcept;
 volatile int AutoOptimizeCutoff() noexcept;
 volatile int AutoOptimizeCutoffKNN() noexcept;
 volatile int & KNNParallelBuild() noexcept;
+volatile int & EmbeddingsThreads() noexcept;
+int GetEmbeddingsThreadsToUse ( int iMaxOverride = -1 );
 
 void SetRtFlushDiskPeriod ( int iFlushWrite, int iFlushSearch );
 

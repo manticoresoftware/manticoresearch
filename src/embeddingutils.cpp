@@ -13,6 +13,7 @@
 #include <string_view>
 
 #include "sphinxint.h"
+#include "sphinxrt.h"
 #include "searchdsql.h"
 #include "columnarmisc.h"
 #include "embeddingutils.h"
@@ -124,7 +125,7 @@ bool ConvertEmbeddings ( knn::TextToEmbeddings_i * pModel, const CSphString & sA
 		dTexts.push_back ( { sText.cstr(), (size_t)sText.Length() } );
 
 	std::string sErrStl;
-	if ( !pModel->Convert ( dTexts, dEmbeddings, sErrStl ) )
+	if ( !pModel->Convert ( dTexts, dEmbeddings, sErrStl, GetEmbeddingsThreadsToUse() ) )
 	{
 		sError = sErrStl.c_str();
 		return false;

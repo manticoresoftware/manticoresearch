@@ -230,7 +230,9 @@ void SqlParserTraits_c::ProcessParsingError ( const char* szMessage )
 		&& ( m_pBuf == m_pLastTokenStart || RouteToUser ( szMessage, m_pLastTokenStart ) ) )
 		m_bWrongParserSyntaxError = true;
 
-	m_pParseError->SetSprintf ( "%s %s near '%s'", m_sErrorHeader.cstr(), szMessage, m_pLastTokenStart ? m_pLastTokenStart : "(null)" );
+	StringBuilder_c sError;
+	sError << m_sErrorHeader << ' ' << szMessage << " near '" << ( m_pLastTokenStart ? m_pLastTokenStart : "(null)" ) << '\'';
+	*m_pParseError = sError.cstr();
 
 	// fixup TOK_xxx thingies
 	char* s = const_cast<char*> ( m_pParseError->cstr() );

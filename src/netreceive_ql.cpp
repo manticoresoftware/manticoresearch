@@ -325,8 +325,12 @@ void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, Str_t sErro
 	// cut the error message to fix issue with long message for popular clients
 	if ( sError.second>MYSQL_ERROR::MAX_LENGTH )
 	{
-		sError.second = MYSQL_ERROR::MAX_LENGTH;
 		char * sErr = const_cast<char *>( sError.first );
+		int iCut = MYSQL_ERROR::MAX_LENGTH - 3;
+		while ( iCut>0 && ( sErr[iCut] & 0xC0 ) == 0x80 )
+			--iCut;
+
+		sError.second = iCut + 3;
 		sErr[sError.second-3] = '.';
 		sErr[sError.second-2] = '.';
 		sErr[sError.second-1] = '.';

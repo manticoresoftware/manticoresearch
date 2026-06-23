@@ -154,6 +154,12 @@ volatile int &AutoOptimizeCutoffMultiplier() noexcept
 	return iAutoOptimizeCutoffMultiplier;
 }
 
+volatile bool &OptimizeCutoffExplicit() noexcept
+{
+	static bool bOptimizeCutoffExplicit = false;
+	return bOptimizeCutoffExplicit;
+}
+
 volatile int &ParallelChunkMergesLimit() noexcept
 {
 	static int iParallelChunkMerges = 1;
@@ -11297,6 +11303,8 @@ void RtIndex_c::CheckStartAutoOptimize()
 		return;
 
 	iCutoff *= GetCutOff ( m_tMutableSettings, m_tSchema.HasKNNAttrs() );
+	if ( !m_tMutableSettings.IsSet ( MutableName_e::OPTIMIZE_CUTOFF ) && !OptimizeCutoffExplicit() )
+		iCutoff = Max ( iCutoff, 2 );
 
 	if ( m_tRtChunks.GetDiskChunksCount()<=iCutoff )
 		return;

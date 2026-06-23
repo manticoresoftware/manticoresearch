@@ -188,6 +188,8 @@ By default, the threshold is the number of logical CPU cores multiplied by 2.
 
 However, if the table has attributes with KNN indexes, the default threshold is different. In this case, it is set to the number of physical CPU cores divided by 2, with a minimum value of 1, to improve KNN search performance.
 
+When [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) is not set explicitly (neither server-wide nor per-table), automatic compaction never merges a table below 2 disk chunks, even when the computed default threshold is lower (which can happen on servers with few CPU cores, particularly for KNN tables). To allow automatic compaction down to a single disk chunk, set `optimize_cutoff` explicitly to `1`.
+
 Note that toggling `auto_optimize` on or off doesn't prevent you from running [OPTIMIZE TABLE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) manually.
 
 <!-- intro -->

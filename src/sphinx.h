@@ -706,6 +706,7 @@ struct CSphQuery
 	const void*		m_pCookie = nullptr;	///< opaque mark, used to manage lifetime of the vec of queries
 
 	int				m_iConcurrency = 0;    ///< limit N of threads to run query with. 0 means 'no limit'
+	int				m_iEmbeddingsThreads = -1; ///< per-query override for embeddings_threads. -1 means 'use global setting'
 	CSphVector<CSphString>	m_dStringSubkeys;
 	CSphVector<int64_t>		m_dIntSubkeys;
 	Dispatcher::Template_t	m_tMainDispatcher;

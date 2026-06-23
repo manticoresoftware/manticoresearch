@@ -125,6 +125,7 @@ static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
 static auto&			g_iParallelChunkMerges = ParallelChunkMergesLimit();
 static auto&			g_iMergeChunksPerJob = MergeChunksPerJob();
 static auto&			g_iKNNParallelBuild = KNNParallelBuild();
+static auto&			g_iEmbeddingsThreads = EmbeddingsThreads();
 static constexpr bool	AUTOOPTIMIZE_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 static constexpr bool	THREAD_EX_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 
@@ -5386,9 +5387,26 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 	return bOk;
 }
 
+static void AppendKeywordCallWarning ( CSphString & sWarning, const CSphString & sMore )
+{
+	if ( sMore.IsEmpty() )
+		return;
+
+	if ( sWarning.IsEmpty() )
+	{
+		sWarning = sMore;
+		return;
+	}
+
+	StringBuilder_c sBuf;
+	sBuf << sWarning << "; " << sMore;
+	sBuf.MoveTo ( sWarning );
+}
+
 void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	StatCountCommand ( SEARCHD_COMMAND_KEYWORDS );
+	sWarning = "";
 	CSphString sError;
 
 	// string query, string index, [bool hits] || [value as option_name, ...]
@@ -5466,6 +5484,7 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 	const CSphString & sIndex = tStmt.m_dInsertValues[1].m_sVal;
 	CSphVector<CSphKeywordInfo> dKeywords;
 	SearchFailuresLog_c tFailureLog;
+	tSettings.m_pWarning = &sWarning;
 
 	if ( !DoGetKeywords ( sIndex, sTerm, tSettings, dKeywords, sError, tFailureLog ) )
 	{
@@ -5506,15 +5525,17 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 	}
 
 	// put network errors and warnings to meta as warning
-	int iWarnings = 0;
+	int iWarnings = sWarning.IsEmpty() ? 0 : 1;
 	if ( !tFailureLog.IsEmpty() )
 	{
-		iWarnings = tFailureLog.GetReportsCount();
+		iWarnings += tFailureLog.GetReportsCount();
 
 		StringBuilder_c sErrorBuf;
 		tFailureLog.BuildReport ( sErrorBuf );
-		sErrorBuf.MoveTo ( sWarning );
-		sphWarning ( "%s", sWarning.cstr() );
+		CSphString sFailureWarning;
+		sErrorBuf.MoveTo ( sFailureWarning );
+		AppendKeywordCallWarning ( sWarning, sFailureWarning );
+		sphWarning ( "%s", sFailureWarning.cstr() );
 	}
 
 	tOut.Eof ( false, iWarnings );
@@ -5769,7 +5790,13 @@ static bool SuggestLocalIndexGet ( const cServedIndexRefPtr_c & pServed, const S
 	pServed->m_pStats->IncCmd ( SEARCHD_COMMAND_SUGGEST );
 
 	RIdx_c pIdx { pServed };
-	if ( !pIdx->GetSettings().m_iMinInfixLen || !pIdx->GetDictionary()->GetSettings().m_bWordDict )
+	if ( pIdx->GetDictionary()->GetSettings().IsKeywordsV2() )
+	{
+		sError.SetSprintf ( "SUGGEST/QSUGGEST is not supported for dict=keywords_32k yet" );
+		return false;
+	}
+
+	if ( !pIdx->GetSettings().m_iMinInfixLen || !pIdx->GetDictionary()->GetSettings().IsWordDict() )
 	{
 		sError.SetSprintf ( "suggests work only for keywords dictionary with infix enabled" );
 		return false;
@@ -6561,82 +6588,78 @@ static bool CheckAttrs ( const VecTraits_T<T> & dAttrs, GETNAME && fnGetName, CS
 }
 
 
-static bool CheckExistingTables ( const SqlStmt_t & tStmt, CSphString & sError )
+static bool CheckExistingTables ( const CSphString & sIndex, bool bIfNotExists, CSphString & sError )
 {
-	if ( g_pLocalIndexes->Contains ( tStmt.m_sIndex ) || g_pDistIndexes->Contains ( tStmt.m_sIndex ) )
+	if ( g_pLocalIndexes->Contains ( sIndex ) || g_pDistIndexes->Contains ( sIndex ) )
 	{
-		if ( tStmt.m_tCreateTable.m_bIfNotExists )
+		if ( bIfNotExists )
 			return true;
 
-		sError.SetSprintf ( "table '%s' already exists", tStmt.m_sIndex.cstr() );
+		sError.SetSprintf ( "table '%s' already exists", sIndex.cstr() );
 		return false;
 	}
 
-	if ( CSphSchema::IsReserved ( tStmt.m_sIndex.cstr() ) )
+	if ( CSphSchema::IsReserved ( sIndex.cstr() ) )
 	{
-		sError.SetSprintf ( "'%s' is a reserved keyword", tStmt.m_sIndex.cstr() );
+		sError.SetSprintf ( "'%s' is a reserved keyword", sIndex.cstr() );
 		return false;
 	}
 
 	return true;
 }
 
-static int CheckShardIntOpt ( const char * sName, const SqlStmt_t & tStmt, CSphString & sError )
+static int CheckShardIntOpt ( const char * sName, const CSphString & sIndex, const CSphVector<NameValueStr_t> & dOpts, CSphString & sError )
 {
-	int iPos = tStmt.m_tCreateTable.m_dOpts.GetFirst ( [&]( const auto & tItem ) { return tItem.m_sName==sName; } );
+	int iPos = dOpts.GetFirst ( [&]( const auto & tItem ) { return tItem.m_sName==sName; } );
 	if ( iPos==-1 )
 		return iPos;
 
-	CSphVariant tVal ( tStmt.m_tCreateTable.m_dOpts[iPos].m_sValue.cstr() );
+	CSphVariant tVal ( dOpts[iPos].m_sValue.cstr() );
 	if ( tVal.int64val()<0 )
-		sError.SetSprintf ( "table '%s': CREATE TABLE failed: negative '%s' option is not allowed", tStmt.m_sIndex.cstr(), sName );
+		sError.SetSprintf ( "table '%s': CREATE TABLE failed: negative '%s' option is not allowed", sIndex.cstr(), sName );
 
 	return iPos;
 }
 
-static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
+static bool CheckCreateTable ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, CSphString & sError )
 {
-	if ( !CheckExistingTables ( tStmt, sError ) )
+	if ( !CheckExistingTables ( sIndex, tCreateTable.m_bIfNotExists, sError ) )
 		return false;
 
-	if ( !CheckAttrs ( tStmt.m_tCreateTable.m_dAttrs, []( const CreateTableAttr_t & tAttr ) { return tAttr.m_tAttr.m_sName; }, sError ) )
+	if ( !CheckAttrs ( tCreateTable.m_dAttrs, []( const CreateTableAttr_t & tAttr ) { return tAttr.m_tAttr.m_sName; }, sError ) )
 		return false;
 
-	if ( !CheckAttrs ( tStmt.m_tCreateTable.m_dFields, []( const CSphColumnInfo & tAttr ) { return tAttr.m_sName; }, sError ) )
+	if ( !CheckAttrs ( tCreateTable.m_dFields, []( const CSphColumnInfo & tAttr ) { return tAttr.m_sName; }, sError ) )
 		return false;
 
-	for ( auto & i : tStmt.m_tCreateTable.m_dAttrs )
+	for ( auto & i : tCreateTable.m_dAttrs )
 		if ( i.m_bKNN && !i.m_tKNNModel.m_sModelName.empty() && !IsKNNEmbeddingsLibLoaded() )
 		{
 			sError.SetSprintf ( "model_name specified for '%s', but embeddings library is not loaded", i.m_tAttr.m_sName.cstr() );
 			return false;
 		}
 
-
-	// cross-checks attrs and fields
-	for ( const auto & i : tStmt.m_tCreateTable.m_dAttrs )
-		for ( const auto & j : tStmt.m_tCreateTable.m_dFields )
+	for ( const auto & i : tCreateTable.m_dAttrs )
+		for ( const auto & j : tCreateTable.m_dFields )
 			if ( i.m_tAttr.m_sName==j.m_sName && i.m_tAttr.m_eAttrType!=SPH_ATTR_STRING )
 			{
 				sError.SetSprintf ( "duplicate attribute name '%s'", i.m_tAttr.m_sName.cstr() );
 				return false;
 			}
 
-	// shard related options
-	const CSphVector<NameValueStr_t> & dOpts = tStmt.m_tCreateTable.m_dOpts;
+	const CSphVector<NameValueStr_t> & dOpts = tCreateTable.m_dOpts;
 	if ( dOpts.GetLength() )
 	{
-		int iShardsPos = CheckShardIntOpt ("shards", tStmt, sError );
+		int iShardsPos = CheckShardIntOpt ( "shards", sIndex, dOpts, sError );
 		if ( !sError.IsEmpty() )
 			return false;
-		int iRfPos = CheckShardIntOpt ( "rf", tStmt, sError );
+		int iRfPos = CheckShardIntOpt ( "rf", sIndex, dOpts, sError );
 		if ( !sError.IsEmpty() )
 			return false;
 
-		// should be routerd into buddy with good error message
 		if ( iShardsPos!=-1 || iRfPos!=-1 )
 		{
-			sError.SetSprintf ( "table '%s': CREATE TABLE failed: 'shards' and 'rf' options require Buddy", tStmt.m_sIndex.cstr() );
+			sError.SetSprintf ( "table '%s': CREATE TABLE failed: 'shards' and 'rf' options require Buddy", sIndex.cstr() );
 			return false;
 		}
 	}
@@ -6650,6 +6673,7 @@ static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 {
 	SearchFailuresLog_c dErrors;
 	CSphString sError;
+	CreateTableSettings_t tExpandedSettings = tStmt.m_tCreateTable;
 
 	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
@@ -6663,8 +6687,14 @@ static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 
 	// only one create table at the time allowed and multiple concurent CREATE TABLE if not exists passes well
 	Threads::ScopedCoroMutex_t tCreateTableLock ( g_tCreateTableMutex );
+	if ( !ExpandCreateTableProfiles ( tExpandedSettings, sError ) )
+	{
+		sError.SetSprintf ( "table '%s': CREATE TABLE failed: %s", tStmt.m_sIndex.cstr(), sError.cstr() );
+		tOut.Error ( sError.cstr() );
+		return;
+	}
 
-	if ( !CheckCreateTable ( tStmt, sError ) )
+	if ( !CheckCreateTable ( tStmt.m_sIndex, tExpandedSettings, sError ) )
 	{
 		sError.SetSprintf ( "table '%s': CREATE TABLE failed: %s", tStmt.m_sIndex.cstr(), sError.cstr() );
 		tOut.Error ( sError.cstr() );
@@ -6672,7 +6702,7 @@ static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	}
 
 	StrVec_t dWarnings;
-	bool bCreatedOk = CreateNewIndexConfigless ( tStmt.m_sIndex, tStmt.m_tCreateTable, dWarnings, sError );
+	bool bCreatedOk = CreateNewIndexConfigless ( tStmt.m_sIndex, tExpandedSettings, dWarnings, sError );
 	sWarning = ConcatWarnings(dWarnings);
 
 	if ( !bCreatedOk )
@@ -6716,7 +6746,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 		return;
 	}
 
-	if ( !CheckExistingTables ( tStmt, sError ) )
+	if ( !CheckExistingTables ( tStmt.m_sIndex, tStmt.m_tCreateTable.m_bIfNotExists, sError ) )
 	{
 		sError.SetSprintf ( "table '%s': CREATE TABLE failed: %s", tStmt.m_sIndex.cstr(), sError.cstr() );
 		tOut.Error ( sError.cstr() );
@@ -8771,8 +8801,7 @@ static void ApplyMysqlMultiStmtSet ( const SqlStmt_t & tStmt )
 		session::Info().SetProfile ( ParseProfileFormat ( tStmt ) );
 }
 
-static bool HandleMysqlSelectStmtGroup ( CSphVector<SqlStmt_t> & dStmt, int iStart, int iEnd, CSphQueryResultMeta & tLastMeta, RowBuffer_i & dRows,
-	const CSphString & sWarning, QueryProfile_c & tProfile )
+static bool HandleMysqlSelectStmtGroup ( CSphVector<SqlStmt_t> & dStmt, int iStart, int iEnd, CSphQueryResultMeta & tLastMeta, RowBuffer_i & dRows, const CSphString & sWarning, QueryProfile_c & tProfile )
 {
 	auto& tSess = session::Info();
 
@@ -9378,6 +9407,13 @@ static bool HandleSetGlobal ( CSphString & sError, const CSphString & sName, int
 	{
 		g_iKNNParallelBuild = Max ( 1, iSetValue );
 		sphInfo ( "set global knn_parallel_build=%d", g_iKNNParallelBuild );
+		return true;
+	}
+
+	if ( sName == "embeddings_threads" )
+	{
+		g_iEmbeddingsThreads = Max ( 0, iSetValue );
+		sphInfo ( "set global embeddings_threads=%d", g_iEmbeddingsThreads );
 		return true;
 	}
 
@@ -10182,6 +10218,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		dTable.MatchTupletf ( "parallel_chunk_merges", "%d", g_iParallelChunkMerges );
 		dTable.MatchTupletf ( "merge_chunks_per_job", "%d", g_iMergeChunksPerJob );
 		dTable.MatchTupletf ( "knn_parallel_build", "%d", g_iKNNParallelBuild );
+		dTable.MatchTupletf ( "embeddings_threads", "%d", g_iEmbeddingsThreads );
 		dTable.MatchTupletf ( "optimize_cutoff", "%d", MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff );
 		dTable.MatchTuplet ( "collation_connection", sphCollationToName ( session::GetCollation() ) );
 		dTable.MatchTuplet ( "query_log_format", LogFormat()==LOG_FORMAT::_PLAIN ? "plain" : "sphinxql" );
@@ -11059,6 +11096,18 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 }
 
 
+static bool ValidateStoredRankerForSchema ( const char * szIndex, const MutableIndexSettings_c & tMutableSettings, const ISphSchema & tSchema, CSphString & sError )
+{
+	CSphString sRankerError;
+	const auto & tQuerySettings = tMutableSettings.m_tQueryExecutionSettings;
+	if ( ValidateStoredRankerExpression ( tQuerySettings.m_eRanker, tQuerySettings.m_sRankerExpr, tSchema, sRankerError ) )
+		return true;
+
+	sError.SetSprintf ( "failed to validate table '%s' ranker, error: '%s'", szIndex, sRankerError.cstr() );
+	return false;
+}
+
+
 static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection & hIndex, CSphReconfigureSettings & tSettings, StrVec_t * pWarnings, CSphString & sError )
 {
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( szIndex );
@@ -11068,7 +11117,8 @@ static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection &
 		tSettings.m_tTokenizer.Setup ( hIndex, sWarning );
 		tSettings.m_tDict.Setup ( hIndex, pFilenameBuilder.get(), sWarning );
 		tSettings.m_tFieldFilter.Setup ( hIndex, sWarning );
-		tSettings.m_tMutableSettings.Load ( hIndex, false, nullptr );
+		if ( !tSettings.m_tMutableSettings.Load ( hIndex, false, nullptr, sError ) )
+			return false;
 
 		if ( pWarnings && !sWarning.IsEmpty() )
 			pWarnings->Add(sWarning);
@@ -11097,7 +11147,13 @@ static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection &
 
 	tSettings.m_tSchema.SetupFlags ( tSettings.m_tIndex, false, nullptr );
 
-	return CheckStoredFields ( tSettings.m_tSchema, tSettings.m_tIndex, sError );
+	if ( !CheckStoredFields ( tSettings.m_tSchema, tSettings.m_tIndex, sError ) )
+		return false;
+
+	if ( !ValidateStoredRankerForSchema ( szIndex, tSettings.m_tMutableSettings, tSettings.m_tSchema, sError ) )
+		return false;
+
+	return true;
 }
 
 
@@ -11283,6 +11339,16 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 		return;
 	}
 
+	CreateTableSettings_t tAlterSettings = tStmt.m_tCreateTable;
+	for ( const auto & i : tAlterSettings.m_dOpts )
+	{
+		if ( i.m_sName=="profile" )
+		{
+			tOut.Error ( "profile=... is only supported in CREATE TABLE" );
+			return;
+		}
+	}
+
 	int iSuffix = pRtIndex->GetChunkId();
 	CSphString sIndexPath = GetPathOnly ( pRtIndex->GetFilebase() );
 
@@ -11291,15 +11357,25 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	pContainer->Populate ( dCreateTableStmts[0].m_tCreateTable, false );
 
 	// force override for old options options from alter should override currect options
-	for ( const auto & i : tStmt.m_tCreateTable.m_dOpts )
+	for ( const auto & i : tAlterSettings.m_dOpts )
 	{
 		pContainer->RemoveKeys ( i.m_sName );
 	}
 
 	// should be able to remove settings with the empty option or remove the prev options by the last empty option
-	for ( const auto & i : tStmt.m_tCreateTable.m_dOpts )
+	for ( const auto & i : tAlterSettings.m_dOpts )
 	{
-		pContainer->AddOption ( i.m_sName, i.m_sValue, true );
+		if ( i.m_sValue.IsEmpty() && ( i.m_sName=="ranker" || i.m_sName=="boolean_mode" ) )
+		{
+			pContainer->Add ( i.m_sName, i.m_sValue );
+			continue;
+		}
+
+		if ( !pContainer->AddOption ( i.m_sName, i.m_sValue, true ) )
+		{
+			tOut.Error ( pContainer->GetError().cstr() );
+			return;
+		}
 	}
 
 	if ( !pContainer->CheckPaths() )
@@ -13491,10 +13567,13 @@ bool SwitchoverIndexSeamless ( const cServedIndexRefPtr_c& pServed, const char* 
 	return LimitedParallelRotationMT ( [&]() { return DoSwitchoverIndexSeamless ( pServed, szIndex, sBase, sNewPath, dWarnings, sError ); } );
 }
 
-void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex, bool bMutableOpt, StrVec_t * pWarnings )
+bool ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError )
 {
-	pIdx->m_tSettings.Load ( hIndex, bMutableOpt, pWarnings );
+	if ( !pIdx->m_tSettings.Load ( hIndex, bMutableOpt, pWarnings, sError ) )
+		return false;
+
 	pIdx->m_sGlobalIDFPath = pIdx->m_tSettings.m_sGlobalIDFPath;
+	return true;
 }
 
 bool ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnCheck, DistributedIndex_t & tIdx, const char * szIndexName, const CSphConfigSection & hIndex, CSphString & sError, StrVec_t * pWarnings )
@@ -13743,19 +13822,20 @@ bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSettings,
 ///////////////////////////////////////////////
 static ResultAndIndex_t LoadRTPercolate ( bool bRT, const char* szIndexName, const CSphConfigSection& hIndex, bool bMutableOpt, StrVec_t* pWarnings, CSphString& sError )
 {
-	bool bWordDict = true;
-	if ( bRT )
+	auto sIndexType = hIndex.GetStr ( "dict", "keywords" );
+	DictFormat_e eDictFormat = DictFormat_e::KEYWORDS;
+	if ( !ParseDictFormat ( sIndexType, eDictFormat ) )
 	{
-		auto sIndexType = hIndex.GetStr ( "dict", "keywords" );
-		bWordDict = true;
-		if ( sIndexType=="crc" )
-			bWordDict = false;
-		else if ( sIndexType!="keywords" )
-		{
-			sError.SetSprintf ( "table '%s': unknown dict=%s; only 'keywords' or 'crc' values allowed", szIndexName, sIndexType.cstr() );
-			return { ADD_ERROR, nullptr };
-		}
+		sError.SetSprintf ( "table '%s': unknown dict=%s; only 'keywords', 'keywords_32k' or 'crc' values allowed", szIndexName, sIndexType.cstr() );
+		return { ADD_ERROR, nullptr };
 	}
+	if ( eDictFormat==DictFormat_e::KEYWORDS_V2 && !bRT )
+	{
+		sError.SetSprintf ( "table '%s': dict=keywords_32k is recognized, but PQ keywords_32k storage is not implemented yet", szIndexName );
+		return { ADD_ERROR, nullptr };
+	}
+
+	bool bWordDict = ( eDictFormat!=DictFormat_e::CRC );
 
 	CSphSchema tSchema ( szIndexName );
 	CSphIndexSettings tSettings;
@@ -13764,14 +13844,18 @@ static ResultAndIndex_t LoadRTPercolate ( bool bRT, const char* szIndexName, con
 
 	// index
 	auto pServed = MakeServedIndex();
-	ConfigureLocalIndex ( pServed, hIndex, bMutableOpt, pWarnings );
+	if ( !ConfigureLocalIndex ( pServed, hIndex, bMutableOpt, pWarnings, sError ) )
+		return { ADD_ERROR, nullptr };
+	if ( !ValidateStoredRankerForSchema ( szIndexName, pServed->m_tSettings, tSchema, sError ) )
+		return { ADD_ERROR, nullptr };
+
 	pServed->m_sIndexPath = hIndex["path"].strval();
 	auto bNeedBinlog = hIndex.GetBool ( "binlog" );
 
 	std::unique_ptr<CSphIndex> pIdx;
 	if ( bRT )
 	{
-		pIdx = sphCreateIndexRT ( szIndexName, pServed->m_sIndexPath, std::move ( tSchema ), pServed->m_tSettings.m_iMemLimit, bWordDict );
+		pIdx = sphCreateIndexRT ( szIndexName, pServed->m_sIndexPath, std::move ( tSchema ), pServed->m_tSettings.m_iMemLimit );
 		pServed->m_eType = IndexType_e::RT;
 		tSettings.m_bBinlog = bNeedBinlog;
 		if ( !bNeedBinlog )
@@ -13814,7 +13898,8 @@ static ResultAndIndex_t LoadPlainIndex ( const char * szIndexName, const CSphCon
 	ServedIndexRefPtr_c pServed = MakeServedIndex();
 	pServed->m_eType = IndexType_e::PLAIN;
 	// configure memlocking, star
-	ConfigureLocalIndex ( pServed, hIndex, bMutableOpt, pWarnings );
+	if ( !ConfigureLocalIndex ( pServed, hIndex, bMutableOpt, pWarnings, sError ) )
+		return { ADD_ERROR, nullptr };
 
 	// try to create index
 	pServed->m_sIndexPath = hIndex["path"].strval ();
@@ -13830,10 +13915,10 @@ static ResultAndIndex_t LoadPlainIndex ( const char * szIndexName, const CSphCon
 ///////////////////////////////////////////////
 /// make and configure template index
 ///////////////////////////////////////////////
-static ResultAndIndex_t LoadTemplateIndex ( const char * szIndexName, const CSphConfigSection &hIndex, bool bMutableOpt, StrVec_t * pWarnings )
+static ResultAndIndex_t LoadTemplateIndex ( const char * szIndexName, const CSphConfigSection &hIndex, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError )
 {
 	CSphIndexSettings tSettings;
-	CSphString sWarning, sError;
+	CSphString sWarning;
 	if ( !tSettings.Setup ( hIndex, szIndexName, sWarning, sError ) )
 	{
 		sphWarning ( "failed to configure table %s: %s", szIndexName, sError.cstr () );
@@ -13850,7 +13935,8 @@ static ResultAndIndex_t LoadTemplateIndex ( const char * szIndexName, const CSph
 	pServed->m_eType = IndexType_e::TEMPLATE;
 
 	// configure memlocking, star
-	ConfigureLocalIndex ( pServed, hIndex, bMutableOpt, pWarnings );
+	if ( !ConfigureLocalIndex ( pServed, hIndex, bMutableOpt, pWarnings, sError ) )
+		return { ADD_ERROR, nullptr };
 
 	pIdx->SetMutableSettings ( pServed->m_tSettings );
 	pIdx->m_iExpansionLimit = g_iExpansionLimit;
@@ -13898,7 +13984,7 @@ ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & 
 		case IndexType_e::PERCOLATE:
 			return LoadRTPercolate ( false, szIndexName, hIndex, bMutableOpt, pWarnings, sError );
 		case IndexType_e::TEMPLATE:
-			return LoadTemplateIndex ( szIndexName, hIndex, bMutableOpt, pWarnings );
+			return LoadTemplateIndex ( szIndexName, hIndex, bMutableOpt, pWarnings, sError );
 		case IndexType_e::PLAIN:
 			return LoadPlainIndex ( szIndexName, hIndex, bMutableOpt, pWarnings, sError );
 		case IndexType_e::ERROR_:
@@ -14676,6 +14762,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 	g_iParallelChunkMerges = Max ( 1, hSearchd.GetInt ( "parallel_chunk_merges", iDefaultParallelMerges ) );
 	g_iMergeChunksPerJob = Max ( 2, hSearchd.GetInt ( "merge_chunks_per_job", 2 ) );
 	g_iKNNParallelBuild = Max ( 1, hSearchd.GetInt ( "knn_parallel_build", GetDefaultKNNParallelBuild(iThreads) ) );
+	g_iEmbeddingsThreads = Max ( 0, hSearchd.GetInt ( "embeddings_threads", 4 ) );
 	g_iThdQueueMax = hSearchd.GetInt ( "jobs_queue_size", g_iThdQueueMax );
 
 	g_iPersistentPoolSize = hSearchd.GetInt ("persistent_connections_limit");

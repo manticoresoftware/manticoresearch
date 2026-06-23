@@ -606,7 +606,7 @@ int main ( int argc, char ** argv )
 
 	CSphString sError;
 	CSphDictSettings tDictSettings;
-	tDictSettings.m_bWordDict = false;
+	tDictSettings.SetDictFormat ( DictFormat_e::CRC );
 
 	TokenizerRefPtr_c pTok = Tokenizer::Detail::CreateUTF8Tokenizer();
 	DictRefPtr_c pDict {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt1", false, 32, nullptr, sError )};
@@ -634,7 +634,7 @@ int main ( int argc, char ** argv )
 	Binlog::Configure ( tRTConfig, 0 );
 	SmallStringHash_T< CSphIndex * > dTemp;
 	Binlog::Replay ( dTemp );
-	auto pIndex = sphCreateIndexRT ( "testrt", DATAFLD "dump", tSchema, 32*1024*1024, false ).release();
+	auto pIndex = sphCreateIndexRT ( "testrt", DATAFLD "dump", tSchema, 32*1024*1024 ).release();
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );
 	StrVec_t dWarnings;

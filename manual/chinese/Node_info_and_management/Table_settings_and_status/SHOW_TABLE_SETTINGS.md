@@ -20,6 +20,8 @@ SHOW TABLE table_name[.N | CHUNK N] SETTINGS
 
 输出类似于 [indextool](../../Miscellaneous_tools.md#indextool) 工具的 [--dumpconfig](../../Miscellaneous_tools.md#indextool) 选项。该报告详细列出了所有表设置，包括分词器和词典选项。
 
+如果一个表是通过 SQL `profile=...` 快捷方式创建的，`SHOW TABLE SETTINGS` 会显示展开后的已保存设置（例如 `ranker` 和 `boolean_mode`），而不是配置文件名称本身。
+
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->

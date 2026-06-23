@@ -75,7 +75,7 @@ POST /search
             "match": {
               "body": "world"
             }
-          }  
+          }
         ]
       }
     },
@@ -420,6 +420,24 @@ WHERE match('machine learning') AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1))
 OPTION fusion_method='rrf', rank_constant=10;
 ```
 
+### boolean_mode
+
+```sql
+OPTION boolean_mode='or'
+```
+
+控制 SphinxQL 全文查询中**没有显式布尔运算符**的多关键词 `MATCH()` 表达式如何被解释。
+
+可从以下值中选择：
+* `and` - 所有关键词都必须匹配
+* `or` - 任意关键词都可以匹配
+
+`OPTION boolean_mode=...` 只对当前查询生效。你也可以通过 `CREATE TABLE ... boolean_mode='...'`，或者使用表 [profile](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#profile)，把默认布尔模式存储在表元数据中。如果两者都存在，以查询选项为准。如果都未指定，SQL 默认使用 `and`。
+
+它只影响相邻关键词或子表达式之间**隐式**的组合方式，前提是这些表达式本身没有显式的全文运算符。像 `|`、`!`/`-`、短语、quorum、`NEAR` 和 `<<` 这类显式运算符会保持各自的语义。
+
+HTTP JSON 在 `match` 查询上有自己对应的设置，通过 `"operator"` 属性实现，默认是 `or`，除非显式设置。
+
 ### ranker
 从以下选项中选择：
 * `proximity_bm25`
@@ -434,6 +452,8 @@ OPTION fusion_method='rrf', rank_constant=10;
 * `export`
 
 有关每个排序器的更多详细信息，请参阅[搜索结果排序](../Searching/Sorting_and_ranking.md#Available-built-in-rankers)。
+
+`OPTION ranker=...` 只为当前查询设置 ranker。你也可以通过 `CREATE TABLE ... ranker='...'`，或者使用表 [profile](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#profile)，把默认 ranker 存储在表元数据中。如果两者都存在，以查询选项为准。如果一个查询目标是多个表且未指定 `OPTION ranker=...`，则每个表都会使用自己保存的默认 ranker，包括本地和远程分布式表。最终合并会直接使用返回的原始权重，不做跨 ranker 归一化，因此只有当参与的表使用相同的 ranker 语义时，全局排序才可以可靠比较。
 
 ### rand_seed
 允许您为`ORDER BY RAND()`查询指定特定的整数种子值，例如：`... OPTION rand_seed=1234`。默认情况下，每个查询都会自动生成一个新的且不同的种子值。

@@ -13,6 +13,7 @@
   * 21.04 (Hirsute Hippo)
   * 22.04 (Jammy)
   * 24.04 (Noble)
+  * 26.04 (Resolute)
 
 * Mint
   * 19

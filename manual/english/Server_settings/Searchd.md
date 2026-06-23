@@ -289,6 +289,32 @@ knn_parallel_build = 4
 
 <!-- end -->
 
+### embeddings_threads
+
+<!-- example conf embeddings_threads -->
+This setting caps how many CPU threads are used when Manticore converts text into vectors. It applies whenever auto-embeddings run: when inserting rows into a table that uses `model_name`/`from`, when an `ALTER TABLE` rebuilds an auto-embedded `float_vector` column, and when a `knn(<field>, '<text>', ...)` search supplies the query as text.
+
+The actual number of threads used is also limited by how many workers are currently free, so a busy server will use fewer threads even if the cap is high. Use this option to keep one large embedding batch from starving concurrent searches.
+
+Default is `4`. Set to `0` to remove the cap, in which case the embeddings library decides how many threads to use (still bounded by the number of free workers).
+
+This value can be changed at runtime using `SET GLOBAL embeddings_threads = N` and inspected via `SHOW VARIABLES`. For KNN `SELECT` queries it can also be overridden per-query with `OPTION embeddings_threads = N` (see [KNN vector search](../Searching/KNN.md#KNN-vector-search)).
+
+<!-- intro -->
+##### Example:
+
+<!-- request Default -->
+```ini
+embeddings_threads = 4
+```
+
+<!-- request Uncapped -->
+```ini
+embeddings_threads = 0
+```
+
+<!-- end -->
+
 ### auto_schema
 
 <!-- example conf auto_schema -->

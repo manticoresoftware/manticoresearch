@@ -185,7 +185,7 @@ public:
 
 	void Unquote();
 
-	static int GetGap() { return SAFETY_GAP; }
+	static constexpr int GetGap() { return SAFETY_GAP; }
 
 	explicit operator ByteBlob_t() const;
 };

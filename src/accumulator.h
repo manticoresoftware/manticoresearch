@@ -127,12 +127,13 @@ public:
 	CSphVector<std::unique_ptr<ReplicationCommand_t>> m_dCmd;
 	ReplicatedCommand_t				m_tCmdReplicated;
 
-	bool						m_bKeywordDict = false;
+	DictFormat_e				m_eDictFormat = DictFormat_e::CRC;
 	DictRefPtr_c				m_pDict;
 	const void *				m_pRefDict = nullptr; // not owned, used only for comparing via ==
 
 public:
-	void			SetupDict ( const RtIndex_i * pIndex, const DictRefPtr_c& pDict, bool bKeywordDict );
+	bool			IsKeywordDict() const { return m_eDictFormat!=DictFormat_e::CRC; }
+	void			SetupDict ( const RtIndex_i * pIndex, const DictRefPtr_c& pDict, DictFormat_e eDictFormat );
 	void			Sort();
 	bool			FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVector<AttrWithModel_t> & dAttrsWithModels, CSphString & sError );
 	void			FetchEmbeddingsSrc ( InsertDocData_c & tDoc, const CSphVector<AttrWithModel_t> & dAttrsWithModels );

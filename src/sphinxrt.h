@@ -217,7 +217,7 @@ public:
 	virtual int		GetChunkId () const { return 0; };
 
 protected:
-	bool PrepareAccum ( RtAccum_t* pAccExt, bool bWordDict, CSphString* pError );
+	bool PrepareAccum ( RtAccum_t* pAccExt, DictFormat_e eDictFormat, CSphString* pError );
 	bool				m_bIndexDeleted = false;
 
 private:
@@ -231,7 +231,7 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 void sphRTSetTestMode ();
 
 /// RT index factory
-std::unique_ptr<RtIndex_i> sphCreateIndexRT ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema, int64_t iRamSize, bool bKeywordDict );
+std::unique_ptr<RtIndex_i> sphCreateIndexRT ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema, int64_t iRamSize );
 
 typedef void ProgressCallbackSimple_t ();
 
@@ -259,6 +259,7 @@ struct RtWord_t
 		const BYTE * m_sWord;
 		INIT_WITH_0 ( SphWordID_t, const BYTE* );
 	};
+	int m_iWordLen = 0;
 	DWORD m_uDocs = 0;		///< document count (for stats and/or BM25)
 	DWORD m_uHits = 0;		///< hit count (for stats and/or BM25)
 	DWORD m_uDoc = 0;		///< index into segment docs
@@ -340,10 +341,11 @@ using ConstRtSegmentRefPtf_t = CSphRefcountedPtr<const RtSegment_t>;
 class RtWordReader_c
 {
 	BYTE m_tPackedWord[SPH_MAX_KEYWORD_LEN + 1];
+	CSphFixedVector<BYTE> m_dKeyword { 0 };
 	RtWord_t m_tWord;
 	int m_iWords = 0;
 
-	bool m_bWordDict;
+	DictFormat_e m_eDictFormat;
 	int m_iWordsCheckpoint;
 	int m_iCheckpoint = 0;
 	const ESphHitless m_eHitlessMode = SPH_HITLESS_NONE;
@@ -352,7 +354,7 @@ public:
 	const BYTE* m_pCur = nullptr;
 	const BYTE* m_pMax = nullptr;
 
-	RtWordReader_c ( const RtSegment_t * pSeg, bool bWordDict, int iWordsCheckpoint, ESphHitless eHitlessMode );
+	RtWordReader_c ( const RtSegment_t * pSeg, DictFormat_e eDictFormat, int iWordsCheckpoint, ESphHitless eHitlessMode );
 	void Reset ( const RtSegment_t * pSeg );
 	inline int Checkpoint() const { return m_iCheckpoint; }
 	const RtWord_t* UnzipWord();
@@ -470,7 +472,7 @@ bool BuildBloom ( const BYTE * sWord, int iLen, int iInfixCodepointCount, bool b
 bool BuildBloom ( const BYTE * sWord, int iLen, int iInfixCodepointCount, bool bUtf8,
 	int iKeyValCount, BloomCheckTraits_t &tBloom );
 
-void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool bKeywordDict, int iMinInfixLen,
+void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, DictFormat_e eDictFormat, int iMinInfixLen,
 	int iWordsCheckpoint, bool bUtf8, ESphHitless eHitlessMode );
 
 bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxCodepointLength, int iDictCpCount,
@@ -479,7 +481,7 @@ bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxCodepoin
 void SetupExactTokenizer ( const TokenizerRefPtr_c & pTokenizer );
 void SetupStarTokenizer ( const TokenizerRefPtr_c & pTokenizer );
 
-bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const ISphFieldFilter * pFieldFilter,
+bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, DictFormat_e eCurrentDictFormat, const ISphFieldFilter * pFieldFilter,
 	const CSphIndexSettings & tIndexSettings, uint64_t uTokHash, uint64_t uDictHash, int iMaxCodepointLength, int64_t iMemLimit,
 	bool bSame, CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError );
 
@@ -493,7 +495,27 @@ volatile int & MergeChunksPerJob() noexcept;
 volatile int AutoOptimizeCutoff() noexcept;
 volatile int AutoOptimizeCutoffKNN() noexcept;
 volatile int & KNNParallelBuild() noexcept;
+volatile int & EmbeddingsThreads() noexcept;
+int GetEmbeddingsThreadsToUse ( int iMaxOverride = -1 );
 
 void SetRtFlushDiskPeriod ( int iFlushWrite, int iFlushSearch );
+
+inline ByteBlob_t GetPackedKeywordLegacy ( const BYTE * pPacked )
+{
+	assert ( pPacked );
+	int iLen = pPacked[0];
+	assert ( iLen>0 && iLen<SPH_MAX_KEYWORD_LEN );
+	return { pPacked+1, iLen };
+}
+
+
+inline ByteBlob_t GetPackedKeywordV2 ( const BYTE * pPacked )
+{
+	assert ( pPacked );
+	const BYTE * pCur = pPacked;
+	int iLen = (int)UnzipIntLE ( pCur );
+	assert ( iLen>0 && iLen<=GetKeywordMaxStoredBytes ( DictFormat_e::KEYWORDS_V2 ) );
+	return { pCur, iLen };
+}
 
 #endif // _sphinxrt_

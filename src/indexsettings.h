@@ -30,6 +30,23 @@ class CSphWriter;
 class CSphReader;
 class FilenameBuilder_i;
 
+struct StoredQueryExecutionSettings_t
+{
+	ESphRankMode	m_eRanker = SPH_RANK_DEFAULT;
+	CSphString		m_sRankerExpr;
+	CSphString		m_sUDRanker;
+	CSphString		m_sUDRankerOpts;
+	bool			m_bDefaultBoolOr = false;
+
+	void SetRanker ( const StoredQueryExecutionSettings_t & tOther )
+	{
+		m_eRanker = tOther.m_eRanker;
+		m_sRankerExpr = tOther.m_sRankerExpr;
+		m_sUDRanker = tOther.m_sUDRanker;
+		m_sUDRankerOpts = tOther.m_sUDRankerOpts;
+	}
+};
+
 enum
 {
 	// where was TOKENIZER_SBCS=1 once
@@ -91,6 +108,57 @@ public:
 };
 
 
+enum class DictFormat_e
+{
+	CRC,
+	KEYWORDS,
+	KEYWORDS_V2
+};
+
+const char * DictFormatName ( DictFormat_e eFormat );
+bool ParseDictFormat ( const CSphString & sValue, DictFormat_e & eFormat );
+int GetMaxTokenBytes ( DictFormat_e eFormat );
+constexpr int GetKeywordBufSize ( DictFormat_e eFormat )
+{
+	return eFormat==DictFormat_e::KEYWORDS_V2
+		? SPH_V2_MAX_TOKEN_BYTES + CSphString::GetGap()
+		: SPH_LEGACY_TOKEN_BYTES + CSphString::GetGap()*4;
+}
+constexpr int GetKeywordMaxStoredBytes ( DictFormat_e eFormat )
+{
+	return eFormat==DictFormat_e::KEYWORDS_V2
+		? SPH_V2_MAX_TOKEN_BYTES
+		: SPH_LEGACY_TOKEN_BYTES;
+}
+
+struct KeywordBuf_t : ISphNoncopyable
+{
+	BYTE				m_dBuf[GetKeywordBufSize ( DictFormat_e::KEYWORDS )];
+	CSphFixedVector<BYTE> m_dBufV2 { 0 };
+
+	explicit KeywordBuf_t ( DictFormat_e eDict = DictFormat_e::KEYWORDS )
+	{
+		Reset ( eDict );
+	}
+
+	void Reset ( DictFormat_e eDict )
+	{
+		m_dBufV2.Reset ( eDict==DictFormat_e::KEYWORDS_V2 ? GetKeywordBufSize ( DictFormat_e::KEYWORDS_V2 ) : 0 );
+	}
+
+	BYTE * Begin()
+	{
+		return m_dBufV2.GetLength() ? m_dBufV2.Begin() : m_dBuf;
+	}
+
+	int GetLength() const
+	{
+		return m_dBufV2.GetLength() ? m_dBufV2.GetLength() : (int)sizeof ( m_dBuf );
+	}
+};
+
+bool ShouldBypassMorphology ( DictFormat_e eFormat, int iTokenBytes );
+
 class CSphDictSettings : public SettingsWriter_c
 {
 public:
@@ -99,9 +167,17 @@ public:
 	CSphString		m_sStopwords;
 	StrVec_t		m_dWordforms;
 	int				m_iMinStemmingLen = 1;
-	bool			m_bWordDict = true;
+	DictFormat_e	m_eDictFormat = DictFormat_e::KEYWORDS;
 	bool			m_bStopwordsUnstemmed = false;
 	CSphString		m_sMorphFingerprint;		///< not used for creation; only for a check when loading
+
+	void			SetDictFormat ( DictFormat_e eFormat ) { m_eDictFormat = eFormat; }
+	DictFormat_e	GetDictFormat () const { return m_eDictFormat; }
+	bool			IsCRC () const { return GetDictFormat()==DictFormat_e::CRC; }
+	bool			IsKeywords () const { return GetDictFormat()==DictFormat_e::KEYWORDS; }
+	bool			IsKeywordsV2 () const { return GetDictFormat()==DictFormat_e::KEYWORDS_V2; }
+	bool			IsWordDict () const { return GetDictFormat()!=DictFormat_e::CRC; }
+	const char *	GetDictFormatName () const { return DictFormatName ( GetDictFormat() ); }
 
 	void			Setup ( const CSphConfigSection & hIndex, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
 	void			Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
@@ -328,6 +404,8 @@ enum class MutableName_e
 	EXPAND_KEYWORDS,
 	RT_MEM_LIMIT,
 	PREOPEN,
+	RANKER,
+	BOOLEAN_MODE,
 	ACCESS_PLAIN_ATTRS,
 	ACCESS_BLOB_ATTRS,
 	ACCESS_DOCLISTS,
@@ -368,6 +446,8 @@ public:
 	int			m_iExpandKeywords;
 	int64_t		m_iMemLimit;
 	bool		m_bPreopen = false;
+	CSphString	m_sRanker; ///< persisted user-visible value for SHOW CREATE/SETTINGS and sidecar save
+	StoredQueryExecutionSettings_t m_tQueryExecutionSettings; ///< prepared table-owned execution defaults
 	FileAccessSettings_t m_tFileAccess;
 	int			m_iOptimizeCutoff;
 	int			m_iOptimizeCutoffKNN;
@@ -381,11 +461,11 @@ public:
 	static MutableIndexSettings_c & GetDefaults();
 
 	bool Load ( const char * sFileName, const char * sIndexName );
-	void Load ( const CSphConfigSection & hIndex, bool bNeedSave, StrVec_t * pWarnings );
+	bool Load ( const CSphConfigSection & hIndex, bool bNeedSave, StrVec_t * pWarnings, CSphString & sError );
 	bool Save ( CSphString & sBuf ) const;
 
 	bool NeedSave() const { return m_bNeedSave; }
-	bool HasSettings() const { return ( m_dLoaded.BitCount()>0 ); }
+	bool HasSettings() const { return ( m_dLoaded.BitCount()>0 || m_dRemoved.BitCount()>0 ); }
 	bool IsSet ( MutableName_e eOpt ) const { return ( HasSettings() && m_dLoaded.BitGet ( (int)eOpt ) ); }
 
 	void Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * ) const override;
@@ -393,7 +473,10 @@ public:
 	void Combine ( const MutableIndexSettings_c & tOther );
 
 private:
+	bool		SetStoredRanker ( const CSphString & sRanker, CSphString & sError );
+	bool		SetStoredBooleanMode ( const CSphString & sValue, CSphString & sError );
 	CSphBitvec	m_dLoaded;
+	CSphBitvec	m_dRemoved;
 	bool		m_bNeedSave = false;
 };
 
@@ -436,6 +519,8 @@ struct CreateTableSettings_t
 	CSphVector<CSphColumnInfo>		m_dFields;
 	CSphVector<NameValueStr_t>		m_dOpts;
 };
+
+bool ExpandCreateTableProfiles ( CreateTableSettings_t & tCreateTable, CSphString & sError );
 
 class IndexSettingsContainer_i
 {

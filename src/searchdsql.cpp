@@ -230,7 +230,9 @@ void SqlParserTraits_c::ProcessParsingError ( const char* szMessage )
 		&& ( m_pBuf == m_pLastTokenStart || RouteToUser ( szMessage, m_pLastTokenStart ) ) )
 		m_bWrongParserSyntaxError = true;
 
-	m_pParseError->SetSprintf ( "%s %s near '%s'", m_sErrorHeader.cstr(), szMessage, m_pLastTokenStart ? m_pLastTokenStart : "(null)" );
+	StringBuilder_c sError;
+	sError << m_sErrorHeader << ' ' << szMessage << " near '" << ( m_pLastTokenStart ? m_pLastTokenStart : "(null)" ) << '\'';
+	*m_pParseError = sError.cstr();
 
 	// fixup TOK_xxx thingies
 	char* s = const_cast<char*> ( m_pParseError->cstr() );
@@ -423,6 +425,7 @@ public:
 	bool			SetupFacetStmt();
 	void			AddFacetFilterAttr ( const SqlNode_t & tAttr );
 	void			SetFacetFilterClause ( FacetFilterClause_e eClause );
+	void			SetFacetZeroes ();
 	bool			SetFacetFilterMode ( const SqlNode_t & tMode );
 
 	void			FilterGroup ( SqlNode_t & tNode, SqlNode_t & tExpr );
@@ -624,6 +627,7 @@ enum class Option_e : BYTE
 	MAX_PREDICTED_TIME,
 	MAX_QUERY_TIME,
 	MORPHOLOGY,
+	BOOLEAN_MODE,
 	RAND_SEED,
 	RANKER,
 	RETRY_COUNT,
@@ -655,6 +659,7 @@ enum class Option_e : BYTE
 	FUSION_WEIGHTS,
 	TOPOLOGY,
 	FACET_FILTER_MODE,
+	EMBEDDINGS_THREADS,
 
 	INVALID_OPTION
 };
@@ -666,11 +671,12 @@ void InitParserOption()
 	const char * dOptions[(BYTE) Option_e::INVALID_OPTION] = { "agent_query_timeout", "boolean_simplify",
 		"columns", "comment", "cutoff", "debug_no_payload", "expand_keywords", "field_weights", "format", "global_idf",
 		"idf", "ignore_nonexistent_columns", "ignore_nonexistent_indexes", "index_weights", "local_df", "low_priority",
-		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
+		"max_matches", "max_predicted_time", "max_query_time", "morphology", "boolean_mode", "rand_seed", "ranker", "retry_count",
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
 		"not_terms_only_allowed", "store", "accurate_aggregation", "max_matches_increase_threshold", "distinct_precision_threshold",
 		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size", "force", "output_words", "expand_blended",
-		"fusion_method", "rank_constant", "window_size", "fusion_weights", "topology", "facet_filter_mode" };
+		"fusion_method", "rank_constant", "window_size", "fusion_weights", "topology", "facet_filter_mode",
+		"embeddings_threads" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -692,7 +698,7 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 			Option_e::GLOBAL_IDF, Option_e::IDF, Option_e::IGNORE_NONEXISTENT_COLUMNS,
 			Option_e::IGNORE_NONEXISTENT_INDEXES, Option_e::INDEX_WEIGHTS, Option_e::LOCAL_DF, Option_e::LOW_PRIORITY,
 			Option_e::MAX_MATCHES, Option_e::MAX_PREDICTED_TIME, Option_e::MAX_QUERY_TIME, Option_e::MORPHOLOGY,
-			Option_e::RAND_SEED, Option_e::RANKER, Option_e::RETRY_COUNT, Option_e::RETRY_DELAY, Option_e::REVERSE_SCAN,
+			Option_e::BOOLEAN_MODE, Option_e::RAND_SEED, Option_e::RANKER, Option_e::RETRY_COUNT, Option_e::RETRY_DELAY, Option_e::REVERSE_SCAN,
 			Option_e::SORT_METHOD, Option_e::STRICT_, Option_e::THREADS, Option_e::TOKEN_FILTER,
 			Option_e::NOT_ONLY_ALLOWED };
 
@@ -700,13 +706,13 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 			Option_e::CUTOFF, Option_e::DEBUG_NO_PAYLOAD, Option_e::EXPAND_KEYWORDS, Option_e::FIELD_WEIGHTS, Option_e::FORMAT,
 			Option_e::GLOBAL_IDF, Option_e::IDF, Option_e::IGNORE_NONEXISTENT_INDEXES, Option_e::INDEX_WEIGHTS,
 			Option_e::LOCAL_DF, Option_e::LOW_PRIORITY, Option_e::MAX_MATCHES, Option_e::MAX_PREDICTED_TIME,
-			Option_e::MAX_QUERY_TIME, Option_e::MORPHOLOGY, Option_e::RAND_SEED, Option_e::RANKER,
+			Option_e::MAX_QUERY_TIME, Option_e::MORPHOLOGY, Option_e::BOOLEAN_MODE, Option_e::RAND_SEED, Option_e::RANKER,
 			Option_e::RETRY_COUNT, Option_e::RETRY_DELAY, Option_e::REVERSE_SCAN, Option_e::SORT_METHOD,
 			Option_e::THREADS, Option_e::TOKEN_FILTER, Option_e::NOT_ONLY_ALLOWED, Option_e::ACCURATE_AGG,
 			Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::THREADS_EX, Option_e::EXPANSION_LIMIT,
 			Option_e::JIEBA_MODE, Option_e::SCROLL, Option_e::JOIN_BATCH_SIZE, Option_e::EXPAND_BLENDED,
 			Option_e::FUSION_METHOD, Option_e::RANK_CONSTANT, Option_e::WINDOW_SIZE, Option_e::FUSION_WEIGHTS,
-			Option_e::FACET_FILTER_MODE };
+			Option_e::FACET_FILTER_MODE, Option_e::EMBEDDINGS_THREADS };
 
 	static Option_e dInsertOptions[] = { Option_e::TOKEN_FILTER_OPTIONS };
 
@@ -819,7 +825,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 		Option_e::THREADS, Option_e::NOT_ONLY_ALLOWED, Option_e::LOW_PRIORITY, Option_e::DEBUG_NO_PAYLOAD,
 		Option_e::ACCURATE_AGG, Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::SWITCHOVER,
 		Option_e::EXPANSION_LIMIT, Option_e::SCROLL, Option_e::JOIN_BATCH_SIZE,
-		Option_e::RANK_CONSTANT, Option_e::WINDOW_SIZE
+		Option_e::RANK_CONSTANT, Option_e::WINDOW_SIZE, Option_e::EMBEDDINGS_THREADS
 	};
 
 	bool bFound = ::any_of ( dIntegerOptions, [eOpt] ( auto i ) { return i == eOpt; } );
@@ -870,6 +876,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 	case Option_e::EXPANSION_LIMIT:				tQuery.m_iExpansionLimit = (int)iValue; break;
 	case Option_e::SCROLL:						tQuery.m_tScrollSettings.m_bRequested = !!iValue; break;
 	case Option_e::JOIN_BATCH_SIZE:				tQuery.m_iJoinBatchSize = (int)iValue; break;
+	case Option_e::EMBEDDINGS_THREADS:			tQuery.m_iEmbeddingsThreads = Max ( 0, (int)iValue ); break;
 	case Option_e::RANK_CONSTANT:
 		if ( iValue < 0 )
 			return FAILED ( "rank_constant must be non-negative" );
@@ -901,17 +908,17 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 	switch ( eOpt )
 	{
 	case Option_e::RANKER:
-		tQuery.m_eRanker = SPH_RANK_TOTAL;
-		for ( int iRanker = SPH_RANK_PROXIMITY_BM25; iRanker<=SPH_RANK_SPH04; iRanker++ )
-			if ( sVal==sphGetRankerName ( ESphRankMode ( iRanker ) ) )
-			{
-				tQuery.m_eRanker = ESphRankMode ( iRanker );
-				break;
-			}
+	{
+		tQuery.m_bExplicitRanker = true;
+		ESphRankMode eRanker = SPH_RANK_TOTAL;
+		if ( sphParseRankerName ( sVal, eRanker ) && eRanker!=SPH_RANK_EXPR && eRanker!=SPH_RANK_EXPORT )
+			tQuery.m_eRanker = eRanker;
+		else
+			tQuery.m_eRanker = SPH_RANK_TOTAL;
 
 		if ( tQuery.m_eRanker==SPH_RANK_TOTAL )
 		{
-			if ( sVal==sphGetRankerName ( SPH_RANK_EXPR ) || sVal==sphGetRankerName ( SPH_RANK_EXPORT ) )
+			if ( eRanker==SPH_RANK_EXPR || eRanker==SPH_RANK_EXPORT )
 				return FAILED ( "missing ranker expression (use OPTION ranker=expr('1+2') for example)" );
 			else if ( sphPluginExists ( PLUGIN_RANKER, sVal.cstr() ) )
 			{
@@ -922,6 +929,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 			return FAILED ( "unknown ranker '%s'", sVal.cstr() );
 		}
 		break;
+	}
 
 	case Option_e::TOKEN_FILTER:    // tokfilter = hello.dll:hello:some_opts
 	{
@@ -979,6 +987,16 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 			tQuery.m_eExpandKeywords = QUERY_OPT_MORPH_NONE;
 		else
 			return FAILED ( "morphology could be only disabled with option none, got %s", sVal.cstr() );
+		break;
+
+	case Option_e::BOOLEAN_MODE:
+		if ( sVal=="or" )
+			tQuery.m_bDefaultBoolOr = true;
+		else if ( sVal=="and" )
+			tQuery.m_bDefaultBoolOr = false;
+		else
+			return FAILED ( "unknown boolean_mode='%s' (must be 'and' or 'or')", sVal.cstr() );
+		tQuery.m_bExplicitBooleanMode = true;
 		break;
 
 	case Option_e::EXPAND_BLENDED:
@@ -1078,13 +1096,16 @@ AddOption_e AddOptionRanker ( CSphQuery & tQuery, const CSphString & sOpt, const
 
 	if ( eOpt==Option_e::RANKER )
 	{
-		if ( sVal=="expr" || sVal=="export" )
+		ESphRankMode eRanker = SPH_RANK_TOTAL;
+		if ( sphParseRankerName ( sVal, eRanker ) && ( eRanker==SPH_RANK_EXPR || eRanker==SPH_RANK_EXPORT ) )
 		{
-			tQuery.m_eRanker = sVal=="expr" ? SPH_RANK_EXPR : SPH_RANK_EXPORT;
+			tQuery.m_bExplicitRanker = true;
+			tQuery.m_eRanker = eRanker;
 			tQuery.m_sRankerExpr = fnGetUnescaped();
 			return AddOption_e::ADDED;
 		} else if ( sphPluginExists ( PLUGIN_RANKER, sVal.cstr() ) )
 		{
+			tQuery.m_bExplicitRanker = true;
 			tQuery.m_eRanker = SPH_RANK_PLUGIN;
 			tQuery.m_sUDRanker = sVal;
 			tQuery.m_sUDRankerOpts = fnGetUnescaped();
@@ -1661,6 +1682,12 @@ void SqlParser_c::AddFacetFilterAttr ( const SqlNode_t & tAttr )
 void SqlParser_c::SetFacetFilterClause ( FacetFilterClause_e eClause )
 {
 	m_pQuery->m_tFacetFilter.m_eClause = eClause;
+}
+
+
+void SqlParser_c::SetFacetZeroes ()
+{
+	m_pQuery->m_tFacetFilter.m_bZeroes = true;
 }
 
 
@@ -2651,28 +2678,38 @@ static bool SetupFacets ( CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
 				tStmt.m_tQuery.m_dFacetOwnFilterAttrs.Add ( tStmt.m_tQuery.m_sGroupBy );
 			if ( !tStmt.m_tQuery.m_sFacetBy.IsEmpty() && !facet::AttrNameInList ( tStmt.m_tQuery.m_dFacetOwnFilterAttrs, tStmt.m_tQuery.m_sFacetBy ) )
 				tStmt.m_tQuery.m_dFacetOwnFilterAttrs.Add ( tStmt.m_tQuery.m_sFacetBy );
-			const bool bUseOwnExclusion = facet::GetFilterMode ( tHeadQuery, tStmt.m_tQuery )!=FacetFilterMode_e::Max;
+			FacetFilterMode_e eMode = facet::GetFilterMode ( tHeadQuery, tStmt.m_tQuery );
+			const bool bUseOwnExclusion = eMode!=FacetFilterMode_e::Max;
 			if ( !facet::CopyFilters ( tHeadQuery, tStmt.m_tQuery, sError, bUseOwnExclusion ) )
 				return false;
 
 			SqlStmt_t tStrict;
-			bool bNeedStrict = ( facet::GetFilterMode ( tHeadQuery, tStmt.m_tQuery )==FacetFilterMode_e::Max );
+			SqlStmt_t tZeroes;
+			bool bNeedStrict = ( eMode==FacetFilterMode_e::Max );
+			bool bNeedZeroes = bNeedStrict && tStmt.m_tQuery.m_tFacetFilter.m_bZeroes;
+			if ( bNeedZeroes )
+				facet::DeferFacetResultPaging ( tStmt.m_tQuery );
 			if ( bNeedStrict )
 			{
 				tStrict.m_eStmt = STMT_SELECT;
 				tStrict.m_tQuery = tStmt.m_tQuery;
-				tStrict.m_tQuery.m_bFacetMaxRef = true;
-				tStrict.m_tQuery.m_tFacetFilter.m_tMode = FacetFilterMode_e::Strict;
-				tStrict.m_tQuery.m_tFacetFilter.m_eClause = FacetFilterClause_e::All;
-				tStrict.m_tQuery.m_dFilters.Reset();
-				tStrict.m_tQuery.m_dFilterTree.Reset();
-				if ( !facet::CopyFilters ( tHeadQuery, tStrict.m_tQuery, sError, true ) )
+				if ( !facet::SetupHelperQuery ( tHeadQuery, tStrict.m_tQuery, facet::FacetHelperQuery_e::Strict, sError ) )
+					return false;
+			}
+
+			if ( bNeedZeroes )
+			{
+				tZeroes.m_eStmt = STMT_SELECT;
+				tZeroes.m_tQuery = tStmt.m_tQuery;
+				if ( !facet::SetupHelperQuery ( tHeadQuery, tZeroes.m_tQuery, facet::FacetHelperQuery_e::Zeroes, sError ) )
 					return false;
 			}
 
 			dOut.Add ( std::move ( tStmt ) );
 			if ( bNeedStrict )
 				dOut.Add ( std::move ( tStrict ) );
+			if ( bNeedZeroes )
+				dOut.Add ( std::move ( tZeroes ) );
 		}
 
 		i = iFacetStart - 1;

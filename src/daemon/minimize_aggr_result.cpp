@@ -115,17 +115,37 @@ static bool MinimizeSchema ( CSphSchema & tDst, const ISphSchema & tSrc )
 
 static void FreeOrphanedDataPtrAttrs ( AggrResult_t & tRes, const CSphSchema & tOldSchema )
 {
-	CSphVector<int> dKeptRows;
+	CSphVector<DataPtrAttr_t> dKeptPtrs;
+	CSphVector<int> dEmpty;
 	static const int SIZE_OF_ROW = 8 * sizeof ( CSphRowitem );
 
 	for ( int i = 0, iAttrsCount = tRes.m_tSchema.GetAttrsCount(); i<iAttrsCount; ++i )
 	{
 		const CSphColumnInfo & tAttr = tRes.m_tSchema.GetAttr(i);
-		if ( tAttr.m_tLocator.m_bDynamic )
-			dKeptRows.Add ( tAttr.m_tLocator.m_iBitOffset / SIZE_OF_ROW );
+		if ( !tAttr.IsDataPtr() || !tAttr.m_tLocator.m_bDynamic )
+			continue;
+
+		DataPtrAttr_t tDesc;
+		tDesc.m_iRowitem = tAttr.m_tLocator.m_iBitOffset / SIZE_OF_ROW;
+		tDesc.m_eType = tAttr.m_eAttrType;
+		dKeptPtrs.Add ( tDesc );
 	}
 
-	CSphVector<DataPtrAttr_t> dOrphanedPtrs = tOldSchema.SubsetPtrs ( dKeptRows );
+	CSphVector<DataPtrAttr_t> dOrphanedPtrs;
+	for ( const DataPtrAttr_t & tOldPtr : tOldSchema.SubsetPtrs ( dEmpty ) )
+	{
+		bool bKept = false;
+		for ( const DataPtrAttr_t & tKeptPtr : dKeptPtrs )
+			if ( tOldPtr.m_iRowitem==tKeptPtr.m_iRowitem && tOldPtr.m_eType==tKeptPtr.m_eType )
+			{
+				bKept = true;
+				break;
+			}
+
+		if ( !bKept )
+			dOrphanedPtrs.Add ( tOldPtr );
+	}
+
 	if ( dOrphanedPtrs.IsEmpty() )
 		return;
 
@@ -1027,7 +1047,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	if ( tRes.m_iSuccesses==1 )
 		RemapNullMask ( tRes.m_dResults[0].m_dMatches, tOldSchema, tRes.m_tSchema );
 
-	if ( bForceSort )
+	if ( bForceSort || tQuery.m_bFacetMaxRef || tQuery.m_iFacetResultLimit>=0 )
 		FreeOrphanedDataPtrAttrs ( tRes, tOldSchema );
 
 	return true;

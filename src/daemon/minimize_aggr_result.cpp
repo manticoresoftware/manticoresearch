@@ -113,48 +113,6 @@ static bool MinimizeSchema ( CSphSchema & tDst, const ISphSchema & tSrc )
 	return bEqual;
 }
 
-static void FreeOrphanedDataPtrAttrs ( AggrResult_t & tRes, const CSphSchema & tOldSchema )
-{
-	CSphVector<DataPtrAttr_t> dKeptPtrs;
-	CSphVector<int> dEmpty;
-	static const int SIZE_OF_ROW = 8 * sizeof ( CSphRowitem );
-
-	for ( int i = 0, iAttrsCount = tRes.m_tSchema.GetAttrsCount(); i<iAttrsCount; ++i )
-	{
-		const CSphColumnInfo & tAttr = tRes.m_tSchema.GetAttr(i);
-		if ( !tAttr.IsDataPtr() || !tAttr.m_tLocator.m_bDynamic )
-			continue;
-
-		DataPtrAttr_t tDesc;
-		tDesc.m_iRowitem = tAttr.m_tLocator.m_iBitOffset / SIZE_OF_ROW;
-		tDesc.m_eType = tAttr.m_eAttrType;
-		dKeptPtrs.Add ( tDesc );
-	}
-
-	CSphVector<DataPtrAttr_t> dOrphanedPtrs;
-	for ( const DataPtrAttr_t & tOldPtr : tOldSchema.SubsetPtrs ( dEmpty ) )
-	{
-		bool bKept = false;
-		for ( const DataPtrAttr_t & tKeptPtr : dKeptPtrs )
-			if ( tOldPtr.m_iRowitem==tKeptPtr.m_iRowitem && tOldPtr.m_eType==tKeptPtr.m_eType )
-			{
-				bKept = true;
-				break;
-			}
-
-		if ( !bKept )
-			dOrphanedPtrs.Add ( tOldPtr );
-	}
-
-	if ( dOrphanedPtrs.IsEmpty() )
-		return;
-
-	for ( auto & tResult : tRes.m_dResults )
-		for ( auto & tMatch : tResult.m_dMatches )
-			CSphSchemaHelper::FreeDataSpecial ( tMatch, dOrphanedPtrs );
-}
-
-
 static void RemapResult ( AggrResult_t & dResult )
 {
 	const ISphSchema & tSchema = dResult.m_tSchema;
@@ -1048,7 +1006,22 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 		RemapNullMask ( tRes.m_dResults[0].m_dMatches, tOldSchema, tRes.m_tSchema );
 
 	if ( bForceSort || tQuery.m_bFacetMaxRef || tQuery.m_iFacetResultLimit>=0 )
-		FreeOrphanedDataPtrAttrs ( tRes, tOldSchema );
+	{
+		CSphVector<int> dKeptRows;
+		static const int SIZE_OF_ROW = 8 * sizeof ( CSphRowitem );
+
+		for ( int i = 0, iAttrsCount = tRes.m_tSchema.GetAttrsCount(); i<iAttrsCount; ++i )
+		{
+			const CSphColumnInfo & tAttr = tRes.m_tSchema.GetAttr(i);
+			if ( tAttr.IsDataPtr() && tAttr.m_tLocator.m_bDynamic )
+				dKeptRows.Add ( tAttr.m_tLocator.m_iBitOffset / SIZE_OF_ROW );
+		}
+
+		CSphVector<DataPtrAttr_t> dOrphanedPtrs = tOldSchema.SubsetPtrs ( dKeptRows );
+		for ( auto & tResult : tRes.m_dResults )
+			for ( auto & tMatch : tResult.m_dMatches )
+				CSphSchemaHelper::FreeDataSpecial ( tMatch, dOrphanedPtrs );
+	}
 
 	return true;
 }

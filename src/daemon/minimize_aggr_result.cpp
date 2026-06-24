@@ -113,6 +113,28 @@ static bool MinimizeSchema ( CSphSchema & tDst, const ISphSchema & tSrc )
 	return bEqual;
 }
 
+static void FreeOrphanedDataPtrAttrs ( AggrResult_t & tRes, const CSphSchema & tOldSchema )
+{
+	CSphVector<int> dKeptRows;
+	static const int SIZE_OF_ROW = 8 * sizeof ( CSphRowitem );
+
+	for ( int i = 0, iAttrsCount = tRes.m_tSchema.GetAttrsCount(); i<iAttrsCount; ++i )
+	{
+		const CSphColumnInfo & tAttr = tRes.m_tSchema.GetAttr(i);
+		if ( tAttr.m_tLocator.m_bDynamic )
+			dKeptRows.Add ( tAttr.m_tLocator.m_iBitOffset / SIZE_OF_ROW );
+	}
+
+	CSphVector<DataPtrAttr_t> dOrphanedPtrs = tOldSchema.SubsetPtrs ( dKeptRows );
+	if ( dOrphanedPtrs.IsEmpty() )
+		return;
+
+	for ( auto & tResult : tRes.m_dResults )
+		for ( auto & tMatch : tResult.m_dMatches )
+			CSphSchemaHelper::FreeDataSpecial ( tMatch, dOrphanedPtrs );
+}
+
+
 static void RemapResult ( AggrResult_t & dResult )
 {
 	const ISphSchema & tSchema = dResult.m_tSchema;
@@ -1004,6 +1026,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 
 	if ( tRes.m_iSuccesses==1 )
 		RemapNullMask ( tRes.m_dResults[0].m_dMatches, tOldSchema, tRes.m_tSchema );
+
+	FreeOrphanedDataPtrAttrs ( tRes, tOldSchema );
 
 	return true;
 }

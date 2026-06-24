@@ -1027,7 +1027,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	if ( tRes.m_iSuccesses==1 )
 		RemapNullMask ( tRes.m_dResults[0].m_dMatches, tOldSchema, tRes.m_tSchema );
 
-	FreeOrphanedDataPtrAttrs ( tRes, tOldSchema );
+	if ( bForceSort )
+		FreeOrphanedDataPtrAttrs ( tRes, tOldSchema );
 
 	return true;
 }

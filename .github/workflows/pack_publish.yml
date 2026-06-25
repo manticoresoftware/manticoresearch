@@ -370,22 +370,27 @@ jobs:
           path: ./mcl-package
       - name: Preflight local Windows MCL package artifact
         if: ${{ needs.check_branch.outputs.mcl_changed == 'true' }}
+        shell: bash
         run: |
           set -euo pipefail
           if [[ -f ./mcl-package/artifact.tar ]]; then
             tar -xf ./mcl-package/artifact.tar -C ./mcl-package
           fi
           find ./mcl-package -maxdepth 3 -type f | sort
-          if ! find ./mcl-package -type f -name 'manticore-columnar-lib-*.zip' | grep -q -- '-libs\.zip$'; then
+          found_mcl_zip=$(find ./mcl-package -type f -name 'manticore-columnar-lib-*-libs.zip' -print -quit)
+          if [[ -z "$found_mcl_zip" ]]; then
             echo "No local Windows MCL libs zip found in mcl_pkg_windows_x64 artifact" >&2
             exit 1
           fi
+          echo "Found local Windows MCL libs zip: $found_mcl_zip"
       - name: Patch version
         run: |
           sed -i "s/0\.0\.0/${{ needs.pack.outputs.version }}/g" src/sphinxversion.h.in
       - name: Initialization
         # without adding the safe.directory the script fails to do git show ...
-        run: git config --global --add safe.directory /__w/manticoresearch/manticoresearch
+        run: |
+          git config --global --add safe.directory "$PWD"
+          git config --global --add safe.directory "$PWD/mcl"
       - name: Make installer
         # TODO: remove the hardcoded paths /builds/ below
         run: |

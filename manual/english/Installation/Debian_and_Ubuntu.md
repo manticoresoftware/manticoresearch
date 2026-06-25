@@ -23,7 +23,7 @@
 ### Quick automatized installation
 
 ```bash
-wget -O - https://manticoresearch.com | sh
+curl https://manticoresearch.com | sh
 ```
 
 ###### Development packages
@@ -31,7 +31,7 @@ wget -O - https://manticoresearch.com | sh
 If you prefer "Nightly" (development) versions do:
 
 ```bash
-wget -O - https://manticoresearch.com | sh -s dev
+curl https://manticoresearch.com | sh -s dev
 ```
 
 ### Manual installation

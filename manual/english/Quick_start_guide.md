@@ -12,10 +12,6 @@ You can install and start Manticore easily on various operating systems, includi
 
 ```bash
 curl https://manticoresearch.com | sh
-
-# OR
-
-wget -O - https://manticoresearch.com | sh
 ```
 
 <!-- intro -->

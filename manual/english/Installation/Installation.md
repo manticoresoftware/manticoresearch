@@ -8,12 +8,6 @@
 curl https://manticoresearch.com | sh
 ```
 
-or, if you prefer `wget`:
-
-```bash
-wget -O - https://manticoresearch.com | sh
-```
-
 If you are looking for separate packages, please find them [here](https://manticoresearch.com/install/#separate-packages).
 
 For more details on the installation on RPM-based linuxes, see [here](../Installation/RHEL_and_Centos.md).
@@ -26,12 +20,6 @@ For more details about quick installer, run
 
 ``` bash
 curl https://manticoresearch.com | sh -s help
-```
-
-or, if you prefer `wget`:
-
-```bash
-wget -O - https://manticoresearch.com | sh -s help
 ```
 
 <!-- request Windows -->

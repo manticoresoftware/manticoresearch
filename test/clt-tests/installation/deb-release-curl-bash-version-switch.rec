@@ -40,14 +40,9 @@ dpkg-query -W -f='${Status}\n' manticore-repo 2>/dev/null
 ––– output –––
 install ok installed
 ––– input –––
-dpkg-query -W -f='${Version}\n' manticore-server-core 2>/dev/null | grep -Fx "$MANTICORE_PREVIOUS_VERSION"; echo $?
+dpkg-query -W -f='${Version}\n' manticore 2>/dev/null | grep -Fx "$MANTICORE_PREVIOUS_VERSION"; echo $?
 ––– output –––
 #!/([0-9]+:)?[0-9]+[.][0-9]+[.][0-9]+([-_+~.][^[:space:]]+)?/!#
-0
-––– input –––
-apt-mark showauto | grep -Fx manticore-server-core; echo $?
-––– output –––
-manticore-server-core
 0
 ––– input –––
 apt-mark showmanual | grep -Fx manticore; echo $?

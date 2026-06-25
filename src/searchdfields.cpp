@@ -254,6 +254,7 @@ static bool GetFieldFromLocal ( const CSphString & sIndexName, const FieldReques
 bool GetFieldFromDist ( VecRefPtrsAgentConn_t & dRemotes, const FieldRequest_t & tArgs, DocHash_t & hFetchedDocs, FieldBlob_t & tRes )
 {
 	const int iFieldsCount = tArgs.m_dFieldNames.GetLength();
+	bool bOk = true;
 	for ( AgentConn_t * pAgent : dRemotes )
 	{
 		auto * pReply = (RemoteFieldsAnswer_t *) pAgent->m_pResult.get ();
@@ -261,6 +262,9 @@ bool GetFieldFromDist ( VecRefPtrsAgentConn_t & dRemotes, const FieldRequest_t &
 		{
 			if ( !pAgent->m_sFailure.IsEmpty() )
 				tRes.m_sError.SetSprintf ( "agent %s: %s", pAgent->m_tDesc.GetMyUrl().cstr(), pAgent->m_sFailure.cstr() );
+			else
+				tRes.m_sError.SetSprintf ( "agent %s: failed to fetch stored fields", pAgent->m_tDesc.GetMyUrl().cstr() );
+			bOk = false;
 			continue;
 		}
 
@@ -281,7 +285,7 @@ bool GetFieldFromDist ( VecRefPtrsAgentConn_t & dRemotes, const FieldRequest_t &
 		}
 	}
 
-	return true;
+	return bOk;
 }
 
 static bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash_t & hFetchedDocs )
@@ -625,7 +629,7 @@ void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 	SendAPICommandGetfieldAnswer ( tOut, tRequest, tRes, tFetched );
 }
 
-void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery )
+bool RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery )
 {
 	assert ( tRes.m_bSingle );
 	assert ( tRes.m_bOneSchema );
@@ -641,7 +645,7 @@ void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery )
 
 	// early reject in case no stored fields found
 	if ( dFieldCols.IsEmpty() )
-		return;
+		return true;
 
 	int iOffset = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
 	int iCount = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
@@ -651,7 +655,7 @@ void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery )
 	CSphVector<ResLoc_t> dIds;
 	auto dRangesIds = ExtractRanges ( dIds, tRes, dMatches );
 	if ( dRangesIds.IsEmpty() )
-		return;
+		return true;
 
 	auto dAgents = GetAgents ( dRangesIds, tRes );
 	assert ( dAgents.GetLength ()==dRangesIds.GetLength () );
@@ -662,6 +666,7 @@ void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery )
 	SetSessionAuth ( dAgents );
 	PerformRemoteTasks ( dAgents, &tBuilder, &tParser );
 
+	bool bOk = true;
 	StringBuilder_c sError { "," };
 	if ( !tRes.m_sWarning.IsEmpty () )
 		sError << tRes.m_sWarning;
@@ -670,8 +675,20 @@ void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery )
 		auto & dReply = *(RemoteFieldsAnswer_t *) pAgent->m_pResult.release ();
 		if ( pAgent->m_bSuccess )
 			FillDocs ( dMatches, dReply, dFieldCols );
-		else if ( !pAgent->m_sFailure.IsEmpty() )
-			sError.Sprintf ( "agent %s: %s", pAgent->m_tDesc.GetMyUrl().cstr(), pAgent->m_sFailure.cstr() );
+		else
+		{
+			if ( !pAgent->m_sFailure.IsEmpty() )
+				sError.Sprintf ( "agent %s: %s", pAgent->m_tDesc.GetMyUrl().cstr(), pAgent->m_sFailure.cstr() );
+			else
+				sError.Sprintf ( "agent %s: failed to fetch stored fields", pAgent->m_tDesc.GetMyUrl().cstr() );
+			bOk = false;
+		}
 	}
-	sError.MoveTo ( tRes.m_sWarning );
+
+	if ( bOk )
+		sError.MoveTo ( tRes.m_sWarning );
+	else
+		sError.MoveTo ( tRes.m_sError );
+
+	return bOk;
 }

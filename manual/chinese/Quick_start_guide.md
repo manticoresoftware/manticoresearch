@@ -12,10 +12,6 @@
 
 ```bash
 curl https://manticoresearch.com | sh
-
-# OR
-
-wget -O - https://manticoresearch.com | sh
 ```
 
 <!-- intro -->

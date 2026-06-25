@@ -8,12 +8,6 @@
 curl https://manticoresearch.com | sh
 ```
 
-或者，如果你更喜欢 `wget`：
-
-```bash
-wget -O - https://manticoresearch.com | sh
-```
-
 如果您需要单独的安装包，请在[这里](https://manticoresearch.com/install/#separate-packages)查找。
 
 有关在基于 RPM 的 Linux 上安装的更多细节，请参见[这里](../Installation/RHEL_and_Centos.md)。
@@ -26,12 +20,6 @@ wget -O - https://manticoresearch.com | sh
 
 ``` bash
 curl https://manticoresearch.com | sh -s help
-```
-
-或者，如果你更喜欢 `wget`：
-
-```bash
-wget -O - https://manticoresearch.com | sh -s help
 ```
 
 <!-- request Windows -->

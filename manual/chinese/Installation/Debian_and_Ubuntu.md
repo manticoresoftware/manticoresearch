@@ -23,7 +23,7 @@
 ### 快速自动化安装
 
 ```bash
-wget -O - https://manticoresearch.com | sh
+curl https://manticoresearch.com | sh
 ```
 
 ###### 开发包
@@ -31,7 +31,7 @@ wget -O - https://manticoresearch.com | sh
 如果你更喜欢“Nightly”（开发版），请执行：
 
 ```bash
-wget -O - https://manticoresearch.com | sh -s dev
+curl https://manticoresearch.com | sh -s dev
 ```
 
 ### 手动安装

@@ -23,7 +23,7 @@
 ### Быстрая автоматизированная установка
 
 ```bash
-wget -O - https://manticoresearch.com | sh
+curl https://manticoresearch.com | sh
 ```
 
 ###### Пакеты для разработки
@@ -31,7 +31,7 @@ wget -O - https://manticoresearch.com | sh
 Если вы предпочитаете версии "Nightly" (для разработки), выполните:
 
 ```bash
-wget -O - https://manticoresearch.com | sh -s dev
+curl https://manticoresearch.com | sh -s dev
 ```
 
 ### Ручная установка

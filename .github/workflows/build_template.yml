@@ -169,6 +169,13 @@ jobs:
         run: |
           ${{ inputs.cmake_command }}
 
+      - name: Upload Windows build cache artifact
+        if: success() && inputs.DISTR == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cache_${{ inputs.cache_key }}
+          path: cache
+
       - name: Prepare artifact path list
         if: success()
         id: artifact_paths

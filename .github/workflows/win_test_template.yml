@@ -99,6 +99,7 @@ jobs:
           (Resolve-Path "mcl-runtime").Path | Out-File -FilePath $env:GITHUB_PATH -Append
           Get-ChildItem "mcl-runtime" | Select-Object -ExpandProperty FullName
       - name: Check out Windows bundle cache
+        id: windows_bundle_cache
         uses: actions/cache@v4
         with:
           path: |
@@ -106,14 +107,31 @@ jobs:
             boost_1_75_0
           enableCrossOsArchive: true
           key: win_bundle
+      - name: Download Windows bundle artifact on cache miss
+        if: steps.windows_bundle_cache.outputs.cache-hit != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: windows_bundle
+          path: .
       - name: Remove ZSTD # since it wasn't used to save the cache and if we don't remove it here the cache won't be found. TODO: install zstd in our images, so we don't have to do these hacks
-        run: rm C:\tools\zstd\zstd.exe
+        shell: pwsh
+        run: |
+          if (Test-Path "C:\tools\zstd\zstd.exe") {
+            Remove-Item "C:\tools\zstd\zstd.exe"
+          }
       - name: Check out cache
+        id: build_cache
         uses: actions/cache@v4
         with:
           path: cache
           enableCrossOsArchive: true
           key: build_windows_x64
+      - name: Download Windows build cache artifact on cache miss
+        if: steps.build_cache.outputs.cache-hit != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: cache_build_windows_x64
+          path: cache
       - name: Run mysql
         run: |
           C:\PROGRA~1\MySQL\"MySQL Server 8.0"\bin\mysqld.exe --initialize-insecure

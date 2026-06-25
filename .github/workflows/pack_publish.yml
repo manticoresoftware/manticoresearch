@@ -364,10 +364,22 @@ jobs:
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Download local Windows MCL package artifact
         if: ${{ needs.check_branch.outputs.mcl_changed == 'true' }}
-        uses: manticoresoftware/download_artifact_with_retries@v4
+        uses: actions/download-artifact@v4
         with:
           name: mcl_pkg_windows_x64
           path: ./mcl-package
+      - name: Preflight local Windows MCL package artifact
+        if: ${{ needs.check_branch.outputs.mcl_changed == 'true' }}
+        run: |
+          set -euo pipefail
+          if [[ -f ./mcl-package/artifact.tar ]]; then
+            tar -xf ./mcl-package/artifact.tar -C ./mcl-package
+          fi
+          find ./mcl-package -maxdepth 3 -type f | sort
+          if ! find ./mcl-package -type f -name 'manticore-columnar-lib-*.zip' | grep -q -- '-libs\.zip$'; then
+            echo "No local Windows MCL libs zip found in mcl_pkg_windows_x64 artifact" >&2
+            exit 1
+          fi
       - name: Patch version
         run: |
           sed -i "s/0\.0\.0/${{ needs.pack.outputs.version }}/g" src/sphinxversion.h.in

@@ -1,16 +1,27 @@
 ––– comment –––
-This test verifies HTTP JSON syntax for ConversationalSearch conversation calls.
+This test verifies HTTP access for ConversationalSearch model management and conversation calls.
 ––– input –––
 export SEARCHD_FLAGS="--iostats --cpustats"
 ––– output –––
 ––– block: ../base/start-searchd-with-buddy –––
 ––– comment –––
-Create a chat model via SQL
+Create a chat model via HTTP
 ––– input –––
-mysql -h0 -P9306 -e "CREATE CHAT MODEL http_assistant (model='openai:gpt-4o-mini', retrieval_limit=5, max_document_length=3000);" > /dev/null
-mysql -N -B -h0 -P9306 -e "SHOW CHAT MODELS;" | grep -c '^http_assistant'
+curl -sX POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "CREATE CHAT MODEL http_assistant (model='openai:gpt-4o-mini', retrieval_limit=5, max_document_length=3000)" \
+  | grep -o 'http_assistant'
 ––– output –––
-1
+http_assistant
+––– comment –––
+Show chat models via HTTP
+––– input –––
+curl -sX POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d 'SHOW CHAT MODELS' \
+  | grep -o 'http_assistant'
+––– output –––
+http_assistant
 ––– comment –––
 Accept valid conversation JSON and reach handler validation
 ––– input –––
@@ -57,9 +68,14 @@ curl -sX POST http://localhost:9308/search \
 ––– output –––
 conversation_uuid must be a string
 ––– comment –––
-Drop chat model via SQL
+Drop chat model via HTTP
 ––– input –––
-mysql -h0 -P9306 -e "DROP CHAT MODEL IF EXISTS http_assistant;"
-mysql -N -B -h0 -P9306 -e "SHOW CHAT MODELS;" | grep -c '^http_assistant' || true
+curl -sX POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d 'DROP CHAT MODEL IF EXISTS http_assistant' > /dev/null
+curl -sX POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d 'SHOW CHAT MODELS' \
+  | grep -c 'http_assistant' || true
 ––– output –––
 0

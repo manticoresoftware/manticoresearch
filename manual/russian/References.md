@@ -469,6 +469,7 @@ index_converter {--config /path/to/config|--path}
   * [diskchunk_flush_write_timeout](Server_settings/Searchd.md#diskchunk_flush_write_timeout) - Таймаут для автоматического сброса RAM-чанка, если в него не было записей
   * [diskchunk_flush_search_timeout](Server_settings/Searchd.md#diskchunk_flush_search_timeout) - Таймаут для предотвращения автоматического сброса RAM-чанка, если в таблице не было поисковых запросов
   * [docstore_cache_size](Server_settings/Searchd.md#docstore_cache_size) - Максимальный размер блоков документов из хранилища документов, хранящихся в памяти
+  * [embeddings_threads](Server_settings/Searchd.md#embeddings_threads) - Максимальное число потоков, которое библиотека embeddings может использовать при генерации векторов для вставок с автоэмбеддингом, перестройке KNN через `ALTER TABLE` и embedding текстовых запросов для KNN
   * [expansion_limit](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) - Максимальное количество расширенных ключевых слов для одного символа подстановки
   * [grouping_in_utc](Server_settings/Searchd.md#grouping_in_utc) - Включает использование часового пояса UTC для группировки временных полей
   * [ha_period_karma](Server_settings/Searchd.md#ha_period_karma) - Размер окна статистики зеркал агентов

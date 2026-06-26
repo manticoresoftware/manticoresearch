@@ -469,6 +469,7 @@ index_converter {--config /path/to/config|--path}
   * [diskchunk_flush_write_timeout](Server_settings/Searchd.md#diskchunk_flush_write_timeout) - 如果没有写入操作，自动刷新 RAM 块的超时时间
   * [diskchunk_flush_search_timeout](Server_settings/Searchd.md#diskchunk_flush_search_timeout) - 如果表中没有搜索操作，防止自动刷新 RAM 块的超时时间
   * [docstore_cache_size](Server_settings/Searchd.md#docstore_cache_size) - 内存中保存的文档存储文档块的最大大小
+  * [embeddings_threads](Server_settings/Searchd.md#embeddings_threads) - 嵌入库在为自动嵌入插入、`ALTER TABLE` KNN 重建以及 KNN 文本查询嵌入生成向量时可使用的最大线程数
   * [expansion_limit](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) - 单个通配符的最大扩展关键字数量
   * [grouping_in_utc](Server_settings/Searchd.md#grouping_in_utc) - 启用 UTC 时区用于分组时间字段
   * [ha_period_karma](Server_settings/Searchd.md#ha_period_karma) - 代理镜像统计窗口大小

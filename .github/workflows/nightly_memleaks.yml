@@ -4,6 +4,7 @@ run-name: 🌙 Nightly valgrind checks ${{ github.sha }}
 on:
   schedule:
     - cron: '00 20 * * *'
+  workflow_dispatch:
   push:
     branches:
       - '**'

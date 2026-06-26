@@ -5,6 +5,7 @@ on:
   # 📅 Run this workflow every day at 23:00 UTC
   schedule:
     - cron: '00 23 * * *'
+  workflow_dispatch:
   # 🚀 Also run when this file is updated in any branch
   push:
     branches:

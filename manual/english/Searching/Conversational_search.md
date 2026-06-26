@@ -10,6 +10,8 @@ It is managed from SQL with:
 * `DROP CHAT MODEL`
 * `CALL CHAT`
 
+Conversation calls are also available through the HTTP JSON `/search` endpoint. Chat model management remains SQL-only.
+
 ## Before you start
 
 You need a vectorized table and an LLM provider. The table requirements are covered below. Provider credentials can be set in `CREATE CHAT MODEL` with `api_key`, or supplied through the matching environment variable, such as `OPENAI_API_KEY`.
@@ -80,6 +82,18 @@ CREATE CHAT MODEL assistant (
 );
 ```
 
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```bash
+curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "CREATE CHAT MODEL assistant (model='openai:gpt-4o-mini')"
+```
+
 <!-- end -->
 
 You can also set provider options and retrieval limits:
@@ -101,6 +115,19 @@ CREATE CHAT MODEL support_assistant (
     max_document_length=3000
 );
 ```
+
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```bash
+curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "CREATE CHAT MODEL support_assistant (model='openai:gpt-4o-mini', api_key='your-provider-api-key', base_url='http://host.docker.internal:8787/v1', timeout=60, retrieval_limit=5, max_document_length=3000)"
+```
+
 <!-- end -->
 
 Common options:
@@ -176,6 +203,24 @@ CALL CHAT(
 );
 ```
 
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```bash
+curl -s -X POST http://localhost:9308/search \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "chat": {
+      "query": "What is vector search?",
+      "table": "docs",
+      "model_name": "assistant"
+    }
+  }'
+```
+
 <!-- end -->
 
 To continue a conversation, pass the same conversation UUID:
@@ -194,6 +239,25 @@ CALL CHAT(
     'assistant',
     'docs-chat-001'
 );
+```
+
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```bash
+curl -s -X POST http://localhost:9308/search \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "chat": {
+      "query": "Can you explain it with an example?",
+      "table": "docs",
+      "model_name": "assistant",
+      "conversation_uuid": "docs-chat-001"
+    }
+  }'
 ```
 
 <!-- end -->
@@ -217,9 +281,63 @@ CALL CHAT(
 );
 ```
 
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```bash
+curl -s -X POST http://localhost:9308/search \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "chat": {
+      "query": "Find documents where the title is about vector search",
+      "table": "docs",
+      "model_name": "assistant",
+      "conversation_uuid": "",
+      "vector_field": "title_embedding"
+    }
+  }'
+```
+
 <!-- end -->
 
 When the fifth argument is present, Buddy checks that the field exists and is a `FLOAT_VECTOR`. If the argument is omitted, Buddy detects the first `FLOAT_VECTOR` field from `SHOW CREATE TABLE`.
+
+
+## HTTP JSON syntax
+
+Conversation calls are also available over HTTP JSON through the standard `/search` endpoint.
+
+Ask a question:
+
+<!-- example conversational_search_http_chat -->
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```bash
+curl -s -X POST http://localhost:9308/search \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "chat": {
+      "query": "What is vector search?",
+      "table": "docs",
+      "model_name": "assistant",
+      "conversation_uuid": "docs-chat-001",
+      "vector_field": "embedding"
+    }
+  }'
+```
+
+<!-- end -->
+
+Required fields in the `chat` object are `query`, `table`, and `model_name`. Optional fields are `conversation_uuid` and `vector_field`. `vector_field` is the HTTP JSON name for the fifth SQL `CALL CHAT` argument. The legacy JSON field name `fields` is accepted as an alias, but a request must not include both `vector_field` and `fields`.
+
+HTTP JSON conversation responses contain the same logical columns as `CALL CHAT`: `conversation_uuid`, `user_query`, `search_query`, `response`, `response_with_refs`, and `sources`. `sources` is returned as a JSON string containing retrieved source rows.
 
 
 ## Search and context details
@@ -273,6 +391,18 @@ List models:
 SHOW CHAT MODELS;
 ```
 
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```bash
+curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "SHOW CHAT MODELS"
+```
+
 <!-- end -->
 
 Describe a model:
@@ -286,6 +416,18 @@ Describe a model:
 
 ```sql
 DESCRIBE CHAT MODEL assistant;
+```
+
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```bash
+curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "DESCRIBE CHAT MODEL assistant"
 ```
 
 <!-- end -->
@@ -303,6 +445,18 @@ Drop a model:
 DROP CHAT MODEL assistant;
 ```
 
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```bash
+curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "DROP CHAT MODEL assistant"
+```
+
 <!-- end -->
 
 Drop safely:
@@ -316,6 +470,18 @@ Drop safely:
 
 ```sql
 DROP CHAT MODEL IF EXISTS assistant;
+```
+
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```bash
+curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "DROP CHAT MODEL IF EXISTS assistant"
 ```
 
 <!-- end -->

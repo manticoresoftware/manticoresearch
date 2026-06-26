@@ -188,6 +188,8 @@ auth_password_min_length = 12
 
 不过，如果表中包含带 KNN 索引的属性，默认阈值会不同。在这种情况下，它被设为物理 CPU 核心数除以 2，最小值为 1，以提升 KNN 搜索性能。
 
+当 [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) 没有显式设置时（无论是全局还是按表），自动压缩都不会把表合并到少于 2 个磁盘块，即使计算出的默认阈值更低也是如此（这在 CPU 核心较少的服务器上可能发生，尤其是 KNN 表）。如果要让自动压缩继续合并到单个磁盘块，请将 `optimize_cutoff` 显式设置为 `1`。
+
 请注意，切换 `auto_optimize` 的开关状态并不会阻止你手动运行 [OPTIMIZE TABLE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE)。
 
 <!-- intro -->
@@ -292,13 +294,13 @@ knn_parallel_build = 4
 ### embeddings_threads
 
 <!-- example conf embeddings_threads -->
-此设置限制 Manticore 将文本转换为向量时可使用的 CPU 线程数。它会在自动 embeddings 运行的所有场景下生效：向使用 `model_name`/`from` 的表插入行时，`ALTER TABLE` 重建自动嵌入的 `float_vector` 列时，以及 `knn(<field>, '<text>', ...)` 搜索以文本形式提供查询时。
+此设置限制 Manticore 将文本转换为向量时可使用的 CPU 线程数。它适用于自动 embedding 运行的所有场景：向使用 `model_name`/`from` 的表插入行时，`ALTER TABLE` 重建自动嵌入的 `float_vector` 列时，以及 `knn(<field>, '<text>', ...)` 搜索将查询以文本形式提供时。
 
-实际使用的线程数还会受当前可用 worker 数量限制，因此即使上限很高，忙碌的服务器也会使用更少的线程。使用此选项可以避免一次大型 embedding 批次饿死并发搜索。
+实际使用的线程数还会受到当前空闲 worker 数量的限制，因此即使上限很高，繁忙的服务器也会使用更少的线程。使用此选项可以避免某个大型 embedding 批次饿死并发搜索。
 
-默认值为 `4`。设为 `0` 可取消上限，此时 embeddings 库会决定使用多少线程（仍受可用 worker 数量限制）。
+默认值为 `4`。设为 `0` 可取消上限，此时 embeddings 库会自行决定使用多少线程（仍受空闲 worker 数量限制）。
 
-可在运行时使用 `SET GLOBAL embeddings_threads = N` 修改此值，并通过 `SHOW VARIABLES` 查看。对于 KNN `SELECT` 查询，也可以通过 `OPTION embeddings_threads = N` 按查询覆盖（参见 [KNN 向量搜索](../Searching/KNN.md#KNN-vector-search)）。
+此值可在运行时通过 `SET GLOBAL embeddings_threads = N` 修改，并可通过 `SHOW VARIABLES` 查看。对于 KNN `SELECT` 查询，还可以使用 `OPTION embeddings_threads = N` 按查询覆盖（见 [KNN 向量搜索](../Searching/KNN.md#KNN-vector-search)）。
 
 <!-- intro -->
 ##### 示例：

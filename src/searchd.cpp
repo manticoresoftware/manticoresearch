@@ -122,6 +122,7 @@ static int				g_iThdQueueMax		= 0;
 static auto&			g_iTFO = sphGetTFO ();
 static bool				g_bJsonConfigLoadedOk = false;
 static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
+static auto&			g_bOptimizeCutoffExplicit = OptimizeCutoffExplicit();
 static auto&			g_iParallelChunkMerges = ParallelChunkMergesLimit();
 static auto&			g_iMergeChunksPerJob = MergeChunksPerJob();
 static auto&			g_iKNNParallelBuild = KNNParallelBuild();
@@ -9422,7 +9423,11 @@ static bool HandleSetGlobal ( CSphString & sError, const CSphString & sName, int
 		if ( iSetValue < 1 )
 			sError = SphSprintf( "optimize_cutoff should be greater than 0, got %d", iSetValue );
 		else
+		{
 			MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = iSetValue;
+			MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoffKNN = iSetValue;
+			g_bOptimizeCutoffExplicit = true;
+		}
 		return true;
 	}
 
@@ -14987,6 +14992,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 	ConfigureQueryLogCommands ( hSearchd.GetStr ( "query_log_commands" ) );
 
 	g_iAutoOptimizeCutoffMultiplier = hSearchd.GetInt ( "auto_optimize", 1 );
+	g_bOptimizeCutoffExplicit = hSearchd.Exists ( "optimize_cutoff" );
 	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoff() );
 	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoffKNN = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoffKNN() );
 

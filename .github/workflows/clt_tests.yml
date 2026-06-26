@@ -38,6 +38,10 @@ jobs:
   discover:
     name: Discover CLT tests
     runs-on: ubuntu-22.04
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
     outputs:
       matrix: ${{ steps.build.outputs.matrix }}
     steps:

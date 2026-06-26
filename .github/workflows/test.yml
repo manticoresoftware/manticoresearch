@@ -683,12 +683,13 @@ jobs:
     if: always() && needs.meta.outputs.run_builds == 'true' && (needs.mcl_test_package_cache_probe.outputs.cache_hit != 'true' || needs.mcl_runtime_linux_release_cached.outputs.cache_hit != 'true' || needs.mcl_runtime_linux_debug_cached.outputs.cache_hit != 'true')
     name: MCL embeddings jammy x86_64
     needs: [meta, mcl_test_package_cache_probe, mcl_runtime_linux_release_cached, mcl_runtime_linux_debug_cached]
-    uses: ./.github/workflows/mcl_embeddings_quick_build.yml
+    uses: ./.github/workflows/mcl_embeddings_build.yml
     secrets: inherit
     with:
       enabled: true
       mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
       source_ref: ${{ github.sha }}
+      run_quality_checks: false
       distr: linux
       arch: x86_64
 
@@ -712,12 +713,13 @@ jobs:
     if: always() && needs.meta.outputs.run_builds == 'true' && needs.mcl_runtime_windows_debug_cached.outputs.cache_hit != 'true'
     name: MCL embeddings windows x86_64
     needs: [meta, mcl_runtime_windows_debug_cached]
-    uses: ./.github/workflows/mcl_embeddings_quick_build.yml
+    uses: ./.github/workflows/mcl_embeddings_build.yml
     secrets: inherit
     with:
       enabled: true
       mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
       source_ref: ${{ github.sha }}
+      run_quality_checks: false
       distr: windows
       arch: x86_64
 
@@ -884,10 +886,10 @@ jobs:
           submodules: recursive
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Download built x86_64 Ubuntu Jammy packages
-        uses: actions/download-artifact@v4
+        uses: manticoresoftware/download_artifact_with_retries@v3
         with:
           name: release_build
-          path: build
+          path: .
       - name: Restore exact-SHA MCL package cache
         if: ${{ needs.mcl_test_package_cache_probe.outputs.cache_hit == 'true' }}
         uses: actions/cache/restore@v4

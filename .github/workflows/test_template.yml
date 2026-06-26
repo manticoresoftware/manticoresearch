@@ -131,10 +131,10 @@ jobs:
           key: build_linux_debug_x86_64
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: manticoresoftware/download_artifact_with_retries@v3
         with:
           name: ${{ inputs.build_artifact_name }}
-          path: build
+          path: .
 
       - name: Restore build artifact executable permissions
         run: |

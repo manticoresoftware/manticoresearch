@@ -24,6 +24,10 @@ on:
         required: false
         type: string
         default: ""
+      run_quality_checks:
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   build:
@@ -35,5 +39,5 @@ jobs:
       enabled: ${{ inputs.enabled }}
       mcl_full_sha: ${{ inputs.mcl_full_sha }}
       source_ref: ${{ inputs.source_ref }}
-      run_quality_checks: true
+      run_quality_checks: ${{ inputs.run_quality_checks }}
     secrets: inherit

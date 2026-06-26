@@ -176,21 +176,9 @@ jobs:
           name: cache_${{ inputs.cache_key }}
           path: cache
 
-      - name: Prepare artifact path list
-        if: success()
-        id: artifact_paths
-        env:
-          ARTIFACT_LIST: ${{ inputs.artifact_list }}
-        run: |
-          {
-            echo 'value<<EOF'
-            printf '%s\n' "$ARTIFACT_LIST" | tr ' ' '\n' | sed '/^$/d'
-            echo EOF
-          } >> "$GITHUB_OUTPUT"
-
       - name: Upload build artifacts
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: ${{ steps.artifact_name.outputs.value }}
-          path: ${{ steps.artifact_paths.outputs.value }}
+          path: ${{ inputs.artifact_list }}

@@ -35,7 +35,7 @@ The following is a list of all collected metrics:
 | `invocation` | Sent when backup was initiated  |
 | `failed` | Sent in case of failed backup |
 | `done` | Sent when backup/restore is successful |
-| `arg_*` | The arguments used to run the tool (excluding index names, etc.) |
+| `arg_*` | The arguments used to run the tool (excluding table names, etc.) |
 | `backup_store_versions_fails` | Indicates failure in saving Manticore version in the backup |
 | `backup_table_count` | Total number of backed up tables |
 | `backup_no_permissions` | Failed backup due to insufficient permissions to destination directory |
@@ -45,7 +45,7 @@ The following is a list of all collected metrics:
 | `restore_no_config_file` | No config file found in the backup during restore |
 | `restore_time` | Duration of the restore |
 | `fsync_time` | Duration of fsync |
-| `restore_target_exists` | Occurs when a folder or index already exists in the destination folder for restore |
+| `restore_target_exists` | Occurs when a folder or table already exists in the destination folder for restore |
 | `terminations` | Indicates that the process was terminated |
 | `signal_*` | The signal used to terminate the process |
 | `tables` | Number of tables in Manticore |

@@ -1008,13 +1008,16 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	if ( bForceSort || tQuery.m_bFacetMaxRef || tQuery.m_iFacetResultLimit>=0 )
 	{
 		CSphVector<int> dKeptRows;
-		static const int SIZE_OF_ROW = 8 * sizeof ( CSphRowitem );
 
-		for ( int i = 0, iAttrsCount = tRes.m_tSchema.GetAttrsCount(); i<iAttrsCount; ++i )
+		for ( int i = 0; i < tRes.m_tSchema.GetAttrsCount(); ++i )
 		{
 			const CSphColumnInfo & tAttr = tRes.m_tSchema.GetAttr(i);
-			if ( tAttr.IsDataPtr() && tAttr.m_tLocator.m_bDynamic )
-				dKeptRows.Add ( tAttr.m_tLocator.m_iBitOffset / SIZE_OF_ROW );
+			if ( !tAttr.IsDataPtr() || !tAttr.m_tLocator.m_bDynamic )
+				continue;
+
+			const int iRowitem = tAttr.m_tLocator.CalcRowitem();
+			assert ( iRowitem>=0 );
+			dKeptRows.Add ( iRowitem );
 		}
 
 		CSphVector<DataPtrAttr_t> dOrphanedPtrs = tOldSchema.SubsetPtrs ( dKeptRows );

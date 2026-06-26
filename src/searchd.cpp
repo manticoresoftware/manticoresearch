@@ -15475,6 +15475,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	bool bColumnarError = !InitColumnar ( sError );
 	bool bSecondaryError = !InitSecondary ( g_sSecondaryError );
 	bool bKNNError = !InitKNN ( sKNNError );
+	auto tEarlyLibCleanup = AtScopeExit ( [] { ShutdownEarlyLoadedLibraries(); } );
 	sphCollationInit ();
 
 	ESphLogLevel eQuietRestoreLevel = g_eLogLevel;
@@ -15535,9 +15536,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		if ( argv[i][0]!='-' )		break;
 
 		// handle no-arg options
-		OPT ( "-h", "--help" )		{ ShowHelp(); ShutdownEarlyLoadedLibraries(); return 0; }
-		OPT ( "-?", "--?" )		{ ShowHelp(); ShutdownEarlyLoadedLibraries(); return 0; }
-		OPT ( "-v", "--version" )	{ InitBanner(); fprintf ( stdout, "%s", g_sBanner.cstr() ); ShutdownEarlyLoadedLibraries(); return 0; }
+		OPT ( "-h", "--help" )		{ ShowHelp(); return 0; }
+		OPT ( "-?", "--?" )		{ ShowHelp(); return 0; }
+		OPT ( "-v", "--version" )	{ InitBanner(); fprintf ( stdout, "%s", g_sBanner.cstr() ); return 0; }
 		OPT ( "-q", "--quiet" )		bQuietRequested = true;
 		OPT1 ( "--console" )		{ g_bOptNoLock = true; g_bOptNoDetach = true; bTestMode = true; }
 		OPT1 ( "--stop" )			bOptStop = true;
@@ -15548,8 +15549,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--cpustats" )		SetCPUStats();
 		OPT1 ( "--mockstack" )		{ bMeasureStack = true; g_bOptNoLock = true; g_bOptNoDetach = true; }
 #if _WIN32
-		OPT1 ( "--install" )		{ if ( !WinService() ) { ServiceInstall ( argc, argv ); ShutdownEarlyLoadedLibraries(); return 0; } }
-		OPT1 ( "--delete" )			{ if ( !WinService() ) { ServiceDelete (); ShutdownEarlyLoadedLibraries(); return 0; } }
+		OPT1 ( "--install" )		{ if ( !WinService() ) { ServiceInstall ( argc, argv ); return 0; } }
+		OPT1 ( "--delete" )			{ if ( !WinService() ) { ServiceDelete (); return 0; } }
 		OPT1 ( "--ntservice" )		{} // it's valid but handled elsewhere
 #else
 		OPT1 ( "--nodetach" )		g_bOptNoDetach = true;
@@ -15623,7 +15624,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		{
 			sStack << "export NO_STACK_CALCULATION=1\n";
 			fprintf ( stdout, "%s", sStack.cstr() );
-			ShutdownEarlyLoadedLibraries();
 			return 0;
 		}
 	}
@@ -15718,7 +15718,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( bOptStop )
 	{
 		int iStopResult = StopOrStopWaitAnother ( hSearchdpre ( "pid_file" ), bOptStopWait );
-		ShutdownEarlyLoadedLibraries();
 		return iStopResult;
 	}
 
@@ -15729,7 +15728,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( bOptStatus )
 	{
 		QueryStatus ( hSearchdpre("listen") );
-		ShutdownEarlyLoadedLibraries();
 		return 0;
 	}
 
@@ -15747,7 +15745,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( bOptAuth )
 	{
 		int iAuthResult = AuthBootstrap ( hSearchdpre, g_sConfigFile, bOptAuthNonInteractive );
-		ShutdownEarlyLoadedLibraries();
 		return iAuthResult;
 	}
 
@@ -15878,7 +15875,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		InitCheckListeners (hConfigTest, [&] (const ListenerDesc_t& tDesc ) { dConfigTestListeners.Add (tDesc); }, false);
 		fprintf ( stdout, "OK\n" );
 		fflush ( stdout );
-		ShutdownEarlyLoadedLibraries();
 		return 0;
 	}
 
@@ -15988,11 +15984,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 			default:
 			// tty-controlled parent
-			ShutdownEarlyLoadedLibraries();
 			return 0;
 		}
 	}
 #endif
+
+	tEarlyLibCleanup.Release();
 
 	sd::mainpid(getpid());
 	LogTimeZoneStartup(sTZWarning);

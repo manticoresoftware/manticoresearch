@@ -538,6 +538,13 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 #endif
 }
 
+static void ShutdownEarlyLoadedLibraries()
+{
+	ShutdownColumnar();
+	ShutdownSecondary();
+	ShutdownKNN();
+}
+
 void sighup ( int )
 {
 	g_bGotSighup = 1;
@@ -14403,6 +14410,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 			while ( !g_pShared->m_bHaveTTY )
 				sphSleepMsec ( 100 );
 
+			ShutdownEarlyLoadedLibraries();
 			exit ( 0 );
 	}
 
@@ -14426,6 +14434,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 
 		default:
 			// tty-controlled parent
+			ShutdownEarlyLoadedLibraries();
 			exit ( 0 );
 	}
 
@@ -14541,6 +14550,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 
 		if ( bShutdown || sphInterrupted() || g_pShared->m_bDaemonAtShutdown )
 		{
+			ShutdownEarlyLoadedLibraries();
 			exit ( 0 );
 		}
 	}
@@ -15471,6 +15481,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	bool bColumnarError = !InitColumnar ( sError );
 	bool bSecondaryError = !InitSecondary ( g_sSecondaryError );
 	bool bKNNError = !InitKNN ( sKNNError );
+	auto tEarlyLibCleanup = AtScopeExit ( [] { ShutdownEarlyLoadedLibraries(); } );
 	sphCollationInit ();
 
 	ESphLogLevel eQuietRestoreLevel = g_eLogLevel;
@@ -15711,7 +15722,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	////////////////////////
 
 	if ( bOptStop )
-		return StopOrStopWaitAnother ( hSearchdpre ( "pid_file" ), bOptStopWait );
+	{
+		int iStopResult = StopOrStopWaitAnother ( hSearchdpre ( "pid_file" ), bOptStopWait );
+		return iStopResult;
+	}
 
 	////////////////////////////////
 	// query running searchd status
@@ -15735,7 +15749,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	// auth bootstrap after configless / data_dir setup
 
 	if ( bOptAuth )
-		return AuthBootstrap ( hSearchdpre, g_sConfigFile, bOptAuthNonInteractive );
+	{
+		int iAuthResult = AuthBootstrap ( hSearchdpre, g_sConfigFile, bOptAuthNonInteractive );
+		return iAuthResult;
+	}
 
 	if ( g_bSystemd.has_value() )
 		sphInfo ( "Systemd assistance: explicitly set to %s", g_bSystemd?"yes":"no" );
@@ -15977,6 +15994,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		}
 	}
 #endif
+
+	tEarlyLibCleanup.Release();
 
 	sd::mainpid(getpid());
 	LogTimeZoneStartup(sTZWarning);

@@ -330,7 +330,14 @@ static bool SetKeysFromPem ( const CSphString & sSslCert, const CSphString & sSs
 
 	// load private key from PEM string
 	std::unique_ptr<BIO, decltype ( &BIO_free ) > pKeyBio ( BIO_new_mem_buf ( sSslKey.cstr(), sSslKey.Length() ), BIO_free );
-	if ( !pKeyBio || SSL_CTX_use_PrivateKey ( pCtx, PEM_read_bio_PrivateKey ( pKeyBio.get(), nullptr, nullptr, nullptr ) )<=0 )
+	if ( !pKeyBio )
+	{
+		ERR_print_errors_cb( &fnSslError, pError );
+		return false;
+	}
+
+	std::unique_ptr<EVP_PKEY, decltype ( &EVP_PKEY_free ) > pKey ( PEM_read_bio_PrivateKey ( pKeyBio.get(), nullptr, nullptr, nullptr ), EVP_PKEY_free );
+	if ( !pKey || SSL_CTX_use_PrivateKey ( pCtx, pKey.get() )<=0 )
 	{
 		ERR_print_errors_cb( &fnSslError, pError );
 		return false;

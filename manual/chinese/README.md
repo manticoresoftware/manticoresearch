@@ -179,7 +179,7 @@
     * [• 特殊后缀](Server_settings/Special_suffixes.md)
     * [• 脚本配置](Server_settings/Scripted_configuration.md)
     * [• 注释](Server_settings/Comments.md)
-    * [• 表和源声明的继承](Server_settings/Inheritance_of_index_and_source_declarations.md)
+    * [• 表和数据源声明的继承](Server_settings/Inheritance_of_table_and_source_declarations.md)
     * [• 在线设置变量](Server_settings/Setting_variables_online.md)
 * [≫ 集成]
     * [Logstash](Integration/Logstash.md)

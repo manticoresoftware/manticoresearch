@@ -179,7 +179,7 @@
     * [• Специальные суффиксы](Server_settings/Special_suffixes.md)
     * [• Скриптовая конфигурация](Server_settings/Scripted_configuration.md)
     * [• Комментарии](Server_settings/Comments.md)
-    * [• Наследование объявлений таблиц и источников](Server_settings/Inheritance_of_index_and_source_declarations.md)
+    * [• Наследование объявлений таблиц и источников](Server_settings/Inheritance_of_table_and_source_declarations.md)
     * [• Установка переменных онлайн](Server_settings/Setting_variables_online.md)
 * [≫ Интеграция]
     * [Logstash](Integration/Logstash.md)

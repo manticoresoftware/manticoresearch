@@ -4675,7 +4675,7 @@ class SphinxConfig
 				$path = "$index_data_path/$subdir->nodeValue";
 				if ( !file_exists ( $path ) )
 					mkdir ( $path );
-				EraseDirContents($path);
+				EraseDirContents($path, true);
 				fwrite($fp, $path);
 				$agents[$agentid]["data_path"] = $subdir->nodeValue;
 				return;

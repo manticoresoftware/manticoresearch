@@ -289,6 +289,32 @@ knn_parallel_build = 4
 
 <!-- end -->
 
+### embeddings_threads
+
+<!-- example conf embeddings_threads -->
+此设置限制 Manticore 将文本转换为向量时可使用的 CPU 线程数。它会在自动 embeddings 运行的所有场景下生效：向使用 `model_name`/`from` 的表插入行时，`ALTER TABLE` 重建自动嵌入的 `float_vector` 列时，以及 `knn(<field>, '<text>', ...)` 搜索以文本形式提供查询时。
+
+实际使用的线程数还会受当前可用 worker 数量限制，因此即使上限很高，忙碌的服务器也会使用更少的线程。使用此选项可以避免一次大型 embedding 批次饿死并发搜索。
+
+默认值为 `4`。设为 `0` 可取消上限，此时 embeddings 库会决定使用多少线程（仍受可用 worker 数量限制）。
+
+可在运行时使用 `SET GLOBAL embeddings_threads = N` 修改此值，并通过 `SHOW VARIABLES` 查看。对于 KNN `SELECT` 查询，也可以通过 `OPTION embeddings_threads = N` 按查询覆盖（参见 [KNN 向量搜索](../Searching/KNN.md#KNN-vector-search)）。
+
+<!-- intro -->
+##### 示例：
+
+<!-- request Default -->
+```ini
+embeddings_threads = 4
+```
+
+<!-- request Uncapped -->
+```ini
+embeddings_threads = 0
+```
+
+<!-- end -->
+
 ### auto_schema
 
 <!-- example conf auto_schema -->

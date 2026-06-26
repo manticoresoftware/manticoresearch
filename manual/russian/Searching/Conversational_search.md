@@ -10,6 +10,8 @@
 * `DROP CHAT MODEL`
 * `CALL CHAT`
 
+Вызовы Conversation также доступны через HTTP JSON-эндпоинт `/search`. Управление чат-моделями по-прежнему доступно только через SQL.
+
 ## Перед началом
 
 Вам нужна векторизованная таблица и провайдер LLM. Требования к таблице описаны ниже. Учетные данные провайдера можно задать в `CREATE CHAT MODEL` через `api_key` либо передать через соответствующую переменную окружения, например `OPENAI_API_KEY`.
@@ -24,7 +26,7 @@
 4. LLM решает, как обработать сообщение: выполнить новый поиск, ответить на основе предыдущего поискового контекста или ответить без извлечения.
 5. Когда требуется извлечение, Buddy выполняет KNN-поиск по выбранному векторному полю.
 6. Buddy строит контекст для LLM из исходных полей `from='...'` векторного поля.
-7. Настроенная LLM генерирует ответ.
+7. Настроенная LLM формирует ответ с встроенными ссылками в формате `[ref:<id>]`, когда использует извлеченные источники.
 8. Buddy сохраняет сообщение пользователя и ответ ассистента в истории беседы.
 
 Пятый аргумент `CALL CHAT` внутри называется `fields`, но для диалогового поиска это означает векторное поле, используемое `knn(...)`. Это не список полей для возврата. Buddy выбирает строки через `SELECT *`, а затем убирает векторные столбцы из полезной нагрузки `sources`, чтобы ответ не включал большие значения embedding.
@@ -80,6 +82,18 @@ CREATE CHAT MODEL assistant (
 );
 ```
 
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```bash
+curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "CREATE CHAT MODEL assistant (model='openai:gpt-4o-mini')"
+```
+
 <!-- end -->
 
 Также можно задать параметры провайдера и лимиты извлечения:
@@ -101,6 +115,19 @@ CREATE CHAT MODEL support_assistant (
     max_document_length=3000
 );
 ```
+
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```bash
+curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "CREATE CHAT MODEL support_assistant (model='openai:gpt-4o-mini', api_key='your-provider-api-key', base_url='http://host.docker.internal:8787/v1', timeout=60, retrieval_limit=5, max_document_length=3000)"
+```
+
 <!-- end -->
 
 Обычные параметры:
@@ -176,6 +203,24 @@ CALL CHAT(
 );
 ```
 
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```bash
+curl -s -X POST http://localhost:9308/search \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "chat": {
+      "query": "What is vector search?",
+      "table": "docs",
+      "model_name": "assistant"
+    }
+  }'
+```
+
 <!-- end -->
 
 Чтобы продолжить беседу, передайте тот же UUID беседы:
@@ -194,6 +239,25 @@ CALL CHAT(
     'assistant',
     'docs-chat-001'
 );
+```
+
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```bash
+curl -s -X POST http://localhost:9308/search \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "chat": {
+      "query": "Can you explain it with an example?",
+      "table": "docs",
+      "model_name": "assistant",
+      "conversation_uuid": "docs-chat-001"
+    }
+  }'
 ```
 
 <!-- end -->
@@ -217,9 +281,63 @@ CALL CHAT(
 );
 ```
 
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```bash
+curl -s -X POST http://localhost:9308/search \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "chat": {
+      "query": "Find documents where the title is about vector search",
+      "table": "docs",
+      "model_name": "assistant",
+      "conversation_uuid": "",
+      "vector_field": "title_embedding"
+    }
+  }'
+```
+
 <!-- end -->
 
 Если пятый аргумент присутствует, Buddy проверяет, что поле существует и имеет тип `FLOAT_VECTOR`. Если аргумент опущен, Buddy определяет первое поле `FLOAT_VECTOR` из `SHOW CREATE TABLE`.
+
+
+## Синтаксис HTTP JSON
+
+Вызовы Conversation также доступны по HTTP JSON через стандартный эндпоинт `/search`.
+
+Задайте вопрос:
+
+<!-- example conversational_search_http_chat -->
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```bash
+curl -s -X POST http://localhost:9308/search \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "chat": {
+      "query": "What is vector search?",
+      "table": "docs",
+      "model_name": "assistant",
+      "conversation_uuid": "docs-chat-001",
+      "vector_field": "embedding"
+    }
+  }'
+```
+
+<!-- end -->
+
+Обязательные поля в объекте `chat` — `query`, `table` и `model_name`. Необязательные поля — `conversation_uuid` и `vector_field`. `vector_field` — это имя поля HTTP JSON для пятого аргумента SQL `CALL CHAT`. Устаревшее имя поля JSON `fields` принимается как псевдоним, но запрос не должен содержать одновременно `vector_field` и `fields`.
+
+Ответы Conversation в HTTP JSON содержат те же логические столбцы, что и `CALL CHAT`: `conversation_uuid`, `user_query`, `search_query`, `response`, `response_with_refs` и `sources`. `sources` возвращается как JSON-строка, содержащая извлеченные строки-источники.
 
 
 ## Подробности поиска и контекста
@@ -239,7 +357,8 @@ Buddy использует извлеченные строки как конте
 | `conversation_uuid` | Существующий или сгенерированный UUID беседы. |
 | `user_query` | Исходный запрос пользователя. |
 | `search_query` | Самостоятельный поисковый запрос, использованный для извлечения. |
-| `response` | Ответ LLM. |
+| `response` | Ответ LLM без встроенных ссылок. |
+| `response_with_refs` | Ответ LLM в том виде, в каком он был сгенерирован, включая встроенные ссылки `[ref:<id>]` на строки в `sources`. |
 | `sources` | Строка JSON с извлеченными исходными строками. |
 
 Пример формы ответа:
@@ -250,11 +369,12 @@ Buddy использует извлеченные строки как конте
   "user_query": "What is vector search?",
   "search_query": "vector search, embeddings, similarity search",
   "response": "Vector search finds similar items by comparing embeddings...",
+  "response_with_refs": "Vector search finds similar items by comparing embeddings... [ref:1]",
   "sources": "[{\"id\":1,\"title\":\"Vector Search\",\"content\":\"...\",\"knn_dist\":0.12}]"
 }
 ```
 
-Векторные поля не включаются в `sources`.
+В `sources` векторные поля не включаются. Встроенные ссылки используют `id` строки-источника, а не заголовок или текст источника. Используйте `response` для обычного ответа и `response_with_refs`, когда нужно показать цитаты.
 
 ## Управление чат-моделями
 
@@ -269,6 +389,18 @@ Buddy использует извлеченные строки как конте
 
 ```sql
 SHOW CHAT MODELS;
+```
+
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```bash
+curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "SHOW CHAT MODELS"
 ```
 
 <!-- end -->
@@ -286,6 +418,18 @@ SHOW CHAT MODELS;
 DESCRIBE CHAT MODEL assistant;
 ```
 
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```bash
+curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "DESCRIBE CHAT MODEL assistant"
+```
+
 <!-- end -->
 
 Удаление модели:
@@ -301,6 +445,18 @@ DESCRIBE CHAT MODEL assistant;
 DROP CHAT MODEL assistant;
 ```
 
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```bash
+curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "DROP CHAT MODEL assistant"
+```
+
 <!-- end -->
 
 Безопасное удаление:
@@ -314,6 +470,18 @@ DROP CHAT MODEL assistant;
 
 ```sql
 DROP CHAT MODEL IF EXISTS assistant;
+```
+
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```bash
+curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "DROP CHAT MODEL IF EXISTS assistant"
 ```
 
 <!-- end -->

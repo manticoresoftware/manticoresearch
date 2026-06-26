@@ -1,0 +1,164 @@
+––– block: ../base/start-searchd –––
+––– input –––
+apt-get update -y > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+apt-get install -y bc > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– input –––
+chmod +x ./test/clt-tests/scripts/load_names_attr.php > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=100000 --concurrency=4 --docs=2000000 --start-id=1 --drop-table > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK name;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1, cutoff=2;"
+––– output –––
+––– input –––
+sleep 1 && mysql -h0 -P9306 -e "show table name status like '%chunk%';"
+––– output –––
++--------------------------+-------+
+| Variable_name            | Value |
++--------------------------+-------+
+| ram_chunk                | 0     |
+| ram_chunk_segments_count | 0     |
+| disk_chunks              | 2     |
++--------------------------+-------+
+––– input –––
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM name"
+––– output –––
+*************************** 1. row ***************************
+2000000
+––– input –––
+php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=100000 --concurrency=4 --docs=2000000 --start-id=2000001 --no-drop-table > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK name;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1, cutoff=2;"
+––– output –––
+––– input –––
+sleep 5 && mysql -h0 -P9306 -e "show table name status like '%chunk%';"
+––– output –––
++--------------------------+-------+
+| Variable_name            | Value |
++--------------------------+-------+
+| ram_chunk                | 0     |
+| ram_chunk_segments_count | 0     |
+| disk_chunks              | 2     |
++--------------------------+-------+
+––– input –––
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM name"
+––– output –––
+*************************** 1. row ***************************
+4000000
+––– input –––
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; (stdbuf -oL searchd 2>&1 | tee /var/log/manticore/searchd.log | grep -i precach & disown); sleep 0.5; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
+––– output –––
+precaching table 'name'
+precached 1 tables in #!/[0-9]{1}.[0-9]{3}/!# sec
+Buddy started!
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES;"
+––– output –––
++-------+------+
+| Table | Type |
++-------+------+
+| name  | rt   |
++-------+------+
+––– input –––
+mysql -h0 -P9306 -e "show table name status like '%chunk%';"
+––– output –––
++--------------------------+-------+
+| Variable_name            | Value |
++--------------------------+-------+
+| ram_chunk                | 0     |
+| ram_chunk_segments_count | 0     |
+| disk_chunks              | 2     |
++--------------------------+-------+
+––– input –––
+mysql -h0 -P9306 -e "select * from name ORDER BY id ASC LIMIT 5;"
+––– output –––
++------+------------------+------+
+| id   | username         | s    |
++------+------------------+------+
+|    1 | CIRA HINOJOSA    | a    |
+|    2 | DENICE HATTON    | a    |
+|    3 | JOAQUIN FOLEY    | a    |
+|    4 | REBEKAH CARLISLE | a    |
+|    5 | EVE GUAJARDO     | a    |
++------+------------------+------+
+––– input –––
+start_optimize=$(date +%s); time mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1, cutoff=1;" &
+––– output –––
+––– input –––
+sleep 2 && start_update=$(date +%s); time_taken_update=$( { time mysql -h0 -P9306 -e "UPDATE name SET s='b' WHERE id=1;" > /dev/null 2>&1; } 2>&1 | grep real | awk '{print $2}'); update_duration=$(echo "$time_taken_update" | awk -F'm' '{print ($1 * 60) + $2}'); if (( $(echo "$update_duration > 1" | bc -l) )); then echo "FAIL: Update took longer than 1 second!"; exit 1; else echo "Update completed within acceptable time."; fi
+––– output –––
+Update completed within acceptable time.
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' ORDER BY id ASC LIMIT 5;"
+––– output –––
++------+---------------+------+
+| id   | username      | s    |
++------+---------------+------+
+|    1 | CIRA HINOJOSA | b    |
++------+---------------+------+
+––– input –––
+start_update=$(date +%s); time_taken_update=$( { time mysql -h0 -P9306 -e "UPDATE name SET s=123 WHERE id=1;" > /dev/null 2>&1; } 2>&1 | grep real | awk '{print $2}'); update_duration=$(echo "$time_taken_update" | awk -F'm' '{print ($1 * 60) + $2}'); if (( $(echo "$update_duration > 1" | bc -l) )); then echo "FAIL: Update took longer than 1 second!"; exit 1; else echo "Update completed within acceptable time."; fi
+––– output –––
+Update completed within acceptable time.
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' ORDER BY id ASC LIMIT 5;"
+––– output –––
++------+---------------+------+
+| id   | username      | s    |
++------+---------------+------+
+|    1 | CIRA HINOJOSA | b    |
++------+---------------+------+
+––– input –––
+start_update=$(date +%s); time_taken_update=$( { time mysql -h0 -P9306 -e "UPDATE name SET s='b' WHERE id > 0;" > /dev/null 2>&1; } 2>&1 | grep real | awk '{print $2}'); update_duration=$(echo "$time_taken_update" | awk -F'm' '{print ($1 * 60) + $2}'); if (( $(echo "$update_duration > 3" | bc -l) )); then echo "FAIL: Update took longer than 3 seconds!"; false; else echo "Update completed within acceptable time."; fi
+––– output –––
+Update completed within acceptable time.
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' ORDER BY id ASC LIMIT 5;"
+––– output –––
++------+------------------+------+
+| id   | username         | s    |
++------+------------------+------+
+|    1 | CIRA HINOJOSA    | b    |
+|    2 | DENICE HATTON    | b    |
+|    3 | JOAQUIN FOLEY    | b    |
+|    4 | REBEKAH CARLISLE | b    |
+|    5 | EVE GUAJARDO     | b    |
++------+------------------+------+
+––– input –––
+start_update=$(date +%s); time_taken_update=$(mysql -h0 -P9306 -e "UPDATE name SET unknown='b' WHERE id=1;" 2>&1); update_duration=$(( $(date +%s) - start_update )); [[ "$time_taken_update" == *"ERROR"* ]] && echo "$time_taken_update"; if (( update_duration <= 1 )); then echo "The command is completed within a reasonable time frame."; else echo "FAIL: Update took longer than 1 second!"; false; fi
+––– output –––
+ERROR 1064 (42000) at line 1: table name: attribute 'unknown' not found
+The command is completed within a reasonable time frame.
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' ORDER BY id ASC LIMIT 5;"
+––– output –––
++------+------------------+------+
+| id   | username         | s    |
++------+------------------+------+
+|    1 | CIRA HINOJOSA    | b    |
+|    2 | DENICE HATTON    | b    |
+|    3 | JOAQUIN FOLEY    | b    |
+|    4 | REBEKAH CARLISLE | b    |
+|    5 | EVE GUAJARDO     | b    |
++------+------------------+------+
+––– input –––
+{ command time wait > /dev/null 2>&1; } 2>&1 | grep -v "real" | grep -v "user" | grep -v "sys"; end_optimize=$(date +%s); optimize_duration=$((end_optimize - start_optimize)); echo "OPTIMIZE duration: $optimize_duration seconds"
+––– output –––
+OPTIMIZE duration: %{NUMBER} seconds

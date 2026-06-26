@@ -35,9 +35,9 @@ handled = [k[4:] for k in re.findall('\w+', r.group(1)) if k!='TOK_IDENT' and k[
 res = sorted(diff(res, handled))
 
 # load reserved keywords list from docs
-r = re.search('List of reserved keywords.*?```(.*)```', load('../manual/References.md'), re.MULTILINE + re.DOTALL)
+r = re.search('List of reserved keywords.*?```(.*)```', load('../manual/english/References.md'), re.MULTILINE + re.DOTALL)
 if not r:
-	die('failed to extract reserved keywords from manual/References.md')
+	die('failed to extract reserved keywords from manual/english/References.md')
 doc = [k for k in re.findall('(\w+)', r.group(1))]
 
 # load reserved keywords list from sources

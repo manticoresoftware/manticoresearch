@@ -12,7 +12,7 @@
 
 #include "searchdsql.h"
 #include "searchdhttp.h"
-
+#include "daemon/search_handler.h"
 #include "nlohmann/json.hpp"
 
 #include <iostream>
@@ -21,7 +21,7 @@ using nljson = nlohmann::json;
 #include "http/log_management.h"
 
 static RwLock_t g_tLockKbnTable;
-static nljson g_tKbnTable = "{}"_json;
+static nljson g_tKbnTable = nljson::parse ( "{}" );
 
 static bool g_bEnabled = true;
 
@@ -32,7 +32,7 @@ static std::vector<CSphString> g_dKbnTablesNames { ".kibana_task_manager", ".apm
 static nljson::json_pointer g_tConfigTables ( "/dashboards/tables" );
 static nljson::json_pointer g_tMode ( "/dashboards/mode" );
 
-static bool LOG_LEVEL_COMPAT = val_from_env ( "MANTICORE_LOG_ES_COMPAT", false ); // verbose logging compat events, ruled by this env variable
+static const bool LOG_LEVEL_COMPAT = env_exists ( "MANTICORE_LOG_ES_COMPAT" ); // verbose logging compat events, ruled by this env variable
 #define LOG_COMPONENT_COMPATINFO ""
 #define COMPATINFO LOGINFO ( COMPAT, COMPATINFO )
 
@@ -594,7 +594,7 @@ private:
 
 			if ( tFullQuery[tNew].cbegin().value().count ( "query" )==1 )
 			{
-				nljson tEq = R"({})"_json;
+				nljson tEq = nljson::parse ( R"({})" );
 				tEq[tFullQuery[tNew].cbegin().key()] = tFullQuery[tNew].cbegin().value()["query"];
 				tFullQuery[tNew] = tEq;
 			}
@@ -621,7 +621,7 @@ private:
 
 			const StrVec_t & dFields = m_hParentFields[sFieldName];
 
-			nljson tExistVec = R"([])"_json;
+			nljson tExistVec = nljson::parse ( R"([])" );
 			for ( const auto & tFieldIt : dFields )
 			{
 				nljson tNewField;
@@ -653,7 +653,7 @@ private:
 			//std::cout << tIt << " : " << tFullQuery[tIt] << "\n";
 
 			nljson::json_pointer tParent = tIt.parent_pointer();
-			tFullQuery[tParent] = R"({ "term": { "missed_exists": "none" } })"_json;
+			tFullQuery[tParent] = nljson::parse ( R"({ "term": { "missed_exists": "none" } })" );
 
 			//std::cout << tFullQuery[tParent] << "\n";
 		}
@@ -1114,27 +1114,39 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	if ( !tParsedQuery.m_sWarning.IsEmpty() )
 		CompatWarning ( "%s", tParsedQuery.m_sWarning.cstr() );
 
-	std::unique_ptr<PubSearchHandler_c> tHandler ( CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tParsedQuery ) );
-	tHandler->RunQueries();
-
-	CSphFixedVector<AggrResult_t *> dAggsRes ( tQuery.m_bGroupEmulation ? 1 : ( 1 + tQuery.m_dAggs.GetLength() ) );
-	dAggsRes[0] = tHandler->GetResult ( 0 );
-	if ( !tQuery.m_bGroupEmulation )
+	CSphString sError;
+	auto tHandler = CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tParsedQuery, sError );
+	if ( !sError.IsEmpty() )
 	{
-		ARRAY_FOREACH ( i, tQuery.m_dAggs )
-			dAggsRes[i+1] = tHandler->GetResult ( i+1 );
+		CompatWarning ( "'%s' at '%s' body '%s'", sError.cstr(), sURL.cstr(), tQuery.m_sRawQuery.cstr() );
+		sRes = JsonEncodeResultError ( sError, GetErrorTypeName ( HttpErrorType_e::Parse ), 400 );
+		TlsMsg::Err ( sError );
+		return false;
 	}
-	sRes = sphEncodeResultJson ( dAggsRes, tQuery, nullptr, ResultSetFormat_e::ES );
+	tHandler.RunQueries();
 
+	sRes = sphEncodeResultJson ( tHandler.m_dAggrResults, tQuery, nullptr, ResultSetFormat_e::ES );
 	bool bOk = true;
 	// want to see at log url and query for search error
-	for ( const AggrResult_t * pAggr : dAggsRes )
+	for ( const AggrResult_t& tAggr : tHandler.m_dAggrResults )
 	{
-		if ( !pAggr->m_iSuccesses )
+		if ( !tAggr.m_iSuccesses )
 		{
-			CompatWarning ( "'%s' at '%s' body '%s'", pAggr->m_sError.cstr(), sURL.cstr(), tQuery.m_sRawQuery.cstr() );
+			CompatWarning ( "'%s' at '%s' body '%s'", tAggr.m_sError.cstr(), sURL.cstr(), tQuery.m_sRawQuery.cstr() );
 			bOk = false;
-			TlsMsg::Err ( pAggr->m_sError );
+			TlsMsg::Err ( tAggr.m_sError );
+		}
+	}
+
+	if ( bOk )
+	{
+		ARRAY_FOREACH ( i, tHandler.m_dQueries )
+		{
+			const auto & tMeta = tHandler.m_dAggrResults[i];
+			auto uMatches = tMeta.m_dResults.IsEmpty() ? 0 : tMeta.m_dResults.First().m_dMatches.GetLength();
+
+			if ( !session::GetBuddy() )
+				gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, tMeta.GetQueryTimeUs() );
 		}
 	}
 
@@ -1253,26 +1265,30 @@ static bool GetDocIds ( const char * sIndexName, const char * sFilterID, DocIdVe
 		tFilter.m_bExclude = false;
 	}
 
-	std::unique_ptr<PubSearchHandler_c> tHandler ( CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tParsed ) );
-	tHandler->RunQueries();
-	const AggrResult_t * pRes = tHandler->GetResult ( 0 );
+	auto tHandler = CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tParsed, sError );
+	if ( !sError.IsEmpty() )
+		return false;
 
-	if ( !pRes )
+	tHandler.RunQueries();
+
+	if ( tHandler.m_dAggrResults.IsEmpty() )
 	{
 		sError.SetSprintf ( "invalid search for index '%s'", sIndexName );
 		return false;
 	}
 
-	if ( !pRes->m_iSuccesses )
+	const AggrResult_t & tRes = tHandler.m_dAggrResults.First();
+
+	if ( !tRes.m_iSuccesses )
 	{
-		sError.SetSprintf ( "%s", pRes->m_sError.cstr() );
+		sError.SetSprintf ( "%s", tRes.m_sError.cstr() );
 		return false;
 	}
 
-	if ( !pRes->m_sWarning.IsEmpty() )
-		CompatWarning ( "%s", pRes->m_sWarning.cstr() );
+	if ( !tRes.m_sWarning.IsEmpty() )
+		CompatWarning ( "%s", tRes.m_sWarning.cstr() );
 
-	const ISphSchema & tSchema = pRes->m_tSchema;
+	const ISphSchema & tSchema = tRes.m_tSchema;
 	const CSphColumnInfo * pColId = tSchema.GetAttr ( sIdName );
 	const CSphColumnInfo * pColVer = tSchema.GetAttr ( sVerName );
 
@@ -1281,7 +1297,7 @@ static bool GetDocIds ( const char * sIndexName, const char * sFilterID, DocIdVe
 		sError.SetSprintf ( "invalid attrs count %d, id=%d, version=%d, index '%s'", tSchema.GetAttrsCount(), ( pColId ? 1 : 0 ), ( pColVer ? 1 : 0 ), sIndexName );
 		return false;
 	}
-	if ( pColId->m_eAttrType!=SPH_ATTR_STRINGPTR )
+	if ( pColId->m_eAttrType!=SPH_ATTR_STRINGPTR && pColId->m_eAttrType!=SPH_ATTR_TDIGEST_PTR )
 	{
 		sError.SetSprintf ( "invalid attr type '%s', index '%s'", AttrType2Str ( pColVer->m_eAttrType ), sIndexName );
 		return false;
@@ -1295,7 +1311,7 @@ static bool GetDocIds ( const char * sIndexName, const char * sFilterID, DocIdVe
 	const CSphAttrLocator & tLocId = pColId->m_tLocator;
 	const CSphAttrLocator & tLocVer = pColVer->m_tLocator;
 
-	auto dMatches = pRes->m_dResults.First ().m_dMatches.Slice ( pRes->m_iOffset, pRes->m_iCount );
+	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
 	for ( const CSphMatch & tMatch : dMatches )
 	{
 		const BYTE * pData = ( const BYTE * ) tMatch.GetAttr ( tLocId );
@@ -1464,12 +1480,12 @@ static int ProcessFilter ( const CSphString * sFilters, nljson & tRes )
 	if ( !sFilters )
 		return 0;
 
-	nljson tResFiltered = R"({})"_json;
+	nljson tResFiltered = nljson::parse ( R"({})" );
 
 	StrVec_t dFilters = sphSplit ( sFilters->cstr(), "," );
 	for ( const CSphString & sFilter : dFilters )
 	{
-		nljson tPartJs = R"({})"_json;
+		nljson tPartJs = nljson::parse ( R"({})" );
 		StrVec_t dParts = sphSplit ( sFilter.cstr(), "." );
 		if ( ProcessFilterPath ( tRes, dParts, 0, tPartJs ) )
 			tResFiltered.merge_patch ( tPartJs );
@@ -1558,7 +1574,7 @@ static int ProcessFilterSource ( const CSphString * sSourceFilter, nljson & tRes
 		
 		const nljson & tSrc = tHit[tSrcCol];
 
-		nljson tSrcFiltered = R"({})"_json;
+		nljson tSrcFiltered = nljson::parse ( R"({})" );
 		for ( const auto & tCol : dColumns )
 		{
 			if ( tSrc.contains ( tCol ) )
@@ -1628,7 +1644,7 @@ static bool EmulateIndexCount ( const CSphString & sIndex, const nljson & tReq, 
 	if ( sFilter=="_all" )
 		sFilter = "*";
 
-	nljson tRes = R"({
+nljson tRes = nljson::parse ( R"({
     "took": 10, 
     "timed_out": false, 
     "_shards": {
@@ -1652,7 +1668,7 @@ static bool EmulateIndexCount ( const CSphString & sIndex, const nljson & tReq, 
             "buckets": []
         }
     }
-})"_json;
+})" );
 
 	nljson::json_pointer tBuckets ( "/aggregations/indices/buckets" );
 
@@ -1674,7 +1690,7 @@ static bool EmulateIndexCount ( const CSphString & sIndex, const nljson & tReq, 
 
 		iIndexes++;
 		iDocsTotal += iDocsCount;
-		nljson tItem = R"({})"_json;
+		nljson tItem = nljson::parse ( R"({})" );
 		tItem["key"] = tIt.first.cstr();
 		tItem["doc_count"] = iDocsCount;
 
@@ -1686,7 +1702,8 @@ static bool EmulateIndexCount ( const CSphString & sIndex, const nljson & tReq, 
 	tRes["hits"]["total"]["value"] = iDocsTotal;
 
 	std::string sRes = tRes.dump();
-	HttpBuildReply ( dResult, EHTTP_STATUS::_200, sRes.c_str(), sRes.length(), false );
+	HttpReplyTrait_t tReply { EHTTP_STATUS::_200, FromSz ( sRes.c_str() ) };
+	HttpBuildReply ( tReply, dResult );
 
 	return true;
 }
@@ -1768,7 +1785,7 @@ bool HttpCompatHandler_c::ProcessCount()
 
 void HttpCompatHandler_c::ProcessEmptyHead ()
 {
-	nljson tJsonRes = R"(
+	nljson tJsonRes = nljson::parse ( R"(
 {
   "name" : "4e9d933ebde2",
   "cluster_name" : "docker-cluster",
@@ -1780,13 +1797,13 @@ void HttpCompatHandler_c::ProcessEmptyHead ()
     "build_hash" : "fc0eeb6e2c25915d63d871d344e3d0b45ea0ea1e",
     "build_date" : "2019-10-22T17:16:35.176724Z",
     "build_snapshot" : false,
-    "lucene_version" : "8.2.0",
+    "lucene_version" : "10.3.1",
     "minimum_wire_compatibility_version" : "6.8.0",
     "minimum_index_compatibility_version" : "6.0.0-beta1"
   },
   "tagline" : "You Know, for Search"
 }
-)"_json;
+)" );
 
 	std::string sRes = tJsonRes.dump();
 	BuildReplyHead ( FromStd ( sRes ), EHTTP_STATUS::_200 );
@@ -1851,7 +1868,7 @@ bool HttpCompatHandler_c::ProcessDeleteDoc()
 	tRes["_seq_no"] = 0;
 	tRes["_primary_term"] = 1;
 	tRes["result"] = ( dIds.GetLength() ? "deleted" : "not_found" );
-	tRes["_shards"] = R"( { "total": 1, "successful": 1, "failed": 0 } )"_json;
+	tRes["_shards"] = nljson::parse ( R"( { "total": 1, "successful": 1, "failed": 0 } )" );
 
 	std::string sRes = tRes.dump();
 	BuildReply ( FromStd ( sRes ), EHTTP_STATUS::_200 );
@@ -1933,11 +1950,11 @@ bool HttpCompatHandler_c::ProcessCreateTable()
 
 	COMPATINFO << "created table '" << sName.cstr() << "'";
 
-	nljson tRes = R"(
+	nljson tRes = nljson::parse ( R"(
 {
     "acknowledged": true, 
     "shards_acknowledged": true
-})"_json;
+})" );
 	tRes["index"] = sName.cstr();
 
 	std::string sRes = tRes.dump();
@@ -1988,7 +2005,7 @@ void HttpCompatHandler_c::ProcessCCR()
 
 void HttpCompatHandler_c::ProcessILM()
 {
-	nljson tItems = R"({})"_json;
+	nljson tItems = nljson::parse ( R"({})" );
 
 	ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
 	for ( const auto & tIt : *hLocal )
@@ -1996,13 +2013,13 @@ void HttpCompatHandler_c::ProcessILM()
 		if ( !tIt.second )
 			continue;
 
-		nljson tItem = R"({"managed": false})"_json;
+		nljson tItem = nljson::parse ( R"({"managed": false})" );
 		tItem["index"] = tIt.first.cstr();
 
 		tItems[tIt.first.cstr()] = tItem;
 	}
 
-	nljson tRes = R"({})"_json;
+	nljson tRes = nljson::parse ( R"({})" );
 	tRes["indices"] = tItems;
 	std::string sRes = tRes.dump();
 	BuildReplyHead ( FromStd ( sRes ), EHTTP_STATUS::_200 );
@@ -2112,7 +2129,7 @@ static void DropKbnTables()
 	}
 	{
 		ScWL_t tLock ( g_tLockKbnTable );
-		g_tKbnTable = "{}"_json;
+		g_tKbnTable = nljson::parse ( "{}" );
 	}
 
 	// look for local indexes with kibana names

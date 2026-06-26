@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -46,6 +46,7 @@ struct SqlNode_t final
 	uint64_t				m_uValue = 0;
 	int						m_iParsedOp = -1;
 	bool					m_bNegative = false;	// this flag means that '-' was explicitly specified before the integer const
+	bool					m_bFloat = false;
 
 							SqlNode_t() = default;
 
@@ -84,7 +85,7 @@ enum
 };
 
 
-enum SqlStmt_e
+enum SqlStmt_e : BYTE
 {
 	STMT_PARSE_ERROR = 0,
 	STMT_DUMMY,
@@ -106,6 +107,7 @@ enum SqlStmt_e
 	STMT_CREATE_TABLE,
 	STMT_CREATE_TABLE_LIKE,
 	STMT_DROP_TABLE,
+	STMT_DROP_CACHE,
 	STMT_SHOW_CREATE_TABLE,
 	STMT_UPDATE,
 	STMT_CREATE_FUNCTION,
@@ -146,9 +148,13 @@ enum SqlStmt_e
 	STMT_DEBUG,
 	STMT_ALTER_KLIST_TARGET,
 	STMT_ALTER_INDEX_SETTINGS,
+	STMT_ALTER_EMBEDDINGS_API_KEY,
+	STMT_ALTER_EMBEDDINGS_API_URL,
+	STMT_ALTER_EMBEDDINGS_API_TIMEOUT,
 	STMT_JOIN_CLUSTER,
 	STMT_CLUSTER_CREATE,
 	STMT_CLUSTER_DELETE,
+	STMT_CLUSTER_EXIT,
 	STMT_CLUSTER_ALTER_ADD,
 	STMT_CLUSTER_ALTER_DROP,
 	STMT_CLUSTER_ALTER_UPDATE,
@@ -162,9 +168,45 @@ enum SqlStmt_e
 	STMT_SHOW_LOCKS,
 	STMT_SHOW_SCROLL,
 	STMT_SHOW_TABLE_INDEXES,
+	STMT_ALTER_REBUILD_KNN,
+	STMT_ALTER_REBUILD_EMBEDDINGS,
+	STMT_LOCK_TABLES,
+	STMT_UNLOCK_TABLES,
+	STMT_RELOAD_AUTH,
+	STMT_SHOW_USAGE,
+	STMT_SHOW_PERMISSIONS,
+	STMT_SHOW_USERS,
+	STMT_SHOW_TOKEN,
+	STMT_SET_PASSWORD,
+	STMT_TOKEN,
+	STMT_CREATE_USER,
+	STMT_DROP_USER,
+	STMT_GRANT,
+	STMT_REVOKE,
 
 	STMT_TOTAL
 };
+
+constexpr const char* SqlStmt2Str(SqlStmt_e eStmt)
+{
+	constexpr const char* dNames[STMT_TOTAL]
+	{
+	"parse_error", "dummy", "select", "insert", "replace", "delete", "show_warnings",
+	"show_status", "show_meta", "set", "begin", "commit", "rollback", "call",
+	"desc", "show_tables", "create_table", "create_table_like", "drop_table", "drop_cache", "show_create_table", "update", "create_func",
+	"drop_func", "attach_index", "flush_rtindex", "flush_ramchunk", "show_variables", "truncate_rtindex",
+	"select_columns", "show_collation", "show_character_set", "optimize_index", "show_agent_status",
+	"show_index_status", "show_index_status", "show_profile", "alter_add", "alter_drop", "alter_modify", "show_plan",
+	"show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
+	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
+	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
+	"alter_index_settings", "alter_embeddings_api_key", "alter_embeddings_api_url", "alter_embeddings_api_timeout", "join_cluster", "cluster_create", "cluster_delete", "cluster_exit", "cluster_index_add",
+	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
+	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes", "alter_rebuild_knn", "alter_rebuild_embeddings", "lock_tables", "unlock_tables",
+	"reload_auth", "show_usage", "show_permissions", "show_users", "show_token", "set_password", "token", "create_user", "drop_user", "grant", "revoke"
+			};
+	return dNames[eStmt];
+}
 
 
 enum SqlSet_e
@@ -250,6 +292,14 @@ struct SqlStmt_t
 	CSphString				m_sSetValue;
 	CSphVector<SphAttr_t>	m_dSetValues;
 
+	// GRANT/REVOKE specific
+	CSphString				m_sAuthAction;
+	CSphString				m_sAuthTarget;
+	CSphString				m_sAuthUser;
+	CSphString				m_sAuthPassword;
+	CSphString				m_sAuthBudget;
+	int						m_iAuthAllow = 1;
+
 	// CALL specific
 	CSphString				m_sCallProc;
 	StrVec_t				m_dCallOptNames;
@@ -277,6 +327,9 @@ public:
 	DWORD					m_uAttrFlags = 0;
 	int						m_iBits = -1;
 	knn::IndexSettings_t	m_tAlterKNN;
+	knn::ModelSettings_t	m_tAlterKNNModel;
+	CSphString				m_sAlterKnnFrom;
+	bool					m_bAlterKnnFromSet = false;
 
 	// CREATE TABLE specific
 	CreateTableSettings_t	m_tCreateTable;
@@ -304,11 +357,16 @@ public:
 	int						m_iIntParam = -1;
 
 	bool					m_bJson = false;
+	bool					m_bShardPhysicalUpdate = false;
 	CSphString				m_sEndpoint;
+	CSphString				m_sRawQuery;
+	CSphString				m_sFullUrl;
 
 	CSphVector<CSphString>	m_dStringSubkeys;
 	CSphVector<int64_t>		m_dIntSubkeys;
 	bool					m_bForce = false;
+	bool					m_bDescTopo = false;
+	bool					m_bFormatOutWordsFile = false;
 
 	std::unique_ptr<DebugCmd::DebugCommand_t> m_pDebugCmd;
 
@@ -351,7 +409,9 @@ public:
 	CSphString		m_sErrorHeader = "PER:";
 
 	void			PushQuery();
-	CSphString &	ToString ( CSphString & sRes, const SqlNode_t & tNode ) const;
+	CSphString &	ToString ( CSphString & sRes, const SqlNode_t & tNode ) const noexcept;
+	CSphString		GetString ( const SqlNode_t& tNode ) const noexcept;
+	Str_t			GetStrt ( const SqlNode_t& tNode ) const noexcept;
 	CSphString		ToStringUnescape ( const SqlNode_t & tNode ) const;
 	float			ToFloat ( const SqlNode_t & tNode ) const { return (float) strtod ( m_pBuf+tNode.m_iStart, nullptr ); }
 	void			ProcessParsingError ( const char* szMessage );
@@ -359,7 +419,7 @@ public:
 
 	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue );
 	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const SqlNode_t & sArg );
-	bool			AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed );
+	bool			AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedVariant> & dNamed );
 	void			DefaultOk ( std::initializer_list<const char*> sList = {} );
 	void			SetIndex ( const SqlNode_t& tNode ) const;
 	void			SetIndex ( const CSphString& sIndex ) const;
@@ -370,6 +430,7 @@ public:
 
 	void			SetDefaultTableForOptions();
 	bool			SetTableForOptions ( const SqlNode_t & tNode );
+	bool			NumIsSaturated ( const SqlNode_t& tNode );
 
 protected:
 	CSphVector<SqlStmt_t> &		m_dStmt;
@@ -401,7 +462,7 @@ enum class AddOption_e
 
 AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sVal, const CSphString & sValOrig, const std::function<CSphString ()> & fnGetUnescaped, SqlStmt_e eStmt, CSphString & sError );
 AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sValue, int64_t iValue, SqlStmt_e eStmt, CSphString & sError );
-AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, CSphVector<CSphNamedInt> & dNamed, SqlStmt_e eStmt, CSphString & sError );
+AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, CSphVector<CSphNamedVariant> & dNamed, SqlStmt_e eStmt, CSphString & sError );
 AddOption_e AddOptionRanker ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sVal, const std::function<CSphString ()> & fnGetUnescaped, SqlStmt_e eStmt, CSphString & sError );
 
 enum class ParseResult_e { PARSE_OK, PARSE_ERROR, PARSE_SYNTAX_ERROR };

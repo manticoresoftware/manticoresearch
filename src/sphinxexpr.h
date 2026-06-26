@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -17,6 +17,7 @@
 #include "std/refcounted_mt.h"
 #include "std/string.h"
 #include "std/sharedptr.h"
+#include "std/stringhash.h"
 
 /// forward decls
 class CSphMatch;
@@ -63,7 +64,8 @@ enum ESphAttr
 	SPH_ATTR_JSON_PTR,					// in-memory version of JSON
 	SPH_ATTR_JSON_FIELD_PTR,			// in-memory version of JSON_FIELD
 	SPH_ATTR_STORED_FIELD,
-	SPH_ATTR_FLOAT_VECTOR_PTR			// in-memory version of FLOAT_VECTOR
+	SPH_ATTR_FLOAT_VECTOR_PTR,			// in-memory version of FLOAT_VECTOR
+	SPH_ATTR_TDIGEST_PTR				// in-memory TDigest state (runtime or serialized)
 };
 
 /// column evaluation stage
@@ -86,6 +88,7 @@ enum ESphExprCommand
 	SPH_EXPR_SET_DOCSTORE_DOCID,	///< interface to fetch docs by docid (postlimit stage)
 	SPH_EXPR_SET_QUERY,
 	SPH_EXPR_SET_EXTRA_DATA,
+	SPH_EXPR_SET_KNN_VEC,
 	SPH_EXPR_GET_DEPENDENT_COLS,	///< used to determine proper evaluating stage
 	SPH_EXPR_GET_GEODIST_SETTINGS,
 	SPH_EXPR_GET_POLY2D_BBOX,
@@ -144,6 +147,9 @@ public:
 
 	/// was this expression spawned in place of a columnar attr?
 	virtual bool IsColumnar ( bool * pStored = nullptr ) const { return false; }
+
+	/// does this expression benefit from rowid-ordered final processing?
+	virtual bool PrefersRowIdOrder() const { return false; }
 
 	/// was this expression spawned in place of a columnar expression?
 	virtual bool IsStored() const { return false; }
@@ -347,6 +353,8 @@ struct ExprParseArgs_t
 	ESphEvalStage *		m_pEvalStage = nullptr;
 	DWORD *				m_pStoredField = nullptr;
 	bool *				m_pNeedDocIds = nullptr;
+	const CSphString *	m_pJoinIdx = nullptr;
+	const CSphString *	m_pJoinIdxLeft = nullptr;
 };
 
 struct JoinArgs_t
@@ -358,9 +366,19 @@ struct JoinArgs_t
 	JoinArgs_t ( const ISphSchema & tJoinedSchema, const CSphString & sIndex1, const CSphString & sIndex2 );
 };
 
+class AttrDependencyMap_c
+{
+public:
+			AttrDependencyMap_c ( const ISphSchema & tSchema );
+
+	bool	IsIndependent ( const CSphString & sAttr ) const;
+
+private:
+	SmallStringHash_T<sph::StringSet> m_hDependents;
+};
 
 struct CommonFilterSettings_t;
-ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, const CSphString * pJoinIdx, CSphString & sError, ExprParseArgs_t & tArgs );
+ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, CSphString & sError, ExprParseArgs_t & tArgs );
 ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr );
 ISphExpr * ExprJsonIn ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg, ESphCollation eCollation );
 ISphExpr * ExprJsonIn ( const VecTraits_T<int64_t> & dVals, ISphExpr * pArg, ESphCollation eCollation );
@@ -377,4 +395,3 @@ CSphString& MySQLVersion();
 }
 
 #endif // _sphinxexpr_
-

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>replication cluster create with long data_dir path</name>
+
+<requires>
+	<replication/>
+	<non-windows/>
+	<force-rt/>
+</requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	watchdog = 0
+	data_dir = <data_path path="1234567890123456789012345678901234567890"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	create cluster c;
+	show status like 'cluster_c_status';
+	delete cluster c;
+</sphinxql>
+</queries>
+
+</test>

@@ -8,13 +8,6 @@
 #pragma GCC diagnostic ignored "-Wfree-nonheap-object"
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 #endif
-
-#define TRACK_BOUNDS(_res,_left,_right) \
-	_res = _left; \
-	if ( _res.m_iStart>0 && pParser->m_pBuf[_res.m_iStart-1]=='`' ) \
-		_res.m_iStart--; \
-	_res.m_iEnd = _right.m_iEnd; \
-	_res.m_iType = 0;
 %}
 
 %lex-param		{ DdlParser_c * pParser }
@@ -22,6 +15,7 @@
 %pure-parser
 %error-verbose
 
+%token	END 0 "$end"
 %token	TOK_IDENT "identifier"
 %token	TOK_TABLEIDENT "tablename"
 %token	TOK_CONST_FLOAT "float"
@@ -30,18 +24,23 @@
 
 %token	TOK_ADD
 %token	TOK_ALTER
+%token	TOK_API_KEY
+%token	TOK_API_URL
+%token	TOK_API_TIMEOUT
 %token	TOK_AS
 %token	TOK_AT
 %token	TOK_ATTRIBUTE
 %token	TOK_BIGINT
 %token	TOK_BIT
 %token	TOK_BOOL
+%token	TOK_CACHE_PATH
 %token	TOK_CLUSTER
 %token	TOK_COLUMN
 %token	TOK_COLUMNAR
 %token	TOK_CREATE
 %token	TOK_DOUBLE
 %token	TOK_DROP
+%token	TOK_EMBEDDINGS
 %token	TOK_ENGINE
 %token	TOK_EXISTS
 %token	TOK_FAST_FETCH
@@ -61,14 +60,19 @@
 %token	TOK_JOIN
 %token	TOK_JSON
 %token	TOK_KILLLIST_TARGET
+%token	TOK_KNN
 %token	TOK_KNN_DIMS
 %token	TOK_KNN_TYPE
 %token	TOK_LIKE
-%token	TOK_OPTION
+%token	TOK_MODEL_NAME
+%token	TOK_MODIFY
+%token	TOK_MODIFY_COLUMN
 %token	TOK_MULTI
 %token	TOK_MULTI64
-%token	TOK_MODIFY
+%token	TOK_MVA "mva"
+%token	TOK_MVA64 "mva64"
 %token	TOK_NOT
+%token	TOK_OPTION
 %token	TOK_PLUGIN
 %token	TOK_QUANTIZATION
 %token	TOK_REBUILD
@@ -84,8 +88,10 @@
 %token	TOK_TEXT
 %token	TOK_TIMESTAMP
 %token	TOK_TYPE
+%token	TOK_USER
 %token	TOK_UINT
 %token	TOK_UPDATE
+%token	TOK_USE_GPU
 
 %%
 
@@ -107,21 +113,20 @@ statement:
 	| import_table
 	;
 
-tablename:
+tableident:
 	TOK_TABLEIDENT
 	| TOK_MODIFY
-	;
-
-ident_without_modify:
-	TOK_TABLEIDENT
-	| TOK_IDENT
     | TOK_TYPE
-    ;
+    | TOK_ENGINE
+    | TOK_MVA
+    | TOK_MVA64
+    | TOK_USER
+	;
 
 ident:
-	ident_without_modify
-	| TOK_MODIFY
-	;
+	tableident
+	| TOK_IDENT
+    ;
 
 text_or_string:
 	TOK_TEXT		{ $$.m_iType = ( DdlParser_c::FLAG_INDEXED | DdlParser_c::FLAG_STORED ); }
@@ -135,6 +140,8 @@ attribute_type:
 	| TOK_BOOL		{ $$.SetValueInt ( SPH_ATTR_BOOL ); }
 	| TOK_MULTI		{ $$.SetValueInt ( SPH_ATTR_UINT32SET ); }
 	| TOK_MULTI64	{ $$.SetValueInt ( SPH_ATTR_INT64SET ); }
+	| TOK_MVA		{ $$.SetValueInt ( SPH_ATTR_UINT32SET ); }
+    | TOK_MVA64		{ $$.SetValueInt ( SPH_ATTR_INT64SET ); }
 	| TOK_JSON		{ $$.SetValueInt ( SPH_ATTR_JSON ); }
 	| TOK_INT		{ $$.SetValueInt ( SPH_ATTR_INTEGER ); }
 	| TOK_UINT		{ $$.SetValueInt ( SPH_ATTR_INTEGER ); }
@@ -142,20 +149,27 @@ attribute_type:
 	| TOK_FLOAT_VECTOR { $$.SetValueInt ( SPH_ATTR_FLOAT_VECTOR ); }
 	;
 
-list_of_tables:
-	| tablename ',' tablename
+
+tablename:
+	tableident
 		{
-    		TRACK_BOUNDS ( $$, $1, $3 );
-    	}
-	| list_of_tables ',' tablename
+			pParser->m_pStmt->m_dStringSubkeys.Add( pParser->GetTableName ( $1 ));
+		}
+	| tableident '.' tableident
 		{
-			TRACK_BOUNDS ( $$, $1, $3 );
+			auto sDbName = pParser->GetString ( $1 );
+			if ( sDbName!="system" )
+			{
+				yyerror ( pParser, SphSprintf ( "unexpected db '%s', only 'system' allowed", sDbName.cstr() ).cstr() );
+				YYERROR;
+			}
+			pParser->m_pStmt->m_dStringSubkeys.Add( pParser->GetTableName ( $1, $3 ));
 		}
 	;
 
 table_or_tables:
 	tablename
-	| list_of_tables
+	| table_or_tables ',' tablename
 	;
 	
 //////////////////////////////////////////////////////////////////////////
@@ -166,99 +180,127 @@ alter_col_type:
 	| text_or_string field_flag_list 	{ $$.SetValueInt ( SPH_ATTR_STRING ); $$.m_iType = $2.m_iType; }
 	;
 
+alter_table_name:
+	TOK_ALTER TOK_TABLE tablename		{ pParser->m_pStmt->m_sIndex = pParser->m_pStmt->m_dStringSubkeys.Last(); }
+	;
+
+alter_cluster_ident:
+	TOK_ALTER TOK_CLUSTER ident			{ pParser->ToString ( pParser->m_pStmt->m_sCluster, $3 );	}
+	;
+
 alter:
-	TOK_ALTER TOK_TABLE tablename TOK_ADD TOK_COLUMN ident alter_col_type item_option_list
+	alter_table_name TOK_ADD TOK_COLUMN ident alter_col_type item_option_list
 		{
-			if ( !pParser->SetupAlterTable ( $3, $6, $7 ) )
+			if ( !pParser->SetupAlterTable ( $4, $5 ) )
 			{
 			 	yyerror ( pParser, pParser->GetLastError() );
 	            YYERROR;
 			}
 		}
-	| TOK_ALTER TOK_TABLE tablename TOK_MODIFY TOK_COLUMN ident alter_col_type item_option_list
+	| alter_table_name TOK_MODIFY_COLUMN ident alter_col_type item_option_list
 		{
-			if ( !pParser->SetupAlterTable ( $3, $6, $7, true ) )
+			if ( !pParser->SetupAlterTable ( $3, $4, true ) )
 			{
 				yyerror ( pParser, pParser->GetLastError() );
 				YYERROR;
 			}
 		}
-	| TOK_ALTER TOK_TABLE tablename TOK_ADD TOK_COLUMN ident TOK_BIT '(' TOK_CONST_INT ')' item_option_list
+	| alter_table_name TOK_MODIFY_COLUMN ident TOK_API_KEY '=' TOK_QUOTED_STRING
+   		{
+   			SqlStmt_t & tStmt = *pParser->m_pStmt;
+   			tStmt.m_eStmt = STMT_ALTER_EMBEDDINGS_API_KEY;
+			pParser->ToString ( tStmt.m_sAlterAttr, $3 );
+			pParser->ToString ( tStmt.m_sAlterOption, $6 ).Unquote();
+   		}
+	| alter_table_name TOK_MODIFY_COLUMN ident TOK_API_URL '=' TOK_QUOTED_STRING
+   		{
+   			SqlStmt_t & tStmt = *pParser->m_pStmt;
+   			tStmt.m_eStmt = STMT_ALTER_EMBEDDINGS_API_URL;
+			pParser->ToString ( tStmt.m_sAlterAttr, $3 );
+			pParser->ToString ( tStmt.m_sAlterOption, $6 ).Unquote();
+   		}
+	| alter_table_name TOK_MODIFY_COLUMN ident TOK_API_TIMEOUT '=' TOK_QUOTED_STRING
+   		{
+   			SqlStmt_t & tStmt = *pParser->m_pStmt;
+   			tStmt.m_eStmt = STMT_ALTER_EMBEDDINGS_API_TIMEOUT;
+			pParser->ToString ( tStmt.m_sAlterAttr, $3 );
+			pParser->ToString ( tStmt.m_sAlterOption, $6 ).Unquote();
+   		}
+	| alter_table_name TOK_ADD TOK_COLUMN ident TOK_BIT '(' TOK_CONST_INT ')' item_option_list
 		{
-			if ( !pParser->SetupAlterTable ( $3, $6, SPH_ATTR_INTEGER, 0, $9.GetValueInt() ) )
+			if ( !pParser->SetupAlterTable ( $4, SPH_ATTR_INTEGER, 0, $7.GetValueInt() ) )
 			{
 			 	yyerror ( pParser, pParser->GetLastError() );
 	            YYERROR;
 			}
 		}
-	| TOK_ALTER TOK_TABLE tablename TOK_DROP TOK_COLUMN ident
+	| alter_table_name TOK_DROP TOK_COLUMN ident
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ALTER_DROP;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
-			pParser->ToString ( tStmt.m_sAlterAttr, $6 );
+			pParser->ToString ( tStmt.m_sAlterAttr, $4 );
 		}
 	| TOK_ALTER TOK_RTINDEX tablename TOK_RECONFIGURE
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ALTER_RECONFIGURE;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
+			pParser->m_pStmt->m_sIndex = pParser->m_pStmt->m_dStringSubkeys.Last();
 		}
-	| TOK_ALTER TOK_TABLE tablename TOK_RECONFIGURE
+	| alter_table_name TOK_RECONFIGURE
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ALTER_RECONFIGURE;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
 		}
-	| TOK_ALTER TOK_TABLE tablename TOK_KILLLIST_TARGET '=' TOK_QUOTED_STRING
+	| alter_table_name TOK_KILLLIST_TARGET '=' TOK_QUOTED_STRING
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ALTER_KLIST_TARGET;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
-			pParser->ToString ( tStmt.m_sAlterOption, $6 ).Unquote();
+			pParser->ToString ( tStmt.m_sAlterOption, $4 ).Unquote();
 		}
-	| alter_index_settings_with_options
-	| TOK_ALTER TOK_CLUSTER ident TOK_ADD table_or_tables
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_CLUSTER_ALTER_ADD;
-			pParser->ToString ( tStmt.m_sCluster, $3 );
-			pParser->ToString ( tStmt.m_sIndex, $5 );
-		}
-	| TOK_ALTER TOK_CLUSTER ident TOK_DROP table_or_tables
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_CLUSTER_ALTER_DROP;
-			pParser->ToString ( tStmt.m_sCluster, $3 );
-			pParser->ToString ( tStmt.m_sIndex, $5 );
-		}
-	| TOK_ALTER TOK_CLUSTER ident TOK_UPDATE tablename
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_CLUSTER_ALTER_UPDATE;
-			pParser->ToString ( tStmt.m_sCluster, $3 );
-			pParser->ToString ( tStmt.m_sSetName, $5 );
-		}
-	| TOK_ALTER TOK_TABLE tablename TOK_REBUILD TOK_SECONDARY
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_ALTER_REBUILD_SI;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
-		}
-	;
-
-
-alter_index_settings:
-	TOK_ALTER TOK_TABLE tablename create_table_option_list
+	| alter_table_name create_table_option_list
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ALTER_INDEX_SETTINGS;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
 		}
-	;
-
-alter_index_settings_with_options:
-	alter_index_settings opt_option_clause
+	| alter_table_name TOK_REBUILD TOK_SECONDARY
+   		{
+   			SqlStmt_t & tStmt = *pParser->m_pStmt;
+   			tStmt.m_eStmt = STMT_ALTER_REBUILD_SI;
+   		}
+	| alter_cluster_ident TOK_ADD table_or_tables
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_CLUSTER_ALTER_ADD;
+		}
+	| alter_cluster_ident TOK_DROP table_or_tables
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_CLUSTER_ALTER_DROP;
+		}
+	| alter_cluster_ident TOK_UPDATE TOK_USER TOK_QUOTED_STRING
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_CLUSTER_ALTER_UPDATE;
+			tStmt.m_sSetName = "user";
+			pParser->ToString ( tStmt.m_sStringParam, $4 ).Unquote();
+		}
+	| alter_cluster_ident TOK_UPDATE tablename
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_CLUSTER_ALTER_UPDATE;
+			pParser->ToString ( tStmt.m_sSetName, $3 );
+		}
+	| alter_table_name TOK_REBUILD TOK_KNN
+   		{
+   			SqlStmt_t & tStmt = *pParser->m_pStmt;
+   			tStmt.m_eStmt = STMT_ALTER_REBUILD_KNN;
+   		}
+	| alter_table_name TOK_REBUILD TOK_EMBEDDINGS ident
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_ALTER_REBUILD_EMBEDDINGS;
+			pParser->ToString ( tStmt.m_sAlterAttr, $4 );
+		}
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -339,6 +381,62 @@ item_option:
     	    	YYERROR;
 			}
 		}
+	| TOK_MODEL_NAME '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionModelName ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_FROM '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionFrom ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_API_KEY '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionAPIKey ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_API_URL '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionAPIUrl ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_API_TIMEOUT '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionAPITimeout ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_CACHE_PATH '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionCachePath ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_USE_GPU '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionUseGPU ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
 	| TOK_QUANTIZATION '=' TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddItemOptionQuantization ( $3 ) )
@@ -393,8 +491,7 @@ create_table_items:
 	;
 
 create_table_option:
-	ident_without_modify '=' TOK_QUOTED_STRING			{ pParser->AddCreateTableOption ( $1, $3 ); }
-	| TOK_ENGINE '=' TOK_QUOTED_STRING	{ pParser->AddCreateTableOption ( $1, $3 ); }
+	ident '=' TOK_QUOTED_STRING	{ pParser->AddCreateTableOption ( $1, $3 ); }
 	;
 
 create_table_option_list:
@@ -417,8 +514,7 @@ create_table:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CREATE_TABLE;
-			pParser->ToString ( tStmt.m_sIndex, $4 );
-			tStmt.m_sIndex.ToLower();
+			tStmt.m_sIndex = tStmt.m_dStringSubkeys.Last();
 		}
 	;
 
@@ -427,10 +523,8 @@ create_table_like:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CREATE_TABLE_LIKE;
-			pParser->ToString ( tStmt.m_sIndex, $4 );
-			pParser->ToString ( tStmt.m_tCreateTable.m_sLike, $6 );
-			tStmt.m_sIndex.ToLower();
-			tStmt.m_tCreateTable.m_sLike.ToLower();
+			tStmt.m_sIndex = tStmt.m_dStringSubkeys.First();
+			tStmt.m_tCreateTable.m_sLike = tStmt.m_dStringSubkeys.Last();
 		}
 	;
 
@@ -439,8 +533,7 @@ drop_table:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_DROP_TABLE;
-			pParser->ToString ( tStmt.m_sIndex, $4 );
-			tStmt.m_sIndex.ToLower();
+			tStmt.m_sIndex = tStmt.m_dStringSubkeys.Last();
 		}
 	;
 
@@ -531,9 +624,9 @@ opt_as:
 	;
 
 insert_val:
-	TOK_CONST_INT			{ $$.m_iType = TOK_CONST_INT; $$.SetValueInt ( $1.GetValueInt() ); }
-	| TOK_CONST_FLOAT		{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = $1.m_fValue; }
-	| TOK_QUOTED_STRING		{ $$.m_iType = TOK_QUOTED_STRING; $$.m_iStart = $1.m_iStart; $$.m_iEnd = $1.m_iEnd; }
+	TOK_CONST_INT			{ $$=$1; $$.m_iType = TOK_CONST_INT; }
+	| TOK_CONST_FLOAT		{ $$.m_fValue = $1.m_fValue; $$.m_iType = TOK_CONST_FLOAT; }
+	| TOK_QUOTED_STRING		{ $$=$1; $$.m_iType = TOK_QUOTED_STRING; }
 	;
 
 create_cluster:
@@ -541,7 +634,7 @@ create_cluster:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CLUSTER_CREATE;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
+			pParser->ToString ( tStmt.m_sCluster, $3 );
 		}
 	;
 
@@ -550,13 +643,13 @@ join_cluster:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_JOIN_CLUSTER;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
+			pParser->ToString ( tStmt.m_sCluster, $3 );
 		}
 	| TOK_JOIN TOK_CLUSTER ident TOK_AT TOK_QUOTED_STRING cluster_opts_list
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_JOIN_CLUSTER;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
+			pParser->ToString ( tStmt.m_sCluster, $3 );
 			pParser->JoinClusterAt ( $5 );
 		}
 	;
@@ -566,7 +659,7 @@ import_table:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_IMPORT_TABLE;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
+			tStmt.m_sIndex = tStmt.m_dStringSubkeys.Last();
 			tStmt.m_sStringParam = pParser->ToStringUnescape ( $5 );
 		}
 	;

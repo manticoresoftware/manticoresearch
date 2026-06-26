@@ -1,0 +1,49 @@
+––– comment –––
+ALTER TABLE REBUILD SECONDARY must work after OPTIMIZE merges RT disk chunks and renames the result.
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL auto_optimize=0; DROP TABLE IF EXISTS rebuild_si; CREATE TABLE rebuild_si(tag int) optimize_cutoff='1'; INSERT INTO rebuild_si VALUES(1,1); FLUSH RAMCHUNK rebuild_si; INSERT INTO rebuild_si VALUES(2,2); FLUSH RAMCHUNK rebuild_si; OPTIMIZE TABLE rebuild_si OPTION sync=1; ALTER TABLE rebuild_si REBUILD SECONDARY;" && echo OK
+––– output –––
+OK
+––– input –––
+mysql -h0 -P9306 -NBe "SHOW TABLE rebuild_si STATUS LIKE 'disk_chunks'\G"
+––– output –––
+*************************** 1. row ***************************
+disk_chunks
+1
+––– comment –––
+SI disabled by an attribute update after OPTIMIZE chunk rename must be saved to the renamed .spidx file.
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL auto_optimize=0; DROP TABLE IF EXISTS rebuild_si_meta; CREATE TABLE rebuild_si_meta(tag int) optimize_cutoff='1'; INSERT INTO rebuild_si_meta VALUES(1,1); FLUSH RAMCHUNK rebuild_si_meta; INSERT INTO rebuild_si_meta VALUES(2,2); FLUSH RAMCHUNK rebuild_si_meta; OPTIMIZE TABLE rebuild_si_meta OPTION sync=1; UPDATE rebuild_si_meta SET tag=3 WHERE id=1; SHOW WARNINGS;"
+––– output –––
++---------+------+-----------------------------------------------------------------------------------------------------------+
+| Level   | Code | Message                                                                                                   |
++---------+------+-----------------------------------------------------------------------------------------------------------+
+| warning | 1000 | secondary index disabled for attribute(s) 'tag' after attribute update; run ALTER TABLE REBUILD SECONDARY |
++---------+------+-----------------------------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE rebuild_si_meta INDEXES;"
+––– output –––
++------+--------+---------+---------+
+| Name | Type   | Enabled | Percent |
++------+--------+---------+---------+
+| tag  | uint32 | 0       | 100     |
+| id   | int64  | 1       | 100     |
++------+--------+---------+---------+
+––– input –––
+if find /var/lib/manticore/rebuild_si_meta -maxdepth 1 -name '*.tmp.spidx' | grep -q .; then echo "stale tmp spidx"; else echo "no stale tmp spidx"; fi
+––– output –––
+no stale tmp spidx
+––– input –––
+stdbuf -oL searchd --stopwait > /dev/null
+––– output –––
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE rebuild_si_meta INDEXES;"
+––– output –––
++------+--------+---------+---------+
+| Name | Type   | Enabled | Percent |
++------+--------+---------+---------+
+| tag  | uint32 | 0       | 100     |
+| id   | int64  | 1       | 100     |
++------+--------+---------+---------+

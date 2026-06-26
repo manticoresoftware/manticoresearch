@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -204,4 +204,14 @@ void MemoryWriter2_c::ZipOffset ( uint64_t uVal )
 void MemoryWriter2_c::ZipInt ( DWORD uVal )
 {
 	ZipValueBE ( [this] ( BYTE b ) { PutByte ( b ); }, uVal );
+}
+
+void GetArrayFixed ( CSphFixedVector<BYTE> & dBuf, MemoryReader_c & tIn )
+{
+	int iCount = tIn.GetDword();
+	if ( !iCount )
+		return;
+
+	dBuf.Reset ( iCount );
+	tIn.GetBytes ( dBuf.Begin(), (int)dBuf.GetLengthBytes() );
 }

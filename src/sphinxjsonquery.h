@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -14,6 +14,7 @@
 #include "sphinx.h"
 #include "sphinxjson.h"
 #include "aggrexpr.h"
+#include "std/tdigest.h"
 
 class QueryParser_i;
 class StmtErrorReporter_i;
@@ -33,9 +34,22 @@ struct JsonAggr_t : public AggrSettings_t
 	CSphString	m_sBucketName;
 	CSphString	m_sCol;
 	int			m_iSize = 0;
+	int			m_iRequestedOffset = 0;
+	int			m_iRequestedLimit = 0;
 	CSphString	m_sSort;
+	FacetFilterTrait_t m_tFacetFilter;
+	int				m_iResult = -1;
+	int				m_iStrictResult = -1;
+	int				m_iZeroesResult = -1;
 	CSphVector<AggrComposite_t> m_dComposite;
 	CSphVector<CSphFilterSettings> m_dCompositeAfterKey;
+	struct MadDeviationEntry_t
+	{
+		double		m_fDeviation = 0.0;
+		int64_t		m_iWeight = 0;
+	};
+	mutable CSphVector<TDigestCentroid_t> m_dMadCentroidScratch;
+	mutable CSphVector<MadDeviationEntry_t> m_dMadDeviationScratch;
 
 	CSphString GetAliasName () const;
 };
@@ -80,14 +94,14 @@ enum class ResultSetFormat_e : bool
 	MntSearch
 };
 
-CSphString		sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes, const JsonQuery_c & tQuery, QueryProfile_c * pProfile, ResultSetFormat_e eFormat );
+CSphString		sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const JsonQuery_c & tQuery, QueryProfile_c * pProfile, ResultSetFormat_e eFormat );
 JsonObj_c		sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID_t tDocId, ResultSetFormat_e eFormat );
 JsonObj_c		sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int iAffected, ResultSetFormat_e eFormat );
 JsonObj_c 		sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int iAffected, ResultSetFormat_e eFormat );
 JsonObj_c		sphEncodeInsertErrorJson ( const char * szIndex, const char * szError, ResultSetFormat_e eFormat );
 JsonObj_c		sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iInserts, int iDeletes, int iUpdates, ResultSetFormat_e eFormat );
 
-bool			sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate );
+bool			sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate, CSphString & sError );
 
 bool			NonEmptyQuery ( const JsonObj_c & tQuery );
 bool			CheckRootNode ( const JsonObj_c & tRoot, CSphString & sError );
@@ -100,4 +114,3 @@ bool ParseJsonInsertSource ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, bool bR
 bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );
 
 #endif
-

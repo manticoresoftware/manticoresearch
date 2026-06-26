@@ -30,11 +30,12 @@ download_package() {
 		repo_url="https://repo.manticoresearch.com/repository/manticoresearch_jammy${repo_suffix}/dists/jammy/main/binary-amd64"
 		file_url="${repo_url}/${file_name}"
 		echo "Trying to download from $file_url"
-		
+
 		if wget -q --spider "$file_url" 2>/dev/null; then
 			echo "Package found at $file_url"
+			mkdir -p "../build"
 			wget -q -O "../build/${file_name}" "$file_url"
-			
+
 			# For executor, we need to download the dev version and also extra package
 			if [ "$package" = 'manticore-executor' ]; then
 				if [[ "$version_string" == *"+"* ]]; then
@@ -44,21 +45,21 @@ download_package() {
 					version=$(echo "$version_string" | cut -d'+' -f1)
 					# Extract date-commit from version_string (after the +)
 					date_commit=$(echo "$version_string" | cut -d'+' -f2)
-					
-					echo "Wgetting from https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date_commit}_linux_amd64-dev.tar.gz"
-					wget -q -O 'manticore-executor-dev.tar.gz' "https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date_commit}_linux_amd64-dev.tar.gz"
+
+					echo "Wgetting from https://github.com/manticoresoftware/executor/releases/download/${version}/manticore-executor-${version}+${date_commit}-linux-amd64-dev.tar.gz"
+					wget -q -O 'manticore-executor-dev.tar.gz' "https://github.com/manticoresoftware/executor/releases/download/${version}/manticore-executor-${version}+${date_commit}-linux-amd64-dev.tar.gz"
 				else
 					# Handle old format
 					echo "Wgetting from https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date}-${commit}_linux_amd64-dev.tar.gz"
 					wget -q -O 'manticore-executor-dev.tar.gz' "https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date}-${commit}_linux_amd64-dev.tar.gz"
 				fi
-				
+
 				tar -xzf 'manticore-executor-dev.tar.gz'
-				
+
 				# Find the extracted directory
-				executor_dev_dir=$(find . -type d -name "manticore-executor_*_linux_amd64-dev" | head -n 1)
+				executor_dev_dir=$(find . -type d -name "manticore-executor-*-linux-amd64-dev" | head -n 1)
 				executor_dev_path=$(realpath "${executor_dev_dir}/manticore-executor")
-				
+
 				# Also add extra package
 				if [[ "$version_string" == *"+"* ]]; then
 					download_package "manticore-extra" "${version_string}" "all"
@@ -66,11 +67,11 @@ download_package() {
 					download_package "manticore-extra" "${version}" "${date}" "${commit}" "all"
 				fi
 			fi
-			
+
 			return 0
 		fi
 	done
-	
+
 	echo "ERROR: Package not found in any repository: ${file_name}" >&2
 	exit 1
 }
@@ -85,14 +86,29 @@ do
 		break
 	fi
 
-    if [[ "$line" =~ ^([^[:space:]]+)[[:space:]]+([^[:space:]]+)\+([0-9]+)-([a-f0-9]+)-?([a-zA-Z0-9]+)?$ ]]; then
-        # Format: <package> <version>+<date>-<commit>-<optional_suffix>
+	if [[ "$line" =~ ^galera[[:space:]] ]]; then
+		echo "Skipping galera: no need to handle it explicitly"
+		continue
+	fi
+
+    if [[ "$line" =~ ^([^[:space:]]+)[[:space:]]+([^[:space:]]+)\+([0-9]+)-([a-f0-9]+)(-?[a-zA-Z0-9]+)?$ ]]; then
+        # Format: <package> <version>+<date>-<commit>[-<optional_suffix>]
         package="${BASH_REMATCH[1]}"
-        version_string="${BASH_REMATCH[2]}+${BASH_REMATCH[3]}-${BASH_REMATCH[4]}"
+        version="${BASH_REMATCH[2]}"
+        date="${BASH_REMATCH[3]}"
+        commit="${BASH_REMATCH[4]}"
+        version_string="${version}+${date}-${commit}"
         if [ -n "${BASH_REMATCH[5]}" ]; then
-            version_string="${version_string}-${BASH_REMATCH[5]}"
+            version_string="${version_string}${BASH_REMATCH[5]}"
         fi
         suffix="${BASH_REMATCH[5]}" # Optional suffix without leading "-"
+        echo "Parsed new format:"
+        echo "  Package: $package"
+        echo "  Version: $version"
+        echo "  Date: $date"
+        echo "  Commit: $commit"
+        echo "  Suffix: $suffix"
+        echo "  Full version string: $version_string"
     elif [[ "$line" =~ ^([^[:space:]]+)[[:space:]]+([^[:space:]]+)[[:space:]]+([^[:space:]]+)[[:space:]]+([^[:space:]]+)$ ]]; then
         # Old format: <package> <version> <date> <commit>
         package="${BASH_REMATCH[1]}"
@@ -100,6 +116,11 @@ do
         date="${BASH_REMATCH[3]}"
         commit="${BASH_REMATCH[4]}"
         suffix=""
+        echo "Parsed old format:"
+        echo "  Package: $package"
+        echo "  Version: $version"
+        echo "  Date: $date"
+        echo "  Commit: $commit"
     else
         echo "ERROR: Unable to parse line: $line" >&2
         exit 1
@@ -165,14 +186,18 @@ docker create \
 # Let's list what's in the /build/ inside the container for debug purposes
 docker exec manticore-test-kit bash -c \
 	'echo "Removing /build/manticore_*, because it may depend on manticore-buddy of a newer version while we'\''re installing Buddy via git clone"; rm /build/manticore_*.deb; ls -la /build/'
+
 # Install deps and add manticore-executor-dev to the container
 docker exec manticore-test-kit bash -c \
-	'echo "apt list before update" && apt list --installed|grep manticore && apt-get -y update && echo "apt list after update" && apt list --installed|grep manticore && apt-get -y install manticore-galera && apt-get -y remove manticore-repo && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && apt-get install -y --allow-downgrades /build/*.deb libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash && apt-get clean -y'
+	'echo "apt list before update" && apt list --installed|grep manticore && apt-get -y update && echo "apt list after update" && apt list --installed|grep manticore && apt-get -y install manticore-galera && apt-get -y remove manticore-repo && apt-get update -y && rm -f /build/manticore_*.deb && dpkg -i --force-confnew /build/*.deb && apt-get install -y libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash && apt-get clean -y'
+
+docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
 
 # Install composer cuz we need it for buddy from the git and also development
 docker exec manticore-test-kit bash -c \
 	"curl -sSL https://getcomposer.org/download/2.7.0/composer.phar > /usr/bin/composer; chmod +x /usr/bin/composer"
 
+echo "Installing custom buddy from git repo with commit $buddy_commit"
 # Install custom buddy from git repo
 #
 buddy_path=/usr/share/manticore/modules/manticore-buddy
@@ -183,6 +208,21 @@ docker exec manticore-test-kit bash -c \
 	cd $buddy_path && \
 	git checkout $buddy_commit && \
 	composer install"
+
+docker exec manticore-test-kit bash -c "grep -q 'query_log = /var/log/manticore/query.log' /etc/manticoresearch/manticore.conf || sed -i '/listen = 127.0.0.1:9308:http/a\    query_log = /var/log/manticore/query.log' /etc/manticoresearch/manticore.conf"
+docker exec manticore-test-kit bash -c "grep -q 'log = /var/log/manticore/searchd.log' /etc/manticoresearch/manticore.conf || sed -i '/listen = 127.0.0.1:9308:http/a\    log = /var/log/manticore/searchd.log' /etc/manticoresearch/manticore.conf"
+
+docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
+
+docker exec manticore-test-kit bash -c \
+    "md5sum /etc/manticoresearch/manticore.conf | awk '{print \$1}' > /manticore.conf.md5"
+
+# Copy the parent directory to /manticore/ inside the container
+parent_dir=$(realpath ..)
+echo "Copying $parent_dir to /manticore/ in the container"
+docker exec manticore-test-kit mkdir -p /manticore
+docker cp "$parent_dir" manticore-test-kit:/tmp/manticore_parent
+docker exec manticore-test-kit bash -c "shopt -s dotglob && cp -r /tmp/manticore_parent/* /manticore/ && rm -rf /tmp/*"
 
 echo "Exporting image to ../manticore_test_kit.img"
 

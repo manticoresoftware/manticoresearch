@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -12,6 +12,7 @@
 
 #include "searchdha.h"
 #include "api_command_cluster.h"
+#include "cluster_sst_progress.h"
 
 struct SyncSrc_t;
 struct FileReserveRequest_t: ClusterRequest_t
@@ -19,6 +20,9 @@ struct FileReserveRequest_t: ClusterRequest_t
 	CSphString m_sIndex;
 	CSphString m_sIndexFileName;
 	SyncSrc_t* m_pChunks = nullptr;
+
+	// donor - joiner progress related
+	SstProgressContext_t m_tProgressCtx;
 };
 
 void operator<< ( ISphOutputBuffer& tOut, const FileReserveRequest_t& tReq );

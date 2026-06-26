@@ -24,6 +24,7 @@
 	const char *	sIdent;			// generic identifier (token does NOT own ident storage; ie values are managed by parser)
 };
 
+%token	END 0 "$end"
 %token <iConst>			TOK_CONST_INT
 %token <fConst>			TOK_CONST_FLOAT
 %token <iConst>			TOK_CONST_STRING

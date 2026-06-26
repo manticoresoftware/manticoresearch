@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2024-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2024-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -42,6 +42,40 @@ CSphString EncodeBase64 ( const CSphString & sValue )
 
 	using namespace boost::archive::iterators;
 	using It = base64_from_binary<transform_width<std::string::const_iterator, 6, 8>>;
+	auto sTmp = std::string(It(std::begin(sVal)), It(std::end(sVal)));
+	return sTmp.append((3 - sVal.size() % 3) % 3, '=').c_str();
+}
+
+bool DecodeBinBase64 ( const CSphString & sSrc, CSphVector<BYTE> & dDst )
+{
+	std::string_view sVal = sSrc.cstr();
+	dDst.Reserve ( dDst.GetLength() + ( ( sVal.size() + 2 ) / 3 ) * 4 );
+
+	using namespace boost::archive::iterators;
+	try
+	{
+		using It = transform_width<binary_from_base64<std::string_view::const_iterator>, 8, 6>;
+		for ( It tIt ( std::begin(sVal) ); tIt!=It( std::end(sVal) ); tIt++ )
+			dDst.Add ( *tIt );
+	}
+	catch (...)
+	{
+		return false;
+	}
+
+	while ( dDst.GetLength() && dDst.Last()=='\0' )
+		dDst.Pop();
+
+	return true;
+}
+
+
+CSphString EncodeBinBase64 ( const VecTraits_T<BYTE> & dSrc )
+{
+	std::string_view sVal { (const char *)dSrc.Begin(), (std::string_view::size_type)dSrc.GetLength() };
+
+	using namespace boost::archive::iterators;
+	using It = base64_from_binary<transform_width<std::string_view::const_iterator, 6, 8>>;
 	auto sTmp = std::string(It(std::begin(sVal)), It(std::end(sVal)));
 	return sTmp.append((3 - sVal.size() % 3) % 3, '=').c_str();
 }

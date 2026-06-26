@@ -1,0 +1,30 @@
+a:1:{i:0;a:11:{i:0;a:2:{s:8:"sphinxql";s:24:"drop table if exists tbl";s:14:"total_affected";i:0;}i:1;a:2:{s:8:"sphinxql";s:488:"create table tbl (
+		id BIGINT,
+		model TEXT,
+		storage_capacity INTEGER,
+		color string,
+		release_year INTEGER,
+		price FLOAT,
+		discounted_price FLOAT,
+		sold BOOL,
+		date_added TIMESTAMP,
+		product_codes MULTI,
+		`values` MULTI64,
+		additional_info JSON,
+		region_id INTEGER,
+		warranty_months INTEGER,
+		customer_score FLOAT,
+		units_left INTEGER,
+		serials MULTI64,
+		category string,
+		promo_score FLOAT,
+		supplier_id BIGINT,
+		batch_no INTEGER,
+		flags MULTI
+	) engine='columnar'";s:14:"total_affected";i:0;}i:2;a:2:{s:8:"sphinxql";s:530:"insert into tbl
+		(id,model,storage_capacity,color,release_year,price,discounted_price,sold,date_added,product_codes,`values`,additional_info,region_id,warranty_months,customer_score,units_left,serials,category,promo_score,supplier_id,batch_no,flags)
+	values
+		(101,'iPhone 13 Pro',256,'silver',2021,1099.98999,989.98999,1,2224442480,(1,2,3),(523456764345678976,9223372036854775807),'{"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}',1,24,4.5,35,(101001,101002),'smartphones',0.91,5001,77,(1,3,5))";s:14:"total_affected";i:1;}i:3;a:2:{s:8:"sphinxql";s:18:"flush ramchunk tbl";s:14:"total_affected";i:0;}i:4;a:2:{s:8:"sphinxql";s:32:"optimize index tbl option sync=1";s:14:"total_affected";i:0;}i:5;a:3:{s:8:"sphinxql";s:30:"select * from tbl where id=101";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:22:{s:2:"id";s:3:"101";s:5:"model";s:13:"iPhone 13 Pro";s:16:"storage_capacity";s:3:"256";s:5:"color";s:6:"silver";s:12:"release_year";s:4:"2021";s:5:"price";s:11:"1099.989990";s:16:"discounted_price";s:10:"989.989990";s:4:"sold";s:1:"1";s:10:"date_added";s:10:"2224442480";s:13:"product_codes";s:5:"1,2,3";s:6:"values";s:38:"523456764345678976,9223372036854775807";s:15:"additional_info";s:81:"{"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}";s:9:"region_id";s:1:"1";s:15:"warranty_months";s:2:"24";s:14:"customer_score";s:8:"4.500000";s:10:"units_left";s:2:"35";s:7:"serials";s:13:"101001,101002";s:8:"category";s:11:"smartphones";s:11:"promo_score";s:8:"0.910000";s:11:"supplier_id";s:4:"5001";s:8:"batch_no";s:2:"77";s:5:"flags";s:5:"1,3,5";}}}i:6;a:2:{s:8:"sphinxql";s:531:"replace into tbl
+		(id,model,storage_capacity,color,release_year,price,discounted_price,sold,date_added,product_codes,`values`,additional_info,region_id,warranty_months,customer_score,units_left,serials,category,promo_score,supplier_id,batch_no,flags)
+	values
+		(101,'iPhone 15 PRO',256,'silver',2021,1099.98999,989.98999,1,2224442480,(1,2,3),(523456764345678976,9223372036854775807),'{"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}',1,24,4.8,28,(101003,101004),'smartphones',0.93,5001,78,(1,3,7))";s:14:"total_affected";i:1;}i:7;a:3:{s:8:"sphinxql";s:30:"select * from tbl where id=101";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:22:{s:2:"id";s:3:"101";s:5:"model";s:13:"iPhone 15 PRO";s:16:"storage_capacity";s:3:"256";s:5:"color";s:6:"silver";s:12:"release_year";s:4:"2021";s:5:"price";s:11:"1099.989990";s:16:"discounted_price";s:10:"989.989990";s:4:"sold";s:1:"1";s:10:"date_added";s:10:"2224442480";s:13:"product_codes";s:5:"1,2,3";s:6:"values";s:38:"523456764345678976,9223372036854775807";s:15:"additional_info";s:81:"{"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}";s:9:"region_id";s:1:"1";s:15:"warranty_months";s:2:"24";s:14:"customer_score";s:8:"4.800000";s:10:"units_left";s:2:"28";s:7:"serials";s:13:"101003,101004";s:8:"category";s:11:"smartphones";s:11:"promo_score";s:8:"0.930000";s:11:"supplier_id";s:4:"5001";s:8:"batch_no";s:2:"78";s:5:"flags";s:5:"1,3,7";}}}i:8;a:2:{s:8:"sphinxql";s:18:"flush ramchunk tbl";s:14:"total_affected";i:0;}i:9;a:3:{s:8:"sphinxql";s:30:"select * from tbl where id=101";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:22:{s:2:"id";s:3:"101";s:5:"model";s:13:"iPhone 15 PRO";s:16:"storage_capacity";s:3:"256";s:5:"color";s:6:"silver";s:12:"release_year";s:4:"2021";s:5:"price";s:11:"1099.989990";s:16:"discounted_price";s:10:"989.989990";s:4:"sold";s:1:"1";s:10:"date_added";s:10:"2224442480";s:13:"product_codes";s:5:"1,2,3";s:6:"values";s:38:"523456764345678976,9223372036854775807";s:15:"additional_info";s:81:"{"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}";s:9:"region_id";s:1:"1";s:15:"warranty_months";s:2:"24";s:14:"customer_score";s:8:"4.800000";s:10:"units_left";s:2:"28";s:7:"serials";s:13:"101003,101004";s:8:"category";s:11:"smartphones";s:11:"promo_score";s:8:"0.930000";s:11:"supplier_id";s:4:"5001";s:8:"batch_no";s:2:"78";s:5:"flags";s:5:"1,3,7";}}}i:10;a:2:{s:8:"sphinxql";s:14:"drop table tbl";s:14:"total_affected";i:0;}}}

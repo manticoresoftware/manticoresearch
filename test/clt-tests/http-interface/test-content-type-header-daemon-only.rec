@@ -1,0 +1,107 @@
+––– comment –––
+Test Content-Type headers for daemon-only HTTP endpoints (without Buddy)
+Verifies that all HTTP API endpoints return correct Content-Type headers
+––– block: ../base/start-searchd –––
+––– comment –––
+Create test table and prepare test data
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_ct; CREATE TABLE test_ct (title TEXT, year INT) min_infix_len='2';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_ct VALUES (1, 'Test Document', 2024);"
+––– output –––
+––– comment –––
+Create PQ table for percolate testing
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS pq_test; CREATE TABLE pq_test (title TEXT, year INT) type='pq';"
+––– output –––
+––– input –––
+echo '{"index":{"_index":"test_ct","_id":2}}
+{"title":"Bulk Document","year":2024}' > /tmp/bulk_test.ndjson
+––– output –––
+––– comment –––
+Test /sql endpoint - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/sql" -d "SELECT * FROM test_ct LIMIT 1" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /cli endpoint - should return application/json
+––– input –––
+curl -i -s "http://localhost:9308/cli?SELECT%20*%20FROM%20test_ct%20LIMIT%201" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /cli_json endpoint with GET and POST - should return application/json
+––– input –––
+curl -i -s "http://localhost:9308/cli_json?SELECT%20*%20FROM%20test_ct" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– input –––
+curl -i -s -X POST "http://localhost:9308/cli_json" -d "SELECT * FROM test_ct" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /search endpoint (Elasticsearch-compatible) - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/search" -d '{"index":"test_ct","query":{"match_all":{}}}' 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /insert endpoint - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/insert" -d '{"index":"test_ct","id":100,"doc":{"title":"Insert Test","year":2024}}' 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /replace endpoint - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/replace" -d '{"index":"test_ct","id":100,"doc":{"title":"Replace Test","year":2025}}' 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /update endpoint - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/update" -d '{"index":"test_ct","id":100,"doc":{"year":2026}}' 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /delete endpoint - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/delete" -d '{"index":"test_ct","id":100}' 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /bulk and /_bulk endpoints - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/bulk" -H "Content-Type: application/x-ndjson" --data-binary @/tmp/bulk_test.ndjson 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– input –––
+curl -i -s -X POST "http://localhost:9308/_bulk" -H "Content-Type: application/x-ndjson" --data-binary @/tmp/bulk_test.ndjson 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /index.html - should return text/html
+––– input –––
+curl -i -s "http://localhost:9308/index.html" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: text/html; charset=UTF-8
+––– comment –––
+Test / root endpoint - should return application/json
+––– input –––
+curl -i -s "http://localhost:9308/" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /pq/<table>/doc endpoint (add PQ rule) - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/pq/pq_test/doc" -d '{"query":{"match":{"title":"test"}}}' 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /pq/<table>/search endpoint (percolate query) - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/pq/pq_test/search" -d '{"query":{"percolate":{"document":{"title":"test document"}}}}' 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8

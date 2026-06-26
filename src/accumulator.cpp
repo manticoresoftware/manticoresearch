@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -37,15 +37,15 @@ ReplicationCommand_t* RtAccum_t::AddCommand ( ReplCmd_e eCmd, CSphString sIndex,
 	return m_dCmd.Last().get();
 }
 
-void RtAccum_t::SetupDict ( const RtIndex_i* pIndex, const DictRefPtr_c& pDict, bool bKeywordDict )
+void RtAccum_t::SetupDict ( const RtIndex_i* pIndex, const DictRefPtr_c& pDict, DictFormat_e eDictFormat )
 {
-	if ( pIndex == m_pIndex && pDict.Ptr() == m_pRefDict && bKeywordDict == m_bKeywordDict )
+	if ( pIndex == m_pIndex && pDict.Ptr() == m_pRefDict && eDictFormat == m_eDictFormat )
 		return;
 
-	m_bKeywordDict = bKeywordDict;
+	m_eDictFormat = eDictFormat;
 	m_pRefDict = pDict.Ptr();
 	m_pDict = GetStatelessDict ( pDict );
-	if ( m_bKeywordDict )
+	if ( IsKeywordDict() )
 	{
 		m_pDict = m_pDictRt = sphCreateRtKeywordsDictionaryWrapper ( m_pDict, pIndex->NeedStoreWordID() );
 	}
@@ -53,7 +53,7 @@ void RtAccum_t::SetupDict ( const RtIndex_i* pIndex, const DictRefPtr_c& pDict, 
 
 void RtAccum_t::ResetDict()
 {
-	assert ( !m_bKeywordDict || m_pDictRt );
+	assert ( !IsKeywordDict() || m_pDictRt );
 	if ( m_pDictRt )
 		m_pDictRt->ResetKeywords();
 
@@ -70,38 +70,343 @@ int RtAccum_t::GetPackedLen() const
 	return m_dPackedKeywords.IsEmpty() ? m_pDictRt->GetPackedLen() : m_dPackedKeywords.GetLength();
 }
 
+static inline bool IsEarlierHit ( const CSphWordHit & a, const CSphWordHit & b, int iWordCmp )
+{
+	return ( iWordCmp < 0 )
+		|| ( iWordCmp == 0 && a.m_tRowID < b.m_tRowID )
+		|| ( iWordCmp == 0 && a.m_tRowID == b.m_tRowID && HITMAN::GetPosWithField ( a.m_uWordPos ) < HITMAN::GetPosWithField ( b.m_uWordPos ) );
+}
+
 
 void RtAccum_t::Sort()
 {
 	TRACE_CONN ( "conn", "RtAccum_t::Sort" );
-	if ( !m_bKeywordDict )
+	switch ( m_eDictFormat )
+	{
+	case DictFormat_e::CRC:
 		m_dAccum.Sort ( Lesser ( [] ( const CSphWordHit& a, const CSphWordHit& b )
 		{
 			return 	( a.m_uWordID<b.m_uWordID ) ||
 				( a.m_uWordID==b.m_uWordID && a.m_tRowID<b.m_tRowID ) ||
 				( a.m_uWordID==b.m_uWordID && a.m_tRowID==b.m_tRowID && HITMAN::GetPosWithField ( a.m_uWordPos )<HITMAN::GetPosWithField ( b.m_uWordPos ) );
 		}));
+		return;
+
+	case DictFormat_e::KEYWORDS_V2:
+		assert ( m_pDictRt );
+		{
+			const BYTE * pPackedKeywords = GetPackedKeywords();
+			m_dAccum.Sort ( Lesser ( [pPackedKeywords] ( const CSphWordHit & a, const CSphWordHit & b )
+			{
+				ByteBlob_t tA = GetPackedKeywordV2 ( pPackedKeywords + a.m_uWordID );
+				ByteBlob_t tB = GetPackedKeywordV2 ( pPackedKeywords + b.m_uWordID );
+				int iCmp = sphDictCmpStrictly ( (const char *)tA.first, tA.second, (const char *)tB.first, tB.second );
+				return IsEarlierHit ( a, b, iCmp );
+			}));
+		}
+		return;
+
+	case DictFormat_e::KEYWORDS:
+		assert ( m_pDictRt );
+		{
+			const BYTE * pPackedKeywords = GetPackedKeywords();
+			m_dAccum.Sort ( Lesser ( [pPackedKeywords] ( const CSphWordHit & a, const CSphWordHit & b )
+			{
+				ByteBlob_t tA = GetPackedKeywordLegacy ( pPackedKeywords + a.m_uWordID );
+				ByteBlob_t tB = GetPackedKeywordLegacy ( pPackedKeywords + b.m_uWordID );
+				int iCmp = sphDictCmpStrictly ( (const char *)tA.first, tA.second, (const char *)tB.first, tB.second );
+				return IsEarlierHit ( a, b, iCmp );
+			}));
+		}
+		return;
+	}
+
+	assert ( 0 && "unknown dict format" );
+}
+
+
+static bool RepackBlob ( const CSphColumnInfo & tAttr, const CSphColumnInfo & tBlobLoc, int iBlobAttr, const CSphRowitem * pRow, const BYTE * pBlobPool, std::unique_ptr<BlobRowBuilder_i> & pBlobWriter, CSphString & sError )
+{
+	SphAttr_t tBlobRowOffset = sphGetRowAttr ( pRow, tBlobLoc.m_tLocator );
+	const BYTE * pBlobRow = pBlobPool + tBlobRowOffset;
+	ByteBlob_t tBlob = sphGetBlobAttr ( pBlobRow, tAttr.m_tLocator );
+
+	BlobAttrInput_e eInput = BlobAttrInput_e::RAW_BYTES;
+	if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
+		eInput = BlobAttrInput_e::MVA_DWORD;
+	else if ( tAttr.m_eAttrType==SPH_ATTR_INT64SET )
+		eInput = BlobAttrInput_e::MVA_INT64;
+
+	return pBlobWriter->SetAttr ( iBlobAttr, tBlob.first, tBlob.second, eInput, sError );
+}
+
+
+static bool StoreEmbeddings ( const CSphSchema & tSchema, int iAttr, int iBlobAttr, int iColumnarAttr, DocstoreDoc_t & tDoc, std::unique_ptr<BlobRowBuilder_i> & pNewBlobBuilder, std::unique_ptr<ColumnarBuilderRT_i> & pNewColumnarBuilder, const IntVec_t & dDocstoreRemap, const std::vector<float> & dEmbedding, CSphVector<int64_t> & dTmp, CSphString & sError )
+{
+	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
+
+	dTmp.Resize ( dEmbedding.size() );
+	ARRAY_FOREACH ( iEmb, dTmp )
+		dTmp[iEmb] = sphF2DW ( dEmbedding[iEmb] );
+
+	if ( tAttr.IsColumnar() )
+		pNewColumnarBuilder->SetAttr ( iColumnarAttr, dTmp.Begin(), dTmp.GetLength() );
 	else
 	{
-		assert ( m_pDictRt );
-		m_dAccum.Sort ( Lesser ( [pPackedKeywords = GetPackedKeywords()] ( const CSphWordHit& a, const CSphWordHit& b )
-		{
-			const BYTE* pPackedA = pPackedKeywords + a.m_uWordID;
-			const BYTE* pPackedB = pPackedKeywords + b.m_uWordID;
-			int iCmp = sphDictCmpStrictly ( (const char*)pPackedA + 1, *pPackedA, (const char*)pPackedB + 1, *pPackedB );
-			return ( iCmp < 0 ) || ( iCmp == 0 && a.m_tRowID < b.m_tRowID ) || ( iCmp == 0 && a.m_tRowID == b.m_tRowID && HITMAN::GetPosWithField ( a.m_uWordPos ) < HITMAN::GetPosWithField ( b.m_uWordPos ) );
-		}));
+		if ( !pNewBlobBuilder->SetAttr ( iBlobAttr, (const BYTE*)dTmp.Begin(), dTmp.GetLengthBytes(), BlobAttrInput_e::MVA_INT64, sError ) )
+			return false;
 	}
+
+	if ( tAttr.IsStored() )
+	{
+		int iId = dDocstoreRemap[iAttr];
+		tDoc.m_dFields[iId].Resize ( dEmbedding.size()*sizeof(DWORD) );
+		const BYTE * pStart = tDoc.m_dFields[iId].Begin();
+		for ( auto i : dEmbedding )
+		{
+			*(DWORD*)pStart = sphF2DW(i);
+			pStart += sizeof(DWORD);
+		}
+	}
+
+	return true;
 }
+
+
+bool RtAccum_t::RebuildStoragesForEmbeddings ( RowID_t tRowID, CSphRowitem * pRow, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::unique_ptr<BlobRowBuilder_i> & pNewBlobBuilder, std::unique_ptr<ColumnarBuilderRT_i> & pNewColumnarBuilder, std::unique_ptr<DocstoreRT_i> & pNewDocstoreBuilder, CSphVector<ScopedTypedIterator_t> & dAllIterators, const IntVec_t & dDocstoreRemap, const CSphColumnInfo * pBlobLoc, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, CSphVector<int64_t> & dTmp, CSphString & sError )
+{
+	int iBlobAttr = 0;
+	int iColumnarAttr = 0;
+	int iAttrWithModel = 0;
+	DocstoreDoc_t tDoc;
+
+	// fetch all fields and attributes without model from docstore (they will not be modified)
+	if ( pNewDocstoreBuilder )
+		tDoc = m_pDocstore->GetDoc ( tRowID, nullptr, -1, false );
+
+	assert(m_pIndex);
+	const CSphSchema & tSchema = m_pIndex->GetInternalSchema();
+
+	ARRAY_FOREACH ( i, dAttrsWithModels )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+		const AttrWithModel_t & tAttrWithModel = dAttrsWithModels[i];
+		bool bStoreGenerated = false;
+
+		if ( tAttrWithModel.m_pModel )
+		{
+			assert ( m_pEmbeddingsSrc );
+			bStoreGenerated = m_pEmbeddingsSrc->IsDefault ( tRowID, iAttrWithModel );
+		}
+
+		if ( bStoreGenerated )
+		{
+			if ( !StoreEmbeddings ( tSchema, i, iBlobAttr, iColumnarAttr, tDoc, pNewBlobBuilder, pNewColumnarBuilder, dDocstoreRemap, dAllEmbeddings[i][tRowID], dTmp, sError ) )
+				return false;
+		}
+		else
+		{
+			if ( pNewBlobBuilder && !tAttr.IsColumnar() && sphIsBlobAttr(tAttr) )
+			{
+				assert(pBlobLoc);
+				if ( !RepackBlob ( tAttr, *pBlobLoc, iBlobAttr, pRow, m_dBlobs.Begin(), pNewBlobBuilder, sError ) )
+					return false;
+			}
+
+			if ( pNewColumnarBuilder && tAttr.IsColumnar() )
+			{
+				auto & tIt = dAllIterators[iColumnarAttr];
+				SetColumnarAttr ( iColumnarAttr, tIt.second, pNewColumnarBuilder.get(), tIt.first, tRowID, dTmp );
+			}
+		}
+
+		if ( sphIsBlobAttr(tAttr) )
+			iBlobAttr++;
+
+		if ( tAttr.IsColumnar() )
+			iColumnarAttr++;
+
+		if ( tAttrWithModel.m_pModel )
+			iAttrWithModel++;
+	}
+
+	if ( pNewBlobBuilder )
+	{
+		assert(pBlobLoc);
+		sphSetRowAttr ( pRow, pBlobLoc->m_tLocator, pNewBlobBuilder->Flush().first );
+	}
+
+	if ( pNewDocstoreBuilder )
+		pNewDocstoreBuilder->AddDoc ( tRowID, tDoc );
+
+	return true;
+}
+
+
+bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, CSphString & sError )
+{
+	const AttrWithModel_t & tAttrWithModel = dAttrsWithModels[iAttr];
+	if ( !tAttrWithModel.m_pModel )
+		return true;
+
+	assert(m_pIndex);
+	const auto & tAttr = m_pIndex->GetInternalSchema().GetAttr(iAttr);
+
+	std::vector<std::vector<float>> & dEmbeddingsForAttr = dAllEmbeddings[iAttr];
+	std::vector<std::string_view> dTexts;
+	DWORD uNumSkipped = 0;
+	IntVec_t dResultIds(m_uAccumDocs);
+	for ( RowID_t tRowID = 0; tRowID < m_uAccumDocs; ++tRowID )
+	{
+		if ( !m_pEmbeddingsSrc || !m_pEmbeddingsSrc->Has ( tRowID, iAttrWithModel ) )
+		{
+			sError.SetSprintf ( "Error generating embeddings for attribute '%s': missing source text in transaction", tAttr.m_sName.cstr() );
+			return false;
+		}
+
+		bool bDefault = m_pEmbeddingsSrc->IsDefault ( tRowID, iAttrWithModel );
+
+		if ( bDefault )
+		{
+			dResultIds[tRowID] = dTexts.size();
+			const auto & dConcat = m_pEmbeddingsSrc->Get ( tRowID, iAttrWithModel );
+			dTexts.push_back ( { dConcat.Begin(), (size_t)dConcat.GetLength() } );
+		}
+		else
+		{
+			dResultIds[tRowID] = -1;
+			uNumSkipped++;
+		}
+	}
+
+	std::string sErrorSTL;
+	std::vector<std::vector<float>> dEmbeddingsForAttrTmp;
+	if ( uNumSkipped!=m_uAccumDocs && !tAttrWithModel.m_pModel->Convert ( dTexts, uNumSkipped ? dEmbeddingsForAttrTmp : dEmbeddingsForAttr, sErrorSTL, GetEmbeddingsThreadsToUse() ) )
+	{
+		sError = sErrorSTL.c_str();
+		return false;
+	}
+
+	if ( uNumSkipped )
+	{
+		dEmbeddingsForAttr.resize ( dResultIds.GetLength() );
+		ARRAY_FOREACH ( i, dResultIds )
+		{
+			int iResultId = dResultIds[i];
+			if ( iResultId!=-1 )
+				dEmbeddingsForAttr[i] = dEmbeddingsForAttrTmp[iResultId];
+		}
+	}
+	else if ( dEmbeddingsForAttr.size()!=dResultIds.GetLength() )
+	{
+		sError = "Error generating embeddings";
+		return false;
+	}
+
+	return true;
+}
+
+
+bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVector<AttrWithModel_t> & dAttrsWithModels, CSphString & sError )
+{
+	if ( !pEmbeddings )
+		return true;
+
+	assert(m_pIndex);
+	const CSphSchema & tSchema = m_pIndex->GetInternalSchema();
+
+	// we need to rebuild our blobs/columnar storage (to replace empty data with fetched floatvectors), but they are immutable by design
+	// so we'll have to rebuild the blobs/columnar storage fully
+	const CSphColumnInfo * pBlobLoc = tSchema.GetAttr ( sphGetBlobLocatorName() );
+	bool bRebuildColumnar = false;
+	bool bRebuildBlobs = false;
+	bool bRebuildDocstore = false;
+	IntVec_t dDocstoreRemap;
+	dDocstoreRemap.Resize ( dAttrsWithModels.GetLength() );
+	dDocstoreRemap.Fill(-1);
+	int iNumColumnarAttrs = 0;
+	ARRAY_FOREACH ( i, dAttrsWithModels )
+	{
+		auto & tAttr = tSchema.GetAttr(i);
+		bool bColumnar = tAttr.IsColumnar();
+		iNumColumnarAttrs += bColumnar;
+
+		if ( !dAttrsWithModels[i].m_pModel )
+			continue;
+
+		assert ( tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR );
+		bRebuildColumnar |= bColumnar;
+		bRebuildBlobs |= !bColumnar;
+		bRebuildDocstore |= tAttr.IsStored();
+
+		dDocstoreRemap[i] = m_pDocstore ? ((DocstoreBuilder_i*)m_pDocstore.get())->GetFieldId ( tAttr.m_sName, DOCSTORE_ATTR ) : -1;
+	}
+
+	CSphTightVector<BYTE> dNewBlobPool;
+	std::unique_ptr<BlobRowBuilder_i> pNewBlobBuilder = bRebuildBlobs ? sphCreateBlobRowBuilder ( tSchema, dNewBlobPool ) : nullptr;
+	std::unique_ptr<ColumnarBuilderRT_i> pNewColumnarBuilder = bRebuildColumnar ? CreateColumnarBuilderRT(tSchema) : nullptr;
+	std::unique_ptr<ColumnarRT_i> pColumnar = bRebuildColumnar ? CreateLightColumnarRT ( tSchema, m_pColumnarBuilder.get() ) : nullptr;
+	CSphVector<ScopedTypedIterator_t> dAllIterators;
+	if ( bRebuildColumnar )
+		dAllIterators = CreateAllColumnarIterators ( pColumnar.get(), tSchema );
+	else
+		dAllIterators.Resize(iNumColumnarAttrs);
+
+	std::unique_ptr<DocstoreRT_i> pNewDocstoreBuilder;
+	if ( bRebuildDocstore )
+	{
+		pNewDocstoreBuilder = CreateDocstoreRT();
+		SetupDocstoreFields ( *pNewDocstoreBuilder, tSchema );
+	}
+
+	// 1st pass - generate all embeddings for each attribute
+	int iRowSize = tSchema.GetRowSize();
+	int iAttrWithModel = 0;
+	std::vector<std::vector<std::vector<float>>> dAllEmbeddings;
+	dAllEmbeddings.resize ( dAttrsWithModels.GetLength() );
+	ARRAY_FOREACH ( i, dAttrsWithModels )
+	{
+		if ( !GenerateEmbeddings( i, iAttrWithModel, dAttrsWithModels, dAllEmbeddings, sError ) )
+			return false;
+
+		if ( dAttrsWithModels[i].m_pModel )
+			iAttrWithModel++;
+	}
+
+	// 2nd pass - rebuild attribute storages
+	std::vector<float> dEmbedding;
+	CSphVector<int64_t> dTmp;
+	CSphRowitem * pRow = m_dAccumRows.Begin();
+	for ( RowID_t tRowID = 0; tRowID < m_uAccumDocs; ++tRowID, pRow += iRowSize )
+		if ( !RebuildStoragesForEmbeddings ( tRowID, pRow, dAttrsWithModels, pNewBlobBuilder, pNewColumnarBuilder, pNewDocstoreBuilder, dAllIterators, dDocstoreRemap, pBlobLoc, dAllEmbeddings, dTmp, sError ) )
+			return false;
+
+	if ( bRebuildBlobs )
+	{
+		m_pBlobWriter = std::move(pNewBlobBuilder);
+		m_dBlobs.SwapData(dNewBlobPool);
+	}
+
+	if ( bRebuildColumnar )
+		m_pColumnarBuilder = std::move(pNewColumnarBuilder);
+
+	if ( bRebuildDocstore )
+		m_pDocstore = std::move(pNewDocstoreBuilder);
+
+	return true;
+}
+
 
 void RtAccum_t::CleanupPart()
 {
+	ResetPreparedForCommit();
 	m_dAccumRows.Resize ( 0 );
 	m_dBlobs.Resize ( 0 );
 	m_pColumnarBuilder.reset();
 	m_dPerDocHitsCount.Resize ( 0 );
 	m_dAccum.Resize ( 0 );
 	m_pDocstore.reset();
+	m_pEmbeddingsSrc.reset();
 
 	ResetDict();
 	ResetRowID();
@@ -122,6 +427,10 @@ void RtAccum_t::Cleanup()
 	m_dCmd.Reset();
 }
 
+void RtAccum_t::CleanReplicated()
+{
+	m_tCmdReplicated = ReplicatedCommand_t();
+}
 
 void RtAccum_t::SetupDocstore()
 {
@@ -155,6 +464,12 @@ bool RtAccum_t::SetupDocstore ( const RtIndex_i& tIndex, CSphString& sError )
 }
 
 
+[[nodiscard]] bool RtAccum_t::IsRtTrxCommand() const noexcept
+{
+	return ( m_dCmd.GetLength () && m_dCmd[0]->m_eCommand==ReplCmd_e::RT_TRX );
+}
+
+
 [[nodiscard]] bool RtAccum_t::IsUpdateCommand() const noexcept
 {
 	return ( m_dCmd.GetLength () &&
@@ -172,9 +487,169 @@ static void ResetTailHit ( CSphWordHit * pHit )
 		pHit->m_uWordPos = HITMAN::GetPosWithField ( pHit->m_uWordPos );
 }
 
+
+static const char * FetchStringFromDoc ( int iAttr, const InsertDocData_c & tDoc, const ISphSchema & tSchema )
+{
+	const char ** ppStr = tDoc.m_dStrings.Begin();
+	int iStrAttr = 0;
+
+	for ( int i=0; i < tSchema.GetAttrsCount(); ++i )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+
+		if ( tAttr.m_eAttrType!=SPH_ATTR_STRING )
+			continue;
+
+		if ( iAttr==i )
+			return ppStr[iStrAttr];
+
+		iStrAttr++;
+	}
+
+	return nullptr;
+}
+
+
+static CSphVector<char> ConcatFromFields ( const InsertDocData_c & tDoc, const AttrWithModel_t & tAttr, const ISphSchema & tSchema )
+{
+	CSphVector<char> dTmp;
+	ARRAY_FOREACH ( i, tAttr.m_dFrom )
+	{
+		auto tFrom = tAttr.m_dFrom[i];
+		int iAttrFieldId = tFrom.first;
+		VecTraits_T<const char> dSrc;
+		if ( tFrom.second )
+			dSrc = { tDoc.m_dFields[iAttrFieldId].Begin(), tDoc.m_dFields[iAttrFieldId].GetLength() };
+		else
+		{
+			const char * szString = FetchStringFromDoc ( iAttrFieldId, tDoc, tSchema );
+			dSrc = { szString, (int64_t)( szString ? strlen(szString) : 0 ) };
+		}
+
+		int iOldSize = dTmp.GetLength();
+		int iOffset = iOldSize + ( iOldSize ? 1 : 0 );
+		dTmp.Resize ( dSrc.GetLength() + iOffset );
+		if ( iOldSize )
+			dTmp[iOldSize] = ' ';
+
+		memcpy ( dTmp.Begin() + iOffset, dSrc.Begin(), dSrc.GetLength() );
+	}
+
+	return dTmp;
+}
+
+
+static bool IsDefaultEmbedding ( const InsertDocData_c & tDoc, const CSphColumnInfo & tAttr, int & iMva )
+{
+	// float_vector shares the same compact storage stream as MVAs in InsertDocData_c,
+	// so we must advance the cursor (iMva) for every MVA-backed schema attr to keep it aligned.
+	if ( !IsMvaAttr ( tAttr.m_eAttrType ) )
+		return false;
+
+	int iNumValues = 0;
+	bool bDefault = false;
+	const int64_t * pMva = tDoc.GetMVA ( iMva );
+	std::tie ( iNumValues, bDefault ) = tDoc.ReadMVALength ( pMva );
+	iMva += iNumValues + 1;
+	return bDefault;
+}
+
+
+void RtAccum_t::FetchEmbeddingsSrc ( InsertDocData_c & tDoc, const CSphVector<AttrWithModel_t> & dAttrsWithModels )
+{
+	if ( !m_pEmbeddingsSrc )
+	{
+		int iAttrsWithModels = dAttrsWithModels.count_of ( []( auto & tData ){ return !!tData.m_pModel; } );
+		m_pEmbeddingsSrc = std::make_unique<EmbeddingsSrc_c>(iAttrsWithModels);
+	}
+
+	assert(m_pIndex);
+	const CSphSchema & tSchema = m_pIndex->GetInternalSchema();
+
+	int iAttrWithModel = 0;
+	int iMva = 0;
+	ARRAY_FOREACH ( i, dAttrsWithModels )
+	{
+		bool bDefault = IsDefaultEmbedding ( tDoc, tSchema.GetAttr(i), iMva );
+
+		const AttrWithModel_t & tAttrWithModel = dAttrsWithModels[i];
+		if ( !tAttrWithModel.m_pModel )
+			continue;
+
+		auto dConcat = ConcatFromFields ( tDoc, tAttrWithModel, tSchema );
+		m_pEmbeddingsSrc->Add ( iAttrWithModel, dConcat, bDefault );
+		iAttrWithModel++;
+	}
+}
+
+
+static DWORD * SetupFieldLengths ( const RtIndex_i * pIndex, const CSphSchema & tSchema, CSphVector<DWORD> & dFieldLengths )
+{
+	if ( !pIndex->GetSettings().m_bIndexFieldLens )
+		return nullptr;
+
+	dFieldLengths.Resize ( tSchema.GetAttrId_LastFieldLen() - tSchema.GetAttrId_FirstFieldLen() + 1 );
+	dFieldLengths.ZeroVec();
+	return dFieldLengths.Begin();
+}
+
+
+static const DocstoreBuilder_i::Doc_t * StoreFieldLengths ( CSphRowitem * pRow, std::unique_ptr<ColumnarBuilderRT_i> & pColumnarBuilder, const CSphVector<DWORD> & dFieldLengths, const CSphSchema & tSchema, DocstoreBuilder_i::Doc_t & dUpdatedStoredDoc, const DocstoreBuilder_i::Doc_t * pStoredDoc )
+{
+	const DocstoreBuilder_i::Doc_t * pUpdatedStoredDoc = pStoredDoc;
+
+	int iNumStoredAttrs = 0;
+	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
+		if ( tSchema.GetAttr(i).IsStored() )
+			iNumStoredAttrs++;
+
+	bool bInitialized = false;
+	int iColumnar = 0;
+	int iStored = 0;
+	int iFirstFieldLen = tSchema.GetAttrId_FirstFieldLen();	
+	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+
+		if ( i>=iFirstFieldLen && i<=tSchema.GetAttrId_LastFieldLen() )
+		{
+			assert ( tAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT );
+			DWORD & uData = dFieldLengths[i-iFirstFieldLen];
+			if ( tAttr.IsColumnar() )
+				pColumnarBuilder->SetAttr ( iColumnar, uData );
+			else
+				sphSetRowAttr ( pRow, tAttr.m_tLocator, uData );
+
+			if ( tAttr.IsStored() )
+			{
+				if ( !bInitialized )
+				{
+					dUpdatedStoredDoc = *pStoredDoc;
+					pUpdatedStoredDoc = &dUpdatedStoredDoc;
+					bInitialized = true;
+				}
+
+				// we assume that stored attrs come last in the schema
+				int iTotalStored = dUpdatedStoredDoc.m_dFields.GetLength();
+				dUpdatedStoredDoc.m_dFields[iTotalStored - iNumStoredAttrs + iStored] = { (BYTE*)&uData, sizeof(DWORD) };
+			}
+		}
+
+		if ( tAttr.IsColumnar() )
+			iColumnar++;
+
+		if ( tAttr.IsStored() )
+			iStored++;
+	}
+
+	return pUpdatedStoredDoc;
+}
+
+
 void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t* pStoredDoc )
 {
 	MEMORY ( MEM_RT_ACCUM );
+	ResetPreparedForCommit();
 
 	// FIXME? what happens on mixed insert/replace?
 	m_bReplace = bReplace;
@@ -207,13 +682,11 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 	int iColumnarAttr = 0;
 	int iMva = 0;
 
-	CSphVector<int64_t> dTempKNN;
-
 	const char** ppStr = tDoc.m_dStrings.Begin();
 	const CSphSchema& tSchema = m_pIndex->GetInternalSchema();
 	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
 	{
-		const CSphColumnInfo& tColumn = tSchema.GetAttr ( i );
+		const CSphColumnInfo & tColumn = tSchema.GetAttr(i);
 
 		switch ( tColumn.m_eAttrType )
 		{
@@ -230,7 +703,7 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 				if ( tColumn.IsColumnar() )
 					m_pColumnarBuilder->SetAttr ( iColumnarAttr, dStr.first, dStr.second );
 				else
-					m_pBlobWriter->SetAttr ( iBlobAttr, dStr.first, dStr.second, sError );
+					m_pBlobWriter->SetAttr ( iBlobAttr, dStr.first, dStr.second, BlobAttrInput_e::RAW_BYTES, sError );
 			}
 			break;
 
@@ -244,21 +717,15 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 				std::tie ( iNumValues, bDefault ) = tDoc.ReadMVALength(pMva);
 				iMva += iNumValues + 1;
 
-				// fill default/missing float_vector+knn attributes with zeroes
-				if ( tColumn.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tColumn.IsIndexedKNN() && bDefault )
-				{
-					dTempKNN.Resize ( tColumn.m_tKNN.m_iDims );
-					dTempKNN.ZeroVec();
-					pMva = dTempKNN.Begin();
-					iNumValues = dTempKNN.GetLength(); 
-				}
-
 				if ( tColumn.IsColumnar() )
 					m_pColumnarBuilder->SetAttr ( iColumnarAttr, pMva, iNumValues );
 				else
-					m_pBlobWriter->SetAttr ( iBlobAttr, (const BYTE*)pMva, iNumValues * sizeof ( int64_t ), sError );
+					m_pBlobWriter->SetAttr ( iBlobAttr, (const BYTE*)pMva, iNumValues * sizeof ( int64_t ), BlobAttrInput_e::MVA_INT64, sError );
 			}
 			break;
+
+		case SPH_ATTR_TOKENCOUNT:
+			break; // skip for now, will be set later
 
 		default:
 			if ( tColumn.IsColumnar() )
@@ -281,16 +748,8 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 		sphSetRowAttr ( pRow, pBlobLoc->m_tLocator, m_pBlobWriter->Flush().first );
 	}
 
-	// handle index_field_lengths
-	DWORD* pFieldLens = nullptr;
-	if ( m_pIndex->GetSettings().m_bIndexFieldLens )
-	{
-		int iFirst = tSchema.GetAttrId_FirstFieldLen();
-		assert ( tSchema.GetAttr ( iFirst ).m_eAttrType == SPH_ATTR_TOKENCOUNT );
-		assert ( tSchema.GetAttr ( iFirst + tSchema.GetFieldsCount() - 1 ).m_eAttrType == SPH_ATTR_TOKENCOUNT );
-		pFieldLens = pRow + ( tSchema.GetAttr ( iFirst ).m_tLocator.m_iBitOffset / 32 );
-		memset ( pFieldLens, 0, sizeof ( int ) * tSchema.GetFieldsCount() ); // NOLINT
-	}
+	CSphVector<DWORD> dFieldLengths;
+	DWORD * pFieldLengths = SetupFieldLengths ( m_pIndex, tSchema, dFieldLengths );
 
 	// accumulate hits
 	int iHits = 0;
@@ -313,11 +772,11 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 				continue;
 
 			// update field lengths
-			if ( pFieldLens )
+			if ( pFieldLengths )
 			{
 				if ( HITMAN::GetField ( uFieldLastHit ) != HITMAN::GetField ( pHit->m_uWordPos ) )
 				{
-					pFieldLens[HITMAN::GetField ( uFieldLastHit )] += uFieldLastCount;
+					pFieldLengths[HITMAN::GetField ( uFieldLastHit )] += uFieldLastCount;
 					uFieldLastCount = 1;
 					uFieldLastHit = pHit->m_uWordPos;
 				}
@@ -340,11 +799,14 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 			m_dAccum.Add ( *pHit );
 			++iHits;
 		}
-		if ( pFieldLens && uFieldLastCount )
-		{
-			pFieldLens[HITMAN::GetField ( uFieldLastHit )] += uFieldLastCount;
-		}
+
+		if ( pFieldLengths && uFieldLastCount )
+			pFieldLengths [ HITMAN::GetField(uFieldLastHit) ] += uFieldLastCount;
 	}
+
+	DocstoreBuilder_i::Doc_t dUpdatedStoredDoc;
+	pStoredDoc = StoreFieldLengths ( pRow, m_pColumnarBuilder, dFieldLengths, tSchema, dUpdatedStoredDoc, pStoredDoc );
+
 	// make sure to get real count without duplicated hits
 	m_dPerDocHitsCount.Add ( iHits );
 
@@ -482,18 +944,26 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 				if ( iRowSize )
 					memcpy ( &m_dAccumRows[iDstRow * iRowSize], &m_dAccumRows[i * iRowSize], iRowSize * sizeof ( CSphRowitem ) );
 
+				m_dPerDocHitsCount[iDstRow] = m_dPerDocHitsCount[i];
+
 				// remove duplicate docstore
 				if ( m_pDocstore )
 					m_pDocstore->SwapRows ( iDstRow, i );
+
+				if ( m_pEmbeddingsSrc )
+					m_pEmbeddingsSrc->SwapRows ( iDstRow, i );
 			}
 			++iDstRow;
 		}
 	}
 
 	m_dAccumRows.Resize ( iDstRow * iRowSize );
+	m_dPerDocHitsCount.Resize ( iDstRow );
 	m_uAccumDocs = iDstRow;
 	if ( m_pDocstore )
 		m_pDocstore->DropTail ( iDstRow );
+	if ( m_pEmbeddingsSrc )
+		m_pEmbeddingsSrc->DropTail ( iDstRow );
 }
 
 
@@ -510,6 +980,7 @@ void RtAccum_t::GrabLastWarning ( CSphString& sWarning )
 void RtAccum_t::SetIndex ( RtIndex_i * pIndex )
 {
 	assert ( pIndex );
+	ResetPreparedForCommit();
 	m_iIndexGeneration = pIndex->GetAlterGeneration();
 	m_pIndex = pIndex;
 	m_pBlobWriter.reset();
@@ -540,6 +1011,7 @@ void RtAccum_t::ResetRowID()
 
 void RtAccum_t::LoadRtTrx ( ByteBlob_t tTrx, DWORD uVer )
 {
+	ResetPreparedForCommit();
 	MemoryReader_c tReader ( tTrx );
 	m_bReplace = !!tReader.GetVal<BYTE>();
 	tReader.GetVal ( m_uAccumDocs );
@@ -598,7 +1070,7 @@ void RtAccum_t::SaveRtTrx ( MemoryWriter_c& tWriter ) const
 	SaveArray ( m_dPerDocHitsCount, tWriter );
 
 	// packed keywords default length is 1 no need to pass that
-	int iLen = ( m_bKeywordDict && m_pDictRt->GetPackedLen() > 1 ? (int)m_pDictRt->GetPackedLen() : 0 );
+	int iLen = ( IsKeywordDict() && m_pDictRt->GetPackedLen() > 1 ? (int)m_pDictRt->GetPackedLen() : 0 );
 	tWriter.PutDword ( iLen );
 	if ( iLen )
 		tWriter.PutBytes ( m_pDictRt->GetPackedKeywords(), iLen );

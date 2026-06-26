@@ -6,7 +6,7 @@ on:
     paths:
       - 'manual/**'
     branches:
-      - master
+      - main
       - maintenance-release
       - manticore-*
 
@@ -14,6 +14,9 @@ env:
   DOCS_AUTOCOMMIT_TITLE: Docs_examples_update
 
 jobs:
+  check:
+    uses: ./.github/workflows/check_docs.yml
+    secrets: inherit
   commit_info:
     name: Commit info
     runs-on: ubuntu-22.04
@@ -27,6 +30,7 @@ jobs:
 
   docs_autocommit_check:
     name: Check for doc deployment autocommits
+    needs: [check]
     runs-on: ubuntu-22.04
     outputs:
       res: ${{ steps.check.outputs.res }}
@@ -44,7 +48,7 @@ jobs:
         shell: bash
     #    timeout-minutes: 30
     container:
-      image: manticoresearch/docs_autodeploy:latest
+      image: manticoresearch/docs_autodeploy_multi:latest
       env:
         CACHEB: "../cache"
         DOCKER_HOST: tcp://docker:2375/
@@ -56,6 +60,7 @@ jobs:
         DOCS_ERRORS_DIR: build/docs/
         DOCS_AUTOCOMMIT_TITLE: ${{ env.DOCS_AUTOCOMMIT_TITLE }}
         DOCS_EXAMPLES_FILEPATH: 'build/test/examples.txt'
+        GH_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
 
         CI_PROJECT_TITLE: dev
         CI_PROJECT_PATH: manticoresoftware/manticoresearch
@@ -67,9 +72,10 @@ jobs:
       - name: Install fresh git
         run: |
           echo 'APT::Key::Assert-Pubkey-Algo ">=rsa1024";' > /etc/apt/apt.conf.d/99weakkey-warning
+          apt-get update --allow-releaseinfo-change
           add-apt-repository -y ppa:git-core/ppa
-          apt -y update
-          apt install -y git
+          apt-get update
+          apt-get install -y git
     
       - name: Checkout
         uses: actions/checkout@v3.5.3
@@ -87,7 +93,8 @@ jobs:
           sh /Deploy/autoupdate.sh $DEPLOY_TARGET $COMMIT_DIR $DOCS_ERRORS_DIR
 
       - name: Upload artifact
+        if: always()
         uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
-          name: Docs error artifact
+          name: Docs deploy error artifact
           path: $DOCS_ERRORS_DIR

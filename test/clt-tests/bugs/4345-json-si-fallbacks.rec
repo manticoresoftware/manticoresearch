@@ -1,0 +1,125 @@
+––– comment –––
+Regression coverage for issue #4345:
+JSON secondary-index filter rewrites must not leak into no-iterator fallback paths.
+This file keeps the original filter-tree repro, plus fallback/control variants that share one daemon startup.
+––– block: ../base/start-searchd –––
+––– comment –––
+Original repro: filter tree on a disk chunk should still evaluate the JSON expression alias after fallback.
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL auto_optimize=0; DROP TABLE IF EXISTS gh4345_mini; CREATE TABLE gh4345_mini (id BIGINT, properties JSON secondary_index='1'); INSERT INTO gh4345_mini VALUES (1, '{\"loginName\":\"alpha\",\"subscriptions\":[{\"nextRenewal\":177300000}],\"channels\":[29]}'), (2, '{\"loginName\":\"alpha\",\"subscriptions\":[],\"channels\":[30]}'); FLUSH RAMCHUNK gh4345_mini;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE gh4345_mini STATUS LIKE 'disk_chunks';"
+––– output –––
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| disk_chunks   | 1     |
++---------------+-------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, ANY ( s.nextRenewal > 177274800 FOR s IN properties.subscriptions) AS p0, REGEX (properties.loginName, '(?i)visitor') AS p1, IN (properties.channels, 29) AS p2 FROM gh4345_mini;"
+––– output –––
++------+------+------+------+
+| id   | p0   | p1   | p2   |
++------+------+------+------+
+|    1 |    1 |    0 |    1 |
+|    2 |    0 |    0 |    0 |
++------+------+------+------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, properties.loginName, ANY ( s.nextRenewal > 177274800 FOR s IN properties.subscriptions) AS p0, REGEX (properties.loginName, '(?i)visitor') AS p1, IN (properties.channels, 29) AS p2 FROM gh4345_mini WHERE (p1 = 1 OR p0 = 1) LIMIT 0,5; SHOW META;"
+––– output –––
++------+----------------------+------+------+------+
+| id   | properties.loginName | p0   | p1   | p2   |
++------+----------------------+------+------+------+
+|    1 | alpha                |    1 |    0 |    1 |
++------+----------------------+------+------+------+
++----------------+-------+
+| Variable_name  | Value |
++----------------+-------+
+| total          | 1     |
+| total_found    | 1     |
+| total_relation | eq    |
+| time           | %{NUMBER}.%{NUMBER} |
++----------------+-------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, properties.loginName, ANY ( s.nextRenewal > 177274800 FOR s IN properties.subscriptions) AS p0, REGEX (properties.loginName, '(?i)visitor') AS p1, IN (properties.channels, 29) AS p2 FROM gh4345_mini WHERE (p1 = 1 OR p0 = 1) AND p2=1 LIMIT 0,5; SHOW META;"
+––– output –––
++------+----------------------+------+------+------+
+| id   | properties.loginName | p0   | p1   | p2   |
++------+----------------------+------+------+------+
+|    1 | alpha                |    1 |    0 |    1 |
++------+----------------------+------+------+------+
++----------------+-------+
+| Variable_name  | Value |
++----------------+-------+
+| total          | 1     |
+| total_found    | 1     |
+| total_relation | eq    |
+| time           | %{NUMBER}.%{NUMBER} |
++----------------+-------+
+––– comment –––
+Small table no-tree path: no iterator planning happens, but the JSON expression alias still has to match.
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL secondary_indexes=1; SELECT id, IN (properties.channels, 29) AS p2 FROM gh4345_mini WHERE p2=1 LIMIT 0,1;"
+––– output –––
++------+------+
+| id   | p2   |
++------+------+
+|    1 |    1 |
++------+------+
+––– comment –––
+Large no-tree path: with SI enabled this is the positive control, and with SI disabled it exercises fallback.
+––– input –––
+manticore-load --quiet --json --port=9306 --init="SET GLOBAL auto_optimize=0; DROP TABLE IF EXISTS gh4345_big_no_tree; CREATE TABLE gh4345_big_no_tree (id BIGINT, properties JSON secondary_index='1');" --load="INSERT INTO gh4345_big_no_tree (id,properties) VALUES (<increment>,'{\"loginName\":\"alpha\",\"subscriptions\":[],\"channels\":[29]}')" --batch-size=1000 --threads=2 --total=12000 > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO gh4345_big_no_tree VALUES (12001, '{\"loginName\":\"alpha\",\"subscriptions\":[],\"channels\":[30]}'); FLUSH RAMCHUNK gh4345_big_no_tree; SHOW TABLE gh4345_big_no_tree STATUS LIKE 'disk_chunks';"
+––– output –––
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| disk_chunks   | 1     |
++---------------+-------+
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL secondary_indexes=1; SELECT id, IN (properties.channels, 29) AS p2 FROM gh4345_big_no_tree WHERE p2=1 LIMIT 0,5; SHOW META;"
+––– output –––
++------+------+
+| id   | p2   |
++------+------+
+| %{NUMBER} |    1 |
+| %{NUMBER} |    1 |
+| %{NUMBER} |    1 |
+| %{NUMBER} |    1 |
+| %{NUMBER} |    1 |
++------+------+
++----------------+----------------------------------------------+
+| Variable_name  | Value                                        |
++----------------+----------------------------------------------+
+| total          | 5                                            |
+| total_found    | %{NUMBER}                                           |
+| total_relation | gte                                          |
+| time           | %{NUMBER}.%{NUMBER}                                        |
+| index          | properties['channels']:SecondaryIndex (100%) |
++----------------+----------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL secondary_indexes=0; SELECT id, IN (properties.channels, 29) AS p2 FROM gh4345_big_no_tree WHERE p2=1 LIMIT 0,1;"
+––– output –––
++------+------+
+| id   | p2   |
++------+------+
+| %{NUMBER} |    1 |
++------+------+
+––– comment –––
+Join preservation: fallback must undo only JSON SI rewrites and keep join-side filter removal.
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS gh4345_join_left; DROP TABLE IF EXISTS gh4345_join_right; CREATE TABLE gh4345_join_left (id BIGINT, properties JSON secondary_index='1'); CREATE TABLE gh4345_join_right (id BIGINT, left_id BIGINT, marker INT); INSERT INTO gh4345_join_left VALUES (1, '{\"channels\":[29]}'), (2, '{\"channels\":[30]}'); INSERT INTO gh4345_join_right VALUES (10, 1, 7), (11, 1, 8), (12, 2, 7); FLUSH RAMCHUNK gh4345_join_left; FLUSH RAMCHUNK gh4345_join_right;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL secondary_indexes=0; SELECT gh4345_join_left.id AS left_id, gh4345_join_right.marker AS marker, IN (properties.channels, 29) AS p2 FROM gh4345_join_left INNER JOIN gh4345_join_right ON gh4345_join_right.left_id = gh4345_join_left.id WHERE p2=1 AND gh4345_join_right.marker=7 ORDER BY left_id ASC;"
+––– output –––
++---------+--------+------+
+| left_id | marker | p2   |
++---------+--------+------+
+|       1 |      7 |    1 |
++---------+--------+------+

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -27,6 +27,7 @@ bool LoadExFunctions ();
 #include "sphinxutils.h"
 #include "searchdaemon.h"
 #include "timeout_queue.h"
+#include "auth/auth_proto_api.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES
@@ -80,6 +81,7 @@ enum AgentStats_e
 	eTimeoutsConnect,	///< number of time-outed connections
 	eConnectFailures,	///< failed to connect
 	eNetworkErrors,		///< network error
+	eWrongQuery,		///< bad query
 	eWrongReplies,		///< incomplete reply
 	eUnexpectedClose,	///< agent closed the connection
 	eNetworkCritical,		///< agent answered, but with warnings
@@ -217,8 +219,6 @@ struct AgentOptions_t
 	int m_iRetryCountMultiplier;
 };
 
-
-extern const char * sAgentStatsNames[(int)eMaxAgentStat + (int)ehMaxStat];
 using HostMetricsSnapshot_t = uint64_t[(int)eMaxAgentStat + (int)ehMaxStat];
 
 /// per-host dashboard
@@ -495,6 +495,8 @@ public:
 	LPKEY			m_pPollerTask = nullptr; ///< internal for poller. fixme! privatize?
 	volatile bool	m_bSuccess {false};	///< agent got processed, no need to retry
 
+	ApiKey_t m_tApiKey;
+
 public:
 	AgentConn_t () = default;
 
@@ -586,7 +588,7 @@ private:
 	void ScheduleCallbacks ();
 	void DisableWrite();
 
-	void BuildData ();
+	bool BuildData ();
 	size_t ReplyBufPlace () const;
 	void InitReplyBuf ( int iSize = 0 );
 	inline bool IsReplyHeader() const { return m_iReplySize<0; }
@@ -637,7 +639,7 @@ bool RunRemoteTask ( AgentConn_t* pConnection, RequestBuilder_i* pQuery, ReplyPa
 
 // simplified full task - schedule jobs, wait for complete, report num of succeeded
 // uses cooperated wait - i.e. yield instead of pause
-int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser, int iQueryRetry = -1, int iQueryDelay = -1 );
+int PerformRemoteTasks ( VectorAgentConn_t & dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser, int iQueryRetry = -1, int iQueryDelay = -1 );
 
 /////////////////////////////////////////////////////////////////////////////
 // DISTRIBUTED QUERIES
@@ -682,14 +684,45 @@ struct DistributedIndex_t : public ISphRefcountedMT
 	int GetAgentQueryTimeoutMs ( bool bRaw=false ) const;
 	void SetAgentConnectTimeoutMs ( int iAgentConnectTimeoutMs );
 	void SetAgentQueryTimeoutMs ( int iAgentQueryTimeoutMs );
-	DistributedIndex_t * Clone() const;
+	virtual IndexType_e GetType() const { return IndexType_e::DISTR; }
+	virtual DistributedIndex_t * Clone() const;
 
-private:
+protected:
 	~DistributedIndex_t() override;
 
 	int m_iAgentConnectTimeoutMs	= 0;	///< in msec, 0 means g_iAgentConnectTimeoutMs
 	int m_iAgentQueryTimeoutMs		= 0;	///< in msec, 0 means g_iAgentQueryTimeoutMs
 };
+
+struct ShardIndex_c : public DistributedIndex_t
+{
+	struct RouteTarget_t
+	{
+		CSphString				m_sName;
+		MultiAgentDescRefPtr_c	m_pAgent;
+		int						m_iOrderId = -1;
+		int						m_iRouteId = -1;
+		int64_t					m_iLocalIndexId = 0;
+		int						m_iLocalAlterGeneration = 0;
+		bool					m_bLocal = true;
+
+		bool IsLocal () const { return m_bLocal; }
+	};
+
+	CSphString				m_sIndexPath;
+	CSphSchema				m_tSchema;
+	CSphIndexSettings		m_tSettings;
+	CSphTokenizerSettings	m_tTokenizerSettings;
+	CSphDictSettings		m_tDictSettings;
+	CSphFieldFilterSettings	m_tFieldFilterSettings;
+	CSphVector<RouteTarget_t> m_dRouteTargets; // shard-only runtime order used for write routing
+
+	IndexType_e GetType() const override { return IndexType_e::SHARD; }
+	DistributedIndex_t * Clone() const override;
+};
+
+const ShardIndex_c * AsShard ( const DistributedIndex_t * pIndex );
+ShardIndex_c * AsShard ( DistributedIndex_t * pIndex );
 
 using DistributedIndexRefPtr_t = CSphRefcountedPtr<DistributedIndex_t>;
 using cDistributedIndexRefPtr_t = CSphRefcountedPtr<const DistributedIndex_t>;
@@ -703,18 +736,12 @@ inline cDistributedIndexRefPtr_t GetDistr ( const CSphString& sName )
 	return g_pDistIndexes->Get ( sName );
 }
 
-struct GuardedQueryStatContainer_t
-{
-	mutable RwLock_t m_tStatsLock;
-	std::unique_ptr<QueryStatContainer_i> m_tStats GUARDED_BY ( m_tStatsLock );
-};
-
-struct SearchdStats_t
+struct SearchdStats_t : public CommandStats_t
 {
 	DWORD					m_uStarted;
 	std::atomic<int64_t>	m_iConnections;
 	std::atomic<int64_t>	m_iMaxedOut;
-	std::array<std::atomic<int64_t>, SEARCHD_COMMAND_TOTAL>	m_iCommandCount;
+
 	std::atomic<int64_t>	m_iAgentConnect;
 	std::atomic<int64_t>	m_iAgentConnectTFO;
 	std::atomic<int64_t>	m_iAgentRetry;
@@ -731,17 +758,10 @@ struct SearchdStats_t
 	std::atomic<int64_t>	m_iDiskReads;		///< total read IO calls (fired by search queries)
 	std::atomic<int64_t>	m_iDiskReadBytes;	///< total read IO traffic
 	std::atomic<int64_t>	m_iDiskReadTime;	///< total read IO time
-
-	std::atomic<int64_t>	m_iPredictedTime;	///< total agent predicted query time
-	std::atomic<int64_t>	m_iAgentPredictedTime;	///< total agent predicted query time
-
-	enum EDETAILS : BYTE { eUpdate, eReplace, eSearch, eTotal };
-	std::array<GuardedQueryStatContainer_t, eTotal> m_dDetailedStats;
 };
 
 void InitSearchdStats ();
-void StatCountCommandDetails ( SearchdStats_t::EDETAILS eCmd, uint64_t uFoundRows, uint64_t tmStart );
-void FormatCmdStats ( VectorLike & dStatus, const char * szPrefix, SearchdStats_t::EDETAILS eCmd );
+void FormatCmdStats ( const CommandStats_t & tStats, const char * szPrefix, CommandStats_t::EDETAILS eCmd, VectorLike & dStatus );
 
 SearchdStats_t&	gStats();
 
@@ -793,23 +813,26 @@ bool sphNBSockEof ( int iSock );
 class SphinxqlRequestBuilder_c : public RequestBuilder_i
 {
 public:
-			SphinxqlRequestBuilder_c ( Str_t sQuery, const SqlStmt_t & tStmt );
+			SphinxqlRequestBuilder_c ( Str_t sQuery, const SqlStmt_t & tStmt, DWORD uApiFlags );
 	void	BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final;
 
 protected:
 	const Str_t m_sBegin;
 	const Str_t m_sEnd;
+	DWORD		m_uApiFlags = 0;
 };
 
 class SphinxqlReplyParser_c : public ReplyParser_i
 {
 public:
 	explicit SphinxqlReplyParser_c ( int * pUpd, int * pWarns );
+	SphinxqlReplyParser_c ( int * pUpd, int * pWarns, CSphString * pWarning );
 	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final;
 
 protected:
 	int * m_pUpdated;
 	int * m_pWarns;
+	CSphString * m_pWarning;
 };
 
 void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery );

@@ -1,15 +1,18 @@
-name: Nightly memleak tests
-run-name: 🌙 Nightly memleak tests ${{ github.sha }}
+name: Nightly valgrind checks
+run-name: 🌙 Nightly valgrind checks ${{ github.sha }}
 
 on:
   schedule:
     - cron: '00 20 * * *'
+  workflow_dispatch:
   push:
+    branches:
+      - '**'
     paths:
       - '.github/workflows/nightly_memleaks.yml'    
       
   
-# cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
+# cancels the previous workflow run when a new one appears in the same branch (e.g. main or a PR's branch)
 concurrency:
   group: nightly_memleaks_${{ github.ref }}
   cancel-in-progress: true

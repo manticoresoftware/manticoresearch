@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2024-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2024-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -30,6 +30,10 @@ static CSphString DetermineLocalTimeZoneName ( CSphString & sWarning )
 {
 	CSphString sPrefix = "Error resolving local time zone from";
 	CSphString sTimeZoneFile = "/etc/localtime";
+	const char * szTZDefault = getenv("TZDEFAULT");
+	if ( szTZDefault )
+		sTimeZoneFile = szTZDefault;
+
 	const char * szTZ = getenv("TZ");
 	if ( szTZ )
 	{
@@ -38,7 +42,8 @@ static CSphString DetermineLocalTimeZoneName ( CSphString & sWarning )
 		if ( *szTZ==':' )
 			++szTZ;
 
-		sTimeZoneFile = szTZ;
+		if ( *szTZ )
+			sTimeZoneFile = szTZ;
 	}
 	else
 		sPrefix.SetSprintf ( "%s '%s'", sPrefix.cstr(), sTimeZoneFile.cstr() );
@@ -53,37 +58,44 @@ static CSphString DetermineLocalTimeZoneName ( CSphString & sWarning )
 	else
 		sPrefix.SetSprintf ( "%s and time zone dir '%s'", sPrefix.cstr(), sTimeZoneDir.cstr() );
 
-	CSphString sResolved;
-	if ( IsSymlink(sTimeZoneFile) && !ResolveSymlink ( sTimeZoneFile, sResolved ) )
+	if ( !sTimeZoneDir.Ends("/") )
+		sTimeZoneDir.SetSprintf ( "%s/", sTimeZoneDir.cstr() );
+
+	CSphString sTimeZonePath;
+	if ( IsPathAbsolute(sTimeZoneFile) )
+		sTimeZonePath = sTimeZoneFile;
+	else
+		sTimeZonePath.SetSprintf ( "%s%s", sTimeZoneDir.cstr(), sTimeZoneFile.cstr() );
+
+	bool bExists = false, bSymlink = false;
+	std::tie ( bExists, bSymlink ) = IsSymlink(sTimeZonePath);
+	if ( !bExists )
 	{
 		sWarning = sPrefix;
 		return "UTC";
 	}
 
-	sTimeZoneFile = sResolved;
-
-	if ( IsPathAbsolute(sTimeZoneFile) )
+	if ( bSymlink )
 	{
-		if ( !sphFileExists(sTimeZoneFile) )
+		CSphString sResolved;
+		if ( !ResolveSymlink ( sTimeZonePath, sResolved ) )
 		{
 			sWarning = sPrefix;
 			return "UTC";
 		}
 
-		if ( sTimeZoneFile.Begins ( sTimeZoneDir.cstr() ) )
-			return sTimeZoneFile.SubString ( sTimeZoneDir.Length(), sTimeZoneFile.Length()-sTimeZoneDir.Length() );
+		sTimeZonePath = sResolved;
+	}
 
+	sTimeZonePath = RealPath(sTimeZonePath);
+	if ( !sphFileExists(sTimeZonePath) )
+	{
 		sWarning = sPrefix;
 		return "UTC";
 	}
 
-	if ( !sTimeZoneDir.Ends("/") )
-		sTimeZoneDir.SetSprintf ( "%s/", sTimeZoneDir.cstr() );
-
-	CSphString sCheck;
-	sCheck.SetSprintf ( "%s%s", sTimeZoneDir.cstr(), sTimeZoneFile.cstr() );
-	if ( sphFileExists(sCheck) )
-		return sTimeZoneFile;
+	if ( sTimeZonePath.Begins ( sTimeZoneDir.cstr() ) )
+		return sTimeZonePath.SubString ( sTimeZoneDir.Length(), sTimeZonePath.Length()-sTimeZoneDir.Length() );
 
 	sWarning = sPrefix;
 	return "UTC";
@@ -127,7 +139,6 @@ static void SetTimeZoneLocal ( StrVec_t & dWarnings )
 	}
 #endif
 
-	g_hTimeZoneLocal = cctz::local_time_zone();
 	g_hTimeZone = g_hTimeZoneLocal;
 	CheckForUTC();
 }
@@ -141,13 +152,22 @@ void InitTimeZones ( StrVec_t & dWarnings )
 }
 
 
-bool SetTimeZone ( const char * szTZ, CSphString & sError )
+bool LoadTimeZone ( const char * szTZ, cctz::time_zone & tTZ, CSphString & sError )
 {
-	if ( !cctz::load_time_zone ( szTZ, &g_hTimeZone ) )
+	if ( !cctz::load_time_zone ( szTZ, &tTZ ) )
 	{
 		sError.SetSprintf ( "Unable to set time zone '%s'", szTZ );
 		return false;
 	}
+
+	return true;
+}
+
+
+bool SetTimeZone ( const char * szTZ, CSphString & sError )
+{
+	if ( !LoadTimeZone ( szTZ, g_hTimeZone, sError ) )
+		return false;
 
 	g_bTimeZoneSet = !g_hTimeZone.name().empty() && strcasecmp ( g_hTimeZone.name().c_str(), "UTC" );
 
@@ -186,6 +206,12 @@ cctz::civil_second ConvertTime ( time_t tTime )
 }
 
 
+cctz::civil_second ConvertTime ( time_t tTime, const cctz::time_zone & tTZ )
+{
+	return cctz::convert ( std::chrono::system_clock::from_time_t(tTime), tTZ );
+}
+
+
 cctz::civil_second ConvertTimeLocal ( time_t tTime )
 {
 	return cctz::convert ( std::chrono::system_clock::from_time_t(tTime), g_hTimeZoneLocal );
@@ -201,6 +227,12 @@ cctz::civil_second ConvertTimeUTC ( time_t tTime )
 time_t ConvertTime ( const cctz::civil_second & tCS )
 {
 	return std::chrono::system_clock::to_time_t ( cctz::convert ( tCS, g_hTimeZone ) );
+}
+
+
+time_t ConvertTime ( const cctz::civil_second & tCS, const cctz::time_zone & tTZ )
+{
+	return std::chrono::system_clock::to_time_t ( cctz::convert ( tCS, tTZ ) );
 }
 
 
@@ -264,6 +296,13 @@ int	CalcNumYearDays ( const cctz::civil_second & tTime )
 CSphString FormatTime ( time_t tTime, const char * szFmt )
 {
 	std::string sRes = cctz::format ( szFmt, std::chrono::system_clock::from_time_t(tTime), g_hTimeZone );
+	return sRes.c_str();
+}
+
+
+CSphString FormatTime ( time_t tTime, const char * szFmt, const cctz::time_zone & tTZ )
+{
+	std::string sRes = cctz::format ( szFmt, std::chrono::system_clock::from_time_t(tTime), tTZ );
 	return sRes.c_str();
 }
 

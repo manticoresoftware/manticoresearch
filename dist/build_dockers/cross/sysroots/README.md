@@ -9,7 +9,7 @@ Place there content of this filder.
 
 Place there archive with boost sources. Archive may be fetched, for example, with command
 ```bash
-wget https://boostorg.jfrog.io/artifactory/main/release/1.78.0/source/boost_1_78_0.tar.gz
+wget https://archives.boost.io/release/1.80.0/source/boost_1_80_0.tar.gz
 ```
 
 Make all `build_*.sh` executable:

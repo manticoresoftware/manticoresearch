@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -116,6 +116,7 @@ public:
 	void					SetupFlags ( const CSphSourceSettings & tSettings, bool bPQ, StrVec_t * pWarnings );
 	bool					HasStoredFields() const;
 	bool					HasStoredAttrs() const;
+	int						GetColumnarAttrsCount() const;
 	bool					HasColumnarAttrs() const;
 	bool					HasNonColumnarAttrs() const;
 	bool					HasKNNAttrs() const;

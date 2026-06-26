@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -11,6 +11,8 @@
 //
 
 #include <gtest/gtest.h>
+
+#include <cfloat>
 
 #include "std/ints.h"
 #include "std/num_conv.h"
@@ -243,6 +245,29 @@ TEST ( functions, sph_Sprintf_to_builder )
 	ASSERT_STREQ ( sBuf.cstr(), "{1 -1 100,2 -2 200} 999.500, -1.400932 999.005" );
 }
 
+TEST ( functions, sph_Sprintf_float_max )
+{
+	using namespace sph;
+
+	constexpr int iMaxFloatStr = 64;
+	char sExpected[iMaxFloatStr];
+	snprintf ( sExpected, sizeof(sExpected), "%f", FLT_MAX );
+
+	char sBuf[iMaxFloatStr];
+	memset ( sBuf, 0, sizeof(sBuf) );
+	sph::Sprintf ( sBuf, "%f", FLT_MAX );
+	EXPECT_STREQ ( sBuf, sExpected );
+
+	StringBuilder_c tBuilder;
+	Sprintf ( tBuilder, "%f", FLT_MAX );
+	EXPECT_STREQ ( tBuilder.cstr(), sExpected );
+
+	tBuilder.Clear();
+	tBuilder << FLT_MAX;
+	EXPECT_STREQ ( tBuilder.cstr(), sExpected );
+
+}
+
 TEST ( functions, builder_sprintf_formatters )
 {
 	using namespace sph;
@@ -286,6 +311,15 @@ TEST ( functions, builder_sprintf_formatters )
 	sBuf.Clear();
 	sBuf.Sprintf ( "%U", (uint64_t)4294967295UL );
 	EXPECT_STREQ ( sBuf.cstr(), "4294967295" );
+
+	// %X - hexadecimal uint64
+	sBuf.Clear();
+	sBuf.Sprintf ( "%X", 4294967295ULL );
+	EXPECT_STREQ ( sBuf.cstr(), "ffffffff" );
+
+	sBuf.Clear();
+	sBuf.Sprintf ( "%X", 0xFFFFFFFFFFFFFF00ULL );
+	EXPECT_STREQ ( sBuf.cstr(), "ffffffffffffff00" );
 
 	// %D - fixed-point signed 64 bit
 	sBuf.Clear();

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -12,7 +12,7 @@
 
 #include "sphinxexpr.h"
 #include "sphinxutils.h"
-#include "sphinxquery.h"
+#include "sphinxquery/sphinxquery.h"
 #include "sphinxrt.h"
 #include "sphinxint.h"
 #include "threadutils.h"
@@ -24,6 +24,7 @@
 #include "histogram.h"
 #include "secondaryindex.h"
 #include "secondarylib.h"
+#include "sphinxquery/xqparser.h"
 #include <cmath>
 
 #define SNOWBALL 0

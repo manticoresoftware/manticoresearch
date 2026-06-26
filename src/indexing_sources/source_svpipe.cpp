@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -145,7 +145,7 @@ bool CSphSource_BaseSV::SetupPipe ( const CSphConfigSection & hSource, FILE * pP
 {
 	m_pFP = pPipe;
 	m_tSchema.Reset ();
-	bool bWordDict = ( m_pDict && m_pDict->GetSettings().m_bWordDict );
+	bool bWordDict = ( m_pDict && m_pDict->GetSettings().IsWordDict() );
 
 	if ( !SetupSchema ( hSource, bWordDict, sError ) )
 		return false;
@@ -253,7 +253,7 @@ bool CSphSource_BaseSV::Connect ( CSphString & sError )
 	// source settings have been updated after ::Setup
 	for ( int i = 0; i < m_tSchema.GetFieldsCount(); i++ )
 	{
-		ESphWordpart eWordpart = GetWordpart ( m_tSchema.GetFieldName(i), m_pDict && m_pDict->GetSettings().m_bWordDict );
+		ESphWordpart eWordpart = GetWordpart ( m_tSchema.GetFieldName(i), m_pDict && m_pDict->GetSettings().IsWordDict() );
 		m_tSchema.SetFieldWordpart ( i, eWordpart );
 	}
 

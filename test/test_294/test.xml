@@ -15,6 +15,7 @@ searchd
 	<searchd_settings/>
 	data_dir = <data_path/>
 	binlog_path =
+	thread_stack = 4096K
 }
 </config>
 

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -17,6 +17,7 @@
 
 #include "sphinxint.h"
 #include "docstore.h"
+#include "knnmisc.h"
 
 struct StoredQueryDesc_t
 {
@@ -46,6 +47,9 @@ enum class ReplCmd_e {
 	UPDATE_API,
 	UPDATE_QL,
 	UPDATE_JSON,
+	AUTH_ADD,
+	AUTH_DELETE,
+	CLUSTER_ALTER_UPDATE_USER,
 
 	TOTAL
 };
@@ -63,6 +67,7 @@ struct ReplicationCommand_t
 	WORD 					m_uVersion = 0;
 	CSphString				m_sIndex; // move to accumulator
 	CSphString				m_sCluster;
+	int64_t					m_iClusterEpoch = 0;
 
 	// add
 	std::unique_ptr<StoredQuery_i> m_pStored;
@@ -84,10 +89,29 @@ struct ReplicationCommand_t
 	const CSphQuery * m_pUpdateCond = nullptr;
 };
 
+struct ReplicatedCommand_t
+{
+	ReplCmd_e m_eCommand { ReplCmd_e::TOTAL };
+	CSphString				m_sIndex;
+	CSphString				m_sCluster;
+
+	// index TID after operation for cluster binlog
+	int64_t					m_iTID = -1;
+
+	ReplicatedCommand_t & operator = ( const ReplicationCommand_t & tOther );
+};
+
 std::unique_ptr<ReplicationCommand_t> MakeReplicationCommand ( ReplCmd_e eCommand, CSphString sIndex, CSphString sCluster = CSphString() );
+
+struct AttrWithModel_t
+{
+	knn::TextToEmbeddings_i *	m_pModel = nullptr;
+	CSphVector<std::pair<int,bool>> m_dFrom;
+};
 
 class RtIndex_i;
 class ColumnarBuilderRT_i;
+class TableEmbeddings_c;
 
 /// indexing accumulator
 class RtAccum_t
@@ -101,17 +125,22 @@ public:
 	CSphTightVector<BYTE>			m_dBlobs;
 	CSphVector<DWORD>				m_dPerDocHitsCount;
 	CSphVector<std::unique_ptr<ReplicationCommand_t>> m_dCmd;
+	ReplicatedCommand_t				m_tCmdReplicated;
 
-	bool						m_bKeywordDict = false;
+	DictFormat_e				m_eDictFormat = DictFormat_e::CRC;
 	DictRefPtr_c				m_pDict;
 	const void *				m_pRefDict = nullptr; // not owned, used only for comparing via ==
 
 public:
-	void			SetupDict ( const RtIndex_i * pIndex, const DictRefPtr_c& pDict, bool bKeywordDict );
+	bool			IsKeywordDict() const { return m_eDictFormat!=DictFormat_e::CRC; }
+	void			SetupDict ( const RtIndex_i * pIndex, const DictRefPtr_c& pDict, DictFormat_e eDictFormat );
 	void			Sort();
+	bool			FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVector<AttrWithModel_t> & dAttrsWithModels, CSphString & sError );
+	void			FetchEmbeddingsSrc ( InsertDocData_c & tDoc, const CSphVector<AttrWithModel_t> & dAttrsWithModels );
 
 	void			CleanupPart();
 	void			Cleanup();
+	void			CleanReplicated();
 
 	void			AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t * pStoredDoc );
 	void			CleanupDuplicates ( int iRowSize );
@@ -137,17 +166,23 @@ public:
 
 	bool			SetupDocstore ( const RtIndex_i & tIndex, CSphString & sError );
 	bool			IsReplace () const { return m_bReplace; }
+	bool			IsPreparedForCommit () const noexcept { return m_bPreparedForCommit; }
+	void			MarkPreparedForCommit () noexcept { m_bPreparedForCommit = true; }
+	void			ResetPreparedForCommit () noexcept { m_bPreparedForCommit = false; }
 
 	[[nodiscard]] bool IsClusterCommand () const noexcept;
+	[[nodiscard]] bool IsRtTrxCommand () const noexcept;
 	[[nodiscard]] bool IsUpdateCommand ( ) const noexcept;
 
 private:
 	bool								m_bReplace = false;		///< insert or replace mode (affects CleanupDuplicates() behavior)
+	bool								m_bPreparedForCommit = false;
 
 	ISphRtDictWraperRefPtr_c			m_pDictRt;
 	std::unique_ptr<BlobRowBuilder_i>	m_pBlobWriter;
 	std::unique_ptr<DocstoreRT_i>		m_pDocstore;
 	std::unique_ptr<ColumnarBuilderRT_i> m_pColumnarBuilder;
+	std::unique_ptr<EmbeddingsSrc_c>	m_pEmbeddingsSrc;
 	RowID_t								m_tNextRowID = 0;
 	CSphFixedVector<BYTE>				m_dPackedKeywords { 0 };
 	uint64_t							m_uSchemaHash = 0;
@@ -160,6 +195,9 @@ private:
 
 	void			ResetDict();
 	void			SetupDocstore();
+
+	bool			RebuildStoragesForEmbeddings ( RowID_t tRowID, CSphRowitem * pRow, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::unique_ptr<BlobRowBuilder_i> & pNewBlobBuilder, std::unique_ptr<ColumnarBuilderRT_i> & pNewColumnarBuilder, std::unique_ptr<DocstoreRT_i> & pNewDocstoreBuilder, CSphVector<ScopedTypedIterator_t> & dAllIterators, const IntVec_t & dDocstoreRemap, const CSphColumnInfo * pBlobLoc, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, CSphVector<int64_t> & dTmp, CSphString & sError );
+	bool			GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, CSphString & sError );
 
 	// defined in sphinxrt.cpp
 	friend RtSegment_t* CreateSegment ( RtAccum_t*, int, ESphHitless, const VecTraits_T<SphWordID_t>&, CSphString& );

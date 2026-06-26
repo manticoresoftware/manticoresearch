@@ -3,7 +3,7 @@
 # file included from all in_*.sh in context of target system docker
 
 # boost_library.sh defines $boostver and $boostlibs, something like this:
-# boostver=1_78_0
+# boostver=1_80_0
 # boostlibs="--with-context --with-system --with-fiber --with-program_options --with-stacktrace  --with-filesystem"
 
 . /sysroot/boost_library.sh

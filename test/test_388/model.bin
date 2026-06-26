@@ -1,0 +1,65 @@
+a:1:{i:0;a:1:{i:0;a:12:{i:0;s:12:"HTTP default";i:1;s:111:"[{
+"columns":[{"connid":{"type":"long long"}}],
+"data":[
+{"connid":2}
+],
+"total":1,
+"error":"",
+"warning":""
+}]";i:2;s:111:"[{
+"columns":[{"connid":{"type":"long long"}}],
+"data":[
+{"connid":2}
+],
+"total":1,
+"error":"",
+"warning":""
+}]";i:3;s:8:"HTTP 1.0";i:4;s:111:"[{
+"columns":[{"connid":{"type":"long long"}}],
+"data":[
+{"connid":2}
+],
+"total":1,
+"error":"",
+"warning":""
+}]";i:5;s:111:"[{
+"columns":[{"connid":{"type":"long long"}}],
+"data":[
+{"connid":3}
+],
+"total":1,
+"error":"",
+"warning":""
+}]";i:6;s:24:"HTTP 1.0 with keep-alive";i:7;s:111:"[{
+"columns":[{"connid":{"type":"long long"}}],
+"data":[
+{"connid":4}
+],
+"total":1,
+"error":"",
+"warning":""
+}]";i:8;s:111:"[{
+"columns":[{"connid":{"type":"long long"}}],
+"data":[
+{"connid":4}
+],
+"total":1,
+"error":"",
+"warning":""
+}]";i:9;s:19:"HTTP 1.1 with close";i:10;s:111:"[{
+"columns":[{"connid":{"type":"long long"}}],
+"data":[
+{"connid":4}
+],
+"total":1,
+"error":"",
+"warning":""
+}]";i:11;s:111:"[{
+"columns":[{"connid":{"type":"long long"}}],
+"data":[
+{"connid":5}
+],
+"total":1,
+"error":"",
+"warning":""
+}]";}}}

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>hybrid search vs scroll</name>
+
+<skip_indexer/>
+
+<requires>
+<knn/>
+<force-rt/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	create table t (title text, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='L2');
+	insert into t (id,title,vec) values (1,'machine learning basics',(0.10,0.10,0.10,0.10));
+	insert into t (id,title,vec) values (2,'deep learning for machine vision',(0.15,0.12,0.08,0.11));
+	insert into t (id,title,vec) values (3,'machine learning algorithms',(0.20,0.15,0.12,0.09));
+	insert into t (id,title,vec) values (4,'cooking recipes italian',(0.11,0.09,0.13,0.10));
+	insert into t (id,title,vec) values (5,'travel guide europe',(0.18,0.11,0.10,0.12));
+	insert into t (id,title,vec) values (6,'machine learning in production',(5.00,5.00,5.00,5.00));
+	flush ramchunk t;
+
+	select id, hybrid_score() from t where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) order by hybrid_score() desc, id asc option fusion_method='rrf';
+
+	select id, hybrid_score() from t where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) order by hybrid_score() desc, id asc limit 2 option fusion_method='rrf';
+	show scroll;
+	select id, hybrid_score() from t where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) order by hybrid_score() desc, id asc limit 2 option fusion_method='rrf', scroll='eyJvcmRlcl9ieV9zdHIiOiJoeWJyaWRfc2NvcmUoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6Imh5YnJpZF9zY29yZSgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjAuMDMxNTEzNjQ2MjQ1MDAyNzQ3LCJ0eXBlIjoiZmxvYXQifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6MywidHlwZSI6ImludCJ9XX0=';
+	show scroll;
+	select id, hybrid_score() from t where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) order by hybrid_score() desc, id asc limit 2 option fusion_method='rrf', scroll='eyJvcmRlcl9ieV9zdHIiOiJoeWJyaWRfc2NvcmUoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6Imh5YnJpZF9zY29yZSgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjAuMDMxMDI0NTMyMzkyNjIxMDQsInR5cGUiOiJmbG9hdCJ9LHsiYXR0ciI6ImlkIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjo2LCJ0eXBlIjoiaW50In1dfQ==';
+	drop table t;
+</sphinxql>
+</queries>
+</test>

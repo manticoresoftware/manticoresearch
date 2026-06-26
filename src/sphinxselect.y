@@ -15,6 +15,7 @@
 %pure-parser
 %error-verbose
 
+%token	END 0 "$end"
 %token SEL_TOKEN
 %token SEL_ID
 %token SEL_AS

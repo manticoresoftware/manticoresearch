@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>many multivalues</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+<var name="line" /><repeat count="1250"><var name="line" delimiter=" ">local='l1' local='l1' local='l1' local='l1'</var></repeat>
+<sphinxql>
+create table l1;
+create table dstr type='distributed'<line/>;
+show tables;
+drop table dstr;
+drop table l1;
+</sphinxql>
+</queries>
+
+</test>

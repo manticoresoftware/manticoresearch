@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>indexer with huge interleaved docids</name>
+<requires>
+<non-rt/>
+<python/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source test_pipe {
+    type = csvpipe
+    csvpipe_command = <python/> <this_test/>/bug.py
+    csvpipe_field = h
+}
+
+table test {
+    path = <data_path/>/test
+    source = test_pipe
+}
+</config>
+
+<queries>
+<sphinxql>
+select * from test;
+</sphinxql>
+</queries>
+
+</test>

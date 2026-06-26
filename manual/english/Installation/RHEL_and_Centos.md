@@ -1,0 +1,58 @@
+# Installing Manticore packages on RedHat and CentOS
+
+### Supported releases:
+
+* CentOS 8, RHEL 8, Oracle Linux 8, CentOS Stream 8
+* Amazon Linux 2
+* CentOS 9, RHEL 9, AlmaLinux 9
+* AlmaLinux 10, other RHEL 10-based distributions
+
+### YUM repository
+
+The simplest method to install Manticore on RedHat/CentOS is by using our YUM repository:
+
+Install the repository:
+```bash
+sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
+```
+
+Then install Manticore Search:
+```bash
+sudo yum install manticore
+```
+
+If you are upgrading to Manticore 6 or newer from an older version, it is recommended to remove your old packages first to avoid conflicts caused by the updated package structure:
+
+```bash
+sudo yum remove manticore*
+```
+
+It won't remove your data and configuration file.
+
+###### Development packages
+If you prefer "Nightly" (development) versions do:
+
+```bash
+sudo yum -y install https://repo.manticoresearch.com/manticore-dev-repo.noarch.rpm && \
+sudo yum -y install manticore
+```
+
+### Standalone RPM packages
+To download standalone RPM files from the Manticore repository, follow the instructions available at https://manticoresearch.com/install/.
+
+### More packages you may need
+#### For indexer
+If you plan to use [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) to create tables from external sources, you'll need to make sure you have installed corresponding client libraries in order to make available of indexing sources you want. The line below will install all of them at once; feel free to use it as is, or to reduce it to install only libraries you need (for only mysql sources - just `mysql-libs` should be enough, and unixODBC is not necessary).
+
+```bash
+sudo yum install mysql-libs postgresql-libs expat unixODBC
+```
+
+In CentOS Stream 8 you may need to run:
+
+```
+dnf install mariadb-connector-c
+```
+
+if you get error `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?` trying to build a plain table from MySQL.
+<!-- proofread -->

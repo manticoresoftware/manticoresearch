@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -16,7 +16,7 @@
 #include <libstemmer.h>
 #endif
 
-#include "sphinxstem.h"
+#include "stem/sphinxstem.h"
 
 #include "word_forms.h"
 #include "tokenizer/multiform_container.h"
@@ -25,6 +25,8 @@
 #include "sphinxint.h"
 #include "sphinxjson.h"
 #include "tokenizer/tok_internals.h"
+
+#include <sys/stat.h>
 
 CSphString g_sLemmatizerBase;
 
@@ -52,7 +54,7 @@ enum class EMORPH : int {
 
 void ConcatReportStrings ( const CSphTightVector<CSphString> & dStrings, CSphString & sReport )
 {
-	sReport = StrVec2Str ( dStrings, " " );
+	sReport = Vec2Str ( dStrings, " " );
 }
 
 
@@ -343,6 +345,10 @@ int TemplateDictTraits_c::AddMorph ( int iMorph )
 
 void TemplateDictTraits_c::ApplyStemmers ( BYTE* pWord ) const
 {
+	const int iTokenBytes = (int)strnlen ( (const char*)pWord, SPH_LEGACY_TOKEN_BYTES+1 );
+	if ( ShouldBypassMorphology ( GetSettings().GetDictFormat(), iTokenBytes ) )
+		return;
+
 	// try wordforms
 	if ( m_pWordforms && m_pWordforms->ToNormalForm ( pWord, true, m_bDisableWordforms ) )
 		return;
@@ -372,13 +378,14 @@ uint64_t TemplateDictTraits_c::GetSettingsFNV() const
 	if ( m_pStopwords )
 		uHash = sphFNV64 ( m_pStopwords, m_iStopwords * sizeof ( *m_pStopwords ), uHash );
 
-	uHash = sphFNV64 ( &m_tSettings.m_iMinStemmingLen, sizeof ( m_tSettings.m_iMinStemmingLen ), uHash );
+	uHash = sphFNV64 ( m_tSettings.m_iMinStemmingLen, uHash );
 	DWORD uFlags = 0;
-	if ( m_tSettings.m_bWordDict )
+	if ( m_tSettings.IsWordDict() )
 		uFlags |= 1 << 0;
 	if ( m_tSettings.m_bStopwordsUnstemmed )
 		uFlags |= 1 << 2;
-	uHash = sphFNV64 ( &uFlags, sizeof ( uFlags ), uHash );
+	uHash = sphFNV64 ( uFlags, uHash );
+	uHash = sphFNV64 ( static_cast<int> ( m_tSettings.GetDictFormat() ), uHash );
 
 	uHash = sphFNV64 ( m_dMorph.Begin(), m_dMorph.GetLength() * sizeof ( m_dMorph[0] ), uHash );
 #if WITH_STEMMER
@@ -438,7 +445,7 @@ void TemplateDictTraits_c::LoadStopwords ( const char * sFiles, FilenameBuilder_
 
 	m_dSWFileInfos.Resize ( 0 );
 
-	TokenizerRefPtr_c pTokenizerClone = pTokenizer->Clone ( SPH_CLONE_INDEX );
+	TokenizerRefPtr_c pTokenizerClone = pTokenizer->Clone ( SPH_CLONE_INDEX, SPH_LEGACY_TOKEN_BYTES );
 	CSphFixedVector<char> dList ( 1 + (int)strlen ( sFiles ) );
 	strcpy ( dList.Begin(), sFiles ); // NOLINT
 
@@ -545,24 +552,13 @@ void TemplateDictTraits_c::LoadStopwords ( const char * sFiles, FilenameBuilder_
 	dStop.Uniq();
 
 	// store IDs
-	if ( dStop.GetLength() )
-	{
-		m_dStopwordContainer.Reset ( dStop.GetLength() );
-		ARRAY_FOREACH ( i, dStop )
-			m_dStopwordContainer[i] = dStop[i];
-
-		m_iStopwords = m_dStopwordContainer.GetLength();
-		m_pStopwords = m_dStopwordContainer.Begin();
-	}
+	LoadStopwords ( dStop );
 }
 
 
 void TemplateDictTraits_c::LoadStopwords ( const CSphVector<SphWordID_t>& dStopwords )
 {
-	m_dStopwordContainer.Reset ( dStopwords.GetLength() );
-	ARRAY_FOREACH ( i, dStopwords )
-		m_dStopwordContainer[i] = dStopwords[i];
-
+	m_dStopwordContainer.CopyFrom ( dStopwords );
 	m_iStopwords = m_dStopwordContainer.GetLength();
 	m_pStopwords = m_dStopwordContainer.Begin();
 }
@@ -626,7 +622,7 @@ CSphWordforms* TemplateDictTraits_c::GetWordformContainer ( const CSphVector<CSp
 	return pContainer;
 }
 
-void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffer, int iLen, const TokenizerRefPtr_c& pTokenizer, const char* szFile, const CSphVector<int>& dBlended, int iFileId )
+void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffer, int iLen, const TokenizerRefPtr_c& pTokenizer, const char* szFile, const CSphVector<int>& dBlended, int iFileId, StrVec_t & dDst2Norm )
 {
 	StrVec_t dTokens;
 
@@ -847,18 +843,7 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 		// let's add destination form to regular wordform to keep destination from being stemmed
 		// FIXME!!! handle multiple destination tokens and ~flag for wordforms
 		if ( !bAfterMorphology && dDestTokens.GetLength() == 1 && !pContainer->m_hHash.Exists ( dDestTokens[0].m_sForm ) )
-		{
-			CSphStoredNF tStoredForm;
-			tStoredForm.m_sWord = dDestTokens[0].m_sForm;
-			tStoredForm.m_bAfterMorphology = bAfterMorphology;
-			pContainer->m_bHavePostMorphNF |= bAfterMorphology;
-			if ( !pContainer->m_dNormalForms.GetLength()
-				 || pContainer->m_dNormalForms.Last().m_sWord != dDestTokens[0].m_sForm
-				 || pContainer->m_dNormalForms.Last().m_bAfterMorphology != bAfterMorphology )
-				pContainer->m_dNormalForms.Add ( tStoredForm );
-
-			pContainer->m_hHash.Add ( pContainer->m_dNormalForms.GetLength() - 1, dDestTokens[0].m_sForm );
-		}
+			dDst2Norm.Add ( dDestTokens[0].m_sForm );
 	} else
 	{
 		if ( bAfterMorphology )
@@ -907,6 +892,29 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 	}
 }
 
+void TemplateDictTraits_c::AddDst2Norm ( CSphWordforms* pContainer, StrVec_t & dDst2Norm )
+{
+	dDst2Norm.Sort ( Lesser ( [] ( const CSphString & sA, const CSphString & sB ) { return sA<sB; } ) );
+	for ( const CSphString & sDst : dDst2Norm )
+	{
+		// let's add destination form to regular wordform to keep destination from being stemmed
+		// but only not user already set
+		if ( pContainer->m_hHash.Exists ( sDst ) )
+			continue;
+
+		if ( !pContainer->m_dNormalForms.GetLength()
+			|| pContainer->m_dNormalForms.Last().m_sWord!=sDst
+			|| pContainer->m_dNormalForms.Last().m_bAfterMorphology )
+		{
+			CSphStoredNF tStoredForm;
+			tStoredForm.m_sWord = sDst;
+			tStoredForm.m_bAfterMorphology = false;
+			pContainer->m_dNormalForms.Add ( tStoredForm );
+		}
+
+		pContainer->m_hHash.Add ( pContainer->m_dNormalForms.GetLength()-1, sDst );
+	}
+}
 
 CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CSphSavedFile>& dFileInfos, const StrVec_t* pEmbeddedWordforms, const TokenizerRefPtr_c& pTokenizer, const char* szIndex )
 {
@@ -916,7 +924,7 @@ CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CS
 	pContainer->m_uTokenizerFNV = pTokenizer->GetSettingsFNV();
 	pContainer->m_sIndexName = szIndex;
 
-	TokenizerRefPtr_c pMyTokenizer = pTokenizer->Clone ( SPH_CLONE_INDEX );
+	TokenizerRefPtr_c pMyTokenizer = pTokenizer->Clone ( SPH_CLONE_INDEX, SPH_LEGACY_TOKEN_BYTES );
 	const CSphTokenizerSettings& tSettings = pMyTokenizer->GetSettings();
 
 	CSphVector<int> dBlended;
@@ -958,11 +966,15 @@ CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CS
 
 		CSphString sAllFiles;
 		ConcatReportStrings ( dFilenames, sAllFiles );
+		StrVec_t dDst2Norm;
 
 		for ( auto& sWordForm : ( *pEmbeddedWordforms ) )
-			AddWordform ( pContainer.get(), const_cast<char*> ( sWordForm.cstr() ), sWordForm.Length(), pMyTokenizer, sAllFiles.cstr(), dBlended, -1 );
+			AddWordform ( pContainer.get(), const_cast<char*> ( sWordForm.cstr() ), sWordForm.Length(), pMyTokenizer, sAllFiles.cstr(), dBlended, -1, dDst2Norm );
+
+		AddDst2Norm ( pContainer.get(), dDst2Norm );
 	} else
 	{
+		StrVec_t dDst2Norm;
 		char sBuffer[6 * SPH_MAX_WORD_LEN + 512]; // enough to hold 2 UTF-8 words, plus some whitespace overhead
 
 		ARRAY_FOREACH ( i, dFileInfos )
@@ -978,8 +990,10 @@ CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CS
 
 			int iLen;
 			while ( ( iLen = rdWordforms.GetLine ( sBuffer, sizeof ( sBuffer ) ) ) >= 0 )
-				AddWordform ( pContainer.get(), sBuffer, iLen, pMyTokenizer, szFile, dBlended, i );
+				AddWordform ( pContainer.get(), sBuffer, iLen, pMyTokenizer, szFile, dBlended, i, dDst2Norm );
 		}
+
+		AddDst2Norm ( pContainer.get(), dDst2Norm );
 	}
 
 	return pContainer.release();

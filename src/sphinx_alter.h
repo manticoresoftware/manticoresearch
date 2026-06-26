@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -44,6 +44,8 @@ struct AttrAddRemoveCtx_t
 	DWORD			m_uFlags;
 	AttrEngine_e	m_eEngine;
 	knn::IndexSettings_t m_tKNN;
+	knn::ModelSettings_t m_tKNNModel;
+	CSphString		m_sKNNFrom;
 };
 
 // common add/remove attribute/field code for both RT and plain indexes

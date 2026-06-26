@@ -57,6 +57,14 @@ index test1
 	source			= test1
 	path			= <data_path/>/test1
 }
+
+index rt1
+{
+	type = rt
+	path = <data_path/>/rt1
+	rt_field = title
+	rt_attr_json = data
+}
 </config>
 
 <db_create>
@@ -108,5 +116,11 @@ select id i, json_data as j from test where j is not null;
 select * from test1;
 select * from test1 where j2.1416 is not null;
 select *, j2.1416, j2.1416.1 from test1;
+
+<!-- extra long double at the result set -->
+insert into rt1 (id, data) values(1, '{"abc":1,"def":"8e80"}');
+insert into rt1 (id, data) values(10, '{"a": 8000000000000000000000000000000000000000000000000000000000000000}');
+select * from rt1 order by id asc;
+
 </sphinxql></queries>
 </test>

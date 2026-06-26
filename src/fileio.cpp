@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -12,6 +12,7 @@
 
 #include "fileio.h"
 #include "sphinxint.h"
+#include <sys/stat.h>
 
 #define SPH_READ_NOPROGRESS_CHUNK (32768*1024)
 
@@ -338,7 +339,7 @@ int CSphReader::GetByte()
 }
 
 
-void CSphReader::GetBytes ( void * pData, int iSize )
+void CSphReader::GetBytes ( void * pData, int64_t iSize )
 {
 	BYTE * pOut = (BYTE*) pData;
 
@@ -358,7 +359,7 @@ void CSphReader::GetBytes ( void * pData, int iSize )
 			UpdateCache();
 			if ( !m_iBuffUsed )
 			{
-				m_sError.SetSprintf ( "pread error in %s: pos=" INT64_FMT ", len=%d, code=%d, msg=%s", m_sFilename.cstr(), (int64_t)m_iPos, iSize, errno, strerror(errno) );
+				m_sError.SetSprintf ( "pread error in %s: pos=" INT64_FMT ", len=" INT64_FMT ", code=%d, msg=%s", m_sFilename.cstr(), (int64_t)m_iPos, iSize, errno, strerror(errno) );
 				memset ( pData, 0, iSize );
 				return; // unexpected io failure
 			}
@@ -383,7 +384,7 @@ void CSphReader::GetBytes ( void * pData, int iSize )
 		{
 			memset ( pData, 0, iSize ); // unexpected io failure
 			m_bError = true;
-			m_sError.SetSprintf ( "pread error in %s: pos=" INT64_FMT ", len=%d", m_sFilename.cstr(), (int64_t)m_iPos, iSize );
+			m_sError.SetSprintf ( "pread error in %s: pos=" INT64_FMT ", len=" INT64_FMT, m_sFilename.cstr(), (int64_t)m_iPos, iSize );
 			return;
 		}
 	}
@@ -940,6 +941,7 @@ bool sphWriteThrottled ( int iFD, const void* pBuf, int64_t iCount, const char* 
 			pIOStats->m_iWriteOps++;
 			pIOStats->m_iWriteBytes += iWritten;
 		}
+		GlobalWrite ( iWritten );
 		if ( sphInterrupted() && iWritten != iToWrite )
 		{
 			sError.SetSprintf ( "%s: write interrupted: %d of %d bytes written", sName, iWritten, iToWrite );
@@ -981,7 +983,7 @@ bool WriteNonThrottled ( int iFD, const void * pBuf, int64_t iCount, const char 
 		if ( pIOStats )
 			tmTimer = sphMicroTimer ();
 
-		auto iToWrite = (int) Min ( iCount, 1UL << 30 );
+		auto iToWrite = (int) Min ( iCount, 1UL << 28 ); // chunks by 256Mb are quire reliable
 		auto iWritten = (int) ::write ( iFD, &p[iTotalWritten], iToWrite );
 
 		if ( pIOStats )
@@ -990,6 +992,7 @@ bool WriteNonThrottled ( int iFD, const void * pBuf, int64_t iCount, const char 
 			pIOStats->m_iWriteOps++;
 			pIOStats->m_iWriteBytes += iWritten;
 		}
+		GlobalWrite ( iWritten );
 		if ( sphInterrupted () && iWritten!=iToWrite )
 		{
 			sError.SetSprintf ( "%s: write interrupted: %d of %d bytes written", sName, iWritten, iToWrite );

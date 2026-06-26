@@ -1,0 +1,109 @@
+name: 📖 Check docs
+run-name: 📖 Check docs ${{ github.sha }}
+
+on:
+  workflow_call:
+  pull_request:
+    paths:
+      - 'manual/**'
+    branches:
+      - main
+      - manticore-*
+
+jobs:
+  docs_check:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: manticoresearch/docs_autodeploy_multi:latest
+      env:
+        CACHEB: "../cache"
+        DOCKER_HOST: tcp://docker:2375/
+        DOCKER_DRIVER: overlay2
+        COMMIT_DIR: manual
+        DOCS_ERRORS_DIR: build/docs/
+        GH_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          submodules: true
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - name: Fetch main and get changed files
+        id: changed-files
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          git config --global --add safe.directory /__w/manticoresearch/manticoresearch
+          # Update local main only if we're not currently on it.
+          if [ "$REF_NAME" != "main" ]; then
+            git fetch origin main:main
+          fi
+          CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD)
+          printf '%s\n' "$CHANGED_FILES"
+          {
+            echo "changed_files<<EOF"
+            printf '%s\n' "$CHANGED_FILES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Get changed doc filepathes
+        id: doc-filepathes
+        env:
+          CHANGED_FILES: ${{ steps.changed-files.outputs.changed_files }}
+        run: |
+          filepathes=()
+          while IFS= read -r file; do
+            case "$file" in
+              "$COMMIT_DIR/"*)
+                filepathes+=("$file")
+              ;;
+            esac
+          done <<< "$CHANGED_FILES"
+          printf '%s\n' "${filepathes[@]}"
+          joined_filepathes="${filepathes[*]}"
+          echo "filepathes=$joined_filepathes" >> "$GITHUB_OUTPUT"
+      - name: Check docs
+        id: check
+        env:
+          DOC_FILEPATHES: ${{ steps.doc-filepathes.outputs.filepathes }}
+        run: |
+          if [ -z "$DOC_FILEPATHES" ]; then
+            echo "No changed doc files under $COMMIT_DIR/, skipping validation."
+            echo "errors=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          docs_errors=$(php "/Deploy/check_docs_validity.php" "$DOC_FILEPATHES" "$COMMIT_DIR/" "$DOCS_ERRORS_DIR" | xargs)
+          echo "$docs_errors"
+          echo "errors=$docs_errors" >> "$GITHUB_OUTPUT"
+      - name: Check docs artifact presence
+        id: docs-artifact
+        run: |
+          if [ -d "$DOCS_ERRORS_DIR" ] && find "$DOCS_ERRORS_DIR" -type f | grep -q .; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Upload artifact
+        if: steps.docs-artifact.outputs.exists == 'true'
+        uses: manticoresoftware/upload_artifact_with_retries@v4
+        with:
+          name: Docs error artifact
+          path: $DOCS_ERRORS_DIR
+      - name: Display result
+        run: |
+          if [ "${{ steps.check.outputs.errors }}" != "" ]; then
+            exit 1
+          fi
+          echo "Doc check passed successfully "
+
+          

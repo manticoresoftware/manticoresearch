@@ -132,6 +132,17 @@ index t12
     wordforms = <this_test/>/wordforms.txt
 }
 
+index t13
+{
+	type			= rt
+	path			= <data_path/>/t13
+	rt_field		= f
+	rt_attr_string	= f
+    
+    charset_table = cjk
+    morphology = icu_chinese
+}
+
 </config>
 
 <db_create>
@@ -260,6 +271,18 @@ select * from t11 where match('"好， 世"') order by id asc;
 select * from t12 where match('"好，世"') order by id asc;
 select * from t12 where match('"好 世"') order by id asc;
 select * from t12 where match('"好， 世"') order by id asc;
+
+<!-- case ICU highlight should not inject extra spaces -->
+insert into t13(f) values('最后，也许');
+select f, highlight() from t13 where match('最后');
+
+call snippets('他们在那家餐厅提供美味的比萨饼。', 'test', '美味的');
+call snippets('他们在那家餐厅 提供美味的 比萨饼。', 'test', '美味的');
+
+insert into t13 (id, f) values(101, '最后，也许你是一名DevOps，其他部门一直尽可能快的往 Elasticsearch 里面灌数据，而你是那个负责防止 Elasticsearch 服务器起火的消防员。只要用户在规则内行事，Elasticsearch集群扩容相当轻松。不过你需要知道如何在进入生产环境前搭建一个稳定的集群，还能  要在凌晨三点钟能识别出警告信号，以防止灾难发生。前面几章你可能不太感兴趣，但这本书的最后一部分是非常重要的，包含所有你需要知道的用以避免系统崩溃的知识。');
+
+select highlight() from t13 where match('最后') and id=101;
+select highlight() from t13 where match('凌晨') and id=101;
 
 </sphinxql></queries>
 

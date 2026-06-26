@@ -1,0 +1,65 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=exit_cluster_restart
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE exit_rt_restart (id bigint, title text);" && mysql -h0 -P1306 -e "ALTER CLUSTER ${CLUSTER_NAME} ADD exit_rt_restart;" && mysql -h0 -P1306 -e "INSERT INTO ${CLUSTER_NAME}:exit_rt_restart VALUES (1,'before exit');"
+––– output –––
+––– input –––
+sleep 2; mysql -h0 -P2306 -e "EXIT CLUSTER ${CLUSTER_NAME};"
+––– output –––
+––– input –––
+bash -c 'end=$((SECONDS+120)); while [ $SECONDS -lt $end ]; do setv=$(mysql -h0 -P1306 -e "SHOW STATUS LIKE '\''cluster_${CLUSTER_NAME}_nodes_set'\''\\G" 2>/dev/null || true); echo "$setv" | grep -q "Counter: cluster_${CLUSTER_NAME}_nodes_set" || { sleep 1; continue; }; echo "$setv" | grep -q "2306" && { sleep 1; continue; }; echo "Survivor nodes_set converged"; echo "$setv" | grep "Value:"; exit 0; done; echo "Timeout waiting for survivor nodes_set cleanup"; exit 1'
+––– output –––
+Survivor nodes_set converged
+  Value: 127.0.0.1:1312
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-new-cluster –––
+––– input –––
+bash -c 'end=$((SECONDS+120)); while [ $SECONDS -lt $end ]; do out=$(mysql -h0 -P1306 -e "SHOW STATUS LIKE '\''cluster_${CLUSTER_NAME}_status'\''\\G" 2>/dev/null || true); echo "$out" | grep -q "Value: primary" && { echo "Survivor restarted as primary"; echo "$out"; exit 0; }; sleep 1; done; echo "Timeout waiting for survivor restart"; exit 1'
+––– output –––
+Survivor restarted as primary
+*************************** 1. row ***************************
+Counter: cluster_exit_cluster_restart_status
+  Value: primary
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_nodes_set'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_exit_cluster_restart_nodes_set
+  Value:
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_nodes_view'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_exit_cluster_restart_nodes_view
+  Value: 127.0.0.1:1312,127.0.0.1:1322:replication
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS cnt FROM exit_rt_restart;"
+––– output –––
+#!/\+[-]+\+/!#
+#!/\| cnt\s+\|/!#
+#!/\+[-]+\+/!#
+| %{NUMBER} |
+#!/\+[-]+\+/!#
+––– input –––
+mysql -h0 -P1306 -e "DELETE CLUSTER ${CLUSTER_NAME};" && mysql -h0 -P1306 -e "DROP TABLE IF EXISTS exit_rt_restart;" && mysql -h0 -P2306 -e "DROP TABLE IF EXISTS exit_rt_restart;"
+––– output –––

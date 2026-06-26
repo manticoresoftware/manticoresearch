@@ -106,6 +106,69 @@ index multi22
 	morphology		= stem_en
 	index_exact_words = 1	
 }
+
+source src_multi31
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT document_id as id, document_id * 10 as idd, title from test_table31
+	sql_attr_uint = idd
+}
+
+index multi_31
+{
+	source			= src_multi31
+	path			= <data_path/>/multi_31
+	wordforms		= <this_test/>/wf_multi3.txt
+	embedded_limit      = 0
+}
+
+source src_plain_defaults
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT 1 id, 0 score, 'running' title UNION SELECT 2 id, 0 score, 'cat' title UNION SELECT 3 id, 0 score, 'run cat' title UNION SELECT 4 id, 100 score, 'alpha' title UNION SELECT 5 id, 1 score, 'alpha alpha alpha' title
+	sql_attr_uint = score
+}
+
+index plain_defaults
+{
+	source			= src_plain_defaults
+	path			= <data_path/>/plain_defaults
+	min_infix_len		= 2
+	morphology		= stem_en
+	index_exact_words	= 1
+	index_field_lengths	= 1
+	boolean_mode		= or
+	ranker			= expr('sum(score)')
+}
+
+index plain_defaults_local_dist
+{
+	type = distributed
+	local = plain_defaults
+}
+
+index plain_defaults_remote_dist
+{
+	type = distributed
+	agent = <my_address/>:plain_defaults
+}
+
+index plain_defaults_const
+{
+	source			= src_plain_defaults
+	path			= <data_path/>/plain_defaults_const
+	min_infix_len		= 2
+	morphology		= stem_en
+	index_exact_words	= 1
+	index_field_lengths	= 1
+	boolean_mode		= and
+	ranker			= expr('1')
+}
+
 </config>
 
 <queries>
@@ -204,6 +267,32 @@ index multi22
 	show meta;
 	SELECT * FROM multi22 WHERE (MATCH('man'));
 	show meta;
+    
+	<!-- user defined dest transform at wordforms -->
+	SELECT *, weight() as w FROM multi_31 WHERE MATCH('oven broil') order by id asc;
+    show meta;
+	SELECT *, weight() as w FROM multi_31 WHERE MATCH('broil') order by id asc;
+    show meta;
+	SELECT *, weight() as w FROM multi_31 WHERE MATCH('bake') order by id asc;
+    show meta;
+
+	<!-- plain/indexer path for stored query defaults and distributed propagation -->
+	SELECT id FROM plain_defaults WHERE MATCH('running cat') ORDER BY id ASC;
+	SELECT id FROM plain_defaults WHERE MATCH('running cat') ORDER BY id ASC OPTION boolean_mode='and';
+	SELECT id FROM plain_defaults WHERE MATCH('*unn*') ORDER BY id ASC;
+	SELECT id, weight() as w FROM plain_defaults WHERE MATCH('alpha') ORDER BY w DESC, id ASC;
+	SELECT id, weight() as w FROM plain_defaults WHERE MATCH('alpha') ORDER BY w DESC, id ASC OPTION ranker=expr('1');
+	SELECT id FROM plain_defaults, plain_defaults_const WHERE MATCH('running cat') ORDER BY id ASC;
+	SELECT id FROM plain_defaults, plain_defaults_const WHERE MATCH('running cat') ORDER BY id ASC OPTION boolean_mode='and';
+	SELECT id, weight() as w FROM plain_defaults, plain_defaults_const WHERE MATCH('alpha') ORDER BY w DESC, id ASC;
+	SELECT id, weight() as w FROM plain_defaults, plain_defaults_const WHERE MATCH('alpha') ORDER BY w DESC, id ASC OPTION ranker=expr('sum(score)');
+	SELECT id FROM plain_defaults_local_dist WHERE MATCH('running cat') ORDER BY id ASC;
+	SELECT id FROM plain_defaults_local_dist WHERE MATCH('running cat') ORDER BY id ASC OPTION boolean_mode='and';
+	SELECT id FROM plain_defaults_remote_dist WHERE MATCH('running cat') ORDER BY id ASC;
+	SELECT id FROM plain_defaults_remote_dist WHERE MATCH('running cat') ORDER BY id ASC OPTION boolean_mode='and';
+	SELECT id, weight() as w FROM plain_defaults_remote_dist WHERE MATCH('alpha') ORDER BY w DESC, id ASC;
+	SELECT id, weight() as w FROM plain_defaults_remote_dist WHERE MATCH('alpha') ORDER BY w DESC, id ASC OPTION ranker=expr('1');
+    
 </sphinxql>
 </queries>
 
@@ -227,4 +316,20 @@ INSERT INTO `test_table` VALUES
 ( 4, 'SomeWhatMoreLongFormThatWouldOverflowShortFormBuffer' )
 </db_insert>
 
+<db_create>
+CREATE TABLE `test_table31`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`title` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `test_table31`</db_drop>
+
+<db_insert>
+INSERT INTO `test_table31` VALUES
+( 1, 'oven broil text' ),
+( 2, 'broil text' ),
+( 3, 'bake text' )
+</db_insert>
 </test>

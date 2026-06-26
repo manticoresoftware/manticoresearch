@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -14,11 +14,15 @@
 #include "std/vector.h"
 #include "fileio.h"
 
+#include "common.h"
 #include "api_command_cluster.h"
 #include "configuration.h"
 #include "cluster_file_reserve.h"
 #include "cluster_file_send.h"
 #include "cluster_index_add_local.h"
+#include "cluster_recv_state_cleanup.h"
+#include "cluster_sst_progress.h"
+#include "searchdreplication.h"
 
 #include <cmath>
 
@@ -49,7 +53,7 @@ private:
 	cServedIndexRefPtr_c m_pServedIndex;
 };
 
-static bool ActivateIndexOnRemotes ( const CSphString& sCluster, const CSphString& sIndex, IndexType_e eType, bool bSendOk, const VecTraits_T<const AgentDesc_t*>& dActivateIndexes, int64_t tmLongOpTimeout )
+static bool ActivateIndexOnRemotes ( const CSphString& sCluster, const CSphString& sIndex, const CSphString & sUser, IndexType_e eType, bool bSendOk, const VecTraits_T<const AgentDesc_t*>& dActivateIndexes, int64_t tmLongOpTimeout, SstProgress_i & tProgress )
 {
 	// send a command to activate transferred index
 	ClusterIndexAddLocalRequest_t tAddLocal;
@@ -63,23 +67,27 @@ static bool ActivateIndexOnRemotes ( const CSphString& sCluster, const CSphStrin
 	ARRAY_FOREACH ( i, dActivateIndexes )
 	{
 		const AgentDesc_t& tDesc = *dActivateIndexes[i];
-		dNodes[i] = ClusterIndexAddLocal_c::CreateAgent ( tDesc, ReplicationTimeoutQuery(), tAddLocal );
+		dNodes[i] = ClusterIndexAddLocal_c::CreateAgent ( tDesc, sUser, ReplicationTimeoutQuery(), tAddLocal );
 	}
 
 	sphLogDebugRpl ( "sent table '%s' %s to %d nodes with timeout %d.%03d sec", sIndex.cstr(), ( bSendOk ? "loading" : "rollback" ), dNodes.GetLength(), (int)( tmLongOpTimeout / 1000 ), (int)( tmLongOpTimeout % 1000 ) );
+	
+	tProgress.StageBegin ( SstStage_e::ACTIVATE_TABLE );
+	auto fnOnSuccess = [&tProgress]( const AgentConn_t * ) { tProgress.AddComplete ( 1 ); };
 
 	ClusterIndexAddLocal_c tReq;
-	if ( !PerformRemoteTasksWrap ( dNodes, tReq, tReq, true ) )
+	if ( !PerformRemoteTasksWrap ( dNodes, tReq, tReq, true, fnOnSuccess ) )
 		return false;
 
 	sphLogDebugRpl ( "remote table '%s' %s", sIndex.cstr(), ( bSendOk ? "added" : "rolled-back" ) );
 	return true;
 }
 
-bool SyncSrc_t::CalculateFilesSignatures()
+bool SyncSrc_t::CalculateFilesSignatures ( SstProgress_i & tProgress )
 {
 	int64_t tmStart = sphMicroTimer();
 	TLS_MSG_STRING ( sError );
+	tProgress.StageBegin ( SstStage_e::CALC_SHA1 );
 
 	auto iMaxChunkBytes = InitSyncSrc();
 	if ( !iMaxChunkBytes.has_value() )
@@ -123,6 +131,8 @@ bool SyncSrc_t::CalculateFilesSignatures()
 			tHashChunk.Update ( dReadBuf.Begin(), iLeft );
 			tHashChunk.Final ( GetChunkHash ( iFile, iChunk ) );
 			++iChunk;
+
+			tProgress.AddComplete ( iLeft );
 		}
 
 		tIndexFile.Close();
@@ -137,7 +147,7 @@ bool SyncSrc_t::CalculateFilesSignatures()
 }
 
 // send local index to remote nodes via API
-bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sIndex, const VecTraits_T<AgentDesc_t>& dDesc, const cServedIndexRefPtr_c& pServedIndex )
+bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sIndex, const CSphString & sUser, const VecTraits_T<AgentDesc_t>& dDesc, const cServedIndexRefPtr_c& pServedIndex, SstProgress_i & tProgress )
 {
 	assert ( !dDesc.IsEmpty ());
 
@@ -155,11 +165,12 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 	sphLogDebugRpl ( "calculate sha1 of table files chunks '%s'", sIndex.cstr() );
 
 	SyncSrc_t tSigSrc { std::move ( dIndexFiles ) };
-	if ( !tSigSrc.CalculateFilesSignatures () )
+	if ( !tSigSrc.CalculateFilesSignatures ( tProgress ) )
 		return false;
 
 	sphLogDebugRpl ( "calculated sha1 of table '%s', files %d, hashes %d", sIndex.cstr(), tSigSrc.m_dIndexFiles.GetLength(), tSigSrc.m_dHashes.GetLength() );
 
+	tProgress.StageBegin ( SstStage_e::RESERVE_FILES );
 	int64_t tmLongOpTimeout = ReplicationTimeoutQuery ( tSigSrc.m_tmTimeout * 3 ); // timeout = sha verify (of all index files) + preload (of all index files) +1 (for slow io)
 
 	FileReserveRequest_t tRequest;
@@ -167,7 +178,9 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 	tRequest.m_sIndex = sIndex;
 	tRequest.m_pChunks = &tSigSrc;
 	tRequest.m_sIndexFileName = GetBaseName ( sIndexPath );
-	auto dNodes = ClusterFileReserve_c::MakeAgents ( dDesc, tmLongOpTimeout, tRequest );
+	tProgress.SetDonor4Joiner ( tSigSrc.m_dIndexFiles.GetLength(), tRequest.m_tProgressCtx );
+
+	auto dNodes = ClusterFileReserve_c::MakeAgents ( dDesc, sUser, tmLongOpTimeout, tRequest );
 	assert ( dDesc.GetLength() == dNodes.GetLength() );
 	auto bOk = SendClusterFileReserve ( dNodes );
 
@@ -175,8 +188,11 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 	if ( !bOk )
 		return false;
 
+	PrepareSendStage( tSigSrc, dNodes, tProgress );
+
 	CSphVector<RemoteFileState_t> dSendStates;
 	CSphVector<const AgentDesc_t*> dActivateIndexes;
+	bool bNodesMatchedActive = true;
 
 	// collect remote file states and make list nodes and files to send
 	auto & sErr = TlsMsg::Err ();
@@ -185,8 +201,9 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 	{
 		FileReserveReply_t & tRes = ClusterFileReserve_c::GetRes ( *dNodes[iNode] );
 		const CSphBitvec & tFilesDstMask = tRes.m_dNodeChunksMask;
-		if ( tSigSrc.m_dBaseNames.GetLength() != tRes.m_dRemotePaths.GetLength() && tSigSrc.m_dHashes.GetLength() != tFilesDstMask.GetSize() )
+		if ( tSigSrc.m_dBaseNames.GetULength() != tRes.m_dRemotePaths.GetULength() && tSigSrc.m_dHashes.GetULength() != tFilesDstMask.GetSize() )
 		{
+			bNodesMatchedActive = false;
 			sErr.Sprintf ( "'%s:%d' wrong stored files %d (expected %d), hashes %d (expected %d)",
 					dNodes[iNode]->m_tDesc.m_sAddr.cstr (), dNodes[iNode]->m_tDesc.m_iPort,
 					tRes.m_dRemotePaths.GetLength(), tSigSrc.m_dBaseNames.GetLength (),
@@ -201,8 +218,9 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 		for ( int iFile = 0; bFilesMatched && iFile < tSigSrc.m_dBaseNames.GetLength(); ++iFile )
 			bFilesMatched &= tFilesDstMask.BitGet ( iFile );
 
-		if ( bFilesMatched && tRes.m_bIndexActive )
-			continue;
+		// files do not match or index not active - send files/activate
+		if ( !bFilesMatched || !tRes.m_bIndexActive )
+			bNodesMatchedActive = false;
 
 		RemoteFileState_t tRemoteState;
 		tRemoteState.m_pAgentDesc = &dDesc[iNode];
@@ -213,7 +231,10 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 		if ( !bFilesMatched )
 			dSendStates.Add ( tRemoteState );
 
-		// after file send need also to re-activate index with new files
+		// always add node to dActivateIndexes if FILE_RESERVE succeeded even if files match and index is active
+		// required to send INDEX_ADD_LOCAL to free RecvState that was created by FILE_RESERVE
+
+		// after file send need also to re-activate index with new files (or just free RecvState if files matched)
 		dActivateIndexes.Add ( &dDesc[iNode] );
 	}
 	sErr.FinishBlock ();
@@ -228,12 +249,34 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 
 	bool bSendOk = true;
 	if ( !dSendStates.IsEmpty() )
-		bSendOk = RemoteClusterFileSend ( tSigSrc, dSendStates, sCluster, sIndex );
+		bSendOk = RemoteClusterFileSend ( tSigSrc, dSendStates, sCluster, sIndex, sUser, tProgress );
 
 	// allow index local write operations passed without replicator
 	tIndexSaveGuard.EnableSave ();
 
-	return ActivateIndexOnRemotes ( sCluster, sIndex, eType, bSendOk, dActivateIndexes, tmLongOpTimeout ) && bSendOk;
+	// all nodes have files matched and index already active send cleanup command
+	if ( bNodesMatchedActive && dSendStates.IsEmpty() )
+	{
+		RecvStateCleanupRequest_t tCleanup;
+		tCleanup.m_sCluster = sCluster;
+		tCleanup.m_sIndex = sIndex;
+
+		VecAgentDesc_t dCleanupDesc;
+		dCleanupDesc.Reserve ( dActivateIndexes.GetLength() );
+		for ( const AgentDesc_t* pDesc : dActivateIndexes )
+			dCleanupDesc.Add ( *pDesc );
+
+		int64_t tmTimeout = ReplicationTimeoutQuery();
+		auto dCleanupNodes = ClusterRecvStateCleanup_c::MakeAgents ( dCleanupDesc, sUser, tmTimeout, tCleanup );
+		assert ( dCleanupDesc.GetLength() == dCleanupNodes.GetLength() );
+
+		ClusterRecvStateCleanup_c tReq;
+		bool bCleanupOk = PerformRemoteTasksWrap ( dCleanupNodes, tReq, tReq, true );
+		return bCleanupOk;
+	}
+
+	bool bActivateOk = ActivateIndexOnRemotes ( sCluster, sIndex, sUser, eType, bSendOk, dActivateIndexes, tmLongOpTimeout, tProgress ) && bSendOk;
+	return bActivateOk && bSendOk;
 }
 
 struct DistIndexSendRequest_t : public ClusterRequest_t
@@ -272,7 +315,7 @@ void operator>> ( InputBuffer_c & tIn, DistIndexSendRequest_t & tReq )
 using ClusterSendDistIndex_c = ClusterCommand_T<E_CLUSTER::INDEX_ADD_DIST, DistIndexSendRequest_t>;
 
 // send distributed index to remote nodes via API
-bool ReplicateDistIndexToNodes ( const CSphString & sCluster, const CSphString & sIndex, const VecTraits_T<AgentDesc_t> & dDesc )
+bool ReplicateDistIndexToNodes ( const CSphString & sCluster, const CSphString & sIndex, const CSphString & sUser, const VecTraits_T<AgentDesc_t> & dDesc )
 {
 	cDistributedIndexRefPtr_t pDist ( GetDistr ( sIndex ) );
 	if ( !pDist )
@@ -285,7 +328,7 @@ bool ReplicateDistIndexToNodes ( const CSphString & sCluster, const CSphString &
 	DistIndexSendRequest_t tSend ( *pDist, sCluster, sIndex );
 
 	int64_t tmTimeout = ReplicationTimeoutQuery();
-	auto dNodes = ClusterSendDistIndex_c::MakeAgents ( dDesc, tmTimeout, tSend );
+	auto dNodes = ClusterSendDistIndex_c::MakeAgents ( dDesc, sUser, tmTimeout, tSend );
 
 	sphLogDebugRpl ( "sending table '%s' to %d nodes with timeout %d.%03d sec", sIndex.cstr(), dNodes.GetLength(), (int)( tmTimeout / 1000 ), (int)( tmTimeout % 1000 ) );
 
@@ -296,9 +339,8 @@ static bool AddDistIndex ( const DistIndexSendRequest_t & tCmd )
 {
 	TLS_MSG_STRING ( sError );
 
-	cDistributedIndexRefPtr_t pDist ( GetDistr ( tCmd.m_sIndex ) );
-	if ( pDist && !pDist->m_sCluster.IsEmpty() )
-		return TlsMsg::Err ( "distributed table '%s:%s' is already the part of the cluster %s, remove it first", tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr(), pDist->m_sCluster.cstr() );
+	if ( !CanReplaceIndex ( tCmd.m_sCluster, tCmd.m_sIndex ) )
+		return false;
 
 	CSphVector<BYTE> dBsonParsed;
 	if ( !sphJsonParse ( dBsonParsed, (char *)tCmd.m_sDesc.cstr(), false, false, false, sError ) )
@@ -317,6 +359,9 @@ static bool AddDistIndex ( const DistIndexSendRequest_t & tCmd )
 	if ( !sWarning.IsEmpty() )
 		sphWarning ( "table '%s' create warning: %s", tCmd.m_sIndex.cstr(), sWarning.cstr() );
 
+	if ( tIndexDesc.m_eType != IndexType_e::DISTR )
+		return TlsMsg::Err ( "unsupported distributed table type '%s' for '%s:%s'", GetIndexTypeName ( tIndexDesc.m_eType ), tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr() );
+
 	CSphConfigSection hConf;
 	tIndexDesc.Save ( hConf );
 
@@ -333,6 +378,9 @@ static bool AddDistIndex ( const DistIndexSendRequest_t & tCmd )
 	}
 
 	// finally, check and add a new or replace an existed distributed index to global table
+	if ( !CanReplaceIndex ( tCmd.m_sCluster, tCmd.m_sIndex ) )
+		return false;
+
 	g_pDistIndexes->AddOrReplace ( pIdx, tCmd.m_sIndex );
 
 	return true;

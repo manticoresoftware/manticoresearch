@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2024-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2024-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -92,6 +92,24 @@ struct DwFlags_t
 	static constexpr DWORD NATIVE = 32ULL;
 };
 
+inline int MakeKeys ( const VecTraits_T<uint64_t> & dBufKeys, CSphFixedVector<Buf_t> & dBufProxy, CSphFixedVector<Key_t> & dKeys )
+{
+	auto iKeysCount = dBufKeys.GetLength();
+
+	// set keys wsrep_buf_t ptr and len
+	dBufProxy.Reset ( iKeysCount );
+	dKeys.Reset ( iKeysCount );
+	ARRAY_CONSTFOREACH ( i, dBufKeys )
+	{
+		dBufProxy[i].m_pData = &dBufKeys[i];
+		dBufProxy[i].m_uLen = sizeof ( uint64_t );
+		dKeys[i].m_pParts = &dBufProxy[i];
+		dKeys[i].m_uCount = 1;
+	}
+
+	return iKeysCount;
+}
+
 extern std::atomic<uint64_t> uWritesetConnIds;
 
 // wrap replication writeset to RAII
@@ -139,20 +157,11 @@ public:
 		return m_eLastRes == Status_e::OK;
 	}
 
-	[[nodiscard]] bool AppendKeys ( const VecTraits_T<uint64_t>& dBufKeys, bool bSharedKeys ) final
+	[[nodiscard]] bool AppendKeys ( const VecTraits_T<uint64_t> & dBufKeys, bool bSharedKeys ) final
 	{
-		auto iKeysCount = dBufKeys.GetLength();
-
-		// set keys wsrep_buf_t ptr and len
-		CSphFixedVector<Buf_t> dBufProxy { iKeysCount };
-		CSphFixedVector<Key_t> dKeys { iKeysCount };
-		ARRAY_CONSTFOREACH ( i, dBufKeys )
-		{
-			dBufProxy[i].m_pData = &dBufKeys[i];
-			dBufProxy[i].m_uLen = sizeof ( uint64_t );
-			dKeys[i].m_pParts = &dBufProxy[i];
-			dKeys[i].m_uCount = 1;
-		}
+		CSphFixedVector<Buf_t> dBufProxy { 0 };
+		CSphFixedVector<Key_t> dKeys { 0 };
+		auto iKeysCount = MakeKeys ( dBufKeys, dBufProxy, dKeys );
 
 		m_eLastRes = m_pWsrep->AppendKey ( &m_tHnd, dKeys.begin(), iKeysCount, ( bSharedKeys ? KeyType_e::SHARED : KeyType_e::EXCLUSIVE ), false );
 		return CheckResult ( "AppendKeys" );
@@ -193,20 +202,12 @@ public:
 	}
 
 	// TOI stuff
-	[[nodiscard]] bool ToExecuteStart ( const VecTraits_T<uint64_t>& dBufKeys, const VecTraits_T<BYTE>& dData ) final
+	[[nodiscard]] bool ToExecuteStart ( const VecTraits_T<uint64_t> & dBufKeys, const VecTraits_T<BYTE> & dData ) final
 	{
-		auto iKeysCount = dBufKeys.GetLength();
-
 		// set keys ptr and len
-		CSphFixedVector<Buf_t> dBufProxy ( iKeysCount );
-		CSphFixedVector<Key_t> dKeys ( iKeysCount );
-		for ( int i = 0; i < iKeysCount; ++i )
-		{
-			dBufProxy[i].m_pData = &dBufKeys[i];
-			dBufProxy[i].m_uLen = sizeof ( uint64_t );
-			dKeys[i].m_pParts = &dBufProxy[i];
-			dKeys[i].m_uCount = 1;
-		}
+		CSphFixedVector<Buf_t> dBufProxy ( 0 );
+		CSphFixedVector<Key_t> dKeys ( 0 );
+		auto iKeysCount = MakeKeys ( dBufKeys, dBufProxy, dKeys );
 
 		Buf_t tQueries { dData.Begin(), (uint64_t)dData.GetLength() };
 		m_eLastRes = m_pWsrep->ToExecuteStart ( m_uConnId, dKeys.begin(), iKeysCount, &tQueries, 1, &m_tMeta );
@@ -238,7 +239,6 @@ protected:
 	CSphRefcountedPtr<WSREPWRAP> m_pWsrep;
 	Wsrep::Cluster_i* m_pCluster;
 	Wsrep::ReceiverRefPtr_c m_pReceiver;
-	Wsrep::GlobalTid_t m_tStateID;
 	CSphString m_sName;
 
 protected:
@@ -429,7 +429,7 @@ inline bool LoadWsrep ( void* pWsrep, const WsrepLoader_t& tLoader )
 }
 
 template<typename PROVIDER>
-Wsrep::Provider_i* MakeProvider ( WsrepLoader_t tLoader, Wsrep::Cluster_i* pCluster, CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions )
+Wsrep::Provider_i* MakeProvider ( WsrepLoader_t tLoader, Wsrep::Cluster_i* pCluster, CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions, Wsrep::GlobalTid_t & tGtid )
 {
 	using WSREPWRAP = typename PROVIDER::WSREPWRAP;
 	CSphRefcountedPtr<WSREPWRAP> pWsrepWrap { new WSREPWRAP };
@@ -444,11 +444,11 @@ Wsrep::Provider_i* MakeProvider ( WsrepLoader_t tLoader, Wsrep::Cluster_i* pClus
 		return nullptr;
 
 	auto pProvider = std::make_unique<PROVIDER> ( pCluster, pWsrepWrap );
-	if ( !pProvider->Init ( std::move ( sName ), szListenAddr, szIncoming, szPath, szOptions ) )
+	if ( !pProvider->Init ( std::move ( sName ), szListenAddr, szIncoming, szPath, szOptions, tGtid ) )
 		return nullptr;
 	return pProvider.release();
 }
 
-Wsrep::Provider_i* MakeProviderV25 ( WsrepLoader_t tLoader, Wsrep::Cluster_i* pCluster, CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions );
+Wsrep::Provider_i* MakeProviderV25 ( WsrepLoader_t tLoader, Wsrep::Cluster_i* pCluster, CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions, Wsrep::GlobalTid_t & tGtid );
 
-Wsrep::Provider_i* MakeProviderV31 ( WsrepLoader_t tLoader, Wsrep::Cluster_i* pCluster, CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions );
+Wsrep::Provider_i* MakeProviderV31 ( WsrepLoader_t tLoader, Wsrep::Cluster_i* pCluster, CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions, Wsrep::GlobalTid_t & tGtid );

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -165,6 +165,7 @@ private:
 
 	int							m_iAttr = -1;
 	ESphAttr					m_eAttrType = SPH_ATTR_NONE;
+	CSphString					m_sRemappedTok;
 
 	bool	SetupSortByRelevance();
 	void	UnifyInternalAttrNames();
@@ -215,7 +216,23 @@ void SortStateSetup_c::UnifyInternalAttrNames()
 	else if ( !strcasecmp ( m_szTok, "count(*)" ) )
 		m_szTok = "@count";
 	else if ( !strcasecmp ( m_szTok, "facet()" ) )
-		m_szTok = "@groupby"; // facet() is essentially a @groupby alias
+	{
+		if ( m_tQuery.m_bFacet && m_tQuery.m_iFacetResultLimit>=0 && !m_tQuery.m_sGroupBy.IsEmpty() )
+		{
+			if ( !sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr() ) )
+			{
+				m_sRemappedTok = m_tQuery.m_sGroupBy;
+				const CSphColumnInfo * pAttr = m_tSchema.GetAttr ( m_sRemappedTok.cstr() );
+				if ( pAttr && !IsMvaAttr ( pAttr->m_eAttrType ) )
+				{
+					m_szTok = m_sRemappedTok.cstr();
+					return;
+				}
+			}
+		}
+
+		m_szTok = "@groupby"; // fallback for grouped results that only expose the group key
+	}
 	else if ( strcasecmp ( m_szTok, "count" )>=0 && m_tTok.IsSparseCount ( m_szTok + sizeof ( "count" ) - 1 ) ) // epression count(*) with various spaces
 		m_szTok = "@count";
 	else if ( !strcasecmp ( m_szTok, "knn_dist()" ) )
@@ -339,7 +356,12 @@ bool SortStateSetup_c::SetupJsonField ( CSphString & sError )
 	if ( m_iAttr>=0 )
 	{
 		ExprParseArgs_t tExprArgs;
-		ISphExpr * pExpr = sphExprParse ( m_szTok, m_tSchema, m_pJoinArgs ? &(m_pJoinArgs->m_sIndex2) : nullptr, sError, tExprArgs );
+		if ( m_pJoinArgs )
+		{
+			tExprArgs.m_pJoinIdx = &m_pJoinArgs->m_sIndex2;
+			tExprArgs.m_pJoinIdxLeft = &m_pJoinArgs->m_sIndex1;
+		}
+		ISphExpr * pExpr = sphExprParse ( m_szTok, m_tSchema, sError, tExprArgs );
 		if ( !pExpr )
 			return false;
 
@@ -362,7 +384,12 @@ bool SortStateSetup_c::SetupColumnar ( CSphString & sError )
 
 	ExprParseArgs_t tExprArgs;
 	tExprArgs.m_pAttrType = &m_eAttrType;
-	ISphExpr * pExpr = sphExprParse ( m_szTok, m_tSchema, m_pJoinArgs ? &(m_pJoinArgs->m_sIndex2) : nullptr, sError, tExprArgs );
+	if ( m_pJoinArgs )
+	{
+		tExprArgs.m_pJoinIdx = &m_pJoinArgs->m_sIndex2;
+		tExprArgs.m_pJoinIdxLeft = &m_pJoinArgs->m_sIndex1;
+	}
+	ISphExpr * pExpr = sphExprParse ( m_szTok, m_tSchema, sError, tExprArgs );
 	if ( !pExpr )
 		return false;
 
@@ -398,7 +425,12 @@ void SortStateSetup_c::SetupJsonConversions()
 	ExprParseArgs_t tExprArgs;
 	tExprArgs.m_pAttrType = &eAttrType;
 	CSphString sError; // ignored
-	ISphExpr * pExpr = sphExprParse ( m_szTok, m_tSchema, m_pJoinArgs ? &(m_pJoinArgs->m_sIndex2) : nullptr, sError, tExprArgs );
+	if ( m_pJoinArgs )
+	{
+		tExprArgs.m_pJoinIdx = &m_pJoinArgs->m_sIndex2;
+		tExprArgs.m_pJoinIdxLeft = &m_pJoinArgs->m_sIndex1;
+	}
+	ISphExpr * pExpr = sphExprParse ( m_szTok, m_tSchema, sError, tExprArgs );
 	if ( !pExpr )
 		return;
 

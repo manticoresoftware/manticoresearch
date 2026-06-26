@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -171,7 +171,7 @@ private:
 			m_dWorkExternal.Add ( (ISphNetAction*) pWork );
 		});
 
-		m_dWorkExternal.Uniq();
+		m_dWorkExternal.Uniq(sph::unstable);
 		for ( auto* pWork : m_dWorkExternal )
 		{
 			// deal with closed sockets which lives exclusively in m_pPoll (and so, would be removed immediately on RemoveEvent() )
@@ -962,7 +962,8 @@ Proto_e AsyncNetInputBuffer_c::Probe()
 	auto tBlob = Tail ();
 	if ( tBlob.second >=4 )
 	{
-		if ( !memcmp (tBlob.first,"\0\0\0\1",4) )
+		// check for head with SPHINX_CLIENT_VERSION (1 or 2)
+		if ( memcmp ( tBlob.first, "\0\0\0\1", 4 )==0 || memcmp ( tBlob.first, "\0\0\0\2", 4 )==0 )
 		{
 			sBytes << "SphinxAPI, usual byte order";
 			eResult = Proto_e::SPHINX;
@@ -1159,6 +1160,22 @@ void AsyncNetBuffer_c::ResetError()
 {
 	InputBuffer_c::ResetError();
 	GenericOutputBuffer_c::ResetError();
+}
+
+void AsyncNetInputBuffer_c::SetBuffer ( CSphVector<BYTE> && dBuf )
+{
+	int64_t iLen = dBuf.GetLength64();
+	int64_t iLimit = dBuf.GetLimit();
+	BYTE * pData = dBuf.LeakData();
+	
+	Reset();
+	m_pData = pData;
+	m_iCount = iLen;
+	m_iLimit = iLimit;
+
+	m_pBuf = pData;
+	m_pCur = pData;
+	m_iLen = iLen;
 }
 
 /////////////////////////////////////////////////////////////////////////////

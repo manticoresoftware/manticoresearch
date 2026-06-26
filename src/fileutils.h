@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -16,8 +16,6 @@
 #include "sphinxstd.h"
 #include "std/strerrorm.h"
 #include <fcntl.h>
-
-#include <sys/stat.h>
 
 #if !_WIN32
  #include <sys/mman.h>
@@ -116,6 +114,10 @@ void			sphDoneIOStats();
 
 CSphIOStats *	GetIOStats();
 
+/// always accounted global written bytes (came from writethrottled/writenonthrottled)
+void			GlobalWrite ( int iWritten ) noexcept;
+uint64_t		GlobalWritten () noexcept;
+
 /// calculate file crc32
 bool			sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 );
 
@@ -161,9 +163,10 @@ CSphString		GetExecutablePath();
 CSphString &	StripPath ( CSphString & sPath );
 CSphString		GetPathOnly ( const CSphString & sFullPath );
 const char *	GetExtension ( const CSphString & sFullPath );
+CSphString		GetPathNoExtension ( const CSphString & sFullPath );
 
 CSphString		RealPath ( const CSphString& sPath );
-bool			IsSymlink ( const CSphString & sFile );
+std::pair<bool,bool> IsSymlink ( const CSphString & sFile );
 bool			ResolveSymlink ( const CSphString & sFile, CSphString & sResult );
 
 class CSphWriter;
@@ -465,6 +468,67 @@ private:
 
 	bool		m_bWrite {false};
 	CSphString	m_sFilename;
+};
+
+class SharedMemory_c
+{
+public:
+	explicit SharedMemory_c ( const CSphString & sPath );
+	~SharedMemory_c();
+
+	enum class OpenResult_e
+	{
+		OK,
+		FAILURE,
+		NO_FILE
+	};
+
+	/// try to open existed shared memory object
+	OpenResult_e Open ();
+
+	/// create new shared memory object
+	bool Create ( int64_t iBytes );
+
+	/// set new size of the shared memory object
+	bool Reset ( int64_t iBytes );
+
+	/// close and destroy shared memory object
+	bool Close ();
+
+	/// get write address
+	BYTE * GetWritePtr() const
+	{
+		return m_pData;
+	}
+
+	/// returns read address - same as write, but const pointer
+	const BYTE * GetReadPtr() const
+	{
+		return GetWritePtr();
+	}
+
+	int64_t GetLength64() const
+	{
+		return m_iCount;
+	}
+
+	bool IsSupported () const;
+	const CSphString & GetError() const
+	{
+		return m_sError;
+	}
+
+private:
+	BYTE * m_pData = nullptr;
+	int64_t m_iCount = 0;
+
+	const CSphString m_sPath;
+	bool m_bHasFile = false;
+
+	CSphString m_sError;
+
+	bool MapFile ( int iFD, int64_t iBytes );
+	bool IsValid ();
 };
 
 #endif // _fileutils_

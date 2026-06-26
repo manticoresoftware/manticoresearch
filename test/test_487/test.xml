@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>replication node rejoin after cluster added \ droped table</name>
+
+<requires>
+	<replication/>
+	<non-windows/>
+	<force-rt/>
+	<heavy/>
+</requires>
+<skip_indexer/>
+<num_agents>3</num_agents>
+
+<config>
+
+<agent0>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+	server_id = <agent_id/>
+}
+</agent0>
+<agent1>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data1"/>
+	server_id = <agent_id/>
+}
+</agent1>
+<agent2>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data2"/>
+	server_id = <agent_id/>
+}
+</agent2>
+
+</config>
+
+<queries>
+
+<!--  agent0 owns cluster a, agent1 owns cluster b, agent2 joins both -->
+<sphinxql d="0" cluster_path="a">
+	create table t (title text indexed, gid int) rt_mem_limit='12M';
+	insert into t (id, title, gid) values (1, 'move me', 1);
+	create cluster a '%cluster_path%' as path;
+	ALTER CLUSTER a ADD t;
+</sphinxql>
+
+<sphinxql d="1" cluster_path="b">
+	create cluster b '%cluster_path%' as path;
+</sphinxql>
+
+<sphinxql d="1" cluster_connect="0" cluster_path="a">
+	join cluster a at '%addr_connect%' '%cluster_path%' as path;
+</sphinxql>
+
+<sphinxql d="2" cluster_connect="0" cluster_path="a">
+	join cluster a at '%addr_connect%' '%cluster_path%' as path;
+</sphinxql>
+
+<sphinxql d="2" cluster_connect="1" cluster_path="b">
+	join cluster b at '%addr_connect%' '%cluster_path%' as path;
+</sphinxql>
+
+<!-- stop the future joiner, move t out of a and into b -->
+<sphinxql d="0" system="stop-agent"/>
+
+<sphinxql d="1">
+	ALTER CLUSTER a DROP t;
+	ALTER CLUSTER b ADD t;
+</sphinxql>
+
+<!-- regression target: the restarted node must not stay in joining -->
+<sphinxql d="0" system="start-agent"/>
+<sphinxql d="0" system="wait-ready" cluster="a"/>
+
+<sphinxql d="0">
+	show status like 'cluster_a_status';
+	show status like 'cluster_a_node_state';
+</sphinxql>
+
+<sphinxql d="1">
+	show status like 'cluster_a_status';
+	show status like 'cluster_a_node_state';
+	show status like 'cluster_b_status';
+	show status like 'cluster_b_node_state';
+	select * from b:t order by id asc;
+</sphinxql>
+
+<sphinxql d="2">
+	show status like 'cluster_a_status';
+	show status like 'cluster_a_node_state';
+	show status like 'cluster_b_status';
+	show status like 'cluster_b_node_state';
+	select * from b:t order by id asc;
+</sphinxql>
+
+<!-- repeat the restart once more after convergence to keep the path covered -->
+<sphinxql d="0" system="stop-agent"/>
+<sphinxql d="0" system="start-agent"/>
+<sphinxql d="0" system="wait-ready" cluster="a"/>
+<sphinxql d="0">
+	show status like 'cluster_a_status';
+	show status like 'cluster_a_node_state';
+</sphinxql>
+
+<!-- cleanup -->
+<sphinxql d="1">
+	ALTER CLUSTER b DROP t;
+</sphinxql>
+
+<sphinxql d="0">
+	DROP TABLE t;
+</sphinxql>
+
+<sphinxql d="1">
+	DROP TABLE t;
+</sphinxql>
+
+<sphinxql d="2">
+	DROP TABLE t;
+</sphinxql>
+
+</queries>
+
+</test>

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -21,6 +21,7 @@ enum class IndexType_e
 	RT,
 	PERCOLATE,
 	DISTR,
+	SHARD,
 	ERROR_, // simple "ERROR" doesn't work on win due to '#define ERROR 0' somewhere.
 };
 
@@ -43,6 +44,8 @@ struct ClusterDesc_t
 	sph::StringSet			m_hIndexes;			// list of index name in cluster
 	StrVec_t				m_dClusterNodes;	// string list of nodes (node - address:API_port)
 	ClusterOptions_t		m_tOptions;			// options for Galera
+	int64_t					m_iClusterEpoch = 0;
+	CSphString				m_sUser;			// user that owns that cluster
 
 	bool					Parse ( const bson::Bson_c & tBson, const CSphString& sName, CSphString & sWarning );
 	void					Save ( JsonEscapedBuilder& tOut ) const;
@@ -108,7 +111,11 @@ bool		IsConfigless();
 const CSphVector<ClusterDesc_t> & GetClustersInt();
 
 struct DistributedIndex_t;
+struct ShardIndex_c;
 CSphString	BuildCreateTableDistr ( const CSphString & sName, const DistributedIndex_t & tDistr );
+CSphString	BuildCreateTableShard ( const CSphString & sName, const ShardIndex_c & tShard, ExtFilesFormat_e eExt, bool bShowTopology = false );
+bool		SaveShardMeta ( const char * szIndexName, const ShardIndex_c & tShard, CSphString & sError );
+bool		LoadShardMeta ( const char * szIndexName, const CSphString & sIndexPath, ShardIndex_c & tShard, StrVec_t & dWarnings, CSphString & sError );
 
 bool		CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, StrVec_t & dWarnings, CSphString & sError );
 bool		AddExistingIndexConfigless ( const CSphString & sIndex, IndexType_e eType, StrVec_t & dWarnings, CSphString & sError );
@@ -122,5 +129,8 @@ enum RunIdx_e : int {
 	DISTR,
 };
 RunIdx_e		IndexIsServed ( const CSphString& sName );
+
+int ParseShardRouteOrderId ( const CSphString & sName );
+bool BuildShardRouteTargets ( const char * szIndexName, ShardIndex_c & tShard, CSphString & sError );
 
 #endif // _searchdconfig_

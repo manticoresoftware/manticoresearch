@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -36,6 +36,14 @@ static ESphEvalStage GetEarliestStage ( ESphEvalStage eStage, const CSphColumnIn
 
 CSphQueryContext::CSphQueryContext ( const CSphQuery & tQuery )
 	: m_tQuery ( tQuery )
+	, m_tQuerySettings ( tQuery )
+{
+}
+
+
+CSphQueryContext::CSphQueryContext ( const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings )
+	: m_tQuery ( tQuery )
+	, m_tQuerySettings ( tQuerySettings )
 {
 }
 

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2018-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2018-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -65,7 +65,11 @@ struct SelectIteratorCtx_t
 };
 
 struct NodeEstimate_t;
+struct CreateFilterContext_t;
+
 CostEstimate_i *	CreateCostEstimate ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, int iCutoff );
 float				CalcFTIntersectCost ( const NodeEstimate_t & tEst1, const NodeEstimate_t & tEst2, int64_t iTotalDocs, int iDocsPerBlock1, int iDocsPerBlock2 );
+int64_t				EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx );
+int64_t				EstimateFilterSelectivity ( const VecTraits_T<CSphFilterSettings> & dFilters, const VecTraits_T<FilterTreeItem_t> * pFilterTree, const CreateFilterContext_t & tCtx );
 
 #endif // _costestimate_

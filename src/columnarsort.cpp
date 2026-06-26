@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -12,6 +12,7 @@
 #include "attribute.h"
 #include "sortcomp.h"
 #include "conversion.h"
+#include "knnmisc.h"
 
 
 class CompareSingleError_fn
@@ -1104,6 +1105,9 @@ static bool CanCreateColumnarSorter ( const ISphSchema & tSchema, const CSphMatc
 			return false;
 
 		if ( tAttr.IsJoined() )
+			return false;
+
+		if ( tAttr.m_sName==GetKnnDistRescoreAttrName() )
 			return false;
 	}
 

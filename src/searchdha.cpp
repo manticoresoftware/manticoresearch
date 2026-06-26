@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -16,7 +16,6 @@
 #include "searchdha.h"
 #include "searchdtask.h"
 #include "coroutine.h"
-#include "mini_timer.h"
 #include "pollable_event.h"
 #include "netpoll.h"
 
@@ -31,9 +30,9 @@
 	#include <WinSock2.h>
 	#include <MSWSock.h>
 	#include <WS2tcpip.h>
-#pragma comment(lib, "WS2_32.Lib")
 #endif
 
+#include "config.h"
 #if HAVE_GETADDRINFO_A
 	#include <signal.h>
 #endif
@@ -183,7 +182,7 @@ void PersistentConnectionsPool_c::ReInit ( int iPoolSize )
 int PersistentConnectionsPool_c::Step ( int* pVar )
 {
 	assert ( pVar );
-	int iRes = *pVar++;
+	int iRes = (*pVar)++;
 	if ( *pVar>=m_dSockets.GetLength () )
 		*pVar = 0;
 	return iRes;
@@ -984,34 +983,9 @@ void InitSearchdStats() NO_THREAD_SAFETY_ANALYSIS
 	tStats.m_iDiskReads = 0;
 	tStats.m_iDiskReadBytes = 0;
 	tStats.m_iDiskReadTime = 0;
-
-	tStats.m_iPredictedTime = 0;
-	tStats.m_iAgentPredictedTime = 0;
-
-	for ( auto & i : tStats.m_iCommandCount )
-		i = 0;
-
-	for ( auto & i: tStats.m_dDetailedStats )
-		i.m_tStats = MakeStatsContainer ();
 }
 
-
-void StatCountCommandDetails ( SearchdStats_t::EDETAILS eCmd, uint64_t uFoundRows, uint64_t tmStart )
-{
-	auto tmNow = sphMicroTimer ();
-	auto & tDetail = gStats ().m_dDetailedStats[eCmd];
-	ScWL_t wLock ( tDetail.m_tStatsLock );
-	tDetail.m_tStats->Add ( uFoundRows, tmNow-tmStart, tmNow );
-}
-
-static void CalculateCommandStats ( SearchdStats_t::EDETAILS eCmd, QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats )
-{
-	auto & tDetail = gStats ().m_dDetailedStats[eCmd];
-	ScRL_t rLock ( tDetail.m_tStatsLock );
-	CalcSimpleStats ( tDetail.m_tStats.get (), tRowsFoundStats, tQueryTimeStats );
-}
-
-void FormatCmdStats ( VectorLike & dStatus, const char * szPrefix, SearchdStats_t::EDETAILS eCmd )
+void FormatCmdStats ( const CommandStats_t & tStats, const char * szPrefix, CommandStats_t::EDETAILS eCmd, VectorLike & dStatus )
 {
 	using namespace QueryStats;
 	static std::array<const char *, TYPE_TOTAL> dStatTypeNames = { "avg", "min", "max", "pct95", "pct99" };
@@ -1027,7 +1001,8 @@ void FormatCmdStats ( VectorLike & dStatus, const char * szPrefix, SearchdStats_
 
 		if ( !bCalculated )
 		{
-			CalculateCommandStats ( eCmd, tRowStats, tTimeStats );
+			tStats.CalcDetailed ( eCmd, tRowStats, tTimeStats );
+
 			iNulls = 0;
 			if ( UINT64_MAX==tTimeStats.m_dStats[INTERVAL_15MIN].m_dData[TYPE_MIN] )
 				iNulls = 3;
@@ -1695,15 +1670,15 @@ bool AgentConn_t::Fatal ( AgentStats_e eStat, const char * sMessage, ... )
 /// correct way to close connection:
 void AgentConn_t::Finish ( bool bFail )
 {
+	sphLogDebugA ( "%d Abort all callbacks ref=%d", m_iStoreTag, ( int ) GetRefcount () );
+	LazyDeleteOrChange (); // remove timer and all callbacks, if any
+	m_pPollerTask = nullptr;
+
 	if ( m_iSock>=0 && ( bFail || !IsPersistent() ) )
 	{
 		sphLogDebugA ( "%d Socket %d closed and turned to -1", m_iStoreTag, m_iSock );
 		SafeCloseSocket ( m_iSock );
 	}
-
-	sphLogDebugA ( "%d Abort all callbacks ref=%d", m_iStoreTag, ( int ) GetRefcount () );
-	LazyDeleteOrChange (); // remove timer and all callbacks, if any
-	m_pPollerTask = nullptr;
 
 	ReturnPersist ();
 	if ( m_iStartQuery )
@@ -1903,16 +1878,23 @@ void AgentConn_t::RecvCallback ( int64_t iWaited, DWORD uReceived )
 }
 
 /// if iovec is empty, prepare (build) the request.
-void AgentConn_t::BuildData ()
+bool AgentConn_t::BuildData ()
 {
 	if ( m_pBuilder && m_dIOVec.IsEmpty () )
 	{
 		sphLogDebugA ( "%d BuildData for this=%p, m_pBuilder=%p", m_iStoreTag, this, m_pBuilder );
 		// prepare our data to send.
 		m_pBuilder->BuildRequest ( *this, m_tOutput );
+
+		CSphString sError;
+		if ( !ApiEncrypt ( m_tApiKey, m_tOutput, sError ) )
+			return Fatal ( eWrongQuery, "%s", sError.cstr() );
+
 		m_dIOVec.BuildFrom ( m_tOutput );
 	} else
 		sphLogDebugA ( "%d BuildData, already done", m_iStoreTag );
+
+	return true;
 }
 
 //! How many bytes we can read to m_pReplyCur (in bytes)
@@ -2043,7 +2025,9 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 	// fixme! ConnectEx doesn't accept scattered buffer. Need to prepare plain one for at least MSS size
 #endif
 
-	BuildData ();
+	if ( !BuildData() )
+		return -1;
+
 	if ( !m_pPollerTask )
 		ScheduleCallbacks ();
 	sphLogDebugA ( "%d overlaped ConnectEx called", m_iStoreTag );
@@ -2074,7 +2058,9 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 #else // _WIN32
 #if defined (MSG_FASTOPEN)
 
-	BuildData ();
+	if ( !BuildData() )
+		return -1;
+
 	struct msghdr dHdr = { 0 };
 	dHdr.msg_iov = m_dIOVec.IOPtr ();
 	dHdr.msg_iovlen = m_dIOVec.IOSize ();
@@ -2087,7 +2073,9 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 	sAddr.sae_dstaddr = pSs;
 	sAddr.sae_dstaddrlen = iLen;
 
-	BuildData ();
+	if ( !BuildData() )
+		return -1;
+
 	size_t iSent = 0;
 	auto iRes = connectx ( m_iSock, &sAddr, SAE_ASSOCID_ANY, CONNECT_RESUME_ON_READ_WRITE | CONNECT_DATA_IDEMPOTENT
 						   , m_dIOVec.IOPtr (), m_dIOVec.IOSize (), &iSent, nullptr );
@@ -2378,7 +2366,7 @@ bool AgentConn_t::DoQuery()
 	if ( IsPersistent() && m_iSock==-1 )
 	{
 		{
-			auto tHdr = APIHeader ( m_tOutput, SEARCHD_COMMAND_PERSIST );
+			auto tHdr = APIHeader ( m_tOutput, SEARCHD_COMMAND_PERSIST, 0 );
 			m_tOutput.SendInt ( 1 ); // set persistent to 1.
 		}
 		m_tOutput.StartNewChunk ();
@@ -2409,7 +2397,8 @@ bool AgentConn_t::DoQuery()
 	// for blackholes we parse query immediately, since builder will be disposed
 	// outside once we returned from the function
 	if ( IsBlackhole () )
-		BuildData ();
+		return BuildData();
+
 	return true;
 }
 
@@ -2489,8 +2478,9 @@ bool AgentConn_t::SendQuery ( DWORD uSent )
 
 	// here we have connected socket and are in process of sending blob there.
 	// prepare our data to send.
-	if ( !uSent )
-		BuildData ();
+	if ( !uSent &&  !BuildData() )
+		return false;
+
 	SSIZE_T iRes = 0;
 	while ( m_dIOVec.HasUnsent () )
 	{
@@ -2616,19 +2606,31 @@ bool AgentConn_t::CommitResult ()
 		return true;
 	}
 
-	MemInputBuffer_c tReq ( m_dReplyBuf.Begin (), m_iReplySize );
-
 	if ( m_eReplyStatus == SEARCHD_RETRY )
 	{
+		MemInputBuffer_c tReq ( m_dReplyBuf.Begin(), m_iReplySize );
 		m_sFailure.SetSprintf ( "remote warning: %s", tReq.GetString ().cstr () );
 		return BadResult ( -1 );
 	}
 
 	if ( m_eReplyStatus == SEARCHD_ERROR )
 	{
+		MemInputBuffer_c tReq ( m_dReplyBuf.Begin(), m_iReplySize );
 		m_sFailure.SetSprintf ( "remote error: %s", tReq.GetString ().cstr () );
 		return BadResult ( -1 );
 	}
+
+	// failures unecrypted
+	if ( !ApiDecryptReply ( m_tApiKey, m_dReplyBuf, m_sFailure ) )
+	{
+		m_sFailure.SetSprintf ( "remote error: %s", m_sFailure.cstr () );
+		m_eReplyStatus = SEARCHD_ERROR;
+		return BadResult ( -1 );
+	}
+
+	m_pReplyCur = m_dReplyBuf.begin ();
+	m_iReplySize = m_dReplyBuf.GetLength();
+	MemInputBuffer_c tReq ( m_dReplyBuf );
 
 	bool bWarnings = ( m_eReplyStatus == SEARCHD_WARNING );
 	if ( bWarnings )
@@ -3345,7 +3347,7 @@ private:
 	// or even both) are still in work, and so we need to keep the 'overlapped' structs alive for them.
 	// So, we can't just delete the task in the case. Instead, we invalidate it (set m_ifd=-1, nullify payload),
 	// so that the next return from events_wait will recognize it and finally totally destroy the task for us.
-	AgentConn_t * DeleteTask ( TaskNet_t * pTask, bool bReleasePayload=true )
+	AgentConn_t * DeleteTask ( TaskNet_t * pTask, bool bReleasePayload=true ) REQUIRES ( LazyThread )
 	{
 		assert ( pTask );
 		sphLogDebugL ( "L DeleteTask for %p, (conn %p, io %d), release=%d", pTask, pTask->m_pPayload, pTask->m_uIOActive, bReleasePayload );
@@ -3378,7 +3380,7 @@ private:
 	}
 
 
-	void ProcessChanges ( TaskNet_t * pTask )
+	void ProcessChanges ( TaskNet_t * pTask ) REQUIRES ( LazyThread )
 	{
 		sphLogDebugL ( "L ProcessChanges for %p, (conn %p) (%d->%d), tm=" INT64_FMT " sock=%d", pTask, pTask->m_pPayload, pTask->m_uIOActive, pTask->m_uIOChanged, pTask->m_iTimeoutTimeUS, pTask->m_ifd );
 
@@ -3421,7 +3423,7 @@ private:
 		SafeDelete ( pExternalQueue );
 
 		auto VARIABLE_IS_NOT_USED uLastLen = m_dInternalTasks.GetLength ();
-		m_dInternalTasks.Uniq ();
+		m_dInternalTasks.Uniq (sph::unstable);
 
 		if ( m_dInternalTasks.IsEmpty () )
 		{
@@ -3459,7 +3461,7 @@ private:
 			auto* pTask = ( TaskNet_t* ) m_dTimeouts.Root ();
 			assert ( pTask->m_iTimeoutTimeUS>0 );
 
-			auto iMonoTime = MonoMicroTimer();
+			int64_t iMonoTime = MonoMicroTimer(); // with auto uint64_t test 259 will fail; fixme!
 			m_iNextTimeoutUS = pTask->m_iTimeoutTimeUS - iMonoTime;
 			if ( m_iNextTimeoutUS>0 )
 				return bHasTimeout;
@@ -3503,7 +3505,7 @@ private:
 	}
 
 	/// abandon and release all events (on shutdown)
-	void AbortScheduled ()
+	void AbortScheduled () REQUIRES ( LazyThread )
 	{
 		while ( !m_dTimeouts.IsEmpty () )
 		{
@@ -3735,8 +3737,12 @@ public:
 		} else
 			sphLogDebugv ( "- %d Change task (task %p), fd=%d (%d) " INT64_FMT "Us -> " INT64_FMT "Us", pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTimeUS, iTimeoutUS );
 
-		
-		AddToQueue ( pTask, pConnection->InNetLoop () );
+		const bool bRemoveClosingFromEpoll = (NETPOLL_TYPE == NETPOLL_EPOLL) && (iTimeoutUS<0) && pConnection->InNetLoop ();
+
+		if ( bRemoveClosingFromEpoll )
+			events_change_io (pTask);
+		else
+			AddToQueue ( pTask, pConnection->InNetLoop () );
 	}
 
 	void DisableWrite ( AgentConn_t * pConnection )

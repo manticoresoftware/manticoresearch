@@ -9,6 +9,12 @@ if [ -z "$CI_COMMIT_SHA" ]; then
   exit 1
 fi
 
+# Check for the build type argument
+if [ -z "$1" ]; then
+  echo -e "${RED}Build type (dev/release) not specified. Exiting$NC \n"
+  exit 1
+fi
+
 NSIS_BUILD_DIR=$(mktemp -d)
 
 cp dist/build_dockers/nsis/nsisscript.nsi $NSIS_BUILD_DIR
@@ -24,8 +30,8 @@ MANTICORE_DATE=${MANTICORE_DATE:2:8}
 MANTICORE_FULL_VERSION="manticore-${MANTICORE_VERSION}-${MANTICORE_DATE}-${CI_COMMIT_SHORT_SHA}-x64-main.zip"
 echo "MANTICORE_FULL_VERSION: $MANTICORE_FULL_VERSION"
 
-IS_RELEASE_DIGIT=$(echo "$MANTICORE_VERSION" | cut -d. -f3)
-if [[ $((IS_RELEASE_DIGIT % 2)) -eq 0 ]]; then
+# Use the command-line argument to determine the build type
+if [ "$1" = "release" ]; then
   DESTINATION_REPOS=("release" "release_candidate")
   MANTICORE_PACKAGE_NAME="https://repo.manticoresearch.com/repository/manticoresearch_windows/release_candidate/x64/$MANTICORE_FULL_VERSION"
 else

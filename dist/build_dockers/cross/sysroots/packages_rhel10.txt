@@ -1,0 +1,20 @@
+# file included from in_rhel10.sh
+
+# provides jemalloc
+curl -O https://rpmfind.net/linux/opensuse/distribution/leap/16.0/repo/oss/$arch/libjemalloc2-5.3.0-160000.1.13.$arch.rpm \
+     -O https://rpmfind.net/linux/opensuse/distribution/leap/16.0/repo/oss/$arch/jemalloc-devel-5.3.0-160000.1.13.$arch.rpm
+
+dnf install -y \
+    libjemalloc2-5.3.0-160000.1.13.$arch.rpm \
+    jemalloc-devel-5.3.0-160000.1.13.$arch.rpm
+
+rm -rf libjemalloc2-5.3.0-160000.1.13.$arch.rpm jemalloc-devel-5.3.0-160000.1.13.$arch.rpm
+
+dnf install -y \
+        mariadb-connector-c-devel \
+        expat-devel \
+        libpq-devel \
+        unixODBC-devel \
+        openssl-devel \
+        libzstd-devel \
+        libcurl-devel

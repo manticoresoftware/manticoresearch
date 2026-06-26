@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -17,6 +17,7 @@
 #include "searchdsql.h"
 #include "attribute.h"
 #include "querycontext.h"
+#include "sphinxquery/xqparser.h"
 
 // hard-coded definitions to avoid probing (that is - to avoid confusing memcheck programs)
 // run searchd with --logdebug --console once, read values, then write them here and uncomment these lines
@@ -31,21 +32,21 @@ protected:
 	int m_iComplexity;
 
 protected:
-	int CalcUsedStackEdge ( BYTE uFiller )
+	DWORD CalcUsedStackEdge ( BYTE uFiller )
 	{
 		ARRAY_CONSTFOREACH ( i, m_dMockStack )
 			if ( m_dMockStack[i]!=uFiller )
-				return m_dMockStack.GetLength ()-i;
+				return m_dMockStack.GetULength()-i;
 
-		return m_dMockStack.GetLength ();
+		return m_dMockStack.GetULength ();
 	}
 
-	void MockInitMem ( BYTE uFiller )
+	ATTRIBUTE_NO_SANITIZE_ADDRESS void MockInitMem ( BYTE uFiller )
 	{
 		::memset ( m_dMockStack.begin (), uFiller, m_dMockStack.GetLengthBytes () );
 	}
 
-	int MeasureStackWithPattern ( BYTE uPattern )
+	DWORD MeasureStackWithPattern ( BYTE uPattern )
 	{
 		MockInitMem ( uPattern );
 		MockParseTest ();
@@ -53,7 +54,7 @@ protected:
 		return sphRoundUp ( iUsedStackEdge, 4 );
 	}
 
-	int MeasureStack ()
+	DWORD MeasureStack ()
 	{
 		auto iStartStackDE = MeasureStackWithPattern ( 0xDE );
 		auto iStartStackAD = MeasureStackWithPattern ( 0xAD );
@@ -70,54 +71,83 @@ protected:
 	}
 
 public:
-	StackSizeTuplet_t MockMeasureStack ()
+	ATTRIBUTE_NO_SANITIZE_ADDRESS StackSizeTuplet_t MockMeasureStack ()
 	{
-		constexpr int iMeasures = 20;
-		std::vector<std::pair<int,int>> dMeasures { iMeasures };
-		int i = 0;
+		StringBuilder_c sLog;
+		constexpr int iMeasures = 50;
+		DWORD uDepth = 0;
+		BuildMockExprWrapper ( uDepth );
+		auto uStartingStack = MeasureStack ();
+		sphLogDebugv( "========= start measure ==============" );
+		sLog.Sprintf( "height 0, stack %d, deltah %d, deltastack %d", uStartingStack, 0, uStartingStack );
+		sphLogDebugv( "height 0, stack %d, deltah %d, deltastack %d", uStartingStack, 0, uStartingStack );
 
-		int iDepth = 0;
-		int iStack = 0;
+		DWORD i = 1;
+		CSphVector<std::pair<int,int>> dHistogram;
+		auto IncValue = [&dHistogram] ( int i ) {
+			for ( auto& pair : dHistogram ) { // expected 2..5 elements; so linear search is perfect here.
+				if ( pair.first != i )
+					continue;
+				++pair.second;
+				return pair.second;
+			}
+			dHistogram.Add({i,1});
+			return 1;
+		};
+		DWORD uPreviousStack = uStartingStack;
+		DWORD uPreviousDepth = uDepth;
 		while ( i<iMeasures )
 		{
-			BuildMockExprWrapper ( iDepth++ );
-			auto iThisStack = MeasureStack ();
-			if ( iThisStack == iStack )
+			BuildMockExprWrapper ( ++uDepth );
+			auto uThisStack = MeasureStack ();
+			if ( uThisStack == uPreviousStack )
 				continue;
 
-			dMeasures[i].first = iDepth-1;
-			dMeasures[i].second = iThisStack;
-			auto iDelta = iThisStack-iStack;
-			iStack = iThisStack;
+			int iDelta = uThisStack - uPreviousStack;
+			DWORD uDeltaDepth = uDepth - uPreviousDepth;
+			uPreviousStack = uThisStack;
+			uPreviousDepth = uDepth;
+			sphLogDebugv( "height %d, stack %d, deltah %d, deltastack %d", uDepth, uThisStack, uDeltaDepth, iDelta );
+			sLog.Sprintf( "%d: %d: %d: %d", uDepth, uThisStack, uDeltaDepth, iDelta );
 			++i;
-			if ( iStack + iDelta >= m_dMockStack.GetLengthBytes() )
+			if ( uDeltaDepth==1 && iDelta>0 )
+			{
+				auto iMaxTries = IncValue ( iDelta );
+				const auto iRestTries = iMeasures - i;
+				if ( iMaxTries>iRestTries ) // we may stop here, if continuing will definitely give us nothing better
+				{
+					if ( dHistogram.GetLength()==1)
+						break;
+					dHistogram.Sort ( Lesser ( [] ( auto l, auto r ) { return l.second>r.second; } ) );
+					if ( iMaxTries > (iRestTries + dHistogram[1].second) )
+						break;
+				}
+			}
+			const int iRestStack = m_dMockStack.GetLengthBytes() - uPreviousStack;
+			if ( iDelta >= iRestStack )
 				break;
 		}
 
-		auto iValues = i;
-		std::vector<std::pair<int, int>> dDeltas { iMeasures };
-		sphLogDebugv( "========= start measure ==============" );
-		std::pair<int,int> dInitial {0,0};
-		for ( i=0; i<iValues; ++i )
+		dHistogram.Sort ( Lesser ( [] ( auto l, auto r ) { return l.second>r.second; } ) );
+		sphLogDebugv( "Performed %d measures out of %d, max depth %d", i, iMeasures, uDepth );
+		sLog.Sprintf( "Performed %d measures out of %d, max depth %d", i, iMeasures, uDepth );
+		for ( const auto& pair : dHistogram )
 		{
-			dDeltas[i].first = dMeasures[i].first-dInitial.first;
-			dDeltas[i].second = dMeasures[i].second-dInitial.second;
-			sphLogDebugv( "height %d, stack %d, deltah %d, deltastack %d", dMeasures[i].first, dMeasures[i].second, dDeltas[i].first, dDeltas[i].second );
-			dInitial = dMeasures[i];
+			sphLogDebugv( "stack frame size %d, frames %d", pair.first, pair.second );
+			sLog.Sprintf( "stack frame size %d, frames %d", pair.first, pair.second );
 		}
 
-		int iStart = dMeasures.front().second;
-
-		iStack = 0;
-		for ( i=iValues-1; i>0; --i )
+		if ( dHistogram.IsEmpty() )
 		{
-			if ( dDeltas[i].first !=1 )
-				break;
-			iStack = Max ( iStack, dDeltas[i].second );
+			sphWarning ("Something wrong measuring stack. After %d tries, %d depth", i, uDepth );
+			sphWarning ("log: %s", sLog.cstr());
 		}
+
+		auto iStack = dHistogram.First().first;
+		assert (iStack>0);
 
 		int iDelta = sphRoundUp ( iStack, 8 );
-		return { iStart, iDelta };
+		return { (int)uStartingStack, iDelta };
 	}
 
 	virtual ~StackMeasurer_c () = default;
@@ -130,13 +160,20 @@ class CreateExprStackSize_c final : public StackMeasurer_c
 	void BuildMockExpr ( int iComplexity ) final
 	{
 		m_sExpr.Clear();
-		m_sExpr << "((attr_a=0)*1)";
+		m_sExpr << "IF(attr_a IN(0,1),10,";
 
-		for ( int i = 1; i<iComplexity+1; ++i ) // ((attr_a=0)*1) + ((attr_b=1)*3) + ((attr_b=2)*5) + ...
-			m_sExpr << "+((attr_b=" << i << ")*" << i * 2+1 << ")";
+		for ( int i = 1; i<iComplexity+1; ++i )
+			m_sExpr << "IF(attr_a IN(" << i << "," << i+1 << ")," << (i+1)*10 << ",";
+		m_sExpr << (iComplexity+2)*10 << ")";
+		for ( int i = 0; i<iComplexity; ++i )
+			m_sExpr << ")";
+
+		//IF(a IN(0,1),10,20)
+		//IF(a IN(0,1),10,IF(a IN(1,2),20,30))
+		//IF(a IN(0,1),10,IF(a IN(1,2),20,IF(a IN(2,3),30,40))) ...
 	}
 
-	void MockParseTest () final
+	ATTRIBUTE_NO_SANITIZE_ADDRESS void MockParseTest () final
 	{
 		struct
 		{
@@ -152,13 +189,11 @@ class CreateExprStackSize_c final : public StackMeasurer_c
 		tAttr.m_eAttrType = SPH_ATTR_INTEGER;
 		tAttr.m_sName = "attr_a";
 		tParams.m_tSchema.AddAttr ( tAttr, false );
-		tAttr.m_sName = "attr_b";
-		tParams.m_tSchema.AddAttr ( tAttr, false );
 
 		tParams.m_sExpr = m_sExpr.cstr();
 
 		Threads::MockCallCoroutine ( m_dMockStack, [&tParams] {
-			tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, nullptr, tParams.m_sError, tParams.m_tArgs );
+			tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, tParams.m_sError, tParams.m_tArgs );
 		} );
 
 		tParams.m_bSuccess = !!tParams.m_pExprBase;
@@ -190,8 +225,8 @@ class EvalExprStackSize_c final : public StackMeasurer_c
 		m_sExpr.Clear ();
 		m_sExpr << "((attr_a=0)*1)";
 
-		for ( int i = 1; i<iComplexity+1; ++i ) // ((attr_a=0)*1) + ((attr_b=1)*3) + ((attr_b=2)*5) + ...
-			m_sExpr << "+((attr_b=" << i << ")*" << i*2+1 << ")";
+		for ( int i = 1; i<iComplexity+1; ++i )
+			m_sExpr << " or attr_b in (" << i << ")"; // ((attr_a=0)*1) or attr_b in (1) or attr_b in (2) ...
 	}
 
 	void MockParseTest () final
@@ -230,7 +265,7 @@ class EvalExprStackSize_c final : public StackMeasurer_c
 		{ // parse in dedicated coro (hope, 100K frame per level should fit any arch)
 			CSphFixedVector<BYTE> dSafeStack { iStack };
 			Threads::MockCallCoroutine ( dSafeStack, [&tParams] {	// do in coro as for fat expr it might already require dedicated stack
-				tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, nullptr, tParams.m_sError, tParams.m_tArgs );
+				tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, tParams.m_sError, tParams.m_tArgs );
 			});
 			tParams.m_bSuccess = !!tParams.m_pExprBase;
 			assert ( tParams.m_pExprBase );
@@ -307,7 +342,7 @@ class DeleteExprStackSize_c final : public StackMeasurer_c
 		{ // parse in dedicated coro (hope, 100K frame per level should fit any arch)
 			CSphFixedVector<BYTE> dSafeStack { iStack };
 			Threads::MockCallCoroutine ( dSafeStack, [&tParams] {	// do in coro as for fat expr it might already require dedicated stack
-				tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, nullptr, tParams.m_sError, tParams.m_tArgs );
+				tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, tParams.m_sError, tParams.m_tArgs );
 			});
 		}
 
@@ -459,6 +494,7 @@ public:
 	FullTextStackSize_c()
 	{
 		CSphDictSettings tDictSettings;
+		tDictSettings.SetDictFormat ( DictFormat_e::CRC );
 
 		auto pTok = Tokenizer::Detail::CreateUTF8Tokenizer();
 		CSphSchema tSrcSchema;
@@ -475,7 +511,7 @@ public:
 		tSchema.AddField ( "text" );
 		tSchema.AddAttr ( tCol, false );
 
-		m_pRtIndex = sphCreateIndexRT ( "testrt", "fake", tSchema, 32 * 1024 * 1024, false );
+		m_pRtIndex = sphCreateIndexRT ( "testrt", "fake", tSchema, 32 * 1024 * 1024 );
 
 		m_pRtIndex->SetTokenizer ( pTok->Clone ( SPH_CLONE_INDEX ) );
 		m_pRtIndex->SetDictionary ( pDict->Clone() );
@@ -510,11 +546,6 @@ public:
 	static constexpr const char * szEnv = "KNOWN_MATCH_SIZE";
 };
 
-#if defined( __clang__ ) || defined( __GNUC__ )
-#define ATTRIBUTE_NO_SANITIZE_ADDRESS __attribute__ ( ( no_sanitize_address ) )
-#else
-#define ATTRIBUTE_NO_SANITIZE_ADDRESS
-#endif
 
 ATTRIBUTE_NO_SANITIZE_ADDRESS StackSizeTuplet_t CreateExprStackSize_c::MockMeasure()
 {
@@ -561,7 +592,7 @@ ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize (StringBuilder_c& sExport)
 	{
 		StringBuilder_c sName;
 		sName << "MANTICORE_" << szEnv;
-		tNewSize.m_iEval = val_from_env ( sName.cstr(), 0 );
+		tNewSize.m_iEval = env_long ( sName.cstr() ).value_or(0);
 
 		if ( !tNewSize.m_iEval )
 		{
@@ -588,7 +619,7 @@ ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize (StringBuilder_c& sExport)
 	{
 		StringBuilder_c sName;
 		sName << "MANTICORE_START_" << szEnv;
-		tNewSize.m_iCreate = val_from_env ( sName.cstr(), tNewSize.m_iCreate );
+		tNewSize.m_iCreate = env_long ( sName.cstr() ).value_or ( tNewSize.m_iCreate );
 
 		if ( !bMocked && !tNewSize.m_iCreate )
 		{
@@ -659,4 +690,3 @@ void DetermineMatchStackSize(StringBuilder_c& sExport)
 #endif
 		(sExport);
 }
-

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -511,7 +511,7 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 	ARRAY_FOREACH ( i, dFound )
 		dFound[i] = false;
 
-	const bool bWordDict = m_pDict->GetSettings().m_bWordDict;
+	const bool bWordDict = m_pDict->GetSettings().IsWordDict();
 
 	// map plain attrs from SQL
 	for ( int i=0; i<m_iSqlFields; i++ )
@@ -1369,8 +1369,8 @@ struct CmpPairs_fn
 
 static uint64_t CreateKey ( DocID_t tDocID, int iEntry )
 {
-	uint64_t uRes = sphFNV64 ( &tDocID, sizeof(tDocID) );
-	return sphFNV64 ( &iEntry, sizeof(iEntry), uRes );
+	uint64_t uRes = sphFNV64 ( tDocID );
+	return sphFNV64 ( iEntry, uRes );
 }
 
 
@@ -1545,7 +1545,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphReader & tReader, CSphString 
 				m_iJoinedHitPos = 0;
 			}
 
-			m_tState = CSphBuildHitsState_t();
+			m_tState.Reset();
 			m_tState.m_iField = m_iJoinedHitField;
 			m_tState.m_iStartField = m_iJoinedHitField;
 			m_tState.m_iEndField = m_iJoinedHitField+1;
@@ -1564,7 +1564,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphReader & tReader, CSphString 
 			m_tDocInfo.m_tRowID = pIdPair->m_tRowID;
 		}
 				
-		BuildHits ( sError, true );
+		BuildHits ( sError );
 
 		// update current position
 		if ( !m_tSchema.GetField(m_iJoinedHitField).m_bPayload && !m_tState.m_bProcessingHits && m_tHits.GetLength() )

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -97,6 +97,7 @@ public:
 
 	/// get stats
 	virtual const CSphSourceStats &		GetStats ();
+	const CSphString &					GetLastWarning () const { return m_sLastWarning; }
 
 	/// updates schema fields and attributes
 	/// updates pInfo if it's empty; checks for match if it's not
@@ -171,7 +172,7 @@ public:
 	virtual void			PostIndex () {}
 
 	// returns false when there are no more documents
-	void					BuildHits ( CSphString & sError, bool bSkipEndMarker );
+	void					BuildHits ( CSphString & sError );
 
 	/// field data getter
 	/// to be implemented by descendants
@@ -199,6 +200,7 @@ protected:
 
 protected:
 	ISphHits				m_tHits;				///< my hitvector
+	CSphString				m_sLastWarning;
 
 protected:
 	char *					m_pReadFileBuffer = nullptr;
@@ -224,6 +226,7 @@ protected:
 		CSphVector<BYTE*> m_dTmpFieldStorage;
 		CSphVector<BYTE*> m_dTmpFieldPtrs;
 		CSphVector<BYTE> m_dFiltered;
+		CSphFixedVector<BYTE> m_dTokenBuf { 0 };
 
 		int m_iStartPos;
 		Hitpos_t m_iHitPos;

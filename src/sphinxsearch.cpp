@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -18,12 +18,11 @@
 #include "attribute.h"
 #include "conversion.h"
 #include "secondaryindex.h"
+#include "columnarlib.h"
 #include "dict/dict_entry.h"
 #include "client_task_info.h"
 
 #include <math.h>
-
-
 bool operator < ( const SkiplistEntry_t & a, RowID_t b )	{ return a.m_tBaseRowIDPlus1<b; }
 bool operator == ( const SkiplistEntry_t & a, RowID_t b )	{ return a.m_tBaseRowIDPlus1==b; }
 bool operator < ( RowID_t a, const SkiplistEntry_t & b )	{ return a<b.m_tBaseRowIDPlus1; }
@@ -150,6 +149,8 @@ public:
 	virtual bool				InitState ( const CSphQueryContext &, CSphString & )	{ return true; }
 
 	void						FinalizeCache ( const ISphSchema & tSorterSchema ) override;
+	// skip caching when SI iterators used as qcache will see the full-text without SI filters as SI modify filters
+	void						DisableCaching() { SafeReleaseAndZero ( m_pQcacheEntry ); }
 
 	NodeEstimate_t				Estimate ( int64_t iTotalDocs ) const override;
 
@@ -176,7 +177,6 @@ protected:
 	const CSphIndex *			m_pIndex = nullptr;					///< this is he who'll do my filtering!
 	CSphQueryContext *			m_pCtx = nullptr;
 
-	int64_t *					m_pNanoBudget = nullptr;
 	QcacheEntry_c *				m_pQcacheEntry = nullptr;			///< data to cache if we decide that the current query is worth caching
 
 	StrVec_t					m_dZones;
@@ -207,6 +207,8 @@ protected:
 			assert ( !m_pOriginalRoot );
 			m_pOriginalRoot = m_pRoot.release();
 			m_pRoot = CreatePseudoFTNode ( m_pOriginalRoot, (RowidIterator_i*)*ppResult );
+			// if SI iterator created - disable caching; only qcache or SI could work at the time
+			DisableCaching();
 			return true;
 
 		case EXTRA_SET_BOUNDARIES:
@@ -231,7 +233,7 @@ public:
 
 
 
-STATIC_ASSERT ( ( 8*8*sizeof(DWORD) )>=SPH_MAX_FIELDS, PAYLOAD_MASK_OVERFLOW );
+static_assert ( ( 8*8*sizeof(DWORD) )>=SPH_MAX_FIELDS, "payload mask overflow" );
 
 static const bool WITH_BM25 = true;
 
@@ -423,19 +425,19 @@ bool RenderKeywordNodeDot ( StringBuilder_c & tRes, const bson::Bson_c& tBson )
 	ScopedComma_c ExplainComma ( tRes, " | ", "[shape=record label=\"", "\"]\n" );
 	tRes << String ( tWord );
 	ScopedComma_c ParamComma ( tRes, " | ", "{ ", " }" );
-	tRes.Sprintf ( "querypos=%d", Int ( tBson.ChildByName ( SZ_QUERYPOS ) ) );
+	tRes.Sprintf ( "qp=%d", Int ( tBson.ChildByName ( SZ_QUERYPOS ) ) );
 	if ( Bool ( tBson.ChildByName ( SZ_EXCLUDED ) ) )
-		tRes += "excluded";
+		tRes += "excl";
 	if ( Bool ( tBson.ChildByName ( SZ_EXPANDED ) ) )
-		tRes += "expanded";
+		tRes += "exp";
 	if ( Bool ( tBson.ChildByName ( SZ_FIELD_START ) ) )
-		tRes += "field_start";
+		tRes += "_start";
 	if ( Bool ( tBson.ChildByName ( SZ_FIELD_END ) ) )
-		tRes += "field_end";
+		tRes += "_end";
 	if ( Bool ( tBson.ChildByName ( SZ_MORPHED ) ) )
-		tRes += "morphed";
+		tRes += "mrph";
 	if ( Bool ( tBson.ChildByName ( SZ_REGEX ) ) )
-		tRes += "regex";
+		tRes += "rgx";
 	auto tBoost = tBson.ChildByName ( SZ_BOOST );
 	if ( !IsNullNode ( tBoost ) )
 	{
@@ -459,7 +461,7 @@ void RenderDotBsonNodePlan ( bson::NodeHandle_t dBson, StringBuilder_c & tRes, i
 		return;
 
 	{
-		ScopedComma_c ExplainComma ( tRes, " | ", R"([shape=record,style=filled,bgcolor="lightgrey" label=")", "\"]\n" );
+		ScopedComma_c ExplainComma ( tRes, " | ", R"([shape=record,style=filled label=")", "\"]\n" );
 		tRes << String ( tBson.ChildByName ( SZ_TYPE ) );
 		ScopedComma_c ParamComma ( tRes, " \\n| ", "{ ", " }" );
 
@@ -486,7 +488,7 @@ void RenderDotBsonNodePlan ( bson::NodeHandle_t dBson, StringBuilder_c & tRes, i
 void RenderDotBsonPlan ( bson::NodeHandle_t dBson, StringBuilder_c & tRes )
 {
 	int iId=0;
-	tRes << "digraph \"transformed_tree\"\n{\n";
+	tRes << "digraph \"transformed_tree\" {\n";
 	RenderDotBsonNodePlan ( dBson, tRes, iId );
 	tRes << "}";
 }
@@ -503,27 +505,39 @@ void XQNodeGetExtraBson ( bson::Assoc_c & tNode, const XQNode_t * pNode )
 	}
 }
 
-void AddAccessSpecsBson ( bson::Assoc_c & tNode, const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones )
+void AddAccessSpecsBson ( bson::Assoc_c & tNode, const XQNode_t * pNode, const CSphSchema * pSchema, const StrVec_t * pZones )
 {
 	assert ( pNode );
 	// dump spec for keyword nodes
 	// FIXME? double check that spec does *not* affect non keyword nodes
-	if ( pNode->m_dSpec.IsEmpty () || pNode->m_dWords.IsEmpty () )
+	if ( pNode->m_dSpec.IsEmpty () || pNode->dWords().IsEmpty () )
 		return;
 
 	const XQLimitSpec_t & s = pNode->m_dSpec;
 	if ( s.m_bFieldSpec && !s.m_dFieldMask.TestAll ( true ) )
 	{
 		StrVec_t dFields;
-		for ( int i = 0; i<tSchema.GetFieldsCount (); ++i )
-			if ( s.m_dFieldMask.Test ( i ) )
-				dFields.Add ( tSchema.GetFieldName ( i ) );
-		tNode.AddStringVec( SZ_FIELDS, dFields );
+		if ( pSchema )
+		{
+			for ( int i = 0; i<pSchema->GetFieldsCount (); ++i )
+				if ( s.m_dFieldMask.Test ( i ) )
+					dFields.Add ( pSchema->GetFieldName ( i ) );
+		} else
+		{
+			if ( !s.m_dFieldMask.TestAll ( false ) )
+				dFields.Add ( SphSprintf ( "%u",s.m_dFieldMask.GetMask32() ) );
+		}
+
+		tNode.AddStringVec ( SZ_FIELDS, dFields );
 	}
 	if ( s.m_iFieldMaxPos )
 		tNode.AddInt ( SZ_MAX_FIELD_POS, s.m_iFieldMaxPos );
-	if ( s.m_dZones.GetLength () )
-		tNode.AddStringVec ( s.m_bZoneSpan ? SZ_ZONESPANS : SZ_ZONES, dZones );
+	if ( !pZones || s.m_dZones.IsEmpty () )
+		return;
+	StrVec_t dZones;
+	for ( const auto& iZone: s.m_dZones )
+		dZones.Add ( (*pZones)[iZone] );
+	tNode.AddStringVec ( s.m_bZoneSpan ? SZ_ZONESPANS : SZ_ZONES, dZones );
 }
 
 void CreateKeywordBson ( bson::Assoc_c& tWord, const XQKeyword_t & tKeyword )
@@ -547,31 +561,31 @@ void CreateKeywordBson ( bson::Assoc_c& tWord, const XQKeyword_t & tKeyword )
 		tWord.AddDouble ( SZ_BOOST, tKeyword.m_fBoost );
 }
 
-void BuildPlanBson ( bson::Assoc_c& tPlan, const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones )
+void BuildPlanBson ( bson::Assoc_c& tPlan, const XQNode_t * pNode, const CSphSchema * pSchema, const StrVec_t * pZones )
 {
 	using namespace bson;
 	tPlan.AddString ( SZ_TYPE, sphXQNodeToStr ( pNode ).cstr() );
 	XQNodeGetExtraBson ( tPlan, pNode );
-	AddAccessSpecsBson ( tPlan, pNode, tSchema, dZones );
+	AddAccessSpecsBson ( tPlan, pNode, pSchema, pZones );
 
-	if ( pNode->m_dChildren.GetLength () && pNode->m_dWords.GetLength () )
+	if ( pNode->dChildren().GetLength () && pNode->dWords().GetLength () )
 		tPlan.AddBool ( SZ_VIRTUALLY_PLAIN, true );
 
-	if ( pNode->m_dChildren.IsEmpty () )
+	if ( pNode->dChildren().IsEmpty () )
 	{
-		MixedVector_c dChildren ( tPlan.StartMixedVec( SZ_CHILDREN ), pNode->m_dWords.GetLength() );
-		for ( const auto & i : pNode->m_dWords )
+		MixedVector_c dChildren ( tPlan.StartMixedVec( SZ_CHILDREN ), pNode->dWords().GetLength() );
+		for ( const XQKeyword_t & i : pNode->dWords() )
 		{
 			Obj_c tWord ( dChildren.StartObj () );
 			CreateKeywordBson ( tWord, i );
 		}
 	} else
 	{
-		MixedVector_c dChildren ( tPlan.StartMixedVec ( SZ_CHILDREN ), pNode->m_dChildren.GetLength () );
-		for ( const auto & i : pNode->m_dChildren )
+		MixedVector_c dChildren ( tPlan.StartMixedVec ( SZ_CHILDREN ), pNode->dChildren().GetLength () );
+		for ( const auto & i : pNode->dChildren() )
 		{
 			Obj_c tChild ( dChildren.StartObj () );
-			BuildPlanBson ( tChild, i, tSchema, dZones );
+			BuildPlanBson ( tChild, i, pSchema, pZones );
 		}
 	}
 }
@@ -601,12 +615,12 @@ CSphString sph::RenderBsonPlanBrief ( const bson::NodeHandle_t& dBson )
 }
 
 
-Bson_t sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones )
+Bson_t sphExplainQuery ( const XQNode_t * pNode, const CSphSchema * pSchema, const StrVec_t * pZones )
 {
 	CSphVector<BYTE> dPlan;
 	{
 		bson::Root_c tPlan ( dPlan );
-		::BuildPlanBson ( tPlan, pNode, tSchema, dZones );
+		::BuildPlanBson ( tPlan, pNode, pSchema, pZones );
 	}
 	return dPlan;
 }
@@ -618,7 +632,7 @@ void QueryProfile_c::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema,
 		return;
 	m_dPlan.Reset();
 	bson::Root_c tPlan ( m_dPlan );
-	::BuildPlanBson ( tPlan, pRoot, tSchema, dZones );
+	::BuildPlanBson ( tPlan, pRoot, &tSchema, &dZones );
 }
 
 ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings, bool bUseBM25 )
@@ -655,7 +669,6 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup,
 
 	m_pIndex = tSetup.m_pIndex;
 	m_pCtx = tSetup.m_pCtx;
-	m_pNanoBudget = tSetup.m_pStats ? tSetup.m_pStats->m_pNanoBudget : nullptr;
 
 	m_dZones = tXQ.m_dZones;
 	m_dZoneStart.Resize ( m_dZones.GetLength() );
@@ -669,7 +682,7 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup,
 
 	DictRefPtr_c pZonesDict;
 	// workaround for a particular case with following conditions
-	if ( !m_pIndex->GetDictionary()->GetSettings().m_bWordDict && m_dZones.GetLength() )
+	if ( !m_pIndex->GetDictionary()->GetSettings().IsWordDict() && m_dZones.GetLength() )
 		pZonesDict = m_pIndex->GetDictionary()->Clone();
 
 	ARRAY_FOREACH ( i, m_dZones )
@@ -770,7 +783,7 @@ void ExtRanker_c::FinalizeCache ( const ISphSchema & tSorterSchema )
 	if ( m_pQcacheEntry )
 	{
 		CSphScopedProfile tProf ( m_pCtx->m_pProfile, SPH_QSTATE_QCACHE_FINAL );
-		QcacheAdd ( m_pCtx->m_tQuery, m_pQcacheEntry, tSorterSchema );
+		QcacheAdd ( m_pCtx->m_tQuery, m_pCtx->m_tQuerySettings, m_pQcacheEntry, tSorterSchema );
 	}
 
 	SafeReleaseAndZero ( m_pQcacheEntry );
@@ -1192,8 +1205,6 @@ const ExtDoc_t * ExtRanker_T<USE_BM25>::GetFilteredDocs ()
 
 		if ( iDocs )
 		{
-			if ( m_pNanoBudget )
-				*m_pNanoBudget -= g_iPredictorCostMatch*iDocs;
 			m_dMyDocs[iDocs].m_tRowID = INVALID_ROWID;
 			return m_dMyDocs;
 		}
@@ -2203,7 +2214,14 @@ public:
 	ESphAttr			m_eExprType { SPH_ATTR_NONE };
 	const CSphSchema *	m_pSchema = nullptr;
 	CSphAttrLocator		m_tFieldLensLoc;
+	CSphFixedVector<int> m_dFieldLenAttrs { 0 };	///< attr id for each autogenerated *_len field attr
+	CSphFixedVector<CSphAttrLocator> m_dFieldLenLocs { 0 };	///< rowwise locator for each autogenerated *_len field attr
+	// Per-field iterators for autogenerated *_len attrs when those token-count attributes are columnar.
+	CSphVector<std::unique_ptr<columnar::Iterator_i>>	m_dFieldLenIters;
+	int					m_iFieldLenAttrs = 0;
+	int					m_iColumnarFieldLens = 0;
 	float				m_fAvgDocLen = 0.0f;
+	float				m_fParamAvgDocLen = 0.0f;
 	const int64_t *		m_pFieldLens = nullptr;
 	int64_t				m_iTotalDocuments = 0;
 	float				m_fParamK1 = 1.2f;
@@ -2380,6 +2398,49 @@ public:
 		}
 	}
 
+	int64_t GetRowwiseFieldLength ( int iField, const CSphMatch & tMatch ) const
+	{
+		if ( iField<m_dFieldLenLocs.GetLength() && m_dFieldLenLocs[iField].m_iBitOffset>=0 )
+			return tMatch.GetAttr ( m_dFieldLenLocs[iField] );
+
+		return 0;
+	}
+
+	int64_t GetFieldLength ( int iField, const CSphMatch & tMatch ) const
+	{
+		if ( iField<m_dFieldLenIters.GetLength() && m_dFieldLenIters[iField] )
+			return m_dFieldLenIters[iField]->Get ( tMatch.m_tRowID );
+
+		return GetRowwiseFieldLength ( iField, tMatch );
+	}
+
+	template < typename FIELD_LENGTH_FN >
+	void ForEachFieldLength ( const CSphMatch & tMatch, FIELD_LENGTH_FN && fn ) const
+	{
+		if ( m_iColumnarFieldLens==m_iFields )
+		{
+			for ( int i=0; i<m_iFields; ++i )
+			{
+				assert ( i<m_dFieldLenIters.GetLength() && m_dFieldLenIters[i] );
+				fn ( i, m_dFieldLenIters[i]->Get ( tMatch.m_tRowID ) );
+			}
+
+		} else if ( m_iColumnarFieldLens )
+		{
+			for ( int i=0; i<m_iFields; ++i )
+				fn ( i, GetFieldLength ( i, tMatch ) );
+
+		} else if ( m_tFieldLensLoc.m_iBitOffset>=0 )
+		{
+			CSphAttrLocator tLoc = m_tFieldLensLoc;
+			for ( int i=0; i<m_iFields; ++i )
+			{
+				fn ( i, tMatch.GetAttr ( tLoc ) );
+				tLoc.m_iBitOffset += 32;
+			}
+		}
+	}
+
 	/// finalize per-document factors that, well, need finalization
 	void FinalizeDocFactors ( const CSphMatch & tMatch )
 	{
@@ -2401,15 +2462,10 @@ public:
 
 		// compute document length
 		float dl = 0; // OPTIMIZE? could precompute and store total dl in attrs, but at a storage cost
-		CSphAttrLocator tLoc = m_tFieldLensLoc;
-		if ( tLoc.m_iBitOffset>=0 )
-			for ( int i=0; i<m_iFields; i++ )
-		{
-			dl += tMatch.GetAttr ( tLoc );
-			tLoc.m_iBitOffset += 32;
-		}
+		ForEachFieldLength ( tMatch, [&dl] ( int, int64_t iFieldLen ) { dl += iFieldLen; } );
 
 		// compute BM25A (one value per document)
+		const float fAvgDocLen = m_fParamAvgDocLen>0.0f ? m_fParamAvgDocLen : m_fAvgDocLen;
 		m_fDocBM25A = 0.0f;
 		for ( int iWord=1; iWord<=m_iMaxQpos; iWord++ )
 		{
@@ -2420,11 +2476,11 @@ public:
 			float idf = m_dIDF[iWord];
 #if defined( __aarch64__ )
 			// direct calculation produces on arm64 different result, so provide explicitly 3 steps
-			const float paramK1 = m_fParamK1 * ( 1 - m_fParamB + m_fParamB * dl / m_fAvgDocLen );
+			const float paramK1 = m_fParamK1 * ( 1 - m_fParamB + m_fParamB * dl / fAvgDocLen );
 			const float sum = tf / ( tf + paramK1 ) * idf;
 			m_fDocBM25A += sum;
 #else
-			m_fDocBM25A += tf / (tf + m_fParamK1*(1 - m_fParamB + m_fParamB*dl/m_fAvgDocLen)) * idf;
+			m_fDocBM25A += tf / (tf + m_fParamK1*(1 - m_fParamB + m_fParamB*dl/fAvgDocLen)) * idf;
 #endif
 		}
 		m_fDocBM25A += 0.5f; // map to [0..1] range
@@ -2724,8 +2780,8 @@ struct Expr_FieldFactor_c<CSphBitvec> : public Expr_NoLocator_c
 	}
 
 private:
-	Expr_FieldFactor_c<CSphBitvec> ( const Expr_FieldFactor_c<CSphBitvec>& rhs )
-	        : m_pIndex ( rhs.m_pIndex ), m_tField ( rhs.m_tField ) {}
+	Expr_FieldFactor_c ( const Expr_FieldFactor_c& rhs )
+		: m_pIndex ( rhs.m_pIndex ), m_tField ( rhs.m_tField ) {}
 };
 
 
@@ -2821,18 +2877,11 @@ struct Expr_BM25F_T : public Expr_NoLocator_c
 
 	float Eval ( const CSphMatch & tMatch ) const final
 	{
-		// compute document field lengths
+		// Use the same columnar-aware field-length fetch path for BM25F as for BM25A.
 		// OPTIMIZE? could precompute and store total dl in attrs, but at a storage cost
 		// OPTIMIZE? could at least share between multiple BM25F instances, if there are many
-		CSphAttrLocator tLoc = m_pState->m_tFieldLensLoc;
-		
 		m_dFieldLens.Fill ( 0 );
-		if ( tLoc.m_iBitOffset>=0 )
-			for ( int i=0; i<m_pState->m_iFields; i++ )
-		{
-			m_dFieldLens[i] = tMatch.GetAttr ( tLoc );
-			tLoc.m_iBitOffset += 32; 
-		}
+		m_pState->ForEachFieldLength ( tMatch, [this] ( int iField, int64_t iFieldLen ) { m_dFieldLens[iField] = (int)iFieldLen; } );
 		
 		// compute (the current instance of) BM25F
 		float fRes = 0.0f;
@@ -2870,11 +2919,15 @@ private:
 		: m_pState ( rhs.m_pState )
 		, m_fK1 ( rhs.m_fK1 )
 		, m_fB ( rhs.m_fB )
-		, m_dWeights ( rhs.m_dWeights )
-		, m_dAvgDocFieldLens ( rhs.m_dAvgDocFieldLens )
-		, m_dFieldLens ( rhs.m_dFieldLens )
+		, m_dWeights ( rhs.m_dWeights.GetLength() )
+		, m_dAvgDocFieldLens ( rhs.m_dAvgDocFieldLens.GetLength() )
+		, m_dFieldLens ( rhs.m_dFieldLens.GetLength() )
 		, m_iWeightMax ( rhs.m_iWeightMax )
-	{}
+	{
+		m_dWeights.CopyFrom ( rhs.m_dWeights );
+		m_dAvgDocFieldLens.CopyFrom ( rhs.m_dAvgDocFieldLens );
+		m_dFieldLens.CopyFrom ( rhs.m_dFieldLens );
+	}
 };
 
 
@@ -3145,7 +3198,7 @@ public:
 		return -1;
 	}
 
-	ISphExpr * CreateNode ( int iID, ISphExpr * _pLeft, const ISphSchema *, ESphEvalStage *, bool *, CSphString & ) final
+	ISphExpr * CreateNode ( int iID, ISphExpr * _pLeft, const ISphSchema *, ESphEvalStage *, bool *, CSphString & ) override
 	{
 		SafeAddRef ( _pLeft );
 		CSphRefcountedPtr<ISphExpr> pLeft ( _pLeft );
@@ -3191,8 +3244,10 @@ public:
 					CSphMatch tDummy;
 					m_pState->m_fParamK1 = pLeft->GetArg(0)->Eval ( tDummy );
 					m_pState->m_fParamB = pLeft->GetArg(1)->Eval ( tDummy );
+					m_pState->m_fParamAvgDocLen = ( pLeft->GetNumArgs()>=3 ) ? pLeft->GetArg(2)->Eval ( tDummy ) : 0.0f;
 					m_pState->m_fParamK1 = Max ( m_pState->m_fParamK1, 0.001f );
 					m_pState->m_fParamB = Min ( Max ( m_pState->m_fParamB, 0.0f ), 1.0f );
+					m_pState->m_fParamAvgDocLen = Max ( m_pState->m_fParamAvgDocLen, 0.0f );
 					return new Expr_FloatPtr_c ( &m_pState->m_fDocBM25A );
 				}
 			case XRANK_BM25F:
@@ -3335,7 +3390,8 @@ public:
 
 			case XRANK_BM25A:
 				if ( !CheckArgtypes ( dArgs, "BM25A", "c:ss", bAllConst, sError ) )
-					return SPH_ATTR_NONE;
+					if ( !CheckArgtypes ( dArgs, "BM25A", "c:sss", bAllConst, sError ) )
+						return SPH_ATTR_NONE;
 				return SPH_ATTR_FLOAT;
 
 			case XRANK_BM25F:
@@ -3397,6 +3453,65 @@ public:
 	}
 };
 
+
+class ExprRankerValidateHook_c : public ExprRankerHook_T<false, false>
+{
+public:
+	ExprRankerValidateHook_c()
+		: ExprRankerHook_T<false, false> ( nullptr )
+	{}
+
+	ISphExpr * CreateNode ( int, ISphExpr *, const ISphSchema *, ESphEvalStage *, bool *, CSphString & ) override final
+	{
+		return new Expr_GetIntConst_Rank_c ( 0 );
+	}
+};
+
+
+static bool CheckRankerExpressionResult ( ESphAttr eExprType, bool bUsesWeight, const char * sCheckError, CSphString & sError )
+{
+	if ( eExprType!=SPH_ATTR_INTEGER && eExprType!=SPH_ATTR_FLOAT )
+	{
+		sError = "ranking expression must evaluate to integer or float";
+		return false;
+	}
+	if ( bUsesWeight )
+	{
+		sError = "ranking expression must not refer to WEIGHT()";
+		return false;
+	}
+	if ( sCheckError )
+	{
+		sError = sCheckError;
+		return false;
+	}
+
+	return true;
+}
+
+
+bool ValidateStoredRankerExpression ( ESphRankMode eRanker, const CSphString & sRankerExpr, const ISphSchema & tSchema, CSphString & sError )
+{
+	if ( eRanker!=SPH_RANK_EXPR && eRanker!=SPH_RANK_EXPORT )
+		return true;
+
+	ExprRankerValidateHook_c tHook;
+	bool bUsesWeight = false;
+	ESphAttr eExprType = SPH_ATTR_NONE;
+
+	ExprParseArgs_t tExprArgs;
+	tExprArgs.m_pAttrType = &eExprType;
+	tExprArgs.m_pUsesWeight = &bUsesWeight;
+	tExprArgs.m_pHook = &tHook;
+
+	ISphExprRefPtr_c pExpr ( sphExprParse ( sRankerExpr.cstr(), tSchema, sError, tExprArgs ) );
+	if ( !pExpr )
+		return false;
+
+	return CheckRankerExpressionResult ( eExprType, bUsesWeight, tHook.m_sCheckError, sError );
+}
+
+
 /// initialize ranker state
 template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
 bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, const int * pWeights, ExtRanker_T<true> * pRanker, CSphString & sError,	DWORD uFactorFlags )
@@ -3436,6 +3551,14 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, 
 	m_dWLCCS.Reset ( iFields );
 	m_dWLCCS.Fill ( 0 );
 	m_dAtc.Reset ( iFields );
+	m_dFieldLenAttrs.Reset ( iFields );
+	m_dFieldLenLocs.Reset ( iFields );
+	m_dFieldLenAttrs.Fill ( -1 );
+	ARRAY_FOREACH ( i, m_dFieldLenLocs )
+		m_dFieldLenLocs[i].Reset();
+	m_tFieldLensLoc.Reset();
+	m_iFieldLenAttrs = 0;
+	m_iColumnarFieldLens = 0;
 
 	ResetDocFactors();
 
@@ -3446,15 +3569,23 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, 
 	for ( int i=0; i<iFields; i++ )
 		m_iMaxLCS += pWeights[i] * pRanker->m_iQwords;
 
-	for ( int i=0; i<m_pSchema->GetAttrsCount(); i++ )
+	// Columnar iterators are attached later via EXTRA_SET_COLUMNAR because RT/plain searches bind columnar per segment/index.
+	for ( int i=0, iField=0; i<m_pSchema->GetAttrsCount() && iField<iFields; i++ )
 	{
 		if ( m_pSchema->GetAttr(i).m_eAttrType!=SPH_ATTR_TOKENCOUNT )
 			continue;
-		m_tFieldLensLoc = m_pSchema->GetAttr(i).m_tLocator;
-		break;
+
+		m_dFieldLenAttrs[iField] = i;
+		m_dFieldLenLocs[iField] = m_pSchema->GetAttr(i).m_tLocator;
+		if ( iField==0 )
+			m_tFieldLensLoc = m_dFieldLenLocs[iField];
+
+		++iField;
+		++m_iFieldLenAttrs;
 	}
 
 	m_fAvgDocLen = 0.0f;
+	m_fParamAvgDocLen = 0.0f;
 	m_pFieldLens = pRanker->GetIndex()->GetFieldLens();
 	if ( m_pFieldLens )
 		for ( int i=0; i<iFields; i++ )
@@ -3480,24 +3611,12 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, 
 	tExprArgs.m_pUsesWeight = &bUsesWeight;
 	tExprArgs.m_pHook = &tHook;
 
-	m_pExpr = sphExprParse ( m_sExpr, *m_pSchema, nullptr, sError, tExprArgs ); // FIXME!!! profile UDF here too
+	m_pExpr = sphExprParse ( m_sExpr, *m_pSchema, sError, tExprArgs ); // FIXME!!! profile UDF here too
 	if ( !m_pExpr )
 		return false;
-	if ( m_eExprType!=SPH_ATTR_INTEGER && m_eExprType!=SPH_ATTR_FLOAT )
-	{
-		sError = "ranking expression must evaluate to integer or float";
+
+	if ( !CheckRankerExpressionResult ( m_eExprType, bUsesWeight, tHook.m_sCheckError, sError ) )
 		return false;
-	}
-	if ( bUsesWeight )
-	{
-		sError = "ranking expression must not refer to WEIGHT()";
-		return false;
-	}
-	if ( tHook.m_sCheckError )
-	{
-		sError = tHook.m_sCheckError;
-		return false;
-	}
 
 	int iUniq = m_iMaxQpos;
 	if_const ( HANDLE_DUPES )
@@ -4040,8 +4159,35 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::ExtraDataImpl ( Extr
 			m_pExpr->Command ( SPH_EXPR_SET_BLOB_POOL, *ppResult );
 			return true;
 		case EXTRA_SET_COLUMNAR:
+		{
 			m_pExpr->Command ( SPH_EXPR_SET_COLUMNAR, *ppResult );
+			m_dFieldLenIters.Reset();
+			m_iColumnarFieldLens = 0;
+			if (!*ppResult)
+				return true;
+
+			// Rebind field-length iterators for the currently active columnar storage before ranking matches.
+			const auto * pColumnar = (const columnar::Columnar_i*)*ppResult;
+			for ( int iField = 0; iField < m_iFieldLenAttrs; iField++ )
+			{
+				const int iAttr = iField<m_dFieldLenAttrs.GetLength() ? m_dFieldLenAttrs[iField] : -1;
+				if ( iAttr<0 )
+					continue;
+
+				const auto & tAttr = m_pSchema->GetAttr(iAttr);
+				if ( !tAttr.IsColumnar() )
+					continue;
+
+				m_dFieldLenIters.Resize ( m_iFields );
+
+				std::string sError;
+				m_dFieldLenIters[iField] = CreateColumnarIterator ( pColumnar, tAttr.m_sName.cstr(), sError );
+				if ( m_dFieldLenIters[iField] )
+					++m_iColumnarFieldLens;
+			}
+
 			return true;
+		}
 		case EXTRA_SET_POOL_CAPACITY:
 			m_iPoolMatchCapacity = *(int*)ppResult;
 			m_iPoolMatchCapacity += MAX_BLOCK_DOCS;
@@ -4411,11 +4557,11 @@ struct ExtQwordOrderbyQueryPos_t
 
 static bool HasQwordDupes ( XQNode_t * pNode, SmallStringHash_T<int> & hQwords )
 {
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		if ( HasQwordDupes ( pNode->m_dChildren[i], hQwords ) )
+	ARRAY_FOREACH ( i, pNode->dChildren() )
+		if ( HasQwordDupes ( pNode->dChildren()[i], hQwords ) )
 			return true;
-	ARRAY_FOREACH ( i, pNode->m_dWords )
-		if ( !hQwords.Add ( 1, pNode->m_dWords[i].m_sWord ) )
+	for ( const auto& dWord : pNode->dWords() )
+		if ( !hQwords.Add ( 1, dWord.m_sWord ) )
 			return true;
 	return false;
 }
@@ -4428,7 +4574,7 @@ static bool HasQwordDupes ( XQNode_t * pNode )
 }
 
 
-std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery & tQuery, CSphQueryResultMeta & tMeta, const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx, const ISphSchema & tSorterSchema )
+std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResultMeta & tMeta, const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx, const ISphSchema & tSorterSchema )
 {
 	// shortcut
 	const CSphIndex * pIndex = tTermSetup.m_pIndex;
@@ -4446,7 +4592,7 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 	// can we serve this from cache?
 	QcacheEntryRefPtr_t pCached;
 	if ( !tRankerSettings.m_bSkipQCache )
-		pCached = QcacheFind ( pIndex->GetIndexId(), tQuery, tSorterSchema );
+		pCached = QcacheFind ( pIndex->GetIndexId(), tQuery, tQuerySettings, tSorterSchema );
 
 	if ( pCached )
 		return QcacheRanker ( pCached, tTermSetup );
@@ -4458,7 +4604,7 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 
 	// setup eval-tree
 	std::unique_ptr<ExtRanker_c> pRanker;
-	switch ( tQuery.m_eRanker )
+	switch ( tQuerySettings.m_eRanker )
 	{
 		case SPH_RANK_PROXIMITY_BM25:
 			if ( uPayloadMask )
@@ -4516,13 +4662,13 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 				tTermSetup.m_bSetQposMask = true;
 				bool bNeedFactors = !!( tCtx.GetPackedFactor() & SPH_FACTOR_ENABLE );
 				if ( bNeedFactors && bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <true, true>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
+					pRanker = std::make_unique < ExtRanker_Expr_T <true, true>> ( tXQ, tTermSetup, tQuerySettings.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
 				else if ( bNeedFactors && !bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <true, false>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
+					pRanker = std::make_unique < ExtRanker_Expr_T <true, false>> ( tXQ, tTermSetup, tQuerySettings.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
 				else if ( !bNeedFactors && bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <false, true>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
+					pRanker = std::make_unique < ExtRanker_Expr_T <false, true>> ( tXQ, tTermSetup, tQuerySettings.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
 				else if ( !bNeedFactors && !bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <false, false>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
+					pRanker = std::make_unique < ExtRanker_Expr_T <false, false>> ( tXQ, tTermSetup, tQuerySettings.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
 			}
 			break;
 
@@ -4530,13 +4676,13 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 			// TODO: replace Export ranker to Expression ranker to remove duplicated code
 			tTermSetup.m_bSetQposMask = true;
 			if ( bGotDupes )
-				pRanker = std::make_unique <ExtRanker_Export_T<true>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
+				pRanker = std::make_unique <ExtRanker_Export_T<true>> ( tXQ, tTermSetup, tQuerySettings.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
 			else
-				pRanker = std::make_unique <ExtRanker_Export_T<false>> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
+				pRanker = std::make_unique <ExtRanker_Export_T<false>> ( tXQ, tTermSetup, tQuerySettings.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
 			break;
 
 		default:
-			tMeta.m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int) tQuery.m_eRanker );
+			tMeta.m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int) tQuerySettings.m_eRanker );
 			if ( bGotDupes )
 				pRanker = std::make_unique < ExtRanker_State_T < RankerState_Proximity_fn<true,true>, true >> ( tXQ, tTermSetup, tRankerSettings );
 			else
@@ -4545,17 +4691,17 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 
 		case SPH_RANK_PLUGIN:
 			{
-				auto p = PluginGet<PluginRanker_c> ( PLUGIN_RANKER, tQuery.m_sUDRanker.cstr() );
+				auto p = PluginGet<PluginRanker_c> ( PLUGIN_RANKER, tQuerySettings.m_sUDRanker.cstr() );
 				// might be a case for query to distributed index
 				if ( p )
 				{
 					pRanker = std::make_unique < ExtRanker_State_T < RankerState_Plugin_fn, true >> ( tXQ, tTermSetup, tRankerSettings );
 					pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN, (void**)&p );
-					pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN_OPTS, (void**) tQuery.m_sUDRankerOpts.cstr() );
+					pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN_OPTS, (void**) tQuerySettings.m_sUDRankerOpts.cstr() );
 				} else
 				{
 					// create default ranker in case of missed plugin
-					tMeta.m_sWarning.SetSprintf ( "unknown ranker plugin '%s'; using default", tQuery.m_sUDRanker.cstr() );
+					tMeta.m_sWarning.SetSprintf ( "unknown ranker plugin '%s'; using default", tQuerySettings.m_sUDRanker.cstr() );
 					if ( bGotDupes )
 						pRanker = std::make_unique < ExtRanker_State_T < RankerState_Proximity_fn<true,true>, true >> ( tXQ, tTermSetup, tRankerSettings );
 					else
@@ -4583,11 +4729,20 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 	for ( auto& hQword : hQwords )
 	{
 		ExtQword_t & tWord = hQword.second;
+		const CSphString & sIDFWord = tWord.m_sDictWord.IsEmpty() ? tWord.m_sWord : tWord.m_sDictWord;
 		int64_t iTermDocs = tWord.m_iDocs;
 		// shared docs count
 		if ( tCtx.m_pLocalDocs )
 		{
-			int64_t * pDocs = (*tCtx.m_pLocalDocs)( tWord.m_sWord );
+			CSphString sLocalDFWord;
+			const CSphString * pLocalDFWord = &sIDFWord;
+			if ( *sIDFWord.cstr()==MAGIC_WORD_HEAD_NONSTEMMED )
+			{
+				sLocalDFWord = sIDFWord;
+				*const_cast<char *>( sLocalDFWord.cstr() ) = '=';
+				pLocalDFWord = &sLocalDFWord;
+			}
+			int64_t * pDocs = (*tCtx.m_pLocalDocs)( *pLocalDFWord );
 			if ( pDocs )
 				iTermDocs = *pDocs;
 		}
@@ -4595,7 +4750,7 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 		// build IDF
 		float fIDF = 0.0f;
 		if ( tQuery.m_bGlobalIDF )
-			fIDF = pIndex->GetGlobalIDF ( tWord.m_sWord, iTermDocs, tQuery.m_bPlainIDF );
+			fIDF = pIndex->GetGlobalIDF ( sIDFWord, iTermDocs, tQuery.m_bPlainIDF );
 		else if ( iTermDocs )
 		{
 			// (word_docs > total_docs) case *is* occasionally possible
@@ -4709,27 +4864,8 @@ CSphHitMarker * CSphHitMarker::Create ( const XQNode_t * pRoot, const ISphQwordS
 
 CSphString sphXQNodeToStr ( const XQNode_t * pNode )
 {
-	static const char * szNodeNames[] =
-	{
-		"AND",
-		"OR",
-		"MAYBE",
-		"NOT",
-		"ANDNOT",
-		"BEFORE",
-		"PHRASE",
-		"PROXIMITY",
-		"QUORUM",
-		"NEAR",
-		"NOTNEAR",
-		"SENTENCE",
-		"PARAGRAPH"
-	};
+	if ( pNode->GetOp()>=SPH_QUERY_AND && pNode->GetOp()<SPH_QUERY_TOTAL )
+		return XQOperatorNameSz(pNode->GetOp());
 
-	if ( pNode->GetOp()>=SPH_QUERY_AND && pNode->GetOp()<=SPH_QUERY_PARAGRAPH )
-		return szNodeNames [ pNode->GetOp()-SPH_QUERY_AND ];
-
-	CSphString sTmp;
-	sTmp.SetSprintf ( "OPERATOR-%d", pNode->GetOp() );
-	return sTmp; 
+	return SphSprintf ( "OPERATOR-%d", pNode->GetOp() );
 }

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -45,7 +45,7 @@ const int				ROWITEM_BITS	= 8*sizeof(CSphRowitem);
 const int				ROWITEMPTR_BITS	= 8*sizeof(CSphRowitemPtr);
 const int				ROWITEM_SHIFT	= 5;
 
-STATIC_ASSERT ( ( 1 << ROWITEM_SHIFT )==ROWITEM_BITS, INVALID_ROWITEM_SHIFT );
+static_assert ( ( 1 << ROWITEM_SHIFT )==ROWITEM_BITS, "invalid ROWITEM_SHIFT" );
 
 #ifndef USE_LITTLE_ENDIAN
 #error Please define endianness
@@ -57,6 +57,8 @@ STATIC_ASSERT ( ( 1 << ROWITEM_SHIFT )==ROWITEM_BITS, INVALID_ROWITEM_SHIFT );
 #define SPH_MAX_FILENAME_LEN	512
 #define SPH_MAX_FIELDS			256
 
+const int SPH_LEGACY_TOKEN_BYTES = SPH_MAX_WORD_LEN*3;
+const int SPH_V2_MAX_TOKEN_BYTES = 32*1024;
 const int MAX_KEYWORD_BYTES = SPH_MAX_WORD_LEN*3+4;
 
 /////////////////////////////////////////////////////////////////////////////
@@ -184,7 +186,10 @@ enum ESphAggrFunc {
 	SPH_AGGR_MIN,
 	SPH_AGGR_MAX,
 	SPH_AGGR_SUM,
-	SPH_AGGR_CAT
+	SPH_AGGR_CAT,
+	SPH_AGGR_PERCENTILES,
+	SPH_AGGR_PERCENTILE_RANKS,
+	SPH_AGGR_MAD
 };
 
 

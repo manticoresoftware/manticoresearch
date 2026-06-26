@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -68,10 +68,13 @@ public:
 		return m_pDict->HasState();
 	}
 	DictRefPtr_c Clone() const final {
+		ValidateClone();
 		return DictRefPtr_c { new DictProxy_c ( m_pDict->Clone() ) };
 	}
 	uint64_t GetSettingsFNV() const final { return m_pDict->GetSettingsFNV(); }
 
 protected:
+	virtual void ValidateClone() const {}
+
 	DictRefPtr_c m_pDict;
 };

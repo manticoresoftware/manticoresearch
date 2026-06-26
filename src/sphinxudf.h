@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2011-2016, Andrew Aksyonoff
 // Copyright (c) 2011-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -29,7 +29,7 @@ extern "C" {
 #endif
 
 /// current udf version
-#define SPH_UDF_VERSION 11
+#define SPH_UDF_VERSION 12
 
 /// error buffer size
 #define SPH_UDF_ERROR_LEN 256

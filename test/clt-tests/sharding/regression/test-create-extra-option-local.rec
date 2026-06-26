@@ -1,0 +1,40 @@
+––– comment –––
+Regression: FAIL_025 — sharded CREATE with an extra table-level option such as
+min_infix_len='3' used to silently leave a broken state: the wrapper-create kept
+failing with "local table is incompatible with shard table", physical shards
+existed, sharding metadata claimed the table active, but the public name was
+not queryable. Buddy now forwards extra options to the wrapper too, so the
+create succeeds end-to-end.
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "create table t25(title text) min_infix_len='3' shards='2' rf='1';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "show tables like 't25';"
+––– output –––
++-------+-------+
+| Table | Type  |
++-------+-------+
+| t25   | shard |
++-------+-------+
+––– input –––
+mysql -h0 -P1306 -e "show create table t25\G" | grep -E "min_infix_len|shards="
+––– output –––
+) min_infix_len='3' shards='2' rf='1'
+––– input –––
+mysql -h0 -P1306 -e "insert into t25(id,title) values(1,'one'),(2,'two');"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "select count(*) c from t25 where id>0;"
+––– output –––
++------+
+| c    |
++------+
+|    2 |
++------+

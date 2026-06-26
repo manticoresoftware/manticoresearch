@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -42,7 +42,7 @@ ENTRY * OpenHashTraits_T<KEY,ENTRY,HASHFUNC,STATE>::FindEntry ( KEY k ) const
 	while ( m_pHash[iIndex].IsUsed(*this) )
 	{
 		ENTRY & tEntry = m_pHash[iIndex];
-		if ( tEntry.m_Key==k )
+		if ( HASHFUNC::Equal (tEntry.m_Key,k) )
 			return &tEntry;
 
 		iIndex = ( iIndex+1 ) & ( m_iSize-1 );
@@ -66,7 +66,7 @@ ENTRY & OpenHashTraits_T<KEY,ENTRY,HASHFUNC,STATE>::AcquireEntry ( KEY k )
 		ENTRY * p = m_pHash + iIndex;
 		if ( p->IsUsed(*this) )
 		{
-			if ( p->m_Key==k )
+			if ( HASHFUNC::Equal (p->m_Key,k) )
 				return *p;
 		}
 		else // no matching keys? add it
@@ -213,6 +213,7 @@ struct HashFunc_Int64_t
 	{
 		return ( DWORD(k) * 0x607cbb77UL ) ^ ( k>>32 );
 	}
+	static FORCE_INLINE DWORD Equal ( int64_t a, int64_t b ) { return a == b; }
 };
 
 template<typename KEY, typename VALUE> OpenHashEntry_T<KEY,VALUE>::OpenHashEntry_T() = default;

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -26,8 +26,9 @@ static constexpr DWORD		BINLOG_META_MAGIC_SPLI = 0x494c5053;	/// magic 'SPLI' he
 // 13 : changed txn format; now stores total documents also
 // 14 : ??
 // 15 : big refactor: remove external ops; ops is 1 byte (unzipped); + internal ops, + size for ADD_TXN, - index ID
+// 16 : keywords_v2 RT dictionary payload versioning
 
-constexpr unsigned int BINLOG_VERSION = 15;
+constexpr unsigned int BINLOG_VERSION = 16;
 
 /// Bin Log Operation
 enum Blop_e : BYTE
@@ -302,6 +303,8 @@ inline const char * SzTxnName ( Txn_e eTxn )
 	case COMMIT: return "commit";
 	case PQ_ADD_DELETE: return "pq_add_delete";
 	}
+	assert(0);
+	return "unknown";
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1276,7 +1279,7 @@ void Binlog_c::DoSaveMeta ( IntVec_t dFiles, SaveMeta_e eForce )
 	// sphWarning ( "%s", sMetaLog.cstr() );
 
 	Threads::SccWL_t rLock { m_tCurrentFilesAccess };
-	if ( eForce==eNoForce && m_dCurrentFiles==dFiles )
+	if ( eForce==eNoForce && m_dCurrentFiles==(const IntVec_t &)dFiles )
 		return;
 
 	if ( dFiles.IsEmpty() )
@@ -1449,7 +1452,7 @@ void Binlog_c::LoadMeta ()
 	assert ( m_iBinlogFileDigits>0 );
 
 	// load list of active log files
-	int iMaxExt = 0;
+	DWORD iMaxExt = 0;
 	for ( int i=m_dSavedFiles.GetLength ()-1; i>=0; --i )
 	{
 		auto iExt = rdMeta.UnzipInt (); // everything else is saved in logs themselves

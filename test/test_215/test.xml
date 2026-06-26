@@ -112,6 +112,9 @@ FLUSH RAMCHUNK rt_killlist;
 REPLACE INTO rt_killlist VALUES (1, 'asdf', 11);
 FLUSH RAMCHUNK rt_killlist;
 SELECT * FROM rt_killlist;
+
+<!-- crash when internal select returns no results because of an error (no sort order defined) -->
+select remove_repeats((select * from dist1 order by id), gid, 0, 10);
 </sphinxql></queries>
 
 </test>

@@ -42,9 +42,8 @@
 DIGIT				[0-9]
 ALPHA				[a-zA-Z_@]
 ALNUM				[a-zA-Z_0-9]
-ALPHA_SYS			[a-zA-Z_]
 ID					{ALPHA}{ALNUM}*
-ID_SYS				{ALPHA_SYS}{ALNUM}*
+ID_SYS				{ALNUM}{ALNUM}*
 SPACE				[ \t\n\r]
 SIGN                [+-]?
 INT                 {DIGIT}+
@@ -89,6 +88,7 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 
 "AGENT"				{ YYSTOREBOUNDS; return TOK_AGENT; }
 "ALL"				{ YYSTOREBOUNDS; return TOK_ALL; }
+"ALLOW"				{ YYSTOREBOUNDS; return TOK_ALLOW; }
 "AND"				{ YYSTOREBOUNDS; return TOK_AND; }
 "ANY"				{ YYSTOREBOUNDS; return TOK_ANY; }
 "AS"				{ YYSTOREBOUNDS; return TOK_AS; }
@@ -97,6 +97,7 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "BEGIN"				{ YYSTOREBOUNDS; return TOK_BEGIN; }
 "BETWEEN"			{ YYSTOREBOUNDS; return TOK_BETWEEN; }
 "BIGINT"			{ YYSTOREBOUNDS; return TOK_BIGINT; }
+"BUDGET"			{ YYSTOREBOUNDS; return TOK_BUDGET; }
 "BY"				{ YYSTOREBOUNDS; return TOK_BY; }
 "CALL"				{ YYSTOREBOUNDS; return TOK_CALL; }
 "CHARACTER"			{ YYSTOREBOUNDS; return TOK_CHARACTER; }
@@ -118,11 +119,16 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "DESCRIBE"			{ YYSTOREBOUNDS; return TOK_DESCRIBE; }
 "DISTINCT"			{ YYSTOREBOUNDS; return TOK_DISTINCT; }
 "DIV"				{ YYSTOREBOUNDS; return TOK_DIV; }
+"DROP"				{ YYSTOREBOUNDS; return TOK_DROP; }
 "DOCIDINDEX"		{ YYSTOREBOUNDS; return TOK_HINT_DOCID; }
 "DOUBLE"			{ YYSTOREBOUNDS; return TOK_DOUBLE; }
 "EXPLAIN"			{ YYSTOREBOUNDS; return TOK_EXPLAIN; }
+"EXCLUDE"			{ YYSTOREBOUNDS; return TOK_EXCLUDE; }
 "FACET"				{ YYSTOREBOUNDS; return TOK_FACET; }
 "FALSE"				{ YYSTOREBOUNDS; return TOK_FALSE; }
+"FILTERS"			{ YYSTOREBOUNDS; return TOK_FILTERS; }
+"MODE"				{ YYSTOREBOUNDS; return TOK_MODE; }
+"ZEROES"			{ YYSTOREBOUNDS; return TOK_ZEROES; }
 "FLOAT"				{ YYSTOREBOUNDS; return TOK_FLOAT; }
 "FOR"				{ YYSTOREBOUNDS; return TOK_FOR; }
 "FORCE"				{ YYSTOREBOUNDS; return TOK_FORCE; }
@@ -134,6 +140,7 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "HAVING"			{ YYSTOREBOUNDS; return TOK_HAVING; }
 "HOSTNAMES"			{ YYSTOREBOUNDS; return TOK_HOSTNAMES; }
 "HOUR"				{ YYSTOREBOUNDS; return TOK_HOUR; }
+"IDENTIFIED"		{ YYSTOREBOUNDS; return TOK_IDENTIFIED; }
 "IGNORE"			{ YYSTOREBOUNDS; return TOK_IGNORE; }
 "IN"				{ YYSTOREBOUNDS; return TOK_IN; }
 "INDEX"				{ YYSTOREBOUNDS; return TOK_INDEX; }
@@ -145,6 +152,7 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "INT"				{ YYSTOREBOUNDS; return TOK_INT; }
 "INTERVAL"			{ YYSTOREBOUNDS; return TOK_INTERVAL; }
 "INTO"				{ YYSTOREBOUNDS; return TOK_INTO; }
+"HYBRID_MATCH"			{ YYSTOREBOUNDS; return TOK_HYBRID_MATCH; }
 "IS"				{ YYSTOREBOUNDS; return TOK_IS; }
 "JOIN"				{ YYSTOREBOUNDS; return TOK_JOIN; }
 "KILL"	    		{ YYSTOREBOUNDS; return TOK_KILL; }
@@ -154,9 +162,11 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "LOGS"				{ YYSTOREBOUNDS; return TOK_LOGS; }
 "LOCKS"				{ YYSTOREBOUNDS; return TOK_LOCKS; }
 "FREEZE"			{ YYSTOREBOUNDS; return TOK_FREEZE; }
+"GRANT"				{ YYSTOREBOUNDS; return TOK_GRANT; }
 "LIMIT"				{ YYSTOREBOUNDS; return TOK_LIMIT; }
 "MATCH"				{ YYSTOREBOUNDS; return TOK_MATCH; }
 "MAX"				{ YYSTOREBOUNDS; return TOK_MAX; }
+"MEDIAN_ABSOLUTE_DEVIATION"	{ YYSTOREBOUNDS; return TOK_MEDIAN_ABSOLUTE_DEVIATION; }
 "META"				{ YYSTOREBOUNDS; return TOK_META; }
 "MIN"				{ YYSTOREBOUNDS; return TOK_MIN; }
 "MINUTE"			{ YYSTOREBOUNDS; return TOK_MINUTE; }
@@ -176,7 +186,11 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "OPTIMIZE"			{ YYSTOREBOUNDS; return TOK_OPTIMIZE; }
 "OR"				{ YYSTOREBOUNDS; return TOK_OR; }
 "ORDER"				{ YYSTOREBOUNDS; return TOK_ORDER; }
+"PASSWORD"			{ YYSTOREBOUNDS; return TOK_PASSWORD; }
+"PERMISSIONS"		{ YYSTOREBOUNDS; return TOK_PERMISSIONS; }
 "PLAN"				{ YYSTOREBOUNDS; return TOK_PLAN; }
+"PERCENTILES"		{ YYSTOREBOUNDS; return TOK_PERCENTILES; }
+"PERCENTILE_RANKS"	{ YYSTOREBOUNDS; return TOK_PERCENTILE_RANKS; }
 "PLUGINS"			{ YYSTOREBOUNDS; return TOK_PLUGINS; }
 "PROFILE"			{ YYSTOREBOUNDS; return TOK_PROFILE; }
 "QUARTER"	    	{ YYSTOREBOUNDS; return TOK_QUARTER; }
@@ -186,6 +200,7 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "RELOAD"			{ YYSTOREBOUNDS; return TOK_RELOAD; }
 "REPLACE"			{ YYSTOREBOUNDS; return TOK_REPLACE; }
 "REMAP"				{ YYSTOREBOUNDS; return TOK_REMAP; }
+"REVOKE"			{ YYSTOREBOUNDS; return TOK_REVOKE; }
 "ROLLBACK"			{ YYSTOREBOUNDS; return TOK_ROLLBACK; }
 "SCROLL"			{ YYSTOREBOUNDS; return TOK_SCROLL; }
 "SECOND"			{ YYSTOREBOUNDS; return TOK_SECOND; }
@@ -205,16 +220,21 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "TABLES"			{ YYSTOREBOUNDS; return TOK_TABLES; }
 "THREADS"			{ YYSTOREBOUNDS; return TOK_THREADS; }
 "TO"				{ YYSTOREBOUNDS; return TOK_TO; }
+"TOKEN"				{ YYSTOREBOUNDS; return TOK_TOKEN; }
 "TRANSACTION"		{ YYSTOREBOUNDS; return TOK_TRANSACTION; }
 "TRUE"				{ YYSTOREBOUNDS; return TOK_TRUE; }
 "UNFREEZE"    		{ YYSTOREBOUNDS; return TOK_UNFREEZE; }
 "UPDATE"			{ YYSTOREBOUNDS; return TOK_UPDATE; }
+"USER"				{ YYSTOREBOUNDS; return TOK_USER; }
+"USAGE"			{ YYSTOREBOUNDS; return TOK_USAGE; }
+"USERS"				{ YYSTOREBOUNDS; return TOK_USERS; }
 "VALUES"			{ YYSTOREBOUNDS; return TOK_VALUES; }
 "VARIABLES"			{ YYSTOREBOUNDS; return TOK_VARIABLES; }
 "WARNINGS"			{ YYSTOREBOUNDS; return TOK_WARNINGS; }
 "WEEK"				{ YYSTOREBOUNDS; return TOK_WEEK; }
 "WEIGHT"			{ YYSTOREBOUNDS; return TOK_WEIGHT; }
 "WHERE"				{ YYSTOREBOUNDS; return TOK_WHERE; }
+"WITH"				{ YYSTOREBOUNDS; return TOK_WITH; }
 "WITHIN"			{ YYSTOREBOUNDS; return TOK_WITHIN; }
 "YEAR"				{ YYSTOREBOUNDS; return TOK_YEAR; }
 
@@ -234,6 +254,9 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 '([^'\\]|\\.|\\\\)*'			{ YYSTOREBOUNDS; pParser->m_pLastTokenStart = yytext; lvalp->SetValueInt ( ( (SphAttr_t)lvalp->m_iStart<<32 ) | ( lvalp->m_iEnd-lvalp->m_iStart ) ); return TOK_QUOTED_STRING; }
 
 {FLOAT_CONSTANT}	{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
+ "inf"               { YYSTOREBOUNDS; lvalp->m_fValue = INFINITY; return TOK_CONST_FLOAT; } /* leading space excludes token from list of reserved words */
+ "-inf"               { YYSTOREBOUNDS; lvalp->m_fValue = -INFINITY; return TOK_CONST_FLOAT; } /* leading space excludes token from list of reserved words */
+ "nan"               { YYSTOREBOUNDS; lvalp->m_fValue = NAN; return TOK_CONST_FLOAT; } /* leading space excludes token from list of reserved words */
 \.{INT}{ID}			{ YYSTOREBOUNDS; return TOK_SUBKEY; }
 \.{INT}			    { YYSTOREBOUNDS; return TOK_DOT_NUMBER; }
 {INT}               { YYSTOREBOUNDS; lvalp->SetValueInt ( strtoull ( yytext, NULL, 10 ), false ); return TOK_CONST_INT; }
@@ -244,6 +267,7 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 {ID}				{ YYSTOREBOUNDS; return TOK_IDENT; }
 {ALNUM}+    		{ YYSTOREBOUNDS; return TOK_BAD_NUMERIC; }
 @@{ID_SYS}			{ YYSTOREBOUNDS; return TOK_SYSVAR; }
+@@`{ID_SYS}`		{ YYSTOREBOUNDS; return TOK_SYSVAR; }
 `{ID}`				{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; }
 `{ID}:{ID}`			{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; }
 `{INT}{ID}`		    { YYSTOREBOUNDS; return TOK_BACKIDENT; } // allow `123xyz` column names

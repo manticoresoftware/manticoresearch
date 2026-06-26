@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -153,15 +153,15 @@ uint64_t ISphTokenizer::GetSettingsFNV() const noexcept
 		uFlags |= 1 << 1;
 	if ( m_bShortTokenFilter )
 		uFlags |= 1 << 2;
-	uHash = sphFNV64 ( &uFlags, sizeof ( uFlags ), uHash );
-	uHash = sphFNV64 ( &m_uBlendVariants, sizeof ( m_uBlendVariants ), uHash );
+	uHash = sphFNV64 ( uFlags, uHash );
+	uHash = sphFNV64 ( m_uBlendVariants, uHash );
 
-	uHash = sphFNV64 ( &m_tSettings.m_iType, sizeof ( m_tSettings.m_iType ), uHash );
-	uHash = sphFNV64 ( &m_tSettings.m_iMinWordLen, sizeof ( m_tSettings.m_iMinWordLen ), uHash );
-	uHash = sphFNV64 ( &m_tSettings.m_iNgramLen, sizeof ( m_tSettings.m_iNgramLen ), uHash );
+	uHash = sphFNV64 ( m_tSettings.m_iType, uHash );
+	uHash = sphFNV64 ( m_tSettings.m_iMinWordLen, uHash );
+	uHash = sphFNV64 ( m_tSettings.m_iNgramLen, uHash );
 
 	if ( !m_tSynFileInfo.m_sFilename.IsEmpty() )
-		uHash = sphFNV64 ( &m_tSynFileInfo.m_uCRC32, sizeof ( m_tSynFileInfo.m_uCRC32 ), uHash );
+		uHash = sphFNV64 ( m_tSynFileInfo.m_uCRC32, uHash );
 
 	return uHash;
 }
@@ -255,15 +255,15 @@ bool ISphTokenizer::SetBlendMode ( const char* sMode, CSphString& sError )
 	return true;
 }
 
-TokenizerRefPtr_c Tokenizer::Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError )
+TokenizerRefPtr_c Tokenizer::Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, int iTokenBytes )
 {
 	TokenizerRefPtr_c pResult;
 	TokenizerRefPtr_c pTokenizer;
 
 	switch ( tSettings.m_iType )
 	{
-	case TOKENIZER_UTF8:	pTokenizer = Tokenizer::Detail::CreateUTF8Tokenizer ( tSettings.m_sCaseFolding.IsEmpty() ); break;
-	case TOKENIZER_NGRAM:	pTokenizer = Tokenizer::Detail::CreateUTF8NgramTokenizer ( tSettings.m_sCaseFolding.IsEmpty() ); break;
+	case TOKENIZER_UTF8:	pTokenizer = Tokenizer::Detail::CreateUTF8Tokenizer ( tSettings.m_sCaseFolding.IsEmpty(), iTokenBytes ); break;
+	case TOKENIZER_NGRAM:	pTokenizer = Tokenizer::Detail::CreateUTF8NgramTokenizer ( tSettings.m_sCaseFolding.IsEmpty(), iTokenBytes ); break;
 	default:
 		sError.SetSprintf ( "failed to create tokenizer (unknown charset type '%d')", tSettings.m_iType );
 		return pResult;
@@ -326,3 +326,29 @@ TokenizerRefPtr_c Tokenizer::Create ( const CSphTokenizerSettings & tSettings, c
 	return pResult;
 }
 
+TokenizerRefPtr_c sphCloneAndSetupQueryTokenizer ( const TokenizerRefPtr_c& pTokenizer, bool bWildcards, bool bExact, bool bJson, int iTokenBytes )
+{
+	assert ( pTokenizer );
+	if ( bWildcards )
+	{
+		if ( bExact )
+		{
+			if ( bJson )
+				return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD_EXACT_JSON, iTokenBytes );
+			return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD_EXACT, iTokenBytes );
+		}
+		if ( bJson )
+			return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD_JSON, iTokenBytes );
+		return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD, iTokenBytes );
+	}
+
+	if ( bExact )
+	{
+		if ( bJson )
+			return pTokenizer->Clone ( SPH_CLONE_QUERY_EXACT_JSON, iTokenBytes );
+		return pTokenizer->Clone ( SPH_CLONE_QUERY_EXACT, iTokenBytes );
+	}
+	if ( bJson )
+		return pTokenizer->Clone ( SPH_CLONE_QUERY, iTokenBytes );
+	return pTokenizer->Clone ( SPH_CLONE_QUERY_, iTokenBytes );
+}

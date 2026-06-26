@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -67,7 +67,11 @@ int BinarySearchFirst ( T* pValues, int iStart, int iEnd, PRED&& tPred, U tRef )
 			iStart = iMid;
 	}
 
-	return iEnd;
+	if ( tPred ( pValues[iStart] ) == tRef )
+		return iStart;
+	if ( tPred ( pValues[iEnd] ) == tRef )
+		return iEnd;
+	return -1;
 }
 
 

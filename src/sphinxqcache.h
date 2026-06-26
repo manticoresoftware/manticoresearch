@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -80,11 +80,12 @@ struct QcacheStatus_t
 };
 
 
-void					QcacheAdd ( const CSphQuery & q, QcacheEntry_c * pResult, const ISphSchema & tSorterSchema );
-QcacheEntry_c *			QcacheFind ( int64_t iIndexId, const CSphQuery & q, const ISphSchema & tSorterSchema );
+void					QcacheAdd ( const CSphQuery & q, const QueryExecutionSettings_t & tQuerySettings, QcacheEntry_c * pResult, const ISphSchema & tSorterSchema );
+QcacheEntry_c *			QcacheFind ( int64_t iIndexId, const CSphQuery & q, const QueryExecutionSettings_t & tQuerySettings, const ISphSchema & tSorterSchema );
 std::unique_ptr<ISphRanker>			QcacheRanker ( QcacheEntry_c * pEntry, const ISphQwordSetup & tSetup );
 const QcacheStatus_t &	QcacheGetStatus();
 void					QcacheSetup ( int64_t iMaxBytes, int iThreshMsec, int iTtlSec );
-void					QcacheDeleteIndex ( int64_t iIndexId );
+void					QcacheClearByIndexId ( int64_t iIndexId );
+void					QcacheClearAll();
 
 #endif // _sphinxqcache_

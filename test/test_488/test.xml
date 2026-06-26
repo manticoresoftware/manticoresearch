@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>replication duplicates bulk on IST replay</name>
+
+<requires>
+	<replication/>
+	<http/>
+	<non-windows/>
+	<force-rt/>
+	<heavy/>
+</requires>
+<skip_indexer/>
+<num_agents>3</num_agents>
+
+<config>
+
+<agent0>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+	server_id = <agent_id/>
+}
+</agent0>
+<agent1>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data1"/>
+	server_id = <agent_id/>
+}
+</agent1>
+<agent2>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data2"/>
+	server_id = <agent_id/>
+}
+</agent2>
+
+</config>
+
+<queries>
+
+<!-- create cluster and table on node0 -->
+<sphinxql d="0">
+	drop table if exists j;
+	create table j (
+		f text,
+		vec float_vector
+	);
+	create cluster e;
+	alter cluster e add j;
+</sphinxql>
+
+<!-- join node1 and node2 -->
+<sphinxql d="1" cluster_connect="0">
+	join cluster e at '%addr_connect%';
+</sphinxql>
+
+<sphinxql d="2" cluster_connect="0">
+	join cluster e at '%addr_connect%';
+</sphinxql>
+
+<sphinxql d="0" system="wait-ready" cluster="e"/>
+<sphinxql d="1" system="wait-ready" cluster="e"/>
+<sphinxql d="2" system="wait-ready" cluster="e"/>
+
+<sphinxql d="0">show status like 'cluster_e_status';</sphinxql>
+<sphinxql d="1">show status like 'cluster_e_status';</sphinxql>
+<sphinxql d="2">show status like 'cluster_e_status';</sphinxql>
+
+<!-- stop node1 so it will catch up through IST later -->
+<sphinxql d="1" system="stop-agent"/>
+
+<sphinxql d="0">show status like 'cluster_e_status';</sphinxql>
+<sphinxql d="2">show status like 'cluster_e_status';</sphinxql>
+
+<!-- populate node0 through raw HTTP /bulk with duplicate ids inside each request -->
+<query d="0" endpoint="bulk" content="application/x-ndjson" skip="1">
+{"insert":{"cluster":"e","index":"j","id":601,"doc":{"f":"tx60-dup-a"}}}
+{"insert":{"cluster":"e","index":"j","id":601,"doc":{"f":"tx60-dup-b"}}}
+{"insert":{"cluster":"e","index":"j","id":602,"doc":{"f":"tx60-dup-c"}}}
+{"insert":{"cluster":"e","index":"j","id":602,"doc":{"f":"tx60-dup-d"}}}
+{"insert":{"cluster":"e","index":"j","id":9060,"doc":{"f":"tx60-uniq"}}}
+</query>
+
+<query d="0" endpoint="bulk" content="application/x-ndjson" skip="1">
+{"insert":{"cluster":"e","index":"j","id":611,"doc":{"f":"tx61-dup-a"}}}
+{"insert":{"cluster":"e","index":"j","id":611,"doc":{"f":"tx61-dup-b"}}}
+{"insert":{"cluster":"e","index":"j","id":612,"doc":{"f":"tx61-dup-c"}}}
+{"insert":{"cluster":"e","index":"j","id":612,"doc":{"f":"tx61-dup-d"}}}
+{"insert":{"cluster":"e","index":"j","id":9061,"doc":{"f":"tx61-uniq"}}}
+</query>
+
+<query d="0" endpoint="bulk" content="application/x-ndjson" skip="1">
+{"insert":{"cluster":"e","index":"j","id":621,"doc":{"f":"tx62-dup-a"}}}
+{"insert":{"cluster":"e","index":"j","id":621,"doc":{"f":"tx62-dup-b"}}}
+{"insert":{"cluster":"e","index":"j","id":622,"doc":{"f":"tx62-dup-c"}}}
+{"insert":{"cluster":"e","index":"j","id":622,"doc":{"f":"tx62-dup-d"}}}
+{"insert":{"cluster":"e","index":"j","id":9062,"doc":{"f":"tx62-uniq"}}}
+</query>
+
+<query d="0" endpoint="bulk" content="application/x-ndjson" skip="1">
+{"insert":{"cluster":"e","index":"j","id":631,"doc":{"f":"tx63-dup-a"}}}
+{"insert":{"cluster":"e","index":"j","id":631,"doc":{"f":"tx63-dup-b"}}}
+{"insert":{"cluster":"e","index":"j","id":632,"doc":{"f":"tx63-dup-c"}}}
+{"insert":{"cluster":"e","index":"j","id":632,"doc":{"f":"tx63-dup-d"}}}
+{"insert":{"cluster":"e","index":"j","id":9063,"doc":{"f":"tx63-uniq"}}}
+</query>
+
+<query d="0" endpoint="bulk" content="application/x-ndjson" skip="1">
+{"insert":{"cluster":"e","index":"j","id":641,"doc":{"f":"tx64-dup-a"}}}
+{"insert":{"cluster":"e","index":"j","id":641,"doc":{"f":"tx64-dup-b"}}}
+{"insert":{"cluster":"e","index":"j","id":642,"doc":{"f":"tx64-dup-c"}}}
+{"insert":{"cluster":"e","index":"j","id":642,"doc":{"f":"tx64-dup-d"}}}
+{"insert":{"cluster":"e","index":"j","id":9064,"doc":{"f":"tx64-uniq"}}}
+</query>
+
+<query d="0" endpoint="bulk" content="application/x-ndjson" skip="1">
+{"insert":{"cluster":"e","index":"j","id":651,"doc":{"f":"tx65-dup-a"}}}
+{"insert":{"cluster":"e","index":"j","id":651,"doc":{"f":"tx65-dup-b"}}}
+{"insert":{"cluster":"e","index":"j","id":652,"doc":{"f":"tx65-dup-c"}}}
+{"insert":{"cluster":"e","index":"j","id":652,"doc":{"f":"tx65-dup-d"}}}
+{"insert":{"cluster":"e","index":"j","id":9065,"doc":{"f":"tx65-uniq"}}}
+</query>
+
+<query d="0" endpoint="bulk" content="application/x-ndjson" skip="1">
+{"insert":{"cluster":"e","index":"j","id":661,"doc":{"f":"tx66-dup-a"}}}
+{"insert":{"cluster":"e","index":"j","id":661,"doc":{"f":"tx66-dup-b"}}}
+{"insert":{"cluster":"e","index":"j","id":662,"doc":{"f":"tx66-dup-c"}}}
+{"insert":{"cluster":"e","index":"j","id":662,"doc":{"f":"tx66-dup-d"}}}
+{"insert":{"cluster":"e","index":"j","id":9066,"doc":{"f":"tx66-uniq"}}}
+</query>
+
+<query d="0" endpoint="bulk" content="application/x-ndjson" skip="1">
+{"insert":{"cluster":"e","index":"j","id":671,"doc":{"f":"tx67-dup-a"}}}
+{"insert":{"cluster":"e","index":"j","id":671,"doc":{"f":"tx67-dup-b"}}}
+{"insert":{"cluster":"e","index":"j","id":672,"doc":{"f":"tx67-dup-c"}}}
+{"insert":{"cluster":"e","index":"j","id":672,"doc":{"f":"tx67-dup-d"}}}
+{"insert":{"cluster":"e","index":"j","id":9067,"doc":{"f":"tx67-uniq"}}}
+</query>
+
+<query d="0" endpoint="bulk" content="application/x-ndjson" skip="1">
+{"insert":{"cluster":"e","index":"j","id":681,"doc":{"f":"tx68-dup-a"}}}
+{"insert":{"cluster":"e","index":"j","id":681,"doc":{"f":"tx68-dup-b"}}}
+{"insert":{"cluster":"e","index":"j","id":682,"doc":{"f":"tx68-dup-c"}}}
+{"insert":{"cluster":"e","index":"j","id":682,"doc":{"f":"tx68-dup-d"}}}
+{"insert":{"cluster":"e","index":"j","id":9068,"doc":{"f":"tx68-uniq"}}}
+</query>
+
+<query d="0" endpoint="bulk" content="application/x-ndjson" skip="1">
+{"insert":{"cluster":"e","index":"j","id":691,"doc":{"f":"tx69-dup-a"}}}
+{"insert":{"cluster":"e","index":"j","id":691,"doc":{"f":"tx69-dup-b"}}}
+{"insert":{"cluster":"e","index":"j","id":692,"doc":{"f":"tx69-dup-c"}}}
+{"insert":{"cluster":"e","index":"j","id":692,"doc":{"f":"tx69-dup-d"}}}
+{"insert":{"cluster":"e","index":"j","id":9069,"doc":{"f":"tx69-uniq"}}}
+</query>
+
+<query d="0" endpoint="bulk" content="application/x-ndjson" skip="1">
+{"insert":{"cluster":"e","index":"j","id":701,"doc":{"f":"tx70-dup-a"}}}
+{"insert":{"cluster":"e","index":"j","id":701,"doc":{"f":"tx70-dup-b"}}}
+{"insert":{"cluster":"e","index":"j","id":702,"doc":{"f":"tx70-dup-c"}}}
+{"insert":{"cluster":"e","index":"j","id":702,"doc":{"f":"tx70-dup-d"}}}
+{"insert":{"cluster":"e","index":"j","id":9070,"doc":{"f":"tx70-uniq"}}}
+</query>
+
+<query d="0" endpoint="bulk" content="application/x-ndjson" skip="1">
+{"insert":{"cluster":"e","index":"j","id":711,"doc":{"f":"tx71-dup-a"}}}
+{"insert":{"cluster":"e","index":"j","id":711,"doc":{"f":"tx71-dup-b"}}}
+{"insert":{"cluster":"e","index":"j","id":712,"doc":{"f":"tx71-dup-c"}}}
+{"insert":{"cluster":"e","index":"j","id":712,"doc":{"f":"tx71-dup-d"}}}
+{"insert":{"cluster":"e","index":"j","id":9071,"doc":{"f":"tx71-uniq"}}}
+</query>
+
+<!-- restart node1 and wait for IST replay -->
+<sphinxql d="1" system="start-agent"/>
+<sphinxql d="1" system="wait-ready" cluster="e"/>
+
+<!-- inspect cluster state and result divergence/convergence -->
+<sphinxql d="0">show status like 'cluster_e_status';</sphinxql>
+<sphinxql d="1">show status like 'cluster_e_status';</sphinxql>
+<sphinxql d="2">show status like 'cluster_e_status';</sphinxql>
+
+<sphinxql d="0">select count(*) from j;</sphinxql>
+<sphinxql d="1">select count(*) from j;</sphinxql>
+<sphinxql d="2">select count(*) from j;</sphinxql>
+
+<sphinxql d="0">select id from j where id in (611,621,641,711) order by id asc limit 10 option max_matches=10;</sphinxql>
+<sphinxql d="1">select id from j where id in (611,621,641,711) order by id asc limit 10 option max_matches=10;</sphinxql>
+<sphinxql d="2">select id from j where id in (611,621,641,711) order by id asc limit 10 option max_matches=10;</sphinxql>
+
+<!-- cleanup -->
+<sphinxql d="0">
+	alter cluster e drop j;
+	drop table j;
+</sphinxql>
+
+</queries>
+
+</test>

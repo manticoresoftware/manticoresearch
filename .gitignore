@@ -11,6 +11,7 @@
 /*.sdf
 /*.opensdf
 /.hg
+**/*.bak
 
 # cmake local presets
 /CMakeUserPresets.json
@@ -28,9 +29,8 @@
 /cmake-build*
 /build
 /buildx64
-/build_temp
 /build_*
-/rlp
+/build-*
 /.vs
 
 # /config/
@@ -42,18 +42,8 @@
 /libstemmer_c/.deps
 
 # /src/
-/src/indexer
-/src/indextool
-/src/search
-/src/searchd
-/src/spelldump
-/src/tests
-/src/wordbreaker
-/src/Makefile
 /src/.deps
 /src/sphinxversion.h
-/src/*.o
-/src/libsphinx.a
 
 # /win/
 /win/*.user
@@ -74,8 +64,13 @@
 /test/clt-tests/**/*.rep
 /test/clt-tests/**/*.deb
 /clt
+/agents.md
 /test/clt-tests/*repo.noarch.deb.*
 /test/clt-tests/**/*.cmp
+/test/.cache/
+/test/examples.txt
+/test/node_prepared_stmt/node_modules
+/test/sqlx_prepared_stmt/target
 
 # /test/ql/
 /test/ql/data/*.log
@@ -86,3 +81,18 @@
 # misc
 /cache
 /local_*_src.txt
+/test/clt-tests/**/*.rep
+/test/clt-tests/**/*.cmp
+/clt
+**/.DS_Store
+/test/clt-tests/**/*.deb
+/test/clt-tests/*repo.noarch.deb.*
+/src/perfetto/perfetto.cc
+/src/perfetto/perfetto.h
+/.codex
+/tmp
+
+# dist
+/dist/docker
+/.env
+/dump.sql

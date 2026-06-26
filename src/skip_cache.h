@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -28,7 +28,8 @@ void ShutdownSkipCache();
 
 namespace SkipCache
 {
-	void DeleteAll ( int64_t iIndexId );
+	void ClearByIndexId ( int64_t iIndexId );
+	void ClearAll();
 	void Release ( SkipCacheKey_t tKey );
 	bool Find ( SkipCacheKey_t tKey, SkipData_t * & pData );
 	bool Add ( SkipCacheKey_t tKey, SkipData_t* pData );

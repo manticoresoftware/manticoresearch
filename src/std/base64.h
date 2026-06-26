@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2024-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2024-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -14,3 +14,6 @@
 
 CSphString EncodeBase64 ( const CSphString & sValue );
 bool DecodeBase64 ( const CSphString & sValue, CSphString & sResult );
+
+bool DecodeBinBase64 ( const CSphString & sSrc, CSphVector<BYTE> & dDst );
+CSphString EncodeBinBase64 ( const VecTraits_T<BYTE> & dSrc );

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -20,7 +20,7 @@ int64_t sphMicroTimer();
 
 /// monotonic microsecond precision timestamp
 /// value of CLOCK_MONOTONIC source
-int64_t MonoMicroTimer();
+uint64_t MonoMicroTimer();
 
 /// return cpu time, in microseconds. CLOCK_THREAD_CPUTIME_ID, or CLOCK_PROCESS_CPUTIME_ID or fall to sphMicroTimer().
 /// defined in searchd.cpp since depends from g_bCpuStats

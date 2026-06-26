@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -19,6 +19,8 @@
 #include "searchdaemon.h"
 #include "binlog.h"
 #include "accumulator.h"
+#include "sphinxudf.h"
+#include "sphinxquery/xqparser.h"
 
 #include <gmock/gmock.h>
 
@@ -215,7 +217,7 @@ protected:
 	{
 		DeleteIndexFiles ( RT_INDEX_FILE_NAME );
 		TestRTInit();
-		tDictSettings.m_bWordDict = false;
+		tDictSettings.SetDictFormat ( DictFormat_e::CRC );
 
 		pTok = Tokenizer::Detail::CreateUTF8Tokenizer ();
 
@@ -280,7 +282,7 @@ TEST_F ( RT, WeightBoundary )
 	for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
 		tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
 
-	auto pIndex = sphCreateIndexRT ( "testrt", RT_INDEX_FILE_NAME, tSchema, 32 * 1024 * 1024, false );
+	auto pIndex = sphCreateIndexRT ( "testrt", RT_INDEX_FILE_NAME, tSchema, 32 * 1024 * 1024 );
 
 	// tricky bit
 	// index owns its tokenizer/dict pair, and MAY do whatever it wants
@@ -393,7 +395,7 @@ TEST_F ( RT, RankerFactors )
 	for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
 		tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
 
-	auto pIndex = sphCreateIndexRT ( "testrt", RT_INDEX_FILE_NAME, tSchema, 128 * 1024, false );
+	auto pIndex = sphCreateIndexRT ( "testrt", RT_INDEX_FILE_NAME, tSchema, 128 * 1024 );
 
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( sphCreateDictionaryCRC ( tDictSettings, nullptr, pTok, "rt", false, 32, nullptr, sError ) );
@@ -579,7 +581,7 @@ TEST_F ( RT, SendVsMerge )
 	for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
 		tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
 
-	auto pIndex = sphCreateIndexRT ( "testrt", RT_INDEX_FILE_NAME, tSchema, 128 * 1024, false );
+	auto pIndex = sphCreateIndexRT ( "testrt", RT_INDEX_FILE_NAME, tSchema, 128 * 1024 );
 
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );

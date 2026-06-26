@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -10,6 +10,7 @@
 
 #include "sphinxstd.h"
 #include "searchdha.h"
+#include "auth/auth.h"
 
 struct FieldRequest_t
 {
@@ -137,6 +138,8 @@ bool GetIndexes ( const CSphString & sIndexes, CSphString & sError, StrVec_t & d
 	StrVec_t dNames;
 	ParseIndexList ( sIndexes, dNames );
 
+	sph::StringSet hDups;
+
 	for ( const CSphString & sIndex : dNames )
 	{
 		auto pLocal = GetServed ( sIndex );
@@ -150,7 +153,9 @@ bool GetIndexes ( const CSphString & sIndexes, CSphString & sError, StrVec_t & d
 
 		if ( pLocal )
 		{
-			dLocal.Add ( sIndex );
+			if ( hDups.Add ( sIndex ) )
+				dLocal.Add ( sIndex );
+
 		} else
 		{
 			for ( const auto& pAgent : pDist->m_dAgents )
@@ -162,16 +167,18 @@ bool GetIndexes ( const CSphString & sIndexes, CSphString & sError, StrVec_t & d
 				pConn->m_pResult = std::make_unique<RemoteFieldsAnswer_t>();
 				dRemotes.Add ( pConn );
 			}
-			dLocal.Append ( pDist->m_dLocal );
+			for ( const auto & sDistLocal : pDist->m_dLocal )
+			{
+				if ( hDups.Add ( sDistLocal ) )
+					dLocal.Add ( sDistLocal );
+			}
 		}
 	}
 
-	dLocal.Uniq();
 	return true;
 }
 
-bool GetFieldFromLocal ( const CSphString & sIndexName, const FieldRequest_t & tArgs, int64_t iSessionID,
-		DocHash_t & hFetchedDocs, FieldBlob_t & tRes )
+static bool GetFieldFromLocal ( const CSphString & sIndexName, const FieldRequest_t & tArgs, int64_t iSessionID, DocHash_t & hFetchedDocs, FieldBlob_t & tRes )
 {
 	auto pServed = GetServed ( sIndexName );
 	if ( !pServed )
@@ -179,6 +186,8 @@ bool GetFieldFromLocal ( const CSphString & sIndexName, const FieldRequest_t & t
 		tRes.m_sError.SetSprintf ( "no such table %s", sIndexName.cstr() );
 		return false;
 	}
+
+	pServed->m_pStats->IncCmd ( SEARCHD_COMMAND_GETFIELD );
 
 	auto& tRefCrashQuery = GlobalCrashQueryGetRef();
 	tRefCrashQuery.m_dIndex = { sIndexName.cstr(), sIndexName.Length() };
@@ -275,7 +284,7 @@ bool GetFieldFromDist ( VecRefPtrsAgentConn_t & dRemotes, const FieldRequest_t &
 	return true;
 }
 
-bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash_t & hFetchedDocs )
+static bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash_t & hFetchedDocs )
 {
 	if ( tReq.m_dDocs.IsEmpty() )
 		return true;
@@ -300,6 +309,7 @@ bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash_t & hF
 		pDistReply = std::make_unique<GetFieldReplyParser_t>();
 
 		pDistReporter = GetObserver();
+		SetSessionAuth ( dRemotes );
 		ScheduleDistrJobs ( dRemotes, pDistReq.get(), pDistReply.get(), pDistReporter.Ptr() );
 	}
 
@@ -600,6 +610,9 @@ void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 		return;
 	}
 
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, tRequest.m_sIndexes, tOut ) )
+		return;
+
 	// fetch stored fields
 	DocHash_t tFetched ( tRequest.m_dDocs.GetLength() );
 	FieldBlob_t tRes;
@@ -646,6 +659,7 @@ void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery )
 	// connect to remote agents and query them
 	GetFieldRequestBuilder_t tBuilder ( dFieldCols );
 	GetFieldReplyParser_t tParser;
+	SetSessionAuth ( dAgents );
 	PerformRemoteTasks ( dAgents, &tBuilder, &tParser );
 
 	StringBuilder_c sError { "," };

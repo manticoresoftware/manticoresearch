@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2020-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2020-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -11,17 +11,15 @@
 
 #include "sphinxutils.h"
 #include "libutils.h"
-#include "fileutils.h"
-#include "schema/columninfo.h"
-#include "schema/schema.h"
-#include "columnarmisc.h"
 #include "secondarylib.h"
+#include "std/env.h"
+#include "std/sys.h"
 
 namespace sec {
 using CheckStorage_fn =			void (*) ( const std::string & sFilename, uint32_t uNumRows, std::function<void (const char*)> & fnError, std::function<void (const char*)> & fnProgress );
 using VersionStr_fn =			const char * (*)();
 using GetVersion_fn	=			int (*)();
-using CreateSI_fn =				SI::Index_i * (*) ( const char * sFile, std::string & sError );
+using CreateSI_fn =				SI::Index_i * (*) ( const char * sFile, const SI::IndexSettings_t & tSettings, std::string & sError );
 using CreateBuilder_fn =		SI::Builder_i *	(*) ( const common::Schema_t & tSchema, size_t tMemoryLimit, const std::string & sFile, size_t tBufferSize, std::string & sError );
 }
 
@@ -30,6 +28,8 @@ static sec::VersionStr_fn		g_fnVersionSecStr = nullptr;
 static sec::CreateSI_fn			g_fnCreateSI = nullptr;
 static sec::CreateBuilder_fn	g_fnCreateBuilder = nullptr;
 
+static uint64_t					g_uBlockCacheSize = 8*1024*1024;
+
 /////////////////////////////////////////////////////////////////////
 
 #if HAVE_DLOPEN
@@ -37,7 +37,16 @@ bool InitSecondary ( CSphString & sError )
 {
 	assert ( !g_pSecondaryLib );
 
-	CSphString sLibfile = TryDifferentPaths ( LIB_MANTICORE_SECONDARY, GetSecondaryFullpath(), SI::LIB_VERSION );
+	CSphString sLibfile;
+	if ( IsAVX512Supported() )
+		sLibfile = TryDifferentPaths ( LIB_MANTICORE_SECONDARY, GetSecondaryFullpath(), SI::LIB_VERSION, "_avx512" );
+
+	if ( sLibfile.IsEmpty() && IsAVX2Supported() )
+		sLibfile = TryDifferentPaths ( LIB_MANTICORE_SECONDARY, GetSecondaryFullpath(), SI::LIB_VERSION, "_avx2" );
+
+	if ( sLibfile.IsEmpty() )
+		sLibfile = TryDifferentPaths ( LIB_MANTICORE_SECONDARY, GetSecondaryFullpath(), SI::LIB_VERSION );
+
 	if ( sLibfile.IsEmpty() )
 		return true;
 
@@ -110,7 +119,20 @@ bool IsSecondaryLibLoaded()
 	return !!g_pSecondaryLib;
 }
 
-SI::Index_i * CreateSecondaryIndex ( const char * sFile, CSphString & sError )
+
+void SetSIBlockCacheSize ( uint64_t uSize )
+{
+	g_uBlockCacheSize = uSize;
+}
+
+
+uint64_t GetSIBlockCacheSize()
+{
+	return g_uBlockCacheSize;
+}
+
+
+SI::Index_i * CreateSecondaryIndex ( const char * szFile, CSphString & sError )
 {
 	if ( !IsSecondaryLibLoaded() )
 	{
@@ -120,8 +142,10 @@ SI::Index_i * CreateSecondaryIndex ( const char * sFile, CSphString & sError )
 
 	assert ( g_fnCreateSI );
 
+	SI::IndexSettings_t tSettings { .m_uBlockCacheSize = g_uBlockCacheSize };
+
 	std::string sTmpError;
-	SI::Index_i * pSIdx = g_fnCreateSI ( sFile, sTmpError );
+	SI::Index_i * pSIdx = g_fnCreateSI ( szFile, tSettings, sTmpError );
 	if ( !pSIdx )
 		sError = sTmpError.c_str();
 

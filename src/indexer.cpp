@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -13,7 +13,7 @@
 #include "sphinxint.h"
 #include "fileutils.h"
 #include "sphinxutils.h"
-#include "sphinxstem.h"
+#include "dict/stem/sphinxstem.h"
 #include "sphinxplugin.h"
 #include "attribute.h"
 #include "cjkpreprocessor.h"
@@ -26,8 +26,8 @@
 #include "tokenizer/tokenizer.h"
 #include "secondarylib.h"
 #include "knnlib.h"
+#include "config.h"
 
-#include <sys/stat.h>
 #include <sys/types.h>
 #include <ctype.h>
 #include <errno.h>
@@ -994,7 +994,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 
 	StrVec_t dWarnings;
 	CSphString sError;
-	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tTokSettings, nullptr, nullptr, dWarnings, sError );
+	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tTokSettings, nullptr, nullptr, dWarnings, sError, GetMaxTokenBytes ( tDictSettings.GetDictFormat() ) );
 	if ( !pTokenizer )
 		sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
@@ -1010,6 +1010,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 			sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
 	DictRefPtr_c pDict;
+	MutableIndexSettings_c tMutableSettings;
 
 	// setup tokenization filters
 	if ( !g_sBuildStops )
@@ -1023,15 +1024,14 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 				sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 		}
 
-		// multiforms filter
-		pDict = tDictSettings.m_bWordDict
+		pDict = tDictSettings.IsWordDict()
 			? sphCreateDictionaryKeywords ( tDictSettings, nullptr, pTokenizer, szIndexName, false, tSettings.m_iSkiplistBlockSize, nullptr, sError )
 			: sphCreateDictionaryCRC ( tDictSettings, nullptr, pTokenizer, szIndexName, false, tSettings.m_iSkiplistBlockSize, nullptr, sError );
 		if ( !pDict )
 			sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
-		MutableIndexSettings_c tMutableSettings;
-		tMutableSettings.Load ( hIndex, false, nullptr );
+		if ( !tMutableSettings.Load ( hIndex, false, nullptr, sError ) )
+			sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
 		bool bNeedExact = ( pDict->HasMorphology() || pDict->GetWordformsFileInfos().GetLength() || tMutableSettings.m_iExpandKeywords );
 		if ( tSettings.m_bIndexExactWords && !bNeedExact )
@@ -1040,7 +1040,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 			fprintf ( stdout, "WARNING: table '%s': no morphology or wordforms, index_exact_words=1 has no effect, ignoring\n", szIndexName );
 		}
 
-		if ( !tSettings.m_bIndexExactWords && ForceExactWords ( tDictSettings.m_bWordDict, pDict->HasMorphology(), tSettings.RawMinPrefixLen(), tSettings.m_iMinInfixLen, pDict->GetSettings().m_sMorphFields.IsEmpty() ) )
+		if ( !tSettings.m_bIndexExactWords && ForceExactWords ( tDictSettings.IsWordDict(), pDict->HasMorphology(), tSettings.RawMinPrefixLen(), tSettings.m_iMinInfixLen, pDict->GetSettings().m_sMorphFields.IsEmpty() ) )
 		{
 			tSettings.m_bIndexExactWords = true;
 			fprintf ( stdout, "WARNING: table '%s': dict=keywords and prefixes and morphology enabled, forcing index_exact_words=1\n", szIndexName );
@@ -1053,7 +1053,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 		Tokenizer::AddToMultiformFilterTo ( pTokenizer, pDict->GetMultiWordforms () );
 
 		// bigram filter
-		Tokenizer::AddBigramFilterTo ( pTokenizer, tSettings.m_eBigramIndex, tSettings.m_sBigramWords, sError );
+		Tokenizer::AddBigramFilterTo ( pTokenizer, tSettings.m_eBigramIndex, tSettings.m_eBigramDelimiter, tSettings.m_sBigramWords, sError );
 		if ( !sError.IsEmpty() )
 			sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
@@ -1242,7 +1242,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 			exit ( 1 );
 		}
 
-		if ( pDict->GetSettings().m_bWordDict && ( tSettings.m_dPrefixFields.GetLength() || tSettings.m_dInfixFields.GetLength() ) )
+		if ( pDict->GetSettings().IsWordDict() && ( tSettings.m_dPrefixFields.GetLength() || tSettings.m_dInfixFields.GetLength() ) )
 		{
 			fprintf ( stdout, "WARNING: table '%s': prefix_fields and infix_fields has no effect with dict=keywords, ignoring\n", szIndexName );
 		}
@@ -1261,6 +1261,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 				pIndex->SetKeepAttrs ( g_sKeepAttrsPath, g_dKeepAttrs );
 		}
 		pIndex->Setup ( tSettings );
+		pIndex->SetMutableSettings ( tMutableSettings );
 
 		ConsoleIndexProgress_t tProgress;
 		bOK = pIndex->Build ( dSources, g_iMemLimit, g_iWriteBuffer, tProgress )!=0;
@@ -1569,7 +1570,7 @@ LONG WINAPI sigsegv ( EXCEPTION_POINTERS * pExc )
 void SetSignalHandlers ()
 {
 	snprintf ( g_sMinidump, sizeof(g_sMinidump), "indexer.%d.mdmp", GetCurrentProcessId() );
-	SetUnhandledExceptionFilter ( sigsegv );
+	AddVectoredExceptionHandler ( TRUE, sigsegv );
 }
 
 #endif // _WIN32
@@ -1689,7 +1690,12 @@ static void MakeVersion()
 	if ( szKNNVer )
 		sKNN.SetSprintf ( " (knn %s)", szKNNVer );
 
-	g_sBannerVersion.SetSprintf ( "%s%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr(), sKNN.cstr() );
+	const char * szKNNEmbVer = GetKNNEmbeddingsVersionStr();
+	CSphString sKNNEmb = "";
+	if ( szKNNEmbVer )
+		sKNNEmb.SetSprintf ( " (embeddings %s)", szKNNEmbVer );
+
+	g_sBannerVersion.SetSprintf ( "%s%s%s%s%s",  szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr(), sKNN.cstr(), sKNNEmb.cstr() );
 }
 
 static void ShowVersion()

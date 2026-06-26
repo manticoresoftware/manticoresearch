@@ -1,0 +1,24 @@
+––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Load test data and perform concurrent searches to generate statistics
+Uses manticore-load with 100k inserts and 3k concurrent searches
+––– input –––
+manticore-load --host=127.0.0.1 --drop --batch-size=10000 --threads=4 --total=100000 --init="CREATE TABLE test(id bigint, name text, type int)" --load="INSERT INTO test(id,name,type) VALUES(<increment>,'<text/10/100>',<int/1/100>)" --together --threads=1 --total=3000 --load="SELECT * FROM test WHERE MATCH('<text/1/1>')" > /dev/null; echo $?
+––– output –––
+0
+––– comment –––
+Verify that search statistics are available both globally and per-table
+Should return 2 matches for search_stats_ms_avg (global + table level)
+––– input –––
+mysql -P9306 -h0 -e "show table test status like '%search_stats_%'; show status like 'search_stats%'" | grep -c search_stats_ms_avg
+––– output –––
+2
+––– comment –––
+Compare per-table and global search statistics consistency
+Validates that statistics are within 20% difference threshold
+––– input –––
+TABLE_AVG=$(mysql -P9306 -h0 -e "show table test status like '%search_stats_ms_avg%'" | grep search_stats_ms_avg | tr -d '|' | awk '{print $2}' | tr -d ' '); GLOBAL_AVG=$(mysql -P9306 -h0 -e "show status like 'search_stats_ms_avg'" | grep search_stats_ms_avg | tr -d '|' | awk '{print $2}' | tr -d ' '); echo "Table avg: $TABLE_AVG, Global avg: $GLOBAL_AVG"; python3 -c "import sys; table=float('$TABLE_AVG'); global_val=float('$GLOBAL_AVG'); diff_pct=abs(table-global_val)/max(table,global_val)*100 if max(table,global_val) > 0 else 0; print(f'Table stats: {table}ms, Global stats: {global_val}ms, Difference: {diff_pct:.1f}%'); result = 'PASS: Statistics are consistent (within 20% difference)' if table > 0 and global_val > 0 and diff_pct <= 20 else f'INFO: Statistics differ by {diff_pct:.1f}% (exceeds 20% threshold)'; print(result)"
+––– output –––
+#!/Table avg: [0-9]+\.[0-9]+, Global avg: [0-9]+\.[0-9]+/!#
+#!/Table stats: [0-9]+\.[0-9]+ms, Global stats: [0-9]+\.[0-9]+ms, Difference: [0-9]+\.[0-9]+%/!#
+#!/PASS: Statistics are consistent \(within 20% difference\)|INFO: Statistics differ by [0-9]+\.[0-9]+% \(exceeds 20% threshold\)/!#

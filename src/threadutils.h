@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -129,23 +129,23 @@ struct Scheduler_i
 {
 	virtual ~Scheduler_i() = default;
 
-	virtual void ScheduleOp ( Threads::details::SchedulerOperation_t* pOp, bool bVip ) = 0;
-	virtual void ScheduleContinuationOp ( Threads::details::SchedulerOperation_t* pOp ) // if task already started
+	virtual void ScheduleOp ( Threads::details::SchedulerOperation_t* pOp, bool bVip ) noexcept = 0;
+	virtual void ScheduleContinuationOp ( Threads::details::SchedulerOperation_t* pOp ) noexcept // if task already started
 	{
 		ScheduleOp ( pOp, false );
 	}
 	// RAII keeper of scheduler (when it exists, scheduler will not finish). That is necessary, say, if the only work is
 	// paused and moved somewhere (for example, as cb in epoll polling). Without keeper scheduler then finish and it will
 	// be impossible to resume it later.
-	virtual Keeper_t KeepWorking() = 0;
+	virtual Keeper_t KeepWorking() noexcept = 0;
 
 	// number of parallel contextes might be necessary when working via this scheduler
 	// alone and strand obviously has 1 worker; threadpool has many.
-	virtual int WorkingThreads() const
+	virtual int WorkingThreads() const noexcept
 	{
 		return 1;
 	};
-	virtual const char* Name() const
+	virtual const char* Name() const noexcept
 	{
 		return "unnamed_sched";
 	}
@@ -159,7 +159,7 @@ struct Scheduler_i
 
 struct SchedulerWithBackend_i: public Scheduler_i
 {
-	virtual bool SetBackend ( Scheduler_i* pBackend ) = 0;
+	virtual bool SetBackend ( Scheduler_i* pBackend ) noexcept = 0;
 };
 
 struct NTasks_t { // snapshot length of Op queue
@@ -205,7 +205,16 @@ public:
 };
 
 /// stack of a thread (that is NOT stack of the coroutine!)
-static const DWORD STACK_SIZE = 128 * 1024;
+///   Release builds: 128 KiB — sufficient for release-mode frame sizes.
+///   Debug builds: 1 MiB — same rationale as DEFAULT_CORO_STACK_SIZE in
+///     coro_stack.h. Debug-mode C++ + Rust frames blow 128 KiB when any
+///     non-trivial C dep runs on a worker thread.
+/// CMake defines NDEBUG for release-type builds.
+#ifdef NDEBUG
+static const DWORD STACK_SIZE = 128 * 1024;    // 128 KiB (release)
+#else
+static const DWORD STACK_SIZE = 256 * 1024;   // 1 MiB (debug)
+#endif
 
 /// get the pointer to my thread's stack
 const void * TopOfStack ();
@@ -252,20 +261,10 @@ Handler WithCopiedCrashQuery ( Handler fnHandler );
 
 extern ThreadRole MainThread;
 
-
-namespace CrashLogger
-{
-#if !_WIN32
-	void HandleCrash( int );
-#else
-	LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc );
-#endif
-	void SetupTimePID();
-};
-
 // Scheduler to global thread pool
 Threads::Worker_i* GlobalWorkPool ();
 void SetMaxChildrenThreads ( int iThreads );
+int MaxChildrenThreads() noexcept;
 void StartGlobalWorkPool ();
 void StopGlobalWorkPool();
 
@@ -300,6 +299,10 @@ namespace searchd
 // send them SIGTERM on shutdown
 namespace Detached
 {
+	using ShutdownNotifierFn = void (*) () noexcept;
+
+	void SetNotifier ( ShutdownNotifierFn fnNotifier ) noexcept;
+
 	void AddThread ( Threads::LowThreadDesc_t* pThread );
 
 	void RemoveThread ( Threads::LowThreadDesc_t* pThread );

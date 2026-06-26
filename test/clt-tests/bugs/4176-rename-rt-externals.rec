@@ -1,0 +1,192 @@
+––– comment –––
+Issue #4176: ALTER TABLE RENAME with external files migration from old to new format
+Test case verifies that ALL external file types (stopwords, wordforms, exceptions) in old format
+are correctly converted to new format (stopwords_chunkX_X.txt, wordforms_chunkX_X.txt, exceptions_chunkX_X.txt)
+during ALTER TABLE RENAME operation
+––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Step 1: Create table with ALL external file types: stopwords, wordforms, exceptions
+––– input –––
+echo "stopword1" > /var/lib/manticore/stop1.txt && \
+echo "test => testing" > /var/lib/manticore/wf1.txt && \
+echo "Manticore => Manticore" > /var/lib/manticore/exc1.txt
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test1 (title TEXT, tag INTEGER) stopwords='/var/lib/manticore/stop1.txt' wordforms='/var/lib/manticore/wf1.txt' exceptions='/var/lib/manticore/exc1.txt';"
+––– output –––
+––– comment –––
+Step 2: Insert data and flush ramchunk to create disk chunk
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test1 (id, title, tag) VALUES (1, 'hello world', 100), (2, 'test data', 200); FLUSH RAMCHUNK test1;"
+––– output –––
+––– comment –––
+Verify disk chunk created and ALL external files are in modern format (xxx_chunk0_0.txt)
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE test1 STATUS LIKE 'disk_chunks';" | grep disk_chunks
+––– output –––
+| disk_chunks   | 1     |
+––– input –––
+ls -1 /var/lib/manticore/test1/ | grep -E "stopwords|wordforms|exceptions" | sort
+––– output –––
+exceptions_chunk0_0.txt
+stopwords_chunk0_0.txt
+wordforms_chunk0_0.txt
+––– comment –––
+Step 3: Stop daemon (IMPORTANT: daemon rewrites .meta on stop, so edit AFTER stop)
+––– input –––
+stdbuf -oL searchd --stopwait > /dev/null 2>&1; echo "Daemon stopped"
+––– output –––
+Daemon stopped
+––– comment –––
+Step 4: Emulate old daemon behavior - rename ALL external files to old format
+This simulates tables created with old Manticore versions (before chunk naming was introduced)
+––– input –––
+mv /var/lib/manticore/test1/stopwords_chunk0_0.txt /var/lib/manticore/test1/stop1.txt && \
+mv /var/lib/manticore/test1/wordforms_chunk0_0.txt /var/lib/manticore/test1/wf1.txt && \
+mv /var/lib/manticore/test1/exceptions_chunk0_0.txt /var/lib/manticore/test1/exc1.txt && \
+ls -1 /var/lib/manticore/test1/ | grep -E "stop1|wf1|exc1" | sort
+––– output –––
+exc1.txt
+stop1.txt
+wf1.txt
+––– comment –––
+Step 5: Edit .meta and .sph files to replace ALL chunk filenames with old format names
+This emulates how old daemon stored external file references
+––– input –––
+sed -i 's/stopwords_chunk0_0\.txt/stop1.txt/g' /var/lib/manticore/test1/test1.meta && \
+sed -i 's/wordforms_chunk0_0\.txt/wf1.txt/g' /var/lib/manticore/test1/test1.meta && \
+sed -i 's/exceptions_chunk0_0\.txt/exc1.txt/g' /var/lib/manticore/test1/test1.meta && \
+sed -i 's/stopwords_chunk0_0\.txt/stop1.txt/g' /var/lib/manticore/test1/test1.0.sph && \
+sed -i 's/wordforms_chunk0_0\.txt/wf1.txt/g' /var/lib/manticore/test1/test1.0.sph && \
+sed -i 's/exceptions_chunk0_0\.txt/exc1.txt/g' /var/lib/manticore/test1/test1.0.sph && \
+echo "Meta and SPH files updated to old format"
+––– output –––
+Meta and SPH files updated to old format
+––– comment –––
+Verify .meta file contains ALL old format references
+––– input –––
+grep -oE "stop1\.txt|wf1\.txt|exc1\.txt" /var/lib/manticore/test1/test1.meta | sort | uniq
+––– output –––
+exc1.txt
+stop1.txt
+wf1.txt
+––– comment –––
+Verify .sph file contains ALL old format references
+––– input –––
+grep -oE "stop1\.txt|wf1\.txt|exc1\.txt" /var/lib/manticore/test1/test1.0.sph | sort | uniq
+––– output –––
+exc1.txt
+stop1.txt
+wf1.txt
+––– comment –––
+Step 6: Start daemon and check log - should be NO warning about missing external files
+ALL old format files (stop1.txt, wf1.txt, exc1.txt) should be loaded successfully
+––– input –––
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd > /dev/null 2>&1 &
+––– output –––
+––– input –––
+sleep 2; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started'; fi
+––– output –––
+Buddy started
+––– comment –––
+CRITICAL CHECK: Verify NO warnings about missing external files in daemon log
+––– input –––
+grep -iE "WARNING.*test1.*(not found|failed to stat)" /var/log/manticore/searchd.log || echo "No warnings found"
+––– output –––
+No warnings found
+––– comment –––
+Verify table is accessible and data preserved
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) as cnt FROM test1\G"
+––– output –––
+*************************** 1. row ***************************
+cnt: 2
+––– comment –––
+Step 7: Issue ALTER TABLE RENAME - this should convert old format to new format
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE test1 RENAME test2;"
+––– output –––
+––– comment –––
+Verify table renamed successfully
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES;" | grep test
+––– output –––
+| test2 | rt   |
+––– comment –––
+Step 8: Restart daemon and check log - should be NO warning about missing external files
+ALL files should be in new format after rename
+––– input –––
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null 2>&1; stdbuf -oL searchd > /dev/null 2>&1 &
+––– output –––
+––– input –––
+sleep 2; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy restarted'; fi
+––– output –––
+Buddy restarted
+––– comment –––
+CRITICAL CHECK: Verify NO warnings about missing external files after rename and restart
+This confirms the fix for issue #4176 works for ALL external file types
+––– input –––
+grep -iE "WARNING.*test2.*(not found|failed to stat)" /var/log/manticore/searchd.log || echo "No warnings found"
+––– output –––
+No warnings found
+––– comment –––
+Step 9: Check test2 folder - ALL external files should be in NEW format (xxx_chunk0_1.txt)
+After RENAME, files get new chunk index (0_1 instead of 0_0)
+––– input –––
+ls -1 /var/lib/manticore/test2/ | grep -E "stopwords|wordforms|exceptions" | sort
+––– output –––
+exceptions_chunk0_1.txt
+stopwords_chunk0_1.txt
+wordforms_chunk0_1.txt
+––– comment –––
+Verify ALL old format files no longer exist
+––– input –––
+ls /var/lib/manticore/test2/ | grep -E "^(stop1|wf1|exc1)\.txt$" || echo "Old format files not found"
+––– output –––
+Old format files not found
+––– comment –––
+Step 10: Check .meta file - ALL external files should be in NEW format (xxx_chunk*)
+Verify new format files present
+––– input –––
+grep -oE "(stopwords|wordforms|exceptions)_chunk[0-9_]+\.txt" /var/lib/manticore/test2/test2.meta | sort | uniq
+––– output –––
+exceptions_chunk0_1.txt
+stopwords_chunk0_1.txt
+wordforms_chunk0_1.txt
+––– comment –––
+Verify old format files NOT present in .meta
+––– input –––
+grep -E "stop1\.txt|wf1\.txt|exc1\.txt" /var/lib/manticore/test2/test2.meta || echo "Old format not found"
+––– output –––
+Old format not found
+––– comment –––
+Step 10: Check .sph file - ALL external files should be in NEW format (xxx_chunk*)
+Verify new format files present
+––– input –––
+grep -oE "(stopwords|wordforms|exceptions)_chunk[0-9_]+\.txt" /var/lib/manticore/test2/test2.0.sph | sort | uniq
+––– output –––
+exceptions_chunk0_1.txt
+stopwords_chunk0_1.txt
+wordforms_chunk0_1.txt
+––– comment –––
+Verify old format files NOT present in .sph
+––– input –––
+grep -E "stop1\.txt|wf1\.txt|exc1\.txt" /var/lib/manticore/test2/test2.0.sph || echo "Old format not found"
+––– output –––
+Old format not found
+––– comment –––
+Final verification: table is fully functional after all operations
+Verify original data preserved after rename
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) as original_rows FROM test2 WHERE id <= 2\G"
+––– output –––
+*************************** 1. row ***************************
+original_rows: 2
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test2 (id, title, tag) VALUES (3, 'after rename', 300);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) as total FROM test2\G"
+––– output –––
+*************************** 1. row ***************************
+total: 3

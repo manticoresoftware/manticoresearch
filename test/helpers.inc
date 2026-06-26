@@ -1,7 +1,11 @@
 <?php
 
 ini_set ( "display_errors", 1 );
-ini_set ( "error_reporting", (E_ALL | E_STRICT) & ~E_USER_DEPRECATED );
+$error_reporting = E_ALL & ~E_USER_DEPRECATED;
+if ( defined ( 'E_STRICT' ) && PHP_VERSION_ID < 80400 ) {
+	$error_reporting |= E_STRICT;
+}
+ini_set ( "error_reporting", $error_reporting );
 ini_set ('memory_limit', '256M');
 
 require_once ( $g_locals['api'] );
@@ -281,6 +285,22 @@ if ( !function_exists("mysql_query") ) {
  else {
 	$mysql_simulated = false;
  }
+
+function mysql_test_connect($host)
+{
+	mysqli_report(MYSQLI_REPORT_OFF);
+	global $gl_conn;
+	$conndetails = explode(":",$host);
+	if ( count($conndetails)==1 )
+		$gl_conn = new mysqli($host,'','', 'Manticore');
+	else
+	{
+		$gl_conn = new mysqli($host, '', '', 'Manticore', (int)$port);
+	}
+	if ($gl_conn->connect_error)
+		return false;
+	return $gl_conn;
+}
 
 // will use mysql_query from php, or our redefined
 function legacy_mysql_wr ($q, $conn)
@@ -683,7 +703,7 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $requireme
 
 	if ( !file_exists($abs_pidfile) )
 	{
-		$error = "PID file ($abs_pidfile) was not created";
+		$error = "PID file ($abs_pidfile) was not created after $i tries";
 		return 1;
 	}
 
@@ -844,6 +864,33 @@ function IsModelGenMode ()
 	return $g_model;
 }
 
+function HasKnnInQuery ( $query_or_result )
+{
+	$query = null;
+	if ( is_array ( $query_or_result ) )
+	{
+		if ( isset ( $query_or_result['sphinxql'] ) )
+			$query = $query_or_result['sphinxql'];
+		else if ( isset ( $query_or_result['http_request'] ) )
+			$query = $query_or_result['http_request'];
+	}
+	else if ( is_string ( $query_or_result ) )
+		$query = $query_or_result;
+
+	if ( !is_string ( $query ) || $query==='' )
+		return false;
+
+	$query = strtolower ( $query );
+	return strpos ( $query, 'knn(' )!==false
+		|| strpos ( $query, 'knn_dist(' )!==false
+		|| strpos ( $query, 'hybrid_score(' )!==false
+		|| strpos ( $query, 'hybrid_match(' )!==false
+		|| strpos ( $query, '_knn_dist' )!==false
+		|| strpos ( $query, '_hybrid_score' )!==false
+		|| strpos ( $query, '"knn"' )!==false
+		|| strpos ( $query, '"hybrid"' )!==false;
+}
+
 function RandomWords ( $n, $seed )
 {
 	srand ( $seed );
@@ -853,7 +900,126 @@ function RandomWords ( $n, $seed )
 	return join ( " ", $words );
 }
 
-function RoundFloatValues ( &$values, $roundoff )
+function IsFloatVector ( $str )
+{
+	if ( strpos ( $str, ',' ) === false || strpos ( $str, '.' ) === false )
+		return false;
+
+	$parts = explode ( ',', $str );
+	if ( count ( $parts ) < 2 )
+		return false;
+
+	foreach ( $parts as $part )
+	{
+		if ( !is_numeric ( trim ( $part ) ) )
+			return false;
+	}
+
+	return true;
+}
+
+
+function RoundFloatVector ( $str, $roundoff )
+{
+	$parts = explode ( ',', $str );
+	foreach ( $parts as &$part )
+	{
+		$trimmed = trim ( $part );
+		if ( is_numeric ( $trimmed ) && strpos ( $trimmed, '.' ) !== false )
+			$part = (string)round ( floatval ( $trimmed ), $roundoff );
+	}
+
+	return implode ( ',', $parts );
+}
+
+
+function IsFloatArray ( $arr )
+{
+	if ( !is_array($arr) || count($arr) < 2 )
+		return false;
+
+	// check if it's a sequential array of numbers (not associative)
+	if ( array_keys($arr) !== range(0, count($arr) - 1) )
+		return false;
+
+	foreach ( $arr as $v )
+	{
+		if ( !is_float($v) && !is_int($v) )
+			return false;
+	}
+
+	return true;
+}
+
+
+// Compare two float vectors (comma-separated strings) with epsilon tolerance
+// Returns true if all components are within epsilon of each other
+function FloatVectorsEqual ( $str1, $str2, $epsilon )
+{
+	$parts1 = explode ( ',', $str1 );
+	$parts2 = explode ( ',', $str2 );
+
+	if ( count($parts1) !== count($parts2) )
+		return false;
+
+	for ( $i = 0; $i < count($parts1); $i++ )
+	{
+		$v1 = floatval ( trim ( $parts1[$i] ) );
+		$v2 = floatval ( trim ( $parts2[$i] ) );
+		$scale = max ( abs($v1), abs($v2), 1.0 );
+		if ( abs ( $v1 - $v2 ) > $epsilon * $scale )
+			return false;
+	}
+
+	return true;
+}
+
+
+// Recursively compare two values with epsilon tolerance for floats and float vectors
+// Returns true if structurally identical, with floats/float-vectors matching within epsilon
+function JsonValuesEqualWithTolerance ( $v1, $v2, $epsilon )
+{
+	if ( $v1 === $v2 )
+		return true;
+
+	// both numeric (floats, ints, or numeric strings with decimals): compare with epsilon
+	if ( is_numeric($v1) && is_numeric($v2) )
+	{
+		$s1 = is_string($v1) ? $v1 : (string)$v1;
+		$s2 = is_string($v2) ? $v2 : (string)$v2;
+		if ( strpos($s1, '.') !== false || strpos($s2, '.') !== false )
+		{
+			$a = floatval($v1);
+			$b = floatval($v2);
+			$scale = max ( abs($a), abs($b), 1.0 );
+			return abs ( $a - $b ) <= $epsilon * $scale;
+		}
+	}
+
+	// string float vectors (SphinxQL path: comma-separated floats)
+	if ( is_string($v1) && is_string($v2) && IsFloatVector($v1) && IsFloatVector($v2) )
+		return FloatVectorsEqual ( $v1, $v2, $epsilon );
+
+	// both arrays: recurse
+	if ( is_array($v1) && is_array($v2) )
+	{
+		if ( count($v1) !== count($v2) )
+			return false;
+		if ( array_keys($v1) !== array_keys($v2) )
+			return false;
+		foreach ( $v1 as $k => $val1 )
+		{
+			if ( !JsonValuesEqualWithTolerance ( $val1, $v2[$k], $epsilon ) )
+				return false;
+		}
+		return true;
+	}
+
+	return false;
+}
+
+
+function RoundFloatValues ( &$values, $roundoff, $vector_roundoff=0, $skip_vectors=false )
 {
 	if ( !is_array ( $values ) )
 		return;
@@ -862,9 +1028,19 @@ function RoundFloatValues ( &$values, $roundoff )
 	{
 		if ( is_float ( $value ) )
 			$value = round ( $value, $roundoff );
+		else if ( is_string ( $value ) && is_numeric ( $value ) && strpos ( $value, '.' ) !== false )
+			$value = (string)round ( floatval ( $value ), $roundoff );
+		else if ( !$skip_vectors && is_string ( $value ) && IsFloatVector ( $value ) )
+			$value = RoundFloatVector ( $value, $vector_roundoff > 0 ? $vector_roundoff : $roundoff );
 
 		if ( is_array ( $value ) )
-			RoundFloatValues ( $value, $roundoff );
+		{
+			if ( !$skip_vectors && $vector_roundoff > 0 && IsFloatArray ( $value ) )
+				foreach ( $value as &$v )
+					$v = round ( $v, $vector_roundoff );
+			else
+				RoundFloatValues ( $value, $roundoff, $vector_roundoff, $skip_vectors );
+		}
 	}
 }
 
@@ -900,7 +1076,7 @@ function CompareColumns ( $a, $b )
 }
 
 
-function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
+function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls, $has_knn=false, $vector_roundoff=0 )
 {
 	if ( isset ( $set["rows"] ) )
 	{
@@ -916,7 +1092,7 @@ function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
 		{
 			foreach ( $rows["hits"]["hits"] as &$hit )
 			{
-				RoundFloatValues ( $hit, 6 );
+				RoundFloatValues ( $hit, $has_knn ? 5 : 6, $vector_roundoff );
 				if ( isset ( $hit["_source"] ) )
 					ksort ( $hit["_source"] );
 			}
@@ -1071,7 +1247,7 @@ function ConnectSpecificQL($agent, $vip=false)
 	if ($address == "localhost")
 		$address = "127.0.0.1";
 	mysqli_report(MYSQLI_REPORT_OFF);
-	return @mysqli_connect ( $address, '', '', '', $port );
+	return @mysqli_connect ( $address, '', '', 'Manticore', $port );
 }
 
 function ConnectQL()
@@ -1226,6 +1402,7 @@ function HttpFormatResultSet ( $result, $nquery, $keep_json_ctrls=false )
 	$matches = array();
 	$meta = array();
 	$agent = '';
+	$response_headers = array();
 
 	if ( array_key_exists ( 'http_endpoint', $result ) )
 		$http_endpoint = $result['http_endpoint'];
@@ -1253,12 +1430,18 @@ function HttpFormatResultSet ( $result, $nquery, $keep_json_ctrls=false )
 	if ( array_key_exists ("agent", $result ) )
 		$agent =" (agent-" . $result["agent"] . ")" ;
 
+	if ( array_key_exists ( 'response_headers', $result ) )
+		$response_headers = $result['response_headers'];
+
 	$request = json_encode ( $http_request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 	$request = stripcslashes ( $request );
 
 	$str .= "http-$nquery$agent> /$http_endpoint\n";
 	$str .= "Status: $http_code\n";
 	$str .= "$http_method ". $request . "\n";
+	if ( count ( $response_headers ) )
+		foreach ( $response_headers as $hdr )
+			$str .= "Header: $hdr\n";
 
 	if ( count ( $rows ) )
 		$str .= ( $keep_json_ctrls ? $json_handler->Encode ( $rows, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) : json_encode ( $rows, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) )."\n";
@@ -1269,28 +1452,55 @@ function HttpFormatResultSet ( $result, $nquery, $keep_json_ctrls=false )
 }
 
 
-function RunCurl ( $curl_desc, &$rows )
+function RunCurl ( $curl_desc, &$rows, &$response_headers=array(), $capture_headers=array(), $normalize_headers=false )
 {
 	$con = curl_init();
 
+	if ( !empty($capture_headers) )
+		$curl_desc[CURLOPT_HEADER] = 1;
+
 	curl_setopt_array ( $con, $curl_desc );
 	$rows = curl_exec ( $con );
-	$rows = preg_replace('/"time":\d+(\.\d+)*,/', '"time":0.000,', $rows);
 	$http_code = curl_getinfo ( $con, CURLINFO_HTTP_CODE );
 
+	if ( !empty($capture_headers) && $rows!==false )
+	{
+		$header_size = curl_getinfo ( $con, CURLINFO_HEADER_SIZE );
+		$header = substr ( $rows, 0, $header_size );
+		$rows = substr ( $rows, $header_size );
+		foreach ( preg_split('/\r\n/', $header) as $hdr )
+		{
+			foreach ( $capture_headers as $needle )
+			{
+				if ( stripos ( $hdr, $needle.':' )===0 )
+				{
+					if ( $normalize_headers )
+						$hdr = preg_replace ( '/^('.preg_quote($needle,'/').':)\s*(.*)$/i', '$1 <value>', $hdr );
+					$response_headers[] = $hdr;
+				}
+			}
+		}
+	}
+
+	$rows = preg_replace('/"time":\d+(\.\d+)*,/', '"time":0.000,', $rows);
 	curl_close($con);
 
 	return $http_code;
 }
 
-function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_query, $use_agent, $use_ssl, $use_gzip, $testdir )
+function CurlDesc ( $http_endpoint, $use_agent=0, $use_ssl=false )
 {
 	global $agents;
 
 	$ssl = $use_ssl ? "https://" : "";
 
 	$http_port = $agents[$use_agent]["http_port"];
-	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => $ssl . "127.0.0.1:$http_port/" . $http_endpoint );
+	return array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => $ssl . "127.0.0.1:$http_port/" . $http_endpoint );
+}
+
+function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_query, $use_agent, $use_ssl, $use_gzip, $testdir, $capture_headers=array(), $normalize_headers=false )
+{
+	$curl_desc = CurlDesc ( $http_endpoint, $use_agent, $use_ssl );
 	if ( $http_method=="POST" )
     {
         $curl_desc[CURLOPT_POST] = 1;
@@ -1332,8 +1542,12 @@ function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_quer
     }
 
 	$rows = "";
-	$http_code = RunCurl( $curl_desc, $rows );
-	return array ( 'http_endpoint'=>$http_endpoint, 'http_method'=>$http_method, 'http_request'=>$http_query, 'rows'=>$rows, 'http_code'=>$http_code, 'http'=>1 );
+	$response_headers = array();
+	$http_code = RunCurl( $curl_desc, $rows, $response_headers, $capture_headers, $normalize_headers );
+	$result = array ( 'http_endpoint'=>$http_endpoint, 'http_method'=>$http_method, 'http_request'=>$http_query, 'rows'=>$rows, 'http_code'=>$http_code, 'http'=>1 );
+	if ( !empty($response_headers) )
+		$result['response_headers'] = $response_headers;
+	return $result;
 }
 
 // these two used from custom tests
@@ -2305,6 +2519,8 @@ class SphinxConfig
         if ( !array_key_exists ( 'rows', $query_result ) )
             return true;
 
+        $has_knn = $this->Requires("knn") && HasKnnInQuery ( $query_result );
+
         if ( $keep_json_ctrls )
         {
 			$json_handler = new SafeJsonHandler();
@@ -2326,7 +2542,7 @@ class SphinxConfig
         if ( isset ( $decoded_rows->hits ) && isset ( $decoded_rows->hits->hits ) )
         {
             foreach ( $decoded_rows->hits->hits as &$hit )
-                RoundFloatValues ( $hit, 6 );
+                RoundFloatValues ( $hit, $has_knn ? 5 : 6 );
         }
 
         $query_result['rows'] = $keep_json_ctrls ? $json_handler->Encode ( $decoded_rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) : json_encode ( $decoded_rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
@@ -2380,6 +2596,8 @@ class SphinxConfig
         $http_content=ArrVal ($attrs, "content", NULL);
         $use_agent = ArrVal ($attrs, "d", 0);
         $use_gzip = ArrVal ($attrs, "gzip", 0);
+        $capture_headers = array_filter ( array_map ( 'trim', explode ( ',', ArrVal ( $attrs, "response_headers", "" ) ) ) );
+        $normalize_headers = (int)ArrVal ( $attrs, "normalize_response_headers", 0 );
 
 
 		if ( !is_array($query) || !$attrs )
@@ -2397,7 +2615,7 @@ class SphinxConfig
             return false;
         }
 
-		$query_result = HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $query, $use_agent, $this->Requires("https"), $use_gzip, $this->_testdir );
+		$query_result = HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $query, $use_agent, $this->Requires("https"), $use_gzip, $this->_testdir, $capture_headers, $normalize_headers );
 
 		if ( $use_agent>0 )
 			$query_result['agent'] = $use_agent;
@@ -2537,6 +2755,9 @@ class SphinxConfig
 		{
             $raw_result["total_rows"] = mysqli_num_rows($result);
 			$query_result["total_rows"] = $raw_result["total_rows"];
+			
+			$round_knn = $this->Requires("knn") && HasKnnInQuery ( $query );
+
 			while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC))
 			{
                 $raw_result["rows"][] = $row;
@@ -2552,6 +2773,11 @@ class SphinxConfig
                 }
                 if ($cont)
                     continue;
+				
+				// Round float values if query contains "knn" (use 5 decimal places to handle architecture differences)
+				if ( $round_knn )
+					RoundFloatValues ( $row, 5 );
+				
 				$query_result["rows"][] = $row;
 			}
 			mysqli_free_result($result);
@@ -2569,7 +2795,7 @@ class SphinxConfig
 		}
 	}
 
-	function RunQueryQL ( $query, &$error, &$examples, $bench, &$connection, &$old_agent, &$old_vip )
+	function RunQueryQL ( $query, &$error, &$examples, $bench, &$connection0, &$connection1, &$old_agent, &$old_vip )
 	{
 		global $agents, $index_data_path;
 
@@ -2579,6 +2805,7 @@ class SphinxConfig
 
         $sleep_agent=ArrVal ($attrs, "sleep", 0);
         $use_agent=ArrVal ($attrs, "d", 0);
+		$secondary_session=ArrVal ($attrs, "conn", 0);
         $vip_connection=ArrVal ($attrs, "vip", 0);
         $system_cmd = ArrVal ($attrs, "system");
         $wait_value = ArrVal ($attrs, "wait_value", 0);
@@ -2591,6 +2818,11 @@ class SphinxConfig
         $ignore_rows = ArrVals ($attrs, 'ignore');
         $hide = ArrVals ($attrs, 'hide',false);
         $params = ArrVal ( $attrs, "params");
+
+		if ( $secondary_session == 0 )
+			$connection = &$connection0;
+		else
+			$connection = &$connection1;
 
         // mysql_host - we direct query to host mysql server, NOT to searchd! (that is sometimes need for rotation)
         $mysql_host = ($use_agent==="mysql");
@@ -2641,6 +2873,10 @@ class SphinxConfig
                 return false;
             $old_agent = $use_agent;
 		}
+
+		if ( $connection===false )
+			if (!($connection = ConnectSpecificQL($use_agent)))
+				return false;
 
 		if ($this->Requires('vip') && ( $old_vip!=$vip_connection || $connection===NULL ))
 		{
@@ -2874,7 +3110,8 @@ class SphinxConfig
 			$cl->Open ();
 		}
 
-        $ql_connection=false;
+        $ql_connection0=false;
+		$ql_connection1=false;
         $old_agent = -1;
         $old_vip = -1;
 
@@ -2907,7 +3144,7 @@ class SphinxConfig
 		{
 			$qinfo = $this->_queries[$n];
 			if ($qinfo['type']=='sphinxql')
-                $bOk = $this->RunQueryQL ( $qinfo, $error, $examples, $benchmark, $ql_connection, $old_agent, $old_vip );
+                $bOk = $this->RunQueryQL ( $qinfo, $error, $examples, $benchmark, $ql_connection0, $ql_connection1, $old_agent, $old_vip );
 			elseif ($qinfo['type']=='query')
                 $bOk = $this->RunQueryHttp ( $qinfo, $error, $examples );
 			elseif ( $qinfo['type']=='comment') {
@@ -3045,8 +3282,11 @@ class SphinxConfig
 			}
 		}
 
-        if ( $ql_connection )
-            mysqli_close ( $ql_connection );
+        if ( $ql_connection0 )
+            mysqli_close ( $ql_connection0 );
+
+		if ( $ql_connection1 )
+			mysqli_close ( $ql_connection1 );
 
 		if ( $benchmark )
 			printf ( " - done in %s\n", sphFormatTime ( MyMicrotime() - $start ) );
@@ -3239,7 +3479,7 @@ class SphinxConfig
 
 		// fixup floats in json via http
 		if ( isset ( $set["http"] ) && $set["http"]==1 )
-			JsonRsetFixup ( $set, IsColumnar(), $keep_json_ctrls );
+			JsonRsetFixup ( $set, IsColumnar(), $keep_json_ctrls, HasKnnInQuery ( $set ) );
 		else
 			SqlRsetFixup ( $set, IsColumnar() );
 
@@ -3306,10 +3546,35 @@ class SphinxConfig
 		$variants_match = $this->Requires("variant_match");
 		$keep_json_ctrls = $this->Requires("keep_json_ctrls");
 
+		$round_knn = $this->Requires("knn_float_tolerance")
+			|| ( $this->Requires("knn") && ( HasKnnInQuery ( $set1 ) || HasKnnInQuery ( $set2 ) ) );
+
 		$this->CompareResultSetFixup ( $set1, $roundoff, $variants_match, $keep_json_ctrls );
 		$this->CompareResultSetFixup ( $set2, $roundoff, $variants_match, $keep_json_ctrls );
 
-		return $set1===$set2;
+		// For <knn/> tests, use epsilon comparison instead of rounding
+		// (rounding always has boundary issues; epsilon comparison does not)
+		if ( $round_knn && isset($set1["rows"]) && isset($set2["rows"]) )
+		{
+			$rows1 = $set1["rows"];
+			$rows2 = $set2["rows"];
+
+			// HTTP/JSON path: rows is a JSON string; parse it for comparison
+			$is_json = is_string($rows1) && is_string($rows2);
+			if ( $is_json )
+			{
+				$rows1 = json_decode ( $rows1, true );
+				$rows2 = json_decode ( $rows2, true );
+			}
+
+			$epsilon = $this->Requires("embeddings") ? 1e-4 : 1e-5;
+			if ( is_array($rows1) && is_array($rows2) && JsonValuesEqualWithTolerance ( $rows1, $rows2, $epsilon ) )
+			{
+				$set1["rows"] = $set2["rows"];
+			}
+		}
+
+		return $set1 === $set2;
 	}
 
 	function CompareResults ( $query1, $query2 )
@@ -3995,6 +4260,7 @@ class SphinxConfig
 				$justcopy = false;
 				$rtcopy = false;
 				$attr_names = array();
+				$have_rt_source = false;
 				$idxbody = "";
 				foreach ($lines as $line)
 				{
@@ -4012,17 +4278,30 @@ class SphinxConfig
 							else
 								$justcopy = true;
 							break;
-						case "source";
+						case "source":
 							{
-								$idxbody .= "\ttype\t= rt\n";
+								$srcschema = $schemas[$value];
 								if ( $collectdata )
-									$indexes[$match[$idxname][0]] = $schemas[$value];
-								foreach ( array_keys( $schemas[$value]['orders'] ) as $key )
+								{
+									if ( !array_key_exists ( $match[$idxname][0], $indexes ) )
+										$indexes[$match[$idxname][0]] = $srcschema;
+									else
+										$indexes[$match[$idxname][0]]['values'] = array_merge ( $indexes[$match[$idxname][0]]['values'], $srcschema['values'] );
+								}
+
+								if ( $have_rt_source )
+								{
+									$sources[$match[$idxname][0]] = $value;
+									break;
+								}
+
+								$idxbody .= "\ttype\t= rt\n";
+								foreach ( array_keys( $srcschema['orders'] ) as $key )
 									if ( $key != "id" && $key != "document_id" )
 									{
-										if ( array_key_exists ( $key, $schemas[$value]['types'] ) )
+										if ( array_key_exists ( $key, $srcschema['types'] ) )
 										{
-											$rt_attr_type = $schemas[$value]['types'][$key];
+											$rt_attr_type = $srcschema['types'][$key];
 											if ( $rt_attr_type!="rt_attr_json" )
 												$attr_names[] = $key;
 
@@ -4033,13 +4312,14 @@ class SphinxConfig
 											} else
 											{
 												$idxbody .= "\t".$rt_attr_type."\t= $key";
-												if (isset($schemas[$value]['bits'][$key]))
-													$idxbody .= $schemas[$value]['bits'][$key];
+												if (isset($srcschema['bits'][$key]))
+													$idxbody .= $srcschema['bits'][$key];
 												$idxbody .= "\n";
 											}
 										} else
 											$idxbody .= "\trt_field\t= $key\n";
 									}
+								$have_rt_source = true;
 								$sources[$match[$idxname][0]] = $value;
 								break;
 							}
@@ -4146,7 +4426,7 @@ class SphinxConfig
 				$connect_string = "$address:$port";
 				if ( $cn !== false )
 					$cn->close();
-				$cn = new mysqli( $address, "", "", "", $port );
+				$cn = new mysqli( $address, "", "", "Manticore", $port );
 			}
 			if ( $cn === false )
 				return false;
@@ -4484,7 +4764,7 @@ function CopyDirContents ( $from, $to )
 
 function CheckConfig ( $config, $path )
 {
-	global $g_re2, $g_icu, $g_jieba, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_tzdata_loaded, $g_zlib;
+	global $g_re2, $g_icu, $g_jieba, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_embeddings_loaded, $g_tzdata_loaded, $g_zlib;
 
 	if ( $config->Requires("non-windows") && $windows )
 	{
@@ -4596,6 +4876,12 @@ function CheckConfig ( $config, $path )
 	if ( $config->Requires("knn") && !$g_knn_loaded)
 	{
 		printf ( "SKIPPING %s, %s - knn library not loaded\n", $path, $config->Name () );
+		return false;
+	}
+
+	if ( $config->Requires("embeddings") && !$g_embeddings_loaded)
+	{
+		printf ( "SKIPPING %s, %s - embeddings library not loaded\n", $path, $config->Name () );
 		return false;
 	}
 

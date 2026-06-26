@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2011-2016, Andrew Aksyonoff
 // Copyright (c) 2011-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -19,6 +19,8 @@
 #include <io.h> // for isatty() in sphinxjson.c
 #endif
 
+// for UNALIGNED_RAM_ACCESS
+#include "config.h"
 
 //////////////////////////////////////////////////////////////////////////
 // helpers
@@ -722,9 +724,15 @@ public:
 
 		ESphJsonType eBase = m_dNodes[tNode.m_dChildren.m_iStart].m_eType;
 		bool bAllSame = true;
+		bool bAllInt = true;
 		JSON_FOREACH ( j, tNode )
+		{
 			if ( eBase!=m_dNodes[j].m_eType )
 				bAllSame = false;
+			if ( m_dNodes[j].m_eType!=JSON_INT32 && m_dNodes[j].m_eType!=JSON_INT64 )
+				bAllInt = false;
+		}
+
 		if ( bAllSame )
 			switch ( eBase )
 			{
@@ -734,6 +742,10 @@ public:
 			case JSON_STRING: return JSON_STRING_VECTOR;
 			default: break; // type matches across all entries, but we do not have a special format for that type
 			}
+		
+		if ( bAllInt )
+			return JSON_INT64_VECTOR;
+
 		return JSON_MIXED_VECTOR;
 	}
 
@@ -851,6 +863,8 @@ public:
 	{
 		m_dNodes.Add ( tNode );
 	}
+
+	int ParseNumber ( const char * szText, JsonNode_t * pNode );
 };
 
 // unused parameter, simply to avoid type clash between all my yylex() functions
@@ -1230,11 +1244,19 @@ void sphJsonFormat ( JsonEscapedBuilder & sOut, const BYTE * pData )
 		sphJsonFieldFormat ( sOut, pData, eType );
 }
 
+static int PrintDouble ( char * sBuf, int iBufSize, double fVal )
+{
+	auto iLen = snprintf ( sBuf, iBufSize, "%lf", fVal );
+	if ( iLen>iBufSize )
+		iLen = snprintf ( sBuf, iBufSize, "%lg", fVal );
+
+	return iLen;
+}
 
 const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData, ESphJsonType eType, bool bQuoteString )
 {
-	const BYTE szDouble = 32;
-	char sDouble[szDouble];
+	const BYTE iLenDouble = 32;
+	char sDouble[iLenDouble];
 
 	// format value
 	const BYTE * p = pData;
@@ -1250,7 +1272,8 @@ const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData,
 
 		case JSON_DOUBLE:
 		{
-			auto iLen = snprintf ( sDouble, szDouble, "%lf", sphQW2D ( sphJsonLoadBigint ( &p ) ) ); // NOLINT
+			double fVal = sphQW2D ( sphJsonLoadBigint ( &p ) );
+			auto iLen = PrintDouble ( sDouble, iLenDouble, fVal );
 			sOut.AppendChunk ( {sDouble, iLen} );
 			break;
 		}
@@ -1286,7 +1309,8 @@ const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData,
 				auto _ = sOut.Array ();
 				for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
 				{
-					auto iLen = snprintf ( sDouble, szDouble, "%lf", sphQW2D ( sphJsonLoadBigint ( &p ) ) ); // NOLINT
+					double fVal = sphQW2D ( sphJsonLoadBigint ( &p ) );
+					auto iLen = PrintDouble ( sDouble, iLenDouble, fVal );
 					sOut.AppendChunk ( {sDouble, iLen} );
 				}
 				break;
@@ -1347,8 +1371,11 @@ static bool FindNextSeparator ( const char * & pSep )
 }
 
 
-bool sphJsonNameSplit ( const char * szName, const char * szIndex, CSphString * pColumn )
+bool sphJsonNameSplit ( const char * szName, const char * szIndex, CSphString * pColumn, bool * pIndexPrefix )
 {
+	if ( pIndexPrefix )
+		*pIndexPrefix = false;
+
 	if ( !szName )
 		return false;
 
@@ -1358,6 +1385,9 @@ bool sphJsonNameSplit ( const char * szName, const char * szIndex, CSphString * 
 
 	if ( szIndex && *pSep=='.' && !strncmp ( szIndex, szName, pSep - szName ) )
 	{
+		if ( pIndexPrefix )
+			*pIndexPrefix = true;
+
 		// this was not a json separator, but a dot between table name and column name
 		pSep++;
 		if ( !FindNextSeparator(pSep) )
@@ -1725,7 +1755,7 @@ bool JsonObj_c::IsDbl() const
 bool JsonObj_c::IsNum() const
 {
 	assert ( m_pRoot );
-	return !!cJSON_IsNumeric ( m_pRoot );
+	return !! ( cJSON_IsNumeric ( m_pRoot ) ||  cJSON_IsUInteger(m_pRoot) );
 }
 
 
@@ -1921,12 +1951,17 @@ bool JsonObj_c::FetchIntItem ( int & iValue, const char * szName, CSphString & s
 
 bool JsonObj_c::FetchInt64Item ( int64_t & iValue, const char * szName, CSphString & sError, bool bIgnoreMissing ) const
 {
-	JsonObj_c tItem = GetIntItem ( szName, sError, bIgnoreMissing );
-	if ( tItem )
-		iValue = tItem.IntVal();
-	else if ( !sError.IsEmpty() )
-		return false;
+	JsonObj_c tItem = GetChild ( szName, sError, bIgnoreMissing );
+	if ( !tItem )
+		return sError.IsEmpty();
 
+	if ( !tItem.IsInt() && !tItem.IsUint() )
+	{
+		sError.SetSprintf ( R"("%s" property value should be an integer)", szName );
+		return false;
+	}
+
+	iValue = tItem.IntVal();
 	return true;
 }
 
@@ -1945,7 +1980,7 @@ bool JsonObj_c::FetchBoolItem ( bool & bValue, const char * szName, CSphString &
 
 bool JsonObj_c::FetchFltItem ( float & fValue, const char * szName, CSphString & sError, bool bIgnoreMissing ) const
 {
-	JsonObj_c tItem = GetBoolItem ( szName, sError, bIgnoreMissing );
+	JsonObj_c tItem = GetFltItem ( szName, sError, bIgnoreMissing );
 	if ( tItem )
 		fValue = tItem.FltVal();
 	else if ( !sError.IsEmpty() )
@@ -1964,6 +1999,15 @@ bool JsonObj_c::FetchStrItem ( CSphString & sValue, const char * szName, CSphStr
 		return false;
 
 	return true;
+}
+
+
+bool JsonObj_c::FetchStrItem ( std::string & sValue, const char * szName, CSphString & sError, bool bIgnoreMissing ) const
+{
+	CSphString sTmp;
+	bool bRes = FetchStrItem ( sTmp, szName, sError, bIgnoreMissing );
+	sValue = sTmp.scstr();
+	return bRes;
 }
 
 
@@ -3108,9 +3152,14 @@ bool Bson_c::BsonToBson ( CSphVector<BYTE> &dOutput ) const
 }
 
 
-const char * Bson_c::sError () const
+const char * Bson_c::Error () const
 {
 	return m_sError.cstr();
+}
+
+bool Bson_c::HasError () const
+{
+	return !m_sError.IsEmpty();
 }
 
 BsonIterator_c::BsonIterator_c ( const NodeHandle_t &dParent )
@@ -3284,16 +3333,22 @@ public:
 
 	inline int MeasureAndOptimizeVector ( cJSON * pCJSON, ESphJsonType &eType )
 	{
-		int iSize = 0;
+  		int iSize = 0;
 		ESphJsonType eOutType = JSON_TOTAL;
 		cJSON * pNode;
 		bool bAllSame = true;
+		bool bAllInt = true;
 		cJSON_ArrayForEach( pNode, pCJSON )
 		{
+			ESphJsonType eCurType = NumericFixup ( pNode );
 			if ( !iSize )
-				eOutType = NumericFixup ( pNode );
-			else if ( bAllSame && ( eOutType!=NumericFixup ( pNode ) ) )
+				eOutType = eCurType;
+			else if ( bAllSame && ( eOutType!=eCurType ) )
 				bAllSame = false;
+
+			if ( eCurType!=JSON_INT32 && eCurType!=JSON_INT64 )
+				bAllInt = false;
+
 			++iSize;
 		}
 
@@ -3301,6 +3356,7 @@ public:
 			return 0;
 
 		if ( bAllSame )
+		{
 			switch ( eOutType )
 			{
 			case JSON_INT32: eType = JSON_INT32_VECTOR; break;
@@ -3309,6 +3365,10 @@ public:
 			case JSON_STRING: eType = JSON_STRING_VECTOR; break;
 			default: break;
 			}
+		} else if ( bAllInt )
+		{
+			eType = JSON_INT64_VECTOR;
+		}
 
 		return iSize;
 	}
@@ -4248,3 +4308,21 @@ void bson::DoubleVector_c::AddValues ( const VecTraits_T<double> & dData )
 	dData.Apply ( [this] ( double f ) { StoreBigint ( m_dBson, sphD2QW ( f ) ); } );
 }
 
+int JsonParser_c::ParseNumber ( const char * szText, JsonNode_t * pNode )
+{
+	errno = 0;
+	int64_t iValue = strtoll ( szText, NULL, 10 );
+	if ( errno==ERANGE )
+	{
+		// overflow set double value
+		pNode->m_eType = JSON_DOUBLE;
+		pNode->m_fValue = strtod ( szText, NULL );
+		return TOK_FLOAT;
+
+	} else
+	{
+		pNode->m_eType = JSON_INT64;
+		pNode->m_iValue = iValue;
+		return TOK_INT;
+	}
+}

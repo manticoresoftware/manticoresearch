@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -17,23 +17,11 @@
 #include "searchdaemon.h"
 #include "coroutine.h"
 
-#include <optional>
-
 #if _WIN32
 	#define USE_PSI_INTERFACE 1
+
 	// for MAC address
-
 	#include <iphlpapi.h>
-	#pragma message("Automatically linking with iphlpapi.lib")
-	#pragma comment(lib, "iphlpapi.lib")
-
-	#pragma comment(linker, "/defaultlib:WS2_32.Lib")
-	#pragma message("Automatically linking with WS2_32.Lib")
-
-	// socket function definitions
-	#pragma comment(linker, "/defaultlib:wsock32.lib")
-	#pragma message("Automatically linking with wsock32.lib")
-
 #else
 	#include <netdb.h>
 	// for MAC address
@@ -53,22 +41,37 @@
 #include <netinet/in.h>
 #endif
 
-#include <cmath>
+#include "config.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // MISC GLOBALS
 /////////////////////////////////////////////////////////////////////////////
 
+static const char* g_sCommands[SEARCHD_COMMAND_TOTAL] = {"command_search", "command_excerpt", "command_update",
+	"command_keywords", "command_persist", "command_status", "gap_6", "command_flushattrs", "command_sphinxql",
+	"command_ping", "command_delete", "command_set", "command_insert", "command_replace", "command_commit",
+	"command_suggest", "command_json", "command_callpq", "command_cluster", "command_getfield", "command_shard_write"};
+
 const char * szCommand ( int eCmd)
 {
-	const char* szCommands[SEARCHD_COMMAND_TOTAL] = {"command_search", "command_excerpt", "command_update",
-		"command_keywords", "command_persist", "command_status", "gap_6", "command_flushattrs", "command_sphinxql",
-		"command_ping", "command_delete", "command_set", "command_insert", "command_replace", "command_commit",
-		"command_suggest", "command_json", "command_callpq", "command_cluster", "command_getfield"};
 	if ( eCmd<SEARCHD_COMMAND_TOTAL )
-		return szCommands[eCmd];
+		return g_sCommands[eCmd];
 	return "***WRONG COMMAND!***";
 }
+
+
+SearchdCommand_e ParseCommand ( const CSphString & sCommand )
+{
+	for ( int i=0; i<SEARCHD_COMMAND_TOTAL; i++ )
+	{
+		const char * sCmdName = g_sCommands[i];
+		if ( sCommand==sCmdName )
+			return SearchdCommand_e(i);
+	}
+
+	return SEARCHD_COMMAND_WRONG;
+}
+
 
 // 'like' matcher
 CheckLike::CheckLike( const char* sPattern )
@@ -269,6 +272,7 @@ const char* GetIndexTypeName ( IndexType_e eType )
 	case IndexType_e::RT: return "rt";
 	case IndexType_e::PERCOLATE: return "percolate";
 	case IndexType_e::DISTR: return "distributed";
+	case IndexType_e::SHARD: return "shard";
 	default: return "invalid";
 	}
 }
@@ -277,6 +281,9 @@ IndexType_e TypeOfIndexConfig( const CSphString& sType )
 {
 	if ( sType=="distributed" )
 		return IndexType_e::DISTR;
+
+	if ( sType=="shard" )
+		return IndexType_e::SHARD;
 
 	if ( sType=="rt" )
 		return IndexType_e::RT;
@@ -856,8 +863,7 @@ void SmartOutputBuffer_t::Reset()
 	m_dBuf.Reserve( NETOUTBUF );
 };
 
-#if _WIN32
-void SmartOutputBuffer_t::LeakTo ( CSphVector<ISphOutputBuffer *> dOut )
+void SmartOutputBuffer_t::LeakTo ( CSphVector<ISphOutputBuffer *> & dOut )
 {
 	for ( auto & pChunk : m_dChunks )
 		dOut.Add ( pChunk );
@@ -865,8 +871,13 @@ void SmartOutputBuffer_t::LeakTo ( CSphVector<ISphOutputBuffer *> dOut )
 	dOut.Add ( new ISphOutputBuffer ( m_dBuf ) );
 	m_dBuf.Reserve ( NETOUTBUF );
 }
-#endif
 
+void SmartOutputBuffer_t::SwapData ( CSphVector<ISphOutputBuffer *> & dChunks )
+{
+	m_dChunks.SwapData ( dChunks );
+	m_dBuf.Reset();
+	m_dBuf.Reserve( NETOUTBUF );
+}
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -997,9 +1008,11 @@ bool InputBuffer_c::IsDataSizeValid ( int iSize )
 	if ( !IsLessMaxPacket ( iSize ) )
 	{
 		return false;
-	} else if ( m_pCur + iSize>m_pBuf + m_iLen )
+	}
+
+	if ( m_pCur + iSize>m_pBuf + m_iLen )
 	{
-		SetError( "read overflows buffer by %d byte, data size %d", (int)( ( m_pCur + iSize ) - ( m_pBuf + m_iLen ) ), iSize );
+		SetError( "read overflows buffer by %d byte, data size %d", (int)( m_pCur + iSize - ( m_pBuf + m_iLen ) ), iSize );
 		return false;
 	}
 
@@ -1042,183 +1055,10 @@ void InputBuffer_c::SetMaxPacketSize( int iMaxPacketSize )
 // SERVED INDEX DESCRIPTORS STUFF
 /////////////////////////////////////////////////////////////////////////////
 
-
-class QueryStatContainer_c: public QueryStatContainer_i
-{
-public:
-	void Add( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp ) final;
-	QueryStatRecord_t GetRecord( int iRecord ) const noexcept final;
-	int GetNumRecords() const final;
-
-	QueryStatContainer_c();
-	QueryStatContainer_c( QueryStatContainer_c&& tOther ) noexcept;
-	void Swap( QueryStatContainer_c& rhs ) noexcept;
-	QueryStatContainer_c& operator=( QueryStatContainer_c tOther ) noexcept;
-
-private:
-	CircularBuffer_T<QueryStatRecord_t> m_dRecords;
-};
-
-std::unique_ptr<QueryStatContainer_i> MakeStatsContainer ()
-{
-	return std::make_unique<QueryStatContainer_c>();
-}
-
-void QueryStatContainer_c::Add( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp )
-{
-	if ( !m_dRecords.IsEmpty())
-	{
-		QueryStatRecord_t& tLast = m_dRecords.Last();
-		const uint64_t BUCKET_TIME_DELTA = 100000;
-		if ( uTimestamp - tLast.m_uTimestamp<=BUCKET_TIME_DELTA )
-		{
-			tLast.m_uFoundRowsMin = Min( uFoundRows, tLast.m_uFoundRowsMin );
-			tLast.m_uFoundRowsMax = Max( uFoundRows, tLast.m_uFoundRowsMax );
-			tLast.m_uFoundRowsSum += uFoundRows;
-
-			tLast.m_uQueryTimeMin = Min( uQueryTime, tLast.m_uQueryTimeMin );
-			tLast.m_uQueryTimeMax = Max( uQueryTime, tLast.m_uQueryTimeMax );
-			tLast.m_uQueryTimeSum += uQueryTime;
-
-			tLast.m_iCount++;
-
-			return;
-		}
-	}
-
-	const uint64_t MAX_TIME_DELTA = 15 * 60 * 1000000;
-	while ( !m_dRecords.IsEmpty() && ( uTimestamp - m_dRecords[0].m_uTimestamp )>MAX_TIME_DELTA )
-		m_dRecords.Pop();
-
-	QueryStatRecord_t& tRecord = m_dRecords.Push();
-	tRecord.m_uFoundRowsMin = uFoundRows;
-	tRecord.m_uFoundRowsMax = uFoundRows;
-	tRecord.m_uFoundRowsSum = uFoundRows;
-
-	tRecord.m_uQueryTimeMin = uQueryTime;
-	tRecord.m_uQueryTimeMax = uQueryTime;
-	tRecord.m_uQueryTimeSum = uQueryTime;
-
-	tRecord.m_uTimestamp = uTimestamp;
-	tRecord.m_iCount = 1;
-}
-
-QueryStatRecord_t QueryStatContainer_c::GetRecord ( int iRecord ) const noexcept
-{
-	return m_dRecords[iRecord];
-}
-
-
-int QueryStatContainer_c::GetNumRecords() const
-{
-	return m_dRecords.GetLength();
-}
-
-QueryStatContainer_c::QueryStatContainer_c() = default;
-
-QueryStatContainer_c::QueryStatContainer_c( QueryStatContainer_c&& tOther ) noexcept
-	: QueryStatContainer_c()
-{ Swap( tOther ); }
-
-void QueryStatContainer_c::Swap( QueryStatContainer_c& rhs ) noexcept
-{
-	rhs.m_dRecords.Swap( m_dRecords );
-}
-
-QueryStatContainer_c& QueryStatContainer_c::operator=( QueryStatContainer_c tOther ) noexcept
-{
-	Swap( tOther );
-	return *this;
-}
-
-//////////////////////////////////////////////////////////////////////////
-
-#ifndef NDEBUG
-
-class QueryStatContainerExact_c: public QueryStatContainer_i
-{
-public:
-	void Add( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp ) final;
-	QueryStatRecord_t GetRecord( int iRecord ) const noexcept final;
-	int GetNumRecords() const final;
-
-	QueryStatContainerExact_c();
-	QueryStatContainerExact_c( QueryStatContainerExact_c&& tOther ) noexcept;
-	void Swap( QueryStatContainerExact_c& rhs ) noexcept;
-	QueryStatContainerExact_c& operator=( QueryStatContainerExact_c tOther ) noexcept;
-
-private:
-	struct QueryStatRecordExact_t
-	{
-		uint64_t m_uQueryTime;
-		uint64_t m_uFoundRows;
-		uint64_t m_uTimestamp;
-	};
-
-	CircularBuffer_T<QueryStatRecordExact_t> m_dRecords;
-};
-
-void QueryStatContainerExact_c::Add( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp )
-{
-	const uint64_t MAX_TIME_DELTA = 15 * 60 * 1000000;
-	while ( !m_dRecords.IsEmpty() && ( uTimestamp - m_dRecords[0].m_uTimestamp )>MAX_TIME_DELTA )
-		m_dRecords.Pop();
-
-	QueryStatRecordExact_t& tRecord = m_dRecords.Push();
-	tRecord.m_uFoundRows = uFoundRows;
-	tRecord.m_uQueryTime = uQueryTime;
-	tRecord.m_uTimestamp = uTimestamp;
-}
-
-
-int QueryStatContainerExact_c::GetNumRecords() const
-{
-	return m_dRecords.GetLength();
-}
-
-
-QueryStatRecord_t QueryStatContainerExact_c::GetRecord ( int iRecord ) const noexcept
-{
-	QueryStatRecord_t tRecord;
-	const QueryStatRecordExact_t& tExact = m_dRecords[iRecord];
-
-	tRecord.m_uQueryTimeMin = tExact.m_uQueryTime;
-	tRecord.m_uQueryTimeMax = tExact.m_uQueryTime;
-	tRecord.m_uQueryTimeSum = tExact.m_uQueryTime;
-	tRecord.m_uFoundRowsMin = tExact.m_uFoundRows;
-	tRecord.m_uFoundRowsMax = tExact.m_uFoundRows;
-	tRecord.m_uFoundRowsSum = tExact.m_uFoundRows;
-
-	tRecord.m_uTimestamp = tExact.m_uTimestamp;
-	tRecord.m_iCount = 1;
-	return tRecord;
-}
-
-QueryStatContainerExact_c::QueryStatContainerExact_c() = default;
-
-QueryStatContainerExact_c::QueryStatContainerExact_c( QueryStatContainerExact_c&& tOther ) noexcept
-	: QueryStatContainerExact_c()
-{ Swap( tOther ); }
-
-void QueryStatContainerExact_c::Swap( QueryStatContainerExact_c& rhs ) noexcept
-{
-	rhs.m_dRecords.Swap( m_dRecords );
-}
-
-QueryStatContainerExact_c& QueryStatContainerExact_c::operator=( QueryStatContainerExact_c tOther ) noexcept
-{
-	Swap( tOther );
-	return *this;
-}
-
-#endif
-
-
-//////////////////////////////////////////////////////////////////////////
 ServedStats_c::ServedStats_c()
-	: m_pQueryStatRecords { std::make_unique<QueryStatContainer_c>() }
+	: m_pQueryStatRecords { MakeStatsContainer() }
 #ifndef NDEBUG
-	, m_pQueryStatRecordsExact { std::make_unique<QueryStatContainerExact_c>() }
+	, m_pQueryStatRecordsExact { MakeExactStatsContainer() }
 #endif
 
 {}
@@ -1245,9 +1085,11 @@ void ServedStats_c::AddQueryStat( uint64_t uFoundRows, uint64_t uQueryTime )
 	m_uTotalQueryTimeMax = Max( uQueryTime, m_uTotalQueryTimeMax );
 	m_uTotalQueryTimeSum += uQueryTime;
 
+	m_tCommandsStats.AddDeltaDetailed ( CommandStats_t::eSearch, uFoundRows, uQueryTime );
+	m_tCommandsStats.Inc ( SEARCHD_COMMAND_SEARCH );
+
 	++m_uTotalQueries;
 }
-
 
 static const uint64_t g_dStatsIntervals[] =
 	{
@@ -1375,6 +1217,27 @@ void ServedStats_c::DoStatCalcStats( const QueryStatContainer_i* pContainer, Que
 	tQueryAllStats.m_uTotalQueries = m_uTotalQueries;
 }
 
+void ServedStats_c::AddWriteStat ( CommandStats_t::EDETAILS eCmd, bool bReplace, uint64_t uRows, uint64_t tmStart )
+{
+	m_tCommandsStats.AddDetailed ( eCmd, uRows, tmStart );
+	switch ( eCmd )
+	{
+	case CommandStats_t::eUpdate:
+		m_tCommandsStats.Inc ( SEARCHD_COMMAND_UPDATE );
+		break;
+	case CommandStats_t::eReplace:
+		m_tCommandsStats.Inc ( bReplace ? SEARCHD_COMMAND_REPLACE : SEARCHD_COMMAND_INSERT );
+		break;
+
+	default: break;
+	}
+}
+
+void ServedStats_c::IncCmd ( SearchdCommand_e eCmd )
+{
+	m_tCommandsStats.Inc ( eCmd );
+}
+
 //////////////////////////////////////////////////////////////////////////
 RunningIndex_c::~RunningIndex_c()
 {
@@ -1433,6 +1296,26 @@ void ServedIndex_c::SetUnlink ( CSphString sUnlink ) const
 {
 	if ( m_pIndex )
 		m_pIndex->m_sUnlink = std::move ( sUnlink );
+}
+
+void ServedIndex_c::LockRead() const noexcept
+{
+	m_tTableLock.WaitRead();
+}
+
+[[nodiscard]] bool ServedIndex_c::UnlockRead() const noexcept
+{
+	return m_tTableLock.UnlockRead();
+}
+
+[[nodiscard]] DWORD ServedIndex_c::GetReadLocks() const noexcept
+{
+	return m_tTableLock.GetReads();
+}
+
+[[nodiscard]] Threads::Coro::ReadTableLock_c& ServedIndex_c::Locker() const noexcept
+{
+	return m_tTableLock;
 }
 
 void LightClone ( ServedIndexRefPtr_c& pTarget, const cServedIndexRefPtr_c& pSource )

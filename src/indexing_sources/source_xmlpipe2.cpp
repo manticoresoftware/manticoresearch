@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -369,7 +369,7 @@ bool CSphSource_XMLPipe2::SetupXML ( int iFieldBufferMax, bool bFixupUTF8, FILE 
 	m_bFixupUTF8 = bFixupUTF8;
 	m_pPipe = pPipe;
 	m_tSchema.Reset ();
-	bool bWordDict = ( m_pDict && m_pDict->GetSettings().m_bWordDict );
+	bool bWordDict = ( m_pDict && m_pDict->GetSettings().IsWordDict() );
 	bool bOk = true;
 
 	bOk &= ConfigureAttrs ( hSource("xmlpipe_attr_uint"),		SPH_ATTR_INTEGER,	m_tSchema, sError );
@@ -405,7 +405,7 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 	// source settings have been updated after ::Setup
 	for ( int i = 0; i < m_tSchema.GetFieldsCount(); ++i )
 	{
-		ESphWordpart eWordpart = GetWordpart ( m_tSchema.GetFieldName(i), m_pDict && m_pDict->GetSettings().m_bWordDict );
+		ESphWordpart eWordpart = GetWordpart ( m_tSchema.GetFieldName(i), m_pDict && m_pDict->GetSettings().IsWordDict() );
 		m_tSchema.SetFieldWordpart ( i, eWordpart );
 	}
 
@@ -835,7 +835,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 		CSphColumnInfo Info;
 		CSphString sDefault;
 		bool bIsAttr = false;
-		bool bWordDict = ( m_pDict && m_pDict->GetSettings().m_bWordDict );
+		bool bWordDict = ( m_pDict && m_pDict->GetSettings().IsWordDict() );
 
 		while ( dAttrs[0] && dAttrs[1] && dAttrs[0][0] && dAttrs[1][0] )
 		{

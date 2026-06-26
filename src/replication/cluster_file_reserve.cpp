@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -93,6 +93,8 @@ void operator<< ( ISphOutputBuffer& tOut, const FileReserveRequest_t& tReq )
 	SendArray ( pSrc->m_dBaseNames, tOut );
 	SendArray ( pSrc->m_dChunks, tOut );
 	SendArray ( pSrc->m_dHashes, tOut );
+
+	tOut << tReq.m_tProgressCtx;
 }
 
 StringBuilder_c& operator<< ( StringBuilder_c& tOut, const FileReserveRequest_t& tReq )
@@ -117,6 +119,8 @@ void operator>> ( InputBuffer_c& tIn, FileReserveRequest_t& tReq )
 	GetArray ( pSrc->m_dBaseNames, tIn );
 	GetArray ( pSrc->m_dChunks, tIn );
 	GetArray ( pSrc->m_dHashes, tIn );
+
+	tIn >> tReq.m_tProgressCtx;
 }
 
 
@@ -172,14 +176,22 @@ struct ScopedFilesRemoval_t: public ISphNoncopyable
 };
 
 // command at remote node for CLUSTER_FILE_RESERVE to check
-// - file could be allocated on disk at cluster path and reserve disk space for a file
+// - file could be allocated on disk at table path and reserve disk space for a file
 // - or make sure that index has exact same index file, ie sha1 matched
 bool ClusterFileReserve ( const FileReserveRequest_t & tCmd, FileReserveReply_t & tRes )
 {
 	sphLogDebugRpl ( "reserve table '%s'", tCmd.m_sIndex.cstr() );
 
+	if ( !CanReplaceIndex ( tCmd.m_sCluster, tCmd.m_sIndex ) )
+		return false;
+
 	int64_t tmStartReserve = sphMicroTimer();
 	CSphString sLocalIndexPath;
+
+	auto pProgressSst = GetClusterProgress ( tCmd.m_sCluster );
+	if ( pProgressSst )
+		pProgressSst->StartLocalStage ( tCmd.m_tProgressCtx, SstStage_e::RESERVE_FILES );
+	AT_SCOPE_EXIT ( [&pProgressSst] { if ( pProgressSst ) pProgressSst->FinishLocalStage(); } );
 
 	assert ( tCmd.m_pChunks );
 	// use index path first
@@ -195,7 +207,7 @@ bool ClusterFileReserve ( const FileReserveRequest_t & tCmd, FileReserveReply_t 
 
 	tRes.m_dRemotePaths.Resize ( tCmd.m_pChunks->m_dBaseNames.GetLength ());
 
-	// use cluster path as head of index path or existed index path
+	// use regular table path or existing index path
 	if ( tRes.m_bIndexActive )
 	{
 		CSphString sPathOnly = GetPathOnly ( sLocalIndexPath );
@@ -207,20 +219,17 @@ bool ClusterFileReserve ( const FileReserveRequest_t & tCmd, FileReserveReply_t 
 		}
 	} else
 	{
-		auto tIndexPath = GetClusterPath ( tCmd.m_sCluster );
-		if ( !tIndexPath )
-			return false;
-		// index in its own directory
-		sLocalIndexPath.SetSprintf ( "%s/%s", tIndexPath->cstr(), tCmd.m_sIndexFileName.cstr() );
-		MkDir ( sLocalIndexPath.cstr() );
+		// index in its own data_dir directory
+		CSphString sIndexDir = GetDatadirPath ( tCmd.m_sIndexFileName );
+		MkDir ( sIndexDir.cstr() );
 
-		// set index files names into cluster folder
+		// set index files names into table folder
 		ARRAY_FOREACH ( iFile, tCmd.m_pChunks->m_dBaseNames )
 		{
 			const CSphString & sFile = tCmd.m_pChunks->m_dBaseNames[iFile];
-			tRes.m_dRemotePaths[iFile].SetSprintf ( "%s/%s", sLocalIndexPath.cstr(), sFile.cstr() );
+			tRes.m_dRemotePaths[iFile].SetSprintf ( "%s/%s", sIndexDir.cstr(), sFile.cstr() );
 		}
-		sLocalIndexPath.SetSprintf ( "%s/%s/%s", tIndexPath->cstr(), tCmd.m_sIndexFileName.cstr(), tCmd.m_sIndexFileName.cstr() );
+		sLocalIndexPath.SetSprintf ( "%s/%s", sIndexDir.cstr(), tCmd.m_sIndexFileName.cstr() );
 	}
 
 	int iBits = tCmd.m_pChunks->m_dChunks.Last().m_iHashStartItem + tCmd.m_pChunks->m_dChunks.Last().GetChunksCount();
@@ -259,6 +268,9 @@ bool ClusterFileReserve ( const FileReserveRequest_t & tCmd, FileReserveReply_t 
 				tmTimeoutFile = Max ( tmReadDelta, tmTimeoutFile );
 			}
 		}
+
+		if ( pProgressSst )
+			pProgressSst->AddComplete ( tFile.m_iFileSize );
 	}
 
 	StrVec_t dLocalPaths ( tRes.m_dRemotePaths.GetLength() );
@@ -296,8 +308,13 @@ bool ClusterFileReserve ( const FileReserveRequest_t & tCmd, FileReserveReply_t 
 	tRes.m_tmTimeoutFile = tmTimeoutFile / 1000;
 	tRes.m_tmTimeout = ( sphMicroTimer() - tmStartReserve ) / 1000;
 
-	assert ( !RecvState::HasState ( DoubleStringKey ( tCmd.m_sCluster, tCmd.m_sIndex ) ) );
-	RecvState::GetState ( DoubleStringKey ( tCmd.m_sCluster, tCmd.m_sIndex ) ).SetMerge ( *tCmd.m_pChunks, tRes, sLocalIndexPath, dLocalPaths );
+	uint64_t uKey = DoubleStringKey ( tCmd.m_sCluster, tCmd.m_sIndex );
+	if ( RecvState::HasState ( uKey ) )
+	{
+		sphLogDebugRpl ( "ClusterFileReserve: stale state for %s %s, resetting", tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr() );
+		RecvState::Free ( uKey );
+	}
+	RecvState::GetState ( uKey ).SetMerge ( *tCmd.m_pChunks, tRes, sLocalIndexPath, dLocalPaths );
 	return true;
 }
 

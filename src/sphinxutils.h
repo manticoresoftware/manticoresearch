@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -16,11 +16,11 @@
 #ifndef _sphinxutils_
 #define _sphinxutils_
 
-#include <ctype.h>
-#include <stdarg.h>
+#include "sphinxdefs.h"
+#include "std/stringhash.h"
+#include "std/stringbuilder.h"
 
-#include "sphinxstd.h"
-
+#include <csignal>
 //////////////////////////////////////////////////////////////////////////
 
 /// my own isalpha (let's build our own theme park!)
@@ -74,7 +74,7 @@ inline bool sphIsModifier ( int iSymbol )
 
 /// all wildcards
 template < typename T >
-inline bool sphIsWild ( T c )
+bool sphIsWild ( T c )
 {
 	return c=='*' || c=='?' || c=='%';
 }
@@ -158,8 +158,29 @@ using StrFunctor = std::function<void ( const char*, int )>;
 void sphSplitApply ( const char * sIn, int iSize, StrFunctor &&dFunc );
 void sphSplitApply ( const char * sIn, int iSize, const char * sBounds, StrFunctor && dFunc );
 
+enum class WildcardBufMode_e
+{
+	Legacy,
+	Extended
+};
+
+struct WildcardBuf_t : ISphNoncopyable
+{
+	explicit WildcardBuf_t ( WildcardBufMode_e eMode = WildcardBufMode_e::Legacy );
+
+	const int * DecodePattern ( const char * sPattern );
+	bool IsExtended() const { return m_eMode==WildcardBufMode_e::Extended; }
+
+	int					m_dString[SPH_MAX_WORD_LEN+1];
+	int					m_dPattern[SPH_MAX_WORD_LEN+1];
+	CSphVector<int>		m_dStringExt;
+	CSphVector<int>		m_dPatternExt;
+	CSphVector<int>		m_dDpExt;
+	WildcardBufMode_e	m_eMode = WildcardBufMode_e::Legacy;
+};
+
 /// string wildcard matching (case-sensitive, supports * and ? patterns)
-bool sphWildcardMatch ( const char * sSstring, const char * sPattern, const int * pPattern = NULL );
+bool sphWildcardMatch ( const char * sSstring, const char * sPattern, const int * pPattern = NULL, WildcardBuf_t * pExtBuf = nullptr );
 
 bool HasWildcard ( const char * sVal );
 
@@ -175,12 +196,15 @@ int64_t sphGetTime64 ( const char* sValue, char** ppErr = nullptr, int64_t iDefa
 int64_t GetUTC ( const CSphString & sTime, const char * sFormat=nullptr );
 bool ParseDateMath ( const CSphString & sMathExpr, int iNow, time_t & tDateTime );
 
+namespace cctz { class time_zone; }
+
 enum class DateUnit_e
 {
 	ms, sec, minute, hour, day, week, month, year,
 	total_units
 };
 void RoundDate ( DateUnit_e eUnit, time_t & tDateTime );
+void RoundDate ( DateUnit_e eUnit, time_t & tDateTime, const cctz::time_zone & tTZ );
 void RoundDate ( DateUnit_e eUnit, int iMulti, time_t & tDateTime );
 std::pair<DateUnit_e, int> ParseDateInterval ( const CSphString & sExpr, bool bFixed, CSphString & sError );
 
@@ -275,11 +299,28 @@ public:
 		return pEntry ? pEntry->strval() : sDefault;
 	}
 
-	/// get bool option value by key and default value
-	bool GetBool ( const char * sKey, bool bDefault = true ) const
+	/// get string option value by key, if any
+	std::optional<CSphString> OptStr ( const char * sKey ) const
 	{
-		CSphVariant * pEntry = ( *this ) ( sKey );
-		return pEntry ? (pEntry->intval ()!=0) : bDefault;
+		CSphVariant * pEntry = (*this)( sKey );
+		if (!pEntry)
+			return std::nullopt;
+		return pEntry->strval();
+	}
+
+	/// get bool option value by key and default value
+	bool GetBool ( const char * szKey, bool bDefault = true ) const noexcept
+	{
+		return OptBool (szKey).value_or(bDefault);
+	}
+
+	/// get bool option value by key, if any
+	std::optional<bool> OptBool ( const char * sKey ) const noexcept
+	{
+		CSphVariant * pEntry = (*this)( sKey );
+		if (!pEntry)
+			return std::nullopt;
+		return pEntry->intval()>0;
 	}
 
 	/// get size option (plain int, or with K/M suffix) value by key and default value
@@ -348,8 +389,9 @@ enum ESphLogLevel : BYTE
 
 extern ESphLogLevel g_eLogLevel;		// current log level, can be changed on the fly
 
-typedef void ( *SphLogger_fn )( ESphLogLevel, const char *, va_list );
-volatile SphLogger_fn& g_pLogger();
+using SphLogger_fn = void ( * )( ESphLogLevel, const char *, va_list );
+void SetLogger (SphLogger_fn fnLogger);
+SphLogger_fn g_pLogger();
 
 void sphLogVa ( const char * sFmt, va_list ap, ESphLogLevel eLevel = SPH_LOG_WARNING );
 void sphWarning_impl ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
@@ -412,6 +454,8 @@ namespace CustomLog {
 
 /// async safe, BUT NOT THREAD SAFE, fprintf
 void sphSafeInfo ( int iFD, const char * sFmt, ... );
+void sphSafeInfoStdOut ( bool bEnableTee );
+void sphSafeInfoWrite ( int iFD, const void * sBuf, int iLen );
 
 #if !_WIN32
 /// UNIX backtrace gets printed out to a stream
@@ -449,7 +493,7 @@ void sphConfigureCommon ( const CSphConfig & hConf, FixPathAbsolute_fn && fnPath
 /// my own is chinese
 FORCE_INLINE bool sphIsChineseCode ( int iCode )
 {
-	return ( ( iCode>=0x2E80 && iCode<=0x2EF3 ) ||	// CJK radicals
+	return ( iCode>=0x2E80 && iCode<=0x2EF3 ) ||	// CJK radicals
 		( iCode>=0x2F00 && iCode<=0x2FD5 ) ||	// Kangxi radicals
 		( iCode>=0x3000 && iCode<=0x303F ) ||	// CJK Symbols and Punctuation
 		( iCode>=0x3105 && iCode<=0x312D ) ||	// Bopomofo
@@ -458,7 +502,7 @@ FORCE_INLINE bool sphIsChineseCode ( int iCode )
 		( iCode>=0x4E00 && iCode<=0x9FFF ) ||	// Ideograph
 		( iCode>=0xF900 && iCode<=0xFAD9 ) ||	// compatibility ideographs
 		( iCode>=0xFF00 && iCode<=0xFFEF ) ||	// Halfwidth and fullwidth forms
-		( iCode>=0x20000 && iCode<=0x2FA1D ) );	// CJK Ideograph Extensions B/C/D, and compatibility ideographs
+		( iCode>=0x20000 && iCode<=0x2FA1D ) ;	// CJK Ideograph Extensions B/C/D, and compatibility ideographs
 }
 
 /// detect chinese chars in a buffer
@@ -576,12 +620,9 @@ bool HasMvaUpdated ( const CSphString & sIndexPath );
 int64_t	UidShort();
 int64_t GetIndexUid();
 
-// server - is server id used as iServer & 0x7f
-// started - is a server start time \ Unix timestamp in seconds
-void		UidShortSetup ( int iServer, int iStarted );
 int			GetUidShortServerId ();
-
-BYTE Pearson8 ( const BYTE * pBuf, int iLen, BYTE uPrev=0 );
+void		SetUidShort ( CSphString sMAC, const CSphString& sPid, bool bTestMode );
+void		SetServerID ( int iServerID ) noexcept;
 
 #if _WIN32
 void		CheckWinInstall();

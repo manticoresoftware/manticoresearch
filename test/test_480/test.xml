@@ -1,0 +1,274 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>configless vs ext files _list</name>
+<requires>
+	<force-rt/>
+</requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>
+CREATE TABLE test ( id bigint, title text )
+stopwords_list='word1; word2; word3';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: stopwords_list='word1; word2; word3'
+-->
+
+CREATE TABLE test ( id bigint, title text )
+stopwords_list='word1 ; word2 ; word3';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: stopwords_list='word1; word2; word3' (spaces normalized)
+-->
+
+CREATE TABLE test ( id bigint, title text )
+stopwords_list='singleword';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: stopwords_list='singleword'
+-->
+
+CREATE TABLE test ( id bigint, title text )
+stopwords_list='';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: stopwords_list='' or not present
+-->
+
+CREATE TABLE test ( id bigint, title text )
+exceptions_list='AT&amp;T => ATT; IBM => International Business Machines';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: exceptions_list='AT&amp;T => ATT; IBM => International Business Machines'
+-->
+
+CREATE TABLE test ( id bigint, title text )
+exceptions_list='from > to; from2 > to2';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: exceptions_list='from > to; from2 > to2'
+-->
+
+CREATE TABLE test ( id bigint, title text )
+exceptions_list='AT\\=&amp;T\\>\\; => AT&amp;T; smthelse > smth';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: exceptions_list='AT\=&amp;T\>\; => AT&amp;T; smthelse > smth'
+Note: The escaped characters should be preserved in SHOW CREATE TABLE
+Note: In SQL, we use \\ to get \ after MySQL client processing
+-->
+
+CREATE TABLE test ( id bigint, title text )
+wordforms_list='word1 => form1; word2 => form2; word3 => form3';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: wordforms_list='word1 => form1; word2 => form2; word3 => form3'
+-->
+
+CREATE TABLE test ( id bigint, title text )
+hitless_words_list='word1; word2; word3; word4';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: hitless_words_list='word1; word2; word3; word4'
+-->
+
+CREATE TABLE test ( id bigint, title text )
+stopwords_list='stop1; stop2' exceptions_list='exc1 => exc2' wordforms_list='wf1 => wf2';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: All three *_list options with their values
+-->
+
+CREATE TABLE test ( id bigint, title text )
+stopwords='<this_test/>/stops.txt';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: stopwords='/path/to/stopwords.txt' (file path, not content)
+-->
+
+CREATE TABLE test ( id bigint, title text )
+exceptions_list='from => to; from2 => to2';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: exceptions_list='from => to; from2 => to2'
+-->
+
+CREATE TABLE test ( id bigint, title text )
+hitless_words_list='onlyoneword';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: hitless_words_list='onlyoneword'
+-->
+
+CREATE TABLE test ( id bigint, title text )
+wordforms_list='word1 => form1; word2 > form2; word3 => form3';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: wordforms_list='word1 => form1; word2 > form2; word3 => form3'
+-->
+
+CREATE TABLE test ( id bigint, title text )
+stopwords_list='word1    word2     word3';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: stopwords_list='word1; word2; word3' (multiple spaces normalized)
+-->
+
+CREATE TABLE test ( id bigint, title text )
+exceptions_list='test\\; => test; normal => normal';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: exceptions_list='test\; => test; normal => normal'
+Note: In SQL, we use \\; to get \; after MySQL client processing
+-->
+
+CREATE TABLE test ( id bigint, title text )
+stopwords='<this_test/>/stops_line.txt';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: stopwords_list='word1; word2; word3; word4; word5'
+(file content read and split by spaces, joined with semicolons)
+-->
+
+CREATE TABLE test ( id bigint, title text )
+stopwords='<this_test/>/stops_mixed.txt';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: stopwords_list='word1; word2; word3; word4; word5; word6'
+(all tokens from all lines, split by spaces, joined with semicolons)
+-->
+
+CREATE TABLE test ( id bigint, title text )
+exceptions='<this_test/>/exc1.txt';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: exceptions_list='AT&amp;T => ATT; IBM => International Business Machines; C++ => CPLUSPLUS'
+(each line becomes an entry, joined with semicolons)
+-->
+
+CREATE TABLE test ( id bigint, title text )
+wordforms='<this_test/>/wordforms2.txt';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: wordforms_list='word1 => form1; word2 => form2; word3 => form3'
+(each line becomes an entry, joined with semicolons)
+-->
+
+CREATE TABLE test ( id bigint, title text )
+hitless_words='<this_test/>/hitless1.txt';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: hitless_words_list='word1; word2; word3'
+(file content read and split by spaces, joined with semicolons)
+-->
+
+CREATE TABLE test ( id bigint, title text )
+stopwords='<this_test/>/dummy.txt';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: stopwords_list='' or not present
+-->
+
+CREATE TABLE test ( id bigint, title text )
+stopwords='<this_test/>/dummy_empty.txt';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: stopwords_list='' or not present (whitespace-only lines ignored)
+-->
+
+CREATE TABLE test ( id bigint, title text )
+stopwords_list='word1; word2; word3;';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: stopwords_list='word1; word2; word3' (trailing semicolon handled)
+-->
+
+CREATE TABLE test ( id bigint, title text )
+stopwords_list='  word1 ; word2 ; word3  ';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: stopwords_list='word1; word2; word3' (spaces trimmed)
+-->
+
+CREATE TABLE test ( id bigint, title text )
+exceptions_list='test\\=value => test=value; test\\;value => test\\;value';
+
+SHOW CREATE TABLE test;
+DROP TABLE test;
+<!--
+Expected: exceptions_list='test\=value => test=value; test\;value => test;value'
+Note: In SQL, we use \\= and \\; to get \= and \; after MySQL client processing
+-->
+
+<!--
+CREATE TABLE test30 (
+    id bigint,
+    title text
+) stopwords='/path/to/file.txt' stopwords_list='word1; word2';
+Expected: Error or one takes precedence
+-->
+
+</sphinxql>
+</queries>
+
+</test>

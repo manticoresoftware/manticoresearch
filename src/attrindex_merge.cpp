@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -21,7 +21,12 @@
 #include "jsonsi.h"
 #include "attrindex_merge.h"
 #include "tracer.h"
+#include "sphinxrt.h"
+#include "coroutine.h"
+#include "client_task_info.h"
 
+#include <atomic>
+#include <algorithm>
 #include <boost/preprocessor/repetition/repeat.hpp>
 
 class AttrMerger_c::Impl_c
@@ -48,39 +53,46 @@ class AttrMerger_c::Impl_c
 	CSphVector<PlainOrColumnar_t>	m_dSiAttrs;
 	std::unique_ptr<SI::Builder_i>	m_pSIdxBuilder;
 
-	CSphVector<ESphExt> 					m_dCreatedFiles;
+	StrVec_t &								m_dCreatedFiles;
+
+	struct KNNInputRef_t
+	{
+		const CSphIndex *		m_pIndex;
+		VecTraits_T<RowID_t>	m_dRowMap;
+		DWORD					m_uAlive;	// pre-counted by the caller of CopyAttributes
+	};
+
+	CSphVector<KNNInputRef_t>		m_dKNNInputs;
 
 private:
 	template <bool WITH_BLOB, bool WITH_STRIDE, bool WITH_DOCSTORE, bool WITH_SI, bool WITH_KNN, bool PURE_COLUMNAR>
 	bool CopyMixedAttributes_T ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap );
 
 	bool AnalyzeMixedAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap );
+	bool ParallelStoreKNN();
+	void RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWorkerEnd, const CSphFixedVector<int64_t> & dInputStarts, std::atomic<bool> & bStop, std::atomic<bool> & bInterrupted, CSphString & sWorkerError );
 
 	CSphString GetTmpFilename ( const CSphIndex* pIdx, ESphExt eExt )
 	{
-		m_dCreatedFiles.Add ( eExt );
 		assert ( pIdx );
-		return  pIdx->GetTmpFilename ( eExt );
+		CSphString sTmp = pIdx->GetTmpFilename ( eExt );
+		m_dCreatedFiles.Add ( sTmp );
+		return sTmp;
 	}
 
 public:
-	Impl_c ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings )
+	Impl_c ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings, StrVec_t & dCreatedFiles )
 		: m_tMonitor ( tMonitor )
 		, m_sError ( sError )
 		, m_iTotalDocs ( iTotalDocs )
 		, m_tBufferSettings ( tSettings )
+		, m_dCreatedFiles ( dCreatedFiles )
 	{}
 
 	bool Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex );
 	bool AnalyzeAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
 	bool CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
-	bool FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t& tBuildHeader, StrVec_t* pCreatedFiles );
-
-	void AddCreatedFiles ( const CSphIndex * pDstIndex, StrVec_t * pCreatedFiles )
-	{
-		if ( pCreatedFiles )
-			m_dCreatedFiles.for_each ( [pCreatedFiles, pDstIndex] ( auto eExt ) { pCreatedFiles->Add ( pDstIndex->GetTmpFilename ( eExt ) ); } );
-	}
+	bool FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t & tBuildHeader );
 };
 
 bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex )
@@ -121,9 +133,15 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 
 	if ( tDstSchema.HasKNNAttrs() )
 	{
-		m_pKNNBuilder = BuildCreateKNN ( tDstSchema, m_iTotalDocs, m_dAttrsForKNN, m_sError );
+		CSphVector<std::pair<PlainOrColumnar_t,int>> dAllKNNAttrs;
+		CSphString sTmpFilename = GetTmpFilename ( pDstIndex, SPH_EXT_SPKNN );
+		sTmpFilename.SetSprintf ( "%s.4bit", sTmpFilename.cstr() );
+		m_pKNNBuilder = BuildCreateKNN ( tDstSchema, m_iTotalDocs, dAllKNNAttrs, sTmpFilename, m_sError );
 		if ( !m_pKNNBuilder )
 			return false;
+
+		for ( const auto & i : dAllKNNAttrs )
+			m_dAttrsForKNN.Add ( i.first );
 	}
 
 	if ( tDstSchema.HasJsonSIAttrs() )
@@ -229,12 +247,7 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 			BuildStoreSI ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
 		}
 
-		if constexpr ( WITH_KNN )
-			if ( !BuildStoreKNN ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder ) )
-			{
-				m_sError = m_pKNNBuilder->GetError().c_str();
-				return false;
-			}
+		// KNN is built in a separate pass
 
 		m_dDocidLookup[m_tResultRowID] = { tDocID, m_tResultRowID };
 		++m_tResultRowID;
@@ -259,6 +272,7 @@ bool AttrMerger_c::Impl_c::AnalyzeMixedAttributes ( const CSphIndex & tIndex, co
 
 	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
 	AT_SCOPE_EXIT ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
+	RowID_t tResultRowID = 0;
 	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID, pRow += iStride )
 	{
 		if ( dRowMap[tRowID]==INVALID_ROWID )
@@ -268,7 +282,7 @@ bool AttrMerger_c::Impl_c::AnalyzeMixedAttributes ( const CSphIndex & tIndex, co
 		if ( m_tMonitor.NeedStop() )
 			return false;
 
-		BuildTrainKNN ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder );
+		BuildTrainKNN ( tRowID, tResultRowID++, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder );
 	}
 
 	return true;
@@ -288,6 +302,9 @@ bool AttrMerger_c::Impl_c::CopyAttributes ( const CSphIndex & tIndex, const VecT
 {
 	if ( !uAlive )
 		return true;
+
+	if ( m_pKNNBuilder )
+		m_dKNNInputs.Add ( { &tIndex, dRowMap, uAlive } );
 
 	// that is very empyric, however is better than nothing.
 	m_iTotalBytes += tIndex.GetStats().m_iTotalBytes * ( (float)uAlive / (float)dRowMap.GetLength64() );
@@ -314,8 +331,142 @@ bool AttrMerger_c::Impl_c::CopyAttributes ( const CSphIndex & tIndex, const VecT
 }
 
 
-bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t& tBuildHeader, StrVec_t* pCreatedFiles )
+void AttrMerger_c::Impl_c::RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWorkerEnd, const CSphFixedVector<int64_t> & dInputStarts, std::atomic<bool> & bStop, std::atomic<bool> & bInterrupted, CSphString & sWorkerError )
 {
+	Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
+
+	const int iNumInputs = m_dKNNInputs.GetLength();
+
+	knn::BuildContext_t tBuildCtx;
+	CSphFixedVector<CSphVector<ScopedTypedIterator_t>> dWorkerIters (iNumInputs);
+	CSphFixedVector<bool> dWorkerItersInited(iNumInputs);
+	dWorkerItersInited.Fill(false);
+
+	// find starting input
+	int iInput = (int)( std::upper_bound ( dInputStarts.Begin(), dInputStarts.End(), iWorkerStart ) - dInputStarts.Begin() ) - 1;
+
+	const CSphIndex * pIndex = nullptr;
+	const CSphRowitem *	pRawAttrs = nullptr;
+	const BYTE * pRawBlobs = nullptr;
+	int iStride = 0;
+	const RowID_t * pRowMap = nullptr;
+	int64_t iRowMapLen = 0;
+
+	auto Rebind = [&]
+	{
+		pIndex		= m_dKNNInputs[iInput].m_pIndex;
+		pRawAttrs	= pIndex->GetRawAttrs();
+		pRawBlobs	= pRawAttrs ? pIndex->GetRawBlobAttrs() : nullptr;
+		iStride		= pRawAttrs ? pIndex->GetMatchSchema().GetRowSize() : 0;
+		pRowMap		= m_dKNNInputs[iInput].m_dRowMap.Begin();
+		iRowMapLen	= m_dKNNInputs[iInput].m_dRowMap.GetLength64();
+	};
+
+	Rebind();
+
+	// skip alive alive rows belonging to earlier workers
+	int64_t iScan = 0;
+	for ( int64_t iAliveToSkip = iWorkerStart - dInputStarts[iInput]; iAliveToSkip > 0; iScan++ )
+	{
+		assert ( iScan < iRowMapLen );
+		if ( pRowMap[iScan]!=INVALID_ROWID )
+			iAliveToSkip--;
+	}
+
+	for ( int64_t iRow = iWorkerStart; iRow< iWorkerEnd; iRow++ )
+	{
+		if ( bStop.load ( std::memory_order_relaxed ) )
+			return;
+
+		if ( m_tMonitor.NeedStop() )
+		{
+			bInterrupted.store ( true, std::memory_order_relaxed );
+			bStop.store ( true, std::memory_order_relaxed );
+			return;
+		}
+
+		// find next alive row, crossing input/table boundaries forward as needed
+		while ( true )
+		{
+			while ( iScan < iRowMapLen && pRowMap[iScan]==INVALID_ROWID )
+				iScan++;
+
+			if ( iScan < iRowMapLen )
+				break;
+
+			iInput++;
+			assert ( iInput < iNumInputs );
+			Rebind();
+			iScan = 0;
+		}
+
+		if ( !dWorkerItersInited[iInput] )
+		{
+			dWorkerIters[iInput] = CreateAllColumnarIterators ( pIndex->GetColumnar(), pIndex->GetMatchSchema() );
+			dWorkerItersInited[iInput] = true;
+		}
+
+		RowID_t tSrc = (RowID_t)iScan;
+		RowID_t tDst = pRowMap[iScan];
+		assert ( tDst != INVALID_ROWID );
+		const CSphRowitem * pRow = pRawAttrs ? pRawAttrs + (int64_t)tSrc * iStride : nullptr;
+		if ( !BuildStoreKNN ( tSrc, tDst, pRow, pRawBlobs, dWorkerIters[iInput], m_dAttrsForKNN, *m_pKNNBuilder, tBuildCtx ) )
+		{
+			RecordKNNBuildError ( sWorkerError, tBuildCtx, "KNN index construction failed at input %d row %u", iInput, tSrc );
+			bStop.store ( true, std::memory_order_relaxed );
+			return;
+		}
+
+		iScan++;
+	}
+}
+
+
+bool AttrMerger_c::Impl_c::ParallelStoreKNN()
+{
+	if ( !m_pKNNBuilder )
+		return true;
+
+	{
+		std::string sErrSTL;
+		if ( !m_pKNNBuilder->FinalizeTraining ( sErrSTL ) )
+		{
+			m_sError = sErrSTL.c_str();
+			return false;
+		}
+	}
+
+	int iNumInputs = m_dKNNInputs.GetLength();
+	if ( !iNumInputs )
+		return true;
+
+	// split only alive rows between workers, not total rows
+	CSphFixedVector<int64_t> dInputStarts ( iNumInputs + 1 );
+	dInputStarts[0] = 0;
+	for ( int i = 0; i < iNumInputs; i++ )
+		dInputStarts[i+1] = dInputStarts[i] + (int64_t)m_dKNNInputs[i].m_uAlive;
+
+	int64_t iTotalAlive = dInputStarts[iNumInputs];
+	if ( !iTotalAlive )
+		return true;
+
+	std::atomic<bool> bInterrupted { false };
+	bool bOk = RunParallelKNNStore ( iTotalAlive, m_sError, [&] ( int iIdx, int64_t iStart, int64_t iEnd, CSphString & sErr, std::atomic<bool> & bStop ) { RunKNNStoreWorker ( iStart, iEnd, dInputStarts, bStop, bInterrupted, sErr ); } );
+	if ( bInterrupted.load ( std::memory_order_relaxed ) )
+	{
+		m_sError = "KNN merge cancelled";
+		return false;
+	}
+
+	return bOk;
+}
+
+
+bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t & tBuildHeader )
+{
+	if ( !ParallelStoreKNN() )
+		return false;
+
 	m_tMinMax.FinishCollect();
 	assert ( m_tResultRowID==m_iTotalDocs );
 	tBuildHeader.m_iDocinfo = m_iTotalDocs;
@@ -383,8 +534,8 @@ bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, 
 }
 
 
-AttrMerger_c::AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings )
-	: m_pImpl { std::make_unique<Impl_c> ( tMonitor, sError, iTotalDocs, tSettings ) }
+AttrMerger_c::AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings, StrVec_t & dCreatedFiles )
+	: m_pImpl { std::make_unique<Impl_c> ( tMonitor, sError, iTotalDocs, tSettings, dCreatedFiles ) }
 {}
 
 AttrMerger_c::~AttrMerger_c() = default;
@@ -407,11 +558,10 @@ bool AttrMerger_c::CopyAttributes ( const CSphIndex& tIndex, const VecTraits_T<R
 	return m_pImpl->CopyAttributes ( tIndex, dRowMap, uAlive );
 }
 
-bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex* pDstIndex, BuildHeader_t& tBuildHeader, StrVec_t* pCreatedFiles )
+bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t & tBuildHeader )
 {
 	TRACE_CORO ( "sph", "AttrMerger_c::FinishMergeAttributes" );
-	bool bOk = m_pImpl->FinishMergeAttributes ( pDstIndex, tBuildHeader, pCreatedFiles );
-	m_pImpl->AddCreatedFiles ( pDstIndex, pCreatedFiles );
+	bool bOk = m_pImpl->FinishMergeAttributes ( pDstIndex, tBuildHeader );
 	return bOk;
 }
 

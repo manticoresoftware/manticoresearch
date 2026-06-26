@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -29,6 +29,23 @@ inline int64_t cast2signed ( SphWordID_t tVal )
 class CSphWriter;
 class CSphReader;
 class FilenameBuilder_i;
+
+struct StoredQueryExecutionSettings_t
+{
+	ESphRankMode	m_eRanker = SPH_RANK_DEFAULT;
+	CSphString		m_sRankerExpr;
+	CSphString		m_sUDRanker;
+	CSphString		m_sUDRankerOpts;
+	bool			m_bDefaultBoolOr = false;
+
+	void SetRanker ( const StoredQueryExecutionSettings_t & tOther )
+	{
+		m_eRanker = tOther.m_eRanker;
+		m_sRankerExpr = tOther.m_sRankerExpr;
+		m_sUDRanker = tOther.m_sUDRanker;
+		m_sUDRankerOpts = tOther.m_sUDRankerOpts;
+	}
+};
 
 enum
 {
@@ -91,6 +108,57 @@ public:
 };
 
 
+enum class DictFormat_e
+{
+	CRC,
+	KEYWORDS,
+	KEYWORDS_V2
+};
+
+const char * DictFormatName ( DictFormat_e eFormat );
+bool ParseDictFormat ( const CSphString & sValue, DictFormat_e & eFormat );
+int GetMaxTokenBytes ( DictFormat_e eFormat );
+constexpr int GetKeywordBufSize ( DictFormat_e eFormat )
+{
+	return eFormat==DictFormat_e::KEYWORDS_V2
+		? SPH_V2_MAX_TOKEN_BYTES + CSphString::GetGap()
+		: SPH_LEGACY_TOKEN_BYTES + CSphString::GetGap()*4;
+}
+constexpr int GetKeywordMaxStoredBytes ( DictFormat_e eFormat )
+{
+	return eFormat==DictFormat_e::KEYWORDS_V2
+		? SPH_V2_MAX_TOKEN_BYTES
+		: SPH_LEGACY_TOKEN_BYTES;
+}
+
+struct KeywordBuf_t : ISphNoncopyable
+{
+	BYTE				m_dBuf[GetKeywordBufSize ( DictFormat_e::KEYWORDS )];
+	CSphFixedVector<BYTE> m_dBufV2 { 0 };
+
+	explicit KeywordBuf_t ( DictFormat_e eDict = DictFormat_e::KEYWORDS )
+	{
+		Reset ( eDict );
+	}
+
+	void Reset ( DictFormat_e eDict )
+	{
+		m_dBufV2.Reset ( eDict==DictFormat_e::KEYWORDS_V2 ? GetKeywordBufSize ( DictFormat_e::KEYWORDS_V2 ) : 0 );
+	}
+
+	BYTE * Begin()
+	{
+		return m_dBufV2.GetLength() ? m_dBufV2.Begin() : m_dBuf;
+	}
+
+	int GetLength() const
+	{
+		return m_dBufV2.GetLength() ? m_dBufV2.GetLength() : (int)sizeof ( m_dBuf );
+	}
+};
+
+bool ShouldBypassMorphology ( DictFormat_e eFormat, int iTokenBytes );
+
 class CSphDictSettings : public SettingsWriter_c
 {
 public:
@@ -99,9 +167,17 @@ public:
 	CSphString		m_sStopwords;
 	StrVec_t		m_dWordforms;
 	int				m_iMinStemmingLen = 1;
-	bool			m_bWordDict = true;
+	DictFormat_e	m_eDictFormat = DictFormat_e::KEYWORDS;
 	bool			m_bStopwordsUnstemmed = false;
 	CSphString		m_sMorphFingerprint;		///< not used for creation; only for a check when loading
+
+	void			SetDictFormat ( DictFormat_e eFormat ) { m_eDictFormat = eFormat; }
+	DictFormat_e	GetDictFormat () const { return m_eDictFormat; }
+	bool			IsCRC () const { return GetDictFormat()==DictFormat_e::CRC; }
+	bool			IsKeywords () const { return GetDictFormat()==DictFormat_e::KEYWORDS; }
+	bool			IsKeywordsV2 () const { return GetDictFormat()==DictFormat_e::KEYWORDS_V2; }
+	bool			IsWordDict () const { return GetDictFormat()!=DictFormat_e::CRC; }
+	const char *	GetDictFormatName () const { return DictFormatName ( GetDictFormat() ); }
 
 	void			Setup ( const CSphConfigSection & hIndex, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
 	void			Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
@@ -242,7 +318,23 @@ enum ESphBigram : BYTE
 	SPH_BIGRAM_NONE			= 0,	///< no bigrams
 	SPH_BIGRAM_ALL			= 1,	///< index all word pairs
 	SPH_BIGRAM_FIRSTFREQ	= 2,	///< only index pairs where one of the words is in a frequent words list
-	SPH_BIGRAM_BOTHFREQ		= 3		///< only index pairs where both words are in a frequent words list
+	SPH_BIGRAM_BOTHFREQ		= 3,	///< only index pairs where both words are in a frequent words list
+	SPH_BIGRAM_SECONDNUMERIC = 4,	///< only index pairs where second token contains ASCII digits only
+	SPH_BIGRAM_SECONDHASDIGIT = 5	///< only index pairs where second token contains at least one ASCII digit
+};
+
+bool BigramNeedsFreq ( ESphBigram eMode ) noexcept;
+bool BigramHasDigit ( const BYTE * pWord, int iLen ) noexcept;
+bool BigramIsDigitsOnly ( const BYTE * pWord, int iLen ) noexcept;
+bool BigramIsSecondDigit ( ESphBigram eMode, const BYTE * pSecond, int iLen ) noexcept;
+
+enum class BigramDelimiter_e : BYTE
+{
+	NONE = 0,		///< store concatenated bigram only
+	DELIMITED,	///< store internal delimited bigram only
+	BOTH,		///< store both internal and concatenated bigrams
+
+	DEFAULT = DELIMITED
 };
 
 enum class JiebaMode_e
@@ -272,6 +364,7 @@ public:
 	KillListTargets_c m_tKlistTargets;	///< list of indexes to apply killlist to
 
 	ESphBigram		m_eBigramIndex = SPH_BIGRAM_NONE;
+	BigramDelimiter_e m_eBigramDelimiter = BigramDelimiter_e::DEFAULT;
 	CSphString		m_sBigramWords;
 	StrVec_t		m_dBigramWords;
 
@@ -311,6 +404,8 @@ enum class MutableName_e
 	EXPAND_KEYWORDS,
 	RT_MEM_LIMIT,
 	PREOPEN,
+	RANKER,
+	BOOLEAN_MODE,
 	ACCESS_PLAIN_ATTRS,
 	ACCESS_BLOB_ATTRS,
 	ACCESS_DOCLISTS,
@@ -351,6 +446,8 @@ public:
 	int			m_iExpandKeywords;
 	int64_t		m_iMemLimit;
 	bool		m_bPreopen = false;
+	CSphString	m_sRanker; ///< persisted user-visible value for SHOW CREATE/SETTINGS and sidecar save
+	StoredQueryExecutionSettings_t m_tQueryExecutionSettings; ///< prepared table-owned execution defaults
 	FileAccessSettings_t m_tFileAccess;
 	int			m_iOptimizeCutoff;
 	int			m_iOptimizeCutoffKNN;
@@ -364,11 +461,11 @@ public:
 	static MutableIndexSettings_c & GetDefaults();
 
 	bool Load ( const char * sFileName, const char * sIndexName );
-	void Load ( const CSphConfigSection & hIndex, bool bNeedSave, StrVec_t * pWarnings );
+	bool Load ( const CSphConfigSection & hIndex, bool bNeedSave, StrVec_t * pWarnings, CSphString & sError );
 	bool Save ( CSphString & sBuf ) const;
 
 	bool NeedSave() const { return m_bNeedSave; }
-	bool HasSettings() const { return ( m_dLoaded.BitCount()>0 ); }
+	bool HasSettings() const { return ( m_dLoaded.BitCount()>0 || m_dRemoved.BitCount()>0 ); }
 	bool IsSet ( MutableName_e eOpt ) const { return ( HasSettings() && m_dLoaded.BitGet ( (int)eOpt ) ); }
 
 	void Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * ) const override;
@@ -376,7 +473,10 @@ public:
 	void Combine ( const MutableIndexSettings_c & tOther );
 
 private:
+	bool		SetStoredRanker ( const CSphString & sRanker, CSphString & sError );
+	bool		SetStoredBooleanMode ( const CSphString & sValue, CSphString & sError );
 	CSphBitvec	m_dLoaded;
+	CSphBitvec	m_dRemoved;
 	bool		m_bNeedSave = false;
 };
 
@@ -399,7 +499,10 @@ struct CreateTableAttr_t
 	bool					m_bStringHash = true;
 	bool					m_bIndexed = false;
 	bool					m_bKNN = false;
+	bool					m_bKNNFromSet = false;
 	knn::IndexSettings_t	m_tKNN;
+	knn::ModelSettings_t	m_tKNNModel;
+	CSphString				m_sKNNFrom;
 };
 
 struct NameValueStr_t
@@ -417,6 +520,8 @@ struct CreateTableSettings_t
 	CSphVector<NameValueStr_t>		m_dOpts;
 };
 
+bool ExpandCreateTableProfiles ( CreateTableSettings_t & tCreateTable, CSphString & sError );
+
 class IndexSettingsContainer_i
 {
 public:
@@ -426,6 +531,7 @@ public:
 	virtual bool			Add ( const char * szName, const CSphString & sValue ) = 0;
 	virtual bool			Add ( const CSphString & sName, const CSphString & sValue ) = 0;
 	virtual CSphString		Get ( const CSphString & sName ) const =0 ;
+	virtual CSphString		GetList ( const CSphString & sName ) const = 0;
 	virtual bool			Contains ( const char * szName ) const = 0;
 	virtual void			RemoveKeys ( const CSphString & sName ) = 0;
 	virtual bool			AddOption ( const CSphString & sName, const CSphString & sValue, bool bExtCopy ) = 0;
@@ -444,6 +550,12 @@ class CSphDict;
 class CSphIndex;
 class Writer_i;
 
+enum class ExtFilesFormat_e
+{
+	FILE,
+	LIST
+};
+
 void		SaveTokenizerSettings ( Writer_i & tWriter, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit );
 void		SaveDictionarySettings ( Writer_i & tWriter, const DictRefPtr_c& pDict, bool bForceWordDict, int iEmbeddedLimit );
 
@@ -453,7 +565,8 @@ void		DumpReadable ( FILE * fp, const CSphIndex & tIndex, const CSphEmbeddedFile
 
 /// try to set dictionary, tokenizer and misc settings for an index (if not already set)
 bool		sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, bool bStripFile, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError );
-CSphString	BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema );
+CSphString	BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema, ExtFilesFormat_e eExt );
+CSphString	BuildCreateTable ( const CSphString & sName, const CSphSchema & tSchema, const CSphIndexSettings & tSettings, const CSphFieldFilterSettings & tFieldFilterSettings, const CSphTokenizerSettings & tTokenizerSettings, const CSphDictSettings & tDictSettings, const MutableIndexSettings_c & tMutableSettings, ExtFilesFormat_e eExt, FilenameBuilder_i * pFilenameBuilder );
 
 // daemon-level callback
 using CreateFilenameBuilder_fn = std::unique_ptr<FilenameBuilder_i> (*) ( const char * szIndex );
@@ -486,5 +599,7 @@ void		LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings 
 void		operator << ( JsonEscapedBuilder & tOut, const CSphIndexSettings & tSettings );
 void		LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion );
 void		SaveIndexSettings ( Writer_i & tWriter, const CSphIndexSettings & tSettings );
+
+CSphString		FormatPath ( const CSphString & sFile, const FilenameBuilder_i * pFilenameBuilder );
 
 #endif // _indexsettings_

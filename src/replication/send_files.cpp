@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -196,4 +196,26 @@ bool SyncSigVerify ( const VecTraits_T<CSphString>& dFiles, const VecTraits_T<HA
 			return false;
 	}
 	return true;
+}
+
+uint64_t SyncSrc_t::CalculateNeededBytes ( const CSphBitvec & dNeededChunks ) const
+{
+	uint64_t uTotalBytes = 0;
+	if ( m_dHashes.IsEmpty() )
+		return 0;
+
+	for ( int iFile=0; iFile<m_dBaseNames.GetLength(); ++iFile )
+	{
+		const FileChunks_t& tFileChunks = m_dChunks[iFile];
+		const int iNumChunksInFile = tFileChunks.GetChunksCount();
+
+		for ( int iChunk=0; iChunk<iNumChunksInFile; ++iChunk )
+		{
+			int iCurChunk = tFileChunks.m_iHashStartItem + iChunk;
+			if ( !dNeededChunks.BitGet ( iCurChunk ) )
+				uTotalBytes += tFileChunks.GetChunkFileLength ( iChunk );
+		}
+	}
+	
+	return uTotalBytes;
 }

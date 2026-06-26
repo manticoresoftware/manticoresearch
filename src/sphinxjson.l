@@ -59,7 +59,7 @@ EXP_CONSTANT        {I}{EXPONENT}
 
 {SIGN}{FLOAT_CONSTANT}	|
 {SIGN}{EXP_CONSTANT}	{ lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
-{SIGN}{DIGIT}+			{ lvalp->m_eType = JSON_INT64; lvalp->m_iValue = strtoll ( yytext, NULL, 10 ); return TOK_INT; }
+{SIGN}{DIGIT}+			{ return pParser->ParseNumber ( yytext, lvalp ); }
 {ID}					{ STORE_BOUNDS; lvalp->m_eType = JSON_STRING; return TOK_IDENT; }
 
 {SPACE}+				{ ; }

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2011-2016, Andrew Aksyonoff
 // Copyright (c) 2011-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -16,6 +16,7 @@
 #include "sphinxutils.h"
 #include "sphinxdefs.h"
 #include "grouper.h"
+#include "config.h"
 
 class ISphExpr;
 
@@ -412,7 +413,7 @@ ESphJsonType sphJsonFindByKey ( ESphJsonType eType, const BYTE ** ppValue, const
 ESphJsonType sphJsonFindByIndex ( ESphJsonType eType, const BYTE ** ppValue, int iIndex );
 
 /// extract object part from the name; return false if not JSON name. szIndex is the possible name of joined index
-bool sphJsonNameSplit ( const char * szName, const char * szIndex = nullptr, CSphString * pColumn = nullptr );
+bool sphJsonNameSplit ( const char * szName, const char * szIndex = nullptr, CSphString * pColumn = nullptr, bool * pIndexPrefix = nullptr );
 
 /// compute node size, in bytes
 /// returns -1 when data itself is required to compute the size, but pData is NULL
@@ -497,6 +498,7 @@ public:
 	bool			FetchBoolItem ( bool & bValue, const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
 	bool			FetchFltItem ( float & fValue, const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
 	bool			FetchStrItem ( CSphString & sValue, const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
+	bool			FetchStrItem ( std::string & sValue, const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
 	bool			HasItem ( const char * szName ) const;
 
 	static JsonObj_c CreateInt ( int64_t iInt );
@@ -658,7 +660,8 @@ public:
 	// helpers
 	inline ESphJsonType GetType() const { return m_dData.second; }
 	operator NodeHandle_t () const { return m_dData; }
-	const char * sError () const;
+	const char * Error () const;
+	bool HasError () const;
 };
 
 // iterate over Bson_c

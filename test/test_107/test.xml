@@ -31,11 +31,7 @@ $results = array();
 $sockStr = "$sd_address:$sd_sphinxql_port";
 if ($sd_address == "localhost")
 	$sockStr = "127.0.0.1:$sd_sphinxql_port";
-$sock = @mysql_connect (
-	$sockStr,
-	$g_locals['db-user'],
-	$g_locals['db-password'] ,
-	true );
+$sock = @mysql_test_connect ($sockStr);
 
 if ( $sock === false )
 {

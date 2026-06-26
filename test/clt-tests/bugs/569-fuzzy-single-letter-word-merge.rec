@@ -1,0 +1,83 @@
+Test for issue #569: Fuzzy not merging words with 1 letter
+https://github.com/manticoresoftware/manticoresearch-buddy/issues/569
+
+Bug: Fuzzy search fails to merge single-letter words with adjacent words,
+even when preserve=1 is set. The query '30 W' should match '30W' but doesn't.
+
+––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Create table with min_infix_len='2' required for fuzzy search
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS t; CREATE TABLE t(f text) min_infix_len='2';"
+––– output –––
+––– comment –––
+Insert test data: '30W' should be findable by '30 W' query
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO t VALUES(1, '30W');"
+––– output –––
+––– comment –––
+Test 1: Basic fuzzy search without preserve - should fail to match
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('30 W') OPTION fuzzy=1;"
+––– output –––
++------+------+
+| id   | f    |
++------+------+
+|    1 | 30W  |
++------+------+
+––– comment –––
+Test 2: Fuzzy search with preserve=1 - BUG: should match but doesn't
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('30 W') OPTION fuzzy=1, preserve=1;"
+––– output –––
++------+------+
+| id   | f    |
++------+------+
+|    1 | 30W  |
++------+------+
+––– comment –––
+Test 3: Verify the data exists with exact match
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('30W');"
+––– output –––
++------+------+
+| id   | f    |
++------+------+
+|    1 | 30W  |
++------+------+
+––– comment –––
+Test 4: Test with longer single letter - should work with multi-char words
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO t VALUES(2, 'hello world');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('hello world') OPTION fuzzy=1;"
+––– output –––
++------+-------------+
+| id   | f           |
++------+-------------+
+|    2 | hello world |
++------+-------------+
+––– comment –––
+Test 5: Additional test case with different single letter
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO t VALUES(3, '100A');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('100 A') OPTION fuzzy=1, preserve=1;"
+––– output –––
++------+------+
+| id   | f    |
++------+------+
+|    3 | 100A |
++------+------+
+––– comment –––
+Verify exact match works for this case too
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('100A');"
+––– output –––
++------+------+
+| id   | f    |
++------+------+
+|    3 | 100A |
++------+------+

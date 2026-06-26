@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -40,6 +40,11 @@ public:
 	{}
 
 	bool Wake ( bool bVip = false ) const noexcept;
+
+	friend bool operator== ( Waker_c const& lhs, Waker_c const& rhs ) noexcept
+	{
+		return &lhs == &rhs;
+	}
 };
 
 class AtomicWaker_c
@@ -69,11 +74,6 @@ public:
 	bool is_linked() const noexcept
 	{
 		return m_tWakerQueueHook.is_linked();
-	}
-
-	friend bool operator== ( Waker_c const& lhs, Waker_c const& rhs ) noexcept
-	{
-		return &lhs == &rhs;
 	}
 
 public:

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -17,6 +17,7 @@
 #include "sphinxsort.h"
 #include "searchdaemon.h"
 #include "indexing_sources/source_mysql.h"
+#include "sphinxquery/xqparser.h"
 
 #if HAVE_RTESTCONFIG_H
 #include "rtestconfig.h"
@@ -74,7 +75,7 @@ void DoSearch ( CSphIndex * pIndex )
 	{
 		auto & tOneRes = tResult.m_dResults.Add ();
 		tOneRes.FillFromSorter ( pSorter );
-		printf ( "%d results found in %d.%03d sec!\n", tOneRes.m_dMatches.GetLength(), tResult.m_iQueryTime/1000, tResult.m_iQueryTime%1000 );
+		printf ( "%d results found in %d.%03d sec!\n", tOneRes.m_dMatches.GetLength(), tResult.GetQueryTimeMs()/1000, tResult.GetQueryTimeMs()%1000 );
 		ARRAY_FOREACH ( i, tOneRes.m_dMatches )
 			printf ( "%d. rowid=%u, weight=%d\n", 1+i, tOneRes.m_dMatches[i].m_tRowID, tOneRes.m_dMatches[i].m_iWeight );
 	}
@@ -605,7 +606,7 @@ int main ( int argc, char ** argv )
 
 	CSphString sError;
 	CSphDictSettings tDictSettings;
-	tDictSettings.m_bWordDict = false;
+	tDictSettings.SetDictFormat ( DictFormat_e::CRC );
 
 	TokenizerRefPtr_c pTok = Tokenizer::Detail::CreateUTF8Tokenizer();
 	DictRefPtr_c pDict {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt1", false, 32, nullptr, sError )};
@@ -633,7 +634,7 @@ int main ( int argc, char ** argv )
 	Binlog::Configure ( tRTConfig, 0 );
 	SmallStringHash_T< CSphIndex * > dTemp;
 	Binlog::Replay ( dTemp );
-	auto pIndex = sphCreateIndexRT ( "testrt", DATAFLD "dump", tSchema, 32*1024*1024, false ).release();
+	auto pIndex = sphCreateIndexRT ( "testrt", DATAFLD "dump", tSchema, 32*1024*1024 ).release();
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );
 	StrVec_t dWarnings;

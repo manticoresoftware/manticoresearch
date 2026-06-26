@@ -1,0 +1,49 @@
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+apt-get install jq -y > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+BUDDY_PORT=$(grep "started.*at http://127.0.0.1:" /var/log/manticore/searchd.log | tail -1 | sed 's/.*http:\/\/127.0.0.1:\([0-9]*\).*/\1/'); echo "Buddy API port: $BUDDY_PORT"
+––– output –––
+Buddy API port: %{NUMBER}
+––– input –––
+curl -s -X GET localhost:$BUDDY_PORT/config | jq -r '.log_level'
+––– output –––
+info
+––– input –––
+curl -s -X POST -d '{"log_level":"debug"}' localhost:$BUDDY_PORT/config; echo
+––– output –––
+{"log_level":"debug"}
+––– input –––
+curl -s -X GET localhost:$BUDDY_PORT/config | jq -r '.log_level'
+––– output –––
+debug
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL log_level=debug;"
+––– output –––
+––– input –––
+curl -s -X GET localhost:$BUDDY_PORT/config | jq -r '.log_level'
+––– output –––
+debug
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL log_level=debugv;"
+––– output –––
+––– input –––
+curl -s -X GET localhost:$BUDDY_PORT/config | jq -r '.log_level'
+––– output –––
+debugv
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL log_level=debugvv;"
+––– output –––
+––– input –––
+curl -s -X GET localhost:$BUDDY_PORT/config | jq -r '.log_level'
+––– output –––
+debugvv
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL log_level=info;"
+––– output –––
+––– input –––
+curl -s -X GET localhost:$BUDDY_PORT/config | jq -r '.log_level'
+––– output –––
+info

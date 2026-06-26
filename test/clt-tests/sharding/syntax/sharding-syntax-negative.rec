@@ -1,0 +1,56 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "create table tbl1(id bigint) shards='a' rf='b'"
+––– output –––
+ERROR 1064 (42000) at line 1: Parameter 'shards' requires to have a numeric value
+––– input –––
+mysql -h0 -P1306 -e "create table tbl2(id bigint) shards='-10' rf='-1'"
+––– output –––
+ERROR 1064 (42000) at line 1: table 'tbl2': CREATE TABLE failed: table 'tbl2': CREATE TABLE failed: negative 'shards' option is not allowed
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tbl3 shards='abc' rf='1';"
+––– output –––
+ERROR 1064 (42000) at line 1: Parameter 'shards' requires to have a numeric value
+––– input –––
+mysql -h0 -P1306 -e "create table tbl4(id bigint) shards='3"
+––– output –––
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected $undefined, expecting string near ''3'
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tbl5 shards='5' rf'12';"
+––– output –––
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected string, expecting '=' near ''12''
+––– input –––
+mysql -h0 -P1306 -e "create table tbl6(id bigint) shards='' rf='1'"
+––– output –––
+ERROR 1064 (42000) at line 1: Parameter 'shards' requires to have a value
+––– input –––
+mysql -h0 -P1306 -e "create table tbl7(id bigint) shards='5' rf='1' extra"
+––– output –––
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected $end, expecting '=' near 'extra'
+––– input –––
+mysql -h0 -P1306 -e "create table tbl8(id bigint) shards='0' rf='0'"
+––– output –––
+ERROR 1064 (42000) at line 1: Invalid shards or rf options are set
+––– input –––
+mysql -h0 -P1306 -e "create table tbl9(id bigint) shards='1.5' rf='2.3'"
+––– output –––
+ERROR 1064 (42000) at line 1: Parameter 'shards' requires to have a numeric value
+––– input –––
+mysql -h0 -P1306 -e "create table tbl10(id bigint) shards '5' rf '1'"
+––– output –––
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected string, expecting '=' near ''5' rf '1''
+––– input –––
+mysql -h0 -P1306 -e "create table tbl11(id bigint) shards='' rf=''"
+––– output –––
+ERROR 1064 (42000) at line 1: Parameter 'shards' requires to have a value
+––– input –––
+mysql -h0 -P1306 -e "create table tbl12(id bigint) shards='5' shards='3' rf='1'"
+––– output –––
+ERROR 1064 (42000) at line 1: Duplicate parameter 'shards' found
+––– input –––
+mysql -h0 -P1306 -e "create table tbl13(id bigint) shards=\"3\" rf=\"1\""
+––– output –––
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected $undefined, expecting string near '"3" rf="1"'

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -32,7 +32,6 @@ public:
 SphWordID_t DictExact_c::GetWordID ( BYTE* pWord )
 {
 	auto iLen = (int)strlen ( (const char*)pWord );
-	iLen = Min ( iLen, 16 + 3 * SPH_MAX_WORD_LEN - 1 );
 
 	if ( !iLen )
 		return 0;

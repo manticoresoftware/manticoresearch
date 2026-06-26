@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -14,45 +14,66 @@
 
 #include "tracer.h"
 #include "searchdreplication.h"
+#include "auth/auth.h"
 
 // commit for common commands
 bool CommitMonitor_c::Commit ()
 {
 	TRACE_CONN ( "conn", "CommitMonitor_c::Commit" );
 	using namespace TlsMsg;
-	RtIndex_i * pIndex = m_tAcc.GetIndex ();
+	RtIndex_i * pIndex = m_tAcc.GetIndex();
 
 	// short path for usual accum without commands
 	if ( m_tAcc.m_dCmd.IsEmpty ())
 		return pIndex && pIndex->Commit ( m_pDeletedCount, &m_tAcc );
 
-	ReplicationCommand_t& tCmd = *m_tAcc.m_dCmd[0];
+	const ReplicationCommand_t & tCmd = *m_tAcc.m_dCmd[0];
 	bool bTruncate = tCmd.m_eCommand == ReplCmd_e::TRUNCATE;
 	bool bOnlyTruncate = bTruncate && ( m_tAcc.m_dCmd.GetLength() == 1 );
 
+	if ( tCmd.m_eCommand==ReplCmd_e::AUTH_DELETE )
+	{
+		TLS_MSG_STRING ( sError );
+		return DeleteAuthDocuments ( m_tAcc, m_pDeletedCount, sError );
+	}
+	if ( tCmd.m_eCommand==ReplCmd_e::AUTH_ADD )
+	{
+		TLS_MSG_STRING ( sError );
+		return InsertAuthDocuments ( m_tAcc, sError );
+	}
+
 	// process with index from accum (no need to lock/unlock it)
 	if ( pIndex )
-		return CommitNonEmptyCmds ( pIndex, tCmd, bOnlyTruncate );
+	{
+		m_tAcc.m_tCmdReplicated = tCmd;
+		bool bOk = CommitNonEmptyCmds ( pIndex, tCmd, bOnlyTruncate );
+		m_tAcc.m_tCmdReplicated.m_iTID = pIndex->m_iTID;
+		return bOk;
+	}
 
 	auto pServed = GetServed ( tCmd.m_sIndex );
 	if ( !pServed )
 		return Err ( "requires an existing table" );
 
 	// truncate needs wlocked index
-	if ( ServedDesc_t::IsMutable ( pServed ) )
+	if ( !ServedDesc_t::IsMutable ( pServed ) )
+		return Err ( "requires an existing RT or percolate table" );
+
+	bool bOk = false;
+	m_tAcc.m_tCmdReplicated = tCmd;
+	if ( bTruncate )
 	{
-		if ( bTruncate )
-		{
-			WIdx_T<RtIndex_i*> tLocked ( pServed );
-			return CommitNonEmptyCmds ( tLocked, tCmd, bOnlyTruncate );
-		} else
-		{
-			RIdx_T<RtIndex_i*> tLocked ( pServed );
-			return CommitNonEmptyCmds ( tLocked, tCmd, bOnlyTruncate );
-		}
+		WIdx_T<RtIndex_i*> pIndex ( pServed );
+		bOk = CommitNonEmptyCmds ( pIndex, tCmd, bOnlyTruncate );
+		m_tAcc.m_tCmdReplicated.m_iTID = pIndex->m_iTID;
+	} else
+	{
+		RIdx_T<RtIndex_i*> pIndex ( pServed );
+		bOk = CommitNonEmptyCmds ( pIndex, tCmd, bOnlyTruncate );
+		m_tAcc.m_tCmdReplicated.m_iTID = pIndex->m_iTID;
 	}
 
-	return Err ( "requires an existing RT or percolate table" );
+	return bOk;
 }
 
 bool CommitMonitor_c::CommitNonEmptyCmds ( RtIndex_i * pIndex, const ReplicationCommand_t & tCmd, bool bOnlyTruncate ) const
@@ -86,6 +107,12 @@ bool CommitMonitor_c::CommitTOI()
 	{
 		bool bOk = SetIndexesClusterTOI ( &tCmd );
 		sphLogDebugRpl ( "CommitTOI %s for '%s'; %s", ( bOk ? "finished" : "failed" ), tCmd.m_sCluster.cstr(), ( bOk ? "" : TlsMsg::szError() ) );
+		return bOk;
+	}
+	case ReplCmd_e::CLUSTER_ALTER_UPDATE_USER:
+	{
+		bool bOk = SetClusterUserTOI ( &tCmd );
+		sphLogDebugRpl ( "CommitTOI %s update user for '%s'; %s", ( bOk ? "finished" : "failed" ), tCmd.m_sCluster.cstr(), ( bOk ? "" : TlsMsg::szError() ) );
 		return bOk;
 	}
 	default:
@@ -175,11 +202,28 @@ bool CommitMonitor_c::UpdateTOI ()
 
 	bool bUpdateAPI = ( tCmd.m_eCommand == ReplCmd_e::UPDATE_API );
 	assert ( bUpdateAPI || tCmd.m_pUpdateCond );
+	// tAcc.m_dCmd and tCmd are invalidated after commit
+	m_tAcc.m_tCmdReplicated = tCmd;
 
-	return DoUpdate ( tUpd, pServed, *m_pUpdated, bUpdateAPI, tCmd.m_bBlobUpdate );
+	bool bOk = DoUpdate ( tUpd, pServed, *m_pUpdated, bUpdateAPI, tCmd.m_bBlobUpdate );
+
+	// scope for the RIdx_c
+	{
+		m_tAcc.m_tCmdReplicated.m_iTID = RIdx_c ( pServed )->m_iTID;
+	}
+
+	return bOk;
 }
 
 CommitMonitor_c::~CommitMonitor_c ()
 {
 	m_tAcc.Cleanup ();
+}
+
+ReplicatedCommand_t & ReplicatedCommand_t::operator = ( const ReplicationCommand_t & tOther )
+{
+	m_eCommand = tOther.m_eCommand;
+	m_sIndex = tOther.m_sIndex;
+	m_sCluster = tOther.m_sCluster;
+	return *this;
 }

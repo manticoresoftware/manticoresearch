@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -38,6 +38,7 @@ void QueryProfile_c::Start ( ESphQueryState eNew )
 	m_tmStamp = sphMicroTimer();
 	m_iPseudoShards = 1;
 	m_iMaxMatches = 0;
+	m_iKnnDistanceComputations = 0;
 }
 
 
@@ -49,6 +50,7 @@ void QueryProfile_c::AddMetric ( const QueryProfile_c & tData )
 		m_dSwitches[i] += tData.m_dSwitches[i];
 		m_tmTotal[i] += tData.m_tmTotal[i];
 	}
+	m_iKnnDistanceComputations += tData.m_iKnnDistanceComputations;
 }
 
 

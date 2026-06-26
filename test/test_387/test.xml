@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>cluster table lock</name>
+
+<requires>
+<replication/>
+<non-windows/>
+<force-rt/>
+</requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	create table a(iid int);
+	create cluster c;
+	alter cluster c add a;
+	lock tables a read;
+	lock tables c:a read;
+	alter cluster c drop a;
+	delete cluster c;
+	drop table a;
+	drop table b;
+</sphinxql>
+</queries>
+
+</test>

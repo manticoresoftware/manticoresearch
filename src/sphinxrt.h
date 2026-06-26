@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -14,7 +14,7 @@
 #define _sphinxrt_
 
 #include "sphinxutils.h"
-#include "sphinxstem.h"
+#include "dict/stem/sphinxstem.h"
 #include "sphinxint.h"
 #include "killlist.h"
 #include "attribute.h"
@@ -27,6 +27,7 @@
 class RtAccum_t;
 
 using VisitChunk_fn = std::function<void ( const CSphIndex* pIndex )>;
+using VisitChunkEx_fn = std::function<void ( const CSphIndex* pIndex, bool bOptimizing )>;
 
 class InsertDocData_c
 {
@@ -50,8 +51,10 @@ public:
 	void								AddMVAValue ( int64_t iValue )						{ m_dMvas.Add(iValue); }
 	void								ResetMVAs()											{ m_dMvas.Resize(0); }
 	const int64_t *						GetMVA ( int iMVA ) const							{ return m_dMvas.Begin()+iMVA; }
+	const VecTraits_T<int64_t> &		GetMVAs() const										{ return m_dMvas; }
 	void								FixParsedMVAs ( const CSphVector<int64_t> & dParsed, int iCount );
 	static std::pair<int, bool>			ReadMVALength ( const int64_t * & pMVA );
+	void								SwapMVAs ( InsertDocData_c & tSrc )					{ Swap ( m_dMvas, tSrc.m_dMvas ); }
 
 private:
 	static const uint64_t DEFAULT_FLAG = 1ULL << 63;
@@ -104,6 +107,18 @@ struct CSphReconfigureSetup
 };
 
 /// RAM based updateable backend interface
+class RtIndex_i;
+
+struct AttachArgs_t
+{
+	RtIndex_i *	m_pSrcIndex = nullptr;
+	bool		m_bTruncate = false;
+	bool		m_bConfigless = false;
+	bool		m_bFatal = false;
+
+	AttachArgs_t ( RtIndex_i * pSrcIndex ) : m_pSrcIndex ( pSrcIndex ) {}
+};
+
 class RtIndex_i : public CSphIndexStub
 {
 public:
@@ -128,6 +143,7 @@ public:
 
 	/// commit pending changes
 	virtual bool Commit ( int * pDeleted, RtAccum_t * pAccExt, CSphString* pError = nullptr ) = 0;
+	virtual bool PreCommit ( RtAccum_t * pAccExt, CSphString & sError ) { return true; }
 
 	/// undo pending changes
 	virtual void RollBack ( RtAccum_t * pAccExt ) = 0;
@@ -143,14 +159,11 @@ public:
 	/// forcibly save RAM chunk as a new disk chunk
 	virtual bool ForceDiskChunk () = 0;
 
-	/// forcibly save RAM chunk as a new disk chunk by the conditions (has new data and has recent searches)
-	virtual void ForceDiskChunk ( int iFlushWrite, int iFlushSearch ) {};
-
 	/// attach a disk chunk to current index
 	virtual bool AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) { return true; }
 
 	/// attach all the content of the RT index (flush ramchunk then disk chunks) to the current index
-	virtual bool AttachRtIndex ( RtIndex_i * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) { return true; }
+	virtual bool AttachRtIndex ( AttachArgs_t & tArgs, CSphString & sError ) { return true; }
 
 	/// truncate index (that is, kill all data)
 	enum Truncate_e : bool { TRUNCATE, DROP };
@@ -159,6 +172,7 @@ public:
 	virtual void Optimize ( OptimizeTask_t tTask ) {}
 	virtual bool StartOptimize ( OptimizeTask_t tTask ) { return true; }
 	virtual int OptimizesRunning () const noexcept { return 0; }
+	virtual void ManualOptimizeCutoff ( int iCutoff ) {}
 
 	virtual int GetNumOfLocks () const noexcept { return 0; }
 
@@ -175,6 +189,7 @@ public:
 	/// do something const with disk chunk (query settings, status, etc.)
 	/// hides internal disk chunks storage
 	virtual void ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) const {};
+	virtual void ProcessDiskChunkEx ( int iChunk, VisitChunkEx_fn&& fnVisitor ) const {};
 
 	/// bind indexing accumulator
 	/// returns false if another index already uses it in an open txn
@@ -202,7 +217,7 @@ public:
 	virtual int		GetChunkId () const { return 0; };
 
 protected:
-	bool PrepareAccum ( RtAccum_t* pAccExt, bool bWordDict, CSphString* pError );
+	bool PrepareAccum ( RtAccum_t* pAccExt, DictFormat_e eDictFormat, CSphString* pError );
 	bool				m_bIndexDeleted = false;
 
 private:
@@ -216,7 +231,7 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 void sphRTSetTestMode ();
 
 /// RT index factory
-std::unique_ptr<RtIndex_i> sphCreateIndexRT ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema, int64_t iRamSize, bool bKeywordDict );
+std::unique_ptr<RtIndex_i> sphCreateIndexRT ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema, int64_t iRamSize );
 
 typedef void ProgressCallbackSimple_t ();
 
@@ -225,7 +240,7 @@ typedef void ProgressCallbackSimple_t ();
 /// Exposed internal stuff (for pq and for testing)
 
 #define SPH_MAX_KEYWORD_LEN (3*SPH_MAX_WORD_LEN+4)
-STATIC_ASSERT ( SPH_MAX_KEYWORD_LEN<255, MAX_KEYWORD_LEN_SHOULD_FITS_BYTE );
+static_assert ( SPH_MAX_KEYWORD_LEN<255, "SPH_MAX_KEYWORD_LEN should fit in byte" );
 
 struct RtDoc_t
 {
@@ -244,6 +259,7 @@ struct RtWord_t
 		const BYTE * m_sWord;
 		INIT_WITH_0 ( SphWordID_t, const BYTE* );
 	};
+	int m_iWordLen = 0;
 	DWORD m_uDocs = 0;		///< document count (for stats and/or BM25)
 	DWORD m_uHits = 0;		///< hit count (for stats and/or BM25)
 	DWORD m_uDoc = 0;		///< index into segment docs
@@ -296,7 +312,7 @@ public:
 	DWORD					GetMergeFactor() const;
 	int						GetStride() const;
 
-	const CSphRowitem * 	FindAliveRow ( DocID_t tDocid ) const;
+	bool					IsAlive ( DocID_t tDocid ) const;
 	const CSphRowitem *		GetDocinfoByRowID ( RowID_t tRowID ) const;
 	RowID_t					GetAliveRowidByDocid ( DocID_t tDocid ) const;
 	RowID_t					GetRowidByDocid ( DocID_t tDocID ) const;
@@ -325,10 +341,11 @@ using ConstRtSegmentRefPtf_t = CSphRefcountedPtr<const RtSegment_t>;
 class RtWordReader_c
 {
 	BYTE m_tPackedWord[SPH_MAX_KEYWORD_LEN + 1];
+	CSphFixedVector<BYTE> m_dKeyword { 0 };
 	RtWord_t m_tWord;
 	int m_iWords = 0;
 
-	bool m_bWordDict;
+	DictFormat_e m_eDictFormat;
 	int m_iWordsCheckpoint;
 	int m_iCheckpoint = 0;
 	const ESphHitless m_eHitlessMode = SPH_HITLESS_NONE;
@@ -337,7 +354,7 @@ public:
 	const BYTE* m_pCur = nullptr;
 	const BYTE* m_pMax = nullptr;
 
-	RtWordReader_c ( const RtSegment_t * pSeg, bool bWordDict, int iWordsCheckpoint, ESphHitless eHitlessMode );
+	RtWordReader_c ( const RtSegment_t * pSeg, DictFormat_e eDictFormat, int iWordsCheckpoint, ESphHitless eHitlessMode );
 	void Reset ( const RtSegment_t * pSeg );
 	inline int Checkpoint() const { return m_iCheckpoint; }
 	const RtWord_t* UnzipWord();
@@ -408,11 +425,11 @@ protected:
 	CSphVector<int>				m_dFieldLengths;
 };
 
-
-#define BLOOM_PER_ENTRY_VALS_COUNT 8
-#define BLOOM_HASHES_COUNT 2
-#define BLOOM_NGRAM_0 2
-#define BLOOM_NGRAM_1 4
+static constexpr DWORD PERCOLATE_BLOOM_WILD_COUNT = 32;
+static constexpr DWORD BLOOM_PER_ENTRY_VALS_COUNT = 8;
+static constexpr DWORD BLOOM_HASHES_COUNT = 2;
+static constexpr DWORD BLOOM_NGRAM_0 = 2;
+static constexpr DWORD BLOOM_NGRAM_1 = 4;
 
 struct BloomGenTraits_t
 {
@@ -427,7 +444,7 @@ struct BloomGenTraits_t
 		m_pBuf[iPos] |= uVal;
 	}
 
-	bool IterateNext () const
+	bool IterateNext () const noexcept
 	{ return true; }
 };
 
@@ -445,7 +462,7 @@ struct BloomCheckTraits_t
 		m_bSame = ( ( m_pBuf[iPos] & uVal )==uVal );
 	}
 
-	bool IterateNext () const
+	bool IterateNext () const noexcept
 	{ return m_bSame; }
 };
 
@@ -455,7 +472,7 @@ bool BuildBloom ( const BYTE * sWord, int iLen, int iInfixCodepointCount, bool b
 bool BuildBloom ( const BYTE * sWord, int iLen, int iInfixCodepointCount, bool bUtf8,
 	int iKeyValCount, BloomCheckTraits_t &tBloom );
 
-void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool bKeywordDict, int iMinInfixLen,
+void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, DictFormat_e eDictFormat, int iMinInfixLen,
 	int iWordsCheckpoint, bool bUtf8, ESphHitless eHitlessMode );
 
 bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxCodepointLength, int iDictCpCount,
@@ -464,7 +481,7 @@ bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxCodepoin
 void SetupExactTokenizer ( const TokenizerRefPtr_c & pTokenizer );
 void SetupStarTokenizer ( const TokenizerRefPtr_c & pTokenizer );
 
-bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const ISphFieldFilter * pFieldFilter,
+bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, DictFormat_e eCurrentDictFormat, const ISphFieldFilter * pFieldFilter,
 	const CSphIndexSettings & tIndexSettings, uint64_t uTokHash, uint64_t uDictHash, int iMaxCodepointLength, int64_t iMemLimit,
 	bool bSame, CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError );
 
@@ -473,7 +490,32 @@ volatile bool &RTChangesAllowed () noexcept;
 
 // Get global flag of autooptimize
 volatile int & AutoOptimizeCutoffMultiplier() noexcept;
+volatile int & ParallelChunkMergesLimit() noexcept;
+volatile int & MergeChunksPerJob() noexcept;
 volatile int AutoOptimizeCutoff() noexcept;
 volatile int AutoOptimizeCutoffKNN() noexcept;
+volatile int & KNNParallelBuild() noexcept;
+volatile int & EmbeddingsThreads() noexcept;
+int GetEmbeddingsThreadsToUse ( int iMaxOverride = -1 );
+
+void SetRtFlushDiskPeriod ( int iFlushWrite, int iFlushSearch );
+
+inline ByteBlob_t GetPackedKeywordLegacy ( const BYTE * pPacked )
+{
+	assert ( pPacked );
+	int iLen = pPacked[0];
+	assert ( iLen>0 && iLen<SPH_MAX_KEYWORD_LEN );
+	return { pPacked+1, iLen };
+}
+
+
+inline ByteBlob_t GetPackedKeywordV2 ( const BYTE * pPacked )
+{
+	assert ( pPacked );
+	const BYTE * pCur = pPacked;
+	int iLen = (int)UnzipIntLE ( pCur );
+	assert ( iLen>0 && iLen<=GetKeywordMaxStoredBytes ( DictFormat_e::KEYWORDS_V2 ) );
+	return { pCur, iLen };
+}
 
 #endif // _sphinxrt_

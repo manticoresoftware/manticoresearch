@@ -108,6 +108,23 @@ index multi_joined
  	charset_table		= 0..9, a..z, A..Z->a..z, _
 }
 
+source exact_hit_joined
+{
+	type					= mysql
+	<sql_settings/>
+
+	sql_query				= select 1 id, 'iphone smth' f \
+		UNION select 2 id, 'iphone' f
+
+	sql_joined_field		= f2 from query; select 1 id, 'iphone' tag
+}
+
+index exact_hit_joined
+{
+	source	= exact_hit_joined
+	path	= <data_path/>/exact_hit_joined
+}
+
 </config>
 
 <db_create>
@@ -171,6 +188,7 @@ insert into test_joined (id, text) values
 		select * from idx_strip where match('Missile');
 		select * from idx_strip where match('Building');
 		select * from idx_strip where match('a');
+		select *, PACKEDFACTORS({json=1}) from exact_hit_joined where match('iphone') option ranker=expr('1');
 	</sphinxql>
 
 </queries>

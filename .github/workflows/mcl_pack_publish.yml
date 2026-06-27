@@ -20,6 +20,7 @@ jobs:
     if: ${{ inputs.enabled }}
     runs-on: ubuntu-22.04
     outputs:
+      version_base: ${{ steps.package_version.outputs.version_base }}
       version_full: ${{ steps.package_version.outputs.version_full }}
       version_rpm: ${{ steps.package_version.outputs.version_rpm }}
     steps:
@@ -62,15 +63,20 @@ jobs:
         id: package_version
         run: |
           set -euo pipefail
-          base_version="8.0.0"
+          base_version="$(git tag --merged HEAD --list '[0-9]*' --sort=-v:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
+          if [[ -z "${base_version}" ]]; then
+            echo "Unable to determine MCL base version from reachable semver tags" >&2
+            exit 1
+          fi
           commit_hash="$(git rev-parse --short=8 HEAD)"
           timestamp="$(git log -1 --format='%cd' --date=format:'%y%m%d%H' HEAD)"
-          if git tag --points-at HEAD | grep -Eq '^release'; then
+          if git tag --points-at HEAD | grep -Eq "^(${base_version}|release-${base_version})$"; then
             version_full="${base_version}+${timestamp}-${commit_hash}"
           else
             version_full="${base_version}+${timestamp}-${commit_hash}-dev"
           fi
           version_rpm="${version_full//-/.}"
+          echo "version_base=${base_version}" >> "$GITHUB_OUTPUT"
           echo "version_full=${version_full}" >> "$GITHUB_OUTPUT"
           echo "version_rpm=${version_rpm}" >> "$GITHUB_OUTPUT"
 
@@ -114,6 +120,7 @@ jobs:
       enabled: ${{ inputs.enabled }}
       mcl_full_sha: ${{ inputs.mcl_full_sha }}
       source_ref: ${{ inputs.source_ref }}
+      version: ${{ needs.metadata.outputs.version_base }}
       package_version: ${{ needs.metadata.outputs.version_full }}
       rpm_package_version: ${{ needs.metadata.outputs.version_rpm }}
       embeddings_artifact: ${{ format('embeddings_linux_{0}', matrix.arch) }}
@@ -135,6 +142,7 @@ jobs:
       enabled: ${{ inputs.enabled }}
       mcl_full_sha: ${{ inputs.mcl_full_sha }}
       source_ref: ${{ inputs.source_ref }}
+      version: ${{ needs.metadata.outputs.version_base }}
       package_version: ${{ needs.metadata.outputs.version_full }}
       rpm_package_version: ${{ needs.metadata.outputs.version_rpm }}
       embeddings_artifact: ${{ format('embeddings_linux_{0}', matrix.arch) }}
@@ -163,6 +171,7 @@ jobs:
       enabled: ${{ inputs.enabled }}
       mcl_full_sha: ${{ inputs.mcl_full_sha }}
       source_ref: ${{ inputs.source_ref }}
+      version: ${{ needs.metadata.outputs.version_base }}
       package_version: ${{ needs.metadata.outputs.version_full }}
       rpm_package_version: ${{ needs.metadata.outputs.version_rpm }}
       embeddings_artifact: ${{ format('embeddings_macos_{0}', matrix.arch) }}
@@ -185,6 +194,7 @@ jobs:
       enabled: ${{ inputs.enabled }}
       mcl_full_sha: ${{ inputs.mcl_full_sha }}
       source_ref: ${{ inputs.source_ref }}
+      version: ${{ needs.metadata.outputs.version_base }}
       package_version: ${{ needs.metadata.outputs.version_full }}
       rpm_package_version: ${{ needs.metadata.outputs.version_rpm }}
       embeddings_artifact: embeddings_windows_x86_64

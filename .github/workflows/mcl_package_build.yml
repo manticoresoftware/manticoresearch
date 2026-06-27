@@ -150,32 +150,38 @@ jobs:
             echo "branch_name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Patch version
-        if: inputs.version != ''
-        run: |
-          sed -i "s/0\.0\.0/${{ inputs.version }}/g" CMakeLists.txt
-          cat CMakeLists.txt
-
       - name: Mark repository as safe for package versioning
-        if: ${{ inputs.package_version == '' }}
         run: git config --global --add safe.directory "$PWD"
 
       - name: Calculate MCL package version
-        if: ${{ inputs.package_version == '' }}
         id: semver
         run: |
           set -euo pipefail
-          base_version="8.0.0"
+          base_version="$(git tag --merged HEAD --list '[0-9]*' --sort=-v:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
+          if [[ -z "${base_version}" ]]; then
+            echo "Unable to determine MCL base version from reachable semver tags" >&2
+            exit 1
+          fi
           commit_hash="$(git rev-parse --short=8 HEAD)"
           timestamp="$(git log -1 --format='%cd' --date=format:'%y%m%d%H' HEAD)"
-          if git tag --points-at HEAD | grep -Eq '^release'; then
+          if git tag --points-at HEAD | grep -Eq "^(${base_version}|release-${base_version})$"; then
             version_full="${base_version}+${timestamp}-${commit_hash}"
           else
             version_full="${base_version}+${timestamp}-${commit_hash}-dev"
           fi
           version_rpm="${version_full//-/.}"
+          echo "base_version=${base_version}" >> "$GITHUB_OUTPUT"
           echo "version_full=${version_full}" >> "$GITHUB_OUTPUT"
           echo "version_rpm=${version_rpm}" >> "$GITHUB_OUTPUT"
+
+      - name: Patch version
+        run: |
+          version="${{ inputs.version }}"
+          if [[ -z "${version}" ]]; then
+            version="${{ steps.semver.outputs.base_version }}"
+          fi
+          sed -i "s/0\.0\.0/${version}/g" CMakeLists.txt
+          cat CMakeLists.txt
 
       - name: Download embeddings lib
         if: ${{ inputs.embeddings_artifact != '' }}

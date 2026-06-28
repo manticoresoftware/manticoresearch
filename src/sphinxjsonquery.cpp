@@ -1047,7 +1047,7 @@ static bool ParseIndexId ( const JsonObj_c & tRoot, bool bArrayIds, SqlStmt_t & 
 
 			if ( bGotString && bGotNumeric )
 			{
-				sError = "Document ids in array should have one type";
+				sError = "Document ids should be integer";
 				return false;
 			}
 		}

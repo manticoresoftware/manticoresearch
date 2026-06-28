@@ -1940,6 +1940,27 @@ static bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t & tDocId, JsonObj_c & tRe
 
 static bool IsUuidDocidTable ( const CSphString & sIndex );
 
+static bool CheckJsonDocidFilterTypes ( const SqlStmt_t & tStmt, CSphString & sError )
+{
+	auto pServed = GetServed ( tStmt.m_sIndex );
+	if ( !pServed || sphHasUuidDocid ( RIdx_c ( pServed )->GetMatchSchema() ) )
+		return true;
+
+	for ( const auto & tFilter : tStmt.m_tQuery.m_dFilters )
+	{
+		if ( tFilter.m_sAttrName!=sphGetDocidName() && tFilter.m_sAttrName!="@id" )
+			continue;
+
+		if ( tFilter.m_eType!=SPH_FILTER_STRING && tFilter.m_eType!=SPH_FILTER_STRING_LIST )
+			continue;
+
+		sError = tStmt.m_eStmt==STMT_DELETE ? "Document ids should be integer or array of integers" : "Document ids should be integer";
+		return false;
+	}
+
+	return true;
+}
+
 static const char * GetUuidDocidForReply ( const SqlStmt_t & tStmt )
 {
 	if ( !IsUuidDocidTable ( tStmt.m_sIndex ) )
@@ -2092,6 +2113,12 @@ public:
 
 		DocID_t tDocId = 0;
 		if ( !ParseQuery ( tStmt, tDocId ) )
+		{
+			ReportError ( nullptr, HttpErrorType_e::Parse, EHTTP_STATUS::_400, tStmt.m_sIndex.cstr() );
+			return false;
+		}
+
+		if ( !CheckJsonDocidFilterTypes ( tStmt, m_sError ) )
 		{
 			ReportError ( nullptr, HttpErrorType_e::Parse, EHTTP_STATUS::_400, tStmt.m_sIndex.cstr() );
 			return false;

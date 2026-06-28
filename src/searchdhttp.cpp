@@ -1879,7 +1879,9 @@ protected:
 			auto dLastIds = session::LastIds();
 			if ( !dLastIds.IsEmpty() )
 				tDocId = dLastIds[0];
-			tResult = sphEncodeTxnResultJson ( sIndex.first, tDocId, m_iInserts, iDeletes, m_iUpdates, m_eFormat );
+			auto dLastIdStrings = session::LastIdStrings();
+			const char * szDocId = dLastIdStrings.IsEmpty() ? nullptr : dLastIdStrings[0].cstr();
+			tResult = sphEncodeTxnResultJson ( sIndex.first, tDocId, szDocId, m_iInserts, iDeletes, m_iUpdates, m_eFormat );
 		}
 		return !tReporter.IsError();
 	}
@@ -1897,6 +1899,14 @@ protected:
 
 static bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t & tDocId, JsonObj_c & tResult, CSphString & sError, ResultSetFormat_e eFormat )
 {
+	int iDocidPos = tStmt.m_dInsertSchema.GetFirst ( [] ( const CSphString & sName ) { return sName==sphGetDocidName(); } );
+	bool bGeneratedUuidDocid = false;
+	if ( iDocidPos==-1 )
+	{
+		auto pServed = GetServed ( tStmt.m_sIndex );
+		bGeneratedUuidDocid = pServed && sphHasUuidDocid ( RIdx_c ( pServed )->GetMatchSchema() );
+	}
+
 	HttpErrorReporter_c tReporter;
 	sphHandleMysqlInsert ( tReporter, tStmt );
 
@@ -1909,11 +1919,47 @@ static bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t & tDocId, JsonObj_c & tRe
 		auto dLastIds = session::LastIds();
 		if ( !dLastIds.IsEmpty() )
 			tDocId = dLastIds[0];
-		tResult = sphEncodeInsertResultJson ( tStmt.m_sIndex.cstr(), tStmt.m_eStmt == STMT_REPLACE, tDocId, eFormat );
+
+		const char * szDocId = nullptr;
+		auto dLastIdStrings = session::LastIdStrings();
+		if ( !dLastIdStrings.IsEmpty() )
+			szDocId = dLastIdStrings[0].cstr();
+		else if ( iDocidPos!=-1 && tStmt.m_dInsertValues[iDocidPos].m_iType==SqlInsert_t::QUOTED_STRING )
+		{
+			auto pServed = GetServed ( tStmt.m_sIndex );
+			if ( pServed && sphHasUuidDocid ( RIdx_c ( pServed )->GetMatchSchema() ) )
+				szDocId = tStmt.m_dInsertValues[iDocidPos].m_sVal.cstr();
+		}
+
+		const bool bReplyAsReplace = tStmt.m_eStmt==STMT_REPLACE && !bGeneratedUuidDocid;
+		tResult = sphEncodeInsertResultJson ( tStmt.m_sIndex.cstr(), bReplyAsReplace, tDocId, szDocId, eFormat );
 	}
 
 	return !tReporter.IsError();
 }
+
+static bool IsUuidDocidTable ( const CSphString & sIndex );
+
+static const char * GetUuidDocidForReply ( const SqlStmt_t & tStmt )
+{
+	if ( !IsUuidDocidTable ( tStmt.m_sIndex ) )
+		return nullptr;
+
+	for ( const auto & tFilter : tStmt.m_tQuery.m_dFilters )
+	{
+		if ( tFilter.m_sAttrName!=sphGetDocidName() && tFilter.m_sAttrName!="@id" && tFilter.m_sAttrName!=sphGetUuidDocidName() )
+			continue;
+
+		if ( tFilter.m_eType==SPH_FILTER_STRING && tFilter.m_dStrings.GetLength()==1 )
+			return tFilter.m_dStrings[0].cstr();
+
+		if ( tFilter.m_eType==SPH_FILTER_STRING_LIST && tFilter.m_dStrings.GetLength()==1 )
+			return tFilter.m_dStrings[0].cstr();
+	}
+
+	return nullptr;
+}
+
 
 static bool ProcessDelete ( Str_t sRawRequest, const SqlStmt_t& tStmt, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError, ResultSetFormat_e eFormat )
 {
@@ -1926,7 +1972,8 @@ static bool ProcessDelete ( Str_t sRawRequest, const SqlStmt_t& tStmt, DocID_t t
 		tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), sError.cstr(), eFormat );
 	} else
 	{
-		tResult = sphEncodeDeleteResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows(), eFormat );
+		const char * szDocId = GetUuidDocidForReply ( tStmt );
+		tResult = sphEncodeDeleteResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows(), eFormat, szDocId );
 	}
 
 	return !tReporter.IsError();
@@ -1992,7 +2039,8 @@ protected:
 			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), sError.cstr(), m_eFormat );
 		} else
 		{
-			tResult = sphEncodeUpdateResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows(), m_eFormat );
+			const char * szDocId = GetUuidDocidForReply ( tStmt );
+			tResult = sphEncodeUpdateResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows(), m_eFormat, szDocId );
 		}
 
 		m_iLastUpdated = tReporter.GetAffectedRows();
@@ -2496,6 +2544,8 @@ struct BulkDoc_t
 	CSphString m_sAction;
 	CSphString m_sIndex;
 	DocID_t m_tDocid { 0 };
+	CSphString m_sDocid;
+	bool m_bDocidString { false };
 	Str_t m_tDocLine;
 };
 
@@ -2503,6 +2553,14 @@ struct BulkTnx_t
 {
 	int m_iFrom { -1 };
 	int m_iCount { 0 };
+};
+
+struct BulkError_t
+{
+	int m_iDoc { -1 };
+	CSphString m_sError;
+	const char * m_szType { "mapper_parsing_exception" };
+	int m_iStatus { 400 };
 };
 
 
@@ -3284,7 +3342,11 @@ static bool ParseMetaLine ( const char * sLine, BulkDoc_t & tDoc, CSphString & s
 		if ( tId.IsNum() )
 			tDoc.m_tDocid = tId.IntVal();
 		else if ( tId.IsStr() )
+		{
+			tDoc.m_sDocid = tId.StrVal();
+			tDoc.m_bDocidString = true;
 			tDoc.m_tDocid = GetDocID ( tId.SzVal() );
+		}
 		else if ( tId.IsNull() )
 			tDoc.m_tDocid = 0;
 		else
@@ -3297,12 +3359,62 @@ static bool ParseMetaLine ( const char * sLine, BulkDoc_t & tDoc, CSphString & s
 	return true;
 }
 
-static bool AddDocid ( SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
+static bool IsUuidDocidTable ( const CSphString & sIndex )
 {
-	int iDocidPos = tStmt.m_dInsertSchema.GetFirst ( [&] ( const CSphString & sName ) { return sName=="id"; } );
+	auto pServed = GetServed ( sIndex );
+	return pServed && sphHasUuidDocid ( RIdx_c ( pServed )->GetMatchSchema() );
+}
+
+
+static bool CheckUuidBulkDocid ( BulkDoc_t & tDoc, CSphString & sError )
+{
+	if ( !tDoc.m_bDocidString )
+	{
+		sError = "uuid id must be a non-empty string";
+		return false;
+	}
+
+	if ( !sphCheckUuidDocid ( tDoc.m_sDocid.cstr(), sError ) )
+		return false;
+
+	tDoc.m_sDocid = sphNormalizeUuidDocid ( tDoc.m_sDocid.cstr() );
+	return true;
+}
+
+
+static bool AddDocid ( SqlStmt_t & tStmt, BulkDoc_t & tDoc, CSphString & sError )
+{
+	bool bUuidDocid = IsUuidDocidTable ( tStmt.m_sIndex );
+	int iDocidPos = tStmt.m_dInsertSchema.GetFirst ( [&] ( const CSphString & sName ) { return sName==sphGetDocidName(); } );
 	if ( iDocidPos!=-1 )
 	{
 		SqlInsert_t & tVal = tStmt.m_dInsertValues[iDocidPos];
+		if ( bUuidDocid )
+		{
+			if ( tVal.m_iType!=SqlInsert_t::QUOTED_STRING )
+			{
+				sError = "uuid id must be a non-empty string";
+				return false;
+			}
+
+			if ( !sphCheckUuidDocid ( tVal.m_sVal.cstr(), sError ) )
+				return false;
+
+			tVal.m_sVal = sphNormalizeUuidDocid ( tVal.m_sVal.cstr() );
+
+			if ( tDoc.m_bDocidString && !CheckUuidBulkDocid ( tDoc, sError ) )
+				return false;
+
+			if ( tDoc.m_bDocidString && tDoc.m_sDocid!=tVal.m_sVal )
+			{
+				sError = "id has already been specified";
+				return false;
+			}
+
+			tDoc.m_sDocid = tVal.m_sVal;
+			tDoc.m_bDocidString = true;
+			return true;
+		}
 
 		// check and convert to int
 		if ( tVal.m_iType!=SqlInsert_t::CONST_INT )
@@ -3313,66 +3425,100 @@ static bool AddDocid ( SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError 
 
 		DocID_t tSrcDocid = (int64_t)tVal.GetValueUint();
 		// can not set id at the same time via es meta and via document id property
-		if ( tDocId && tDocId!=tSrcDocid )
+		if ( tDoc.m_tDocid && tDoc.m_tDocid!=tSrcDocid )
 		{
 			sError = "id has already been specified";
 			return false;
 		}
 		
-		tDocId = tSrcDocid;
+		tDoc.m_tDocid = tSrcDocid;
 		return true;
 	}
 
-	if ( !tDocId )
+	if ( bUuidDocid )
+	{
+		if ( !tDoc.m_bDocidString )
+			return true;
+
+		if ( !CheckUuidBulkDocid ( tDoc, sError ) )
+			return false;
+
+		tStmt.m_dInsertSchema.Add ( sphGetDocidName() );
+		SqlInsert_t & tId = tStmt.m_dInsertValues.Add();
+		tId.m_iType = SqlInsert_t::QUOTED_STRING;
+		tId.m_sVal = tDoc.m_sDocid;
+
+		tStmt.m_iSchemaSz = tStmt.m_dInsertSchema.GetLength();
+		return true;
+	}
+
+	if ( !tDoc.m_tDocid )
 		return true;
 
 	tStmt.m_dInsertSchema.Add ( sphGetDocidName() );
 	SqlInsert_t & tId = tStmt.m_dInsertValues.Add();
 	tId.m_iType = SqlInsert_t::CONST_INT;
-	tId.SetValueInt(tDocId);
+	tId.SetValueInt ( tDoc.m_tDocid );
 
 	tStmt.m_iSchemaSz = tStmt.m_dInsertSchema.GetLength();
 	return true;
 }
 
-static bool ParseSourceLine ( const char * sLine, const CSphString & sAction, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
+static bool ParseSourceLine ( const char * sLine, BulkDoc_t & tDoc, SqlStmt_t & tStmt, CSphString & sError )
 {
+	const bool bUuidDocid = IsUuidDocidTable ( tStmt.m_sIndex );
 	// FIXME!!! update and delete ES compat endpoints
-	if ( sAction=="index" )
+	if ( tDoc.m_sAction=="index" )
 	{
 		JsonObj_c tRoot ( sLine );
 		if ( !ParseJsonInsertSource ( tRoot, tStmt, true, sError ) )
 			return false;
-		if ( !AddDocid ( tStmt, tDocId, sError ) )
+		if ( !AddDocid ( tStmt, tDoc, sError ) )
 			return false;
 
-	}  else if ( sAction=="create" )
+	}  else if ( tDoc.m_sAction=="create" )
 	{
 		JsonObj_c tRoot ( sLine );
 		if ( !ParseJsonInsertSource ( tRoot, tStmt, false, sError ) )
 			return false;
-		if ( !AddDocid ( tStmt, tDocId, sError ) )
+		if ( !AddDocid ( tStmt, tDoc, sError ) )
 			return false;
 
-	} else if ( sAction=="update" )
+	} else if ( tDoc.m_sAction=="update" )
 	{
+		if ( bUuidDocid && !CheckUuidBulkDocid ( tDoc, sError ) )
+			return false;
+
 		JsonObj_c tUpd ( FromSz ( sLine ) );
 		tUpd.AddStr ( "table", tStmt.m_sIndex );
-		tUpd.AddInt ( "id", tDocId );
-		if ( !ParseJsonUpdate ( tUpd, tStmt, tDocId, sError ) )
+		if ( tDoc.m_bDocidString )
+			tUpd.AddStr ( "id", tDoc.m_sDocid.cstr() );
+		else
+			tUpd.AddInt ( "id", tDoc.m_tDocid );
+		if ( !ParseJsonUpdate ( tUpd, tStmt, tDoc.m_tDocid, sError ) )
 			return false;
 
-	} else if ( sAction=="delete" )
+	} else if ( tDoc.m_sAction=="delete" )
 	{
+		if ( bUuidDocid && !CheckUuidBulkDocid ( tDoc, sError ) )
+			return false;
+
 		tStmt.m_eStmt = STMT_DELETE;
 		tStmt.m_tQuery.m_sSelect = "id";
 		CSphFilterSettings & tFilter = tStmt.m_tQuery.m_dFilters.Add();
-		tFilter.m_eType = SPH_FILTER_VALUES;
-		tFilter.m_dValues.Add ( tDocId );
+		if ( tDoc.m_bDocidString )
+		{
+			tFilter.m_eType = SPH_FILTER_STRING;
+			tFilter.m_dStrings.Add ( tDoc.m_sDocid );
+		} else
+		{
+			tFilter.m_eType = SPH_FILTER_VALUES;
+			tFilter.m_dValues.Add ( tDoc.m_tDocid );
+		}
 		tFilter.m_sAttrName = "id";
 	} else
 	{
-		sError.SetSprintf ( "unknown action: %s", sAction.cstr() );
+		sError.SetSprintf ( "unknown action: %s", tDoc.m_sAction.cstr() );
 		return false;
 	}
 
@@ -3508,8 +3654,13 @@ bool HttpHandlerEsBulk_c::Process()
 	const BulkDoc_t * pLastDoc = dDocs.Begin();
 	for ( const BulkDoc_t * pCurDoc = pLastDoc + 1; pCurDoc<dDocs.End(); pCurDoc++ )
 	{
-		// chain the same statements to the same index but not the updates
-		if ( pLastDoc->m_sIndex==pCurDoc->m_sIndex && pLastDoc->m_sAction==pCurDoc->m_sAction && pCurDoc->m_sAction!="update" )
+		// chain the same statements to the same index but not the updates.
+		// UUID index actions are upserts and must stay ordered/committed one by one,
+		// otherwise duplicate UUIDs inside one bulk request look like staged duplicates.
+		bool bCanChain = pLastDoc->m_sIndex==pCurDoc->m_sIndex && pLastDoc->m_sAction==pCurDoc->m_sAction && pCurDoc->m_sAction!="update";
+		if ( bCanChain && pCurDoc->m_sAction=="index" && IsUuidDocidTable ( pCurDoc->m_sIndex ) )
+			bCanChain = false;
+		if ( bCanChain )
 			continue;
 
 		BulkTnx_t & tTnx = dTnx.Add();
@@ -3539,12 +3690,22 @@ bool HttpHandlerEsBulk_c::Process()
 	return bOk;
 }
 
+static const char * GetEsDocidForReply ( const BulkDoc_t & tDoc, char (&sBuf)[70] )
+{
+	if ( tDoc.m_bDocidString )
+		return tDoc.m_sDocid.cstr();
+
+	snprintf ( sBuf, sizeof(sBuf), UINT64_FMT, (uint64_t)tDoc.m_tDocid );
+	return sBuf;
+}
+
+
 static void AddEsReply ( const BulkDoc_t & tDoc, JsonObj_c & tRoot )
 {
 	const JsonObj_c tRefShards ( "{ \"total\": 1, \"successful\": 1, \"failed\": 0 }" );
 
 	char sBuf[70];
-	snprintf ( sBuf, sizeof(sBuf), UINT64_FMT, (uint64_t)tDoc.m_tDocid );
+	const char * szDocid = GetEsDocidForReply ( tDoc, sBuf );
 	const char * sActionRes = "created";
 	if ( tDoc.m_sAction=="delete" )
 		sActionRes = "deleted";
@@ -3555,7 +3716,7 @@ static void AddEsReply ( const BulkDoc_t & tDoc, JsonObj_c & tRoot )
 	JsonObj_c tRes;
 	tRes.AddStr ( "_index", tDoc.m_sIndex.cstr() );
 	tRes.AddStr ( "_type", "doc" );
-	tRes.AddStr ( "_id", sBuf );
+	tRes.AddStr ( "_id", szDocid );
 	tRes.AddInt ( "_version", 1 );
 	tRes.AddStr ( "result", sActionRes );
 	tRes.AddItem ( "_shards", tShard );
@@ -3568,10 +3729,10 @@ static void AddEsReply ( const BulkDoc_t & tDoc, JsonObj_c & tRoot )
 	tRoot.AddItem ( tAction );
 }
 
-static void AddEsError ( int iReply, const CSphString & sError, const char * sErrorType, const BulkDoc_t & tDoc, JsonObj_c & tRoot )
+static void AddEsError ( int iReply, const CSphString & sError, const char * sErrorType, const BulkDoc_t & tDoc, JsonObj_c & tRoot, int iStatus=400 )
 {
 	char sBuf[70];
-	snprintf ( sBuf, sizeof(sBuf), UINT64_FMT, (uint64_t)tDoc.m_tDocid );
+	const char * szDocid = GetEsDocidForReply ( tDoc, sBuf );
 
 	JsonObj_c tErrorObj;
 	tErrorObj.AddStr ( "type", sErrorType );
@@ -3580,8 +3741,8 @@ static void AddEsError ( int iReply, const CSphString & sError, const char * sEr
 	JsonObj_c tRes;
 	tRes.AddStr ( "_index", tDoc.m_sIndex.cstr() );
 	tRes.AddStr ( "_type", "doc" );
-	tRes.AddStr ( "_id", sBuf );
-	tRes.AddInt ( "status", 400 );
+	tRes.AddStr ( "_id", szDocid );
+	tRes.AddInt ( "status", iStatus );
 	tRes.AddItem ( "error", tErrorObj );
 
 	JsonObj_c tAction;
@@ -3593,11 +3754,49 @@ static void AddEsError ( int iReply, const CSphString & sError, const char * sEr
 		tRoot.AddItem ( tAction );
 }
 
+static BulkError_t & AddBulkError ( CSphVector<BulkError_t> & dErrors, int iDoc, const CSphString & sError, const char * szType="mapper_parsing_exception", int iStatus=400 )
+{
+	BulkError_t & tError = dErrors.Add();
+	tError.m_iDoc = iDoc;
+	tError.m_sError = sError;
+	tError.m_szType = szType;
+	tError.m_iStatus = iStatus;
+	return tError;
+}
+
+static CSphString GetBulkCreateDocidKey ( const BulkDoc_t & tDoc )
+{
+	CSphString sKey;
+	if ( tDoc.m_bDocidString )
+		sKey.SetSprintf ( "s:%s", tDoc.m_sDocid.cstr() );
+	else if ( tDoc.m_tDocid )
+		sKey.SetSprintf ( "n:" UINT64_FMT, (uint64_t)tDoc.m_tDocid );
+
+	return sKey;
+}
+
+static bool IsSeenBulkCreateDocid ( const CSphVector<std::pair<CSphString, CSphString>> & dSeenDocids, const CSphString & sIndex, const CSphString & sDocidKey )
+{
+	return dSeenDocids.any_of ( [&sIndex, &sDocidKey] ( const auto & tSeen )
+	{
+		return tSeen.first==sIndex && tSeen.second==sDocidKey;
+	} );
+}
+
+static CSphString MakeBulkCreateDuplicateError ( const BulkDoc_t & tDoc )
+{
+	char sBuf[70];
+	CSphString sError;
+	sError.SetSprintf ( "[_doc][%s]: version conflict, document already exists", GetEsDocidForReply ( tDoc, sBuf ) );
+	return sError;
+}
+
 bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecTraits_T<BulkDoc_t> & dDocs, JsonObj_c & tItems )
 {
 	bool bOk = true;
 
-	CSphVector<std::pair<int, CSphString>> dErrors;
+	CSphVector<BulkError_t> dErrors;
+	CSphVector<std::pair<CSphString, CSphString>> dSeenCreateDocids;
 
 	for ( const BulkTnx_t & tTnx : dTnx )
 	{
@@ -3615,7 +3814,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 
 			if ( IsEmpty ( tDoc.m_tDocLine ) )
 			{
-				dErrors.Add ( { iDoc, "failed to parse, document is empty" } );
+				AddBulkError ( dErrors, iDoc, "failed to parse, document is empty" );
 				continue;
 			}
 
@@ -3624,11 +3823,22 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			tStmt.m_sIndex = tDoc.m_sIndex;
 			tStmt.m_sStmt = tDoc.m_tDocLine.first;
 
-			bool bParsed = ParseSourceLine ( tDoc.m_tDocLine.first, tDoc.m_sAction, tStmt, tDoc.m_tDocid, m_sError );
+			bool bParsed = ParseSourceLine ( tDoc.m_tDocLine.first, tDoc, tStmt, m_sError );
 			if ( !bParsed )
 			{
-				dErrors.Add ( { iDoc, m_sError } );
+				AddBulkError ( dErrors, iDoc, m_sError );
 				continue;
+			}
+
+			CSphString sCreateDocidKey;
+			if ( tStmt.m_eStmt==STMT_INSERT )
+			{
+				sCreateDocidKey = GetBulkCreateDocidKey ( tDoc );
+				if ( !sCreateDocidKey.IsEmpty() && IsSeenBulkCreateDocid ( dSeenCreateDocids, tDoc.m_sIndex, sCreateDocidKey ) )
+				{
+					AddBulkError ( dErrors, iDoc, MakeBulkCreateDuplicateError ( tDoc ), "version_conflict_engine_exception", 409 );
+					continue;
+				}
 			}
 
 			bool bAction = false;
@@ -3641,6 +3851,15 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			case STMT_INSERT:
 			case STMT_REPLACE:
 				bAction = ProcessInsert ( tStmt, tDoc.m_tDocid, tResult, m_sError, ResultSetFormat_e::ES );
+				if ( bAction && IsUuidDocidTable ( tStmt.m_sIndex ) && !tDoc.m_bDocidString )
+				{
+					auto dLastIdStrings = session::LastIdStrings();
+					if ( !dLastIdStrings.IsEmpty() )
+					{
+						tDoc.m_sDocid = dLastIdStrings[0];
+						tDoc.m_bDocidString = true;
+					}
+				}
 				break;
 
 			case STMT_UPDATE:
@@ -3669,13 +3888,15 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 					tErrorType = tError.GetItem ( "type" );
 
 				if ( !tErrorType.Empty() )
-					dErrors.Add ( { iDoc, tErrorType.StrVal() } );
+					AddBulkError ( dErrors, iDoc, tErrorType.StrVal() );
 				else
 				{
-					dErrors.Add ( { iDoc, CSphString() } );
-					dErrors.Last().second.SetSprintf ( "unknown statement \"%s\":%s", tStmt.m_sStmt, tDoc.m_tDocLine.first );
+					CSphString sUnknown;
+					sUnknown.SetSprintf ( "unknown statement \"%s\":%s", tStmt.m_sStmt, tDoc.m_tDocLine.first );
+					AddBulkError ( dErrors, iDoc, sUnknown );
 				}
-			}
+			} else if ( tStmt.m_eStmt==STMT_INSERT && !sCreateDocidKey.IsEmpty() )
+				dSeenCreateDocids.Add ( { tDoc.m_sIndex, sCreateDocidKey } );
 		}
 
 		// FIXME!!! check commit of empty accum
@@ -3689,7 +3910,8 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 				assert ( tTnx.m_iCount==1 );
 				const BulkDoc_t & tUpdDoc = dDocs[tTnx.m_iFrom];
 				CSphString sUpdError;
-				sUpdError.SetSprintf ( "[_doc][" INT64_FMT "]: document missing", tUpdDoc.m_tDocid );
+				char sBuf[70];
+				sUpdError.SetSprintf ( "[_doc][%s]: document missing", GetEsDocidForReply ( tUpdDoc, sBuf ) );
 				AddEsError ( -1, sUpdError, "document_missing_exception", tUpdDoc, tItems );
 			} else
 			{
@@ -3713,7 +3935,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 		}
 
 		for ( const auto & tErr : dErrors )
-			AddEsError ( tErr.first, tErr.second, "mapper_parsing_exception", dDocs[tErr.first], tItems );
+			AddEsError ( tErr.m_iDoc, tErr.m_sError, tErr.m_szType, dDocs[tErr.m_iDoc], tItems, tErr.m_iStatus );
 	}
 
 	bOk &= dErrors.IsEmpty();

@@ -27,6 +27,7 @@
 #include "std/tdigest.h"
 #include "std/tdigest_runtime.h"
 #include "facetutils.h"
+#include "indexsettings.h"
 
 static const char * g_szAll = "_all";
 static const char * g_szHighlight = "_@highlight_";
@@ -1004,15 +1005,15 @@ static bool ParseIndexId ( const JsonObj_c & tRoot, bool bArrayIds, SqlStmt_t & 
 	JsonObj_c tId = tRoot.GetItem ( "id" );
 	if ( tId )
 	{
-		if ( !tId.IsInt() && !tId.IsUint() && !tId.IsArray() )
+		if ( !tId.IsInt() && !tId.IsUint() && !tId.IsStr() && !tId.IsArray() )
 		{
-			sError = "Document ids should be integer or array of integers";
+			sError = "Document ids should be integer, string, or array of integers/strings";
 			return false;
 		}
 
 		if ( !bArrayIds && tId.IsArray() )
 		{
-			sError = "Document ids should be integer";
+			sError = "Document ids should be integer or string";
 			return false;
 		}
 
@@ -1025,11 +1026,13 @@ static bool ParseIndexId ( const JsonObj_c & tRoot, bool bArrayIds, SqlStmt_t & 
 			}
 		} else
 		{
+			bool bGotString = false;
+			bool bGotNumeric = false;
 			for ( const auto & tItem : tId )
 			{
-				if ( !tItem.IsInt() && !tItem.IsUint() )
+				if ( !tItem.IsInt() && !tItem.IsUint() && !tItem.IsStr() )
 				{
-					sError = "Document ids should be integer";
+					sError = "Document ids should be integer or string";
 					return false;
 				}
 				if ( tItem.IsInt() && tItem.IntVal()<0 )
@@ -1037,11 +1040,20 @@ static bool ParseIndexId ( const JsonObj_c & tRoot, bool bArrayIds, SqlStmt_t & 
 					sError = "Negative document ids are not allowed";
 					return false;
 				}
+
+				bGotString |= tItem.IsStr();
+				bGotNumeric |= tItem.IsInt() || tItem.IsUint();
+			}
+
+			if ( bGotString && bGotNumeric )
+			{
+				sError = "Document ids in array should have one type";
+				return false;
 			}
 		}
 	}
 
-	if ( tId && !tId.IsArray() )
+	if ( tId && !tId.IsArray() && !tId.IsStr() )
 		tDocId = tId.IntVal();
 	else
 		tDocId = 0; 	// enable auto-id
@@ -1710,10 +1722,21 @@ bool ParseJsonInsert ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDo
 	if ( !ParseCluster ( tRoot, tStmt, sError ) )
 		return false;
 
-	tStmt.m_dInsertSchema.Add ( sphGetDocidName() );
-	SqlInsert_t & tId = tStmt.m_dInsertValues.Add();
-	tId.m_iType = SqlInsert_t::CONST_INT;
-	tId.SetValueInt ( (uint64_t)tDocId, false );
+	JsonObj_c tJsonId = tRoot.GetItem ( "id" );
+	if ( tJsonId )
+	{
+		tStmt.m_dInsertSchema.Add ( sphGetDocidName() );
+		SqlInsert_t & tId = tStmt.m_dInsertValues.Add();
+		if ( tJsonId.IsStr() )
+		{
+			tId.m_iType = SqlInsert_t::QUOTED_STRING;
+			tId.m_sVal = tJsonId.StrVal();
+		} else
+		{
+			tId.m_iType = SqlInsert_t::CONST_INT;
+			tId.SetValueInt ( (uint64_t)tDocId, false );
+		}
+	}
 
 	// "doc" is optional
 	JsonObj_c tSource = tRoot.GetItem("doc");
@@ -1825,19 +1848,30 @@ static bool ParseUpdateDeleteQueries ( const JsonObj_c & tRoot, bool bDelete, Sq
 			return false;
 
 		CSphFilterSettings & tFilter = tStmt.m_tQuery.m_dFilters.Add();
-		tFilter.m_eType = SPH_FILTER_VALUES;
 		if ( bDelete && tId.IsArray() )
 		{
+			bool bStringIds = tId.Size() && tId[0].IsStr();
+			tFilter.m_eType = bStringIds ? SPH_FILTER_STRING_LIST : SPH_FILTER_VALUES;
 			for ( const auto & tItem : tId )
-				tFilter.m_dValues.Add ( tItem.IntVal() );
+			{
+				if ( bStringIds )
+					tFilter.m_dStrings.Add ( tItem.StrVal() );
+				else
+					tFilter.m_dValues.Add ( tItem.IntVal() );
+			}
 
+		} else if ( tId.IsStr() )
+		{
+			tFilter.m_eType = SPH_FILTER_STRING;
+			tFilter.m_dStrings.Add ( tId.StrVal() );
 		} else
 		{
+			tFilter.m_eType = SPH_FILTER_VALUES;
 			tFilter.m_dValues.Add ( tId.IntVal() );
 		}
 		tFilter.m_sAttrName = "id";
 
-		tDocId = tFilter.m_dValues[0];
+		tDocId = tFilter.m_dValues.GetLength() ? tFilter.m_dValues[0] : 0;
 	}
 
 	// "query" is optional
@@ -2221,9 +2255,10 @@ static bool IsJoinedWeight ( const CSphString & sAttr, const CSphQuery & tQuery 
 
 static bool NeedToSkipAttr ( const CSphString & sName, const CSphQuery & tQuery )
 {
-	const char * szName = sName.cstr();
+	bool bUuidDocid = sName==sphGetUuidDocidName();
+	const char * szName = bUuidDocid ? sphGetDocidName() : sName.cstr();
 
-	if ( szName[0]=='i' && szName[1]=='d' && szName[2]=='\0' ) return true;
+	if ( !bUuidDocid && szName[0]=='i' && szName[1]=='d' && szName[2]=='\0' ) return true;
 	if ( sName.Begins ( g_szHighlight ) ) return true;
 	if ( sName.Begins ( GetFilterAttrPrefix() ) ) return true;
 	if ( sName.Begins ( g_szOrder ) ) return true;
@@ -2291,6 +2326,19 @@ static const char * GetName ( const JsonDocField_t & tDF )
 	return tDF.m_sName.cstr();
 }
 
+
+static const CSphColumnInfo * GetUuidAwareAttr ( const char * szName, const ISphSchema & tSchema )
+{
+	if ( strcmp ( szName, sphGetDocidName() )==0 )
+	{
+		const CSphColumnInfo * pUuid = tSchema.GetAttr ( sphGetUuidDocidName() );
+		if ( pUuid )
+			return pUuid;
+	}
+
+	return tSchema.GetAttr ( szName );
+}
+
 template <typename T>
 void EncodeFields ( const CSphVector<T> & dFields, const AggrResult_t & tRes, const CSphMatch & tMatch, const ISphSchema & tSchema,	bool bValArray, const char * sPrefix, const char * sEnd, JsonEscapedBuilder & tOut )
 {
@@ -2299,7 +2347,8 @@ void EncodeFields ( const CSphVector<T> & dFields, const AggrResult_t & tRes, co
 	tOut.StartBlock ( ",", sPrefix, sEnd );
 	for ( const T & tDF : dFields )
 	{
-		const CSphColumnInfo * pCol = tSchema.GetAttr ( GetName ( tDF ) );
+		const char * szName = GetName ( tDF );
+		const CSphColumnInfo * pCol = GetUuidAwareAttr ( szName, tSchema );
 		if ( !pCol )
 		{
 			tOut += R"("Default")";
@@ -2312,8 +2361,10 @@ void EncodeFields ( const CSphVector<T> & dFields, const AggrResult_t & tRes, co
 
 		if ( bValArray )
 			tOut.Sprintf ( "%s", tDFVal.cstr() );
+		else if ( pCol->m_sName==sphGetUuidDocidName() && strcmp ( szName, sphGetDocidName() )==0 )
+			tOut.Sprintf ( R"("%s":[%s])", szName, tDFVal.cstr() );
 		else
-			tOut.Sprintf ( R"("%s":["%s"])", GetName ( tDF ), tDFVal.cstr() );
+			tOut.Sprintf ( R"("%s":["%s"])", szName, tDFVal.cstr() );
 	}
 	tOut.FinishBlock ( false ); // close obj
 }
@@ -2347,18 +2398,50 @@ static bool IsJsonFieldAttr ( ESphAttr eAttr )
 }
 
 
-static const CSphColumnInfo * GetPlainAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, const CSphSchema & tRawSchema )
+static const CSphColumnInfo * GetJsonInternalAggrKey ( const CSphString & sCol, const CSphSchema & tSchema, const CSphSchema & tRawSchema )
 {
-	const CSphColumnInfo * pKey = tSchema.GetAttr ( tAggr.m_sCol.cstr() );
-	if ( !pKey || pKey->m_eAttrType!=SPH_ATTR_JSON_PTR )
-		return pKey;
-
-	CSphString sJsonKey = SortJsonInternalSet ( tAggr.m_sCol );
+	CSphString sJsonKey = SortJsonInternalSet ( sCol );
 	const CSphColumnInfo * pJsonKey = tSchema.GetAttr ( sJsonKey.cstr() );
 	if ( !pJsonKey )
 		pJsonKey = tRawSchema.GetAttr ( sJsonKey.cstr() );
 
-	return pJsonKey && IsJsonFieldAttr ( pJsonKey->m_eAttrType ) ? pJsonKey : pKey;
+	return pJsonKey && IsJsonFieldAttr ( pJsonKey->m_eAttrType ) ? pJsonKey : nullptr;
+}
+
+
+static const CSphColumnInfo * GetStoredStringAggrKey ( const CSphString & sCol, const CSphSchema & tSchema, const CSphSchema & tRawSchema )
+{
+	const CSphColumnInfo * pKey = tSchema.GetAttr ( sCol.cstr() );
+	if ( !pKey )
+		pKey = tRawSchema.GetAttr ( sCol.cstr() );
+	if ( pKey )
+		return pKey;
+
+	return GetJsonInternalAggrKey ( sCol, tSchema, tRawSchema );
+}
+
+
+static const CSphColumnInfo * GetUuidDocidAggrKey ( const CSphString & sCol, const CSphSchema & tSchema, const CSphSchema & tRawSchema )
+{
+	if ( sCol!=sphGetDocidName() )
+		return nullptr;
+
+	return GetStoredStringAggrKey ( sphGetUuidDocidName(), tSchema, tRawSchema );
+}
+
+
+static const CSphColumnInfo * GetPlainAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, const CSphSchema & tRawSchema )
+{
+	const CSphColumnInfo * pKey = GetUuidDocidAggrKey ( tAggr.m_sCol, tSchema, tRawSchema );
+	if ( pKey )
+		return pKey;
+
+	pKey = tSchema.GetAttr ( tAggr.m_sCol.cstr() );
+	if ( !pKey || pKey->m_eAttrType!=SPH_ATTR_JSON_PTR )
+		return pKey;
+
+	const CSphColumnInfo * pJsonKey = GetJsonInternalAggrKey ( tAggr.m_sCol, tSchema, tRawSchema );
+	return pJsonKey ? pJsonKey : pKey;
 }
 
 
@@ -2371,11 +2454,16 @@ static bool GetAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, c
 	{
 		for ( const auto & tItem : tAggr.m_dComposite )
 		{
-			const CSphColumnInfo * pCol = tSchema.GetAttr ( tItem.m_sColumn.cstr() );
+			const CSphColumnInfo * pCol = GetUuidDocidAggrKey ( tItem.m_sColumn, tSchema, tRawSchema );
+			if ( !pCol )
+				pCol = tSchema.GetAttr ( tItem.m_sColumn.cstr() );
+			if ( !pCol )
+				pCol = GetJsonInternalAggrKey ( tItem.m_sColumn, tSchema, tRawSchema );
+
 			CSphString sJsonCol;
 			if ( !pCol && sphJsonNameSplit ( tItem.m_sColumn.cstr(), nullptr, &sJsonCol ) )
 				pCol = tSchema.GetAttr ( sJsonCol.cstr() );
-			
+
 			if ( !pCol )
 				return false;
 
@@ -3054,6 +3142,19 @@ static void AddJoinedWeight ( JsonEscapedBuilder & tOut, const CSphQuery & tQuer
 }
 
 
+static const char * GetResultIndexName ( const AggrResult_t & tRes, const JsonQuery_c & tQuery, const CSphMatch & tMatch, bool bTag, int iTag )
+{
+	int iIndexTag = bTag ? tMatch.m_iTag : iTag;
+	if ( iIndexTag>=0 && iIndexTag<tRes.m_dIndexNames.GetLength() )
+		return tRes.m_dIndexNames[iIndexTag].scstr();
+
+	if ( tRes.m_dIndexNames.GetLength()==1 )
+		return tRes.m_dIndexNames[0].scstr();
+
+	return tQuery.m_sIndexes.cstr();
+}
+
+
 CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const JsonQuery_c & tQuery, QueryProfile_c * pProfile, ResultSetFormat_e eFormat )
 {
 	assert ( dRes.GetLength()>=1 );
@@ -3123,6 +3224,7 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 		const CSphColumnInfo * pHybridScore = tSchema.GetAttr ( GetHybridScoreAttrName() );
 
 		bool bCompatId = false;
+		bool bUuidId = false;
 		const CSphColumnInfo * pCompatRaw = nullptr;
 		const CSphColumnInfo * pCompatVer = nullptr;
 		if ( eFormat==ResultSetFormat_e::ES )
@@ -3138,6 +3240,13 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 			pCompatVer = tSchema.GetAttr ( "_version" );
 		}
 
+		const CSphColumnInfo * pUuidId = tSchema.GetAttr ( sphGetUuidDocidName() );
+		if ( pUuidId && !bCompatId )
+		{
+			pId = pUuidId;
+			bUuidId = true;
+		}
+
 		bool bTag = tRes.m_bTagsAssigned;
 		int iTag = ( bTag ? 0 : tRes.m_dResults.First().m_iTag );
 		auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
@@ -3148,7 +3257,12 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 
 			// note, that originally there is string UID, so we just output number in quotes for docid here
 			// number in quotes in compat mode or just number for _id
-			if ( bCompatId || ( eFormat==ResultSetFormat_e::ES ) )
+			if ( bUuidId )
+			{
+				JsonObjAddAttr ( tOut, pId->m_eAttrType, "_id", tMatch, pId->m_tLocator );
+				tOut.Sprintf ( R"("_score":%d)", tMatch.m_iWeight );
+			}
+			else if ( bCompatId || ( eFormat==ResultSetFormat_e::ES ) )
 			{
 				DocID_t tDocID = tMatch.GetAttr ( pId->m_tLocator );
 				tOut.Sprintf ( R"("_id":"%llu","_score":%d)", tDocID, tMatch.m_iWeight );
@@ -3165,7 +3279,7 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 
 			if ( eFormat==ResultSetFormat_e::ES )
 			{
-				tOut.Sprintf ( R"("_index":"%s")", tRes.m_dIndexNames[bTag ? tMatch.m_iTag : iTag].scstr() ); // FIXME!!! breaks for multiple indexes
+				tOut.Sprintf ( R"("_index":"%s")", GetResultIndexName ( tRes, tQuery, tMatch, bTag, iTag ) );
 				tOut += R"("_type": "doc")";
 				if ( pCompatVer )
 					JsonObjAddAttr ( tOut, pCompatVer->m_eAttrType, "_version", tMatch, pCompatVer->m_tLocator );
@@ -3193,7 +3307,8 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 						continue;
 
 					const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
-					JsonObjAddAttr ( tOut, tCol.m_eAttrType, tCol.m_sName.cstr(), tMatch, tCol.m_tLocator );
+					const char * szAttrName = tCol.m_sName==sphGetUuidDocidName() ? sphGetDocidName() : tCol.m_sName.cstr();
+					JsonObjAddAttr ( tOut, tCol.m_eAttrType, szAttrName, tMatch, tCol.m_tLocator );
 				}
 
 			tOut.FinishBlock ( false ); // _source obj
@@ -3325,12 +3440,15 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 }
 
 
-JsonObj_c sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID_t tDocId, ResultSetFormat_e eFormat )
+JsonObj_c sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID_t tDocId, const char * szDocId, ResultSetFormat_e eFormat )
 {
 	JsonObj_c tObj;
 
 	tObj.AddStr ( ( eFormat==ResultSetFormat_e::ES ? "_index" : "table" ), szIndex );
-	tObj.AddUint ( "id", tDocId );
+	if ( szDocId )
+		tObj.AddStr ( "id", szDocId );
+	else
+		tObj.AddUint ( "id", tDocId );
 	tObj.AddBool ( "created", !bReplace );
 	tObj.AddStr ( "result", bReplace ? "updated" : "created" );
 	tObj.AddInt ( "status", bReplace ? 200 : 201 );
@@ -3338,12 +3456,15 @@ JsonObj_c sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID
 	return tObj;
 }
 
-JsonObj_c sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iInserts, int iDeletes, int iUpdates, ResultSetFormat_e eFormat )
+JsonObj_c sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, const char * szDocId, int iInserts, int iDeletes, int iUpdates, ResultSetFormat_e eFormat )
 {
 	JsonObj_c tObj;
 
 	tObj.AddStr ( ( eFormat==ResultSetFormat_e::ES ? "_index" : "table" ), szIndex );
-	tObj.AddInt ( "_id", tDocId );
+	if ( szDocId )
+		tObj.AddStr ( "_id", szDocId );
+	else
+		tObj.AddInt ( "_id", tDocId );
 	tObj.AddInt ( "created", iInserts );
 	tObj.AddInt ( "deleted", iDeletes );
 	tObj.AddInt ( "updated", iUpdates );
@@ -3355,13 +3476,17 @@ JsonObj_c sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iIns
 }
 
 
-JsonObj_c sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int iAffected, ResultSetFormat_e eFormat )
+JsonObj_c sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int iAffected, ResultSetFormat_e eFormat, const char * szDocId )
 {
 	JsonObj_c tObj;
 
 	tObj.AddStr ( ( eFormat==ResultSetFormat_e::ES ? "_index" : "table" ), szIndex );
 
-	if ( !tDocId )
+	if ( szDocId )
+	{
+		tObj.AddStr ( "id", szDocId );
+		tObj.AddStr ( "result", iAffected ? "updated" : "noop" );
+	} else if ( !tDocId )
 		tObj.AddInt ( "updated", iAffected );
 	else
 	{
@@ -3373,13 +3498,18 @@ JsonObj_c sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int 
 }
 
 
-JsonObj_c sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int iAffected, ResultSetFormat_e eFormat )
+JsonObj_c sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int iAffected, ResultSetFormat_e eFormat, const char * szDocId )
 {
 	JsonObj_c tObj;
 
 	tObj.AddStr ( ( eFormat==ResultSetFormat_e::ES ? "_index" : "table" ), szIndex );
 
-	if ( !tDocId )
+	if ( szDocId )
+	{
+		tObj.AddStr ( "id", szDocId );
+		tObj.AddBool ( "found", !!iAffected );
+		tObj.AddStr ( "result", iAffected ? "deleted" : "not found" );
+	} else if ( !tDocId )
 		tObj.AddInt ( "deleted", iAffected );
 	else
 	{
@@ -3977,6 +4107,12 @@ static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphStr
 
 	if ( bString )
 	{
+		if ( strcmp ( tSelect.SzVal(), sphGetUuidDocidName() )==0 )
+		{
+			sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
+			return false;
+		}
+
 		tQuery.m_dIncludeItems.Add ( tSelect.StrVal() );
 		if ( tQuery.m_dIncludeItems[0]=="*" || tQuery.m_dIncludeItems[0].IsEmpty() )
 			tQuery.m_dIncludeItems.Reset();
@@ -3985,7 +4121,19 @@ static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphStr
 	}
 
 	if ( bArray )
-		return ParseStringArray ( tSelect, R"("_source")", tQuery.m_dIncludeItems, sError );
+	{
+		if ( !ParseStringArray ( tSelect, R"("_source")", tQuery.m_dIncludeItems, sError ) )
+			return false;
+
+		for ( const auto & sItem : tQuery.m_dIncludeItems )
+			if ( sItem==sphGetUuidDocidName() )
+			{
+				sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
+				return false;
+			}
+
+		return true;
+	}
 
 	assert ( bObj );
 
@@ -3995,6 +4143,13 @@ static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphStr
 	{
 		if ( !ParseStringArray ( tInclude, R"("_source" "includes")", tQuery.m_dIncludeItems, sError ) )
 			return false;
+
+		for ( const auto & sItem : tQuery.m_dIncludeItems )
+			if ( sItem==sphGetUuidDocidName() )
+			{
+				sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
+				return false;
+			}
 
 		if ( tQuery.m_dIncludeItems.GetLength()==1 && tQuery.m_dIncludeItems[0]=="*" )
 			tQuery.m_dIncludeItems.Reset();
@@ -4007,6 +4162,13 @@ static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphStr
 	{
 		if ( !ParseStringArray ( tExclude, R"("_source" "excludes")", tQuery.m_dExcludeItems, sError ) )
 			return false;
+
+		for ( const auto & sItem : tQuery.m_dExcludeItems )
+			if ( sItem==sphGetUuidDocidName() )
+			{
+				sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
+				return false;
+			}
 	} else if ( !sError.IsEmpty() )
 		return false;
 
@@ -4140,6 +4302,12 @@ bool ParseDocFields ( const JsonObj_c & tDocFields, JsonQuery_c & tQuery, CSphSt
 		CSphString sFieldName;
 		if ( !tItem.FetchStrItem ( sFieldName, "field", sError, false ) )
 			return false;
+
+		if ( sFieldName==sphGetUuidDocidName() )
+		{
+			sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
+			return false;
+		}
 
 		if ( tQuery.m_dItems.GetFirst ( [&sFieldName] ( const CSphQueryItem & tVal ) { return ( tVal.m_sExpr=="*" || tVal.m_sExpr==sFieldName ); } )==-1 )
 		{
@@ -4984,6 +5152,19 @@ static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<Js
 			sError.SetSprintf ( R"(bucket '%s' without aggregate items)", tItem.m_sBucketName.cstr() );
 			return false;
 		}
+
+		if ( tItem.m_sCol==sphGetUuidDocidName() )
+		{
+			sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
+			return false;
+		}
+
+		for ( const auto & tComposite : tItem.m_dComposite )
+			if ( tComposite.m_sColumn==sphGetUuidDocidName() )
+			{
+				sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
+				return false;
+			}
 
 		dParentItems.Add ( tItem );
 	}

@@ -35,6 +35,7 @@
 #include "docstore.h"
 #include "global_idf.h"
 #include "indexformat.h"
+#include "indexsettings.h"
 #include "indexcheck.h"
 #include "coroutine.h"
 #include "columnarlib.h"
@@ -707,6 +708,12 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 	for ( const auto & tUpdAttr : tUpd.m_dAttributes )
 	{
 		const CSphString & sUpdAttrName = tUpdAttr.m_sName;
+		if ( sUpdAttrName==sphGetDocidName() || ( sphHasUuidDocid(tSchema) && sUpdAttrName==sphGetUuidDocidName() ) )
+		{
+			sError = "'id' attribute cannot be updated";
+			return false;
+		}
+
 		int iUpdAttrId = tSchema.GetAttrIndex ( sUpdAttrName.cstr() );
 
 		// try to find JSON attribute with a field

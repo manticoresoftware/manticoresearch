@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>replication for RT UUID document IDs</name>
+
+<requires>
+	<replication/>
+	<non-windows/>
+	<force-rt/>
+	<heavy/>
+</requires>
+<skip_indexer/>
+<num_agents>2</num_agents>
+
+<config>
+
+<agent0>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+	server_id = <agent_id/>
+}
+</agent0>
+<agent1>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data1"/>
+	server_id = <agent_id/>
+}
+</agent1>
+
+</config>
+
+<queries>
+
+<!-- create replicated UUID-id RT table on node 0 -->
+<sphinxql d="0">
+	CREATE TABLE uuid_rt ( id uuid, title text indexed, tag string, price int ) rt_mem_limit='12M';
+	CREATE CLUSTER test;
+	ALTER CLUSTER test ADD uuid_rt;
+	INSERT INTO test:uuid_rt ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655441000', 'seed document', 'seed', 10 );
+	SELECT id, tag, price FROM test:uuid_rt ORDER BY id ASC;
+</sphinxql>
+
+<!-- join node 1 and verify the UUID public id arrived through SST/replication -->
+<sphinxql d="1" cluster_connect="0">
+	JOIN CLUSTER test AT '%addr_connect%';
+	SELECT id, tag, price FROM test:uuid_rt ORDER BY id ASC;
+</sphinxql>
+
+<!-- write through node 1 and verify node 0 receives the public UUID id -->
+<sphinxql d="1">
+	INSERT INTO test:uuid_rt ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655441001', 'node1 insert', 'node1', 20 );
+	UPDATE test:uuid_rt SET price=21, tag='node1-updated' WHERE id='550e8400-e29b-41d4-a716-446655441001';
+	SELECT id, tag, price FROM test:uuid_rt ORDER BY id ASC;
+</sphinxql>
+
+<sphinxql d="0">
+	debug wait test status 4 like 'state' option 'timeout'=30;
+	SELECT id, tag, price FROM test:uuid_rt ORDER BY id ASC;
+</sphinxql>
+
+<!-- replace/delete by public UUID id through node 0 and verify node 1 converges -->
+<sphinxql d="0">
+	REPLACE INTO test:uuid_rt ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655441000', 'seed replaced', 'replaced', 11 );
+	DELETE FROM test:uuid_rt WHERE id='550e8400-e29b-41d4-a716-446655441001';
+	SELECT id, tag, price FROM test:uuid_rt ORDER BY id ASC;
+</sphinxql>
+
+<sphinxql d="1">
+	debug wait test status 6 like 'state' option 'timeout'=30;
+	SELECT id, tag, price FROM test:uuid_rt ORDER BY id ASC;
+</sphinxql>
+
+<!-- cleanup -->
+<sphinxql d="0">
+	ALTER CLUSTER test DROP uuid_rt;
+	DROP TABLE uuid_rt;
+	DELETE CLUSTER test;
+</sphinxql>
+
+</queries>
+
+</test>

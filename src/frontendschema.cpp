@@ -12,6 +12,7 @@
 
 #include "frontendschema.h"
 
+#include "indexsettings.h"
 #include "queuecreator.h"
 
 /// returns internal magic names for expressions like COUNT(*) that have a corresponding one
@@ -25,6 +26,40 @@ static const char * GetMagicSchemaName ( const CSphString & s )
 	if ( s=="groupby()" )
 		return "@groupby";
 	return s.cstr();
+}
+
+
+static bool HasUuidDocidFrontendAttr ( const ISphSchema & tSchema )
+{
+	return tSchema.GetAttrIndex ( sphGetUuidDocidName() )>=0;
+}
+
+
+static bool IsUuidDocidAlias ( const ISphSchema & tSchema, const CSphString & sAttr )
+{
+	return HasUuidDocidFrontendAttr(tSchema) && ( strcmp ( sAttr.cstr(), sphGetDocidName() )==0 || strcmp ( sAttr.cstr(), "@id" )==0 );
+}
+
+
+static bool IsFrontendAttrMatch ( const ISphSchema & tSchema, const CSphString & sSchemaAttr, const CSphString & sQueryAttr )
+{
+	if ( IsUuidDocidAlias ( tSchema, sQueryAttr ) )
+		return strcmp ( sSchemaAttr.cstr(), sphGetUuidDocidName() )==0;
+
+	return strcmp ( sSchemaAttr.cstr(), GetMagicSchemaName ( sQueryAttr ) )==0;
+}
+
+
+static int GetFrontendAttrIndex ( const ISphSchema & tSchema, const CSphString & sAttr )
+{
+	if ( IsUuidDocidAlias ( tSchema, sAttr ) )
+	{
+		int iUuidAttr = tSchema.GetAttrIndex ( sphGetUuidDocidName() );
+		if ( iUuidAttr>=0 )
+			return iUuidAttr;
+	}
+
+	return tSchema.GetAttrIndex ( GetMagicSchemaName ( sAttr ) );
 }
 
 /// a functor to sort columns by (is_aggregate ASC, column_index ASC)
@@ -92,7 +127,7 @@ void FrontendSchemaBuilder_c::CollectKnownItems()
 
 		int iCol = -1;
 		if ( !m_bQueryFromAPI && tItem.m_sAlias.IsEmpty() )
-			iCol = m_tRes.m_tSchema.GetAttrIndex ( tItem.m_sExpr.cstr() );
+			iCol = GetFrontendAttrIndex ( m_tRes.m_tSchema, tItem.m_sExpr );
 
 		if ( iCol>=0 )
 		{
@@ -141,7 +176,7 @@ void FrontendSchemaBuilder_c::AddAttrs()
 		} else if ( bMagic && ( tCol.m_pExpr || bUsualApi ) )
 		{
 			ARRAY_FOREACH ( j, m_dUnmappedAttrs )
-				if ( tCol.m_sName==GetMagicSchemaName ( m_dItems[ m_dUnmappedAttrs[j] ].m_sExpr ) )
+				if ( IsFrontendAttrMatch ( m_tRes.m_tSchema, tCol.m_sName, m_dItems[ m_dUnmappedAttrs[j] ].m_sExpr ) )
 				{
 					int k = m_dUnmappedAttrs[j];
 					m_dFrontend[k].m_iIndex = iCol;
@@ -163,9 +198,9 @@ void FrontendSchemaBuilder_c::AddAttrs()
 			{
 				int k = m_dUnmappedAttrs[j];
 				const CSphQueryItem & t = m_dItems[k];
-				if ( ( tCol.m_sName==GetMagicSchemaName ( t.m_sExpr ) && t.m_eAggrFunc==SPH_AGGR_NONE )
+				if ( ( IsFrontendAttrMatch ( m_tRes.m_tSchema, tCol.m_sName, t.m_sExpr ) && t.m_eAggrFunc==SPH_AGGR_NONE )
 					|| ( t.m_sAlias==tCol.m_sName &&
-						( m_tRes.m_tSchema.GetAttrIndex ( GetMagicSchemaName ( t.m_sExpr ) )==-1 || t.m_eAggrFunc!=SPH_AGGR_NONE ) ) )
+						( GetFrontendAttrIndex ( m_tRes.m_tSchema, t.m_sExpr )==-1 || t.m_eAggrFunc!=SPH_AGGR_NONE ) ) )
 				{
 					// tricky bit about naming
 					//

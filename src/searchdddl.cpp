@@ -66,6 +66,7 @@ public:
 
 	bool	AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol );
 	bool	AddCreateTableId ( const SqlNode_t & tName );
+	bool	AddCreateTableUuidId ( const SqlNode_t & tName, const SqlNode_t & tType );
 	void	AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits );
 
 	bool	AddItemOptionEngine ( const SqlNode_t & tOption );
@@ -419,6 +420,52 @@ bool DdlParser_c::AddCreateTableId ( const SqlNode_t & tName )
 	tAttr.m_tAttr.m_sName		= sName;
 	tAttr.m_tAttr.m_eAttrType	= SPH_ATTR_BIGINT;
 	tOpts.CopyOptionsTo(tAttr);
+	return true;
+}
+
+
+bool DdlParser_c::AddCreateTableUuidId ( const SqlNode_t & tName, const SqlNode_t & tType )
+{
+	assert( m_pStmt );
+
+	CSphString sType;
+	ToString ( sType, tType );
+	sType.ToLower();
+	if ( sType!="uuid" )
+	{
+		m_sError.SetSprintf ( "unknown column type '%s'", sType.cstr() );
+		m_tItemOptions.Reset();
+		return false;
+	}
+
+	CSphString sName;
+	ToString ( sName, tName );
+	sName.ToLower();
+	if ( sName!="id" )
+	{
+		m_sError.SetSprintf ( "uuid type can only be used for 'id', got '%s'", sName.cstr() );
+		m_tItemOptions.Reset();
+		return false;
+	}
+
+	ItemOptions_t tOpts = m_tItemOptions;
+	m_tItemOptions.Reset();
+
+	if ( tOpts.m_bHashOptionSet )
+	{
+		m_sError = "cannot set 'hash' option for 'id'";
+		return false;
+	}
+
+	CreateTableAttr_t & tIdAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
+	tIdAttr.m_tAttr.m_sName		= sphGetDocidName();
+	tIdAttr.m_tAttr.m_eAttrType	= SPH_ATTR_BIGINT;
+	tOpts.CopyOptionsTo(tIdAttr);
+
+	CreateTableAttr_t & tUuidAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
+	tUuidAttr.m_tAttr.m_sName		= sphGetUuidDocidName();
+	tUuidAttr.m_tAttr.m_eAttrType	= SPH_ATTR_STRING;
+	tUuidAttr.m_bIndexed			= true;
 	return true;
 }
 

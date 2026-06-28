@@ -27,6 +27,7 @@
 #include "geodist.h"
 #include "knnmisc.h"
 #include "hybridexecutor.h"
+#include "indexsettings.h"
 #include <time.h>
 #include <math.h>
 
@@ -4595,6 +4596,9 @@ void ExprParser_t::AddUservar ( const char* sBegin, int iLen, YYSTYPE * lvalp )
 
 int ExprParser_t::ParseAttrsAndFields ( const char * szTok, YYSTYPE * lvalp ) noexcept
 {
+	if ( strcmp ( szTok, sphGetDocidName() )==0 && sphHasUuidDocid ( *m_pSchema ) )
+		szTok = sphGetUuidDocidName();
+
 	// check for attribute
 	int iCol = m_pSchema->GetAttrIndex ( szTok );
 	if ( iCol>=0 )
@@ -10594,7 +10598,12 @@ int ExprParser_t::ParseJoinAttr ( const char * szTable, uint64_t uOffset )
 	// Left table columns are stored in schema without prefix; right table with "right.attr"
 	CSphString sAttrWithTable;
 	if ( m_pJoinIdxLeft && *m_pJoinIdxLeft==szTable )
-		sAttrWithTable = sAttrName;
+	{
+		if ( sAttrName==sphGetDocidName() && sphHasUuidDocid ( *m_pSchema ) )
+			sAttrWithTable = sphGetUuidDocidName();
+		else
+			sAttrWithTable = sAttrName;
+	}
 	else
 		sAttrWithTable.SetSprintf ( "%s.%s", szTable, sAttrName.cstr() );
 

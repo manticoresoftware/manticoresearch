@@ -7,6 +7,9 @@
 #include <limits>
 #include <utility>
 
+CSphString sphGenerateUuidDocid ( DocID_t tDocID );
+DocID_t sphGenerateAutoDocid();
+
 void ShardDocStorage_t::Cleanup()
 {
 	m_dAttrRows.Resize ( 0 );
@@ -426,6 +429,19 @@ static int GetShardTargetOrdinal ( const ShardIndex_c & tShard, int64_t iDocID )
 	return JumpConsistentHash ( sphCRC32 ( sDocID.cstr(), sDocID.Length() ), iTargets );
 }
 
+static int GetShardTargetOrdinal ( const ShardIndex_c & tShard, const char * szKey )
+{
+	int iTargets = tShard.m_dRouteTargets.GetLength();
+	assert ( iTargets > 0 );
+	if ( iTargets == 1 )
+		return 0;
+
+	if ( !szKey )
+		return -1;
+
+	return JumpConsistentHash ( sphCRC32 ( szKey, (int)strlen ( szKey ) ), iTargets );
+}
+
 static const ShardIndex_c::RouteTarget_t * GetShardRouteTarget ( const ShardIndex_c & tShard, int iTargetOrdinal )
 {
 	if ( iTargetOrdinal < 0 || iTargetOrdinal >= tShard.m_dRouteTargets.GetLength() )
@@ -505,6 +521,45 @@ static int64_t GetBufferedShardDocID ( const CSphSchema & tSchema, const ShardDo
 	auto tDocIDLoc = pDocID->m_tLocator;
 	tDocIDLoc.m_bDynamic = true;
 	return sphGetRowAttr ( pRow, tDocIDLoc );
+}
+
+static const char * GetBufferedShardStringAttr ( const CSphSchema & tSchema, const ShardDocStorage_t & tStorage, int iRowId, int iStringAttr, CSphString & sError )
+{
+	if ( iRowId<0 || iRowId>=tStorage.m_dRows.GetLength() )
+	{
+		sError = "internal error: invalid shard row id";
+		return nullptr;
+	}
+
+	if ( iStringAttr<0 || iStringAttr>=GetShardStringAttrCount ( tSchema ) )
+	{
+		sError = "internal error: invalid shard string attribute";
+		return nullptr;
+	}
+
+	const auto & tRow = tStorage.m_dRows[iRowId];
+	if ( tRow.m_iStringRefOff<0 || tRow.m_iStringRefOff+iStringAttr>=tStorage.m_dStringRefs.GetLength() )
+	{
+		sError = "internal error: missing shard string attribute";
+		return nullptr;
+	}
+
+	const BYTE * pBlobBase = tStorage.m_dBlobPool.IsEmpty() ? nullptr : tStorage.m_dBlobPool.Begin();
+	const auto & tRef = tStorage.m_dStringRefs[tRow.m_iStringRefOff + iStringAttr];
+	return ( tRef.m_iOff>=0 && pBlobBase ) ? (const char *)pBlobBase + tRef.m_iOff : nullptr;
+}
+
+static const char * GetBufferedShardUuidDocid ( const CSphSchema & tSchema, const ShardDocStorage_t & tStorage, int iRowId, CSphString & sError )
+{
+	int iUuidString = GetInsertStringAttrOrdinal ( tSchema, sphGetUuidDocidName() );
+	const char * szUuid = GetBufferedShardStringAttr ( tSchema, tStorage, iRowId, iUuidString, sError );
+	if ( !sError.IsEmpty() )
+		return nullptr;
+
+	if ( !sphCheckUuidDocid ( szUuid, sError ) )
+		return nullptr;
+
+	return szUuid;
 }
 
 template<typename ACTION>
@@ -1078,6 +1133,32 @@ static bool CollectDeleteDocidsFromTargetTable ( const CSphString & sTargetName,
 	return true;
 }
 
+static bool CollectUuidDocidsFromTargetTable ( const CSphString & sTargetName, const cServedIndexRefPtr_c & pServed, const char * szUuid, CSphVector<DocID_t> & dDocids, CSphString & sError )
+{
+	dDocids.Resize ( 0 );
+
+	CSphQuery tQuery;
+	SetQueryDefaultsExt2 ( tQuery );
+	tQuery.m_eQueryType = QUERY_SQL;
+	tQuery.m_sIndexes = sTargetName;
+	tQuery.m_sSelect = sphGetDocidName();
+	tQuery.m_iLimit = 2;
+	tQuery.m_iMaxMatches = 2;
+
+	CSphFilterSettings & tFilter = tQuery.m_dFilters.Add();
+	tFilter.m_sAttrName = sphGetDocidName();
+	tFilter.m_eType = SPH_FILTER_STRING;
+	tFilter.m_dStrings.Add ( szUuid );
+	tFilter.m_bExclude = false;
+
+	DocsCollector_c tCollector { tQuery, false, sTargetName, pServed, &sError };
+	if ( !sError.IsEmpty() )
+		return false;
+
+	dDocids.Append ( tCollector.GetValuesSlice() );
+	return true;
+}
+
 static bool CommitBufferedShardBatch ( const CSphSchema & tSchema, const cServedIndexRefPtr_c & pServed, RtIndex_i * pIndex, const CSphString & sTargetName, const CSphString & sCluster, const CSphVector<ShardBatchOp_t> & dOps, const CSphVector<int64_t> & dDeleteDocids, const CSphVector<ShardDeletePredicate_t> & dDeletePredicates, const ShardDocStorage_t & tStorage, int & iDeleted, CSphString & sWarning, CSphString & sError )
 {
 	iDeleted = 0;
@@ -1086,6 +1167,9 @@ static bool CommitBufferedShardBatch ( const CSphSchema & tSchema, const cServed
 
 	RtAccum_t tAccum;
 	CSphVector<DocID_t> dPredicateDeleteDocs;
+	CSphVector<DocID_t> dUuidDocids;
+	sph::StringSet dSeenUuidDocids;
+	const bool bUuidDocid = sphHasUuidDocid ( tSchema );
 	for ( const auto & tOp : dOps )
 	{
 		if ( tOp.m_eOp==ShardTxnOp_e::ROW_WRITE )
@@ -1093,6 +1177,40 @@ static bool CommitBufferedShardBatch ( const CSphSchema & tSchema, const cServed
 			InsertDocData_c tDoc ( tSchema );
 			bool bReplace = false;
 			RowToInsert ( tSchema, tStorage, tOp.m_iData, tDoc, bReplace );
+			if ( bUuidDocid )
+			{
+				const char * szUuid = GetBufferedShardUuidDocid ( tSchema, tStorage, tOp.m_iData, sError );
+				if ( !szUuid )
+				{
+					pIndex->RollBack ( &tAccum );
+					return false;
+				}
+
+				CSphString sUuid = szUuid;
+				if ( !dSeenUuidDocids.Add ( sUuid ) )
+				{
+					sError.SetSprintf ( "duplicate id '%s'", szUuid );
+					pIndex->RollBack ( &tAccum );
+					return false;
+				}
+
+				if ( !bReplace )
+				{
+					if ( !CollectUuidDocidsFromTargetTable ( sTargetName, pServed, szUuid, dUuidDocids, sError ) )
+					{
+						pIndex->RollBack ( &tAccum );
+						return false;
+					}
+
+					if ( !dUuidDocids.IsEmpty() )
+					{
+						sError.SetSprintf ( "duplicate id '%s'", szUuid );
+						pIndex->RollBack ( &tAccum );
+						return false;
+					}
+				}
+			}
+
 			if ( !pIndex->AddDocument ( tDoc, bReplace, CSphString(), sError, sWarning, &tAccum ) || !sError.IsEmpty() )
 			{
 				pIndex->RollBack ( &tAccum );
@@ -1486,11 +1604,42 @@ static void ExtractShardDeletePredicate ( const SqlStmt_t & tStmt, ShardDeletePr
 	CopyQueryToShardDeletePredicate ( tStmt.m_tQuery, tPredicate );
 }
 
+static int AddUuidShardDeletePredicate ( ShardTxnState_t & tShardTxn, const char * szUuid )
+{
+	int iPredicateIdx = tShardTxn.m_dDeletePredicates.GetLength();
+	ShardDeletePredicate_t & tPredicate = tShardTxn.m_dDeletePredicates.Add();
+	tPredicate.m_eQueryType = QUERY_SQL;
+
+	CSphFilterSettings & tFilter = tPredicate.m_dFilters.Add();
+	tFilter.m_sAttrName = sphGetDocidName();
+	tFilter.m_eType = SPH_FILTER_STRING;
+	tFilter.m_dStrings.Add ( szUuid );
+	tFilter.m_bExclude = false;
+
+	return iPredicateIdx;
+}
+
+static void AddShardQueryDeleteOp ( ShardTxnState_t & tShardTxn, int iTarget, int iPredicateIdx )
+{
+	auto & tTarget = tShardTxn.m_dTargets[iTarget];
+	auto & tOp = tTarget.m_dOps.Add();
+	tOp.m_eOp = ShardTxnOp_e::QUERY_DELETE;
+	tOp.m_iData = iPredicateIdx;
+	tOp.m_iCount = 1;
+
+	auto & tOrder = tShardTxn.m_dOrder.Add();
+	tOrder.m_iTarget = iTarget;
+	tOrder.m_eOp = ShardTxnOp_e::QUERY_DELETE;
+	tOrder.m_iData = iPredicateIdx;
+	tOrder.m_iCount = 1;
+}
+
 bool AddDocumentShard ( const SqlStmt_t & tStmt, const ShardIndex_c & tShard, StmtErrorReporter_i & tOut, int & iAffectedRows )
 {
 	auto * pSession = session::GetClientSession();
 	auto & sWarning = pSession->m_tLastMeta.m_sWarning;
 	auto & dLastIds = pSession->m_dLastIds;
+	auto & dLastIdStrings = pSession->m_dLastIdStrings;
 	const bool bReplaceStmt = ( tStmt.m_eStmt == STMT_REPLACE );
 	iAffectedRows = 0;
 
@@ -1511,7 +1660,10 @@ bool AddDocumentShard ( const SqlStmt_t & tStmt, const ShardIndex_c & tShard, St
 	}
 
 	const CSphSchema & tSchema = tShard.m_tSchema;
+	const bool bUuidDocid = sphHasUuidDocid ( tSchema );
 	int iSchemaSz = tSchema.GetAttrsCount() + tSchema.GetFieldsCount();
+	if ( bUuidDocid )
+		iSchemaSz--;
 	if ( tShard.m_tSettings.m_bIndexFieldLens )
 		iSchemaSz -= tSchema.GetFieldsCount();
 
@@ -1557,13 +1709,19 @@ bool AddDocumentShard ( const SqlStmt_t & tStmt, const ShardIndex_c & tShard, St
 
 	CSphVector<int64_t> dStmtDocIDs;
 	dStmtDocIDs.Reserve ( tStmt.m_iRowsAffected );
+	CSphVector<CSphString> dStmtDocIDStrings;
+	if ( bUuidDocid )
+		dStmtDocIDStrings.Reserve ( tStmt.m_iRowsAffected );
 
 	AttributeConverter_c tConverter ( tSchema, dFieldAttrs, sError, sWarning );
+	int iUuidString = bUuidDocid ? GetInsertStringAttrOrdinal ( tSchema, sphGetUuidDocidName() ) : -1;
+	sph::StringSet dSeenUuidDocids;
 
 	for ( int iRow = 0; iRow < tStmt.m_iRowsAffected; ++iRow )
 	{
 		assert ( sError.IsEmpty() );
 		tConverter.NewRow();
+		SqlInsert_t tGeneratedUuid;
 
 		int iSchemaAttrCount = tSchema.GetAttrsCount();
 		int iFieldLenAttr = tSchema.GetAttrId_FirstFieldLen();
@@ -1574,7 +1732,18 @@ bool AddDocumentShard ( const SqlStmt_t & tStmt, const ShardIndex_c & tShard, St
 		for ( int i = 0; i < iSchemaAttrCount && bOk; ++i )
 		{
 			int iQuerySchemaIdx = dAttrSchema[i];
-			if ( iQuerySchemaIdx < 0 )
+			const CSphString & sAttrName = tSchema.GetAttr(i).m_sName;
+			if ( iQuerySchemaIdx < 0 && bUuidDocid && sAttrName==sphGetUuidDocidName() )
+			{
+				tConverter.SetID ( sphGenerateAutoDocid() );
+
+				tGeneratedUuid.m_iType = SqlInsert_t::QUOTED_STRING;
+				tGeneratedUuid.m_sVal = sphGenerateUuidDocid ( tConverter.GetID() );
+				bOk = tConverter.SetAttrValue ( i, tGeneratedUuid, iRow, iQuerySchemaIdx, sError );
+			}
+			else if ( iQuerySchemaIdx < 0 && bUuidDocid && sAttrName==sphGetDocidName() && tConverter.GetID() )
+				continue;
+			else if ( iQuerySchemaIdx < 0 )
 				tConverter.SetDefaultAttrValue ( i );
 			else
 				bOk = tConverter.SetAttrValue ( i, tStmt.m_dInsertValues[iQuerySchemaIdx + iRow * iExp], iRow, iQuerySchemaIdx, sError );
@@ -1597,11 +1766,37 @@ bool AddDocumentShard ( const SqlStmt_t & tStmt, const ShardIndex_c & tShard, St
 
 		tConverter.Finalize();
 
+		const char * szUuid = nullptr;
+		bool bUuidGenerated = false;
 		bool bReplace = ( bReplaceStmt && tConverter.GetID() != 0 );
-		if ( !tConverter.GetID() )
-			tConverter.SetID ( UidShort() );
+		if ( bUuidDocid )
+		{
+			bUuidGenerated = !tGeneratedUuid.m_sVal.IsEmpty();
+			if ( iUuidString<0 || iUuidString>=tConverter.m_dStrings.GetLength() )
+			{
+				sError = "internal error: missing uuid id value";
+				break;
+			}
 
-		int iTargetOrdinal = GetShardTargetOrdinal ( tShard, tConverter.GetID() );
+			szUuid = tConverter.m_dStrings[iUuidString];
+			if ( !sphCheckUuidDocid ( szUuid, sError ) )
+				break;
+
+			CSphString sUuid = szUuid;
+			if ( !dSeenUuidDocids.Add ( sUuid ) )
+			{
+				sError.SetSprintf ( "duplicate id '%s'", szUuid );
+				break;
+			}
+			dStmtDocIDStrings.Add ( szUuid );
+
+			bReplace = bReplaceStmt && !bUuidGenerated;
+		}
+
+		if ( !tConverter.GetID() )
+			tConverter.SetID ( sphGenerateAutoDocid() );
+
+		int iTargetOrdinal = bUuidDocid ? GetShardTargetOrdinal ( tShard, szUuid ) : GetShardTargetOrdinal ( tShard, tConverter.GetID() );
 		const auto * pRouteTarget = GetShardRouteTarget ( tShard, iTargetOrdinal );
 		if ( !pRouteTarget )
 		{
@@ -1609,23 +1804,14 @@ bool AddDocumentShard ( const SqlStmt_t & tStmt, const ShardIndex_c & tShard, St
 			break;
 		}
 
-		int iTarget = FindShardTxnTarget ( tShardTxn, pRouteTarget->m_iRouteId );
-		if ( iTarget < 0 )
+		if ( bUuidDocid && bReplace )
 		{
-			if ( !tShardTxn.HasPendingData() )
-			{
-				tShardTxn.m_sShard = tStmt.m_sIndex;
-				tShardTxn.m_pShardInstance = &tShard;
-			}
-
-			auto & tNewTarget = AddShardTxnTarget ( tShardTxn );
-			tNewTarget.m_sIndex = pRouteTarget->m_sName;
-			tNewTarget.m_iRouteId = pRouteTarget->m_iRouteId;
-			tNewTarget.m_bLocal = pRouteTarget->IsLocal();
-			if ( !pRouteTarget->IsLocal() )
-				tNewTarget.m_pAgent = pRouteTarget->m_pAgent;
-			iTarget = tShardTxn.m_dTargets.GetLength() - 1;
+			int iPredicateIdx = AddUuidShardDeletePredicate ( tShardTxn, szUuid );
+			int iDeleteTarget = FindOrAddShardTxnTarget ( tShardTxn, tStmt.m_sIndex, tShard, *pRouteTarget );
+			AddShardQueryDeleteOp ( tShardTxn, iDeleteTarget, iPredicateIdx );
 		}
+
+		int iTarget = FindOrAddShardTxnTarget ( tShardTxn, tStmt.m_sIndex, tShard, *pRouteTarget );
 
 		auto & tTarget = tShardTxn.m_dTargets[iTarget];
 		int iStoredRow = StoreRow ( tConverter, tSchema, tShardTxn.m_tStorage, bReplace, tShardTxn.m_dOrder.GetLength() );
@@ -1666,7 +1852,14 @@ bool AddDocumentShard ( const SqlStmt_t & tStmt, const ShardIndex_c & tShard, St
 	} else
 		dLastIds.SwapData ( dStmtDocIDs );
 
-	int64_t iLastInsertID = dLastIds.GetLength() ? dLastIds.Last() : 0;
+	if ( bUuidDocid )
+		dLastIdStrings.SwapData ( dStmtDocIDStrings );
+	else
+		dLastIdStrings.Resize ( 0 );
+
+	int64_t iLastInsertID = 0;
+	if ( dLastIds.GetLength() && !bUuidDocid )
+		iLastInsertID = dLastIds.Last();
 	tOut.Ok ( iAffectedRows, sWarning, iLastInsertID );
 	return true;
 }

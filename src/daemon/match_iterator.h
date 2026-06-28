@@ -35,8 +35,10 @@ class MatchIterator_c
 	int m_iRawIdx; // raw iteration index (internal)
 	int m_iLimit;
 	std::function<int  ( int )> m_fnOrder; // use to access matches by accending docid order
+	CSphAttrLocator m_tDocidLoc;
 	bool m_bTailClean = false;
 
+	DocID_t GetDocID ( const CSphMatch & tMatch ) const noexcept;
 	bool MaybeUseWordOrder ( const CSphSwapVector<CSphMatch> & dMatches ) const noexcept;
 	bool MaybeUseDwordOrder ( const CSphSwapVector<CSphMatch> & dMatches ) const noexcept;
 	void UseTags ( VecTraits_T<CSphMatch> & dOrder ) noexcept;

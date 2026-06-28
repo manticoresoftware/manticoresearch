@@ -1,0 +1,193 @@
+# UUID primary IDs implementation specification
+
+**Status:** branch implementation spec for GitHub issue #1429.
+
+## Goal
+
+Support UUID/GUID values as user-facing document IDs for RT/configless tables while keeping Manticore's internal `DocID_t` machinery numeric. This avoids widening `DocID_t`, adding a broad UUID attribute type, or changing `/Users/sn/columnar_uuid`.
+
+## Design summary
+
+The minimal implementation keeps two identities for UUID-ID tables:
+
+1. **Internal ID**: the existing numeric `id` / `DocID_t` (`SPH_ATTR_BIGINT`) used by RT chunks, docstore, kill lists, updates, deletes, replication, and other existing internals.
+2. **Public ID**: a hidden exact string attribute named `@uuid_id`, exposed to users as `id` on UUID-ID tables.
+
+Public `id` operations are translated as follows:
+
+- incoming public `id` values are validated as 36-character hyphenated UUID strings, normalized to lowercase, and stored in `@uuid_id`;
+- omitted `id` values generate a UUIDv8-style string derived from the unique internal numeric `DocID_t` surrogate;
+- explicit duplicate checks and `REPLACE`/`UPDATE`/`DELETE` resolution find the internal numeric docid through exact string lookup on `@uuid_id`; generated UUID inserts skip that lookup;
+- result formatting maps `@uuid_id` back to public `id` and hides the internal numeric surrogate.
+
+This preserves exact UUID semantics without hashing UUIDs into 64-bit IDs.
+
+## Public behavior
+
+### DDL
+
+```sql
+CREATE TABLE products_uuid ( id uuid, title text, price int );
+```
+
+Rules:
+
+- `id uuid` is valid only for RT/configless tables.
+- Only the primary `id` column can use the `uuid` type.
+- Regular attributes cannot use `uuid`.
+- PQ/plain/indexer-created tables are not supported for UUID IDs.
+- Existing tables cannot be converted to or from `id uuid` with `ALTER TABLE`.
+- `SHOW CREATE TABLE` renders the public schema as `id uuid`; the hidden storage attribute is not exposed as a normal column.
+
+### ID format
+
+Accepted explicit IDs are canonical UUID-shaped strings:
+
+```text
+550e8400-e29b-41d4-a716-446655440000
+```
+
+Validation is shape-based: 36 bytes, hyphens at positions 8/13/18/23, and hexadecimal digits elsewhere. Uppercase hexadecimal input is accepted and normalized to lowercase. Generated IDs use a UUIDv8-style layout that encodes the internal numeric `DocID_t`, making generated public UUID IDs unique under the same guarantees as internal numeric auto-IDs. Generated IDs are not random UUIDv4 values.
+
+### SQL DML
+
+Supported:
+
+- `INSERT INTO t (id, ...) VALUES ('uuid', ...)`
+- `INSERT INTO t (...) VALUES (...)` with generated UUID `id`
+- `REPLACE INTO t (id, ...) VALUES ('uuid', ...)`
+- `UPDATE t SET ... WHERE id='uuid'`
+- `DELETE FROM t WHERE id='uuid'`
+- equality and `IN` filters on public `id`
+- `ORDER BY id`, `GROUP BY id`, `COUNT(DISTINCT id)`, and facets over public `id` as string semantics
+- `LAST_INSERT_ID()` and `@@session.last_insert_id` return UUID strings for UUID-ID tables
+
+Rejected/unsupported:
+
+- numeric values for UUID `id`
+- invalid UUID strings
+- direct use of `@uuid_id` in public select/filter/group/sort/update/insert paths
+- range filters (`<`, `<=`, `>`, `>=`) and arithmetic expressions on UUID `id`
+- treating `0` as an auto-ID marker; omit `id` instead
+
+### JSON / Elasticsearch-compatible APIs
+
+Supported UUID-aware paths include:
+
+- `/json/insert`, `/json/replace`, `/json/update`, `/json/delete`, `/json/search`
+- ES-style `_bulk` `index`/`create` actions with string `_id`
+- ES-style `_search` response IDs/docvalue fields for public `id`
+
+For numeric-ID tables, previous numeric/compatibility behavior is preserved.
+
+## Code structure
+
+### Core helpers
+
+`src/indexsettings.cpp` / `src/indexsettings.h` define the UUID-ID helpers:
+
+- `sphGetUuidDocidName()` returns `@uuid_id`;
+- `sphHasUuidDocid(schema)` detects UUID-ID tables by hidden string attr presence;
+- `sphIsValidUuidDocid()` validates UUID shape;
+- `sphCheckUuidDocid()` returns user-facing validation errors;
+- `sphNormalizeUuidDocid()` lowercases UUID strings.
+
+`src/searchd.cpp` defines `sphGenerateUuidDocid(DocID_t)` and insert-time helpers for:
+
+- encoding the unique internal numeric `DocID_t` into a UUIDv8-style public string;
+- locating the hidden string attr ordinal in insert string storage;
+- resolving explicit UUID strings to existing numeric `DocID_t` values;
+- detecting duplicate UUIDs inside a single multi-row statement with `sph::StringSet`.
+
+### DDL and schema
+
+`src/ddl.y` and `src/searchdddl.cpp` add a special `id uuid` grammar branch. The DDL parser:
+
+- validates that the type token is `uuid`;
+- validates that the column name is exactly `id`;
+- creates the normal internal numeric `id` attr;
+- adds hidden string attr `@uuid_id` and marks it indexed.
+
+`src/attribute.cpp`, `src/indexcheck.cpp`, and create-table validation treat `@uuid_id` as internal but allow it only when generated by the UUID-ID DDL path.
+
+### Insert/replace
+
+`src/searchd.cpp`, `src/searchdhttp.cpp`, and `src/searchdhttpcompat.cpp` route public `id` values to `@uuid_id` for UUID-ID tables. They do not make `SPH_ATTR_BIGINT` accept UUID strings.
+
+For insert/replace:
+
+1. map public `id` input to `@uuid_id`;
+2. validate and lowercase the UUID string;
+3. generate a UUID when `id` is omitted;
+4. resolve existing UUID on `REPLACE` and reuse existing internal docid when present;
+5. reject duplicates for `INSERT` and duplicate UUIDs staged inside the same statement/bulk request.
+
+### Lookup, filters, updates, deletes
+
+UUID public `id` filters are handled as string filters against the hidden `@uuid_id` attribute where public query semantics need string behavior, or resolved to internal numeric docids before existing write/delete internals need `DocID_t`.
+
+The implementation intentionally uses existing exact string/filter/query machinery rather than adding a new persistent UUID→docid map or changing RT/disk chunk storage layout.
+
+### Result rendering
+
+Changed result-formatting paths map `@uuid_id` back to public `id`:
+
+- SQL column names and values;
+- JSON search hits and `_source`/docvalue handling;
+- ES-compatible responses;
+- joins, facets, sorting/grouping, and aggregate keys involving public `id`.
+
+The internal numeric `id` remains hidden on UUID-ID tables.
+
+### Distributed, sharding, and replication
+
+Distributed agent result paths send the hidden UUID string when the master needs public `id` output.
+
+Shard write buffering preserves the UUID string and routes UUID-ID rows deterministically from the UUID value. Sharded UUID `REPLACE` deletes are scheduled only on the routed target, not blindly on every route target.
+
+Replication tests cover create/insert/update/replace/delete behavior through a cluster table.
+
+### Columnar/MCL
+
+No changes are required in `/Users/sn/columnar_uuid` for the minimal implementation. UUID public IDs use an existing string attribute path, including columnar RT tables. This avoids adding a native UUID or 128-bit type to MCL.
+
+## Performance and memory considerations
+
+- Internal `DocID_t` stays 64-bit, so existing row, kill-list, and docstore memory layouts are unchanged.
+- Each UUID-ID row stores one additional exact string (`@uuid_id`).
+- Per-statement duplicate detection uses `sph::StringSet`, avoiding O(N²) linear duplicate checks for large multi-row inserts/bulk batches.
+- The branch does not add a table-wide UUID→docid RAM map. Explicit UUID duplicate/replace checks reuse existing query/filter lookup paths with low limits. Server-generated UUIDs are derived from the internal numeric auto-ID, so generated inserts skip the UUID lookup and go straight through the normal RT insert path.
+- ID-based operations that start from a public UUID string (`SELECT ... WHERE id='uuid'`, `UPDATE`, `REPLACE`, and `DELETE`) are expected to be slower than the same operations on numeric IDs because they must resolve `@uuid_id` back to the internal numeric `DocID_t`. Current `manticore-load` measurements on 50k-row RT tables show UUID id operations at roughly 8-21% of numeric-id throughput. A future direct UUID→DocID lookup index/map would be needed to close that gap.
+- Sharded UUID `REPLACE` now targets the deterministic UUID route instead of broadcasting delete predicates to every route target.
+
+## Limitations / non-goals
+
+- No native `SPH_ATTR_UUID` type.
+- No widening of `DocID_t` or internal row IDs.
+- No UUID IDs for plain/indexer-created tables or PQ tables.
+- No `ALTER TABLE` conversion to/from UUID IDs.
+- No numeric/range/arithmetic semantics for UUID `id`.
+- No direct public access to `@uuid_id`.
+- Generated UUIDs are for document identifiers, not cryptographic secrets.
+
+## Test coverage in this branch
+
+New tests:
+
+- `test/test_517/test.xml` — RT UUID document IDs across SQL, JSON, ES-compatible bulk/search, generated IDs, validation errors, duplicate handling, `REPLACE`, `UPDATE`, `DELETE`, flush-to-disk, columnar RT, joins, distributed agent path, facets/aggs, and numeric-ID regression checks.
+- `test/test_518/test.xml` — replicated RT UUID document IDs through cluster create/join/insert/update/replace/delete convergence.
+
+Focused verification should include:
+
+```bash
+# from /Users/sn/manticore_uuid/build
+cmake --build . --target searchd indexer indextool
+
+# from /Users/sn/manticore_uuid/test
+php ubertest.php gen -s /Users/sn/manticore_uuid/build/src/searchd -i /Users/sn/manticore_uuid/build/src/indexer test_517
+php ubertest.php t   -s /Users/sn/manticore_uuid/build/src/searchd -i /Users/sn/manticore_uuid/build/src/indexer test_517
+php ubertest.php gen -s /Users/sn/manticore_uuid/build/src/searchd -i /Users/sn/manticore_uuid/build/src/indexer test_518
+php ubertest.php t   -s /Users/sn/manticore_uuid/build/src/searchd -i /Users/sn/manticore_uuid/build/src/indexer test_518
+```
+
+If the local build/test harness uses a different build directory, run the equivalent existing configured target and the same two test directories.

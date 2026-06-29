@@ -2216,6 +2216,11 @@ bool NativeUkLemmatizer_c::EndsWith ( const std::string & sValue, const char * s
 	return sValue.length()>=iSuffixLen && sValue.compare ( sValue.length()-iSuffixLen, iSuffixLen, sSuffix )==0;
 }
 
+static bool IsUkApostropheCodepoint ( int iCode )
+{
+	return iCode=='\'' || iCode==0x2019 || iCode==0x02bc;
+}
+
 std::string NativeUkLemmatizer_c::ApplyUkCharSubstitute ( const std::string & sWord )
 {
 	std::string sResult;
@@ -2552,7 +2557,7 @@ static bool SkipNonUkToken ( const BYTE * pWord )
 		if ( iCode>=0x400 && iCode<=0x4ff )
 			continue;
 
-		if ( iCode=='-' )
+		if ( iCode=='-' || IsUkApostropheCodepoint ( iCode ) )
 			continue;
 
 		// allow non_cjk uk mapping too

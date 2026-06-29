@@ -79,6 +79,9 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	DROP TABLE IF EXISTS join_right;
 	DROP TABLE IF EXISTS dist_agent;
 	DROP TABLE IF EXISTS dist_agent_multi;
+	DROP TABLE IF EXISTS uuid_shard;
+	DROP TABLE IF EXISTS uuid_shard_a;
+	DROP TABLE IF EXISTS uuid_shard_b;
 	DROP TABLE IF EXISTS uuid_dist_a;
 	DROP TABLE IF EXISTS uuid_dist_b;
 
@@ -88,6 +91,9 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	CREATE TABLE uuid_case ( id uuid, title text, tag string, price int );
 	CREATE TABLE uuid_dist_a ( id uuid, title text, tag string, price int );
 	CREATE TABLE uuid_dist_b ( id uuid, title text, tag string, price int );
+	CREATE TABLE uuid_shard_a ( id uuid, title text, tag string, price int );
+	CREATE TABLE uuid_shard_b ( id uuid, title text, tag string, price int );
+	CREATE TABLE uuid_shard ( id uuid, title text, tag string, price int ) type='shard' local='uuid_shard_a' local='uuid_shard_b';
 	CREATE TABLE numeric_ids ( title text, tag string );
 
 	DESC uuid_ids;
@@ -194,6 +200,22 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	SELECT * FROM dist_agent_multi ORDER BY price ASC;
 	SELECT id, tag, price FROM dist_agent_multi ORDER BY price ASC;
 
+	<!-- sharded UUID table should accept and route public UUID ids across RT shard targets -->
+	DESC uuid_shard;
+	SHOW CREATE TABLE uuid_shard;
+	INSERT INTO uuid_shard ( id, title, tag, price ) VALUES ( '30000000-0000-4000-8000-000000000001', 'shard explicit one', 'shard-one', 901 );
+	INSERT INTO uuid_shard ( id, title, tag, price ) VALUES ( '30000000-0000-4000-8000-000000000002', 'shard explicit two', 'shard-two', 902 );
+	INSERT INTO uuid_shard ( title, tag, price ) VALUES ( 'shard generated', 'shard-auto', 903 );
+	SELECT LAST_INSERT_ID();
+	SELECT COUNT(*), COUNT(DISTINCT id) FROM uuid_shard;
+	SELECT id, tag, price FROM uuid_shard WHERE id='30000000-0000-4000-8000-000000000001';
+	INSERT INTO uuid_shard ( id, title, tag, price ) VALUES ( '30000000-0000-4000-8000-000000000001', 'shard duplicate', 'shard-dup', 904 );
+	REPLACE INTO uuid_shard ( id, title, tag, price ) VALUES ( '30000000-0000-4000-8000-000000000001', 'shard replaced', 'shard-replaced', 905 );
+	UPDATE uuid_shard SET price=906, tag='shard-updated' WHERE id='30000000-0000-4000-8000-000000000002';
+	SELECT id, tag, price FROM uuid_shard WHERE id IN ('30000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000002') ORDER BY price ASC;
+	DELETE FROM uuid_shard WHERE id='30000000-0000-4000-8000-000000000002';
+	SELECT id, tag, price FROM uuid_shard ORDER BY price ASC;
+
 	INSERT INTO numeric_ids ( id, title, tag ) VALUES ( 1, 'numeric document', 'ok' );
 	SELECT id, tag FROM numeric_ids WHERE id=1;
 	INSERT INTO numeric_ids ( id, title, tag ) VALUES ( '550e8400-e29b-41d4-a716-446655440099', 'bad numeric document', 'bad' );
@@ -234,6 +256,15 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	"docvalue_fields": [ { "field": "id" } ],
 	"sort": [ { "price": "asc" } ],
 	"size": 10
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_shard",
+	"query": { "equals": { "id": "30000000-0000-4000-8000-000000000001" } },
+	"_source": [ "id", "tag", "price" ],
+	"sort": [ { "price": "asc" } ]
 }
 </query>
 
@@ -487,6 +518,9 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	DROP TABLE dist_agent;
 	DROP TABLE join_left;
 	DROP TABLE join_right;
+	DROP TABLE uuid_shard;
+	DROP TABLE uuid_shard_a;
+	DROP TABLE uuid_shard_b;
 	DROP TABLE uuid_dist_a;
 	DROP TABLE uuid_dist_b;
 	DROP TABLE uuid_ids;

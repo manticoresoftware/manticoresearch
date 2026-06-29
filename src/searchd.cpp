@@ -6883,9 +6883,9 @@ static bool CheckCreateTable ( const CSphString & sIndex, const CreateTableSetti
 			{
 				CSphString sType = tOpt.m_sValue;
 				sType.ToLower();
-				if ( sType!="rt" )
+				if ( sType!="rt" && sType!="shard" )
 				{
-					sError = "uuid id is supported for real-time tables only";
+					sError = "uuid id is supported for real-time and sharded tables only";
 					return false;
 				}
 			}

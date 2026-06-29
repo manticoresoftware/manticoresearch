@@ -982,7 +982,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	if ( bMaster )
 	{
 		CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_GETFIELD );
-		RemotesGetField ( tRes, tQuery );
+		if ( !RemotesGetField ( tRes, tQuery ) )
+			return false;
 	}
 
 	// all the merging and sorting is now done

@@ -56,7 +56,7 @@ jobs:
         mkdir build && cd build
         export CC=`which clang`
         export CXX=`which clang++`
-        cmake -DQFUZZER=ON ..
+        cmake -DQFUZZER=ON -DMCL_LOCAL_RUNTIME=OFF ..
         cmake --build . --target qfuzzer
 
   cache_build_artifact:

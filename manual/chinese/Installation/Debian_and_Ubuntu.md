@@ -43,7 +43,7 @@ wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo apt install ./manticore-repo.noarch.deb
 sudo apt update
 ```
-（如果未安装，请安装 `wget`；如果 `apt-key` 失败，请安装 `gnupg2`）。
+（如果未安装，请安装 `wget`）。
 
 然后安装 Manticore Search：
 ```

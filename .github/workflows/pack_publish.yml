@@ -7,6 +7,7 @@ on:
     workflows: [ 🔬 Test ]
     types: [ completed ]
     branches: [ main ]
+  workflow_dispatch:
   pull_request:
     branches: [ main ]
     types: [opened, synchronize, reopened, labeled, unlabeled]

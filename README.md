@@ -147,7 +147,7 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
 
 # Installation
 
-## Quick native install
+## Quick install
 
 For Linux and macOS with Homebrew, use the one-line installer:
 

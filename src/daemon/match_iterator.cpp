@@ -104,9 +104,10 @@ MatchIterator_c::MatchIterator_c ( OneResultset_t & tResult )
 	auto& dMatches = tResult.m_dMatches;
 	m_iLimit = dMatches.GetLength();
 
+	const CSphColumnInfo * pUuidDocID = m_tResult.m_tSchema.GetAttr ( sphGetUuidDocidName() );
 	const CSphColumnInfo * pDocID = m_tResult.m_tSchema.GetAttr ( sphGetDocidName() );
-	assert ( pDocID || m_tResult.m_tSchema.GetAttr ( sphGetUuidDocidName() ) );
-	if ( pDocID )
+	assert ( pDocID || pUuidDocID );
+	if ( pUuidDocID && pDocID )
 	{
 		m_tDocIDLocator = pDocID->m_tLocator;
 		m_bUseDocIDLocator = true;

@@ -14,6 +14,7 @@
 
 #include "searchdsql.h"
 #include "client_session.h"
+#include "searchdssl.h"
 #include "auth_common.h"
 #include "auth_proto_mysql.h"
 #include "auth_log.h"
@@ -53,6 +54,9 @@ MySQLAuth_t GetMySQLAuth()
 
 static bool CheckPwd ( const MySQLAuth_t & tSalt, const AuthUserCred_t & tEntry, const VecTraits_T<BYTE> & dClientHash )
 {
+	if ( dClientHash.GetLength()!=HASH20_SIZE )
+		return false;
+
 	const HASH20_t & tSha1 = tEntry.m_tPwdSha1;
 	HASH20_t tSha2 = CalcBinarySHA1 ( tSha1.data(), tSha1.size() );
 
@@ -65,8 +69,7 @@ static bool CheckPwd ( const MySQLAuth_t & tSalt, const AuthUserCred_t & tEntry,
 	CSphFixedVector<BYTE> dRes ( tSha1.size() );
 	Crypt ( dRes.Begin(), tSha3.data(), tSha1.data(), dRes.GetLength() );
 
-	int iCmp = memcmp ( dRes.Begin(), dClientHash.Begin(), Min ( dClientHash.GetLength(), dRes.GetLength() ) );
-	return ( iCmp==0 );
+	return SecretEqual ( dRes, dClientHash );
 }
 
 bool CheckAuth ( const MySQLAuth_t & tAuth, const CSphString & sUser, const VecTraits_T<BYTE> & dClientHash, CSphString & sError )
@@ -76,17 +79,21 @@ bool CheckAuth ( const MySQLAuth_t & tAuth, const CSphString & sUser, const VecT
 
 	AuthUsersPtr_t pUsers = GetAuth();
 	const AuthUserCred_t * pUser = pUsers->m_hUserToken ( sUser );
-	if ( !pUser || dClientHash.IsEmpty() )
+	if ( !pUser )
 	{
 		sError.SetSprintf ( "Access denied for user '%s' (using password: %s)", sUser.cstr(), ( dClientHash.IsEmpty() ? "NO" : "YES" ) );
-		if ( !pUser )
-			AuthLog().AuthFailure ( sUser, AccessMethod_e::SQL, session::szClientName(), "user does not exist" );
-		else
-			AuthLog().AuthFailure ( sUser, AccessMethod_e::SQL, session::szClientName(), "no password provided" );
+		AuthLog().AuthFailure ( sUser, AccessMethod_e::SQL, session::szClientName(), "user does not exist" );
 		return false;
 	}
 
-	if ( !CheckPwd ( tAuth, *pUser, dClientHash ) )
+	if ( dClientHash.IsEmpty() )
+	{
+		sError.SetSprintf ( "Access denied for user '%s' (using password: NO)", sUser.cstr() );
+		AuthLog().AuthFailure ( sUser, AccessMethod_e::SQL, session::szClientName(), "no password provided" );
+		return false;
+	}
+
+	if ( dClientHash.GetLength()!=HASH20_SIZE || !CheckPwd ( tAuth, *pUser, dClientHash ) )
 	{
 		sError.SetSprintf ( "Access denied for user '%s' (using password: YES)", sUser.cstr() );
 		AuthLog().AuthFailure ( sUser, AccessMethod_e::SQL, session::szClientName(), "invalid password" );

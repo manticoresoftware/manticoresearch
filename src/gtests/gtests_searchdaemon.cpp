@@ -15,6 +15,7 @@
 #include "sphinxint.h"
 #include "searchdaemon.h"
 #include "searchdha.h"
+#include "searchdssl.h"
 #include "searchdreplication.h"
 #include "replication/wsrep_cxx.h"
 #include "replication/cluster_binlog.h"
@@ -33,6 +34,21 @@ TEST ( functions, QueryStatElement_t_ctr )
 	ASSERT_EQ ( tElem.m_dData[TYPE_MAX], 0 );
 	ASSERT_EQ ( tElem.m_dData[TYPE_95], 0 );
 	ASSERT_EQ ( tElem.m_dData[TYPE_99], 0 );
+}
+
+TEST ( functions, SecretEqual )
+{
+	BYTE dA[] = { 1, 2, 3, 4 };
+	BYTE dB[] = { 1, 2, 3, 4 };
+	BYTE dDiff[] = { 1, 2, 3, 5 };
+	BYTE dShort[] = { 1, 2, 3 };
+	BYTE dLong[] = { 1, 2, 3, 4, 5 };
+
+	EXPECT_TRUE ( SecretEqual ( VecTraits_T<BYTE> ( dA, sizeof ( dA ) ), VecTraits_T<BYTE> ( dB, sizeof ( dB ) ) ) );
+	EXPECT_FALSE ( SecretEqual ( VecTraits_T<BYTE> ( dA, sizeof ( dA ) ), VecTraits_T<BYTE> ( dDiff, sizeof ( dDiff ) ) ) );
+	EXPECT_FALSE ( SecretEqual ( VecTraits_T<BYTE> ( dA, sizeof ( dA ) ), VecTraits_T<BYTE> ( dShort, sizeof ( dShort ) ) ) );
+	EXPECT_FALSE ( SecretEqual ( VecTraits_T<BYTE> ( dA, sizeof ( dA ) ), VecTraits_T<BYTE> ( dLong, sizeof ( dLong ) ) ) );
+	EXPECT_FALSE ( SecretEqual ( VecTraits_T<BYTE>(), VecTraits_T<BYTE>() ) );
 }
 
 class tstlogger

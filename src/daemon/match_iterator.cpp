@@ -18,12 +18,8 @@
 class MatchTagSortAccessor_c
 {
 	const VecTraits_T<CSphMatch> & m_dTagOrder;
-	CSphAttrLocator m_tDocidLoc;
 public:
-	MatchTagSortAccessor_c ( const VecTraits_T<CSphMatch> & dTagOrder, CSphAttrLocator tDocidLoc )
-		: m_dTagOrder ( dTagOrder )
-		, m_tDocidLoc ( tDocidLoc )
-	{}
+	explicit MatchTagSortAccessor_c ( const VecTraits_T<CSphMatch> & dTagOrder) : m_dTagOrder ( dTagOrder ) {}
 	using T = CSphMatch;
 	using MEDIAN_TYPE = int;
 	static MEDIAN_TYPE Key ( T * a ) { return a->m_iTag; }
@@ -34,14 +30,9 @@ public:
 
 	bool IsLess ( int a, int b ) const noexcept
 	{
-		return (DocID_t)m_dTagOrder[a].GetAttr ( m_tDocidLoc ) < (DocID_t)m_dTagOrder[b].GetAttr ( m_tDocidLoc );
+		return sphGetDocID ( m_dTagOrder[a].m_pDynamic )<sphGetDocID ( m_dTagOrder[b].m_pDynamic );
 	}
 };
-
-DocID_t MatchIterator_c::GetDocID ( const CSphMatch & tMatch ) const noexcept
-{
-	return (DocID_t)tMatch.GetAttr ( m_tDocidLoc );
-}
 
 // use space after end of matches to store indexes, WORD per match
 bool MatchIterator_c::MaybeUseWordOrder ( const CSphSwapVector<CSphMatch>& dMatches ) const noexcept
@@ -57,8 +48,8 @@ bool MatchIterator_c::MaybeUseWordOrder ( const CSphSwapVector<CSphMatch>& dMatc
 	VecTraits_T dOrder = { (WORD *) dMatches.end (), m_iLimit };
 	ARRAY_CONSTFOREACH( i, dOrder )
 		dOrder[i] = i;
-	dOrder.Sort ( Lesser ( [this, &dMatches] ( WORD a, WORD b ) {
-		return GetDocID ( dMatches[a] ) < GetDocID ( dMatches[b] );
+	dOrder.Sort ( Lesser ( [&dMatches] ( WORD a, WORD b ) {
+		return sphGetDocID ( dMatches[a].m_pDynamic )<sphGetDocID ( dMatches[b].m_pDynamic );
 	} ) );
 	return true;
 }
@@ -77,8 +68,8 @@ bool MatchIterator_c::MaybeUseDwordOrder ( const CSphSwapVector<CSphMatch>& dMat
 	VecTraits_T dOrder = { (DWORD *) dMatches.end (), m_iLimit };
 	for( DWORD i=0, uLen=dOrder.GetLength(); i<uLen; ++i )
 		dOrder[i] = i;
-	dOrder.Sort ( Lesser ( [this, &dMatches] ( DWORD a, DWORD b ) {
-		return GetDocID ( dMatches[a] ) < GetDocID ( dMatches[b] );
+	dOrder.Sort ( Lesser ( [&dMatches] ( DWORD a, DWORD b ) {
+		return sphGetDocID ( dMatches[a].m_pDynamic )<sphGetDocID ( dMatches[b].m_pDynamic );
 	} ) );
 	return true;
 }
@@ -89,7 +80,7 @@ void MatchIterator_c::UseTags ( VecTraits_T<CSphMatch> & dOrder ) noexcept
 	ARRAY_CONSTFOREACH( i, dOrder )
 		dOrder[i].m_iTag = i;
 
-	MatchTagSortAccessor_c tOrder ( dOrder, m_tDocidLoc );
+	MatchTagSortAccessor_c tOrder ( dOrder );
 	sphSort ( dOrder.Begin (), dOrder.GetLength (), tOrder, tOrder );
 	m_bTailClean = true;
 }
@@ -100,9 +91,7 @@ MatchIterator_c::MatchIterator_c ( OneResultset_t & tResult )
 	auto& dMatches = tResult.m_dMatches;
 	m_iLimit = dMatches.GetLength();
 
-	const CSphColumnInfo * pDocid = m_tResult.m_tSchema.GetAttr ( sphGetDocidName() );
-	assert ( pDocid );
-	m_tDocidLoc = pDocid->m_tLocator;
+	assert ( m_tResult.m_tSchema.GetAttr ( sphGetDocidName() ) || m_tResult.m_tSchema.GetAttr ( sphGetUuidDocidName() ) );
 
 	if ( MaybeUseWordOrder ( dMatches ) )
 		m_fnOrder = [pData = (WORD *) m_tResult.m_dMatches.end ()] ( int i ) { return pData[i]; };
@@ -117,7 +106,7 @@ MatchIterator_c::MatchIterator_c ( OneResultset_t & tResult )
 	m_iRawIdx = 0;
 	m_iIdx = m_fnOrder(0);
 
-	m_tDocID = GetDocID ( m_tResult.m_dMatches[m_iIdx] );
+	m_tDocID = sphGetDocID ( m_tResult.m_dMatches[m_iIdx].m_pDynamic );
 }
 
 MatchIterator_c::~MatchIterator_c ()
@@ -139,6 +128,6 @@ bool MatchIterator_c::Step () noexcept
 	if ( m_iRawIdx>=m_iLimit )
 		return false;
 	m_iIdx = m_fnOrder ( m_iRawIdx );
-	m_tDocID = GetDocID ( m_tResult.m_dMatches[m_iIdx] );
+	m_tDocID = sphGetDocID ( m_tResult.m_dMatches[m_iIdx].m_pDynamic );
 	return true;
 }

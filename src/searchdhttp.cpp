@@ -3518,7 +3518,7 @@ static bool ParseSourceLine ( const char * sLine, BulkDoc_t & tDoc, SqlStmt_t & 
 
 		JsonObj_c tUpd ( FromSz ( sLine ) );
 		tUpd.AddStr ( "table", tStmt.m_sIndex );
-		if ( tDoc.m_bDocidString )
+		if ( bUuidDocid && tDoc.m_bDocidString )
 			tUpd.AddStr ( "id", tDoc.m_sDocid.cstr() );
 		else
 			tUpd.AddInt ( "id", tDoc.m_tDocid );
@@ -3533,7 +3533,7 @@ static bool ParseSourceLine ( const char * sLine, BulkDoc_t & tDoc, SqlStmt_t & 
 		tStmt.m_eStmt = STMT_DELETE;
 		tStmt.m_tQuery.m_sSelect = "id";
 		CSphFilterSettings & tFilter = tStmt.m_tQuery.m_dFilters.Add();
-		if ( tDoc.m_bDocidString )
+		if ( bUuidDocid && tDoc.m_bDocidString )
 		{
 			tFilter.m_eType = SPH_FILTER_STRING;
 			tFilter.m_dStrings.Add ( tDoc.m_sDocid );

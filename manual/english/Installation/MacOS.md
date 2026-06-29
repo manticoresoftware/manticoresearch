@@ -1,6 +1,6 @@
 # Installing Manticore on MacOS
 
-### Quick automatized installation
+### Quick install
 
 ```bash
 curl https://manticoresearch.com | sh

@@ -7,7 +7,7 @@
 * CentOS 9, RHEL 9, AlmaLinux 9
 * AlmaLinux 10, other RHEL 10-based distributions
 
-### Quick automatized installation
+### Quick install
 
 ```bash
 curl https://manticoresearch.com | sh

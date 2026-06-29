@@ -7,7 +7,7 @@
 * CentOS 9, RHEL 9, AlmaLinux 9
 * AlmaLinux 10, другие дистрибутивы на основе RHEL 10
 
-### Быстрая автоматизированная установка
+### Быстрая установка
 
 ```bash
 curl https://manticoresearch.com | sh

@@ -40,7 +40,7 @@ curl https://manticoresearch.com | sh -s dev
 Установите репозиторий:
 ```bash
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
+sudo apt install ./manticore-repo.noarch.deb
 sudo apt update
 ```
 (установите `wget`, если он не установлен; установите `gnupg2`, если `apt-key` завершится ошибкой).
@@ -62,7 +62,7 @@ sudo apt remove manticore*
 Если вы предпочитаете "Ночные" (разрабатываемые) версии, выполните:
 ```bash
 wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb && \
-sudo dpkg -i manticore-dev-repo.noarch.deb && \
+sudo apt install ./manticore-dev-repo.noarch.deb && \
 sudo apt -y update && \
 sudo apt -y install manticore
 ```

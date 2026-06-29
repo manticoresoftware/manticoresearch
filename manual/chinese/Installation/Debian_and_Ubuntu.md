@@ -40,7 +40,7 @@ curl https://manticoresearch.com | sh -s dev
 安装仓库：
 ```bash
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
+sudo apt install ./manticore-repo.noarch.deb
 sudo apt update
 ```
 （如果未安装，请安装 `wget`；如果 `apt-key` 失败，请安装 `gnupg2`）。
@@ -62,7 +62,7 @@ sudo apt remove manticore*
 如果您更喜欢使用“Nightly”（开发）版本，请执行以下操作：
 ```bash
 wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb && \
-sudo dpkg -i manticore-dev-repo.noarch.deb && \
+sudo apt install ./manticore-dev-repo.noarch.deb && \
 sudo apt -y update && \
 sudo apt -y install manticore
 ```

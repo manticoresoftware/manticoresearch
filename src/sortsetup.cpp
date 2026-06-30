@@ -19,7 +19,7 @@
 
 static bool IsUuidDocidAlias ( const ISphSchema & tSchema, const char * szAttr )
 {
-	return tSchema.GetAttrIndex ( sphGetUuidDocidName() )>=0 && ( !strcasecmp ( szAttr, sphGetDocidName() ) || !strcasecmp ( szAttr, "@id" ) );
+	return tSchema.GetAttrIndex ( sphGetUuidDocidName() )>=0 && !strcasecmp ( szAttr, sphGetDocidName() );
 }
 
 

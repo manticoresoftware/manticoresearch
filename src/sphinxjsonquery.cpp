@@ -4105,6 +4105,15 @@ static bool ParseStringArray ( const JsonObj_c & tArray, const char * szProp, St
 	return true;
 }
 
+static bool CheckInternalDocidAttrName ( const CSphString & sName, CSphString & sError )
+{
+	if ( sName!=sphGetUuidDocidName() && sName!="@id" )
+		return true;
+
+	sError.SetSprintf ( "attribute '%s' is internal", sName.cstr() );
+	return false;
+}
+
 
 static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphString & sError )
 {
@@ -4120,11 +4129,8 @@ static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphStr
 
 	if ( bString )
 	{
-		if ( strcmp ( tSelect.SzVal(), sphGetUuidDocidName() )==0 )
-		{
-			sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
+		if ( !CheckInternalDocidAttrName ( tSelect.StrVal(), sError ) )
 			return false;
-		}
 
 		tQuery.m_dIncludeItems.Add ( tSelect.StrVal() );
 		if ( tQuery.m_dIncludeItems[0]=="*" || tQuery.m_dIncludeItems[0].IsEmpty() )
@@ -4139,11 +4145,8 @@ static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphStr
 			return false;
 
 		for ( const auto & sItem : tQuery.m_dIncludeItems )
-			if ( sItem==sphGetUuidDocidName() )
-			{
-				sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
+			if ( !CheckInternalDocidAttrName ( sItem, sError ) )
 				return false;
-			}
 
 		return true;
 	}
@@ -4158,11 +4161,8 @@ static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphStr
 			return false;
 
 		for ( const auto & sItem : tQuery.m_dIncludeItems )
-			if ( sItem==sphGetUuidDocidName() )
-			{
-				sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
+			if ( !CheckInternalDocidAttrName ( sItem, sError ) )
 				return false;
-			}
 
 		if ( tQuery.m_dIncludeItems.GetLength()==1 && tQuery.m_dIncludeItems[0]=="*" )
 			tQuery.m_dIncludeItems.Reset();
@@ -4177,11 +4177,8 @@ static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphStr
 			return false;
 
 		for ( const auto & sItem : tQuery.m_dExcludeItems )
-			if ( sItem==sphGetUuidDocidName() )
-			{
-				sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
+			if ( !CheckInternalDocidAttrName ( sItem, sError ) )
 				return false;
-			}
 	} else if ( !sError.IsEmpty() )
 		return false;
 
@@ -4316,11 +4313,8 @@ bool ParseDocFields ( const JsonObj_c & tDocFields, JsonQuery_c & tQuery, CSphSt
 		if ( !tItem.FetchStrItem ( sFieldName, "field", sError, false ) )
 			return false;
 
-		if ( sFieldName==sphGetUuidDocidName() )
-		{
-			sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
+		if ( !CheckInternalDocidAttrName ( sFieldName, sError ) )
 			return false;
-		}
 
 		if ( tQuery.m_dItems.GetFirst ( [&sFieldName] ( const CSphQueryItem & tVal ) { return ( tVal.m_sExpr=="*" || tVal.m_sExpr==sFieldName ); } )==-1 )
 		{
@@ -5166,18 +5160,12 @@ static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<Js
 			return false;
 		}
 
-		if ( tItem.m_sCol==sphGetUuidDocidName() )
-		{
-			sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
+		if ( !CheckInternalDocidAttrName ( tItem.m_sCol, sError ) )
 			return false;
-		}
 
 		for ( const auto & tComposite : tItem.m_dComposite )
-			if ( tComposite.m_sColumn==sphGetUuidDocidName() )
-			{
-				sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
+			if ( !CheckInternalDocidAttrName ( tComposite.m_sColumn, sError ) )
 				return false;
-			}
 
 		dParentItems.Add ( tItem );
 	}

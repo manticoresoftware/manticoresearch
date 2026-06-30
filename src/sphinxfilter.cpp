@@ -2037,7 +2037,7 @@ static void TransformForJsonSI ( const CreateFilterContext_t & tCtx, CSphVector<
 
 static bool IsUuidDocidName ( const CSphString & sAttrName )
 {
-	return sAttrName==sphGetDocidName() || sAttrName=="@id";
+	return !sAttrName.IsEmpty() && strcmp ( sAttrName.cstr(), sphGetDocidName() )==0;
 }
 
 
@@ -2049,6 +2049,12 @@ static bool FixupUuidDocidFilter ( CSphFilterSettings & tFilter, const ISphSchem
 	if ( tFilter.m_sAttrName==sphGetUuidDocidName() )
 	{
 		sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
+		return false;
+	}
+
+	if ( tFilter.m_sAttrName=="@id" )
+	{
+		sError = "attribute '@id' is internal";
 		return false;
 	}
 

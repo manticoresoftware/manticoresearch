@@ -4410,6 +4410,12 @@ bool CreateAttrMaps ( CSphVector<int> & dAttrSchema, CSphVector<int> & dFieldSch
 	StrVec_t dCheck = dStmtInsertSchema;
 	ARRAY_FOREACH ( i, dCheck )
 	{
+		if ( sphHasUuidDocid(tSchema) && dCheck[i]=="@id" )
+		{
+			tOut.Error ( "attribute '@id' is internal" );
+			return false;
+		}
+
 		// internal UUID storage attr must not be writable through public insert/replace column lists;
 		// callers should use the public id column instead.
 		if ( dCheck[i]==sphGetUuidDocidName() )
@@ -4783,6 +4789,7 @@ void AttributeConverter_c::SetDefaultFieldValue ( int iField )
 
 void AttributeConverter_c::NewRow()
 {
+	SetID(0);
 	m_dStrings.Resize(0);
 	m_tStrings.Reset();
 	ResetMVAs();
@@ -4872,7 +4879,7 @@ static bool FindTxnUuidDocid ( const CSphVector<CSphString> & dKeys, const CSphV
 }
 
 
-static bool ResolveUuidDocidForInsert ( const CSphString & sIndex, const cServedIndexRefPtr_c & pServed, int iUuidString, const CSphString & sUuid, AttributeConverter_c & tConverter, bool bReplace, bool bGeneratedUuid, sph::StringSet & dSeenUuidDocids, bool bUseTxnUuidDocids, CSphVector<CSphString> & dTxnUuidDocidKeys, CSphVector<int64_t> & dTxnUuidDocids, CSphVector<CSphString> * pLastIdStrings, CSphString & sError )
+static bool ResolveUuidDocidForInsert ( const CSphString & sIndex, const cServedIndexRefPtr_c & pServed, int iUuidString, const CSphString & sUuid, AttributeConverter_c & tConverter, bool bReplace, bool bGeneratedUuid, sph::StringSet & dSeenUuidDocids, CSphVector<CSphString> & dStmtUuidDocidKeys, CSphVector<int64_t> & dStmtUuidDocids, bool bUseTxnUuidDocids, CSphVector<CSphString> & dTxnUuidDocidKeys, CSphVector<int64_t> & dTxnUuidDocids, CSphVector<CSphString> * pLastIdStrings, CSphString & sError )
 {
 	if ( iUuidString<0 )
 		return true;
@@ -4886,7 +4893,7 @@ static bool ResolveUuidDocidForInsert ( const CSphString & sIndex, const cServed
 	if ( !sphCheckUuidDocid ( sUuid.cstr(), sError ) )
 		return false;
 
-	if ( !dSeenUuidDocids.Add ( sUuid ) )
+	if ( !dSeenUuidDocids.Add ( sUuid ) && !bReplace )
 	{
 		sError.SetSprintf ( "duplicate id '%s'", sUuid.cstr() );
 		return false;
@@ -4900,14 +4907,21 @@ static bool ResolveUuidDocidForInsert ( const CSphString & sIndex, const cServed
 	if ( bGeneratedUuid )
 		return true;
 
-	CSphString sTxnKey;
+	CSphString sTxnKey = MakeTxnUuidDocidKey ( sIndex, sUuid );
+	DocID_t tMappedDocID = 0;
+	if ( FindTxnUuidDocid ( dStmtUuidDocidKeys, dStmtUuidDocids, sTxnKey, tMappedDocID ) )
+	{
+		tConverter.SetID ( tMappedDocID );
+		return true;
+	}
+
 	if ( bUseTxnUuidDocids )
 	{
-		sTxnKey = MakeTxnUuidDocidKey ( sIndex, sUuid );
-		DocID_t tTxnDocID = 0;
-		if ( FindTxnUuidDocid ( dTxnUuidDocidKeys, dTxnUuidDocids, sTxnKey, tTxnDocID ) )
+		if ( FindTxnUuidDocid ( dTxnUuidDocidKeys, dTxnUuidDocids, sTxnKey, tMappedDocID ) )
 		{
-			tConverter.SetID ( tTxnDocID );
+			tConverter.SetID ( tMappedDocID );
+			dStmtUuidDocidKeys.Add ( sTxnKey );
+			dStmtUuidDocids.Add ( tMappedDocID );
 			return true;
 		}
 	}
@@ -4949,6 +4963,9 @@ static bool ResolveUuidDocidForInsert ( const CSphString & sIndex, const cServed
 	}
 	else if ( !tConverter.GetID() )
 		tConverter.SetID ( sphGenerateAutoDocid() );
+
+	dStmtUuidDocidKeys.Add ( sTxnKey );
+	dStmtUuidDocids.Add ( tConverter.GetID() );
 
 	if ( bUseTxnUuidDocids )
 	{
@@ -5287,6 +5304,8 @@ static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServe
 	AttributeConverter_c tConverter ( tSchema, dFieldAttrs, sError, sWarning );
 	int iUuidString = bUuidDocid ? GetInsertStringAttrOrdinal ( tSchema, sphGetUuidDocidName() ) : -1;
 	sph::StringSet dSeenUuidDocids;
+	CSphVector<CSphString> dStmtUuidDocidKeys;
+	CSphVector<int64_t> dStmtUuidDocids;
 
 	// convert attrs
 	for ( int iRow=0; iRow<tStmt.m_iRowsAffected; iRow++ )
@@ -5360,7 +5379,7 @@ static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServe
 		{
 			bool bGeneratedUuid = !tGeneratedUuid.m_sVal.IsEmpty();
 			bool bReplaceRow = bReplace && !bGeneratedUuid;
-			if ( !ResolveUuidDocidForInsert ( tStmt.m_sIndex, pServed, iUuidString, sUuidDocid, tConverter, bReplaceRow, bGeneratedUuid, dSeenUuidDocids, !pSession->m_bAutoCommit || pSession->m_bInTransaction, pSession->m_dTxnUuidDocidKeys, pSession->m_dTxnUuidDocids, iUuidString>=0 ? &dIdStrings : nullptr, sError ) )
+			if ( !ResolveUuidDocidForInsert ( tStmt.m_sIndex, pServed, iUuidString, sUuidDocid, tConverter, bReplaceRow, bGeneratedUuid, dSeenUuidDocids, dStmtUuidDocidKeys, dStmtUuidDocids, !pSession->m_bAutoCommit || pSession->m_bInTransaction, pSession->m_dTxnUuidDocidKeys, pSession->m_dTxnUuidDocids, iUuidString>=0 ? &dIdStrings : nullptr, sError ) )
 				break;
 
 			pIndex->AddDocument ( tConverter, bReplaceRow, tStmt.m_sStringParam, sError, sWarning, pAccum );

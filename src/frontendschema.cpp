@@ -25,7 +25,7 @@ static const char * GetMagicSchemaName ( const CSphString & s )
 		return "@weight";
 	if ( s=="groupby()" )
 		return "@groupby";
-	return s.cstr();
+	return s.IsEmpty() ? "" : s.cstr();
 }
 
 
@@ -37,14 +37,14 @@ static bool HasUuidDocidFrontendAttr ( const ISphSchema & tSchema )
 
 static bool IsUuidDocidAlias ( const ISphSchema & tSchema, const CSphString & sAttr )
 {
-	return HasUuidDocidFrontendAttr(tSchema) && ( strcmp ( sAttr.cstr(), sphGetDocidName() )==0 || strcmp ( sAttr.cstr(), "@id" )==0 );
+	return HasUuidDocidFrontendAttr(tSchema) && !sAttr.IsEmpty() && strcmp ( sAttr.cstr(), sphGetDocidName() )==0;
 }
 
 
 static bool IsFrontendAttrMatch ( const ISphSchema & tSchema, const CSphString & sSchemaAttr, const CSphString & sQueryAttr )
 {
 	if ( IsUuidDocidAlias ( tSchema, sQueryAttr ) )
-		return strcmp ( sSchemaAttr.cstr(), sphGetUuidDocidName() )==0;
+		return !sSchemaAttr.IsEmpty() && strcmp ( sSchemaAttr.cstr(), sphGetUuidDocidName() )==0;
 
 	return strcmp ( sSchemaAttr.cstr(), GetMagicSchemaName ( sQueryAttr ) )==0;
 }

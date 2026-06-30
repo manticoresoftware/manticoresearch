@@ -134,21 +134,28 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400e29b41d4a716446655440000', 'bad document', 'bad', 30 );
 	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-44665544000g', 'bad document', 'bad', 30 );
 	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( 123, 'bad document', 'bad', 30 );
+	INSERT INTO uuid_ids ( `@id`, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440013', 'bad at-id insert', 'bad-atid', 33 );
+	REPLACE INTO uuid_ids ( `@id`, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440014', 'bad at-id replace', 'bad-atid', 34 );
 	INSERT INTO uuid_ids ( @uuid_id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440011', 'bad hidden insert', 'bad-hidden', 31 );
 	REPLACE INTO uuid_ids ( @uuid_id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440012', 'bad hidden replace', 'bad-hidden', 32 );
 	SELECT id FROM uuid_ids WHERE id=123;
 	SELECT id, tag, price FROM uuid_ids WHERE id IN ('550e8400-e29b-41d4-a716-446655440011','550e8400-e29b-41d4-a716-446655440012') ORDER BY id ASC;
+	SELECT id FROM uuid_ids WHERE `@id`=123;
 	SELECT id FROM uuid_ids WHERE id > '550e8400-e29b-41d4-a716-446655440000';
 	SELECT id FROM uuid_ids WHERE id &lt; '550e8400-e29b-41d4-a716-446655440001';
 	SELECT id FROM uuid_ids WHERE id >= '550e8400-e29b-41d4-a716-446655440000';
 	SELECT id FROM uuid_ids WHERE id &lt;= '550e8400-e29b-41d4-a716-446655440001';
+	SELECT `@id` FROM uuid_ids LIMIT 1;
 	SELECT id FROM uuid_ids WHERE @uuid_id='550e8400-e29b-41d4-a716-446655440000';
 	SELECT id FROM uuid_ids WHERE @uuid_id IN ('550e8400-e29b-41d4-a716-446655440000');
 	SELECT id FROM uuid_ids WHERE @uuid_id > '550e8400-e29b-41d4-a716-446655440000';
 	SELECT @uuid_id FROM uuid_ids LIMIT 1;
+	SELECT id FROM uuid_ids ORDER BY `@id` ASC LIMIT 1;
 	SELECT id FROM uuid_ids ORDER BY @uuid_id ASC LIMIT 1;
+	SELECT `@id`, COUNT(*) FROM uuid_ids GROUP BY `@id` ORDER BY `@id` ASC LIMIT 1;
 	SELECT @uuid_id, COUNT(*) FROM uuid_ids GROUP BY @uuid_id ORDER BY @uuid_id ASC LIMIT 1;
 	SELECT COUNT(DISTINCT id) FROM uuid_ids;
+	SELECT COUNT(DISTINCT `@id`) FROM uuid_ids;
 	SELECT COUNT(DISTINCT @uuid_id) FROM uuid_ids;
 	SELECT id+1 FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440000';
 
@@ -163,10 +170,12 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	SELECT id, tag FROM uuid_txn WHERE id='10000000-0000-4000-8000-000000000001' ORDER BY tag ASC;
 
 	REPLACE INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440000', 'first replaced', 'replaced', 11 );
+	REPLACE INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440000', 'first replace in batch', 'replace-batch-first', 12 ), ( '550e8400-e29b-41d4-a716-446655440000', 'second replace in batch', 'replace-batch-second', 13 );
 	SELECT id, tag, price FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440000';
 
 	UPDATE uuid_ids SET price=22, tag='updated' WHERE id='550e8400-e29b-41d4-a716-446655440001';
 	SELECT id, tag, price FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440001';
+	UPDATE uuid_ids SET `@id`='550e8400-e29b-41d4-a716-446655440001' WHERE id='550e8400-e29b-41d4-a716-446655440001';
 	UPDATE uuid_ids SET @uuid_id='not-a-uuid' WHERE id='550e8400-e29b-41d4-a716-446655440001';
 	SELECT id, tag, price FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440001';
 
@@ -179,13 +188,18 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 
 	<!-- columnar table keeps UUID public id and string lookup through ram/disk -->
 	INSERT INTO uuid_col ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440020', 'columnar document', 'columnar', 50 );
+	INSERT INTO uuid_col ( id, title, tag, price ) VALUES ( 'FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF', 'columnar upper-shaped document', 'columnar-shaped', 51 );
 	SELECT id, tag, price FROM uuid_col WHERE id='550e8400-e29b-41d4-a716-446655440020';
+	SELECT id, tag, price FROM uuid_col WHERE id='ffffffff-ffff-ffff-ffff-ffffffffffff';
+	SELECT id, COUNT(*) FROM uuid_col GROUP BY id ORDER BY id ASC;
+	SELECT COUNT(DISTINCT id) FROM uuid_col;
 	INSERT INTO uuid_col ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440023', 'columnar ram delete', 'columnar-ram-delete', 53 );
 	DELETE FROM uuid_col WHERE tag='columnar-ram-delete';
 	SELECT id, tag, price FROM uuid_col WHERE id='550e8400-e29b-41d4-a716-446655440023';
 	INSERT INTO uuid_col ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440024', 'columnar disk delete', 'columnar-disk-delete', 54 );
 	FLUSH RAMCHUNK uuid_col;
 	SELECT id, tag, price FROM uuid_col WHERE id='550e8400-e29b-41d4-a716-446655440020';
+	SELECT COUNT(DISTINCT id) FROM uuid_col;
 	DELETE FROM uuid_col WHERE id='550e8400-e29b-41d4-a716-446655440024';
 	SELECT id, tag, price FROM uuid_col WHERE id IN ('550e8400-e29b-41d4-a716-446655440020','550e8400-e29b-41d4-a716-446655440024') ORDER BY id ASC;
 	INSERT INTO uuid_col ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440026', 'columnar json disk delete', 'columnar-json-disk-delete', 56 );
@@ -207,11 +221,12 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	INSERT INTO dist_agent ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440030', 'dist inserted', 'dist', 60 );
 	SELECT id, tag, price FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440030';
 
-	<!-- multi-agent distributed UUID ids must not collapse to one hit during merge/dedup -->
-	INSERT INTO uuid_dist_a ( id, title, tag, price ) VALUES ( '10000000-0000-4000-8000-000000000001', 'dist a one', 'dist-a-one', 701 ), ( '10000000-0000-4000-8000-000000000002', 'dist a two', 'dist-a-two', 702 ), ( '10000000-0000-4000-8000-000000000003', 'dist a three', 'dist-a-three', 703 );
-	INSERT INTO uuid_dist_b ( id, title, tag, price ) VALUES ( '20000000-0000-4000-8000-000000000001', 'dist b one', 'dist-b-one', 801 ), ( '20000000-0000-4000-8000-000000000002', 'dist b two', 'dist-b-two', 802 ), ( '20000000-0000-4000-8000-000000000003', 'dist b three', 'dist-b-three', 803 );
+	<!-- multi-agent distributed UUID ids must aggregate by public UUID, not internal DocID_t surrogates -->
+	INSERT INTO uuid_dist_a ( id, title, tag, price ) VALUES ( '10000000-0000-4000-8000-000000000001', 'dist shared on a', 'dist-a-shared', 701 ), ( '10000000-0000-4000-8000-000000000002', 'dist a two', 'dist-a-two', 702 ), ( '10000000-0000-4000-8000-000000000003', 'dist a three', 'dist-a-three', 703 );
+	INSERT INTO uuid_dist_b ( id, title, tag, price ) VALUES ( '10000000-0000-4000-8000-000000000001', 'dist shared on b', 'dist-b-shared', 801 ), ( '20000000-0000-4000-8000-000000000002', 'dist b two', 'dist-b-two', 802 ), ( '20000000-0000-4000-8000-000000000003', 'dist b three', 'dist-b-three', 803 );
 	CREATE TABLE dist_agent_multi type='distributed' agent='<agent0_address/>:uuid_dist_a' agent='<agent0_address/>:uuid_dist_b';
-	SELECT COUNT(*) FROM dist_agent_multi;
+	SELECT COUNT(*), COUNT(DISTINCT id) FROM dist_agent_multi;
+	SELECT id, COUNT(*) FROM dist_agent_multi GROUP BY id ORDER BY id ASC;
 	SELECT * FROM dist_agent_multi ORDER BY price ASC;
 	SELECT id, tag, price FROM dist_agent_multi ORDER BY price ASC;
 
@@ -234,6 +249,8 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	INSERT INTO numeric_ids ( id, title, tag ) VALUES ( 1, 'numeric document', 'ok' );
 	SELECT id, tag FROM numeric_ids WHERE id=1;
 	INSERT INTO numeric_ids ( id, title, tag ) VALUES ( '550e8400-e29b-41d4-a716-446655440099', 'bad numeric document', 'bad' );
+	INSERT INTO uuid_case ( id, title, tag, price ) VALUES ( '00000000-0000-0000-0000-000000000001', 'uuid shaped document', 'uuid-shaped', 83 );
+	SELECT id, tag, price FROM uuid_case WHERE id='00000000-0000-0000-0000-000000000001';
 </sphinxql>
 
 <query endpoint="sql?mode=raw" method="post">SELECT COUNT(*) FROM uuid_ids FACET id ORDER BY id ASC</query>
@@ -341,7 +358,22 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 <query endpoint="json/search">
 {
 	"table": "uuid_ids",
+	"query": { "equals": { "@id": "550e8400-e29b-41d4-a716-446655440000" } }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
 	"_source": [ "@uuid_id" ],
+	"query": { "match_all": {} }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"_source": [ "@id" ],
 	"query": { "match_all": {} }
 }
 </query>
@@ -587,7 +619,21 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 <query endpoint="uuid_ids/_search">
 {
 	"query": { "match_all": {} },
+	"docvalue_fields": [ { "field": "@id" } ]
+}
+</query>
+
+<query endpoint="uuid_ids/_search">
+{
+	"query": { "match_all": {} },
 	"aggs": { "hidden_uuid": { "terms": { "field": "@uuid_id" } } }
+}
+</query>
+
+<query endpoint="uuid_ids/_search">
+{
+	"query": { "match_all": {} },
+	"aggs": { "atid": { "terms": { "field": "@id" } } }
 }
 </query>
 

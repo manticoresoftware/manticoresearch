@@ -1954,6 +1954,12 @@ static bool CheckJsonDocidFilterTypes ( const SqlStmt_t & tStmt, CSphString & sE
 
 		if ( bUuidDocid )
 		{
+			if ( tFilter.m_sAttrName=="@id" )
+			{
+				sError = "attribute '@id' is internal";
+				return false;
+			}
+
 			if ( tFilter.m_eType==SPH_FILTER_STRING || tFilter.m_eType==SPH_FILTER_STRING_LIST )
 				continue;
 
@@ -1978,7 +1984,7 @@ static const char * GetUuidDocidForReply ( const SqlStmt_t & tStmt )
 
 	for ( const auto & tFilter : tStmt.m_tQuery.m_dFilters )
 	{
-		if ( tFilter.m_sAttrName!=sphGetDocidName() && tFilter.m_sAttrName!="@id" && tFilter.m_sAttrName!=sphGetUuidDocidName() )
+		if ( tFilter.m_sAttrName!=sphGetDocidName() && tFilter.m_sAttrName!=sphGetUuidDocidName() )
 			continue;
 
 		if ( tFilter.m_eType==SPH_FILTER_STRING && tFilter.m_dStrings.GetLength()==1 )

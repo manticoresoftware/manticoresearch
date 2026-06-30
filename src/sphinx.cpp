@@ -708,6 +708,12 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 	for ( const auto & tUpdAttr : tUpd.m_dAttributes )
 	{
 		const CSphString & sUpdAttrName = tUpdAttr.m_sName;
+		if ( sphHasUuidDocid(tSchema) && sUpdAttrName=="@id" )
+		{
+			sError = "attribute '@id' is internal";
+			return false;
+		}
+
 		if ( sUpdAttrName==sphGetDocidName() || ( sphHasUuidDocid(tSchema) && sUpdAttrName==sphGetUuidDocidName() ) )
 		{
 			sError = "'id' attribute cannot be updated";

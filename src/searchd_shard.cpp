@@ -1187,7 +1187,7 @@ static bool CommitBufferedShardBatch ( const CSphSchema & tSchema, const cServed
 				}
 
 				CSphString sUuid = szUuid;
-				if ( !dSeenUuidDocids.Add ( sUuid ) )
+				if ( !dSeenUuidDocids.Add ( sUuid ) && !bReplace )
 				{
 					sError.SetSprintf ( "duplicate id '%s'", szUuid );
 					pIndex->RollBack ( &tAccum );
@@ -1568,7 +1568,7 @@ void HandleCommandShardWrite ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c
 	tOut.SendInt ( iDeleted );
 }
 
-static bool ValidateShardDeleteStatement ( const SqlStmt_t & tStmt, CSphString & sError )
+static bool ValidateShardDeleteStatement ( const SqlStmt_t & tStmt, const CSphSchema & tSchema, CSphString & sError )
 {
 	const auto & tQuery = tStmt.m_tQuery;
 	if ( !tQuery.m_sStore.IsEmpty() )
@@ -1576,6 +1576,14 @@ static bool ValidateShardDeleteStatement ( const SqlStmt_t & tStmt, CSphString &
 		sError = "shard DELETE does not support STORE";
 		return false;
 	}
+
+	if ( sphHasUuidDocid ( tSchema ) )
+		for ( const auto & tFilter : tQuery.m_dFilters )
+			if ( tFilter.m_sAttrName=="@id" )
+			{
+				sError = "attribute '@id' is internal";
+				return false;
+			}
 
 	return true;
 }
@@ -1783,14 +1791,15 @@ bool AddDocumentShard ( const SqlStmt_t & tStmt, const ShardIndex_c & tShard, St
 				break;
 
 			CSphString sUuid = szUuid;
-			if ( !dSeenUuidDocids.Add ( sUuid ) )
+			bool bReplaceUuidRow = bReplaceStmt && !bUuidGenerated;
+			if ( !dSeenUuidDocids.Add ( sUuid ) && !bReplaceUuidRow )
 			{
 				sError.SetSprintf ( "duplicate id '%s'", szUuid );
 				break;
 			}
 			dStmtDocIDStrings.Add ( szUuid );
 
-			bReplace = bReplaceStmt && !bUuidGenerated;
+			bReplace = bReplaceUuidRow;
 		}
 
 		if ( !tConverter.GetID() )
@@ -1880,7 +1889,7 @@ bool DeleteDocumentShard ( const SqlStmt_t & tStmt, const ShardIndex_c & tShard,
 	}
 
 	CSphVector<int64_t> dDocids;
-	if ( !ValidateShardDeleteStatement ( tStmt, sError ) )
+	if ( !ValidateShardDeleteStatement ( tStmt, tShard.m_tSchema, sError ) )
 	{
 		tOut.ErrorEx ( EMYSQL_ERR::PARSE_ERROR, sError.cstr() );
 		return false;

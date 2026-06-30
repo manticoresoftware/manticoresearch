@@ -7,7 +7,21 @@
 * CentOS 9, RHEL 9, AlmaLinux 9
 * AlmaLinux 10, 其他基于 RHEL 10 的发行版
 
-### YUM 仓库
+### 快速自动化安装
+
+```bash
+curl https://manticoresearch.com | sh
+```
+
+###### 开发包
+
+如果你更喜欢“Nightly”（开发）版本，请执行：
+
+```bash
+curl https://manticoresearch.com | sh -s dev
+```
+
+### 手动安装
 
 在 RedHat/CentOS 上安装 Manticore 的最简单方法是使用我们的 YUM 仓库：
 

@@ -138,4 +138,6 @@ EXIT CLUSTER posts
 Use `EXIT CLUSTER` when you want to detach only the current node. Use `DELETE CLUSTER` when you want to remove the cluster from every node.
 
 `EXIT CLUSTER` is only allowed for a healthy local node in a primary cluster. If the command returns a warning, the local detach already succeeded, but some follow-up may still be required. In that case run `ALTER CLUSTER <cluster_name> UPDATE nodes` on any surviving node to finish refreshing the remaining cluster metadata.
+
+If the surviving side becomes a clean one-node cluster after `EXIT CLUSTER`, it remains a replication cluster. After a clean shutdown, that surviving node can be started normally and should return as `primary` / `synced`; you do not need `--new-cluster` for this self-only case.
 <!-- proofread -->

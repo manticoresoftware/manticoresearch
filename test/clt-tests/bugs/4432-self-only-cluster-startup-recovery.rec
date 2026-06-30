@@ -1,0 +1,105 @@
+––– input –––
+bash -c 'for INSTANCE in 1 2; do stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null 2>&1 || true; done; rm -rf /var/run/manticore-{1,2} /var/lib/manticore-{1,2} /var/log/manticore-{1,2}'
+––– output –––
+––– input –––
+bash -c 'export INSTANCE=1; mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}; stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null; if timeout 30 grep -qm1 "\[BUDDY\] started" <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo "AUTO_NODE1_STARTED=yes"; else echo "AUTO_NODE1_STARTED=no"; cat /var/log/manticore-${INSTANCE}/searchd.log; fi'
+––– output –––
+AUTO_NODE1_STARTED=yes
+––– input –––
+bash -c 'export INSTANCE=2; mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}; stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null; if timeout 30 grep -qm1 "\[BUDDY\] started" <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo "AUTO_NODE2_STARTED=yes"; else echo "AUTO_NODE2_STARTED=no"; cat /var/log/manticore-${INSTANCE}/searchd.log; fi'
+––– output –––
+AUTO_NODE2_STARTED=yes
+––– input –––
+mkdir -p /var/log/manticore-1/c4432_auto_node1 /var/log/manticore-2/c4432_auto_node2; mysql -h0 -P1306 -e "CREATE CLUSTER c4432_auto 'c4432_auto_node1' AS path;" && mysql -h0 -P2306 -e "JOIN CLUSTER c4432_auto AT '127.0.0.1:1312' 'c4432_auto_node2' AS path;"
+––– output –––
+––– input –––
+bash -c 'end=$((SECONDS+90)); while [ $SECONDS -lt $end ]; do mysql -h0 -P1306 -N -B -e "SHOW STATUS LIKE '\''cluster_c4432_auto_node_state'\''" 2>/dev/null | grep -qw synced && mysql -h0 -P2306 -N -B -e "SHOW STATUS LIKE '\''cluster_c4432_auto_node_state'\''" 2>/dev/null | grep -qw synced && { echo "AUTO_CLUSTER_SYNCED=yes"; exit 0; }; sleep 1; done; echo "AUTO_CLUSTER_SYNCED=no"; mysql -h0 -P1306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_auto_%'\''" 2>&1 || true; mysql -h0 -P2306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_auto_%'\''" 2>&1 || true'
+––– output –––
+AUTO_CLUSTER_SYNCED=yes
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE t4432_auto (id bigint, title text);" && mysql -h0 -P1306 -e "ALTER CLUSTER c4432_auto ADD t4432_auto;" && mysql -h0 -P1306 -e "INSERT INTO c4432_auto:t4432_auto VALUES (1,'before exit');" && mysql -h0 -P2306 -e "EXIT CLUSTER c4432_auto;"
+––– output –––
+––– input –––
+bash -c 'end=$((SECONDS+30)); while [ $SECONDS -lt $end ]; do nodes=$(mysql -h0 -P1306 -N -B -e "SHOW STATUS LIKE '\''cluster_c4432_auto_nodes_set'\''" 2>/dev/null | awk "{print \$2}"); [ "$nodes" = "127.0.0.1:1312" ] && { echo "AUTO_SELF_ONLY_NODESET=yes"; exit 0; }; sleep 1; done; echo "AUTO_SELF_ONLY_NODESET=no"; mysql -h0 -P1306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_auto_%'\''" 2>&1 || true'
+––– output –––
+AUTO_SELF_ONLY_NODESET=yes
+––– input –––
+bash -c 'export INSTANCE=1; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null'
+––– output –––
+––– input –––
+bash -c 'json=$(tr -d " \n\t" < /var/log/manticore-1/manticore.json); echo "$json" | grep -q "\"self_bootstrap_on_startup\":true" && echo "AUTO_SELF_BOOTSTRAP_FLAG=ok" || { echo "AUTO_SELF_BOOTSTRAP_FLAG=failed"; cat /var/log/manticore-1/manticore.json; }'
+––– output –––
+AUTO_SELF_BOOTSTRAP_FLAG=ok
+––– input –––
+bash -c 'export INSTANCE=1; stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null; if timeout 30 grep -qm1 "\[BUDDY\] started" <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo "AUTO_NODE1_RESTARTED=yes"; else echo "AUTO_NODE1_RESTARTED=no"; cat /var/log/manticore-${INSTANCE}/searchd.log; fi'
+––– output –––
+AUTO_NODE1_RESTARTED=yes
+––– input –––
+bash -c 'end=$((SECONDS+90)); while [ $SECONDS -lt $end ]; do status=$(mysql -h0 -P1306 -N -B -e "SHOW STATUS LIKE '\''cluster_c4432_auto_status'\''" 2>/dev/null | awk "{print \$2}"); state=$(mysql -h0 -P1306 -N -B -e "SHOW STATUS LIKE '\''cluster_c4432_auto_node_state'\''" 2>/dev/null | awk "{print \$2}"); [ "$status" = "primary" ] && [ "$state" = "synced" ] && { echo "AUTO_RECOVERY_PRIMARY_SYNCED=yes"; exit 0; }; sleep 1; done; echo "AUTO_RECOVERY_PRIMARY_SYNCED=no"; mysql -h0 -P1306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_auto_%'\''" 2>&1 || true; tail -n 200 /var/log/manticore-1/searchd.log'
+––– output –––
+AUTO_RECOVERY_PRIMARY_SYNCED=yes
+––– input –––
+bash -c 'mysql -h0 -P1306 -e "INSERT INTO c4432_auto:t4432_auto VALUES (2,'\''after restart'\'');" && [ "$(mysql -h0 -P1306 -N -B -e "SELECT COUNT(*) FROM t4432_auto;")" = "2" ] && echo "AUTO_CLUSTER_INSERT=ok" || echo "AUTO_CLUSTER_INSERT=failed"'
+––– output –––
+AUTO_CLUSTER_INSERT=ok
+––– input –––
+bash -c 'mysql -h0 -P1306 -N -B -e "SHOW STATUS LIKE '\''cluster_c4432_auto_indexes'\''" | grep -qw t4432_auto && mysql -h0 -P1306 -N -B -e "SHOW STATUS LIKE '\''cluster_c4432_auto_nodes_set'\''" | grep -q "127.0.0.1:1312" && echo "AUTO_STATUS_METADATA=ok" || echo "AUTO_STATUS_METADATA=failed"'
+––– output –––
+AUTO_STATUS_METADATA=ok
+––– input –––
+bash -c 'export INSTANCE=1; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null'
+––– output –––
+––– input –––
+bash -c 'json=$(tr -d " \n\t" < /var/log/manticore-1/manticore.json); echo "$json" | grep -q "\"c4432_auto\"" && echo "$json" | grep -q "\"nodes\":\\[\"127.0.0.1:1312\"\\]" && echo "$json" | grep -q "\"indexes\":\\[\"t4432_auto\"\\]" && echo "$json" | grep -q "\"self_bootstrap_on_startup\":true" && echo "AUTO_CONFIG_PRESERVED=ok" || { echo "AUTO_CONFIG_PRESERVED=failed"; cat /var/log/manticore-1/manticore.json; }'
+––– output –––
+AUTO_CONFIG_PRESERVED=ok
+––– input –––
+bash -c 'for INSTANCE in 1 2; do stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null 2>&1 || true; done; rm -rf /var/run/manticore-{1,2} /var/lib/manticore-{1,2} /var/log/manticore-{1,2}'
+––– output –––
+––– input –––
+bash -c 'export INSTANCE=1; mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}; stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null; if timeout 30 grep -qm1 "\[BUDDY\] started" <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo "NEG_NODE1_STARTED=yes"; else echo "NEG_NODE1_STARTED=no"; cat /var/log/manticore-${INSTANCE}/searchd.log; fi'
+––– output –––
+NEG_NODE1_STARTED=yes
+––– input –––
+bash -c 'export INSTANCE=2; mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}; stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null; if timeout 30 grep -qm1 "\[BUDDY\] started" <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo "NEG_NODE2_STARTED=yes"; else echo "NEG_NODE2_STARTED=no"; cat /var/log/manticore-${INSTANCE}/searchd.log; fi'
+––– output –––
+NEG_NODE2_STARTED=yes
+––– input –––
+mkdir -p /var/log/manticore-1/c4432_preserve_node1 /var/log/manticore-2/c4432_preserve_node2; mysql -h0 -P1306 -e "CREATE CLUSTER c4432_preserve 'c4432_preserve_node1' AS path;" && mysql -h0 -P2306 -e "JOIN CLUSTER c4432_preserve AT '127.0.0.1:1312' 'c4432_preserve_node2' AS path;"
+––– output –––
+––– input –––
+bash -c 'end=$((SECONDS+90)); while [ $SECONDS -lt $end ]; do mysql -h0 -P1306 -N -B -e "SHOW STATUS LIKE '\''cluster_c4432_preserve_node_state'\''" 2>/dev/null | grep -qw synced && mysql -h0 -P2306 -N -B -e "SHOW STATUS LIKE '\''cluster_c4432_preserve_node_state'\''" 2>/dev/null | grep -qw synced && { echo "NEG_CLUSTER_SYNCED=yes"; exit 0; }; sleep 1; done; echo "NEG_CLUSTER_SYNCED=no"; mysql -h0 -P1306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_preserve_%'\''" 2>&1 || true; mysql -h0 -P2306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_preserve_%'\''" 2>&1 || true'
+––– output –––
+NEG_CLUSTER_SYNCED=yes
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE t4432_preserve (id bigint, title text);" && mysql -h0 -P1306 -e "ALTER CLUSTER c4432_preserve ADD t4432_preserve;" && mysql -h0 -P1306 -e "INSERT INTO c4432_preserve:t4432_preserve VALUES (1,'before peer stop');"
+––– output –––
+––– input –––
+bash -c 'export INSTANCE=2; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null; export INSTANCE=1; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null'
+––– output –––
+––– input –––
+bash -c 'export INSTANCE=1; stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null; if timeout 30 grep -qm1 "\[BUDDY\] started" <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo "NEG_NODE1_RESTARTED=yes"; else echo "NEG_NODE1_RESTARTED=no"; cat /var/log/manticore-${INSTANCE}/searchd.log; fi'
+––– output –––
+NEG_NODE1_RESTARTED=yes
+––– input –––
+bash -c 'status=$(mysql -h0 -P1306 -N -B -e "SHOW STATUS LIKE '\''cluster_c4432_preserve_%'\''" 2>/dev/null | awk '\''$1=="cluster_c4432_preserve_status"{print $2}'\''); [ "$status" = "recovery-required" ] && echo "NEG_RECOVERY_REQUIRED=yes" || { echo "NEG_RECOVERY_REQUIRED=no"; mysql -h0 -P1306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_preserve_%'\''" 2>&1 || true; tail -n 200 /var/log/manticore-1/searchd.log; }'
+––– output –––
+NEG_RECOVERY_REQUIRED=yes
+––– input –––
+bash -c 'mysql -h0 -P1306 -e "INSERT INTO c4432_preserve:t4432_preserve VALUES (2,'\''should fail'\'');" >/tmp/c4432_preserve_insert.out 2>&1 && { echo "NEG_CLUSTER_INSERT=unexpected_success"; cat /tmp/c4432_preserve_insert.out; } || { grep -F "cluster '\''c4432_preserve'\'' is not ready" /tmp/c4432_preserve_insert.out >/dev/null && echo "NEG_CLUSTER_INSERT=rejected" || { echo "NEG_CLUSTER_INSERT=unexpected_error"; cat /tmp/c4432_preserve_insert.out; }; }'
+––– output –––
+NEG_CLUSTER_INSERT=rejected
+––– input –––
+bash -c 'mysql -h0 -P1306 -N -B -e "SHOW STATUS LIKE '\''cluster_c4432_preserve_indexes'\''" | grep -qw t4432_preserve && mysql -h0 -P1306 -N -B -e "SHOW STATUS LIKE '\''cluster_c4432_preserve_last_error'\''" | grep -q "remote version check failed" && echo "NEG_STATUS_METADATA=ok" || { echo "NEG_STATUS_METADATA=failed"; mysql -h0 -P1306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_preserve_%'\''" 2>&1 || true; }'
+––– output –––
+NEG_STATUS_METADATA=ok
+––– input –––
+bash -c 'export INSTANCE=1; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null'
+––– output –––
+––– input –––
+bash -c 'json=$(tr -d " \n\t" < /var/log/manticore-1/manticore.json); echo "$json" | grep -q "\"c4432_preserve\"" && echo "$json" | grep -q "\"127.0.0.1:2312\"" && echo "$json" | grep -q "\"indexes\":\\[\"t4432_preserve\"\\]" && ! echo "$json" | grep -q "\"self_bootstrap_on_startup\"" && echo "NEG_CONFIG_PRESERVED=ok" || { echo "NEG_CONFIG_PRESERVED=failed"; cat /var/log/manticore-1/manticore.json; }'
+––– output –––
+NEG_CONFIG_PRESERVED=ok
+––– input –––
+bash -c 'for INSTANCE in 1 2; do stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null 2>&1 || true; done'
+––– output –––

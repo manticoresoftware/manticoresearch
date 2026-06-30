@@ -7,7 +7,7 @@
 * CentOS 9, RHEL 9, AlmaLinux 9
 * AlmaLinux 10, 其他基于 RHEL 10 的发行版
 
-### 快速自动化安装
+### 快速安装
 
 ```bash
 curl https://manticoresearch.com | sh

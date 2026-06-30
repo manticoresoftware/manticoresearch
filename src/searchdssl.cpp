@@ -29,6 +29,7 @@ void ForceSsl()
 #include <openssl/err.h>
 #include <openssl/bio.h>
 #include <openssl/x509v3.h>
+#include <openssl/crypto.h>
 
 #include <memory>
 
@@ -994,4 +995,20 @@ const CSphString & GetSslCert()
 const CSphString & GetSslKey()
 {
 	return g_sSslKey;
+}
+
+bool SecretEqual ( const VecTraits_T<BYTE> & dA, const VecTraits_T<BYTE> & dB )
+{
+	if ( dA.IsEmpty() || dB.IsEmpty() || dA.GetLength()!=dB.GetLength() )
+		return false;
+
+#if WITH_SSL
+	return CRYPTO_memcmp ( dA.Begin(), dB.Begin(), dA.GetLength() )==0;
+#else
+	unsigned int uDiff = 0;
+	for ( int i = 0; i<dA.GetLength(); ++i )
+		uDiff |= dA[i] ^ dB[i];
+
+	return uDiff==0;
+#endif
 }

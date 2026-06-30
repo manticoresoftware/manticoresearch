@@ -54,15 +54,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY2'
+          python3 - <<'PY'
           import json
           import os
           import pathlib
 
-          has_api_keys = any(
-              os.environ.get(name)
-              for name in ("OPENAI_API_KEY", "VOYAGE_API_KEY", "JINA_API_KEY")
-          )
+          openai_key = os.environ.get("OPENAI_API_KEY", "")
+          voyage_key = os.environ.get("VOYAGE_API_KEY", "")
+          jina_key = os.environ.get("JINA_API_KEY", "")
+          have_remote_embedding_keys = all([openai_key, voyage_key, jina_key])
 
           roots = [
               "test/clt-tests/buddy",
@@ -72,6 +72,7 @@ jobs:
               "test/clt-tests/data-manipulation",
               "test/clt-tests/expected-errors",
               "test/clt-tests/fulltext-search",
+              "test/clt-tests/mcl",
               "test/clt-tests/http-interface",
               "test/clt-tests/indexer",
               "test/clt-tests/join",
@@ -92,17 +93,15 @@ jobs:
               "test/clt-tests/vector-knn",
           ]
 
-          if has_api_keys:
-              roots.insert(7, "test/clt-tests/mcl")
-          else:
-              print("Skipping auto-embeddings tests - no API keys available")
-
           tests = []
           for root in roots:
               root_path = pathlib.Path(root)
               if not root_path.exists():
                   continue
               for path in sorted(root_path.glob("*.rec")):
+                  content = path.read_text(encoding="utf-8")
+                  if not have_remote_embedding_keys and "API_KEY='" in content:
+                      continue
                   # clt appends "*.rec" to the prefix; strip the suffix to avoid ".rec*.rec"
                   tests.append(str(path.with_suffix("")))
 
@@ -127,7 +126,7 @@ jobs:
           output_path = os.environ["GITHUB_OUTPUT"]
           with open(output_path, "a", encoding="utf-8") as fh:
               fh.write(f"matrix={json.dumps(matrix)}\n")
-          PY2
+          PY
 
   clt:
     name: CLT
@@ -142,6 +141,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
+
     steps:
       # Reuse the embedding-model cache from a previous run if one exists. It is bind-mounted
       # at /var/lib/manticore/.cache, where Manticore caches downloaded HuggingFace models.

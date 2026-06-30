@@ -122,6 +122,7 @@ static int				g_iThdQueueMax		= 0;
 static auto&			g_iTFO = sphGetTFO ();
 static bool				g_bJsonConfigLoadedOk = false;
 static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
+static auto&			g_bOptimizeCutoffExplicit = OptimizeCutoffExplicit();
 static auto&			g_iParallelChunkMerges = ParallelChunkMergesLimit();
 static auto&			g_iMergeChunksPerJob = MergeChunksPerJob();
 static auto&			g_iKNNParallelBuild = KNNParallelBuild();
@@ -535,6 +536,13 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 		::close ( fdStopwait );
 	}
 #endif
+}
+
+static void ShutdownEarlyLoadedLibraries()
+{
+	ShutdownColumnar();
+	ShutdownSecondary();
+	ShutdownKNN();
 }
 
 void sighup ( int )
@@ -9741,7 +9749,11 @@ static bool HandleSetGlobal ( CSphString & sError, const CSphString & sName, int
 		if ( iSetValue < 1 )
 			sError = SphSprintf( "optimize_cutoff should be greater than 0, got %d", iSetValue );
 		else
+		{
 			MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = iSetValue;
+			MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoffKNN = iSetValue;
+			g_bOptimizeCutoffExplicit = true;
+		}
 		return true;
 	}
 
@@ -14733,6 +14745,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 			while ( !g_pShared->m_bHaveTTY )
 				sphSleepMsec ( 100 );
 
+			ShutdownEarlyLoadedLibraries();
 			exit ( 0 );
 	}
 
@@ -14756,6 +14769,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 
 		default:
 			// tty-controlled parent
+			ShutdownEarlyLoadedLibraries();
 			exit ( 0 );
 	}
 
@@ -14871,6 +14885,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 
 		if ( bShutdown || sphInterrupted() || g_pShared->m_bDaemonAtShutdown )
 		{
+			ShutdownEarlyLoadedLibraries();
 			exit ( 0 );
 		}
 	}
@@ -15322,6 +15337,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 	ConfigureQueryLogCommands ( hSearchd.GetStr ( "query_log_commands" ) );
 
 	g_iAutoOptimizeCutoffMultiplier = hSearchd.GetInt ( "auto_optimize", 1 );
+	g_bOptimizeCutoffExplicit = hSearchd.Exists ( "optimize_cutoff" );
 	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoff() );
 	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoffKNN = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoffKNN() );
 
@@ -15800,6 +15816,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	bool bColumnarError = !InitColumnar ( sError );
 	bool bSecondaryError = !InitSecondary ( g_sSecondaryError );
 	bool bKNNError = !InitKNN ( sKNNError );
+	auto tEarlyLibCleanup = AtScopeExit ( [] { ShutdownEarlyLoadedLibraries(); } );
 	sphCollationInit ();
 
 	ESphLogLevel eQuietRestoreLevel = g_eLogLevel;
@@ -16040,7 +16057,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	////////////////////////
 
 	if ( bOptStop )
-		return StopOrStopWaitAnother ( hSearchdpre ( "pid_file" ), bOptStopWait );
+	{
+		int iStopResult = StopOrStopWaitAnother ( hSearchdpre ( "pid_file" ), bOptStopWait );
+		return iStopResult;
+	}
 
 	////////////////////////////////
 	// query running searchd status
@@ -16064,7 +16084,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	// auth bootstrap after configless / data_dir setup
 
 	if ( bOptAuth )
-		return AuthBootstrap ( hSearchdpre, g_sConfigFile, bOptAuthNonInteractive );
+	{
+		int iAuthResult = AuthBootstrap ( hSearchdpre, g_sConfigFile, bOptAuthNonInteractive );
+		return iAuthResult;
+	}
 
 	if ( g_bSystemd.has_value() )
 		sphInfo ( "Systemd assistance: explicitly set to %s", g_bSystemd?"yes":"no" );
@@ -16306,6 +16329,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		}
 	}
 #endif
+
+	tEarlyLibCleanup.Release();
 
 	sd::mainpid(getpid());
 	LogTimeZoneStartup(sTZWarning);

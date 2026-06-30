@@ -87,7 +87,7 @@ Manticore Search 支持影响特定服务器设置的会话级和全局服务器
 	或者，通过 MySQL CLI，设置为：
   ```sql
   SET threads_ex='16';
-  -- or 
+  -- 或
   SET GLOBAL threads_ex='/2';
   ```
 
@@ -110,6 +110,7 @@ Manticore Search 支持影响特定服务器设置的会话级和全局服务器
 * `COREDUMP= {1|0}` 打开/关闭崩溃时保存服务器核心文件或迷你转储。更多详情见[此处](../Starting_the_server/Manually.md#searchd-command-line-options)。
 * `CPUSTATS= {1|0}` 打开/关闭[CPU 时间跟踪](../Starting_the_server/Manually.md#searchd-command-line-options)。
 * `DISTINCT_PRECISION_THRESHOLD`：设置未来查询的选项 [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) 的默认值。
+* `EMBEDDINGS_THREADS = <non-negative integer>` 在运行时更改 [embeddings_threads](../Server_settings/Searchd.md#embeddings_threads)。该值限制 embeddings 库在为自动嵌入插入、`ALTER TABLE` KNN 重建以及 KNN 文本查询嵌入生成向量时可使用的线程数。`0` 表示不限制。
 * `ES_COMPAT = {on/off/dashboards}` 设置为 `on`（默认）时，支持类似 Elasticsearch 的写请求；`off` 禁用该支持；`dashboards` 启用支持且允许来自 Kibana 的请求（此功能为实验性）。
 * `EXPANSION_MERGE_THRESHOLD_DOCS`：动态更改配置项 [expansion_merge_threshold_docs](../Server_settings/Searchd.md#expansion_merge_threshold_docs) 的值。
 * `EXPANSION_MERGE_THRESHOLD_HITS`：动态更改配置项 [expansion_merge_threshold_hits](../Server_settings/Searchd.md#expansion_merge_threshold_hits) 的值。

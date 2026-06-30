@@ -3,6 +3,7 @@ run-name: 🌙 Nightly tests of mysqldump and elasticdump ${{ github.sha }}
 on:
   schedule:
     - cron: '00 20 * * *'
+  workflow_dispatch:
   pull_request:
     branches: [ main ]
     paths:

@@ -22,6 +22,8 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- example create_buddy_plugin -->
 
+> УСТАРЕЛО: Это устарело и будет удалено в будущих версиях.
+
 Buddy плагины могут расширять функциональность Manticore Search и обеспечивать выполнение определенных запросов, которые не поддерживаются изначально. Чтобы узнать больше о создании Buddy плагинов, рекомендуем прочитать [эту статью](https://manticoresearch.com/blog/manticoresearch-buddy-pluggable-design/).
 
 Для создания Buddy плагина выполните следующий SQL-запрос:

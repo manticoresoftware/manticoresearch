@@ -1,6 +1,6 @@
-#Inheritance of index and source declarations
+# Inheritance of table and source declarations
 
-Inheritance in `index` and `source` declarations enables better organization of tables with similar settings or structures and reduces the configuration size. Both parent and child tables or sources can utilize inheritance.
+Inheritance in `table` and `source` declarations enables better organization of tables with similar settings or structures and reduces the configuration size. Both parent and child tables or sources can utilize inheritance.
 
 No specific configurations are needed for a parent table or source.
 
@@ -24,4 +24,3 @@ Note that existing values of a multi-value setting will not be copied if the chi
 
 The inheritance behavior applies to fields and attributes, not just table options. For example, if the parent has two integer attributes and the child needs a new integer attribute, the integer attribute declarations from the parent must be copied into the child configuration.
 <!-- proofread -->
-

@@ -350,7 +350,7 @@ class DeleteExprStackSize_c final : public StackMeasurer_c
 		assert ( tParams.m_pExprBase );
 
 		Threads::MockCallCoroutine ( m_dMockStack, [&tParams] {
-			tParams.m_pExprBase->Eval ( tParams.m_tMatch );
+			tParams.m_pExprBase->Release ();
 		} );
 
 		if ( !tParams.m_bSuccess || !tParams.m_sError.IsEmpty () )
@@ -588,13 +588,14 @@ ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize (StringBuilder_c& sExport)
 	auto szReport = MOCK::szReport;
 	auto szEnv = MOCK::szEnv;
 	bool bMocked = false;
-	if ( !FRAMEVAL || Threads::StackMockingAllowed() )
+	const bool bCanMockStack = Threads::StackMockingAllowed();
+	if ( !FRAMEVAL || bCanMockStack )
 	{
 		StringBuilder_c sName;
 		sName << "MANTICORE_" << szEnv;
 		tNewSize.m_iEval = env_long ( sName.cstr() ).value_or(0);
 
-		if ( !tNewSize.m_iEval )
+		if ( !tNewSize.m_iEval && bCanMockStack )
 		{
 			tNewSize = MOCK::MockMeasure();
 			bMocked = true;
@@ -615,13 +616,13 @@ ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize (StringBuilder_c& sExport)
 		sphLogDebug ( "Frame %s is %d (compiled-in)", szReport, iFrameSize );
 	}
 
-	if ( !INITVAL || Threads::StackMockingAllowed() )
+	if ( !INITVAL || bCanMockStack )
 	{
 		StringBuilder_c sName;
 		sName << "MANTICORE_START_" << szEnv;
 		tNewSize.m_iCreate = env_long ( sName.cstr() ).value_or ( tNewSize.m_iCreate );
 
-		if ( !bMocked && !tNewSize.m_iCreate )
+		if ( !bMocked && !tNewSize.m_iCreate && bCanMockStack )
 		{
 			tNewSize = MOCK::MockMeasure();
 			bMocked = true;

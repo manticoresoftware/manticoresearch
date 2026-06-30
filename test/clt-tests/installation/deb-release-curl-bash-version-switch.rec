@@ -1,0 +1,75 @@
+––– input –––
+export PATH=/usr/bin:/usr/local/bin:/usr/sbin:/sbin:/bin
+––– output –––
+––– input –––
+apt-get update -y > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+export DEBIAN_FRONTEND=noninteractive && apt-get install -y gnupg2 procps wget > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+export TERM=xterm && export LC_ALL=C.UTF-8 && export LANG=C.UTF-8
+––– output –––
+––– block: installer-url –––
+––– input –––
+set -o pipefail; (wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | sh -s list-versions-file /tmp/manticore-versions.txt) > /tmp/manticore-versions.out 2>&1; echo $?
+––– output –––
+0
+––– input –––
+cmp -s /tmp/manticore-versions.txt <(sort -Vu /tmp/manticore-versions.txt); echo $?
+––– output –––
+0
+––– input –––
+tail -n2 /tmp/manticore-versions.txt > /tmp/manticore-switch-versions; test "$(wc -l < /tmp/manticore-switch-versions)" -eq 2; echo $?
+––– output –––
+0
+––– input –––
+export MANTICORE_PREVIOUS_VERSION="$(sed -n '1p' /tmp/manticore-switch-versions)"; export MANTICORE_TARGET_VERSION="$(sed -n '2p' /tmp/manticore-switch-versions)"; printf '%s\n%s\n' "$MANTICORE_PREVIOUS_VERSION" "$MANTICORE_TARGET_VERSION" | grep -E '^([0-9]+:)?[0-9]+[.][0-9]+[.][0-9]+([-_+~.][^[:space:]]+)?$'; echo $?
+––– output –––
+#!/([0-9]+:)?[0-9]+[.][0-9]+[.][0-9]+([-_+~.][^[:space:]]+)?/!#
+#!/([0-9]+:)?[0-9]+[.][0-9]+[.][0-9]+([-_+~.][^[:space:]]+)?/!#
+0
+––– input –––
+set -o pipefail; (wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | sh -s version "$MANTICORE_PREVIOUS_VERSION" no-start) > /tmp/manticore-install-previous.out 2>&1; echo $?
+––– output –––
+0
+––– input –––
+dpkg-query -W -f='${Status}\n' manticore-repo 2>/dev/null
+––– output –––
+install ok installed
+––– input –––
+dpkg-query -W -f='${Version}\n' manticore 2>/dev/null | grep -Fx "$MANTICORE_PREVIOUS_VERSION"; echo $?
+––– output –––
+#!/([0-9]+:)?[0-9]+[.][0-9]+[.][0-9]+([-_+~.][^[:space:]]+)?/!#
+0
+––– input –––
+apt-mark showmanual | grep -Fx manticore; echo $?
+––– output –––
+manticore
+0
+––– input –––
+set -o pipefail; (wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | sh -s upgrade no-start) > /tmp/manticore-version-switch.out 2>&1; echo $?
+––– output –––
+0
+––– input –––
+grep -q 'Leaving existing installation unchanged' /tmp/manticore-version-switch.out; echo $?
+––– output –––
+1
+––– input –––
+grep -q 'Upgrading Manticore' /tmp/manticore-version-switch.out; echo $?
+––– output –––
+0
+––– input –––
+dpkg-query -W -f='${Version}\n' manticore 2>/dev/null | grep -Fx "$MANTICORE_TARGET_VERSION"; echo $?
+––– output –––
+#!/([0-9]+:)?[0-9]+[.][0-9]+[.][0-9]+([-_+~.][^[:space:]]+)?/!#
+0
+––– input –––
+apt-get remove -y 'manticore*' > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+dpkg -l | awk '/^ii/ && /manticore/ { print $2 }'
+––– output –––

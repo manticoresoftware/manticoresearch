@@ -10769,8 +10769,10 @@ static int EXPR_STACK_PARSE = 150;
 
 void SetExprNodeParseStackItemSize ( std::pair<int, int> tSize )
 {
-	EXPR_STACK_PARSE_CREATE = tSize.first;
-	EXPR_STACK_PARSE = tSize.second;
+	if ( tSize.first )
+		EXPR_STACK_PARSE_CREATE = tSize.first;
+	if ( tSize.second )
+		EXPR_STACK_PARSE = tSize.second;
 }
 
 
@@ -10780,8 +10782,10 @@ static int EXPR_STACK_EVAL = 8;
 
 void SetExprNodeEvalStackItemSize ( std::pair<int, int> tSize )
 {
-	EXPR_STACK_EVAL_CREATE = tSize.first;
-	EXPR_STACK_EVAL = tSize.second;
+	if ( tSize.first )
+		EXPR_STACK_EVAL_CREATE = tSize.first;
+	if ( tSize.second )
+		EXPR_STACK_EVAL = tSize.second;
 }
 
 

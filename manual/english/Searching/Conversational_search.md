@@ -10,6 +10,8 @@ It is managed from SQL with:
 * `DROP CHAT MODEL`
 * `CALL CHAT`
 
+Conversation calls are also available through the HTTP JSON `/search` endpoint. Chat model management remains SQL-only.
+
 ## Before you start
 
 You need a vectorized table and an LLM provider. The table requirements are covered below. Provider credentials can be set in `CREATE CHAT MODEL` with `api_key`, or supplied through the matching environment variable, such as `OPENAI_API_KEY`.
@@ -24,7 +26,7 @@ When `CALL CHAT` runs, Buddy builds a retrieval-augmented answer in this order:
 4. The LLM decides how to handle the message: search again, answer from the previous search context, or answer without retrieval.
 5. Buddy runs KNN search with the selected vector field when retrieval is needed.
 6. Buddy builds the LLM context from the vector field's `from='...'` source fields.
-7. The configured LLM generates the answer with inline references in `[ref:<id>]` format when it uses retrieved sources.
+7. The configured LLM generates the answer from the retrieved context and any `custom_prompt` instructions.
 8. Buddy saves the user message and the assistant reply in the conversation history.
 
 The fifth argument of `CALL CHAT` is called `fields` internally, but for conversational search it means the vector field used by `knn(...)`. It is not a list of fields to return. Buddy selects rows with `SELECT *`, then removes vector columns from the `sources` payload so the response does not include large embedding values.
@@ -80,6 +82,18 @@ CREATE CHAT MODEL assistant (
 );
 ```
 
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```bash
+curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "CREATE CHAT MODEL assistant (model='openai:gpt-4o-mini')"
+```
+
 <!-- end -->
 
 You can also set provider options and retrieval limits:
@@ -101,6 +115,19 @@ CREATE CHAT MODEL support_assistant (
     max_document_length=3000
 );
 ```
+
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```bash
+curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "CREATE CHAT MODEL support_assistant (model='openai:gpt-4o-mini', api_key='your-provider-api-key', base_url='http://host.docker.internal:8787/v1', timeout=60, retrieval_limit=5, max_document_length=3000)"
+```
+
 <!-- end -->
 
 Common options:
@@ -109,6 +136,7 @@ Common options:
 |---|---:|---|
 | `model` | Yes | LLM model id in `provider:model` format. |
 | `description` | No | Stored description. |
+| `custom_prompt` | No | Prompt instructions used to build the answer from the retrieved context and conversation history. If set, it must be non-empty and at most 32768 bytes. |
 | `api_key` | No | Provider API key passed to the `llm` extension. |
 | `base_url` | No | Provider or proxy base URL. |
 | `timeout` | No | LLM request timeout, `1..65536`. |
@@ -157,6 +185,33 @@ Arguments are positional only:
 
 The table argument must be a plain table identifier, optionally qualified as `database.table`. The vector field argument must be a plain field identifier.
 
+## Customizing answers and citations
+
+When Buddy sends a request to the LLM, it combines answer instructions with data sections containing the current conversation history, retrieved context, and user query. By default, Buddy provides the answer instructions. Set `custom_prompt` in `CREATE CHAT MODEL` to replace those default instructions with your own. The value must contain non-whitespace text and must not exceed 32768 bytes. Buddy still appends the history, context, and query sections after your custom instructions, so write the prompt to explain how the LLM should use those sections.
+
+For example, to make every response item cite the source row that supports it, create a model with a prompt like this:
+
+```sql
+CREATE CHAT MODEL cited_assistant (
+    model='openai:gpt-4o-mini',
+    custom_prompt='You are a context-only answer writer.
+
+Answer using only the provided context. Do not use outside knowledge, memory, assumptions, or unsupported facts.
+
+Keep the answer concise and under 4096 tokens.
+
+Citation rules:
+- Every item must end with a citation.
+- Never include a reference ID within the item itself.
+- In the end of the item, append the reference context ID (`context[].id`) in the format `[ref:<id>]`.
+- Do not duplicate the references in the end of the whole answer.
+
+If the provided context does not contain enough information, answer exactly:
+
+I don\'t have enough information in the provided context to answer.'
+);
+```
+
 ## Asking questions
 
 Use `CALL CHAT` with a query, a table, and a chat model.
@@ -174,6 +229,24 @@ CALL CHAT(
     'docs',
     'assistant'
 );
+```
+
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```bash
+curl -s -X POST http://localhost:9308/search \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "chat": {
+      "query": "What is vector search?",
+      "table": "docs",
+      "model_name": "assistant"
+    }
+  }'
 ```
 
 <!-- end -->
@@ -194,6 +267,25 @@ CALL CHAT(
     'assistant',
     'docs-chat-001'
 );
+```
+
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```bash
+curl -s -X POST http://localhost:9308/search \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "chat": {
+      "query": "Can you explain it with an example?",
+      "table": "docs",
+      "model_name": "assistant",
+      "conversation_uuid": "docs-chat-001"
+    }
+  }'
 ```
 
 <!-- end -->
@@ -217,9 +309,64 @@ CALL CHAT(
 );
 ```
 
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```bash
+curl -s -X POST http://localhost:9308/search \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "chat": {
+      "query": "Find documents where the title is about vector search",
+      "table": "docs",
+      "model_name": "assistant",
+      "conversation_uuid": "",
+      "vector_field": "title_embedding"
+    }
+  }'
+```
+
 <!-- end -->
 
 When the fifth argument is present, Buddy checks that the field exists and is a `FLOAT_VECTOR`. If the argument is omitted, Buddy detects the first `FLOAT_VECTOR` field from `SHOW CREATE TABLE`.
+
+
+## HTTP JSON syntax
+
+Conversation calls are available over HTTP JSON through the standard `/search` endpoint.
+
+Ask a question:
+
+<!-- example conversational_search_http_chat -->
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```bash
+curl -s -X POST http://localhost:9308/search \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "chat": {
+      "query": "What is vector search?",
+      "table": "docs",
+      "model_name": "assistant",
+      "conversation_uuid": "docs-chat-001",
+      "vector_field": "embedding"
+    }
+  }'
+```
+
+<!-- end -->
+
+Required fields in the `chat` object are `query`, `table`, and `model_name`. Optional fields are `conversation_uuid` and `vector_field`. `vector_field` is the HTTP JSON name for the fifth SQL `CALL CHAT` argument. The legacy JSON field name `fields` is accepted as an alias, but a request must not include both `vector_field` and `fields`.
+
+
+HTTP JSON conversation responses contain the same logical columns as `CALL CHAT`: `conversation_uuid`, `user_query`, `search_query`, `response`, and `sources`. `sources` is returned as a JSON string containing retrieved source rows.
 
 
 ## Search and context details
@@ -239,8 +386,7 @@ Buddy uses the retrieved rows as LLM context. The same rows are returned in `sou
 | `conversation_uuid` | Existing or generated conversation id. |
 | `user_query` | Original user query. |
 | `search_query` | Standalone search query used for retrieval. |
-| `response` | LLM answer with inline references removed. |
-| `response_with_refs` | LLM answer as generated, including inline `[ref:<id>]` references to rows in `sources`. |
+| `response` | LLM answer as generated. |
 | `sources` | JSON string containing retrieved source rows. |
 
 Example response shape:
@@ -251,12 +397,11 @@ Example response shape:
   "user_query": "What is vector search?",
   "search_query": "vector search, embeddings, similarity search",
   "response": "Vector search finds similar items by comparing embeddings...",
-  "response_with_refs": "Vector search finds similar items by comparing embeddings... [ref:1]",
   "sources": "[{\"id\":1,\"title\":\"Vector Search\",\"content\":\"...\",\"knn_dist\":0.12}]"
 }
 ```
 
-Vector fields are not included in `sources`. Inline references use the source row `id`, not the source title or text. Use `response` for a plain answer and `response_with_refs` when you want to display citations.
+Vector fields are not included in `sources`. If you want source citations, add citation instructions to `custom_prompt`; the source row `id` is available in the context and `sources` payload.
 
 ## Managing chat models
 
@@ -271,6 +416,19 @@ List models:
 
 ```sql
 SHOW CHAT MODELS;
+```
+
+
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```bash
+curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "SHOW CHAT MODELS"
 ```
 
 <!-- end -->
@@ -288,6 +446,19 @@ Describe a model:
 DESCRIBE CHAT MODEL assistant;
 ```
 
+
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```bash
+curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "DESCRIBE CHAT MODEL assistant"
+```
+
 <!-- end -->
 
 Drop a model:
@@ -303,6 +474,19 @@ Drop a model:
 DROP CHAT MODEL assistant;
 ```
 
+
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```bash
+curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "DROP CHAT MODEL assistant"
+```
+
 <!-- end -->
 
 Drop safely:
@@ -316,6 +500,19 @@ Drop safely:
 
 ```sql
 DROP CHAT MODEL IF EXISTS assistant;
+```
+
+
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```bash
+curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "DROP CHAT MODEL IF EXISTS assistant"
 ```
 
 <!-- end -->

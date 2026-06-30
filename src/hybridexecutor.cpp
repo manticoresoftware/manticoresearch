@@ -17,6 +17,7 @@
 #include "coroutine.h"
 #include "knnmisc.h"
 #include "sorterscroll.h"
+#include "sortcomp.h"
 #include "sphinxquery/xqparser.h"
 
 struct SubQueryResult_t
@@ -65,13 +66,13 @@ static void ClearHybridScoreInternalExpr ( ISphMatchSorter * pSorter )
 // Each result set contributes ranks 1..count. Documents appearing in multiple sets
 // accumulate score = sum( weight_i / (rank_in_set_i + k) ) across all sets they appear in.
 // Weights default to 1.0 when not specified.
-static void FuseRRF ( CSphVector<SubQueryResult_t> & dResults, int iRankConstant, const CSphVector<float> & dWeights, CSphVector<RRFEntry_t> & dFused )
+static void FuseRRF ( CSphVector<SubQueryResult_t> & dResults, int iRankConstant, const CSphVector<float> & dWeights, CSphVector<RRFEntry_t> & dFused, bool bGroupBy, const CSphMatchComparatorState * pWithinGroupState )
 {
 	int iTotalMatches = 0;
 	for ( const auto & tRes : dResults )
 		iTotalMatches += tRes.m_iCount;
 
-	OpenHashTable_T<DocID_t, int> hDoc2Idx ( Max ( iTotalMatches, 16 ) );
+	OpenHashTable_T<SphGroupKey_t, int> hKey2Idx ( Max ( iTotalMatches, 16 ) );
 
 	int iKnnCount = dResults.GetLength() - 1; // sets 1..N are KNN
 
@@ -79,21 +80,25 @@ static void FuseRRF ( CSphVector<SubQueryResult_t> & dResults, int iRankConstant
 	{
 		float fWeight = iSet < dWeights.GetLength() ? dWeights[iSet] : 1.0f;
 		auto & tRes = dResults[iSet];
+		const CSphColumnInfo * pGroupBy = ( bGroupBy && tRes.m_pSorter ) ? tRes.m_pSorter->GetSchema()->GetAttr ( "@groupby" ) : nullptr;
 		for ( int i = 0; i < tRes.m_iCount; i++ )
 		{
 			DocID_t tDocID = sphGetDocID ( tRes.m_dMatches[i].m_pDynamic );
+			SphGroupKey_t tFusionKey = pGroupBy ? tRes.m_dMatches[i].GetAttr ( pGroupBy->m_tLocator ) : (SphGroupKey_t)tDocID;
 			float fContribution = fWeight / ( (i + 1) + iRankConstant );
 
-			int * pIdx = hDoc2Idx.Find ( tDocID );
+			int * pIdx = hKey2Idx.Find ( tFusionKey );
 			if ( pIdx )
 			{
 				auto & tEntry = dFused[*pIdx];
-				tEntry.m_fScore += fContribution;
-
-				if ( iSet==0 )
-					tEntry.m_iTextMatchIdx = i;
-				else
-					tEntry.m_dKnnMatchIdx[iSet - 1] = i;
+				int & iStoredMatch = iSet==0 ? tEntry.m_iTextMatchIdx : tEntry.m_dKnnMatchIdx[iSet - 1];
+				if ( iStoredMatch < 0 )
+				{
+					tEntry.m_fScore += fContribution;
+					iStoredMatch = i;
+				}
+				else if ( pWithinGroupState && MatchGeneric5_fn::IsLess ( tRes.m_dMatches[iStoredMatch], tRes.m_dMatches[i], *pWithinGroupState ) )
+					iStoredMatch = i;
 			}
 			else
 			{
@@ -109,7 +114,7 @@ static void FuseRRF ( CSphVector<SubQueryResult_t> & dResults, int iRankConstant
 				else
 					tEntry.m_dKnnMatchIdx[iSet - 1] = i;
 
-				hDoc2Idx.Add ( tDocID, iFusedIdx );
+				hKey2Idx.Add ( tFusionKey, iFusedIdx );
 			}
 		}
 	}
@@ -391,7 +396,8 @@ void HybridExecutor_c::SetupKnnQueries ( const CSphQuery & tQuery )
 		tKnnQuery.m_sRawQuery = "";
 		tKnnQuery.m_bHybridSearch = false;
 		tKnnQuery.m_eSort = SPH_SORT_EXTENDED;
-		tKnnQuery.m_sSortBy = "@weight desc";
+		if ( tKnnQuery.m_sGroupBy.IsEmpty() )
+			tKnnQuery.m_sSortBy = "@weight desc";
 		RemoveQueryItems ( tKnnQuery.m_dItems, { "hybrid_score()", GetHybridScoreAttrName() } );
 		m_tHybridScoreNames.RemoveFilters ( tKnnQuery.m_dFilters );
 
@@ -430,7 +436,8 @@ void HybridExecutor_c::SetupTextQuery ( const CSphQuery & tQuery )
 	m_tTextQuery.m_dKnnSettings.Reset();
 	m_tTextQuery.m_bHybridSearch = false;
 	m_tTextQuery.m_eSort = SPH_SORT_EXTENDED;
-	m_tTextQuery.m_sSortBy = "@weight desc";
+	if ( m_tTextQuery.m_sGroupBy.IsEmpty() )
+		m_tTextQuery.m_sSortBy = "@weight desc";
 	RemoveQueryItems ( m_tTextQuery.m_dItems, { "hybrid_score()", GetHybridScoreAttrName(), GetKnnDistAttrName(), "knn_dist()" } );
 	m_tKnnDistNames.RemoveFilters ( m_tTextQuery.m_dFilters );
 
@@ -525,9 +532,17 @@ void HybridExecutor_c::SetupSubQueryLimits()
 
 	int iWindow = m_tHybridSettings.m_iWindowSize > 0 ? m_tHybridSettings.m_iWindowSize : Max ( iMaxKnnDocs, (int64_t)m_tTextQuery.m_iLimit );
 	for ( auto & tKnnQuery : m_dKnnQueries )
+	{
 		tKnnQuery.m_iLimit = iWindow;
+		bool bCustomWithinGroupSort = !tKnnQuery.m_sGroupBy.IsEmpty() && !tKnnQuery.m_sSortBy.IsEmpty() && strcasecmp ( tKnnQuery.m_sSortBy.cstr(), "@weight desc" );
+		if ( bCustomWithinGroupSort )
+			tKnnQuery.m_iGroupbyLimit = iWindow;
+	}
 
 	m_tTextQuery.m_iLimit = iWindow;
+	bool bTextCustomWithinGroupSort = !m_tTextQuery.m_sGroupBy.IsEmpty() && !m_tTextQuery.m_sSortBy.IsEmpty() && strcasecmp ( m_tTextQuery.m_sSortBy.cstr(), "@weight desc" );
+	if ( bTextCustomWithinGroupSort )
+		m_tTextQuery.m_iGroupbyLimit = iWindow;
 }
 
 
@@ -847,7 +862,7 @@ bool HybridExecutor_c::Execute ( CSphQueryResult & tResult, const VecTraits_T<IS
 	}
 
 	CSphVector<RRFEntry_t> dFused;
-	FuseRRF ( m_dSubResults, m_tHybridSettings.m_iRankConstant, m_dWeights, dFused );
+	FuseRRF ( m_dSubResults, m_tHybridSettings.m_iRankConstant, m_dWeights, dFused, pOutputSorter->IsGroupby(), pOutputSorter->IsGroupby() ? &pOutputSorter->GetState() : nullptr );
 	PushFusedMatches ( pOutputSorter, dFused );
 
 	if ( dSorters.any_of ( [&] ( ISphMatchSorter * p ) { return !p->FinalizeJoin ( tMeta.m_sError, tMeta.m_sWarning ); } ) )

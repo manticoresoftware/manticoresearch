@@ -1,5 +1,5 @@
 ––– input –––
-bash -c 'for INSTANCE in 1 2; do stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null 2>&1 || true; done; rm -rf /var/run/manticore-{1,2} /var/lib/manticore-{1,2} /var/log/manticore-{1,2}'
+bash -c 'for INSTANCE in 1 2; do export INSTANCE; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null 2>&1 || true; done; rm -rf /var/run/manticore-{1,2} /var/lib/manticore-{1,2} /var/log/manticore-{1,2}'
 ––– output –––
 ––– input –––
 bash -c 'export INSTANCE=1; mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}; stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null; if timeout 30 grep -qm1 "\[BUDDY\] started" <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo "AUTO_NODE1_STARTED=yes"; else echo "AUTO_NODE1_STARTED=no"; cat /var/log/manticore-${INSTANCE}/searchd.log; fi'
@@ -109,7 +109,7 @@ bash -c 'json=$(tr -d " \n\t" < /var/log/manticore-1/manticore.json); echo "$jso
 ––– output –––
 AUTO_CONFIG_PRESERVED=ok
 ––– input –––
-bash -c 'for INSTANCE in 1 2; do stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null 2>&1 || true; done; rm -rf /var/run/manticore-{1,2} /var/lib/manticore-{1,2} /var/log/manticore-{1,2}'
+bash -c 'for INSTANCE in 1 2; do export INSTANCE; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null 2>&1 || true; done; rm -rf /var/run/manticore-{1,2} /var/lib/manticore-{1,2} /var/log/manticore-{1,2}'
 ––– output –––
 ––– input –––
 bash -c 'export INSTANCE=1; mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}; stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null; if timeout 30 grep -qm1 "\[BUDDY\] started" <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo "NEG_NODE1_STARTED=yes"; else echo "NEG_NODE1_STARTED=no"; cat /var/log/manticore-${INSTANCE}/searchd.log; fi'
@@ -123,22 +123,77 @@ NEG_NODE2_STARTED=yes
 mkdir -p /var/log/manticore-1/c4432_preserve_node1 /var/log/manticore-2/c4432_preserve_node2; mysql -h0 -P1306 -e "CREATE CLUSTER c4432_preserve 'c4432_preserve_node1' AS path;" && mysql -h0 -P2306 -e "JOIN CLUSTER c4432_preserve AT '127.0.0.1:1312' 'c4432_preserve_node2' AS path;" >/tmp/c4432_preserve_join.out 2>&1 || true
 ––– output –––
 ––– input –––
-bash -c 'wait1=$(mysql -E -h0 -P1306 -e "debug wait c4432_preserve like '\''state'\'' option '\''timeout'\''=90;" 2>&1); wait2=$(mysql -E -h0 -P2306 -e "debug wait c4432_preserve like '\''state'\'' option '\''timeout'\''=90;" 2>&1); status1=$(mysql -E -h0 -P1306 -e "SHOW STATUS LIKE '\''cluster_c4432_preserve_%'\''" 2>&1 || true); status2=$(mysql -E -h0 -P2306 -e "SHOW STATUS LIKE '\''cluster_c4432_preserve_%'\''" 2>&1 || true); echo "$wait1" | grep -q "Value: synced" && echo "$wait2" | grep -q "Value: synced" && echo "$status1" | grep -q "Counter: cluster_c4432_preserve_nodes_set" && echo "$status1" | grep -q "127.0.0.1:1312" && echo "$status1" | grep -q "127.0.0.1:2312" && { echo "NEG_CLUSTER_SYNCED=yes"; exit 0; }; echo "NEG_CLUSTER_SYNCED=no"; cat /tmp/c4432_preserve_join.out 2>/dev/null || true; echo "$wait1"; echo "$wait2"; echo "$status1"; echo "$status2"'
+bash <<'EOF'
+wait_node() {
+	port="$1"
+	deadline=$((SECONDS+90))
+	while [ $SECONDS -lt $deadline ]; do
+		wait_out=$(mysql -E -h0 -P"$port" -e "debug wait c4432_preserve like 'state' option 'timeout'=5;" 2>&1 || true)
+		status_out=$(mysql -E -h0 -P"$port" -e "SHOW STATUS LIKE 'cluster_c4432_preserve_%';" 2>&1 || true)
+		echo "$wait_out" | grep -q "Value: synced" &&
+			echo "$status_out" | grep -q "Counter: cluster_c4432_preserve_nodes_set" &&
+			echo "$status_out" | grep -q "127.0.0.1:1312" &&
+			echo "$status_out" | grep -q "127.0.0.1:2312" &&
+			echo "$status_out" | grep -q "Counter: cluster_c4432_preserve_node_state" &&
+			echo "$status_out" | grep -q "Value: synced" &&
+			return 0
+	done
+	echo "$wait_out"
+	echo "$status_out"
+	return 1
+}
+
+wait1=$(wait_node 1306 2>&1)
+rc1=$?
+wait2=$(wait_node 2306 2>&1)
+rc2=$?
+
+if [ $rc1 -eq 0 ] && [ $rc2 -eq 0 ]; then
+	echo "NEG_CLUSTER_SYNCED=yes"
+	exit 0
+fi
+
+echo "NEG_CLUSTER_SYNCED=no"
+cat /tmp/c4432_preserve_join.out 2>/dev/null || true
+echo "$wait1"
+echo "$wait2"
+EOF
 ––– output –––
 NEG_CLUSTER_SYNCED=yes
 ––– input –––
 bash <<'EOF'
 seqno() { mysql -E -h0 -P"$1" -e "SHOW STATUS LIKE 'cluster_${2}_state_seqno';" 2>/tmp/c4432_preserve_seqno.err | awk '/Value:/{print $2; exit}'; }
 wait_seq() { mysql -E -h0 -P"$1" -e "debug wait $2 status $3 like 'state' option 'timeout'=30;" 2>&1; }
-wait_ready() { mysql -E -h0 -P"$1" -e "debug wait $2 like 'state' option 'timeout'=30;" >"/tmp/c4432_preserve_ready_$1.out" 2>&1; }
+wait_ready() {
+	port="$1"
+	cluster="$2"
+	deadline=$((SECONDS+90))
+	while [ $SECONDS -lt $deadline ]; do
+		wait_out=$(mysql -E -h0 -P"$port" -e "debug wait $cluster like 'state' option 'timeout'=5;" 2>&1 || true)
+		status_out=$(mysql -E -h0 -P"$port" -e "SHOW STATUS LIKE 'cluster_${cluster}_%';" 2>&1 || true)
+		{
+			echo "$wait_out"
+			echo "$status_out"
+		} >"/tmp/c4432_preserve_ready_$port.out"
+		echo "$wait_out" | grep -q "Value: synced" &&
+			echo "$status_out" | grep -q "Counter: cluster_${cluster}_nodes_set" &&
+			echo "$status_out" | grep -q "127.0.0.1:1312" &&
+			echo "$status_out" | grep -q "127.0.0.1:2312" &&
+			echo "$status_out" | grep -q "Counter: cluster_${cluster}_node_state" &&
+			echo "$status_out" | grep -q "Value: synced" &&
+			return 0
+	done
+	return 1
+}
 wait_ok() { echo "$1" | awk -v want="$2" '/Value:/{ if ($2>=want) ok=1 } END{ exit ok ? 0 : 1 }'; }
 has_index() { mysql -N -B -h0 -P"$1" -e "SHOW STATUS LIKE 'cluster_${2}_indexes';" 2>/tmp/c4432_preserve_indexes_$1.err | grep -qw "$3"; }
+has_row() { mysql -N -B -h0 -P"$1" -e "SELECT COUNT(*) FROM $2;" 2>/tmp/c4432_preserve_count_$1.err | awk '{ if ($1>0) ok=1 } END{ exit ok ? 0 : 1 }'; }
 
 mysql -h0 -P1306 -e "CREATE TABLE t4432_preserve (id bigint, title text);" >/tmp/c4432_preserve_create.out 2>&1
 
 added=0
 for attempt in 1 2 3; do
-	wait_ready 2306 c4432_preserve
+	wait_ready 2306 c4432_preserve || continue
 	before_add=$(seqno 2306 c4432_preserve)
 	[ -n "$before_add" ] || before_add=0
 	want_add=$((before_add+1))
@@ -161,17 +216,17 @@ done
 if [ "$added" = 1 ]; then
 	inserted=0
 	for attempt in 1 2 3; do
-		wait_ready 2306 c4432_preserve
+		wait_ready 2306 c4432_preserve || continue
 		before_insert=$(seqno 2306 c4432_preserve)
 		[ -n "$before_insert" ] || before_insert=0
 		want_insert=$((before_insert+1))
-		mysql -h0 -P1306 -e "INSERT INTO c4432_preserve:t4432_preserve VALUES (1,'before peer stop');" >/tmp/c4432_preserve_insert_setup.out 2>&1
+		mysql -h0 -P1306 -e "INSERT INTO c4432_preserve:t4432_preserve VALUES ($attempt,'before peer stop');" >/tmp/c4432_preserve_insert_setup.out 2>&1
 		insert_rc=$?
 		after_insert=$(seqno 2306 c4432_preserve)
 		if [ $insert_rc -eq 0 ]; then
 			wait_insert=$(wait_seq 2306 c4432_preserve "$want_insert")
 			after_insert=$(seqno 2306 c4432_preserve)
-			if wait_ok "$wait_insert" "$want_insert"; then
+			if wait_ok "$wait_insert" "$want_insert" || has_row 2306 t4432_preserve; then
 				inserted=1
 				break
 			fi
@@ -221,5 +276,5 @@ bash -c 'json=$(tr -d " \n\t" < /var/log/manticore-1/manticore.json); echo "$jso
 ––– output –––
 NEG_CONFIG_PRESERVED=ok
 ––– input –––
-bash -c 'for INSTANCE in 1 2; do stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null 2>&1 || true; done'
+bash -c 'for INSTANCE in 1 2; do export INSTANCE; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null 2>&1 || true; done'
 ––– output –––

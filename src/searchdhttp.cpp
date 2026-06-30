@@ -1943,13 +1943,23 @@ static bool IsUuidDocidTable ( const CSphString & sIndex );
 static bool CheckJsonDocidFilterTypes ( const SqlStmt_t & tStmt, CSphString & sError )
 {
 	auto pServed = GetServed ( tStmt.m_sIndex );
-	if ( !pServed || sphHasUuidDocid ( RIdx_c ( pServed )->GetMatchSchema() ) )
+	if ( !pServed )
 		return true;
 
+	bool bUuidDocid = sphHasUuidDocid ( RIdx_c ( pServed )->GetMatchSchema() );
 	for ( const auto & tFilter : tStmt.m_tQuery.m_dFilters )
 	{
-		if ( tFilter.m_sAttrName!=sphGetDocidName() && tFilter.m_sAttrName!="@id" )
+		if ( tFilter.m_sAttrName!=sphGetDocidName() && tFilter.m_sAttrName!="@id" && tFilter.m_sAttrName!=sphGetUuidDocidName() )
 			continue;
+
+		if ( bUuidDocid )
+		{
+			if ( tFilter.m_eType==SPH_FILTER_STRING || tFilter.m_eType==SPH_FILTER_STRING_LIST )
+				continue;
+
+			sError = tStmt.m_eStmt==STMT_DELETE ? "Document ids should be strings or array of strings" : "Document id should be a string";
+			return false;
+		}
 
 		if ( tFilter.m_eType!=SPH_FILTER_STRING && tFilter.m_eType!=SPH_FILTER_STRING_LIST )
 			continue;
@@ -2572,6 +2582,7 @@ struct BulkDoc_t
 	CSphString m_sIndex;
 	DocID_t m_tDocid { 0 };
 	CSphString m_sDocid;
+	bool m_bDocidSet { false };
 	bool m_bDocidString { false };
 	Str_t m_tDocLine;
 };
@@ -3366,6 +3377,7 @@ static bool ParseMetaLine ( const char * sLine, BulkDoc_t & tDoc, CSphString & s
 	JsonObj_c tId = tAction.GetItem ( "_id" );
 	if ( tId )
 	{
+		tDoc.m_bDocidSet = true;
 		if ( tId.IsNum() )
 			tDoc.m_tDocid = tId.IntVal();
 		else if ( tId.IsStr() )
@@ -3412,6 +3424,12 @@ static bool CheckUuidBulkDocid ( BulkDoc_t & tDoc, CSphString & sError )
 static bool AddDocid ( SqlStmt_t & tStmt, BulkDoc_t & tDoc, CSphString & sError )
 {
 	bool bUuidDocid = IsUuidDocidTable ( tStmt.m_sIndex );
+	if ( bUuidDocid && tDoc.m_bDocidSet && !tDoc.m_bDocidString )
+	{
+		sError = "uuid id must be a non-empty string";
+		return false;
+	}
+
 	int iDocidPos = tStmt.m_dInsertSchema.GetFirst ( [&] ( const CSphString & sName ) { return sName==sphGetDocidName(); } );
 	if ( iDocidPos!=-1 )
 	{

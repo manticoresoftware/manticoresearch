@@ -4840,7 +4840,31 @@ int GetInsertStringAttrOrdinal ( const CSphSchema & tSchema, const char * szAttr
 }
 
 
-static bool ResolveUuidDocidForInsert ( const CSphString & sIndex, const cServedIndexRefPtr_c & pServed, int iUuidString, const CSphString & sUuid, AttributeConverter_c & tConverter, bool bReplace, bool bGeneratedUuid, sph::StringSet & dSeenUuidDocids, CSphVector<CSphString> * pLastIdStrings, CSphString & sError )
+static CSphString MakeTxnUuidDocidKey ( const CSphString & sIndex, const CSphString & sUuid )
+{
+	CSphString sKey;
+	sKey.SetSprintf ( "%s:%s", sIndex.cstr(), sUuid.cstr() );
+	return sKey;
+}
+
+
+static bool FindTxnUuidDocid ( const CSphVector<CSphString> & dKeys, const CSphVector<int64_t> & dDocids, const CSphString & sKey, DocID_t & tDocID )
+{
+	assert ( dKeys.GetLength()==dDocids.GetLength() );
+	ARRAY_FOREACH ( i, dKeys )
+	{
+		if ( dKeys[i]==sKey )
+		{
+			tDocID = (DocID_t)dDocids[i];
+			return true;
+		}
+	}
+
+	return false;
+}
+
+
+static bool ResolveUuidDocidForInsert ( const CSphString & sIndex, const cServedIndexRefPtr_c & pServed, int iUuidString, const CSphString & sUuid, AttributeConverter_c & tConverter, bool bReplace, bool bGeneratedUuid, sph::StringSet & dSeenUuidDocids, bool bUseTxnUuidDocids, CSphVector<CSphString> & dTxnUuidDocidKeys, CSphVector<int64_t> & dTxnUuidDocids, CSphVector<CSphString> * pLastIdStrings, CSphString & sError )
 {
 	if ( iUuidString<0 )
 		return true;
@@ -4867,6 +4891,18 @@ static bool ResolveUuidDocidForInsert ( const CSphString & sIndex, const cServed
 	// duplicate INSERTs and to map REPLACE to an existing internal DocID_t.
 	if ( bGeneratedUuid )
 		return true;
+
+	CSphString sTxnKey;
+	if ( bUseTxnUuidDocids )
+	{
+		sTxnKey = MakeTxnUuidDocidKey ( sIndex, sUuid );
+		DocID_t tTxnDocID = 0;
+		if ( FindTxnUuidDocid ( dTxnUuidDocidKeys, dTxnUuidDocids, sTxnKey, tTxnDocID ) )
+		{
+			tConverter.SetID ( tTxnDocID );
+			return true;
+		}
+	}
 
 	CSphQuery tQuery;
 	SetQueryDefaultsExt2 ( tQuery );
@@ -4905,6 +4941,12 @@ static bool ResolveUuidDocidForInsert ( const CSphString & sIndex, const cServed
 	}
 	else if ( !tConverter.GetID() )
 		tConverter.SetID ( sphGenerateAutoDocid() );
+
+	if ( bUseTxnUuidDocids )
+	{
+		dTxnUuidDocidKeys.Add ( sTxnKey );
+		dTxnUuidDocids.Add ( tConverter.GetID() );
+	}
 
 	return true;
 }
@@ -4991,6 +5033,8 @@ void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery )
 			return tOut.Error ( "%s", sError.cstr() );
 		}
 	}
+	pSession->m_dTxnUuidDocidKeys.Resize ( 0 );
+	pSession->m_dTxnUuidDocids.Resize ( 0 );
 	pSession->m_bInTransaction = true;
 	tOut.Ok ( 0 );
 }
@@ -5005,6 +5049,8 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 
 	MEMORY ( MEM_SQL_COMMIT );
 	pSession->m_bInTransaction = false;
+	pSession->m_dTxnUuidDocidKeys.Resize ( 0 );
+	pSession->m_dTxnUuidDocids.Resize ( 0 );
 	int iDeleted = 0;
 
 	if ( pSession->m_tShardTxn.HasPendingData() )
@@ -5306,7 +5352,7 @@ static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServe
 		{
 			bool bGeneratedUuid = !tGeneratedUuid.m_sVal.IsEmpty();
 			bool bReplaceRow = bReplace && !bGeneratedUuid;
-			if ( !ResolveUuidDocidForInsert ( tStmt.m_sIndex, pServed, iUuidString, sUuidDocid, tConverter, bReplaceRow, bGeneratedUuid, dSeenUuidDocids, iUuidString>=0 ? &dIdStrings : nullptr, sError ) )
+			if ( !ResolveUuidDocidForInsert ( tStmt.m_sIndex, pServed, iUuidString, sUuidDocid, tConverter, bReplaceRow, bGeneratedUuid, dSeenUuidDocids, !pSession->m_bAutoCommit || pSession->m_bInTransaction, pSession->m_dTxnUuidDocidKeys, pSession->m_dTxnUuidDocids, iUuidString>=0 ? &dIdStrings : nullptr, sError ) )
 				break;
 
 			pIndex->AddDocument ( tConverter, bReplaceRow, tStmt.m_sStringParam, sError, sWarning, pAccum );
@@ -8737,7 +8783,10 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 			return err ( "Storing del subset not implemented for PQ tables" );
 
 		assert ( sStore.Begins ( "@" ) );
-		DocsCollector_c dData { tStmt.m_tQuery, tStmt.m_bJson, sName, pServed, &sError };
+		CSphQuery tCollectQuery = tStmt.m_tQuery;
+		const bool bJsonCollect = tStmt.m_bJson || tCollectQuery.m_eQueryType==QUERY_JSON;
+		tCollectQuery.m_eQueryType = bJsonCollect ? QUERY_JSON : QUERY_SQL;
+		DocsCollector_c dData { tCollectQuery, bJsonCollect, sName, pServed, &sError };
 		auto dDocs = dData.GetValuesSlice();
 		if ( !sError.IsEmpty() )
 			return err();
@@ -8774,7 +8823,10 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 		pAccum->m_dCmd.Add ( std::move ( pCmd ) );
 	} else
 	{
-		DocsCollector_c dData { tStmt.m_tQuery, tStmt.m_bJson, sName, pServed, &sError};
+		CSphQuery tCollectQuery = tStmt.m_tQuery;
+		const bool bJsonCollect = tStmt.m_bJson || tCollectQuery.m_eQueryType==QUERY_JSON;
+		tCollectQuery.m_eQueryType = bJsonCollect ? QUERY_JSON : QUERY_SQL;
+		DocsCollector_c dData { tCollectQuery, bJsonCollect, sName, pServed, &sError};
 		auto dDocs = dData.GetValuesSlice();
 		if ( !sError.IsEmpty() )
 			return err();
@@ -9357,6 +9409,8 @@ static bool HandleSetLocal ( CSphString& sError, const CSphString& sName, int64_
 		auto pSession = session::Info().GetClientSession();
 		pSession->m_bAutoCommit = bAutoCommit;
 		pSession->m_bInTransaction = false;
+		pSession->m_dTxnUuidDocidKeys.Resize ( 0 );
+		pSession->m_dTxnUuidDocids.Resize ( 0 );
 
 		// commit all pending changes
 		if ( bAutoCommit && pSession->m_tShardTxn.HasPendingData() )
@@ -12952,12 +13006,21 @@ const char* session::GetCurrentDbName ()
 
 void session::SetAutoCommit ( bool bAutoCommit )
 {
-	GetClientSession()->m_bAutoCommit = bAutoCommit;
+	auto * pSession = GetClientSession();
+	pSession->m_bAutoCommit = bAutoCommit;
+	pSession->m_dTxnUuidDocidKeys.Resize ( 0 );
+	pSession->m_dTxnUuidDocids.Resize ( 0 );
 }
 
 void session::SetInTrans ( bool bInTrans )
 {
-	GetClientSession()->m_bInTransaction = bInTrans;
+	auto * pSession = GetClientSession();
+	pSession->m_bInTransaction = bInTrans;
+	if ( !bInTrans )
+	{
+		pSession->m_dTxnUuidDocidKeys.Resize ( 0 );
+		pSession->m_dTxnUuidDocids.Resize ( 0 );
+	}
 }
 
 bool session::IsInTrans ()

@@ -74,6 +74,9 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	DROP TABLE IF EXISTS uuid_auto;
 	DROP TABLE IF EXISTS uuid_col;
 	DROP TABLE IF EXISTS uuid_case;
+	DROP TABLE IF EXISTS uuid_txn;
+	DROP TABLE IF EXISTS bad_hidden_uuid;
+	DROP TABLE IF EXISTS bad_mixed_uuid;
 	DROP TABLE IF EXISTS numeric_ids;
 	DROP TABLE IF EXISTS join_left;
 	DROP TABLE IF EXISTS join_right;
@@ -89,6 +92,7 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	CREATE TABLE uuid_auto ( id uuid, title text, tag string, price int );
 	CREATE TABLE uuid_col ( id uuid, title text, tag string, price int ) engine='columnar';
 	CREATE TABLE uuid_case ( id uuid, title text, tag string, price int );
+	CREATE TABLE uuid_txn ( id uuid, title text, tag string );
 	CREATE TABLE uuid_dist_a ( id uuid, title text, tag string, price int );
 	CREATE TABLE uuid_dist_b ( id uuid, title text, tag string, price int );
 	CREATE TABLE uuid_shard_a ( id uuid, title text, tag string, price int );
@@ -100,6 +104,8 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	SHOW CREATE TABLE uuid_ids;
 	CREATE TABLE bad_uuid_attr ( title text, guid uuid );
 	CREATE TABLE bad_uuid_pq ( id uuid, query text ) type='pq';
+	CREATE TABLE bad_hidden_uuid ( `@uuid_id` string, title text );
+	CREATE TABLE bad_mixed_uuid ( id bigint, `@uuid_id` string, title text );
 
 	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440000', 'first document', 'old', 10 );
 	SELECT LAST_INSERT_ID();
@@ -149,6 +155,12 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	<!-- duplicate existing and duplicate staged UUID ids -->
 	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440000', 'duplicate document', 'dup', 30 );
 	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440010', 'batch one', 'batch', 1 ), ( '550e8400-e29b-41d4-a716-446655440010', 'batch two', 'batch', 2 );
+	SET autocommit=0;
+	INSERT INTO uuid_txn ( id, title, tag ) VALUES ( '10000000-0000-4000-8000-000000000001', 'transaction duplicate one', 'first' );
+	INSERT INTO uuid_txn ( id, title, tag ) VALUES ( '10000000-0000-4000-8000-000000000001', 'transaction duplicate two', 'second' );
+	COMMIT;
+	SET autocommit=1;
+	SELECT id, tag FROM uuid_txn WHERE id='10000000-0000-4000-8000-000000000001' ORDER BY tag ASC;
 
 	REPLACE INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440000', 'first replaced', 'replaced', 11 );
 	SELECT id, tag, price FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440000';
@@ -176,6 +188,9 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	SELECT id, tag, price FROM uuid_col WHERE id='550e8400-e29b-41d4-a716-446655440020';
 	DELETE FROM uuid_col WHERE id='550e8400-e29b-41d4-a716-446655440024';
 	SELECT id, tag, price FROM uuid_col WHERE id IN ('550e8400-e29b-41d4-a716-446655440020','550e8400-e29b-41d4-a716-446655440024') ORDER BY id ASC;
+	INSERT INTO uuid_col ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440026', 'columnar json disk delete', 'columnar-json-disk-delete', 56 );
+	FLUSH RAMCHUNK uuid_col;
+	SELECT id, tag, price FROM uuid_col WHERE id='550e8400-e29b-41d4-a716-446655440026';
 
 	<!-- UUID id joins should compare public UUID strings, not internal DocID_t surrogates -->
 	CREATE TABLE join_left ( id uuid, title text, k string );
@@ -334,6 +349,28 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 <query endpoint="json/update">
 {
 	"table": "uuid_ids",
+	"id": 123,
+	"doc": { "tag": "json-bad-numeric-update", "price": 91 }
+}
+</query>
+
+<query endpoint="json/delete">
+{
+	"table": "uuid_ids",
+	"id": 123
+}
+</query>
+
+<query endpoint="json/delete">
+{
+	"table": "uuid_ids",
+	"id": 0
+}
+</query>
+
+<query endpoint="json/update">
+{
+	"table": "uuid_ids",
 	"id": "550e8400-e29b-41d4-a716-446655440003",
 	"doc": { "tag": "json-updated", "price": 41 }
 }
@@ -370,6 +407,105 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 }
 </query>
 
+<query endpoint="json/insert">
+{
+	"table": "uuid_ids",
+	"id": "550e8400-e29b-41d4-a716-446655440008",
+	"doc": { "title": "json query delete", "tag": "json-query-delete", "price": 58 }
+}
+</query>
+
+<query endpoint="json/delete">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440008" } }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440008" } }
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"table": "uuid_col",
+	"id": "550e8400-e29b-41d4-a716-446655440025",
+	"doc": { "title": "columnar json ram delete", "tag": "columnar-json-ram-delete", "price": 55 }
+}
+</query>
+
+<query endpoint="json/delete">
+{
+	"table": "uuid_col",
+	"id": "550e8400-e29b-41d4-a716-446655440025"
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_col",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440025" } }
+}
+</query>
+
+<query endpoint="json/delete">
+{
+	"table": "uuid_col",
+	"id": "550e8400-e29b-41d4-a716-446655440026"
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_col",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440026" } }
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"table": "uuid_col",
+	"id": "550e8400-e29b-41d4-a716-446655440027",
+	"doc": { "title": "columnar json query ram delete", "tag": "columnar-json-query-ram-delete", "price": 57 }
+}
+</query>
+
+<query endpoint="json/delete">
+{
+	"table": "uuid_col",
+	"query": { "equals": { "tag": "columnar-json-query-ram-delete" } }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_col",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440027" } }
+}
+</query>
+
+<sphinxql>
+	INSERT INTO uuid_col ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440028', 'columnar json query disk delete', 'columnar-json-query-disk-delete', 58 );
+	FLUSH RAMCHUNK uuid_col;
+</sphinxql>
+
+<query endpoint="json/delete">
+{
+	"table": "uuid_col",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440028" } }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_col",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440028" } }
+}
+</query>
+
 <query endpoint="json/search">
 {
 	"table": "uuid_ids",
@@ -383,6 +519,31 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 { "index" : { "_index" : "uuid_ids", "_id" : "not-a-uuid" } }
 { "title" : "es bulk bad", "tag" : "bulk-bad", "price" : 45 }
 </bulk>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "uuid_ids", "_id" : 123 } }
+{ "title" : "es bulk numeric id", "tag" : "bulk-numeric-id", "price" : 52 }
+{ "create" : { "_index" : "uuid_ids", "_id" : 124 } }
+{ "title" : "es bulk numeric create", "tag" : "bulk-numeric-create", "price" : 53 }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "tag": "bulk-numeric-id" } },
+	"_source": [ "id", "tag", "price" ],
+	"sort": [ { "tag": "asc" } ]
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "tag": "bulk-numeric-create" } },
+	"_source": [ "id", "tag", "price" ],
+	"sort": [ { "tag": "asc" } ]
+}
+</query>
 
 <query endpoint="json/search">
 {
@@ -527,6 +688,9 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	DROP TABLE uuid_auto;
 	DROP TABLE uuid_col;
 	DROP TABLE uuid_case;
+	DROP TABLE uuid_txn;
+	DROP TABLE IF EXISTS bad_hidden_uuid;
+	DROP TABLE IF EXISTS bad_mixed_uuid;
 	DROP TABLE numeric_ids;
 </sphinxql>
 </queries>

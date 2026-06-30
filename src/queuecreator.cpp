@@ -1114,8 +1114,12 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem, bool bAllowIn
 	assert ( m_pSorterSchema );
 	const CSphString & sExpr = tItem.m_sExpr;
 	bool bUuidDocid = HasUuidDocidAttr ( m_tSettings.m_tSchema ) || HasUuidDocidAttr ( *m_pSorterSchema );
+	bool bCollectingDocids = !!m_tSettings.m_pCollection;
 	if ( sExpr==sphGetDocidName() && bUuidDocid && !bAllowInternalUuidDocid )
 	{
+		if ( bCollectingDocids )
+			return true;
+
 		CSphQueryItem tUuidItem = tItem;
 		tUuidItem.m_sExpr = sphGetUuidDocidName();
 		if ( tUuidItem.m_sAlias.IsEmpty() || tUuidItem.m_sAlias==sphGetDocidName() )
@@ -1482,6 +1486,12 @@ bool QueueCreator_c::AddExpressionsForUpdates()
 {
 	if ( !m_tSettings.m_pCollection )
 		return true;
+
+	// UUID id filters are rewritten from public `id`/`@id` to the hidden string @uuid_id.
+	// Keep it in the internal update/delete collector schema even though the collector itself
+	// returns numeric DocID_t values from `id`.
+	if ( HasUuidDocidAttr ( m_tSettings.m_tSchema ) )
+		m_hQueryColumns.Add ( sphGetUuidDocidName() );
 
 	const CSphColumnInfo * pOldDocId = m_pSorterSchema->GetAttr ( sphGetDocidName() );
 	if ( !pOldDocId->IsColumnar() && !pOldDocId->IsColumnarExpr() )
@@ -2878,7 +2888,7 @@ ISphMatchSorter * QueueCreator_c::CreateQueue ()
 	pTop->SetGroupState ( m_tStateGroup );
 	pTop->SetRandom ( m_bRandomize );
 	if ( !m_bHaveStar && m_hQueryColumns.GetLength() )
-		pTop->SetFilteredAttrs ( m_hQueryColumns, m_tSettings.m_bNeedDocids || m_bExprsNeedDocids );
+		pTop->SetFilteredAttrs ( m_hQueryColumns, m_tSettings.m_bNeedDocids || m_bExprsNeedDocids || !!m_tSettings.m_pCollection );
 
 	if ( m_bRandomize )
 	{

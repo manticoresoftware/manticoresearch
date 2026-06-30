@@ -112,6 +112,17 @@ static_assert ( IS_TRIVIALLY_COPYABLE ( SqlNode_t ), "YYSTYPE must be trivial fo
 # define YYSTYPE_IS_TRIVIAL 1
 # define YYSTYPE_IS_DECLARED 1
 
+
+static bool IsReservedUuidDocidAttr ( const CSphString & sName, CSphString & sError )
+{
+	if ( sName!=sphGetUuidDocidName() )
+		return false;
+
+	sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
+	return true;
+}
+
+
 // unused parameter, simply to avoid type clash between all my yylex() functions
 #define YY_DECL static int my_lex ( YYSTYPE * lvalp, void * yyscanner, DdlParser_c * pParser )
 
@@ -308,6 +319,12 @@ bool DdlParser_c::SetupAlterTable ( const SqlNode_t & tAttr, ESphAttr eAttr, int
 	m_pStmt->m_sIndex.ToLower();
 	m_pStmt->m_sAlterAttr.ToLower();
 	m_pStmt->m_eAlterColType = eAttr;
+	if ( IsReservedUuidDocidAttr ( m_pStmt->m_sAlterAttr, m_sError ) )
+	{
+		m_tItemOptions.Reset();
+		return false;
+	}
+
 	m_pStmt->m_uFieldFlags = ConvertFlags(iFieldFlags);
 	m_pStmt->m_uAttrFlags = m_tItemOptions.ToFlags();
 	m_pStmt->m_eEngine = m_tItemOptions.m_eEngine;
@@ -337,6 +354,11 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 	CSphString sName;
 	ToString ( sName, tName );
 	sName.ToLower ();
+	if ( IsReservedUuidDocidAttr ( sName, m_sError ) )
+	{
+		m_tItemOptions.Reset();
+		return false;
+	}
 
 	auto eAttrType = (ESphAttr) tCol.GetValueInt();
 	auto iType = tCol.m_iType;

@@ -1883,7 +1883,20 @@ static bool ParseUpdateDeleteQueries ( const JsonObj_c & tRoot, bool bDelete, Sq
 	}
 
 	CSphString sWarning; // fixme: add to results
-	return ParseJsonQueryFilters ( tQuery, tStmt.m_tQuery, sError, sWarning );
+	if ( !ParseJsonQueryFilters ( tQuery, tStmt.m_tQuery, sError, sWarning ) )
+		return false;
+
+	// JSON update/delete queries collect matching internal numeric docids.
+	// ParseJsonQueryFilters() initializes ordinary JSON search output to '*', but
+	// collection must keep selecting 'id' so UUID-id tables do not collect the
+	// public string @uuid_id column instead of the internal DocID_t.
+	tStmt.m_tQuery.m_dItems.Resize ( 0 );
+	CSphQueryItem & tItem = tStmt.m_tQuery.m_dItems.Add();
+	tItem.m_sExpr = sphGetDocidName();
+	tItem.m_sAlias = sphGetDocidName();
+	tStmt.m_tQuery.m_sSelect = sphGetDocidName();
+
+	return true;
 }
 
 

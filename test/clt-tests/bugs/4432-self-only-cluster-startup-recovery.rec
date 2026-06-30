@@ -10,14 +10,45 @@ bash -c 'export INSTANCE=2; mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}; s
 ––– output –––
 AUTO_NODE2_STARTED=yes
 ––– input –––
-mkdir -p /var/log/manticore-1/c4432_auto_node1 /var/log/manticore-2/c4432_auto_node2; mysql -h0 -P1306 -e "CREATE CLUSTER c4432_auto 'c4432_auto_node1' AS path;" && mysql -h0 -P2306 -e "JOIN CLUSTER c4432_auto AT '127.0.0.1:1312' 'c4432_auto_node2' AS path;"
+mkdir -p /var/log/manticore-1/c4432_auto_node1 /var/log/manticore-2/c4432_auto_node2; mysql -h0 -P1306 -e "CREATE CLUSTER c4432_auto 'c4432_auto_node1' AS path;" && mysql -h0 -P2306 -e "JOIN CLUSTER c4432_auto AT '127.0.0.1:1312' 'c4432_auto_node2' AS path;" >/tmp/c4432_auto_join.out 2>&1 || true
 ––– output –––
 ––– input –––
-bash -c 'end=$((SECONDS+90)); while [ $SECONDS -lt $end ]; do mysql -h0 -P1306 -N -B -e "SHOW STATUS LIKE '\''cluster_c4432_auto_node_state'\''" 2>/dev/null | grep -qw synced && mysql -h0 -P2306 -N -B -e "SHOW STATUS LIKE '\''cluster_c4432_auto_node_state'\''" 2>/dev/null | grep -qw synced && { echo "AUTO_CLUSTER_SYNCED=yes"; exit 0; }; sleep 1; done; echo "AUTO_CLUSTER_SYNCED=no"; mysql -h0 -P1306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_auto_%'\''" 2>&1 || true; mysql -h0 -P2306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_auto_%'\''" 2>&1 || true'
+bash -c 'wait1=$(mysql -E -h0 -P1306 -e "debug wait c4432_auto like '\''state'\'' option '\''timeout'\''=90;" 2>&1); wait2=$(mysql -E -h0 -P2306 -e "debug wait c4432_auto like '\''state'\'' option '\''timeout'\''=90;" 2>&1); echo "$wait1" | grep -q "Value: synced" && echo "$wait2" | grep -q "Value: synced" && { echo "AUTO_CLUSTER_SYNCED=yes"; exit 0; }; echo "AUTO_CLUSTER_SYNCED=no"; cat /tmp/c4432_auto_join.out 2>/dev/null || true; echo "$wait1"; echo "$wait2"; mysql -h0 -P1306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_auto_%'\''" 2>&1 || true; mysql -h0 -P2306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_auto_%'\''" 2>&1 || true'
 ––– output –––
 AUTO_CLUSTER_SYNCED=yes
 ––– input –––
-bash -c 'mysql -h0 -P1306 -e "CREATE TABLE t4432_auto (id bigint, title text);" && end=$((SECONDS+30)); while [ $SECONDS -lt $end ]; do mysql -h0 -P1306 -e "ALTER CLUSTER c4432_auto ADD t4432_auto;" >/tmp/c4432_auto_alter.out 2>&1 && mysql -h0 -P1306 -e "INSERT INTO c4432_auto:t4432_auto VALUES (1,'\''before exit'\'');" && mysql -h0 -P2306 -e "EXIT CLUSTER c4432_auto;" && { echo "AUTO_TABLE_ADDED=yes"; exit 0; }; sleep 1; done; echo "AUTO_TABLE_ADDED=no"; cat /tmp/c4432_auto_alter.out; mysql -h0 -P1306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_auto_%'\''" 2>&1 || true'
+bash <<'EOF'
+seqno() { mysql -E -h0 -P"$1" -e "SHOW STATUS LIKE 'cluster_${2}_state_seqno';" 2>/tmp/c4432_auto_seqno.err | awk '/Value:/{print $2; exit}'; }
+wait_seq() { mysql -E -h0 -P"$1" -e "debug wait $2 status $3 like 'state' option 'timeout'=30;" 2>&1; }
+wait_ok() { echo "$1" | awk -v want="$2" '/Value:/{ if ($2>=want) ok=1 } END{ exit ok ? 0 : 1 }'; }
+
+mysql -h0 -P1306 -e "CREATE TABLE t4432_auto (id bigint, title text);" >/tmp/c4432_auto_create.out 2>&1
+before_add=$(seqno 2306 c4432_auto)
+want_add=$((before_add+1))
+mysql -h0 -P1306 -e "ALTER CLUSTER c4432_auto ADD t4432_auto;" >/tmp/c4432_auto_alter.out 2>&1
+wait_add=$(wait_seq 2306 c4432_auto "$want_add")
+after_add=$(seqno 2306 c4432_auto)
+
+if wait_ok "$wait_add" "$want_add"; then
+	before_insert=$(seqno 2306 c4432_auto)
+	want_insert=$((before_insert+1))
+	mysql -h0 -P1306 -e "INSERT INTO c4432_auto:t4432_auto VALUES (1,'before exit');" >/tmp/c4432_auto_insert_setup.out 2>&1
+	wait_insert=$(wait_seq 2306 c4432_auto "$want_insert")
+	after_insert=$(seqno 2306 c4432_auto)
+	if wait_ok "$wait_insert" "$want_insert" && mysql -h0 -P2306 -e "EXIT CLUSTER c4432_auto;" >/tmp/c4432_auto_exit.out 2>&1; then
+		echo "AUTO_TABLE_ADDED=yes"
+		exit 0
+	fi
+fi
+
+echo "AUTO_TABLE_ADDED=no"
+echo "AUTO_ADD_BEFORE=$before_add AUTO_ADD_WANTED=$want_add AUTO_ADD_AFTER=$after_add"
+echo "AUTO_INSERT_BEFORE=$before_insert AUTO_INSERT_WANTED=$want_insert AUTO_INSERT_AFTER=$after_insert"
+cat /tmp/c4432_auto_create.out /tmp/c4432_auto_alter.out /tmp/c4432_auto_insert_setup.out /tmp/c4432_auto_exit.out 2>/dev/null || true
+echo "$wait_add"
+echo "$wait_insert"
+mysql -h0 -P1306 -E -e "SHOW STATUS LIKE 'cluster_c4432_auto_%'" 2>&1 || true
+EOF
 ––– output –––
 AUTO_TABLE_ADDED=yes
 ––– input –––
@@ -36,11 +67,34 @@ bash -c 'export INSTANCE=1; stdbuf -oL searchd --logreplication -c test/clt-test
 ––– output –––
 AUTO_NODE1_RESTARTED=yes
 ––– input –––
-bash -c 'end=$((SECONDS+90)); while [ $SECONDS -lt $end ]; do status=$(mysql -h0 -P1306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_auto_status'\''" 2>/dev/null || true); state=$(mysql -h0 -P1306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_auto_node_state'\''" 2>/dev/null || true); echo "$status" | grep -q "Value: primary" && echo "$state" | grep -q "Value: synced" && { echo "AUTO_RECOVERY_PRIMARY_SYNCED=yes"; exit 0; }; sleep 1; done; echo "AUTO_RECOVERY_PRIMARY_SYNCED=no"; mysql -h0 -P1306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_auto_%'\''" 2>&1 || true; tail -n 200 /var/log/manticore-1/searchd.log'
+bash -c 'ready=$(mysql -E -h0 -P1306 -e "debug wait c4432_auto like '\''state'\'' option '\''timeout'\''=90;" 2>&1); status=$(mysql -h0 -P1306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_auto_status'\''" 2>/dev/null || true); state=$(mysql -h0 -P1306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_auto_node_state'\''" 2>/dev/null || true); echo "$ready" | grep -q "Value: synced" && echo "$status" | grep -q "Value: primary" && echo "$state" | grep -q "Value: synced" && { echo "AUTO_RECOVERY_PRIMARY_SYNCED=yes"; exit 0; }; echo "AUTO_RECOVERY_PRIMARY_SYNCED=no"; echo "$ready"; mysql -h0 -P1306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_auto_%'\''" 2>&1 || true; tail -n 200 /var/log/manticore-1/searchd.log'
 ––– output –––
 AUTO_RECOVERY_PRIMARY_SYNCED=yes
 ––– input –––
-bash -c 'mysql -h0 -P1306 -e "INSERT INTO c4432_auto:t4432_auto VALUES (2,'\''after restart'\'');" >/tmp/c4432_auto_insert.out 2>&1 && end=$((SECONDS+30)); count=""; while [ $SECONDS -lt $end ]; do count=$(mysql -h0 -P1306 -E -e "SELECT COUNT(*) AS total FROM t4432_auto;" 2>/tmp/c4432_auto_count.out | tr -d "\r"); echo "$count" | grep -q "total: 2" && { echo "AUTO_CLUSTER_INSERT=ok"; exit 0; }; sleep 1; done; echo "AUTO_CLUSTER_INSERT=failed"; echo "$count"; cat /tmp/c4432_auto_insert.out; cat /tmp/c4432_auto_count.out; mysql -h0 -P1306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_auto_%'\''" 2>&1 || true'
+bash <<'EOF'
+seqno() { mysql -E -h0 -P"$1" -e "SHOW STATUS LIKE 'cluster_${2}_state_seqno';" 2>/tmp/c4432_auto_seqno.err | awk '/Value:/{print $2; exit}'; }
+wait_seq() { mysql -E -h0 -P"$1" -e "debug wait $2 status $3 like 'state' option 'timeout'=30;" 2>&1; }
+wait_ok() { echo "$1" | awk -v want="$2" '/Value:/{ if ($2>=want) ok=1 } END{ exit ok ? 0 : 1 }'; }
+
+before_insert=$(seqno 1306 c4432_auto)
+want_insert=$((before_insert+1))
+mysql -h0 -P1306 -e "INSERT INTO c4432_auto:t4432_auto VALUES (2,'after restart');" >/tmp/c4432_auto_insert.out 2>&1
+wait_insert=$(wait_seq 1306 c4432_auto "$want_insert")
+after_insert=$(seqno 1306 c4432_auto)
+count=$(mysql -h0 -P1306 -E -e "SELECT COUNT(*) AS total FROM t4432_auto;" 2>/tmp/c4432_auto_count.out | tr -d "\r")
+
+if wait_ok "$wait_insert" "$want_insert" && echo "$count" | grep -q "total: 2"; then
+	echo "AUTO_CLUSTER_INSERT=ok"
+	exit 0
+fi
+
+echo "AUTO_CLUSTER_INSERT=failed"
+echo "AUTO_INSERT_BEFORE=$before_insert AUTO_INSERT_WANTED=$want_insert AUTO_INSERT_AFTER=$after_insert"
+cat /tmp/c4432_auto_insert.out /tmp/c4432_auto_count.out 2>/dev/null || true
+echo "$wait_insert"
+echo "$count"
+mysql -h0 -P1306 -E -e "SHOW STATUS LIKE 'cluster_c4432_auto_%'" 2>&1 || true
+EOF
 ––– output –––
 AUTO_CLUSTER_INSERT=ok
 ––– input –––
@@ -66,14 +120,71 @@ bash -c 'export INSTANCE=2; mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}; s
 ––– output –––
 NEG_NODE2_STARTED=yes
 ––– input –––
-mkdir -p /var/log/manticore-1/c4432_preserve_node1 /var/log/manticore-2/c4432_preserve_node2; mysql -h0 -P1306 -e "CREATE CLUSTER c4432_preserve 'c4432_preserve_node1' AS path;" && mysql -h0 -P2306 -e "JOIN CLUSTER c4432_preserve AT '127.0.0.1:1312' 'c4432_preserve_node2' AS path;"
+mkdir -p /var/log/manticore-1/c4432_preserve_node1 /var/log/manticore-2/c4432_preserve_node2; mysql -h0 -P1306 -e "CREATE CLUSTER c4432_preserve 'c4432_preserve_node1' AS path;" && mysql -h0 -P2306 -e "JOIN CLUSTER c4432_preserve AT '127.0.0.1:1312' 'c4432_preserve_node2' AS path;" >/tmp/c4432_preserve_join.out 2>&1 || true
 ––– output –––
 ––– input –––
-bash -c 'end=$((SECONDS+90)); while [ $SECONDS -lt $end ]; do mysql -h0 -P1306 -N -B -e "SHOW STATUS LIKE '\''cluster_c4432_preserve_node_state'\''" 2>/dev/null | grep -qw synced && mysql -h0 -P2306 -N -B -e "SHOW STATUS LIKE '\''cluster_c4432_preserve_node_state'\''" 2>/dev/null | grep -qw synced && { echo "NEG_CLUSTER_SYNCED=yes"; exit 0; }; sleep 1; done; echo "NEG_CLUSTER_SYNCED=no"; mysql -h0 -P1306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_preserve_%'\''" 2>&1 || true; mysql -h0 -P2306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_preserve_%'\''" 2>&1 || true'
+bash -c 'wait1=$(mysql -E -h0 -P1306 -e "debug wait c4432_preserve like '\''state'\'' option '\''timeout'\''=90;" 2>&1); status1=$(mysql -E -h0 -P1306 -e "SHOW STATUS LIKE '\''cluster_c4432_preserve_%'\''" 2>&1 || true); echo "$wait1" | grep -q "Value: synced" && echo "$status1" | grep -q "Counter: cluster_c4432_preserve_nodes_set" && echo "$status1" | grep -q "127.0.0.1:1312" && echo "$status1" | grep -q "127.0.0.1:2312" && { echo "NEG_CLUSTER_SYNCED=yes"; exit 0; }; echo "NEG_CLUSTER_SYNCED=no"; cat /tmp/c4432_preserve_join.out 2>/dev/null || true; echo "$wait1"; echo "$status1"; mysql -h0 -P2306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_preserve_%'\''" 2>&1 || true'
 ––– output –––
 NEG_CLUSTER_SYNCED=yes
 ––– input –––
-bash -c 'mysql -h0 -P1306 -e "CREATE TABLE t4432_preserve (id bigint, title text);" && end=$((SECONDS+30)); while [ $SECONDS -lt $end ]; do mysql -h0 -P1306 -e "ALTER CLUSTER c4432_preserve ADD t4432_preserve;" >/tmp/c4432_preserve_alter.out 2>&1 && mysql -h0 -P1306 -e "INSERT INTO c4432_preserve:t4432_preserve VALUES (1,'\''before peer stop'\'');" && { echo "NEG_TABLE_ADDED=yes"; exit 0; }; sleep 1; done; echo "NEG_TABLE_ADDED=no"; cat /tmp/c4432_preserve_alter.out; mysql -h0 -P1306 -E -e "SHOW STATUS LIKE '\''cluster_c4432_preserve_%'\''" 2>&1 || true'
+bash <<'EOF'
+seqno() { mysql -E -h0 -P"$1" -e "SHOW STATUS LIKE 'cluster_${2}_state_seqno';" 2>/tmp/c4432_preserve_seqno.err | awk '/Value:/{print $2; exit}'; }
+wait_seq() { mysql -E -h0 -P"$1" -e "debug wait $2 status $3 like 'state' option 'timeout'=30;" 2>&1; }
+wait_ready() { mysql -E -h0 -P"$1" -e "debug wait $2 like 'state' option 'timeout'=10;" >/tmp/c4432_preserve_ready.out 2>&1; }
+wait_ok() { echo "$1" | awk -v want="$2" '/Value:/{ if ($2>=want) ok=1 } END{ exit ok ? 0 : 1 }'; }
+
+mysql -h0 -P1306 -e "CREATE TABLE t4432_preserve (id bigint, title text);" >/tmp/c4432_preserve_create.out 2>&1
+
+added=0
+for attempt in 1 2 3; do
+	wait_ready 1306 c4432_preserve
+	before_add=$(seqno 1306 c4432_preserve)
+	want_add=$((before_add+1))
+	mysql -h0 -P1306 -e "ALTER CLUSTER c4432_preserve ADD t4432_preserve;" >/tmp/c4432_preserve_alter.out 2>&1
+	alter_rc=$?
+	after_add=$(seqno 1306 c4432_preserve)
+	if [ $alter_rc -eq 0 ]; then
+		wait_add=$(wait_seq 1306 c4432_preserve "$want_add")
+		after_add=$(seqno 1306 c4432_preserve)
+		if wait_ok "$wait_add" "$want_add"; then
+			added=1
+			break
+		fi
+	fi
+done
+
+if [ "$added" = 1 ]; then
+	inserted=0
+	for attempt in 1 2 3; do
+		wait_ready 1306 c4432_preserve
+		before_insert=$(seqno 1306 c4432_preserve)
+		want_insert=$((before_insert+1))
+		mysql -h0 -P1306 -e "INSERT INTO c4432_preserve:t4432_preserve VALUES (1,'before peer stop');" >/tmp/c4432_preserve_insert_setup.out 2>&1
+		insert_rc=$?
+		after_insert=$(seqno 1306 c4432_preserve)
+		if [ $insert_rc -eq 0 ]; then
+			wait_insert=$(wait_seq 1306 c4432_preserve "$want_insert")
+			after_insert=$(seqno 1306 c4432_preserve)
+			if wait_ok "$wait_insert" "$want_insert"; then
+				inserted=1
+				break
+			fi
+		fi
+	done
+	if [ "$inserted" = 1 ]; then
+		echo "NEG_TABLE_ADDED=yes"
+		exit 0
+	fi
+fi
+
+echo "NEG_TABLE_ADDED=no"
+echo "NEG_ADD_BEFORE=$before_add NEG_ADD_WANTED=$want_add NEG_ADD_AFTER=$after_add NEG_ADD_RC=$alter_rc"
+echo "NEG_INSERT_BEFORE=$before_insert NEG_INSERT_WANTED=$want_insert NEG_INSERT_AFTER=$after_insert NEG_INSERT_RC=$insert_rc"
+cat /tmp/c4432_preserve_create.out /tmp/c4432_preserve_ready.out /tmp/c4432_preserve_alter.out /tmp/c4432_preserve_insert_setup.out 2>/dev/null || true
+echo "$wait_add"
+echo "$wait_insert"
+mysql -h0 -P1306 -E -e "SHOW STATUS LIKE 'cluster_c4432_preserve_%'" 2>&1 || true
+EOF
 ––– output –––
 NEG_TABLE_ADDED=yes
 ––– input –––

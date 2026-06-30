@@ -26,7 +26,7 @@ When `CALL CHAT` runs, Buddy builds a retrieval-augmented answer in this order:
 4. The LLM decides how to handle the message: search again, answer from the previous search context, or answer without retrieval.
 5. Buddy runs KNN search with the selected vector field when retrieval is needed.
 6. Buddy builds the LLM context from the vector field's `from='...'` source fields.
-7. The configured LLM generates the answer with inline references in `[ref:<id>]` format when it uses retrieved sources.
+7. The configured LLM generates the answer from the retrieved context and any `custom_prompt` instructions.
 8. Buddy saves the user message and the assistant reply in the conversation history.
 
 The fifth argument of `CALL CHAT` is called `fields` internally, but for conversational search it means the vector field used by `knn(...)`. It is not a list of fields to return. Buddy selects rows with `SELECT *`, then removes vector columns from the `sources` payload so the response does not include large embedding values.
@@ -136,6 +136,7 @@ Common options:
 |---|---:|---|
 | `model` | Yes | LLM model id in `provider:model` format. |
 | `description` | No | Stored description. |
+| `custom_prompt` | No | Prompt instructions used to build the answer from the retrieved context and conversation history. If set, it must be non-empty and at most 32768 bytes. |
 | `api_key` | No | Provider API key passed to the `llm` extension. |
 | `base_url` | No | Provider or proxy base URL. |
 | `timeout` | No | LLM request timeout, `1..65536`. |
@@ -183,6 +184,33 @@ Arguments are positional only:
 | 5 | `fields` / vector field | No | `FLOAT_VECTOR` field used in `knn(...)`. |
 
 The table argument must be a plain table identifier, optionally qualified as `database.table`. The vector field argument must be a plain field identifier.
+
+## Customizing answers and citations
+
+When Buddy sends a request to the LLM, it combines answer instructions with data sections containing the current conversation history, retrieved context, and user query. By default, Buddy provides the answer instructions. Set `custom_prompt` in `CREATE CHAT MODEL` to replace those default instructions with your own. The value must contain non-whitespace text and must not exceed 32768 bytes. Buddy still appends the history, context, and query sections after your custom instructions, so write the prompt to explain how the LLM should use those sections.
+
+For example, to make every response item cite the source row that supports it, create a model with a prompt like this:
+
+```sql
+CREATE CHAT MODEL cited_assistant (
+    model='openai:gpt-4o-mini',
+    custom_prompt='You are a context-only answer writer.
+
+Answer using only the provided context. Do not use outside knowledge, memory, assumptions, or unsupported facts.
+
+Keep the answer concise and under 4096 tokens.
+
+Citation rules:
+- Every item must end with a citation.
+- Never include a reference ID within the item itself.
+- In the end of the item, append the reference context ID (`context[].id`) in the format `[ref:<id>]`.
+- Do not duplicate the references in the end of the whole answer.
+
+If the provided context does not contain enough information, answer exactly:
+
+I don\'t have enough information in the provided context to answer.'
+);
+```
 
 ## Asking questions
 
@@ -308,7 +336,7 @@ When the fifth argument is present, Buddy checks that the field exists and is a 
 
 ## HTTP JSON syntax
 
-Conversation calls are also available over HTTP JSON through the standard `/search` endpoint.
+Conversation calls are available over HTTP JSON through the standard `/search` endpoint.
 
 Ask a question:
 
@@ -337,7 +365,8 @@ curl -s -X POST http://localhost:9308/search \
 
 Required fields in the `chat` object are `query`, `table`, and `model_name`. Optional fields are `conversation_uuid` and `vector_field`. `vector_field` is the HTTP JSON name for the fifth SQL `CALL CHAT` argument. The legacy JSON field name `fields` is accepted as an alias, but a request must not include both `vector_field` and `fields`.
 
-HTTP JSON conversation responses contain the same logical columns as `CALL CHAT`: `conversation_uuid`, `user_query`, `search_query`, `response`, `response_with_refs`, and `sources`. `sources` is returned as a JSON string containing retrieved source rows.
+
+HTTP JSON conversation responses contain the same logical columns as `CALL CHAT`: `conversation_uuid`, `user_query`, `search_query`, `response`, and `sources`. `sources` is returned as a JSON string containing retrieved source rows.
 
 
 ## Search and context details
@@ -357,8 +386,7 @@ Buddy uses the retrieved rows as LLM context. The same rows are returned in `sou
 | `conversation_uuid` | Existing or generated conversation id. |
 | `user_query` | Original user query. |
 | `search_query` | Standalone search query used for retrieval. |
-| `response` | LLM answer with inline references removed. |
-| `response_with_refs` | LLM answer as generated, including inline `[ref:<id>]` references to rows in `sources`. |
+| `response` | LLM answer as generated. |
 | `sources` | JSON string containing retrieved source rows. |
 
 Example response shape:
@@ -369,12 +397,11 @@ Example response shape:
   "user_query": "What is vector search?",
   "search_query": "vector search, embeddings, similarity search",
   "response": "Vector search finds similar items by comparing embeddings...",
-  "response_with_refs": "Vector search finds similar items by comparing embeddings... [ref:1]",
   "sources": "[{\"id\":1,\"title\":\"Vector Search\",\"content\":\"...\",\"knn_dist\":0.12}]"
 }
 ```
 
-Vector fields are not included in `sources`. Inline references use the source row `id`, not the source title or text. Use `response` for a plain answer and `response_with_refs` when you want to display citations.
+Vector fields are not included in `sources`. If you want source citations, add citation instructions to `custom_prompt`; the source row `id` is available in the context and `sources` payload.
 
 ## Managing chat models
 
@@ -390,6 +417,7 @@ List models:
 ```sql
 SHOW CHAT MODELS;
 ```
+
 
 
 <!-- intro -->
@@ -419,6 +447,7 @@ DESCRIBE CHAT MODEL assistant;
 ```
 
 
+
 <!-- intro -->
 ##### JSON:
 
@@ -446,6 +475,7 @@ DROP CHAT MODEL assistant;
 ```
 
 
+
 <!-- intro -->
 ##### JSON:
 
@@ -471,6 +501,7 @@ Drop safely:
 ```sql
 DROP CHAT MODEL IF EXISTS assistant;
 ```
+
 
 
 <!-- intro -->

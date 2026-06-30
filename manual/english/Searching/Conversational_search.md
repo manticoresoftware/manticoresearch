@@ -145,8 +145,6 @@ Common options:
 
 Chat model names may contain only letters, numbers, and underscores.
 
-`custom_prompt` is optional. If it is omitted, Buddy uses its default answer prompt. If it is set, it must contain non-whitespace text and must not exceed 32768 bytes. To make the LLM return source citations, include that instruction in `custom_prompt`, for example: `Cite sources as [ref:<id>] using source row ids from the context.`
-
 The `model` option must use `provider:model` format:
 
 ```sql
@@ -186,6 +184,33 @@ Arguments are positional only:
 | 5 | `fields` / vector field | No | `FLOAT_VECTOR` field used in `knn(...)`. |
 
 The table argument must be a plain table identifier, optionally qualified as `database.table`. The vector field argument must be a plain field identifier.
+
+## Customizing answers and citations
+
+When Buddy sends a request to the LLM, it combines answer instructions with data sections containing the current conversation history, retrieved context, and user query. By default, Buddy provides the answer instructions. Set `custom_prompt` in `CREATE CHAT MODEL` to replace those default instructions with your own. The value must contain non-whitespace text and must not exceed 32768 bytes. Buddy still appends the history, context, and query sections after your custom instructions, so write the prompt to explain how the LLM should use those sections.
+
+For example, to make every response item cite the source row that supports it, create a model with a prompt like this:
+
+```sql
+CREATE CHAT MODEL cited_assistant (
+    model='openai:gpt-4o-mini',
+    custom_prompt='You are a context-only answer writer.
+
+Answer using only the provided context. Do not use outside knowledge, memory, assumptions, or unsupported facts.
+
+Keep the answer concise and under 4096 tokens.
+
+Citation rules:
+- Every item must end with a citation.
+- Never include a reference ID within the item itself.
+- In the end of the item, append the reference context ID (`context[].id`) in the format `[ref:<id>]`.
+- Do not duplicate the references in the end of the whole answer.
+
+If the provided context does not contain enough information, answer exactly:
+
+I don\'t have enough information in the provided context to answer.'
+);
+```
 
 ## Asking questions
 

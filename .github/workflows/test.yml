@@ -1198,16 +1198,20 @@ jobs:
               failed=1
             fi
           fi
-          for entry in "${runtime_results[@]}"; do
-            name="${entry%%:*}"
-            rest="${entry#*:}"
-            cache_hit="${rest%%:*}"
-            build_result="${rest#*:}"
-            if [[ "$cache_hit" != "true" && "$build_result" != "success" ]]; then
-              echo "$name: no cached runtime artifact and build result was $build_result"
-              failed=1
-            fi
-          done
+          if [[ "${{ needs.meta.outputs.run_builds }}" == "true" ]]; then
+            # Runtime artifacts are required only when build/ubertest jobs run.
+            # CLT-only cached-image runs intentionally skip both runtime cache probes and runtime builds.
+            for entry in "${runtime_results[@]}"; do
+              name="${entry%%:*}"
+              rest="${entry#*:}"
+              cache_hit="${rest%%:*}"
+              build_result="${rest#*:}"
+              if [[ "$cache_hit" != "true" && "$build_result" != "success" ]]; then
+                echo "$name: no cached runtime artifact and build result was $build_result"
+                failed=1
+              fi
+            done
+          fi
           if [[ "$failed" -ne 0 ]]; then
             echo "* Overall: failure" >> "$GITHUB_STEP_SUMMARY"
             echo "One or more build/test jobs failed"

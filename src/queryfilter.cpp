@@ -191,12 +191,10 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 		{
 			if ( m_pSettings->m_bIndexExactWords && dKeywords[iTokenized].m_sNormalized.cstr()[0]!='=' )
 			{
-				snprintf ( (char *)sTmp, sizeof(sTmp)-1, "=%s", dKeywords[iTokenized].m_sNormalized.cstr() );
-				sTmp[sizeof(sTmp)-1] = '\0';
-
-				strncpy ( (char*)sTmp2, dKeywords[iTokenized].m_sTokenized.scstr(), sizeof ( sTmp2 ) - 1 );
-				sTmp2[sizeof(sTmp2)-1] = '\0';
-
+				BYTE * sTmp = CopyExactKeywordString ( dTmp, (const BYTE*)dKeywords[iTokenized].m_sNormalized.cstr() );
+				BYTE * sTmp2 = CopyKeywordString ( dTmp2, dKeywords[iTokenized].m_sTokenized.scstr() );
+				if ( !sTmp || !sTmp2 )
+					continue;
 				AddKeywordStats ( sTmp, sTmp2, iKeywordQpos, dKeywords );
 			}
 			continue;

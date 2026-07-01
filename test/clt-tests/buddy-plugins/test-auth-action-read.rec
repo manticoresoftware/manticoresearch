@@ -89,7 +89,40 @@ MYSQL_PWD=readerpass1 mysql -E -ureader -h0 -P9306 -e "SET AUTOCOMMIT = 0; SET N
 *************************** 1. row ***************************
 ok: 1
 ––– comment –––
-––– 4.1.6 MySQL client startup SHOW VARIABLES with READ — success –––
+––– 4.1.6 SET SESSION unknown variable with READ — SET handler error –––
+EXPECTED: Session-scoped SET_EXTRA must reach SET handling instead of auth denial.
+––– comment –––
+––– input –––
+MYSQL_PWD=readerpass1 mysql -ureader -h0 -P9306 -e "SET SESSION foo = 1;" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: Unknown session variable 'foo' in SET statement
+––– comment –––
+––– 4.1.7 SET SESSION supported variable with READ — success –––
+EXPECTED: Session-scoped SET_EXTRA must not require WRITE/admin permissions.
+––– comment –––
+––– input –––
+MYSQL_PWD=readerpass1 mysql -E -ureader -h0 -P9306 -e "SET SESSION autocommit = 0; SELECT 1 AS ok;"
+––– output –––
+*************************** 1. row ***************************
+ok: 1
+––– comment –––
+––– 4.1.8 SET GLOBAL with READ — denied –––
+EXPECTED: Global SET_EXTRA still requires WRITE permission.
+––– comment –––
+––– input –––
+MYSQL_PWD=readerpass1 mysql -ureader -h0 -P9306 -e "SET GLOBAL foo = 1;" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'reader'
+––– comment –––
+––– 4.1.9 Mixed SESSION/GLOBAL SET with READ — denied –––
+EXPECTED: Mixed SET_EXTRA remains on the permission-checked path.
+––– comment –––
+––– input –––
+MYSQL_PWD=readerpass1 mysql -ureader -h0 -P9306 -e "SET SESSION autocommit = 0, GLOBAL foo = 1;" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'reader'
+––– comment –––
+––– 4.1.10 MySQL client startup SHOW VARIABLES with READ — success –––
 EXPECTED: MySQL compatibility metadata requests must not require SCHEMA/admin permissions.
 ––– comment –––
 ––– input –––

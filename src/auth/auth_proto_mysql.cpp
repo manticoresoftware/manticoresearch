@@ -170,6 +170,22 @@ static bool DenyInternalAuthStorageTarget ( const CSphString & sUser, const CSph
 }
 
 
+static bool IsSessionOnlySetExtra ( const SqlStmt_t & tStmt )
+{
+	if ( tStmt.m_eSet!=SET_EXTRA )
+		return false;
+
+	if ( !tStmt.m_dInsertValues.GetLength() || tStmt.m_dInsertValues.GetLength()!=tStmt.m_dInsertSchema.GetLength() )
+		return false;
+
+	for ( const SqlInsert_t & tValue : tStmt.m_dInsertValues )
+		if ( !( tValue.m_iType & 1 ) )
+			return false;
+
+	return true;
+}
+
+
 bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
 {
 	if ( !IsAuthEnabled() )
@@ -243,7 +259,7 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 		return CheckPerms ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, false, sError );
 
 	case STMT_SET:
-		if ( tStmt.m_eSet==SET_LOCAL )
+		if ( tStmt.m_eSet==SET_LOCAL || IsSessionOnlySetExtra ( tStmt ) )
 			return true;
 		return CheckPerms ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, true, sError );
 

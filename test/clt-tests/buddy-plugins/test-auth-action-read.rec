@@ -79,3 +79,20 @@ EXPECTED: Success
 MYSQL_PWD=readerpass1 mysql -E -ureader -h0 -P9306 -e "SHOW TABLES;" | grep "Table:" | sort
 ––– output –––
 Table: readtest
+––– comment –––
+––– 4.1.5 MySQL client startup local SETs with READ — success –––
+EXPECTED: MySQL compatibility startup commands must not require WRITE/admin permissions.
+––– comment –––
+––– input –––
+MYSQL_PWD=readerpass1 mysql -E -ureader -h0 -P9306 -e "SET AUTOCOMMIT = 0; SET NAMES utf8; SELECT 1 AS ok;"
+––– output –––
+*************************** 1. row ***************************
+ok: 1
+––– comment –––
+––– 4.1.6 MySQL client startup SHOW VARIABLES with READ — success –––
+EXPECTED: MySQL compatibility metadata requests must not require SCHEMA/admin permissions.
+––– comment –––
+––– input –––
+MYSQL_PWD=readerpass1 mysql -N -ureader -h0 -P9306 -e "SHOW VARIABLES;" >/dev/null && echo "show_variables: OK"
+––– output –––
+show_variables: OK

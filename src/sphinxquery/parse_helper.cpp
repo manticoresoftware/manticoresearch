@@ -16,6 +16,13 @@
 #include "tokenizer/tokenizer.h"
 #include "dict/dict_base.h"
 
+void SetKeywordWithMarkers ( CSphString & sDst, const char * sPrefix, const CSphString & sWord, const char * sSuffix )
+{
+	StringBuilder_c sBuf;
+	sBuf << sPrefix << sWord << sSuffix;
+	sBuf.MoveTo ( sDst );
+}
+
 namespace { // static
 
 void TransformMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec & tMorphDisabledFields )
@@ -42,7 +49,7 @@ void TransformMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec & tMorphDisab
 					dWords.for_each ( [] ( XQKeyword_t & tKw )
 					{
 						if ( !tKw.m_sWord.IsEmpty() && !tKw.m_sWord.Begins( "=" ) && !tKw.m_sWord.Begins("*") && !tKw.m_sWord.Ends("*") )
-							tKw.m_sWord.SetSprintf ( "=%s", tKw.m_sWord.cstr() );
+							SetKeywordWithMarkers ( tKw.m_sWord, "=", tKw.m_sWord );
 					});
 				});
 			}
@@ -315,6 +322,19 @@ void XQParseHelper_c::Setup ( const CSphSchema * pSchema, TokenizerRefPtr_c pTok
 	m_pParsed = pXQQuery;
 	m_iAtomPos = 0;
 	m_bEmptyStopword = ( tSettings.m_iStopwordStep==0 );
+	m_dQueryTokenScratch.Reset ( GetKeywordBufSize ( m_pDict->GetSettings().GetDictFormat() ) );
+}
+
+
+BYTE * XQParseHelper_c::CopyQueryTokenToScratch ( const char * sToken )
+{
+	assert ( sToken );
+	assert ( m_dQueryTokenScratch.GetLength()>0 );
+
+	int iLen = Min ( (int)strlen ( sToken ), m_dQueryTokenScratch.GetLength()-1 );
+	memcpy ( m_dQueryTokenScratch.Begin(), sToken, iLen );
+	m_dQueryTokenScratch[iLen] = '\0';
+	return m_dQueryTokenScratch.Begin();
 }
 
 
@@ -730,7 +750,7 @@ void XQParseHelper_c::FixupDestForms ()
 			const auto& sWord =  m_dDestForms [ tDesc.m_iDestStart + iForm ];
 			// propagate exact word flag to all destination forms
 			if ( bExact )
-				tKeyword.m_sWord.SetSprintf ( "=%s", sWord.cstr() );
+				SetKeywordWithMarkers ( tKeyword.m_sWord, "=", sWord );
 			else
 				tKeyword.m_sWord = sWord;
 

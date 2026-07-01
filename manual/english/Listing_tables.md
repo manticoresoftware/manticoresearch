@@ -29,7 +29,7 @@ SHOW TABLES;
 
 ```sql
 +----------+-------------+
-| Index    | Type        |
+| Table    | Type        |
 +----------+-------------+
 | dist     | distributed |
 | plain    | local       |
@@ -118,7 +118,7 @@ utilsApi.sql('SHOW TABLES')
 
 <!-- response Python -->
 ```python
-{u'columns': [{u'Index': {u'type': u'string'}},
+{u'columns': [{u'Table': {u'type': u'string'}},
               {u'Type': {u'type': u'string'}}],
  u'data': [{u'Index': u'dist1', u'Type': u'distributed'},
            {u'Index': u'rt', u'Type': u'rt'},
@@ -480,6 +480,8 @@ SHOW CREATE TABLE table_name [ OPTION output_words = 'list' | 'file' ]
 ```
 
 Prints the `CREATE TABLE` statement used to create the specified table.
+
+If the table was created using a SQL `profile=...` shortcut, `SHOW CREATE TABLE` prints the expanded settings instead of the profile name itself.
 
 The `output_words` option allows you to control how external file settings (such as `stopwords`, `exceptions`, `wordforms`, `hitless_words`) are displayed:
 

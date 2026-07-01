@@ -10,6 +10,7 @@
 
 #include "sphinxstd.h"
 #include "searchdha.h"
+#include "auth/auth.h"
 
 struct FieldRequest_t
 {
@@ -59,7 +60,121 @@ struct RemoteFieldsAnswer_t : public iQueryResult, public FieldBlob_t
 	// reply data
 	CSphVector<DocID_t> m_dDocs;
 	const BYTE * m_pFieldsRaw = nullptr; // not owned
+	int m_iFieldsLen = 0;
+	int m_iExpectedFields = -1;
+	int m_iRequestedDocs = -1;
 };
+
+static bool FailReply ( AgentConn_t & tAgent, const char * sFmt, ... )
+{
+	CSphString sMessage;
+	sMessage.SetSprintf ( "invalid GETFIELD reply: %s", sFmt );
+
+	va_list ap;
+	va_start ( ap, sFmt );
+	tAgent.m_sFailure.SetSprintfVa ( sMessage.cstr(), ap );
+	va_end ( ap );
+
+	return false;
+}
+
+
+static bool ValidateFieldLocs ( const VecTraits_T<FieldLoc_t> & dLocs, int iFieldsLen, CSphString & sError )
+{
+	ARRAY_CONSTFOREACH ( i, dLocs )
+	{
+		const auto & tLoc = dLocs[i];
+		if ( tLoc.m_iOff<0 || tLoc.m_iSize<0 )
+		{
+			sError.SetSprintf ( "locator %d has negative offset or size (off=%d, size=%d)",
+					i, tLoc.m_iOff, tLoc.m_iSize );
+			return false;
+		}
+
+		if ( int64_t ( tLoc.m_iOff ) + tLoc.m_iSize>iFieldsLen )
+		{
+			sError.SetSprintf ( "locator %d out of fields blob range (off=%d, size=%d, fields_len=%d)",
+					i, tLoc.m_iOff, tLoc.m_iSize, iFieldsLen );
+			return false;
+		}
+	}
+
+	return true;
+}
+
+
+static bool ValidateFields ( const RemoteFieldsAnswer_t & tReply, CSphString & sError )
+{
+	if ( tReply.m_iExpectedFields<0 )
+	{
+		sError = "invalid expected field count";
+		return false;
+	}
+
+	if ( tReply.m_iRequestedDocs<0 )
+	{
+		sError = "invalid requested doc count";
+		return false;
+	}
+
+	if ( tReply.m_dDocs.GetLength()>tReply.m_iRequestedDocs )
+	{
+		sError.SetSprintf ( "doc count %d exceeds requested doc count %d",
+				tReply.m_dDocs.GetLength(), tReply.m_iRequestedDocs );
+		return false;
+	}
+
+	int64_t iExpectedLocs = int64_t ( tReply.m_dDocs.GetLength() ) * tReply.m_iExpectedFields;
+	if ( iExpectedLocs!=tReply.m_dLocs.GetLength() )
+	{
+		sError.SetSprintf ( "invalid locator count (docs=%d, fields=%d, locators=%d)",
+				tReply.m_dDocs.GetLength(), tReply.m_iExpectedFields, tReply.m_dLocs.GetLength() );
+		return false;
+	}
+
+	if ( tReply.m_iFieldsLen<0 || ( tReply.m_iFieldsLen && !tReply.m_pFieldsRaw ) )
+	{
+		sError = "invalid fields blob";
+		return false;
+	}
+
+	if ( !ValidateFieldLocs ( tReply.m_dLocs, tReply.m_iFieldsLen, sError ) )
+		return false;
+
+	return true;
+}
+
+
+static void SetFieldReplyContract ( RemoteFieldsAnswer_t & tReply, int iExpectedFields, int iRequestedDocs )
+{
+	tReply.m_iExpectedFields = iExpectedFields;
+	tReply.m_iRequestedDocs = iRequestedDocs;
+}
+
+
+static void SetFieldReplyContract ( VecRefPtrsAgentConn_t & dRemotes, int iExpectedFields, int iRequestedDocs )
+{
+	for ( AgentConn_t * pAgent : dRemotes )
+	{
+		auto * pReply = (RemoteFieldsAnswer_t *) pAgent->m_pResult.get();
+		assert ( pReply );
+		SetFieldReplyContract ( *pReply, iExpectedFields, iRequestedDocs );
+	}
+}
+
+
+static bool ValidateReturnedDocs ( const RemoteFieldsAnswer_t & tReply, const DocHash_t & hRequestedDocs, CSphString & sError )
+{
+	for ( DocID_t tDocid : tReply.m_dDocs )
+		if ( !hRequestedDocs.Exists ( tDocid ) )
+		{
+			sError.SetSprintf ( "returned doc " UINT64_FMT " was not requested", uint64_t ( tDocid ) );
+			return false;
+		}
+
+	return true;
+}
+
 
 struct GetFieldRequestBuilder_t : public RequestBuilder_i
 {
@@ -92,20 +207,62 @@ struct GetFieldReplyParser_t : public ReplyParser_i
 	{
 		auto * pReply = (RemoteFieldsAnswer_t *)tAgent.m_pResult.get();
 		assert ( pReply );
-		pReply->m_dDocs.Resize ( tReq.GetDword() );
-		for ( auto& tDoc : pReply->m_dDocs )
-			tDoc = tReq.GetUint64();
-		pReply->m_dLocs.Resize ( tReq.GetDword() );
-		for ( FieldLoc_t & tField : pReply->m_dLocs )
-		{
-			tField.m_iOff = tReq.GetDword();
-			tField.m_iSize = tReq.GetDword();
-		}
-		int iFieldsLen = tReq.GetDword();
-		if ( iFieldsLen )
-			tReq.GetBytesZerocopy( &pReply->m_pFieldsRaw, iFieldsLen );
 
-		return !tReq.GetError();
+		DWORD uDocs = tReq.GetDword();
+		if ( uDocs>INT_MAX )
+			return FailReply ( tAgent, "doc count %u exceeds INT_MAX", uDocs );
+
+		if ( int64_t ( uDocs ) * sizeof ( DocID_t ) + 2*sizeof ( DWORD )>tReq.HasBytes() )
+			return FailReply ( tAgent, "doc count %u exceeds remaining packet", uDocs );
+
+		CSphVector<DocID_t> dDocs;
+		dDocs.Resize ( (int)uDocs );
+		for ( auto & tDoc : dDocs )
+			tDoc = tReq.GetUint64();
+
+		DWORD uLocs = tReq.GetDword();
+		if ( uLocs>INT_MAX )
+			return FailReply ( tAgent, "locator count %u exceeds INT_MAX", uLocs );
+
+		if ( int64_t ( uLocs ) * 2*sizeof ( DWORD ) + sizeof ( DWORD )>tReq.HasBytes() )
+			return FailReply ( tAgent, "locator count %u exceeds remaining packet", uLocs );
+
+		CSphVector<FieldLoc_t> dLocs;
+		dLocs.Resize ( (int)uLocs );
+		ARRAY_FOREACH ( i, dLocs )
+		{
+			DWORD uOff = tReq.GetDword();
+			DWORD uSize = tReq.GetDword();
+
+			if ( uOff>INT_MAX )
+				return FailReply ( tAgent, "locator %d offset %u exceeds INT_MAX", i, uOff );
+
+			if ( uSize>INT_MAX )
+				return FailReply ( tAgent, "locator %d size %u exceeds INT_MAX", i, uSize );
+
+			dLocs[i] = { (int)uOff, (int)uSize };
+		}
+
+		DWORD uFieldsLen = tReq.GetDword();
+		if ( uFieldsLen>INT_MAX )
+			return FailReply ( tAgent, "fields blob length %u exceeds INT_MAX", uFieldsLen );
+
+		int iFieldsLen = (int)uFieldsLen;
+		if ( iFieldsLen>tReq.HasBytes() )
+			return FailReply ( tAgent, "fields blob length %d exceeds remaining packet", iFieldsLen );
+
+		const BYTE * pFieldsRaw = nullptr;
+		if ( iFieldsLen )
+			tReq.GetBytesZerocopy ( &pFieldsRaw, iFieldsLen );
+
+		if ( tReq.GetError() )
+			return FailReply ( tAgent, "failed to read reply: %s", tReq.GetErrorMessage().cstr() );
+
+		pReply->m_dDocs.SwapData ( dDocs );
+		pReply->m_dLocs.SwapData ( dLocs );
+		pReply->m_iFieldsLen = iFieldsLen;
+		pReply->m_pFieldsRaw = pFieldsRaw;
+		return true;
 	}
 };
 
@@ -253,6 +410,11 @@ static bool GetFieldFromLocal ( const CSphString & sIndexName, const FieldReques
 bool GetFieldFromDist ( VecRefPtrsAgentConn_t & dRemotes, const FieldRequest_t & tArgs, DocHash_t & hFetchedDocs, FieldBlob_t & tRes )
 {
 	const int iFieldsCount = tArgs.m_dFieldNames.GetLength();
+	DocHash_t hRequestedDocs ( tArgs.m_dDocs.GetLength() );
+	for ( DocID_t tDocid : tArgs.m_dDocs )
+		hRequestedDocs.Set ( tDocid, 0 );
+
+	bool bOk = true;
 	for ( AgentConn_t * pAgent : dRemotes )
 	{
 		auto * pReply = (RemoteFieldsAnswer_t *) pAgent->m_pResult.get ();
@@ -260,6 +422,23 @@ bool GetFieldFromDist ( VecRefPtrsAgentConn_t & dRemotes, const FieldRequest_t &
 		{
 			if ( !pAgent->m_sFailure.IsEmpty() )
 				tRes.m_sError.SetSprintf ( "agent %s: %s", pAgent->m_tDesc.GetMyUrl().cstr(), pAgent->m_sFailure.cstr() );
+			else
+				tRes.m_sError.SetSprintf ( "agent %s: failed to fetch stored fields", pAgent->m_tDesc.GetMyUrl().cstr() );
+			bOk = false;
+			continue;
+		}
+
+		if ( !ValidateFields ( *pReply, tRes.m_sError ) )
+		{
+			tRes.m_sError.SetSprintf ( "agent %s: invalid GETFIELD reply: %s", pAgent->m_tDesc.GetMyUrl().cstr(), tRes.m_sError.cstr() );
+			bOk = false;
+			continue;
+		}
+
+		if ( !ValidateReturnedDocs ( *pReply, hRequestedDocs, tRes.m_sError ) )
+		{
+			tRes.m_sError.SetSprintf ( "agent %s: invalid GETFIELD reply: %s", pAgent->m_tDesc.GetMyUrl().cstr(), tRes.m_sError.cstr() );
+			bOk = false;
 			continue;
 		}
 
@@ -275,12 +454,13 @@ bool GetFieldFromDist ( VecRefPtrsAgentConn_t & dRemotes, const FieldRequest_t &
 			for ( const auto& tSrcField : dLocs  )
 			{
 				tRes.m_dLocs.Add ( { tRes.m_dBlob.GetLength (), tSrcField.m_iSize } );
-				tRes.m_dBlob.Append ( pReply->m_pFieldsRaw+tSrcField.m_iOff, tSrcField.m_iSize );
+				const BYTE * pField = tSrcField.m_iSize ? pReply->m_pFieldsRaw+tSrcField.m_iOff : nullptr;
+				tRes.m_dBlob.Append ( pField, tSrcField.m_iSize );
 			}
 		}
 	}
 
-	return true;
+	return bOk;
 }
 
 static bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash_t & hFetchedDocs )
@@ -304,10 +484,13 @@ static bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash
 
 	if ( !dRemotes.IsEmpty () )
 	{
+		SetFieldReplyContract ( dRemotes, tReq.m_dFieldNames.GetLength(), tReq.m_dDocs.GetLength() );
+
 		pDistReq = std::make_unique<ProxyFieldRequestBuilder_t> ( tReq );
 		pDistReply = std::make_unique<GetFieldReplyParser_t>();
 
 		pDistReporter = GetObserver();
+		SetSessionAuth ( dRemotes );
 		ScheduleDistrJobs ( dRemotes, pDistReq.get(), pDistReply.get(), pDistReporter.Ptr() );
 	}
 
@@ -443,6 +626,41 @@ int TagOf ( const ResLoc_t& tLoc, const VecTraits_T<CSphMatch> & dMatches )
 	return dMatches[tLoc.m_iIndex].m_iTag;
 }
 
+static bool ValidateSortedReturnedDocs ( const VecTraits_T<ResLoc_t> & dResDocs, const VecTraits_T<DocID_t> & dDocs, const VecTraits_T<int> & dOrd, CSphString & sError )
+{
+	int iDocs = dDocs.GetLength();
+	if ( !iDocs )
+		return true;
+
+	int iDoc = 0;
+	int iRecvDoc = dOrd[iDoc];
+	for ( const auto & dResDoc : dResDocs )
+	{
+		if ( dResDoc.m_iDocid<dDocs[iRecvDoc] )
+			continue;
+
+		if ( dResDoc.m_iDocid>dDocs[iRecvDoc] )
+		{
+			sError.SetSprintf ( "returned doc " UINT64_FMT " was not requested", uint64_t ( dDocs[iRecvDoc] ) );
+			return false;
+		}
+
+		++iDoc;
+		if ( iDoc>=iDocs )
+			break;
+
+		iRecvDoc = dOrd[iDoc];
+	}
+
+	if ( iDoc<iDocs )
+	{
+		sError.SetSprintf ( "returned doc " UINT64_FMT " was not requested", uint64_t ( dDocs[dOrd[iDoc]] ) );
+		return false;
+	}
+
+	return true;
+}
+
 // fill vec of ResLoc_t with remote matches from tRes, sorted by tags, inside groups sorted by DocID
 void CollectTaggedDocs ( CSphVector<ResLoc_t> & dIds, const AggrResult_t & tRes, const VecTraits_T<CSphMatch> & dMatches )
 {
@@ -536,21 +754,27 @@ VecRefPtrsAgentConn_t GetAgents( const VecTraits_T<RemoteFieldsAnswer_t>& dRange
 	return dAgents;
 }
 
-void FillDocs ( VecTraits_T<CSphMatch> & dMatches, RemoteFieldsAnswer_t& dReply,
-		const VecTraits_T<const CSphColumnInfo *>& dFieldCols )
+bool FillDocs ( VecTraits_T<CSphMatch> & dMatches, RemoteFieldsAnswer_t& dReply,
+		const VecTraits_T<const CSphColumnInfo *>& dFieldCols, CSphString & sError )
 {
 	auto & dResDocs = dReply.m_dResDocs; // directly passed from source, sorted by DocID
 	auto & dDocs = dReply.m_dDocs; // received, m.b. different (shrinked and unordered)
 	int iStride = dFieldCols.GetLength ();
 
+	if ( !ValidateFields ( dReply, sError ) )
+		return false;
+
 	if ( dDocs.IsEmpty () )
-		return;
+		return true;
 
 	// docs and locators placed in unknown order, but for merging we need them ordered.
 	CSphFixedVector<int> dOrd { dDocs.GetLength () };
 	ARRAY_CONSTFOREACH( i, dOrd )
 		dOrd[i] = i;
 	dOrd.Sort ( Lesser ( [&dDocs] ( int l, int r ) { return dDocs[l]<dDocs[r]; } ) );
+
+	if ( !ValidateSortedReturnedDocs ( dResDocs, dDocs, dOrd, sError ) )
+		return false;
 
 	int iDocs = dDocs.GetLength();
 	int iDoc = 0;
@@ -567,7 +791,8 @@ void FillDocs ( VecTraits_T<CSphMatch> & dMatches, RemoteFieldsAnswer_t& dReply,
 		auto dLocators = dReply.m_dLocs.Slice ( iStride * iDoc, iStride );
 		ARRAY_CONSTFOREACH( i, dFieldCols )
 		{
-			BYTE * pPacked = sphPackPtrAttr ( { dReply.m_pFieldsRaw+dLocators[i].m_iOff, dLocators[i].m_iSize } );
+			const BYTE * pField = dLocators[i].m_iSize ? dReply.m_pFieldsRaw+dLocators[i].m_iOff : nullptr;
+			BYTE * pPacked = sphPackPtrAttr ( { pField, dLocators[i].m_iSize } );
 			pPacked = (BYTE*)ExchangeAttr ( tMatch, dFieldCols[i]->m_tLocator, (SphAttr_t)pPacked );
 			sphDeallocatePacked ( pPacked );
 		}
@@ -578,6 +803,30 @@ void FillDocs ( VecTraits_T<CSphMatch> & dMatches, RemoteFieldsAnswer_t& dReply,
 
 		iRecvDoc = dOrd[iDoc];
 	}
+
+	return true;
+}
+
+static bool FillRemoteDocs ( AgentConn_t * pAgent, VecTraits_T<CSphMatch> & dMatches,
+		const VecTraits_T<const CSphColumnInfo *>& dFieldCols, StringBuilder_c & sError )
+{
+	auto & dReply = *(RemoteFieldsAnswer_t *) pAgent->m_pResult.release ();
+	if ( pAgent->m_bSuccess )
+	{
+		CSphString sFailure;
+		if ( FillDocs ( dMatches, dReply, dFieldCols, sFailure ) )
+			return true;
+
+		sError.Sprintf ( "agent %s: invalid GETFIELD reply: %s", pAgent->m_tDesc.GetMyUrl().cstr(), sFailure.cstr() );
+		return false;
+	}
+
+	if ( !pAgent->m_sFailure.IsEmpty() )
+		sError.Sprintf ( "agent %s: %s", pAgent->m_tDesc.GetMyUrl().cstr(), pAgent->m_sFailure.cstr() );
+	else
+		sError.Sprintf ( "agent %s: failed to fetch stored fields", pAgent->m_tDesc.GetMyUrl().cstr() );
+
+	return false;
 }
 
 CSphVector<const CSphColumnInfo *> GetStoredColumnList ( const CSphSchema & tSchema )
@@ -608,6 +857,9 @@ void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 		return;
 	}
 
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, tRequest.m_sIndexes, tOut ) )
+		return;
+
 	// fetch stored fields
 	DocHash_t tFetched ( tRequest.m_dDocs.GetLength() );
 	FieldBlob_t tRes;
@@ -620,7 +872,7 @@ void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 	SendAPICommandGetfieldAnswer ( tOut, tRequest, tRes, tFetched );
 }
 
-void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery )
+bool RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery )
 {
 	assert ( tRes.m_bSingle );
 	assert ( tRes.m_bOneSchema );
@@ -636,7 +888,7 @@ void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery )
 
 	// early reject in case no stored fields found
 	if ( dFieldCols.IsEmpty() )
-		return;
+		return true;
 
 	int iOffset = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
 	int iCount = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
@@ -646,26 +898,31 @@ void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery )
 	CSphVector<ResLoc_t> dIds;
 	auto dRangesIds = ExtractRanges ( dIds, tRes, dMatches );
 	if ( dRangesIds.IsEmpty() )
-		return;
+		return true;
 
 	auto dAgents = GetAgents ( dRangesIds, tRes );
 	assert ( dAgents.GetLength ()==dRangesIds.GetLength () );
+	for ( auto & dRange : dRangesIds )
+		SetFieldReplyContract ( dRange, dFieldCols.GetLength(), dRange.m_dResDocs.GetLength() );
 
 	// connect to remote agents and query them
 	GetFieldRequestBuilder_t tBuilder ( dFieldCols );
 	GetFieldReplyParser_t tParser;
+	SetSessionAuth ( dAgents );
 	PerformRemoteTasks ( dAgents, &tBuilder, &tParser );
 
+	bool bOk = true;
 	StringBuilder_c sError { "," };
 	if ( !tRes.m_sWarning.IsEmpty () )
 		sError << tRes.m_sWarning;
 	for ( auto* pAgent : dAgents )
-	{
-		auto & dReply = *(RemoteFieldsAnswer_t *) pAgent->m_pResult.release ();
-		if ( pAgent->m_bSuccess )
-			FillDocs ( dMatches, dReply, dFieldCols );
-		else if ( !pAgent->m_sFailure.IsEmpty() )
-			sError.Sprintf ( "agent %s: %s", pAgent->m_tDesc.GetMyUrl().cstr(), pAgent->m_sFailure.cstr() );
-	}
-	sError.MoveTo ( tRes.m_sWarning );
+		if ( !FillRemoteDocs ( pAgent, dMatches, dFieldCols, sError ) )
+			bOk = false;
+
+	if ( bOk )
+		sError.MoveTo ( tRes.m_sWarning );
+	else
+		sError.MoveTo ( tRes.m_sError );
+
+	return bOk;
 }

@@ -38,6 +38,9 @@ public:
 	bool					SetBlendMode ( const char * sMode, CSphString & sError ) override		{ return m_pTokenizer->SetBlendMode ( sMode, sError ); }
 	void					Setup ( const CSphTokenizerSettings & tSettings ) override				{ m_pTokenizer->Setup ( tSettings ); }
 	const CSphTokenizerSettings &	GetSettings () const override									{ return m_pTokenizer->GetSettings (); }
+	int						GetMaxTokenBytes () const noexcept override								{ return m_pTokenizer->GetMaxTokenBytes(); }
+	int						GetOversizedTokenCount () const noexcept override						{ return m_pTokenizer->GetOversizedTokenCount(); }
+	int						ResetOversizedTokenCount () noexcept override							{ return m_pTokenizer->ResetOversizedTokenCount(); }
 	const CSphSavedFile &	GetSynFileInfo () const override										{ return m_pTokenizer->GetSynFileInfo (); }
 	bool					EnableSentenceIndexing ( CSphString & sError ) override					{ return m_pTokenizer->EnableSentenceIndexing ( sError ); }
 	bool					EnableZoneIndexing ( CSphString & sError ) override						{ return m_pTokenizer->EnableZoneIndexing ( sError ); }

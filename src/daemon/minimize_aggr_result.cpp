@@ -888,7 +888,7 @@ static void ComputePostlimit ( AggrResult_t & tRes, const CSphQuery & tQuery, bo
 }
 
 /// merges multiple result sets, remaps columns, does reorder for outer selects
-bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, const sph::StringSet & hExtraColumns, QueryProfile_c * pProfiler, const CSphFilterSettings * pAggrFilter, bool bForceRefItems, bool bMaster )
+bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, const sph::StringSet & hExtraColumns, QueryProfile_c * pProfiler, const CSphFilterSettings * pAggrFilter, bool bForceRefItems, bool bMaster, bool bForceSort )
 {
 	bool bReturnZeroCount = !tRes.m_dZeroCount.IsEmpty();
 	bool bQueryFromAPI = tQuery.m_eQueryType==QUERY_API;
@@ -946,7 +946,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	// if there's more than one result set,
 	// we now have to merge and order all the matches
 	// this is a good time to apply outer order clause, too
-	if ( tRes.m_iSuccesses>1 || pAggrFilter )
+	if ( bForceSort || tRes.m_iSuccesses>1 || pAggrFilter )
 	{
 		if ( !MergeAllMatches ( tRes, tQuery, bHaveLocals, bAllEqual, bMaster, pAggrFilter, pProfiler ) )
 			return false;
@@ -982,7 +982,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	if ( bMaster )
 	{
 		CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_GETFIELD );
-		RemotesGetField ( tRes, tQuery );
+		if ( !RemotesGetField ( tRes, tQuery ) )
+			return false;
 	}
 
 	// all the merging and sorting is now done
@@ -1004,6 +1005,27 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 
 	if ( tRes.m_iSuccesses==1 )
 		RemapNullMask ( tRes.m_dResults[0].m_dMatches, tOldSchema, tRes.m_tSchema );
+
+	if ( bForceSort || tQuery.m_bFacetMaxRef || tQuery.m_iFacetResultLimit>=0 )
+	{
+		CSphVector<int> dKeptRows;
+
+		for ( int i = 0; i < tRes.m_tSchema.GetAttrsCount(); ++i )
+		{
+			const CSphColumnInfo & tAttr = tRes.m_tSchema.GetAttr(i);
+			if ( !tAttr.IsDataPtr() || !tAttr.m_tLocator.m_bDynamic )
+				continue;
+
+			const int iRowitem = tAttr.m_tLocator.CalcRowitem();
+			assert ( iRowitem>=0 );
+			dKeptRows.Add ( iRowitem );
+		}
+
+		CSphVector<DataPtrAttr_t> dOrphanedPtrs = tOldSchema.SubsetPtrs ( dKeptRows );
+		for ( auto & tResult : tRes.m_dResults )
+			for ( auto & tMatch : tResult.m_dMatches )
+				CSphSchemaHelper::FreeDataSpecial ( tMatch, dOrphanedPtrs );
+	}
 
 	return true;
 }

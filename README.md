@@ -60,6 +60,8 @@ What distinguishes it from other solutions is:
 * Manticore is SQL-first, utilizing SQL as its native syntax, and offers compatibility with the MySQL protocol, allowing you to use your preferred MySQL client.
 * With clients available in [PHP](https://github.com/manticoresoftware/manticoresearch-php), [Python](https://github.com/manticoresoftware/manticoresearch-python), [Python asyncio](https://github.com/manticoresoftware/manticoresearch-python-asyncio) [JavaScript](https://github.com/manticoresoftware/manticoresearch-javascript), [Typescript](https://github.com/manticoresoftware/manticoresearch-typescript), [Java](https://github.com/manticoresoftware/manticoresearch-java), [Elixir](https://github.com/manticoresoftware/manticoresearch-elixir), [Go](https://github.com/manticoresoftware/manticoresearch-go), and [Rust](https://github.com/manticoresoftware/manticoresearch-rust), integration with Manticore Search becomes easy.
 * Manticore also provides a programmatic HTTP JSON protocol for more versatile data and schema management, with Elasticsearch-compatible writes support.
+* [Sharded tables](https://manual.manticoresearch.com/Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table) transparently distribute reads and writes across multiple physical shards on one node or across a replication cluster.
+* Built-in [authentication and authorization](https://manual.manticoresearch.com/Security/Authentication_and_authorization) secures MySQL, HTTP/HTTPS, distributed remote agents, and replication-related operations with users, bearer tokens, and fine-grained permissions.
 * Built in C++, Manticore Search starts quickly and uses minimal RAM (around 40MB RSS for an empty instance), with low-level optimizations contributing to its impressive performance.
 * With real-time inserts, newly added or updated documents are immediately accessible.
 * Interactive courses are available through [Interactive courses](https://play.manticoresearch.com/) to make learning a breeze.
@@ -100,10 +102,12 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [using a "percolate" table](https://play.manticoresearch.com/pq/)
   - or the [Kafka integration](https://manual.manticoresearch.com/Integration/Kafka)
 * High-availability:
+  - [Sharded tables](https://manual.manticoresearch.com/Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table)
   - Data can be distributed across servers and data-centers
   - [Synchronous replication](https://play.manticoresearch.com/replication/)
   - Built-in load balancing
 * Security:
+  - [Authentication and authorization](https://manual.manticoresearch.com/Security/Authentication_and_authorization)
   - [https support](https://play.manticoresearch.com/https/)
   - [read-only mode](https://manual.manticoresearch.com/Security/Read_only)
 * Data safety:
@@ -143,7 +147,28 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
 
 # Installation
 
-### Docker
+## Quick install
+
+For Linux and macOS with Homebrew, use the one-line installer:
+
+```sh
+curl https://manticoresearch.com | sh
+```
+
+It detects Debian/Ubuntu/Mint, RHEL/CentOS/Amazon/Oracle/Fedora-like RPM systems, and macOS with Homebrew. It configures the official Manticore repository when needed, installs `manticore`, starts the service when supported, and prints the result.
+
+Common commands:
+
+```sh
+curl https://manticoresearch.com | sh -s help
+curl https://manticoresearch.com | sh -s list-versions
+curl https://manticoresearch.com | sh -s version 25.0.0
+curl https://manticoresearch.com | sh -s dev
+curl https://manticoresearch.com | sh -s upgrade
+```
+
+## Docker
+
 Docker image is available on [Docker Hub](https://dockr.ly/33biV0U).
 
 To experiment with Manticore Search in Docker just run:
@@ -170,31 +195,42 @@ Note that upon exiting the MySQL client, the Manticore container will be stopped
 
 Read [the full instruction for the docker image](https://github.com/manticoresoftware/docker) for more details including our recommendations on running it in production.
 
-### Packages
+### Manual package installation
 
-## [Ubuntu, Debian, Centos, Windows and MacOS packages are here](https://manticoresearch.com/install/).
+If you prefer explicit package-manager commands, use the manual instructions below or see the [downloads page](https://manticoresearch.com/install/).
 
-### YUM repo for RHEL/Centos/Amazon/Oracle Linux
+### RPM repo for RHEL/CentOS/Amazon/Oracle/Fedora-like Linux
+
 ```
 sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 sudo yum install manticore
 ```
 
+or use `dnf` when available:
+
+```
+sudo dnf install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
+sudo dnf install manticore
+```
+
 ### APT repo for Ubuntu/Debian/Mint
+
 ```
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
+sudo apt install ./manticore-repo.noarch.deb
 sudo apt update
 sudo apt install manticore
 ```
 
-### Homebrew on MacOS
+### Homebrew on macOS
+
 ```
 brew install manticoresoftware/tap/manticoresearch manticoresoftware/tap/manticore-extra
 ```
 
 ### Windows
-See [instruction here](https://manual.manticoresearch.com/Installation/Windows).
+
+For WSL/WSL2, use the Linux installer inside the WSL distribution. For native Windows, see the [Windows installation instructions](https://manual.manticoresearch.com/Installation/Windows).
 
 ### Clouds
 

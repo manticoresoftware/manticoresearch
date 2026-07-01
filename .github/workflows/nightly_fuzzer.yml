@@ -5,6 +5,7 @@ on:
   # 📅 Run this workflow every day at 23:00 UTC
   schedule:
     - cron: '00 23 * * *'
+  workflow_dispatch:
   # 🚀 Also run when this file is updated in any branch
   push:
     branches:
@@ -49,13 +50,13 @@ jobs:
     with:
       CTEST_CONFIGURATION_TYPE: "Debug"
       artifact_name: fuzz-build
-      artifact_list: "build"
+      artifact_list: "build/src/fuzzer/qfuzzer"
       cache_key: build-linux-fuzz-cache-dir
       cmake_command: |
         mkdir build && cd build
         export CC=`which clang`
         export CXX=`which clang++`
-        cmake -DQFUZZER=ON ..
+        cmake -DQFUZZER=ON -DMCL_LOCAL_RUNTIME=OFF ..
         cmake --build . --target qfuzzer
 
   cache_build_artifact:
@@ -120,7 +121,7 @@ jobs:
 
             # Run qfuzzer and capture its exit code
             export ASAN_SYMBOLIZER_PATH=/usr/bin/llvm-symbolizer-14
-            ./qfuzzer -verbosity=0 -max_total_time=12000 -jobs=5 -workers=5-dict=../../../src/fuzzer/dict.txt corpus 2>&1 | tee fuzzer_output.txt
+            ./qfuzzer -verbosity=0 -max_total_time=12000 -jobs=5 -workers=5 -dict=../../../src/fuzzer/dict.txt corpus 2>&1 | tee fuzzer_output.txt
             qfuzzer_exit_code=${PIPESTATUS[0]}
 
             echo '```' >> $GITHUB_STEP_SUMMARY

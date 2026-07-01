@@ -89,7 +89,10 @@ bool InitSecondary ( CSphString & sError )
 void ShutdownSecondary()
 {
 	if ( g_pSecondaryLib )
+	{
 		dlclose ( g_pSecondaryLib );
+		g_pSecondaryLib = nullptr;
+	}
 }
 
 #else

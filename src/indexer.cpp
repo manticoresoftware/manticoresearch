@@ -994,7 +994,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 
 	StrVec_t dWarnings;
 	CSphString sError;
-	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tTokSettings, nullptr, nullptr, dWarnings, sError );
+	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tTokSettings, nullptr, nullptr, dWarnings, sError, GetMaxTokenBytes ( tDictSettings.GetDictFormat() ) );
 	if ( !pTokenizer )
 		sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
@@ -1010,6 +1010,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 			sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
 	DictRefPtr_c pDict;
+	MutableIndexSettings_c tMutableSettings;
 
 	// setup tokenization filters
 	if ( !g_sBuildStops )
@@ -1023,15 +1024,14 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 				sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 		}
 
-		// multiforms filter
-		pDict = tDictSettings.m_bWordDict
+		pDict = tDictSettings.IsWordDict()
 			? sphCreateDictionaryKeywords ( tDictSettings, nullptr, pTokenizer, szIndexName, false, tSettings.m_iSkiplistBlockSize, nullptr, sError )
 			: sphCreateDictionaryCRC ( tDictSettings, nullptr, pTokenizer, szIndexName, false, tSettings.m_iSkiplistBlockSize, nullptr, sError );
 		if ( !pDict )
 			sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
-		MutableIndexSettings_c tMutableSettings;
-		tMutableSettings.Load ( hIndex, false, nullptr );
+		if ( !tMutableSettings.Load ( hIndex, false, nullptr, sError ) )
+			sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 
 		bool bNeedExact = ( pDict->HasMorphology() || pDict->GetWordformsFileInfos().GetLength() || tMutableSettings.m_iExpandKeywords );
 		if ( tSettings.m_bIndexExactWords && !bNeedExact )
@@ -1040,7 +1040,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 			fprintf ( stdout, "WARNING: table '%s': no morphology or wordforms, index_exact_words=1 has no effect, ignoring\n", szIndexName );
 		}
 
-		if ( !tSettings.m_bIndexExactWords && ForceExactWords ( tDictSettings.m_bWordDict, pDict->HasMorphology(), tSettings.RawMinPrefixLen(), tSettings.m_iMinInfixLen, pDict->GetSettings().m_sMorphFields.IsEmpty() ) )
+		if ( !tSettings.m_bIndexExactWords && ForceExactWords ( tDictSettings.IsWordDict(), pDict->HasMorphology(), tSettings.RawMinPrefixLen(), tSettings.m_iMinInfixLen, pDict->GetSettings().m_sMorphFields.IsEmpty() ) )
 		{
 			tSettings.m_bIndexExactWords = true;
 			fprintf ( stdout, "WARNING: table '%s': dict=keywords and prefixes and morphology enabled, forcing index_exact_words=1\n", szIndexName );
@@ -1242,7 +1242,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 			exit ( 1 );
 		}
 
-		if ( pDict->GetSettings().m_bWordDict && ( tSettings.m_dPrefixFields.GetLength() || tSettings.m_dInfixFields.GetLength() ) )
+		if ( pDict->GetSettings().IsWordDict() && ( tSettings.m_dPrefixFields.GetLength() || tSettings.m_dInfixFields.GetLength() ) )
 		{
 			fprintf ( stdout, "WARNING: table '%s': prefix_fields and infix_fields has no effect with dict=keywords, ignoring\n", szIndexName );
 		}
@@ -1261,6 +1261,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 				pIndex->SetKeepAttrs ( g_sKeepAttrsPath, g_dKeepAttrs );
 		}
 		pIndex->Setup ( tSettings );
+		pIndex->SetMutableSettings ( tMutableSettings );
 
 		ConsoleIndexProgress_t tProgress;
 		bOK = pIndex->Build ( dSources, g_iMemLimit, g_iWriteBuffer, tProgress )!=0;

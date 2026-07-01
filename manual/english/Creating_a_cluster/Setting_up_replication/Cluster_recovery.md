@@ -55,9 +55,11 @@ If nodes A and B are stopped cleanly and node C remains online, node C can conti
 
 When nodes A and B start again, they rejoin automatically and synchronize from node C. While they are rejoining, check `SHOW STATUS LIKE 'cluster_<name>_status'`, `SHOW STATUS LIKE 'cluster_<name>_node_state'`, and `SHOW STATUS LIKE 'cluster_<name>_size'`. Wait until all nodes show `primary` / `synced` and the expected cluster size before treating recovery as complete.
 
+If nodes A and B were intentionally removed from the cluster, for example with `EXIT CLUSTER`, and node C is now the only persisted node in the cluster, node C can also recover after its own clean restart with a normal daemon start. In that self-only case, `--new-cluster` is not required.
+
 ### All nodes were shut down cleanly
 
-If all nodes were stopped normally, the cluster is fully offline and must be started again in a special way so it can become the first running node of the cluster.
+If all nodes in a multi-node cluster were stopped normally, the cluster is fully offline and must be started again in a special way so one node can become the first running node of the cluster.
 
 On clean shutdown, each node writes its last transaction number to `grastate.dat`. The node that was stopped last is the safest node to start first:
 

@@ -3,6 +3,10 @@ run-name: 🔬 Test ${{ github.sha }}
 
 #on: workflow_call
 
+permissions:
+  contents: read
+  packages: write
+
 on:
   push:
     branches:
@@ -36,8 +40,14 @@ jobs:
     name: Meta
     runs-on: ubuntu-22.04
     outputs:
-      columnar_locator: ${{ steps.set_locator.outputs.columnar_locator }}
-      branch_name: ${{ steps.check_branch.outputs.branch_name }}
+      branch_name: ${{ steps.branch_info.outputs.branch_name }}
+      mcl_sha: ${{ steps.mcl_sha.outputs.mcl_sha }}
+      mcl_full_sha: ${{ steps.mcl_sha.outputs.mcl_full_sha }}
+      mcl_changed: ${{ steps.mcl_detect.outputs.mcl }}
+      mcl_test_pkg_cache_key: ${{ steps.mcl_cache_keys.outputs.test_pkg_cache_key }}
+      mcl_runtime_linux_release_cache_key: ${{ steps.mcl_cache_keys.outputs.linux_release_cache_key }}
+      mcl_runtime_linux_debug_cache_key: ${{ steps.mcl_cache_keys.outputs.linux_debug_cache_key }}
+      mcl_runtime_windows_debug_cache_key: ${{ steps.mcl_cache_keys.outputs.windows_debug_cache_key }}
       branch_tag: ${{ steps.sanitize_branch.outputs.branch_tag }}
       source_hash: ${{ steps.source_hash.outputs.source_hash }}
       image_exists: ${{ steps.image_check.outputs.image_exists }}
@@ -58,6 +68,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive
+          token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Commit info
         run: |
           echo "# Automated Tests of commit ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
@@ -65,32 +77,17 @@ jobs:
           echo "* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})" >> $GITHUB_STEP_SUMMARY
           echo "* Ref: ${{ github.ref_type }} \"${{ github.ref_name }}\"" >> $GITHUB_STEP_SUMMARY
           echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
-      - name: Check if branch exists in manticoresoftware/columnar
-        id: check_branch
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          REF_NAME: ${{ github.ref_name }}
+      - name: Resolve branch info
+        id: branch_info
         run: |
-          # Extract the actual branch name for pull requests
-          if [[ "$EVENT_NAME" == "pull_request" ]]; then
-            BRANCH_NAME="$PR_HEAD_REF"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
           else
-            BRANCH_NAME="$REF_NAME"
+            BRANCH_NAME="${{ github.ref_name }}"
           fi
-
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://api.github.com/repos/manticoresoftware/columnar/branches/$BRANCH_NAME")
-          if [ "$HTTP_STATUS" -eq "200" ]; then
-            echo "branch_exists=true" >> $GITHUB_OUTPUT
-            echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
-          else
-            echo "branch_exists=false" >> $GITHUB_OUTPUT
-            echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
-          fi
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
       - name: Sanitize branch name for tags
         id: sanitize_branch
-        env:
-          BRANCH_NAME: ${{ steps.check_branch.outputs.branch_name }}
         run: |
           sanitize_tag() {
             local name=$1
@@ -98,22 +95,30 @@ jobs:
             name=$(echo "$name" | sed 's/[^a-zA-Z0-9_.-]//g')
             echo "$name"
           }
-          branch_name="$BRANCH_NAME"
+          branch_name="${{ steps.branch_info.outputs.branch_name }}"
           branch_tag=$(sanitize_tag "$branch_name")
           echo "branch_tag=$branch_tag" >> $GITHUB_OUTPUT
       - name: Calculate source hash
         id: source_hash
-        env:
-          BRANCH_EXISTS: ${{ steps.check_branch.outputs.branch_exists }}
-          BRANCH_NAME: ${{ steps.check_branch.outputs.branch_name }}
         run: |
           set -euo pipefail
-          if [[ "$BRANCH_EXISTS" == "true" ]]; then
-            git clone --depth 1 --branch "$BRANCH_NAME"               https://github.com/manticoresoftware/columnar.git columnar
-            rm -rf columnar/.git
-          fi
-          HASH=$(find . -type f             ! -path "./test/clt-tests/*"             ! -path "./columnar/test/clt-tests/*"             ! -path "./.git/*"             -print0             | sort -z             | xargs -0 md5sum             | md5sum             | awk '{print $1}')
+          HASH=$(find . -type f ! -path "./test/clt-tests/*" ! -path "*/.git/*" ! -name .git -print0 | sort -z | xargs -0 md5sum | md5sum | awk '{print $1}')
           echo "source_hash=$HASH" >> $GITHUB_OUTPUT
+
+      - name: Resolve MCL submodule SHA
+        id: mcl_sha
+        run: |
+          set -euo pipefail
+          echo "mcl_sha=$(git -C mcl rev-parse --short=8 HEAD)" >> $GITHUB_OUTPUT
+          echo "mcl_full_sha=$(git -C mcl rev-parse HEAD)" >> $GITHUB_OUTPUT
+      - name: Resolve MCL cache keys
+        if: ${{ steps.mcl_sha.outputs.mcl_full_sha != '' }}
+        id: mcl_cache_keys
+        run: |
+          echo "test_pkg_cache_key=mcl-test-pkg-jammy-amd64-${{ steps.mcl_sha.outputs.mcl_full_sha }}" >> "$GITHUB_OUTPUT"
+          echo "linux_release_cache_key=mcl-runtime-linux-relwithdebinfo-x86_64-v1-${{ steps.mcl_sha.outputs.mcl_full_sha }}" >> "$GITHUB_OUTPUT"
+          echo "linux_debug_cache_key=mcl-runtime-linux-debug-x86_64-v1-${{ steps.mcl_sha.outputs.mcl_full_sha }}" >> "$GITHUB_OUTPUT"
+          echo "windows_debug_cache_key=mcl-runtime-windows-debug-x64-v2-${{ steps.mcl_sha.outputs.mcl_full_sha }}" >> "$GITHUB_OUTPUT"
       - name: Check for existing test kit image
         id: image_check
         env:
@@ -135,18 +140,6 @@ jobs:
             echo "image_source_hash=" >> $GITHUB_OUTPUT
           fi
           echo "image_tag=${TAG}" >> $GITHUB_OUTPUT
-      - name: Set Columnar Locator
-        id: set_locator
-        env:
-          REF_NAME: ${{ github.ref_name }}
-          BRANCH_EXISTS: ${{ steps.check_branch.outputs.branch_exists }}
-          BRANCH_NAME: ${{ steps.check_branch.outputs.branch_name }}
-        run: |
-          if [[ "$REF_NAME" != "main" && "$BRANCH_EXISTS" == "true" ]]; then
-            echo "columnar_locator=GIT_REPOSITORY https://github.com/manticoresoftware/columnar.git GIT_TAG $BRANCH_NAME" >> $GITHUB_OUTPUT
-          else
-            echo "columnar_locator=" >> $GITHUB_OUTPUT
-          fi
       - name: Detect changed files and categories
         id: detect
         shell: bash
@@ -191,12 +184,15 @@ jobs:
             echo "* (no files)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-          export FILES="$files"
+          files_list_path="$RUNNER_TEMP/changed-files.txt"
+          printf '%s\n' "$files" > "$files_list_path"
 
-          python3 - <<'PY'
+          python3 - "$files_list_path" <<'PY'
           import os
+          import sys
 
-          files = os.environ.get("FILES", "").splitlines()
+          with open(sys.argv[1], encoding="utf-8") as fh:
+              files = [line.rstrip("\n") for line in fh]
           source = False
           test = False
           clt = False
@@ -219,21 +215,51 @@ jobs:
               fh.write(f"test={'true' if test else 'false'}\n")
               fh.write(f"clt={'true' if clt else 'false'}\n")
           PY
+      - name: Finalize MCL detection
+        id: mcl_detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          mcl_needed=false
+          base=""
+          head="${{ github.sha }}"
+          if [[ -n "${{ steps.image_check.outputs.image_commit }}" ]]; then
+            base="${{ steps.image_check.outputs.image_commit }}"
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+
+          files=""
+          if [[ -z "$base" || "$base" == "0000000000000000000000000000000000000000" ]]; then
+            files=$(git ls-tree -r --name-only "$head")
+          else
+            if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+              git fetch --no-tags --depth=1 origin "$base"
+            fi
+            files=$(git diff --name-only "$base" "$head")
+          fi
+
+          if printf '%s\n' "$files" | grep -Eq '^(mcl(/|$)|\.gitmodules$)'; then
+            mcl_needed=true
+          fi
+          if [[ "${{ steps.mcl_sha.outputs.mcl_sha }}" != "" ]]             && ! bash dist/resolve_repo_artifact.sh --repo-type dev --distr jammy --arch amd64 --sha "${{ steps.mcl_sha.outputs.mcl_sha }}" --extension .deb >/dev/null 2>&1; then
+            mcl_needed=true
+          fi
+          echo "mcl=$mcl_needed" >> "$GITHUB_OUTPUT"
+
       - name: Check related PRs for branch
         id: related_prs
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
-          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           reason=""
-          if [[ "$EVENT_NAME" == "pull_request" ]]; then
-            for repo in columnar manticoresearch-buddy; do
-              response="$( (curl -sSL -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY_OWNER/$repo/pulls?state=open&head=$GITHUB_REPOSITORY_OWNER:$PR_HEAD_REF&per_page=1" || true) | tr -d '[:space:]')"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            for repo in manticoresearch-buddy; do
+              response="$( (curl -sSL -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository_owner }}/$repo/pulls?state=open&head=${{ github.repository_owner }}:${{ github.event.pull_request.head.ref }}&per_page=1" || true) | tr -d '[:space:]')"
               if [[ "$response" != "[]" && "$response" != "" ]]; then
-                reason+="$repo: open PR for $GITHUB_REPOSITORY_OWNER:$PR_HEAD_REF | "
+                reason+="$repo: open PR for ${{ github.repository_owner }}:${{ github.event.pull_request.head.ref }} | "
               fi
             done
 
@@ -266,9 +292,6 @@ jobs:
           skip_clt_tag=false
           if git tag --points-at HEAD | grep -qx "skip_clt"; then
             skip_clt_tag=true
-            run_clt=false
-          fi
-          if [[ -n "${{ steps.related_prs.outputs.skip_clt_reason }}" ]]; then
             run_clt=false
           fi
           run_image_push=false
@@ -317,7 +340,6 @@ jobs:
             boost_1_75_0
           enableCrossOsArchive: true
           key: win_bundle
-          lookup-only: true
       - name: Extract Windows bundle from Windows sysroot
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
@@ -329,41 +351,91 @@ jobs:
         run: |
           wget https://repo.manticoresearch.com/repository/ci/boost_1_75_0.tgz
           tar -xf boost_1_75_0.tgz
+      - name: Upload Windows bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows_bundle
+          path: |
+            bundle
+            boost_1_75_0
 
   build_linux_debug:
     if: needs.meta.outputs.run_builds == 'true'
     needs: [meta]
     name: Linux debug build
     uses: ./.github/workflows/build_template.yml
+    secrets: inherit
     with:
       CTEST_CONFIGURATION_TYPE: "Debug"
-      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       artifact_name: debug_build
       cache_key: build_linux_debug_x86_64
       cmake_command: |
         export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
+        export MCL_LOCAL_RUNTIME=OFF
         ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
 
-  test_linux_debug:
-    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
-    name: Linux debug mode tests
-    needs: [build_linux_debug, meta]
+  test_linux_debug_plain:
+    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_linux_debug.result == 'success' && (needs.mcl_runtime_linux_debug_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_linux_debug.result == 'success')
+    name: Linux debug mode tests (plain)
+    needs: [build_linux_debug, mcl_runtime_linux_debug_cached, mcl_runtime_linux_debug, meta]
+    permissions:
+      checks: write
+      contents: read
     uses: ./.github/workflows/test_template.yml
+    secrets: inherit
     with:
-      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       build_artifact_name: debug_build
-      artifact_name: debug_test_results
-      results_name: "Linux debug test results"
-      timeout: 25
+      artifact_name: debug_test_results_plain
+      results_name: "Linux debug plain test results"
+      suite_name: plain
+      CTEST_REGEX: "^test_"
+      timeout: 20
+      MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
+
+  test_linux_debug_rt:
+    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_linux_debug.result == 'success' && (needs.mcl_runtime_linux_debug_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_linux_debug.result == 'success')
+    name: Linux debug mode tests (rt)
+    needs: [build_linux_debug, mcl_runtime_linux_debug_cached, mcl_runtime_linux_debug, meta]
+    permissions:
+      checks: write
+      contents: read
+    uses: ./.github/workflows/test_template.yml
+    secrets: inherit
+    with:
+      build_artifact_name: debug_build
+      artifact_name: debug_test_results_rt
+      results_name: "Linux debug RT test results"
+      suite_name: rt
+      CTEST_REGEX: "^rt_"
+      timeout: 20
+      MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
+
+  test_linux_debug_mcl:
+    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_linux_debug.result == 'success' && (needs.mcl_runtime_linux_debug_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_linux_debug.result == 'success')
+    name: Linux debug mode tests (MCL)
+    needs: [build_linux_debug, mcl_runtime_linux_debug_cached, mcl_runtime_linux_debug, meta]
+    permissions:
+      checks: write
+      contents: read
+    uses: ./.github/workflows/test_template.yml
+    secrets: inherit
+    with:
+      build_artifact_name: debug_build
+      artifact_name: debug_test_results_mcl
+      results_name: "Linux debug MCL test results"
+      suite_name: mcl
+      CTEST_REGEX: "^(col|secondary)_"
+      timeout: 20
+      MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
 
   build_linux_release:
     if: needs.meta.outputs.run_builds == 'true'
     needs: [meta]
     name: Linux release build
     uses: ./.github/workflows/build_template.yml
+    secrets: inherit
     with:
       artifact_name: release_build
-      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       cache_key: build_linux_release_x86_64
       artifact_list: "build/xml build/CMakeFiles/CMake*.log build/api/libsphinxclient/testcli build/src/indexer build/src/indextool build/src/searchd build/src/tests build/src/gtests/gmanticoretest build/config/*.c build/config/*.h build/**/*.cxx build/**/*.gcno build/manticore*deb"
       cmake_command: |
@@ -373,32 +445,391 @@ jobs:
         ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
         cmake --build build --target package
 
-  test_linux_release_mcl:
-    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
-    name: Linux release mode tests (MCL)
-    needs: [build_linux_release, meta]
-    uses: ./.github/workflows/test_template.yml
+  build_linux_release_tests:
+    if: needs.meta.outputs.run_builds == 'true'
+    needs: [meta]
+    name: Linux release test build
+    uses: ./.github/workflows/build_template.yml
+    secrets: inherit
     with:
-      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
-      build_artifact_name: release_build
-      artifact_name: release_mcl_test_results
-      results_name: "Linux release MCL test results"
-      timeout: 15
-      INSTALL_MCL_FROM_DEPS: true
-      FLOAT_TOLERANCE: true
-      CTEST_EXCLUDE_REGEX: "rt_298|rt_306|rt_481"
+      artifact_name: release_test_build
+      cache_key: build_linux_release_tests_x86_64
+      cmake_command: |
+        export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
+        export MCL_LOCAL_RUNTIME=OFF
+        ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
 
-  test_linux_release:
-    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
-    name: Linux release mode tests
-    needs: [build_linux_release, meta]
-    uses: ./.github/workflows/test_template.yml
+  mcl_test_package_cache_probe:
+    name: MCL test package cache probe
+    needs: [meta]
+    runs-on: ubuntu-22.04
+    container:
+      image: manticoresearch/external_toolchain:clang16_cmake3263
+    outputs:
+      cache_key: ${{ steps.meta.outputs.cache_key }}
+      cache_hit: ${{ steps.meta.outputs.cache_hit }}
+    steps:
+      - name: Prepare probe path
+        run: mkdir -p .mcl-package-cache
+      - name: Restore exact-SHA MCL package cache
+        id: probe
+        if: ${{ needs.meta.outputs.mcl_full_sha != '' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: .mcl-package-cache
+          key: mcl-test-pkg-jammy-amd64-${{ needs.meta.outputs.mcl_full_sha }}
+      - name: Validate restored MCL package cache
+        id: validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          if find .mcl-package-cache -maxdepth 2 -type f -name 'manticore-columnar-lib_*_amd64.deb' | grep -q .; then
+            echo "cache_payload_ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cache_payload_ok=false" >> "$GITHUB_OUTPUT"
+            echo "Cached MCL package payload missing; treating cache as miss"
+            find .mcl-package-cache -maxdepth 4 -type f | sort || true
+          fi
+      - name: Export cache probe metadata
+        id: meta
+        run: |
+          echo "cache_key=mcl-test-pkg-jammy-amd64-${{ needs.meta.outputs.mcl_full_sha }}" >> "$GITHUB_OUTPUT"
+          echo "cache_hit=${{ steps.probe.outputs['cache-hit'] == 'true' && steps.validate.outputs.cache_payload_ok == 'true' && 'true' || 'false' }}" >> "$GITHUB_OUTPUT"
+
+  mcl_cached_package_jammy:
+    name: MCL jammy cached package
+    needs: [meta, mcl_test_package_cache_probe]
+    if: needs.mcl_test_package_cache_probe.outputs.cache_hit == 'true'
+    runs-on: ubuntu-22.04
+    container:
+      image: manticoresearch/external_toolchain:clang16_cmake3263
+    steps:
+      - name: Restore exact-SHA MCL package cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .mcl-package-cache
+          key: ${{ needs.mcl_test_package_cache_probe.outputs.cache_key }}
+      - name: Prepare cached MCL package artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          find .mcl-package-cache -maxdepth 1 -type f | sort
+          rm -rf mcl-package
+          mkdir -p mcl-package
+          find .mcl-package-cache -maxdepth 1 -type f -name 'manticore-columnar-lib*' -exec cp {} mcl-package/ \;
+          find mcl-package -maxdepth 1 -type f | sort
+          if ! find mcl-package -maxdepth 1 -type f -name 'manticore-columnar-lib_*_amd64.deb' | grep -q .; then
+            echo 'No manticore-columnar-lib package found to publish from exact-SHA cache' >&2
+            exit 1
+          fi
+      - name: Upload cached MCL package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcl_package_jammy_x86_64
+          path: mcl-package
+          if-no-files-found: error
+
+  mcl_runtime_linux_release_cached:
+    name: MCL runtime Linux release cached
+    needs: [meta]
+    if: always() && needs.meta.outputs.run_builds == 'true'
+    runs-on: ubuntu-22.04
+    container:
+      image: manticoresearch/external_toolchain:vcpkg331_20260310
+    outputs:
+      cache_hit: ${{ steps.validate.outputs.cache_hit }}
+    steps:
+      - name: Prepare cache path
+        run: mkdir -p .mcl-runtime-cache
+      - name: Restore exact MCL Linux Release runtime cache
+        id: restore
+        uses: actions/cache/restore@v4
+        with:
+          path: .mcl-runtime-cache
+          key: ${{ needs.meta.outputs.mcl_runtime_linux_release_cache_key }}
+      - name: Validate MCL Linux Release runtime cache
+        id: validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=true
+          if [[ "${{ steps.restore.outputs['cache-hit'] }}" != "true" ]]; then
+            ok=false
+          fi
+          for lib in lib_manticore_columnar.so lib_manticore_secondary.so lib_manticore_knn.so lib_manticore_knn_embeddings.so; do
+            if [[ ! -f ".mcl-runtime-cache/${lib}" ]]; then
+              ok=false
+            fi
+          done
+          if [[ "${ok}" == "true" ]]; then
+            rm -rf mcl-runtime
+            mkdir -p mcl-runtime
+            cp .mcl-runtime-cache/* mcl-runtime/
+            find mcl-runtime -maxdepth 1 -type f | sort
+          else
+            echo "MCL Linux Release runtime cache miss or incomplete"
+            find .mcl-runtime-cache -maxdepth 1 -type f | sort || true
+          fi
+          echo "cache_hit=${ok}" >> "$GITHUB_OUTPUT"
+      - name: Upload cached MCL Linux Release runtime artifact
+        if: steps.validate.outputs.cache_hit == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcl_runtime_linux_release_x86_64
+          path: mcl-runtime
+          if-no-files-found: error
+
+  mcl_runtime_linux_debug_cached:
+    name: MCL runtime Linux debug cached
+    needs: [meta]
+    if: always() && needs.meta.outputs.run_builds == 'true'
+    runs-on: ubuntu-22.04
+    container:
+      image: manticoresearch/external_toolchain:vcpkg331_20260310
+    outputs:
+      cache_hit: ${{ steps.validate.outputs.cache_hit }}
+    steps:
+      - name: Prepare cache path
+        run: mkdir -p .mcl-runtime-cache
+      - name: Restore exact MCL Linux Debug runtime cache
+        id: restore
+        uses: actions/cache/restore@v4
+        with:
+          path: .mcl-runtime-cache
+          key: ${{ needs.meta.outputs.mcl_runtime_linux_debug_cache_key }}
+      - name: Validate MCL Linux Debug runtime cache
+        id: validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=true
+          if [[ "${{ steps.restore.outputs['cache-hit'] }}" != "true" ]]; then
+            ok=false
+          fi
+          for lib in lib_manticore_columnar.so lib_manticore_secondary.so lib_manticore_knn.so lib_manticore_knn_embeddings.so; do
+            if [[ ! -f ".mcl-runtime-cache/${lib}" ]]; then
+              ok=false
+            fi
+          done
+          if [[ "${ok}" == "true" ]]; then
+            rm -rf mcl-runtime
+            mkdir -p mcl-runtime
+            cp .mcl-runtime-cache/* mcl-runtime/
+            find mcl-runtime -maxdepth 1 -type f | sort
+          else
+            echo "MCL Linux Debug runtime cache miss or incomplete"
+            find .mcl-runtime-cache -maxdepth 1 -type f | sort || true
+          fi
+          echo "cache_hit=${ok}" >> "$GITHUB_OUTPUT"
+      - name: Upload cached MCL Linux Debug runtime artifact
+        if: steps.validate.outputs.cache_hit == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcl_runtime_linux_debug_x86_64
+          path: mcl-runtime
+          if-no-files-found: error
+
+  mcl_runtime_windows_debug_cached:
+    name: MCL runtime Windows debug cached
+    needs: [meta]
+    if: always() && needs.meta.outputs.run_builds == 'true'
+    runs-on: ubuntu-22.04
+    container:
+      image: manticoresearch/external_toolchain:vcpkg331_20260310
+    outputs:
+      cache_hit: ${{ steps.validate.outputs.cache_hit }}
+    steps:
+      - name: Prepare cache path
+        run: mkdir -p .mcl-runtime-cache
+      - name: Restore exact MCL Windows Debug runtime cache
+        id: restore
+        uses: actions/cache/restore@v4
+        with:
+          path: .mcl-runtime-cache
+          key: ${{ needs.meta.outputs.mcl_runtime_windows_debug_cache_key }}
+      - name: Validate MCL Windows Debug runtime cache
+        id: validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=true
+          if [[ "${{ steps.restore.outputs['cache-hit'] }}" != "true" ]]; then
+            ok=false
+          fi
+          for lib in lib_manticore_columnar.dll lib_manticore_secondary.dll lib_manticore_knn.dll lib_manticore_knn_embeddings.dll libiomp5md.dll; do
+            if [[ ! -f ".mcl-runtime-cache/${lib}" ]]; then
+              ok=false
+            fi
+          done
+          if [[ "${ok}" == "true" ]]; then
+            rm -rf mcl-runtime
+            mkdir -p mcl-runtime
+            cp .mcl-runtime-cache/* mcl-runtime/
+            find mcl-runtime -maxdepth 1 -type f | sort
+          else
+            echo "MCL Windows Debug runtime cache miss or incomplete"
+            find .mcl-runtime-cache -maxdepth 1 -type f | sort || true
+          fi
+          echo "cache_hit=${ok}" >> "$GITHUB_OUTPUT"
+      - name: Upload cached MCL Windows Debug runtime artifact
+        if: steps.validate.outputs.cache_hit == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcl_runtime_windows_debug_x64
+          path: mcl-runtime
+          if-no-files-found: error
+
+  mcl_embeddings_jammy_x86_64:
+    if: always() && needs.meta.outputs.run_builds == 'true' && (needs.mcl_test_package_cache_probe.outputs.cache_hit != 'true' || needs.mcl_runtime_linux_release_cached.outputs.cache_hit != 'true' || needs.mcl_runtime_linux_debug_cached.outputs.cache_hit != 'true')
+    name: MCL embeddings jammy x86_64
+    needs: [meta, mcl_test_package_cache_probe, mcl_runtime_linux_release_cached, mcl_runtime_linux_debug_cached]
+    uses: ./.github/workflows/mcl_embeddings_build.yml
+    secrets: inherit
     with:
-      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
-      build_artifact_name: release_build
-      artifact_name: release_test_results
-      results_name: "Linux release test results"
+      enabled: true
+      mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
+      source_ref: ${{ github.sha }}
+      run_quality_checks: false
+      distr: linux
+      arch: x86_64
+
+  mcl_package_jammy:
+    if: always() && needs.meta.outputs.run_builds == 'true' && needs.mcl_test_package_cache_probe.outputs.cache_hit != 'true'
+    name: MCL jammy package
+    needs: [meta, mcl_embeddings_jammy_x86_64, mcl_test_package_cache_probe]
+    uses: ./.github/workflows/mcl_package_build.yml
+    secrets: inherit
+    with:
+      enabled: true
+      mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
+      source_ref: ${{ github.sha }}
+      artifact_name: mcl_package_jammy_x86_64
+      package_cache_key: ${{ needs.mcl_test_package_cache_probe.outputs.cache_key }}
+      embeddings_artifact: embeddings_linux_x86_64
+      distr: jammy
+      arch: x86_64
+
+  mcl_embeddings_windows_x86_64:
+    if: always() && needs.meta.outputs.run_builds == 'true' && needs.mcl_runtime_windows_debug_cached.outputs.cache_hit != 'true'
+    name: MCL embeddings windows x86_64
+    needs: [meta, mcl_runtime_windows_debug_cached]
+    uses: ./.github/workflows/mcl_embeddings_build.yml
+    secrets: inherit
+    with:
+      enabled: true
+      mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
+      source_ref: ${{ github.sha }}
+      run_quality_checks: false
+      distr: windows
+      arch: x86_64
+
+  mcl_runtime_linux_release:
+    if: always() && needs.meta.outputs.run_builds == 'true' && needs.mcl_runtime_linux_release_cached.outputs.cache_hit != 'true'
+    name: MCL runtime Linux release
+    needs: [meta, mcl_runtime_linux_release_cached, mcl_embeddings_jammy_x86_64]
+    uses: ./.github/workflows/mcl_runtime_build.yml
+    secrets: inherit
+    with:
+      enabled: true
+      mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
+      source_ref: ${{ github.sha }}
+      artifact_name: mcl_runtime_linux_release_x86_64
+      cache_key: ${{ needs.meta.outputs.mcl_runtime_linux_release_cache_key }}
+      distr: jammy
+      arch: x86_64
+      CTEST_CONFIGURATION_TYPE: RelWithDebInfo
+      embeddings_artifact: embeddings_linux_x86_64
+
+  mcl_runtime_linux_debug:
+    if: always() && needs.meta.outputs.run_builds == 'true' && needs.mcl_runtime_linux_debug_cached.outputs.cache_hit != 'true'
+    name: MCL runtime Linux debug
+    needs: [meta, mcl_runtime_linux_debug_cached, mcl_embeddings_jammy_x86_64]
+    uses: ./.github/workflows/mcl_runtime_build.yml
+    secrets: inherit
+    with:
+      enabled: true
+      mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
+      source_ref: ${{ github.sha }}
+      artifact_name: mcl_runtime_linux_debug_x86_64
+      cache_key: ${{ needs.meta.outputs.mcl_runtime_linux_debug_cache_key }}
+      distr: jammy
+      arch: x86_64
+      CTEST_CONFIGURATION_TYPE: Debug
+      embeddings_artifact: embeddings_linux_x86_64
+
+  mcl_runtime_windows_debug:
+    if: always() && needs.meta.outputs.run_builds == 'true' && needs.mcl_runtime_windows_debug_cached.outputs.cache_hit != 'true'
+    name: MCL runtime Windows debug
+    needs: [meta, mcl_runtime_windows_debug_cached, mcl_embeddings_windows_x86_64]
+    uses: ./.github/workflows/mcl_runtime_build.yml
+    secrets: inherit
+    with:
+      enabled: true
+      mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
+      source_ref: ${{ github.sha }}
+      artifact_name: mcl_runtime_windows_debug_x64
+      cache_key: ${{ needs.meta.outputs.mcl_runtime_windows_debug_cache_key }}
+      distr: windows
+      arch: x64
+      sysroot_url_key: roots_mysql83_jan17
+      boost_url_key: boost_80
+      CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
+      CTEST_CONFIGURATION_TYPE: Debug
+      embeddings_artifact: embeddings_windows_x86_64
+
+  test_linux_release_plain:
+    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_linux_release_tests.result == 'success' && (needs.mcl_runtime_linux_release_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_linux_release.result == 'success')
+    name: Linux release mode tests (plain)
+    needs: [build_linux_release_tests, mcl_runtime_linux_release_cached, mcl_runtime_linux_release, meta]
+    permissions:
+      checks: write
+      contents: read
+    uses: ./.github/workflows/test_template.yml
+    secrets: inherit
+    with:
+      build_artifact_name: release_test_build
+      artifact_name: release_test_results_plain
+      results_name: "Linux release plain test results"
+      suite_name: plain
+      CTEST_REGEX: "^test_"
       timeout: 15
+      MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_release_x86_64
+
+  test_linux_release_rt:
+    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_linux_release_tests.result == 'success' && (needs.mcl_runtime_linux_release_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_linux_release.result == 'success')
+    name: Linux release mode tests (rt)
+    needs: [build_linux_release_tests, mcl_runtime_linux_release_cached, mcl_runtime_linux_release, meta]
+    permissions:
+      checks: write
+      contents: read
+    uses: ./.github/workflows/test_template.yml
+    secrets: inherit
+    with:
+      build_artifact_name: release_test_build
+      artifact_name: release_test_results_rt
+      results_name: "Linux release RT test results"
+      suite_name: rt
+      CTEST_REGEX: "^rt_"
+      timeout: 15
+      MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_release_x86_64
+
+  test_linux_release_mcl:
+    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_linux_release_tests.result == 'success' && (needs.mcl_runtime_linux_release_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_linux_release.result == 'success')
+    name: Linux release mode tests (MCL)
+    needs: [build_linux_release_tests, mcl_runtime_linux_release_cached, mcl_runtime_linux_release, meta]
+    permissions:
+      checks: write
+      contents: read
+    uses: ./.github/workflows/test_template.yml
+    secrets: inherit
+    with:
+      build_artifact_name: release_test_build
+      artifact_name: release_test_results_mcl
+      results_name: "Linux release MCL test results"
+      suite_name: mcl
+      CTEST_REGEX: "^(col|secondary)_"
+      timeout: 15
+      MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_release_x86_64
 
 
   # When only CLT changed and a cached image exists, build jobs are skipped. A job that needs
@@ -413,6 +844,9 @@ jobs:
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Reuse cached test kit image
         env:
           REPO_OWNER: ${{ github.repository_owner }}
@@ -425,29 +859,51 @@ jobs:
           docker create --name manticore-test-kit-src --entrypoint /bin/sh test-kit:img -c "true"
           docker export manticore-test-kit-src > manticore_test_kit.img
           docker rm manticore-test-kit-src
+      - name: Pack docker image artifact
+        run: tar -cf artifact.tar manticore_test_kit.img
       - name: Upload docker image artifact
-        uses: manticoresoftware/upload_artifact_with_retries@v4
+        uses: actions/upload-artifact@v4
         with:
           name: manticore_test_kit.img
-          path: manticore_test_kit.img
+          path: artifact.tar
 
   test_kit_docker_build:
     name: Test Kit docker image
     needs:
       - build_linux_release
+      - mcl_cached_package_jammy
+      - mcl_package_jammy
+      - mcl_test_package_cache_probe
       - meta
-    if: needs.meta.outputs.run_image_build == 'true' && needs.meta.outputs.image_exists != 'true'
+    if: always() && needs.meta.outputs.run_image_build == 'true' && needs.meta.outputs.image_exists != 'true'
     runs-on: ubuntu-22.04
     outputs:
       out-build: ${{ steps.build.outputs.build_image }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Download built x86_64 Ubuntu Jammy packages
         uses: manticoresoftware/download_artifact_with_retries@v3
         with:
           name: release_build
           path: .
+      - name: Restore exact-SHA MCL package cache
+        if: ${{ needs.mcl_test_package_cache_probe.outputs.cache_hit == 'true' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: ./.mcl-package-cache
+          key: ${{ needs.mcl_test_package_cache_probe.outputs.cache_key }}
+
+      - name: Download local MCL package artifact (best effort)
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: mcl_package_jammy_x86_64
+          path: ./mcl-package
       # Uncomment this shortcut for debug to save time by not preparing the packages in the pack_jammy job
       # - run: |
       #     wget http://dev2.manticoresearch.com/build_jammy_RelWithDebInfo_x86_64.zip
@@ -461,11 +917,13 @@ jobs:
         run: |
           BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_build.sh
           echo "build_image=ghcr.io/$REPO_OWNER/manticoresearch:test-kit-${{ steps.sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
+      - name: Pack docker image artifact
+        run: tar -cf artifact.tar manticore_test_kit.img
       - name: Upload docker image artifact
-        uses: manticoresoftware/upload_artifact_with_retries@v4
+        uses: actions/upload-artifact@v4
         with:
           name: manticore_test_kit.img
-          path: manticore_test_kit.img
+          path: artifact.tar
 
   clt:
     if: always() && needs.meta.outputs.run_clt == 'true' && (needs.test_kit_docker_build.result == 'success' || needs.test_kit_docker_reuse.result == 'success')
@@ -483,34 +941,44 @@ jobs:
       ref: ${{ github.sha }}
 
   test_kit_docker_push:
-    if: always() && needs.meta.outputs.run_image_push == 'true'
+    if: always() && needs.meta.outputs.run_image_push == 'true' && (needs.test_kit_docker_build.result == 'success' || needs.test_kit_docker_reuse.result == 'success')
     needs:
       - clt
       - meta
       - test_kit_docker_build
       - test_kit_docker_reuse
-      - test_linux_debug
-      - test_linux_release
+      - test_linux_debug_plain
+      - test_linux_debug_rt
+      - test_linux_debug_mcl
+      - test_linux_release_plain
+      - test_linux_release_rt
       - test_linux_release_mcl
-      - test_windows
+      - test_windows_plain
+      - test_windows_rt
+      - test_windows_mcl
     name: Push Test Kit docker image to repo
     runs-on: ubuntu-22.04
     env:
-      GHCR_USER: ${{ vars.GHCR_USER }}
-      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+      GHCR_USER: ${{ vars.GHCR_USER || github.actor }}
+      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD || github.token }}
       REPO_OWNER: ${{ github.repository_owner }}
       SOURCE_HASH: ${{ needs.meta.outputs.source_hash }}
       BRANCH_TAG: ${{ needs.meta.outputs.branch_tag }}
-      HASH_TAG_OK: ${{ needs.test_linux_debug.result == 'success' && needs.test_linux_release.result == 'success' && needs.test_linux_release_mcl.result == 'success' && needs.test_windows.result == 'success' }}
+      HASH_TAG_OK: ${{ needs.meta.outputs.source_hash != '' }}
       IMAGE_BUILD_COMMIT: ${{ github.sha }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
       - name: Download artifact
-        uses: manticoresoftware/download_artifact_with_retries@main
+        uses: actions/download-artifact@v4
         with:
           name: manticore_test_kit.img
           path: .
+      - name: Unpack docker image artifact
+        run: |
+          if [[ -f artifact.tar ]]; then
+            tar -xf artifact.tar
+          fi
       - name: Calculate short commit hash
         id: sha
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
@@ -524,14 +992,15 @@ jobs:
     needs: [meta]
     name: Linux aarch64 build
     uses: ./.github/workflows/build_template.yml
+    secrets: inherit
     # Use -VV instead of -V below for more verbose output
     with:
       arch: aarch64
-      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       cmake_command: |
         mkdir build
         cd build
         export CMAKE_TOOLCHAIN_FILE=$(pwd)/../dist/build_dockers/cross/linux.cmake
+        export MCL_LOCAL_RUNTIME=OFF
         ctest -V -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
       cache_key: build_jammy_aarch64
 
@@ -540,14 +1009,15 @@ jobs:
     needs: [meta]
     name: FreeBSD x86_64 build
     uses: ./.github/workflows/build_template.yml
+    secrets: inherit
     with:
       DISTR: freebsd13
-      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       boost_url_key: none
       cmake_command: |
         mkdir build
         cd build
         export CMAKE_TOOLCHAIN_FILE=$(pwd)/../dist/build_dockers/cross/freebsd.cmake
+        export MCL_LOCAL_RUNTIME=OFF
         ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
       cache_key: build_freebsd_x86_64
 
@@ -556,6 +1026,7 @@ jobs:
     needs: [meta]
     name: Windows x64 build
     uses: ./.github/workflows/build_template.yml
+    secrets: inherit
     with:
       DISTR: windows
       arch: x64
@@ -565,29 +1036,86 @@ jobs:
       CTEST_CONFIGURATION_TYPE: Debug
       cache_key: build_windows_x64
       artifact_list: "build/xml build/src/Debug/indexer.exe build/src/Debug/indexer.pdb build/src/Debug/searchd.exe build/src/Debug/searchd.pdb build/src/gtests/Debug/gmanticoretest.exe build/src/gtests/Debug/gmanticoretest.pdb build/src/Debug/*.dll build/src/gtests/Debug/*.dll build/config/*.c build/config/*.h"
-      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
+      cmake_command: |
+        export MCL_LOCAL_RUNTIME=OFF
+        ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
 
-  test_windows:
-    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
-    name: Windows tests
-    needs: [build_windows, win_bundle, meta]
+  test_windows_plain:
+    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_windows.result == 'success' && (needs.mcl_runtime_windows_debug_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_windows_debug.result == 'success')
+    name: Windows tests (plain)
+    needs: [build_windows, mcl_runtime_windows_debug_cached, mcl_runtime_windows_debug, win_bundle, meta]
+    permissions:
+      checks: write
+      contents: read
     uses: ./.github/workflows/win_test_template.yml
+    secrets: inherit
     with:
       CTEST_START: 1
       CTEST_END: 999999
-      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
-      artifact_name: windows_test_results
+      artifact_name: windows_test_results_plain
+      results_name: "Windows plain test results"
+      suite_name: plain
+      CTEST_REGEX: "^test_"
+      MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_windows_debug_x64
+
+  test_windows_rt:
+    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_windows.result == 'success' && (needs.mcl_runtime_windows_debug_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_windows_debug.result == 'success')
+    name: Windows tests (rt)
+    needs: [build_windows, mcl_runtime_windows_debug_cached, mcl_runtime_windows_debug, win_bundle, meta]
+    permissions:
+      checks: write
+      contents: read
+    uses: ./.github/workflows/win_test_template.yml
+    secrets: inherit
+    with:
+      CTEST_START: 1
+      CTEST_END: 999999
+      artifact_name: windows_test_results_rt
+      results_name: "Windows RT test results"
+      suite_name: rt
+      CTEST_REGEX: "^rt_"
+      MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_windows_debug_x64
+
+  test_windows_mcl:
+    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_windows.result == 'success' && (needs.mcl_runtime_windows_debug_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_windows_debug.result == 'success')
+    name: Windows tests (MCL)
+    needs: [build_windows, mcl_runtime_windows_debug_cached, mcl_runtime_windows_debug, win_bundle, meta]
+    permissions:
+      checks: write
+      contents: read
+    uses: ./.github/workflows/win_test_template.yml
+    secrets: inherit
+    with:
+      CTEST_START: 1
+      CTEST_END: 999999
+      artifact_name: windows_test_results_mcl
+      results_name: "Windows MCL test results"
+      suite_name: mcl
+      CTEST_REGEX: "^(col|secondary)_"
+      MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_windows_debug_x64
 
   final_status:
     name: Final status
     needs:
       - build_linux_debug
-      - test_linux_debug
+      - mcl_runtime_linux_debug_cached
+      - mcl_runtime_linux_debug
+      - test_linux_debug_plain
+      - test_linux_debug_rt
+      - test_linux_debug_mcl
       - build_linux_release
-      - test_linux_release
+      - build_linux_release_tests
+      - mcl_runtime_linux_release_cached
+      - mcl_runtime_linux_release
+      - test_linux_release_plain
+      - test_linux_release_rt
       - test_linux_release_mcl
+      - mcl_runtime_windows_debug_cached
+      - mcl_runtime_windows_debug
       - build_windows
-      - test_windows
+      - test_windows_plain
+      - test_windows_rt
+      - test_windows_mcl
       - build_freebsd
       - build_aarch64
       - clt
@@ -601,14 +1129,31 @@ jobs:
           failed=0
           results=(
             "build_linux_debug:${{ needs.build_linux_debug.result }}"
-            "test_linux_debug:${{ needs.test_linux_debug.result }}:${{ needs.test_linux_debug.outputs.test_outcome }}"
+            "mcl_runtime_linux_debug_cached:${{ needs.mcl_runtime_linux_debug_cached.result }}"
+            "mcl_runtime_linux_debug:${{ needs.mcl_runtime_linux_debug.result }}"
+            "test_linux_debug_plain:${{ needs.test_linux_debug_plain.result }}:${{ needs.test_linux_debug_plain.outputs.test_outcome }}"
+            "test_linux_debug_rt:${{ needs.test_linux_debug_rt.result }}:${{ needs.test_linux_debug_rt.outputs.test_outcome }}"
+            "test_linux_debug_mcl:${{ needs.test_linux_debug_mcl.result }}:${{ needs.test_linux_debug_mcl.outputs.test_outcome }}"
             "build_linux_release:${{ needs.build_linux_release.result }}"
-            "test_linux_release:${{ needs.test_linux_release.result }}:${{ needs.test_linux_release.outputs.test_outcome }}"
+            "build_linux_release_tests:${{ needs.build_linux_release_tests.result }}"
+            "mcl_runtime_linux_release_cached:${{ needs.mcl_runtime_linux_release_cached.result }}"
+            "mcl_runtime_linux_release:${{ needs.mcl_runtime_linux_release.result }}"
+            "test_linux_release_plain:${{ needs.test_linux_release_plain.result }}:${{ needs.test_linux_release_plain.outputs.test_outcome }}"
+            "test_linux_release_rt:${{ needs.test_linux_release_rt.result }}:${{ needs.test_linux_release_rt.outputs.test_outcome }}"
             "test_linux_release_mcl:${{ needs.test_linux_release_mcl.result }}:${{ needs.test_linux_release_mcl.outputs.test_outcome }}"
+            "mcl_runtime_windows_debug_cached:${{ needs.mcl_runtime_windows_debug_cached.result }}"
+            "mcl_runtime_windows_debug:${{ needs.mcl_runtime_windows_debug.result }}"
             "build_windows:${{ needs.build_windows.result }}"
-            "test_windows:${{ needs.test_windows.result }}:${{ needs.test_windows.outputs.test_outcome }}"
+            "test_windows_plain:${{ needs.test_windows_plain.result }}:${{ needs.test_windows_plain.outputs.test_outcome }}"
+            "test_windows_rt:${{ needs.test_windows_rt.result }}:${{ needs.test_windows_rt.outputs.test_outcome }}"
+            "test_windows_mcl:${{ needs.test_windows_mcl.result }}:${{ needs.test_windows_mcl.outputs.test_outcome }}"
             "build_freebsd:${{ needs.build_freebsd.result }}"
             "build_aarch64:${{ needs.build_aarch64.result }}"
+          )
+          runtime_results=(
+            "mcl_runtime_linux_debug:${{ needs.mcl_runtime_linux_debug_cached.outputs.cache_hit }}:${{ needs.mcl_runtime_linux_debug.result }}"
+            "mcl_runtime_linux_release:${{ needs.mcl_runtime_linux_release_cached.outputs.cache_hit }}:${{ needs.mcl_runtime_linux_release.result }}"
+            "mcl_runtime_windows_debug:${{ needs.mcl_runtime_windows_debug_cached.outputs.cache_hit }}:${{ needs.mcl_runtime_windows_debug.result }}"
           )
           {
             echo "### Final status"
@@ -641,18 +1186,28 @@ jobs:
               failed=1
               continue
             fi
-            if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
+            if [[ "$result" == "failure" || "$result" == "cancelled" || "$result" == "abandoned" || "$result" == "timed_out" || "$result" == "action_required" || "$result" == "startup_failure" ]]; then
               echo "$name: $result"
               failed=1
             fi
           done
           if [[ "${{ needs.meta.outputs.run_clt }}" == "true" ]]; then
             result="${{ needs.clt.result }}"
-            if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
+            if [[ "$result" == "failure" || "$result" == "cancelled" || "$result" == "abandoned" || "$result" == "timed_out" || "$result" == "action_required" || "$result" == "startup_failure" ]]; then
               echo "clt: $result"
               failed=1
             fi
           fi
+          for entry in "${runtime_results[@]}"; do
+            name="${entry%%:*}"
+            rest="${entry#*:}"
+            cache_hit="${rest%%:*}"
+            build_result="${rest#*:}"
+            if [[ "$cache_hit" != "true" && "$build_result" != "success" ]]; then
+              echo "$name: no cached runtime artifact and build result was $build_result"
+              failed=1
+            fi
+          done
           if [[ "$failed" -ne 0 ]]; then
             echo "* Overall: failure" >> "$GITHUB_STEP_SUMMARY"
             echo "One or more build/test jobs failed"

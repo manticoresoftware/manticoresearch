@@ -38,7 +38,10 @@ enum
 	QFLAG_JSON_QUERY			= 1UL << 11,
 	QFLAG_NOT_ONLY_ALLOWED		= 1UL << 12,
 	QFLAG_LOCAL_DF_SET			= 1UL << 13,
-	QFLAG_SIMPLIFY_SET			= 1UL << 14
+	QFLAG_SIMPLIFY_SET			= 1UL << 14,
+	QFLAG_EXPLICIT_RANKER		= 1UL << 15,
+	QFLAG_EXPLICIT_BOOLEAN_MODE	= 1UL << 16,
+	QFLAG_DEFAULT_BOOL_OR		= 1UL << 17
 };
 
 void operator<< ( ISphOutputBuffer & tOut, const CSphNamedInt & tValue )
@@ -60,7 +63,7 @@ static void SendStringVec ( ISphOutputBuffer & tOut, const StrVec_t & dStrings )
 		tOut.SendString ( sValue.cstr() );
 }
 
-static void SendFacetFilterTrait ( ISphOutputBuffer & tOut, const FacetFilterTrait_t & tTrait )
+static void SendFacetFilterTrait ( ISphOutputBuffer & tOut, const FacetFilterTrait_t & tTrait, WORD uMasterVer )
 {
 	tOut.SendByte ( tTrait.m_tMode.has_value() );
 	if ( tTrait.m_tMode )
@@ -68,6 +71,8 @@ static void SendFacetFilterTrait ( ISphOutputBuffer & tOut, const FacetFilterTra
 
 	tOut.SendByte ( (BYTE)tTrait.m_eClause );
 	SendStringVec ( tOut, tTrait.m_dAttrs );
+	if ( uMasterVer>=31 )
+		tOut.SendByte ( tTrait.m_bZeroes );
 }
 
 void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, int iWeight ) const
@@ -88,6 +93,9 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	uFlags |= QFLAG_NOT_ONLY_ALLOWED * q.m_bNotOnlyAllowed;
 	uFlags |= QFLAG_LOCAL_DF_SET * q.m_bLocalDF.has_value();
 	uFlags |= QFLAG_SIMPLIFY_SET * q.m_bSimplify.has_value();
+	uFlags |= QFLAG_EXPLICIT_RANKER * q.m_bExplicitRanker;
+	uFlags |= QFLAG_EXPLICIT_BOOLEAN_MODE * q.m_bExplicitBooleanMode;
+	uFlags |= QFLAG_DEFAULT_BOOL_OR * q.m_bDefaultBoolOr;
 
 	if ( q.m_eQueryType==QUERY_JSON )
 		uFlags |= QFLAG_JSON_QUERY;
@@ -338,7 +346,7 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	tOut.SendString ( q.m_sExpandBlended.cstr() );
 
 	tOut.SendByte ( q.m_bFacetMaxRef );
-	SendFacetFilterTrait ( tOut, q.m_tFacetFilter );
+	SendFacetFilterTrait ( tOut, q.m_tFacetFilter, VER_COMMAND_SEARCH_MASTER );
 	SendStringVec ( tOut, q.m_dFacetOwnFilterAttrs );
 }
 
@@ -628,7 +636,7 @@ static void ParseStringVec ( InputBuffer_c & tReq, StrVec_t & dStrings )
 		sValue = tReq.GetString();
 }
 
-static void ParseFacetFilterTrait ( InputBuffer_c & tReq, FacetFilterTrait_t & tTrait )
+static void ParseFacetFilterTrait ( InputBuffer_c & tReq, FacetFilterTrait_t & tTrait, WORD uMasterVer )
 {
 	tTrait.m_tMode.reset();
 	bool bHasMode = !!tReq.GetByte();
@@ -637,6 +645,7 @@ static void ParseFacetFilterTrait ( InputBuffer_c & tReq, FacetFilterTrait_t & t
 
 	tTrait.m_eClause = (FacetFilterClause_e)tReq.GetByte();
 	ParseStringVec ( tReq, tTrait.m_dAttrs );
+	tTrait.m_bZeroes = uMasterVer>=31 && !!tReq.GetByte();
 }
 
 
@@ -755,10 +764,42 @@ static void AddDocids ( CSphVector<CSphQueryItem> & dItems )
 }
 
 
-void PrepareQueryEmulation ( CSphQuery * pQuery )
+static void MarkEmulatedQueryRanker ( CSphQuery * pQuery, SearchQueryOrigin_e eOrigin )
+{
+	switch ( eOrigin )
+	{
+		case SearchQueryOrigin_e::ApiClient:
+		case SearchQueryOrigin_e::MasterAgent:
+			pQuery->m_bExplicitRanker = true;
+			return;
+	}
+
+	assert ( false && "unknown query origin" );
+}
+
+
+static void MarkEmulatedQueryBooleanMode ( CSphQuery * pQuery, SearchQueryOrigin_e eOrigin )
+{
+	switch ( eOrigin )
+	{
+		case SearchQueryOrigin_e::ApiClient:
+		case SearchQueryOrigin_e::MasterAgent:
+			pQuery->m_bExplicitBooleanMode = true;
+			pQuery->m_bDefaultBoolOr = false;
+			return;
+	}
+
+	assert ( false && "unknown query origin" );
+}
+
+
+void PrepareQueryEmulation ( CSphQuery * pQuery, SearchQueryOrigin_e eOrigin )
 {
 	if ( pQuery->m_eMode == SPH_MATCH_BOOLEAN )
+	{
 		pQuery->m_eRanker = SPH_RANK_NONE;
+		MarkEmulatedQueryRanker ( pQuery, eOrigin );
+	}
 
 	if ( pQuery->m_eMode == SPH_MATCH_FULLSCAN )
 		pQuery->m_sQuery = "";
@@ -766,6 +807,7 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 	if ( pQuery->m_eMode != SPH_MATCH_ALL && pQuery->m_eMode != SPH_MATCH_ANY && pQuery->m_eMode != SPH_MATCH_PHRASE )
 		return;
 
+	// Legacy match-mode text emulation is independent from the binary API request origin.
 	const char * szQuery = pQuery->m_sRawQuery.cstr();
 	int iQueryLen = szQuery ? (int) strlen ( szQuery ) : 0;
 
@@ -792,11 +834,13 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 		}
 	}
 
+	MarkEmulatedQueryBooleanMode ( pQuery, eOrigin );
+
 	switch ( pQuery->m_eMode )
 	{
-		case SPH_MATCH_ALL:		pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes = '\0'; break;
-		case SPH_MATCH_ANY:		pQuery->m_eRanker = SPH_RANK_MATCHANY; strncpy ( szRes, "\"/1", 8 ); break;
-		case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes++ = '\"'; *szRes = '\0'; break;
+		case SPH_MATCH_ALL:		pQuery->m_eRanker = SPH_RANK_PROXIMITY; MarkEmulatedQueryRanker ( pQuery, eOrigin ); *szRes = '\0'; break;
+		case SPH_MATCH_ANY:		pQuery->m_eRanker = SPH_RANK_MATCHANY; MarkEmulatedQueryRanker ( pQuery, eOrigin ); strncpy ( szRes, "\"/1", 8 ); break;
+		case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; MarkEmulatedQueryRanker ( pQuery, eOrigin ); *szRes++ = '\"'; *szRes = '\0'; break;
 		default:				return;
 	}
 }
@@ -833,6 +877,14 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	tQuery.m_iLimit = tReq.GetInt ();
 	tQuery.m_eMode = (ESphMatchMode) tReq.GetInt ();
 	tQuery.m_eRanker = (ESphRankMode) tReq.GetInt ();
+	tQuery.m_bExplicitRanker = !!( uFlags & QFLAG_EXPLICIT_RANKER );
+	if ( !tQuery.m_bExplicitRanker && uMasterVer<32 )
+		tQuery.m_bExplicitRanker = ( tQuery.m_eRanker!=SPH_RANK_DEFAULT );
+	if ( uMasterVer>=32 )
+	{
+		tQuery.m_bExplicitBooleanMode = !!( uFlags & QFLAG_EXPLICIT_BOOLEAN_MODE );
+		tQuery.m_bDefaultBoolOr = !!( uFlags & QFLAG_DEFAULT_BOOL_OR );
+	}
 	if ( tQuery.m_eRanker==SPH_RANK_EXPR || tQuery.m_eRanker==SPH_RANK_EXPORT )
 		tQuery.m_sRankerExpr = tReq.GetString();
 
@@ -1238,7 +1290,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	if ( uMasterVer>=30 )
 	{
 		tQuery.m_bFacetMaxRef = !!tReq.GetByte();
-		ParseFacetFilterTrait ( tReq, tQuery.m_tFacetFilter );
+		ParseFacetFilterTrait ( tReq, tQuery.m_tFacetFilter, uMasterVer );
 		ParseStringVec ( tReq, tQuery.m_dFacetOwnFilterAttrs );
 	}
 
@@ -1268,7 +1320,10 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	tQuery.m_sQuery = tQuery.m_sRawQuery;
 
 	if ( tQuery.m_eQueryType!=QUERY_JSON )
-		PrepareQueryEmulation ( &tQuery );
+	{
+		SearchQueryOrigin_e eOrigin = uMasterVer>0 ? SearchQueryOrigin_e::MasterAgent : SearchQueryOrigin_e::ApiClient;
+		PrepareQueryEmulation ( &tQuery, eOrigin );
+	}
 
 	FixupQuerySettings ( tQuery );
 
@@ -1673,6 +1728,12 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 	for ( auto & dQuery: dQueries )
 		if ( !ParseSearchQuery ( tReq, tOut, dQuery, uVer, uMasterVer ) )
 			return;
+
+	CSphString sTmpIndex;
+	const CSphString & sIndex = ( dQueries.IsEmpty() ? sTmpIndex.scstr() : dQueries[0].m_sIndexes );
+	// assumes the multiple queries are to the same index
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, tOut ) )
+		return;
 
 	// run queries, send response
 	SearchHandler_c tHandler { std::move (dQueries), !bAgentMode };

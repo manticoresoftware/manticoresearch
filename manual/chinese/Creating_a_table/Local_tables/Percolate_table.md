@@ -19,6 +19,8 @@
 
 创建新的渗透表时，您需要记住的是指定文档的预期模式，该模式将与您稍后添加的规则进行匹配。这与[任何其他本地表](../../Creating_a_table/Local_tables.md)的创建方式相同。
 
+Percolate 表不支持 [dict=keywords_32k](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)。
+
 
 <!-- intro -->
 ##### 通过SQL创建渗透表：

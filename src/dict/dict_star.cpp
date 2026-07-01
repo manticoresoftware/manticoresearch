@@ -21,21 +21,33 @@ public:
 	DictStar_c ( DictRefPtr_c pDict, bool bInfixes )
 		: DictProxy_c ( std::move (pDict) )
 		, m_bInfixes ( bInfixes )
+		, m_eDictFormat ( m_pDict->GetSettings().GetDictFormat() )
+		, m_dBuf ( m_eDictFormat==DictFormat_e::KEYWORDS_V2 ? GetKeywordBufSize ( m_eDictFormat ) : 0 )
 	{}
 
 	SphWordID_t GetWordID ( BYTE* pWord ) final;
 
 private:
 	bool m_bInfixes;
-};
+	DictFormat_e m_eDictFormat;
+	CSphFixedVector<BYTE> m_dBuf { 0 };
 
+	void ValidateClone() const final { assert ( false && "DictStar_c must be operation-local" ); }
+};
 
 SphWordID_t DictStar_c::GetWordID ( BYTE* pWord )
 {
-	char sBuf[16 + 3 * SPH_MAX_WORD_LEN];
+	BYTE dBuf[GetKeywordBufSize ( DictFormat_e::KEYWORDS )];
+	const bool bKeywordsV2 = ( m_eDictFormat==DictFormat_e::KEYWORDS_V2 );
+	const int iBufSize = GetKeywordBufSize ( m_eDictFormat );
+	BYTE * sBuf = bKeywordsV2 ? m_dBuf.Begin() : dBuf;
+
+	assert ( bKeywordsV2 || m_dBuf.GetLength()==0 );
+	assert ( !bKeywordsV2 || m_dBuf.GetLength()==GetKeywordBufSize ( DictFormat_e::KEYWORDS_V2 ) );
+	assert ( bKeywordsV2 || iBufSize==(int)sizeof ( dBuf ) );
 
 	auto iRawLen = (int)strlen ( (const char*)pWord );
-	int iLen = Min ( iRawLen, 16 + 3 * SPH_MAX_WORD_LEN - 1 );
+	int iLen = Min ( iRawLen, iBufSize - 1 );
 
 	if ( !iLen )
 		return 0;
@@ -49,7 +61,7 @@ SphWordID_t DictStar_c::GetWordID ( BYTE* pWord )
 		if ( m_pDict->GetSettings().m_bStopwordsUnstemmed && IsStopWord ( pWord ) )
 			return 0;
 
-		if ( iRawLen <= ( 16 + 3 * SPH_MAX_WORD_LEN - 1 ) )
+		if ( iRawLen < iBufSize )
 			m_pDict->ApplyStemmers ( pWord );
 
 		// stemmer might squeeze out the word
@@ -60,10 +72,10 @@ SphWordID_t DictStar_c::GetWordID ( BYTE* pWord )
 			return 0;
 	}
 
-	if ( iRawLen <= (16 + 3 * SPH_MAX_WORD_LEN - 1) )
+	if ( iRawLen < iBufSize )
 		iRawLen = (int) strlen ( (const char *) pWord );
-	iLen = Min ( iRawLen, 16 + 3 * SPH_MAX_WORD_LEN - 1 );
-	assert ( iLen < 16 + 3 * SPH_MAX_WORD_LEN ); // < 142
+	iLen = Min ( iRawLen, iBufSize - 1 );
+	assert ( iLen < iBufSize );
 
 	if ( !iLen || ( bHeadStar && iLen == 1 ) )
 		return 0;
@@ -131,7 +143,7 @@ SphWordID_t DictStar_c::GetWordID ( BYTE* pWord )
 	}
 
 	// calc id for mangled word
-	return m_pDict->GetWordID ( (BYTE*)sBuf, iLen, !bHeadStar && !bTailStar );
+	return m_pDict->GetWordID ( sBuf, iLen, !bHeadStar && !bTailStar );
 }
 
 

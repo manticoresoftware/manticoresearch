@@ -213,7 +213,10 @@ bool ClusterDesc_t::Parse ( const bson::Bson_c& tBson, const CSphString& sName, 
 	} );
 
 	m_iClusterEpoch = Int ( tBson.ChildByName ( "cluster_epoch" ) );
+	m_bSelfBootstrapOnStartup = Bool ( tBson.ChildByName ( "self_bootstrap_on_startup" ), false );
 	m_sPath = String ( tBson.ChildByName ( "path" ) );
+	m_sUser = String ( tBson.ChildByName ( "user" ) );
+
 	return true;
 }
 
@@ -249,7 +252,9 @@ void ClusterDesc_t::Save ( JsonEscapedBuilder& tOut ) const
 	}
 	if ( m_iClusterEpoch > 0 )
 		tOut.NamedVal ( "cluster_epoch", m_iClusterEpoch );
+	tOut.NamedValNonDefault ( "self_bootstrap_on_startup", m_bSelfBootstrapOnStartup, false );
 	tOut.NamedStringNonEmpty ( "path", m_sPath );
+	tOut.NamedStringNonEmpty ( "user", m_sUser );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1924,7 +1929,7 @@ bool SaveShardMeta ( const char * szIndexName, const ShardIndex_c & tShard, CSph
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( szIndexName );
 
 	StrVec_t dWarnings;
-	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tShard.m_tTokenizerSettings, nullptr, pFilenameBuilder.get(), dWarnings, sError );
+	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tShard.m_tTokenizerSettings, nullptr, pFilenameBuilder.get(), dWarnings, sError, GetMaxTokenBytes ( tShard.m_tDictSettings.GetDictFormat() ) );
 	if ( !pTokenizer )
 		return false;
 
@@ -1946,7 +1951,7 @@ bool SaveShardMeta ( const char * szIndexName, const ShardIndex_c & tShard, CSph
 	sNewMeta.Named ( "tokenizer_settings" );
 	SaveTokenizerSettings ( sNewMeta, pTokenizer, tShard.m_tSettings.m_iEmbeddedLimit );
 	sNewMeta.Named ( "dictionary_settings" );
-	SaveDictionarySettings ( sNewMeta, pDict, tShard.m_tDictSettings.m_bWordDict, tShard.m_tSettings.m_iEmbeddedLimit );
+	SaveDictionarySettings ( sNewMeta, pDict, tShard.m_tDictSettings.IsWordDict(), tShard.m_tSettings.m_iEmbeddedLimit );
 	if ( !tShard.m_tFieldFilterSettings.m_dRegexps.IsEmpty() )
 		sNewMeta.NamedVal ( "field_filter_settings", tShard.m_tFieldFilterSettings );
 

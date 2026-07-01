@@ -23,7 +23,26 @@ searchd {
 
 所有 HTTP 端点返回 `application/json` 内容类型。大多数端点使用 JSON 负载进行请求。然而，有一些例外情况使用 NDJSON 或简单的 URL 编码负载。
 
-目前没有用户认证。因此，请确保 HTTP 接口在您的网络之外不可访问。由于 Manticore 的功能与其他 Web 服务器类似，您可以使用反向代理（如 Nginx）来实现 HTTP 认证或缓存。
+如果启用了[身份验证和授权](../Security/Authentication_and_authorization.md)，HTTP/HTTPS 客户端必须发送 Basic 认证头或 bearer token：
+
+```bash
+curl -u admin:StrongPass#2026 http://127.0.0.1:9308/sql?mode=raw -d "SELECT 1"
+curl -H "Authorization: Bearer 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" http://127.0.0.1:9308/sql?mode=raw -d "SELECT 1"
+```
+
+使用 `POST /token` 为已认证的 HTTP 用户创建或轮换 bearer token：
+
+```bash
+curl -u admin:StrongPass#2026 -X POST http://127.0.0.1:9308/token -d "{}"
+```
+
+该端点只会返回一次原始 token。请妥善保存。`SHOW TOKEN` 显示的是已存储的 token 哈希，而不是原始 bearer token。要替换 bearer token，请使用 `POST /token` 或 SQL `TOKEN` 命令进行轮换。
+
+通过网络发送凭据或 bearer token 时，请使用 HTTPS。
+
+HTTP 头名称以及 `Basic` 和 `Bearer` 方案名称均不区分大小写。用户名区分大小写。
+
+缺少或无效的凭据会返回 `401 Unauthorized`。有效凭据但没有所需权限时会返回 `403 Forbidden`。
 
 <!-- example HTTPS -->
 HTTP 协议也支持 [SSL 加密](../Security/SSL.md)：
@@ -711,7 +730,7 @@ curl 0:9308/cli_json -d 'desc test'
 curl -s localhost:9312/cli_json -d "CALL PQ ('pq', ('{"title":"angry", "gid":3 }'))" --next localhost:9312/cli_json -d 'show meta'
 
 ```
-但是请注意，以下内容将**无法工作**：
+curl -s localhost:9312/cli_json -d "CALL PQ ('pq', ('{"title":"angry", "gid":3 }'))" --next localhost:9312/cli_json -d 'show meta'
 ```
 
 curl -s localhost:9312/cli_json -d "CALL PQ ('pq', ('{"title":"angry", "gid":3 }')); show meta"

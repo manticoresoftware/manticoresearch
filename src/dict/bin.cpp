@@ -18,15 +18,21 @@
 // CHUNK READER
 /////////////////////////////////////////////////////////////////////////////
 
-CSphBin::CSphBin ( ESphHitless eMode, bool bWordDict )
+CSphBin::CSphBin ( ESphHitless eMode, DictFormat_e eDictFormat )
 	: m_eMode ( eMode )
-	, m_bWordDict ( bWordDict )
+	, m_eDictFormat ( eDictFormat )
+	, m_dKeyword ( IsWordDict() ? GetKeywordBufSize ( eDictFormat ) : 0 )
+#ifndef NDEBUG
+	, m_dLastKeyword ( IsWordDict() ? GetKeywordBufSize ( eDictFormat ) : 0 )
+#endif
 {
-	m_tHit.m_szKeyword = bWordDict ? m_sKeyword.data() : nullptr;
-	m_sKeyword[0] = '\0';
+	m_tHit.m_szKeyword = IsWordDict() ? m_dKeyword.Begin() : nullptr;
+	if ( IsWordDict() )
+		m_dKeyword[0] = '\0';
 
 #ifndef NDEBUG
-	m_sLastKeyword[0] = '\0';
+	if ( IsWordDict() )
+		m_dLastKeyword[0] = '\0';
 #endif
 }
 
@@ -252,27 +258,32 @@ int CSphBin::ReadHit ( AggregateHit_t* pOut )
 			switch ( m_eState )
 			{
 			case BIN_WORD:
-				if ( m_bWordDict )
+				if ( IsWordDict() )
 				{
 #ifdef NDEBUG
 					// FIXME?! move this under PARANOID or something?
 					// or just introduce an assert() checked release build?
-					if ( uDelta >= std::size ( m_sKeyword ) )
+					if ( uDelta >= (SphWordID_t)m_dKeyword.GetLength() )
 						sphDie ( "INTERNAL ERROR: corrupted keyword length (len=" UINT64_FMT ", deltapos=" UINT64_FMT ")",
 							(uint64_t)uDelta,
 							(uint64_t)( m_iFilePos - m_iLeft ) );
 #else
-					assert ( uDelta > 0 && uDelta < std::size ( m_sKeyword ) - 1 );
+					assert ( uDelta > 0 && uDelta < (SphWordID_t)m_dKeyword.GetLength() );
 #endif
 
-					ReadBytes ( m_sKeyword.data(), (int)uDelta );
-					m_sKeyword[uDelta] = '\0';
-					tHit.m_uWordID = sphCRC32 ( m_sKeyword.data() ); // must be in sync with dict!
+					if ( m_eDictFormat==DictFormat_e::KEYWORDS_V2 && uDelta>(SphWordID_t)GetKeywordMaxStoredBytes ( m_eDictFormat ) )
+						sphDie ( "INTERNAL ERROR: corrupted keywords_32k keyword length (len=" UINT64_FMT ", deltapos=" UINT64_FMT ")",
+							(uint64_t)uDelta,
+							(uint64_t)( m_iFilePos - m_iLeft ) );
+
+					ReadBytes ( m_dKeyword.Begin(), (int)uDelta );
+					m_dKeyword[uDelta] = '\0';
+					tHit.m_uWordID = sphCRC32 ( m_dKeyword.Begin() ); // must be in sync with dict!
 
 #ifndef NDEBUG
 					assert ( ( m_iLastWordID < tHit.m_uWordID )
-							 || ( m_iLastWordID == tHit.m_uWordID && strcmp ( (char*)m_sLastKeyword.data(), (char*)m_sKeyword.data() ) < 0 ) );
-					strncpy ( (char*)m_sLastKeyword.data(), (char*)m_sKeyword.data(), std::size ( m_sLastKeyword ) );
+							 || ( m_iLastWordID == tHit.m_uWordID && strcmp ( (char*)m_dLastKeyword.Begin(), (char*)m_dKeyword.Begin() ) < 0 ) );
+					memcpy ( m_dLastKeyword.Begin(), m_dKeyword.Begin(), (int)uDelta+1 );
 #endif
 
 				} else

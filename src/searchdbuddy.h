@@ -19,6 +19,7 @@ void BuddyStart ( const std::optional<CSphString> & sConfigPath, const CSphStrin
 void BuddyShutdown ();
 
 bool HasBuddy();
+bool HasBuddyConfigured ( const std::optional<CSphString> & sConfigPath );
 bool IsBuddyQuery ( const OptionsHash_t & hOptions );
 
 bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, OptionsHash_t& hOptions, CSphVector<BYTE>& dResult, bool bNeedHttpResponse, http_method eRequestType );

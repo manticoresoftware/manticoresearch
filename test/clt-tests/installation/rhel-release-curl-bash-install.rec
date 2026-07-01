@@ -1,0 +1,38 @@
+––– input –––
+sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo; sed -i s/^#.*baseurl=http/baseurl=http/g /etc/yum.repos.d/*.repo
+––– output –––
+––– input –––
+yum install -y -q --skip-broken curl mariadb mariadb105 which procps > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– block: installer-url –––
+––– input –––
+set -o pipefail; (curl -sSL "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | sh -s silent) > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+rpm -q manticore-repo >/dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+stdbuf -oL searchd --version
+––– output –––
+Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (embeddings %{VERSION})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+––– input –––
+manticore-executor -v
+––– output –––
+PHP %{VERSION} (cli) (built: #!/[a-zA-Z]{3}/!# #!/[0-9]+/!# %{YEAR} %{TIME}) (NTS)
+Copyright (c) The PHP Group
+Zend Engine #!/v[0-9]+\.[0-9]+\.[0-9]+/!#, Copyright (c) Zend Technologies
+––– block: check-searchd-process –––
+––– block: check-backup –––
+––– input –––
+yum remove -y 'manticore*' > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+rpm -qa | grep manticore
+––– output –––

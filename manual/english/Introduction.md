@@ -44,6 +44,12 @@ Manticore's native syntax is SQL and it supports SQL over HTTP and MySQL protoco
 #### JSON over HTTP
 For a more programmatic approach to managing data and schemas, Manticore provides [HTTP JSON](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) protocol, similar to that of Elasticsearch.
 
+#### Sharded tables
+Manticore supports [`type='sharding'` tables](Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md) that transparently distribute reads and writes across multiple physical shards on a single node or a replication cluster, improving write scalability while simplifying routing, failover, and operational management.
+
+#### Authentication and authorization
+Manticore provides built-in [authentication and authorization](Security/Authentication_and_authorization.md) for MySQL, HTTP/HTTPS, distributed remote agents, and replication-related operations, with users, bearer tokens, and fine-grained permissions.
+
 #### Elasticsearch-compatible writes
 You can execute Elasticsearch-compatible [insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Adding-documents-to-a-real-time-table) and [replace](Data_creation_and_modification/Updating_documents/REPLACE.md#REPLACE) JSON queries which enables using Manticore with tools like Logstash (version < 7.13), Filebeat and other tools from the Beats family.
 

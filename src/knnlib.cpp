@@ -184,6 +184,12 @@ void ShutdownKNN()
 	{
 		g_pEmbeddingsLib.reset();
 		dlclose(g_pKNNLib);
+		g_pKNNLib = nullptr;
+		g_fnCreate = nullptr;
+		g_fnCreateKNNBuilder = nullptr;
+		g_fnCreateDistanceCalc = nullptr;
+		g_fnLoadEmbeddingsLib = nullptr;
+		g_fnVersionStr = nullptr;
 	}
 }
 

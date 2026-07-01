@@ -23,6 +23,16 @@ To set up replication in Manticore Search:
 * A [listen](../../Server_settings/Searchd.md#listen)  directive must be specified, containing an IP address accessible by other nodes, or a [node_address](../../Server_settings/Searchd.md#node_address) with an accessible IP address.
 * Optionally, you can set unique values for [server_id](../../Server_settings/Searchd.md#server_id) on each cluster node. If no value is set, the node will attempt to use the MAC address or a random number to generate the `server_id`.
 
+If [authentication and authorization](../../Security/Authentication_and_authorization.md) is enabled, cluster operations require the `replication` permission. Grant it to the user that should own replication operations for the cluster:
+
+```sql
+GRANT replication ON 'posts' TO 'repl_user';
+```
+
+`CREATE CLUSTER` and `JOIN CLUSTER` can specify that user with `'<user>' AS user`. The user must exist with matching stored authentication data on the nodes that take part in the operation. Creating the same user name and password independently on each node is not enough, because the stored authentication data can differ. If you change auth data outside the daemon, run `RELOAD AUTH` on the affected nodes before using the cluster operation.
+
+Later `ALTER CLUSTER ... ADD`, `ALTER CLUSTER ... DROP`, `ALTER CLUSTER ... UPDATE nodes`, and `DELETE CLUSTER` use the stored cluster user. When authentication is enabled, a successful `JOIN CLUSTER` replaces all local authentication data on the joining node with the donor cluster's authentication data.
+
 If there is no `replication` [listen](../../Server_settings/Searchd.md#listen) directive set, Manticore will use the first two free ports in the range of 200 ports after the default protocol listening port for each created cluster. To set replication ports manually, the [listen](../../Server_settings/Searchd.md#listen) directive (of `replication` type) port range must be defined and the address/port range pairs must not intersect between different nodes on the same server. As a rule of thumb, the port range should specify at least two ports per cluster. When you define a replication listener with a port range (e.g., `listen = 192.168.0.1:9320-9328:replication`), Manticore doesn't immediately start listening on these ports. Instead, it will take random free ports from the specified range only when you start using replication.
 
 ## Replication cluster
@@ -66,8 +76,8 @@ The [Auto ID](../../Data_creation_and_modification/Adding_documents_to_a_table/A
 <!-- request SQL -->
 
 ```sql
-INSERT INTO posts:weekly_index VALUES ( 'iphone case' )
-TRUNCATE RTINDEX click_query:weekly_index
+INSERT INTO posts:weekly_table VALUES ( 'iphone case' )
+TRUNCATE TABLE click_query:weekly_table
 UPDATE INTO posts:rt_tags SET tags=(101, 302, 304) WHERE MATCH ('use') AND id IN (1,101,201)
 DELETE FROM clicks:rt WHERE MATCH ('dumy') AND gid>206
 ```
@@ -78,7 +88,7 @@ DELETE FROM clicks:rt WHERE MATCH ('dumy') AND gid>206
 POST /insert -d '
 {
   "cluster":"posts",
-  "table":"weekly_index",
+  "table":"weekly_table",
   "doc":
   {
     "title" : "iphone case",
@@ -88,7 +98,7 @@ POST /insert -d '
 POST /delete -d '
 {
   "cluster":"posts",
-  "table": "weekly_index",
+  "table": "weekly_table",
   "id":1
 }'
 ```
@@ -96,10 +106,10 @@ POST /delete -d '
 <!-- request PHP -->
 
 ```php
-$index->addDocuments([
+$table->addDocuments([
         1, ['title' => 'iphone case', 'price' => 19.85]
 ]);
-$index->deleteDocument(1);
+$table->deleteDocument(1);
 ```
 
 <!-- intro -->
@@ -108,8 +118,8 @@ $index->deleteDocument(1);
 <!-- request Python -->
 
 ``` python
-indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}})
-indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
+indexApi.insert({"cluster":"posts","table":"weekly_table","doc":{"title":"iphone case","price":19.85}})
+indexApi.delete({"cluster":"posts","table":"weekly_table","id":1})
 ```
 
 <!-- intro -->
@@ -118,8 +128,8 @@ indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
 <!-- request Python-asyncio -->
 
 ``` python
-await indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}})
-await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
+await indexApi.insert({"cluster":"posts","table":"weekly_table","doc":{"title":"iphone case","price":19.85}})
+await indexApi.delete({"cluster":"posts","table":"weekly_table","id":1})
 ```
 
 <!-- intro -->
@@ -128,8 +138,8 @@ await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
 <!-- request Javascript -->
 
 ``` javascript
-res = await indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}});
- res = await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1});
+res = await indexApi.insert({"cluster":"posts","table":"weekly_table","doc":{"title":"iphone case","price":19.85}});
+ res = await indexApi.delete({"cluster":"posts","table":"weekly_table","id":1});
 ```
 
 <!-- intro -->
@@ -143,11 +153,11 @@ HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","Crossbody Bag with Tassel");
     put("price",19.85);
 }};
-newdoc.index("weekly_index").cluster("posts").id(1L).setDoc(doc);
+newdoc.table("weekly_table").cluster("posts").id(1L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 
 DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest();
-deleteRequest.index("weekly_index").cluster("posts").setId(1L);
+deleteRequest.table("weekly_table").cluster("posts").setId(1L);
 indexApi.delete(deleteRequest);
 
 ```
@@ -161,10 +171,10 @@ indexApi.delete(deleteRequest);
 Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "Crossbody Bag with Tassel");
 doc.Add("price", 19.85);
-InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "weekly_index", cluster:posts, id: 1, doc: doc);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "weekly_table", cluster:posts, id: 1, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 
-DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(table: "weekly_index", cluster: "posts", id: 1);
+DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(table: "weekly_table", cluster: "posts", id: 1);
 indexApi.Delete(deleteDocumentRequest);
 ```
 
@@ -178,7 +188,7 @@ let mut doc = HashMap::new();
 doc.insert("title".to_string(), serde_json::json!("Crossbody Bag with Tassel"));
 doc.insert("price".to_string(), serde_json::json!(19.85));
 let insert_req = InsertDocumentRequest {
-    table: serde_json::json!("weekly_index"),
+    table: serde_json::json!("weekly_table"),
     doc: serde_json::json!(doc),
     cluster: serde_json::json!("posts"),
     id: serde_json::json!(1),
@@ -186,7 +196,7 @@ let insert_req = InsertDocumentRequest {
 let insert_res = index_api.insert(insert_req).await;
 
 let delete_req = DeleteDocumentRequest {
-    table: serde_json::json!("weekly_index"),
+    table: serde_json::json!("weekly_table"),
     cluster: serde_json::json!("posts"),
     id: serde_json::json!(1),
 };
@@ -209,8 +219,8 @@ When using the HTTP endpoint `json/search`, the `cluster` property can be specif
 <!-- request SQL -->
 
 ```sql
-SELECT * FROM weekly_index
-CALL PQ('posts:weekly_index', 'document is here')
+SELECT * FROM weekly_table
+CALL PQ('posts:weekly_table', 'document is here')
 ```
 
 <!-- request JSON -->
@@ -219,12 +229,12 @@ CALL PQ('posts:weekly_index', 'document is here')
 POST /search -d '
 {
   "cluster":"posts",
-  "table":"weekly_index",
+  "table":"weekly_table",
   "query":{"match":{"title":"keyword"}}
 }'
 POST /search -d '
 {
-  "table":"weekly_index",
+  "table":"weekly_table",
   "query":{"match":{"title":"keyword"}}
 }'
 ```
@@ -619,7 +629,7 @@ POST /insert -d '
 <!-- request PHP -->
 
 ```php
-$index->addDocuments([
+$table->addDocuments([
         3, ['title' => 'test me']
 ]);
 
@@ -662,7 +672,7 @@ InsertDocumentRequest newdoc = new InsertDocumentRequest();
 HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","test me");
 }};
-newdoc.index("pq_title").cluster("posts").id(3L).setDoc(doc);
+newdoc.table("pq_title").cluster("posts").id(3L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 ```
 
@@ -674,7 +684,7 @@ sqlresult = indexApi.insert(newdoc);
 ``` clike
 Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "test me");
-InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "pq_title", cluster: "posts", id: 3, doc: doc);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "pq_title", cluster: "posts", id: 3, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 ```
 

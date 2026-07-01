@@ -108,6 +108,7 @@ class CSphQueryContext : public ISphNoncopyable
 public:
 	// searching-only, per-query
 	const CSphQuery &				m_tQuery;
+	QueryExecutionSettings_t		m_tQuerySettings;
 
 	int								m_iWeights = 0;					///< search query field weights count
 	int								m_dWeights [ SPH_MAX_FIELDS ];	///< search query field weights
@@ -131,6 +132,7 @@ public:
 	int64_t							m_iIndexTotalDocs = 0;
 
 	explicit CSphQueryContext ( const CSphQuery & tQuery );
+	explicit CSphQueryContext ( const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings );
 			~CSphQueryContext () { 	ResetFilters(); }
 
 	void	BindWeights ( const CSphQuery & tQuery, const CSphSchema & tSchema, CSphString & sWarning );

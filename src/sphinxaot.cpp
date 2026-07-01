@@ -1881,23 +1881,9 @@ public:
 	BYTE * GetToken() final;
 };
 
-void sphAotAddBlendTrimAll ( TokenizerRefPtr_c& pTokenizer )
-{
-	const CSphTokenizerSettings & tSettings = pTokenizer->GetSettings();
-	if ( tSettings.m_sBlendChars.IsEmpty() )
-		return;
-
-	CSphString sError, sBlendMode;
-	sBlendMode.SetSprintf ( "%s%s", tSettings.m_sBlendMode.IsEmpty() ? "trim_none" : tSettings.m_sBlendMode.cstr(), ",trim_all" );
-	Verify ( pTokenizer->SetBlendMode ( sBlendMode.cstr(), sError ) );
-}
-
-
 void sphAotTransformFilter ( TokenizerRefPtr_c& pTokenizer, const DictRefPtr_c& pDict, bool bIndexExact, DWORD uLangMask )
 {
 	assert ( uLangMask!=0 );
-	sphAotAddBlendTrimAll ( pTokenizer );
-
 	for ( int i=AOT_BEGIN; i<AOT_LENGTH; ++i )
 	{
 		if ( uLangMask & (1UL<<i) )

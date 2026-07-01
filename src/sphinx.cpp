@@ -592,8 +592,6 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 		pTokenizer->AddSpecials ( "=" );
 		SetupExactDict ( pDict );
 	}
-	if ( m_tSettings.m_uAotFilterMask )
-		sphAotAddBlendTrimAll ( pTokenizer );
 
 	dKeywords.Resize ( 0 );
 
@@ -10382,8 +10380,18 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 			return false;
 		}
 	}
-	if ( m_tSettings.m_uAotFilterMask )
-		sphAotAddBlendTrimAll ( pTokenizer );
+
+	const CSphString & sBlendMode = pTokenizer->GetSettings().m_sBlendMode;
+	if ( !sBlendMode.IsEmpty() )
+	{
+		CSphString sError;
+		if ( !pTokenizer->SetBlendMode ( sBlendMode.cstr(), sError ) )
+		{
+			if ( pError )
+				*pError = sError;
+			return false;
+		}
+	}
 
 	pTokenizer->SetBuffer ( sModifiedQuery, (int)strlen ( (const char*)sModifiedQuery ) );
 

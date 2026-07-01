@@ -24,6 +24,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 	int iQpos = 1;
 	int iExactQpos = -1;
 	CSphVector<int> dQposWildcards;
+	CSphVector<BYTE> dSkipAotTransform;
 
 	// FIXME!!! got rid of duplicated term stat and qword setup
 	while ( ( sWord = m_pTokenizer->GetToken() ) )
@@ -50,6 +51,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 		const BYTE* sMultiform = m_pTokenizer->GetTokenizedMultiform();
 		strncpy ( (char*)sTokenized, sMultiform ? (const char*)sMultiform : (const char*)sWord, sizeof ( sTokenized ) - 1 );
 
+		int iKeywordStart = dKeywords.GetLength();
 		if ( tCtx.m_bAllowExpansion && ( !m_tFoldSettings.m_bFoldWildcards || m_tFoldSettings.m_bStats ) && sphHasExpandableWildcards ( (const char*)sWord ) )
 		{
 			dQposWildcards.Add ( iQpos );
@@ -101,6 +103,8 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 
 		// FIXME!!! handle consecutive blended wo blended parts
 		bool bBlended = m_pTokenizer->TokenIsBlended();
+		for ( int iKeyword = iKeywordStart; iKeyword < dKeywords.GetLength(); ++iKeyword )
+			dSkipAotTransform.Add ( bBlended ? 1 : 0 );
 
 		if ( bBlended )
 		{
@@ -136,6 +140,21 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 		// do not transform expanded wild-cards
 		if ( tSkipTransform.BitGetOr ( iKeywordQpos ) )
 			continue;
+
+		if ( dSkipAotTransform[iTokenized] )
+		{
+			if ( m_pSettings->m_bIndexExactWords && dKeywords[iTokenized].m_sNormalized.cstr()[0]!='=' )
+			{
+				snprintf ( (char *)sTmp, sizeof(sTmp)-1, "=%s", dKeywords[iTokenized].m_sNormalized.cstr() );
+				sTmp[sizeof(sTmp)-1] = '\0';
+
+				strncpy ( (char*)sTmp2, dKeywords[iTokenized].m_sTokenized.scstr(), sizeof ( sTmp2 ) - 1 );
+				sTmp2[sizeof(sTmp2)-1] = '\0';
+
+				AddKeywordStats ( sTmp, sTmp2, iKeywordQpos, dKeywords );
+			}
+			continue;
+		}
 
 		// MUST copy as Dict::GetWordID changes word and might add symbols
 		strncpy ( (char*)sTokenized, dKeywords[iTokenized].m_sNormalized.scstr(), sizeof ( sTokenized ) - 1 );

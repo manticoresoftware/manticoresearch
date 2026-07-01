@@ -8688,8 +8688,18 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 			return false;
 		}
 	}
-	if ( m_tSettings.m_uAotFilterMask )
-		sphAotAddBlendTrimAll ( pTokenizer );
+
+	const CSphString & sBlendMode = pTokenizer->GetSettings().m_sBlendMode;
+	if ( !sBlendMode.IsEmpty() )
+	{
+		CSphString sError;
+		if ( !pTokenizer->SetBlendMode ( sBlendMode.cstr(), sError ) )
+		{
+			if ( pError )
+				*pError = sError;
+			return false;
+		}
+	}
 
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (const BYTE *)sQuery;

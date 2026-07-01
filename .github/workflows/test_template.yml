@@ -282,4 +282,5 @@ jobs:
           files: build/junit*.xml
           compare_to_earlier_commit: false
           comment_mode: failures
+          job_summary: ${{ steps.test.outcome == 'failure' }}
   

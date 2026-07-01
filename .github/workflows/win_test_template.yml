@@ -230,6 +230,7 @@ jobs:
           compare_to_earlier_commit: false
           files: build/junit_*.xml
           comment_mode: failures
+          job_summary: ${{ steps.test.outcome == 'failure' }}
       - name: Verify test job result
         run: |
           if [[ "${{ needs.test_windows.result }}" != "success" ]]; then

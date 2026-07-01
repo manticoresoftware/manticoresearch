@@ -75,7 +75,9 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	DROP TABLE IF EXISTS uuid_col;
 	DROP TABLE IF EXISTS uuid_case;
 	DROP TABLE IF EXISTS uuid_txn;
+	DROP TABLE IF EXISTS bad_atid_uuid;
 	DROP TABLE IF EXISTS bad_hidden_uuid;
+	DROP TABLE IF EXISTS bad_hidden_uuid_id;
 	DROP TABLE IF EXISTS bad_mixed_uuid;
 	DROP TABLE IF EXISTS numeric_ids;
 	DROP TABLE IF EXISTS join_left;
@@ -104,7 +106,10 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	SHOW CREATE TABLE uuid_ids;
 	CREATE TABLE bad_uuid_attr ( title text, guid uuid );
 	CREATE TABLE bad_uuid_pq ( id uuid, query text ) type='pq';
+	CREATE TABLE bad_atid_uuid ( id uuid, title text, `@id` string );
+	ALTER TABLE uuid_ids ADD COLUMN `@id` string;
 	CREATE TABLE bad_hidden_uuid ( `@uuid_id` string, title text );
+	CREATE TABLE bad_hidden_uuid_id ( id uuid, title text, `@uuid_id` string );
 	CREATE TABLE bad_mixed_uuid ( id bigint, `@uuid_id` string, title text );
 
 	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440000', 'first document', 'old', 10 );
@@ -155,6 +160,8 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	SELECT `@id`, COUNT(*) FROM uuid_ids GROUP BY `@id` ORDER BY `@id` ASC LIMIT 1;
 	SELECT @uuid_id, COUNT(*) FROM uuid_ids GROUP BY @uuid_id ORDER BY @uuid_id ASC LIMIT 1;
 	SELECT COUNT(DISTINCT id) FROM uuid_ids;
+	SELECT MIN(id), MAX(id) FROM uuid_ids;
+	SELECT GROUP_CONCAT(id) FROM uuid_ids;
 	SELECT COUNT(DISTINCT `@id`) FROM uuid_ids;
 	SELECT COUNT(DISTINCT @uuid_id) FROM uuid_ids;
 	SELECT id+1 FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440000';
@@ -300,6 +307,20 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 }
 </query>
 
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "uuid_shard", "_id" : "30000000-0000-4000-8000-000000000003" } }
+{ "title" : "es bulk shard", "tag" : "bulk-shard", "price" : 907 }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_shard",
+	"query": { "equals": { "id": "30000000-0000-4000-8000-000000000003" } },
+	"_source": [ "id", "tag", "price" ],
+	"sort": [ { "price": "asc" } ]
+}
+</query>
+
 <query endpoint="json/insert">
 {
 	"table": "uuid_ids",
@@ -337,6 +358,13 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	"table": "uuid_ids",
 	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440003" } },
 	"sort": [ { "id": "asc" } ]
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "not-a-uuid" } }
 }
 </query>
 
@@ -612,6 +640,34 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 <query endpoint="uuid_ids/_search">
 {
 	"query": { "match_all": {} },
+	"fields": [ "@id" ]
+}
+</query>
+
+<query endpoint="uuid_ids/_search">
+{
+	"query": { "match_all": {} },
+	"fields": [ "@uuid_id" ]
+}
+</query>
+
+<query endpoint="uuid_ids/_search">
+{
+	"query": { "match_all": {} },
+	"stored_fields": [ "@id" ]
+}
+</query>
+
+<query endpoint="uuid_ids/_search">
+{
+	"query": { "match_all": {} },
+	"stored_fields": [ "@uuid_id" ]
+}
+</query>
+
+<query endpoint="uuid_ids/_search">
+{
+	"query": { "match_all": {} },
 	"docvalue_fields": [ { "field": "@uuid_id" } ]
 }
 </query>
@@ -699,6 +755,15 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 {
 	"table": "uuid_ids",
 	"size": 0,
+	"query": { "match_all": {} },
+	"aggs": { "min_id": { "min": { "field": "id" } } }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"size": 0,
 	"query": { "equals": { "tag": "bulk" } },
 	"aggs": { "uuid_id_terms": { "terms": { "field": "id", "size": 5, "order": { "id": "asc" } } } }
 }
@@ -735,7 +800,9 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	DROP TABLE uuid_col;
 	DROP TABLE uuid_case;
 	DROP TABLE uuid_txn;
+	DROP TABLE IF EXISTS bad_atid_uuid;
 	DROP TABLE IF EXISTS bad_hidden_uuid;
+	DROP TABLE IF EXISTS bad_hidden_uuid_id;
 	DROP TABLE IF EXISTS bad_mixed_uuid;
 	DROP TABLE numeric_ids;
 </sphinxql>

@@ -3407,7 +3407,12 @@ static bool ParseMetaLine ( const char * sLine, BulkDoc_t & tDoc, CSphString & s
 static bool IsUuidDocidTable ( const CSphString & sIndex )
 {
 	auto pServed = GetServed ( sIndex );
-	return pServed && sphHasUuidDocid ( RIdx_c ( pServed )->GetMatchSchema() );
+	if ( pServed && sphHasUuidDocid ( RIdx_c ( pServed )->GetMatchSchema() ) )
+		return true;
+
+	auto pDistr = GetDistr ( sIndex );
+	const ShardIndex_c * pShard = AsShard ( pDistr.Ptr() );
+	return pShard && sphHasUuidDocid ( pShard->m_tSchema );
 }
 
 

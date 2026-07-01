@@ -1289,6 +1289,20 @@ static bool CheckCreateTableSettings ( const CreateTableSettings_t & tCreateTabl
 		}
 	}
 
+	bool bUuidDocid = false;
+	bool bAtid = false;
+	for ( const auto & tAttr : tCreateTable.m_dAttrs )
+	{
+		bUuidDocid |= tAttr.m_tAttr.m_sName==sphGetUuidDocidName();
+		bAtid |= tAttr.m_tAttr.m_sName=="@id";
+	}
+
+	if ( bUuidDocid && bAtid )
+	{
+		sError = "attribute '@id' is internal";
+		return false;
+	}
+
 	return true;
 }
 

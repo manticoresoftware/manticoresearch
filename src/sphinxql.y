@@ -343,6 +343,16 @@ ident:
 	ident_for_set_stmt | all_set_tail | TOK_BACKIDENT
 	;
 
+table_alias_ident:
+	TOK_IDENT
+	| TOK_BACKIDENT
+	{
+		$$ = $1;
+		++$$.m_iStart;
+		--$$.m_iEnd;
+	}
+	;
+
 option_name:
 	ident_without_option | all_set_tail | TOK_FORCE 
 	;
@@ -643,7 +653,7 @@ opt_outer_limit:
 
 select_from:
 	TOK_SELECT select_items_list
-	TOK_FROM target_in_select_from { pParser->m_pStmt->m_eStmt = STMT_SELECT; } // set stmt here to check the option below
+	TOK_FROM target_in_select_from opt_table_alias { pParser->m_pStmt->m_eStmt = STMT_SELECT; } // set stmt here to check the option below
 	opt_join_clause
 	opt_where_clause
 	opt_group_clause
@@ -663,7 +673,13 @@ select_items_list:
 
 select_item:
 	'*'									{ pParser->AddItem ( &$1 ); }
+	| table_alias_ident '.' '*'		{ TRACK_BOUNDS ( $$, $1, $3 ); pParser->AddItem ( &$$ ); }
 	| select_expr opt_alias
+	;
+
+opt_table_alias:
+	// empty
+	| opt_as table_alias_ident			{ pParser->SetTableAlias ( $2 ); }
 	;
 
 opt_alias:

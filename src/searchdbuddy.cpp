@@ -21,7 +21,6 @@
 #define BOOST_PROCESS_VERSION 1
 #include <boost/process/v1/async.hpp>
 #include <boost/process/v1/child.hpp>
-#include <boost/process/v1/env.hpp>
 #include <boost/process/v1/error.hpp>
 #include <boost/process/v1/handles.hpp>
 #include <boost/process/v1/io.hpp>

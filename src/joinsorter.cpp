@@ -18,6 +18,7 @@
 #include "sphinxjson.h"
 #include "querycontext.h"
 #include "docstore.h"
+#include "indexsettings.h"
 
 static int64_t g_iJoinCacheSize = 20971520;
 static int g_iJoinBatchSize = 1000;
@@ -131,6 +132,19 @@ static bool GetJoinAttrName ( const CSphString & sAttr, const CSphString & sJoin
 	}
 
 	return false;
+}
+
+
+static const CSphColumnInfo * GetUuidAwareAttr ( const ISphSchema & tSchema, const CSphString & sAttr )
+{
+	if ( sAttr==sphGetDocidName() && sphHasUuidDocid(tSchema) )
+	{
+		const CSphColumnInfo * pUuid = tSchema.GetAttr ( sphGetUuidDocidName() );
+		if ( pUuid )
+			return pUuid;
+	}
+
+	return tSchema.GetAttr ( sAttr.cstr() );
 }
 
 
@@ -1826,7 +1840,7 @@ bool JoinSorter_c::SetupOnFilters ( CSphString & sError )
 		}
 
 		// FIXME! handle compound names for left table (e.g. 'table1.id')
-		const CSphColumnInfo * pAttr1 = m_pSorter->GetSchema()->GetAttr ( sAttrIdx1.cstr() );
+		const CSphColumnInfo * pAttr1 = GetUuidAwareAttr ( *m_pSorter->GetSchema(), sAttrIdx1 );
 		assert(pAttr1);
 
 		// maybe it is a stored field?
@@ -1836,7 +1850,7 @@ bool JoinSorter_c::SetupOnFilters ( CSphString & sError )
 			return false;
 		}
 
-		const CSphColumnInfo * pAttr2 = m_pJoinedIndex->GetMatchSchema().GetAttr ( sAttrIdx2.cstr() );
+		const CSphColumnInfo * pAttr2 = GetUuidAwareAttr ( m_pJoinedIndex->GetMatchSchema(), sAttrIdx2 );
 		if ( pAttr2 && pAttr2->m_eAttrType==SPH_ATTR_STRINGPTR && pAttr2->m_eStage==SPH_EVAL_POSTLIMIT )
 		{
 			sError.SetSprintf ( "Unable to perform join on a stored field '%s.%s'", sIdx2.cstr(), pAttr2->m_sName.cstr() );
@@ -2077,11 +2091,14 @@ void JoinSorter_c::AddStarItemsToJoinSelectList()
 	for ( int i = 0; i < tJoinedSchema.GetAttrsCount(); i++ )
 	{
 		auto & tAttr = tJoinedSchema.GetAttr(i);
-		if ( sphIsInternalAttr(tAttr) )
+		bool bUuidDocid = tAttr.m_sName==sphGetUuidDocidName();
+		bool bPlainDocid = tAttr.m_sName==sphGetDocidName() && sphHasUuidDocid(tJoinedSchema);
+		if ( bPlainDocid || ( sphIsInternalAttr(tAttr) && !bUuidDocid ) )
 			continue;
 
+		const char * szAttrName = bUuidDocid ? sphGetDocidName() : tAttr.m_sName.cstr();
 		CSphString sAttrName;
-		sAttrName.SetSprintf ( "%s.%s", GetJoinedIndexName().cstr(), tAttr.m_sName.cstr() );
+		sAttrName.SetSprintf ( "%s.%s", GetJoinedIndexName().cstr(), szAttrName );
 		AddToJoinSelectList ( sAttrName, sAttrName );
 	}
 }

@@ -16,6 +16,7 @@
 #include "searchdaemon.h"
 #include "search_handler.h"
 #include "logger.h"
+#include "indexsettings.h"
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -378,16 +379,21 @@ static void ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tReq, const CSph
 {
 	tMatch.Reset ( tSchema.GetRowSize() );
 
-	// WAS: docids
-	if ( bAgent64 )
-		tReq.GetUint64();
-	else
-		tReq.GetDword();
+	DocID_t tDocID = bAgent64 ? tReq.GetUint64() : tReq.GetDword();
 
 	tMatch.m_iWeight = tReq.GetInt ();
 	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
 	{
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+
+		// UUID agents send the internal numeric DocID_t only in the match header and suppress
+		// the numeric @id attr to avoid leaking it. Rehydrate the local @id row slot used by
+		// reducers/dedup/sorters without consuming an attribute from the wire stream.
+		if ( tAttr.m_sName==sphGetDocidName() && tSchema.GetAttr ( sphGetUuidDocidName() ) )
+		{
+			tMatch.SetAttr ( tAttr.m_tLocator, tDocID );
+			continue;
+		}
 
 		assert ( sphPlainAttrToPtrAttr(tAttr.m_eAttrType)==tAttr.m_eAttrType );
 
@@ -508,6 +514,15 @@ static void ParseSchema ( OneResultset_t & tRes, MemInputBuffer_c & tReq )
 			tCol.m_uFieldFlags = CSphColumnInfo::FIELD_STORED;
 		}
 		tSchema.AddAttr ( tCol, true ); // all attributes received from agents are dynamic
+	}
+
+	// UUID agents do not send the internal numeric @id attr as an attribute, but every
+	// match still carries the numeric DocID_t in the match header. Keep a local dynamic
+	// @id slot so master-side merge/dedup/sort code has the usual internal DocID_t.
+	if ( tSchema.GetAttr ( sphGetUuidDocidName() ) && !tSchema.GetAttr ( sphGetDocidName() ) )
+	{
+		CSphColumnInfo tDocid ( sphGetDocidName(), SPH_ATTR_BIGINT );
+		tSchema.AddAttr ( tDocid, true );
 	}
 }
 
@@ -1619,7 +1634,10 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 
 	for ( const CSphMatch & tMatch : dMatches )
 	{
-		Verify ( tRes.m_tSchema.GetAttr(sphGetDocidName()) );
+		// Numeric DocID_t is always sent in the match header. UUID-id frontend schemas
+		// may expose only the public UUID attr, while the dynamic row still keeps the
+		// internal DocID_t at the conventional row start for the wire header.
+		Verify ( tRes.m_tSchema.GetAttr(sphGetDocidName()) || tRes.m_tSchema.GetAttr(sphGetUuidDocidName()) );
 		tOut.SendUint64 ( sphGetDocID(tMatch.m_pDynamic) );
 		tOut.SendInt ( tMatch.m_iWeight );
 

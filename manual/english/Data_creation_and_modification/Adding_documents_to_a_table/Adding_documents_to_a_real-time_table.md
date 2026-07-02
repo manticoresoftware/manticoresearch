@@ -9,7 +9,9 @@ You can insert a single or [multiple documents](../../Data_creation_and_modifica
 
 Expressions are not currently supported in `INSERT`, so values must be explicitly specified.
 
-The ID field/value can be omitted, as RT and PQ tables support [auto-id](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) functionality. You can also use `0` as the id value to force automatic ID generation. Rows with duplicate IDs will not be overwritten by `INSERT`. Instead, you can use [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md) for that purpose.
+The ID field/value can be omitted, as RT and PQ tables support [auto-id](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) functionality. For numeric-ID tables, you can also use `0` as the id value to force automatic ID generation. Rows with duplicate IDs will not be overwritten by `INSERT`. Instead, you can use [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md) for that purpose.
+
+For tables created with [`id uuid`](../../Creating_a_table/Data_types.md#UUID-document-IDs), explicit IDs must be quoted 36-character UUID-shaped strings with hyphens (`8-4-4-4-12` hexadecimal digits), for example `550e8400-e29b-41d4-a716-446655440000`. Uppercase hexadecimal letters are accepted and normalized to lowercase; explicit IDs are not required to use a specific UUID version or RFC variant. If `id` is omitted, Manticore generates a UUIDv8-style string derived from its internal auto-generated numeric document ID; unlike numeric tables, `0` is not a UUID auto-ID marker. UUID IDs are returned as strings in SQL and as string `_id` values in JSON responses. They can be used with `INSERT`, `REPLACE`, `UPDATE`, `DELETE`, and equality/`IN` filters, including after a RAM chunk is flushed to disk. Range filters and numeric expressions on UUID IDs are not supported.
 
 When using the HTTP JSON protocol, you have two different request formats to choose from: a common Manticore format and an Elasticsearch-like format. Both formats are demonstrated in the examples below.
 
@@ -104,6 +106,52 @@ POST /insert
   "status": 201
 }
 
+```
+
+For tables created with `id uuid`, pass the JSON `id` as a UUID string, or omit it to generate one automatically:
+
+<!-- request JSON -->
+
+```json
+POST /insert
+{
+  "table":"products_uuid",
+  "id":"550e8400-e29b-41d4-a716-446655440000",
+  "doc":
+  {
+    "title":"Crossbody Bag with Tassel",
+    "price":19.85
+  }
+}
+
+POST /insert
+{
+  "table":"products_uuid",
+  "doc":
+  {
+    "title":"Generated UUID Bag",
+    "price":29
+  }
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "table": "products_uuid",
+  "_id": "550e8400-e29b-41d4-a716-446655440000",
+  "created": true,
+  "result": "created",
+  "status": 201
+}
+{
+  "table": "products_uuid",
+  "_id": "<generated UUID>",
+  "created": true,
+  "result": "created",
+  "status": 201
+}
 ```
 
 <!-- intro -->
@@ -622,6 +670,8 @@ This layout ensures that generated IDs are unique among cluster nodes and that d
 Important: the 24-bit counter is not a hard limit on the total number of documents you can insert during one server run. You can insert more than 16,777,216 documents after startup; the IDs will still keep increasing and remain unique for that running process. The `~16 million IDs per second` rule matters for uniqueness across restarts: after a restart, the time-based part must advance far enough so that newly generated IDs do not overlap with IDs created before the restart.
 
 As a result, the first ID from the generator used for auto ID is NOT 1 but a larger number. Additionally, the document stream inserted into a table might have non-sequential ID values if inserts into other tables occur between calls, as the ID generator is singular in the server and shared between all its tables.
+
+For UUID-ID tables, auto-generation creates a canonical UUID string rather than a 64-bit integer. The internal numeric surrogate used by Manticore is not exposed as the document ID.
 
 <!-- intro -->
 ##### SQL:

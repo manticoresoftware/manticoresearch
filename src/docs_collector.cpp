@@ -13,6 +13,7 @@
 #include "docs_collector.h"
 #include "searchdaemon.h"
 #include "indexfiles.h"
+#include "indexsettings.h"
 #include "daemon/search_handler.h"
 
 class DocsCollector_c::Impl_c
@@ -27,12 +28,15 @@ class DocsCollector_c::Impl_c
 
 	// check the short path - if we have clauses 'id=smth' or 'id in (xx,yy)' or 'id in @uservar' - we know
 	// all the values list immediatelly and don't have to run the heavy query here.
-	bool ProcessFast( const CSphQuery& tQuery )
+	bool ProcessFast( const CSphQuery& tQuery, const cServedIndexRefPtr_c& pDesc )
 	{
 		if ( !tQuery.m_sQuery.IsEmpty() || !tQuery.m_dFilterTree.IsEmpty() || tQuery.m_dFilters.GetLength() != 1 )
 			return false;
 
 		const CSphFilterSettings* pFilter = tQuery.m_dFilters.Begin();
+		if ( pFilter->m_sAttrName=="@id" && sphHasUuidDocid ( RIdx_c(pDesc)->GetMatchSchema() ) )
+			return false;
+
 		if ( ( pFilter->m_bHasEqualMin || pFilter->m_bHasEqualMax ) && pFilter->m_eType == SPH_FILTER_VALUES
 				&& ( pFilter->m_sAttrName == "@id" || pFilter->m_sAttrName == "id" ) && !pFilter->m_bExclude )
 		{
@@ -91,7 +95,7 @@ class DocsCollector_c::Impl_c
 public:
 	Impl_c ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
 	{
-		if ( !ProcessFast ( tQuery ) )
+		if ( !ProcessFast ( tQuery, pDesc ) )
 			ProcessFull ( tQuery, bJson, sIndex, pDesc, pError );
 	}
 

@@ -102,6 +102,7 @@ class ClientSession_c;
 
 bool IsHttpStmt ( const SqlStmt_t & tStmt );
 bool CreateAttrMaps ( CSphVector<int> & dAttrSchema, CSphVector<int> & dFieldSchema, CSphVector<bool> & dFieldAttrs, const CSphSchema & tSchema, const StrVec_t & dStmtInsertSchema, StmtErrorReporter_i & tOut );
+int GetInsertStringAttrOrdinal ( const CSphSchema & tSchema, const char * szAttrName );
 bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSettings, const char * szIndexName, const CSphConfigSection & hIndex, bool bWordDict, bool bPercolate, StrVec_t * pWarnings, CSphString & sError );
 
 struct StringPtrTraits_t
@@ -138,6 +139,7 @@ private:
 
 	StringPtrTraits_t 		m_tStrings;
 	StrVec_t				m_dTmpFieldStorage;
+	SqlInsert_t				m_tNormalizedUuidDocid;
 	CSphVector<float>		m_dTmpFloats;
 	CSphVector<int>			m_dColumnarRemap;
 

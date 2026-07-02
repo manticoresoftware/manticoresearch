@@ -1345,6 +1345,8 @@ bool IsMaxedOut ();
 bool IsReadOnly ();
 void sphFormatFactors ( StringBuilder_c& dOut, const unsigned int * pFactors, bool bJson );
 void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt );
+CSphString sphGenerateUuidDocid ( DocID_t tDocID );
+DocID_t sphGenerateAutoDocid();
 void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery );
 void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery );
 void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery );
@@ -1390,6 +1392,7 @@ namespace session {
 	QueryProfile_c* StartProfiling ( ESphQueryState );
 	void SaveLastProfile();
 	VecTraits_T<int64_t> LastIds();
+	VecTraits_T<CSphString> LastIdStrings();
 	void SetOptimizeById ( bool bOptimizeById );
 	bool GetOptimizeById();
 	void SetDeprecatedEOF ( bool bDeprecatedEOF );

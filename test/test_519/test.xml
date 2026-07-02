@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>RT UUID document IDs without secondary indexes</name>
+
+<requires>
+	<force-rt/>
+	<http/>
+	<columnar/>
+</requires>
+
+<skip_indexer/>
+<skip_db/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	secondary_indexes = 0
+}
+</config>
+
+<queries>
+<sphinxql>
+	DROP TABLE IF EXISTS uuid_no_si_row;
+	DROP TABLE IF EXISTS uuid_no_si_col;
+
+	SHOW VARIABLES LIKE 'secondary_indexes';
+
+	CREATE TABLE uuid_no_si_row ( id uuid, title text, tag string, price int );
+	CREATE TABLE uuid_no_si_col ( id uuid, title text, tag string, price int ) engine='columnar';
+
+	DESC uuid_no_si_row;
+	DESC uuid_no_si_col;
+
+	INSERT INTO uuid_no_si_row ( id, title, tag, price ) VALUES ( '60000000-0000-4000-8000-000000000001', 'row explicit one', 'row-one', 10 );
+	INSERT INTO uuid_no_si_row ( id, title, tag, price ) VALUES ( '60000000-0000-4000-8000-000000000002', 'row explicit two', 'row-two', 20 );
+	INSERT INTO uuid_no_si_row ( title, tag, price ) VALUES ( 'row generated', 'row-auto', 30 );
+	SELECT COUNT(*), COUNT(DISTINCT id) FROM uuid_no_si_row;
+	SELECT id, tag, price FROM uuid_no_si_row WHERE id='60000000-0000-4000-8000-000000000001';
+	UPDATE uuid_no_si_row SET tag='row-updated', price=11 WHERE id='60000000-0000-4000-8000-000000000001';
+	SELECT id, tag, price FROM uuid_no_si_row WHERE id='60000000-0000-4000-8000-000000000001';
+	REPLACE INTO uuid_no_si_row ( id, title, tag, price ) VALUES ( '60000000-0000-4000-8000-000000000001', 'row replaced', 'row-replaced', 12 );
+	FLUSH RAMCHUNK uuid_no_si_row;
+	SELECT id, tag, price FROM uuid_no_si_row WHERE id='60000000-0000-4000-8000-000000000001';
+	DELETE FROM uuid_no_si_row WHERE id='60000000-0000-4000-8000-000000000002';
+	SELECT COUNT(*) FROM uuid_no_si_row WHERE id='60000000-0000-4000-8000-000000000002';
+
+	INSERT INTO uuid_no_si_col ( id, title, tag, price ) VALUES ( '70000000-0000-4000-8000-000000000001', 'columnar explicit one', 'col-one', 100 );
+	INSERT INTO uuid_no_si_col ( id, title, tag, price ) VALUES ( '70000000-0000-4000-8000-000000000002', 'columnar explicit two', 'col-two', 200 );
+	SELECT id, tag, price FROM uuid_no_si_col WHERE id='70000000-0000-4000-8000-000000000001';
+	FLUSH RAMCHUNK uuid_no_si_col;
+	SELECT id, tag, price FROM uuid_no_si_col WHERE id='70000000-0000-4000-8000-000000000001';
+	DELETE FROM uuid_no_si_col WHERE id='70000000-0000-4000-8000-000000000002';
+	SELECT COUNT(*) FROM uuid_no_si_col WHERE id='70000000-0000-4000-8000-000000000002';
+	SELECT id FROM uuid_no_si_col WHERE id IN ('70000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000002') ORDER BY id ASC;
+</sphinxql>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_no_si_row",
+	"query": { "equals": { "id": "60000000-0000-4000-8000-000000000001" } },
+	"_source": [ "id", "tag", "price" ]
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_no_si_col",
+	"query": { "equals": { "id": "70000000-0000-4000-8000-000000000001" } },
+	"_source": [ "id", "tag", "price" ]
+}
+</query>
+
+<sphinxql>
+	DROP TABLE uuid_no_si_row;
+	DROP TABLE uuid_no_si_col;
+</sphinxql>
+</queries>
+
+</test>

@@ -24,6 +24,7 @@
 #include "secondaryindex.h"
 #include "jsonsi.h"
 #include "knnmisc.h"
+#include "indexsettings.h"
 
 #include <boost/icl/interval.hpp>
 
@@ -2034,9 +2035,67 @@ static void TransformForJsonSI ( const CreateFilterContext_t & tCtx, CSphVector<
 }
 
 
+static bool IsUuidDocidName ( const CSphString & sAttrName )
+{
+	return !sAttrName.IsEmpty() && strcmp ( sAttrName.cstr(), sphGetDocidName() )==0;
+}
+
+
+static bool FixupUuidDocidFilter ( CSphFilterSettings & tFilter, const ISphSchema & tSchema, CSphString & sError )
+{
+	if ( !sphHasUuidDocid(tSchema) )
+		return true;
+
+	if ( tFilter.m_sAttrName==sphGetUuidDocidName() )
+	{
+		sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
+		return false;
+	}
+
+	if ( tFilter.m_sAttrName=="@id" )
+	{
+		sError = "attribute '@id' is internal";
+		return false;
+	}
+
+	if ( !IsUuidDocidName ( tFilter.m_sAttrName ) )
+		return true;
+
+	if ( tFilter.m_eType==SPH_FILTER_RANGE || tFilter.m_eType==SPH_FILTER_FLOATRANGE )
+	{
+		sError = "uuid id range filters are not supported";
+		return false;
+	}
+
+	if ( tFilter.m_eType!=SPH_FILTER_STRING && tFilter.m_eType!=SPH_FILTER_STRING_LIST )
+	{
+		sError = "uuid id filter must be a string";
+		return false;
+	}
+
+	if ( tFilter.m_eStrCmpDir!=EStrCmpDir::EQ )
+	{
+		sError = "uuid id range filters are not supported";
+		return false;
+	}
+
+	for ( auto & sUuid : tFilter.m_dStrings )
+	{
+		if ( !sphCheckUuidDocid ( sUuid.cstr(), sError ) )
+			return false;
+
+		sUuid = sphNormalizeUuidDocid ( sUuid.cstr() );
+	}
+
+	tFilter.m_sAttrName = sphGetUuidDocidName();
+	return true;
+}
+
+
 bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, const CSphVector<CSphQueryItem> & dItems, CSphString & sError, CSphVector<JsonSIFilterTransform_t> * pJsonSITransforms )
 {
 	assert(tCtx.m_pFilters);
+	assert(tCtx.m_pMatchSchema);
 	const VecTraits_T<CSphFilterSettings> & dFilters = *tCtx.m_pFilters;
 	if ( pJsonSITransforms )
 		pJsonSITransforms->Resize(0);
@@ -2046,7 +2105,10 @@ bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilte
 	ARRAY_FOREACH ( i, dFilters )
 	{
 		dModified[i] = dFilters[i];
-		if ( !FixupFilterSettings ( dFilters[i], dModified[i], tCtx, dFilters[i].m_sAttrName, sError ) )
+		if ( !FixupUuidDocidFilter ( dModified[i], *tCtx.m_pMatchSchema, sError ) )
+			return false;
+
+		if ( !FixupFilterSettings ( dModified[i], dModified[i], tCtx, dModified[i].m_sAttrName, sError ) )
 			return false;
 	}
 

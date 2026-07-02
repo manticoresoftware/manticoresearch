@@ -329,6 +329,88 @@ const RtTypedAttr_t & GetRtType ( int iType )
 }
 
 
+static const char * g_sUuidDocidName = "@uuid_id";
+
+const char * sphGetUuidDocidName()
+{
+	return g_sUuidDocidName;
+}
+
+
+bool sphHasUuidDocid ( const ISphSchema & tSchema )
+{
+	const CSphColumnInfo * pUuidId = tSchema.GetAttr ( sphGetUuidDocidName() );
+	return pUuidId && pUuidId->m_eAttrType==SPH_ATTR_STRING;
+}
+
+
+static bool IsUuidHex ( char c )
+{
+	return ( c>='0' && c<='9' ) || ( c>='a' && c<='f' ) || ( c>='A' && c<='F' );
+}
+
+
+static bool IsUuidVersion ( char c )
+{
+	return c>='1' && c<='8';
+}
+
+
+static bool IsUuidVariant ( char c )
+{
+	return c=='8' || c=='9' || c=='a' || c=='A' || c=='b' || c=='B';
+}
+
+
+bool sphIsValidUuidDocid ( const char * szUuid )
+{
+	if ( !szUuid )
+		return false;
+
+	for ( int i=0; i<36; ++i )
+	{
+		char c = szUuid[i];
+		if ( !c )
+			return false;
+
+		if ( i==8 || i==13 || i==18 || i==23 )
+		{
+			if ( c!='-' )
+				return false;
+		} else if ( !IsUuidHex(c) )
+			return false;
+	}
+
+	return szUuid[36]=='\0' && IsUuidVersion ( szUuid[14] ) && IsUuidVariant ( szUuid[19] );
+}
+
+
+bool sphCheckUuidDocid ( const char * szUuid, CSphString & sError )
+{
+	if ( !szUuid || !*szUuid )
+	{
+		sError = "uuid id must be a non-empty string";
+		return false;
+	}
+
+	if ( !sphIsValidUuidDocid ( szUuid ) )
+	{
+		sError.SetSprintf ( "invalid uuid id '%s'", szUuid );
+		return false;
+	}
+
+	return true;
+}
+
+
+CSphString sphNormalizeUuidDocid ( const char * szUuid )
+{
+	CSphString sUuid = szUuid;
+	sUuid.ToLower();
+	return sUuid;
+}
+
+
 CSphString FormatPath ( const CSphString & sFile, const FilenameBuilder_i * pFilenameBuilder )
 {
 	if ( !pFilenameBuilder || sFile.IsEmpty() || IsPathAbsolute ( sFile ) )
@@ -2678,7 +2760,7 @@ static bool IsDDLToken ( const CSphString & sTok )
 }
 
 
-static CSphString FormatCreateTableAttr ( const CSphColumnInfo & tAttr, const CSphIndexSettings & tSettings, int iNumColumnar, bool bQuote )
+static CSphString FormatCreateTableAttr ( const CSphColumnInfo & tAttr, const CSphIndexSettings & tSettings, int iNumColumnar, bool bQuote, const char * szTypeOverride=nullptr )
 {
 	StringBuilder_c sRes;
 
@@ -2689,7 +2771,7 @@ static CSphString FormatCreateTableAttr ( const CSphColumnInfo & tAttr, const CS
 	else
 		sQuotedName = tAttr.m_sName;
 
-	sRes << sQuotedName << " " << GetAttrTypeName(tAttr);
+	sRes << sQuotedName << " " << ( szTypeOverride ? szTypeOverride : GetAttrTypeName(tAttr).cstr() );
 
 	AddStorageSettings ( sRes, tAttr, tSettings, false, iNumColumnar );
 	AddEngineSettings ( sRes, tAttr );
@@ -2754,7 +2836,7 @@ static CSphString BuildCreateTableImpl ( const CSphString & sName, const CSphSch
 	const CSphColumnInfo * pId = tSchema.GetAttr("id");
 	assert(pId);
 
-	sRes << FormatCreateTableAttr ( *pId, tSettings, iNumColumnar, bQuote );
+	sRes << FormatCreateTableAttr ( *pId, tSettings, iNumColumnar, bQuote, sphHasUuidDocid(tSchema) ? "uuid" : nullptr );
 
 	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
 	{

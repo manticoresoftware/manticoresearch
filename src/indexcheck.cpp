@@ -19,6 +19,7 @@
 #include "docstore.h"
 #include "conversion.h"
 #include "columnarlib.h"
+#include "indexsettings.h"
 #include "indexfiles.h"
 #include "roaring/roaring64map.hh"
 
@@ -1829,7 +1830,7 @@ bool SchemaConfigureCheckAttribute ( const CSphSchema & tSchema, const CSphColum
 		return false;
 	}
 
-	if ( sphIsInternalAttr ( tCol.m_sName ) )
+	if ( sphIsInternalAttr ( tCol.m_sName ) && tCol.m_sName!=sphGetUuidDocidName() )
 	{
 		sError.SetSprintf ( "%s is not a valid attribute name", tCol.m_sName.cstr() );
 		return false;

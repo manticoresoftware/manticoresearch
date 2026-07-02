@@ -2965,6 +2965,13 @@ bool CSphIndex_VLN::Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride )
 
 bool CSphIndex_VLN::AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, const ISphSchema & tOldSchema, const ISphSchema & tNewSchema, CSphString & sError )
 {
+	bool bHaveColumnar = false;
+	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
+		bHaveColumnar |= tNewSchema.GetAttr(i).IsColumnar();
+
+	if ( !bHaveColumnar )
+		return true;
+
 	BuildBufferSettings_t tSettings; // use default buffer settings
 	CSphString sTmpSPC = GetTmpFilename ( SPH_EXT_SPC );
 	bool bKeepTmp = false;

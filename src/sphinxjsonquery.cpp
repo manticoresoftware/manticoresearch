@@ -959,6 +959,7 @@ static bool ParseSort ( const JsonObj_c & tSort, JsonQuery_c & tQuery, bool & bG
 static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphString & sError );
 static bool ParseScriptFields ( const JsonObj_c & tExpr, CSphQuery & tQuery, CSphString & sError );
 static bool ParseExpressions ( const JsonObj_c & tExpr, CSphQuery & tQuery, CSphString & sError );
+static bool CheckIgnoredDocFields ( const JsonObj_c & tFields, const char * szProp, CSphString & sError );
 static bool ParseDocFields ( const JsonObj_c & tDocFields, JsonQuery_c & tQuery, CSphString & sError );
 static bool ParseAggregates ( const JsonObj_c & tAggs, JsonQuery_c & tQuery, CSphString & sError );
 
@@ -1690,6 +1691,14 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery )
 	// docvalue_fields
 	JsonObj_c tDocFields = tRoot.GetItem ( "docvalue_fields" );
 	if ( tDocFields && !ParseDocFields ( tDocFields, tQuery, sError ) )
+		return false;
+
+	JsonObj_c tFields = tRoot.GetItem ( "fields" );
+	if ( tFields && !CheckIgnoredDocFields ( tFields, "fields", sError ) )
+		return false;
+
+	JsonObj_c tStoredFields = tRoot.GetItem ( "stored_fields" );
+	if ( tStoredFields && !CheckIgnoredDocFields ( tStoredFields, "stored_fields", sError ) )
 		return false;
 
 	// aggs
@@ -4292,6 +4301,36 @@ static bool ParseExpressions ( const JsonObj_c & tExpr, CSphQuery & tQuery, CSph
 
 //////////////////////////////////////////////////////////////////////////
 // docvalue_fields
+
+static bool CheckIgnoredDocFieldItem ( const JsonObj_c & tItem, CSphString & sError )
+{
+	if ( tItem.IsStr() )
+		return CheckInternalDocidAttrName ( tItem.StrVal(), sError );
+
+	if ( tItem.IsObj() )
+	{
+		JsonObj_c tField = tItem.GetItem ( "field" );
+		if ( tField && tField.IsStr() )
+			return CheckInternalDocidAttrName ( tField.StrVal(), sError );
+	}
+
+	return true;
+}
+
+
+static bool CheckIgnoredDocFields ( const JsonObj_c & tFields, const char * /*szProp*/, CSphString & sError )
+{
+	if ( tFields.IsArray() )
+	{
+		for ( const auto & tItem : tFields )
+			if ( !CheckIgnoredDocFieldItem ( tItem, sError ) )
+				return false;
+
+		return true;
+	}
+
+	return CheckIgnoredDocFieldItem ( tFields, sError );
+}
 
 bool ParseDocFields ( const JsonObj_c & tDocFields, JsonQuery_c & tQuery, CSphString & sError )
 {

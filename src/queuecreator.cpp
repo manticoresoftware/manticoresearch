@@ -1168,7 +1168,10 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem, bool bAllowIn
 			|| eAttr==SPH_ATTR_UINT32SET || eAttr==SPH_ATTR_INT64SET )
 		{
 			if ( tItem.m_eAggrFunc!=SPH_AGGR_NONE )
-				return Err ( "can not aggregate non-scalar attribute '%s'",	tItem.m_sExpr.cstr() );
+			{
+				const char * szAttr = tItem.m_sExpr==sphGetUuidDocidName() ? sphGetDocidName() : tItem.m_sExpr.cstr();
+				return Err ( "can not aggregate non-scalar attribute '%s'", szAttr );
+			}
 		}
 	}
 

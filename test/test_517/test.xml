@@ -138,6 +138,9 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( 'not-a-uuid', 'bad document', 'bad', 30 );
 	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400e29b41d4a716446655440000', 'bad document', 'bad', 30 );
 	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-44665544000g', 'bad document', 'bad', 30 );
+	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '00000000-0000-0000-0000-000000000000', 'bad nil document', 'bad', 30 );
+	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-01d4-a716-446655440000', 'bad version document', 'bad', 30 );
+	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-f716-446655440000', 'bad variant document', 'bad', 30 );
 	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( 123, 'bad document', 'bad', 30 );
 	INSERT INTO uuid_ids ( `@id`, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440013', 'bad at-id insert', 'bad-atid', 33 );
 	REPLACE INTO uuid_ids ( `@id`, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440014', 'bad at-id replace', 'bad-atid', 34 );
@@ -195,9 +198,9 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 
 	<!-- columnar table keeps UUID public id and string lookup through ram/disk -->
 	INSERT INTO uuid_col ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440020', 'columnar document', 'columnar', 50 );
-	INSERT INTO uuid_col ( id, title, tag, price ) VALUES ( 'FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF', 'columnar upper-shaped document', 'columnar-shaped', 51 );
+	INSERT INTO uuid_col ( id, title, tag, price ) VALUES ( 'FFFFFFFF-FFFF-4FFF-8FFF-FFFFFFFFFFFF', 'columnar upper-shaped document', 'columnar-shaped', 51 );
 	SELECT id, tag, price FROM uuid_col WHERE id='550e8400-e29b-41d4-a716-446655440020';
-	SELECT id, tag, price FROM uuid_col WHERE id='ffffffff-ffff-ffff-ffff-ffffffffffff';
+	SELECT id, tag, price FROM uuid_col WHERE id='ffffffff-ffff-4fff-8fff-ffffffffffff';
 	SELECT id, COUNT(*) FROM uuid_col GROUP BY id ORDER BY id ASC;
 	SELECT COUNT(DISTINCT id) FROM uuid_col;
 	INSERT INTO uuid_col ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440023', 'columnar ram delete', 'columnar-ram-delete', 53 );
@@ -256,8 +259,7 @@ $ql->Query ( "DROP TABLE IF EXISTS uuid_http_dynamic" );
 	INSERT INTO numeric_ids ( id, title, tag ) VALUES ( 1, 'numeric document', 'ok' );
 	SELECT id, tag FROM numeric_ids WHERE id=1;
 	INSERT INTO numeric_ids ( id, title, tag ) VALUES ( '550e8400-e29b-41d4-a716-446655440099', 'bad numeric document', 'bad' );
-	INSERT INTO uuid_case ( id, title, tag, price ) VALUES ( '00000000-0000-0000-0000-000000000001', 'uuid shaped document', 'uuid-shaped', 83 );
-	SELECT id, tag, price FROM uuid_case WHERE id='00000000-0000-0000-0000-000000000001';
+	INSERT INTO uuid_case ( id, title, tag, price ) VALUES ( '00000000-0000-0000-0000-000000000001', 'uuid invalid-version document', 'uuid-invalid-version', 83 );
 </sphinxql>
 
 <query endpoint="sql?mode=raw" method="post">SELECT COUNT(*) FROM uuid_ids FACET id ORDER BY id ASC</query>

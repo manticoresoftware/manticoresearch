@@ -350,6 +350,18 @@ static bool IsUuidHex ( char c )
 }
 
 
+static bool IsUuidVersion ( char c )
+{
+	return c>='1' && c<='8';
+}
+
+
+static bool IsUuidVariant ( char c )
+{
+	return c=='8' || c=='9' || c=='a' || c=='A' || c=='b' || c=='B';
+}
+
+
 bool sphIsValidUuidDocid ( const char * szUuid )
 {
 	if ( !szUuid )
@@ -369,7 +381,7 @@ bool sphIsValidUuidDocid ( const char * szUuid )
 			return false;
 	}
 
-	return szUuid[36]=='\0';
+	return szUuid[36]=='\0' && IsUuidVersion ( szUuid[14] ) && IsUuidVariant ( szUuid[19] );
 }
 
 

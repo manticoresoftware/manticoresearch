@@ -1037,6 +1037,28 @@ void HttpErrorReporter_c::ErrorEx ( EMYSQL_ERR /*iErr*/, const char * sError )
 	m_sError = sError;
 }
 
+
+static bool IsUuidClientValidationError ( const char * szError )
+{
+	if ( !szError )
+		return false;
+
+	return strstr ( szError, "invalid uuid id" )
+		|| strstr ( szError, "uuid id must be" )
+		|| strstr ( szError, "attribute '@id' is internal" )
+		|| strstr ( szError, "attribute '@uuid_id' is internal" )
+		|| strstr ( szError, "can not aggregate non-scalar attribute 'id'" );
+}
+
+
+static EHTTP_STATUS GetHttpStatusForSqlError ( EMYSQL_ERR eErr, const char * szError )
+{
+	if ( eErr==EMYSQL_ERR::ACCESS_DENIED_ERROR )
+		return EHTTP_STATUS::_403;
+
+	return IsUuidClientValidationError ( szError ) ? EHTTP_STATUS::_400 : EHTTP_STATUS::_500;
+}
+
 StmtErrorReporter_i * CreateHttpErrorReporter()
 {
 	return new HttpErrorReporter_c();
@@ -1203,7 +1225,7 @@ public:
 		auto tHandler = CreateMsearchHandler ( std::move ( pQueryParser ), m_eQueryType, m_tParsed, sError );
 		if ( !sError.IsEmpty() )
 		{
-			ReportError ( sError.cstr(), EHTTP_STATUS::_500 );
+			ReportError ( sError.cstr(), IsUuidClientValidationError ( sError.cstr() ) ? EHTTP_STATUS::_400 : EHTTP_STATUS::_500 );
 			return false;
 		}
 		SetStmt ( tHandler );
@@ -1227,7 +1249,7 @@ public:
 		AggrResult_t & tRes = tHandler.m_dAggrResults.First();
 		if ( !tRes.m_sError.IsEmpty() )
 		{
-			ReportError ( tRes.m_sError.cstr(), EHTTP_STATUS::_500 );
+			ReportError ( tRes.m_sError.cstr(), IsUuidClientValidationError ( tRes.m_sError.cstr() ) ? EHTTP_STATUS::_400 : EHTTP_STATUS::_500 );
 			return false;
 		}
 
@@ -1797,7 +1819,7 @@ public:
 		session::Execute ( m_sQuery, tOut );
 		if ( tOut.IsError() )
 		{
-			ReportError ( tOut.GetError().scstr(), ( tOut.m_eError==EMYSQL_ERR::ACCESS_DENIED_ERROR ? EHTTP_STATUS::_403 : EHTTP_STATUS::_500 ) );
+			ReportError ( tOut.GetError().scstr(), GetHttpStatusForSqlError ( tOut.m_eError, tOut.GetError().scstr() ) );
 			return false;
 		}
 		BuildReply ( tOut.Finish(), EHTTP_STATUS::_200 );

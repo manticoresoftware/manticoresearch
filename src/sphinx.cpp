@@ -155,6 +155,27 @@ int64_t		g_iIndexerPoolStartHit		= 0;
 
 static bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, const CSphString & sFileName, CSphString & sError );
 
+static void DeleteMergeTmpFiles ( const StrVec_t & dFiles )
+{
+	dFiles.for_each ( [] ( const auto & sFile )
+	{
+		if ( sFile.IsEmpty() )
+			return;
+
+		CSphString sMask;
+		sMask.SetSprintf ( "%s*", sFile.cstr() );
+		StrVec_t dMatches = FindFiles ( sMask.cstr(), false );
+		if ( dMatches.IsEmpty() && sphFileExists ( sFile.cstr() ) )
+			dMatches.Add ( sFile );
+
+		dMatches.for_each ( [] ( const auto & sTmpFile )
+		{
+			if ( !sTmpFile.IsEmpty() )
+				::unlink ( sTmpFile.cstr() );
+		} );
+	} );
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // COMPILE-TIME CHECKS
 /////////////////////////////////////////////////////////////////////////////
@@ -7333,11 +7354,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	// unlink prepared attribute files on exit, if any
 	AT_SCOPE_EXIT ( [&dDeleteOnInterrupt]
 	{
-		dDeleteOnInterrupt.for_each ( [] ( const auto & sFile )
-		{
-			if ( !sFile.IsEmpty() && sphFileExists ( sFile.cstr() ) )
-				::unlink ( sFile.cstr() );
-		} ); 
+		DeleteMergeTmpFiles ( dDeleteOnInterrupt );
 	});
 
 	// merging attributes
@@ -7514,11 +7531,7 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 	StrVec_t dDeleteOnInterrupt;
 	AT_SCOPE_EXIT ( [&dDeleteOnInterrupt]
 	{
-		dDeleteOnInterrupt.for_each ( [] ( const auto & sFile )
-		{
-			if ( !sFile.IsEmpty() && sphFileExists ( sFile.cstr() ) )
-				::unlink ( sFile.cstr() );
-		} );
+		DeleteMergeTmpFiles ( dDeleteOnInterrupt );
 	} );
 
 	{

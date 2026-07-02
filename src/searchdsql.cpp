@@ -374,6 +374,7 @@ public:
 	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	bool			AddExtendedAggrItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc, SqlNode_t * pStart, SqlNode_t * pEnd, const CSphVector<CSphNamedVariant> * pOpts );
 	bool			AddItem ( const char * pToken, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
+	void			SetTableAlias ( const SqlNode_t & tAlias );
 	bool			AddCount ();
 	void			AliasLastItem ( SqlNode_t * pAlias );
 	void			AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode );
@@ -1466,6 +1467,56 @@ void SqlParser_c::AddItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFunc, SqlNode_t
 	tItem.m_eAggrFunc = eAggrFunc;
 	tItem.m_tAggrSettings.m_eAggrFunc = ToExtendedAggr ( eAggrFunc );
 	AutoAlias ( tItem, pStart?pStart:pExpr, pEnd?pEnd:pExpr );
+}
+
+static bool HasTableAliasAt ( const char * sValue, int iValueLen, const char * sAlias, int iAliasLen, int iOffset )
+{
+	return iValueLen>=iOffset+iAliasLen && !strncmp ( sValue+iOffset, sAlias, iAliasLen );
+}
+
+static bool StripTableAliasPrefix ( CSphString & sValue, const CSphString & sAlias )
+{
+	if ( !sValue.Length() || !sAlias.Length() )
+		return false;
+
+	const char * sValuePtr = sValue.cstr();
+	const char * sAliasPtr = sAlias.cstr();
+	const int iValueLen = sValue.Length();
+	const int iAliasLen = sAlias.Length();
+	int iPrefixLen = 0;
+
+	if ( iValueLen>iAliasLen && sValuePtr[iAliasLen]=='.'
+		&& HasTableAliasAt ( sValuePtr, iValueLen, sAliasPtr, iAliasLen, 0 ) )
+		iPrefixLen = iAliasLen+1;
+	else if ( iValueLen>iAliasLen+2 && sValuePtr[0]=='`'
+		&& sValuePtr[iAliasLen+1]=='`' && sValuePtr[iAliasLen+2]=='.'
+		&& HasTableAliasAt ( sValuePtr, iValueLen, sAliasPtr, iAliasLen, 1 ) )
+		iPrefixLen = iAliasLen+3;
+	else if ( iValueLen>iAliasLen+1
+		&& sValuePtr[iAliasLen]=='`' && sValuePtr[iAliasLen+1]=='.'
+		&& HasTableAliasAt ( sValuePtr, iValueLen, sAliasPtr, iAliasLen, 0 ) )
+		iPrefixLen = iAliasLen+2;
+	else
+		return false;
+
+	CSphString sStripped;
+	sStripped.SetBinary ( sValuePtr+iPrefixLen, iValueLen-iPrefixLen );
+	sValue = sStripped;
+	return true;
+}
+
+void SqlParser_c::SetTableAlias ( const SqlNode_t & tAlias )
+{
+	CSphString sAlias;
+	ToString ( sAlias, tAlias );
+	sAlias.ToLower();
+
+	for ( auto & tItem : m_pQuery->m_dItems )
+	{
+		bool bAutoAlias = tItem.m_sAlias==tItem.m_sExpr;
+		if ( StripTableAliasPrefix ( tItem.m_sExpr, sAlias ) && bAutoAlias )
+			tItem.m_sAlias = tItem.m_sExpr;
+	}
 }
 
 bool SqlParser_c::AddExtendedAggrItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFunc, SqlNode_t * pStart, SqlNode_t * pEnd, const CSphVector<CSphNamedVariant> * pOpts )

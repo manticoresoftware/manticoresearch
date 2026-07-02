@@ -169,7 +169,7 @@ mysql -h0 -P9306 -e "SELECT @@version"
 mysql -h0 -P9306 -NE -e "SELECT @@version_comment"
 ––– output –––
 *************************** 1. row ***************************
-git #!/[\w\s\(\)\.]+/!#
+git #!/[\w\s\(\)\.\/\-\[\]]+/!#
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@autocommit"
 ––– output –––
@@ -385,6 +385,60 @@ category_id: 1
        name: Mouse
       price: #!/[0-9]+\.[0-9]+/!#
 category_id: 2
+––– input –––
+mysql -h0 -P9306 -e "SELECT p.* FROM Manticore.products AS p LIMIT 0, 200"
+––– output –––
++------+--------+------------+-------------+
+| id   | name   | price      | category_id |
++------+--------+------------+-------------+
+|    1 | Laptop | #!/[0-9]+\.[0-9]+/!# |           1 |
+|    2 | Mouse  |  #!/[0-9]+\.[0-9]+/!# |           2 |
++------+--------+------------+-------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT p.id, p.name FROM products p ORDER BY id ASC"
+––– output –––
++------+--------+
+| id   | name   |
++------+--------+
+|    1 | Laptop |
+|    2 | Mouse  |
++------+--------+
+––– input –––
+mysql -h0 -P9306 -e 'SELECT `p`.* FROM Manticore.products AS `p` LIMIT 0, 200'
+––– output –––
++------+--------+------------+-------------+
+| id   | name   | price      | category_id |
++------+--------+------------+-------------+
+|    1 | Laptop | #!/[0-9]+\.[0-9]+/!# |           1 |
+|    2 | Mouse  |  #!/[0-9]+\.[0-9]+/!# |           2 |
++------+--------+------------+-------------+
+––– input –––
+mysql -h0 -P9306 -e 'SELECT `p`.id, `p`.name FROM products AS `p` ORDER BY id ASC'
+––– output –––
++------+--------+
+| id   | name   |
++------+--------+
+|    1 | Laptop |
+|    2 | Mouse  |
++------+--------+
+––– input –––
+mysql -h0 -P9306 -e 'SELECT `p`.id AS product_id FROM products AS `p` ORDER BY id ASC'
+––– output –––
++------------+
+| product_id |
++------------+
+|          1 |
+|          2 |
++------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT name, categories.title FROM products INNER JOIN categories ON categories.id = products.category_id ORDER BY id ASC"
+––– output –––
++--------+------------------+
+| name   | categories.title |
++--------+------------------+
+| Laptop | Electronics      |
+| Mouse  | Accessories      |
++--------+------------------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM products WHERE price > 50"
 ––– output –––

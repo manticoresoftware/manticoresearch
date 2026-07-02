@@ -1,6 +1,6 @@
 # UUID primary IDs implementation specification
 
-**Status:** branch implementation spec for GitHub issue #1429.
+**Status:** branch implementation and QA spec for GitHub issue #1429, synced with branch `fix/uuid-primary-ids-1429` at `de7dd5a04`.
 
 ## Goal
 
@@ -15,7 +15,7 @@ The minimal implementation keeps two identities for UUID-ID tables:
 
 Public `id` operations are translated as follows:
 
-- incoming public `id` values are validated as 36-character hyphenated UUID strings, normalized to lowercase, and stored in `@uuid_id`;
+- incoming public `id` values are validated as strict UUID strings, normalized to lowercase, and stored in `@uuid_id`;
 - omitted `id` values generate a UUIDv8-style string derived from the unique internal numeric `DocID_t` surrogate;
 - explicit duplicate checks and `REPLACE`/`UPDATE`/`DELETE` resolution find the internal numeric docid through exact string lookup on `@uuid_id`; generated UUID inserts skip that lookup;
 - result formatting maps `@uuid_id` back to public `id` and hides the internal numeric surrogate.
@@ -43,13 +43,21 @@ Rules:
 
 ### ID format
 
-Accepted explicit IDs are canonical UUID-shaped strings:
+Accepted explicit IDs are quoted UUID strings in canonical `8-4-4-4-12` hexadecimal layout:
 
 ```text
 550e8400-e29b-41d4-a716-446655440000
 ```
 
-Validation is shape-based: 36 bytes, hyphens at positions 8/13/18/23, and hexadecimal digits elsewhere. Uppercase hexadecimal input is accepted and normalized to lowercase. Generated IDs use a UUIDv8-style layout that encodes the internal numeric `DocID_t`, making generated public UUID IDs unique under the same guarantees as internal numeric auto-IDs. Generated IDs are not random UUIDv4 values.
+Validation is strict enough to reject malformed or reserved UUID-like values:
+
+- exactly 36 bytes;
+- hyphens at positions 8/13/18/23;
+- hexadecimal digits elsewhere;
+- version nibble at position 14 must be `1` through `8`;
+- RFC variant nibble at position 19 must be `8`, `9`, `a`, `A`, `b`, or `B`.
+
+Uppercase hexadecimal input is accepted and normalized to lowercase. The nil UUID and version-0 / invalid-variant values are rejected by the same checks. Generated IDs use a UUIDv8-style layout that encodes the internal numeric `DocID_t`, making generated public UUID IDs unique under the same guarantees as internal numeric auto-IDs. Generated IDs are not random UUIDv4 values.
 
 ### SQL DML
 
@@ -67,7 +75,7 @@ Supported:
 Rejected/unsupported:
 
 - numeric values for UUID `id`
-- invalid UUID strings
+- invalid UUID strings, including nil UUIDs, version-0 strings, and invalid RFC variants
 - direct use of `@uuid_id` in public select/filter/group/sort/update/insert paths
 - range filters (`<`, `<=`, `>`, `>=`) and arithmetic expressions on UUID `id`
 - treating `0` as an auto-ID marker; omit `id` instead
@@ -77,10 +85,13 @@ Rejected/unsupported:
 Supported UUID-aware paths include:
 
 - `/json/insert`, `/json/replace`, `/json/update`, `/json/delete`, `/json/search`
+- `/json/bulk` valid insert/replace/update/delete actions
 - ES-style `_bulk` `index`/`create` actions with string `_id`
 - ES-style `_search` response IDs/docvalue fields for public `id`
 
 For numeric-ID tables, previous numeric/compatibility behavior is preserved.
+
+Client-side UUID validation errors should be reported as request validation errors, not daemon/internal errors. The intended status contract is HTTP 400 for invalid UUID strings, numeric IDs sent to UUID-ID tables, hidden internal ID access (`@id`/`@uuid_id`), and unsupported UUID range/arithmetic operations. Current branch QA shows the data-level behavior is reject/no-write, but a few HTTP status/envelope paths still need follow-up; see [Known current follow-up gaps](#known-current-follow-up-gaps).
 
 ## Code structure
 
@@ -90,7 +101,7 @@ For numeric-ID tables, previous numeric/compatibility behavior is preserved.
 
 - `sphGetUuidDocidName()` returns `@uuid_id`;
 - `sphHasUuidDocid(schema)` detects UUID-ID tables by hidden string attr presence;
-- `sphIsValidUuidDocid()` validates UUID shape;
+- `sphIsValidUuidDocid()` validates strict UUID layout, version, and RFC variant;
 - `sphCheckUuidDocid()` returns user-facing validation errors;
 - `sphNormalizeUuidDocid()` lowercases UUID strings.
 
@@ -173,6 +184,20 @@ The supported columnar contract is the same public UUID-ID contract as row-wise 
 - No numeric/range/arithmetic semantics for UUID `id`.
 - No direct public access to `@uuid_id`.
 - Generated UUIDs are for document identifiers, not cryptographic secrets.
+
+## Known current follow-up gaps
+
+Exploratory QA after `de7dd5a04` confirmed the following remaining UUID-related gaps. These are status/envelope classification issues unless noted otherwise: the branch rejects the bad request and does not intentionally write data, but the HTTP status or error wrapper does not yet match the desired client-validation contract.
+
+1. `POST /sql?mode=raw` with a UUID `id` range predicate, for example `WHERE id > 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001'`, currently returns HTTP 500 with `uuid id range filters are not supported`; it should be HTTP 400.
+2. `POST /json/search` with a UUID `id` range predicate currently returns HTTP 500 with the same validation error; it should be HTTP 400.
+3. `POST /json/update` with an invalid UUID string in top-level `id` currently returns HTTP 409/action-request-validation; it should be HTTP 400 parse/request validation.
+4. `POST /json/insert` with a numeric top-level `id` into a UUID-ID table currently returns HTTP 409/action-request-validation; it should be HTTP 400 because UUID IDs must be strings.
+5. `POST /json/replace` with an invalid UUID string in top-level `id` currently returns HTTP 409/action-request-validation; it should be HTTP 400.
+6. `POST /json/bulk` with an invalid UUID action `id` currently returns top-level HTTP 500 and per-item 409; it should not be a server error. Prefer either top-level HTTP 400 or the endpoint's established bulk-envelope behavior with per-item 400.
+7. ES-compatible `POST /_bulk` with an invalid UUID `_id` currently gives per-item 400 but bubbles the response to top-level HTTP 409. Prefer ES-style top-level HTTP 200 with item status 400, or top-level HTTP 400 if the project standardizes on request rejection.
+
+The likely minimal fix area for these gaps is HTTP error classification/envelope handling around `searchdhttp.cpp` and the JSON/ES bulk adapters, not the UUID storage model.
 
 ## Test coverage in this branch
 

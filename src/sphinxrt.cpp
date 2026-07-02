@@ -9025,6 +9025,18 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		}
 	}
 
+	const CSphString & sBlendMode = pTokenizer->GetSettings().m_sBlendMode;
+	if ( !sBlendMode.IsEmpty() )
+	{
+		CSphString sError;
+		if ( !pTokenizer->SetBlendMode ( sBlendMode.cstr(), sError ) )
+		{
+			if ( pError )
+				*pError = sError;
+			return false;
+		}
+	}
+
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (const BYTE *)sQuery;
 	FieldFilterOptions_t tFFOptions { tSettings.m_eJiebaMode };

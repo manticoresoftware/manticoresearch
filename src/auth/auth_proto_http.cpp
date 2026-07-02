@@ -13,6 +13,7 @@
 #include "std/base64.h"
 #include "searchdhttp.h"
 #include "searchdbuddy.h"
+#include "searchdssl.h"
 
 #include "auth_common.h"
 #include "auth_log.h"
@@ -33,8 +34,8 @@ HASH256_t GetPwdHash256 ( const AuthUserCred_t & tEntry, const CSphString & sPwd
 static bool CheckPwd ( const AuthUserCred_t & tEntry, const CSphString & sPwd )
 {
 	HASH256_t tPwdHash = GetPwdHash256 ( tEntry, sPwd );
-	int iCmp = memcmp ( tEntry.m_dPwdSha256.Begin(), tPwdHash.data(), tPwdHash.size() );
-	return ( iCmp==0 );
+	VecTraits_T<BYTE> dPwdHash ( tPwdHash.data(), tPwdHash.size() );
+	return SecretEqual ( tEntry.m_dPwdSha256, dPwdHash );
 }
 
 static bool FailAuth ( HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply )
@@ -117,8 +118,9 @@ static bool CheckBearerMatched ( const HASH256_t & tHashTokenData, const AuthUse
 	pHashBearer256->Update ( tUser.m_dSalt.Begin(), tUser.m_dSalt.GetLength() );
 	pHashBearer256->Update ( tHashTokenData.data(), tHashTokenData.size() );
 	auto tBearer256 = pHashBearer256->FinalHash();
+	VecTraits_T<BYTE> dBearer256 ( tBearer256.data(), tBearer256.size() );
 
-	if ( memcmp ( tUser.m_dBearerSha256.Begin(), tBearer256.data(), tBearer256.size() )==0 )
+	if ( SecretEqual ( tUser.m_dBearerSha256, dBearer256 ) )
 	{
 		GetBearerCache().AddUser ( tHashTokenData, tUser.m_sUser );
 		sUser = tUser.m_sUser;

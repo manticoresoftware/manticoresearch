@@ -166,13 +166,10 @@ mysql -h0 -P9306 -e "SELECT @@version"
 | 8.0.43    |
 +-----------+
 ––– input –––
-mysql -h0 -P9306 -e "SELECT @@version_comment"
+mysql -h0 -P9306 -NE -e "SELECT @@version_comment"
 ––– output –––
-+-------------------------------+
-| @@version_comment             |
-+-------------------------------+
-| git branch main...origin/main |
-+-------------------------------+
+*************************** 1. row ***************************
+git #!/[\w\s\(\)\.]+/!#
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@autocommit"
 ––– output –––

@@ -14,6 +14,7 @@
 
 #include "searchdsql.h"
 #include "client_session.h"
+#include "searchdssl.h"
 #include "auth_common.h"
 #include "auth_proto_mysql.h"
 #include "auth_log.h"
@@ -35,17 +36,12 @@ MySQLAuth_t GetMySQLAuth()
 {
 	MySQLAuth_t tAuth;
 
-	// fill scramble auth data (random)
-	DWORD i = 0;
-	DWORD uRand = sphRand() | 0x01010101;
-
-	for ( ; i<( tAuth.m_dScramble.GetLength() - sizeof ( DWORD ) ); i+=sizeof ( DWORD ) )
-	{
-		memcpy ( tAuth.m_dScramble.Begin() + i, &uRand, sizeof ( DWORD ) );
-		uRand = sphRand() | 0x01010101;
-	}
-	if ( i<tAuth.m_dScramble.GetLength() )
-		memcpy ( tAuth.m_dScramble.Begin() + i, &uRand, tAuth.m_dScramble.GetLength() - i );
+	// Fill scramble auth data with printable ASCII bytes.
+	// Connector/J treats mysql_native_password challenge data as a string internally;
+	// arbitrary high-bit bytes make it compute a token that does not match the server.
+	static constexpr char dChallengeAlphabet[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+	for ( int i = 0; i < tAuth.m_dScramble.GetLength() - 1; ++i )
+		tAuth.m_dScramble[i] = dChallengeAlphabet [ sphRand() % ( sizeof(dChallengeAlphabet) - 1 ) ];
 	tAuth.m_dScramble.Last()  = 0;
 
 	return tAuth;
@@ -53,6 +49,9 @@ MySQLAuth_t GetMySQLAuth()
 
 static bool CheckPwd ( const MySQLAuth_t & tSalt, const AuthUserCred_t & tEntry, const VecTraits_T<BYTE> & dClientHash )
 {
+	if ( dClientHash.GetLength()!=HASH20_SIZE )
+		return false;
+
 	const HASH20_t & tSha1 = tEntry.m_tPwdSha1;
 	HASH20_t tSha2 = CalcBinarySHA1 ( tSha1.data(), tSha1.size() );
 
@@ -65,8 +64,7 @@ static bool CheckPwd ( const MySQLAuth_t & tSalt, const AuthUserCred_t & tEntry,
 	CSphFixedVector<BYTE> dRes ( tSha1.size() );
 	Crypt ( dRes.Begin(), tSha3.data(), tSha1.data(), dRes.GetLength() );
 
-	int iCmp = memcmp ( dRes.Begin(), dClientHash.Begin(), Min ( dClientHash.GetLength(), dRes.GetLength() ) );
-	return ( iCmp==0 );
+	return SecretEqual ( dRes, dClientHash );
 }
 
 bool CheckAuth ( const MySQLAuth_t & tAuth, const CSphString & sUser, const VecTraits_T<BYTE> & dClientHash, CSphString & sError )
@@ -76,17 +74,21 @@ bool CheckAuth ( const MySQLAuth_t & tAuth, const CSphString & sUser, const VecT
 
 	AuthUsersPtr_t pUsers = GetAuth();
 	const AuthUserCred_t * pUser = pUsers->m_hUserToken ( sUser );
-	if ( !pUser || dClientHash.IsEmpty() )
+	if ( !pUser )
 	{
 		sError.SetSprintf ( "Access denied for user '%s' (using password: %s)", sUser.cstr(), ( dClientHash.IsEmpty() ? "NO" : "YES" ) );
-		if ( !pUser )
-			AuthLog().AuthFailure ( sUser, AccessMethod_e::SQL, session::szClientName(), "user does not exist" );
-		else
-			AuthLog().AuthFailure ( sUser, AccessMethod_e::SQL, session::szClientName(), "no password provided" );
+		AuthLog().AuthFailure ( sUser, AccessMethod_e::SQL, session::szClientName(), "user does not exist" );
 		return false;
 	}
 
-	if ( !CheckPwd ( tAuth, *pUser, dClientHash ) )
+	if ( dClientHash.IsEmpty() )
+	{
+		sError.SetSprintf ( "Access denied for user '%s' (using password: NO)", sUser.cstr() );
+		AuthLog().AuthFailure ( sUser, AccessMethod_e::SQL, session::szClientName(), "no password provided" );
+		return false;
+	}
+
+	if ( dClientHash.GetLength()!=HASH20_SIZE || !CheckPwd ( tAuth, *pUser, dClientHash ) )
 	{
 		sError.SetSprintf ( "Access denied for user '%s' (using password: YES)", sUser.cstr() );
 		AuthLog().AuthFailure ( sUser, AccessMethod_e::SQL, session::szClientName(), "invalid password" );
@@ -168,6 +170,22 @@ static bool DenyInternalAuthStorageTarget ( const CSphString & sUser, const CSph
 }
 
 
+static bool IsSessionOnlySetExtra ( const SqlStmt_t & tStmt )
+{
+	if ( tStmt.m_eSet!=SET_EXTRA )
+		return false;
+
+	if ( !tStmt.m_dInsertValues.GetLength() || tStmt.m_dInsertValues.GetLength()!=tStmt.m_dInsertSchema.GetLength() )
+		return false;
+
+	for ( const SqlInsert_t & tValue : tStmt.m_dInsertValues )
+		if ( !( tValue.m_iType & 1 ) )
+			return false;
+
+	return true;
+}
+
+
 bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
 {
 	if ( !IsAuthEnabled() )
@@ -182,6 +200,7 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	switch ( tStmt.m_eStmt )
 	{
 	case STMT_PARSE_ERROR: return true;
+	case STMT_DUMMY: return true; // harmless MySQL compatibility commands, e.g. SET NAMES
 
 	case STMT_SELECT:
 	case STMT_DESCRIBE:
@@ -239,8 +258,12 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 
 		return CheckPerms ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, false, sError );
 
-	// special write actions without index
 	case STMT_SET:
+		if ( tStmt.m_eSet==SET_LOCAL || IsSessionOnlySetExtra ( tStmt ) )
+			return true;
+		return CheckPerms ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, true, sError );
+
+	// special write actions without index
 	case STMT_BEGIN:
 	case STMT_COMMIT:
 	case STMT_ROLLBACK:
@@ -283,10 +306,12 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	}
 
 
-	case STMT_SHOW_STATUS:
 	case STMT_SHOW_VARIABLES:
 	case STMT_SHOW_COLLATION:
 	case STMT_SHOW_CHARACTER_SET:
+		return true;
+
+	case STMT_SHOW_STATUS:
 	case STMT_SHOW_DATABASES:
 	case STMT_SHOW_PLUGINS:
 	case STMT_SHOW_THREADS:

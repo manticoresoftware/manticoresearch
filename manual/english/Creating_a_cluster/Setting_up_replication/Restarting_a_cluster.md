@@ -1,6 +1,8 @@
 # Restarting a cluster
 
-When a whole replication cluster is down, one node must be started first so the other nodes know which copy of the cluster to join.
+When a whole multi-node replication cluster is down, one node must be started first so the other nodes know which copy of the cluster to join.
+
+There is one normal-startup exception: if the cluster had already become a clean one-node cluster, for example after the other nodes left with `EXIT CLUSTER`, start that remaining node normally. After a clean shutdown, Manticore restores that self-only cluster as `primary` / `synced` without `--new-cluster`.
 
 That first-start decision is based on `grastate.dat`, the small replication state file stored in the cluster data directory. The most important fields are:
 

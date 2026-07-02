@@ -20,16 +20,30 @@
   * 20
   * 21
 
-### APT repository
+### Quick install
+
+```bash
+curl https://manticoresearch.com | sh
+```
+
+###### Development packages
+
+If you prefer "Nightly" (development) versions do:
+
+```bash
+curl https://manticoresearch.com | sh -s dev
+```
+
+### Manual installation
 The easiest way to install Manticore in Ubuntu/Debian/Mint is by using our APT repository.
 
 Install the repository:
 ```bash
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
+sudo apt install ./manticore-repo.noarch.deb
 sudo apt update
 ```
-(install `wget` if it's not installed; install `gnupg2` if `apt-key` fails).
+(install `wget` if it's not installed).
 
 Then install Manticore Search:
 ```
@@ -48,7 +62,7 @@ It won't remove your data and configuration file.
 If you prefer "Nightly" (development) versions do:
 ```bash
 wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb && \
-sudo dpkg -i manticore-dev-repo.noarch.deb && \
+sudo apt install ./manticore-dev-repo.noarch.deb && \
 sudo apt -y update && \
 sudo apt -y install manticore
 ```

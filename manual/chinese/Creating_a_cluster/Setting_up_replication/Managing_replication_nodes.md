@@ -138,4 +138,6 @@ EXIT CLUSTER posts
 当您只想脱离当前节点时，请使用 `EXIT CLUSTER`。当您想从每个节点移除集群时，请使用 `DELETE CLUSTER`。
 
 `EXIT CLUSTER` 仅允许在主集群中的健康本地节点上执行。如果命令返回警告，本地脱离已成功，但可能仍需要后续操作。在这种情况下，在任何存活节点上运行 `ALTER CLUSTER <cluster_name> UPDATE nodes` 以完成刷新剩余集群元数据的操作。
+
+如果幸存的一侧在执行 `EXIT CLUSTER` 后变成了一个干净的单节点集群，它仍然是一个复制集群。干净关闭后，这个幸存节点可以按正常方式启动，并且应当返回为 `primary` / `synced`；在这种仅包含自身的情况下，你不需要使用 `--new-cluster`。
 <!-- proofread -->

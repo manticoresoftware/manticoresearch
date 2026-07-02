@@ -168,6 +168,12 @@ jobs:
           cp -r build/Testing/*/Test.xml build/test_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}/
           cp -r build/test build/test_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
         continue-on-error: true
+      - name: Upload CTest XML artifact
+        if: always()
+        uses: manticoresoftware/upload_artifact_with_retries@v4
+        with:
+          name: ${{ inputs.artifact_name }}_ctest_xml
+          path: "build/test*/Test.xml"
       - name: Upload test artifacts
         if: always()
         continue-on-error: true
@@ -197,10 +203,21 @@ jobs:
         with:
           name: ${{ inputs.artifact_name }}
           path: .
+      - name: Download CTest XML artifact
+        uses: manticoresoftware/download_artifact_with_retries@v3
+        with:
+          name: ${{ inputs.artifact_name }}_ctest_xml
+          path: .
       - name: Convert the XML to JUnit format
         run: |
           shopt -s nullglob
-          for xml in build/test_*/Test.xml; do
+          xml_files=(build/test_*/Test.xml)
+          if [[ ${#xml_files[@]} -eq 0 ]]; then
+            echo "No CTest XML files found in downloaded artifacts"
+            find build -maxdepth 3 -type f | sort || true
+            exit 1
+          fi
+          for xml in "${xml_files[@]}"; do
             out="build/junit_$(basename "$(dirname "$xml")").xml"
             xsltproc -o "$out" misc/junit/ctest2junit.xsl "$xml"
           done
@@ -213,6 +230,7 @@ jobs:
           compare_to_earlier_commit: false
           files: build/junit_*.xml
           comment_mode: failures
+          job_summary: ${{ steps.test.outcome == 'failure' }}
       - name: Verify test job result
         run: |
           if [[ "${{ needs.test_windows.result }}" != "success" ]]; then

@@ -6,37 +6,12 @@
 Вы можете легко установить и запустить Manticore в различных операционных системах, включая Ubuntu, Centos, Debian, Windows и MacOS. Кроме того, вы также можете использовать Manticore в качестве контейнера Docker.
 
 <!-- intro -->
-### Ubuntu
+### Linux/MacOS
 
-<!-- request Ubuntu -->
+<!-- request Linux -->
+
 ```bash
-wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
-sudo apt update
-sudo apt install manticore manticore-columnar-lib
-sudo systemctl start manticore
-```
-
-<!-- intro -->
-### Debian
-
-<!-- request Debian -->
-```bash
-wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
-sudo apt update
-sudo apt install manticore manticore-columnar-lib
-sudo systemctl start manticore
-```
-
-<!-- intro -->
-### Centos
-
-<!-- request Centos -->
-```bash
-sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-sudo yum install manticore manticore-columnar-lib
-sudo systemctl start manticore
+curl https://manticoresearch.com | sh
 ```
 
 <!-- intro -->
@@ -51,14 +26,6 @@ sudo systemctl start manticore
   ```
 * Запустите Manticore из оснастки "Службы" консоли управления Microsoft.
 
-<!-- intro -->
-### MacOS
-
-<!-- request MacOS -->
-```bash
-brew install manticoresearch
-brew services start manticoresearch
-```
 
 <!-- intro -->
 ### Docker

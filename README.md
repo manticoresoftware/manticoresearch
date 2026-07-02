@@ -147,7 +147,28 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
 
 # Installation
 
-### Docker
+## Quick install
+
+For Linux and macOS with Homebrew, use the one-line installer:
+
+```sh
+curl https://manticoresearch.com | sh
+```
+
+It detects Debian/Ubuntu/Mint, RHEL/CentOS/Amazon/Oracle/Fedora-like RPM systems, and macOS with Homebrew. It configures the official Manticore repository when needed, installs `manticore`, starts the service when supported, and prints the result.
+
+Common commands:
+
+```sh
+curl https://manticoresearch.com | sh -s help
+curl https://manticoresearch.com | sh -s list-versions
+curl https://manticoresearch.com | sh -s version 25.0.0
+curl https://manticoresearch.com | sh -s dev
+curl https://manticoresearch.com | sh -s upgrade
+```
+
+## Docker
+
 Docker image is available on [Docker Hub](https://dockr.ly/33biV0U).
 
 To experiment with Manticore Search in Docker just run:
@@ -174,31 +195,42 @@ Note that upon exiting the MySQL client, the Manticore container will be stopped
 
 Read [the full instruction for the docker image](https://github.com/manticoresoftware/docker) for more details including our recommendations on running it in production.
 
-### Packages
+### Manual package installation
 
-## [Ubuntu, Debian, Centos, Windows and MacOS packages are here](https://manticoresearch.com/install/).
+If you prefer explicit package-manager commands, use the manual instructions below or see the [downloads page](https://manticoresearch.com/install/).
 
-### YUM repo for RHEL/Centos/Amazon/Oracle Linux
+### RPM repo for RHEL/CentOS/Amazon/Oracle/Fedora-like Linux
+
 ```
 sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 sudo yum install manticore
 ```
 
+or use `dnf` when available:
+
+```
+sudo dnf install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
+sudo dnf install manticore
+```
+
 ### APT repo for Ubuntu/Debian/Mint
+
 ```
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
+sudo apt install ./manticore-repo.noarch.deb
 sudo apt update
 sudo apt install manticore
 ```
 
-### Homebrew on MacOS
+### Homebrew on macOS
+
 ```
 brew install manticoresoftware/tap/manticoresearch manticoresoftware/tap/manticore-extra
 ```
 
 ### Windows
-See [instruction here](https://manual.manticoresearch.com/Installation/Windows).
+
+For WSL/WSL2, use the Linux installer inside the WSL distribution. For native Windows, see the [Windows installation instructions](https://manual.manticoresearch.com/Installation/Windows).
 
 ### Clouds
 

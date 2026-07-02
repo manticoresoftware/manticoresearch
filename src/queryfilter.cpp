@@ -63,6 +63,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 	int iQpos = 1;
 	int iExactQpos = -1;
 	CSphVector<int> dQposWildcards;
+	CSphVector<BYTE> dSkipAotTransform;
 
 	// FIXME!!! got rid of duplicated term stat and qword setup
 	while ( ( sWord = m_pTokenizer->GetToken() ) )
@@ -93,6 +94,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 		if ( !sTokenized )
 			continue;
 
+		int iKeywordStart = dKeywords.GetLength();
 		if ( tCtx.m_bAllowExpansion && ( !m_tFoldSettings.m_bFoldWildcards || m_tFoldSettings.m_bStats ) && sphHasExpandableWildcards ( (const char*)sWord ) )
 		{
 			dQposWildcards.Add ( iQpos );
@@ -144,6 +146,8 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 
 		// FIXME!!! handle consecutive blended wo blended parts
 		bool bBlended = m_pTokenizer->TokenIsBlended();
+		for ( int iKeyword = iKeywordStart; iKeyword < dKeywords.GetLength(); ++iKeyword )
+			dSkipAotTransform.Add ( bBlended ? 1 : 0 );
 
 		if ( bBlended )
 		{
@@ -182,6 +186,19 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 			continue;
 		if ( ShouldBypassMorphology ( m_pDict->GetSettings().GetDictFormat(), dKeywords[iTokenized].m_sNormalized.Length() ) )
 			continue;
+
+		if ( dSkipAotTransform[iTokenized] )
+		{
+			if ( m_pSettings->m_bIndexExactWords && dKeywords[iTokenized].m_sNormalized.cstr()[0]!='=' )
+			{
+				BYTE * sTmp = CopyExactKeywordString ( dTmp, (const BYTE*)dKeywords[iTokenized].m_sNormalized.cstr() );
+				BYTE * sTmp2 = CopyKeywordString ( dTmp2, dKeywords[iTokenized].m_sTokenized.scstr() );
+				if ( !sTmp || !sTmp2 )
+					continue;
+				AddKeywordStats ( sTmp, sTmp2, iKeywordQpos, dKeywords );
+			}
+			continue;
+		}
 
 		// MUST copy as Dict::GetWordID changes word and might add symbols
 		BYTE * sTokenized = CopyKeywordString ( dTokenized, dKeywords[iTokenized].m_sNormalized.scstr() );

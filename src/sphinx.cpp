@@ -155,6 +155,30 @@ int64_t		g_iIndexerPoolStartHit		= 0;
 
 static bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, const CSphString & sFileName, CSphString & sError );
 
+static void DeleteTmpFilesWithPrefix ( const CSphString & sFile )
+{
+	if ( sFile.IsEmpty() )
+		return;
+
+	CSphString sMask;
+	sMask.SetSprintf ( "%s*", sFile.cstr() );
+	StrVec_t dMatches = FindFiles ( sMask.cstr(), false );
+	if ( dMatches.IsEmpty() && sphFileExists ( sFile.cstr() ) )
+		dMatches.Add ( sFile );
+
+	dMatches.for_each ( [] ( const auto & sTmpFile )
+	{
+		if ( !sTmpFile.IsEmpty() )
+			::unlink ( sTmpFile.cstr() );
+	} );
+}
+
+
+static void DeleteTmpFilesWithPrefix ( const StrVec_t & dFiles )
+{
+	dFiles.for_each ( [] ( const auto & sFile ) { DeleteTmpFilesWithPrefix ( sFile ); } );
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // COMPILE-TIME CHECKS
 /////////////////////////////////////////////////////////////////////////////
@@ -2941,12 +2965,31 @@ bool CSphIndex_VLN::Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride )
 
 bool CSphIndex_VLN::AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, const ISphSchema & tOldSchema, const ISphSchema & tNewSchema, CSphString & sError )
 {
+	bool bHaveColumnar = false;
+	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
+		bHaveColumnar |= tNewSchema.GetAttr(i).IsColumnar();
+
+	if ( !bHaveColumnar )
+		return true;
+
 	BuildBufferSettings_t tSettings; // use default buffer settings
-	auto pBuilder = CreateColumnarBuilder ( tNewSchema, GetTmpFilename ( SPH_EXT_SPC ), tSettings.m_iBufferColumnar, sError );
+	CSphString sTmpSPC = GetTmpFilename ( SPH_EXT_SPC );
+	bool bKeepTmp = false;
+	AT_SCOPE_EXIT ( [&sTmpSPC, &bKeepTmp]
+	{
+		if ( !bKeepTmp )
+			DeleteTmpFilesWithPrefix ( sTmpSPC );
+	} );
+
+	auto pBuilder = CreateColumnarBuilder ( tNewSchema, sTmpSPC, tSettings.m_iBufferColumnar, sError );
 	if ( !pBuilder )
 		return false;
 
-	return Alter_AddRemoveColumnar ( bAddAttr, m_tSchema, tNewSchema, m_pColumnar.get(), pBuilder.get(), (DWORD)m_iDocinfo, GetName(), sError );
+	if ( !Alter_AddRemoveColumnar ( bAddAttr, tOldSchema, tNewSchema, m_pColumnar.get(), pBuilder.get(), (DWORD)m_iDocinfo, GetName(), sError ) )
+		return false;
+
+	bKeepTmp = true;
+	return true;
 }
 
 
@@ -3029,8 +3072,10 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	}
 
 	if ( bColumnar )
-		AddRemoveColumnarAttr ( bAddAttr, tCtx.m_sName, tCtx.m_eType, m_tSchema, tNewSchema, sError );
-	else
+	{
+		if ( !AddRemoveColumnarAttr ( bAddAttr, tCtx.m_sName, tCtx.m_eType, m_tSchema, tNewSchema, sError ) )
+			return false;
+	} else
 	{
 		int64_t iTotalRows = m_iDocinfo + (m_iDocinfoIndex+1)*2;
 		Alter_AddRemoveRowwiseAttr ( m_tSchema, tNewSchema, m_tAttr.GetReadPtr(), (DWORD)iTotalRows, m_tBlobAttrs.GetReadPtr(), *pSPAWriteWrapper, *pSPBWriteWrapper, bAddAttr, tCtx.m_sName );
@@ -7333,11 +7378,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	// unlink prepared attribute files on exit, if any
 	AT_SCOPE_EXIT ( [&dDeleteOnInterrupt]
 	{
-		dDeleteOnInterrupt.for_each ( [] ( const auto & sFile )
-		{
-			if ( !sFile.IsEmpty() && sphFileExists ( sFile.cstr() ) )
-				::unlink ( sFile.cstr() );
-		} ); 
+		DeleteTmpFilesWithPrefix ( dDeleteOnInterrupt );
 	});
 
 	// merging attributes
@@ -7514,11 +7555,7 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 	StrVec_t dDeleteOnInterrupt;
 	AT_SCOPE_EXIT ( [&dDeleteOnInterrupt]
 	{
-		dDeleteOnInterrupt.for_each ( [] ( const auto & sFile )
-		{
-			if ( !sFile.IsEmpty() && sphFileExists ( sFile.cstr() ) )
-				::unlink ( sFile.cstr() );
-		} );
+		DeleteTmpFilesWithPrefix ( dDeleteOnInterrupt );
 	} );
 
 	{

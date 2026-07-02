@@ -1469,18 +1469,38 @@ void SqlParser_c::AddItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFunc, SqlNode_t
 	AutoAlias ( tItem, pStart?pStart:pExpr, pEnd?pEnd:pExpr );
 }
 
+static bool HasTableAliasAt ( const char * sValue, int iValueLen, const char * sAlias, int iAliasLen, int iOffset )
+{
+	return iValueLen>=iOffset+iAliasLen && !strncmp ( sValue+iOffset, sAlias, iAliasLen );
+}
+
 static bool StripTableAliasPrefix ( CSphString & sValue, const CSphString & sAlias )
 {
 	if ( !sValue.Length() || !sAlias.Length() )
 		return false;
 
-	CSphString sPrefix;
-	sPrefix.SetSprintf ( "%s.", sAlias.cstr() );
-	if ( !sValue.Begins ( sPrefix.cstr() ) )
+	const char * sValuePtr = sValue.cstr();
+	const char * sAliasPtr = sAlias.cstr();
+	const int iValueLen = sValue.Length();
+	const int iAliasLen = sAlias.Length();
+	int iPrefixLen = 0;
+
+	if ( iValueLen>iAliasLen && sValuePtr[iAliasLen]=='.'
+		&& HasTableAliasAt ( sValuePtr, iValueLen, sAliasPtr, iAliasLen, 0 ) )
+		iPrefixLen = iAliasLen+1;
+	else if ( iValueLen>iAliasLen+2 && sValuePtr[0]=='`'
+		&& sValuePtr[iAliasLen+1]=='`' && sValuePtr[iAliasLen+2]=='.'
+		&& HasTableAliasAt ( sValuePtr, iValueLen, sAliasPtr, iAliasLen, 1 ) )
+		iPrefixLen = iAliasLen+3;
+	else if ( iValueLen>iAliasLen+1
+		&& sValuePtr[iAliasLen]=='`' && sValuePtr[iAliasLen+1]=='.'
+		&& HasTableAliasAt ( sValuePtr, iValueLen, sAliasPtr, iAliasLen, 0 ) )
+		iPrefixLen = iAliasLen+2;
+	else
 		return false;
 
 	CSphString sStripped;
-	sStripped.SetBinary ( sValue.cstr()+sPrefix.Length(), sValue.Length()-sPrefix.Length() );
+	sStripped.SetBinary ( sValuePtr+iPrefixLen, iValueLen-iPrefixLen );
 	sValue = sStripped;
 	return true;
 }
@@ -1493,8 +1513,8 @@ void SqlParser_c::SetTableAlias ( const SqlNode_t & tAlias )
 
 	for ( auto & tItem : m_pQuery->m_dItems )
 	{
-		CSphString sOrigExpr = tItem.m_sExpr;
-		if ( StripTableAliasPrefix ( tItem.m_sExpr, sAlias ) && tItem.m_sAlias==sOrigExpr )
+		bool bAutoAlias = tItem.m_sAlias==tItem.m_sExpr;
+		if ( StripTableAliasPrefix ( tItem.m_sExpr, sAlias ) && bAutoAlias )
 			tItem.m_sAlias = tItem.m_sExpr;
 	}
 }

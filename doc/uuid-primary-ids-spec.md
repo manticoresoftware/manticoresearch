@@ -1,6 +1,6 @@
 # UUID primary IDs implementation specification
 
-**Status:** branch implementation and QA spec for GitHub issue #1429, synced with branch `fix/uuid-primary-ids-1429` at `de7dd5a04`.
+**Status:** branch implementation and QA spec for GitHub issue #1429, synced with branch `fix/uuid-primary-ids-1429`.
 
 ## Goal
 
@@ -22,7 +22,7 @@ Public `id` operations are translated as follows:
 
 This preserves exact UUID semantics without hashing UUIDs into 64-bit IDs.
 
-UUID-ID correctness does **not** depend on query-time secondary indexes being enabled. The hidden `@uuid_id` string attribute is marked indexed so exact string filters can use the normal acceleration path when secondary indexes are enabled, but UUID lookup, duplicate resolution, `REPLACE`, `UPDATE`, and `DELETE` must still work with `searchd.secondary_indexes = 0` by falling back to the ordinary exact string filter path.
+UUID-ID correctness does **not** depend on query-time secondary indexes being enabled. The hidden `@uuid_id` string attribute is marked indexed and is explicitly eligible for the normal secondary-index and histogram planning paths so exact public `id` equality/`IN` filters can use `@uuid_id:SecondaryIndex` when secondary indexes are enabled. UUID lookup, duplicate resolution, `REPLACE`, `UPDATE`, and `DELETE` must still work with `searchd.secondary_indexes = 0` by falling back to the ordinary exact string filter path.
 
 ## Public behavior
 
@@ -139,7 +139,11 @@ For insert/replace:
 
 UUID public `id` filters are handled as string filters against the hidden `@uuid_id` attribute where public query semantics need string behavior, or resolved to internal numeric docids before existing write/delete internals need `DocID_t`.
 
-The implementation intentionally uses existing exact string/filter/query machinery rather than adding a new persistent UUID→docid map or changing RT/disk chunk storage layout. When secondary indexes are disabled globally (`searchd.secondary_indexes = 0`), the same public UUID operations still resolve through the ordinary string filter path; they may be slower, but they are semantically supported.
+The implementation intentionally uses existing exact string/filter/query machinery for persisted/disk data and does not add a new persistent UUID→docid storage format. Hot committed RT RAM data additionally maintains a per-segment `@uuid_id` → internal `DocID_t` lookup map alongside the existing `DocID_t` → rowid map. `REPLACE`, duplicate checks, and transaction commit duplicate probes can use this RAM map when the served RT index has only RAM segments. If disk chunks are attached, or a segment-level duplicate/corrupt UUID entry makes the map ambiguous, the code falls back to the ordinary query/filter lookup path.
+
+When secondary indexes are enabled and built for disk chunks, public UUID equality/`IN` filters are rewritten before iterator planning so the hidden `@uuid_id` storage attribute can be selected by the secondary-index planner. The hidden backing index is an implementation detail: direct public `@uuid_id` access remains rejected, and user-facing index listings such as `SHOW TABLE ... INDEXES` do not expose `@uuid_id`. Runtime diagnostics may still show `@uuid_id:SecondaryIndex` in `SHOW META` because that is the actual internal iterator used for public `id='uuid'` filters.
+
+When secondary indexes are disabled globally (`searchd.secondary_indexes = 0`), the same public UUID operations still resolve through the ordinary string filter path; they may be slower, but they are semantically supported.
 
 ### Result rendering
 
@@ -171,8 +175,10 @@ The supported columnar contract is the same public UUID-ID contract as row-wise 
 - Internal `DocID_t` stays 64-bit, so existing row, kill-list, and docstore memory layouts are unchanged.
 - Each UUID-ID row stores one additional exact string (`@uuid_id`).
 - Per-statement duplicate detection uses `sph::StringSet`, avoiding O(N²) linear duplicate checks for large multi-row inserts/bulk batches.
-- The branch does not add a table-wide UUID→docid RAM map. Explicit UUID duplicate/replace checks reuse existing query/filter lookup paths with low limits. Server-generated UUIDs are derived from the internal numeric auto-ID, so generated inserts skip the UUID lookup and go straight through the normal RT insert path.
-- ID-based operations that start from a public UUID string (`SELECT ... WHERE id='uuid'`, `UPDATE`, `REPLACE`, and `DELETE`) are expected to be slower than the same operations on numeric IDs because they must resolve `@uuid_id` back to the internal numeric `DocID_t`. Current `manticore-load` measurements on 50k-row RT tables show UUID id operations at roughly 8-21% of numeric-id throughput. A future direct UUID→DocID lookup index/map would be needed to close that gap.
+- The branch does not add a persistent or table-wide UUID→docid storage format. It does add a committed-RT-RAM per-segment `@uuid_id` → internal `DocID_t` map, built with the existing RAM segment rowid map and populated from either row-wise string blobs or columnar string iterators. This map accelerates hot `REPLACE`/duplicate/existence checks without widening `DocID_t` or adding an MCL UUID type.
+- Explicit UUID inserts in transactions and `/json/bulk` defer committed-data duplicate detection to commit and then check the accumulated UUID list in one batch. Transaction-local UUID state is hash-backed, avoiding O(N²) vector scans inside large explicit UUID batches.
+- ID-based operations that start from a public UUID string (`SELECT ... WHERE id='uuid'`, `UPDATE`, `REPLACE`, and `DELETE`) are expected to be slower than the same operations on numeric IDs because they must resolve `@uuid_id` back to the internal numeric `DocID_t`. With secondary indexes enabled and rebuilt for disk chunks, exact public UUID equality/`IN` filters should use the hidden `@uuid_id` secondary index and avoid table-size-dependent full scans. Local 1k/10k/50k lookup measurements showed UUID miss median slope improving from 4.09x before the hidden-index eligibility fix to 1.41x after it; at 50k rows, UUID miss median improved from 1.812 ms to 0.642 ms.
+- Local repeated explicit-UUID `/json/bulk` benchmarks over 30 × 1000-row commits showed the RAM map removing the committed-row-count slope for hot RT RAM data: final fast path median was 1.1007s / 27.3k docs/s for 30k rows, versus 16.0630s / 1.87k docs/s with only the two RAM UUID lookup call sites temporarily disabled. In the side-by-side Manticore-vs-Elasticsearch harness, explicit UUID bulk insert reached about 23.6k docs/s for Manticore versus about 84.1k docs/s for Elasticsearch, narrowing the old after-SI gap from 22.24x to 3.57x in the main run. Disk/flushed chunks still use the query/SI-capable fallback path unless they get an equivalent committed UUID lookup path later.
 - Sharded UUID `REPLACE` now targets the deterministic UUID route instead of broadcasting delete predicates to every route target.
 
 ## Limitations / non-goals
@@ -187,7 +193,7 @@ The supported columnar contract is the same public UUID-ID contract as row-wise 
 
 ## Known current follow-up gaps
 
-Exploratory QA after `de7dd5a04` confirmed the following remaining UUID-related gaps. These are status/envelope classification issues unless noted otherwise: the branch rejects the bad request and does not intentionally write data, but the HTTP status or error wrapper does not yet match the desired client-validation contract.
+Exploratory QA on this branch confirmed the following remaining UUID-related gaps. These are status/envelope classification issues unless noted otherwise: the branch rejects the bad request and does not intentionally write data, but the HTTP status or error wrapper does not yet match the desired client-validation contract.
 
 1. `POST /sql?mode=raw` with a UUID `id` range predicate, for example `WHERE id > 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0001'`, currently returns HTTP 500 with `uuid id range filters are not supported`; it should be HTTP 400.
 2. `POST /json/search` with a UUID `id` range predicate currently returns HTTP 500 with the same validation error; it should be HTTP 400.

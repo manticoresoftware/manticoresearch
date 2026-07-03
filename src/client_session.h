@@ -56,8 +56,8 @@ public:
 	bool m_bInTransaction = false;
 	CSphVector<int64_t> m_dLastIds;
 	CSphVector<CSphString> m_dLastIdStrings;
-	StrVec_t m_dTxnUuidDocidKeys;
-	CSphVector<int64_t> m_dTxnUuidDocids;
+	SmallStringHash_T<int64_t, 4096> m_hTxnUuidDocids;
+	StrVec_t m_dTxnInsertUuidDocids;
 	QueryProfile_c m_tProfile;
 	QueryProfile_c m_tLastProfile;
 	bool m_bOptimizeById = true;

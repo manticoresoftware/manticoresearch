@@ -21,6 +21,7 @@
 #include "docstore.h"
 #include "columnarrt.h"
 #include "coroutine.h"
+#include "std/stringhash.h"
 #include "tokenizer/tokenizer.h"
 #include "indexing_sources/source_document.h"
 
@@ -158,6 +159,11 @@ public:
 
 	/// forcibly save RAM chunk as a new disk chunk
 	virtual bool ForceDiskChunk () = 0;
+
+	/// fast UUID-public-id lookup for committed in-RAM data
+	/// returns false when the implementation can not prove it searched all data
+	virtual bool LookupUuidDocid ( const CSphString & sUuid, int iLimit, CSphVector<DocID_t> & dDocids ) const { return false; }
+	virtual bool HasAnyUuidDocid ( const VecTraits_T<CSphString> & dUuids, bool & bHasAny ) const { return false; }
 
 	/// attach a disk chunk to current index
 	virtual bool AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) { return true; }
@@ -298,6 +304,7 @@ public:
 	CSphVector<BYTE>				m_dKeywordCheckpoints;
 	std::atomic<int64_t> *			m_pRAMCounter = nullptr;///< external RAM counter
 	OpenHashTable_T<DocID_t, RowID_t>	m_tDocIDtoRowID;		///< speeds up docid-rowid lookups
+	SmallStringHash_T<int64_t, 4096>	m_tUuidDocID;			///< speeds up UUID public-id lookups
 	DeadRowMap_Ram_c				m_tDeadRowMap;
 	std::unique_ptr<DocstoreRT_i>	m_pDocstore;
 	std::unique_ptr<ColumnarRT_i>	m_pColumnar;

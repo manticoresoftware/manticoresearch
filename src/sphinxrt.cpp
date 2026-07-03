@@ -545,6 +545,30 @@ void RtSegment_t::SetupDocstore ( const CSphSchema * pSchema )
 void RtSegment_t::BuildDocID2RowIDMap ( const CSphSchema & tSchema )
 {
 	m_tDocIDtoRowID.Reset(m_uRows);
+	m_tUuidDocID.Reset();
+
+	const CSphColumnInfo * pUuidAttr = tSchema.GetAttr ( sphGetUuidDocidName() );
+	std::unique_ptr<columnar::Iterator_i> pUuidIt;
+	if ( pUuidAttr && pUuidAttr->IsColumnar() )
+	{
+		std::string sError;
+		pUuidIt = CreateColumnarIterator ( m_pColumnar.get(), sphGetUuidDocidName(), sError );
+		assert ( pUuidIt );
+	}
+
+	auto fnAddUuidDocid = [this] ( const BYTE * pUuid, int iUuidLen, DocID_t tDocID )
+	{
+		if ( !pUuid || iUuidLen<=0 )
+			return;
+
+		CSphString sUuid ( (const char *)pUuid, iUuidLen );
+		if ( !m_tUuidDocID.Add ( (int64_t)tDocID, sUuid ) )
+		{
+			int64_t * pOldDocID = m_tUuidDocID ( sUuid );
+			assert ( pOldDocID );
+			*pOldDocID = 0; // duplicate/corrupt segment: force query fallback
+		}
+	};
 
 	if ( !tSchema.GetAttr(0).IsColumnar() )
 	{
@@ -553,7 +577,25 @@ void RtSegment_t::BuildDocID2RowIDMap ( const CSphSchema & tSchema )
 		FakeRL_t _ {m_tLock}; // no need true lock as the func is in game during build/merge when segment is not yet published
 
 		for ( int i=0; i<m_dRows.GetLength(); i+=iStride )
-			m_tDocIDtoRowID.Add ( sphGetDocID ( &m_dRows[i] ), tRowID++ );
+		{
+			const CSphRowitem * pRow = &m_dRows[i];
+			DocID_t tDocID = sphGetDocID ( pRow );
+			m_tDocIDtoRowID.Add ( tDocID, tRowID );
+
+			if ( pUuidAttr )
+			{
+				const BYTE * pUuid = nullptr;
+				int iUuidLen = 0;
+				if ( pUuidIt )
+					iUuidLen = pUuidIt->Get ( tRowID, pUuid );
+				else
+					pUuid = sphGetBlobAttr ( pRow, pUuidAttr->m_tLocator, m_dBlobs.Begin(), iUuidLen );
+
+				fnAddUuidDocid ( pUuid, iUuidLen, tDocID );
+			}
+
+			tRowID++;
+		}
 	}
 	else
 	{
@@ -561,7 +603,17 @@ void RtSegment_t::BuildDocID2RowIDMap ( const CSphSchema & tSchema )
 		auto pIt = CreateColumnarIterator ( m_pColumnar.get(), sphGetDocidName(), sError );
 		assert ( pIt );
 		for ( RowID_t tRowID = 0; tRowID<m_uRows; tRowID++ )
-			m_tDocIDtoRowID.Add ( pIt->Get(tRowID), tRowID );
+		{
+			DocID_t tDocID = pIt->Get(tRowID);
+			m_tDocIDtoRowID.Add ( tDocID, tRowID );
+
+			if ( pUuidIt )
+			{
+				const BYTE * pUuid = nullptr;
+				int iUuidLen = pUuidIt->Get ( tRowID, pUuid );
+				fnAddUuidDocid ( pUuid, iUuidLen, tDocID );
+			}
+		}
 	}
 }
 
@@ -1506,6 +1558,8 @@ public:
 	void				ForceRamFlush ( const char * szReason ) final;
 	bool				IsFlushNeed() const final;
 	bool				ForceDiskChunk() final;
+	bool				LookupUuidDocid ( const CSphString & sUuid, int iLimit, CSphVector<DocID_t> & dDocids ) const final;
+	bool				HasAnyUuidDocid ( const VecTraits_T<CSphString> & dUuids, bool & bHasAny ) const final;
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) final;
 	bool				AttachRtIndex ( AttachArgs_t & tArgs, CSphString & sError ) final;
 	bool				Truncate ( CSphString & sError, Truncate_e eAction ) final;
@@ -1942,6 +1996,79 @@ void RtIndex_c::UpdateUnlockedCount()
 		return;
 
 	m_tUnLockedSegments.UpdateValueAndNotifyAll ( (int)m_tRtChunks.RamSegs()->count_of ( [] ( auto& dSeg ) { return !dSeg->m_iLocked; } ) );
+}
+
+
+bool RtIndex_c::LookupUuidDocid ( const CSphString & sUuid, int iLimit, CSphVector<DocID_t> & dDocids ) const
+{
+	dDocids.Reset();
+
+	if ( iLimit<=0 )
+		return true;
+
+	if ( !sphHasUuidDocid ( m_tSchema ) )
+		return false;
+
+	auto tData = RtData();
+	if ( !tData.m_pChunks->IsEmpty() )
+		return false; // disk chunks are not covered by RAM-segment UUID maps
+
+	for ( const auto & pSeg : *tData.m_pSegs )
+	{
+		const int64_t * pDocID = pSeg->m_tUuidDocID ( sUuid );
+		if ( !pDocID )
+			continue;
+
+		if ( !*pDocID )
+			return false; // ambiguous duplicate in a segment; use the query fallback
+
+		DocID_t tDocID = (DocID_t)*pDocID;
+		if ( !pSeg->IsAlive ( tDocID ) )
+			continue;
+
+		dDocids.Add ( tDocID );
+		if ( dDocids.GetLength()>=iLimit )
+			break;
+	}
+
+	return true;
+}
+
+
+bool RtIndex_c::HasAnyUuidDocid ( const VecTraits_T<CSphString> & dUuids, bool & bHasAny ) const
+{
+	bHasAny = false;
+
+	if ( dUuids.IsEmpty() )
+		return true;
+
+	if ( !sphHasUuidDocid ( m_tSchema ) )
+		return false;
+
+	auto tData = RtData();
+	if ( !tData.m_pChunks->IsEmpty() )
+		return false; // disk chunks are not covered by RAM-segment UUID maps
+
+	for ( const CSphString & sUuid : dUuids )
+	{
+		for ( const auto & pSeg : *tData.m_pSegs )
+		{
+			const int64_t * pDocID = pSeg->m_tUuidDocID ( sUuid );
+			if ( !pDocID )
+				continue;
+
+			if ( !*pDocID )
+				return false; // ambiguous duplicate in a segment; use the query fallback
+
+			if ( pSeg->IsAlive ( (DocID_t)*pDocID ) )
+			{
+				bHasAny = true;
+				return true;
+			}
+		}
+	}
+
+	return true;
 }
 
 void RtIndex_c::ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) const

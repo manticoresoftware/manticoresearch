@@ -160,13 +160,12 @@ jobs:
             echo "Windows CTest failed"
             exit 1
           fi
-      - name: Prepare test results
+      - name: Prepare CTest XML artifact
         if: always()
         shell: bash
         run: |
           mkdir -p build/test_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
           cp -r build/Testing/*/Test.xml build/test_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}/
-          cp -r build/test build/test_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
         continue-on-error: true
       - name: Upload CTest XML artifact
         if: always()
@@ -180,7 +179,7 @@ jobs:
         uses: manticoresoftware/upload_artifact_with_retries@v5
         with:
           name: ${{ inputs.artifact_name }}
-          path: "build/test*/Test.xml build/test_*/test/**/report* build/test_*/test/**/error*.txt build/test_*/test/**/*.log build/test_*/test/**/*log build/test_*/test/**/*.txt build/test/*.mdmp build/test/*.dmp build/test/**/*.mdmp build/test/**/*.dmp build/test_*/test/**/*.mdmp build/test_*/test/**/*.dmp"
+          path: "build/test*/Test.xml build/test/**/report* build/test/**/error*.txt build/test/**/*.log build/test/**/*log build/test/**/*.txt build/test/*.mdmp build/test/*.dmp build/test/**/*.mdmp build/test/**/*.dmp"
 
   report_windows:
     name: Windows tests summary and report (${{ inputs.suite_name || format('{0}_{1}', inputs.CTEST_START, inputs.CTEST_END) }})

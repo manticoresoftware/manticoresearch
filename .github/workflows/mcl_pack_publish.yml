@@ -24,7 +24,7 @@ jobs:
       version_full: ${{ steps.package_version.outputs.version_full }}
       version_rpm: ${{ steps.package_version.outputs.version_rpm }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.source_ref != '' && inputs.source_ref || github.sha }}
           fetch-depth: 0

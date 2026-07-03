@@ -27,17 +27,17 @@ jobs:
         cache-hit: ${{ steps.check-cache.outputs.cache-hit }}
     steps:
         - name: 📥 Checkout repo
-          uses: actions/checkout@v3        
+          uses: actions/checkout@v5
         - name: 💾 Attempt to restore build cache
           id: check-cache
-          uses: actions/cache@v4
+          uses: actions/cache@v5
           with:
             path: build
             key: build-linux-fuzz-${{ github.sha }}
 #            key: build-linux-fuzz
         - name: 📦 Upload restored build (if cache was found)
           if: steps.check-cache.outputs.cache-hit == 'true'
-          uses: actions/upload-artifact@v4
+          uses: actions/upload-artifact@v6
           with:
               name: fuzz-build
               path: build
@@ -66,12 +66,12 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
         - name: 📥 Download built artifact
-          uses: actions/download-artifact@v4
+          uses: actions/download-artifact@v7
           with:
               name: fuzz-build
               path: build
         - name: 💾 Save build to cache
-          uses: actions/cache/save@v4
+          uses: actions/cache/save@v5
           with:
               path: build
               key: build-linux-fuzz-${{ github.sha }}
@@ -91,18 +91,18 @@ jobs:
       image: ubuntu:jammy
     steps:
       - name: 📥 Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           set-safe-directory: true
       - name: 📦 Download built artifact with retry logic
-        uses: manticoresoftware/download_artifact_with_retries@v3
+        uses: manticoresoftware/download_artifact_with_retries@v5
         continue-on-error: true
         with:
           name: fuzz-build
           path: .
       - name: Restore cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: build/src/fuzzer/corpus
           key: fuzz-corpus-cache-to-delete
@@ -134,13 +134,13 @@ jobs:
             exit $qfuzzer_exit_code
       - name: Save cache
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: build/src/fuzzer/corpus
           key: fuzz-corpus-${{ steps.run.outputs.corpus_size || 'unknown' }}
       - name: 📦 Upload fuzzer directory
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: fuzzer-dir
           path: |
@@ -152,7 +152,7 @@ jobs:
             !build/src/fuzzer/CTest*
       - name: 📦 Upload updated fuzzer corpus
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: fuzzer-corpus
           path: build/src/fuzzer/corpus
@@ -169,7 +169,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: 📥 Download fuzzer-corpus artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: fuzzer-corpus
           path: corpus

@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
@@ -95,7 +95,7 @@ jobs:
           fi
       - name: Upload artifact
         if: steps.docs-artifact.outputs.exists == 'true'
-        uses: manticoresoftware/upload_artifact_with_retries@v4
+        uses: manticoresoftware/upload_artifact_with_retries@v5
         with:
           name: Docs error artifact
           path: $DOCS_ERRORS_DIR

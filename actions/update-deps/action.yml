@@ -19,7 +19,7 @@ runs:
   using: "composite"
   steps:
     - name: Checkout the calling repo
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       env:
         GH_REPOSITORY_REF: ${{ github.head_ref || github.ref }}
       with:
@@ -29,7 +29,7 @@ runs:
         path: repository
 
     - name: Checkout manticoreseach
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       env:
         GH_ACTION_REPOSITORY: ${{ github.action_repository }}
         GH_ACTION_REF: ${{ github.action_ref }}

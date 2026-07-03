@@ -105,7 +105,7 @@ jobs:
         RPM_PACKAGE_VERSION: ${{ inputs.rpm_package_version }}
     steps:
       - name: Checkout daemon repository with MCL submodule
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.source_ref != '' && inputs.source_ref || github.sha }}
           fetch-depth: 0
@@ -185,7 +185,7 @@ jobs:
 
       - name: Download embeddings lib
         if: ${{ inputs.embeddings_artifact != '' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         continue-on-error: true
         with:
           name: ${{ inputs.embeddings_artifact }}
@@ -222,7 +222,7 @@ jobs:
           fi
 
       - name: Check out main cache before building
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: cache
           enableCrossOsArchive: true
@@ -231,7 +231,7 @@ jobs:
             ${{ inputs.cache_key }}_master
 
       - name: Check out deps cache before building
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: build/_deps/cache
           enableCrossOsArchive: true
@@ -295,7 +295,7 @@ jobs:
 
       - name: Save MCL package to exact-SHA cache
         if: success() && inputs.package_cache_key != ''
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .mcl-package-cache
           key: ${{ inputs.package_cache_key }}
@@ -314,7 +314,7 @@ jobs:
 
       - name: Upload build artifacts
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ inputs.artifact_name }}
           path: ${{ steps.artifact_paths.outputs.value }}

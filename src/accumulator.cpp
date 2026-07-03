@@ -13,6 +13,7 @@
 #include "accumulator.h"
 #include "sphinxrt.h"
 #include "columnarmisc.h"
+#include "coroutine.h"
 #include "memio.h"
 #include "tracer.h"
 
@@ -281,7 +282,22 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 
 	std::string sErrorSTL;
 	std::vector<std::vector<float>> dEmbeddingsForAttrTmp;
-	if ( uNumSkipped!=m_uAccumDocs && !tAttrWithModel.m_pModel->Convert ( dTexts, uNumSkipped ? dEmbeddingsForAttrTmp : dEmbeddingsForAttr, sErrorSTL, GetEmbeddingsThreadsToUse() ) )
+	bool bConverted = true;
+	if ( uNumSkipped!=m_uAccumDocs )
+	{
+		auto & dEmbeddingsTarget = uNumSkipped ? dEmbeddingsForAttrTmp : dEmbeddingsForAttr;
+		auto fnConvert = [&]
+		{
+			return tAttrWithModel.m_pModel->Convert ( dTexts, dEmbeddingsTarget, sErrorSTL, GetEmbeddingsThreadsToUse() );
+		};
+
+		if ( Threads::IsInsideCoroutine() )
+			Threads::Coro::Continue ( Threads::GetMaxCoroStackSize(), [&] { bConverted = fnConvert(); } );
+		else
+			bConverted = fnConvert();
+	}
+
+	if ( !bConverted )
 	{
 		sError = sErrorSTL.c_str();
 		return false;

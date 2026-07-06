@@ -1711,7 +1711,9 @@ bool QueueCreator_c::CanRescoreKNN() const
 		return false;
 
 	const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
-	return pAttr && pAttr->IsIndexedKNN() && pAttr->m_tKNN.m_iDims>0;
+
+	// rescore reads the stored vectors directly; a columnar *expression* vector has no stored data to read, so skip rescore
+	return pAttr && pAttr->IsIndexedKNN() && pAttr->m_tKNN.m_iDims>0 && !pAttr->IsColumnarExpr();
 }
 
 
@@ -1720,12 +1722,8 @@ bool QueueCreator_c::AddKNNRescoreColumn()
 	if ( !CanRescoreKNN() )
 		return true;
 
-	const auto & tKNN = m_tQuery.SingleKnnSettings();
-	const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
-
 	CSphColumnInfo tKNNDistRescored ( GetKnnDistRescoreAttrName(), SPH_ATTR_FLOAT );
-	tKNNDistRescored.m_eStage = SPH_EVAL_FINAL;
-	tKNNDistRescored.m_pExpr = CreateExpr_KNNDistRescore ( tKNN.m_dVec, *pAttr );
+	tKNNDistRescored.m_eStage = SPH_EVAL_SORTER;
 
 	m_pSorterSchema->AddAttr ( tKNNDistRescored, true );
 	m_hQueryColumns.Add ( tKNNDistRescored.m_sName );

@@ -8,6 +8,8 @@
 curl https://manticoresearch.com | sh
 ```
 
+Another test.
+
 If you are looking for separate packages, please find them [here](https://manticoresearch.com/install/#separate-packages).
 
 For more details on the installation on RPM-based linuxes, see [here](../Installation/RHEL_and_Centos.md).

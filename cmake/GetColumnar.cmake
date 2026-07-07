@@ -1,35 +1,13 @@
 include ( update_bundle )
 
-# How to perform version update (check-list):
-#
-# Say, you want to upgrade secondary headers to v.13
-# --------- On columnar side ------------
-# 1. Change value of constant LIB_VERSION in secondary/secondary.h to 13
-# 2. Commit and publish the changes.
-# 3. Wait until changes are mirrored to github. Ensure it is tagged as 'c16-s13' (mirroring script should do it)
-# 4. If the tag wasn't appear, push it manually, as:
-#	git tag c16-s13
-#	git push origin c16-s13 # here you must write your alias of github (NOT gitlab) repo instead of 'origin'
-# --------- On manticore side ------------
-# 1. Fix the numbers NEED_COLUMNAR_API and NEED_SECONDARY_API according to your upgrade
-# 2. Reconfigure build.
-#
-# Notice, with tagged revision in columnar repo you don't need to touch `columnar_src.txt` file anymore, however you
-# still can do it for any specific requirements.
+# MCL source is provided only through the daemon git submodule. Packaging builds
+# use only API targets; local non-packaging builds can also build runtime modules
+# from the submodule for local testing/debugging.
 
 # Versions of API headers we are need to build with.
 set ( NEED_COLUMNAR_API 27 )
 set ( NEED_SECONDARY_API 20 )
-set ( NEED_KNN_API 14 )
-
-# Note: we don't build, neither link with columnar. Only thing we expect to get is a few interface headers, aka 'columnar_api'.
-# Actual usage of columnar is solely defined by availability of the module named below. That module is build (or not built)
-# separately outside the manticore.
-
-# In order to debug columnar, you should, namely, debug columnar. Open columnar's source, provide MANTICORE_LOCATOR there and configure.
-# It will be 'inverted' project with columnar as main code and manticore as helper aside.
-# If you provide locator as 'SOURCE_DIR /path/to/manticore/sources', they will be used inplace, without any copying, and will be available
-# to edit in IDE.
+set ( NEED_KNN_API 16 )
 
 if (WIN32)
 	set ( EXTENSION dll )
@@ -53,75 +31,107 @@ macro ( restore_paths )
 endmacro ()
 
 macro ( return_if_all_api_found )
-	if (TARGET columnar::columnar_api)
-		set ( _HAS_COLUMNAR ON )
-	endif ()
-
-	if (TARGET columnar::secondary_api)
-		set ( _HAS_SECONDARY ON )
-	endif ()
-
-	if (TARGET columnar::knn_api)
-		set ( _HAS_KNN ON )
-	endif ()
-
-	if (_HAS_COLUMNAR AND _HAS_SECONDARY AND _HAS_KNN)
+	if (TARGET columnar::columnar_api AND TARGET columnar::secondary_api AND TARGET columnar::knn_api)
 		include ( FeatureSummary )
 		set_package_properties ( columnar PROPERTIES TYPE RUNTIME
-				DESCRIPTION "a column-oriented storage library with a low memory footprint, designed to handle large volumes of data, a secondary index library, and a k-nearest neighbor search library"
-				URL "https://github.com/manticoresoftware/columnar/"
-				)
-		trace ( columnar::columnar_api )
-		trace ( columnar::secondary_api )
-		trace ( columnar::knn_api )
-
-		# restore prev find paths to avoid polishing global scope
+			DESCRIPTION "columnar, secondary, knn, and embeddings APIs from MCL"
+			URL "https://github.com/manticoresoftware/columnar/"
+		)
 		restore_paths()
 		return ()
 	endif ()
 endmacro ()
 
-# Columnar might be already provided by inverted inclusion - i.e. when sources of manticore included as testing tool into columnar's sources
+function ( import_mcl_runtime_target target file )
+	if ( NOT EXISTS "${file}" )
+		message ( FATAL_ERROR "MCL runtime artifact for ${target} is missing: ${file}" )
+	endif ()
+
+	add_library ( ${target} MODULE IMPORTED GLOBAL )
+	set_target_properties ( ${target} PROPERTIES
+		IMPORTED_LOCATION "${file}"
+		IMPORTED_LOCATION_DEBUG "${file}"
+		IMPORTED_LOCATION_RELEASE "${file}"
+		IMPORTED_LOCATION_RELWITHDEBINFO "${file}"
+		IMPORTED_LOCATION_MINSIZEREL "${file}"
+	)
+endfunction ()
+
 if (TARGET columnar::columnar_api)
-	message ( STATUS "Columnar is already defined, skip." )
+	message ( STATUS "Columnar API targets already defined, skip." )
 	return ()
 endif ()
 
-# expected version
-set ( NEED_API_NUMERIC_VERSION "${NEED_COLUMNAR_API}.${NEED_SECONDARY_API}.${NEED_KNN_API}" )
-set ( AUTO_TAG "c${NEED_COLUMNAR_API}-s${NEED_SECONDARY_API}-k${NEED_KNN_API}" )
-
-# set current path to modules in local usr
-get_build ( COLUMNAR_BUILD "mcl/${AUTO_TAG}" )
-
-# store prev find paths to avoid polishing global scope
 backup_paths()
 
-prepend_prefix ( "${COLUMNAR_BUILD}" )
-
-find_package ( columnar "${NEED_API_NUMERIC_VERSION}" EXACT COMPONENTS columnar_api secondary_api knn_api CONFIG )
-return_if_all_api_found ()
-
-# Not found. get columnar src, extract columnar_api.
-if (DEFINED ENV{COLUMNAR_LOCATOR} AND NOT "$ENV{COLUMNAR_LOCATOR}" STREQUAL "")
-	set ( COLUMNAR_LOCATOR $ENV{COLUMNAR_LOCATOR} )
-	message(STATUS "Using COLUMNAR_LOCATOR from environment variable: ${COLUMNAR_LOCATOR}")
-elseif (EXISTS "${MANTICORE_SOURCE_DIR}/local_columnar_src.txt")
-	file ( STRINGS "${MANTICORE_SOURCE_DIR}/local_columnar_src.txt" COLUMNAR_LOCATOR LIMIT_COUNT 1 )
-	message(STATUS "Using COLUMNAR_LOCATOR from local_columnar_src.txt: ${COLUMNAR_LOCATOR}")
-else ()
-	file ( STRINGS "${MANTICORE_SOURCE_DIR}/columnar_src.txt" COLUMNAR_LOCATOR LIMIT_COUNT 1)
-	message(STATUS "Using COLUMNAR_LOCATOR from columnar_src.txt: ${COLUMNAR_LOCATOR}")
+set ( MCL_SUBMODULE_DIR "${MANTICORE_SOURCE_DIR}/mcl" )
+if ( NOT EXISTS "${MCL_SUBMODULE_DIR}/CMakeLists.txt" )
+	message ( FATAL_ERROR "MCL submodule is required at ${MCL_SUBMODULE_DIR}. Initialize it with: git submodule update --init --recursive mcl" )
 endif ()
 
-string ( CONFIGURE "${COLUMNAR_LOCATOR}" COLUMNAR_LOCATOR ) # that is to expand possible inside variables
+set ( MCL_PACKAGING_BUILD OFF )
+if ( PACK OR DISTR_BUILD )
+	set ( MCL_PACKAGING_BUILD ON )
+endif ()
 
-configure_file ( ${MANTICORE_SOURCE_DIR}/cmake/columnar-imported.cmake.in columnar-build/CMakeLists.txt )
-execute_process ( COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/columnar-build )
-execute_process ( COMMAND ${CMAKE_COMMAND} --build . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/columnar-build )
+set ( MCL_LOCAL_RUNTIME_DEFAULT OFF )
+if ( NOT MCL_PACKAGING_BUILD )
+	set ( MCL_LOCAL_RUNTIME_DEFAULT ON )
+endif ()
 
-find_package ( columnar ${NEED_API_NUMERIC_VERSION} EXACT REQUIRED COMPONENTS columnar_api secondary_api knn_api CONFIG )
+option ( MCL_LOCAL_RUNTIME "Build MCL runtime modules from the local submodule for non-packaging developer builds" ${MCL_LOCAL_RUNTIME_DEFAULT} )
+set ( MCL_RUNTIME_ARTIFACT_DIR "" CACHE PATH "Directory with prebuilt MCL runtime modules for CI tests" )
+
+if ( MCL_LOCAL_RUNTIME AND MCL_PACKAGING_BUILD )
+	message ( STATUS "MCL_LOCAL_RUNTIME is disabled for packaging builds; using MCL API targets only" )
+	set ( MCL_LOCAL_RUNTIME OFF )
+endif ()
+
+if ( MCL_RUNTIME_ARTIFACT_DIR )
+	message ( STATUS "Using MCL API from git submodule with runtime artifacts from: ${MCL_RUNTIME_ARTIFACT_DIR}" )
+	set ( API_ONLY ON )
+	add_subdirectory ( "${MCL_SUBMODULE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/mcl-api" EXCLUDE_FROM_ALL )
+	unset ( API_ONLY )
+
+	get_filename_component ( MCL_RUNTIME_ARTIFACT_DIR "${MCL_RUNTIME_ARTIFACT_DIR}" ABSOLUTE )
+	set ( MCL_RUNTIME_COLUMNAR "${MCL_RUNTIME_ARTIFACT_DIR}/${LIB_MANTICORE_COLUMNAR}" )
+	set ( MCL_RUNTIME_SECONDARY "${MCL_RUNTIME_ARTIFACT_DIR}/${LIB_MANTICORE_SECONDARY}" )
+	set ( MCL_RUNTIME_KNN "${MCL_RUNTIME_ARTIFACT_DIR}/${LIB_MANTICORE_KNN}" )
+	set ( MCL_RUNTIME_EMBEDDINGS "${MCL_RUNTIME_ARTIFACT_DIR}/${LIB_MANTICORE_KNN_EMBEDDINGS}" )
+
+	import_mcl_runtime_target ( columnar_lib "${MCL_RUNTIME_COLUMNAR}" )
+	import_mcl_runtime_target ( secondary_index "${MCL_RUNTIME_SECONDARY}" )
+	import_mcl_runtime_target ( knn_lib "${MCL_RUNTIME_KNN}" )
+	import_mcl_runtime_target ( embeddings "${MCL_RUNTIME_EMBEDDINGS}" )
+	set ( MANTICORE_KNN_EMBEDDINGS_LIB "${MCL_RUNTIME_EMBEDDINGS}" CACHE INTERNAL "Path to manticoresearch text embeddings library" FORCE )
+
+	function ( special_ubertest_addtest testN tst_name REQUIRES )
+		if (NOT NON-RT IN_LIST REQUIRES AND NOT NON-COLUMNAR IN_LIST REQUIRES)
+			add_ubertest ( "${testN}" "${tst_name}" "${REQUIRES}" "col" "COLUMNAR" "--rt --ignore-weights --columnar" )
+		elseif (NOT NON-SECONDARY IN_LIST REQUIRES)
+			add_ubertest ( "${testN}" "${tst_name}" "${REQUIRES}" "secondary" "SECONDARY" "" )
+		endif ()
+	endfunction ()
+
+	function ( special_ubertest_properties test )
+		set_property ( TEST "${test}" APPEND PROPERTY ENVIRONMENT "LIB_MANTICORE_COLUMNAR=$<TARGET_FILE:columnar_lib>" )
+		set_property ( TEST "${test}" APPEND PROPERTY ENVIRONMENT "LIB_MANTICORE_SECONDARY=$<TARGET_FILE:secondary_index>" )
+		set_property ( TEST "${test}" APPEND PROPERTY ENVIRONMENT "LIB_MANTICORE_KNN=$<TARGET_FILE:knn_lib>" )
+		set_property ( TEST "${test}" APPEND PROPERTY ENVIRONMENT "LIB_MANTICORE_KNN_EMBEDDINGS=${MANTICORE_KNN_EMBEDDINGS_LIB}" )
+	endfunction ()
+elseif ( MCL_LOCAL_RUNTIME )
+	message ( STATUS "Using MCL from git submodule with local runtime build: ${MCL_SUBMODULE_DIR}" )
+	if ( NOT DEFINED BUILD_EMBEDDINGS_LOCALLY AND NOT MANTICORE_KNN_EMBEDDINGS_LIB )
+		set ( BUILD_EMBEDDINGS_LOCALLY ON CACHE BOOL "Build MCL embeddings library locally" )
+	endif ()
+	add_subdirectory ( "${MCL_SUBMODULE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/mcl-runtime" )
+else ()
+	message ( STATUS "Using MCL API from git submodule: ${MCL_SUBMODULE_DIR}" )
+	set ( API_ONLY ON )
+	add_subdirectory ( "${MCL_SUBMODULE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/mcl-api" EXCLUDE_FROM_ALL )
+	unset ( API_ONLY )
+endif ()
+
 return_if_all_api_found ()
 
-# restore prev find paths to avoid polishing global scope
-restore_paths()
+message ( FATAL_ERROR "MCL submodule was found at ${MCL_SUBMODULE_DIR}, but API targets were not exported" )

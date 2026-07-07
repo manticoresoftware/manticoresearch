@@ -39,6 +39,8 @@
     * [≫ 创建分布式表](Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md)
         * [• 创建本地分布式表](Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)
         * [• 远程表](Creating_a_table/Creating_a_distributed_table/Remote_tables.md)
+    * [⪢ 创建分片表](Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md)
+        * [• 表分片：当前限制](Creating_a_table/Creating_a_sharded_table/Table_sharding_current_limitations.md)
 * [• 列出表](Listing_tables.md)
 * [• 删除表](Deleting_a_table.md)
 * [• 清空表](Emptying_a_table.md)
@@ -118,6 +120,7 @@
     * [• 基于成本的优化器](Searching/Cost_based_optimizer.md)
     * [• K 最近邻向量搜索](Searching/KNN.md)
     * [• 混合搜索](Searching/Hybrid_search.md)
+    * [• 对话式搜索](Searching/Conversational_search.md)
 * [• 更新表结构和设置](Updating_table_schema_and_settings.md)
     * [• 在 RT 模式下更新表结构](Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode)
     * [• 在 RT 模式下更新表 FT 设置](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode)
@@ -146,6 +149,7 @@
     * [• 刷新主机名](Securing_and_compacting_a_table/Flushing_hostnames.md)
 * [≫ 安全]
     * [• SSL](Security/SSL.md)
+    * [• 身份验证与授权](Security/Authentication_and_authorization.md)
     * [• 只读](Security/Read_only.md)
 * [≫ 日志]
     * [• 查询日志](Logging/Query_logging.md)
@@ -175,7 +179,7 @@
     * [• 特殊后缀](Server_settings/Special_suffixes.md)
     * [• 脚本配置](Server_settings/Scripted_configuration.md)
     * [• 注释](Server_settings/Comments.md)
-    * [• 表和源声明的继承](Server_settings/Inheritance_of_index_and_source_declarations.md)
+    * [• 表和数据源声明的继承](Server_settings/Inheritance_of_table_and_source_declarations.md)
     * [• 在线设置变量](Server_settings/Setting_variables_online.md)
 * [≫ 集成]
     * [Logstash](Integration/Logstash.md)
@@ -184,6 +188,7 @@
     * [Vector.dev](Integration/Vectordev.md)
     * [Grafana](Integration/Grafana.md)
     * [Kibana](Integration/Kibana.md)
+    * [Opensearch Dashboards](Integration/Opensearch_Dashboards.md)
     * [Kafka](Integration/Kafka.md)
     * [DBeaver](Integration/DBeaver.md)
     * [Apache Superset](Integration/Apache_Superset.md)
@@ -211,4 +216,3 @@
 * [📖 参考资料](References.md)
     * [• 旧版本](References.md#Documentation-for-old-Manticore-versions)
 <!-- proofread -->
-

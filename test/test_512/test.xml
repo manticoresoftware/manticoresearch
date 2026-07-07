@@ -76,13 +76,13 @@ SELECT count(*) FROM facet_opt_review WHERE brand_id=7 AND color_id=1 LIMIT 0 OP
   }
 }</query>
 
-<!-- Explicit per-agg strict via filter_mode is new syntax; output should match strict, but optimization may differ. -->
+<!-- Explicit per-agg strict is new syntax; output should match strict, but optimization may differ. -->
 <query endpoint="search">{
   "table": "facet_opt_review",
   "limit": 0,
   "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } } ] } },
   "aggs": {
-    "color_single_mode_strict": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "filter_mode": "strict" }
+    "color_single_mode_strict": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "mode": "strict" }
   }
 }</query>
 

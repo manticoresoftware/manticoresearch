@@ -45,7 +45,7 @@ jobs:
     outputs:
       matrix: ${{ steps.build.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.ref }}
@@ -54,15 +54,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY2'
+          python3 - <<'PY'
           import json
           import os
           import pathlib
 
-          has_api_keys = any(
-              os.environ.get(name)
-              for name in ("OPENAI_API_KEY", "VOYAGE_API_KEY", "JINA_API_KEY")
-          )
+          openai_key = os.environ.get("OPENAI_API_KEY", "")
+          voyage_key = os.environ.get("VOYAGE_API_KEY", "")
+          jina_key = os.environ.get("JINA_API_KEY", "")
+          have_remote_embedding_keys = all([openai_key, voyage_key, jina_key])
 
           roots = [
               "test/clt-tests/buddy",
@@ -72,6 +72,7 @@ jobs:
               "test/clt-tests/data-manipulation",
               "test/clt-tests/expected-errors",
               "test/clt-tests/fulltext-search",
+              "test/clt-tests/mcl",
               "test/clt-tests/http-interface",
               "test/clt-tests/indexer",
               "test/clt-tests/join",
@@ -92,17 +93,15 @@ jobs:
               "test/clt-tests/vector-knn",
           ]
 
-          if has_api_keys:
-              roots.insert(7, "test/clt-tests/mcl")
-          else:
-              print("Skipping auto-embeddings tests - no API keys available")
-
           tests = []
           for root in roots:
               root_path = pathlib.Path(root)
               if not root_path.exists():
                   continue
               for path in sorted(root_path.glob("*.rec")):
+                  content = path.read_text(encoding="utf-8")
+                  if not have_remote_embedding_keys and "API_KEY='" in content:
+                      continue
                   # clt appends "*.rec" to the prefix; strip the suffix to avoid ".rec*.rec"
                   tests.append(str(path.with_suffix("")))
 
@@ -127,7 +126,7 @@ jobs:
           output_path = os.environ["GITHUB_OUTPUT"]
           with open(output_path, "a", encoding="utf-8") as fh:
               fh.write(f"matrix={json.dumps(matrix)}\n")
-          PY2
+          PY
 
   clt:
     name: CLT
@@ -142,8 +141,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
+
     steps:
-      - uses: manticoresoftware/clt@0.7.8
+      # Reuse the embedding-model cache from a previous run if one exists. It is bind-mounted
+      # at /var/lib/manticore/.cache, where Manticore caches downloaded HuggingFace models.
+      # After the tests, whatever the chunk downloaded is saved for the next run.
+      # NOTE: this makes .cache a mountpoint, so tests must never `rm -rf /var/lib/manticore`
+      # itself — wipe its contents instead (`rm -rf /var/lib/manticore/*` leaves .cache alone).
+      - id: model_cache
+        name: Restore model cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/clt-model-cache
+          key: clt-models-v1-chunk-${{ matrix.chunk.id }}
+
+      - name: Ensure model cache dir
+        shell: bash
+        run: mkdir -p "${{ runner.temp }}/clt-model-cache" && chmod 777 "${{ runner.temp }}/clt-model-cache"
+
+      - uses: manticoresoftware/clt@0.7.9
         with:
           artifact: ${{ inputs.artifact_name }}
           image: ${{ inputs.docker_image }}
@@ -151,5 +167,20 @@ jobs:
           ref: ${{ inputs.ref }}
           test_prefix: ${{ matrix.chunk.test_prefix }}
           comment_mode: failures
-          run_args: "-e OPENAI_API_KEY -e VOYAGE_API_KEY -e JINA_API_KEY"
+          run_args: "-e OPENAI_API_KEY -e VOYAGE_API_KEY -e JINA_API_KEY -v ${{ runner.temp }}/clt-model-cache:/var/lib/manticore/.cache"
           ui_host: "https://clt.manticoresearch.com"
+
+      # Containers write model blobs as root with mode 600; make them readable so the
+      # runner user can pack them into the cache.
+      - name: Fix model cache permissions
+        if: ${{ always() && steps.model_cache.outputs.cache-hit != 'true' }}
+        shell: bash
+        run: sudo chmod -R a+rX "${{ runner.temp }}/clt-model-cache" || true
+
+      - name: Save model cache
+        if: ${{ always() && steps.model_cache.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/clt-model-cache
+          key: clt-models-v1-chunk-${{ matrix.chunk.id }}

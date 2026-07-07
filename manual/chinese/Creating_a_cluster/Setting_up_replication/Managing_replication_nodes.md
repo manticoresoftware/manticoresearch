@@ -104,6 +104,13 @@ utils_api.sql("ALTER CLUSTER posts UPDATE nodes", Some(true)).await;
 
 <!-- end -->
 
+如果启用了[身份验证和授权](../../Security/Authentication_and_authorization.md)，`ALTER CLUSTER ... UPDATE nodes`、`ALTER CLUSTER ... ADD` 和 `ALTER CLUSTER ... DROP` 会使用已存储的集群用户。要更改已存储的集群用户，请为新用户授予 `replication` 权限并运行：
+
+```sql
+ALTER CLUSTER posts UPDATE user 'repl_user'
+```
+
+新的已存储用户必须在后续参与集群操作的节点上配置匹配的身份验证数据。如果已存储用户缺失、身份验证数据不同，或者失去了 `replication` 权限，这些操作都会失败。
 
 例如，当集群最初建立时，用于重新加入集群的节点列表是 `10.10.0.1:9312,10.10.1.1:9312`。此后，其他节点加入了集群，现在活动节点是 `10.10.0.1:9312,10.10.1.1:9312,10.15.0.1:9312,10.15.0.3:9312`。然而，用于重新加入集群的节点列表没有更新。
 
@@ -131,4 +138,6 @@ EXIT CLUSTER posts
 当您只想脱离当前节点时，请使用 `EXIT CLUSTER`。当您想从每个节点移除集群时，请使用 `DELETE CLUSTER`。
 
 `EXIT CLUSTER` 仅允许在主集群中的健康本地节点上执行。如果命令返回警告，本地脱离已成功，但可能仍需要后续操作。在这种情况下，在任何存活节点上运行 `ALTER CLUSTER <cluster_name> UPDATE nodes` 以完成刷新剩余集群元数据的操作。
+
+如果幸存的一侧在执行 `EXIT CLUSTER` 后变成了一个干净的单节点集群，它仍然是一个复制集群。干净关闭后，这个幸存节点可以按正常方式启动，并且应当返回为 `primary` / `synced`；在这种仅包含自身的情况下，你不需要使用 `--new-cluster`。
 <!-- proofread -->

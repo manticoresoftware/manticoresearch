@@ -39,6 +39,8 @@
     * [≫ Создание распределенной таблицы](Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md)
         * [• Создание локальной распределенной таблицы](Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)
         * [• Удаленные таблицы](Creating_a_table/Creating_a_distributed_table/Remote_tables.md)
+    * [⪢ Создание шардинговой таблицы](Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md)
+        * [• Шардирование таблиц: текущие ограничения](Creating_a_table/Creating_a_sharded_table/Table_sharding_current_limitations.md)
 * [• Список таблиц](Listing_tables.md)
 * [• Удаление таблицы](Deleting_a_table.md)
 * [• Очистка таблицы](Emptying_a_table.md)
@@ -118,6 +120,7 @@
     * [• Оптимизатор на основе стоимости](Searching/Cost_based_optimizer.md)
     * [• Векторный поиск K-ближайших соседей](Searching/KNN.md)
     * [• Гибридный поиск](Searching/Hybrid_search.md)
+    * [• Разговорный поиск](Searching/Conversational_search.md)
 * [• Обновление схемы и настроек таблицы](Updating_table_schema_and_settings.md)
     * [• Обновление схемы таблицы в режиме RT](Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode)
     * [• Обновление FT-настроек таблицы в режиме RT](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode)
@@ -146,6 +149,7 @@
     * [• Сброс имен хостов](Securing_and_compacting_a_table/Flushing_hostnames.md)
 * [≫ Безопасность]
     * [• SSL](Security/SSL.md)
+    * [• Аутентификация и авторизация](Security/Authentication_and_authorization.md)
     * [• Только для чтения](Security/Read_only.md)
 * [≫ Логирование]
     * [• Логирование запросов](Logging/Query_logging.md)
@@ -175,7 +179,7 @@
     * [• Специальные суффиксы](Server_settings/Special_suffixes.md)
     * [• Скриптовая конфигурация](Server_settings/Scripted_configuration.md)
     * [• Комментарии](Server_settings/Comments.md)
-    * [• Наследование объявлений таблиц и источников](Server_settings/Inheritance_of_index_and_source_declarations.md)
+    * [• Наследование объявлений таблиц и источников](Server_settings/Inheritance_of_table_and_source_declarations.md)
     * [• Установка переменных онлайн](Server_settings/Setting_variables_online.md)
 * [≫ Интеграция]
     * [Logstash](Integration/Logstash.md)
@@ -184,6 +188,7 @@
     * [Vector.dev](Integration/Vectordev.md)
     * [Grafana](Integration/Grafana.md)
     * [Kibana](Integration/Kibana.md)
+    * [Opensearch Dashboards](Integration/Opensearch_Dashboards.md)
     * [Kafka](Integration/Kafka.md)
     * [DBeaver](Integration/DBeaver.md)
     * [Apache Superset](Integration/Apache_Superset.md)
@@ -211,4 +216,3 @@
 * [📖 Ссылки](References.md)
     * [• Предыдущие версии](References.md#Documentation-for-old-Manticore-versions)
 <!-- proofread -->
-

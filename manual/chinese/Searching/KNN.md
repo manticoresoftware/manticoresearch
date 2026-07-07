@@ -103,7 +103,8 @@ table test_vec {
 
 | 模型类型 | 示例 | 需要 API 密钥 | 说明 |
 |------------|---------|-----------------|-------|
-| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | 否 | 本地 BERT 基础模型，自动下载 |
+| **ONNX（推荐）** | `Xenova/all-MiniLM-L6-v2` | 否 | 来自任何提供 `.onnx` 文件的 Hugging Face 仓库的本地模型。运行在 Manticore 高速的 ONNX Runtime 后端上。浏览列表：[feature-extraction ONNX 模型](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm)。 |
+| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | 否 | 基于 BERT 的本地模型，会自动下载。仍然支持 - 在可用时优先使用上面的 ONNX。 |
 | **Qwen** | `Qwen/Qwen3-Embedding-0.6B` | 否 | 本地 Qwen 系列模型 |
 | **Llama** | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | 否 | 本地 Llama 系列模型 |
 | **Mistral** | `Locutusque/TinyMistral-248M-v2` | 否 | 本地 Mistral 系列模型 |
@@ -125,9 +126,19 @@ table test_vec {
 
 <!-- request SQL -->
 
-使用 sentence-transformers（无需 API 密钥）
+使用本地 [ONNX 模型](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) - 推荐（无需 API key）
 ```sql
 CREATE TABLE products (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+使用 sentence-transformers（无需 API key；走 Candle 路径 - 在可用时优先使用上面的 ONNX）
+```sql
+CREATE TABLE products_st (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
@@ -182,7 +193,7 @@ CREATE TABLE products_all (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM=''
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM=''
 );
 ```
 
@@ -197,7 +208,7 @@ table products {
     rt_field = title
     rt_field = description
     rt_attr_float_vector = embedding_vector
-    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":"title"}]}
 }
 ```
 
@@ -221,7 +232,7 @@ table products_all {
     rt_field = title
     rt_field = description
     rt_attr_float_vector = embedding_vector
-    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":""}]}
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":""}]}
 }
 ```
 
@@ -239,9 +250,9 @@ table products_all {
 以下示例的数据：
 
 DROP TABLE IF EXISTS products;
-CREATE TABLE products(title text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title');
+CREATE TABLE products(title text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='Xenova/all-MiniLM-L6-v2' from='title');
 DROP TABLE IF EXISTS products_openai;
-CREATE TABLE products_openai(title text, description text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title,description');
+CREATE TABLE products_openai(title text, description text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='Xenova/all-MiniLM-L6-v2' from='title,description');
 -->
 
 <!-- example inserting_embeddings -->
@@ -295,7 +306,7 @@ INSERT INTO products (title, embedding_vector) VALUES
 POST /sql?mode=raw -d "INSERT INTO products (title) VALUES ('machine learning artificial intelligence'),('banana fruit sweet yellow')"
 ```
 
-插入多个字段 - 如果 FROM='title,description'，两者都会用于生成嵌入
+插入多个字段 - 如果 `FROM='title,description'`，两者都会用于嵌入
 ```JSON
 POST /sql?mode=raw -d "INSERT INTO products_openai (title, description) VALUES ('smartphone', 'latest mobile device with advanced features'), ('laptop', 'portable computer for work and gaming')"
 ```
@@ -494,6 +505,8 @@ POST /insert
 * `rescore`：启用 KNN 重新评分（默认启用）。在 SQL 中设为 `0` 或在 JSON 中设为 `false` 可禁用重新评分。KNN 搜索在使用量化向量完成后（可能伴随过采样），会使用原始（全精度）向量重新计算距离并重新排序结果，以提高排序准确性。
 * `oversampling`：设置一个因子（浮点值），在执行 KNN 搜索时将 `k` 乘以该因子，从而使用量化向量检索出比所需更多的候选结果。默认应用 `oversampling=3.0`。如果启用了重新评分，这些候选结果之后可以重新评估。过采样也适用于非量化向量。由于它会增大 `k`，进而影响 HNSW 索引的工作方式，因此可能会使结果精度略有变化。
 * `early_termination`：启用或禁用 HNSW 图遍历期间的自适应提前终止。默认启用。设为 SQL 中的 `0` 或 JSON 中的 `false` 可禁用。详情参见[提前终止](../Searching/KNN.md#Early-termination)。
+
+当提供的是文本查询时（因此 Manticore 会在搜索前对字符串进行嵌入），可以在 SQL 中通过 `OPTION embeddings_threads = N` 按查询覆盖嵌入库使用的线程数。该值只会限制此查询的嵌入调用，覆盖全局 [embeddings_threads](../Server_settings/Searchd.md#embeddings_threads) 设置；`0` 表示不设上限。当查询以向量数组形式提供时，此选项不起作用。
 
 文档总是按其与搜索向量的距离排序。你指定的任何附加排序条件都会在这个主排序条件之后应用。若要获取距离，有一个内置函数 [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29)。
 

@@ -18,15 +18,15 @@ searchd
 </config>
 
 <queries>
-<sphinxql>create table facet_sql_review ( title text, brand_id integer, color_id integer, color_name string, size_id integer, size_name string, sku string )</sphinxql>
-<sphinxql>insert into facet_sql_review ( id, title, brand_id, color_id, color_name, size_id, size_name, sku ) values
-(1,'p1',7,1,'red',10,'small','sku1'),
-(2,'p2',7,1,'red',20,'large','sku2'),
-(3,'p3',7,2,'blue',10,'small','sku3'),
-(4,'p4',7,3,'green',30,'xlarge','sku4'),
-(5,'p5',8,1,'red',10,'small','sku5'),
-(6,'p6',8,4,'black',20,'large','sku6'),
-(7,'p7',9,5,'white',10,'small','sku7')</sphinxql>
+<sphinxql>create table facet_sql_review ( title text, brand_id integer, color_id integer, color_name string, size_id integer, size_name string, sku string, price integer )</sphinxql>
+<sphinxql>insert into facet_sql_review ( id, title, brand_id, color_id, color_name, size_id, size_name, sku, price ) values
+(1,'p1',7,1,'red',10,'small','sku1',100),
+(2,'p2',7,1,'red',20,'large','sku2',200),
+(3,'p3',7,2,'blue',10,'small','sku3',150),
+(4,'p4',7,3,'green',30,'xlarge','sku4',300),
+(5,'p5',8,1,'red',10,'small','sku5',100),
+(6,'p6',8,4,'black',20,'large','sku6',200),
+(7,'p7',9,5,'white',10,'small','sku7',50)</sphinxql>
 
 <sphinxql>
 <!-- Legacy/default and explicit strict must stay strict and keep the facet multi-query multiplier. -->
@@ -50,6 +50,24 @@ SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 AND size_i
 
 <!-- ZEROES should preserve broad max buckets even when visible counts are scoped by ALL FILTERS. -->
 SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 AND size_id=10 LIMIT 0 OPTION facet_filter_mode='max' FACET size_id ALL FILTERS ZEROES ORDER BY FACET() ASC;;
+
+<!-- ZEROES must participate in final ORDER/LIMIT, not be appended after paging. DESC LIMIT 1 should return only the broad zero bucket. -->
+SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 AND size_id=10 LIMIT 0 OPTION facet_filter_mode='max' FACET size_id ALL FILTERS ZEROES ORDER BY FACET() DESC LIMIT 1;;
+
+<!-- ZEROES must sort the merged visible+zero buckets by count before applying LIMIT. ASC LIMIT 1 should return a zero-count bucket only. -->
+SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 AND size_id=10 LIMIT 0 OPTION facet_filter_mode='max' FACET size_id ALL FILTERS ZEROES ORDER BY COUNT(*) ASC LIMIT 1;;
+
+<!-- ZEROES with COUNT(*) DESC must still apply LIMIT after merging, not append zero buckets after the visible page. -->
+SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 AND size_id=10 LIMIT 0 OPTION facet_filter_mode='max' FACET size_id ALL FILTERS ZEROES ORDER BY COUNT(*) DESC LIMIT 1;;
+
+<!-- ZEROES must reuse the facet sorter for expression-backed buckets. DESC LIMIT 1 should return only the highest broad zero expression bucket. -->
+SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 AND price=100 LIMIT 0 OPTION facet_filter_mode='max' FACET price/100 ALL FILTERS ZEROES ORDER BY FACET() DESC LIMIT 1;;
+
+<!-- ZEROES must sort merged string buckets with the query collation; ASC LIMIT 1 should return the broad zero string bucket. -->
+SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_name='red' AND size_id=10 LIMIT 0 OPTION facet_filter_mode='max' FACET color_name ALL FILTERS ZEROES ORDER BY FACET() ASC LIMIT 1;;
+
+<!-- Per-facet MODE max should combine with ALL FILTERS ZEROES exactly as documented. -->
+SELECT count(*) FROM facet_sql_review WHERE brand_id=7 AND color_id=1 AND size_id=10 LIMIT 0 OPTION facet_filter_mode='strict' FACET size_id ALL FILTERS ZEROES MODE max ORDER BY FACET() DESC LIMIT 1;;
 </sphinxql>
 
 <!-- Complex boolean filter trees should fail clearly for facet-local rewrite modes in V1. -->

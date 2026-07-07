@@ -7,7 +7,21 @@
 * CentOS 9, RHEL 9, AlmaLinux 9
 * AlmaLinux 10, другие дистрибутивы на основе RHEL 10
 
-### Репозиторий YUM
+### Быстрая установка
+
+```bash
+curl https://manticoresearch.com | sh
+```
+
+###### Пакеты для разработки
+
+Если вы предпочитаете версии "Nightly" (для разработки), выполните:
+
+```bash
+curl https://manticoresearch.com | sh -s dev
+```
+
+### Ручная установка
 
 Самый простой способ установить Manticore на RedHat/CentOS — использовать наш репозиторий YUM:
 
@@ -21,7 +35,7 @@ sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 sudo yum install manticore
 ```
 
-Если вы обновляетесь до Manticore 6 с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновленной структурой пакетов:
+Если вы обновляетесь до Manticore 6 или новее с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновлённой структурой пакетов:
 
 ```bash
 sudo yum remove manticore*
@@ -33,8 +47,8 @@ sudo yum remove manticore*
 Если вы предпочитаете "Ночные" (разрабатываемые) версии, выполните:
 
 ```bash
-sudo yum -y install https://repo.manticoresearch.com/manticore-repo.noarch.rpm && \
-sudo yum -y --disablerepo=manticore --enablerepo manticore-dev install manticore
+sudo yum -y install https://repo.manticoresearch.com/manticore-dev-repo.noarch.rpm && \
+sudo yum -y install manticore
 ```
 
 ### Автономные RPM-пакеты

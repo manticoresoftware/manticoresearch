@@ -16,6 +16,12 @@
 
 namespace facet
 {
+enum class FacetHelperQuery_e : BYTE
+{
+	Strict,
+	Zeroes
+};
+
 struct FacetBucketSet_t
 {
 	CSphString m_sAttr;
@@ -47,9 +53,14 @@ FacetFilterMode_e GetFilterMode ( const CSphQuery & tHeadQuery, const CSphQuery 
 
 bool ShouldRewriteFilters ( const CSphQuery & tHeadQuery, const CSphQuery & tFacetQuery );
 bool CopyFilters ( const CSphQuery & tHeadQuery, CSphQuery & tFacetQuery, CSphString & sError, bool bUseOwnExclusionRuleInNoneClause );
+bool SetupHelperQuery ( const CSphQuery & tHeadQuery, CSphQuery & tFacetQuery, FacetHelperQuery_e eHelper, CSphString & sError );
+void DeferFacetResultPaging ( CSphQuery & tQuery );
+bool HasDeferredFacetResultPaging ( const CSphQuery & tQuery );
+int GetFacetResultOffset ( const CSphQuery & tQuery );
+int GetFacetResultLimit ( const CSphQuery & tQuery );
+bool AppendMissingFacetZeroes ( const CSphQuery & tFacetQuery, AggrResult_t & tRes, const AggrResult_t & tZeroesRes, bool & bAppended );
 
 const char * GetBucketStatus ( const CSphMatch & tMatch, const ISphSchema & tSchema, const FacetStatusSources_t & tStatus );
-bool MatchBucketSet ( const CSphMatch & tMatch, const ISphSchema & tSchema, const FacetBucketSet_t & tBuckets );
 const CSphVector<CSphFilterSettings> * CollectSelectedFiltersForAttr ( const CSphVector<CSphFilterSettings> & dFilters, const CSphString & sAttr, CSphVector<CSphFilterSettings> & dSelected );
 
 const FacetBucketSet_t * CollectFacetStatusValuesFilter ( const CSphQuery & tFacetQuery, const ISphSchema & tBucketSchema, const AggrResult_t & tRes, FacetBucketSet_t & tBuckets );

@@ -20,7 +20,7 @@ const char* SPHINX_DEFAULT_UTF8_TABLE = "0..9, A..Z->a..z, _, a..z, U+410..U+42F
 class Tokenizer_UTF8_Base_c: public CSphTokenizerBase2
 {
 public:
-	explicit Tokenizer_UTF8_Base_c ( bool bDefaultCharset );
+	Tokenizer_UTF8_Base_c ( bool bDefaultCharset, int iTokenBytes );
 	void SetBuffer ( const BYTE* sBuffer, int iLength ) final;
 	int GetCodepointLength ( int iCode ) const noexcept final;
 	int GetMaxCodepointLength() const noexcept final
@@ -29,7 +29,8 @@ public:
 	}
 };
 
-Tokenizer_UTF8_Base_c::Tokenizer_UTF8_Base_c ( bool bDefaultCharset )
+Tokenizer_UTF8_Base_c::Tokenizer_UTF8_Base_c ( bool bDefaultCharset, int iTokenBytes )
+	: CSphTokenizerBase2 ( iTokenBytes )
 {
 	if ( bDefaultCharset )
 	{
@@ -51,9 +52,18 @@ void Tokenizer_UTF8_Base_c::SetBuffer ( const BYTE* sBuffer, int iLength )
 	m_pCur = sBuffer;
 	m_pTokenStart = m_pTokenEnd = nullptr;
 	m_pBlendStart = m_pBlendEnd = nullptr;
+	ResetAccum();
 
 	m_iOvershortCount = 0;
 	m_bBoundary = m_bTokenBoundary = false;
+	m_bBlended = false;
+	m_bBlendedPart = false;
+	m_bBlendAdd = false;
+	m_uBlendVariantsPending = 0;
+	m_bBlendedHead = false;
+	m_bAccumOverLimit = false;
+	m_bLastTokenOverLimit = false;
+	ResetOversizedTokenCount();
 }
 
 int Tokenizer_UTF8_Base_c::GetCodepointLength ( int iCode ) const noexcept
@@ -76,12 +86,12 @@ template<bool IS_QUERY>
 class CSphTokenizer_UTF8: public Tokenizer_UTF8_Base_c
 {
 public:
-	explicit CSphTokenizer_UTF8 ( bool bDefaultCharset )
-		: Tokenizer_UTF8_Base_c ( bDefaultCharset )
+	CSphTokenizer_UTF8 ( bool bDefaultCharset, int iTokenBytes = SPH_LEGACY_TOKEN_BYTES )
+		: Tokenizer_UTF8_Base_c ( bDefaultCharset, iTokenBytes )
 	{}
 	BYTE * GetToken() override;
 	BYTE * GetTokenEscaped() override;
-	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const noexcept final;
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode, int iTokenBytes=0 ) const noexcept final;
 };
 
 
@@ -114,13 +124,14 @@ BYTE* CSphTokenizer_UTF8<IS_QUERY>::GetTokenEscaped()
 }
 
 template<bool IS_QUERY>
-TokenizerRefPtr_c CSphTokenizer_UTF8<IS_QUERY>::Clone ( ESphTokenizerClone eMode ) const noexcept
+TokenizerRefPtr_c CSphTokenizer_UTF8<IS_QUERY>::Clone ( ESphTokenizerClone eMode, int iTokenBytes ) const noexcept
 {
 	CSphTokenizerBase* pClone;
+	int iCloneTokenBytes = iTokenBytes>0 ? iTokenBytes : GetMaxTokenBytes();
 	if ( eMode != SPH_CLONE_INDEX )
-		pClone = new CSphTokenizer_UTF8<true> ( false );
+		pClone = new CSphTokenizer_UTF8<true> ( false, iCloneTokenBytes );
 	else
-		pClone = new CSphTokenizer_UTF8<false> ( false );
+		pClone = new CSphTokenizer_UTF8<false> ( false, iCloneTokenBytes );
 	pClone->CloneBase ( this, eMode );
 	return TokenizerRefPtr_c {pClone};
 }
@@ -132,8 +143,8 @@ template<bool IS_QUERY>
 class CSphTokenizer_UTF8Ngram: public CSphTokenizer_UTF8<IS_QUERY>
 {
 public:
-	explicit CSphTokenizer_UTF8Ngram ( bool bDefaultCharset )
-		: CSphTokenizer_UTF8<IS_QUERY> (bDefaultCharset) {}
+	CSphTokenizer_UTF8Ngram ( bool bDefaultCharset, int iTokenBytes = SPH_LEGACY_TOKEN_BYTES )
+		: CSphTokenizer_UTF8<IS_QUERY> ( bDefaultCharset, iTokenBytes ) {}
 	bool SetNgramChars ( const char* sConfig, CSphString& sError ) final;
 	void SetNgramLen ( int iLen ) final;
 	BYTE* GetToken() final;
@@ -165,12 +176,12 @@ BYTE* CSphTokenizer_UTF8Ngram<IS_QUERY>::GetToken()
 	return CSphTokenizer_UTF8<IS_QUERY>::GetToken();
 }
 
-TokenizerRefPtr_c Tokenizer::Detail::CreateUTF8Tokenizer ( bool bDefaultCharset )
+TokenizerRefPtr_c Tokenizer::Detail::CreateUTF8Tokenizer ( bool bDefaultCharset, int iTokenBytes )
 {
-	return TokenizerRefPtr_c { new CSphTokenizer_UTF8<false> ( bDefaultCharset ) };
+	return TokenizerRefPtr_c { new CSphTokenizer_UTF8<false> ( bDefaultCharset, iTokenBytes ) };
 }
 
-TokenizerRefPtr_c Tokenizer::Detail::CreateUTF8NgramTokenizer ( bool bDefaultCharset )
+TokenizerRefPtr_c Tokenizer::Detail::CreateUTF8NgramTokenizer ( bool bDefaultCharset, int iTokenBytes )
 {
-	return TokenizerRefPtr_c { new CSphTokenizer_UTF8Ngram<false> ( bDefaultCharset ) };
+	return TokenizerRefPtr_c { new CSphTokenizer_UTF8Ngram<false> ( bDefaultCharset, iTokenBytes ) };
 }

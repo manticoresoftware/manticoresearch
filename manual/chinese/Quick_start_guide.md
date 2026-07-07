@@ -6,37 +6,12 @@
 您可以在各种操作系统上轻松安装并启动 Manticore，包括 Ubuntu、Centos、Debian、Windows 和 MacOS。此外，您还可以将 Manticore 作为 Docker 容器使用。
 
 <!-- intro -->
-### Ubuntu
+### Linux/MacOS
 
-<!-- request Ubuntu -->
+<!-- request Linux -->
+
 ```bash
-wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
-sudo apt update
-sudo apt install manticore manticore-columnar-lib
-sudo systemctl start manticore
-```
-
-<!-- intro -->
-### Debian
-
-<!-- request Debian -->
-```bash
-wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
-sudo apt update
-sudo apt install manticore manticore-columnar-lib
-sudo systemctl start manticore
-```
-
-<!-- intro -->
-### Centos
-
-<!-- request Centos -->
-```bash
-sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-sudo yum install manticore manticore-columnar-lib
-sudo systemctl start manticore
+curl https://manticoresearch.com | sh
 ```
 
 <!-- intro -->
@@ -51,14 +26,6 @@ sudo systemctl start manticore
   ```
 * 通过 Microsoft 管理控制台的“服务”管理单元启动 Manticore。
 
-<!-- intro -->
-### MacOS
-
-<!-- request MacOS -->
-```bash
-brew install manticoresearch
-brew services start manticoresearch
-```
 
 <!-- intro -->
 ### Docker
@@ -615,17 +582,17 @@ let insert_res3 = index_api.insert(insert_req3).await;
 
 ``` typescript
 res = await indexApi.insert({
-  index: 'test',
+  table: 'test',
   id: 1,
   doc: { content: 'Text 1', name: 'Doc 1', cat: 1 },
 });
 res = await indexApi.insert({
-  index: 'test',
+  table: 'test',
   id: 2,
   doc: { content: 'Text 2', name: 'Doc 2', cat: 2 },
 });
 res = await indexApi.insert({
-  index: 'test',
+  table: 'test',
   id: 3,
   doc: { content: 'Text 3', name: 'Doc 3', cat: 7 },
 });
@@ -733,7 +700,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$result = $index->search('@title remove hair')->highlight(['title'])->get();
+$result = $table->search('@title remove hair')->highlight(['title'])->get();
 foreach($result as $doc)
 {
     echo "Doc ID: ".$doc->getId()."\n";
@@ -833,7 +800,7 @@ java
 query = new HashMap<String,Object>();
 query.put("query_string","@title remove hair");
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 searchRequest.setQuery(query);
 HashMap<String,Object> highlight = new HashMap<String,Object>(){{
     put("fields",new String[] {"title"});
@@ -928,7 +895,7 @@ TypeScript
 
 ```typescript
 res = await searchApi.search({
-  index: 'test',
+  table: 'test',
   query: { query_string: {'text 1'} },
   highlight: {'fields': ['content'] }
 });
@@ -1096,7 +1063,7 @@ UpdateDocumentRequest updateRequest = new UpdateDocumentRequest();
 doc = new HashMap<String,Object >(){{
     put("price",18.5);
 }};
-updateRequest.index("products").id(1513686608316989452L).setDoc(doc);
+updateRequest.table("products").id(1513686608316989452L).setDoc(doc);
 indexApi.update(updateRequest);
 ```
 
@@ -1132,7 +1099,7 @@ let update_res = index_api.update(update_req).await;
 
 <!-- request TypeScript -->
 ``` typescript
-res = await indexApi.update({ index: "test", id: 1, doc: { cat: 10 } });
+res = await indexApi.update({ table: "test", id: 1, doc: { cat: 10 } });
 ```
 
 <!-- intro -->
@@ -1204,7 +1171,7 @@ POST /delete
 <!-- request PHP -->
 
 ```php
-$result = $index->deleteDocuments(new \Manticoresearch\Query\Range('price',['lte'=>10]));
+$result = $table->deleteDocuments(new \Manticoresearch\Query\Range('price',['lte'=>10]));
 
 ```
 <!-- response PHP -->
@@ -1257,7 +1224,7 @@ query.put("range",new HashMap<String,Object>(){{
         put("lte",10);
     }});
 }});
-deleteRequest.index("products").setQuery(query);
+deleteRequest.table("products").setQuery(query);
 indexApi.delete(deleteRequest);
 
 ```
@@ -1272,7 +1239,7 @@ Dictionary<string, Object> price = new Dictionary<string, Object>();
 price.Add("lte", 10);
 Dictionary<string, Object> range = new Dictionary<string, Object>();
 range.Add("price", price);
-DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(index: "products", query: range);
+DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(table: "products", query: range);
 indexApi.Delete(deleteDocumentRequest);
 ```
 
@@ -1301,7 +1268,7 @@ index_api.delete(delete_req).await;
 <!-- request TypeScript -->
 ``` typescript
 res = await indexApi.delete({
-  index: 'test',
+  table: 'test',
   query: { match: { '*': 'Text 1' } },
 });
 ```
@@ -1321,4 +1288,3 @@ res, _, _ := apiClient.IndexAPI.Delete(context.Background()).DeleteDocumentReque
 
 <!-- end -->
 <!-- proofread -->
-

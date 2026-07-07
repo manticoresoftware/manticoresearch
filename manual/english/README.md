@@ -120,6 +120,7 @@
     * [• Cost-based optimizer](Searching/Cost_based_optimizer.md)
     * [• K-nearest neighbor vector search](Searching/KNN.md)
     * [• Hybrid search](Searching/Hybrid_search.md)
+    * [• Conversational search](Searching/Conversational_search.md)
 * [• Updating table schema and settings](Updating_table_schema_and_settings.md)
     * [• Updating table schema in RT mode](Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode)
     * [• Updating table FT settings in RT mode](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode)
@@ -148,6 +149,7 @@
     * [• Flushing hostnames](Securing_and_compacting_a_table/Flushing_hostnames.md)
 * [≫ Security]
     * [• SSL](Security/SSL.md)
+    * [• Authentication and authorization](Security/Authentication_and_authorization.md)
     * [• Read-only](Security/Read_only.md)
 * [≫ Logging]
     * [• Query logging](Logging/Query_logging.md)
@@ -177,7 +179,7 @@
     * [• Special suffixes](Server_settings/Special_suffixes.md)
     * [• Scripted configuration](Server_settings/Scripted_configuration.md)
     * [• Comments](Server_settings/Comments.md)
-    * [• Inheritance of table and source declarations](Server_settings/Inheritance_of_index_and_source_declarations.md)
+    * [• Inheritance of table and source declarations](Server_settings/Inheritance_of_table_and_source_declarations.md)
     * [• Setting variables online](Server_settings/Setting_variables_online.md)
 * [≫ Integration]
     * [Logstash](Integration/Logstash.md)
@@ -186,6 +188,7 @@
     * [Vector.dev](Integration/Vectordev.md)
     * [Grafana](Integration/Grafana.md)
     * [Kibana](Integration/Kibana.md)
+    * [Opensearch Dashboards](Integration/Opensearch_Dashboards.md)
     * [Kafka](Integration/Kafka.md)
     * [DBeaver](Integration/DBeaver.md)
     * [Apache Superset](Integration/Apache_Superset.md)
@@ -213,4 +216,3 @@
 * [📖 References](References.md)
     * [• Previous versions](References.md#Documentation-for-old-Manticore-versions)
 <!-- proofread -->
-

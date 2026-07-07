@@ -205,3 +205,13 @@ void MemoryWriter2_c::ZipInt ( DWORD uVal )
 {
 	ZipValueBE ( [this] ( BYTE b ) { PutByte ( b ); }, uVal );
 }
+
+void GetArrayFixed ( CSphFixedVector<BYTE> & dBuf, MemoryReader_c & tIn )
+{
+	int iCount = tIn.GetDword();
+	if ( !iCount )
+		return;
+
+	dBuf.Reset ( iCount );
+	tIn.GetBytes ( dBuf.Begin(), (int)dBuf.GetLengthBytes() );
+}

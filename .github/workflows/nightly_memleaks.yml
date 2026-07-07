@@ -4,6 +4,7 @@ run-name: 🌙 Nightly valgrind checks ${{ github.sha }}
 on:
   schedule:
     - cron: '00 20 * * *'
+  workflow_dispatch:
   push:
     branches:
       - '**'
@@ -34,12 +35,12 @@ jobs:
         CACHEB: "../cache"
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           set-safe-directory: true
       - name: Check out cache before building
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: cache
           key: build_linux_debug_x86_64
@@ -50,7 +51,7 @@ jobs:
       - name: Upload build artifacts
         if: always()
         continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@v4
+        uses: manticoresoftware/upload_artifact_with_retries@v5
         with:
           name: memleaks_${{ github.sha }}
           path: build/Testing

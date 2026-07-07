@@ -1,6 +1,5 @@
-backup 1.10.0+26032519-c42465e9-dev
-buddy 3.47.2+26060516-4ce387ef-dev
-mcl 13.5.2+26052919-f7132f23-dev
+backup 1.10.1+26061912-e2ca2bce-dev
+buddy 4.2.0+26063013-dc2f8c9f-dev
 executor 1.4.3+26033010-390b6e66-dev
 tzdata 1.0.1 250714 7eebffa
 load 1.25.0+26050511-832198ca-dev

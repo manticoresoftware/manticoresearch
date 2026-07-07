@@ -83,6 +83,13 @@ index testpoly
 	source 			= src_testpoly
 	path			= <data_path/>/testpoly
 }
+
+index si_notin_cutoff
+{
+	type = rt
+	path = <data_path/>/si_notin_cutoff
+	rt_attr_uint = l
+}
 </config>
 
 <db_create>
@@ -181,6 +188,16 @@ select * from test4 where tag in (2010) order by id desc /*+ SecondaryIndex(tag)
 <sphinxql>SELECT x,y,CONTAINS(POLY2D(1,1,1,7,7,7,7,1),x,y) a FROM testpoly WHERE a=1 order by id asc /*+ SecondaryIndex(x,y) */; show meta</sphinxql>
 <sphinxql>SELECT x,y,CONTAINS(POLY2D(4,1,4,7,7,7,7,1),x,y) a FROM testpoly WHERE a=1 order by id asc /*+ No_SecondaryIndex(x,y) */; show meta</sphinxql>
 <sphinxql>SELECT x,y,CONTAINS(POLY2D(4,1,4,7,7,7,7,1),x,y) a FROM testpoly WHERE a=1 order by id asc /*+ SecondaryIndex(x,y) */; show meta</sphinxql>
+
+<!-- regression for excluded value-list filter with implicit cutoff -->
+<var name="si_notin_cutoff_vals"/>
+<repeat count="911" vars="i1 i2 i3 i4 i5 i6 i7 i8 i9" init="1 2 3 4 5 6 7 8 9" inc="9 9 9 9 9 9 9 9 9"><var name="si_notin_cutoff_vals" delimiter=",">(<i1/>,2),(<i2/>,3),(<i3/>,4),(<i4/>,5),(<i5/>,6),(<i6/>,7),(<i7/>,8),(<i8/>,9),(<i9/>,1)</var></repeat>
+<sphinxql skip="1">insert into si_notin_cutoff(id,l) values <si_notin_cutoff_vals/></sphinxql>
+<sphinxql>
+flush ramchunk si_notin_cutoff;
+select l from si_notin_cutoff where l not in (1,2,3,4,5,6,7,8,9) limit 1 /*+ SecondaryIndex(l) */;
+show meta;
+</sphinxql>
 
 </queries>
 

@@ -103,7 +103,8 @@ table test_vec {
 
 | Тип модели | Пример | Требуется API-ключ | Примечания |
 |------------|---------|-----------------|-------|
-| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | Нет | Локальные модели на базе BERT, загружаются автоматически |
+| **ONNX (рекомендуется)** | `Xenova/all-MiniLM-L6-v2` | Нет | Локальные модели из любого репозитория Hugging Face, который содержит файл `.onnx`. Работают на быстром бэкенде Manticore ONNX Runtime. Список: [модели feature-extraction ONNX](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm). |
+| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | Нет | Локальные модели на основе BERT, загружаются автоматически. По-прежнему поддерживаются — если доступно, используйте ONNX выше. |
 | **Qwen** | `Qwen/Qwen3-Embedding-0.6B` | Нет | Локальные модели семейства Qwen |
 | **Llama** | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | Нет | Локальные модели семейства Llama |
 | **Mistral** | `Locutusque/TinyMistral-248M-v2` | Нет | Локальные модели семейства Mistral |
@@ -125,9 +126,19 @@ table test_vec {
 
 <!-- request SQL -->
 
-Использование sentence-transformers (API-ключ не нужен)
+Использование локальной [ONNX-модели](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) — рекомендуется (ключ API не нужен)
 ```sql
 CREATE TABLE products (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+Использование sentence-transformers (ключ API не нужен; работает через путь Candle — если доступно, используйте ONNX выше)
+```sql
+CREATE TABLE products_st (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
@@ -182,7 +193,7 @@ CREATE TABLE products_all (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM=''
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM=''
 );
 ```
 
@@ -197,7 +208,7 @@ table products {
     rt_field = title
     rt_field = description
     rt_attr_float_vector = embedding_vector
-    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":"title"}]}
 }
 ```
 
@@ -221,7 +232,7 @@ table products_all {
     rt_field = title
     rt_field = description
     rt_attr_float_vector = embedding_vector
-    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":""}]}
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":""}]}
 }
 ```
 
@@ -239,9 +250,9 @@ table products_all {
 данные для следующего примера:
 
 DROP TABLE IF EXISTS products;
-CREATE TABLE products(title text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title');
+CREATE TABLE products(title text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='Xenova/all-MiniLM-L6-v2' from='title');
 DROP TABLE IF EXISTS products_openai;
-CREATE TABLE products_openai(title text, description text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title,description');
+CREATE TABLE products_openai(title text, description text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='Xenova/all-MiniLM-L6-v2' from='title,description');
 -->
 
 <!-- example inserting_embeddings -->
@@ -295,7 +306,7 @@ INSERT INTO products (title, embedding_vector) VALUES
 POST /sql?mode=raw -d "INSERT INTO products (title) VALUES ('machine learning artificial intelligence'),('banana fruit sweet yellow')"
 ```
 
-Вставка нескольких полей - оба используются для эмбеддинга, если `FROM='title,description'`
+Вставка нескольких полей - оба используются для встраивания, если FROM='title,description'
 ```JSON
 POST /sql?mode=raw -d "INSERT INTO products_openai (title, description) VALUES ('smartphone', 'latest mobile device with advanced features'), ('laptop', 'portable computer for work and gaming')"
 ```
@@ -494,6 +505,8 @@ POST /insert
 * `rescore`: Включает повторное оценивание KNN (по умолчанию включено). Установите `0` в SQL или `false` в JSON, чтобы отключить повторное оценивание. После завершения поиска KNN с использованием квантизованных векторов (с возможным oversampling) расстояния пересчитываются по исходным (full-precision) векторам, и результаты пересортировываются для повышения точности ранжирования.
 * `oversampling`: Задает коэффициент (значение float), на который умножается `k` при выполнении поиска KNN, из-за чего с использованием квантизованных векторов извлекается больше кандидатов, чем требуется. По умолчанию применяется `oversampling=3.0`. Эти кандидаты можно затем переоценить, если повторное оценивание включено. Oversampling также работает и с неквантизованными векторами. Поскольку он увеличивает `k`, а это влияет на работу индекса HNSW, он может вызвать небольшое изменение точности результатов.
 * `early_termination`: Включает или отключает адаптивное раннее завершение при обходе графа HNSW. По умолчанию включено. Установите `0` в SQL или `false` в JSON, чтобы отключить. Подробности см. в разделе [Раннее завершение](../Searching/KNN.md#Early-termination).
+
+Когда задан текстовый запрос (то есть Manticore сначала встраивает строку перед поиском), число потоков, используемых библиотекой embeddings, можно переопределить для каждого запроса в SQL с помощью `OPTION embeddings_threads = N`. Это значение ограничивает вызов embeddings только для этого запроса, переопределяя глобальную настройку [embeddings_threads](../Server_settings/Searchd.md#embeddings_threads); `0` означает отсутствие ограничения. Эта опция не влияет на запрос, если он передан в виде массива векторов.
 
 Документы всегда сортируются по расстоянию до вектора поиска. Любые дополнительные критерии сортировки, которые вы укажете, будут применяться после этого основного условия сортировки. Чтобы получить расстояние, есть встроенная функция [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29).
 

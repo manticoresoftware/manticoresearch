@@ -20,6 +20,11 @@ using PluginQueryTokenRefPtr_c = CSphRefcountedPtr<PluginQueryTokenFilter_c>;
 class XQParseHelper_c
 {
 public:
+	XQParseHelper_c () = default;
+	XQParseHelper_c ( const XQParseHelper_c & ) = delete;
+	XQParseHelper_c & operator= ( const XQParseHelper_c & ) = delete;
+	XQParseHelper_c ( XQParseHelper_c && ) noexcept = default;
+	XQParseHelper_c & operator= ( XQParseHelper_c && ) noexcept = default;
 	virtual ~XQParseHelper_c () = default;
 
 	void SetString ( const char * szString );
@@ -41,6 +46,7 @@ public:
 	const StrVec_t & GetZone() const noexcept;
 	XQNode_t *		SpawnNode ( const XQLimitSpec_t & dSpec ) noexcept;
 	void			DeleteSpawned ( XQNode_t * pNode ) noexcept;
+	BYTE *			CopyQueryTokenToScratch ( const char * sToken );
 
 protected:
 	struct MultiformNode_t
@@ -50,11 +56,10 @@ protected:
 		int			m_iDestCount;
 	};
 
-	static const int MAX_TOKEN_BYTES = 3*SPH_MAX_WORD_LEN + 16;
-
 	const CSphSchema *		m_pSchema {nullptr};
 	TokenizerRefPtr_c		m_pTokenizer;
 	DictRefPtr_c			m_pDict;
+	CSphFixedVector<BYTE>	m_dQueryTokenScratch { 0 };
 	bool					m_bStopOnInvalid {true};
 	XQQuery_t *				m_pParsed {nullptr};
 	bool					m_bError {false};

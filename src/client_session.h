@@ -62,6 +62,8 @@ public:
 	bool m_bShardPhysicalUpdate = false;
 	StrVec_t m_dLockedTables;
 	PreparedStatements m_dPreparedStatements;
+	bool m_bAuthAllowBuddy = false;
+	bool m_bAuthErrorSkipBuddy = false;
 
 public:
 	NONCOPYMOVABLE ( ClientSession_c );

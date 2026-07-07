@@ -14,16 +14,56 @@
 
 #include "sphinxsearch.h"
 
+static BYTE * CopyKeywordString ( KeywordBuf_t & dDst, const char * sSrc )
+{
+	int iLen = (int)strlen ( sSrc );
+	if ( iLen>=dDst.GetLength() )
+		return nullptr;
+
+	memcpy ( dDst.Begin(), sSrc, iLen );
+	dDst.Begin()[iLen] = '\0';
+	return dDst.Begin();
+}
+
+
+static BYTE * CopyExactKeywordString ( KeywordBuf_t & dDst, const BYTE * sSrc )
+{
+	int iLen = (int)strlen ( (const char*)sSrc );
+	if ( iLen+1>=dDst.GetLength() )
+		return nullptr;
+
+	dDst.Begin()[0] = '=';
+	memcpy ( dDst.Begin()+1, sSrc, iLen+1 );
+	return dDst.Begin();
+}
+
+
+static void ReportSkippedOverLimitTokens ( ISphTokenizer * pTokenizer, CSphString * pWarning, CSphQueryResultMeta * pResult )
+{
+	if ( !pWarning && pResult )
+		pWarning = &pResult->m_sWarning;
+
+	if ( pWarning )
+		WarnAppendSkipped ( *pWarning, pTokenizer->ResetOversizedTokenCount() );
+	else
+		pTokenizer->ResetOversizedTokenCount();
+}
+
+
 void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, ExpansionContext_t & tCtx )
 {
 	assert ( m_pTokenizer && m_pDict && m_pSettings );
 
-	BYTE sDstWord[3 * SPH_MAX_WORD_LEN + 4]; 
-	BYTE sTokenized[3 * SPH_MAX_WORD_LEN + 4];
+	DictFormat_e eDictFormat = m_pDict->GetSettings().GetDictFormat();
+	KeywordBuf_t dDstWord ( eDictFormat );
+	KeywordBuf_t dTokenized ( eDictFormat );
+	KeywordBuf_t dTmp ( eDictFormat );
+	KeywordBuf_t dTmp2 ( eDictFormat );
 	BYTE* sWord;
 	int iQpos = 1;
 	int iExactQpos = -1;
 	CSphVector<int> dQposWildcards;
+	CSphVector<BYTE> dSkipAotTransform;
 
 	// FIXME!!! got rid of duplicated term stat and qword setup
 	while ( ( sWord = m_pTokenizer->GetToken() ) )
@@ -31,6 +71,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 		if ( tCtx.m_iCutoff!=-1 && dKeywords.GetLength()>=tCtx.m_iCutoff )
 		{
 			dKeywords.Add(); // fake keyword to let code know we're past cutoff
+			ReportSkippedOverLimitTokens ( m_pTokenizer.Ptr(), m_tFoldSettings.m_pWarning, tCtx.m_pResult );
 			return;
 		}
 
@@ -43,13 +84,17 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 
 		if ( iExactQpos==iQpos )
 		{
-			snprintf ( (char *)sDstWord, sizeof(sDstWord)-1, "=%s", sWord );
-			sWord = sDstWord;
+			sWord = CopyExactKeywordString ( dDstWord, sWord );
+			if ( !sWord )
+				continue;
 		}
 
 		const BYTE* sMultiform = m_pTokenizer->GetTokenizedMultiform();
-		strncpy ( (char*)sTokenized, sMultiform ? (const char*)sMultiform : (const char*)sWord, sizeof ( sTokenized ) - 1 );
+		BYTE * sTokenized = CopyKeywordString ( dTokenized, sMultiform ? (const char*)sMultiform : (const char*)sWord );
+		if ( !sTokenized )
+			continue;
 
+		int iKeywordStart = dKeywords.GetLength();
 		if ( tCtx.m_bAllowExpansion && ( !m_tFoldSettings.m_bFoldWildcards || m_tFoldSettings.m_bStats ) && sphHasExpandableWildcards ( (const char*)sWord ) )
 		{
 			dQposWildcards.Add ( iQpos );
@@ -101,6 +146,8 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 
 		// FIXME!!! handle consecutive blended wo blended parts
 		bool bBlended = m_pTokenizer->TokenIsBlended();
+		for ( int iKeyword = iKeywordStart; iKeyword < dKeywords.GetLength(); ++iKeyword )
+			dSkipAotTransform.Add ( bBlended ? 1 : 0 );
 
 		if ( bBlended )
 		{
@@ -113,11 +160,12 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 	}
 
 	if ( !m_pSettings->m_uAotFilterMask )
+	{
+		ReportSkippedOverLimitTokens ( m_pTokenizer.Ptr(), m_tFoldSettings.m_pWarning, tCtx.m_pResult );
 		return;
+	}
 
 	XQLimitSpec_t tSpec;
-	BYTE sTmp[3 * SPH_MAX_WORD_LEN + 4];
-	BYTE sTmp2[3 * SPH_MAX_WORD_LEN + 4];
 	CSphVector<const XQNode_t*> dChildren ( 64 );
 
 	CSphBitvec tSkipTransform;
@@ -136,9 +184,26 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 		// do not transform expanded wild-cards
 		if ( tSkipTransform.BitGetOr ( iKeywordQpos ) )
 			continue;
+		if ( ShouldBypassMorphology ( m_pDict->GetSettings().GetDictFormat(), dKeywords[iTokenized].m_sNormalized.Length() ) )
+			continue;
+
+		if ( dSkipAotTransform[iTokenized] )
+		{
+			if ( m_pSettings->m_bIndexExactWords && dKeywords[iTokenized].m_sNormalized.cstr()[0]!='=' )
+			{
+				BYTE * sTmp = CopyExactKeywordString ( dTmp, (const BYTE*)dKeywords[iTokenized].m_sNormalized.cstr() );
+				BYTE * sTmp2 = CopyKeywordString ( dTmp2, dKeywords[iTokenized].m_sTokenized.scstr() );
+				if ( !sTmp || !sTmp2 )
+					continue;
+				AddKeywordStats ( sTmp, sTmp2, iKeywordQpos, dKeywords );
+			}
+			continue;
+		}
 
 		// MUST copy as Dict::GetWordID changes word and might add symbols
-		strncpy ( (char*)sTokenized, dKeywords[iTokenized].m_sNormalized.scstr(), sizeof ( sTokenized ) - 1 );
+		BYTE * sTokenized = CopyKeywordString ( dTokenized, dKeywords[iTokenized].m_sNormalized.scstr() );
+		if ( !sTokenized )
+			continue;
 		int iPreAotCount = dKeywords.GetLength();
 
 		XQNode_t tAotNode ( tSpec );
@@ -159,9 +224,11 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 			for ( const auto& dAotKeyword: pChild->dWords() )
 			{
 				// MUST copy as Dict::GetWordID changes word and might add symbols
-				strncpy ( (char*)sTmp, dAotKeyword.m_sWord.scstr(), sizeof ( sTmp ) - 1 );
+				BYTE * sTmp = CopyKeywordString ( dTmp, dAotKeyword.m_sWord.scstr() );
 				// prevent use-after-free-bug due to vector grow: AddKeywordsStats() calls dKeywords.Add()
-				strncpy ( (char*)sTmp2, dKeywords[iTokenized].m_sTokenized.scstr(), sizeof ( sTmp2 ) - 1 );
+				BYTE * sTmp2 = CopyKeywordString ( dTmp2, dKeywords[iTokenized].m_sTokenized.scstr() );
+				if ( !sTmp || !sTmp2 )
+					continue;
 				AddKeywordStats ( sTmp, sTmp2, iKeywordQpos, dKeywords );
 			}
 
@@ -211,6 +278,8 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 	// sort by qpos
 	if ( dKeywords.GetLength() != iTokenizedTotal )
 		sphSort ( dKeywords.Begin(), dKeywords.GetLength(), bind ( &CSphKeywordInfo::m_iQpos ) );
+
+	ReportSkippedOverLimitTokens ( m_pTokenizer.Ptr(), m_tFoldSettings.m_pWarning, tCtx.m_pResult );
 }
 
 void CSphTemplateQueryFilter::AddKeywordStats ( BYTE* sWord, const BYTE* sTokenized, int iQpos, CSphVector<CSphKeywordInfo>& dKeywords )

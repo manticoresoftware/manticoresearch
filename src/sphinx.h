@@ -59,7 +59,7 @@ extern const char * szGIT_BRANCH_ID;
 extern const char * szGDB_SOURCE_DIR;
 
 #define SPHINX_SEARCHD_PROTO	1
-#define SPHINX_CLIENT_VERSION	1
+#define SPHINX_CLIENT_VERSION	2
 
 constexpr int64_t SMALL_INDEX_THRESH = 8192;
 
@@ -579,6 +579,8 @@ struct CSphQuery
 	CSphVector<DWORD>	m_dWeights;		///< user-supplied per-field weights. may be NULL. default is NULL
 	ESphMatchMode	m_eMode = SPH_MATCH_EXTENDED;		///< match mode. default is "match all"
 	ESphRankMode	m_eRanker = SPH_RANK_DEFAULT;		///< ranking mode, default is proximity+BM25
+	bool			m_bExplicitRanker = false;	///< whether ranker was explicitly specified by the client
+	bool			m_bExplicitBooleanMode = false;	///< whether boolean_mode was explicitly specified by the client
 	CSphString		m_sRankerExpr;		///< ranking expression for SPH_RANK_EXPR
 	CSphString		m_sUDRanker;		///< user-defined ranker name
 	CSphString		m_sUDRankerOpts;	///< user-defined ranker options
@@ -600,6 +602,7 @@ struct CSphQuery
 	bool			m_bZSlist = false;			///< whether the ranker has to fetch the zonespanlist with this query
 	std::optional<bool> m_bSimplify;			///< whether to apply boolean simplification
 	static constexpr bool m_bDefaultSimplify = true;
+	bool			m_bDefaultBoolOr = false;	///< whether implicit full-text whitespace should parse as OR
 	bool			m_bPlainIDF = false;		///< whether to use PlainIDF=log(N/n) or NormalizedIDF=log((N-n+1)/n)
 	bool			m_bGlobalIDF = false;		///< whether to use local indexes or a global idf file
 	bool			m_bNormalizedTFIDF = true;	///< whether to scale IDFs by query word count, so that TF*IDF is normalized
@@ -690,6 +693,8 @@ struct CSphQuery
 	bool			m_bFacetHead = false;
 	bool			m_bFacetMaxRef = false;	///< internal hidden facet helper query/result
 	FacetFilterTrait_t m_tFacetFilter;
+	int				m_iFacetResultOffset = -1;	///< internal deferred facet paging: restore requested offset after zero-bucket merge/order
+	int				m_iFacetResultLimit = -1;	///< internal deferred facet paging: restore requested limit after zero-bucket merge/order
 	StrVec_t		m_dFacetOwnFilterAttrs;
 
 	QueryType_e		m_eQueryType {QUERY_API};		///< queries from sphinxql require special handling
@@ -701,6 +706,7 @@ struct CSphQuery
 	const void*		m_pCookie = nullptr;	///< opaque mark, used to manage lifetime of the vec of queries
 
 	int				m_iConcurrency = 0;    ///< limit N of threads to run query with. 0 means 'no limit'
+	int				m_iEmbeddingsThreads = -1; ///< per-query override for embeddings_threads. -1 means 'use global setting'
 	CSphVector<CSphString>	m_dStringSubkeys;
 	CSphVector<int64_t>		m_dIntSubkeys;
 	Dispatcher::Template_t	m_tMainDispatcher;
@@ -712,12 +718,41 @@ struct CSphQuery
 	const KnnSearchSettings_t &	SingleKnnSettings() const	{ return m_dKnnSettings[0]; }
 };
 
+struct QueryExecutionSettings_t
+{
+	ESphRankMode	m_eRanker = SPH_RANK_DEFAULT;
+	CSphString		m_sRankerExpr;
+	CSphString		m_sUDRanker;
+	CSphString		m_sUDRankerOpts;
+	bool			m_bDefaultBoolOr = false;
+
+	QueryExecutionSettings_t() = default;
+	explicit QueryExecutionSettings_t ( const CSphQuery & tQuery )
+		: m_eRanker ( tQuery.m_eRanker )
+		, m_sRankerExpr ( tQuery.m_sRankerExpr )
+		, m_sUDRanker ( tQuery.m_sUDRanker )
+		, m_sUDRankerOpts ( tQuery.m_sUDRankerOpts )
+		, m_bDefaultBoolOr ( tQuery.m_bDefaultBoolOr )
+	{}
+
+	void SetRanker ( const QueryExecutionSettings_t & tOther )
+	{
+		m_eRanker = tOther.m_eRanker;
+		m_sRankerExpr = tOther.m_sRankerExpr;
+		m_sUDRanker = tOther.m_sUDRanker;
+		m_sUDRankerOpts = tOther.m_sUDRankerOpts;
+	}
+};
+
 void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitless = false );
 
 /// parse select list string into items
 bool ParseSelectList ( CSphString & sError, CSphQuery &pResult );
 
 void SetQueryDefaultsExt2 ( CSphQuery & tQuery );
+bool ParseStoredRanker ( const CSphString & sRanker, QueryExecutionSettings_t & tSettings, CSphString & sError );
+bool ValidateStoredRankerExpression ( ESphRankMode eRanker, const CSphString & sRankerExpr, const ISphSchema & tSchema, CSphString & sError );
+QueryExecutionSettings_t BuildQueryExecutionSettings ( const CSphQuery & tQuery, const MutableIndexSettings_c & tSettings );
 
 /// some low-level query stats
 struct CSphQueryStats
@@ -1231,6 +1266,8 @@ DiskIndexQwordTraits_c * sphCreateDiskIndexQword ( bool bInlineHits );
 
 /// returns ranker name as string
 const char * sphGetRankerName ( ESphRankMode eRanker );
+bool sphParseRankerName ( const CSphString & sRanker, ESphRankMode & eRanker );
+bool sphSplitRankerCall ( const CSphString & sRanker, CSphString & sName, CSphString & sArg );
 
 struct DocstoreDoc_t
 {

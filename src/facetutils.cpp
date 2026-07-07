@@ -9,8 +9,8 @@
 //
 
 #include "searchdaemon.h"
-#include "queuecreator.h"
 #include "facetutils.h"
+#include "queuecreator.h"
 #include "std/fnv64.h"
 
 namespace facet
@@ -266,6 +266,99 @@ static uint64_t CalcBucketHash ( const CSphMatch & tMatch, const CSphColumnInfo 
 	return sphFNV64 ( tMatch.GetAttr ( tAttr.m_tLocator ) );
 }
 
+static bool IsFacetCountColumn ( const CSphColumnInfo & tCol )
+{
+	return tCol.m_sName=="@count"
+		|| tCol.m_sName=="count(*)"
+		|| tCol.m_sName=="@groupbycount"
+		|| tCol.m_sName=="distinct"
+		|| tCol.m_sName=="@distinct"
+		|| tCol.m_sName=="_@distinct"
+		|| tCol.m_sName.Begins ( "count(distinct " );
+}
+
+static void ZeroFacetCountColumns ( CSphMatch & tMatch, const ISphSchema & tSchema )
+{
+	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
+	{
+		const auto & tCol = tSchema.GetAttr(i);
+		if ( !IsFacetCountColumn ( tCol ) )
+			continue;
+
+		switch ( tCol.m_eAttrType )
+		{
+		case SPH_ATTR_INTEGER:
+		case SPH_ATTR_TIMESTAMP:
+		case SPH_ATTR_BOOL:
+		case SPH_ATTR_TOKENCOUNT:
+		case SPH_ATTR_BIGINT:
+		case SPH_ATTR_UINT64:
+			tMatch.SetAttr ( tCol.m_tLocator, 0 );
+			break;
+
+		case SPH_ATTR_FLOAT:
+			tMatch.SetAttrFloat ( tCol.m_tLocator, 0.0f );
+			break;
+
+		case SPH_ATTR_DOUBLE:
+			tMatch.SetAttrDouble ( tCol.m_tLocator, 0.0 );
+			break;
+
+		default:
+			break;
+		}
+	}
+}
+
+bool SetupHelperQuery ( const CSphQuery & tHeadQuery, CSphQuery & tFacetQuery, FacetHelperQuery_e eHelper, CSphString & sError )
+{
+	tFacetQuery.m_bFacetMaxRef = true;
+	tFacetQuery.m_dFilters.Reset();
+	tFacetQuery.m_dFilterTree.Reset();
+
+	switch ( eHelper )
+	{
+	case FacetHelperQuery_e::Strict:
+		tFacetQuery.m_tFacetFilter.m_tMode = FacetFilterMode_e::Strict;
+		tFacetQuery.m_tFacetFilter.m_eClause = FacetFilterClause_e::All;
+		return CopyFilters ( tHeadQuery, tFacetQuery, sError, true );
+
+	case FacetHelperQuery_e::Zeroes:
+		tFacetQuery.m_tFacetFilter.m_eClause = FacetFilterClause_e::None;
+		tFacetQuery.m_tFacetFilter.m_dAttrs.Reset();
+		return CopyFilters ( tHeadQuery, tFacetQuery, sError, false );
+	}
+
+	assert ( 0 && "Unknown facet helper query kind" );
+	return false;
+}
+
+void DeferFacetResultPaging ( CSphQuery & tQuery )
+{
+	if ( tQuery.m_iFacetResultLimit>=0 )
+		return;
+
+	tQuery.m_iFacetResultOffset = tQuery.m_iOffset;
+	tQuery.m_iFacetResultLimit = tQuery.m_iLimit;
+	tQuery.m_iOffset = 0;
+	tQuery.m_iLimit = tQuery.m_iMaxMatches;
+}
+
+bool HasDeferredFacetResultPaging ( const CSphQuery & tQuery )
+{
+	return tQuery.m_iFacetResultLimit>=0;
+}
+
+int GetFacetResultOffset ( const CSphQuery & tQuery )
+{
+	return HasDeferredFacetResultPaging ( tQuery ) ? tQuery.m_iFacetResultOffset : tQuery.m_iOffset;
+}
+
+int GetFacetResultLimit ( const CSphQuery & tQuery )
+{
+	return HasDeferredFacetResultPaging ( tQuery ) ? tQuery.m_iFacetResultLimit : tQuery.m_iLimit;
+}
+
 static const FacetBucketSet_t * CollectBucketSet ( const VecTraits_T<CSphMatch> & dMatches, const ISphSchema & tSchema, const CSphString & sAttr, FacetBucketSet_t & tBuckets )
 {
 	tBuckets.Reset();
@@ -282,7 +375,7 @@ static const FacetBucketSet_t * CollectBucketSet ( const VecTraits_T<CSphMatch> 
 	return &tBuckets;
 }
 
-bool MatchBucketSet ( const CSphMatch & tMatch, const ISphSchema & tSchema, const FacetBucketSet_t & tBuckets )
+static bool MatchBucketSet ( const CSphMatch & tMatch, const ISphSchema & tSchema, const FacetBucketSet_t & tBuckets )
 {
 	const CSphColumnInfo * pAttr = tSchema.GetAttr ( tBuckets.m_sAttr.cstr() );
 	if ( !pAttr )
@@ -377,5 +470,40 @@ const CSphVector<CSphFilterSettings> * CollectSelectedFiltersForAttr ( const CSp
 			dSelected.Add ( tFilter );
 
 	return dSelected.IsEmpty() ? nullptr : &dSelected;
+}
+
+bool AppendMissingFacetZeroes ( const CSphQuery & tFacetQuery, AggrResult_t & tRes, const AggrResult_t & tZeroesRes, bool & bAppended )
+{
+	bAppended = false;
+
+	if ( tRes.m_dResults.IsEmpty() || tZeroesRes.m_dResults.IsEmpty() )
+		return false;
+
+	auto & tVisibleResult = tRes.m_dResults.First();
+	const auto & tZeroesResult = tZeroesRes.m_dResults.First();
+
+	CSphString sAttr;
+	if ( !GetFacetStatusAttr ( tFacetQuery, &tVisibleResult.m_tSchema, tVisibleResult.m_tSchema, sAttr ) )
+		return false;
+
+	FacetBucketSet_t tVisibleBuckets;
+	const FacetBucketSet_t * pVisibleBuckets = CollectFacetAvailableFilters ( tRes, sAttr, tVisibleResult.m_dMatches, tVisibleBuckets );
+	if ( !pVisibleBuckets )
+		return false;
+
+	tVisibleResult.m_dMatches.Reserve ( tVisibleResult.m_dMatches.GetLength() + tZeroesResult.m_dMatches.GetLength() );
+	for ( const auto & tZeroMatch : tZeroesResult.m_dMatches )
+	{
+		if ( MatchBucketSet ( tZeroMatch, tZeroesResult.m_tSchema, *pVisibleBuckets ) )
+			continue;
+
+		CSphMatch & tOutMatch = tVisibleResult.m_dMatches.Add();
+		tOutMatch.Reset ( tVisibleResult.m_tSchema.GetDynamicSize() );
+		tVisibleResult.m_tSchema.CloneMatch ( tOutMatch, tZeroMatch );
+		ZeroFacetCountColumns ( tOutMatch, tVisibleResult.m_tSchema );
+		bAppended = true;
+	}
+
+	return true;
 }
 }

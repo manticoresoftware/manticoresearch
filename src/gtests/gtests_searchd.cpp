@@ -174,9 +174,30 @@ TEST ( searchd_stuff, prepare_emulation )
 {
 	CSphQuery tQuery;
 	tQuery.m_eMode = SPH_MATCH_ALL;
-	PrepareQueryEmulation ( &tQuery );
+	tQuery.m_sRawQuery = "alpha beta";
+	PrepareQueryEmulation ( &tQuery, SearchQueryOrigin_e::ApiClient );
 
 	ASSERT_EQ ( tQuery.m_eRanker, SPH_RANK_PROXIMITY );
+	ASSERT_TRUE ( tQuery.m_bExplicitRanker );
+	ASSERT_TRUE ( tQuery.m_bExplicitBooleanMode );
+	ASSERT_FALSE ( tQuery.m_bDefaultBoolOr );
+	ASSERT_STREQ ( tQuery.m_sQuery.cstr(), "alpha beta" );
+
+	CSphQuery tPhrase;
+	tPhrase.m_eMode = SPH_MATCH_PHRASE;
+	PrepareQueryEmulation ( &tPhrase, SearchQueryOrigin_e::ApiClient );
+
+	ASSERT_EQ ( tPhrase.m_eRanker, SPH_RANK_PROXIMITY );
+	ASSERT_TRUE ( tPhrase.m_bExplicitRanker );
+	ASSERT_TRUE ( tPhrase.m_bExplicitBooleanMode );
+	ASSERT_FALSE ( tPhrase.m_bDefaultBoolOr );
+
+	CSphQuery tBoolean;
+	tBoolean.m_eMode = SPH_MATCH_BOOLEAN;
+	PrepareQueryEmulation ( &tBoolean, SearchQueryOrigin_e::ApiClient );
+
+	ASSERT_EQ ( tBoolean.m_eRanker, SPH_RANK_NONE );
+	ASSERT_TRUE ( tBoolean.m_bExplicitRanker );
 }
 
 class CustomNetloop_c :  public ::testing::Test

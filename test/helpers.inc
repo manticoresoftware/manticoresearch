@@ -4260,6 +4260,7 @@ class SphinxConfig
 				$justcopy = false;
 				$rtcopy = false;
 				$attr_names = array();
+				$have_rt_source = false;
 				$idxbody = "";
 				foreach ($lines as $line)
 				{
@@ -4279,15 +4280,28 @@ class SphinxConfig
 							break;
 						case "source":
 							{
-								$idxbody .= "\ttype\t= rt\n";
+								$srcschema = $schemas[$value];
 								if ( $collectdata )
-									$indexes[$match[$idxname][0]] = $schemas[$value];
-								foreach ( array_keys( $schemas[$value]['orders'] ) as $key )
+								{
+									if ( !array_key_exists ( $match[$idxname][0], $indexes ) )
+										$indexes[$match[$idxname][0]] = $srcschema;
+									else
+										$indexes[$match[$idxname][0]]['values'] = array_merge ( $indexes[$match[$idxname][0]]['values'], $srcschema['values'] );
+								}
+
+								if ( $have_rt_source )
+								{
+									$sources[$match[$idxname][0]] = $value;
+									break;
+								}
+
+								$idxbody .= "\ttype\t= rt\n";
+								foreach ( array_keys( $srcschema['orders'] ) as $key )
 									if ( $key != "id" && $key != "document_id" )
 									{
-										if ( array_key_exists ( $key, $schemas[$value]['types'] ) )
+										if ( array_key_exists ( $key, $srcschema['types'] ) )
 										{
-											$rt_attr_type = $schemas[$value]['types'][$key];
+											$rt_attr_type = $srcschema['types'][$key];
 											if ( $rt_attr_type!="rt_attr_json" )
 												$attr_names[] = $key;
 
@@ -4298,13 +4312,14 @@ class SphinxConfig
 											} else
 											{
 												$idxbody .= "\t".$rt_attr_type."\t= $key";
-												if (isset($schemas[$value]['bits'][$key]))
-													$idxbody .= $schemas[$value]['bits'][$key];
+												if (isset($srcschema['bits'][$key]))
+													$idxbody .= $srcschema['bits'][$key];
 												$idxbody .= "\n";
 											}
 										} else
 											$idxbody .= "\trt_field\t= $key\n";
 									}
+								$have_rt_source = true;
 								$sources[$match[$idxname][0]] = $value;
 								break;
 							}
@@ -4660,7 +4675,7 @@ class SphinxConfig
 				$path = "$index_data_path/$subdir->nodeValue";
 				if ( !file_exists ( $path ) )
 					mkdir ( $path );
-				EraseDirContents($path);
+				EraseDirContents($path, true);
 				fwrite($fp, $path);
 				$agents[$agentid]["data_path"] = $subdir->nodeValue;
 				return;

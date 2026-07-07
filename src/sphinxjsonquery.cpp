@@ -46,7 +46,7 @@ struct ErrorPathGuard_t
 class QueryTreeBuilder_c : public XQParseHelper_c
 {
 public:
-					QueryTreeBuilder_c ( const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizerQL, const CSphIndexSettings & tSettings );
+					QueryTreeBuilder_c ( const CSphQuery * pQuery, const QueryExecutionSettings_t & tExecutionSettings, TokenizerRefPtr_c pQueryTokenizerQL, const CSphIndexSettings & tSettings );
 
 	void			CollectKeywords ( const char * szStr, XQNode_t * pNode, const XQLimitSpec_t & tLimitSpec, float fBoost );
 
@@ -59,6 +59,7 @@ public:
 	const TokenizerRefPtr_c &	GetQLTokenizer() { return m_pQueryTokenizerQL; }
 	const CSphIndexSettings &	GetIndexSettings() { return m_tSettings; }
 	const CSphQuery *			GetQuery() { return m_pQuery; }
+	const QueryExecutionSettings_t & GetExecutionSettings() { return m_tExecutionSettings; }
 
 	bool m_bHasFulltext = false;
 	bool m_bHasFilter = false;
@@ -70,6 +71,7 @@ public:
 
 private:
 	const CSphQuery *			m_pQuery {nullptr};
+	const QueryExecutionSettings_t & m_tExecutionSettings;
 	const TokenizerRefPtr_c		m_pQueryTokenizerQL;
 	const CSphIndexSettings &	m_tSettings;
 
@@ -81,8 +83,9 @@ private:
 };
 
 
-QueryTreeBuilder_c::QueryTreeBuilder_c ( const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizerQL, const CSphIndexSettings & tSettings )
+QueryTreeBuilder_c::QueryTreeBuilder_c ( const CSphQuery * pQuery, const QueryExecutionSettings_t & tExecutionSettings, TokenizerRefPtr_c pQueryTokenizerQL, const CSphIndexSettings & tSettings )
 	: m_pQuery ( pQuery )
+	, m_tExecutionSettings ( tExecutionSettings )
 	, m_pQueryTokenizerQL ( std::move (pQueryTokenizerQL) )
 	, m_tSettings ( tSettings )
 {}
@@ -129,10 +132,7 @@ void QueryTreeBuilder_c::CollectKeywords ( const char * szStr, XQNode_t * pNode,
 
 		// check for stopword, and create that node
 		// temp buffer is required, because GetWordID() might expand (!) the keyword in-place
-		BYTE sTmp [ MAX_TOKEN_BYTES ];
-
-		strncpy ( (char*)sTmp, sToken, MAX_TOKEN_BYTES );
-		sTmp[MAX_TOKEN_BYTES-1] = '\0';
+		BYTE * sTmp = CopyQueryTokenToScratch ( sToken );
 
 		int iStopWord = 0;
 		if ( m_pPlugin && m_pPlugin->m_fnPreMorph )
@@ -244,7 +244,7 @@ void QueryTreeBuilder_c::ErrorPrintPath ( QueryTreeBuilder_c & tOrig )
 
 QueryTreeBuilder_c QueryTreeBuilder_c::CreateCollectPath ( const CSphSchema * pSchema )
 {
-	QueryTreeBuilder_c tOther ( m_pQuery, std::move ( m_pQueryTokenizerQL ), m_tSettings );
+	QueryTreeBuilder_c tOther ( m_pQuery, m_tExecutionSettings, std::move ( m_pQueryTokenizerQL ), m_tSettings );
 	tOther.Setup ( pSchema, m_pTokenizer->Clone ( SPH_CLONE ), std::move ( m_pDict ), m_pParsed, m_tSettings );
 
 	tOther.m_bErrorCollectPath = true;
@@ -276,7 +276,7 @@ class QueryParserJson_c : public QueryParser_i
 {
 public:
 	bool	IsFullscan ( const CSphQuery & tQuery ) const final;
-	bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const final;
+	bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const QueryExecutionSettings_t & tExecutionSettings, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const final;
 	QueryParser_i * Clone() const final { return new QueryParserJson_c; }
 
 private:
@@ -382,7 +382,7 @@ static bool HasFulltext ( const XQNode_t * pRoot )
 	return false;
 }
 
-bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizerQL, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c & pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const
+bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, const CSphQuery * pQuery, const QueryExecutionSettings_t & tExecutionSettings, TokenizerRefPtr_c pQueryTokenizerQL, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c & pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const
 {
 	JsonObj_c tRoot ( szQuery );
 
@@ -399,7 +399,7 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 	assert ( pQueryTokenizerJson->IsQueryTok() );
 	DictRefPtr_c pMyDict = GetStatelessDict ( pDict );
 
-	QueryTreeBuilder_c tBuilder ( pQuery, std::move ( pQueryTokenizerQL ), tSettings );
+	QueryTreeBuilder_c tBuilder ( pQuery, tExecutionSettings, std::move ( pQueryTokenizerQL ), tSettings );
 	tBuilder.Setup ( pSchema, pQueryTokenizerJson->Clone ( SPH_CLONE ), pMyDict, &tParsed, tSettings );
 
 	const JsonObj_c tFtNode = FindFullTextQueryNode ( tRoot );
@@ -833,7 +833,7 @@ XQNode_t * QueryParserJson_c::ConstructQLNode ( const JsonObj_c & tJson, QueryTr
 	XQQuery_t tParsed;
 	tParsed.m_dZones = tBuilder.GetZone(); // should keep the same zone list for whole tree
 	// no need to pass morph fields here as upper level does fixup
-	if ( !sphParseExtendedQuery ( tParsed, sQueryString.cstr(), tBuilder.GetQuery(), tBuilder.GetQLTokenizer(), tBuilder.GetSchema(), tBuilder.GetDict(), tBuilder.GetIndexSettings(), nullptr ) )
+	if ( !sphParseExtendedQuery ( tParsed, sQueryString.cstr(), tBuilder.GetQuery(), tBuilder.GetExecutionSettings(), tBuilder.GetQLTokenizer(), tBuilder.GetSchema(), tBuilder.GetDict(), tBuilder.GetIndexSettings(), nullptr ) )
 	{
 		tBuilder.Error ( "%s", tParsed.m_sParseError.cstr() );
 		return nullptr;
@@ -1126,17 +1126,11 @@ static bool ParseOptions ( const JsonObj_c & tOptions, CSphQuery & tQuery, CSphS
 		else if ( i.IsStr() )
 		{
 			CSphString sRanker = i.StrVal();
-			const char * szRanker = sRanker.cstr();
-			while ( sphIsAlpha(*szRanker) )
-				szRanker++;
+			CSphString sExpr;
 
-			if ( *szRanker=='(' && sRanker.Ends(")")  )
+			if ( sphSplitRankerCall ( i.StrVal(), sRanker, sExpr ) )
 			{
-				int iRankerNameLen = szRanker-sRanker.cstr();
-				CSphString sExpr = sRanker.SubString (iRankerNameLen+1, sRanker.Length()-iRankerNameLen-2 );
 				sExpr.Unquote();
-
-				sRanker = sRanker.SubString ( 0, iRankerNameLen );
 				eAdd = ::AddOptionRanker ( tQuery, sOpt, sRanker, [sExpr]{ return sExpr; }, STMT_SELECT, sError );
 			}
 
@@ -2718,17 +2712,7 @@ static const CSphColumnInfo * GetJsonFacetStatusAttr ( const JsonAggr_t & tAggr,
 	return tKey.m_pKey;
 }
 
-static void ZeroJsonFacetCountColumns ( CSphMatch & tMatch, const ISphSchema & tSchema )
-{
-	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
-	{
-		const auto & tAttr = tSchema.GetAttr(i);
-		if ( tAttr.m_sName=="count(*)" || tAttr.m_sName=="@groupbycount" || tAttr.m_sName=="distinct" || tAttr.m_sName=="_@distinct" )
-			tMatch.SetAttr ( tAttr.m_tLocator, 0 );
-	}
-}
-
-static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, ResultSetFormat_e eFormat, const sph::StringSet & hDatetime, int iNow, const CSphString & sDistinctName, facet::FacetStatusSources_t tStatus, JsonEscapedBuilder & tOut, const AggrResult_t * pZeroesRes = nullptr )
+static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, ResultSetFormat_e eFormat, const sph::StringSet & hDatetime, int iNow, const CSphString & sDistinctName, facet::FacetStatusSources_t tStatus, JsonEscapedBuilder & tOut )
 {
 	if ( tAggr.m_eAggrFunc==Aggr_e::COUNT )
 		return;
@@ -2780,7 +2764,8 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 		{
 			JsonEscapedBuilder tPrefixBucketBlock;
 			JsonEscapedBuilder tBufMatch;
-			auto fnEncodeBucket = [&] ( const CSphMatch & tMatch )
+
+			for ( const CSphMatch & tMatch : dMatches )
 			{
 				RangeKeyDesc_t * pRange = nullptr;
 				if ( tAggr.m_eAggrFunc==Aggr_e::RANGE || tAggr.m_eAggrFunc==Aggr_e::DATE_RANGE )
@@ -2789,7 +2774,7 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 					pRange = tKey.m_tRangeNames ( iBucket );
 					// lets skip bucket with out of ranges index, ie _all
 					if ( !pRange )
-						return;
+						continue;
 				}
 
 				// bucket item is array item or dict item
@@ -2808,27 +2793,6 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 				}
 				if ( pDistinct )
 					JsonObjAddAttr ( tOut, pDistinct->m_eAttrType, pDistinct->m_sName.cstr(), tMatch, pDistinct->m_tLocator );
-			};
-
-			for ( const CSphMatch & tMatch : dMatches )
-				fnEncodeBucket ( tMatch );
-
-			if ( pZeroesRes && !pZeroesRes->m_dResults.IsEmpty() )
-			{
-				facet::FacetBucketSet_t tVisibleBuckets;
-				const auto * pVisibleBuckets = facet::CollectFacetAvailableFilters ( tRes, tKey.m_pKey->m_sName, dMatches, tVisibleBuckets );
-				auto dZeroMatches = GetResultMatches ( pZeroesRes->m_dResults.First().m_dMatches, pZeroesRes->m_tSchema, pZeroesRes->m_iOffset, pZeroesRes->m_iCount, tAggr );
-				for ( const auto & tZeroMatch : dZeroMatches )
-				{
-					if ( pVisibleBuckets && facet::MatchBucketSet ( tZeroMatch, pZeroesRes->m_tSchema, *pVisibleBuckets ) )
-						continue;
-
-					CSphMatch tOutMatch;
-					tOutMatch.Reset ( tRes.m_tSchema.GetDynamicSize() );
-					tOutMatch.Combine ( tZeroMatch, tRes.m_tSchema.GetDynamicSize() );
-					ZeroJsonFacetCountColumns ( tOutMatch, tRes.m_tSchema );
-					fnEncodeBucket ( tOutMatch );
-				}
 			}
 		}
 	
@@ -3318,15 +3282,17 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 					{
 						VecTraits_T<CSphMatch> dMatches;
 						if ( !tRes.m_dResults.IsEmpty() )
-							dMatches = GetResultMatches ( tRes.m_dResults.First().m_dMatches, tRes.m_tSchema, tRes.m_iOffset, tRes.m_iCount, tAggr );
+						{
+							if ( tAggr.m_iZeroesResult>=0 )
+								dMatches = tRes.m_dResults.First().m_dMatches;
+							else
+								dMatches = GetResultMatches ( tRes.m_dResults.First().m_dMatches, tRes.m_tSchema, tRes.m_iOffset, tRes.m_iCount, tAggr );
+						}
 						tStatus.m_pAvailableBuckets = facet::CollectFacetAvailableFilters ( tRes, pKey->m_sName, dMatches, dAvailableBuckets );
 					}
 				}
 
-				const AggrResult_t * pZeroesRes = nullptr;
-				if ( tAggr.m_iZeroesResult>=0 && tAggr.m_iZeroesResult<dRes.GetLength() )
-					pZeroesRes = &dRes[tAggr.m_iZeroesResult];
-				EncodeAggr ( tAggr, i, dRes[iResultSet], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tStatus, tOut, pZeroesRes );
+				EncodeAggr ( tAggr, i, dRes[iResultSet], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tStatus, tOut );
 			}
 			tOut.FinishBlock ( false ); // aggregations obj
 		}
@@ -4945,19 +4911,13 @@ static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<Js
 				continue;
 			}
 
-			if ( strcmp ( tAggsItem.Name(), "filter_mode" )==0 )
+			if ( strcmp ( tAggsItem.Name(), "filter_mode" )==0 || strcmp ( tAggsItem.Name(), "mode" )==0 )
 			{
 				FacetFilterMode_e eMode = FacetFilterMode_e::Strict;
 				if ( !ParseFacetFilterMode ( tAggsItem, eMode, sError, tAggsItem.Name() ) )
 					return false;
 				tItem.m_tFacetFilter.m_tMode = eMode;
 				continue;
-			}
-
-			if ( strcmp ( tAggsItem.Name(), "mode" )==0 )
-			{
-				sError = R"("mode" is not supported in JSON aggregations; use "filter_mode" instead)";
-				return false;
 			}
 
 			if ( strcmp ( tAggsItem.Name(), "filters" )==0 )

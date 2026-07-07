@@ -24,6 +24,9 @@
 
 #include "std/string.h"
 
+#include "auth/auth.h"
+#include "auth/auth_common.h"
+
 static const bool LOG_LEVEL_LOCAL_SEARCH = env_exists ( "MANTICORE_LOG_LOCAL_SEARCH" ); // verbose logging local search events, ruled by this env variable
 #define LOG_COMPONENT_LOCSEARCHINFO __LINE__ << " "
 #define LOCSEARCHINFO LOGINFO ( LOCAL_SEARCH, LOCSEARCHINFO )
@@ -1397,6 +1400,31 @@ static void FixupSystemTableW ( StrVec_t & dNames, CSphQuery & tQuery ) noexcept
 ////////////////////////////////////////////////////////////////
 // check for single-query, multi-queue optimization possibility
 ////////////////////////////////////////////////////////////////
+static bool HasSameRankerIntent ( const CSphQuery & tLeft, const CSphQuery & tRight )
+{
+	if ( tLeft.m_bExplicitRanker!=tRight.m_bExplicitRanker )
+		return false;
+
+	if ( tLeft.m_eRanker!=tRight.m_eRanker )
+		return false;
+
+	if ( tLeft.m_eRanker==SPH_RANK_EXPR || tLeft.m_eRanker==SPH_RANK_EXPORT )
+		return tLeft.m_sRankerExpr==tRight.m_sRankerExpr;
+
+	if ( tLeft.m_eRanker==SPH_RANK_PLUGIN )
+		return tLeft.m_sUDRanker==tRight.m_sUDRanker && tLeft.m_sUDRankerOpts==tRight.m_sUDRankerOpts;
+
+	return true;
+}
+
+
+static bool HasSameBooleanModeIntent ( const CSphQuery & tLeft, const CSphQuery & tRight )
+{
+	return tLeft.m_bExplicitBooleanMode==tRight.m_bExplicitBooleanMode
+		&& tLeft.m_bDefaultBoolOr==tRight.m_bDefaultBoolOr;
+}
+
+
 bool SearchHandler_c::CheckMultiQuery() const
 {
 	const int iQueries = m_dNQueries.GetLength();
@@ -1415,20 +1443,20 @@ bool SearchHandler_c::CheckMultiQuery() const
 		// these parameters must be the same
 		if (
 			( qCheck.m_sRawQuery!=qFirst.m_sRawQuery ) || // query string
-				( qCheck.m_dWeights.GetLength ()!=qFirst.m_dWeights.GetLength () ) || // weights count
-				( qCheck.m_dWeights.GetLength () && memcmp ( qCheck.m_dWeights.Begin (), qFirst.m_dWeights.Begin (),
-					sizeof ( qCheck.m_dWeights[0] ) * qCheck.m_dWeights.GetLength () ) ) || // weights
-				( qCheck.m_eMode!=qFirst.m_eMode ) || // search mode
-				( qCheck.m_eRanker!=qFirst.m_eRanker ) || // ranking mode
-				( qCheck.m_dFilters.GetLength ()!=qFirst.m_dFilters.GetLength () ) || // attr filters count
-				( qCheck.m_dFilterTree.GetLength ()!=qFirst.m_dFilterTree.GetLength () ) ||
-				( qCheck.m_iCutoff!=qFirst.m_iCutoff ) || // cutoff
-				( qCheck.m_eSort==SPH_SORT_EXPR && qFirst.m_eSort==SPH_SORT_EXPR && qCheck.m_sSortBy!=qFirst.m_sSortBy )
-				|| // sort expressions
-					( qCheck.m_bGeoAnchor!=qFirst.m_bGeoAnchor ) || // geodist expression
-				( qCheck.m_bGeoAnchor && qFirst.m_bGeoAnchor
-					&& ( qCheck.m_fGeoLatitude!=qFirst.m_fGeoLatitude
-						|| qCheck.m_fGeoLongitude!=qFirst.m_fGeoLongitude ) ) ) // some geodist cases
+			( qCheck.m_dWeights.GetLength ()!=qFirst.m_dWeights.GetLength () ) || // weights count
+			( qCheck.m_dWeights.GetLength () && memcmp ( qCheck.m_dWeights.Begin (), qFirst.m_dWeights.Begin (),
+				sizeof ( qCheck.m_dWeights[0] ) * qCheck.m_dWeights.GetLength () ) ) || // weights
+			( qCheck.m_eMode!=qFirst.m_eMode ) || // search mode
+			!HasSameRankerIntent ( qCheck, qFirst ) || // ranking mode
+			!HasSameBooleanModeIntent ( qCheck, qFirst ) || // implicit boolean operator mode
+			( qCheck.m_dFilters.GetLength ()!=qFirst.m_dFilters.GetLength () ) || // attr filters count
+			( qCheck.m_dFilterTree.GetLength ()!=qFirst.m_dFilterTree.GetLength () ) ||
+			( qCheck.m_iCutoff!=qFirst.m_iCutoff ) || // cutoff
+			( qCheck.m_eSort==SPH_SORT_EXPR && qFirst.m_eSort==SPH_SORT_EXPR && qCheck.m_sSortBy!=qFirst.m_sSortBy ) || // sort expressions
+			( qCheck.m_bGeoAnchor!=qFirst.m_bGeoAnchor ) || // geodist expression
+			( qCheck.m_bGeoAnchor && qFirst.m_bGeoAnchor
+				&& ( qCheck.m_fGeoLatitude!=qFirst.m_fGeoLatitude
+					|| qCheck.m_fGeoLongitude!=qFirst.m_fGeoLongitude ) ) ) // some geodist cases
 
 			return false;
 
@@ -1777,10 +1805,11 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 	int iOrderTag = 0;
 	bool bSysVar = tQuery.m_sIndexes.Begins ( "@@" );
 //		bSysVar = bSysVar || StrEqN ( FROMS ("information_schema"), tQuery.m_sIndexes.cstr() );
+	bool bAuthTbl = tQuery.m_sIndexes.Begins ( GetPrefixAuth().cstr() );
 
 	// search through specified local indexes
 	StrVec_t dIdxNames;
-	if ( bSysVar )
+	if ( bSysVar || bAuthTbl )
 		dIdxNames.Add ( tQuery.m_sIndexes );
 	else
 	{
@@ -1864,7 +1893,7 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 	else
 		m_dLocal.SwapData ( dLocals );
 
-	return !bSysVar;
+	return !( bSysVar || bAuthTbl );
 }
 
 // generate warning about slow full text expansion for queries there
@@ -1940,6 +1969,75 @@ static void FillupFacetError ( int iQueries, const VecTraits_T<CSphQuery> & dQue
 
 			tRes.m_sError = *pError;
 		}
+	}
+}
+
+static sph::StringSet BuildExtraSchemaSet ( const StrVec_t & dExtraSchema )
+{
+	sph::StringSet hExtra;
+	for ( const CSphString & sExtra : dExtraSchema )
+		hExtra.Add ( sExtra );
+
+	return hExtra;
+}
+
+static void ApplyFacetZeroesPaging ( const CSphQuery & tFacetQuery, AggrResult_t & tRes )
+{
+	tRes.m_iOffset = Max ( facet::GetFacetResultOffset ( tFacetQuery ), 0 );
+	const int iLimit = Max ( facet::GetFacetResultLimit ( tFacetQuery ), 0 );
+	tRes.m_iCount = Max ( Min ( iLimit, tRes.GetLength()-tRes.m_iOffset ), 0 );
+	tRes.m_iMatches = tRes.m_iCount;
+}
+
+static int FindFacetZeroesHelper ( const VecTraits_T<CSphQuery> & dQueries, int iFacet )
+{
+	if ( iFacet<0 || iFacet>=dQueries.GetLength() || !facet::HasDeferredFacetResultPaging ( dQueries[iFacet] ) )
+		return -1;
+
+	int iHelper = iFacet + 1;
+	if ( iHelper<dQueries.GetLength() && dQueries[iHelper].m_bFacetMaxRef )
+		++iHelper;
+
+	if ( iHelper<dQueries.GetLength() && dQueries[iHelper].m_bFacetMaxRef )
+		return iHelper;
+
+	return -1;
+}
+
+static void FinalizeFacetZeroes ( const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<AggrResult_t> & dResults, bool bHaveLocals, const StrVec_t & dExtraSchema, QueryProfile_c * pProfile, bool bForceRefItems, bool bMaster )
+{
+	for ( int i=0; i<dQueries.GetLength(); ++i )
+	{
+		const CSphQuery & tFacetQuery = dQueries[i];
+		if ( !tFacetQuery.m_bFacet )
+			continue;
+
+		int iZeroes = FindFacetZeroesHelper ( dQueries, i );
+		if ( iZeroes<0 )
+			continue;
+
+		AggrResult_t & tRes = dResults[i];
+		const AggrResult_t & tZeroesRes = dResults[iZeroes];
+		if ( !tRes.m_iSuccesses || !tZeroesRes.m_iSuccesses )
+		{
+			ApplyFacetZeroesPaging ( tFacetQuery, tRes );
+			continue;
+		}
+
+		bool bAppended = false;
+		bool bCanFinalize = facet::AppendMissingFacetZeroes ( tFacetQuery, tRes, tZeroesRes, bAppended );
+		if ( bCanFinalize && bAppended )
+		{
+			sph::StringSet hExtra = BuildExtraSchemaSet ( dExtraSchema );
+			if ( !MinimizeAggrResult ( tRes, tFacetQuery, bHaveLocals, hExtra, pProfile, nullptr, bForceRefItems, bMaster, true ) )
+			{
+				tRes.m_iSuccesses = 0;
+				continue;
+			}
+		}
+
+		tRes.m_iTotalMatches = Max<int64_t> ( tZeroesRes.m_iTotalMatches, tRes.GetLength() );
+		ApplyFacetZeroesPaging ( tFacetQuery, tRes );
 	}
 }
 
@@ -2052,6 +2150,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		tReqBuilder = std::make_unique<SearchRequestBuilder_c> ( m_dNQueries, iDivideLimits );
 		tParser = std::make_unique<SearchReplyParser_c> ( iQueries );
 		tReporter = GetObserver();
+		SetSessionAuth ( dRemotes );
 
 		// run remote queries. tReporter will tell us when they're finished.
 		// also blackholes will be removed from this flow of remotes.
@@ -2202,9 +2301,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 	for ( int iRes=0; iRes<iQueries; ++iRes )
 	{
-		sph::StringSet hExtra;
-		for ( const CSphString & sExtra : m_dExtraSchema )
-			hExtra.Add ( sExtra );
+		sph::StringSet hExtra = BuildExtraSchemaSet ( m_dExtraSchema );
 
 		AggrResult_t & tRes = m_dNAggrResults[iRes];
 		const CSphQuery & tQuery = m_dNQueries[iRes];
@@ -2278,6 +2375,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		for ( const auto & tLocal : m_dLocal )
 			tRes.m_dIndexNames.Add ( tLocal.m_sName );
 	}
+
+	FinalizeFacetZeroes ( m_dNQueries, m_dNAggrResults, !m_dLocal.IsEmpty(), m_dExtraSchema, m_pProfile, m_bFederatedUser, m_bMaster );
 
 	// pop up facet error from one of the query to the front
 	FillupFacetError ( iQueries, m_dQueries, m_dNAggrResults );
@@ -2486,9 +2585,14 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 	tQuery.m_bFacetHead = true;
 	tHandler.SetQuery ( 0, tQuery, nullptr );
 	tHandler.SetJoinQueryOptions ( 0, tParsed.m_tJoinQueryOptions );
-	const JsonQuery_c tHeadFacetQuery = tQuery;
 	int iRefLimit = tQuery.m_iLimit;
 	int iRefOffset = tQuery.m_iOffset;
+	for ( auto & tAgg : tQuery.m_dAggs )
+	{
+		tAgg.m_iRequestedLimit = tAgg.m_iSize ? tAgg.m_iSize : iRefLimit;
+		tAgg.m_iRequestedOffset = tAgg.m_iSize ? 0 : iRefOffset;
+	}
+	const JsonQuery_c tHeadFacetQuery = tQuery;
 
 	ARRAY_FOREACH ( i, tHeadFacetQuery.m_dAggs )
 	{
@@ -2642,18 +2746,15 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 			tQuery.m_iLimit = iRefLimit;
 			tQuery.m_iOffset = iRefOffset;
 		}
+		if ( tBucket.m_iZeroesResult>=0 )
+			facet::DeferFacetResultPaging ( tQuery );
 
 		tHandler.SetQuery ( tBucket.m_iResult, tQuery, nullptr );
 
 		if ( tBucket.m_iStrictResult>=0 )
 		{
 			JsonQuery_c tStrictQuery = tQuery;
-			tStrictQuery.m_bFacetMaxRef = true;
-			tStrictQuery.m_tFacetFilter.m_tMode = FacetFilterMode_e::Strict;
-			tStrictQuery.m_tFacetFilter.m_eClause = FacetFilterClause_e::All;
-			tStrictQuery.m_dFilters.Reset();
-			tStrictQuery.m_dFilterTree.Reset();
-			if ( !facet::CopyFilters ( tHeadFacetQuery, tStrictQuery, sError, true ) )
+			if ( !facet::SetupHelperQuery ( tHeadFacetQuery, tStrictQuery, facet::FacetHelperQuery_e::Strict, sError ) )
 			{
 				tQuery = tHeadFacetQuery;
 				return tHandler;
@@ -2665,12 +2766,7 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 		if ( tBucket.m_iZeroesResult>=0 )
 		{
 			JsonQuery_c tZeroesQuery = tQuery;
-			tZeroesQuery.m_bFacetMaxRef = true;
-			tZeroesQuery.m_tFacetFilter.m_eClause = FacetFilterClause_e::None;
-			tZeroesQuery.m_tFacetFilter.m_dAttrs.Reset();
-			tZeroesQuery.m_dFilters.Reset();
-			tZeroesQuery.m_dFilterTree.Reset();
-			if ( !facet::CopyFilters ( tHeadFacetQuery, tZeroesQuery, sError, false ) )
+			if ( !facet::SetupHelperQuery ( tHeadFacetQuery, tZeroesQuery, facet::FacetHelperQuery_e::Zeroes, sError ) )
 			{
 				tQuery = tHeadFacetQuery;
 				return tHandler;

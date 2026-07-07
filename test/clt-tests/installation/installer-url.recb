@@ -1,0 +1,3 @@
+––– input –––
+export MANTICORE_INSTALLER_REPO_URL="${MANTICORE_INSTALLER_REPO_URL:-https://manticoresearch.com}"
+––– output –––

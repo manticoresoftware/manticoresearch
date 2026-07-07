@@ -44,11 +44,11 @@ where:
 * `field` value must contain the name of the attribute or expression being faceted
 * optional `size` specifies the maximum number of buckets to include in the result. When not specified, it inherits the main query's limit. More details can be found in the [Size of facet result](../Searching/Faceted_search.md#Size-of-facet-result) section.
 * optional `sort` specifies an array of attributes and/or additional properties using the same syntax as the ["sort" parameter in the main query](../Searching/Sorting_and_ranking.md#Sorting-via-JSON).
-* optional top-level `facet_filter_mode` controls how all aggregations inherit filters from the main query. Supported values are `strict`, `auto`, and `max`.
-* optional per-aggregation `filter_mode` overrides the inherited mode for that aggregation. Supported values are `strict`, `auto`, and `max`. In SQL, the equivalent per-facet keyword is `MODE`.
+* optional top-level `facet_filter_mode` controls how all aggregations inherit filters from the main query. Supported values are `strict`, `auto`, and `max`. This is the query-level setting in SQL (`OPTION facet_filter_mode='...'`) and the top-level setting in JSON.
+* optional per-aggregation `mode` overrides the inherited mode for that aggregation. Supported values are `strict`, `auto`, and `max`. This key is JSON-only and is not an alias for `facet_filter_mode`. In SQL, the equivalent per-facet override is the `MODE` keyword inside a `FACET` clause.
 * optional per-aggregation `filters` explicitly lists which main-query attribute filters should be applied to that aggregation. In SQL the equivalent clause is `FILTERS ...`.
-* optional per-aggregation `exclude_filters` explicitly lists which main-query attribute filters should not be applied to that aggregation. In SQL the equivalent clause is `EXCLUDE FILTERS ...`.
-* optional per-aggregation `zeroes` enables zero-count buckets in `max` mode. In SQL, the equivalent per-facet keyword is `ZEROES`.
+* optional per-aggregation `exclude_filters` explicitly lists which main-query attribute filters should not be applied to that aggregation. This key is JSON-only; in SQL the equivalent clause is `EXCLUDE FILTERS ...`.
+* optional per-aggregation `zeroes` enables zero-count buckets in `max` mode. In SQL, the equivalent per-facet keyword is `ZEROES`. If you want filtered visible counts in SQL `max` mode and also want broad zero-count buckets, use `OPTION facet_filter_mode='max' ... FACET ... ALL FILTERS ZEROES`.
 * `auto` and `max` facet result sets can include a `status` bucket marker. Returned values are `selected`, `available`, and `unavailable`.
 
 The result set will contain an `aggregations` node with the returned facets, where `key` is the aggregated value and `doc_count` is the aggregation count.
@@ -2405,20 +2405,20 @@ Built-in modes:
   - count buckets from the broad base query and add a `status` marker for each bucket
 
 Manual overrides:
-- `all filters` (SQL only)
+- SQL `ALL FILTERS`
   - apply all main-query filters to this facet
-- `filters`
+- SQL `FILTERS ...` / JSON `filters`
   - apply only the listed main-query filters to this facet
-- `exclude_filters`
+- SQL `EXCLUDE FILTERS ...` / JSON `exclude_filters`
   - apply all main-query filters except the listed ones to this facet
 
 Short version:
 - `strict` = apply everything
 - `auto` = apply everything except this facet's own filters + `status`
 - `max` = broad base-query counts + `status`
-- `all filters` (SQL only) = apply everything
-- `filters` = apply only these filters
-- `exclude_filters` = apply everything except these filters
+- SQL `ALL FILTERS` = apply everything
+- SQL `FILTERS` = apply only these filters
+- JSON `exclude_filters` / SQL `EXCLUDE FILTERS` = apply everything except these filters
 
 Performance note:
 - `max` is the most expensive facet mode because it has to collect broad facet counts and strict/current availability metadata
@@ -2487,11 +2487,16 @@ The per-facet SQL clauses mean:
 - `ALL FILTERS` — apply all main-query filters to this facet
 - `FILTERS color_id, size_id` — apply only `color_id` and `size_id` filters to this facet
 - `EXCLUDE FILTERS color_id` — apply all main-query filters except `color_id` to this facet
+- `MODE max` — override the inherited facet mode for this one SQL facet
 - `ZEROES` — in SQL `max` mode, keep buckets from the broader `max` bucket universe even when the visible facet count is `0`; in JSON the equivalent per-aggregation key is `"zeroes": true`
 
 The naming differs slightly between SQL and JSON:
 - SQL uses the query option `facet_filter_mode`, the per-facet keyword `MODE`, and the clauses `FILTERS` / `EXCLUDE FILTERS`
-- JSON uses the top-level key `facet_filter_mode`, the per-aggregation keys `filter_mode` / `zeroes`, and the keys `filters` / `exclude_filters`
+- JSON uses the top-level key `facet_filter_mode`, the per-aggregation keys `mode` / `zeroes`, and the keys `filters` / `exclude_filters`
+
+There is no query-level `mode` key. Use `facet_filter_mode` for the inherited query/top-level default, `MODE` for one SQL facet, and `mode` for one JSON aggregation.
+
+`ZEROES` does not replace `MODE max`; it works with `max` mode. So if the query already has `OPTION facet_filter_mode='max'`, the SQL form is simply `FACET color_id ALL FILTERS ZEROES`. If the query default stays `strict` or `auto`, enable `max` on that one facet explicitly with `FACET color_id ALL FILTERS ZEROES MODE max`.
 
 These clauses override the filter scope that would otherwise come from `facet_filter_mode` or SQL `MODE`. For example, with `OPTION facet_filter_mode='max'`, `FACET color_id ALL FILTERS ZEROES` still emits `status`, its visible counts use all main-query filters, and `ZEROES` keeps broad `max` buckets that are missing from the filtered counts as `count(*) = 0` rows.
 
@@ -2579,7 +2584,7 @@ POST /search -d '
   "aggs": {
     "colors": {
       "terms": { "field": "color_id" },
-      "filter_mode": "strict"
+      "mode": "strict"
     },
     "sku": {
       "terms": { "field": "sku" },
@@ -2595,7 +2600,7 @@ POST /search -d '
 
 Notes:
 - in SQL, `MODE` overrides the query-level `facet_filter_mode` for one facet, and `ZEROES` keeps zero-count `max` buckets visible for that facet
-- in JSON, `filter_mode` overrides the top-level `facet_filter_mode` for one aggregation, and `zeroes: true` enables the same zero-count `max` buckets behavior for that aggregation
+- in JSON, `mode` overrides the top-level `facet_filter_mode` for one aggregation, and `"zeroes": true` enables the same zero-count `max` buckets behavior for that aggregation
 - selected values are reported as `status=selected` for explicit value filters such as `=` and `IN`.
 - unsupported same-field filters such as ranges do not currently participate in selected-value detection.
 - facet-local filter scope supports conjunction-only attribute filters. Complex boolean filter trees are not rewritten per facet.

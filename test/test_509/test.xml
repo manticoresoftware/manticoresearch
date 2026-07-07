@@ -97,15 +97,15 @@ SELECT count(*) FROM facet_scope LIMIT 0 FACET ts MODE max FILTERS ver;;
   }
 }</query>
 
-<!-- per-aggregation filter_mode. Selected values are reported as selected. -->
+<!-- per-aggregation mode and alias. Selected values are reported as selected. -->
 <query endpoint="search">{
   "table": "facet_scope",
   "query": { "bool": { "must": [ { "in": { "ts": [10,20] } }, { "equals": { "ver": "20" } } ] } },
   "facet_filter_mode": "strict",
   "aggs": {
-    "ts_mode_auto": { "terms": { "field": "ts" }, "filter_mode": "auto" },
-    "ver_mode_max": { "terms": { "field": "ver" }, "filter_mode": "max" },
-    "gid_mode_strict": { "terms": { "field": "gid" }, "filter_mode": "strict" }
+    "ts_mode_auto": { "terms": { "field": "ts" }, "mode": "auto" },
+    "ver_mode_max": { "terms": { "field": "ver" }, "mode": "max" },
+    "gid_mode_strict": { "terms": { "field": "gid" }, "mode": "strict" }
   }
 }</query>
 
@@ -133,8 +133,8 @@ SELECT count(*) FROM facet_scope LIMIT 0 FACET ts MODE max FILTERS ver;;
   "query": { "bool": { "must": [ { "in": { "ts": [10,20] } }, { "equals": { "ver": "20" } } ] } },
   "facet_filter_mode": "strict",
   "aggs": {
-    "gid_filters_ts_mode_max": { "terms": { "field": "gid" }, "filters": ["ts"], "filter_mode": "max" },
-    "gid_exclude_ver_mode_auto": { "terms": { "field": "gid" }, "exclude_filters": ["ver"], "filter_mode": "auto" }
+    "gid_filters_ts_mode_max": { "terms": { "field": "gid" }, "filters": ["ts"], "mode": "max" },
+    "gid_exclude_ver_mode_auto": { "terms": { "field": "gid" }, "exclude_filters": ["ver"], "mode": "auto" }
   }
 }</query>
 
@@ -144,8 +144,8 @@ SELECT count(*) FROM facet_scope LIMIT 0 FACET ts MODE max FILTERS ver;;
   "query": { "match_all": {} },
   "facet_filter_mode": "max",
   "aggs": {
-    "ts_all_docs_max": { "terms": { "field": "ts" }, "filter_mode": "max" },
-    "ver_all_docs_max": { "terms": { "field": "ver" }, "filter_mode": "max" }
+    "ts_all_docs_max": { "terms": { "field": "ts" }, "mode": "max" },
+    "ver_all_docs_max": { "terms": { "field": "ver" }, "mode": "max" }
   }
 }</query>
 
@@ -168,12 +168,7 @@ SELECT count(*) FROM facet_scope LIMIT 0 FACET ts MODE max FILTERS ver;;
 
 <query endpoint="search">{
   "table": "facet_scope",
-  "aggs": { "ts_bad_mode": { "terms": { "field": "ts" }, "filter_mode": "bogus" } }
-}</query>
-
-<query endpoint="search">{
-  "table": "facet_scope",
-  "aggs": { "ts_legacy_mode_rejected": { "terms": { "field": "ts" }, "mode": "bogus" } }
+  "aggs": { "ts_bad_mode": { "terms": { "field": "ts" }, "mode": "bogus" } }
 }</query>
 
 <query endpoint="search">{

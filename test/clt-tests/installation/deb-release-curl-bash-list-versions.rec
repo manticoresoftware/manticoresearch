@@ -14,7 +14,7 @@ export TERM=xterm && export LC_ALL=C.UTF-8 && export LANG=C.UTF-8
 ––– output –––
 ––– block: installer-url –––
 ––– input –––
-set -o pipefail; (wget -qO- "$MANTICORE_INSTALLER_REPO_URL" | sh -s list-versions-file /tmp/manticore-list-versions.txt) > /tmp/manticore-list-versions.out 2>&1; echo $?
+set -o pipefail; (run_manticore_installer_wget list-versions-file /tmp/manticore-list-versions.txt) > /tmp/manticore-list-versions.out 2>&1; echo $?
 ––– output –––
 0
 ––– input –––

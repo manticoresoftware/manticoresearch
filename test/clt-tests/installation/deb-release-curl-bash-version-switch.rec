@@ -14,7 +14,7 @@ export TERM=xterm && export LC_ALL=C.UTF-8 && export LANG=C.UTF-8
 ––– output –––
 ––– block: installer-url –––
 ––– input –––
-set -o pipefail; (wget -qO- "$MANTICORE_INSTALLER_REPO_URL" | sh -s list-versions-file /tmp/manticore-versions.txt) > /tmp/manticore-versions.out 2>&1; echo $?
+set -o pipefail; (run_manticore_installer_wget list-versions-file /tmp/manticore-versions.txt) > /tmp/manticore-versions.out 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
@@ -32,7 +32,7 @@ export MANTICORE_PREVIOUS_VERSION="$(sed -n '1p' /tmp/manticore-switch-versions)
 #!/([0-9]+:)?[0-9]+[.][0-9]+[.][0-9]+([-_+~.][^[:space:]]+)?/!#
 0
 ––– input –––
-set -o pipefail; (wget -qO- "$MANTICORE_INSTALLER_REPO_URL" | sh -s version "$MANTICORE_PREVIOUS_VERSION" no-start) > /tmp/manticore-install-previous.out 2>&1; echo $?
+set -o pipefail; (run_manticore_installer_wget version "$MANTICORE_PREVIOUS_VERSION" no-start) > /tmp/manticore-install-previous.out 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
@@ -50,7 +50,7 @@ apt-mark showmanual | grep -Fx manticore; echo $?
 manticore
 0
 ––– input –––
-set -o pipefail; (wget -qO- "$MANTICORE_INSTALLER_REPO_URL" | sh -s upgrade no-start) > /tmp/manticore-version-switch.out 2>&1; echo $?
+set -o pipefail; (run_manticore_installer_wget upgrade no-start) > /tmp/manticore-version-switch.out 2>&1; echo $?
 ––– output –––
 0
 ––– input –––

@@ -7,7 +7,7 @@ yum install -y -q --skip-broken curl mariadb mariadb105 which procps > /dev/null
 0
 ––– block: installer-url –––
 ––– input –––
-set -o pipefail; (curl -sSL "$MANTICORE_INSTALLER_REPO_URL" | sh -s silent) > /dev/null 2>&1; echo $?
+set -o pipefail; (run_manticore_installer_curl silent) > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––

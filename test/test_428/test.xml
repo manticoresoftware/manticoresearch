@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>multi statements with incompatible count distinct should fall back to per-query execution</name>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src_t
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select id, a, b from test_t
+	sql_attr_uint		= a
+	sql_attr_uint		= b
+}
+
+index t
+{
+	source			= src_t
+	path			= <data_path/>/t
+}
+
+source src_books
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select id, author_id, page_count, year from test_books
+	sql_attr_uint		= author_id
+	sql_attr_uint		= page_count
+	sql_attr_uint		= year
+}
+
+index books
+{
+	source			= src_books
+	path			= <data_path/>/books
+}
+</config>
+
+<db_create>
+create table test_t
+(
+	id int not null,
+	a int not null,
+	b int not null
+);
+</db_create>
+<db_drop>drop table if exists test_t;</db_drop>
+<db_insert>
+insert into test_t values
+(1,1,2),
+(2,1,1)
+</db_insert>
+
+<db_create>
+create table test_books
+(
+	id int not null,
+	author_id int not null,
+	page_count int not null,
+	year int not null
+);
+</db_create>
+<db_drop>drop table if exists test_books;</db_drop>
+<db_insert>
+insert into test_books values
+(1,1,201,2011),
+(2,1,202,2012),
+(3,2,201,2011),
+(4,2,203,2013),
+(5,3,202,2012),
+(6,3,204,2014),
+(7,4,201,2011),
+(8,4,205,2015),
+(9,5,202,2012),
+(10,5,206,2016),
+(11,6,203,2013),
+(12,6,207,2017)
+</db_insert>
+
+<queries><sphinxql>
+select count(distinct a) as c1 from t; select count(distinct b) as c2 from t;
+select * from t group by a; select count(distinct a) as c3 from t;
+select count(distinct author_id) as cnt, groupby() as page_count from books group by page_count order by page_count asc; select count(distinct author_id) as cnt, groupby() as year from books group by year order by year asc; select count(distinct author_id) as total_cnt from books; select * from books group by author_id within group order by year desc order by id desc limit 4, 2 option max_matches=6;
+</sphinxql></queries>
+
+</test>

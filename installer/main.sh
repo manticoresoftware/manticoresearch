@@ -327,7 +327,11 @@ determine_action() {
 
     if desired_version_installed "$target_version"; then
         if [[ -n "$MANTICORE_REPO_CHANNEL" ]]; then
-            print_info "Installed version $current_version is already the latest available in the ${MANTICORE_REPO_CHANNEL} repository."
+            if [[ "$OS_FAMILY" == "brew" ]]; then
+                print_info "Installed version $current_version is already the latest available in the Homebrew ${MANTICORE_REPO_CHANNEL} formula."
+            else
+                print_info "Installed version $current_version is already the latest available in the ${MANTICORE_REPO_CHANNEL} repository."
+            fi
         else
             print_info "Installed version $current_version is already up to date."
         fi
@@ -335,6 +339,17 @@ determine_action() {
     fi
 
     if [[ -n "$MANTICORE_REPO_CHANNEL" ]]; then
+        if [[ "$OS_FAMILY" == "brew" ]]; then
+            if [[ "$UPGRADE_REQUESTED" == "true" ]] || ask_confirm "Latest Homebrew ${MANTICORE_REPO_CHANNEL} formula version is $target_version. Upgrade from $current_version?"; then
+                print_info "Switching from version $current_version to latest Homebrew ${MANTICORE_REPO_CHANNEL} formula version $target_version."
+                ACTION="upgrade"
+                return 0
+            else
+                print_info "Leaving version $current_version installed."
+                exit 0
+            fi
+        fi
+
         if [[ "$UPGRADE_REQUESTED" == "true" ]] || ask_confirm "Latest ${MANTICORE_REPO_CHANNEL} repository version is $target_version. Switch from $current_version?"; then
             print_info "Switching from version $current_version to latest ${MANTICORE_REPO_CHANNEL} repository version $target_version."
             SPECIFIC_VERSION="$target_version"

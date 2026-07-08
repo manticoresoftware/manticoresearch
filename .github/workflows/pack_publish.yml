@@ -538,7 +538,7 @@ jobs:
           delimiter: "-"
           target: ${{ needs.pack.outputs.target }}
       - name: Publish standalone MCL DEB package
-        if: needs.pack.outputs.mcl_package_needed == 'true'
+        if: needs.pack.outputs.mcl_package_needed == 'true' && matrix.DISTR != 'buster'
         uses: manticoresoftware/publish_to_repo@main
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
@@ -572,7 +572,7 @@ jobs:
           delimiter: "_"
           target: ${{ needs.pack.outputs.target }}
       - name: Publish standalone MCL RPM package
-        if: needs.pack.outputs.mcl_package_needed == 'true'
+        if: needs.pack.outputs.mcl_package_needed == 'true' && matrix.DISTR != 7
         uses: manticoresoftware/publish_to_repo@main
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}

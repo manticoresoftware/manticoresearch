@@ -10,7 +10,7 @@
 
 | 字段 | 描述 |
 | - | - |
-| ID| 一个具有自动递增功能的64位无符号整数。在添加PQ规则时可以省略，如[添加PQ规则](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md)中所述 |
+| ID | 无符号 64 位规则 ID。添加 PQ 规则时可省略或设为 `0`，以使用自动 ID 生成，如 [add a PQ rule](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) 中所述。不允许显式负 ID。 |
 | Query | 规则的[全文查询](../../Searching/Full_text_matching/Basic_usage.md)，可以看作是[MATCH子句](../../Searching/Full_text_matching/Basic_usage.md)或[JSON /search](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON)的值。如果查询中使用了[按字段运算符](../../Searching/Full_text_matching/Operators.md)，则需要在渗透表配置中声明全文字段。如果存储的查询仅用于属性过滤（没有全文查询），查询值可以为空或省略。此字段的值应对应于预期的文档模式，该模式在创建渗透表时指定。 |
 | Filters | 可选。过滤器是一个可选字符串，包含属性过滤器和/或表达式，定义方式与[WHERE子句](../../Searching/Filters.md#WHERE)或[JSON过滤](../../Searching/Filters.md#HTTP-JSON)相同。此字段的值应对应于预期的文档模式，该模式在创建渗透表时指定。 |
 | Tags | 可选。标签表示一个由逗号分隔的字符串标签列表，可用于过滤/删除PQ规则。在执行[渗透查询](../../Searching/Percolate_query.md)时，标签也可以与匹配的文档一起返回。 |

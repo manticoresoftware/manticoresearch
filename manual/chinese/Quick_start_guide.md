@@ -387,7 +387,7 @@ Query OK, 3 rows affected (0.01 sec)
 ##### JSON:
 
 <!-- request JSON -->
-`"id":0` 或没有 id 会强制自动 ID 生成。
+对于这个实时表，`"id":0` 或省略 `id` 会请求自动生成 ID。
 
 ```json
 POST /insert

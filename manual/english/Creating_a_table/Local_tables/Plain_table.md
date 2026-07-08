@@ -44,7 +44,7 @@ table tbl {
   * Insert additional data into the table once it has been built
   * Delete data from the table
   * Create, delete, or alter the table schema online
-  * Use [UUID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) for automatic ID generation (data from external storage must include a unique identifier)
+  * Use [auto-ID generation](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) when building the table; rows from external storage must include explicit, unique, non-zero unsigned 64-bit document IDs
 
 Numeric attributes, including [MVAs](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29), are the only elements that can be updated in a plain table. All other data in the table is immutable. If updates or new records are required, the table must be rebuilt. During the rebuilding process, the existing table remains available to serve requests, and a process called  [rotation](../../Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md) is performed when the new version is ready, bringing it online and discarding the old version.
 

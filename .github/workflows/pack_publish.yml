@@ -517,16 +517,18 @@ jobs:
 
   publish_debian_ubuntu:
     needs: [publish, pack]
-    if: needs.pack.outputs.should_continue == 'true'
+    if: needs.pack.outputs.should_continue == 'true' || needs.pack.outputs.mcl_package_needed == 'true'
     strategy:
       fail-fast: true
       matrix:
-        DISTR: [bionic, focal, jammy, bullseye, bookworm]
+        DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
         arch: [x86_64, aarch64]
     runs-on: ubuntu-22.04
     name: ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
     steps:
-      - uses: manticoresoftware/publish_to_repo@main
+      - name: Publish daemon DEB package
+        if: needs.pack.outputs.should_continue == 'true' && matrix.DISTR != 'buster'
+        uses: manticoresoftware/publish_to_repo@main
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
           distr: ${{ matrix.DISTR }}
@@ -535,76 +537,9 @@ jobs:
           type: deb
           delimiter: "-"
           target: ${{ needs.pack.outputs.target }}
-
-  publish_rhel:
-    needs: [publish, pack]
-    if: needs.pack.outputs.should_continue == 'true'
-    strategy:
-      fail-fast: true
-      matrix:
-        DISTR: [8, 9, 10]
-        arch: [x86_64, aarch64]
-    runs-on: ubuntu-22.04
-    name: RHEL ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
-    steps:
-      - uses: manticoresoftware/publish_to_repo@main
-        with:
-          ssh_key: ${{ secrets.REPO_SSH_KEY }}
-          distr: ${{ matrix.DISTR }}
-          arch: ${{ matrix.arch }}
-          artifact: build_rhel${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
-          type: rpm
-          delimiter: "_"
-          target: ${{ needs.pack.outputs.target }}
-
-  publish_macos:
-    name: Publishing MacOS
-    needs: [publish, pack]
-    if: needs.pack.outputs.should_continue == 'true'
-    strategy:
-      fail-fast: true
-      matrix:
-        arch: [x86_64, arm64]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/publish_to_repo@main
-        with:
-          ssh_key: ${{ secrets.REPO_SSH_KEY }}
-          distr: macos
-          arch: ${{ matrix.arch }}
-          artifact: build_macos_RelWithDebInfo_${{ matrix.arch }}
-          type: arc
-          delimiter: "-"
-          target: ${{ needs.pack.outputs.target }}
-
-  publish_windows:
-    name: Publishing Windows packages to repo.manticoresearch.com
-    needs: [publish, pack]
-    if: needs.pack.outputs.should_continue == 'true'
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/publish_to_repo@main
-        with:
-          ssh_key: ${{ secrets.REPO_SSH_KEY }}
-          distr: windows
-          arch: x64
-          artifact: build_windows_RelWithDebInfo_x64
-          type: arc
-          delimiter: "-"
-          target: ${{ needs.pack.outputs.target }}
-
-  publish_mcl_debian_ubuntu:
-    name: MCL ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
-    needs: [publish, pack]
-    if: needs.pack.outputs.mcl_package_needed == 'true'
-    strategy:
-      fail-fast: true
-      matrix:
-        DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
-        arch: [x86_64, aarch64]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/publish_to_repo@main
+      - name: Publish standalone MCL DEB package
+        if: needs.pack.outputs.mcl_package_needed == 'true'
+        uses: manticoresoftware/publish_to_repo@main
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
           distr: ${{ matrix.DISTR }}
@@ -614,18 +549,31 @@ jobs:
           delimiter: "-"
           target: ${{ needs.pack.outputs.target }}
 
-  publish_mcl_rhel:
-    name: MCL RHEL ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
+  publish_rhel:
     needs: [publish, pack]
-    if: needs.pack.outputs.mcl_package_needed == 'true'
+    if: needs.pack.outputs.should_continue == 'true' || needs.pack.outputs.mcl_package_needed == 'true'
     strategy:
       fail-fast: true
       matrix:
         DISTR: [7, 8, 9, 10]
         arch: [x86_64, aarch64]
     runs-on: ubuntu-22.04
+    name: RHEL ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
     steps:
-      - uses: manticoresoftware/publish_to_repo@main
+      - name: Publish daemon RPM package
+        if: needs.pack.outputs.should_continue == 'true' && matrix.DISTR != 7
+        uses: manticoresoftware/publish_to_repo@main
+        with:
+          ssh_key: ${{ secrets.REPO_SSH_KEY }}
+          distr: ${{ matrix.DISTR }}
+          arch: ${{ matrix.arch }}
+          artifact: build_rhel${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
+          type: rpm
+          delimiter: "_"
+          target: ${{ needs.pack.outputs.target }}
+      - name: Publish standalone MCL RPM package
+        if: needs.pack.outputs.mcl_package_needed == 'true'
+        uses: manticoresoftware/publish_to_repo@main
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
           distr: ${{ matrix.DISTR }}
@@ -635,17 +583,30 @@ jobs:
           delimiter: "_"
           target: ${{ needs.pack.outputs.target }}
 
-  publish_mcl_macos:
-    name: MCL MacOS ${{ matrix.arch }} publishing
+  publish_macos:
+    name: Publishing MacOS
     needs: [publish, pack]
-    if: needs.pack.outputs.mcl_package_needed == 'true'
+    if: needs.pack.outputs.should_continue == 'true' || needs.pack.outputs.mcl_package_needed == 'true'
     strategy:
       fail-fast: true
       matrix:
         arch: [x86_64, arm64]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/publish_to_repo@main
+      - name: Publish daemon macOS package
+        if: needs.pack.outputs.should_continue == 'true'
+        uses: manticoresoftware/publish_to_repo@main
+        with:
+          ssh_key: ${{ secrets.REPO_SSH_KEY }}
+          distr: macos
+          arch: ${{ matrix.arch }}
+          artifact: build_macos_RelWithDebInfo_${{ matrix.arch }}
+          type: arc
+          delimiter: "-"
+          target: ${{ needs.pack.outputs.target }}
+      - name: Publish standalone MCL macOS package
+        if: needs.pack.outputs.mcl_package_needed == 'true'
+        uses: manticoresoftware/publish_to_repo@main
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
           distr: macos
@@ -655,13 +616,26 @@ jobs:
           delimiter: "-"
           target: ${{ needs.pack.outputs.target }}
 
-  publish_mcl_windows:
-    name: MCL Windows x64 publishing
+  publish_windows:
+    name: Publishing Windows packages to repo.manticoresearch.com
     needs: [publish, pack]
-    if: needs.pack.outputs.mcl_package_needed == 'true'
+    if: needs.pack.outputs.should_continue == 'true' || needs.pack.outputs.mcl_package_needed == 'true'
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/publish_to_repo@main
+      - name: Publish daemon Windows package
+        if: needs.pack.outputs.should_continue == 'true'
+        uses: manticoresoftware/publish_to_repo@main
+        with:
+          ssh_key: ${{ secrets.REPO_SSH_KEY }}
+          distr: windows
+          arch: x64
+          artifact: build_windows_RelWithDebInfo_x64
+          type: arc
+          delimiter: "-"
+          target: ${{ needs.pack.outputs.target }}
+      - name: Publish standalone MCL Windows package
+        if: needs.pack.outputs.mcl_package_needed == 'true'
+        uses: manticoresoftware/publish_to_repo@main
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
           distr: windows
@@ -675,6 +649,7 @@ jobs:
   test_windows_installer:
     name: Test Windows NSIS installer
     needs: [publish_windows, pack]
+    if: needs.pack.outputs.should_continue == 'true'
     runs-on: windows-latest
     steps:
     - name: Download Windows installer artifact
@@ -863,6 +838,7 @@ jobs:
   publish_nsis:
     name: Publishing Windows NSIS installer
     needs: [test_windows_installer, publish, pack]
+    if: needs.pack.outputs.should_continue == 'true'
     runs-on: ubuntu-22.04
     steps:
       - uses: manticoresoftware/publish_to_repo@main
@@ -878,6 +854,7 @@ jobs:
   build_docker:
     name: Building and pushing docker
     needs: [publish_debian_ubuntu, pack]
+    if: needs.pack.outputs.should_continue == 'true'
     runs-on: ubuntu-22.04
     env:
       DOCKER_USER: ${{ secrets.DOCKER_USER }}
@@ -906,7 +883,8 @@ jobs:
 
   clt_rhel_dev_installation:
     name: Testing RHEL dev packages installation
-    needs: publish_rhel
+    needs: [publish_rhel, pack]
+    if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -921,7 +899,8 @@ jobs:
 
   clt_deb_dev_installation:
     name: Testing DEB dev packages installation
-    needs: publish_debian_ubuntu
+    needs: [publish_debian_ubuntu, pack]
+    if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
       matrix:

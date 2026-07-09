@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>LEFT JOIN multi-facet cleanup after join sorter setup error</name>
+
+<requires>
+	<force-rt/>
+	<sphinxql_keep_null/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	join_batch_size = 1000
+}
+</config>
+
+<queries>
+<sphinxql>
+	DROP TABLE IF EXISTS issue4633_right;
+	DROP TABLE IF EXISTS issue4633_left;
+
+	CREATE TABLE issue4633_left (id bigint, owner_id uint, ref_id uint, created_at uint, active uint);
+	CREATE TABLE issue4633_right (
+		id bigint, name text indexed stored, descr text indexed stored,
+		color_name string indexed attribute, brand_name string indexed attribute,
+		cat_name string indexed attribute, gender_code string indexed attribute,
+		flag uint, brand_id uint, color_id uint, categories mva,
+		product_id uint, is_lost uint, price float, discount uint, suggest mva
+	);
+
+	INSERT INTO issue4633_left(id, owner_id, ref_id, created_at, active) VALUES
+		(1, 12345, 101, 1, 1),
+		(2, 12345, 102, 2, 1),
+		(3, 12345, 101, 3, 1),
+		(4, 7,     101, 4, 1),
+		(5, 12345, 101, 5, 0);
+
+	INSERT INTO issue4633_right(id, name, descr, color_name, brand_name, cat_name, gender_code, flag, brand_id, color_id, categories, product_id, is_lost, price, discount, suggest) VALUES
+		(101, 'n1', 'd1', 'red',  'b1', 'c1', 'm', 0, 11, 21, (1,2), 1001, 0, 4700, 0, (10,20)),
+		(102, 'n2', 'd2', 'blue', 'b2', 'c2', 'f', 0, 12, 22, (2,3), 1002, 0, 4900, 0, (20,30)),
+		(103, 'n3', 'd3', 'green','b1', 'c3', 'm', 0, 11, 23, (1,3), 1003, 0, 7000, 0, (30,40));
+
+	<!-- Control query: same JOIN + multiple FACET clauses over right-side attrs, including MVAs. -->
+	SELECT id FROM issue4633_left
+	LEFT JOIN issue4633_right ON issue4633_left.ref_id = issue4633_right.id
+	WHERE active = 1 AND owner_id = 12345
+		AND issue4633_right.price &gt;= 4500 AND issue4633_right.price &lt;= 5000
+	ORDER BY id ASC
+	OPTION max_matches = 1000
+	FACET issue4633_right.gender_code ORDER BY COUNT(*) DESC LIMIT 1000
+	FACET issue4633_right.categories  ORDER BY COUNT(*) DESC LIMIT 1000
+	FACET issue4633_right.brand_id    ORDER BY COUNT(*) DESC LIMIT 1000
+	FACET issue4633_right.color_id    ORDER BY COUNT(*) DESC LIMIT 1000
+	FACET issue4633_right.suggest     ORDER BY COUNT(*) DESC LIMIT 1000;;
+
+	<!-- Regression for #4633: quoted float filters make join sorter setup fail; cleanup must not double-delete sorters/crash. -->
+	SELECT id FROM issue4633_left
+	LEFT JOIN issue4633_right ON issue4633_left.ref_id = issue4633_right.id
+	WHERE active = 1 AND owner_id = 12345
+		AND issue4633_right.price &gt;= '4500' AND issue4633_right.price &lt;= '5000'
+	OPTION max_matches = 1000
+	FACET issue4633_right.gender_code ORDER BY COUNT(*) DESC LIMIT 1000
+	FACET issue4633_right.categories  ORDER BY COUNT(*) DESC LIMIT 1000
+	FACET issue4633_right.brand_id    ORDER BY COUNT(*) DESC LIMIT 1000
+	FACET issue4633_right.color_id    ORDER BY COUNT(*) DESC LIMIT 1000
+	FACET issue4633_right.suggest     ORDER BY COUNT(*) DESC LIMIT 1000;;
+
+	<!-- Prove searchd survived the failing sorter setup path above. -->
+	SELECT 1 AS searchd_survived;
+
+	DROP TABLE issue4633_right;
+	DROP TABLE issue4633_left;
+</sphinxql>
+</queries>
+
+</test>

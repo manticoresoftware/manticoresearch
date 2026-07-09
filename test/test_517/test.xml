@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>distributed KNN over columnar shards</name>
+
+<skip_indexer/>
+
+<requires>
+	<knn/>
+	<knn_float_tolerance/>
+	<columnar/>
+	<http/>
+	<force-rt/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	<!-- regression for issue #4704: distributed-table KNN over columnar shards crashed in AddKNNRescoreColumn()/MinimizeAggrResult() -->
+	create table knn_repro_s1 (
+		id bigint,
+		chunk_vector float_vector knn_type='hnsw' knn_dims='3' hnsw_similarity='cosine' quantization='8bit',
+		chunk_text string
+	) engine='columnar';
+
+	create table knn_repro_s2 (
+		id bigint,
+		chunk_vector float_vector knn_type='hnsw' knn_dims='3' hnsw_similarity='cosine' quantization='8bit',
+		chunk_text string
+	) engine='columnar';
+
+	insert into knn_repro_s1 (id, chunk_vector, chunk_text) values
+		(1, (1.0, 0.0, 0.0), 'Introduction to vector databases and search engines'),
+		(2, (0.0, 1.0, 0.0), 'Machine learning and deep neural networks explained'),
+		(3, (0.1, 0.9, 0.4), 'Artificial intelligence models in cloud computing'),
+		(4, (0.7, 0.1, 0.7), 'Optimizing database performance and cluster storage'),
+		(5, (0.2, 0.3, 0.9), 'The future of quantum computing and data science');
+
+	insert into knn_repro_s2 (id, chunk_vector, chunk_text) values
+		(6, (0.8, 0.5, 0.1), 'Development of high-load systems and databases'),
+		(7, (0.0, 0.2, 0.9), 'Studying language models and text processing'),
+		(8, (0.6, 0.6, 0.0), 'Methods for optimizing search indexes in a cluster'),
+		(9, (0.3, 0.7, 0.4), 'Big data analytics and business intelligence'),
+		(10, (0.1, 0.1, 0.8), 'Fundamentals of information security and encryption');
+
+	flush ramchunk knn_repro_s1;
+	flush ramchunk knn_repro_s2;
+
+	create table knn_repro type='distributed'
+		agent='<agent0_address/>:knn_repro_s1'
+		agent='<agent0_address/>:knn_repro_s2';
+
+	select id from knn_repro where knn(chunk_vector, (0.06799611,-0.065073356,-0.10450687)) limit 0, 200;
+	select id, knn_dist() from knn_repro where knn(chunk_vector, 10, (0.06799611,-0.065073356,-0.10450687)) limit 0, 200;
+</sphinxql>
+
+<query endpoint="json/search">
+{
+	"table": "knn_repro",
+	"_source": { "excludes": ["*"] },
+	"limit": 10,
+	"knn": {
+		"field": "chunk_vector",
+		"query": [0.06799611, -0.065073356, -0.10450687],
+		"k": 10
+	}
+}
+</query>
+
+<sphinxql>
+	drop table knn_repro;
+	drop table knn_repro_s1;
+	drop table knn_repro_s2;
+</sphinxql>
+</queries>
+
+</test>

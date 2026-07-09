@@ -409,6 +409,9 @@ public:
 	bool			AddStringCmpFilter ( const SqlNode_t & tCol, const SqlNode_t & tVal, bool bExclude, EStrCmpDir eStrCmpDir );
 	CSphFilterSettings * AddValuesFilter ( const SqlNode_t & tCol ) { return AddFilter ( tCol, SPH_FILTER_VALUES ); }
 	CSphFilterSettings * AddValuesFilter ( const SqlNode_t & tCol, int iValuesIdx );
+	void			SetDocidConstListCheck ( const SqlNode_t & tCol );
+	void			ClearDocidConstListCheck () { m_bCheckDocidConstList = false; }
+	bool			CheckDocidConstListItem ( const SqlNode_t & tValue );
 	bool			AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal, StrList_e eType, bool bInverse=false );
 	bool			AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull );
 	void			AddHaving ();
@@ -477,6 +480,7 @@ private:
 	CSphVector<CSphNamedVariant> m_dNamedVec;
 	ESphAttr					m_eJoinTypeCast = SPH_ATTR_NONE;
 	bool						m_bJoinParseMode = false;
+	bool						m_bCheckDocidConstList = false;
 	LastWhereItem_e				m_eLastWhereItem = LastWhereItem_e::NONE;
 	int							m_iLastWhereItemKnn = -1;
 
@@ -2348,6 +2352,28 @@ CSphFilterSettings * SqlParser_c::AddValuesFilter ( const SqlNode_t & tCol, int 
 	auto & dValues = GetMvaVec ( iValuesIdx );
 	CopyValuesToFilter ( pFilter, dValues );
 	return pFilter;
+}
+
+
+void SqlParser_c::SetDocidConstListCheck ( const SqlNode_t & tCol )
+{
+	CSphString sCol;
+	ToString ( sCol, tCol );
+	sCol.ToLower();
+	m_bCheckDocidConstList = sCol=="id" || sCol=="@id";
+}
+
+
+bool SqlParser_c::CheckDocidConstListItem ( const SqlNode_t & tValue )
+{
+	if ( !m_bCheckDocidConstList )
+		return false;
+
+	if ( !NumIsSaturated ( tValue ) )
+		return false;
+
+	ClearDocidConstListCheck();
+	return true;
 }
 
 

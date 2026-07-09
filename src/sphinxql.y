@@ -917,15 +917,25 @@ filter_item:
 			pFilter->m_dValues.Add ( $3.GetValueInt() );
 			pFilter->m_bExclude = true;
 		}
-	| expr_ident TOK_IN '(' const_list ')'
+	| expr_ident TOK_IN '('
 		{
-			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $4.m_iValues );
+			pParser->SetDocidConstListCheck ( $1 );
+		}
+	const_list ')'
+		{
+			pParser->ClearDocidConstListCheck();
+			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $5.m_iValues );
 			if ( !pFilter )
 				YYERROR;
 		}
-	| expr_ident TOK_NOT TOK_IN '(' const_list ')'
+	| expr_ident TOK_NOT TOK_IN '('
 		{
-			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $5.m_iValues );
+			pParser->SetDocidConstListCheck ( $1 );
+		}
+	const_list ')'
+		{
+			pParser->ClearDocidConstListCheck();
+			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $6.m_iValues );
 			if ( !pFilter )
 				YYERROR;
 			pFilter->m_bExclude = true;
@@ -1241,7 +1251,7 @@ const_float_unsigned:
 const_list:
 	const_int
 		{
-			if ( pParser->NumIsSaturated ( $1 ) )
+			if ( pParser->CheckDocidConstListItem ( $1 ) )
 				YYERROR;
 			assert ( $$.m_iValues<0 );
         	$$.m_iValues = pParser->AddMvaVec ();
@@ -1257,7 +1267,7 @@ const_list:
 		}
 	| const_list ',' const_int
 		{
-			if ( pParser->NumIsSaturated ( $3 ) )
+			if ( pParser->CheckDocidConstListItem ( $3 ) )
 				YYERROR;
 			auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
 			dVec.Add ( { $3.GetValueInt(), $3.GetValueFloat(), false } );

@@ -25,6 +25,8 @@ struct AttrValue_t
 	int64_t m_iValue;
 	float	m_fValue;
 	bool	m_bFloat;
+	uint64_t m_uValue = 0;
+	bool	m_bNegative = false;
 
 	bool operator == ( const AttrValue_t & rhs ) const	{ return m_iValue==rhs.m_iValue && m_fValue==rhs.m_fValue && m_bFloat==rhs.m_bFloat; }
 	bool operator < ( const AttrValue_t & rhs ) const	{ return m_iValue<rhs.m_iValue; }

@@ -1,56 +1,59 @@
 # 介绍
 
-Manticore Search 是一个高性能、多存储的数据库，专为搜索和分析而设计，提供极速的全文搜索、实时索引以及向量搜索和列存储等高级功能，以实现高效的数据分析。它既能处理小型数据集，也能应对大型数据集，提供无缝的可扩展性和强大的洞察力，适用于现代应用。
 
-作为一个开源数据库（可在 [GitHub](https://github.com/manticoresoftware/manticoresearch/) 获取），Manticore Search 于 2017 年创建，是 [Sphinx Search](https://sphinxsearch.com/) 引擎的延续。我们的开发团队吸取了 Sphinx 的所有优点，并显著提升了其功能，修复了数百个漏洞（详见我们的 [更新日志](https://manual.manticoresearch.com/Changelog)）。Manticore Search 是一个现代、快速且轻量级的数据库，具备卓越的全文搜索能力，基于对其前身的几乎完全重写构建。
+测试
 
-## Manticore 的主要特点包括：
-#### 强大且快速的全文搜索，适用于小型和大型数据集
+Manticore Search 是一个高性能、多存储数据库，专为搜索和分析而构建，提供闪电般快速的全文搜索、实时索引以及矢量搜索和列式存储等高级功能，以实现高效的数据分析。它设计用于处理小型和大型数据集，能够实现无缝扩展并为现代应用提供强大见解。
+
+作为一个开源数据库（可在 [GitHub](https://github.com/manticoresoftware/manticoresearch/) 上获取），Manticore Search 创建于2017年，作为 [Sphinx Search](https://sphinxsearch.com/) 引擎的延续。我们的开发团队取了 Sphinx 的所有最佳功能，并显著改进了其功能，同时修复了数百个漏洞（详见我们的 [更新日志](https://manual.manticoresearch.com/Changelog)）。Manticore Search 是一个现代、快速且轻量的数据库，拥有卓越的全文搜索能力，基于对其前身几乎完全重写的代码构建。
+
+## Manticore 的关键特性包括：
+#### 功能强大且快速的全文搜索，适用于小型和大型数据集
 
   * [查询自动补全](Searching/Autocomplete.md)
   * [模糊搜索](Searching/Spell_correction.md#Fuzzy-Search)
-  * 超过 20 种 [全文操作符](https://play.manticoresearch.com/fulltextintro/)<!--{target="_blank"}--> 和超过 20 种排名因素
+  * 超过20种 [全文运算符](https://play.manticoresearch.com/fulltextintro/)<!--{target="_blank"}--> 和20多种排名因素
   * [自定义排名](Searching/Sorting_and_ranking.md#Ranking-overview)
   * [词干提取](Creating_a_table/NLP_and_tokenization/Morphology.md)
   * [词形还原](Creating_a_table/NLP_and_tokenization/Morphology.md)
   * [停用词](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md)
   * [同义词](Creating_a_table/NLP_and_tokenization/Exceptions.md)
-  * [词形变化](Creating_a_table/NLP_and_tokenization/Wordforms.md)
-  * [字符和词级别的高级分词](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md)
-  * [准确的中文分词](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md)
+  * [词形变换](Creating_a_table/NLP_and_tokenization/Wordforms.md)
+  * [字符级和词级的高级分词](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md)
+  * [适用于中文的正确分词](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md)
   * [文本高亮](Searching/Highlighting.md)
 
-#### 向量搜索功能
-Manticore Search 支持将机器学习模型生成的嵌入向量添加到每个文档中，然后对其进行[最近邻搜索](Searching/KNN.md)。这使您能够构建相似度搜索、推荐、语义搜索和基于自然语言处理算法的相关性排名等功能，还包括图像、视频和声音搜索。
+#### 矢量搜索功能
+Manticore Search 支持将您机器学习模型生成的嵌入向量添加到每个文档中，然后进行 [最近邻搜索](Searching/KNN.md)。这使您能够构建相似性搜索、推荐系统、语义搜索和基于自然语言处理算法的相关性排名等功能，包括图像、视频和声音搜索。
 
-#### JOIN
-Manticore Search 支持通过 SQL 和 JSON 进行的 [JOIN](Searching/Joining.md) 查询，允许您合并多个表的数据。
+#### 连接查询（JOIN）
+Manticore Search 通过 SQL 和 JSON 支持 [JOIN](Searching/Joining.md) 查询，允许您合并多个表中的数据。
 
 #### 多线程
-Manticore Search 利用智能查询并行化技术，降低响应时间，并在需要时充分利用所有 CPU 核心。
+Manticore Search 利用智能查询并行化来降低响应时间，并在需要时充分利用所有 CPU 核心。
 
 #### 基于成本的查询优化器
-基于成本的查询优化器使用关于索引数据的统计信息，评估给定查询不同执行计划的相对成本。这样，优化器能够确定检索所需结果的最高效计划，考虑因素包括索引数据的大小、查询的复杂性和可用资源。
+基于成本的查询优化器利用有关索引数据的统计数据评估不同执行计划的相对成本。这样优化器可以确定检索所需结果的最有效计划，考虑索引数据大小、查询复杂度和可用资源等因素。
 
 #### 存储选项
-Manticore 提供[行存储和列存储选项](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)，以适应不同规模的数据集。传统且默认的行存储适用于所有规模的数据集——小型、中型和大型，而列存储选项通过 Manticore Columnar Library 提供，适合更大规模的数据集。这两种存储选项的关键区别在于，行存储要求所有属性（全文字段除外）保存在内存中以获得最佳性能，而列存储则不需要，因此内存消耗更低，但性能可能略有下降（详见 https://db-benchmarks.com/ 上的统计数据）。
+Manticore 提供 [行式和列式存储选项](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)，以适应不同大小的数据集。传统且默认的行式存储适用于所有大小的数据集——小型、中型和大型，而列式存储通过 Manticore 列库提供，适用于更大型的数据集。这两种存储方式的主要区别在于，行式存储需将所有属性（全文字段除外）保存在内存中以实现最佳性能，而列式存储则不需要，因此内存消耗更低，但性能可能略慢（可参见 https://db-benchmarks.com/ 上的统计数据）。
 
 #### 自动二级索引
-[Manticore Columnar Library](https://github.com/manticoresoftware/columnar/) 使用 [Piecewise Geometric Model 索引](https://github.com/gvinciguerra/PGM-index)，该索引利用索引键与其内存位置之间的学习映射。该映射的简洁性及其独特的递归构造算法，使 PGM 索引在空间上远超传统索引，同时仍提供最佳的查询和更新性能。二级索引默认对所有数值和字符串字段开启，并可对 json 属性启用。
+[Manticore 列库](https://github.com/manticoresoftware/columnar/) 使用 [分段几何模型索引（PGM-index）](https://github.com/gvinciguerra/PGM-index)，它利用索引键与内存位置之间的学习映射。这种映射的简洁性以及特有的递归构造算法，使 PGM-index 成为空间效率远超传统索引的数据结构，同时仍提供最佳的查询和更新性能。二级索引默认针对所有数字和字符串字段开启，并可对 JSON 属性启用。
 
-#### SQL 优先
-Manticore 的原生语法是 SQL，支持通过 HTTP 和 MySQL 协议的 SQL，允许通过任何编程语言中的流行 mysql 客户端连接。
+#### SQL优先
+Manticore 的原生语法是 SQL，支持通过 HTTP 和 MySQL 协议执行 SQL，允许通过任何编程语言中的流行 MySQL 客户端连接。
 
-#### HTTP JSON
-为了更程序化地管理数据和模式，Manticore 提供类似 Elasticsearch 的 [HTTP JSON](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) 协议。
+#### HTTP 上的 JSON
+为了更程序化地管理数据和模式，Manticore 提供了类似 Elasticsearch 的 [HTTP JSON](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) 协议。
 
 #### 兼容 Elasticsearch 的写入
-您可以执行兼容 Elasticsearch 的 [插入](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Adding-documents-to-a-real-time-table) 和 [替换](Data_creation_and_modification/Updating_documents/REPLACE.md#REPLACE) JSON 查询，从而使 Manticore 能与 Logstash（版本 < 7.13）、Filebeat 及 Beats 家族的其他工具配合使用。
+您可以执行兼容 Elasticsearch 的 [插入](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Adding-documents-to-a-real-time-table) 和 [替换](Data_creation_and_modification/Updating_documents/REPLACE.md#REPLACE) JSON 查询，使 Manticore 能够与 Logstash（版本 < 7.13）、Filebeat 及 Beats 家族的其他工具一起使用。
 
 #### 声明式和命令式的模式管理
 轻松在线或通过配置文件创建、更新和删除表。
 
-#### C++ 的优势与 PHP 的便利性
+#### 结合 C++ 的性能优势和 PHP 的便利性
 Manticore Search 守护进程采用 C++ 开发，提供快速启动时间和高效的内存利用率。底层优化进一步提升了性能。另一个关键组件称为 [Manticore Buddy](https://github.com/manticoresoftware/manticoresearch-buddy)，用 PHP 编写，用于不需要极快响应时间或极高处理能力的高级功能。虽然贡献 C++ 代码可能具有挑战性，但使用 Manticore Buddy 添加新的 SQL/JSON 命令应该是一个简单的过程。
 
 #### 实时插入

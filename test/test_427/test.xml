@@ -3,6 +3,12 @@
 <test>
 <name>stored fields over network</name>
 
+<requires>
+	<non-rt/>
+	<non-windows/>
+	<non-columnar/>
+</requires>
+
 <env MANTICORE_STORED_TIMEOUT="1" MANTICORE_STORED_TIMEOUT_AGENT="1"/>
 
 <config>

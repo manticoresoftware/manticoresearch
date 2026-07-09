@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>uint64 document id IN list boundaries</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<queries>
+<sphinxql>
+	drop table if exists rt_uint64_id_in;
+	create table rt_uint64_id_in ( title text );
+	insert into rt_uint64_id_in ( id, title ) values
+		( 15350048095312000079, 'first high id' ),
+		( 12529215726433669114, 'second high id' ),
+		( 1, 'low id' );
+
+	select id, title from rt_uint64_id_in where id = -3096695978397551537 order by id asc;
+	select id, title from rt_uint64_id_in where id in ( -3096695978397551537, -5917528347275882502 ) order by id asc;
+	select id, title from rt_uint64_id_in where id = 15350048095312000079 order by id asc;
+	select id, title from rt_uint64_id_in where id in ( 15350048095312000079, 12529215726433669114 ) order by id asc;
+
+	flush ramchunk rt_uint64_id_in;
+
+	select id, title from rt_uint64_id_in where id = -3096695978397551537 order by id asc;
+	select id, title from rt_uint64_id_in where id in ( -3096695978397551537, -5917528347275882502 ) order by id asc;
+	select id, title from rt_uint64_id_in where id = 15350048095312000079 order by id asc;
+	select id, title from rt_uint64_id_in where id in ( 15350048095312000079, 12529215726433669114 ) order by id asc;
+	drop table rt_uint64_id_in;
+</sphinxql>
+</queries>
+
+</test>

@@ -1241,6 +1241,8 @@ const_float_unsigned:
 const_list:
 	const_int
 		{
+			if ( pParser->NumIsSaturated ( $1 ) )
+				YYERROR;
 			assert ( $$.m_iValues<0 );
         	$$.m_iValues = pParser->AddMvaVec ();
         	auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
@@ -1255,6 +1257,8 @@ const_list:
 		}
 	| const_list ',' const_int
 		{
+			if ( pParser->NumIsSaturated ( $3 ) )
+				YYERROR;
 			auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
 			dVec.Add ( { $3.GetValueInt(), $3.GetValueFloat(), false } );
 		}

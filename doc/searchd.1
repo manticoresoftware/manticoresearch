@@ -5,7 +5,7 @@
 .\"    Source: Manticore Search
 .\"  Language: English
 .\"
-.TH "SEARCHD" "1" "05/02/2026" "Manticore Search" ""
+.TH "SEARCHD" "1" "26/06/2026" "Manticore Search" ""
 .SH "NAME"
 searchd \- Manticore Search Server
 .SH "SYNOPSIS"
@@ -25,6 +25,12 @@ The options available to \fB\fCsearchd\fR in all operating systems are:
 \fB\fC\-\-quiet\fR (\fB\fC\-q\fR for short) suppresses startup output except errors (banner and precache messages).
 .IP \(bu 2
 \fB\fC\-\-config <file>\fR (\fB\fC\-c <file>\fR for short) tells \fB\fCsearchd\fR to use the specified file as its configuration.
+.IP \(bu 2
+\fB\fC\-\-auth\fR runs interactive \fB\fCauthentication bootstrap\fR mode. Use it after starting \fB\fCsearchd\fR with authentication enabled to create the first administrator. The running daemon must use the same configuration file, \fB\fCpid_file\fR must be configured and readable, and the authentication storage must be missing or empty. Bootstrap rejects a non\-empty authentication store, grants all actions to the first administrator, and does not return a bearer token. Use \fB\fCTOKEN\fR or HTTP \fB\fCPOST /token\fR after bootstrap if the administrator needs bearer access.
+.IP \(bu 2
+\fB\fC\-\-auth\-non\-interactive\fR runs authentication bootstrap mode with the administrator name, password, and password confirmation read from stdin. It has the same daemon, \fB\fCpid_file\fR, empty\-storage, and no\-token behavior as \fB\fC\-\-auth\fR\&.
+.IP \(bu 2
+\fB\fC\-\-check\fR checks the configuration file, verifies that the server can start with it, then exits. It prints \fB\fCOK\fR and exits with code 0 if the check succeeds. If the check fails, it exits with code 1 and prints the same error that \fB\fCsearchd\fR would print during a regular startup.
 .IP \(bu 2
 \fB\fC\-\-stop\fR is used to asynchronously stop \fB\fCsearchd\fR, using the details of the PID file as specified in the Manticore configuration file. Therefore, you may also need to confirm to \fB\fCsearchd\fR which configuration file to use with the \fB\fC\-\-config\fR option. Example:
 .PP
@@ -172,6 +178,11 @@ export MANTICORE_START_KNOWN_MATCH_SIZE=14552
 export NO_STACK_CALCULATION=1
 .fi
 .RE
+.IP \(bu 2
+\fB\fC\-\-safetrace\fR forces \fB\fCsearchd\fR to only use the system's backtrace() call in crash reports. In certain (rare) scenarios, this might be a "safer" way to get that report. This is a debugging option.
+.IP \(bu 2
+.IP
+\fB\fC\-\-nodetach\fR (Linux only): Prevents \fB\fCsearchd\fR from detaching into the background. In this mode, log entries are printed directly to the console. Query processing remains unaffected. This option is intended for debugging or for capturing output when running Manticore in a Docker container.
 .RE
 .SS Windows options
 .PP
@@ -216,10 +227,6 @@ C:\\WINDOWS\\system32> C:\\Manticore\\bin\\searchd.exe \-\-install
 .RE
 .IP \(bu 2
 \fB\fC\-\-ntservice\fR is an option that is passed by the Microsoft Management Console to \fB\fCsearchd\fR to invoke it as a service on Windows platforms. It would not normally be necessary to call this directly; this would normally be called by Windows when the service is started, although if you wanted to call this as a regular service from the command\-line (as the complement to \fB\fC\-\-console\fR) you could do so in theory.
-.IP \(bu 2
-\fB\fC\-\-safetrace\fR forces \fB\fCsearchd\fR to only use the system's backtrace() call in crash reports. In certain (rare) scenarios, this might be a "safer" way to get that report. This is a debugging option.
-.IP \(bu 2
-\fB\fC\-\-nodetach\fR switch (Linux only) tells \fB\fCsearchd\fR not to detach into the background. This will also cause log entries to be printed out to the console. Query processing operates as usual. This is a debugging option and might also be useful when you run Manticore in a Docker container to capture its output.
 .RE
 .SH PLUGIN DIR
 .PP

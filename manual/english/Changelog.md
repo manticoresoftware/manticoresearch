@@ -1662,7 +1662,7 @@ Released: May 18th 2022
   - `manticore-icudata`, `manticore-dev`, `manticore-converter` didn't change much
   - `.tgz` bundle which includes all the packages
 * Support for Ubuntu Jammy
-* Support for Amazon Linux 2 via [YUM repo](Installation/RHEL_and_Centos.md#YUM-repository)
+* Support for Amazon Linux 2 via [YUM repo](Installation/RHEL_and_Centos.md)
 
 ### Bugfixes
 * [Issue #815](https://github.com/manticoresoftware/manticoresearch/issues/815) Random crash when using UDF function
@@ -1852,7 +1852,7 @@ sys	0m0.047s
 
 ### Minor changes
 <!-- example -->
-- Linux Mint and Ubuntu Hirsute Hippo are supported via [APT repository](Installation/Debian_and_Ubuntu.md#APT-repository)
+- Linux Mint and Ubuntu Hirsute Hippo are supported via [APT repository](Installation/Debian_and_Ubuntu.md)
 - faster update by id via HTTP in big indexes in some cases (depends on the ids distribution)
 - [671e65a2](https://github.com/manticoresoftware/lemmatizer-uk/commit/671e65a296800537123a3f8b324eeaa3f58b9632) - added caching to lemmatizer-uk
 

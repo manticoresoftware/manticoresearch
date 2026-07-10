@@ -332,7 +332,7 @@
 
 **Выпущено**: 7 ноября 2025 г.
 
-❤️ Мы хотели бы выразить искреннюю благодарность [@ricardopintottrdata](https://github.com/ricardopintottrdata) за его работу над [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) и [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) — за устранение проблем, связанных с общим количеством `HAVING` и ошибкой `filter with empty name` — а также [@jdelStrother](https://github.com/jdelStrother) за вклад в [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819), который улучшает обработку `ParseCJKSegmentation`, когда поддержка Jieba недоступна.
+❤️ Мы хотели бы выразить искреннюю благодарность [@ricardopintottrdata](https://github.com/ricardopintottrdata) за работу над [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) и [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) — за исправление проблем с общими итоговыми значениями `HAVING` и ошибкой `filter with empty name` — а также [@jdelStrother](https://github.com/jdelStrother) за вклад в [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819), который улучшает обработку `ParseCJKSegmentation`, когда поддержка Jieba недоступна.
 
 Ваши усилия помогают сделать проект сильнее — большое спасибо!
 
@@ -1662,7 +1662,7 @@
   - `manticore-icudata`, `manticore-dev`, `manticore-converter` не изменились сильно
   - `.tgz` пакет, который включает все пакеты
 * Поддержка Ubuntu Jammy
-* Поддержка Amazon Linux 2 через [YUM repo](Installation/RHEL_and_Centos.md#YUM-repository)
+* Поддержка Amazon Linux 2 через [репозиторий YUM](Installation/RHEL_and_Centos.md)
 
 ### Исправления ошибок
 * [Проблема #815](https://github.com/manticoresoftware/manticoresearch/issues/815) Случайный сбой при использовании функции UDF
@@ -1852,7 +1852,7 @@ sys	0m0.047s
 
 ### Незначительные изменения
 <!-- example -->
-- Linux Mint и Ubuntu Hirsute Hippo поддерживаются через [APT repository](Installation/Debian_and_Ubuntu.md#APT-repository)
+- Linux Mint и Ubuntu Hirsute Hippo поддерживаются через [репозиторий APT](Installation/Debian_and_Ubuntu.md)
 - более быстрое обновление по id через HTTP в больших индексах в некоторых случаях (зависит от распределения id)
 - [671e65a2](https://github.com/manticoresoftware/lemmatizer-uk/commit/671e65a296800537123a3f8b324eeaa3f58b9632) - добавлено кэширование в lemmatizer-uk
 

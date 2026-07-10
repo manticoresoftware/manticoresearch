@@ -332,7 +332,7 @@
 
 **发布日期**：2025年11月7日
 
-❤️ 我们要向 [@ricardopintottrdata](https://github.com/ricardopintottrdata) 对 [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) 和 [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 所做的工作致以诚挚感谢——这些工作修复了 `HAVING` 总计数和 `filter with empty name` 错误相关的问题；也要感谢 [@jdelStrother](https://github.com/jdelStrother) 通过 [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) 做出的贡献，它改进了在没有 Jieba 支持时对 `ParseCJKSegmentation` 的处理。
+❤️ 我们衷心感谢 [@ricardopintottrdata](https://github.com/ricardopintottrdata) 在 [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) 和 [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 中所做的工作——它们解决了 `HAVING` 总计数和 `filter with empty name` 错误相关的问题——也感谢 [@jdelStrother](https://github.com/jdelStrother) 通过 [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) 做出的贡献，该 PR 改进了在没有 Jieba 支持时对 `ParseCJKSegmentation` 的处理。
 
 您的努力使项目更加强大——非常感谢！
 
@@ -1662,7 +1662,7 @@
   - `manticore-icudata`、`manticore-dev`、`manticore-converter` 变化不大
   - 包含所有包的 `.tgz` 压缩包
 * 支持 Ubuntu Jammy
-* 通过 [YUM repository](Installation/RHEL_and_Centos.md#YUM-repository) 支持 Amazon Linux 2
+* 通过 [YUM repo](Installation/RHEL_and_Centos.md) 支持 Amazon Linux 2
 
 ### 错误修复
 * [Issue #815](https://github.com/manticoresoftware/manticoresearch/issues/815) 使用UDF函数时随机崩溃
@@ -1852,7 +1852,7 @@ sys	0m0.047s
 
 ### 小型变更
 <!-- example -->
-- 通过 [APT repository](Installation/Debian_and_Ubuntu.md#APT-repository) 支持 Linux Mint 和 Ubuntu Hirsute Hippo
+- 通过 [APT repository](Installation/Debian_and_Ubuntu.md) 支持 Linux Mint 和 Ubuntu Hirsute Hippo
 - 在某些情况下，通过 HTTP 在大型索引中通过 ID 更新更快（取决于 ID 分布）
 - [671e65a2](https://github.com/manticoresoftware/lemmatizer-uk/commit/671e65a296800537123a3f8b324eeaa3f58b9632) - 为 lemmatizer-uk 添加了缓存
 

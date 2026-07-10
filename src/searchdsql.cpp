@@ -339,14 +339,14 @@ bool SqlParserTraits_c::SetTableForOptions ( const SqlNode_t & tNode )
 	return true;
 }
 
-bool SqlParserTraits_c::NumIsSaturated ( const SqlNode_t& tNode )
+bool SqlParserTraits_c::NumIsSaturated ( uint64_t uValue, bool bNegative )
 {
-	const auto uLimit = (uint64_t)LLONG_MAX + (tNode.m_bNegative ? 1ULL : 0ULL);
-	if ( tNode.m_uValue > uLimit )
+	const auto uLimit = (uint64_t)LLONG_MAX + ( bNegative ? 1ULL : 0ULL );
+	if ( uValue > uLimit )
 	{
 		assert ( m_pParseError );
-		const char* szSign = tNode.m_bNegative?"-":"";
-		m_pParseError->SetSprintf ( "number %s" UINT64_FMT " is out of range [-9223372036854775808..9223372036854775807]", szSign, tNode.m_uValue );
+		const char * szSign = bNegative ? "-" : "";
+		m_pParseError->SetSprintf ( "number %s" UINT64_FMT " is out of range [-9223372036854775808..9223372036854775807]", szSign, uValue );
 		return true;
 	}
 	return false;
@@ -409,6 +409,9 @@ public:
 	bool			AddStringCmpFilter ( const SqlNode_t & tCol, const SqlNode_t & tVal, bool bExclude, EStrCmpDir eStrCmpDir );
 	CSphFilterSettings * AddValuesFilter ( const SqlNode_t & tCol ) { return AddFilter ( tCol, SPH_FILTER_VALUES ); }
 	CSphFilterSettings * AddValuesFilter ( const SqlNode_t & tCol, int iValuesIdx );
+	void			BeginDocidConstList ( const SqlNode_t & tCol );
+	void			CheckDocidConstListItem ( uint64_t uValue, bool bNegative );
+	bool			EndDocidConstList ();
 	bool			AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal, StrList_e eType, bool bInverse=false );
 	bool			AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull );
 	void			AddHaving ();
@@ -477,6 +480,8 @@ private:
 	CSphVector<CSphNamedVariant> m_dNamedVec;
 	ESphAttr					m_eJoinTypeCast = SPH_ATTR_NONE;
 	bool						m_bJoinParseMode = false;
+	bool						m_bCheckDocidConstList = false;
+	bool						m_bInvalidDocidConstList = false;
 	LastWhereItem_e				m_eLastWhereItem = LastWhereItem_e::NONE;
 	int							m_iLastWhereItemKnn = -1;
 
@@ -2348,6 +2353,30 @@ CSphFilterSettings * SqlParser_c::AddValuesFilter ( const SqlNode_t & tCol, int 
 	auto & dValues = GetMvaVec ( iValuesIdx );
 	CopyValuesToFilter ( pFilter, dValues );
 	return pFilter;
+}
+
+
+void SqlParser_c::BeginDocidConstList ( const SqlNode_t & tCol )
+{
+	const Str_t sCol = GetStrt ( tCol );
+	m_bCheckDocidConstList = StrEqN ( sCol, FROMS ( "id" ) ) || StrEqN ( sCol, FROMS ( "@id" ) );
+	m_bInvalidDocidConstList = false;
+}
+
+
+void SqlParser_c::CheckDocidConstListItem ( uint64_t uValue, bool bNegative )
+{
+	if ( m_bCheckDocidConstList && !m_bInvalidDocidConstList )
+		m_bInvalidDocidConstList = NumIsSaturated ( uValue, bNegative );
+}
+
+
+bool SqlParser_c::EndDocidConstList ()
+{
+	const bool bValid = !m_bInvalidDocidConstList;
+	m_bCheckDocidConstList = false;
+	m_bInvalidDocidConstList = false;
+	return bValid;
 }
 
 

@@ -1,6 +1,6 @@
 # 更新日志
 
-## 版本 28.4.3
+## 版本 28.4.4
 **发布于**：2026 年 7 月 10 日
 
 本次发布重点改进 KNN 性能、对话式搜索、更易安装、更好的 faceting 和 embedding 控制，并修复了身份验证安全、复制、SQL 兼容性、分布式查询以及 columnar/KNN 内部实现中的问题。
@@ -18,6 +18,7 @@
 * ⚠️ **[v28.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.0.0)** [ Issue #4667](https://github.com/manticoresoftware/manticoresearch/issues/4667) [ PR #4668](https://github.com/manticoresoftware/manticoresearch/pull/4668) **破坏性变更**：插件 ABI 版本 `SPH_UDF_VERSION` 升级到 12，因此 token-filter 插件可以正确接收较长的 [dict=keywords_32k](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict) 词元，而不会再静默绕过超过旧版 126 字节限制的值。这会影响现有的外部 UDF、ranker 和 token-filter 插件二进制文件：在加载到此版本之前必须重新编译；而将词元文本复制到固定大小缓冲区的 token-filter 实现，可能也需要修改代码以处理更长的词元。现有表数据和配置保持兼容，不需要索引迁移。如果同时恢复为针对旧 ABI 编译的插件二进制文件，并且不依赖新的长词元插件行为，也可以降级。
 
 ### Bug 修复
+* 🪲 [v28.4.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.4) 更新了 `README.Debian.in` 和 `man` 页面。
 * 🪲 [v28.4.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.3) [ Issue #1250](https://github.com/manticoresoftware/manticoresearch/issues/1250) [ PR #4623](https://github.com/manticoresoftware/manticoresearch/pull/4623) 修复了 [COUNT(DISTINCT ...)](Searching/Grouping.md#COUNT%28DISTINCT-field%29) 周围不兼容的多语句处理，避免了多查询结果处理中错误的结果延续和行集损坏。
 * 🪲 [v28.4.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.2) [ PR #4713](https://github.com/manticoresoftware/manticoresearch/pull/4713) 修复了 MySQL 多语句执行中的身份验证/授权权限检查绕过，因此多语句请求中的每条语句都会在认证下被正确校验。
 * 🪲 [v28.4.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.1) [ Issue #4705](https://github.com/manticoresoftware/manticoresearch/issues/4705) [ PR #4712](https://github.com/manticoresoftware/manticoresearch/pull/4712) 通过将保存的复制用户持久化到集群元数据中，修复了经过身份验证的复制集群重启恢复问题，因此节点可以恢复并自动重新加入，而不会丢失配置的集群用户。
@@ -332,7 +333,7 @@
 
 **发布日期**：2025年11月7日
 
-❤️ 我们衷心感谢 [@ricardopintottrdata](https://github.com/ricardopintottrdata) 在 [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) 和 [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 中所做的工作——它们解决了 `HAVING` 总计数和 `filter with empty name` 错误相关的问题——也感谢 [@jdelStrother](https://github.com/jdelStrother) 通过 [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) 做出的贡献，该 PR 改进了在没有 Jieba 支持时对 `ParseCJKSegmentation` 的处理。
+❤️ 我们衷心感谢 [@ricardopintottrdata](https://github.com/ricardopintottrdata) 通过 [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) 和 [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 所做的工作 - 解决了 `HAVING` 总计数和 `filter with empty name` 错误相关的问题 - 也感谢 [@jdelStrother](https://github.com/jdelStrother) 通过 [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) 做出的贡献，该 PR 改进了在没有 Jieba 支持时对 `ParseCJKSegmentation` 的处理。
 
 您的努力使项目更加强大——非常感谢！
 

@@ -53,6 +53,7 @@ What distinguishes it from other solutions is:
 * With its modern multithreading architecture and efficient query parallelization capabilities, Manticore is able to fully utilize all your CPU cores to achieve the quickest response times possible.
 * The powerful and speedy full-text search works seamlessly with both small and large datasets.
 * Hybrid search combines full-text and vector retrieval in a single query for better relevance.
+* Conversational search lets existing vectorized tables answer questions with KNN retrieval, conversation history, and LLM-backed responses through SQL `CALL CHAT` or the HTTP JSON `/search` endpoint.
 * Row-wise storage for small, medium and big size datasets.
 * For even larger datasets, Manticore offers columnar storage support through the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/), capable of handling datasets too big to fit in RAM.
 * Performant secondary indexes are automatically created using the PGM-index (Piecewise Geometric Model index), which provides efficient mapping between indexed keys and their memory locations.
@@ -85,6 +86,7 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [Geo-spatial search](https://play.manticoresearch.com/geosearch/)
   - [Hybrid search](https://manual.manticoresearch.com/Searching/Hybrid_search)
   - [Vector search](https://manual.manticoresearch.com/Searching/KNN)
+  - [Conversational search](https://manual.manticoresearch.com/Searching/Conversational_search)
   - [Joining tables](https://manual.manticoresearch.com/Searching/Joining)
   - [Spelling correction](https://play.manticoresearch.com/didyoumean/)
   - [Autocomplete](https://manual.manticoresearch.com/Searching/Autocomplete#Autocomplete)

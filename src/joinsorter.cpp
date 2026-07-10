@@ -2830,14 +2830,9 @@ bool CreateJoinMultiSorter ( const CSphIndex * pIndex, const VecTraits_T<const C
 	// the idea is that 1st sorter does the join AND it also pushes joined matches to all other sorters
 	// to avoid double push to 1..N sorters they are wrapped in a class that prevents pushing matches
 	CSphVector<std::shared_ptr<ISphMatchSorter>> dSharedSorters;
+	// Transfer ownership to dSharedSorters and clear raw aliases used by failure cleanup below.
 	for ( auto & pSorter : dSorters )
-	{
-		dSharedSorters.Add ( std::shared_ptr<ISphMatchSorter>(pSorter) );
-
-		// Sorter ownership is transferred to dSharedSorters here. If join sorter setup fails below,
-		// the caller still runs its cleanup path, so do not leave dangling raw pointers behind.
-		pSorter = nullptr;
-	}
+		dSharedSorters.Add ( std::shared_ptr<ISphMatchSorter>( std::exchange ( pSorter, nullptr ) ) );
 
 	if ( dJoinedIndexes.GetLength()==1 )
 	{

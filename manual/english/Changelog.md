@@ -1,6 +1,6 @@
 # Changelog
 
-## Version 28.4.3
+## Version 28.4.4
 **Released**: July 10th 2026
 
 This release focuses on KNN performance, conversational search improvements, easier installation, better faceting and embedding controls, and fixes across authentication security, replication, SQL compatibility, distributed queries, and columnar/KNN internals.
@@ -18,6 +18,7 @@ This release focuses on KNN performance, conversational search improvements, eas
 * ⚠️ **[v28.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.0.0)** [ Issue #4667](https://github.com/manticoresoftware/manticoresearch/issues/4667) [ PR #4668](https://github.com/manticoresoftware/manticoresearch/pull/4668) **Breaking change**: plugin ABI version `SPH_UDF_VERSION` is bumped to 12 so token-filter plugins can correctly receive long [dict=keywords_32k](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict) tokens instead of silently bypassing values over the legacy 126-byte limit. This breaks existing external UDF, ranker, and token-filter plugin binaries: they must be rebuilt before loading into this version, and token-filter implementations that copy token text into fixed-size buffers may also need code changes to handle much longer tokens. Existing table data and configuration remain compatible, and no index migration is required. Downgrade is possible if you also restore plugin binaries built for the older ABI and do not rely on the new long-token plugin behavior.
 
 ### Bug Fixes
+* 🪲 [v28.4.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.4) Updated `README.Debian.in` and `man` pages.
 * 🪲 [v28.4.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.3) [ Issue #1250](https://github.com/manticoresoftware/manticoresearch/issues/1250) [ PR #4623](https://github.com/manticoresoftware/manticoresearch/pull/4623) Fixed incompatible multi-statement handling around [COUNT(DISTINCT ...)](Searching/Grouping.md#COUNT%28DISTINCT-field%29), preventing incorrect carry-over and rowset corruption in multi-query result processing.
 * 🪲 [v28.4.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.2) [ PR #4713](https://github.com/manticoresoftware/manticoresearch/pull/4713) Fixed an authentication/authorization permission-check bypass in MySQL multi-statement execution, so each statement in a multi-statement request is validated correctly under auth.
 * 🪲 [v28.4.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.1) [ Issue #4705](https://github.com/manticoresoftware/manticoresearch/issues/4705) [ PR #4712](https://github.com/manticoresoftware/manticoresearch/pull/4712) Fixed authenticated replication-cluster restart recovery by persisting the stored replication user in cluster metadata, so nodes can restore and automatically rejoin without losing the configured cluster user.

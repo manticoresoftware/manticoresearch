@@ -1,6 +1,6 @@
 # Журнал изменений
 
-## Версия 28.4.3
+## Версия 28.4.4
 **Выпуск**: 10 июля 2026
 
 Этот выпуск сосредоточен на производительности KNN, улучшениях разговорного поиска, более простой установке, лучшем управлении фасетами и эмбеддингами, а также исправлениях в аутентификации и безопасности, репликации, SQL-совместимости, распределенных запросах и внутренних механизмах columnar/KNN.
@@ -18,6 +18,7 @@
 * ⚠️ **[v28.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.0.0)** [ Issue #4667](https://github.com/manticoresoftware/manticoresearch/issues/4667) [ PR #4668](https://github.com/manticoresoftware/manticoresearch/pull/4668) **Ломающее изменение**: версия ABI плагина `SPH_UDF_VERSION` повышена до 12, чтобы плагины token-filter могли корректно получать длинные токены [dict=keywords_32k](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict) вместо тихого пропуска значений сверх устаревшего лимита 126 байт. Это ломает существующие бинарные файлы внешних UDF, ranker и token-filter плагинов: перед загрузкой в эту версию их нужно пересобрать, а реализациям token-filter, которые копируют текст токена в буферы фиксированного размера, может также потребоваться изменить код для обработки значительно более длинных токенов. Существующие данные таблиц и конфигурация остаются совместимыми, миграция индекса не требуется. Понижение версии возможно, если вы также восстановите бинарные файлы плагинов, собранные для старого ABI, и не полагаетесь на новое поведение плагинов с длинными токенами.
 
 ### Исправления ошибок
+* 🪲 [v28.4.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.4) Обновлены `README.Debian.in` и страницы `man`.
 * 🪲 [v28.4.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.3) [ Issue #1250](https://github.com/manticoresoftware/manticoresearch/issues/1250) [ PR #4623](https://github.com/manticoresoftware/manticoresearch/pull/4623) Исправлена несовместимая обработка многооператорных запросов вокруг [COUNT(DISTINCT ...)](Searching/Grouping.md#COUNT%28DISTINCT-field%29), что предотвращает неверный перенос состояния и повреждение набора строк при обработке результатов нескольких запросов.
 * 🪲 [v28.4.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.2) [ PR #4713](https://github.com/manticoresoftware/manticoresearch/pull/4713) Исправлен обход проверки прав аутентификации и авторизации при выполнении нескольких операторов в MySQL, поэтому каждый оператор в многооператорном запросе корректно проверяется в рамках auth.
 * 🪲 [v28.4.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.1) [ Issue #4705](https://github.com/manticoresoftware/manticoresearch/issues/4705) [ PR #4712](https://github.com/manticoresoftware/manticoresearch/pull/4712) Исправлено восстановление после перезапуска аутентифицированного репликационного кластера за счет сохранения репликационного пользователя в метаданных кластера, поэтому узлы могут восстановиться и автоматически присоединиться обратно, не теряя настроенного пользователя кластера.
@@ -332,7 +333,7 @@
 
 **Выпущено**: 7 ноября 2025 г.
 
-❤️ Мы хотели бы выразить искреннюю благодарность [@ricardopintottrdata](https://github.com/ricardopintottrdata) за работу над [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) и [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) — за исправление проблем с общими итоговыми значениями `HAVING` и ошибкой `filter with empty name` — а также [@jdelStrother](https://github.com/jdelStrother) за вклад в [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819), который улучшает обработку `ParseCJKSegmentation`, когда поддержка Jieba недоступна.
+❤️ Хотим от всего сердца поблагодарить [@ricardopintottrdata](https://github.com/ricardopintottrdata) за работу над [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) и [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) — за устранение проблем с общими итогами `HAVING` и ошибкой `filter with empty name` — а также [@jdelStrother](https://github.com/jdelStrother) за вклад в [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819), который улучшает обработку `ParseCJKSegmentation`, когда поддержка Jieba недоступна.
 
 Ваши усилия помогают сделать проект сильнее — большое спасибо!
 

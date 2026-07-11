@@ -21,6 +21,7 @@
 #include "digest_sha1.h"
 #include "tracer.h"
 #include "auth/auth.h"
+#include "auth/auth_common.h"
 
 #include "replication/wsrep_cxx.h"
 #include "replication/common.h"
@@ -1822,6 +1823,78 @@ static bool AddAndStartCluster ( ReplicationClusterRefPtr_c pCluster )
 	return true;
 }
 
+static bool AuthPermitsLegacyClusterAction ( const UserPerms_t & dPerms, AuthAction_e eAction, const CSphString & sTarget )
+{
+	// Mirrors CheckPerms() resolution without producing auth-denied log entries while we
+	// only look for a best-effort startup compatibility user for pre-user-field clusters.
+	for ( const auto & tPerm : dPerms )
+	{
+		if ( tPerm.m_eAction!=eAction )
+			continue;
+
+		if ( !tPerm.m_bTargetWildcard && tPerm.m_sTarget==sTarget )
+			return tPerm.m_bAllow;
+
+		if ( tPerm.m_bTargetWildcard && !sTarget.IsEmpty() && ( tPerm.m_bTargetWildcardAll || sphWildcardMatch ( sTarget.cstr(), tPerm.m_sTarget.cstr() ) ) )
+			return tPerm.m_bAllow;
+	}
+
+	return false;
+}
+
+static bool PreferLegacyClusterUserCandidate ( const CSphString & sUser, bool bAdmin, const CSphString & sBestUser, bool bBestAdmin )
+{
+	if ( sBestUser.IsEmpty() )
+		return true;
+
+	// Prefer a dedicated replication user over a broader admin user when old metadata
+	// does not say which session user created the cluster. If that still leaves several
+	// candidates, use a deterministic name order so startup is stable.
+	if ( bAdmin!=bBestAdmin )
+		return !bAdmin;
+
+	return strcmp ( sUser.cstr(), sBestUser.cstr() ) < 0;
+}
+
+static bool TryAssignLegacyClusterUser ( ClusterDesc_t & tDesc )
+{
+	if ( !IsAuthEnabled() || !tDesc.m_sUser.IsEmpty() )
+		return true;
+
+	AuthUsersPtr_t pUsers = GetAuth();
+	if ( !pUsers )
+		return false;
+
+	CSphString sBestUser;
+	bool bBestAdmin = false;
+	for ( const auto & tUserPerms : pUsers->m_hUserPerms )
+	{
+		const CSphString & sUser = tUserPerms.first;
+		if ( sUser==GetAuthBuddyName() )
+			continue;
+
+		if ( !pUsers->m_hUserToken ( sUser ) )
+			continue;
+
+		if ( !AuthPermitsLegacyClusterAction ( tUserPerms.second, AuthAction_e::REPLICATION, tDesc.m_sName ) )
+			continue;
+
+		bool bAdmin = AuthPermitsLegacyClusterAction ( tUserPerms.second, AuthAction_e::ADMIN, "*" );
+		if ( PreferLegacyClusterUserCandidate ( sUser, bAdmin, sBestUser, bBestAdmin ) )
+		{
+			sBestUser = sUser;
+			bBestAdmin = bAdmin;
+		}
+	}
+
+	if ( sBestUser.IsEmpty() )
+		return false;
+
+	tDesc.m_sUser = sBestUser;
+	sphWarning ( "Cluster %s: missing effective replication user in stored metadata, using '%s' for legacy compatibility", tDesc.m_sName.cstr(), tDesc.m_sUser.cstr() );
+	return true;
+}
+
 static bool ClusterDescOk ( const ClusterDesc_t& tDesc, bool bForce ) noexcept
 {
 	if ( tDesc.m_dClusterNodes.IsEmpty() )
@@ -1996,8 +2069,9 @@ static void CoPrepareClustersOnStartup ( RplBootstrap_e eBs ) EXCLUDES ( g_tClus
 {
 	SmallStringHash_T<ReplicationClusterRefPtr_c> hClusters;
 	assert ( Threads::IsInsideCoroutine() );
-	for ( const ClusterDesc_t& tDesc : GetClustersInt() )
+	for ( ClusterDesc_t tDesc : GetClustersInt() )
 	{
+		TryAssignLegacyClusterUser ( tDesc );
 		if ( !ClusterDescOk ( tDesc, eBs==RplBootstrap_e::FORCED ) )
 			continue;
 

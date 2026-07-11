@@ -1,0 +1,78 @@
+––– comment –––
+Regression for https://github.com/manticoresoftware/manticoresearch/issues/4720.
+Legacy cluster metadata created before effective replication user persistence has no
+`user` field in manticore.json. Auth-enabled startup must infer a compatible
+replication user instead of skipping the cluster and losing table membership.
+––– comment –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach-with-auth –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "CREATE USER 'repluser' IDENTIFIED BY 'replpass1234';" >/dev/null; MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "GRANT replication ON * TO 'repluser';" >/dev/null; MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "CREATE CLUSTER legacycluster 'repluser' AS user;" >/dev/null; MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "CREATE TABLE t1 (title text);" >/dev/null; MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "ALTER CLUSTER legacycluster ADD t1;" >/dev/null; MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "INSERT INTO legacycluster:t1(id,title) VALUES (1,'before restart');" >/dev/null; echo "legacy cluster ready"
+––– output –––
+legacy cluster ready
+––– input –––
+python3 - <<'PY'
+import json
+with open('/var/log/manticore-1/manticore.json') as f:
+    cfg = json.load(f)
+print(cfg['clusters']['legacycluster'].get('user'))
+PY
+––– output –––
+repluser
+––– input –––
+stdbuf -oL searchd --stopwait -c /tmp/searchd-with-flexible-ports-auth-${INSTANCE}.conf >/dev/null; echo "stopped before legacy metadata edit"
+––– output –––
+stopped before legacy metadata edit
+––– input –––
+python3 - <<'PY'
+import json
+path = '/var/log/manticore-1/manticore.json'
+with open(path) as f:
+    cfg = json.load(f)
+for cluster in cfg.get('clusters', {}).values():
+    cluster.pop('user', None)
+with open(path, 'w') as f:
+    json.dump(cfg, f, separators=(',', ':'))
+print('legacy metadata without user')
+PY
+––– output –––
+legacy metadata without user
+––– input –––
+python3 - <<'PY'
+import json
+with open('/var/log/manticore-1/manticore.json') as f:
+    cfg = json.load(f)
+print('user' in cfg['clusters']['legacycluster'])
+PY
+––– output –––
+False
+––– input –––
+bash -c 'export INSTANCE=1; : > /var/log/manticore-${INSTANCE}/searchd.log; stdbuf -oL searchd --new-cluster -c /tmp/searchd-with-flexible-ports-auth-${INSTANCE}.conf >/dev/null; if timeout 30 grep -qm1 "\[BUDDY\] started" <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo "restarted from legacy metadata"; else echo "restart failed"; cat /var/log/manticore-${INSTANCE}/searchd.log; exit 1; fi'
+––– output –––
+restarted from legacy metadata
+––– input –––
+grep -o "Cluster legacycluster: missing effective replication user in stored metadata, using 'repluser' for legacy compatibility" /var/log/manticore-1/searchd.log
+––– output –––
+Cluster legacycluster: missing effective replication user in stored metadata, using 'repluser' for legacy compatibility
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_legacycluster_indexes_count';" | grep 'cluster_legacycluster_indexes_count' | grep -oE '[0-9]+' | tail -1
+––– output –––
+1
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_legacycluster_indexes';" | grep 'cluster_legacycluster_indexes' | awk -F'|' '{gsub(/ /, "", $3); print $3}'
+––– output –––
+t1
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "INSERT INTO legacycluster:t1(id,title) VALUES (2,'after restart'); SELECT COUNT(*) FROM t1;" | grep -oE '[0-9]+' | tail -1
+––– output –––
+2
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "INSERT INTO t1(id,title) VALUES (3,'local path rejected');" 2>&1 | grep -o "table 't1' is a part of cluster 'legacycluster', use 'legacycluster:t1'"
+––– output –––
+table 't1' is a part of cluster 'legacycluster', use 'legacycluster:t1'
+––– input –––
+stdbuf -oL searchd --stopwait -c /tmp/searchd-with-flexible-ports-auth-${INSTANCE}.conf >/dev/null; echo "stopped"
+––– output –––
+stopped

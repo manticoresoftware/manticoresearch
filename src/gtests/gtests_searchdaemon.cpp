@@ -20,13 +20,6 @@
 #include "replication/wsrep_cxx.h"
 #include "replication/cluster_binlog.h"
 
-#include <atomic>
-#include <chrono>
-#include <condition_variable>
-#include <mutex>
-#include <thread>
-#include <vector>
-
 
 // QueryStatElement_t uses default ctr with inline initializer;
 // this test is just to be sure it works correctly

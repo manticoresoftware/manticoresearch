@@ -16,12 +16,12 @@
 
 ## 破坏性变更
 * ⚠️ **[v28.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.0.0)** [ Issue #4667](https://github.com/manticoresoftware/manticoresearch/issues/4667) [ PR #4668](https://github.com/manticoresoftware/manticoresearch/pull/4668) **破坏性变更**：插件 ABI 版本 `SPH_UDF_VERSION` 升级到 12，因此 token-filter 插件可以正确接收较长的 [dict=keywords_32k](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict) 词元，而不会再静默绕过超过旧版 126 字节限制的值。这会影响现有的外部 UDF、ranker 和 token-filter 插件二进制文件：在加载到此版本之前必须重新编译；而将词元文本复制到固定大小缓冲区的 token-filter 实现，可能也需要修改代码以处理更长的词元。现有表数据和配置保持兼容，不需要索引迁移。如果同时恢复为针对旧 ABI 编译的插件二进制文件，并且不依赖新的长词元插件行为，也可以降级。
+* ⚠️ **[v28.4.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.1)** [ Issue #4720](https://github.com/manticoresoftware/manticoresearch/issues/4720) [ PR #4712](https://github.com/manticoresoftware/manticoresearch/pull/4712) **破坏性升级条件**：一个启用了认证的复制集群，如果其 `manticore.json` 在 v28.4.1 之前保存，则不会存储复制用户。升级后，Manticore 无法自动恢复该集群，并会保持其已保存的元数据不变。停止所有集群节点并备份数据目录。在每个节点上，只删除 `manticore.json` 中受影响的集群描述符；保留表条目和表目录。启动节点，使用预期的复制账户重新创建并加入集群，然后通过 `ALTER CLUSTER ... ADD` 连接现有表。不要删除表目录。由 v28.4.1 及更高版本保存的集群会包含复制用户，因此不受影响。
 
 ### Bug 修复
 * 🪲 [v28.4.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.4) 更新了 `README.Debian.in` 和 `man` 页面。
 * 🪲 [v28.4.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.3) [ Issue #1250](https://github.com/manticoresoftware/manticoresearch/issues/1250) [ PR #4623](https://github.com/manticoresoftware/manticoresearch/pull/4623) 修复了 [COUNT(DISTINCT ...)](Searching/Grouping.md#COUNT%28DISTINCT-field%29) 周围不兼容的多语句处理，避免了多查询结果处理中错误的结果延续和行集损坏。
 * 🪲 [v28.4.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.2) [ PR #4713](https://github.com/manticoresoftware/manticoresearch/pull/4713) 修复了 MySQL 多语句执行中的身份验证/授权权限检查绕过，因此多语句请求中的每条语句都会在认证下被正确校验。
-* 🪲 [v28.4.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.1) [ Issue #4705](https://github.com/manticoresoftware/manticoresearch/issues/4705) [ PR #4712](https://github.com/manticoresoftware/manticoresearch/pull/4712) 通过将保存的复制用户持久化到集群元数据中，修复了经过身份验证的复制集群重启恢复问题，因此节点可以恢复并自动重新加入，而不会丢失配置的集群用户。
 * 🪲 [v28.3.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.3.7) [ Issue #4697](https://github.com/manticoresoftware/manticoresearch/issues/4697) [ PR #4698](https://github.com/manticoresoftware/manticoresearch/pull/4698) 修复了中断的 columnar/KNN 合并清理，使跟踪的临时前缀下的临时组件文件能够被正确移除，避免残留的 `.tmp.spc.*` 文件破坏后续的表重命名、挂载或删除操作。
 * 🪲 [v28.3.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.3.6) [ PR #4695](https://github.com/manticoresoftware/manticoresearch/pull/4695) 通过接受 `SELECT` 查询中的简单单表别名，改进了 [DBeaver](Integration/DBeaver.md) 兼容性，因此 DBeaver 默认的表浏览查询不再失败。
 * 🪲 [v28.3.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.3.5) [ Issue #4682](https://github.com/manticoresoftware/manticoresearch/issues/4682) [ PR #4683](https://github.com/manticoresoftware/manticoresearch/pull/4683) 修复了内置乌克兰语词形还原器，使撇号词能够正确归一化，从而让如 `здоров'ям` 这样的形式可以在 [lemmatize_uk_all](Creating_a_table/NLP_and_tokenization/Supported_languages.md) 下匹配 `здоров'я`。
@@ -333,7 +333,7 @@
 
 **发布日期**：2025年11月7日
 
-❤️ 我们衷心感谢 [@ricardopintottrdata](https://github.com/ricardopintottrdata) 通过 [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) 和 [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 所做的工作 - 解决了 `HAVING` 总计数和 `filter with empty name` 错误相关的问题 - 也感谢 [@jdelStrother](https://github.com/jdelStrother) 通过 [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) 做出的贡献，该 PR 改进了在没有 Jieba 支持时对 `ParseCJKSegmentation` 的处理。
+❤️ 我们衷心感谢 [@ricardopintottrdata](https://github.com/ricardopintottrdata) 在 [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) 和 [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 中的工作，解决了 `HAVING` 总计数和 `filter with empty name` 错误相关的问题；也感谢 [@jdelStrother](https://github.com/jdelStrother) 通过 [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) 做出的贡献，该 PR 改进了在没有 Jieba 支持时对 `ParseCJKSegmentation` 的处理。
 
 您的努力使项目更加强大——非常感谢！
 

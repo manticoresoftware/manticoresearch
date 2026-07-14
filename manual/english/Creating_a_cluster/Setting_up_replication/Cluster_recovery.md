@@ -76,7 +76,7 @@ If you bootstrap a less advanced node first, a more advanced node may later join
 
 Use this procedure as a last resort when no node can restore the cluster through the normal recovery methods above, but the cluster's tables are still present in the local data directories. This can happen when saved cluster metadata is incomplete or incompatible with the running version, or when another startup failure leaves the old cluster membership unusable.
 
-This procedure creates a new cluster. It discards the old cluster membership and replication history, then copies the tables from one selected node to the other nodes. Do not use it while any node still has a healthy `primary` / `synced` copy of the old cluster. In that case, keep the healthy cluster and recover the other nodes through [JOIN CLUSTER](Joining_a_replication_cluster.md#joining-a-replication-cluster).
+This procedure creates a new cluster. It discards the old cluster membership and replication history, then copies the tables from one selected node to the other nodes. Do not use it while any node still has a healthy `primary` / `synced` copy of the old cluster. In that case, keep the healthy cluster and recover the other nodes through [JOIN CLUSTER](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md#Joining-a-replication-cluster).
 
 1. Stop Manticore on every node that belonged to the failed cluster. Do not write to the local tables during this procedure.
 2. Back up the full `data_dir` on every node. Keep a copy of the old cluster descriptor if it contains custom `path`, `nodes`, or provider `options` that you need when recreating the cluster.
@@ -86,7 +86,7 @@ This procedure creates a new cluster. It discards the old cluster membership and
    Leave the `indexes` object and every table directory in place. Do not delete or recreate the tables.
 
 5. Start Manticore normally on every node. The former cluster tables should now appear as local tables. Check the tables on the selected source node before continuing. If they are missing or incomplete, stop and restore the backup.
-6. On the selected source node, create the cluster. Include any saved `path`, `nodes`, or provider options if you still need them. If authentication is enabled, add `'<replication-user>' AS user` to this statement and the `JOIN CLUSTER` statements below. The account must have matching stored authentication data and `replication` permission on every node. See [setting up replication](Setting_up_replication.md#setting-up-replication).
+6. On the selected source node, create the cluster. Include any saved `path`, `nodes`, or provider options if you still need them. If authentication is enabled, add `'<replication-user>' AS user` to this statement and the `JOIN CLUSTER` statements below. The account must have matching stored authentication data and `replication` permission on every node. See [setting up replication](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Setting-up-replication).
 
    ```sql
    CREATE CLUSTER posts

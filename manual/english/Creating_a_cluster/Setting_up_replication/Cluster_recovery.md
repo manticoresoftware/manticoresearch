@@ -72,6 +72,40 @@ After that, start the remaining nodes normally and let them rejoin. Verify recov
 
 If you bootstrap a less advanced node first, a more advanced node may later join it and receive a full SST from an older state, which can discard transactions that existed only on the more advanced node. That is why the node with `safe_to_bootstrap: 1` should be your first choice.
 
+### Recreate a cluster from existing local tables
+
+Use this procedure as a last resort when no node can restore the cluster through the normal recovery methods above, but the cluster's tables are still present in the local data directories. This can happen when saved cluster metadata is incomplete or incompatible with the running version, or when another startup failure leaves the old cluster membership unusable.
+
+This procedure creates a new cluster. It discards the old cluster membership and replication history, then copies the tables from one selected node to the other nodes. Do not use it while any node still has a healthy `primary` / `synced` copy of the old cluster. In that case, keep the healthy cluster and recover the other nodes through [JOIN CLUSTER](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md#Joining-a-replication-cluster).
+
+1. Stop Manticore on every node that belonged to the failed cluster. Do not write to the local tables during this procedure.
+2. Back up the full `data_dir` on every node. Keep a copy of the old cluster descriptor if it contains custom `path`, `nodes`, or provider `options` that you need when recreating the cluster.
+3. Choose the node whose local tables contain the data you want to keep. This node will become the source for the new cluster. Adding its tables to the cluster later replaces tables with the same names on the other nodes.
+4. On every node, edit `<data_dir>/manticore.json`. From the top-level `clusters` object, remove only the entry for the failed cluster. For example, remove `clusters.posts` for a cluster named `posts`.
+
+   Leave the `indexes` object and every table directory in place. Do not delete or recreate the tables.
+
+5. Start Manticore normally on every node. The former cluster tables should now appear as local tables. Check the tables on the selected source node before continuing. If they are missing or incomplete, stop and restore the backup.
+6. On the selected source node, create the cluster. Include any saved `path`, `nodes`, or provider options if you still need them. If authentication is enabled, add `'<replication-user>' AS user` to this statement and the `JOIN CLUSTER` statements below. The account must have matching stored authentication data and `replication` permission on every node. See [setting up replication](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Setting-up-replication).
+
+   ```sql
+   CREATE CLUSTER posts
+   ```
+
+7. On every other node, join the new cluster through the first node:
+
+   ```sql
+   JOIN CLUSTER posts AT 'node-a.example:9312'
+   ```
+
+8. On the selected source node, attach the existing local tables to the new cluster:
+
+   ```sql
+   ALTER CLUSTER posts ADD table_a, table_b
+   ```
+
+9. Wait until every node reports `cluster_posts_status=primary` and `cluster_posts_node_state=synced` before resuming writes.
+
 ### One node crashed or became unreachable
 
 If node A disappears because of a crash or a network problem, nodes B and C will first try to reconnect to it. If that fails, they remove it from the cluster, recalculate quorum, and continue working as the primary cluster.

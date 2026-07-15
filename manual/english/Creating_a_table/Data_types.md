@@ -358,9 +358,9 @@ Below is the list of data types supported by Manticore Search:
 
 ## Document ID
 
-The document identifier is a mandatory attribute that must be a unique 64-bit unsigned integer. Document IDs can be explicitly specified when creating a table, but they are always enabled even if not specified. Document IDs cannot be updated.
+The document identifier is a mandatory attribute that must be unique. Document IDs support unsigned 64-bit values. Explicit document IDs must be non-zero; negative document IDs are not allowed. Document IDs are always enabled even if not specified, and they cannot be updated.
 
-When you create a table, you can specify ID explicitly, but regardless of the data type you use, it will always behave as described above - stored as unsigned 64-bit but exposed as signed 64-bit integer.
+When declaring a table, you can include `id` in the `CREATE TABLE` schema, but regardless of the data type you use, it will behave as described above. In the MySQL/SQL interface, the ID is exposed as a signed 64-bit `bigint`, so large unsigned ID values may appear as negative numbers there.
 
 ```sql
 mysql> CREATE TABLE tbl(id bigint, content text);
@@ -387,17 +387,20 @@ DESC tbl;
 2 rows in set (0.00 sec)
 ```
 
-When working with document IDs, it's important to know that they are stored internally as unsigned 64-bit integers but are handled differently depending on the interface:
+Auto-ID generation depends on the table type. RT and PQ tables can generate IDs when the ID is omitted from an insert or replace request, or when `0` is used as the ID value. Plain tables built from external sources do not support automatic ID generation; their source data must provide explicit, unique, non-zero unsigned 64-bit document IDs.
+
+When working with document IDs, it's important to know that unsigned 64-bit values are handled differently depending on the interface:
 
 **MySQL/SQL interface:**
 * IDs greater than 2^63-1 will appear as negative numbers.
 * When filtering by such large IDs, you must use their signed representation.
+* This signed representation is only for displaying or filtering existing large IDs; negative IDs are not accepted when inserting or indexing documents.
 * Use the [UINT64()](../Functions/Type_casting_functions.md#UINT64%28%29) function to view the actual unsigned value.
 
 **JSON/HTTP interface:**
 * IDs are always displayed as their original unsigned values, regardless of size.
-* Both signed and unsigned representations can be used for filtering.
-* Insert operations accept the full unsigned 64-bit range.
+* Both signed and unsigned representations can be used for filtering existing large IDs.
+* Insert operations accept the full unsigned 64-bit range, but negative `id` values are rejected.
 
 For example, let's create a table and insert some values around 2^63:
 ```sql
@@ -512,7 +515,7 @@ curl -s 0:9308/search -d '{"table": "t"}'
   }
 }
 
-# Both signed and unsigned values work for filtering
+# Both signed and unsigned values work for filtering the same stored ID
 curl -s 0:9308/search -d '{"table": "t", "query": {"equals": {"id": 17581446260360033510}}}'
 curl -s 0:9308/search -d '{"table": "t", "query": {"equals": {"id": -865297813349518106}}}'
 

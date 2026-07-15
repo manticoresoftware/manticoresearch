@@ -1101,7 +1101,7 @@ static const uint64_t g_dStatsIntervals[] =
 
 void ServedStats_c::CalculateQueryStats( QueryStats_t& tRowsFoundStats, QueryStats_t& tQueryTimeStats ) const
 {
-	ScRL_t rLock { m_tStatsLock };
+	ScWL_t wLock { m_tStatsLock };
 	DoStatCalcStats ( m_pQueryStatRecords.get(), tRowsFoundStats, tQueryTimeStats );
 }
 
@@ -1110,7 +1110,7 @@ void ServedStats_c::CalculateQueryStats( QueryStats_t& tRowsFoundStats, QuerySta
 
 void ServedStats_c::CalculateQueryStatsExact( QueryStats_t& tRowsFoundStats, QueryStats_t& tQueryTimeStats ) const
 {
-	ScRL_t rLock { m_tStatsLock };
+	ScWL_t wLock { m_tStatsLock };
 	DoStatCalcStats ( m_pQueryStatRecordsExact.get(), tRowsFoundStats, tQueryTimeStats );
 }
 
@@ -1196,7 +1196,7 @@ void ServedStats_c::DoStatCalcStats( const QueryStatContainer_i* pContainer, Que
 
 	auto uTimestamp = sphMicroTimer();
 
-	int iRecords = m_pQueryStatRecords->GetNumRecords();
+	int iRecords = pContainer->GetNumRecords();
 	for ( int i = INTERVAL_1MIN; i<=INTERVAL_15MIN; ++i )
 		CalcStatsForInterval( pContainer, tRowsFoundStats.m_dStats[i], tQueryTimeStats.m_dStats[i], uTimestamp, g_dStatsIntervals[i], iRecords );
 

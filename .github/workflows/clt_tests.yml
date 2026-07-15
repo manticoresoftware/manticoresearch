@@ -100,7 +100,7 @@ jobs:
                   continue
               for path in sorted(root_path.glob("*.rec")):
                   content = path.read_text(encoding="utf-8")
-                  if not have_remote_embedding_keys and "API_KEY='" in content:
+                  if not have_remote_embedding_keys and "api_key='" in content.lower():
                       continue
                   # clt appends "*.rec" to the prefix; strip the suffix to avoid ".rec*.rec"
                   tests.append(str(path.with_suffix("")))

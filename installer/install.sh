@@ -83,7 +83,7 @@ install_manticore_package() {
             print_error "version is not supported for Homebrew installs."
             return 1
         fi
-        brew install "$BREW_PACKAGE_NAME"
+        brew install "$(brew_package_name)"
     fi
 
     print_success "Manticore package is installed."

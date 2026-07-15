@@ -430,7 +430,7 @@ public:
 
 	void			SetDefaultTableForOptions();
 	bool			SetTableForOptions ( const SqlNode_t & tNode );
-	bool			NumIsSaturated ( const SqlNode_t& tNode );
+	bool			NumIsSaturated ( uint64_t uValue, bool bNegative );
 
 protected:
 	CSphVector<SqlStmt_t> &		m_dStmt;

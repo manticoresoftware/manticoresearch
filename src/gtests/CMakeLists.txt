@@ -6,6 +6,10 @@ if (NOT TARGET GTest::gmock_main)
 	return ()
 endif ()
 
+if (WITH_SSL)
+	target_compile_definitions ( searchd_ssl PRIVATE MANTICORE_SSL_TEST_HOOKS )
+endif ()
+
 set ( GTESTS_SRC
 		gtests_rtstuff.cpp
 		gtests_text.cpp
@@ -15,6 +19,7 @@ set ( GTESTS_SRC
 		gtests_searchd.cpp
 		gtests_filter.cpp
 		gtests_searchdaemon.cpp
+		gtests_ssl.cpp
 		gtests_stringbuilder.cpp
 		gtests_strfmt.cpp
 		gtests_pqstuff.cpp
@@ -33,6 +38,10 @@ target_link_libraries ( gmanticoretest PRIVATE
 		source_svpipe
 		daemon
 )
+
+if (WITH_SSL)
+	target_link_libraries ( gmanticoretest PRIVATE OpenSSL::SSL OpenSSL::Crypto )
+endif ()
 
 if (WITH_EXPAT)
 	target_link_libraries ( gmanticoretest PRIVATE source_xmlpipe2 )

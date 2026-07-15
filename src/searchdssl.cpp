@@ -657,16 +657,19 @@ class AsyncSSBufferedSocket_c final : public AsyncNetBuffer_c
 			int iGot = BIO_read ( m_pSslBackend, pBuf, iCanRead );
 			sphLogDebugv ( FRONT "<< BioReadFront (%p) done %d from %d..%d" NORM,
 					(BIO *) m_pSslBackend, iGot, iNeed, iHaveSpace );
+			if ( iGot<=0 )
+			{
+				sphLogDebugv ( FRONT "<< BioReadFront (%p) breaking on %d after %d" NORM,
+						(BIO *) m_pSslBackend, iGot, iGotTotal );
+				if ( iGot<0 && !iGotTotal )
+					return -1;
+				break;
+			}
+
 			pBuf += iGot;
 			iGotTotal += iGot;
 			iNeed -= iGot;
 			iHaveSpace -= iGot;
-			if ( !iGot )
-			{
-				sphLogDebugv ( FRONT "<< BioReadFront (%p) breaking on %d" NORM,
-						(BIO *) m_pSslBackend, iGotTotal );
-				break;
-			}
 		}
 		m_iReceivedTotal += iGotTotal;
 		return iGotTotal;
@@ -707,6 +710,14 @@ public:
 		return m_iReceivedTotal;
 	}
 };
+
+#if defined(MANTICORE_SSL_TEST_HOOKS)
+std::unique_ptr<AsyncNetBuffer_c> MakeSslTestBuffer ( BIO * pSslBackend )
+{
+	assert ( pSslBackend );
+	return std::make_unique<AsyncSSBufferedSocket_c> ( BIOPtr_c ( pSslBackend, [] ( BIO * pBio ) { BIO_free_all ( pBio ); } ) );
+}
+#endif
 
 bool MakeSecureLayer ( std::unique_ptr<AsyncNetBuffer_c>& pSource )
 {

@@ -351,3 +351,18 @@ void UniqKeywords ( CSphVector<CSphKeywordInfo> & dSrc )
 
 	sphSort ( dSrc.Begin(), dSrc.GetLength(), KeywordSorter_fn() );
 }
+
+
+void UniqKeywordStats ( CSphVector<CSphKeywordInfo> & dSrc )
+{
+	SmallStringHash_T<CSphKeywordInfo> hWords;
+	for ( const CSphKeywordInfo & tInfo : dSrc )
+		if ( !hWords.Exists ( tInfo.m_sNormalized ) )
+			hWords.Add ( tInfo, tInfo.m_sNormalized );
+
+	dSrc.Resize ( 0 );
+	for ( const auto & tWord : hWords )
+		dSrc.Add ( tWord.second );
+
+	sphSort ( dSrc.Begin(), dSrc.GetLength(), KeywordSorter_fn() );
+}

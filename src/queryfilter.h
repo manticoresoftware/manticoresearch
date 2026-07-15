@@ -56,3 +56,4 @@ struct KeywordSorter_fn
 };
 
 void UniqKeywords ( CSphVector<CSphKeywordInfo> & dSrc );
+void UniqKeywordStats ( CSphVector<CSphKeywordInfo> & dSrc );

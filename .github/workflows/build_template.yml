@@ -147,6 +147,15 @@ jobs:
           name: ${{ inputs.MCL_PACKAGE_ARTIFACT_NAME }}
           path: ./mcl-package
 
+      - name: Unpack built MCL package artifact
+        if: ${{ inputs.MCL_PACKAGE_ARTIFACT_NAME != '' }}
+        run: |
+          set -euo pipefail
+          if [[ -f ./mcl-package/artifact.tar ]]; then
+            tar -xf ./mcl-package/artifact.tar -C ./mcl-package
+          fi
+          find ./mcl-package -maxdepth 4 -type f | sort
+
       - name: Export MCL package environment
         run: |
           set -euo pipefail

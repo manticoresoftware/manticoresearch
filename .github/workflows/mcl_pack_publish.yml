@@ -16,6 +16,12 @@ on:
         default: ""
 
 jobs:
+  noop:
+    if: ${{ inputs.enabled != true }}
+    runs-on: ubuntu-22.04
+    steps:
+      - run: echo "MCL package build is not needed for this run"
+
   metadata:
     if: ${{ inputs.enabled }}
     runs-on: ubuntu-22.04
@@ -23,6 +29,7 @@ jobs:
       version_base: ${{ steps.package_version.outputs.version_base }}
       version_full: ${{ steps.package_version.outputs.version_full }}
       version_rpm: ${{ steps.package_version.outputs.version_rpm }}
+      version_tagged: ${{ steps.package_version.outputs.version_tagged }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -63,14 +70,23 @@ jobs:
         id: package_version
         run: |
           set -euo pipefail
-          base_version="$(git tag --merged HEAD --list '[0-9]*' --sort=-v:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
+          # MCL semver tags are owned by manticoresoftware/columnar's Auto version workflow.
+          # The daemon workflow only consumes those tags to package the checked-out submodule SHA.
+          tagged_version="$(git tag --points-at HEAD --list '[0-9]*' --sort=-v:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+          if [[ -n "${tagged_version}" ]]; then
+            base_version="${tagged_version}"
+            version_tagged=true
+          else
+            base_version="$(git tag --merged HEAD --list '[0-9]*' --sort=-v:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
+            version_tagged=false
+          fi
           if [[ -z "${base_version}" ]]; then
             echo "Unable to determine MCL base version from reachable semver tags" >&2
             exit 1
           fi
           commit_hash="$(git rev-parse --short=8 HEAD)"
           timestamp="$(git log -1 --format='%cd' --date=format:'%y%m%d%H' HEAD)"
-          if git tag --points-at HEAD | grep -Eq "^(${base_version}|release-${base_version})$"; then
+          if [[ "${version_tagged}" == true ]] || git tag --points-at HEAD | grep -Eq "^release-${base_version}$"; then
             version_full="${base_version}+${timestamp}-${commit_hash}"
           else
             version_full="${base_version}+${timestamp}-${commit_hash}-dev"
@@ -79,6 +95,7 @@ jobs:
           echo "version_base=${base_version}" >> "$GITHUB_OUTPUT"
           echo "version_full=${version_full}" >> "$GITHUB_OUTPUT"
           echo "version_rpm=${version_rpm}" >> "$GITHUB_OUTPUT"
+          echo "version_tagged=${version_tagged}" >> "$GITHUB_OUTPUT"
 
   embeddings_builds:
     if: ${{ inputs.enabled }}

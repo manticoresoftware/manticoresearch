@@ -12,8 +12,32 @@ cosine_similarity() {
         print dot / (sqrt(suma2) * sqrt(sumb2))
     }' "$file1" "$file2"
 }
+
+retry_remote_embedding_create_table() {
+    local sql="$1"
+    local attempts=5
+    local delay=1
+    local attempt output rc
+
+    for attempt in $(seq 1 "$attempts"); do
+        output=$(mysql -h0 -P9306 -e "$sql" 2>&1)
+        rc=$?
+
+        if [ "$rc" -eq 0 ]; then
+            return 0
+        fi
+
+        if [ "$attempt" -eq "$attempts" ]; then
+            printf '%s\n' "$output" >&2
+            return "$rc"
+        fi
+
+        sleep "$delay"
+        delay=$((delay * 2))
+    done
+}
 ––– output –––
 ––– input –––
-export -f cosine_similarity
+export -f cosine_similarity retry_remote_embedding_create_table
 ––– output –––
 

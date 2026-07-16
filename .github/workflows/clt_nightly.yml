@@ -9,7 +9,7 @@ on:
     branches: [ main ]
     paths:
       - '.github/workflows/clt_nightly.yml'
-      - 'test/clt-tests/installation/**'
+      # Installer curl|sh checks stay on the nightly/manual run only; installer-source PRs use installer.yml.
       - 'test/clt-tests/data-manipulation/test-replace-into.rec'
       - 'test/clt-tests/data-manipulation/test-alter-rename-nightly.rec'
       - 'test/clt-tests/indexing-error/**'

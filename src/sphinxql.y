@@ -903,7 +903,7 @@ filter_item:
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
-			if ( pParser->NumIsSaturated ($3) )
+			if ( pParser->NumIsSaturated ( $3.m_uValue, $3.m_bNegative ) )
 				YYERROR;
 			pFilter->m_dValues.Add ( $3.GetValueInt() );
 		}
@@ -912,20 +912,32 @@ filter_item:
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
-			if ( pParser->NumIsSaturated ($3) )
+			if ( pParser->NumIsSaturated ( $3.m_uValue, $3.m_bNegative ) )
 				YYERROR;
 			pFilter->m_dValues.Add ( $3.GetValueInt() );
 			pFilter->m_bExclude = true;
 		}
-	| expr_ident TOK_IN '(' const_list ')'
+	| expr_ident TOK_IN '('
 		{
-			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $4.m_iValues );
+			pParser->BeginDocidConstList ( $1 );
+		}
+	const_list ')'
+		{
+			if ( !pParser->EndDocidConstList() )
+				YYERROR;
+			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $5.m_iValues );
 			if ( !pFilter )
 				YYERROR;
 		}
-	| expr_ident TOK_NOT TOK_IN '(' const_list ')'
+	| expr_ident TOK_NOT TOK_IN '('
 		{
-			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $5.m_iValues );
+			pParser->BeginDocidConstList ( $1 );
+		}
+	const_list ')'
+		{
+			if ( !pParser->EndDocidConstList() )
+				YYERROR;
+			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $6.m_iValues );
 			if ( !pFilter )
 				YYERROR;
 			pFilter->m_bExclude = true;
@@ -1090,7 +1102,7 @@ filter_item:
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
-			if ( pParser->NumIsSaturated ($3) )
+			if ( pParser->NumIsSaturated ( $3.m_uValue, $3.m_bNegative ) )
 				YYERROR;
 			pFilter->m_dValues.Add ( $3.GetValueInt() );
 		}
@@ -1099,7 +1111,7 @@ filter_item:
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
-			if ( pParser->NumIsSaturated ($3) )
+			if ( pParser->NumIsSaturated ( $3.m_uValue, $3.m_bNegative ) )
 				YYERROR;
 			pFilter->m_dValues.Add ( $3.GetValueInt() );
 			pFilter->m_bExclude = true;
@@ -1241,6 +1253,7 @@ const_float_unsigned:
 const_list:
 	const_int
 		{
+			pParser->CheckDocidConstListItem ( $1.m_uValue, $1.m_bNegative );
 			assert ( $$.m_iValues<0 );
         	$$.m_iValues = pParser->AddMvaVec ();
         	auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
@@ -1255,6 +1268,7 @@ const_list:
 		}
 	| const_list ',' const_int
 		{
+			pParser->CheckDocidConstListItem ( $3.m_uValue, $3.m_bNegative );
 			auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
 			dVec.Add ( { $3.GetValueInt(), $3.GetValueFloat(), false } );
 		}

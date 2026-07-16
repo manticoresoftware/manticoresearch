@@ -975,6 +975,7 @@ CSphVector<ClusterDesc_t> ReplicationCollectClusters ()  EXCLUDES ( g_tClustersL
 		ReplicationClusterRefPtr_c m_pCluster;
 		CSphString m_sName;
 		CSphString m_sPath;
+		CSphString m_sUser;
 		StrVec_t m_dClusterNodes;
 		bool m_bSelfBootstrapOnStartup = false;
 	};
@@ -994,6 +995,7 @@ CSphVector<ClusterDesc_t> ReplicationCollectClusters ()  EXCLUDES ( g_tClustersL
 			tSnapshot.m_pCluster = tCluster.second;
 			tSnapshot.m_sName = tCluster.second->m_sName;
 			tSnapshot.m_sPath = tCluster.second->m_sPath;
+			tSnapshot.m_sUser = tCluster.second->GetUserSnapshot();
 			tSnapshot.m_dClusterNodes = tCluster.second->m_dClusterNodes;
 			tSnapshot.m_bSelfBootstrapOnStartup = tCluster.second->m_bSelfBootstrapOnStartup && tCluster.second->m_dClusterNodes.GetLength()==1;
 		}
@@ -1013,6 +1015,7 @@ CSphVector<ClusterDesc_t> ReplicationCollectClusters ()  EXCLUDES ( g_tClustersL
 		ClusterDesc_t & tDesc = dClusters.Add();
 		tDesc.m_sName = tSnapshot.m_sName;
 		tDesc.m_sPath = tSnapshot.m_sPath;
+		tDesc.m_sUser = tSnapshot.m_sUser;
 		tDesc.m_dClusterNodes = tSnapshot.m_dClusterNodes;
 		tDesc.m_bSelfBootstrapOnStartup = tSnapshot.m_bSelfBootstrapOnStartup;
 		pCluster->WithRlockedIndexes ( [&tDesc,pCluster] ( const auto & hIndexes )

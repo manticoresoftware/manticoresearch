@@ -16,6 +16,7 @@ Removed Format Validation: The previous format-based validation (e.g., "sk-" pre
 ––– comment –––
 Start Manticore Search
 ––– block: ../base/start-searchd –––
+––– block: ./base –––
 ––– comment –––
 MOCK SERVER STARTUP
 ––– comment –––
@@ -82,7 +83,7 @@ Expected: Table creation succeeds, SHOW CREATE TABLE does NOT display api_key (s
 Verify: Full workflow works correctly
 Note: Using real OpenAI API key and default endpoint
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_valid_api_key (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}')" 2>&1; echo $?
+retry_remote_embedding_create_table "CREATE TABLE test_valid_api_key (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}')"; echo $?
 ––– output –––
 0
 ––– comment –––

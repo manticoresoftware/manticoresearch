@@ -300,21 +300,9 @@ jobs:
           path: .mcl-package-cache
           key: ${{ inputs.package_cache_key }}
 
-      - name: Prepare artifact path list
-        if: success()
-        id: artifact_paths
-        env:
-          ARTIFACT_LIST: ${{ inputs.artifact_list }}
-        run: |
-          {
-            echo 'value<<EOF'
-            printf '%s\n' "$ARTIFACT_LIST" | tr ' ' '\n' | sed '/^$/d'
-            echo EOF
-          } >> "$GITHUB_OUTPUT"
-
       - name: Upload build artifacts
         if: success()
-        uses: actions/upload-artifact@v6
+        uses: manticoresoftware/upload_artifact_with_retries@v5
         with:
           name: ${{ inputs.artifact_name }}
-          path: ${{ steps.artifact_paths.outputs.value }}
+          path: ${{ inputs.artifact_list }}

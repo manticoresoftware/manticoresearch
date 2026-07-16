@@ -186,16 +186,8 @@ static bool IsSessionOnlySetExtra ( const SqlStmt_t & tStmt )
 }
 
 
-bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
+static bool SqlCheckStmtPerms ( const CSphString & sUser, const SqlStmt_t & tStmt, CSphString & sError )
 {
-	if ( !IsAuthEnabled() )
-		return true;
-
-	if ( !dStmt.GetLength() )
-		return true;
-
-	const SqlStmt_t & tStmt = dStmt[0];
-
 	// handle SQL query
 	switch ( tStmt.m_eStmt )
 	{
@@ -368,6 +360,19 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	// FIXME!!! skip buddy for that failed query
 	sError.SetSprintf ( "Permission denied for user '%s'", sUser.cstr() );
 	return false;
+}
+
+
+bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
+{
+	if ( !IsAuthEnabled() )
+		return true;
+
+	for ( const SqlStmt_t & tStmt : dStmt )
+		if ( !SqlCheckStmtPerms ( sUser, tStmt, sError ) )
+			return false;
+
+	return true;
 }
 
 bool SqlSkipBuddy()

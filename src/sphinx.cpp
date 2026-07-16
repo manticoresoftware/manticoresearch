@@ -1545,7 +1545,7 @@ bool IsOndisk ( FileAccess_e eType ) { return eType==FileAccess_e::FILE || eType
 
 bool FileAccessSettings_t::operator== ( const FileAccessSettings_t & tOther ) const
 {
-	return ( m_eAttr==tOther.m_eAttr && m_eBlob==tOther.m_eBlob && m_eDoclist==tOther.m_eDoclist && m_eHitlist==tOther.m_eHitlist && m_eDict==tOther.m_eDict &&
+	return ( m_eAttr==tOther.m_eAttr && m_eBlob==tOther.m_eBlob && m_eDoclist==tOther.m_eDoclist && m_eHitlist==tOther.m_eHitlist && m_eDict==tOther.m_eDict && m_eColumnar==tOther.m_eColumnar && m_eSecondary==tOther.m_eSecondary &&
 		m_iReadBufferDocList==tOther.m_iReadBufferDocList && m_iReadBufferHitList==tOther.m_iReadBufferHitList );
 }
 
@@ -3131,7 +3131,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 
 		if ( tNewSchema.HasColumnarAttrs() )
 		{
-			m_pColumnar = CreateColumnarStorageReader ( GetFilename ( SPH_EXT_SPC ), (DWORD)m_iDocinfo, sError );
+			m_pColumnar = CreateColumnarStorageReader ( GetFilename ( SPH_EXT_SPC ), (DWORD)m_iDocinfo, false, sError );
 			if ( !m_pColumnar )
 				return false;
 		}
@@ -10279,7 +10279,8 @@ bool CSphIndex_VLN::PreallocColumnar()
 	if ( !m_tSchema.HasColumnarAttrs() )
 		return true;
 
-	m_pColumnar = CreateColumnarStorageReader ( GetFilename ( SPH_EXT_SPC ), (DWORD)m_iDocinfo, m_sLastError );
+	bool bMmap = m_tMutableSettings.m_tFileAccess.m_eColumnar==FileAccess_e::MMAP;
+	m_pColumnar = CreateColumnarStorageReader ( GetFilename ( SPH_EXT_SPC ), (DWORD)m_iDocinfo, bMmap, m_sLastError );
 	return !!m_pColumnar;
 }
 
@@ -10348,7 +10349,8 @@ bool CSphIndex_VLN::LoadSecondaryIndex ( const CSphString & sFile )
 		return GetSecondaryIndexDefault()!=SIDefault_e::FORCE;
 	}
 
-	if ( !m_tSI.Load ( sFile, m_sLastError ) && GetSecondaryIndexDefault()!=SIDefault_e::DISABLED )
+	bool bMmap = m_tMutableSettings.m_tFileAccess.m_eSecondary==FileAccess_e::MMAP;
+	if ( !m_tSI.Load ( sFile, bMmap, m_sLastError ) && GetSecondaryIndexDefault()!=SIDefault_e::DISABLED )
 	{
 		if ( GetSecondaryIndexDefault()!=SIDefault_e::FORCE )
 		{
@@ -12805,7 +12807,7 @@ bool CSphIndex_VLN::AlterSI ( CSphString & sError )
 		if ( !RenameWithRollback ( dFilesFrom, dFilesTo, sError ) )
 			return false;
 
-		if ( !m_tSI.Load ( dCurFiles[i].cstr(), sError ) )
+		if ( !m_tSI.Load ( dCurFiles[i].cstr(), m_tMutableSettings.m_tFileAccess.m_eSecondary==FileAccess_e::MMAP, sError ) )
 			return false;
 
 		if ( bCurExists )

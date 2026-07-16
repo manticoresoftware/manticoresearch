@@ -16,7 +16,7 @@
 #include "schema/schema.h"
 
 namespace col {
-using CreateStorageReader_fn =	columnar::Columnar_i * (*) ( const std::string & sFilename, uint32_t uTotalDocs, std::string & sError );
+using CreateStorageReader_fn =	columnar::Columnar_i * (*) ( const std::string & sFilename, uint32_t uTotalDocs, bool bMmap, std::string & sError );
 using CreateBuilder_fn =		columnar::Builder_i * (*) ( const common::Schema_t & tSchema, const std::string & sFile, size_t tBufferSize, std::string & sError );
 using CheckStorage_fn =			void (*) ( const std::string & sFilename, uint32_t uNumRows, std::function<void (const char*)> & fnError, std::function<void (const char*)> & fnProgress );
 using VersionStr_fn =			const char * (*)();
@@ -54,7 +54,7 @@ common::AttrType_e ToColumnarType ( ESphAttr eAttrType, int iBitCount )
 }
 
 
-std::unique_ptr<columnar::Columnar_i> CreateColumnarStorageReader ( const CSphString & sFile, DWORD uNumDocs, CSphString & sError )
+std::unique_ptr<columnar::Columnar_i> CreateColumnarStorageReader ( const CSphString & sFile, DWORD uNumDocs, bool bMmap, CSphString & sError )
 {
 	if ( !IsColumnarLibLoaded() )
 	{
@@ -64,7 +64,7 @@ std::unique_ptr<columnar::Columnar_i> CreateColumnarStorageReader ( const CSphSt
 
 	std::string sErrorSTL;
 	assert ( g_fnCreateColumnarStorage );
-	std::unique_ptr<columnar::Columnar_i> pColumnar { g_fnCreateColumnarStorage ( sFile.cstr(), uNumDocs, sErrorSTL ) };
+	std::unique_ptr<columnar::Columnar_i> pColumnar { g_fnCreateColumnarStorage ( sFile.cstr(), uNumDocs, bMmap, sErrorSTL ) };
 	if ( !pColumnar )
 		sError = sErrorSTL.c_str();
 

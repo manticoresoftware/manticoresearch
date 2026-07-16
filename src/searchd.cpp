@@ -14810,6 +14810,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 
 	tDefaultFA.m_eAttr = GetFileAccess( hSearchd, "access_plain_attrs", false, tDefaultFA.m_eAttr );
 	tDefaultFA.m_eBlob = GetFileAccess( hSearchd, "access_blob_attrs", false, tDefaultFA.m_eBlob );
+	tDefaultFA.m_eColumnar = GetFileMmapAccess( hSearchd, "access_columnar_attrs", tDefaultFA.m_eColumnar );
+	tDefaultFA.m_eSecondary = GetFileMmapAccess( hSearchd, "access_secondary", tDefaultFA.m_eSecondary );
 
 	if ( hSearchd("subtree_docs_cache") )
 		g_iMaxCachedDocs = hSearchd.GetSize ( "subtree_docs_cache", g_iMaxCachedDocs );

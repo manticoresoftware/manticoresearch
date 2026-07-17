@@ -72,9 +72,9 @@ void PublicThreadDesc_t::Swap ( PublicThreadDesc_t & rhs )
 	::Swap ( m_sThreadName, rhs.m_sThreadName );
 	::Swap ( m_sClientName, rhs.m_sClientName );
 	::Swap ( m_sDescription, rhs.m_sDescription );
+	::Swap ( m_sSphinxqlQuery, rhs.m_sSphinxqlQuery );
 	::Swap ( m_sProto, rhs.m_sProto );
 	::Swap ( m_tmConnect, rhs.m_tmConnect );
-	::Swap ( m_pQuery, rhs.m_pQuery );
 	::Swap ( m_szCommand, rhs.m_szCommand );
 	::Swap ( m_iConnID, rhs.m_iConnID );
 	::Swap ( m_eProto, rhs.m_eProto );
@@ -98,7 +98,7 @@ void CopyBasicThreadInfo ( const Threads::LowThreadDesc_t * pSrc, PublicThreadDe
 
 void RenderPublicTaskInfo ( const void * pSrc, PublicThreadDesc_t & dDst, BYTE eType )
 {
-	if ( pInfos[eType] )
+	if ( eType<uFreeInfoSlot.load ( std::memory_order_acquire ) && pInfos[eType] )
 		pInfos[eType] ( pSrc, dDst );
 }
 
@@ -108,8 +108,11 @@ void GatherPublicTaskInfo ( PublicThreadDesc_t& dDst, const std::atomic<void*>& 
 	auto pSrcInfo = (TaskInfo_t*)tGuard.Protect ( pTask );
 	while ( pSrcInfo )
 	{
-		RenderPublicTaskInfo ( pSrcInfo, dDst, pSrcInfo->m_eType );
-		pSrcInfo = (TaskInfo_t*)tGuard.Protect ( pSrcInfo->m_pPrev );
+		BYTE eType = pSrcInfo->m_eType;
+		if ( !eType || eType>=uFreeInfoSlot.load ( std::memory_order_acquire ) )
+			break;
+		RenderPublicTaskInfo ( pSrcInfo, dDst, eType );
+		pSrcInfo = (TaskInfo_t*)tGuard.ProtectChained ( pSrcInfo->m_pPrev );
 	}
 	tGuard.Release();
 }
@@ -244,7 +247,7 @@ void myinfo::SetCommand ( const char * szCommand )
 
 void myinfo::SetCommandDone()
 {
-	auto pNode = HazardGetMini();
+	auto pNode = HazardGetMini ();
 	if ( pNode )
 	{
 		pNode->m_tmLastJobDoneTimeUS = sphMicroTimer();

@@ -21,6 +21,7 @@
 #include "schematransform.h"
 #include "minimize_aggr_result.h"
 #include "facetutils.h"
+#include "searchdsql.h"
 
 #include "std/string.h"
 
@@ -1928,19 +1929,75 @@ struct QueryInfo_t : TaskInfo_t
 {
 	DECLARE_RENDER( QueryInfo_t );
 
-	// actually it is 'virtually hazard'. Don't care about query* itself, however later in dtr of Searchandler_t
-	// will work with refs to members of it's m_dQueries and retire of whole vec.
-	std::atomic<const CSphQuery *> m_pHazardQuery;
+	CSphString m_sSphinxqlQuery;
 };
 
 DEFINE_RENDER ( QueryInfo_t )
 {
 	auto & tInfo = *(QueryInfo_t *) pSrc;
 	dDst.m_sChain << "Query ";
-	hazard::Guard_c tGuard;
-	auto pQuery = tGuard.Protect ( tInfo.m_pHazardQuery );
-	if ( pQuery && session::GetProto()!=Proto_e::MYSQL41 ) // cheat: for mysql query not used, so will not copy it then
-		dDst.m_pQuery = std::make_unique<CSphQuery> ( *pQuery );
+
+	if ( tInfo.m_sSphinxqlQuery.IsEmpty() )
+		return;
+
+	int iLimit = dDst.m_iDescriptionLimit;
+	if ( iLimit>=0 && iLimit<tInfo.m_sSphinxqlQuery.Length() )
+		dDst.m_sSphinxqlQuery.SetBinary ( tInfo.m_sSphinxqlQuery.cstr(), iLimit );
+	else
+		dDst.m_sSphinxqlQuery = tInfo.m_sSphinxqlQuery;
+}
+
+
+static constexpr int QUERY_INFO_SPHINXQL_SNAPSHOT_LIMIT = 8192;
+
+static void CopyQueryInfoSnapshot ( CSphString & sDst, const char * sSrc )
+{
+	if ( !sSrc || !*sSrc )
+		return;
+
+	int iLen = 0;
+	while ( iLen<QUERY_INFO_SPHINXQL_SNAPSHOT_LIMIT && sSrc[iLen] )
+		++iLen;
+
+	sDst.SetBinary ( sSrc, iLen );
+}
+
+static void CopyQueryInfoSnapshot ( CSphString & sDst, const CSphString & sSrc )
+{
+	if ( sSrc.IsEmpty() )
+		return;
+
+	int iLen = Min ( sSrc.Length(), QUERY_INFO_SPHINXQL_SNAPSHOT_LIMIT );
+	sDst.SetBinary ( sSrc.cstr(), iLen );
+}
+
+static CSphString FormatSphinxqlSnapshot ( const CSphQuery & tQuery, const CSphQuery & tJoinOptions )
+{
+	CSphString sRendered;
+	QuotationEscapedBuilder tBuf;
+	FormatSphinxql ( tQuery, tJoinOptions, 0, tBuf );
+	tBuf.MoveTo ( sRendered );
+
+	CSphString sQuery;
+	CopyQueryInfoSnapshot ( sQuery, sRendered );
+	return sQuery;
+}
+
+static CSphString MakeQueryInfoSnapshot ( const CSphQuery & tQuery, const CSphQuery & tJoinOptions, const SqlStmt_t * pStmt )
+{
+	CSphString sQuery;
+
+	// SQL-over-HTTP already has the original frontend SQL statement here. Prefer that cheap,
+	// owned snapshot over re-rendering CSphQuery on the common HTTP /sql path.
+	if ( pStmt )
+		CopyQueryInfoSnapshot ( sQuery, pStmt->m_sStmt );
+
+	// For format=sphinxql, preserve the old API/JSON behavior: render a SphinxQL-like
+	// snapshot while the query owner still has the CSphQuery. Do not show raw JSON here.
+	if ( sQuery.IsEmpty() )
+		sQuery = FormatSphinxqlSnapshot ( tQuery, tJoinOptions );
+
+	return sQuery;
 }
 
 static void FillupFacetError ( int iQueries, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<AggrResult_t> & dAggrResults )
@@ -2053,7 +2110,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 	// we've own scoped context here
 	auto pQueryInfo = new QueryInfo_t;
-	pQueryInfo->m_pHazardQuery.store ( m_dNQueries.begin(), std::memory_order_release );
+	if ( session::GetProto()!=Proto_e::MYSQL41 )
+		pQueryInfo->m_sSphinxqlQuery = MakeQueryInfoSnapshot ( m_dNQueries.First(), m_dNJoinQueryOptions.First(), m_pStmt );
 	ScopedInfo_T pTlsQueryInfo ( pQueryInfo );
 
 	// all my stats

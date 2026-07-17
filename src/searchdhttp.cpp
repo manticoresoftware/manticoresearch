@@ -1306,6 +1306,9 @@ protected:
 			return nullptr;
 		}
 
+		for ( auto & tStmt : m_dStmt )
+			tStmt.m_sStmt = pRawQl->cstr();
+
 		( (CSphQuery &) m_tParsed.m_tQuery ) = m_dStmt[0].m_tQuery;
 		bool bFacet = ( m_dStmt.GetLength()>1 );
 		for ( const auto & tStmt : m_dStmt )

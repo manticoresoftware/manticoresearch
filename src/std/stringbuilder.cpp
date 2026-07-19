@@ -44,6 +44,7 @@ void StringBuilder_c::Swap ( StringBuilder_c& rhs ) noexcept
 	::Swap ( m_szBuffer, rhs.m_szBuffer );
 	::Swap ( m_iSize, rhs.m_iSize );
 	::Swap ( m_iUsed, rhs.m_iUsed );
+	::Swap ( m_iLimit, rhs.m_iLimit );
 	::Swap ( m_dDelimiters, rhs.m_dDelimiters );
 }
 
@@ -96,25 +97,26 @@ void StringBuilder_c::FinishBlocks ( int iLevel, bool bAllowEmpty )
 
 StringBuilder_c & StringBuilder_c::vAppendf ( const char * sTemplate, va_list ap )
 {
+	if ( IsLimitReached() )
+		return *this;
+
 	if ( !m_szBuffer )
 		InitBuffer ();
 
 	assert ( m_szBuffer );
 	assert ( m_iUsed<m_iSize );
 
-	auto sComma = Delim();
+	AppendRawChunk ( Delim() );
+	if ( IsLimitReached() )
+		return *this;
 
 	while (true)
 	{
 		int64_t iLeft = m_iSize - m_iUsed;
-		if ( sComma.second && sComma.second < iLeft ) // prepend delimiter first...
-		{
-			if ( sComma.second )
-				memcpy ( m_szBuffer + m_iUsed, sComma.first, sComma.second );
-			iLeft -= sComma.second;
-			m_iUsed += sComma.second;
-			sComma = dEmptyStr;
-		}
+		if ( m_iLimit>=0 )
+			iLeft = Min ( iLeft, m_iLimit-m_iUsed+1 ); // include trailing zero
+		if ( iLeft<=0 )
+			break;
 
 		// try to append
 		va_list cp;
@@ -133,10 +135,17 @@ StringBuilder_c & StringBuilder_c::vAppendf ( const char * sTemplate, va_list ap
 			break;
 		}
 
+		if ( m_iLimit>=0 )
+		{
+			m_iUsed = m_iLimit;
+			m_szBuffer[m_iUsed] = '\0';
+			break;
+		}
+
 		// we need more chars!
 		// either 256 (happens on Windows; lets assume we need 256 more chars)
 		// or get all the needed chars and 64 more for future calls
-		GrowEnough ( iPrinted<0 ? 256 : iPrinted + sComma.second );
+		GrowEnough ( iPrinted<0 ? 256 : iPrinted );
 	}
 	return *this;
 }
@@ -241,6 +250,13 @@ void StringBuilder_c::MoveTo ( CSphString &sTarget )
 {
 	sTarget.Adopt ( &m_szBuffer );
 	NewBuffer ();
+}
+
+void StringBuilder_c::SetUsed ( int64_t iUsed )
+{
+	m_iUsed = m_iLimit>=0 ? Min ( iUsed, m_iLimit ) : iUsed;
+	if ( m_szBuffer )
+		m_szBuffer[m_iUsed] = '\0';
 }
 
 

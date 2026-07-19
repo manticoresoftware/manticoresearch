@@ -200,6 +200,23 @@ TEST ( searchd_stuff, prepare_emulation )
 	ASSERT_TRUE ( tBoolean.m_bExplicitRanker );
 }
 
+
+TEST ( searchd_stuff, format_sphinxql_snapshot_is_limited )
+{
+	CSphQuery tQuery;
+	tQuery.m_sIndexes = "idx";
+	tQuery.m_sQuery.SetBinary ( std::string ( 20000, 'a' ).c_str(), 20000 );
+
+	CSphQuery tJoinOptions;
+	QuotationEscapedBuilder tBuf;
+	tBuf.SetLimit ( 8192 );
+	FormatSphinxql ( tQuery, tJoinOptions, 0, tBuf );
+
+	ASSERT_EQ ( tBuf.GetLength(), 8192 );
+	ASSERT_EQ ( strlen ( tBuf.cstr() ), 8192 );
+	ASSERT_TRUE ( strncmp ( tBuf.cstr(), "SELECT * FROM idx WHERE MATCH('", 31 )==0 );
+}
+
 class CustomNetloop_c :  public ::testing::Test
 {
 protected:

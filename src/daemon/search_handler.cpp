@@ -1975,6 +1975,7 @@ static CSphString FormatSphinxqlSnapshot ( const CSphQuery & tQuery, const CSphQ
 {
 	CSphString sRendered;
 	QuotationEscapedBuilder tBuf;
+	tBuf.SetLimit ( QUERY_INFO_SPHINXQL_SNAPSHOT_LIMIT );
 	FormatSphinxql ( tQuery, tJoinOptions, 0, tBuf );
 	tBuf.MoveTo ( sRendered );
 

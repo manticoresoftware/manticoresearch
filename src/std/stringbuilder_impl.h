@@ -18,13 +18,19 @@
 
 inline void StringBuilder_c::AppendRawChunk ( Str_t sText ) // append without any commas
 {
-	if ( !sText.second )
+	if ( !sText.second || IsLimitReached() )
 		return;
 
-	GrowEnough ( sText.second + 1 ); // +1 because we'll put trailing \0 also
+	int64_t iLen = sText.second;
+	if ( m_iLimit>=0 )
+		iLen = Min ( iLen, m_iLimit-m_iUsed );
+	if ( iLen<=0 )
+		return;
 
-	memcpy ( m_szBuffer + m_iUsed, sText.first, sText.second );
-	m_iUsed += sText.second;
+	GrowEnough ( iLen + 1 ); // +1 because we'll put trailing \0 also
+
+	memcpy ( m_szBuffer + m_iUsed, sText.first, iLen );
+	m_iUsed += iLen;
 	m_szBuffer[m_iUsed] = '\0';
 }
 
@@ -37,14 +43,11 @@ inline StringBuilder_c& StringBuilder_c::SkipNextComma()
 
 inline StringBuilder_c& StringBuilder_c::AppendName ( const Str_t& sName, bool bQuoted )
 {
-	if ( ::IsEmpty ( sName ) )
+	if ( ::IsEmpty ( sName ) || IsLimitReached() )
 		return *this;
 
 	AppendChunk ( sName, bQuoted ? '"' : '\0' );
-	GrowEnough ( 2 );
-	m_szBuffer[m_iUsed] = ':';
-	m_szBuffer[m_iUsed + 1] = '\0';
-	m_iUsed += 1;
+	AppendRawChunk ( FROMS ( ":" ) );
 	return SkipNextComma();
 }
 
@@ -55,23 +58,35 @@ inline StringBuilder_c& StringBuilder_c::AppendName ( const char* szName, bool b
 
 inline StringBuilder_c& StringBuilder_c::AppendChunk ( const Str_t& sChunk, char cQuote )
 {
-	if ( !sChunk.second )
+	if ( !sChunk.second || IsLimitReached() )
 		return *this;
 
 	auto sComma = Delim();
 	int iQuote = cQuote != 0;
 
-	GrowEnough ( sChunk.second + sComma.second + iQuote + iQuote + 1 ); // +1 because we'll put trailing \0 also
+	auto fnAppend = [this] ( const char * sData, int64_t iLen )
+	{
+		if ( !iLen || IsLimitReached() )
+			return;
 
-	if ( sComma.second )
-		memcpy ( m_szBuffer + m_iUsed, sComma.first, sComma.second );
+		if ( m_iLimit>=0 )
+			iLen = Min ( iLen, m_iLimit-m_iUsed );
+		if ( iLen<=0 )
+			return;
+
+		GrowEnough ( iLen + 1 );
+		memcpy ( m_szBuffer + m_iUsed, sData, iLen );
+		m_iUsed += iLen;
+		m_szBuffer[m_iUsed] = '\0';
+	};
+
+	fnAppend ( sComma.first, sComma.second );
 	if ( iQuote )
-		m_szBuffer[m_iUsed + sComma.second] = cQuote;
-	memcpy ( m_szBuffer + m_iUsed + sComma.second + iQuote, sChunk.first, sChunk.second );
-	m_iUsed += sChunk.second + sComma.second + iQuote + iQuote;
+		fnAppend ( &cQuote, 1 );
+	fnAppend ( sChunk.first, sChunk.second );
 	if ( iQuote )
-		m_szBuffer[m_iUsed - 1] = cQuote;
-	m_szBuffer[m_iUsed] = '\0';
+		fnAppend ( &cQuote, 1 );
+
 	return *this;
 }
 
@@ -92,10 +107,17 @@ inline StringBuilder_c& StringBuilder_c::AppendString ( Str_t sText, char cQuote
 
 inline StringBuilder_c& StringBuilder_c::operator+= ( const char* sText )
 {
-	if ( !sText || *sText == '\0' )
+	if ( !sText || *sText == '\0' || IsLimitReached() )
 		return *this;
 
-	return AppendChunk ( { sText, (int)strlen ( sText ) } );
+	int iLen = 0;
+	if ( m_iLimit>=0 )
+		while ( iLen<GetSpaceLeft() && sText[iLen] )
+			++iLen;
+	else
+		iLen = (int)strlen ( sText );
+
+	return AppendChunk ( { sText, iLen } );
 }
 
 inline StringBuilder_c& StringBuilder_c::operator<< ( const Str_t& sChunk )
@@ -213,6 +235,17 @@ inline void StringBuilder_c::Clear()
 	m_dDelimiters.Reset();
 }
 
+inline void StringBuilder_c::SetLimit ( int64_t iLimit )
+{
+	m_iLimit = iLimit;
+	if ( m_iLimit>=0 && m_iUsed>m_iLimit )
+	{
+		m_iUsed = m_iLimit;
+		if ( m_szBuffer )
+			m_szBuffer[m_iUsed] = '\0';
+	}
+}
+
 inline void StringBuilder_c::Rewind()
 {
 	if ( m_szBuffer )
@@ -270,13 +303,7 @@ inline void StringBuilder_c::InitAddPrefix()
 
 	assert ( m_iUsed==0 || m_iUsed<m_iSize );
 
-	auto sPrefix = Delim();
-	if ( sPrefix.second ) // prepend delimiter first...
-	{
-		GrowEnough ( sPrefix.second );
-		memcpy ( m_szBuffer + m_iUsed, sPrefix.first, sPrefix.second );
-		m_iUsed += sPrefix.second;
-	}
+	AppendRawChunk ( Delim() );
 }
 
 inline const Str_t & StringBuilder_c::Delim ()

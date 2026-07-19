@@ -79,6 +79,52 @@ wait $pids 2> /dev/null || true
 json_search_ok
 no_raw_json_info
 ––– input –––
+rm -f /tmp/issue4678_big_json_payload.json /tmp/issue4678_big_json.err
+{
+  printf '{"table":"issue4678","query":{"match":{"title":"'
+  for n in $(seq 1 60000); do printf 'alpha '; done
+  printf '"}},"limit":10000,"max_matches":50000,"sort":[{"id":"desc"}]}'
+} > /tmp/issue4678_big_json_payload.json
+pids=""
+for worker in $(seq 1 8); do
+  (
+    for n in $(seq 1 20); do
+      curl -sS --max-time 120 -H 'Content-Type: application/json' --data-binary @/tmp/issue4678_big_json_payload.json 'http://127.0.0.1:9308/search' > /dev/null 2>> /tmp/issue4678_big_json.err || true
+    done
+  ) &
+  pids="$pids $!"
+done
+snapshot_seen=0
+snapshot_over=0
+for n in $(seq 1 200); do
+  out=$(mysql -h0 -P9306 -e "SHOW THREADS OPTION columns=20000,format=sphinxql" 2> /dev/null || true)
+  row=$(printf '%s\n' "$out" | awk -F'|' '
+    $4 ~ /http/ {
+      info=$11
+      gsub(/^ +| +$/, "", info)
+      if ( info ~ /^\{/ ) next
+      if ( info ~ /api-search query/ || info ~ /^SELECT \* FROM issue4678 WHERE MATCH/ ) {
+        seen=1
+        if ( length(info)>8192 ) over=1
+      }
+    }
+    END { print (seen ? 1 : 0) " " (over ? 1 : 0) }
+  ')
+  seen=${row% *}
+  over=${row#* }
+  [ "$seen" = 1 ] && snapshot_seen=1
+  [ "$over" = 1 ] && snapshot_over=1
+  [ "$snapshot_seen" = 1 ] && break
+  sleep 0.05
+done
+kill $pids 2> /dev/null || true
+wait $pids 2> /dev/null || true
+[ "$snapshot_seen" = 1 ] && echo bounded_snapshot_seen || echo bounded_snapshot_missing
+[ "$snapshot_over" = 0 ] && echo bounded_snapshot_limited || echo bounded_snapshot_too_long
+––– output –––
+bounded_snapshot_seen
+bounded_snapshot_limited
+––– input –––
 rm -f /tmp/issue4678_curl_*.cfg /tmp/issue4678_curl_*.rc /tmp/issue4678_curl_*.err
 manticore-load --quiet --host=127.0.0.1 --port=9306 --drop --batch-size=250 --threads=4 --total=5000 --init="CREATE TABLE issue4678(title text, tag string, gid uint)" --load="INSERT INTO issue4678(id,title,tag,gid) VALUES(<increment>,'alpha beta gamma delta omega vector thread query manticore search <increment>','tag<int/0/17>',<int/0/97>)" > /dev/null
 mysql -h0 -P9306 -e "FLUSH RAMCHUNK issue4678;" > /dev/null

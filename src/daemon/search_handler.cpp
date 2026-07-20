@@ -1950,6 +1950,14 @@ DEFINE_RENDER ( QueryInfo_t )
 
 static constexpr int QUERY_INFO_SPHINXQL_SNAPSHOT_LIMIT = 8192;
 
+static void CopyQueryInfoSnapshotImpl ( CSphString & sDst, const char * sSrc, int iLen )
+{
+	if ( !sSrc || iLen<=0 )
+		return;
+
+	sDst.SetBinary ( sSrc, Min ( iLen, QUERY_INFO_SPHINXQL_SNAPSHOT_LIMIT ) );
+}
+
 static void CopyQueryInfoSnapshot ( CSphString & sDst, const char * sSrc )
 {
 	if ( !sSrc || !*sSrc )
@@ -1959,16 +1967,12 @@ static void CopyQueryInfoSnapshot ( CSphString & sDst, const char * sSrc )
 	while ( iLen<QUERY_INFO_SPHINXQL_SNAPSHOT_LIMIT && sSrc[iLen] )
 		++iLen;
 
-	sDst.SetBinary ( sSrc, iLen );
+	CopyQueryInfoSnapshotImpl ( sDst, sSrc, iLen );
 }
 
 static void CopyQueryInfoSnapshot ( CSphString & sDst, const CSphString & sSrc )
 {
-	if ( sSrc.IsEmpty() )
-		return;
-
-	int iLen = Min ( sSrc.Length(), QUERY_INFO_SPHINXQL_SNAPSHOT_LIMIT );
-	sDst.SetBinary ( sSrc.cstr(), iLen );
+	CopyQueryInfoSnapshotImpl ( sDst, sSrc.cstr(), sSrc.Length() );
 }
 
 static CSphString FormatSphinxqlSnapshot ( const CSphQuery & tQuery, const CSphQuery & tJoinOptions )

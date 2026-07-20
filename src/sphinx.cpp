@@ -35,7 +35,6 @@
 #include "docstore.h"
 #include "global_idf.h"
 #include "indexformat.h"
-#include "indexsettings.h"
 #include "indexcheck.h"
 #include "coroutine.h"
 #include "columnarlib.h"
@@ -732,18 +731,6 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 	for ( const auto & tUpdAttr : tUpd.m_dAttributes )
 	{
 		const CSphString & sUpdAttrName = tUpdAttr.m_sName;
-		if ( sphHasUuidDocid(tSchema) && sUpdAttrName=="@id" )
-		{
-			sError = "attribute '@id' is internal";
-			return false;
-		}
-
-		if ( sUpdAttrName==sphGetDocidName() || ( sphHasUuidDocid(tSchema) && sUpdAttrName==sphGetUuidDocidName() ) )
-		{
-			sError = "'id' attribute cannot be updated";
-			return false;
-		}
-
 		int iUpdAttrId = tSchema.GetAttrIndex ( sUpdAttrName.cstr() );
 
 		// try to find JSON attribute with a field
@@ -1333,6 +1320,7 @@ public:
 	int					KillDupes() final;
 	int					CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, BlockerFn&& fnWatcher ) final;
 	bool				IsAlive ( DocID_t tDocID ) const final;
+	DocID_t				FindAliveUuidDocid ( const UuidDocidKey_t & tKey ) const final;
 
 	const CSphSourceStats &		GetStats () const final { return m_tStats; }
 	int64_t *			GetFieldLens() const final { return m_tSettings.m_bIndexFieldLens ? m_dFieldLens.begin() : nullptr; }
@@ -1399,6 +1387,7 @@ private:
 
 	CSphMappedBuffer<BYTE>		m_tDocidLookup;		///< speeds up docid-rowid lookups + used for applying killlist on startup
 	LookupReader_c				m_tLookupReader;	///< used by getrowidbydocid
+	UuidLookupReader_c			m_tUuidLookupReader;
 
 	std::unique_ptr<Docstore_i>	m_pDocstore;
 	std::unique_ptr<columnar::Columnar_i> m_pColumnar;
@@ -2532,7 +2521,7 @@ RowsToUpdateData_t CSphIndex_VLN::Update_CollectRowPtrs ( const UpdateContext_t 
 
 	dSorted.Sort ( Lesser ( [&dDocids] ( int a, int b ) { return dDocids[a]<dDocids[b]; } ) );
 	DocIdIndexReader_c tSortedReader ( dSorted, dDocids );
-	LookupReaderIterator_c tLookupReader ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tLookupReader ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 	Intersect ( tLookupReader, tSortedReader, [&dRowsToUpdate, this] ( RowID_t tRowID, DocID_t, DocIdIndexReader_c& tSortedReader )
 	{
 		if ( m_tDeadRowMap.IsSet ( tRowID ) )
@@ -2552,7 +2541,7 @@ RowsToUpdate_t CSphIndex_VLN::Update_PrepareGatheredRowPtrs ( RowsToUpdate_t & d
 	RowsToUpdate_t & dRows = dWRows; // that is actually to indicate that we CHANGE contents inside dWRows, so it should be passed by non-const reference.
 
 	dRows.Sort ( Lesser ( [&dDocids] ( auto& a, auto& b ) { return dDocids[a.m_iIdx]<dDocids[b.m_iIdx]; } ) );
-	LookupReaderIterator_c tLookupReader ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tLookupReader ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 
 	RowID_t tRowID = INVALID_ROWID;
 	DocID_t tDocID = 0;
@@ -3354,7 +3343,7 @@ bool CSphIndex_VLN::AlterKillListTarget ( KillListTargets_c & tTargets, CSphStri
 void CSphIndex_VLN::KillExistingDocids ( CSphIndex * pTarget ) const
 {
 	// FIXME! collecting all docids is a waste of memory
-	LookupReaderIterator_c tLookup ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tLookup ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 	CSphFixedVector<DocID_t> dKillList ( m_iDocinfo );
 	for ( auto& dKill : dKillList )
 		tLookup.ReadDocID ( dKill );
@@ -3365,7 +3354,7 @@ void CSphIndex_VLN::KillExistingDocids ( CSphIndex * pTarget ) const
 
 int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 {
-	LookupReaderIterator_c tTargetReader ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tTargetReader ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 	DocidListReader_c tKillerReader ( dKlist );
 
 	int iTotalKilled;
@@ -3388,7 +3377,7 @@ int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 
 int CSphIndex_VLN::KillDupes()
 {
-	LookupReaderIterator_c tLookup ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tLookup ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 	int iTotalKilled = 0;
 
 	RowID_t tRowID = INVALID_ROWID;
@@ -3413,7 +3402,7 @@ int CSphIndex_VLN::KillDupes()
 
 int CSphIndex_VLN::CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, BlockerFn&& fnWatcher )
 {
-	LookupReaderIterator_c tTargetReader ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tTargetReader ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 	DocidListReader_c tKillerReader ( dKlist );
 
 	int iTotalKilled = ProcessIntersected ( tTargetReader, tKillerReader, [this,fnWatcher=std::move(fnWatcher)] ( RowID_t tRow, DocID_t tDoc )
@@ -7293,8 +7282,8 @@ std::pair<DWORD,DWORD> CSphIndex_VLN::CreateRowMapsAndCountTotalDocs ( const CSp
 	{
 		tExtraDeadMap.Reset ( dDstRowMap.GetLength() );
 
-		LookupReaderIterator_c tDstLookupReader ( pDstIndex->m_tDocidLookup.GetReadPtr() );
-		LookupReaderIterator_c tSrcLookupReader ( pSrcIndex->m_tDocidLookup.GetReadPtr() );
+		LookupReaderIterator_c tDstLookupReader ( pDstIndex->m_tDocidLookup.GetReadPtr(), pDstIndex->m_uVersion );
+		LookupReaderIterator_c tSrcLookupReader ( pSrcIndex->m_tDocidLookup.GetReadPtr(), pSrcIndex->m_uVersion );
 
 		KillByLookup ( tDstLookupReader, tSrcLookupReader, tExtraDeadMap );
 	}
@@ -8163,6 +8152,14 @@ bool CSphIndex_VLN::IsAlive ( DocID_t tDocID ) const
 }
 
 
+DocID_t CSphIndex_VLN::FindAliveUuidDocid ( const UuidDocidKey_t & tKey ) const
+{
+	assert ( m_tSchema.GetAttr(0).IsUuidLinkedDocid() );
+	DocID_t tDocID = m_tUuidLookupReader.Find ( tKey );
+	return tDocID && IsAlive ( tDocID ) ? tDocID : 0;
+}
+
+
 inline const CSphRowitem * CSphIndex_VLN::FindDocinfo ( DocID_t tDocID ) const
 {
 	RowID_t tRowID = GetRowidByDocid ( tDocID );
@@ -8988,7 +8985,7 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	dSIIterators = m_tSI.CreateSecondaryIndexIterator ( dSIInfo, dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), iCutoff, bUseSICache, tMeta.m_sWarning );
 
 	// lookup-by-id (.SPT) iterators
-	dLookupIterators = CreateLookupIterator ( dSIInfo, dFilters, m_tDocidLookup.GetReadPtr(), RowID_t(m_iDocinfo) );
+	dLookupIterators = CreateLookupIterator ( dSIInfo, dFilters, m_tDocidLookup.GetReadPtr(), m_uVersion, RowID_t(m_iDocinfo) );
 
 	// try to spawn analyzers or prefilters from columnar storage
 	// if we already created an iterator at prev stage, we need to recreate filters here,
@@ -10227,7 +10224,11 @@ bool CSphIndex_VLN::PreallocDocidLookup()
 	if ( !m_tDocidLookup.Setup ( GetFilename ( SPH_EXT_SPT ), m_sLastError, false ) )
 		return false;
 
-	m_tLookupReader.SetData ( m_tDocidLookup.GetReadPtr() );
+	auto [ tUuidEntriesOffset, nDocs ] = m_tLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), m_uVersion );
+	const bool bUuidLinked = m_tSchema.GetAttr(0).IsUuidLinkedDocid();
+	assert ( !!tUuidEntriesOffset==bUuidLinked );
+	if ( bUuidLinked )
+		m_tUuidLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), tUuidEntriesOffset, nDocs );
 
 	return true;
 }

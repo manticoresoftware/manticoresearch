@@ -959,7 +959,6 @@ static bool ParseSort ( const JsonObj_c & tSort, JsonQuery_c & tQuery, bool & bG
 static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphString & sError );
 static bool ParseScriptFields ( const JsonObj_c & tExpr, CSphQuery & tQuery, CSphString & sError );
 static bool ParseExpressions ( const JsonObj_c & tExpr, CSphQuery & tQuery, CSphString & sError );
-static bool CheckIgnoredDocFields ( const JsonObj_c & tFields, const char * szProp, CSphString & sError );
 static bool ParseDocFields ( const JsonObj_c & tDocFields, JsonQuery_c & tQuery, CSphString & sError );
 static bool ParseAggregates ( const JsonObj_c & tAggs, JsonQuery_c & tQuery, CSphString & sError );
 
@@ -1693,14 +1692,6 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery )
 	if ( tDocFields && !ParseDocFields ( tDocFields, tQuery, sError ) )
 		return false;
 
-	JsonObj_c tFields = tRoot.GetItem ( "fields" );
-	if ( tFields && !CheckIgnoredDocFields ( tFields, "fields", sError ) )
-		return false;
-
-	JsonObj_c tStoredFields = tRoot.GetItem ( "stored_fields" );
-	if ( tStoredFields && !CheckIgnoredDocFields ( tStoredFields, "stored_fields", sError ) )
-		return false;
-
 	// aggs
 	JsonObj_c tFacetFilterMode = tRoot.GetItem ( "facet_filter_mode" );
 	if ( tFacetFilterMode )
@@ -1869,6 +1860,12 @@ static bool ParseUpdateDeleteQueries ( const JsonObj_c & tRoot, bool bDelete, Sq
 					tFilter.m_dValues.Add ( tItem.IntVal() );
 			}
 
+			if ( !bStringIds )
+			{
+				tDocId = tFilter.m_dValues[0];
+				tFilter.m_dValues.Sort();
+			}
+
 		} else if ( tId.IsStr() )
 		{
 			tFilter.m_eType = SPH_FILTER_STRING;
@@ -1880,7 +1877,8 @@ static bool ParseUpdateDeleteQueries ( const JsonObj_c & tRoot, bool bDelete, Sq
 		}
 		tFilter.m_sAttrName = "id";
 
-		tDocId = tFilter.m_dValues.GetLength() ? tFilter.m_dValues[0] : 0;
+		if ( !tId.IsArray() )
+			tDocId = tFilter.m_dValues.GetLength() ? tFilter.m_dValues[0] : 0;
 	}
 
 	// "query" is optional
@@ -1895,15 +1893,10 @@ static bool ParseUpdateDeleteQueries ( const JsonObj_c & tRoot, bool bDelete, Sq
 	if ( !ParseJsonQueryFilters ( tQuery, tStmt.m_tQuery, sError, sWarning ) )
 		return false;
 
-	// JSON update/delete queries collect matching internal numeric docids.
-	// ParseJsonQueryFilters() initializes ordinary JSON search output to '*', but
-	// collection must keep selecting 'id' so UUID-id tables do not collect the
-	// public string @uuid_id column instead of the internal DocID_t.
+	// JSON update/delete queries collect matching internal numeric docids independently
+	// of the select list. Drop the default '*' projection added for regular JSON searches.
 	tStmt.m_tQuery.m_dItems.Resize ( 0 );
-	CSphQueryItem & tItem = tStmt.m_tQuery.m_dItems.Add();
-	tItem.m_sExpr = sphGetDocidName();
-	tItem.m_sAlias = sphGetDocidName();
-	tStmt.m_tQuery.m_sSelect = sphGetDocidName();
+	tStmt.m_tQuery.m_sSelect = "";
 
 	return true;
 }
@@ -2349,17 +2342,29 @@ static const char * GetName ( const JsonDocField_t & tDF )
 }
 
 
-static const CSphColumnInfo * GetUuidAwareAttr ( const char * szName, const ISphSchema & tSchema )
+// JSON fields/docvalue_fields expose public UUID primary id as "id" or its
+// legacy "@id" alias; the value is stored in the hidden string column.
+static std::pair<const CSphColumnInfo *, bool> GetUuidIdFieldAttr ( const ISphSchema & tSchema, const char * szName )
 {
-	if ( strcmp ( szName, sphGetDocidName() )==0 )
+	if ( !szName )
+		return { nullptr, false };
+
+	bool bDocid = strcmp ( szName, sphGetDocidName() )==0 || strcmp ( szName, "@id" )==0;
+	if ( bDocid )
 	{
 		const CSphColumnInfo * pUuid = tSchema.GetAttr ( sphGetUuidDocidName() );
+		assert ( !pUuid || pUuid->m_eAttrType==SPH_ATTR_STRING || pUuid->m_eAttrType==SPH_ATTR_STRINGPTR );
 		if ( pUuid )
-			return pUuid;
+			return { pUuid, true };
 	}
 
-	return tSchema.GetAttr ( szName );
+	const CSphColumnInfo * pAttr = tSchema.GetAttr ( szName );
+	if ( !pAttr && bDocid )
+		pAttr = tSchema.GetAttr ( sphGetDocidName() );
+
+	return { pAttr, false };
 }
+
 
 template <typename T>
 void EncodeFields ( const CSphVector<T> & dFields, const AggrResult_t & tRes, const CSphMatch & tMatch, const ISphSchema & tSchema,	bool bValArray, const char * sPrefix, const char * sEnd, JsonEscapedBuilder & tOut )
@@ -2370,7 +2375,7 @@ void EncodeFields ( const CSphVector<T> & dFields, const AggrResult_t & tRes, co
 	for ( const T & tDF : dFields )
 	{
 		const char * szName = GetName ( tDF );
-		const CSphColumnInfo * pCol = GetUuidAwareAttr ( szName, tSchema );
+		auto [ pCol, bRawJsonValue ] = GetUuidIdFieldAttr ( tSchema, szName );
 		if ( !pCol )
 		{
 			tOut += R"("Default")";
@@ -2383,7 +2388,7 @@ void EncodeFields ( const CSphVector<T> & dFields, const AggrResult_t & tRes, co
 
 		if ( bValArray )
 			tOut.Sprintf ( "%s", tDFVal.cstr() );
-		else if ( pCol->m_sName==sphGetUuidDocidName() && strcmp ( szName, sphGetDocidName() )==0 )
+		else if ( bRawJsonValue )
 			tOut.Sprintf ( R"("%s":[%s])", szName, tDFVal.cstr() );
 		else
 			tOut.Sprintf ( R"("%s":["%s"])", szName, tDFVal.cstr() );
@@ -2420,9 +2425,30 @@ static bool IsJsonFieldAttr ( ESphAttr eAttr )
 }
 
 
-static const CSphColumnInfo * GetJsonInternalAggrKey ( const CSphString & sCol, const CSphSchema & tSchema, const CSphSchema & tRawSchema )
+static const CSphColumnInfo * GetAggrAttr ( const CSphString & sCol, const CSphSchema & tSchema, const CSphSchema & tRawSchema )
 {
-	CSphString sJsonKey = SortJsonInternalSet ( sCol );
+	bool bDocid = sCol==sphGetDocidName() || sCol=="@id";
+	if ( bDocid )
+	{
+		const CSphColumnInfo * pUuid = tSchema.GetAttr ( sphGetUuidDocidName() );
+		if ( !pUuid )
+			pUuid = tRawSchema.GetAttr ( sphGetUuidDocidName() );
+
+		if ( pUuid )
+			return pUuid;
+	}
+
+	const CSphColumnInfo * pAttr = tSchema.GetAttr ( sCol.cstr() );
+	if ( !pAttr && bDocid )
+		pAttr = tSchema.GetAttr ( sphGetDocidName() );
+
+	return pAttr;
+}
+
+
+static const CSphColumnInfo * GetJsonInternalAggrKey ( const char * szCol, const CSphSchema & tSchema, const CSphSchema & tRawSchema )
+{
+	CSphString sJsonKey = SortJsonInternalSet ( szCol );
 	const CSphColumnInfo * pJsonKey = tSchema.GetAttr ( sJsonKey.cstr() );
 	if ( !pJsonKey )
 		pJsonKey = tRawSchema.GetAttr ( sJsonKey.cstr() );
@@ -2431,38 +2457,13 @@ static const CSphColumnInfo * GetJsonInternalAggrKey ( const CSphString & sCol, 
 }
 
 
-static const CSphColumnInfo * GetStoredStringAggrKey ( const CSphString & sCol, const CSphSchema & tSchema, const CSphSchema & tRawSchema )
-{
-	const CSphColumnInfo * pKey = tSchema.GetAttr ( sCol.cstr() );
-	if ( !pKey )
-		pKey = tRawSchema.GetAttr ( sCol.cstr() );
-	if ( pKey )
-		return pKey;
-
-	return GetJsonInternalAggrKey ( sCol, tSchema, tRawSchema );
-}
-
-
-static const CSphColumnInfo * GetUuidDocidAggrKey ( const CSphString & sCol, const CSphSchema & tSchema, const CSphSchema & tRawSchema )
-{
-	if ( sCol!=sphGetDocidName() )
-		return nullptr;
-
-	return GetStoredStringAggrKey ( sphGetUuidDocidName(), tSchema, tRawSchema );
-}
-
-
 static const CSphColumnInfo * GetPlainAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, const CSphSchema & tRawSchema )
 {
-	const CSphColumnInfo * pKey = GetUuidDocidAggrKey ( tAggr.m_sCol, tSchema, tRawSchema );
-	if ( pKey )
-		return pKey;
-
-	pKey = tSchema.GetAttr ( tAggr.m_sCol.cstr() );
+	const CSphColumnInfo * pKey = GetAggrAttr ( tAggr.m_sCol, tSchema, tRawSchema );
 	if ( !pKey || pKey->m_eAttrType!=SPH_ATTR_JSON_PTR )
 		return pKey;
 
-	const CSphColumnInfo * pJsonKey = GetJsonInternalAggrKey ( tAggr.m_sCol, tSchema, tRawSchema );
+	const CSphColumnInfo * pJsonKey = GetJsonInternalAggrKey ( tAggr.m_sCol.cstr(), tSchema, tRawSchema );
 	return pJsonKey ? pJsonKey : pKey;
 }
 
@@ -2476,11 +2477,7 @@ static bool GetAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, c
 	{
 		for ( const auto & tItem : tAggr.m_dComposite )
 		{
-			const CSphColumnInfo * pCol = GetUuidDocidAggrKey ( tItem.m_sColumn, tSchema, tRawSchema );
-			if ( !pCol )
-				pCol = tSchema.GetAttr ( tItem.m_sColumn.cstr() );
-			if ( !pCol )
-				pCol = GetJsonInternalAggrKey ( tItem.m_sColumn, tSchema, tRawSchema );
+			const CSphColumnInfo * pCol = GetAggrAttr ( tItem.m_sColumn, tSchema, tRawSchema );
 
 			CSphString sJsonCol;
 			if ( !pCol && sphJsonNameSplit ( tItem.m_sColumn.cstr(), nullptr, &sJsonCol ) )
@@ -4114,16 +4111,6 @@ static bool ParseStringArray ( const JsonObj_c & tArray, const char * szProp, St
 	return true;
 }
 
-static bool CheckInternalDocidAttrName ( const CSphString & sName, CSphString & sError )
-{
-	if ( sName!=sphGetUuidDocidName() && sName!="@id" )
-		return true;
-
-	sError.SetSprintf ( "attribute '%s' is internal", sName.cstr() );
-	return false;
-}
-
-
 static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphString & sError )
 {
 	bool bString = tSelect.IsStr();
@@ -4138,9 +4125,6 @@ static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphStr
 
 	if ( bString )
 	{
-		if ( !CheckInternalDocidAttrName ( tSelect.StrVal(), sError ) )
-			return false;
-
 		tQuery.m_dIncludeItems.Add ( tSelect.StrVal() );
 		if ( tQuery.m_dIncludeItems[0]=="*" || tQuery.m_dIncludeItems[0].IsEmpty() )
 			tQuery.m_dIncludeItems.Reset();
@@ -4149,16 +4133,7 @@ static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphStr
 	}
 
 	if ( bArray )
-	{
-		if ( !ParseStringArray ( tSelect, R"("_source")", tQuery.m_dIncludeItems, sError ) )
-			return false;
-
-		for ( const auto & sItem : tQuery.m_dIncludeItems )
-			if ( !CheckInternalDocidAttrName ( sItem, sError ) )
-				return false;
-
-		return true;
-	}
+		return ParseStringArray ( tSelect, R"("_source")", tQuery.m_dIncludeItems, sError );
 
 	assert ( bObj );
 
@@ -4168,10 +4143,6 @@ static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphStr
 	{
 		if ( !ParseStringArray ( tInclude, R"("_source" "includes")", tQuery.m_dIncludeItems, sError ) )
 			return false;
-
-		for ( const auto & sItem : tQuery.m_dIncludeItems )
-			if ( !CheckInternalDocidAttrName ( sItem, sError ) )
-				return false;
 
 		if ( tQuery.m_dIncludeItems.GetLength()==1 && tQuery.m_dIncludeItems[0]=="*" )
 			tQuery.m_dIncludeItems.Reset();
@@ -4184,10 +4155,6 @@ static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphStr
 	{
 		if ( !ParseStringArray ( tExclude, R"("_source" "excludes")", tQuery.m_dExcludeItems, sError ) )
 			return false;
-
-		for ( const auto & sItem : tQuery.m_dExcludeItems )
-			if ( !CheckInternalDocidAttrName ( sItem, sError ) )
-				return false;
 	} else if ( !sError.IsEmpty() )
 		return false;
 
@@ -4302,36 +4269,6 @@ static bool ParseExpressions ( const JsonObj_c & tExpr, CSphQuery & tQuery, CSph
 //////////////////////////////////////////////////////////////////////////
 // docvalue_fields
 
-static bool CheckIgnoredDocFieldItem ( const JsonObj_c & tItem, CSphString & sError )
-{
-	if ( tItem.IsStr() )
-		return CheckInternalDocidAttrName ( tItem.StrVal(), sError );
-
-	if ( tItem.IsObj() )
-	{
-		JsonObj_c tField = tItem.GetItem ( "field" );
-		if ( tField && tField.IsStr() )
-			return CheckInternalDocidAttrName ( tField.StrVal(), sError );
-	}
-
-	return true;
-}
-
-
-static bool CheckIgnoredDocFields ( const JsonObj_c & tFields, const char * /*szProp*/, CSphString & sError )
-{
-	if ( tFields.IsArray() )
-	{
-		for ( const auto & tItem : tFields )
-			if ( !CheckIgnoredDocFieldItem ( tItem, sError ) )
-				return false;
-
-		return true;
-	}
-
-	return CheckIgnoredDocFieldItem ( tFields, sError );
-}
-
 bool ParseDocFields ( const JsonObj_c & tDocFields, JsonQuery_c & tQuery, CSphString & sError )
 {
 	if ( !tDocFields || !tDocFields.IsArray() )
@@ -4351,9 +4288,11 @@ bool ParseDocFields ( const JsonObj_c & tDocFields, JsonQuery_c & tQuery, CSphSt
 		CSphString sFieldName;
 		if ( !tItem.FetchStrItem ( sFieldName, "field", sError, false ) )
 			return false;
-
-		if ( !CheckInternalDocidAttrName ( sFieldName, sError ) )
+		if ( sFieldName==sphGetUuidDocidName() )
+		{
+			sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
 			return false;
+		}
 
 		if ( tQuery.m_dItems.GetFirst ( [&sFieldName] ( const CSphQueryItem & tVal ) { return ( tVal.m_sExpr=="*" || tVal.m_sExpr==sFieldName ); } )==-1 )
 		{
@@ -5199,12 +5138,18 @@ static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<Js
 			return false;
 		}
 
-		if ( !CheckInternalDocidAttrName ( tItem.m_sCol, sError ) )
+		if ( tItem.m_sCol==sphGetUuidDocidName() )
+		{
+			sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
 			return false;
+		}
 
 		for ( const auto & tComposite : tItem.m_dComposite )
-			if ( !CheckInternalDocidAttrName ( tComposite.m_sColumn, sError ) )
+			if ( tComposite.m_sColumn==sphGetUuidDocidName() )
+			{
+				sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
 				return false;
+			}
 
 		dParentItems.Add ( tItem );
 	}

@@ -483,10 +483,12 @@ bool DdlParser_c::AddCreateTableUuidId ( const SqlNode_t & tName, const SqlNode_
 	tIdAttr.m_tAttr.m_sName		= sphGetDocidName();
 	tIdAttr.m_tAttr.m_eAttrType	= SPH_ATTR_BIGINT;
 	tOpts.CopyOptionsTo(tIdAttr);
+	tIdAttr.m_tAttr.m_uAttrFlags |= CSphColumnInfo::ATTR_UUID_LINK;
 
 	CreateTableAttr_t & tUuidAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
 	tUuidAttr.m_tAttr.m_sName		= sphGetUuidDocidName();
 	tUuidAttr.m_tAttr.m_eAttrType	= SPH_ATTR_STRING;
+	tUuidAttr.m_tAttr.m_eEngine		= tOpts.m_eEngine;
 	tUuidAttr.m_bIndexed			= true;
 	return true;
 }

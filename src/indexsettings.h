@@ -493,9 +493,8 @@ const RtTypedAttr_t &	GetRtType ( int iType );
 
 const char *			sphGetUuidDocidName();
 bool					sphHasUuidDocid ( const ISphSchema & tSchema );
-bool					sphIsValidUuidDocid ( const char * szUuid );
-bool					sphCheckUuidDocid ( const char * szUuid, CSphString & sError );
-CSphString				sphNormalizeUuidDocid ( const char * szUuid );
+bool					sphPrepareUuidDocid ( const char * szUuid, CSphString & sNormalizedUuid, CSphString & sError );
+bool					sphIsNormalizedUuidDocid ( Str_t tUuid );
 
 bool					StrToAttrEngine ( AttrEngine_e & eEngine, AttrEngine_e eDefault, const CSphString & sValue, CSphString & sError );
 

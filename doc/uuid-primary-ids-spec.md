@@ -37,7 +37,7 @@ Rules:
 - `id uuid` is valid only for RT/configless tables, including `engine='columnar'` RT tables.
 - Only the primary `id` column can use the `uuid` type.
 - Regular attributes cannot use `uuid`.
-- PQ/plain/indexer-created tables are not supported for UUID IDs.
+- PQ/plain/indexer-created tables and shard tables are not supported for UUID IDs.
 - Existing tables cannot be converted to or from `id uuid` with `ALTER TABLE`.
 - `SHOW CREATE TABLE` renders the public schema as `id uuid`; the hidden storage attribute is not exposed as a normal column.
 
@@ -86,12 +86,14 @@ Supported UUID-aware paths include:
 
 - `/json/insert`, `/json/replace`, `/json/update`, `/json/delete`, `/json/search`
 - `/json/bulk` valid insert/replace/update/delete actions
-- ES-style `_bulk` `index`/`create` actions with string `_id`
+- ES-style `_bulk` `index`/`create`/`update`/`delete` actions with string `_id`
 - ES-style `_search` response IDs/docvalue fields for public `id`
 
-For numeric-ID tables, previous numeric/compatibility behavior is preserved.
+ES-style `_bulk` classifies string IDs without resolving or locking the target table. Decimal integer strings remain numeric IDs, strings accepted by `sphPrepareUuidDocid()` become normalized UUID IDs, and all other strings retain the legacy numeric hash from `GetDocID()`. The same rule applies to metadata `_id` and source-body `id`.
 
-Client-side UUID validation errors should be reported as request validation errors, not daemon/internal errors. The intended status contract is HTTP 400 for invalid UUID strings, numeric IDs sent to UUID-ID tables, hidden internal ID access (`@id`/`@uuid_id`), and unsupported UUID range/arithmetic operations. Current branch QA shows the data-level behavior is reject/no-write, but a few HTTP status/envelope paths still need follow-up; see [Known current follow-up gaps](#known-current-follow-up-gaps).
+This preserves numeric strings and arbitrary non-UUID string IDs on numeric-ID tables. The ES handler does not add target-schema validation for UUID-shaped strings. For `index`/`create` against a numeric-ID table, the existing numeric insert conversion applies, including acceptance of a leading decimal prefix when non-strict attribute conversion is enabled. `update`/`delete` continue to use string filters and follow the table's normal filter validation.
+
+Client-side UUID validation errors should be reported as request validation errors, not daemon/internal errors. The intended status contract is HTTP 400 for invalid UUID strings, numeric IDs sent to UUID-ID tables, direct hidden `@uuid_id` access, and unsupported UUID range/arithmetic operations. The legacy `@id` query alias follows public `id`; on UUID-ID tables it resolves to the UUID string and does not expose the internal numeric `DocID_t`. Raw `_source` include/exclude patterns named `@id` or `@uuid_id` remain unmatched because source projection uses the public name `id`. Current branch QA shows the data-level behavior is reject/no-write, but a few HTTP status/envelope paths still need follow-up; see [Known current follow-up gaps](#known-current-follow-up-gaps).
 
 ## Code structure
 
@@ -100,10 +102,12 @@ Client-side UUID validation errors should be reported as request validation erro
 `src/indexsettings.cpp` / `src/indexsettings.h` define the UUID-ID helpers:
 
 - `sphGetUuidDocidName()` returns `@uuid_id`;
-- `sphHasUuidDocid(schema)` detects UUID-ID tables by hidden string attr presence;
-- `sphIsValidUuidDocid()` validates strict UUID layout, version, and RFC variant;
-- `sphCheckUuidDocid()` returns user-facing validation errors;
-- `sphNormalizeUuidDocid()` lowercases UUID strings.
+- `sphHasUuidDocid(schema)` detects UUID-ID tables by the linked numeric `id`
+  flag and asserts the hidden string storage invariant in debug builds;
+- `sphPrepareUuidDocid()` validates strict UUID layout, version, and RFC variant,
+  returns user-facing validation errors, and lowercases accepted UUID strings;
+- `sphIsNormalizedUuidDocid()` checks the normalized runtime invariant on a
+  length-bearing string span.
 
 `src/searchd.cpp` defines `sphGenerateUuidDocid(DocID_t)` and insert-time helpers for:
 
@@ -156,11 +160,11 @@ Changed result-formatting paths map `@uuid_id` back to public `id`:
 
 The internal numeric `id` remains hidden on UUID-ID tables.
 
-### Distributed, sharding, and replication
+### Distributed and replication
 
 Distributed agent result paths send the hidden UUID string when the master needs public `id` output.
 
-Shard write buffering preserves the UUID string and routes UUID-ID rows deterministically from the UUID value. Sharded UUID `REPLACE` deletes are scheduled only on the routed target, not blindly on every route target.
+Shard tables reject `id uuid` in this branch. UUID shard routing and write buffering need a separate design because shard routing must know the final placement key before the target RT table can resolve the hidden numeric `DocID_t`.
 
 Replication tests cover create/insert/update/replace/delete behavior through a cluster table.
 
@@ -179,13 +183,13 @@ The supported columnar contract is the same public UUID-ID contract as row-wise 
 - Explicit UUID inserts in transactions and `/json/bulk` defer committed-data duplicate detection to commit and then check the accumulated UUID list in one batch. Transaction-local UUID state is hash-backed, avoiding O(N²) vector scans inside large explicit UUID batches.
 - ID-based operations that start from a public UUID string (`SELECT ... WHERE id='uuid'`, `UPDATE`, `REPLACE`, and `DELETE`) are expected to be slower than the same operations on numeric IDs because they must resolve `@uuid_id` back to the internal numeric `DocID_t`. With secondary indexes enabled and rebuilt for disk chunks, exact public UUID equality/`IN` filters should use the hidden `@uuid_id` secondary index and avoid table-size-dependent full scans. Local 1k/10k/50k lookup measurements showed UUID miss median slope improving from 4.09x before the hidden-index eligibility fix to 1.41x after it; at 50k rows, UUID miss median improved from 1.812 ms to 0.642 ms.
 - Local repeated explicit-UUID `/json/bulk` benchmarks over 30 × 1000-row commits showed the RAM map removing the committed-row-count slope for hot RT RAM data: final fast path median was 1.1007s / 27.3k docs/s for 30k rows, versus 16.0630s / 1.87k docs/s with only the two RAM UUID lookup call sites temporarily disabled. In the side-by-side Manticore-vs-Elasticsearch harness, explicit UUID bulk insert reached about 23.6k docs/s for Manticore versus about 84.1k docs/s for Elasticsearch, narrowing the old after-SI gap from 22.24x to 3.57x in the main run. Disk/flushed chunks still use the query/SI-capable fallback path unless they get an equivalent committed UUID lookup path later.
-- Sharded UUID `REPLACE` now targets the deterministic UUID route instead of broadcasting delete predicates to every route target.
+- Shard-table UUID insert/replace performance is out of scope for this branch because `id uuid` is rejected for `type='shard'` tables.
 
 ## Limitations / non-goals
 
 - No native `SPH_ATTR_UUID` type.
 - No widening of `DocID_t` or internal row IDs.
-- No UUID IDs for plain/indexer-created tables or PQ tables.
+- No UUID IDs for plain/indexer-created tables, PQ tables, or shard tables.
 - No `ALTER TABLE` conversion to/from UUID IDs.
 - No numeric/range/arithmetic semantics for UUID `id`.
 - No direct public access to `@uuid_id`.
@@ -201,7 +205,7 @@ Exploratory QA on this branch confirmed the following remaining UUID-related gap
 4. `POST /json/insert` with a numeric top-level `id` into a UUID-ID table currently returns HTTP 409/action-request-validation; it should be HTTP 400 because UUID IDs must be strings.
 5. `POST /json/replace` with an invalid UUID string in top-level `id` currently returns HTTP 409/action-request-validation; it should be HTTP 400.
 6. `POST /json/bulk` with an invalid UUID action `id` currently returns top-level HTTP 500 and per-item 409; it should not be a server error. Prefer either top-level HTTP 400 or the endpoint's established bulk-envelope behavior with per-item 400.
-7. ES-compatible `POST /_bulk` with an invalid UUID `_id` currently gives per-item 400 but bubbles the response to top-level HTTP 409. Prefer ES-style top-level HTTP 200 with item status 400, or top-level HTTP 400 if the project standardizes on request rejection.
+7. ES-compatible `POST /_bulk` keeps the pre-UUID handler's grouped transactions and error-envelope behavior. Standardizing independent per-item commits, conflict responses, or top-level versus item status codes is separate main-branch work and is not part of UUID-ID support.
 
 The likely minimal fix area for these gaps is HTTP error classification/envelope handling around `searchdhttp.cpp` and the JSON/ES bulk adapters, not the UUID storage model.
 

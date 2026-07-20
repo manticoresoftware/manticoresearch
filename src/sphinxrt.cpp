@@ -17,6 +17,7 @@
 #include "sphinxsort.h"
 #include "sphinxutils.h"
 #include "sphinxquery/sphinxquery.h"
+#include "sphinxquery/xqparser.h"
 #include "fileutils.h"
 #include "sphinxplugin.h"
 #include "icu.h"
@@ -368,6 +369,47 @@ SphAttr_t InsertDocData_c::GetID() const
 }
 
 
+void InsertDocData_c::ResetPrimaryIdState()
+{
+	m_eDocidMode = InsertDocidMode_e::NUMERIC;
+	m_iUuidString = -1;
+	m_sOwnedUuidDocid = "";
+}
+
+
+void InsertDocData_c::SetUuidDocidString ( CSphString && sUuid )
+{
+	assert ( m_iUuidString>=0 && m_iUuidString<m_dStrings.GetLength() );
+	assert ( sphIsNormalizedUuidDocid ( { sUuid.cstr(), sUuid.Length() } ) );
+	m_sOwnedUuidDocid.Swap ( sUuid );
+	if ( m_iUuidString>=0 && m_iUuidString<m_dStrings.GetLength() )
+		m_dStrings[m_iUuidString] = m_sOwnedUuidDocid.cstr();
+}
+
+
+const char * InsertDocData_c::GetUuidDocidString() const
+{
+	if ( m_iUuidString<0 || m_iUuidString>=m_dStrings.GetLength() )
+		return nullptr;
+
+	return m_dStrings[m_iUuidString];
+}
+
+
+static CSphString sphGenerateUuidDocid ( DocID_t tDocID )
+{
+	uint64_t uDocID = (uint64_t)tDocID;
+	unsigned uHi32 = (unsigned)( uDocID>>32 );
+	unsigned uMid16 = (unsigned)( ( uDocID>>16 ) & 0xffff );
+	unsigned uVersion = 0x8000 | (unsigned)( ( uDocID>>4 ) & 0x0fff );
+	unsigned uVariant = 0x8000 | (unsigned)( uDocID & 0x000f );
+
+	CSphString sUuid;
+	sUuid.SetSprintf ( "%08x-%04x-%04x-%04x-000000000000", uHi32, uMid16, uVersion, uVariant );
+	return sUuid;
+}
+
+
 void InsertDocData_c::AddMVALength ( int iLength, bool bDefault )
 {
 	m_dMvas.Add ( int64_t(iLength) | ( bDefault ? DEFAULT_FLAG : 0 ) );
@@ -437,6 +479,8 @@ void RtSegment_t::UpdateUsedRam() const NO_THREAD_SAFETY_ANALYSIS
 	iUsedRam += m_dKeywordCheckpoints.AllocatedBytes();
 	iUsedRam += m_dRows.AllocatedBytes();
 	iUsedRam += m_dInfixFilterCP.AllocatedBytes();
+	iUsedRam += m_tDocIDtoRowID.GetLengthBytes();
+	iUsedRam += m_tUuidDocID.GetLengthBytes();
 	iUsedRam += m_pDocstore ? m_pDocstore->AllocatedBytes() : 0;
 	iUsedRam += m_pColumnar ? m_pColumnar->AllocatedBytes() : 0;
 	FixupRAMCounter ( iUsedRam - std::exchange ( m_iUsedRam, iUsedRam ) );
@@ -542,35 +586,28 @@ void RtSegment_t::SetupDocstore ( const CSphSchema * pSchema )
 }
 
 
+static void AddUuidDocid ( RtSegment_t & tSegment, const BYTE * pUuid, int iUuidLen, DocID_t tDocID )
+{
+	if ( !pUuid || iUuidLen<=0 )
+		return;
+
+	[[maybe_unused]] bool bAdded = tSegment.m_tUuidDocID.Add ( sphGetUuidDocidKey ( { (const char *)pUuid, iUuidLen } ), tDocID );
+	assert ( bAdded );
+}
+
+
 void RtSegment_t::BuildDocID2RowIDMap ( const CSphSchema & tSchema )
 {
+	const CSphColumnInfo & tDocid = tSchema.GetAttr(0);
+	const bool bColumnarId = tDocid.IsColumnar();
+	const bool bUuidLinked = tDocid.IsUuidLinkedDocid();
+	const CSphColumnInfo * pUuidAttr = bUuidLinked ? tSchema.GetAttr ( sphGetUuidDocidName() ) : nullptr;
+	assert ( !bUuidLinked || ( pUuidAttr && pUuidAttr->m_eAttrType==SPH_ATTR_STRING && pUuidAttr->IsColumnar()==bColumnarId ) );
+
 	m_tDocIDtoRowID.Reset(m_uRows);
-	m_tUuidDocID.Reset();
+	m_tUuidDocID.Reset ( bUuidLinked ? m_uRows : 0 );
 
-	const CSphColumnInfo * pUuidAttr = tSchema.GetAttr ( sphGetUuidDocidName() );
-	std::unique_ptr<columnar::Iterator_i> pUuidIt;
-	if ( pUuidAttr && pUuidAttr->IsColumnar() )
-	{
-		std::string sError;
-		pUuidIt = CreateColumnarIterator ( m_pColumnar.get(), sphGetUuidDocidName(), sError );
-		assert ( pUuidIt );
-	}
-
-	auto fnAddUuidDocid = [this] ( const BYTE * pUuid, int iUuidLen, DocID_t tDocID )
-	{
-		if ( !pUuid || iUuidLen<=0 )
-			return;
-
-		CSphString sUuid ( (const char *)pUuid, iUuidLen );
-		if ( !m_tUuidDocID.Add ( (int64_t)tDocID, sUuid ) )
-		{
-			int64_t * pOldDocID = m_tUuidDocID ( sUuid );
-			assert ( pOldDocID );
-			*pOldDocID = 0; // duplicate/corrupt segment: force query fallback
-		}
-	};
-
-	if ( !tSchema.GetAttr(0).IsColumnar() )
+	if ( !bColumnarId )
 	{
 		int iStride = GetStride();
 		RowID_t tRowID = 0;
@@ -582,16 +619,11 @@ void RtSegment_t::BuildDocID2RowIDMap ( const CSphSchema & tSchema )
 			DocID_t tDocID = sphGetDocID ( pRow );
 			m_tDocIDtoRowID.Add ( tDocID, tRowID );
 
-			if ( pUuidAttr )
+			if ( bUuidLinked )
 			{
-				const BYTE * pUuid = nullptr;
 				int iUuidLen = 0;
-				if ( pUuidIt )
-					iUuidLen = pUuidIt->Get ( tRowID, pUuid );
-				else
-					pUuid = sphGetBlobAttr ( pRow, pUuidAttr->m_tLocator, m_dBlobs.Begin(), iUuidLen );
-
-				fnAddUuidDocid ( pUuid, iUuidLen, tDocID );
+				const BYTE * pUuid = sphGetBlobAttr ( pRow, pUuidAttr->m_tLocator, m_dBlobs.Begin(), iUuidLen );
+				AddUuidDocid ( *this, pUuid, iUuidLen, tDocID );
 			}
 
 			tRowID++;
@@ -600,6 +632,8 @@ void RtSegment_t::BuildDocID2RowIDMap ( const CSphSchema & tSchema )
 	else
 	{
 		std::string sError;
+		auto pUuidIt = bUuidLinked ? CreateColumnarIterator ( m_pColumnar.get(), sphGetUuidDocidName(), sError ) : nullptr;
+		assert ( !bUuidLinked || pUuidIt );
 		auto pIt = CreateColumnarIterator ( m_pColumnar.get(), sphGetDocidName(), sError );
 		assert ( pIt );
 		for ( RowID_t tRowID = 0; tRowID<m_uRows; tRowID++ )
@@ -607,11 +641,11 @@ void RtSegment_t::BuildDocID2RowIDMap ( const CSphSchema & tSchema )
 			DocID_t tDocID = pIt->Get(tRowID);
 			m_tDocIDtoRowID.Add ( tDocID, tRowID );
 
-			if ( pUuidIt )
+			if ( bUuidLinked )
 			{
 				const BYTE * pUuid = nullptr;
 				int iUuidLen = pUuidIt->Get ( tRowID, pUuid );
-				fnAddUuidDocid ( pUuid, iUuidLen, tDocID );
+				AddUuidDocid ( *this, pUuid, iUuidLen, tDocID );
 			}
 		}
 	}
@@ -1558,8 +1592,6 @@ public:
 	void				ForceRamFlush ( const char * szReason ) final;
 	bool				IsFlushNeed() const final;
 	bool				ForceDiskChunk() final;
-	bool				LookupUuidDocid ( const CSphString & sUuid, int iLimit, CSphVector<DocID_t> & dDocids ) const final;
-	bool				HasAnyUuidDocid ( const VecTraits_T<CSphString> & dUuids, bool & bHasAny ) const final;
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) final;
 	bool				AttachRtIndex ( AttachArgs_t & tArgs, CSphString & sError ) final;
 	bool				Truncate ( CSphString & sError, Truncate_e eAction ) final;
@@ -1686,11 +1718,13 @@ private:
 	static const DWORD			META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
 	// NOTICE! meta version 21 was introduced in 2a6ea8f7 and rolled back to 20 in e1709760.
 	// v22: keywords_v2 dictionary layout versioning.
-	static constexpr DWORD		META_VERSION		= 22; // next should be 23
-	//< current version. since 20 we now store meta in json fixme! Also change version in indextool.cpp, and support the changes!
+	// v23: UUID primary ID linked-schema semantics.
+	static constexpr DWORD		META_VERSION		= 23; // next should be 24
+	// Since v20, RT meta is JSON. indextool.cpp's separate v18 constant only handles legacy binary meta.
 
 	int							m_iStride;
 	uint64_t					m_uSchemaHash = 0;
+	UuidDocidRegistryPtr_t		m_pUuidRegistry;
 	std::atomic<int64_t>		m_iRamChunksAllocatedRAM { 0 };
 
 	std::atomic<bool>			m_bOptimizeStop { false };
@@ -1817,6 +1851,9 @@ private:
 	bool						LoadEmbeddingModels ( CSphString & sError );
 	const CSphQuery *			SetupAutoEmbeddings ( const CSphQuery & tQuery, CSphQuery & tUpdatedQuery, const ISphSchema & tMatchSchema, CSphString & sError ) const;
 	bool						VerifyKNN ( InsertDocData_c & tDoc, CSphString & sError ) const;
+	DocID_t						LookupCommittedUuidDocid ( const UuidDocidKey_t & tKey ) const;
+	bool						ResolvePrimaryIdForAdd ( InsertDocData_c & tDoc, bool & bReplace, UuidDocidLease_c & tUuidLease, CSphString & sError ) const;
+	bool						ResolveUuidDocidForAdd ( InsertDocData_c & tDoc, bool & bReplace, UuidDocidLease_c & tUuidLease, CSphString & sError ) const;
 
 	template<typename PRED>
 	int64_t						GetMemCount(PRED&& fnPred) const;
@@ -1999,77 +2036,191 @@ void RtIndex_c::UpdateUnlockedCount()
 }
 
 
-bool RtIndex_c::LookupUuidDocid ( const CSphString & sUuid, int iLimit, CSphVector<DocID_t> & dDocids ) const
+static DocID_t LookupRamUuidDocid ( const RtGuard_t & tGuard, const UuidDocidKey_t & tKey )
 {
-	dDocids.Reset();
-
-	if ( iLimit<=0 )
-		return true;
-
-	if ( !sphHasUuidDocid ( m_tSchema ) )
-		return false;
-
-	auto tData = RtData();
-	if ( !tData.m_pChunks->IsEmpty() )
-		return false; // disk chunks are not covered by RAM-segment UUID maps
-
-	for ( const auto & pSeg : *tData.m_pSegs )
+	for ( const auto & pSeg : tGuard.m_dRamSegs )
 	{
-		const int64_t * pDocID = pSeg->m_tUuidDocID ( sUuid );
+		const DocID_t * pDocID = pSeg->m_tUuidDocID.Find ( tKey );
 		if ( !pDocID )
 			continue;
 
-		if ( !*pDocID )
-			return false; // ambiguous duplicate in a segment; use the query fallback
-
-		DocID_t tDocID = (DocID_t)*pDocID;
+		assert ( *pDocID );
+		DocID_t tDocID = *pDocID;
 		if ( !pSeg->IsAlive ( tDocID ) )
 			continue;
 
-		dDocids.Add ( tDocID );
-		if ( dDocids.GetLength()>=iLimit )
-			break;
+		return tDocID;
 	}
 
-	return true;
+	return 0;
 }
 
 
-bool RtIndex_c::HasAnyUuidDocid ( const VecTraits_T<CSphString> & dUuids, bool & bHasAny ) const
+DocID_t RtIndex_c::LookupCommittedUuidDocid ( const UuidDocidKey_t & tKey ) const
 {
-	bHasAny = false;
+	assert ( sphHasUuidDocid ( m_tSchema ) );
 
-	if ( dUuids.IsEmpty() )
-		return true;
+	RtGuard_t tGuard ( RtData() );
+	DocID_t tDocID = LookupRamUuidDocid ( tGuard, tKey );
+	if ( tDocID || tGuard.m_dDiskChunks.IsEmpty() )
+		return tDocID;
 
-	if ( !sphHasUuidDocid ( m_tSchema ) )
-		return false;
-
-	auto tData = RtData();
-	if ( !tData.m_pChunks->IsEmpty() )
-		return false; // disk chunks are not covered by RAM-segment UUID maps
-
-	for ( const CSphString & sUuid : dUuids )
+	for ( const ConstDiskChunkRefPtr_t & pChunk : tGuard.m_dDiskChunks )
 	{
-		for ( const auto & pSeg : *tData.m_pSegs )
+		tDocID = pChunk->Cidx().FindAliveUuidDocid ( tKey );
+		if ( tDocID )
+			return tDocID;
+	}
+
+	return 0;
+}
+
+
+static bool IsAliveInRam ( const RtGuard_t & tGuard, DocID_t tDocID )
+{
+	return tGuard.m_dRamSegs.any_of ( [tDocID] ( const ConstRtSegmentRefPtf_t & p ) { return p->IsAlive ( tDocID ); } );
+}
+
+
+static bool IsAliveInCommittedData ( const RtGuard_t & tGuard, DocID_t tDocID )
+{
+	return IsAliveInRam ( tGuard, tDocID )
+		|| tGuard.m_dDiskChunks.any_of ( [tDocID] ( const ConstDiskChunkRefPtr_t & p ) { return p->Cidx().IsAlive ( tDocID ); } );
+}
+
+
+static DocID_t GenerateAutoDocid ( const RtGuard_t & tGuard )
+{
+	DocID_t tDocID = 0;
+	do
+		tDocID = UidShort();
+	while ( IsAliveInRam ( tGuard, tDocID ) );
+
+	return tDocID;
+}
+
+
+bool RtIndex_c::ResolveUuidDocidForAdd ( InsertDocData_c & tDoc, bool & bReplace, UuidDocidLease_c & tUuidLease, CSphString & sError ) const
+{
+	assert ( tDoc.m_eDocidMode==InsertDocidMode_e::UUID_AUTO || tDoc.m_eDocidMode==InsertDocidMode_e::UUID_EXPLICIT );
+	assert ( sphHasUuidDocid ( m_tSchema ) );
+	assert ( m_pUuidRegistry );
+	assert ( tUuidLease.IsEmpty() );
+	UuidDocidRegistry_i * pUuidRegistry = m_pUuidRegistry.Ptr();
+
+	if ( tDoc.m_iUuidString<0 )
+	{
+		sError = "internal error: missing uuid id value";
+		return false;
+	}
+
+	if ( tDoc.m_eDocidMode==InsertDocidMode_e::UUID_AUTO )
+	{
+		bReplace = false;
+		for ( ;; )
 		{
-			const int64_t * pDocID = pSeg->m_tUuidDocID ( sUuid );
-			if ( !pDocID )
+			DocID_t tDocID = GenerateAutoDocid ( RtGuard() );
+			CSphString sUuid = sphGenerateUuidDocid ( tDocID );
+			UuidDocidKey_t tKey = sphGetUuidDocidKey ( { sUuid.cstr(), sUuid.Length() } );
+
+			UuidDocidLease_c tCandidateLease;
+			if ( !tCandidateLease.TryAcquire ( pUuidRegistry, tKey ) )
 				continue;
 
-			if ( !*pDocID )
-				return false; // ambiguous duplicate in a segment; use the query fallback
+			if ( LookupRamUuidDocid ( RtGuard(), tKey ) )
+				continue;
 
-			if ( pSeg->IsAlive ( (DocID_t)*pDocID ) )
-			{
-				bHasAny = true;
-				return true;
-			}
+			if ( pUuidRegistry->SetDocidIfEmpty ( tKey, tDocID )!=tDocID )
+				continue;
+
+			tDoc.SetID ( tDocID );
+			tDoc.SetUuidDocidString ( std::move ( sUuid ) );
+			tUuidLease = std::move ( tCandidateLease );
+			return true;
 		}
 	}
 
+	const char * szUuid = tDoc.GetUuidDocidString();
+	if ( !szUuid || !*szUuid )
+	{
+		sError = "internal error: missing uuid id value";
+		return false;
+	}
+
+	UuidDocidKey_t tKey = sphGetUuidDocidKey ( FromSz ( szUuid ) );
+	tUuidLease.Acquire ( pUuidRegistry, tKey );
+
+	DocID_t tCommittedDocID = LookupCommittedUuidDocid ( tKey );
+	if ( tCommittedDocID )
+	{
+		if ( !bReplace )
+		{
+			DocID_t tMappedDocID = pUuidRegistry->GetDocid ( tKey );
+			if ( tMappedDocID && tMappedDocID!=tCommittedDocID )
+			{
+				sError.SetSprintf ( "duplicate uuid id '%s'", szUuid );
+				return false;
+			}
+
+			sError.SetSprintf ( "duplicate id '%s'", szUuid );
+			return false;
+		}
+
+		DocID_t tEffectiveDocID = pUuidRegistry->SetDocidIfEmpty ( tKey, tCommittedDocID );
+		if ( tEffectiveDocID!=tCommittedDocID )
+		{
+			sError.SetSprintf ( "duplicate uuid id '%s'", szUuid );
+			return false;
+		}
+
+		tDoc.SetID ( tEffectiveDocID );
+	}
+	else
+	{
+		DocID_t tMappedDocID = pUuidRegistry->GetDocid ( tKey );
+		if ( !tMappedDocID )
+		{
+			DocID_t tCandidateDocID = GenerateAutoDocid ( RtGuard() );
+			tMappedDocID = pUuidRegistry->SetDocidIfEmpty ( tKey, tCandidateDocID );
+		}
+
+		tDoc.SetID ( tMappedDocID );
+	}
+
 	return true;
 }
+
+
+bool RtIndex_c::ResolvePrimaryIdForAdd ( InsertDocData_c & tDoc, bool & bReplace, UuidDocidLease_c & tUuidLease, CSphString & sError ) const
+{
+	if ( tDoc.m_eDocidMode==InsertDocidMode_e::UUID_AUTO || tDoc.m_eDocidMode==InsertDocidMode_e::UUID_EXPLICIT )
+		return ResolveUuidDocidForAdd ( tDoc, bReplace, tUuidLease, sError );
+
+	assert ( tDoc.m_eDocidMode==InsertDocidMode_e::NUMERIC );
+	assert ( tUuidLease.IsEmpty() );
+	DocID_t tDocID = tDoc.GetID();
+
+	if ( tDocID && bReplace )
+		return true;
+
+	auto tGuard = RtGuard();
+	if ( !tDocID )
+	{
+		bReplace = false;
+		tDoc.SetID ( GenerateAutoDocid ( tGuard ) );
+		return true;
+	}
+
+	assert ( !bReplace && tDocID!=0 );
+	if ( IsAliveInCommittedData ( tGuard, tDocID ) )
+	{
+		sError.SetSprintf ( "duplicate id '" UINT64_FMT "'", tDocID );
+		return false;
+	}
+
+	return true;
+}
+
 
 void RtIndex_c::ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) const
 {
@@ -2401,33 +2552,15 @@ bool RtIndex_c::AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphS
 	assert ( m_tSchema.GetAttrIndex ( sphGetDocidName() )==0 );
 	assert ( m_tSchema.GetAttr ( sphGetDocidName() )->m_eAttrType==SPH_ATTR_BIGINT );
 
-	DocID_t tDocID = tDoc.GetID();
+	MEMORY ( MEM_INDEX_RT );
 
-	// here is only point related to current index - generate unique autoID, or check that provided is not duplicate.
-	if ( !tDocID || !bReplace )
-	{
-		auto tGuard = RtGuard();
-		if ( !tDocID ) // docID wasn't provided, need to generate autoID
-		{
-			bReplace = false; // with absent docID we effectively fall to plain 'insert' - nothing to kill
-			do
-				tDocID = UidShort ();
-			while ( tGuard.m_dRamSegs.any_of (
-					[tDocID] ( const ConstRtSegmentRefPtf_t & p ) { return p->IsAlive ( tDocID ); } ) );
+	if ( !BindAccum ( pAcc, &sError ) )
+		return false;
 
-			tDoc.SetID ( tDocID );
-		} else
-		{
-			// docID was provided, but that is new insert and we need to check for duplicates
-			assert ( !bReplace && tDocID!=0 );
-			if ( tGuard.m_dRamSegs.any_of ( [tDocID] ( const ConstRtSegmentRefPtf_t & p ) { return p->IsAlive ( tDocID ); })
-				|| tGuard.m_dDiskChunks.any_of ( [tDocID] ( const ConstDiskChunkRefPtr_t & p ) { return p->Cidx().IsAlive(tDocID); }))
-			{
-				sError.SetSprintf ( "duplicate id '" UINT64_FMT "'", tDocID );
-				return false; // already exists and not deleted; INSERT fails
-			}
-		}
-	}
+	UuidDocidLease_c tUuidLease;
+	if ( !ResolvePrimaryIdForAdd ( tDoc, bReplace, tUuidLease, sError ) )
+		return false;
+	assert ( ( tDoc.m_eDocidMode==InsertDocidMode_e::NUMERIC )==tUuidLease.IsEmpty() );
 
 	TokenizerRefPtr_c tTokenizer = CloneIndexingTokenizer();
 
@@ -2436,11 +2569,6 @@ bool RtIndex_c::AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphS
 		sError.SetSprintf ( "internal error: no indexing tokenizer available" );
 		return false;
 	}
-
-	MEMORY ( MEM_INDEX_RT );
-
-	if ( !BindAccum ( pAcc, &sError ) )
-		return false;
 
 	tDoc.m_tDoc.m_tRowID = pAcc->GenerateRowID();
 
@@ -2504,7 +2632,11 @@ bool RtIndex_c::AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphS
 	DocstoreBuilder_i::Doc_t tStoredDoc;
 	DocstoreBuilder_i::Doc_t * pStoredDoc = FetchDocFields ( tStoredDoc, tDoc, tSrc, dTmpAttrStorage );
 	tDoc.m_iTotalBytes = tSrc.GetStats().m_iTotalBytes;
-	return AddDocument ( pHits, tDoc, bReplace, pStoredDoc, sError, sWarning, pAcc );
+	if ( !AddDocument ( pHits, tDoc, bReplace, pStoredDoc, sError, sWarning, pAcc ) )
+		return false;
+
+	tUuidLease.Adopt ( *pAcc );
+	return true;
 }
 
 
@@ -2536,7 +2668,16 @@ bool RtIndex_i::PrepareAccum ( RtAccum_t* pAcc, DictFormat_e eDictFormat, CSphSt
 
 bool RtIndex_c::BindAccum ( RtAccum_t * pAccExt, CSphString * pError )
 {
-	return PrepareAccum ( pAccExt, GetDictFormat(), pError );
+	const bool bFirstBind = !pAccExt->GetIndex();
+	if ( !PrepareAccum ( pAccExt, GetDictFormat(), pError ) )
+		return false;
+
+	assert ( ( m_tSchema.GetAttrsCount() && m_tSchema.GetAttr(0).IsUuidLinkedDocid() )==(bool)m_pUuidRegistry );
+	if ( bFirstBind && m_pUuidRegistry )
+		pAccExt->BindUuidRegistry ( m_pUuidRegistry );
+
+	assert ( pAccExt->IsUuidRegistry ( m_pUuidRegistry.Ptr() ) );
+	return true;
 }
 
 
@@ -3745,6 +3886,11 @@ inline CheckMerge_e CheckSegmentsPair ( std::pair<const RtSegment_t*, const RtSe
 	LOC_ESTIMATE ( m_dKeywordCheckpoints );
 	LOC_ESTIMATE ( m_dRows );
 
+	// Both source maps are alive while the merged maps are built. Their
+	// combined allocations are conservative bounds for the new maps.
+	iEstimatedMergedSize += pA->m_tDocIDtoRowID.GetLengthBytes() + pB->m_tDocIDtoRowID.GetLengthBytes();
+	iEstimatedMergedSize += pA->m_tUuidDocID.GetLengthBytes() + pB->m_tUuidDocID.GetLengthBytes();
+
 #undef LOC_ESTIMATE
 #undef ESTIMATE
 
@@ -4323,6 +4469,12 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	}
 
 	CSphFixedVector<DocidRowidPair_t> dRawLookup ( tCtx.m_iTotalDocuments );
+	const CSphColumnInfo & tDocidAttr = m_tSchema.GetAttr(0);
+	const bool bUuidLinked = tDocidAttr.IsUuidLinkedDocid();
+	const CSphColumnInfo * pUuidAttr = bUuidLinked ? m_tSchema.GetAttr ( sphGetUuidDocidName() ) : nullptr;
+	assert ( !bUuidLinked || ( pUuidAttr && pUuidAttr->m_eAttrType==SPH_ATTR_STRING && pUuidAttr->IsColumnar()==tDocidAttr.IsColumnar() ) );
+	PlainOrColumnar_t tUuidAttr = bUuidLinked ? CreatePlainOrColumnar ( m_tSchema, *pUuidAttr ) : PlainOrColumnar_t();
+	CSphFixedVector<UuidDocidLookupPair_t> dRawUuidLookup ( bUuidLinked ? tCtx.m_iTotalDocuments : 0 );
 
 	int iColumnarIdLoc = -1;
 	if ( m_tSchema.GetAttr(0).IsColumnar() )
@@ -4375,6 +4527,14 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			if ( iColumnarIdLoc<0 )
 				tDocID = sphGetDocID(pRow);
 
+			if ( bUuidLinked )
+			{
+				const uint8_t * pUuid = nullptr;
+				int iUuidLen = tUuidAttr.Get ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, pUuid );
+				Str_t tUuid { (const char *)pUuid, iUuidLen };
+				dRawUuidLookup[tNextRowID] = { sphGetUuidDocidKey ( tUuid ), tDocID };
+			}
+
 			BuildStoreHistograms ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForHistogram, tHistograms );
 
 			if ( pSIdxBuilder.get() )
@@ -4403,6 +4563,8 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	// rows could be killed during index save and tNextRowID could be less than tCtx.m_iTotalDocuments \ initial count
 	assert ( tNextRowID<=(RowID_t)dRawLookup.GetLength() );
 	VecTraits_T<DocidRowidPair_t> dLookup ( dRawLookup.Begin(), tNextRowID );
+	VecTraits_T<UuidDocidLookupPair_t> dUuidLookup ( dRawUuidLookup.Begin(), bUuidLinked ? tNextRowID : 0 );
+	assert ( !bUuidLinked || dUuidLookup.GetLength()==dLookup.GetLength() );
 
 	std::string sErrorSTL;
 	if ( pColumnarBuilder && !pColumnarBuilder->Done(sErrorSTL) )
@@ -4425,10 +4587,20 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 
 	dLookup.Sort ( CmpDocidLookup_fn() );
 
-	if ( !WriteDocidLookup ( sSPT, dLookup, sError ) )
+	if ( bUuidLinked )
+		dUuidLookup.Sort ( CmpUuidDocidLookup_fn() );
+
+	bool bWritten = false;
+	if ( bUuidLinked )
+		bWritten = WriteDocidLookup ( sSPT, dLookup, dUuidLookup, sError );
+	else
+		bWritten = WriteDocidLookup ( sSPT, dLookup, sError );
+
+	if ( !bWritten )
 		return false;
 
 	dRawLookup.Reset(0);
+	dRawUuidLookup.Reset(0);
 
 	if ( !tHistograms.Save ( sSPHI, sError ) )
 		return false;
@@ -8306,6 +8478,7 @@ static bool QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 }
 
 
+
 bool FinalExpressionCalculation ( CSphQueryContext & tCtx, const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks, VecTraits_T<ISphMatchSorter *> & dSorters, bool bFinalizeSorters, CSphQueryResultMeta & tMeta )
 {
 	if ( dSorters.any_of ( [&] ( ISphMatchSorter * p ) { return !p->FinalizeJoin ( tMeta.m_sError, tMeta.m_sWarning ); } ) )
@@ -11474,7 +11647,7 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	pRes->m_iDead = SegmentsGetDeadRows ( tGuard.m_dRamSegs );
 
 	pRes->m_iRamChunkSize = iUsedRam + tGuard.m_dRamSegs.GetLength()*int(sizeof(RtSegment_t));
-	pRes->m_iRamUse = sizeof( RtIndex_c ) + pRes->m_iRamChunkSize;
+	pRes->m_iRamUse = sizeof( RtIndex_c ) + pRes->m_iRamChunkSize + ( m_pUuidRegistry ? m_pUuidRegistry->AllocatedBytes() : 0 );
 	pRes->m_iRamRetired = m_iRamChunksAllocatedRAM.load(std::memory_order_relaxed) - iUsedRam;
 
 	pRes->m_iMemLimit = m_iRtMemLimit;
@@ -12000,6 +12173,19 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 	// add id column
 	CSphColumnInfo tDocIdCol ( sphGetDocidName() );
 	tDocIdCol.m_eAttrType = SPH_ATTR_BIGINT;
+	for ( CSphVariant * v = hIndex ( "rt_attr_string" ); v; v = v->m_pNext )
+	{
+		StrVec_t dNameParts;
+		sphSplit ( dNameParts, v->cstr(), ":" );
+		CSphString sAttrName = dNameParts[0];
+		sAttrName.ToLower();
+		if ( sAttrName==sphGetUuidDocidName() )
+		{
+			tDocIdCol.m_uAttrFlags |= CSphColumnInfo::ATTR_UUID_LINK;
+			break;
+		}
+	}
+
 	if ( !bPQ )
 		SetColumnarFlag ( tDocIdCol, tSettings );
 
@@ -12100,6 +12286,12 @@ void RtIndex_c::SetSchema ( CSphSchema tSchema )
 	m_tSchema = std::move ( tSchema );
 	m_iStride = m_tSchema.GetRowSize();
 	m_uSchemaHash = SchemaFNV ( m_tSchema );
+
+	const bool bUuidDocid = m_tSchema.GetAttrsCount() && m_tSchema.GetAttr(0).IsUuidLinkedDocid();
+	if ( bUuidDocid && !m_pUuidRegistry )
+		m_pUuidRegistry = CreateUuidDocidRegistry();
+	else if ( !bUuidDocid && m_pUuidRegistry )
+		m_pUuidRegistry = nullptr;
 
 	if ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() )
 	{

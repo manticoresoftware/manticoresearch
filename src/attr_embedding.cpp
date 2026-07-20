@@ -22,7 +22,7 @@ void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphString & sE
 {
 	CSphString sAttrToAdd = tStmt.m_sAlterAttr;
 	sAttrToAdd.ToLower();
-	if ( sphHasUuidDocid ( pIdx->GetMatchSchema() ) && strcmp ( sAttrToAdd.cstr(), "@id" )==0 )
+	if ( strcmp ( sAttrToAdd.cstr(), "@id" )==0 && sphHasUuidDocid ( pIdx->GetMatchSchema() ) )
 	{
 		sError = "attribute '@id' is internal";
 		return;

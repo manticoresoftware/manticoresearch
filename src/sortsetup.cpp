@@ -12,28 +12,8 @@
 
 #include "sortsetup.h"
 
-#include "indexsettings.h"
 #include "sphinxjson.h"
 #include "sphinxsort.h"
-
-
-static bool IsUuidDocidAlias ( const ISphSchema & tSchema, const char * szAttr )
-{
-	return tSchema.GetAttrIndex ( sphGetUuidDocidName() )>=0 && !strcasecmp ( szAttr, sphGetDocidName() );
-}
-
-
-static int GetSortAttrIndex ( const ISphSchema & tSchema, const char * szAttr )
-{
-	if ( IsUuidDocidAlias ( tSchema, szAttr ) )
-	{
-		int iUuidAttr = tSchema.GetAttrIndex ( sphGetUuidDocidName() );
-		if ( iUuidAttr>=0 )
-			return iUuidAttr;
-	}
-
-	return tSchema.GetAttrIndex(szAttr);
-}
 
 
 CSphMatchComparatorState::CSphMatchComparatorState()
@@ -262,7 +242,7 @@ void SortStateSetup_c::UnifyInternalAttrNames()
 
 bool SortStateSetup_c::CheckOrderByMva ( CSphString & sError ) const
 {
-	int iAttr = GetSortAttrIndex ( m_tSchema, m_szTok );
+	int iAttr = m_tSchema.GetAttrIndex(m_szTok);
 
 	if ( iAttr<0 )
 		return true;
@@ -283,7 +263,7 @@ void SortStateSetup_c::FindAliasedGroupby()
 	if ( m_iAttr>=0 )
 		return;
 
-	int iAttr = GetSortAttrIndex ( m_tSchema, m_szTok );
+	int iAttr = m_tSchema.GetAttrIndex(m_szTok);
 	if ( iAttr>=0 )
 	{
 		m_iAttr = iAttr;
@@ -327,7 +307,7 @@ void SortStateSetup_c::FindAliasedSortby()
 	if ( m_iAttr>=0 )
 		return;
 
-	int iAttr = GetSortAttrIndex ( m_tSchema, m_szTok );
+	int iAttr = m_tSchema.GetAttrIndex(m_szTok);
 	if ( iAttr>=0 )
 	{
 		m_iAttr = iAttr;

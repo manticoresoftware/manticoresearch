@@ -87,6 +87,7 @@ bool			sphInterrupted();
 
 struct CSphMultiformContainer;
 class CSphWriter;
+struct UuidDocidKey_t;
 
 
 /// wordforms container
@@ -1422,6 +1423,7 @@ public:
 	virtual bool				AlterKillListTarget ( KillListTargets_c & tTargets, CSphString & sError ) { return false; }
 	virtual void				KillExistingDocids ( CSphIndex * pTarget ) const {}
 	virtual bool				IsAlive ( DocID_t tDocID ) const { return false; }
+	virtual DocID_t			FindAliveUuidDocid ( const UuidDocidKey_t & ) const { assert ( 0 && "uuid lookup is not supported by this index" ); return 0; }
 
 	bool						GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const override { return false; }
 	int							GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const override { return -1; }

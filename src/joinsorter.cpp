@@ -135,19 +135,6 @@ static bool GetJoinAttrName ( const CSphString & sAttr, const CSphString & sJoin
 }
 
 
-static const CSphColumnInfo * GetUuidAwareAttr ( const ISphSchema & tSchema, const CSphString & sAttr )
-{
-	if ( sAttr==sphGetDocidName() && sphHasUuidDocid(tSchema) )
-	{
-		const CSphColumnInfo * pUuid = tSchema.GetAttr ( sphGetUuidDocidName() );
-		if ( pUuid )
-			return pUuid;
-	}
-
-	return tSchema.GetAttr ( sAttr.cstr() );
-}
-
-
 bool SplitJoinedAttrName ( const CSphString & sJoinedAttr, CSphString & sTable, CSphString & sAttr, CSphString * pError )
 {
 	StrVec_t dAttr = sphSplit ( sJoinedAttr.cstr(), "." );
@@ -1840,7 +1827,15 @@ bool JoinSorter_c::SetupOnFilters ( CSphString & sError )
 		}
 
 		// FIXME! handle compound names for left table (e.g. 'table1.id')
-		const CSphColumnInfo * pAttr1 = GetUuidAwareAttr ( *m_pSorter->GetSchema(), sAttrIdx1 );
+		const ISphSchema & tLeftSchema = *m_pSorter->GetSchema();
+		const CSphColumnInfo * pAttr1 = tLeftSchema.GetAttr ( sAttrIdx1.cstr() );
+		if ( sAttrIdx1==sphGetDocidName() )
+		{
+			const CSphColumnInfo * pUuid = tLeftSchema.GetAttr ( sphGetUuidDocidName() );
+			assert ( !pUuid || pUuid->m_eAttrType==SPH_ATTR_STRING || pUuid->m_eAttrType==SPH_ATTR_STRINGPTR );
+			if ( pUuid )
+				pAttr1 = pUuid;
+		}
 		assert(pAttr1);
 
 		// maybe it is a stored field?
@@ -1850,7 +1845,13 @@ bool JoinSorter_c::SetupOnFilters ( CSphString & sError )
 			return false;
 		}
 
-		const CSphColumnInfo * pAttr2 = GetUuidAwareAttr ( m_pJoinedIndex->GetMatchSchema(), sAttrIdx2 );
+		const CSphSchema & tRightSchema = m_pJoinedIndex->GetMatchSchema();
+		const CSphColumnInfo * pAttr2 = tRightSchema.GetAttr ( sAttrIdx2.cstr() );
+		if ( pAttr2 && pAttr2->IsUuidLinkedDocid() )
+		{
+			pAttr2 = tRightSchema.GetAttr ( sphGetUuidDocidName() );
+			assert ( pAttr2 && ( pAttr2->m_eAttrType==SPH_ATTR_STRING || pAttr2->m_eAttrType==SPH_ATTR_STRINGPTR ) );
+		}
 		if ( pAttr2 && pAttr2->m_eAttrType==SPH_ATTR_STRINGPTR && pAttr2->m_eStage==SPH_EVAL_POSTLIMIT )
 		{
 			sError.SetSprintf ( "Unable to perform join on a stored field '%s.%s'", sIdx2.cstr(), pAttr2->m_sName.cstr() );
@@ -2088,12 +2089,19 @@ void JoinSorter_c::AddStarItemsToJoinSelectList()
 	if ( !bHaveStar )
 		return;
 
+	const CSphColumnInfo * pUuidDocid = tJoinedSchema.GetAttr ( sphGetUuidDocidName() );
+	assert ( !pUuidDocid || pUuidDocid->m_eAttrType==SPH_ATTR_STRING || pUuidDocid->m_eAttrType==SPH_ATTR_STRINGPTR );
 	for ( int i = 0; i < tJoinedSchema.GetAttrsCount(); i++ )
 	{
 		auto & tAttr = tJoinedSchema.GetAttr(i);
-		bool bUuidDocid = tAttr.m_sName==sphGetUuidDocidName();
-		bool bPlainDocid = tAttr.m_sName==sphGetDocidName() && sphHasUuidDocid(tJoinedSchema);
-		if ( bPlainDocid || ( sphIsInternalAttr(tAttr) && !bUuidDocid ) )
+		if ( tAttr.IsUuidLinkedDocid() )
+		{
+			assert ( tAttr.m_sName==sphGetDocidName() );
+			continue;
+		}
+
+		bool bUuidDocid = pUuidDocid==&tAttr;
+		if ( sphIsInternalAttr(tAttr) && !bUuidDocid )
 			continue;
 
 		const char * szAttrName = bUuidDocid ? sphGetDocidName() : tAttr.m_sName.cstr();

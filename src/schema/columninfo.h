@@ -48,7 +48,8 @@ struct CSphColumnInfo
 		ATTR_STORED				= 1 << 2,
 		ATTR_INDEXED_KNN		= 1 << 3,
 		ATTR_JOINED				= 1 << 4,
-		ATTR_INDEXED_SI			= 1 << 5
+		ATTR_INDEXED_SI			= 1 << 5,
+		ATTR_UUID_LINK			= 1 << 6
 	};
 
 	CSphString		m_sName;							///< column name
@@ -101,6 +102,7 @@ struct CSphColumnInfo
 	bool IsJoined() const;
 	bool IsIndexedSI() const;
 	bool IsStored() const;
+	bool IsUuidLinkedDocid() const;
 };
 
 

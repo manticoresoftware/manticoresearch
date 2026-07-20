@@ -825,6 +825,7 @@ struct IndexInfo_t
 {
 	bool							m_bEnabled {false};
 	DWORD							m_nDocs {0};
+	DWORD							m_uVersion {0};
 	CSphString						m_sName;
 	CSphString						m_sPath;
 	CSphFixedVector<DocID_t>		m_dKilllist;
@@ -843,15 +844,15 @@ static void ApplyKilllist ( IndexInfo_t & tTarget, const IndexInfo_t & tKiller, 
 {
 	if ( tSettings.m_uFlags & KillListTarget_t::USE_DOCIDS )
 	{
-		LookupReaderIterator_c tTargetReader ( tTarget.m_tLookup.GetReadPtr() );
-		LookupReaderIterator_c tKillerReader ( tKiller.m_tLookup.GetReadPtr() );
+		LookupReaderIterator_c tTargetReader ( tTarget.m_tLookup.GetReadPtr(), tTarget.m_uVersion );
+		LookupReaderIterator_c tKillerReader ( tKiller.m_tLookup.GetReadPtr(), tKiller.m_uVersion );
 
 		KillByLookup ( tTargetReader, tKillerReader, tTarget.m_tDeadRowMap );
 	}
 
 	if ( tSettings.m_uFlags & KillListTarget_t::USE_KLIST )
 	{
-		LookupReaderIterator_c tTargetReader ( tTarget.m_tLookup.GetReadPtr() );
+		LookupReaderIterator_c tTargetReader ( tTarget.m_tLookup.GetReadPtr(), tTarget.m_uVersion );
 		DocidListReader_c tKillerReader ( tKiller.m_dKilllist );
 
 		KillByLookup ( tTargetReader, tKillerReader, tTarget.m_tDeadRowMap );
@@ -886,6 +887,7 @@ static void ApplyKilllists ( CSphConfig & hConf )
 			fprintf ( stdout, "WARNING: unable to index header for table %s\n", tIndex.m_sName.cstr() );
 			continue;
 		}
+		tIndex.m_uVersion = tIndexFiles.GetVersion();
 
 		// no lookups prior to v.54
 		if ( tIndexFiles.GetVersion() < 54 )

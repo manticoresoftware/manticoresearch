@@ -4511,6 +4511,13 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp ) noe
 {
 	// check attribute type and width
 	const CSphColumnInfo & tCol = m_pSchema->GetAttr ( iAttr );
+	if ( tCol.IsUuidLinkedDocid() )
+	{
+		int iUuid = m_pSchema->GetAttrIndex ( sphGetUuidDocidName() );
+		assert ( iUuid>=0 );
+		assert ( m_pSchema->GetAttr(iUuid).m_eAttrType==SPH_ATTR_STRING || m_pSchema->GetAttr(iUuid).m_eAttrType==SPH_ATTR_STRINGPTR );
+		return ParseAttr ( iUuid, sphGetUuidDocidName(), lvalp );
+	}
 
 	// check for a duplicate attribute created for showing a stored field in the result set
 	if ( tCol.m_uFieldFlags & CSphColumnInfo::FIELD_STORED )
@@ -4596,9 +4603,6 @@ void ExprParser_t::AddUservar ( const char* sBegin, int iLen, YYSTYPE * lvalp )
 
 int ExprParser_t::ParseAttrsAndFields ( const char * szTok, YYSTYPE * lvalp ) noexcept
 {
-	if ( strcmp ( szTok, sphGetDocidName() )==0 && sphHasUuidDocid ( *m_pSchema ) )
-		szTok = sphGetUuidDocidName();
-
 	// check for attribute
 	int iCol = m_pSchema->GetAttrIndex ( szTok );
 	if ( iCol>=0 )
@@ -10599,15 +10603,20 @@ int ExprParser_t::ParseJoinAttr ( const char * szTable, uint64_t uOffset )
 	CSphString sAttrWithTable;
 	if ( m_pJoinIdxLeft && *m_pJoinIdxLeft==szTable )
 	{
-		if ( sAttrName==sphGetDocidName() && sphHasUuidDocid ( *m_pSchema ) )
-			sAttrWithTable = sphGetUuidDocidName();
-		else
-			sAttrWithTable = sAttrName;
+		sAttrWithTable = sAttrName;
 	}
 	else
 		sAttrWithTable.SetSprintf ( "%s.%s", szTable, sAttrName.cstr() );
 
 	int iAttr = m_pSchema->GetAttrIndex ( sAttrWithTable.cstr() );
+	if ( iAttr>=0 && m_pSchema->GetAttr(iAttr).IsUuidLinkedDocid() )
+	{
+		int iUuid = m_pSchema->GetAttrIndex ( sphGetUuidDocidName() );
+		assert ( iUuid>=0 );
+		assert ( m_pSchema->GetAttr(iUuid).m_eAttrType==SPH_ATTR_STRING || m_pSchema->GetAttr(iUuid).m_eAttrType==SPH_ATTR_STRINGPTR );
+		iAttr = iUuid;
+	}
+
 	if ( iAttr==-1 )
 		m_sParserError.SetSprintf ( "unknown attribute '%s'", sAttrWithTable.cstr() );
 

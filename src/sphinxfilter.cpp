@@ -2041,20 +2041,22 @@ static bool IsUuidDocidName ( const CSphString & sAttrName )
 }
 
 
-static bool FixupUuidDocidFilter ( CSphFilterSettings & tFilter, const ISphSchema & tSchema, CSphString & sError )
+static bool FixupUuidDocidFilter ( CSphFilterSettings & tFilter, const CreateFilterContext_t & tCtx, CSphString & sError )
 {
-	if ( !sphHasUuidDocid(tSchema) )
+	assert ( tCtx.m_pIndexSchema );
+	assert ( tCtx.m_pMatchSchema );
+	const CSphColumnInfo * pDocid = tCtx.m_pIndexSchema->GetAttr ( sphGetDocidName() );
+	if ( !pDocid || !pDocid->IsUuidLinkedDocid() )
 		return true;
+
+#ifndef NDEBUG
+	const CSphColumnInfo * pUuidDocid = tCtx.m_pMatchSchema->GetAttr ( sphGetUuidDocidName() );
+	assert ( pUuidDocid && ( pUuidDocid->m_eAttrType==SPH_ATTR_STRING || pUuidDocid->m_eAttrType==SPH_ATTR_STRINGPTR ) );
+#endif
 
 	if ( tFilter.m_sAttrName==sphGetUuidDocidName() )
 	{
 		sError.SetSprintf ( "attribute '%s' is internal", sphGetUuidDocidName() );
-		return false;
-	}
-
-	if ( tFilter.m_sAttrName=="@id" )
-	{
-		sError = "attribute '@id' is internal";
 		return false;
 	}
 
@@ -2081,10 +2083,8 @@ static bool FixupUuidDocidFilter ( CSphFilterSettings & tFilter, const ISphSchem
 
 	for ( auto & sUuid : tFilter.m_dStrings )
 	{
-		if ( !sphCheckUuidDocid ( sUuid.cstr(), sError ) )
+		if ( !sphPrepareUuidDocid ( sUuid.cstr(), sUuid, sError ) )
 			return false;
-
-		sUuid = sphNormalizeUuidDocid ( sUuid.cstr() );
 	}
 
 	tFilter.m_sAttrName = sphGetUuidDocidName();
@@ -2105,7 +2105,7 @@ bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilte
 	ARRAY_FOREACH ( i, dFilters )
 	{
 		dModified[i] = dFilters[i];
-		if ( !FixupUuidDocidFilter ( dModified[i], *tCtx.m_pMatchSchema, sError ) )
+		if ( !FixupUuidDocidFilter ( dModified[i], tCtx, sError ) )
 			return false;
 
 		if ( !FixupFilterSettings ( dModified[i], dModified[i], tCtx, dModified[i].m_sAttrName, sError ) )

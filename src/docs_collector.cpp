@@ -13,7 +13,6 @@
 #include "docs_collector.h"
 #include "searchdaemon.h"
 #include "indexfiles.h"
-#include "indexsettings.h"
 #include "daemon/search_handler.h"
 
 class DocsCollector_c::Impl_c
@@ -26,19 +25,16 @@ class DocsCollector_c::Impl_c
 	DocID_t					m_iLastId = -1;
 	bool					m_bFastPath = false;
 
-	// check the short path - if we have clauses 'id=smth' or 'id in (xx,yy)' or 'id in @uservar' - we know
-	// all the values list immediatelly and don't have to run the heavy query here.
-	bool ProcessFast( const CSphQuery& tQuery, const cServedIndexRefPtr_c& pDesc )
+	// check the short path - if we have internal '@id=smth' or '@id in (xx,yy)' clauses,
+	// we know all values immediately and do not have to run the heavy query here.
+	bool ProcessFast ( const CSphQuery& tQuery )
 	{
 		if ( !tQuery.m_sQuery.IsEmpty() || !tQuery.m_dFilterTree.IsEmpty() || tQuery.m_dFilters.GetLength() != 1 )
 			return false;
 
 		const CSphFilterSettings* pFilter = tQuery.m_dFilters.Begin();
-		if ( pFilter->m_sAttrName=="@id" && sphHasUuidDocid ( RIdx_c(pDesc)->GetMatchSchema() ) )
-			return false;
-
 		if ( ( pFilter->m_bHasEqualMin || pFilter->m_bHasEqualMax ) && pFilter->m_eType == SPH_FILTER_VALUES
-				&& ( pFilter->m_sAttrName == "@id" || pFilter->m_sAttrName == "id" ) && !pFilter->m_bExclude )
+				&& pFilter->m_sAttrName == "@id" && !pFilter->m_bExclude )
 		{
 			m_dFastSlice = pFilter->GetValues();
 			m_iFastIdx = 0;
@@ -47,9 +43,9 @@ class DocsCollector_c::Impl_c
 		return m_bFastPath;
 	}
 
-	void ProcessFull ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
+	void ProcessFull ( const CSphQuery& tQuery, bool bJson, QueryType_e eQueryType, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
 	{
-		SearchHandler_c tHandler ( 1, CreateQueryParser ( bJson ), tQuery.m_eQueryType, false );
+		SearchHandler_c tHandler ( 1, CreateQueryParser ( bJson ), eQueryType, false );
 		tHandler.m_dAcquired.AddIndex ( sIndex, pDesc );
 		tHandler.RunCollect ( tQuery, sIndex, pError, &m_dCompressedDocids );
 
@@ -93,10 +89,10 @@ class DocsCollector_c::Impl_c
 	}
 
 public:
-	Impl_c ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
+	Impl_c ( const CSphQuery& tQuery, bool bJson, QueryType_e eQueryType, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
 	{
-		if ( !ProcessFast ( tQuery, pDesc ) )
-			ProcessFull ( tQuery, bJson, sIndex, pDesc, pError );
+		if ( !ProcessFast ( tQuery ) )
+			ProcessFull ( tQuery, bJson, eQueryType, sIndex, pDesc, pError );
 	}
 
 	bool GetValuesChunk ( CSphVector<DocID_t>& dValues, int iValues )
@@ -130,7 +126,12 @@ public:
 
 /// public iface
 DocsCollector_c::DocsCollector_c ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
-	: m_pImpl { std::make_unique<Impl_c> ( tQuery, bJson, sIndex, pDesc, pError ) }
+	: DocsCollector_c ( tQuery, bJson, tQuery.m_eQueryType, sIndex, pDesc, pError )
+{}
+
+
+DocsCollector_c::DocsCollector_c ( const CSphQuery& tQuery, bool bJson, QueryType_e eQueryType, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
+	: m_pImpl { std::make_unique<Impl_c> ( tQuery, bJson, eQueryType, sIndex, pDesc, pError ) }
 {}
 
 DocsCollector_c::~DocsCollector_c() = default;

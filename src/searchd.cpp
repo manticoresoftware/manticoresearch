@@ -1025,7 +1025,7 @@ void sphGetAttrsToSend ( const ISphSchema & tSchema, bool bAgentMode, bool bNeed
 	int iUuidId = tSchema.GetAttrIndex ( sphGetUuidDocidName() );
 	if ( iUuidId!=-1 )
 	{
-		if ( iId!=-1 )
+		if ( !bAgentMode && iId!=-1 )
 			tAttrs.BitClear(iId);
 
 		// Agents must always send the hidden public UUID string to the master; otherwise
@@ -4362,12 +4362,15 @@ bool IsHttpStmt ( const SqlStmt_t & tStmt )
 static void PopulateMapsFromIndexSchema ( CSphVector<int> & dAttrSchema, CSphVector<int> & dFieldSchema, const CSphSchema & tSchema )
 {
 	assert ( tSchema.GetAttr(0).m_sName==sphGetDocidName() );
-	int iUuidDocid = tSchema.GetAttrIndex ( sphGetUuidDocidName() );
+	const CSphColumnInfo & tDocid = tSchema.GetAttr(0);
+	const bool bUuidDocid = tDocid.IsUuidLinkedDocid();
+	int iUuidDocid = bUuidDocid ? tSchema.GetAttrIndex ( sphGetUuidDocidName() ) : -1;
+	assert ( !bUuidDocid || ( iUuidDocid>=0 && tSchema.GetAttr(iUuidDocid).m_eAttrType==SPH_ATTR_STRING ) );
 
 	ARRAY_FOREACH ( i, dFieldSchema )
 		dFieldSchema[i] = i+1;
 
-	if ( iUuidDocid>=0 )
+	if ( bUuidDocid )
 	{
 		dAttrSchema[0] = -1;
 		dAttrSchema[iUuidDocid] = 0;
@@ -4406,11 +4409,16 @@ bool CreateAttrMaps ( CSphVector<int> & dAttrSchema, CSphVector<int> & dFieldSch
 		return true;
 	}
 
+	const CSphColumnInfo * pDocid = tSchema.GetAttr ( sphGetDocidName() );
+	const bool bUuidDocid = pDocid && pDocid->IsUuidLinkedDocid();
+	const int iUuidDocid = bUuidDocid ? tSchema.GetAttrIndex ( sphGetUuidDocidName() ) : -1;
+	assert ( !bUuidDocid || ( iUuidDocid>=0 && tSchema.GetAttr(iUuidDocid).m_eAttrType==SPH_ATTR_STRING ) );
+
 	// got a list of columns, check for 1) existance, 2) dupes
 	StrVec_t dCheck = dStmtInsertSchema;
 	ARRAY_FOREACH ( i, dCheck )
 	{
-		if ( sphHasUuidDocid(tSchema) && dCheck[i]=="@id" )
+		if ( bUuidDocid && dCheck[i]=="@id" )
 		{
 			tOut.Error ( "attribute '@id' is internal" );
 			return false;
@@ -4466,13 +4474,13 @@ bool CreateAttrMaps ( CSphVector<int> & dAttrSchema, CSphVector<int> & dFieldSch
 	// map attrs
 	ARRAY_FOREACH ( j, dAttrSchema )
 	{
-		if ( j==0 && sphHasUuidDocid(tSchema) )
+		if ( j==0 && bUuidDocid )
 		{
 			dAttrSchema[j] = -1;
 			continue;
 		}
 
-		if ( tSchema.GetAttr(j).m_sName==sphGetUuidDocidName() && dInsertSchema.Exists ( sphGetDocidName() ) )
+		if ( j==iUuidDocid && dInsertSchema.Exists ( sphGetDocidName() ) )
 		{
 			dAttrSchema[j] = dInsertSchema[sphGetDocidName()];
 			continue;
@@ -4494,6 +4502,9 @@ AttributeConverter_c::AttributeConverter_c ( const CSphSchema & tSchema, const C
 	: InsertDocData_c ( tSchema )
 	, m_tSchema ( tSchema )
 	, m_pDocId ( tSchema.GetAttr ( sphGetDocidName() ) )
+	, m_iUuidDocidAttr ( m_pDocId && m_pDocId->IsUuidLinkedDocid()
+		? tSchema.GetAttrIndex ( sphGetUuidDocidName() )
+		: -1 )
 	, m_dFieldAttrs ( dFieldAttrs )
 	, m_sError ( sError )
 	, m_sWarning ( sWarning )
@@ -4512,6 +4523,9 @@ AttributeConverter_c::AttributeConverter_c ( const CSphSchema & tSchema, const C
 
 	m_dColumnarAttrs.Resize(iColumnarAttr);
 	m_tStrings.m_dOff.Reset(iAttrs);
+
+	assert ( !m_pDocId || !m_pDocId->IsUuidLinkedDocid()
+		|| ( m_iUuidDocidAttr>=0 && tSchema.GetAttr ( m_iUuidDocidAttr ).m_eAttrType==SPH_ATTR_STRING ) );
 }
 
 
@@ -4637,20 +4651,20 @@ bool AttributeConverter_c::CheckMVA ( const CSphColumnInfo & tCol, const SqlInse
 }
 
 
-bool AttributeConverter_c::CheckInsertTypes ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx )
+static bool PrepareUuidDocidValue ( const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx, CSphString & sUuid, CSphString & sError )
 {
-	if ( tCol.m_sName==sphGetUuidDocidName() )
+	if ( tVal.m_iType!=SqlInsert_t::QUOTED_STRING || tVal.m_sVal.IsEmpty() )
 	{
-		if ( tVal.m_iType!=SqlInsert_t::QUOTED_STRING )
-		{
-			m_sError = "uuid id must be a non-empty string";
-			return false;
-		}
-
-		if ( !sphCheckUuidDocid ( tVal.m_sVal.cstr(), m_sError ) )
-			return false;
+		sError.SetSprintf ( "row %d, column %d: uuid id must be a non-empty string", 1+iRow, 1+iQuerySchemaIdx ); // 1 for human base
+		return false;
 	}
 
+	return sphPrepareUuidDocid ( tVal.m_sVal.cstr(), sUuid, sError );
+}
+
+
+bool AttributeConverter_c::CheckInsertTypes ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx )
+{
 	// null fits all values as for now it sets default value for any type
 	if ( tVal.m_iType==SqlInsert_t::TOK_NULL )
 		return true;
@@ -4718,29 +4732,28 @@ void AttributeConverter_c::SetDefaultAttrValue ( int iCol )
 bool AttributeConverter_c::SetAttrValue ( int iCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx, CSphString & sError )
 {
 	const CSphColumnInfo & tCol = m_tSchema.GetAttr(iCol);
-	bool bDocId = tCol.m_sName == sphGetDocidName();
-	bool bUuidDocId = tCol.m_sName == sphGetUuidDocidName();
-	const SqlInsert_t * pVal = &tVal;
+	bool bDocId = &tCol==m_pDocId;
+	bool bUuidDocId = iCol==m_iUuidDocidAttr;
 	CSphAttrLocator tLoc = tCol.m_tLocator;
 	tLoc.m_bDynamic = true;
 
-	if ( bUuidDocId && ( tVal.m_iType!=SqlInsert_t::QUOTED_STRING || tVal.m_sVal.IsEmpty() ) )
-	{
-		sError.SetSprintf ( "row %d, column %d: uuid id must be a non-empty string", 1+iRow, 1+iQuerySchemaIdx ); // 1 for human base
-		return false;
-	}
 	if ( bUuidDocId )
 	{
-		m_tNormalizedUuidDocid = tVal;
-		m_tNormalizedUuidDocid.m_sVal = sphNormalizeUuidDocid ( tVal.m_sVal.cstr() );
-		pVal = &m_tNormalizedUuidDocid;
+		CSphString sUuid;
+		if ( !PrepareUuidDocidValue ( tVal, iRow, iQuerySchemaIdx, sUuid, sError ) )
+			return false;
+
+		assert ( m_iUuidString==m_dStrings.GetLength() );
+		m_dStrings.Add ( nullptr );
+		SetUuidDocidString ( std::move ( sUuid ) );
+		return true;
 	}
 
-	if ( !CheckInsertTypes ( tCol, *pVal, iRow, iQuerySchemaIdx ) )
+	if ( !CheckInsertTypes ( tCol, tVal, iRow, iQuerySchemaIdx ) )
 		return false;
 
 	SphAttr_t tAttr;
-	if ( CSphMatchVariant::ConvertPlainAttr ( *pVal, tCol.m_eAttrType, &tCol.m_sName, tAttr, bDocId, sError ) )
+	if ( CSphMatchVariant::ConvertPlainAttr ( tVal, tCol.m_eAttrType, &tCol.m_sName, tAttr, bDocId, sError ) )
 	{
 		if ( tCol.IsColumnar() )
 			m_dColumnarAttrs [ m_dColumnarRemap[iCol] ] = tAttr;
@@ -4753,9 +4766,9 @@ bool AttributeConverter_c::SetAttrValue ( int iCol, const SqlInsert_t & tVal, in
 			return false;
 	}
 
-	if ( !CheckStrings ( tCol, *pVal, iCol, iRow ) )	return false;
-	if ( !CheckJson ( tCol, *pVal ) )				return false;
-	if ( !CheckMVA ( tCol, *pVal, iCol, iRow ) )		return false;
+	if ( !CheckStrings ( tCol, tVal, iCol, iRow ) )	return false;
+	if ( !CheckJson ( tCol, tVal ) )				return false;
+	if ( !CheckMVA ( tCol, tVal, iCol, iRow ) )		return false;
 
 	return true;
 }
@@ -4792,6 +4805,7 @@ void AttributeConverter_c::NewRow()
 	SetID(0);
 	m_dStrings.Resize(0);
 	m_tStrings.Reset();
+	ResetPrimaryIdState();
 	ResetMVAs();
 }
 
@@ -4810,30 +4824,7 @@ static bool IsInsertStringAttr ( ESphAttr eAttr )
 }
 
 
-CSphString sphGenerateUuidDocid ( DocID_t tDocID )
-{
-	// UUIDv8-shaped, injective encoding of the internal auto DocID_t.
-	// Generated public UUID ids therefore inherit the same uniqueness guarantees
-	// as numeric auto ids without doing an @uuid_id lookup on every insert.
-	uint64_t uDocID = (uint64_t)tDocID;
-	unsigned uHi32 = (unsigned)( uDocID>>32 );
-	unsigned uMid16 = (unsigned)( ( uDocID>>16 ) & 0xffff );
-	unsigned uVersion = 0x8000 | (unsigned)( ( uDocID>>4 ) & 0x0fff );
-	unsigned uVariant = 0x8000 | (unsigned)( uDocID & 0x000f );
-
-	CSphString sUuid;
-	sUuid.SetSprintf ( "%08x-%04x-%04x-%04x-000000000000", uHi32, uMid16, uVersion, uVariant );
-	return sUuid;
-}
-
-
-DocID_t sphGenerateAutoDocid()
-{
-	return UidShort();
-}
-
-
-int GetInsertStringAttrOrdinal ( const CSphSchema & tSchema, const char * szAttrName )
+static int GetInsertStringAttrOrdinal ( const CSphSchema & tSchema, const char * szAttrName )
 {
 	int iStringAttr = 0;
 	int iAttrs = tSchema.GetAttrsCount();
@@ -4854,225 +4845,28 @@ int GetInsertStringAttrOrdinal ( const CSphSchema & tSchema, const char * szAttr
 	return -1;
 }
 
-
-static CSphString MakeTxnUuidDocidKey ( const CSphString & sIndex, const CSphString & sUuid )
+struct UuidDocidInsertSchema_t
 {
-	CSphString sKey;
-	sKey.SetSprintf ( "%s:%s", sIndex.cstr(), sUuid.cstr() );
-	return sKey;
-}
+	bool m_bEnabled = false;
+	int m_iUuidAttr = -1;
+	int m_iUuidString = -1;
+};
 
-
-using TxnUuidDocidHash_t = SmallStringHash_T<int64_t, 4096>;
-
-
-static bool FindTxnUuidDocid ( const TxnUuidDocidHash_t & hDocids, const CSphString & sKey, DocID_t & tDocID )
+static UuidDocidInsertSchema_t GetUuidDocidInsertSchema ( const CSphSchema & tSchema )
 {
-	auto * pDocid = hDocids ( sKey );
-	if ( !pDocid )
-		return false;
+	UuidDocidInsertSchema_t tUuidDocid;
+	const CSphColumnInfo * pDocid = tSchema.GetAttr ( sphGetDocidName() );
+	if ( !pDocid || !pDocid->IsUuidLinkedDocid() )
+		return tUuidDocid;
 
-	tDocID = (DocID_t)*pDocid;
-	return true;
-}
+	tUuidDocid.m_bEnabled = true;
+	tUuidDocid.m_iUuidAttr = tSchema.GetAttrIndex ( sphGetUuidDocidName() );
+	tUuidDocid.m_iUuidString = GetInsertStringAttrOrdinal ( tSchema, sphGetUuidDocidName() );
 
-
-static void AddTxnUuidDocid ( TxnUuidDocidHash_t & hDocids, const CSphString & sKey, DocID_t tDocID )
-{
-	if ( !hDocids.Add ( (int64_t)tDocID, sKey ) )
-	{
-		int64_t * pDocid = hDocids ( sKey );
-		assert ( pDocid );
-		*pDocid = (int64_t)tDocID;
-	}
-}
-
-
-static bool LookupUuidDocid ( const CSphString & sIndex, const cServedIndexRefPtr_c & pServed, const CSphString & sUuid, int iLimit, CSphVector<DocID_t> & dDocids, CSphString & sError )
-{
-	if ( pServed && ServedDesc_t::IsMutable ( pServed ) )
-	{
-		RIdx_T<const RtIndex_i*> pIndex { pServed };
-		if ( pIndex->LookupUuidDocid ( sUuid, iLimit, dDocids ) )
-			return true;
-	}
-
-	CSphQuery tQuery;
-	SetQueryDefaultsExt2 ( tQuery );
-	tQuery.m_eQueryType = QUERY_SQL;
-	tQuery.m_sIndexes = sIndex;
-	tQuery.m_sSelect = sphGetDocidName();
-	tQuery.m_iLimit = iLimit;
-	tQuery.m_iMaxMatches = iLimit;
-
-	CSphFilterSettings & tFilter = tQuery.m_dFilters.Add();
-	tFilter.m_sAttrName = sphGetDocidName();
-	tFilter.m_eType = SPH_FILTER_STRING;
-	tFilter.m_dStrings.Add ( sUuid.cstr() );
-	tFilter.m_bExclude = false;
-
-	DocsCollector_c tCollector { tQuery, false, sIndex, pServed, &sError };
-	if ( !sError.IsEmpty() )
-		return false;
-
-	dDocids.Reset();
-	dDocids.Append ( tCollector.GetValuesSlice() );
-	return true;
-}
-
-
-static bool HasAnyExistingUuidDocids ( const CSphString & sIndex, const cServedIndexRefPtr_c & pServed, const VecTraits_T<CSphString> & dUuids, CSphString & sError )
-{
-	if ( dUuids.IsEmpty() )
-		return false;
-
-	if ( pServed && ServedDesc_t::IsMutable ( pServed ) )
-	{
-		bool bHasAny = false;
-		RIdx_T<const RtIndex_i*> pIndex { pServed };
-		if ( pIndex->HasAnyUuidDocid ( dUuids, bHasAny ) )
-			return bHasAny;
-	}
-
-	CSphQuery tQuery;
-	SetQueryDefaultsExt2 ( tQuery );
-	tQuery.m_eQueryType = QUERY_SQL;
-	tQuery.m_sIndexes = sIndex;
-	tQuery.m_sSelect = sphGetDocidName();
-	tQuery.m_iLimit = 1;
-	tQuery.m_iMaxMatches = 1;
-
-	CSphFilterSettings & tFilter = tQuery.m_dFilters.Add();
-	tFilter.m_sAttrName = sphGetDocidName();
-	tFilter.m_eType = SPH_FILTER_STRING_LIST;
-	tFilter.m_bExclude = false;
-	tFilter.m_dStrings.Reserve ( dUuids.GetLength() );
-	for ( const CSphString & sUuid : dUuids )
-		tFilter.m_dStrings.Add ( sUuid.cstr() );
-
-	DocsCollector_c tCollector { tQuery, false, sIndex, pServed, &sError };
-	if ( !sError.IsEmpty() )
-		return true;
-
-	return !tCollector.GetValuesSlice().IsEmpty();
-}
-
-
-static bool CheckTxnInsertUuidDocids ( const CSphString & sIndex, const cServedIndexRefPtr_c & pServed, const VecTraits_T<CSphString> & dUuids, CSphString & sError )
-{
-	if ( !HasAnyExistingUuidDocids ( sIndex, pServed, dUuids, sError ) )
-		return sError.IsEmpty();
-
-	if ( !sError.IsEmpty() )
-		return false;
-
-	CSphVector<DocID_t> dDocids;
-	for ( const CSphString & sUuid : dUuids )
-	{
-		if ( !LookupUuidDocid ( sIndex, pServed, sUuid, 1, dDocids, sError ) )
-			return false;
-
-		if ( !dDocids.IsEmpty() )
-		{
-			sError.SetSprintf ( "duplicate id '%s'", sUuid.cstr() );
-			return false;
-		}
-	}
-
-	sError = "duplicate uuid id";
-	return false;
-}
-
-
-static bool ResolveUuidDocidForInsert ( const CSphString & sIndex, const cServedIndexRefPtr_c & pServed, int iUuidString, const CSphString & sUuid, AttributeConverter_c & tConverter, bool bReplace, bool bGeneratedUuid, sph::StringSet & dSeenUuidDocids, TxnUuidDocidHash_t & hStmtUuidDocids, bool bUseTxnUuidDocids, TxnUuidDocidHash_t & hTxnUuidDocids, CSphVector<CSphString> & dTxnInsertUuidDocids, CSphVector<CSphString> * pLastIdStrings, CSphString & sError )
-{
-	if ( iUuidString<0 )
-		return true;
-
-	if ( sUuid.IsEmpty() )
-	{
-		sError.SetSprintf ( "internal error: missing uuid id value" );
-		return false;
-	}
-
-	if ( !sphCheckUuidDocid ( sUuid.cstr(), sError ) )
-		return false;
-
-	if ( !dSeenUuidDocids.Add ( sUuid ) && !bReplace )
-	{
-		sError.SetSprintf ( "duplicate id '%s'", sUuid.cstr() );
-		return false;
-	}
-	if ( pLastIdStrings )
-		pLastIdStrings->Add ( sUuid );
-
-	// Server-generated UUIDs are new public ids by construction. Avoid an
-	// indexed lookup per inserted row; explicit UUIDs still need it to reject
-	// duplicate INSERTs and to map REPLACE to an existing internal DocID_t.
-	if ( bGeneratedUuid )
-		return true;
-
-	CSphString sTxnKey = MakeTxnUuidDocidKey ( sIndex, sUuid );
-	DocID_t tMappedDocID = 0;
-	if ( FindTxnUuidDocid ( hStmtUuidDocids, sTxnKey, tMappedDocID ) )
-	{
-		tConverter.SetID ( tMappedDocID );
-		return true;
-	}
-
-	if ( bUseTxnUuidDocids )
-	{
-		if ( FindTxnUuidDocid ( hTxnUuidDocids, sTxnKey, tMappedDocID ) )
-		{
-			tConverter.SetID ( tMappedDocID );
-			AddTxnUuidDocid ( hStmtUuidDocids, sTxnKey, tMappedDocID );
-			return true;
-		}
-	}
-
-	// In a transaction (notably /json/bulk), explicit UUID INSERTs used to run
-	// an @id string lookup for every row. Defer duplicate detection to commit and
-	// run a single string-list lookup for the accumulated UUIDs instead.
-	if ( bUseTxnUuidDocids && !bReplace )
-	{
-		if ( !tConverter.GetID() )
-			tConverter.SetID ( sphGenerateAutoDocid() );
-
-		AddTxnUuidDocid ( hStmtUuidDocids, sTxnKey, tConverter.GetID() );
-		AddTxnUuidDocid ( hTxnUuidDocids, sTxnKey, tConverter.GetID() );
-		dTxnInsertUuidDocids.Add ( sUuid );
-		return true;
-	}
-
-	CSphVector<DocID_t> dDocids;
-	if ( !LookupUuidDocid ( sIndex, pServed, sUuid, 2, dDocids, sError ) )
-		return false;
-
-	if ( dDocids.GetLength()>1 )
-	{
-		sError.SetSprintf ( "duplicate uuid id '%s'", sUuid.cstr() );
-		return false;
-	}
-
-	if ( dDocids.GetLength() )
-	{
-		if ( !bReplace )
-		{
-			sError.SetSprintf ( "duplicate id '%s'", sUuid.cstr() );
-			return false;
-		}
-
-		tConverter.SetID ( dDocids[0] );
-	}
-	else if ( !tConverter.GetID() )
-		tConverter.SetID ( sphGenerateAutoDocid() );
-
-	AddTxnUuidDocid ( hStmtUuidDocids, sTxnKey, tConverter.GetID() );
-
-	if ( bUseTxnUuidDocids )
-		AddTxnUuidDocid ( hTxnUuidDocids, sTxnKey, tConverter.GetID() );
-
-	return true;
+	assert ( pDocid->IsUuidLinkedDocid() );
+	assert ( tUuidDocid.m_iUuidAttr>=0 && tSchema.GetAttr ( tUuidDocid.m_iUuidAttr ).m_eAttrType==SPH_ATTR_STRING );
+	assert ( tUuidDocid.m_iUuidString>=0 );
+	return tUuidDocid;
 }
 
 
@@ -5157,8 +4951,6 @@ void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery )
 			return tOut.Error ( "%s", sError.cstr() );
 		}
 	}
-	pSession->m_hTxnUuidDocids.Reset();
-	pSession->m_dTxnInsertUuidDocids.Resize ( 0 );
 	pSession->m_bInTransaction = true;
 	tOut.Ok ( 0 );
 }
@@ -5173,9 +4965,6 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 
 	MEMORY ( MEM_SQL_COMMIT );
 	pSession->m_bInTransaction = false;
-	CSphVector<CSphString> dTxnInsertUuidDocids;
-	dTxnInsertUuidDocids.SwapData ( pSession->m_dTxnInsertUuidDocids );
-	pSession->m_hTxnUuidDocids.Reset();
 	int iDeleted = 0;
 
 	if ( pSession->m_tShardTxn.HasPendingData() )
@@ -5208,17 +4997,6 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 		if ( bCommit )
 		{
 			StatCountCommand ( SEARCHD_COMMAND_COMMIT );
-			if ( !dTxnInsertUuidDocids.IsEmpty() )
-			{
-				auto pServed = GetServed ( pAccum->GetIndexName() );
-				if ( !CheckTxnInsertUuidDocids ( pAccum->GetIndexName(), pServed, dTxnInsertUuidDocids, sError ) )
-				{
-					pIndex->RollBack ( pAccum );
-					tOut.Error ( "%s", sError.cstr() );
-					return;
-				}
-			}
-
 			if ( !HandleCmdReplicateDelete ( *pAccum, iDeleted ) )
 			{
 				TlsMsg::MoveError(sError);
@@ -5346,7 +5124,9 @@ static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServe
 
 	// get schema, check values count
 	const CSphSchema & tSchema = pIndex->GetMatchSchema ();
-	const bool bUuidDocid = sphHasUuidDocid(tSchema);
+	const UuidDocidInsertSchema_t tUuidDocid = GetUuidDocidInsertSchema ( tSchema );
+	const bool bUuidDocid = tUuidDocid.m_bEnabled;
+
 	int iSchemaSz = tSchema.GetAttrsCount() + tSchema.GetFieldsCount();
 	if ( bUuidDocid )
 		iSchemaSz--;
@@ -5413,18 +5193,14 @@ static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServe
 	tIdLoc.m_bDynamic = true;
 
 	AttributeConverter_c tConverter ( tSchema, dFieldAttrs, sError, sWarning );
-	int iUuidString = bUuidDocid ? GetInsertStringAttrOrdinal ( tSchema, sphGetUuidDocidName() ) : -1;
-	sph::StringSet dSeenUuidDocids;
-	TxnUuidDocidHash_t hStmtUuidDocids;
 
 	// convert attrs
 	for ( int iRow=0; iRow<tStmt.m_iRowsAffected; iRow++ )
 	{
 		assert ( sError.IsEmpty() );
 		tConverter.NewRow();
-		SqlInsert_t tGeneratedUuid;
-		CSphString sUuidDocid;
-		bool bHaveInternalDocid = false;
+		if ( bUuidDocid )
+			tConverter.m_iUuidString = tUuidDocid.m_iUuidString;
 
 		int iSchemaAttrCount = tSchema.GetAttrsCount();
 		int iFieldLenAttr = tSchema.GetAttrId_FirstFieldLen();
@@ -5436,27 +5212,22 @@ static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServe
 		for ( int i=0; i<iSchemaAttrCount && bOk; i++ )
 		{
 			int iQuerySchemaIdx = dAttrSchema[i];
-			const CSphString & sAttrName = tSchema.GetAttr(i).m_sName;
-			if ( iQuerySchemaIdx < 0 && bUuidDocid && sAttrName==sphGetUuidDocidName() )
+			if ( iQuerySchemaIdx < 0 )
 			{
-				tConverter.SetID ( sphGenerateAutoDocid() );
-				bHaveInternalDocid = true;
-
-				tGeneratedUuid.m_iType = SqlInsert_t::QUOTED_STRING;
-				tGeneratedUuid.m_sVal = sphGenerateUuidDocid ( tConverter.GetID() );
-				sUuidDocid = tGeneratedUuid.m_sVal;
-				bOk = tConverter.SetAttrValue ( i, tGeneratedUuid, iRow, iQuerySchemaIdx, sError );
-			}
-			else if ( iQuerySchemaIdx < 0 && bUuidDocid && sAttrName==sphGetDocidName() && bHaveInternalDocid )
-				continue;
-			else if ( iQuerySchemaIdx < 0 )
 				tConverter.SetDefaultAttrValue(i);
+				if ( i==tUuidDocid.m_iUuidAttr )
+				{
+					tConverter.m_eDocidMode = InsertDocidMode_e::UUID_AUTO;
+				}
+			}
 			else
 			{
 				const SqlInsert_t & tInsertValue = tStmt.m_dInsertValues[iQuerySchemaIdx + iRow * iExp];
 				bOk = tConverter.SetAttrValue ( i, tInsertValue, iRow, iQuerySchemaIdx, sError );
-				if ( bOk && bUuidDocid && sAttrName==sphGetUuidDocidName() )
-					sUuidDocid = sphNormalizeUuidDocid ( tInsertValue.m_sVal.cstr() );
+				if ( bOk && i==tUuidDocid.m_iUuidAttr )
+				{
+					tConverter.m_eDocidMode = InsertDocidMode_e::UUID_EXPLICIT;
+				}
 			}
 		}
 
@@ -5487,13 +5258,22 @@ static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServe
 		}
 		else
 		{
-			bool bGeneratedUuid = !tGeneratedUuid.m_sVal.IsEmpty();
-			bool bReplaceRow = bReplace && !bGeneratedUuid;
-			if ( !ResolveUuidDocidForInsert ( tStmt.m_sIndex, pServed, iUuidString, sUuidDocid, tConverter, bReplaceRow, bGeneratedUuid, dSeenUuidDocids, hStmtUuidDocids, !pSession->m_bAutoCommit || pSession->m_bInTransaction, pSession->m_hTxnUuidDocids, pSession->m_dTxnInsertUuidDocids, iUuidString>=0 ? &dIdStrings : nullptr, sError ) )
+			bool bReplaceRow = bReplace;
+			if ( !pIndex->AddDocument ( tConverter, bReplaceRow, tStmt.m_sStringParam, sError, sWarning, pAccum ) )
 				break;
 
-			pIndex->AddDocument ( tConverter, bReplaceRow, tStmt.m_sStringParam, sError, sWarning, pAccum );
 			dIds.Add ( tConverter.GetID() );
+			if ( bUuidDocid )
+			{
+				const char * szUuid = tConverter.GetUuidDocidString();
+				if ( !szUuid || !*szUuid )
+				{
+					sError = "internal error: missing uuid id value";
+					break;
+				}
+
+				dIdStrings.Add ( szUuid );
+			}
 
 			pAccum->AddCommand ( ReplCmd_e::RT_TRX, tStmt.m_sIndex, tStmt.m_sCluster );
 		}
@@ -5552,7 +5332,7 @@ static void CommitAcc ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed,
 	}
 
 	int64_t iLastInsertId = 0;
-	if ( dLastIds.GetLength() && !sphHasUuidDocid ( RIdx_c ( pServed )->GetMatchSchema() ) )
+	if ( dLastIds.GetLength() && pSession->m_dLastIdStrings.IsEmpty() )
 		iLastInsertId = dLastIds.Last();
 
 	// my OK packet
@@ -6748,7 +6528,7 @@ static void AddAttributeDesc ( VectorLike & dOut, const CSphColumnInfo & tAttr, 
 	if ( !dOut.MatchAdd ( tAttr.m_sName.cstr() ) )
 		return;
 
-	if ( sphHasUuidDocid(tSchema) && tAttr.m_sName==sphGetDocidName() )
+	if ( tAttr.m_sName==sphGetDocidName() && tAttr.IsUuidLinkedDocid() )
 		dOut.Add ( "uuid" );
 	else if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER && tAttr.m_tLocator.m_iBitCount!=ROWITEM_BITS && tAttr.m_tLocator.m_iBitCount>0 )
 	{
@@ -7066,9 +6846,9 @@ static bool CheckCreateTable ( const CSphString & sIndex, const CreateTableSetti
 			{
 				CSphString sType = tOpt.m_sValue;
 				sType.ToLower();
-				if ( sType!="rt" && sType!="shard" )
+				if ( sType!="rt" )
 				{
-					sError = "uuid id is supported for real-time and sharded tables only";
+					sError = "uuid id is supported for real-time tables only";
 					return false;
 				}
 			}
@@ -8887,6 +8667,35 @@ static std::unique_ptr<ReplicationCommand_t> MakePercolateDeleteDocumentsCommand
 	return nullptr;
 }
 
+static bool CollectUuidDeleteKeys ( const CSphQuery & tQuery, const ISphSchema & tSchema, StrVec_t & dUuidKeys, CSphString & sError )
+{
+	if ( !sphHasUuidDocid ( tSchema ) )
+		return true;
+
+	if ( !tQuery.m_sQuery.IsEmpty() || !tQuery.m_dFilterTree.IsEmpty() || tQuery.m_dFilters.GetLength()!=1 )
+		return true;
+
+	const CSphFilterSettings & tFilter = tQuery.m_dFilters[0];
+	if ( tFilter.m_sAttrName!=sphGetDocidName() || tFilter.m_bExclude )
+		return true;
+
+	if ( tFilter.m_eType!=SPH_FILTER_STRING && tFilter.m_eType!=SPH_FILTER_STRING_LIST )
+		return true;
+
+	if ( tFilter.m_eStrCmpDir!=EStrCmpDir::EQ )
+		return true;
+
+	for ( const CSphString & sUuid : tFilter.m_dStrings )
+	{
+		CSphString sNormalizedUuid;
+		if ( !sphPrepareUuidDocid ( sUuid.cstr(), sNormalizedUuid, sError ) )
+			return false;
+
+		dUuidKeys.Add ( sNormalizedUuid );
+	}
+
+	return true;
+}
 
 static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * sDistributed, const SqlStmt_t & tStmt,
 		SearchFailuresLog_c & dErrors, bool bCommit, CSphSessionAccum & tAcc )
@@ -8920,10 +8729,9 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 			return err ( "Storing del subset not implemented for PQ tables" );
 
 		assert ( sStore.Begins ( "@" ) );
-		CSphQuery tCollectQuery = tStmt.m_tQuery;
-		const bool bJsonCollect = tStmt.m_bJson || tCollectQuery.m_eQueryType==QUERY_JSON;
-		tCollectQuery.m_eQueryType = bJsonCollect ? QUERY_JSON : QUERY_SQL;
-		DocsCollector_c dData { tCollectQuery, bJsonCollect, sName, pServed, &sError };
+		const bool bJsonCollect = tStmt.m_bJson || tStmt.m_tQuery.m_eQueryType==QUERY_JSON;
+		const QueryType_e eCollectQueryType = bJsonCollect ? QUERY_JSON : QUERY_SQL;
+		DocsCollector_c dData { tStmt.m_tQuery, bJsonCollect, eCollectQueryType, sName, pServed, &sError };
 		auto dDocs = dData.GetValuesSlice();
 		if ( !sError.IsEmpty() )
 			return err();
@@ -8960,10 +8768,9 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 		pAccum->m_dCmd.Add ( std::move ( pCmd ) );
 	} else
 	{
-		CSphQuery tCollectQuery = tStmt.m_tQuery;
-		const bool bJsonCollect = tStmt.m_bJson || tCollectQuery.m_eQueryType==QUERY_JSON;
-		tCollectQuery.m_eQueryType = bJsonCollect ? QUERY_JSON : QUERY_SQL;
-		DocsCollector_c dData { tCollectQuery, bJsonCollect, sName, pServed, &sError};
+		const bool bJsonCollect = tStmt.m_bJson || tStmt.m_tQuery.m_eQueryType==QUERY_JSON;
+		const QueryType_e eCollectQueryType = bJsonCollect ? QUERY_JSON : QUERY_SQL;
+		DocsCollector_c dData { tStmt.m_tQuery, bJsonCollect, eCollectQueryType, sName, pServed, &sError };
 		auto dDocs = dData.GetValuesSlice();
 		if ( !sError.IsEmpty() )
 			return err();
@@ -8973,11 +8780,22 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 		if ( !sError.IsEmpty() )
 			return err();
 
+		StrVec_t dUuidKeys;
+		if ( !sCluster.IsEmpty() && !CollectUuidDeleteKeys ( tStmt.m_tQuery, pRtIndex->GetMatchSchema(), dUuidKeys, sError ) )
+			return err();
+
 		if ( !pRtIndex->DeleteDocument ( dDocs, sError, pAccum ) ) // assume dData is alive, as we use slice from internal vec
 			return err();
 
 		assert ( pAccum );
-		pAccum->AddCommand ( ReplCmd_e::RT_TRX, sName, sCluster );
+		ReplicationCommand_t * pCmd = pAccum->AddCommand ( ReplCmd_e::RT_TRX, sName, sCluster );
+		if ( !dUuidKeys.IsEmpty() )
+		{
+			if ( pCmd->m_dUuidKeys.IsEmpty() )
+				pCmd->m_dUuidKeys.SwapData ( dUuidKeys );
+			else
+				pCmd->m_dUuidKeys.Append ( dUuidKeys );
+		}
 	}
 
 	int iAffected = 0;
@@ -9548,12 +9366,6 @@ static bool HandleSetLocal ( CSphString& sError, const CSphString& sName, int64_
 		auto pSession = session::Info().GetClientSession();
 		pSession->m_bAutoCommit = bAutoCommit;
 		pSession->m_bInTransaction = false;
-		CSphVector<CSphString> dTxnInsertUuidDocids;
-		if ( bAutoCommit )
-			dTxnInsertUuidDocids.SwapData ( pSession->m_dTxnInsertUuidDocids );
-		else
-			pSession->m_dTxnInsertUuidDocids.Resize ( 0 );
-		pSession->m_hTxnUuidDocids.Reset();
 
 		// commit all pending changes
 		if ( bAutoCommit && pSession->m_tShardTxn.HasPendingData() )
@@ -9562,17 +9374,6 @@ static bool HandleSetLocal ( CSphString& sError, const CSphString& sName, int64_
 			if ( !CommitShardTxn ( *pSession, sError, &dCommittedDocIDs ) )
 			{
 				pSession->m_dLastIds.SwapData ( dCommittedDocIDs );
-				return false;
-			}
-		}
-
-		if ( bAutoCommit && tAcc.GetIndex() && !dTxnInsertUuidDocids.IsEmpty() )
-		{
-			RtAccum_t * pAccum = tAcc.GetAcc();
-			auto pServed = GetServed ( pAccum->GetIndexName() );
-			if ( !CheckTxnInsertUuidDocids ( pAccum->GetIndexName(), pServed, dTxnInsertUuidDocids, sError ) )
-			{
-				tAcc.GetIndex()->RollBack ( pAccum );
 				return false;
 			}
 		}
@@ -13169,19 +12970,12 @@ void session::SetAutoCommit ( bool bAutoCommit )
 {
 	auto * pSession = GetClientSession();
 	pSession->m_bAutoCommit = bAutoCommit;
-	pSession->m_hTxnUuidDocids.Reset();
-	pSession->m_dTxnInsertUuidDocids.Resize ( 0 );
 }
 
 void session::SetInTrans ( bool bInTrans )
 {
 	auto * pSession = GetClientSession();
 	pSession->m_bInTransaction = bInTrans;
-	if ( !bInTrans )
-	{
-		pSession->m_hTxnUuidDocids.Reset();
-		pSession->m_dTxnInsertUuidDocids.Resize ( 0 );
-	}
 }
 
 bool session::IsInTrans ()

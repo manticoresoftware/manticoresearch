@@ -329,19 +329,30 @@ const RtTypedAttr_t & GetRtType ( int iType )
 }
 
 
-static const char * g_sUuidDocidName = "@uuid_id";
-
 const char * sphGetUuidDocidName()
 {
-	return g_sUuidDocidName;
+	static const char * UUID_DOCID_ATTR = "@uuid_id";
+	return UUID_DOCID_ATTR;
 }
-
 
 bool sphHasUuidDocid ( const ISphSchema & tSchema )
 {
+	const CSphColumnInfo * pDocid = tSchema.GetAttr ( sphGetDocidName() );
+	if ( !pDocid || !pDocid->IsUuidLinkedDocid() )
+		return false;
+
+#ifndef NDEBUG
 	const CSphColumnInfo * pUuidId = tSchema.GetAttr ( sphGetUuidDocidName() );
-	return pUuidId && pUuidId->m_eAttrType==SPH_ATTR_STRING;
+	assert ( pUuidId && pUuidId->m_eAttrType==SPH_ATTR_STRING );
+#endif
+	return true;
 }
+
+
+static constexpr int UUID_DOCID_LENGTH = 36;
+static constexpr int UUID_DOCID_VERSION_POS = 14;
+static constexpr int UUID_DOCID_VARIANT_POS = 19;
+static constexpr int UUID_DOCID_GROUP_LENGTHS[] = { 8, 4, 4, 4, 12 };
 
 
 static bool IsUuidHex ( char c )
@@ -362,30 +373,30 @@ static bool IsUuidVariant ( char c )
 }
 
 
-bool sphIsValidUuidDocid ( const char * szUuid )
+static bool IsUuidDocid ( Str_t tUuid )
 {
-	if ( !szUuid )
+	if ( !tUuid.first || tUuid.second!=UUID_DOCID_LENGTH )
 		return false;
 
-	for ( int i=0; i<36; ++i )
+	const char * pCur = tUuid.first;
+	const char * pEnd = pCur + UUID_DOCID_LENGTH;
+	for ( int iGroupLength : UUID_DOCID_GROUP_LENGTHS )
 	{
-		char c = szUuid[i];
-		if ( !c )
-			return false;
-
-		if ( i==8 || i==13 || i==18 || i==23 )
-		{
-			if ( c!='-' )
+		const char * pGroupEnd = pCur + iGroupLength;
+		while ( pCur<pGroupEnd )
+			if ( !IsUuidHex ( *pCur++ ) )
 				return false;
-		} else if ( !IsUuidHex(c) )
+
+		if ( pCur<pEnd && *pCur++!='-' )
 			return false;
 	}
 
-	return szUuid[36]=='\0' && IsUuidVersion ( szUuid[14] ) && IsUuidVariant ( szUuid[19] );
+	assert ( pCur==pEnd );
+	return IsUuidVersion ( tUuid.first[UUID_DOCID_VERSION_POS] ) && IsUuidVariant ( tUuid.first[UUID_DOCID_VARIANT_POS] );
 }
 
 
-bool sphCheckUuidDocid ( const char * szUuid, CSphString & sError )
+bool sphPrepareUuidDocid ( const char * szUuid, CSphString & sNormalizedUuid, CSphString & sError )
 {
 	if ( !szUuid || !*szUuid )
 	{
@@ -393,21 +404,29 @@ bool sphCheckUuidDocid ( const char * szUuid, CSphString & sError )
 		return false;
 	}
 
-	if ( !sphIsValidUuidDocid ( szUuid ) )
+	if ( !IsUuidDocid ( { szUuid, (int)strlen(szUuid) } ) )
 	{
 		sError.SetSprintf ( "invalid uuid id '%s'", szUuid );
 		return false;
 	}
 
+	CSphString sNormalized = szUuid;
+	sNormalized.ToLower();
+	sNormalizedUuid.Swap ( sNormalized );
 	return true;
 }
 
 
-CSphString sphNormalizeUuidDocid ( const char * szUuid )
+bool sphIsNormalizedUuidDocid ( Str_t tUuid )
 {
-	CSphString sUuid = szUuid;
-	sUuid.ToLower();
-	return sUuid;
+	if ( !IsUuidDocid ( tUuid ) )
+		return false;
+
+	for ( int i=0; i<tUuid.second; ++i )
+		if ( tUuid.first[i]>='A' && tUuid.first[i]<='F' )
+			return false;
+
+	return true;
 }
 
 
@@ -2836,7 +2855,7 @@ static CSphString BuildCreateTableImpl ( const CSphString & sName, const CSphSch
 	const CSphColumnInfo * pId = tSchema.GetAttr("id");
 	assert(pId);
 
-	sRes << FormatCreateTableAttr ( *pId, tSettings, iNumColumnar, bQuote, sphHasUuidDocid(tSchema) ? "uuid" : nullptr );
+	sRes << FormatCreateTableAttr ( *pId, tSettings, iNumColumnar, bQuote, pId->IsUuidLinkedDocid() ? "uuid" : nullptr );
 
 	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
 	{

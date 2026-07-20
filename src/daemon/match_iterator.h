@@ -36,13 +36,10 @@ class MatchIterator_c
 	int m_iLimit;
 	std::function<int  ( int )> m_fnOrder; // use to access matches by accending docid order
 	bool m_bTailClean = false;
-	CSphAttrLocator m_tDocIDLocator;
-	bool m_bUseDocIDLocator = false;
 
 	bool MaybeUseWordOrder ( const CSphSwapVector<CSphMatch> & dMatches ) const noexcept;
 	bool MaybeUseDwordOrder ( const CSphSwapVector<CSphMatch> & dMatches ) const noexcept;
 	void UseTags ( VecTraits_T<CSphMatch> & dOrder ) noexcept;
-	DocID_t GetDocID ( const CSphMatch & tMatch ) const noexcept;
 
 public:
 	OneResultset_t & m_tResult;

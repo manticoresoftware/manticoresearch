@@ -497,6 +497,10 @@ void CSphSchema::SetupColumnarFlags ( const CSphSourceSettings & tSettings, StrV
 		hNoHashes.Add ( 0, i );
 	}
 
+	const CSphColumnInfo * pDocid = GetAttr ( sphGetDocidName() );
+	bool bUuidLinked = pDocid && pDocid->IsUuidLinkedDocid();
+	const CSphColumnInfo * pUuidDocid = bUuidLinked ? GetAttr ( sphGetUuidDocidName() ) : nullptr;
+	assert ( !bUuidLinked || ( pUuidDocid && pUuidDocid->m_eAttrType==SPH_ATTR_STRING ) );
 	bool bHaveColumnar = false;
 	for ( auto& tAttr : m_dAttrs )
 	{
@@ -510,7 +514,8 @@ void CSphSchema::SetupColumnarFlags ( const CSphSourceSettings & tSettings, StrV
 			}
 		}
 
-		if ( sphIsInternalAttr ( tAttr ) )
+		bool bUuidDocidStorage = &tAttr==pUuidDocid;
+		if ( sphIsInternalAttr ( tAttr ) && !bUuidDocidStorage )
 			tAttr.m_eEngine = AttrEngine_e::ROWWISE;
 		else
 		{

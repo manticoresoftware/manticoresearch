@@ -453,7 +453,7 @@ deleteRequest.SetId(1)
 <!-- example delete 4 -->
 这里，从名为`test`的表中删除具有`id`匹配值的文档：
 
-注意，带有`id=N`或`id IN (X,Y)`的形式的删除操作最快，因为它们在不执行搜索的情况下删除文档。
+对于 numeric-ID 表，使用 `id=N` 或 `id IN (X,Y)` 的删除形式最快，因为它们会在不执行搜索的情况下删除文档。
 还请注意，响应中仅包含对应于`_id`字段的第一个被删除文档的id。
 
 <!-- intro -->
@@ -595,7 +595,7 @@ POST /delete
     }
 }
 
-POST /search 
+POST /search
 {
   "table": "test"
 }

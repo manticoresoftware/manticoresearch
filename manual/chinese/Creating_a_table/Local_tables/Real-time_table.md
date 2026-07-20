@@ -290,7 +290,7 @@ POST /sql?mode=raw -d "create table products LIKE old_products WITH DATA"
 * [清空表](../../Emptying_a_table.md)。
 * 使用 `ALTER` 命令在线更改架构，如 [在线更改架构](../../Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode) 所述。
 * 在配置文件中定义表，如 [定义表](../../Creating_a_table/Local_tables/Real-time_table.md) 所述。
-* 使用 [UUID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) 功能自动提供 ID。
+* 使用[自动 ID 生成](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID)。
 
 ### ⛔ 实时表中无法执行的操作：
 * 不能使用 [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 功能进行数据摄取。

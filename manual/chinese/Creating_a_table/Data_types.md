@@ -358,9 +358,9 @@ create table tbl(title text, type int, price float engine='columnar') engine='ro
 
 ## 文档 ID
 
-文档标识符是一个必填属性，且必须唯一。Document ID 支持无符号 64 位值。显式指定的 document ID 必须非零；不允许使用负数 document ID。即使未显式指定，Document ID 也始终启用，并且不能更新。
+每个表都有一个文档 ID。它必须唯一且不能更新。默认情况下，文档 ID 是无符号 64 位值。显式指定的数字文档 ID 必须非零；不允许使用负数文档 ID。实时表也可以使用 UUID 文档 ID，详见 [UUID document IDs](../Creating_a_table/Data_types.md#UUID-document-IDs)。
 
-在声明表时，你可以在 `CREATE TABLE` schema 中包含 `id`，但无论使用哪种数据类型，它都会按上述方式工作。在 MySQL/SQL 接口中，ID 以有符号 64 位 `bigint` 形式暴露，因此较大的无符号 ID 值在那里可能显示为负数。
+对于数字文档 ID，你可以在 `CREATE TABLE` 模式中声明 `id bigint`，也可以省略它，让 Manticore 自动添加。在 MySQL/SQL 接口中，数字 ID 会以有符号 64 位 `bigint` 的形式暴露，因此较大的无符号 ID 值在这里可能显示为负数。
 
 ```sql
 mysql> CREATE TABLE tbl(id bigint, content text);
@@ -387,9 +387,57 @@ DESC tbl;
 2 rows in set (0.00 sec)
 ```
 
-Auto-ID 生成取决于表类型。RT 和 PQ 表在 insert 或 replace 请求中省略 ID，或者将 ID 值设为 `0` 时，都可以生成 ID。由外部来源构建的 Plain 表不支持自动 ID 生成；其源数据必须提供显式、唯一、非零的无符号 64 位 document ID。
+自动 ID 生成取决于表和 ID 类型。使用数字 ID 的 RT 和 PQ 表在插入或替换请求中省略 ID，或者使用 `0` 时，可以自动生成 ID。`id uuid` 的 RT 表只有在省略 `id` 时才会生成 UUID。由外部源构建的普通表不支持自动 ID 生成；其源数据必须提供显式、唯一、非零的无符号 64 位文档 ID。
 
-处理 document ID 时，需要知道无符号 64 位值会因接口不同而以不同方式处理：
+### UUID 文档 ID
+
+实时表可以通过将主键声明为 `id uuid` 来使用 UUID 文档 ID。显式 UUID 必须是带引号的 36 字符字符串，格式为 `xxxxxxxx-xxxx-Vxxx-Wxxx-xxxxxxxxxxxx`，其中每个 `x` 都是十六进制数字。`V` 是版本位，必须是 `1` 到 `8` 之间的值。`W` 是变体位，必须是 `8`、`9`、`a` 或 `b`。例如，在 `550e8400-e29b-41d4-a716-446655440000` 中，版本是 `4`，变体是 `a`。接受大写十六进制字母，并会统一规范为小写。
+
+省略 `id` 可自动生成 UUID。这适用于 SQL `INSERT` 和 `REPLACE`、原生 JSON 插入和替换请求，以及与 Elasticsearch 兼容的 `_bulk` `index` 和 `create` 操作。Manticore 生成的 UUIDv8 源自其内部自动生成的数字文档 ID。生成的 UUID 与数字自动 ID 具有相同的唯一性保证，并不是随机的 UUIDv4 值。
+
+SQL 会将 UUID ID 作为字符串返回。原生 JSON 写入响应使用 `id`，而 JSON 搜索和与 Elasticsearch 兼容的响应使用 `_id`。
+
+UUID ID 支持相等和 `IN` 过滤器，并且可与 `REPLACE`、`UPDATE` 和 `DELETE` 一起使用，即使 RAM 块已刷新到磁盘后也是如此。`ORDER BY id`、`GROUP BY id` 和 `COUNT(DISTINCT id)` 使用 UUID 字符串值。对于 UUID-ID 表，`LAST_INSERT_ID()` 和 `@@session.last_insert_id` 返回公开的 UUID 字符串。
+
+限制：
+
+* 只有 `id` 列可以使用 `uuid` 类型；普通属性不能声明为 `uuid`。
+* UUID 文档 ID 仅支持实时表，包括列式实时表和复制实时表。不支持由 plain/indexer 创建的表、percolate/PQ 表或分片表。
+* `ALTER TABLE` 不能将现有表转换为 `id uuid`，也不能从 `id uuid` 转回去。
+* UUID `id` 过滤器支持相等和 `IN`。不支持 `<`、`<=`、`>` 和 `>=` 这类范围比较，也不支持对 UUID `id` 进行数值/算术表达式运算。
+* 内部 UUID 存储属性不属于公共模式，不能直接被选择、过滤、分组、排序、插入或更新。
+* 与数字 ID 表不同，UUID-ID 表不会把 `0` 视为自动 ID 标记。
+
+<!-- example uuid document ids -->
+
+<!-- intro -->
+##### SQL：
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products_uuid(id uuid, title text, price int);
+INSERT INTO products_uuid(id, title, price) VALUES('550e8400-e29b-41d4-a716-446655440000', 'Crossbody Bag', 19);
+INSERT INTO products_uuid(title, price) VALUES('Generated UUID Bag', 29);
+SELECT id, price FROM products_uuid WHERE id='550e8400-e29b-41d4-a716-446655440000';
+```
+
+<!-- response SQL -->
+
+```sql
+Query OK, 0 rows affected (0.00 sec)
+Query OK, 1 rows affected (0.00 sec)
+Query OK, 1 rows affected (0.00 sec)
++--------------------------------------+-------+
+| id                                   | price |
++--------------------------------------+-------+
+| 550e8400-e29b-41d4-a716-446655440000 |    19 |
++--------------------------------------+-------+
+1 row in set (0.00 sec)
+```
+
+<!-- end -->
+
+在处理数字文档 ID 时，需要注意无符号 64 位值会根据接口的不同而以不同方式处理：
 
 **MySQL/SQL 接口：**
 * 大于 2^63-1 的 ID 将显示为负数。

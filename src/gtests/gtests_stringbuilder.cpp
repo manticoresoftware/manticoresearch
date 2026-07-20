@@ -501,61 +501,6 @@ TEST ( functions, EscapedStringBuilderbounds )
 	ASSERT_STREQ ( tBuilder.cstr(), "'space'" );
 }
 
-TEST ( functions, StringBuilderLimit )
-{
-	StringBuilder_c tBuilder;
-	tBuilder.SetLimit ( 5 );
-	tBuilder << "abc";
-	tBuilder << "defgh";
-	ASSERT_EQ ( tBuilder.GetLength(), 5 );
-	ASSERT_STREQ ( tBuilder.cstr(), "abcde" );
-
-	tBuilder.Clear();
-	tBuilder.SetLimit ( 4 );
-	tBuilder.AppendChunk ( FROMS ( "abcdef" ), '`' );
-	ASSERT_EQ ( tBuilder.GetLength(), 4 );
-	ASSERT_STREQ ( tBuilder.cstr(), "`abc" );
-
-	tBuilder.Clear();
-	tBuilder.SetLimit ( 7 );
-	tBuilder.Appendf ( "%s", "abcdefghijklmnopqrstuvwxyz" );
-	ASSERT_EQ ( tBuilder.GetLength(), 7 );
-	ASSERT_STREQ ( tBuilder.cstr(), "abcdefg" );
-
-	tBuilder.Clear();
-	tBuilder.SetLimit ( 6 );
-	tBuilder << "id=" << 123456789;
-	ASSERT_EQ ( tBuilder.GetLength(), 6 );
-	ASSERT_STREQ ( tBuilder.cstr(), "id=123" );
-}
-
-TEST ( functions, EscapedStringBuilderLimit )
-{
-	QuotationEscapedBuilder tBuilder;
-	tBuilder.SetLimit ( 8 );
-	tBuilder.FixupSpacedAndAppendEscaped ( "aaaaaaaaaaaaaaaaaaaaaaaa" );
-	ASSERT_EQ ( tBuilder.GetLength(), 8 );
-	ASSERT_STREQ ( tBuilder.cstr(), "'aaaaaaa" );
-
-	tBuilder.Clear();
-	tBuilder.SetLimit ( 1 );
-	tBuilder.AppendEscaped ( nullptr, EscBld::eEscape );
-	ASSERT_EQ ( tBuilder.GetLength(), 1 );
-	ASSERT_STREQ ( tBuilder.cstr(), "'" );
-
-	tBuilder.Clear();
-	tBuilder.SetLimit ( 5 );
-	tBuilder.AppendEscaped ( "abcdef", EscBld::eNone, 6 );
-	ASSERT_EQ ( tBuilder.GetLength(), 5 );
-	ASSERT_STREQ ( tBuilder.cstr(), "abcde" );
-
-	tBuilder.Clear();
-	tBuilder.SetLimit ( 10 );
-	tBuilder.AppendEscaped ( "space	 and more", EscBld::eFixupSpace, 15 );
-	ASSERT_EQ ( tBuilder.GetLength(), 10 );
-	ASSERT_STREQ ( tBuilder.cstr(), "space  and" );
-}
-
 void esc_first_comma ( const char* sText, BYTE eKind, const char* sProof )
 {
 	QuotationEscapedBuilder tBuilder;

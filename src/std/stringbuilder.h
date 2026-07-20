@@ -62,10 +62,6 @@ public:
 	// get state
 	bool				IsEmpty () const { return !m_szBuffer || m_szBuffer[0]=='\0'; }
 	inline int64_t		GetLength () const { return m_iUsed; }
-	void				SetLimit ( int64_t iLimit );
-	inline int64_t		GetLimit () const { return m_iLimit; }
-	inline bool			IsLimitReached () const { return m_iLimit>=0 && m_iUsed>=m_iLimit; }
-	inline int64_t		GetSpaceLeft () const { return m_iLimit<0 ? INT64_MAX : Max<int64_t> ( 0, m_iLimit-m_iUsed ); }
 
 	// different kind of fullfillments
 	StringBuilder_c &	AppendChunk ( const Str_t& sChunk, char cQuote = '\0' );
@@ -111,12 +107,12 @@ public:
 	StringBuilder_c &	operator << ( bool bVal );
 
 	// support for sph::Sprintf - emulate POD 'char*'
-	inline StringBuilder_c &	operator ++() { GrowEnough ( 1 ); SetUsed ( m_iUsed + 1 ); return *this; }
-	inline void					operator += ( int64_t i ) { GrowEnough ( i ); SetUsed ( m_iUsed + i ); }
-	inline void 		SetPos ( const char* sPos ) { assert (sPos>=m_szBuffer && sPos<m_szBuffer+m_iSize); SetUsed ( sPos-m_szBuffer ); }; // helper. sPos must point inside existing buf
+	inline StringBuilder_c &	operator ++() { GrowEnough ( 1 ); ++m_iUsed; return *this; }
+	inline void					operator += ( int64_t i ) { GrowEnough ( i ); m_iUsed += i; }
+	inline void 		SetPos ( const char* sPos ) { assert (sPos>=m_szBuffer && sPos<m_szBuffer+m_iSize); m_iUsed = sPos-m_szBuffer; }; // helper. sPos must point inside existing buf
 
 	// append 1 char despite any blocks.
-	inline void			RawC ( char cChar ) { if ( IsLimitReached() ) return; GrowEnough ( 1 ); *end () = cChar; SetUsed ( m_iUsed + 1 ); }
+	inline void			RawC ( char cChar ) { GrowEnough ( 1 ); *end () = cChar; ++m_iUsed; }
 	void				AppendRawChunk ( Str_t sText ); // append without any commas
 	StringBuilder_c &	SkipNextComma();
 	StringBuilder_c &	AppendName ( const char * szName, bool bQuoted=true ); // append "szName":
@@ -170,10 +166,8 @@ protected:
 	char *			m_szBuffer = nullptr;
 	int64_t			m_iSize = 0;
 	int64_t			m_iUsed = 0;
-	int64_t			m_iLimit = -1;
 	CSphVector<LazyComma_c> m_dDelimiters;
 
-	void			SetUsed ( int64_t iUsed );
 	void			Grow ( int iLen ); // unconditionally shrink enough to place at least iLen more bytes
 
 	void InitAddPrefix();

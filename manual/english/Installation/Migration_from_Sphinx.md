@@ -60,8 +60,8 @@ String, JSON and MVA attributes can be updated in Manticore 3.x using `UPDATE` s
 
 In 2.x string attributes required `REPLACE`, for JSON it was only possible to update scalar properties (as they were fixed-width) and MVAs could be updated using the MVA pool. Now updates are performed directly on the blob component. One setting that may require tuning is [attr_update_reserve](../Data_creation_and_modification/Updating_documents/UPDATE.md#attr_update_reserve) which allows changing the allocated extra space at the end of the blob used to avoid frequent resizes in case the new values are bigger than the existing values in the blob.
 
-## Document IDs in Manticore 3.x
-Doc ids used to be UNSIGNED 64-bit integers. Now they are POSITIVE SIGNED 64-bit integers.
+## Document IDs in Manticore 3.x and later
+In Manticore 3.x table files, document IDs moved away from the old Sphinx 2.x unsigned-only representation and were exposed through a signed 64-bit `bigint` interface. Current Manticore versions support unsigned 64-bit document ID values and reject negative document IDs when indexing or inserting. In the MySQL/SQL interface, IDs greater than `2^63-1` can still be displayed and filtered by their signed representation; use `UINT64(id)` to see the actual unsigned value.
 
 ## RT mode in Manticore 3.x
 Read here about the [RT mode](../Read_this_first.md#Real-time-mode-vs-plain-mode)
@@ -121,7 +121,7 @@ Here's the complete list of `index_converter` options:
 * `--index` specifies which table should be converted
 * `--path` - instead of using a config file, a path containing table(s) can be used
 * `--strip-path` - strips path from filenames referenced by table: stopwords, exceptions and wordforms
-* `--large-docid` - allows to convert documents with ids larger than 2^63 and display a warning, otherwise it will just exit on the large id with an error. This option was added as in Manticore 3.x doc ids are signed bigint, while previously they were unsigned
+* `--large-docid` - allows converting documents with ids larger than 2^63 and displays a warning; otherwise, conversion exits with an error on the large id. This option was added for Manticore 3.x format compatibility, because Sphinx/Manticore 2.x used unsigned doc id values that could exceed the signed 64-bit display range.
 * `--output-dir <dir>` - writes the new files in a chosen folder rather than the same location as with the existing table files. When this option set, existing table files will remain untouched at their location.
 * `--all` - converts all tables from the config
 * `--killlist-target <targets>` sets the target tables for which kill-lists will be applied. This option should be used only in conjunction with the `--index` option

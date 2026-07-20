@@ -14,6 +14,7 @@ API Key Validation: All keys are valid except "wrong" (returns 401 error)
 ––– comment –––
 Start Manticore Search
 ––– block: ../base/start-searchd –––
+––– block: ./base –––
 ––– comment –––
 MOCK SERVER STARTUP
 ––– comment –––
@@ -43,7 +44,7 @@ Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-serv
 ––– comment –––
 Create table without API_URL
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_alter_add_api_url (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}')" 2>&1; echo $?
+retry_remote_embedding_create_table "CREATE TABLE test_alter_add_api_url (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}')"; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -102,7 +103,7 @@ Expected: ALTER succeeds (reverts to default endpoint), default endpoint used, S
 ––– comment –––
 Create table with API_URL
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_alter_remove_api_url (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}' API_URL='http://localhost:8080/v1/embeddings')" 2>&1; echo $?
+retry_remote_embedding_create_table "CREATE TABLE test_alter_remove_api_url (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}' API_URL='http://localhost:8080/v1/embeddings')"; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -184,7 +185,7 @@ Expected: ALTER succeeds, new timeout used for subsequent requests, SHOW CREATE 
 ––– comment –––
 Create table without API_TIMEOUT
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_alter_add_api_timeout (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}')" 2>&1; echo $?
+retry_remote_embedding_create_table "CREATE TABLE test_alter_add_api_timeout (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}')"; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -213,7 +214,7 @@ Expected: ALTER succeeds, new timeout used for subsequent requests, SHOW CREATE 
 ––– comment –––
 Create table with API_TIMEOUT='30'
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_alter_change_api_timeout (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}' API_TIMEOUT='30')" 2>&1; echo $?
+retry_remote_embedding_create_table "CREATE TABLE test_alter_change_api_timeout (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}' API_TIMEOUT='30')"; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -242,7 +243,7 @@ Expected: ALTER succeeds (reverts to default timeout), default timeout (10s) use
 ––– comment –––
 Create table with API_TIMEOUT='30'
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_alter_remove_api_timeout (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}' API_TIMEOUT='30')" 2>&1; echo $?
+retry_remote_embedding_create_table "CREATE TABLE test_alter_remove_api_timeout (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}' API_TIMEOUT='30')"; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -272,7 +273,7 @@ Verify: Error message: "API_TIMEOUT must be a non-negative integer"
 ––– comment –––
 First create table
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_alter_negative_timeout (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}')" 2>&1; echo $?
+retry_remote_embedding_create_table "CREATE TABLE test_alter_negative_timeout (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}')"; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -290,7 +291,7 @@ Verify: Error message: "API_TIMEOUT must be a non-negative integer"
 ––– comment –––
 First create table
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_alter_nonint_timeout (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}')" 2>&1; echo $?
+retry_remote_embedding_create_table "CREATE TABLE test_alter_nonint_timeout (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}')"; echo $?
 ––– output –––
 0
 ––– comment –––

@@ -7,7 +7,7 @@ yum install -y -q --skip-broken wget curl which procps diffutils > /dev/null 2>&
 0
 ––– block: installer-url –––
 ––– input –––
-set -o pipefail; (wget -qO- "$MANTICORE_INSTALLER_REPO_URL/bootstrap-standalone.sh" | sh -s list-versions-file /tmp/manticore-list-versions.txt) > /tmp/manticore-list-versions.out 2>&1; echo $?
+set -o pipefail; (run_manticore_installer_wget list-versions-file /tmp/manticore-list-versions.txt) > /tmp/manticore-list-versions.out 2>&1; echo $?
 ––– output –––
 0
 ––– input –––

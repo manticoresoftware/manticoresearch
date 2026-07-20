@@ -37,15 +37,51 @@ permissions:
 jobs:
   check_branch:
     name: Resolve MCL metadata
-    needs: [pack]
-    if: needs.pack.outputs.should_continue == 'true'
     runs-on: ubuntu-22.04
+    if: |
+      (
+        github.event_name == 'pull_request'
+        &&
+        (
+          contains(
+            github.event.pull_request.labels.*.name, 'pack'
+          )
+          ||
+          contains(
+            github.event.pull_request.labels.*.name, 'publish'
+          )
+        )
+      )
+      ||
+      (
+        github.event_name == 'workflow_run'
+        &&
+        github.event.workflow_run.conclusion == 'success'
+        &&
+        github.ref == 'refs/heads/main'
+      )
+      ||
+      (
+        github.event_name == 'push'
+        &&
+        (
+          startsWith(
+            github.ref, 'refs/heads/manticore-'
+          )
+          ||
+          contains(
+            github.ref, 'refs/tags/pack_publish'
+          )
+        )
+      )
     outputs:
       mcl_sha: ${{ steps.mcl.outputs.mcl_sha }}
       mcl_full_sha: ${{ steps.mcl.outputs.mcl_full_sha }}
-      mcl_changed: ${{ steps.detect.outputs.mcl_changed }}
+      mcl_submodule_changed: ${{ steps.detect.outputs.mcl_submodule_changed }}
+      mcl_missing_dev: ${{ steps.detect.outputs.mcl_missing_dev }}
+      mcl_missing_release_candidate: ${{ steps.detect.outputs.mcl_missing_release_candidate }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
@@ -79,21 +115,33 @@ jobs:
           else
             files=$(git ls-tree -r --name-only "$head")
           fi
-          repo_has_mcl_pkg=false
-          if bash dist/resolve_repo_artifact.sh --repo-type dev --distr jammy --arch amd64 --sha "${{ steps.mcl.outputs.mcl_sha }}" --extension .deb >/dev/null 2>&1; then
-            repo_has_mcl_pkg=true
+          mcl_submodule_changed=false
+          if echo "$files" | grep -Eq '^(mcl|mcl/|\.gitmodules$)'; then
+            mcl_submodule_changed=true
           fi
 
-          if echo "$files" | grep -Eq '^(mcl|mcl/|\.gitmodules$)'; then
-            echo "mcl_changed=true" >> $GITHUB_OUTPUT
-          elif [[ "$repo_has_mcl_pkg" != true ]]; then
-            echo "mcl_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "mcl_changed=false" >> $GITHUB_OUTPUT
+          repo_has_mcl_dev=false
+          if bash dist/resolve_repo_artifact.sh --repo-type dev --distr jammy --arch amd64 --sha "${{ steps.mcl.outputs.mcl_sha }}" --extension .deb >/dev/null 2>&1; then
+            repo_has_mcl_dev=true
           fi
+
+          repo_has_mcl_release_candidate=false
+          if bash dist/resolve_repo_artifact.sh --repo-type release_candidate --distr jammy --arch amd64 --sha "${{ steps.mcl.outputs.mcl_sha }}" --extension .deb >/dev/null 2>&1; then
+            repo_has_mcl_release_candidate=true
+          fi
+
+          mcl_missing_dev=false
+          mcl_missing_release_candidate=false
+          [[ "$repo_has_mcl_dev" == true ]] || mcl_missing_dev=true
+          [[ "$repo_has_mcl_release_candidate" == true ]] || mcl_missing_release_candidate=true
+
+          echo "mcl_submodule_changed=${mcl_submodule_changed}" >> "$GITHUB_OUTPUT"
+          echo "mcl_missing_dev=${mcl_missing_dev}" >> "$GITHUB_OUTPUT"
+          echo "mcl_missing_release_candidate=${mcl_missing_release_candidate}" >> "$GITHUB_OUTPUT"
 
   pack:
     name: OK to pack?
+    needs: check_branch
     runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.semver-tagger.outputs.version }}
@@ -102,6 +150,7 @@ jobs:
       version_deb: ${{ steps.semver-tagger.outputs.version_deb }}
       target: ${{ steps.semver-tagger.outputs.target }}
       should_continue: ${{ steps.check-should-continue.outputs.should_continue }}
+      mcl_package_needed: ${{ steps.mcl-package-needed.outputs.mcl_package_needed }}
     if: |
       (
         github.event_name == 'pull_request'
@@ -140,7 +189,7 @@ jobs:
       )
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           submodules: recursive
@@ -153,6 +202,26 @@ jobs:
           github_token: ${{ secrets.GH_ACCESS_TOKEN != '' && secrets.GH_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
           conventional_commits_authors: alexey@manticoresearch.com
           ignore_patterns: '\.md$|^test/|^manual/|\.clt|\.github|\.patterns|\.yml|\.gitignore'
+      - name: Check if MCL package should be built
+        id: mcl-package-needed
+        run: |
+          set -euo pipefail
+          target="${{ steps.semver-tagger.outputs.target }}"
+          mcl_package_needed=false
+
+          if [[ "$target" == "release" && "${{ needs.check_branch.outputs.mcl_missing_release_candidate }}" == "true" ]]; then
+            echo "MCL package is needed because it is missing from release_candidate for this submodule SHA"
+            mcl_package_needed=true
+          elif [[ "$target" != "release" && "${{ needs.check_branch.outputs.mcl_missing_dev }}" == "true" ]]; then
+            echo "MCL package is needed because it is missing from dev for this submodule SHA"
+            mcl_package_needed=true
+          elif [[ "${{ needs.check_branch.outputs.mcl_submodule_changed }}" == "true" ]]; then
+            echo "MCL submodule changed, but a package for this SHA is already available for target $target"
+          else
+            echo "MCL package is already available for target $target"
+          fi
+
+          echo "mcl_package_needed=${mcl_package_needed}" >> "$GITHUB_OUTPUT"
       - name: Check if we should continue packing
         id: check-should-continue
         run: |
@@ -180,7 +249,11 @@ jobs:
           echo "* Ref: ${{ github.ref_type }} \"${{ github.ref_name }}\"" >> $GITHUB_STEP_SUMMARY
           echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
           echo "* Version updated: ${{ steps.semver-tagger.outputs.version_updated }}" >> $GITHUB_STEP_SUMMARY
-          echo "* Should continue packing: ${{ steps.check-should-continue.outputs.should_continue }}" >> $GITHUB_STEP_SUMMARY
+          echo "* Should continue packing daemon packages: ${{ steps.check-should-continue.outputs.should_continue }}" >> $GITHUB_STEP_SUMMARY
+          echo "* MCL submodule changed: ${{ needs.check_branch.outputs.mcl_submodule_changed }}" >> $GITHUB_STEP_SUMMARY
+          echo "* MCL package missing from dev: ${{ needs.check_branch.outputs.mcl_missing_dev }}" >> $GITHUB_STEP_SUMMARY
+          echo "* MCL package missing from release_candidate: ${{ needs.check_branch.outputs.mcl_missing_release_candidate }}" >> $GITHUB_STEP_SUMMARY
+          echo "* Should build standalone MCL package: ${{ steps.mcl-package-needed.outputs.mcl_package_needed }}" >> $GITHUB_STEP_SUMMARY
 
 #  debug_info:
 #    name: Debug GitHub Event Info
@@ -203,11 +276,11 @@ jobs:
 
   mcl_pack_matrix:
     needs: [check_branch, pack]
-    if: needs.pack.outputs.should_continue == 'true'
+    if: needs.pack.outputs.should_continue == 'true' || needs.pack.outputs.mcl_package_needed == 'true'
     uses: ./.github/workflows/mcl_pack_publish.yml
     secrets: inherit
     with:
-      enabled: ${{ needs.check_branch.outputs.mcl_changed == 'true' && needs.pack.outputs.should_continue == 'true' }}
+      enabled: ${{ needs.pack.outputs.mcl_package_needed == 'true' }}
       mcl_full_sha: ${{ needs.check_branch.outputs.mcl_full_sha }}
       source_ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
@@ -220,7 +293,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       # We have to checkout to access .github/workflows/ in further steps
@@ -240,8 +313,8 @@ jobs:
         DISTR: [bionic, focal, jammy, bullseye, bookworm]
         arch: [x86_64, aarch64]
     with:
-      MCL_PACKAGE_ARTIFACT_NAME: ${{ needs.check_branch.outputs.mcl_changed == 'true' && format('mcl_pkg_{0}_{1}', matrix.DISTR, matrix.arch) || '' }}
-      MCL_PACKAGE_SHA: ${{ needs.check_branch.outputs.mcl_changed != 'true' && needs.check_branch.outputs.mcl_sha || '' }}
+      MCL_PACKAGE_ARTIFACT_NAME: ${{ needs.pack.outputs.mcl_package_needed == 'true' && format('mcl_pkg_{0}_{1}', matrix.DISTR, matrix.arch) || '' }}
+      MCL_PACKAGE_SHA: ${{ needs.pack.outputs.mcl_package_needed != 'true' && needs.check_branch.outputs.mcl_sha || '' }}
       MCL_REPO_TYPE: ${{ needs.pack.outputs.target == 'release' && 'release_candidate' || 'dev' }}
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
@@ -269,8 +342,8 @@ jobs:
         DISTR: [rhel8, rhel9, rhel10]
         arch: [x86_64, aarch64]
     with:
-      MCL_PACKAGE_ARTIFACT_NAME: ${{ needs.check_branch.outputs.mcl_changed == 'true' && format('mcl_pkg_{0}_{1}', matrix.DISTR, matrix.arch) || '' }}
-      MCL_PACKAGE_SHA: ${{ needs.check_branch.outputs.mcl_changed != 'true' && needs.check_branch.outputs.mcl_sha || '' }}
+      MCL_PACKAGE_ARTIFACT_NAME: ${{ needs.pack.outputs.mcl_package_needed == 'true' && format('mcl_pkg_{0}_{1}', matrix.DISTR, matrix.arch) || '' }}
+      MCL_PACKAGE_SHA: ${{ needs.pack.outputs.mcl_package_needed != 'true' && needs.check_branch.outputs.mcl_sha || '' }}
       MCL_REPO_TYPE: ${{ needs.pack.outputs.target == 'release' && 'release_candidate' || 'dev' }}
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
@@ -301,8 +374,8 @@ jobs:
         DISTR: [macos]
         arch: [x86_64, arm64]
     with:
-      MCL_PACKAGE_ARTIFACT_NAME: ${{ needs.check_branch.outputs.mcl_changed == 'true' && format('mcl_pkg_{0}_{1}', matrix.DISTR, matrix.arch) || '' }}
-      MCL_PACKAGE_SHA: ${{ needs.check_branch.outputs.mcl_changed != 'true' && needs.check_branch.outputs.mcl_sha || '' }}
+      MCL_PACKAGE_ARTIFACT_NAME: ${{ needs.pack.outputs.mcl_package_needed == 'true' && format('mcl_pkg_{0}_{1}', matrix.DISTR, matrix.arch) || '' }}
+      MCL_PACKAGE_SHA: ${{ needs.pack.outputs.mcl_package_needed != 'true' && needs.check_branch.outputs.mcl_sha || '' }}
       MCL_REPO_TYPE: ${{ needs.pack.outputs.target == 'release' && 'release_candidate' || 'dev' }}
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
@@ -328,8 +401,8 @@ jobs:
     needs: [pack, check_branch, check_deps, mcl_pack_matrix]
     if: needs.pack.outputs.should_continue == 'true'
     with:
-      MCL_PACKAGE_ARTIFACT_NAME: ${{ needs.check_branch.outputs.mcl_changed == 'true' && 'mcl_pkg_windows_x64' || '' }}
-      MCL_PACKAGE_SHA: ${{ needs.check_branch.outputs.mcl_changed != 'true' && needs.check_branch.outputs.mcl_sha || '' }}
+      MCL_PACKAGE_ARTIFACT_NAME: ${{ needs.pack.outputs.mcl_package_needed == 'true' && 'mcl_pkg_windows_x64' || '' }}
+      MCL_PACKAGE_SHA: ${{ needs.pack.outputs.mcl_package_needed != 'true' && needs.check_branch.outputs.mcl_sha || '' }}
       MCL_REPO_TYPE: ${{ needs.pack.outputs.target == 'release' && 'release_candidate' || 'dev' }}
       DISTR: windows
       arch: x64
@@ -358,19 +431,19 @@ jobs:
       CI_COMMIT_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           submodules: recursive
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Download local Windows MCL package artifact
-        if: ${{ needs.check_branch.outputs.mcl_changed == 'true' }}
-        uses: actions/download-artifact@v4
+        if: ${{ needs.pack.outputs.mcl_package_needed == 'true' }}
+        uses: actions/download-artifact@v7
         with:
           name: mcl_pkg_windows_x64
           path: ./mcl-package
       - name: Preflight local Windows MCL package artifact
-        if: ${{ needs.check_branch.outputs.mcl_changed == 'true' }}
+        if: ${{ needs.pack.outputs.mcl_package_needed == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -400,7 +473,7 @@ jobs:
         shell: bash
       - run: mv /builds/manticoresearch/dev/build build
       - name: Upload artifact
-        uses: manticoresoftware/upload_artifact_with_retries@main
+        uses: manticoresoftware/upload_artifact_with_retries@v5
         with:
           name: win_installer
           path: build/manticore-*.exe
@@ -409,30 +482,53 @@ jobs:
   publish:
     name: OK to publish?
     runs-on: ubuntu-22.04
-    # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
-    needs: [pack_debian_ubuntu, pack_rhel, pack_macos, build_nsis]
+    # This job depends on both daemon and MCL package preparation jobs. Some of
+    # them may be intentionally skipped, so the if condition below checks the
+    # relevant artifact family explicitly.
+    needs: [pack, pack_debian_ubuntu, pack_rhel, pack_macos, build_nsis, mcl_pack_matrix]
     if: |
-      (github.repository == 'manticoresoftware/manticoresearch')
+      always()
+      && (github.repository == 'manticoresoftware/manticoresearch')
       && (
         (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
         || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
         || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/manticore-'))
         || (github.event_name == 'push' && contains(github.ref, 'refs/tags/pack_publish'))
       )
+      && (
+        (
+          needs.pack.outputs.should_continue == 'true'
+          && needs.pack_debian_ubuntu.result == 'success'
+          && needs.pack_rhel.result == 'success'
+          && needs.pack_macos.result == 'success'
+          && needs.build_nsis.result == 'success'
+        )
+        ||
+        (
+          needs.pack.outputs.mcl_package_needed == 'true'
+          && needs.mcl_pack_matrix.result == 'success'
+        )
+      )
     steps:
-      - run: echo "Ready to publish"
+      - run: |
+          echo "Ready to publish"
+          echo "Daemon packages needed: ${{ needs.pack.outputs.should_continue }}"
+          echo "Standalone MCL packages needed: ${{ needs.pack.outputs.mcl_package_needed }}"
 
   publish_debian_ubuntu:
     needs: [publish, pack]
+    if: needs.pack.outputs.should_continue == 'true' || needs.pack.outputs.mcl_package_needed == 'true'
     strategy:
       fail-fast: true
       matrix:
-        DISTR: [bionic, focal, jammy, bullseye, bookworm]
+        DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
         arch: [x86_64, aarch64]
     runs-on: ubuntu-22.04
     name: ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
     steps:
-      - uses: manticoresoftware/publish_to_repo@main
+      - name: Publish daemon DEB package
+        if: needs.pack.outputs.should_continue == 'true' && matrix.DISTR != 'buster'
+        uses: manticoresoftware/publish_to_repo@main
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
           distr: ${{ matrix.DISTR }}
@@ -441,18 +537,32 @@ jobs:
           type: deb
           delimiter: "-"
           target: ${{ needs.pack.outputs.target }}
+      - name: Publish standalone MCL DEB package
+        if: needs.pack.outputs.mcl_package_needed == 'true' && matrix.DISTR != 'buster'
+        uses: manticoresoftware/publish_to_repo@main
+        with:
+          ssh_key: ${{ secrets.REPO_SSH_KEY }}
+          distr: ${{ matrix.DISTR }}
+          arch: ${{ matrix.arch }}
+          artifact: mcl_pkg_${{ matrix.DISTR }}_${{ matrix.arch }}
+          type: deb
+          delimiter: "-"
+          target: ${{ needs.pack.outputs.target }}
 
   publish_rhel:
     needs: [publish, pack]
+    if: needs.pack.outputs.should_continue == 'true' || needs.pack.outputs.mcl_package_needed == 'true'
     strategy:
       fail-fast: true
       matrix:
-        DISTR: [8, 9, 10]
+        DISTR: [7, 8, 9, 10]
         arch: [x86_64, aarch64]
     runs-on: ubuntu-22.04
     name: RHEL ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
     steps:
-      - uses: manticoresoftware/publish_to_repo@main
+      - name: Publish daemon RPM package
+        if: needs.pack.outputs.should_continue == 'true' && matrix.DISTR != 7
+        uses: manticoresoftware/publish_to_repo@main
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
           distr: ${{ matrix.DISTR }}
@@ -461,17 +571,31 @@ jobs:
           type: rpm
           delimiter: "_"
           target: ${{ needs.pack.outputs.target }}
+      - name: Publish standalone MCL RPM package
+        if: needs.pack.outputs.mcl_package_needed == 'true' && matrix.DISTR != 7
+        uses: manticoresoftware/publish_to_repo@main
+        with:
+          ssh_key: ${{ secrets.REPO_SSH_KEY }}
+          distr: ${{ matrix.DISTR }}
+          arch: ${{ matrix.arch }}
+          artifact: mcl_pkg_rhel${{ matrix.DISTR }}_${{ matrix.arch }}
+          type: rpm
+          delimiter: "_"
+          target: ${{ needs.pack.outputs.target }}
 
   publish_macos:
     name: Publishing MacOS
     needs: [publish, pack]
+    if: needs.pack.outputs.should_continue == 'true' || needs.pack.outputs.mcl_package_needed == 'true'
     strategy:
       fail-fast: true
       matrix:
         arch: [x86_64, arm64]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/publish_to_repo@main
+      - name: Publish daemon macOS package
+        if: needs.pack.outputs.should_continue == 'true'
+        uses: manticoresoftware/publish_to_repo@main
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
           distr: macos
@@ -480,13 +604,27 @@ jobs:
           type: arc
           delimiter: "-"
           target: ${{ needs.pack.outputs.target }}
+      - name: Publish standalone MCL macOS package
+        if: needs.pack.outputs.mcl_package_needed == 'true'
+        uses: manticoresoftware/publish_to_repo@main
+        with:
+          ssh_key: ${{ secrets.REPO_SSH_KEY }}
+          distr: macos
+          arch: ${{ matrix.arch }}
+          artifact: mcl_pkg_macos_${{ matrix.arch }}
+          type: arc
+          delimiter: "-"
+          target: ${{ needs.pack.outputs.target }}
 
   publish_windows:
     name: Publishing Windows packages to repo.manticoresearch.com
     needs: [publish, pack]
+    if: needs.pack.outputs.should_continue == 'true' || needs.pack.outputs.mcl_package_needed == 'true'
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/publish_to_repo@main
+      - name: Publish daemon Windows package
+        if: needs.pack.outputs.should_continue == 'true'
+        uses: manticoresoftware/publish_to_repo@main
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
           distr: windows
@@ -495,15 +633,27 @@ jobs:
           type: arc
           delimiter: "-"
           target: ${{ needs.pack.outputs.target }}
+      - name: Publish standalone MCL Windows package
+        if: needs.pack.outputs.mcl_package_needed == 'true'
+        uses: manticoresoftware/publish_to_repo@main
+        with:
+          ssh_key: ${{ secrets.REPO_SSH_KEY }}
+          distr: windows
+          arch: x64
+          artifact: mcl_pkg_windows_x64
+          type: arc
+          delimiter: "-"
+          target: ${{ needs.pack.outputs.target }}
 
   # Test Windows installer without Docker/Buddy on GitHub Actions
   test_windows_installer:
     name: Test Windows NSIS installer
     needs: [publish_windows, pack]
+    if: needs.pack.outputs.should_continue == 'true'
     runs-on: windows-latest
     steps:
     - name: Download Windows installer artifact
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: win_installer
         path: ./installer
@@ -688,13 +838,14 @@ jobs:
   publish_nsis:
     name: Publishing Windows NSIS installer
     needs: [test_windows_installer, publish, pack]
+    if: needs.pack.outputs.should_continue == 'true'
     runs-on: ubuntu-22.04
     steps:
       - uses: manticoresoftware/publish_to_repo@main
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
-          distr:
-          arch:
+          distr: windows
+          arch: x64
           artifact: win_installer
           type: arc
           delimiter: "-"
@@ -703,6 +854,7 @@ jobs:
   build_docker:
     name: Building and pushing docker
     needs: [publish_debian_ubuntu, pack]
+    if: needs.pack.outputs.should_continue == 'true'
     runs-on: ubuntu-22.04
     env:
       DOCKER_USER: ${{ secrets.DOCKER_USER }}
@@ -711,7 +863,7 @@ jobs:
       GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           submodules: recursive
@@ -723,7 +875,7 @@ jobs:
         id: sha
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
         with:
           image: tonistiigi/binfmt:qemu-v7.0.0-28
       - name: Building docker
@@ -731,14 +883,15 @@ jobs:
 
   clt_rhel_dev_installation:
     name: Testing RHEL dev packages installation
-    needs: publish_rhel
+    needs: [publish_rhel, pack]
+    if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
       matrix:
         image: [ "almalinux:8", "almalinux:9", "almalinux:10", "oraclelinux:9", "amazonlinux:latest" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.7.8
+      - uses: manticoresoftware/clt@0.7.9
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/rhel-dev-
@@ -746,14 +899,15 @@ jobs:
 
   clt_deb_dev_installation:
     name: Testing DEB dev packages installation
-    needs: publish_debian_ubuntu
+    needs: [publish_debian_ubuntu, pack]
+    if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
       matrix:
         image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:bullseye", "debian:bookworm" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.7.8
+      - uses: manticoresoftware/clt@0.7.9
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-dev-

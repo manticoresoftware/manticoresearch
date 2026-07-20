@@ -841,6 +841,18 @@ CSphVector<const CSphColumnInfo *> GetStoredColumnList ( const CSphSchema & tSch
 	return dFieldCols;
 }
 
+bool Env_ManticoreStoredTimeout()
+{
+	static auto iTimeout = env_long ("MANTICORE_STORED_TIMEOUT");
+	return iTimeout? true : false;
+}
+
+bool Env_ManticoreStoredTimeoutAgent()
+{
+	static auto iTimeout = env_long ("MANTICORE_STORED_TIMEOUT_AGENT");
+	return iTimeout? true : false;
+}
+
 } // static namespace
 
 void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )
@@ -856,6 +868,8 @@ void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 		SendErrorReply ( tOut, "invalid or truncated request" );
 		return;
 	}
+	if ( Env_ManticoreStoredTimeoutAgent() )
+		return;
 
 	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, tRequest.m_sIndexes, tOut ) )
 		return;
@@ -868,6 +882,8 @@ void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 		SendErrorReply ( tOut, "%s", tRes.m_sError.cstr() );
 		return;
 	}
+	if ( Env_ManticoreStoredTimeout() )
+		return;
 
 	SendAPICommandGetfieldAnswer ( tOut, tRequest, tRes, tFetched );
 }

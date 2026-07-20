@@ -358,9 +358,9 @@ Below is the list of data types supported by Manticore Search:
 
 ## Document ID
 
-The document identifier is a mandatory attribute that must be a unique 64-bit unsigned integer. Document IDs can be explicitly specified when creating a table, but they are always enabled even if not specified. Document IDs cannot be updated.
+The document identifier is a mandatory attribute that must be unique. Document IDs support unsigned 64-bit values. Explicit document IDs must be non-zero; negative document IDs are not allowed. Document IDs are always enabled even if not specified, and they cannot be updated.
 
-When you create a table, you can specify ID explicitly, but regardless of the data type you use, it will always behave as described above - stored as unsigned 64-bit but exposed as signed 64-bit integer.
+When declaring a table, you can include `id` in the `CREATE TABLE` schema, but regardless of the data type you use, it will behave as described above. In the MySQL/SQL interface, the ID is exposed as a signed 64-bit `bigint`, so large unsigned ID values may appear as negative numbers there.
 
 ```sql
 mysql> CREATE TABLE tbl(id bigint, content text);
@@ -387,62 +387,20 @@ DESC tbl;
 2 rows in set (0.00 sec)
 ```
 
-### UUID document IDs
+Auto-ID generation depends on the table type. RT and PQ tables can generate IDs when the ID is omitted from an insert or replace request, or when `0` is used as the ID value. Plain tables built from external sources do not support automatic ID generation; their source data must provide explicit, unique, non-zero unsigned 64-bit document IDs.
 
-Real-time tables can use string UUID/GUID-style document IDs by declaring the primary key as `id uuid`. Explicit UUID IDs must be quoted 36-character UUID-shaped strings with hyphens (`8-4-4-4-12` hexadecimal digits), for example `550e8400-e29b-41d4-a716-446655440000`. Manticore validates this shape and normalizes uppercase hexadecimal letters to lowercase, but it does not require a specific UUID version or RFC variant for explicit IDs. If you omit `id` in `INSERT`, `REPLACE`, JSON insert/replace, or Elasticsearch-style indexing, Manticore generates a UUIDv8-style string derived from its internal auto-generated numeric document ID. This makes Manticore-generated UUID IDs unique under the same guarantees as numeric auto-IDs; generated UUID IDs are not random UUIDv4 values.
-
-UUID IDs are returned as strings in SQL and as string `_id` values in JSON responses. They can be used in equality filters, `IN` filters, `REPLACE`, `UPDATE`, and `DELETE` statements, including after a RAM chunk is flushed to disk. `ORDER BY id`, `GROUP BY id`, and `COUNT(DISTINCT id)` use the UUID string value. `LAST_INSERT_ID()` and `@@session.last_insert_id` return the public UUID string for UUID-ID tables.
-
-Limitations:
-
-* Only the `id` column can use the `uuid` type; regular attributes cannot be declared as `uuid`.
-* UUID document IDs are supported for real-time/configless tables, including columnar real-time tables and replicated real-time tables. They are not supported for plain/indexer-created tables or percolate/PQ tables.
-* Existing tables cannot be converted to or from `id uuid` with `ALTER TABLE`.
-* UUID `id` filters support equality and `IN`. Range comparisons such as `<`, `<=`, `>`, and `>=`, and numeric/arithmetic expressions on UUID `id`, are not supported.
-* The internal UUID storage attribute is not part of the public schema and cannot be selected, filtered, grouped, sorted, inserted, or updated directly.
-* UUID ID-based operations are slower than numeric-ID operations because Manticore resolves the public UUID string to an internal numeric document ID internally. Use numeric IDs for the highest-throughput primary-key workloads.
-* Unlike numeric-ID tables, `0` is not an auto-ID marker for UUID-ID tables; omit `id` to generate a UUID automatically. Manticore-generated UUIDs use a UUIDv8-style layout derived from the internal auto-generated numeric document ID.
-
-<!-- example uuid document ids -->
-
-<!-- intro -->
-##### SQL:
-<!-- request SQL -->
-
-```sql
-CREATE TABLE products_uuid(id uuid, title text, price int);
-INSERT INTO products_uuid(id, title, price) VALUES('550e8400-e29b-41d4-a716-446655440000', 'Crossbody Bag', 19);
-INSERT INTO products_uuid(title, price) VALUES('Generated UUID Bag', 29);
-SELECT id, price FROM products_uuid WHERE id='550e8400-e29b-41d4-a716-446655440000';
-```
-
-<!-- response SQL -->
-
-```sql
-Query OK, 0 rows affected (0.00 sec)
-Query OK, 1 rows affected (0.00 sec)
-Query OK, 1 rows affected (0.00 sec)
-+--------------------------------------+-------+
-| id                                   | price |
-+--------------------------------------+-------+
-| 550e8400-e29b-41d4-a716-446655440000 |    19 |
-+--------------------------------------+-------+
-1 row in set (0.00 sec)
-```
-
-<!-- end -->
-
-When working with numeric document IDs, it's important to know that they are stored internally as unsigned 64-bit integers but are handled differently depending on the interface:
+When working with document IDs, it's important to know that unsigned 64-bit values are handled differently depending on the interface:
 
 **MySQL/SQL interface:**
 * IDs greater than 2^63-1 will appear as negative numbers.
 * When filtering by such large IDs, you must use their signed representation.
+* This signed representation is only for displaying or filtering existing large IDs; negative IDs are not accepted when inserting or indexing documents.
 * Use the [UINT64()](../Functions/Type_casting_functions.md#UINT64%28%29) function to view the actual unsigned value.
 
 **JSON/HTTP interface:**
 * IDs are always displayed as their original unsigned values, regardless of size.
-* Both signed and unsigned representations can be used for filtering.
-* Insert operations accept the full unsigned 64-bit range.
+* Both signed and unsigned representations can be used for filtering existing large IDs.
+* Insert operations accept the full unsigned 64-bit range, but negative `id` values are rejected.
 
 For example, let's create a table and insert some values around 2^63:
 ```sql
@@ -557,7 +515,7 @@ curl -s 0:9308/search -d '{"table": "t"}'
   }
 }
 
-# Both signed and unsigned values work for filtering
+# Both signed and unsigned values work for filtering the same stored ID
 curl -s 0:9308/search -d '{"table": "t", "query": {"equals": {"id": 17581446260360033510}}}'
 curl -s 0:9308/search -d '{"table": "t", "query": {"equals": {"id": -865297813349518106}}}'
 

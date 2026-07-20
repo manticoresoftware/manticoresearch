@@ -106,7 +106,7 @@ jobs:
         FLOAT_TOLERANCE: ${{ inputs.FLOAT_TOLERANCE }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           submodules: recursive
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
@@ -124,14 +124,14 @@ jobs:
           test -f /work/aot/uk.pak
 
       - name: Check out cache before building
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: cache
           enableCrossOsArchive: true
           key: build_linux_debug_x86_64
 
       - name: Download build artifacts
-        uses: manticoresoftware/download_artifact_with_retries@v3
+        uses: manticoresoftware/download_artifact_with_retries@v5
         with:
           name: ${{ inputs.build_artifact_name }}
           path: .
@@ -153,7 +153,7 @@ jobs:
 
       - name: Download MCL runtime artifact
         if: ${{ inputs.MCL_RUNTIME_ARTIFACT_NAME != '' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: ${{ inputs.MCL_RUNTIME_ARTIFACT_NAME }}
           path: ./mcl-runtime
@@ -185,7 +185,7 @@ jobs:
       - name: Download built MCL package artifact (best effort)
         if: ${{ inputs.MCL_PACKAGE_ARTIFACT_NAME != '' }}
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: ${{ inputs.MCL_PACKAGE_ARTIFACT_NAME }}
           path: ./.mcl-package-cache
@@ -259,7 +259,7 @@ jobs:
       - name: Upload test artifacts
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ inputs.artifact_name }}
           path: |
@@ -282,4 +282,5 @@ jobs:
           files: build/junit*.xml
           compare_to_earlier_commit: false
           comment_mode: failures
+          job_summary: ${{ steps.test.outcome == 'failure' }}
   

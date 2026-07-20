@@ -387,7 +387,7 @@ Query OK, 3 rows affected (0.01 sec)
 ##### JSON:
 
 <!-- request JSON -->
-`"id":0` or no id forces automatic ID generation.
+For this real-time table, `"id":0` or omitting `id` requests automatic ID generation.
 
 ```json
 POST /insert

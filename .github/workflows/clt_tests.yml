@@ -45,7 +45,7 @@ jobs:
     outputs:
       matrix: ${{ steps.build.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.ref }}
@@ -100,7 +100,7 @@ jobs:
                   continue
               for path in sorted(root_path.glob("*.rec")):
                   content = path.read_text(encoding="utf-8")
-                  if not have_remote_embedding_keys and "API_KEY='" in content:
+                  if not have_remote_embedding_keys and "api_key='" in content.lower():
                       continue
                   # clt appends "*.rec" to the prefix; strip the suffix to avoid ".rec*.rec"
                   tests.append(str(path.with_suffix("")))
@@ -150,7 +150,7 @@ jobs:
       # itself — wipe its contents instead (`rm -rf /var/lib/manticore/*` leaves .cache alone).
       - id: model_cache
         name: Restore model cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ${{ runner.temp }}/clt-model-cache
           key: clt-models-v1-chunk-${{ matrix.chunk.id }}
@@ -159,7 +159,7 @@ jobs:
         shell: bash
         run: mkdir -p "${{ runner.temp }}/clt-model-cache" && chmod 777 "${{ runner.temp }}/clt-model-cache"
 
-      - uses: manticoresoftware/clt@0.7.8
+      - uses: manticoresoftware/clt@0.7.9
         with:
           artifact: ${{ inputs.artifact_name }}
           image: ${{ inputs.docker_image }}
@@ -180,7 +180,7 @@ jobs:
       - name: Save model cache
         if: ${{ always() && steps.model_cache.outputs.cache-hit != 'true' }}
         continue-on-error: true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: ${{ runner.temp }}/clt-model-cache
           key: clt-models-v1-chunk-${{ matrix.chunk.id }}

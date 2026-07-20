@@ -70,6 +70,21 @@ MYSQL_PWD=noreplpass1 mysql -E -unorepluser -h0 -P2306 -e "SELECT id,title FROM 
 ––– output –––
 #!/1[[:space:]]+delegated replication works/!#
 ––– comment –––
+––– Cluster metadata must persist the effective replication user for restart/rejoin –––
+––– comment –––
+––– input –––
+bash -c 'for INSTANCE in 1 2; do json=$(tr -d " \n\t" < /var/log/manticore-${INSTANCE}/manticore.json); echo "$json" | grep -q "\"user\":\"repluser\"" || { echo "MISSING_USER_IN_CONFIG_NODE${INSTANCE}"; cat /var/log/manticore-${INSTANCE}/manticore.json; exit 1; }; done; echo "CLUSTER_USER_PERSISTED=yes"'
+––– output –––
+CLUSTER_USER_PERSISTED=yes
+––– input –––
+bash -c 'export INSTANCE=1; stdbuf -oL searchd --stopwait -c /tmp/searchd-with-flexible-ports-auth-${INSTANCE}.conf >/dev/null; : > /var/log/manticore-${INSTANCE}/searchd.log; stdbuf -oL searchd -c /tmp/searchd-with-flexible-ports-auth-${INSTANCE}.conf >/dev/null; if timeout 30 grep -qm1 "\[BUDDY\] started" <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo "NODE1_RESTARTED=yes"; else echo "NODE1_RESTARTED=no"; cat /var/log/manticore-${INSTANCE}/searchd.log; fi'
+––– output –––
+NODE1_RESTARTED=yes
+––– input –––
+bash -c 'ready=$(MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P1306 -e "debug wait mycluster like '\''state'\'' option '\''timeout'\''=90;" 2>&1); status=$(MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P1306 -e "SHOW STATUS LIKE '\''cluster_mycluster_status'\''" 2>&1); state=$(MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P1306 -e "SHOW STATUS LIKE '\''cluster_mycluster_node_state'\''" 2>&1); if echo "$ready" | grep -q "Value: synced" && echo "$status" | grep -q "Value: primary" && echo "$state" | grep -q "Value: synced" && ! grep -q "missing effective replication user" /var/log/manticore-1/searchd.log; then echo "NODE1_REJOINED_WITH_USER=yes"; else echo "NODE1_REJOINED_WITH_USER=no"; echo "$ready"; echo "$status"; echo "$state"; tail -n 200 /var/log/manticore-1/searchd.log; exit 1; fi'
+––– output –––
+NODE1_REJOINED_WITH_USER=yes
+––– comment –––
 ––– Node1: delete cluster as norepluser (uses cluster user for replication auth) –––
 ––– comment –––
 ––– input –––

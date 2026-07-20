@@ -358,9 +358,9 @@ create table tbl(title text, type int, price float engine='columnar') engine='ro
 
 ## 文档 ID
 
-文档标识符是一个必需的属性，必须是唯一的 64 位无符号整数。创建表时可以显式指定文档 ID，但即使未指定，文档 ID 也始终会被启用。文档 ID 无法更新。
+文档标识符是一个必填属性，且必须唯一。Document ID 支持无符号 64 位值。显式指定的 document ID 必须非零；不允许使用负数 document ID。即使未显式指定，Document ID 也始终启用，并且不能更新。
 
-创建表时，您可以显式指定 ID，但无论您使用何种数据类型，其行为始终如上所述——以无符号 64 位存储，但以有符号 64 位整数形式暴露。
+在声明表时，你可以在 `CREATE TABLE` schema 中包含 `id`，但无论使用哪种数据类型，它都会按上述方式工作。在 MySQL/SQL 接口中，ID 以有符号 64 位 `bigint` 形式暴露，因此较大的无符号 ID 值在那里可能显示为负数。
 
 ```sql
 mysql> CREATE TABLE tbl(id bigint, content text);
@@ -387,17 +387,20 @@ DESC tbl;
 2 rows in set (0.00 sec)
 ```
 
-处理文档 ID 时，重要的是要知道它们在内部以无符号 64 位整数存储，但根据接口的不同，处理方式也有所不同：
+Auto-ID 生成取决于表类型。RT 和 PQ 表在 insert 或 replace 请求中省略 ID，或者将 ID 值设为 `0` 时，都可以生成 ID。由外部来源构建的 Plain 表不支持自动 ID 生成；其源数据必须提供显式、唯一、非零的无符号 64 位 document ID。
+
+处理 document ID 时，需要知道无符号 64 位值会因接口不同而以不同方式处理：
 
 **MySQL/SQL 接口：**
 * 大于 2^63-1 的 ID 将显示为负数。
 * 过滤此类大 ID 时，必须使用其有符号表示。
+* 这种有符号表示只用于显示或过滤已有的大 ID；在插入或索引文档时，不接受负数 ID。
 * 使用 [UINT64()](../Functions/Type_casting_functions.md#UINT64%28%29) 函数查看实际的无符号值。
 
 **JSON/HTTP 接口：**
 * ID 始终以其原始无符号值显示，无论大小。
-* 过滤时可以使用有符号或无符号表示。
-* 插入操作接受完整的无符号 64 位范围。
+* 有符号和无符号两种表示都可用于过滤已有的大 ID。
+* Insert 操作接受完整的无符号 64 位范围，但负数 `id` 值会被拒绝。
 
 例如，让我们创建一个表并插入一些接近 2^63 的值：
 ```sql
@@ -512,7 +515,7 @@ curl -s 0:9308/search -d '{"table": "t"}'
   }
 }
 
-# Both signed and unsigned values work for filtering
+# Both signed and unsigned values work for filtering the same stored ID
 curl -s 0:9308/search -d '{"table": "t", "query": {"equals": {"id": 17581446260360033510}}}'
 curl -s 0:9308/search -d '{"table": "t", "query": {"equals": {"id": -865297813349518106}}}'
 

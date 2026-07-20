@@ -343,6 +343,16 @@ ident:
 	ident_for_set_stmt | all_set_tail | TOK_BACKIDENT
 	;
 
+table_alias_ident:
+	TOK_IDENT
+	| TOK_BACKIDENT
+	{
+		$$ = $1;
+		++$$.m_iStart;
+		--$$.m_iEnd;
+	}
+	;
+
 option_name:
 	ident_without_option | all_set_tail | TOK_FORCE 
 	;
@@ -643,7 +653,7 @@ opt_outer_limit:
 
 select_from:
 	TOK_SELECT select_items_list
-	TOK_FROM target_in_select_from { pParser->m_pStmt->m_eStmt = STMT_SELECT; } // set stmt here to check the option below
+	TOK_FROM target_in_select_from opt_table_alias { pParser->m_pStmt->m_eStmt = STMT_SELECT; } // set stmt here to check the option below
 	opt_join_clause
 	opt_where_clause
 	opt_group_clause
@@ -663,7 +673,13 @@ select_items_list:
 
 select_item:
 	'*'									{ pParser->AddItem ( &$1 ); }
+	| table_alias_ident '.' '*'		{ TRACK_BOUNDS ( $$, $1, $3 ); pParser->AddItem ( &$$ ); }
 	| select_expr opt_alias
+	;
+
+opt_table_alias:
+	// empty
+	| opt_as table_alias_ident			{ pParser->SetTableAlias ( $2 ); }
 	;
 
 opt_alias:
@@ -887,7 +903,7 @@ filter_item:
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
-			if ( pParser->NumIsSaturated ($3) )
+			if ( pParser->NumIsSaturated ( $3.m_uValue, $3.m_bNegative ) )
 				YYERROR;
 			pFilter->m_dValues.Add ( $3.GetValueInt() );
 		}
@@ -896,20 +912,32 @@ filter_item:
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
-			if ( pParser->NumIsSaturated ($3) )
+			if ( pParser->NumIsSaturated ( $3.m_uValue, $3.m_bNegative ) )
 				YYERROR;
 			pFilter->m_dValues.Add ( $3.GetValueInt() );
 			pFilter->m_bExclude = true;
 		}
-	| expr_ident TOK_IN '(' const_list ')'
+	| expr_ident TOK_IN '('
 		{
-			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $4.m_iValues );
+			pParser->BeginDocidConstList ( $1 );
+		}
+	const_list ')'
+		{
+			if ( !pParser->EndDocidConstList() )
+				YYERROR;
+			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $5.m_iValues );
 			if ( !pFilter )
 				YYERROR;
 		}
-	| expr_ident TOK_NOT TOK_IN '(' const_list ')'
+	| expr_ident TOK_NOT TOK_IN '('
 		{
-			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $5.m_iValues );
+			pParser->BeginDocidConstList ( $1 );
+		}
+	const_list ')'
+		{
+			if ( !pParser->EndDocidConstList() )
+				YYERROR;
+			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $6.m_iValues );
 			if ( !pFilter )
 				YYERROR;
 			pFilter->m_bExclude = true;
@@ -1074,7 +1102,7 @@ filter_item:
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
-			if ( pParser->NumIsSaturated ($3) )
+			if ( pParser->NumIsSaturated ( $3.m_uValue, $3.m_bNegative ) )
 				YYERROR;
 			pFilter->m_dValues.Add ( $3.GetValueInt() );
 		}
@@ -1083,7 +1111,7 @@ filter_item:
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
-			if ( pParser->NumIsSaturated ($3) )
+			if ( pParser->NumIsSaturated ( $3.m_uValue, $3.m_bNegative ) )
 				YYERROR;
 			pFilter->m_dValues.Add ( $3.GetValueInt() );
 			pFilter->m_bExclude = true;
@@ -1225,6 +1253,7 @@ const_float_unsigned:
 const_list:
 	const_int
 		{
+			pParser->CheckDocidConstListItem ( $1.m_uValue, $1.m_bNegative );
 			assert ( $$.m_iValues<0 );
         	$$.m_iValues = pParser->AddMvaVec ();
         	auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
@@ -1239,6 +1268,7 @@ const_list:
 		}
 	| const_list ',' const_int
 		{
+			pParser->CheckDocidConstListItem ( $3.m_uValue, $3.m_bNegative );
 			auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
 			dVec.Add ( { $3.GetValueInt(), $3.GetValueFloat(), false } );
 		}

@@ -628,7 +628,7 @@ private:
 	uint64_t			m_uTotalQueries GUARDED_BY ( m_tStatsLock ) = 0;
 
 	void				DoStatCalcStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats,
-							QueryStats_t & tQueryTimeStats ) const REQUIRES_SHARED ( m_tStatsLock );
+							QueryStats_t & tQueryTimeStats ) const REQUIRES ( m_tStatsLock );
 
 	CommandStats_t		m_tCommandsStats;
 };

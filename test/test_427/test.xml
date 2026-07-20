@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>stored fields over network</name>
+
+<requires>
+	<non-rt/>
+	<non-windows/>
+	<non-columnar/>
+</requires>
+
+<env MANTICORE_STORED_TIMEOUT="1" MANTICORE_STORED_TIMEOUT_AGENT="1"/>
+
+<config>
+indexer
+{
+	mem_limit			= 28M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source auth
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre = SET NAMES UTF8
+}
+
+source src1 : auth
+{
+	sql_query = SELECT id, text FROM test_table WHERE id&lt;2
+}
+
+source src2 : auth
+{
+	sql_query = SELECT id, text FROM test_table WHERE id&gt;=2 AND id&lt;4
+}
+
+source src3 : auth
+{
+	sql_query = SELECT id, text FROM test_table WHERE id&gt;=4
+}
+
+index idx1
+{
+	source			= src1
+	path			= <data_path/>/idx1
+}
+
+index idx2
+{
+	source			= src2
+	path			= <data_path/>/idx2
+}
+
+index idx3
+{
+	source			= src3
+	path			= <data_path/>/idx3
+}
+
+index dist0
+{
+	type					= distributed
+	agent					= <my_address/>:idx3
+}
+
+index dist1
+{
+	type					= distributed
+	local					= idx1
+	agent					= <my_address/>:idx2
+}
+
+index dist2
+{
+	type					= distributed
+	local					= idx1
+	agent					= <my_address/>:dist0
+}
+
+index dist3
+{
+	type					= distributed
+	local					= idx1
+	local = idx2
+	local = idx3
+}
+
+</config>
+
+<queries>
+<sphinxql>
+	select * from idx1 order by id asc;
+	select * from idx2 order by id asc;
+	select * from idx3 order by id asc;
+	select * from dist0 order by id asc;
+	select * from dist1 order by id asc;
+	select * from dist2 order by id asc;
+	select * from dist3 order by id asc;
+</sphinxql>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11),
+  `text` varchar(255) NOT NULL
+)
+</db_create>
+
+
+ <db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 'test'),
+( 2, 'test'),
+( 3, 'test'),
+( 4, 'test'),
+( 5, 'test'),
+( 6, 'test'),
+( 7, 'test'),
+( 8, 'test'),
+( 9, 'test'),
+( 10, 'test')
+</db_insert>
+
+</test>

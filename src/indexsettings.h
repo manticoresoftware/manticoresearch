@@ -411,6 +411,8 @@ enum class MutableName_e
 	ACCESS_DOCLISTS,
 	ACCESS_HITLISTS,
 	ACCESS_DICT,
+	ACCESS_COLUMNAR_ATTRS,
+	ACCESS_SECONDARY,
 	READ_BUFFER_DOCS,
 	READ_BUFFER_HITS,
 	OPTIMIZE_CUTOFF,
@@ -431,6 +433,8 @@ struct FileAccessSettings_t : public SettingsWriter_c
 	FileAccess_e	m_eDoclist = FileAccess_e::FILE;
 	FileAccess_e	m_eHitlist = FileAccess_e::FILE;
 	FileAccess_e	m_eDict = FileAccess_e::MMAP_PREREAD;
+	FileAccess_e	m_eColumnar = FileAccess_e::FILE;
+	FileAccess_e	m_eSecondary = FileAccess_e::FILE;
 	int				m_iReadBufferDocList = DEFAULT_READ_BUFFER;
 	int				m_iReadBufferHitList = DEFAULT_READ_BUFFER;
 
@@ -579,6 +583,7 @@ FileAccess_e ParseFileAccess ( CSphString sVal );
 int			ParseKeywordExpansion ( const char * sValue );
 void		SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphString & sSettingsFile );
 FileAccess_e GetFileAccess (  const CSphConfigSection & hIndex, const char * sKey, bool bList, FileAccess_e eDefault );
+FileAccess_e GetFileMmapAccess ( const CSphConfigSection & hIndex, const char * sKey, FileAccess_e eDefault );
 
 // combine per-index and per-attribute engine settings
 AttrEngine_e CombineEngines ( AttrEngine_e eIndexEngine, AttrEngine_e eAttrEngine );

@@ -314,40 +314,82 @@ void KNNVecDistCalc_c::RescoreBatch ( VecTraits_T<CSphMatch*> & dMatches, const 
 
 void KNNVecDistCalc_c::RescoreColumnar ( const VecTraits_T<int> & dOrder, VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetColumnarFromMatch_fn & fnColumnar )
 {
+	const int iCount = dOrder.GetLength();
 	const int iVecBytes = m_tAttr.m_tKNN.m_iDims*(int)sizeof(float);
+
+	static const int CHUNK = 256;
 
 	std::unique_ptr<columnar::Iterator_i> pIterator;
 	columnar::Columnar_i * pCurColumnar = nullptr;
 	bool bInitialized = false;
+	bool bCurStable = false;	// does the current store's Get() return pointers stable across later Get() calls?
 
-	ARRAY_FOREACH ( i, dOrder )
+	CSphVector<const void*> dPtrs;
+	CSphVector<CSphMatch*> dValid;
+	CSphVector<float> dOut;
+	dPtrs.Reserve(CHUNK);
+	dValid.Reserve(CHUNK);
+	dOut.Reserve(CHUNK);
+
+	auto fnCompute = [&]()
+	{
+		if ( !dPtrs.GetLength() )
+			return;
+
+		dOut.Resize ( dPtrs.GetLength() );
+		m_pDistCalc->CalcDistBatch ( m_dAnchor.Begin(), { dPtrs.Begin(), (size_t)dPtrs.GetLength() }, { dOut.Begin(), (size_t)dOut.GetLength() } );
+
+		ARRAY_FOREACH ( k, dValid )
+			dValid[k]->SetAttrFloat ( tOutLoc, dOut[k] );
+
+		dPtrs.Resize(0);
+		dValid.Resize(0);
+	};
+
+	for ( int i = 0; i < iCount; i++ )
 	{
 		CSphMatch * pMatch = dMatches[ dOrder[i] ];
-
 		columnar::Columnar_i * pColumnar = fnColumnar(pMatch);
+
 		if ( !bInitialized || pColumnar!=pCurColumnar )
 		{
 			pCurColumnar = pColumnar;
 			bInitialized = true;
 			pIterator.reset();
+			bCurStable = false;
 
 			if ( pColumnar )
 			{
 				std::string sError; // FIXME! report errors
-				// ascending-rowid access -> buffered reader (sequential read-ahead)
 				columnar::IteratorHints_t tHints { .m_bNeedStringHashes = false, .m_bBuffered = true };
 				pIterator = CreateColumnarIterator ( pColumnar, m_tAttr.m_sName.cstr(), sError, tHints );
+
+				columnar::AttrInfo_t tInfo;
+				if ( pColumnar->GetAttrInfo ( m_tAttr.m_sName.cstr(), tInfo ) )
+					bCurStable = tInfo.m_bStablePtr;
 			}
 		}
 
 		const BYTE * pData = nullptr;
 		int iLen = pIterator ? pIterator->Get ( pMatch->m_tRowID, pData ) : 0;
-		float fDist = ( iLen==iVecBytes && pData )
-			? m_fnDistFunc ( pData, m_dAnchor.Begin(), (size_t)-1, (size_t)-1, m_pDistFuncParam )
-			: FLT_MAX;
+		if ( iLen!=iVecBytes || !pData )
+		{
+			pMatch->SetAttrFloat ( tOutLoc, FLT_MAX );
+			continue;
+		}
 
-		pMatch->SetAttrFloat ( tOutLoc, fDist );
+		if ( bCurStable )
+		{
+			dPtrs.Add(pData);
+			dValid.Add(pMatch);
+			if ( dPtrs.GetLength()>=CHUNK )
+				fnCompute();
+		}
+		else
+			pMatch->SetAttrFloat ( tOutLoc, m_fnDistFunc ( pData, m_dAnchor.Begin(), (size_t)-1, (size_t)-1, m_pDistFuncParam ) );
 	}
+
+	fnCompute();
 }
 
 

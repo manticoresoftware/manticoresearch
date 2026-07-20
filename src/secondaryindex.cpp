@@ -1248,9 +1248,9 @@ RowIteratorsWithEstimates_t SIIteratorCreator_c::Create ( CSphString & sWarning 
 
 /////////////////////////////////////////////////////////////////////
 
-bool SIContainer_c::Load ( const CSphString & sFile, CSphString & sError )
+bool SIContainer_c::Load ( const CSphString & sFile, bool bMmap, CSphString & sError )
 {
-	SI::Index_i * pIndex = CreateSecondaryIndex ( sFile.cstr(), sError );
+	SI::Index_i * pIndex = CreateSecondaryIndex ( sFile.cstr(), bMmap, sError );
 	if ( !pIndex )
 		return false;
 

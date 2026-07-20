@@ -112,6 +112,9 @@ searchd
 	INSERT INTO uuid_ids ( @uuid_id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440011', 'bad hidden insert', 'bad-hidden', 31 );
 	REPLACE INTO uuid_ids ( @uuid_id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440012', 'bad hidden replace', 'bad-hidden', 32 );
 	SELECT id FROM uuid_ids WHERE id=123;
+	UPDATE uuid_ids SET tag='sql-internal-id-noop' WHERE id=123;
+	DELETE FROM uuid_ids WHERE id=123;
+	UPDATE uuid_ids SET missing_attr=1 WHERE id=123;
 	SELECT id, tag, price FROM uuid_ids WHERE id IN ('550e8400-e29b-41d4-a716-446655440011','550e8400-e29b-41d4-a716-446655440012') ORDER BY id ASC;
 	SELECT id FROM uuid_ids WHERE `@id`=123;
 	SELECT id FROM uuid_ids WHERE id > '550e8400-e29b-41d4-a716-446655440000';
@@ -790,6 +793,11 @@ searchd
 { "doc" : { "tag" : "bulk-update-before-invalid", "price" : 84 } }
 { "update" : { "_index" : "uuid_ids", "_id" : "not-a-uuid" } }
 { "doc" : { "tag" : "bulk-update-invalid", "price" : 85 } }
+</bulk>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "update" : { "_index" : "uuid_ids", "_id" : 126 } }
+{ "doc" : { "tag" : "bulk-update-numeric-internal", "price" : 86 } }
 </bulk>
 
 <query endpoint="json/search">

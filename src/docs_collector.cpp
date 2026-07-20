@@ -25,8 +25,8 @@ class DocsCollector_c::Impl_c
 	DocID_t					m_iLastId = -1;
 	bool					m_bFastPath = false;
 
-	// check the short path - if we have internal '@id=smth' or '@id in (xx,yy)' clauses,
-	// we know all values immediately and do not have to run the heavy query here.
+	// check the short path - if we have clauses 'id=smth' or 'id in (xx,yy)' or 'id in @uservar' - we know
+	// all the values list immediatelly and don't have to run the heavy query here.
 	bool ProcessFast ( const CSphQuery& tQuery )
 	{
 		if ( !tQuery.m_sQuery.IsEmpty() || !tQuery.m_dFilterTree.IsEmpty() || tQuery.m_dFilters.GetLength() != 1 )
@@ -34,7 +34,7 @@ class DocsCollector_c::Impl_c
 
 		const CSphFilterSettings* pFilter = tQuery.m_dFilters.Begin();
 		if ( ( pFilter->m_bHasEqualMin || pFilter->m_bHasEqualMax ) && pFilter->m_eType == SPH_FILTER_VALUES
-				&& pFilter->m_sAttrName == "@id" && !pFilter->m_bExclude )
+				&& ( pFilter->m_sAttrName == "@id" || pFilter->m_sAttrName == "id" ) && !pFilter->m_bExclude )
 		{
 			m_dFastSlice = pFilter->GetValues();
 			m_iFastIdx = 0;

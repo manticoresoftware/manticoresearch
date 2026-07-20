@@ -12,7 +12,7 @@ for n in `seq 1 100`; do mysql -h0 -P9306 -e "insert into t values(0, 'abc', 'st
 sleep 10; mysql -NE -h0 -P9306 -e "select count(*) from t"
 ––– output –––
 *************************** 1. row ***************************
-#!/55|56|57|58|59/!#
+51
 ––– input –––
 mysql -h0 -P9306 -e "unfreeze t;"
 ––– output –––
@@ -31,7 +31,7 @@ for n in `seq 1 100`; do mysql -h0 -P9306 -e "insert into t values(0, 'abc', 'st
 sleep 10; mysql -NE -h0 -P9306 -e "select count(*) from t"
 ––– output –––
 *************************** 1. row ***************************
-#!/55|56|57|58|59/!#
+51
 ––– input –––
 mysql -h0 -P9306 -e "unfreeze t; unfreeze t; unfreeze t;"
 ––– output –––

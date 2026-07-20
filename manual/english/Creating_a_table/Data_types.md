@@ -358,9 +358,9 @@ Below is the list of data types supported by Manticore Search:
 
 ## Document ID
 
-The document identifier is a mandatory attribute that must be unique. Document IDs support unsigned 64-bit values. Explicit document IDs must be non-zero; negative document IDs are not allowed. Document IDs are always enabled even if not specified, and they cannot be updated.
+Every table has a document ID. It must be unique and cannot be updated. By default, document IDs are unsigned 64-bit values. Explicit numeric document IDs must be non-zero; negative document IDs are not allowed. Real-time tables can instead use UUID document IDs, as described in [UUID document IDs](../Creating_a_table/Data_types.md#UUID-document-IDs).
 
-When declaring a table, you can include `id` in the `CREATE TABLE` schema, but regardless of the data type you use, it will behave as described above. In the MySQL/SQL interface, the ID is exposed as a signed 64-bit `bigint`, so large unsigned ID values may appear as negative numbers there.
+For a numeric document ID, you can declare `id bigint` in the `CREATE TABLE` schema or omit it and let Manticore add it automatically. In the MySQL/SQL interface, a numeric ID is exposed as a signed 64-bit `bigint`, so large unsigned ID values may appear as negative numbers there.
 
 ```sql
 mysql> CREATE TABLE tbl(id bigint, content text);
@@ -387,23 +387,26 @@ DESC tbl;
 2 rows in set (0.00 sec)
 ```
 
-Auto-ID generation depends on the table type. RT and PQ tables can generate IDs when the ID is omitted from an insert or replace request, or when `0` is used as the ID value. Plain tables built from external sources do not support automatic ID generation; their source data must provide explicit, unique, non-zero unsigned 64-bit document IDs.
+Auto-ID generation depends on the table and ID type. RT and PQ tables with numeric IDs can generate an ID when it is omitted from an insert or replace request, or when `0` is used. An RT table with `id uuid` generates a UUID only when `id` is omitted. Plain tables built from external sources do not support automatic ID generation; their source data must provide explicit, unique, non-zero unsigned 64-bit document IDs.
 
 ### UUID document IDs
 
-Real-time tables can use string UUID/GUID-style document IDs by declaring the primary key as `id uuid`. Explicit UUID IDs must be quoted 36-character UUID-shaped strings with hyphens (`8-4-4-4-12` hexadecimal digits), for example `550e8400-e29b-41d4-a716-446655440000`. Manticore validates this shape and normalizes uppercase hexadecimal letters to lowercase, but it does not require a specific UUID version or RFC variant for explicit IDs. If you omit `id` in `INSERT`, `REPLACE`, JSON insert/replace, or Elasticsearch-style indexing, Manticore generates a UUIDv8-style string derived from its internal auto-generated numeric document ID. This makes Manticore-generated UUID IDs unique under the same guarantees as numeric auto-IDs; generated UUID IDs are not random UUIDv4 values.
+Real-time tables can use UUID document IDs by declaring the primary key as `id uuid`. An explicit UUID must be a quoted 36-character string in the form `xxxxxxxx-xxxx-Vxxx-Wxxx-xxxxxxxxxxxx`, where each `x` is a hexadecimal digit. `V` is the version digit and must be from `1` through `8`. `W` is the variant digit and must be `8`, `9`, `a`, or `b`. For example, in `550e8400-e29b-41d4-a716-446655440000`, the version is `4` and the variant is `a`. Uppercase hexadecimal letters are accepted and normalized to lowercase.
 
-UUID IDs are returned as strings in SQL and as string `_id` values in JSON responses. They can be used in equality filters, `IN` filters, `REPLACE`, `UPDATE`, and `DELETE` statements, including after a RAM chunk is flushed to disk. `ORDER BY id`, `GROUP BY id`, and `COUNT(DISTINCT id)` use the UUID string value. `LAST_INSERT_ID()` and `@@session.last_insert_id` return the public UUID string for UUID-ID tables.
+Omit `id` to generate a UUID automatically. This works with SQL `INSERT` and `REPLACE`, native JSON insert and replace requests, and Elasticsearch-compatible `_bulk` `index` and `create` operations. Manticore derives the generated UUIDv8 from its internal auto-generated numeric document ID. Generated UUIDs have the same uniqueness guarantees as numeric auto-IDs and are not random UUIDv4 values.
+
+SQL returns UUID IDs as strings. Native JSON write responses use `id`, while JSON search and Elasticsearch-compatible responses use `_id`.
+
+UUID IDs support equality and `IN` filters and can be used with `REPLACE`, `UPDATE`, and `DELETE`, including after a RAM chunk is flushed to disk. `ORDER BY id`, `GROUP BY id`, and `COUNT(DISTINCT id)` use the UUID string value. `LAST_INSERT_ID()` and `@@session.last_insert_id` return the public UUID string for UUID-ID tables.
 
 Limitations:
 
 * Only the `id` column can use the `uuid` type; regular attributes cannot be declared as `uuid`.
-* UUID document IDs are supported for real-time/configless tables, including columnar real-time tables and replicated real-time tables. They are not supported for plain/indexer-created tables or percolate/PQ tables.
-* Existing tables cannot be converted to or from `id uuid` with `ALTER TABLE`.
+* UUID document IDs are supported only for real-time tables, including columnar and replicated real-time tables. They are not supported for plain/indexer-created, percolate/PQ, or shard tables.
+* `ALTER TABLE` cannot convert an existing table to or from `id uuid`.
 * UUID `id` filters support equality and `IN`. Range comparisons such as `<`, `<=`, `>`, and `>=`, and numeric/arithmetic expressions on UUID `id`, are not supported.
 * The internal UUID storage attribute is not part of the public schema and cannot be selected, filtered, grouped, sorted, inserted, or updated directly.
-* UUID ID-based operations are slower than numeric-ID operations because Manticore resolves the public UUID string to an internal numeric document ID internally. Use numeric IDs for the highest-throughput primary-key workloads.
-* Unlike numeric-ID tables, `0` is not an auto-ID marker for UUID-ID tables; omit `id` to generate a UUID automatically. Manticore-generated UUIDs use a UUIDv8-style layout derived from the internal auto-generated numeric document ID.
+* Unlike numeric-ID tables, UUID-ID tables do not treat `0` as an auto-ID marker.
 
 <!-- example uuid document ids -->
 

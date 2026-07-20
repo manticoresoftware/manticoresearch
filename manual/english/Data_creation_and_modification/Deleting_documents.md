@@ -453,7 +453,7 @@ deleteRequest.SetId(1)
 <!-- example delete 4 -->
 Here, documents with `id` matching values from the table named `test` are deleted:
 
-Note that the delete forms with `id=N` or `id IN (X,Y)` are the fastest, as they delete documents without performing a search.
+For numeric-ID tables, the delete forms with `id=N` or `id IN (X,Y)` are the fastest, as they delete documents without performing a search.
 Also note that the response contains only the id of the first deleted document in the corresponding `_id` field.
 
 <!-- intro -->

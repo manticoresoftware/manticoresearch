@@ -5,7 +5,15 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thank you for submitting a bug report. We appreciate your effort to provide detailed information. Please answer the following questions to help us identify and fix the bug. Thank you!
+        Thank you for submitting a bug report. We appreciate your effort to provide detailed information.
+
+        ## Before you submit
+
+        - **Existing Manticore Search clients: please create the bug report in your private repository instead of the public issue tracker. Reports there are prioritized so we can start working on them right away.**
+        - **Need this bug fixed soon?** Manticore Search provides support subscriptions. If timely resolution is important, please subscribe via [Manticore Search services](https://manticoresearch.com/services/).
+        - Public GitHub issues are welcome, but they are triaged according to our public backlog and may not receive immediate attention.
+
+        Please answer the following questions to help us identify and fix the bug.
   - type: textarea
     id: proposal
     attributes:
@@ -44,7 +52,7 @@ body:
         - "No"
   - type: markdown
     attributes:
-      value: "## Thank you for completing the form! For an expedited solution, consider our [professional services](https://manticoresearch.com/services/)."
+      value: "## Thank you for completing the form! If timely resolution is important, please use a support subscription: [Manticore Search services](http://manticoresearch.com/services/)."
   - type: textarea
     id: checklist
     attributes:

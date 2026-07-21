@@ -16,7 +16,7 @@
 #include "std/sys.h"
 
 namespace sec {
-using CheckStorage_fn =			void (*) ( const std::string & sFilename, uint32_t uNumRows, std::function<void (const char*)> & fnError, std::function<void (const char*)> & fnProgress );
+using CheckStorage_fn =			bool (*) ( const std::string & sFilename, uint32_t uNumRows, SI::ErrorReporter_fn & fnError, SI::ProgressReporter_fn & fnProgress );
 using VersionStr_fn =			const char * (*)();
 using GetVersion_fn	=			int (*)();
 using CreateSI_fn =				SI::Index_i * (*) ( const char * sFile, const SI::IndexSettings_t & tSettings, std::string & sError );
@@ -157,15 +157,16 @@ SI::Index_i * CreateSecondaryIndex ( const char * szFile, CSphString & sError )
 	return pSIdx;
 }
 
-void CheckSecondaryIndexStorage ( const CSphString & sFile, uint32_t uNumRows, std::function<void (const char*)> && fnError, std::function<void (const char*)> && fnProgress )
+bool CheckSecondaryIndexStorage ( const CSphString & sFile, uint32_t uNumRows, SI::ErrorReporter_fn && fnError, SI::ProgressReporter_fn && fnProgress )
 {
 	if ( !IsSecondaryLibLoaded() || !g_fnCheckSI )
 	{
-		fnError ( "secondary index library not loaded" );
-		return;
+		if ( fnError )
+			fnError ( "secondary index library not loaded" );
+		return false;
 	}
 
-	g_fnCheckSI ( sFile.cstr(), uNumRows, fnError, fnProgress );
+	return g_fnCheckSI ( sFile.cstr(), uNumRows, fnError, fnProgress );
 }
 
 std::unique_ptr<SI::Builder_i> CreateSecondaryIndexBuilder ( const common::Schema_t & tSchema, int64_t iMemoryLimit, const CSphString & sFile, int iBufferSize, CSphString & sError )

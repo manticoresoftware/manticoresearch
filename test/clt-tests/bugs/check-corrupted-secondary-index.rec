@@ -1,13 +1,10 @@
 ––– comment –––
-indextool --check must report a corrupted secondary-index payload as a check failure instead of crashing.
+indextool --check must report corrupted secondary-index files as controlled check failures instead of crashing.
 ––– block: ../base/start-searchd –––
 ––– input –––
-mysql -h0 -P9306 -N -B -e "SET GLOBAL auto_optimize=0; DROP TABLE IF EXISTS si_check; CREATE TABLE si_check (id BIGINT, properties JSON secondary_index='1'); INSERT INTO si_check VALUES (1, '{\"channels\":[29],\"v\":10}'), (2, '{\"channels\":[30],\"v\":20}'), (3, '{\"channels\":[29],\"v\":30}'); FLUSH RAMCHUNK si_check; SET GLOBAL secondary_indexes=1; SELECT id, IN(properties.channels, 29) AS p2 FROM si_check WHERE p2=1 ORDER BY id ASC;"
+mysql -h0 -P9306 -N -B -e "SET GLOBAL auto_optimize=0; DROP TABLE IF EXISTS si_check; CREATE TABLE si_check (id BIGINT, properties JSON secondary_index='1'); INSERT INTO si_check VALUES (1, '{\"channels\":[29],\"v\":10}'), (2, '{\"channels\":[30],\"v\":20}'), (3, '{\"channels\":[29],\"v\":30}'); FLUSH RAMCHUNK si_check; SET GLOBAL secondary_indexes=1;" && echo si_ready
 ––– output –––
-+------+------+
-|    1 |    1 |
-|    3 |    1 |
-+------+------+
+si_ready
 ––– input –––
 stdbuf -oL searchd --stopwait > /dev/null
 ––– output –––
@@ -15,11 +12,39 @@ stdbuf -oL searchd --stopwait > /dev/null
 indextool --check si_check >/tmp/si_check_clean.out 2>&1; echo clean_rc=$?
 ––– output –––
 clean_rc=0
+––– comment –––
+Save the clean file once and restore it before each independent corruption.
 ––– input –––
-spidx=$(find /var/lib/manticore/si_check -maxdepth 1 -name '*.spidx' | head -1); test -s "$spidx" && cp "$spidx" "$spidx.good" && size=$(wc -c < "$spidx") && keep=$((size/2)) && [ "$keep" -ge 1 ] || keep=1; dd if="$spidx.good" of="$spidx" bs=1 count="$keep" status=none; echo truncated_spidx
+spidx=$(find /var/lib/manticore/si_check -maxdepth 1 -name '*.spidx' | head -1); if test -s "$spidx" && cp "$spidx" "$spidx.good"; then echo saved_clean_spidx; else echo failed_to_save_clean_spidx; fi
 ––– output –––
-truncated_spidx
+saved_clean_spidx
+––– comment –––
+Half-file truncation must fail while loading the secondary-index metadata.
 ––– input –––
-set +e; out=$(indextool --check si_check 2>&1); rc=$?; set -e; if [ "$rc" -ne 0 ] && echo "$out" | grep -Eiq 'FAILED|unexpected EOF|Invalid secondary index'; then echo corrupted_check_failed_as_expected; else echo "unexpected rc=$rc"; echo "$out"; fi
+spidx=$(find /var/lib/manticore/si_check -maxdepth 1 -name '*.spidx' | head -1); if test -s "$spidx.good"; then size=$(wc -c < "$spidx.good"); keep=$((size/2)); [ "$keep" -ge 1 ] || keep=1; if dd if="$spidx.good" of="$spidx" bs=1 count="$keep" status=none && [ "$(wc -c < "$spidx")" -eq "$keep" ]; then echo truncated_spidx_half; else echo failed_to_truncate_spidx_half; fi; else echo failed_to_truncate_spidx_half; fi
+––– output –––
+truncated_spidx_half
+––– input –––
+set +e; out=$(indextool --check si_check 2>&1); rc=$?; set -e; if [ "$rc" -ne 0 ] && echo "$out" | grep -Eq 'check FAILED, [0-9]+( of [0-9]+)? failures reported'; then echo corrupted_check_failed_as_expected; else echo "unexpected rc=$rc"; echo "$out"; fi
 ––– output –––
 corrupted_check_failed_as_expected
+––– comment –––
+One missing byte at the tail makes the final block-offset entry incomplete.
+––– input –––
+spidx=$(find /var/lib/manticore/si_check -maxdepth 1 -name '*.spidx' | head -1); if test -s "$spidx.good" && cp "$spidx.good" "$spidx"; then size=$(wc -c < "$spidx"); keep=$((size-1)); if [ "$keep" -ge 1 ] && dd if="$spidx.good" of="$spidx" bs=1 count="$keep" status=none && [ "$(wc -c < "$spidx")" -eq "$keep" ]; then echo truncated_spidx_tail; else echo tail_truncation_failed; fi; else echo tail_truncation_failed; fi
+––– output –––
+truncated_spidx_tail
+––– input –––
+set +e; out=$(indextool --check si_check 2>&1); rc=$?; set -e; if [ "$rc" -ne 0 ] && echo "$out" | grep -Eq 'check FAILED, [0-9]+( of [0-9]+)? failures reported'; then echo tail_corruption_failed_as_expected; else echo "unexpected rc=$rc"; echo "$out"; fi
+––– output –––
+tail_corruption_failed_as_expected
+––– comment –––
+The final complete offset table entry must still point inside the raw-block area.
+––– input –––
+spidx=$(find /var/lib/manticore/si_check -maxdepth 1 -name '*.spidx' | head -1); if test -s "$spidx.good" && cp "$spidx.good" "$spidx"; then size=$(wc -c < "$spidx"); if [ "$size" -ge 8 ] && perl -e 'print pack("Q<", $ARGV[0])' "$size" | dd of="$spidx" bs=1 seek=$((size-8)) count=8 conv=notrunc status=none && [ "$(wc -c < "$spidx")" -eq "$size" ]; then echo corrupted_last_block_offset; else echo failed_to_corrupt_block_offset; fi; else echo failed_to_corrupt_block_offset; fi
+––– output –––
+corrupted_last_block_offset
+––– input –––
+set +e; out=$(indextool --check si_check 2>&1); rc=$?; set -e; if [ "$rc" -ne 0 ] && echo "$out" | grep -Eq 'check FAILED, [0-9]+( of [0-9]+)? failures reported'; then echo corrupt_offset_check_failed_as_expected; else echo "unexpected rc=$rc"; echo "$out"; fi
+––– output –––
+corrupt_offset_check_failed_as_expected

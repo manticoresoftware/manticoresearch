@@ -1523,7 +1523,11 @@ void DiskIndexChecker_c::Impl_c::CheckSecondaryIndexes()
 
 	m_tReporter.Msg ( "checking secondary indexes..." );
 	CheckSecondaryIndexStorage ( GetFilename(SPH_EXT_SPIDX), (DWORD)m_iNumRows,
-		[this]( const char * szError ){ m_tReporter.Fail ( "\n%s", szError ); },
+		[this]( const char * szError )
+		{
+			m_tReporter.Fail ( szError ? "\n%s" : "%s", szError ? szError : "" );
+			return m_tReporter.GetNumFails()<FAILS_THRESH;
+		},
 		[this]( const char * szProgress ){ m_tReporter.Progress ( "%s", szProgress ); } );
 }
 

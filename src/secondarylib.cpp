@@ -16,7 +16,7 @@
 #include "std/sys.h"
 
 namespace sec {
-using CheckStorage_fn =			void (*) ( const std::string & sFilename, uint32_t uNumRows, std::function<void (const char*)> & fnError, std::function<void (const char*)> & fnProgress );
+using CheckStorage_fn =			bool (*) ( const std::string & sFilename, uint32_t uNumRows, SI::ErrorReporter_fn & fnError, SI::ProgressReporter_fn & fnProgress );
 using VersionStr_fn =			const char * (*)();
 using GetVersion_fn	=			int (*)();
 using CreateSI_fn =				SI::Index_i * (*) ( const char * sFile, const SI::IndexSettings_t & tSettings, std::string & sError );
@@ -26,6 +26,7 @@ using CreateBuilder_fn =		SI::Builder_i *	(*) ( const common::Schema_t & tSchema
 static void *					g_pSecondaryLib = nullptr;
 static sec::VersionStr_fn		g_fnVersionSecStr = nullptr;
 static sec::CreateSI_fn			g_fnCreateSI = nullptr;
+static sec::CheckStorage_fn		g_fnCheckSI = nullptr;
 static sec::CreateBuilder_fn	g_fnCreateBuilder = nullptr;
 
 static uint64_t					g_uBlockCacheSize = 8*1024*1024;
@@ -79,6 +80,7 @@ bool InitSecondary ( CSphString & sError )
 
 	if ( !LoadFunc ( g_fnVersionSecStr, tHandle.Get(), "GetSecondaryLibVersionStr", sLibfile, sError ) )				return false;
 	if ( !LoadFunc ( g_fnCreateSI, tHandle.Get(), "CreateSecondaryIndex", sLibfile, sError ) )						return false;
+	if ( !LoadFunc ( g_fnCheckSI, tHandle.Get(), "CheckSecondaryIndex", sLibfile, sError ) )						return false;
 	if ( !LoadFunc ( g_fnCreateBuilder, tHandle.Get(), "CreateBuilder", sLibfile, sError ) )						return false;
 
 	g_pSecondaryLib = tHandle.Leak();
@@ -153,6 +155,18 @@ SI::Index_i * CreateSecondaryIndex ( const char * szFile, CSphString & sError )
 		sError = sTmpError.c_str();
 
 	return pSIdx;
+}
+
+bool CheckSecondaryIndexStorage ( const CSphString & sFile, uint32_t uNumRows, SI::ErrorReporter_fn && fnError, SI::ProgressReporter_fn && fnProgress )
+{
+	if ( !IsSecondaryLibLoaded() || !g_fnCheckSI )
+	{
+		if ( fnError )
+			fnError ( "secondary index library not loaded" );
+		return false;
+	}
+
+	return g_fnCheckSI ( sFile.cstr(), uNumRows, fnError, fnProgress );
 }
 
 std::unique_ptr<SI::Builder_i> CreateSecondaryIndexBuilder ( const common::Schema_t & tSchema, int64_t iMemoryLimit, const CSphString & sFile, int iBufferSize, CSphString & sError )

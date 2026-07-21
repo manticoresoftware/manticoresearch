@@ -19,6 +19,7 @@
 #include "docstore.h"
 #include "conversion.h"
 #include "columnarlib.h"
+#include "secondarylib.h"
 #include "indexsettings.h"
 #include "indexfiles.h"
 #include "roaring/roaring64map.hh"
@@ -546,6 +547,7 @@ private:
 	void	CheckKillList() const;
 	void	CheckBlockIndex();
 	void	CheckColumnar();
+	void	CheckSecondaryIndexes();
 	void	CheckDocidLookup();
 	void	CheckUuidDocidLookup ( CSphReader & tLookup, int64_t iDocs, SphOffset_t tEntriesOffset, SphOffset_t tNumericEnd );
 	void	CheckDocids();
@@ -882,6 +884,7 @@ void DiskIndexChecker_c::Impl_c::Check()
 	CheckAttributes();
 	CheckBlockIndex();
 	CheckColumnar();
+	CheckSecondaryIndexes();
 	CheckKillList();
 	CheckDocstore();
 
@@ -1510,6 +1513,23 @@ void DiskIndexChecker_c::Impl_c::CheckColumnar()
 
 	CheckColumnarStorage ( GetFilename(SPH_EXT_SPC), (DWORD)m_iNumRows,
 		[this]( const char * szError ){ m_tReporter.Fail ( "\n%s", szError ); },
+		[this]( const char * szProgress ){ m_tReporter.Progress ( "%s", szProgress ); } );
+}
+
+
+void DiskIndexChecker_c::Impl_c::CheckSecondaryIndexes()
+{
+	CSphString sError;
+	if ( !sphFileExists ( GetFilename(SPH_EXT_SPIDX), &sError ) )
+		return;
+
+	m_tReporter.Msg ( "checking secondary indexes..." );
+	CheckSecondaryIndexStorage ( GetFilename(SPH_EXT_SPIDX), (DWORD)m_iNumRows,
+		[this]( const char * szError )
+		{
+			m_tReporter.Fail ( szError ? "\n%s" : "%s", szError ? szError : "" );
+			return m_tReporter.GetNumFails()<FAILS_THRESH;
+		},
 		[this]( const char * szProgress ){ m_tReporter.Progress ( "%s", szProgress ); } );
 }
 

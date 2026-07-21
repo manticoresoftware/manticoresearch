@@ -387,55 +387,7 @@ DESC tbl;
 2 rows in set (0.00 sec)
 ```
 
-Auto-ID generation depends on the table and ID type. RT and PQ tables with numeric IDs can generate an ID when it is omitted from an insert or replace request, or when `0` is used. An RT table with `id uuid` generates a UUID only when `id` is omitted. Plain tables built from external sources do not support automatic ID generation; their source data must provide explicit, unique, non-zero unsigned 64-bit document IDs.
-
-### UUID document IDs
-
-Real-time tables can use UUID document IDs by declaring the primary key as `id uuid`. An explicit UUID must be a quoted 36-character string in the form `xxxxxxxx-xxxx-Vxxx-Wxxx-xxxxxxxxxxxx`, where each `x` is a hexadecimal digit. `V` is the version digit and must be from `1` through `8`. `W` is the variant digit and must be `8`, `9`, `a`, or `b`. For example, in `550e8400-e29b-41d4-a716-446655440000`, the version is `4` and the variant is `a`. Uppercase hexadecimal letters are accepted and normalized to lowercase.
-
-Omit `id` to generate a UUID automatically. This works with SQL `INSERT` and `REPLACE`, native JSON insert and replace requests, and Elasticsearch-compatible `_bulk` `index` and `create` operations. Manticore derives the generated UUIDv8 from its internal auto-generated numeric document ID. Generated UUIDs have the same uniqueness guarantees as numeric auto-IDs and are not random UUIDv4 values.
-
-SQL returns UUID IDs as strings. Native JSON write responses use `id`, while JSON search and Elasticsearch-compatible responses use `_id`.
-
-UUID IDs support equality and `IN` filters and can be used with `REPLACE`, `UPDATE`, and `DELETE`, including after a RAM chunk is flushed to disk. `ORDER BY id`, `GROUP BY id`, and `COUNT(DISTINCT id)` use the UUID string value. `LAST_INSERT_ID()` and `@@session.last_insert_id` return the public UUID string for UUID-ID tables.
-
-Limitations:
-
-* Only the `id` column can use the `uuid` type; regular attributes cannot be declared as `uuid`.
-* UUID document IDs are supported only for real-time tables, including columnar and replicated real-time tables. They are not supported for plain/indexer-created, percolate/PQ, or shard tables.
-* `ALTER TABLE` cannot convert an existing table to or from `id uuid`.
-* UUID `id` filters support equality and `IN`. Range comparisons such as `<`, `<=`, `>`, and `>=`, and numeric/arithmetic expressions on UUID `id`, are not supported.
-* The internal UUID storage attribute is not part of the public schema and cannot be selected, filtered, grouped, sorted, inserted, or updated directly.
-* Unlike numeric-ID tables, UUID-ID tables do not treat `0` as an auto-ID marker.
-
-<!-- example uuid document ids -->
-
-<!-- intro -->
-##### SQL:
-<!-- request SQL -->
-
-```sql
-CREATE TABLE products_uuid(id uuid, title text, price int);
-INSERT INTO products_uuid(id, title, price) VALUES('550e8400-e29b-41d4-a716-446655440000', 'Crossbody Bag', 19);
-INSERT INTO products_uuid(title, price) VALUES('Generated UUID Bag', 29);
-SELECT id, price FROM products_uuid WHERE id='550e8400-e29b-41d4-a716-446655440000';
-```
-
-<!-- response SQL -->
-
-```sql
-Query OK, 0 rows affected (0.00 sec)
-Query OK, 1 rows affected (0.00 sec)
-Query OK, 1 rows affected (0.00 sec)
-+--------------------------------------+-------+
-| id                                   | price |
-+--------------------------------------+-------+
-| 550e8400-e29b-41d4-a716-446655440000 |    19 |
-+--------------------------------------+-------+
-1 row in set (0.00 sec)
-```
-
-<!-- end -->
+Auto-ID generation depends on the table and ID type. RT and PQ tables with numeric IDs can generate an ID when it is omitted from an insert or replace request, or when `0` is used. An RT table with [id uuid](../Creating_a_table/Data_types.md#UUID-document-IDs) generates a UUID only when `id` is omitted. Plain tables built from external sources do not support automatic ID generation; their source data must provide explicit, unique, non-zero unsigned 64-bit document IDs.
 
 When working with numeric document IDs, it's important to know that unsigned 64-bit values are handled differently depending on the interface:
 
@@ -574,6 +526,54 @@ curl -s 0:9308/insert -d '{"table": "t", "id": 18446744073709551615, "doc": {}}'
 This means when working with large document IDs:
 1. **MySQL interface** requires using the signed representation for queries but can display the unsigned value with `UINT64()`
 2. **JSON interface** consistently uses unsigned values for display and accepts both representations for filtering
+
+### UUID document IDs
+
+<!-- example uuid document ids -->
+
+Real-time tables can use UUID document IDs with `id uuid`. Explicit IDs must be strings in the 36-character `8-4-4-4-12` hexadecimal format, for example `550e8400-e29b-41d4-a716-446655440000`. Manticore accepts UUID versions `1` through `8` and RFC variants `8`, `9`, `a`, and `b`. Uppercase letters are accepted and normalized to lowercase.
+
+Omit `id` to generate a UUID automatically. This works with SQL `INSERT` and `REPLACE`, native JSON insert and replace requests, and Elasticsearch-compatible `_bulk` `index` and `create` operations. Generated IDs use a UUIDv8-style layout and have [the same uniqueness guarantees](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) as numeric auto-IDs. They are not random UUIDv4 values and must not be used as cryptographic secrets.
+
+SQL returns UUID IDs as strings. Native JSON write responses use key name `id`, while JSON search and Elasticsearch-compatible responses use `_id`.
+
+UUID IDs can be used in equality and `IN` filters and to identify documents in `REPLACE`, `UPDATE`, and `DELETE`. `INSERT` rejects an ID that already exists; use `REPLACE` to overwrite the document with that ID. After an `INSERT` or `REPLACE` on a UUID-ID table, `LAST_INSERT_ID()` and `@@session.last_insert_id` return the UUID IDs of the affected documents.
+
+Limitations:
+
+* Only the `id` column can use the `uuid` type; regular attributes cannot be declared as `uuid`.
+* UUID document IDs are supported only for real-time tables, including columnar and replicated real-time tables. They are not supported for plain (indexer-created), percolate/PQ, or shard tables.
+* `ALTER TABLE` cannot convert an existing table to or from `id uuid`.
+* Range filters (`<`, `<=`, `>`, `>=`) and numeric or arithmetic expressions on UUID `id` are not supported.
+* Unlike numeric-ID tables, UUID-ID tables do not treat `0` as an auto-ID marker.
+
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products_uuid(id uuid, title text, price int);
+INSERT INTO products_uuid(id, title, price) VALUES('550e8400-e29b-41d4-a716-446655440000', 'Crossbody Bag', 19);
+INSERT INTO products_uuid(title, price) VALUES('Generated UUID Bag', 29);
+SELECT id, price FROM products_uuid WHERE id='550e8400-e29b-41d4-a716-446655440000';
+```
+
+<!-- response SQL -->
+
+```sql
+Query OK, 0 rows affected (0.00 sec)
+Query OK, 1 rows affected (0.00 sec)
+Query OK, 1 rows affected (0.00 sec)
++--------------------------------------+-------+
+| id                                   | price |
++--------------------------------------+-------+
+| 550e8400-e29b-41d4-a716-446655440000 |    19 |
++--------------------------------------+-------+
+1 row in set (0.00 sec)
+```
+
+<!-- end -->
 
 ## Character data types
 

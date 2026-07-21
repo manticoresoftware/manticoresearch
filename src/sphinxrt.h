@@ -21,6 +21,7 @@
 #include "docstore.h"
 #include "columnarrt.h"
 #include "coroutine.h"
+#include "uuid_docid.h"
 #include "tokenizer/tokenizer.h"
 #include "indexing_sources/source_document.h"
 
@@ -28,6 +29,13 @@ class RtAccum_t;
 
 using VisitChunk_fn = std::function<void ( const CSphIndex* pIndex )>;
 using VisitChunkEx_fn = std::function<void ( const CSphIndex* pIndex, bool bOptimizing )>;
+
+enum class InsertDocidMode_e
+{
+	NUMERIC,
+	UUID_AUTO,
+	UUID_EXPLICIT
+};
 
 class InsertDocData_c
 {
@@ -41,11 +49,16 @@ public:
 	CSphVector<SphAttr_t>				m_dColumnarAttrs;
 	int									m_iColumnarID = -1;
 	int64_t								m_iTotalBytes = 0;
+	InsertDocidMode_e					m_eDocidMode = InsertDocidMode_e::NUMERIC;
+	int									m_iUuidString = -1;
 
 										explicit InsertDocData_c ( const ISphSchema & tSchema );
 
 	void								SetID ( SphAttr_t tDocID );
 	SphAttr_t							GetID() const;
+	void								ResetPrimaryIdState();
+	void								SetUuidDocidString ( CSphString && sUuid );
+	const char *						GetUuidDocidString() const;
 
 	void								AddMVALength ( int iLength, bool bDefault=false );
 	void								AddMVAValue ( int64_t iValue )						{ m_dMvas.Add(iValue); }
@@ -60,6 +73,7 @@ private:
 	static const uint64_t DEFAULT_FLAG = 1ULL << 63;
 
 	CSphVector<int64_t>					m_dMvas;
+	CSphString							m_sOwnedUuidDocid;
 };
 
 struct OptimizeTask_t
@@ -298,6 +312,7 @@ public:
 	CSphVector<BYTE>				m_dKeywordCheckpoints;
 	std::atomic<int64_t> *			m_pRAMCounter = nullptr;///< external RAM counter
 	OpenHashTable_T<DocID_t, RowID_t>	m_tDocIDtoRowID;		///< speeds up docid-rowid lookups
+	OpenHashTable_T<UuidDocidKey_t, DocID_t, UuidDocidKeyHash_fn> m_tUuidDocID { 0 }; ///< speeds up UUID public-id lookups
 	DeadRowMap_Ram_c				m_tDeadRowMap;
 	std::unique_ptr<DocstoreRT_i>	m_pDocstore;
 	std::unique_ptr<ColumnarRT_i>	m_pColumnar;

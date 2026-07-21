@@ -12,6 +12,7 @@
 
 #include "frontendschema.h"
 
+#include "indexsettings.h"
 #include "queuecreator.h"
 
 /// returns internal magic names for expressions like COUNT(*) that have a corresponding one
@@ -24,7 +25,40 @@ static const char * GetMagicSchemaName ( const CSphString & s )
 		return "@weight";
 	if ( s=="groupby()" )
 		return "@groupby";
-	return s.cstr();
+	return s.IsEmpty() ? "" : s.cstr();
+}
+
+
+static int GetUuidIdIndex ( const ISphSchema & tSchema, const CSphString & sAttr, bool bProjectUuidId )
+{
+	if ( !bProjectUuidId )
+		return -1;
+
+	if ( sAttr.IsEmpty() || strcmp ( sAttr.cstr(), sphGetDocidName() )!=0 )
+		return -1;
+
+	int iUuid = tSchema.GetAttrIndex ( sphGetUuidDocidName() );
+	assert ( iUuid<0 || tSchema.GetAttr(iUuid).m_eAttrType==SPH_ATTR_STRING || tSchema.GetAttr(iUuid).m_eAttrType==SPH_ATTR_STRINGPTR );
+	return iUuid;
+}
+
+
+static bool IsFrontendAttrMatch ( const ISphSchema & tSchema, const CSphString & sSchemaAttr, const CSphString & sQueryAttr, bool bProjectUuidId )
+{
+	if ( GetUuidIdIndex ( tSchema, sQueryAttr, bProjectUuidId )>=0 )
+		return !sSchemaAttr.IsEmpty() && strcmp ( sSchemaAttr.cstr(), sphGetUuidDocidName() )==0;
+
+	return strcmp ( sSchemaAttr.cstr(), GetMagicSchemaName ( sQueryAttr ) )==0;
+}
+
+
+static int GetFrontendAttrIndex ( const ISphSchema & tSchema, const CSphString & sAttr, bool bProjectUuidId )
+{
+	int iUuidAttr = GetUuidIdIndex ( tSchema, sAttr, bProjectUuidId );
+	if ( iUuidAttr>=0 )
+		return iUuidAttr;
+
+	return tSchema.GetAttrIndex ( GetMagicSchemaName ( sAttr ) );
 }
 
 /// a functor to sort columns by (is_aggregate ASC, column_index ASC)
@@ -48,6 +82,23 @@ struct AggregateColumnSort_fn
 		return a.m_iIndex < b.m_iIndex;
 	}
 };
+
+
+static void MoveDocidFirst ( CSphVector<CSphColumnInfo> & dAttrs )
+{
+	int iDocid = 0;
+	while ( iDocid<dAttrs.GetLength() && dAttrs[iDocid].m_sName!=sphGetDocidName() )
+		++iDocid;
+
+	if ( iDocid==dAttrs.GetLength() )
+	{
+		assert ( 0 && "agent schema must contain numeric id" );
+		return;
+	}
+
+	for ( ; iDocid>0; --iDocid )
+		Swap ( dAttrs[iDocid], dAttrs[iDocid-1] );
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -86,13 +137,17 @@ bool FrontendSchemaBuilder_c::Build ( bool bMaster, CSphString & sError )
 
 void FrontendSchemaBuilder_c::CollectKnownItems()
 {
+	// Agent wire schemas keep numeric id as a normal attr; the master applies
+	// the public UUID id alias after it receives and merges agent results.
+	const bool bProjectUuidId = !m_bAgent;
+
 	ARRAY_CONSTFOREACH ( i, m_dItems )
 	{
 		const CSphQueryItem & tItem = m_dItems[i];
 
 		int iCol = -1;
 		if ( !m_bQueryFromAPI && tItem.m_sAlias.IsEmpty() )
-			iCol = m_tRes.m_tSchema.GetAttrIndex ( tItem.m_sExpr.cstr() );
+			iCol = GetFrontendAttrIndex ( m_tRes.m_tSchema, tItem.m_sExpr, bProjectUuidId );
 
 		if ( iCol>=0 )
 		{
@@ -109,6 +164,7 @@ void FrontendSchemaBuilder_c::CollectKnownItems()
 void FrontendSchemaBuilder_c::AddAttrs()
 {
 	bool bUsualApi = !m_bAgent && m_bQueryFromAPI;
+	const bool bProjectUuidId = !m_bAgent;
 
 	for ( int iCol=0; iCol<m_tRes.m_tSchema.GetAttrsCount(); ++iCol )
 	{
@@ -141,7 +197,7 @@ void FrontendSchemaBuilder_c::AddAttrs()
 		} else if ( bMagic && ( tCol.m_pExpr || bUsualApi ) )
 		{
 			ARRAY_FOREACH ( j, m_dUnmappedAttrs )
-				if ( tCol.m_sName==GetMagicSchemaName ( m_dItems[ m_dUnmappedAttrs[j] ].m_sExpr ) )
+				if ( IsFrontendAttrMatch ( m_tRes.m_tSchema, tCol.m_sName, m_dItems[ m_dUnmappedAttrs[j] ].m_sExpr, bProjectUuidId ) )
 				{
 					int k = m_dUnmappedAttrs[j];
 					m_dFrontend[k].m_iIndex = iCol;
@@ -163,9 +219,9 @@ void FrontendSchemaBuilder_c::AddAttrs()
 			{
 				int k = m_dUnmappedAttrs[j];
 				const CSphQueryItem & t = m_dItems[k];
-				if ( ( tCol.m_sName==GetMagicSchemaName ( t.m_sExpr ) && t.m_eAggrFunc==SPH_AGGR_NONE )
+				if ( ( IsFrontendAttrMatch ( m_tRes.m_tSchema, tCol.m_sName, t.m_sExpr, bProjectUuidId ) && t.m_eAggrFunc==SPH_AGGR_NONE )
 					|| ( t.m_sAlias==tCol.m_sName &&
-						( m_tRes.m_tSchema.GetAttrIndex ( GetMagicSchemaName ( t.m_sExpr ) )==-1 || t.m_eAggrFunc!=SPH_AGGR_NONE ) ) )
+						( GetFrontendAttrIndex ( m_tRes.m_tSchema, t.m_sExpr, bProjectUuidId )==-1 || t.m_eAggrFunc!=SPH_AGGR_NONE ) ) )
 				{
 					// tricky bit about naming
 					//
@@ -263,7 +319,12 @@ void FrontendSchemaBuilder_c::Finalize()
 	// in agents only, push aggregated columns, if any, to the end
 	// for that, sort the schema by (is_aggregate ASC, column_index ASC)
 	if ( m_bAgent )
+	{
 		m_dFrontend.Sort ( AggregateColumnSort_fn() );
+		// Parsed agent attributes get fresh locators in wire order, while reducers
+		// read the internal numeric docid directly from dynamic row item zero.
+		MoveDocidFirst ( m_dFrontend );
+	}
 }
 
 

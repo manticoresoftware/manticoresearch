@@ -287,7 +287,7 @@ POST /delete -d '
 ``` json
 {
     "table": "test",
-    "_id": 1,
+    "id": 1,
     "found": true,
     "result": "deleted"
 }
@@ -350,7 +350,7 @@ res = await indexApi.delete({"table" : "test", "id" : 1});
 
 <!-- response javascript -->
 ```javascript
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -430,7 +430,7 @@ res = await indexApi.delete({ index: 'test', id: 1 });
 
 <!-- response TypeScript -->
 ```json
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -445,7 +445,7 @@ deleteRequest.SetId(1)
 
 <!-- response Go -->
 ```json
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- end -->
@@ -453,7 +453,7 @@ deleteRequest.SetId(1)
 <!-- example delete 4 -->
 这里，从名为`test`的表中删除具有`id`匹配值的文档：
 
-注意，带有`id=N`或`id IN (X,Y)`的形式的删除操作最快，因为它们在不执行搜索的情况下删除文档。
+对于 numeric-ID 表，使用 `id=N` 或 `id IN (X,Y)` 的删除形式最快，因为它们会在不执行搜索的情况下删除文档。
 还请注意，响应中仅包含对应于`_id`字段的第一个被删除文档的id。
 
 <!-- intro -->
@@ -487,7 +487,7 @@ POST /delete -d '
 ``` json
     {
         "table":"test",
-        "_id":1,
+        "id":1,
         "found":true,
         "result":"deleted"
     }
@@ -595,7 +595,7 @@ POST /delete
     }
 }
 
-POST /search 
+POST /search
 {
   "table": "test"
 }
@@ -714,7 +714,7 @@ indexApi.delete({"cluster":"cluster_1","table" : "test", "id" : 1})
 
 <!-- response javascript -->
 ```javascript
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -795,7 +795,7 @@ res = await indexApi.delete({ cluster: 'cluster_1', index: 'test', id: 1 });
 
 <!-- response TypeScript -->
 ```json
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -811,7 +811,7 @@ deleteRequest.SetId(1)
 
 <!-- response Go -->
 ```json
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- end -->
@@ -846,7 +846,7 @@ POST /bulk
          "bulk":
          {
             "table":"test",
-            "_id":0,
+            "id":0,
             "created":0,
             "deleted":2,
             "updated":0,

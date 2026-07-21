@@ -700,6 +700,11 @@ struct ReplicateKeys_t
 		m_dHashes.AddN ( iCount );
 		return m_dHashes.Slice ( iOff, iCount );
 	}
+
+	void AddKey ( uint64_t uKey, bool bShared )
+	{
+		AddKeys ( 1, bShared )[0] = uKey;
+	}
 };
 
 static StringBuilder_c & operator << ( StringBuilder_c & tBuilder, const ReplicateKeys_t & tKeys )
@@ -1232,6 +1237,23 @@ static void AddSharedKeys ( const uint64_t uIndex, const VecTraits_T<DocID_t> & 
 	}
 }
 
+static uint64_t GetUuidDocidKeyDomain ( uint64_t uIndex )
+{
+	static constexpr const char * UUID_KEY_NAMESPACE = "rt_uuid_public_id";
+	static constexpr int UUID_KEY_NAMESPACE_LEN = sizeof ( "rt_uuid_public_id" ) - 1;
+	return sphFNV64 ( UUID_KEY_NAMESPACE, UUID_KEY_NAMESPACE_LEN, uIndex );
+}
+
+static void AddUuidDocidKey ( uint64_t uUuidDomain, ByteBlob_t tUuid, ReplicateKeys_t & tKeys )
+{
+	tKeys.AddKey ( sphFNV64 ( tUuid.first, tUuid.second, uUuidDomain ), false );
+}
+
+static void AddUuidDocidKey ( uint64_t uUuidDomain, const CSphString & sUuid, ReplicateKeys_t & tKeys )
+{
+	tKeys.AddKey ( sphFNV64cont ( sUuid.cstr(), uUuidDomain ), false );
+}
+
 static void StoreCommandPqAdd ( const ReplicationCommand_t & tCmd, MemoryWriter_c & tWriter, const uint64_t uIndex, ReplicateKeys_t & tKeys )
 {
 	assert ( tCmd.m_pStored );
@@ -1262,12 +1284,37 @@ static void StoreCommandPqDelete ( const ReplicationCommand_t & tCmd, MemoryWrit
 	}
 }
 
-static void StoreCommandRtTnx ( MemoryWriter_c & tWriter, const RtAccum_t & tAcc, const uint64_t uIndex, ReplicateKeys_t & tKeys )
+static void StoreCommandRtTnx ( const ReplicationCommand_t & tCmd, MemoryWriter_c & tWriter, const RtAccum_t & tAcc, const uint64_t uIndex, ReplicateKeys_t & tKeys )
 {
 	tAcc.SaveRtTrx ( tWriter );
 
 	// table is the shared key and table with ID is the exclusive key
-	AddSharedKeys ( uIndex, tAcc.m_dAccumKlist, tKeys );
+	if ( tAcc.m_dAccumKlist.GetLength() )
+		AddSharedKeys ( uIndex, tAcc.m_dAccumKlist, tKeys );
+	else
+		tKeys.AddKey ( uIndex, true );
+
+	if ( tCmd.m_eCommand!=ReplCmd_e::RT_TRX )
+		return;
+
+	assert ( !tAcc.m_uAccumDocs || tAcc.GetIndex() );
+	const bool bAccumUuid = tAcc.m_uAccumDocs && sphHasUuidDocid ( tAcc.GetIndex()->GetInternalSchema() );
+
+	if ( !bAccumUuid && tCmd.m_dUuidKeys.IsEmpty() )
+		return;
+
+	const uint64_t uUuidDomain = GetUuidDocidKeyDomain ( uIndex );
+	if ( bAccumUuid )
+		tAcc.ForEachUuidDocid ( [&tKeys, uUuidDomain] ( ByteBlob_t tUuid )
+			{
+				assert ( tUuid.first );
+				assert ( tUuid.second>0 );
+				assert ( sphIsNormalizedUuidDocid ( { (const char *)tUuid.first, tUuid.second } ) );
+				AddUuidDocidKey ( uUuidDomain, tUuid, tKeys );
+			} );
+
+	for ( const CSphString & sUuid : tCmd.m_dUuidKeys )
+		AddUuidDocidKey ( uUuidDomain, sUuid, tKeys );
 }
 
 static void StoreCommandUpdateApi ( const ReplicationCommand_t & tCmd, MemoryWriter_c & tWriter, const uint64_t uIndex, ReplicateKeys_t & tKeys )
@@ -1415,7 +1462,7 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 		case ReplCmd_e::RT_TRX:
 		case ReplCmd_e::AUTH_ADD:
 		case ReplCmd_e::AUTH_DELETE:
-			StoreCommandRtTnx ( tWriter, tAcc, uIndex, tKeys );
+			StoreCommandRtTnx ( tCmd, tWriter, tAcc, uIndex, tKeys );
 			break;
 
 		case ReplCmd_e::UPDATE_API:

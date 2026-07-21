@@ -20,6 +20,7 @@
 #include "conversion.h"
 #include "columnarlib.h"
 #include "secondarylib.h"
+#include "indexsettings.h"
 #include "indexfiles.h"
 #include "roaring/roaring64map.hh"
 
@@ -548,6 +549,7 @@ private:
 	void	CheckColumnar();
 	void	CheckSecondaryIndexes();
 	void	CheckDocidLookup();
+	void	CheckUuidDocidLookup ( CSphReader & tLookup, int64_t iDocs, SphOffset_t tEntriesOffset, SphOffset_t tNumericEnd );
 	void	CheckDocids();
 	void	CheckDocstore();
 	void	CheckSchema();
@@ -1558,6 +1560,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 	int64_t iDocs = tLookup.GetDword();
 	int64_t iDocsPerCheckpoint = tLookup.GetDword();
 	tLookup.GetOffset(); // max docid
+	SphOffset_t tUuidEntriesOffset = m_uVersion>=71 ? tLookup.GetOffset() : 0;
 	int64_t iLookupBase = tLookup.GetPos();
 
 	int iCheckpoints = ( iDocs + iDocsPerCheckpoint - 1 ) / iDocsPerCheckpoint;
@@ -1647,6 +1650,54 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 			m_tReporter.Fail ( "row %u(" INT64_FMT ") not mapped at lookup, docid " UINT64_FMT, i, m_iNumRows, tDocID );
 		}
 	}
+
+	SphOffset_t tNumericEnd = tLookup.GetPos();
+	if ( pId->IsUuidLinkedDocid() )
+		CheckUuidDocidLookup ( tLookup, iDocs, tUuidEntriesOffset, tNumericEnd );
+	else if ( tUuidEntriesOffset )
+		m_tReporter.Fail ( "unexpected uuid lookup offset in .SPT" );
+}
+
+
+void DiskIndexChecker_c::Impl_c::CheckUuidDocidLookup ( CSphReader & tLookup, int64_t iDocs, SphOffset_t tEntriesOffset, SphOffset_t tNumericEnd )
+{
+	if ( m_uVersion<71 )
+	{
+		m_tReporter.Fail ( "uuid lookup requires index format 71 or newer" );
+		return;
+	}
+
+	if ( iDocs!=m_iNumRows )
+		m_tReporter.Fail ( "uuid lookup entry count " INT64_FMT " differs from row count " INT64_FMT, iDocs, m_iNumRows );
+
+	uint64_t uEntriesBytes = (uint64_t)iDocs*sizeof(UuidDocidLookupPair_t);
+	if ( tEntriesOffset!=tNumericEnd || tEntriesOffset<=0 || (uint64_t)tEntriesOffset>(uint64_t)tLookup.GetFilesize() || uEntriesBytes!=(uint64_t)tLookup.GetFilesize()-(uint64_t)tEntriesOffset )
+	{
+		m_tReporter.Fail ( "invalid uuid lookup bounds in .SPT" );
+		return;
+	}
+
+	tLookup.SeekTo ( tEntriesOffset, sizeof(UuidDocidLookupPair_t) );
+	UuidDocidLookupPair_t tPrev;
+	for ( int64_t i=0; i<iDocs; ++i )
+	{
+		UuidDocidLookupPair_t tPair;
+		tPair.m_tKey.m_uHi = (uint64_t)tLookup.GetOffset();
+		tPair.m_tKey.m_uLo = (uint64_t)tLookup.GetOffset();
+		tPair.m_tDocID = tLookup.GetOffset();
+		if ( tLookup.GetErrorFlag() )
+		{
+			m_tReporter.Fail ( "error reading uuid lookup entry " INT64_FMT ": %s", i, tLookup.GetErrorMessage().cstr() );
+			return;
+		}
+
+		if ( !tPair.m_tDocID )
+			m_tReporter.Fail ( "uuid lookup has zero docid at entry " INT64_FMT, i );
+		if ( i && !CmpUuidDocidLookup_fn::IsLess ( tPrev, tPair ) )
+			m_tReporter.Fail ( "uuid lookup keys are not strictly increasing at entry " INT64_FMT, i );
+
+		tPrev = tPair;
+	}
 }
 
 RowID_t DiskIndexChecker_c::Impl_c::GetRowidByDocid ( DocID_t iDocID ) const
@@ -1658,7 +1709,7 @@ RowID_t DiskIndexChecker_c::Impl_c::GetRowidByDocid ( DocID_t iDocID ) const
 		return INVALID_ROWID;
 
 	LookupReader_c tLookupReader;
-	tLookupReader.SetData ( tDocidLookup.GetReadPtr() );
+	tLookupReader.SetData ( tDocidLookup.GetReadPtr(), m_uVersion );
 
 	return tLookupReader.Find(iDocID);
 }
@@ -1849,7 +1900,7 @@ bool SchemaConfigureCheckAttribute ( const CSphSchema & tSchema, const CSphColum
 		return false;
 	}
 
-	if ( sphIsInternalAttr ( tCol.m_sName ) )
+	if ( sphIsInternalAttr ( tCol.m_sName ) && tCol.m_sName!=sphGetUuidDocidName() )
 	{
 		sError.SetSprintf ( "%s is not a valid attribute name", tCol.m_sName.cstr() );
 		return false;

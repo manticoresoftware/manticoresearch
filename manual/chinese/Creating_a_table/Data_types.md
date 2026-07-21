@@ -358,9 +358,9 @@ create table tbl(title text, type int, price float engine='columnar') engine='ro
 
 ## 文档 ID
 
-文档标识符是一个必填属性，且必须唯一。Document ID 支持无符号 64 位值。显式指定的 document ID 必须非零；不允许使用负数 document ID。即使未显式指定，Document ID 也始终启用，并且不能更新。
+每个表都有一个文档 ID。它必须唯一且不能更新。默认情况下，文档 ID 是无符号 64 位值。显式指定的数字文档 ID 必须非零；不允许使用负数文档 ID。实时表也可以使用 UUID 文档 ID，详见 [UUID document IDs](../Creating_a_table/Data_types.md#UUID-document-IDs)。
 
-在声明表时，你可以在 `CREATE TABLE` schema 中包含 `id`，但无论使用哪种数据类型，它都会按上述方式工作。在 MySQL/SQL 接口中，ID 以有符号 64 位 `bigint` 形式暴露，因此较大的无符号 ID 值在那里可能显示为负数。
+对于数字文档 ID，你可以在 `CREATE TABLE` 模式中声明 `id bigint`，也可以省略它，让 Manticore 自动添加。在 MySQL/SQL 接口中，数字 ID 会以有符号 64 位 `bigint` 的形式暴露，因此较大的无符号 ID 值在这里可能显示为负数。
 
 ```sql
 mysql> CREATE TABLE tbl(id bigint, content text);
@@ -387,9 +387,9 @@ DESC tbl;
 2 rows in set (0.00 sec)
 ```
 
-Auto-ID 生成取决于表类型。RT 和 PQ 表在 insert 或 replace 请求中省略 ID，或者将 ID 值设为 `0` 时，都可以生成 ID。由外部来源构建的 Plain 表不支持自动 ID 生成；其源数据必须提供显式、唯一、非零的无符号 64 位 document ID。
+自动 ID 生成取决于表和 ID 类型。使用数值 ID 的 RT 表和 PQ 表，在 `insert` 或 `replace` 请求中省略 ID，或者将其设为 `0` 时，都可以生成 ID。使用 [id uuid](../Creating_a_table/Data_types.md#UUID-document-IDs) 的 RT 表只有在省略 `id` 时才会生成 UUID。由外部数据源构建的普通表不支持自动 ID 生成；其源数据必须提供显式、唯一、非零的无符号 64 位文档 ID。
 
-处理 document ID 时，需要知道无符号 64 位值会因接口不同而以不同方式处理：
+在处理数字文档 ID 时，需要注意无符号 64 位值会根据接口的不同而以不同方式处理：
 
 **MySQL/SQL 接口：**
 * 大于 2^63-1 的 ID 将显示为负数。
@@ -526,6 +526,54 @@ curl -s 0:9308/insert -d '{"table": "t", "id": 18446744073709551615, "doc": {}}'
 这意味着在处理大文档 ID 时：
 1. **MySQL 接口** 要求查询时使用有符号表示，但可以通过 `UINT64()` 显示无符号值
 2. **JSON 接口** 始终使用无符号值显示，并接受两种表示进行过滤
+
+### UUID 文档 ID
+
+<!-- example uuid document ids -->
+
+实时表可以使用 `id uuid` 的 UUID 文档 ID。显式 ID 必须是 36 字符的 `8-4-4-4-12` 十六进制格式字符串，例如 `550e8400-e29b-41d4-a716-446655440000`。Manticore 接受 UUID 版本 `1` 到 `8`，以及 RFC 变体 `8`、`9`、`a` 和 `b`。支持大写字母，并会规范化为小写。
+
+省略 `id` 可自动生成 UUID。这适用于 SQL `INSERT` 和 `REPLACE`、原生 JSON 插入和替换请求，以及 Elasticsearch 兼容的 `_bulk` `index` 和 `create` 操作。生成的 ID 采用类似 UUIDv8 的布局，并且具有与数值自动 ID [相同的唯一性保证](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID)。它们不是随机的 UUIDv4 值，不能用作加密密钥。
+
+SQL 会将 UUID ID 作为字符串返回。对于 UUID-ID 表，原生 JSON 写入响应使用键名 `id`，而 JSON 搜索和 Elasticsearch 兼容响应使用 `_id`。
+
+UUID ID 可用于相等和 `IN` 过滤器，也可用于在 `REPLACE`、`UPDATE` 和 `DELETE` 中标识文档。`INSERT` 会拒绝已存在的 ID；要覆盖该 ID 对应的文档，请使用 `REPLACE`。在 UUID-ID 表上执行 `INSERT` 或 `REPLACE` 后，`LAST_INSERT_ID()` 和 `@@session.last_insert_id` 会返回受影响文档的 UUID ID。
+
+限制：
+
+* 只有 `id` 列可以使用 `uuid` 类型；普通属性不能声明为 `uuid`。
+* UUID 文档 ID 仅支持实时表，包括列式实时表和复制实时表。不支持普通表（由 indexer 创建）、percolate/PQ 表或 shard 表。
+* `ALTER TABLE` 不能将现有表转换为或转换自 `id uuid`。
+* 不支持对 UUID `id` 使用范围过滤器（`<`、`<=`、`>`、`>=`）以及数值或算术表达式。
+* 与数值 ID 表不同，UUID-ID 表不会把 `0` 视为自动 ID 标记。
+
+
+<!-- intro -->
+##### SQL：
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products_uuid(id uuid, title text, price int);
+INSERT INTO products_uuid(id, title, price) VALUES('550e8400-e29b-41d4-a716-446655440000', 'Crossbody Bag', 19);
+INSERT INTO products_uuid(title, price) VALUES('Generated UUID Bag', 29);
+SELECT id, price FROM products_uuid WHERE id='550e8400-e29b-41d4-a716-446655440000';
+```
+
+<!-- response SQL -->
+
+```sql
+Query OK, 0 rows affected (0.00 sec)
+Query OK, 1 rows affected (0.00 sec)
+Query OK, 1 rows affected (0.00 sec)
++--------------------------------------+-------+
+| id                                   | price |
++--------------------------------------+-------+
+| 550e8400-e29b-41d4-a716-446655440000 |    19 |
++--------------------------------------+-------+
+1 row in set (0.00 sec)
+```
+
+<!-- end -->
 
 ## 字符数据类型
 
@@ -3305,7 +3353,7 @@ POST /search
 ```JSON
 {
    "table":"products",
-   "_id":1,
+   "id":1,
    "created":true,
    "result":"created",
    "status":201

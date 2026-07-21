@@ -509,6 +509,9 @@ static void ParseSchema ( OneResultset_t & tRes, MemInputBuffer_c & tReq )
 		}
 		tSchema.AddAttr ( tCol, true ); // all attributes received from agents are dynamic
 	}
+
+	assert ( !tSchema.GetAttr ( sphGetDocidName() ) || tSchema.GetAttr ( sphGetDocidName() )->m_tLocator.m_bDynamic );
+	assert ( !tSchema.GetAttr ( sphGetDocidName() ) || tSchema.GetAttr ( sphGetDocidName() )->m_tLocator.CalcRowitem()==0 );
 }
 
 

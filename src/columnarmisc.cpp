@@ -33,6 +33,24 @@ CSphVector<ScopedTypedIterator_t> CreateAllColumnarIterators ( const columnar::C
 }
 
 
+PlainOrColumnar_t CreatePlainOrColumnar ( const ISphSchema & tSchema, const CSphColumnInfo & tAttr )
+{
+	int iColumnar = 0;
+	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
+	{
+		const CSphColumnInfo & tSchemaAttr = tSchema.GetAttr(i);
+		if ( &tSchemaAttr==&tAttr )
+			return PlainOrColumnar_t ( tAttr, iColumnar );
+
+		if ( tSchemaAttr.IsColumnar() )
+			++iColumnar;
+	}
+
+	assert ( 0 && "attribute does not belong to schema" );
+	return {};
+}
+
+
 SphAttr_t SetColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * pBuilder, std::unique_ptr<columnar::Iterator_i> & pIterator, RowID_t tRowID, CSphVector<int64_t> & dTmp )
 {
 	switch ( eType )

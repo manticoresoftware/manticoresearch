@@ -1,0 +1,60 @@
+––– block: ../base/start-searchd –––
+––– comment –––
+Generated UUID primary IDs must be canonical UUIDv8-shaped values, distinct within
+each request flow, and usable as the public id through SQL, native JSON, and ES bulk.
+––– input –––
+if ! command -v jq >/dev/null; then apt-get update >/dev/null 2>&1 && apt-get install -y jq >/dev/null 2>&1; fi; echo $?
+––– output –––
+0
+––– input –––
+uuid_re='^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-8[0-9a-f]{3}-000000000000$'; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS uuid_auto_sql_clt; DROP TABLE IF EXISTS uuid_auto_http_clt; CREATE TABLE uuid_auto_sql_clt ( id uuid, title text, tag string ); CREATE TABLE uuid_auto_http_clt ( id uuid, title text, tag string );"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO uuid_auto_sql_clt ( title, tag ) VALUES ( 'auto sql one', 'sql-auto-one' ), ( 'auto sql two', 'sql-auto-two' );"; echo $?
+––– output –––
+0
+––– input –––
+sql_ids=($(mysql -h0 -P9306 -e "SELECT id FROM uuid_auto_sql_clt ORDER BY tag ASC" | awk '/^\| [0-9a-f]/{print $2}')); [[ ${#sql_ids[@]} -eq 2 && ${sql_ids[0]} =~ $uuid_re && ${sql_ids[1]} =~ $uuid_re && ${sql_ids[0]} != ${sql_ids[1]} ]]; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT tag FROM uuid_auto_sql_clt WHERE id='${sql_ids[0]}'" | grep -q 'sql-auto-one'; echo $?
+––– output –––
+0
+––– input –––
+curl -sS -o /tmp/uuid_auto_json_replace.json -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' --data '{ "table": "uuid_auto_http_clt", "doc": { "title": "auto replace", "tag": "json-auto-replace" } }' http://localhost:9308/json/replace
+––– output –––
+200
+––– input –––
+json_replace_id=$(jq -r '.id' /tmp/uuid_auto_json_replace.json); jq -e '(.result == "created" and .created == true and .status == 201)' /tmp/uuid_auto_json_replace.json >/dev/null && [[ $json_replace_id =~ $uuid_re ]]; echo $?
+––– output –––
+0
+––– input –––
+curl -sS -o /tmp/uuid_auto_json_insert.json -X POST -H 'Content-Type: application/json' --data '{ "table": "uuid_auto_http_clt", "doc": { "title": "auto insert", "tag": "json-auto-insert" } }' http://localhost:9308/json/insert; json_insert_id=$(jq -r '.id' /tmp/uuid_auto_json_insert.json); [[ $json_insert_id =~ $uuid_re && $json_insert_id != $json_replace_id ]]; echo $?
+––– output –––
+0
+––– input –––
+curl -sS -X POST -H 'Content-Type: application/json' --data '{ "table": "uuid_auto_http_clt", "query": { "equals": { "tag": "json-auto-replace" } }, "_source": ["id", "tag"], "limit": 1 }' http://localhost:9308/json/search | jq -e --arg id "$json_replace_id" '(.hits.hits[0] | ._id == $id and ._source.id == $id)'
+––– output –––
+true
+––– input –––
+printf '%s\n' '{ "index" : { "_index" : "uuid_auto_http_clt" } }' '{ "title" : "es bulk auto", "tag" : "es-bulk-auto" }' | curl -sS -o /tmp/uuid_auto_es_bulk.json -w '%{http_code}\n' -X POST -H 'Content-Type: application/x-ndjson' --data-binary @- http://localhost:9308/_bulk
+––– output –––
+200
+––– input –––
+es_bulk_id=$(jq -r '.items[0].index._id' /tmp/uuid_auto_es_bulk.json); jq -e '.errors == false' /tmp/uuid_auto_es_bulk.json >/dev/null && [[ $es_bulk_id =~ $uuid_re ]]; echo $?
+––– output –––
+0
+––– input –––
+curl -sS -X POST -H 'Content-Type: application/json' --data '{ "table": "uuid_auto_http_clt", "query": { "equals": { "tag": "es-bulk-auto" } }, "_source": ["id", "tag"], "limit": 1 }' http://localhost:9308/json/search | jq -e --arg id "$es_bulk_id" '(.hits.hits[0] | ._id == $id and ._source.id == $id)'
+––– output –––
+true
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE uuid_auto_sql_clt; DROP TABLE uuid_auto_http_clt;"; rm -f /tmp/uuid_auto_json_replace.json /tmp/uuid_auto_json_insert.json /tmp/uuid_auto_es_bulk.json; echo $?
+––– output –––
+0

@@ -89,6 +89,10 @@ MatchIterator_c::MatchIterator_c ( OneResultset_t & tResult )
 	auto& dMatches = tResult.m_dMatches;
 	m_iLimit = dMatches.GetLength();
 
+	assert ( m_tResult.m_tSchema.GetAttr ( sphGetDocidName() ) );
+	assert ( m_tResult.m_tSchema.GetAttr ( sphGetDocidName() )->m_tLocator.m_bDynamic );
+	assert ( m_tResult.m_tSchema.GetAttr ( sphGetDocidName() )->m_tLocator.CalcRowitem()==0 );
+
 	if ( MaybeUseWordOrder ( dMatches ) )
 		m_fnOrder = [pData = (WORD *) m_tResult.m_dMatches.end ()] ( int i ) { return pData[i]; };
 	else if ( MaybeUseDwordOrder ( dMatches ) )
@@ -102,7 +106,6 @@ MatchIterator_c::MatchIterator_c ( OneResultset_t & tResult )
 	m_iRawIdx = 0;
 	m_iIdx = m_fnOrder(0);
 
-	assert ( m_tResult.m_tSchema.GetAttr ( sphGetDocidName() ) );
 	m_tDocID = sphGetDocID ( m_tResult.m_dMatches[m_iIdx].m_pDynamic );
 }
 

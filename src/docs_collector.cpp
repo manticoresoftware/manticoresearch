@@ -27,7 +27,7 @@ class DocsCollector_c::Impl_c
 
 	// check the short path - if we have clauses 'id=smth' or 'id in (xx,yy)' or 'id in @uservar' - we know
 	// all the values list immediatelly and don't have to run the heavy query here.
-	bool ProcessFast( const CSphQuery& tQuery )
+	bool ProcessFast ( const CSphQuery& tQuery )
 	{
 		if ( !tQuery.m_sQuery.IsEmpty() || !tQuery.m_dFilterTree.IsEmpty() || tQuery.m_dFilters.GetLength() != 1 )
 			return false;
@@ -43,9 +43,9 @@ class DocsCollector_c::Impl_c
 		return m_bFastPath;
 	}
 
-	void ProcessFull ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
+	void ProcessFull ( const CSphQuery& tQuery, bool bJson, QueryType_e eQueryType, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
 	{
-		SearchHandler_c tHandler ( 1, CreateQueryParser ( bJson ), tQuery.m_eQueryType, false );
+		SearchHandler_c tHandler ( 1, CreateQueryParser ( bJson ), eQueryType, false );
 		tHandler.m_dAcquired.AddIndex ( sIndex, pDesc );
 		tHandler.RunCollect ( tQuery, sIndex, pError, &m_dCompressedDocids );
 
@@ -89,10 +89,10 @@ class DocsCollector_c::Impl_c
 	}
 
 public:
-	Impl_c ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
+	Impl_c ( const CSphQuery& tQuery, bool bJson, QueryType_e eQueryType, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
 	{
 		if ( !ProcessFast ( tQuery ) )
-			ProcessFull ( tQuery, bJson, sIndex, pDesc, pError );
+			ProcessFull ( tQuery, bJson, eQueryType, sIndex, pDesc, pError );
 	}
 
 	bool GetValuesChunk ( CSphVector<DocID_t>& dValues, int iValues )
@@ -126,7 +126,12 @@ public:
 
 /// public iface
 DocsCollector_c::DocsCollector_c ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
-	: m_pImpl { std::make_unique<Impl_c> ( tQuery, bJson, sIndex, pDesc, pError ) }
+	: DocsCollector_c ( tQuery, bJson, tQuery.m_eQueryType, sIndex, pDesc, pError )
+{}
+
+
+DocsCollector_c::DocsCollector_c ( const CSphQuery& tQuery, bool bJson, QueryType_e eQueryType, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
+	: m_pImpl { std::make_unique<Impl_c> ( tQuery, bJson, eQueryType, sIndex, pDesc, pError ) }
 {}
 
 DocsCollector_c::~DocsCollector_c() = default;

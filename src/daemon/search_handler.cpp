@@ -2478,8 +2478,12 @@ void AddCompositeItems ( const CSphString & sCol, CSphVector<CSphQueryItem> & dI
 	for ( const CSphString & sCol : dAttrs )
 	{
 		if_const ( HAS_ATTRS )
-			if ( (*pAttrs)[sCol] )
+		{
+			bool bAlreadySelected = (*pAttrs)[sCol];
+			bool bDocidSelectedByStar = (*pAttrs)["*"] && sCol==sphGetDocidName();
+			if ( bAlreadySelected || bDocidSelectedByStar )
 				continue;
+		}
 
 		CSphQueryItem & tItem = dItems.Add();
 		tItem.m_sExpr = sCol;
@@ -2712,7 +2716,7 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 			break;
 		}
 		tQuery.m_sOrderBy = "@weight desc";
-		if ( tBucket.m_eAggrFunc==Aggr_e::COMPOSITE )
+		if ( tBucket.m_eAggrFunc==Aggr_e::COMPOSITE && tBucket.m_dComposite.GetLength()>1 )
 			tQuery.m_eGroupFunc = SPH_GROUPBY_MULTIPLE;
 
 		if ( tBucket.m_sSort.IsEmpty() )

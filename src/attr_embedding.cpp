@@ -16,11 +16,17 @@
 
 #include "embeddingutils.h"
 #include "attr_embedding.h"
+#include "indexsettings.h"
 
 void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphString & sError, bool bModify )
 {
 	CSphString sAttrToAdd = tStmt.m_sAlterAttr;
 	sAttrToAdd.ToLower();
+	if ( strcmp ( sAttrToAdd.cstr(), "@id" )==0 && sphHasUuidDocid ( pIdx->GetMatchSchema() ) )
+	{
+		sError = "attribute '@id' is internal";
+		return;
+	}
 
 	bool bIndexed = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED;
 	bool bStored = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_STORED;

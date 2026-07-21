@@ -13,6 +13,7 @@
 #include "attribute.h"
 #include "sphinxint.h"
 #include "conversion.h"
+#include "indexsettings.h"
 #include <math.h>
 #include <algorithm>
 
@@ -887,7 +888,7 @@ Histogram_i * HistogramContainer_c::Get ( const CSphString & sAttr ) const
 
 static bool CanCreateHistogram ( const CSphString & sAttrName, ESphAttr eAttrType )
 {
-	if ( sphIsInternalAttr ( sAttrName ) )
+	if ( sphIsInternalAttr ( sAttrName ) && sAttrName!=sphGetUuidDocidName() )
 		return false;
 
 	return ( eAttrType==SPH_ATTR_INTEGER || eAttrType==SPH_ATTR_BIGINT || eAttrType==SPH_ATTR_BOOL || eAttrType==SPH_ATTR_FLOAT || eAttrType==SPH_ATTR_TIMESTAMP || eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET || eAttrType==SPH_ATTR_STRING );

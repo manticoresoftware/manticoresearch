@@ -18,6 +18,7 @@
 #include "searchdbuddy.h"
 #include "auth/auth_proto_mysql.h"
 #include "client_session.h"
+#include "indexsettings.h"
 
 #include "sqlchecks/checks.h"
 
@@ -1230,7 +1231,7 @@ void SendTableSchema ( SqlRowBuffer_c & tSqlOut, CSphString sName )
 	assert ( tSchema.GetAttr ( 0 ).m_sName == sphGetDocidName() );
 	const auto & tId = tSchema.GetAttr ( 0 );
 
-	tSqlOut.HeadColumn ( tId.m_sName.cstr(), ESphAttr2MysqlColumn ( tId.m_eAttrType ) );
+	tSqlOut.HeadColumn ( tId.m_sName.cstr(), tId.IsUuidLinkedDocid() ? MYSQL_COL_STRING : ESphAttr2MysqlColumn ( tId.m_eAttrType ) );
 	for ( int i = 0; i < tSchema.GetFieldsCount(); ++i )
 	{
 		const auto & tField = tSchema.GetField ( i );

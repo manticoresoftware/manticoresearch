@@ -27,6 +27,7 @@
 #include "geodist.h"
 #include "knnmisc.h"
 #include "hybridexecutor.h"
+#include "indexsettings.h"
 #include <time.h>
 #include <math.h>
 
@@ -4510,6 +4511,13 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp ) noe
 {
 	// check attribute type and width
 	const CSphColumnInfo & tCol = m_pSchema->GetAttr ( iAttr );
+	if ( tCol.IsUuidLinkedDocid() )
+	{
+		int iUuid = m_pSchema->GetAttrIndex ( sphGetUuidDocidName() );
+		assert ( iUuid>=0 );
+		assert ( m_pSchema->GetAttr(iUuid).m_eAttrType==SPH_ATTR_STRING || m_pSchema->GetAttr(iUuid).m_eAttrType==SPH_ATTR_STRINGPTR );
+		return ParseAttr ( iUuid, sphGetUuidDocidName(), lvalp );
+	}
 
 	// check for a duplicate attribute created for showing a stored field in the result set
 	if ( tCol.m_uFieldFlags & CSphColumnInfo::FIELD_STORED )
@@ -10594,11 +10602,21 @@ int ExprParser_t::ParseJoinAttr ( const char * szTable, uint64_t uOffset )
 	// Left table columns are stored in schema without prefix; right table with "right.attr"
 	CSphString sAttrWithTable;
 	if ( m_pJoinIdxLeft && *m_pJoinIdxLeft==szTable )
+	{
 		sAttrWithTable = sAttrName;
+	}
 	else
 		sAttrWithTable.SetSprintf ( "%s.%s", szTable, sAttrName.cstr() );
 
 	int iAttr = m_pSchema->GetAttrIndex ( sAttrWithTable.cstr() );
+	if ( iAttr>=0 && m_pSchema->GetAttr(iAttr).IsUuidLinkedDocid() )
+	{
+		int iUuid = m_pSchema->GetAttrIndex ( sphGetUuidDocidName() );
+		assert ( iUuid>=0 );
+		assert ( m_pSchema->GetAttr(iUuid).m_eAttrType==SPH_ATTR_STRING || m_pSchema->GetAttr(iUuid).m_eAttrType==SPH_ATTR_STRINGPTR );
+		iAttr = iUuid;
+	}
+
 	if ( iAttr==-1 )
 		m_sParserError.SetSprintf ( "unknown attribute '%s'", sAttrWithTable.cstr() );
 

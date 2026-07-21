@@ -9,7 +9,9 @@ You can insert a single or [multiple documents](../../Data_creation_and_modifica
 
 Expressions are not currently supported in `INSERT`, so values must be explicitly specified.
 
-The ID field/value can be omitted, as RT and PQ tables support [auto-id](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) functionality. You can also use `0` as the id value to force automatic ID generation. Rows with duplicate IDs will not be overwritten by `INSERT`. Instead, you can use [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md) for that purpose.
+The ID field/value can be omitted, as RT and PQ tables support [auto-id](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) functionality. For numeric-ID tables, you can also use `0` as the id value to force automatic ID generation. Rows with duplicate IDs will not be overwritten by `INSERT`. Instead, you can use [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md) for that purpose.
+
+For tables created with [`id uuid`](../../Creating_a_table/Data_types.md#UUID-document-IDs), pass an explicit UUID as a quoted string or omit `id` to generate one automatically. Explicit values must match `xxxxxxxx-xxxx-Vxxx-Wxxx-xxxxxxxxxxxx`, where each `x` is a hexadecimal digit, `V` is the version (`1` through `8`), and `W` is the variant (`8`, `9`, `a`, or `b`). Uppercase hexadecimal letters are accepted and normalized to lowercase. Unlike numeric IDs, `0` does not request automatic UUID generation.
 
 When using the HTTP JSON protocol, you have two different request formats to choose from: a common Manticore format and an Elasticsearch-like format. Both formats are demonstrated in the examples below.
 
@@ -84,26 +86,72 @@ POST /insert
 ```json
 {
   "table": "products",
-  "_id": 1,
+  "id": 1,
   "created": true,
   "result": "created",
   "status": 201
 }
 {
   "table": "products",
-  "_id": 2,
+  "id": 2,
   "created": true,
   "result": "created",
   "status": 201
 }
 {
   "table": "products",
-  "_id": 1657860156022587406,
+  "id": 1657860156022587406,
   "created": true,
   "result": "created",
   "status": 201
 }
 
+```
+
+For tables created with `id uuid`, pass the JSON `id` as a UUID string, or omit it to generate one automatically:
+
+<!-- request JSON -->
+
+```json
+POST /insert
+{
+  "table":"products_uuid",
+  "id":"550e8400-e29b-41d4-a716-446655440000",
+  "doc":
+  {
+    "title":"Crossbody Bag with Tassel",
+    "price":19.85
+  }
+}
+
+POST /insert
+{
+  "table":"products_uuid",
+  "doc":
+  {
+    "title":"Generated UUID Bag",
+    "price":29
+  }
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "table": "products_uuid",
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "created": true,
+  "result": "created",
+  "status": 201
+}
+{
+  "table": "products_uuid",
+  "id": "<generated UUID>",
+  "created": true,
+  "result": "created",
+  "status": 201
+}
 ```
 
 <!-- intro -->
@@ -367,14 +415,14 @@ POST /insert
 ```json
 {
   "table": "weekly_table",
-  "_id": 1,
+  "id": 1,
   "created": true,
   "result": "created",
   "status": 201
 }
 {
   "table": "weekly_table",
-  "_id": 1657860156022587406,
+  "id": 1657860156022587406,
   "created": true,
   "result": "created",
   "status": 201
@@ -598,21 +646,21 @@ POST /insert  -d
 <!-- response JSON -->
 
 ```json
-{"table":"t","_id":2,"created":true,"result":"created","status":201}
+{"table":"t","id":2,"created":true,"result":"created","status":201}
 ```
 
 <!-- end -->
 
 ## Auto ID
 <!-- example autoid -->
-Manticore provides an auto ID generation functionality for the column ID of documents inserted or replaced into a real-time or [Percolate table](../../Creating_a_table/Local_tables/Percolate_table.md). The generator produces a unique ID for a document with some guarantees, but it should not be considered an auto-incremented ID.
+Manticore provides automatic ID generation for documents inserted or replaced into a real-time or [Percolate table](../../Creating_a_table/Local_tables/Percolate_table.md). The generator produces a unique numeric value with the guarantees below, but it should not be considered an auto-incrementing sequence.
 
 The generated ID value is guaranteed to be unique under the following conditions:
 * The [server_id](../../Server_settings/Searchd.md#server_id) value of the current server is in the range of 0 to 127 and is unique among nodes in the cluster, or it uses the default value generated from the MAC address as a seed
 * The system time does not change for the Manticore node between server restarts
 * The average auto-ID generation rate between two server starts stays below about 16 million IDs per second
 
-The auto ID generator creates a 64-bit integer for a document ID and uses the following layout:
+The auto ID generator creates a 64-bit integer with the following layout:
 * Bits 0 to 23 are a counter that is incremented on every call to the auto ID generator
 * Bits 24 to 55 store the server start time in seconds, encoded as `(unix_timestamp_at_start - 2019-05-01 00:00:00 UTC)`
 * Bits 56 to 62 store the `server_id` (the value is masked to the range 0..127)
@@ -622,6 +670,8 @@ This layout ensures that generated IDs are unique among cluster nodes and that d
 Important: the 24-bit counter is not a hard limit on the total number of documents you can insert during one server run. You can insert more than 16,777,216 documents after startup; the IDs will still keep increasing and remain unique for that running process. The `~16 million IDs per second` rule matters for uniqueness across restarts: after a restart, the time-based part must advance far enough so that newly generated IDs do not overlap with IDs created before the restart.
 
 As a result, the first ID from the generator used for auto ID is NOT 1 but a larger number. Additionally, the document stream inserted into a table might have non-sequential ID values if inserts into other tables occur between calls, as the ID generator is singular in the server and shared between all its tables.
+
+For numeric-ID tables, this integer is the public document ID. For UUID-ID tables, Manticore encodes it as a canonical UUIDv8 string; clients see only the UUID.
 
 <!-- intro -->
 ##### SQL:
@@ -818,6 +868,8 @@ or
 { "index": { "table": "products" } }
 { "title": "Crossbody Bag with Tassel", "price": 19.85, "id": "1" }
 ```
+
+For an RT table declared with `id uuid`, `/bulk` reads UUIDs from `id`. `/_bulk` reads them from metadata `_id` or the document `id`. Both endpoints can omit the ID to generate a UUID automatically.
 
 #### Chunked transfer in /bulk
 The `/bulk` (Manticore mode) endpoint supports [Chunked transfer encoding](https://en.wikipedia.org/wiki/Chunked_transfer_encoding). You can use it to transmit large batches. It:

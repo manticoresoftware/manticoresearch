@@ -921,9 +921,9 @@ static StrVec_t ExpandIndexes ( const CSphString & sSrcIndexes, CSphString & sRe
 	{
 		if ( !HasWildcard ( sName.cstr() ) )
 		{
-			// then look for local index
+			// then look for local/distributed index
 			auto pServed ( GetServed ( sName ) );
-			if ( pServed )
+			if ( pServed || GetDistr ( sName ) )
 				dLocalIndexes.Add ( sName );
 		} else
 		{

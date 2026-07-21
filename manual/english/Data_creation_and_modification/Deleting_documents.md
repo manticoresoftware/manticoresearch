@@ -287,7 +287,7 @@ POST /delete -d '
 ``` json
 {
     "table": "test",
-    "_id": 1,
+    "id": 1,
     "found": true,
     "result": "deleted"
 }
@@ -350,7 +350,7 @@ res = await indexApi.delete({"table" : "test", "id" : 1});
 
 <!-- response javascript -->
 ```javascript
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -430,7 +430,7 @@ res = await indexApi.delete({ index: 'test', id: 1 });
 
 <!-- response TypeScript -->
 ```json
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -445,7 +445,7 @@ deleteRequest.SetId(1)
 
 <!-- response Go -->
 ```json
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- end -->
@@ -453,7 +453,7 @@ deleteRequest.SetId(1)
 <!-- example delete 4 -->
 Here, documents with `id` matching values from the table named `test` are deleted:
 
-Note that the delete forms with `id=N` or `id IN (X,Y)` are the fastest, as they delete documents without performing a search.
+For numeric-ID tables, the delete forms with `id=N` or `id IN (X,Y)` are the fastest, as they delete documents without performing a search.
 Also note that the response contains only the id of the first deleted document in the corresponding `_id` field.
 
 <!-- intro -->
@@ -487,7 +487,7 @@ POST /delete -d '
 ``` json
     {
         "table":"test",
-        "_id":1,
+        "id":1,
         "found":true,
         "result":"deleted"
     }
@@ -714,7 +714,7 @@ indexApi.delete({"cluster":"cluster_1","table" : "test", "id" : 1})
 
 <!-- response javascript -->
 ```javascript
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -795,7 +795,7 @@ res = await indexApi.delete({ cluster: 'cluster_1', index: 'test', id: 1 });
 
 <!-- response TypeScript -->
 ```json
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -811,7 +811,7 @@ deleteRequest.SetId(1)
 
 <!-- response Go -->
 ```json
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- end -->
@@ -846,7 +846,7 @@ POST /bulk
          "bulk":
          {
             "table":"test",
-            "_id":0,
+            "id":0,
             "created":0,
             "deleted":2,
             "updated":0,

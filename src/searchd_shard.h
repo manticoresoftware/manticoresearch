@@ -133,6 +133,7 @@ public:
 private:
 	const CSphSchema &		m_tSchema;
 	const CSphColumnInfo *	m_pDocId = nullptr;
+	int						m_iUuidDocidAttr = -1;
 
 	const CSphVector<bool> & m_dFieldAttrs;
 

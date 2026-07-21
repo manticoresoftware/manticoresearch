@@ -29,6 +29,7 @@ inline int64_t cast2signed ( SphWordID_t tVal )
 class CSphWriter;
 class CSphReader;
 class FilenameBuilder_i;
+class ISphSchema;
 
 struct StoredQueryExecutionSettings_t
 {
@@ -489,6 +490,11 @@ struct RtTypedAttr_t
 
 int						GetNumRtTypes();
 const RtTypedAttr_t &	GetRtType ( int iType );
+
+const char *			sphGetUuidDocidName();
+bool					sphHasUuidDocid ( const ISphSchema & tSchema );
+bool					sphPrepareUuidDocid ( const char * szUuid, CSphString & sNormalizedUuid, CSphString & sError );
+bool					sphIsNormalizedUuidDocid ( Str_t tUuid );
 
 bool					StrToAttrEngine ( AttrEngine_e & eEngine, AttrEngine_e eDefault, const CSphString & sValue, CSphString & sError );
 

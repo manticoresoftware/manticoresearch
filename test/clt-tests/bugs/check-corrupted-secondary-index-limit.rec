@@ -1,0 +1,22 @@
+––– comment –––
+indextool --check must suppress detailed secondary-index diagnostics after its limit while counting every independently corrupted block.
+––– block: ../base/start-searchd –––
+––– input –––
+perl -e 'my $q=chr 39; print "SET GLOBAL auto_optimize=0; DROP TABLE IF EXISTS si_check_limit; CREATE TABLE si_check_limit (id BIGINT, properties JSON secondary_index=\0471\047);\n"; for (my $first=1; $first<=13056; $first+=256) { my $last=$first+255; $last=13056 if $last>13056; print "INSERT INTO si_check_limit VALUES "; print join q{,}, map { "(".$_.",".$q."{\"v\":".$_."}".$q.")" } ($first..$last); print ";\n"; } print "FLUSH RAMCHUNK si_check_limit; SET GLOBAL secondary_indexes=1;\n";' >/tmp/si_check_limit.sql && mysql -h0 -P9306 </tmp/si_check_limit.sql && echo si_ready
+––– output –––
+si_ready
+––– input –––
+stdbuf -oL searchd --stopwait > /dev/null
+––– output –––
+––– input –––
+indextool --check si_check_limit >/tmp/si_check_limit_clean.out 2>&1; echo clean_rc=$?
+––– output –––
+clean_rc=0
+––– input –––
+spidx=$(find /var/lib/manticore/si_check_limit -maxdepth 1 -name '*.spidx' | head -1); blocks=102; if test -s "$spidx" && [ "$(wc -c < "$spidx")" -gt $((blocks*8)) ]; then size=$(wc -c < "$spidx"); table_start=$((size-blocks*8)); perl -e 'my ($file,$start,$count)=@ARGV; open my $fh,"<:raw",$file or die $!; seek $fh,$start,0 or die $!; my $got=read $fh,my $buf,$count*8; die "short read" unless defined $got && $got==$count*8; for (my $i=0;$i<$count;$i++) { print unpack("Q<",substr($buf,$i*8,8)),"\n"; }' "$spidx" "$table_start" "$blocks" | while read -r off; do dd if=/dev/zero of="$spidx" bs=1 seek="$off" count=1 conv=notrunc status=none; done; echo corrupted_all_block_headers; else echo failed_to_corrupt_block_headers; fi
+––– output –––
+corrupted_all_block_headers
+––– input –––
+set +e; out=$(indextool --check si_check_limit 2>&1); rc=$?; set -e; if [ "$rc" -ne 0 ] && echo "$out" | grep -Eq 'check FAILED, [0-9]+ of 102 failures reported'; then echo all_limited_errors_counted; else echo "unexpected rc=$rc"; echo "$out"; fi
+––– output –––
+all_limited_errors_counted

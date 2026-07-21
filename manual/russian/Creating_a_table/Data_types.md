@@ -535,7 +535,7 @@ curl -s 0:9308/insert -d '{"table": "t", "id": 18446744073709551615, "doc": {}}'
 
 Опустите `id`, чтобы автоматически сгенерировать UUID. Это работает с SQL `INSERT` и `REPLACE`, нативными JSON-запросами `insert` и `replace`, а также с совместимыми с Elasticsearch операциями `_bulk` `index` и `create`. Сгенерированные ID используют схему в стиле UUIDv8 и имеют [те же гарантии уникальности](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID), что и числовые auto-ID. Это не случайные значения UUIDv4, и их нельзя использовать как криптографические секреты.
 
-SQL возвращает UUID ID в виде строк. Ответы на нативные JSON-запросы записи используют ключ `id`, тогда как JSON-поиск и совместимые с Elasticsearch ответы используют `_id`.
+SQL возвращает UUID-идентификаторы в виде строк. Для таблиц с UUID-ID в нативных JSON-ответах записи используется ключ `id`, а в JSON-ответах поиска и в ответах, совместимых с Elasticsearch, используется `_id`.
 
 UUID ID можно использовать в фильтрах равенства и `IN`, а также для идентификации документов в `REPLACE`, `UPDATE` и `DELETE`. `INSERT` отклоняет уже существующий ID; используйте `REPLACE`, чтобы перезаписать документ с этим ID. После `INSERT` или `REPLACE` в таблице с UUID-ID `LAST_INSERT_ID()` и `@@session.last_insert_id` возвращают UUID ID затронутых документов.
 
@@ -3353,7 +3353,7 @@ POST /search
 ```JSON
 {
    "table":"products",
-   "_id":1,
+   "id":1,
    "created":true,
    "result":"created",
    "status":201

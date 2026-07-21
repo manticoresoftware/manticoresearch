@@ -535,7 +535,7 @@ Real-time tables can use UUID document IDs with `id uuid`. Explicit IDs must be 
 
 Omit `id` to generate a UUID automatically. This works with SQL `INSERT` and `REPLACE`, native JSON insert and replace requests, and Elasticsearch-compatible `_bulk` `index` and `create` operations. Generated IDs use a UUIDv8-style layout and have [the same uniqueness guarantees](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) as numeric auto-IDs. They are not random UUIDv4 values and must not be used as cryptographic secrets.
 
-SQL returns UUID IDs as strings. Native JSON write responses use key name `id`, while JSON search and Elasticsearch-compatible responses use `_id`.
+SQL returns UUID IDs as strings. For UUID-ID tables, native JSON write responses use key name `id`, while JSON search and Elasticsearch-compatible responses use `_id`.
 
 UUID IDs can be used in equality and `IN` filters and to identify documents in `REPLACE`, `UPDATE`, and `DELETE`. `INSERT` rejects an ID that already exists; use `REPLACE` to overwrite the document with that ID. After an `INSERT` or `REPLACE` on a UUID-ID table, `LAST_INSERT_ID()` and `@@session.last_insert_id` return the UUID IDs of the affected documents.
 
@@ -3353,7 +3353,7 @@ POST /search
 ```JSON
 {
    "table":"products",
-   "_id":1,
+   "id":1,
    "created":true,
    "result":"created",
    "status":201

@@ -535,7 +535,7 @@ curl -s 0:9308/insert -d '{"table": "t", "id": 18446744073709551615, "doc": {}}'
 
 省略 `id` 可自动生成 UUID。这适用于 SQL `INSERT` 和 `REPLACE`、原生 JSON 插入和替换请求，以及 Elasticsearch 兼容的 `_bulk` `index` 和 `create` 操作。生成的 ID 采用类似 UUIDv8 的布局，并且具有与数值自动 ID [相同的唯一性保证](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID)。它们不是随机的 UUIDv4 值，不能用作加密密钥。
 
-SQL 会把 UUID ID 作为字符串返回。原生 JSON 写入响应使用键名 `id`，而 JSON 搜索和 Elasticsearch 兼容响应使用 `_id`。
+SQL 会将 UUID ID 作为字符串返回。对于 UUID-ID 表，原生 JSON 写入响应使用键名 `id`，而 JSON 搜索和 Elasticsearch 兼容响应使用 `_id`。
 
 UUID ID 可用于相等和 `IN` 过滤器，也可用于在 `REPLACE`、`UPDATE` 和 `DELETE` 中标识文档。`INSERT` 会拒绝已存在的 ID；要覆盖该 ID 对应的文档，请使用 `REPLACE`。在 UUID-ID 表上执行 `INSERT` 或 `REPLACE` 后，`LAST_INSERT_ID()` 和 `@@session.last_insert_id` 会返回受影响文档的 UUID ID。
 
@@ -3353,7 +3353,7 @@ POST /search
 ```JSON
 {
    "table":"products",
-   "_id":1,
+   "id":1,
    "created":true,
    "result":"created",
    "status":201

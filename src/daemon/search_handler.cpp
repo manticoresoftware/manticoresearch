@@ -1319,28 +1319,9 @@ void SearchHandler_c::SetupLocalDF ()
 		{
 			GetKeywordsSettings_t tSettings;
 			tSettings.m_bStats = true;
+			tSettings.m_bFoldStatsToUnique = true;
 			dKeywords.Resize ( 0 );
 			pIndex->GetKeywords ( dKeywords, dQuery.Begin(), tSettings, NULL );
-
-			// FIXME!!! move duplicate removal to GetKeywords to do less QWord setup and dict searching
-			// custom uniq - got rid of word duplicates
-			dKeywords.Sort ( bind ( &CSphKeywordInfo::m_sNormalized ) );
-			if ( dKeywords.GetLength()>1 )
-			{
-				int iSrc = 1, iDst = 1;
-				while ( iSrc<dKeywords.GetLength() )
-				{
-					if ( dKeywords[iDst-1].m_sNormalized==dKeywords[iSrc].m_sNormalized )
-						iSrc++;
-					else
-					{
-						Swap ( dKeywords[iDst], dKeywords[iSrc] );
-						iDst++;
-						iSrc++;
-					}
-				}
-				dKeywords.Resize ( iDst );
-			}
 		}
 
 		for ( auto& tKw: dKeywords )

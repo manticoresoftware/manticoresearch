@@ -9074,8 +9074,6 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 		tAotFilter.GetKeywords ( dKeywords, tExpCtx );
 		bHasWildcards = tExpCtx.m_bHasWildcards;
-		if ( tSettings.m_bFoldStatsToUnique )
-			UniqKeywordStats ( dKeywords );
 	} else
 	{
 		KeywordBuf_t dWord ( GetDictFormat() );
@@ -9130,7 +9128,7 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 		// merge keywords from RAM parts with disk keywords
 		if ( iWasKeywords!=dKeywords.GetLength() )
-			UniqKeywords ( dKeywords );
+			UniqKeywords ( dKeywords, KeywordUniq_e::BY_NORMALIZED_AND_QPOS );
 	}
 
 	return true;

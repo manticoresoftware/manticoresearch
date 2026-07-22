@@ -9057,6 +9057,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 		SwitchProfile ( pProfiler, SPH_QSTATE_LOCAL_DF );
 		GetKeywordsSettings_t tSettings;
 		tSettings.m_bStats = true;
+		tSettings.m_bFoldStatsToUnique = true;
 		// do not want to expand keywords and fold back its statistics as it could take too much time
 		tSettings.m_bAllowExpansion = false;
 
@@ -9409,7 +9410,7 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	if ( !tSettings.m_bStats && !bHasWildcards )
 		return true;
 
-	if ( bFillOnly )
+	if ( bFillOnly || tSettings.m_bFoldStatsToUnique )
 	{
 		for ( auto& pChunk : tGuard.m_dDiskChunks )
 			pChunk->Cidx().FillKeywords ( dKeywords );
@@ -9427,7 +9428,7 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 		// merge keywords from RAM parts with disk keywords
 		if ( iWasKeywords!=dKeywords.GetLength() )
-			UniqKeywords ( dKeywords );
+			UniqKeywords ( dKeywords, KeywordUniq_e::BY_NORMALIZED_AND_QPOS );
 	}
 
 	return true;

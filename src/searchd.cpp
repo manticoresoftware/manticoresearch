@@ -5578,7 +5578,7 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 
 		// process result sets
 		if ( dLocals.GetLength() + iAgentsReply>1 )
-			UniqKeywords ( dKeywords );
+			UniqKeywords ( dKeywords, KeywordUniq_e::BY_NORMALIZED_AND_QPOS );
 
 		bOk = true;
 	}

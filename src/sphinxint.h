@@ -1208,6 +1208,7 @@ struct ExpansionContext_t : public ExpansionTrait_t
 struct GetKeywordsSettings_t
 {
 	bool	m_bStats = true;
+	bool	m_bFoldStatsToUnique = false;	///< collect stats once per normalized keyword, used by internal local_df pre-pass
 	bool	m_bFoldLemmas = false;
 	bool	m_bFoldBlended = false;
 	bool	m_bFoldWildcards = false;

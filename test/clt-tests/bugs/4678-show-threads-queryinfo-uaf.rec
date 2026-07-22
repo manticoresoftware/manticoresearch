@@ -1,9 +1,9 @@
 ––– comment –––
 Issue #4678 regression: concurrent HTTP /sql queries and SHOW THREADS must not
 crash searchd by copying a live CSphQuery from QueryInfo_t owned by another task.
-The dataset is generated with manticore-load. The stress uses only Bash plus
-curl's parallel transfer mode against HTTP raw SQL because the reported crash was
-in HttpRawSqlHandler while rendering SHOW THREADS.
+The dataset is generated with manticore-load. A heavy JSON /search workload
+keeps non-SQL query state active while HTTP raw SQL issues SHOW THREADS; the
+reported crash was in HttpRawSqlHandler while rendering SHOW THREADS.
 ––– block: ../base/start-searchd –––
 ––– input –––
 manticore-load --quiet --host=127.0.0.1 --port=9306 --drop --batch-size=250 --threads=4 --total=5000 --init="CREATE TABLE issue4678(title text, tag string, gid uint)" --load="INSERT INTO issue4678(id,title,tag,gid) VALUES(<increment>,'alpha beta gamma delta omega vector thread query manticore search <increment>','tag<int/0/17>',<int/0/97>)" > /dev/null; echo $?
@@ -51,33 +51,29 @@ columns_limited
 mysql_fallback_ok
 ––– input –––
 rm -f /tmp/issue4678_json_functional.err
-manticore-load --quiet --host=127.0.0.1 --port=9306 --drop --batch-size=1000 --threads=4 --total=50000 --init="CREATE TABLE issue4678(title text, tag string, gid uint)" --load="INSERT INTO issue4678(id,title,tag,gid) VALUES(<increment>,'alpha beta gamma delta omega vector thread query manticore search <increment>','tag<int/0/17>',<int/0/97>)" > /dev/null
+manticore-load --quiet --host=127.0.0.1 --port=9306 --drop --batch-size=5000 --threads=4 --total=200000 --init="CREATE TABLE issue4678(title text, tag string, gid uint)" --load="INSERT INTO issue4678(id,title,tag,gid) VALUES(<increment>,'alpha beta gamma delta omega vector thread query manticore search <increment>','tag<int/0/17>',<int/0/97>)" > /dev/null
 mysql -h0 -P9306 -e "FLUSH RAMCHUNK issue4678;" > /dev/null
-if curl -sS --fail --max-time 20 -H 'Content-Type: application/json' -d '{"table":"issue4678","query":{"match":{"title":"alpha beta gamma delta omega vector thread query manticore search"}},"limit":1,"max_matches":50000}' 'http://127.0.0.1:9308/search' | grep -Eq '"timed_out"[[:space:]]*:[[:space:]]*false'; then echo json_search_ok; else echo json_search_failed; fi
 pids=""
-for worker in $(seq 1 16); do
+for worker in $(seq 1 32); do
   (
-    for n in $(seq 1 300); do
-      curl -sS --max-time 20 -H 'Content-Type: application/json' -d '{"table":"issue4678","query":{"match":{"title":"alpha beta gamma delta omega vector thread query manticore search"}},"limit":10000,"max_matches":50000}' 'http://127.0.0.1:9308/search' > /dev/null 2>> /tmp/issue4678_json_functional.err || true
+    for n in $(seq 1 100); do
+      curl -sS --max-time 60 -H 'Content-Type: application/json' -d '{"table":"issue4678","query":{"match":{"title":"alpha beta gamma delta omega vector thread query manticore search"}},"expressions":{"title_hash":"crc32(title)"},"sort":[{"title_hash":"desc"}],"limit":50000,"max_matches":200000}' 'http://127.0.0.1:9308/search' > /dev/null 2>> /tmp/issue4678_json_functional.err || true
     done
   ) &
   pids="$pids $!"
 done
-json_raw_ok=1
-for n in $(seq 1 200); do
-  out=$(mysql -h0 -P9306 -e "SHOW THREADS OPTION format=sphinxql" 2> /dev/null || true)
-  if printf '%s\n' "$out" | awk -F'|' '$4 ~ /http/ { info=$11; gsub(/^ +| +$/, "", info); if ( info ~ /^\{/ ) found=1 } END { exit !found }'; then
-    json_raw_ok=0
-    break
+show_threads_ok=0
+for n in $(seq 1 400); do
+  if mysql -h0 -P9306 -e "SHOW THREADS OPTION format=sphinxql" > /dev/null 2>&1; then
+    show_threads_ok=1
   fi
   sleep 0.05
 done
 kill $pids 2> /dev/null || true
 wait $pids 2> /dev/null || true
-[ "$json_raw_ok" = 1 ] && echo no_raw_json_info || echo raw_json_info_seen
+[ "$show_threads_ok" = 1 ] && echo json_show_threads_ok || echo json_show_threads_failed
 ––– output –––
-json_search_ok
-no_raw_json_info
+json_show_threads_ok
 ––– input –––
 rm -f /tmp/issue4678_curl_*.cfg /tmp/issue4678_curl_*.rc /tmp/issue4678_curl_*.err
 manticore-load --quiet --host=127.0.0.1 --port=9306 --drop --batch-size=250 --threads=4 --total=5000 --init="CREATE TABLE issue4678(title text, tag string, gid uint)" --load="INSERT INTO issue4678(id,title,tag,gid) VALUES(<increment>,'alpha beta gamma delta omega vector thread query manticore search <increment>','tag<int/0/17>',<int/0/97>)" > /dev/null

@@ -19,15 +19,6 @@
 #include <openssl/bio.h>
 #include <openssl/opensslv.h>
 
-#include <algorithm>
-#include <cstring>
-#include <initializer_list>
-#include <memory>
-#include <utility>
-#include <vector>
-
-std::unique_ptr<AsyncNetBuffer_c> MakeSslTestBuffer ( BIO * pSslBackend );
-
 #if ( OPENSSL_VERSION_NUMBER < 0x1010000fL )
 #define BIO_set_shutdown(pBio,CODE) pBio->shutdown = CODE
 #define BIO_get_shutdown(pBio) pBio->shutdown

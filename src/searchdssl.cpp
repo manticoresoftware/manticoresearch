@@ -711,13 +711,11 @@ public:
 	}
 };
 
-#if defined(MANTICORE_SSL_TEST_HOOKS)
 std::unique_ptr<AsyncNetBuffer_c> MakeSslTestBuffer ( BIO * pSslBackend )
 {
 	assert ( pSslBackend );
 	return std::make_unique<AsyncSSBufferedSocket_c> ( BIOPtr_c ( pSslBackend, [] ( BIO * pBio ) { BIO_free_all ( pBio ); } ) );
 }
-#endif
 
 bool MakeSecureLayer ( std::unique_ptr<AsyncNetBuffer_c>& pSource )
 {

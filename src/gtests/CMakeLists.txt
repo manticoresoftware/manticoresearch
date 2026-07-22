@@ -6,10 +6,6 @@ if (NOT TARGET GTest::gmock_main)
 	return ()
 endif ()
 
-if (WITH_SSL)
-	target_compile_definitions ( searchd_ssl PRIVATE MANTICORE_SSL_TEST_HOOKS )
-endif ()
-
 set ( GTESTS_SRC
 		gtests_rtstuff.cpp
 		gtests_text.cpp

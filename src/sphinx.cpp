@@ -10754,6 +10754,12 @@ static int sphQueryHeightCalc ( const XQNode_t * pNode )
 {
 	if ( pNode->dChildren().IsEmpty() )
 	{
+		// Phrase-like plain nodes are later expanded into one ExtNode per word.
+		// Account for that width here, otherwise a long quoted phrase can pass
+		// the stack guard and overrun/corrupt the small worker coroutine stack.
+		if ( pNode->GetOp()==SPH_QUERY_PHRASE || pNode->GetOp()==SPH_QUERY_PROXIMITY || pNode->GetOp()==SPH_QUERY_NEAR || pNode->GetOp()==SPH_QUERY_QUORUM )
+			return pNode->dWords().GetLength();
+
 		// exception, pre-cached OR of tiny (rare) keywords is just one node
 		if ( pNode->GetOp()==SPH_QUERY_OR )
 		{

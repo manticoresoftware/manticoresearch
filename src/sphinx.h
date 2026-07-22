@@ -421,6 +421,8 @@ struct CSphQueryItem
 	CSphString		m_sExpr;		///< expression to compute
 	CSphString		m_sAlias;		///< alias to return
 	ESphAggrFunc	m_eAggrFunc { SPH_AGGR_NONE };
+	int				m_iGroupConcatLimit = 0; ///< number of rows retained by ordered GROUP_CONCAT()
+	bool				m_bGroupConcatOrdered = false;
 	float			m_fTdigestCompression = 200.0f; ///< optional tdigest compression for extended aggs
 	AggrSettings_t	m_tAggrSettings; ///< full settings payload for extended aggregate functions
 };
@@ -680,6 +682,8 @@ struct CSphQuery
 	int				m_iSQLSelectEnd = -1;	///< SQL parser helper
 
 	int				m_iGroupbyLimit = 1;	///< number of elems within group
+	int				m_iGroupConcatLimit = 0;	///< number of rows retained for ordered GROUP_CONCAT() aggregates
+	bool				m_bGroupConcatOrder = false;	///< GROUP_CONCAT() supplies the within-group order
 
 	CSphVector<CSphQueryItem>	m_dItems;		///< parsed select-list
 	CSphVector<CSphQueryItem>	m_dRefItems;	///< select-list prior replacing by facet

@@ -67,6 +67,7 @@ struct CSphColumnInfo
 	CSphString		m_sQueryRange;						///< query to retrieve range (for multi-valued attrs only)
 
 	ISphExprRefPtr_c m_pExpr;							///< evaluator for expression items
+	ISphExprRefPtr_c m_pGroupConcatExpr;					///< evaluator for ordered GROUP_CONCAT() source values
 	ESphAggrFunc	m_eAggrFunc { SPH_AGGR_NONE };		///< aggregate function on top of expression (for GROUP BY)
 	ESphEvalStage	m_eStage { SPH_EVAL_STATIC };		///< column evaluation stage (who and how computes this column)
 	bool			m_bPayload = false;
@@ -82,6 +83,8 @@ struct CSphColumnInfo
 
 	float			m_fTdigestCompression = 200.0f;		///< tdigest compression for extended aggs
 	AggrSettings_t	m_tAggrSettings;					///< full settings payload for extended aggs
+	int				m_iGroupConcatLimit = 0;			///< number of rows retained by ordered GROUP_CONCAT()
+	bool				m_bGroupConcatOrdered = false;
 
 	WORD			m_uNext = 0xFFFF;					///< next in linked list for hash in CSphSchema
 

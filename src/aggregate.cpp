@@ -782,13 +782,33 @@ static ByteBlob_t & operator>> ( ByteBlob_t & dIn, VecTraits_T<BYTE> & tData )
 class AggrConcat_c final : public AggrFunc_i
 {
 	CSphAttrLocator	m_tLoc;
+	ISphExpr *		m_pExpr;
+	ISphExpr *		m_pInputExpr;
+	ESphAttr		m_eInputType;
+	int			m_iLimit;
+	bool			m_bOrdered;
+	bool			m_bColumnarBound = false;
 
 public:
 	explicit AggrConcat_c ( const CSphColumnInfo & tCol )
 		: m_tLoc ( tCol.m_tLocator )
+		, m_pExpr ( tCol.m_pExpr.Ptr() )
+		, m_pInputExpr ( tCol.m_pGroupConcatExpr.Ptr() )
+		, m_eInputType ( tCol.m_eAggrInputType )
+		, m_iLimit ( tCol.m_iGroupConcatLimit )
+		, m_bOrdered ( tCol.m_bGroupConcatOrdered )
 	{
 		assert ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR );
 		assert ( !m_tLoc.IsBlobAttr ()); // otherwise we will fail on fetching data!
+	}
+
+	void SetColumnar ( columnar::Columnar_i * pColumnar ) final
+	{
+		if ( m_bOrdered && !m_bColumnarBound && pColumnar )
+		{
+			m_pInputExpr->Command ( SPH_EXPR_SET_COLUMNAR, (void *)pColumnar );
+			m_bColumnarBound = true;
+		}
 	}
 
 	// here we convert back to plain string
@@ -823,6 +843,51 @@ public:
 
 		// release previous, write converted
 		sphDeallocatePacked ( sphPackedBlob ( dSrc ) );
+		sphPackPtrAttrInPlace ( dOut );
+		tMatch.SetAttr ( m_tLoc, (SphAttr_t) dOut.LeakData () );
+	}
+
+	void FinalizeGroup ( CSphMatch & tMatch, const VecTraits_T<const CSphMatch *> & dMatches ) final
+	{
+		if ( !m_bOrdered )
+		{
+			Finalize ( tMatch );
+			return;
+		}
+
+		BStream_c dOut;
+		for ( int i = 0; i<Min ( m_iLimit, dMatches.GetLength() ); ++i )
+		{
+			const BYTE * pValue = nullptr;
+			int iLength = 0;
+			CSphString sValue;
+			switch ( m_eInputType )
+			{
+			case SPH_ATTR_INTEGER:
+			case SPH_ATTR_BOOL:
+			case SPH_ATTR_TIMESTAMP:
+				sValue.SetSprintf ( "%u", m_pInputExpr->IntEval ( *dMatches[i] ) );
+				break;
+			case SPH_ATTR_BIGINT:
+				sValue.SetSprintf ( INT64_FMT, m_pInputExpr->Int64Eval ( *dMatches[i] ) );
+				break;
+			case SPH_ATTR_FLOAT:
+				sValue.SetSprintf ( "%f", m_pInputExpr->Eval ( *dMatches[i] ) );
+				break;
+			default:
+				iLength = m_pInputExpr->StringEval ( *dMatches[i], &pValue );
+				break;
+			}
+			if ( i )
+				dOut << ',';
+			if ( pValue && iLength )
+				dOut << ByteBlob_t { pValue, iLength };
+			else if ( sValue.Length() )
+				dOut << ByteBlob_t { (const BYTE *)sValue.cstr(), sValue.Length() };
+		}
+
+		auto dPrevious = tMatch.FetchAttrData ( m_tLoc, nullptr );
+		sphDeallocatePacked ( sphPackedBlob ( dPrevious ) );
 		sphPackPtrAttrInPlace ( dOut );
 		tMatch.SetAttr ( m_tLoc, (SphAttr_t) dOut.LeakData () );
 	}

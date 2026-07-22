@@ -25,6 +25,7 @@ public:
 	virtual void	Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped, bool bMerge ) = 0;
 	virtual void	Setup ( CSphMatch & tDst, const CSphMatch & tSrc, bool bMerge ) {}
 	virtual void	Finalize ( CSphMatch & tDst ) {}
+	virtual void	FinalizeGroup ( CSphMatch & tDst, const VecTraits_T<const CSphMatch *> & ) { Finalize ( tDst ); }
 	virtual void	Discard ( CSphMatch & tDst ) {}
 	virtual void	SetColumnar ( columnar::Columnar_i * pColumnar ) {}
 	virtual bool	NeedsDiscard () const { return false; }

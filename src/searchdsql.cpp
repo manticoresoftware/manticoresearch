@@ -372,6 +372,7 @@ public:
 
 	void			AddIndexHint ( SecondaryIndexType_e eType, bool bForce, const SqlNode_t & tValue );
 	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
+	bool			AddGroupConcatItem ( SqlNode_t * pExpr, SqlNode_t * pStart, SqlNode_t * pEnd, const SqlNode_t & tOrder, int iLimit );
 	bool			AddExtendedAggrItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc, SqlNode_t * pStart, SqlNode_t * pEnd, const CSphVector<CSphNamedVariant> * pOpts );
 	bool			AddItem ( const char * pToken, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	void			SetTableAlias ( const SqlNode_t & tAlias );
@@ -1473,6 +1474,28 @@ void SqlParser_c::AddItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFunc, SqlNode_t
 	tItem.m_tAggrSettings.m_eAggrFunc = ToExtendedAggr ( eAggrFunc );
 	AutoAlias ( tItem, pStart?pStart:pExpr, pEnd?pEnd:pExpr );
 }
+
+
+bool SqlParser_c::AddGroupConcatItem ( SqlNode_t * pExpr, SqlNode_t * pStart, SqlNode_t * pEnd, const SqlNode_t & tOrder, int iLimit )
+{
+	CSphString sOrder;
+	ToString ( sOrder, tOrder );
+	if ( m_pQuery->m_bGroupConcatOrder && m_pQuery->m_sSortBy!=sOrder )
+	{
+		yyerror ( this, "ordered GROUP_CONCAT() expressions must use the same ORDER BY clause" );
+		return false;
+	}
+
+	AddItem ( pExpr, SPH_AGGR_CAT, pStart, pEnd );
+	CSphQueryItem & tItem = m_pQuery->m_dItems.Last();
+	tItem.m_iGroupConcatLimit = iLimit;
+	tItem.m_bGroupConcatOrdered = true;
+	m_pQuery->m_iGroupConcatLimit = Max ( m_pQuery->m_iGroupConcatLimit, iLimit );
+	m_pQuery->m_sSortBy = sOrder;
+	m_pQuery->m_bGroupConcatOrder = true;
+	return true;
+}
+
 
 static bool HasTableAliasAt ( const char * sValue, int iValueLen, const char * sAlias, int iAliasLen, int iOffset )
 {

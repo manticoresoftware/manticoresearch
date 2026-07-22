@@ -2008,6 +2008,22 @@ POST /sql?mode=raw -d "SELECT major, count(*), count(distinct age) FROM students
 
 `GROUP_CONCAT(field)` возвращает список значений, разделённых запятыми.
 
+Чтобы вернуть только первые `N` значений в заданном порядке, используйте:
+
+```sql
+GROUP_CONCAT(field ORDER BY sort_field {ASC | DESC} [, ...] LIMIT N)
+```
+
+Эта форма доступна в SQL-запросах. Ее `ORDER BY` задает порядок объединяемых значений, а `LIMIT` определяет, сколько значений включать в каждую группу.
+
+**Текущее ограничение Manticore:** Manticore не может независимо сортировать строки в группе для разных выражений в одном и том же запросе. Поэтому:
+
+* Не сочетайте упорядоченный `GROUP_CONCAT()` с `WITHIN GROUP ORDER BY`.
+* Если в запросе несколько упорядоченных выражений `GROUP_CONCAT()`, используйте в каждом один и тот же `ORDER BY`.
+* Используйте упорядоченный `GROUP_CONCAT()` только с `GROUP BY`; он недоступен для неявной единственной группы.
+
+Это ограничение касается только порядка значений внутри группы. Внешний `ORDER BY` по-прежнему независимо сортирует возвращаемые группы.
+
 <!-- intro -->
 ##### Пример:
 
@@ -2081,6 +2097,31 @@ POST /sql?mode=raw -d "SELECT major, count(*), count(distinct age), group_concat
     "warning": ""
   }
 ]
+```
+
+<!-- end -->
+
+<!-- example concat-order-limit -->
+##### Упорядоченные и ограниченные значения
+
+Например, это возвращает самого старшего студента по каждой специальности. Порядок групп в результате по-прежнему задается внешним `ORDER BY`.
+
+<!-- request SQL -->
+```sql
+SELECT major, GROUP_CONCAT(age ORDER BY age DESC LIMIT 1) AS oldest_age
+FROM students
+GROUP BY major
+ORDER BY major ASC;
+```
+<!-- response SQL -->
+```sql
++----------+------------+
+| major    | oldest_age |
++----------+------------+
+| arts     | 21         |
+| business | 22         |
+| cs       | 22         |
++----------+------------+
 ```
 
 <!-- end -->

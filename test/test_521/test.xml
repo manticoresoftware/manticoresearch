@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>GROUP_CONCAT with ORDER BY and LIMIT</name>
+
+<requires>
+	<force-rt/>
+	<columnar/>
+</requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries><sphinxql>
+DROP TABLE IF EXISTS rt;
+CREATE TABLE rt (title text, category integer, name_rank integer);
+INSERT INTO rt (id, title, category, name_rank) VALUES
+(1, 'one', 7, 4), (2, 'two', 7, 1), (3, 'three', 7, 3), (4, 'four', 7, 2),
+(5, 'five', 8, 2), (6, 'six', 8, 1),
+(7, 'seven', 9, 1), (8, 'eight', 9, 1), (9, 'nine', 9, 2);
+
+<!-- The default GROUP BY limit is one, but GROUP_CONCAT must retain its own ordered top N. -->
+SELECT category, GROUP_CONCAT(id ORDER BY name_rank ASC, id DESC LIMIT 3) AS ids FROM rt GROUP BY category ORDER BY category ASC;
+<!-- LIMIT larger than the group keeps every row in the requested order. -->
+SELECT category, GROUP_CONCAT(id ORDER BY name_rank DESC, id ASC LIMIT 99) AS ids FROM rt GROUP BY category ORDER BY category ASC;
+<!-- LIMIT 0 returns an empty concatenation, rather than falling back to unlimited GROUP_CONCAT(). -->
+SELECT category, GROUP_CONCAT(id ORDER BY name_rank ASC LIMIT 0) AS ids FROM rt GROUP BY category ORDER BY category ASC;
+<!-- GROUP N BY controls returned rows independently of the GROUP_CONCAT limit. -->
+SELECT category, id, GROUP_CONCAT(id ORDER BY name_rank ASC, id DESC LIMIT 3) AS ids FROM rt GROUP 2 BY category ORDER BY category ASC;
+<!-- Existing unlimited GROUP_CONCAT behavior remains unchanged. -->
+SELECT category, GROUP_CONCAT(id) AS ids FROM rt GROUP BY category ORDER BY category ASC;
+
+<!-- Multiple ordered GROUP_CONCAT() expressions may use different limits when they share one ordering. -->
+SELECT category, GROUP_CONCAT(id ORDER BY name_rank ASC LIMIT 1) AS first_id, GROUP_CONCAT(id ORDER BY name_rank ASC LIMIT 2) AS first_two_ids FROM rt GROUP BY category ORDER BY category ASC;
+
+<!-- Ordered GROUP_CONCAT requires an explicit group because it retains per-group rows. -->
+SELECT GROUP_CONCAT(id ORDER BY name_rank ASC LIMIT 2) AS ids FROM rt;
+
+<!-- Conflicting within-group orderings are rejected rather than silently using the wrong one. -->
+SELECT category, GROUP_CONCAT(id ORDER BY name_rank ASC LIMIT 1), GROUP_CONCAT(id ORDER BY id DESC LIMIT 1) FROM rt GROUP BY category;
+SELECT category, GROUP_CONCAT(id ORDER BY name_rank ASC LIMIT 1) FROM rt GROUP BY category WITHIN GROUP ORDER BY id DESC;
+
+<!-- Exercise the same path on disk-backed Columnar attributes and a string expression. -->
+DROP TABLE IF EXISTS rt_columnar;
+CREATE TABLE rt_columnar (title text, category integer, name_rank integer, label string attribute) engine='columnar';
+INSERT INTO rt_columnar (id, title, category, name_rank, label) VALUES
+(1, 'one', 7, 4, 'one'), (2, 'two', 7, 1, 'two'), (3, 'three', 7, 3, 'three'), (4, 'four', 7, 2, 'four'),
+(5, 'five', 8, 2, 'five'), (6, 'six', 8, 1, 'six'),
+(7, 'seven', 9, 1, 'seven'), (8, 'eight', 9, 1, 'eight'), (9, 'nine', 9, 2, 'nine');
+FLUSH RAMCHUNK rt_columnar;
+SHOW CREATE TABLE rt_columnar;
+SELECT category, GROUP_CONCAT(CONCAT(label, ':', TO_STRING(id)) ORDER BY name_rank ASC, id DESC LIMIT 3) AS labels FROM rt_columnar GROUP BY category ORDER BY category ASC;
+SELECT category, GROUP_CONCAT(id ORDER BY name_rank DESC, id ASC LIMIT 1) AS ids FROM rt_columnar GROUP BY category ORDER BY category ASC;
+SELECT category, GROUP_CONCAT(CONCAT(label, '') ORDER BY name_rank ASC LIMIT 0) AS label FROM rt_columnar GROUP BY category ORDER BY category ASC;
+DROP TABLE rt_columnar;
+DROP TABLE rt;
+</sphinxql></queries>
+</test>

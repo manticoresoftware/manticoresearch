@@ -300,7 +300,7 @@
 ##### Поиск и ранжирование
 * [BM25F()](Functions/Searching_and_ranking_functions.md#BM25F%28%29) - Возвращает точное значение формулы BM25F
 * [EXIST()](Functions/Searching_and_ranking_functions.md#EXIST%28%29) - Заменяет несуществующие столбцы значениями по умолчанию
-* [GROUP_CONCAT()](Searching/Grouping.md#GROUP_CONCAT%28field%29) - Создает список значений атрибутов всех документов в группе, разделенный запятыми
+* [GROUP_CONCAT()](Searching/Grouping.md#GROUP_CONCAT%28field%29) - Формирует список значений атрибутов в группе, разделённый запятыми; в SQL может упорядочивать и ограничивать значения
 * [HIGHLIGHT()](Searching/Highlighting.md) - Подсвечивает результаты поиска
 * [MIN_TOP_SORTVAL()](Functions/Searching_and_ranking_functions.md#MIN_TOP_SORTVAL%28%29) - Возвращает значение ключа сортировки худшего найденного элемента в текущих top-N совпадениях
 * [MIN_TOP_WEIGHT()](Functions/Searching_and_ranking_functions.md#MIN_TOP_WEIGHT%28%29) - Возвращает вес худшего найденного элемента в текущих top-N совпадениях

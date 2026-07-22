@@ -300,7 +300,7 @@
 ##### Searching and ranking
 * [BM25F()](Functions/Searching_and_ranking_functions.md#BM25F%28%29) - Returns precise BM25F formula value
 * [EXIST()](Functions/Searching_and_ranking_functions.md#EXIST%28%29) - Replaces non-existing columns with default values
-* [GROUP_CONCAT()](Searching/Grouping.md#GROUP_CONCAT%28field%29) - Produces a comma-separated list of the attribute values of all documents in the group
+* [GROUP_CONCAT()](Searching/Grouping.md#GROUP_CONCAT%28field%29) - Produces a comma-separated list of attribute values in a group; it can order and limit the values in SQL
 * [HIGHLIGHT()](Searching/Highlighting.md) - Highlights search results
 * [MIN_TOP_SORTVAL()](Functions/Searching_and_ranking_functions.md#MIN_TOP_SORTVAL%28%29) - Returns sort key value of the worst found element in the current top-N matches
 * [MIN_TOP_WEIGHT()](Functions/Searching_and_ranking_functions.md#MIN_TOP_WEIGHT%28%29) - Returns weight of the worst found element in the current top-N matches

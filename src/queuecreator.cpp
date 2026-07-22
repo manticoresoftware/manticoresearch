@@ -684,6 +684,8 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 
 	if ( bHasImplicitGrouping )
 	{
+		if ( m_tQuery.m_bGroupConcatOrder )
+			return Err ( "ordered GROUP_CONCAT() requires GROUP BY" );
 		m_tGroupSorterSettings.m_bImplicit = true;
 		return true;
 	}
@@ -1252,6 +1254,17 @@ bool QueueCreator_c::ParseResolvedQueryItem ( const CSphQueryItem & tItem )
 			tExprParseArgs.m_pJoinIdxLeft = &m_tSettings.m_pJoinArgs->m_sIndex1;
 		}
 		tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), *m_pSorterSchema, m_sError, tExprParseArgs );
+		if ( tItem.m_bGroupConcatOrdered )
+		{
+			ESphAttr eInputType = SPH_ATTR_NONE;
+			ExprParseArgs_t tInputArgs = tExprParseArgs;
+			tInputArgs.m_pAttrType = &eInputType;
+			ISphExprRefPtr_c pInputExpr { sphExprParse ( sExpr.cstr(), *m_pSorterSchema, m_sError, tInputArgs ) };
+			if ( !pInputExpr )
+				return Err ( "parse error: %s", m_sError.cstr() );
+			tExprCol.m_pGroupConcatExpr = pInputExpr;
+			tExprCol.m_eAggrInputType = eInputType;
+		}
 	}
 	else
 	{
@@ -1269,6 +1282,8 @@ bool QueueCreator_c::ParseResolvedQueryItem ( const CSphQueryItem & tItem )
 	tExprCol.m_eAggrFunc = tItem.m_eAggrFunc;
 	tExprCol.m_fTdigestCompression = tItem.m_fTdigestCompression;
 	tExprCol.m_tAggrSettings = tItem.m_tAggrSettings;
+	tExprCol.m_iGroupConcatLimit = tItem.m_iGroupConcatLimit;
+	tExprCol.m_bGroupConcatOrdered = tItem.m_bGroupConcatOrdered;
 	tExprCol.m_iIndex = iSorterAttr>= 0 ? m_pSorterSchema->GetAttrIndexOriginal ( tItem.m_sAlias.cstr() ) : -1;
 	if ( !tExprCol.m_pExpr )
 		return Err ( "parse error: %s", m_sError.cstr() );

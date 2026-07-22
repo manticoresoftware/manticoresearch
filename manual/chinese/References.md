@@ -300,7 +300,7 @@
 ##### 搜索和排名
 * [BM25F()](Functions/Searching_and_ranking_functions.md#BM25F%28%29) - 返回精确的BM25F公式值
 * [EXIST()](Functions/Searching_and_ranking_functions.md#EXIST%28%29) - 用默认值替换不存在的列
-* [GROUP_CONCAT()](Searching/Grouping.md#GROUP_CONCAT%28field%29) - 生成分组中属性值的逗号分隔列表
+* [GROUP_CONCAT()](Searching/Grouping.md#GROUP_CONCAT%28field%29) - 生成组内属性值的逗号分隔列表；可以在 SQL 中对这些值进行排序和限制
 * [HIGHLIGHT()](Searching/Highlighting.md) - 高亮搜索结果
 * [MIN_TOP_SORTVAL()](Functions/Searching_and_ranking_functions.md#MIN_TOP_SORTVAL%28%29) - 返回当前前N匹配中最差元素的排序键值
 * [MIN_TOP_WEIGHT()](Functions/Searching_and_ranking_functions.md#MIN_TOP_WEIGHT%28%29) - 返回当前前N匹配中最差元素的权重

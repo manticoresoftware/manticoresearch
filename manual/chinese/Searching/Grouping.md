@@ -2008,6 +2008,22 @@ POST /sql?mode=raw -d "SELECT major, count(*), count(distinct age) FROM students
 
 `GROUP_CONCAT(field)` 返回逗号分隔的值列表。
 
+要按指定顺序仅返回前 `N` 个值，请使用：
+
+```sql
+GROUP_CONCAT(field ORDER BY sort_field {ASC | DESC} [, ...] LIMIT N)
+```
+
+这种写法可用于 SQL 查询。它的 `ORDER BY` 控制拼接值的顺序，`LIMIT` 控制每个分组包含多少个值。
+
+**Manticore 当前的限制：** Manticore 不能在同一个查询中，针对不同表达式独立对组内行排序。因此：
+
+* 不要将有序的 `GROUP_CONCAT()` 与 `WITHIN GROUP ORDER BY` 组合使用。
+* 如果一个查询包含多个有序的 `GROUP_CONCAT()` 表达式，每个表达式都要使用相同的 `ORDER BY` 子句。
+* 仅将有序的 `GROUP_CONCAT()` 与 `GROUP BY` 一起使用；它不适用于隐式的单个分组。
+
+这个限制只适用于分组内值的排序。外层的 `ORDER BY` 仍然会独立对返回的分组进行排序。
+
 <!-- intro -->
 ##### 例子：
 
@@ -2081,6 +2097,31 @@ POST /sql?mode=raw -d "SELECT major, count(*), count(distinct age), group_concat
     "warning": ""
   }
 ]
+```
+
+<!-- end -->
+
+<!-- example concat-order-limit -->
+##### 有序且受限的值
+
+例如，这会返回每个专业中最年长的那一名学生。分组结果的顺序仍由外层 `ORDER BY` 控制。
+
+<!-- request SQL -->
+```sql
+SELECT major, GROUP_CONCAT(age ORDER BY age DESC LIMIT 1) AS oldest_age
+FROM students
+GROUP BY major
+ORDER BY major ASC;
+```
+<!-- response SQL -->
+```sql
++----------+------------+
+| major    | oldest_age |
++----------+------------+
+| arts     | 21         |
+| business | 22         |
+| cs       | 22         |
++----------+------------+
 ```
 
 <!-- end -->

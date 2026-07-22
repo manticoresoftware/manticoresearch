@@ -2008,6 +2008,22 @@ Often, you want to better understand the contents of each group. You can use [GR
 
 `GROUP_CONCAT(field)` returns the list as comma-separated values.
 
+To return only the first `N` values in a defined order, use:
+
+```sql
+GROUP_CONCAT(field ORDER BY sort_field {ASC | DESC} [, ...] LIMIT N)
+```
+
+This form is available in SQL queries. Its `ORDER BY` controls the order of the concatenated values and `LIMIT` controls how many values are included for each group.
+
+**Current Manticore limitation:** Manticore cannot independently sort the rows in a group for different expressions in the same query. Therefore:
+
+* Do not combine ordered `GROUP_CONCAT()` with `WITHIN GROUP ORDER BY`.
+* If a query has multiple ordered `GROUP_CONCAT()` expressions, use the same `ORDER BY` clause in each one.
+* Use ordered `GROUP_CONCAT()` only with `GROUP BY`; it is not available for an implicit single group.
+
+This restriction applies only to ordering values inside a group. The outer `ORDER BY` still independently sorts the returned groups.
+
 <!-- intro -->
 ##### Example:
 
@@ -2081,6 +2097,31 @@ POST /sql?mode=raw -d "SELECT major, count(*), count(distinct age), group_concat
     "warning": ""
   }
 ]
+```
+
+<!-- end -->
+
+<!-- example concat-order-limit -->
+##### Ordered and limited values
+
+For example, this returns the oldest one student from each major. The group result order remains controlled by the outer `ORDER BY`.
+
+<!-- request SQL -->
+```sql
+SELECT major, GROUP_CONCAT(age ORDER BY age DESC LIMIT 1) AS oldest_age
+FROM students
+GROUP BY major
+ORDER BY major ASC;
+```
+<!-- response SQL -->
+```sql
++----------+------------+
+| major    | oldest_age |
++----------+------------+
+| arts     | 21         |
+| business | 22         |
+| cs       | 22         |
++----------+------------+
 ```
 
 <!-- end -->

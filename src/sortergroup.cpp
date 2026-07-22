@@ -883,7 +883,8 @@ public:
 	CSphKBufferNGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings ) // FIXME! make k configurable
 		: KBufferGroupSorter ( pComp, pQuery, tSettings )
 		, m_hGroup2Index ( tSettings.m_iMaxMatches*GROUPBY_FACTOR )
-		, m_iGLimit ( Min ( pQuery->m_iGroupbyLimit, m_iLimit ) )
+		, m_iGLimit ( Min ( Max ( pQuery->m_iGroupbyLimit, pQuery->m_iGroupConcatLimit ), m_iLimit ) )
+		, m_iResultGLimit ( Min ( pQuery->m_iGroupbyLimit, m_iLimit ) )
 	{
 #ifndef NDEBUG
 		DBG << "Created iruns = " << m_iruns << " ipushed = " << m_ipushed;
@@ -928,8 +929,12 @@ public:
 			}
 
 			fnSwap ( tGroupHead ); // move top group match
-			for ( int i=this->m_dIData[iHead]; i!=iHead; i = this->m_dIData[i] )
+			int iGroupRows = 1;
+			for ( int i=this->m_dIData[iHead]; i!=iHead && iGroupRows<m_iResultGLimit; i = this->m_dIData[i] )
+			{
 				fnSwap ( m_dData[i] ); // move tail matches
+				++iGroupRows;
+			}
 		}
 
 		// final clean up before possible next pass
@@ -1062,6 +1067,7 @@ protected:
 	OpenHashTable_T<SphGroupKey_t, int> m_hGroup2Index; // used to quickly locate group for incoming match
 
 	int				m_iGLimit;		///< limit per one group
+	int				m_iResultGLimit;	///< number of rows per group returned to the client
 	SphGroupKey_t	m_uLastGroupKey = -1;	///< helps to determine in pushEx whether the new subgroup started
 	int				m_iFree = 0;			///< current insertion point
 	int				m_iUsed = 0;
@@ -1418,8 +1424,13 @@ private:
 		auto dAggrs = GetAggregatesWithoutAvgs ();
 		for ( auto& iHead : m_dFinalizedHeads )
 		{
+			CSphVector<const CSphMatch *> dGroup;
+			for ( auto i = this->m_dIData[iHead]; i!=iHead; i = this->m_dIData[i] )
+				dGroup.Add ( &m_dData[i] );
+			dGroup.Add ( &m_dData[iHead] );
+
 			for ( auto * pAggr : dAggrs )
-				pAggr->Finalize ( m_dData[iHead] );
+				pAggr->FinalizeGroup ( m_dData[iHead], dGroup );
 
 			PropagateAggregates ( iHead );
 			iHead = this->m_dIData[iHead]; // shift
@@ -2026,7 +2037,7 @@ static ISphMatchSorter * CreateGroupSorter ( const ISphMatchComparator * pComp, 
 	using UniqCount_c		= UniqGrouped_T<ValueWithGroupCount_t>;
 	using UniqCountSingle_c = UniqSingle_T<ValueWithCount_t>;
 
-	BYTE uSelector3rd = 32*( bUseHLL ? 1 : 0 ) + 16*( tSettings.m_bGrouped ? 1:0 ) + 8*( tSettings.m_bJson ? 1:0 ) + 4*( pQuery->m_iGroupbyLimit>1 ? 1:0 ) + 2*( tSettings.m_bImplicit ? 1:0 ) + ( ( tSettings.m_pGrouper && tSettings.m_pGrouper->IsMultiValue() ) ? 1:0 );
+	BYTE uSelector3rd = 32*( bUseHLL ? 1 : 0 ) + 16*( tSettings.m_bGrouped ? 1:0 ) + 8*( tSettings.m_bJson ? 1:0 ) + 4*( pQuery->m_iGroupbyLimit>1 || pQuery->m_bGroupConcatOrder ? 1:0 ) + 2*( tSettings.m_bImplicit ? 1:0 ) + ( ( tSettings.m_pGrouper && tSettings.m_pGrouper->IsMultiValue() ) ? 1:0 );
 	switch ( uSelector3rd )
 	{
 	case 0:	CREATE_SORTER_4TH ( CSphKBufferGroupSorter,		COMPGROUP, Uniq_c,		pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );

@@ -705,6 +705,11 @@ select_expr:
 	| TOK_MIN '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_MIN, &$1, &$4 ); }
 	| TOK_SUM '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_SUM, &$1, &$4 ); }
 	| TOK_GROUP_CONCAT '(' expr ')'		{ pParser->AddItem ( &$3, SPH_AGGR_CAT, &$1, &$4 ); }
+	| TOK_GROUP_CONCAT '(' expr TOK_ORDER TOK_BY order_items_list TOK_LIMIT TOK_CONST_INT ')'
+		{
+			if ( !pParser->AddGroupConcatItem ( &$3, &$1, &$9, $6, $8.GetValueInt() ) )
+				YYERROR;
+		}
 	| TOK_PERCENTILES '(' expr ')'		{ if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_PERCENTILES, &$1, &$4, nullptr ) ) YYERROR; }
 	| TOK_PERCENTILES '(' expr ',' '{' named_const_list '}' ')' { if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_PERCENTILES, &$1, &$8, &( pParser->GetNamedVec ( $6.GetValueInt() ) ) ) ) YYERROR; }
 	| TOK_PERCENTILE_RANKS '(' expr ')'	{ if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_PERCENTILE_RANKS, &$1, &$4, nullptr ) ) YYERROR; }
@@ -1337,6 +1342,11 @@ group_order_clause:
 			if ( pParser->m_pQuery->m_sGroupBy.IsEmpty() )
 			{
 				yyerror ( pParser, "you must specify GROUP BY element in order to use WITHIN GROUP ORDER BY clause" );
+				YYERROR;
+			}
+			if ( pParser->m_pQuery->m_bGroupConcatOrder )
+			{
+				yyerror ( pParser, "WITHIN GROUP ORDER BY can not be combined with ordered GROUP_CONCAT()" );
 				YYERROR;
 			}
 			pParser->ToString ( pParser->m_pQuery->m_sSortBy, $5 );

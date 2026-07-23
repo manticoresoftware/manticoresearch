@@ -372,8 +372,10 @@ public:
 
 	void			AddIndexHint ( SecondaryIndexType_e eType, bool bForce, const SqlNode_t & tValue );
 	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
+	void			AddGroupConcatPlainItem ( SqlNode_t * pExpr, const SqlNode_t & tSeparator, SqlNode_t * pStart, SqlNode_t * pEnd );
 	void			BeginGroupConcatOrder ();
 	void			AddGroupConcatOrder ( const SqlNode_t & tExpr, bool bDesc );
+	void			SetGroupConcatSeparator ( const SqlNode_t & tSeparator );
 	bool			AddGroupConcatItem ( SqlNode_t * pExpr, const SqlNode_t & tLimit, SqlNode_t * pStart, SqlNode_t * pEnd );
 	void			BeginOrderBy ();
 	void			AddOrderByItem ( const SqlNode_t & tExpr );
@@ -1487,6 +1489,12 @@ void SqlParser_c::BeginGroupConcatOrder ()
 	m_tGroupConcat = GroupConcatSettings_t();
 }
 
+void SqlParser_c::AddGroupConcatPlainItem ( SqlNode_t * pExpr, const SqlNode_t & tSeparator, SqlNode_t * pStart, SqlNode_t * pEnd )
+{
+	AddItem ( pExpr, SPH_AGGR_CAT, pStart, pEnd );
+	m_pQuery->m_dItems.Last().m_tAggrSettings.m_tGroupConcat.m_sSeparator = ToStringUnescape ( tSeparator );
+}
+
 void SqlParser_c::BeginOrderBy ()
 {
 	m_pQuery->m_dOrderByItems.Reset();
@@ -1512,6 +1520,11 @@ void SqlParser_c::AddGroupConcatOrder ( const SqlNode_t & tExpr, bool bDesc )
 		sOrder << m_tGroupConcat.m_sOrderBy << ", ";
 	sOrder << tOrder.m_sExpr << ( bDesc ? " desc" : " asc" );
 	sOrder.MoveTo ( m_tGroupConcat.m_sOrderBy );
+}
+
+void SqlParser_c::SetGroupConcatSeparator ( const SqlNode_t & tSeparator )
+{
+	m_tGroupConcat.m_sSeparator = ToStringUnescape ( tSeparator );
 }
 
 bool SqlParser_c::AddGroupConcatItem ( SqlNode_t * pExpr, const SqlNode_t & tLimit, SqlNode_t * pStart, SqlNode_t * pEnd )
@@ -2700,6 +2713,11 @@ struct QueryItemProxy_t
 		m_uHash = sphCRC32 ( m_pItem->m_sAlias.cstr() );
 		m_uHash = sphCRC32 ( m_pItem->m_sExpr.cstr(), m_pItem->m_sExpr.Length(), m_uHash );
 		m_uHash = sphCRC32 ( (const void*)&m_pItem->m_eAggrFunc, sizeof(m_pItem->m_eAggrFunc), m_uHash );
+		if ( m_pItem->m_eAggrFunc==SPH_AGGR_CAT )
+		{
+			const CSphString & sSeparator = m_pItem->m_tAggrSettings.m_tGroupConcat.m_sSeparator;
+			m_uHash = sphCRC32 ( sSeparator.scstr(), sSeparator.Length(), m_uHash );
+		}
 	}
 };
 

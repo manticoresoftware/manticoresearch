@@ -122,6 +122,7 @@ struct GroupConcatSettings_t
 {
 	CSphString							m_sOrderBy;
 	CSphVector<GroupConcatOrderItem_t>	m_dOrder;
+	CSphString							m_sSeparator = ",";
 	int									m_iLimit = -1;
 
 	bool IsLimited() const { return m_iLimit>=0; }

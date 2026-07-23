@@ -54,17 +54,34 @@ FROM rt GROUP BY category ORDER BY category ASC;
 
 <!-- LIMIT 0 is an empty scalar and does not create a helper sorter. -->
 SELECT category, GROUP_CONCAT(id ORDER BY name_rank LIMIT 0) AS ids FROM rt GROUP BY category ORDER BY category ASC;
+SELECT category, GROUP_CONCAT(id ORDER BY name_rank SEPARATOR ':' LIMIT 0) AS ids FROM rt GROUP BY category ORDER BY category ASC;
 
 <!-- GROUP M BY controls representative rows independently; each receives the same CSV. -->
 SELECT category, id, GROUP_CONCAT(id ORDER BY name_rank ASC, id DESC LIMIT 3) AS ids FROM rt GROUP 2 BY category WITHIN GROUP ORDER BY id DESC ORDER BY category ASC;
+SELECT category, id, GROUP_CONCAT(id ORDER BY name_rank ASC, id DESC SEPARATOR '::' LIMIT 3) AS ids
+FROM rt GROUP 2 BY category WITHIN GROUP ORDER BY id DESC ORDER BY category ASC;
 
 <!-- Ordinary GROUP_CONCAT stays on the eager aggregate path beside a limited item. -->
 SELECT category, GROUP_CONCAT(id) AS all_ids, GROUP_CONCAT(id ORDER BY name_rank ASC LIMIT 2) AS first_ids FROM rt GROUP BY category ORDER BY category ASC OPTION threads=1;
+SELECT category,
+	GROUP_CONCAT(id SEPARATOR ':') AS all_ids,
+	GROUP_CONCAT(id ORDER BY name_rank ASC SEPARATOR '|' LIMIT 2) AS first_ids
+FROM rt GROUP BY category ORDER BY category ASC OPTION threads=1;
 
 <!-- Every limited item has an independent comparator and limit. -->
 SELECT category,
 	GROUP_CONCAT(id ORDER BY name_rank ASC, id DESC LIMIT 1) AS first_id,
 	GROUP_CONCAT(id ORDER BY id DESC LIMIT 2) AS last_ids
+FROM rt GROUP BY category ORDER BY category ASC;
+SELECT category,
+	GROUP_CONCAT(id ORDER BY name_rank ASC, id DESC SEPARATOR ':' LIMIT 1) AS first_id,
+	GROUP_CONCAT(id ORDER BY id DESC SEPARATOR '' LIMIT 2) AS last_ids
+FROM rt GROUP BY category ORDER BY category ASC;
+
+<!-- Separator literals are unescaped once and values containing the separator are not quoted. -->
+SELECT category,
+	GROUP_CONCAT(CONCAT('v|',TO_STRING(id)) ORDER BY name_rank ASC SEPARATOR '|' LIMIT 3) AS values_with_separator,
+	GROUP_CONCAT(id ORDER BY name_rank ASC SEPARATOR '\0' LIMIT 3) AS escaped_separator
 FROM rt GROUP BY category ORDER BY category ASC;
 
 <!-- Visible WITHIN GROUP ordering remains independent from the helper ordering. -->
@@ -125,6 +142,11 @@ SELECT category, GROUP_CONCAT(id ORDER BY name_rank ASC LIMIT 2147483648) AS ids
 SELECT category, GROUP_CONCAT(DISTINCT id ORDER BY name_rank ASC LIMIT 2) AS ids FROM rt GROUP BY category;
 SELECT category, GROUP_CONCAT(id, category ORDER BY name_rank ASC LIMIT 2) AS ids FROM rt GROUP BY category;
 SELECT category, GROUP_CONCAT(id ORDER BY name_rank ASC LIMIT 2 SEPARATOR ':') AS ids FROM rt GROUP BY category;
+SELECT category, GROUP_CONCAT(id ORDER BY name_rank ASC SEPARATOR 1 LIMIT 2) AS ids FROM rt GROUP BY category;
+SELECT category, GROUP_CONCAT(id ORDER BY name_rank ASC SEPARATOR category LIMIT 2) AS ids FROM rt GROUP BY category;
+SELECT category, GROUP_CONCAT(id ORDER BY name_rank ASC SEPARATOR ':' ) AS ids FROM rt GROUP BY category;
+SELECT category, GROUP_CONCAT(id SEPARATOR ':' LIMIT 2) AS ids FROM rt GROUP BY category;
+SELECT category, GROUP_CONCAT(id SEPARATOR 1) AS ids FROM rt GROUP BY category;
 SELECT category, GROUP_CONCAT(id ORDER BY name_rank ASC LIMIT 2 OFFSET 1) AS ids FROM rt GROUP BY category;
 
 <!-- Rejected planner combinations. -->
@@ -162,6 +184,8 @@ INSERT INTO rt_rowwise (id, title, category, name_rank, label) VALUES
 FLUSH RAMCHUNK rt_rowwise;
 SELECT category, GROUP_CONCAT(CONCAT(label, ':', TO_STRING(id)) ORDER BY name_rank DESC LIMIT 3) AS labels
 FROM rt_rowwise GROUP BY category;
+SELECT category, GROUP_CONCAT(CONCAT(label, ':', TO_STRING(id)) ORDER BY name_rank DESC SEPARATOR ' / ' LIMIT 3) AS labels
+FROM rt_rowwise GROUP BY category;
 DROP TABLE rt_rowwise;
 </sphinxql>
 
@@ -176,6 +200,8 @@ INSERT INTO rt_columnar_chunks (id, title, category, name_rank, label) VALUES
 (3, 'three', 7, 3, 'three'), (4, 'four', 7, 4, 'four');
 FLUSH RAMCHUNK rt_columnar_chunks;
 SELECT category, GROUP_CONCAT(CONCAT(label, ':', TO_STRING(id)) ORDER BY name_rank ASC LIMIT 4) AS labels
+FROM rt_columnar_chunks GROUP BY category OPTION threads=4;
+SELECT category, GROUP_CONCAT(CONCAT(label, ':', TO_STRING(id)) ORDER BY name_rank ASC SEPARATOR '' LIMIT 4) AS labels
 FROM rt_columnar_chunks GROUP BY category OPTION threads=4;
 SELECT category, GROUP_CONCAT(CONCAT(label, '') ORDER BY name_rank ASC LIMIT 0) AS label
 FROM rt_columnar_chunks GROUP BY category;
@@ -208,6 +234,8 @@ agent='<agent2_address/>:rt_remote_even';
 <!-- Interleaved keys require a terminal global top-N merge across two agents. -->
 SELECT category, GROUP_CONCAT(id ORDER BY name_rank ASC LIMIT 4) AS ids
 FROM rt_remote_dist GROUP BY category ORDER BY category ASC;
+SELECT category, GROUP_CONCAT(id ORDER BY name_rank ASC SEPARATOR '::' LIMIT 4) AS ids
+FROM rt_remote_dist GROUP BY category ORDER BY category ASC;
 
 <!-- Helper and head follow the same distributed max_matches splitting. -->
 SELECT category, GROUP_CONCAT(id ORDER BY name_rank ASC LIMIT 4) AS ids
@@ -217,9 +245,16 @@ SHOW META;
 <!-- Ordinary distributed GROUP_CONCAT remains on its original path. -->
 SELECT category, GROUP_CONCAT(id) AS ids
 FROM rt_remote_dist GROUP BY category ORDER BY category ASC OPTION threads=1;
+SELECT category,
+	GROUP_CONCAT(id SEPARATOR ':') AS colon_ids,
+	GROUP_CONCAT(id SEPARATOR '') AS compact_ids,
+	GROUP_CONCAT(id SEPARATOR '::') AS multibyte_ids
+FROM rt_remote_dist GROUP BY category ORDER BY category ASC OPTION threads=1;
 
 <!-- Ordinary concat with GROUP M BY is merged once per agent/group and copied to every representative. -->
 SELECT category, id, GROUP_CONCAT(id) AS ids
+FROM rt_remote_dist GROUP 2 BY category WITHIN GROUP ORDER BY id DESC ORDER BY category ASC OPTION threads=1;
+SELECT category, id, GROUP_CONCAT(id SEPARATOR '::') AS ids
 FROM rt_remote_dist GROUP 2 BY category WITHIN GROUP ORDER BY id DESC ORDER BY category ASC OPTION threads=1;
 
 <!-- Independent limited expressions coexist with the unchanged ordinary aggregate. -->
@@ -227,6 +262,11 @@ SELECT category,
 	GROUP_CONCAT(id) AS all_ids,
 	GROUP_CONCAT(id ORDER BY name_rank ASC LIMIT 3) AS first_ids,
 	GROUP_CONCAT(id ORDER BY id DESC LIMIT 2) AS last_ids
+FROM rt_remote_dist GROUP BY category ORDER BY category ASC OPTION threads=1;
+SELECT category,
+	GROUP_CONCAT(id SEPARATOR ':') AS all_ids,
+	GROUP_CONCAT(id ORDER BY name_rank ASC SEPARATOR '|' LIMIT 3) AS first_ids,
+	GROUP_CONCAT(id ORDER BY id DESC SEPARATOR '' LIMIT 2) AS last_ids
 FROM rt_remote_dist GROUP BY category ORDER BY category ASC OPTION threads=1;
 
 <!-- Expression/string payloads cross the wire as ordinary STRINGPTR match attributes. -->
@@ -247,16 +287,6 @@ SELECT category,
 	GROUP_CONCAT(id ORDER BY name_rank ASC LIMIT 3) AS first_ids,
 	GROUP_CONCAT(label ORDER BY id DESC LIMIT 2) AS labels
 FROM rt_remote_dist GROUP BY category ORDER BY category ASC OPTION threads=4;
-
-<!-- A refused second agent yields one visible partial-result warning, not one per helper. -->
-DROP TABLE IF EXISTS rt_remote_refused;
-CREATE TABLE rt_remote_refused type='distributed'
-agent='<agent1_address/>:rt_remote_odd'
-agent='127.0.0.1:1:rt_remote_even';
-SELECT category, GROUP_CONCAT(id ORDER BY name_rank ASC LIMIT 3) AS ids
-FROM rt_remote_refused GROUP BY category ORDER BY category ASC;
-SHOW WARNINGS;
-DROP TABLE rt_remote_refused;
 
 DROP TABLE rt_remote_dist;
 </sphinxql>

@@ -2006,21 +2006,28 @@ POST /sql?mode=raw -d "SELECT major, count(*), count(distinct age) FROM students
 
 你通常想更好地了解每个分组的内容。你可以使用 [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows) 实现，但它会返回额外的行，可能不想出现在结果中。`GROUP_CONCAT()` 通过连接组中特定字段的数值来丰富分组内容。继续使用前面的例子，这里改进为显示每组中的所有年龄。
 
-`GROUP_CONCAT(field)` 返回逗号分隔的值列表。
-
-有序形式会按指定的排序规则，只保留前 `N` 个值：
+普通形式接受可选的常量字符串分隔符：
 
 ```sql
-GROUP_CONCAT(expression ORDER BY sort_expression [ASC|DESC] [, ...] LIMIT N)
+GROUP_CONCAT(expression [SEPARATOR 'separator'])
 ```
 
-该形式要求显式使用 `GROUP BY`。结果仍是一个逗号分隔的字符串。使用 `GROUP M BY` 时，每个分组返回 M 行代表记录，并且每行都包含相同的字符串。
+默认分隔符为逗号。分隔符可以是任意带引号的字符串，包括多字符字符串或空字符串。
+
+有序形式会按指定的排序规则，只保留前 `N` 个值，并接受相同的分隔符选项：
+
+```sql
+GROUP_CONCAT(expression ORDER BY sort_expression [ASC|DESC] [, ...]
+             [SEPARATOR 'separator'] LIMIT N)
+```
+
+`SEPARATOR` 必须位于 `LIMIT` 之前。该有序形式要求显式使用 `GROUP BY`。结果是一个连接后的字符串。使用 `GROUP M BY` 时，每个分组返回 M 行代表记录，并且每行都包含相同的字符串。
 
 每个有序 `GROUP_CONCAT()` 都有独立的组内 top-N 队列。一条查询可以包含多个排序规则和限制不同的有序表达式，也可以同时使用 `WITHIN GROUP ORDER BY`。`LIMIT 0` 返回空字符串。如果 `N` 大于分组大小，则返回全部值。值转换和空值处理与 `GROUP_CONCAT(field)` 相同。
 
 对于每个有序表达式，内存开销与保留的分组数乘以 `N` 成正比。
 
-该形式目前仅支持显式使用 `GROUP BY` 的 SphinxQL 查询。它不支持 `DISTINCT`、多个值表达式、`SEPARATOR`、`OFFSET`、隐式分组、JSON 聚合语法、`FACET`、`JOIN`、外层查询或表函数、KNN/混合查询以及 scroll。有序 `GROUP_CONCAT()` 的别名不能用于 `HAVING` 或结果排序。结果排序可以使用分组键和普通聚合，但不能使用代表行中的值。
+该形式目前仅支持显式使用 `GROUP BY` 的 SphinxQL 查询。它不支持 `DISTINCT`、多个值表达式、`OFFSET`、隐式分组、JSON 聚合语法、`FACET`、`JOIN`、外层查询或表函数、KNN/混合查询以及 scroll。有序 `GROUP_CONCAT()` 的别名不能用于 `HAVING` 或结果排序。结果排序可以使用分组键和普通聚合，但不能使用代表行中的值。
 
 例如，下面的查询为每个专业最多返回两个年龄，并将较大的年龄排在前面：
 
@@ -2503,4 +2510,3 @@ POST /sql?mode=raw -d "SELECT release_year year, count(*) FROM films GROUP BY ye
 
 <!-- end -->
 <!-- proofread -->
-

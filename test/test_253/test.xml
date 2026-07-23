@@ -248,6 +248,21 @@ select CONCAT(str,'-',',','-',to_string(bint)) from test;
 select CONCAT(str,bint) from test;
 select GROUP_CONCAT(CONCAT(str,',',to_string(bint))) from test GROUP BY bint;
 select CONCAT(str,',',to_string(bint)) a, GROUP_CONCAT(a) from test GROUP BY bint;
+
+<!-- GROUP_CONCAT separators are constant SQL strings and remain independent in shared select lists. -->
+select str,
+	GROUP_CONCAT(id) implicit_comma,
+	GROUP_CONCAT(id SEPARATOR ',') explicit_comma,
+	GROUP_CONCAT(id SEPARATOR ':') colon,
+	GROUP_CONCAT(id SEPARATOR '::') multibyte,
+	GROUP_CONCAT(id SEPARATOR '') empty_separator,
+	GROUP_CONCAT(id SEPARATOR '\0') escaped_separator,
+	GROUP_CONCAT(CONCAT(str,'|',TO_STRING(id)) SEPARATOR '|') values_containing_separator
+from test where str='str4' group by str;
+
+<!-- GROUP M BY representatives receive the same eager aggregate with its custom separator. -->
+select id, str, GROUP_CONCAT(id SEPARATOR ':') ids from test group 2 by str;
+
 select id, concat(str) as g, group_concat(g) as grp from test group 2 by str;
 
 <!-- case PackedFactors missed for the query from the query cache -->

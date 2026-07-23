@@ -1101,7 +1101,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 class GroupConcatFold_c final : public MatchProcessor_i
 {
 public:
-	GroupConcatFold_c ( ISphMatchSorter & tVisibleSorter, const ISphSchema & tVisibleSchema, const ISphSchema & tHelperSchema, const CSphString & sValueAttr, CSphString & sError )
+	GroupConcatFold_c ( ISphMatchSorter & tVisibleSorter, const ISphSchema & tVisibleSchema, const ISphSchema & tHelperSchema, const CSphString & sValueAttr, const CSphString & sSeparator, CSphString & sError )
 		: m_tVisibleSorter ( tVisibleSorter )
 		, m_tVisibleSchema ( tVisibleSchema )
 		, m_tHelperSchema ( tHelperSchema )
@@ -1125,7 +1125,7 @@ public:
 		m_tVisibleValue = pVisibleValue->m_tLocator;
 		m_tHelperValue = pHelperValue->m_tLocator;
 		m_tHelperGroup = pHelperGroup->m_tLocator;
-		m_pAggregate.reset ( CreateAggrConcat ( *pVisibleValue ) );
+		m_pAggregate.reset ( CreateAggrConcat ( *pVisibleValue, sSeparator ) );
 		m_tAccumulator.Reset ( m_tVisibleSchema.GetDynamicSize() );
 		m_tSource.Reset ( m_tVisibleSchema.GetDynamicSize() );
 		// Treat the already ordered candidates as one synthetic source stream.
@@ -1270,7 +1270,28 @@ bool MinimizeGroupConcatBundle ( AggrResult_t * pResults, const CSphQuery * pQue
 		}
 
 		const CSphString & sValueAttr = pQueries[i].m_dRefItems[0].m_sAlias;
-		GroupConcatFold_c tFold ( *pVisibleSorter, pResults[0].m_tSchema, pResults[i].m_tSchema, sValueAttr, pResults[0].m_sError );
+		const CSphQueryItem * pOwner = nullptr;
+		for ( const CSphQueryItem & tItem : pQueries[0].m_dRefItems )
+		{
+			if ( tItem.m_sExpr!=sValueAttr )
+				continue;
+
+			if ( pOwner )
+			{
+				pResults[0].m_sError.SetSprintf ( "internal error: multiple limited GROUP_CONCAT items own transport column '%s'", sValueAttr.cstr() );
+				return false;
+			}
+
+			pOwner = &tItem;
+		}
+
+		if ( !pOwner || pOwner->m_eAggrFunc!=SPH_AGGR_NONE || !pOwner->m_tAggrSettings.m_tGroupConcat.IsLimited() )
+		{
+			pResults[0].m_sError.SetSprintf ( "internal error: limited GROUP_CONCAT owner for transport column '%s' was not found", sValueAttr.cstr() );
+			return false;
+		}
+
+		GroupConcatFold_c tFold ( *pVisibleSorter, pResults[0].m_tSchema, pResults[i].m_tSchema, sValueAttr, pOwner->m_tAggrSettings.m_tGroupConcat.m_sSeparator, pResults[0].m_sError );
 		pHelperSorter->Finalize ( tFold, false, true );
 		if ( !tFold.Finish() )
 			return false;

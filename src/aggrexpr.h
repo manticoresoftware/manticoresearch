@@ -112,6 +112,24 @@ struct AggrMadSetting_t
 	float m_fCompression = 1000.0f;
 };
 
+struct GroupConcatOrderItem_t
+{
+	CSphString	m_sExpr;
+	bool		m_bDesc = false;
+};
+
+struct GroupConcatSettings_t
+{
+	CSphString							m_sOrderBy;
+	CSphVector<GroupConcatOrderItem_t>	m_dOrder;
+	int									m_iLimit = -1;
+
+	bool IsLimited() const { return m_iLimit>=0; }
+};
+
+bool IsGroupConcatValueAttr ( const CSphString & sAttr );
+CSphString GetGroupConcatValueAttrName ( int iOrdinal );
+
 struct AggrSettings_t
 {
 	Aggr_e		m_eAggrFunc { Aggr_e::NONE };
@@ -122,6 +140,7 @@ struct AggrSettings_t
 	AggrPercentilesSetting_t m_tPercentiles;
 	AggrPercentileRanksSetting_t m_tPercentileRanks;
 	AggrMadSetting_t m_tMad;
+	GroupConcatSettings_t m_tGroupConcat;
 };
 
 ISphExpr * CreateExprRange ( ISphExpr * pAttr, const AggrRangeSetting_t & tRanges );

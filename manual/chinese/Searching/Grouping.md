@@ -2008,6 +2008,28 @@ POST /sql?mode=raw -d "SELECT major, count(*), count(distinct age) FROM students
 
 `GROUP_CONCAT(field)` 返回逗号分隔的值列表。
 
+有序形式会按指定的排序规则，只保留前 `N` 个值：
+
+```sql
+GROUP_CONCAT(expression ORDER BY sort_expression [ASC|DESC] [, ...] LIMIT N)
+```
+
+该形式要求显式使用 `GROUP BY`。结果仍是一个逗号分隔的字符串。使用 `GROUP M BY` 时，每个分组返回 M 行代表记录，并且每行都包含相同的字符串。
+
+每个有序 `GROUP_CONCAT()` 都有独立的组内 top-N 队列。一条查询可以包含多个排序规则和限制不同的有序表达式，也可以同时使用 `WITHIN GROUP ORDER BY`。`LIMIT 0` 返回空字符串。如果 `N` 大于分组大小，则返回全部值。值转换和空值处理与 `GROUP_CONCAT(field)` 相同。
+
+对于每个有序表达式，内存开销与保留的分组数乘以 `N` 成正比。
+
+该形式目前仅支持显式使用 `GROUP BY` 的 SphinxQL 查询。它不支持 `DISTINCT`、多个值表达式、`SEPARATOR`、`OFFSET`、隐式分组、JSON 聚合语法、`FACET`、`JOIN`、外层查询或表函数、KNN/混合查询以及 scroll。有序 `GROUP_CONCAT()` 的别名不能用于 `HAVING` 或结果排序。结果排序可以使用分组键和普通聚合，但不能使用代表行中的值。
+
+例如，下面的查询为每个专业最多返回两个年龄，并将较大的年龄排在前面：
+
+```sql
+SELECT major, GROUP_CONCAT(age ORDER BY age DESC LIMIT 2) AS top_ages
+FROM students
+GROUP BY major
+```
+
 <!-- intro -->
 ##### 例子：
 

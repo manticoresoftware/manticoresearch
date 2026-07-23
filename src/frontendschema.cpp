@@ -176,7 +176,9 @@ void FrontendSchemaBuilder_c::AddAttrs()
 		if ( !bMagic && tCol.m_pExpr )
 		{
 			ARRAY_FOREACH ( j, m_dUnmappedAttrs )
-				if ( m_dItems[ m_dUnmappedAttrs[j] ].m_sAlias==tCol.m_sName )
+				if ( m_dItems[ m_dUnmappedAttrs[j] ].m_sAlias==tCol.m_sName
+					|| ( IsGroupConcatValueAttr ( m_dItems[ m_dUnmappedAttrs[j] ].m_sExpr )
+						&& m_dItems[ m_dUnmappedAttrs[j] ].m_sExpr==tCol.m_sName ) )
 				{
 					int k = m_dUnmappedAttrs[j];
 					m_dFrontend[k].m_iIndex = iCol;

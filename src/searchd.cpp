@@ -994,10 +994,20 @@ DistributedIndex_t * DistributedIndex_t::Clone() const
 	return pDist;
 }
 
-void UpdateLastMeta ( VecTraits_T<AggrResult_t> tResults )
+static void UpdateLastMeta ( CSphQueryResultMeta & tLastMeta, VecTraits_T<AggrResult_t> tResults, const VecTraits_T<CSphQuery> & dQueries )
+{
+	for ( int i = Min ( tResults.GetLength(), dQueries.GetLength() )-1; i>=0; --i )
+		if ( !dQueries[i].IsInternalQuery() )
+		{
+			tLastMeta = tResults[i];
+			return;
+		}
+}
+
+void UpdateLastMeta ( VecTraits_T<AggrResult_t> tResults, const VecTraits_T<CSphQuery> & dQueries )
 {
 	ScWL_t dLastMetaLock ( g_tLastMetaLock );
-	g_tLastMeta = tResults.Last();
+	UpdateLastMeta ( g_tLastMeta, tResults, dQueries );
 }
 
 
@@ -9026,7 +9036,7 @@ static bool MysqlStmtHasVisibleResultAfter ( const CSphVector<SqlStmt_t> & dStmt
 	{
 		if ( dStmt[iNext].m_eStmt!=STMT_SELECT )
 			return true;
-		if ( !dStmt[iNext].m_tQuery.m_bFacetMaxRef )
+		if ( !dStmt[iNext].m_tQuery.IsInternalQuery() )
 			return true;
 	}
 
@@ -9042,21 +9052,21 @@ static int GetMysqlSelectGroupEnd ( const CSphVector<SqlStmt_t> & dStmt, int iSt
 
 	if ( tFirstQuery.m_bFacetHead )
 	{
-		while ( iEnd<dStmt.GetLength() && dStmt[iEnd].m_eStmt==STMT_SELECT && ( dStmt[iEnd].m_tQuery.m_bFacet || dStmt[iEnd].m_tQuery.m_bFacetMaxRef ) )
+		while ( iEnd<dStmt.GetLength() && dStmt[iEnd].m_eStmt==STMT_SELECT && ( dStmt[iEnd].m_tQuery.m_bFacet || dStmt[iEnd].m_tQuery.IsFacetHelper() ) )
 			++iEnd;
 
 		return iEnd;
 	}
 
-	if ( tFirstQuery.m_bFacet || tFirstQuery.m_bFacetMaxRef )
+	if ( tFirstQuery.m_bFacet || tFirstQuery.IsFacetHelper() )
 	{
-		while ( iEnd<dStmt.GetLength() && dStmt[iEnd].m_eStmt==STMT_SELECT && dStmt[iEnd].m_tQuery.m_bFacetMaxRef )
+		while ( iEnd<dStmt.GetLength() && dStmt[iEnd].m_eStmt==STMT_SELECT && dStmt[iEnd].m_tQuery.IsFacetHelper() )
 			++iEnd;
 
 		return iEnd;
 	}
 
-	while ( iEnd<dStmt.GetLength() && dStmt[iEnd].m_eStmt==STMT_SELECT && !dStmt[iEnd].m_tQuery.m_bFacetHead && !dStmt[iEnd].m_tQuery.m_bFacet && !dStmt[iEnd].m_tQuery.m_bFacetMaxRef )
+	while ( iEnd<dStmt.GetLength() && dStmt[iEnd].m_eStmt==STMT_SELECT && !dStmt[iEnd].m_tQuery.m_bFacetHead && !dStmt[iEnd].m_tQuery.m_bFacet && !dStmt[iEnd].m_tQuery.IsFacetHelper() )
 		++iEnd;
 
 	return iEnd;
@@ -9142,7 +9152,7 @@ static bool HandleMysqlSelectStmtGroup ( CSphVector<SqlStmt_t> & dStmt, int iSta
 				tLastMeta.m_iAgentCpuTime += tResult.m_iAgentCpuTime;
 			}
 		} else
-			tLastMeta = tHandler.m_dAggrResults.Last();
+			UpdateLastMeta ( tLastMeta, tHandler.m_dAggrResults, tHandler.m_dQueries );
 	}
 
 	if ( !bSearchOK )
@@ -9167,6 +9177,13 @@ static bool HandleMysqlSelectStmtGroup ( CSphVector<SqlStmt_t> & dStmt, int iSta
 		case STMT_SELECT:
 		{
 			AggrResult_t & tRes = tHandler.m_dAggrResults[iSelect++];
+			const int iQueryIdx = iSelect-1;
+			if ( iQueryIdx>=0 && tHandler.m_dQueries[iQueryIdx].IsInternalQuery() )
+			{
+				bBreak = false;
+				break;
+			}
+
 			// mysql server breaks send on error
 			bBreak = !tRes.m_iSuccesses;
 
@@ -9174,10 +9191,6 @@ static bool HandleMysqlSelectStmtGroup ( CSphVector<SqlStmt_t> & dStmt, int iSta
 				tRes.m_sWarning = sWarning;
 			if ( bBreak )
 				bMoreResultsFollow = false;
-
-			const int iQueryIdx = iSelect-1;
-			if ( iQueryIdx>=0 && tHandler.m_dQueries[iQueryIdx].m_bFacetMaxRef )
-				break;
 
 			dSelectedFilters.Resize ( 0 );
 			dSelectedBuckets.Reset();
@@ -9194,7 +9207,7 @@ static bool HandleMysqlSelectStmtGroup ( CSphVector<SqlStmt_t> & dStmt, int iSta
 					if ( eMode==FacetFilterMode_e::Max )
 					{
 						pStrictRes = &tRes;
-						if ( iQueryIdx+1<tHandler.m_dQueries.GetLength() && tHandler.m_dQueries[iQueryIdx+1].m_bFacetMaxRef )
+						if ( iQueryIdx+1<tHandler.m_dQueries.GetLength() && tHandler.m_dQueries[iQueryIdx+1].IsFacetHelper() )
 							pStrictRes = &tHandler.m_dAggrResults[iQueryIdx+1];
 					}
 

@@ -372,6 +372,11 @@ public:
 
 	void			AddIndexHint ( SecondaryIndexType_e eType, bool bForce, const SqlNode_t & tValue );
 	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
+	void			BeginGroupConcatOrder ();
+	void			AddGroupConcatOrder ( const SqlNode_t & tExpr, bool bDesc );
+	bool			AddGroupConcatItem ( SqlNode_t * pExpr, const SqlNode_t & tLimit, SqlNode_t * pStart, SqlNode_t * pEnd );
+	void			BeginOrderBy ();
+	void			AddOrderByItem ( const SqlNode_t & tExpr );
 	bool			AddExtendedAggrItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc, SqlNode_t * pStart, SqlNode_t * pEnd, const CSphVector<CSphNamedVariant> * pOpts );
 	bool			AddItem ( const char * pToken, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	void			SetTableAlias ( const SqlNode_t & tAlias );
@@ -484,6 +489,8 @@ private:
 	bool						m_bInvalidDocidConstList = false;
 	LastWhereItem_e				m_eLastWhereItem = LastWhereItem_e::NONE;
 	int							m_iLastWhereItemKnn = -1;
+	GroupConcatSettings_t		m_tGroupConcat;
+	bool						m_bCollectOrderBy = false;
 
 	void			AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
 	bool			CheckOption ( Option_e eOption ) const override;
@@ -564,6 +571,7 @@ void SqlParser_c::PushQuery ()
 	m_pQuery->m_eCollation = m_eCollation;
 
 	m_bMatchClause = false;
+	m_bCollectOrderBy = false;
 }
 
 
@@ -1474,6 +1482,59 @@ void SqlParser_c::AddItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFunc, SqlNode_t
 	AutoAlias ( tItem, pStart?pStart:pExpr, pEnd?pEnd:pExpr );
 }
 
+void SqlParser_c::BeginGroupConcatOrder ()
+{
+	m_tGroupConcat = GroupConcatSettings_t();
+}
+
+void SqlParser_c::BeginOrderBy ()
+{
+	m_pQuery->m_dOrderByItems.Reset();
+	m_bCollectOrderBy = true;
+}
+
+void SqlParser_c::AddOrderByItem ( const SqlNode_t & tExpr )
+{
+	if ( !m_bCollectOrderBy )
+		return;
+
+	ToString ( m_pQuery->m_dOrderByItems.Add(), tExpr );
+}
+
+void SqlParser_c::AddGroupConcatOrder ( const SqlNode_t & tExpr, bool bDesc )
+{
+	GroupConcatOrderItem_t & tOrder = m_tGroupConcat.m_dOrder.Add();
+	ToString ( tOrder.m_sExpr, tExpr );
+	tOrder.m_bDesc = bDesc;
+
+	StringBuilder_c sOrder;
+	if ( !m_tGroupConcat.m_sOrderBy.IsEmpty() )
+		sOrder << m_tGroupConcat.m_sOrderBy << ", ";
+	sOrder << tOrder.m_sExpr << ( bDesc ? " desc" : " asc" );
+	sOrder.MoveTo ( m_tGroupConcat.m_sOrderBy );
+}
+
+bool SqlParser_c::AddGroupConcatItem ( SqlNode_t * pExpr, const SqlNode_t & tLimit, SqlNode_t * pStart, SqlNode_t * pEnd )
+{
+	const int64_t iLimit = tLimit.GetValueInt();
+	if ( iLimit<0 || iLimit>INT_MAX )
+	{
+		yyerror ( this, "GROUP_CONCAT LIMIT is out of range [0..2147483647]" );
+		return false;
+	}
+
+	if ( m_tGroupConcat.m_dOrder.IsEmpty() )
+	{
+		yyerror ( this, "GROUP_CONCAT ORDER BY list can not be empty" );
+		return false;
+	}
+
+	AddItem ( pExpr, SPH_AGGR_CAT, pStart, pEnd );
+	m_tGroupConcat.m_iLimit = (int)iLimit;
+	m_pQuery->m_dItems.Last().m_tAggrSettings.m_tGroupConcat = std::move ( m_tGroupConcat );
+	return true;
+}
+
 static bool HasTableAliasAt ( const char * sValue, int iValueLen, const char * sAlias, int iAliasLen, int iOffset )
 {
 	return iValueLen>=iOffset+iAliasLen && !strncmp ( sValue+iOffset, sAlias, iAliasLen );
@@ -1686,6 +1747,9 @@ bool SqlParser_c::AddDistinctSort ( SqlNode_t * pNewExpr, SqlNode_t * pStart, Sq
 		return false;
 
 	m_pQuery->m_sOrderBy.SetSprintf ( "@distinct %s", ( bSortAsc ? "asc" : "desc" ) );
+	m_pQuery->m_bExplicitOrderBy = true;
+	m_pQuery->m_dOrderByItems.Reset();
+	m_pQuery->m_dOrderByItems.Add ( "@distinct" );
 	return true;
 }
 
@@ -2886,6 +2950,218 @@ static bool SetupFacetDistinct ( CSphVector<SqlStmt_t> & dStmt, CSphString & sEr
 	return true;
 }
 
+static bool IsLimitedGroupConcat ( const CSphQueryItem & tItem )
+{
+	return tItem.m_eAggrFunc==SPH_AGGR_CAT && tItem.m_tAggrSettings.m_tGroupConcat.IsLimited();
+}
+
+static bool HasLimitedGroupConcat ( const CSphQuery & tQuery )
+{
+	return tQuery.m_dItems.any_of ( [] ( const CSphQueryItem & tItem ) { return IsLimitedGroupConcat ( tItem ); } );
+}
+
+static bool SameAttrName ( const CSphString & sLeft, const CSphString & sRight )
+{
+	return !strcasecmp ( sLeft.cstr(), sRight.cstr() );
+}
+
+static bool IsLimitedGroupConcatAlias ( const CSphQuery & tQuery, const CSphString & sAlias )
+{
+	if ( sAlias.IsEmpty() )
+		return false;
+
+	for ( const CSphQueryItem & tItem : tQuery.m_dItems )
+		if ( IsLimitedGroupConcat ( tItem ) && SameAttrName ( tItem.m_sAlias, sAlias ) )
+			return true;
+
+	return false;
+}
+
+static bool ValidateLimitedGroupConcat ( const SqlStmt_t & tStmt, CSphString & sError )
+{
+	const CSphQuery & tQuery = tStmt.m_tQuery;
+	if ( tQuery.m_sGroupBy.IsEmpty() )
+	{
+		sError = "limited GROUP_CONCAT requires an explicit GROUP BY";
+		return false;
+	}
+
+	if ( tQuery.m_bFacet || tQuery.m_bFacetHead || !tQuery.m_sFacetBy.IsEmpty() )
+	{
+		sError = "limited GROUP_CONCAT is not supported with FACET";
+		return false;
+	}
+
+	if ( tQuery.m_eJoinType!=JoinType_e::NONE || !tQuery.m_sJoinIdx.IsEmpty() )
+	{
+		sError = "limited GROUP_CONCAT is not supported with JOIN";
+		return false;
+	}
+
+	if ( !tStmt.m_sTableFunc.IsEmpty() || tStmt.m_pTableFunc )
+	{
+		sError = "limited GROUP_CONCAT is not supported with table functions";
+		return false;
+	}
+
+	if ( tQuery.m_bHasOuter )
+	{
+		sError = "limited GROUP_CONCAT is not supported in outer SELECT queries";
+		return false;
+	}
+
+	if ( tQuery.HasKnn() || tQuery.m_bHybridSearch )
+	{
+		sError = "limited GROUP_CONCAT is not supported with KNN or hybrid search";
+		return false;
+	}
+
+	if ( !tQuery.m_tScrollSettings.m_dAttrs.IsEmpty() )
+	{
+		sError = "limited GROUP_CONCAT is not supported with scroll";
+		return false;
+	}
+
+	if ( IsLimitedGroupConcatAlias ( tQuery, tQuery.m_tHaving.m_sAttrName ) )
+	{
+		sError.SetSprintf ( "limited GROUP_CONCAT alias '%s' is not supported in HAVING", tQuery.m_tHaving.m_sAttrName.cstr() );
+		return false;
+	}
+
+	for ( const CSphString & sOrderItem : tQuery.m_dOrderByItems )
+		if ( IsLimitedGroupConcatAlias ( tQuery, sOrderItem ) )
+		{
+			sError.SetSprintf ( "limited GROUP_CONCAT alias '%s' is not supported in result ORDER BY", sOrderItem.cstr() );
+			return false;
+		}
+
+	return true;
+}
+
+static bool IsGroupOrderKey ( const CSphQuery & tQuery, const CSphString & sOrderItem )
+{
+	if ( sOrderItem=="@groupby" || sOrderItem=="groupby()" || SameAttrName ( sOrderItem, tQuery.m_sGroupBy ) )
+		return true;
+
+	for ( const CSphQueryItem & tItem : tQuery.m_dItems )
+		if ( SameAttrName ( tItem.m_sAlias, sOrderItem )
+			&& ( SameAttrName ( tItem.m_sExpr, tQuery.m_sGroupBy ) || tItem.m_sExpr=="@groupby" || tItem.m_sExpr=="groupby()" ) )
+			return true;
+
+	return false;
+}
+
+static bool PrepareLimitedGroupOrder ( CSphQuery & tQuery, CSphString & sError )
+{
+	if ( !tQuery.m_bExplicitOrderBy )
+	{
+		tQuery.m_sGroupSortBy = "@groupby desc";
+		return true;
+	}
+
+	if ( tQuery.m_dOrderByItems.any_of ( [&] ( const CSphString & sItem ) { return IsGroupOrderKey ( tQuery, sItem ); } ) )
+		return true;
+
+	if ( tQuery.m_dOrderByItems.GetLength()>=5 )
+	{
+		sError = "limited GROUP_CONCAT requires a group-key tie-breaker, but all 5 group-order slots are already used";
+		return false;
+	}
+
+	tQuery.m_sGroupSortBy.SetSprintf ( "%s, @groupby asc", tQuery.m_sGroupSortBy.cstr() );
+	return true;
+}
+
+static void EnsureGroupKeyItem ( CSphVector<CSphQueryItem> & dItems )
+{
+	if ( dItems.any_of ( [] ( const CSphQueryItem & tItem )
+		{ return tItem.m_sExpr=="groupby()" || tItem.m_sExpr=="@groupby" || tItem.m_sAlias=="@groupby"; } ) )
+		return;
+
+	CSphQueryItem & tGroupKey = dItems.Add();
+	tGroupKey.m_sExpr = "groupby()";
+	tGroupKey.m_sAlias = "@groupby";
+}
+
+static bool SetupLimitedGroupConcat ( CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
+{
+	CSphVector<SqlStmt_t> dExpanded;
+	for ( SqlStmt_t & tInput : dStmt )
+	{
+		SqlStmt_t tStmt = std::move ( tInput );
+		if ( tStmt.m_eStmt!=STMT_SELECT || !HasLimitedGroupConcat ( tStmt.m_tQuery ) )
+		{
+			dExpanded.Add ( std::move ( tStmt ) );
+			continue;
+		}
+
+		if ( !ValidateLimitedGroupConcat ( tStmt, sError ) )
+			return false;
+
+		CSphQuery & tHead = tStmt.m_tQuery;
+		if ( !PrepareLimitedGroupOrder ( tHead, sError ) )
+			return false;
+
+		tHead.m_dRefItems = tHead.m_dItems;
+		CSphVector<int> dPositiveItems;
+		int iOrdinal = 0;
+
+		ARRAY_FOREACH ( iItem, tHead.m_dItems )
+		{
+			CSphQueryItem & tPhysical = tHead.m_dItems[iItem];
+			if ( !IsLimitedGroupConcat ( tPhysical ) )
+				continue;
+
+			const GroupConcatSettings_t tSettings = tPhysical.m_tAggrSettings.m_tGroupConcat;
+			const CSphString sSource = tPhysical.m_sExpr;
+			const CSphString sInternal = GetGroupConcatValueAttrName ( iOrdinal++ );
+
+			CSphQueryItem & tVisible = tHead.m_dRefItems[iItem];
+			tVisible.m_sExpr = sInternal;
+			tVisible.m_eAggrFunc = SPH_AGGR_NONE;
+
+			tPhysical.m_sExpr.SetSprintf ( tSettings.m_iLimit ? "TO_STRING(%s)" : "TO_STRING('')", sSource.cstr() );
+			tPhysical.m_sAlias = sInternal;
+			tPhysical.m_eAggrFunc = SPH_AGGR_NONE;
+			tPhysical.m_tAggrSettings = AggrSettings_t();
+
+			if ( tSettings.m_iLimit>0 )
+				dPositiveItems.Add ( iItem );
+		}
+
+		EnsureGroupKeyItem ( tHead.m_dItems );
+
+		CSphVector<CSphQuery> dHelpers;
+		for ( int iItem : dPositiveItems )
+		{
+			const CSphQueryItem & tVisible = tHead.m_dRefItems[iItem];
+			const GroupConcatSettings_t & tSettings = tVisible.m_tAggrSettings.m_tGroupConcat;
+
+			CSphQuery & tHelper = dHelpers.Add();
+			tHelper = tHead;
+			tHelper.m_eQueryRole = QueryRole_e::GROUP_CONCAT_HELPER;
+			tHelper.m_iGroupbyLimit = tSettings.m_iLimit;
+			tHelper.m_sSortBy = tSettings.m_sOrderBy;
+			tHelper.m_tHaving = CSphFilterSettings();
+			tHelper.m_dRefItems.Reset();
+			tHelper.m_dRefItems.Add ( tHelper.m_dItems[iItem] );
+		}
+
+		const char * sStatement = tStmt.m_sStmt;
+		dExpanded.Add ( std::move ( tStmt ) );
+		for ( CSphQuery & tHelper : dHelpers )
+		{
+			SqlStmt_t & tHelperStmt = dExpanded.Add();
+			tHelperStmt.m_eStmt = STMT_SELECT;
+			tHelperStmt.m_sStmt = sStatement;
+			tHelperStmt.m_tQuery = std::move ( tHelper );
+		}
+	}
+
+	dStmt.SwapData ( dExpanded );
+	return true;
+}
+
 
 bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation )
 {
@@ -3018,6 +3294,9 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 
 	bool bGotFacet = SetupFacets ( dStmt, sError );
 	if ( !sError.IsEmpty() )
+		return false;
+
+	if ( !SetupLimitedGroupConcat ( dStmt, sError ) )
 		return false;
 
 	if ( bGotFacet )

@@ -18,6 +18,7 @@
 #include "schematransform.h"
 #include "match_iterator.h"
 #include "searchdha.h"
+#include "aggregate.h"
 
 // returns true if incoming schema (src) is compatible with existing (dst); false otherwise
 static bool MinimizeSchema ( CSphSchema & tDst, const ISphSchema & tSrc )
@@ -423,12 +424,18 @@ static void SortTagsAndDocstores ( AggrResult_t & tRes, const VecTraits_T<int>& 
 	Debug ( tRes.m_bIdxByTag = true; )
 }
 
-static int KillDupesAndFlatten ( ISphMatchSorter * pSorter, AggrResult_t & tRes )
+struct PreparedSorter_t
+{
+	std::unique_ptr<ISphMatchSorter>	m_pSorter;
+	CSphFixedVector<int>				m_dTagOrder { 0 };
+};
+
+static int PushAllMatches ( ISphMatchSorter * pSorter, AggrResult_t & tRes, CSphFixedVector<int> & dOrd )
 {
 	assert ( pSorter );
 
 	int iTags = tRes.m_dResults.GetLength();
-	CSphFixedVector<int> dOrd ( iTags );
+	dOrd.Reset ( iTags );
 	ARRAY_CONSTFOREACH( i, dOrd )
 		dOrd[i] = i;
 
@@ -451,19 +458,25 @@ static int KillDupesAndFlatten ( ISphMatchSorter * pSorter, AggrResult_t & tRes 
 		dResult.m_dMatches.Reset();
 	}
 
+	return iDup;
+}
+
+static void FlattenPreparedSorter ( PreparedSorter_t & tPrepared, AggrResult_t & tRes )
+{
+	assert ( tPrepared.m_pSorter );
+
 	// don't issue tRes.m_dResults.reset since each result still has a docstore by tag
 
 	// flatten all results into single chunk
 	auto & tFinalMatches = tRes.m_dResults.First ();
-	tFinalMatches.FillFromSorter ( pSorter );
+	tFinalMatches.FillFromSorter ( tPrepared.m_pSorter.get() );
 	Debug ( tRes.m_bSingle = true; )
 	Debug ( tRes.m_bOneSchema = true; )
 
 	// now all matches properly tagged located in tRes.m_dResults.First()
 	// each tRes.m_dResults has proper tag and corresponding docstore pointer in random order
 	// and we have dOrd wich enumerates them in descending tag order
-	SortTagsAndDocstores ( tRes, dOrd );
-	return iDup;
+	SortTagsAndDocstores ( tRes, tPrepared.m_dTagOrder );
 }
 
 static void RecoverAggregateFunctions ( const CSphQuery & tQuery, const AggrResult_t & tRes )
@@ -752,7 +765,7 @@ static bool MinimizeSchemas ( AggrResult_t & tRes )
 	return bAllEqual;
 }
 
-static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, bool bAllEqual, bool bMaster, const CSphFilterSettings * pAggrFilter, QueryProfile_c * pProfiler )
+static bool PrepareMergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, bool bAllEqual, bool bMaster, const CSphFilterSettings * pAggrFilter, QueryProfile_c * pProfiler, PreparedSorter_t & tPrepared )
 {
 	ESphSortOrder eQuerySort = ( tQuery.m_sOuterOrderBy.IsEmpty() ? SPH_SORT_RELEVANCE : SPH_SORT_EXTENDED );
 	CSphQuery tQueryCopy = tQuery;
@@ -788,7 +801,7 @@ static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, boo
 	tQueueSettings.m_bGrouped = true;
 
 	SphQueueRes_t tQueueRes;
-	std::unique_ptr<ISphMatchSorter> pSorter ( sphCreateQueue ( tQueueSettings, tQueryCopy, tRes.m_sError, tQueueRes ) );
+	tPrepared.m_pSorter.reset ( sphCreateQueue ( tQueueSettings, tQueryCopy, tRes.m_sError, tQueueRes ) );
 
 	// restore outer order related patches, or it screws up the query log
 	if ( tQueryCopy.m_bHasOuter )
@@ -797,10 +810,10 @@ static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, boo
 		Swap ( eQuerySort, tQueryCopy.m_eSort );
 	}
 
-	if ( !pSorter )
+	if ( !tPrepared.m_pSorter )
 		return false;
 
-	pSorter->SetMerge(true);
+	tPrepared.m_pSorter->SetMerge(true);
 
 	// reset bAllEqual flag if sorter makes new attributes
 	if ( bAllEqual )
@@ -808,7 +821,7 @@ static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, boo
 		// at first we count already existed internal attributes
 		// then check if sorter makes more
 		int iRemapCount = GetStringRemapCount ( tRes.m_tSchema, tRes.m_tSchema );
-		int iNewCount = GetStringRemapCount ( *pSorter->GetSchema(), tRes.m_tSchema );
+		int iNewCount = GetStringRemapCount ( *tPrepared.m_pSorter->GetSchema(), tRes.m_tSchema );
 
 		bAllEqual = ( iNewCount<=iRemapCount );
 	}
@@ -820,7 +833,7 @@ static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, boo
 	// that's why we explicitly copy a CSphRsetSchema to a plain CSphSchema and move it to tRes.m_tSchema
 	{
 		CSphSchema tSchemaCopy;
-		tSchemaCopy = *pSorter->GetSchema();
+		tSchemaCopy = *tPrepared.m_pSorter->GetSchema();
 		tRes.m_tSchema.Swap ( tSchemaCopy );
 	}
 
@@ -838,7 +851,7 @@ static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, boo
 	}
 
 	// do the sort work!
-	tRes.m_iTotalMatches -= KillDupesAndFlatten ( pSorter.get(), tRes );
+	tRes.m_iTotalMatches -= PushAllMatches ( tPrepared.m_pSorter.get(), tRes, tPrepared.m_dTagOrder );
 	return true;
 }
 
@@ -887,132 +900,180 @@ static void ComputePostlimit ( AggrResult_t & tRes, const CSphQuery & tQuery, bo
 		ProcessSinglePostlimit ( tRes.m_dResults.First(), dPostlimit, tQuery.m_sQuery.cstr(), iOff, iLimit );
 }
 
-/// merges multiple result sets, remaps columns, does reorder for outer selects
-bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, const sph::StringSet & hExtraColumns, QueryProfile_c * pProfiler, const CSphFilterSettings * pAggrFilter, bool bForceRefItems, bool bMaster, bool bForceSort )
+class PreparedMinimize_t
 {
-	bool bReturnZeroCount = !tRes.m_dZeroCount.IsEmpty();
-	bool bQueryFromAPI = tQuery.m_eQueryType==QUERY_API;
+public:
+	PreparedMinimize_t ( AggrResult_t & tResult, const CSphQuery & tQuery, bool bHaveLocals, QueryProfile_c * pProfiler, const CSphFilterSettings * pAggrFilter, bool bMaster, bool bForceSort )
+		: m_tResult ( tResult )
+		, m_tQuery ( tQuery )
+		, m_pProfiler ( pProfiler )
+		, m_pAggrFilter ( pAggrFilter )
+		, m_bHaveLocals ( bHaveLocals )
+		, m_bMaster ( bMaster )
+		, m_bForceSort ( bForceSort )
+	{}
 
+	bool Prepare ( const sph::StringSet & hExtraColumns, bool bForceRefItems );
+	bool Finish();
+
+	bool IsEarlyDone() const { return m_bEarlyDone; }
+	ISphMatchSorter * GetSorter() const { return m_tSorter.m_pSorter.get(); }
+
+private:
+	AggrResult_t &							m_tResult;
+	const CSphQuery &						m_tQuery;
+	QueryProfile_c *						m_pProfiler = nullptr;
+	const CSphFilterSettings *				m_pAggrFilter = nullptr;
+	bool									m_bHaveLocals = false;
+	bool									m_bMaster = false;
+	bool									m_bForceSort = false;
+	bool									m_bAllEqual = true;
+	bool									m_bEarlyDone = false;
+	CSphVector<CSphQueryItem>				m_dExpandedItems;
+	std::unique_ptr<FrontendSchemaBuilder_c>	m_pFrontendBuilder;
+	PreparedSorter_t						m_tSorter;
+};
+
+bool PreparedMinimize_t::Prepare ( const sph::StringSet & hExtraColumns, bool bForceRefItems )
+{
+	const bool bReturnZeroCount = !m_tResult.m_dZeroCount.IsEmpty();
+	const bool bQueryFromAPI = m_tQuery.m_eQueryType==QUERY_API;
 	// 0 matches via SphinxAPI? no fiddling with schemes is necessary
 	// (and via SphinxQL, we still need to return the right schema)
 	// 0 result set schemes via SphinxQL? just bail
-	if ( tRes.IsEmpty() && ( bQueryFromAPI || !bReturnZeroCount ) )
+	if ( m_tResult.IsEmpty() && ( bQueryFromAPI || !bReturnZeroCount ) )
 	{
-		Debug ( tRes.m_bSingle = true; )
-		if ( !tRes.m_dResults.IsEmpty () )
+		Debug ( m_tResult.m_bSingle = true; )
+		if ( !m_tResult.m_dResults.IsEmpty () )
 		{
-			tRes.m_tSchema = tRes.m_dResults.First ().m_tSchema;
-			Debug( tRes.m_bOneSchema = true; )
+			m_tResult.m_tSchema = m_tResult.m_dResults.First ().m_tSchema;
+			Debug( m_tResult.m_bOneSchema = true; )
 		}
+		m_bEarlyDone = true;
 		return true;
 	}
 
-	Debug ( tRes.m_bSingle = tRes.m_dResults.GetLength ()==1; )
+	Debug ( m_tResult.m_bSingle = m_tResult.m_dResults.GetLength ()==1; )
 
 	// build a minimal schema over all the (potentially different) schemes
 	// that we have in our aggregated result set
-	assert ( tRes.m_dResults.GetLength() || bReturnZeroCount );
+	assert ( m_tResult.m_dResults.GetLength() || bReturnZeroCount );
 
-	bool bAllEqual = MinimizeSchemas(tRes);
+	m_bAllEqual = MinimizeSchemas ( m_tResult );
 
-	Debug ( tRes.m_bOneSchema = tRes.m_bSingle; )
+	Debug ( m_tResult.m_bOneSchema = m_tResult.m_bSingle; )
 
-	const CSphVector<CSphQueryItem> & dQueryItems = ( tQuery.m_bFacet || tQuery.m_bFacetHead || bForceRefItems ) ? tQuery.m_dRefItems : tQuery.m_dItems;
+	const CSphVector<CSphQueryItem> & dQueryItems = ( m_tQuery.m_bFacet || m_tQuery.m_bFacetHead || bForceRefItems ) ? m_tQuery.m_dRefItems : m_tQuery.m_dItems;
 
 	// build a list of select items that the query asked for
 	bool bHaveExprs = false;
-	CSphVector<CSphQueryItem> tExtItems;
-	const CSphVector<CSphQueryItem> & dItems = ExpandAsterisk ( tRes.m_tSchema, dQueryItems, tExtItems, tQuery, bHaveExprs );
+	const CSphVector<CSphQueryItem> & dItems = ExpandAsterisk ( m_tResult.m_tSchema, dQueryItems, m_dExpandedItems, m_tQuery, bHaveExprs );
 
 	// api + index without attributes + select * case
 	// can not skip aggregate filtering
-	if ( bQueryFromAPI && dItems.IsEmpty() && !pAggrFilter && !bHaveExprs )
+	if ( bQueryFromAPI && dItems.IsEmpty() && !m_pAggrFilter && !bHaveExprs )
 	{
-		tRes.ClampAllMatches();
+		m_tResult.ClampAllMatches();
+		m_bEarlyDone = true;
 		return true;
 	}
 
 	// build the final schemas!
-	FrontendSchemaBuilder_c tFrontendBuilder ( tRes, tQuery, dItems, dQueryItems, hExtraColumns, bQueryFromAPI, bHaveLocals );
-	if ( !tFrontendBuilder.Build ( bMaster, tRes.m_sError ) )
+	m_pFrontendBuilder = std::make_unique<FrontendSchemaBuilder_c> ( m_tResult, m_tQuery, dItems, dQueryItems, hExtraColumns, bQueryFromAPI, m_bHaveLocals );
+	if ( !m_pFrontendBuilder->Build ( m_bMaster, m_tResult.m_sError ) )
 		return false;
 
 	// tricky bit
 	// in purely distributed case, all schemas are received from the wire, and miss aggregate functions info
 	// thus, we need to re-assign that info
-	if ( !bHaveLocals )
-		RecoverAggregateFunctions ( tQuery, tRes );
+	if ( !m_bHaveLocals )
+		RecoverAggregateFunctions ( m_tQuery, m_tResult );
 
 	// if there's more than one result set,
 	// we now have to merge and order all the matches
 	// this is a good time to apply outer order clause, too
-	if ( bForceSort || tRes.m_iSuccesses>1 || pAggrFilter )
+	if ( m_bForceSort || m_tResult.m_iSuccesses>1 || m_pAggrFilter )
 	{
-		if ( !MergeAllMatches ( tRes, tQuery, bHaveLocals, bAllEqual, bMaster, pAggrFilter, pProfiler ) )
+		if ( !PrepareMergeAllMatches ( m_tResult, m_tQuery, m_bHaveLocals, m_bAllEqual, m_bMaster, m_pAggrFilter, m_pProfiler, m_tSorter ) )
 			return false;
 	} else
 	{
-		tRes.m_dResults.First().m_iTag = 0;
-		Debug ( tRes.m_bTagsCompacted = true );
-		Debug ( tRes.m_bIdxByTag = true; )
+		m_tResult.m_dResults.First().m_iTag = 0;
+		Debug ( m_tResult.m_bTagsCompacted = true );
+		Debug ( m_tResult.m_bIdxByTag = true; )
+	}
+
+	return true;
+}
+
+bool PreparedMinimize_t::Finish()
+{
+	if ( m_bEarlyDone )
+		return true;
+
+	// Complete the original MergeAllMatches flatten step before post-processing.
+	if ( m_tSorter.m_pSorter )
+	{
+		FlattenPreparedSorter ( m_tSorter, m_tResult );
+		m_tSorter.m_pSorter.reset();
 	}
 
 	// apply outer order clause to single result set
 	// (multiple combined sets just got reordered above)
 	// apply inner limit first
-	if ( tRes.m_iSuccesses==1 && tQuery.m_bHasOuter )
+	if ( m_tResult.m_iSuccesses==1 && m_tQuery.m_bHasOuter )
 	{
-		tRes.ClampMatches ( tQuery.m_iLimit );
-		if ( !tQuery.m_sOuterOrderBy.IsEmpty() )
+		m_tResult.ClampMatches ( m_tQuery.m_iLimit );
+		if ( !m_tQuery.m_sOuterOrderBy.IsEmpty() )
 		{
-			if ( !ApplyOuterOrder ( tRes, tQuery ) )
+			if ( !ApplyOuterOrder ( m_tResult, m_tQuery ) )
 				return false;
 		}
-		Debug ( tRes.m_bSingle = true; )
-		Debug ( tRes.m_bTagsCompacted = true );
-		Debug ( tRes.m_bIdxByTag = true; )
+		Debug ( m_tResult.m_bSingle = true; )
+		Debug ( m_tResult.m_bTagsCompacted = true );
+		Debug ( m_tResult.m_bIdxByTag = true; )
 	}
 
-	if ( bAllEqual && bHaveLocals )
+	if ( m_bAllEqual && m_bHaveLocals )
 	{
-		CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_POST );
-		ComputePostlimit ( tRes, tQuery, bMaster );
+		CSphScopedProfile tProf ( m_pProfiler, SPH_QSTATE_EVAL_POST );
+		ComputePostlimit ( m_tResult, m_tQuery, m_bMaster );
 	}
 
-	if ( bMaster )
+	if ( m_bMaster )
 	{
-		CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_GETFIELD );
-		if ( !RemotesGetField ( tRes, tQuery ) )
+		CSphScopedProfile tProf ( m_pProfiler, SPH_QSTATE_EVAL_GETFIELD );
+		if ( !RemotesGetField ( m_tResult, m_tQuery ) )
 			return false;
 	}
 
 	// all the merging and sorting is now done
 	// replace the minimized matches schema with its subset, the result set schema
-	CSphSchema tOldSchema = tRes.m_tSchema;
-	tFrontendBuilder.PopulateSchema ( tRes.m_tSchema );
+	CSphSchema tOldSchema = m_tResult.m_tSchema;
+	m_pFrontendBuilder->PopulateSchema ( m_tResult.m_tSchema );
 
         // FIX(#3428): Adjust SHOW META -> total_found only when HAVING is present.
         // After flattening/merging, m_dResults[0] holds the post-HAVING groups.
         // Cap total_found to the number of survivors to reflect post-HAVING reality.
         // Same HAVING presence condition as used in MergeAllMatches: pAggrFilter != nullptr.
-        const bool bHasHaving = ( pAggrFilter != nullptr );
-        if ( bHasHaving && !tRes.m_dResults.IsEmpty() )
+        const bool bHasHaving = ( m_pAggrFilter != nullptr );
+        if ( bHasHaving && !m_tResult.m_dResults.IsEmpty() )
         {
-                const int iHavingSurvivors = tRes.m_dResults[0].m_dMatches.GetLength();
-                if ( iHavingSurvivors < tRes.m_iTotalMatches )
-                        tRes.m_iTotalMatches = iHavingSurvivors;
+                const int iHavingSurvivors = m_tResult.m_dResults[0].m_dMatches.GetLength();
+                if ( iHavingSurvivors < m_tResult.m_iTotalMatches )
+                        m_tResult.m_iTotalMatches = iHavingSurvivors;
         }
 
-	if ( tRes.m_iSuccesses==1 )
-		RemapNullMask ( tRes.m_dResults[0].m_dMatches, tOldSchema, tRes.m_tSchema );
+	if ( m_tResult.m_iSuccesses==1 )
+		RemapNullMask ( m_tResult.m_dResults[0].m_dMatches, tOldSchema, m_tResult.m_tSchema );
 
-	if ( bForceSort || tQuery.m_bFacetMaxRef || tQuery.m_iFacetResultLimit>=0 )
+	if ( m_bForceSort || m_tQuery.IsInternalQuery() || m_tQuery.m_iFacetResultLimit>=0 )
 	{
 		CSphVector<int> dKeptRows;
 
-		for ( int i = 0; i < tRes.m_tSchema.GetAttrsCount(); ++i )
+		for ( int i = 0; i < m_tResult.m_tSchema.GetAttrsCount(); ++i )
 		{
-			const CSphColumnInfo & tAttr = tRes.m_tSchema.GetAttr(i);
+			const CSphColumnInfo & tAttr = m_tResult.m_tSchema.GetAttr(i);
 			if ( !tAttr.IsDataPtr() || !tAttr.m_tLocator.m_bDynamic )
 				continue;
 
@@ -1022,10 +1083,204 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 		}
 
 		CSphVector<DataPtrAttr_t> dOrphanedPtrs = tOldSchema.SubsetPtrs ( dKeptRows );
-		for ( auto & tResult : tRes.m_dResults )
+		for ( auto & tResult : m_tResult.m_dResults )
 			for ( auto & tMatch : tResult.m_dMatches )
 				CSphSchemaHelper::FreeDataSpecial ( tMatch, dOrphanedPtrs );
 	}
 
 	return true;
+}
+
+/// merges multiple result sets, remaps columns, does reorder for outer selects
+bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, const sph::StringSet & hExtraColumns, QueryProfile_c * pProfiler, const CSphFilterSettings * pAggrFilter, bool bForceRefItems, bool bMaster, bool bForceSort )
+{
+	PreparedMinimize_t tPrepared ( tRes, tQuery, bHaveLocals, pProfiler, pAggrFilter, bMaster, bForceSort );
+	return tPrepared.Prepare ( hExtraColumns, bForceRefItems ) && tPrepared.Finish();
+}
+
+class GroupConcatFold_c final : public MatchProcessor_i
+{
+public:
+	GroupConcatFold_c ( ISphMatchSorter & tVisibleSorter, const ISphSchema & tVisibleSchema, const ISphSchema & tHelperSchema, const CSphString & sValueAttr, CSphString & sError )
+		: m_tVisibleSorter ( tVisibleSorter )
+		, m_tVisibleSchema ( tVisibleSchema )
+		, m_tHelperSchema ( tHelperSchema )
+		, m_sError ( sError )
+	{
+		const CSphColumnInfo * pVisibleValue = m_tVisibleSchema.GetAttr ( sValueAttr.cstr() );
+		const CSphColumnInfo * pHelperValue = m_tHelperSchema.GetAttr ( sValueAttr.cstr() );
+		const CSphColumnInfo * pHelperGroup = m_tHelperSchema.GetAttr ( "@groupby" );
+		if ( !pVisibleValue || !pHelperValue || !pHelperGroup )
+		{
+			m_sError.SetSprintf ( "internal error: limited GROUP_CONCAT transport schema is missing '%s' or @groupby", sValueAttr.cstr() );
+			return;
+		}
+
+		if ( pVisibleValue->m_eAttrType!=SPH_ATTR_STRINGPTR || pHelperValue->m_eAttrType!=SPH_ATTR_STRINGPTR )
+		{
+			m_sError.SetSprintf ( "internal error: limited GROUP_CONCAT transport column '%s' is not STRINGPTR", sValueAttr.cstr() );
+			return;
+		}
+
+		m_tVisibleValue = pVisibleValue->m_tLocator;
+		m_tHelperValue = pHelperValue->m_tLocator;
+		m_tHelperGroup = pHelperGroup->m_tLocator;
+		m_pAggregate.reset ( CreateAggrConcat ( *pVisibleValue ) );
+		m_tAccumulator.Reset ( m_tVisibleSchema.GetDynamicSize() );
+		m_tSource.Reset ( m_tVisibleSchema.GetDynamicSize() );
+		// Treat the already ordered candidates as one synthetic source stream.
+		m_tAccumulator.m_iTag = 0;
+		m_tSource.m_iTag = 0;
+		m_bReady = true;
+	}
+
+	~GroupConcatFold_c() override
+	{
+		if ( m_tAccumulator.m_pDynamic )
+			m_tVisibleSchema.FreeDataPtrs ( m_tAccumulator );
+	}
+
+	void Process ( CSphMatch * pMatch ) override
+	{
+		if ( !m_bReady || !m_sError.IsEmpty() )
+			return;
+
+		const SphGroupKey_t uGroup = pMatch->GetAttr ( m_tHelperGroup );
+		if ( m_bHaveGroup && uGroup!=m_uGroup )
+			if ( !FlushGroup() )
+				return;
+
+		if ( !m_bHaveGroup )
+		{
+			m_uGroup = uGroup;
+			m_bHaveGroup = true;
+		}
+
+		m_tSource.SetAttr ( m_tVisibleValue, pMatch->GetAttr ( m_tHelperValue ) );
+		m_pAggregate->Update ( m_tAccumulator, m_tSource, false, false );
+		m_tSource.SetAttr ( m_tVisibleValue, 0 );
+	}
+
+	void Process ( VecTraits_T<CSphMatch *> & dMatches ) override
+	{
+		for ( CSphMatch * pMatch : dMatches )
+			Process ( pMatch );
+	}
+
+	bool ProcessInRowIdOrder() const override { return false; }
+
+	bool Finish()
+	{
+		if ( !m_bReady || !m_sError.IsEmpty() )
+			return false;
+
+		return !m_bHaveGroup || FlushGroup();
+	}
+
+	int GetInstalledGroups() const { return m_iInstalledGroups; }
+
+private:
+	bool FlushGroup()
+	{
+		m_pAggregate->Finalize ( m_tAccumulator );
+		const BYTE * pFinal = (const BYTE *)m_tAccumulator.GetAttr ( m_tVisibleValue );
+		const bool bVisible = m_tVisibleSorter.VisitGroup ( m_uGroup, [this,pFinal] ( CSphMatch & tMatch )
+		{
+			BYTE * pCopy = sphCopyPackedAttr ( pFinal );
+			BYTE * pDisplaced = (BYTE *)ExchangeAttr ( tMatch, m_tVisibleValue, (SphAttr_t)pCopy );
+			sphDeallocatePacked ( pDisplaced );
+		});
+
+		BYTE * pOwned = (BYTE *)ExchangeAttr ( m_tAccumulator, m_tVisibleValue, 0 );
+		sphDeallocatePacked ( pOwned );
+		m_bHaveGroup = false;
+		m_iInstalledGroups += bVisible;
+		return true;
+	}
+
+	ISphMatchSorter &				m_tVisibleSorter;
+	const ISphSchema &				m_tVisibleSchema;
+	const ISphSchema &				m_tHelperSchema;
+	CSphString &					m_sError;
+	CSphAttrLocator					m_tVisibleValue;
+	CSphAttrLocator					m_tHelperValue;
+	CSphAttrLocator					m_tHelperGroup;
+	std::unique_ptr<AggrFunc_i>		m_pAggregate;
+	CSphMatch						m_tAccumulator;
+	CSphMatch						m_tSource;
+	SphGroupKey_t					m_uGroup = 0;
+	int								m_iInstalledGroups = 0;
+	bool							m_bReady = false;
+	bool							m_bHaveGroup = false;
+};
+
+bool MinimizeGroupConcatBundle ( AggrResult_t * pResults, const CSphQuery * pQueries, int iQueries, bool bHaveLocals, const sph::StringSet & hExtraColumns, QueryProfile_c * pProfiler, const CSphFilterSettings * pHeadAggrFilter, bool bMaster )
+{
+	if ( !pResults || !pQueries || iQueries<2 || !bMaster )
+		return false;
+
+	std::vector<std::unique_ptr<PreparedMinimize_t>> dPrepared;
+	dPrepared.reserve ( iQueries );
+	dPrepared.emplace_back ( std::make_unique<PreparedMinimize_t> ( pResults[0], pQueries[0], bHaveLocals, pProfiler, pHeadAggrFilter, bMaster, true ) );
+	if ( !dPrepared.back()->Prepare ( hExtraColumns, true ) )
+		return false;
+
+	PreparedMinimize_t & tHead = *dPrepared[0];
+	if ( tHead.IsEarlyDone() )
+		return tHead.Finish();
+
+	ISphMatchSorter * pVisibleSorter = tHead.GetSorter();
+	if ( !pVisibleSorter || !pVisibleSorter->IsGroupby() )
+	{
+		pResults[0].m_sError = "internal error: limited GROUP_CONCAT visible grouped sorter was not reconstructed";
+		return false;
+	}
+
+	const int iVisibleGroups = pVisibleSorter->PrepareGroupAccess();
+	if ( iVisibleGroups<0 )
+	{
+		pResults[0].m_sError = "internal error: limited GROUP_CONCAT visible sorter does not support grouped lookup";
+		return false;
+	}
+
+	for ( int i = 1; i<iQueries; ++i )
+	{
+		if ( !pQueries[i].IsGroupConcatHelper() )
+		{
+			pResults[0].m_sError = "internal error: non-GROUP_CONCAT query found inside limited GROUP_CONCAT bundle";
+			return false;
+		}
+
+		dPrepared.emplace_back ( std::make_unique<PreparedMinimize_t> ( pResults[i], pQueries[i], bHaveLocals, pProfiler, nullptr, bMaster, true ) );
+		PreparedMinimize_t & tHelper = *dPrepared.back();
+		if ( !tHelper.Prepare ( hExtraColumns, true ) )
+		{
+			if ( pResults[0].m_sError.IsEmpty() )
+				pResults[0].m_sError = pResults[i].m_sError;
+			if ( pResults[0].m_sError.IsEmpty() )
+				pResults[0].m_sError = "required limited GROUP_CONCAT helper failed during result minimization";
+			return false;
+		}
+
+		ISphMatchSorter * pHelperSorter = tHelper.GetSorter();
+		if ( !pHelperSorter || !pHelperSorter->IsGroupby() || pQueries[i].m_dRefItems.GetLength()!=1 )
+		{
+			pResults[0].m_sError = "internal error: limited GROUP_CONCAT helper grouped sorter was not reconstructed";
+			return false;
+		}
+
+		const CSphString & sValueAttr = pQueries[i].m_dRefItems[0].m_sAlias;
+		GroupConcatFold_c tFold ( *pVisibleSorter, pResults[0].m_tSchema, pResults[i].m_tSchema, sValueAttr, pResults[0].m_sError );
+		pHelperSorter->Finalize ( tFold, false, true );
+		if ( !tFold.Finish() )
+			return false;
+
+		if ( tFold.GetInstalledGroups()!=iVisibleGroups )
+		{
+			pResults[0].m_sError.SetSprintf ( "internal error: limited GROUP_CONCAT installed %d of %d visible groups", tFold.GetInstalledGroups(), iVisibleGroups );
+			return false;
+		}
+	}
+
+	return tHead.Finish();
 }

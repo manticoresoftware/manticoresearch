@@ -361,6 +361,7 @@ private:
 	bool	ReplaceWithColumnarItem ( const CSphString & sAttr, ESphEvalStage eStage );
 	int		ReduceOrIncreaseMaxMatches() const;
 	int		AdjustMaxMatches ( int iMaxMatches ) const;
+	bool	SetupGroupConcatHelperStorage();
 	bool	ConvertColumnarToDocstore();
 	bool	SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphString & sExpr, DWORD uQueryPackedFactorFlags );
 	bool	SetupColumnarAggregates ( CSphColumnInfo & tExprCol );
@@ -1282,6 +1283,14 @@ bool QueueCreator_c::ParseResolvedQueryItem ( const CSphQueryItem & tItem )
 	if ( tExprCol.m_eAggrFunc==SPH_AGGR_NONE )
 	{
 		SelectExprEvalStage(tExprCol);
+		if ( IsGroupConcatValueAttr ( tExprCol.m_sName ) )
+		{
+			tExprCol.m_eStage = SPH_EVAL_PRESORT;
+			StrVec_t dDependentCols;
+			tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
+			FetchDependencyChains ( dDependentCols );
+			PropagateEvalStage ( tExprCol, dDependentCols );
+		}
 
 		// add it!
 		// NOTE, "final" stage might need to be fixed up later
@@ -2497,6 +2506,46 @@ bool QueueCreator_c::SetupGroupSortingFunc ( bool bGotDistinct )
 		return false;
 	}
 
+	const bool bLimitedGroupConcat = m_tQuery.m_dRefItems.any_of ( [] ( const CSphQueryItem & tItem )
+		{ return tItem.m_tAggrSettings.m_tGroupConcat.IsLimited(); } );
+	if ( bLimitedGroupConcat )
+	{
+		int iSortAttrs = 0;
+		bool bHasGroupKey = false;
+		for ( ; iSortAttrs<CSphMatchComparatorState::MAX_ATTRS && m_tStateGroup.m_dAttrs[iSortAttrs]>=0; ++iSortAttrs )
+		{
+			const int iAttr = m_tStateGroup.m_dAttrs[iSortAttrs];
+			const CSphColumnInfo & tColumn = m_pSorterSchema->GetAttr ( iAttr );
+			bool bGroupColumn = false;
+			for ( const auto & tGroupColumn : m_dGroupColumns )
+				bGroupColumn |= tGroupColumn.first==iAttr;
+
+			const bool bGroupMagic = IsGroupbyMagic ( tColumn.m_sName );
+			const bool bOrdinaryAggregate = tColumn.m_eAggrFunc!=SPH_AGGR_NONE;
+			if ( !bGroupColumn && !bGroupMagic && !bOrdinaryAggregate )
+			{
+				m_sError.SetSprintf ( "group ordering by representative-row attribute '%s' is not supported with limited GROUP_CONCAT", tColumn.m_sName.cstr() );
+				return false;
+			}
+
+			bHasGroupKey |= bGroupColumn || tColumn.m_sName=="@groupby";
+		}
+
+		if ( !bHasGroupKey )
+		{
+			if ( iSortAttrs>=CSphMatchComparatorState::MAX_ATTRS )
+			{
+				m_sError = "limited GROUP_CONCAT requires a group-key tie-breaker, but all 5 group-order slots are already used";
+				return false;
+			}
+
+			sGroupOrderBy.SetSprintf ( "%s, @groupby asc", sGroupOrderBy.cstr() );
+			eRes = sphParseSortClause ( m_tQuery, sGroupOrderBy.cstr(), *m_pSorterSchema, m_eGroupFunc, m_tStateGroup, m_dGroupJsonExprs, m_tSettings.m_pJoinArgs.get(), m_sError );
+			if ( eRes!=SORT_CLAUSE_OK )
+				return false;
+		}
+	}
+
 	ExtraAddSortkeys ( m_tStateGroup.m_dAttrs );
 
 	if ( !m_tGroupSorterSettings.m_bImplicit )
@@ -2681,6 +2730,21 @@ int QueueCreator_c::AdjustMaxMatches ( int iMaxMatches ) const
 }
 
 
+bool QueueCreator_c::SetupGroupConcatHelperStorage()
+{
+	if ( !m_tQuery.IsGroupConcatHelper() )
+		return true;
+
+	const int iGroupSlots = AdjustMaxMatches ( m_tGroupSorterSettings.m_iMaxMatches );
+	const int64_t iCapacity = (int64_t)iGroupSlots * m_tQuery.m_iGroupbyLimit;
+	if ( iGroupSlots<=0 || m_tQuery.m_iGroupbyLimit<=0 || iCapacity>INT_MAX/4 )
+		return Err ( "limited GROUP_CONCAT helper capacity overflows: %d group slots * %d", iGroupSlots, m_tQuery.m_iGroupbyLimit );
+
+	m_tGroupSorterSettings.m_iMaxMatches = (int)iCapacity;
+	return true;
+}
+
+
 bool QueueCreator_c::CanCalcFastCountDistinct() const
 {
 	bool bHasAggregates = PredictAggregates();
@@ -2729,7 +2793,8 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	if ( m_bGotGroupby )
 	{
 		m_tGroupSorterSettings.m_bGrouped = m_tSettings.m_bGrouped;
-		m_tGroupSorterSettings.m_iMaxMatches = AdjustMaxMatches ( m_tGroupSorterSettings.m_iMaxMatches );
+		if ( !m_tQuery.IsGroupConcatHelper() )
+			m_tGroupSorterSettings.m_iMaxMatches = AdjustMaxMatches ( m_tGroupSorterSettings.m_iMaxMatches );
 		if ( m_pProfile )
 			m_pProfile->m_iMaxMatches = m_tGroupSorterSettings.m_iMaxMatches;
 
@@ -2787,7 +2852,8 @@ bool QueueCreator_c::SetupGroupQueue ()
 {
 	return AddGroupbyStuff ()
 		&& SetupMatchesSortingFunc ()
-		&& SetGroupSorting ();
+		&& SetGroupSorting ()
+		&& SetupGroupConcatHelperStorage();
 }
 
 bool QueueCreator_c::ConvertColumnarToDocstore()

@@ -2008,6 +2008,28 @@ Often, you want to better understand the contents of each group. You can use [GR
 
 `GROUP_CONCAT(field)` returns the list as comma-separated values.
 
+The ordered form keeps only the first `N` values according to its own ordering:
+
+```sql
+GROUP_CONCAT(expression ORDER BY sort_expression [ASC|DESC] [, ...] LIMIT N)
+```
+
+It requires an explicit `GROUP BY`. The result is still one comma-separated string. With `GROUP M BY`, M representative rows are returned for a group and each row contains the same string.
+
+Each ordered `GROUP_CONCAT()` has its own per-group top-N queue. A query can contain several ordered expressions with different order clauses and limits, and can also use `WITHIN GROUP ORDER BY`. `LIMIT 0` returns an empty string. If `N` exceeds the group size, all values are returned. Value conversion and empty-value handling are the same as for `GROUP_CONCAT(field)`.
+
+The memory cost is proportional to the number of retained groups multiplied by `N`, for each ordered expression.
+
+This form currently supports SphinxQL queries with an explicit `GROUP BY`. It does not support `DISTINCT`, multiple value expressions, `SEPARATOR`, `OFFSET`, implicit grouping, JSON aggregation syntax, `FACET`, `JOIN`, outer selects or table functions, KNN/hybrid queries, or scroll. An ordered `GROUP_CONCAT()` alias cannot be used in `HAVING` or result ordering. Result ordering can use group keys and ordinary aggregates, but not representative-row values.
+
+For example, the following query returns at most two ages per major, with the highest age first:
+
+```sql
+SELECT major, GROUP_CONCAT(age ORDER BY age DESC LIMIT 2) AS top_ages
+FROM students
+GROUP BY major
+```
+
 <!-- intro -->
 ##### Example:
 

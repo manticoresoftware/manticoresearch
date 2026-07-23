@@ -1371,7 +1371,7 @@ void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 
 void BuildStatusOneline ( StringBuilder_c& sOut );
 
-void UpdateLastMeta (VecTraits_T<AggrResult_t> tResults );
+void UpdateLastMeta ( VecTraits_T<AggrResult_t> tResults, const VecTraits_T<CSphQuery> & dQueries );
 
 namespace session {
 	bool IsAutoCommit ( const ClientSession_c* );

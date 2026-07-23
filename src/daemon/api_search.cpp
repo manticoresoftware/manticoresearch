@@ -345,7 +345,7 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 
 	tOut.SendString ( q.m_sExpandBlended.cstr() );
 
-	tOut.SendByte ( q.m_bFacetMaxRef );
+	tOut.SendByte ( (BYTE)q.m_eQueryRole );
 	SendFacetFilterTrait ( tOut, q.m_tFacetFilter, VER_COMMAND_SEARCH_MASTER );
 	SendStringVec ( tOut, q.m_dFacetOwnFilterAttrs );
 }
@@ -1292,7 +1292,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 	if ( uMasterVer>=30 )
 	{
-		tQuery.m_bFacetMaxRef = !!tReq.GetByte();
+		tQuery.m_eQueryRole = (QueryRole_e)tReq.GetByte();
 		ParseFacetFilterTrait ( tReq, tQuery.m_tFacetFilter, uMasterVer );
 		ParseStringVec ( tReq, tQuery.m_dFacetOwnFilterAttrs );
 	}
@@ -1611,14 +1611,22 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 	// send schema
 	SendSchema ( tOut, tRes, tAttrsToSend, iVer, uMasterVer, bAgentMode );
 
+	auto & dResult = tRes.m_dResults.First();
+	int iOffset = tRes.m_iOffset;
+	int iCount = tRes.m_iCount;
+	if ( bAgentMode && tQuery.IsGroupConcatHelper() )
+	{
+		iOffset = 0;
+		iCount = dResult.m_dMatches.GetLength();
+	}
+
 	// send matches
-	tOut.SendInt ( tRes.m_iCount );
+	tOut.SendInt ( iCount );
 	tOut.SendInt ( 1 ); // was USE_64BIT
 
 	CSphVector<BYTE> dJson ( 512 );
 
-	auto& dResult = tRes.m_dResults.First();
-	auto dMatches = dResult.m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
+	auto dMatches = dResult.m_dMatches.Slice ( iOffset, iCount );
 
 	for ( const CSphMatch & tMatch : dMatches )
 	{
@@ -1638,7 +1646,7 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 	}
 
 	if ( tQuery.m_bAgent && tQuery.m_iLimit )
-		tOut.SendInt ( tRes.m_iCount );
+		tOut.SendInt ( iCount );
 	else
 		tOut.SendInt ( dResult.m_dMatches.GetLength() );
 
@@ -1755,5 +1763,5 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 	ARRAY_FOREACH ( i, tHandler.m_dQueries )
 		SendResult ( uVer, tOut, tHandler.m_dAggrResults[i], bAgentMode, tHandler.m_dQueries[i], uMasterVer );
 
-	UpdateLastMeta ( tHandler.m_dAggrResults );
+	UpdateLastMeta ( tHandler.m_dAggrResults, tHandler.m_dQueries );
 }

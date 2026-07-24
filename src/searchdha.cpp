@@ -237,6 +237,22 @@ void PersistentConnectionsPool_c::ReturnConnection ( int iSocket )
 	m_dSockets[Step ( &m_iWit )] = iSocket;
 }
 
+void PersistentConnectionsPool_c::CloseIdleConnections ()
+{
+	ScopedMutex_t tGuard ( m_dDataLock );
+
+	int iRead = m_iRit;
+	for ( int i = 0; i<m_iFreeWindow; ++i )
+	{
+		int & iSock = m_dSockets[Step ( &iRead )];
+		if ( iSock>=0 )
+		{
+			sphSockClose ( iSock );
+			iSock = -1;
+		}
+	}
+}
+
 // close all the sockets in the pool.
 void PersistentConnectionsPool_c::Shutdown ()
 {
@@ -1662,6 +1678,8 @@ bool AgentConn_t::Fatal ( AgentStats_e eStat, const char * sMessage, ... )
 	va_end ( ap );
 	sphLogDebugv ( "%d FATAL: %s", m_iStoreTag, m_sFailure.cstr () ); // want to log failure at extended log mode wo recompile of daemon
 	State ( Agent_e::RETRY );
+	if ( IsPersistent () )
+		m_tDesc.m_pDash->m_pPersPool->CloseIdleConnections ();
 	Finish ( true );
 	agent_stats_inc ( *this, eStat );
 	return false;
@@ -3894,4 +3912,3 @@ bool sphNBSockEof ( int iSock )
 		return true;
 	return false;
 }
-

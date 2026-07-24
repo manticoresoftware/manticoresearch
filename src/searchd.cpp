@@ -1151,7 +1151,8 @@ OneResultset_t::~OneResultset_t()
 
 inline static bool ClusterFlavour () noexcept
 {
-	return !g_sClusterUser.IsEmpty () && session::GetClientSession ()->m_sUser==g_sClusterUser;
+	auto * pSession = session::GetClientSession();
+	return pSession && !g_sClusterUser.IsEmpty () && pSession->m_sUser==g_sClusterUser;
 }
 
 
@@ -7176,22 +7177,11 @@ enum ThreadInfoFormat_e
 	THD_FORMAT_SPHINXQL
 };
 
-static Str_t FormatInfo ( const PublicThreadDesc_t & tThd, ThreadInfoFormat_e eFmt, QuotationEscapedBuilder & tBuf )
-{
-	if ( tThd.m_pQuery && eFmt==THD_FORMAT_SPHINXQL && tThd.m_eProto!=Proto_e::MYSQL41 )
-	{
-		bool bGotQuery = false;
-		if ( tThd.m_pQuery )
-		{
-			tBuf.Clear();
-			FormatSphinxql ( *tThd.m_pQuery, {}, 0, tBuf );
-			bGotQuery = true;
-		}
 
-		// query might be removed prior to lock then go to common path
-		if ( bGotQuery )
-			return (Str_t)tBuf;
-	}
+static Str_t FormatInfo ( const PublicThreadDesc_t & tThd, ThreadInfoFormat_e eFmt )
+{
+	if ( eFmt==THD_FORMAT_SPHINXQL && !tThd.m_sSphinxqlQuery.IsEmpty() && tThd.m_eProto!=Proto_e::MYSQL41 )
+		return FromStr ( tThd.m_sSphinxqlQuery );
 
 	if ( tThd.m_sDescription.IsEmpty () && tThd.m_szCommand )
 		return FromSz ( tThd.m_szCommand );
@@ -7233,8 +7223,6 @@ void HandleShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	tOut.HeadColumn ( "Info" );
 	if (!tOut.HeadEnd())
 		return;
-
-	QuotationEscapedBuilder tBuf;
 
 //	sphLogDebug ( "^^ Show threads. Current info is %p", GetTaskInfo () );
 
@@ -7285,7 +7273,7 @@ void HandleShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 
 		if ( bAll )
 			tOut.PutString ( dThd.m_sChain ); // Chain
-		auto sInfo = FormatInfo ( dThd, eFmt, tBuf );
+		auto sInfo = FormatInfo ( dThd, eFmt );
 		if ( iCols >= 0 && iCols < sInfo.second )
 			sInfo.second = iCols;
 		tOut.PutString ( sInfo ); // Info m_pTaskInfo
@@ -7324,8 +7312,6 @@ void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt )
 	if ( !tOut.HeadEnd() )
 		return;
 
-	QuotationEscapedBuilder tBuf;
-
 	//	sphLogDebug ( "^^ Show threads. Current info is %p", GetTaskInfo () );
 
 	CSphSwapVector<PublicThreadDesc_t> dFinal;
@@ -7353,7 +7339,7 @@ void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt )
 			tOut.PutTimestampAsString ( dThd.m_tmLastJobStartTimeUS );
 		else
 			tOut.PutTimeAsString ( dThd.m_tmLastJobDoneTimeUS - dThd.m_tmLastJobStartTimeUS );
-		auto sInfo = FormatInfo ( dThd, eFmt, tBuf );
+		auto sInfo = FormatInfo ( dThd, eFmt );
 		if ( iCols >= 0 && iCols < sInfo.second )
 			sInfo.second = iCols;
 		tOut.PutString ( sInfo ); // Info m_pTaskInfo

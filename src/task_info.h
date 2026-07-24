@@ -55,11 +55,11 @@ struct PublicThreadDesc_t
 	StringBuilder_c		m_sChain;
 	StringBuilder_c		m_sClientName	{" "};
 	StringBuilder_c		m_sDescription	{" "};
+	CSphString			m_sSphinxqlQuery;
 	StringBuilder_c		m_sProto		{","};
 
 	int 				m_iDescriptionLimit = -1;	///< cb flag when collecting info with columns=N, avoid copy huge descriptions then
 	int64_t				m_tmConnect		= -1; ///< when did the client connect?
-	std::unique_ptr<CSphQuery>	m_pQuery; /// currently running query, if not sphinxql
 	const char*			m_szCommand		= nullptr;	/// simple static SYSTEM, SELECT, UPDATE, etc. Used in show threads, crash dumping
 	int					m_iConnID		= -1; ///< current conn-id for this thread. For logging and tracking in mysql
 

@@ -1,0 +1,124 @@
+––– comment –––
+Issue #4678 regression: concurrent HTTP /sql queries and SHOW THREADS must not
+crash searchd by copying a live CSphQuery from QueryInfo_t owned by another task.
+The dataset is generated with manticore-load. A heavy JSON /search workload
+keeps non-SQL query state active while HTTP raw SQL issues SHOW THREADS; the
+reported crash was in HttpRawSqlHandler while rendering SHOW THREADS.
+––– block: ../base/start-searchd –––
+––– input –––
+manticore-load --quiet --host=127.0.0.1 --port=9306 --drop --batch-size=250 --threads=4 --total=5000 --init="CREATE TABLE issue4678(title text, tag string, gid uint)" --load="INSERT INTO issue4678(id,title,tag,gid) VALUES(<increment>,'alpha beta gamma delta omega vector thread query manticore search <increment>','tag<int/0/17>',<int/0/97>)" > /dev/null; echo $?
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK issue4678;"
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM issue4678;" | grep -o '5000'
+––– output –––
+0
+5000
+––– input –––
+rm -f /tmp/issue4678_functional.err
+pids=""
+for worker in $(seq 1 8); do
+  (
+    for n in $(seq 1 1000); do
+      curl -sS --max-time 10 -H 'Content-Type: application/x-www-form-urlencoded' --data-binary 'query=select+id%2C+weight%28%29+from+issue4678+where+match%28%27alpha+beta+gamma+delta+omega+vector+thread+query+manticore+search%27%29+order+by+weight%28%29+desc+limit+1000+option+max_matches%3D20000' 'http://127.0.0.1:9308/sql?mode=raw' > /dev/null 2>> /tmp/issue4678_functional.err || true
+    done
+  ) &
+  pids="$pids $!"
+done
+sphinxql_ok=0
+columns_ok=0
+mysql_fallback_ok=0
+for n in $(seq 1 200); do
+  out=$(mysql -h0 -P9306 -e "SHOW THREADS OPTION format=sphinxql" 2> /dev/null || true)
+  if printf '%s\n' "$out" | awk -F'|' '$4 ~ /http/ { info=$11; gsub(/^ +| +$/, "", info); if ( info ~ /^select .* from issue4678 .*match/ ) found=1 } END { exit !found }'; then
+    sphinxql_ok=1
+  fi
+  if mysql -h0 -P9306 -e "SHOW THREADS OPTION columns=30,format=sphinxql" 2> /dev/null | awk -F'|' '$4 ~ /http/ { info=$11; gsub(/^ +| +$/, "", info); if ( info ~ /^select / && length(info)==30 ) found=1 } END { exit !found }'; then
+    columns_ok=1
+  fi
+  if printf '%s\n' "$out" | awk -F'|' '$4 ~ /mysql/ { info=$11; gsub(/^ +| +$/, "", info); if ( info ~ /^SHOW THREADS OPTION format=sphinxql/ ) found=1 } END { exit !found }'; then
+    mysql_fallback_ok=1
+  fi
+  [ "$sphinxql_ok$columns_ok$mysql_fallback_ok" = 111 ] && break
+  sleep 0.05
+done
+kill $pids 2> /dev/null || true
+wait $pids 2> /dev/null || true
+[ "$sphinxql_ok" = 1 ] && echo sphinxql_rendered || echo sphinxql_missing
+[ "$columns_ok" = 1 ] && echo columns_limited || echo columns_not_limited
+[ "$mysql_fallback_ok" = 1 ] && echo mysql_fallback_ok || echo mysql_fallback_missing
+––– output –––
+sphinxql_rendered
+columns_limited
+mysql_fallback_ok
+––– input –––
+rm -f /tmp/issue4678_json_functional.err
+manticore-load --quiet --host=127.0.0.1 --port=9306 --drop --batch-size=5000 --threads=4 --total=200000 --init="CREATE TABLE issue4678(title text, tag string, gid uint)" --load="INSERT INTO issue4678(id,title,tag,gid) VALUES(<increment>,'alpha beta gamma delta omega vector thread query manticore search <increment>','tag<int/0/17>',<int/0/97>)" > /dev/null
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK issue4678;" > /dev/null
+pids=""
+for worker in $(seq 1 32); do
+  (
+    for n in $(seq 1 100); do
+      curl -sS --max-time 60 -H 'Content-Type: application/json' -d '{"table":"issue4678","query":{"match":{"title":"alpha beta gamma delta omega vector thread query manticore search"}},"expressions":{"title_hash":"crc32(title)"},"sort":[{"title_hash":"desc"}],"limit":50000,"max_matches":200000}' 'http://127.0.0.1:9308/search' > /dev/null 2>> /tmp/issue4678_json_functional.err || true
+    done
+  ) &
+  pids="$pids $!"
+done
+show_threads_ok=0
+for n in $(seq 1 400); do
+  if mysql -h0 -P9306 -e "SHOW THREADS OPTION format=sphinxql" > /dev/null 2>&1; then
+    show_threads_ok=1
+  fi
+  sleep 0.05
+done
+kill $pids 2> /dev/null || true
+wait $pids 2> /dev/null || true
+[ "$show_threads_ok" = 1 ] && echo json_show_threads_ok || echo json_show_threads_failed
+––– output –––
+json_show_threads_ok
+––– input –––
+rm -f /tmp/issue4678_curl_*.cfg /tmp/issue4678_curl_*.rc /tmp/issue4678_curl_*.err
+manticore-load --quiet --host=127.0.0.1 --port=9306 --drop --batch-size=250 --threads=4 --total=5000 --init="CREATE TABLE issue4678(title text, tag string, gid uint)" --load="INSERT INTO issue4678(id,title,tag,gid) VALUES(<increment>,'alpha beta gamma delta omega vector thread query manticore search <increment>','tag<int/0/17>',<int/0/97>)" > /dev/null
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK issue4678;" > /dev/null
+add_http_query() {
+  cfg="$1"
+  data="$2"
+  {
+    echo 'url = "http://127.0.0.1:9308/sql?mode=raw"'
+    echo 'request = "POST"'
+    echo 'header = "Content-Type: application/x-www-form-urlencoded"'
+    printf 'data = "%s"\n' "$data"
+    echo 'output = "/dev/null"'
+    echo 'next'
+  } >> "$cfg"
+}
+for batch in $(seq 1 3); do
+  cfg="/tmp/issue4678_curl_${batch}.cfg"
+  for n in $(seq 1 3000); do
+    add_http_query "$cfg" 'query=SHOW+THREADS+OPTION+format%3Dsphinxql'
+    add_http_query "$cfg" 'query=SHOW+THREADS'
+    add_http_query "$cfg" 'query=SELECT+id%2C+weight%28%29+FROM+issue4678+WHERE+MATCH%28%27alpha+beta+gamma%27%29+ORDER+BY+weight%28%29+DESC+LIMIT+20+OPTION+max_matches%3D1000'
+    add_http_query "$cfg" 'query=SELECT+gid%2C+count%28%2A%29+c+FROM+issue4678+WHERE+MATCH%28%27thread+query+search%27%29+GROUP+BY+gid+ORDER+BY+c+DESC+LIMIT+20+OPTION+max_matches%3D2000'
+  done
+  sed -i '$d' "$cfg"
+done
+for batch in $(seq 1 3); do
+  cfg="/tmp/issue4678_curl_${batch}.cfg"
+  (
+    curl -sS -Z --parallel-immediate --parallel-max 24 --connect-timeout 5 --max-time 30 -K "$cfg" > /dev/null 2> "/tmp/issue4678_curl_${batch}.err"
+    echo $? > "/tmp/issue4678_curl_${batch}.rc"
+  ) &
+done
+wait
+failed=0
+for rc in /tmp/issue4678_curl_*.rc; do [ "$(cat "$rc")" = 0 ] || failed=1; done
+echo enough_requests
+[ "$failed" = 0 ] && echo clients_ok || echo client_errors
+if [ "$failed" != 0 ]; then head -c 200 /tmp/issue4678_curl_*.err | tr '\n' ' ' | sed 's/^/first_error /'; echo; fi
+mysql -h0 -P9306 -e "SELECT 1" > /dev/null; echo $?
+if grep -qE 'FATAL: CRASH DUMP|Handling signal' /var/log/manticore/searchd.log; then echo log_crashed; else echo no_crash; fi
+if grep -qE 'QueryInfo_t::Render|CSphQuery::CSphQuery|_ZN11QueryInfo_t6Render|_ZN9CSphQuery|HttpRawSqlHandler' /var/log/manticore/searchd.log; then echo queryinfo_stack; else echo no_queryinfo_stack; fi
+––– output –––
+enough_requests
+clients_ok
+0
+no_crash
+no_queryinfo_stack

@@ -1352,13 +1352,13 @@ group_order_clause:
 
 opt_order_clause:
 	// empty
-	| order_clause
+	| { pParser->BeginOrderBy(); } order_clause
 	;
 
 order_clause:
-	TOK_ORDER TOK_BY { pParser->BeginOrderBy(); } order_items_list
+	TOK_ORDER TOK_BY order_items_list
 		{
-			pParser->ToString ( pParser->m_pQuery->m_sOrderBy, $4 );
+			pParser->ToString ( pParser->m_pQuery->m_sOrderBy, $3 );
 			pParser->m_pQuery->m_bExplicitOrderBy = true;
 		}
 	| TOK_ORDER TOK_BY TOK_RAND '(' ')'

@@ -139,7 +139,7 @@ static int				g_iPidFD		= -1;
 static int				g_iMaxCachedDocs	= 0;	// in bytes
 static int				g_iMaxCachedHits	= 0;	// in bytes
 
-int						g_iMaxPacketSize	= 128*1024*1024;	// in bytes; for both query packets from clients and response packets from agents
+int						g_iMaxPacketSize	= SPH_MAX_PACKET_SIZE;	// in bytes; for both query packets from clients and response packets from agents
 int						g_iMaxFilters		= 256;
 int						g_iMaxFilterValues	= 4096;
 int						g_iMaxBatchQueries	= 32;
@@ -16061,7 +16061,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	g_sConfigPath = sphGetCwd();
 	sphConfigureCommon ( hConf, FixPathAbsolute ); // this also inits plugins now
 
-	if ( g_iMaxPacketSize<128*1024 || g_iMaxPacketSize>128*1024*1024 )
+	if ( g_iMaxPacketSize<SPH_MIN_PACKET_SIZE || g_iMaxPacketSize>SPH_MAX_PACKET_SIZE )
 		sphFatal ( "max_packet_size out of bounds (128K..128M)" );
 
 	if ( g_iMaxFilters<1 || g_iMaxFilters>10240 )

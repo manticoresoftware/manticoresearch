@@ -121,6 +121,9 @@ extern int g_iReadTimeoutS;        // defined in searchd.cpp
 extern int g_iWriteTimeoutS;    // sec
 extern bool g_bTimeoutEachPacket;
 
+constexpr int SPH_MIN_PACKET_SIZE = 128*1024;
+constexpr int SPH_MAX_PACKET_SIZE = 128*1024*1024;
+
 extern int g_iMaxPacketSize;    // in bytes; for both query packets from clients and response packets from agents
 
 

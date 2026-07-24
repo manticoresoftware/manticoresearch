@@ -1303,7 +1303,7 @@ bool QueueCreator_c::ParseResolvedQueryItem ( const CSphQueryItem & tItem )
 	}
 	else // some aggregate
 	{
-		bool bColumnarAggregate = SetupColumnarAggregates(tExprCol);
+		bool bColumnarAggregate = tExprCol.m_eAggrFunc!=SPH_AGGR_CAT && SetupColumnarAggregates(tExprCol);
 		bool bJoinAggregate = ExprHasJoinPrefix ( tExprCol.m_sName, m_tSettings.m_pJoinArgs.get() );
 
 		// columnar aggregates have their own code path; no need to calculate them in presort

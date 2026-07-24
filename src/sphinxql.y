@@ -155,6 +155,7 @@
 %token	TOK_SECOND
 %token	TOK_SECONDARY
 %token	TOK_SELECT
+%token	TOK_SEPARATOR
 %token	TOK_SET
 %token	TOK_SETTINGS
 %token	TOK_SESSION
@@ -306,7 +307,7 @@ reserved_tokens_without_option_without_all:
 	| TOK_PLUGINS | TOK_PROFILE | TOK_RAND | TOK_REBUILD
 	| TOK_REMAP | TOK_REPLACE
 	| TOK_REVOKE | TOK_ROLLBACK | TOK_SECONDARY | TOK_SESSION | TOK_SET
-	| TOK_SETTINGS | TOK_SHOW | TOK_SONAME | TOK_START | TOK_STATUS | TOK_STRING
+	| TOK_SEPARATOR | TOK_SETTINGS | TOK_SHOW | TOK_SONAME | TOK_START | TOK_STATUS | TOK_STRING
 	| TOK_SUM | TOK_TABLE | TOK_TABLES | TOK_THREADS | TOK_TO
 	| TOK_UNFREEZE | TOK_UPDATE | TOK_VALUES | TOK_VARIABLES
 	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITH | TOK_WITHIN | TOK_KILL | TOK_QUERY
@@ -705,6 +706,12 @@ select_expr:
 	| TOK_MIN '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_MIN, &$1, &$4 ); }
 	| TOK_SUM '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_SUM, &$1, &$4 ); }
 	| TOK_GROUP_CONCAT '(' expr ')'		{ pParser->AddItem ( &$3, SPH_AGGR_CAT, &$1, &$4 ); }
+	| TOK_GROUP_CONCAT '(' expr TOK_SEPARATOR TOK_QUOTED_STRING ')'
+											{ pParser->AddGroupConcatPlainItem ( &$3, $5, &$1, &$6 ); }
+	| TOK_GROUP_CONCAT '(' expr TOK_ORDER TOK_BY
+			{ pParser->BeginGroupConcatOrder(); }
+			group_concat_order_items opt_group_concat_separator TOK_LIMIT TOK_CONST_INT ')'
+			{ if ( !pParser->AddGroupConcatItem ( &$3, $10, &$1, &$11 ) ) YYERROR; }
 	| TOK_PERCENTILES '(' expr ')'		{ if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_PERCENTILES, &$1, &$4, nullptr ) ) YYERROR; }
 	| TOK_PERCENTILES '(' expr ',' '{' named_const_list '}' ')' { if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_PERCENTILES, &$1, &$8, &( pParser->GetNamedVec ( $6.GetValueInt() ) ) ) ) YYERROR; }
 	| TOK_PERCENTILE_RANKS '(' expr ')'	{ if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_PERCENTILE_RANKS, &$1, &$4, nullptr ) ) YYERROR; }
@@ -1345,17 +1352,19 @@ group_order_clause:
 
 opt_order_clause:
 	// empty
-	| order_clause
+	| { pParser->BeginOrderBy(); } order_clause
 	;
 
 order_clause:
 	TOK_ORDER TOK_BY order_items_list
 		{
 			pParser->ToString ( pParser->m_pQuery->m_sOrderBy, $3 );
+			pParser->m_pQuery->m_bExplicitOrderBy = true;
 		}
 	| TOK_ORDER TOK_BY TOK_RAND '(' ')'
 		{
 			pParser->m_pQuery->m_sOrderBy = "@random";
+			pParser->m_pQuery->m_bExplicitOrderBy = true;
 		}
 	| TOK_ORDER TOK_BY TOK_COUNT '(' TOK_DISTINCT distinct_ident ')' TOK_ASC
 		{
@@ -1375,9 +1384,25 @@ order_items_list:
 	;
 
 order_item:
-	expr_ident
-	| expr_ident TOK_ASC				{ TRACK_BOUNDS ( $$, $1, $2 ); }
-	| expr_ident TOK_DESC				{ TRACK_BOUNDS ( $$, $1, $2 ); }
+	expr_ident							{ pParser->AddOrderByItem ( $1 ); }
+	| expr_ident TOK_ASC				{ pParser->AddOrderByItem ( $1 ); TRACK_BOUNDS ( $$, $1, $2 ); }
+	| expr_ident TOK_DESC				{ pParser->AddOrderByItem ( $1 ); TRACK_BOUNDS ( $$, $1, $2 ); }
+	;
+
+group_concat_order_items:
+	group_concat_order_item
+	| group_concat_order_items ',' group_concat_order_item
+	;
+
+group_concat_order_item:
+	expr_ident							{ pParser->AddGroupConcatOrder ( $1, false ); }
+	| expr_ident TOK_ASC				{ pParser->AddGroupConcatOrder ( $1, false ); }
+	| expr_ident TOK_DESC				{ pParser->AddGroupConcatOrder ( $1, true ); }
+	;
+
+opt_group_concat_separator:
+	// empty
+	| TOK_SEPARATOR TOK_QUOTED_STRING	{ pParser->SetGroupConcatSeparator ( $2 ); }
 	;
 
 opt_limit_clause:

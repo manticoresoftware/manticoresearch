@@ -15,3 +15,4 @@
 #include "searchdaemon.h"
 
 bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, const sph::StringSet & hExtraColumns, QueryProfile_c * pProfiler, const CSphFilterSettings * pAggrFilter, bool bForceRefItems, bool bMaster, bool bForceSort = false );
+bool MinimizeGroupConcatBundle ( AggrResult_t * pResults, const CSphQuery * pQueries, int iQueries, bool bHaveLocals, const sph::StringSet & hExtraColumns, QueryProfile_c * pProfiler, const CSphFilterSettings * pHeadAggrFilter, bool bMaster );

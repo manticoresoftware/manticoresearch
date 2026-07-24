@@ -41,5 +41,6 @@ AggrFunc_i * CreateAggrPercentileRanks ( const CSphColumnInfo & tAttr );
 AggrFunc_i * CreateAggrMad ( const CSphColumnInfo & tAttr );
 
 AggrFunc_i * CreateAggrConcat ( const CSphColumnInfo & tAttr );
+AggrFunc_i * CreateAggrConcat ( const CSphColumnInfo & tAttr, const CSphString & sSeparator );
 
 #endif // _aggregate_

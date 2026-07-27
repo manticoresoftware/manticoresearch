@@ -141,7 +141,7 @@ mysql> desc rt;
 ALTER TABLE table ft_setting='value'[, ft_setting2='value']
 ```
 
-您可以使用`ALTER`在[RT模式](Read_this_first.md#Real-time-mode-vs-plain-mode)下修改表的全文设置。但是，它只影响新文档，不影响现有文档。
+你可以使用 `ALTER` 来修改表的全文检索设置，适用于 [RT 模式](Read_this_first.md#Real-time-mode-vs-plain-mode)。不过，它只会影响新文档，不会影响已有文档。要把新设置应用到已有文档，请先[重新索引它们](Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings)。
 示例：
 * 创建一个具有全文字段和`charset_table`的表，该表只允许3个可搜索字符：`a`、`b`和`c`。
 * 然后我们插入文档'abcd'并通过查询`abcd`找到它，`d`被忽略，因为它不在`charset_table`数组中
@@ -253,7 +253,7 @@ Query OK, 0 rows affected (0.00 sec)
 ALTER TABLE table RECONFIGURE
 ```
 
-`ALTER`还可以在[普通模式](Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29)下重新配置RT表，以便配置文件中的新分词、词法分析和其他文本处理设置对新文档生效。注意，现有文档将保持不变。在内部，它会强制将当前RAM块保存为新的磁盘块，并调整表头，以便使用更新的全文设置对新文档进行分词。
+`ALTER TABLE ... RECONFIGURE` 会重新加载 [plain 模式](Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29)下 RT 表的全文检索设置。配置文件中的新分词、形态学以及其他文本处理设置，会应用到在该命令之后插入或替换的文档。已有文档会保留使用旧设置构建的全文索引。要把新设置应用到这些文档，请[重新索引它们](Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings)。该命令会将当前 RAM chunk 刷写为新的 disk chunk，并更新表头。
 
 <!-- request Example -->
 ```sql
@@ -277,6 +277,21 @@ mysql> show table rt settings;
 1 row in set (0.00 sec)
 ```
 <!-- end -->
+
+## 在更改 FT 设置后重新索引现有文档
+
+更改全文检索设置会影响文档插入或替换时的索引过程。要把新设置应用到已有文档，请在更改设置后重新插入这些文档。这适用于通配符索引、分词、形态学、wordforms 以及其他全文检索设置。
+
+在 plain 模式下，先更新表配置，然后运行 `ALTER TABLE <table_name> RECONFIGURE`。在 RT 模式下，按上文所述使用 `ALTER TABLE` 修改设置。在创建转储之前，请停止对表的写入，或者确保在转储和回放期间发生变更的文档也会被重新索引。
+
+创建一个仅包含数据的转储，使其输出 `REPLACE` 语句，然后将其回放到同一个表中：
+
+```bash
+mysqldump -h0 -P9306 --replace -t -c -e --net-buffer-length=16m manticore <table_name> > <table_name>-reindex.sql
+mysql -h0 -P9306 < <table_name>-reindex.sql
+```
+
+`-t` 会省略 `DROP` 和 `CREATE TABLE` 语句，而 `--replace` 会让转储在文档 ID 匹配时进行替换。每个回放的文档都会使用当前的全文检索设置进行索引。表必须存储所有全文字段：`mysqldump` 不能备份包含非存储字段的表。对于复制表，请使用 [复制模式备份说明](Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump)。
 
 ## 重建二级索引
 

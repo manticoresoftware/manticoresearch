@@ -126,6 +126,7 @@
     * [• Обновление FT-настроек таблицы в режиме RT](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode)
     * [• Переименование таблицы реального времени](Updating_table_schema_and_settings.md#Renaming-a-real-time-table)
     * [• Обновление FT-настроек таблицы в обычном режиме](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-plain-mode)
+    * [• Переиндексация существующих документов после изменения настроек FT](Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings)
     * [• Перестроение вторичного индекса](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)
     * [• Изменение распределенной таблицы](Updating_table_schema_and_settings.md#Changing-a-distributed-table)
 * [≫ Функции]

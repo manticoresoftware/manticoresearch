@@ -141,7 +141,7 @@ mysql> desc rt;
 ALTER TABLE table ft_setting='value'[, ft_setting2='value']
 ```
 
-You can use `ALTER` to modify the full-text settings of your table in  [RT mode](Read_this_first.md#Real-time-mode-vs-plain-mode). However, it only affects new documents and not existing ones.
+You can use `ALTER` to modify the full-text settings of your table in  [RT mode](Read_this_first.md#Real-time-mode-vs-plain-mode). However, it only affects new documents and not existing ones. To apply the new settings to existing documents, [reindex them](Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings).
 Example:
 * create a table with a full-text field and `charset_table` that allows only 3 searchable characters: `a`, `b` and `c`.
 * then we insert document 'abcd' and find it by query `abcd`, the `d` just gets ignored since it's not in the `charset_table` array
@@ -253,7 +253,7 @@ Query OK, 0 rows affected (0.00 sec)
 ALTER TABLE table RECONFIGURE
 ```
 
-`ALTER` can also reconfigure an RT table in the [plain mode](Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29), so that new tokenization, morphology and other text processing settings from the configuration file take effect for new documents. Note, that the existing document will be left intact. Internally, it forcibly saves the current RAM chunk as a new disk chunk and adjusts the table header, so that new documents are tokenized using the updated full-text settings.
+`ALTER TABLE ... RECONFIGURE` reloads the full-text settings of an RT table in [plain mode](Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29). The new tokenization, morphology, and other text-processing settings from the configuration file apply to documents inserted or replaced after the command. Existing documents retain the full-text index built with the previous settings. To apply the new settings to those documents, [reindex them](Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings). The command flushes the current RAM chunk to a new disk chunk and updates the table header.
 
 <!-- request Example -->
 ```sql
@@ -277,6 +277,21 @@ mysql> show table rt settings;
 1 row in set (0.00 sec)
 ```
 <!-- end -->
+
+## Reindexing existing documents after changing FT settings
+
+Changing a full-text setting affects indexing when a document is inserted or replaced. To apply a new setting to existing documents, reinsert them after changing the setting. This applies to wildcard indexing, tokenization, morphology, wordforms, and other full-text settings.
+
+In plain mode, update the table configuration and run `ALTER TABLE <table_name> RECONFIGURE` first. In RT mode, change the setting with `ALTER TABLE` as described above. Before creating the dump, stop writes to the table or ensure that documents changed during the dump and replay are also reindexed.
+
+Create a data-only dump that emits `REPLACE` statements, then replay it into the same table:
+
+```bash
+mysqldump -h0 -P9306 --replace -t -c -e --net-buffer-length=16m manticore <table_name> > <table_name>-reindex.sql
+mysql -h0 -P9306 < <table_name>-reindex.sql
+```
+
+`-t` omits `DROP` and `CREATE TABLE` statements, while `--replace` makes the dump replace documents with matching IDs. Each replayed document is indexed with the current full-text settings. The table must store every full-text field: `mysqldump` cannot back up tables with non-stored fields. For replicated tables, use the [replication-mode backup instructions](Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump).
 
 ## Rebuilding a secondary index
 

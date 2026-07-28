@@ -1836,6 +1836,8 @@ private:
 
 	bool						Update_DiskChunks ( AttrUpdateInc_t & tUpd, const DiskChunkSlice_t & dDiskChunks, CSphString & sError, CSphString & sWarning ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 
+	StrVec_t					CollectOwnedExternalFiles () const REQUIRES ( m_tWorkers.SerialChunkAccess() );
+	void						RemoveOutdatedOwnedExternalFiles ( StrVec_t & dOldFiles ) const REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	void						GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* = nullptr ) const override;
 	DocstoreBuilder_i::Doc_t *	FetchDocFields ( DocstoreBuilder_i::Doc_t & tStoredDoc, const InsertDocData_c & tDoc, CSphSource_StringVector & tSrc, CSphVector<CSphVector<BYTE>> & dTmpAttrStorage ) const;
 
@@ -10223,6 +10225,10 @@ bool RtIndex_c::Truncate ( CSphString&, Truncate_e eAction )
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 	TRACE_SCHED ( "rt", "Truncate" );
 
+	StrVec_t dOldExternalFiles;
+	if ( eAction==TRUNCATE )
+		dOldExternalFiles = CollectOwnedExternalFiles();
+
 	// update and save meta
 	// indicate 0 disk chunks, we are about to kill them anyway
 	// current TID will be saved, so replay will properly skip preceding txns
@@ -10245,6 +10251,9 @@ bool RtIndex_c::Truncate ( CSphString&, Truncate_e eAction )
 		tChangeset.InitRamSegs ( RtWriter_c::empty );
 		tChangeset.InitDiskChunks ( RtWriter_c::empty );
 	}
+
+	if ( eAction==TRUNCATE )
+		RemoveOutdatedOwnedExternalFiles ( dOldExternalFiles );
 
 	// reset cache
 	QcacheClearByIndexId ( GetIndexId() );
@@ -10535,6 +10544,7 @@ void RtIndex_c::DropDiskChunk ( int iChunkID, int* pAffected )
 	// work in serial fiber
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 	TRACE_SCHED ( "rt", "DropDiskChunk" );
+	auto dOldExternalFiles = CollectOwnedExternalFiles();
 	{
 		auto tChangeset = RtWriter();
 		tChangeset.InitDiskChunks ( RtWriter_c::empty );
@@ -10546,6 +10556,7 @@ void RtIndex_c::DropDiskChunk ( int iChunkID, int* pAffected )
 				tChangeset.m_pNewDiskChunks->Add ( pChunk );
 	}
 	SaveMeta();
+	RemoveOutdatedOwnedExternalFiles ( dOldExternalFiles );
 	if ( pAffected )
 		++*pAffected;
 }
@@ -10561,6 +10572,7 @@ void RtIndex_c::DropDiskChunks ( IntVec_t& dChunks, int* pAffected ) REQUIRES ( 
 	TRACE_SCHED ( "rt", "RtIndex_c::DropDiskChunks" );
 	sphLogDebug( "rt optimize: table %s: drop disk chunks (%d)", GetName(), dChunks.GetLength() );
 
+	auto dOldExternalFiles = CollectOwnedExternalFiles();
 	{
 		auto tChangeset = RtWriter();
 		tChangeset.InitDiskChunks ( RtWriter_c::empty );
@@ -10572,6 +10584,7 @@ void RtIndex_c::DropDiskChunks ( IntVec_t& dChunks, int* pAffected ) REQUIRES ( 
 				tChangeset.m_pNewDiskChunks->Add ( pChunk );
 	}
 	SaveMeta();
+	RemoveOutdatedOwnedExternalFiles ( dOldExternalFiles );
 	if ( pAffected )
 		*pAffected+=dChunks.GetLength();
 }
@@ -10968,6 +10981,7 @@ bool RtIndex_c::CompressOneChunk ( int iChunkID, int* pAffected )
 		dUpdates.Reset();
 	}
 
+	auto dOldExternalFiles = CollectOwnedExternalFiles();
 	if ( !PublishMergedChunks ( "compress", [iChunkID, pCompressed] ( int iChunk, DiskChunkVec_c& tRes ) {
 			if ( iChunk==iChunkID )
 				tRes.Add ( pCompressed );
@@ -10979,6 +10993,7 @@ bool RtIndex_c::CompressOneChunk ( int iChunkID, int* pAffected )
 	pCompressed->m_bFinallyUnlink = false;
 	SaveMeta();
 	Preread();
+	RemoveOutdatedOwnedExternalFiles ( dOldExternalFiles );
 	if ( pAffected )
 		++*pAffected;
 	return true;
@@ -11165,6 +11180,7 @@ bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAf
 		dUpdates.Reset();
 	}
 
+	auto dOldExternalFiles = CollectOwnedExternalFiles();
 	if ( !PublishMergedChunks ( "split",
 				 [iChunkID, pChunkI, pChunkE] ( int iChunk, DiskChunkVec_c& tRes ) {
 		if ( iChunk==iChunkID )
@@ -11182,6 +11198,7 @@ bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAf
 	pChunkE->m_bFinallyUnlink = false;
 	SaveMeta();
 	Preread();
+	RemoveOutdatedOwnedExternalFiles ( dOldExternalFiles );
 	if ( pAffected )
 		++*pAffected;
 	return true;
@@ -11281,6 +11298,7 @@ bool RtIndex_c::MergeNChunks ( const char * szParentAction, VecTraits_T<ConstDis
 		return dChunks.any_of ( [iChunk] ( const auto & tChunk ) { return tChunk->Cidx().m_iChunk==iChunk; } );
 	};
 
+	auto dOldExternalFiles = CollectOwnedExternalFiles();
 	if ( !PublishMergedChunks ( szParentAction, fnFilter ) )
 		return false;
 
@@ -11304,6 +11322,7 @@ bool RtIndex_c::MergeNChunks ( const char * szParentAction, VecTraits_T<ConstDis
 	pMerged->m_bFinallyUnlink = false;
 	SaveMeta();
 	Preread();
+	RemoveOutdatedOwnedExternalFiles ( dOldExternalFiles );
 	if ( pAffected )
 		++*pAffected;
 	return true;
@@ -11950,6 +11969,30 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 	uHash = sphFNV64 ( tSettings.m_iStopwordStep, uHash );
 
 	return uHash;
+}
+
+StrVec_t RtIndex_c::CollectOwnedExternalFiles () const
+{
+	// Only data_dir mode installs a filename builder. Config-defined tables
+	// merely reference shared external files and must never unlink them.
+	auto fnCreateFilenameBuilder = GetIndexFilenameBuilder();
+	if ( !fnCreateFilenameBuilder )
+		return {};
+
+	auto pFilenameBuilder = fnCreateFilenameBuilder ( GetName() );
+	if ( !pFilenameBuilder )
+		return {};
+
+	StrVec_t dFiles;
+	StrVec_t dExternalFiles;
+	GetIndexFiles ( dFiles, dExternalFiles, pFilenameBuilder.get() );
+	return dExternalFiles;
+}
+
+void RtIndex_c::RemoveOutdatedOwnedExternalFiles ( StrVec_t & dOldFiles ) const
+{
+	auto dNewFiles = CollectOwnedExternalFiles();
+	RemoveOutdatedFiles ( dNewFiles, dOldFiles );
 }
 
 void RtIndex_c::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* pParentFilenameBuilder ) const

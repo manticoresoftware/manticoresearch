@@ -39,6 +39,7 @@
 #include "sphinx_alter.h"
 #include "chunksearchctx.h"
 #include "indexfiles.h"
+#include "jieba.h"
 #include "task_dispatcher.h"
 #include "tracer.h"
 #include "pseudosharding.h"
@@ -11769,6 +11770,13 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, DictFo
 	if ( tDict->GetSettings().IsWordDict() && tDict->HasMorphology() && bIsStarDict && !tSettings.m_tIndex.m_bIndexExactWords )
 		tSettings.m_tIndex.m_bIndexExactWords = true;
 
+	const uint64_t pTokenizer_GetSettingsFNV = pTokenizer->GetSettingsFNV();
+	const uint64_t tDict_GetSettingsFNV = tDict->GetSettingsFNV();
+	const int pTokenizer_GetMaxCodepointLength = pTokenizer->GetMaxCodepointLength();
+	const uint64_t sphGetSettingsFNV_tIndexSettings = sphGetSettingsFNV ( tIndexSettings );
+	const uint64_t sphGetSettingsFNV_tSettings_m_tIndex = sphGetSettingsFNV ( tSettings.m_tIndex );
+	const bool tSettings_m_tMutableSettings_HasSettings = tSettings.m_tMutableSettings.HasSettings();
+
 	// re filter
 	bool bReFilterSame = true;
 	CSphFieldFilterSettings tFieldFilterSettings;
@@ -11796,34 +11804,56 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, DictFo
 
 	// field filter
 	std::unique_ptr<ISphFieldFilter> tFieldFilter;
-
-	if ( !bReFilterSame && tSettings.m_tFieldFilter.m_dRegexps.GetLength () )
+	bool bPreprocessorSame = ( tIndexSettings.m_ePreprocessor==tSettings.m_tIndex.m_ePreprocessor );
+	if ( tSettings.m_tIndex.m_ePreprocessor==Preprocessor_e::JIEBA )
 	{
-		tFieldFilter = sphCreateRegexpFilter ( tSettings.m_tFieldFilter, sError );
-		if ( !tFieldFilter )
+		// The data-dir ALTER path rejects changes to the effective Jieba
+		// settings. Preserve its field-filter chain for unrelated changes,
+		// rebuilding the full chain only when another filter input changed.
+		if ( bReFilterSame && bPreprocessorSame && uTokHash==pTokenizer_GetSettingsFNV && pFieldFilter )
+			tFieldFilter = pFieldFilter->Clone();
+		else
 		{
-			sError.SetSprintf ( "'%s' failed to create field filter, error '%s'", sIndexName.cstr (), sError.cstr () );
-			return true;
+			if ( tSettings.m_tFieldFilter.m_dRegexps.GetLength() )
+			{
+				tFieldFilter = sphCreateRegexpFilter ( tSettings.m_tFieldFilter, sError );
+				if ( !tFieldFilter )
+				{
+					sError.SetSprintf ( "'%s' failed to create field filter, error '%s'", sIndexName.cstr (), sError.cstr () );
+					return true;
+				}
+			}
+
+			if ( !SpawnFilterJieba ( tFieldFilter, tSettings.m_tIndex, tSettings.m_tTokenizer, sIndexName.cstr(), pFilenameBuilder.get(), sError ) )
+			{
+				sError.SetSprintf ( "'%s' failed to create field filter, error '%s'", sIndexName.cstr (), sError.cstr () );
+				return true;
+			}
+		}
+	}
+	else
+	{
+		if ( !bReFilterSame && tSettings.m_tFieldFilter.m_dRegexps.GetLength() )
+		{
+			tFieldFilter = sphCreateRegexpFilter ( tSettings.m_tFieldFilter, sError );
+			if ( !tFieldFilter )
+			{
+				sError.SetSprintf ( "'%s' failed to create field filter, error '%s'", sIndexName.cstr (), sError.cstr () );
+				return true;
+			}
+		}
+
+		// icu filter
+		if ( !bPreprocessorSame )
+		{
+			if ( !sphSpawnFilterICU ( tFieldFilter, tSettings.m_tIndex, tSettings.m_tTokenizer, sIndexName.cstr(), sError ) )
+			{
+				sError.SetSprintf ( "'%s' failed to create field filter, error '%s'", sIndexName.cstr (), sError.cstr () );
+				return true;
+			}
 		}
 	}
 
-	// icu filter
-	bool bIcuSame = ( tIndexSettings.m_ePreprocessor==tSettings.m_tIndex.m_ePreprocessor );
-	if ( !bIcuSame )
-	{
-		if ( !sphSpawnFilterICU ( tFieldFilter, tSettings.m_tIndex, tSettings.m_tTokenizer, sIndexName.cstr(), sError ) )
-		{
-			sError.SetSprintf ( "'%s' failed to create field filter, error '%s'", sIndexName.cstr (), sError.cstr () );
-			return true;
-		}
-	}
-
-	const uint64_t pTokenizer_GetSettingsFNV = pTokenizer->GetSettingsFNV();
-	const uint64_t tDict_GetSettingsFNV = tDict->GetSettingsFNV();
-	const int pTokenizer_GetMaxCodepointLength = pTokenizer->GetMaxCodepointLength();
-	const uint64_t sphGetSettingsFNV_tIndexSettings = sphGetSettingsFNV ( tIndexSettings );
-	const uint64_t sphGetSettingsFNV_tSettings_m_tIndex = sphGetSettingsFNV ( tSettings.m_tIndex );
-	const bool tSettings_m_tMutableSettings_HasSettings = tSettings.m_tMutableSettings.HasSettings();
 	// compare options
 	if ( !bSame
 		|| bDictFormatChanged
@@ -11832,7 +11862,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, DictFo
 		|| iMaxCodepointLength!=pTokenizer_GetMaxCodepointLength
 		|| sphGetSettingsFNV_tIndexSettings!=sphGetSettingsFNV_tSettings_m_tIndex
 		|| !bReFilterSame
-		|| !bIcuSame
+		|| !bPreprocessorSame
 		|| tSettings_m_tMutableSettings_HasSettings )
 	{
 		tSetup.m_pTokenizer = pTokenizer.Leak();

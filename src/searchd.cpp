@@ -11404,7 +11404,24 @@ static bool ValidateStoredRankerForSchema ( const char * szIndex, const MutableI
 }
 
 
-static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection & hIndex, CSphReconfigureSettings & tSettings, StrVec_t * pWarnings, CSphString & sError )
+static bool HasJiebaSettingsChanged ( const CSphIndexSettings & tCurrent, const CSphIndexSettings & tRequested )
+{
+	const bool bCurrentJieba = tCurrent.m_ePreprocessor==Preprocessor_e::JIEBA;
+	const bool bRequestedJieba = tRequested.m_ePreprocessor==Preprocessor_e::JIEBA;
+	if ( bCurrentJieba!=bRequestedJieba )
+		return true;
+
+	if ( !bCurrentJieba )
+		return false;
+
+	return tCurrent.m_eJiebaMode!=tRequested.m_eJiebaMode
+		|| tCurrent.m_bJiebaHMM!=tRequested.m_bJiebaHMM
+		|| tCurrent.m_sJiebaUserDictPath!=tRequested.m_sJiebaUserDictPath;
+}
+
+
+static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection & hIndex, CSphReconfigureSettings & tSettings, StrVec_t * pWarnings, CSphString & sError,
+	const CSphIndexSettings * pCurrentIndexSettings = nullptr )
 {
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( szIndex );
 
@@ -11436,6 +11453,12 @@ static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection &
 
 		if ( pWarnings && !sWarning.IsEmpty() )
 			pWarnings->Add(sWarning);
+	}
+
+	if ( pCurrentIndexSettings && HasJiebaSettingsChanged ( *pCurrentIndexSettings, tSettings.m_tIndex ) )
+	{
+		sError.SetSprintf ( "table '%s': changing Jieba settings with ALTER TABLE is not supported", szIndex );
+		return false;
 	}
 
 	if ( tSettings.m_tIndex.m_bIndexFieldLens && !AddFieldLens ( tSettings.m_tSchema, false, sError ) )
@@ -11692,7 +11715,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 
 	StrVec_t dWarnings;
 	CSphReconfigureSettings tSettings;
-	if ( !PrepareReconfigure ( tStmt.m_sIndex.cstr(), pContainer->AsCfg(), tSettings, &dWarnings, sError ) )
+	if ( !PrepareReconfigure ( tStmt.m_sIndex.cstr(), pContainer->AsCfg(), tSettings, &dWarnings, sError, &pRtIndex->GetSettings() ) )
 	{
 		tOut.Error ( sError.cstr () );
 		return;

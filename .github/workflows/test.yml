@@ -79,11 +79,14 @@ jobs:
           echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
       - name: Resolve branch info
         id: branch_info
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+            BRANCH_NAME="$HEAD_REF"
           else
-            BRANCH_NAME="${{ github.ref_name }}"
+            BRANCH_NAME="$REF_NAME"
           fi
           echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
       - name: Sanitize branch name for tags

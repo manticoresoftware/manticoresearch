@@ -143,11 +143,14 @@ jobs:
 
       - name: Determine branch name for cache
         id: branch
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "branch_name=${{ github.head_ref }}" >> $GITHUB_OUTPUT
+            echo "branch_name=$HEAD_REF" >> $GITHUB_OUTPUT
           else
-            echo "branch_name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "branch_name=$REF_NAME" >> $GITHUB_OUTPUT
           fi
 
       - name: Mark repository as safe for package versioning

@@ -20,6 +20,8 @@ SHOW TABLE table_name[.N | CHUNK N] SETTINGS
 
 The output resembles the [--dumpconfig](../../Miscellaneous_tools.md#indextool) option of the [indextool](../../Miscellaneous_tools.md#indextool) utility. The report provides a breakdown of all table settings, including tokenizer and dictionary options.
 
+If a table was created with a SQL `profile=...` shortcut, `SHOW TABLE SETTINGS` displays the expanded stored settings (for example `ranker` and `boolean_mode`), not the profile name itself.
+
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->

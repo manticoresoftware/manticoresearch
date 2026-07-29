@@ -198,6 +198,7 @@ bool ApiDecrypt ( SearchdCommand_e eCmd, DWORD uVer, AsyncNetInputBuffer_c & tIn
 	const BYTE * pEncrypted = nullptr;
 	if ( !tIn.GetBytesZerocopy ( &pEncrypted, iReplySize ) )
 	{
+		sError = "failed to read encrypted API body";
 		AuthLog().AuthFailure ( sUser, AccessMethod_e::API, session::szClientName(), "buffer read failed" );
 		return false;
 	}
@@ -222,10 +223,24 @@ bool ApiDecrypt ( SearchdCommand_e eCmd, DWORD uVer, AsyncNetInputBuffer_c & tIn
 	auto uDecryptedVer = tIn.GetWord ();
 	iReplySize = tIn.GetInt ();
 
+	if ( tIn.GetError() )
+	{
+		sError = "invalid decrypted API header";
+		AuthLog().AuthFailure ( sUser, AccessMethod_e::API, session::szClientName(), sError.cstr() );
+		return false;
+	}
+
 	if ( eDecryptedCmd!=eCmd || uDecryptedVer!=uVer )
 	{
 		sError.SetSprintf ( "invalid decryption (command=%d(%d), ver=%u(%u))", eCmd, eDecryptedCmd, uVer, uDecryptedVer );
 		AuthLog().AuthFailure ( sUser, AccessMethod_e::API, session::szClientName(), "invalid decryption: command/version mismatch" );
+		return false;
+	}
+
+	if ( iReplySize<0 || iReplySize!=tIn.HasBytes() )
+	{
+		sError.SetSprintf ( "invalid decrypted API body length %d (available %d)", iReplySize, tIn.HasBytes() );
+		AuthLog().AuthFailure ( sUser, AccessMethod_e::API, session::szClientName(), "invalid decryption: body length mismatch" );
 		return false;
 	}
 

@@ -41,3 +41,129 @@ EXPECTED: ERROR 1045 (42000): Access denied for user 'admin' (using password: NO
 mysql -uadmin -h0 -P9306 -e "SELECT 1;" 2>&1
 ––– output –––
 ERROR 1045 (42000): Access denied for user 'admin' (using password: NO)
+––– comment –––
+––– 1.1.5 mysql_native_password auth response compatibility –––
+EXPECTED: Full 20-byte responses succeed; Connector/J-style seed handling succeeds;
+correct 1, 2, and 19-byte prefixes fail.
+––– comment –––
+––– input –––
+python3 - <<'PY'
+import hashlib
+import socket
+import struct
+
+HOST = "127.0.0.1"
+PORT = 9306
+USER = "admin"
+PASSWORD = "adminpass"
+
+CLIENT_PROTOCOL_41 = 0x00000200
+CLIENT_SECURE_CONNECTION = 0x00008000
+CLIENT_MULTI_RESULTS = 0x00020000
+CLIENT_PLUGIN_AUTH = 0x00080000
+COM_QUERY = 0x03
+
+
+def read_packet(sock):
+    header = sock.recv(4)
+    if len(header) != 4:
+        raise RuntimeError("short MySQL packet header")
+    length = header[0] | (header[1] << 8) | (header[2] << 16)
+    seq = header[3]
+    data = bytearray()
+    while len(data) < length:
+        chunk = sock.recv(length - len(data))
+        if not chunk:
+            raise RuntimeError("unexpected EOF while reading MySQL packet")
+        data.extend(chunk)
+    return seq, bytes(data)
+
+
+def send_packet(sock, seq, payload):
+    sock.sendall(struct.pack("<I", len(payload))[:3] + bytes([seq]) + payload)
+
+
+def parse_scramble(data):
+    pos = 1
+    pos = data.index(b"\0", pos) + 1
+    pos += 4
+    part1 = data[pos:pos + 8]
+    pos += 8
+    pos += 1
+    pos += 2
+    pos += 1
+    pos += 2
+    pos += 2
+    auth_len = data[pos]
+    pos += 1
+    pos += 10
+    part2 = data[pos:pos + max(13, auth_len - 8)]
+    return (part1 + part2)[:20]
+
+
+def native_password_token(password, scramble):
+    stage1 = hashlib.sha1(password).digest()
+    stage2 = hashlib.sha1(stage1).digest()
+    stage3 = hashlib.sha1(scramble + stage2).digest()
+    return bytes(a ^ b for a, b in zip(stage1, stage3))
+
+
+def connectorj_style_seed(scramble):
+    # Connector/J passes the server seed through string handling before hashing.
+    # Printable ASCII seeds survive unchanged; arbitrary high-bit random bytes do not.
+    return scramble.decode("utf-8", "replace").encode("utf-8")
+
+
+def auth_result(reply):
+    if reply[0] == 0x00:
+        return "OK"
+    if reply[0] == 0xFF:
+        return "ERR %d" % struct.unpack("<H", reply[1:3])[0]
+    return "0x%02x" % reply[0]
+
+
+def try_auth(seed_filter=lambda seed: seed, prefix_len=None, mutate_first=False, run_query=False):
+    with socket.create_connection((HOST, PORT), timeout=5) as sock:
+        _, handshake = read_packet(sock)
+        scramble = parse_scramble(handshake)
+        token = native_password_token(PASSWORD.encode(), seed_filter(scramble))
+        response = token if prefix_len is None else token[:prefix_len]
+        if mutate_first:
+            response = bytes([response[0] ^ 0xFF]) + response[1:]
+
+        caps = CLIENT_PROTOCOL_41 | CLIENT_SECURE_CONNECTION | CLIENT_MULTI_RESULTS | CLIENT_PLUGIN_AUTH
+        payload = struct.pack("<IIB", caps, 16 * 1024 * 1024, 33)
+        payload += bytes(23)
+        payload += USER.encode() + b"\0"
+        payload += bytes([len(response)]) + response
+        payload += b"mysql_native_password\0"
+        send_packet(sock, 1, payload)
+
+        _, reply = read_packet(sock)
+        result = auth_result(reply)
+        if result != "OK" or not run_query:
+            return result
+
+        send_packet(sock, 2, bytes([COM_QUERY]) + b"SELECT 1")
+        _, first = read_packet(sock)
+        return "OK" if first and first[0] == 1 else auth_result(first)
+
+
+cases = [
+    ("full_expected", {"run_query": True}),
+    ("connectorj_style", {"seed_filter": connectorj_style_seed, "run_query": True}),
+    ("prefix_1_expected", {"prefix_len": 1}),
+    ("prefix_2_expected", {"prefix_len": 2}),
+    ("prefix_19_expected", {"prefix_len": 19}),
+    ("prefix_1_wrong", {"prefix_len": 1, "mutate_first": True}),
+]
+for label, kwargs in cases:
+    print("%s: %s" % (label, try_auth(**kwargs)))
+PY
+––– output –––
+full_expected: OK
+connectorj_style: OK
+prefix_1_expected: ERR 1045
+prefix_2_expected: ERR 1045
+prefix_19_expected: ERR 1045
+prefix_1_wrong: ERR 1045

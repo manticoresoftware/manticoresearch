@@ -1666,6 +1666,7 @@ bool AddDocumentShard ( const SqlStmt_t & tStmt, const ShardIndex_c & tShard, St
 	} else
 		dLastIds.SwapData ( dStmtDocIDs );
 
+	pSession->m_dLastIdStrings.Resize ( 0 );
 	int64_t iLastInsertID = dLastIds.GetLength() ? dLastIds.Last() : 0;
 	tOut.Ok ( iAffectedRows, sWarning, iLastInsertID );
 	return true;
@@ -1848,6 +1849,12 @@ static bool ConfigureShardMetadataFromConfig ( ShardIndex_c & tShard, const char
 
 	if ( !ConfigureRTPercolate ( tShard.m_tSchema, tShard.m_tSettings, szIndexName, hIndex, bWordDict, false, pWarnings, sError ) )
 		return false;
+
+	if ( sphHasUuidDocid ( tShard.m_tSchema ) )
+	{
+		sError.SetSprintf ( "table '%s': uuid id is supported for real-time tables only", szIndexName );
+		return false;
+	}
 
 	tShard.m_sIndexPath = hIndex["path"].strval();
 

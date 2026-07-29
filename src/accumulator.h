@@ -18,6 +18,9 @@
 #include "sphinxint.h"
 #include "docstore.h"
 #include "knnmisc.h"
+#include "uuid_docid.h"
+
+#include <functional>
 
 struct StoredQueryDesc_t
 {
@@ -75,6 +78,7 @@ struct ReplicationCommand_t
 	// delete
 	CSphVector<int64_t>		m_dDeleteQueries;
 	CSphString				m_sDeleteTags;
+	StrVec_t				m_dUuidKeys;
 
 	// truncate
 	std::unique_ptr<CSphReconfigureSettings> m_tReconfigure;
@@ -117,6 +121,8 @@ class TableEmbeddings_c;
 class RtAccum_t
 {
 public:
+	~RtAccum_t();
+
 	DWORD							m_uAccumDocs = 0;
 	int64_t 						m_iAccumBytes = 0;
 	CSphTightVector<CSphWordHit>	m_dAccum;
@@ -144,11 +150,16 @@ public:
 
 	void			AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t * pStoredDoc );
 	void			CleanupDuplicates ( int iRowSize );
+	void			ForEachUuidDocid ( const std::function<void ( ByteBlob_t )> & fnVisitor ) const;
 	void			GrabLastWarning ( CSphString & sWarning );
 	void			SetIndex ( RtIndex_i * pIndex );
 
 	RowID_t			GenerateRowID();
 	void			ResetRowID();
+	void			BindUuidRegistry ( const UuidDocidRegistryPtr_t & pRegistry );
+	bool			IsUuidRegistry ( const UuidDocidRegistry_i * pRegistry ) const;
+	void			AdoptUuidLease ( const UuidDocidRegistry_i * pRegistry, const UuidDocidKey_t & tKey );
+	void			ResetUuidLeases();
 	uint64_t		GetSchemaHash() const { return m_uSchemaHash; }
 
 	RtIndex_i *		GetIndex() const { return m_pIndex; }
@@ -192,6 +203,8 @@ private:
 	int									m_iIndexGeneration = 0;
 	CSphString							m_sIndexName;
 	int64_t								m_iIndexId = 0;
+	UuidDocidRegistryPtr_t				m_pUuidRegistry;
+	CSphVector<UuidDocidKey_t>			m_dUuidLeases;
 
 	void			ResetDict();
 	void			SetupDocstore();

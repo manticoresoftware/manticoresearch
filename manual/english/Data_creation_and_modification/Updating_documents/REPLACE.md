@@ -171,7 +171,7 @@ POST /replace
 ```json
 {
   "table":"products",
-  "_id":1,
+  "id":1,
   "created":false,
   "result":"updated",
   "status":200
@@ -350,7 +350,7 @@ res = await indexApi.replace({"table" : "products", "id" : 1, "doc" : {"title" :
 
 <!-- response javascript -->
 ```javascript
-{"table":"products","_id":1,"result":"updated"}
+{"table":"products","id":1,"result":"updated"}
 ```
 
 <!-- intro -->
@@ -447,7 +447,7 @@ res = await indexApi.replace({
 ```json
 {
     "table":"test",
-    "_id":1,
+    "id":1,
     "created":false
     "result":"updated"
     "status":200
@@ -470,7 +470,7 @@ res, _, _ := apiClient.IndexAPI.Replace(context.Background()).InsertDocumentRequ
 ```go
 {
     "table":"test",
-    "_id":1,
+    "id":1,
     "created":false
     "result":"updated"
     "status":200
@@ -524,7 +524,7 @@ POST /bulk
       "replace":
       {
         "table":"products",
-        "_id":1,
+        "id":1,
         "created":false,
         "result":"updated",
         "status":200
@@ -534,7 +534,7 @@ POST /bulk
       "replace":
       {
         "table":"products",
-        "_id":2,
+        "id":2,
         "created":false,
         "result":"updated",
         "status":200
@@ -650,7 +650,7 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 
 <!-- response javascript -->
 ```javascript
-{"items":[{"replace":{"table":"products","_id":1,"created":false,"result":"updated","status":200}},{"replace":{"table":"products","_id":2,"created":false,"result":"updated","status":200}}],"errors":false}
+{"items":[{"replace":{"table":"products","id":1,"created":false,"result":"updated","status":200}},{"replace":{"table":"products","id":2,"created":false,"result":"updated","status":200}}],"errors":false}
 
 ```
 
@@ -740,7 +740,7 @@ res = await indexApi.bulk(
       "replace":
       {
         "table":"test",
-        "_id":1,
+        "id":1,
         "created":false,
         "result":"updated",
         "status":200
@@ -750,7 +750,7 @@ res = await indexApi.bulk(
       "replace":
       {
         "table":"test",
-        "_id":2,
+        "id":2,
         "created":false,
         "result":"updated",
         "status":200
@@ -778,7 +778,7 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
       "replace":
       {
         "table":"test",
-        "_id":1,
+        "id":1,
         "created":false,
         "result":"updated",
         "status":200
@@ -788,7 +788,7 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
       "replace":
       {
         "table":"test",
-        "_id":2,
+        "id":2,
         "created":false,
         "result":"updated",
         "status":200

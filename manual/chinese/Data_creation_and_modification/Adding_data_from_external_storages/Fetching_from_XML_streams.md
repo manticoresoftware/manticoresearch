@@ -50,7 +50,7 @@ that in-document field order must not matter, sir</content>
 
 允许任意字段和属性。它们在流中每个文档内的顺序也可以是任意的；顺序会被忽略。字段长度有限制；超过 2 MB 的字段将被截断到 2 MB（此限制可在源中更改）。
 
-模式，即完整的字段和属性列表，必须在任何文档解析之前声明。可以通过配置文件中的 `xmlpipe_field` 和 `xmlpipe_attr_XXX` 设置声明，也可以直接在流中使用 `<sphinx:schema>` 元素声明。`<sphinx:schema>` 是可选的。它只能作为 `<sphinx:docset>` 中的第一个子元素出现。如果流中没有模式定义，则使用配置文件中的设置。否则，流中的设置优先。注意文档 ID 应作为 `<sphinx:document>` 标签的属性 `id` 指定（例如 `<sphinx:document id="1235">`），并且应是唯一的正的非零 64 位整数。
+在解析任何文档之前，必须先声明 schema，也就是完整的字段和属性列表。这可以通过配置文件中的 `xmlpipe_field` 和 `xmlpipe_attr_XXX` 设置来完成，也可以直接在流里使用 `<sphinx:schema>` 元素来完成。`<sphinx:schema>` 是可选的。它只允许作为 `<sphinx:docset>` 中第一个子元素出现。如果没有在流内定义 schema，则会使用配置文件中的设置；否则，以流内设置为准。注意，文档 id 应该作为 `<sphinx:document>` 标签的属性 `id` 指定（例如 `<sphinx:document id="1235">`）。对于 plain table，document ID 必须显式指定，并且是唯一的、非零的无符号 64 位整数。不允许使用负数 document ID。plain table 不支持自动生成 ID，`0` 也不能用于请求自动生成的 ID。
 
 未知标签（既未声明为字段也未声明为属性）将被忽略并发出警告。上面示例中的 `<misc>` 将被忽略。所有嵌套的标签及其属性（如上例中 `<subject>` 中的 `<strong>`）将被静默忽略。
 
@@ -68,7 +68,7 @@ xmlpipe2 识别的 XML 元素（标签）及其适用的属性有：
     * "type"，指定属性类型。可能的值有 "int"、"bigint"、"timestamp"、"bool"、"float"、"multi" 和 "json"。
     * "bits"，指定 "int" 类型属性的位数。有效值为 1 到 32。
     * "default"，指定如果文档中不存在该属性元素时应使用的默认值。
-* `sphinx:document` - 必须元素，必须是 sphinx:docset 的子元素。包含声明的字段和属性值的任意其他元素，用于索引。声明方式要么使用 sphinx:field 和 sphinx:attr 元素，要么在配置文件中声明。唯一已知的属性是 "id"，必须包含唯一的整数文档 ID。
+* `sphinx:document` - 必需元素，必须是 sphinx:docset 的子元素。它包含任意其他元素，其中放置要建立索引的字段和值属性，字段和属性可以通过 sphinx:field 和 sphinx:attr 元素声明，也可以在配置文件中声明。已知的唯一属性是 `id`；它必须包含一个显式指定的、唯一的、非零的无符号 64 位 document ID。
 * `sphinx:killlist` - 可选元素，sphinx:docset 的子元素。包含若干 "id" 元素，其内容是属于待从表中删除的文档 ID。杀死列表用于多表搜索中抑制搜索结果中其他表中的文档。
 
 ## 源配置的数据定义

@@ -1,0 +1,234 @@
+name: Installer tests
+run-name: 📦 Installer tests ${{ github.sha }}
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/installer.yml'
+      - 'installer/**'
+      - 'test/clt-tests/installation/*'
+
+# cancels the previous workflow run when a new one appears in the same branch (e.g. main or a PR's branch)
+concurrency:
+  group: installer_${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate-installer:
+    name: Validate installer scripts
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Validate modular and standalone installer scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for script in installer/*.sh; do
+            if [[ "$script" == "installer/bootstrap-standalone.sh" ]]; then
+              sh -n "$script"
+            else
+              bash -n "$script"
+            fi
+          done
+
+          tmp_dir=$(mktemp -d)
+          trap 'rm -rf "$tmp_dir"' EXIT
+          generated_standalone="$tmp_dir/bootstrap-standalone.sh"
+          bash installer/build.sh "$generated_standalone"
+          sh -n "$generated_standalone"
+
+          if ! cmp -s installer/bootstrap-standalone.sh "$generated_standalone"; then
+            echo "installer/bootstrap-standalone.sh is not in sync with installer/*.sh" >&2
+            diff -u installer/bootstrap-standalone.sh "$generated_standalone" >&2
+            exit 1
+          fi
+
+  clt-installer:
+    name: CLT ${{ matrix.name }}
+    needs: [validate-installer]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Alma 8 release installer
+            runner: ubuntu-22.04
+            image: almalinux:8
+            test_prefix: |
+              test/clt-tests/installation/rhel-release-curl-bash-install
+              test/clt-tests/installation/rhel-release-curl-bash-list-versions
+          - name: Alma 9 release installer
+            runner: ubuntu-22.04
+            image: almalinux:9
+            test_prefix: |
+              test/clt-tests/installation/rhel-release-curl-bash-install
+              test/clt-tests/installation/rhel-release-curl-bash-list-versions
+          - name: Alma 10 release installer
+            runner: ubuntu-22.04
+            image: almalinux:10
+            test_prefix: |
+              test/clt-tests/installation/rhel-release-curl-bash-install
+              test/clt-tests/installation/rhel-release-curl-bash-list-versions
+          - name: OL 9 release installer
+            runner: ubuntu-22.04
+            image: oraclelinux:9
+            test_prefix: |
+              test/clt-tests/installation/rhel-release-curl-bash-install
+              test/clt-tests/installation/rhel-release-curl-bash-list-versions
+          - name: Amazon release installer
+            runner: ubuntu-22.04
+            image: amazonlinux:latest
+            test_prefix: |
+              test/clt-tests/installation/rhel-release-curl-bash-install
+              test/clt-tests/installation/rhel-release-curl-bash-list-versions
+          - name: Bionic release installer
+            runner: ubuntu-22.04
+            image: ubuntu:bionic
+            test_prefix: |
+              test/clt-tests/installation/deb-release-curl-bash-install
+              test/clt-tests/installation/deb-release-curl-bash-list-versions
+              test/clt-tests/installation/deb-release-curl-bash-version-switch
+          - name: Focal release installer
+            runner: ubuntu-22.04
+            image: ubuntu:focal
+            test_prefix: |
+              test/clt-tests/installation/deb-release-curl-bash-install
+              test/clt-tests/installation/deb-release-curl-bash-list-versions
+              test/clt-tests/installation/deb-release-curl-bash-version-switch
+          - name: Jammy release installer
+            runner: ubuntu-22.04
+            image: ubuntu:jammy
+            test_prefix: |
+              test/clt-tests/installation/deb-release-curl-bash-install
+              test/clt-tests/installation/deb-release-curl-bash-list-versions
+              test/clt-tests/installation/deb-release-curl-bash-version-switch
+          - name: Bullseye release installer
+            runner: ubuntu-22.04
+            image: debian:bullseye
+            test_prefix: |
+              test/clt-tests/installation/deb-release-curl-bash-install
+              test/clt-tests/installation/deb-release-curl-bash-list-versions
+              test/clt-tests/installation/deb-release-curl-bash-version-switch
+          - name: Bookworm release installer
+            runner: ubuntu-22.04
+            image: debian:bookworm
+            test_prefix: |
+              test/clt-tests/installation/deb-release-curl-bash-install
+              test/clt-tests/installation/deb-release-curl-bash-list-versions
+              test/clt-tests/installation/deb-release-curl-bash-version-switch
+          - name: Trixie release installer
+            runner: ubuntu-22.04
+            image: debian:trixie
+            test_prefix: |
+              test/clt-tests/installation/deb-release-curl-bash-install
+              test/clt-tests/installation/deb-release-curl-bash-list-versions
+              test/clt-tests/installation/deb-release-curl-bash-version-switch
+          - name: Noble release installer
+            runner: ubuntu-22.04
+            image: ubuntu:noble
+            test_prefix: |
+              test/clt-tests/installation/deb-release-curl-bash-install
+              test/clt-tests/installation/deb-release-curl-bash-list-versions
+              test/clt-tests/installation/deb-release-curl-bash-version-switch
+          - name: Alma 8 arm64 release installer
+            runner: ubuntu-24.04-arm
+            image: almalinux:8
+            test_prefix: |
+              test/clt-tests/installation/rhel-release-curl-bash-install
+              test/clt-tests/installation/rhel-release-curl-bash-list-versions
+          - name: Alma 9 arm64 release installer
+            runner: ubuntu-24.04-arm
+            image: almalinux:9
+            test_prefix: |
+              test/clt-tests/installation/rhel-release-curl-bash-install
+              test/clt-tests/installation/rhel-release-curl-bash-list-versions
+          - name: Alma 10 arm64 release installer
+            runner: ubuntu-24.04-arm
+            image: almalinux:10
+            test_prefix: |
+              test/clt-tests/installation/rhel-release-curl-bash-install
+              test/clt-tests/installation/rhel-release-curl-bash-list-versions
+          - name: OL 9 arm64 release installer
+            runner: ubuntu-24.04-arm
+            image: oraclelinux:9
+            test_prefix: |
+              test/clt-tests/installation/rhel-release-curl-bash-install
+              test/clt-tests/installation/rhel-release-curl-bash-list-versions
+          - name: Amazon arm64 release installer
+            runner: ubuntu-24.04-arm
+            image: amazonlinux:latest
+            test_prefix: |
+              test/clt-tests/installation/rhel-release-curl-bash-install
+              test/clt-tests/installation/rhel-release-curl-bash-list-versions
+          - name: Bionic arm64 release installer
+            runner: ubuntu-24.04-arm
+            image: ubuntu:bionic
+            test_prefix: |
+              test/clt-tests/installation/deb-release-curl-bash-install
+              test/clt-tests/installation/deb-release-curl-bash-list-versions
+              test/clt-tests/installation/deb-release-curl-bash-version-switch
+          - name: Focal arm64 release installer
+            runner: ubuntu-24.04-arm
+            image: ubuntu:focal
+            test_prefix: |
+              test/clt-tests/installation/deb-release-curl-bash-install
+              test/clt-tests/installation/deb-release-curl-bash-list-versions
+              test/clt-tests/installation/deb-release-curl-bash-version-switch
+          - name: Jammy arm64 release installer
+            runner: ubuntu-24.04-arm
+            image: ubuntu:jammy
+            test_prefix: |
+              test/clt-tests/installation/deb-release-curl-bash-install
+              test/clt-tests/installation/deb-release-curl-bash-list-versions
+              test/clt-tests/installation/deb-release-curl-bash-version-switch
+          - name: Bullseye arm64 release installer
+            runner: ubuntu-24.04-arm
+            image: debian:bullseye
+            test_prefix: |
+              test/clt-tests/installation/deb-release-curl-bash-install
+              test/clt-tests/installation/deb-release-curl-bash-list-versions
+              test/clt-tests/installation/deb-release-curl-bash-version-switch
+          - name: Bookworm arm64 release installer
+            runner: ubuntu-24.04-arm
+            image: debian:bookworm
+            test_prefix: |
+              test/clt-tests/installation/deb-release-curl-bash-install
+              test/clt-tests/installation/deb-release-curl-bash-list-versions
+              test/clt-tests/installation/deb-release-curl-bash-version-switch
+          - name: Trixie arm64 release installer
+            runner: ubuntu-24.04-arm
+            image: debian:trixie
+            test_prefix: |
+              test/clt-tests/installation/deb-release-curl-bash-install
+              test/clt-tests/installation/deb-release-curl-bash-list-versions
+              test/clt-tests/installation/deb-release-curl-bash-version-switch
+          - name: Noble arm64 release installer
+            runner: ubuntu-24.04-arm
+            image: ubuntu:noble
+            test_prefix: |
+              test/clt-tests/installation/deb-release-curl-bash-install
+              test/clt-tests/installation/deb-release-curl-bash-list-versions
+              test/clt-tests/installation/deb-release-curl-bash-version-switch
+    steps:
+      - uses: manticoresoftware/clt@0.7.9
+        with:
+          image: ${{ matrix.image }}
+          test_prefix: ${{ matrix.test_prefix }}
+          comment_mode: failures
+          init_code: |
+            set -euo pipefail
+            mkdir -p "$RUNNER_TEMP/manticore-installer"
+            bash installer/build.sh "$RUNNER_TEMP/manticore-installer/bootstrap-standalone.sh"
+            chmod 755 "$RUNNER_TEMP/manticore-installer/bootstrap-standalone.sh"
+            sh -n "$RUNNER_TEMP/manticore-installer/bootstrap-standalone.sh"
+          run_args: "-v ${{ runner.temp }}/manticore-installer:/mnt/manticore-installer:ro -e MANTICORE_INSTALLER_SCRIPT=/mnt/manticore-installer/bootstrap-standalone.sh"
+          ui_host: "https://clt.manticoresearch.com"

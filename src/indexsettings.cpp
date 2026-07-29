@@ -329,6 +329,107 @@ const RtTypedAttr_t & GetRtType ( int iType )
 }
 
 
+const char * sphGetUuidDocidName()
+{
+	static const char * UUID_DOCID_ATTR = "@uuid_id";
+	return UUID_DOCID_ATTR;
+}
+
+bool sphHasUuidDocid ( const ISphSchema & tSchema )
+{
+	const CSphColumnInfo * pDocid = tSchema.GetAttr ( sphGetDocidName() );
+	if ( !pDocid || !pDocid->IsUuidLinkedDocid() )
+		return false;
+
+#ifndef NDEBUG
+	const CSphColumnInfo * pUuidId = tSchema.GetAttr ( sphGetUuidDocidName() );
+	assert ( pUuidId && pUuidId->m_eAttrType==SPH_ATTR_STRING );
+#endif
+	return true;
+}
+
+
+static constexpr int UUID_DOCID_LENGTH = 36;
+static constexpr int UUID_DOCID_VERSION_POS = 14;
+static constexpr int UUID_DOCID_VARIANT_POS = 19;
+static constexpr int UUID_DOCID_GROUP_LENGTHS[] = { 8, 4, 4, 4, 12 };
+
+
+static bool IsUuidHex ( char c )
+{
+	return ( c>='0' && c<='9' ) || ( c>='a' && c<='f' ) || ( c>='A' && c<='F' );
+}
+
+
+static bool IsUuidVersion ( char c )
+{
+	return c>='1' && c<='8';
+}
+
+
+static bool IsUuidVariant ( char c )
+{
+	return c=='8' || c=='9' || c=='a' || c=='A' || c=='b' || c=='B';
+}
+
+
+static bool IsUuidDocid ( Str_t tUuid )
+{
+	if ( !tUuid.first || tUuid.second!=UUID_DOCID_LENGTH )
+		return false;
+
+	const char * pCur = tUuid.first;
+	const char * pEnd = pCur + UUID_DOCID_LENGTH;
+	for ( int iGroupLength : UUID_DOCID_GROUP_LENGTHS )
+	{
+		const char * pGroupEnd = pCur + iGroupLength;
+		while ( pCur<pGroupEnd )
+			if ( !IsUuidHex ( *pCur++ ) )
+				return false;
+
+		if ( pCur<pEnd && *pCur++!='-' )
+			return false;
+	}
+
+	assert ( pCur==pEnd );
+	return IsUuidVersion ( tUuid.first[UUID_DOCID_VERSION_POS] ) && IsUuidVariant ( tUuid.first[UUID_DOCID_VARIANT_POS] );
+}
+
+
+bool sphPrepareUuidDocid ( const char * szUuid, CSphString & sNormalizedUuid, CSphString & sError )
+{
+	if ( !szUuid || !*szUuid )
+	{
+		sError = "uuid id must be a non-empty string";
+		return false;
+	}
+
+	if ( !IsUuidDocid ( { szUuid, (int)strlen(szUuid) } ) )
+	{
+		sError.SetSprintf ( "invalid uuid id '%s'", szUuid );
+		return false;
+	}
+
+	CSphString sNormalized = szUuid;
+	sNormalized.ToLower();
+	sNormalizedUuid.Swap ( sNormalized );
+	return true;
+}
+
+
+bool sphIsNormalizedUuidDocid ( Str_t tUuid )
+{
+	if ( !IsUuidDocid ( tUuid ) )
+		return false;
+
+	for ( int i=0; i<tUuid.second; ++i )
+		if ( tUuid.first[i]>='A' && tUuid.first[i]<='F' )
+			return false;
+
+	return true;
+}
+
+
 CSphString FormatPath ( const CSphString & sFile, const FilenameBuilder_i * pFilenameBuilder )
 {
 	if ( !pFilenameBuilder || sFile.IsEmpty() || IsPathAbsolute ( sFile ) )
@@ -1461,6 +1562,54 @@ void IndexSettingsContainer_c::ResetCleanup()
 	m_dCleanupFiles.Reset();
 }
 
+static bool ParseStoredBooleanMode ( const CSphString & sValue, bool & bDefaultBoolOr, CSphString & sError )
+{
+	if ( sValue=="or" )
+	{
+		bDefaultBoolOr = true;
+		return true;
+	}
+
+	if ( sValue=="and" )
+	{
+		bDefaultBoolOr = false;
+		return true;
+	}
+
+	sError.SetSprintf ( "unknown boolean_mode='%s' (must be and or or)", sValue.cstr() );
+	return false;
+}
+
+static bool ValidateStoredRanker ( const CSphString & sValue, CSphString & sError )
+{
+	QueryExecutionSettings_t tSettings;
+	return ParseStoredRanker ( sValue, tSettings, sError );
+}
+
+bool MutableIndexSettings_c::SetStoredRanker ( const CSphString & sRanker, CSphString & sError )
+{
+	QueryExecutionSettings_t tRankerSettings;
+	if ( !ParseStoredRanker ( sRanker, tRankerSettings, sError ) )
+		return false;
+
+	m_sRanker = sRanker;
+	m_tQueryExecutionSettings.m_eRanker = tRankerSettings.m_eRanker;
+	m_tQueryExecutionSettings.m_sRankerExpr = tRankerSettings.m_sRankerExpr;
+	m_tQueryExecutionSettings.m_sUDRanker = tRankerSettings.m_sUDRanker;
+	m_tQueryExecutionSettings.m_sUDRankerOpts = tRankerSettings.m_sUDRankerOpts;
+	return true;
+}
+
+bool MutableIndexSettings_c::SetStoredBooleanMode ( const CSphString & sValue, CSphString & sError )
+{
+	bool bDefaultBoolOr = false;
+	if ( !ParseStoredBooleanMode ( sValue, bDefaultBoolOr, sError ) )
+		return false;
+
+	m_tQueryExecutionSettings.m_bDefaultBoolOr = bDefaultBoolOr;
+	return true;
+}
+
 bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphString & sValue, bool bExtCopy )
 {
 	if ( sName=="type" && sValue=="pq" )
@@ -1617,7 +1766,77 @@ bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphS
 		return Add ( sName, sValue );
 	}
 
+	if ( sName=="ranker" )
+	{
+		if ( !ValidateStoredRanker ( sValue, m_sError ) )
+			return false;
+
+		return Add ( sName, sValue );
+	}
+
+	if ( sName=="boolean_mode" )
+	{
+		bool bDefaultBoolOr = false;
+		if ( !ParseStoredBooleanMode ( sValue, bDefaultBoolOr, m_sError ) )
+			return false;
+
+		return Add ( sName, sValue );
+	}
+
 	return Add ( sName, sValue );
+}
+
+
+bool ExpandCreateTableProfiles ( CreateTableSettings_t & tCreateTable, CSphString & sError )
+{
+	if ( !tCreateTable.m_dOpts.GetLength() )
+		return true;
+
+	CSphVector<NameValueStr_t> dExpanded;
+	dExpanded.Reserve ( tCreateTable.m_dOpts.GetLength() + 6 );
+
+	for ( const auto & tOpt : tCreateTable.m_dOpts )
+	{
+		if ( tOpt.m_sName!="profile" )
+		{
+			dExpanded.Add ( tOpt );
+			continue;
+		}
+
+		if ( tOpt.m_sValue=="relevance" )
+		{
+			NameValueStr_t & tMinInfix = dExpanded.Add();
+			tMinInfix.m_sName = "min_infix_len";
+			tMinInfix.m_sValue = "2";
+
+			NameValueStr_t & tIndexFieldLengths = dExpanded.Add();
+			tIndexFieldLengths.m_sName = "index_field_lengths";
+			tIndexFieldLengths.m_sValue = "1";
+
+			NameValueStr_t & tIndexExactWords = dExpanded.Add();
+			tIndexExactWords.m_sName = "index_exact_words";
+			tIndexExactWords.m_sValue = "1";
+
+			NameValueStr_t & tRanker = dExpanded.Add();
+			tRanker.m_sName = "ranker";
+			tRanker.m_sValue = "expr('1000*bm25a(1.2,0.75,256)')";
+
+			NameValueStr_t & tMorphology = dExpanded.Add();
+			tMorphology.m_sName = "morphology";
+			tMorphology.m_sValue = "stem_en";
+
+			NameValueStr_t & tBooleanMode = dExpanded.Add();
+			tBooleanMode.m_sName = "boolean_mode";
+			tBooleanMode.m_sValue = "or";
+			continue;
+		}
+
+		sError.SetSprintf ( "unknown profile='%s'", tOpt.m_sValue.cstr() );
+		return false;
+	}
+
+	tCreateTable.m_dOpts.SwapData ( dExpanded );
+	return true;
 }
 
 
@@ -2560,7 +2779,7 @@ static bool IsDDLToken ( const CSphString & sTok )
 }
 
 
-static CSphString FormatCreateTableAttr ( const CSphColumnInfo & tAttr, const CSphIndexSettings & tSettings, int iNumColumnar, bool bQuote )
+static CSphString FormatCreateTableAttr ( const CSphColumnInfo & tAttr, const CSphIndexSettings & tSettings, int iNumColumnar, bool bQuote, const char * szTypeOverride=nullptr )
 {
 	StringBuilder_c sRes;
 
@@ -2571,7 +2790,7 @@ static CSphString FormatCreateTableAttr ( const CSphColumnInfo & tAttr, const CS
 	else
 		sQuotedName = tAttr.m_sName;
 
-	sRes << sQuotedName << " " << GetAttrTypeName(tAttr);
+	sRes << sQuotedName << " " << ( szTypeOverride ? szTypeOverride : GetAttrTypeName(tAttr).cstr() );
 
 	AddStorageSettings ( sRes, tAttr, tSettings, false, iNumColumnar );
 	AddEngineSettings ( sRes, tAttr );
@@ -2636,7 +2855,7 @@ static CSphString BuildCreateTableImpl ( const CSphString & sName, const CSphSch
 	const CSphColumnInfo * pId = tSchema.GetAttr("id");
 	assert(pId);
 
-	sRes << FormatCreateTableAttr ( *pId, tSettings, iNumColumnar, bQuote );
+	sRes << FormatCreateTableAttr ( *pId, tSettings, iNumColumnar, bQuote, pId->IsUuidLinkedDocid() ? "uuid" : nullptr );
 
 	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
 	{
@@ -2759,6 +2978,8 @@ const char * GetMutableName ( MutableName_e eName )
 		case MutableName_e::EXPAND_KEYWORDS: return "expand_keywords";
 		case MutableName_e::RT_MEM_LIMIT: return "rt_mem_limit";
 		case MutableName_e::PREOPEN: return "preopen";
+		case MutableName_e::RANKER: return "ranker";
+		case MutableName_e::BOOLEAN_MODE: return "boolean_mode";
 		case MutableName_e::ACCESS_PLAIN_ATTRS: return "access_plain_attrs";
 		case MutableName_e::ACCESS_BLOB_ATTRS: return "access_blob_attrs";
 		case MutableName_e::ACCESS_DOCLISTS: return "access_doclists";
@@ -2846,6 +3067,7 @@ MutableIndexSettings_c::MutableIndexSettings_c()
 	, m_iFlushWrite ( -1 )
 	, m_iFlushSearch ( -1 )
 	, m_dLoaded ( (int)MutableName_e::TOTAL )
+	, m_dRemoved ( (int)MutableName_e::TOTAL )
 {
 #if !_WIN32
 	m_bPreopen	= true;
@@ -2921,6 +3143,34 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 		m_dLoaded.BitSet ( (int)MutableName_e::PREOPEN );
 	}
 
+	JsonObj_c tRanker = tParser.GetStrItem ( GetMutableName ( MutableName_e::RANKER ), sError, true );
+	if ( tRanker )
+	{
+		if ( tRanker.StrVal().IsEmpty() )
+			m_dRemoved.BitSet ( (int)MutableName_e::RANKER );
+		else if ( !SetStoredRanker ( tRanker.StrVal(), sError ) )
+		{
+			sphWarning ( "table %s, error: %s", sIndexName, sError.cstr() );
+			return false;
+		}
+		else
+			m_dLoaded.BitSet ( (int)MutableName_e::RANKER );
+	}
+
+	JsonObj_c tBooleanMode = tParser.GetStrItem ( GetMutableName ( MutableName_e::BOOLEAN_MODE ), sError, true );
+	if ( tBooleanMode )
+	{
+		if ( tBooleanMode.StrVal().IsEmpty() )
+			m_dRemoved.BitSet ( (int)MutableName_e::BOOLEAN_MODE );
+		else if ( !SetStoredBooleanMode ( tBooleanMode.StrVal(), sError ) )
+		{
+			sphWarning ( "table %s, error: %s", sIndexName, sError.cstr() );
+			return false;
+		}
+		else
+			m_dLoaded.BitSet ( (int)MutableName_e::BOOLEAN_MODE );
+	}
+
 	GetFileAccess( tParser, MutableName_e::ACCESS_PLAIN_ATTRS, false, m_tFileAccess.m_eAttr, m_dLoaded );
 	GetFileAccess( tParser, MutableName_e::ACCESS_BLOB_ATTRS, false, m_tFileAccess.m_eBlob, m_dLoaded );
 	GetFileAccess( tParser, MutableName_e::ACCESS_DOCLISTS, true, m_tFileAccess.m_eDoclist, m_dLoaded );
@@ -2978,7 +3228,7 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 	return true;
 }
 
-void MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeedSave, StrVec_t * pWarnings )
+bool MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeedSave, StrVec_t * pWarnings, CSphString & sError )
 {
 	m_bNeedSave |= bNeedSave;
 
@@ -2999,6 +3249,28 @@ void MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeed
 	{
 		m_bPreopen = hIndex.GetBool ( GetMutableName ( MutableName_e::PREOPEN ), false ) || MutableIndexSettings_c::GetDefaults().m_bPreopen;
 		m_dLoaded.BitSet ( (int)MutableName_e::PREOPEN );
+	}
+
+	if ( hIndex.Exists ( GetMutableName ( MutableName_e::RANKER ) ) )
+	{
+		CSphString sRanker = hIndex.GetStr ( GetMutableName ( MutableName_e::RANKER ) );
+		if ( sRanker.IsEmpty() )
+			m_dRemoved.BitSet ( (int)MutableName_e::RANKER );
+		else if ( !SetStoredRanker ( sRanker, sError ) )
+			return false;
+		else
+			m_dLoaded.BitSet ( (int)MutableName_e::RANKER );
+	}
+
+	if ( hIndex.Exists ( GetMutableName ( MutableName_e::BOOLEAN_MODE ) ) )
+	{
+		CSphString sBooleanMode = hIndex.GetStr ( GetMutableName ( MutableName_e::BOOLEAN_MODE ) );
+		if ( sBooleanMode.IsEmpty() )
+			m_dRemoved.BitSet ( (int)MutableName_e::BOOLEAN_MODE );
+		else if ( !SetStoredBooleanMode ( sBooleanMode, sError ) )
+			return false;
+		else
+			m_dLoaded.BitSet ( (int)MutableName_e::BOOLEAN_MODE );
 	}
 
 	// DEPRICATED - remove these 2 options
@@ -3070,6 +3342,7 @@ void MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeed
 		m_dLoaded.BitSet ( (int)MutableName_e::DISKCHUNK_FLUSH_SEARCH_TIMEOUT );
 	}
 
+	return true;
 }
 
 static void AddStr ( const CSphBitvec & dLoaded, MutableName_e eName, JsonObj_c & tRoot, const char * sVal )
@@ -3114,6 +3387,8 @@ bool MutableIndexSettings_c::Save ( CSphString & sBuf ) const
 	AddInt ( m_dLoaded, MutableName_e::RT_MEM_LIMIT, tRoot, m_iMemLimit );
 	if ( m_dLoaded.BitGet ( (int)MutableName_e::PREOPEN ) )
 		tRoot.AddBool ( "preopen", m_bPreopen );
+	AddStr ( m_dLoaded, MutableName_e::RANKER, tRoot, m_sRanker.cstr() );
+	AddStr ( m_dLoaded, MutableName_e::BOOLEAN_MODE, tRoot, m_tQueryExecutionSettings.m_bDefaultBoolOr ? "or" : "and" );
 
 	AddStr ( m_dLoaded, MutableName_e::ACCESS_PLAIN_ATTRS, tRoot, FileAccessName ( m_tFileAccess.m_eAttr ) );
 	AddStr ( m_dLoaded, MutableName_e::ACCESS_BLOB_ATTRS, tRoot, FileAccessName ( m_tFileAccess.m_eBlob ) );
@@ -3152,6 +3427,32 @@ void MutableIndexSettings_c::Combine ( const MutableIndexSettings_c & tOther )
 	{
 		m_bPreopen = tOther.m_bPreopen;
 		m_dLoaded.BitSet ( (int)MutableName_e::PREOPEN );
+	}
+
+	if ( tOther.m_dRemoved.BitGet ( (int)MutableName_e::RANKER ) )
+	{
+		m_sRanker = "";
+		m_tQueryExecutionSettings.SetRanker ( StoredQueryExecutionSettings_t() );
+		m_dLoaded.BitClear ( (int)MutableName_e::RANKER );
+	}
+
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::RANKER ) )
+	{
+		m_sRanker = tOther.m_sRanker;
+		m_tQueryExecutionSettings.SetRanker ( tOther.m_tQueryExecutionSettings );
+		m_dLoaded.BitSet ( (int)MutableName_e::RANKER );
+	}
+
+	if ( tOther.m_dRemoved.BitGet ( (int)MutableName_e::BOOLEAN_MODE ) )
+	{
+		m_tQueryExecutionSettings.m_bDefaultBoolOr = false;
+		m_dLoaded.BitClear ( (int)MutableName_e::BOOLEAN_MODE );
+	}
+
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::BOOLEAN_MODE ) )
+	{
+		m_tQueryExecutionSettings.m_bDefaultBoolOr = tOther.m_tQueryExecutionSettings.m_bDefaultBoolOr;
+		m_dLoaded.BitSet ( (int)MutableName_e::BOOLEAN_MODE );
 	}
 
 	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::ACCESS_PLAIN_ATTRS ) )
@@ -3240,6 +3541,8 @@ void MutableIndexSettings_c::Format ( SettingsFormatter_c & tOut, FilenameBuilde
 	FormatSetting ( this, tOut, MutableName_e::EXPAND_KEYWORDS, GetExpandKwName ( m_iExpandKeywords ), m_iExpandKeywords!=tDefaults.m_iExpandKeywords );
 	FormatSetting ( this, tOut, MutableName_e::RT_MEM_LIMIT, m_iMemLimit, m_iMemLimit!=tDefaults.m_iMemLimit );
 	FormatSetting ( this, tOut, MutableName_e::PREOPEN, m_bPreopen, m_bPreopen!=tDefaults.m_bPreopen );
+	FormatSetting ( this, tOut, MutableName_e::RANKER, m_sRanker, IsSet ( MutableName_e::RANKER ) );
+	FormatSetting ( this, tOut, MutableName_e::BOOLEAN_MODE, m_tQueryExecutionSettings.m_bDefaultBoolOr ? "or" : "and", IsSet ( MutableName_e::BOOLEAN_MODE ) );
 
 	FormatSetting ( this, tOut, MutableName_e::ACCESS_PLAIN_ATTRS, FileAccessName ( m_tFileAccess.m_eAttr ), m_tFileAccess.m_eAttr!=tDefaults.m_tFileAccess.m_eAttr );
 	FormatSetting ( this, tOut, MutableName_e::ACCESS_BLOB_ATTRS, FileAccessName ( m_tFileAccess.m_eBlob ), m_tFileAccess.m_eBlob!=tDefaults.m_tFileAccess.m_eBlob );

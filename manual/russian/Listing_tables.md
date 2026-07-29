@@ -29,7 +29,7 @@ SHOW TABLES;
 
 ```sql
 +----------+-------------+
-| Index    | Type        |
+| Таблица | Тип |
 +----------+-------------+
 | dist     | distributed |
 | plain    | local       |
@@ -118,7 +118,7 @@ utilsApi.sql('SHOW TABLES')
 
 <!-- response Python -->
 ```python
-{u'columns': [{u'Index': {u'type': u'string'}},
+{u'columns': [{u'Table': {u'type': u'string'}},
               {u'Type': {u'type': u'string'}}],
  u'data': [{u'Index': u'dist1', u'Type': u'distributed'},
            {u'Index': u'rt', u'Type': u'rt'},
@@ -393,7 +393,7 @@ utils_api.sql("SHOW TABLES LIKE 'pro%'", Some(true)).await
 {DESC | DESCRIBE} table_name [ LIKE pattern ]
 ```
 
-Оператор `DESCRIBE` выводит список столбцов таблицы и связанных с ними типов. Столбцы включают идентификатор документа, полнотекстовые поля и атрибуты. Порядок соответствует порядку, в котором поля и атрибуты ожидаются операторами `INSERT` и `REPLACE`. Типы столбцов включают `field`, `integer`, `timestamp`, `ordinal`, `bool`, `float`, `bigint`, `string` и `mva`. Столбец ID будет иметь тип `bigint`. Пример:
+Оператор `DESCRIBE` выводит столбцы таблицы и их связанные типы. Столбцы включают ID документа, полнотекстовые поля и атрибуты. Порядок соответствует тому, в котором поля и атрибуты ожидаются операторами `INSERT` и `REPLACE`. Типы столбцов включают `field`, `integer`, `timestamp`, `ordinal`, `bool`, `float`, `bigint`, `uuid`, `string` и `mva`. Столбец ID по умолчанию имеет тип `bigint`, а для таблицы реального времени, объявленной с `id uuid`, используется `uuid`. Пример:
 
 ```sql
 mysql> DESC rt;
@@ -418,7 +418,7 @@ data for the following examples:
 
 DROP TABLE IF EXISTS tbl;
 CREATE TABLE tbl(title text indexed stored) charset_table='non_cont,cont' morphology='icu_chinese';
---> 
+-->
 
 <!-- example name_table -->
 Вы также можете просмотреть схему таблицы, выполнив запрос `select * from <table_name>.@table`. Преимущество этого метода в том, что вы можете использовать предложение `WHERE` для фильтрации:
@@ -480,6 +480,8 @@ SHOW CREATE TABLE table_name [ OPTION output_words = 'list' | 'file' ]
 ```
 
 Выводит оператор `CREATE TABLE`, использованный для создания указанной таблицы.
+
+Если таблица была создана с помощью SQL-ярлыка `profile=...`, `SHOW CREATE TABLE` выводит развернутые настройки вместо самого имени профиля.
 
 Опция `output_words` позволяет управлять отображением настроек внешних файлов (таких как `stopwords`, `exceptions`, `wordforms`, `hitless_words`):
 

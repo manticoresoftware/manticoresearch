@@ -3,6 +3,7 @@ run-name: 🌙 Nightly tests of mysqldump and elasticdump ${{ github.sha }}
 on:
   schedule:
     - cron: '00 20 * * *'
+  workflow_dispatch:
   pull_request:
     branches: [ main ]
     paths:
@@ -30,8 +31,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-      - uses: manticoresoftware/clt@0.7.8
+        uses: actions/checkout@v5
+      - uses: manticoresoftware/clt@0.7.9
         with:
           image: manticoresearch/dind:v1
           test_prefix: test/clt-tests/mysqldump/versions/mariadb/
@@ -44,8 +45,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-      - uses: manticoresoftware/clt@0.7.8
+        uses: actions/checkout@v5
+      - uses: manticoresoftware/clt@0.7.9
         with:
           image: manticoresearch/dind:v1
           test_prefix: test/clt-tests/mysqldump/versions/mysql/
@@ -58,8 +59,8 @@ jobs:
     timeout-minutes: 60  
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-      - uses: manticoresoftware/clt@0.7.8
+        uses: actions/checkout@v5
+      - uses: manticoresoftware/clt@0.7.9
         with:
           image: manticoresearch/dind:v1
           test_prefix: test/clt-tests/migration-es-ms/
@@ -68,7 +69,7 @@ jobs:
 
       - name: Upload .rep File
         if: always()  
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: test-migration-es-ms-rep
           path: test/clt-tests/migration-es-ms/test-migration-es-ms.rep

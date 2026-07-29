@@ -29,7 +29,7 @@ extern "C" {
 #endif
 
 /// current udf version
-#define SPH_UDF_VERSION 11
+#define SPH_UDF_VERSION 12
 
 /// error buffer size
 #define SPH_UDF_ERROR_LEN 256

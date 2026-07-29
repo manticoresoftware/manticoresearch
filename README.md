@@ -53,6 +53,7 @@ What distinguishes it from other solutions is:
 * With its modern multithreading architecture and efficient query parallelization capabilities, Manticore is able to fully utilize all your CPU cores to achieve the quickest response times possible.
 * The powerful and speedy full-text search works seamlessly with both small and large datasets.
 * Hybrid search combines full-text and vector retrieval in a single query for better relevance.
+* Conversational search lets existing vectorized tables answer questions with KNN retrieval, conversation history, and LLM-backed responses through SQL `CALL CHAT` or the HTTP JSON `/search` endpoint.
 * Row-wise storage for small, medium and big size datasets.
 * For even larger datasets, Manticore offers columnar storage support through the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/), capable of handling datasets too big to fit in RAM.
 * Performant secondary indexes are automatically created using the PGM-index (Piecewise Geometric Model index), which provides efficient mapping between indexed keys and their memory locations.
@@ -85,6 +86,7 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [Geo-spatial search](https://play.manticoresearch.com/geosearch/)
   - [Hybrid search](https://manual.manticoresearch.com/Searching/Hybrid_search)
   - [Vector search](https://manual.manticoresearch.com/Searching/KNN)
+  - [Conversational search](https://manual.manticoresearch.com/Searching/Conversational_search)
   - [Joining tables](https://manual.manticoresearch.com/Searching/Joining)
   - [Spelling correction](https://play.manticoresearch.com/didyoumean/)
   - [Autocomplete](https://manual.manticoresearch.com/Searching/Autocomplete#Autocomplete)
@@ -147,7 +149,28 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
 
 # Installation
 
-### Docker
+## Quick install
+
+For Linux and macOS with Homebrew, use the one-line installer:
+
+```sh
+curl https://manticoresearch.com | sh
+```
+
+It detects Debian/Ubuntu/Mint, RHEL/CentOS/Amazon/Oracle/Fedora-like RPM systems, and macOS with Homebrew. It configures the official Manticore repository when needed, installs `manticore`, starts the service when supported, and prints the result.
+
+Common commands:
+
+```sh
+curl https://manticoresearch.com | sh -s help
+curl https://manticoresearch.com | sh -s list-versions
+curl https://manticoresearch.com | sh -s version 25.0.0
+curl https://manticoresearch.com | sh -s dev
+curl https://manticoresearch.com | sh -s upgrade
+```
+
+## Docker
+
 Docker image is available on [Docker Hub](https://dockr.ly/33biV0U).
 
 To experiment with Manticore Search in Docker just run:
@@ -174,31 +197,42 @@ Note that upon exiting the MySQL client, the Manticore container will be stopped
 
 Read [the full instruction for the docker image](https://github.com/manticoresoftware/docker) for more details including our recommendations on running it in production.
 
-### Packages
+### Manual package installation
 
-## [Ubuntu, Debian, Centos, Windows and MacOS packages are here](https://manticoresearch.com/install/).
+If you prefer explicit package-manager commands, use the manual instructions below or see the [downloads page](https://manticoresearch.com/install/).
 
-### YUM repo for RHEL/Centos/Amazon/Oracle Linux
+### RPM repo for RHEL/CentOS/Amazon/Oracle/Fedora-like Linux
+
 ```
 sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 sudo yum install manticore
 ```
 
+or use `dnf` when available:
+
+```
+sudo dnf install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
+sudo dnf install manticore
+```
+
 ### APT repo for Ubuntu/Debian/Mint
+
 ```
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
+sudo apt install ./manticore-repo.noarch.deb
 sudo apt update
 sudo apt install manticore
 ```
 
-### Homebrew on MacOS
+### Homebrew on macOS
+
 ```
 brew install manticoresoftware/tap/manticoresearch manticoresoftware/tap/manticore-extra
 ```
 
 ### Windows
-See [instruction here](https://manual.manticoresearch.com/Installation/Windows).
+
+For WSL/WSL2, use the Linux installer inside the WSL distribution. For native Windows, see the [Windows installation instructions](https://manual.manticoresearch.com/Installation/Windows).
 
 ### Clouds
 

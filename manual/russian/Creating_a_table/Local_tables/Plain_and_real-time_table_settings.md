@@ -65,6 +65,30 @@ table <table name> {
 
 ### Общие настройки для обычных таблиц и таблиц реального времени
 
+#### профиль
+
+`profile` — это SQL-only ярлык для применения заранее определённого набора настроек таблицы только в `CREATE TABLE`. В `ALTER TABLE` он не поддерживается. Само имя профиля **не** хранится в метаданных таблицы; Manticore сохраняет только развёрнутые настройки, поэтому `SHOW CREATE TABLE` выводит итоговые параметры, а не `profile=...`.
+
+Поддерживаются следующие значения:
+
+* `relevance` - разворачивается в:
+  * [`min_infix_len='2'`](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)
+  * [`index_field_lengths='1'`](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths)
+  * [`index_exact_words='1'`](../../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words)
+  * [`ranker=expr('1000*bm25a(1.2,0.75,256)')`](../../Searching/Options.md#ranker)
+  * [`morphology='stem_en'`](../../Creating_a_table/NLP_and_tokenization/Morphology.md#morphology)
+  * [`boolean_mode='or'`](../../Searching/Options.md#boolean_mode)
+
+Профиль `relevance` может улучшить ранжирование и полноту выдачи во многих англоязычных full-text нагрузках, но он также увеличивает объём работы при индексации и выполнении запроса, поэтому по сравнению с настройками по умолчанию может потребовать больше CPU, места на диске и памяти.
+
+Если вы также явно задаёте один из этих параметров, `profile` следует той же семантике дублирующихся настроек, что и обычные настройки `CREATE TABLE`: выигрывает первое вхождение. Поскольку профиль разворачивается в обычные настройки в момент создания, `profile='relevance' ranker='bm25'` сохраняет ranker из профиля, и полностью развёрнутая явная форма ведёт себя так же. Аналогично, `ranker='bm25' profile='relevance'` сохраняет `ranker='bm25'`.
+
+Развёрнутые настройки сохраняются в метаданных таблицы. `OPTION ranker=...` на уровне запроса по-прежнему переопределяет любой сохранённый ranker таблицы. Если запрос ищет по нескольким таблицам и не задаёт ranker, каждая таблица продолжает использовать свой собственный сохранённый ranker по умолчанию, включая локальные и удалённые распределённые таблицы. В этом случае Manticore объединяет результаты, используя исходные возвращённые веса; он **не** нормализует веса между разными ranker или выражениями, поэтому смешивание разных per-table ranker может привести к несопоставимому глобальному порядку.
+
+```sql
+CREATE TABLE products(title text) profile='relevance';
+```
+
 #### type
 
 ```ini
@@ -994,6 +1018,7 @@ table products {
 * [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
 * [blend_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)
 * [blend_mode](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
+* [boolean_mode](../../Searching/Options.md#boolean_mode)
 * [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)
 * [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)
 * [embedded_limit](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)

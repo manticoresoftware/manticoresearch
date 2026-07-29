@@ -453,7 +453,7 @@ POST /insert
 ```json
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"created":true,
 	"result":"created",
 	"status":201
@@ -461,7 +461,7 @@ POST /insert
 
 {
 	"table":"test",
-	"_id":2,
+	"id":2,
 	"created":true,
 	"result":"created",
 	"status":201
@@ -505,6 +505,8 @@ The parameters are:
 * `rescore`: Enables KNN rescoring (enabled by default). Set to `0` in SQL or `false` in JSON to disable rescoring. After the KNN search is completed using quantized vectors (with possible oversampling), distances are recalculated with the original (full-precision) vectors and results are re-sorted to improve ranking accuracy.
 * `oversampling`: Sets a factor (float value) by which `k` is multiplied when executing the KNN search, causing more candidates to be retrieved than needed using quantized vectors. `oversampling=3.0` is applied by default. These candidates can be re-evaluated later if rescoring is enabled. Oversampling also works with non-quantized vectors. Since it increases `k`, which affects how the HNSW index works, it may cause a small change in result accuracy.
 * `early_termination`: Enables or disables adaptive early termination during HNSW graph traversal. Enabled by default. Set to `0` in SQL or `false` in JSON to disable. See [Early termination](../Searching/KNN.md#Early-termination) for details.
+
+When a text query is supplied (so Manticore embeds the string before the search), the number of threads used by the embeddings library can be overridden per-query in SQL with `OPTION embeddings_threads = N`. The value caps the embeddings call for this query only, overriding the global [embeddings_threads](../Server_settings/Searchd.md#embeddings_threads) setting; `0` means uncapped. The option has no effect when the query is supplied as a vector array.
 
 Documents are always sorted by their distance to the search vector. Any additional sorting criteria you specify will be applied after this primary sort condition. For retrieving the distance, there is a built-in function called [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29).
 

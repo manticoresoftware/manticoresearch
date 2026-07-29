@@ -3,7 +3,7 @@
 TSV/CSV is the simplest way to pass data to the Manticore indexer. This method was created due to the limitations of xmlpipe2. In xmlpipe2, the indexer must map each attribute and field tag in the XML file to a corresponding schema element. This mapping requires time, and it increases with the number of fields and attributes in the schema. TSV/CSV has no such issue, as each field and attribute corresponds to a particular column in the TSV/CSV file. In some cases, TSV/CSV could work slightly faster than xmlpipe2.
 
 ## File format
-The first column in TSV/CSV file must be a document ID. The rest columns must mirror the declaration of fields and attributes in the schema definition. Note that you don't need to declare the document ID in the schema, since it's always considered to be present, should be in the 1st column and needs to be a unique-signed positive non-zero 64-bit integer.
+The first column in TSV/CSV file must be a document ID. The rest columns must mirror the declaration of fields and attributes in the schema definition. Note that you don't need to declare the document ID in the schema, since it's always considered to be present and should be in the 1st column. For plain tables, document IDs must be explicit, unique, non-zero unsigned 64-bit integers. Negative document IDs are not allowed. Plain tables do not support automatic ID generation, and `0` cannot be used to request an auto-generated ID.
 
 The difference between tsvpipe and csvpipe is delimiter and quoting rules. tsvpipe has a tab character as hardcoded delimiter and has no quoting rules. csvpipe has the  `csvpipe_delimiter`option for delimiter with a default value of , and also has quoting rules, such as:
 

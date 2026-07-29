@@ -24,4 +24,5 @@ std::unique_ptr<QueryParser_i> sphCreatePlainQueryParser();
 /// a) we do not always have an actual real index class, and
 /// b) might need to tweak stuff even we do
 /// FIXME! remove either pQuery or sQuery
+bool	sphParseExtendedQuery ( XQQuery_t & tQuery, const char * sQuery, const CSphQuery * pQuery, const QueryExecutionSettings_t & tExecutionSettings, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields );
 bool	sphParseExtendedQuery ( XQQuery_t & tQuery, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields );

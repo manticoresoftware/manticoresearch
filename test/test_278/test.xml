@@ -1046,6 +1046,25 @@ select t2.i al, (al + al) doubled from t1 join t2 on t1.id = t2.id where doubled
 
 drop table if exists t1;
 drop table if exists t2;
+
+<!-- regression for #4633: failed multi-facet JOIN setup must not double-delete sorters -->
+create table issue4633_left ( ref_id uint );
+create table issue4633_right ( id bigint, m multi, price float );
+
+insert into issue4633_left values (1, 101), (2, 102), (3, 101);
+insert into issue4633_right values (101, (1,2), 4700), (102, (2,3), 4900);
+
+select id from issue4633_left
+left join issue4633_right on issue4633_left.ref_id = issue4633_right.id
+where issue4633_right.price >= '4500' and issue4633_right.price &lt;= '5000'
+option max_matches = 1000
+facet issue4633_right.m order by count(*) desc limit 1000
+facet issue4633_right.id order by count(*) desc limit 1000;;
+
+select 1 as searchd_survived;
+
+drop table issue4633_right;
+drop table issue4633_left;
 </sphinxql>
 
 

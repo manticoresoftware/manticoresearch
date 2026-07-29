@@ -230,7 +230,9 @@ void SqlParserTraits_c::ProcessParsingError ( const char* szMessage )
 		&& ( m_pBuf == m_pLastTokenStart || RouteToUser ( szMessage, m_pLastTokenStart ) ) )
 		m_bWrongParserSyntaxError = true;
 
-	m_pParseError->SetSprintf ( "%s %s near '%s'", m_sErrorHeader.cstr(), szMessage, m_pLastTokenStart ? m_pLastTokenStart : "(null)" );
+	StringBuilder_c sError;
+	sError << m_sErrorHeader << ' ' << szMessage << " near '" << ( m_pLastTokenStart ? m_pLastTokenStart : "(null)" ) << '\'';
+	*m_pParseError = sError.cstr();
 
 	// fixup TOK_xxx thingies
 	char* s = const_cast<char*> ( m_pParseError->cstr() );
@@ -337,14 +339,14 @@ bool SqlParserTraits_c::SetTableForOptions ( const SqlNode_t & tNode )
 	return true;
 }
 
-bool SqlParserTraits_c::NumIsSaturated ( const SqlNode_t& tNode )
+bool SqlParserTraits_c::NumIsSaturated ( uint64_t uValue, bool bNegative )
 {
-	const auto uLimit = (uint64_t)LLONG_MAX + (tNode.m_bNegative ? 1ULL : 0ULL);
-	if ( tNode.m_uValue > uLimit )
+	const auto uLimit = (uint64_t)LLONG_MAX + ( bNegative ? 1ULL : 0ULL );
+	if ( uValue > uLimit )
 	{
 		assert ( m_pParseError );
-		const char* szSign = tNode.m_bNegative?"-":"";
-		m_pParseError->SetSprintf ( "number %s" UINT64_FMT " is out of range [-9223372036854775808..9223372036854775807]", szSign, tNode.m_uValue );
+		const char * szSign = bNegative ? "-" : "";
+		m_pParseError->SetSprintf ( "number %s" UINT64_FMT " is out of range [-9223372036854775808..9223372036854775807]", szSign, uValue );
 		return true;
 	}
 	return false;
@@ -370,8 +372,16 @@ public:
 
 	void			AddIndexHint ( SecondaryIndexType_e eType, bool bForce, const SqlNode_t & tValue );
 	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
+	void			AddGroupConcatPlainItem ( SqlNode_t * pExpr, const SqlNode_t & tSeparator, SqlNode_t * pStart, SqlNode_t * pEnd );
+	void			BeginGroupConcatOrder ();
+	void			AddGroupConcatOrder ( const SqlNode_t & tExpr, bool bDesc );
+	void			SetGroupConcatSeparator ( const SqlNode_t & tSeparator );
+	bool			AddGroupConcatItem ( SqlNode_t * pExpr, const SqlNode_t & tLimit, SqlNode_t * pStart, SqlNode_t * pEnd );
+	void			BeginOrderBy ();
+	void			AddOrderByItem ( const SqlNode_t & tExpr );
 	bool			AddExtendedAggrItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc, SqlNode_t * pStart, SqlNode_t * pEnd, const CSphVector<CSphNamedVariant> * pOpts );
 	bool			AddItem ( const char * pToken, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
+	void			SetTableAlias ( const SqlNode_t & tAlias );
 	bool			AddCount ();
 	void			AliasLastItem ( SqlNode_t * pAlias );
 	void			AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode );
@@ -406,6 +416,9 @@ public:
 	bool			AddStringCmpFilter ( const SqlNode_t & tCol, const SqlNode_t & tVal, bool bExclude, EStrCmpDir eStrCmpDir );
 	CSphFilterSettings * AddValuesFilter ( const SqlNode_t & tCol ) { return AddFilter ( tCol, SPH_FILTER_VALUES ); }
 	CSphFilterSettings * AddValuesFilter ( const SqlNode_t & tCol, int iValuesIdx );
+	void			BeginDocidConstList ( const SqlNode_t & tCol );
+	void			CheckDocidConstListItem ( uint64_t uValue, bool bNegative );
+	bool			EndDocidConstList ();
 	bool			AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal, StrList_e eType, bool bInverse=false );
 	bool			AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull );
 	void			AddHaving ();
@@ -423,6 +436,7 @@ public:
 	bool			SetupFacetStmt();
 	void			AddFacetFilterAttr ( const SqlNode_t & tAttr );
 	void			SetFacetFilterClause ( FacetFilterClause_e eClause );
+	void			SetFacetZeroes ();
 	bool			SetFacetFilterMode ( const SqlNode_t & tMode );
 
 	void			FilterGroup ( SqlNode_t & tNode, SqlNode_t & tExpr );
@@ -473,8 +487,12 @@ private:
 	CSphVector<CSphNamedVariant> m_dNamedVec;
 	ESphAttr					m_eJoinTypeCast = SPH_ATTR_NONE;
 	bool						m_bJoinParseMode = false;
+	bool						m_bCheckDocidConstList = false;
+	bool						m_bInvalidDocidConstList = false;
 	LastWhereItem_e				m_eLastWhereItem = LastWhereItem_e::NONE;
 	int							m_iLastWhereItemKnn = -1;
+	GroupConcatSettings_t		m_tGroupConcat;
+	bool						m_bCollectOrderBy = false;
 
 	void			AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
 	bool			CheckOption ( Option_e eOption ) const override;
@@ -555,6 +573,7 @@ void SqlParser_c::PushQuery ()
 	m_pQuery->m_eCollation = m_eCollation;
 
 	m_bMatchClause = false;
+	m_bCollectOrderBy = false;
 }
 
 
@@ -624,6 +643,7 @@ enum class Option_e : BYTE
 	MAX_PREDICTED_TIME,
 	MAX_QUERY_TIME,
 	MORPHOLOGY,
+	BOOLEAN_MODE,
 	RAND_SEED,
 	RANKER,
 	RETRY_COUNT,
@@ -655,6 +675,7 @@ enum class Option_e : BYTE
 	FUSION_WEIGHTS,
 	TOPOLOGY,
 	FACET_FILTER_MODE,
+	EMBEDDINGS_THREADS,
 
 	INVALID_OPTION
 };
@@ -666,11 +687,12 @@ void InitParserOption()
 	const char * dOptions[(BYTE) Option_e::INVALID_OPTION] = { "agent_query_timeout", "boolean_simplify",
 		"columns", "comment", "cutoff", "debug_no_payload", "expand_keywords", "field_weights", "format", "global_idf",
 		"idf", "ignore_nonexistent_columns", "ignore_nonexistent_indexes", "index_weights", "local_df", "low_priority",
-		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
+		"max_matches", "max_predicted_time", "max_query_time", "morphology", "boolean_mode", "rand_seed", "ranker", "retry_count",
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
 		"not_terms_only_allowed", "store", "accurate_aggregation", "max_matches_increase_threshold", "distinct_precision_threshold",
 		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size", "force", "output_words", "expand_blended",
-		"fusion_method", "rank_constant", "window_size", "fusion_weights", "topology", "facet_filter_mode" };
+		"fusion_method", "rank_constant", "window_size", "fusion_weights", "topology", "facet_filter_mode",
+		"embeddings_threads" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -692,7 +714,7 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 			Option_e::GLOBAL_IDF, Option_e::IDF, Option_e::IGNORE_NONEXISTENT_COLUMNS,
 			Option_e::IGNORE_NONEXISTENT_INDEXES, Option_e::INDEX_WEIGHTS, Option_e::LOCAL_DF, Option_e::LOW_PRIORITY,
 			Option_e::MAX_MATCHES, Option_e::MAX_PREDICTED_TIME, Option_e::MAX_QUERY_TIME, Option_e::MORPHOLOGY,
-			Option_e::RAND_SEED, Option_e::RANKER, Option_e::RETRY_COUNT, Option_e::RETRY_DELAY, Option_e::REVERSE_SCAN,
+			Option_e::BOOLEAN_MODE, Option_e::RAND_SEED, Option_e::RANKER, Option_e::RETRY_COUNT, Option_e::RETRY_DELAY, Option_e::REVERSE_SCAN,
 			Option_e::SORT_METHOD, Option_e::STRICT_, Option_e::THREADS, Option_e::TOKEN_FILTER,
 			Option_e::NOT_ONLY_ALLOWED };
 
@@ -700,13 +722,13 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 			Option_e::CUTOFF, Option_e::DEBUG_NO_PAYLOAD, Option_e::EXPAND_KEYWORDS, Option_e::FIELD_WEIGHTS, Option_e::FORMAT,
 			Option_e::GLOBAL_IDF, Option_e::IDF, Option_e::IGNORE_NONEXISTENT_INDEXES, Option_e::INDEX_WEIGHTS,
 			Option_e::LOCAL_DF, Option_e::LOW_PRIORITY, Option_e::MAX_MATCHES, Option_e::MAX_PREDICTED_TIME,
-			Option_e::MAX_QUERY_TIME, Option_e::MORPHOLOGY, Option_e::RAND_SEED, Option_e::RANKER,
+			Option_e::MAX_QUERY_TIME, Option_e::MORPHOLOGY, Option_e::BOOLEAN_MODE, Option_e::RAND_SEED, Option_e::RANKER,
 			Option_e::RETRY_COUNT, Option_e::RETRY_DELAY, Option_e::REVERSE_SCAN, Option_e::SORT_METHOD,
 			Option_e::THREADS, Option_e::TOKEN_FILTER, Option_e::NOT_ONLY_ALLOWED, Option_e::ACCURATE_AGG,
 			Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::THREADS_EX, Option_e::EXPANSION_LIMIT,
 			Option_e::JIEBA_MODE, Option_e::SCROLL, Option_e::JOIN_BATCH_SIZE, Option_e::EXPAND_BLENDED,
 			Option_e::FUSION_METHOD, Option_e::RANK_CONSTANT, Option_e::WINDOW_SIZE, Option_e::FUSION_WEIGHTS,
-			Option_e::FACET_FILTER_MODE };
+			Option_e::FACET_FILTER_MODE, Option_e::EMBEDDINGS_THREADS };
 
 	static Option_e dInsertOptions[] = { Option_e::TOKEN_FILTER_OPTIONS };
 
@@ -819,7 +841,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 		Option_e::THREADS, Option_e::NOT_ONLY_ALLOWED, Option_e::LOW_PRIORITY, Option_e::DEBUG_NO_PAYLOAD,
 		Option_e::ACCURATE_AGG, Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::SWITCHOVER,
 		Option_e::EXPANSION_LIMIT, Option_e::SCROLL, Option_e::JOIN_BATCH_SIZE,
-		Option_e::RANK_CONSTANT, Option_e::WINDOW_SIZE
+		Option_e::RANK_CONSTANT, Option_e::WINDOW_SIZE, Option_e::EMBEDDINGS_THREADS
 	};
 
 	bool bFound = ::any_of ( dIntegerOptions, [eOpt] ( auto i ) { return i == eOpt; } );
@@ -870,6 +892,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 	case Option_e::EXPANSION_LIMIT:				tQuery.m_iExpansionLimit = (int)iValue; break;
 	case Option_e::SCROLL:						tQuery.m_tScrollSettings.m_bRequested = !!iValue; break;
 	case Option_e::JOIN_BATCH_SIZE:				tQuery.m_iJoinBatchSize = (int)iValue; break;
+	case Option_e::EMBEDDINGS_THREADS:			tQuery.m_iEmbeddingsThreads = Max ( 0, (int)iValue ); break;
 	case Option_e::RANK_CONSTANT:
 		if ( iValue < 0 )
 			return FAILED ( "rank_constant must be non-negative" );
@@ -901,17 +924,17 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 	switch ( eOpt )
 	{
 	case Option_e::RANKER:
-		tQuery.m_eRanker = SPH_RANK_TOTAL;
-		for ( int iRanker = SPH_RANK_PROXIMITY_BM25; iRanker<=SPH_RANK_SPH04; iRanker++ )
-			if ( sVal==sphGetRankerName ( ESphRankMode ( iRanker ) ) )
-			{
-				tQuery.m_eRanker = ESphRankMode ( iRanker );
-				break;
-			}
+	{
+		tQuery.m_bExplicitRanker = true;
+		ESphRankMode eRanker = SPH_RANK_TOTAL;
+		if ( sphParseRankerName ( sVal, eRanker ) && eRanker!=SPH_RANK_EXPR && eRanker!=SPH_RANK_EXPORT )
+			tQuery.m_eRanker = eRanker;
+		else
+			tQuery.m_eRanker = SPH_RANK_TOTAL;
 
 		if ( tQuery.m_eRanker==SPH_RANK_TOTAL )
 		{
-			if ( sVal==sphGetRankerName ( SPH_RANK_EXPR ) || sVal==sphGetRankerName ( SPH_RANK_EXPORT ) )
+			if ( eRanker==SPH_RANK_EXPR || eRanker==SPH_RANK_EXPORT )
 				return FAILED ( "missing ranker expression (use OPTION ranker=expr('1+2') for example)" );
 			else if ( sphPluginExists ( PLUGIN_RANKER, sVal.cstr() ) )
 			{
@@ -922,6 +945,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 			return FAILED ( "unknown ranker '%s'", sVal.cstr() );
 		}
 		break;
+	}
 
 	case Option_e::TOKEN_FILTER:    // tokfilter = hello.dll:hello:some_opts
 	{
@@ -979,6 +1003,16 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 			tQuery.m_eExpandKeywords = QUERY_OPT_MORPH_NONE;
 		else
 			return FAILED ( "morphology could be only disabled with option none, got %s", sVal.cstr() );
+		break;
+
+	case Option_e::BOOLEAN_MODE:
+		if ( sVal=="or" )
+			tQuery.m_bDefaultBoolOr = true;
+		else if ( sVal=="and" )
+			tQuery.m_bDefaultBoolOr = false;
+		else
+			return FAILED ( "unknown boolean_mode='%s' (must be 'and' or 'or')", sVal.cstr() );
+		tQuery.m_bExplicitBooleanMode = true;
 		break;
 
 	case Option_e::EXPAND_BLENDED:
@@ -1078,13 +1112,16 @@ AddOption_e AddOptionRanker ( CSphQuery & tQuery, const CSphString & sOpt, const
 
 	if ( eOpt==Option_e::RANKER )
 	{
-		if ( sVal=="expr" || sVal=="export" )
+		ESphRankMode eRanker = SPH_RANK_TOTAL;
+		if ( sphParseRankerName ( sVal, eRanker ) && ( eRanker==SPH_RANK_EXPR || eRanker==SPH_RANK_EXPORT ) )
 		{
-			tQuery.m_eRanker = sVal=="expr" ? SPH_RANK_EXPR : SPH_RANK_EXPORT;
+			tQuery.m_bExplicitRanker = true;
+			tQuery.m_eRanker = eRanker;
 			tQuery.m_sRankerExpr = fnGetUnescaped();
 			return AddOption_e::ADDED;
 		} else if ( sphPluginExists ( PLUGIN_RANKER, sVal.cstr() ) )
 		{
+			tQuery.m_bExplicitRanker = true;
 			tQuery.m_eRanker = SPH_RANK_PLUGIN;
 			tQuery.m_sUDRanker = sVal;
 			tQuery.m_sUDRankerOpts = fnGetUnescaped();
@@ -1447,6 +1484,120 @@ void SqlParser_c::AddItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFunc, SqlNode_t
 	AutoAlias ( tItem, pStart?pStart:pExpr, pEnd?pEnd:pExpr );
 }
 
+void SqlParser_c::BeginGroupConcatOrder ()
+{
+	m_tGroupConcat = GroupConcatSettings_t();
+}
+
+void SqlParser_c::AddGroupConcatPlainItem ( SqlNode_t * pExpr, const SqlNode_t & tSeparator, SqlNode_t * pStart, SqlNode_t * pEnd )
+{
+	AddItem ( pExpr, SPH_AGGR_CAT, pStart, pEnd );
+	m_pQuery->m_dItems.Last().m_tAggrSettings.m_tGroupConcat.m_sSeparator = ToStringUnescape ( tSeparator );
+}
+
+void SqlParser_c::BeginOrderBy ()
+{
+	m_pQuery->m_dOrderByItems.Reset();
+	m_bCollectOrderBy = true;
+}
+
+void SqlParser_c::AddOrderByItem ( const SqlNode_t & tExpr )
+{
+	if ( !m_bCollectOrderBy )
+		return;
+
+	ToString ( m_pQuery->m_dOrderByItems.Add(), tExpr );
+}
+
+void SqlParser_c::AddGroupConcatOrder ( const SqlNode_t & tExpr, bool bDesc )
+{
+	GroupConcatOrderItem_t & tOrder = m_tGroupConcat.m_dOrder.Add();
+	ToString ( tOrder.m_sExpr, tExpr );
+	tOrder.m_bDesc = bDesc;
+
+	StringBuilder_c sOrder;
+	if ( !m_tGroupConcat.m_sOrderBy.IsEmpty() )
+		sOrder << m_tGroupConcat.m_sOrderBy << ", ";
+	sOrder << tOrder.m_sExpr << ( bDesc ? " desc" : " asc" );
+	sOrder.MoveTo ( m_tGroupConcat.m_sOrderBy );
+}
+
+void SqlParser_c::SetGroupConcatSeparator ( const SqlNode_t & tSeparator )
+{
+	m_tGroupConcat.m_sSeparator = ToStringUnescape ( tSeparator );
+}
+
+bool SqlParser_c::AddGroupConcatItem ( SqlNode_t * pExpr, const SqlNode_t & tLimit, SqlNode_t * pStart, SqlNode_t * pEnd )
+{
+	const int64_t iLimit = tLimit.GetValueInt();
+	if ( iLimit<0 || iLimit>INT_MAX )
+	{
+		yyerror ( this, "GROUP_CONCAT LIMIT is out of range [0..2147483647]" );
+		return false;
+	}
+
+	if ( m_tGroupConcat.m_dOrder.IsEmpty() )
+	{
+		yyerror ( this, "GROUP_CONCAT ORDER BY list can not be empty" );
+		return false;
+	}
+
+	AddItem ( pExpr, SPH_AGGR_CAT, pStart, pEnd );
+	m_tGroupConcat.m_iLimit = (int)iLimit;
+	m_pQuery->m_dItems.Last().m_tAggrSettings.m_tGroupConcat = std::move ( m_tGroupConcat );
+	return true;
+}
+
+static bool HasTableAliasAt ( const char * sValue, int iValueLen, const char * sAlias, int iAliasLen, int iOffset )
+{
+	return iValueLen>=iOffset+iAliasLen && !strncmp ( sValue+iOffset, sAlias, iAliasLen );
+}
+
+static bool StripTableAliasPrefix ( CSphString & sValue, const CSphString & sAlias )
+{
+	if ( !sValue.Length() || !sAlias.Length() )
+		return false;
+
+	const char * sValuePtr = sValue.cstr();
+	const char * sAliasPtr = sAlias.cstr();
+	const int iValueLen = sValue.Length();
+	const int iAliasLen = sAlias.Length();
+	int iPrefixLen = 0;
+
+	if ( iValueLen>iAliasLen && sValuePtr[iAliasLen]=='.'
+		&& HasTableAliasAt ( sValuePtr, iValueLen, sAliasPtr, iAliasLen, 0 ) )
+		iPrefixLen = iAliasLen+1;
+	else if ( iValueLen>iAliasLen+2 && sValuePtr[0]=='`'
+		&& sValuePtr[iAliasLen+1]=='`' && sValuePtr[iAliasLen+2]=='.'
+		&& HasTableAliasAt ( sValuePtr, iValueLen, sAliasPtr, iAliasLen, 1 ) )
+		iPrefixLen = iAliasLen+3;
+	else if ( iValueLen>iAliasLen+1
+		&& sValuePtr[iAliasLen]=='`' && sValuePtr[iAliasLen+1]=='.'
+		&& HasTableAliasAt ( sValuePtr, iValueLen, sAliasPtr, iAliasLen, 0 ) )
+		iPrefixLen = iAliasLen+2;
+	else
+		return false;
+
+	CSphString sStripped;
+	sStripped.SetBinary ( sValuePtr+iPrefixLen, iValueLen-iPrefixLen );
+	sValue = sStripped;
+	return true;
+}
+
+void SqlParser_c::SetTableAlias ( const SqlNode_t & tAlias )
+{
+	CSphString sAlias;
+	ToString ( sAlias, tAlias );
+	sAlias.ToLower();
+
+	for ( auto & tItem : m_pQuery->m_dItems )
+	{
+		bool bAutoAlias = tItem.m_sAlias==tItem.m_sExpr;
+		if ( StripTableAliasPrefix ( tItem.m_sExpr, sAlias ) && bAutoAlias )
+			tItem.m_sAlias = tItem.m_sExpr;
+	}
+}
+
 bool SqlParser_c::AddExtendedAggrItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFunc, SqlNode_t * pStart, SqlNode_t * pEnd, const CSphVector<CSphNamedVariant> * pOpts )
 {
 	AddItem ( pExpr, eAggrFunc, pStart, pEnd );
@@ -1609,6 +1760,9 @@ bool SqlParser_c::AddDistinctSort ( SqlNode_t * pNewExpr, SqlNode_t * pStart, Sq
 		return false;
 
 	m_pQuery->m_sOrderBy.SetSprintf ( "@distinct %s", ( bSortAsc ? "asc" : "desc" ) );
+	m_pQuery->m_bExplicitOrderBy = true;
+	m_pQuery->m_dOrderByItems.Reset();
+	m_pQuery->m_dOrderByItems.Add ( "@distinct" );
 	return true;
 }
 
@@ -1661,6 +1815,12 @@ void SqlParser_c::AddFacetFilterAttr ( const SqlNode_t & tAttr )
 void SqlParser_c::SetFacetFilterClause ( FacetFilterClause_e eClause )
 {
 	m_pQuery->m_tFacetFilter.m_eClause = eClause;
+}
+
+
+void SqlParser_c::SetFacetZeroes ()
+{
+	m_pQuery->m_tFacetFilter.m_bZeroes = true;
 }
 
 
@@ -2273,6 +2433,30 @@ CSphFilterSettings * SqlParser_c::AddValuesFilter ( const SqlNode_t & tCol, int 
 }
 
 
+void SqlParser_c::BeginDocidConstList ( const SqlNode_t & tCol )
+{
+	const Str_t sCol = GetStrt ( tCol );
+	m_bCheckDocidConstList = StrEqN ( sCol, FROMS ( "id" ) ) || StrEqN ( sCol, FROMS ( "@id" ) );
+	m_bInvalidDocidConstList = false;
+}
+
+
+void SqlParser_c::CheckDocidConstListItem ( uint64_t uValue, bool bNegative )
+{
+	if ( m_bCheckDocidConstList && !m_bInvalidDocidConstList )
+		m_bInvalidDocidConstList = NumIsSaturated ( uValue, bNegative );
+}
+
+
+bool SqlParser_c::EndDocidConstList ()
+{
+	const bool bValid = !m_bInvalidDocidConstList;
+	m_bCheckDocidConstList = false;
+	m_bInvalidDocidConstList = false;
+	return bValid;
+}
+
+
 bool SqlParser_c::AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal, StrList_e eType, bool bInverse )
 {
 	CSphFilterSettings * pFilter = AddFilter ( tCol, SPH_FILTER_STRING_LIST );
@@ -2529,6 +2713,11 @@ struct QueryItemProxy_t
 		m_uHash = sphCRC32 ( m_pItem->m_sAlias.cstr() );
 		m_uHash = sphCRC32 ( m_pItem->m_sExpr.cstr(), m_pItem->m_sExpr.Length(), m_uHash );
 		m_uHash = sphCRC32 ( (const void*)&m_pItem->m_eAggrFunc, sizeof(m_pItem->m_eAggrFunc), m_uHash );
+		if ( m_pItem->m_eAggrFunc==SPH_AGGR_CAT )
+		{
+			const CSphString & sSeparator = m_pItem->m_tAggrSettings.m_tGroupConcat.m_sSeparator;
+			m_uHash = sphCRC32 ( sSeparator.scstr(), sSeparator.Length(), m_uHash );
+		}
 	}
 };
 
@@ -2651,28 +2840,38 @@ static bool SetupFacets ( CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
 				tStmt.m_tQuery.m_dFacetOwnFilterAttrs.Add ( tStmt.m_tQuery.m_sGroupBy );
 			if ( !tStmt.m_tQuery.m_sFacetBy.IsEmpty() && !facet::AttrNameInList ( tStmt.m_tQuery.m_dFacetOwnFilterAttrs, tStmt.m_tQuery.m_sFacetBy ) )
 				tStmt.m_tQuery.m_dFacetOwnFilterAttrs.Add ( tStmt.m_tQuery.m_sFacetBy );
-			const bool bUseOwnExclusion = facet::GetFilterMode ( tHeadQuery, tStmt.m_tQuery )!=FacetFilterMode_e::Max;
+			FacetFilterMode_e eMode = facet::GetFilterMode ( tHeadQuery, tStmt.m_tQuery );
+			const bool bUseOwnExclusion = eMode!=FacetFilterMode_e::Max;
 			if ( !facet::CopyFilters ( tHeadQuery, tStmt.m_tQuery, sError, bUseOwnExclusion ) )
 				return false;
 
 			SqlStmt_t tStrict;
-			bool bNeedStrict = ( facet::GetFilterMode ( tHeadQuery, tStmt.m_tQuery )==FacetFilterMode_e::Max );
+			SqlStmt_t tZeroes;
+			bool bNeedStrict = ( eMode==FacetFilterMode_e::Max );
+			bool bNeedZeroes = bNeedStrict && tStmt.m_tQuery.m_tFacetFilter.m_bZeroes;
+			if ( bNeedZeroes )
+				facet::DeferFacetResultPaging ( tStmt.m_tQuery );
 			if ( bNeedStrict )
 			{
 				tStrict.m_eStmt = STMT_SELECT;
 				tStrict.m_tQuery = tStmt.m_tQuery;
-				tStrict.m_tQuery.m_bFacetMaxRef = true;
-				tStrict.m_tQuery.m_tFacetFilter.m_tMode = FacetFilterMode_e::Strict;
-				tStrict.m_tQuery.m_tFacetFilter.m_eClause = FacetFilterClause_e::All;
-				tStrict.m_tQuery.m_dFilters.Reset();
-				tStrict.m_tQuery.m_dFilterTree.Reset();
-				if ( !facet::CopyFilters ( tHeadQuery, tStrict.m_tQuery, sError, true ) )
+				if ( !facet::SetupHelperQuery ( tHeadQuery, tStrict.m_tQuery, facet::FacetHelperQuery_e::Strict, sError ) )
+					return false;
+			}
+
+			if ( bNeedZeroes )
+			{
+				tZeroes.m_eStmt = STMT_SELECT;
+				tZeroes.m_tQuery = tStmt.m_tQuery;
+				if ( !facet::SetupHelperQuery ( tHeadQuery, tZeroes.m_tQuery, facet::FacetHelperQuery_e::Zeroes, sError ) )
 					return false;
 			}
 
 			dOut.Add ( std::move ( tStmt ) );
 			if ( bNeedStrict )
 				dOut.Add ( std::move ( tStrict ) );
+			if ( bNeedZeroes )
+				dOut.Add ( std::move ( tZeroes ) );
 		}
 
 		i = iFacetStart - 1;
@@ -2766,6 +2965,218 @@ static bool SetupFacetDistinct ( CSphVector<SqlStmt_t> & dStmt, CSphString & sEr
 		i = iEnd - 1;
 	}
 
+	return true;
+}
+
+static bool IsLimitedGroupConcat ( const CSphQueryItem & tItem )
+{
+	return tItem.m_eAggrFunc==SPH_AGGR_CAT && tItem.m_tAggrSettings.m_tGroupConcat.IsLimited();
+}
+
+static bool HasLimitedGroupConcat ( const CSphQuery & tQuery )
+{
+	return tQuery.m_dItems.any_of ( [] ( const CSphQueryItem & tItem ) { return IsLimitedGroupConcat ( tItem ); } );
+}
+
+static bool SameAttrName ( const CSphString & sLeft, const CSphString & sRight )
+{
+	return !strcasecmp ( sLeft.cstr(), sRight.cstr() );
+}
+
+static bool IsLimitedGroupConcatAlias ( const CSphQuery & tQuery, const CSphString & sAlias )
+{
+	if ( sAlias.IsEmpty() )
+		return false;
+
+	for ( const CSphQueryItem & tItem : tQuery.m_dItems )
+		if ( IsLimitedGroupConcat ( tItem ) && SameAttrName ( tItem.m_sAlias, sAlias ) )
+			return true;
+
+	return false;
+}
+
+static bool ValidateLimitedGroupConcat ( const SqlStmt_t & tStmt, CSphString & sError )
+{
+	const CSphQuery & tQuery = tStmt.m_tQuery;
+	if ( tQuery.m_sGroupBy.IsEmpty() )
+	{
+		sError = "limited GROUP_CONCAT requires an explicit GROUP BY";
+		return false;
+	}
+
+	if ( tQuery.m_bFacet || tQuery.m_bFacetHead || !tQuery.m_sFacetBy.IsEmpty() )
+	{
+		sError = "limited GROUP_CONCAT is not supported with FACET";
+		return false;
+	}
+
+	if ( tQuery.m_eJoinType!=JoinType_e::NONE || !tQuery.m_sJoinIdx.IsEmpty() )
+	{
+		sError = "limited GROUP_CONCAT is not supported with JOIN";
+		return false;
+	}
+
+	if ( !tStmt.m_sTableFunc.IsEmpty() || tStmt.m_pTableFunc )
+	{
+		sError = "limited GROUP_CONCAT is not supported with table functions";
+		return false;
+	}
+
+	if ( tQuery.m_bHasOuter )
+	{
+		sError = "limited GROUP_CONCAT is not supported in outer SELECT queries";
+		return false;
+	}
+
+	if ( tQuery.HasKnn() || tQuery.m_bHybridSearch )
+	{
+		sError = "limited GROUP_CONCAT is not supported with KNN or hybrid search";
+		return false;
+	}
+
+	if ( !tQuery.m_tScrollSettings.m_dAttrs.IsEmpty() )
+	{
+		sError = "limited GROUP_CONCAT is not supported with scroll";
+		return false;
+	}
+
+	if ( IsLimitedGroupConcatAlias ( tQuery, tQuery.m_tHaving.m_sAttrName ) )
+	{
+		sError.SetSprintf ( "limited GROUP_CONCAT alias '%s' is not supported in HAVING", tQuery.m_tHaving.m_sAttrName.cstr() );
+		return false;
+	}
+
+	for ( const CSphString & sOrderItem : tQuery.m_dOrderByItems )
+		if ( IsLimitedGroupConcatAlias ( tQuery, sOrderItem ) )
+		{
+			sError.SetSprintf ( "limited GROUP_CONCAT alias '%s' is not supported in result ORDER BY", sOrderItem.cstr() );
+			return false;
+		}
+
+	return true;
+}
+
+static bool IsGroupOrderKey ( const CSphQuery & tQuery, const CSphString & sOrderItem )
+{
+	if ( sOrderItem=="@groupby" || sOrderItem=="groupby()" || SameAttrName ( sOrderItem, tQuery.m_sGroupBy ) )
+		return true;
+
+	for ( const CSphQueryItem & tItem : tQuery.m_dItems )
+		if ( SameAttrName ( tItem.m_sAlias, sOrderItem )
+			&& ( SameAttrName ( tItem.m_sExpr, tQuery.m_sGroupBy ) || tItem.m_sExpr=="@groupby" || tItem.m_sExpr=="groupby()" ) )
+			return true;
+
+	return false;
+}
+
+static bool PrepareLimitedGroupOrder ( CSphQuery & tQuery, CSphString & sError )
+{
+	if ( !tQuery.m_bExplicitOrderBy )
+	{
+		tQuery.m_sGroupSortBy = "@groupby desc";
+		return true;
+	}
+
+	if ( tQuery.m_dOrderByItems.any_of ( [&] ( const CSphString & sItem ) { return IsGroupOrderKey ( tQuery, sItem ); } ) )
+		return true;
+
+	if ( tQuery.m_dOrderByItems.GetLength()>=5 )
+	{
+		sError = "limited GROUP_CONCAT requires a group-key tie-breaker, but all 5 group-order slots are already used";
+		return false;
+	}
+
+	tQuery.m_sGroupSortBy.SetSprintf ( "%s, @groupby asc", tQuery.m_sGroupSortBy.cstr() );
+	return true;
+}
+
+static void EnsureGroupKeyItem ( CSphVector<CSphQueryItem> & dItems )
+{
+	if ( dItems.any_of ( [] ( const CSphQueryItem & tItem )
+		{ return tItem.m_sExpr=="groupby()" || tItem.m_sExpr=="@groupby" || tItem.m_sAlias=="@groupby"; } ) )
+		return;
+
+	CSphQueryItem & tGroupKey = dItems.Add();
+	tGroupKey.m_sExpr = "groupby()";
+	tGroupKey.m_sAlias = "@groupby";
+}
+
+static bool SetupLimitedGroupConcat ( CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
+{
+	CSphVector<SqlStmt_t> dExpanded;
+	for ( SqlStmt_t & tInput : dStmt )
+	{
+		SqlStmt_t tStmt = std::move ( tInput );
+		if ( tStmt.m_eStmt!=STMT_SELECT || !HasLimitedGroupConcat ( tStmt.m_tQuery ) )
+		{
+			dExpanded.Add ( std::move ( tStmt ) );
+			continue;
+		}
+
+		if ( !ValidateLimitedGroupConcat ( tStmt, sError ) )
+			return false;
+
+		CSphQuery & tHead = tStmt.m_tQuery;
+		if ( !PrepareLimitedGroupOrder ( tHead, sError ) )
+			return false;
+
+		tHead.m_dRefItems = tHead.m_dItems;
+		CSphVector<int> dPositiveItems;
+		int iOrdinal = 0;
+
+		ARRAY_FOREACH ( iItem, tHead.m_dItems )
+		{
+			CSphQueryItem & tPhysical = tHead.m_dItems[iItem];
+			if ( !IsLimitedGroupConcat ( tPhysical ) )
+				continue;
+
+			const GroupConcatSettings_t tSettings = tPhysical.m_tAggrSettings.m_tGroupConcat;
+			const CSphString sSource = tPhysical.m_sExpr;
+			const CSphString sInternal = GetGroupConcatValueAttrName ( iOrdinal++ );
+
+			CSphQueryItem & tVisible = tHead.m_dRefItems[iItem];
+			tVisible.m_sExpr = sInternal;
+			tVisible.m_eAggrFunc = SPH_AGGR_NONE;
+
+			tPhysical.m_sExpr.SetSprintf ( tSettings.m_iLimit ? "TO_STRING(%s)" : "TO_STRING('')", sSource.cstr() );
+			tPhysical.m_sAlias = sInternal;
+			tPhysical.m_eAggrFunc = SPH_AGGR_NONE;
+			tPhysical.m_tAggrSettings = AggrSettings_t();
+
+			if ( tSettings.m_iLimit>0 )
+				dPositiveItems.Add ( iItem );
+		}
+
+		EnsureGroupKeyItem ( tHead.m_dItems );
+
+		CSphVector<CSphQuery> dHelpers;
+		for ( int iItem : dPositiveItems )
+		{
+			const CSphQueryItem & tVisible = tHead.m_dRefItems[iItem];
+			const GroupConcatSettings_t & tSettings = tVisible.m_tAggrSettings.m_tGroupConcat;
+
+			CSphQuery & tHelper = dHelpers.Add();
+			tHelper = tHead;
+			tHelper.m_eQueryRole = QueryRole_e::GROUP_CONCAT_HELPER;
+			tHelper.m_iGroupbyLimit = tSettings.m_iLimit;
+			tHelper.m_sSortBy = tSettings.m_sOrderBy;
+			tHelper.m_tHaving = CSphFilterSettings();
+			tHelper.m_dRefItems.Reset();
+			tHelper.m_dRefItems.Add ( tHelper.m_dItems[iItem] );
+		}
+
+		const char * sStatement = tStmt.m_sStmt;
+		dExpanded.Add ( std::move ( tStmt ) );
+		for ( CSphQuery & tHelper : dHelpers )
+		{
+			SqlStmt_t & tHelperStmt = dExpanded.Add();
+			tHelperStmt.m_eStmt = STMT_SELECT;
+			tHelperStmt.m_sStmt = sStatement;
+			tHelperStmt.m_tQuery = std::move ( tHelper );
+		}
+	}
+
+	dStmt.SwapData ( dExpanded );
 	return true;
 }
 
@@ -2903,20 +3314,13 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 	if ( !sError.IsEmpty() )
 		return false;
 
+	if ( !SetupLimitedGroupConcat ( dStmt, sError ) )
+		return false;
+
 	if ( bGotFacet )
 	{
 		if ( !SetupFacetDistinct ( dStmt, sError ) )
 			return false;
-	}
-	else
-	{
-		// need to keep same wide result set schema
-		if ( dStmt.GetLength()>1 )
-		{
-			const CSphString & sDistinct = dStmt[0].m_tQuery.m_sGroupDistinct;
-			for ( int i=1; i<dStmt.GetLength(); i++ )
-				dStmt[i].m_tQuery.m_sGroupDistinct = sDistinct;
-		}
 	}
 
 	return true;

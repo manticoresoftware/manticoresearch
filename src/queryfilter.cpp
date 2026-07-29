@@ -52,6 +52,14 @@ static void ReportSkippedOverLimitTokens ( ISphTokenizer * pTokenizer, CSphStrin
 
 void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, ExpansionContext_t & tCtx )
 {
+	CollectKeywords ( dKeywords, tCtx );
+	if ( m_tFoldSettings.m_bFoldStatsToUnique )
+		UniqKeywords ( dKeywords, KeywordUniq_e::BY_NORMALIZED );
+}
+
+
+void ISphQueryFilter::CollectKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, ExpansionContext_t & tCtx )
+{
 	assert ( m_pTokenizer && m_pDict && m_pSettings );
 
 	DictFormat_e eDictFormat = m_pDict->GetSettings().GetDictFormat();
@@ -63,6 +71,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 	int iQpos = 1;
 	int iExactQpos = -1;
 	CSphVector<int> dQposWildcards;
+	CSphVector<BYTE> dSkipAotTransform;
 
 	// FIXME!!! got rid of duplicated term stat and qword setup
 	while ( ( sWord = m_pTokenizer->GetToken() ) )
@@ -93,6 +102,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 		if ( !sTokenized )
 			continue;
 
+		int iKeywordStart = dKeywords.GetLength();
 		if ( tCtx.m_bAllowExpansion && ( !m_tFoldSettings.m_bFoldWildcards || m_tFoldSettings.m_bStats ) && sphHasExpandableWildcards ( (const char*)sWord ) )
 		{
 			dQposWildcards.Add ( iQpos );
@@ -144,6 +154,8 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 
 		// FIXME!!! handle consecutive blended wo blended parts
 		bool bBlended = m_pTokenizer->TokenIsBlended();
+		for ( int iKeyword = iKeywordStart; iKeyword < dKeywords.GetLength(); ++iKeyword )
+			dSkipAotTransform.Add ( bBlended ? 1 : 0 );
 
 		if ( bBlended )
 		{
@@ -182,6 +194,19 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 			continue;
 		if ( ShouldBypassMorphology ( m_pDict->GetSettings().GetDictFormat(), dKeywords[iTokenized].m_sNormalized.Length() ) )
 			continue;
+
+		if ( dSkipAotTransform[iTokenized] )
+		{
+			if ( m_pSettings->m_bIndexExactWords && dKeywords[iTokenized].m_sNormalized.cstr()[0]!='=' )
+			{
+				BYTE * sTmp = CopyExactKeywordString ( dTmp, (const BYTE*)dKeywords[iTokenized].m_sNormalized.cstr() );
+				BYTE * sTmp2 = CopyKeywordString ( dTmp2, dKeywords[iTokenized].m_sTokenized.scstr() );
+				if ( !sTmp || !sTmp2 )
+					continue;
+				AddKeywordStats ( sTmp, sTmp2, iKeywordQpos, dKeywords );
+			}
+			continue;
+		}
 
 		// MUST copy as Dict::GetWordID changes word and might add symbols
 		BYTE * sTokenized = CopyKeywordString ( dTokenized, dKeywords[iTokenized].m_sNormalized.scstr() );
@@ -308,24 +333,44 @@ void CSphPlainQueryFilter::AddKeywordStats ( BYTE * sWord, const BYTE * sTokeniz
 	RemoveDictSpecials ( tInfo.m_sNormalized, ( m_pSettings->m_eBigramIndex!=SPH_BIGRAM_NONE ) );
 }
 
-void UniqKeywords ( CSphVector<CSphKeywordInfo> & dSrc )
+template<bool KEEP_QPOS, typename HASH, typename KEY>
+static void AddUniqueKeyword_T ( HASH & hWords, const KEY & tKey, const CSphKeywordInfo & tInfo )
 {
-	CSphOrderedHash < CSphKeywordInfo, uint64_t, IdentityHash_fn, 256 > hWords;
+	if constexpr ( !KEEP_QPOS )
+	{
+		if ( hWords.Exists ( tKey ) )
+			return;
+	}
+
+	CSphKeywordInfo & tVal = hWords.AddUnique ( tKey );
+	if ( !tVal.m_iQpos )
+		tVal = tInfo;
+	else if constexpr ( KEEP_QPOS )
+	{
+		tVal.m_iDocs += tInfo.m_iDocs;
+		tVal.m_iHits += tInfo.m_iHits;
+	}
+}
+
+
+template<KeywordUniq_e MODE>
+static void UniqKeywords_T ( CSphVector<CSphKeywordInfo> & dSrc )
+{
+	constexpr bool KEEP_QPOS = MODE==KeywordUniq_e::BY_NORMALIZED_AND_QPOS;
+	using Key_t = std::conditional_t<KEEP_QPOS,uint64_t,CSphString>;
+	using Hash_fn = std::conditional_t<KEEP_QPOS,IdentityHash_fn,CSphStrHashFunc>;
+	CSphOrderedHash<CSphKeywordInfo,Key_t,Hash_fn,256> hWords;
+
 	ARRAY_FOREACH ( i, dSrc )
 	{
 		const CSphKeywordInfo & tInfo = dSrc[i];
-		uint64_t uKey = sphFNV64 ( tInfo.m_iQpos );
-		uKey = sphFNV64 ( tInfo.m_sNormalized.cstr(), tInfo.m_sNormalized.Length(), uKey );
-
-		CSphKeywordInfo & tVal = hWords.AddUnique ( uKey );
-		if ( !tVal.m_iQpos )
+		if constexpr ( KEEP_QPOS )
 		{
-			tVal = tInfo;
+			uint64_t uKey = sphFNV64 ( tInfo.m_iQpos );
+			uKey = sphFNV64 ( tInfo.m_sNormalized.cstr(), tInfo.m_sNormalized.Length(), uKey );
+			AddUniqueKeyword_T<KEEP_QPOS> ( hWords, uKey, tInfo );
 		} else
-		{
-			tVal.m_iDocs += tInfo.m_iDocs;
-			tVal.m_iHits += tInfo.m_iHits;
-		}
+			AddUniqueKeyword_T<KEEP_QPOS> ( hWords, tInfo.m_sNormalized, tInfo );
 	}
 
 	dSrc.Resize ( 0 );
@@ -333,4 +378,13 @@ void UniqKeywords ( CSphVector<CSphKeywordInfo> & dSrc )
 		dSrc.Add ( tWord.second );
 
 	sphSort ( dSrc.Begin(), dSrc.GetLength(), KeywordSorter_fn() );
+}
+
+
+void UniqKeywords ( CSphVector<CSphKeywordInfo> & dSrc, KeywordUniq_e eMode )
+{
+	if ( eMode==KeywordUniq_e::BY_NORMALIZED_AND_QPOS )
+		UniqKeywords_T<KeywordUniq_e::BY_NORMALIZED_AND_QPOS> ( dSrc );
+	else
+		UniqKeywords_T<KeywordUniq_e::BY_NORMALIZED> ( dSrc );
 }

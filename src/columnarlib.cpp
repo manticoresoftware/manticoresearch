@@ -184,7 +184,10 @@ bool InitColumnar ( CSphString & sError )
 void ShutdownColumnar()
 {
 	if ( g_pColumnarLib )
+	{
 		dlclose(g_pColumnarLib);
+		g_pColumnarLib = nullptr;
+	}
 }
 
 #else

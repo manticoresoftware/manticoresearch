@@ -51,6 +51,8 @@ POST /sql?mode=raw -d "OPTIMIZE TABLE rt"
 
 但是，如果表具有带有 KNN 索引的属性，则此阈值不同。在这种情况下，它设置为物理 CPU 核心数除以 2，以提高 KNN 搜索性能。
 
+请注意，当未显式设置 `optimize_cutoff` 时（既没有设置全局的 [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) 选项，也没有设置按表的 [optimize_cutoff](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#optimize_cutoff) 选项），[自动合并](../Server_settings/Searchd.md#auto_optimize) 即使计算出的默认阈值更低，也绝不会将表合并到少于 2 个磁盘块。比如在 CPU 核心较少的服务器上，尤其是 KNN 表，这种情况更常见。至少保留 2 个磁盘块可以避免反复把所有内容合并成单个块所带来的开销。若要强制自动合并到单个磁盘块，请将 `optimize_cutoff` 明确设置为 `1`。手动执行的 `OPTIMIZE ... OPTION cutoff=1` 不受此限制影响，仍然会合并到一个块。
+
 您还可以使用 `cutoff` 选项手动控制优化的磁盘块数量。
 
 其他选项包括：

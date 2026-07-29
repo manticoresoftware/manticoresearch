@@ -121,6 +121,9 @@ extern int g_iReadTimeoutS;        // defined in searchd.cpp
 extern int g_iWriteTimeoutS;    // sec
 extern bool g_bTimeoutEachPacket;
 
+constexpr int SPH_MIN_PACKET_SIZE = 128*1024;
+constexpr int SPH_MAX_PACKET_SIZE = 128*1024*1024;
+
 extern int g_iMaxPacketSize;    // in bytes; for both query packets from clients and response packets from agents
 
 
@@ -136,7 +139,7 @@ SearchdCommand_e ParseCommand ( const CSphString & sCommand );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 30
+	VER_COMMAND_SEARCH_MASTER = 34
 };
 
 
@@ -628,7 +631,7 @@ private:
 	uint64_t			m_uTotalQueries GUARDED_BY ( m_tStatsLock ) = 0;
 
 	void				DoStatCalcStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats,
-							QueryStats_t & tQueryTimeStats ) const REQUIRES_SHARED ( m_tStatsLock );
+							QueryStats_t & tQueryTimeStats ) const REQUIRES ( m_tStatsLock );
 
 	CommandStats_t		m_tCommandsStats;
 };
@@ -1157,7 +1160,7 @@ bool PreloadKlistTarget ( const CSphString& sBase, RotateFrom_e eFrom, StrVec_t&
 ServedIndexRefPtr_c MakeCloneForRotation ( const cServedIndexRefPtr_c& pSource, const CSphString& sIndex );
 
 bool ConfigureDistributedIndex ( std::function<bool ( const CSphString& )>&& fnCheck, DistributedIndex_t& tIdx, const char * szIndexName, const CSphConfigSection& hIndex, CSphString & sError, StrVec_t* pWarnings = nullptr );
-void ConfigureLocalIndex ( ServedDesc_t* pIdx, const CSphConfigSection& hIndex, bool bMutableOpt, StrVec_t* pWarnings );
+bool ConfigureLocalIndex ( ServedDesc_t* pIdx, const CSphConfigSection& hIndex, bool bMutableOpt, StrVec_t* pWarnings, CSphString& sError );
 
 volatile bool& sphGetSeamlessRotate() noexcept;
 
@@ -1371,7 +1374,7 @@ void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 
 void BuildStatusOneline ( StringBuilder_c& sOut );
 
-void UpdateLastMeta (VecTraits_T<AggrResult_t> tResults );
+void UpdateLastMeta ( VecTraits_T<AggrResult_t> tResults, const VecTraits_T<CSphQuery> & dQueries );
 
 namespace session {
 	bool IsAutoCommit ( const ClientSession_c* );
@@ -1390,6 +1393,7 @@ namespace session {
 	QueryProfile_c* StartProfiling ( ESphQueryState );
 	void SaveLastProfile();
 	VecTraits_T<int64_t> LastIds();
+	VecTraits_T<CSphString> LastIdStrings();
 	void SetOptimizeById ( bool bOptimizeById );
 	bool GetOptimizeById();
 	void SetDeprecatedEOF ( bool bDeprecatedEOF );

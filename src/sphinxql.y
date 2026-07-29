@@ -74,6 +74,7 @@
 %token	TOK_FILTERS
 %token	TOK_FLOAT
 %token	TOK_MODE
+%token	TOK_ZEROES
 %token	TOK_FOR
 %token	TOK_FORCE
 %token	TOK_FROM
@@ -154,6 +155,7 @@
 %token	TOK_SECOND
 %token	TOK_SECONDARY
 %token	TOK_SELECT
+%token	TOK_SEPARATOR
 %token	TOK_SET
 %token	TOK_SETTINGS
 %token	TOK_SESSION
@@ -305,7 +307,7 @@ reserved_tokens_without_option_without_all:
 	| TOK_PLUGINS | TOK_PROFILE | TOK_RAND | TOK_REBUILD
 	| TOK_REMAP | TOK_REPLACE
 	| TOK_REVOKE | TOK_ROLLBACK | TOK_SECONDARY | TOK_SESSION | TOK_SET
-	| TOK_SETTINGS | TOK_SHOW | TOK_SONAME | TOK_START | TOK_STATUS | TOK_STRING
+	| TOK_SEPARATOR | TOK_SETTINGS | TOK_SHOW | TOK_SONAME | TOK_START | TOK_STATUS | TOK_STRING
 	| TOK_SUM | TOK_TABLE | TOK_TABLES | TOK_THREADS | TOK_TO
 	| TOK_UNFREEZE | TOK_UPDATE | TOK_VALUES | TOK_VARIABLES
 	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITH | TOK_WITHIN | TOK_KILL | TOK_QUERY
@@ -319,7 +321,7 @@ names_transaction_collate:
     ;
 
 ident_without_option:
-	TOK_IDENT | reserved_tokens_without_option | TOK_EXCLUDE | TOK_FILTERS | TOK_MODE
+	TOK_IDENT | reserved_tokens_without_option | TOK_EXCLUDE | TOK_FILTERS | TOK_MODE | TOK_ZEROES
 	;
 
 ident_for_set_stmt:
@@ -340,6 +342,16 @@ all_set_tail:
 
 ident:
 	ident_for_set_stmt | all_set_tail | TOK_BACKIDENT
+	;
+
+table_alias_ident:
+	TOK_IDENT
+	| TOK_BACKIDENT
+	{
+		$$ = $1;
+		++$$.m_iStart;
+		--$$.m_iEnd;
+	}
 	;
 
 option_name:
@@ -642,7 +654,7 @@ opt_outer_limit:
 
 select_from:
 	TOK_SELECT select_items_list
-	TOK_FROM target_in_select_from { pParser->m_pStmt->m_eStmt = STMT_SELECT; } // set stmt here to check the option below
+	TOK_FROM target_in_select_from opt_table_alias { pParser->m_pStmt->m_eStmt = STMT_SELECT; } // set stmt here to check the option below
 	opt_join_clause
 	opt_where_clause
 	opt_group_clause
@@ -662,7 +674,13 @@ select_items_list:
 
 select_item:
 	'*'									{ pParser->AddItem ( &$1 ); }
+	| table_alias_ident '.' '*'		{ TRACK_BOUNDS ( $$, $1, $3 ); pParser->AddItem ( &$$ ); }
 	| select_expr opt_alias
+	;
+
+opt_table_alias:
+	// empty
+	| opt_as table_alias_ident			{ pParser->SetTableAlias ( $2 ); }
 	;
 
 opt_alias:
@@ -688,6 +706,12 @@ select_expr:
 	| TOK_MIN '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_MIN, &$1, &$4 ); }
 	| TOK_SUM '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_SUM, &$1, &$4 ); }
 	| TOK_GROUP_CONCAT '(' expr ')'		{ pParser->AddItem ( &$3, SPH_AGGR_CAT, &$1, &$4 ); }
+	| TOK_GROUP_CONCAT '(' expr TOK_SEPARATOR TOK_QUOTED_STRING ')'
+											{ pParser->AddGroupConcatPlainItem ( &$3, $5, &$1, &$6 ); }
+	| TOK_GROUP_CONCAT '(' expr TOK_ORDER TOK_BY
+			{ pParser->BeginGroupConcatOrder(); }
+			group_concat_order_items opt_group_concat_separator TOK_LIMIT TOK_CONST_INT ')'
+			{ if ( !pParser->AddGroupConcatItem ( &$3, $10, &$1, &$11 ) ) YYERROR; }
 	| TOK_PERCENTILES '(' expr ')'		{ if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_PERCENTILES, &$1, &$4, nullptr ) ) YYERROR; }
 	| TOK_PERCENTILES '(' expr ',' '{' named_const_list '}' ')' { if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_PERCENTILES, &$1, &$8, &( pParser->GetNamedVec ( $6.GetValueInt() ) ) ) ) YYERROR; }
 	| TOK_PERCENTILE_RANKS '(' expr ')'	{ if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_PERCENTILE_RANKS, &$1, &$4, nullptr ) ) YYERROR; }
@@ -886,7 +910,7 @@ filter_item:
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
-			if ( pParser->NumIsSaturated ($3) )
+			if ( pParser->NumIsSaturated ( $3.m_uValue, $3.m_bNegative ) )
 				YYERROR;
 			pFilter->m_dValues.Add ( $3.GetValueInt() );
 		}
@@ -895,20 +919,32 @@ filter_item:
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
-			if ( pParser->NumIsSaturated ($3) )
+			if ( pParser->NumIsSaturated ( $3.m_uValue, $3.m_bNegative ) )
 				YYERROR;
 			pFilter->m_dValues.Add ( $3.GetValueInt() );
 			pFilter->m_bExclude = true;
 		}
-	| expr_ident TOK_IN '(' const_list ')'
+	| expr_ident TOK_IN '('
 		{
-			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $4.m_iValues );
+			pParser->BeginDocidConstList ( $1 );
+		}
+	const_list ')'
+		{
+			if ( !pParser->EndDocidConstList() )
+				YYERROR;
+			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $5.m_iValues );
 			if ( !pFilter )
 				YYERROR;
 		}
-	| expr_ident TOK_NOT TOK_IN '(' const_list ')'
+	| expr_ident TOK_NOT TOK_IN '('
 		{
-			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $5.m_iValues );
+			pParser->BeginDocidConstList ( $1 );
+		}
+	const_list ')'
+		{
+			if ( !pParser->EndDocidConstList() )
+				YYERROR;
+			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $6.m_iValues );
 			if ( !pFilter )
 				YYERROR;
 			pFilter->m_bExclude = true;
@@ -1073,7 +1109,7 @@ filter_item:
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
-			if ( pParser->NumIsSaturated ($3) )
+			if ( pParser->NumIsSaturated ( $3.m_uValue, $3.m_bNegative ) )
 				YYERROR;
 			pFilter->m_dValues.Add ( $3.GetValueInt() );
 		}
@@ -1082,7 +1118,7 @@ filter_item:
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
-			if ( pParser->NumIsSaturated ($3) )
+			if ( pParser->NumIsSaturated ( $3.m_uValue, $3.m_bNegative ) )
 				YYERROR;
 			pFilter->m_dValues.Add ( $3.GetValueInt() );
 			pFilter->m_bExclude = true;
@@ -1224,6 +1260,7 @@ const_float_unsigned:
 const_list:
 	const_int
 		{
+			pParser->CheckDocidConstListItem ( $1.m_uValue, $1.m_bNegative );
 			assert ( $$.m_iValues<0 );
         	$$.m_iValues = pParser->AddMvaVec ();
         	auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
@@ -1238,6 +1275,7 @@ const_list:
 		}
 	| const_list ',' const_int
 		{
+			pParser->CheckDocidConstListItem ( $3.m_uValue, $3.m_bNegative );
 			auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
 			dVec.Add ( { $3.GetValueInt(), $3.GetValueFloat(), false } );
 		}
@@ -1314,17 +1352,19 @@ group_order_clause:
 
 opt_order_clause:
 	// empty
-	| order_clause
+	| { pParser->BeginOrderBy(); } order_clause
 	;
 
 order_clause:
 	TOK_ORDER TOK_BY order_items_list
 		{
 			pParser->ToString ( pParser->m_pQuery->m_sOrderBy, $3 );
+			pParser->m_pQuery->m_bExplicitOrderBy = true;
 		}
 	| TOK_ORDER TOK_BY TOK_RAND '(' ')'
 		{
 			pParser->m_pQuery->m_sOrderBy = "@random";
+			pParser->m_pQuery->m_bExplicitOrderBy = true;
 		}
 	| TOK_ORDER TOK_BY TOK_COUNT '(' TOK_DISTINCT distinct_ident ')' TOK_ASC
 		{
@@ -1344,9 +1384,25 @@ order_items_list:
 	;
 
 order_item:
-	expr_ident
-	| expr_ident TOK_ASC				{ TRACK_BOUNDS ( $$, $1, $2 ); }
-	| expr_ident TOK_DESC				{ TRACK_BOUNDS ( $$, $1, $2 ); }
+	expr_ident							{ pParser->AddOrderByItem ( $1 ); }
+	| expr_ident TOK_ASC				{ pParser->AddOrderByItem ( $1 ); TRACK_BOUNDS ( $$, $1, $2 ); }
+	| expr_ident TOK_DESC				{ pParser->AddOrderByItem ( $1 ); TRACK_BOUNDS ( $$, $1, $2 ); }
+	;
+
+group_concat_order_items:
+	group_concat_order_item
+	| group_concat_order_items ',' group_concat_order_item
+	;
+
+group_concat_order_item:
+	expr_ident							{ pParser->AddGroupConcatOrder ( $1, false ); }
+	| expr_ident TOK_ASC				{ pParser->AddGroupConcatOrder ( $1, false ); }
+	| expr_ident TOK_DESC				{ pParser->AddGroupConcatOrder ( $1, true ); }
+	;
+
+opt_group_concat_separator:
+	// empty
+	| TOK_SEPARATOR TOK_QUOTED_STRING	{ pParser->SetGroupConcatSeparator ( $2 ); }
 	;
 
 opt_limit_clause:
@@ -2297,8 +2353,16 @@ opt_facet_mode:
 		}
 	;
 
+opt_facet_zeroes:
+	// empty
+	| TOK_ZEROES
+		{
+			pParser->SetFacetZeroes();
+		}
+	;
+
 facet_stmt:
-	TOK_FACET facet_items_list opt_facet_by_items_list opt_facet_filters opt_facet_mode opt_distinct_item opt_order_clause opt_limit_clause
+	TOK_FACET facet_items_list opt_facet_by_items_list opt_facet_filters opt_facet_zeroes opt_facet_mode opt_distinct_item opt_order_clause opt_limit_clause
 		{
 			if ( !pParser->SetupFacetStmt() )
 				YYERROR;

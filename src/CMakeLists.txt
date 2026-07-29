@@ -21,18 +21,6 @@ message ( STATUS "Inside directory src..." )
 include ( GetColumnar )
 target_link_libraries ( lextra INTERFACE columnar::columnar_api columnar::secondary_api columnar::knn_api )
 
-# check if we have correct columnar api
-set_property ( TARGET lextra PROPERTY INTERFACE_COLUMNAR_API_VERSION ${NEED_COLUMNAR_API} )
-set_property ( TARGET lextra APPEND PROPERTY COMPATIBLE_INTERFACE_STRING COLUMNAR_API_VERSION )
-
-# check if we have correct secondary api
-set_property ( TARGET lextra PROPERTY INTERFACE_SECONDARY_API_VERSION ${NEED_SECONDARY_API} )
-set_property ( TARGET lextra APPEND PROPERTY COMPATIBLE_INTERFACE_STRING SECONDARY_API_VERSION )
-
-# check if we have correct knn api
-set_property ( TARGET lextra PROPERTY INTERFACE_KNN_API_VERSION ${NEED_KNN_API} )
-set_property ( TARGET lextra APPEND PROPERTY COMPATIBLE_INTERFACE_STRING KNN_API_VERSION )
-
 target_include_directories ( lextra INTERFACE ${CMAKE_CURRENT_SOURCE_DIR} )
 get_banner ( CONFIGURE_FLAGS )
 infomsg ( "${CONFIGURE_FLAGS}" )
@@ -67,7 +55,7 @@ add_subdirectory ( indexing_sources )
 
 # main bunch of sources (for libsphinx)
 add_library ( lmanticore STATIC sphinx.cpp sphinxutils.cpp
-		sphinxsort.cpp sortsetup.cpp sphinxexpr.cpp sphinxfilter.cpp sphinxsearch.cpp sphinxrt.cpp accumulator.cpp
+		sphinxsort.cpp sortsetup.cpp sphinxexpr.cpp sphinxfilter.cpp sphinxsearch.cpp sphinxrt.cpp accumulator.cpp uuid_docid.cpp
 		sphinxjson.cpp sphinxaot.cpp sphinxplugin.cpp sphinxudf.c sphinxqcache.cpp 
 		attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp json/cJSON_test.c sphinxpq.cpp
 		global_idf.cpp docstore.cpp lz4/lz4.c lz4/lz4hc.c snippetfunctor.cpp snippetindex.cpp
@@ -153,7 +141,7 @@ target_compile_definitions ( lextra INTERFACE BOOST_ALL_NO_LIB=1 )
 set ( HEADERS sphinxfilter.h sphinxint.h sphinxpq.h sphinxrt.h
 		sphinxsort.h sphinxutils.h sphinxexpr.h sphinx.h sphinxjson.h sphinxplugin.h sphinxqcache.h
 		sphinxsearch.h sphinxstd.h sphinxudf.h lz4/lz4.h lz4/lz4hc.h http/http_parser.h secondaryindex.h
-		searchnode.h killlist.h attribute.h accumulator.h global_idf.h event.h threadutils.h threadutils_impl.h
+		searchnode.h killlist.h attribute.h accumulator.h uuid_docid.h global_idf.h event.h threadutils.h threadutils_impl.h
 		hazard_pointer.h task_info.h mini_timer.h collation.h histogram.h sortsetup.h
 		indexsettings.h columnarlib.h fileio.h memio.h memio_impl.h queryprofile.h columnarfilter.h columnargrouper.h fileutils.h
 		libutils.h conversion.h columnarsort.h sortcomp.h binlog_defs.h binlog.h ${MANTICORE_BINARY_DIR}/config/config.h

@@ -835,7 +835,7 @@ protected:
 	CSphString * m_pWarning;
 };
 
-void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery );
+bool RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery );
 void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
 
 #endif // _searchdha_

@@ -29,7 +29,7 @@ SHOW TABLES;
 
 ```sql
 +----------+-------------+
-| Index    | Type        |
+| Table    | Type        |
 +----------+-------------+
 | dist     | distributed |
 | plain    | local       |
@@ -118,7 +118,7 @@ utilsApi.sql('SHOW TABLES')
 
 <!-- response Python -->
 ```python
-{u'columns': [{u'Index': {u'type': u'string'}},
+{u'columns': [{u'Table': {u'type': u'string'}},
               {u'Type': {u'type': u'string'}}],
  u'data': [{u'Index': u'dist1', u'Type': u'distributed'},
            {u'Index': u'rt', u'Type': u'rt'},
@@ -393,7 +393,7 @@ utils_api.sql("SHOW TABLES LIKE 'pro%'", Some(true)).await
 {DESC | DESCRIBE} table_name [ LIKE pattern ]
 ```
 
-The `DESCRIBE` statement lists the table columns and their associated types. The columns are document ID, full-text fields, and attributes. The order matches the order in which fields and attributes are expected by `INSERT` and `REPLACE` statements. Column types  include `field`, `integer`, `timestamp`, `ordinal`, `bool`, `float`, `bigint`, `string`, and `mva`. ID column will be typed as `bigint`. Example:
+The `DESCRIBE` statement lists the table columns and their associated types. The columns are document ID, full-text fields, and attributes. The order matches the order in which fields and attributes are expected by `INSERT` and `REPLACE` statements. Column types include `field`, `integer`, `timestamp`, `ordinal`, `bool`, `float`, `bigint`, `uuid`, `string`, and `mva`. The ID column is `bigint` by default and `uuid` for a real-time table declared with `id uuid`. Example:
 
 ```sql
 mysql> DESC rt;
@@ -480,6 +480,8 @@ SHOW CREATE TABLE table_name [ OPTION output_words = 'list' | 'file' ]
 ```
 
 Prints the `CREATE TABLE` statement used to create the specified table.
+
+If the table was created using a SQL `profile=...` shortcut, `SHOW CREATE TABLE` prints the expanded settings instead of the profile name itself.
 
 The `output_words` option allows you to control how external file settings (such as `stopwords`, `exceptions`, `wordforms`, `hitless_words`) are displayed:
 

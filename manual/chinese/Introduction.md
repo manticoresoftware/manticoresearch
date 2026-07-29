@@ -21,7 +21,10 @@ Manticore Search 是一款面向搜索和分析场景打造的高性能多存储
   * [文本高亮](Searching/Highlighting.md)
 
 #### 向量搜索能力
-Manticore Search 支持将机器学习模型生成的 embedding 添加到每个文档中，然后对其执行 [最近邻搜索](Searching/KNN.md)。这使你可以构建相似度搜索、推荐、语义搜索，以及基于 NLP 算法的相关性排序等功能，还包括图像、视频和声音搜索等场景。
+Manticore Search 支持将由你的机器学习模型生成的嵌入添加到每个文档中，然后对其进行 [nearest-neighbor search](Searching/KNN.md)。这使你可以构建相似度搜索、推荐、语义搜索、[conversational search](Searching/Conversational_search.md) 和基于 NLP 算法的相关性排序等功能，其中还包括图像、视频和声音搜索。
+
+#### 会话搜索
+Manticore Search 支持在现有的向量化表上进行 [conversational search](Searching/Conversational_search.md)。它会使用 KNN 搜索检索最相关的行，将这些行与对话历史一起作为 LLM 的上下文，并且可以通过 SQL `CALL CHAT` 或 HTTP JSON `/search` 端点进行应答。
 
 #### JOIN
 Manticore Search 支持通过 SQL 和 JSON 执行 [JOIN](Searching/Joining.md) 查询，让你可以把多个表中的数据组合起来。
@@ -99,6 +102,10 @@ Manticore Search 用途广泛，可应用于多种场景，包括：
   - 借助 Manticore 的列式存储和 OLAP 能力，高效分析大规模数据集。
   - 以极低延迟对 TB 级数据执行复杂查询。
   - 使用 Kibana、[Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) 或 [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/) 可视化数据。
+
+- **会话与 AI 搜索**：
+  - 在现有向量化内容之上构建问答和助手体验。
+  - 使用 KNN 检索和对话历史，通过 [conversational search](Searching/Conversational_search.md) 为答案提供依据。
 
 - **分面搜索**：
   - 允许用户按价格、品牌或日期等类别筛选搜索结果，获得更精细的搜索体验。

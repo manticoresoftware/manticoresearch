@@ -9,7 +9,9 @@
 
 `INSERT` 中目前不支持表达式，因此必须显式指定值。
 
-ID字段/值可以省略，因为RT和PQ表支持[自动ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID)功能。您也可以使用0作为ID值以强制生成自动ID。具有重复ID的行不会通过`INSERT` 被覆盖。相反，您可以使用[REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md)来实现这一点。
+ID 字段/值可以省略，因为 RT 和 PQ 表支持 [auto-id](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) 功能。对于 numeric-ID 表，你也可以将 `0` 作为 id 值，以强制自动生成 ID。具有重复 ID 的行不会被 `INSERT` 覆盖。要实现这一目的，请改用 [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md)。
+
+对于使用 [`id uuid`](../../Creating_a_table/Data_types.md#UUID-document-IDs) 创建的表，请传入一个带引号的显式 UUID 字符串，或者省略 `id` 以自动生成一个。显式值必须匹配 `xxxxxxxx-xxxx-Vxxx-Wxxx-xxxxxxxxxxxx`，其中每个 `x` 都是十六进制数字，`V` 是版本（`1` 到 `8`），`W` 是变体（`8`、`9`、`a` 或 `b`）。系统接受大写十六进制字母，并会将其规范化为小写。不同于 numeric ID，`0` 不会触发自动生成 UUID。
 
 使用HTTP JSON协议时，您有两种不同的请求格式可供选择：通用Manticore格式和Elasticsearch类似的格式。这两种格式在下面的示例中都有展示。
 
@@ -84,26 +86,72 @@ POST /insert
 ```json
 {
   "table": "products",
-  "_id": 1,
+  "id": 1,
   "created": true,
   "result": "created",
   "status": 201
 }
 {
   "table": "products",
-  "_id": 2,
+  "id": 2,
   "created": true,
   "result": "created",
   "status": 201
 }
 {
   "table": "products",
-  "_id": 1657860156022587406,
+  "id": 1657860156022587406,
   "created": true,
   "result": "created",
   "status": 201
 }
 
+```
+
+对于使用 `id uuid` 创建的表，请将 JSON `id` 作为 UUID 字符串传入，或者省略它以自动生成一个：
+
+<!-- request JSON -->
+
+```json
+POST /insert
+{
+  "table":"products_uuid",
+  "id":"550e8400-e29b-41d4-a716-446655440000",
+  "doc":
+  {
+    "title":"Crossbody Bag with Tassel",
+    "price":19.85
+  }
+}
+
+POST /insert
+{
+  "table":"products_uuid",
+  "doc":
+  {
+    "title":"Generated UUID Bag",
+    "price":29
+  }
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "table": "products_uuid",
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "created": true,
+  "result": "created",
+  "status": 201
+}
+{
+  "table": "products_uuid",
+  "id": "<generated UUID>",
+  "created": true,
+  "result": "created",
+  "status": 201
+}
 ```
 
 <!-- intro -->
@@ -167,13 +215,23 @@ POST /products/_create/
 
 ```php
 $index->addDocuments([
-        ['id' => 1, 'title' => 'Crossbody Bag with Tassel', 'price' => 19.85]
+        ['id' => 1, 'title' => 'Crossbody Bag with Tassel', 'price' => 19.85],
+        ['id' => 2, 'title' => 'microfiber sheet set', 'price' => 19.99],
+        ['id' => 3, 'title' => 'Pet Hair Remover Glove', 'price' => 7.99]
 ]);
+```
+
+对于复制表，在添加文档之前先设置集群名称：
+
+```php
+// Set the cluster name
+$index->setName('weekly_table')->setCluster('posts');
+
+// Then add documents in bulk
 $index->addDocuments([
-        ['id' => 2, 'title' => 'Crossbody Bag with Tassel']
-]);
-$index->addDocuments([
-        ['id' => 0, 'title' => 'Yellow bag']
+        ['id' => 1, 'title' => 'Crossbody Bag with Tassel', 'price' => 19.85],
+        ['id' => 2, 'title' => 'microfiber sheet set', 'price' => 19.99],
+        ['id' => 3, 'title' => 'Pet Hair Remover Glove', 'price' => 7.99]
 ]);
 ```
 
@@ -182,10 +240,24 @@ $index->addDocuments([
 
 <!-- request Python -->
 
-``` python
-indexApi.insert({"table" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
-indexApi.insert({"table" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}})
-indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}})
+```python
+docs = [ \
+    {"insert": {"table" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"table" : "products", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+]
+res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
+
+对于复制表，在每个文档中包含 `cluster` 属性：
+
+```python
+docs = [ \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+]
+res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
 
 <!-- intro -->
@@ -193,10 +265,24 @@ indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}})
 
 <!-- request Python-asyncio -->
 
-``` python
-await indexApi.insert({"table" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
-await indexApi.insert({"table" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}})
-await indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}})
+```python
+docs = [ \
+    {"insert": {"table" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"table" : "products", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+]
+res = await indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
+
+对于复制表，在每个文档中包含 `cluster` 属性：
+
+```python
+docs = [ \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+]
+res = await indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
 
 <!-- intro -->
@@ -204,10 +290,24 @@ await indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow b
 
 <!-- request Javascript -->
 
-``` javascript
-res = await indexApi.insert({"table" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}});
-res = await indexApi.insert({"table" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}});
-res = await indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}});
+```javascript
+let docs = [
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}},
+    {"insert": {"table" : "products", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}},
+    {"insert": {"table" : "products", "id" : 5, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+];
+res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
+```
+
+对于复制表，在每个文档中包含 `cluster` 属性：
+
+```javascript
+let docs = [
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 3, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}},
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}},
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 5, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+];
+res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ```
 
 <!-- intro -->
@@ -216,28 +316,19 @@ res = await indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Ye
 <!-- request Java -->
 
 ``` java
-InsertDocumentRequest newdoc = new InsertDocumentRequest();
-HashMap<String,Object> doc = new HashMap<String,Object>(){{
-    put("title","Crossbody Bag with Tassel");
-    put("price",19.85);
-}};
-newdoc.index("products").id(1L).setDoc(doc);
-sqlresult = indexApi.insert(newdoc);
+String body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+BulkResponse bulkresult = indexApi.bulk(body);
+```
 
-newdoc = new InsertDocumentRequest();
-HashMap<String,Object> doc = new HashMap<String,Object>(){{
-    put("title","Crossbody Bag with Tassel");
-}};
-newdoc.index("products").id(2L).setDoc(doc);
-sqlresult = indexApi.insert(newdoc);
+对于复制表，在每个文档中包含 `cluster` 属性：
 
-newdoc = new InsertDocumentRequest();
-HashMap<String,Object> doc = new HashMap<String,Object>(){{
-    put("title","Yellow bag");
- }};
-newdoc.index("products").id(0L).setDoc(doc);
-sqlresult = indexApi.insert(newdoc);
-
+``` java
+String body = "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+BulkResponse bulkresult = indexApi.bulk(body);
 ```
 
 <!-- intro -->
@@ -246,22 +337,175 @@ sqlresult = indexApi.insert(newdoc);
 <!-- request C# -->
 
 ``` clike
+string body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+BulkResponse bulkresult = indexApi.Bulk(string.Join("\n", docs));
+```
+
+对于复制表，在每个文档中包含 `cluster` 属性：
+
+``` clike
+string body = "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+BulkResponse bulkresult = indexApi.Bulk(string.Join("\n", docs));
+```
+
+<!-- end -->
+
+## 向复制表添加文档
+<!-- example replicated_insert -->
+在使用[复制表](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md)时，必须使用特殊语法，以确保写入操作能够正确传播到集群中的所有节点。
+
+对复制表执行所有写入操作（INSERT、REPLACE、DELETE、TRUNCATE、UPDATE）时，必须：
+* 在 SQL 中：使用 `cluster_name:table_name` 格式，而不是只写表名
+* 在 JSON 中：将 `cluster` 属性与 `table` 属性一起包含
+
+如果不使用正确的语法，操作将失败并报错。
+
+<!-- intro -->
+##### SQL：
+<!-- request SQL -->
+
+```sql
+INSERT INTO posts:weekly_table(title,price) VALUES ('Crossbody Bag with Tassel', 19.85);
+INSERT INTO posts:weekly_table VALUES (0,'Yellow bag', 4.95);
+```
+<!-- response SQL -->
+
+```sql
+Query OK, 1 rows affected (0.00 sec)
+Query OK, 1 rows affected (0.00 sec)
+```
+
+<!-- intro -->
+##### JSON：
+
+<!-- request JSON -->
+
+```json
+POST /insert
+{
+  "cluster":"posts",
+  "table":"weekly_table",
+  "id":1,
+  "doc":
+  {
+    "title" : "Crossbody Bag with Tassel",
+    "price" : 19.85
+  }
+}
+
+POST /insert
+{
+  "cluster":"posts",
+  "table":"weekly_table",
+  "id":0,
+  "doc":
+  {
+    "title" : "Yellow bag",
+    "price" : 4.95
+  }
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "table": "weekly_table",
+  "id": 1,
+  "created": true,
+  "result": "created",
+  "status": 201
+}
+{
+  "table": "weekly_table",
+  "id": 1657860156022587406,
+  "created": true,
+  "result": "created",
+  "status": 201
+}
+```
+
+<!-- intro -->
+##### PHP：
+
+<!-- request PHP -->
+
+```php
+// Set the cluster name
+$index->setName('weekly_table')->setCluster('posts');
+
+// Then add documents
+$index->addDocuments([
+        ['id' => 1, 'title' => 'Crossbody Bag with Tassel', 'price' => 19.85],
+        ['id' => 2, 'title' => 'microfiber sheet set', 'price' => 19.99],
+        ['id' => 3, 'title' => 'Pet Hair Remover Glove', 'price' => 7.99]
+]);
+```
+
+<!-- intro -->
+##### Python：
+
+<!-- request Python -->
+
+```python
+indexApi.insert({"cluster":"posts", "table":"weekly_table", "id":1, "doc":{"title":"Crossbody Bag with Tassel", "price":19.85}})
+indexApi.insert({"cluster":"posts", "table":"weekly_table", "id":0, "doc":{"title":"Yellow bag", "price":4.95}})
+```
+
+<!-- intro -->
+##### Javascript：
+
+<!-- request Javascript -->
+
+```javascript
+res = await indexApi.insert({"cluster":"posts", "table":"weekly_table", "id":1, "doc":{"title":"Crossbody Bag with Tassel", "price":19.85}});
+res = await indexApi.insert({"cluster":"posts", "table":"weekly_table", "id":0, "doc":{"title":"Yellow bag", "price":4.95}});
+```
+
+<!-- intro -->
+##### Java：
+
+<!-- request Java -->
+
+```java
+InsertDocumentRequest newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc = new HashMap<String,Object>(){{
+    put("title","Crossbody Bag with Tassel");
+    put("price",19.85);
+}};
+newdoc.table("weekly_table").cluster("posts").id(1L).setDoc(doc);
+sqlresult = indexApi.insert(newdoc);
+
+newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc2 = new HashMap<String,Object>(){{
+    put("title","Yellow bag");
+    put("price",4.95);
+}};
+newdoc.table("weekly_table").cluster("posts").id(0L).setDoc(doc2);
+sqlresult = indexApi.insert(newdoc);
+```
+
+<!-- intro -->
+##### C#：
+
+<!-- request C# -->
+
+```clike
 Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "Crossbody Bag with Tassel");
 doc.Add("price", 19.85);
-InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 1, doc: doc);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "weekly_table", cluster: "posts", id: 1, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 
 doc = new Dictionary<string, Object>();
-doc.Add("title", "Crossbody Bag with Tassel");
-newdoc = new InsertDocumentRequest(index: "products", id: 2, doc: doc);
-sqlresult = indexApi.Insert(newdoc);
-
-doc = new Dictionary<string, Object>();
 doc.Add("title", "Yellow bag");
-newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
+doc.Add("price", 4.95);
+newdoc = new InsertDocumentRequest(table: "weekly_table", cluster: "posts", id: 0, doc: doc);
 sqlresult = indexApi.Insert(newdoc);
-
 ```
 
 <!-- intro -->
@@ -269,35 +513,26 @@ sqlresult = indexApi.Insert(newdoc);
 
 <!-- request Rust -->
 
-``` rust
+```rust
 let mut doc = HashMap::new();
 doc.insert("title".to_string(), serde_json::json!("Crossbody Bag with Tassel"));
 doc.insert("price".to_string(), serde_json::json!(19.85));
 let mut insert_req = InsertDocumentRequest {
-    table: serde_json::json!("products"),
+    table: serde_json::json!("weekly_table"),
     doc: serde_json::json!(doc),
+    cluster: serde_json::json!("posts"),
     id: serde_json::json!(1),
-    ..Default::default(),
 };
 let mut insert_res = index_api.insert(insert_req).await;
 
 doc = HashMap::new();
-doc.insert("title".to_string(), serde_json::json!("Crossbody Bag with Tassel"));
+doc.insert("title".to_string(), serde_json::json!("Yellow bag"));
+doc.insert("price".to_string(), serde_json::json!(4.95));
 insert_req = InsertDocumentRequest {
-    table: serde_json::json!("products"),
+    table: serde_json::json!("weekly_table"),
     doc: serde_json::json!(doc),
-    id: serde_json::json!(2),
-    ..Default::default(),
-};
-insert_res = index_api.insert(insert_req).await;
-
-doc = HashMap::new();
-doc.insert("title".to_string(), serde_json::json!("Tellow bag"));
-insert_req = InsertDocumentRequest {
-    table: serde_json::json!("products"),
-    doc: serde_json::json!(doc),
+    cluster: serde_json::json!("posts"),
     id: serde_json::json!(0),
-    ..Default::default(),
 };
 insert_res = index_api.insert(insert_req).await;
 ```
@@ -330,7 +565,7 @@ Manticore具有自动表创建机制，当插入或替换查询中指定的表�
 - `%Y-%m-%dT%H`
 
 
-请注意，`/bulk` HTTP端点不支持自动表创建（自动模式）。仅`/_bulk`（Elasticsearch类似的）HTTP端点和SQL接口支持此功能。
+请记住，`/bulk` HTTP 端点不支持自动创建表（auto schema）。只有 `/_bulk`（类似 Elasticsearch）端点和 SQL 接口支持此功能。
 
 <!-- intro -->
 ##### SQL：
@@ -411,30 +646,32 @@ POST /insert  -d
 <!-- response JSON -->
 
 ```json
-{"table":"t","_id":2,"created":true,"result":"created","status":201}
+{"table":"t","id":2,"created":true,"result":"created","status":201}
 ```
 
 <!-- end -->
 
 ## 自动ID
 <!-- example autoid -->
-Manticore 为插入或替换到实时表或[Percolate表](../../Creating_a_table/Local_tables/Percolate_table.md)的文档的ID列提供了自动ID生成功能。生成器为文档生成一个唯一的ID，但不应将其视为自动递增ID。
+Manticore 会为插入到实时表或 [Percolate table](../../Creating_a_table/Local_tables/Percolate_table.md) 中、或写回其中的文档提供自动 ID 生成。生成器会产生一个具有以下保证的唯一数值，但它不应被视为自增序列。
 
 生成的 ID 值在以下条件下保证唯一：
 * 当前服务器的 [server_id](../../Server_settings/Searchd.md#server_id) 值在 0 到 127 范围内，并且在集群节点中唯一，或者它使用从 MAC 地址生成的默认值作为种子
 * 系统时间在 Manticore 节点服务器重启间不发生变化
 * 两次服务器启动之间的自动生成ID速率平均保持在每秒约1600万ID以下
 
-自动生成器为文档ID创建一个64位整数，并使用以下布局：
+自动 ID 生成器会创建一个 64 位整数，其布局如下：
 * 第0到23位是一个计数器，每次调用自动生成器时递增
 * 第24到55位存储服务器启动时间（以秒为单位），编码为`(unix_timestamp_at_start - 2019-05-01 00:00:00 UTC)`
 * 第56到62位存储`server_id`（该值被限制在0..127范围内）
 
-此布局确保了集群节点之间生成的ID是唯一的，并且插入到不同节点的数据不会在它们之间产生冲突。
+这种布局可确保在集群节点之间生成的 ID 是唯一的，并且插入到不同集群节点的数据不会发生冲突。这在使用复制表时尤其重要，因为它能保证自动生成的 ID 在复制集群的所有节点上都是唯一的。
 
 重要的是：24位计数器并不是服务器单次运行期间可以插入文档总数的硬性限制。在启动后，您可以插入超过16,777,216个文档，ID仍会继续增加并在该运行过程中保持唯一。`~16 million IDs per second`规则对于跨重启的唯一性很重要：重启后，基于时间的部分必须足够前进，以确保新生成的ID不会与重启前生成的ID重叠。
 
 因此，自动 ID 生成器生成的第一个 ID 不是 1，而是一个较大的数字。此外，插入表中的文档流可能具有非连续的 ID 值，如果在调用之间向其他表插入数据，因为 ID 生成器在服务器中是唯一的并且在其所有表之间共享。
+
+对于 numeric-ID 表，这个整数就是对外可见的文档 ID。对于 UUID-ID 表，Manticore 会将其编码为标准的 UUIDv8 字符串；客户端只能看到 UUID。
 
 <!-- intro -->
 ##### SQL:
@@ -617,20 +854,22 @@ CALL UUID_SHORT(3)
 * 你可能需要增加 [max_packet_size](../../Server_settings/Searchd.md#max_packet_size) 的值以允许更大的批量
 * 通常，每次批量插入操作被视为具有原子性保证的单个 [事务](../../Data_creation_and_modification/Transactions.md)，因此你要么一次性将所有新文档放入表中，要么在失败情况下一个都不添加。关于空行或切换到另一张表的更多细节见“JSON”示例。
 
-请注意，`/bulk` HTTP 端点不支持自动创建表（自动模式）。只有 `/_bulk`（类似 Elasticsearch）HTTP 端点和 SQL 接口支持此功能。`/_bulk`（类似 Elasticsearch）HTTP 端点允许表名包含集群名，格式为 `cluster_name:table_name`。
+请注意，`/bulk` HTTP 端点不支持自动创建表（auto schema）。只有 `/_bulk`（类似 Elasticsearch）端点和 SQL 接口支持此功能。`/_bulk`（类似 Elasticsearch）HTTP 端点允许在表名中使用 `cluster_name:table_name` 格式包含集群名称。
 
 `/_bulk` 端点接受与 Elasticsearch 相同格式的文档 ID，你也可以在文档内部包含 `id`：
 ```json
-{ "index": { "table" : "products", "_id" : "1" } }
-{ "title" : "Crossbody Bag with Tassel", "price": 19.85 }
+{ "index": { "table": "products", "_id": "1" } }
+{ "title": "Crossbody Bag with Tassel", "price": 19.85 }
 ```
 
 或者
 
 ```json
-{ "index": { "table" : "products" } }
-{ "title" : "Crossbody Bag with Tassel", "price": 19.85, "id": "1" }
+{ "index": { "table": "products" } }
+{ "title": "Crossbody Bag with Tassel", "price": 19.85, "id": "1" }
 ```
+
+对于声明为 `id uuid` 的 RT 表，`/bulk` 从 `id` 读取 UUID。`/_bulk` 从元数据 `_id` 或文档 `id` 中读取 UUID。两个端点都可以省略 ID，以便自动生成 UUID。
 
 #### /bulk 的分块传输
 `/bulk`（Manticore 模式）端点支持[分块传输编码](https://en.wikipedia.org/wiki/Chunked_transfer_encoding)。你可以用它来传输大批量数据。它能够：
@@ -696,69 +935,15 @@ POST /bulk
 '
 ```
 
-<!-- response JSON -->
-```json
-{
-  "items": [
-    {
-      "bulk": {
-        "table": "products",
-        "_id": 2,
-        "created": 2,
-        "deleted": 0,
-        "updated": 0,
-        "result": "created",
-        "status": 201
-      }
-    }
-  ],
-  "current_line": 4,
-  "skipped_lines": 0,
-  "errors": false,
-  "error": ""
-}
+对于复制表，在每个操作中包含 `cluster` 属性：
 
-{
-  "items": [
-    {
-      "bulk": {
-        "table": "test1",
-        "_id": 22,
-        "created": 2,
-        "deleted": 0,
-        "updated": 0,
-        "result": "created",
-        "status": 201
-      }
-    },
-    {
-      "bulk": {
-        "table": "test1",
-        "_id": 23,
-        "created": 1,
-        "deleted": 0,
-        "updated": 0,
-        "result": "created",
-        "status": 201
-      }
-    },
-    {
-      "bulk": {
-        "table": "test2",
-        "_id": 25,
-        "created": 2,
-        "deleted": 0,
-        "updated": 0,
-        "result": "created",
-        "status": 201
-      }
-    }
-  ],
-  "current_line": 8,
-  "skipped_lines": 0,
-  "errors": false,
-  "error": ""
-}
+```json
+POST /bulk
+-H "Content-Type: application/x-ndjson" -d '
+{"insert": {"cluster":"posts", "table":"weekly_table", "id":1, "doc":  {"title":"Crossbody Bag with Tassel","price":19.85}}}
+{"insert": {"cluster":"posts", "table":"weekly_table", "id":2, "doc":  {"title":"microfiber sheet set","price":19.99}}}
+{"insert": {"cluster":"posts", "table":"weekly_table", "id":3, "doc":  {"title":"Pet Hair Remover Glove","price":7.99}}}
+'
 ```
 
 <!-- request Elasticsearch -->
@@ -818,12 +1003,38 @@ POST /_bulk
 }
 ```
 
+对于复制表，使用 `cluster_name:table_name` 格式在表名中包含集群名称：
+
+```json
+POST /_bulk
+-H "Content-Type: application/x-ndjson" -d '
+{ "index" : { "table" : "posts:weekly_table" } }
+{ "title" : "Yellow Bag", "price": 12 }
+{ "create" : { "table" : "posts:weekly_table" } }
+{ "title" : "Red Bag", "price": 12.5, "id": 3 }
+'
+```
+
 <!-- intro -->
 ##### PHP:
 <!-- request PHP -->
 使用 addDocuments() 方法：
 
 ```php
+$index->addDocuments([
+        ['id' => 1, 'title' => 'Crossbody Bag with Tassel', 'price' => 19.85],
+        ['id' => 2, 'title' => 'microfiber sheet set', 'price' => 19.99],
+        ['id' => 3, 'title' => 'Pet Hair Remover Glove', 'price' => 7.99]
+]);
+```
+
+对于复制表，在添加文档之前先设置集群名称：
+
+```php
+// Set the cluster name
+$index->setName('weekly_table')->setCluster('posts');
+
+// Then add documents in bulk
 $index->addDocuments([
         ['id' => 1, 'title' => 'Crossbody Bag with Tassel', 'price' => 19.85],
         ['id' => 2, 'title' => 'microfiber sheet set', 'price' => 19.99],
@@ -840,13 +1051,24 @@ $index->addDocuments([
 docs = [ \
     {"insert": {"table" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
     {"insert": {"table" : "products", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
-    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+]
+res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
+
+对于复制表，在每个文档中包含 `cluster` 属性：
+
+```python
+docs = [ \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
 ]
 res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
 
 <!-- intro -->
-##### Python=asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 
@@ -854,7 +1076,18 @@ res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 docs = [ \
     {"insert": {"table" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
     {"insert": {"table" : "products", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
-    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+]
+res = await indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
+
+对于复制表，在每个文档中包含 `cluster` 属性：
+
+```python
+docs = [ \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
 ]
 res = await indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
@@ -868,10 +1101,22 @@ res = await indexApi.bulk('\n'.join(map(json.dumps,docs)))
 let docs = [
     {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}},
     {"insert": {"table" : "products", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}},
-    {"insert": {"table" : "products", "id" : 5, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
+    {"insert": {"table" : "products", "id" : 5, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
 ];
 res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ```
+
+对于复制表，在每个文档中包含 `cluster` 属性：
+
+```javascript
+let docs = [
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 3, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}},
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}},
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 5, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+];
+res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
+```
+
 <!-- intro -->
 ##### java:
 
@@ -880,7 +1125,16 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ``` java
 String body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
     "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
-    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+BulkResponse bulkresult = indexApi.bulk(body);
+```
+
+对于复制表，在每个文档中包含 `cluster` 属性：
+
+``` java
+String body = "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
 BulkResponse bulkresult = indexApi.bulk(body);
 ```
 
@@ -892,7 +1146,16 @@ BulkResponse bulkresult = indexApi.bulk(body);
 ``` clike
 string body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
     "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
-    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+BulkResponse bulkresult = indexApi.Bulk(string.Join("\n", docs));
+```
+
+对于复制表，在每个文档中包含 `cluster` 属性：
+
+``` clike
+string body = "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
 BulkResponse bulkresult = indexApi.Bulk(string.Join("\n", docs));
 ```
 
@@ -1209,4 +1472,3 @@ let insert_res = index_api.insert(insert_req).await;
 <!-- end -->
 
 <!-- proofread -->
-

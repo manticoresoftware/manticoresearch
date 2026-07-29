@@ -188,6 +188,8 @@ By default, the threshold is the number of logical CPU cores multiplied by 2.
 
 However, if the table has attributes with KNN indexes, the default threshold is different. In this case, it is set to the number of physical CPU cores divided by 2, with a minimum value of 1, to improve KNN search performance.
 
+When [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) is not set explicitly (neither server-wide nor per-table), automatic compaction never merges a table below 2 disk chunks, even when the computed default threshold is lower (which can happen on servers with few CPU cores, particularly for KNN tables). To allow automatic compaction down to a single disk chunk, set `optimize_cutoff` explicitly to `1`.
+
 Note that toggling `auto_optimize` on or off doesn't prevent you from running [OPTIMIZE TABLE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) manually.
 
 <!-- intro -->
@@ -285,6 +287,32 @@ knn_parallel_build = 1
 <!-- request Increase -->
 ```ini
 knn_parallel_build = 4
+```
+
+<!-- end -->
+
+### embeddings_threads
+
+<!-- example conf embeddings_threads -->
+This setting caps how many CPU threads are used when Manticore converts text into vectors. It applies whenever auto-embeddings run: when inserting rows into a table that uses `model_name`/`from`, when an `ALTER TABLE` rebuilds an auto-embedded `float_vector` column, and when a `knn(<field>, '<text>', ...)` search supplies the query as text.
+
+The actual number of threads used is also limited by how many workers are currently free, so a busy server will use fewer threads even if the cap is high. Use this option to keep one large embedding batch from starving concurrent searches.
+
+Default is `4`. Set to `0` to remove the cap, in which case the embeddings library decides how many threads to use (still bounded by the number of free workers).
+
+This value can be changed at runtime using `SET GLOBAL embeddings_threads = N` and inspected via `SHOW VARIABLES`. For KNN `SELECT` queries it can also be overridden per-query with `OPTION embeddings_threads = N` (see [KNN vector search](../Searching/KNN.md#KNN-vector-search)).
+
+<!-- intro -->
+##### Example:
+
+<!-- request Default -->
+```ini
+embeddings_threads = 4
+```
+
+<!-- request Uncapped -->
+```ini
+embeddings_threads = 0
 ```
 
 <!-- end -->

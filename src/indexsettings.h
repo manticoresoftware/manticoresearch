@@ -29,6 +29,24 @@ inline int64_t cast2signed ( SphWordID_t tVal )
 class CSphWriter;
 class CSphReader;
 class FilenameBuilder_i;
+class ISphSchema;
+
+struct StoredQueryExecutionSettings_t
+{
+	ESphRankMode	m_eRanker = SPH_RANK_DEFAULT;
+	CSphString		m_sRankerExpr;
+	CSphString		m_sUDRanker;
+	CSphString		m_sUDRankerOpts;
+	bool			m_bDefaultBoolOr = false;
+
+	void SetRanker ( const StoredQueryExecutionSettings_t & tOther )
+	{
+		m_eRanker = tOther.m_eRanker;
+		m_sRankerExpr = tOther.m_sRankerExpr;
+		m_sUDRanker = tOther.m_sUDRanker;
+		m_sUDRankerOpts = tOther.m_sUDRankerOpts;
+	}
+};
 
 enum
 {
@@ -387,6 +405,8 @@ enum class MutableName_e
 	EXPAND_KEYWORDS,
 	RT_MEM_LIMIT,
 	PREOPEN,
+	RANKER,
+	BOOLEAN_MODE,
 	ACCESS_PLAIN_ATTRS,
 	ACCESS_BLOB_ATTRS,
 	ACCESS_DOCLISTS,
@@ -427,6 +447,8 @@ public:
 	int			m_iExpandKeywords;
 	int64_t		m_iMemLimit;
 	bool		m_bPreopen = false;
+	CSphString	m_sRanker; ///< persisted user-visible value for SHOW CREATE/SETTINGS and sidecar save
+	StoredQueryExecutionSettings_t m_tQueryExecutionSettings; ///< prepared table-owned execution defaults
 	FileAccessSettings_t m_tFileAccess;
 	int			m_iOptimizeCutoff;
 	int			m_iOptimizeCutoffKNN;
@@ -440,11 +462,11 @@ public:
 	static MutableIndexSettings_c & GetDefaults();
 
 	bool Load ( const char * sFileName, const char * sIndexName );
-	void Load ( const CSphConfigSection & hIndex, bool bNeedSave, StrVec_t * pWarnings );
+	bool Load ( const CSphConfigSection & hIndex, bool bNeedSave, StrVec_t * pWarnings, CSphString & sError );
 	bool Save ( CSphString & sBuf ) const;
 
 	bool NeedSave() const { return m_bNeedSave; }
-	bool HasSettings() const { return ( m_dLoaded.BitCount()>0 ); }
+	bool HasSettings() const { return ( m_dLoaded.BitCount()>0 || m_dRemoved.BitCount()>0 ); }
 	bool IsSet ( MutableName_e eOpt ) const { return ( HasSettings() && m_dLoaded.BitGet ( (int)eOpt ) ); }
 
 	void Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * ) const override;
@@ -452,7 +474,10 @@ public:
 	void Combine ( const MutableIndexSettings_c & tOther );
 
 private:
+	bool		SetStoredRanker ( const CSphString & sRanker, CSphString & sError );
+	bool		SetStoredBooleanMode ( const CSphString & sValue, CSphString & sError );
 	CSphBitvec	m_dLoaded;
+	CSphBitvec	m_dRemoved;
 	bool		m_bNeedSave = false;
 };
 
@@ -465,6 +490,11 @@ struct RtTypedAttr_t
 
 int						GetNumRtTypes();
 const RtTypedAttr_t &	GetRtType ( int iType );
+
+const char *			sphGetUuidDocidName();
+bool					sphHasUuidDocid ( const ISphSchema & tSchema );
+bool					sphPrepareUuidDocid ( const char * szUuid, CSphString & sNormalizedUuid, CSphString & sError );
+bool					sphIsNormalizedUuidDocid ( Str_t tUuid );
 
 bool					StrToAttrEngine ( AttrEngine_e & eEngine, AttrEngine_e eDefault, const CSphString & sValue, CSphString & sError );
 
@@ -495,6 +525,8 @@ struct CreateTableSettings_t
 	CSphVector<CSphColumnInfo>		m_dFields;
 	CSphVector<NameValueStr_t>		m_dOpts;
 };
+
+bool ExpandCreateTableProfiles ( CreateTableSettings_t & tCreateTable, CSphString & sError );
 
 class IndexSettingsContainer_i
 {

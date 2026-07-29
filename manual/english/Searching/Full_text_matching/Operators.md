@@ -2,6 +2,8 @@
 
 The query string can include specific operators that define the conditions for how the words from the query string should be matched.
 
+For the default behavior of multi-keyword queries **without** explicit operators, see [`boolean_mode`](../../Searching/Options.md#boolean_mode).
+
 ### Boolean operators
 
 #### AND operator

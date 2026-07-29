@@ -15,6 +15,7 @@ API Key Validation: All keys are valid except "wrong" (returns 401 error)
 ––– comment –––
 Start Manticore Search
 ––– block: ../base/start-searchd –––
+––– block: ./base –––
 ––– comment –––
 MOCK SERVER STARTUP
 ––– comment –––
@@ -41,7 +42,7 @@ Test: Create table without API_TIMEOUT parameter
 Expected: Uses default timeout (10 seconds)
 Verify: Table creation succeeds, SHOW CREATE TABLE does NOT display api_timeout
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_api_timeout_not_specified (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}')" 2>&1; echo $?
+retry_remote_embedding_create_table "CREATE TABLE test_api_timeout_not_specified (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}')"; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -62,7 +63,7 @@ Test: CREATE TABLE ... API_TIMEOUT='0'
 Expected: Treated as not specified, uses default timeout (10 seconds)
 Verify: Table creation succeeds, SHOW CREATE TABLE does NOT display api_timeout
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_api_timeout_zero (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}' API_TIMEOUT='0')" 2>&1; echo $?
+retry_remote_embedding_create_table "CREATE TABLE test_api_timeout_zero (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}' API_TIMEOUT='0')"; echo $?
 ––– output –––
 0
 ––– comment –––

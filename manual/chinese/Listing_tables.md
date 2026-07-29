@@ -29,7 +29,7 @@ SHOW TABLES;
 
 ```sql
 +----------+-------------+
-| Index    | Type        |
+| 表格    | 类型        |
 +----------+-------------+
 | dist     | distributed |
 | plain    | local       |
@@ -118,7 +118,7 @@ utilsApi.sql('SHOW TABLES')
 
 <!-- response Python -->
 ```python
-{u'columns': [{u'Index': {u'type': u'string'}},
+{u'columns': [{u'Table': {u'type': u'string'}},
               {u'Type': {u'type': u'string'}}],
  u'data': [{u'Index': u'dist1', u'Type': u'distributed'},
            {u'Index': u'rt', u'Type': u'rt'},
@@ -393,7 +393,7 @@ utils_api.sql("SHOW TABLES LIKE 'pro%'", Some(true)).await
 {DESC | DESCRIBE} table_name [ LIKE pattern ]
 ```
 
-`DESCRIBE` 语句列出表的列及其相关类型。列包括文档 ID、全文字段和属性。顺序与 `INSERT` 和 `REPLACE` 语句预期的字段和属性顺序一致。列类型包括 `field`、`integer`、`timestamp`、`ordinal`、`bool`、`float`、`bigint`、`string` 和 `mva`。ID 列将被指定为 `bigint`。示例：
+`DESCRIBE` 语句列出表的列及其对应类型。列包括文档 ID、全文字段和属性。其顺序与 `INSERT` 和 `REPLACE` 语句所期望的字段和属性顺序一致。列类型包括 `field`、`integer`、`timestamp`、`ordinal`、`bool`、`float`、`bigint`、`uuid`、`string` 和 `mva`。`ID` 列默认是 `bigint`，对于使用 `id uuid` 声明的实时表则为 `uuid`。示例：
 
 ```sql
 mysql> DESC rt;
@@ -418,7 +418,7 @@ data for the following examples:
 
 DROP TABLE IF EXISTS tbl;
 CREATE TABLE tbl(title text indexed stored) charset_table='non_cont,cont' morphology='icu_chinese';
---> 
+-->
 
 <!-- example name_table -->
 您还可以通过执行查询 `select * from <table_name>.@table` 查看表模式。此方法的优点是您可以使用 `WHERE` 子句进行过滤：
@@ -480,6 +480,8 @@ SHOW CREATE TABLE table_name [ OPTION output_words = 'list' | 'file' ]
 ```
 
 打印用于创建指定表的 `CREATE TABLE` 语句。
+
+如果该表是使用 SQL `profile=...` 快捷方式创建的，`SHOW CREATE TABLE` 打印的是展开后的设置，而不是 profile 名称本身。
 
 `output_words` 选项允许您控制外部文件设置（如 `stopwords`、`exceptions`、`wordforms`、`hitless_words`）的显示方式：
 

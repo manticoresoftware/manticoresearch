@@ -87,7 +87,7 @@ Manticore Search поддерживает переменные сервера н
   Или через MySQL CLI, как:
   ```sql
   SET threads_ex='16';
-  -- or 
+  -- или
   SET GLOBAL threads_ex='/2';
   ```
 
@@ -104,34 +104,35 @@ Manticore Search поддерживает переменные сервера н
 
 * `WAIT_TIMEOUT = <значение>` устанавливает таймаут SQL-соединения на максимально допустимое время простоя для неинтерактивного соединения. Вы можете настроить этот параметр либо для сессии (для текущего соединения), либо глобально, но глобальные настройки применяются только при использовании VIP-соединений.
 * `INTERACTIVE_TIMEOUT = <значение>` устанавливает таймаут SQL-соединения на максимально допустимое время простоя для интерактивного соединения. Как и `WAIT_TIMEOUT`, этот параметр можно настроить для сессии или глобально, но глобальные настройки применяются только при использовании VIP-соединений.
-* `ACCURATE_AGGREGATION`: Устанавливает значение по умолчанию для опции [accurate_aggregation](../Searching/Options.md#accurate_aggregation) будущих запросов.  
+* `ACCURATE_AGGREGATION`: Устанавливает значение по умолчанию для опции [accurate_aggregation](../Searching/Options.md#accurate_aggregation) будущих запросов.
 * `AUTO_OPTIMIZE = <non-negative integer>` Настраивает [auto_optimize](../Server_settings/Searchd.md#auto_optimize): `0` отключает, `1` включает с порогом по умолчанию, а значения больше `1` умножают этот порог.
-* `cluster_user = name` Устанавливает имя пользователя, используемое с `mysqldump` / `mariadb-dump` для [включения режима репликации](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump).  
-* `COREDUMP= {1|0}` Включает/выключает сохранение core-файла или минидампа сервера при сбое. Подробнее [здесь](../Starting_the_server/Manually.md#searchd-command-line-options).  
-* `CPUSTATS= {1|0}` Включает/выключает [отслеживание времени CPU](../Starting_the_server/Manually.md#searchd-command-line-options).  
-* `DISTINCT_PRECISION_THRESHOLD`: Устанавливает значение по умолчанию для опции [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) будущих запросов.  
-* `ES_COMPAT = {on/off/dashboards}` При установке в `on` (по умолчанию) поддерживаются запросы записи, аналогичные Elasticsearch; `off` отключает поддержку; `dashboards` включает поддержку и также разрешает запросы из Kibana (функциональность экспериментальная).  
-* `EXPANSION_MERGE_THRESHOLD_DOCS`: Изменяет значение настройки конфига [expansion_merge_threshold_docs](../Server_settings/Searchd.md#expansion_merge_threshold_docs) на лету.  
-* `EXPANSION_MERGE_THRESHOLD_HITS`: Изменяет значение настройки конфига [expansion_merge_threshold_hits](../Server_settings/Searchd.md#expansion_merge_threshold_hits) на лету.  
-* `GROUPING_IN_UTC = {0 | 1}` При установке в 1 вызывает расчет функций группировки по времени (day(), month(), year(), yearmonth(), yearmonthday()) в UTC. Подробнее о параметре [grouping_in_utc](../Server_settings/Searchd.md).  
-* `IOSTATS = {0 | 1}` Включает или выключает отчеты об операциях ввода-вывода (кроме атрибутов) в журнале запросов.  
+* `cluster_user = name` Устанавливает имя пользователя, используемое с `mysqldump` / `mariadb-dump` для [включения режима репликации](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump).
+* `COREDUMP= {1|0}` Включает/выключает сохранение core-файла или минидампа сервера при сбое. Подробнее [здесь](../Starting_the_server/Manually.md#searchd-command-line-options).
+* `CPUSTATS= {1|0}` Включает/выключает [отслеживание времени CPU](../Starting_the_server/Manually.md#searchd-command-line-options).
+* `DISTINCT_PRECISION_THRESHOLD`: Устанавливает значение по умолчанию для опции [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) будущих запросов.
+* `EMBEDDINGS_THREADS = <non-negative integer>` Меняет [embeddings_threads](../Server_settings/Searchd.md#embeddings_threads) во время работы. Значение ограничивает, сколько потоков библиотека embeddings может использовать при генерации векторов для вставок с автоэмбеддингом, перестроения KNN в `ALTER TABLE` и эмбеддинга текстовых запросов KNN. `0` отключает ограничение.
+* `ES_COMPAT = {on/off/dashboards}` При установке в `on` (по умолчанию) поддерживаются запросы записи, аналогичные Elasticsearch; `off` отключает поддержку; `dashboards` включает поддержку и также разрешает запросы из Kibana (функциональность экспериментальная).
+* `EXPANSION_MERGE_THRESHOLD_DOCS`: Изменяет значение настройки конфига [expansion_merge_threshold_docs](../Server_settings/Searchd.md#expansion_merge_threshold_docs) на лету.
+* `EXPANSION_MERGE_THRESHOLD_HITS`: Изменяет значение настройки конфига [expansion_merge_threshold_hits](../Server_settings/Searchd.md#expansion_merge_threshold_hits) на лету.
+* `GROUPING_IN_UTC = {0 | 1}` При установке в 1 вызывает расчет функций группировки по времени (day(), month(), year(), yearmonth(), yearmonthday()) в UTC. Подробнее о параметре [grouping_in_utc](../Server_settings/Searchd.md).
+* `IOSTATS = {0 | 1}` Включает или выключает отчеты об операциях ввода-вывода (кроме атрибутов) в журнале запросов.
 * `KNN_PARALLEL_BUILD = <положительное целое число>` Изменяет [knn_parallel_build](../Server_settings/Searchd.md#knn_parallel_build) во время выполнения. Значение контролирует, сколько рабочих потоков может использоваться для построения графов HNSW во время сохранения RT-чанков и слияний чанков при `OPTIMIZE` / автооптимизации.
-* `LOG_DEBUG_FILTER = <string value>` Фильтрует избыточные сообщения журнала. Если установлено значение, тогда все логи с уровнем > INFO (например, `DEBUG`, `DEBUGV` и т.д.) будут сравниваться со строкой, и выводиться только в случае, если начинаются с данного значения.  
-* `LOG_LEVEL = {info | debug | replication | debugv | debugvv}` Изменяет текущий уровень подробности журнала.  
-* `MAINTENANCE = {0 | 1}` При установке в 1 переводит сервер в режим обслуживания. В этом режиме запросы могут выполнять только клиенты с VIP-соединениями. Все новые не-VIP соединения отклоняются. Существующие соединения сохраняются.  
-* `MAX_THREADS_PER_QUERY = <POSITIVE_INT_VALUE>` Переопределяет [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query) во время выполнения. Если задано глобально, меняет поведение для всех сессий. Значение 0 означает "без ограничений". Если установлены обе переменные — на сессию и глобальная, приоритет у переменной на сессию.  
-* `NET_WAIT = {-1 | 0 | POSITIVE_INT_VALUE}` Изменяет значение настройки [net_wait_tm](../Server_settings/Searchd.md#net_wait_tm) searchd.  
-* `OPTIMIZE_CUTOFF = <value>`: Изменяет значение настройки конфига [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) на лету.  
-* `PSEUDO_SHARDING = {1|0}` Включает/выключает поиск с помощью [псевдо-шардинга](../Server_settings/Searchd.md#pseudo_sharding).  
-* `QCACHE_MAX_BYTES = <value>` Изменяет лимит использования ОЗУ для [query_cache](../Searching/Query_cache.md) на заданное значение.  
-* `QCACHE_THRESH_MSEC = <value>` Изменяет минимальный порог времени выполнения кэша запросов [query_cache](../Searching/Query_cache.md) на заданное значение.  
-* `QCACHE_TTL_SEC = <value>` Изменяет время жизни (TTL) для закэшированного результата в [query_cache](../Searching/Query_cache.md) на заданное значение.  
-* `QUERY_LOG_FORMAT = {plain | sphinxql}` Изменяет текущий формат журнала.  
-* `QUERY_LOG_MIN_MSEC = <value>` Изменяет значение настройки [query_log_min_msec](../Server_settings/Searchd.md#query_log_min_msec) searchd. В этом случае значение ожидается строго в миллисекундах без обработки суффиксов времени, как в конфиге.  
-  > Внимание: это очень специфичная и "жёсткая" переменная; отфильтрованные сообщения просто удаляются и не записываются в журнал. Лучше фильтруйте журнал с помощью чего-то вроде 'grep', тогда у вас всегда будет резервная копия полного оригинального журнала.  
-* `RESET_NETWORK_TIMEOUT_ON_PACKET = {1|0}` Изменяет параметр [reset_network_timeout_on_packet](../Server_settings/Searchd.md#reset_network_timeout_on_packet). Изменять этот параметр могут только клиенты с VIP-соединениями.  
-* `SECONDARY_INDEXES = {1|0}` Включает/выключает [вторичные индексы](../Server_settings/Searchd.md#secondary_indexes) для поисковых запросов.  
-* `TIMEZONE = <value>` Указывает временную зону, используемую функциями, связанными с датой/временем. Подробнее о параметре [timezone](../Server_settings/Searchd.md).  
+* `LOG_DEBUG_FILTER = <string value>` Фильтрует избыточные сообщения журнала. Если установлено значение, тогда все логи с уровнем > INFO (например, `DEBUG`, `DEBUGV` и т.д.) будут сравниваться со строкой, и выводиться только в случае, если начинаются с данного значения.
+* `LOG_LEVEL = {info | debug | replication | debugv | debugvv}` Изменяет текущий уровень подробности журнала.
+* `MAINTENANCE = {0 | 1}` При установке в 1 переводит сервер в режим обслуживания. В этом режиме запросы могут выполнять только клиенты с VIP-соединениями. Все новые не-VIP соединения отклоняются. Существующие соединения сохраняются.
+* `MAX_THREADS_PER_QUERY = <POSITIVE_INT_VALUE>` Переопределяет [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query) во время выполнения. Если задано глобально, меняет поведение для всех сессий. Значение 0 означает "без ограничений". Если установлены обе переменные — на сессию и глобальная, приоритет у переменной на сессию.
+* `NET_WAIT = {-1 | 0 | POSITIVE_INT_VALUE}` Изменяет значение настройки [net_wait_tm](../Server_settings/Searchd.md#net_wait_tm) searchd.
+* `OPTIMIZE_CUTOFF = <value>`: Изменяет значение настройки конфига [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) на лету.
+* `PSEUDO_SHARDING = {1|0}` Включает/выключает поиск с помощью [псевдо-шардинга](../Server_settings/Searchd.md#pseudo_sharding).
+* `QCACHE_MAX_BYTES = <value>` Изменяет лимит использования ОЗУ для [query_cache](../Searching/Query_cache.md) на заданное значение.
+* `QCACHE_THRESH_MSEC = <value>` Изменяет минимальный порог времени выполнения кэша запросов [query_cache](../Searching/Query_cache.md) на заданное значение.
+* `QCACHE_TTL_SEC = <value>` Изменяет время жизни (TTL) для закэшированного результата в [query_cache](../Searching/Query_cache.md) на заданное значение.
+* `QUERY_LOG_FORMAT = {plain | sphinxql}` Изменяет текущий формат журнала.
+* `QUERY_LOG_MIN_MSEC = <value>` Изменяет значение настройки [query_log_min_msec](../Server_settings/Searchd.md#query_log_min_msec) searchd. В этом случае значение ожидается строго в миллисекундах без обработки суффиксов времени, как в конфиге.
+  > Внимание: это очень специфичная и "жёсткая" переменная; отфильтрованные сообщения просто удаляются и не записываются в журнал. Лучше фильтруйте журнал с помощью чего-то вроде 'grep', тогда у вас всегда будет резервная копия полного оригинального журнала.
+* `RESET_NETWORK_TIMEOUT_ON_PACKET = {1|0}` Изменяет параметр [reset_network_timeout_on_packet](../Server_settings/Searchd.md#reset_network_timeout_on_packet). Изменять этот параметр могут только клиенты с VIP-соединениями.
+* `SECONDARY_INDEXES = {1|0}` Включает/выключает [вторичные индексы](../Server_settings/Searchd.md#secondary_indexes) для поисковых запросов.
+* `TIMEZONE = <value>` Указывает временную зону, используемую функциями, связанными с датой/временем. Подробнее о параметре [timezone](../Server_settings/Searchd.md).
 
 Примеры:
 
@@ -149,5 +150,5 @@ mysql> SET INDEX users GLOBAL @banned=(1,2,3);
 Query OK, 0 rows affected (0.01 sec)
 ```
 
-Чтобы сделать пользовательские переменные постоянными, убедитесь, что [sphinxql_state](../Server_settings/Searchd.md#sphinxql_state) включен.  
+Чтобы сделать пользовательские переменные постоянными, убедитесь, что [sphinxql_state](../Server_settings/Searchd.md#sphinxql_state) включен.
 <!-- proofread -->

@@ -24,6 +24,7 @@
 #include "searchnode.h"
 #include "sphinxjson.h"
 #include "sphinxqcache.h"
+#include "sphinxplugin.h"
 #include "icu.h"
 #include "jieba.h"
 #include "attribute.h"
@@ -154,6 +155,30 @@ int64_t		g_iIndexerPoolStartHit		= 0;
 
 static bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, const CSphString & sFileName, CSphString & sError );
 
+static void DeleteTmpFilesWithPrefix ( const CSphString & sFile )
+{
+	if ( sFile.IsEmpty() )
+		return;
+
+	CSphString sMask;
+	sMask.SetSprintf ( "%s*", sFile.cstr() );
+	StrVec_t dMatches = FindFiles ( sMask.cstr(), false );
+	if ( dMatches.IsEmpty() && sphFileExists ( sFile.cstr() ) )
+		dMatches.Add ( sFile );
+
+	dMatches.for_each ( [] ( const auto & sTmpFile )
+	{
+		if ( !sTmpFile.IsEmpty() )
+			::unlink ( sTmpFile.cstr() );
+	} );
+}
+
+
+static void DeleteTmpFilesWithPrefix ( const StrVec_t & dFiles )
+{
+	dFiles.for_each ( [] ( const auto & sFile ) { DeleteTmpFilesWithPrefix ( sFile ); } );
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // COMPILE-TIME CHECKS
 /////////////////////////////////////////////////////////////////////////////
@@ -188,6 +213,46 @@ const char * sphGetRankerName ( ESphRankMode eRanker )
 		return NULL;
 
 	return g_dRankerNames[eRanker];
+}
+
+
+bool sphParseRankerName ( const CSphString & sRanker, ESphRankMode & eRanker )
+{
+	const char * szRanker = sRanker.cstr();
+	if ( !szRanker )
+		return false;
+
+	for ( int iRanker = SPH_RANK_PROXIMITY_BM25; iRanker<SPH_RANK_TOTAL; ++iRanker )
+	{
+		const char * szName = sphGetRankerName ( ESphRankMode ( iRanker ) );
+		if ( szName && sRanker==szName )
+		{
+			eRanker = ESphRankMode ( iRanker );
+			return true;
+		}
+	}
+
+	return false;
+}
+
+
+bool sphSplitRankerCall ( const CSphString & sRanker, CSphString & sName, CSphString & sArg )
+{
+	const char * szRanker = sRanker.cstr();
+	if ( !szRanker )
+		return false;
+
+	const char * szArg = szRanker;
+	while ( sphIsAlpha ( *szArg ) )
+		++szArg;
+
+	if ( szArg==szRanker || *szArg!='(' || !sRanker.Ends ( ")" ) )
+		return false;
+
+	int iNameLen = szArg-szRanker;
+	sName = sRanker.SubString ( 0, iNameLen );
+	sArg = sRanker.SubString ( iNameLen+1, sRanker.Length()-iNameLen-2 );
+	return true;
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -1255,6 +1320,7 @@ public:
 	int					KillDupes() final;
 	int					CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, BlockerFn&& fnWatcher ) final;
 	bool				IsAlive ( DocID_t tDocID ) const final;
+	DocID_t				FindAliveUuidDocid ( const UuidDocidKey_t & tKey ) const final;
 
 	const CSphSourceStats &		GetStats () const final { return m_tStats; }
 	int64_t *			GetFieldLens() const final { return m_tSettings.m_bIndexFieldLens ? m_dFieldLens.begin() : nullptr; }
@@ -1321,6 +1387,7 @@ private:
 
 	CSphMappedBuffer<BYTE>		m_tDocidLookup;		///< speeds up docid-rowid lookups + used for applying killlist on startup
 	LookupReader_c				m_tLookupReader;	///< used by getrowidbydocid
+	UuidLookupReader_c			m_tUuidLookupReader;
 
 	std::unique_ptr<Docstore_i>	m_pDocstore;
 	std::unique_ptr<columnar::Columnar_i> m_pColumnar;
@@ -1345,8 +1412,8 @@ private:
 private:
 	void						GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* = nullptr ) const override;
 
-	bool						ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tXQ, DictRefPtr_c pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const;
-	bool						RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, bool bCloneDict, const CSphQuery & tQuery, CSphQueryResult & tResult, VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tParsed, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
+	bool						ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tXQ, DictRefPtr_c pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const;
+	bool						RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, bool bCloneDict, const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResult & tResult, VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tParsed, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
 
 	template <bool ROWID_LIMITS>
 	bool						ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResultMeta & tMeta, const VecTraits_T<ISphMatchSorter *> & dSorters, CSphMatch & tMatch, int iCutoff, bool bRandomize, int iIndexWeight, int64_t tmMaxTimer, const RowIdBoundaries_t * pBoundaries = nullptr ) const;
@@ -1926,6 +1993,102 @@ void SetQueryDefaultsExt2 ( CSphQuery & tQuery )
 	tQuery.m_iRetryDelay = DEFAULT_QUERY_RETRY;
 }
 
+bool ParseStoredRanker ( const CSphString & sRanker, QueryExecutionSettings_t & tSettings, CSphString & sError )
+{
+	if ( sRanker.IsEmpty() )
+		return true;
+
+	auto SetRanker = [&] ( ESphRankMode eRanker )
+	{
+		tSettings.m_eRanker = eRanker;
+		tSettings.m_sRankerExpr = "";
+		tSettings.m_sUDRanker = "";
+		tSettings.m_sUDRankerOpts = "";
+	};
+
+	auto SetExprRanker = [&] ( ESphRankMode eRanker, CSphString sExpr )
+	{
+		sExpr.Trim();
+		if ( sExpr.Length()>=2 )
+		{
+			char cQuote = sExpr.cstr()[0];
+			if ( ( cQuote=='\'' || cQuote=='"' ) && sExpr.cstr()[sExpr.Length()-1]==cQuote )
+				sExpr = sExpr.SubString ( 1, sExpr.Length()-2 );
+		}
+
+		SetRanker ( eRanker );
+		tSettings.m_sRankerExpr = sExpr;
+	};
+
+	auto SetPluginRanker = [&] ( const CSphString & sName, const CSphString & sOpts )
+	{
+		tSettings.m_eRanker = SPH_RANK_PLUGIN;
+		tSettings.m_sUDRanker = sName;
+		tSettings.m_sRankerExpr = "";
+		tSettings.m_sUDRankerOpts = sOpts;
+	};
+
+	CSphString sRankerName = sRanker;
+	CSphString sRankerArg;
+	bool bHasRankerArg = sphSplitRankerCall ( sRanker, sRankerName, sRankerArg );
+
+	ESphRankMode eRanker = SPH_RANK_TOTAL;
+	if ( sphParseRankerName ( sRankerName, eRanker ) )
+	{
+		if ( eRanker==SPH_RANK_EXPR || eRanker==SPH_RANK_EXPORT )
+		{
+			if ( !bHasRankerArg )
+			{
+				sError.SetSprintf ( "missing ranker expression (use ranker='expr(1+2)' for example)" );
+				return false;
+			}
+
+			SetExprRanker ( eRanker, sRankerArg );
+			return true;
+		}
+
+		if ( bHasRankerArg )
+		{
+			sError.SetSprintf ( "unknown table ranker '%s'", sRanker.cstr() );
+			return false;
+		}
+
+		SetRanker ( eRanker );
+		return true;
+	}
+
+	if ( sphPluginExists ( PLUGIN_RANKER, sRankerName.cstr() ) )
+	{
+		CSphString sRankerOpts;
+		if ( bHasRankerArg )
+			sRankerOpts = sRankerArg;
+
+		SetPluginRanker ( sRankerName, sRankerOpts );
+		return true;
+	}
+
+	sError.SetSprintf ( "unknown table ranker '%s'", sRanker.cstr() );
+	return false;
+}
+
+QueryExecutionSettings_t BuildQueryExecutionSettings ( const CSphQuery & tQuery, const MutableIndexSettings_c & tSettings )
+{
+	QueryExecutionSettings_t tEffectiveSettings ( tQuery );
+
+	if ( !tQuery.m_bExplicitBooleanMode && tSettings.IsSet ( MutableName_e::BOOLEAN_MODE ) )
+		tEffectiveSettings.m_bDefaultBoolOr = tSettings.m_tQueryExecutionSettings.m_bDefaultBoolOr;
+
+	if ( !tQuery.m_bExplicitRanker && tSettings.IsSet ( MutableName_e::RANKER ) && !tSettings.m_sRanker.IsEmpty() )
+	{
+		tEffectiveSettings.m_eRanker = tSettings.m_tQueryExecutionSettings.m_eRanker;
+		tEffectiveSettings.m_sRankerExpr = tSettings.m_tQueryExecutionSettings.m_sRankerExpr;
+		tEffectiveSettings.m_sUDRanker = tSettings.m_tQueryExecutionSettings.m_sUDRanker;
+		tEffectiveSettings.m_sUDRankerOpts = tSettings.m_tQueryExecutionSettings.m_sUDRankerOpts;
+	}
+
+	return tEffectiveSettings;
+}
+
 void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitless )
 {
 	#define LOC_ERROR( ... ) do { sError.SetSprintf (__VA_ARGS__); return; } while(0)
@@ -2358,7 +2521,7 @@ RowsToUpdateData_t CSphIndex_VLN::Update_CollectRowPtrs ( const UpdateContext_t 
 
 	dSorted.Sort ( Lesser ( [&dDocids] ( int a, int b ) { return dDocids[a]<dDocids[b]; } ) );
 	DocIdIndexReader_c tSortedReader ( dSorted, dDocids );
-	LookupReaderIterator_c tLookupReader ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tLookupReader ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 	Intersect ( tLookupReader, tSortedReader, [&dRowsToUpdate, this] ( RowID_t tRowID, DocID_t, DocIdIndexReader_c& tSortedReader )
 	{
 		if ( m_tDeadRowMap.IsSet ( tRowID ) )
@@ -2378,7 +2541,7 @@ RowsToUpdate_t CSphIndex_VLN::Update_PrepareGatheredRowPtrs ( RowsToUpdate_t & d
 	RowsToUpdate_t & dRows = dWRows; // that is actually to indicate that we CHANGE contents inside dWRows, so it should be passed by non-const reference.
 
 	dRows.Sort ( Lesser ( [&dDocids] ( auto& a, auto& b ) { return dDocids[a.m_iIdx]<dDocids[b.m_iIdx]; } ) );
-	LookupReaderIterator_c tLookupReader ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tLookupReader ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 
 	RowID_t tRowID = INVALID_ROWID;
 	DocID_t tDocID = 0;
@@ -2804,12 +2967,31 @@ bool CSphIndex_VLN::Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride )
 
 bool CSphIndex_VLN::AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, const ISphSchema & tOldSchema, const ISphSchema & tNewSchema, CSphString & sError )
 {
+	bool bHaveColumnar = false;
+	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
+		bHaveColumnar |= tNewSchema.GetAttr(i).IsColumnar();
+
+	if ( !bHaveColumnar )
+		return true;
+
 	BuildBufferSettings_t tSettings; // use default buffer settings
-	auto pBuilder = CreateColumnarBuilder ( tNewSchema, GetTmpFilename ( SPH_EXT_SPC ), tSettings.m_iBufferColumnar, sError );
+	CSphString sTmpSPC = GetTmpFilename ( SPH_EXT_SPC );
+	bool bKeepTmp = false;
+	AT_SCOPE_EXIT ( [&sTmpSPC, &bKeepTmp]
+	{
+		if ( !bKeepTmp )
+			DeleteTmpFilesWithPrefix ( sTmpSPC );
+	} );
+
+	auto pBuilder = CreateColumnarBuilder ( tNewSchema, sTmpSPC, tSettings.m_iBufferColumnar, sError );
 	if ( !pBuilder )
 		return false;
 
-	return Alter_AddRemoveColumnar ( bAddAttr, m_tSchema, tNewSchema, m_pColumnar.get(), pBuilder.get(), (DWORD)m_iDocinfo, GetName(), sError );
+	if ( !Alter_AddRemoveColumnar ( bAddAttr, tOldSchema, tNewSchema, m_pColumnar.get(), pBuilder.get(), (DWORD)m_iDocinfo, GetName(), sError ) )
+		return false;
+
+	bKeepTmp = true;
+	return true;
 }
 
 
@@ -2892,8 +3074,10 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	}
 
 	if ( bColumnar )
-		AddRemoveColumnarAttr ( bAddAttr, tCtx.m_sName, tCtx.m_eType, m_tSchema, tNewSchema, sError );
-	else
+	{
+		if ( !AddRemoveColumnarAttr ( bAddAttr, tCtx.m_sName, tCtx.m_eType, m_tSchema, tNewSchema, sError ) )
+			return false;
+	} else
 	{
 		int64_t iTotalRows = m_iDocinfo + (m_iDocinfoIndex+1)*2;
 		Alter_AddRemoveRowwiseAttr ( m_tSchema, tNewSchema, m_tAttr.GetReadPtr(), (DWORD)iTotalRows, m_tBlobAttrs.GetReadPtr(), *pSPAWriteWrapper, *pSPBWriteWrapper, bAddAttr, tCtx.m_sName );
@@ -3159,7 +3343,7 @@ bool CSphIndex_VLN::AlterKillListTarget ( KillListTargets_c & tTargets, CSphStri
 void CSphIndex_VLN::KillExistingDocids ( CSphIndex * pTarget ) const
 {
 	// FIXME! collecting all docids is a waste of memory
-	LookupReaderIterator_c tLookup ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tLookup ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 	CSphFixedVector<DocID_t> dKillList ( m_iDocinfo );
 	for ( auto& dKill : dKillList )
 		tLookup.ReadDocID ( dKill );
@@ -3170,7 +3354,7 @@ void CSphIndex_VLN::KillExistingDocids ( CSphIndex * pTarget ) const
 
 int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 {
-	LookupReaderIterator_c tTargetReader ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tTargetReader ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 	DocidListReader_c tKillerReader ( dKlist );
 
 	int iTotalKilled;
@@ -3193,7 +3377,7 @@ int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 
 int CSphIndex_VLN::KillDupes()
 {
-	LookupReaderIterator_c tLookup ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tLookup ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 	int iTotalKilled = 0;
 
 	RowID_t tRowID = INVALID_ROWID;
@@ -3218,7 +3402,7 @@ int CSphIndex_VLN::KillDupes()
 
 int CSphIndex_VLN::CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, BlockerFn&& fnWatcher )
 {
-	LookupReaderIterator_c tTargetReader ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tTargetReader ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 	DocidListReader_c tKillerReader ( dKlist );
 
 	int iTotalKilled = ProcessIntersected ( tTargetReader, tKillerReader, [this,fnWatcher=std::move(fnWatcher)] ( RowID_t tRow, DocID_t tDoc )
@@ -5634,6 +5818,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( !CheckStoredFields ( m_tSchema, m_tSettings, m_sLastError ) )
 		return 0;
 
+	const auto & tQuerySettings = m_tMutableSettings.m_tQueryExecutionSettings;
+	if ( !ValidateStoredRankerExpression ( tQuerySettings.m_eRanker, tQuerySettings.m_sRankerExpr, m_tSchema, m_sLastError ) )
+		return 0;
 
 	bool bHaveJoined = pSource0->HasJoinedFields();
 
@@ -7095,8 +7282,8 @@ std::pair<DWORD,DWORD> CSphIndex_VLN::CreateRowMapsAndCountTotalDocs ( const CSp
 	{
 		tExtraDeadMap.Reset ( dDstRowMap.GetLength() );
 
-		LookupReaderIterator_c tDstLookupReader ( pDstIndex->m_tDocidLookup.GetReadPtr() );
-		LookupReaderIterator_c tSrcLookupReader ( pSrcIndex->m_tDocidLookup.GetReadPtr() );
+		LookupReaderIterator_c tDstLookupReader ( pDstIndex->m_tDocidLookup.GetReadPtr(), pDstIndex->m_uVersion );
+		LookupReaderIterator_c tSrcLookupReader ( pSrcIndex->m_tDocidLookup.GetReadPtr(), pSrcIndex->m_uVersion );
 
 		KillByLookup ( tDstLookupReader, tSrcLookupReader, tExtraDeadMap );
 	}
@@ -7193,11 +7380,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	// unlink prepared attribute files on exit, if any
 	AT_SCOPE_EXIT ( [&dDeleteOnInterrupt]
 	{
-		dDeleteOnInterrupt.for_each ( [] ( const auto & sFile )
-		{
-			if ( !sFile.IsEmpty() && sphFileExists ( sFile.cstr() ) )
-				::unlink ( sFile.cstr() );
-		} ); 
+		DeleteTmpFilesWithPrefix ( dDeleteOnInterrupt );
 	});
 
 	// merging attributes
@@ -7374,11 +7557,7 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 	StrVec_t dDeleteOnInterrupt;
 	AT_SCOPE_EXIT ( [&dDeleteOnInterrupt]
 	{
-		dDeleteOnInterrupt.for_each ( [] ( const auto & sFile )
-		{
-			if ( !sFile.IsEmpty() && sphFileExists ( sFile.cstr() ) )
-				::unlink ( sFile.cstr() );
-		} );
+		DeleteTmpFilesWithPrefix ( dDeleteOnInterrupt );
 	} );
 
 	{
@@ -7970,6 +8149,14 @@ bool CSphIndex_VLN::IsAlive ( DocID_t tDocID ) const
 		return false;
 
 	return ( !m_tDeadRowMap.IsSet ( tRow ) );
+}
+
+
+DocID_t CSphIndex_VLN::FindAliveUuidDocid ( const UuidDocidKey_t & tKey ) const
+{
+	assert ( m_tSchema.GetAttr(0).IsUuidLinkedDocid() );
+	DocID_t tDocID = m_tUuidLookupReader.Find ( tKey );
+	return tDocID && IsAlive ( tDocID ) ? tDocID : 0;
 }
 
 
@@ -8798,7 +8985,7 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	dSIIterators = m_tSI.CreateSecondaryIndexIterator ( dSIInfo, dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), iCutoff, bUseSICache, tMeta.m_sWarning );
 
 	// lookup-by-id (.SPT) iterators
-	dLookupIterators = CreateLookupIterator ( dSIInfo, dFilters, m_tDocidLookup.GetReadPtr(), RowID_t(m_iDocinfo) );
+	dLookupIterators = CreateLookupIterator ( dSIInfo, dFilters, m_tDocidLookup.GetReadPtr(), m_uVersion, RowID_t(m_iDocinfo) );
 
 	// try to spawn analyzers or prefilters from columnar storage
 	// if we already created an iterator at prev stage, we need to recreate filters here,
@@ -10037,7 +10224,11 @@ bool CSphIndex_VLN::PreallocDocidLookup()
 	if ( !m_tDocidLookup.Setup ( GetFilename ( SPH_EXT_SPT ), m_sLastError, false ) )
 		return false;
 
-	m_tLookupReader.SetData ( m_tDocidLookup.GetReadPtr() );
+	auto [ tUuidEntriesOffset, nDocs ] = m_tLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), m_uVersion );
+	const bool bUuidLinked = m_tSchema.GetAttr(0).IsUuidLinkedDocid();
+	assert ( !!tUuidEntriesOffset==bUuidLinked );
+	if ( bUuidLinked )
+		m_tUuidLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), tUuidEntriesOffset, nDocs );
 
 	return true;
 }
@@ -10507,6 +10698,18 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 		}
 	}
 
+	const CSphString & sBlendMode = pTokenizer->GetSettings().m_sBlendMode;
+	if ( !sBlendMode.IsEmpty() )
+	{
+		CSphString sError;
+		if ( !pTokenizer->SetBlendMode ( sBlendMode.cstr(), sError ) )
+		{
+			if ( pError )
+				*pError = sError;
+			return false;
+		}
+	}
+
 	pTokenizer->SetBuffer ( sModifiedQuery, (int)strlen ( (const char*)sModifiedQuery ) );
 
 	ExpansionContext_t tExpCtx;
@@ -10551,6 +10754,12 @@ static int sphQueryHeightCalc ( const XQNode_t * pNode )
 {
 	if ( pNode->dChildren().IsEmpty() )
 	{
+		// Phrase-like plain nodes are later expanded into one ExtNode per word.
+		// Account for that width here, otherwise a long quoted phrase can pass
+		// the stack guard and overrun/corrupt the small worker coroutine stack.
+		if ( pNode->GetOp()==SPH_QUERY_PHRASE || pNode->GetOp()==SPH_QUERY_PROXIMITY || pNode->GetOp()==SPH_QUERY_NEAR || pNode->GetOp()==SPH_QUERY_QUORUM )
+			return pNode->dWords().GetLength();
+
 		// exception, pre-cached OR of tiny (rare) keywords is just one node
 		if ( pNode->GetOp()==SPH_QUERY_OR )
 		{
@@ -11543,7 +11752,7 @@ bool CSphIndex_VLN::SplitQuery ( RUN && tRun, CSphQueryResult & tResult, const C
 }
 
 
-bool CSphIndex_VLN::RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, bool bCloneDict, const CSphQuery & tQuery, CSphQueryResult & tResult, VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tParsed, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const
+bool CSphIndex_VLN::RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, bool bCloneDict, const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResult & tResult, VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tParsed, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const
 {
 	return Threads::Coro::ContinueBool ( iStackNeed, [&] {
 
@@ -11572,7 +11781,7 @@ bool CSphIndex_VLN::RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, 
 			SetupExactDict ( pClonedDict );
 		}
 
-		bool bResult = ParsedMultiQuery ( tQuery, tResult, dSorters, *pTree, bCloneDict ? std::move (pClonedDict) : std::move (pDict), tArgs, &tNodeCache, tmMaxTimer );
+		bool bResult = ParsedMultiQuery ( tQuery, tQuerySettings, tResult, dSorters, *pTree, bCloneDict ? std::move (pClonedDict) : std::move (pDict), tArgs, &tNodeCache, tmMaxTimer );
 
 		PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), tArgs.m_bFinalizeSorters, tResult.m_pMeta->m_pProfile, tArgs.m_bModifySorterSchemas );
 
@@ -11585,6 +11794,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 {
 	auto & tMeta = *tResult.m_pMeta;
 	QueryProfile_c * pProfile = tMeta.m_pProfile;
+	QueryExecutionSettings_t tQuerySettings = BuildQueryExecutionSettings ( tQuery, m_tMutableSettings );
 
 	int64_t	tmMaxTimer = 0;
 	std::unique_ptr<MiniTimer_c> pTimerGuard;
@@ -11643,7 +11853,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 
 	assert ( m_pQueryTokenizer.Ptr() && m_pQueryTokenizerJson.Ptr() );
 	XQQuery_t tParsed;
-	if ( !pQueryParser->ParseQuery ( tParsed, (const char*)sModifiedQuery, &tQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
+	if ( !pQueryParser->ParseQuery ( tParsed, (const char*)sModifiedQuery, &tQuery, tQuerySettings, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
 	{
 		// FIXME? might wanna reset profile to unknown state
 		tMeta.m_sError = tParsed.m_sParseError;
@@ -11698,12 +11908,12 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 
 	if ( tArgs.m_iThreads>1 )
 		return SplitQuery (
-			[this, iStackNeed, &pDict, &tParsed, &tmMaxTimer]
+			[this, iStackNeed, &pDict, &tParsed, &tQuerySettings, &tmMaxTimer]
 			( CSphQueryResult & tChunkResult, const CSphQuery & tQuery, VecTraits_T<ISphMatchSorter *> dLocalSorters, const CSphMultiQueryArgs & tMultiArgs )
-			{ return RunParsedMultiQuery ( iStackNeed, pDict, true, tQuery, tChunkResult, dLocalSorters, tParsed, tMultiArgs, tmMaxTimer ); },
+			{ return RunParsedMultiQuery ( iStackNeed, pDict, true, tQuery, tQuerySettings, tChunkResult, dLocalSorters, tParsed, tMultiArgs, tmMaxTimer ); },
 			tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
 
-	return RunParsedMultiQuery ( iStackNeed, pDict, false, tQuery, tResult, dSorters, tParsed, tArgs, tmMaxTimer );
+	return RunParsedMultiQuery ( iStackNeed, pDict, false, tQuery, tQuerySettings, tResult, dSorters, tParsed, tArgs, tmMaxTimer );
 }
 
 
@@ -11719,6 +11929,10 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 
 	assert ( ppSorters );
 
+	CSphFixedVector<QueryExecutionSettings_t> dQuerySettings ( iQueries );
+	for ( int i=0; i<iQueries; ++i )
+		dQuerySettings[i] = BuildQueryExecutionSettings ( pQueries[i], m_tMutableSettings );
+
 	DictRefPtr_c pDict = GetStatelessDict ( m_pDict );
 	SetupStarDict ( pDict );
 	SetupExactDict ( pDict );
@@ -11732,6 +11946,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 	for ( int i=0; i<iQueries; ++i )
 	{
 		const auto & tCurQuery = pQueries[i];
+		const auto & tCurQuerySettings = dQuerySettings[i];
 		auto & tCurResult = pResults[i];
 		auto & tMeta = *tCurResult.m_pMeta;
 
@@ -11761,7 +11976,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 		const QueryParser_i * pQueryParser = tCurQuery.m_pQueryParser;
 		assert ( pQueryParser );
 
-		if ( pQueryParser->ParseQuery ( dXQ[i], tCurQuery.m_sQuery.cstr(), &tCurQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
+		if ( pQueryParser->ParseQuery ( dXQ[i], tCurQuery.m_sQuery.cstr(), &tCurQuery, tCurQuerySettings, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
 		{
 			// transform query if needed (quorum transform, keyword expansion, etc.)
 			TransformExtendedQueryArgs_t tTranformArgs { GetBooleanSimplify ( tCurQuery ), dXQ[i].m_bNeedPhraseTransform, this };
@@ -11824,6 +12039,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 		for ( int j=0; j<iQueries; ++j )
 		{
 			const auto & tCurQuery = pQueries[j];
+			const auto & tCurQuerySettings = dQuerySettings[j];
 			auto & tCurResult = pResults[j];
 			auto & tMeta = *tCurResult.m_pMeta;
 
@@ -11836,7 +12052,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 			MiniTimer_c tTimerGuard;
 			int64_t tmMaxTimer = tTimerGuard.Engage ( tCurQuery.m_uMaxQueryMsec ); // max_query_time
 
-			if ( dXQ[j].m_pRoot && ppSorters[j] && ParsedMultiQuery ( tCurQuery, tCurResult, { ppSorters+j, 1 }, dXQ[j], pDict, tArgs, &tNodeCache, tmMaxTimer ) )
+			if ( dXQ[j].m_pRoot && ppSorters[j] && ParsedMultiQuery ( tCurQuery, tCurQuerySettings, tCurResult, { ppSorters+j, 1 }, dXQ[j], pDict, tArgs, &tNodeCache, tmMaxTimer ) )
 			{
 				bResult = true;
 				tMeta.m_iMultiplier = iCommonSubtrees ? iQueries : 1;
@@ -11924,7 +12140,7 @@ static void SetupRowIdBoundaries ( const CSphVector<CSphFilterSettings> & dFilte
 }
 
 
-bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter *> & dSorters, const XQQuery_t & tXQ, DictRefPtr_c pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const
+bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter *> & dSorters, const XQQuery_t & tXQ, DictRefPtr_c pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const
 {
 	assert ( !tQuery.m_sQuery.IsEmpty() && tQuery.m_eMode!=SPH_MATCH_FULLSCAN ); // scans must go through MultiScan()
 	assert ( tArgs.m_iTag>=0 );
@@ -11955,7 +12171,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 		return false;
 	}
 
-	CSphQueryContext tCtx(tQuery);
+	CSphQueryContext tCtx ( tQuery, tQuerySettings );
 	CreateFilterContext_t tFlx;
 	const ISphSchema * pMaxSorterSchema = nullptr;
 	CSphVector<const ISphSchema *> dSorterSchemas;
@@ -12020,11 +12236,11 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tXQ, tQuery, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
+	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tXQ, tQuery, tQuerySettings, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
 	if ( !pRanker )
 		return false;
 
-	if ( ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE ) && tQuery.m_eRanker!=SPH_RANK_EXPR )
+	if ( ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE ) && tQuerySettings.m_eRanker!=SPH_RANK_EXPR )
 		tMeta.m_sWarning.SetSprintf ( "packedfactors() and bm25f() requires using an expression ranker" );
 
 	tCtx.SetupExtraData ( pRanker.get(), dSorters.GetLength()==1 ? dSorters[0] : nullptr );

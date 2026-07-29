@@ -16,6 +16,7 @@
 #include "knnlib.h"
 #include "exprtraits.h"
 #include "sphinxint.h"
+#include "attribute.h"
 #include "querycontext.h"
 #include "queryprofile.h"
 #include "fileio.h"
@@ -190,43 +191,40 @@ std::unique_ptr<knn::KNNFilter_i> CreateKNNPrefilter ( const CSphQueryContext & 
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-class Expr_KNNDist_c : public ISphExpr
+
+class KNNVecDistCalc_c
 {
 public:
-				Expr_KNNDist_c ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
+				KNNVecDistCalc_c ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
 
-	float		Eval ( const CSphMatch & tMatch ) const override;
-	int			IntEval ( const CSphMatch & tMatch ) const override		{ return (int)Eval(tMatch); }
-	int64_t		Int64Eval ( const CSphMatch & tMatch ) const override	{ return (int64_t)Eval(tMatch); }
-	void		FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override { sphFixupLocator ( m_tAttr.m_tLocator, pOldSchema, pNewSchema ); }
-	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;
-	ISphExpr *	Clone() const override									{ return new Expr_KNNDist_c ( m_dAnchor, m_tAttr ); }
-	void		Command ( ESphExprCommand eCmd, void * pArg ) override;
+	void		SetAnchor ( const CSphVector<float> & dAnchor );
+	void		SetBlobPool ( const BYTE * pPool )									{ m_pBlobPool = pPool; }
+	void		SetColumnar ( columnar::Columnar_i * pColumnar );
+	void		FixupLocator ( const ISphSchema * pOld, const ISphSchema * pNew )	{ sphFixupLocator ( m_tAttr.m_tLocator, pOld, pNew ); }
 
-	void		SetData ( const util::Span_T<const knn::DocDist_t> & dData );
+	float		CalcDist ( const CSphMatch & tMatch ) const;
+	void		RescoreBatch ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool, const GetColumnarFromMatch_fn & fnColumnar );
+	void		RescoreBatchLocal ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc );
 
-protected:
-	CSphVector<float>	m_dAnchor;
-	CSphColumnInfo		m_tAttr;
-	bool				m_bUseAttribute = false;
-	const BYTE *		m_pBlobPool = nullptr;
-	std::unique_ptr<columnar::Iterator_i> m_pIterator;
-
-	float				CalcDist ( const CSphMatch & tMatch ) const;
+	const CSphColumnInfo &		GetAttr() const		{ return m_tAttr; }
+	const CSphVector<float> &	GetAnchor() const	{ return m_dAnchor; }
 
 private:
+	CSphVector<float>					m_dAnchor;
+	CSphColumnInfo						m_tAttr;
+	const BYTE *						m_pBlobPool = nullptr;
+	columnar::Columnar_i *				m_pColumnar = nullptr;
+	std::unique_ptr<columnar::Iterator_i> m_pIterator;
 	std::unique_ptr<knn::Distance_i>	m_pDistCalc;
 	knn::Distance_i::DistFunc_fn		m_fnDistFunc = nullptr;
 	void *								m_pDistFuncParam = nullptr;
 
-	util::Span_T<const  knn::DocDist_t>	m_dData;
-	mutable const knn::DocDist_t *		m_pStart = nullptr;
-
-	void				SetAnchor ( const CSphVector<float> & dAnchor );
+	void		RescoreColumnar ( const VecTraits_T<int> & dOrder, VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetColumnarFromMatch_fn & fnColumnar );
+	void		RescoreBlob ( const VecTraits_T<int> & dOrder, VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool );
 };
 
 
-Expr_KNNDist_c::Expr_KNNDist_c ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr )
+KNNVecDistCalc_c::KNNVecDistCalc_c ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr )
 	: m_tAttr ( tAttr )
 {
 	knn::IndexSettings_t tDistSettings = tAttr.m_tKNN;
@@ -241,10 +239,218 @@ Expr_KNNDist_c::Expr_KNNDist_c ( const CSphVector<float> & dAnchor, const CSphCo
 }
 
 
+void KNNVecDistCalc_c::SetAnchor ( const CSphVector<float> & dAnchor )
+{
+	m_dAnchor = dAnchor;
+
+	if ( m_tAttr.m_tKNN.m_eHNSWSimilarity==knn::HNSWSimilarity_e::COSINE )
+		NormalizeVec(m_dAnchor);
+}
+
+
+void KNNVecDistCalc_c::SetColumnar ( columnar::Columnar_i * pColumnar )
+{
+	m_pColumnar = pColumnar;	// remembered for RescoreBatchLocal
+
+	if ( !m_tAttr.IsColumnar() )
+		return;
+
+	if ( pColumnar )
+	{
+		std::string sError; // FIXME! report errors
+		columnar::IteratorHints_t tHints { .m_bNeedStringHashes = false, .m_bBuffered = false };
+		m_pIterator = CreateColumnarIterator ( pColumnar, m_tAttr.m_sName.cstr(), sError, tHints );
+	}
+	else
+		m_pIterator.reset();
+}
+
+
+float KNNVecDistCalc_c::CalcDist ( const CSphMatch & tMatch ) const
+{
+	// this code path is used when no iterator is available, i.e. in ram chunk
+	ByteBlob_t tRes;
+	if ( m_pIterator )
+		tRes.second = m_pIterator->Get ( tMatch.m_tRowID, tRes.first );
+	else
+		tRes = tMatch.FetchAttrData ( m_tAttr.m_tLocator, m_pBlobPool );
+
+	size_t uDim = tRes.second / sizeof(float);
+	if ( (int)uDim!=m_tAttr.m_tKNN.m_iDims )
+		return FLT_MAX;
+
+	assert ( m_fnDistFunc );
+	return m_fnDistFunc ( tRes.first, m_dAnchor.Begin(), (size_t)-1, (size_t)-1, m_pDistFuncParam );
+}
+
+
+void KNNVecDistCalc_c::RescoreBatch ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool, const GetColumnarFromMatch_fn & fnColumnar )
+{
+	const int iCount = dMatches.GetLength();
+	if ( !iCount )
+		return;
+
+	assert ( m_tAttr.m_tKNN.m_iDims>0 );
+	// anchor must be set (SetKNNVec) before rescore; for auto-embeddings it is resolved post-creation
+	assert ( m_dAnchor.GetLength()==m_tAttr.m_tKNN.m_iDims );
+
+	CSphVector<int> dOrder ( iCount );
+	ARRAY_FOREACH ( i, dOrder )
+		dOrder[i] = i;
+
+	dOrder.Sort ( Lesser ( [&dMatches] ( int a, int b )
+	{
+		if ( dMatches[a]->m_iTag!=dMatches[b]->m_iTag )
+			return dMatches[a]->m_iTag < dMatches[b]->m_iTag;
+		return dMatches[a]->m_tRowID < dMatches[b]->m_tRowID;
+	} ) );
+
+	if ( m_tAttr.IsColumnar() )
+		RescoreColumnar ( dOrder, dMatches, tOutLoc, fnColumnar );
+	else
+		RescoreBlob ( dOrder, dMatches, tOutLoc, fnBlobPool );
+}
+
+
+void KNNVecDistCalc_c::RescoreColumnar ( const VecTraits_T<int> & dOrder, VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetColumnarFromMatch_fn & fnColumnar )
+{
+	const int iVecBytes = m_tAttr.m_tKNN.m_iDims*(int)sizeof(float);
+
+	std::unique_ptr<columnar::Iterator_i> pIterator;
+	columnar::Columnar_i * pCurColumnar = nullptr;
+	bool bInitialized = false;
+
+	ARRAY_FOREACH ( i, dOrder )
+	{
+		CSphMatch * pMatch = dMatches[ dOrder[i] ];
+
+		columnar::Columnar_i * pColumnar = fnColumnar(pMatch);
+		if ( !bInitialized || pColumnar!=pCurColumnar )
+		{
+			pCurColumnar = pColumnar;
+			bInitialized = true;
+			pIterator.reset();
+
+			if ( pColumnar )
+			{
+				std::string sError; // FIXME! report errors
+				// ascending-rowid access -> buffered reader (sequential read-ahead)
+				columnar::IteratorHints_t tHints { .m_bNeedStringHashes = false, .m_bBuffered = true };
+				pIterator = CreateColumnarIterator ( pColumnar, m_tAttr.m_sName.cstr(), sError, tHints );
+			}
+		}
+
+		const BYTE * pData = nullptr;
+		int iLen = pIterator ? pIterator->Get ( pMatch->m_tRowID, pData ) : 0;
+		float fDist = ( iLen==iVecBytes && pData )
+			? m_fnDistFunc ( pData, m_dAnchor.Begin(), (size_t)-1, (size_t)-1, m_pDistFuncParam )
+			: FLT_MAX;
+
+		pMatch->SetAttrFloat ( tOutLoc, fDist );
+	}
+}
+
+
+void KNNVecDistCalc_c::RescoreBlob ( const VecTraits_T<int> & dOrder, VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool )
+{
+	const int iCount = dOrder.GetLength();
+	const int iVecBytes = m_tAttr.m_tKNN.m_iDims*(int)sizeof(float);
+
+	static const int CHUNK = 256;
+
+	// read the blob-row offset from the match row (docinfo), then read the blob-row header from the
+	// pool at that offset. Software-pipeline both: prefetch the offset location furthest ahead, then
+	// (once it's warm) prefetch the header, then resolve. CalcDistBatch prefetches the vector itself.
+	static const int PF_OFFSET = 16;
+	static const int PF_HEADER = 8;
+
+	CSphVector<const void*>	dPtrs;
+	CSphVector<CSphMatch*> dValid;
+	CSphVector<float> dOut;
+	dPtrs.Reserve(CHUNK);
+	dValid.Reserve(CHUNK);
+	dOut.Reserve(CHUNK);
+
+	for ( int iPos = 0; iPos < iCount; iPos += CHUNK )
+	{
+		const int iChunk = Min ( CHUNK, iCount-iPos );
+		dPtrs.Resize(0);
+		dValid.Resize(0);
+
+		for ( int j = 0; j < iChunk; j++ )
+		{
+			const int iGlobal = iPos+j;
+			if ( iGlobal+PF_OFFSET < iCount )
+				sphPrefetchBlobRowOffset ( *dMatches[ dOrder[iGlobal+PF_OFFSET] ], m_tAttr.m_tLocator );
+
+			if ( iGlobal+PF_HEADER < iCount )
+			{
+				CSphMatch * pAhead = dMatches[ dOrder[iGlobal+PF_HEADER] ];
+				sphPrefetchBlobRow ( *pAhead, m_tAttr.m_tLocator, fnBlobPool(pAhead) );
+			}
+
+			CSphMatch * pMatch = dMatches[ dOrder[iGlobal] ];
+			ByteBlob_t tRes = pMatch->FetchAttrData ( m_tAttr.m_tLocator, fnBlobPool(pMatch) );
+			if ( tRes.second!=iVecBytes || !tRes.first )
+			{
+				pMatch->SetAttrFloat ( tOutLoc, FLT_MAX );
+				continue;
+			}
+
+			dPtrs.Add ( tRes.first );
+			dValid.Add ( pMatch );
+		}
+
+		if ( !dPtrs.GetLength() )
+			continue;
+
+		dOut.Resize ( dPtrs.GetLength() );
+		m_pDistCalc->CalcDistBatch ( m_dAnchor.Begin(), { dPtrs.Begin(), (size_t)dPtrs.GetLength() }, { dOut.Begin(), (size_t)dOut.GetLength() } );
+
+		ARRAY_FOREACH ( k, dValid )
+			dValid[k]->SetAttrFloat ( tOutLoc, dOut[k] );
+	}
+}
+
+
+void KNNVecDistCalc_c::RescoreBatchLocal ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc )
+{
+	const BYTE * pPool = m_pBlobPool;
+	columnar::Columnar_i * pColumnar = m_pColumnar;
+	RescoreBatch ( dMatches, tOutLoc,
+		[pPool] ( const CSphMatch * ) { return pPool; },
+		[pColumnar] ( const CSphMatch * ) { return pColumnar; } );
+}
+
+/////////////////////////////////////////////////////////////////////
+
+class Expr_KNNDist_c : public ISphExpr
+{
+public:
+				Expr_KNNDist_c ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr ) : m_tCalc ( dAnchor, tAttr ) {}
+
+	float		Eval ( const CSphMatch & tMatch ) const override;
+	int			IntEval ( const CSphMatch & tMatch ) const override		{ return (int)Eval(tMatch); }
+	int64_t		Int64Eval ( const CSphMatch & tMatch ) const override	{ return (int64_t)Eval(tMatch); }
+	void		FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override { m_tCalc.FixupLocator ( pOldSchema, pNewSchema ); }
+	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;
+	ISphExpr *	Clone() const override									{ return new Expr_KNNDist_c ( m_tCalc.GetAnchor(), m_tCalc.GetAttr() ); }
+	void		Command ( ESphExprCommand eCmd, void * pArg ) override;
+
+	void		SetData ( const util::Span_T<const knn::DocDist_t> & dData );
+	KNNVecDistCalc_c *	GetVecDistCalc()	{ return &m_tCalc; }
+
+private:
+	KNNVecDistCalc_c					m_tCalc;
+	util::Span_T<const  knn::DocDist_t>	m_dData;
+	mutable const knn::DocDist_t *		m_pStart = nullptr;
+};
+
+
 float Expr_KNNDist_c::Eval ( const CSphMatch & tMatch ) const
 {
 	if ( !m_pStart )
-		return CalcDist(tMatch);
+		return m_tCalc.CalcDist(tMatch);
 
 	// use precalculated data
 	const knn::DocDist_t * pEnd = m_dData.end();
@@ -260,29 +466,18 @@ void Expr_KNNDist_c::Command ( ESphExprCommand eCmd, void * pArg )
 	switch ( eCmd )
 	{
 	case SPH_EXPR_SET_COLUMNAR:
-		if ( m_tAttr.IsColumnar() )
-		{
-			auto pColumnar = (const columnar::Columnar_i*)pArg;
-			if ( pColumnar && !m_bUseAttribute )
-			{
-				std::string sError; // FIXME! report errors
-				columnar::IteratorHints_t tHints { .m_bNeedStringHashes = false, .m_bBuffered = false };
-				m_pIterator = CreateColumnarIterator ( pColumnar, m_tAttr.m_sName.cstr(), sError, tHints );
-			}
-			else
-				m_pIterator.reset();
-		}
+		m_tCalc.SetColumnar ( (columnar::Columnar_i*)pArg );
 		break;
 
 	case SPH_EXPR_SET_BLOB_POOL:
-		m_pBlobPool = (const BYTE*)pArg;
+		m_tCalc.SetBlobPool ( (const BYTE*)pArg );
 
 		// reset our temporary data (e.g. between index chunks)
 		m_pStart = nullptr;
 		break;
 
 	case SPH_EXPR_SET_KNN_VEC:
-		SetAnchor ( *(const CSphVector<float>*)pArg );
+		m_tCalc.SetAnchor ( *(const CSphVector<float>*)pArg );
 		break;
 
 	default:
@@ -304,76 +499,6 @@ uint64_t Expr_KNNDist_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uP
 	return CALC_DEP_HASHES();
 }
 
-
-float Expr_KNNDist_c::CalcDist ( const CSphMatch & tMatch ) const
-{
-	// this code path is used when no iterator is available, i.e. in ram chunk
-	ByteBlob_t tRes;
-	if ( m_pIterator )
-		tRes.second = m_pIterator->Get ( tMatch.m_tRowID, tRes.first );
-	else
-		tRes = tMatch.FetchAttrData ( m_tAttr.m_tLocator, m_pBlobPool );
-
-	size_t uDim = tRes.second / sizeof(float);
-	if ( (int)uDim!=m_tAttr.m_tKNN.m_iDims )
-		return FLT_MAX;
-
-	assert ( m_fnDistFunc );
-	return m_fnDistFunc ( tRes.first, m_dAnchor.Begin(), (size_t)-1, (size_t)-1, m_pDistFuncParam );
-}
-
-
-void Expr_KNNDist_c::SetAnchor ( const CSphVector<float> & dAnchor )
-{
-	m_dAnchor = dAnchor;
-
-	if ( m_tAttr.m_tKNN.m_eHNSWSimilarity==knn::HNSWSimilarity_e::COSINE )
-		NormalizeVec(m_dAnchor);
-}
-
-/////////////////////////////////////////////////////////////////////
-
-class Expr_KNNDistRescore_c : public Expr_KNNDist_c
-{
-public:
-				Expr_KNNDistRescore_c ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
-
-	float		Eval ( const CSphMatch & tMatch ) const override	{ return CalcDist(tMatch); }
-	void		Command ( ESphExprCommand eCmd, void * pArg ) final;
-	bool		IsColumnar ( bool * pStored ) const final			{ return m_tAttr.IsColumnar(); }
-	bool		PrefersRowIdOrder() const final						{ return true; }
-
-protected:
-	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;
-	ISphExpr *	Clone() const override								{ return new Expr_KNNDistRescore_c ( m_dAnchor, m_tAttr ); }
-};
-
-
-Expr_KNNDistRescore_c::Expr_KNNDistRescore_c ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr )
-	: Expr_KNNDist_c ( dAnchor, tAttr )
-{
-	if ( tAttr.IsColumnarExpr() )
-		m_bUseAttribute = true;
-}
-
-
-void Expr_KNNDistRescore_c ::Command ( ESphExprCommand eCmd, void * pArg )
-{
-	Expr_KNNDist_c::Command ( eCmd, pArg );
-
-	if ( m_bUseAttribute && eCmd==SPH_EXPR_GET_DEPENDENT_COLS )
-		static_cast<StrVec_t*>(pArg)->Add ( m_tAttr.m_sName );
-}
-
-
-uint64_t Expr_KNNDistRescore_c ::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
-{
-	EXPR_CLASS_NAME("Expr_KNNDistRescore_c");
-	CALC_STR_HASH(m_tAttr.m_sName, m_tAttr.m_sName.Length());
-	CALC_POD_HASH(m_bUseAttribute);
-	return CALC_DEP_HASHES();
-}
-
 /////////////////////////////////////////////////////////////////////
 
 const char * GetKnnDistAttrName()
@@ -392,12 +517,6 @@ const char * GetKnnDistRescoreAttrName()
 ISphExpr * CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr )
 {
 	return new Expr_KNNDist_c ( dAnchor, tAttr );
-}
-
-
-ISphExpr * CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr )
-{
-	return new Expr_KNNDistRescore_c ( dAnchor, tAttr );
 }
 
 
@@ -1014,10 +1133,34 @@ static ISphMatchComparator * CreateMatchComparator ( ESphSortFunc eFunc )
 }
 
 
+class MatchPtrCollector_c : public MatchProcessor_i
+{
+public:
+	CSphVector<CSphMatch*>	m_dMatches;
+
+	void	Process ( CSphMatch * pMatch ) final					{ m_dMatches.Add ( pMatch ); }
+	void	Process ( VecTraits_T<CSphMatch *> & dMatches ) final	{ for ( auto * p : dMatches ) m_dMatches.Add ( p ); }
+	bool	ProcessInRowIdOrder() const final						{ return false; }
+};
+
+
+static KNNVecDistCalc_c * GetKnnDistCalc ( const ISphSchema * pSchema )
+{
+	if ( !pSchema )
+		return nullptr;
+
+	const CSphColumnInfo * pAttr = pSchema->GetAttr ( GetKnnDistAttrName() );
+	if ( !pAttr || !pAttr->m_pExpr )
+		return nullptr;
+
+	return ( (Expr_KNNDist_c*)pAttr->m_pExpr.Ptr() )->GetVecDistCalc();
+}
+
+
 class RescoreSorter_c : public ISphMatchSorter
 {
 public:
-			RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp ) : m_pSorter ( pSorter ), m_pComp ( std::move ( pComp ) ) {}
+			RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp );
 
 	bool	Push ( const CSphMatch & tEntry ) final							{ return m_pSorter->Push(tEntry); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) override	{ for ( auto & i : dMatches ) m_pSorter->Push(i); }
@@ -1042,7 +1185,7 @@ public:
 	int64_t	GetTotalCount() const override									{ return m_pSorter->GetTotalCount(); }
 
 	void	SetFilteredAttrs ( const sph::StringSet & hAttrs, bool bAddDocid ) override { m_pSorter->SetFilteredAttrs ( hAttrs, bAddDocid ); }
-	void	TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch, bool bFinalizeSorters ) override { m_pSorter->TransformPooled2StandalonePtrs ( fnBlobPoolFromMatch, fnGetColumnarFromMatch, bFinalizeSorters ); }
+	void	TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch, bool bFinalizeSorters ) override;
 
 	bool	IsRandom() const override 										{ return m_pSorter->IsRandom(); }
 	void	SetRandom ( bool bRandom ) override								{ m_pSorter->SetRandom(bRandom); }
@@ -1057,7 +1200,16 @@ public:
 private:
 	std::unique_ptr<ISphMatchSorter> m_pSorter;
 	CSphRefcountedPtr<ISphMatchComparator> m_pComp;
+	bool							m_bRescored = false;
+
+	const CSphAttrLocator *			GetRescoreLocator() const;
 };
+
+
+RescoreSorter_c::RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp )
+	: m_pSorter ( pSorter )
+	, m_pComp ( std::move ( pComp ) )
+{}
 
 
 int RescoreSorter_c::Flatten ( CSphMatch * pTo )
@@ -1081,11 +1233,23 @@ int RescoreSorter_c::Flatten ( CSphMatch * pTo )
 	auto * pKNNDistRescore = m_pSorter->GetSchema()->GetAttr ( GetKnnDistRescoreAttrName() );
 	assert(pKNNDistRescore);
 
-	// Copy rescored dist to old dist first, then re-apply the original sorter.
-	// The original sorter state starts with knn_dist() (unless the user explicitly
-	// sorted by knn_dist()) and then contains user ORDER BY tie-breakers.
-	// Sorting by rescored distance only, even stably, can keep stale approximate
-	// distance order ahead of explicit tie-breakers for exact-distance ties.
+	// Exact rescore normally happens in TransformPooled2StandalonePtrs (while per-match blob pools
+	// are still valid). If that transform was skipped for this query, matches are still pooled under
+	// the original schema here, so rescore now with the single pool.
+	if ( !m_bRescored )
+	{
+		KNNVecDistCalc_c * pCalc = GetKnnDistCalc ( m_pSorter->GetSchema() );
+		if ( pCalc )
+		{
+			CSphVector<CSphMatch*> dPtrs ( dMatches.GetLength() );
+			ARRAY_FOREACH ( i, dMatches )
+				dPtrs[i] = &dMatches[i];
+
+			pCalc->RescoreBatchLocal ( dPtrs, pKNNDistRescore->m_tLocator );
+		}
+		m_bRescored = true;
+	}
+
 	for ( auto & tMatch : dMatches )
 		for ( const auto & tLocator : dOldKnnDistLoc )
 			tMatch.SetAttrFloat ( tLocator, tMatch.GetAttrFloat ( pKNNDistRescore->m_tLocator ) );
@@ -1097,6 +1261,36 @@ int RescoreSorter_c::Flatten ( CSphMatch * pTo )
 		Swap ( i, *pTo++ );
 
 	return iCopied;
+}
+
+
+const CSphAttrLocator * RescoreSorter_c::GetRescoreLocator() const
+{
+	const auto * pSchema = m_pSorter->GetSchema();
+	if ( !pSchema )
+		return nullptr;
+	const auto * pAttr = pSchema->GetAttr ( GetKnnDistRescoreAttrName() );
+	return pAttr ? &pAttr->m_tLocator : nullptr;
+}
+
+
+void RescoreSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch, bool bFinalizeSorters )
+{
+	// Rescore BEFORE the inner sorter rewrites pooled attrs to standalone
+	if ( !m_bRescored )
+	{
+		const CSphAttrLocator * pRescoreLoc = GetRescoreLocator();
+		KNNVecDistCalc_c * pCalc = GetKnnDistCalc ( m_pSorter->GetSchema() );
+		if ( pRescoreLoc && pCalc )
+		{
+			MatchPtrCollector_c tCollector;
+			m_pSorter->Finalize ( tCollector, false, false );
+			pCalc->RescoreBatch ( tCollector.m_dMatches, *pRescoreLoc, fnBlobPoolFromMatch, fnGetColumnarFromMatch );
+		}
+		m_bRescored = true;
+	}
+
+	m_pSorter->TransformPooled2StandalonePtrs ( std::move ( fnBlobPoolFromMatch ), std::move ( fnGetColumnarFromMatch ), bFinalizeSorters );
 }
 
 
@@ -1127,6 +1321,7 @@ ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnS
 
 	return new RescoreSorter_c ( pSorter, std::move ( pComp ) );
 }
+
 
 bool ValidateEmbeddingsAPITimeout ( const CSphString & sValue, int & iTimeout, CSphString & sError )
 {

@@ -22,6 +22,8 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- example create_buddy_plugin -->
 
+> DEPRECATED: This is deprecated and will be removed in future versions.
+
 Buddy plugins can extend Manticore Search's functionality and enable certain queries that are not natively supported. To learn more about creating Buddy plugins, we recommend reading [this article](https://manticoresearch.com/blog/manticoresearch-buddy-pluggable-design/).
 
 To create a Buddy plugin, run the following SQL command:

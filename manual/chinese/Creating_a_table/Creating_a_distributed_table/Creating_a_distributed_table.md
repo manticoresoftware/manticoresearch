@@ -39,8 +39,8 @@ table foo {
 
 <!-- request SQL -->
 ```sql
-CREATE TABLE distributed_index type='distributed'
-  local='local_index'
+CREATE TABLE distributed_table type='distributed'
+  local='local_table'
   agent='127.0.0.1:9312:remote_table';
 ```
 <!-- end -->
@@ -54,4 +54,3 @@ CREATE TABLE distributed_index type='distributed'
 2. [远程表](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent)：这些是部署在服务器外部的表。要枚举远程表，使用语法 `agent =`。每一行代表一个端点或代理。每个代理可以包含多个外部位置和选项以决定其工作方式。更多详情见[这里](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent)。需要注意的是，服务器对正在处理的表的类型不拥有任何信息。例如，如果你对一个不是 percolate 表的远程表 'foo' 发出 `CALL PQ`，可能会导致错误。
 
 <!-- proofread -->
-

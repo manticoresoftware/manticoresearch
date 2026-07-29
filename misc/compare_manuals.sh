@@ -116,6 +116,77 @@ path_exists() {
     [[ -e "$full_path" ]]
 }
 
+# Function to check that Markdown ATX titles use a space after the opening # marker
+check_markdown_title_spacing() {
+    local manual_dir=$1
+
+    print_colored "$BLUE" "=== Markdown Title Spacing Check ==="
+
+    local violations
+    violations=$(
+        find "$manual_dir" -type f -name "*.md" -print0 | \
+        while IFS= read -r -d '' md_file; do
+            awk -v file="$md_file" '
+                {
+                    line = $0
+                    sub(/\r$/, "", line)
+
+                    # Ignore fenced code blocks so examples like shell prompts do not fail the check.
+                    fence_line = line
+                    sub(/^[ ]{0,3}/, "", fence_line)
+
+                    if (in_fence) {
+                        if (fence_char == "`" && fence_line ~ /^```+/) {
+                            match(fence_line, /^`+/)
+                            if (RLENGTH >= fence_len) {
+                                in_fence = 0
+                            }
+                        } else if (fence_char == "~" && fence_line ~ /^~~~+/) {
+                            match(fence_line, /^~+/)
+                            if (RLENGTH >= fence_len) {
+                                in_fence = 0
+                            }
+                        }
+                        next
+                    }
+
+                    if (fence_line ~ /^```+/) {
+                        match(fence_line, /^`+/)
+                        fence_char = "`"
+                        fence_len = RLENGTH
+                        in_fence = 1
+                        next
+                    }
+                    if (fence_line ~ /^~~~+/) {
+                        match(fence_line, /^~+/)
+                        fence_char = "~"
+                        fence_len = RLENGTH
+                        in_fence = 1
+                        next
+                    }
+
+                    # Bad: #Title or ##Title. Good: # Title or ## Title.
+                    if (line ~ /^[ ]{0,3}#{1,6}[^ #]/) {
+                        printf "%s:%d:%s\n", file, FNR, line
+                    }
+                }
+            ' "$md_file"
+        done
+    )
+
+    if [[ -n "$violations" ]]; then
+        HAS_ISSUES=1
+        print_colored "$RED" "Markdown titles without a space after the opening # marker:"
+        printf '%s\n' "$violations" | while IFS= read -r violation; do
+            printf '  %s\n' "$violation"
+        done
+        echo
+    else
+        print_colored "$GREEN" "✓ All markdown titles have a space after the opening # marker."
+        echo
+    fi
+}
+
 # Main comparison function
 compare_with_languages() {
     local english_dir=$1
@@ -338,6 +409,9 @@ main() {
     # Show summary first
     show_summary "$ENGLISH_DIR"
 
+    # Check all manual Markdown titles before comparing translations
+    check_markdown_title_spacing "$MANUAL_DIR"
+
     # Compare structures and content
     # Compare structures and content
     compare_with_languages "$ENGLISH_DIR"
@@ -365,11 +439,12 @@ case "${1:-}" in
         echo "  --remove       Automatically remove files with mismatched line counts"
         echo ""
         echo "EXIT CODES:"
-        echo "  0              All translations perfect (no missing files or line count mismatches)"
-        echo "  1              Issues found (missing translations or line count mismatches)"
+        echo "  0              All translations perfect and Markdown titles have valid spacing"
+        echo "  1              Issues found (missing translations, content mismatches, or Markdown title spacing errors)"
         echo ""
         echo "This script compares the structure and content of .md files"
-        echo "in manual/english/ with all other language directories."
+        echo "in manual/english/ with all other language directories, and checks"
+        echo "that Markdown titles in manual/ use '# Title' spacing."
         echo "With --remove flag, files with different line counts are automatically deleted."
         exit 0
         ;;

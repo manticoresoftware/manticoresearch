@@ -987,6 +987,8 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "stopword_step",			0, NULL },
 	{ "blend_chars",			0, NULL },
 	{ "expand_keywords",		0, NULL },
+	{ "ranker",				0, NULL },
+	{ "boolean_mode",			0, NULL },
 	{ "hitless_words",			0, NULL },
 	{ "hit_format",				KEY_HIDDEN | KEY_DEPRECATED, "default value" },
 	{ "rt_field",				KEY_LIST, NULL },
@@ -1214,6 +1216,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "auth_log_level",			0, NULL },
 	{ "auth_password_policy",	0, NULL },
 	{ "auth_password_min_length",	0, NULL },
+	{ "embeddings_threads",		0, nullptr },
 	{ NULL,						0, NULL }
 };
 

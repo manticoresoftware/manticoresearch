@@ -17,6 +17,7 @@ API Key Validation: All keys are valid except "wrong" (returns 401 error)
 ––– comment –––
 Start Manticore Search
 ––– block: ../base/start-searchd –––
+––– block: ./base –––
 ––– comment –––
 MOCK SERVER STARTUP
 
@@ -313,7 +314,7 @@ Expected: ALTER fails with error about column not found
 
 Create table first
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_nonexistent_column (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}')" 2>&1; echo $?
+retry_remote_embedding_create_table "CREATE TABLE test_nonexistent_column (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}')"; echo $?
 ––– output –––
 0
 ––– comment –––

@@ -51,6 +51,8 @@ By default, OPTIMIZE merges the RT table's disk chunks down to a number less tha
 
 However, if the table has attributes with KNN indexes, this threshold is different. In this case, it is set to the number of physical CPU cores divided by 2 to improve KNN search performance.
 
+Note that when no `optimize_cutoff` is set explicitly (neither the server-wide [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) setting nor the per-table [optimize_cutoff](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#optimize_cutoff) option), [automatic compaction](../Server_settings/Searchd.md#auto_optimize) never merges a table below 2 disk chunks, even if the computed default threshold is lower (for example, on servers with few CPU cores, especially for KNN tables). Keeping at least 2 disk chunks avoids the cost of repeatedly merging everything into a single chunk. To force automatic compaction down to a single disk chunk, set `optimize_cutoff` explicitly to `1`. A manual `OPTIMIZE ... OPTION cutoff=1` is not affected by this and still compacts down to one chunk.
+
 You can also control the number of optimized disk chunks manually using the `cutoff` option.
 
 Additional options include:

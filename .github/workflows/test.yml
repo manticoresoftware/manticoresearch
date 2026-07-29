@@ -91,6 +91,8 @@ jobs:
           echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
       - name: Sanitize branch name for tags
         id: sanitize_branch
+        env:
+          BRANCH_NAME_OUT: ${{ steps.branch_info.outputs.branch_name }}
         run: |
           sanitize_tag() {
             local name=$1
@@ -98,7 +100,7 @@ jobs:
             name=$(echo "$name" | sed 's/[^a-zA-Z0-9_.-]//g')
             echo "$name"
           }
-          branch_name="${{ steps.branch_info.outputs.branch_name }}"
+          branch_name="$BRANCH_NAME_OUT"
           branch_tag=$(sanitize_tag "$branch_name")
           echo "branch_tag=$branch_tag" >> $GITHUB_OUTPUT
       - name: Calculate source hash
@@ -255,14 +257,21 @@ jobs:
 
       - name: Check related PRs for branch
         id: related_prs
+        env:
+          OWNER: ${{ github.repository_owner }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           reason=""
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # URL-encode the head filter: a branch name may contain characters that are
+            # meaningful in a query string (#, &, ?, spaces) as well as in the shell.
+            head_filter="$(jq -rn --arg v "${OWNER}:${HEAD_REF}" '$v|@uri')"
             for repo in manticoresearch-buddy; do
-              response="$( (curl -sSL -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository_owner }}/$repo/pulls?state=open&head=${{ github.repository_owner }}:${{ github.event.pull_request.head.ref }}&per_page=1" || true) | tr -d '[:space:]')"
+              response="$( (curl -sSL -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GH_TOKEN}" "https://api.github.com/repos/${OWNER}/${repo}/pulls?state=open&head=${head_filter}&per_page=1" || true) | tr -d '[:space:]')"
               if [[ "$response" != "[]" && "$response" != "" ]]; then
-                reason+="$repo: open PR for ${{ github.repository_owner }}:${{ github.event.pull_request.head.ref }} | "
+                reason+="$repo: open PR for ${OWNER}:${HEAD_REF} | "
               fi
             done
 

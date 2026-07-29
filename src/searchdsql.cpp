@@ -465,6 +465,7 @@ public:
 	int64_t			DotGetInt ( const SqlNode_t & tNode ) const;
 
 	void 			AddStringSubkey ( const SqlNode_t & tNode ) const;
+	void 			AddBacktickedStringSubkey ( const SqlNode_t & tNode ) const;
 	void 			AddIntSubkey ( const SqlNode_t & tNode ) const;
 	void			AddDotIntSubkey ( const SqlNode_t & tNode ) const;
 
@@ -607,6 +608,13 @@ void SqlParser_c::AddStringSubkey ( const SqlNode_t & tNode ) const
 {
 	auto& sKey = m_pStmt->m_dStringSubkeys.Add();
 	ToString ( sKey, tNode );
+}
+
+void SqlParser_c::AddBacktickedStringSubkey ( const SqlNode_t & tNode ) const
+{
+	auto sName = GetStrt ( tNode );
+	assert ( sName.second && sName.first[sName.second-1]=='`' );
+	m_pStmt->m_dStringSubkeys.Add().SetSprintf ( ".%.*s", sName.second-1, sName.first );
 }
 
 void SqlParser_c::AddIntSubkey ( const SqlNode_t & tNode ) const

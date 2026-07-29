@@ -2213,12 +2213,43 @@ global_or_session:
 
 //////////////////////////////////////////////////////////////////////////
 
+optimize_system_prefix_token:
+	TOK_SYSTEM
+	| TOK_IDENT // a backtick-quoted system prefix is lexed as TOK_IDENT
+	;
+
+optimize_system_prefix:
+	optimize_system_prefix_token
+		{
+			auto sPrefix = pParser->GetString ( $1 );
+			if ( sPrefix!="system" )
+			{
+				pParser->m_pParseError->SetSprintf ( "unexpected db '%s', only 'system' allowed", sPrefix.cstr() );
+				YYERROR;
+			}
+			pParser->SetIndex ( $1 );
+		}
+	;
+
+optimize_system_tablename:
+	optimize_system_prefix string_key
+	| optimize_system_prefix TOK_BACKTICKED_SUBKEY
+		{
+			pParser->AddBacktickedStringSubkey ( $2 );
+		}
+	;
+
+optimize_tablename:
+	single_manticore_tablename
+		{
+			pParser->SetIndex ( $1 );
+		}
+	| optimize_system_tablename
+	;
+
 optimize_index:
 	TOK_OPTIMIZE  { pParser->m_pStmt->m_eStmt = STMT_OPTIMIZE_INDEX; }
-		index_or_table single_manticore_tablename opt_option_clause
-			{
-				pParser->SetIndex( $4 );
-			}
+		index_or_table optimize_tablename opt_option_clause
 	;
 
 

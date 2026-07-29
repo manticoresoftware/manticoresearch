@@ -389,6 +389,8 @@ Use the `cluster` user and the `-t` flag to enable replication mode. See the det
 
 To apply changed full-text settings to existing documents, see [Reindexing existing documents after changing FT settings](../Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings).
 
+When piping a dump directly into `mysql` to reindex the same table, `--skip-lock-tables` is required. It is not required when exporting to a file and replaying it after `mysqldump` exits.
+
 <!-- example mysqldump_restore -->
 ### Restore
 

@@ -389,6 +389,8 @@ mariadb-dump -etc --replace -h0 -P9306 -ucluster manticore --skip-lock-tables cl
 
 要将已更改的全文设置应用到现有文档，请参见[在更改 FT 设置后重新索引现有文档](../Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings)。
 
+当将转储直接通过管道输入 `mysql` 以重新索引同一张表时，必须使用 `--skip-lock-tables`。如果是导出到文件并在 `mysqldump` 退出后再回放，则不需要。
+
 <!-- example mysqldump_restore -->
 ### 恢复
 

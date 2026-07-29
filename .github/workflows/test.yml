@@ -319,6 +319,11 @@ jobs:
           echo "run_image_push=$run_image_push" >> "$GITHUB_OUTPUT"
           echo "skip_clt_tag=$skip_clt_tag" >> "$GITHUB_OUTPUT"
       - name: Summarize gating
+        env:
+          # skip_clt_reason embeds the PR head ref (a contributor-controlled branch
+          # name); read it from the environment instead of interpolating it into the
+          # script so it cannot contribute shell syntax.
+          SKIP_CLT_REASON: ${{ steps.related_prs.outputs.skip_clt_reason }}
         run: |
           {
             echo "### Gate decisions"
@@ -331,8 +336,8 @@ jobs:
             if [[ "${{ steps.calc.outputs.skip_clt_tag }}" == "true" ]]; then
               echo "* CLT skip reason: skip_clt tag on commit"
             fi
-            if [[ -n "${{ steps.related_prs.outputs.skip_clt_reason }}" ]]; then
-              echo "* CLT skip reason: ${{ steps.related_prs.outputs.skip_clt_reason }}"
+            if [[ -n "$SKIP_CLT_REASON" ]]; then
+              echo "* CLT skip reason: $SKIP_CLT_REASON"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 

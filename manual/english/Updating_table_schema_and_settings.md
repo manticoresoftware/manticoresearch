@@ -282,16 +282,26 @@ mysql> show table rt settings;
 
 Changing a full-text setting affects indexing when a document is inserted or replaced. To apply a new setting to existing documents, reinsert them after changing the setting. This applies to wildcard indexing, tokenization, morphology, wordforms, and other full-text settings.
 
-In plain mode, update the table configuration and run `ALTER TABLE <table_name> RECONFIGURE` first. In RT mode, change the setting with `ALTER TABLE` as described above. Before creating the dump, stop writes to the table or ensure that documents changed during the dump and replay are also reindexed.
+In plain mode, update the table configuration and run `ALTER TABLE <table_name> RECONFIGURE` first. In RT mode, change the setting with `ALTER TABLE` as described above. Pause application writes before creating the dump and keep them paused until the replay completes; otherwise, the replay can overwrite newer values written after a document was exported.
 
 Create a data-only dump that emits `REPLACE` statements, then replay it into the same table:
 
 ```bash
-mysqldump -h0 -P9306 --replace -t -c -e --net-buffer-length=16m manticore <table_name> > <table_name>-reindex.sql
-mysql -h0 -P9306 < <table_name>-reindex.sql
+mysqldump -h0 -P9306 --replace -t -c -e --net-buffer-length=16m manticore '<table_name>' > '<table_name>-reindex.sql'
+mysql -h0 -P9306 < '<table_name>-reindex.sql'
 ```
 
-`-t` omits `DROP` and `CREATE TABLE` statements, while `--replace` makes the dump replace documents with matching IDs. Each replayed document is indexed with the current full-text settings. The table must store every full-text field: `mysqldump` cannot back up tables with non-stored fields. For replicated tables, use the [replication-mode backup instructions](Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump).
+`-t` omits `DROP` and `CREATE TABLE` statements, while `--replace` makes the dump replace documents with matching IDs. Each replayed document is indexed with the current full-text settings.
+
+If you pipe the dump directly into `mysql` instead of saving it to a file, `--skip-lock-tables` is required:
+
+```bash
+mysqldump -h0 -P9306 --skip-lock-tables --replace -t -c -e --net-buffer-length=16m manticore '<table_name>' | mysql -h0 -P9306
+```
+
+Without `--skip-lock-tables`, `mysqldump` holds a read lock while exporting, so concurrent `REPLACE` statements can fail with `table '<table_name>' is locked` when the dump spans multiple batches. The option is not required for the two-step file workflow because `mysqldump` exits and releases the lock before the replay starts.
+
+The table must store every full-text field: `mysqldump` cannot back up tables with non-stored fields. For replicated tables, use the [replication-mode backup instructions](Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump).
 
 ## Rebuilding a secondary index
 

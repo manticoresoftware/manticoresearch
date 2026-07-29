@@ -389,6 +389,8 @@ mariadb-dump -etc --replace -h0 -P9306 -ucluster manticore --skip-lock-tables cl
 
 Чтобы применить изменённые настройки полнотекстового поиска к существующим документам, см. [Переиндексация существующих документов после изменения настроек FT](../Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings).
 
+При прямой передаче дампа в `mysql` для переиндексации той же таблицы требуется `--skip-lock-tables`. При экспорте в файл и последующем воспроизведении после выхода `mysqldump` это не требуется.
+
 <!-- example mysqldump_restore -->
 ### Восстановление
 

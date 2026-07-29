@@ -282,16 +282,26 @@ mysql> show table rt settings;
 
 更改全文检索设置会影响文档插入或替换时的索引过程。要把新设置应用到已有文档，请在更改设置后重新插入这些文档。这适用于通配符索引、分词、形态学、wordforms 以及其他全文检索设置。
 
-在 plain 模式下，先更新表配置，然后运行 `ALTER TABLE <table_name> RECONFIGURE`。在 RT 模式下，按上文所述使用 `ALTER TABLE` 修改设置。在创建转储之前，请停止对表的写入，或者确保在转储和回放期间发生变更的文档也会被重新索引。
+在普通模式下，先更新表配置并运行 `ALTER TABLE <table_name> RECONFIGURE`。在 RT 模式下，按上文所述使用 `ALTER TABLE` 修改设置。在创建导出之前先暂停应用写入，并保持暂停直到回放完成；否则，回放可能会覆盖文档导出后写入的新值。
 
 创建一个仅包含数据的转储，使其输出 `REPLACE` 语句，然后将其回放到同一个表中：
 
 ```bash
-mysqldump -h0 -P9306 --replace -t -c -e --net-buffer-length=16m manticore <table_name> > <table_name>-reindex.sql
-mysql -h0 -P9306 < <table_name>-reindex.sql
+mysqldump -h0 -P9306 --replace -t -c -e --net-buffer-length=16m manticore '<table_name>' > '<table_name>-reindex.sql'
+mysql -h0 -P9306 < '<table_name>-reindex.sql'
 ```
 
-`-t` 会省略 `DROP` 和 `CREATE TABLE` 语句，而 `--replace` 会让转储在文档 ID 匹配时进行替换。每个回放的文档都会使用当前的全文检索设置进行索引。表必须存储所有全文字段：`mysqldump` 不能备份包含非存储字段的表。对于复制表，请使用 [复制模式备份说明](Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump)。
+`-t` 会省略 `DROP` 和 `CREATE TABLE` 语句，而 `--replace` 会让导出在回放时用相同 ID 的文档替换现有文档。每个被回放的文档都会使用当前全文检索设置建立索引。
+
+如果你不是先保存到文件，而是直接将导出内容通过管道传给 `mysql`，则必须使用 `--skip-lock-tables`：
+
+```bash
+mysqldump -h0 -P9306 --skip-lock-tables --replace -t -c -e --net-buffer-length=16m manticore '<table_name>' | mysql -h0 -P9306
+```
+
+如果不使用 `--skip-lock-tables`，`mysqldump` 在导出期间会持有读锁，因此当导出跨越多个批次时，并发的 `REPLACE` 语句可能会失败，报出 `table '<table_name>' is locked`。对于先导出到文件、再进行回放的两步工作流，则不需要该选项，因为 `mysqldump` 会在回放开始前退出并释放锁。
+
+该表必须存储所有全文字段：`mysqldump` 无法备份包含非存储字段的表。对于复制表，请使用[复制模式备份说明](Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump)。
 
 ## 重建二级索引
 

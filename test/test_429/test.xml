@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>mysql CLI 'status' command queries</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<queries>
+<sphinxql>
+select DATABASE(), USER() limit 1;
+<!-- select @@version_comment limit 1; - very noisy for testing, depends on git branch. -->
+select @@character_set_client, @@character_set_connection, @@character_set_server, @@character_set_database limit 1;
+</sphinxql>
+</queries>
+
+</test>

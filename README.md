@@ -124,6 +124,7 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - Cost-based optimizer determines the most efficient execution plan of a search query
 * Data types:
   - full-text field - inverted index
+  - [UUID document IDs](https://manual.manticoresearch.com/Creating_a_table/Data_types#UUID-document-IDs) for real-time tables
   - int, bigint and float numeric fields in row-wise and columnar fashion
   - multi-value attributes (array)
   - string and JSON

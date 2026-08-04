@@ -25,6 +25,11 @@ void SetKeywordWithMarkers ( CSphString & sDst, const char * sPrefix, const CSph
 
 namespace { // static
 
+bool IsFieldSpecChar ( char c )
+{
+	return (unsigned char)c>=0x80 || sphIsAlpha ( c );
+}
+
 void TransformMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec & tMorphDisabledFields )
 {
 	if ( !pNode )
@@ -214,20 +219,20 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 		bBlock = HandleFieldBlockStart ( pPtr );
 
 	// handle invalid chars
-	if ( !sphIsAlpha(*pPtr) )
+	if ( !IsFieldSpecChar(*pPtr) )
 	{
 		bIgnore = true;
 		m_pTokenizer->SetBufferPtr ( pPtr ); // ignore and re-parse (FIXME! maybe warn?)
 		return true;
 	}
-	assert ( sphIsAlpha(*pPtr) ); // i think i'm paranoid
+	assert ( IsFieldSpecChar(*pPtr) ); // i think i'm paranoid
 
 	// handle field specification
 	if ( !bBlock )
 	{
 		// handle standalone field specification
 		const char * pFieldStart = pPtr;
-		while ( sphIsAlpha(*pPtr) && pPtr<pLastPtr )
+		while ( pPtr<pLastPtr && IsFieldSpecChar(*pPtr) )
 			++pPtr;
 
 		assert ( pPtr-pFieldStart>0 );
@@ -241,14 +246,14 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 	} else
 	{
 		// handle fields block specification
-		assert ( sphIsAlpha(*pPtr) && bBlock ); // and complicated
+		assert ( IsFieldSpecChar(*pPtr) && bBlock ); // and complicated
 
 		bool bOK = false;
 		const char * pFieldStart = nullptr;
 		while ( pPtr<pLastPtr )
 		{
 			// accumulate field name, while we can
-			if ( sphIsAlpha(*pPtr) || *pPtr=='.' )
+			if ( IsFieldSpecChar(*pPtr) || *pPtr=='.' )
 			{
 				if ( !pFieldStart )
 					pFieldStart = pPtr;

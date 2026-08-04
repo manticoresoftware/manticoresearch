@@ -28,6 +28,10 @@
 
 %}
 
+TABLE_IDENT			[a-zA-Z_\200-\377][a-zA-Z0-9_\200-\377]*
+QUOTED_TABLE_IDENT	[a-zA-Z0-9_\200-\377]+
+IDENT				[@a-zA-Z_\200-\377][a-zA-Z0-9_\200-\377]*
+QUOTED_IDENT		[@a-zA-Z0-9_\200-\377][a-zA-Z0-9_\200-\377]*
 
 
 
@@ -123,11 +127,11 @@
 \-?[0-9]+			{ YYSTOREBOUNDS; lvalp->SetValueInt ( strtoull ( yytext, NULL, 10 ), false ); return TOK_CONST_INT; }
 [-+]?([0-9]*\.?[0-9]+|[0-9]+\.)([Ee][-+]?[0-9]+)?	{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
 
-[a-zA-Z_][a-zA-Z0-9_]*          { YYSTOREBOUNDS; return TOK_TABLEIDENT; }
-`[a-zA-Z0-9_]+`	                { YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLEIDENT; } // allow `123xyz` table names
+{TABLE_IDENT}                     { YYSTOREBOUNDS; return TOK_TABLEIDENT; }
+`{QUOTED_TABLE_IDENT}`            { YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLEIDENT; } // allow `123xyz` table names
 
-[@a-zA-Z_][a-zA-Z0-9_]* 		{ YYSTOREBOUNDS; return TOK_IDENT; }
-`[@a-zA-Z0-9_][a-zA-Z0-9_]*`	{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; } // allow `123xyz` column names
+{IDENT}                           { YYSTOREBOUNDS; return TOK_IDENT; }
+`{QUOTED_IDENT}`                  { YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; } // allow `123xyz` column names
 
 [ \t\n\r]+			{ ; }
 .					{ YYSTOREBOUNDS; return yytext[0]; }

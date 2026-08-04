@@ -120,6 +120,17 @@ TEST ( functions, SecretEqual )
 	EXPECT_FALSE ( SecretEqual ( VecTraits_T<BYTE>(), VecTraits_T<BYTE>() ) );
 }
 
+TEST ( functions, ParseUnicodeIndexList )
+{
+	StrVec_t dIndexes;
+	ParseIndexList ( " 搜索表 , 商品表.分片,	ascii_table-1 ", dIndexes );
+
+	ASSERT_EQ ( dIndexes.GetLength(), 3 );
+	EXPECT_STREQ ( dIndexes[0].cstr(), "搜索表" );
+	EXPECT_STREQ ( dIndexes[1].cstr(), "商品表.分片" );
+	EXPECT_STREQ ( dIndexes[2].cstr(), "ascii_table-1" );
+}
+
 class tstlogger
 {
 	// test helper log - logs into sLogBuff.

@@ -144,3 +144,82 @@ UTF-8 table names can be dropped
 mysql -h0 -P9306 -e 'DROP TABLE `搜索表`; DROP TABLE 商品表; DROP TABLE товары2026; DROP TABLE `2026_архив_📦`; DROP TABLE ascii_control;' && echo dropped
 ––– output –––
 dropped
+––– comment –––
+RT mode: a real-time table supports a UTF-8 table name and UTF-8 field scoping
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE поля4770 (название text, описание text); INSERT INTO поля4770 (id, название, описание) VALUES (7, 'Клавиатура', 'Мышь'), (8, 'Мышь', 'Клавиатура');" && mysql --table -h0 -P9306 -e "SELECT id FROM поля4770 WHERE MATCH('@название клавиатура');" | awk -F'|' '$2 ~ /^[[:space:]]*[0-9]+[[:space:]]*$/ { gsub(/[[:space:]]/, "", $2); print $2 }'
+––– output –––
+7
+––– input –––
+mysql --table -h0 -P9306 -e "SELECT id FROM поля4770 WHERE MATCH('@(название,описание) клавиатура');" | awk -F'|' '$2 ~ /^[[:space:]]*[0-9]+[[:space:]]*$/ { gsub(/[[:space:]]/, "", $2); print $2 }' | sort -n
+––– output –––
+7
+8
+––– input –––
+mysql --table -h0 -P9306 -e "SELECT id FROM поля4770 WHERE MATCH('@!описание клавиатура');" | awk -F'|' '$2 ~ /^[[:space:]]*[0-9]+[[:space:]]*$/ { gsub(/[[:space:]]/, "", $2); print $2 }'
+––– output –––
+7
+––– input –––
+mysql -h0 -P9306 -e 'DROP TABLE поля4770;' && echo dropped_rt_fields
+––– output –––
+dropped_rt_fields
+––– comment –––
+RT mode: a percolate table supports a UTF-8 table name and UTF-8 field-scoped rules
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE правила4770 (название text, описание text, цена integer) type='pq'; INSERT INTO правила4770 (id, query, filters) VALUES (1, '@название клавиатура', 'цена=100');" && echo created_and_loaded_rt_pq
+––– output –––
+created_and_loaded_rt_pq
+––– input –––
+mysql --table -h0 -P9306 -e "CALL PQ('правила4770', '{\"название\":\"клавиатура\",\"описание\":\"мышь\",\"цена\":100}');" | awk -F'|' '$2 ~ /^[[:space:]]*1[[:space:]]*$/ { gsub(/[[:space:]]/, "", $2); print $2 }'
+––– output –––
+1
+––– input –––
+mysql --table -h0 -P9306 -e "CALL PQ('правила4770', '{\"название\":\"мышь\",\"описание\":\"клавиатура\",\"цена\":100}');" | awk -F'|' '$2 ~ /^[[:space:]]*1[[:space:]]*$/ { found=1 } END { print found+0 }'
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e 'DROP TABLE правила4770;' && echo dropped_rt_pq
+––– output –––
+dropped_rt_pq
+––– comment –––
+Switch to Plain mode with UTF-8 table names and UTF-8 fields in config-defined real-time, percolate, and plain tables
+––– input –––
+searchd --stopwait >/dev/null; rm -rf /tmp/test4770_cfg_rt /tmp/test4770_cfg_pq /tmp/test4770_cfg_plain*; printf '%s\n' '1,Клавиатура,Мышь,100' '2,Мышь,Клавиатура,60' > /tmp/test4770.csv; printf '%s\n' 'source test4770_source {' '  type = csvpipe' '  csvpipe_command = cat /tmp/test4770.csv' '  csvpipe_field = название' '  csvpipe_field = описание' '  csvpipe_attr_uint = цена' '}' '' 'table таблица4770_rt {' '  type = rt' '  path = /tmp/test4770_cfg_rt' '  rt_field = название' '  rt_field = описание' '  rt_attr_uint = цена' '}' '' 'table правила4770_cfg {' '  type = percolate' '  path = /tmp/test4770_cfg_pq' '  rt_field = название' '  rt_field = описание' '  rt_attr_uint = цена' '}' '' 'table обычная4770 {' '  type = plain' '  source = test4770_source' '  path = /tmp/test4770_cfg_plain' '}' '' 'searchd {' '  listen = 127.0.0.1:9306:mysql' '  listen = 127.0.0.1:9308:http' '  log = /var/log/manticore/searchd.log' '  query_log = /var/log/manticore/query.log' '  pid_file = /run/manticore/searchd.pid' '  buddy_path =' '}' > /tmp/test4770-plain-mode.conf; indexer --quiet --config /tmp/test4770-plain-mode.conf --all >/dev/null 2>&1 && echo plain_table_indexed
+––– output –––
+plain_table_indexed
+––– input –––
+rm -f /var/log/manticore/searchd.log; searchd --config /tmp/test4770-plain-mode.conf >/dev/null; if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo plain_mode_started; else echo plain_mode_start_failed; fi
+––– output –––
+plain_mode_started
+––– input –––
+mysql --table -h0 -P9306 -e 'SHOW TABLES;' | awk -F'|' '/(таблица4770_rt|правила4770_cfg|обычная4770)/ { for (i=2; i<=3; i++) gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i); print $2 "|" $3 }' | LC_ALL=C sort
+––– output –––
+обычная4770|local
+правила4770_cfg|percolate
+таблица4770_rt|rt
+––– comment –––
+Plain mode: a config-defined real-time table supports a UTF-8 table name and UTF-8 field scoping
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO таблица4770_rt (id, название, описание, цена) VALUES (3, 'Клавиатура', 'Мышь', 100), (4, 'Мышь', 'Клавиатура', 60);" && mysql --table -h0 -P9306 -e "SELECT id FROM таблица4770_rt WHERE MATCH('@название клавиатура');" | awk -F'|' '$2 ~ /^[[:space:]]*[0-9]+[[:space:]]*$/ { gsub(/[[:space:]]/, "", $2); print $2 }'
+––– output –––
+3
+––– comment –––
+Plain mode: a config-defined percolate table supports a UTF-8 table name and UTF-8 field-scoped rules
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO правила4770_cfg (id, query, filters) VALUES (5, '@название клавиатура', 'цена=100');" && mysql --table -h0 -P9306 -e "CALL PQ('правила4770_cfg', '{\"название\":\"клавиатура\",\"описание\":\"мышь\",\"цена\":100}');" | awk -F'|' '$2 ~ /^[[:space:]]*5[[:space:]]*$/ { gsub(/[[:space:]]/, "", $2); print $2 }'
+––– output –––
+5
+––– input –––
+mysql --table -h0 -P9306 -e "CALL PQ('правила4770_cfg', '{\"название\":\"мышь\",\"описание\":\"клавиатура\",\"цена\":100}');" | awk -F'|' '$2 ~ /^[[:space:]]*5[[:space:]]*$/ { found=1 } END { print found+0 }'
+––– output –––
+0
+––– comment –––
+Plain mode: a plain table supports a UTF-8 table name and UTF-8 field scoping
+––– input –––
+mysql --table -h0 -P9306 -e "SELECT id FROM обычная4770 WHERE MATCH('@название клавиатура');" | awk -F'|' '$2 ~ /^[[:space:]]*[0-9]+[[:space:]]*$/ { gsub(/[[:space:]]/, "", $2); print $2 }'
+––– output –––
+1
+––– input –––
+searchd --config /tmp/test4770-plain-mode.conf --stopwait >/dev/null && echo plain_mode_stopped
+––– output –––
+plain_mode_stopped

@@ -8,15 +8,15 @@ mysql -h0 -P9306 -e 'CREATE TABLE `搜索表` (`标题` text, `价格` integer);
 ––– output –––
 created
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO `搜索表` (id, `标题`, `价格`) VALUES (1, '你好', 42);" && echo inserted
+mysql -h0 -P9306 -e "INSERT INTO \`搜索表\` (id, \`标题\`, \`价格\`) VALUES (1, '你好', 42);" && echo inserted
 ––– output –––
 inserted
 ––– input –––
-mysql -N -B -h0 -P9306 -e 'SELECT id, `标题`, `价格` FROM `搜索表`;' | tr '\t' '|'
+mysql --table -h0 -P9306 -e 'SELECT id, `标题`, `价格` FROM `搜索表`;' | awk -F'|' '/你好/ { for (i=2; i<=4; i++) gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i); print $2 "|" $3 "|" $4 }'
 ––– output –––
 1|你好|42
 ––– input –––
-mysql -N -B -h0 -P9306 -e 'DESCRIBE `搜索表`;' | cut -f1 | grep -E '^(标题|价格)$'
+mysql -h0 -P9306 -e 'DESCRIBE `搜索表`;' | grep -oE '标题|价格'
 ––– output –––
 标题
 价格
@@ -31,13 +31,13 @@ mysql -h0 -P9306 -e "INSERT INTO 商品表 (id, 名称, 库存) VALUES (2, '键�
 ––– output –––
 inserted
 ––– input –––
-mysql -N -B -h0 -P9306 -e 'SELECT id, 名称, 库存 FROM 商品表;' | tr '\t' '|'
+mysql --table -h0 -P9306 -e 'SELECT id, 名称, 库存 FROM 商品表;' | awk -F'|' '/键盘/ { for (i=2; i<=4; i++) gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i); print $2 "|" $3 "|" $4 }'
 ––– output –––
 2|键盘|7
 ––– comment –––
 UTF-8 table names are visible and can be dropped
 ––– input –––
-mysql -N -B -h0 -P9306 -e 'SHOW TABLES;' | cut -f1 | grep -E '^(搜索表|商品表)$' | LC_ALL=C sort
+mysql -h0 -P9306 -e 'SHOW TABLES;' | grep -oE '搜索表|商品表' | LC_ALL=C sort
 ––– output –––
 商品表
 搜索表

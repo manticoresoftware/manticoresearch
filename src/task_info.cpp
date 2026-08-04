@@ -109,6 +109,8 @@ void GatherPublicTaskInfo ( PublicThreadDesc_t& dDst, const std::atomic<void*>& 
 	while ( pSrcInfo )
 	{
 		RenderPublicTaskInfo ( pSrcInfo, dDst, pSrcInfo->m_eType );
+		hazard::Guard_c tShortliveGuard;
+		tShortliveGuard.SetGuard ( pSrcInfo ); // secondary protection
 		pSrcInfo = (TaskInfo_t*)tGuard.Protect ( pSrcInfo->m_pPrev );
 	}
 	tGuard.Release();

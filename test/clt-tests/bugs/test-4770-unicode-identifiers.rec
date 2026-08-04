@@ -2,15 +2,15 @@
 Issue #4770: SQL identifiers must support UTF-8 table and field names
 ––– block: ../base/start-searchd –––
 ––– comment –––
-Backtick-quoted UTF-8 identifiers work through DDL and DML
+Backtick-quoted Chinese identifiers work through DDL and DML
 ––– input –––
-mysql -h0 -P9306 -e 'CREATE TABLE `搜索表` (`标题` text, `价格` integer);' && echo created
+mysql -h0 -P9306 -e 'CREATE TABLE `搜索表` (`标题` text, `价格` integer);' && echo created_chinese_quoted
 ––– output –––
-created
+created_chinese_quoted
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO \`搜索表\` (id, \`标题\`, \`价格\`) VALUES (1, '你好', 42);" && echo inserted
+mysql -h0 -P9306 -e "INSERT INTO \`搜索表\` (id, \`标题\`, \`价格\`) VALUES (1, '你好', 42);" && echo inserted_chinese_quoted
 ––– output –––
-inserted
+inserted_chinese_quoted
 ––– input –––
 mysql --table -h0 -P9306 -e 'SELECT id, `标题`, `价格` FROM `搜索表`;' | awk -F'|' '/你好/ { for (i=2; i<=4; i++) gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i); print $2 "|" $3 "|" $4 }'
 ––– output –––
@@ -21,27 +21,126 @@ mysql -h0 -P9306 -e 'DESCRIBE `搜索表`;' | grep -oE '标题|价格'
 标题
 价格
 ––– comment –––
-Unquoted UTF-8 identifiers work through DDL and DML
+Unquoted Chinese identifiers work through DDL and DML
 ––– input –––
-mysql -h0 -P9306 -e 'CREATE TABLE 商品表 (名称 text, 库存 integer);' && echo created
+mysql -h0 -P9306 -e 'CREATE TABLE 商品表 (名称 text, 库存 integer);' && echo created_chinese_unquoted
 ––– output –––
-created
+created_chinese_unquoted
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO 商品表 (id, 名称, 库存) VALUES (2, '键盘', 7);" && echo inserted
+mysql -h0 -P9306 -e "INSERT INTO 商品表 (id, 名称, 库存) VALUES (5, '键盘', 7);" && echo inserted_chinese_unquoted
 ––– output –––
-inserted
+inserted_chinese_unquoted
 ––– input –––
 mysql --table -h0 -P9306 -e 'SELECT id, 名称, 库存 FROM 商品表;' | awk -F'|' '/键盘/ { for (i=2; i<=4; i++) gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i); print $2 "|" $3 "|" $4 }'
 ––– output –––
-2|键盘|7
+5|键盘|7
 ––– comment –––
-UTF-8 table names are visible and can be dropped
+Unquoted Russian identifiers, including ё, numeric suffixes, and four-byte UTF-8, work through DDL and DML
 ––– input –––
-mysql -h0 -P9306 -e 'SHOW TABLES;' | grep -oE '搜索表|商品表' | LC_ALL=C sort
+mysql -h0 -P9306 -e 'CREATE TABLE товары2026 (название text, цена integer, ёмкость integer, 📦метка integer);' && echo created_russian_unquoted
 ––– output –––
+created_russian_unquoted
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO товары2026 (id, название, цена, ёмкость, 📦метка) VALUES (2, 'Клавиатура', 100, 75, 1), (3, 'Мышь', 60, 25, 0);" && echo inserted_russian_unquoted
+––– output –––
+inserted_russian_unquoted
+––– comment –––
+Unicode fields work in ALTER, UPDATE, arithmetic expressions, aliases, and full-text search
+––– input –––
+mysql -h0 -P9306 -e 'ALTER TABLE товары2026 ADD COLUMN скидка integer; UPDATE товары2026 SET скидка=15 WHERE id=2;' && echo altered_and_updated_russian
+––– output –––
+altered_and_updated_russian
+––– input –––
+mysql --table -h0 -P9306 -e 'SELECT id, название, цена-скидка AS итоговая_цена, 📦метка FROM товары2026 WHERE id=2;' | awk -F'|' '/Клавиатура/ { for (i=2; i<=5; i++) gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i); print $2 "|" $3 "|" $4 "|" $5 }'
+––– output –––
+2|Клавиатура|85|1
+––– comment –––
+Prepared statements preserve Russian table and field names
+––– input –––
+php -r 'mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT); $m=new mysqli("127.0.0.1", "", "", "", 9306); $m->set_charset("utf8"); $s=$m->prepare("SELECT id FROM товары2026 WHERE цена=?"); $v=100; $s->bind_param("i",$v); $s->execute(); echo $s->get_result()->fetch_row()[0], PHP_EOL;'
+––– output –––
+2
+––– comment –––
+Text stored in a Unicode-named field is searchable
+––– input –––
+mysql --table -h0 -P9306 -e "SELECT id FROM товары2026 WHERE MATCH('клавиатура');" | awk -F'|' '$2 ~ /^[[:space:]]*2[[:space:]]*$/ { gsub(/[[:space:]]/, "", $2); print $2 }'
+––– output –––
+2
+––– input –––
+mysql --table -h0 -P9306 -e 'DESCRIBE товары2026;' | awk -F'|' '{ field=$2; gsub(/^[[:space:]]+|[[:space:]]+$/, "", field); if (field=="название" || field=="цена" || field=="ёмкость" || field=="скидка" || field=="📦метка") print field }' | LC_ALL=C sort
+––– output –––
+название
+скидка
+цена
+ёмкость
+📦метка
+––– comment –––
+Quoted identifiers support a numeric-leading Russian name and four-byte UTF-8 characters
+––– input –––
+mysql -h0 -P9306 -e 'CREATE TABLE `2026_архив_📦` (`1поле` text, `сумма_₽` integer, `метка_📦` integer);' && echo created_russian_quoted_edge
+––– output –––
+created_russian_quoted_edge
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO \`2026_архив_📦\` (id, \`1поле\`, \`сумма_₽\`, \`метка_📦\`) VALUES (4, 'Отчёт', 900, 1);" && echo inserted_russian_quoted_edge
+––– output –––
+inserted_russian_quoted_edge
+––– input –––
+mysql --table -h0 -P9306 -e 'SELECT id, `1поле`, `сумма_₽`, `метка_📦` FROM `2026_архив_📦`;' | awk -F'|' '/Отчёт/ { for (i=2; i<=5; i++) gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i); print $2 "|" $3 "|" $4 "|" $5 }'
+––– output –––
+4|Отчёт|900|1
+––– comment –––
+Comma-separated table lists preserve mixed Chinese and Russian UTF-8 names
+––– input –––
+mysql --table -h0 -P9306 -e 'SELECT id FROM 商品表, товары2026 ORDER BY id ASC;' | awk -F'|' '$2 ~ /^[[:space:]]*[235][[:space:]]*$/ { gsub(/[[:space:]]/, "", $2); print $2 }'
+––– output –––
+2
+3
+5
+––– comment –––
+UTF-8 identifiers survive a daemon restart
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e 'SHOW TABLES;' | grep -oE '搜索表|商品表|товары2026|2026_архив_📦' | LC_ALL=C sort
+––– output –––
+2026_архив_📦
+товары2026
 商品表
 搜索表
 ––– input –––
-mysql -h0 -P9306 -e 'DROP TABLE `搜索表`; DROP TABLE 商品表;' && echo dropped
+mysql --table -h0 -P9306 -e 'SELECT id, название, цена-скидка AS итоговая_цена, 📦метка FROM товары2026 WHERE id=2;' | awk -F'|' '/Клавиатура/ { for (i=2; i<=5; i++) gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i); print $2 "|" $3 "|" $4 "|" $5 }'
+––– output –––
+2|Клавиатура|85|1
+––– comment –––
+Unicode fields work in DELETE filters
+––– input –––
+mysql -h0 -P9306 -e 'DELETE FROM товары2026 WHERE цена=60;' && mysql --table -h0 -P9306 -e 'SELECT id FROM товары2026 ORDER BY id ASC;' | awk -F'|' '$2 ~ /^[[:space:]]*[0-9]+[[:space:]]*$/ { gsub(/[[:space:]]/, "", $2); print $2 }'
+––– output –––
+2
+––– comment –––
+Compatibility controls: ASCII identifiers and system variables still work
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE ascii_control (text_field text, value_2 integer); INSERT INTO ascii_control VALUES (6, 'ascii', 6); SELECT @@version;" >/dev/null && echo ascii_compatible
+––– output –––
+ascii_compatible
+––– comment –––
+Unquoted numeric-leading and ASCII-punctuation names remain rejected
+––– input –––
+if mysql -h0 -P9306 -e 'CREATE TABLE 2026таблица (поле text);' >/dev/null 2>&1; then echo unexpected_numeric_leading_acceptance; else echo numeric_leading_rejected; fi
+––– output –––
+numeric_leading_rejected
+––– input –––
+if mysql -h0 -P9306 -e 'CREATE TABLE плохая-таблица (поле text);' >/dev/null 2>&1; then echo unexpected_punctuation_acceptance; else echo punctuation_rejected; fi
+––– output –––
+punctuation_rejected
+––– comment –––
+System-variable names remain ASCII-only
+––– input –––
+if mysql -h0 -P9306 -e 'SELECT @@версия;' >/dev/null 2>&1; then echo unexpected_unicode_system_variable; else echo unicode_system_variable_rejected; fi
+––– output –––
+unicode_system_variable_rejected
+––– comment –––
+UTF-8 table names can be dropped
+––– input –––
+mysql -h0 -P9306 -e 'DROP TABLE `搜索表`; DROP TABLE 商品表; DROP TABLE товары2026; DROP TABLE `2026_архив_📦`; DROP TABLE ascii_control;' && echo dropped
 ––– output –––
 dropped

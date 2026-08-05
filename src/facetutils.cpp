@@ -312,7 +312,7 @@ static void ZeroFacetCountColumns ( CSphMatch & tMatch, const ISphSchema & tSche
 
 bool SetupHelperQuery ( const CSphQuery & tHeadQuery, CSphQuery & tFacetQuery, FacetHelperQuery_e eHelper, CSphString & sError )
 {
-	tFacetQuery.m_bFacetMaxRef = true;
+	tFacetQuery.m_eQueryRole = QueryRole_e::FACET_HELPER;
 	tFacetQuery.m_dFilters.Reset();
 	tFacetQuery.m_dFilterTree.Reset();
 

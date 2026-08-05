@@ -1,0 +1,1090 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>RT UUID document IDs</name>
+
+<requires>
+	<force-rt/>
+	<http/>
+	<columnar/>
+</requires>
+
+<skip_indexer/>
+<skip_db/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	auto_optimize = 0
+}
+</config>
+
+<queries>
+<sphinxql>
+	DROP TABLE IF EXISTS uuid_ids;
+	DROP TABLE IF EXISTS uuid_auto;
+	DROP TABLE IF EXISTS uuid_col;
+	DROP TABLE IF EXISTS uuid_case;
+	DROP TABLE IF EXISTS uuid_txn;
+	DROP TABLE IF EXISTS uuid_mixed_row;
+	DROP TABLE IF EXISTS uuid_mixed_col;
+	DROP TABLE IF EXISTS uuid_disk_row;
+	DROP TABLE IF EXISTS uuid_disk_col;
+	DROP TABLE IF EXISTS bad_atid_uuid;
+	DROP TABLE IF EXISTS bad_hidden_uuid;
+	DROP TABLE IF EXISTS bad_hidden_uuid_id;
+	DROP TABLE IF EXISTS bad_mixed_uuid;
+	DROP TABLE IF EXISTS bad_uuid_shard;
+	DROP TABLE IF EXISTS numeric_ids;
+	DROP TABLE IF EXISTS numeric_shard;
+	DROP TABLE IF EXISTS numeric_shard_a;
+	DROP TABLE IF EXISTS numeric_shard_b;
+	DROP TABLE IF EXISTS join_left;
+	DROP TABLE IF EXISTS join_right;
+	DROP TABLE IF EXISTS dist_agent;
+	DROP TABLE IF EXISTS dist_agent_multi;
+	DROP TABLE IF EXISTS dist_agent_numeric;
+	DROP TABLE IF EXISTS uuid_dist_a;
+	DROP TABLE IF EXISTS uuid_dist_b;
+
+	CREATE TABLE uuid_ids ( id uuid, title text, tag string, price int );
+	CREATE TABLE uuid_auto ( id uuid, title text, tag string, price int );
+	CREATE TABLE uuid_col ( id uuid, title text, tag string, price int ) engine='columnar';
+	CREATE TABLE uuid_case ( id uuid, title text, tag string, price int );
+	CREATE TABLE uuid_txn ( id uuid, title text, tag string );
+	CREATE TABLE uuid_mixed_row ( id uuid, title text, tag string, price int );
+	CREATE TABLE uuid_mixed_col ( id uuid, title text, tag string, price int ) engine='columnar';
+	CREATE TABLE uuid_disk_row ( id uuid, title text, tag string, price int );
+	CREATE TABLE uuid_disk_col ( id uuid, title text, tag string, price int ) engine='columnar';
+	CREATE TABLE uuid_dist_a ( id uuid, title text, tag string, price int );
+	CREATE TABLE uuid_dist_b ( id uuid, title text, tag string, price int );
+	CREATE TABLE numeric_ids ( title text, tag string );
+	CREATE TABLE numeric_shard_a ( title text, tag string, price int );
+	CREATE TABLE numeric_shard_b ( title text, tag string, price int );
+	CREATE TABLE numeric_shard ( title text, tag string, price int ) type='shard' local='numeric_shard_a' local='numeric_shard_b';
+
+	DESC uuid_ids;
+	SHOW CREATE TABLE uuid_ids;
+	CREATE TABLE bad_uuid_attr ( title text, guid uuid );
+	CREATE TABLE bad_uuid_pq ( id uuid, query text ) type='pq';
+	CREATE TABLE bad_uuid_shard ( id uuid, title text, tag string, price int ) type='shard' local='uuid_ids';
+	CREATE TABLE bad_atid_uuid ( id uuid, title text, `@id` string );
+	ALTER TABLE uuid_ids ADD COLUMN `@id` string;
+	CREATE TABLE bad_hidden_uuid ( `@uuid_id` string, title text );
+	CREATE TABLE bad_hidden_uuid_id ( id uuid, title text, `@uuid_id` string );
+	CREATE TABLE bad_mixed_uuid ( id bigint, `@uuid_id` string, title text );
+
+	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440000', 'first document', 'old', 10 );
+	SELECT LAST_INSERT_ID();
+	SELECT @@session.last_insert_id;
+	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440001', 'second document', 'old', 20 );
+	INSERT INTO uuid_case ( id, title, tag, price ) VALUES ( '10000000-0000-4000-8000-000000000000', 'multi one', 'multi', 1 ), ( '10000001-0000-4000-8000-000000000000', 'multi two', 'multi', 2 );
+	SELECT COUNT(*) FROM uuid_case WHERE tag='multi';
+	SELECT id, tag, price FROM uuid_case WHERE tag='multi' ORDER BY price ASC;
+	INSERT INTO uuid_auto ( title, tag, price ) VALUES ( 'auto sql document', 'auto-sql', 25 );
+	INSERT INTO uuid_auto ( title, tag, price ) VALUES ( 'auto sql document 2', 'auto-sql-2', 26 );
+	SELECT tag, price FROM uuid_auto WHERE tag='auto-sql';
+	SELECT COUNT(*), COUNT(DISTINCT id) FROM uuid_auto;
+	SELECT id, tag, price FROM uuid_ids ORDER BY id ASC;
+	SELECT id, tag, price FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440000';
+	SELECT id, tag, price FROM uuid_ids WHERE id IN ('550e8400-e29b-41d4-a716-446655440001');
+	SELECT id, COUNT(*) FROM uuid_ids GROUP BY id ORDER BY id ASC;
+	<!-- ExprParser_t::ParseAttrsAndFields must resolve UUID-table id as public UUID string, not internal DocID_t -->
+	SELECT TO_STRING(id) AS id_str FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440000';
+
+	<!-- accepted mixed-case UUID ids are stored and matched in lowercase canonical form -->
+	INSERT INTO uuid_case ( id, title, tag, price ) VALUES ( '550E8400-E29B-41D4-A716-446655440080', 'upper sql', 'upper-sql', 80 );
+	SELECT id, tag, price FROM uuid_case WHERE id='550e8400-e29b-41d4-a716-446655440080';
+	SELECT id, tag, price FROM uuid_case WHERE id='550E8400-E29B-41D4-A716-446655440080';
+
+	<!-- strict UUID id validation -->
+	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( 'not-a-uuid', 'bad document', 'bad', 30 );
+	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400e29b41d4a716446655440000', 'bad document', 'bad', 30 );
+	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-44665544000g', 'bad document', 'bad', 30 );
+	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '00000000-0000-0000-0000-000000000000', 'bad nil document', 'bad', 30 );
+	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-01d4-a716-446655440000', 'bad version document', 'bad', 30 );
+	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-f716-446655440000', 'bad variant document', 'bad', 30 );
+	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( 123, 'bad document', 'bad', 30 );
+	INSERT INTO uuid_ids ( `@id`, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440013', 'bad at-id insert', 'bad-atid', 33 );
+	REPLACE INTO uuid_ids ( `@id`, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440014', 'bad at-id replace', 'bad-atid', 34 );
+	INSERT INTO uuid_ids ( @uuid_id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440011', 'bad hidden insert', 'bad-hidden', 31 );
+	REPLACE INTO uuid_ids ( @uuid_id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440012', 'bad hidden replace', 'bad-hidden', 32 );
+	SELECT id FROM uuid_ids WHERE id=123;
+	UPDATE uuid_ids SET tag='sql-internal-id-noop' WHERE id=123;
+	DELETE FROM uuid_ids WHERE id=123;
+	UPDATE uuid_ids SET missing_attr=1 WHERE id=123;
+	SELECT id, tag, price FROM uuid_ids WHERE id IN ('550e8400-e29b-41d4-a716-446655440011','550e8400-e29b-41d4-a716-446655440012') ORDER BY id ASC;
+	SELECT id FROM uuid_ids WHERE `@id`=123;
+	SELECT id FROM uuid_ids WHERE id > '550e8400-e29b-41d4-a716-446655440000';
+	SELECT id FROM uuid_ids WHERE id &lt; '550e8400-e29b-41d4-a716-446655440001';
+	SELECT id FROM uuid_ids WHERE id >= '550e8400-e29b-41d4-a716-446655440000';
+	SELECT id FROM uuid_ids WHERE id &lt;= '550e8400-e29b-41d4-a716-446655440001';
+	SELECT `@id` FROM uuid_ids LIMIT 1;
+	SELECT id FROM uuid_ids WHERE @uuid_id='550e8400-e29b-41d4-a716-446655440000';
+	SELECT id FROM uuid_ids WHERE @uuid_id IN ('550e8400-e29b-41d4-a716-446655440000');
+	SELECT id FROM uuid_ids WHERE @uuid_id > '550e8400-e29b-41d4-a716-446655440000';
+	SELECT @uuid_id FROM uuid_ids LIMIT 1;
+	SELECT id FROM uuid_ids ORDER BY `@id` ASC LIMIT 1;
+	SELECT id FROM uuid_ids ORDER BY @uuid_id ASC LIMIT 1;
+	SELECT `@id`, COUNT(*) FROM uuid_ids GROUP BY `@id` ORDER BY `@id` ASC LIMIT 1;
+	SELECT @uuid_id, COUNT(*) FROM uuid_ids GROUP BY @uuid_id ORDER BY @uuid_id ASC LIMIT 1;
+	SELECT COUNT(DISTINCT id) FROM uuid_ids;
+	SELECT MIN(id), MAX(id) FROM uuid_ids;
+	SELECT GROUP_CONCAT(id) FROM uuid_ids;
+	SELECT COUNT(DISTINCT `@id`) FROM uuid_ids;
+	SELECT COUNT(DISTINCT @uuid_id) FROM uuid_ids;
+	<!-- UUID public id must not be accepted as a numeric expression operand -->
+	SELECT id+1 FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440000';
+
+	<!-- duplicate existing and duplicate staged UUID ids -->
+	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440000', 'duplicate document', 'dup', 30 );
+	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440010', 'batch one', 'batch', 1 ), ( '550e8400-e29b-41d4-a716-446655440010', 'batch two', 'batch', 2 );
+	SELECT id, tag, price FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440010';
+	SET autocommit=0;
+	INSERT INTO uuid_txn ( id, title, tag ) VALUES ( '10000000-0000-4000-8000-000000000001', 'transaction duplicate one', 'first' );
+	INSERT INTO uuid_txn ( id, title, tag ) VALUES ( '10000000-0000-4000-8000-000000000001', 'transaction duplicate two', 'second' );
+	COMMIT;
+	SET autocommit=1;
+	SELECT id, tag FROM uuid_txn WHERE id='10000000-0000-4000-8000-000000000001' ORDER BY tag ASC;
+	INSERT INTO uuid_txn ( id, title, tag ) VALUES ( '10000000-0000-4000-8000-000000000002', 'transaction committed duplicate base', 'committed-dup-base' );
+	SET autocommit=0;
+	INSERT INTO uuid_txn ( id, title, tag ) VALUES ( '10000000-0000-4000-8000-000000000003', 'transaction staged before committed duplicate', 'staged-before-dup' );
+	INSERT INTO uuid_txn ( id, title, tag ) VALUES ( '10000000-0000-4000-8000-000000000002', 'transaction duplicate committed', 'dup-committed' );
+	COMMIT;
+	SET autocommit=1;
+	SELECT id, tag FROM uuid_txn ORDER BY id ASC;
+		INSERT INTO uuid_txn ( id, title, tag ) VALUES ( '10000000-0000-4000-8000-000000000005', 'autocommit committed duplicate base', 'autocommit-dup-base' );
+		SET autocommit=0;
+		INSERT INTO uuid_txn ( id, title, tag ) VALUES ( '10000000-0000-4000-8000-000000000006', 'autocommit staged before committed duplicate', 'autocommit-staged-before-dup' );
+		INSERT INTO uuid_txn ( id, title, tag ) VALUES ( '10000000-0000-4000-8000-000000000005', 'autocommit duplicate committed', 'autocommit-dup-committed' );
+		SET autocommit=1;
+		SELECT id, tag FROM uuid_txn WHERE id IN ('10000000-0000-4000-8000-000000000005','10000000-0000-4000-8000-000000000006') ORDER BY id ASC;
+		SET autocommit=0;
+		INSERT INTO uuid_txn ( id, title, tag ) VALUES ( '10000000-0000-4000-8000-000000000007', 'rollback staged uuid', 'rollback-staged' );
+		ROLLBACK;
+		SET autocommit=1;
+		INSERT INTO uuid_txn ( id, title, tag ) VALUES ( '10000000-0000-4000-8000-000000000007', 'after rollback uuid', 'after-rollback' );
+		SELECT id, tag FROM uuid_txn WHERE id='10000000-0000-4000-8000-000000000007';
+
+		REPLACE INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440000', 'first replaced', 'replaced', 11 );
+		REPLACE INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440000', 'first replace in batch', 'replace-batch-first', 12 ), ( '550e8400-e29b-41d4-a716-446655440000', 'second replace in batch', 'replace-batch-second', 13 );
+		SELECT id, tag, price FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440000';
+
+	UPDATE uuid_ids SET price=22, tag='updated' WHERE id='550e8400-e29b-41d4-a716-446655440001';
+	SELECT id, tag, price FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440001';
+	UPDATE uuid_ids SET `@id`='550e8400-e29b-41d4-a716-446655440001' WHERE id='550e8400-e29b-41d4-a716-446655440001';
+	UPDATE uuid_ids SET @uuid_id='not-a-uuid' WHERE id='550e8400-e29b-41d4-a716-446655440001';
+	SELECT id, tag, price FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440001';
+
+	DELETE FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440001';
+	SELECT id, tag, price FROM uuid_ids ORDER BY id ASC;
+
+		INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440002', 'third document', 'disk', 30 );
+		FLUSH RAMCHUNK uuid_ids;
+		SELECT id, tag, price FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440002';
+		INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440002', 'duplicate disk document', 'disk-dup', 31 );
+		REPLACE INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440002', 'disk replaced', 'disk-replaced', 32 );
+		SELECT id, tag, price FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440002';
+		FLUSH RAMCHUNK uuid_auto;
+		INSERT INTO uuid_auto ( title, tag, price ) VALUES ( 'auto sql after disk', 'auto-after-disk', 27 );
+		SELECT COUNT(*), COUNT(DISTINCT id) FROM uuid_auto;
+
+	<!-- UUID lookup must merge the RAM hash result with a disk-only query. -->
+	INSERT INTO uuid_mixed_row ( id, title, tag, price ) VALUES ( '30000000-0000-4000-8000-000000000100', 'row disk', 'row-disk', 100 );
+	FLUSH RAMCHUNK uuid_mixed_row;
+	INSERT INTO uuid_mixed_row ( id, title, tag, price ) VALUES ( '30000000-0000-4000-8000-000000000101', 'row ram', 'row-ram', 101 );
+	INSERT INTO uuid_mixed_row ( id, title, tag, price ) VALUES ( '30000000-0000-4000-8000-000000000101', 'row ram duplicate', 'row-ram-duplicate', 102 );
+	REPLACE INTO uuid_mixed_row ( id, title, tag, price ) VALUES ( '30000000-0000-4000-8000-000000000101', 'row ram replaced', 'row-ram-replaced', 103 );
+	INSERT INTO uuid_mixed_row ( id, title, tag, price ) VALUES ( '30000000-0000-4000-8000-000000000100', 'row disk duplicate', 'row-disk-duplicate', 104 );
+	REPLACE INTO uuid_mixed_row ( id, title, tag, price ) VALUES ( '30000000-0000-4000-8000-000000000100', 'row disk replaced', 'row-disk-replaced', 105 );
+	INSERT INTO uuid_mixed_row ( id, title, tag, price ) VALUES ( '30000000-0000-4000-8000-000000000102', 'row miss', 'row-miss', 106 );
+	INSERT INTO uuid_mixed_row ( title, tag, price ) VALUES ( 'row auto', 'row-auto', 107 );
+	SELECT id, tag, price FROM uuid_mixed_row WHERE id IN ( '30000000-0000-4000-8000-000000000100', '30000000-0000-4000-8000-000000000101', '30000000-0000-4000-8000-000000000102' ) ORDER BY id ASC;
+	SELECT COUNT(*), COUNT(DISTINCT id) FROM uuid_mixed_row;
+
+	INSERT INTO uuid_mixed_col ( id, title, tag, price ) VALUES ( '40000000-0000-4000-8000-000000000100', 'columnar disk', 'columnar-mixed-disk', 110 );
+	FLUSH RAMCHUNK uuid_mixed_col;
+	INSERT INTO uuid_mixed_col ( id, title, tag, price ) VALUES ( '40000000-0000-4000-8000-000000000101', 'columnar ram', 'columnar-mixed-ram', 111 );
+	INSERT INTO uuid_mixed_col ( id, title, tag, price ) VALUES ( '40000000-0000-4000-8000-000000000101', 'columnar ram duplicate', 'columnar-mixed-ram-duplicate', 112 );
+	REPLACE INTO uuid_mixed_col ( id, title, tag, price ) VALUES ( '40000000-0000-4000-8000-000000000101', 'columnar ram replaced', 'columnar-mixed-ram-replaced', 113 );
+	INSERT INTO uuid_mixed_col ( id, title, tag, price ) VALUES ( '40000000-0000-4000-8000-000000000102', 'columnar miss', 'columnar-mixed-miss', 114 );
+	INSERT INTO uuid_mixed_col ( title, tag, price ) VALUES ( 'columnar auto', 'columnar-mixed-auto', 115 );
+	SELECT id, tag, price FROM uuid_mixed_col WHERE id IN ( '40000000-0000-4000-8000-000000000100', '40000000-0000-4000-8000-000000000101', '40000000-0000-4000-8000-000000000102' ) ORDER BY id ASC;
+	SELECT COUNT(*), COUNT(DISTINCT id) FROM uuid_mixed_col;
+
+	<!-- direct UUID lookup in two rowwise disk chunks and after optimize -->
+	INSERT INTO uuid_disk_row ( id, title, tag, price ) VALUES
+		( '50000000-0000-4000-8000-000000000001', 'row disk one', 'row-one', 1 ),
+		( '50000000-0000-4000-8000-000000000002', 'row disk two', 'row-two', 2 );
+	FLUSH RAMCHUNK uuid_disk_row;
+	INSERT INTO uuid_disk_row ( id, title, tag, price ) VALUES
+		( '50000000-0000-4000-8000-000000000003', 'row disk three', 'row-three', 3 ),
+		( '50000000-0000-4000-8000-000000000004', 'row disk four', 'row-four', 4 );
+	FLUSH RAMCHUNK uuid_disk_row;
+	INSERT INTO uuid_disk_row ( id, title, tag, price ) VALUES ( '50000000-0000-4000-8000-000000000001', 'row duplicate', 'row-duplicate', 11 );
+	REPLACE INTO uuid_disk_row ( id, title, tag, price ) VALUES ( '50000000-0000-4000-8000-000000000001', 'row replaced', 'row-replaced', 12 );
+	INSERT INTO uuid_disk_row ( id, title, tag, price ) VALUES ( '50000000-0000-4000-8000-000000000005', 'row miss', 'row-miss', 5 );
+	INSERT INTO uuid_disk_row ( title, tag, price ) VALUES ( 'row generated', 'row-generated', 6 );
+	UPDATE uuid_disk_row SET tag='row-three-updated', price=13 WHERE id='50000000-0000-4000-8000-000000000003';
+	DELETE FROM uuid_disk_row WHERE id='50000000-0000-4000-8000-000000000004';
+	SELECT id, tag, price FROM uuid_disk_row WHERE id IN ( '50000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000003', '50000000-0000-4000-8000-000000000004', '50000000-0000-4000-8000-000000000005' ) ORDER BY id ASC;
+	OPTIMIZE INDEX uuid_disk_row OPTION sync=1, cutoff=1;
+	INSERT INTO uuid_disk_row ( id, title, tag, price ) VALUES ( '50000000-0000-4000-8000-000000000002', 'row post-optimize duplicate', 'row-post-duplicate', 21 );
+	REPLACE INTO uuid_disk_row ( id, title, tag, price ) VALUES ( '50000000-0000-4000-8000-000000000002', 'row post-optimize replaced', 'row-post-replaced', 22 );
+	INSERT INTO uuid_disk_row ( id, title, tag, price ) VALUES ( '50000000-0000-4000-8000-000000000006', 'row post-optimize miss', 'row-post-miss', 23 );
+	INSERT INTO uuid_disk_row ( title, tag, price ) VALUES ( 'row post-optimize generated', 'row-post-generated', 24 );
+	UPDATE uuid_disk_row SET tag='row-three-post-updated', price=25 WHERE id='50000000-0000-4000-8000-000000000003';
+	SELECT id, tag, price FROM uuid_disk_row WHERE id='50000000-0000-4000-8000-000000000003';
+	DELETE FROM uuid_disk_row WHERE id='50000000-0000-4000-8000-000000000003';
+	SELECT id, tag, price FROM uuid_disk_row WHERE id IN ( '50000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000002', '50000000-0000-4000-8000-000000000003', '50000000-0000-4000-8000-000000000005', '50000000-0000-4000-8000-000000000006' ) ORDER BY id ASC;
+	SELECT COUNT(*), COUNT(DISTINCT id) FROM uuid_disk_row;
+
+	<!-- direct UUID lookup in two columnar disk chunks and after optimize -->
+	INSERT INTO uuid_disk_col ( id, title, tag, price ) VALUES
+		( '60000000-0000-4000-8000-000000000001', 'columnar disk one', 'columnar-one', 31 ),
+		( '60000000-0000-4000-8000-000000000002', 'columnar disk two', 'columnar-two', 32 );
+	FLUSH RAMCHUNK uuid_disk_col;
+	INSERT INTO uuid_disk_col ( id, title, tag, price ) VALUES
+		( '60000000-0000-4000-8000-000000000003', 'columnar disk three', 'columnar-three', 33 ),
+		( '60000000-0000-4000-8000-000000000004', 'columnar disk four', 'columnar-four', 34 );
+	FLUSH RAMCHUNK uuid_disk_col;
+	INSERT INTO uuid_disk_col ( id, title, tag, price ) VALUES ( '60000000-0000-4000-8000-000000000001', 'columnar duplicate', 'columnar-duplicate', 41 );
+	REPLACE INTO uuid_disk_col ( id, title, tag, price ) VALUES ( '60000000-0000-4000-8000-000000000001', 'columnar replaced', 'columnar-replaced', 42 );
+	INSERT INTO uuid_disk_col ( id, title, tag, price ) VALUES ( '60000000-0000-4000-8000-000000000005', 'columnar miss', 'columnar-miss', 35 );
+	INSERT INTO uuid_disk_col ( title, tag, price ) VALUES ( 'columnar generated', 'columnar-generated', 36 );
+	UPDATE uuid_disk_col SET tag='columnar-three-updated', price=43 WHERE id='60000000-0000-4000-8000-000000000003';
+	DELETE FROM uuid_disk_col WHERE id='60000000-0000-4000-8000-000000000004';
+	SELECT id, tag, price FROM uuid_disk_col WHERE id IN ( '60000000-0000-4000-8000-000000000001', '60000000-0000-4000-8000-000000000003', '60000000-0000-4000-8000-000000000004', '60000000-0000-4000-8000-000000000005' ) ORDER BY id ASC;
+	OPTIMIZE INDEX uuid_disk_col OPTION sync=1, cutoff=1;
+	INSERT INTO uuid_disk_col ( id, title, tag, price ) VALUES ( '60000000-0000-4000-8000-000000000002', 'columnar post-optimize duplicate', 'columnar-post-duplicate', 51 );
+	REPLACE INTO uuid_disk_col ( id, title, tag, price ) VALUES ( '60000000-0000-4000-8000-000000000002', 'columnar post-optimize replaced', 'columnar-post-replaced', 52 );
+	INSERT INTO uuid_disk_col ( id, title, tag, price ) VALUES ( '60000000-0000-4000-8000-000000000006', 'columnar post-optimize miss', 'columnar-post-miss', 53 );
+	INSERT INTO uuid_disk_col ( title, tag, price ) VALUES ( 'columnar post-optimize generated', 'columnar-post-generated', 54 );
+	UPDATE uuid_disk_col SET tag='columnar-three-post-updated', price=55 WHERE id='60000000-0000-4000-8000-000000000003';
+	SELECT id, tag, price FROM uuid_disk_col WHERE id='60000000-0000-4000-8000-000000000003';
+	DELETE FROM uuid_disk_col WHERE id='60000000-0000-4000-8000-000000000003';
+	SELECT id, tag, price FROM uuid_disk_col WHERE id IN ( '60000000-0000-4000-8000-000000000001', '60000000-0000-4000-8000-000000000002', '60000000-0000-4000-8000-000000000003', '60000000-0000-4000-8000-000000000005', '60000000-0000-4000-8000-000000000006' ) ORDER BY id ASC;
+	SELECT COUNT(*), COUNT(DISTINCT id) FROM uuid_disk_col;
+
+		<!-- columnar table keeps UUID public id and string lookup through ram/disk -->
+	INSERT INTO uuid_col ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440020', 'columnar document', 'columnar', 50 );
+	INSERT INTO uuid_col ( id, title, tag, price ) VALUES ( 'FFFFFFFF-FFFF-4FFF-8FFF-FFFFFFFFFFFF', 'columnar upper-shaped document', 'columnar-shaped', 51 );
+	SELECT id, tag, price FROM uuid_col WHERE id='550e8400-e29b-41d4-a716-446655440020';
+	SELECT id, tag, price FROM uuid_col WHERE id='ffffffff-ffff-4fff-8fff-ffffffffffff';
+	SELECT id, COUNT(*) FROM uuid_col GROUP BY id ORDER BY id ASC;
+	SELECT COUNT(DISTINCT id) FROM uuid_col;
+	INSERT INTO uuid_col ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440023', 'columnar ram delete', 'columnar-ram-delete', 53 );
+	DELETE FROM uuid_col WHERE tag='columnar-ram-delete';
+	SELECT id, tag, price FROM uuid_col WHERE id='550e8400-e29b-41d4-a716-446655440023';
+	INSERT INTO uuid_col ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440024', 'columnar disk delete', 'columnar-disk-delete', 54 );
+	FLUSH RAMCHUNK uuid_col;
+	SELECT id, tag, price FROM uuid_col WHERE id='550e8400-e29b-41d4-a716-446655440020';
+	SELECT COUNT(DISTINCT id) FROM uuid_col;
+	DELETE FROM uuid_col WHERE id='550e8400-e29b-41d4-a716-446655440024';
+	SELECT id, tag, price FROM uuid_col WHERE id IN ('550e8400-e29b-41d4-a716-446655440020','550e8400-e29b-41d4-a716-446655440024') ORDER BY id ASC;
+	INSERT INTO uuid_col ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440026', 'columnar json disk delete', 'columnar-json-disk-delete', 56 );
+	FLUSH RAMCHUNK uuid_col;
+	SELECT id, tag, price FROM uuid_col WHERE id='550e8400-e29b-41d4-a716-446655440026';
+
+	<!-- ExprParser_t::ParseJoinAttr must resolve UUID id joins through public UUID strings, not internal DocID_t surrogates -->
+	CREATE TABLE join_left ( id uuid, title text, k string );
+	CREATE TABLE join_right ( id uuid, title text, k string );
+	INSERT INTO join_left ( id, title, k ) VALUES ( '550e8400-e29b-41d4-a716-446655440021', 'left match', 'same' );
+	INSERT INTO join_right ( id, title, k ) VALUES ( '550e8400-e29b-41d4-a716-446655440021', 'right match', 'same' );
+	INSERT INTO join_right ( id, title, k ) VALUES ( '550e8400-e29b-41d4-a716-446655440022', 'right miss', 'same' );
+	SELECT join_left.id, join_right.id, join_left.k, join_right.k FROM join_left INNER JOIN join_right ON join_left.id = join_right.id ORDER BY join_right.id ASC;
+	SELECT join_left.id, join_right.id, join_left.k, join_right.k FROM join_left INNER JOIN join_right ON join_left.k = join_right.k ORDER BY join_right.id ASC;
+
+	<!-- distributed table through the agent path should expose UUID public ids -->
+	CREATE TABLE dist_agent type='distributed' agent='<agent0_address/>:uuid_ids';
+	SELECT id, tag, price FROM dist_agent WHERE id='550e8400-e29b-41d4-a716-446655440000';
+	INSERT INTO dist_agent ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440030', 'dist inserted', 'dist', 60 );
+	SELECT id, tag, price FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440030';
+
+	<!-- multi-agent distributed UUID ids must aggregate by public UUID, not internal DocID_t surrogates -->
+	INSERT INTO uuid_dist_a ( id, title, tag, price ) VALUES ( '10000000-0000-4000-8000-000000000001', 'dist shared on a', 'dist-a-shared', 701 ), ( '10000000-0000-4000-8000-000000000002', 'dist a two', 'dist-a-two', 702 ), ( '10000000-0000-4000-8000-000000000003', 'dist a three', 'dist-a-three', 703 );
+	INSERT INTO uuid_dist_b ( id, title, tag, price ) VALUES ( '10000000-0000-4000-8000-000000000001', 'dist shared on b', 'dist-b-shared', 801 ), ( '20000000-0000-4000-8000-000000000002', 'dist b two', 'dist-b-two', 802 ), ( '20000000-0000-4000-8000-000000000003', 'dist b three', 'dist-b-three', 803 );
+	CREATE TABLE dist_agent_multi type='distributed' agent='<agent0_address/>:uuid_dist_a' agent='<agent0_address/>:uuid_dist_b';
+	SELECT COUNT(*), COUNT(DISTINCT id) FROM dist_agent_multi;
+	SELECT id, COUNT(*) FROM dist_agent_multi GROUP BY id ORDER BY id ASC;
+	SELECT * FROM dist_agent_multi ORDER BY price ASC;
+	SELECT id, tag, price FROM dist_agent_multi ORDER BY price ASC;
+	SELECT tag, id, price FROM dist_agent_multi ORDER BY price ASC;
+	SELECT tag, price FROM dist_agent_multi ORDER BY price ASC;
+
+	<!-- numeric shard tables should keep ordinary explicit-id, auto-id, replace, update, and delete behavior -->
+	INSERT INTO numeric_shard ( id, title, tag, price ) VALUES ( 101, 'shard explicit one', 'numeric-shard-one', 901 );
+	INSERT INTO numeric_shard ( id, title, tag, price ) VALUES ( 102, 'shard explicit two', 'numeric-shard-two', 902 );
+	INSERT INTO numeric_shard ( title, tag, price ) VALUES ( 'shard generated', 'numeric-shard-auto', 903 );
+	SELECT COUNT(*), COUNT(DISTINCT id) FROM numeric_shard;
+	SELECT id, tag, price FROM numeric_shard WHERE id=101;
+	REPLACE INTO numeric_shard ( id, title, tag, price ) VALUES ( 101, 'shard replaced', 'numeric-shard-replaced', 905 );
+	UPDATE numeric_shard SET price=906, tag='numeric-shard-updated' WHERE id=102;
+	SELECT id, tag, price FROM numeric_shard WHERE id IN (101,102) ORDER BY price ASC;
+	DELETE FROM numeric_shard WHERE id=102;
+	SELECT tag, price FROM numeric_shard ORDER BY price ASC;
+	CREATE TABLE dist_agent_numeric type='distributed' agent='<agent0_address/>:numeric_shard_a' agent='<agent0_address/>:numeric_shard_b';
+	SELECT tag, id, price FROM dist_agent_numeric ORDER BY price ASC;
+	SELECT tag, price FROM dist_agent_numeric ORDER BY price ASC;
+
+	INSERT INTO numeric_ids ( id, title, tag ) VALUES ( 1, 'numeric document', 'ok' );
+	SELECT id, tag FROM numeric_ids WHERE id=1;
+	INSERT INTO numeric_ids ( id, title, tag ) VALUES ( '550e8400-e29b-41d4-a716-446655440099', 'bad numeric document', 'bad' );
+	INSERT INTO uuid_case ( id, title, tag, price ) VALUES ( '00000000-0000-0000-0000-000000000001', 'uuid invalid-version document', 'uuid-invalid-version', 83 );
+</sphinxql>
+
+<query endpoint="sql?mode=raw" method="post">SELECT COUNT(*) FROM uuid_ids FACET id ORDER BY id ASC</query>
+
+<!-- legacy @id remains accepted by schema-independent JSON/ES parsing on numeric-id tables -->
+<query endpoint="json/search">
+{
+	"table": "numeric_ids",
+	"_source": [ "@id" ],
+	"query": { "match_all": {} }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "dist_agent",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440000" } },
+	"_source": [ "id", "tag", "price" ],
+	"sort": [ { "id": "asc" } ]
+}
+</query>
+
+<query endpoint="dist_agent/_search">
+{
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440000" } },
+	"docvalue_fields": [ { "field": "id" } ],
+	"sort": [ { "id": "asc" } ]
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "dist_agent_multi",
+	"query": { "match_all": {} },
+	"_source": [ "id", "tag", "price" ],
+	"sort": [ { "price": "asc" } ],
+	"limit": 10
+}
+</query>
+
+<query endpoint="dist_agent_multi/_search">
+{
+	"query": { "match_all": {} },
+	"docvalue_fields": [ { "field": "id" } ],
+	"sort": [ { "price": "asc" } ],
+	"size": 10
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"table": "uuid_ids",
+	"id": "550e8400-e29b-41d4-a716-446655440003",
+	"doc": { "title": "json insert", "tag": "json", "price": 40 }
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"table": "uuid_case",
+	"id": "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
+	"doc": { "title": "json upper", "tag": "upper-json", "price": 81 }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_case",
+	"query": { "equals": { "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" } },
+	"_source": [ "id", "tag", "price" ]
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"table": "uuid_ids",
+	"id": "not-a-uuid",
+	"doc": { "title": "bad json insert", "tag": "bad-json", "price": 40 }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440003" } },
+	"sort": [ { "id": "asc" } ]
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "not-a-uuid" } }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "range": { "@uuid_id": { "gt": "550e8400-e29b-41d4-a716-446655440000" } } },
+	"sort": [ { "id": "asc" } ]
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "@uuid_id": "550e8400-e29b-41d4-a716-446655440000" } }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "@id": "550e8400-e29b-41d4-a716-446655440000" } }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"_source": [ "@uuid_id" ],
+	"query": { "match_all": {} }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"_source": [ "@id" ],
+	"query": { "match_all": {} }
+}
+</query>
+
+<query endpoint="json/update">
+{
+	"table": "uuid_ids",
+	"id": 123,
+	"doc": { "tag": "json-bad-numeric-update", "price": 91 }
+}
+</query>
+
+<query endpoint="json/delete">
+{
+	"table": "uuid_ids",
+	"id": 123
+}
+</query>
+
+<query endpoint="json/delete">
+{
+	"table": "uuid_ids",
+	"id": 0
+}
+</query>
+
+<query endpoint="json/update">
+{
+	"table": "uuid_ids",
+	"id": "550e8400-e29b-41d4-a716-446655440003",
+	"doc": { "tag": "json-updated", "price": 41 }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440003" } },
+	"sort": [ { "id": "asc" } ]
+}
+</query>
+
+<query endpoint="json/replace">
+{
+	"table": "uuid_ids",
+	"id": "550e8400-e29b-41d4-a716-446655440003",
+	"doc": { "title": "json replaced", "tag": "json-replaced", "price": 42 }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440003" } },
+	"sort": [ { "id": "asc" } ]
+}
+</query>
+
+<query endpoint="json/delete">
+{
+	"table": "uuid_ids",
+	"id": "550e8400-e29b-41d4-a716-446655440003"
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"table": "uuid_ids",
+	"id": "550e8400-e29b-41d4-a716-446655440008",
+	"doc": { "title": "json query delete", "tag": "json-query-delete", "price": 58 }
+}
+</query>
+
+<query endpoint="json/delete">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440008" } }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440008" } }
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"table": "uuid_col",
+	"id": "550e8400-e29b-41d4-a716-446655440025",
+	"doc": { "title": "columnar json ram delete", "tag": "columnar-json-ram-delete", "price": 55 }
+}
+</query>
+
+<query endpoint="json/delete">
+{
+	"table": "uuid_col",
+	"id": "550e8400-e29b-41d4-a716-446655440025"
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_col",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440025" } }
+}
+</query>
+
+<query endpoint="json/delete">
+{
+	"table": "uuid_col",
+	"id": "550e8400-e29b-41d4-a716-446655440026"
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_col",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440026" } }
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"table": "uuid_col",
+	"id": "550e8400-e29b-41d4-a716-446655440027",
+	"doc": { "title": "columnar json query ram delete", "tag": "columnar-json-query-ram-delete", "price": 57 }
+}
+</query>
+
+<query endpoint="json/delete">
+{
+	"table": "uuid_col",
+	"query": { "equals": { "tag": "columnar-json-query-ram-delete" } }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_col",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440027" } }
+}
+</query>
+
+<sphinxql>
+	INSERT INTO uuid_col ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440028', 'columnar json query disk delete', 'columnar-json-query-disk-delete', 58 );
+	FLUSH RAMCHUNK uuid_col;
+</sphinxql>
+
+<query endpoint="json/delete">
+{
+	"table": "uuid_col",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440028" } }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_col",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440028" } }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440003" } }
+}
+</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "uuid_ids", "_id" : "550e8400-e29b-41d4-a716-446655440004" } }
+{ "title" : "es bulk explicit", "tag" : "bulk", "price" : 43 }
+{ "index" : { "_index" : "uuid_ids", "_id" : "not-a-uuid" } }
+{ "title" : "es bulk bad", "tag" : "bulk-bad", "price" : 45 }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "tag": "bulk-bad" } }
+}
+</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "uuid_auto" } }
+{ "title" : "es bulk generated", "tag" : "bulk-generated", "price" : 54 }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_auto",
+	"query": { "equals": { "tag": "bulk-generated" } },
+	"_source": [ "id", "tag", "price" ]
+}
+</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "uuid_ids", "_id" : 123 } }
+{ "title" : "es bulk numeric id", "tag" : "bulk-numeric-id", "price" : 52 }
+{ "create" : { "_index" : "uuid_ids", "_id" : 124 } }
+{ "title" : "es bulk numeric create", "tag" : "bulk-numeric-create", "price" : 53 }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "tag": "bulk-numeric-id" } },
+	"_source": [ "id", "tag", "price" ],
+	"sort": [ { "tag": "asc" } ]
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "tag": "bulk-numeric-create" } },
+	"_source": [ "id", "tag", "price" ],
+	"sort": [ { "tag": "asc" } ]
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440004" } },
+	"sort": [ { "id": "asc" } ]
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440004" } },
+	"_source": [ "id" ],
+	"sort": [ { "id": "asc" } ]
+}
+</query>
+
+<query endpoint="uuid_ids/_search">
+{
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440004" } },
+	"sort": [ { "id": "asc" } ]
+}
+</query>
+
+<query endpoint="uuid_ids/_search">
+{
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440004" } },
+	"docvalue_fields": [ { "field": "id" } ],
+	"sort": [ { "id": "asc" } ]
+}
+</query>
+
+<query endpoint="uuid_ids/_search">
+{
+	"query": { "match_all": {} },
+	"docvalue_fields": [ { "field": "@uuid_id" } ]
+}
+</query>
+
+<query endpoint="uuid_ids/_search">
+{
+	"query": { "match_all": {} },
+	"docvalue_fields": [ { "field": "@id" } ]
+}
+</query>
+
+<query endpoint="uuid_ids/_search">
+{
+	"query": { "match_all": {} },
+	"aggs": { "hidden_uuid": { "terms": { "field": "@uuid_id" } } }
+}
+</query>
+
+<query endpoint="uuid_ids/_search">
+{
+	"query": { "match_all": {} },
+	"aggs": { "atid": { "terms": { "field": "@id" } } }
+}
+</query>
+
+<sphinxql>
+	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '550e8400-e29b-41d4-a716-446655440040', 'es bulk update delete target', 'bulk-update-delete-target', 40 ), ( '550e8400-e29b-41d4-a716-446655440041', 'es bulk uppercase target', 'bulk-update-delete-upper-target', 41 );
+</sphinxql>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "update" : { "_index" : "uuid_ids", "_id" : "550e8400-e29b-41d4-a716-446655440040" } }
+{ "doc" : { "tag" : "bulk-update-supported", "price" : 82 } }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440040" } },
+	"_source": [ "id", "tag", "price" ]
+}
+</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "delete" : { "_index" : "uuid_ids", "_id" : "550e8400-e29b-41d4-a716-446655440040" } }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440040" } },
+	"_source": [ "id", "tag", "price" ]
+}
+</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "update" : { "_index" : "uuid_ids", "_id" : "550E8400-E29B-41D4-A716-446655440041" } }
+{ "doc" : { "tag" : "bulk-update-upper", "price" : 83 } }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440041" } },
+	"_source": [ "id", "tag", "price" ]
+}
+</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "update" : { "_index" : "uuid_ids", "_id" : "550e8400-e29b-41d4-a716-446655440041" } }
+{ "doc" : { "tag" : "bulk-update-before-invalid", "price" : 84 } }
+{ "update" : { "_index" : "uuid_ids", "_id" : "not-a-uuid" } }
+{ "doc" : { "tag" : "bulk-update-invalid", "price" : 85 } }
+</bulk>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "update" : { "_index" : "uuid_ids", "_id" : 126 } }
+{ "doc" : { "tag" : "bulk-update-numeric-internal", "price" : 86 } }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440041" } },
+	"_source": [ "id", "tag", "price" ]
+}
+</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "delete" : { "_index" : "uuid_ids", "_id" : "550E8400-E29B-41D4-A716-446655440041" } }
+{ "delete" : { "_index" : "uuid_ids", "_id" : "not-a-uuid" } }
+{ "delete" : { "_index" : "uuid_ids", "_id" : 125 } }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440041" } },
+	"_source": [ "id", "tag", "price" ]
+}
+</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "uuid_case", "_id" : "BBBBBBBB-BBBB-4BBB-8BBB-BBBBBBBBBBBB" } }
+{ "id" : "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "title" : "es bulk upper", "tag" : "upper-bulk", "price" : 82 }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_case",
+	"query": { "equals": { "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" } },
+	"_source": [ "id", "tag", "price" ]
+}
+</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "create" : { "_index" : "uuid_ids", "_id" : "550e8400-e29b-41d4-a716-446655440000" } }
+{ "title" : "es bulk committed duplicate", "tag" : "bulk-committed-duplicate", "price" : 44 }
+</bulk>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "create" : { "_index" : "uuid_ids", "_id" : "550e8400-e29b-41d4-a716-446655440005" } }
+{ "title" : "es bulk duplicate one", "tag" : "bulk-dup-one", "price" : 46 }
+{ "create" : { "_index" : "uuid_ids", "_id" : "550e8400-e29b-41d4-a716-446655440005" } }
+{ "title" : "es bulk duplicate two", "tag" : "bulk-dup-two", "price" : 47 }
+</bulk>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "create" : { "_index" : "uuid_ids", "_id" : "550e8400-e29b-41d4-a716-446655440006" } }
+{ "title" : "es bulk lower", "tag" : "bulk-case-lower", "price" : 48 }
+{ "create" : { "_index" : "uuid_ids", "_id" : "550E8400-E29B-41D4-A716-446655440006" } }
+{ "title" : "es bulk upper duplicate", "tag" : "bulk-case-upper", "price" : 49 }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440006" } },
+	"sort": [ { "tag": "asc" } ]
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440005" } },
+	"sort": [ { "tag": "asc" } ]
+}
+</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "uuid_ids", "_id" : "550e8400-e29b-41d4-a716-446655440007" } }
+{ "title" : "es bulk index first", "tag" : "bulk-index-first", "price" : 50 }
+{ "index" : { "_index" : "uuid_ids", "_id" : "550e8400-e29b-41d4-a716-446655440007" } }
+{ "title" : "es bulk index second", "tag" : "bulk-index-second", "price" : 51 }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440007" } },
+	"sort": [ { "tag": "asc" } ]
+}
+</query>
+
+<sphinxql>
+	INSERT INTO numeric_ids ( id, title, tag ) VALUES ( 201, 'numeric aggregation one', 'numeric-aggr' ), ( 202, 'numeric aggregation two', 'numeric-aggr' );
+	INSERT INTO uuid_ids ( id, title, tag, price ) VALUES ( '40000000-0000-4000-8000-000000000001', 'uuid aggregation one', 'uuid-aggr', 61 ), ( '40000000-0000-4000-8000-000000000002', 'uuid aggregation two', 'uuid-aggr', 62 );
+</sphinxql>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"size": 0,
+	"query": { "match_all": {} },
+	"aggs": { "min_id": { "min": { "field": "id" } } }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"size": 0,
+	"query": { "equals": { "tag": "uuid-aggr" } },
+	"aggs": { "uuid_id_terms": { "terms": { "field": "id", "size": 5, "order": { "id": "asc" } } } }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "numeric_ids",
+	"size": 0,
+	"query": { "equals": { "tag": "numeric-aggr" } },
+	"aggs": { "numeric_id_terms": { "terms": { "field": "id", "size": 5, "order": { "id": "asc" } } } }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "uuid_ids",
+	"size": 0,
+	"query": { "equals": { "tag": "uuid-aggr" } },
+	"aggs": {
+		"uuid_id_composite": {
+			"composite": {
+				"size": 5,
+				"sources": [ { "public_id": { "terms": { "field": "id" } } } ]
+			}
+		}
+	}
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"table": "numeric_ids",
+	"size": 0,
+	"query": { "equals": { "tag": "numeric-aggr" } },
+	"aggs": {
+		"numeric_id_composite": {
+			"composite": {
+				"size": 5,
+				"sources": [ { "public_id": { "terms": { "field": "id" } } } ]
+			}
+		}
+	}
+}
+</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "create" : { "_index" : "numeric_ids", "_id" : 10 } }
+{ "title" : "numeric bulk duplicate one", "tag" : "numeric-bulk-one" }
+{ "create" : { "_index" : "numeric_ids", "_id" : 10 } }
+{ "title" : "numeric bulk duplicate two", "tag" : "numeric-bulk-two" }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "numeric_ids",
+	"query": { "equals": { "id": 10 } },
+	"sort": [ { "tag": "asc" } ]
+}
+</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "numeric_ids", "_id" : "20" } }
+{ "title" : "numeric bulk string id", "tag" : "numeric-bulk-string" }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "numeric_ids",
+	"query": { "equals": { "tag": "numeric-bulk-string" } },
+	"sort": [ { "tag": "asc" } ]
+}
+</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "update" : { "_index" : "numeric_ids", "_id" : "20" } }
+{ "doc" : { "tag" : "numeric-bulk-string-updated" } }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "numeric_ids",
+	"query": { "equals": { "tag": "numeric-bulk-string-updated" } },
+	"sort": [ { "tag": "asc" } ]
+}
+</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "delete" : { "_index" : "numeric_ids", "_id" : "20" } }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "numeric_ids",
+	"query": { "equals": { "tag": "numeric-bulk-string-updated" } },
+	"sort": [ { "tag": "asc" } ]
+}
+</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "numeric_ids", "_id" : "numeric-string-es-id" } }
+{ "id" : "numeric-string-es-id", "title" : "numeric bulk arbitrary string", "tag" : "numeric-bulk-arbitrary" }
+</bulk>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "update" : { "_index" : "numeric_ids", "_id" : "numeric-string-es-id" } }
+{ "doc" : { "tag" : "numeric-bulk-arbitrary-updated" } }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "numeric_ids",
+	"query": { "equals": { "tag": "numeric-bulk-arbitrary-updated" } },
+	"sort": [ { "tag": "asc" } ]
+}
+</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "delete" : { "_index" : "numeric_ids", "_id" : "numeric-string-es-id" } }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "numeric_ids",
+	"query": { "equals": { "tag": "numeric-bulk-arbitrary-updated" } }
+}
+</query>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "create" : { "_index" : "numeric_ids", "_id" : "numeric-string-es-id" } }
+{ "title" : "numeric bulk arbitrary recreate", "tag" : "numeric-bulk-arbitrary-created" }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "numeric_ids",
+	"query": { "equals": { "tag": "numeric-bulk-arbitrary-created" } },
+	"sort": [ { "tag": "asc" } ]
+}
+</query>
+
+<sphinxql>
+	INSERT INTO numeric_ids ( id, title, tag ) VALUES ( 30000000, 'numeric uuid prefix guard', 'numeric-uuid-prefix-guard' );
+</sphinxql>
+
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "numeric_ids", "_id" : "30000000-0000-4000-8000-000000000001" } }
+{ "title" : "numeric bulk uuid-shaped", "tag" : "numeric-bulk-uuid-shaped" }
+</bulk>
+
+<query endpoint="json/search">
+{
+	"table": "numeric_ids",
+	"query": { "equals": { "tag": "numeric-bulk-uuid-shaped" } }
+}
+</query>
+
+<sphinxql>
+	SELECT id, tag, price FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440005' ORDER BY tag ASC;
+	DROP TABLE dist_agent_multi;
+	DROP TABLE dist_agent;
+	DROP TABLE dist_agent_numeric;
+	DROP TABLE join_left;
+	DROP TABLE join_right;
+	DROP TABLE numeric_shard;
+	DROP TABLE numeric_shard_a;
+	DROP TABLE numeric_shard_b;
+	DROP TABLE uuid_dist_a;
+	DROP TABLE uuid_dist_b;
+	DROP TABLE uuid_ids;
+	DROP TABLE uuid_auto;
+	DROP TABLE uuid_col;
+	DROP TABLE uuid_case;
+	DROP TABLE uuid_txn;
+	DROP TABLE uuid_mixed_row;
+	DROP TABLE uuid_mixed_col;
+	DROP TABLE IF EXISTS bad_atid_uuid;
+	DROP TABLE IF EXISTS bad_hidden_uuid;
+	DROP TABLE IF EXISTS bad_hidden_uuid_id;
+	DROP TABLE IF EXISTS bad_mixed_uuid;
+	DROP TABLE numeric_ids;
+</sphinxql>
+</queries>
+
+</test>

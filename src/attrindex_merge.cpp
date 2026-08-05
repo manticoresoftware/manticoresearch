@@ -38,6 +38,7 @@ class AttrMerger_c::Impl_c
 	std::unique_ptr<JsonSIBuilder_i>		m_pJsonSIBuilder;
 	CSphVector<PlainOrColumnar_t>			m_dAttrsForKNN;
 	CSphFixedVector<DocidRowidPair_t> 		m_dDocidLookup {0};
+	CSphFixedVector<UuidDocidLookupPair_t>	m_dUuidLookup {0};
 	CSphWriter								m_tWriterSPA;
 	std::unique_ptr<BlobRowBuilder_i>		m_pBlobRowBuilder;
 	std::unique_ptr<DocstoreBuilder_i>		m_pDocstoreBuilder;
@@ -48,6 +49,7 @@ class AttrMerger_c::Impl_c
 	MergeCb_c & 							m_tMonitor;
 	CSphString &							m_sError;
 	int64_t									m_iTotalDocs;
+	bool									m_bUuidLinked = false;
 	BuildBufferSettings_t					m_tBufferSettings;
 
 	CSphVector<PlainOrColumnar_t>	m_dSiAttrs;
@@ -65,7 +67,7 @@ class AttrMerger_c::Impl_c
 	CSphVector<KNNInputRef_t>		m_dKNNInputs;
 
 private:
-	template <bool WITH_BLOB, bool WITH_STRIDE, bool WITH_DOCSTORE, bool WITH_SI, bool WITH_KNN, bool PURE_COLUMNAR>
+	template <bool WITH_BLOB, bool WITH_STRIDE, bool WITH_DOCSTORE, bool WITH_SI, bool PURE_COLUMNAR, bool WITH_UUID>
 	bool CopyMixedAttributes_T ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap );
 
 	bool AnalyzeMixedAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap );
@@ -161,15 +163,18 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 	m_tMinMax.Init ( tDstSchema );
 
 	m_dDocidLookup.Reset ( m_iTotalDocs );
+	m_bUuidLinked = tDstSchema.GetAttr(0).IsUuidLinkedDocid();
+	m_dUuidLookup.Reset ( m_bUuidLinked ? m_iTotalDocs : 0 );
 	BuildCreateHistograms ( m_tHistograms, m_dAttrsForHistogram, tDstSchema );
 
 	m_tResultRowID = 0;
 	return true;
 }
 
-template <bool WITH_BLOB, bool WITH_STRIDE, bool WITH_DOCSTORE, bool WITH_SI, bool WITH_KNN, bool PURE_COLUMNAR>
+template <bool WITH_BLOB, bool WITH_STRIDE, bool WITH_DOCSTORE, bool WITH_SI, bool PURE_COLUMNAR, bool WITH_UUID>
 bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap )
 {
+	assert ( WITH_UUID==m_bUuidLinked );
 	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
 	CSphVector<int64_t> dTmp;
 
@@ -180,6 +185,13 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 	CSphFixedVector<CSphRowitem> dTmpRow ( iStride );
 	auto iStrideBytes = dTmpRow.GetLengthBytes();
 	const CSphColumnInfo* pBlobLocator = WITH_BLOB ? tIndex.GetMatchSchema().GetAttr ( sphGetBlobLocatorName() ) : nullptr;
+	PlainOrColumnar_t tUuidAttr;
+	if constexpr ( WITH_UUID )
+	{
+		const CSphColumnInfo * pUuidAttr = tIndex.GetMatchSchema().GetAttr ( sphGetUuidDocidName() );
+		assert ( pUuidAttr && pUuidAttr->m_eAttrType==SPH_ATTR_STRING );
+		tUuidAttr = CreatePlainOrColumnar ( tIndex.GetMatchSchema(), *pUuidAttr );
+	}
 
 	int iChunk = tIndex.m_iChunk;
 	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
@@ -234,6 +246,14 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 		{
 			assert ( !pRow );
 			assert ( !pRawBlobAttrs );
+		}
+
+		if constexpr ( WITH_UUID )
+		{
+			const uint8_t * pUuid = nullptr;
+			int iUuidLen = tUuidAttr.Get ( tRowID, pRow, pRawBlobAttrs, dColumnarIterators, pUuid );
+			Str_t tUuid { (const char *)pUuid, iUuidLen };
+			m_dUuidLookup[m_tResultRowID] = { sphGetUuidDocidKey ( tUuid ), tDocID };
 		}
 
 		BuildStoreHistograms ( tRowID, pRow, pRawBlobAttrs, dColumnarIterators, m_dAttrsForHistogram, m_tHistograms );
@@ -314,9 +334,9 @@ bool AttrMerger_c::Impl_c::CopyAttributes ( const CSphIndex & tIndex, const VecT
 	const bool bStride = !bPureColumnar && tIndex.GetMatchSchema ().GetRowSize ()>0;
 	const bool bDocstore = !!m_pDocstoreBuilder;
 	const bool bSI = !!m_pSIdxBuilder;
-	const bool bKNN = !!m_pKNNBuilder;
+	const bool bUuidLinked = m_bUuidLinked;
 
-	int iIndex = bPureColumnar*32+bKNN*16+bSI*8+bDocstore*4+bStride*2+bBlob;
+	int iIndex = bUuidLinked*32+bPureColumnar*16+bSI*8+bDocstore*4+bStride*2+bBlob;
 
 	switch ( iIndex )
 	{
@@ -474,7 +494,20 @@ bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, 
 	tBuildHeader.m_iTotalBytes = m_iTotalBytes;
 
 	m_dDocidLookup.Sort ( CmpDocidLookup_fn() );
-	if ( !WriteDocidLookup ( GetTmpFilename ( pDstIndex, SPH_EXT_SPT ), m_dDocidLookup, m_sError ) )
+	if ( m_bUuidLinked )
+	{
+		assert ( m_dUuidLookup.GetLength()==m_dDocidLookup.GetLength() );
+		m_dUuidLookup.Sort ( CmpUuidDocidLookup_fn() );
+	}
+
+	CSphString sLookup = GetTmpFilename ( pDstIndex, SPH_EXT_SPT );
+	bool bWritten = false;
+	if ( m_bUuidLinked )
+		bWritten = WriteDocidLookup ( sLookup, m_dDocidLookup, m_dUuidLookup, m_sError );
+	else
+		bWritten = WriteDocidLookup ( sLookup, m_dDocidLookup, m_sError );
+
+	if ( !bWritten )
 		return false;
 
 	if ( pDstIndex->GetMatchSchema().HasNonColumnarAttrs() )

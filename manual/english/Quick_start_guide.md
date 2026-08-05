@@ -426,7 +426,7 @@ POST /insert
 ```json
 {
   "table": "products",
-  "_id": 0,
+  "id": 0,
   "created": true,
   "result": "created",
   "status": 201
@@ -434,7 +434,7 @@ POST /insert
 
 {
   "table": "products",
-  "_id": 0,
+  "id": 0,
   "created": true,
   "result": "created",
   "status": 201
@@ -442,7 +442,7 @@ POST /insert
 
 {
   "table": "products",
-  "_id": 0,
+  "id": 0,
   "created": true,
   "result": "created",
   "status": 201
@@ -1004,7 +1004,7 @@ POST /update
 ```json
 {
   "table": "products",
-  "_id": 1513686608316989452,
+  "id": 1513686608316989452,
   "result": "updated"
 }
 ```

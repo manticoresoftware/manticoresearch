@@ -393,7 +393,7 @@ utils_api.sql("SHOW TABLES LIKE 'pro%'", Some(true)).await
 {DESC | DESCRIBE} table_name [ LIKE pattern ]
 ```
 
-`DESCRIBE` 语句列出表的列及其相关类型。列包括文档 ID、全文字段和属性。顺序与 `INSERT` 和 `REPLACE` 语句预期的字段和属性顺序一致。列类型包括 `field`、`integer`、`timestamp`、`ordinal`、`bool`、`float`、`bigint`、`string` 和 `mva`。ID 列将被指定为 `bigint`。示例：
+`DESCRIBE` 语句列出表的列及其对应类型。列包括文档 ID、全文字段和属性。其顺序与 `INSERT` 和 `REPLACE` 语句所期望的字段和属性顺序一致。列类型包括 `field`、`integer`、`timestamp`、`ordinal`、`bool`、`float`、`bigint`、`uuid`、`string` 和 `mva`。`ID` 列默认是 `bigint`，对于使用 `id uuid` 声明的实时表则为 `uuid`。示例：
 
 ```sql
 mysql> DESC rt;

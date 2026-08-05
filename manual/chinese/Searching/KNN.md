@@ -453,7 +453,7 @@ POST /insert
 ```json
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"created":true,
 	"result":"created",
 	"status":201
@@ -461,7 +461,7 @@ POST /insert
 
 {
 	"table":"test",
-	"_id":2,
+	"id":2,
 	"created":true,
 	"result":"created",
 	"status":201

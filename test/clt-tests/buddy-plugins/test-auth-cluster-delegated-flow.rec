@@ -4,8 +4,11 @@ Test delegated cluster flow with non-replication session user in 2-node replicat
 Scenario:
 1) Session user `norepluser` has read/write/schema but no replication.
 2) Cluster/effective replication user is `repluser` (has replication).
-3) Whole flow is executed from `norepluser`:
-   CREATE CLUSTER -> JOIN CLUSTER -> ALTER CLUSTER ADD -> INSERT -> SELECT on node2 -> DELETE CLUSTER.
+3) Node 2 has the minimum 128 KiB `max_packet_size`.
+4) The flow creates a pre-populated 12,288-row RT table, then executes
+   ALTER CLUSTER ... ADD as `norepluser` and verifies the transferred rows.
+5) A post-add insert still replicates, and the cluster-user/restart checks run
+   as before.
 ––– comment –––
 ––– input –––
 export INSTANCE=1
@@ -22,6 +25,13 @@ export INSTANCE=2
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "CREATE USER 'repluser' IDENTIFIED BY 'repluser1234';" >/dev/null; MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "GRANT replication ON * TO 'repluser';" >/dev/null; MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "CREATE USER 'norepluser' IDENTIFIED BY 'noreplpass1';" >/dev/null; MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "GRANT read ON * TO 'norepluser';" >/dev/null; MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "GRANT write ON * TO 'norepluser';" >/dev/null; MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "GRANT schema ON * TO 'norepluser';" >/dev/null; cp /var/log/manticore-1/auth.json /var/log/manticore-2/auth.json; MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "RELOAD AUTH;" >/dev/null; echo "Users ready"
 ––– output –––
 Users ready
+––– comment –––
+Restart node 2 with the lowest supported local packet limit. Valid cluster
+transfer frames must remain compatible with a donor using the default limit.
+––– input –––
+stdbuf -oL searchd --stopwait -c /tmp/searchd-with-flexible-ports-auth-2.conf >/dev/null; sed '/^searchd {/a\    max_packet_size = 128K' /tmp/searchd-with-flexible-ports-auth-2.conf > /tmp/searchd-with-flexible-ports-auth-2-small-packet.conf; stdbuf -oL searchd -c /tmp/searchd-with-flexible-ports-auth-2-small-packet.conf >/dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-2/searchd.log); then echo NODE2_RESTARTED; else cat /var/log/manticore-2/searchd.log; exit 1; fi
+––– output –––
+NODE2_RESTARTED
 ––– comment –––
 ––– Negative check: norepluser cannot be used as effective replication user –––
 ––– comment –––
@@ -47,15 +57,42 @@ MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P2306 -e "JOIN CLUSTER mycluster A
 ––– Node1 regular flow as norepluser –––
 ––– comment –––
 ––– input –––
-MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P1306 -e "CREATE TABLE t1 (id BIGINT, title TEXT);" >/dev/null; echo $?
+{
+echo "CREATE TABLE t1 (id BIGINT, title TEXT) rt_mem_limit='128M';"
+for first in $(seq 1 128 12288); do
+    last=$((first + 127))
+    printf 'INSERT INTO t1 (id,title) VALUES '
+    for id in $(seq "$first" "$last"); do
+        if [ "$id" -ne "$first" ]; then printf ','; fi
+        printf -v token 'x%05d' "$id"
+        printf -v body "$token%.0s" {1..171}
+        printf "(%s,'%s')" "$id" "$body"
+    done
+    printf ';\n'
+done
+echo 'FLUSH RAMCHUNK t1;'
+} | MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P1306; echo $?
 ––– output –––
 0
+––– comment –––
+The literal SphinxQL seed is intentional: the current manticore-load package
+has no database-credential options, so it cannot populate this auth-enabled
+daemon. It also creates a deterministic roughly 12 MiB pre-existing RT table,
+which makes ALTER CLUSTER ... ADD send FILE_RESERVE metadata beyond the
+receiver's initial probe buffer.
+––– comment –––
 ––– input –––
 MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P1306 -e "ALTER CLUSTER mycluster ADD t1;" >/dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P1306 -e "INSERT INTO mycluster:t1 VALUES (1,'delegated replication works');" >/dev/null; echo $?
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "debug wait mycluster like 'state' option 'timeout'=90;" >/dev/null && MYSQL_PWD=noreplpass1 mysql -NB -unorepluser -h0 -P2306 -e "SELECT COUNT(*) FROM mycluster:t1;"
+––– output –––
+#!/\+[-+]+\+/!#
+#!/\|[[:space:]]*12288[[:space:]]*\|/!#
+#!/\+[-+]+\+/!#
+––– input –––
+MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P1306 -e "INSERT INTO mycluster:t1 VALUES (12289,'delegated replication works');" >/dev/null; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -66,9 +103,9 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "debug wait mycluster like 'stat
 ––– output –––
 0
 ––– input –––
-MYSQL_PWD=noreplpass1 mysql -E -unorepluser -h0 -P2306 -e "SELECT id,title FROM mycluster:t1 ORDER BY id ASC;" | awk -F': ' '/id:/{id=$2}/title:/{print id "\t" $2}'
+MYSQL_PWD=noreplpass1 mysql -E -unorepluser -h0 -P2306 -e "SELECT id,title FROM mycluster:t1 WHERE id=12289;" | awk -F': ' '/id:/{id=$2}/title:/{print id "\t" $2}'
 ––– output –––
-#!/1[[:space:]]+delegated replication works/!#
+#!/12289[[:space:]]+delegated replication works/!#
 ––– comment –––
 ––– Cluster metadata must persist the effective replication user for restart/rejoin –––
 ––– comment –––

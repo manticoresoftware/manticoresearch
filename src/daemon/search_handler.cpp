@@ -254,6 +254,11 @@ void SearchHandler_c::SetProfile ( QueryProfile_c * pProfile )
 	m_pProfile = pProfile;
 }
 
+static bool HasGroupConcatProjection ( const CSphQuery & tQuery )
+{
+	return tQuery.m_dRefItems.any_of ( [] ( const CSphQueryItem & tItem ) { return IsGroupConcatValueAttr ( tItem.m_sExpr ); } );
+}
+
 
 void SearchHandler_c::RunQueries()
 {
@@ -1319,28 +1324,9 @@ void SearchHandler_c::SetupLocalDF ()
 		{
 			GetKeywordsSettings_t tSettings;
 			tSettings.m_bStats = true;
+			tSettings.m_bFoldStatsToUnique = true;
 			dKeywords.Resize ( 0 );
 			pIndex->GetKeywords ( dKeywords, dQuery.Begin(), tSettings, NULL );
-
-			// FIXME!!! move duplicate removal to GetKeywords to do less QWord setup and dict searching
-			// custom uniq - got rid of word duplicates
-			dKeywords.Sort ( bind ( &CSphKeywordInfo::m_sNormalized ) );
-			if ( dKeywords.GetLength()>1 )
-			{
-				int iSrc = 1, iDst = 1;
-				while ( iSrc<dKeywords.GetLength() )
-				{
-					if ( dKeywords[iDst-1].m_sNormalized==dKeywords[iSrc].m_sNormalized )
-						iSrc++;
-					else
-					{
-						Swap ( dKeywords[iDst], dKeywords[iSrc] );
-						iDst++;
-						iSrc++;
-					}
-				}
-				dKeywords.Resize ( iDst );
-			}
 		}
 
 		for ( auto& tKw: dKeywords )
@@ -1995,10 +1981,10 @@ static int FindFacetZeroesHelper ( const VecTraits_T<CSphQuery> & dQueries, int 
 		return -1;
 
 	int iHelper = iFacet + 1;
-	if ( iHelper<dQueries.GetLength() && dQueries[iHelper].m_bFacetMaxRef )
+	if ( iHelper<dQueries.GetLength() && dQueries[iHelper].IsFacetHelper() )
 		++iHelper;
 
-	if ( iHelper<dQueries.GetLength() && dQueries[iHelper].m_bFacetMaxRef )
+	if ( iHelper<dQueries.GetLength() && dQueries[iHelper].IsFacetHelper() )
 		return iHelper;
 
 	return -1;
@@ -2065,6 +2051,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 	// prepare for descent
 	const CSphQuery & tFirst = m_dNQueries.First();
+	const bool bGroupConcatBundle = iQueries>1 && m_dNQueries[1].IsGroupConcatHelper();
 	m_dNAggrResults.Apply ( [] ( AggrResult_t & r ) { r.m_iSuccesses = 0; } );
 
 	if ( iQueries==1 && m_pProfile )
@@ -2299,15 +2286,38 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	SwitchProfile ( m_pProfile, SPH_QSTATE_AGGREGATE );
 	CSphIOStats tIO;
 
+	if ( m_bMaster && bGroupConcatBundle && m_dNAggrResults[0].m_iSuccesses )
+	{
+		AggrResult_t & tHead = m_dNAggrResults[0];
+		const int iHeadSuccesses = tHead.m_iSuccesses;
+		for ( int iHelper=1; iHelper<iQueries; ++iHelper )
+		{
+			assert ( m_dNQueries[iHelper].IsGroupConcatHelper() );
+			SearchFailuresLog_c & tHelperFailures = m_dNFailuresSet[iHelper];
+			m_dNFailuresSet[0].Append ( tHelperFailures );
+			if ( m_dNAggrResults[iHelper].m_iSuccesses==iHeadSuccesses )
+				continue;
+
+			if ( tHelperFailures.IsEmpty() )
+				m_dNFailuresSet[0].SubmitEx ( tFirst.m_sIndexes, nullptr, "%s", "required limited GROUP_CONCAT helper failed" );
+			tHead.m_iSuccesses = 0;
+		}
+	}
+
 	for ( int iRes=0; iRes<iQueries; ++iRes )
 	{
 		sph::StringSet hExtra = BuildExtraSchemaSet ( m_dExtraSchema );
 
 		AggrResult_t & tRes = m_dNAggrResults[iRes];
 		const CSphQuery & tQuery = m_dNQueries[iRes];
+		const bool bGroupConcatHead = bGroupConcatBundle && iRes==0;
 
 		// minimize sorters needs these pointers
 		tIO.Add ( tRes.m_tIOStats );
+
+		// terminal coordinators consume helpers as one logical query bundle
+		if ( m_bMaster && bGroupConcatBundle && iRes>0 )
+			continue;
 
 		// if there were no successful searches at all, this is an error
 		if ( !tRes.m_iSuccesses )
@@ -2343,7 +2353,16 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				}
 			}
 
-			bool bOk = MinimizeAggrResult ( tRes, tQuery, !m_dLocal.IsEmpty(), hExtra, m_pProfile, pAggrFilter, m_bFederatedUser, m_bMaster );
+			bool bOk = false;
+			if ( m_bMaster && bGroupConcatHead )
+			{
+				bOk = MinimizeGroupConcatBundle ( m_dNAggrResults.Begin(), m_dNQueries.Begin(), iQueries,
+					!m_dLocal.IsEmpty(), hExtra, m_pProfile, pAggrFilter, m_bMaster );
+			} else
+			{
+				const bool bForceRefItems = m_bFederatedUser || tQuery.IsInternalQuery() || bGroupConcatHead || HasGroupConcatProjection ( tQuery );
+				bOk = MinimizeAggrResult ( tRes, tQuery, !m_dLocal.IsEmpty(), hExtra, m_pProfile, pAggrFilter, bForceRefItems, m_bMaster );
+			}
 
 			if ( !bOk )
 			{
@@ -2478,8 +2497,12 @@ void AddCompositeItems ( const CSphString & sCol, CSphVector<CSphQueryItem> & dI
 	for ( const CSphString & sCol : dAttrs )
 	{
 		if_const ( HAS_ATTRS )
-			if ( (*pAttrs)[sCol] )
+		{
+			bool bAlreadySelected = (*pAttrs)[sCol];
+			bool bDocidSelectedByStar = (*pAttrs)["*"] && sCol==sphGetDocidName();
+			if ( bAlreadySelected || bDocidSelectedByStar )
 				continue;
+		}
 
 		CSphQueryItem & tItem = dItems.Add();
 		tItem.m_sExpr = sCol;
@@ -2712,7 +2735,7 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 			break;
 		}
 		tQuery.m_sOrderBy = "@weight desc";
-		if ( tBucket.m_eAggrFunc==Aggr_e::COMPOSITE )
+		if ( tBucket.m_eAggrFunc==Aggr_e::COMPOSITE && tBucket.m_dComposite.GetLength()>1 )
 			tQuery.m_eGroupFunc = SPH_GROUPBY_MULTIPLE;
 
 		if ( tBucket.m_sSort.IsEmpty() )

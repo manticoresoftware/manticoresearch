@@ -1,5 +1,32 @@
 # 更新日志
 
+## 版本 28.6.6
+**发布时间**：2026年7月31日
+
+此版本新增了 UUID 文档 ID 和有序、受限的 `GROUP_CONCAT()`，并修复了复制、备份、查询处理、SQL 兼容性以及二级索引方面的问题。
+
+### 新功能与改进
+* 🆕 [v28.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.6.0) [Issue #4746](https://github.com/manticoresoftware/manticoresearch/issues/4746) 为显式 SphinxQL `GROUP BY` 查询新增了有序、受限的 [GROUP_CONCAT()](Searching/Grouping.md#GROUP_CONCAT%28field%29)：`GROUP_CONCAT(expression ORDER BY ... [SEPARATOR '...'] LIMIT N)` 会按所需顺序保留每个分组中的前 `N` 个值。
+* 🆕 [v28.5.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.5.0) [Issue #1429](https://github.com/manticoresoftware/manticoresearch/issues/1429) 通过 `id uuid` 为实时表新增了 [UUID 文档 ID](Creating_a_table/Data_types.md#UUID-document-IDs)，支持显式指定或自动生成的 ID、UUID 相等和 `IN` 过滤，以及基于 UUID 的 `REPLACE`、`UPDATE` 和 `DELETE`。
+
+### 错误修复
+* 🪲 [v28.6.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.6.6) [Issue #4741](https://github.com/manticoresoftware/manticoresearch/issues/4741) 修复了在认证支持使 `USER` 成为关键字后 `USER()` 的解析问题，恢复了与 MySQL 客户端 `status` 命令的兼容性。
+* 🪲 [v28.6.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.6.5) [Issue #4764](https://github.com/manticoresoftware/manticoresearch/issues/4764) 修复了在启用 `boolean_simplify` 时，复杂布尔查询上的 [CALL SNIPPETS](Searching/Highlighting.md#CALL-SNIPPETS) 需要数秒的问题，并恢复了受影响查询的预期高亮显示。
+* 🪲 [v28.6.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.6.4) [Issue #4737](https://github.com/manticoresoftware/manticoresearch/issues/4737) 修复了对限定的 `system.<table>` 名称执行 [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 时的解析问题，使物理分片表可以被优化。
+* 🪲 [v28.6.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.6.3) [Issue #138](https://github.com/manticoresoftware/manticoresearch-backup/issues/138) 将 [manticore-backup](https://github.com/manticoresoftware/manticoresearch-backup) 更新到 1.10.2，修复了成功备份后 RT 表保持冻结、后续写入被无限期阻塞的问题。
+* 🪲 [v28.6.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.6.2) [Issue #4758](https://github.com/manticoresoftware/manticoresearch/issues/4758) 修复了在 `ALTER`、`TRUNCATE`、分块移除或优化后遗留的过时 RT 外部文件，并阻止无关的 `ALTER TABLE` 变更丢失 Jieba 分词设置；当前若不支持的有效 Jieba 设置变更，将明确失败。
+* 🪲 [v28.6.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.6.1) [Issue #4750](https://github.com/manticoresoftware/manticoresearch/issues/4750) 修复了已认证的复制状态传输，因此 `ALTER CLUSTER ... ADD` 可以添加已存在且已有数据的 RT 表，而不会因重试耗尽而失败。
+* 🪲 [v28.5.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.5.3) [Issue #4730](https://github.com/manticoresoftware/manticoresearch/issues/4730) 修复了长的精确查询和类似短语的查询可能因在查询栈保护中未按完整词项宽度计数而导致内存损坏或 `searchd` 崩溃的问题。
+* 🪲 [v28.5.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.5.2) [PR #4729](https://github.com/manticoresoftware/manticoresearch/pull/4729) 通过去重重复的关键词统计，改进了多分块 RT 表和分布式表的 `local_df` 查询处理，避免了大型重复 `OR` 和短语查询在搜索前进行过多工作。
+* 🪲 [v28.5.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.5.1) [Issue #4726](https://github.com/manticoresoftware/manticoresearch/issues/4726) 修复了一个 SphinxQL 连接处理竞态问题，该问题可能在客户端于启动期间连接或过早中止 SSL 升级时，使工作线程飙升到 100% CPU，并让 `searchd` 永久无响应。
+* 🪲 [v28.4.11](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.11) [PR #4725](https://github.com/manticoresoftware/manticoresearch/pull/4725) 改进了 `indextool --check`，用于验证二级索引结构和负载，将损坏的 `.spidx` 文件报告为检查失败，而不是崩溃。
+* 🪲 [v28.4.10](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.10) [PR #4735](https://github.com/manticoresoftware/manticoresearch/pull/4735) 修复了 Ruby API fixture 的响应解析，以保留有效的 `"0"` 分块，与 PHP 客户端行为保持一致。
+* 🪲 [v28.4.9](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.9) [Issue #4595](https://github.com/manticoresoftware/manticoresearch/issues/4595) 将 [MCL](https://github.com/manticoresoftware/columnar) 更新到 13.8.2，修复了可能导致使用二级索引的查询崩溃的 StreamVByte 解码器越界读取问题，包括在 JSON 字段上的 `GROUP BY`。
+* 🪲 [v28.4.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.8) [PR #4703](https://github.com/manticoresoftware/manticoresearch/pull/4703) 修复了当有效响应分块以字符串 `"0"` 结尾时的 PHP API 响应解析问题，避免了受影响包大小下出现误报的 `failed to read searchd response` 错误。
+* 🪲 [v28.4.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.7) [PR #4721](https://github.com/manticoresoftware/manticoresearch/pull/4721) 修复了并发的 `SHOW INDEX ... STATUS` 竞态问题，该问题可能损坏查询统计分位数计算（`p95`/`p99`）。
+* 🪲 [v28.4.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.6) [Issue #4677](https://github.com/manticoresoftware/manticoresearch/issues/4677) 修复了文档 ID 的 `IN(...)` 过滤器在 `Long.MAX_VALUE` 以上的有效无符号 64 位 ID 上静默返回空结果的问题；现在无效的越界文档 ID 会明确校验失败，同时不会限制有效的 `multi64` 值。
+* 🪲 [v28.4.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.4.5) [Issue #4633](https://github.com/manticoresoftware/manticoresearch/issues/4633) 修复了 `LEFT JOIN` 查询使用多个 `FACET` 子句时可能发生的崩溃，方法是防止连接多分面排序器被重复清理。
+
 ## 版本 28.4.4
 **发布于**：2026 年 7 月 10 日
 

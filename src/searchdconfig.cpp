@@ -1291,6 +1291,44 @@ static bool CheckCreateTableSettings ( const CreateTableSettings_t & tCreateTabl
 		}
 	}
 
+	bool bUuidDocid = false;
+	bool bUuidLinkedId = false;
+	for ( const auto & tAttr : tCreateTable.m_dAttrs )
+	{
+		const CSphColumnInfo & tCol = tAttr.m_tAttr;
+		if ( tCol.m_sName=="@id" )
+		{
+			sError = "attribute '@id' is internal";
+			return false;
+		}
+
+		if ( tCol.m_sName==sphGetDocidName() && tCol.IsUuidLinkedDocid() )
+		{
+			if ( tCol.m_eAttrType!=SPH_ATTR_BIGINT )
+			{
+				sError.SetSprintf ( "uuid id schema is invalid: '%s' must be bigint", sphGetDocidName() );
+				return false;
+			}
+			bUuidLinkedId = true;
+		}
+
+		if ( tCol.m_sName==sphGetUuidDocidName() )
+		{
+			if ( tCol.m_eAttrType!=SPH_ATTR_STRING )
+			{
+				sError.SetSprintf ( "uuid id schema is invalid: hidden '%s' must be string", sphGetUuidDocidName() );
+				return false;
+			}
+			bUuidDocid = true;
+		}
+	}
+
+	if ( bUuidDocid!=bUuidLinkedId )
+	{
+		sError.SetSprintf ( "uuid id schema is invalid: linked '%s' and hidden '%s' must be created together", sphGetDocidName(), sphGetUuidDocidName() );
+		return false;
+	}
+
 	return true;
 }
 

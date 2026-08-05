@@ -2,6 +2,8 @@
 
 通配符搜索是一种常见的文本搜索类型。在 Manticore 中，它是在词典级别执行的。默认情况下，普通表和 RT 表都使用一种名为 [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict) 的词典类型。在这种模式下，单词会按原样存储，因此启用通配符不会影响表的大小。执行通配符搜索时，系统会在词典中查找该通配词的所有可能展开形式。当展开结果很多，或者展开结果对应的命中列表很大时，这种展开在查询时的计算开销会成为问题，尤其是在中缀的情况下，因为通配符会同时加在单词的开头和结尾。为避免这类问题，可以使用 [expansion_limit](../../Server_settings/Searchd.md#expansion_limit)。
 
+> 注意：更改已填充表的索引时通配符设置，例如 `min_prefix_len` 或 `min_infix_len`，只会影响更改之后被索引的文档。要将新设置应用到现有文档，请[重新索引它们](../../Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings)。
+
 ## min_prefix_len
 
 <!-- example min_prefix_len -->

@@ -469,6 +469,14 @@ create_table_item:
             YYERROR;
 		 }
 	}
+	| ident TOK_TABLEIDENT item_option_list
+	{
+		if ( !pParser->AddCreateTableUuidId ( $1, $2 ) )
+		{
+			yyerror ( pParser, pParser->GetLastError() );
+			YYERROR;
+		}
+	}
 	| ident item_option_list
 	{
 		if ( !pParser->AddCreateTableId ( $1 ) )

@@ -18,6 +18,7 @@
 #include "killlist.h"
 #include "attribute.h"
 #include "columnarfilter.h"
+#include "indexsettings.h"
 #include <queue>
 
 #include "util/util.h"
@@ -1404,8 +1405,10 @@ static void ConvertSchema ( const CSphSchema & tSchema, common::Schema_t & tSISc
 	for ( int iAttr=0; iAttr<tSchema.GetAttrsCount(); iAttr++ )
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr ( iAttr );
-		// skip special / iternal attributes
-		if ( sphIsInternalAttr ( tCol.m_sName ) )
+		// skip special/internal attributes, except for the hidden storage backing
+		// UUID public ids. Public id filters are rewritten to @uuid_id before SI
+		// planning, so this internal string attr needs a real secondary index.
+		if ( sphIsInternalAttr ( tCol.m_sName ) && tCol.m_sName!=sphGetUuidDocidName() )
 			continue;
 
 		if ( tCol.m_eAttrType==SPH_ATTR_JSON )

@@ -121,6 +121,9 @@ extern int g_iReadTimeoutS;        // defined in searchd.cpp
 extern int g_iWriteTimeoutS;    // sec
 extern bool g_bTimeoutEachPacket;
 
+constexpr int SPH_MIN_PACKET_SIZE = 128*1024;
+constexpr int SPH_MAX_PACKET_SIZE = 128*1024*1024;
+
 extern int g_iMaxPacketSize;    // in bytes; for both query packets from clients and response packets from agents
 
 
@@ -136,7 +139,7 @@ SearchdCommand_e ParseCommand ( const CSphString & sCommand );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 33
+	VER_COMMAND_SEARCH_MASTER = 34
 };
 
 
@@ -1371,7 +1374,7 @@ void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 
 void BuildStatusOneline ( StringBuilder_c& sOut );
 
-void UpdateLastMeta (VecTraits_T<AggrResult_t> tResults );
+void UpdateLastMeta ( VecTraits_T<AggrResult_t> tResults, const VecTraits_T<CSphQuery> & dQueries );
 
 namespace session {
 	bool IsAutoCommit ( const ClientSession_c* );
@@ -1390,6 +1393,7 @@ namespace session {
 	QueryProfile_c* StartProfiling ( ESphQueryState );
 	void SaveLastProfile();
 	VecTraits_T<int64_t> LastIds();
+	VecTraits_T<CSphString> LastIdStrings();
 	void SetOptimizeById ( bool bOptimizeById );
 	bool GetOptimizeById();
 	void SetDeprecatedEOF ( bool bDeprecatedEOF );

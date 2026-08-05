@@ -24,7 +24,7 @@ void			ShutdownSecondary();
 const char *	GetSecondaryVersionStr();
 bool			IsSecondaryLibLoaded();
 
-SI::Index_i *	CreateSecondaryIndex ( const char * szFile, CSphString & sError );
+SI::Index_i *	CreateSecondaryIndex ( const char * szFile, bool bMmap, CSphString & sError );
 bool			CheckSecondaryIndexStorage ( const CSphString & sFile, uint32_t uNumRows, SI::ErrorReporter_fn && fnError, SI::ProgressReporter_fn && fnProgress );
 std::unique_ptr<SI::Builder_i> CreateSecondaryIndexBuilder ( const common::Schema_t & tSchema, int64_t iMemoryLimit, const CSphString & sFile, int iBufferSize, CSphString & sError );
 

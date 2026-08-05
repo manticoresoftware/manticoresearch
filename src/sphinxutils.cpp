@@ -36,6 +36,7 @@
 #endif
 
 #include <iomanip>
+#include <uni_algo/conv.h>
 
 #if _WIN32
 #include <codecvt>
@@ -1309,69 +1310,17 @@ static bool IsNamedSection ( const KeySection_t * pSection )
 	return pSection->m_szKey && pSection->m_bNamed;
 }
 
-static bool DecodeUtf8Codepoint ( const BYTE * & p, const BYTE * pEnd, DWORD & uCode )
-{
-	BYTE uFirst = *p++;
-	if ( uFirst<0x80 )
-	{
-		uCode = uFirst;
-		return true;
-	}
-
-	int iTrailing = 0;
-	if ( uFirst>=0xC2 && uFirst<=0xDF )
-	{
-		iTrailing = 1;
-		uCode = uFirst & 0x1F;
-	}
-	else if ( uFirst>=0xE0 && uFirst<=0xEF )
-	{
-		iTrailing = 2;
-		uCode = uFirst & 0x0F;
-	}
-	else if ( uFirst>=0xF0 && uFirst<=0xF4 )
-	{
-		iTrailing = 3;
-		uCode = uFirst & 0x07;
-	}
-	else
-		return false;
-
-	if ( pEnd-p<iTrailing )
-		return false;
-
-	if ( ( uFirst==0xE0 && p[0]<0xA0 ) || ( uFirst==0xED && p[0]>=0xA0 ) ||
-		( uFirst==0xF0 && p[0]<0x90 ) || ( uFirst==0xF4 && p[0]>=0x90 ) )
-		return false;
-
-	for ( int i = 0; i<iTrailing; ++i )
-	{
-		if ( ( p[i] & 0xC0 )!=0x80 )
-			return false;
-		uCode = ( uCode<<6 ) | ( p[i] & 0x3F );
-	}
-
-	p += iTrailing;
-	return true;
-}
-
-
 bool sphValidateUtf8 ( const char * szText, CSphString & sError )
 {
 	if ( !szText )
 		return true;
 
-	const BYTE * p = (const BYTE *)szText;
-	const BYTE * pEnd = p + strlen ( szText );
-	while ( p<pEnd )
+	if ( !una::is_valid_utf8 ( std::string_view ( szText ) ) )
 	{
-		DWORD uCode = 0;
-		if ( !DecodeUtf8Codepoint ( p, pEnd, uCode ) )
-		{
-			sError = "invalid UTF-8";
-			return false;
-		}
+		sError = "invalid UTF-8";
+		return false;
 	}
+
 	return true;
 }
 
@@ -1404,16 +1353,16 @@ bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int i
 		sError.SetSprintf ( "identifier is too long (%d bytes, max=%d)", (int)( pEnd-p ), iMaxBytes );
 		return false;
 	}
+	if ( !una::is_valid_utf8 ( std::string_view ( szName, pEnd-p ) ) )
+	{
+		sError = "invalid UTF-8 in identifier";
+		return false;
+	}
 
 	bool bFirst = true;
 	while ( p<pEnd )
 	{
-		DWORD uCode = 0;
-		if ( !DecodeUtf8Codepoint ( p, pEnd, uCode ) )
-		{
-			sError = "invalid UTF-8 in identifier";
-			return false;
-		}
+		DWORD uCode = sphUTF8Decode ( p );
 
 		if ( uCode<0x80 )
 		{

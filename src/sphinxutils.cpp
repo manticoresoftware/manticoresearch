@@ -1309,8 +1309,144 @@ static bool IsNamedSection ( const KeySection_t * pSection )
 	return pSection->m_szKey && pSection->m_bNamed;
 }
 
+static bool DecodeUtf8Codepoint ( const BYTE * & p, const BYTE * pEnd, DWORD & uCode )
+{
+	BYTE uFirst = *p++;
+	if ( uFirst<0x80 )
+	{
+		uCode = uFirst;
+		return true;
+	}
+
+	int iTrailing = 0;
+	if ( uFirst>=0xC2 && uFirst<=0xDF )
+	{
+		iTrailing = 1;
+		uCode = uFirst & 0x1F;
+	}
+	else if ( uFirst>=0xE0 && uFirst<=0xEF )
+	{
+		iTrailing = 2;
+		uCode = uFirst & 0x0F;
+	}
+	else if ( uFirst>=0xF0 && uFirst<=0xF4 )
+	{
+		iTrailing = 3;
+		uCode = uFirst & 0x07;
+	}
+	else
+		return false;
+
+	if ( pEnd-p<iTrailing )
+		return false;
+
+	if ( ( uFirst==0xE0 && p[0]<0xA0 ) || ( uFirst==0xED && p[0]>=0xA0 ) ||
+		( uFirst==0xF0 && p[0]<0x90 ) || ( uFirst==0xF4 && p[0]>=0x90 ) )
+		return false;
+
+	for ( int i = 0; i<iTrailing; ++i )
+	{
+		if ( ( p[i] & 0xC0 )!=0x80 )
+			return false;
+		uCode = ( uCode<<6 ) | ( p[i] & 0x3F );
+	}
+
+	p += iTrailing;
+	return true;
+}
+
+
+bool sphValidateUtf8 ( const char * szText, CSphString & sError )
+{
+	if ( !szText )
+		return true;
+
+	const BYTE * p = (const BYTE *)szText;
+	const BYTE * pEnd = p + strlen ( szText );
+	while ( p<pEnd )
+	{
+		DWORD uCode = 0;
+		if ( !DecodeUtf8Codepoint ( p, pEnd, uCode ) )
+		{
+			sError = "invalid UTF-8";
+			return false;
+		}
+	}
+	return true;
+}
+
+
+bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int iMaxBytes, CSphString & sError )
+{
+	auto IsUnsafeCodepoint = [] ( DWORD uCode )
+	{
+		return uCode<=0x1F || ( uCode>=0x7F && uCode<=0x9F ) ||
+			uCode==0x00A0 || uCode==0x00AD || uCode==0x034F || uCode==0x061C || uCode==0x1680 ||
+			( uCode>=0x115F && uCode<=0x1160 ) || ( uCode>=0x17B4 && uCode<=0x17B5 ) ||
+			( uCode>=0x180B && uCode<=0x180F ) || ( uCode>=0x2000 && uCode<=0x200F ) ||
+			( uCode>=0x2028 && uCode<=0x202F ) || ( uCode>=0x205F && uCode<=0x206F ) ||
+			uCode==0x3000 || uCode==0x3164 || ( uCode>=0xFE00 && uCode<=0xFE0F ) ||
+			uCode==0xFEFF || ( uCode>=0xFFF0 && uCode<=0xFFF8 ) || uCode==0xFFA0 ||
+			( uCode>=0x1BCA0 && uCode<=0x1BCA3 ) ||
+			( uCode>=0x1D173 && uCode<=0x1D17A ) || ( uCode>=0xE0000 && uCode<=0xE0FFF );
+	};
+
+	if ( !szName || !*szName )
+	{
+		sError = "identifier is empty";
+		return false;
+	}
+
+	const BYTE * p = (const BYTE *)szName;
+	const BYTE * pEnd = p + strlen ( szName );
+	if ( iMaxBytes && pEnd-p>iMaxBytes )
+	{
+		sError.SetSprintf ( "identifier is too long (%d bytes, max=%d)", (int)( pEnd-p ), iMaxBytes );
+		return false;
+	}
+
+	bool bFirst = true;
+	while ( p<pEnd )
+	{
+		DWORD uCode = 0;
+		if ( !DecodeUtf8Codepoint ( p, pEnd, uCode ) )
+		{
+			sError = "invalid UTF-8 in identifier";
+			return false;
+		}
+
+		if ( uCode<0x80 )
+		{
+			bool bLetter = ( uCode>='a' && uCode<='z' ) || ( uCode>='A' && uCode<='Z' ) || uCode=='_';
+			bool bDigit = uCode>='0' && uCode<='9';
+			if ( !bLetter && !( bDigit && ( !bFirst || bAllowLeadingDigit ) ) )
+			{
+				sError.SetSprintf ( "invalid character '%c' in identifier", (BYTE)uCode );
+				return false;
+			}
+		}
+		else if ( IsUnsafeCodepoint ( uCode ) )
+		{
+			sError.SetSprintf ( "unsafe Unicode character U+%04X in identifier", uCode );
+			return false;
+		}
+
+		bFirst = false;
+	}
+
+	return true;
+}
+
+
 bool CSphConfigParser::AddSection ( const char * szType, const char * szSection )
 {
+	if ( ( !strcasecmp ( szType, "table" ) || !strcasecmp ( szType, "index" ) ) )
+	{
+		CSphString sError;
+		if ( !sphValidateIdentifier ( szSection, true, SPH_MAX_TABLE_NAME_BYTES, sError ) )
+			return TlsMsg::Err ( "invalid table name '%s': %s", szSection, sError.cstr() );
+	}
+
 	m_sSectionType = szType;
 	m_sSectionName = szSection;
 
@@ -1567,7 +1703,7 @@ bool CSphConfigParser::Parse ()
 	using namespace TlsMsg;
 	ResetErr();
 
-	constexpr int L_TOKEN		= 64;
+	constexpr int L_TOKEN		= SPH_MAX_TABLE_NAME_BYTES + 1;
 
 	// init parser
 	m_iLine = 0;

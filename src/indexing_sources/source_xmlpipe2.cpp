@@ -390,8 +390,10 @@ bool CSphSource_XMLPipe2::SetupXML ( int iFieldBufferMax, bool bFixupUTF8, FILE 
 	if ( !DebugCheckSchema ( m_tSchema, sError ) )
 		return false;
 
-	ConfigureFields ( hSource("xmlpipe_field"), bWordDict, m_tSchema );
-	ConfigureFields ( hSource("xmlpipe_field_string"), bWordDict, m_tSchema );
+	bOk &= ConfigureFields ( hSource("xmlpipe_field"), bWordDict, m_tSchema, sError );
+	bOk &= ConfigureFields ( hSource("xmlpipe_field_string"), bWordDict, m_tSchema, sError );
+	if ( !bOk )
+		return false;
 
 	AllocDocinfo();
 	return true;

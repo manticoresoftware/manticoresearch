@@ -521,6 +521,7 @@ struct CreateTableSettings_t
 {
 	CSphString						m_sLike;
 	bool							m_bIfNotExists = false;
+	bool							m_bNameQuoted = false;
 	CSphVector<CreateTableAttr_t>	m_dAttrs;
 	CSphVector<CSphColumnInfo>		m_dFields;
 	CSphVector<NameValueStr_t>		m_dOpts;

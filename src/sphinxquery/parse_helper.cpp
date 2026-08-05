@@ -12,6 +12,7 @@
 
 #include "parse_helper.h"
 #include "sphinxplugin.h"
+#include "sphinxutils.h"
 
 #include "tokenizer/tokenizer.h"
 #include "dict/dict_base.h"
@@ -154,6 +155,9 @@ bool XQParseHelper_c::AddField ( FieldMask_t & dFields, const char * szField, in
 
 	CSphString sField;
 	sField.SetBinary ( szField, iLen );
+	CSphString sIdentifierError;
+	if ( !sphValidateIdentifier ( sField.cstr(), true, 0, sIdentifierError ) )
+		return Error ( "invalid field name '%s': %s", sField.cstr(), sIdentifierError.cstr() );
 
 	int iField = m_pSchema->GetFieldIndex ( sField.cstr() );
 	if ( iField < 0 && m_pDiscoverySchema )

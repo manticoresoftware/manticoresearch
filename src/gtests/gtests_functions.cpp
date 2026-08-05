@@ -17,6 +17,7 @@
 #include "json/cJSON.h"
 #include "threadutils.h"
 #include <cmath>
+#include <string>
 #include "histogram.h"
 #include "conversion.h"
 #include "digest_sha1.h"
@@ -24,6 +25,52 @@
 
 // Miscelaneous short functional tests: TDigest, SpanSearch,
 // stringbuilder, CJson, TaggedHash, Log2
+
+//////////////////////////////////////////////////////////////////////////
+
+TEST ( IdentifierValidation, ValidNamesAndLimits )
+{
+	CSphString sError;
+	EXPECT_TRUE ( sphValidateIdentifier ( "product_2026", false, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "товары2026", false, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "📦метка", false, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "2026_архив", true, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "2026_архив", false, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad-name", true, 0, sError ) );
+
+	std::string sMax ( SPH_MAX_TABLE_NAME_BYTES, 'a' );
+	EXPECT_TRUE ( sphValidateIdentifier ( sMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
+	sMax.push_back ( 'a' );
+	EXPECT_FALSE ( sphValidateIdentifier ( sMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
+}
+
+
+TEST ( IdentifierValidation, InvalidUtf8AndUnsafeCodepoints )
+{
+	CSphString sError;
+	const char dInvalid[][5] =
+	{
+		{ (char)0x80, 0, 0, 0, 0 },
+		{ (char)0xC0, (char)0xAF, 0, 0, 0 },
+		{ (char)0xE2, (char)0x82, 0, 0, 0 },
+		{ (char)0xED, (char)0xA0, (char)0x80, 0, 0 },
+		{ (char)0xF4, (char)0x90, (char)0x80, (char)0x80, 0 }
+	};
+	for ( const auto & szInvalid : dInvalid )
+	{
+		EXPECT_FALSE ( sphValidateUtf8 ( szInvalid, sError ) );
+		EXPECT_FALSE ( sphValidateIdentifier ( szInvalid, false, 0, sError ) );
+	}
+
+	EXPECT_TRUE ( sphValidateUtf8 ( "@название клавиатура", sError ) );
+
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad name", false, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad​name", false, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad‮name", false, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "a‍name", false, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xB0name", false, 0, sError ) ); // U+FFF0
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 

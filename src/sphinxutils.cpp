@@ -1366,7 +1366,7 @@ bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int i
 
 		if ( uCode<0x80 )
 		{
-			bool bLetter = ( uCode>='a' && uCode<='z' ) || ( uCode>='A' && uCode<='Z' ) || uCode=='_';
+			bool bLetter = ( uCode>='a' && uCode<='z' ) || ( uCode>='A' && uCode<='Z' ) || uCode=='_' || ( bFirst && uCode=='@' );
 			bool bDigit = uCode>='0' && uCode<='9';
 			if ( !bLetter && !( bDigit && ( !bFirst || bAllowLeadingDigit ) ) )
 			{

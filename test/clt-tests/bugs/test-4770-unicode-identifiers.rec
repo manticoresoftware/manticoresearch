@@ -182,6 +182,55 @@ mysql -h0 -P9306 -e 'DROP TABLE правила4770;' && echo dropped_rt_pq
 ––– output –––
 dropped_rt_pq
 ––– comment –––
+Quoted reserved table names work while unquoted reserved names stay rejected
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE reserved_source4770 (body text); CREATE TABLE \`select\` LIKE reserved_source4770; INSERT INTO \`select\` VALUES (10, 'reserved'); DROP TABLE \`select\`; DROP TABLE reserved_source4770;" >/dev/null && echo quoted_reserved_ok; if mysql -h0 -P9306 -e 'CREATE TABLE select (body text);' >/dev/null 2>&1; then echo unquoted_reserved_accepted; else echo unquoted_reserved_rejected; fi; if mysql -h0 -P9306 -e 'CREATE TABLE system.select (body text);' >/dev/null 2>&1; then echo qualified_reserved_accepted; else echo qualified_reserved_rejected; fi
+––– output –––
+quoted_reserved_ok
+unquoted_reserved_rejected
+qualified_reserved_rejected
+––– comment –––
+Qualified system table names remain supported
+––– input –––
+mysql -h0 -P9306 -e 'CREATE TABLE system.система4770 (body text); CREATE TABLE system.`select` (body text); DROP TABLE system.система4770; DROP TABLE system.`select`;' >/dev/null && echo system_tables_ok
+––– output –––
+system_tables_ok
+––– comment –––
+Malformed UTF-8 is rejected without creating an unreachable table or killing the daemon
+––– input –––
+for hex in 80 c0af e282; do if { printf 'CREATE TABLE `bad'; printf '%s' "$hex" | xxd -r -p; printf 'name` (body text);'; } | mysql --binary-mode -h0 -P9306 >/dev/null 2>&1; then echo malformed_accepted; else echo malformed_rejected; fi; done; if { printf 'CREATE TABLE bad_bit (`bad'; printf '80' | xxd -r -p; printf 'name` BIT(3));'; } | mysql --binary-mode -h0 -P9306 >/dev/null 2>&1; then echo malformed_bit_accepted; else echo malformed_bit_rejected; fi; mysql -h0 -P9306 -e "CREATE TABLE selector_probe (body text); INSERT INTO selector_probe VALUES (1,'test'); CREATE TABLE rule_probe (body text) type='pq';" >/dev/null; if { printf "SELECT * FROM selector_probe WHERE MATCH('@bad"; printf '80' | xxd -r -p; printf "name test');"; } | mysql --binary-mode -h0 -P9306 >/dev/null 2>&1; then echo malformed_selector_accepted; else echo malformed_selector_rejected; fi; if { printf "INSERT INTO rule_probe (id,query) VALUES (1,'@bad"; printf '80' | xxd -r -p; printf "name test');"; } | mysql --binary-mode -h0 -P9306 >/dev/null 2>&1; then echo malformed_rule_accepted; else echo malformed_rule_rejected; fi; mysql -h0 -P9306 -e 'DROP TABLE selector_probe; DROP TABLE rule_probe; SELECT 1;' >/dev/null && echo daemon_alive
+––– output –––
+malformed_rejected
+malformed_rejected
+malformed_rejected
+malformed_bit_rejected
+malformed_selector_rejected
+malformed_rule_rejected
+daemon_alive
+––– comment –––
+SQL-managed table names use the 242-byte limit and reject unsafe invisible Unicode
+––– input –––
+python3 - <<'PY'
+import subprocess
+m=['mysql','--binary-mode','-h0','-P9306']
+for n in (242,243):
+ name='a'*n
+ r=subprocess.run(m,input=f'CREATE TABLE `{name}` (body text);'.encode(),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+ print(f'sql_{n}_'+('accepted' if r.returncode==0 else 'rejected'))
+ if r.returncode==0:
+  subprocess.run(m,input=f'DROP TABLE `{name}`;'.encode(),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+for name in ('bad\u00a0name','bad\u200bname','bad\u202ename','a\u200dname'):
+ r=subprocess.run(m,input=f'CREATE TABLE `{name}` (body text);'.encode(),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+ print('unsafe_'+('accepted' if r.returncode==0 else 'rejected'))
+PY
+––– output –––
+sql_242_accepted
+sql_243_rejected
+unsafe_rejected
+unsafe_rejected
+unsafe_rejected
+unsafe_rejected
+––– comment –––
 Switch to Plain mode with UTF-8 table names and UTF-8 fields in config-defined real-time, percolate, and plain tables
 ––– input –––
 searchd --stopwait >/dev/null; rm -rf /tmp/test4770_cfg_rt /tmp/test4770_cfg_pq /tmp/test4770_cfg_plain*; printf '%s\n' '1,Клавиатура,Мышь,100' '2,Мышь,Клавиатура,60' > /tmp/test4770.csv; printf '%s\n' 'source test4770_source {' '  type = csvpipe' '  csvpipe_command = cat /tmp/test4770.csv' '  csvpipe_field = название' '  csvpipe_field = описание' '  csvpipe_attr_uint = цена' '}' '' 'table таблица4770_rt {' '  type = rt' '  path = /tmp/test4770_cfg_rt' '  rt_field = название' '  rt_field = описание' '  rt_attr_uint = цена' '}' '' 'table правила4770_cfg {' '  type = percolate' '  path = /tmp/test4770_cfg_pq' '  rt_field = название' '  rt_field = описание' '  rt_attr_uint = цена' '}' '' 'table обычная4770 {' '  type = plain' '  source = test4770_source' '  path = /tmp/test4770_cfg_plain' '}' '' 'searchd {' '  listen = 127.0.0.1:9306:mysql' '  listen = 127.0.0.1:9308:http' '  log = /var/log/manticore/searchd.log' '  query_log = /var/log/manticore/query.log' '  pid_file = /run/manticore/searchd.pid' '  buddy_path =' '}' > /tmp/test4770-plain-mode.conf; indexer --quiet --config /tmp/test4770-plain-mode.conf --all >/dev/null 2>&1 && echo plain_table_indexed
@@ -223,3 +272,41 @@ mysql --table -h0 -P9306 -e "SELECT id FROM обычная4770 WHERE MATCH('@н�
 searchd --config /tmp/test4770-plain-mode.conf --stopwait >/dev/null && echo plain_mode_stopped
 ––– output –––
 plain_mode_stopped
+––– comment –––
+Config-managed real-time, percolate, and plain table names use the same 242-byte limit
+––– input –––
+python3 - <<'PY'
+from pathlib import Path
+names={kind:'a'*241+suffix for kind,suffix in [('plain','n'),('rt','r'),('pq','p')]}
+conf="source s {\n type = csvpipe\n csvpipe_command = printf '1,needle\\n'\n csvpipe_field = body\n}\n"
+conf+=f"table {names['plain']} {{\n type = plain\n source = s\n path = /tmp/test4770-len-242-plain\n}}\n"
+conf+=f"table {names['rt']} {{\n type = rt\n path = /tmp/test4770-len-242-rt\n rt_field = body\n}}\n"
+conf+=f"table {names['pq']} {{\n type = percolate\n path = /tmp/test4770-len-242-pq\n rt_field = body\n}}\n"
+searchd="searchd {\n listen = 127.0.0.1:19306:mysql\n log = /tmp/test4770-len.log\n query_log = /tmp/test4770-len-query.log\n pid_file = /tmp/test4770-len.pid\n buddy_path =\n}\n"
+Path('/tmp/test4770-len-242.conf').write_text(conf+searchd)
+for kind,suffix in [('plain','n'),('rt','r'),('pq','p')]:
+ name='a'*242+suffix
+ body="source s {\n type = csvpipe\n csvpipe_command = printf '1,needle\\n'\n csvpipe_field = body\n}\n" if kind=='plain' else ''
+ table_type='percolate' if kind=='pq' else kind
+ body+=f"table {name} {{\n type = {table_type}\n path = /tmp/test4770-len-243-{kind}\n"
+ body+=(" source = s\n" if kind=='plain' else " rt_field = body\n")
+ body+="}\n"+searchd
+ Path(f'/tmp/test4770-len-243-{kind}.conf').write_text(body)
+PY
+rm -rf /tmp/test4770-len-242-plain /tmp/test4770-len-242-rt /tmp/test4770-len-242-pq /tmp/test4770-len-243-plain /tmp/test4770-len-243-rt /tmp/test4770-len-243-pq /tmp/test4770-len.pid /tmp/test4770-len.log; if indexer --config /tmp/test4770-len-242.conf --all >/dev/null 2>&1; then echo config_242_indexed; else echo config_242_failed; fi; searchd --config /tmp/test4770-len-242.conf >/dev/null; for i in {1..50}; do mysqladmin -h127.0.0.1 -P19306 ping --silent >/dev/null 2>&1 && break; sleep 0.1; done; mysql -h127.0.0.1 -P19306 -N -e 'SHOW TABLES' | wc -l | tr -d ' '; searchd --config /tmp/test4770-len-242.conf --stopwait >/dev/null; for kind in plain rt pq; do if searchd --config /tmp/test4770-len-243-$kind.conf --check >/dev/null 2>&1; then echo config_243_${kind}_accepted; else echo config_243_${kind}_rejected; fi; done
+––– output –––
+config_242_indexed
+3
+config_243_plain_rejected
+config_243_rt_rejected
+config_243_pq_rejected
+––– comment –––
+Config-managed table and field names reject unsupported ASCII punctuation consistently
+––– input –––
+printf '%s\n' 'table bad-name {' ' type = rt' ' path = /tmp/test4770-bad-table' ' rt_field = body' '}' 'searchd {' ' listen = 127.0.0.1:19306:mysql' ' log = /tmp/test4770-bad.log' ' query_log = /tmp/test4770-bad-query.log' ' pid_file = /tmp/test4770-bad.pid' '}' > /tmp/test4770-bad-table.conf; if searchd --config /tmp/test4770-bad-table.conf --check >/tmp/test4770-bad-table.out 2>&1; then echo bad_table_accepted; elif grep -q "invalid table name 'bad-name': invalid character '-'" /tmp/test4770-bad-table.out; then echo bad_table_rejected; else echo wrong_table_failure; fi
+––– output –––
+bad_table_rejected
+––– input –––
+printf '%s\n' 'source bad_source {' ' type = csvpipe' " csvpipe_command = printf '1,needle\\n'" ' csvpipe_field = bad-name' '}' 'table good_table {' ' type = plain' ' source = bad_source' ' path = /tmp/test4770-bad-field' '}' 'searchd {' ' listen = 127.0.0.1:19306:mysql' ' log = /tmp/test4770-bad.log' ' query_log = /tmp/test4770-bad-query.log' ' pid_file = /tmp/test4770-bad.pid' '}' > /tmp/test4770-bad-field.conf; if indexer --config /tmp/test4770-bad-field.conf --all >/dev/null 2>&1; then echo bad_field_accepted; else echo bad_field_rejected; fi
+––– output –––
+bad_field_rejected

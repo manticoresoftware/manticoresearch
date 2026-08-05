@@ -34,6 +34,8 @@ TEST ( IdentifierValidation, ValidNamesAndLimits )
 	EXPECT_TRUE ( sphValidateIdentifier ( "product_2026", false, 0, sError ) );
 	EXPECT_TRUE ( sphValidateIdentifier ( "товары2026", false, 0, sError ) );
 	EXPECT_TRUE ( sphValidateIdentifier ( "📦метка", false, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "@timestamp", false, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "@uuid_id", false, 0, sError ) );
 	EXPECT_TRUE ( sphValidateIdentifier ( "2026_архив", true, 0, sError ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "2026_архив", false, 0, sError ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "bad-name", true, 0, sError ) );

@@ -12605,77 +12605,6 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i
 } // NOLINT function length
 
 
-static void AddFields ( const char * sQuery, CSphSchema & tSchema )
-{
-	CSphColumnInfo tField;
-
-	const char * sToken = sQuery;
-	if ( !sToken )
-	{
-		tField.m_sName = "dummy_field"; // for query with only all fields, @*
-		tSchema.AddField ( tField );
-		return;
-	}
-
-	const char * OPTION_RELAXED = "@@relaxed";
-	const auto OPTION_RELAXED_LEN = (int) strlen ( OPTION_RELAXED );
-	if ( strncmp ( sToken, OPTION_RELAXED, OPTION_RELAXED_LEN )==0 && !sphIsAlpha ( sToken[OPTION_RELAXED_LEN] ) )
-		sToken += OPTION_RELAXED_LEN;
-
-	while ( *sToken )
-	{
-		if ( *sToken!='@' )
-		{
-			sToken++;
-			continue;
-		}
-
-		sToken++;
-		if ( !*sToken )
-			break;
-		if ( *sToken=='!' || *sToken=='*' )
-			sToken++;
-		if ( !*sToken )
-			break;
-		bool bBlock = ( *sToken=='(' );
-		if ( bBlock )
-			sToken++;
-		if ( !*sToken )
-			break;
-
-		// handle block with field names
-		while ( *sToken )
-		{
-			const char * sField = sToken;
-			while ( *sToken && sphIsAlpha( *sToken ) )
-				sToken++;
-
-			int iLen = int ( sToken - sField );
-			if ( iLen )
-			{
-				tField.m_sName.SetBinary ( sField, iLen );
-				if ( !tSchema.GetField ( tField.m_sName.cstr() ) )
-					tSchema.AddField ( tField );
-			}
-
-			if ( !bBlock )
-				break;
-
-			if ( *sToken && *sToken==',' )
-				sToken++;
-
-			if ( *sToken && *sToken==')' )
-				break;
-		}
-	}
-
-	if ( !tSchema.GetFieldsCount() )
-	{
-		tField.m_sName = "dummy_field"; // for query with only all fields, @*
-		tSchema.AddField ( tField );
-	}
-}
-
 Bson_t EmptyBson ()
 {
 	Bson_t dEmpty;
@@ -12687,8 +12616,6 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 	if ( !tArgs.m_szQuery )
 		return EmptyBson ();
 
-	std::unique_ptr<QueryParser_i> pQueryParser ( sphCreatePlainQueryParser() );
-
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (const BYTE *)tArgs.m_szQuery;
 
@@ -12699,11 +12626,27 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 	const CSphSchema * pSchema = tArgs.m_pSchema;
 	if ( !pSchema )
 	{
+		// Template tables have no match schema. Discover valid named selectors with
+		// the real parser, then parse again once negated selectors can see all fields.
+		XQQuery_t tDiscovery;
+		QueryExecutionSettings_t tExecutionSettings;
+		if ( !sphDiscoverExtendedQuerySchema ( tDiscovery, (const char*)sModifiedQuery, nullptr, tExecutionSettings, tArgs.m_pQueryTokenizer, tSchema, tArgs.m_pDict, *tArgs.m_pSettings, tArgs.m_pMorphFields ) )
+		{
+			TlsMsg::Err ( tDiscovery.m_sParseError );
+			return EmptyBson ();
+		}
+
+		if ( !tSchema.GetFieldsCount() )
+		{
+			CSphColumnInfo tField;
+			tField.m_sName = "dummy_field"; // for query with only all fields, @*
+			tSchema.AddField ( tField );
+		}
+
 		pSchema = &tSchema;
-		// need to fill up schema with fields from query
-		AddFields ( tArgs.m_szQuery, tSchema );
 	}
 
+	std::unique_ptr<QueryParser_i> pQueryParser ( sphCreatePlainQueryParser() );
 	XQQuery_t tParsed;
 	if ( !pQueryParser->ParseQuery ( tParsed, (const char*)sModifiedQuery, nullptr, tArgs.m_pQueryTokenizer, nullptr, pSchema, tArgs.m_pDict, *tArgs.m_pSettings, tArgs.m_pMorphFields ) )
 	{

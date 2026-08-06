@@ -213,8 +213,7 @@ inline CSphString& CSphString::ToLower()
 {
 	if ( m_sValue )
 		for ( char* s = m_sValue; *s; ++s )
-			if ( *s>='A' && *s<='Z' )
-				*s += 'a'-'A';
+			*s = (char)tolower ( *s );
 	return *this;
 }
 
@@ -222,8 +221,7 @@ inline CSphString& CSphString::ToUpper()
 {
 	if ( m_sValue )
 		for ( char* s = m_sValue; *s; s++ )
-			if ( *s>='a' && *s<='z' )
-				*s -= 'a'-'A';
+			*s = (char)toupper ( *s );
 	return *this;
 }
 

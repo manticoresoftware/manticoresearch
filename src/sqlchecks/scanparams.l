@@ -32,7 +32,7 @@
 %option prefix="yy7"
 %option align
 
-ID					@*[a-zA-Z_\200-\377][a-zA-Z_0-9\200-\377]*
+ID					@*[a-zA-Z_][a-zA-Z_0-9]*
 SPACE				[ \t\n\r]
 DIGIT				[0-9]
 SIGN                [+-]?

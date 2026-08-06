@@ -57,11 +57,6 @@ static_assert ( ( 1 << ROWITEM_SHIFT )==ROWITEM_BITS, "invalid ROWITEM_SHIFT" );
 #define SPH_MAX_FILENAME_LEN	512
 #define SPH_MAX_FIELDS			256
 
-// Linux NAME_MAX (255) minus the longest generated table-file suffix:
-// ".2147483647.tmp.spjidx.jsonsi.tmp.2147483647.tmp" (48 bytes).
-// Keep the public limit identical for SQL-managed and config-managed tables.
-const int SPH_MAX_TABLE_NAME_BYTES = 207;
-
 const int SPH_LEGACY_TOKEN_BYTES = SPH_MAX_WORD_LEN*3;
 const int SPH_V2_MAX_TOKEN_BYTES = 32*1024;
 const int MAX_KEYWORD_BYTES = SPH_MAX_WORD_LEN*3+4;

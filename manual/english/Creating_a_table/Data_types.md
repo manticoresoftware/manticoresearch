@@ -4,26 +4,19 @@
 
 Manticore's data types can be split into two categories: full-text fields and attributes.
 
-### Table and field name syntax
+### Field name syntax
 
-Table and field names can contain ASCII letters (`a-z`, `A-Z`), numbers (`0-9`), underscores (`_`), and valid non-ASCII UTF-8 characters. An unquoted SQL name must start with an ASCII letter, an underscore, or a non-ASCII UTF-8 character. Numbers are allowed after the first character.
+Field names in Manticore must follow these rules:
 
-The same character support applies to real-time and percolate tables created in [RT mode](../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29), and to real-time, percolate, and plain tables defined in [Plain mode](../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29). For percolate tables, this includes field names in the expected document schema.
-
-Use backticks around SQL names that begin with a number and contain at least one letter, underscore, or non-ASCII UTF-8 character, and around names that match a reserved SQL keyword. For example, use `` `2026_архив` `` or `` `select` ``. Backticks do not make arbitrary ASCII punctuation valid; characters such as `-`, `$`, spaces, and embedded backticks are not supported in user-defined names.
-
-Identifiers must be valid UTF-8. Control characters, Unicode whitespace, bidirectional controls, and invisible default-ignorable characters are rejected. This includes non-breaking spaces, zero-width spaces, and zero-width joiners. Table names are limited to 207 UTF-8 bytes in both RT and Plain modes. For qualified `system.` table names, the prefix counts toward this limit.
-
-SQL-created table names and SQL identifiers that contain ASCII letters are case-insensitive. Configuration section names in Plain mode are case-sensitive. Unicode case folding and Unicode normalization are not applied in either mode, so use the exact Unicode spelling consistently.
+* Can contain letters (a-z, A-Z), numbers (0-9), and hyphens (-)
+* Must start with a letter
+* Numbers can only appear after letters
+* Underscore (`_`) is the only allowed special character
+* Field names are case-insensitive
 
 For example:
-* Valid unquoted names: `title`, `product_id`, `user_name_2`, `товары2026`, `商品表`, `📦метка`
-* Valid quoted names: `` `2026_архив` ``, `` `select` ``
-* Invalid names: `2title` without backticks, `-price`, `user@name`, `user-name`, and `bad​name` containing a zero-width space
-
-In Plain mode, table names are section names in the configuration file and are written without backticks there. Backticks can still be used when referring to those tables in SQL. For example, a config section can be named `таблица2026`, while a section named `2026_архив` is referenced as `` `2026_архив` `` in SQL.
-
-[Field-scoped full-text query operators](../Searching/Full_text_matching/Operators.md) also support non-ASCII UTF-8 field names. For example, `MATCH('@название клавиатура')` restricts the search to the `название` field. This also applies to field-scoped queries stored as percolate rules.
+* Valid field names: `title`, `product_id`, `user_name_2`
+* Invalid field names: `2title`, `-price`, `user@name`
 
 ### Full-text fields
 

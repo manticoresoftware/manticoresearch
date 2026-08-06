@@ -1205,13 +1205,6 @@ CSphString HAStrategyToStr ( HAStrategies_e eStrategy )
 	return "";
 }
 
-static bool IsIndexListChar ( char cChar )
-{
-	const BYTE uChar = (BYTE)cChar;
-	return uChar>=0x80 || isalpha ( uChar ) || isdigit ( uChar ) || cChar=='_' || cChar=='.' || cChar=='-';
-}
-
-
 void ParseIndexList ( const CSphString &sIndexes, StrVec_t &dOut )
 {
 	CSphString sSplit = sIndexes;
@@ -1221,8 +1214,8 @@ void ParseIndexList ( const CSphString &sIndexes, StrVec_t &dOut )
 	auto * p = const_cast<char *> ( sSplit.cstr() );
 	while ( *p )
 	{
-		// skip non-name characters
-		while ( *p && !IsIndexListChar ( *p ) )
+		// skip non-alphas
+		while ( *p && !isalpha ( *p ) && !isdigit ( *p ) && *p!='_' && *p!='.' && *p!='-' )
 			p++;
 		if ( !( *p ) )
 			break;
@@ -1234,7 +1227,7 @@ void ParseIndexList ( const CSphString &sIndexes, StrVec_t &dOut )
 
 		// this is my next index name
 		const char * sNext = p;
-		while ( IsIndexListChar ( *p ) )
+		while ( isalpha ( *p ) || isdigit ( *p ) || *p=='_' || *p=='.' || *p=='-' )
 			p++;
 
 		assert ( sNext!=p );

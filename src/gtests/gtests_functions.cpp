@@ -14,88 +14,16 @@
 
 #include "sphinxint.h"
 #include "sphinxutils.h"
-
-#include <uni_algo/conv.h>
 #include "json/cJSON.h"
 #include "threadutils.h"
 #include <cmath>
-#include <string>
 #include "histogram.h"
 #include "conversion.h"
 #include "digest_sha1.h"
 #include "std/openhash.h"
 
-#include <climits>
-
 // Miscelaneous short functional tests: TDigest, SpanSearch,
 // stringbuilder, CJson, TaggedHash, Log2
-
-//////////////////////////////////////////////////////////////////////////
-
-TEST ( IdentifierValidation, ValidNamesAndLimits )
-{
-	CSphString sError;
-	EXPECT_TRUE ( sphValidateIdentifier ( "product_2026", false, 0, sError ) );
-	EXPECT_TRUE ( sphValidateIdentifier ( "товары2026", false, 0, sError ) );
-	EXPECT_TRUE ( sphValidateIdentifier ( "📦метка", false, 0, sError ) );
-	EXPECT_TRUE ( sphValidateIdentifier ( "@timestamp", false, 0, sError ) );
-	EXPECT_TRUE ( sphValidateIdentifier ( "@uuid_id", false, 0, sError ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "task.params", true, 0, sError ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "graph-workspace.description", true, 0, sError ) );
-	EXPECT_TRUE ( sphValidateIdentifier ( "task.params", true, 0, sError, true ) );
-	EXPECT_TRUE ( sphValidateIdentifier ( "graph-workspace.description", true, 0, sError, true ) );
-	EXPECT_TRUE ( sphValidateIdentifier ( "2026_архив", true, 0, sError ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "2026_архив", false, 0, sError ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "bad-name", true, 0, sError ) );
-
-	std::string sMax ( SPH_MAX_TABLE_NAME_BYTES, 'a' );
-	EXPECT_TRUE ( sphValidateIdentifier ( sMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
-	sMax.push_back ( 'a' );
-	EXPECT_FALSE ( sphValidateIdentifier ( sMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
-
-	std::string sLongestTail = "." + std::to_string ( INT_MAX ) + ".tmp.spjidx.jsonsi.tmp." + std::to_string ( INT_MAX ) + ".tmp";
-	EXPECT_EQ ( sLongestTail.length(), 48 );
-	EXPECT_LE ( SPH_MAX_TABLE_NAME_BYTES + sLongestTail.length(), 255 );
-	EXPECT_GT ( SPH_MAX_TABLE_NAME_BYTES + 1 + sLongestTail.length(), 255 );
-}
-
-
-TEST ( IdentifierValidation, InvalidUtf8AndUnsafeCodepoints )
-{
-	CSphString sError;
-	const char dInvalid[][5] =
-	{
-		{ (char)0x80, 0, 0, 0, 0 },
-		{ (char)0xC0, (char)0xAF, 0, 0, 0 },
-		{ (char)0xE2, (char)0x82, 0, 0, 0 },
-		{ (char)0xED, (char)0xA0, (char)0x80, 0, 0 },
-		{ (char)0xF4, (char)0x90, (char)0x80, (char)0x80, 0 }
-	};
-	for ( const auto & szInvalid : dInvalid )
-	{
-		EXPECT_FALSE ( una::is_valid_utf8 ( std::string_view ( szInvalid ) ) );
-		EXPECT_FALSE ( sphValidateIdentifier ( szInvalid, false, 0, sError ) );
-	}
-
-	EXPECT_TRUE ( una::is_valid_utf8 ( std::string_view ( "@название клавиатура" ) ) );
-
-	EXPECT_FALSE ( sphValidateIdentifier ( "bad name", false, 0, sError ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "bad​name", false, 0, sError ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "bad‮name", false, 0, sError ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "a‍name", false, 0, sError ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xB0name", false, 0, sError ) ); // U+FFF0
-}
-
-
-TEST ( IdentifierValidation, AsciiCaseConversionPreservesUtf8 )
-{
-	CSphString sLower = "ASCII_ÉЖ";
-	EXPECT_STREQ ( sLower.ToLower().cstr(), "ascii_ÉЖ" );
-
-	CSphString sUpper = "ascii_éж";
-	EXPECT_STREQ ( sUpper.ToUpper().cstr(), "ASCII_éж" );
-}
-
 
 //////////////////////////////////////////////////////////////////////////
 

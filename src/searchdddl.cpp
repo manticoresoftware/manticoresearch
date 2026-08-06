@@ -67,7 +67,7 @@ public:
 	bool	AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol );
 	bool	AddCreateTableId ( const SqlNode_t & tName );
 	bool	AddCreateTableUuidId ( const SqlNode_t & tName, const SqlNode_t & tType );
-	bool	AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits );
+	void	AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits );
 
 	bool	AddItemOptionEngine ( const SqlNode_t & tOption );
 	bool	AddItemOptionHash ( const SqlNode_t & tOption );
@@ -97,8 +97,6 @@ public:
 	void	AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode );
 	CSphString	GetTableName ( const SqlNode_t& tName ) const noexcept;
 	CSphString	GetTableName ( const SqlNode_t& tDb, const SqlNode_t& tName ) const noexcept;
-	bool		IsBacktickQuoted ( const SqlNode_t & tName ) const noexcept { return tName.m_iStart>0 && m_pBuf[tName.m_iStart-1]=='`'; }
-	bool		ValidateIdentifier ( const SqlNode_t & tName, int iMaxBytes = 0 );
 
 private:
 	CSphString		m_sError;
@@ -225,31 +223,16 @@ DdlParser_c::DdlParser_c ( CSphVector<SqlStmt_t> & dStmt, const char* szQuery, C
 }
 
 
-bool DdlParser_c::AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits )
+void DdlParser_c::AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits )
 {
 	assert(m_pStmt);
 	CreateTableAttr_t & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
 	ToString ( tAttr.m_tAttr.m_sName, tCol );
-	if ( !sphValidateIdentifier ( tAttr.m_tAttr.m_sName.cstr(), IsBacktickQuoted ( tCol ), 0, m_sError ) )
-	{
-		m_pStmt->m_tCreateTable.m_dAttrs.Pop();
-		m_tItemOptions.Reset();
-		return false;
-	}
 	tAttr.m_tAttr.m_sName.ToLower();
 	tAttr.m_tAttr.m_eAttrType = SPH_ATTR_INTEGER;
 	tAttr.m_tAttr.m_tLocator.m_iBitCount = iBits;
 	m_tItemOptions.CopyOptionsTo(tAttr);
 	m_tItemOptions.Reset();
-	return true;
-}
-
-
-bool DdlParser_c::ValidateIdentifier ( const SqlNode_t & tName, int iMaxBytes )
-{
-	CSphString sName;
-	ToString ( sName, tName );
-	return sphValidateIdentifier ( sName.cstr(), IsBacktickQuoted ( tName ), iMaxBytes, m_sError );
 }
 
 
@@ -333,11 +316,6 @@ bool DdlParser_c::SetupAlterTable ( const SqlNode_t & tAttr, ESphAttr eAttr, int
 
 	m_pStmt->m_eStmt = bModify ? STMT_ALTER_MODIFY : STMT_ALTER_ADD;
 	ToString ( m_pStmt->m_sAlterAttr, tAttr );
-	if ( !sphValidateIdentifier ( m_pStmt->m_sAlterAttr.cstr(), IsBacktickQuoted ( tAttr ), 0, m_sError ) )
-	{
-		m_tItemOptions.Reset();
-		return false;
-	}
 	m_pStmt->m_sIndex.ToLower();
 	m_pStmt->m_sAlterAttr.ToLower();
 	m_pStmt->m_eAlterColType = eAttr;
@@ -375,11 +353,6 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 
 	CSphString sName;
 	ToString ( sName, tName );
-	if ( !sphValidateIdentifier ( sName.cstr(), IsBacktickQuoted ( tName ), 0, m_sError ) )
-	{
-		m_tItemOptions.Reset();
-		return false;
-	}
 	sName.ToLower ();
 	if ( IsReservedUuidDocidAttr ( sName, m_sError ) )
 	{

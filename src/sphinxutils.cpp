@@ -1329,7 +1329,7 @@ bool sphValidateUtf8 ( const char * szText, CSphString & sError )
 }
 
 
-bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int iMaxBytes, CSphString & sError )
+bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int iMaxBytes, CSphString & sError, bool bAllowPathPunctuation )
 {
 	auto IsUnsafeCodepoint = [] ( DWORD uCode )
 	{
@@ -1370,7 +1370,7 @@ bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int i
 
 		if ( uCode<0x80 )
 		{
-			bool bLetter = ( uCode>='a' && uCode<='z' ) || ( uCode>='A' && uCode<='Z' ) || uCode=='_' || ( bFirst && uCode=='@' );
+			bool bLetter = ( uCode>='a' && uCode<='z' ) || ( uCode>='A' && uCode<='Z' ) || uCode=='_' || ( bFirst && uCode=='@' ) || ( bAllowPathPunctuation && !bFirst && ( uCode=='.' || uCode=='-' ) );
 			bool bDigit = uCode>='0' && uCode<='9';
 			if ( !bLetter && !( bDigit && ( !bFirst || bAllowLeadingDigit ) ) )
 			{

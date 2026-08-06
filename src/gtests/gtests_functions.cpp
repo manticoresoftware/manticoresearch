@@ -36,6 +36,10 @@ TEST ( IdentifierValidation, ValidNamesAndLimits )
 	EXPECT_TRUE ( sphValidateIdentifier ( "📦метка", false, 0, sError ) );
 	EXPECT_TRUE ( sphValidateIdentifier ( "@timestamp", false, 0, sError ) );
 	EXPECT_TRUE ( sphValidateIdentifier ( "@uuid_id", false, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "task.params", true, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "graph-workspace.description", true, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "task.params", true, 0, sError, true ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "graph-workspace.description", true, 0, sError, true ) );
 	EXPECT_TRUE ( sphValidateIdentifier ( "2026_архив", true, 0, sError ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "2026_архив", false, 0, sError ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "bad-name", true, 0, sError ) );

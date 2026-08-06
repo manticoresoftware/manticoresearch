@@ -1310,21 +1310,6 @@ static bool IsNamedSection ( const KeySection_t * pSection )
 	return pSection->m_szKey && pSection->m_bNamed;
 }
 
-bool sphValidateUtf8 ( const char * szText, CSphString & sError )
-{
-	if ( !szText )
-		return true;
-
-	if ( !una::is_valid_utf8 ( std::string_view ( szText ) ) )
-	{
-		sError = "invalid UTF-8";
-		return false;
-	}
-
-	return true;
-}
-
-
 bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int iMaxBytes, CSphString & sError, bool bAllowPathPunctuation )
 {
 	auto IsUnsafeCodepoint = [] ( DWORD uCode )

@@ -14,6 +14,8 @@
 
 #include "sphinxint.h"
 #include "sphinxutils.h"
+
+#include <uni_algo/conv.h>
 #include "json/cJSON.h"
 #include "threadutils.h"
 #include <cmath>
@@ -64,11 +66,11 @@ TEST ( IdentifierValidation, InvalidUtf8AndUnsafeCodepoints )
 	};
 	for ( const auto & szInvalid : dInvalid )
 	{
-		EXPECT_FALSE ( sphValidateUtf8 ( szInvalid, sError ) );
+		EXPECT_FALSE ( una::is_valid_utf8 ( std::string_view ( szInvalid ) ) );
 		EXPECT_FALSE ( sphValidateIdentifier ( szInvalid, false, 0, sError ) );
 	}
 
-	EXPECT_TRUE ( sphValidateUtf8 ( "@название клавиатура", sError ) );
+	EXPECT_TRUE ( una::is_valid_utf8 ( std::string_view ( "@название клавиатура" ) ) );
 
 	EXPECT_FALSE ( sphValidateIdentifier ( "bad name", false, 0, sError ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "bad​name", false, 0, sError ) );

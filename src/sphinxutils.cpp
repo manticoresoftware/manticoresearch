@@ -36,6 +36,7 @@
 #endif
 
 #include <iomanip>
+#include <uni_algo/conv.h>
 
 #if _WIN32
 #include <codecvt>
@@ -1313,8 +1314,77 @@ static bool IsNamedSection ( const KeySection_t * pSection )
 	return pSection->m_szKey && pSection->m_bNamed;
 }
 
+bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int iMaxBytes, CSphString & sError, bool bAllowPathPunctuation )
+{
+	auto IsUnsafeCodepoint = [] ( DWORD uCode )
+	{
+		return uCode<=0x1F || ( uCode>=0x7F && uCode<=0x9F ) ||
+			uCode==0x00A0 || uCode==0x00AD || uCode==0x034F || uCode==0x061C || uCode==0x1680 ||
+			( uCode>=0x115F && uCode<=0x1160 ) || ( uCode>=0x17B4 && uCode<=0x17B5 ) ||
+			( uCode>=0x180B && uCode<=0x180F ) || ( uCode>=0x2000 && uCode<=0x200F ) ||
+			( uCode>=0x2028 && uCode<=0x202F ) || ( uCode>=0x205F && uCode<=0x206F ) ||
+			uCode==0x3000 || uCode==0x3164 || ( uCode>=0xFE00 && uCode<=0xFE0F ) ||
+			uCode==0xFEFF || ( uCode>=0xFFF0 && uCode<=0xFFF8 ) || uCode==0xFFA0 ||
+			( uCode>=0x1BCA0 && uCode<=0x1BCA3 ) ||
+			( uCode>=0x1D173 && uCode<=0x1D17A ) || ( uCode>=0xE0000 && uCode<=0xE0FFF );
+	};
+
+	if ( !szName || !*szName )
+	{
+		sError = "identifier is empty";
+		return false;
+	}
+
+	const BYTE * p = (const BYTE *)szName;
+	const BYTE * pEnd = p + strlen ( szName );
+	if ( iMaxBytes && pEnd-p>iMaxBytes )
+	{
+		sError.SetSprintf ( "identifier is too long (%d bytes, max=%d)", (int)( pEnd-p ), iMaxBytes );
+		return false;
+	}
+	if ( !una::is_valid_utf8 ( std::string_view ( szName, pEnd-p ) ) )
+	{
+		sError = "invalid UTF-8 in identifier";
+		return false;
+	}
+
+	bool bFirst = true;
+	while ( p<pEnd )
+	{
+		DWORD uCode = sphUTF8Decode ( p );
+
+		if ( uCode<0x80 )
+		{
+			bool bLetter = ( uCode>='a' && uCode<='z' ) || ( uCode>='A' && uCode<='Z' ) || uCode=='_' || ( bFirst && uCode=='@' ) || ( bAllowPathPunctuation && !bFirst && ( uCode=='.' || uCode=='-' ) );
+			bool bDigit = uCode>='0' && uCode<='9';
+			if ( !bLetter && !( bDigit && ( !bFirst || bAllowLeadingDigit ) ) )
+			{
+				sError.SetSprintf ( "invalid character '%c' in identifier", (BYTE)uCode );
+				return false;
+			}
+		}
+		else if ( IsUnsafeCodepoint ( uCode ) )
+		{
+			sError.SetSprintf ( "unsafe Unicode character U+%04X in identifier", uCode );
+			return false;
+		}
+
+		bFirst = false;
+	}
+
+	return true;
+}
+
+
 bool CSphConfigParser::AddSection ( const char * szType, const char * szSection )
 {
+	if ( ( !strcasecmp ( szType, "table" ) || !strcasecmp ( szType, "index" ) ) )
+	{
+		CSphString sError;
+		if ( !sphValidateIdentifier ( szSection, true, SPH_MAX_TABLE_NAME_BYTES, sError ) )
+			return TlsMsg::Err ( "invalid table name '%s': %s", szSection, sError.cstr() );
+	}
+
 	m_sSectionType = szType;
 	m_sSectionName = szSection;
 
@@ -1571,7 +1641,7 @@ bool CSphConfigParser::Parse ()
 	using namespace TlsMsg;
 	ResetErr();
 
-	constexpr int L_TOKEN		= 64;
+	constexpr int L_TOKEN		= SPH_MAX_TABLE_NAME_BYTES + 1;
 
 	// init parser
 	m_iLine = 0;
@@ -1586,7 +1656,7 @@ bool CSphConfigParser::Parse ()
 	DWORD uToken = 0;
 	int iCh = -1;
 
-	enum class States_e { S_TOP, S_SKIP2NL, S_TOK, S_TYPE, S_SEC, S_CHR, S_VALUE, S_SECNAME, S_SECBASE, S_KEY };
+	enum class States_e { S_TOP, S_SKIP2NL, S_TOK, S_NAMETOK, S_TYPE, S_SEC, S_CHR, S_VALUE, S_SECNAME, S_SECBASE, S_KEY };
 	auto eState = States_e::S_TOP;
 	std::array<States_e,8> eStack;
 	DWORD uStack = 0;
@@ -1598,6 +1668,7 @@ bool CSphConfigParser::Parse ()
 	auto LOC_PUSH = [&uStack, &eStack, &eState] ( States_e eNew ) { assert ( uStack<eStack.size() ); eStack[uStack++] = std::exchange(eState,eNew); };
 	auto LOC_POP = [&uStack, &eStack, &eState] { assert ( uStack > 0 ); eState = eStack[--uStack]; };
 	auto LOC_BACK = [&p] { --p; };
+	auto IsNameChar = [] ( char c ) { return (BYTE)c>=0x80 || sphIsAlpha ( c ); };
 
 	for ( ; p < pDataEnd; ++p )
 	{
@@ -1642,6 +1713,16 @@ bool CSphConfigParser::Parse ()
 			if ( !sphIsAlpha(*p) )			{ LOC_POP (); sToken [ uToken ] = '\0'; uToken = 0; LOC_BACK(); continue; }
 			if ( !uToken )					{ sToken[0] = '\0'; }
 											sToken [ uToken++ ] = *p; continue;
+		}
+
+		// handle section-name token state
+		case States_e::S_NAMETOK:
+		{
+			if ( !uToken && !IsNameChar(*p) )	LOC_ERROR ( "internal error (invalid char in S_NAMETOK pos 0)" );
+			if ( uToken==sToken.size() )		LOC_ERROR ( "token too long" );
+			if ( !IsNameChar(*p) )				{ LOC_POP (); sToken [ uToken ] = '\0'; uToken = 0; LOC_BACK(); continue; }
+			if ( !uToken )						{ sToken[0] = '\0'; }
+												sToken [ uToken++ ] = *p; continue;
 		}
 
 		// handle S_TYPE state
@@ -1732,10 +1813,10 @@ bool CSphConfigParser::Parse ()
 		// handle S_SECNAME state
 		case States_e::S_SECNAME:
 		{
-			if ( isspace(*p) )					{ continue; }
-			if ( !sToken[0]&&!sphIsAlpha(*p))	{ LOC_ERROR ( "named section: expected name, got '%c'", *p ); }
+			if ( isspace ( (BYTE)*p ) )			{ continue; }
+			if ( !sToken[0]&&!IsNameChar(*p))	{ LOC_ERROR ( "named section: expected name, got '%c'", *p ); }
 
-			if ( !sToken[0] )				{ LOC_PUSH ( States_e::S_TOK ); LOC_BACK(); continue; }
+			if ( !sToken[0] )				{ LOC_PUSH ( States_e::S_NAMETOK ); LOC_BACK(); continue; }
 			if ( !AddSection ( m_sSectionType.cstr(), sToken.data() ) ) break;
 			sToken[0] = '\0';
 			if ( *p==':' )					{ eState = States_e::S_SECBASE; continue; }
@@ -1746,9 +1827,9 @@ bool CSphConfigParser::Parse ()
 		// handle S_SECBASE state
 		case States_e::S_SECBASE:
 		{
-			if ( isspace(*p) )					{ continue; }
-			if ( !sToken[0]&&!sphIsAlpha(*p))	{ LOC_ERROR ( "named section: expected parent name, got '%c'", *p ); }
-			if ( !sToken[0] )					{ LOC_PUSH ( States_e::S_TOK ); LOC_BACK(); continue; }
+			if ( isspace ( (BYTE)*p ) )			{ continue; }
+			if ( !sToken[0]&&!IsNameChar(*p))	{ LOC_ERROR ( "named section: expected parent name, got '%c'", *p ); }
+			if ( !sToken[0] )					{ LOC_PUSH ( States_e::S_NAMETOK ); LOC_BACK(); continue; }
 
 			// copy the section
 			assert ( m_tConf.Exists ( m_sSectionType ) );

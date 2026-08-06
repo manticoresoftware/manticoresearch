@@ -17,6 +17,7 @@
 #include "searchdha.h"
 #include "searchdssl.h"
 #include "searchdreplication.h"
+#include "searchdddl.h"
 #include "replication/wsrep_cxx.h"
 #include "replication/cluster_binlog.h"
 
@@ -119,6 +120,68 @@ TEST ( functions, SecretEqual )
 	EXPECT_FALSE ( SecretEqual ( VecTraits_T<BYTE> ( dA, sizeof ( dA ) ), VecTraits_T<BYTE> ( dLong, sizeof ( dLong ) ) ) );
 	EXPECT_FALSE ( SecretEqual ( VecTraits_T<BYTE>(), VecTraits_T<BYTE>() ) );
 }
+
+TEST ( functions, ParseUnicodeIndexList )
+{
+	StrVec_t dIndexes;
+	ParseIndexList ( " 搜索表 , 商品表.分片,	ascii_table-1 ", dIndexes );
+
+	ASSERT_EQ ( dIndexes.GetLength(), 3 );
+	EXPECT_STREQ ( dIndexes[0].cstr(), "搜索表" );
+	EXPECT_STREQ ( dIndexes[1].cstr(), "商品表.分片" );
+	EXPECT_STREQ ( dIndexes[2].cstr(), "ascii_table-1" );
+}
+
+
+static bool ParseDdlForTest ( const std::string & sQuery, CSphString & sError )
+{
+	std::vector<char> dQuery ( sQuery.begin(), sQuery.end() );
+	dQuery.resize ( sQuery.length()+2 );
+	CSphVector<SqlStmt_t> dStmt;
+	return ParseDdl ( { dQuery.data(), (int)sQuery.length() }, dStmt, sError );
+}
+
+
+TEST ( functions, DdlGenericIdentifiersValidateUtf8 )
+{
+	CSphString sError;
+	EXPECT_TRUE ( ParseDdlForTest ( "CREATE FUNCTION функция RETURNS INT SONAME 'missing.so'", sError ) ) << sError.cstr();
+
+	std::string sMaxTable = "CREATE TABLE `" + std::string ( SPH_MAX_TABLE_NAME_BYTES, 'a' ) + "` (body text)";
+	EXPECT_TRUE ( ParseDdlForTest ( sMaxTable, sError ) ) << sError.cstr();
+	sMaxTable.insert ( sMaxTable.find ( '`' )+1, 1, 'a' );
+	sError = "";
+	EXPECT_FALSE ( ParseDdlForTest ( sMaxTable, sError ) );
+
+	std::string sMaxSystem = "CREATE TABLE system.`" + std::string ( SPH_MAX_TABLE_NAME_BYTES-7, 'a' ) + "` (body text)";
+	sError = "";
+	EXPECT_TRUE ( ParseDdlForTest ( sMaxSystem, sError ) ) << sError.cstr();
+	sMaxSystem.insert ( sMaxSystem.find ( '`' )+1, 1, 'a' );
+	sError = "";
+	EXPECT_FALSE ( ParseDdlForTest ( sMaxSystem, sError ) );
+
+	const char * dUnsafe[] =
+	{
+		"CREATE FUNCTION bad​name RETURNS INT SONAME 'missing.so'",
+		"CREATE PLUGIN bad​name TYPE 'ranker' SONAME 'missing.so'",
+		"CREATE CLUSTER bad​name",
+		"JOIN CLUSTER bad​name"
+	};
+	for ( const char * szQuery : dUnsafe )
+	{
+		sError = "";
+		EXPECT_FALSE ( ParseDdlForTest ( szQuery, sError ) ) << szQuery;
+		EXPECT_NE ( strstr ( sError.cstr(), "unsafe Unicode character U+200B" ), nullptr ) << sError.cstr();
+	}
+
+	std::string sMalformed = "CREATE FUNCTION bad";
+	sMalformed.push_back ( (char)0x80 );
+	sMalformed += "name RETURNS INT SONAME 'missing.so'";
+	sError = "";
+	EXPECT_FALSE ( ParseDdlForTest ( sMalformed, sError ) );
+	EXPECT_NE ( strstr ( sError.cstr(), "invalid UTF-8 in identifier" ), nullptr ) << sError.cstr();
+}
+
 
 class tstlogger
 {

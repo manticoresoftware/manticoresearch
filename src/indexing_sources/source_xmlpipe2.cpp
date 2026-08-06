@@ -390,8 +390,10 @@ bool CSphSource_XMLPipe2::SetupXML ( int iFieldBufferMax, bool bFixupUTF8, FILE 
 	if ( !DebugCheckSchema ( m_tSchema, sError ) )
 		return false;
 
-	ConfigureFields ( hSource("xmlpipe_field"), bWordDict, m_tSchema );
-	ConfigureFields ( hSource("xmlpipe_field_string"), bWordDict, m_tSchema );
+	bOk &= ConfigureFields ( hSource("xmlpipe_field"), bWordDict, m_tSchema, sError );
+	bOk &= ConfigureFields ( hSource("xmlpipe_field_string"), bWordDict, m_tSchema, sError );
+	if ( !bOk )
+		return false;
 
 	AllocDocinfo();
 	return true;
@@ -842,6 +844,12 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 			if ( !strcmp ( *dAttrs, "name" ) )
 			{
 				Info.m_sName = dAttrs[1];
+				CSphString sNameError;
+				if ( !sphValidateIdentifier ( Info.m_sName.cstr(), true, 0, sNameError ) )
+				{
+					Error ( "invalid field name '%s': %s", Info.m_sName.cstr(), sNameError.cstr() );
+					return;
+				}
 				if ( m_tSchema.GetField ( Info.m_sName.cstr() ) )
 				{
 					Error ( "field '%s' is added twice", Info.m_sName.cstr() );
@@ -938,6 +946,12 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 
 		if ( !bError )
 		{
+			CSphString sNameError;
+			if ( !sphValidateIdentifier ( Info.m_sName.cstr(), true, 0, sNameError ) )
+			{
+				Error ( "invalid attribute name '%s': %s", Info.m_sName.cstr(), sNameError.cstr() );
+				return;
+			}
 			if ( Info.m_sName.IsEmpty() || CSphSchema::IsReserved ( Info.m_sName.cstr() ) )
 			{
 				Error ( "%s is not a valid attribute name", Info.m_sName.cstr() );

@@ -1057,7 +1057,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 {
 	// FIXME? might wanna verify somehow that pTokenizer has all the specials etc from sphSetupQueryTokenizer
 	assert ( pTokenizer->IsQueryTok() );
-	if ( !una::is_valid_utf8 ( std::string_view ( sQuery ) ) )
+	if ( sQuery && !una::is_valid_utf8 ( std::string_view ( sQuery ) ) )
 	{
 		tParsed.m_sParseError = "invalid UTF-8";
 		return false;

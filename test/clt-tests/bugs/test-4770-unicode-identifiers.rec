@@ -208,24 +208,27 @@ malformed_selector_rejected
 malformed_rule_rejected
 daemon_alive
 ––– comment –––
-SQL-managed table names use the 242-byte limit and reject unsafe invisible Unicode
+SQL-managed table names use the 207-byte limit, persist at the boundary, and reject unsafe invisible Unicode
 ––– input –––
 python3 - <<'PY'
 import subprocess
 m=['mysql','--binary-mode','-h0','-P9306']
-for n in (242,243):
+for n in (207,208):
  name='a'*n
- r=subprocess.run(m,input=f'CREATE TABLE `{name}` (body text);'.encode(),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+ r=subprocess.run(m,input=f"CREATE TABLE `{name}` (body text, properties json secondary_index='1');".encode(),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
  print(f'sql_{n}_'+('accepted' if r.returncode==0 else 'rejected'))
  if r.returncode==0:
+  r=subprocess.run(m,input=f'''INSERT INTO `{name}` VALUES (1,'needle','{{"category":"one"}}'); FLUSH RAMCHUNK `{name}`; INSERT INTO `{name}` VALUES (2,'needle','{{"category":"two"}}'); FLUSH RAMCHUNK `{name}`; OPTIMIZE TABLE `{name}` OPTION cutoff=1, sync=1;'''.encode(),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+  print(f'sql_{n}_'+('jsonsi_lifecycle_ok' if r.returncode==0 else 'jsonsi_lifecycle_failed'))
   subprocess.run(m,input=f'DROP TABLE `{name}`;'.encode(),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 for name in ('bad\u00a0name','bad\u200bname','bad\u202ename','a\u200dname'):
  r=subprocess.run(m,input=f'CREATE TABLE `{name}` (body text);'.encode(),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
  print('unsafe_'+('accepted' if r.returncode==0 else 'rejected'))
 PY
 ––– output –––
-sql_242_accepted
-sql_243_rejected
+sql_207_accepted
+sql_207_jsonsi_lifecycle_ok
+sql_208_rejected
 unsafe_rejected
 unsafe_rejected
 unsafe_rejected
@@ -284,33 +287,33 @@ searchd --config /tmp/test4770-plain-mode.conf --stopwait >/dev/null && echo pla
 ––– output –––
 plain_mode_stopped
 ––– comment –––
-Config-managed real-time, percolate, and plain table names use the same 242-byte limit
+Config-managed real-time, percolate, and plain table names use the same 207-byte limit
 ––– input –––
 python3 - <<'PY'
 from pathlib import Path
-names={kind:'a'*241+suffix for kind,suffix in [('plain','n'),('rt','r'),('pq','p')]}
+names={kind:'a'*206+suffix for kind,suffix in [('plain','n'),('rt','r'),('pq','p')]}
 conf="source s {\n type = csvpipe\n csvpipe_command = printf '1,needle\\n'\n csvpipe_field = body\n}\n"
-conf+=f"table {names['plain']} {{\n type = plain\n source = s\n path = /tmp/test4770-len-242-plain\n}}\n"
-conf+=f"table {names['rt']} {{\n type = rt\n path = /tmp/test4770-len-242-rt\n rt_field = body\n}}\n"
-conf+=f"table {names['pq']} {{\n type = percolate\n path = /tmp/test4770-len-242-pq\n rt_field = body\n}}\n"
+conf+=f"table {names['plain']} {{\n type = plain\n source = s\n path = /tmp/test4770-len-207-plain\n}}\n"
+conf+=f"table {names['rt']} {{\n type = rt\n path = /tmp/test4770-len-207-rt\n rt_field = body\n}}\n"
+conf+=f"table {names['pq']} {{\n type = percolate\n path = /tmp/test4770-len-207-pq\n rt_field = body\n}}\n"
 searchd="searchd {\n listen = 127.0.0.1:19306:mysql\n log = /tmp/test4770-len.log\n query_log = /tmp/test4770-len-query.log\n pid_file = /tmp/test4770-len.pid\n buddy_path =\n}\n"
-Path('/tmp/test4770-len-242.conf').write_text(conf+searchd)
+Path('/tmp/test4770-len-207.conf').write_text(conf+searchd)
 for kind,suffix in [('plain','n'),('rt','r'),('pq','p')]:
- name='a'*242+suffix
+ name='a'*207+suffix
  body="source s {\n type = csvpipe\n csvpipe_command = printf '1,needle\\n'\n csvpipe_field = body\n}\n" if kind=='plain' else ''
  table_type='percolate' if kind=='pq' else kind
- body+=f"table {name} {{\n type = {table_type}\n path = /tmp/test4770-len-243-{kind}\n"
+ body+=f"table {name} {{\n type = {table_type}\n path = /tmp/test4770-len-208-{kind}\n"
  body+=(" source = s\n" if kind=='plain' else " rt_field = body\n")
  body+="}\n"+searchd
- Path(f'/tmp/test4770-len-243-{kind}.conf').write_text(body)
+ Path(f'/tmp/test4770-len-208-{kind}.conf').write_text(body)
 PY
-rm -rf /tmp/test4770-len-242-plain /tmp/test4770-len-242-rt /tmp/test4770-len-242-pq /tmp/test4770-len-243-plain /tmp/test4770-len-243-rt /tmp/test4770-len-243-pq /tmp/test4770-len.pid /tmp/test4770-len.log; if indexer --config /tmp/test4770-len-242.conf --all >/dev/null 2>&1; then echo config_242_indexed; else echo config_242_failed; fi; searchd --config /tmp/test4770-len-242.conf >/dev/null; for i in {1..50}; do mysqladmin -h127.0.0.1 -P19306 ping --silent >/dev/null 2>&1 && break; sleep 0.1; done; mysql --skip-table --batch --skip-column-names -h127.0.0.1 -P19306 -e 'SHOW TABLES' | wc -l | tr -d ' '; searchd --config /tmp/test4770-len-242.conf --stopwait >/dev/null; for kind in plain rt pq; do if searchd --config /tmp/test4770-len-243-$kind.conf --check >/dev/null 2>&1; then echo config_243_${kind}_accepted; else echo config_243_${kind}_rejected; fi; done
+rm -rf /tmp/test4770-len-207-plain /tmp/test4770-len-207-rt /tmp/test4770-len-207-pq /tmp/test4770-len-208-plain /tmp/test4770-len-208-rt /tmp/test4770-len-208-pq /tmp/test4770-len.pid /tmp/test4770-len.log; if indexer --config /tmp/test4770-len-207.conf --all >/dev/null 2>&1; then echo config_207_indexed; else echo config_207_failed; fi; searchd --config /tmp/test4770-len-207.conf >/dev/null; for i in {1..50}; do mysqladmin -h127.0.0.1 -P19306 ping --silent >/dev/null 2>&1 && break; sleep 0.1; done; mysql --skip-table --batch --skip-column-names -h127.0.0.1 -P19306 -e 'SHOW TABLES' | wc -l | tr -d ' '; searchd --config /tmp/test4770-len-207.conf --stopwait >/dev/null; for kind in plain rt pq; do if searchd --config /tmp/test4770-len-208-$kind.conf --check >/dev/null 2>&1; then echo config_208_${kind}_accepted; else echo config_208_${kind}_rejected; fi; done
 ––– output –––
-config_242_indexed
+config_207_indexed
 3
-config_243_plain_rejected
-config_243_rt_rejected
-config_243_pq_rejected
+config_208_plain_rejected
+config_208_rt_rejected
+config_208_pq_rejected
 ––– comment –––
 Config-managed table and field names reject unsupported ASCII punctuation consistently
 ––– input –––

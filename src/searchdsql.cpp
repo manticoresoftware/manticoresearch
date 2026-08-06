@@ -25,8 +25,6 @@
 #include "std/base64.h"
 #include "facetutils.h"
 
-#include <uni_algo/conv.h>
-
 // uncomment to see everything came to parser.
 //#define DUMP_INCOMING_QUERIES
 
@@ -1875,11 +1873,6 @@ bool SqlParser_c::SetMatch ( const YYSTYPE & tValue )
 
 	m_bMatchClause = true;
 	m_pQuery->m_sQuery = ToStringUnescape ( tValue );
-	if ( !una::is_valid_utf8 ( std::string_view ( m_pQuery->m_sQuery.cstr() ) ) )
-	{
-		yyerror ( this, "invalid UTF-8" );
-		return false;
-	}
 	m_pQuery->m_sRawQuery = m_pQuery->m_sQuery;
 	m_eLastWhereItem = LastWhereItem_e::MATCH;
 	m_iLastWhereItemKnn = -1;
@@ -1897,12 +1890,6 @@ bool SqlParser_c::AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex 
 	ToString ( sMatchIndex, tIndex );
 
 	CSphString sError;
-	CSphString sMatchQuery = ToStringUnescape ( tValue );
-	if ( !una::is_valid_utf8 ( std::string_view ( sMatchQuery.cstr() ) ) )
-	{
-		yyerror ( this, "invalid UTF-8" );
-		return false;
-	}
 	if ( dQueryIndexes.any_of ( [&sMatchIndex]( const CSphString & sIndex ){ return sIndex==sMatchIndex; } ) )
 	{
 		if ( m_bMatchClause )
@@ -1913,7 +1900,7 @@ bool SqlParser_c::AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex 
 		}
 
 		// it's a plain match() on othe left index
-		m_pQuery->m_sQuery = sMatchQuery;
+		m_pQuery->m_sQuery = ToStringUnescape(tValue);
 		m_pQuery->m_sRawQuery = m_pQuery->m_sQuery;
 
 		m_bMatchClause = true;
@@ -1929,7 +1916,7 @@ bool SqlParser_c::AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex 
 			return false;
 		}
 
-		m_pQuery->m_sJoinQuery = sMatchQuery;
+		m_pQuery->m_sJoinQuery = ToStringUnescape(tValue);
 
 		m_bJoinMatchClause = true;
 		m_eLastWhereItem = LastWhereItem_e::NONE;

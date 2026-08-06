@@ -6805,8 +6805,10 @@ static bool CheckAttrs ( const VecTraits_T<T> & dAttrs, GETNAME && fnGetName, CS
 
 static bool CheckExistingTables ( const CSphString & sIndex, bool bIfNotExists, bool bNameQuoted, CSphString & sError )
 {
-	const char * szIdentifier = sIndex.Begins ( "system." ) ? sIndex.cstr()+7 : sIndex.cstr();
-	if ( !sphValidateIdentifier ( szIdentifier, bNameQuoted, SPH_MAX_TABLE_NAME_BYTES, sError ) )
+	bool bSystem = sIndex.Begins ( "system." );
+	const char * szIdentifier = bSystem ? sIndex.cstr()+7 : sIndex.cstr();
+	int iMaxIdentifierBytes = SPH_MAX_TABLE_NAME_BYTES - ( bSystem ? 7 : 0 );
+	if ( !sphValidateIdentifier ( szIdentifier, bNameQuoted, iMaxIdentifierBytes, sError ) )
 		return false;
 
 	if ( g_pLocalIndexes->Contains ( sIndex ) || g_pDistIndexes->Contains ( sIndex ) )

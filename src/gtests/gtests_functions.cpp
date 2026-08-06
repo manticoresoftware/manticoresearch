@@ -25,6 +25,8 @@
 #include "digest_sha1.h"
 #include "std/openhash.h"
 
+#include <climits>
+
 // Miscelaneous short functional tests: TDigest, SpanSearch,
 // stringbuilder, CJson, TaggedHash, Log2
 
@@ -50,6 +52,11 @@ TEST ( IdentifierValidation, ValidNamesAndLimits )
 	EXPECT_TRUE ( sphValidateIdentifier ( sMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
 	sMax.push_back ( 'a' );
 	EXPECT_FALSE ( sphValidateIdentifier ( sMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
+
+	std::string sLongestTail = "." + std::to_string ( INT_MAX ) + ".tmp.spjidx.jsonsi.tmp." + std::to_string ( INT_MAX ) + ".tmp";
+	EXPECT_EQ ( sLongestTail.length(), 48 );
+	EXPECT_LE ( SPH_MAX_TABLE_NAME_BYTES + sLongestTail.length(), 255 );
+	EXPECT_GT ( SPH_MAX_TABLE_NAME_BYTES + 1 + sLongestTail.length(), 255 );
 }
 
 
@@ -77,6 +84,16 @@ TEST ( IdentifierValidation, InvalidUtf8AndUnsafeCodepoints )
 	EXPECT_FALSE ( sphValidateIdentifier ( "bad‮name", false, 0, sError ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "a‍name", false, 0, sError ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xB0name", false, 0, sError ) ); // U+FFF0
+}
+
+
+TEST ( IdentifierValidation, AsciiCaseConversionPreservesUtf8 )
+{
+	CSphString sLower = "ASCII_ÉЖ";
+	EXPECT_STREQ ( sLower.ToLower().cstr(), "ascii_ÉЖ" );
+
+	CSphString sUpper = "ascii_éж";
+	EXPECT_STREQ ( sUpper.ToUpper().cstr(), "ASCII_éж" );
 }
 
 

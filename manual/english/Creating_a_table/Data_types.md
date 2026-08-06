@@ -12,7 +12,7 @@ The same character support applies to real-time and percolate tables created in 
 
 Use backticks around SQL names that begin with a number and contain at least one letter, underscore, or non-ASCII UTF-8 character, and around names that match a reserved SQL keyword. For example, use `` `2026_архив` `` or `` `select` ``. Backticks do not make arbitrary ASCII punctuation valid; characters such as `-`, `$`, spaces, and embedded backticks are not supported in user-defined names.
 
-Identifiers must be valid UTF-8. Control characters, Unicode whitespace, bidirectional controls, and invisible default-ignorable characters are rejected. This includes non-breaking spaces, zero-width spaces, and zero-width joiners. Table names are limited to 242 UTF-8 bytes in both RT and Plain modes.
+Identifiers must be valid UTF-8. Control characters, Unicode whitespace, bidirectional controls, and invisible default-ignorable characters are rejected. This includes non-breaking spaces, zero-width spaces, and zero-width joiners. Table names are limited to 207 UTF-8 bytes in both RT and Plain modes. For qualified `system.` table names, the prefix counts toward this limit.
 
 SQL-created table names and SQL identifiers that contain ASCII letters are case-insensitive. Configuration section names in Plain mode are case-sensitive. Unicode case folding and Unicode normalization are not applied in either mode, so use the exact Unicode spelling consistently.
 

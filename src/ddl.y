@@ -125,7 +125,23 @@ tableident:
 
 ident:
 	tableident
+		{
+			if ( !pParser->ValidateIdentifier ( $1, 0 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+				YYERROR;
+			}
+			$$ = $1;
+		}
 	| TOK_IDENT
+		{
+			if ( !pParser->ValidateIdentifier ( $1, 0 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+				YYERROR;
+			}
+			$$ = $1;
+		}
     ;
 
 text_or_string:
@@ -163,7 +179,7 @@ tablename:
 		}
 	| tableident '.' tableident
 		{
-			if ( !pParser->ValidateIdentifier ( $3, SPH_MAX_TABLE_NAME_BYTES ) )
+			if ( !pParser->ValidateIdentifier ( $3, SPH_MAX_TABLE_NAME_BYTES-7 ) )
 			{
 				yyerror ( pParser, pParser->GetLastError() );
 				YYERROR;

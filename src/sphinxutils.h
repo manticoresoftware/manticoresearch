@@ -34,10 +34,6 @@ inline int sphIsAlphaOnly ( int c )
 	return ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' );
 }
 
-/// Validate a UTF-8 string without accepting overlong encodings, surrogates,
-/// truncated sequences, or code points above U+10FFFF.
-bool sphValidateUtf8 ( const char * szText, CSphString & sError );
-
 /// Validate a user-defined table or field identifier.
 /// Non-ASCII characters must form valid UTF-8; ASCII is limited to letters,
 /// digits, and underscores. A leading digit is allowed only when quoted in SQL

@@ -36,13 +36,19 @@ static bool			g_bConfigless = false;
 
 static CSphString GetPathForNewIndex ( const CSphString & sIndexName )
 {
-	CSphString sRes;
-	if ( g_sDataDir.Length() && !g_sDataDir.Ends("/") && !g_sDataDir.Ends("\\") )
-		sRes.SetSprintf ( "%s/%s", g_sDataDir.cstr(), sIndexName.cstr() );
-	else
-		sRes.SetSprintf ( "%s%s", g_sDataDir.cstr(), sIndexName.cstr() );
+	return sphGetConfiglessTablePath ( g_sDataDir, sIndexName );
+}
 
-	return sRes;
+
+static CSphString GetPathForExistingIndex ( const CSphString & sIndexName )
+{
+	CSphString sPath = GetPathForNewIndex ( sIndexName );
+	CSphString sLegacyPath;
+	sLegacyPath.SetSprintf ( "%s/%s", g_sDataDir.cstr(), sIndexName.cstr() );
+	if ( sPath!=sLegacyPath && !sphDirExists ( sPath.cstr() ) && sphDirExists ( sLegacyPath.cstr() ) )
+		return sLegacyPath;
+
+	return sPath;
 }
 
 
@@ -136,7 +142,7 @@ CSphString FilenameBuilder_c::GetFullPath ( const CSphString & sName ) const
 	if ( !IsConfigless() || !sName.Length() )
 		return sName;
 
-	CSphString sPath = GetPathForNewIndex ( m_sIndex );
+	CSphString sPath = GetPathForExistingIndex ( m_sIndex );
 
 	StringBuilder_c sNewValue {" "};
 	StringBuilder_c sTmp;
@@ -356,11 +362,15 @@ void IndexDescDistr_t::Save ( CSphConfigSection & hIndex ) const
 
 //////////////////////////////////////////////////////////////////////////
 
-bool IndexDesc_t::Parse ( const bson::Bson_c& tBson, const CSphString& sName, CSphString& sWarning )
+bool IndexDesc_t::Parse ( const bson::Bson_c& tBson, const CSphString& sName, CSphString & sWarning )
 {
 	using namespace bson;
 	if ( sName.IsEmpty() )
 		return TlsMsg::Err ( "empty table name" );
+
+	CSphString sNameError;
+	if ( !sphValidateTableName ( sName.cstr(), true, sNameError ) )
+		return TlsMsg::Err ( "invalid table name '%s': %s", sName.cstr(), sNameError.cstr() );
 
 	m_sName = sName;
 
@@ -805,6 +815,22 @@ bool SaveConfigInt ( CSphString & sError )
 static bool PrepareDirForNewIndex ( CSphString & sPath, CSphString & sIndexPath, const CSphString & sIndexName, CSphString & sError )
 {
 	CSphString sNewPath = GetPathForNewIndex(sIndexName);
+	CSphString sPhysicalName = sNewPath;
+	StripPath ( sPhysicalName );
+	CSphString sNewIndexPath;
+	sNewIndexPath.SetSprintf ( "%s/%s", sNewPath.cstr(), sPhysicalName.cstr() );
+
+	if ( g_pLocalIndexes )
+	{
+		ServedSnap_t hLocals = g_pLocalIndexes->GetHash();
+		for ( const auto & tIt : *hLocals )
+			if ( tIt.first!=sIndexName && tIt.second && tIt.second->m_sIndexPath==sNewIndexPath )
+			{
+				sError.SetSprintf ( "physical table-name collision between '%s' and '%s'", sIndexName.cstr(), tIt.first.cstr() );
+				return false;
+			}
+	}
+
 	StringBuilder_c sRes;
 	sRes << sNewPath;
 
@@ -831,7 +857,7 @@ static bool PrepareDirForNewIndex ( CSphString & sPath, CSphString & sIndexPath,
 
 	sRes << "/";
 	sPath = sRes.cstr();
-	sRes << sIndexName;
+	sRes << sPhysicalName;
 	sIndexPath = sRes.cstr();
 
 	return true;
@@ -1453,7 +1479,7 @@ static void DeleteExtraIndexFiles ( CSphIndex * pIndex, const StrVec_t * pExtFil
 	assert(pIndex);
 
 	CSphString sTmp;
-	CSphString sPath = GetPathForNewIndex ( pIndex->GetName() );
+	CSphString sPath = GetPathForExistingIndex ( pIndex->GetName() );
 
 	auto pTokenizer = pIndex->GetTokenizer();
 	auto pDict = pIndex->GetDictionary();
@@ -1501,7 +1527,7 @@ static void DeleteExtraIndexFiles ( CSphIndex * pIndex, const StrVec_t * pExtFil
 
 static bool DeleteShardFiles ( const CSphString & sIndex, CSphString & sError )
 {
-	CSphString sDir = GetPathForNewIndex ( sIndex );
+	CSphString sDir = GetPathForExistingIndex ( sIndex );
 	if ( !sphDirExists ( sDir.cstr() ) )
 		return true;
 
@@ -1684,7 +1710,10 @@ bool AddExistingIndexConfigless ( const CSphString & sIndex, IndexType_e eType, 
 	IndexDesc_t tNewIndex;
 	tNewIndex.m_eType = eType;
 	tNewIndex.m_sName = sIndex;
-	tNewIndex.m_sPath.SetSprintf ( "%s/%s", GetPathForNewIndex(sIndex).cstr(), sIndex.cstr() );
+	CSphString sDir = GetPathForNewIndex(sIndex);
+	CSphString sPhysicalName = sDir;
+	StripPath ( sPhysicalName );
+	tNewIndex.m_sPath.SetSprintf ( "%s/%s", sDir.cstr(), sPhysicalName.cstr() );
 
 	if ( ConfiglessPreloadIndex ( tNewIndex, dWarnings, sError )!= ADD_NEEDLOAD )
 		return false;
@@ -1747,7 +1776,7 @@ static bool ReportEmptyDir ( const CSphString & sIndexName, CSphString * pMsg )
 	if ( !pMsg )
 		return true;
 
-	CSphString sIndexPath = GetPathForNewIndex ( sIndexName );
+	CSphString sIndexPath = GetPathForExistingIndex ( sIndexName );
 	CSphString sSearchPath; 
 	sSearchPath.SetSprintf ( "%s/*", sIndexPath.cstr() );
 

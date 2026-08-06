@@ -38,8 +38,9 @@ inline int sphIsAlphaOnly ( int c )
 /// Non-ASCII characters must form valid UTF-8; ASCII is limited to letters,
 /// digits, and underscores. A leading digit is allowed only when quoted in SQL
 /// or when read from quote-less configuration syntax. Dots and dashes can be
-/// enabled for flattened compatibility-field paths.
+/// enabled only for flattened/internal compatibility-field paths.
 bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int iMaxBytes, CSphString & sError, bool bAllowPathPunctuation = false );
+bool sphValidateTableName ( const char * szName, bool bAllowLeadingDigit, CSphString & sError );
 
 inline bool sphIsInteger ( char c )
 {

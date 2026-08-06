@@ -12226,7 +12226,7 @@ static void SetKNNFlag ( CSphColumnInfo & tCol, const CSphIndexSettings & tSetti
 }
 
 
-bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSchema, const CSphIndexSettings & tSettings, StrVec_t * pWarnings, CSphString & sError, bool bSkipValidation, bool bPQ )
+bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSchema, const CSphIndexSettings & tSettings, StrVec_t * pWarnings, CSphString & sError, bool bSkipValidation, bool bPQ, bool bAllowCompatibilityNames )
 {
 	// fields
 	SmallStringHash_T<BYTE> hFields;
@@ -12234,7 +12234,7 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 	{
 		CSphString sFieldName = v->cstr();
 		CSphString sNameError;
-		if ( !sphValidateIdentifier ( sFieldName.cstr(), true, 0, sNameError, true ) )
+		if ( !sphValidateIdentifier ( sFieldName.cstr(), true, 0, sNameError, bAllowCompatibilityNames ) )
 		{
 			sError.SetSprintf ( "invalid field name '%s': %s", sFieldName.cstr(), sNameError.cstr() );
 			return false;
@@ -12286,7 +12286,8 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 			sphSplit ( dNameParts, v->cstr(), ":");
 			CSphColumnInfo tCol ( dNameParts[0].cstr(), iTypes[iType]);
 			CSphString sNameError;
-			if ( !sphValidateIdentifier ( tCol.m_sName.cstr(), true, 0, sNameError, true ) )
+			bool bInternalName = tCol.m_sName==sphGetUuidDocidName() || tCol.m_sName=="@timestamp";
+			if ( !sphValidateIdentifier ( tCol.m_sName.cstr(), true, 0, sNameError, bAllowCompatibilityNames || bInternalName ) )
 			{
 				sError.SetSprintf ( "invalid attribute name '%s': %s", tCol.m_sName.cstr(), sNameError.cstr() );
 				return false;

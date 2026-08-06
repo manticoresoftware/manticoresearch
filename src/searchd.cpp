@@ -6805,11 +6805,10 @@ static bool CheckAttrs ( const VecTraits_T<T> & dAttrs, GETNAME && fnGetName, CS
 
 static bool CheckExistingTables ( const CSphString & sIndex, bool bIfNotExists, bool bNameQuoted, CSphString & sError )
 {
-	bool bSystem = sIndex.Begins ( "system." );
-	const char * szIdentifier = bSystem ? sIndex.cstr()+7 : sIndex.cstr();
-	int iMaxIdentifierBytes = SPH_MAX_TABLE_NAME_BYTES - ( bSystem ? 7 : 0 );
-	if ( !sphValidateIdentifier ( szIdentifier, bNameQuoted, iMaxIdentifierBytes, sError ) )
+	if ( !sphValidateTableName ( sIndex.cstr(), bNameQuoted, sError ) )
 		return false;
+
+	const char * szIdentifier = sIndex.Begins ( "system." ) ? sIndex.cstr()+7 : sIndex.cstr();
 
 	if ( g_pLocalIndexes->Contains ( sIndex ) || g_pDistIndexes->Contains ( sIndex ) )
 	{
@@ -14069,7 +14068,7 @@ bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSettings,
 			sphWarning ( "table '%s': %s", szIndexName, sWarning.cstr() );
 	}
 
-	if ( !sphRTSchemaConfigure ( hIndex, tSchema, tSettings, pWarnings, sError, bPercolate, bPercolate ) )
+	if ( !sphRTSchemaConfigure ( hIndex, tSchema, tSettings, pWarnings, sError, bPercolate, bPercolate, IsConfigless() ) )
 	{
 		sphWarning ( "table '%s': %s - NOT SERVING", szIndexName, sError.cstr () );
 		return false;

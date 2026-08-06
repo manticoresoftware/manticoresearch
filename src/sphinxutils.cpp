@@ -1344,6 +1344,7 @@ bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int i
 		return false;
 	}
 
+	bool bInternalAtName = bAllowPathPunctuation && ( !strcmp ( szName, "@timestamp" ) || !strcmp ( szName, "@uuid_id" ) );
 	bool bFirst = true;
 	while ( p<pEnd )
 	{
@@ -1351,7 +1352,7 @@ bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int i
 
 		if ( uCode<0x80 )
 		{
-			bool bLetter = ( uCode>='a' && uCode<='z' ) || ( uCode>='A' && uCode<='Z' ) || uCode=='_' || ( bFirst && uCode=='@' ) || ( bAllowPathPunctuation && !bFirst && ( uCode=='.' || uCode=='-' ) );
+			bool bLetter = ( uCode>='a' && uCode<='z' ) || ( uCode>='A' && uCode<='Z' ) || uCode=='_' || ( bFirst && uCode=='@' && bInternalAtName ) || ( bAllowPathPunctuation && !bFirst && ( uCode=='.' || uCode=='-' ) );
 			bool bDigit = uCode>='0' && uCode<='9';
 			if ( !bLetter && !( bDigit && ( !bFirst || bAllowLeadingDigit ) ) )
 			{
@@ -1372,12 +1373,21 @@ bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int i
 }
 
 
+bool sphValidateTableName ( const char * szName, bool bAllowLeadingDigit, CSphString & sError )
+{
+	static constexpr int SYSTEM_PREFIX_LEN = 7;
+	bool bSystem = szName && !strncmp ( szName, "system.", SYSTEM_PREFIX_LEN );
+	const char * szIdentifier = bSystem ? szName+SYSTEM_PREFIX_LEN : szName;
+	return sphValidateIdentifier ( szIdentifier, bAllowLeadingDigit, SPH_MAX_TABLE_NAME_BYTES - ( bSystem ? SYSTEM_PREFIX_LEN : 0 ), sError );
+}
+
+
 bool CSphConfigParser::AddSection ( const char * szType, const char * szSection )
 {
 	if ( ( !strcasecmp ( szType, "table" ) || !strcasecmp ( szType, "index" ) ) )
 	{
 		CSphString sError;
-		if ( !sphValidateIdentifier ( szSection, true, SPH_MAX_TABLE_NAME_BYTES, sError ) )
+		if ( !sphValidateTableName ( szSection, true, sError ) )
 			return TlsMsg::Err ( "invalid table name '%s': %s", szSection, sError.cstr() );
 	}
 

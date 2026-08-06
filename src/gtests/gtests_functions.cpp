@@ -14,6 +14,7 @@
 
 #include "sphinxint.h"
 #include "sphinxutils.h"
+#include "fileutils.h"
 
 #include <uni_algo/conv.h>
 #include "json/cJSON.h"
@@ -38,8 +39,11 @@ TEST ( IdentifierValidation, ValidNamesAndLimits )
 	EXPECT_TRUE ( sphValidateIdentifier ( "product_2026", false, 0, sError ) );
 	EXPECT_TRUE ( sphValidateIdentifier ( "товары2026", false, 0, sError ) );
 	EXPECT_TRUE ( sphValidateIdentifier ( "📦метка", false, 0, sError ) );
-	EXPECT_TRUE ( sphValidateIdentifier ( "@timestamp", false, 0, sError ) );
-	EXPECT_TRUE ( sphValidateIdentifier ( "@uuid_id", false, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "@timestamp", false, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "@uuid_id", false, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "@timestamp", false, 0, sError, true ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "@uuid_id", false, 0, sError, true ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "@user_field", false, 0, sError, true ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "task.params", true, 0, sError ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "graph-workspace.description", true, 0, sError ) );
 	EXPECT_TRUE ( sphValidateIdentifier ( "task.params", true, 0, sError, true ) );
@@ -47,16 +51,45 @@ TEST ( IdentifierValidation, ValidNamesAndLimits )
 	EXPECT_TRUE ( sphValidateIdentifier ( "2026_архив", true, 0, sError ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "2026_архив", false, 0, sError ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "bad-name", true, 0, sError ) );
+	EXPECT_TRUE ( sphValidateTableName ( "system.товары", false, sError ) );
+	EXPECT_FALSE ( sphValidateTableName ( "system.bad-name", false, sError ) );
 
 	std::string sMax ( SPH_MAX_TABLE_NAME_BYTES, 'a' );
 	EXPECT_TRUE ( sphValidateIdentifier ( sMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
 	sMax.push_back ( 'a' );
 	EXPECT_FALSE ( sphValidateIdentifier ( sMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
 
+	std::string sSystemMax = "system." + std::string ( SPH_MAX_TABLE_NAME_BYTES-7, 'a' );
+	EXPECT_TRUE ( sphValidateTableName ( sSystemMax.c_str(), false, sError ) );
+	sSystemMax.push_back ( 'a' );
+	EXPECT_FALSE ( sphValidateTableName ( sSystemMax.c_str(), false, sError ) );
+
 	std::string sLongestTail = "." + std::to_string ( INT_MAX ) + ".tmp.spjidx.jsonsi.tmp." + std::to_string ( INT_MAX ) + ".tmp";
 	EXPECT_EQ ( sLongestTail.length(), 48 );
-	EXPECT_LE ( SPH_MAX_TABLE_NAME_BYTES + sLongestTail.length(), 255 );
-	EXPECT_GT ( SPH_MAX_TABLE_NAME_BYTES + 1 + sLongestTail.length(), 255 );
+	EXPECT_LE ( sphGetTablePhysicalName ( sMax.c_str() ).Length() + sLongestTail.length(), 255 );
+}
+
+
+TEST ( IdentifierValidation, PortablePhysicalTableNames )
+{
+	EXPECT_STREQ ( sphGetTablePhysicalName ( "products_2026" ).cstr(), "products_2026" );
+	EXPECT_STRNE ( sphGetTablePhysicalName ( "con" ).cstr(), "con" );
+	EXPECT_STRNE ( sphGetTablePhysicalName ( "aux" ).cstr(), "aux" );
+	EXPECT_STRNE ( sphGetTablePhysicalName ( "com1" ).cstr(), "com1" );
+	EXPECT_STREQ ( sphGetTablePhysicalName ( "__manticore_u_41" ).cstr(), "__manticore_u_41" );
+
+	CSphString sNfc = sphGetTablePhysicalName ( "é" );
+	CSphString sNfd = sphGetTablePhysicalName ( "é" );
+	EXPECT_STRNE ( sNfc.cstr(), sNfd.cstr() );
+	EXPECT_TRUE ( sNfc.Begins ( "@manticore_u_" ) );
+	EXPECT_TRUE ( sNfd.Begins ( "@manticore_u_" ) );
+
+	std::string sLong ( SPH_MAX_TABLE_NAME_BYTES, 'a' );
+	CSphString sPhysical = sphGetTablePhysicalName ( sLong.c_str() );
+	EXPECT_TRUE ( sPhysical.Begins ( "@manticore_h_" ) );
+	EXPECT_STREQ ( sPhysical.cstr(), "@manticore_h_d6dd3a809626a0de62ad9b013e5f950af6d079ca5096627ec5d518cb9a59cfa9" );
+	EXPECT_LE ( sPhysical.Length(), SPH_MAX_TABLE_NAME_BYTES );
+	EXPECT_EQ ( sPhysical, sphGetTablePhysicalName ( sLong.c_str() ) );
 }
 
 

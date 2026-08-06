@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>UTF-8 identifier policy in configured tables and sources</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source источник4770
+{
+	type = mysql
+	<sql_settings/>
+	sql_query_pre = SET NAMES utf8mb4
+	sql_query = SELECT id, название, описание, цена FROM source_4770
+	sql_attr_uint = цена
+}
+
+index обычная4770
+{
+	type = plain
+	source = источник4770
+	path = <data_path/>/plain4770
+}
+
+index таблица4770_rt
+{
+	type = rt
+	path = <data_path/>/rt4770
+	rt_field = название
+	rt_field = описание
+	rt_attr_uint = цена
+	rt_attr_uint = ёмкость
+	rt_attr_uint = 📦метка
+}
+
+index правила4770_cfg
+{
+	type = percolate
+	path = <data_path/>/pq4770
+	rt_field = название
+	rt_field = описание
+	rt_attr_uint = цена
+}
+
+index распределенная4770
+{
+	type = distributed
+	local = таблица4770_rt
+	local = обычная4770
+}
+
+index шаблон4770
+{
+	type = template
+	charset_table = 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451
+}
+
+# User-defined Plain-mode fields and attributes use the same public syntax
+# as SQL DDL; compatibility punctuation is not enabled for config entries.
+index invalid_field4770
+{
+	type = rt
+	path = <data_path/>/invalid_field4770
+	rt_field = bad-name
+}
+
+index invalid_attr4770
+{
+	type = percolate
+	path = <data_path/>/invalid_attr4770
+	rt_field = title
+	rt_attr_uint = bad-name
+}
+</config>
+
+<queries>
+<sphinxql>
+	SHOW TABLES;
+	INSERT INTO таблица4770_rt (id, название, описание, цена, ёмкость, 📦метка) VALUES
+		(10, 'Клавиатура', 'Игровая клавиатура', 100, 75, 1);
+	SELECT id, название, цена FROM таблица4770_rt WHERE MATCH('@название клавиатура');
+	SELECT id, название, цена FROM обычная4770 WHERE MATCH('@название клавиатура');
+	SELECT id, название, цена FROM распределенная4770 WHERE MATCH('@название клавиатура');
+	INSERT INTO правила4770_cfg (id, query) VALUES (1, '@название клавиатура');
+	CALL PQ('правила4770_cfg', '{"название":"клавиатура","описание":"товар","цена":100}');
+	CALL SNIPPETS('Игровая клавиатура', 'шаблон4770', 'клавиатура');
+</sphinxql>
+</queries>
+
+<db_create>
+CREATE TABLE source_4770
+(
+	id BIGINT PRIMARY KEY NOT NULL,
+	`название` VARCHAR(255) NOT NULL,
+	`описание` VARCHAR(255) NOT NULL,
+	`цена` INTEGER NOT NULL
+) CHARACTER SET utf8mb4;
+</db_create>
+<db_insert>
+INSERT INTO source_4770 (id, `название`, `описание`, `цена`) VALUES
+	(1, 'Клавиатура', 'Игровая клавиатура', 100),
+	(2, 'Мышь', 'Игровая мышь', 60);
+</db_insert>
+<db_drop>DROP TABLE IF EXISTS source_4770</db_drop>
+</test>

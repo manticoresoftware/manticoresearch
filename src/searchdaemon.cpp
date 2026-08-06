@@ -392,8 +392,15 @@ ListenerDesc_t ParseResolveListener ( const char* sSpec, bool bResolve, CSphStri
 	tRes.m_bVIP = false;
 	tRes.m_bReadOnly = false;
 
-	// split by colon
-	auto dParts = sphSplit( sSpec, ":" ); // diff. parts are :-separated
+	// split by colon. The explicit unix: prefix permits a relative socket path;
+	// this is useful after searchd changes into data_dir and avoids sun_path limits.
+	bool bExplicitUnix = strncmp ( sSpec, "unix:", 5 )==0;
+	if ( bExplicitUnix && !sSpec[5] )
+	{
+		MaybeFatalLog ( pFatal, "UNIX socket path must not be empty" );
+		return {};
+	}
+	auto dParts = sphSplit ( bExplicitUnix ? sSpec+5 : sSpec, ":" ); // diff. parts are :-separated
 
 	int iParts = dParts.GetLength();
 	if ( iParts>3 )
@@ -405,12 +412,18 @@ ListenerDesc_t ParseResolveListener ( const char* sSpec, bool bResolve, CSphStri
 	assert ( iParts>=1 && iParts<=3 );
 
 	// handle UNIX socket case
-	// might be either name on itself (1 part), or name+protocol (2 parts)
-	if ( *dParts[0].scstr()=='/' )
+	// might be either an absolute path, or a relative path after the unix: prefix;
+	// protocol may be omitted for backward compatibility.
+	if ( bExplicitUnix || *dParts[0].scstr()=='/' )
 	{
 		if ( iParts>2 )
 		{
 			MaybeFatalLog ( pFatal, "invalid listen format (too many fields)" );
+			return {};
+		}
+		if ( dParts[0].IsEmpty() )
+		{
+			MaybeFatalLog ( pFatal, "UNIX socket path must not be empty" );
 			return {};
 		}
 

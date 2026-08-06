@@ -22,6 +22,7 @@
 #include <boost/process/v1/async.hpp>
 #include <boost/process/v1/child.hpp>
 #include <boost/process/v1/error.hpp>
+#include <boost/process/v1/env.hpp>
 #include <boost/process/v1/handles.hpp>
 #include <boost/process/v1/io.hpp>
 #else
@@ -45,6 +46,8 @@ static CSphString g_sPath;
 static CSphString g_sListener4Buddy;
 static CSphString g_sUrlBuddy;
 static CSphString g_sStartArgs;
+static CSphString g_sBuddyUnixAlias;
+static CSphString g_sBuddyUnixAliasDir;
 
 static const int PIPE_BUF_SIZE = 2048;
 static std::unique_ptr<boost::asio::io_context> g_pIOS;
@@ -81,8 +84,9 @@ static std::unique_ptr<FreePortList_i> g_pBuddyPortList { nullptr };
 ScopedPort_c g_tBuddyPort;
 
 static BuddyState_e TryToStart ( const char * sArgs, CSphString & sError );
-static CSphString GetUrl ( const ListenerDesc_t & tDesc );
 static CSphString BuddyGetPath ( const std::optional<CSphString> & sPath, const CSphString & sPluginDir, int iHostPort, const CSphString & sDataDir );
+static CSphString GetBuddyCallbackUrl ( const ListenerDesc_t & tDesc );
+static void CleanupBuddyUnixAlias();
 static void BuddyStop ();
 static CSphString GetLogLevel();
 
@@ -271,7 +275,7 @@ static void ReadFromPipe ( const boost::system::error_code & tGotCode, std::size
 #ifdef _WIN32
 	tListen.m_iPort = g_tBuddyPort;
 #endif
-	g_sUrlBuddy = GetUrl( tListen );
+	g_sUrlBuddy = BuddyGetListenerUrl ( tListen );
 	g_eBuddy = BuddyState_e::WORK;
 	g_iRestartCount = 0;
 	sphInfo ( "[BUDDY] started %.*s '%s' at %s", sBuddyVer.second, sBuddyVer.first, g_sStartArgs.cstr(), g_sUrlBuddy.cstr() );
@@ -424,21 +428,84 @@ BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 	return BuddyState_e::STARTING;
 }
 
-CSphString GetUrl ( const ListenerDesc_t & tDesc )
+CSphString BuddyGetListenerUrl ( const ListenerDesc_t & tDesc )
 {
-    CSphString sURI;
+	CSphString sURI;
+	if ( !tDesc.m_sUnix.IsEmpty() )
+	{
+		CSphString sSocketPath = tDesc.m_sUnix;
+		if ( !IsPathAbsolute ( sSocketPath ) )
+		{
+			CSphString sCwd = sphGetCwd();
+			sSocketPath.SetSprintf ( "%s/%s", sCwd.cstr(), tDesc.m_sUnix.cstr() );
+			sSocketPath = sphNormalizePath ( sSocketPath );
+		}
+		sURI.SetSprintf ( "unix:%s", sSocketPath.cstr() );
+		return sURI;
+	}
 
 #ifdef _WIN32
-    // Use the constant host for Windows
-    sURI.SetSprintf ("http://host.docker.internal:%d", tDesc.m_iPort);
+	// Use the constant host for Windows
+	sURI.SetSprintf ("http://host.docker.internal:%d", tDesc.m_iPort);
 #else
-    // Original code for other systems
-    char sAddrBuf [ SPH_ADDRESS_SIZE ];
-    sphFormatIP ( sAddrBuf, sizeof(sAddrBuf), tDesc.m_uIP );
-    sURI.SetSprintf ( "http://%s:%d", sAddrBuf, tDesc.m_iPort );
+	char sAddrBuf [ SPH_ADDRESS_SIZE ];
+	sphFormatIP ( sAddrBuf, sizeof(sAddrBuf), tDesc.m_uIP );
+	sURI.SetSprintf ( "http://%s:%d", sAddrBuf, tDesc.m_iPort );
 #endif
 
-    return sURI;
+	return sURI;
+}
+
+static void CleanupBuddyUnixAlias()
+{
+#if !_WIN32
+	if ( !g_sBuddyUnixAlias.IsEmpty() )
+		unlink ( g_sBuddyUnixAlias.cstr() );
+	if ( !g_sBuddyUnixAliasDir.IsEmpty() )
+		rmdir ( g_sBuddyUnixAliasDir.cstr() );
+#endif
+	g_sBuddyUnixAlias = {};
+	g_sBuddyUnixAliasDir = {};
+}
+
+static CSphString GetBuddyCallbackUrl ( const ListenerDesc_t & tDesc )
+{
+	CSphString sUrl = BuddyGetListenerUrl ( tDesc );
+#if _WIN32
+	return sUrl;
+#else
+	if ( tDesc.m_sUnix.IsEmpty() )
+		return sUrl;
+
+	const char * szSocketPath = sUrl.cstr() + strlen ( "unix:" );
+	sockaddr_un tAddress {};
+	if ( strlen(szSocketPath)<sizeof(tAddress.sun_path) )
+		return sUrl;
+
+	if ( g_sBuddyUnixAlias.IsEmpty() )
+	{
+		char szAliasDir[] = "/tmp/manticore-buddy-XXXXXX";
+		const char * szCreatedDir = mkdtemp ( szAliasDir );
+		if ( !szCreatedDir )
+		{
+			sphWarning ( "[BUDDY] failed to create short Unix socket alias directory: %s", strerrorm(errno) );
+			return sUrl;
+		}
+
+		g_sBuddyUnixAliasDir = szCreatedDir;
+		g_sBuddyUnixAlias.SetSprintf ( "%s/searchd.sock", szCreatedDir );
+		if ( symlink ( szSocketPath, g_sBuddyUnixAlias.cstr() )<0 )
+		{
+			sphWarning ( "[BUDDY] failed to create short Unix socket alias: %s", strerrorm(errno) );
+			CleanupBuddyUnixAlias();
+			return sUrl;
+		}
+	}
+
+	CSphString sAliasUrl;
+	sAliasUrl.SetSprintf ( "unix:%s", g_sBuddyUnixAlias.cstr() );
+	return sAliasUrl;
+#endif
 }
 
 static void SetContainerName ( const CSphString & sConfigPath )
@@ -458,7 +525,7 @@ static void BuddyStopContainer()
 #endif
 }
 
-void BuddyStart ( const std::optional<CSphString>& sConfigPath, const CSphString & sPluginDir, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads, const CSphString & sConfigFilePath, const CSphString & sDataDir )
+void BuddyStart ( const std::optional<CSphString>& sConfigPath, const CSphString & sPluginDir, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads, const CSphString & sConfigFilePath, const CSphString & sDataDir, bool bLocalMode )
 {
 	const char* szHelperUrl = getenv ( "MANTICORE_HELPER_URL" );
 	if ( szHelperUrl )
@@ -484,7 +551,7 @@ void BuddyStart ( const std::optional<CSphString>& sConfigPath, const CSphString
 			g_pBuddyPortList.reset ( PortRange::Create ( "127.0.0.1", tDesc.m_iPort+100, 20 ) );
 			g_tBuddyPort = g_pBuddyPortList->AcquirePort();
 #endif
-			g_sListener4Buddy = GetUrl ( tDesc );
+			g_sListener4Buddy = GetBuddyCallbackUrl ( tDesc );
 			break;
 		}
 	}
@@ -512,12 +579,13 @@ void BuddyStart ( const std::optional<CSphString>& sConfigPath, const CSphString
 
 	CSphString sLogLevel = GetLogLevel();
 
-	g_sStartArgs.SetSprintf ( "%s --listen=%s %s %s --threads=%d %s",
+	g_sStartArgs.SetSprintf ( "%s --listen=%s %s %s --threads=%d %s %s",
 		g_sPath.cstr(),
 		g_sListener4Buddy.cstr(),
 		g_sBuddyBind.scstr(),
 		( bTelemetry ? "" : "--disable-telemetry" ),
-		iThreads, sLogLevel.scstr() );
+		iThreads, sLogLevel.scstr(),
+		( bLocalMode ? "--skip=manticoresoftware/buddy-plugin-sharding" : "" ) );
 
 	sphLogDebug ( "[BUDDY] start args: %s", g_sStartArgs.cstr() );
 
@@ -568,6 +636,7 @@ void BuddyStop ()
 void BuddyShutdown ()
 {
 	BuddyStop();
+	CleanupBuddyUnixAlias();
 	g_tBuddyPort = ScopedPort_c();
 	g_pBuddyPortList.reset();
 }

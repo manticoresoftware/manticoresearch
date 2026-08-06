@@ -14,6 +14,9 @@
 
 #include "sphinxint.h"
 #include "searchdaemon.h"
+#include "searchdbuddy.h"
+#include "searchdlocal.h"
+#include "searchdlocalinternal.h"
 #include "searchdha.h"
 #include "searchdssl.h"
 #include "searchdreplication.h"
@@ -818,6 +821,177 @@ bool operator==( const ListenerDesc_t& lhs, const ListenerDesc_t& rhs )
 	&& lhs.m_sUnix == rhs.m_sUnix;
 }
 
+TEST ( SplitLocalSqlStatements, quoted_delimiters_and_comments )
+{
+	auto dQuoted = SplitLocalSqlStatements ( "SELECT 'a;b'; SELECT \"c;d\"; SELECT `e;f`; SELECT 'a\\';b'; SELECT 'x'';y';" );
+	ASSERT_EQ ( 5U, dQuoted.size() );
+	EXPECT_EQ ( "SELECT 'a;b'", dQuoted[0] );
+	EXPECT_EQ ( "SELECT \"c;d\"", dQuoted[1] );
+	EXPECT_EQ ( "SELECT `e;f`", dQuoted[2] );
+	EXPECT_EQ ( "SELECT 'a\\';b'", dQuoted[3] );
+	EXPECT_EQ ( "SELECT 'x'';y'", dQuoted[4] );
+
+	auto dComments = SplitLocalSqlStatements ( "SELECT 1 /* block ; */; -- line ;\nSELECT 2; # hash ;\nSELECT 5--2;" );
+	ASSERT_EQ ( 3U, dComments.size() );
+	EXPECT_EQ ( "SELECT 1", dComments[0] );
+	EXPECT_EQ ( "SELECT 2", dComments[1] );
+	EXPECT_EQ ( "SELECT 5--2", dComments[2] );
+
+	auto dDashComment = SplitLocalSqlStatements ( "SELECT 1-- comment ;\n;" );
+	ASSERT_EQ ( 1U, dDashComment.size() );
+	EXPECT_EQ ( "SELECT 1", dDashComment[0] );
+	auto dDashArithmetic = SplitLocalSqlStatements ( "SELECT 5 --2;" );
+	ASSERT_EQ ( 1U, dDashArithmetic.size() );
+	EXPECT_EQ ( "SELECT 5 --2", dDashArithmetic[0] );
+
+	auto dVertical = SplitLocalSqlStatements ( "SELECT 1\\G SELECT 2; SELECT '\\G'; SELECT 3 /* \\G */\\G" );
+	ASSERT_EQ ( 4U, dVertical.size() );
+	EXPECT_EQ ( "SELECT 1", dVertical[0] );
+	EXPECT_EQ ( "SELECT 2", dVertical[1] );
+	EXPECT_EQ ( "SELECT '\\G'", dVertical[2] );
+	EXPECT_EQ ( "SELECT 3", dVertical[3] );
+	auto dCommentedVertical = SplitLocalSqlStatements ( "SELECT 4 -- \\G\n\\G" );
+	ASSERT_EQ ( 1U, dCommentedVertical.size() );
+	EXPECT_EQ ( "SELECT 4", dCommentedVertical[0] );
+	auto dOtherQuotes = SplitLocalSqlStatements ( "SELECT \"\\G\"; SELECT `\\G`; SELECT 5 # \\G\n\\G" );
+	ASSERT_EQ ( 3U, dOtherQuotes.size() );
+	EXPECT_EQ ( "SELECT \"\\G\"", dOtherQuotes[0] );
+	EXPECT_EQ ( "SELECT `\\G`", dOtherQuotes[1] );
+	EXPECT_EQ ( "SELECT 5", dOtherQuotes[2] );
+	EXPECT_TRUE ( SplitLocalSqlStatements ( "\\G;" ).empty() );
+	EXPECT_TRUE ( SplitLocalSqlStatements ( nullptr ).empty() );
+}
+
+TEST ( LocalSqlResponse, case_sensitive_columns )
+{
+	const std::string sResponse = R"([{"columns":[{"Foo":{"type":"long"}},{"foo":{"type":"long"}}],"data":[{"Foo":1,"foo":2}],"error":"","warning":""}])";
+	CSphString sError;
+	testing::internal::CaptureStdout();
+	EXPECT_TRUE ( localmode::PrintSqlResponse ( sResponse, sError, false ) ) << sError.cstr();
+	EXPECT_EQ ( "Foo	foo\n1	2\n", testing::internal::GetCapturedStdout() );
+}
+
+TEST ( LocalSqlResponse, interactive_table_and_outcomes )
+{
+	CSphString sError;
+	const std::string sRows = R"([{"columns":[{"name":{"type":"string"}},{"id":{"type":"long long"}}],"data":[{"name":"one","id":1},{"name":"twenty","id":20}],"total":2,"error":"","warning":""}])";
+	testing::internal::CaptureStdout();
+	EXPECT_TRUE ( localmode::PrintSqlResponse ( sRows, sError, true, 1250 ) ) << sError.cstr();
+	EXPECT_EQ (
+		"┌────────┬────┐\n"
+		"│ name   │ id │\n"
+		"├────────┼────┤\n"
+		"│ one    │  1 │\n"
+		"│ twenty │ 20 │\n"
+		"└────────┴────┘\n"
+		"2 rows in set (1.250 ms)\n",
+		testing::internal::GetCapturedStdout() );
+
+	const std::string sEmpty = R"([{"columns":[{"id":{"type":"long long"}}],"data":[],"total":0,"error":"","warning":""}])";
+	testing::internal::CaptureStdout();
+	EXPECT_TRUE ( localmode::PrintSqlResponse ( sEmpty, sError, true, 500 ) ) << sError.cstr();
+	EXPECT_EQ ( "Empty set (0.500 ms)\n", testing::internal::GetCapturedStdout() );
+
+	const std::string sDdl = R"([{"total":0,"error":"","warning":""}])";
+	testing::internal::CaptureStdout();
+	EXPECT_TRUE ( localmode::PrintSqlResponse ( sDdl, sError, true, 2000 ) ) << sError.cstr();
+	EXPECT_EQ ( "Query OK (2.000 ms)\n", testing::internal::GetCapturedStdout() );
+
+	const std::string sAffected = R"([{"total":1,"error":"","warning":""}])";
+	testing::internal::CaptureStdout();
+	EXPECT_TRUE ( localmode::PrintSqlResponse ( sAffected, sError, true, 700 ) ) << sError.cstr();
+	EXPECT_EQ ( "Query OK, 1 row affected (0.700 ms)\n", testing::internal::GetCapturedStdout() );
+
+	testing::internal::CaptureStdout();
+	EXPECT_TRUE ( localmode::PrintSqlResponse ( sDdl, sError, true, 2500, true ) ) << sError.cstr();
+	EXPECT_EQ ( "Query OK, 0 rows affected (2.500 ms)\n", testing::internal::GetCapturedStdout() );
+}
+
+TEST ( LocalSqlResponse, vertical_rows )
+{
+	CSphString sError;
+	const std::string sRows = R"([{"columns":[{"name":{"type":"string"}},{"id":{"type":"long long"}}],"data":[{"name":"one","id":1},{"name":"two","id":2}],"total":2,"error":"","warning":""}])";
+	testing::internal::CaptureStdout();
+	EXPECT_TRUE ( localmode::PrintSqlResponse ( sRows, sError, false, -1, false, true ) ) << sError.cstr();
+	EXPECT_EQ (
+		"*************************** 1. row ***************************\n"
+		"name: one\n"
+		"  id: 1\n"
+		"*************************** 2. row ***************************\n"
+		"name: two\n"
+		"  id: 2\n",
+		testing::internal::GetCapturedStdout() );
+
+	testing::internal::CaptureStdout();
+	EXPECT_TRUE ( localmode::PrintSqlResponse ( sRows, sError, true, 750, false, true ) ) << sError.cstr();
+	std::string sInteractive = testing::internal::GetCapturedStdout();
+	EXPECT_NE ( std::string::npos, sInteractive.find ( "*************************** 1. row ***************************\n" ) );
+	const std::string sFooter = "2 rows in set (0.750 ms)\n";
+	ASSERT_GE ( sInteractive.size(), sFooter.size() );
+	EXPECT_EQ ( sFooter, sInteractive.substr ( sInteractive.size()-sFooter.size() ) );
+}
+
+TEST ( LocalSqlResponse, interactive_table_uses_terminal_width_for_utf8 )
+{
+	CSphString sError;
+	const std::string sResponse = R"([{"columns":[{"字":{"type":"string"}}],"data":[{"字":"猫猫"}],"total":1,"error":"","warning":""}])";
+	testing::internal::CaptureStdout();
+	EXPECT_TRUE ( localmode::PrintSqlResponse ( sResponse, sError, true, 100 ) ) << sError.cstr();
+	EXPECT_EQ (
+		"┌──────┐\n"
+		"│ 字   │\n"
+		"├──────┤\n"
+		"│ 猫猫 │\n"
+		"└──────┘\n"
+		"1 row in set (0.100 ms)\n",
+		testing::internal::GetCapturedStdout() );
+}
+
+#if !_WIN32
+TEST ( LocalSqlResponse, interactive_table_falls_back_to_ascii )
+{
+	const char * szPrevious = getenv ( "LC_ALL" );
+	std::string sPrevious = szPrevious ? szPrevious : "";
+	bool bHadPrevious = szPrevious!=nullptr;
+	setenv ( "LC_ALL", "C", 1 );
+	AT_SCOPE_EXIT ( [&] { if ( bHadPrevious ) setenv ( "LC_ALL", sPrevious.c_str(), 1 ); else unsetenv ( "LC_ALL" ); } );
+
+	CSphString sError;
+	const std::string sResponse = R"([{"columns":[{"name":{"type":"string"}}],"data":[{"name":"one"}],"total":1,"error":"","warning":""}])";
+	testing::internal::CaptureStdout();
+	EXPECT_TRUE ( localmode::PrintSqlResponse ( sResponse, sError, true, 100 ) ) << sError.cstr();
+	EXPECT_EQ (
+		"+------+\n"
+		"| name |\n"
+		"+------+\n"
+		"| one  |\n"
+		"+------+\n"
+		"1 row in set (0.100 ms)\n",
+		testing::internal::GetCapturedStdout() );
+}
+#endif
+
+TEST ( LocalSqlResponse, malformed_columns_fail_cleanly )
+{
+	const std::string sResponse = R"([{"columns":[["long"]],"data":[],"error":"","warning":""}])";
+	CSphString sError;
+	EXPECT_FALSE ( localmode::PrintSqlResponse ( sResponse, sError, false ) );
+	EXPECT_STREQ ( "invalid column metadata in local Manticore response", sError.cstr() );
+}
+
+TEST ( BuddyGetListenerUrl, unix_socket )
+{
+	ListenerDesc_t tAbsolute;
+	tAbsolute.m_sUnix = "/tmp/manticore_data/searchd.sock";
+	EXPECT_STREQ ( "unix:/tmp/manticore_data/searchd.sock", BuddyGetListenerUrl ( tAbsolute ).cstr() );
+
+	ListenerDesc_t tRelative;
+	tRelative.m_sUnix = "searchd.sock";
+	CSphString sExpected;
+	sExpected.SetSprintf ( "unix:%s/searchd.sock", sphGetCwd().cstr() );
+	EXPECT_STREQ ( sExpected.cstr(), BuddyGetListenerUrl ( tRelative ).cstr() );
+}
+
 
 // simple IP, no port, default port - success
 TEST ( ParseListener, simple_ip_no_port )
@@ -826,6 +1000,9 @@ TEST ( ParseListener, simple_ip_no_port )
 		{"8.8.8.8:1000",		{ Proto_e::SPHINX, "", "", 134744072, 1000, 0, false }},
 		{"1000",				{ Proto_e::SPHINX, "", "", 0, 1000, 0, false }},
 		{"/linux/host",			{ Proto_e::SPHINX, "/linux/host", "", 0, 9312, 0, false }},
+		{"unix:searchd.sock",		{ Proto_e::SPHINX, "searchd.sock", "", 0, 9312, 0, false }},
+		{"unix:searchd.sock:http", { Proto_e::HTTP, "searchd.sock", "", 0, 9312, 0, false }},
+		{"unix:mysql.sock:mysql41", { Proto_e::MYSQL41, "mysql.sock", "", 0, 9312, 0, false }},
 		{"8.8.8.8:1000-10000",	{ Proto_e::SPHINX, "", "", 134744072, 1000, 9001, false }},
 
 		{"8.8.8.8:1000:sphinx",		{ Proto_e::SPHINXSE, "", "", 134744072, 1000, 0, false }},
@@ -877,6 +1054,26 @@ TEST ( ParseListener, simple_ip_no_port )
 #endif
 		ListenerDesc_t tDesc = ParseListener( sCase.sSpec );
 		EXPECT_TRUE ( tDesc==sCase.sRes ) << sCase.sSpec;
+	}
+}
+
+TEST_F ( DeathLogger_c, ParseListener_wrong_unix )
+{
+	struct
+	{
+		const char * m_szSpec;
+		const char * m_szError;
+	} dCases[] =
+	{
+		{ "unix:", "UNIX socket path must not be empty" },
+		{ "unix:searchd.sock:http:extra", "invalid listen format (too many fields)" }
+	};
+
+	for ( const auto & tCase : dCases )
+	{
+		CSphString sFatal;
+		ParseListener ( tCase.m_szSpec, &sFatal );
+		EXPECT_STREQ ( tCase.m_szError, sFatal.cstr() );
 	}
 }
 

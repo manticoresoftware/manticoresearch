@@ -13,12 +13,9 @@
 #include "xqparser.h"
 #include "parse_helper.h"
 #include "sphinxplugin.h"
-#include "sphinxutils.h"
 #include "tokenizer/tokenizer.h"
 #include "dict/dict_base.h"
 #include "xqdebug.h"
-
-#include <uni_algo/conv.h>
 
 //////////////////////////////////////////////////////////////////////////
 // EXTENDED PARSER RELOADED
@@ -1057,11 +1054,6 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 {
 	// FIXME? might wanna verify somehow that pTokenizer has all the specials etc from sphSetupQueryTokenizer
 	assert ( pTokenizer->IsQueryTok() );
-	if ( sQuery && !una::is_valid_utf8 ( std::string_view ( sQuery ) ) )
-	{
-		tParsed.m_sParseError = "invalid UTF-8";
-		return false;
-	}
 
 	// most outcomes are errors
 	SafeDelete ( tParsed.m_pRoot );

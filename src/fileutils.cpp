@@ -1244,3 +1244,4 @@ bool SharedMemory_c::IsSupported () const
 	return true;
 #endif
 }
+

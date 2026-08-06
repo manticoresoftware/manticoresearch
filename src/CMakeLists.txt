@@ -196,7 +196,7 @@ target_link_libraries ( lmanticore PUBLIC uni-algo::uni-algo )
 add_library ( lsearchd OBJECT searchdha.cpp api_reply_stream.cpp http/http_parser.c searchdhttp.cpp
 		searchdtask.cpp taskping.cpp taskmalloctrim.cpp taskglobalidf.cpp tasksavestate.cpp
 		taskflushbinlog.cpp taskflushattrs.cpp taskflushmutable.cpp taskpreread.cpp
-		searchdaemon.cpp searchdfields.cpp searchdconfig.cpp
+		searchdaemon.cpp searchdfields.cpp searchdconfig.cpp searchdlocal.cpp searchdlocalclient.cpp searchdlocalhistory.cpp
 		searchdsql.cpp searchdddl.cpp networking_daemon.cpp
 		net_action_accept.cpp netreceive_api.cpp
 		netreceive_http.cpp netreceive_ql.cpp query_status.cpp
@@ -206,6 +206,19 @@ add_library ( lsearchd OBJECT searchdha.cpp api_reply_stream.cpp http/http_parse
 		searchd_shard.cpp
 		facetutils.cpp
 		auth/auth.cpp auth/auth_common.cpp auth/auth_proto_http.cpp auth/auth_proto_mysql.cpp auth/auth_proto_api.cpp auth/auth_perms.cpp auth/gcm_nonce.cpp auth/auth_log.cpp auth/auth_bootstrap.cpp)
+
+# Local interactive mode loads LibEdit at runtime so package builds do not need
+# its headers. Prefer the SONAME found by the build system, while the client
+# keeps fallbacks for installations without a development link.
+if (NOT WIN32 AND NOT APPLE AND HAVE_DLOPEN)
+	find_library ( LOCAL_LIBEDIT_PATH NAMES edit )
+	if (LOCAL_LIBEDIT_PATH)
+		GET_SONAME ( "${LOCAL_LIBEDIT_PATH}" LOCAL_LIBEDIT_SONAME )
+		if (LOCAL_LIBEDIT_SONAME)
+			target_compile_definitions ( lsearchd PRIVATE LOCAL_LIBEDIT_LIBRARY="${LOCAL_LIBEDIT_SONAME}" )
+		endif ()
+	endif ()
+endif ()
 		
 target_sources ( lsearchd PUBLIC ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
 add_library ( digest_sha1 digest_sha1.cpp )

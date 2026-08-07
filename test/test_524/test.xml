@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>UTF-8 identifier policy in configured tables and sources</name>
+<requires><non-rt/></requires>
 
 <config>
 indexer
@@ -17,7 +18,7 @@ source источник4770
 {
 	type = mysql
 	<sql_settings/>
-	sql_query_pre = SET NAMES utf8mb4
+	sql_query_pre = SET NAMES utf8
 	sql_query = SELECT id, название, описание, цена FROM source_4770
 	sql_attr_uint = цена
 }

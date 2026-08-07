@@ -1697,7 +1697,7 @@ bool CSphConfigParser::Parse ()
 		// handle S_TOP state
 		case States_e::S_TOP:
 		{
-			if ( isspace(*p) )				continue;
+			if ( isspace ( (unsigned char)*p ) )	continue;
 			if ( *p=='#' )					{ LOC_PUSH ( States_e::S_SKIP2NL ); continue; }
 			if ( !sphIsAlpha(*p) )			LOC_ERROR ( "invalid token" );
 			uToken = 0;
@@ -1738,7 +1738,7 @@ bool CSphConfigParser::Parse ()
 		// handle S_TYPE state
 		case States_e::S_TYPE:
 		{
-			if ( isspace(*p) )				continue;
+			if ( isspace ( (unsigned char)*p ) )	continue;
 			if ( *p=='#' )					{ LOC_PUSH ( States_e::S_SKIP2NL ); continue; }
 			if ( !sToken[0] )				{ LOC_ERROR ( "internal error (empty token in S_TYPE)" ); }
 
@@ -1772,7 +1772,7 @@ bool CSphConfigParser::Parse ()
 		// handle S_CHR state
 		case States_e::S_CHR:
 		{
-			if ( isspace(*p) )				continue;
+			if ( isspace ( (unsigned char)*p ) )	continue;
 			if ( *p=='#' )					{ LOC_PUSH ( States_e::S_SKIP2NL ); continue; }
 			if ( *p!=iCh )					LOC_ERROR ( "expected '%c', got '%c'", iCh, *p );
 											LOC_POP (); continue;
@@ -1781,7 +1781,7 @@ bool CSphConfigParser::Parse ()
 		// handle S_SEC state
 		case States_e::S_SEC:
 		{
-			if ( isspace(*p) )				continue;
+			if ( isspace ( (unsigned char)*p ) )	continue;
 			if ( *p=='#' )					{ LOC_PUSH ( States_e::S_SKIP2NL ); continue; }
 			if ( *p=='}' )					{ LOC_POP (); continue; }
 			if ( sphIsAlpha(*p) )			{ LOC_PUSH ( States_e::S_KEY ); LOC_PUSH ( States_e::S_TOK ); LOC_BACK(); iValue = 0; sValue[0] = '\0'; continue; }

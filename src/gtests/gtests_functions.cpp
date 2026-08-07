@@ -72,6 +72,23 @@ TEST ( IdentifierValidation, ValidNamesAndLimits )
 }
 
 
+TEST ( IdentifierValidation, ConfigParserAcceptsUtf8SectionNames )
+{
+	constexpr char sConfig[] =
+		"index таблица4770\n"
+		"{\n"
+		"  type = rt\n"
+		"  path = utf8_section\n"
+		"  rt_field = название\n"
+		"}\n";
+
+	CSphConfig hConfig;
+	ASSERT_TRUE ( ParseConfig ( &hConfig, "utf8-section.conf", FROMS ( sConfig ) ) ) << TlsMsg::szError();
+	ASSERT_TRUE ( hConfig.Exists ( "index" ) );
+	ASSERT_TRUE ( hConfig["index"].Exists ( "таблица4770" ) );
+}
+
+
 TEST ( IdentifierValidation, PortablePhysicalTableNames )
 {
 	EXPECT_STREQ ( sphGetTablePhysicalName ( "products_2026" ).cstr(), "products_2026" );

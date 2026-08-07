@@ -165,6 +165,18 @@ jobs:
             $p = Start-Process -FilePath $exe -ArgumentList '--check','--config',$cfg -WorkingDirectory $root -PassThru -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
             $exited = $p.WaitForExit(15000)
             if (-not $exited) {
+              $cdbCandidates = @(
+                (Get-Command cdb.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -ErrorAction SilentlyContinue),
+                "${env:ProgramFiles(x86)}\Windows Kits\10\Debuggers\x64\cdb.exe"
+              ) | Where-Object { $_ -and (Test-Path $_) }
+              if ($cdbCandidates.Count -gt 0) {
+                $cdb = $cdbCandidates[0]
+                Write-Host "CDB $cdb attaching to PID $($p.Id)"
+                & $cdb -p $p.Id -c '.symfix; .reload; ~* k; qd' 2>&1
+              } else {
+                Write-Host 'CDB NOT FOUND'
+                Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10" -Filter cdb.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+              }
               $p.Kill($true)
               $p.WaitForExit()
               Write-Host "CASE ${name}: HANG"

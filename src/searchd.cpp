@@ -15319,8 +15319,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 
 	g_iAutoOptimizeCutoffMultiplier = hSearchd.GetInt ( "auto_optimize", 1 );
 	g_bOptimizeCutoffExplicit = hSearchd.Exists ( "optimize_cutoff" );
-	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoff() );
-	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoffKNN = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoffKNN() );
+	const auto iOptimizeCutoff = hSearchd.OptInt("optimize_cutoff");
+	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = iOptimizeCutoff.value_or ( AutoOptimizeCutoff() );
+	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoffKNN = iOptimizeCutoff.value_or ( AutoOptimizeCutoffKNN() );
 
 	SetPseudoSharding ( hSearchd.GetInt ( "pseudo_sharding", 1 )!=0 );
 	SetOptionSI ( hSearchd, bTestMode );

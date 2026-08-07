@@ -22,7 +22,7 @@ Table names are limited to 207 UTF-8 bytes in both RT and Plain modes. For quali
 
 In RT mode, the exact logical table name is stored in Manticore's metadata while table files use a bounded portable ASCII basename. This lets byte-distinct names coexist on case- or normalization-insensitive filesystems and avoids Windows reserved filenames. The component mapping does not prevalidate the complete storage path; operating-system path limits still apply, and a later filesystem error reports the failing path and OS error.
 
-For names created through SQL, Manticore converts ASCII uppercase letters to lowercase. Non-ASCII characters retain their original spelling. Configuration section names in Plain mode are case-sensitive, including their ASCII letters. Unicode case folding and Unicode normalization are not applied in either mode, so use the exact Unicode spelling consistently.
+For table, field, and attribute names created through SQL, Manticore converts ASCII uppercase letters to lowercase. Non-ASCII characters retain their original spelling. Configuration section names in Plain mode are case-sensitive, including their ASCII letters. Unicode case folding and Unicode normalization are not applied in either mode, so use the exact Unicode spelling consistently.
 
 For example:
 * Valid unquoted names: `title`, `product_id`, `user_name_2`, `товары2026`, `商品表`, `📦метка`

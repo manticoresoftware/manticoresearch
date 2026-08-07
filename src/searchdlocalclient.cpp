@@ -19,6 +19,7 @@
 #include <vector>
 
 #if !_WIN32
+#include <netinet/in.h>
 #include <strings.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
@@ -27,8 +28,6 @@
 
 namespace localmode
 {
-constexpr const char * LOCAL_DATA_DIR = "manticore_data";
-constexpr const char * LOCAL_SOCKET = "searchd.sock";
 
 std::string TrimInput ( const std::string & sValue )
 {
@@ -204,30 +203,54 @@ bool SendAll ( int iSocket, const char * pData, size_t iLength, CSphString & sEr
 	return true;
 }
 
-int ConnectSocket ( CSphString & sError )
+void SetSocketTimeouts ( int iSocket )
 {
-	CSphString sSocketPath;
-	sSocketPath.SetSprintf ( "%s/%s", LOCAL_DATA_DIR, LOCAL_SOCKET );
+	timeval tTimeout { 30, 0 };
+	setsockopt ( iSocket, SOL_SOCKET, SO_RCVTIMEO, &tTimeout, sizeof(tTimeout) );
+	setsockopt ( iSocket, SOL_SOCKET, SO_SNDTIMEO, &tTimeout, sizeof(tTimeout) );
+}
+
+int ConnectSocket ( CSphString & sError, const SqlEndpoint_t & tEndpoint )
+{
+	if ( tEndpoint.m_sUnix.IsEmpty() )
+	{
+		int iSocket = socket ( AF_INET, SOCK_STREAM, 0 );
+		if ( iSocket<0 )
+			return ClientError ( sError, -1, "failed to create configured socket", strerror(errno) );
+
+		sockaddr_in tAddress {};
+		tAddress.sin_family = AF_INET;
+		tAddress.sin_port = htons ( tEndpoint.m_iPort );
+		tAddress.sin_addr.s_addr = tEndpoint.m_uIP;
+		if ( connect ( iSocket, (sockaddr*)&tAddress, sizeof(tAddress) )<0 )
+		{
+			sError.SetSprintf ( "cannot connect to Manticore instance at %s: %s", tEndpoint.m_sDescription.cstr(), strerror(errno) );
+			close ( iSocket );
+			return -1;
+		}
+
+		SetSocketTimeouts ( iSocket );
+		return iSocket;
+	}
+
 	sockaddr_un tAddress {};
-	if ( sSocketPath.Length()>= (int)sizeof(tAddress.sun_path) )
-		return ClientError ( sError, -1, "local socket path is too long", sSocketPath.cstr() );
+	if ( tEndpoint.m_sUnix.Length()>= (int)sizeof(tAddress.sun_path) )
+		return ClientError ( sError, -1, "Manticore socket path is too long", tEndpoint.m_sUnix.cstr() );
 
 	int iSocket = socket ( AF_UNIX, SOCK_STREAM, 0 );
 	if ( iSocket<0 )
-		return ClientError ( sError, -1, "failed to create local socket", strerror(errno) );
+		return ClientError ( sError, -1, "failed to create Manticore socket", strerror(errno) );
 
 	tAddress.sun_family = AF_UNIX;
-	strncpy ( tAddress.sun_path, sSocketPath.cstr(), sizeof(tAddress.sun_path)-1 );
+	strncpy ( tAddress.sun_path, tEndpoint.m_sUnix.cstr(), sizeof(tAddress.sun_path)-1 );
 	if ( connect ( iSocket, (sockaddr*)&tAddress, sizeof(tAddress) )<0 )
 	{
-		sError.SetSprintf ( "cannot connect to local Manticore instance at %s: %s", sSocketPath.cstr(), strerror(errno) );
+		sError.SetSprintf ( "cannot connect to Manticore instance at %s: %s", tEndpoint.m_sDescription.cstr(), strerror(errno) );
 		close ( iSocket );
 		return -1;
 	}
 
-	timeval tTimeout { 30, 0 };
-	setsockopt ( iSocket, SOL_SOCKET, SO_RCVTIMEO, &tTimeout, sizeof(tTimeout) );
-	setsockopt ( iSocket, SOL_SOCKET, SO_SNDTIMEO, &tTimeout, sizeof(tTimeout) );
+	SetSocketTimeouts ( iSocket );
 	return iSocket;
 }
 
@@ -250,14 +273,14 @@ bool ReadHttpResponse ( int iSocket, int & iStatus, std::string & sBody, CSphStr
 		if ( iRead<0 && errno==EINTR )
 			continue;
 		if ( iRead<=0 )
-			return ClientError ( sError, false, "failed to read local HTTP response", iRead==0 ? "connection closed" : strerror(errno) );
+			return ClientError ( sError, false, "failed to read Manticore HTTP response", iRead==0 ? "connection closed" : strerror(errno) );
 		sResponse.append ( sBuffer, (size_t)iRead );
 		if ( sResponse.size()>1024*1024 )
-			return ClientError ( sError, false, "local HTTP response header is too large" );
+			return ClientError ( sError, false, "Manticore HTTP response header is too large" );
 	}
 
 	if ( sscanf ( sResponse.c_str(), "HTTP/%*d.%*d %d", &iStatus )!=1 )
-		return ClientError ( sError, false, "invalid response from local Manticore instance" );
+		return ClientError ( sError, false, "invalid response from Manticore instance" );
 
 	size_t iContentLength = std::string::npos;
 	size_t iLine = sResponse.find("\r\n")+2;
@@ -271,7 +294,7 @@ bool ReadHttpResponse ( int iSocket, int & iStatus, std::string & sBody, CSphStr
 	}
 
 	if ( iContentLength==std::string::npos )
-		return ClientError ( sError, false, "local HTTP response has no Content-Length" );
+		return ClientError ( sError, false, "Manticore HTTP response has no Content-Length" );
 
 	const size_t iBodyBegin = iHeaderEnd+4;
 	while ( sResponse.size()-iBodyBegin<iContentLength )
@@ -280,7 +303,7 @@ bool ReadHttpResponse ( int iSocket, int & iStatus, std::string & sBody, CSphStr
 		if ( iRead<0 && errno==EINTR )
 			continue;
 		if ( iRead<=0 )
-			return ClientError ( sError, false, "incomplete local HTTP response", iRead==0 ? "connection closed" : strerror(errno) );
+			return ClientError ( sError, false, "incomplete Manticore HTTP response", iRead==0 ? "connection closed" : strerror(errno) );
 		sResponse.append ( sBuffer, (size_t)iRead );
 	}
 
@@ -529,7 +552,7 @@ bool PrintSqlResponse ( const std::string & sBody, CSphString & sError, bool bIn
 {
 	JsonObj_c tRoot ( Str_t { sBody.data(), (int)sBody.size() } );
 	if ( !tRoot )
-		return ClientError ( sError, false, "invalid JSON response from local Manticore instance" );
+		return ClientError ( sError, false, "invalid JSON response from Manticore instance" );
 
 	if ( !tRoot.IsArray() )
 	{
@@ -553,7 +576,7 @@ bool PrintSqlResponse ( const std::string & sBody, CSphString & sError, bool bIn
 			for ( JsonObj_c tColumn : tColumns )
 			{
 				if ( !tColumn.IsObj() )
-					return ClientError ( sError, false, "invalid column metadata in local Manticore response" );
+					return ClientError ( sError, false, "invalid column metadata in Manticore response" );
 				LocalColumn_t tInfo;
 				for ( JsonObj_c tMetadata : tColumn )
 				{
@@ -564,7 +587,7 @@ bool PrintSqlResponse ( const std::string & sBody, CSphString & sError, bool bIn
 					break;
 				}
 				if ( tInfo.m_sName.empty() )
-					return ClientError ( sError, false, "invalid column metadata in local Manticore response" );
+					return ClientError ( sError, false, "invalid column metadata in Manticore response" );
 				dColumnInfo.push_back ( std::move(tInfo) );
 			}
 
@@ -663,10 +686,10 @@ bool ParseHttpError ( const std::string & sBody, CSphString & sError )
 }
 
 #if !_WIN32
-bool FetchCompletionColumn ( const std::string & sStatement, std::vector<std::string> & dValues )
+bool FetchCompletionColumn ( const std::string & sStatement, std::vector<std::string> & dValues, const SqlEndpoint_t & tEndpoint )
 {
 	CSphString sError;
-	int iSocket = ConnectSocket ( sError );
+	int iSocket = ConnectSocket ( sError, tEndpoint );
 	if ( iSocket<0 )
 		return false;
 	AT_SCOPE_EXIT ( [&] { close ( iSocket ); } );
@@ -732,10 +755,10 @@ std::string QuoteCompletionIdentifier ( const std::string & sIdentifier )
 }
 #endif
 
-CompletionProvider_fn CreateCompletionProvider()
+CompletionProvider_fn CreateCompletionProvider ( SqlEndpoint_t tEndpoint )
 {
 	auto pCachedWords = std::make_shared<std::vector<std::string>>();
-	return [pCachedWords] ( const std::string & sLine )
+	return [pCachedWords,tEndpoint=std::move(tEndpoint)] ( const std::string & sLine )
 	{
 		static constexpr const char * dKeywords[] =
 		{
@@ -761,12 +784,12 @@ CompletionProvider_fn CreateCompletionProvider()
 		std::vector<std::string> dWords ( std::begin(dKeywords), std::end(dKeywords) );
 #if !_WIN32
 		std::vector<std::string> dTables;
-		if ( FetchCompletionColumn ( "SHOW TABLES", dTables ) )
+		if ( FetchCompletionColumn ( "SHOW TABLES", dTables, tEndpoint ) )
 		{
 			dWords.insert ( dWords.end(), dTables.begin(), dTables.end() );
 			constexpr size_t MAX_TABLES_WITH_COLUMN_COMPLETION = 100;
 			for ( size_t i=0; i<Min ( dTables.size(), MAX_TABLES_WITH_COLUMN_COMPLETION ); ++i )
-				FetchCompletionColumn ( "DESCRIBE " + QuoteCompletionIdentifier(dTables[i]), dWords );
+				FetchCompletionColumn ( "DESCRIBE " + QuoteCompletionIdentifier(dTables[i]), dWords, tEndpoint );
 		}
 #endif
 		*pCachedWords = std::move(dWords);
@@ -775,7 +798,7 @@ CompletionProvider_fn CreateCompletionProvider()
 }
 
 #if !_WIN32
-QueryResult_e ExecuteSqlBatch ( int & iSocket, const char * szQuery, bool bPrintStatements, bool bAligned )
+QueryResult_e ExecuteSqlBatch ( int & iSocket, const char * szQuery, bool bPrintStatements, bool bAligned, const SqlEndpoint_t & tEndpoint )
 {
 	auto dStatements = SplitSqlBatch ( szQuery );
 	if ( dStatements.empty() )
@@ -794,7 +817,7 @@ QueryResult_e ExecuteSqlBatch ( int & iSocket, const char * szQuery, bool bPrint
 		if ( IsSocketClosed ( iSocket ) )
 		{
 			close ( iSocket );
-			iSocket = ConnectSocket ( sQueryError );
+			iSocket = ConnectSocket ( sQueryError, tEndpoint );
 			if ( iSocket<0 )
 				return ConnectionError();
 		}

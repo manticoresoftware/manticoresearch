@@ -976,7 +976,7 @@ TEST ( LocalSqlResponse, malformed_columns_fail_cleanly )
 	const std::string sResponse = R"([{"columns":[["long"]],"data":[],"error":"","warning":""}])";
 	CSphString sError;
 	EXPECT_FALSE ( localmode::PrintSqlResponse ( sResponse, sError, false ) );
-	EXPECT_STREQ ( "invalid column metadata in local Manticore response", sError.cstr() );
+	EXPECT_STREQ ( "invalid column metadata in Manticore response", sError.cstr() );
 }
 
 TEST ( BuddyGetListenerUrl, unix_socket )

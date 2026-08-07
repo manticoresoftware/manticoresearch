@@ -187,6 +187,7 @@ class LocalLineEditor_c final : public LineEditor_i
 	std::vector<std::string> m_dCompletionMatches;
 	size_t m_iCompletionMatch = 0;
 	bool m_bPersistenceEnabled = true;
+	bool m_bPersistHistory = true;
 	std::vector<std::string> m_dHistory;
 	size_t m_iUnpersistedHistory = 0;
 	CSphString m_sWarning;
@@ -537,17 +538,22 @@ class LocalLineEditor_c final : public LineEditor_i
 	}
 
 public:
-	explicit LocalLineEditor_c ( CompletionProvider_fn fnCompletionProvider )
+	explicit LocalLineEditor_c ( CompletionProvider_fn fnCompletionProvider, bool bPersistHistory )
 		: m_fnCompletionProvider ( std::move(fnCompletionProvider) )
+		, m_bPersistenceEnabled ( bPersistHistory )
+		, m_bPersistHistory ( bPersistHistory )
 	{
 		if ( !LoadLibrary() )
 			return;
 		m_fnStifleHistory ( HISTORY_LIMIT );
-		HistoryLock_c tLock;
-		if ( !tLock.Lock ( m_sWarning ) )
-			return;
-		if ( !LoadHistory ( m_dHistory, m_sWarning ) )
-			m_bPersistenceEnabled = false;
+		if ( m_bPersistHistory )
+		{
+			HistoryLock_c tLock;
+			if ( !tLock.Lock ( m_sWarning ) )
+				return;
+			if ( !LoadHistory ( m_dHistory, m_sWarning ) )
+				m_bPersistenceEnabled = false;
+		}
 		ReplayHistory();
 		InstallCompletion();
 	}
@@ -615,6 +621,13 @@ public:
 
 	bool AddHistory ( const std::string & sLine, CSphString & sError ) override
 	{
+		if ( !m_bPersistHistory )
+		{
+			m_dHistory.push_back ( sLine );
+			TrimHistory ( m_dHistory );
+			ReplayHistory();
+			return true;
+		}
 		if ( !m_bPersistenceEnabled )
 		{
 			RememberUnpersistedHistory ( sLine );
@@ -660,11 +673,11 @@ public:
 };
 #endif
 
-std::unique_ptr<LineEditor_i> CreateLineEditor ( const CSphString & sDataDir, CSphString & sWarning, CompletionProvider_fn fnCompletionProvider )
+std::unique_ptr<LineEditor_i> CreateLineEditor ( const CSphString & sDataDir, CSphString & sWarning, CompletionProvider_fn fnCompletionProvider, bool bPersistHistory )
 {
 #if !_WIN32
 	g_sLocalDataDir = sDataDir;
-	auto pEditor = std::make_unique<LocalLineEditor_c> ( std::move(fnCompletionProvider) );
+	auto pEditor = std::make_unique<LocalLineEditor_c> ( std::move(fnCompletionProvider), bPersistHistory );
 	sWarning = pEditor->GetWarning();
 	if ( !pEditor->IsActive() )
 		return nullptr;

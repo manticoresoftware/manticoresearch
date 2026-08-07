@@ -8,14 +8,14 @@
 
 您可以使用 SQL 命令如 `CREATE TABLE`、`ALTER TABLE` 和 `DROP TABLE` 来创建和修改表结构，并删除它。此模式特别适用于 **实时** 和 **过滤查询** 表。
 
-创建表时，表名会被转换为小写。
+创建时，表名中的 ASCII 字母会转换为小写。非 ASCII 的 UTF-8 字符会保留原始拼写，不会进行 Unicode 大小写折叠。参见 [表、字段和属性名称语法](Creating_a_table/Data_types.md#Table-and-field-name-syntax)。
 
 ## 在配置文件中定义表结构（纯文本模式）
 在这种模式下，您可以在配置文件中指定表结构。Manticore 在启动时读取此结构并在表不存在时创建它。此模式特别适用于 **纯文本** 表，这些表使用外部存储的数据。
 
 要删除一个表，请从配置文件中移除它或移除路径设置并发送 SIGHUP 信号给服务器或重启它。
 
-此模式下表名是区分大小写的。
+在此模式下，配置节名称区分大小写。表、字段和属性名称，以及命名的 source 节，都可以包含非 ASCII 的 UTF-8 字符。不会应用 Unicode 大小写折叠和 Unicode 规范化，因此请始终使用完全一致的 Unicode 拼写。参见 [表、字段和属性名称语法](Creating_a_table/Data_types.md#Table-and-field-name-syntax)。
 
 此模式支持所有类型的表。
 

@@ -4,19 +4,35 @@
 
 Manticore 的数据类型可以分为两类：全文字段和属性。
 
-### 字段名语法
+### 表和字段名语法
 
-Manticore 中的字段名必须遵循以下规则：
+表名、字段名和属性名可以包含 ASCII 字母（`a-z`、`A-Z`）、数字（`0-9`）、下划线（`_`）以及安全的非 ASCII UTF-8 字符。未加引号的 SQL 名称必须以 ASCII 字母、下划线或非 ASCII UTF-8 字符开头。首字符之后可以使用数字。
 
-* 可以包含字母（a-z, A-Z）、数字（0-9）和连字符（-）
-* 必须以字母开头
-* 数字只能出现在字母之后
-* 下划线（`_`）是唯一允许的特殊字符
-* 字段名不区分大小写
+相同的基础语法适用于各模式下支持该类型的所有表类型：`[RT mode](../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29)` 中的实时表、percolate 表和分布式表，以及 `[Plain mode](../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29)` 中的实时表、percolate 表、普通表、分布式表和模板表。它也适用于定义字段或属性的所有 schema，包括 percolate 表预期的文档 schema，以及从 SQL、CSV/TSV 或 XML 源推断出的 schema。
+
+其他用户定义的 SQL 对象名，包括函数名、插件名和复制集群名，也遵循相同的安全 UTF-8 规则。
+
+对于以数字开头且至少包含一个字母、下划线或非 ASCII UTF-8 字符的 SQL 名称，以及与保留 SQL 关键字完全匹配的名称，请用反引号包起来。例如，使用 `` `2026_архив` `` 或 `` `select` ``。配置文件名不加引号，并且可以以数字开头。反引号不会让任意 ASCII 标点变成合法字符；`-`、`$`、空格以及嵌入的反引号等字符都不支持用于用户定义名称。
+
+为了兼容常见的日志采集 schema，`CREATE TABLE` 和 `ALTER TABLE` 也接受精确的列名 `@timestamp` 和 `@version`，加不加反引号都可以。其他以 `@` 开头的用户定义名称仍然无效。这个例外并不意味着 `@` 会成为 SQL 或配置文件 schema 中的通用标识符字符。
+
+标识符必须是有效的 UTF-8。控制字符、Unicode 空白字符、双向控制字符以及默认忽略的不可见字符都会被拒绝。这包括不间断空格、零宽空格和零宽连接符。
+
+在 RT 模式和 Plain 模式下，表名都限制为 207 个 UTF-8 字节。对于带限定符的 `system.` 表名，前缀也计入这个限制。这个限制在加载现有表定义时同样适用，因此升级前请先重命名任何更长的表。
+
+在 RT 模式下，精确的逻辑表名会存储在 Manticore 的元数据中，而表文件则使用长度受限、可移植的 ASCII 基名。这样可以让字节不同的名称在大小写不敏感或归一化不敏感的文件系统上共存，并避免 Windows 保留文件名。组件映射不会预先校验完整的存储路径；操作系统的路径长度限制仍然适用，后续的文件系统错误会报告失败路径和操作系统错误。
+
+通过 SQL 创建的表名、字段名和属性名会把 ASCII 大写字母转换为小写。非 ASCII 字符会保留原样。Plain 模式中的配置节名区分大小写，包括其中的 ASCII 字母。两种模式都不会应用 Unicode 大小写折叠或 Unicode 归一化，因此请始终使用完全一致的 Unicode 拼写。
 
 例如：
-* 有效的字段名：`title`、`product_id`、`user_name_2`
-* 无效的字段名：`2title`、`-price`、`user@name`
+* 有效的未加引号名称：`title`、`product_id`、`user_name_2`、`товары2026`、`商品表`、`📦метка`
+* 有效的带引号名称：`` `2026_архив` ``、`` `select` ``
+* 有效的 SQL 兼容列名：`@timestamp`、`@version`
+* 无效名称：未加反引号的 `2title`、`-price`、`user@name`、`user-name`、`@user_field`，以及包含零宽空格的 `bad​name`
+
+在 Plain 模式下，表名就是配置文件中的节名，并且在配置里不写反引号。不过在 SQL 中引用这些表时仍然可以使用反引号。例如，配置节可以命名为 `таблица2026`，而名为 `2026_архив` 的节在 SQL 中要写成 `` `2026_архив` ``。
+
+按字段限定的全文检索操作符 `[Field-scoped full-text query operators](../Searching/Full_text_matching/Operators.md)` 也支持非 ASCII UTF-8 字段名。例如，`MATCH('@название клавиатура')` 会将搜索范围限制在 `название` 字段。这同样适用于存储为 percolate 规则的按字段限定查询。
 
 ### 全文字段
 

@@ -20,6 +20,7 @@
 #include "searchdssl.h"
 #include "searchdddl.h"
 #include "query_status.h"
+#include "searchdlocal.h"
 #include "debug_cmds.h"
 #include "stackmock.h"
 #include "binlog.h"
@@ -131,6 +132,7 @@ static constexpr bool	AUTOOPTIMIZE_NEEDS_VIP = false; // whether non-VIP can iss
 static constexpr bool	THREAD_EX_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 
 static CSphVector<Listener_t>	g_dListeners;
+static StrVec_t			g_dUnixListenerPaths;
 
 CSphString				g_sPidFile;
 static bool				g_bPidIsMine = false;		// if PID is not mine, don't unlink it on fail
@@ -491,6 +493,10 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	for ( auto& dListener : g_dListeners )
 		if ( dListener.m_iSock>=0 )
 			sphSockClose ( dListener.m_iSock );
+#if !_WIN32
+	for ( const auto & sSocketPath : g_dUnixListenerPaths )
+		::unlink ( sSocketPath.cstr() );
+#endif
 
 	SHUTINFO << "Close persistent sockets ...";
 	ClosePersistentSockets();
@@ -642,6 +648,11 @@ static int sphCreateUnixSocket ( const char * sPath ) REQUIRES ( MainThread )
 		sphFatal ( "bind() on UNIX socket failed: %s", sphSockError() );
 	umask ( iMask );
 
+	// Relative UNIX listeners are intended for private data directories.
+	// Keep absolute listener permissions backward compatible.
+	if ( !IsPathAbsolute(sPath) && chmod ( sPath, S_IRUSR | S_IWUSR )!=0 )
+		sphFatal ( "chmod() on UNIX socket file failed: %s", sphSockError() );
+
 	return iSock;
 }
 #endif // !_WIN32
@@ -734,6 +745,13 @@ bool AddGlobalListener ( const ListenerDesc_t& tDesc ) REQUIRES ( MainThread )
 	{
 		tListener.m_iSock = sphCreateUnixSocket ( tDesc.m_sUnix.cstr () );
 		tListener.m_bTcp = false;
+		if ( !IsPathAbsolute ( tDesc.m_sUnix ) )
+		{
+			CSphString sCwd = sphGetCwd();
+			CSphString sSocketPath;
+			sSocketPath.SetSprintf ( "%s/%s", sCwd.cstr(), tDesc.m_sUnix.cstr() );
+			g_dUnixListenerPaths.Add ( sphNormalizePath ( sSocketPath ) );
+		}
 	} else
 #endif
 		tListener.m_iSock = sphCreateInetSocket ( tDesc );
@@ -14629,8 +14647,11 @@ void ShowHelp ()
 		"-h, --help\t\tdisplay this help message\n"
 		"-v, --version\t\tdisplay version information\n"
 		"-q, --quiet\t\tonly print errors on startup\n"
-		"-c, --config <file>\tread configuration from specified file\n"
-		"\t\t\t(default is manticore.conf)\n"
+		"-c, --config <file>	read configuration from specified file\n"
+		"			(default is manticore.conf)\n"
+		"-l, --local		run in zero-configuration local mode\n"
+		"-e, --execute [query]	execute SQL against a local or configured instance\n"
+		"			(-c selects the config; interactive when query is omitted; unavailable on Windows)\n"
 		"--check\t\t\tcheck config and exit\n"
 		"--stop\t\t\tsend SIGTERM to currently running searchd\n"
 		"--stopwait\t\tsend SIGTERM and wait until actual exit\n"
@@ -15833,6 +15854,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	bool			bNewClusterForce = false;
 	bool			bForcePseudoSharding = false;
 	const char*		szCmdConfigFile = nullptr;
+	const char*		szExecute = nullptr;
+	bool			bExecute = false;
+	bool			bLocalMode = false;
 	bool			bMeasureStack = false;
 	bool			bQuietRequested = false;
 	bool			bOptAuth = false;
@@ -15862,6 +15886,17 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT ( "-?", "--?" )		{ ShowHelp(); return 0; }
 		OPT ( "-v", "--version" )	{ InitBanner(); fprintf ( stdout, "%s", g_sBanner.cstr() ); return 0; }
 		OPT ( "-q", "--quiet" )		bQuietRequested = true;
+		OPT ( "-l", "--local" )		bLocalMode = true;
+		OPT ( "-e", "--execute" )	{
+			bExecute = true;
+			if ( i+1<argc )
+			{
+				const char * szNext = argv[i+1];
+				bool bSqlComment = szNext[0]=='-' && szNext[1]=='-' && isspace ( (unsigned char)szNext[2] );
+				if ( szNext[0]!='-' || bSqlComment )
+					szExecute = argv[++i];
+			}
+		}
 		OPT1 ( "--console" )		{ g_bOptNoLock = true; g_bOptNoDetach = true; bTestMode = true; }
 		OPT1 ( "--stop" )			bOptStop = true;
 		OPT1 ( "--stopwait" )		{ bOptStop = true; bOptStopWait = true; }
@@ -15911,7 +15946,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		else if ( (i+1)>=argc )		break;
 		OPT ( "-c", "--config" )	szCmdConfigFile = argv[++i];
 		OPT ( "-p", "--port" )		{ iOptPort = atoi ( argv[++i] ); }
-		OPT ( "-l", "--listen" )	{ sOptListen = argv[++i]; }
+		OPT1 ( "--listen" )			{ sOptListen = argv[++i]; }
 		OPT ( "-i", "--index" )		dOptIndexes.Add ( argv[++i] ); // FIXME!!! remove depricated cli option
 		OPT ( "-t", "--table" )		dOptIndexes.Add ( argv[++i] );
 #if _WIN32
@@ -15924,6 +15959,21 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	}
 	if ( i!=argc )
 		sphFatal ( "malformed or unknown option near '%s'; use '-h' or '--help' to see available options.", argv[i] );
+
+	if ( bLocalMode && szCmdConfigFile )
+		sphFatal ( "--local cannot be combined with --config" );
+	if ( bLocalMode && ( iOptPort || sOptListen ) )
+		sphFatal ( "--local cannot be combined with --port or --listen" );
+	if ( bLocalMode && bOptStatus )
+		sphFatal ( "--status is not supported in local mode" );
+
+	if ( bExecute )
+	{
+		if ( bOptStop || bOptStatus || bConfigTest )
+			sphFatal ( "--execute cannot be combined with lifecycle or configuration-check options" );
+		sphInitCJson();
+		return ExecuteLocalSql ( szExecute, szCmdConfigFile );
+	}
 
 	InitBanner();
 
@@ -15963,7 +16013,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	sKNNError = {};
 
 	SetupLemmatizerBase();
-	g_sConfigFile = sphGetConfigFile ( szCmdConfigFile );
+	g_sConfigFile = bLocalMode ? "<local>" : sphGetConfigFile ( szCmdConfigFile );
 #if _WIN32
 	// init WSA on Windows
 	// we need to do it this early because otherwise gethostbyname() from config parser could fail
@@ -16013,15 +16063,22 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	// parse config file
 	/////////////////////
 
-	auto dConfig = FetchAndCheckIfChanged ( g_sConfigFile ).second;
-	sphInfo( "using config file '%s' (%d chars)...", g_sConfigFile.cstr(), dConfig.GetLength());
-	// do parse
-	// don't aqcuire wlock, since we're in single main thread here.
+	// don't acquire wlock, since we're in single main thread here.
 	FakeScopedWLock_T<> wFakeLock { g_tRotateConfigMutex };
-	if ( !ParseConfig ( &g_hCfg, g_sConfigFile, dConfig ) )
-		sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
-
-	dConfig.Reset(); // make valgrind happy (that is not a leak, but produce 'still reachable' message)
+	if ( bLocalMode )
+	{
+		CSphString sLocalDataDir;
+		if ( !BuildLocalSearchdConfig ( g_hCfg, sLocalDataDir, sError ) )
+			sphFatal ( "%s", sError.cstr() );
+		sphInfo ( "using local data directory '%s'", sLocalDataDir.cstr() );
+	}
+	else
+	{
+		auto dConfig = FetchAndCheckIfChanged ( g_sConfigFile ).second;
+		sphInfo( "using config file '%s' (%d chars)...", g_sConfigFile.cstr(), dConfig.GetLength());
+		if ( !ParseConfig ( &g_hCfg, g_sConfigFile, dConfig ) )
+			sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
+	}
 
 	const CSphConfig& hConf = g_hCfg;
 
@@ -16603,7 +16660,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	// --test should not guess buddy path
 	// otherwise daemon generates warning message that counts as bad daemon restart by ubertest
 	if ( bWithBuddy.value_or (!bTestMode) )
-		BuddyStart ( g_sBuddyPath, PluginGetDir(), dListenerDescs, g_bTelemetry, MaxChildrenThreads(), g_sConfigFile, RealPath ( GetDataDirInt() ) );
+		BuddyStart ( g_sBuddyPath, PluginGetDir(), dListenerDescs, g_bTelemetry, MaxChildrenThreads(), g_sConfigFile, RealPath ( GetDataDirInt() ), bLocalMode );
 
 	g_bJsonConfigLoadedOk = true;
 

@@ -1,0 +1,819 @@
+––– comment –––
+searchd -l uses a private, persistent local data directory and HTTP Unix socket; bare searchd keeps configured mode.
+––– input –––
+cat > /tmp/test-zero-config-local-mode.sh <<'EOF'
+#!/usr/bin/env bash
+set -u
+
+SEARCHD=$(command -v "${SEARCHD_BIN:-searchd}") || exit 1
+case "$SEARCHD" in
+  /*) ;;
+  *) SEARCHD=$(cd "$(dirname "$SEARCHD")" && pwd)/$(basename "$SEARCHD") ;;
+esac
+root=$(mktemp -d)
+local_dir="$root/local-$(printf '%0120d' 0)"
+configured_dir="$root/configured"
+configured_conf="$root/configured.conf"
+configured_http_conf="$root/configured-http.conf"
+configured_binary_conf="$root/configured-binary.conf"
+configured_absolute_unix_conf="$root/configured-absolute-unix.conf"
+configured_port=$((19000 + RANDOM % 20000))
+configured_binary_port=$((configured_port + 1))
+configured_mysql_port=$((configured_port + 2))
+local_pid=
+configured_pid=
+default_conf_backup=
+
+fail() { printf 'not ok - %s\n' "$*" >&2; exit 1; }
+pass() { printf 'ok - %s\n' "$*"; }
+alive() {
+  local pid=$1 state
+  kill -0 "$pid" 2>/dev/null || return 1
+  # Linux kill -0 also succeeds for an exited process that PID 1 has not reaped.
+  if [ -r "/proc/$pid/stat" ]; then
+    state=$(awk '{ print $3 }' "/proc/$pid/stat") || return 1
+    [ "$state" != Z ] || return 1
+  fi
+  kill -0 "$pid" 2>/dev/null
+}
+mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
+has_tcp_listener() {
+  local pid=$1 fd target inode
+  if [ -d "/proc/$pid/fd" ]; then
+    for fd in "/proc/$pid/fd"/*; do
+      target=$(readlink "$fd" 2>/dev/null) || continue
+      case "$target" in
+        'socket:['*) inode=${target#'socket:['}; inode=${inode%']'} ;;
+        *) continue ;;
+      esac
+      awk -v inode="$inode" '$4=="0A" && $10==inode { found=1 } END { exit !found }' /proc/net/tcp* 2>/dev/null && return 0
+    done
+    return 1
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -Pan -p "$pid" -iTCP -sTCP:LISTEN 2>/dev/null | grep -q LISTEN
+    return $?
+  fi
+  return 2
+}
+wait_dead() {
+  local pid=$1
+  local i
+  for i in {1..100}; do
+    alive "$pid" || return 0
+    sleep 0.1
+  done
+  return 1
+}
+cleanup() {
+  if [ -s "$local_dir/manticore_data/searchd.pid" ]; then
+    (cd "$local_dir" && "$SEARCHD" -l --stopwait >/dev/null 2>&1) || true
+  fi
+  if [ -e "$configured_conf" ]; then
+    "$SEARCHD" --config "$configured_conf" --stopwait >/dev/null 2>&1 || true
+  fi
+  if [ -n "$default_conf_backup" ]; then
+    cp "$default_conf_backup" /etc/manticoresearch/manticore.conf
+  fi
+  rm -rf "$root"
+}
+trap cleanup EXIT
+
+mkdir -p "$configured_dir/data" "$local_dir"
+cat > "$configured_conf" <<CONF
+searchd {
+    listen = 127.0.0.1:${configured_mysql_port}:mysql
+    listen = 127.0.0.1:${configured_binary_port}
+    listen = 127.0.0.1:${configured_port}:http
+    listen = $configured_dir/configured.sock:http
+    log = $configured_dir/searchd.log
+    query_log = $configured_dir/query.log
+    pid_file = $configured_dir/searchd.pid
+    data_dir = $configured_dir/data
+    buddy_path =
+    watchdog = 0
+}
+CONF
+cat > "$configured_http_conf" <<CONF
+searchd {
+    listen = 127.0.0.1:${configured_port}:http
+}
+CONF
+cat > "$configured_binary_conf" <<CONF
+searchd {
+    listen = unix:configured.sock:http
+    listen = 127.0.0.1:$((configured_binary_port + 10))-$((configured_binary_port + 11)):http
+    listen = 127.0.0.1:${configured_binary_port}
+}
+CONF
+cat > "$configured_absolute_unix_conf" <<CONF
+searchd {
+    listen = $configured_dir/configured.sock:http
+}
+CONF
+
+(cd "$configured_dir" && "$SEARCHD" --config "$configured_conf" >/dev/null 2>&1) || fail '--config daemon did not start'
+for i in {1..100}; do
+  if [ -s "$configured_dir/searchd.pid" ]; then
+    configured_pid=$(cat "$configured_dir/searchd.pid")
+    alive "$configured_pid" && break
+  fi
+  sleep 0.1
+done
+[ -n "$configured_pid" ] && alive "$configured_pid" || fail '--config daemon is not running'
+configured_response=
+for i in {1..100}; do
+  configured_response=$(curl -fsS --max-time 1 -X POST "http://127.0.0.1:${configured_port}/sql?mode=raw" -d 'SELECT 909 AS configured_mode' 2>/dev/null) && break
+  sleep 0.1
+done
+printf '%s' "$configured_response" | grep -q '"configured_mode":909' || fail '--config did not preserve the configured HTTP listener'
+[ ! -e "$configured_dir/manticore_data" ] || fail '--config unexpectedly entered local mode'
+pass '--config preserves configured mode'
+
+configured_route_create=$(curl -fsS --max-time 2 -X POST "http://127.0.0.1:${configured_port}/sql?mode=raw" -d 'CREATE TABLE configured_route_probe(value integer)') \
+  || fail 'configured route table setup failed'
+printf '%s' "$configured_route_create" | grep -q '"error":""' || fail 'configured route table setup returned an error'
+configured_route_insert=$(curl -fsS --max-time 2 -X POST "http://127.0.0.1:${configured_port}/sql?mode=raw" -d 'INSERT INTO configured_route_probe(id,value) VALUES(1,818181)') \
+  || fail 'configured route row setup failed'
+printf '%s' "$configured_route_insert" | grep -q '"error":""' || fail 'configured route row setup returned an error'
+
+configured_execute=$(cd "$local_dir" && "$SEARCHD" --config "$configured_binary_conf" -e 'SELECT 910 AS configured_execute') \
+  || fail 'searchd --config -e did not connect to the configured binary listener'
+printf '%s' "$configured_execute" | grep -q $'configured_execute\n910' || fail 'searchd --config -e omitted its configured result row'
+[ ! -e "$local_dir/manticore_data" ] || fail 'searchd --config -e unexpectedly created manticore_data'
+configured_http_execute=$(cd "$local_dir" && "$SEARCHD" -c "$configured_http_conf" -e 'SELECT 911 AS configured_http_execute') \
+  || fail 'searchd -c -e did not connect to the configured HTTP listener'
+printf '%s' "$configured_http_execute" | grep -q $'configured_http_execute\n911' || fail 'searchd -c -e omitted its configured HTTP result row'
+pass 'searchd -c/--config -e uses configured binary and HTTP listeners'
+
+# The CLT container has a packaged default config but no default daemon. Point
+# that config at the test-owned daemon so normal discovery is deterministic.
+if [ -e /.dockerenv ]; then
+  default_conf_backup="$root/default-manticore.conf"
+  cp /etc/manticoresearch/manticore.conf "$default_conf_backup" || fail 'default config backup failed'
+  cp "$configured_conf" /etc/manticoresearch/manticore.conf || fail 'default config fixture setup failed'
+fi
+global_fallback=$(cd "$local_dir" && "$SEARCHD" -e 'SELECT 606 AS global_fallback') || fail 'searchd -e did not use the normally discovered config'
+printf '%s' "$global_fallback" | grep -q $'global_fallback\n606' || fail 'default-config query omitted its result row'
+[ ! -e "$local_dir/manticore_data" ] || fail 'searchd -e unexpectedly created manticore_data'
+pass 'searchd -e uses the normally discovered config when no local instance exists'
+
+printf 'marker\n' > "$local_dir/manticore_data"
+if malformed_file=$(cd "$local_dir" && "$SEARCHD" -e 'SELECT 607 AS unsafe_global_fallback' 2>&1); then
+  fail 'searchd -e routed a non-directory local marker to the global daemon'
+fi
+printf '%s' "$malformed_file" | grep -q 'local data path .* is not a directory' || fail 'searchd -e did not explain the non-directory local marker'
+[ "$(cat "$local_dir/manticore_data")" = marker ] || fail 'searchd -e modified the non-directory local marker'
+rm "$local_dir/manticore_data"
+
+ln -s missing-local-data "$local_dir/manticore_data"
+if malformed_symlink=$(cd "$local_dir" && "$SEARCHD" -e 'SELECT 608 AS unsafe_global_fallback' 2>&1); then
+  fail 'searchd -e routed a dangling local marker to the global daemon'
+fi
+printf '%s' "$malformed_symlink" | grep -q 'local data path .* is not a directory' || fail 'searchd -e did not explain the dangling local marker'
+rm "$local_dir/manticore_data"
+
+mkdir "$local_dir/manticore_data"
+if (cd "$local_dir" && "$SEARCHD" -e 'SELECT 609 AS unsafe_global_fallback' >/dev/null 2>&1); then
+  fail 'searchd -e routed an empty local data directory to the global daemon'
+fi
+rmdir "$local_dir/manticore_data"
+pass 'searchd -e never falls back past an existing local data marker'
+
+(cd "$local_dir" && "$SEARCHD" --check >/dev/null 2>&1) || fail 'bare searchd did not use a valid default configuration'
+[ ! -e "$local_dir/manticore_data" ] || fail 'bare searchd unexpectedly entered local mode'
+pass 'bare searchd preserves default configuration lookup'
+
+(cd "$local_dir" && "$SEARCHD" -l >/dev/null 2>&1) || fail 'searchd -l did not start'
+local_socket="$local_dir/manticore_data/searchd.sock"
+socket_response=
+for i in {1..100}; do
+  socket_response=$(cd "$local_dir" && curl -fsS --max-time 1 --unix-socket manticore_data/searchd.sock -X POST 'http://localhost/sql?mode=raw' -d 'SELECT 707 AS socket_http' 2>/dev/null) && break
+  sleep 0.1
+done
+[ -d "$local_dir/manticore_data" ] || fail 'searchd -l did not create manticore_data'
+[ -S "$local_socket" ] || fail 'searchd -l did not create manticore_data/searchd.sock'
+printf '%s' "$socket_response" | grep -q '"socket_http":707' || fail 'local Unix socket is not an HTTP listener'
+[ "$(mode "$local_dir/manticore_data")" = 700 ] || fail 'manticore_data permissions are not 0700'
+[ "$(mode "$local_socket")" = 600 ] || fail 'local Unix socket permissions are not 0600'
+[ -s "$local_dir/manticore_data/searchd.pid" ] || fail 'searchd -l did not create its PID file under manticore_data'
+[ -e "$local_dir/manticore_data/searchd.log" ] || fail 'searchd -l did not create its log under manticore_data'
+local_pid=$(cat "$local_dir/manticore_data/searchd.pid")
+[ -n "$local_pid" ] && alive "$local_pid" || fail 'cannot identify the local daemon from its PID file'
+if has_tcp_listener "$local_pid"; then
+  fail 'local daemon has a TCP listener'
+else
+  listener_rc=$?
+  [ "$listener_rc" -eq 1 ] || fail 'cannot inspect local daemon TCP listeners'
+fi
+pass 'searchd -l creates manticore_data with HTTP Unix socket and no TCP listeners'
+
+local_route_create=$(cd "$local_dir" && curl -fsS --max-time 2 --unix-socket manticore_data/searchd.sock -X POST 'http://localhost/sql?mode=raw' -d 'CREATE TABLE local_route_probe(value integer)') \
+  || fail 'local precedence table setup failed'
+printf '%s' "$local_route_create" | grep -q '"error":""' || fail 'local precedence table setup returned an error'
+local_route_insert=$(cd "$local_dir" && curl -fsS --max-time 2 --unix-socket manticore_data/searchd.sock -X POST 'http://localhost/sql?mode=raw' -d 'INSERT INTO local_route_probe(id,value) VALUES(1,717171)') \
+  || fail 'local precedence row setup failed'
+printf '%s' "$local_route_insert" | grep -q '"error":""' || fail 'local precedence row setup returned an error'
+local_route=$(cd "$local_dir" && "$SEARCHD" -e 'SELECT value FROM local_route_probe WHERE id=1') || fail 'searchd -e did not prefer the detected local instance'
+printf '%s' "$local_route" | grep -q $'value\n717171' || fail 'searchd -e queried the configured daemon instead of the detected local instance'
+absolute_unix_route=$(cd "$local_dir" && "$SEARCHD" -c "$configured_absolute_unix_conf" -e 'SELECT value FROM configured_route_probe WHERE id=1') \
+  || fail 'searchd -c -e did not connect through an absolute configured Unix listener'
+printf '%s' "$absolute_unix_route" | grep -q $'value\n818181' || fail 'absolute configured Unix listener reached the wrong daemon'
+configured_override=$(cd "$local_dir" && "$SEARCHD" -c "$configured_http_conf" -e 'SELECT value FROM configured_route_probe WHERE id=1') \
+  || fail 'searchd -c -e did not override the detected local instance'
+printf '%s' "$configured_override" | grep -q $'value\n818181' || fail 'searchd -c -e did not query the configured-only table'
+single=$(cd "$local_dir" && "$SEARCHD" -e 'SELECT 101 AS single_query') || fail 'searchd -e SELECT failed'
+printf '%s' "$single" | grep -q $'single_query\n101' || fail 'searchd -e SELECT omitted its result row'
+multi=$(cd "$local_dir" && "$SEARCHD" -e 'SELECT 201 AS first_query; SELECT 202 AS second_query;') || fail 'searchd -e multi-query failed'
+printf '%s' "$multi" | grep -q $'first_query\n201' || fail 'searchd -e omitted the first query result row'
+printf '%s' "$multi" | grep -q $'second_query\n202' || fail 'searchd -e omitted the second query result row'
+pass 'searchd -e executes SELECT and semicolon-separated queries'
+
+vertical=$(cd "$local_dir" && "$SEARCHD" -e 'SELECT 301 AS short, 302 AS longer\G SELECT 303 AS regular;') || fail 'searchd -e vertical query failed'
+printf '%s' "$vertical" | grep -q '^\*\{27\} 1\. row \*\{27\}$' || fail '\G omitted the vertical row header'
+printf '%s' "$vertical" | grep -q $' short: 301\nlonger: 302' || fail '\G did not align vertical fields'
+printf '%s' "$vertical" | grep -q $'regular\n303' || fail 'normal output after \G was not preserved'
+printf '%s' "$vertical" | grep -q $'\t' && fail '\G unexpectedly emitted TSV for its result'
+pass 'searchd -e supports vertical output with \\G'
+
+piped_columns=$(cd "$local_dir" && "$SEARCHD" -e 'SELECT 1 AS short, 222 AS longer') || fail 'piped two-column query failed'
+printf '%s' "$piped_columns" | grep -q $'short\tlonger\n1\t222' || fail 'redirected one-shot output is not TSV'
+SEARCHD="$SEARCHD" LOCAL_DIR="$local_dir" python3 <<'PY' || fail 'terminal one-shot output is not aligned'
+import errno, os, pty, re, subprocess
+
+master, slave = pty.openpty()
+proc = subprocess.Popen(
+    [os.environ['SEARCHD'], '-e', 'SELECT 1 AS short, 222 AS longer'],
+    cwd=os.environ['LOCAL_DIR'], stdin=subprocess.DEVNULL, stdout=slave, stderr=slave,
+    close_fds=True,
+)
+os.close(slave)
+output = bytearray()
+while True:
+    try:
+        chunk = os.read(master, 4096)
+    except OSError as exc:
+        if exc.errno == errno.EIO:
+            break
+        raise
+    if not chunk:
+        break
+    output.extend(chunk)
+proc.wait(timeout=5)
+os.close(master)
+text = bytes(output).replace(b'\r\n', b'\n')
+expected_table = (
+    '┌───────┬────────┐\n'
+    '│ short │ longer │\n'
+    '├───────┼────────┤\n'
+    '│     1 │    222 │\n'
+    '└───────┴────────┘\n'
+).encode()
+if proc.returncode or b'\t' in text or expected_table not in text or not re.search(rb'1 row in set \(\d+\.\d{3} ms\)', text):
+    raise RuntimeError(f'unexpected terminal one-shot output: rc={proc.returncode}, output={text!r}')
+PY
+pass 'searchd -e frames terminal output with timing and preserves redirected TSV'
+
+buddy_queries=
+for i in {1..100}; do
+  buddy_queries=$(cd "$local_dir" && "$SEARCHD" -e 'SHOW QUERIES' 2>/dev/null) && break
+  sleep 0.1
+done
+printf '%s' "$buddy_queries" | grep -q $'id\tquery\ttime\tprotocol\thost' || fail 'Buddy SHOW QUERIES did not work over the local Unix socket'
+pass 'Buddy callbacks use the local Unix socket'
+
+grep -Fq -- '--skip=manticoresoftware/buddy-plugin-sharding' "$local_dir/manticore_data/searchd.log" \
+  || fail 'local Buddy startup did not skip the sharding plugin'
+buddy_core_plugins=$(grep -F 'core:' "$local_dir/manticore_data/searchd.log" | tail -1)
+[ -n "$buddy_core_plugins" ] || fail 'local Buddy did not report its loaded core plugins'
+printf '%s' "$buddy_core_plugins" | grep -qw sharding \
+  && fail 'local Buddy still loaded the sharding plugin'
+grep -Fq 'Node ID detection failed' "$local_dir/manticore_data/searchd.log" \
+  && fail 'local Buddy sharding worker crashed while detecting a TCP node ID'
+pass 'local Buddy startup skips the sharding plugin'
+
+(cd "$local_dir" && "$SEARCHD" -e "CREATE TABLE completion_probe (title text, counter integer); INSERT INTO completion_probe(id,title,counter) VALUES(1,'completed',1); INSERT INTO completion_probe(id,title,counter) VALUES(2,'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',2)" >/dev/null) \
+  || fail 'completion fixture setup failed'
+configured_completion_create=$(curl -fsS --max-time 2 -X POST "http://127.0.0.1:${configured_port}/sql?mode=raw" -d 'CREATE TABLE configured_completion_probe(configured_column text)') \
+  || fail 'configured completion table setup failed'
+printf '%s' "$configured_completion_create" | grep -q '"error":""' || fail 'configured completion table setup returned an error'
+configured_completion_insert=$(curl -fsS --max-time 2 -X POST "http://127.0.0.1:${configured_port}/sql?mode=raw" -d "INSERT INTO configured_completion_probe(id,configured_column) VALUES(1,'configured')") \
+  || fail 'configured completion row setup failed'
+printf '%s' "$configured_completion_insert" | grep -q '"error":""' || fail 'configured completion row setup returned an error'
+
+SEARCHD="$SEARCHD" LOCAL_DIR="$local_dir" CONFIGURED_CONF="$configured_binary_conf" python3 <<'PY' || fail 'interactive command history failed'
+import errno, fcntl, os, pty, re, select, signal, struct, subprocess, sys, termios, time
+
+
+def has_result(output, column, value):
+    normalized = output.replace(b'\r', b'')
+    cells = []
+    separator = '│'.encode()
+    for line in normalized.splitlines():
+        if line.startswith(separator) and line.endswith(separator):
+            cells.extend(cell.strip() for cell in line.split(separator)[1:-1])
+    return column in cells and value in cells
+
+
+class Session:
+    def __init__(self, columns=None, args=None):
+        self.master, slave = pty.openpty()
+        if columns:
+            fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 24, columns, 0, 0))
+
+        def setup_terminal():
+            os.setsid()
+            fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
+
+        command = [os.environ['SEARCHD'], *(args or []), '-e']
+        self.proc = subprocess.Popen(
+            command, cwd=os.environ['LOCAL_DIR'],
+            stdin=slave, stdout=slave, stderr=slave, close_fds=True,
+            preexec_fn=setup_terminal,
+        )
+        os.close(slave)
+        self.startup = self.read_prompt()
+
+    def read_prompt(self):
+        data = bytearray()
+        deadline = time.time() + 5
+        while not data.endswith(b'manticore> ') and not data.endswith(b'core> '):
+            if time.time() >= deadline:
+                raise RuntimeError(f'timed out waiting for prompt: {bytes(data)!r}')
+            ready, _, _ = select.select([self.master], [], [], 0.1)
+            if ready:
+                data.extend(os.read(self.master, 4096))
+        return bytes(data)
+
+    def write_keys(self, text):
+        offset = 0
+        while offset < len(text):
+            length = 3 if text[offset:offset + 2] == b'\x1b[' else 1
+            os.write(self.master, text[offset:offset + length])
+            offset += length
+            time.sleep(0.01)
+
+    def command(self, action):
+        if isinstance(action, tuple):
+            text, signum = action
+            self.write_keys(text)
+            time.sleep(0.05)
+            os.kill(self.proc.pid, signum)
+        else:
+            self.write_keys(action)
+        return self.read_prompt()
+
+    def close(self, terminate_with=None, allowed_codes=(0,)):
+        if terminate_with is None:
+            os.write(self.master, b'exit\n')
+        else:
+            os.kill(self.proc.pid, terminate_with)
+        deadline = time.time() + 5
+        while self.proc.poll() is None and time.time() < deadline:
+            ready, _, _ = select.select([self.master], [], [], 0.1)
+            if ready:
+                try:
+                    os.read(self.master, 4096)
+                except OSError as exc:
+                    if exc.errno != errno.EIO:
+                        raise
+        self.proc.wait(timeout=5)
+        os.close(self.master)
+        if terminate_with is None and self.proc.returncode not in allowed_codes:
+            raise RuntimeError(f'interactive client exited with {self.proc.returncode}')
+        return self.proc.returncode
+
+
+configured = Session(args=['-c', os.environ['CONFIGURED_CONF']])
+try:
+    configured_error = configured.command(b'THIS IS INVALID SQL;\n')
+    if b'ERROR ' not in configured_error:
+        raise RuntimeError(f'configured SQL error was not reported: {configured_error!r}')
+
+    configured_completion = configured.command(b'SELECT configured_col\t FROM configured_completion_pr\t WHERE id=1;\n')
+    if not has_result(configured_completion, b'configured_column', b'configured'):
+        raise RuntimeError(f'configured reconnect or completion failed: {configured_completion!r}')
+finally:
+    configured.close(allowed_codes=(1,))
+
+configured_history_session = Session(args=['-c', os.environ['CONFIGURED_CONF']])
+try:
+    configured_history = configured_history_session.command(b'SELECT 6060 AS configured_history;\n')
+    if not has_result(configured_history, b'configured_history', b'6060'):
+        raise RuntimeError(f'configured history command failed: {configured_history!r}')
+
+    configured_recall = configured_history_session.command(b'\x1b[A\n')
+    if not has_result(configured_recall, b'configured_history', b'6060'):
+        raise RuntimeError(f'configured in-memory history recall failed: {configured_recall!r}')
+finally:
+    configured_history_session.close()
+
+for artifact in ('.history', '.history.lock'):
+    path = os.path.join(os.environ['LOCAL_DIR'], 'manticore_data', artifact)
+    if os.path.exists(path):
+        raise RuntimeError(f'configured interactive session created local history artifact: {path}')
+
+completion = Session()
+try:
+    keyword_completion = completion.command(b'SEL\t 501 AS keyword_completion;\n')
+    if not has_result(keyword_completion, b'keyword_completion', b'501'):
+        raise RuntimeError(f'SQL keyword completion failed: {keyword_completion!r}')
+
+    schema_completion = completion.command(b'SELECT 1 AS prefix_value,tit\t AS completion_value FROM completion_pr\t;\n')
+    if not has_result(schema_completion, b'completion_value', b'completed'):
+        raise RuntimeError(f'table or column completion failed: {schema_completion!r}')
+
+    ddl_completion = completion.command(b"CREATE TABLE completion_refresh (fresh_col text, counter BIGI\t); INSERT INTO completion_refresh(id,fresh_col) VALUES(1,'fresh');\n")
+    if ddl_completion.count(b'Query OK') != 2:
+        raise RuntimeError(f'interactive DDL/DML outcomes missing: {ddl_completion!r}')
+
+    refreshed_completion = completion.command(b'SELECT fres\t AS refreshed_value FROM completion_ref\t;\n')
+    if not has_result(refreshed_completion, b'refreshed_value', b'fresh'):
+        raise RuntimeError(f'completion did not refresh after DDL: {refreshed_completion!r}')
+
+    zero_affected = completion.command(b'UPDATE completion_probe SET counter=3 WHERE id=999;\n')
+    if b'Query OK, 0 rows affected' not in zero_affected:
+        raise RuntimeError(f'zero-row DML outcome missing: {zero_affected!r}')
+
+    vertical_output = completion.command(b'SELECT id,title FROM completion_probe WHERE id=1\\G\n')
+    vertical_normalized = vertical_output.replace(b'\r', b'')
+    if (b'*************************** 1. row ***************************\n' not in vertical_normalized
+            or b'   id: 1\ntitle: completed\n' not in vertical_normalized
+            or not re.search(rb'1 row in set \(\d+\.\d{3} ms\)', vertical_normalized)):
+        raise RuntimeError(f'interactive \\G output was not vertical: {vertical_output!r}')
+finally:
+    completion.close()
+
+partial = Session()
+try:
+    partial_baseline = partial.command(b'SELECT tit\t FROM completion_pr\t LIMIT 0;\n')
+    if b'Empty set' not in partial_baseline:
+        raise RuntimeError(f'completion baseline failed: {partial_baseline!r}')
+
+    partial_error = partial.command(b'CREATE TABLE zzpartial_table(yy_partial_col text); THIS IS INVALID SQL;\n')
+    if b'ERROR ' not in partial_error:
+        raise RuntimeError(f'partial DDL error was not reported: {partial_error!r}')
+
+    partial_completion = partial.command(b'SELECT yy_\t FROM zzp\t LIMIT 0;\n')
+    if b'Empty set' not in partial_completion:
+        raise RuntimeError(f'completion cache was stale after partial DDL: {partial_completion!r}')
+finally:
+    partial.close(allowed_codes=(1,))
+
+narrow = Session(columns=40)
+try:
+    narrow_output = narrow.command(b'SELECT title AS long_value FROM completion_probe WHERE id=2;\n')
+    narrow_text = narrow_output.decode('utf-8', errors='replace')
+    if '…' not in narrow_text or any(len(line) > 40 for line in narrow_text.splitlines() if '│' in line or '─' in line):
+        raise RuntimeError(f'framed table did not fit the terminal width: {narrow_output!r}')
+finally:
+    narrow.close()
+
+tiniest = Session(columns=5)
+try:
+    tiniest_output = tiniest.command(b'SELECT 123456789 AS long_value;\n')
+    tiniest_lines = [line.strip('\r') for line in tiniest_output.decode('utf-8', errors='replace').splitlines() if any(c in line for c in '┌│├└')]
+    if not tiniest_lines or any(len(line) > 5 for line in tiniest_lines):
+        raise RuntimeError(f'minimum framed table width overflowed: {tiniest_output!r}')
+finally:
+    tiniest.close()
+print('ok - interactive completion expands SQL keywords, tables, and columns')
+
+history = os.path.join(os.environ['LOCAL_DIR'], 'manticore_data', '.history')
+try:
+    os.unlink(history)
+except FileNotFoundError:
+    pass
+
+history_seed = Session()
+try:
+    history_probe = history_seed.command(b'SELECT 401 AS history_probe;\n')
+    if not has_result(history_probe, b'history_probe', b'401'):
+        raise RuntimeError(f'history seed command failed: {history_probe!r}')
+finally:
+    history_seed.close()
+
+history_session = Session()
+try:
+    recalled = history_session.command(b'\x1b[A\n')
+    if not has_result(recalled, b'history_probe', b'401'):
+        raise RuntimeError(f'Up did not recall persisted command: {recalled!r}')
+
+    restored = history_session.command(b'SELECT 402 AS history_draft;\x1b[A\x1b[B\n')
+    if not has_result(restored, b'history_draft', b'402'):
+        raise RuntimeError(f'Down did not restore the current draft: {restored!r}')
+
+    interrupted = history_session.command((b'SEL\t 499 AS interrupted_draft', signal.SIGINT))
+    if b'^C' not in interrupted:
+        raise RuntimeError(f'Ctrl-C did not clear the current draft: {interrupted!r}')
+
+    recalled_after_interrupt = history_session.command(b'\x1b[A\n')
+    if not has_result(recalled_after_interrupt, b'history_draft', b'402'):
+        raise RuntimeError(f'history was lost after Ctrl-C: {recalled_after_interrupt!r}')
+
+    after_interrupt = history_session.command(b'SELECT 403 AS after_interrupt;\n')
+    if not has_result(after_interrupt, b'after_interrupt', b'403'):
+        raise RuntimeError(f'client did not continue after Ctrl-C: {after_interrupt!r}')
+
+    quit_interrupted = history_session.command((b'SELECT 498 AS quit_interrupted_draft', signal.SIGQUIT))
+    if b'^\\' not in quit_interrupted:
+        raise RuntimeError(f'Ctrl-\\ did not clear the current draft: {quit_interrupted!r}')
+
+    recalled_after_quit = history_session.command(b'\x1b[A\n')
+    if not has_result(recalled_after_quit, b'after_interrupt', b'403'):
+        raise RuntimeError(f'history was lost after Ctrl-\\: {recalled_after_quit!r}')
+
+    after_quit_interrupt = history_session.command(b'SELECT 404 AS after_quit_interrupt;\n')
+    if not has_result(after_quit_interrupt, b'after_quit_interrupt', b'404'):
+        raise RuntimeError(f'client did not continue after Ctrl-\\: {after_quit_interrupt!r}')
+finally:
+    history_session.close()
+
+baseline = Session()
+baseline_sigterm = baseline.close(signal.SIGTERM)
+
+after_sigint = Session()
+after_sigint_output = after_sigint.command((b'SELECT 497 AS signal_state_int', signal.SIGINT))
+if b'^C' not in after_sigint_output:
+    raise RuntimeError(f'Ctrl-C signal-state probe failed: {after_sigint_output!r}')
+sigterm_after_sigint = after_sigint.close(signal.SIGTERM)
+
+after_sigquit = Session()
+after_sigquit_output = after_sigquit.command((b'SELECT 496 AS signal_state_quit', signal.SIGQUIT))
+if b'^\\' not in after_sigquit_output:
+    raise RuntimeError(f'Ctrl-\\ signal-state probe failed: {after_sigquit_output!r}')
+sigterm_after_sigquit = after_sigquit.close(signal.SIGTERM)
+
+if sigterm_after_sigint != baseline_sigterm or sigterm_after_sigquit != baseline_sigterm:
+    raise RuntimeError(
+        f'interrupt recovery corrupted SIGTERM: baseline={baseline_sigterm}, '
+        f'after SIGINT={sigterm_after_sigint}, after SIGQUIT={sigterm_after_sigquit}'
+    )
+
+history = os.path.join(os.environ['LOCAL_DIR'], 'manticore_data', '.history')
+if os.path.getsize(history) == 0:
+    raise RuntimeError('history file is empty')
+with open(history, 'rb') as source:
+    history_data = source.read()
+history_lines = history_data.splitlines()
+if history_lines != [
+    b'SELECT 401 AS history_probe;',
+    b'SELECT 401 AS history_probe;',
+    b'SELECT 402 AS history_draft;',
+    b'SELECT 402 AS history_draft;',
+    b'SELECT 403 AS after_interrupt;',
+    b'SELECT 403 AS after_interrupt;',
+    b'SELECT 404 AS after_quit_interrupt;',
+]:
+    raise RuntimeError(f'history is not the expected plain-text command list: {history_lines!r}')
+if b'interrupted_draft' in history_data or b'quit_interrupted_draft' in history_data:
+    raise RuntimeError(f'interrupted drafts leaked into history: {history_data!r}')
+if os.stat(history).st_mode & 0o777 != 0o600:
+    raise RuntimeError('history file mode is not 0600')
+history_lock = os.path.join(os.environ['LOCAL_DIR'], 'manticore_data', '.history.lock')
+if os.stat(history_lock).st_mode & 0o777 != 0o600:
+    raise RuntimeError('history lock mode is not 0600')
+print('ok - interactive history persists and terminal interrupts clear the draft')
+history = os.path.join(os.environ['LOCAL_DIR'], 'manticore_data', '.history')
+try:
+    os.unlink(history)
+except FileNotFoundError:
+    pass
+
+client_a = Session()
+client_b = Session()
+concurrent_a = client_a.command(b'SELECT 411 AS concurrent_a;\n')
+if not has_result(concurrent_a, b'concurrent_a', b'411'):
+    raise RuntimeError(f'first concurrent command failed: {concurrent_a!r}')
+concurrent_b = client_b.command(b'SELECT 422 AS concurrent_b;\n')
+if not has_result(concurrent_b, b'concurrent_b', b'422'):
+    raise RuntimeError(f'second concurrent command failed: {concurrent_b!r}')
+client_a.close()
+client_b.close()
+
+with open(history, 'rb') as source:
+    valid_history = source.read()
+if b'concurrent_a' not in valid_history:
+    raise RuntimeError(f'earlier concurrent command was lost: {valid_history!r}')
+if b'concurrent_b' not in valid_history:
+    raise RuntimeError(f'latest concurrent command was not persisted: {valid_history!r}')
+
+os.chmod(history, 0o644)
+permission_repair = Session()
+permission_repair.close()
+if os.stat(history).st_mode & 0o777 != 0o600:
+    raise RuntimeError('existing history permissions were not repaired to 0600')
+
+history_lock = os.path.join(os.environ['LOCAL_DIR'], 'manticore_data', '.history.lock')
+lock_sentinel = os.path.join(os.environ['LOCAL_DIR'], 'history-lock-sentinel')
+with open(lock_sentinel, 'wb') as target:
+    target.write(b'unchanged')
+os.unlink(history_lock)
+os.symlink(lock_sentinel, history_lock)
+retry = Session()
+if b'failed to open local history lock' not in retry.startup:
+    raise RuntimeError(f'lock failure was not reported at startup: {retry.startup!r}')
+retry_after_failure = retry.command(b'SELECT 431 AS retry_after_lock_failure;\n')
+if not has_result(retry_after_failure, b'retry_after_lock_failure', b'431'):
+    raise RuntimeError(f'command after lock failure failed: {retry_after_failure!r}')
+os.unlink(history_lock)
+retry_after_recovery = retry.command(b'SELECT 432 AS retry_after_lock_recovery;\n')
+if not has_result(retry_after_recovery, b'retry_after_lock_recovery', b'432'):
+    raise RuntimeError(f'command after lock recovery failed: {retry_after_recovery!r}')
+retry.close()
+with open(lock_sentinel, 'rb') as source:
+    if source.read() != b'unchanged':
+        raise RuntimeError('history lock symlink target was modified')
+with open(history, 'rb') as source:
+    retried_history = source.read()
+for marker in (b'retry_after_lock_failure', b'retry_after_lock_recovery'):
+    if marker not in retried_history:
+        raise RuntimeError(f'lock retry lost {marker!r}: {retried_history!r}')
+os.unlink(lock_sentinel)
+
+plain_history = b'SELECT 441 AS plain_first;\nSELECT 442 AS plain_second;\n'
+with open(history, 'wb') as target:
+    target.write(plain_history)
+os.chmod(history, 0o600)
+plain = Session()
+with open(history, 'rb') as source:
+    unchanged_on_startup = source.read()
+if unchanged_on_startup != plain_history:
+    raise RuntimeError(f'plain-text history changed at startup: {unchanged_on_startup!r}')
+plain_recalled = plain.command(b'\x1b[A\n')
+if not has_result(plain_recalled, b'plain_second', b'442'):
+    raise RuntimeError(f'plain-text history was not recalled: {plain_recalled!r}')
+plain_appended = plain.command(b'SELECT 443 AS appended_history;\n')
+if not has_result(plain_appended, b'appended_history', b'443'):
+    raise RuntimeError(f'plain-text history append command failed: {plain_appended!r}')
+plain.close()
+with open(history, 'rb') as source:
+    appended_history = source.read()
+if appended_history.splitlines() != [
+    b'SELECT 441 AS plain_first;',
+    b'SELECT 442 AS plain_second;',
+    b'SELECT 442 AS plain_second;',
+    b'SELECT 443 AS appended_history;',
+]:
+    raise RuntimeError(f'plain-text history append changed format or order: {appended_history!r}')
+
+with open(history, 'wb') as target:
+    for i in range(1002):
+        target.write(f'SELECT {i} AS bounded_{i};\n'.encode())
+bounded = Session()
+bounded_output = bounded.command(b'SELECT 1002 AS bounded_1002;\n')
+if not has_result(bounded_output, b'bounded_1002', b'1002'):
+    raise RuntimeError(f'bounded-history command failed: {bounded_output!r}')
+bounded.close()
+with open(history, 'rb') as source:
+    bounded_lines = source.read().splitlines()
+if len(bounded_lines) != 1000 or b'bounded_0' in bounded_lines or b'bounded_1002' not in bounded_lines[-1]:
+    raise RuntimeError(f'plain-text history was not bounded to the newest 1000 commands: {bounded_lines[:2]!r} ... {bounded_lines[-2:]!r}')
+
+for invalid_history in (
+    b'_HiStOrY_V2_bad\nfoo\n',
+    b'  _HiStOrY_V2_bad\nfoo\n',
+    b'  \n_HiStOrY_V2_bad\nfoo\n',
+    b'\xef\xbb\xbf_HiStOrY_V2_bad\nfoo\n',
+    b'\xef\xbb\xbf\xef\xbb\xbf_HiStOrY_V2_bad\nfoo\n',
+    b'\xef\xbb\xbf  \xef\xbb\xbf_HiStOrY_V2_bad\nfoo\n',
+    b'\xfe\xff_HiStOrY_V2_bad\nfoo\n',
+    b'SELECT 1 AS invalid_prefix;\nbad\x00record\n',
+):
+    with open(history, 'wb') as target:
+        target.write(invalid_history)
+    os.chmod(history, 0o600)
+
+    invalid = Session()
+    if b'failed to read local history' not in invalid.startup:
+        raise RuntimeError(f'invalid history was accepted without a warning: {invalid.startup!r}')
+    invalid_recall = invalid.command(b'\x1b[A\n')
+    if has_result(invalid_recall, b'invalid_prefix', b'1'):
+        raise RuntimeError('valid prefix from malformed history leaked into editor history')
+    invalid_command = invalid.command(b'SELECT 433 AS must_not_replace_invalid_history;\n')
+    if not has_result(invalid_command, b'must_not_replace_invalid_history', b'433'):
+        raise RuntimeError(f'command with invalid history failed: {invalid_command!r}')
+    invalid.close()
+    with open(history, 'rb') as source:
+        after_invalid = source.read()
+    if after_invalid != invalid_history:
+        raise RuntimeError(f'invalid history was overwritten: {after_invalid!r}')
+
+with open(history, 'wb') as target:
+    target.write(valid_history)
+os.chmod(history, 0o600)
+PY
+pass 'concurrent clients merge bounded plain-text history and preserve invalid files'
+
+interactive=$(cd "$local_dir" && printf ';\nSET SESSION wait_timeout=123;\nSELECT @@wait_timeout;\nexit;\n' | "$SEARCHD" --execute) || fail 'interactive searchd --execute failed'
+printf '%s' "$interactive" | grep -q $'@@wait_timeout\n123' || fail 'interactive statements did not share one SQL session'
+eof_result=$(cd "$local_dir" && printf 'SELECT 302 AS eof_query;\n' | "$SEARCHD" -e) || fail 'interactive searchd -e did not exit cleanly on EOF'
+printf '%s' "$eof_result" | grep -q $'eof_query\n302' || fail 'interactive EOF mode omitted its result'
+pass 'searchd -e supports interactive exit, EOF, and persistent session state'
+
+set +e
+interactive_error=$(cd "$local_dir" && printf 'THIS IS INVALID SQL;\nSELECT 303 AS after_error;\nexit\n' | "$SEARCHD" -e 2>&1)
+interactive_error_rc=$?
+set -e
+[ "$interactive_error_rc" -ne 0 ] || fail 'interactive SQL error did not affect exit status'
+printf '%s' "$interactive_error" | grep -q 'ERROR' || fail 'interactive SQL error was not reported'
+printf '%s' "$interactive_error" | grep -q $'after_error\n303' || fail 'interactive mode did not continue after a SQL error'
+pass 'interactive mode reports errors and continues with the next line'
+
+if (cd "$local_dir" && "$SEARCHD" -l --quiet >/dev/null 2>&1); then
+  fail 'a second searchd -l unexpectedly started in the same directory'
+fi
+alive "$local_pid" || fail 'duplicate start disturbed the original local daemon'
+pass 'duplicate local startup does not disturb the current directory instance'
+
+quoted=$(cd "$local_dir" && "$SEARCHD" -e "CREATE TABLE split_values(value string); INSERT INTO split_values(id,value) VALUES(1,'first;item'); SELECT value FROM split_values WHERE id=1;") || fail 'quoted-semicolon batch failed'
+printf '%s' "$quoted" | grep -q $'value\nfirst;item' || fail 'semicolon inside a quoted value split the batch'
+pass 'searchd -e preserves semicolons inside strings'
+
+comments=$(cd "$local_dir" && "$SEARCHD" -e $'-- line ; comment\nSELECT 5--2 AS arithmetic; # hash ; comment\nSELECT 303 AS after_hash; /* block ; comment */ SELECT 304 AS after_block;') || fail 'searchd -e comment-aware batch failed'
+printf '%s' "$comments" | grep -q $'arithmetic\n7' || fail 'double minus was misread as a comment'
+printf '%s' "$comments" | grep -q $'after_hash\n303' || fail 'hash comment semicolon split the batch'
+printf '%s' "$comments" | grep -q $'after_block\n304' || fail 'block comment semicolon split the batch'
+pass 'searchd -e handles comments without corrupting arithmetic or batch boundaries'
+
+if unterminated=$(cd "$local_dir" && "$SEARCHD" -e 'SELECT 909 AS unterminated_probe /*' 2>&1); then
+  fail 'searchd -e executed SQL before an unterminated block comment'
+fi
+printf '%s' "$unterminated" | grep -q 'ERROR: unterminated block comment' || fail 'unterminated block comment error was unclear'
+printf '%s' "$unterminated" | grep -q $'unterminated_probe\n909' && fail 'unterminated block comment executed its SQL prefix'
+pass 'searchd -e rejects unterminated block comments without executing their SQL prefix'
+
+(cd "$local_dir" && "$SEARCHD" -e "CREATE TABLE exact_values(n bigint); INSERT INTO exact_values(id,n) VALUES(9007199254740993,9223372036854775807);") >/dev/null || fail 'exact-value setup failed'
+exact=$(cd "$local_dir" && "$SEARCHD" -e 'SELECT id,n FROM exact_values WHERE id=9007199254740993') || fail 'exact-value query failed'
+printf '%s' "$exact" | grep -q $'9007199254740993\t9223372036854775807' || fail '64-bit integer precision was lost'
+pass 'searchd -e preserves signed 64-bit integer precision'
+
+(cd "$local_dir" && "$SEARCHD" -e "CREATE TABLE customers(name string); CREATE TABLE orders(customer_id bigint, product string); INSERT INTO customers(id,name) VALUES(1,'no-order');") >/dev/null || fail 'NULL rendering setup failed'
+null_row=$(cd "$local_dir" && "$SEARCHD" -e 'SELECT customers.id,customers.name,orders.product FROM customers LEFT JOIN orders ON customers.id=orders.customer_id') || fail 'NULL rendering query failed'
+printf '%s' "$null_row" | grep -q $'1\tno-order\tNULL' || fail 'JSON null was not rendered as NULL'
+pass 'searchd -e renders JSON null as NULL'
+
+set +e
+error_batch=$(cd "$local_dir" && "$SEARCHD" -e 'CREATE TABLE before_error_marker(x text); THIS IS INVALID SQL; CREATE TABLE must_not_exist(x text)' 2>&1)
+error_rc=$?
+set -e
+[ "$error_rc" -ne 0 ] || fail 'invalid SQL unexpectedly succeeded'
+printf '%s' "$error_batch" | grep -q 'ERROR' || fail 'invalid SQL did not report an error'
+tables=$(cd "$local_dir" && "$SEARCHD" -e 'SHOW TABLES') || fail 'SHOW TABLES after SQL error failed'
+printf '%s' "$tables" | grep -q $'before_error_marker\t' || fail 'statement before the SQL error did not run'
+printf '%s' "$tables" | grep -q $'must_not_exist\t' && fail 'batch continued after the first SQL error'
+pass 'searchd -e stops a batch on the first SQL error'
+
+(cd "$local_dir" && "$SEARCHD" -e "CREATE TABLE local_persist(title text, n integer); INSERT INTO local_persist(id,title,n) VALUES(1,'kept',42);") >/dev/null || fail 'local DDL/DML failed'
+(cd "$local_dir" && "$SEARCHD" -l --stopwait >/dev/null 2>&1) || fail 'local --stopwait failed'
+wait_dead "$local_pid" || fail 'local --stopwait did not stop the local daemon'
+[ ! -e "$local_socket" ] || fail 'local --stopwait left the local Unix socket behind'
+[ ! -e "$local_dir/manticore_data/searchd.pid" ] || fail 'local --stopwait left the local PID file behind'
+alive "$configured_pid" || fail 'local --stopwait stopped the configured daemon'
+configured_response=$(curl -fsS --max-time 1 -X POST "http://127.0.0.1:${configured_port}/sql?mode=raw" -d 'SELECT 909 AS configured_mode' 2>/dev/null) || fail 'configured daemon disappeared after local --stopwait'
+printf '%s' "$configured_response" | grep -q '"configured_mode":909' || fail 'configured daemon no longer answers after local --stopwait'
+pass 'searchd -l --stopwait targets the local daemon only'
+
+(cd "$local_dir" && "$SEARCHD" --local >/dev/null 2>&1) || fail 'local daemon did not restart'
+for i in {1..100}; do
+  persisted=$(cd "$local_dir" && "$SEARCHD" -e 'SELECT id,title,n FROM local_persist WHERE id=1' 2>/dev/null) && break
+  sleep 0.1
+done
+printf '%s' "${persisted:-}" | grep -q 'kept' || fail 'local DDL/DML did not persist across restart'
+printf '%s' "$persisted" | grep -qw '42' || fail 'persisted attribute value is missing after restart'
+pass 'local DDL/DML persists across restart'
+
+(cd "$local_dir" && "$SEARCHD" -l --stopwait >/dev/null 2>&1) || fail 'final local --stopwait failed'
+[ ! -e "$local_dir/manticore_data/searchd.sock" ] || fail 'final local --stopwait left the Unix socket behind'
+alive "$configured_pid" || fail 'configured daemon was not isolated from local lifecycle'
+"$SEARCHD" --config "$configured_conf" --stopwait >/dev/null 2>&1 || fail 'configured daemon cleanup failed'
+configured_pid=
+pass 'local and configured daemon lifecycles stay isolated'
+EOF
+SEARCHD_BIN="${SEARCHD_BIN:-searchd}" bash /tmp/test-zero-config-local-mode.sh
+––– output –––
+ok - --config preserves configured mode
+ok - searchd -c/--config -e uses configured binary and HTTP listeners
+ok - searchd -e uses the normally discovered config when no local instance exists
+ok - searchd -e never falls back past an existing local data marker
+ok - bare searchd preserves default configuration lookup
+ok - searchd -l creates manticore_data with HTTP Unix socket and no TCP listeners
+ok - searchd -e executes SELECT and semicolon-separated queries
+ok - searchd -e supports vertical output with \\G
+ok - searchd -e frames terminal output with timing and preserves redirected TSV
+ok - Buddy callbacks use the local Unix socket
+ok - local Buddy startup skips the sharding plugin
+ok - interactive completion expands SQL keywords, tables, and columns
+ok - interactive history persists and terminal interrupts clear the draft
+ok - concurrent clients merge bounded plain-text history and preserve invalid files
+ok - searchd -e supports interactive exit, EOF, and persistent session state
+ok - interactive mode reports errors and continues with the next line
+ok - duplicate local startup does not disturb the current directory instance
+ok - searchd -e preserves semicolons inside strings
+ok - searchd -e handles comments without corrupting arithmetic or batch boundaries
+ok - searchd -e rejects unterminated block comments without executing their SQL prefix
+ok - searchd -e preserves signed 64-bit integer precision
+ok - searchd -e renders JSON null as NULL
+ok - searchd -e stops a batch on the first SQL error
+ok - searchd -l --stopwait targets the local daemon only
+ok - local DDL/DML persists across restart
+ok - local and configured daemon lifecycles stay isolated

@@ -22,6 +22,23 @@ jobs:
           gh run download 31167434927 --repo manticoresoftware/manticoresearch -n build_windows_Debug_x64 -D win
           New-Item -ItemType Directory -Force win/extracted | Out-Null
           tar -xf win/artifact.tar -C win/extracted
+      - name: Probe shared identifier validator
+        shell: pwsh
+        run: |
+          $root = (Resolve-Path win/extracted/build/src/gtests/Debug).Path
+          $exe = Join-Path $root 'gmanticoretest.exe'
+          $out = Join-Path $env:RUNNER_TEMP 'identifier-gtest.out'
+          $err = Join-Path $env:RUNNER_TEMP 'identifier-gtest.err'
+          $p = Start-Process -FilePath $exe -ArgumentList '--gtest_filter=IdentifierValidation.ValidNamesAndLimits' -WorkingDirectory $root -PassThru -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
+          if (-not $p.WaitForExit(15000)) {
+            $p.Kill($true)
+            $p.WaitForExit()
+            Write-Host 'IDENTIFIER GTEST: HANG'
+          } else {
+            Write-Host "IDENTIFIER GTEST: EXIT $($p.ExitCode)"
+          }
+          if (Test-Path $out) { Get-Content $out }
+          if (Test-Path $err) { Get-Content $err }
       - name: Bisect UTF-8 config
         shell: pwsh
         run: |

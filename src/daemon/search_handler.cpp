@@ -92,7 +92,7 @@ SearchHandler_c::SearchHandler_c ( CSphFixedVector<CSphQuery> dQueries, bool bMa
 //////////////////
 /* Smart gc retire of vec of queries.
  * We have CSphVector<CSphQuery> which is over, but some threads may still use separate queries from it, so we can't just
- * delete it, since they will loose the objects and it will cause crash.
+ * delete it, since they will lose the objects and it will cause crash.
  *
  * So, if some queries are still in use, we retire them with custom deleter, which will decrease counter,
  * and finally delete whole vec.
@@ -100,38 +100,37 @@ SearchHandler_c::SearchHandler_c ( CSphFixedVector<CSphQuery> dQueries, bool bMa
 class RetireQueriesVec_c
 {
 	CSphFixedVector<CSphQuery> m_dQueries {0}; // given queries I'll finally remove
-	std::atomic<int>		m_iInUse;	// how many of them still reffered
+	std::atomic<int>		m_iInUse;	// how many of them still referred
 
 	void OneQueryDeleted()
 	{
-		if ( m_iInUse.fetch_sub ( 1, std::memory_order_release )==1 )
-		{
-			assert( m_iInUse.load ( std::memory_order_acquire )==0 );
-			delete this;
-		}
+		if ( m_iInUse.fetch_sub ( 1, std::memory_order_release )>1 )
+			return;
+
+		assert( m_iInUse.load ( std::memory_order_acquire )<=0 );
+		delete this;
 	}
 
 	static void Delete ( void * pArg )
 	{
-		if ( pArg )
-		{
-			auto pMe = (RetireQueriesVec_c *) ( (CSphQuery *) pArg )->m_pCookie;
-			assert ( pMe && "Each retiring query from vec must have address of RetireQueriesVec_c in cookie");
-			if ( pMe )
-				pMe->OneQueryDeleted ();
-		}
+		if ( !pArg )
+			return;
+
+		auto pMe = (RetireQueriesVec_c *) ( (CSphQuery *) pArg )->m_pCookie;
+		assert ( pMe && "Each retiring query from vec must have address of RetireQueriesVec_c in cookie");
+		if ( pMe )
+			pMe->OneQueryDeleted ();
 	}
 
 public:
-	void EngageRetiring ( CSphFixedVector<CSphQuery> dQueries, CSphVector<int> dRetired )
+	void EngageAll ( CSphFixedVector<CSphQuery> dQueries, int iRetired )
 	{
-		assert ( !dRetired.IsEmpty () );
-		m_iInUse.store ( dRetired.GetLength (), std::memory_order_release );
+		m_iInUse.store ( iRetired, std::memory_order_release );
 		m_dQueries = std::move ( dQueries );
-		for ( auto iRetired: dRetired )
+		for ( auto& dQuery : m_dQueries )
 		{
-			m_dQueries[iRetired].m_pCookie = this;
-			hazard::Retire ( (void*) &m_dQueries[iRetired], Delete );
+			dQuery.m_pCookie = this;
+			hazard::Retire ( (void*) &dQuery, Delete );
 		}
 	}
 };
@@ -139,12 +138,10 @@ public:
 SearchHandler_c::~SearchHandler_c ()
 {
 	auto dPointed = hazard::GetListOfPointed ( m_dQueries );
-	if ( !dPointed.IsEmpty () )
-	{
-		// pQueryHolder will be self-removed when all used queries retired
-		auto pQueryHolder = new RetireQueriesVec_c;
-		pQueryHolder->EngageRetiring ( std::move ( m_dQueries ), std::move ( dPointed ) );
-	}
+
+	// pQueryHolder will be self-removed when all used queries retired
+	auto pQueryHolder = new RetireQueriesVec_c;
+	pQueryHolder->EngageAll ( std::move ( m_dQueries ), dPointed.GetLength() );
 }
 
 

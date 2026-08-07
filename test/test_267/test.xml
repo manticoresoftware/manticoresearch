@@ -22,11 +22,15 @@ searchd
 <sphinxql>
 	create table t(f text, a int);
 	insert into t values(0,'a b c',123), (0,'a b d',123),(0,'a d e',123);
+	insert into t(id,f,a) values(10,'alpha some words beta gamma',123), (11,'alpha some words beta delta',123);
 </sphinxql>
 <query endpoint="json/search">{ "table": "t", "query": { "query_string": "a -b -c" }}</query>
+<query endpoint="json/search">{ "table": "t", "query": { "query_string": "(alpha NEAR/5 beta) !delta" }, "limit": 0, "track_total_hits": true }</query>
+<query endpoint="json/search">{ "table": "t", "query": { "query_string": "\"alpha beta\"~5 !delta" }, "limit": 0, "track_total_hits": true }</query>
 <sphinxql>
     select * from t;
     select * from t where match('a -b -c'); show meta;
+	select count(*) from t where match('(alpha NEAR/5 beta) !delta');
 	drop table t;
 </sphinxql>
 </queries>

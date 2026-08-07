@@ -153,6 +153,41 @@ TEST ( functions, DdlGenericIdentifiersValidateUtf8 )
 	sError = "";
 	EXPECT_FALSE ( ParseDdlForTest ( sMaxTable, sError ) );
 
+	const char * dCompatibleColumnQueries[] =
+	{
+		"CREATE TABLE logs (@timestamp TIMESTAMP, @version STRING)",
+		"CREATE TABLE logs_quoted (`@timestamp` TIMESTAMP, `@version` STRING)",
+		"CREATE TABLE logs_bit (@timestamp BIT(1))",
+		"ALTER TABLE logs ADD COLUMN @timestamp TIMESTAMP",
+		"ALTER TABLE logs ADD COLUMN @timestamp BIT(1)",
+		"ALTER TABLE logs MODIFY COLUMN @timestamp BIGINT",
+		"ALTER TABLE logs MODIFY COLUMN @version API_KEY='secret'",
+		"ALTER TABLE logs MODIFY COLUMN @version API_URL='http://127.0.0.1'",
+		"ALTER TABLE logs MODIFY COLUMN @version API_TIMEOUT='1s'",
+		"ALTER TABLE logs DROP COLUMN @version",
+		"ALTER TABLE logs REBUILD EMBEDDINGS @version"
+	};
+	for ( const char * szQuery : dCompatibleColumnQueries )
+	{
+		sError = "";
+		EXPECT_TRUE ( ParseDdlForTest ( szQuery, sError ) ) << szQuery << ": " << sError.cstr();
+	}
+
+	const char * dRejectedAtQueries[] =
+	{
+		"CREATE TABLE logs (@user_field STRING)",
+		"CREATE TABLE logs (`@uuid_id` STRING)",
+		"CREATE TABLE logs (@timestampx TIMESTAMP)",
+		"CREATE TABLE logs (@version2 STRING)",
+		"CREATE TABLE @timestamp (body TEXT)",
+		"CREATE FUNCTION @timestamp RETURNS INT SONAME 'missing.so'"
+	};
+	for ( const char * szQuery : dRejectedAtQueries )
+	{
+		sError = "";
+		EXPECT_FALSE ( ParseDdlForTest ( szQuery, sError ) ) << szQuery;
+	}
+
 	std::string sMaxSystem = "CREATE TABLE system.`" + std::string ( SPH_MAX_TABLE_NAME_BYTES-7, 'a' ) + "` (body text)";
 	sError = "";
 	EXPECT_TRUE ( ParseDdlForTest ( sMaxSystem, sError ) ) << sError.cstr();

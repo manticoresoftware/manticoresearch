@@ -1348,7 +1348,7 @@ bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int i
 		return false;
 	}
 
-	bool bInternalAtName = bAllowPathPunctuation && ( !strcmp ( szName, "@timestamp" ) || !strcmp ( szName, "@uuid_id" ) );
+	bool bInternalAtName = bAllowPathPunctuation && ( !strcmp ( szName, "@timestamp" ) || !strcmp ( szName, "@version" ) || !strcmp ( szName, "@uuid_id" ) );
 	bool bFirst = true;
 	while ( p<pEnd )
 	{

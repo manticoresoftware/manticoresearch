@@ -360,7 +360,7 @@
 
 **发布日期**：2025年11月7日
 
-❤️ 我们衷心感谢 [@ricardopintottrdata](https://github.com/ricardopintottrdata) 在 [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) 和 [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 中的工作，解决了 `HAVING` 总计数和 `filter with empty name` 错误相关的问题；也感谢 [@jdelStrother](https://github.com/jdelStrother) 通过 [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) 做出的贡献，该 PR 改进了在没有 Jieba 支持时对 `ParseCJKSegmentation` 的处理。
+❤️ 我们衷心感谢 [@ricardopintottrdata](https://github.com/ricardopintottrdata) 在 [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) 和 [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 中所做的工作，解决了 `HAVING` 总数和 `filter with empty name` 错误相关的问题；同时也感谢 [@jdelStrother](https://github.com/jdelStrother) 通过 [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) 做出的贡献，该 PR 改进了在没有 Jieba 支持时对 `ParseCJKSegmentation` 的处理。
 
 您的努力使项目更加强大——非常感谢！
 
@@ -1401,9 +1401,9 @@
 * **⚠️ 突破性变更**：二级索引文件格式已更改，因此如果您使用二级索引进行搜索，并且配置文件中包含`searchd.secondary_indexes = 1`，请注意新版本的Manticore将**跳过加载具有二级索引的表**。建议您：
   - 在升级之前，将配置文件中的`searchd.secondary_indexes`更改为0。
   - 运行实例。Manticore将加载表并发出警告。
-  - 对每个索引运行 [ALTER TABLE <table name> REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) 以重建二级索引。
+  - 对每个索引运行 [ALTER TABLE `<table name>` REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)，以重建二级索引。
 
-  如果你在运行复制集群，则需要在所有节点上运行 [ALTER TABLE <table name> REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)，或者按照 [此说明](Securing_and_compacting_a_table/Compacting_a_table.md#Optimizing-clustered-tables) 进行，但有一个改动：运行 [ALTER .. REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) 而不是 [OPTIMIZE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE)。
+  如果你在运行复制集群，就需要在所有节点上执行 [ALTER TABLE `<table name>` REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)，或者按照 [此说明](Securing_and_compacting_a_table/Compacting_a_table.md#Optimizing-clustered-tables) 进行，但只需做一处更改：改为运行 [ALTER .. REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)，而不是 [OPTIMIZE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE)。
 * **⚠️ 突破性变更**：binlog版本已更新，因此任何旧版本的binlog将不会被重放。在升级过程中确保Manticore Search干净关闭非常重要。这意味着在停止旧实例后，`/var/lib/manticore/binlog/`目录中除了`binlog.meta`外不应有其他binlog文件。
 * [Issue #849](https://github.com/manticoresoftware/manticoresearch/issues/849) `SHOW SETTINGS`：现在可以从Manticore内部查看配置文件中的设置。
 * [Issue #1007](https://github.com/manticoresoftware/manticoresearch/issues/1007) [SET GLOBAL CPUSTATS=1/0](Server_settings/Setting_variables_online.md#SET) 开启/关闭CPU时间跟踪；[SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) 现在在CPU时间跟踪关闭时不再显示CPU统计信息。

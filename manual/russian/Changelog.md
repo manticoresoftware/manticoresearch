@@ -360,7 +360,7 @@
 
 **Выпущено**: 7 ноября 2025 г.
 
-❤️ Мы хотели бы от всей души поблагодарить [@ricardopintottrdata](https://github.com/ricardopintottrdata) за работу над [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) и [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) — за устранение проблем, связанных с общим числом в `HAVING` и ошибкой `filter with empty name` — а также [@jdelStrother](https://github.com/jdelStrother) за вклад в [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819), который улучшает обработку `ParseCJKSegmentation`, когда поддержка Jieba недоступна.
+❤️ Хотим от всего сердца поблагодарить [@ricardopintottrdata](https://github.com/ricardopintottrdata) за их работу над [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) и [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) — за устранение проблем с общим числом строк в `HAVING` и ошибкой `filter with empty name` — а также [@jdelStrother](https://github.com/jdelStrother) за вклад в [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819), который улучшает обработку `ParseCJKSegmentation`, когда поддержка Jieba недоступна.
 
 Ваши усилия помогают сделать проект сильнее — большое спасибо!
 
@@ -1401,9 +1401,9 @@
 * **⚠️ СЛОМАННОЕ ИЗМЕНЕНИЕ**: Формат файла вторичных индексов был изменен, поэтому если вы используете вторичные индексы для поиска и у вас в конфигурационном файле указано `searchd.secondary_indexes = 1`, имейте в виду, что новая версия Manticore **пропустит загрузку таблиц, которые имеют вторичные индексы**. Рекомендуется:
   - Перед обновлением измените `searchd.secondary_indexes` на 0 в конфигурационном файле.
   - Запустите экземпляр. Manticore загрузит таблицы с предупреждением.
-  - Выполните [ALTER TABLE <table name> REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) для каждого индекса, чтобы перестроить вторичные индексы.
+  - Выполните [ALTER TABLE `<table name>` REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) для каждого индекса, чтобы перестроить вторичные индексы.
 
-  Если вы запускаете репликационный кластер, вам нужно выполнить [ALTER TABLE <table name> REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) на всех узлах или следовать [этой инструкции](Securing_and_compacting_a_table/Compacting_a_table.md#Optimizing-clustered-tables), изменив только одно: запускать [ALTER .. REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) вместо [OPTIMIZE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE).
+  Если вы работаете в кластере с репликацией, вам нужно выполнить [ALTER TABLE `<table name>` REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) на всех узлах или следовать [этой инструкции](Securing_and_compacting_a_table/Compacting_a_table.md#Optimizing-clustered-tables) с одним изменением: используйте [ALTER .. REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) вместо [OPTIMIZE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE).
 * **⚠️ СЛОМАННОЕ ИЗМЕНЕНИЕ**: Версия binlog была обновлена, поэтому любые binlog из предыдущих версий не будут воспроизведены. Важно убедиться, что Manticore Search остановлен корректно в процессе обновления. Это означает, что в `/var/lib/manticore/binlog/` не должно быть файлов binlog, кроме `binlog.meta`, после остановки предыдущего экземпляра.
 * [Проблема #849](https://github.com/manticoresoftware/manticoresearch/issues/849) `SHOW SETTINGS`: теперь вы можете видеть настройки из конфигурационного файла изнутри Manticore.
 * [Проблема #1007](https://github.com/manticoresoftware/manticoresearch/issues/1007) [SET GLOBAL CPUSTATS=1/0](Server_settings/Setting_variables_online.md#SET) включает/выключает отслеживание времени процессора; [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) теперь не показывает статистику CPU, когда отслеживание времени процессора выключено.

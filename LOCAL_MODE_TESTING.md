@@ -19,6 +19,23 @@ Run the submodule update after switching branches or pulling a commit that chang
 
 Local-mode paths are relative to the current directory, so an isolated directory avoids affecting another daemon.
 
+If the current directory has no `manticore_data`, `searchd -e` follows the same default configuration lookup as ordinary `searchd`. It reads that config and connects to its first usable binary (`SPHINX`, which also accepts HTTP) or HTTP listener. Absolute Unix listeners are supported. Relative Unix paths and TCP port ranges are skipped because the client cannot infer the daemon's runtime path or selected port safely. If the config declares no listeners, the normal binary default at `127.0.0.1:9312` applies:
+
+```bash
+cd "$TESTDIR"
+"$BIN" -e 'SELECT 1 AS configured_value'
+test ! -e manticore_data
+```
+
+Use `-c` or `--config` to select a specific config. An explicit config is authoritative even when the current directory contains `manticore_data`:
+
+```bash
+"$BIN" -c /path/to/manticore.conf -e 'SELECT 1'
+"$BIN" --config /path/to/manticore.conf -e
+```
+
+Without an explicit config, a detected local instance always takes precedence over the configured daemon. Any existing `manticore_data` marker pins execution to the local path; malformed markers, stale/empty local directories, and inaccessible paths fail rather than routing a query elsewhere. Configured interactive sessions keep command history in memory for that session but do not create a local history directory.
+
 ## Start and query
 
 ```bash

@@ -16,6 +16,8 @@ bool BuildLocalSearchdConfig ( CSphConfig & hConf, CSphString & sDataDir, CSphSt
 /// quoted identifiers, escapes, or comments as statement boundaries.
 std::vector<std::string> SplitLocalSqlStatements ( const char * szSql );
 
-/// Execute one or more SQL statements against ./manticore_data/searchd.sock.
+/// On supported Unix-like platforms, execute SQL against
+/// ./manticore_data/searchd.sock, or an HTTP-capable listener selected from
+/// the explicit or normally discovered searchd configuration.
 /// A null or empty query starts the simple line-oriented interactive client.
-int ExecuteLocalSql ( const char * sQuery );
+int ExecuteLocalSql ( const char * sQuery, const char * sConfigFile=nullptr );

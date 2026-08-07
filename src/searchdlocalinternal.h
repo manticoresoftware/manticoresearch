@@ -19,9 +19,17 @@ using CompletionProvider_fn = std::function<std::vector<std::string> ( const std
 
 enum class QueryResult_e { OK, SQL_ERROR, CONNECTION_ERROR };
 
+struct SqlEndpoint_t
+{
+	CSphString m_sUnix;
+	DWORD m_uIP = 0;
+	int m_iPort = 0;
+	CSphString m_sDescription;
+};
+
 #if !_WIN32
-int ConnectSocket ( CSphString & sError );
-QueryResult_e ExecuteSqlBatch ( int & iSocket, const char * szQuery, bool bPrintStatements, bool bAligned );
+int ConnectSocket ( CSphString & sError, const SqlEndpoint_t & tEndpoint );
+QueryResult_e ExecuteSqlBatch ( int & iSocket, const char * szQuery, bool bPrintStatements, bool bAligned, const SqlEndpoint_t & tEndpoint );
 #endif
 
 class LineEditor_i
@@ -33,6 +41,6 @@ public:
 	virtual void RefreshCompletions ( const std::string & sLine, bool bSuccessful ) = 0;
 };
 
-std::unique_ptr<LineEditor_i> CreateLineEditor ( const CSphString & sDataDir, CSphString & sWarning, CompletionProvider_fn fnCompletionProvider={} );
-CompletionProvider_fn CreateCompletionProvider();
+std::unique_ptr<LineEditor_i> CreateLineEditor ( const CSphString & sDataDir, CSphString & sWarning, CompletionProvider_fn fnCompletionProvider={}, bool bPersistHistory=true );
+CompletionProvider_fn CreateCompletionProvider ( SqlEndpoint_t tEndpoint );
 }

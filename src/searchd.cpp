@@ -14650,8 +14650,8 @@ void ShowHelp ()
 		"-c, --config <file>	read configuration from specified file\n"
 		"			(default is manticore.conf)\n"
 		"-l, --local		run in zero-configuration local mode\n"
-		"-e, --execute [query]	execute SQL against the local instance\n"
-		"			(interactive mode when query is omitted)\n"
+		"-e, --execute [query]	execute SQL against a local or configured instance\n"
+		"			(-c selects the config; interactive when query is omitted; unavailable on Windows)\n"
 		"--check\t\t\tcheck config and exit\n"
 		"--stop\t\t\tsend SIGTERM to currently running searchd\n"
 		"--stopwait\t\tsend SIGTERM and wait until actual exit\n"
@@ -15969,12 +15969,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	if ( bExecute )
 	{
-		if ( szCmdConfigFile )
-			sphFatal ( "--execute is only supported for a local zero-configuration instance" );
 		if ( bOptStop || bOptStatus || bConfigTest )
 			sphFatal ( "--execute cannot be combined with lifecycle or configuration-check options" );
 		sphInitCJson();
-		return ExecuteLocalSql ( szExecute );
+		return ExecuteLocalSql ( szExecute, szCmdConfigFile );
 	}
 
 	InitBanner();

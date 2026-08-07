@@ -1,0 +1,161 @@
+name: Debug 4770 Windows config
+
+on:
+  push:
+    branches: [debug/4770-windows-config]
+    paths: [.github/workflows/debug-4770-windows.yml]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  config-bisect:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - name: Download existing Windows build
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 31167434927 --repo manticoresoftware/manticoresearch -n build_windows_Debug_x64 -D win
+          New-Item -ItemType Directory -Force win/extracted | Out-Null
+          tar -xf win/artifact.tar -C win/extracted
+      - name: Bisect UTF-8 config
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = (Resolve-Path win/extracted/build/src/Debug).Path
+          $exe = Join-Path $root 'searchd.exe'
+          $tmp = Join-Path $env:RUNNER_TEMP 'manticore-4770-config'
+          New-Item -ItemType Directory -Force $tmp | Out-Null
+
+          $searchd = @"
+          searchd
+          {
+            listen = 127.0.0.1:17012
+            listen = 127.0.0.1:17006:mysql41
+            log = $tmp/searchd.log
+            query_log = $tmp/query.log
+            pid_file = $tmp/searchd.pid
+          }
+          "@
+
+          $cases = [ordered]@{
+            ascii = @"
+          index ascii_rt
+          {
+            type = rt
+            path = $tmp/ascii
+            rt_field = title
+          }
+          "@
+            cyr_table = @"
+          index таблица4770_rt
+          {
+            type = rt
+            path = $tmp/cyrtable
+            rt_field = title
+          }
+          "@
+            cyr_fields = @"
+          index fields_rt
+          {
+            type = rt
+            path = $tmp/cyrfields
+            rt_field = название
+            rt_attr_uint = цена
+          }
+          "@
+            emoji_attr = @"
+          index emoji_rt
+          {
+            type = rt
+            path = $tmp/emoji
+            rt_field = title
+            rt_attr_uint = 📦метка
+          }
+          "@
+            percolate = @"
+          index правила4770_cfg
+          {
+            type = percolate
+            path = $tmp/pq
+            rt_field = название
+          }
+          "@
+            distributed = @"
+          index child_rt
+          {
+            type = rt
+            path = $tmp/child
+            rt_field = title
+          }
+          index распределенная4770
+          {
+            type = distributed
+            local = child_rt
+          }
+          "@
+            template = @"
+          index шаблон4770
+          {
+            type = template
+            charset_table = 0..9, A..Z->a..z, _, a..z
+          }
+          "@
+            full = @"
+          index таблица4770_rt
+          {
+            type = rt
+            path = $tmp/fullrt
+            rt_field = название
+            rt_field = описание
+            rt_attr_uint = цена
+            rt_attr_uint = ёмкость
+            rt_attr_uint = 📦метка
+          }
+          index правила4770_cfg
+          {
+            type = percolate
+            path = $tmp/fullpq
+            rt_field = название
+            rt_field = описание
+            rt_attr_uint = цена
+          }
+          index распределенная4770
+          {
+            type = distributed
+            local = таблица4770_rt
+          }
+          index шаблон4770
+          {
+            type = template
+            charset_table = 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451
+          }
+          "@
+          }
+
+          $encoding = [System.Text.UTF8Encoding]::new($false)
+          $failed = $false
+          foreach ($entry in $cases.GetEnumerator()) {
+            $name = $entry.Key
+            $cfg = Join-Path $tmp "$name.conf"
+            $out = Join-Path $tmp "$name.out"
+            $err = Join-Path $tmp "$name.err"
+            [IO.File]::WriteAllText($cfg, $searchd + "`n" + $entry.Value, $encoding)
+            $p = Start-Process -FilePath $exe -ArgumentList '--check','--config',$cfg -WorkingDirectory $root -PassThru -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
+            $exited = $p.WaitForExit(15000)
+            if (-not $exited) {
+              $p.Kill($true)
+              $p.WaitForExit()
+              Write-Host "CASE $name: HANG"
+              $failed = $true
+            } else {
+              Write-Host "CASE $name: EXIT $($p.ExitCode)"
+            }
+            if (Test-Path $out) { Get-Content $out }
+            if (Test-Path $err) { Get-Content $err }
+          }
+          if ($failed) { exit 1 }

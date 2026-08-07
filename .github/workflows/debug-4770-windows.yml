@@ -150,10 +150,10 @@ jobs:
             if (-not $exited) {
               $p.Kill($true)
               $p.WaitForExit()
-              Write-Host "CASE $name: HANG"
+              Write-Host "CASE ${name}: HANG"
               $failed = $true
             } else {
-              Write-Host "CASE $name: EXIT $($p.ExitCode)"
+              Write-Host "CASE ${name}: EXIT $($p.ExitCode)"
             }
             if (Test-Path $out) { Get-Content $out }
             if (Test-Path $err) { Get-Content $err }

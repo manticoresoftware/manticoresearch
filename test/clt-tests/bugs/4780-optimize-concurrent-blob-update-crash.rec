@@ -1,0 +1,73 @@
+––– comment –––
+Regression for #4780: RT OPTIMIZE must not retain raw row/blob-pool pointers over a merge pulse that lets a pending blob-growing update acquire the disk-chunk write lock.
+The test uses a config-defined RT table intentionally: stored_fields is empty, so the merge reaches CopyMixedAttributes_T<true,true,false,true,false,false>. It expects searchd to remain alive. On the unfixed image the concurrent workload crashes searchd and prints "crashed" instead.
+––– input –––
+searchd --stopwait >/dev/null 2>&1 || true; rm -rf /tmp/gh4780; mkdir -p /tmp/gh4780/data /tmp/gh4780/binlog; printf '%s\n' 'searchd' '{' '  listen = 127.0.0.1:9306:mysql41' '  log = /var/log/manticore/searchd.log' '  query_log = /tmp/gh4780/query.log' '  pid_file = /tmp/gh4780/searchd.pid' '  binlog_path = /tmp/gh4780/binlog' '  secondary_indexes = 1' '  network_timeout = 10' '  seamless_rotate = 0' '  preopen_tables = 0' '  unlink_old = 1' '}' '' 'index articles' '{' '  type = rt' '  path = /tmp/gh4780/data/articles' '  rt_field = title' '  stored_fields =' '  rt_attr_uint = tenant_id' '  rt_attr_multi = tags' '  rt_attr_string = category' '  rt_attr_json = payload' '}' > /tmp/gh4780/manticore.conf; rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --config /tmp/gh4780/manticore.conf > /tmp/gh4780/start.log 2>&1; for i in $(seq 1 100); do mysql -h0 -P9306 -e 'SELECT 1' >/dev/null 2>&1 && { echo ready; break; }; sleep 0.1; done
+––– output –––
+ready
+––– input –––
+cat > /tmp/gh4780/repro.php <<'PHP'
+<?php
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+$host = '127.0.0.1'; $port = 9306; $chunks = 8; $rowsPerChunk = 2500; $rounds = 12; $totalRows = $chunks * $rowsPerChunk;
+$stopFile = '/tmp/gh4780/stop'; $errorFile = '/tmp/gh4780/errors'; @unlink($stopFile); @unlink($errorFile);
+function db() { global $host, $port; $m = new mysqli($host, '', '', 'Manticore', $port); $m->set_charset('utf8mb4'); return $m; }
+function q($sql) { $m = db(); try { return $m->query($sql); } finally { $m->close(); } }
+function quotev($m, $s) { return "'" . $m->real_escape_string($s) . "'"; }
+function note_error($s) { global $errorFile; file_put_contents($errorFile, $s."\n", FILE_APPEND); }
+try {
+    q('SET GLOBAL auto_optimize=0');
+    for ($chunk=0; $chunk<$chunks; $chunk++) {
+        $first = $chunk*$rowsPerChunk + 1; $last = $first + $rowsPerChunk - 1; $m = db(); $vals = [];
+        $payload = '{"stage":"initial","flags":[1,2,3]}'; $category = 'seed-' . str_repeat('a', 256);
+        for ($id=$first; $id<=$last; $id++) {
+            $vals[] = sprintf("(%d,%s,%d,(%d,%d),%s,%s)", $id, quotev($m, "article $id baseline text"), $id%31, $id%97, $id%89+100, quotev($m, $category), quotev($m, $payload));
+            if (count($vals) >= 250) { $m->query('INSERT INTO articles(id,title,tenant_id,tags,category,payload) VALUES ' . implode(',', $vals)); $vals = []; }
+        }
+        if ($vals) $m->query('INSERT INTO articles(id,title,tenant_id,tags,category,payload) VALUES ' . implode(',', $vals));
+        $m->query('FLUSH RAMCHUNK articles'); $m->close();
+    }
+} catch (Throwable $e) { echo "crashed\n"; exit(0); }
+function fork_worker($kind, $seed) {
+    global $stopFile, $totalRows;
+    $pid = pcntl_fork(); if ($pid != 0) return $pid; mt_srand($seed);
+    try {
+        $m = db(); $n = 0;
+        while (!file_exists($stopFile)) {
+            $id = mt_rand(1, $totalRows);
+            if ($kind === 'update') {
+                $blob = 'u'.$seed.'-'.str_repeat('x', mt_rand(8192, 131072));
+                $payload = sprintf('{"stage":"updated","worker":%d,"doc":%d,"blob":"%s"}', $seed, $id, str_repeat('y', 64));
+                $m->query(sprintf("UPDATE articles SET tags=(%d,%d,%d), category=%s, payload=%s WHERE id=%d", $id%29, $id%43+100, $id%53+200, quotev($m, $blob), quotev($m, $payload), $id));
+            } elseif ($kind === 'replace') {
+                if (($n % 3) === 0) $m->query("DELETE FROM articles WHERE id=$id");
+                $blob = 'r'.$seed.'-'.str_repeat('z', mt_rand(4096, 32768)); $payload = sprintf('{"stage":"replace","worker":%d}', $seed);
+                $m->query(sprintf("REPLACE INTO articles(id,title,tenant_id,tags,category,payload) VALUES(%d,%s,%d,(%d,%d),%s,%s)", $id, quotev($m, "replacement $id"), $id%31, $id%97, $id%89+100, quotev($m, $blob), quotev($m, $payload)));
+            } else {
+                $res = $m->query("SELECT id,tenant_id FROM articles WHERE id=$id"); if ($res) $res->free();
+            }
+            $n++;
+        }
+        $m->close();
+    } catch (Throwable $e) { if (!file_exists($stopFile)) note_error($kind.'-'.$seed.': '.$e->getMessage()); }
+    exit(0);
+}
+$pids = [];
+for ($i=0; $i<8; $i++) $pids[] = fork_worker('update', 1000+$i);
+for ($i=0; $i<3; $i++) $pids[] = fork_worker('replace', 2000+$i);
+for ($i=0; $i<2; $i++) $pids[] = fork_worker('read', 3000+$i);
+$crashed = false;
+for ($round=1; $round<=$rounds; $round++) {
+    try { q('OPTIMIZE TABLE articles OPTION sync=1, cutoff=8'); q('FLUSH RAMCHUNK articles'); }
+    catch (Throwable $e) { $crashed = true; break; }
+    if (file_exists('/var/log/manticore/searchd.log') && strpos(file_get_contents('/var/log/manticore/searchd.log'), 'FATAL: CRASH DUMP') !== false) { $crashed = true; break; }
+}
+touch($stopFile); foreach ($pids as $pid) pcntl_waitpid($pid, $status);
+try { q('SELECT COUNT(*) FROM articles'); } catch (Throwable $e) { $crashed = true; }
+if (file_exists('/var/log/manticore/searchd.log') && strpos(file_get_contents('/var/log/manticore/searchd.log'), 'FATAL: CRASH DUMP') !== false) $crashed = true;
+echo $crashed ? "crashed\n" : "not_crashed\n";
+exit(0);
+PHP
+php /tmp/gh4780/repro.php
+––– output –––
+not_crashed

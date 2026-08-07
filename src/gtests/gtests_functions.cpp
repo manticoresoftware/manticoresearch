@@ -40,8 +40,10 @@ TEST ( IdentifierValidation, ValidNamesAndLimits )
 	EXPECT_TRUE ( sphValidateIdentifier ( "товары2026", false, 0, sError ) );
 	EXPECT_TRUE ( sphValidateIdentifier ( "📦метка", false, 0, sError ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "@timestamp", false, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "@version", false, 0, sError ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "@uuid_id", false, 0, sError ) );
 	EXPECT_TRUE ( sphValidateIdentifier ( "@timestamp", false, 0, sError, true ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "@version", false, 0, sError, true ) );
 	EXPECT_TRUE ( sphValidateIdentifier ( "@uuid_id", false, 0, sError, true ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "@user_field", false, 0, sError, true ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "task.params", true, 0, sError ) );

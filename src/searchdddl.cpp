@@ -98,7 +98,7 @@ public:
 	CSphString	GetTableName ( const SqlNode_t& tName ) const noexcept;
 	CSphString	GetTableName ( const SqlNode_t& tDb, const SqlNode_t& tName ) const noexcept;
 	bool		IsBacktickQuoted ( const SqlNode_t & tName ) const noexcept { return tName.m_iStart>0 && m_pBuf[tName.m_iStart-1]=='`'; }
-	bool		ValidateIdentifier ( const SqlNode_t & tName, int iMaxBytes = 0 );
+	bool		ValidateIdentifier ( const SqlNode_t & tName, int iMaxBytes = 0, bool bAllowCompatibilityNames = false );
 
 private:
 	CSphString		m_sError;
@@ -230,7 +230,7 @@ bool DdlParser_c::AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits )
 	assert(m_pStmt);
 	CreateTableAttr_t & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
 	ToString ( tAttr.m_tAttr.m_sName, tCol );
-	if ( !sphValidateIdentifier ( tAttr.m_tAttr.m_sName.cstr(), IsBacktickQuoted ( tCol ), 0, m_sError ) )
+	if ( !ValidateIdentifier ( tCol, 0, true ) )
 	{
 		m_pStmt->m_tCreateTable.m_dAttrs.Pop();
 		m_tItemOptions.Reset();
@@ -245,11 +245,12 @@ bool DdlParser_c::AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits )
 }
 
 
-bool DdlParser_c::ValidateIdentifier ( const SqlNode_t & tName, int iMaxBytes )
+bool DdlParser_c::ValidateIdentifier ( const SqlNode_t & tName, int iMaxBytes, bool bAllowCompatibilityNames )
 {
 	CSphString sName;
 	ToString ( sName, tName );
-	return sphValidateIdentifier ( sName.cstr(), IsBacktickQuoted ( tName ), iMaxBytes, m_sError );
+	bool bCompatibilityName = bAllowCompatibilityNames && ( sName=="@timestamp" || sName=="@version" );
+	return sphValidateIdentifier ( sName.cstr(), IsBacktickQuoted ( tName ), iMaxBytes, m_sError, bCompatibilityName );
 }
 
 
@@ -333,7 +334,7 @@ bool DdlParser_c::SetupAlterTable ( const SqlNode_t & tAttr, ESphAttr eAttr, int
 
 	m_pStmt->m_eStmt = bModify ? STMT_ALTER_MODIFY : STMT_ALTER_ADD;
 	ToString ( m_pStmt->m_sAlterAttr, tAttr );
-	if ( !sphValidateIdentifier ( m_pStmt->m_sAlterAttr.cstr(), IsBacktickQuoted ( tAttr ), 0, m_sError ) )
+	if ( !ValidateIdentifier ( tAttr, 0, true ) )
 	{
 		m_tItemOptions.Reset();
 		return false;
@@ -375,7 +376,7 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 
 	CSphString sName;
 	ToString ( sName, tName );
-	if ( !sphValidateIdentifier ( sName.cstr(), IsBacktickQuoted ( tName ), 0, m_sError ) )
+	if ( !ValidateIdentifier ( tName, 0, true ) )
 	{
 		m_tItemOptions.Reset();
 		return false;

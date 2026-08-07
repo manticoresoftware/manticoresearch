@@ -132,6 +132,7 @@ public:
 	void	ReInit ( int iPoolSize ) REQUIRES ( !m_dDataLock );
 	int		RentConnection () REQUIRES ( !m_dDataLock );
 	void	ReturnConnection ( int iSocket ) REQUIRES ( !m_dDataLock );
+	void	CloseIdleConnections () REQUIRES ( !m_dDataLock );
 	void	Shutdown () REQUIRES ( !m_dDataLock );
 };
 

@@ -860,8 +860,13 @@ public:
 		ScopedMutex_t dLock { m_dMutex };
 		m_bStop = true;
 		m_dWork.reset ();
-		if ( sphIsDied() )
-			m_tService.stop();
+		// Always signal the service to stop so every idle worker is woken and exits. This used to be
+		// guarded by sphIsDied(): on a graceful shutdown the workers were only released if m_dWork.reset()
+		// happened to drive m_iOutstandingWork to 0. If anything else still held outstanding work (e.g. a
+		// galera service thread that outlived replication teardown), the count never reached 0, stop() was
+		// never called, the idle workers stayed parked in Wait(), and the Join() below deadlocked the
+		// daemon forever during `searchd --stopwait`.
+		m_tService.stop();
 		dLock.Unlock ();
 		LOG ( DEBUG, TP ) << "stopping thread pool";
 		LOGINFO ( TPLIFE, TP ) << "stopping thread pool";

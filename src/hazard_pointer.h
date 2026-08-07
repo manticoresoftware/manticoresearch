@@ -192,6 +192,28 @@ public:
 		return pCurrentPtr;
 	}
 
+	// Protect a pointer stored inside an object already protected by this guard,
+	// and move this guard to the loaded pointer. The current guard must stay on
+	// the owner object while we verify its atomic field, so use a temporary guard
+	// for the loaded pointer and then transfer that pointer back here.
+	template <typename PTR>
+	PTR ProtectChained ( const std::atomic<PTR>& pMtVal )
+	{
+		assert ( m_pGuard );
+
+		Guard_c tNextGuard;
+		PTR pAssignedPtr;
+		PTR pCurrentPtr = pMtVal.load ( std::memory_order_relaxed );
+		do {
+			pAssignedPtr = pCurrentPtr;
+			tNextGuard.m_pGuard->Set ( pCurrentPtr );
+			pCurrentPtr = pMtVal.load ( std::memory_order_acquire );
+		} while ( pAssignedPtr!=pCurrentPtr );
+
+		m_pGuard->Set ( pCurrentPtr );
+		return pCurrentPtr;
+	}
+
 	template<typename PTR, typename DELETER>
 	PTR Protect ( const ScopedPtr_T<PTR,DELETER> & pMtVal )
 	{

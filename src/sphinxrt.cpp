@@ -12226,13 +12226,19 @@ static void SetKNNFlag ( CSphColumnInfo & tCol, const CSphIndexSettings & tSetti
 }
 
 
-bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSchema, const CSphIndexSettings & tSettings, StrVec_t * pWarnings, CSphString & sError, bool bSkipValidation, bool bPQ )
+bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSchema, const CSphIndexSettings & tSettings, StrVec_t * pWarnings, CSphString & sError, bool bSkipValidation, bool bPQ, bool bAllowCompatibilityNames )
 {
 	// fields
 	SmallStringHash_T<BYTE> hFields;
 	for ( CSphVariant * v=hIndex("rt_field"); v; v=v->m_pNext )
 	{
 		CSphString sFieldName = v->cstr();
+		CSphString sNameError;
+		if ( !sphValidateIdentifier ( sFieldName.cstr(), true, 0, sNameError, bAllowCompatibilityNames ) )
+		{
+			sError.SetSprintf ( "invalid field name '%s': %s", sFieldName.cstr(), sNameError.cstr() );
+			return false;
+		}
 		sFieldName.ToLower();
 		tSchema.AddField ( sFieldName.cstr() );
 		hFields.Add ( 1, sFieldName );
@@ -12279,6 +12285,13 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 			StrVec_t dNameParts;
 			sphSplit ( dNameParts, v->cstr(), ":");
 			CSphColumnInfo tCol ( dNameParts[0].cstr(), iTypes[iType]);
+			CSphString sNameError;
+			bool bInternalName = tCol.m_sName==sphGetUuidDocidName() || tCol.m_sName=="@timestamp";
+			if ( !sphValidateIdentifier ( tCol.m_sName.cstr(), true, 0, sNameError, bAllowCompatibilityNames || bInternalName ) )
+			{
+				sError.SetSprintf ( "invalid attribute name '%s': %s", tCol.m_sName.cstr(), sNameError.cstr() );
+				return false;
+			}
 			tCol.m_sName.ToLower();
 
 			// ignore doc id, it was added via create table to pass id attribute settings

@@ -34,6 +34,14 @@ inline int sphIsAlphaOnly ( int c )
 	return ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' );
 }
 
+/// Validate a user-defined table or field identifier.
+/// Non-ASCII characters must form valid UTF-8; ASCII is limited to letters,
+/// digits, and underscores. A leading digit is allowed only when quoted in SQL
+/// or when read from quote-less configuration syntax. Dots and dashes can be
+/// enabled only for flattened/internal compatibility-field paths.
+bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int iMaxBytes, CSphString & sError, bool bAllowPathPunctuation = false );
+bool sphValidateTableName ( const char * szName, bool bAllowLeadingDigit, CSphString & sError );
+
 inline bool sphIsInteger ( char c )
 {
 	return ( c>='0' && c<='9' ) || c=='+' || c=='-';

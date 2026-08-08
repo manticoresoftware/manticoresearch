@@ -241,7 +241,7 @@ private:
 /// initialize subsystem
 class CSphConfigSection;
 void sphRTInit ( CSphString sBinlogPath, bool bCommonBinlog = false, const CSphConfigSection * pCommon = nullptr );
-bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSchema, const CSphIndexSettings & tSettings, StrVec_t * pWarnings, CSphString & sError, bool bSkipValidation, bool bPQ );
+bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSchema, const CSphIndexSettings & tSettings, StrVec_t * pWarnings, CSphString & sError, bool bSkipValidation, bool bPQ, bool bAllowCompatibilityNames = false );
 void sphRTSetTestMode ();
 
 /// RT index factory

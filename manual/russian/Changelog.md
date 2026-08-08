@@ -6,6 +6,7 @@
 В этом выпуске добавлены UUID для document ID и упорядоченный `GROUP_CONCAT()` с ограничением, а также исправления в репликации, резервном копировании, обработке запросов, SQL-совместимости и вторичных индексах.
 
 ### Новые возможности и улучшения
+* 🆕 Добавлено тестирование Filebeat версии 9.5.
 * 🆕 [v28.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.6.0) [Issue #4746](https://github.com/manticoresoftware/manticoresearch/issues/4746) Добавлен упорядоченный `GROUP_CONCAT()` с ограничением [GROUP_CONCAT()](Searching/Grouping.md#GROUP_CONCAT%28field%29) для явных запросов SphinxQL `GROUP BY`: `GROUP_CONCAT(expression ORDER BY ... [SEPARATOR '...'] LIMIT N)` сохраняет `N` лучших значений в каждой группе в указанном порядке.
 * 🆕 [v28.5.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.5.0) [Issue #1429](https://github.com/manticoresoftware/manticoresearch/issues/1429) Добавлены [UUID document IDs](Creating_a_table/Data_types.md#UUID-document-IDs) для таблиц real-time через `id uuid`, включая явные или автоматически сгенерированные ID, проверки равенства UUID и фильтры `IN`, а также `REPLACE`, `UPDATE` и `DELETE` на основе UUID.
 

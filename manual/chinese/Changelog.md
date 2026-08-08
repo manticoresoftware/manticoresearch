@@ -6,6 +6,7 @@
 此版本新增了 UUID 文档 ID 和有序、受限的 `GROUP_CONCAT()`，并修复了复制、备份、查询处理、SQL 兼容性以及二级索引方面的问题。
 
 ### 新功能与改进
+* 🆕 为 Filebeat 9.5 版本添加了测试。
 * 🆕 [v28.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.6.0) [Issue #4746](https://github.com/manticoresoftware/manticoresearch/issues/4746) 为显式 SphinxQL `GROUP BY` 查询新增了有序、受限的 [GROUP_CONCAT()](Searching/Grouping.md#GROUP_CONCAT%28field%29)：`GROUP_CONCAT(expression ORDER BY ... [SEPARATOR '...'] LIMIT N)` 会按所需顺序保留每个分组中的前 `N` 个值。
 * 🆕 [v28.5.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.5.0) [Issue #1429](https://github.com/manticoresoftware/manticoresearch/issues/1429) 通过 `id uuid` 为实时表新增了 [UUID 文档 ID](Creating_a_table/Data_types.md#UUID-document-IDs)，支持显式指定或自动生成的 ID、UUID 相等和 `IN` 过滤，以及基于 UUID 的 `REPLACE`、`UPDATE` 和 `DELETE`。
 

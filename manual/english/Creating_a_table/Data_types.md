@@ -18,7 +18,7 @@ For compatibility with common log-ingestion schemas, `CREATE TABLE` and `ALTER T
 
 Identifiers must be valid UTF-8. Control characters, Unicode whitespace, bidirectional controls, and invisible default-ignorable characters are rejected. This includes non-breaking spaces, zero-width spaces, and zero-width joiners.
 
-Table names are limited to 207 UTF-8 bytes in both RT and Plain modes. For qualified `system.` table names, the prefix counts toward this limit. The limit also applies when existing table definitions are loaded, so rename any longer table before upgrading.
+Table names are limited to 200 bytes after being encoded as UTF-8 in both RT and Plain modes. Each ASCII character uses one byte, while a non-ASCII character uses two, three, or four bytes. This means a name can contain up to 200 ASCII characters, but fewer non-ASCII characters depending on the characters used. For qualified `system.` table names, the prefix counts toward this limit. The limit also applies when existing table definitions are loaded, so rename any longer table before upgrading.
 
 In RT mode, the exact logical table name is stored in Manticore's metadata while table files use a bounded portable ASCII basename. This lets byte-distinct names coexist on case- or normalization-insensitive filesystems and avoids Windows reserved filenames. The component mapping does not prevalidate the complete storage path; operating-system path limits still apply, and a later filesystem error reports the failing path and OS error.
 

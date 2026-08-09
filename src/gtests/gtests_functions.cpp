@@ -61,6 +61,13 @@ TEST ( IdentifierValidation, ValidNamesAndLimits )
 	sMax.push_back ( 'a' );
 	EXPECT_FALSE ( sphValidateIdentifier ( sMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
 
+	std::string sMultibyteMax ( SPH_MAX_TABLE_NAME_BYTES-2, 'a' );
+	sMultibyteMax += "é";
+	ASSERT_EQ ( sMultibyteMax.length(), SPH_MAX_TABLE_NAME_BYTES );
+	EXPECT_TRUE ( sphValidateIdentifier ( sMultibyteMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
+	sMultibyteMax.push_back ( 'a' );
+	EXPECT_FALSE ( sphValidateIdentifier ( sMultibyteMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
+
 	std::string sSystemMax = "system." + std::string ( SPH_MAX_TABLE_NAME_BYTES-7, 'a' );
 	EXPECT_TRUE ( sphValidateTableName ( sSystemMax.c_str(), false, sError ) );
 	sSystemMax.push_back ( 'a' );
@@ -68,6 +75,8 @@ TEST ( IdentifierValidation, ValidNamesAndLimits )
 
 	std::string sLongestTail = "." + std::to_string ( INT_MAX ) + ".tmp.spjidx.jsonsi.tmp." + std::to_string ( INT_MAX ) + ".tmp";
 	EXPECT_EQ ( sLongestTail.length(), 48 );
+	EXPECT_EQ ( SPH_MAX_TABLE_NAME_BYTES + sLongestTail.length(), 248 );
+	EXPECT_LE ( SPH_MAX_TABLE_NAME_BYTES + sLongestTail.length(), 255 );
 	EXPECT_LE ( sphGetTablePhysicalName ( sMax.c_str() ).Length() + sLongestTail.length(), 255 );
 }
 
@@ -106,7 +115,7 @@ TEST ( IdentifierValidation, PortablePhysicalTableNames )
 	std::string sLong ( SPH_MAX_TABLE_NAME_BYTES, 'a' );
 	CSphString sPhysical = sphGetTablePhysicalName ( sLong.c_str() );
 	EXPECT_TRUE ( sPhysical.Begins ( "@manticore_h_" ) );
-	EXPECT_STREQ ( sPhysical.cstr(), "@manticore_h_d6dd3a809626a0de62ad9b013e5f950af6d079ca5096627ec5d518cb9a59cfa9" );
+	EXPECT_STREQ ( sPhysical.cstr(), "@manticore_h_bc8331b8793fe78af2373387e1917423f6f1b16bfec5ef36691deb73ad8e5420" );
 	EXPECT_LE ( sPhysical.Length(), SPH_MAX_TABLE_NAME_BYTES );
 	EXPECT_EQ ( sPhysical, sphGetTablePhysicalName ( sLong.c_str() ) );
 }

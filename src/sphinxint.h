@@ -1397,7 +1397,7 @@ struct RemapXSV_t
 	int m_iTag {-1};
 };
 
-// internals attributes are last no need to send them
+// select attributes that should be sent to the client or an agent
 void sphGetAttrsToSend ( const ISphSchema & tSchema, bool bAgentMode, bool bNeedId, CSphBitvec & tAttrs );
 
 

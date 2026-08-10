@@ -15126,6 +15126,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 
 	tDefaultFA.m_eAttr = GetFileAccess( hSearchd, "access_plain_attrs", false, tDefaultFA.m_eAttr );
 	tDefaultFA.m_eBlob = GetFileAccess( hSearchd, "access_blob_attrs", false, tDefaultFA.m_eBlob );
+	tDefaultFA.m_eColumnar = GetFileMmapAccess( hSearchd, "access_columnar_attrs", tDefaultFA.m_eColumnar );
+	tDefaultFA.m_eSecondary = GetFileMmapAccess( hSearchd, "access_secondary", tDefaultFA.m_eSecondary );
 
 	if ( hSearchd("subtree_docs_cache") )
 		g_iMaxCachedDocs = hSearchd.GetSize ( "subtree_docs_cache", g_iMaxCachedDocs );
@@ -15319,8 +15321,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 
 	g_iAutoOptimizeCutoffMultiplier = hSearchd.GetInt ( "auto_optimize", 1 );
 	g_bOptimizeCutoffExplicit = hSearchd.Exists ( "optimize_cutoff" );
-	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoff() );
-	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoffKNN = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoffKNN() );
+	const auto iOptimizeCutoff = hSearchd.OptInt("optimize_cutoff");
+	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = iOptimizeCutoff.value_or ( AutoOptimizeCutoff() );
+	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoffKNN = iOptimizeCutoff.value_or ( AutoOptimizeCutoffKNN() );
 
 	SetPseudoSharding ( hSearchd.GetInt ( "pseudo_sharding", 1 )!=0 );
 	SetOptionSI ( hSearchd, bTestMode );

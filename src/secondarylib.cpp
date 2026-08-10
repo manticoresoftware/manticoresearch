@@ -137,7 +137,7 @@ uint64_t GetSIBlockCacheSize()
 }
 
 
-SI::Index_i * CreateSecondaryIndex ( const char * szFile, CSphString & sError )
+SI::Index_i * CreateSecondaryIndex ( const char * szFile, bool bMmap, CSphString & sError )
 {
 	if ( !IsSecondaryLibLoaded() )
 	{
@@ -147,7 +147,7 @@ SI::Index_i * CreateSecondaryIndex ( const char * szFile, CSphString & sError )
 
 	assert ( g_fnCreateSI );
 
-	SI::IndexSettings_t tSettings { .m_uBlockCacheSize = g_uBlockCacheSize };
+	SI::IndexSettings_t tSettings { .m_uBlockCacheSize = g_uBlockCacheSize, .m_bMmap = bMmap };
 
 	std::string sTmpError;
 	SI::Index_i * pSIdx = g_fnCreateSI ( szFile, tSettings, sTmpError );

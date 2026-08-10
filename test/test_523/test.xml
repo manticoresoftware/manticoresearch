@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>binary API SEARCH rejects negative element counts</name>
+<skip_db/>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<custom_test><![CDATA[
+$pack_i32 = function ( $v ) { return pack ( 'N', $v & 0xffffffff ); };
+$pack_u32 = function ( $v ) { return pack ( 'N', $v & 0xffffffff ); };
+$pack_u16 = function ( $v ) { return pack ( 'n', $v & 0xffff ); };
+$pack_str = function ( $s ) use ( $pack_i32 ) { return $pack_i32 ( strlen ( $s ) ) . $s; };
+
+$query_prefix = function ( $attr_filters_count = 0 ) use ( $pack_i32, $pack_u32, $pack_str )
+{
+	$body = '';
+	$body .= $pack_i32 ( 0 );      // master version
+	$body .= $pack_u32 ( 1 );      // query count
+	$body .= $pack_u32 ( 0 );      // flags
+	$body .= $pack_i32 ( 0 );      // offset
+	$body .= $pack_i32 ( 20 );     // limit
+	$body .= $pack_i32 ( 0 );      // match mode
+	$body .= $pack_i32 ( 0 );      // ranker
+	$body .= $pack_i32 ( 0 );      // sort mode
+	$body .= $pack_str ( '' );     // sort by
+	$body .= $pack_str ( '' );     // raw query
+	$body .= $pack_i32 ( 0 );      // field weights (legacy dwords count)
+	$body .= $pack_str ( '' );     // indexes
+	$body .= $pack_i32 ( 0 );      // idrange64
+	$body .= $pack_u32 ( 0 );      // min docid
+	$body .= $pack_u32 ( 0 );      // max docid
+	$body .= $pack_i32 ( $attr_filters_count ); // attr filters
+	$body .= $pack_u32 ( 0 );      // group func
+	$body .= $pack_str ( '' );     // group by
+	$body .= $pack_i32 ( 1000 );   // max matches
+	$body .= $pack_str ( '' );     // group sort by
+	$body .= $pack_i32 ( 0 );      // cutoff
+	$body .= $pack_i32 ( 0 );      // retry count
+	$body .= $pack_i32 ( 0 );      // retry delay
+	$body .= $pack_str ( '' );     // group distinct
+	$body .= $pack_i32 ( 0 );      // geoanchor
+	return $body;
+};
+
+$query_suffix = function ( $filter_tree_count ) use ( $pack_i32, $pack_u32, $pack_str )
+{
+	$body = '';
+	$body .= $pack_str ( '' );     // comment
+	$body .= $pack_i32 ( 0 );      // overrides
+	$body .= $pack_str ( '' );     // select
+	$body .= $pack_str ( '' );     // outer order by
+	$body .= $pack_u32 ( 0 );      // outer offset
+	$body .= $pack_u32 ( 0 );      // outer limit
+	$body .= $pack_i32 ( 0 );      // has outer
+	$body .= $pack_i32 ( 0 );      // expansion limit
+	$body .= $pack_str ( '' );     // query token filter lib
+	$body .= $pack_str ( '' );     // query token filter name
+	$body .= $pack_str ( '' );     // query token filter opts
+	$body .= $pack_i32 ( $filter_tree_count );
+	return $body;
+};
+
+$packet = function ( $body ) use ( $pack_u16, $pack_u32 )
+{
+	return $pack_u16 ( 0 ) . $pack_u16 ( 0x127 ) . $pack_u32 ( strlen ( $body ) ) . $body;
+};
+
+$full_query = function ( $index_weights, $field_weights, $filter_tree_count ) use ( $query_prefix, $query_suffix, $packet, $pack_i32, $pack_u32, $pack_str )
+{
+	$body = $query_prefix();
+	$body .= $pack_i32 ( count ( $index_weights ) );
+	foreach ( $index_weights as $pair )
+		$body .= $pack_str ( $pair[0] ) . $pack_i32 ( $pair[1] );
+	$body .= $pack_u32 ( 0 );
+	$body .= $pack_i32 ( count ( $field_weights ) );
+	foreach ( $field_weights as $pair )
+		$body .= $pack_str ( $pair[0] ) . $pack_i32 ( $pair[1] );
+	$body .= $query_suffix ( $filter_tree_count );
+	return $packet ( $body );
+};
+
+$cases = array (
+	'control-zero' => $full_query ( array(), array(), 0 ),
+	'control-positive' => $full_query ( array ( array ( 'idx', 1 ) ), array(), 0 ),
+	'negative-attrfilters' => $packet ( $query_prefix ( -1 ) ),
+	'negative-indexweights' => $packet ( $query_prefix() . $pack_i32 ( -1 ) ),
+	'negative-fieldweights' => $packet ( $query_prefix() . $pack_i32 ( 0 ) . $pack_u32 ( 0 ) . $pack_i32 ( -1 ) ),
+	'negative-filtertree' => $packet ( $query_prefix() . $pack_i32 ( 0 ) . $pack_u32 ( 0 ) . $pack_i32 ( 0 ) . $query_suffix ( -1 ) ),
+);
+
+$send_case = function ( $payload )
+{
+	global $sd_address, $sd_port;
+	$fp = @stream_socket_client ( "tcp://$sd_address:$sd_port", $errno, $errstr, 2 );
+	if ( !$fp )
+		return 'connect-error';
+	stream_set_timeout ( $fp, 0, 500000 );
+	@fread ( $fp, 4 ); // server handshake, if already available
+	fwrite ( $fp, pack ( 'N', 1 ) );
+	fwrite ( $fp, $payload );
+	$data = @fread ( $fp, 4096 );
+	if ( strlen ( $data )==4 )
+		$data .= @fread ( $fp, 4096 );
+	$meta = stream_get_meta_data ( $fp );
+	fclose ( $fp );
+	if ( $data==='' )
+		return $meta['timed_out'] ? 'timeout' : 'closed';
+	return 'reply';
+};
+
+$results = array();
+foreach ( $cases as $name => $payload )
+{
+	$status = $send_case ( $payload );
+	$results[$name] = ( $status==='reply' ) ? 'ok' : $status;
+}
+]]></custom_test>
+
+</test>

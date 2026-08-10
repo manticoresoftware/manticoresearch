@@ -7188,20 +7188,8 @@ enum ThreadInfoFormat_e
 
 static Str_t FormatInfo ( const PublicThreadDesc_t & tThd, ThreadInfoFormat_e eFmt, QuotationEscapedBuilder & tBuf )
 {
-	if ( tThd.m_pQuery && eFmt==THD_FORMAT_SPHINXQL && tThd.m_eProto!=Proto_e::MYSQL41 )
-	{
-		bool bGotQuery = false;
-		if ( tThd.m_pQuery )
-		{
-			tBuf.Clear();
-			FormatSphinxql ( *tThd.m_pQuery, {}, 0, tBuf );
-			bGotQuery = true;
-		}
-
-		// query might be removed prior to lock then go to common path
-		if ( bGotQuery )
-			return (Str_t)tBuf;
-	}
+	if ( eFmt==THD_FORMAT_SPHINXQL && !tThd.m_sPreParsedQuery.IsEmpty() && tThd.m_eProto!=Proto_e::MYSQL41 )
+		return FromStr ( tThd.m_sPreParsedQuery );
 
 	if ( tThd.m_sDescription.IsEmpty () && tThd.m_szCommand )
 		return FromSz ( tThd.m_szCommand );

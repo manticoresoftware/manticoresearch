@@ -73,6 +73,7 @@ void PublicThreadDesc_t::Swap ( PublicThreadDesc_t & rhs )
 	::Swap ( m_sClientName, rhs.m_sClientName );
 	::Swap ( m_sDescription, rhs.m_sDescription );
 	::Swap ( m_sProto, rhs.m_sProto );
+	::Swap ( m_sPreParsedQuery, rhs.m_sPreParsedQuery );
 	::Swap ( m_tmConnect, rhs.m_tmConnect );
 	::Swap ( m_pQuery, rhs.m_pQuery );
 	::Swap ( m_szCommand, rhs.m_szCommand );
@@ -117,7 +118,7 @@ void GatherPublicTaskInfo ( PublicThreadDesc_t& dDst, const std::atomic<void*>& 
 }
 
 
-PublicThreadDesc_t GatherPublicThreadInfo ( const Threads::LowThreadDesc_t * pSrc, int iCols )
+PublicThreadDesc_t GatherPublicThreadInfo ( const Threads::LowThreadDesc_t * pSrc, std::optional<int> iCols )
 {
 	PublicThreadDesc_t dDst;
 	if (!pSrc)
@@ -185,10 +186,10 @@ void MiniTaskInfo_t::RenderWithoutChain ( PublicThreadDesc_t& dDst )
 	auto pDescription = tGuard.Protect ( m_pHazardDescription );
 	if ( pDescription )
 	{
-		if ( dDst.m_iDescriptionLimit < 0 ) // no limit
+		if ( !dDst.m_iDescriptionLimit ) // no limit
 			dDst.m_sDescription << *pDescription;
 		else
-			dDst.m_sDescription.AppendChunk ( { pDescription->scstr(), Min ( m_iDescriptionLen, dDst.m_iDescriptionLimit ) } );
+			dDst.m_sDescription.AppendChunk ( { pDescription->scstr(), Min ( m_iDescriptionLen, *dDst.m_iDescriptionLimit ) } );
 	}
 }
 

@@ -56,8 +56,9 @@ struct PublicThreadDesc_t
 	StringBuilder_c		m_sClientName	{" "};
 	StringBuilder_c		m_sDescription	{" "};
 	StringBuilder_c		m_sProto		{","};
+	CSphString			m_sPreParsedQuery;
 
-	int 				m_iDescriptionLimit = -1;	///< cb flag when collecting info with columns=N, avoid copy huge descriptions then
+	std::optional<int> 	m_iDescriptionLimit { std::nullopt };	///< cb flag when collecting info with columns=N, avoid copy huge descriptions then
 	int64_t				m_tmConnect		= -1; ///< when did the client connect?
 	std::unique_ptr<CSphQuery>	m_pQuery; /// currently running query, if not sphinxql
 	const char*			m_szCommand		= nullptr;	/// simple static SYSTEM, SELECT, UPDATE, etc. Used in show threads, crash dumping
@@ -73,7 +74,7 @@ struct PublicThreadDesc_t
 };
 
 // flatten info from thread. iCols make hint for huge descriptions to avoid full copy
-PublicThreadDesc_t GatherPublicThreadInfo ( const Threads::LowThreadDesc_t * pSrc, int iCols );
+PublicThreadDesc_t GatherPublicThreadInfo ( const Threads::LowThreadDesc_t * pSrc, std::optional<int> iCols );
 
 // internal helpers
 // we don't expect all possible taskinfos being located in this file,

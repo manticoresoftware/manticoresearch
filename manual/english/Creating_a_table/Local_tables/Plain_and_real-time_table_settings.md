@@ -107,7 +107,7 @@ Value: **plain** (default), rt
 path = path/to/table
 ```
 
-The path to where the table will be stored or located, either absolute or relative, without the extension. 
+The path to where the table will be stored or located, either absolute or relative, without the extension. When `indexer` builds a plain table, it creates any missing parent directories in this path. The user running `indexer` must have write permission for the nearest existing parent directory.
 
 Value: The path to the table, **mandatory**
 

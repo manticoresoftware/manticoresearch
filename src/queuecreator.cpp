@@ -1789,7 +1789,8 @@ bool QueueCreator_c::AddKNNDistColumn()
 // calc here yields a null calc and crashes, so rescore must be skipped.
 bool QueueCreator_c::CanRescoreKNN() const
 {
-	if ( m_tQuery.m_bHybridSearch || !m_tQuery.HasKnn() )
+	// Merge queues receive already-computed shard values and must not evaluate sorter expressions again.
+	if ( !m_tSettings.m_bComputeItems || m_tQuery.m_bHybridSearch || !m_tQuery.HasKnn() )
 		return false;
 
 	const auto & tKNN = m_tQuery.SingleKnnSettings();

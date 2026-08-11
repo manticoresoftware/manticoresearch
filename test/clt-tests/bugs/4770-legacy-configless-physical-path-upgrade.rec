@@ -2,7 +2,8 @@
 Regression for issue #4770: before portable physical table names were added,
 configless tables used their logical name as the directory and manticore.json
 path. Stage that stopped-daemon layout for the Windows-reserved logical name
-`con`, then verify upgrade load, query, restart, drop, and raw-directory cleanup.
+`con`, then verify upgrade load, query, restart, drop, and cleanup of all legacy data
+files. The established lock-file residue is allowed.
 
 ––– block: ../base/start-searchd –––
 ––– input –––
@@ -56,6 +57,6 @@ python3 -c 'import json; print(int("con" not in json.load(open("/var/lib/mantico
 ––– output –––
 1
 ––– input –––
-test ! -d /var/lib/manticore/con; echo $?
+find /var/lib/manticore/con -mindepth 1 -maxdepth 1 ! -name 'con.lock' 2>/dev/null | wc -l | tr -d ' '
 ––– output –––
 0

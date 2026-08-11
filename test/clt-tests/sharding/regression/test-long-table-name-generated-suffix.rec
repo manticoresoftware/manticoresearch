@@ -31,6 +31,11 @@ mysql -h0 -P1306 -e "INSERT INTO ${LONG_TABLE_NAME}(id,body) VALUES(1,'boundary'
 0
 ––– block: ../../base/replication/stop-searchd –––
 ––– block: ../../base/replication/start-searchd-precach –––
+––– comment –––
+Wait for Buddy's one-second sharding processor tick to initialize its queue after restart.
+––– input –––
+sleep 2
+––– output –––
 ––– input –––
 mysql -h0 -P1306 -N -B -e "SHOW TABLES" | grep -c "${LONG_TABLE_NAME}"
 ––– output –––

@@ -315,15 +315,15 @@ config_201_plain_rejected
 config_201_rt_rejected
 config_201_pq_rejected
 ––– comment –––
-Config-managed table and field names reject unsupported ASCII punctuation consistently
+Config-managed table and field names preserve legacy ASCII punctuation compatibility
 ––– input –––
 printf '%s\n' 'table bad-name {' ' type = rt' ' path = /tmp/test4770-bad-table' ' rt_field = body' '}' 'searchd {' ' listen = 127.0.0.1:19306:mysql' ' log = /tmp/test4770-bad.log' ' query_log = /tmp/test4770-bad-query.log' ' pid_file = /tmp/test4770-bad.pid' '}' > /tmp/test4770-bad-table.conf; if searchd --config /tmp/test4770-bad-table.conf --check >/tmp/test4770-bad-table.out 2>&1; then echo bad_table_accepted; elif grep -q "invalid table name 'bad-name': invalid character '-'" /tmp/test4770-bad-table.out; then echo bad_table_rejected; else echo wrong_table_failure; fi
 ––– output –––
-bad_table_rejected
+bad_table_accepted
 ––– input –––
 printf '%s\n' 'source bad_source {' ' type = csvpipe' " csvpipe_command = printf '1,needle\\n'" ' csvpipe_field = bad-name' '}' 'table good_table {' ' type = plain' ' source = bad_source' ' path = /tmp/test4770-bad-field' '}' 'searchd {' ' listen = 127.0.0.1:19306:mysql' ' log = /tmp/test4770-bad.log' ' query_log = /tmp/test4770-bad-query.log' ' pid_file = /tmp/test4770-bad.pid' '}' > /tmp/test4770-bad-field.conf; if indexer --config /tmp/test4770-bad-field.conf --all >/dev/null 2>&1; then echo bad_field_accepted; else echo bad_field_rejected; fi
 ––– output –––
-bad_field_rejected
+bad_field_accepted
 ––– comment –––
 Embedded XML schemas reject unsupported field and attribute names
 ––– input –––

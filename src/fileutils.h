@@ -161,6 +161,7 @@ bool			CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sErr
 // Existing short lowercase ASCII names retain their historical on-disk names.
 CSphString		sphGetTablePhysicalName ( const CSphString & sName );
 CSphString		sphGetConfiglessTablePath ( const CSphString & sDataDir, const CSphString & sName );
+CSphString		sphGetExistingConfiglessTablePath ( const CSphString & sDataDir, const CSphString & sName );
 
 bool			IsPathAbsolute ( const CSphString & sPath );
 CSphString		GetExecutablePath();

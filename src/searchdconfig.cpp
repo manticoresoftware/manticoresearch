@@ -42,13 +42,7 @@ static CSphString GetPathForNewIndex ( const CSphString & sIndexName )
 
 static CSphString GetPathForExistingIndex ( const CSphString & sIndexName )
 {
-	CSphString sPath = GetPathForNewIndex ( sIndexName );
-	CSphString sLegacyPath;
-	sLegacyPath.SetSprintf ( "%s/%s", g_sDataDir.cstr(), sIndexName.cstr() );
-	if ( sPath!=sLegacyPath && !sphDirExists ( sPath.cstr() ) && sphDirExists ( sLegacyPath.cstr() ) )
-		return sLegacyPath;
-
-	return sPath;
+	return sphGetExistingConfiglessTablePath ( g_sDataDir, sIndexName );
 }
 
 
@@ -369,7 +363,7 @@ bool IndexDesc_t::Parse ( const bson::Bson_c& tBson, const CSphString& sName, CS
 		return TlsMsg::Err ( "empty table name" );
 
 	CSphString sNameError;
-	if ( !sphValidateTableName ( sName.cstr(), true, sNameError ) )
+	if ( !sphValidateTableName ( sName.cstr(), true, sNameError, true ) )
 		return TlsMsg::Err ( "invalid table name '%s': %s", sName.cstr(), sNameError.cstr() );
 
 	m_sName = sName;
@@ -1408,7 +1402,7 @@ static void AppendCreateTableTopology ( StringBuilder_c & sRes, const Distribute
 CSphString BuildCreateTableDistr ( const CSphString & sName, const DistributedIndex_t & tDistr )
 {
 	StringBuilder_c sRes(" ");
-	sRes << "CREATE TABLE" << sName << "type='distributed'";
+	sRes << "CREATE TABLE" << FormatCreateTableIdentifier ( sName ) << "type='distributed'";
 	AppendCreateTableTopology ( sRes, tDistr );
 	return sRes.cstr();
 }

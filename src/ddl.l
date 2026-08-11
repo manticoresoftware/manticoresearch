@@ -29,9 +29,9 @@
 %}
 
 TABLE_IDENT			[a-zA-Z_\200-\377][a-zA-Z0-9_\200-\377]*
-QUOTED_TABLE_IDENT	[a-zA-Z0-9_\200-\377]+
+QUOTED_TABLE_IDENT	[0-9]*[a-zA-Z_\200-\377][a-zA-Z0-9_\200-\377]*
 IDENT				[@a-zA-Z_\200-\377][a-zA-Z0-9_\200-\377]*
-QUOTED_IDENT		[@a-zA-Z0-9_\200-\377][a-zA-Z0-9_\200-\377]*
+QUOTED_IDENT		[0-9]*[@a-zA-Z_\200-\377][a-zA-Z0-9_\200-\377]*
 
 
 

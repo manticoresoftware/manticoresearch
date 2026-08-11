@@ -61,6 +61,7 @@ static_assert ( ( 1 << ROWITEM_SHIFT )==ROWITEM_BITS, "invalid ROWITEM_SHIFT" );
 // With the longest known generated table-file suffix (48 bytes), a 200-byte
 // basename uses at most 248 bytes of the Linux NAME_MAX (255) component limit.
 const int SPH_MAX_TABLE_NAME_BYTES = 200;
+const int SPH_MAX_GENERATED_TABLE_SUFFIX_BYTES = 48;
 
 const int SPH_LEGACY_TOKEN_BYTES = SPH_MAX_WORD_LEN*3;
 const int SPH_V2_MAX_TOKEN_BYTES = 32*1024;

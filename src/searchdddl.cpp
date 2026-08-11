@@ -249,7 +249,7 @@ bool DdlParser_c::ValidateIdentifier ( const SqlNode_t & tName, int iMaxBytes, b
 {
 	CSphString sName;
 	ToString ( sName, tName );
-	bool bCompatibilityName = bAllowCompatibilityNames && ( sName=="@timestamp" || sName=="@version" );
+	bool bCompatibilityName = bAllowCompatibilityNames && ( !strcasecmp ( sName.cstr(), "@timestamp" ) || !strcasecmp ( sName.cstr(), "@version" ) );
 	return sphValidateIdentifier ( sName.cstr(), IsBacktickQuoted ( tName ), iMaxBytes, m_sError, bCompatibilityName );
 }
 

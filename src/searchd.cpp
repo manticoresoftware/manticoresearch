@@ -6810,18 +6810,18 @@ static bool CheckExistingTables ( const CSphString & sIndex, bool bIfNotExists, 
 
 	const char * szIdentifier = sIndex.Begins ( "system." ) ? sIndex.cstr()+7 : sIndex.cstr();
 
+	if ( !bNameQuoted && CSphSchema::IsReserved ( szIdentifier ) )
+	{
+		sError.SetSprintf ( "'%s' is a reserved keyword", sIndex.cstr() );
+		return false;
+	}
+
 	if ( g_pLocalIndexes->Contains ( sIndex ) || g_pDistIndexes->Contains ( sIndex ) )
 	{
 		if ( bIfNotExists )
 			return true;
 
 		sError.SetSprintf ( "table '%s' already exists", sIndex.cstr() );
-		return false;
-	}
-
-	if ( !bNameQuoted && CSphSchema::IsReserved ( szIdentifier ) )
-	{
-		sError.SetSprintf ( "'%s' is a reserved keyword", sIndex.cstr() );
 		return false;
 	}
 
@@ -14068,7 +14068,7 @@ bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSettings,
 			sphWarning ( "table '%s': %s", szIndexName, sWarning.cstr() );
 	}
 
-	if ( !sphRTSchemaConfigure ( hIndex, tSchema, tSettings, pWarnings, sError, bPercolate, bPercolate, IsConfigless() ) )
+	if ( !sphRTSchemaConfigure ( hIndex, tSchema, tSettings, pWarnings, sError, bPercolate, bPercolate ) )
 	{
 		sphWarning ( "table '%s': %s - NOT SERVING", szIndexName, sError.cstr () );
 		return false;

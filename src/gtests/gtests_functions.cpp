@@ -15,6 +15,7 @@
 #include "sphinxint.h"
 #include "sphinxutils.h"
 #include "fileutils.h"
+#include "indexsettings.h"
 
 #include <uni_algo/conv.h>
 #include "json/cJSON.h"
@@ -52,6 +53,8 @@ TEST ( IdentifierValidation, ValidNamesAndLimits )
 	EXPECT_TRUE ( sphValidateIdentifier ( "graph-workspace.description", true, 0, sError, true ) );
 	EXPECT_TRUE ( sphValidateIdentifier ( "2026_архив", true, 0, sError ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "2026_архив", false, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "123", true, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "123", true, 0, sError, true ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "bad-name", true, 0, sError ) );
 	EXPECT_TRUE ( sphValidateTableName ( "system.товары", false, sError ) );
 	EXPECT_FALSE ( sphValidateTableName ( "system.bad-name", false, sError ) );
@@ -68,7 +71,7 @@ TEST ( IdentifierValidation, ValidNamesAndLimits )
 	sMultibyteMax.push_back ( 'a' );
 	EXPECT_FALSE ( sphValidateIdentifier ( sMultibyteMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
 
-	std::string sSystemMax = "system." + std::string ( SPH_MAX_TABLE_NAME_BYTES-7, 'a' );
+	std::string sSystemMax = "system." + std::string ( SPH_MAX_TABLE_NAME_BYTES + SPH_MAX_GENERATED_TABLE_SUFFIX_BYTES, 'a' );
 	EXPECT_TRUE ( sphValidateTableName ( sSystemMax.c_str(), false, sError ) );
 	sSystemMax.push_back ( 'a' );
 	EXPECT_FALSE ( sphValidateTableName ( sSystemMax.c_str(), false, sError ) );
@@ -81,20 +84,51 @@ TEST ( IdentifierValidation, ValidNamesAndLimits )
 }
 
 
+TEST ( IdentifierValidation, ExistingConfiglessPathFallsBackToLegacyLayout )
+{
+	CSphString sRoot;
+	sRoot.SetSprintf ( "%s/gtests-legacy-path-%lld", sphGetCwd().cstr(), (long long)sphMicroTimer() );
+	ASSERT_TRUE ( MkDir ( sRoot.cstr() ) );
+	AT_SCOPE_EXIT ( [&sRoot] { ::rmdir ( sRoot.cstr() ); } );
+
+	CSphString sLegacyPath;
+	sLegacyPath.SetSprintf ( "%s/legacy-name", sRoot.cstr() );
+	ASSERT_TRUE ( MkDir ( sLegacyPath.cstr() ) );
+	AT_SCOPE_EXIT ( [&sLegacyPath] { ::rmdir ( sLegacyPath.cstr() ); } );
+
+	EXPECT_STREQ ( sphGetExistingConfiglessTablePath ( sRoot, "legacy-name" ).cstr(), sLegacyPath.cstr() );
+
+	CSphString sMappedPath = sphGetConfiglessTablePath ( sRoot, "legacy-name" );
+	ASSERT_TRUE ( MkDir ( sMappedPath.cstr() ) );
+	AT_SCOPE_EXIT ( [&sMappedPath] { ::rmdir ( sMappedPath.cstr() ); } );
+	EXPECT_STREQ ( sphGetExistingConfiglessTablePath ( sRoot, "legacy-name" ).cstr(), sMappedPath.cstr() );
+}
+
+
+TEST ( IdentifierValidation, GeneratedDdlQuotesIdentifiersWhenNeeded )
+{
+	EXPECT_STREQ ( FormatCreateTableIdentifier ( "ordinary_name" ).cstr(), "ordinary_name" );
+	EXPECT_STREQ ( FormatCreateTableIdentifier ( "2026_архив" ).cstr(), "`2026_архив`" );
+	EXPECT_STREQ ( FormatCreateTableIdentifier ( "from" ).cstr(), "`from`" );
+	EXPECT_STREQ ( FormatCreateTableIdentifier ( "system.from" ).cstr(), "system.`from`" );
+	EXPECT_STREQ ( FormatCreateTableIdentifier ( "ordinary_name", true ).cstr(), "`ordinary_name`" );
+}
+
+
 TEST ( IdentifierValidation, ConfigParserAcceptsUtf8SectionNames )
 {
 	constexpr char sConfig[] =
-		"index таблица4770\n"
+		"index таблица-4770\n"
 		"{\n"
 		"  type = rt\n"
 		"  path = utf8_section\n"
-		"  rt_field = название\n"
+		"  rt_field = название-поля\n"
 		"}\n";
 
 	CSphConfig hConfig;
 	ASSERT_TRUE ( ParseConfig ( &hConfig, "utf8-section.conf", FROMS ( sConfig ) ) ) << TlsMsg::szError();
 	ASSERT_TRUE ( hConfig.Exists ( "index" ) );
-	ASSERT_TRUE ( hConfig["index"].Exists ( "таблица4770" ) );
+	ASSERT_TRUE ( hConfig["index"].Exists ( "таблица-4770" ) );
 }
 
 
@@ -145,6 +179,9 @@ TEST ( IdentifierValidation, InvalidUtf8AndUnsafeCodepoints )
 	EXPECT_FALSE ( sphValidateIdentifier ( "bad‮name", false, 0, sError ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "a‍name", false, 0, sError ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xB0name", false, 0, sError ) ); // U+FFF0
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xB9name", false, 0, sError ) ); // U+FFF9
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xBAname", false, 0, sError ) ); // U+FFFA
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xBBname", false, 0, sError ) ); // U+FFFB
 }
 
 

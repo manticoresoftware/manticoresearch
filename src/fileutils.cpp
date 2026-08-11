@@ -110,6 +110,22 @@ CSphString sphGetConfiglessTablePath ( const CSphString & sDataDir, const CSphSt
 }
 
 
+CSphString sphGetExistingConfiglessTablePath ( const CSphString & sDataDir, const CSphString & sName )
+{
+	CSphString sPath = sphGetConfiglessTablePath ( sDataDir, sName );
+	CSphString sLegacyPath;
+	if ( sDataDir.Length() && !sDataDir.Ends("/") && !sDataDir.Ends("\\") )
+		sLegacyPath.SetSprintf ( "%s/%s", sDataDir.cstr(), sName.cstr() );
+	else
+		sLegacyPath.SetSprintf ( "%s%s", sDataDir.cstr(), sName.cstr() );
+
+	if ( sPath!=sLegacyPath && !sphDirExists ( sPath.cstr() ) && sphDirExists ( sLegacyPath.cstr() ) )
+		return sLegacyPath;
+
+	return sPath;
+}
+
+
 CSphIOStats::~CSphIOStats ()
 {
 	Stop();

@@ -200,7 +200,7 @@ tablename:
 		}
 	| tableident '.' tableident
 		{
-			if ( !pParser->ValidateIdentifier ( $3, SPH_MAX_TABLE_NAME_BYTES-7 ) )
+			if ( !pParser->ValidateIdentifier ( $3, SPH_MAX_TABLE_NAME_BYTES + SPH_MAX_GENERATED_TABLE_SUFFIX_BYTES ) )
 			{
 				yyerror ( pParser, pParser->GetLastError() );
 				YYERROR;

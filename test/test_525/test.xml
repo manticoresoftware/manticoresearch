@@ -66,21 +66,28 @@ index шаблон4770
 	charset_table = 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451
 }
 
-# User-defined Plain-mode fields and attributes use the same public syntax
-# as SQL DDL; compatibility punctuation is not enabled for config entries.
-index invalid_field4770
+# Preserve punctuation accepted by earlier releases when loading configured schemas.
+index legacy-table4770
 {
 	type = rt
-	path = <data_path/>/invalid_field4770
-	rt_field = bad-name
+	path = <data_path/>/legacy_table4770
+	rt_field = title
 }
 
-index invalid_attr4770
+index legacy_field4770
+{
+	type = rt
+	path = <data_path/>/legacy_field4770
+	rt_field = title-text
+	rt_attr_string = category-name
+}
+
+index legacy_pq4770
 {
 	type = percolate
-	path = <data_path/>/invalid_attr4770
-	rt_field = title
-	rt_attr_uint = bad-name
+	path = <data_path/>/legacy_pq4770
+	rt_field = task.params
+	rt_field = graph-workspace.description
 }
 </config>
 
@@ -94,6 +101,8 @@ index invalid_attr4770
 	SELECT id, название, цена FROM распределенная4770 WHERE MATCH('@название клавиатура');
 	INSERT INTO правила4770_cfg (id, query) VALUES (1, '@название клавиатура');
 	CALL PQ('правила4770_cfg', '{"название":"клавиатура","описание":"товар","цена":100}');
+	INSERT INTO legacy_pq4770 (id, query) VALUES (1, '@task.params hello'), (2, '@graph-workspace.description world');
+	CALL PQ('legacy_pq4770', '{"task.params":"hello","graph-workspace.description":"world"}');
 	CALL SNIPPETS('Игровая клавиатура', 'шаблон4770', 'клавиатура');
 </sphinxql>
 </queries>

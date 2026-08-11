@@ -40,7 +40,7 @@ inline int sphIsAlphaOnly ( int c )
 /// or when read from quote-less configuration syntax. Dots and dashes can be
 /// enabled only for flattened/internal compatibility-field paths.
 bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int iMaxBytes, CSphString & sError, bool bAllowPathPunctuation = false );
-bool sphValidateTableName ( const char * szName, bool bAllowLeadingDigit, CSphString & sError );
+bool sphValidateTableName ( const char * szName, bool bAllowLeadingDigit, CSphString & sError, bool bAllowLegacyPunctuation = false );
 
 inline bool sphIsInteger ( char c )
 {

@@ -153,10 +153,16 @@ TEST ( functions, DdlGenericIdentifiersValidateUtf8 )
 	sError = "";
 	EXPECT_FALSE ( ParseDdlForTest ( sMaxTable, sError ) );
 
+	sError = "";
+	EXPECT_FALSE ( ParseDdlForTest ( "CREATE TABLE `123` (body text)", sError ) );
+	sError = "";
+	EXPECT_FALSE ( ParseDdlForTest ( "CREATE TABLE valid (`456` text)", sError ) );
+
 	const char * dCompatibleColumnQueries[] =
 	{
 		"CREATE TABLE logs (@timestamp TIMESTAMP, @version STRING)",
 		"CREATE TABLE logs_quoted (`@timestamp` TIMESTAMP, `@version` STRING)",
+		"CREATE TABLE logs_mixed (@TIMESTAMP TIMESTAMP, `@Version` STRING)",
 		"CREATE TABLE logs_bit (@timestamp BIT(1))",
 		"ALTER TABLE logs ADD COLUMN @timestamp TIMESTAMP",
 		"ALTER TABLE logs ADD COLUMN @timestamp BIT(1)",
@@ -188,7 +194,7 @@ TEST ( functions, DdlGenericIdentifiersValidateUtf8 )
 		EXPECT_FALSE ( ParseDdlForTest ( szQuery, sError ) ) << szQuery;
 	}
 
-	std::string sMaxSystem = "CREATE TABLE system.`" + std::string ( SPH_MAX_TABLE_NAME_BYTES-7, 'a' ) + "` (body text)";
+	std::string sMaxSystem = "CREATE TABLE system.`" + std::string ( SPH_MAX_TABLE_NAME_BYTES + SPH_MAX_GENERATED_TABLE_SUFFIX_BYTES, 'a' ) + "` (body text)";
 	sError = "";
 	EXPECT_TRUE ( ParseDdlForTest ( sMaxSystem, sError ) ) << sError.cstr();
 	sMaxSystem.insert ( sMaxSystem.find ( '`' )+1, 1, 'a' );

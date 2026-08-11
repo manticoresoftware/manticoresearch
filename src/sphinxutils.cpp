@@ -1324,7 +1324,7 @@ bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int i
 			( uCode>=0x180B && uCode<=0x180F ) || ( uCode>=0x2000 && uCode<=0x200F ) ||
 			( uCode>=0x2028 && uCode<=0x202F ) || ( uCode>=0x205F && uCode<=0x206F ) ||
 			uCode==0x3000 || uCode==0x3164 || ( uCode>=0xFE00 && uCode<=0xFE0F ) ||
-			uCode==0xFEFF || ( uCode>=0xFFF0 && uCode<=0xFFF8 ) || uCode==0xFFA0 ||
+			uCode==0xFEFF || ( uCode>=0xFFF0 && uCode<=0xFFFB ) || uCode==0xFFA0 ||
 			( uCode>=0x1BCA0 && uCode<=0x1BCA3 ) ||
 			( uCode>=0x1D173 && uCode<=0x1D17A ) || ( uCode>=0xE0000 && uCode<=0xE0FFF );
 	};
@@ -1348,8 +1348,9 @@ bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int i
 		return false;
 	}
 
-	bool bInternalAtName = bAllowPathPunctuation && ( !strcmp ( szName, "@timestamp" ) || !strcmp ( szName, "@version" ) || !strcmp ( szName, "@uuid_id" ) );
+	bool bInternalAtName = bAllowPathPunctuation && ( !strcasecmp ( szName, "@timestamp" ) || !strcasecmp ( szName, "@version" ) || !strcasecmp ( szName, "@uuid_id" ) );
 	bool bFirst = true;
+	bool bHasNonDigit = false;
 	while ( p<pEnd )
 	{
 		DWORD uCode = sphUTF8Decode ( p );
@@ -1358,6 +1359,7 @@ bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int i
 		{
 			bool bLetter = ( uCode>='a' && uCode<='z' ) || ( uCode>='A' && uCode<='Z' ) || uCode=='_' || ( bFirst && uCode=='@' && bInternalAtName ) || ( bAllowPathPunctuation && !bFirst && ( uCode=='.' || uCode=='-' ) );
 			bool bDigit = uCode>='0' && uCode<='9';
+			bHasNonDigit |= !bDigit;
 			if ( !bLetter && !( bDigit && ( !bFirst || bAllowLeadingDigit ) ) )
 			{
 				sError.SetSprintf ( "invalid character '%c' in identifier", (BYTE)uCode );
@@ -1369,20 +1371,29 @@ bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int i
 			sError.SetSprintf ( "unsafe Unicode character U+%04X in identifier", uCode );
 			return false;
 		}
+		else
+			bHasNonDigit = true;
 
 		bFirst = false;
+	}
+
+	if ( !bHasNonDigit )
+	{
+		sError = "identifier must contain a letter, underscore, or non-ASCII character";
+		return false;
 	}
 
 	return true;
 }
 
 
-bool sphValidateTableName ( const char * szName, bool bAllowLeadingDigit, CSphString & sError )
+bool sphValidateTableName ( const char * szName, bool bAllowLeadingDigit, CSphString & sError, bool bAllowLegacyPunctuation )
 {
 	static constexpr int SYSTEM_PREFIX_LEN = 7;
 	bool bSystem = szName && !strncmp ( szName, "system.", SYSTEM_PREFIX_LEN );
 	const char * szIdentifier = bSystem ? szName+SYSTEM_PREFIX_LEN : szName;
-	return sphValidateIdentifier ( szIdentifier, bAllowLeadingDigit, SPH_MAX_TABLE_NAME_BYTES - ( bSystem ? SYSTEM_PREFIX_LEN : 0 ), sError );
+	int iMaxBytes = SPH_MAX_TABLE_NAME_BYTES + ( bSystem ? SPH_MAX_GENERATED_TABLE_SUFFIX_BYTES : 0 );
+	return sphValidateIdentifier ( szIdentifier, bAllowLeadingDigit, iMaxBytes, sError, bAllowLegacyPunctuation );
 }
 
 
@@ -1391,7 +1402,7 @@ bool CSphConfigParser::AddSection ( const char * szType, const char * szSection 
 	if ( ( !strcasecmp ( szType, "table" ) || !strcasecmp ( szType, "index" ) ) )
 	{
 		CSphString sError;
-		if ( !sphValidateTableName ( szSection, true, sError ) )
+		if ( !sphValidateTableName ( szSection, true, sError, true ) )
 			return TlsMsg::Err ( "invalid table name '%s': %s", szSection, sError.cstr() );
 	}
 

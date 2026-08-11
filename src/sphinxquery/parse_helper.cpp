@@ -28,7 +28,7 @@ namespace { // static
 
 bool IsFieldSpecChar ( char c )
 {
-	return (unsigned char)c>=0x80 || sphIsAlpha ( c );
+	return (unsigned char)c>=0x80 || sphIsAlpha ( c ) || c=='.' || c=='-';
 }
 
 void TransformMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec & tMorphDisabledFields )
@@ -155,11 +155,13 @@ bool XQParseHelper_c::AddField ( FieldMask_t & dFields, const char * szField, in
 
 	CSphString sField;
 	sField.SetBinary ( szField, iLen );
-	CSphString sIdentifierError;
-	if ( !sphValidateIdentifier ( sField.cstr(), true, 0, sIdentifierError ) )
-		return Error ( "invalid field name '%s': %s", sField.cstr(), sIdentifierError.cstr() );
-
 	int iField = m_pSchema->GetFieldIndex ( sField.cstr() );
+	if ( iField<0 )
+	{
+		CSphString sIdentifierError;
+		if ( !sphValidateIdentifier ( sField.cstr(), true, 0, sIdentifierError ) )
+			return Error ( "invalid field name '%s': %s", sField.cstr(), sIdentifierError.cstr() );
+	}
 	if ( iField < 0 && m_pDiscoverySchema )
 	{
 		if ( m_pDiscoverySchema->GetFieldsCount()>=SPH_MAX_FIELDS )

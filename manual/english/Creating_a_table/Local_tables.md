@@ -8,14 +8,14 @@ Replication is only available in this mode.
 
 You can use SQL commands such as `CREATE TABLE`, `ALTER TABLE` and `DROP TABLE` to create and modify table schema, and to drop it. This mode is particularly useful for **real-time** and **percolate tables**.
 
-ASCII letters in table names are converted to lowercase when created. Non-ASCII UTF-8 characters retain their original spelling and do not undergo Unicode case folding. See [table, field, and attribute name syntax](Creating_a_table/Data_types.md#Table-and-field-name-syntax).
+ASCII letters in table names are converted to lowercase when created. Non-ASCII UTF-8 characters retain their original spelling and do not undergo Unicode case folding. See [table, field, and attribute name syntax](Data_types.md#Table-and-field-name-syntax).
 
 ## Defining table schema in config (Plain mode)
 In this mode, you can specify the table schema in the configuration file. Manticore reads this schema on startup and creates the table if it doesn't exist yet. This mode is particularly useful for **plain tables** that use data from an external storage.
 
 To drop a table, remove it from the configuration file or remove the path setting and send a HUP signal to the server or restart it.
 
-Configuration section names are case-sensitive in this mode. Table, field, and attribute names, as well as named source sections, can contain non-ASCII UTF-8 characters. Unicode case folding and Unicode normalization are not applied, so use the exact Unicode spelling consistently. See [table, field, and attribute name syntax](Creating_a_table/Data_types.md#Table-and-field-name-syntax).
+Configuration section names are case-sensitive in this mode. Table, field, and attribute names, as well as named source sections, can contain non-ASCII UTF-8 characters. Unicode case folding and Unicode normalization are not applied, so use the exact Unicode spelling consistently. See [table, field, and attribute name syntax](Data_types.md#Table-and-field-name-syntax).
 
 All table types are supported in this mode.
 

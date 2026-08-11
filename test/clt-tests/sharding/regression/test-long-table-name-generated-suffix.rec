@@ -1,0 +1,57 @@
+––– comment –––
+Regression for issue #4770: a valid 191-byte logical table name used to fail
+when Buddy generated internal system.<name>_sN shard names, because the DDL
+parser applied the 200-byte public-name limit to the generated component.
+Verify the real Buddy-managed create, internal shard materialization, DML, and
+cleanup path.
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+LONG_TABLE_NAME="t$(printf '%0190d' 1)"; echo ${#LONG_TABLE_NAME}
+––– output –––
+191
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE ${LONG_TABLE_NAME}(body text) shards='2' rf='1';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -N -B -e "SHOW TABLES" | grep -c "${LONG_TABLE_NAME}"
+––– output –––
+1
+––– input –––
+mysql -h0 -P1306 -N -B -e "SHOW TABLES FROM system" | grep -c "system.${LONG_TABLE_NAME}_s"
+––– output –––
+2
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO ${LONG_TABLE_NAME}(id,body) VALUES(1,'boundary');"; echo $?
+––– output –––
+0
+––– block: ../../base/replication/stop-searchd –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -N -B -e "SHOW TABLES" | grep -c "${LONG_TABLE_NAME}"
+––– output –––
+1
+––– input –––
+mysql -h0 -P1306 -N -B -e "SHOW TABLES FROM system" | grep -c "system.${LONG_TABLE_NAME}_s"
+––– output –––
+2
+––– input –––
+mysql -h0 -P1306 -N -B -e "SELECT COUNT(*) FROM ${LONG_TABLE_NAME}" | tr -cd '0-9\n' | grep '^1$'
+––– output –––
+1
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE ${LONG_TABLE_NAME};"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -N -B -e "SHOW TABLES FROM system" | grep -c "system.${LONG_TABLE_NAME}_s"
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -N -B -e "SHOW TABLES" | grep -c "${LONG_TABLE_NAME}"; true
+––– output –––
+0

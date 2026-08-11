@@ -939,7 +939,7 @@ Marker_e InspectLocalMarker ( const char * szDirectory, std::string & sError )
 #if _WIN32
 	(void)szDirectory;
 	sError = "local mode is not supported on Windows";
-	return Marker_e::ERROR;
+	return Marker_e::ERROR_;
 #else
 	std::string sPath = szDirectory && *szDirectory ? szDirectory : ".";
 	if ( sPath.back()!='/' ) sPath += '/';
@@ -949,7 +949,7 @@ Marker_e InspectLocalMarker ( const char * szDirectory, std::string & sError )
 	{
 		if ( errno==ENOENT ) return Marker_e::ABSENT;
 		sError = "cannot inspect local data path '" + sPath + "': " + strerror(errno);
-		return Marker_e::ERROR;
+		return Marker_e::ERROR_;
 	}
 	if ( !S_ISDIR(tStat.st_mode) )
 	{

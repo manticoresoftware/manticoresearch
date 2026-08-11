@@ -28,7 +28,7 @@ enum class Marker_e
 	ABSENT,
 	DIRECTORY,
 	INVALID,
-	ERROR
+	ERROR_
 };
 
 struct Options_t

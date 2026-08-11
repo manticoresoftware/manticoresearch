@@ -29,13 +29,18 @@ mysql -h0 -P1306 -N -B -e "SHOW TABLES FROM system" | grep -c "system.${LONG_TAB
 mysql -h0 -P1306 -e "INSERT INTO ${LONG_TABLE_NAME}(id,body) VALUES(1,'boundary');"; echo $?
 ––– output –––
 0
+––– input –––
+SHARD_HEARTBEAT=$(mysql -h0 -P1306 -N -B -e "SELECT value[0].seen_at FROM system.sharding_state WHERE REGEX(\`key\`, '^node:') LIMIT 1" 2>/dev/null | tr -cd '0-9'); test -n "$SHARD_HEARTBEAT"; echo $?
+––– output –––
+0
 ––– block: ../../base/replication/stop-searchd –––
 ––– block: ../../base/replication/start-searchd-precach –––
 ––– comment –––
-Wait for Buddy's one-second sharding processor tick to initialize its queue after restart.
+Wait for the persisted node heartbeat to advance, proving Buddy's sharding processor initialized its queue after restart.
 ––– input –––
-sleep 2
+for i in $(seq 1 100); do NEW_SHARD_HEARTBEAT=$(mysql -h0 -P1306 -N -B -e "SELECT value[0].seen_at FROM system.sharding_state WHERE REGEX(\`key\`, '^node:') LIMIT 1" 2>/dev/null | tr -cd '0-9'); [ "${NEW_SHARD_HEARTBEAT:-0}" -gt "$SHARD_HEARTBEAT" ] && break; sleep 0.1; done; [ "${NEW_SHARD_HEARTBEAT:-0}" -gt "$SHARD_HEARTBEAT" ]; echo $?
 ––– output –––
+0
 ––– input –––
 mysql -h0 -P1306 -N -B -e "SHOW TABLES" | grep -c "${LONG_TABLE_NAME}"
 ––– output –––

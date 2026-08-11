@@ -7188,20 +7188,8 @@ enum ThreadInfoFormat_e
 
 static Str_t FormatInfo ( const PublicThreadDesc_t & tThd, ThreadInfoFormat_e eFmt, QuotationEscapedBuilder & tBuf )
 {
-	if ( tThd.m_pQuery && eFmt==THD_FORMAT_SPHINXQL && tThd.m_eProto!=Proto_e::MYSQL41 )
-	{
-		bool bGotQuery = false;
-		if ( tThd.m_pQuery )
-		{
-			tBuf.Clear();
-			FormatSphinxql ( *tThd.m_pQuery, {}, 0, tBuf );
-			bGotQuery = true;
-		}
-
-		// query might be removed prior to lock then go to common path
-		if ( bGotQuery )
-			return (Str_t)tBuf;
-	}
+	if ( eFmt==THD_FORMAT_SPHINXQL && !tThd.m_sPreParsedQuery.IsEmpty() && tThd.m_eProto!=Proto_e::MYSQL41 )
+		return FromStr ( tThd.m_sPreParsedQuery );
 
 	if ( tThd.m_sDescription.IsEmpty () && tThd.m_szCommand )
 		return FromSz ( tThd.m_szCommand );
@@ -7212,14 +7200,15 @@ void HandleShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
 	ThreadInfoFormat_e eFmt = THD_FORMAT_NATIVE;
 	bool bAll = false;
-	int iCols = -1;
+	std::optional<int> iCols { std::nullopt };
 	if ( pStmt )
 	{
 		if ( pStmt->m_sThreadFormat == "sphinxql" )
 			eFmt = THD_FORMAT_SPHINXQL;
 		else if ( pStmt->m_sThreadFormat == "all" )
 			bAll = true;
-		iCols = pStmt->m_iThreadsCols;
+		if ( pStmt->m_iThreadsCols>=0 )
+			iCols = pStmt->m_iThreadsCols;
 	}
 
 	tOut.HeadBegin ();
@@ -7296,8 +7285,8 @@ void HandleShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		if ( bAll )
 			tOut.PutString ( dThd.m_sChain ); // Chain
 		auto sInfo = FormatInfo ( dThd, eFmt, tBuf );
-		if ( iCols >= 0 && iCols < sInfo.second )
-			sInfo.second = iCols;
+		if ( iCols.has_value() )
+			sInfo.second = Min ( sInfo.second, iCols.value() );
 		tOut.PutString ( sInfo ); // Info m_pTaskInfo
 		if ( !tOut.Commit () )
 			break;
@@ -7311,14 +7300,15 @@ void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt )
 {
 	ThreadInfoFormat_e eFmt = THD_FORMAT_NATIVE;
 	bool bAll = false;
-	int iCols = -1;
+	std::optional<int> iCols { std::nullopt };
 	if ( pStmt )
 	{
 		if ( pStmt->m_sThreadFormat == "sphinxql" )
 			eFmt = THD_FORMAT_SPHINXQL;
 		else if ( pStmt->m_sThreadFormat == "all" )
 			bAll = true;
-		iCols = pStmt->m_iThreadsCols;
+		if ( pStmt->m_iThreadsCols>=0 )
+			iCols = pStmt->m_iThreadsCols;
 	}
 
 	tOut.HeadBegin ();
@@ -7364,8 +7354,8 @@ void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt )
 		else
 			tOut.PutTimeAsString ( dThd.m_tmLastJobDoneTimeUS - dThd.m_tmLastJobStartTimeUS );
 		auto sInfo = FormatInfo ( dThd, eFmt, tBuf );
-		if ( iCols >= 0 && iCols < sInfo.second )
-			sInfo.second = iCols;
+		if ( iCols.has_value() )
+			sInfo.second = Min ( sInfo.second, iCols.value() );
 		tOut.PutString ( sInfo ); // Info m_pTaskInfo
 		if ( !tOut.Commit() )
 			break;

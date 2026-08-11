@@ -62,7 +62,8 @@ static DWORD ResolveIPv4 ( const char * szHost, CSphString * pFatal )
 		DWORD uNext = reinterpret_cast<sockaddr_in *>(pAddress->ai_addr)->sin_addr.s_addr;
 		dAddresses.push_back ( uNext );
 		char szAddress[INET_ADDRSTRLEN] {};
-		in_addr tAddress { uNext };
+		in_addr tAddress {};
+		tAddress.s_addr = uNext;
 		const char * szText = inet_ntop ( AF_INET, &tAddress, szAddress, sizeof(szAddress) );
 		if ( iAddresses++ ) sAddresses += "; ip=";
 		else sAddresses = "ip=";
@@ -72,7 +73,8 @@ static DWORD ResolveIPv4 ( const char * szHost, CSphString * pFatal )
 	if ( iAddresses>1 )
 	{
 		char szSelected[INET_ADDRSTRLEN] {};
-		in_addr tSelected { uAddress };
+		in_addr tSelected {};
+		tSelected.s_addr = uAddress;
 		inet_ntop ( AF_INET, &tSelected, szSelected, sizeof(szSelected) );
 		sphWarning ( "multiple addresses (%s) found for '%s', using first one (%s)", sAddresses.c_str(), szHost, szSelected );
 	}

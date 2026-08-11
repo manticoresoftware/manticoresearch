@@ -21,6 +21,7 @@
 #if !_WIN32
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <netinet/in.h>
 #include <strings.h>
 #include <sys/stat.h>
 #include <unistd.h>

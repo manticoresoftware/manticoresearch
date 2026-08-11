@@ -5,13 +5,14 @@
 #include "searchdlocalinternal.h"
 #include "searchdlocal.h"
 
-#include "searchdaemon.h"
 #include "json/cJSON.h"
+#include "sphinxint.h"
 #include "sphinxjson.h"
 
 #include <cerrno>
 #include <algorithm>
 #include <cctype>
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -19,10 +20,13 @@
 #include <vector>
 
 #if !_WIN32
+#include <fcntl.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <strings.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
+#include <sys/un.h>
 #include <unistd.h>
 #endif
 
@@ -188,13 +192,44 @@ bool ReportsAffectedRows ( const std::string & sStatement )
 #endif
 
 #if !_WIN32
-bool SendAll ( int iSocket, const char * pData, size_t iLength, CSphString & sError )
+int64_t EffectiveDeadline ( int64_t iDeadlineUS )
 {
+	return iDeadlineUS ? iDeadlineUS : sphMicroTimer()+30000000;
+}
+
+bool WaitSocket ( int iSocket, short iEvents, int64_t iDeadlineUS, CSphString & sError )
+{
+	while ( true )
+	{
+		int64_t iRemaining = iDeadlineUS-sphMicroTimer();
+		if ( iRemaining<=0 )
+			return ClientError ( sError, false, "Manticore socket operation timed out" );
+		pollfd tPoll { iSocket, iEvents, 0 };
+		int iWaitMS = (int)std::min<int64_t> ( ( iRemaining+999 )/1000, INT_MAX );
+		int iReady = poll ( &tPoll, 1, iWaitMS );
+		if ( iReady>0 )
+			return true;
+		if ( iReady<0 && errno==EINTR )
+			return ClientError ( sError, false, "Manticore socket operation interrupted" );
+		if ( iReady<0 )
+			return ClientError ( sError, false, "failed waiting for Manticore socket", strerror(errno) );
+	}
+}
+
+bool SendAll ( int iSocket, const char * pData, size_t iLength, CSphString & sError, int64_t iDeadlineUS=0 )
+{
+	iDeadlineUS = EffectiveDeadline ( iDeadlineUS );
 	while ( iLength )
 	{
 		ssize_t iSent = send ( iSocket, pData, iLength, MSG_NOSIGNAL );
-		if ( iSent<0 && errno==EINTR )
+		if ( iSent<0 && ( errno==EAGAIN || errno==EWOULDBLOCK ) )
+		{
+			if ( !WaitSocket(iSocket,POLLOUT,iDeadlineUS,sError) )
+				return false;
 			continue;
+		}
+		if ( iSent<0 && errno==EINTR )
+			return ClientError ( sError, false, "Manticore socket operation interrupted" );
 		if ( iSent<=0 )
 			return ClientError ( sError, false, "failed to send query", strerror(errno) );
 		pData += iSent;
@@ -203,15 +238,31 @@ bool SendAll ( int iSocket, const char * pData, size_t iLength, CSphString & sEr
 	return true;
 }
 
-void SetSocketTimeouts ( int iSocket )
+bool StartNonblockingConnect ( int iSocket, const sockaddr * pAddress, socklen_t iLength, int64_t iDeadlineUS, CSphString & sError )
 {
-	timeval tTimeout { 30, 0 };
-	setsockopt ( iSocket, SOL_SOCKET, SO_RCVTIMEO, &tTimeout, sizeof(tTimeout) );
-	setsockopt ( iSocket, SOL_SOCKET, SO_SNDTIMEO, &tTimeout, sizeof(tTimeout) );
+	int iFlags = fcntl ( iSocket, F_GETFL, 0 );
+	if ( iFlags<0 || fcntl(iSocket,F_SETFL,iFlags|O_NONBLOCK)<0 )
+		return ClientError ( sError, false, "failed to make Manticore socket nonblocking", strerror(errno) );
+	if ( connect(iSocket,pAddress,iLength)==0 )
+		return true;
+	if ( errno!=EINPROGRESS && errno!=EWOULDBLOCK )
+		return false;
+	if ( !WaitSocket(iSocket,POLLOUT,iDeadlineUS,sError) )
+		return false;
+	int iConnectError = 0;
+	socklen_t iErrorLength = sizeof(iConnectError);
+	if ( getsockopt(iSocket,SOL_SOCKET,SO_ERROR,&iConnectError,&iErrorLength)<0 || iConnectError )
+	{
+		errno = iConnectError ? iConnectError : errno;
+		return false;
+	}
+	return true;
 }
 
-int ConnectSocket ( CSphString & sError, const SqlEndpoint_t & tEndpoint )
+int ConnectSocket ( CSphString & sError, const SqlEndpoint_t & tEndpoint, int64_t iDeadlineUS )
 {
+	iDeadlineUS = EffectiveDeadline ( iDeadlineUS );
+	sError = "";
 	if ( tEndpoint.m_sUnix.IsEmpty() )
 	{
 		int iSocket = socket ( AF_INET, SOCK_STREAM, 0 );
@@ -222,14 +273,13 @@ int ConnectSocket ( CSphString & sError, const SqlEndpoint_t & tEndpoint )
 		tAddress.sin_family = AF_INET;
 		tAddress.sin_port = htons ( tEndpoint.m_iPort );
 		tAddress.sin_addr.s_addr = tEndpoint.m_uIP;
-		if ( connect ( iSocket, (sockaddr*)&tAddress, sizeof(tAddress) )<0 )
+		if ( !StartNonblockingConnect(iSocket,(sockaddr*)&tAddress,sizeof(tAddress),iDeadlineUS,sError) )
 		{
-			sError.SetSprintf ( "cannot connect to Manticore instance at %s: %s", tEndpoint.m_sDescription.cstr(), strerror(errno) );
+			if ( sError.IsEmpty() )
+				sError.SetSprintf ( "cannot connect to Manticore instance at %s: %s", tEndpoint.m_sDescription.cstr(), strerror(errno) );
 			close ( iSocket );
 			return -1;
 		}
-
-		SetSocketTimeouts ( iSocket );
 		return iSocket;
 	}
 
@@ -243,14 +293,13 @@ int ConnectSocket ( CSphString & sError, const SqlEndpoint_t & tEndpoint )
 
 	tAddress.sun_family = AF_UNIX;
 	strncpy ( tAddress.sun_path, tEndpoint.m_sUnix.cstr(), sizeof(tAddress.sun_path)-1 );
-	if ( connect ( iSocket, (sockaddr*)&tAddress, sizeof(tAddress) )<0 )
+	if ( !StartNonblockingConnect(iSocket,(sockaddr*)&tAddress,sizeof(tAddress),iDeadlineUS,sError) )
 	{
-		sError.SetSprintf ( "cannot connect to Manticore instance at %s: %s", tEndpoint.m_sDescription.cstr(), strerror(errno) );
+		if ( sError.IsEmpty() )
+			sError.SetSprintf ( "cannot connect to Manticore instance at %s: %s", tEndpoint.m_sDescription.cstr(), strerror(errno) );
 		close ( iSocket );
 		return -1;
 	}
-
-	SetSocketTimeouts ( iSocket );
 	return iSocket;
 }
 
@@ -261,8 +310,9 @@ bool IsSocketClosed ( int iSocket )
 	return iRead==0 || ( iRead<0 && errno!=EAGAIN && errno!=EWOULDBLOCK && errno!=EINTR );
 }
 
-bool ReadHttpResponse ( int iSocket, int & iStatus, std::string & sBody, CSphString & sError )
+bool ReadHttpResponse ( int iSocket, int & iStatus, std::string & sBody, CSphString & sError, int64_t iDeadlineUS=0 )
 {
+	iDeadlineUS = EffectiveDeadline ( iDeadlineUS );
 	std::string sResponse;
 	char sBuffer[8192];
 	size_t iHeaderEnd = std::string::npos;
@@ -270,8 +320,12 @@ bool ReadHttpResponse ( int iSocket, int & iStatus, std::string & sBody, CSphStr
 	while ( ( iHeaderEnd=sResponse.find("\r\n\r\n") )==std::string::npos )
 	{
 		ssize_t iRead = recv ( iSocket, sBuffer, sizeof(sBuffer), 0 );
-		if ( iRead<0 && errno==EINTR )
+		if ( iRead<0 && ( errno==EAGAIN || errno==EWOULDBLOCK ) )
+		{
+			if ( !WaitSocket(iSocket,POLLIN,iDeadlineUS,sError) ) return false;
 			continue;
+		}
+		if ( iRead<0 && errno==EINTR ) return ClientError ( sError, false, "Manticore socket operation interrupted" );
 		if ( iRead<=0 )
 			return ClientError ( sError, false, "failed to read Manticore HTTP response", iRead==0 ? "connection closed" : strerror(errno) );
 		sResponse.append ( sBuffer, (size_t)iRead );
@@ -283,7 +337,7 @@ bool ReadHttpResponse ( int iSocket, int & iStatus, std::string & sBody, CSphStr
 		return ClientError ( sError, false, "invalid response from Manticore instance" );
 
 	size_t iContentLength = std::string::npos;
-	size_t iLine = sResponse.find("\r\n")+2;
+	size_t iLine = sResponse.find ( "\r\n" )+2;
 	while ( iLine<iHeaderEnd )
 	{
 		size_t iLineEnd = sResponse.find ( "\r\n", iLine );
@@ -300,8 +354,12 @@ bool ReadHttpResponse ( int iSocket, int & iStatus, std::string & sBody, CSphStr
 	while ( sResponse.size()-iBodyBegin<iContentLength )
 	{
 		ssize_t iRead = recv ( iSocket, sBuffer, sizeof(sBuffer), 0 );
-		if ( iRead<0 && errno==EINTR )
+		if ( iRead<0 && ( errno==EAGAIN || errno==EWOULDBLOCK ) )
+		{
+			if ( !WaitSocket(iSocket,POLLIN,iDeadlineUS,sError) ) return false;
 			continue;
+		}
+		if ( iRead<0 && errno==EINTR ) return ClientError ( sError, false, "Manticore socket operation interrupted" );
 		if ( iRead<=0 )
 			return ClientError ( sError, false, "incomplete Manticore HTTP response", iRead==0 ? "connection closed" : strerror(errno) );
 		sResponse.append ( sBuffer, (size_t)iRead );
@@ -309,6 +367,70 @@ bool ReadHttpResponse ( int iSocket, int & iStatus, std::string & sBody, CSphStr
 
 	sBody.assign ( sResponse, iBodyBegin, iContentLength );
 	return true;
+}
+
+QueryResult_e ProbeEndpoint ( const SqlEndpoint_t & tEndpoint, CSphString & sError, int64_t iDeadlineUS )
+{
+	iDeadlineUS = EffectiveDeadline ( iDeadlineUS );
+	int iSocket = ConnectSocket ( sError, tEndpoint, iDeadlineUS );
+	if ( iSocket<0 )
+		return QueryResult_e::CONNECTION_ERROR;
+	AT_SCOPE_EXIT ( [&] { close ( iSocket ); } );
+
+	static constexpr char sQuery[] = "SELECT 1";
+	std::string sRequest = "POST /sql?mode=raw HTTP/1.1\r\nHost: localhost\r\nContent-Type: text/plain\r\nConnection: close\r\nContent-Length: ";
+	sRequest += std::to_string ( sizeof(sQuery)-1 );
+	sRequest += "\r\n\r\n";
+	sRequest += sQuery;
+	if ( !SendAll ( iSocket, sRequest.data(), sRequest.size(), sError, iDeadlineUS ) )
+		return QueryResult_e::CONNECTION_ERROR;
+
+	int iStatus = 0;
+	std::string sBody;
+	if ( !ReadHttpResponse ( iSocket, iStatus, sBody, sError, iDeadlineUS ) )
+		return QueryResult_e::CONNECTION_ERROR;
+	if ( iStatus<200 || iStatus>=300 )
+	{
+		sError.SetSprintf ( "Manticore readiness query returned HTTP status %d", iStatus );
+		return QueryResult_e::SQL_ERROR;
+	}
+	JsonObj_c tRoot ( Str_t { sBody.data(), (int)sBody.size() } );
+	if ( !tRoot || !tRoot.IsArray() || tRoot.Size()!=1 )
+	{
+		sError = "invalid response to Manticore readiness query";
+		return QueryResult_e::SQL_ERROR;
+	}
+	JsonObj_c tResult;
+	for ( JsonObj_c tItem : tRoot )
+	{
+		tResult = std::move(tItem);
+		break;
+	}
+	JsonObj_c tError = GetCaseSensitiveItem ( tResult, "error" );
+	if ( tError && tError.IsStr() && *tError.SzVal() )
+	{
+		sError = tError.SzVal();
+		return QueryResult_e::SQL_ERROR;
+	}
+	JsonObj_c tRows = GetCaseSensitiveItem ( tResult, "data" );
+	if ( !tRows || !tRows.IsArray() || tRows.Size()!=1 )
+	{
+		sError = "invalid data in Manticore readiness response";
+		return QueryResult_e::SQL_ERROR;
+	}
+	JsonObj_c tRow;
+	for ( JsonObj_c tItem : tRows )
+	{
+		tRow = std::move(tItem);
+		break;
+	}
+	JsonObj_c tValue = GetCaseSensitiveItem ( tRow, "1" );
+	if ( !tValue || !( tValue.IsInt() || tValue.IsUint() ) || tValue.IntVal()!=1 )
+	{
+		sError = "unexpected result from Manticore readiness query";
+		return QueryResult_e::SQL_ERROR;
+	}
+	return QueryResult_e::OK;
 }
 #endif
 
@@ -805,7 +927,7 @@ QueryResult_e ExecuteSqlBatch ( int & iSocket, const char * szQuery, bool bPrint
 		return QueryResult_e::OK;
 
 	CSphString sQueryError;
-	auto ConnectionError = [&] { fprintf ( stderr, "searchd: %s\n", sQueryError.cstr() ); return QueryResult_e::CONNECTION_ERROR; };
+	auto ConnectionError = [&] { fprintf ( stderr, "manticore: %s\n", sQueryError.cstr() ); return QueryResult_e::CONNECTION_ERROR; };
 	for ( const LocalStatement_t & tStatement : dStatements )
 	{
 		const std::string & sStatement = tStatement.m_sSql;

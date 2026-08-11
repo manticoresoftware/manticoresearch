@@ -506,15 +506,27 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	SHUTINFO << "Close auth log ...";
 	AuthDone();
 
-	// close pid
-	SHUTINFO << "Release (close) pid file ...";
+	// Remove owned metadata while the ownership lock is still held. Closing
+	// first lets a concurrent replacement daemon acquire the path and then
+	// have its newly published PID file removed by this exiting process.
+	SHUTINFO << "Remove and release pid file ...";
+#if !_WIN32
+	if ( g_bPidIsMine && !g_sPidFile.IsEmpty() && g_iPidFD!=-1 )
+	{
+		CSphString sUnlinkError;
+		if ( !UnlinkFileIfSameDescriptor(g_iPidFD,g_sPidFile,sUnlinkError) )
+			sphWarning ( "refusing to unlink PID metadata: %s", sUnlinkError.cstr() );
+	}
 	if ( g_iPidFD!=-1 )
 		::close ( g_iPidFD );
 	g_iPidFD = -1;
-
-	// remove pid file, if we owned it
+#else
+	if ( g_iPidFD!=-1 )
+		::close ( g_iPidFD );
+	g_iPidFD = -1;
 	if ( g_bPidIsMine && !g_sPidFile.IsEmpty() )
 		::unlink ( g_sPidFile.cstr() );
+#endif
 
 	SHUTINFO << "Shutdown hazard pointers ...";
 	hazard::Shutdown ();
@@ -14887,8 +14899,6 @@ void ShowHelp ()
 		"-c, --config <file>	read configuration from specified file\n"
 		"			(default is manticore.conf)\n"
 		"-l, --local		run in zero-configuration local mode\n"
-		"-e, --execute [query]	execute SQL against a local or configured instance\n"
-		"			(-c selects the config; interactive when query is omitted; unavailable on Windows)\n"
 		"--check\t\t\tcheck config and exit\n"
 		"--stop\t\t\tsend SIGTERM to currently running searchd\n"
 		"--stopwait\t\tsend SIGTERM and wait until actual exit\n"
@@ -15949,28 +15959,41 @@ int StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread 
 
 	CSphString sPidFile = v->cstr();
 	FixPathAbsolute ( sPidFile );
+	int iPid = 0;
+#if _WIN32
 	FILE * fp = fopen ( sPidFile.cstr(), "r" );
 	if ( !fp )
 		sphFatal ( "stop: pid file '%s' does not exist or is not readable", sPidFile.cstr() );
-
-	char sBuf[16];
+	char sBuf[32] {};
 	int iLen = (int) fread ( sBuf, 1, sizeof(sBuf)-1, fp );
-	sBuf[iLen] = '\0';
+	bool bComplete = feof(fp) && !ferror(fp);
 	fclose ( fp );
-
-	int iPid = atoi(sBuf);
-	if ( iPid<=0 )
+	errno = 0;
+	char * pEnd = nullptr;
+	long iValue = strtol ( sBuf, &pEnd, 10 );
+	const char * pLimit = sBuf+iLen;
+	if ( pEnd<pLimit && *pEnd=='\r' ) ++pEnd;
+	if ( pEnd<pLimit && *pEnd=='\n' ) ++pEnd;
+	if ( !bComplete || errno==ERANGE || iValue<=0 || iValue>INT_MAX || !pEnd || pEnd!=pLimit )
 		sphFatal ( "stop: failed to read valid pid from '%s'", sPidFile.cstr() );
+	iPid = (int)iValue;
+#else
+	int iPidFD = -1;
+	CSphString sPidError;
+	if ( !OpenPidFile(sPidFile,iPidFD,iPid,sPidError) )
+		sphFatal ( "stop: %s", sPidError.cstr() );
+	AT_SCOPE_EXIT ( [&] { SafeClose(iPidFD); } );
+	if ( !ValidatePidFileOwner(iPidFD,iPid,sPidError) )
+		sphFatal ( "stop: pid file '%s' is not owned by recorded pid %d: %s", sPidFile.cstr(), iPid, sPidError.cstr() );
+#endif
 
 	int iWaitTimeout = g_iShutdownTimeoutUs + 100000;
-
-	int iExitCode = 0;
 #if _WIN32
-	iExitCode = WinStopOrWaitAnother ( iPid, iWaitTimeout );
+	return WinStopOrWaitAnother ( iPid, iWaitTimeout );
 #else
-	iExitCode = StopDaemonAndWait ( bWait, iPid, iWaitTimeout );
+	return StopDaemonAndWait ( bWait, iPid, iWaitTimeout, iPidFD );
 #endif
-	return iExitCode;}
+}
 } // static namespace
 
 
@@ -16100,8 +16123,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	bool			bNewClusterForce = false;
 	bool			bForcePseudoSharding = false;
 	const char*		szCmdConfigFile = nullptr;
-	const char*		szExecute = nullptr;
-	bool			bExecute = false;
 	bool			bLocalMode = false;
 	bool			bMeasureStack = false;
 	bool			bQuietRequested = false;
@@ -16133,16 +16154,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT ( "-v", "--version" )	{ InitBanner(); fprintf ( stdout, "%s", g_sBanner.cstr() ); return 0; }
 		OPT ( "-q", "--quiet" )		bQuietRequested = true;
 		OPT ( "-l", "--local" )		bLocalMode = true;
-		OPT ( "-e", "--execute" )	{
-			bExecute = true;
-			if ( i+1<argc )
-			{
-				const char * szNext = argv[i+1];
-				bool bSqlComment = szNext[0]=='-' && szNext[1]=='-' && isspace ( (unsigned char)szNext[2] );
-				if ( szNext[0]!='-' || bSqlComment )
-					szExecute = argv[++i];
-			}
-		}
 		OPT1 ( "--console" )		{ g_bOptNoLock = true; g_bOptNoDetach = true; bTestMode = true; }
 		OPT1 ( "--stop" )			bOptStop = true;
 		OPT1 ( "--stopwait" )		{ bOptStop = true; bOptStopWait = true; }
@@ -16212,14 +16223,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		sphFatal ( "--local cannot be combined with --port or --listen" );
 	if ( bLocalMode && bOptStatus )
 		sphFatal ( "--status is not supported in local mode" );
-
-	if ( bExecute )
-	{
-		if ( bOptStop || bOptStatus || bConfigTest )
-			sphFatal ( "--execute cannot be combined with lifecycle or configuration-check options" );
-		sphInitCJson();
-		return ExecuteLocalSql ( szExecute, szCmdConfigFile );
-	}
 
 	InitBanner();
 

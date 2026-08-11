@@ -28,7 +28,8 @@ struct SqlEndpoint_t
 };
 
 #if !_WIN32
-int ConnectSocket ( CSphString & sError, const SqlEndpoint_t & tEndpoint );
+int ConnectSocket ( CSphString & sError, const SqlEndpoint_t & tEndpoint, int64_t iDeadlineUS=0 );
+QueryResult_e ProbeEndpoint ( const SqlEndpoint_t & tEndpoint, CSphString & sError, int64_t iDeadlineUS=0 );
 QueryResult_e ExecuteSqlBatch ( int & iSocket, const char * szQuery, bool bPrintStatements, bool bAligned, const SqlEndpoint_t & tEndpoint );
 #endif
 

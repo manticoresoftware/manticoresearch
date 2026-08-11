@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>CALL SNIPPETS and HIGHLIGHT retain well-formed markup</name>
+<skip_db/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source s
+{
+	type = tsvpipe
+	tsvpipe_command = printf '1		\074html\076\074body\076\074p\076What will happen to ecosia.\074/p\076\074p\076Ecosia test\074/p\076\074/body\076\074/html\076\n'
+	tsvpipe_field = f
+	tsvpipe_field = test
+}
+
+index i
+{
+	source = s
+	path = <data_path/>/i
+	stored_fields = test
+}
+</config>
+
+<queries><sphinxql>
+CALL SNIPPETS ('&lt;a&gt;x.&lt;i&gt;x&lt;/i&gt;&lt;/a&gt;', 'i', 'x', 0 AS limit, 'retain' AS html_strip_mode);
+CALL SNIPPETS ('&lt;html&gt;&lt;body&gt;&lt;p&gt;What will happen to ecosia.&lt;/p&gt;&lt;p&gt;Ecosia test&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;', 'i', 'ecosia', 1 AS use_boundaries, 1 AS query_mode, 0 AS around, 0 AS limit, 'retain' AS html_strip_mode, '&lt;span class=&quot;snippet&quot;&gt;' AS before_match, '&lt;/span&gt;' AS after_match);
+CALL SNIPPETS ('&lt;a&gt;x.&lt;i&gt;&lt;/i&gt;&lt;u&gt;x&lt;/u&gt; y x&lt;/a&gt;', 'i', 'x', 0 AS limit, 'retain' AS html_strip_mode, '&lt;b id=&quot;%PASSAGE_ID%&quot;&gt;' AS before_match, '&lt;/b&gt;&lt;!--%PASSAGE_ID%--&gt;' AS after_match, 100 AS start_passage_id);
+SELECT id, HIGHLIGHT({html_strip_mode=retain,use_boundaries=1,query_mode=1,around=0,limit=0,before_match='&lt;span class=&quot;snippet&quot;&gt;',after_match='&lt;/span&gt;'},test) AS highlight FROM i WHERE MATCH('Ecosia');
+</sphinxql></queries>
+</test>

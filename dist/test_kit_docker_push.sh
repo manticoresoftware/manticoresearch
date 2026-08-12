@@ -78,10 +78,9 @@ docker import \
 [ -n "$img_url_branch" ] && docker tag "$img_url" "$img_url_branch"
 [ -n "$img_url_hash" ] && docker tag "$img_url" "$img_url_hash"
 
-light_images=(
-	"${hub_repo}:test-kit-light-${BUILD_COMMIT}"
-	"${hub_repo}:test-kit-light-${BRANCH_TAG}"
-)
+docker load -i test_kit_light_docker.tar.gz
+light_images=( "${hub_repo}:test-kit-light-${BUILD_COMMIT}" "${hub_repo}:test-kit-light-${BRANCH_TAG}" )
+for img in "${light_images[@]}"; do docker tag test-kit-light:img "$img"; done
 
 # pusing to ghcr.io
 [ -n "$GHCR_USER" ] && for img in "$img_url" "$img_url_latest" "$img_url_tag" "$img_url_branch" "$img_url_hash" "${light_images[@]}"; do

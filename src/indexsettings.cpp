@@ -2500,6 +2500,14 @@ void DumpSettings ( StringBuilder_c & tBuf, const CSphIndex & tIndex, FilenameBu
 }
 
 
+void DumpSettings ( StringBuilder_c & tBuf, const CSphIndexSettings & tSettings, const CSphFieldFilterSettings & tFieldFilterSettings, const CSphTokenizerSettings & tTokenizerSettings, const CSphDictSettings & tDictSettings, const MutableIndexSettings_c & tMutableSettings, FilenameBuilder_i * pFilenameBuilder )
+{
+	SettingsFormatterState_t tState(tBuf);
+	SettingsFormatter_c tFormatter ( tState, "", " = ", "", "\n" );
+	FormatAllSettings ( tSettings, tFieldFilterSettings, tTokenizerSettings, tDictSettings, tMutableSettings, tFormatter, pFilenameBuilder );
+}
+
+
 void DumpSettingsCfg ( FILE * fp, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder )
 {
 	SettingsFormatterState_t tState(fp);

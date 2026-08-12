@@ -10974,6 +10974,23 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !pServed )
 	{
+		// a shard table keeps the unified settings of its shards right in the wrapper;
+		// a regular distributed table has no settings of its own, so it keeps erroring
+		auto pDist = GetDistr ( tStmt.m_sIndex );
+		if ( const ShardIndex_c * pShard = AsShard ( pDist.Ptr() ) )
+		{
+			if ( !tOut.HeadOfStrings ( { "Variable_name", "Value" } ) )
+				return;
+
+			StringBuilder_c tBuf;
+			std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( tStmt.m_sIndex.cstr() );
+			DumpSettings ( tBuf, pShard->m_tSettings, pShard->m_tFieldFilterSettings, pShard->m_tTokenizerSettings, pShard->m_tDictSettings, MutableIndexSettings_c::GetDefaults(), pFilenameBuilder.get() );
+
+			tOut.DataTuplet ( "settings", tBuf.cstr () );
+			tOut.Eof ();
+			return;
+		}
+
 		tOut.Error ( "SHOW TABLE SETTINGS requires an existing table" );
 		return;
 	}

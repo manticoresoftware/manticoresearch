@@ -390,7 +390,7 @@ void AttrMerger_c::Impl_c::RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWo
 
 	Rebind();
 
-	// skip alive alive rows belonging to earlier workers
+	// skip alive rows belonging to earlier workers
 	int64_t iScan = 0;
 	for ( int64_t iAliveToSkip = iWorkerStart - dInputStarts[iInput]; iAliveToSkip > 0; iScan++ )
 	{
@@ -476,8 +476,22 @@ bool AttrMerger_c::Impl_c::ParallelStoreKNN()
 	if ( !iTotalAlive )
 		return true;
 
+	CSphVector<int> dStartedChunks;
+	AT_SCOPE_EXIT ( [&]
+	{
+		for ( int i = dStartedChunks.GetLength()-1; i>=0; --i )
+			m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, dStartedChunks[i] );
+	} );
+
+	ARRAY_FOREACH ( iInput, m_dKNNInputs )
+	{
+		int iChunk = m_dKNNInputs[iInput].m_pIndex->m_iChunk;
+		m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
+		dStartedChunks.Add ( iChunk );
+	}
+
 	std::atomic<bool> bInterrupted { false };
-	bool bOk = RunParallelKNNStore ( iTotalAlive, m_sError, [&] ( int iIdx, int64_t iStart, int64_t iEnd, CSphString & sErr, std::atomic<bool> & bStop ) { RunKNNStoreWorker ( iStart, iEnd, dInputStarts, bStop, bInterrupted, sErr ); } );
+	bool bOk = RunParallelKNNStore ( iTotalAlive, m_sError, [&] ( int, int64_t iStart, int64_t iEnd, CSphString & sErr, std::atomic<bool> & bStop ) { RunKNNStoreWorker ( iStart, iEnd, dInputStarts, bStop, bInterrupted, sErr ); } );
 	if ( bInterrupted.load ( std::memory_order_relaxed ) )
 	{
 		m_sError = "KNN merge cancelled";

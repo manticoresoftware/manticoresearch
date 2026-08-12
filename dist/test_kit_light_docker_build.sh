@@ -6,10 +6,8 @@ bundle_dir="${1:?Usage: $0 <bundle-package-directory>}"
 
 work_dir="$(mktemp -d)"
 container="manticore-light-smoke-$$"
-server_pid=""
 cleanup() {
   docker rm -f "$container" >/dev/null 2>&1 || true
-  [[ -z "$server_pid" ]] || { kill "$server_pid" >/dev/null 2>&1 || true; wait "$server_pid" 2>/dev/null || true; }
   rm -rf "$work_dir"
 }
 trap cleanup EXIT
@@ -18,16 +16,15 @@ trap cleanup EXIT
 package="$(find "$bundle_dir" -type f -name 'manticore_[0-9]*_amd64.deb' -print -quit)"
 [[ -n "$package" ]] || { echo "Bundle package not found" >&2; exit 1; }
 
-mkdir "$work_dir/http"
-cp "$package" "$work_dir/http/manticore_test-kit_amd64.deb"
 docker_ref=6132e279e57e1ebe226e90d27ee2ba9676a19251
 curl -fsSL "https://github.com/manticoresoftware/docker/archive/$docker_ref.tar.gz" | tar -xz -C "$work_dir"
+docker_dir="$work_dir/docker-$docker_ref"
+cp "$package" "$docker_dir/manticore_test-kit_amd64.deb"
+sed -i.bak "s/^#ADD \\*deb /ADD *deb /; s/^ENV DAEMON_URL .*/ENV DAEMON_URL \${DAEMON_URL}/" "$docker_dir/Dockerfile"
+rm "$docker_dir/Dockerfile.bak"
 
-python3 -m http.server 18080 --bind 0.0.0.0 --directory "$work_dir/http" >"$work_dir/http.log" 2>&1 &
-server_pid=$!
-docker build --platform linux/amd64 --add-host host.docker.internal:host-gateway \
-  --build-arg DEV=0 --build-arg DAEMON_URL=http://host.docker.internal:18080/manticore_test-kit__ARCH_64.deb \
-  --tag test-kit-light:img "$work_dir/docker-$docker_ref"
+docker build --platform linux/amd64 --build-arg DEV=0 --build-arg DAEMON_URL= \
+  --tag test-kit-light:img "$docker_dir"
 
 docker run --detach --name "$container" test-kit-light:img >/dev/null
 for _ in {1..60}; do

@@ -517,6 +517,8 @@ public:
 	void AbortCallback();
 	bool CheckOrphaned();
 	void SetNoLimitReplySize();
+	/// Keep the current reply buffer alive after parsing because a parser published a borrowed view into it.
+	void KeepReplyBufferAfterParse() { m_bKeepReplyBufferAfterParse = true; }
 	void EnableRemoteReplyHeartbeats ();
 	bool ExpectsRemoteReplyHeartbeat () const;
 
@@ -565,6 +567,7 @@ private:
 	bool m_bInNetLoop	= false;		///< if we're inside netloop (1-thread work with schedule)
 	bool m_bNeedKick	= false;		///< if we've installed callback from outside th and need to kick netloop
 	bool m_bManyTries = false;			///< to avoid report 'retries limit esceeded' if we have ONLY one retry
+	bool m_bKeepReplyBufferAfterParse = false;	///< current parser published a borrowed view into m_dReplyBuf
 
 	Agent_e			m_eConnState { Agent_e::HEALTHY };	///< current state
 	SearchdStatus_e m_eReplyStatus { SEARCHD_ERROR };    ///< reply status code

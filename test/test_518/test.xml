@@ -23,32 +23,6 @@ searchd
 
 <queries>
 <sphinxql>
-	DROP TABLE IF EXISTS uuid_ids;
-	DROP TABLE IF EXISTS uuid_auto;
-	DROP TABLE IF EXISTS uuid_col;
-	DROP TABLE IF EXISTS uuid_case;
-	DROP TABLE IF EXISTS uuid_txn;
-	DROP TABLE IF EXISTS uuid_mixed_row;
-	DROP TABLE IF EXISTS uuid_mixed_col;
-	DROP TABLE IF EXISTS uuid_disk_row;
-	DROP TABLE IF EXISTS uuid_disk_col;
-	DROP TABLE IF EXISTS bad_atid_uuid;
-	DROP TABLE IF EXISTS bad_hidden_uuid;
-	DROP TABLE IF EXISTS bad_hidden_uuid_id;
-	DROP TABLE IF EXISTS bad_mixed_uuid;
-	DROP TABLE IF EXISTS bad_uuid_shard;
-	DROP TABLE IF EXISTS numeric_ids;
-	DROP TABLE IF EXISTS numeric_shard;
-	DROP TABLE IF EXISTS numeric_shard_a;
-	DROP TABLE IF EXISTS numeric_shard_b;
-	DROP TABLE IF EXISTS join_left;
-	DROP TABLE IF EXISTS join_right;
-	DROP TABLE IF EXISTS dist_agent;
-	DROP TABLE IF EXISTS dist_agent_multi;
-	DROP TABLE IF EXISTS dist_agent_numeric;
-	DROP TABLE IF EXISTS uuid_dist_a;
-	DROP TABLE IF EXISTS uuid_dist_b;
-
 	CREATE TABLE uuid_ids ( id uuid, title text, tag string, price int );
 	CREATE TABLE uuid_auto ( id uuid, title text, tag string, price int );
 	CREATE TABLE uuid_col ( id uuid, title text, tag string, price int ) engine='columnar';
@@ -1062,6 +1036,7 @@ searchd
 
 <sphinxql>
 	SELECT id, tag, price FROM uuid_ids WHERE id='550e8400-e29b-41d4-a716-446655440005' ORDER BY tag ASC;
+
 	DROP TABLE dist_agent_multi;
 	DROP TABLE dist_agent;
 	DROP TABLE dist_agent_numeric;
@@ -1083,7 +1058,10 @@ searchd
 	DROP TABLE IF EXISTS bad_hidden_uuid;
 	DROP TABLE IF EXISTS bad_hidden_uuid_id;
 	DROP TABLE IF EXISTS bad_mixed_uuid;
+	DROP TABLE IF EXISTS bad_uuid_shard;
 	DROP TABLE numeric_ids;
+	DROP TABLE uuid_disk_row;
+	DROP TABLE uuid_disk_col;
 </sphinxql>
 </queries>
 

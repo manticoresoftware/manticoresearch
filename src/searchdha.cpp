@@ -2331,6 +2331,7 @@ void AgentConn_t::StartRemoteLoopTry ()
 	while ( StartNextRetry () )
 	{
 		/// reset state before every retry
+		m_bKeepReplyBufferAfterParse = false;
 		m_dIOVec.Reset ();
 		m_tOutput.Reset ();
 		InitReplyBuf ();
@@ -2634,6 +2635,15 @@ void AgentConn_t::SetNoLimitReplySize()
 bool AgentConn_t::CommitResult ()
 {
 	sphLogDebugA ( "%d CommitResult() ref=%d, parser %p", m_iStoreTag, ( int ) GetRefcount (), m_pParser );
+	AT_SCOPE_EXIT ( [this] {
+		// A complete reply no longer has active transport operations. Drop request views before
+		// their backing output and preserve only reply buffers explicitly borrowed by a parser.
+		m_dIOVec.Reset ();
+		m_tOutput.Reset ();
+		if ( !m_bKeepReplyBufferAfterParse )
+			InitReplyBuf ();
+	} );
+
 	if ( !m_pParser )
 	{
 		Finish();

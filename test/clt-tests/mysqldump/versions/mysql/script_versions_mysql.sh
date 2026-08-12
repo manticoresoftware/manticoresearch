@@ -30,7 +30,7 @@ docker_pull_with_retries() {
 # Check for new major.minor versions
 echo "🔍 Checking for new MySQL major.minor versions..."
 
-LATEST_MYSQL="9.7"
+LATEST_MYSQL="26.7"
 
 if command -v curl >/dev/null 2>&1; then
     found_new=false
@@ -69,7 +69,7 @@ fi
 echo ""
 
 # MySQL versions
-versions=("mysql:5.6" "mysql:5.7" "mysql:8.0" "mysql:8.2" "mysql:8.3" "mysql:8.4" "mysql:9.0" "mysql:9.1" "mysql:9.2" "mysql:9.3" "mysql:9.4" "mysql:9.5" "mysql:9.6" "mysql:9.7" "mysql:latest")
+versions=("mysql:5.6" "mysql:5.7" "mysql:8.0" "mysql:8.2" "mysql:8.3" "mysql:8.4" "mysql:9.0" "mysql:9.1" "mysql:9.2" "mysql:9.3" "mysql:9.4" "mysql:9.5" "mysql:9.6" "mysql:9.7" "mysql:26.7" "mysql:latest")
 
 # Going through all the versions
 for version in "${versions[@]}"; do

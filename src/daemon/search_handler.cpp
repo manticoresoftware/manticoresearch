@@ -21,6 +21,7 @@
 #include "schematransform.h"
 #include "minimize_aggr_result.h"
 #include "facetutils.h"
+#include "searchdsql.h"
 
 #include "std/string.h"
 
@@ -1913,20 +1914,28 @@ static void CheckExpansion ( CSphQueryResultMeta & tMeta )
 struct QueryInfo_t : TaskInfo_t
 {
 	DECLARE_RENDER( QueryInfo_t );
-
-	// actually it is 'virtually hazard'. Don't care about query* itself, however later in dtr of Searchandler_t
-	// will work with refs to members of it's m_dQueries and retire of whole vec.
-	std::atomic<const CSphQuery *> m_pHazardQuery;
+	CSphString m_sPreParsedQuery;
 };
 
 DEFINE_RENDER ( QueryInfo_t )
 {
 	auto & tInfo = *(QueryInfo_t *) pSrc;
 	dDst.m_sChain << "Query ";
+	if ( tInfo.m_sPreParsedQuery.IsEmpty() )
+		return;
+
+	if ( dDst.m_iDescriptionLimit )
+		dDst.m_sPreParsedQuery.SetBinary ( tInfo.m_sPreParsedQuery.cstr(), Min ( dDst.m_iDescriptionLimit.value(), Min ( tInfo.m_sPreParsedQuery.Length(), 8192) ) );
+	else
+		dDst.m_sPreParsedQuery = tInfo.m_sPreParsedQuery;
+
+/* here we need to fix lifetime, temporary commented out
 	hazard::Guard_c tGuard;
 	auto pQuery = tGuard.Protect ( tInfo.m_pHazardQuery );
 	if ( pQuery && session::GetProto()!=Proto_e::MYSQL41 ) // cheat: for mysql query not used, so will not copy it then
 		dDst.m_pQuery = std::make_unique<CSphQuery> ( *pQuery );
+
+		*/
 }
 
 static void FillupFacetError ( int iQueries, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<AggrResult_t> & dAggrResults )
@@ -2039,7 +2048,17 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 	// we've own scoped context here
 	auto pQueryInfo = new QueryInfo_t;
-	pQueryInfo->m_pHazardQuery.store ( m_dNQueries.begin(), std::memory_order_release );
+	if ( session::GetProto()!=Proto_e::MYSQL41 ) {
+		if ( m_pStmt )
+			pQueryInfo->m_sPreParsedQuery = m_pStmt->m_sStmt;
+
+		if ( pQueryInfo->m_sPreParsedQuery.IsEmpty() ) {
+			QuotationEscapedBuilder tBuf;
+			FormatSphinxql ( m_dNQueries.First(), m_dNJoinQueryOptions.First(), 0, tBuf );
+			tBuf.MoveTo ( pQueryInfo->m_sPreParsedQuery );
+		}
+	}
+//	pQueryInfo->m_pHazardQuery.store ( m_dNQueries.begin(), std::memory_order_release );
 	ScopedInfo_T pTlsQueryInfo ( pQueryInfo );
 
 	// all my stats

@@ -151,6 +151,17 @@ bool XQParseHelper_c::AddField ( FieldMask_t & dFields, const char * szField, in
 	sField.SetBinary ( szField, iLen );
 
 	int iField = m_pSchema->GetFieldIndex ( sField.cstr() );
+	if ( iField < 0 && m_pDiscoverySchema )
+	{
+		if ( m_pDiscoverySchema->GetFieldsCount()>=SPH_MAX_FIELDS )
+			return Error ( " max %d fields allowed", SPH_MAX_FIELDS );
+
+		CSphColumnInfo tField;
+		tField.m_sName.SetBinary ( szField, iLen );
+		m_pDiscoverySchema->AddField ( tField );
+		iField = m_pSchema->GetFieldIndex ( sField.cstr() );
+	}
+
 	if ( iField < 0 )
 	{
 		if ( m_bStopOnInvalid )
@@ -314,9 +325,10 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 }
 
 
-void XQParseHelper_c::Setup ( const CSphSchema * pSchema, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, XQQuery_t * pXQQuery, const CSphIndexSettings & tSettings )
+void XQParseHelper_c::Setup ( const CSphSchema * pSchema, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, XQQuery_t * pXQQuery, const CSphIndexSettings & tSettings, CSphSchema * pDiscoverySchema )
 {
 	m_pSchema = pSchema;
+	m_pDiscoverySchema = pDiscoverySchema;
 	m_pTokenizer = std::move ( pTokenizer );
 	m_pDict = std::move (pDict);
 	m_pParsed = pXQQuery;

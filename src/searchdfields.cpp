@@ -262,6 +262,8 @@ struct GetFieldReplyParser_t : public ReplyParser_i
 		pReply->m_dLocs.SwapData ( dLocs );
 		pReply->m_iFieldsLen = iFieldsLen;
 		pReply->m_pFieldsRaw = pFieldsRaw;
+		if ( pFieldsRaw )
+			tAgent.KeepReplyBufferAfterParse ();
 		return true;
 	}
 };

@@ -78,8 +78,13 @@ docker import \
 [ -n "$img_url_branch" ] && docker tag "$img_url" "$img_url_branch"
 [ -n "$img_url_hash" ] && docker tag "$img_url" "$img_url_hash"
 
+light_images=(
+	"${hub_repo}:test-kit-light-${BUILD_COMMIT}"
+	"${hub_repo}:test-kit-light-${BRANCH_TAG}"
+)
+
 # pusing to ghcr.io
-[ -n "$GHCR_USER" ] && for img in "$img_url" "$img_url_latest" "$img_url_tag" "$img_url_branch" "$img_url_hash"; do
+[ -n "$GHCR_USER" ] && for img in "$img_url" "$img_url_latest" "$img_url_tag" "$img_url_branch" "$img_url_hash" "${light_images[@]}"; do
 	[ -n "$img" ] || continue
 	docker push "$img" \
 	  && echo "❗ Pushed the image to $img" \

@@ -978,12 +978,13 @@ jobs:
       ref: ${{ github.sha }}
 
   test_kit_docker_push:
-    if: always() && needs.meta.outputs.run_image_push == 'true' && (needs.test_kit_docker_build.result == 'success' || needs.test_kit_docker_reuse.result == 'success')
+    if: always() && needs.meta.outputs.run_image_push == 'true' && (needs.test_kit_docker_build.result == 'success' || needs.test_kit_docker_reuse.result == 'success') && needs.test_kit_light_docker_build.result == 'success'
     needs:
       - clt
       - meta
       - test_kit_docker_build
       - test_kit_docker_reuse
+      - test_kit_light_docker_build
       - test_linux_debug_plain
       - test_linux_debug_rt
       - test_linux_debug_mcl
@@ -1016,13 +1017,23 @@ jobs:
           if [[ -f artifact.tar ]]; then
             tar -xf artifact.tar
           fi
+      - name: Download light image artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: test_kit_light_docker
+          path: .
+      - name: Load light image
+        run: gzip -dc test_kit_light_docker.tar.gz | docker load
       - name: Calculate short commit hash
         id: sha
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       - name: Pushing docker image to repo
         id: test-kit-push
+        env:
+          TEST_RESULT: ${{ needs.clt.result }}
+          BUILD_COMMIT: ${{ steps.sha.outputs.sha_short }}
         run: |
-          TEST_RESULT=${{ needs.clt.result }} BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_push.sh
+          /bin/bash dist/test_kit_docker_push.sh
 
   test_kit_light_docker_build:
     if: always() && needs.meta.outputs.run_builds == 'true' && needs.build_linux_bundle.result == 'success'
@@ -1317,44 +1328,3 @@ jobs:
             exit 1
           fi
           echo "* Overall: success" >> "$GITHUB_STEP_SUMMARY"
-
-  test_kit_light_docker_push:
-    if: always() && needs.final_status.result == 'success' && needs.meta.outputs.run_builds == 'true' && needs.test_kit_light_docker_build.result == 'success'
-    needs: [final_status, meta, test_kit_light_docker_build]
-    name: Push Light Test Kit docker image
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Download light image artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: test_kit_light_docker
-          path: .
-      - name: Load light image
-        run: gzip -dc test_kit_light_docker.tar.gz | docker load
-      - name: Resolve image tags
-        id: tags
-        env:
-          REPO_OWNER: ${{ github.repository_owner }}
-          BRANCH_TAG: ${{ needs.meta.outputs.branch_tag }}
-        run: |
-          set -euo pipefail
-          short_sha="${GITHUB_SHA:0:7}"
-          echo "commit=ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-light-${short_sha}" >> "$GITHUB_OUTPUT"
-          echo "branch=ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-light-${BRANCH_TAG}" >> "$GITHUB_OUTPUT"
-      - name: Log in to GHCR
-        env:
-          GHCR_USER: ${{ vars.GHCR_USER || github.actor }}
-          GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD || github.token }}
-        run: echo "$GHCR_PASSWORD" | docker login ghcr.io --username "$GHCR_USER" --password-stdin
-      - name: Push light image tags
-        env:
-          IMAGE_COMMIT: ${{ steps.tags.outputs.commit }}
-          IMAGE_BRANCH: ${{ steps.tags.outputs.branch }}
-        run: |
-          set -euo pipefail
-          docker push "$IMAGE_COMMIT"
-          docker push "$IMAGE_BRANCH"
-          {
-            echo "Pushed light test-kit to $IMAGE_COMMIT"
-            echo "Pushed light test-kit to $IMAGE_BRANCH"
-          } >> "$GITHUB_STEP_SUMMARY"

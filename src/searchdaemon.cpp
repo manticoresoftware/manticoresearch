@@ -50,7 +50,8 @@
 static const char* g_sCommands[SEARCHD_COMMAND_TOTAL] = {"command_search", "command_excerpt", "command_update",
 	"command_keywords", "command_persist", "command_status", "gap_6", "command_flushattrs", "command_sphinxql",
 	"command_ping", "command_delete", "command_set", "command_insert", "command_replace", "command_commit",
-	"command_suggest", "command_json", "command_callpq", "command_cluster", "command_getfield", "command_shard_write"};
+	"command_suggest", "command_json", "command_callpq", "command_cluster", "command_getfield", "command_shard_write",
+	"command_optimize"};
 
 const char * szCommand ( int eCmd)
 {
@@ -1010,9 +1011,10 @@ bool InputBuffer_c::IsDataSizeValid ( int iSize )
 		return false;
 	}
 
-	if ( m_pCur + iSize>m_pBuf + m_iLen )
+	const int iRemaining = HasBytes ();
+	if ( iSize>iRemaining )
 	{
-		SetError( "read overflows buffer by %d byte, data size %d", (int)( m_pCur + iSize - ( m_pBuf + m_iLen ) ), iSize );
+		SetError( "read overflows buffer by %d byte, data size %d", iSize-iRemaining, iSize );
 		return false;
 	}
 

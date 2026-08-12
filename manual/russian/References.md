@@ -70,10 +70,10 @@
 * [SHOW TOKEN](Security/Authentication_and_authorization.md#Users-and-tokens) - Показывает хэш сохранённого токена
 * [RELOAD AUTH](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - Перезагружает данные аутентификации
 
-##### Оптимизация таблиц реального времени
+##### Оптимизация таблицы
 * [FLUSH RAMCHUNK](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK) - Принудительно создает новый диск
 * [FLUSH TABLE](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#FLUSH-TABLE) - Сбрасывает RAM-чанк таблицы реального времени на диск
-* [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) - Помещает таблицу реального времени в очередь на оптимизацию
+* [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) — уплотняет RT-таблицу или физические RT-цели распределенной или шардинговой таблицы
 
 ##### Импорт в таблицу реального времени
 * [ATTACH TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) - Переносит данные из обычной таблицы в таблицу реального времени

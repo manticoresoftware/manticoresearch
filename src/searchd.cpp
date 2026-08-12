@@ -58,6 +58,7 @@
 #include "daemon/notifier.h"
 #include "facetutils.h"
 #include "daemon/daemon_ipc.h"
+#include "api_reply_stream.h"
 
 // services
 #include "taskping.h"
@@ -245,7 +246,7 @@ int64_t g_iNextSystemdWatchdogTick = -1;
 static const char * g_dApiCommands[SEARCHD_COMMAND_TOTAL] =
 {
 	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs", "query", "ping", "delete", "set",  "insert", "replace", "commit", "suggest", "json",
-	"callpq", "clusterpq", "getfield", "shard_write"
+	"callpq", "clusterpq", "getfield", "shard_write", "optimize"
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -3256,6 +3257,7 @@ void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLengt
 		case SEARCHD_COMMAND_CLUSTER:	HandleAPICommandCluster ( tOut, uCommandVer, tBuf, tSess.szClientName() ); break;
 		case SEARCHD_COMMAND_GETFIELD:	HandleCommandGetField ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_SHARD_WRITE: HandleCommandShardWrite ( tOut, uCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_OPTIMIZE:	HandleCommandOptimize ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_SUGGEST:	HandleCommandSuggest ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_PERSIST: break; // already processes, here just for stat
 
@@ -10136,80 +10138,307 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 		tOut.Ok ( 0, dWarnings.GetLength() );
 }
 
-static bool WaitOptimize ( RowBuffer_i & tOut, const CSphString & sIndex )
+static bool StartAndWaitOptimize ( const CSphString & sIndex, const cServedIndexRefPtr_c & pIndex, OptimizeTask_t & tTask, CSphString & sError )
 {
-	if ( PollOptimizeRunning ( sIndex ) )
+	if ( tTask.m_iCutoff>0 )
+		RIdx_T<RtIndex_i *> ( pIndex )->ManualOptimizeCutoff ( tTask.m_iCutoff );
+
+	if ( !RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( tTask ) )
+	{
+		sError = "Can't optimize frozen table";
+		return false;
+	}
+
+	if ( !PollOptimizeRunning ( sIndex ) )
+	{
+		sError = "RT table went away during waiting";
+		return false;
+	}
+
+	return true;
+}
+
+
+static bool RunSynchronousOptimize ( const CSphString & sIndex, const cServedIndexRefPtr_c & pIndex, int iCutoff, CSphString & sError )
+{
+	sError = "";
+	OptimizeTask_t tTask;
+	tTask.m_eVerb = OptimizeTask_t::eManualOptimize;
+	tTask.m_iCutoff = iCutoff>0 ? iCutoff : 0;
+
+	const bool bHasCutoff = ( tTask.m_iCutoff>0 );
+
+	if ( !StartAndWaitOptimize ( sIndex, pIndex, tTask, sError ) )
+		return false;
+	if ( !bHasCutoff )
 		return true;
 
-	tOut.Error ( "RT table went away during waiting" );
+	CSphIndexStatus tStatus;
+	RIdx_T<RtIndex_i *> ( pIndex )->GetStatus ( &tStatus );
+	if ( tStatus.m_iNumChunks<=tTask.m_iCutoff )
+		return true;
+
+	if ( !StartAndWaitOptimize ( sIndex, pIndex, tTask, sError ) )
+		return false;
+
+	RIdx_T<RtIndex_i *> ( pIndex )->GetStatus ( &tStatus );
+	if ( tStatus.m_iNumChunks<=tTask.m_iCutoff )
+		return true;
+
+	sError.SetSprintf ( "OPTIMIZE TABLE did not reach the requested cutoff %d, got %d disk chunks", tTask.m_iCutoff, tStatus.m_iNumChunks );
 	return false;
 }
+
+void BuildRemoteOptimizeRequest ( ISphOutputBuffer & tOut, DWORD uHeartbeatIntervalMs, const CSphString & sIndexes, int iCutoff )
+{
+	auto tHeader = APIHeader ( tOut, SEARCHD_COMMAND_OPTIMIZE, VER_COMMAND_OPTIMIZE );
+	tOut.SendDword ( uHeartbeatIntervalMs );
+	tOut.SendString ( sIndexes.cstr() );
+	tOut.SendInt ( iCutoff );
+}
+
+class RemoteOptimizeRequestBuilder_c final : public RequestBuilder_i
+{
+public:
+	RemoteOptimizeRequestBuilder_c ( DWORD uHeartbeatIntervalMs, int iCutoff )
+		: m_uHeartbeatIntervalMs ( uHeartbeatIntervalMs )
+		, m_iCutoff ( iCutoff )
+	{}
+
+	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
+	{
+		BuildRemoteOptimizeRequest ( tOut, m_uHeartbeatIntervalMs, tAgent.m_tDesc.m_sIndexes, m_iCutoff );
+	}
+
+private:
+	DWORD m_uHeartbeatIntervalMs = 0;
+	int m_iCutoff = 0;
+};
+
+
+class RemoteOptimizeReplyParser_c final : public ReplyParser_i
+{
+public:
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final
+	{
+		if ( !tReq.HasBytes () )
+			return true;
+
+		tAgent.m_sFailure.SetSprintf ( "unexpected remote optimize reply body (%d bytes)", tReq.HasBytes () );
+		return false;
+	}
+};
+
+
+static bool IsRtOptimizeTarget ( const cServedIndexRefPtr_c & pIndex )
+{
+	return pIndex && pIndex->m_eType==IndexType_e::RT;
+}
+
+void HandleCommandOptimize ( GenericOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq )
+{
+	if ( !CheckCommandVersion ( uVer, VER_COMMAND_OPTIMIZE, tOut ) )
+		return;
+	if ( uVer<VER_COMMAND_OPTIMIZE_HEARTBEAT )
+	{
+		SendErrorReply ( tOut, "optimize request requires a heartbeat-capable command version" );
+		return;
+	}
+
+	const DWORD uHeartbeatIntervalMs = tReq.GetDword ();
+	const CSphString sIndexes = tReq.GetString ();
+	const int iCutoff = tReq.GetInt ();
+	if ( tReq.GetError () || tReq.HasBytes () )
+	{
+		SendErrorReply ( tOut, "invalid or truncated optimize request" );
+		return;
+	}
+
+	if ( !uHeartbeatIntervalMs )
+	{
+		SendErrorReply ( tOut, "optimize request requires a positive heartbeat interval" );
+		return;
+	}
+
+	StrVec_t dIndexes;
+	ParseIndexList ( sIndexes, dIndexes );
+	if ( dIndexes.IsEmpty () )
+	{
+		SendErrorReply ( tOut, "optimize target table list is empty" );
+		return;
+	}
+
+	if ( iCutoff<0 )
+	{
+		SendErrorReply ( tOut, "optimize cutoff must be nonnegative" );
+		return;
+	}
+
+	for ( const CSphString & sIndex : dIndexes )
+		if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::WRITE, sIndex, tOut ) )
+			return;
+
+	CSphString sError;
+	if ( !sphCheckWeCanModify ( sError ) )
+	{
+		SendErrorReply ( tOut, "%s", sError.cstr() );
+		return;
+	}
+
+	CSphVector<cServedIndexRefPtr_c> dTargets;
+	dTargets.Resize ( dIndexes.GetLength() );
+	ARRAY_FOREACH ( i, dIndexes )
+	{
+		dTargets[i] = GetServed ( dIndexes[i] );
+		if ( !IsRtOptimizeTarget ( dTargets[i] ) )
+		{
+			SendErrorReply ( tOut, "remote table '%s' must be an existing RT table", dIndexes[i].cstr() );
+			return;
+		}
+	}
+
+	ApiReplyStream_c tStream ( uHeartbeatIntervalMs, uVer, tOut );
+	tStream.Start ();
+
+	SearchFailuresLog_c dFailures;
+	ARRAY_FOREACH ( i, dTargets )
+		if ( !RunSynchronousOptimize ( dIndexes[i], dTargets[i], iCutoff, sError ) )
+			dFailures.Submit ( dIndexes[i], nullptr, sError.cstr() );
+
+	if ( !tStream.StopAndHandoff () )
+		return;
+
+	if ( !dFailures.IsEmpty () )
+	{
+		StringBuilder_c sReport;
+		dFailures.BuildReport ( sReport );
+		SendErrorReply ( tOut, "%s", sReport.cstr() );
+		return;
+	}
+
+	{
+		auto tReply = APIAnswer ( tOut, uVer );
+	}
+}
+
 
 void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 
-	auto sIndex = tStmt.m_sIndex;
-	auto pIndex = GetServed ( sIndex );
-	if ( !ServedDesc_t::IsMutable ( pIndex ) )
-	{
-		tOut.Error ( "OPTIMIZE TABLE requires an existing RT table" );
-		return;
-	}
-
-	OptimizeTask_t tTask;
-	tTask.m_eVerb = OptimizeTask_t::eManualOptimize;
-	tTask.m_iCutoff = tStmt.m_tQuery.m_iCutoff<=0 ? 0 : tStmt.m_tQuery.m_iCutoff;
-
-	const bool bHasCutoff = ( tTask.m_iCutoff>0 );
+	const CSphString sIndex = tStmt.m_sIndex;
+	const cServedIndexRefPtr_c pIndex = GetServed ( sIndex );
+	const int iCutoff = tStmt.m_tQuery.m_iCutoff<=0 ? 0 : tStmt.m_tQuery.m_iCutoff;
 	const bool bSync = tStmt.m_tQuery.m_bSync;
-	if ( bHasCutoff )
-		RIdx_T<RtIndex_i *> ( pIndex )->ManualOptimizeCutoff ( tTask.m_iCutoff );
-
-	bool bStarted = RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( tTask );
-
-	if ( !bSync )
+	if ( ServedDesc_t::IsMutable ( pIndex ) )
 	{
+		if ( !bSync )
+		{
+			OptimizeTask_t tTask;
+			tTask.m_eVerb = OptimizeTask_t::eManualOptimize;
+			tTask.m_iCutoff = iCutoff;
+			if ( iCutoff>0 )
+				RIdx_T<RtIndex_i *> ( pIndex )->ManualOptimizeCutoff ( iCutoff );
+			RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( tTask );
+			tOut.Ok ();
+			return;
+		}
+
+		CSphString sError;
+		if ( !RunSynchronousOptimize ( sIndex, pIndex, iCutoff, sError ) )
+		{
+			tOut.Error ( sError.cstr() );
+			return;
+		}
+
 		tOut.Ok ();
 		return;
 	}
 
-	if ( !bStarted )
+	const cDistributedIndexRefPtr_t pRouted = GetDistr ( sIndex );
+	if ( !pRouted )
 	{
-		tOut.Error ( "Can't optimize frozen table" );
+		tOut.Error ( "OPTIMIZE TABLE requires an existing RT, distributed, or shard table" );
+		return;
+	}
+	const char * szRoutedType = GetIndexTypeName ( pRouted->GetType () );
+
+	if ( !bSync )
+	{
+		// Keep asynchronous public-shard OPTIMIZE delegated to Buddy.
+		if ( pRouted->GetType()==IndexType_e::SHARD )
+		{
+			tOut.Error ( "OPTIMIZE TABLE requires an existing RT table" );
+			return;
+		}
+
+		tOut.ErrorEx ( "OPTIMIZE TABLE on a %s table requires OPTION sync=1", szRoutedType );
 		return;
 	}
 
-	if ( !WaitOptimize ( tOut, sIndex ) )
-		return;
+	const int iQueryTimeoutMs = pRouted->GetAgentQueryTimeoutMs ();
+	const DWORD uHeartbeatIntervalMs = CalcRemoteHeartbeatIntervalMs ( iQueryTimeoutMs );
 
-	if ( bHasCutoff )
+	CSphVector<cServedIndexRefPtr_c> dLocalTargets;
+	dLocalTargets.Resize ( pRouted->m_dLocal.GetLength() );
+	ARRAY_FOREACH ( i, pRouted->m_dLocal )
 	{
-		CSphIndexStatus tStatus;
-		RIdx_T<RtIndex_i *> ( pIndex )->GetStatus ( &tStatus );
-		if ( tStatus.m_iNumChunks>tTask.m_iCutoff )
+		dLocalTargets[i] = GetServed ( pRouted->m_dLocal[i] );
+		if ( !IsRtOptimizeTarget ( dLocalTargets[i] ) )
 		{
-			if ( bHasCutoff )
-				RIdx_T<RtIndex_i *> ( pIndex )->ManualOptimizeCutoff ( tTask.m_iCutoff );
-
-			bStarted = RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( tTask );
-			if ( !bStarted )
-			{
-				tOut.Error ( "Can't optimize frozen table" );
-				return;
-			}
-
-			if ( !WaitOptimize ( tOut, sIndex ) )
-				return;
-
-			RIdx_T<RtIndex_i *> ( pIndex )->GetStatus ( &tStatus );
-			if ( tStatus.m_iNumChunks>tTask.m_iCutoff )
-			{
-				tOut.ErrorEx ( "OPTIMIZE TABLE did not reach the requested cutoff %d, got %d disk chunks", tTask.m_iCutoff, tStatus.m_iNumChunks );
-				return;
-			}
+			CSphString sError;
+			sError.SetSprintf ( "%s OPTIMIZE local table '%s' must be an existing RT table", szRoutedType, pRouted->m_dLocal[i].cstr() );
+			tOut.Error ( sError.cstr() );
+			return;
 		}
+	}
+
+	VecRefPtrsAgentConn_t dAgents;
+	pRouted->GetAllHosts ( dAgents );
+	int iRemoteTargets = 0;
+	for ( AgentConn_t * pAgent : dAgents )
+	{
+		pAgent->m_iMyConnectTimeoutMs = pRouted->GetAgentConnectTimeoutMs ();
+		pAgent->m_iMyQueryTimeoutMs = iQueryTimeoutMs;
+		pAgent->EnableRemoteReplyHeartbeats ();
+		if ( pAgent->IsBlackhole () )
+			continue;
+
+		++iRemoteTargets;
+	}
+
+	if ( dLocalTargets.IsEmpty () && !iRemoteTargets )
+	{
+		tOut.ErrorEx ( "%s OPTIMIZE has no local or remote targets", szRoutedType );
+		return;
+	}
+
+	SearchFailuresLog_c dFailures;
+	CSphString sError;
+	ARRAY_FOREACH ( i, dLocalTargets )
+		if ( !RunSynchronousOptimize ( pRouted->m_dLocal[i], dLocalTargets[i], iCutoff, sError ) )
+			dFailures.Submit ( pRouted->m_dLocal[i], sIndex.cstr(), sError.cstr() );
+
+	if ( !dAgents.IsEmpty () )
+	{
+		SetSessionAuth ( dAgents );
+		RemoteOptimizeRequestBuilder_c tRequest ( uHeartbeatIntervalMs, iCutoff );
+		RemoteOptimizeReplyParser_c tParser;
+		PerformRemoteTasks ( dAgents, &tRequest, &tParser, 0 );
+
+		for ( const AgentConn_t * pAgent : dAgents )
+			if ( !pAgent->m_bSuccess )
+				dFailures.SubmitEx ( pAgent->m_tDesc.m_sIndexes, sIndex.cstr(), "agent %s: %s",
+					pAgent->m_tDesc.GetMyUrl().cstr(), pAgent->m_sFailure.IsEmpty() ? "remote optimize failed" : pAgent->m_sFailure.cstr() );
+	}
+
+	if ( !dFailures.IsEmpty () )
+	{
+		StringBuilder_c sReport;
+		dFailures.BuildReport ( sReport );
+		tOut.Error ( sReport.cstr() );
+		return;
 	}
 
 	tOut.Ok ();
@@ -10651,7 +10880,7 @@ void ServedStats_c::GetIndexQueryStats ( VectorLike & dStatus ) const
 	AddFoundRowsStatsToOutput ( dStatus, "found_rows", tRowsFoundStats );
 
 	// command stats
-	SearchdCommand_e dCommands[] = { SEARCHD_COMMAND_SEARCH, SEARCHD_COMMAND_EXCERPT, SEARCHD_COMMAND_UPDATE, SEARCHD_COMMAND_KEYWORDS, SEARCHD_COMMAND_STATUS, SEARCHD_COMMAND_DELETE, SEARCHD_COMMAND_INSERT, SEARCHD_COMMAND_REPLACE, SEARCHD_COMMAND_COMMIT, SEARCHD_COMMAND_SUGGEST, SEARCHD_COMMAND_CALLPQ, SEARCHD_COMMAND_GETFIELD, SEARCHD_COMMAND_SHARD_WRITE };
+	SearchdCommand_e dCommands[] = { SEARCHD_COMMAND_SEARCH, SEARCHD_COMMAND_EXCERPT, SEARCHD_COMMAND_UPDATE, SEARCHD_COMMAND_KEYWORDS, SEARCHD_COMMAND_STATUS, SEARCHD_COMMAND_DELETE, SEARCHD_COMMAND_INSERT, SEARCHD_COMMAND_REPLACE, SEARCHD_COMMAND_COMMIT, SEARCHD_COMMAND_SUGGEST, SEARCHD_COMMAND_CALLPQ, SEARCHD_COMMAND_GETFIELD, SEARCHD_COMMAND_SHARD_WRITE, SEARCHD_COMMAND_OPTIMIZE };
 	for ( auto eCmd : dCommands )
 		dStatus.MatchTupletf ( szCommand ( eCmd ), "%l", m_tCommandsStats.Get ( eCmd ) );
 
@@ -14009,10 +14238,11 @@ bool ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnChec
 
 	if ( hIndex("agent_query_timeout") )
 	{
-		if ( hIndex["agent_query_timeout"].intval()<=0 )
+		const int iAgentQueryTimeoutMs = hIndex.GetMsTimeMs ( "agent_query_timeout" );
+		if ( iAgentQueryTimeoutMs<=0 )
 			sphWarning ( "table '%s': agent_query_timeout must be positive, ignored", szIndexName );
 		else
-			tIdx.SetAgentQueryTimeoutMs ( hIndex.GetMsTimeMs ( "agent_query_timeout") );
+			tIdx.SetAgentQueryTimeoutMs ( iAgentQueryTimeoutMs );
 	}
 
 	bool bHaveHA = tIdx.m_dAgents.any_of ( [] ( const auto& ag ) { return ag->IsHA (); } );
@@ -15185,7 +15415,11 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 	g_iQueryLogMinMs = hSearchd.GetMsTimeMs ( "query_log_min_msec", g_iQueryLogMinMs );
 
 	g_iAgentConnectTimeoutMs = hSearchd.GetMsTimeMs ( "agent_connect_timeout", g_iAgentConnectTimeoutMs );
-	g_iAgentQueryTimeoutMs = hSearchd.GetMsTimeMs ( "agent_query_timeout", g_iAgentQueryTimeoutMs );
+	const int iAgentQueryTimeoutMs = hSearchd.GetMsTimeMs ( "agent_query_timeout", g_iAgentQueryTimeoutMs );
+	if ( iAgentQueryTimeoutMs>0 )
+		g_iAgentQueryTimeoutMs = iAgentQueryTimeoutMs;
+	else
+		sphWarning ( "agent_query_timeout must be positive, ignored" );
 	g_iAgentRetryDelayMs = hSearchd.GetMsTimeMs ( "agent_retry_delay", g_iAgentRetryDelayMs );
 	if ( g_iAgentRetryDelayMs > DAEMON_MAX_RETRY_DELAY )
 		sphWarning ( "agent_retry_delay %d exceeded max recommended %d", g_iAgentRetryDelayMs, DAEMON_MAX_RETRY_DELAY );
@@ -15194,7 +15428,11 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 		sphWarning ( "agent_retry_count %d exceeded max recommended %d", g_iAgentRetryCount, DAEMON_MAX_RETRY_COUNT );
 
 	g_iReplConnectTimeoutMs = hSearchd.GetMsTimeMs ( "replication_connect_timeout", g_iReplConnectTimeoutMs );
-	g_iReplQueryTimeoutMs = hSearchd.GetMsTimeMs ( "replication_query_timeout", g_iReplQueryTimeoutMs );
+	const int iReplQueryTimeoutMs = hSearchd.GetMsTimeMs ( "replication_query_timeout", g_iReplQueryTimeoutMs );
+	if ( iReplQueryTimeoutMs>=1000 )
+		g_iReplQueryTimeoutMs = iReplQueryTimeoutMs;
+	else
+		sphWarning ( "replication_query_timeout must be at least 1000 ms, ignored" );
 	g_iReplRetryCount = hSearchd.GetInt ( "replication_retry_count", g_iReplRetryCount );
 	g_iReplRetryDelayMs = hSearchd.GetMsTimeMs ( "replication_retry_delay", g_iReplRetryDelayMs );
 	ReplicationSetTimeouts ( g_iReplConnectTimeoutMs, g_iReplQueryTimeoutMs, g_iReplRetryCount, g_iReplRetryDelayMs );

@@ -70,10 +70,10 @@
 * [SHOW TOKEN](Security/Authentication_and_authorization.md#Users-and-tokens) - Shows the stored token hash
 * [RELOAD AUTH](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - Reloads authentication data
 
-##### Real-time table optimization
+##### Table optimization
 * [FLUSH RAMCHUNK](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK) - Force creating a new disk chunk
 * [FLUSH TABLE](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#FLUSH-TABLE) - Flushes real-time table RAM chunk to disk
-* [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) - Enqueues real-time table for optimization
+* [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) - Compacts an RT table or the physical RT targets of a distributed or sharded table
 
 ##### Importing to a real-time table
 * [ATTACH TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) - Moves data from a plain table to a real-time table

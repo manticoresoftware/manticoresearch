@@ -462,6 +462,26 @@ jobs:
         ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
         cmake --build build --target package
 
+  build_linux_bundle:
+    if: always() && needs.meta.outputs.run_builds == 'true' && (needs.mcl_cached_package_jammy.result == 'success' || needs.mcl_package_jammy.result == 'success')
+    needs: [meta, mcl_test_package_cache_probe, mcl_cached_package_jammy, mcl_package_jammy]
+    name: Linux bundle package
+    uses: ./.github/workflows/build_template.yml
+    secrets: inherit
+    with:
+      artifact_name: linux_bundle_package
+      cache_key: build_linux_bundle_x86_64
+      artifact_list: "build/manticore_*_amd64.deb"
+      MCL_PACKAGE_ARTIFACT_NAME: mcl_package_jammy_x86_64
+      MCL_PACKAGE_SHA: ${{ needs.meta.outputs.mcl_full_sha }}
+      MCL_REPO_TYPE: dev
+      cmake_command: |
+        mkdir build
+        cd build
+        export BUNDLE_REPO_TYPE=dev
+        cmake -DPACK=1 -DPACK_BUNDLE=1 ..
+        cmake --build . --target package
+
   build_linux_release_tests:
     if: needs.meta.outputs.run_builds == 'true'
     needs: [meta]
@@ -1004,6 +1024,56 @@ jobs:
         run: |
           TEST_RESULT=${{ needs.clt.result }} BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_push.sh
 
+  test_kit_light_docker_build:
+    if: always() && needs.meta.outputs.run_builds == 'true' && needs.build_linux_bundle.result == 'success'
+    needs: [meta, build_linux_bundle]
+    name: Light Test Kit docker image build
+    runs-on: ubuntu-22.04
+    env:
+      REPO_OWNER: ${{ github.repository_owner }}
+      BRANCH_TAG: ${{ needs.meta.outputs.branch_tag }}
+      EXPECTED_COMMIT: ${{ github.sha }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Download bundle package
+        uses: manticoresoftware/download_artifact_with_retries@v5
+        with:
+          name: linux_bundle_package
+          path: ./bundle-package
+      - name: Unpack bundle package
+        run: |
+          set -euo pipefail
+          if [[ -f bundle-package/artifact.tar ]]; then
+            tar -xf bundle-package/artifact.tar -C bundle-package
+          fi
+          find bundle-package -type f -name 'manticore*.deb' -print | sort
+      - name: Resolve image tags
+        id: tags
+        run: |
+          set -euo pipefail
+          short_sha="$(git rev-parse --short HEAD)"
+          echo "commit=ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-light-${short_sha}" >> "$GITHUB_OUTPUT"
+          echo "branch=ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-light-${BRANCH_TAG}" >> "$GITHUB_OUTPUT"
+      - name: Build and verify official-style image
+        env:
+          IMAGE_COMMIT: ${{ steps.tags.outputs.commit }}
+          IMAGE_BRANCH: ${{ steps.tags.outputs.branch }}
+        run: ./dist/test_kit_light_docker_build.sh bundle-package
+      - name: Save light image
+        env:
+          IMAGE_COMMIT: ${{ steps.tags.outputs.commit }}
+          IMAGE_BRANCH: ${{ steps.tags.outputs.branch }}
+        run: |
+          set -euo pipefail
+          docker save "$IMAGE_COMMIT" "$IMAGE_BRANCH" | gzip -1 > test_kit_light_docker.tar.gz
+      - name: Upload light image artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: test_kit_light_docker
+          path: test_kit_light_docker.tar.gz
+          compression-level: 0
+
   build_aarch64:
     if: needs.meta.outputs.run_builds == 'true'
     needs: [meta]
@@ -1133,6 +1203,8 @@ jobs:
       - test_windows_plain
       - test_windows_rt
       - test_windows_mcl
+      - build_linux_bundle
+      - test_kit_light_docker_build
       - build_freebsd
       - build_aarch64
       - clt
@@ -1164,6 +1236,8 @@ jobs:
             "test_windows_plain:${{ needs.test_windows_plain.result }}:${{ needs.test_windows_plain.outputs.test_outcome }}"
             "test_windows_rt:${{ needs.test_windows_rt.result }}:${{ needs.test_windows_rt.outputs.test_outcome }}"
             "test_windows_mcl:${{ needs.test_windows_mcl.result }}:${{ needs.test_windows_mcl.outputs.test_outcome }}"
+            "build_linux_bundle:${{ needs.build_linux_bundle.result }}"
+            "test_kit_light_docker_build:${{ needs.test_kit_light_docker_build.result }}"
             "build_freebsd:${{ needs.build_freebsd.result }}"
             "build_aarch64:${{ needs.build_aarch64.result }}"
           )
@@ -1216,6 +1290,14 @@ jobs:
             fi
           fi
           if [[ "${{ needs.meta.outputs.run_builds }}" == "true" ]]; then
+            if [[ "${{ needs.build_linux_bundle.result }}" != "success" ]]; then
+              echo "build_linux_bundle: required but result was ${{ needs.build_linux_bundle.result }}"
+              failed=1
+            fi
+            if [[ "${{ needs.test_kit_light_docker_build.result }}" != "success" ]]; then
+              echo "test_kit_light_docker_build: required but result was ${{ needs.test_kit_light_docker_build.result }}"
+              failed=1
+            fi
             for entry in "${runtime_results[@]}"; do
               name="${entry%%:*}"
               rest="${entry#*:}"
@@ -1235,3 +1317,44 @@ jobs:
             exit 1
           fi
           echo "* Overall: success" >> "$GITHUB_STEP_SUMMARY"
+
+  test_kit_light_docker_push:
+    if: needs.final_status.result == 'success' && needs.meta.outputs.run_builds == 'true'
+    needs: [final_status, meta, test_kit_light_docker_build]
+    name: Push Light Test Kit docker image
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download light image artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: test_kit_light_docker
+          path: .
+      - name: Load light image
+        run: gzip -dc test_kit_light_docker.tar.gz | docker load
+      - name: Resolve image tags
+        id: tags
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+          BRANCH_TAG: ${{ needs.meta.outputs.branch_tag }}
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA:0:7}"
+          echo "commit=ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-light-${short_sha}" >> "$GITHUB_OUTPUT"
+          echo "branch=ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-light-${BRANCH_TAG}" >> "$GITHUB_OUTPUT"
+      - name: Log in to GHCR
+        env:
+          GHCR_USER: ${{ vars.GHCR_USER || github.actor }}
+          GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD || github.token }}
+        run: echo "$GHCR_PASSWORD" | docker login ghcr.io --username "$GHCR_USER" --password-stdin
+      - name: Push light image tags
+        env:
+          IMAGE_COMMIT: ${{ steps.tags.outputs.commit }}
+          IMAGE_BRANCH: ${{ steps.tags.outputs.branch }}
+        run: |
+          set -euo pipefail
+          docker push "$IMAGE_COMMIT"
+          docker push "$IMAGE_BRANCH"
+          {
+            echo "Pushed light test-kit to $IMAGE_COMMIT"
+            echo "Pushed light test-kit to $IMAGE_BRANCH"
+          } >> "$GITHUB_STEP_SUMMARY"

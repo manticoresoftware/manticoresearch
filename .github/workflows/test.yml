@@ -1319,7 +1319,7 @@ jobs:
           echo "* Overall: success" >> "$GITHUB_STEP_SUMMARY"
 
   test_kit_light_docker_push:
-    if: needs.final_status.result == 'success' && needs.meta.outputs.run_builds == 'true'
+    if: always() && needs.final_status.result == 'success' && needs.meta.outputs.run_builds == 'true' && needs.test_kit_light_docker_build.result == 'success'
     needs: [final_status, meta, test_kit_light_docker_build]
     name: Push Light Test Kit docker image
     runs-on: ubuntu-22.04

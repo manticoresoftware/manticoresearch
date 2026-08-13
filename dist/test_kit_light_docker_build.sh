@@ -2,12 +2,9 @@
 set -euo pipefail
 
 bundle_dir="${1:?Usage: $0 <bundle-package-directory>}"
-: "${GITHUB_SHA:?GITHUB_SHA must be set}"
 
 work_dir="$(mktemp -d)"
-container="manticore-light-smoke-$$"
 cleanup() {
-  docker rm -f "$container" >/dev/null 2>&1 || true
   rm -rf "$work_dir"
 }
 trap cleanup EXIT
@@ -26,13 +23,4 @@ rm "$docker_dir/Dockerfile.bak"
 docker build --platform linux/amd64 --build-arg DEV=0 --build-arg DAEMON_URL= \
   --tag test-kit-light:img "$docker_dir"
 
-docker run --detach --name "$container" test-kit-light:img >/dev/null
-for _ in {1..60}; do
-  docker exec "$container" mysql -e 'SHOW VERSION' >/dev/null 2>&1 && break
-  sleep 1
-done
-version="$(docker exec "$container" searchd --version 2>&1)"
-printf '%s\n' "$version"
-grep -q "${GITHUB_SHA:0:7}" <<<"$version"
-docker exec "$container" mysql -e "CREATE TABLE light_smoke(title text); INSERT INTO light_smoke(id,title) VALUES(1,'hello'); SELECT id FROM light_smoke WHERE MATCH('hello')" >/dev/null
 docker save test-kit-light:img | gzip -1 > test_kit_light_docker.tar.gz

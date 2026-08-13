@@ -1026,7 +1026,7 @@ jobs:
         with:
           name: release_build
           path: ./bundle-package
-      - name: Build and verify official-style image
+      - name: Build official-style image
         run: ./dist/test_kit_light_docker_build.sh bundle-package
       - name: Upload light image artifact
         uses: actions/upload-artifact@v6

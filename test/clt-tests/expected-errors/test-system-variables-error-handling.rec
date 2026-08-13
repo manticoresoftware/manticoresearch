@@ -109,6 +109,12 @@ mysql -h0 -P9306 -e "SELECT @@character_set_client, @@tx_isolation_fake, @@max_a
 ––– output –––
 ERROR 1064 (42000) at line 1: unknown sysvar @@tx_isolation_fake
 ––– comment –––
+2.2 MySQL Connector/J initialization query
+––– input –––
+mysql -N -B -h0 -P9306 -e "SELECT @@session.auto_increment_increment AS auto_increment_increment, @@character_set_client AS character_set_client, @@character_set_connection AS character_set_connection, @@character_set_results AS character_set_results, @@character_set_server AS character_set_server, @@collation_server AS collation_server, @@collation_connection AS collation_connection, @@init_connect AS init_connect, @@interactive_timeout AS interactive_timeout, @@license AS license, @@lower_case_table_names AS lower_case_table_names, @@max_allowed_packet AS max_allowed_packet, @@net_write_timeout AS net_write_timeout, @@performance_schema AS performance_schema, @@sql_mode AS sql_mode, @@system_time_zone AS system_time_zone, @@time_zone AS time_zone, @@transaction_isolation AS transaction_isolation, @@wait_timeout AS wait_timeout, @@query_cache_size AS query_cache_size;"
+––– output –––
+1	utf8	utf8	utf8mb4	utf8mb4	utf8mb4_0900_ai_ci	utf8mb4_0900_ai_ci		900	GPL	1	134217728	60	1	ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION	UTC	SYSTEM	REPEATABLE-READ	28800	0
+––– comment –––
 3.1 Test with mysqldump/mariadb-dump
 ––– input –––
 mysqldump -h0 -P9306 manticore tbl --no-data --column-statistics=0 --skip-comments --skip-opt --no-tablespaces > /tmp/dump.sql 2> >(grep -E -v "Warning: column statistics|Warning: version string returned by server is incorrect." >&2)

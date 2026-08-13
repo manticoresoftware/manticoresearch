@@ -390,6 +390,14 @@ bool CSphSource_BaseSV::StoreAttribute ( int iAttr, int iOff )
 		ParseFieldMVA ( tRemap.m_iAttr, sVal );
 		break;
 
+	case SPH_ATTR_FLOAT_VECTOR:
+		if ( !ParseFieldFloatVector ( tRemap.m_iAttr, sVal ) )
+		{
+			DecorateMessage ( "invalid float vector value '%s'", sVal );
+			return false;
+		}
+		break;
+
 	case SPH_ATTR_TOKENCOUNT:
 		m_tDocInfo.SetAttr ( tAttr.m_tLocator, 0 );
 		break;
@@ -572,6 +580,7 @@ bool CSphSource_TSV::SetupSchema ( const CSphConfigSection & hSource, bool bWord
 	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_bigint"),		SPH_ATTR_BIGINT,	m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_multi"),		SPH_ATTR_UINT32SET,	m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_multi_64"),	SPH_ATTR_INT64SET,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_float_vector"), SPH_ATTR_FLOAT_VECTOR, m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_string"),		SPH_ATTR_STRING,	m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_json"),		SPH_ATTR_JSON,		m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("tsvpipe_field_string"),	SPH_ATTR_STRING,	m_tSchema, sError );
@@ -800,6 +809,7 @@ bool CSphSource_CSV::SetupSchema ( const CSphConfigSection & hSource, bool bWord
 	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_bigint"),		SPH_ATTR_BIGINT,	m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_multi"),		SPH_ATTR_UINT32SET,	m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_multi_64"),	SPH_ATTR_INT64SET,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_float_vector"), SPH_ATTR_FLOAT_VECTOR, m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_string"),		SPH_ATTR_STRING,	m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_json"),		SPH_ATTR_JSON,		m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("csvpipe_field_string"),	SPH_ATTR_STRING,	m_tSchema, sError );

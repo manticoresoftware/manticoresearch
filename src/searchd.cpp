@@ -10042,10 +10042,30 @@ bool AttachIndexerRtBulkChunk ( const CSphString & sTable, int64_t iIndexId, con
 		return false;
 	}
 
+	if ( pPlain->GetMatchSchema().HasKNNAttrs() && !pPlain->AlterKNN ( sError ) )
+	{
+		sError.SetSprintf ( "failed building KNN index for indexer RT bulk chunk: %s", sError.cstr() );
+		return false;
+	}
+
 	bool bFatal = false;
 	bool bAttached = false;
 	{
-		WIdx_T<RtIndex_i *> pRt { pServed };
+		auto pCurrent = GetServed ( sTable );
+		if ( !ServedDesc_t::IsMutable ( pCurrent ) )
+		{
+			sError.SetSprintf ( "table '%s' disappeared while finalizing indexer RT bulk", sTable.cstr() );
+			return false;
+		}
+
+		WIdx_T<RtIndex_i *> pRt { pCurrent };
+		auto pRegistered = GetServed ( sTable );
+		if ( pRegistered.Ptr()!=pCurrent.Ptr() || pRt->GetIndexId()!=iIndexId )
+		{
+			sError.SetSprintf ( "table '%s' was replaced while finalizing indexer RT bulk", sTable.cstr() );
+			return false;
+		}
+
 		bAttached = pRt->AttachDiskIndex ( pPlain.get(), false, bFatal, sError );
 	}
 	if ( bAttached )

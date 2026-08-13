@@ -13,7 +13,7 @@ import pymysql
 
 
 def sql_conn(port):
-    return pymysql.connect(host="127.0.0.1", port=port, user="root", autocommit=True)
+    return pymysql.connect(host="127.0.0.1", port=port, user="root", autocommit=True, ssl_disabled=True)
 
 
 def query(conn, statement, args=None):
@@ -28,6 +28,10 @@ def count(conn, table):
 
 def table_status(conn, table):
     return dict(query(conn, f"SHOW TABLE {table} STATUS"))
+
+
+def disk_chunks(conn, table):
+    return int(table_status(conn, table)["disk_chunks"])
 
 
 def staging_dirs(data_dir):
@@ -205,6 +209,214 @@ def transaction_invariant_test(port, data_dir):
     admin.close()
 
 
+def all_types_and_knn_test(port, data_dir):
+    writer = sql_conn(port)
+    reader = sql_conn(port)
+    table = "indexer_rt_all_types"
+    query(writer, f"DROP TABLE IF EXISTS {table}")
+    query(writer, f"CREATE TABLE {table} (id BIGINT, title TEXT, i INTEGER, bits BIT(5), bi BIGINT, b BOOL, ts TIMESTAMP, f FLOAT, s STRING, j JSON, m MULTI, m64 MULTI64, v FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2')")
+    query(writer, "SET indexer_rt_bulk=1")
+    query(writer, "BEGIN")
+    query(writer, f"INSERT INTO {table} (id,title,i,bits,bi,b,ts,f,s,j,m,m64,v) VALUES "
+          "(1,'alpha, \\\"quoted\\\"',42,31,-9223372036854775807,1,1700000000,3.1415927,'hello, \\\"csv\\\"','{\\\"name\\\":\\\"alpha\\\",\\\"n\\\":7}',(3,1,2),(9223372036854775806,-5),(-0.25,0.5,0,0)),"
+          "(2,'beta',0,17,9223372036854775807,0,2147483647,-0.125,'','{\\\"name\\\":\\\"beta\\\",\\\"ok\\\":true}',(),(),(1,0,0,0)),"
+          "(3,'gamma',4294967295,1,-1,1,1,1.5,'unicode café','[1,2,3]',(9,9,8),(7,7,-9),(0,1,0,0))")
+    query(writer, f"INSERT INTO {table} (id,title,v) VALUES (4,'defaults',(0,0,1,0))")
+    assert count(reader, table) == 0, "all-type rows became visible before COMMIT"
+    query(writer, "COMMIT")
+
+    rows = sorted(query(reader, f"SELECT id,title,i,bits,bi,b,ts,f,s,j,m,m64,v FROM {table}"))
+    assert len(rows) == 4, rows
+    assert rows[0][:7] == (1, 'alpha, "quoted"', 42, 31, -9223372036854775807, 1, 1700000000), rows[0]
+    assert abs(rows[0][7] - 3.1415927) < 1e-5
+    assert rows[0][8] == 'hello, "csv"'
+    assert json.loads(rows[0][9]) == {"name": "alpha", "n": 7}
+    assert rows[0][10:13] == ("1,2,3", "-5,9223372036854775806", "-0.250000,0.500000,0.000000,0.000000")
+    assert rows[1][2:7] == (0, 17, 9223372036854775807, 0, 2147483647)
+    assert rows[1][10:12] == ("", "")
+    assert rows[2][2] == 4294967295
+    assert rows[2][3] == 1
+    assert rows[2][8] == "unicode café"
+    assert json.loads(rows[2][9]) == [1, 2, 3]
+    assert rows[2][10:12] == ("8,9", "-9,7")
+    assert rows[3][2:12] == (0, 0, 0, 0, 0, 0.0, "", None, "", "")
+    assert disk_chunks(reader, table) == 1
+
+    knn = query(reader, f"SELECT id,knn_dist() FROM {table} WHERE knn(v,4,(0.9,0.1,0,0)) ORDER BY knn_dist() ASC")
+    assert [row[0] for row in knn] == [2, 1, 3, 4], knn
+    expected = (0.02, 1.4825, 1.62, 1.82)
+    assert all(abs(row[1] - expected[i]) < 1e-5 for i, row in enumerate(knn)), knn
+    assert query(reader, f"SELECT id FROM {table} WHERE knn(v,4,(0.9,0.1,0,0)) ORDER BY knn_dist() ASC") == ((2,), (1,), (3,), (4,))
+
+    writer.close()
+    reader.close()
+
+
+def unindexed_float_vector_test(port):
+    writer = sql_conn(port)
+    reader = sql_conn(port)
+    table = "indexer_rt_unindexed_vector"
+    query(writer, f"DROP TABLE IF EXISTS {table}")
+    query(writer, f"CREATE TABLE {table} (title TEXT, v FLOAT_VECTOR)")
+    query(writer, "SET indexer_rt_bulk=1")
+    query(writer, "BEGIN")
+    query(writer, f"INSERT INTO {table}(id,title,v) VALUES (1,'three decimals',(0.25,-1.5,2.75)),(2,'one decimal',(9.5))")
+    query(writer, "COMMIT")
+    rows = sorted(query(reader, f"SELECT id,v FROM {table}"))
+    assert rows == [(1, "0.250000,-1.500000,2.750000"), (2, "9.500000")], rows
+    assert disk_chunks(reader, table) == 1
+    writer.close()
+    reader.close()
+
+
+def field_forms_and_id_boundary_test(port):
+    writer = sql_conn(port)
+    reader = sql_conn(port)
+    for table, definition, column, selectable in (
+        ("indexer_rt_field_attr", "both STRING INDEXED ATTRIBUTE", "both", True),
+        ("indexer_rt_field_indexed", "indexed_value TEXT INDEXED", "indexed_value", False),
+        ("indexer_rt_field_stored", "saved_value TEXT STORED", "saved_value", True),
+    ):
+        query(writer, f"DROP TABLE IF EXISTS {table}")
+        query(writer, f"CREATE TABLE {table} ({definition})")
+        query(writer, "SET indexer_rt_bulk=1")
+        query(writer, "BEGIN")
+        query(writer, f"INSERT INTO {table}(id,{column}) VALUES (1,'alpha beta'),(2,'gamma')")
+        query(writer, "COMMIT")
+        assert query(reader, f"SELECT id FROM {table} WHERE MATCH('alpha')") == ((1,),)
+        if selectable:
+            assert query(reader, f"SELECT id,{column} FROM {table}") == ((1, "alpha beta"), (2, "gamma"))
+        assert disk_chunks(reader, table) == 1
+
+    direct = "indexer_rt_id_boundary_direct"
+    assisted = "indexer_rt_id_boundary_assisted"
+    for table, bulk in ((direct, 0), (assisted, 1)):
+        query(writer, f"DROP TABLE IF EXISTS {table}")
+        query(writer, f"CREATE TABLE {table} (title TEXT)")
+        query(writer, f"SET indexer_rt_bulk={bulk}")
+        if bulk:
+            query(writer, "BEGIN")
+        query(writer, f"INSERT INTO {table}(id,title) VALUES (9223372036854775808,'high bit'),(18446744073709551615,'maximum')")
+        if bulk:
+            query(writer, "COMMIT")
+    direct_rows = query(reader, f"SELECT id,title FROM {direct}")
+    assisted_rows = query(reader, f"SELECT id,title FROM {assisted}")
+    assert assisted_rows == direct_rows == ((-9223372036854775808, "high bit"), (-1, "maximum")), (direct_rows, assisted_rows)
+    assert disk_chunks(reader, assisted) == 1
+    writer.close()
+    reader.close()
+
+
+def columnar_all_types_test(port):
+    writer = sql_conn(port)
+    reader = sql_conn(port)
+    table = "indexer_rt_columnar_types"
+    query(writer, f"DROP TABLE IF EXISTS {table}")
+    query(writer, f"CREATE TABLE {table} (title TEXT, i INTEGER, bi BIGINT, f FLOAT, s STRING, j JSON, m MULTI, m64 MULTI64, v FLOAT_VECTOR) ENGINE='columnar'")
+    query(writer, "SET indexer_rt_bulk=1")
+    query(writer, "BEGIN")
+    query(writer, f"INSERT INTO {table}(id,title,i,bi,f,s,j,m,m64,v) VALUES (1,'columnar searchable',4294967295,-7,-0.25,'café','{{\\\"x\\\":1}}',(3,1,3),(9,-2),(0.25,-1.5))")
+    query(writer, "COMMIT")
+    rows = query(reader, f"SELECT id,i,bi,f,s,j,m,m64,v FROM {table}")
+    assert len(rows) == 1 and rows[0][:3] == (1, 4294967295, -7), rows
+    assert abs(rows[0][3] + 0.25) < 1e-6
+    assert rows[0][4] == "café" and json.loads(rows[0][5]) == {"x": 1}
+    assert rows[0][6:] == ("1,3", "-2,9", "0.250000,-1.500000"), rows
+    assert query(reader, f"SELECT id FROM {table} WHERE MATCH('searchable')") == ((1,),)
+    assert disk_chunks(reader, table) == 1
+    writer.close()
+    reader.close()
+
+
+def columnar_and_cosine_knn_test(port):
+    writer = sql_conn(port)
+    reader = sql_conn(port)
+    cases = (
+        ("indexer_rt_columnar_vector", "l2", " ENGINE='columnar'", (1.0, 1.0)),
+        ("indexer_rt_cosine_vector", "cosine", "", (0.70710677, 0.70710677)),
+        ("indexer_rt_columnar_cosine_vector", "cosine", " ENGINE='columnar'", (0.70710677, 0.70710677)),
+    )
+
+    for table, similarity, engine, expected_third in cases:
+        query(writer, f"DROP TABLE IF EXISTS {table}")
+        query(writer, f"CREATE TABLE {table} (title TEXT, v FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='{similarity}'{engine})")
+        query(writer, "SET indexer_rt_bulk=1")
+        query(writer, "BEGIN")
+        query(writer, f"INSERT INTO {table}(id,title,v) VALUES (1,'x',(1,0,0,0)),(2,'y',(0,1,0,0)),(3,'z',(1,1,0,0))")
+        query(writer, "COMMIT")
+
+        rows = sorted(query(reader, f"SELECT id,v FROM {table}"))
+        vector = tuple(float(value) for value in rows[2][1].split(','))
+        assert abs(vector[0] - expected_third[0]) < 1e-5 and abs(vector[1] - expected_third[1]) < 1e-5, rows
+        knn = query(reader, f"SELECT id,knn_dist() FROM {table} WHERE knn(v,3,(0.9,0.1,0,0)) ORDER BY knn_dist() ASC")
+        assert [row[0] for row in knn] == [1, 3, 2], knn
+        assert disk_chunks(reader, table) == 1
+
+    direct = "indexer_rt_cosine_vector_direct"
+    query(writer, f"DROP TABLE IF EXISTS {direct}")
+    query(writer, f"CREATE TABLE {direct} (title TEXT, v FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='cosine')")
+    query(writer, "SET indexer_rt_bulk=0")
+    query(writer, f"INSERT INTO {direct}(id,title,v) VALUES (1,'x',(1,0,0,0)),(2,'y',(0,1,0,0)),(3,'z',(1,1,0,0))")
+    direct_rows = sorted(query(reader, f"SELECT id,v FROM {direct}"))
+    assisted_rows = sorted(query(reader, "SELECT id,v FROM indexer_rt_cosine_vector"))
+    columnar_assisted_rows = sorted(query(reader, "SELECT id,v FROM indexer_rt_columnar_cosine_vector"))
+    assert direct_rows == assisted_rows == columnar_assisted_rows, (direct_rows, assisted_rows, columnar_assisted_rows)
+    direct_knn = query(reader, f"SELECT id,knn_dist() FROM {direct} WHERE knn(v,3,(0.9,0.1,0,0)) ORDER BY knn_dist() ASC")
+    assisted_knn = query(reader, "SELECT id,knn_dist() FROM indexer_rt_cosine_vector WHERE knn(v,3,(0.9,0.1,0,0)) ORDER BY knn_dist() ASC")
+    columnar_assisted_knn = query(reader, "SELECT id,knn_dist() FROM indexer_rt_columnar_cosine_vector WHERE knn(v,3,(0.9,0.1,0,0)) ORDER BY knn_dist() ASC")
+    assert [row[0] for row in direct_knn] == [row[0] for row in assisted_knn]
+    assert all(abs(direct_knn[i][1] - assisted_knn[i][1]) < 1e-5 for i in range(len(direct_knn))), (direct_knn, assisted_knn)
+    assert [row[0] for row in direct_knn] == [row[0] for row in columnar_assisted_knn]
+    assert all(abs(direct_knn[i][1] - columnar_assisted_knn[i][1]) < 1e-5 for i in range(len(direct_knn))), (direct_knn, columnar_assisted_knn)
+
+    writer.close()
+    reader.close()
+
+
+def vector_rejection_atomicity_test(port, data_dir):
+    writer = sql_conn(port)
+    reader = sql_conn(port)
+    table = "indexer_rt_bad_vectors"
+    query(writer, f"DROP TABLE IF EXISTS {table}")
+    query(writer, f"CREATE TABLE {table} (title TEXT, v FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2')")
+    query(writer, "SET indexer_rt_bulk=1")
+
+    for bad_vector, expected in (
+        ("(1,2,3)", "requires 4 vector entries"),
+        ("(1,2,3,4,5)", "requires 4 vector entries"),
+        ("()", "requires a tuple value"),
+        ("(1e400,0,0,0)", "entries must be finite"),
+        ("(nan,0,0,0)", "entries must be finite"),
+        ("(inf,0,0,0)", "entries must be finite"),
+    ):
+        query(writer, "BEGIN")
+        query(writer, f"INSERT INTO {table}(id,title,v) VALUES (1,'valid before rejection',(1,0,0,0))")
+        try:
+            query(writer, f"INSERT INTO {table}(id,title,v) VALUES (2,'invalid',{bad_vector})")
+            raise AssertionError(f"accepted invalid vector {bad_vector}")
+        except pymysql.MySQLError as exc:
+            assert expected in str(exc), exc
+        query(writer, "COMMIT")
+        assert count(reader, table) == 0, f"{bad_vector} attached a partial chunk"
+        assert disk_chunks(reader, table) == 0, f"{bad_vector} attached a partial disk chunk"
+        assert not staging_dirs(data_dir), f"{bad_vector} left staging state behind"
+        assert not indexer_pids(), f"{bad_vector} left an indexer worker behind"
+
+    query(writer, "BEGIN")
+    try:
+        query(writer, f"INSERT INTO {table}(id,title,v) VALUES (3,'malformed','not-a-vector')")
+        raise AssertionError("accepted malformed float_vector text")
+    except pymysql.MySQLError as exc:
+        assert "float_vector" in str(exc).lower(), exc
+    query(writer, "COMMIT")
+    assert count(reader, table) == 0
+    assert disk_chunks(reader, table) == 0
+    assert not staging_dirs(data_dir)
+    assert not indexer_pids()
+    writer.close()
+    reader.close()
+
+
 def send_chunked_bulk(port, first_sent, finish, response):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
     conn.putrequest("POST", "/bulk?indexer_rt_bulk=1")
@@ -302,6 +514,12 @@ def main():
     sql_disconnect_cleanup_test(args.sql_port, args.data_dir)
     concurrent_streams_test(args.sql_port, args.data_dir)
     transaction_invariant_test(args.sql_port, args.data_dir)
+    all_types_and_knn_test(args.sql_port, args.data_dir)
+    unindexed_float_vector_test(args.sql_port)
+    field_forms_and_id_boundary_test(args.sql_port)
+    columnar_all_types_test(args.sql_port)
+    columnar_and_cosine_knn_test(args.sql_port)
+    vector_rejection_atomicity_test(args.sql_port, args.data_dir)
     http_streaming_test(args.sql_port, args.http_port, args.data_dir)
     malformed_http_cleanup_test(args.sql_port, args.http_port, args.data_dir)
     unsupported_http_operation_test(args.sql_port, args.http_port, args.data_dir)

@@ -14,12 +14,14 @@
 #include "fileutils.h"
 #include "indexfiles.h"
 #include "indexsettings.h"
+#include "knnmisc.h"
 #include "searchdaemon.h"
 #include "searchdsql.h"
 #include "sphinxrt.h"
 #include "threadutils.h"
 
 #include <atomic>
+#include <cmath>
 
 #if !_WIN32
 #include <fcntl.h>
@@ -33,6 +35,35 @@ extern char ** environ;
 #endif
 
 bool AttachIndexerRtBulkChunk ( const CSphString & sTable, int64_t iIndexId, const CSphString & sPath, CSphString & sError );
+
+
+static bool ValidateFloatVectorValue ( const CSphColumnInfo & tAttr, const SqlInsert_t & tValue, int iRow, CSphString & sError )
+{
+	if ( tValue.m_iType==SqlInsert_t::TOK_NULL )
+		return true;
+
+	if ( tValue.m_iType!=SqlInsert_t::CONST_MVA || !tValue.m_pVals )
+	{
+		sError.SetSprintf ( "row %d, attribute '%s': float_vector requires a tuple value", iRow+1, tAttr.m_sName.cstr() );
+		return false;
+	}
+
+	const auto & dValues = *tValue.m_pVals;
+	if ( tAttr.IsIndexedKNN() && dValues.GetLength()!=tAttr.m_tKNN.m_iDims )
+	{
+		sError.SetSprintf ( "row %d, attribute '%s': KNN index requires %d vector entries; %d specified", iRow+1, tAttr.m_sName.cstr(), tAttr.m_tKNN.m_iDims, dValues.GetLength() );
+		return false;
+	}
+
+	for ( const auto & tItem : dValues )
+		if ( !std::isfinite ( tItem.m_fValue ) )
+		{
+			sError.SetSprintf ( "row %d, attribute '%s': float_vector entries must be finite", iRow+1, tAttr.m_sName.cstr() );
+			return false;
+		}
+
+	return true;
+}
 
 static void AppendCsvEscaped ( StringBuilder_c & sOut, const char * szValue )
 {
@@ -237,7 +268,7 @@ static bool StartIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError
 #endif
 
 
-static void AppendInsertValueToCsv ( StringBuilder_c & sOut, const SqlInsert_t & tValue, bool bDocid )
+static void AppendInsertValueToCsv ( StringBuilder_c & sOut, const SqlInsert_t & tValue, ESphAttr eType, bool bDocid )
 {
 	sOut << '"';
 	switch ( tValue.m_iType )
@@ -266,7 +297,10 @@ static void AppendInsertValueToCsv ( StringBuilder_c & sOut, const SqlInsert_t &
 				if ( !bFirst )
 					sOut.RawC ( ' ' );
 				bFirst = false;
-				sOut << tItem.m_iValue;
+				if ( eType==SPH_ATTR_FLOAT_VECTOR )
+					sOut.Appendf ( "%.9g", tItem.m_fValue );
+				else
+					sOut << tItem.m_iValue;
 			}
 		}
 		break;
@@ -301,9 +335,17 @@ static const char * CsvAttrDirective ( ESphAttr eType )
 	case SPH_ATTR_JSON:			return "csvpipe_attr_json";
 	case SPH_ATTR_UINT32SET:	return "csvpipe_attr_multi";
 	case SPH_ATTR_INT64SET:		return "csvpipe_attr_multi_64";
+	case SPH_ATTR_FLOAT_VECTOR:	return "csvpipe_attr_float_vector";
 	default:					return nullptr;
 	}
 }
+
+
+static constexpr ESphAttr g_dCsvAttrOrder[] =
+{
+	SPH_ATTR_INTEGER, SPH_ATTR_TIMESTAMP, SPH_ATTR_BOOL, SPH_ATTR_FLOAT, SPH_ATTR_BIGINT,
+	SPH_ATTR_UINT32SET, SPH_ATTR_INT64SET, SPH_ATTR_FLOAT_VECTOR, SPH_ATTR_STRING, SPH_ATTR_JSON
+};
 
 
 void CleanupIndexerRtBulk ( ClientSession_c & tSession )
@@ -347,6 +389,8 @@ static bool CheckSchemaSupported ( const CSphSchema & tSchema, CSphString & sErr
 	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
 	{
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+		if ( sphIsInternalAttr ( tAttr ) )
+			continue;
 		ESphAttr eType = tAttr.m_eAttrType;
 		if ( eType!=SPH_ATTR_TOKENCOUNT && !CsvAttrDirective ( eType ) )
 		{
@@ -401,19 +445,22 @@ static bool InitIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tS
 		const CSphColumnInfo * pSameAttr = tSchema.GetAttr ( tField.m_sName.cstr() );
 		fprintf ( fpConfig, "  %s = %s\n", pSameAttr && pSameAttr->m_eAttrType==SPH_ATTR_STRING ? "csvpipe_field_string" : "csvpipe_field", tField.m_sName.cstr() );
 	}
-	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
-	{
-		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
-		if ( tAttr.m_sName==sphGetDocidName() || tAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT )
-			continue;
-		const CSphColumnInfo * pSameField = tSchema.GetField ( tAttr.m_sName.cstr() );
-		if ( pSameField && tAttr.m_eAttrType==SPH_ATTR_STRING )
-			continue;
-		fprintf ( fpConfig, "  %s = %s\n", CsvAttrDirective ( tAttr.m_eAttrType ), tAttr.m_sName.cstr() );
-	}
+	for ( ESphAttr eType : g_dCsvAttrOrder )
+		for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
+		{
+			const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+			if ( tAttr.m_eAttrType!=eType || tAttr.m_sName==sphGetDocidName() || sphIsInternalAttr ( tAttr ) )
+				continue;
+			const CSphColumnInfo * pSameField = tSchema.GetField ( tAttr.m_sName.cstr() );
+			if ( pSameField && tAttr.m_eAttrType==SPH_ATTR_STRING )
+				continue;
+			fprintf ( fpConfig, "  %s = %s\n", CsvAttrDirective ( tAttr.m_eAttrType ), tAttr.m_sName.cstr() );
+		}
 	fprintf ( fpConfig, "}\n\nindex indexer_rt_bulk_chunk {\n  type = plain\n  source = indexer_rt_bulk_source\n  path = %s\n", tSession.m_sIndexerRtBulkIndex.cstr() );
 	DumpSettingsCfg ( fpConfig, *pRt, nullptr );
-	fprintf ( fpConfig, "}\n" );
+	if ( pRt->GetSettings().m_dKNN.GetLength() )
+		fprintf ( fpConfig, "\n	knn = %s", FormatKNNConfigStr ( pRt->GetSettings().m_dKNN ).cstr() );
+	fprintf ( fpConfig, "\n}\n" );
 	fclose ( fpConfig );
 
 	tSession.m_sIndexerRtBulkTable = tStmt.m_sIndex;
@@ -463,36 +510,56 @@ bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, C
 	RIdx_T<RtIndex_i *> pRt { pServed };
 	const CSphSchema & tSchema = pRt->GetMatchSchema();
 	const int iColumns = tStmt.m_iSchemaSz;
-	CSphVector<std::pair<int,bool>> dColumns;
-	auto AddColumn = [&] ( const CSphString & sName, bool bDocid ) {
-		dColumns.Add ( { FindInsertColumn ( tStmt, sName ), bDocid } );
-	};
-	AddColumn ( sphGetDocidName(), true );
-	for ( int i=0; i<tSchema.GetFieldsCount(); ++i )
-		AddColumn ( tSchema.GetField(i).m_sName, false );
 	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
 	{
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
-		if ( tAttr.m_sName==sphGetDocidName() || tAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT )
+		if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR )
 			continue;
-		if ( tSchema.GetField ( tAttr.m_sName.cstr() ) && tAttr.m_eAttrType==SPH_ATTR_STRING )
+
+		int iColumn = FindInsertColumn ( tStmt, tAttr.m_sName );
+		if ( iColumn<0 )
 			continue;
-		AddColumn ( tAttr.m_sName, false );
+
+		for ( int iRow=0; iRow<tStmt.m_iRowsAffected; ++iRow )
+			if ( !ValidateFloatVectorValue ( tAttr, tStmt.m_dInsertValues[iRow*iColumns+iColumn], iRow, sError ) )
+			{
+				CleanupIndexerRtBulk ( tSession );
+				return false;
+			}
 	}
+
+	struct CsvColumn_t { int m_iColumn; ESphAttr m_eType; bool m_bDocid; };
+	CSphVector<CsvColumn_t> dColumns;
+	auto AddColumn = [&] ( const CSphString & sName, ESphAttr eType, bool bDocid ) {
+		dColumns.Add ( { FindInsertColumn ( tStmt, sName ), eType, bDocid } );
+	};
+	AddColumn ( sphGetDocidName(), SPH_ATTR_BIGINT, true );
+	for ( int i=0; i<tSchema.GetFieldsCount(); ++i )
+		AddColumn ( tSchema.GetField(i).m_sName, SPH_ATTR_STRING, false );
+	for ( ESphAttr eType : g_dCsvAttrOrder )
+		for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
+		{
+			const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+			if ( tAttr.m_eAttrType!=eType || tAttr.m_sName==sphGetDocidName() || sphIsInternalAttr ( tAttr ) )
+				continue;
+			if ( tSchema.GetField ( tAttr.m_sName.cstr() ) && tAttr.m_eAttrType==SPH_ATTR_STRING )
+				continue;
+			AddColumn ( tAttr.m_sName, tAttr.m_eAttrType, false );
+		}
 
 	StringBuilder_c sBatch;
 	for ( int iRow=0; iRow<tStmt.m_iRowsAffected; ++iRow )
 	{
 		bool bFirst = true;
-		for ( const auto & [ iColumn, bDocid ] : dColumns )
+		for ( const auto & tColumn : dColumns )
 		{
 			if ( !bFirst )
 				sBatch << ',';
 			bFirst = false;
-			if ( iColumn<0 )
+			if ( tColumn.m_iColumn<0 )
 				AppendCsvQuoted ( sBatch, "" );
 			else
-				AppendInsertValueToCsv ( sBatch, tStmt.m_dInsertValues[iRow*iColumns+iColumn], bDocid );
+				AppendInsertValueToCsv ( sBatch, tStmt.m_dInsertValues[iRow*iColumns+tColumn.m_iColumn], tColumn.m_eType, tColumn.m_bDocid );
 		}
 		sBatch << '\n';
 	}

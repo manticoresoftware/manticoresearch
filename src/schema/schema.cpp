@@ -578,6 +578,7 @@ void CSphSchema::SetupKNNFlags ( const CSphSourceSettings & tSettings )
 
 		int iId = hKNN[tAttr.m_sName];
 		const auto & tKNN = tSettings.m_dKNN[iId];
+		tAttr.m_uAttrFlags |= CSphColumnInfo::ATTR_INDEXED_KNN;
 		tAttr.m_tKNN		= tKNN;
 		// Explicitly cast to ModelSettings_t base class to correctly extract the ModelSettings_t subobject
 		// from NamedKNNSettings_t (which uses multiple inheritance: IndexSettings_t + ModelSettings_t).

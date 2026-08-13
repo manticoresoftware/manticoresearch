@@ -4988,7 +4988,18 @@ static const CSphVector<int64_t> * FetchMVA ( DocID_t tDocId, int iAttr, const C
 		pMva = tMvaContainer.m_tContainer[iAttr]->Find(tDocId);
 	}
 
-	if ( pMva )
+	if ( pMva && tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tAttr.IsIndexedKNN() && tAttr.m_tKNN.m_eHNSWSimilarity==knn::HNSWSimilarity_e::COSINE )
+	{
+		CSphVector<float> dVector;
+		dVector.Resize ( pMva->GetLength() );
+		ARRAY_FOREACH ( i, dVector )
+			dVector[i] = sphDW2F ( (DWORD)(*pMva)[i] );
+		NormalizeVec ( dVector );
+		ARRAY_FOREACH ( i, dVector )
+			(*pMva)[i] = sphF2DW ( dVector[i] );
+	}
+
+	if ( pMva && tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR )
 		SortMva ( *pMva, ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET ) );
 
 	return pMva;
@@ -5014,6 +5025,7 @@ bool CSphIndex_VLN::Build_StoreBlobAttrs ( DocID_t tDocId, std::pair<SphOffset_t
 		{
 		case SPH_ATTR_UINT32SET:
 		case SPH_ATTR_INT64SET:
+		case SPH_ATTR_FLOAT_VECTOR:
 			{
 				const CSphVector<int64_t> * pMva = FetchMVA ( tDocId, i, tAttr, tMvaContainer, tSource, bForceSource );
 				bOk = tBlobRowBuilder.SetAttr ( iBlobAttr++, pMva ? (const BYTE*)(pMva->Begin()) : nullptr, pMva ? pMva->GetLength()*sizeof(int64_t) : 0, BlobAttrInput_e::MVA_INT64, sError );
@@ -5072,6 +5084,7 @@ static void Builder_StoreAttrs ( const CSphSchema & tSchema, DocID_t tDocId, CSp
 
 		case SPH_ATTR_UINT32SET:
 		case SPH_ATTR_INT64SET:
+		case SPH_ATTR_FLOAT_VECTOR:
 			{
 				const CSphVector<int64_t> * pMva = FetchMVA ( tDocId, i, tAttr, tMvaContainer, tSource, false );
 				pBuilder->SetAttr ( iAttrId, pMva ? pMva->Begin() : nullptr, pMva ? pMva->GetLength() : 0 );

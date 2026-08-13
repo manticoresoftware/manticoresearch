@@ -933,6 +933,7 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "csvpipe_attr_string",		KEY_LIST, NULL },
 	{ "csvpipe_attr_json",		KEY_LIST, NULL },
 	{ "csvpipe_field_string",	KEY_LIST, NULL },
+	{ "csvpipe_attr_order",		0, NULL },
 	{ "csvpipe_delimiter",		0, NULL },
 	{ NULL,						0, NULL }
 };

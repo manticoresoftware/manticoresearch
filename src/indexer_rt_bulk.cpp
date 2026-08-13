@@ -456,6 +456,17 @@ static bool InitIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tS
 				continue;
 			fprintf ( fpConfig, "  %s = %s\n", CsvAttrDirective ( tAttr.m_eAttrType ), tAttr.m_sName.cstr() );
 		}
+	fprintf ( fpConfig, "  csvpipe_attr_order = " );
+	bool bFirstAttr = true;
+	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+		if ( tAttr.m_sName==sphGetDocidName() || sphIsInternalAttr ( tAttr ) || !CsvAttrDirective ( tAttr.m_eAttrType ) )
+			continue;
+		fprintf ( fpConfig, "%s%s", bFirstAttr ? "" : ",", tAttr.m_sName.cstr() );
+		bFirstAttr = false;
+	}
+	fprintf ( fpConfig, "\n" );
 	fprintf ( fpConfig, "}\n\nindex indexer_rt_bulk_chunk {\n  type = plain\n  source = indexer_rt_bulk_source\n  path = %s\n", tSession.m_sIndexerRtBulkIndex.cstr() );
 	DumpSettingsCfg ( fpConfig, *pRt, nullptr );
 	if ( pRt->GetSettings().m_dKNN.GetLength() )

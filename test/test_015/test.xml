@@ -3,6 +3,8 @@
 
 <name>phrase matching vs duplicate keywords</name>
 
+<requires><rt-indexer/></requires>
+
 <config>
 indexer
 {

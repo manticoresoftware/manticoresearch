@@ -98,6 +98,11 @@ function (add_ubertest testN tst_name LABELS prefix label flags)
 		SET_TESTS_PROPERTIES ( "${_tstn}" PROPERTIES RESOURCE_GROUPS "datadir:1,mysql:1" )
 	endif ()
 	_test_prop ("${_tstn}")
+	if ("${flags}" MATCHES "--rt-indexer")
+		set_property (TEST "${_tstn}" APPEND PROPERTY ENVIRONMENT
+			"MANTICORE_INDEXER_RT_INDEXER=$<TARGET_FILE:indexer>"
+			"MANTICORE_NO_BUDDY=1")
+	endif ()
 endfunction ()
 
 function (add_ubertests testN tst_name LABELS)
@@ -106,6 +111,12 @@ function (add_ubertests testN tst_name LABELS)
 	endif ()
 	if (NOT "NON-RT" IN_LIST LABELS)
 		add_ubertest ("${testN}" "${tst_name}" "${LABELS}" "rt" "RT" "--rt --ignore-weights")
+	endif ()
+	# Start with explicitly opted-in compatible tests. Add <rt-indexer/> to a
+	# test's requirements after confirming that it does not depend on ordinary
+	# RT mutation or RAM-chunk semantics.
+	if ("RT-INDEXER" IN_LIST LABELS AND NOT "NON-RT-INDEXER" IN_LIST LABELS)
+		add_ubertest ("${testN}" "${tst_name}" "${LABELS}" "rtidx" "RT_INDEXER" "--rt-indexer --ignore-weights")
 	endif ()
 endfunction ()
 

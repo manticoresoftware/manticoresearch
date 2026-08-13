@@ -112,9 +112,9 @@ function (add_ubertests testN tst_name LABELS)
 	if (NOT "NON-RT" IN_LIST LABELS)
 		add_ubertest ("${testN}" "${tst_name}" "${LABELS}" "rt" "RT" "--rt --ignore-weights")
 	endif ()
-	# Start with explicitly opted-in compatible tests. Add <rt-indexer/> to a
-	# test's requirements after confirming that it does not depend on ordinary
-	# RT mutation or RAM-chunk semantics.
+	# Indexer-assisted loading is meaningful only for tests that have both a
+	# source and an index for the RT conversion path. Exclude semantic conflicts
+	# explicitly with <non-rt-indexer/>.
 	if ("RT-INDEXER" IN_LIST LABELS AND NOT "NON-RT-INDEXER" IN_LIST LABELS)
 		add_ubertest ("${testN}" "${tst_name}" "${LABELS}" "rtidx" "RT_INDEXER" "--rt-indexer --ignore-weights")
 	endif ()
@@ -142,9 +142,11 @@ foreach ( test ${tests} )
 	if ( EXISTS "${test}/test.xml" )
 		# open the file with the test and read _chunk of 512 bytes
 		file ( READ ${test}/test.xml _test_head LIMIT 512 )
+		file ( READ ${test}/test.xml _test_xml )
 
 		# convert it to lower (CMAKE regexes are case-sensitive)
 		STRING ( TOLOWER "${_test_head}" _lower_test_head )
+		STRING ( TOLOWER "${_test_xml}" _lower_test_xml )
 
 		# extract test name. It is not simple 'match <name>(.*)</name>' since we want non-lower-case,
 		# so find the chunk in lowered-case, then take the clause by substring from original chunk
@@ -178,6 +180,12 @@ foreach ( test ${tests} )
 
 		IF ("${_test_head}" MATCHES "<skip_db/>")
 			LIST ( APPEND LABELS "SKIP_DB" )
+		endif ()
+
+		if (NOT "NON-RT" IN_LIST LABELS AND NOT "NON-RT-INDEXER" IN_LIST LABELS AND NOT "SKIP_INDEXER" IN_LIST LABELS
+			AND "${_lower_test_xml}" MATCHES "(^|[\n\r])[ 	]*source[ 	]+[^ 	\n\r{]+"
+			AND "${_lower_test_xml}" MATCHES "(^|[\n\r])[ 	]*index[ 	]+[^ 	\n\r:{]+")
+			LIST ( APPEND LABELS "RT-INDEXER" )
 		endif ()
 
 	else ()

@@ -3,6 +3,8 @@
 
 <name>plain table direct query defaults from config</name>
 
+<requires><non-rt-indexer/></requires>
+
 <config>
 indexer
 {

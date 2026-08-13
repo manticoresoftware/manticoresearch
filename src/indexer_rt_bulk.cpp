@@ -454,7 +454,10 @@ static bool InitIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tS
 			const CSphColumnInfo * pSameField = tSchema.GetField ( tAttr.m_sName.cstr() );
 			if ( pSameField && tAttr.m_eAttrType==SPH_ATTR_STRING )
 				continue;
-			fprintf ( fpConfig, "  %s = %s\n", CsvAttrDirective ( tAttr.m_eAttrType ), tAttr.m_sName.cstr() );
+			fprintf ( fpConfig, "  %s = %s", CsvAttrDirective ( tAttr.m_eAttrType ), tAttr.m_sName.cstr() );
+			if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER && tAttr.m_tLocator.IsBitfield() )
+				fprintf ( fpConfig, ":%d", tAttr.m_tLocator.m_iBitCount );
+			fprintf ( fpConfig, "\n" );
 		}
 	fprintf ( fpConfig, "  csvpipe_attr_order = " );
 	bool bFirstAttr = true;

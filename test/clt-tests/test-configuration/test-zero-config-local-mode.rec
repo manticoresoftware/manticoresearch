@@ -354,7 +354,7 @@ printf '%s' "$vertical" | grep -q $'\t' && fail '\G unexpectedly emitted TSV for
 pass 'manticore supports vertical output with \\G'
 
 piped_columns=$(cd "$local_dir" && "$MANTICORE" -e 'SELECT 1 AS short, 222 AS longer') || fail 'piped two-column query failed'
-printf '%s' "$piped_columns" | grep -q $'short\tlonger\n1\t222' || fail 'redirected one-shot output is not TSV'
+[ "$piped_columns" = $'short\tlonger\n1\t222' ] || fail 'redirected one-shot output is not exact TSV'
 MANTICORE="$MANTICORE" LOCAL_DIR="$local_dir" python3 <<'PY' || fail 'terminal one-shot output is not aligned'
 import errno, os, pty, re, subprocess
 

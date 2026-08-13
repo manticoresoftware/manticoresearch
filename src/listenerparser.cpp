@@ -107,7 +107,7 @@ static Proto_e SimpleProtoByName ( const CSphString& sProto, CSphString * pFatal
 		return Proto_e::REPLICATION;
 	if ( sProto=="sphinx" )
 		return Proto_e::SPHINXSE;
-	
+
 	MaybeFatalLog ( pFatal, "unknown listen protocol type '%s'", sProto.scstr());
 	return Proto_e::UNKNOWN;
 }
@@ -312,4 +312,3 @@ ListenerDesc_t ParseListener ( const char* sSpec, CSphString* pFatal )
 {
 	return ParseResolveListener ( sSpec, true, pFatal );
 }
-

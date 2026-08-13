@@ -244,7 +244,8 @@ int ExecuteManticoreSql ( const char * szSql, ManticoreClientTarget_e eTarget, c
 
 	if ( szSql && *szSql )
 	{
-		localmode::QueryResult_e eResult = localmode::ExecuteSqlBatch ( iSocket, szSql, true, isatty(STDOUT_FILENO), tEndpoint );
+		const bool bAligned = isatty ( STDOUT_FILENO );
+		localmode::QueryResult_e eResult = localmode::ExecuteSqlBatch ( iSocket, szSql, bAligned, bAligned, tEndpoint );
 		close ( iSocket );
 		return eResult==localmode::QueryResult_e::OK ? 0 : 1;
 	}

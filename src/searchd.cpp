@@ -57,6 +57,7 @@
 #include "std/tdigest_runtime.h"
 #include "daemon/notifier.h"
 #include "facetutils.h"
+#include "indexer_rt_bulk.h"
 #include "daemon/daemon_ipc.h"
 #include "api_reply_stream.h"
 
@@ -4973,6 +4974,8 @@ void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery )
 			return tOut.Error ( "%s", sError.cstr() );
 		}
 	}
+	if ( pSession->m_bIndexerRtBulk )
+		CleanupIndexerRtBulk ( *pSession );
 	pSession->m_bInTransaction = true;
 	tOut.Ok ( 0 );
 }
@@ -4988,6 +4991,17 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 	MEMORY ( MEM_SQL_COMMIT );
 	pSession->m_bInTransaction = false;
 	int iDeleted = 0;
+
+	if ( pSession->m_bIndexerRtBulk && !pSession->m_sIndexerRtBulkTable.IsEmpty() )
+	{
+		if ( !bCommit )
+			CleanupIndexerRtBulk ( *pSession );
+		else if ( !FinalizeIndexerRtBulk ( *pSession, sError ) )
+		{
+			tOut.Error ( "%s", sError.cstr() );
+			return;
+		}
+	}
 
 	if ( pSession->m_tShardTxn.HasPendingData() )
 	{
@@ -5076,6 +5090,17 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	}
 
 	assert ( pServed );
+	if ( pSession->m_bIndexerRtBulk )
+	{
+		if ( !StageIndexerRtBulk ( *pSession, tStmt, pSession->m_sError ) )
+		{
+			CleanupIndexerRtBulk ( *pSession );
+			tOut.Error ( "%s", pSession->m_sError.cstr() );
+		}
+		else
+			tOut.Ok ( tStmt.m_iRowsAffected );
+		return;
+	}
 	Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
 	if ( !tWriting.CanWrite() )
 	{
@@ -9379,6 +9404,8 @@ static bool HandleSetLocal ( CSphString& sError, const CSphString& sName, int64_
 		// per-session AUTOCOMMIT
 		bool bAutoCommit = ( iSetValue != 0 );
 		auto pSession = session::Info().GetClientSession();
+		if ( !pSession->m_sIndexerRtBulkTable.IsEmpty() )
+			CleanupIndexerRtBulk ( *pSession );
 		pSession->m_bAutoCommit = bAutoCommit;
 		pSession->m_bInTransaction = false;
 
@@ -9398,6 +9425,15 @@ static bool HandleSetLocal ( CSphString& sError, const CSphString& sName, int64_
 			TlsMsg::MoveError(sError);
 			return false;
 		}
+		return true;
+	}
+
+	if ( sName == "indexer_rt_bulk" )
+	{
+		auto pSession = session::Info().GetClientSession();
+		if ( !iSetValue )
+			CleanupIndexerRtBulk ( *pSession );
+		pSession->m_bIndexerRtBulk = !!iSetValue;
 		return true;
 	}
 
@@ -9978,6 +10014,43 @@ void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString
 		tOut.Ok();
 	 else
 		tOut.Error ( sError.cstr() );
+}
+
+
+bool AttachIndexerRtBulkChunk ( const CSphString & sTable, int64_t iIndexId, const CSphString & sPath, CSphString & sError )
+{
+	auto pServed = GetServed ( sTable );
+	if ( !ServedDesc_t::IsMutable ( pServed ) )
+	{
+		sError.SetSprintf ( "table '%s' disappeared while finalizing indexer RT bulk", sTable.cstr() );
+		return false;
+	}
+	{
+		RIdx_T<RtIndex_i *> pRt { pServed };
+		if ( pRt->GetIndexId()!=iIndexId )
+		{
+			sError.SetSprintf ( "table '%s' was replaced while finalizing indexer RT bulk", sTable.cstr() );
+			return false;
+		}
+	}
+
+	auto pPlain = sphCreateIndexPhrase ( "indexer_rt_bulk_chunk", sPath );
+	StrVec_t dWarnings;
+	if ( !pPlain->Prealloc ( false, nullptr, dWarnings ) )
+	{
+		sError.SetSprintf ( "failed loading indexer RT bulk chunk: %s", pPlain->GetLastError().cstr() );
+		return false;
+	}
+
+	bool bFatal = false;
+	bool bAttached = false;
+	{
+		WIdx_T<RtIndex_i *> pRt { pServed };
+		bAttached = pRt->AttachDiskIndex ( pPlain.get(), false, bFatal, sError );
+	}
+	if ( bAttached )
+		pPlain.release();
+	return bAttached;
 }
 
 
@@ -12507,6 +12580,7 @@ void ClientSession_c::FreezeLastMeta()
 
 ClientSession_c::~ClientSession_c ()
 {
+	CleanupIndexerRtBulk ( *this );
 	m_tShardTxn.Cleanup();
 	UnlockTables(this);
 }

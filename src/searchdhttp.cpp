@@ -22,6 +22,7 @@
 #include "accumulator.h"
 #include "networking_daemon.h"
 #include "client_session.h"
+#include "indexer_rt_bulk.h"
 #include "tracer.h"
 #include "searchdbuddy.h"
 #include "compressed_http.h"
@@ -2279,6 +2280,18 @@ public:
 		if ( !CheckNDJson() )
 			return false;
 
+		auto pSession = session::Info().GetClientSession();
+		const bool bIndexerRtBulk = m_tOptions.Exists ( "indexer_rt_bulk" ) && m_tOptions["indexer_rt_bulk"]=="1";
+		if ( bIndexerRtBulk )
+			pSession->m_bIndexerRtBulk = true;
+		AT_SCOPE_EXIT ( [pSession, bIndexerRtBulk] {
+			if ( bIndexerRtBulk )
+			{
+				CleanupIndexerRtBulk ( *pSession );
+				pSession->m_bIndexerRtBulk = false;
+			}
+		});
+
 		JsonObj_c tResults ( true );
 		bool bResult = false;
 		int iCurLine = 0;
@@ -2364,6 +2377,12 @@ public:
 			}
 
 			SetQueryOptions ( m_tOptions, tStmt );
+			if ( bIndexerRtBulk && tStmt.m_eStmt!=STMT_INSERT )
+			{
+				m_sError = "indexer_rt_bulk prototype supports INSERT only";
+				RollbackBulkTxn ( tTxnState );
+				return FinishBulk ( tResults, false, iCurLine, iLastTxStartLine, EHTTP_STATUS::_400 );
+			}
 
 			switch ( tStmt.m_eStmt )
 			{

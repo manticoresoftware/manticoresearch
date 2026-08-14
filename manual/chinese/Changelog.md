@@ -1,9 +1,9 @@
 # 更新日志
 
-## 版本 29.0.1
+## 版本 29.0.2
 **发布日期**：2026 年 8 月 14 日
 
-本次发布新增分片表设置检查、分布式表和分片表优化、Unix socket Buddy 回调、更可靠的对话式搜索、可配置的文件访问，以及更快的列式 KNN 重新评分；同时修复了高亮、查询检查、KNN 合并压缩、分布式查询内存占用、模板表和并发 RT 表优化等问题。
+本次发布新增了分片表设置检查、分布式表和分片表优化、Unix socket Buddy 回调、更可靠的会话式搜索、可配置的文件访问，以及更快的列式 KNN 重评分；同时修复了备份、JDBC 兼容性、高亮、查询检查、KNN 压缩、分布式查询内存使用、模板表以及并发 RT 表优化中的问题。
 
 ### 新功能与改进
 * 🆕 [v29.0.0](https://github.com/manticoresoftware/manticoresearch/tree/29.0.0) [Issue #4802](https://github.com/manticoresoftware/manticoresearch/issues/4802) 通过 `OPTION sync=1` 新增对分布式表和分片表的同步 [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 支持，将请求的截断点应用到每个本地 RT 组件和已配置的远程镜像。
@@ -15,6 +15,8 @@
 * ⚠️ [v29.0.0](https://github.com/manticoresoftware/manticoresearch/tree/29.0.0) [Issue #4739](https://github.com/manticoresoftware/manticoresearch/issues/4739) 为长时间运行的分片写入和复制 SST 增加了流式心跳回复，这会改变 `SHARD_WRITE` API 和集群协议。**这只会影响升级或降级使用原生分片表写入或复制的混合版本部署**；独立节点以及不使用这两项功能的部署无需特殊处理。现有数据和配置保持兼容，无需迁移。升级时，请先更新远程分片代理，再更新其协调器，并在开始 SST 之前更新所有复制对等节点。降级仍可在无需重建数据的情况下进行，但应先将协调器降级，再降级代理，并且在对等节点运行混合版本时必须避免 SST。
 
 ### Bug 修复
+* 🪲 [v29.0.2](https://github.com/manticoresoftware/manticoresearch/tree/29.0.2) [Backup PR #140](https://github.com/manticoresoftware/manticoresearch-backup/pull/140) 将 [manticore-backup](https://github.com/manticoresoftware/manticoresearch-backup) 更新到 1.10.3，修复了在每表 `FREEZE` 之后如果发生错误，会导致失败的备份使 RT 表保持冻结的问题。
+* 🪲 [v29.0.2](https://github.com/manticoresoftware/manticoresearch/tree/29.0.2) [Issue #4434](https://github.com/manticoresoftware/manticoresearch/issues/4434) 将 Buddy 更新到 4.4.1，通过支持 `@@query_cache_size` 系统变量和数值型系统变量值，恢复了 MySQL Connector/J 的初始化。
 * 🪲 [v29.0.1](https://github.com/manticoresoftware/manticoresearch/tree/29.0.1) [Issue #4780](https://github.com/manticoresoftware/manticoresearch/issues/4780) 修复了在 RT 表优化期间，当并发更新重新分配 blob 支持的属性时 `searchd` 崩溃的问题，包括 KNN 表；方法是防止合并工作线程读取过期的源内存。
 * 🪲 [v29.0.0](https://github.com/manticoresoftware/manticoresearch/tree/29.0.0) [Issue #4739](https://github.com/manticoresoftware/manticoresearch/issues/4739) 修复了物理表在刷新或执行其他耗时操作时，长时间运行的分片写入超时的问题；现在心跳回复可以保持连接存活，而无需将 `agent_query_timeout` 设得异常大。
 * 🪲 [v28.9.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.9.3) [Issue #4792](https://github.com/manticoresoftware/manticoresearch/issues/4792) 修复了在 `html_strip_mode=retain` 时 [CALL SNIPPETS and HIGHLIGHT()](Searching/Highlighting.md) 生成无效的嵌套 HTML 的问题；现在高亮包装器会保留现有元素边界并生成格式正确的标记。

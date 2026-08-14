@@ -1,9 +1,9 @@
 # Changelog
 
-## Version 29.0.1
+## Version 29.0.2
 **Released**: August 14th 2026
 
-This release adds sharded-table settings inspection, distributed and sharded table optimization, Unix-socket Buddy callbacks, more reliable conversational search, configurable file access, and faster columnar KNN rescoring, with fixes across highlighting, query inspection, KNN compaction, distributed-query memory use, template tables, and concurrent RT-table optimization.
+This release adds sharded-table settings inspection, distributed and sharded table optimization, Unix-socket Buddy callbacks, more reliable conversational search, configurable file access, and faster columnar KNN rescoring, with fixes across backups, JDBC compatibility, highlighting, query inspection, KNN compaction, distributed-query memory use, template tables, and concurrent RT-table optimization.
 
 ### New Features and Improvements
 * 🆕 [v29.0.0](https://github.com/manticoresoftware/manticoresearch/tree/29.0.0) [Issue #4802](https://github.com/manticoresoftware/manticoresearch/issues/4802) Added synchronous [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) support for distributed and sharded tables via `OPTION sync=1`, applying the requested cutoff to every local RT component and configured remote mirror.
@@ -15,6 +15,8 @@ This release adds sharded-table settings inspection, distributed and sharded tab
 * ⚠️ [v29.0.0](https://github.com/manticoresoftware/manticoresearch/tree/29.0.0) [Issue #4739](https://github.com/manticoresoftware/manticoresearch/issues/4739) Added streamed heartbeat replies for long-running shard writes and replication SST, changing the `SHARD_WRITE` API and the cluster protocol. **This matters only when upgrading or downgrading mixed-version deployments that use native sharded-table writes or replication**; standalone nodes and deployments that use neither require no special action. Existing data and configuration remain compatible, with no migration required. During upgrades, update remote shard agents before their coordinators and all replication peers before initiating SST. Downgrade remains possible without rebuilding data, but coordinators should be downgraded before agents and SST must be avoided while peers run mixed versions.
 
 ### Bug Fixes
+* 🪲 [v29.0.2](https://github.com/manticoresoftware/manticoresearch/tree/29.0.2) [Backup PR #140](https://github.com/manticoresoftware/manticoresearch-backup/pull/140) Updated [manticore-backup](https://github.com/manticoresoftware/manticoresearch-backup) to 1.10.3, fixing failed backups leaving RT tables frozen when an error occurs after a per-table `FREEZE`.
+* 🪲 [v29.0.2](https://github.com/manticoresoftware/manticoresearch/tree/29.0.2) [Issue #4434](https://github.com/manticoresoftware/manticoresearch/issues/4434) Updated Buddy to 4.4.1, restoring MySQL Connector/J initialization by supporting the `@@query_cache_size` system variable and numeric system-variable values.
 * 🪲 [v29.0.1](https://github.com/manticoresoftware/manticoresearch/tree/29.0.1) [Issue #4780](https://github.com/manticoresoftware/manticoresearch/issues/4780) Fixed `searchd` crashes during RT-table optimization when concurrent updates resized blob-backed attributes, including KNN tables, by preventing merge workers from reading stale source memory.
 * 🪲 [v29.0.0](https://github.com/manticoresoftware/manticoresearch/tree/29.0.0) [Issue #4739](https://github.com/manticoresoftware/manticoresearch/issues/4739) Fixed long-running shard writes timing out while a physical table was flushing or performing other expensive work; heartbeat replies now keep the connection alive without requiring an excessively large `agent_query_timeout`.
 * 🪲 [v28.9.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.9.3) [Issue #4792](https://github.com/manticoresoftware/manticoresearch/issues/4792) Fixed [CALL SNIPPETS and HIGHLIGHT()](Searching/Highlighting.md) producing invalid nested HTML with `html_strip_mode=retain`; highlight wrappers now preserve existing element boundaries and generate well-formed markup.

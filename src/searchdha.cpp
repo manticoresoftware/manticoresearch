@@ -3799,8 +3799,8 @@ public:
 
 		if ( bRemoveClosingFromEpoll )
 			events_change_io (pTask);
-		else
-			AddToQueue ( pTask, pConnection->InNetLoop () );
+
+		AddToQueue ( pTask, pConnection->InNetLoop () );
 	}
 
 	void DisableWrite ( AgentConn_t * pConnection )

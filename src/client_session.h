@@ -57,6 +57,7 @@ public:
 	bool m_bInTransaction = false;
 	bool m_bIndexerRtBulk = false;
 	FILE * m_pIndexerRtBulkStream = nullptr;
+	std::unique_ptr<char[]> m_pIndexerRtBulkBuffer;
 	int m_iIndexerRtBulkPid = -1;
 	int64_t m_iIndexerRtBulkIndexId = -1;
 	CSphString m_sIndexerRtBulkTable;

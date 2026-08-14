@@ -262,7 +262,17 @@ static bool StartIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError
 		sError.SetSprintf ( "failed to open indexer RT bulk stream: %s", strerrorm ( iFdopenErrno ) );
 		return false;
 	}
-	setvbuf ( tSession.m_pIndexerRtBulkStream, nullptr, _IONBF, 0 );
+	constexpr size_t iBufferSize = 256*1024;
+	tSession.m_pIndexerRtBulkBuffer = std::make_unique<char[]> ( iBufferSize );
+	if ( setvbuf ( tSession.m_pIndexerRtBulkStream, tSession.m_pIndexerRtBulkBuffer.get(), _IOFBF, iBufferSize ) )
+	{
+		fclose ( tSession.m_pIndexerRtBulkStream );
+		tSession.m_pIndexerRtBulkStream = nullptr;
+		tSession.m_pIndexerRtBulkBuffer.reset();
+		StopIndexerRtBulk ( tSession );
+		sError = "failed to configure indexer RT bulk stream buffering";
+		return false;
+	}
 	return true;
 }
 #endif
@@ -355,6 +365,7 @@ void CleanupIndexerRtBulk ( ClientSession_c & tSession )
 		fclose ( tSession.m_pIndexerRtBulkStream );
 		tSession.m_pIndexerRtBulkStream = nullptr;
 	}
+	tSession.m_pIndexerRtBulkBuffer.reset();
 
 	#if !_WIN32
 	StopIndexerRtBulk ( tSession );
@@ -604,6 +615,7 @@ bool FinalizeIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError )
 			iCloseErrno = errno;
 		tSession.m_pIndexerRtBulkStream = nullptr;
 	}
+	tSession.m_pIndexerRtBulkBuffer.reset();
 
 	#if !_WIN32
 	if ( !WaitIndexerRtBulk ( tSession, sError ) )

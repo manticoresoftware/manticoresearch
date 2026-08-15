@@ -1015,7 +1015,7 @@ bool WriteNonThrottled ( int iFD, const void * pBuf, int64_t iCount, const char 
 	return true;
 }
 
-size_t sphReadThrottled ( int iFD, void* pBuf, size_t iCount )
+size_t sphReadThrottled ( int iFD, void* pBuf, size_t iCount, bool bInterruptible )
 {
 	if ( iCount <= 0 )
 		return iCount;
@@ -1023,7 +1023,7 @@ size_t sphReadThrottled ( int iFD, void* pBuf, size_t iCount )
 	auto iStep = Min ( iCount, (size_t)g_iMaxIOSize ); // Now always 0 < g_iMaxIOSize < 1 GB
 	auto* p = (BYTE*)pBuf;
 	size_t nBytesToRead = iCount;
-	while ( iCount && !sphInterrupted() )
+	while ( iCount && ( !bInterruptible || !sphInterrupted() ) )
 	{
 		ThrottleSleep();
 		auto iChunk = (long)Min ( iCount, iStep );

@@ -909,7 +909,8 @@ bool sphJsonParse ( CSphVector<BYTE>& dData, const CSphString& sFileName, CSphSt
 		return false;
 
 	CSphFixedVector<char> dJsonText { iFileSize + 2 }; // +4 for zero-gap at the end
-	auto iRead = (int64_t)sphReadThrottled ( tFile.GetFD (), dJsonText.begin (), iFileSize );
+	// Metadata being finalized during shutdown must still be readable by the publishing task.
+	auto iRead = (int64_t)sphReadThrottled ( tFile.GetFD (), dJsonText.begin (), iFileSize, false );
 	if ( iRead!=iFileSize )
 		return false;
 

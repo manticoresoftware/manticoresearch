@@ -29,6 +29,13 @@ static constexpr DWORD		BINLOG_META_MAGIC_SPLI = 0x494c5053;	/// magic 'SPLI' he
 // 16 : keywords_v2 RT dictionary payload versioning
 
 constexpr unsigned int BINLOG_VERSION = 16;
+// v16 only added keywords_v2 payloads; v15 tables use legacy encodings that remain supported.
+constexpr unsigned int BINLOG_COMPAT_VERSION = 15;
+
+static bool IsReplayableVersion ( DWORD uVersion )
+{
+	return uVersion==BINLOG_VERSION || uVersion==BINLOG_COMPAT_VERSION;
+}
 
 /// Bin Log Operation
 enum Blop_e : BYTE
@@ -1438,8 +1445,8 @@ void Binlog_c::LoadMeta ()
 		return;
 
 	// ok, so there is actual recovery data
-	// could be wrong version of the empty binlog
-	m_bWrongVersion = ( uVersion!=BINLOG_VERSION );
+	// could be incompatible version of the empty binlog
+	m_bWrongVersion = !IsReplayableVersion ( uVersion );
 
 	// let's require that bitness
 	if ( uVersion < 15 )
@@ -1570,7 +1577,7 @@ BinlogFileState_e Binlog_c::ReplayBinlog ( BinlogReplayFileDesc_t & tLog, const 
 		sphWarning ( "binlog: log io error at pos=" INT64_FMT ": %s", tReader.GetPos(), sError.cstr() );
 
 	// could replay empty binlog of the old version
-	m_bWrongVersion = ( uVersion!=BINLOG_VERSION );
+	m_bWrongVersion = !IsReplayableVersion ( uVersion );
 
 	if ( iFileSize==8 ) // couple of DWORDs we just read - header and version
 	{
@@ -2039,7 +2046,7 @@ void Binlog_c::Log ( DWORD uFlag, const char * sTemplate, ... ) const
 	if ( ( m_uReplayFlags & uFlag )==0 )
 	{
 		sphDieVa ( sTemplate, ap );
-		exit ( 1 );
+		std::_Exit ( 1 );
 	} else if ( g_eLogLevel>=SPH_LOG_WARNING )
 	{
 		sphLogVa ( sTemplate, ap, SPH_LOG_WARNING );

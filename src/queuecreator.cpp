@@ -475,6 +475,16 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 		}
 		break;
 
+	case SPH_ATTR_FLOAT_VECTOR:
+	case SPH_ATTR_FLOAT_VECTOR_PTR:
+		m_tGroupSorterSettings.m_pGrouper = CreateGrouperFloatVec ( tLoc, false );
+		break;
+
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
+		m_tGroupSorterSettings.m_pGrouper = CreateGrouperFloatVec ( tLoc, true );
+		break;
+
 	case SPH_ATTR_BOOL:
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_BIGINT:
@@ -2543,6 +2553,28 @@ bool QueueCreator_c::SetupGroupSortingFunc ( bool bGotDistinct )
 			eRes = sphParseSortClause ( m_tQuery, sGroupOrderBy.cstr(), *m_pSorterSchema, m_eGroupFunc, m_tStateGroup, m_dGroupJsonExprs, m_tSettings.m_pJoinArgs.get(), m_sError );
 			if ( eRes!=SORT_CLAUSE_OK )
 				return false;
+		}
+	}
+
+	if ( !m_tGroupSorterSettings.m_bImplicit && m_tGroupSorterSettings.m_pGrouper && m_tGroupSorterSettings.m_pGrouper->IsMultiValue() )
+	{
+		const int iGroupby = m_pSorterSchema->GetAttrIndex ( "@groupby" );
+		if ( iGroupby>=0 )
+		{
+			const CSphColumnInfo & tGroupbyCol = m_pSorterSchema->GetAttr ( iGroupby );
+			for ( int i = 0; i<CSphMatchComparatorState::MAX_ATTRS && m_tStateGroup.m_dAttrs[i]>=0; i++ )
+			{
+				bool bGroupColumn = false;
+				for ( const auto & tGroupColumn : m_dGroupColumns )
+					bGroupColumn |= tGroupColumn.first==m_tStateGroup.m_dAttrs[i];
+
+				if ( !bGroupColumn )
+					continue;
+
+				m_tStateGroup.m_dAttrs[i]	= iGroupby;
+				m_tStateGroup.m_tLocator[i]	= tGroupbyCol.m_tLocator;
+				m_tStateGroup.m_eKeypart[i]	= Attr2Keypart ( tGroupbyCol.m_eAttrType );
+			}
 		}
 	}
 

@@ -259,9 +259,9 @@ static DWORD ConvertFlags ( int iFlags )
 
 bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphString & sName, const ItemOptions_t & tOpts, CSphString & sError )
 {
-	if ( eAttrType!=SPH_ATTR_FLOAT_VECTOR && !tOpts.m_sKNNType.IsEmpty() )
+	if ( eAttrType!=SPH_ATTR_FLOAT_VECTOR && eAttrType!=SPH_ATTR_FLOAT_VECTOR_ARRAY && !tOpts.m_sKNNType.IsEmpty() )
 	{
-		sError = "knn_type='hnsw' can only be used with float_vector attributes";
+		sError = "knn_type='hnsw' can only be used with float_vector and float_vector_array attributes";
 		return false;
 	}
 
@@ -273,8 +273,15 @@ bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphSt
 			return false;
 		}
 	}
-	else if ( eAttrType==SPH_ATTR_FLOAT_VECTOR )
+	else if ( eAttrType==SPH_ATTR_FLOAT_VECTOR || eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY )
 	{
+		// auto-embeddings produce exactly one vector per document, so they are meaningless for an array column
+		if ( eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY && !tOpts.m_sModelName.IsEmpty() )
+		{
+			sError = "model_name can't be used with float_vector_array attributes";
+			return false;
+		}
+
 		if ( !tOpts.m_sKNNType.IsEmpty() )
 		{
 			if ( ( !tOpts.m_bKNNDimsSpecified || !tOpts.m_bHNSWSimilaritySpecified ) && tOpts.m_sModelName.IsEmpty() )

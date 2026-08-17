@@ -630,25 +630,33 @@ extern int g_iMaxFilterValues;
 extern bool	g_bIOStats;
 static auto& g_bCpuStats 	= sphGetbCpuStat ();
 
-static bool ReadApiCount ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, const char * szName, int & iCount, int iMax=-1, int iMinBytesPerItem=0 )
+static bool ReadApiCount ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, const char * szName, int & iCount )
 {
 	iCount = tReq.GetInt();
 
-	int iEffectiveMax = iMax;
-	if ( iMinBytesPerItem>0 )
+	if ( tReq.GetError() )
 	{
-		int iPacketMax = tReq.HasBytes() / iMinBytesPerItem;
-		if ( iEffectiveMax<0 || iPacketMax<iEffectiveMax )
-			iEffectiveMax = iPacketMax;
+		SendErrorReply ( tOut, "invalid or truncated request" );
+		return false;
 	}
 
-	if ( iCount<0 || ( iEffectiveMax>=0 && iCount>iEffectiveMax ) )
+	if ( iCount<0 || iCount>tReq.HasBytes() )
 	{
-		if ( iEffectiveMax>=0 )
-			SendErrorReply ( tOut, "invalid %s count %d (should be in 0..%d range)", szName, iCount, iEffectiveMax );
-		else
-			SendErrorReply ( tOut, "invalid %s count %d", szName, iCount );
+		SendErrorReply ( tOut, "invalid %s count %d", szName, iCount );
+		return false;
+	}
 
+	return true;
+}
+
+static bool ReadApiCountLimited ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, const char * szName, int & iCount, int iMaxCount )
+{
+	if ( !ReadApiCount ( tReq, tOut, szName, iCount ) )
+		return false;
+
+	if ( iCount>iMaxCount )
+	{
+		SendErrorReply ( tOut, "invalid %s count %d (should be in 0..%d range)", szName, iCount, iMaxCount );
 		return false;
 	}
 
@@ -658,7 +666,7 @@ static bool ReadApiCount ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, const 
 static bool ParseStringVec ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, StrVec_t & dStrings, const char * szName )
 {
 	int iCount = 0;
-	if ( !ReadApiCount ( tReq, tOut, szName, iCount, -1, 4 ) )
+	if ( !ReadApiCount ( tReq, tOut, szName, iCount ) )
 		return false;
 
 	dStrings.Resize ( iCount );
@@ -686,7 +694,7 @@ static bool ParseFacetFilterTrait ( InputBuffer_c & tReq, ISphOutputBuffer & tOu
 static bool ParseQueryItems ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphVector<CSphQueryItem> & dItems, WORD uMasterVer )
 {
 	int iCount = 0;
-	if ( !ReadApiCount ( tReq, tOut, "select item", iCount, -1, uMasterVer>=34 ? 16 : 12 ) )
+	if ( !ReadApiCount ( tReq, tOut, "select item", iCount ) )
 		return false;
 
 	dItems.Resize ( iCount );
@@ -1004,7 +1012,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		tMaxDocID = INT64_MAX;
 
 	int iAttrFilters = 0;
-	if ( !ReadApiCount ( tReq, tOut, "attribute filter", iAttrFilters, g_iMaxFilters, 12 ) )
+	if ( !ReadApiCountLimited ( tReq, tOut, "attribute filter", iAttrFilters, g_iMaxFilters ) )
 		return false;
 
 	tQuery.m_dFilters.Resize ( iAttrFilters );
@@ -1045,7 +1053,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	}
 
 	int iIndexWeights = 0;
-	if ( !ReadApiCount ( tReq, tOut, "index weight", iIndexWeights, -1, 8 ) )
+	if ( !ReadApiCount ( tReq, tOut, "index weight", iIndexWeights ) )
 		return false;
 	tQuery.m_dIndexWeights.Resize ( iIndexWeights );
 	for ( auto& dIndexWeight : tQuery.m_dIndexWeights )
@@ -1054,7 +1062,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	tQuery.m_uMaxQueryMsec = tReq.GetDword ();
 
 	int iFieldWeights = 0;
-	if ( !ReadApiCount ( tReq, tOut, "field weight", iFieldWeights, SPH_MAX_FIELDS, 8 ) )
+	if ( !ReadApiCountLimited ( tReq, tOut, "field weight", iFieldWeights, SPH_MAX_FIELDS ) )
 		return false;
 	tQuery.m_dFieldWeights.Resize ( iFieldWeights );
 	for ( auto & dFieldWeight : tQuery.m_dFieldWeights )
@@ -1162,7 +1170,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	if ( uVer>=0x121 )
 	{
 		int iFilterTreeItems = 0;
-		if ( !ReadApiCount ( tReq, tOut, "filter tree item", iFilterTreeItems, -1, 16 ) )
+		if ( !ReadApiCount ( tReq, tOut, "filter tree item", iFilterTreeItems ) )
 			return false;
 		tQuery.m_dFilterTree.Resize ( iFilterTreeItems );
 		for ( FilterTreeItem_t &tItem : tQuery.m_dFilterTree )
@@ -1189,7 +1197,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	if ( uMasterVer>=20 )
 	{
 		int iIndexHints = 0;
-		if ( !ReadApiCount ( tReq, tOut, "index hint", iIndexHints, -1, 12 ) )
+		if ( !ReadApiCount ( tReq, tOut, "index hint", iIndexHints ) )
 			return false;
 		tQuery.m_dIndexHints.Resize ( iIndexHints );
 		for ( auto & i : tQuery.m_dIndexHints )
@@ -1207,7 +1215,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		tQuery.m_sJoinQuery	= tReq.GetString();
 
 		int iOnFilters = 0;
-		if ( !ReadApiCount ( tReq, tOut, "join filter", iOnFilters, -1, uMasterVer>=22 ? 24 : 16 ) )
+		if ( !ReadApiCount ( tReq, tOut, "join filter", iOnFilters ) )
 			return false;
 		tQuery.m_dOnFilters.Resize ( iOnFilters );
 		for ( auto & i : tQuery.m_dOnFilters )
@@ -1263,7 +1271,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 			}
 
 			int iVecLen = 0;
-			if ( !ReadApiCount ( tReq, tOut, "knn vector", iVecLen, -1, 4 ) )
+			if ( !ReadApiCount ( tReq, tOut, "knn vector", iVecLen ) )
 				return false;
 			tKNN.m_dVec.Resize ( iVecLen );
 			for ( auto & i : tKNN.m_dVec )
@@ -1281,7 +1289,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	if ( uMasterVer>=29 )
 	{
 		int iNumKnn = 0;
-		if ( !ReadApiCount ( tReq, tOut, "knn query", iNumKnn, -1, 25 ) )
+		if ( !ReadApiCount ( tReq, tOut, "knn query", iNumKnn ) )
 			return false;
 		for ( int i = 0; i < iNumKnn; i++ )
 		{
@@ -1312,7 +1320,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 			tKNN.m_bPrefilter = !!tReq.GetInt();
 			tKNN.m_bFullscan = !!tReq.GetInt();
 			int iVecLen = 0;
-			if ( !ReadApiCount ( tReq, tOut, "knn vector", iVecLen, -1, 4 ) )
+			if ( !ReadApiCount ( tReq, tOut, "knn vector", iVecLen ) )
 				return false;
 			tKNN.m_dVec.Resize ( iVecLen );
 			for ( auto & j : tKNN.m_dVec )
@@ -1342,7 +1350,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 			}
 			tQuery.m_tHybridSettings.m_sMatchAlias = tReq.GetString();
 			int iNumWeights = 0;
-			if ( !ReadApiCount ( tReq, tOut, "hybrid named weight", iNumWeights, -1, 8 ) )
+			if ( !ReadApiCount ( tReq, tOut, "hybrid named weight", iNumWeights ) )
 				return false;
 			tQuery.m_tHybridSettings.m_dNamedWeights.Resize(iNumWeights);
 			for ( auto & tW : tQuery.m_tHybridSettings.m_dNamedWeights )
@@ -1361,7 +1369,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		tQuery.m_tScrollSettings.m_sSortBy = tReq.GetString();
 		tQuery.m_tScrollSettings.m_bRequested = !!tReq.GetInt();
 		int iScrollAttrs = 0;
-		if ( !ReadApiCount ( tReq, tOut, "scroll attr", iScrollAttrs, -1, 28 ) )
+		if ( !ReadApiCount ( tReq, tOut, "scroll attr", iScrollAttrs ) )
 			return false;
 		tQuery.m_tScrollSettings.m_dAttrs.Resize ( iScrollAttrs );
 
@@ -1821,9 +1829,27 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 	bool bAgentMode = ( uMasterVer>0 );
 
 	// parse request
-	int iQueries = tReq.GetDword ();
+	int iQueries = tReq.GetInt ();
 
-	if ( g_iMaxBatchQueries>0 && ( iQueries<=0 || iQueries>g_iMaxBatchQueries ) )
+	if ( tReq.GetError() )
+	{
+		SendErrorReply ( tOut, "invalid or truncated request" );
+		return;
+	}
+
+	if ( iQueries<=0 )
+	{
+		SendErrorReply ( tOut, "bad multi-query count %d (must be positive)", iQueries );
+		return;
+	}
+
+	if ( iQueries>tReq.HasBytes() )
+	{
+		SendErrorReply ( tOut, "bad multi-query count %d", iQueries );
+		return;
+	}
+
+	if ( g_iMaxBatchQueries>0 && iQueries>g_iMaxBatchQueries )
 	{
 		SendErrorReply ( tOut, "bad multi-query count %d (must be in 1..%d range)", iQueries, g_iMaxBatchQueries );
 		return;

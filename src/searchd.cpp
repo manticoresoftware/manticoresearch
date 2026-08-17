@@ -1022,14 +1022,10 @@ void sphGetAttrsToSend ( const ISphSchema & tSchema, bool bAgentMode, bool bNeed
 {
 	int iCount = tSchema.GetAttrsCount();
 	tAttrs.Init ( iCount );
-	if ( !bAgentMode && iCount && IsSortStringInternal ( tSchema.GetAttr ( iCount-1 ).m_sName ) )
-	{
-		for ( int i=iCount-1; i>=0 && IsSortStringInternal ( tSchema.GetAttr(i).m_sName ); --i )
-			iCount = i;
-	}
 
 	for ( int i = 0; i < iCount; ++i )
-		if ( !sphIsInternalAttr ( tSchema.GetAttr(i) ) )
+		if ( !sphIsInternalAttr ( tSchema.GetAttr(i) )
+			&& ( bAgentMode || !IsSortStringInternal ( tSchema.GetAttr(i).m_sName ) ) )
 			tAttrs.BitSet(i);
 
 	int iId = tSchema.GetAttrIndex ( sphGetDocidName() );

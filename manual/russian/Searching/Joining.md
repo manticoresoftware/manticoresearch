@@ -243,15 +243,15 @@ POST /search
 
 <!-- response SQL -->
 ```
-+---------------+-----------------+-------------------+
-| name          | orders.quantity | @int_attr_email   |
-+---------------+-----------------+-------------------+
-| Alice Johnson |               1 | alice@example.com |
-| Alice Johnson |               1 | alice@example.com |
-| Bob Smith     |               2 | bob@example.com   |
-| Carol White   |               1 | carol@example.com |
-| John Smith    |            NULL | john@example.com  |
-+---------------+-----------------+-------------------+
++---------------+-----------------+
+| name          | orders.quantity |
++---------------+-----------------+
+| Alice Johnson |               1 |
+| Alice Johnson |               1 |
+| Bob Smith     |               2 |
+| Carol White   |               1 |
+| John Smith    |            NULL |
++---------------+-----------------+
 5 rows in set (0.00 sec)
 ```
 

@@ -1,0 +1,38 @@
+––– comment –––
+Issue #4811 related regression: when binlog transaction replay fails on a corrupted/truncated binlog, the fatal log must mention the recovery flag users can choose explicitly: --replay-flags=ignore-trx-errors.
+––– input –––
+rm -rf /tmp/issue-4811-binlog-trx; mkdir -p /tmp/issue-4811-binlog-trx/data /tmp/issue-4811-binlog-trx/binlog; cat > /tmp/issue-4811-binlog-trx/manticore.conf <<'EOF'
+index products
+{
+    type = rt
+    path = /tmp/issue-4811-binlog-trx/data/products
+    rt_field = name
+}
+
+searchd
+{
+    listen = 127.0.0.1:9306:mysql41
+    log = /tmp/issue-4811-binlog-trx/searchd.log
+    query_log = /tmp/issue-4811-binlog-trx/query.log
+    pid_file = /tmp/issue-4811-binlog-trx/searchd.pid
+    binlog_path = /tmp/issue-4811-binlog-trx/binlog
+    binlog_common = 1
+    watchdog = 0
+}
+EOF
+stdbuf -oL searchd --config /tmp/issue-4811-binlog-trx/manticore.conf --stopwait >/dev/null 2>&1 || true; stdbuf -oL searchd --config /tmp/issue-4811-binlog-trx/manticore.conf >/tmp/issue-4811-binlog-trx/start1.out 2>&1; for i in $(seq 1 100); do mysql --ssl-mode=DISABLED -h127.0.0.1 -P9306 -e 'SELECT 1' >/dev/null 2>&1 && { echo ready; break; }; sleep 0.1; done
+––– output –––
+ready
+––– input –––
+if mysql --ssl-mode=DISABLED -h127.0.0.1 -P9306 -e "INSERT INTO products(id,name) VALUES(1,'alpha'),(2,'beta'); SELECT COUNT(*) FROM products;" >/tmp/issue-4811-binlog-trx/insert.out 2>&1; then echo inserted; else cat /tmp/issue-4811-binlog-trx/insert.out; fi; pid=$(cat /tmp/issue-4811-binlog-trx/searchd.pid); kill -9 "$pid"; for i in $(seq 1 50); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done; log=$(find /tmp/issue-4811-binlog-trx/binlog -type f -name 'binlog.*' ! -name '*.meta' | sort | head -1); size=$(wc -c < "$log"); keep=$((size-1)); truncate -s "$keep" "$log"; echo truncated_binlog
+––– output –––
+inserted
+truncated_binlog
+––– input –––
+set +e; stdbuf -oL searchd --config /tmp/issue-4811-binlog-trx/manticore.conf >/tmp/issue-4811-binlog-trx/start2.out 2>&1; rc=$?; set -e; if [ "$rc" -ne 0 ] && grep -q -- '--replay-flags=ignore-trx-errors' /tmp/issue-4811-binlog-trx/searchd.log /tmp/issue-4811-binlog-trx/start2.out; then echo replay_trx_hint_logged; else echo "unexpected rc=$rc"; cat /tmp/issue-4811-binlog-trx/start2.out; tail -100 /tmp/issue-4811-binlog-trx/searchd.log; fi
+––– output –––
+replay_trx_hint_logged
+––– input –––
+stdbuf -oL searchd --config /tmp/issue-4811-binlog-trx/manticore.conf --stopwait >/dev/null 2>&1 || true; rm -rf /tmp/issue-4811-binlog-trx; echo cleaned
+––– output –––
+cleaned

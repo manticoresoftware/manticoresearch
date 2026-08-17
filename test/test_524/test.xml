@@ -77,10 +77,9 @@ searchd
 	<!-- a wrong-length anchor is still rejected against knn_dims -->
 	select id from t where knn(v,10,(1,0,0));
 
-	<!-- Filtered KNN. Note docs 3 and 4 hold no vectors and DO appear here at FLT_MAX.
-      	 Filtering on knn_dist is what excludes them -->
+	<!-- Filtered KNN. Docs 3 and 4 hold no vectors, so they are excluded here even though the filter alone would admit them: a doc with no vector is near nothing -->
 	select id, knn_dist() from t where id!=1 and knn(v,10,(1,0,0,0)) order by id asc;
-	<!-- filtering on the distance excludes them -->
+	<!-- an explicit distance predicate is then redundant, not load-bearing: same rows either way -->
 	select id, knn_dist() from t where id!=1 and @knn_dist &lt; 1e38 and knn(v,10,(1,0,0,0)) order by id asc;
 	select id, knn_dist() d from t where id!=1 and d &lt; 1e38 and knn(v,10,(1,0,0,0)) order by id asc;
 	<!-- and it must work inside a filter tree too -->
@@ -88,14 +87,33 @@ searchd
 	drop table t;
 
 	<!-- ============ empty index: every row empty, plus a zero-row table ============ -->
-	create table t (title text, v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+	create table t (title text, v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2', tag int);
 	select id from t where knn(v,10,(1,0,0,0));
-	insert into t values (1, 'a', []);
-	insert into t values (2, 'b', []);
+	select id from t where tag=1 and knn(v,10,(1,0,0,0));
+	insert into t values (1, 'a', [], 1);
+	insert into t values (2, 'b', [], 2);
 	select id from t where knn(v,10,(1,0,0,0));
+	<!-- a filter is what reaches the planner's graph-size heuristics; an unfiltered knn returns before them -->
+	select id from t where tag=1 and knn(v,10,(1,0,0,0));
+	select id from t where tag&lt;9 and knn(v,10,(1,0,0,0));
 	flush ramchunk t;
+	<!-- ...and again now that the zero-vector graph has been through save/load -->
 	select id from t where knn(v,10,(1,0,0,0));
+	select id from t where tag=1 and knn(v,10,(1,0,0,0));
+	select id from t where tag&lt;9 and knn(v,10,(1,0,0,0));
 	select * from t order by id asc;
+	drop table t;
+
+	<!-- ============ partially empty index: a filter must not resurrect vector-less docs ============ -->
+	<!-- docs 2 and 4 own no vectors, so no knn query may return them -->
+	create table t (v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2', tag int);
+	insert into t values (1, [[1,0,0,0]], 1), (2, [], 1), (3, [[0,1,0,0]], 1), (4, [], 1), (5, [[0,0,1,0]], 1);
+	select id from t where knn(v,10,(1,0,0,0)) order by id asc;
+	select id from t where tag=1 and knn(v,10,(1,0,0,0)) order by id asc;
+	flush ramchunk t;
+	<!-- ...and the disk chunk must answer both exactly as the ram chunk did -->
+	select id from t where knn(v,10,(1,0,0,0)) order by id asc;
+	select id from t where tag=1 and knn(v,10,(1,0,0,0)) order by id asc;
 	drop table t;
 
 	<!-- ============ real coordinates: fractional and negative ============ -->
@@ -220,11 +238,12 @@ searchd
 	drop table t;
 
 	<!-- ============ quantized + all-empty ============ -->
-	create table t (v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' quantization='1bit');
-	insert into t values (1, []), (2, []);
+	create table t (v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' quantization='1bit', tag int);
+	insert into t values (1, [], 1), (2, [], 2);
 	flush ramchunk t;
 	select id from t where knn(v,5,(1,0,0,0));
-	insert into t values (3, [[1,0,0,0],[0,1,0,0]]);
+	select id from t where tag=1 and knn(v,5,(1,0,0,0));
+	insert into t values (3, [[1,0,0,0],[0,1,0,0]], 3);
 	flush ramchunk t;
 	select id, knn_dist() from t where knn(v,5,(1,0,0,0));
 	drop table t;

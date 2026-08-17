@@ -9129,7 +9129,9 @@ bool CSphIndex_VLN::SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilt
 	tFlx.m_iTotalDocs	= m_iDocinfo;
 	tFlx.m_sJoinIdx		= tQuery.m_sJoinIdx;
 	tFlx.m_eJoinType	= tQuery.m_eJoinType;
-	tFlx.m_bAddKNNDistFilter = tQuery.HasKnn() && HasKNNDistFilter(tQuery);
+	// the knn iterator is what normally keeps vector-less docs out of the result. it is skipped when the planner brute-forces instead,
+	// and a scan cannot tell an empty vector from a far one, so guard those cases with the knn_dist filter too
+	tFlx.m_bAddKNNDistFilter = tQuery.HasKnn() && ( HasKNNDistFilter(tQuery) || tQuery.m_dFilters.GetLength() || tQuery.SingleKnnSettings().m_bFullscan );
 
 	// may modify eval stages in schema; needs to be before SetupCalc
 	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, pModifiedMatchSchema, tQuery.m_dItems, tMeta.m_sError, &dJsonSITransforms ) )

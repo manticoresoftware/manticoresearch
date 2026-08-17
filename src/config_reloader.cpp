@@ -149,7 +149,12 @@ private:
 		assert ( pAlreadyServed );
 
 		ServedIndexRefPtr_c pClone = MakeFullClone ( pAlreadyServed );
-		ConfigureLocalIndex ( pClone, hIndex, false, nullptr );
+		CSphString sError;
+		if ( !ConfigureLocalIndex ( pClone, hIndex, false, nullptr, sError ) )
+		{
+			sphWarning ( "table '%s': failed to reconfigure, using last valid definition; error: %s", sIndex.cstr(), sError.cstr() );
+			return KeepExisting ( sIndex );
+		}
 		m_hNewLocalIndexes.Add ( pClone, sIndex );
 
 		// need w-lock of already served (exposed) idx, since we change settings.
@@ -186,7 +191,12 @@ private:
 			return LoadNewLocalFromConfig ( sIndex, hIndex );
 
 		ServedDesc_t tNewDesc;
-		ConfigureLocalIndex ( &tNewDesc, hIndex, false, nullptr );
+		CSphString sError;
+		if ( !ConfigureLocalIndex ( &tNewDesc, hIndex, false, nullptr, sError ) )
+		{
+			sphWarning ( "table '%s': failed to reconfigure, using last valid definition; error: %s", sIndex.cstr(), sError.cstr() );
+			return KeepExisting ( sIndex );
+		}
 		bool bReconfigured =
 			tNewDesc.m_tSettings.m_iExpandKeywords != pAlreadyServed->m_tSettings.m_iExpandKeywords
 			|| tNewDesc.m_tSettings.m_tFileAccess != pAlreadyServed->m_tSettings.m_tFileAccess

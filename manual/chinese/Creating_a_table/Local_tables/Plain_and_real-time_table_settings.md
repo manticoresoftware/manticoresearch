@@ -65,6 +65,30 @@ table <table name> {
 
 ### 普通表和实时表的通用设置
 
+#### profile
+
+`profile` 是仅限 SQL 的快捷方式，只能在 `CREATE TABLE` 中应用一组预定义的表设置。它不支持 `ALTER TABLE`。profile 名称本身不会存储在表元数据中；Manticore 只保存展开后的设置，因此 `SHOW CREATE TABLE` 输出的是最终选项，而不是 `profile=...`。
+
+当前支持的值：
+
+* `relevance` - 展开为：
+  * [`min_infix_len='2'`](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)
+  * [`index_field_lengths='1'`](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths)
+  * [`index_exact_words='1'`](../../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words)
+  * [`ranker=expr('1000*bm25a(1.2,0.75,256)')`](../../Searching/Options.md#ranker)
+  * [`morphology='stem_en'`](../../Creating_a_table/NLP_and_tokenization/Morphology.md#morphology)
+  * [`boolean_mode='or'`](../../Searching/Options.md#boolean_mode)
+
+`relevance` profile 可以提升许多英文全文检索负载的排序效果和召回率，但它也会增加索引和查询阶段的工作量，因此与默认设置相比，可能会带来额外的 CPU、存储和内存开销。
+
+如果你还显式指定了这些选项中的某一个，`profile` 会遵循与普通 `CREATE TABLE` 设置相同的重复选项语义：第一次出现的值生效。由于 profile 会在创建时展开为普通设置，`profile='relevance' ranker='bm25'` 会保留 profile 中的 ranker，完整展开后的显式写法也是如此。同样，`ranker='bm25' profile='relevance'` 也会保留 `ranker='bm25'`。
+
+展开后的设置会存储在表元数据中。查询级别的 `OPTION ranker=...` 仍然会覆盖任何已存储的表级 ranker。如果一个查询搜索多个表且未指定 ranker，每个表仍会使用各自存储的默认 ranker，包括本地表和远程分布式表。在这种情况下，Manticore 会使用返回的原始权重合并结果；它不会在不同 ranker 或表达式之间对权重做归一化，因此混用不同的表级 ranker 可能会产生不可直接比较的全局排序。
+
+```sql
+CREATE TABLE products(title text) profile='relevance';
+```
+
 #### type
 
 ```ini
@@ -83,7 +107,7 @@ type = rt
 path = path/to/table
 ```
 
-表将被存储或定位的路径，可以是绝对路径或相对路径，不带扩展名。
+表将被存储或定位的路径，绝对路径或相对路径均可，不含扩展名。
 
 值：表的路径，**必填**
 
@@ -488,7 +512,7 @@ knn = {"attrs":[{"name":"image_vector","type":"hnsw","dims":768,"hnsw_similarity
 rt_attr_float_vector = embedding_vector
 rt_field = title
 rt_field = description
-knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}
+knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":"title"}]}
 ```
 
 **必需的 KNN 参数：**
@@ -502,7 +526,7 @@ knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2",
 - `hnsw_ef_construction`：构建时间/准确性权衡（默认：200）
 
 **自动嵌入参数**（当使用 `model_name` 时）：
-- `model_name`：使用的嵌入模型（例如，`"sentence-transformers/all-MiniLM-L6-v2"`、`"openai/text-embedding-ada-002"`、`"openai:text-embedding-ada-002"`）。当指定时，必须省略`dims`，因为模型会自动确定维度。
+- `model_name`：要使用的嵌入模型（例如，`"Xenova/all-MiniLM-L6-v2"` 适用于快速的 ONNX 路径 - 浏览 [Hugging Face 上的 ONNX 模型](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm)；也支持 `"sentence-transformers/all-MiniLM-L6-v2"`；OpenAI 可使用 `"openai/text-embedding-ada-002"`）。指定后必须省略 `dims`，因为模型会自动决定维度。
 - `from`：用于生成嵌入的字段名称列表（逗号分隔），或空字符串 `""` 表示使用所有文本/字符串字段。当指定 `model_name` 时，此参数是必需的。
 - `api_key`：基于 API 的模型（OpenAI、Voyage、Jina）的 API 密钥。仅在使用基于 API 的嵌入服务时需要。
 - `cache_path`：下载模型的缓存路径（用于 sentence-transformers 模型）。
@@ -994,6 +1018,7 @@ table products {
 * [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
 * [blend_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)
 * [blend_mode](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
+* [boolean_mode](../../Searching/Options.md#boolean_mode)
 * [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)
 * [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)
 * [embedded_limit](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)

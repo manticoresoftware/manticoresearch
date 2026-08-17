@@ -141,7 +141,7 @@ mysql> desc rt;
 ALTER TABLE table ft_setting='value'[, ft_setting2='value']
 ```
 
-您可以使用`ALTER`在[RT模式](Read_this_first.md#Real-time-mode-vs-plain-mode)下修改表的全文设置。但是，它只影响新文档，不影响现有文档。
+你可以使用 `ALTER` 来修改表的全文检索设置，适用于 [RT 模式](Read_this_first.md#Real-time-mode-vs-plain-mode)。不过，它只会影响新文档，不会影响已有文档。要把新设置应用到已有文档，请先[重新索引它们](Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings)。
 示例：
 * 创建一个具有全文字段和`charset_table`的表，该表只允许3个可搜索字符：`a`、`b`和`c`。
 * 然后我们插入文档'abcd'并通过查询`abcd`找到它，`d`被忽略，因为它不在`charset_table`数组中
@@ -253,7 +253,7 @@ Query OK, 0 rows affected (0.00 sec)
 ALTER TABLE table RECONFIGURE
 ```
 
-`ALTER`还可以在[普通模式](Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29)下重新配置RT表，以便配置文件中的新分词、词法分析和其他文本处理设置对新文档生效。注意，现有文档将保持不变。在内部，它会强制将当前RAM块保存为新的磁盘块，并调整表头，以便使用更新的全文设置对新文档进行分词。
+`ALTER TABLE ... RECONFIGURE` 会重新加载 [plain 模式](Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29)下 RT 表的全文检索设置。配置文件中的新分词、形态学以及其他文本处理设置，会应用到在该命令之后插入或替换的文档。已有文档会保留使用旧设置构建的全文索引。要把新设置应用到这些文档，请[重新索引它们](Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings)。该命令会将当前 RAM chunk 刷写为新的 disk chunk，并更新表头。
 
 <!-- request Example -->
 ```sql
@@ -277,6 +277,31 @@ mysql> show table rt settings;
 1 row in set (0.00 sec)
 ```
 <!-- end -->
+
+## 在更改 FT 设置后重新索引现有文档
+
+更改全文检索设置会影响文档插入或替换时的索引过程。要把新设置应用到已有文档，请在更改设置后重新插入这些文档。这适用于通配符索引、分词、形态学、wordforms 以及其他全文检索设置。
+
+在普通模式下，先更新表配置并运行 `ALTER TABLE <table_name> RECONFIGURE`。在 RT 模式下，按上文所述使用 `ALTER TABLE` 修改设置。在创建导出之前先暂停应用写入，并保持暂停直到回放完成；否则，回放可能会覆盖文档导出后写入的新值。
+
+创建一个仅包含数据的转储，使其输出 `REPLACE` 语句，然后将其回放到同一个表中：
+
+```bash
+mysqldump -h0 -P9306 --replace -t -c -e --net-buffer-length=16m manticore '<table_name>' > '<table_name>-reindex.sql'
+mysql -h0 -P9306 < '<table_name>-reindex.sql'
+```
+
+`-t` 会省略 `DROP` 和 `CREATE TABLE` 语句，而 `--replace` 会让导出在回放时用相同 ID 的文档替换现有文档。每个被回放的文档都会使用当前全文检索设置建立索引。
+
+如果你不是先保存到文件，而是直接将导出内容通过管道传给 `mysql`，则必须使用 `--skip-lock-tables`：
+
+```bash
+mysqldump -h0 -P9306 --skip-lock-tables --replace -t -c -e --net-buffer-length=16m manticore '<table_name>' | mysql -h0 -P9306
+```
+
+如果不使用 `--skip-lock-tables`，`mysqldump` 在导出期间会持有读锁，因此当导出跨越多个批次时，并发的 `REPLACE` 语句可能会失败，报出 `table '<table_name>' is locked`。对于先导出到文件、再进行回放的两步工作流，则不需要该选项，因为 `mysqldump` 会在回放开始前退出并释放锁。
+
+该表必须存储所有全文字段：`mysqldump` 无法备份包含非存储字段的表。对于复制表，请使用[复制模式备份说明](Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump)。
 
 ## 重建二级索引
 
@@ -350,7 +375,7 @@ Manticore 不会持久化该列中当前向量是自动生成、由用户显式�
 
 <!-- request Example -->
 ```sql
-ALTER TABLE products ADD COLUMN embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title';
+ALTER TABLE products ADD COLUMN embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title';
 ALTER TABLE products REBUILD EMBEDDINGS embedding;
 ```
 

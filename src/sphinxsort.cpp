@@ -608,7 +608,9 @@ private:
 	int							m_iMaxMatches;
 	CSphVector<DocID_t>			m_dUnsortedDocs;
 	MemoryWriter_c				m_tWriter;
-	bool						m_bDocIdDynamic = false;
+	CSphAttrLocator				m_tDocidLoc;
+	bool						m_bUseDocidLoc = false;
+	bool						m_bDocIdDynamic = true;
 
 	inline bool			PushMatch ( const CSphMatch & tEntry );
 	inline void			ProcessPushed();
@@ -637,7 +639,15 @@ bool CollectQueue_c::PushMatch ( const CSphMatch & tEntry )
 	if ( m_dUnsortedDocs.GetLength() >= m_iMaxMatches && m_dUnsortedDocs.GetLength() == m_dUnsortedDocs.GetLimit() )
 		ProcessPushed();
 
-	m_dUnsortedDocs.Add ( sphGetDocID ( m_bDocIdDynamic ? tEntry.m_pDynamic : tEntry.m_pStatic ) );
+	DocID_t tDocId = 0;
+	if ( m_bUseDocidLoc )
+		tDocId = (DocID_t)tEntry.GetAttr ( m_tDocidLoc );
+	else
+	{
+		const CSphRowitem * pRow = ( m_bDocIdDynamic && tEntry.m_pDynamic ) ? tEntry.m_pDynamic : tEntry.m_pStatic;
+		tDocId = sphGetDocID ( pRow );
+	}
+	m_dUnsortedDocs.Add ( tDocId );
 	return true;
 }
 
@@ -654,8 +664,19 @@ void CollectQueue_c::SetSchema ( ISphSchema * pSchema, bool bRemapCmp )
 	BASE::SetSchema ( pSchema, bRemapCmp );
 
 	const CSphColumnInfo * pDocId = pSchema->GetAttr ( sphGetDocidName() );
-	assert(pDocId);
-	m_bDocIdDynamic = pDocId->m_tLocator.m_bDynamic;
+	bool bStringDocid = pDocId && ( pDocId->m_eAttrType==SPH_ATTR_STRING || pDocId->m_eAttrType==SPH_ATTR_STRINGPTR );
+	m_bUseDocidLoc = pDocId && !bStringDocid;
+	if ( m_bUseDocidLoc )
+	{
+		m_tDocidLoc = pDocId->m_tLocator;
+		m_bDocIdDynamic = pDocId->m_tLocator.m_bDynamic;
+	}
+	else
+	{
+		// UUID public result schemas may expose string `id`/`@uuid_id`, while the internal
+		// DocID_t is still stored at the conventional static row start for collection/delete.
+		m_bDocIdDynamic = false;
+	}
 }
 
 

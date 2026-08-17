@@ -1043,6 +1043,8 @@ searchRequest.SetSort(sort)
 
 所以，Manticore 中的排名是可配置的。它有一个所谓的**ranker**（排名器）的概念。排名器可以形式化定义为一个接受文档和查询作为输入，并输出相关性值的函数。通俗来说，排名器控制着 Manticore 将如何（使用哪种具体算法）给文档分配权重。
 
+可以通过 [`OPTION ranker=...`](../Searching/Options.md#ranker) 为每个查询选择一个 ranker，也可以在 `CREATE TABLE ... ranker='...'` 中将其存为表级默认值（也可通过表 [profile](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#profile) 设置）。两者同时存在时，以查询选项为准。当一个查询同时搜索多张表且没有显式指定查询级 ranker 时，每张表会继续使用自己保存的默认 ranker，包括本地和远程分布式表。最终合并时比较的是原始返回权重；系统不会提供自动归一化层来让不同的 ranker 或自定义表达式在数值上可直接比较。
+
 ## 内置排名器
 
 Manticore 提供了几种适用于不同用途的内置排名器。它们中的许多使用两个因素：短语接近度（也称为LCS）和BM25。短语接近度根据关键词位置工作，而BM25根据关键词频率工作。基本上，文档和查询之间的短语匹配程度越高，短语接近度越高（当文档包含查询的完整逐字引用时达到最大值）。而当文档包含更多罕见词时，BM25分值越高。详细讨论稍后进行。

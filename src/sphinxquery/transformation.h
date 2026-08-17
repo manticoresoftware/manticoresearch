@@ -113,7 +113,8 @@ private:
 private:
 	void DumpSimilar () const noexcept;
 
-	void SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t *> & dNodes ) noexcept;
+	// returns false when cost-based transformations cannot obtain keyword statistics
+	bool SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t *> & dNodes ) noexcept;
 	void ResetCostsHash() noexcept;
 
 	static int GetWeakestIndex ( const CSphVector<XQNode_t *> & dNodes );

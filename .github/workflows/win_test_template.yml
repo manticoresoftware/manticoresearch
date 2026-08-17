@@ -14,7 +14,19 @@ on:
       artifact_name:
         required: true
         type: string
-      COLUMNAR_LOCATOR:
+      results_name:
+        required: false
+        type: string
+        default: "Windows test results"
+      CTEST_REGEX:
+        required: false
+        type: string
+        default: ""
+      suite_name:
+        required: false
+        type: string
+        default: ""
+      MCL_RUNTIME_ARTIFACT_NAME:
         required: false
         type: string
         default: ""
@@ -25,7 +37,7 @@ on:
 
 jobs:
   test_windows:
-    name: ${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
+    name: ${{ inputs.suite_name || format('{0}_{1}', inputs.CTEST_START, inputs.CTEST_END) }}
     runs-on: windows-2022
     env:
       CACHEB: "../cache"
@@ -35,37 +47,91 @@ jobs:
       CTEST_CONFIGURATION_TYPE: Debug
       CTEST_START: ${{ inputs.CTEST_START }}
       CTEST_END: ${{ inputs.CTEST_END }}
+      CTEST_REGEX: ${{ inputs.CTEST_REGEX }}
       CTEST_RESOURCE: ${{ github.workspace }}\\misc\\ctest\\ubertests\\ubertests_docker_image\\resource.json
       # The following is useful to test a specific test, just uncomment it, no need to disable CTEST_START/END
       # CTEST_REGEX: test_234
       NO_BUILD: 1
-      COLUMNAR_LOCATOR: ${{ inputs.COLUMNAR_LOCATOR }}
     outputs:
       test_outcome: ${{ steps.test.outcome }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Download build artifacts
-        uses: manticoresoftware/download_artifact_with_retries@v3
+        uses: manticoresoftware/download_artifact_with_retries@v5
         with:
           name: build_windows_Debug_x64
           path: .
+      - name: Download MCL runtime artifact
+        if: ${{ inputs.MCL_RUNTIME_ARTIFACT_NAME != '' }}
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ inputs.MCL_RUNTIME_ARTIFACT_NAME }}
+          path: mcl-runtime
+      - name: Preflight MCL runtime artifact
+        if: ${{ inputs.MCL_RUNTIME_ARTIFACT_NAME != '' }}
+        shell: pwsh
+        run: |
+          if (Test-Path "mcl-runtime/artifact.tar") {
+            tar -xf "mcl-runtime/artifact.tar" -C "mcl-runtime"
+          }
+          $required = @(
+            "lib_manticore_columnar.dll",
+            "lib_manticore_secondary.dll",
+            "lib_manticore_knn.dll",
+            "lib_manticore_knn_embeddings.dll",
+            "libiomp5md.dll"
+          )
+          foreach ($lib in $required) {
+            $path = Join-Path "mcl-runtime" $lib
+            if (!(Test-Path $path)) {
+              Write-Error "Missing MCL runtime library: $lib"
+              Get-ChildItem -Recurse "mcl-runtime" | Select-Object -ExpandProperty FullName
+              exit 1
+            }
+          }
+          $runtimeDir = ((Resolve-Path "mcl-runtime").Path) -replace '\\','/'
+          "MCL_RUNTIME_ARTIFACT_DIR=$runtimeDir" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "BUILD_EMBEDDINGS_LOCALLY=OFF" | Out-File -FilePath $env:GITHUB_ENV -Append
+          (Resolve-Path "mcl-runtime").Path | Out-File -FilePath $env:GITHUB_PATH -Append
+          Get-ChildItem "mcl-runtime" | Select-Object -ExpandProperty FullName
       - name: Check out Windows bundle cache
-        uses: actions/cache@v4
+        id: windows_bundle_cache
+        uses: actions/cache@v5
         with:
           path: |
             bundle
             boost_1_75_0
           enableCrossOsArchive: true
           key: win_bundle
+      - name: Download Windows bundle artifact on cache miss
+        if: steps.windows_bundle_cache.outputs.cache-hit != 'true'
+        uses: actions/download-artifact@v7
+        with:
+          name: windows_bundle
+          path: .
       - name: Remove ZSTD # since it wasn't used to save the cache and if we don't remove it here the cache won't be found. TODO: install zstd in our images, so we don't have to do these hacks
-        run: rm C:\tools\zstd\zstd.exe
+        shell: pwsh
+        run: |
+          if (Test-Path "C:\tools\zstd\zstd.exe") {
+            Remove-Item "C:\tools\zstd\zstd.exe"
+          }
       - name: Check out cache
-        uses: actions/cache@v4
+        id: build_cache
+        uses: actions/cache@v5
         with:
           path: cache
           enableCrossOsArchive: true
           key: build_windows_x64
+      - name: Download Windows build cache artifact on cache miss
+        if: steps.build_cache.outputs.cache-hit != 'true'
+        uses: actions/download-artifact@v7
+        with:
+          name: cache_build_windows_x64
+          path: cache
       - name: Run mysql
         run: |
           C:\PROGRA~1\MySQL\"MySQL Server 8.0"\bin\mysqld.exe --initialize-insecure
@@ -86,52 +152,84 @@ jobs:
         # Add -VV to ctest to display extra debug info
         run: ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
         continue-on-error: true
-      - name: Prepare test results
+      - name: Check test results
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.test.outcome }}" == "failure" ]; then
+            echo "Windows CTest failed"
+            exit 1
+          fi
+      - name: Prepare CTest XML artifact
         if: always()
         shell: bash
         run: |
           mkdir -p build/test_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
           cp -r build/Testing/*/Test.xml build/test_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}/
-          cp -r build/test build/test_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
         continue-on-error: true
+      - name: Upload CTest XML artifact
+        if: always()
+        uses: manticoresoftware/upload_artifact_with_retries@v5
+        with:
+          name: ${{ inputs.artifact_name }}_ctest_xml
+          path: "build/test*/Test.xml"
       - name: Upload test artifacts
         if: always()
         continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@v4
+        uses: manticoresoftware/upload_artifact_with_retries@v5
         with:
           name: ${{ inputs.artifact_name }}
-          path: "build/test*/Test.xml build/test_*/test_*/report* build/test_*/error*.txt build/test_*/*log"
+          path: "build/test*/Test.xml build/test/**/report* build/test/**/error*.txt build/test/**/*.log build/test/**/*log build/test/**/*.txt build/test/*.mdmp build/test/*.dmp build/test/**/*.mdmp build/test/**/*.dmp"
 
   report_windows:
-    name: Windows tests summary and report
+    name: Windows tests summary and report (${{ inputs.suite_name || format('{0}_{1}', inputs.CTEST_START, inputs.CTEST_END) }})
     needs: test_windows
     runs-on: ubuntu-22.04
+    permissions:
+      checks: write
+      contents: read
     container:
       image: manticoresearch/ubertests_public:332_aot
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Download test report artifacts
-        uses: manticoresoftware/download_artifact_with_retries@v3
+        uses: manticoresoftware/download_artifact_with_retries@v5
         continue-on-error: true
         with:
           name: ${{ inputs.artifact_name }}
           path: .
+      - name: Download CTest XML artifact
+        uses: manticoresoftware/download_artifact_with_retries@v5
+        with:
+          name: ${{ inputs.artifact_name }}_ctest_xml
+          path: .
       - name: Convert the XML to JUnit format
         run: |
           shopt -s nullglob
-          for xml in build/test_*/Test.xml; do
+          xml_files=(build/test_*/Test.xml)
+          if [[ ${#xml_files[@]} -eq 0 ]]; then
+            echo "No CTest XML files found in downloaded artifacts"
+            find build -maxdepth 3 -type f | sort || true
+            exit 1
+          fi
+          for xml in "${xml_files[@]}"; do
             out="build/junit_$(basename "$(dirname "$xml")").xml"
             xsltproc -o "$out" misc/junit/ctest2junit.xsl "$xml"
           done
         shell: bash
       - name: Publish test results
+        if: github.repository_owner == 'manticoresoftware'
         uses: manticoresoftware/publish-unit-test-result-action@v2
         with:
-          check_name: Windows test results
+          check_name: ${{ inputs.results_name }}
           compare_to_earlier_commit: false
           files: build/junit_*.xml
           comment_mode: failures
+          job_summary: ${{ steps.test.outcome == 'failure' }}
       - name: Verify test job result
         run: |
           if [[ "${{ needs.test_windows.result }}" != "success" ]]; then

@@ -110,6 +110,7 @@ Known global server variables are:
 * `COREDUMP= {1|0}` Turns on/off saving a core file or a minidump of the server on crash. More details [here](../Starting_the_server/Manually.md#searchd-command-line-options).
 * `CPUSTATS= {1|0}` Turns on/off [CPU time tracking](../Starting_the_server/Manually.md#searchd-command-line-options).
 * `DISTINCT_PRECISION_THRESHOLD`: Sets the default value for the option [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) of future queries.
+* `EMBEDDINGS_THREADS = <non-negative integer>` Changes [embeddings_threads](../Server_settings/Searchd.md#embeddings_threads) at runtime. The value caps how many threads the embeddings library may use when generating vectors for auto-embedding inserts, `ALTER TABLE` KNN rebuilds, and KNN text-query embedding. `0` disables the cap.
 * `ES_COMPAT = {on/off/dashboards}` When set to `on` (default), Elasticsearch-like write requests are supported; `off` disables the support; `dashboards` enables the support and also allows requests from Kibana (this functionality is experimental).
 * `EXPANSION_MERGE_THRESHOLD_DOCS`: Changes the value of the config's [expansion_merge_threshold_docs](../Server_settings/Searchd.md#expansion_merge_threshold_docs) setting on-the-fly.
 * `EXPANSION_MERGE_THRESHOLD_HITS`: Changes the value of the config's [expansion_merge_threshold_hits](../Server_settings/Searchd.md#expansion_merge_threshold_hits) setting on-the-fly.

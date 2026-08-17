@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<sphinx:docset>
+<sphinx:document id="11">
+<title>running</title>
+<score>0</score>
+</sphinx:document>
+<sphinx:document id="12">
+<title>cat</title>
+<score>0</score>
+</sphinx:document>
+<sphinx:document id="13">
+<title>run cat</title>
+<score>0</score>
+</sphinx:document>
+<sphinx:document id="14">
+<title>alpha</title>
+<score>100</score>
+</sphinx:document>
+<sphinx:document id="15">
+<title>alpha alpha alpha</title>
+<score>1</score>
+</sphinx:document>
+</sphinx:docset>

@@ -2,49 +2,25 @@
 
 <!-- example installation expanded -->
 
-<!-- request RHEL, Centos, Alma, Amazon, Oracle -->
+<!-- request RHEL, Centos, Alma, Amazon, Oracle, Debian, Ubuntu, Mint, MacOS -->
 
 ``` bash
-sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-sudo yum install manticore
+curl https://manticoresearch.com | sh
 ```
-
-If you are upgrading from an older version, it is recommended to remove your old packages first to avoid conflicts caused by the updated package structure:
-```bash
-sudo yum --setopt=tsflags=noscripts remove manticore*
-```
-It won't remove your data. If you made changes to the configuration file, it will be saved to `/etc/manticoresearch/manticore.conf.rpmsave`.
 
 If you are looking for separate packages, please find them [here](https://manticoresearch.com/install/#separate-packages).
 
-For more details on the installation, see [below](../Installation/RHEL_and_Centos.md).
+For more details on the installation on RPM-based linuxes, see [here](../Installation/RHEL_and_Centos.md).
 
-<!-- request Debian, Ubuntu, Mint -->
+For more details on the installation on DEBIAN-based linuxes, see [here](../Installation/Debian_and_Ubuntu.md).
 
-``` bash
-wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
-sudo apt update
-sudo apt install manticore
-```
+Please find more details on the installation on macOS, see [below](../Installation/MacOS.md).
 
-If you are upgrading to Manticore 6 from an older version, it is recommended to remove your old packages first to avoid conflicts caused by the updated package structure:
-```bash
-sudo apt remove manticore*
-```
-It won't remove your data or configuration file.
-
-If you are looking for separate packages, please find them [here](https://manticoresearch.com/install/#separate-packages).
-
-For more details on the installation, see [below](../Installation/Debian_and_Ubuntu.md).
-
-<!-- request MacOS -->
+For more details about quick installer, run
 
 ``` bash
-brew install manticoresoftware/tap/manticoresearch manticoresoftware/tap/manticore-extra
+curl https://manticoresearch.com | sh -s help
 ```
-
-Please find more details on the installation [below](../Installation/MacOS.md).
 
 <!-- request Windows -->
 

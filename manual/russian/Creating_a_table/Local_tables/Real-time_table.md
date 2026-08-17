@@ -290,7 +290,7 @@ POST /sql?mode=raw -d "create table products LIKE old_products WITH DATA"
 * [Очищать таблицу](../../Emptying_a_table.md).
 * Изменять схему онлайн с помощью команды `ALTER`, как описано в [Изменение схемы онлайн](../../Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode).
 * Определять таблицу в конфигурационном файле, как подробно описано в [Определение таблицы](../../Creating_a_table/Local_tables/Real-time_table.md).
-* Использовать функцию [UUID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) для автоматического назначения ID.
+* Используйте [автоматическую генерацию ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID).
 
 ### ⛔ Что нельзя делать с таблицей реального времени:
 * Загружать данные с помощью функции [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).

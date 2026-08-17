@@ -65,6 +65,30 @@ table <table name> {
 
 ### Общие настройки для обычных таблиц и таблиц реального времени
 
+#### профиль
+
+`profile` — это SQL-only ярлык для применения заранее определённого набора настроек таблицы только в `CREATE TABLE`. В `ALTER TABLE` он не поддерживается. Само имя профиля **не** хранится в метаданных таблицы; Manticore сохраняет только развёрнутые настройки, поэтому `SHOW CREATE TABLE` выводит итоговые параметры, а не `profile=...`.
+
+Поддерживаются следующие значения:
+
+* `relevance` - разворачивается в:
+  * [`min_infix_len='2'`](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)
+  * [`index_field_lengths='1'`](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths)
+  * [`index_exact_words='1'`](../../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words)
+  * [`ranker=expr('1000*bm25a(1.2,0.75,256)')`](../../Searching/Options.md#ranker)
+  * [`morphology='stem_en'`](../../Creating_a_table/NLP_and_tokenization/Morphology.md#morphology)
+  * [`boolean_mode='or'`](../../Searching/Options.md#boolean_mode)
+
+Профиль `relevance` может улучшить ранжирование и полноту выдачи во многих англоязычных full-text нагрузках, но он также увеличивает объём работы при индексации и выполнении запроса, поэтому по сравнению с настройками по умолчанию может потребовать больше CPU, места на диске и памяти.
+
+Если вы также явно задаёте один из этих параметров, `profile` следует той же семантике дублирующихся настроек, что и обычные настройки `CREATE TABLE`: выигрывает первое вхождение. Поскольку профиль разворачивается в обычные настройки в момент создания, `profile='relevance' ranker='bm25'` сохраняет ranker из профиля, и полностью развёрнутая явная форма ведёт себя так же. Аналогично, `ranker='bm25' profile='relevance'` сохраняет `ranker='bm25'`.
+
+Развёрнутые настройки сохраняются в метаданных таблицы. `OPTION ranker=...` на уровне запроса по-прежнему переопределяет любой сохранённый ranker таблицы. Если запрос ищет по нескольким таблицам и не задаёт ranker, каждая таблица продолжает использовать свой собственный сохранённый ranker по умолчанию, включая локальные и удалённые распределённые таблицы. В этом случае Manticore объединяет результаты, используя исходные возвращённые веса; он **не** нормализует веса между разными ranker или выражениями, поэтому смешивание разных per-table ranker может привести к несопоставимому глобальному порядку.
+
+```sql
+CREATE TABLE products(title text) profile='relevance';
+```
+
 #### type
 
 ```ini
@@ -83,7 +107,7 @@ type = rt
 path = path/to/table
 ```
 
-Путь к месту хранения или расположения таблицы, абсолютный или относительный, без расширения.
+Путь, по которому таблица будет храниться или располагаться, абсолютный или относительный, без расширения.
 
 Значение: Путь к таблице, **обязательный параметр**
 
@@ -488,7 +512,7 @@ knn = {"attrs":[{"name":"image_vector","type":"hnsw","dims":768,"hnsw_similarity
 rt_attr_float_vector = embedding_vector
 rt_field = title
 rt_field = description
-knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}
+knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":"title"}]}
 ```
 
 **Обязательные параметры KNN:**
@@ -502,7 +526,7 @@ knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2",
 - `hnsw_ef_construction`: Компромисс между временем построения и точностью (по умолчанию: 200)
 
 **Параметры автоматических эмбеддингов** (при использовании `model_name`):
-- `model_name`: Модель вложений для использования (например, `"sentence-transformers/all-MiniLM-L6-v2"`, `"openai/text-embedding-ada-002"`, `"openai:text-embedding-ada-002"`). Когда указано, `dims` должно быть пропущено, так как модель определяет размерности автоматически.
+- `model_name`: Используемая модель эмбеддингов (например, `"Xenova/all-MiniLM-L6-v2"` для быстрого пути ONNX — см. [модели ONNX на Hugging Face](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm); также поддерживается `"sentence-transformers/all-MiniLM-L6-v2"`; для OpenAI — `"openai/text-embedding-ada-002"`). Если параметр указан, `dims` нужно опустить, поскольку модель автоматически определяет размерность.
 - `from`: Список имен полей, разделенных запятыми, для использования при генерации эмбеддингов, или пустая строка `""` для использования всех текстовых/строковых полей. Этот параметр обязателен при указании `model_name`.
 - `api_key`: API-ключ для моделей на основе API (OpenAI, Voyage, Jina). Требуется только для сервисов эмбеддингов на основе API.
 - `cache_path`: Необязательный путь для кэширования загруженных моделей (для моделей sentence-transformers).
@@ -994,6 +1018,7 @@ table products {
 * [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
 * [blend_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)
 * [blend_mode](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
+* [boolean_mode](../../Searching/Options.md#boolean_mode)
 * [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)
 * [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)
 * [embedded_limit](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)

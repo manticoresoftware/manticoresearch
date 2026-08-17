@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>binary api batched plain multiquery defaults</name>
+<skip_db/>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+}
+
+source src_plain_defaults
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data.xml
+	xmlpipe_field = title
+	xmlpipe_attr_uint = score
+}
+
+source src_plain_defaults_const
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data_const.xml
+	xmlpipe_field = title
+	xmlpipe_attr_uint = score
+}
+
+index plain_defaults
+{
+	source = src_plain_defaults
+	path = <data_path/>/plain_defaults
+	min_infix_len = 2
+	morphology = stem_en
+	index_exact_words = 1
+	index_field_lengths = 1
+	boolean_mode = or
+	ranker = expr('sum(score)')
+}
+
+index plain_defaults_const
+{
+	source = src_plain_defaults_const
+	path = <data_path/>/plain_defaults_const
+	min_infix_len = 2
+	morphology = stem_en
+	index_exact_words = 1
+	index_field_lengths = 1
+	boolean_mode = and
+	ranker = expr('1')
+}
+</config>
+
+<custom_test><![CDATA[
+global $sd_address, $sd_port;
+$cl = new APIClient();
+$cl->SetServer ( $sd_address, $sd_port );
+$cl->SetArrayResult ( true );
+$cl->SetMatchMode ( SPH_MATCH_EXTENDED2 );
+
+$simplify = function ( $res )
+{
+	if ( $res===false )
+		return array ( 'error' => 'query failed' );
+
+	$out = array();
+	if ( isset($res['warning']) && $res['warning'] )
+		$out['warning'] = $res['warning'];
+	if ( isset($res['error']) && $res['error'] )
+		$out['error'] = $res['error'];
+
+	$hits = array();
+	if ( isset($res['matches']) && is_array($res['matches']) )
+	{
+		foreach ( $res['matches'] as $match )
+		{
+			$id = isset($match['id']) ? (int)$match['id'] : 0;
+			$hits[$id] = isset($match['weight']) ? (int)$match['weight'] : null;
+		}
+	}
+	ksort ( $hits );
+	$out['hits'] = $hits;
+	$out['total'] = isset($res['total']) ? (int)$res['total'] : 0;
+	$out['total_found'] = isset($res['total_found']) ? (int)$res['total_found'] : 0;
+	return $out;
+};
+
+$cl->AddQuery ( 'running cat', 'plain_defaults,plain_defaults_const' );
+$cl->SetRankingMode ( SPH_RANK_EXPR, 'sum(score)' );
+$cl->AddQuery ( 'alpha', 'plain_defaults,plain_defaults_const' );
+
+$batch = $cl->RunQueries();
+$results = array();
+foreach ( $batch as $queryRes )
+	$results[] = $simplify ( $queryRes );
+
+]]></custom_test>
+
+</test>

@@ -19,7 +19,7 @@
 
 class ISphSchema;
 
-std::unique_ptr<columnar::Columnar_i>	CreateColumnarStorageReader ( const CSphString & sFile, DWORD uNumDocs, CSphString & sError );
+std::unique_ptr<columnar::Columnar_i>	CreateColumnarStorageReader ( const CSphString & sFile, DWORD uNumDocs, bool bMmap, CSphString & sError );
 std::unique_ptr<columnar::Builder_i>	CreateColumnarBuilder ( const ISphSchema & tSchema, const CSphString & sFilename, size_t tBufferSize, CSphString & sError );
 void					CheckColumnarStorage ( const CSphString & sFile, DWORD uNumRows, std::function<void (const char*)> fnError, std::function<void (const char*)> fnProgress );
 

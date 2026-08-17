@@ -256,10 +256,8 @@ mysql> debug;
 | command                                                                 | meaning                                                                                |
 +-------------------------------------------------------------------------+----------------------------------------------------------------------------------------+
 | flush logs                                                              | emulate USR1 signal                                                                    |
-| reload indexes                                                          | emulate HUP signal                                                                     |
+| reload tables                                                           | 模拟 HUP 信号                                                                     |
 | debug token <password>                                                  | calculate token for password                                                           |
-| debug malloc_stats                                                      | perform 'malloc_stats', result in searchd.log                                          |
-| debug malloc_trim                                                       | pefrorm 'malloc_trim' call                                                             |
 | debug sleep <N>                                                         | sleep for <N> seconds                                                                  |
 | debug tasks                                                             | display global tasks stat (use select from @@system.tasks instead)                     |
 | debug sched                                                             | display task manager schedule (use select from @@system.sched instead)                 |
@@ -268,14 +266,16 @@ mysql> debug;
 | debug files <TBL> [option format=all|external]                          | list files belonging to <TBL>. 'all' - including external (wordforms, stopwords, etc.) |
 | debug close                                                             | ask server to close connection from it's side                                          |
 | debug compress <TBL> [chunk] <X> [option sync=1]                        | Compress disk chunk X of RT table <TBL> (wipe out deleted documents)                   |
+| debug dedup <TBL> [chunk] <X>                                           | 清除 RT 表 <TBL> 的磁盘块 X 中的重复项（将重复项标记为已删除）          |
 | debug split <TBL> [chunk] <X> on @<uservar> [option sync=1]             | Split disk chunk X of RT table <TBL> using set of DocIDs from @uservar                 |
 | debug wait <cluster> [like 'xx'] [option timeout=3]                     | wait <cluster> ready, but no more than 3 secs.                                         |
 | debug wait <cluster> status <N> [like 'xx'] [option timeout=13]         | wait <cluster> commit achieve <N>, but no more than 13 secs                            |
 | debug meta                                                              | Show max_matches/pseudo_shards. Needs set profiling=1                                  |
 | debug trace OFF|'path/to/file' [<N>]                                    | trace flow to file until N bytes written, or 'trace OFF'                               |
 | debug curl <URL>                                                        | request given url via libcurl                                                          |
+| debug pause <ID> on|off                                                 | 切换命名断点 [仅限开发]                                                     |
 +-------------------------------------------------------------------------+----------------------------------------------------------------------------------------+
-19 rows in set (0.00 sec)
+19 行结果（0.01 秒）
 ```
 
 同样来自 VIP 连接：
@@ -285,12 +285,10 @@ mysql> debug;
 | command                                                                 | meaning                                                                                |
 +-------------------------------------------------------------------------+----------------------------------------------------------------------------------------+
 | flush logs                                                              | emulate USR1 signal                                                                    |
-| reload indexes                                                          | emulate HUP signal                                                                     |
+| reload tables                                                           | 模拟 HUP 信号                                                                     |
 | debug shutdown <password>                                               | emulate TERM signal                                                                    |
 | debug crash <password>                                                  | crash daemon (make SIGSEGV action)                                                     |
 | debug token <password>                                                  | calculate token for password                                                           |
-| debug malloc_stats                                                      | perform 'malloc_stats', result in searchd.log                                          |
-| debug malloc_trim                                                       | pefrorm 'malloc_trim' call                                                             |
 | debug procdump                                                          | ask watchdog to dump us                                                                |
 | debug setgdb on|off                                                     | enable or disable potentially dangerous crash dumping with gdb                         |
 | debug setgdb status                                                     | show current mode of gdb dumping                                                       |
@@ -302,12 +300,14 @@ mysql> debug;
 | debug files <TBL> [option format=all|external]                          | list files belonging to <TBL>. 'all' - including external (wordforms, stopwords, etc.) |
 | debug close                                                             | ask server to close connection from it's side                                          |
 | debug compress <TBL> [chunk] <X> [option sync=1]                        | Compress disk chunk X of RT table <TBL> (wipe out deleted documents)                   |
+| debug dedup <TBL> [chunk] <X>                                           | 清除 RT 表 <TBL> 的磁盘块 X 中的重复项（将重复项标记为已删除）          |
 | debug split <TBL> [chunk] <X> on @<uservar> [option sync=1]             | Split disk chunk X of RT table <TBL> using set of DocIDs from @uservar                 |
 | debug wait <cluster> [like 'xx'] [option timeout=3]                     | wait <cluster> ready, but no more than 3 secs.                                         |
 | debug wait <cluster> status <N> [like 'xx'] [option timeout=13]         | wait <cluster> commit achieve <N>, but no more than 13 secs                            |
 | debug meta                                                              | Show max_matches/pseudo_shards. Needs set profiling=1                                  |
 | debug trace OFF|'path/to/file' [<N>]                                    | trace flow to file until N bytes written, or 'trace OFF'                               |
 | debug curl <URL>                                                        | request given url via libcurl                                                          |
+| debug pause <ID> on|off                                                 | 切换命名断点 [仅限开发]                                                     |
 +-------------------------------------------------------------------------+----------------------------------------------------------------------------------------+
 24 rows in set (0.00 sec)
 ```

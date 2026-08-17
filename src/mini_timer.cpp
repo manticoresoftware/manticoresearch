@@ -84,6 +84,7 @@ class TinyTimer_c
 
 	// thread
 	SphThread_t m_tCounterThread;
+	std::atomic<bool> m_bCounterThreadJoinable { false };
 	std::atomic<LowThreadDesc_t*> m_pCounterThread { nullptr };
 
 private:
@@ -194,7 +195,9 @@ public:
 		RegisterIterator ( [this] ( const ThreadFN& fnHandler ) {
 			fnHandler ( m_pCounterThread.load ( std::memory_order_relaxed ) );
 		} );
-		Create ( &m_tCounterThread, [this] { Loop (); }, false, "Timer" );
+		m_bCounterThreadJoinable.store (
+			Create ( &m_tCounterThread, [this] { Loop (); }, false, "Timer" ),
+			std::memory_order_release );
 	}
 
 	~TinyTimer_c()
@@ -206,7 +209,7 @@ public:
 	void Stop() noexcept
 	{
 		m_bInterrupted.store ( true, std::memory_order_release );
-		if ( !g_bTimerActive )
+		if ( !m_bCounterThreadJoinable.exchange ( false, std::memory_order_acq_rel ) )
 			return;
 		Kick();
 		Join ( &m_tCounterThread );
@@ -322,7 +325,7 @@ MiniTimer_c::~MiniTimer_c()
 
 void sph::ShutdownMiniTimer()
 {
-	if ( g_bTimerActive )
+	if ( g_bTimerCreated )
 		g_TinyTimer().Stop();
 }
 

@@ -43,9 +43,9 @@ public:
 		SetFilterSchema ( CSphSchema(), sError );
 	}
 
-	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const noexcept final
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode, int iTokenBytes=0 ) const noexcept final
 	{
-		return TokenizerRefPtr_c { new PluginFilterTokenizer_c ( m_pTokenizer->Clone ( eMode ), m_pFilter, m_sOptions.cstr() ) };
+		return TokenizerRefPtr_c { new PluginFilterTokenizer_c ( m_pTokenizer->Clone ( eMode, iTokenBytes ), m_pFilter, m_sOptions.cstr() ) };
 	}
 
 	bool SetFilterSchema ( const CSphSchema& s, CSphString& sError ) final
@@ -134,8 +134,7 @@ public:
 			}
 
 			// compute proper position delta
-			m_iPosDelta = ( m_bWasBlended ? 0 : 1 ) + CSphTokenFilter::GetOvershortCount();
-			m_bWasBlended = CSphTokenFilter::TokenIsBlended();
+			SetRawTokenState();
 
 			// push raw token to plugin, return a processed one, if any
 			int iExtra = 0;
@@ -153,6 +152,12 @@ public:
 	}
 
 private:
+	void SetRawTokenState()
+	{
+		m_iPosDelta = ( m_bWasBlended ? 0 : 1 ) + CSphTokenFilter::GetOvershortCount();
+		m_bWasBlended = CSphTokenFilter::TokenIsBlended();
+	}
+
 	void GetBlended()
 	{
 		if ( m_pFilter->m_fnTokenIsBlended )

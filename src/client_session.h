@@ -55,6 +55,7 @@ public:
 	bool m_bAutoCommit = true;
 	bool m_bInTransaction = false;
 	CSphVector<int64_t> m_dLastIds;
+	CSphVector<CSphString> m_dLastIdStrings;
 	QueryProfile_c m_tProfile;
 	QueryProfile_c m_tLastProfile;
 	bool m_bOptimizeById = true;
@@ -62,6 +63,8 @@ public:
 	bool m_bShardPhysicalUpdate = false;
 	StrVec_t m_dLockedTables;
 	PreparedStatements m_dPreparedStatements;
+	bool m_bAuthAllowBuddy = false;
+	bool m_bAuthErrorSkipBuddy = false;
 
 public:
 	NONCOPYMOVABLE ( ClientSession_c );

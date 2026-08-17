@@ -2,49 +2,25 @@
 
 <!-- example installation expanded -->
 
-<!-- request RHEL, Centos, Alma, Amazon, Oracle -->
+<!-- request RHEL, Centos, Alma, Amazon, Oracle, Debian, Ubuntu, Mint, MacOS -->
 
 ``` bash
-sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-sudo yum install manticore
+curl https://manticoresearch.com | sh
 ```
-
-Если вы обновляетесь с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновленной структурой пакетов:
-```bash
-sudo yum --setopt=tsflags=noscripts remove manticore*
-```
-Это не удалит ваши данные. Если вы внесли изменения в файл конфигурации, он будет сохранен как `/etc/manticoresearch/manticore.conf.rpmsave`.
 
 Если вы ищете отдельные пакеты, вы можете найти их [здесь](https://manticoresearch.com/install/#separate-packages).
 
-Для получения подробной информации об установке смотрите [ниже](../Installation/RHEL_and_Centos.md).
+Подробнее об установке в Linux на базе RPM см. [здесь](../Installation/RHEL_and_Centos.md).
 
-<!-- request Debian, Ubuntu, Mint -->
+Подробнее об установке в Linux на базе DEBIAN см. [здесь](../Installation/Debian_and_Ubuntu.md).
 
-``` bash
-wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
-sudo apt update
-sudo apt install manticore
-```
+Подробнее об установке в macOS см. [ниже](../Installation/MacOS.md).
 
-Если вы обновляетесь до Manticore 6 с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновленной структурой пакетов:
-```bash
-sudo apt remove manticore*
-```
-Это не удалит ваши данные или файл конфигурации.
-
-Если вы ищете отдельные пакеты, вы можете найти их [здесь](https://manticoresearch.com/install/#separate-packages).
-
-Для получения подробной информации об установке смотрите [ниже](../Installation/Debian_and_Ubuntu.md).
-
-<!-- request MacOS -->
+Подробнее о быстром установщике выполните
 
 ``` bash
-brew install manticoresoftware/tap/manticoresearch manticoresoftware/tap/manticore-extra
+curl https://manticoresearch.com | sh -s help
 ```
-
-Подробную информацию об установке смотрите [ниже](../Installation/MacOS.md).
 
 <!-- request Windows -->
 

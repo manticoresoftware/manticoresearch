@@ -76,6 +76,104 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 ```
 <!-- end -->
 
+### 认证
+
+<!-- example conf auth -->
+启用[认证和授权](../Security/Authentication_and_authorization.md)。可选，默认为空，表示禁用认证。
+
+在[RT 模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)下，使用 `auth = 1` 启用认证。Manticore 会将认证数据存储在 [data_dir](../Server_settings/Searchd.md#data_dir) 下的 `auth.json` 中。使用 `auth = 0` 或省略该设置可禁用认证。
+
+在[普通模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)下，将 `auth` 设为认证文件路径。不要在普通模式下使用 `auth = 1`。
+
+启用认证后，如果认证文件不存在，守护进程会创建它。在首次引导之前，缺失或为空的存储都是有效的，包括零字节文件、仅包含空白字符的文件、空 JSON 对象，或空的用户和权限数组。引导完成后会写入完整的认证 JSON。启动时，守护进程会拒绝无效路径、不可读文件、组或其他用户可读文件、格式错误的 JSON、重复存储的密钥以及无效的 auth 数据结构。请保持该文件私有；守护进程创建的文件权限为 `600`。
+
+<!-- intro -->
+##### RT 模式：
+
+<!-- request RT mode -->
+```ini
+searchd {
+    data_dir = /var/lib/manticore
+    auth = 1
+}
+```
+
+<!-- request Disable -->
+```ini
+searchd {
+    data_dir = /var/lib/manticore
+    auth = 0
+}
+```
+
+<!-- intro -->
+##### 普通模式：
+
+<!-- request Plain mode -->
+```ini
+searchd {
+    auth = /path/to/auth.json
+}
+```
+<!-- end -->
+
+### auth_log_level
+
+<!-- example conf auth_log_level -->
+控制认证日志的详细程度。可选，默认值为 `info`。
+
+认证事件会写入守护进程日志旁边的独立日志文件。如果 [log](../Server_settings/Searchd.md#log) 是 `/var/log/manticore/searchd.log`，则认证日志为 `/var/log/manticore/searchd.log.auth`。
+
+支持的值：
+
+* `disabled` - 不记录认证事件。
+* `error` - 记录权限拒绝和严重故障。
+* `warning` - 记录错误和认证失败尝试。
+* `info` - 记录警告、成功的认证管理变更，以及集群加入时的 auth 数据备份。
+* `all` - 记录 `info` 级事件以及面向用户的成功认证事件。
+* `trace` - 记录 `all` 级事件，并额外记录成功的内部传输认证，例如 Manticore Buddy 和守护进程之间的 API 认证。
+
+成功的授权允许检查在任何级别都不会被记录。权限拒绝会被记录，但允许检查可能出现在每个查询中，即使在 `trace` 模式下也会让认证日志变得很嘈杂。
+
+当 `JOIN CLUSTER` 替换本地认证数据时，`info`、`all` 和 `trace` 日志会将先前本地 auth 数据的 JSON 备份写入 `searchd.log.auth`。该备份可能包含用户名、salt、密码哈希和 bearer 哈希。请将认证日志视为敏感的运维数据，并在共享前进行脱敏。
+
+<!-- request Example -->
+```ini
+auth_log_level = warning
+```
+<!-- end -->
+
+### auth_password_policy
+
+<!-- example conf auth_password_policy -->
+控制认证用户的密码校验。可选，默认值为 `LOW`。
+
+支持的值：
+
+* `LOW` - 要求密码非空，并满足 [auth_password_min_length](../Server_settings/Searchd.md#auth_password_min_length) 的长度要求。
+* `MEDIUM` - 在 `LOW` 的基础上，还要求至少包含一个小写字母、一个大写字母、一个数字和一个非字母数字字符。
+
+该策略适用于 `searchd --auth`、`CREATE USER` 和 `SET PASSWORD`。
+
+<!-- request Example -->
+```ini
+auth_password_policy = MEDIUM
+```
+<!-- end -->
+
+### auth_password_min_length
+
+<!-- example conf auth_password_min_length -->
+定义认证用户密码的最小长度。可选，默认值为 `8`。
+
+最小长度适用于 `searchd --auth`、`CREATE USER` 和 `SET PASSWORD`。
+
+<!-- request Example -->
+```ini
+auth_password_min_length = 12
+```
+<!-- end -->
+
 ### auto_optimize
 
 <!-- example conf auto_optimize -->
@@ -89,6 +187,8 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 默认情况下，阈值为逻辑 CPU 核心数乘以 2。
 
 不过，如果表中包含带 KNN 索引的属性，默认阈值会不同。在这种情况下，它被设为物理 CPU 核心数除以 2，最小值为 1，以提升 KNN 搜索性能。
+
+当 [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) 没有显式设置时（无论是全局还是按表），自动压缩都不会把表合并到少于 2 个磁盘块，即使计算出的默认阈值更低也是如此（这在 CPU 核心较少的服务器上可能发生，尤其是 KNN 表）。如果要让自动压缩继续合并到单个磁盘块，请将 `optimize_cutoff` 显式设置为 `1`。
 
 请注意，切换 `auto_optimize` 的开关状态并不会阻止你手动运行 [OPTIMIZE TABLE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE)。
 
@@ -187,6 +287,32 @@ knn_parallel_build = 1
 <!-- request Increase -->
 ```ini
 knn_parallel_build = 4
+```
+
+<!-- end -->
+
+### embeddings_threads
+
+<!-- example conf embeddings_threads -->
+此设置限制 Manticore 将文本转换为向量时可使用的 CPU 线程数。它适用于自动 embedding 运行的所有场景：向使用 `model_name`/`from` 的表插入行时，`ALTER TABLE` 重建自动嵌入的 `float_vector` 列时，以及 `knn(<field>, '<text>', ...)` 搜索将查询以文本形式提供时。
+
+实际使用的线程数还会受到当前空闲 worker 数量的限制，因此即使上限很高，繁忙的服务器也会使用更少的线程。使用此选项可以避免某个大型 embedding 批次饿死并发搜索。
+
+默认值为 `4`。设为 `0` 可取消上限，此时 embeddings 库会自行决定使用多少线程（仍受空闲 worker 数量限制）。
+
+此值可在运行时通过 `SET GLOBAL embeddings_threads = N` 修改，并可通过 `SHOW VARIABLES` 查看。对于 KNN `SELECT` 查询，还可以使用 `OPTION embeddings_threads = N` 按查询覆盖（见 [KNN 向量搜索](../Searching/KNN.md#KNN-vector-search)）。
+
+<!-- intro -->
+##### 示例：
+
+<!-- request Default -->
+```ini
+embeddings_threads = 4
+```
+
+<!-- request Uncapped -->
+```ini
+embeddings_threads = 0
 ```
 
 <!-- end -->

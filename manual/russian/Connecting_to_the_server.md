@@ -7,6 +7,8 @@
   * порт 9308 для HTTP/HTTPS подключений
   * порт 9312 для HTTP/HTTPS, а также подключений от других узлов Manticore и клиентов, основанных на бинарном API Manticore
 
+Если включены [аутентификация и авторизация](Security/Authentication_and_authorization.md), MySQL-клиенты должны подключаться с именем пользователя и паролем Manticore, а клиенты HTTP/HTTPS должны использовать Basic-аутентификацию или bearer token. Имена пользователей чувствительны к регистру. См. [Аутентификация и авторизация](Security/Authentication_and_authorization.md) для начальной настройки, а также создания или ротации bearer token.
+
 <!-- intro -->
 ##### Подключение через MySQL:
 
@@ -140,4 +142,3 @@ docker run --name manticore -d manticoresearch/manticore && docker exec -it mant
 ```
 <!-- end -->
 <!-- proofread -->
-

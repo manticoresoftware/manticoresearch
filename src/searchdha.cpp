@@ -1878,16 +1878,23 @@ void AgentConn_t::RecvCallback ( int64_t iWaited, DWORD uReceived )
 }
 
 /// if iovec is empty, prepare (build) the request.
-void AgentConn_t::BuildData ()
+bool AgentConn_t::BuildData ()
 {
 	if ( m_pBuilder && m_dIOVec.IsEmpty () )
 	{
 		sphLogDebugA ( "%d BuildData for this=%p, m_pBuilder=%p", m_iStoreTag, this, m_pBuilder );
 		// prepare our data to send.
 		m_pBuilder->BuildRequest ( *this, m_tOutput );
+
+		CSphString sError;
+		if ( !ApiEncrypt ( m_tApiKey, m_tOutput, sError ) )
+			return Fatal ( eWrongQuery, "%s", sError.cstr() );
+
 		m_dIOVec.BuildFrom ( m_tOutput );
 	} else
 		sphLogDebugA ( "%d BuildData, already done", m_iStoreTag );
+
+	return true;
 }
 
 //! How many bytes we can read to m_pReplyCur (in bytes)
@@ -2018,7 +2025,9 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 	// fixme! ConnectEx doesn't accept scattered buffer. Need to prepare plain one for at least MSS size
 #endif
 
-	BuildData ();
+	if ( !BuildData() )
+		return -1;
+
 	if ( !m_pPollerTask )
 		ScheduleCallbacks ();
 	sphLogDebugA ( "%d overlaped ConnectEx called", m_iStoreTag );
@@ -2049,7 +2058,9 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 #else // _WIN32
 #if defined (MSG_FASTOPEN)
 
-	BuildData ();
+	if ( !BuildData() )
+		return -1;
+
 	struct msghdr dHdr = { 0 };
 	dHdr.msg_iov = m_dIOVec.IOPtr ();
 	dHdr.msg_iovlen = m_dIOVec.IOSize ();
@@ -2062,7 +2073,9 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 	sAddr.sae_dstaddr = pSs;
 	sAddr.sae_dstaddrlen = iLen;
 
-	BuildData ();
+	if ( !BuildData() )
+		return -1;
+
 	size_t iSent = 0;
 	auto iRes = connectx ( m_iSock, &sAddr, SAE_ASSOCID_ANY, CONNECT_RESUME_ON_READ_WRITE | CONNECT_DATA_IDEMPOTENT
 						   , m_dIOVec.IOPtr (), m_dIOVec.IOSize (), &iSent, nullptr );
@@ -2291,6 +2304,26 @@ void AgentConn_t::GenericInit ( RequestBuilder_i * pQuery, ReplyParser_i * pPars
 	State ( Agent_e::HEALTHY );
 }
 
+void AgentConn_t::EnableRemoteReplyHeartbeats ()
+{
+	m_bRemoteReplyHeartbeats = true;
+}
+
+bool AgentConn_t::ExpectsRemoteReplyHeartbeat () const
+{
+	return m_bRemoteReplyHeartbeats;
+}
+
+void AgentConn_t::AcceptRemoteReplyHeartbeat ()
+{
+	const int64_t iNowUS = MonoMicroTimer ();
+
+	m_iPoolerTimeoutPeriodUS = m_iMyQueryTimeoutMs * 1000;
+	m_iPoolerTimeoutUS = iNowUS + m_iPoolerTimeoutPeriodUS;
+	LazyDeleteOrChange ( m_iPoolerTimeoutUS, m_iPoolerTimeoutPeriodUS );
+	sphLogDebugv ( "remote reply heartbeat accepted from %s, lease renewed for " INT64_FMT " ms", m_tDesc.GetMyUrl().cstr(), m_iMyQueryTimeoutMs );
+}
+
 /// an entry point to the whole remote agent's work
 void AgentConn_t::StartRemoteLoopTry ()
 {
@@ -2298,6 +2331,7 @@ void AgentConn_t::StartRemoteLoopTry ()
 	while ( StartNextRetry () )
 	{
 		/// reset state before every retry
+		m_bKeepReplyBufferAfterParse = false;
 		m_dIOVec.Reset ();
 		m_tOutput.Reset ();
 		InitReplyBuf ();
@@ -2353,7 +2387,7 @@ bool AgentConn_t::DoQuery()
 	if ( IsPersistent() && m_iSock==-1 )
 	{
 		{
-			auto tHdr = APIHeader ( m_tOutput, SEARCHD_COMMAND_PERSIST );
+			auto tHdr = APIHeader ( m_tOutput, SEARCHD_COMMAND_PERSIST, 0 );
 			m_tOutput.SendInt ( 1 ); // set persistent to 1.
 		}
 		m_tOutput.StartNewChunk ();
@@ -2384,7 +2418,8 @@ bool AgentConn_t::DoQuery()
 	// for blackholes we parse query immediately, since builder will be disposed
 	// outside once we returned from the function
 	if ( IsBlackhole () )
-		BuildData ();
+		return BuildData();
+
 	return true;
 }
 
@@ -2464,8 +2499,9 @@ bool AgentConn_t::SendQuery ( DWORD uSent )
 
 	// here we have connected socket and are in process of sending blob there.
 	// prepare our data to send.
-	if ( !uSent )
-		BuildData ();
+	if ( !uSent &&  !BuildData() )
+		return false;
+
 	SSIZE_T iRes = 0;
 	while ( m_dIOVec.HasUnsent () )
 	{
@@ -2532,16 +2568,37 @@ bool AgentConn_t::ReceiveAnswer ( DWORD uRecv )
 			if ( !iRest ) // not only handshake, but whole header is here
 			{
 				auto uStat = dBuf.GetWord ();
-				auto VARIABLE_IS_NOT_USED uVer = dBuf.GetWord (); // there is version here. But it is not used.
+				auto uVer = dBuf.GetWord ();
 				auto iReplySize = dBuf.GetInt ();
 
 				sphLogDebugA ( "%d Header (Status=%d, Version=%d, answer need %d bytes)", m_iStoreTag, uStat, uVer, iReplySize );
 
+				if ( uStat==SEARCHD_IN_PROGRESS )
+				{
+					if ( !ExpectsRemoteReplyHeartbeat () )
+						return Fatal ( eWrongReplies, "unexpected in-progress reply (version=%d, len=%d)", uVer, iReplySize );
+					if ( iReplySize!=0 )
+						return Fatal ( eWrongReplies, "invalid in-progress reply size (len=%d, expected=0)", iReplySize );
+
+					AcceptRemoteReplyHeartbeat ();
+					InitReplyBuf ();
+					m_pReplyCur += sizeof ( int );
+					m_bConnectHandshake = false;
+					continue;
+				}
+
 				if ( iReplySize<0 || ( m_bReplyLimitSize && iReplySize>g_iMaxPacketSize ) ) // FIXME! add reasonable max packet len too
 					return Fatal ( eWrongReplies, "invalid packet size (status=%d, len=%d, max_packet_size=%d)", uStat, iReplySize, g_iMaxPacketSize );
 
-				// allocate buf for reply
-				InitReplyBuf ( iReplySize );
+				// Keep an empty terminal distinct from the header-reading sentinel.
+				if ( iReplySize )
+					InitReplyBuf ( iReplySize );
+				else
+				{
+					m_dReplyBuf.Reset ( 0 );
+					m_iReplySize = 0;
+					m_pReplyCur = nullptr;
+				}
 				m_eReplyStatus = ( SearchdStatus_e ) uStat;
 			}
 		}
@@ -2578,6 +2635,15 @@ void AgentConn_t::SetNoLimitReplySize()
 bool AgentConn_t::CommitResult ()
 {
 	sphLogDebugA ( "%d CommitResult() ref=%d, parser %p", m_iStoreTag, ( int ) GetRefcount (), m_pParser );
+	AT_SCOPE_EXIT ( [this] {
+		// A complete reply no longer has active transport operations. Drop request views before
+		// their backing output and preserve only reply buffers explicitly borrowed by a parser.
+		m_dIOVec.Reset ();
+		m_tOutput.Reset ();
+		if ( !m_bKeepReplyBufferAfterParse )
+			InitReplyBuf ();
+	} );
+
 	if ( !m_pParser )
 	{
 		Finish();
@@ -2591,25 +2657,44 @@ bool AgentConn_t::CommitResult ()
 		return true;
 	}
 
-	MemInputBuffer_c tReq ( m_dReplyBuf.Begin (), m_iReplySize );
-
 	if ( m_eReplyStatus == SEARCHD_RETRY )
 	{
+		MemInputBuffer_c tReq ( m_dReplyBuf.Begin(), m_iReplySize );
 		m_sFailure.SetSprintf ( "remote warning: %s", tReq.GetString ().cstr () );
 		return BadResult ( -1 );
 	}
 
 	if ( m_eReplyStatus == SEARCHD_ERROR )
 	{
+		MemInputBuffer_c tReq ( m_dReplyBuf.Begin(), m_iReplySize );
 		m_sFailure.SetSprintf ( "remote error: %s", tReq.GetString ().cstr () );
 		return BadResult ( -1 );
 	}
+
+	// failures unecrypted
+	if ( !ApiDecryptReply ( m_tApiKey, m_dReplyBuf, m_sFailure ) )
+	{
+		m_sFailure.SetSprintf ( "remote error: %s", m_sFailure.cstr () );
+		m_eReplyStatus = SEARCHD_ERROR;
+		return BadResult ( -1 );
+	}
+
+	m_pReplyCur = m_dReplyBuf.begin ();
+	m_iReplySize = m_dReplyBuf.GetLength();
+	BYTE uEmptyReply = 0;
+	MemInputBuffer_c tReq ( m_dReplyBuf.IsEmpty () ? &uEmptyReply : m_dReplyBuf.begin (), m_dReplyBuf.GetLength () );
 
 	bool bWarnings = ( m_eReplyStatus == SEARCHD_WARNING );
 	if ( bWarnings )
 		m_sFailure.SetSprintf ( "remote warning: %s", tReq.GetString ().cstr () );
 
-	if ( !m_pParser->ParseReply ( tReq, *this ) )
+	const bool bParsed = m_pParser->ParseReply ( tReq, *this );
+	if ( tReq.GetError () )
+	{
+		m_sFailure.SetSprintf ( "failed to parse remote reply: %s", tReq.GetErrorMessage ().cstr () );
+		return BadResult ( -1 );
+	}
+	if ( !bParsed )
 		return BadResult ();
 
 	Finish();
@@ -3867,4 +3952,3 @@ bool sphNBSockEof ( int iSock )
 		return true;
 	return false;
 }
-

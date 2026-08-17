@@ -27,7 +27,7 @@ indextool <command> [options]
 * `--dumpheader FILENAME.sph` 立即转储指定的表头文件，而不会干扰任何其他表文件或配置文件。报告详细显示所有表设置，尤其是完整的属性和字段列表。
 * `--dumpconfig FILENAME.sph` 以几乎符合 manticore.conf 文件格式的格式，提取指定表头文件的表定义。
 * `--dumpheader TABLENAME` 按表名转储表头，同时在配置文件中查找表头路径。
-* `--dumpdict TABLENAME` 转储字典。额外的 `-stats` 开关会向字典转储中添加文档总数。这对于用于 IDF 文件创建的字典文件是必需的。
+* `--dumpdict TABLENAME` 会导出词典。额外加上 `-stats` 开关会在词典导出中加入文档总数。这对于用于创建 IDF 文件的词典文件是必需的。该命令目前还不支持 `dict=keywords_32k` 词典。
 * `--dumpdocids TABLENAME` 按表名转储文档 ID。
 * `--dumphitlist TABLENAME KEYWORD` 转储指定表中某关键词的所有实例（出现次数），关键词以文本定义。
 * `--dumphitlist TABLENAME --wordid ID` 转储指定表中某关键词的所有实例（出现次数），关键词以内部数字 ID 表示。

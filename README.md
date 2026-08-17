@@ -40,37 +40,37 @@ Manticore Search is an easy-to-use, open-source, and fast database designed for 
 
 # Introduction
 
-**❗Read recent [blog post about Manticore vs Elasticsearch](https://manticoresearch.com/blog/manticore-alternative-to-elasticsearch/)❗**
+What distinguishes Manticore from other solutions is:
+* It's very fast and therefore more cost-efficient than alternatives. In the current [reproducible benchmarks](https://github.com/db-benchmarks/db-benchmarks), Manticore Search 27.1.5 is:
+  - [**340x faster** than MySQL 9.7.1](https://db-benchmarks.com/?cache=fast_avg&engines=manticoresearch_27.1.5%2Cmysql_9.7.1&tests=hn_small&memory=110000) and [**6.51x faster** than Typesense 27.1](https://db-benchmarks.com/?cache=fast_avg&engines=manticoresearch_27.1.5%2Ctypesense_27.1&tests=hn_small&memory=110000) for 1.1M Hacker News comments
+  - **3.85x faster** than tuned Elasticsearch 9.4.3 for [100M+ Hacker News comments](https://db-benchmarks.com/?cache=fast_avg&engines=manticoresearch_rowwise_27.1.5%2Celasticsearch_tuned_9.4.3&tests=hn&memory=110000)
+  - [**5.03x faster** than tuned Elasticsearch 9.4.3](https://db-benchmarks.com/?cache=fast_avg&engines=elasticsearch_tuned_9.4.3%2Cmanticoresearch_columnar_27.1.5&tests=logs10m&memory=110000&queries=0%2C1%2C3%2C4%2C10%2C11) for selected typical DevOps queries on 10M Nginx logs; [**1.71x faster** than ClickHouse 26.6.1.1193](https://db-benchmarks.com/?cache=fast_avg&engines=manticoresearch_columnar_27.1.5%2Cclickhouse_26.6.1.1193&tests=logs10m&memory=110000) across the dashboard's default 10M-log query selection
+  - [**2.02x faster** than tuned Elasticsearch 9.4.3](https://db-benchmarks.com/?cache=fast_avg&engines=manticoresearch_columnar_27.1.5%2Celasticsearch_tuned_9.4.3&tests=taxi&memory=110000) and [**3.16x faster** than ClickHouse 26.6.1.1193](https://db-benchmarks.com/?cache=fast_avg&engines=manticoresearch_columnar_27.1.5%2Cclickhouse_26.6.1.1193&tests=taxi&memory=110000) for 1.7B NYC taxi rides
+  - For the same [10M Nginx-log ingestion](https://db-benchmarks.com/?cache=fast_avg&engines=elasticsearch_tuned_9.4.3%2Cmanticoresearch_columnar_27.1.5&tests=logs10m&memory=110000&queries=0%2C1%2C3%2C4%2C10%2C11), Manticore Search Columnar 27.1.5 completed in **5m 46s** vs **10m 15s** for tuned Elasticsearch 9.4.3, using **1.02 vs 3.80 CPU cores** on average, **3.98 GB vs 36.98 GB RAM** on average, and **0.41 MB read / 8.05 GB written** vs **322.14 MB read / 18.47 GB written**.
 
-What distinguishes it from other solutions is:
-* It's very fast and therefore more cost-efficient than alternatives, for example Manticore is:
-  - **182x faster** than MySQL for [small data](https://db-benchmarks.com/test-hn-small/#mysql-vs-manticore-search) ([reproducible](https://github.com/db-benchmarks/db-benchmarks#get-started)❗)
-  - **29x faster** than Elasticsearch for [log analytics](https://db-benchmarks.com/test-logs10m/#elasticsearch-with-no-tuning-vs-manticore-search-default-row-wise-storage) ([reproducible](https://github.com/db-benchmarks/db-benchmarks#get-started)❗)
-  - **15x faster** than Elasticsearch for [small dataset](https://db-benchmarks.com/test-hn-small/#manticore-search-vs-elasticsearch) ([reproducible](https://github.com/db-benchmarks/db-benchmarks#get-started)❗)
-  - **5x faster** than Elasticsearch for [medium-size data](https://db-benchmarks.com/test-hn/#manticore-search-columnar-storage-vs-elasticsearch) ([reproducible](https://github.com/db-benchmarks/db-benchmarks#get-started)❗)
-  - **4x faster** than Elasticsearch for [big data](https://db-benchmarks.com/test-taxi/#manticore-search-vs-elasticsearch) ([reproducible](https://github.com/db-benchmarks/db-benchmarks#get-started)❗)
-  - **up to 2x faster** max throughput than Elasticsearch's for data ingestion on a single server ([reproducible](https://manticoresearch.com/blog/manticore-alternative-to-elasticsearch/#data-ingestion-performance)❗)
-* With its modern multithreading architecture and efficient query parallelization capabilities, Manticore is able to fully utilize all your CPU cores to achieve the quickest response times possible.
-* The powerful and speedy full-text search works seamlessly with both small and large datasets.
-* Hybrid search combines full-text and vector retrieval in a single query for better relevance.
-* Row-wise storage for small, medium and big size datasets.
-* For even larger datasets, Manticore offers columnar storage support through the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/), capable of handling datasets too big to fit in RAM.
-* Performant secondary indexes are automatically created using the PGM-index (Piecewise Geometric Model index), which provides efficient mapping between indexed keys and their memory locations.
-* The cost-based query optimizer uses statistical data about indexed data to evaluate and determine the most efficient execution plan.
-* Manticore is SQL-first, utilizing SQL as its native syntax, and offers compatibility with the MySQL protocol, allowing you to use your preferred MySQL client.
-* With clients available in [PHP](https://github.com/manticoresoftware/manticoresearch-php), [Python](https://github.com/manticoresoftware/manticoresearch-python), [Python asyncio](https://github.com/manticoresoftware/manticoresearch-python-asyncio) [JavaScript](https://github.com/manticoresoftware/manticoresearch-javascript), [Typescript](https://github.com/manticoresoftware/manticoresearch-typescript), [Java](https://github.com/manticoresoftware/manticoresearch-java), [Elixir](https://github.com/manticoresoftware/manticoresearch-elixir), [Go](https://github.com/manticoresoftware/manticoresearch-go), and [Rust](https://github.com/manticoresoftware/manticoresearch-rust), integration with Manticore Search becomes easy.
-* Manticore also provides a programmatic HTTP JSON protocol for more versatile data and schema management, with Elasticsearch-compatible writes support.
-* Built in C++, Manticore Search starts quickly and uses minimal RAM (around 40MB RSS for an empty instance), with low-level optimizations contributing to its impressive performance.
-* With real-time inserts, newly added or updated documents are immediately accessible.
-* Interactive courses are available through [Interactive courses](https://play.manticoresearch.com/) to make learning a breeze.
-* Manticore also boasts built-in virtually synchronous multi-master replication using the Galera library and load balancing capabilities.
-* Data can be synced from sources such as MySQL, PostgreSQL, ODBC, xml, and csv with ease.
-* While not fully ACID-compliant, Manticore supports isolated transactions and binary logging for safe writes.
-* Effortless data backup and recovery with built-in tools like manticore-backup, SQL BACKUP, and S3-compatible backup/restore support
+  Results are workload-specific; use the linked dashboard to select the queries that match your workload.
+* ⚡ **Multi-threaded query execution** and efficient query parallelization use all CPU cores for low response times.
+* 🔎 **Full-text search** works seamlessly with both small and large datasets.
+* 🧩 **Hybrid search** combines full-text and vector retrieval in a single query for better relevance.
+* 💬 **Conversational search** lets existing vectorized tables answer questions with KNN retrieval, conversation history, and LLM-backed responses through SQL `CALL CHAT` or the HTTP JSON `/search` endpoint.
+* 🏎️ **Row-wise storage** provides fast performance for small, medium, and large datasets.
+* 🗄️ **Columnar storage**, powered by the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/), handles datasets too large to fit in RAM.
+* 📇 **Automatic secondary indexes** use the PGM-index (Piecewise Geometric Model index) for efficient mapping between indexed keys and memory locations.
+* 🧠 **Cost-based query optimization** uses indexed-data statistics to select efficient execution plans.
+* 🧮 **SQL-first and MySQL-compatible**: use SQL as the native syntax with your preferred MySQL client.
+* 🔌 **Official clients** for [PHP](https://github.com/manticoresoftware/manticoresearch-php), [Python](https://github.com/manticoresoftware/manticoresearch-python), [Python asyncio](https://github.com/manticoresoftware/manticoresearch-python-asyncio) [JavaScript](https://github.com/manticoresoftware/manticoresearch-javascript), [Typescript](https://github.com/manticoresoftware/manticoresearch-typescript), [Java](https://github.com/manticoresoftware/manticoresearch-java), [Elixir](https://github.com/manticoresoftware/manticoresearch-elixir), [Go](https://github.com/manticoresoftware/manticoresearch-go), and [Rust](https://github.com/manticoresoftware/manticoresearch-rust) make integration easy.
+* 🌐 **HTTP JSON API and Elasticsearch-compatible writes** support versatile data and schema management.
+* 🧱 **Sharded tables** transparently distribute reads and writes across physical shards on one node or across a replication cluster.
+* 🔐 **Built-in authentication and authorization** secure MySQL, HTTP/HTTPS, distributed remote agents, and replication-related operations with users, bearer tokens, and fine-grained permissions.
+* 🪶 **C++ performance and a small footprint**: Manticore Search starts quickly and uses around 40MB RSS for an empty instance.
+* ⚡ **Real-time inserts** make newly added or updated documents immediately accessible.
+* 🎓 **Interactive courses** at [play.manticoresearch.com](https://play.manticoresearch.com/) make learning easier.
+* 🔄 **Virtually synchronous multi-master replication** uses Galera and includes load balancing.
+* 🔗 **Data synchronization** supports sources such as MySQL, PostgreSQL, ODBC, XML, and CSV.
+* 🛡️ **Safe writes**: while not fully ACID-compliant, Manticore supports isolated transactions and binary logging.
+* 💾 **Backup and recovery** include `manticore-backup`, SQL `BACKUP`, and S3-compatible backup/restore support.
 
 [Craigslist](https://www.craigslist.org/), [Socialgist](https://socialgist.com/), [PubChem](https://pubchem.ncbi.nlm.nih.gov/), [Rozetka](https://rozetka.com.ua/) and many others use Manticore for efficient searching and stream filtering.
-
-Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/sphinx) in 2017.
 
 # More features
 * Full-text search and relevance:
@@ -83,6 +83,7 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [Geo-spatial search](https://play.manticoresearch.com/geosearch/)
   - [Hybrid search](https://manual.manticoresearch.com/Searching/Hybrid_search)
   - [Vector search](https://manual.manticoresearch.com/Searching/KNN)
+  - [Conversational search](https://manual.manticoresearch.com/Searching/Conversational_search)
   - [Joining tables](https://manual.manticoresearch.com/Searching/Joining)
   - [Spelling correction](https://play.manticoresearch.com/didyoumean/)
   - [Autocomplete](https://manual.manticoresearch.com/Searching/Autocomplete#Autocomplete)
@@ -100,10 +101,12 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [using a "percolate" table](https://play.manticoresearch.com/pq/)
   - or the [Kafka integration](https://manual.manticoresearch.com/Integration/Kafka)
 * High-availability:
+  - [Sharded tables](https://manual.manticoresearch.com/Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table)
   - Data can be distributed across servers and data-centers
   - [Synchronous replication](https://play.manticoresearch.com/replication/)
   - Built-in load balancing
 * Security:
+  - [Authentication and authorization](https://manual.manticoresearch.com/Security/Authentication_and_authorization)
   - [https support](https://play.manticoresearch.com/https/)
   - [read-only mode](https://manual.manticoresearch.com/Security/Read_only)
 * Data safety:
@@ -118,6 +121,7 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - Cost-based optimizer determines the most efficient execution plan of a search query
 * Data types:
   - full-text field - inverted index
+  - [UUID document IDs](https://manual.manticoresearch.com/Creating_a_table/Data_types#UUID-document-IDs) for real-time tables
   - int, bigint and float numeric fields in row-wise and columnar fashion
   - multi-value attributes (array)
   - string and JSON
@@ -143,7 +147,28 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
 
 # Installation
 
-### Docker
+## Quick install
+
+For Linux and macOS with Homebrew, use the one-line installer:
+
+```sh
+curl https://manticoresearch.com | sh
+```
+
+It detects Debian/Ubuntu/Mint, RHEL/CentOS/Amazon/Oracle/Fedora-like RPM systems, and macOS with Homebrew. It configures the official Manticore repository when needed, installs `manticore`, starts the service when supported, and prints the result.
+
+Common commands:
+
+```sh
+curl https://manticoresearch.com | sh -s help
+curl https://manticoresearch.com | sh -s list-versions
+curl https://manticoresearch.com | sh -s version 25.0.0
+curl https://manticoresearch.com | sh -s dev
+curl https://manticoresearch.com | sh -s upgrade
+```
+
+## Docker
+
 Docker image is available on [Docker Hub](https://dockr.ly/33biV0U).
 
 To experiment with Manticore Search in Docker just run:
@@ -170,36 +195,43 @@ Note that upon exiting the MySQL client, the Manticore container will be stopped
 
 Read [the full instruction for the docker image](https://github.com/manticoresoftware/docker) for more details including our recommendations on running it in production.
 
-### Packages
+### Manual package installation
 
-## [Ubuntu, Debian, Centos, Windows and MacOS packages are here](https://manticoresearch.com/install/).
+If you prefer explicit package-manager commands, use the manual instructions below or see the [downloads page](https://manticoresearch.com/install/).
 
-### YUM repo for RHEL/Centos/Amazon/Oracle Linux
+### RPM repo for RHEL/CentOS/Amazon/Oracle/Fedora-like Linux
+
 ```
 sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 sudo yum install manticore
 ```
 
+or use `dnf` when available:
+
+```
+sudo dnf install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
+sudo dnf install manticore
+```
+
 ### APT repo for Ubuntu/Debian/Mint
+
 ```
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
+sudo apt install ./manticore-repo.noarch.deb
 sudo apt update
 sudo apt install manticore
 ```
 
-### Homebrew on MacOS
+### Homebrew on macOS
+
 ```
 brew install manticoresoftware/tap/manticoresearch manticoresoftware/tap/manticore-extra
 ```
 
 ### Windows
-See [instruction here](https://manual.manticoresearch.com/Installation/Windows).
 
-### Clouds
+For WSL/WSL2, use the Linux installer inside the WSL distribution. For native Windows, see the [Windows installation instructions](https://manual.manticoresearch.com/Installation/Windows).
 
-* [Elestio](https://elest.io/open-source/manticoresearch)
-* [Hosting Ukraine](https://www.ukraine.com.ua/uk/news/hosting/manticore-search/)
 
 # Documentation and community sites
 
@@ -220,7 +252,7 @@ See [instruction here](https://manual.manticoresearch.com/Installation/Windows).
   * https://github.com/dimv36/sphinxlink - Extension for PostgreSQL for running search queries and returning data as PostgreSQL tables
 
 # How we can support you
-Should your company require any help - we provide full-cycle services in the areas of Sphinx and Manticore Search:
+Should your company require any help - we provide full-cycle services:
   * Audit
   * Support
   * Consulting

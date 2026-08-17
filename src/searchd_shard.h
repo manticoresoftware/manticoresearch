@@ -133,6 +133,7 @@ public:
 private:
 	const CSphSchema &		m_tSchema;
 	const CSphColumnInfo *	m_pDocId = nullptr;
+	int						m_iUuidDocidAttr = -1;
 
 	const CSphVector<bool> & m_dFieldAttrs;
 
@@ -157,6 +158,6 @@ ResultAndIndex_t AddShardIndex ( const char * szIndexName, const CSphConfigSecti
 bool EnsureNoPendingShardTxn ( const ClientSession_c & tSession, CSphString & sError );
 void RollbackShardTxn ( ShardTxnState_t & tShardTxn );
 bool CommitShardTxn ( ClientSession_c & tSession, CSphString & sError, CSphVector<int64_t> * pCommittedDocIDs = nullptr, int * pDeletedCount = nullptr );
-void HandleCommandShardWrite ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
+void HandleCommandShardWrite ( GenericOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq );
 bool AddDocumentShard ( const SqlStmt_t & tStmt, const ShardIndex_c & tShard, StmtErrorReporter_i & tOut, int & iAffectedRows );
 bool DeleteDocumentShard ( const SqlStmt_t & tStmt, const ShardIndex_c & tShard, StmtErrorReporter_i & tOut, int & iAffectedRows );

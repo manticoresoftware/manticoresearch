@@ -65,6 +65,30 @@ table <table name> {
 
 ### Common plain and real-time tables settings
 
+#### profile
+
+`profile` is a SQL-only shortcut for applying a predefined bundle of table settings in `CREATE TABLE` only. It is not supported in `ALTER TABLE`. The profile name itself is **not** stored in table metadata; Manticore stores only the expanded settings, so `SHOW CREATE TABLE` prints the resulting options rather than `profile=...`.
+
+Currently supported values:
+
+* `relevance` - expands to:
+  * [`min_infix_len='2'`](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)
+  * [`index_field_lengths='1'`](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths)
+  * [`index_exact_words='1'`](../../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words)
+  * [`ranker=expr('1000*bm25a(1.2,0.75,256)')`](../../Searching/Options.md#ranker)
+  * [`morphology='stem_en'`](../../Creating_a_table/NLP_and_tokenization/Morphology.md#morphology)
+  * [`boolean_mode='or'`](../../Searching/Options.md#boolean_mode)
+
+The `relevance` profile can improve ranking and recall for many English full-text workloads, but it also increases work done at indexing and query time, so it may cost extra CPU, storage, and memory compared to the defaults.
+
+If you also specify one of these options explicitly, `profile` follows the same duplicate-option semantics as ordinary `CREATE TABLE` settings: the first occurrence wins. Because the profile expands into ordinary settings at create time, `profile='relevance' ranker='bm25'` keeps the profile ranker, and the fully expanded explicit form does the same. Likewise, `ranker='bm25' profile='relevance'` keeps `ranker='bm25'`.
+
+The expanded settings are stored in table metadata. Query-level `OPTION ranker=...` still overrides any stored table ranker. If a query searches multiple tables and does not specify a ranker, each table keeps using its own stored default ranker, including local and remote distributed tables. In that case, Manticore merges results using the raw returned weights; it does **not** normalize weights across different rankers or expressions, so mixing different per-table rankers can produce non-comparable global ordering.
+
+```sql
+CREATE TABLE products(title text) profile='relevance';
+```
+
 #### type
 
 ```ini
@@ -488,7 +512,7 @@ knn = {"attrs":[{"name":"image_vector","type":"hnsw","dims":768,"hnsw_similarity
 rt_attr_float_vector = embedding_vector
 rt_field = title
 rt_field = description
-knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}
+knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":"title"}]}
 ```
 
 **Required KNN parameters:**
@@ -502,7 +526,7 @@ knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2",
 - `hnsw_ef_construction`: Construction time/accuracy trade-off (default: 200)
 
 **Auto-embeddings parameters** (when using `model_name`):
-- `model_name`: The embedding model to use (e.g., `"sentence-transformers/all-MiniLM-L6-v2"`, `"openai/text-embedding-ada-002"`, `"openai:text-embedding-ada-002"`). When specified, `dims` must be omitted as the model determines the dimensions automatically.
+- `model_name`: The embedding model to use (e.g., `"Xenova/all-MiniLM-L6-v2"` for the fast ONNX path — browse [ONNX models on Hugging Face](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm); `"sentence-transformers/all-MiniLM-L6-v2"` is also supported; `"openai/text-embedding-ada-002"` for OpenAI). When specified, `dims` must be omitted as the model determines the dimensions automatically.
 - `from`: Comma-separated list of field names to use for embedding generation, or empty string `""` to use all text/string fields. This parameter is required when `model_name` is specified.
 - `api_key`: API key for API-based models (OpenAI, Voyage, Jina). Only required for API-based embedding services.
 - `cache_path`: Optional path for caching downloaded models (for sentence-transformers models).
@@ -994,6 +1018,7 @@ The following settings are supported. They are all described in section [NLP and
 * [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
 * [blend_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)
 * [blend_mode](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
+* [boolean_mode](../../Searching/Options.md#boolean_mode)
 * [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)
 * [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)
 * [embedded_limit](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)

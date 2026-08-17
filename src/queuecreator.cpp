@@ -27,10 +27,17 @@
 #include "knnmisc.h"
 #include "hybridexecutor.h"
 #include "sorterscroll.h"
+#include "indexsettings.h"
 #include "sphinxquery/sphinxquery.h"
 
 static const char g_sIntAttrPrefix[] = "@int_attr_";
 static const char g_sIntJsonPrefix[] = "@groupbystr_";
+
+
+static bool HasUuidDocidAttr ( const ISphSchema & tSchema )
+{
+	return tSchema.GetAttrIndex ( sphGetUuidDocidName() )>=0;
+}
 
 
 bool HasImplicitGrouping ( const CSphQuery & tQuery )
@@ -62,6 +69,13 @@ bool sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema )
 
 int GetAliasedAttrIndex ( const CSphString & sAttr, const CSphQuery & tQuery, const ISphSchema & tSchema )
 {
+	if ( !sAttr.IsEmpty() && strcmp ( sAttr.cstr(), sphGetDocidName() )==0 )
+	{
+		int iUuidAttr = tSchema.GetAttrIndex ( sphGetUuidDocidName() );
+		if ( iUuidAttr>=0 )
+			return iUuidAttr;
+	}
+
 	int iAttr = tSchema.GetAttrIndex ( sAttr.cstr() );
 	if ( iAttr>=0 )
 		return iAttr;
@@ -296,6 +310,7 @@ private:
 	sph::StringSet				m_hExtra;
 
 	bool	ParseQueryItem ( const CSphQueryItem & tItem );
+	bool	ParseResolvedQueryItem ( const CSphQueryItem & tItem );
 	bool	MaybeAddGeodistColumn();
 	bool	MaybeAddExprColumn();
 	bool	MaybeAddExpressionsFromSelectList();
@@ -331,8 +346,9 @@ private:
 	bool	AddGroupbyStuff();
 	void	AddKnnDistSort ( CSphString & sSortBy );
 	void	AddHybridScoreSort ( CSphString & sSortBy );
-	bool	ParseJoinExpr ( CSphColumnInfo & tExprCol, const CSphString & sAttr, const CSphString & sExpr ) const;
+	bool	CheckNoInternalUuidSortRefs ( const CSphString & sSortBy ) const;
 	bool	SetGroupSorting();
+	bool	ParseJoinExpr ( CSphColumnInfo & tExprCol, const CSphString & sAttr, const CSphString & sExpr ) const;
 	void	ExtraAddSortkeys ( const int * dAttrs );
 	bool	AddStoredFieldExpressions();
 	bool	AddColumnarAttributeExpressions();
@@ -345,6 +361,7 @@ private:
 	bool	ReplaceWithColumnarItem ( const CSphString & sAttr, ESphEvalStage eStage );
 	int		ReduceOrIncreaseMaxMatches() const;
 	int		AdjustMaxMatches ( int iMaxMatches ) const;
+	bool	SetupGroupConcatHelperStorage();
 	bool	ConvertColumnarToDocstore();
 	bool	SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphString & sExpr, DWORD uQueryPackedFactorFlags );
 	bool	SetupColumnarAggregates ( CSphColumnInfo & tExprCol );
@@ -487,17 +504,26 @@ bool QueueCreator_c::SetupDistinctAttr()
 	assert ( m_pSorterSchema );
 	auto & tSchema = *m_pSorterSchema;
 
-	int iDistinct = tSchema.GetAttrIndex ( sDistinct.cstr() );
+	CSphString sDistinctKey = sDistinct;
+	if ( HasUuidDocidAttr ( m_tSettings.m_tSchema ) || HasUuidDocidAttr ( tSchema ) )
+	{
+		if ( sDistinct==sphGetUuidDocidName() )
+			return Err ( "attribute '%s' is internal", sphGetUuidDocidName() );
+		if ( !sDistinct.IsEmpty() && strcmp ( sDistinct.cstr(), sphGetDocidName() )==0 )
+			sDistinctKey = sphGetUuidDocidName();
+	}
+
+	int iDistinct = tSchema.GetAttrIndex ( sDistinctKey.cstr() );
 	if ( iDistinct<0 )
 	{
 		CSphString sJsonCol;
-		if ( !sphJsonNameSplit ( sDistinct.cstr(), m_tQuery.m_sJoinIdx.cstr(), &sJsonCol ) )
+		if ( !sphJsonNameSplit ( sDistinctKey.cstr(), m_tQuery.m_sJoinIdx.cstr(), &sJsonCol ) )
 		{
 			return Err ( "group-count-distinct attribute '%s' not found", sDistinct.cstr() );
 			return false;
 		}
 
-		CSphColumnInfo tExprCol ( sDistinct.cstr(), SPH_ATTR_JSON_FIELD_PTR );
+		CSphColumnInfo tExprCol ( sDistinctKey.cstr(), SPH_ATTR_JSON_FIELD_PTR );
 		tExprCol.m_eStage = SPH_EVAL_SORTER;
 		tExprCol.m_uAttrFlags = CSphColumnInfo::ATTR_JOINED;
 		m_pSorterSchema->AddAttr ( tExprCol, true );
@@ -538,6 +564,12 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 {
 	if ( m_tQuery.m_sGroupBy.IsEmpty() && !bHasImplicitGrouping )
 		return true;
+
+	if ( !m_tQuery.m_sGroupBy.IsEmpty() && HasUuidDocidAttr ( m_tSettings.m_tSchema ) )
+	{
+		if ( strstr ( m_tQuery.m_sGroupBy.cstr(), sphGetUuidDocidName() ) )
+			return Err ( "attribute '%s' is internal", sphGetUuidDocidName() );
+	}
 
 	if ( m_tQuery.m_eGroupFunc==SPH_GROUPBY_ATTRPAIR )
 		return Err ( "SPH_GROUPBY_ATTRPAIR is not supported any more (just group on 'bigint' attribute)" );
@@ -1077,8 +1109,31 @@ void QueueCreator_c::SelectExprEvalStage ( CSphColumnInfo & tExprCol )
 
 bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 {
+	const CSphString & sExpr = tItem.m_sExpr;
+	if ( !HasUuidDocidAttr ( m_tSettings.m_tSchema ) )
+		return ParseResolvedQueryItem ( tItem );
+
+	if ( sExpr==sphGetUuidDocidName() )
+		return Err ( "attribute '%s' is internal", sphGetUuidDocidName() );
+
+	if ( sExpr==sphGetDocidName() || sExpr=="@id" )
+	{
+		CSphQueryItem tUuidItem = tItem;
+		tUuidItem.m_sExpr = sphGetUuidDocidName();
+		if ( tUuidItem.m_sAlias.IsEmpty() || tUuidItem.m_sAlias==sphGetDocidName() )
+			tUuidItem.m_sAlias = sphGetDocidName();
+		return ParseResolvedQueryItem ( tUuidItem );
+	}
+
+	return ParseResolvedQueryItem ( tItem );
+}
+
+
+bool QueueCreator_c::ParseResolvedQueryItem ( const CSphQueryItem & tItem )
+{
 	assert ( m_pSorterSchema );
 	const CSphString & sExpr = tItem.m_sExpr;
+
 	bool bIsCount = IsCount(sExpr);
 	m_bHasCount |= bIsCount;
 
@@ -1110,7 +1165,10 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 			|| eAttr==SPH_ATTR_UINT32SET || eAttr==SPH_ATTR_INT64SET )
 		{
 			if ( tItem.m_eAggrFunc!=SPH_AGGR_NONE )
-				return Err ( "can not aggregate non-scalar attribute '%s'",	tItem.m_sExpr.cstr() );
+			{
+				const char * szAttr = tItem.m_sExpr==sphGetUuidDocidName() ? sphGetDocidName() : tItem.m_sExpr.cstr();
+				return Err ( "can not aggregate non-scalar attribute '%s'", szAttr );
+			}
 		}
 	}
 
@@ -1225,6 +1283,14 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	if ( tExprCol.m_eAggrFunc==SPH_AGGR_NONE )
 	{
 		SelectExprEvalStage(tExprCol);
+		if ( IsGroupConcatValueAttr ( tExprCol.m_sName ) )
+		{
+			tExprCol.m_eStage = SPH_EVAL_PRESORT;
+			StrVec_t dDependentCols;
+			tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
+			FetchDependencyChains ( dDependentCols );
+			PropagateEvalStage ( tExprCol, dDependentCols );
+		}
 
 		// add it!
 		// NOTE, "final" stage might need to be fixed up later
@@ -1237,7 +1303,7 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	}
 	else // some aggregate
 	{
-		bool bColumnarAggregate = SetupColumnarAggregates(tExprCol);
+		bool bColumnarAggregate = tExprCol.m_eAggrFunc!=SPH_AGGR_CAT && SetupColumnarAggregates(tExprCol);
 		bool bJoinAggregate = ExprHasJoinPrefix ( tExprCol.m_sName, m_tSettings.m_pJoinArgs.get() );
 
 		// columnar aggregates have their own code path; no need to calculate them in presort
@@ -1384,9 +1450,15 @@ bool QueueCreator_c::AddStoredFieldExpressions()
 
 bool QueueCreator_c::AddColumnarAttributeExpressions()
 {
+	const CSphColumnInfo * pUuidAttr = m_tSettings.m_tSchema.GetAttr ( sphGetUuidDocidName() );
+
 	for ( int i = 0; i<m_tSettings.m_tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tAttr = m_tSettings.m_tSchema.GetAttr(i);
+		bool bUuidAttr = &tAttr==pUuidAttr;
+		if ( sphIsInternalAttr ( tAttr ) && !bUuidAttr )
+			continue;
+
 		const CSphColumnInfo * pSorterAttr = m_pSorterSchema->GetAttr ( tAttr.m_sName.cstr() );
 
 		if ( !tAttr.IsColumnar() || ( pSorterAttr && !pSorterAttr->IsColumnar() ) )
@@ -1396,7 +1468,8 @@ bool QueueCreator_c::AddColumnarAttributeExpressions()
 
 		CSphQueryItem tItem;
 		tItem.m_sExpr = tItem.m_sAlias = tAttr.m_sName;
-		if ( !ParseQueryItem ( tItem ) )
+		bool bParsed = bUuidAttr ? ParseResolvedQueryItem ( tItem ) : ParseQueryItem ( tItem );
+		if ( !bParsed )
 			return false;
 
 		// copy knn settings
@@ -1436,17 +1509,30 @@ bool QueueCreator_c::AddExpressionsForUpdates()
 	if ( !m_tSettings.m_pCollection )
 		return true;
 
+	// UUID id filters are rewritten from public `id` to the hidden string @uuid_id.
+	// Keep it in the internal update/delete collector schema even though the collector itself
+	// returns numeric DocID_t values from `id`.
+	if ( HasUuidDocidAttr ( m_tSettings.m_tSchema ) )
+		m_hQueryColumns.Add ( sphGetUuidDocidName() );
+
 	const CSphColumnInfo * pOldDocId = m_pSorterSchema->GetAttr ( sphGetDocidName() );
 	if ( !pOldDocId->IsColumnar() && !pOldDocId->IsColumnarExpr() )
 		return true;
 
 	if ( pOldDocId->IsColumnar() )
 	{
-		// add columnar id expressions to update queue. otherwise we won't be able to fetch docids which are needed to run updates/deletes
-		CSphQueryItem tItem;
-		tItem.m_sExpr = tItem.m_sAlias = sphGetDocidName();
-		if ( !ParseQueryItem ( tItem ) )
-			return false;
+		// Add a raw columnar numeric docid expression to update/delete queues.
+		// UUID tables expose public `id` as the hidden string UUID, but deletes still need the internal DocID_t.
+		CSphString sDocidName = sphGetDocidName();
+		int iDocidAttr = m_pSorterSchema->GetAttrIndex ( sDocidName.cstr() );
+		assert ( iDocidAttr>=0 );
+
+		CSphColumnInfo tDocidExpr ( sDocidName.cstr(), SPH_ATTR_BIGINT );
+		tDocidExpr.m_eStage = SPH_EVAL_PRESORT;
+		tDocidExpr.m_pExpr = CreateExpr_GetColumnarInt ( sDocidName, pOldDocId->IsStored() );
+
+		m_pSorterSchema->AddAttr ( tDocidExpr, true );
+		m_pSorterSchema->RemoveStaticAttr ( iDocidAttr );
 	}
 
 	auto * pDocId = const_cast<CSphColumnInfo *> ( m_pSorterSchema->GetAttr ( sphGetDocidName() ) );
@@ -1711,7 +1797,9 @@ bool QueueCreator_c::CanRescoreKNN() const
 		return false;
 
 	const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
-	return pAttr && pAttr->IsIndexedKNN() && pAttr->m_tKNN.m_iDims>0;
+
+	// rescore reads the stored vectors directly; a columnar *expression* vector has no stored data to read, so skip rescore
+	return pAttr && pAttr->IsIndexedKNN() && pAttr->m_tKNN.m_iDims>0 && !pAttr->IsColumnarExpr();
 }
 
 
@@ -1720,12 +1808,8 @@ bool QueueCreator_c::AddKNNRescoreColumn()
 	if ( !CanRescoreKNN() )
 		return true;
 
-	const auto & tKNN = m_tQuery.SingleKnnSettings();
-	const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
-
 	CSphColumnInfo tKNNDistRescored ( GetKnnDistRescoreAttrName(), SPH_ATTR_FLOAT );
-	tKNNDistRescored.m_eStage = SPH_EVAL_FINAL;
-	tKNNDistRescored.m_pExpr = CreateExpr_KNNDistRescore ( tKNN.m_dVec, *pAttr );
+	tKNNDistRescored.m_eStage = SPH_EVAL_SORTER;
 
 	m_pSorterSchema->AddAttr ( tKNNDistRescored, true );
 	m_hQueryColumns.Add ( tKNNDistRescored.m_sName );
@@ -1862,21 +1946,32 @@ bool QueueCreator_c::AddJoinAttrs()
 		return true;
 
 	const auto & tSchema = m_tSettings.m_pJoinArgs->m_tJoinedSchema;
+	const CSphColumnInfo * pDocid = tSchema.GetAttr ( sphGetDocidName() );
+	const bool bUuidLinked = pDocid && pDocid->IsUuidLinkedDocid();
+	const CSphColumnInfo * pUuidDocid = bUuidLinked ? tSchema.GetAttr ( sphGetUuidDocidName() ) : nullptr;
+	assert ( !bUuidLinked || ( pUuidDocid && ( pUuidDocid->m_eAttrType==SPH_ATTR_STRING || pUuidDocid->m_eAttrType==SPH_ATTR_STRINGPTR ) ) );
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
-		if ( !sphIsInternalAttr ( tSchema.GetAttr(i).m_sName ) )
-		{
-			CSphColumnInfo tAttr = tSchema.GetAttr(i);
-			tAttr.m_sName.SetSprintf ( "%s.%s", m_tSettings.m_pJoinArgs->m_sIndex2.cstr(), tAttr.m_sName.cstr() );
-			tAttr.m_eAttrType = sphPlainAttrToPtrAttr ( tAttr.m_eAttrType );
-			tAttr.m_tLocator.Reset();
-			tAttr.m_eStage = SPH_EVAL_SORTER;
-			tAttr.m_uAttrFlags &= ~( CSphColumnInfo::ATTR_COLUMNAR | CSphColumnInfo::ATTR_COLUMNAR_HASHES );
-			tAttr.m_uAttrFlags |= CSphColumnInfo::ATTR_JOINED;
-			m_pSorterSchema->AddAttr ( tAttr, true );
+	{
+		const CSphColumnInfo & tSrcAttr = tSchema.GetAttr(i);
+		bool bUuidDocid = &tSrcAttr==pUuidDocid;
+		bool bPlainDocid = tSrcAttr.IsUuidLinkedDocid();
+		assert ( !bPlainDocid || &tSrcAttr==pDocid );
+		if ( bPlainDocid || ( sphIsInternalAttr ( tSrcAttr.m_sName ) && !bUuidDocid ) )
+			continue;
 
-			m_hQueryDups.Add ( tAttr.m_sName );
-			m_hQueryColumns.Add ( tAttr.m_sName );
-		}
+		CSphColumnInfo tAttr = tSrcAttr;
+		const char * szAttrName = bUuidDocid ? sphGetDocidName() : tAttr.m_sName.cstr();
+		tAttr.m_sName.SetSprintf ( "%s.%s", m_tSettings.m_pJoinArgs->m_sIndex2.cstr(), szAttrName );
+		tAttr.m_eAttrType = sphPlainAttrToPtrAttr ( tAttr.m_eAttrType );
+		tAttr.m_tLocator.Reset();
+		tAttr.m_eStage = SPH_EVAL_SORTER;
+		tAttr.m_uAttrFlags &= ~( CSphColumnInfo::ATTR_COLUMNAR | CSphColumnInfo::ATTR_COLUMNAR_HASHES );
+		tAttr.m_uAttrFlags |= CSphColumnInfo::ATTR_JOINED;
+		m_pSorterSchema->AddAttr ( tAttr, true );
+
+		m_hQueryDups.Add ( tAttr.m_sName );
+		m_hQueryColumns.Add ( tAttr.m_sName );
+	}
 
 	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
 	{
@@ -2309,10 +2404,24 @@ void QueueCreator_c::AddHybridScoreSort ( CSphString & sSortBy )
 		sSortBy.SetSprintf ( "hybrid_score() desc, %s", sSortBy.cstr() );
 }
 
+
+bool QueueCreator_c::CheckNoInternalUuidSortRefs ( const CSphString & sSortBy ) const
+{
+	if ( !HasUuidDocidAttr ( m_tSettings.m_tSchema ) || sSortBy.IsEmpty() )
+		return true;
+
+	if ( strstr ( sSortBy.cstr(), sphGetUuidDocidName() ) )
+		return Err ( "attribute '%s' is internal", sphGetUuidDocidName() );
+
+	return true;
+}
+
 // matches sorting function
 bool QueueCreator_c::SetupMatchesSortingFunc()
 {
 	m_bRandomize = false;
+	if ( !CheckNoInternalUuidSortRefs ( m_tQuery.m_sSortBy ) )
+		return false;
 
 	if ( m_tQuery.m_eSort==SPH_SORT_EXTENDED )
 	{
@@ -2347,7 +2456,7 @@ bool QueueCreator_c::SetupMatchesSortingFunc()
 	// check sort-by attribute
 	if ( m_tQuery.m_eSort!=SPH_SORT_RELEVANCE )
 	{
-		int iSortAttr = m_pSorterSchema->GetAttrIndex ( m_tQuery.m_sSortBy.cstr() );
+		int iSortAttr = GetAliasedAttrIndex ( m_tQuery.m_sSortBy, m_tQuery, *m_pSorterSchema );
 		if ( iSortAttr<0 )
 		{
 			Err ( "sort-by attribute '%s' not found", m_tQuery.m_sSortBy.cstr() );
@@ -2384,6 +2493,8 @@ bool QueueCreator_c::SetupGroupSortingFunc ( bool bGotDistinct )
 		AddKnnDistSort ( sGroupOrderBy );
 		AddHybridScoreSort ( sGroupOrderBy );
 	}
+	if ( !CheckNoInternalUuidSortRefs ( sGroupOrderBy ) )
+		return false;
 
 	ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, sGroupOrderBy.cstr(), *m_pSorterSchema, m_eGroupFunc, m_tStateGroup, m_dGroupJsonExprs, m_tSettings.m_pJoinArgs.get(), m_sError );
 
@@ -2393,6 +2504,46 @@ bool QueueCreator_c::SetupGroupSortingFunc ( bool bGotDistinct )
 			m_sError = "groups can not be sorted by @random";
 
 		return false;
+	}
+
+	const bool bLimitedGroupConcat = m_tQuery.m_dRefItems.any_of ( [] ( const CSphQueryItem & tItem )
+		{ return tItem.m_tAggrSettings.m_tGroupConcat.IsLimited(); } );
+	if ( bLimitedGroupConcat )
+	{
+		int iSortAttrs = 0;
+		bool bHasGroupKey = false;
+		for ( ; iSortAttrs<CSphMatchComparatorState::MAX_ATTRS && m_tStateGroup.m_dAttrs[iSortAttrs]>=0; ++iSortAttrs )
+		{
+			const int iAttr = m_tStateGroup.m_dAttrs[iSortAttrs];
+			const CSphColumnInfo & tColumn = m_pSorterSchema->GetAttr ( iAttr );
+			bool bGroupColumn = false;
+			for ( const auto & tGroupColumn : m_dGroupColumns )
+				bGroupColumn |= tGroupColumn.first==iAttr;
+
+			const bool bGroupMagic = IsGroupbyMagic ( tColumn.m_sName );
+			const bool bOrdinaryAggregate = tColumn.m_eAggrFunc!=SPH_AGGR_NONE;
+			if ( !bGroupColumn && !bGroupMagic && !bOrdinaryAggregate )
+			{
+				m_sError.SetSprintf ( "group ordering by representative-row attribute '%s' is not supported with limited GROUP_CONCAT", tColumn.m_sName.cstr() );
+				return false;
+			}
+
+			bHasGroupKey |= bGroupColumn || tColumn.m_sName=="@groupby";
+		}
+
+		if ( !bHasGroupKey )
+		{
+			if ( iSortAttrs>=CSphMatchComparatorState::MAX_ATTRS )
+			{
+				m_sError = "limited GROUP_CONCAT requires a group-key tie-breaker, but all 5 group-order slots are already used";
+				return false;
+			}
+
+			sGroupOrderBy.SetSprintf ( "%s, @groupby asc", sGroupOrderBy.cstr() );
+			eRes = sphParseSortClause ( m_tQuery, sGroupOrderBy.cstr(), *m_pSorterSchema, m_eGroupFunc, m_tStateGroup, m_dGroupJsonExprs, m_tSettings.m_pJoinArgs.get(), m_sError );
+			if ( eRes!=SORT_CLAUSE_OK )
+				return false;
+		}
 	}
 
 	ExtraAddSortkeys ( m_tStateGroup.m_dAttrs );
@@ -2405,7 +2556,7 @@ bool QueueCreator_c::SetupGroupSortingFunc ( bool bGotDistinct )
 
 	if ( bGotDistinct )
 	{
-		m_dGroupColumns.Add ( { m_pSorterSchema->GetAttrIndex ( m_tQuery.m_sGroupDistinct.cstr() ), true } );
+		m_dGroupColumns.Add ( { GetAliasedAttrIndex ( m_tQuery.m_sGroupDistinct, m_tQuery, *m_pSorterSchema ), true } );
 		assert ( m_dGroupColumns.Last().first>=0 );
 		m_hExtra.Add ( m_pSorterSchema->GetAttr ( m_dGroupColumns.Last().first ).m_sName );
 	}
@@ -2579,6 +2730,21 @@ int QueueCreator_c::AdjustMaxMatches ( int iMaxMatches ) const
 }
 
 
+bool QueueCreator_c::SetupGroupConcatHelperStorage()
+{
+	if ( !m_tQuery.IsGroupConcatHelper() )
+		return true;
+
+	const int iGroupSlots = AdjustMaxMatches ( m_tGroupSorterSettings.m_iMaxMatches );
+	const int64_t iCapacity = (int64_t)iGroupSlots * m_tQuery.m_iGroupbyLimit;
+	if ( iGroupSlots<=0 || m_tQuery.m_iGroupbyLimit<=0 || iCapacity>INT_MAX/4 )
+		return Err ( "limited GROUP_CONCAT helper capacity overflows: %d group slots * %d", iGroupSlots, m_tQuery.m_iGroupbyLimit );
+
+	m_tGroupSorterSettings.m_iMaxMatches = (int)iCapacity;
+	return true;
+}
+
+
 bool QueueCreator_c::CanCalcFastCountDistinct() const
 {
 	bool bHasAggregates = PredictAggregates();
@@ -2627,7 +2793,8 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	if ( m_bGotGroupby )
 	{
 		m_tGroupSorterSettings.m_bGrouped = m_tSettings.m_bGrouped;
-		m_tGroupSorterSettings.m_iMaxMatches = AdjustMaxMatches ( m_tGroupSorterSettings.m_iMaxMatches );
+		if ( !m_tQuery.IsGroupConcatHelper() )
+			m_tGroupSorterSettings.m_iMaxMatches = AdjustMaxMatches ( m_tGroupSorterSettings.m_iMaxMatches );
 		if ( m_pProfile )
 			m_pProfile->m_iMaxMatches = m_tGroupSorterSettings.m_iMaxMatches;
 
@@ -2658,7 +2825,7 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	// wrapper would look up a missing @knn_dist_rescore attr and crash on flatten.
 	if ( CanRescoreKNN() )
 	{
-		pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.SingleKnnSettings() );
+		pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.SingleKnnSettings(), m_eMatchFunc );
 		if ( !pSorter )
 			return nullptr;
 	}
@@ -2685,7 +2852,8 @@ bool QueueCreator_c::SetupGroupQueue ()
 {
 	return AddGroupbyStuff ()
 		&& SetupMatchesSortingFunc ()
-		&& SetGroupSorting ();
+		&& SetGroupSorting ()
+		&& SetupGroupConcatHelperStorage();
 }
 
 bool QueueCreator_c::ConvertColumnarToDocstore()
@@ -2802,7 +2970,7 @@ ISphMatchSorter * QueueCreator_c::CreateQueue ()
 	pTop->SetGroupState ( m_tStateGroup );
 	pTop->SetRandom ( m_bRandomize );
 	if ( !m_bHaveStar && m_hQueryColumns.GetLength() )
-		pTop->SetFilteredAttrs ( m_hQueryColumns, m_tSettings.m_bNeedDocids || m_bExprsNeedDocids );
+		pTop->SetFilteredAttrs ( m_hQueryColumns, m_tSettings.m_bNeedDocids || m_bExprsNeedDocids || !!m_tSettings.m_pCollection );
 
 	if ( m_bRandomize )
 	{

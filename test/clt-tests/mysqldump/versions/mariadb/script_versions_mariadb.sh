@@ -1,10 +1,36 @@
 #!/bin/bash
 set -e
 
+docker_pull_with_retries() {
+    local image="$1"
+    local err_file
+    local attempt
+    local max_attempts=3
+    local delay=5
+
+    err_file=$(mktemp)
+
+    for attempt in $(seq 1 "$max_attempts"); do
+        if docker pull --platform linux/amd64 -q "$image" > /dev/null 2>"$err_file"; then
+            rm -f "$err_file"
+            return 0
+        fi
+
+        if [ "$attempt" -lt "$max_attempts" ]; then
+            sleep "$delay"
+            delay=$((delay * 2))
+        fi
+    done
+
+    cat "$err_file" >&2
+    rm -f "$err_file"
+    return 1
+}
+
 # Check for new major.minor versions
 echo "🔍 Checking for new MariaDB major.minor versions..."
 
-LATEST_MARIADB="12.2"
+LATEST_MARIADB="12.3"
 
 if command -v curl >/dev/null 2>&1; then
     found_new=false
@@ -43,7 +69,7 @@ fi
 echo ""
 
 # MariaDB versions
-versions=("mariadb:10.5" "mariadb:10.6" "mariadb:10.7" "mariadb:10.8" "mariadb:10.9" "mariadb:10.10" "mariadb:10.11" "mariadb:11.0" "mariadb:11.1" "mariadb:11.2" "mariadb:11.3-rc" "mariadb:11.4" "mariadb:11.5" "mariadb:11.6" "mariadb:11.7" "mariadb:11.8" "mariadb:12.0" "mariadb:12.1" "mariadb:12.2" "mariadb:latest")
+versions=("mariadb:10.5" "mariadb:10.6" "mariadb:10.7" "mariadb:10.8" "mariadb:10.9" "mariadb:10.10" "mariadb:10.11" "mariadb:11.0" "mariadb:11.1" "mariadb:11.2" "mariadb:11.3-rc" "mariadb:11.4" "mariadb:11.5" "mariadb:11.6" "mariadb:11.7" "mariadb:11.8" "mariadb:12.0" "mariadb:12.1" "mariadb:12.2" "mariadb:12.3" "mariadb:latest")
 
 # Going through all the versions
 for version in "${versions[@]}"; do
@@ -53,7 +79,7 @@ for version in "${versions[@]}"; do
     echo "Testing version: $version"
 
     # Start the container
-    docker pull --platform linux/amd64 -q $version > /dev/null
+    docker_pull_with_retries "$version"
     docker run --rm -d --network=test_network --platform linux/amd64 --name db-test -e MYSQL_ROOT_PASSWORD=my-secret-pw $version bash -c "tail -f /dev/null" > /dev/null
     sleep 5
 
@@ -135,8 +161,11 @@ echo "All MariaDB versions tested successfully!"
 echo ""
 echo "Checking documentation versions..."
 
-# Check documentation from mounted /manual volume
+# Check documentation from mounted /manual volume, with local-checkout fallback
 DOC_FILE="/manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
+if [ ! -f "$DOC_FILE" ] && [ -f "./manual/english/Securing_and_compacting_a_table/Backup_and_restore.md" ]; then
+    DOC_FILE="./manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
+fi
 
 if [ -f "$DOC_FILE" ]; then
     echo "Checking documentation file..."

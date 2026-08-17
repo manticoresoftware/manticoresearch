@@ -61,6 +61,17 @@ query_log_format = sphinxql # default
 ```
 <!-- end -->
 
+<!-- example sphixql_log3 -->
+需要注意的是，Manticore 不仅记录 SELECT 查询，还记录诸如 UPDATE 之类的数据修改语句。UPDATE 语句会以 SQL 日志格式记录，而 INSERT、REPLACE 和 DELETE 操作不会被记录。如果你需要对所有操作进行完整日志记录，可能还需要在应用层额外实现日志。
+
+<!-- intro -->
+UPDATE 的 `sphinxql` 日志条目示例：
+<!-- request Example -->
+```sql
+/* Sat Mar 15 01:05:28.508 2025 conn 7 (127.0.0.1:63942) real 0.000 */ UPDATE test SET title='Updated Title' WHERE id=1;
+```
+<!-- end -->
+
 ### Plain日志格式
 
 <!-- example plain_log -->
@@ -120,6 +131,9 @@ query_log_format = plain
 ```
 
 <!-- end -->
+
+与 SQL 日志格式不同，纯文本日志格式只记录搜索查询（SELECT 语句）。INSERT、REPLACE、DELETE 和 UPDATE 之类的数据修改语句不会以这种格式记录。UPDATE 语句会以 SQL 格式记录，但不会以纯文本格式记录。
+
 
 ## 仅记录慢查询
 

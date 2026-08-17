@@ -121,6 +121,9 @@ extern int g_iReadTimeoutS;        // defined in searchd.cpp
 extern int g_iWriteTimeoutS;    // sec
 extern bool g_bTimeoutEachPacket;
 
+constexpr int SPH_MIN_PACKET_SIZE = 128*1024;
+constexpr int SPH_MAX_PACKET_SIZE = 128*1024*1024;
+
 extern int g_iMaxPacketSize;    // in bytes; for both query packets from clients and response packets from agents
 
 
@@ -131,11 +134,12 @@ static const int64_t S2US = I64C ( 1000000 );
 /////////////////////////////////////////////////////////////////////////////
 
 const char* szCommand ( int );
+SearchdCommand_e ParseCommand ( const CSphString & sCommand );
 
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 30
+	VER_COMMAND_SEARCH_MASTER = 34
 };
 
 
@@ -154,12 +158,20 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
-	VER_COMMAND_CLUSTER		= 0x10E,
+	VER_COMMAND_CLUSTER		= 0x10F,
 	VER_COMMAND_GETFIELD	= 0x100,
 	VER_COMMAND_SUGGEST		= 0x102,
-	VER_COMMAND_SHARD_WRITE	= 0x100,
+	VER_COMMAND_SHARD_WRITE	= 0x101,
+	VER_COMMAND_OPTIMIZE	= 0x101,
 
 	VER_COMMAND_WRONG = 0,
+};
+
+enum SearchdCommandMinV_e : WORD
+{
+	VER_COMMAND_SHARD_WRITE_HEARTBEAT = 0x101,
+	VER_COMMAND_OPTIMIZE_HEARTBEAT = 0x101,
+	VER_COMMAND_CLUSTER_HEARTBEAT = 0x10F,
 };
 
 enum ApiCommandFlags_e : DWORD
@@ -433,8 +445,10 @@ public:
 	}
 };
 
+struct ApiAuthToken_t;
+
 // RAII Start Sphinx API command/request header
-APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer = 0 /* SEARCHD_OK */ );
+APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer );
 
 // RAII Sphinx API answer
 APIBlob_c APIAnswer ( ISphOutputBuffer & dBuff, WORD uVer = 0, WORD uStatus = 0 /* SEARCHD_OK */ );
@@ -452,9 +466,8 @@ public:
 //	void PrependBuf ( SmartOutputBuffer_t &dBuf );
 	size_t GetIOVec ( CSphVector<sphIovec> &dOut ) const;
 	void Reset();
-#if _WIN32
-	void LeakTo ( CSphVector<ISphOutputBuffer *> dOut );
-#endif
+	void LeakTo ( CSphVector<ISphOutputBuffer *> & dOut );
+	void SwapData ( CSphVector<ISphOutputBuffer *> & dChunks );
 };
 
 class GenericOutputBuffer_c : public ISphOutputBuffer
@@ -626,7 +639,7 @@ private:
 	uint64_t			m_uTotalQueries GUARDED_BY ( m_tStatsLock ) = 0;
 
 	void				DoStatCalcStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats,
-							QueryStats_t & tQueryTimeStats ) const REQUIRES_SHARED ( m_tStatsLock );
+							QueryStats_t & tQueryTimeStats ) const REQUIRES ( m_tStatsLock );
 
 	CommandStats_t		m_tCommandsStats;
 };
@@ -1155,7 +1168,7 @@ bool PreloadKlistTarget ( const CSphString& sBase, RotateFrom_e eFrom, StrVec_t&
 ServedIndexRefPtr_c MakeCloneForRotation ( const cServedIndexRefPtr_c& pSource, const CSphString& sIndex );
 
 bool ConfigureDistributedIndex ( std::function<bool ( const CSphString& )>&& fnCheck, DistributedIndex_t& tIdx, const char * szIndexName, const CSphConfigSection& hIndex, CSphString & sError, StrVec_t* pWarnings = nullptr );
-void ConfigureLocalIndex ( ServedDesc_t* pIdx, const CSphConfigSection& hIndex, bool bMutableOpt, StrVec_t* pWarnings );
+bool ConfigureLocalIndex ( ServedDesc_t* pIdx, const CSphConfigSection& hIndex, bool bMutableOpt, StrVec_t* pWarnings, CSphString& sError );
 
 volatile bool& sphGetSeamlessRotate() noexcept;
 
@@ -1257,6 +1270,7 @@ public:
 // from mysqld_error.h
 enum class EMYSQL_ERR : WORD
 {
+	ACCESS_DENIED_ERROR			= 1045,
 	NO_DB_ERROR					= 1046,
 	UNKNOWN_COM_ERROR			= 1047,
 	SERVER_SHUTDOWN				= 1053,
@@ -1303,6 +1317,7 @@ enum class EHTTP_STATUS : BYTE
 	_200,
 	_206,
 	_400,
+	_401,
 	_403,
 	_404,
 	_405,
@@ -1331,6 +1346,7 @@ enum class EHTTP_ENDPOINT : BYTE
 	CLI,
 	CLI_JSON,
 	ES_BULK,
+	TOKEN,
 
 	TOTAL
 };
@@ -1353,6 +1369,7 @@ void FixPathAbsolute ( CSphString & sPath );
 using OptionsHash_t = SmallStringHash_T<CSphString>;
 void				ProcessHttpJsonQuery ( const CSphString & sQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError );
+void				sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sError, const char * sHeaderField );
 void				LoadCompatHttp ( const char * sData );
 void				SaveCompatHttp ( JsonEscapedBuilder & tOut );
 void				SetupCompatHttp();
@@ -1362,10 +1379,11 @@ int64_t				GetDocID ( const char * szID );
 
 void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, GenericOutputBuffer_c & tOut );
 void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
+void HandleCommandOptimize ( GenericOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq );
 
 void BuildStatusOneline ( StringBuilder_c& sOut );
 
-void UpdateLastMeta (VecTraits_T<AggrResult_t> tResults );
+void UpdateLastMeta ( VecTraits_T<AggrResult_t> tResults, const VecTraits_T<CSphQuery> & dQueries );
 
 namespace session {
 	bool IsAutoCommit ( const ClientSession_c* );
@@ -1374,6 +1392,7 @@ namespace session {
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
 	void SetFederatedUser();
 	void SetUser ( const CSphString & sUser );
+	const CSphString & GetUser();
 	void SetCurrentDbName ( CSphString sDb );
 	const char* GetCurrentDbName ();
 	void SetAutoCommit ( bool bAutoCommit );
@@ -1383,6 +1402,7 @@ namespace session {
 	QueryProfile_c* StartProfiling ( ESphQueryState );
 	void SaveLastProfile();
 	VecTraits_T<int64_t> LastIds();
+	VecTraits_T<CSphString> LastIdStrings();
 	void SetOptimizeById ( bool bOptimizeById );
 	bool GetOptimizeById();
 	void SetDeprecatedEOF ( bool bDeprecatedEOF );

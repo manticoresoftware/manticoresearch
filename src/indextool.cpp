@@ -825,6 +825,7 @@ struct IndexInfo_t
 {
 	bool							m_bEnabled {false};
 	DWORD							m_nDocs {0};
+	DWORD							m_uVersion {0};
 	CSphString						m_sName;
 	CSphString						m_sPath;
 	CSphFixedVector<DocID_t>		m_dKilllist;
@@ -843,15 +844,15 @@ static void ApplyKilllist ( IndexInfo_t & tTarget, const IndexInfo_t & tKiller, 
 {
 	if ( tSettings.m_uFlags & KillListTarget_t::USE_DOCIDS )
 	{
-		LookupReaderIterator_c tTargetReader ( tTarget.m_tLookup.GetReadPtr() );
-		LookupReaderIterator_c tKillerReader ( tKiller.m_tLookup.GetReadPtr() );
+		LookupReaderIterator_c tTargetReader ( tTarget.m_tLookup.GetReadPtr(), tTarget.m_uVersion );
+		LookupReaderIterator_c tKillerReader ( tKiller.m_tLookup.GetReadPtr(), tKiller.m_uVersion );
 
 		KillByLookup ( tTargetReader, tKillerReader, tTarget.m_tDeadRowMap );
 	}
 
 	if ( tSettings.m_uFlags & KillListTarget_t::USE_KLIST )
 	{
-		LookupReaderIterator_c tTargetReader ( tTarget.m_tLookup.GetReadPtr() );
+		LookupReaderIterator_c tTargetReader ( tTarget.m_tLookup.GetReadPtr(), tTarget.m_uVersion );
 		DocidListReader_c tKillerReader ( tKiller.m_dKilllist );
 
 		KillByLookup ( tTargetReader, tKillerReader, tTarget.m_tDeadRowMap );
@@ -886,6 +887,7 @@ static void ApplyKilllists ( CSphConfig & hConf )
 			fprintf ( stdout, "WARNING: unable to index header for table %s\n", tIndex.m_sName.cstr() );
 			continue;
 		}
+		tIndex.m_uVersion = tIndexFiles.GetVersion();
 
 		// no lookups prior to v.54
 		if ( tIndexFiles.GetVersion() < 54 )
@@ -1202,7 +1204,7 @@ static bool LoadJsonConfig ( CSphConfig & hConf, const CSphString & sConfigFile 
 	return true;
 }
 
-static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, CSphString sIndex, bool bDictKeywords, bool bRotate, StrVec_t * pWarnings, CSphString & sError )
+static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, CSphString sIndex, bool bRotate, StrVec_t * pWarnings, CSphString & sError )
 {
 	// don't expect complete index declarations from indexes created with CREATE TABLE
 	const auto& hIndex = hConf["index"][sIndex];
@@ -1213,7 +1215,7 @@ static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, CSphString s
 		CSphSchema tSchema;
 		CSphIndexSettings tSettings;
 		if ( bFromJson || sphRTSchemaConfigure ( hIndex, tSchema, tSettings, pWarnings, sError, false, false ) )
-			return sphCreateIndexRT ( std::move ( sIndex ), hIndex["path"].strval(), std::move ( tSchema ), 32*1024*1024, bDictKeywords );
+			return sphCreateIndexRT ( std::move ( sIndex ), hIndex["path"].strval(), std::move ( tSchema ), 32*1024*1024 );
 	} else
 	{
 		StringBuilder_c tPath;
@@ -1554,13 +1556,8 @@ int main ( int argc, char ** argv )
 		if ( !hConf["index"][sIndex]("path") )
 			sphDie ( "table '%s': missing 'path' in config'\n", sIndex.cstr() );
 
-		// preload that index
-		bool bDictKeywords = true;
-		if ( hConf["index"][sIndex].Exists ( "dict" ) )
-			bDictKeywords = ( hConf["index"][sIndex]["dict"]!="crc" );
-
 		StrVec_t dWarnings;
-		pIndex = CreateIndex ( hConf, sIndex, bDictKeywords, bRotate, &dWarnings, sError );
+		pIndex = CreateIndex ( hConf, sIndex, bRotate, &dWarnings, sError );
 
 		for ( const auto & i : dWarnings )
 			fprintf ( stdout, "WARNING: table '%s': %s\n", sIndex.cstr(), i.cstr() );

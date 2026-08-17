@@ -460,7 +460,7 @@ docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE invalid-source (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_invalid' num_consumers='1' batch=50;"
 ––– output –––
-ERROR 1064 (42000) at line 1: P03: syntax error, unexpected tablename, expecting CLUSTER or FUNCTION or PLUGIN or TABLE near 'SOURCE invalid-source (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_invalid' num_consumers='1' batch=50'
+ERROR 1064 (42000) at line 1: P01: syntax error, unexpected identifier, expecting USER near 'SOURCE invalid-source (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_invalid' num_consumers='1' batch=50'
 ––– input –––
 CONSUMER_GROUP="manticore_drop_source"
 ––– block: ../../base/kafka-reset-consumer-offsets –––

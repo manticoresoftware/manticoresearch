@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>plain table direct query defaults from config</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src_plain_defaults
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT id, title, score FROM test_table ORDER BY id
+	sql_attr_uint = score
+}
+
+source src_plain_defaults_b
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT id+10 AS id, title, score FROM test_table ORDER BY id
+	sql_attr_uint = score
+}
+
+index plain_defaults
+{
+	source = src_plain_defaults
+	path = <data_path/>/plain_defaults
+	morphology = stem_en
+	ranker = expr('sum(score)')
+	boolean_mode = or
+}
+
+index plain_defaults_b
+{
+	source = src_plain_defaults_b
+	path = <data_path/>/plain_defaults_b
+	morphology = stem_en
+	ranker = expr('sum(score)')
+	boolean_mode = or
+}
+
+index dist_local_defaults
+{
+	type = distributed
+	local = plain_defaults
+	local = plain_defaults_b
+}
+
+index dist_remote_defaults
+{
+	type = distributed
+	agent = <my_address/>:plain_defaults
+	agent = <my_address/>:plain_defaults_b
+	agent_connect_timeout = 1000
+	agent_query_timeout = 3000
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	title VARCHAR(255) NOT NULL,
+	score INTEGER NOT NULL
+)
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+<db_insert>
+INSERT INTO test_table VALUES
+(1,'running',0),
+(2,'cat',0),
+(3,'run cat',0),
+(4,'alpha',100),
+(5,'alpha alpha alpha',1),
+(6,'walking',0)
+</db_insert>
+
+<queries><sphinxql>
+SHOW TABLE plain_defaults SETTINGS;
+SELECT id FROM plain_defaults WHERE MATCH('running cat') ORDER BY id ASC;
+SELECT id FROM plain_defaults WHERE MATCH('walk') ORDER BY id ASC;
+SELECT id, weight() AS w FROM plain_defaults WHERE MATCH('alpha') ORDER BY w DESC, id ASC;
+SELECT id, weight() AS w FROM plain_defaults WHERE MATCH('alpha') ORDER BY w DESC, id ASC OPTION ranker=expr('1');
+SELECT id FROM plain_defaults, plain_defaults_b WHERE MATCH('running cat') ORDER BY id ASC;
+SELECT id, weight() AS w FROM plain_defaults, plain_defaults_b WHERE MATCH('alpha') ORDER BY w DESC, id ASC;
+SELECT id FROM dist_local_defaults WHERE MATCH('running cat') ORDER BY id ASC;
+SELECT id, weight() AS w FROM dist_local_defaults WHERE MATCH('alpha') ORDER BY w DESC, id ASC;
+SELECT id FROM dist_remote_defaults WHERE MATCH('running cat') ORDER BY id ASC;
+SELECT id, weight() AS w FROM dist_remote_defaults WHERE MATCH('alpha') ORDER BY w DESC, id ASC;
+SELECT id, weight() AS w FROM dist_remote_defaults WHERE MATCH('alpha') ORDER BY w DESC, id ASC OPTION ranker=expr('1');
+</sphinxql></queries>
+
+</test>

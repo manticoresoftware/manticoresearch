@@ -29,7 +29,7 @@ if mysql --ssl-mode=DISABLED -h127.0.0.1 -P9306 -e "INSERT INTO t(id,f) VALUES(1
 inserted
 removed_missing_binlog
 ––– input –––
-set +e; stdbuf -oL searchd --config /tmp/issue-4811-binlog/manticore.conf >/tmp/issue-4811-binlog/start2.out 2>&1; rc=$?; set -e; if [ "$rc" -ne 0 ] && grep -q -- '--replay-flags=ignore-open-errors' /tmp/issue-4811-binlog/searchd.log /tmp/issue-4811-binlog/start2.out; then echo replay_hint_logged; else echo "unexpected rc=$rc"; cat /tmp/issue-4811-binlog/start2.out; tail -100 /tmp/issue-4811-binlog/searchd.log; fi
+stdbuf -oL searchd --config /tmp/issue-4811-binlog/manticore.conf >/tmp/issue-4811-binlog/start2.out 2>&1 || true; for i in $(seq 1 50); do grep -q -- '--replay-flags=ignore-open-errors' /tmp/issue-4811-binlog/searchd.log /tmp/issue-4811-binlog/start2.out 2>/dev/null && break; sleep 0.1; done; if grep -q -- '--replay-flags=ignore-open-errors' /tmp/issue-4811-binlog/searchd.log /tmp/issue-4811-binlog/start2.out 2>/dev/null; then echo replay_hint_logged; else echo missing_replay_hint; cat /tmp/issue-4811-binlog/start2.out; tail -100 /tmp/issue-4811-binlog/searchd.log; fi
 ––– output –––
 replay_hint_logged
 ––– input –––

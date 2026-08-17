@@ -1227,7 +1227,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 		// index!
 		//////////
 
-		CSphString sIndexBase = hIndex["path"].cstr();
+		CSphString sIndexBase = hIndex["path"];
 		CSphString sIndexDir = GetPathOnly ( sIndexBase );
 		if ( sIndexDir!=sIndexBase && !MkDir ( sIndexDir.cstr() ) )
 		{

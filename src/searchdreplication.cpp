@@ -2427,8 +2427,8 @@ StrVec_t ReplicationCluster_t::GetIndexes() const noexcept
 			dIndexes.Add ( tIndex.first );
 		for ( const auto & tIndex : hIndexesLoaded )
 		{
-			assert ( !hIndexes[tIndex.first] );
-			dIndexes.Add ( tIndex.first );
+			if ( !hIndexes[tIndex.first] )
+				dIndexes.Add ( tIndex.first );
 		}
 	});
 	return dIndexes;

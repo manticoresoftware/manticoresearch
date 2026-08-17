@@ -10282,8 +10282,7 @@ class RTMergeCb_c final: public MergeCb_c
 	RtIndex_c* m_pOwner;
 	CSphVector<int> m_dTrackedChunks;
 
-	const DiskChunk_c* m_pChunk = nullptr;
-	int64_t m_iLastPayload = -1;
+	CSphVector<const DiskChunk_c *> m_dActiveAttrsChunks;
 
 public:
 	NONCOPYMOVABLE ( RTMergeCb_c );
@@ -10303,40 +10302,74 @@ public:
 			m_pOwner->SetKillHookFor ( &m_tKilledWhileMerge, (int)iPayload );
 			break;
 		case E_MERGEATTRS_START: // enter serial state/rlock
-			m_iLastPayload = iPayload;
-			m_pOwner->ProcessDiskChunkByID ( (int)iPayload, [this] ( const DiskChunk_c* p ) { m_pChunk = p; } );
-			m_pChunk->m_tLock.ReadLock ();
-			m_pChunk->CastIdx().m_bAttrsBusy.store ( true, std::memory_order_release );
+		{
+			int iChunk = (int)iPayload;
+			assert ( m_dActiveAttrsChunks.GetFirst ( [iChunk] ( const DiskChunk_c * pChunk ) { return pChunk->Cidx().m_iChunk==iChunk; } )<0 );
+
+			const DiskChunk_c * pChunk = nullptr;
+			m_pOwner->ProcessDiskChunkByID ( iChunk, [&pChunk] ( const DiskChunk_c* p ) { pChunk = p; } );
+			assert ( pChunk );
+			if ( !pChunk )
+				break;
+
+			pChunk->m_tLock.ReadLock ();
+			pChunk->CastIdx().m_bAttrsBusy.store ( true, std::memory_order_release );
+			m_dActiveAttrsChunks.Add ( pChunk );
 			break;
+		}
 		case E_MERGEATTRS_PULSE: // inside serial state/rlock
+		{
+			int iChunk = (int)iPayload;
 #ifndef NDEBUG
-			assert ( m_iLastPayload==iPayload );
-			m_pOwner->ProcessDiskChunkByID ( (int)iPayload, [this] ( const DiskChunk_c* p ) { assert ( m_pChunk == p); } );
+			assert ( m_dActiveAttrsChunks.GetLength()==1 );
 #endif
-			if ( m_pChunk && m_pChunk->m_iPendingUpdates.load ( std::memory_order_relaxed )>0 && m_pChunk->m_tLock.TestNextWlock() )
+			if ( m_dActiveAttrsChunks.GetLength()!=1 )
+				break;
+
+			const DiskChunk_c * pChunk = m_dActiveAttrsChunks[0];
+			assert ( pChunk->Cidx().m_iChunk==iChunk );
+			if ( pChunk->Cidx().m_iChunk!=iChunk )
+				break;
+
+#ifndef NDEBUG
+			m_pOwner->ProcessDiskChunkByID ( iChunk, [pChunk] ( const DiskChunk_c* p ) { assert ( pChunk == p); } );
+#endif
+
+			if ( pChunk && pChunk->m_iPendingUpdates.load ( std::memory_order_relaxed )>0 && pChunk->m_tLock.TestNextWlock() )
 			{
-				m_pChunk->m_tLock.Unlock (); // pulse lock that update can catch
+				pChunk->m_tLock.Unlock (); // pulse lock that update can catch
 				Threads::Coro::Reschedule();
-				m_pChunk->m_tLock.ReadLock ();
+				pChunk->m_tLock.ReadLock ();
 			}
 			break;
+		}
 		case E_MERGEATTRS_FINISHED: // leave serial state/rlock
+		{
+			int iChunk = (int)iPayload;
+			int iActive = m_dActiveAttrsChunks.GetFirst ( [iChunk] ( const DiskChunk_c * pChunk ) { return pChunk->Cidx().m_iChunk==iChunk; } );
 #ifndef NDEBUG
-			assert ( m_iLastPayload==iPayload );
-			m_pOwner->ProcessDiskChunkByID ( (int)iPayload, [this] ( const DiskChunk_c* p ) { assert ( m_pChunk == p); } );
+			assert ( iActive>=0 );
+			if ( iActive>=0 )
+				m_pOwner->ProcessDiskChunkByID ( iChunk, [this, iActive] ( const DiskChunk_c* p ) { assert ( m_dActiveAttrsChunks[iActive] == p); } );
 #endif
-			m_pChunk->m_tLock.Unlock ();
-			m_iLastPayload = -1;
-			m_pChunk = nullptr;
+			if ( iActive<0 )
+				break;
+
+			m_dActiveAttrsChunks[iActive]->m_tLock.Unlock ();
+			m_dActiveAttrsChunks.RemoveFast ( iActive );
 			break;
+		}
 		default:
 			break;
 		}
 	}
 
-	~RTMergeCb_c() final
+	~RTMergeCb_c() final NO_THREAD_SAFETY_ANALYSIS
 	{
 		assert ( m_pOwner );
+		for ( int i = m_dActiveAttrsChunks.GetLength()-1; i>=0; --i )
+			m_dActiveAttrsChunks[i]->m_tLock.Unlock ();
+
 		m_pOwner->SetKillHookFor ( nullptr, m_dTrackedChunks );
 	}
 

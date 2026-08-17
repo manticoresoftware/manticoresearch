@@ -57,6 +57,24 @@ MYSQL_PWD=distpass1234 mysql -NB -udistreader -h0 -P1306 -e "SELECT id,title FRO
 #!/\|[[:space:]]*2[[:space:]]*\|[[:space:]]*remote-row[[:space:]]*\|/!#
 #!/\+[-+]+\+/!#
 ––– comment –––
+––– 8.3.6 Distributed OPTIMIZE forwards credentials and authorizes every physical target before mutation –––
+EXPECTED: A user with WRITE on the logical and both physical tables can
+optimize both remote targets. Revoking WRITE on the second physical table only
+on the agent makes the next request fail before either target is mutated.
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "SET GLOBAL auto_optimize=0; DROP TABLE IF EXISTS auth_opt_a; DROP TABLE IF EXISTS auth_opt_b; CREATE TABLE auth_opt_a(title text) optimize_cutoff='1'; CREATE TABLE auth_opt_b(title text) optimize_cutoff='1'; INSERT INTO auth_opt_a VALUES(1,'one'); FLUSH RAMCHUNK auth_opt_a; INSERT INTO auth_opt_a VALUES(2,'two'); FLUSH RAMCHUNK auth_opt_a; INSERT INTO auth_opt_b VALUES(1,'one'); FLUSH RAMCHUNK auth_opt_b; INSERT INTO auth_opt_b VALUES(2,'two'); FLUSH RAMCHUNK auth_opt_b;"; MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "DROP TABLE IF EXISTS auth_opt_dist; CREATE TABLE auth_opt_dist TYPE='distributed' AGENT='127.0.0.1:2312:auth_opt_a,auth_opt_b' agent_query_timeout='2s'; CREATE USER 'distwriter' IDENTIFIED BY 'distwriter1234'; GRANT write ON 'auth_opt_dist' TO 'distwriter'; GRANT write ON 'auth_opt_a' TO 'distwriter'; GRANT write ON 'auth_opt_b' TO 'distwriter';" >/dev/null; cp /var/log/manticore-1/auth.json /var/log/manticore-2/auth.json; MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "RELOAD AUTH;" >/dev/null; echo "optimize auth prepared"
+––– output –––
+optimize auth prepared
+––– input –––
+if MYSQL_PWD=distwriter1234 mysql -udistwriter -h0 -P1306 -e "OPTIMIZE TABLE auth_opt_dist OPTION sync=1,cutoff=1"; then a=$(MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "SHOW TABLE auth_opt_a STATUS LIKE 'disk_chunks'" | awk -F'|' '$2 ~ /disk_chunks/ {gsub(/ /,"",$3); print $3}'); b=$(MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "SHOW TABLE auth_opt_b STATUS LIKE 'disk_chunks'" | awk -F'|' '$2 ~ /disk_chunks/ {gsub(/ /,"",$3); print $3}'); if [ "$a" = 1 ] && [ "$b" = 1 ]; then echo FORWARDED_WRITE_AUTH_OK; else echo "FAIL_FORWARDED_WRITE_CHUNKS a=$a b=$b"; fi; else echo FAIL_FORWARDED_WRITE_AUTH; fi
+––– output –––
+FORWARDED_WRITE_AUTH_OK
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "DROP TABLE auth_opt_a; DROP TABLE auth_opt_b; CREATE TABLE auth_opt_a(title text) optimize_cutoff='1'; CREATE TABLE auth_opt_b(title text) optimize_cutoff='1'; INSERT INTO auth_opt_a VALUES(1,'one'); FLUSH RAMCHUNK auth_opt_a; INSERT INTO auth_opt_a VALUES(2,'two'); FLUSH RAMCHUNK auth_opt_a; INSERT INTO auth_opt_b VALUES(1,'one'); FLUSH RAMCHUNK auth_opt_b; INSERT INTO auth_opt_b VALUES(2,'two'); FLUSH RAMCHUNK auth_opt_b; REVOKE write ON 'auth_opt_b' FROM 'distwriter';"; out=$(MYSQL_PWD=distwriter1234 mysql --force -udistwriter -h0 -P1306 -e "OPTIMIZE TABLE auth_opt_dist OPTION sync=1,cutoff=1" 2>&1 || true); a=$(MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "SHOW TABLE auth_opt_a STATUS LIKE 'disk_chunks'" | awk -F'|' '$2 ~ /disk_chunks/ {gsub(/ /,"",$3); print $3}'); b=$(MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "SHOW TABLE auth_opt_b STATUS LIKE 'disk_chunks'" | awk -F'|' '$2 ~ /disk_chunks/ {gsub(/ /,"",$3); print $3}'); if printf '%s\n' "$out" | grep -q "Permission denied for user 'distwriter'" && [ "$a" = 2 ] && [ "$b" = 2 ]; then echo REMOTE_WRITE_DENIED_BEFORE_MUTATION; else printf 'FAIL_REMOTE_WRITE_DENIAL a=%s b=%s error=%s\n' "$a" "$b" "$out"; fi
+––– output –––
+REMOTE_WRITE_DENIED_BEFORE_MUTATION
+––– comment –––
 ––– 8.3.2 Same username but different auth material on remote node –––
 EXPECTED: Distributed query fails with explicit remote auth (bad tag) error; auth log reports mismatch
 ––– comment –––

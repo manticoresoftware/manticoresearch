@@ -20,6 +20,8 @@ SHOW TABLE table_name[.N | CHUNK N] SETTINGS
 
 The output resembles the [--dumpconfig](../../Miscellaneous_tools.md#indextool) option of the [indextool](../../Miscellaneous_tools.md#indextool) utility. The report provides a breakdown of all table settings, including tokenizer and dictionary options.
 
+The statement works for real-time, plain, and [sharded](../../Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md) tables (a sharded table reports the settings shared by all its shards). It is not supported for distributed tables, since they have no settings of their own.
+
 If a table was created with a SQL `profile=...` shortcut, `SHOW TABLE SETTINGS` displays the expanded stored settings (for example `ranker` and `boolean_mode`), not the profile name itself.
 
 <!-- intro -->

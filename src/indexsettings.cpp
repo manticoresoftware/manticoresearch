@@ -2500,6 +2500,14 @@ void DumpSettings ( StringBuilder_c & tBuf, const CSphIndex & tIndex, FilenameBu
 }
 
 
+void DumpSettings ( StringBuilder_c & tBuf, const CSphIndexSettings & tSettings, const CSphFieldFilterSettings & tFieldFilterSettings, const CSphTokenizerSettings & tTokenizerSettings, const CSphDictSettings & tDictSettings, const MutableIndexSettings_c & tMutableSettings, FilenameBuilder_i * pFilenameBuilder )
+{
+	SettingsFormatterState_t tState(tBuf);
+	SettingsFormatter_c tFormatter ( tState, "", " = ", "", "\n" );
+	FormatAllSettings ( tSettings, tFieldFilterSettings, tTokenizerSettings, tDictSettings, tMutableSettings, tFormatter, pFilenameBuilder );
+}
+
+
 void DumpSettingsCfg ( FILE * fp, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder )
 {
 	SettingsFormatterState_t tState(fp);
@@ -3260,6 +3268,7 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 	{
 		m_iOptimizeCutoff = tOptimizeCutoff.IntVal();
 		m_iOptimizeCutoff = Max ( m_iOptimizeCutoff, 1 );
+		m_iOptimizeCutoffKNN = m_iOptimizeCutoff;
 		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
 	}
 
@@ -3387,6 +3396,7 @@ bool MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeed
 	{
 		m_iOptimizeCutoff = hIndex.GetInt ( GetMutableName ( MutableName_e::OPTIMIZE_CUTOFF ), g_iOptimizeCutoff );
 		m_iOptimizeCutoff = Max ( m_iOptimizeCutoff, 1 );
+		m_iOptimizeCutoffKNN = m_iOptimizeCutoff;
 		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
 	}
 
@@ -3572,6 +3582,7 @@ void MutableIndexSettings_c::Combine ( const MutableIndexSettings_c & tOther )
 	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::OPTIMIZE_CUTOFF ) )
 	{
 		m_iOptimizeCutoff = tOther.m_iOptimizeCutoff;
+		m_iOptimizeCutoffKNN = tOther.m_iOptimizeCutoffKNN;
 		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
 	}
 

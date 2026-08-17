@@ -158,12 +158,20 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
-	VER_COMMAND_CLUSTER		= 0x10E,
+	VER_COMMAND_CLUSTER		= 0x10F,
 	VER_COMMAND_GETFIELD	= 0x100,
 	VER_COMMAND_SUGGEST		= 0x102,
-	VER_COMMAND_SHARD_WRITE	= 0x100,
+	VER_COMMAND_SHARD_WRITE	= 0x101,
+	VER_COMMAND_OPTIMIZE	= 0x101,
 
 	VER_COMMAND_WRONG = 0,
+};
+
+enum SearchdCommandMinV_e : WORD
+{
+	VER_COMMAND_SHARD_WRITE_HEARTBEAT = 0x101,
+	VER_COMMAND_OPTIMIZE_HEARTBEAT = 0x101,
+	VER_COMMAND_CLUSTER_HEARTBEAT = 0x10F,
 };
 
 enum ApiCommandFlags_e : DWORD
@@ -1371,6 +1379,7 @@ int64_t				GetDocID ( const char * szID );
 
 void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, GenericOutputBuffer_c & tOut );
 void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
+void HandleCommandOptimize ( GenericOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq );
 
 void BuildStatusOneline ( StringBuilder_c& sOut );
 

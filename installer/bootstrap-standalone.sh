@@ -25,8 +25,12 @@ PACKAGE_NAME="manticore"
 DEB_FALLBACK_VERSIONED_PACKAGE_NAMES="manticore manticore-server manticore-server-core manticore-tools manticore-dev manticore-common"
 RPM_FALLBACK_VERSIONED_PACKAGE_NAMES="manticore manticore-server manticore-server-core manticore-tools manticore-devel manticore-common"
 SERVICE_NAME="manticore"
-BREW_PACKAGE_NAME="manticoresoftware/tap/manticore"
-BREW_SERVICE_NAME="manticore"
+BREW_RELEASE_PACKAGE_NAME="manticoresoftware/tap/manticore"
+BREW_RELEASE_SERVICE_NAME="manticore"
+BREW_DEV_PACKAGE_NAME="manticoresoftware/tap-dev/manticore-dev"
+BREW_DEV_SERVICE_NAME="manticore-dev"
+BREW_PACKAGE_NAME="$BREW_RELEASE_PACKAGE_NAME"
+BREW_SERVICE_NAME="$BREW_RELEASE_SERVICE_NAME"
 
 DEB_REPO_PACKAGE_NAME="manticore-repo"
 RPM_REPO_PACKAGE_NAME="manticore-repo"
@@ -301,7 +305,7 @@ upgrade_package() {
             print_error "version is not supported for Homebrew upgrades."
             return 1
         fi
-        brew upgrade "$BREW_SERVICE_NAME" || brew install "$BREW_PACKAGE_NAME"
+        brew upgrade "$(brew_package_name)" || brew install "$(brew_package_name)"
     fi
 }
 
@@ -454,7 +458,7 @@ install_manticore_package() {
             print_error "version is not supported for Homebrew installs."
             return 1
         fi
-        brew install "$BREW_PACKAGE_NAME"
+        brew install "$(brew_package_name)"
     fi
 
     print_success "Manticore package is installed."
@@ -557,7 +561,7 @@ remove_package() {
             sudo_exec yum remove -y "${package_specs[@]}"
         fi
     elif [[ "$OS_FAMILY" == "brew" ]]; then
-        brew uninstall "$BREW_SERVICE_NAME"
+        brew uninstall "$(brew_package_name)"
     fi
 }
 
@@ -763,7 +767,7 @@ searchd_owned_by_package() {
     elif [[ "$OS_FAMILY" == "rpm" ]]; then
         rpm -qf "$searchd_path" 2>/dev/null | grep -q '^manticore'
     elif [[ "$OS_FAMILY" == "brew" ]]; then
-        brew list --formula "$BREW_SERVICE_NAME" >/dev/null 2>&1
+        brew_formula_installed_for_channel release || brew_formula_installed_for_channel dev
     else
         return 1
     fi
@@ -905,6 +909,57 @@ rpm_repo_package_url_for_channel() {
     esac
 }
 
+brew_package_name_for_channel() {
+    case "$1" in
+        release) echo "$BREW_RELEASE_PACKAGE_NAME" ;;
+        dev) echo "$BREW_DEV_PACKAGE_NAME" ;;
+        *) return 1 ;;
+    esac
+}
+
+brew_service_name_for_channel() {
+    case "$1" in
+        release) echo "$BREW_RELEASE_SERVICE_NAME" ;;
+        dev) echo "$BREW_DEV_SERVICE_NAME" ;;
+        *) return 1 ;;
+    esac
+}
+
+brew_formula_installed_for_channel() {
+    local formula
+
+    formula=$(brew_package_name_for_channel "$1") || return 1
+    brew list --formula "$formula" >/dev/null 2>&1
+}
+
+brew_channel_or_default() {
+    if [[ -n "${MANTICORE_REPO_CHANNEL:-}" ]]; then
+        echo "$MANTICORE_REPO_CHANNEL"
+        return 0
+    fi
+
+    if brew_formula_installed_for_channel dev && ! brew_formula_installed_for_channel release; then
+        echo dev
+        return 0
+    fi
+
+    echo release
+}
+
+brew_package_name() {
+    local channel
+
+    channel=$(brew_channel_or_default)
+    brew_package_name_for_channel "$channel"
+}
+
+brew_service_name() {
+    local channel
+
+    channel=$(brew_channel_or_default)
+    brew_service_name_for_channel "$channel"
+}
+
 rpm_run() {
     local command=$1
     shift
@@ -1003,8 +1058,7 @@ ensure_repo_channel() {
             ;;
         brew)
             if [[ -n "${MANTICORE_REPO_CHANNEL:-}" ]]; then
-                print_error "Repository channels are not supported for Homebrew installs."
-                return 1
+                print_info "Using Homebrew ${MANTICORE_REPO_CHANNEL} formula: $(brew_package_name)"
             fi
             ;;
     esac
@@ -1300,7 +1354,11 @@ package_installed() {
         done
         return 1
     elif [[ "$OS_FAMILY" == "brew" ]]; then
-        brew list --formula "$BREW_SERVICE_NAME" >/dev/null 2>&1
+        if [[ -n "${MANTICORE_REPO_CHANNEL:-}" ]]; then
+            brew_formula_installed_for_channel "$MANTICORE_REPO_CHANNEL"
+        else
+            brew_formula_installed_for_channel release || brew_formula_installed_for_channel dev
+        fi
     else
         return 1
     fi
@@ -1324,7 +1382,7 @@ get_installed_version() {
         done
         return 1
     elif [[ "$OS_FAMILY" == "brew" ]]; then
-        brew list --versions "$BREW_SERVICE_NAME" 2>/dev/null | awk 'NR==1 {print $2}'
+        brew list --versions "$(brew_package_name)" 2>/dev/null | awk 'NR==1 {print $NF}'
     fi
 }
 
@@ -1344,7 +1402,7 @@ get_latest_available_version() {
     fi
 
     if [[ "$OS_FAMILY" == "brew" ]]; then
-        brew info --formula "$BREW_SERVICE_NAME" 2>/dev/null | awk '/^==> / {for (i=1; i<=NF; i++) if ($i == "stable") {print $(i+1); exit}}'
+        brew info --formula "$(brew_package_name)" 2>/dev/null | awk '/^==> / {for (i=1; i<=NF; i++) if ($i == "stable") {print $(i+1); exit}}'
     fi
 }
 
@@ -1888,7 +1946,7 @@ ensure_service_stopped() {
 
 service_is_active() {
     if [[ "$OS_FAMILY" == "brew" ]]; then
-        brew services list 2>/dev/null | awk -v svc="$BREW_SERVICE_NAME" '$1 == svc && $2 == "started" {found=1} END {exit found ? 0 : 1}'
+        brew services list 2>/dev/null | awk -v svc="$(brew_service_name)" '$1 == svc && $2 == "started" {found=1} END {exit found ? 0 : 1}'
     elif systemctl_usable; then
         systemctl is-active --quiet "$SERVICE_NAME" >/dev/null 2>&1
     elif command -v pgrep >/dev/null 2>&1; then
@@ -1914,7 +1972,7 @@ systemctl_usable() {
 
 start_service() {
     if [[ "$OS_FAMILY" == "brew" ]]; then
-        brew services start "$BREW_SERVICE_NAME"
+        brew services start "$(brew_package_name)"
     elif systemctl_usable; then
         sudo_exec systemctl start "$SERVICE_NAME"
     else
@@ -1925,7 +1983,7 @@ start_service() {
 
 stop_service() {
     if [[ "$OS_FAMILY" == "brew" ]]; then
-        brew services stop "$BREW_SERVICE_NAME"
+        brew services stop "$(brew_package_name)"
     elif systemctl_usable; then
         sudo_exec systemctl stop "$SERVICE_NAME"
     else
@@ -2269,7 +2327,11 @@ determine_action() {
 
     if desired_version_installed "$target_version"; then
         if [[ -n "$MANTICORE_REPO_CHANNEL" ]]; then
-            print_info "Installed version $current_version is already the latest available in the ${MANTICORE_REPO_CHANNEL} repository."
+            if [[ "$OS_FAMILY" == "brew" ]]; then
+                print_info "Installed version $current_version is already the latest available in the Homebrew ${MANTICORE_REPO_CHANNEL} formula."
+            else
+                print_info "Installed version $current_version is already the latest available in the ${MANTICORE_REPO_CHANNEL} repository."
+            fi
         else
             print_info "Installed version $current_version is already up to date."
         fi
@@ -2277,6 +2339,17 @@ determine_action() {
     fi
 
     if [[ -n "$MANTICORE_REPO_CHANNEL" ]]; then
+        if [[ "$OS_FAMILY" == "brew" ]]; then
+            if [[ "$UPGRADE_REQUESTED" == "true" ]] || ask_confirm "Latest Homebrew ${MANTICORE_REPO_CHANNEL} formula version is $target_version. Upgrade from $current_version?"; then
+                print_info "Switching from version $current_version to latest Homebrew ${MANTICORE_REPO_CHANNEL} formula version $target_version."
+                ACTION="upgrade"
+                return 0
+            else
+                print_info "Leaving version $current_version installed."
+                exit 0
+            fi
+        fi
+
         if [[ "$UPGRADE_REQUESTED" == "true" ]] || ask_confirm "Latest ${MANTICORE_REPO_CHANNEL} repository version is $target_version. Switch from $current_version?"; then
             print_info "Switching from version $current_version to latest ${MANTICORE_REPO_CHANNEL} repository version $target_version."
             SPECIFIC_VERSION="$target_version"

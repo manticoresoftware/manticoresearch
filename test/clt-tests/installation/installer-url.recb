@@ -1,3 +1,18 @@
 ––– input –––
-export MANTICORE_INSTALLER_REPO_URL="${MANTICORE_INSTALLER_REPO_URL:-https://repo.manticoresearch.com/repository/install}"
+export MANTICORE_INSTALLER_REPO_URL="${MANTICORE_INSTALLER_REPO_URL:-https://manticoresearch.com}"
+export MANTICORE_INSTALLER_SCRIPT="${MANTICORE_INSTALLER_SCRIPT:-}"
+run_manticore_installer_curl() {
+    if [ -n "$MANTICORE_INSTALLER_SCRIPT" ]; then
+        cat "$MANTICORE_INSTALLER_SCRIPT" | sh -s "$@"
+    else
+        curl -sSL "$MANTICORE_INSTALLER_REPO_URL" | sh -s "$@"
+    fi
+}
+run_manticore_installer_wget() {
+    if [ -n "$MANTICORE_INSTALLER_SCRIPT" ]; then
+        cat "$MANTICORE_INSTALLER_SCRIPT" | sh -s "$@"
+    else
+        wget -qO- "$MANTICORE_INSTALLER_REPO_URL" | sh -s "$@"
+    fi
+}
 ––– output –––

@@ -14,10 +14,12 @@ The output format for the cluster status variables is as follows:  `cluster_name
 * `nodes_view` - the actual list of nodes in the cluster that the current node can see.
 * `state_uuid` - UUID state of the cluster. If it matches the value in local_state_uuid, the local and cluster nodes are in sync.
 * `conf_id` - total number of cluster membership changes that have taken place.
-* `status` - cluster component status. Possible values are primary (primary group configuration, quorum present), non_primary (non-primary group configuration, quorum lost), or disconnected (not connected to group, retrying).
+* `status` - cluster component status. Possible values are primary (primary group configuration, quorum present), non_primary (non-primary group configuration, quorum lost), disconnected (not connected to group, retrying), or recovery-required (cluster metadata is preserved, but the replication provider did not start and manual recovery is required).
 * `size` - number of nodes currently in the cluster.
 * `local_index` - the node's index in the cluster.
 * `last_error` - the last recorded error message related to a cluster operation. The message provides a high-level summary of the problem. For more detailed context, you should consult the `searchd.log` file.
+
+When `status` is `recovery-required`, Manticore keeps the cluster metadata and table membership visible so you can inspect or delete the cluster, but the cluster is not writable. Galera provider status variables are not available until the cluster is recovered and started again.
 
 ### SST Progress Metrics
 

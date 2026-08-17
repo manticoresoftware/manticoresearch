@@ -95,7 +95,7 @@ upgrade_package() {
             print_error "version is not supported for Homebrew upgrades."
             return 1
         fi
-        brew upgrade "$BREW_SERVICE_NAME" || brew install "$BREW_PACKAGE_NAME"
+        brew upgrade "$(brew_package_name)" || brew install "$(brew_package_name)"
     fi
 }
 

@@ -9,7 +9,9 @@
 
 `INSERT` 中目前不支持表达式，因此必须显式指定值。
 
-ID字段/值可以省略，因为RT和PQ表支持[自动ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID)功能。您也可以使用0作为ID值以强制生成自动ID。具有重复ID的行不会通过`INSERT` 被覆盖。相反，您可以使用[REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md)来实现这一点。
+ID 字段/值可以省略，因为 RT 和 PQ 表支持 [auto-id](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) 功能。对于 numeric-ID 表，你也可以将 `0` 作为 id 值，以强制自动生成 ID。具有重复 ID 的行不会被 `INSERT` 覆盖。要实现这一目的，请改用 [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md)。
+
+对于使用 [`id uuid`](../../Creating_a_table/Data_types.md#UUID-document-IDs) 创建的表，请传入一个带引号的显式 UUID 字符串，或者省略 `id` 以自动生成一个。显式值必须匹配 `xxxxxxxx-xxxx-Vxxx-Wxxx-xxxxxxxxxxxx`，其中每个 `x` 都是十六进制数字，`V` 是版本（`1` 到 `8`），`W` 是变体（`8`、`9`、`a` 或 `b`）。系统接受大写十六进制字母，并会将其规范化为小写。不同于 numeric ID，`0` 不会触发自动生成 UUID。
 
 使用HTTP JSON协议时，您有两种不同的请求格式可供选择：通用Manticore格式和Elasticsearch类似的格式。这两种格式在下面的示例中都有展示。
 
@@ -84,26 +86,72 @@ POST /insert
 ```json
 {
   "table": "products",
-  "_id": 1,
+  "id": 1,
   "created": true,
   "result": "created",
   "status": 201
 }
 {
   "table": "products",
-  "_id": 2,
+  "id": 2,
   "created": true,
   "result": "created",
   "status": 201
 }
 {
   "table": "products",
-  "_id": 1657860156022587406,
+  "id": 1657860156022587406,
   "created": true,
   "result": "created",
   "status": 201
 }
 
+```
+
+对于使用 `id uuid` 创建的表，请将 JSON `id` 作为 UUID 字符串传入，或者省略它以自动生成一个：
+
+<!-- request JSON -->
+
+```json
+POST /insert
+{
+  "table":"products_uuid",
+  "id":"550e8400-e29b-41d4-a716-446655440000",
+  "doc":
+  {
+    "title":"Crossbody Bag with Tassel",
+    "price":19.85
+  }
+}
+
+POST /insert
+{
+  "table":"products_uuid",
+  "doc":
+  {
+    "title":"Generated UUID Bag",
+    "price":29
+  }
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "table": "products_uuid",
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "created": true,
+  "result": "created",
+  "status": 201
+}
+{
+  "table": "products_uuid",
+  "id": "<generated UUID>",
+  "created": true,
+  "result": "created",
+  "status": 201
+}
 ```
 
 <!-- intro -->
@@ -367,14 +415,14 @@ POST /insert
 ```json
 {
   "table": "weekly_table",
-  "_id": 1,
+  "id": 1,
   "created": true,
   "result": "created",
   "status": 201
 }
 {
   "table": "weekly_table",
-  "_id": 1657860156022587406,
+  "id": 1657860156022587406,
   "created": true,
   "result": "created",
   "status": 201
@@ -598,21 +646,21 @@ POST /insert  -d
 <!-- response JSON -->
 
 ```json
-{"table":"t","_id":2,"created":true,"result":"created","status":201}
+{"table":"t","id":2,"created":true,"result":"created","status":201}
 ```
 
 <!-- end -->
 
 ## 自动ID
 <!-- example autoid -->
-Manticore 为插入或替换到实时表或[Percolate表](../../Creating_a_table/Local_tables/Percolate_table.md)的文档的ID列提供了自动ID生成功能。生成器为文档生成一个唯一的ID，但不应将其视为自动递增ID。
+Manticore 会为插入到实时表或 [Percolate table](../../Creating_a_table/Local_tables/Percolate_table.md) 中、或写回其中的文档提供自动 ID 生成。生成器会产生一个具有以下保证的唯一数值，但它不应被视为自增序列。
 
 生成的 ID 值在以下条件下保证唯一：
 * 当前服务器的 [server_id](../../Server_settings/Searchd.md#server_id) 值在 0 到 127 范围内，并且在集群节点中唯一，或者它使用从 MAC 地址生成的默认值作为种子
 * 系统时间在 Manticore 节点服务器重启间不发生变化
 * 两次服务器启动之间的自动生成ID速率平均保持在每秒约1600万ID以下
 
-自动生成器为文档ID创建一个64位整数，并使用以下布局：
+自动 ID 生成器会创建一个 64 位整数，其布局如下：
 * 第0到23位是一个计数器，每次调用自动生成器时递增
 * 第24到55位存储服务器启动时间（以秒为单位），编码为`(unix_timestamp_at_start - 2019-05-01 00:00:00 UTC)`
 * 第56到62位存储`server_id`（该值被限制在0..127范围内）
@@ -622,6 +670,8 @@ Manticore 为插入或替换到实时表或[Percolate表](../../Creating_a_table
 重要的是：24位计数器并不是服务器单次运行期间可以插入文档总数的硬性限制。在启动后，您可以插入超过16,777,216个文档，ID仍会继续增加并在该运行过程中保持唯一。`~16 million IDs per second`规则对于跨重启的唯一性很重要：重启后，基于时间的部分必须足够前进，以确保新生成的ID不会与重启前生成的ID重叠。
 
 因此，自动 ID 生成器生成的第一个 ID 不是 1，而是一个较大的数字。此外，插入表中的文档流可能具有非连续的 ID 值，如果在调用之间向其他表插入数据，因为 ID 生成器在服务器中是唯一的并且在其所有表之间共享。
+
+对于 numeric-ID 表，这个整数就是对外可见的文档 ID。对于 UUID-ID 表，Manticore 会将其编码为标准的 UUIDv8 字符串；客户端只能看到 UUID。
 
 <!-- intro -->
 ##### SQL:
@@ -818,6 +868,8 @@ CALL UUID_SHORT(3)
 { "index": { "table": "products" } }
 { "title": "Crossbody Bag with Tassel", "price": 19.85, "id": "1" }
 ```
+
+对于声明为 `id uuid` 的 RT 表，`/bulk` 从 `id` 读取 UUID。`/_bulk` 从元数据 `_id` 或文档 `id` 中读取 UUID。两个端点都可以省略 ID，以便自动生成 UUID。
 
 #### /bulk 的分块传输
 `/bulk`（Manticore 模式）端点支持[分块传输编码](https://en.wikipedia.org/wiki/Chunked_transfer_encoding)。你可以用它来传输大批量数据。它能够：

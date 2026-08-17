@@ -306,7 +306,7 @@ INSERT INTO products (title, embedding_vector) VALUES
 POST /sql?mode=raw -d "INSERT INTO products (title) VALUES ('machine learning artificial intelligence'),('banana fruit sweet yellow')"
 ```
 
-Вставка нескольких полей - оба используются для встраивания, если FROM='title,description'
+Вставьте несколько полей — они оба используются для встраивания, если FROM='title,description'
 ```JSON
 POST /sql?mode=raw -d "INSERT INTO products_openai (title, description) VALUES ('smartphone', 'latest mobile device with advanced features'), ('laptop', 'portable computer for work and gaming')"
 ```
@@ -453,7 +453,7 @@ POST /insert
 ```json
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"created":true,
 	"result":"created",
 	"status":201
@@ -461,7 +461,7 @@ POST /insert
 
 {
 	"table":"test",
-	"_id":2,
+	"id":2,
 	"created":true,
 	"result":"created",
 	"status":201

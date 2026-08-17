@@ -22,6 +22,9 @@ searchd
 
 <queries>
 <sphinxql>
+	set global auto_optimize=0;
+	<!-- keep the three-to-one oracle in one merge job -->
+	set global merge_chunks_per_job=3;
 	drop table if exists system.test;
 	create table system.test;
 	desc system.test;
@@ -57,6 +60,28 @@ searchd
 	alter cluster test drop test;
 	delete cluster test;
 	select * from system.test;
+
+	<!-- OPTIMIZE accepts a system table and operates on the complete name -->
+	create table system.optimize_test (r text);
+	insert into system.optimize_test (id,r) values (4,'four');
+	flush ramchunk system.optimize_test;
+	insert into system.optimize_test (id,r) values (5,'five');
+	flush ramchunk system.optimize_test;
+	insert into system.optimize_test (id,r) values (6,'six');
+	flush ramchunk system.optimize_test;
+	select count(*) chunks from system.optimize_test.@status;
+	optimize table system.optimize_test option sync=1, cutoff=1;
+	select count(*) chunks from system.optimize_test.@status;
+	select count(*) rows from system.optimize_test;
+	drop table system.optimize_test;
+
+	<!-- only the exact lowercase system namespace is accepted -->
+	optimize table sYsTeM.test;
+	optimize table `systEM`.test;
+
+	<!-- a qualified name must use separately quoted identifiers -->
+	optimize table `system.test`;
+
 	drop table system.test;
 	drop table test;
 	create table system.test;
@@ -64,6 +89,13 @@ searchd
 	create table `system`.test2;
 	create table `system`.`test3`;
 	create table `bla`.`test3`;
+
+	<!-- DDL-equivalent quoting is accepted by OPTIMIZE -->
+	optimize table system.test;
+	optimize table system.`test1`;
+	optimize table `system`.test2;
+	optimize index `system` . `test3`;
+
 	show tables;
 	drop table system.test;
 	drop table system.test1;

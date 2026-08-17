@@ -387,7 +387,7 @@ Query OK, 3 rows affected (0.01 sec)
 ##### JSON:
 
 <!-- request JSON -->
-`"id":0` или отсутствие id приводит к автоматической генерации ID.
+Для этой real-time-таблицы `"id":0` или отсутствие `id` запрашивает автоматическую генерацию ID.
 
 ```json
 POST /insert
@@ -426,7 +426,7 @@ POST /insert
 ```json
 {
   "table": "products",
-  "_id": 0,
+  "id": 0,
   "created": true,
   "result": "created",
   "status": 201
@@ -434,7 +434,7 @@ POST /insert
 
 {
   "table": "products",
-  "_id": 0,
+  "id": 0,
   "created": true,
   "result": "created",
   "status": 201
@@ -442,7 +442,7 @@ POST /insert
 
 {
   "table": "products",
-  "_id": 0,
+  "id": 0,
   "created": true,
   "result": "created",
   "status": 201
@@ -1004,7 +1004,7 @@ POST /update
 ```json
 {
   "table": "products",
-  "_id": 1513686608316989452,
+  "id": 1513686608316989452,
   "result": "updated"
 }
 ```

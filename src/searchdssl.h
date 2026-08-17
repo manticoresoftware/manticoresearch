@@ -40,6 +40,9 @@ bool MakeRandBuf ( Str_t & sRes, CSphString & sError );
 bool SecretEqual ( const VecTraits_T<BYTE> & dA, const VecTraits_T<BYTE> & dB );
 
 #if WITH_SSL
+	// Kept forward-declared so SSL consumers do not need to include OpenSSL headers.
+	typedef struct bio_st BIO;
+
 	// set SSL key, certificate and ca-certificate to be used in SSL, if required.
 	// does NOT anyway initialize SSL library or call any of it's funcitons.
 	void SetServerSSLKeys ( const CSphString & sSslCert,  const CSphString & sSslKey,  const CSphString & sSslCa );
@@ -51,6 +54,9 @@ bool SecretEqual ( const VecTraits_T<BYTE> & dA, const VecTraits_T<BYTE> & dB );
 	// Replace pSource with it's SSL version.
 	// any data not consumed from original source will be considered as part of ssl handshake.
 	bool MakeSecureLayer ( std::unique_ptr<AsyncNetBuffer_c> & pSource );
+
+	// Creates the SSL input buffer around a supplied BIO; used by SSL tests.
+	std::unique_ptr<AsyncNetBuffer_c> MakeSslTestBuffer ( BIO * pSslBackend );
 
 #else
 	// these stubs work together with NOT including searchdsll.cpp into the final build

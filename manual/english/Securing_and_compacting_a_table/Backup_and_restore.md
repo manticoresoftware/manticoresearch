@@ -351,7 +351,7 @@ Manticore config
 
 ## Backup and restore with mysqldump
 
-Manticore supports `mysqldump` utility from MySQL up to 9.7 and `mariadb-dump` utility from MariaDB up to 12.3.
+Manticore supports `mysqldump` utility from MySQL up to 26.7 and `mariadb-dump` utility from MariaDB up to 12.3.
 
 <!-- example mysqldump_backup -->
 
@@ -387,6 +387,10 @@ Use the `cluster` user and the `-t` flag to enable replication mode. See the det
 
 <!-- end -->
 
+To apply changed full-text settings to existing documents, see [Reindexing existing documents after changing FT settings](../Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings).
+
+When piping a dump directly into `mysql` to reindex the same table, `--skip-lock-tables` is required. It is not required when exporting to a file and replaying it after `mysqldump` exits.
+
 <!-- example mysqldump_restore -->
 ### Restore
 
@@ -409,10 +413,10 @@ This command enables you to restore everything from the `manticore_backup.sql` f
 
 Here are some more settings that can be used with mysqldump to tailor your backup:
 
-- `-t` skips `drop`/`create` table commands. Useful for full-text reindexation of a table after changing tokenization settings.
+- `-t` skips `drop`/`create` table commands. Use it when reindexing a table after changing full-text settings.
 - `--no-data`: This setting omits table data from the backup, resulting in a backup file that consists only of table schemas.
 - `--ignore-table=[database_name].[table_name]`: This option allows you to bypass a particular table during the backup operation. Note that the database name must be `manticore`.
-- `--replace` to perform `replace` instead of `insert`. Useful for full-text reindexation of a table after changing tokenization settings.
+- `--replace` to perform `replace` instead of `insert`. Use it when reindexing a table after changing full-text settings.
 - `--net-buffer-length=16M` to make batches up to 16 megabytes large for faster restoration.
 - `-e` to batch up documents. Useful for faster restoration.
 - `-c` to keep column names. Useful for reindexation of a table after changing its schema (e.g., changing field order).

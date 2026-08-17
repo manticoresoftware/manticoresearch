@@ -54,9 +54,6 @@ struct SyncSrc_t
 	// hashes of all index files
 	CSphFixedVector<HASH20_t> m_dHashes { 0 };
 
-	int64_t m_tmTimeout = 0;	 // millisecond it took to read and hash all files, used for calc agent query timeout later
-	int64_t m_tmTimeoutFile = 0; // max millisecond to read or hash files, used for calc agent query timeout later
-
 	int64_t m_iBufferSize = 0;
 
 public:

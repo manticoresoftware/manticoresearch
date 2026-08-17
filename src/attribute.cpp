@@ -15,11 +15,27 @@
 #include "sphinxjson.h"
 #include "indexcheck.h"
 #include "knnmisc.h"
+#include "indexsettings.h"
 #include "schema/locator.h"
 
 #if __has_include( <charconv>)
 #include <charconv>
 #endif
+
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
+
+static FORCE_INLINE void PrefetchT0 ( const void * p )
+{
+#if defined(__GNUC__) || defined(__clang__)
+	__builtin_prefetch ( p, 0, 3 );	// read, high temporal locality
+#elif defined(_MSC_VER)
+	_mm_prefetch ( (const char *)p, _MM_HINT_T0 );
+#else
+	(void)p;
+#endif
+}
 
 //////////////////////////////////////////////////////////////////////////
 // blob attributes
@@ -640,6 +656,20 @@ ByteBlob_t sphGetBlobAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tL
 	assert ( pBlobPool );
 	int64_t iOffset = GetBlobRowOffset ( tMatch, tLocator );
 	return GetBlobAttr ( pBlobPool+iOffset, tLocator.m_iBlobAttrId, tLocator.m_nBlobAttrs );
+}
+
+
+void sphPrefetchBlobRowOffset ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator )
+{
+	assert ( tLocator.IsBlobAttr() && !tLocator.m_bDynamic && tMatch.m_pStatic );
+	PrefetchT0 ( (const int64_t*)tMatch.m_pStatic + tLocator.m_iBlobRowOffset );
+}
+
+
+void sphPrefetchBlobRow ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool )
+{
+	assert ( pBlobPool && tLocator.IsBlobAttr() && !tLocator.m_bDynamic && tMatch.m_pStatic );
+	PrefetchT0 ( pBlobPool + GetBlobRowOffset ( tMatch.m_pStatic, tLocator.m_iBlobRowOffset ) );
 }
 
 const BYTE * sphGetBlobAttr ( const CSphRowitem * pDocinfo, const CSphAttrLocator & tLocator, const BYTE * pBlobPool, int & iLengthBytes )
@@ -1314,7 +1344,7 @@ static void FloatVec2Str ( const float * pFloatVec, int iLengthBytes, StringBuil
 
 bool sphIsInternalAttr ( const CSphString & sAttrName )
 {
-	return sAttrName==sphGetBlobLocatorName() || sAttrName==GetNullMaskAttrName() || sAttrName==GetKnnDistRescoreAttrName();
+	return sAttrName==sphGetBlobLocatorName() || sAttrName==GetNullMaskAttrName() || sAttrName==GetKnnDistRescoreAttrName() || sAttrName==sphGetUuidDocidName();
 }
 
 

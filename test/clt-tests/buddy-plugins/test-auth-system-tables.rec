@@ -85,3 +85,11 @@ EXPECTED: Permission denied for direct DML on system.auth_users (use auth SQL co
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "INSERT INTO system.auth_users(username, salt, hashes) VALUES('hacker', 'aabb', '{\"password_sha1_no_salt\":\"aabb\"}');" 2>&1
 ––– output –––
 ERROR 1045 (42000) at line 1: Permission denied for user 'admin'
+––– comment –––
+––– 6.1.8 Admin cannot directly OPTIMIZE system.auth_users –––
+EXPECTED: The qualified name parses, then the internal auth storage guard denies access
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "OPTIMIZE TABLE system.auth_users;" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'admin'

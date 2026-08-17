@@ -2,6 +2,8 @@
 
 Wildcard searching is a common text search type. In Manticore, it is performed at the dictionary level. By default, both plain and RT tables use a dictionary type called [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict). In this mode, words are stored as they are, so enabling wildcarding does not affect the size of the table. When a wildcard search is performed, the dictionary is searched to find all possible expansions of the wildcarded word. This expansion can be problematic in terms of computation at query time when the expanded word provides many expansions or expansions that have huge hitlists, especially in the case of infixes where the wildcard is added at the start and end of the word. To avoid such problems, the  [expansion_limit](../../Server_settings/Searchd.md#expansion_limit) can be used.
 
+> NOTE: Changing index-time wildcard settings such as `min_prefix_len` or `min_infix_len` on a populated table affects only documents indexed after the change. To apply the new settings to existing documents, [reindex them](../../Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings).
+
 ## min_prefix_len
 
 <!-- example min_prefix_len -->

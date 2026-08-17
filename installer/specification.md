@@ -180,7 +180,7 @@ Start Manticore:
 brew services start manticore
 ```
 
-There is no repository bootstrap package in the Homebrew flow. `version` is not supported for Homebrew installs or upgrades unless Homebrew support for this is explicitly designed later.
+There is no repository bootstrap package in the Homebrew flow. The default `release` channel uses `manticoresoftware/tap/manticore`; the explicit `dev` channel uses the separate Homebrew dev formula `manticoresoftware/tap-dev/manticore-dev` and service name `manticore-dev`. `version` is not supported for Homebrew installs or upgrades unless Homebrew support for this is explicitly designed later.
 
 ### Unsupported Platforms
 
@@ -290,8 +290,8 @@ Public pipe examples should pass commands as `sh -s command args`, not `sh -s --
 - `uninstall`: stop and remove Manticore, preserving repository configuration and data/config state.
 - `purge`: stop and remove Manticore, then remove the repository bootstrap package when applicable.
 - `purge-all`: same as `purge`, then remove configured Manticore config and data directories after explicit confirmation unless `silent` is set.
-- `dev`: explicitly switch to the `Dev` repository. If Manticore is already installed, align it to the latest version available from that channel through the upgrade flow after confirmation unless `upgrade` is also present.
-- `release`: explicitly switch to the `Release` repository. If Manticore is already installed, align it to the latest version available from that channel through the upgrade flow after confirmation unless `upgrade` is also present.
+- `dev`: explicitly switch to the `Dev` repository/formula. On Homebrew this installs or upgrades `manticoresoftware/tap-dev/manticore-dev`. If Manticore is already installed in the selected channel, align it to the latest version available from that channel through the upgrade flow after confirmation unless `upgrade` is also present.
+- `release`: explicitly switch to the `Release` repository/formula. On Homebrew this installs or upgrades `manticoresoftware/tap/manticore`. If Manticore is already installed in the selected channel, align it to the latest version available from that channel through the upgrade flow after confirmation unless `upgrade` is also present.
 
 If different `dev`, `release` exist in one command, it should be treated as error. (if user selects one and
 same repo, i.e. `dev` more than once - that is not error).
@@ -482,7 +482,7 @@ sh -n installer/bootstrap-standalone.sh
 bash -n installer/bootstrap.sh installer/build.sh installer/main.sh installer/install.sh installer/upgrade.sh installer/uninstall.sh installer/detect.sh installer/ui.sh
 ```
 
-Homebrew behavior should be tested on a host or image where Homebrew is available and apt/yum/dnf are absent or hidden from `PATH`.
+Homebrew behavior should be tested on a host or image where Homebrew is available and apt/yum/dnf are absent or hidden from `PATH`, including `dev` selecting `manticoresoftware/tap-dev/manticore-dev` and `release` selecting `manticoresoftware/tap/manticore`.
 
 `bootstrap-standalone.sh` should be tested separately because it duplicates the modular flow and does not download modules.
 

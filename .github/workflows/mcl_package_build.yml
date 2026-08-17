@@ -105,7 +105,7 @@ jobs:
         RPM_PACKAGE_VERSION: ${{ inputs.rpm_package_version }}
     steps:
       - name: Checkout daemon repository with MCL submodule
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.source_ref != '' && inputs.source_ref || github.sha }}
           fetch-depth: 0
@@ -143,11 +143,14 @@ jobs:
 
       - name: Determine branch name for cache
         id: branch
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "branch_name=${{ github.head_ref }}" >> $GITHUB_OUTPUT
+            echo "branch_name=$HEAD_REF" >> $GITHUB_OUTPUT
           else
-            echo "branch_name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "branch_name=$REF_NAME" >> $GITHUB_OUTPUT
           fi
 
       - name: Mark repository as safe for package versioning
@@ -185,7 +188,7 @@ jobs:
 
       - name: Download embeddings lib
         if: ${{ inputs.embeddings_artifact != '' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         continue-on-error: true
         with:
           name: ${{ inputs.embeddings_artifact }}
@@ -222,7 +225,7 @@ jobs:
           fi
 
       - name: Check out main cache before building
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: cache
           enableCrossOsArchive: true
@@ -231,7 +234,7 @@ jobs:
             ${{ inputs.cache_key }}_master
 
       - name: Check out deps cache before building
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: build/_deps/cache
           enableCrossOsArchive: true
@@ -295,26 +298,14 @@ jobs:
 
       - name: Save MCL package to exact-SHA cache
         if: success() && inputs.package_cache_key != ''
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .mcl-package-cache
           key: ${{ inputs.package_cache_key }}
 
-      - name: Prepare artifact path list
-        if: success()
-        id: artifact_paths
-        env:
-          ARTIFACT_LIST: ${{ inputs.artifact_list }}
-        run: |
-          {
-            echo 'value<<EOF'
-            printf '%s\n' "$ARTIFACT_LIST" | tr ' ' '\n' | sed '/^$/d'
-            echo EOF
-          } >> "$GITHUB_OUTPUT"
-
       - name: Upload build artifacts
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: manticoresoftware/upload_artifact_with_retries@v5
         with:
           name: ${{ inputs.artifact_name }}
-          path: ${{ steps.artifact_paths.outputs.value }}
+          path: ${{ inputs.artifact_list }}

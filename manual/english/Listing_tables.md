@@ -393,7 +393,7 @@ utils_api.sql("SHOW TABLES LIKE 'pro%'", Some(true)).await
 {DESC | DESCRIBE} table_name [ LIKE pattern ]
 ```
 
-The `DESCRIBE` statement lists the table columns and their associated types. The columns are document ID, full-text fields, and attributes. The order matches the order in which fields and attributes are expected by `INSERT` and `REPLACE` statements. Column types  include `field`, `integer`, `timestamp`, `ordinal`, `bool`, `float`, `bigint`, `string`, and `mva`. ID column will be typed as `bigint`. Example:
+The `DESCRIBE` statement lists the table columns and their associated types. The columns are document ID, full-text fields, and attributes. The order matches the order in which fields and attributes are expected by `INSERT` and `REPLACE` statements. Column types include `field`, `integer`, `timestamp`, `ordinal`, `bool`, `float`, `bigint`, `uuid`, `string`, and `mva`. The ID column is `bigint` by default and `uuid` for a real-time table declared with `id uuid`. Example:
 
 ```sql
 mysql> DESC rt;

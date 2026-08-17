@@ -35,7 +35,7 @@ remove_package() {
             sudo_exec yum remove -y "${package_specs[@]}"
         fi
     elif [[ "$OS_FAMILY" == "brew" ]]; then
-        brew uninstall "$BREW_SERVICE_NAME"
+        brew uninstall "$(brew_package_name)"
     fi
 }
 

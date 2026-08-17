@@ -16,6 +16,7 @@
 #include "std/bitvec.h"
 #include "searchdconfig.h"
 #include "searchdha.h"
+#include "api_reply_stream.h"
 #include "wsrep_cxx.h"
 #include "send_files.h"
 
@@ -40,6 +41,11 @@ enum class E_CLUSTER : WORD
 	EXIT_UPDATE_NODES	= 14,
 	GET_NODE_AUTH		= 15,
 };
+
+inline constexpr bool IsClusterHeartbeatCommand ( E_CLUSTER eCmd )
+{
+	return eCmd==E_CLUSTER::FILE_RESERVE || eCmd==E_CLUSTER::FILE_SEND || eCmd==E_CLUSTER::INDEX_ADD_LOCAL;
+}
 
 inline constexpr const char* szClusterCmd ( E_CLUSTER eCmd )
 {
@@ -129,6 +135,8 @@ public:
 	static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const CSphString & sUser, int64_t iTimeoutMs, const REQUEST & tReq )
 	{
 		auto* pAgent = CreateAgentBase ( tDesc, iTimeoutMs );
+		if constexpr ( IsClusterHeartbeatCommand ( CMD ) )
+			pAgent->EnableRemoteReplyHeartbeats ();
 		pAgent->m_pResult = std::make_unique<CustomAgentData_T<REQUEST, REPLY>> ( tReq );
 		SetAuth ( sUser, pAgent );
 		return pAgent;
@@ -141,6 +149,8 @@ public:
 		ARRAY_FOREACH ( i, dDesc )
 		{
 			auto * pAgent = CreateAgentBase ( dDesc[i], iTimeout );
+			if constexpr ( IsClusterHeartbeatCommand ( CMD ) )
+				pAgent->EnableRemoteReplyHeartbeats ();
 			pAgent->m_pResult = std::make_unique<CustomAgentData_T<REQUEST, REPLY>> ( tReq );
 			dNodes[i] = pAgent;
 		}
@@ -175,6 +185,8 @@ public:
 		// API header
 		auto tReply = APIHeader ( tOut, SEARCHD_COMMAND_CLUSTER, VER_COMMAND_CLUSTER );
 		tOut.SendWord ( static_cast<WORD> ( CMD ) );
+		if constexpr ( IsClusterHeartbeatCommand ( CMD ) )
+			tOut.SendDword ( CalcRemoteHeartbeatIntervalMs ( tAgent.m_iMyQueryTimeoutMs ) );
 		tOut << GetReq ( tAgent );
 
 		// FIXME!!! add !IsAuthEnabled()
@@ -216,11 +228,12 @@ using FnOnSuccess = std::function < void ( const AgentConn_t * ) >;
 bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tReq, ReplyParser_i & tReply, bool bRetry, FnOnSuccess fnOnSuccess );
 
 // handle all API incoming.
-void HandleAPICommandCluster ( ISphOutputBuffer& tOut, WORD uCommandVer, InputBuffer_c& tBuf, const char* szClient );
+void HandleAPICommandCluster ( GenericOutputBuffer_c& tOut, WORD uCommandVer, InputBuffer_c& tBuf, const char* szClient );
 
 void ReplicationSetTimeouts ( int iConnectTimeoutMs, int iQueryTimeoutMs, int iRetryCount, int iRetryDelayMs );
 
 int64_t ReplicationTimeoutQuery ( int64_t iTimeout = 0 ); // 2 minutes in msec
+int64_t ReplicationSstQueryTimeout ();
 int ReplicationTimeoutConnect ();
 int ReplicationRetryCount ();
 int ReplicationRetryDelay ();
@@ -228,4 +241,3 @@ int ReplicationTimeoutAnyNode ();
 int ReplicationFileRetryCount ();
 int ReplicationFileRetryDelay ();
 void ReportClusterError ( const CSphString& sCluster, const CSphString& sError, const char* szClient, E_CLUSTER eCmd );
-

@@ -55,9 +55,11 @@ safe_to_bootstrap: 1
 
 当节点 A 和 B 重新启动时，它们会自动重新加入并从节点 C 同步。在它们重新加入时，检查 `SHOW STATUS LIKE 'cluster_<name>_status'`、`SHOW STATUS LIKE 'cluster_<name>_node_state'` 和 `SHOW STATUS LIKE 'cluster_<name>_size'`。等待所有节点显示 `primary` / `synced` 并且集群大小符合预期后，再将恢复视为完成。
 
+如果节点 A 和 B 是有意从集群中移除的，例如使用 `EXIT CLUSTER`，而节点 C 现在是集群中唯一仍然保留的节点，那么节点 C 在执行自身的干净重启后，也可以通过正常的守护进程启动恢复。在这种仅剩自身的情况下，不需要 `--new-cluster`。
+
 ### 所有节点都被干净关闭
 
-如果所有节点都正常关闭，集群完全离线，必须以特殊方式重新启动，以便成为集群的第一个运行节点。
+如果多节点集群中的所有节点都已正常停止，那么集群就处于完全离线状态，必须以特殊方式重新启动，这样其中一个节点才能成为集群中第一个运行的节点。
 
 在干净关闭时，每个节点将其最后一个事务号写入 `grastate.dat`。最后关闭的节点是首先启动的最安全节点：
 
@@ -69,6 +71,40 @@ safe_to_bootstrap: 1
 之后，正常启动其余节点并让它们重新加入。通过 `SHOW STATUS LIKE 'cluster_<name>_status'`、`SHOW STATUS LIKE 'cluster_<name>_node_state'` 和 `SHOW STATUS LIKE 'cluster_<name>_size'` 验证恢复。
 
 如果您首先引导一个较不先进的节点，一个更先进的节点可能会稍后加入它并从较旧状态接收完整的 SST，这可能会丢弃仅存在于更先进节点上的事务。这就是为什么 `safe_to_bootstrap: 1` 的节点应是您的首选。
+
+### 从现有本地表重新创建集群
+
+当没有任何节点能够通过上面的常规恢复方法恢复集群，但集群的表仍然存在于本地数据目录中时，可将此流程作为最后手段。在保存的集群元数据不完整、与当前运行版本不兼容，或者其他启动失败导致旧集群成员关系不可用时，都可能出现这种情况。
+
+此流程会创建一个新集群。它会丢弃旧集群成员关系和复制历史，然后把所选节点上的表复制到其他节点。只要任何节点仍然拥有旧集群健康的 `primary` / `synced` 副本，就不要使用此流程。在这种情况下，应保留健康的集群，并通过 [JOIN CLUSTER](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md#Joining-a-replication-cluster) 恢复其他节点。
+
+1. 在属于故障集群的每个节点上停止 Manticore。在此流程期间，不要写入本地表。
+2. 在每个节点上备份完整的 `data_dir`。如果旧集群描述符中包含你在重新创建集群时仍需要的自定义 `path`、`nodes` 或提供程序 `options`，请保留一份副本。
+3. 选择一个其本地表中包含你想保留的数据的节点。这个节点将成为新集群的数据源。稍后将它的表添加到集群时，会替换其他节点上同名的表。
+4. 在每个节点上，编辑 `<data_dir>/manticore.json`。在顶层 `clusters` 对象中，只删除故障集群对应的条目。例如，对于名为 `posts` 的集群，删除 `clusters.posts`。
+
+   保留 `indexes` 对象以及所有表目录。不要删除或重新创建这些表。
+
+5. 在每个节点上正常启动 Manticore。原先的集群表现在应该会作为本地表出现。在继续之前，请先检查所选源节点上的表。如果它们缺失或不完整，请停止并恢复备份。
+6. 在所选源节点上创建集群。如果你仍然需要保存的 `path`、`nodes` 或提供程序选项，请一并包含。如果已启用身份验证，请在此语句以及下面的 `JOIN CLUSTER` 语句中添加 `'<replication-user>' AS user`。该账号必须在每个节点上具有匹配的已存储身份验证数据和 `replication` 权限。参见 [设置复制](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Setting-up-replication)。
+
+   ```sql
+   CREATE CLUSTER posts
+   ```
+
+7. 在其他每个节点上，通过第一个节点加入新集群：
+
+   ```sql
+   JOIN CLUSTER posts AT 'node-a.example:9312'
+   ```
+
+8. 在所选源节点上，将现有本地表附加到新集群：
+
+   ```sql
+   ALTER CLUSTER posts ADD table_a, table_b
+   ```
+
+9. 在恢复写入之前，等待每个节点都报告 `cluster_posts_status=primary` 且 `cluster_posts_node_state=synced`。
 
 ### 一个节点崩溃或变得不可达
 

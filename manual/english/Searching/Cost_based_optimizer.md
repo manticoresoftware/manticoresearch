@@ -6,7 +6,7 @@ The CBO can also enhance the performance of full-text queries. See below for mor
 
 The CBO may decide to replace one or more query filters with one of the following entities if it determines that doing so will improve performance:
 
-1. A **docid index** utilizes a special docid-only secondary index stored in files with the `.spt` extension. Besides improving filters on document IDs, the docid index is also used to accelerate document ID to row ID lookups and to speed up the application of large killlists during daemon startup.
+1. A **docid index** utilizes a special docid-only secondary index stored in files with the `.spt` extension. Besides improving filters on numeric document IDs, the docid index is also used to accelerate document ID to row ID lookups and to speed up the application of large killlists during daemon startup.
 2. A **columnar scan** relies on columnar storage and can only be used on a columnar attribute. It scans every value and tests it against the filter, but it is heavily optimized and is typically faster than the default approach.
 3. **Secondary indexes** are generated for all attributes (except JSON) by default. They use the [PGM index](https://pgm.di.unipi.it/) along with Manticore's built-in inverted index to retrieve the list of row IDs corresponding to a value or range of values. Secondary indexes are stored in files with the `.spidx` and `.spjidx` extensions.
 For information on how to generate secondary indexes over JSON attributes, see [json_secondary_indexes](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#json_secondary_indexes).
@@ -19,7 +19,7 @@ The optimizer estimates the cost of each execution path using various attribute 
 4. A columnar min-max tree. While the CBO uses histograms to estimate the number of documents left after applying the filter, it also needs to determine how many documents the filter had to process. For columnar attributes, partial evaluation of the min-max tree serves this purpose.
 5. Full-text dictionary. The CBO utilizes term stats to estimate the cost of evaluating the full-text tree.
 
-The optimizer computes the execution cost for every filter used in a query. Since certain filters can be replaced with several different entities (e.g., for a document id, Manticore can use a plain scan, a docid index lookup, a columnar scan (if the document id is columnar), and a secondary index), the optimizer evaluates all available combinations. However, there is a maximum limit of 1024 combinations.
+The optimizer computes the execution cost for every filter used in a query. Since certain filters can be replaced with several different entities (e.g., for a numeric document ID, Manticore can use a plain scan, a docid index lookup, a columnar scan (if the document ID is columnar), and a secondary index), the optimizer evaluates all available combinations. However, there is a maximum limit of 1024 combinations.
 
 To estimate query execution costs, the optimizer calculates the estimated costs of the most significant operations performed when executing the query. It uses preset constants to represent the cost of each operation.
 

@@ -87,6 +87,7 @@ bool			sphInterrupted();
 
 struct CSphMultiformContainer;
 class CSphWriter;
+struct UuidDocidKey_t;
 
 
 /// wordforms container
@@ -452,6 +453,13 @@ enum class FacetFilterClause_e : BYTE
 	Exclude
 };
 
+enum class QueryRole_e : BYTE
+{
+	NONE = 0,
+	FACET_HELPER = 1,
+	GROUP_CONCAT_HELPER = 2
+};
+
 struct FacetFilterTrait_t
 {
 	std::optional<FacetFilterMode_e> m_tMode;
@@ -660,6 +668,8 @@ struct CSphQuery
 
 	CSphString		m_sSelect;				///< select-list (attributes and/or expressions)
 	CSphString		m_sOrderBy;				///< order-by clause
+	bool			m_bExplicitOrderBy = false;	///< SQL ORDER BY was supplied by the client
+	CSphVector<CSphString> m_dOrderByItems;	///< parsed expressions in the explicit SQL ORDER BY
 
 	CSphString		m_sOuterOrderBy;		///< temporary (?) subselect hack
 	int				m_iOuterOffset = 0;		///< keep and apply outer offset at master
@@ -691,7 +701,7 @@ struct CSphQuery
 
 	bool			m_bFacet = false;			///< whether this a facet query
 	bool			m_bFacetHead = false;
-	bool			m_bFacetMaxRef = false;	///< internal hidden facet helper query/result
+	QueryRole_e		m_eQueryRole = QueryRole_e::NONE;	///< serialized physical-query role
 	FacetFilterTrait_t m_tFacetFilter;
 	int				m_iFacetResultOffset = -1;	///< internal deferred facet paging: restore requested offset after zero-bucket merge/order
 	int				m_iFacetResultLimit = -1;	///< internal deferred facet paging: restore requested limit after zero-bucket merge/order
@@ -714,6 +724,9 @@ struct CSphQuery
 
 	bool						HasKnn() const				{ return !m_dKnnSettings.IsEmpty(); }
 	bool						HasMultipleKnn() const		{ return m_dKnnSettings.GetLength() > 1; }
+	bool						IsInternalQuery() const		{ return m_eQueryRole!=QueryRole_e::NONE; }
+	bool						IsFacetHelper() const		{ return m_eQueryRole==QueryRole_e::FACET_HELPER; }
+	bool						IsGroupConcatHelper() const	{ return m_eQueryRole==QueryRole_e::GROUP_CONCAT_HELPER; }
 	KnnSearchSettings_t &		SingleKnnSettings()			{ return m_dKnnSettings[0]; }
 	const KnnSearchSettings_t &	SingleKnnSettings() const	{ return m_dKnnSettings[0]; }
 };
@@ -1422,6 +1435,7 @@ public:
 	virtual bool				AlterKillListTarget ( KillListTargets_c & tTargets, CSphString & sError ) { return false; }
 	virtual void				KillExistingDocids ( CSphIndex * pTarget ) const {}
 	virtual bool				IsAlive ( DocID_t tDocID ) const { return false; }
+	virtual DocID_t			FindAliveUuidDocid ( const UuidDocidKey_t & ) const { assert ( 0 && "uuid lookup is not supported by this index" ); return 0; }
 
 	bool						GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const override { return false; }
 	int							GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const override { return -1; }

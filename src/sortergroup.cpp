@@ -374,6 +374,25 @@ public:
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) override	{ assert ( 0 && "Not supported in grouping"); }
 	bool	PushGrouped ( const CSphMatch & tEntry, bool ) override			{ return PushEx<true> ( tEntry, tEntry.GetAttr ( m_tLocGroupby ), false, false, true, nullptr ); }
 	ISphMatchSorter * Clone() const override								{ return this->template CloneSorterT<MYTYPE>(); }
+	int		PrepareGroupAccess() override									{ FinalizeMatches(); return this->m_dIData.GetLength(); }
+
+	bool VisitGroup ( SphAttr_t uGroupKey, const VisitMatch_fn & fnVisitor ) override
+	{
+		assert ( m_bMatchesFinalized );
+
+		if ( m_hGroup2Match.GetLength()!=this->m_dIData.GetLength() )
+		{
+			m_hGroup2Match.Clear();
+			RebuildHash();
+		}
+
+		CSphMatch ** ppMatch = m_hGroup2Match.Find ( uGroupKey );
+		if ( !ppMatch )
+			return false;
+
+		fnVisitor ( **ppMatch );
+		return true;
+	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
 	int Flatten ( CSphMatch * pTo ) override
@@ -897,6 +916,24 @@ public:
 	bool	Push ( const CSphMatch & tEntry ) override						{ return PushEx<false> ( tEntry, m_pGrouper->KeyFromMatch(tEntry), false, false, true, nullptr ); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final	{ assert ( 0 && "Not supported in grouping"); }
 	bool	PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) override	{ return PushEx<true> ( tEntry, tEntry.GetAttr ( m_tLocGroupby ), bNewSet, false, true, nullptr ); }
+	int		PrepareGroupAccess() override									{ FinalizeMatches(); return m_hGroup2Index.GetLength(); }
+
+	bool VisitGroup ( SphAttr_t uGroupKey, const VisitMatch_fn & fnVisitor ) override
+	{
+		assert ( m_bFinalized );
+
+		int * pStoredHead = m_hGroup2Index.Find ( uGroupKey );
+		if ( !pStoredHead )
+			return false;
+
+		int iStart = this->m_dIData[*pStoredHead];
+
+		fnVisitor ( m_dData[iStart] );
+		for ( int i = this->m_dIData[iStart]; i!=iStart; i = this->m_dIData[i] )
+			fnVisitor ( m_dData[i] );
+
+		return true;
+	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
 	int Flatten ( CSphMatch * pTo ) override
@@ -904,12 +941,7 @@ public:
 		if ( !GetLength() )
 			return 0;
 
-		if ( !m_bFinalized )
-		{
-			FinalizeChains ();
-			PrepareForExport ();
-			CountDistinct ();
-		}
+		FinalizeMatches();
 
 		auto fnSwap = [&pTo] ( CSphMatch & tSrc ) 	{ // the writer
 			Swap ( *pTo, tSrc );
@@ -954,12 +986,7 @@ public:
 
 		if ( bFinalizeMatches )
 		{
-			if ( !m_bFinalized )
-			{
-				FinalizeChains();
-				PrepareForExport();
-				CountDistinct();
-			}
+			FinalizeMatches();
 
 			ProcessData ( tProcessor, m_dFinalizedHeads );
 		}
@@ -1376,6 +1403,16 @@ private:
 	}
 
 	// final pass before iface finalize/flatten - cut worst, sort everything
+	void FinalizeMatches()
+	{
+		if ( !GetLength() || m_bFinalized )
+			return;
+
+		FinalizeChains();
+		PrepareForExport();
+		CountDistinct();
+	}
+
 	void FinalizeChains()
 	{
 		if ( m_bFinalized )

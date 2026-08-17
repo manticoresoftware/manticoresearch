@@ -98,14 +98,13 @@ mysql -h0 -P9306 -e "SHOW CHAT MODELS;" | grep -c "openai"
 ––– comment –––
 Test with single content field
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('Tell me about vector search', 'knowledge_base', 'fast_assistant')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_1.txt
+mysql -h0 -P9306 -e "CALL CHAT('Tell me about vector search', 'knowledge_base', 'fast_assistant')\G;" | awk '/^[[:space:]]*response: ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_1.txt
 ––– output –––
 *************************** 1. row ***************************
 #!/.*conversation_uuid: [a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
 #!/.*user_query: Tell me about vector search/!#
 #!/.*search_query: .*[Vv]ector.*[Ss]earch.*/!#
 #!/.*response: .*[Vv]ector.*[Ss]earch.*/!#
-#!/.*response_with_refs: .*/!#
 #!/.*sources: .*/!#
 ––– input –––
 grep 'sources:' /tmp/output_1.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([2,3,4])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
@@ -114,14 +113,13 @@ OK
 ––– comment –––
 Test with two content fields (title, content)
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('Explain vector search', 'knowledge_base', 'detailed_assistant')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_2.txt
+mysql -h0 -P9306 -e "CALL CHAT('Explain vector search', 'knowledge_base', 'detailed_assistant')\G;" | awk '/^[[:space:]]*response: ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_2.txt
 ––– output –––
 *************************** 1. row ***************************
 #!/.*conversation_uuid: [a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
 #!/.*user_query: Explain vector search/!#
 #!/.*search_query: .*[Vv]ector.*[Ss]earch.*/!#
 #!/.*response: .*[Vv]ector.*[Ss]earch.*/!#
-#!/.*response_with_refs: .*/!#
 #!/.*sources: .*/!#
 ––– input –––
 grep 'sources:' /tmp/output_2.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([2,3,4])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
@@ -130,14 +128,13 @@ OK
 ––– comment –––
 Test with multiple content fields (title, summary, content)
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('Tell me about RAG architecture', 'knowledge_base', 'creative_assistant')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_3.txt
+mysql -h0 -P9306 -e "CALL CHAT('Tell me about RAG architecture', 'knowledge_base', 'creative_assistant')\G;" | awk '/^[[:space:]]*response: ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_3.txt
 ––– output –––
 *************************** 1. row ***************************
 #!/.*conversation_uuid: [a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
 #!/.*user_query: Tell me about RAG architecture/!#
 #!/.*search_query: .*(RAG|[Rr]etrieval|[Gg]eneration).*/!#
 #!/.*response: .*(RAG|[Rr]etrieval|[Gg]eneration).*/!#
-#!/.*response_with_refs: .*/!#
 #!/.*sources: .*/!#
 ––– input –––
 grep 'sources:' /tmp/output_3.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([4])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
@@ -146,14 +143,13 @@ OK
 ––– comment –––
 Test conversation tracking - first message in a new conversation
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('What is clustering?', 'knowledge_base', 'fast_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_4.txt
+mysql -h0 -P9306 -e "CALL CHAT('What is clustering?', 'knowledge_base', 'fast_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | awk '/^[[:space:]]*response: ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_4.txt
 ––– output –––
 *************************** 1. row ***************************
 #!/.*conversation_uuid: conv-test-1234-5678-90ab-cdef12345678/!#
 #!/.*user_query: What is clustering\?/!#
 #!/.*search_query: .*[Cc]luster.*/!#
 #!/.*response: .*/!#
-#!/.*response_with_refs: .*/!#
 #!/.*sources: .*/!#
 ––– input –––
 grep 'sources:' /tmp/output_4.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
@@ -162,14 +158,13 @@ OK
 ––– comment –––
 Test conversation tracking - follow-up message (should maintain context)
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('How do I configure it?', 'knowledge_base', 'fast_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_5.txt
+mysql -h0 -P9306 -e "CALL CHAT('How do I configure it?', 'knowledge_base', 'fast_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | awk '/^[[:space:]]*response: ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_5.txt
 ––– output –––
 *************************** 1. row ***************************
 #!/.*conversation_uuid: conv-test-1234-5678-90ab-cdef12345678/!#
 #!/.*user_query: How do I configure it\?/!#
 #!/.*search_query: .*[Cc]luster.*/!#
 #!/.*response: .*/!#
-#!/.*response_with_refs: .*/!#
 #!/.*sources: .*/!#
 ––– input –––
 grep 'sources:' /tmp/output_5.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
@@ -178,14 +173,13 @@ OK
 ––– comment –––
 Test same model on same conversation
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('What are best practices?', 'knowledge_base', 'fast_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_6.txt
+mysql -h0 -P9306 -e "CALL CHAT('What are best practices?', 'knowledge_base', 'fast_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | awk '/^[[:space:]]*response: ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }' | tee /tmp/output_6.txt
 ––– output –––
 *************************** 1. row ***************************
 #!/.*conversation_uuid: conv-test-1234-5678-90ab-cdef12345678/!#
 #!/.*user_query: What are best practices\?/!#
 #!/.*search_query: .*[Cc]luster.*/!#
 #!/.*response: .*/!#
-#!/.*response_with_refs: .*/!#
 #!/.*sources: .*/!#
 ––– input –––
 grep 'sources:' /tmp/output_6.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
@@ -194,14 +188,13 @@ OK
 ––– comment –––
 Test independent conversation - different context
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('Show me tutorials', 'knowledge_base', 'creative_assistant', 'conv-other-aaaa-bbbb-cccc-dddddddddddd')\G;" | awk '/^[[:space:]]*(response|response_with_refs): ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }'
+mysql -h0 -P9306 -e "CALL CHAT('Show me tutorials', 'knowledge_base', 'creative_assistant', 'conv-other-aaaa-bbbb-cccc-dddddddddddd')\G;" | awk '/^[[:space:]]*response: ?/ { if (in_field) print r; r=$0; in_field=1; next } in_field && /^[[:space:]]+sources: / { print r; print; in_field=0; next } in_field { r=r " " $0; next } { print } END { if (in_field) print r }'
 ––– output –––
 *************************** 1. row ***************************
 #!/.*conversation_uuid: conv-other-aaaa-bbbb-cccc-dddddddddddd/!#
 #!/.*user_query: Show me tutorials/!#
 #!/.*search_query: .*tutorials.*/!#
 #!/.*response: .*/!#
-#!/.*response_with_refs: .*/!#
 #!/.*sources: .*/!#
 ––– comment –––
 Cleanup - drop all models

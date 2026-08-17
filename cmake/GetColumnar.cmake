@@ -5,9 +5,9 @@ include ( update_bundle )
 # from the submodule for local testing/debugging.
 
 # Versions of API headers we are need to build with.
-set ( NEED_COLUMNAR_API 27 )
-set ( NEED_SECONDARY_API 20 )
-set ( NEED_KNN_API 15 )
+set ( NEED_COLUMNAR_API 28 )
+set ( NEED_SECONDARY_API 21 )
+set ( NEED_KNN_API 16 )
 
 if (WIN32)
 	set ( EXTENSION dll )

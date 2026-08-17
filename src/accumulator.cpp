@@ -13,10 +13,17 @@
 #include "accumulator.h"
 #include "sphinxrt.h"
 #include "columnarmisc.h"
+#include "coroutine.h"
 #include "memio.h"
 #include "tracer.h"
+#include "indexsettings.h"
 
 #include <memory>
+
+RtAccum_t::~RtAccum_t()
+{
+	ResetUuidLeases();
+}
 
 std::unique_ptr<ReplicationCommand_t> MakeReplicationCommand ( ReplCmd_e eCommand, CSphString sIndex, CSphString sCluster )
 {
@@ -281,7 +288,22 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 
 	std::string sErrorSTL;
 	std::vector<std::vector<float>> dEmbeddingsForAttrTmp;
-	if ( uNumSkipped!=m_uAccumDocs && !tAttrWithModel.m_pModel->Convert ( dTexts, uNumSkipped ? dEmbeddingsForAttrTmp : dEmbeddingsForAttr, sErrorSTL, GetEmbeddingsThreadsToUse() ) )
+	bool bConverted = true;
+	if ( uNumSkipped!=m_uAccumDocs )
+	{
+		auto & dEmbeddingsTarget = uNumSkipped ? dEmbeddingsForAttrTmp : dEmbeddingsForAttr;
+		auto fnConvert = [&]
+		{
+			return tAttrWithModel.m_pModel->Convert ( dTexts, dEmbeddingsTarget, sErrorSTL, GetEmbeddingsThreadsToUse() );
+		};
+
+		if ( Threads::IsInsideCoroutine() )
+			Threads::Coro::Continue ( Threads::GetMaxCoroStackSize(), [&] { bConverted = fnConvert(); } );
+		else
+			bConverted = fnConvert();
+	}
+
+	if ( !bConverted )
 	{
 		sError = sErrorSTL.c_str();
 		return false;
@@ -425,6 +447,7 @@ void RtAccum_t::Cleanup()
 	m_iIndexId = 0;
 
 	m_dCmd.Reset();
+	ResetUuidLeases();
 }
 
 void RtAccum_t::CleanReplicated()
@@ -966,6 +989,48 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 		m_pEmbeddingsSrc->DropTail ( iDstRow );
 }
 
+void RtAccum_t::ForEachUuidDocid ( const std::function<void ( ByteBlob_t )> & fnVisitor ) const
+{
+	assert ( m_uAccumDocs );
+	assert ( m_pIndex );
+
+	const CSphSchema & tSchema = m_pIndex->GetInternalSchema();
+	assert ( sphHasUuidDocid ( tSchema ) );
+
+	const CSphColumnInfo * pUuidAttr = tSchema.GetAttr ( sphGetUuidDocidName() );
+	assert ( pUuidAttr );
+	assert ( pUuidAttr->m_eAttrType==SPH_ATTR_STRING );
+
+	if ( pUuidAttr->IsColumnar() )
+	{
+		assert ( m_pColumnarBuilder );
+		std::unique_ptr<ColumnarRT_i> pColumnar = CreateLightColumnarRT ( tSchema, m_pColumnarBuilder.get() );
+		std::string sError;
+		std::unique_ptr<columnar::Iterator_i> pUuidIt = CreateColumnarIterator ( pColumnar.get(), pUuidAttr->m_sName.cstr(), sError );
+		assert ( pUuidIt );
+
+		for ( DWORD uRow = 0; uRow < m_uAccumDocs; ++uRow )
+		{
+			const BYTE * pUuid = nullptr;
+			int iUuidLen = pUuidIt->Get ( uRow, pUuid );
+			fnVisitor ( { pUuid, iUuidLen } );
+		}
+
+		return;
+	}
+
+	assert ( tSchema.GetAttr ( sphGetBlobLocatorName() ) );
+	assert ( !m_dBlobs.IsEmpty() );
+	const int iRowSize = tSchema.GetRowSize();
+	assert ( iRowSize>0 );
+	assert ( m_dAccumRows.GetLength()==int64_t ( m_uAccumDocs ) * iRowSize );
+
+	const BYTE * pBlobPool = m_dBlobs.Begin();
+	const CSphRowitem * pRow = m_dAccumRows.Begin();
+	for ( DWORD uRow = 0; uRow < m_uAccumDocs; ++uRow, pRow += iRowSize )
+		fnVisitor ( sphGetBlobAttr ( pRow, pUuidAttr->m_tLocator, pBlobPool ) );
+}
+
 
 void RtAccum_t::GrabLastWarning ( CSphString& sWarning )
 {
@@ -1009,9 +1074,52 @@ void RtAccum_t::ResetRowID()
 	m_tNextRowID = 0;
 }
 
+void RtAccum_t::BindUuidRegistry ( const UuidDocidRegistryPtr_t & pRegistry )
+{
+	assert ( pRegistry );
+	assert ( !m_pUuidRegistry );
+	assert ( m_dUuidLeases.IsEmpty() );
+	m_pUuidRegistry = pRegistry;
+}
+
+
+bool RtAccum_t::IsUuidRegistry ( const UuidDocidRegistry_i * pRegistry ) const
+{
+	return m_pUuidRegistry.Ptr()==pRegistry;
+}
+
+
+void RtAccum_t::AdoptUuidLease ( const UuidDocidRegistry_i * pRegistry, const UuidDocidKey_t & tKey )
+{
+	assert ( pRegistry );
+	assert ( m_pUuidRegistry.Ptr()==pRegistry );
+	assert ( m_pUuidRegistry->GetDocid ( tKey ) );
+	m_dUuidLeases.Add ( tKey );
+}
+
+
+void RtAccum_t::ResetUuidLeases()
+{
+	if ( m_dUuidLeases.IsEmpty() )
+	{
+		m_pUuidRegistry = nullptr;
+		return;
+	}
+
+	assert ( m_pUuidRegistry );
+	for ( const UuidDocidKey_t & tKey : m_dUuidLeases )
+		m_pUuidRegistry->ReleaseKey ( tKey );
+
+	m_dUuidLeases.Reset();
+	m_pUuidRegistry = nullptr;
+}
+
+
 void RtAccum_t::LoadRtTrx ( ByteBlob_t tTrx, DWORD uVer )
 {
 	ResetPreparedForCommit();
+	assert ( !m_pUuidRegistry );
+	assert ( m_dUuidLeases.IsEmpty() );
 	MemoryReader_c tReader ( tTrx );
 	m_bReplace = !!tReader.GetVal<BYTE>();
 	tReader.GetVal ( m_uAccumDocs );

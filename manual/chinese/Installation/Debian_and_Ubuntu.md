@@ -20,7 +20,7 @@
   * 20
   * 21
 
-### 快速自动化安装
+### 快速安装
 
 ```bash
 curl https://manticoresearch.com | sh

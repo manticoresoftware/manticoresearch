@@ -65,7 +65,7 @@ jobs:
       run_image_push: ${{ steps.calc.outputs.run_image_push }} # push test-kit image tags
       skip_clt_reason: ${{ steps.related_prs.outputs.skip_clt_reason }} # explanation for CLT skip
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           submodules: recursive
@@ -79,15 +79,20 @@ jobs:
           echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
       - name: Resolve branch info
         id: branch_info
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+            BRANCH_NAME="$HEAD_REF"
           else
-            BRANCH_NAME="${{ github.ref_name }}"
+            BRANCH_NAME="$REF_NAME"
           fi
           echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
       - name: Sanitize branch name for tags
         id: sanitize_branch
+        env:
+          BRANCH_NAME_OUT: ${{ steps.branch_info.outputs.branch_name }}
         run: |
           sanitize_tag() {
             local name=$1
@@ -95,7 +100,7 @@ jobs:
             name=$(echo "$name" | sed 's/[^a-zA-Z0-9_.-]//g')
             echo "$name"
           }
-          branch_name="${{ steps.branch_info.outputs.branch_name }}"
+          branch_name="$BRANCH_NAME_OUT"
           branch_tag=$(sanitize_tag "$branch_name")
           echo "branch_tag=$branch_tag" >> $GITHUB_OUTPUT
       - name: Calculate source hash
@@ -252,14 +257,21 @@ jobs:
 
       - name: Check related PRs for branch
         id: related_prs
+        env:
+          OWNER: ${{ github.repository_owner }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           reason=""
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # URL-encode the head filter: a branch name may contain characters that are
+            # meaningful in a query string (#, &, ?, spaces) as well as in the shell.
+            head_filter="$(jq -rn --arg v "${OWNER}:${HEAD_REF}" '$v|@uri')"
             for repo in manticoresearch-buddy; do
-              response="$( (curl -sSL -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository_owner }}/$repo/pulls?state=open&head=${{ github.repository_owner }}:${{ github.event.pull_request.head.ref }}&per_page=1" || true) | tr -d '[:space:]')"
+              response="$( (curl -sSL -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GH_TOKEN}" "https://api.github.com/repos/${OWNER}/${repo}/pulls?state=open&head=${head_filter}&per_page=1" || true) | tr -d '[:space:]')"
               if [[ "$response" != "[]" && "$response" != "" ]]; then
-                reason+="$repo: open PR for ${{ github.repository_owner }}:${{ github.event.pull_request.head.ref }} | "
+                reason+="$repo: open PR for ${OWNER}:${HEAD_REF} | "
               fi
             done
 
@@ -307,6 +319,11 @@ jobs:
           echo "run_image_push=$run_image_push" >> "$GITHUB_OUTPUT"
           echo "skip_clt_tag=$skip_clt_tag" >> "$GITHUB_OUTPUT"
       - name: Summarize gating
+        env:
+          # skip_clt_reason embeds the PR head ref (a contributor-controlled branch
+          # name); read it from the environment instead of interpolating it into the
+          # script so it cannot contribute shell syntax.
+          SKIP_CLT_REASON: ${{ steps.related_prs.outputs.skip_clt_reason }}
         run: |
           {
             echo "### Gate decisions"
@@ -319,8 +336,8 @@ jobs:
             if [[ "${{ steps.calc.outputs.skip_clt_tag }}" == "true" ]]; then
               echo "* CLT skip reason: skip_clt tag on commit"
             fi
-            if [[ -n "${{ steps.related_prs.outputs.skip_clt_reason }}" ]]; then
-              echo "* CLT skip reason: ${{ steps.related_prs.outputs.skip_clt_reason }}"
+            if [[ -n "$SKIP_CLT_REASON" ]]; then
+              echo "* CLT skip reason: $SKIP_CLT_REASON"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -333,7 +350,7 @@ jobs:
     steps:
       - name: Check out cache
         id: cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             bundle
@@ -352,7 +369,7 @@ jobs:
           wget https://repo.manticoresearch.com/repository/ci/boost_1_75_0.tgz
           tar -xf boost_1_75_0.tgz
       - name: Upload Windows bundle artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: windows_bundle
           path: |
@@ -429,8 +446,8 @@ jobs:
       MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
 
   build_linux_release:
-    if: needs.meta.outputs.run_builds == 'true'
-    needs: [meta]
+    if: always() && needs.meta.outputs.run_builds == 'true' && (needs.mcl_cached_package_jammy.result == 'success' || needs.mcl_package_jammy.result == 'success')
+    needs: [meta, mcl_cached_package_jammy, mcl_package_jammy]
     name: Linux release build
     uses: ./.github/workflows/build_template.yml
     secrets: inherit
@@ -438,11 +455,14 @@ jobs:
       artifact_name: release_build
       cache_key: build_linux_release_x86_64
       artifact_list: "build/xml build/CMakeFiles/CMake*.log build/api/libsphinxclient/testcli build/src/indexer build/src/indextool build/src/searchd build/src/tests build/src/gtests/gmanticoretest build/config/*.c build/config/*.h build/**/*.cxx build/**/*.gcno build/manticore*deb"
+      MCL_PACKAGE_ARTIFACT_NAME: mcl_package_jammy_x86_64
+      MCL_PACKAGE_SHA: ${{ needs.meta.outputs.mcl_full_sha }}
       cmake_command: |
         export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
         export PACK=1
         export PACK_KEEP_TESTS=1
         ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
+        cmake -S . -B build -DPACK_BUNDLE=1
         cmake --build build --target package
 
   build_linux_release_tests:
@@ -474,7 +494,7 @@ jobs:
       - name: Restore exact-SHA MCL package cache
         id: probe
         if: ${{ needs.meta.outputs.mcl_full_sha != '' }}
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: .mcl-package-cache
           key: mcl-test-pkg-jammy-amd64-${{ needs.meta.outputs.mcl_full_sha }}
@@ -505,7 +525,7 @@ jobs:
       image: manticoresearch/external_toolchain:clang16_cmake3263
     steps:
       - name: Restore exact-SHA MCL package cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: .mcl-package-cache
           key: ${{ needs.mcl_test_package_cache_probe.outputs.cache_key }}
@@ -523,7 +543,7 @@ jobs:
             exit 1
           fi
       - name: Upload cached MCL package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: mcl_package_jammy_x86_64
           path: mcl-package
@@ -543,7 +563,7 @@ jobs:
         run: mkdir -p .mcl-runtime-cache
       - name: Restore exact MCL Linux Release runtime cache
         id: restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: .mcl-runtime-cache
           key: ${{ needs.meta.outputs.mcl_runtime_linux_release_cache_key }}
@@ -573,7 +593,7 @@ jobs:
           echo "cache_hit=${ok}" >> "$GITHUB_OUTPUT"
       - name: Upload cached MCL Linux Release runtime artifact
         if: steps.validate.outputs.cache_hit == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: mcl_runtime_linux_release_x86_64
           path: mcl-runtime
@@ -593,7 +613,7 @@ jobs:
         run: mkdir -p .mcl-runtime-cache
       - name: Restore exact MCL Linux Debug runtime cache
         id: restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: .mcl-runtime-cache
           key: ${{ needs.meta.outputs.mcl_runtime_linux_debug_cache_key }}
@@ -623,7 +643,7 @@ jobs:
           echo "cache_hit=${ok}" >> "$GITHUB_OUTPUT"
       - name: Upload cached MCL Linux Debug runtime artifact
         if: steps.validate.outputs.cache_hit == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: mcl_runtime_linux_debug_x86_64
           path: mcl-runtime
@@ -643,7 +663,7 @@ jobs:
         run: mkdir -p .mcl-runtime-cache
       - name: Restore exact MCL Windows Debug runtime cache
         id: restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: .mcl-runtime-cache
           key: ${{ needs.meta.outputs.mcl_runtime_windows_debug_cache_key }}
@@ -673,7 +693,7 @@ jobs:
           echo "cache_hit=${ok}" >> "$GITHUB_OUTPUT"
       - name: Upload cached MCL Windows Debug runtime artifact
         if: steps.validate.outputs.cache_hit == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: mcl_runtime_windows_debug_x64
           path: mcl-runtime
@@ -843,7 +863,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           submodules: recursive
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
@@ -862,7 +882,7 @@ jobs:
       - name: Pack docker image artifact
         run: tar -cf artifact.tar manticore_test_kit.img
       - name: Upload docker image artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: manticore_test_kit.img
           path: artifact.tar
@@ -881,18 +901,18 @@ jobs:
       out-build: ${{ steps.build.outputs.build_image }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           submodules: recursive
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Download built x86_64 Ubuntu Jammy packages
-        uses: manticoresoftware/download_artifact_with_retries@v3
+        uses: manticoresoftware/download_artifact_with_retries@v5
         with:
           name: release_build
           path: .
       - name: Restore exact-SHA MCL package cache
         if: ${{ needs.mcl_test_package_cache_probe.outputs.cache_hit == 'true' }}
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ./.mcl-package-cache
           key: ${{ needs.mcl_test_package_cache_probe.outputs.cache_key }}
@@ -900,7 +920,7 @@ jobs:
       - name: Download local MCL package artifact (best effort)
         if: ${{ always() }}
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: mcl_package_jammy_x86_64
           path: ./mcl-package
@@ -920,7 +940,7 @@ jobs:
       - name: Pack docker image artifact
         run: tar -cf artifact.tar manticore_test_kit.img
       - name: Upload docker image artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: manticore_test_kit.img
           path: artifact.tar
@@ -941,12 +961,13 @@ jobs:
       ref: ${{ github.sha }}
 
   test_kit_docker_push:
-    if: always() && needs.meta.outputs.run_image_push == 'true' && (needs.test_kit_docker_build.result == 'success' || needs.test_kit_docker_reuse.result == 'success')
+    if: always() && needs.meta.outputs.run_image_push == 'true' && (needs.test_kit_docker_build.result == 'success' || needs.test_kit_docker_reuse.result == 'success') && needs.test_kit_light_docker_build.result == 'success'
     needs:
       - clt
       - meta
       - test_kit_docker_build
       - test_kit_docker_reuse
+      - test_kit_light_docker_build
       - test_linux_debug_plain
       - test_linux_debug_rt
       - test_linux_debug_mcl
@@ -968,9 +989,9 @@ jobs:
       IMAGE_BUILD_COMMIT: ${{ github.sha }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
       - name: Download artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: manticore_test_kit.img
           path: .
@@ -979,6 +1000,11 @@ jobs:
           if [[ -f artifact.tar ]]; then
             tar -xf artifact.tar
           fi
+      - name: Download light image artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: test_kit_light_docker
+          path: .
       - name: Calculate short commit hash
         id: sha
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
@@ -986,6 +1012,28 @@ jobs:
         id: test-kit-push
         run: |
           TEST_RESULT=${{ needs.clt.result }} BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_push.sh
+
+  test_kit_light_docker_build:
+    if: always() && needs.meta.outputs.run_builds == 'true' && needs.build_linux_release.result == 'success'
+    needs: [meta, build_linux_release]
+    name: Light Test Kit docker image build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Download bundle package
+        uses: manticoresoftware/download_artifact_with_retries@v5
+        with:
+          name: release_build
+          path: ./bundle-package
+      - name: Build official-style image
+        run: ./dist/test_kit_light_docker_build.sh bundle-package
+      - name: Upload light image artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: test_kit_light_docker
+          path: test_kit_light_docker.tar.gz
+          compression-level: 0
 
   build_aarch64:
     if: needs.meta.outputs.run_builds == 'true'
@@ -1116,6 +1164,7 @@ jobs:
       - test_windows_plain
       - test_windows_rt
       - test_windows_mcl
+      - test_kit_light_docker_build
       - build_freebsd
       - build_aarch64
       - clt
@@ -1147,6 +1196,7 @@ jobs:
             "test_windows_plain:${{ needs.test_windows_plain.result }}:${{ needs.test_windows_plain.outputs.test_outcome }}"
             "test_windows_rt:${{ needs.test_windows_rt.result }}:${{ needs.test_windows_rt.outputs.test_outcome }}"
             "test_windows_mcl:${{ needs.test_windows_mcl.result }}:${{ needs.test_windows_mcl.outputs.test_outcome }}"
+            "test_kit_light_docker_build:${{ needs.test_kit_light_docker_build.result }}"
             "build_freebsd:${{ needs.build_freebsd.result }}"
             "build_aarch64:${{ needs.build_aarch64.result }}"
           )
@@ -1201,6 +1251,10 @@ jobs:
           if [[ "${{ needs.meta.outputs.run_builds }}" == "true" ]]; then
             # Runtime artifacts are required only when build/ubertest jobs run.
             # CLT-only cached-image runs intentionally skip both runtime cache probes and runtime builds.
+            if [[ "${{ needs.test_kit_light_docker_build.result }}" != "success" ]]; then
+              echo "test_kit_light_docker_build: required but result was ${{ needs.test_kit_light_docker_build.result }}"
+              failed=1
+            fi
             for entry in "${runtime_results[@]}"; do
               name="${entry%%:*}"
               rest="${entry#*:}"
@@ -1211,6 +1265,8 @@ jobs:
                 failed=1
               fi
             done
+          else
+            echo "* MCL runtime artifacts: skipped (build/ubertest jobs disabled by gate)" >> "$GITHUB_STEP_SUMMARY"
           fi
           if [[ "$failed" -ne 0 ]]; then
             echo "* Overall: failure" >> "$GITHUB_STEP_SUMMARY"

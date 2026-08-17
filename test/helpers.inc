@@ -1483,6 +1483,7 @@ function RunCurl ( $curl_desc, &$rows, &$response_headers=array(), $capture_head
 	}
 
 	$rows = preg_replace('/"time":\d+(\.\d+)*,/', '"time":0.000,', $rows);
+	$rows = preg_replace('/thread_stack=\d+K or higher required/', 'thread_stack=<N>K or higher required', $rows);
 	curl_close($con);
 
 	return $http_code;
@@ -2409,6 +2410,15 @@ class SphinxConfig
 		$this->_num_agents		= GetFirstChildValue ( $xml, "num_agents", 1 );
 		$this->_skip_indexer	= GetFirstChildValue ( $xml, "skip_indexer", false )!==false;
 		$skip_db         		= GetFirstChildValue ( $xml, "skip_db", false )!==false;
+
+		foreach ( ChildrenArray ( $xml, "env" ) as $node ) {
+			foreach( AttrArray( $node ) as $attr ) {
+				$name = $attr->nodeName;
+				$value = $attr->nodeValue;
+				putenv("$name=$value");
+#				print("ENV: $name=$value\n");
+			}
+		}
 
 		if ( $has_db && $skip_db )
 		{

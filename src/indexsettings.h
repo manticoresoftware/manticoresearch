@@ -29,6 +29,7 @@ inline int64_t cast2signed ( SphWordID_t tVal )
 class CSphWriter;
 class CSphReader;
 class FilenameBuilder_i;
+class ISphSchema;
 
 struct StoredQueryExecutionSettings_t
 {
@@ -411,6 +412,8 @@ enum class MutableName_e
 	ACCESS_DOCLISTS,
 	ACCESS_HITLISTS,
 	ACCESS_DICT,
+	ACCESS_COLUMNAR_ATTRS,
+	ACCESS_SECONDARY,
 	READ_BUFFER_DOCS,
 	READ_BUFFER_HITS,
 	OPTIMIZE_CUTOFF,
@@ -431,6 +434,8 @@ struct FileAccessSettings_t : public SettingsWriter_c
 	FileAccess_e	m_eDoclist = FileAccess_e::FILE;
 	FileAccess_e	m_eHitlist = FileAccess_e::FILE;
 	FileAccess_e	m_eDict = FileAccess_e::MMAP_PREREAD;
+	FileAccess_e	m_eColumnar = FileAccess_e::FILE;
+	FileAccess_e	m_eSecondary = FileAccess_e::FILE;
 	int				m_iReadBufferDocList = DEFAULT_READ_BUFFER;
 	int				m_iReadBufferHitList = DEFAULT_READ_BUFFER;
 
@@ -489,6 +494,11 @@ struct RtTypedAttr_t
 
 int						GetNumRtTypes();
 const RtTypedAttr_t &	GetRtType ( int iType );
+
+const char *			sphGetUuidDocidName();
+bool					sphHasUuidDocid ( const ISphSchema & tSchema );
+bool					sphPrepareUuidDocid ( const char * szUuid, CSphString & sNormalizedUuid, CSphString & sError );
+bool					sphIsNormalizedUuidDocid ( Str_t tUuid );
 
 bool					StrToAttrEngine ( AttrEngine_e & eEngine, AttrEngine_e eDefault, const CSphString & sValue, CSphString & sError );
 
@@ -560,6 +570,7 @@ void		SaveTokenizerSettings ( Writer_i & tWriter, const TokenizerRefPtr_c& pToke
 void		SaveDictionarySettings ( Writer_i & tWriter, const DictRefPtr_c& pDict, bool bForceWordDict, int iEmbeddedLimit );
 
 void		DumpSettings ( StringBuilder_c & tBuf, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder );
+void		DumpSettings ( StringBuilder_c & tBuf, const CSphIndexSettings & tSettings, const CSphFieldFilterSettings & tFieldFilterSettings, const CSphTokenizerSettings & tTokenizerSettings, const CSphDictSettings & tDictSettings, const MutableIndexSettings_c & tMutableSettings, FilenameBuilder_i * pFilenameBuilder );
 void		DumpSettingsCfg ( FILE * fp, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder );
 void		DumpReadable ( FILE * fp, const CSphIndex & tIndex, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder );
 
@@ -579,6 +590,7 @@ FileAccess_e ParseFileAccess ( CSphString sVal );
 int			ParseKeywordExpansion ( const char * sValue );
 void		SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphString & sSettingsFile );
 FileAccess_e GetFileAccess (  const CSphConfigSection & hIndex, const char * sKey, bool bList, FileAccess_e eDefault );
+FileAccess_e GetFileMmapAccess ( const CSphConfigSection & hIndex, const char * sKey, FileAccess_e eDefault );
 
 // combine per-index and per-attribute engine settings
 AttrEngine_e CombineEngines ( AttrEngine_e eIndexEngine, AttrEngine_e eAttrEngine );

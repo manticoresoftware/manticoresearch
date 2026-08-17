@@ -14,10 +14,12 @@
 * `nodes_view` - 当前节点可见的集群实际节点列表
 * `state_uuid` - 集群的 UUID 状态。如果它与 local_state_uuid 的值匹配，则本地和集群节点同步
 * `conf_id` - 发生的集群成员变更总数
-* `status` - 集群组件状态。可能的值为 primary（主组配置，有法定人数）、non_primary（非主组配置，失去法定人数）或 disconnected（未连接到组，正在重试）
+* `status` - 集群组件状态。可能的值为 primary（主组配置，仲裁存在）、non_primary（非主组配置，仲裁丢失）、disconnected（未连接到组，正在重试），或 recovery-required（集群元数据会被保留，但复制提供程序未启动，需要手动恢复）。
 * `size` - 当前集群中的节点数量
 * `local_index` - 节点在集群中的索引
 * `last_error` - 与集群操作相关的最后一条记录错误消息。消息提供问题的高级摘要。有关更详细的上下文，您应查看 `searchd.log` 文件。
+
+当 `status` 为 `recovery-required` 时，Manticore 会保留集群元数据，并保持表成员关系可见，这样你可以检查或删除集群，但集群不可写。只有在集群恢复并重新启动后，Galera provider 状态变量才可用。
 
 ### SST 进度指标
 

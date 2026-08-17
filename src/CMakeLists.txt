@@ -55,7 +55,7 @@ add_subdirectory ( indexing_sources )
 
 # main bunch of sources (for libsphinx)
 add_library ( lmanticore STATIC sphinx.cpp sphinxutils.cpp
-		sphinxsort.cpp sortsetup.cpp sphinxexpr.cpp sphinxfilter.cpp sphinxsearch.cpp sphinxrt.cpp accumulator.cpp
+		sphinxsort.cpp sortsetup.cpp sphinxexpr.cpp sphinxfilter.cpp sphinxsearch.cpp sphinxrt.cpp accumulator.cpp uuid_docid.cpp
 		sphinxjson.cpp sphinxaot.cpp sphinxplugin.cpp sphinxudf.c sphinxqcache.cpp 
 		attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp json/cJSON_test.c sphinxpq.cpp
 		global_idf.cpp docstore.cpp lz4/lz4.c lz4/lz4hc.c snippetfunctor.cpp snippetindex.cpp
@@ -141,7 +141,7 @@ target_compile_definitions ( lextra INTERFACE BOOST_ALL_NO_LIB=1 )
 set ( HEADERS sphinxfilter.h sphinxint.h sphinxpq.h sphinxrt.h
 		sphinxsort.h sphinxutils.h sphinxexpr.h sphinx.h sphinxjson.h sphinxplugin.h sphinxqcache.h
 		sphinxsearch.h sphinxstd.h sphinxudf.h lz4/lz4.h lz4/lz4hc.h http/http_parser.h secondaryindex.h
-		searchnode.h killlist.h attribute.h accumulator.h global_idf.h event.h threadutils.h threadutils_impl.h
+		searchnode.h killlist.h attribute.h accumulator.h uuid_docid.h global_idf.h event.h threadutils.h threadutils_impl.h
 		hazard_pointer.h task_info.h mini_timer.h collation.h histogram.h sortsetup.h
 		indexsettings.h columnarlib.h fileio.h memio.h memio_impl.h queryprofile.h columnarfilter.h columnargrouper.h fileutils.h
 		libutils.h conversion.h columnarsort.h sortcomp.h binlog_defs.h binlog.h ${MANTICORE_BINARY_DIR}/config/config.h
@@ -151,7 +151,7 @@ set ( HEADERS sphinxfilter.h sphinxint.h sphinxpq.h sphinxrt.h
 		aggrexpr.h joinsorter.h queuecreator.h exprgeodist.h exprremap.h exprdocstore.h schematransform.h attr_embedding.h embeddingutils.h hybridexecutor.h sortergroup.h
 		sortertraits.h sorterprecalc.h querycontext.h skip_cache.h jsonsi.h jieba.h cjkpreprocessor.h sorterscroll.h )
 
-set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h searchdha.h searchdreplication.h searchdsql.h
+set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h searchdha.h searchdreplication.h searchdsql.h api_reply_stream.h
 		searchdtask.h client_task_info.h taskflushattrs.h taskflushbinlog.h taskflushmutable.h taskglobalidf.h
 		taskmalloctrim.h taskping.h taskpreread.h tasksavestate.h net_action_accept.h
 		netreceive_api.h netreceive_http.h netreceive_ql.h networking_daemon.h query_status.h
@@ -193,7 +193,7 @@ diag ( LMANTICORE_BISON SEARCHD_BISON LMANTICORE_FLEX SEARCHD_FLEX )
 target_sources ( lmanticore PUBLIC ${LMANTICORE_BISON} ${LMANTICORE_FLEX} ${HEADERS} ${CHARSET_FILES} ${CHARSET_TEMPLATE} "../misc/manticore.natvis" )
 target_link_libraries ( lmanticore PUBLIC uni-algo::uni-algo )
 
-add_library ( lsearchd OBJECT searchdha.cpp http/http_parser.c searchdhttp.cpp
+add_library ( lsearchd OBJECT searchdha.cpp api_reply_stream.cpp http/http_parser.c searchdhttp.cpp
 		searchdtask.cpp taskping.cpp taskmalloctrim.cpp taskglobalidf.cpp tasksavestate.cpp
 		taskflushbinlog.cpp taskflushattrs.cpp taskflushmutable.cpp taskpreread.cpp
 		searchdaemon.cpp searchdfields.cpp searchdconfig.cpp

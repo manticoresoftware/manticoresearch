@@ -155,6 +155,30 @@ int64_t		g_iIndexerPoolStartHit		= 0;
 
 static bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, const CSphString & sFileName, CSphString & sError );
 
+static void DeleteTmpFilesWithPrefix ( const CSphString & sFile )
+{
+	if ( sFile.IsEmpty() )
+		return;
+
+	CSphString sMask;
+	sMask.SetSprintf ( "%s*", sFile.cstr() );
+	StrVec_t dMatches = FindFiles ( sMask.cstr(), false );
+	if ( dMatches.IsEmpty() && sphFileExists ( sFile.cstr() ) )
+		dMatches.Add ( sFile );
+
+	dMatches.for_each ( [] ( const auto & sTmpFile )
+	{
+		if ( !sTmpFile.IsEmpty() )
+			::unlink ( sTmpFile.cstr() );
+	} );
+}
+
+
+static void DeleteTmpFilesWithPrefix ( const StrVec_t & dFiles )
+{
+	dFiles.for_each ( [] ( const auto & sFile ) { DeleteTmpFilesWithPrefix ( sFile ); } );
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // COMPILE-TIME CHECKS
 /////////////////////////////////////////////////////////////////////////////
@@ -1296,6 +1320,7 @@ public:
 	int					KillDupes() final;
 	int					CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, BlockerFn&& fnWatcher ) final;
 	bool				IsAlive ( DocID_t tDocID ) const final;
+	DocID_t				FindAliveUuidDocid ( const UuidDocidKey_t & tKey ) const final;
 
 	const CSphSourceStats &		GetStats () const final { return m_tStats; }
 	int64_t *			GetFieldLens() const final { return m_tSettings.m_bIndexFieldLens ? m_dFieldLens.begin() : nullptr; }
@@ -1362,6 +1387,7 @@ private:
 
 	CSphMappedBuffer<BYTE>		m_tDocidLookup;		///< speeds up docid-rowid lookups + used for applying killlist on startup
 	LookupReader_c				m_tLookupReader;	///< used by getrowidbydocid
+	UuidLookupReader_c			m_tUuidLookupReader;
 
 	std::unique_ptr<Docstore_i>	m_pDocstore;
 	std::unique_ptr<columnar::Columnar_i> m_pColumnar;
@@ -1521,7 +1547,7 @@ bool IsOndisk ( FileAccess_e eType ) { return eType==FileAccess_e::FILE || eType
 
 bool FileAccessSettings_t::operator== ( const FileAccessSettings_t & tOther ) const
 {
-	return ( m_eAttr==tOther.m_eAttr && m_eBlob==tOther.m_eBlob && m_eDoclist==tOther.m_eDoclist && m_eHitlist==tOther.m_eHitlist && m_eDict==tOther.m_eDict &&
+	return ( m_eAttr==tOther.m_eAttr && m_eBlob==tOther.m_eBlob && m_eDoclist==tOther.m_eDoclist && m_eHitlist==tOther.m_eHitlist && m_eDict==tOther.m_eDict && m_eColumnar==tOther.m_eColumnar && m_eSecondary==tOther.m_eSecondary &&
 		m_iReadBufferDocList==tOther.m_iReadBufferDocList && m_iReadBufferHitList==tOther.m_iReadBufferHitList );
 }
 
@@ -2495,7 +2521,7 @@ RowsToUpdateData_t CSphIndex_VLN::Update_CollectRowPtrs ( const UpdateContext_t 
 
 	dSorted.Sort ( Lesser ( [&dDocids] ( int a, int b ) { return dDocids[a]<dDocids[b]; } ) );
 	DocIdIndexReader_c tSortedReader ( dSorted, dDocids );
-	LookupReaderIterator_c tLookupReader ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tLookupReader ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 	Intersect ( tLookupReader, tSortedReader, [&dRowsToUpdate, this] ( RowID_t tRowID, DocID_t, DocIdIndexReader_c& tSortedReader )
 	{
 		if ( m_tDeadRowMap.IsSet ( tRowID ) )
@@ -2515,7 +2541,7 @@ RowsToUpdate_t CSphIndex_VLN::Update_PrepareGatheredRowPtrs ( RowsToUpdate_t & d
 	RowsToUpdate_t & dRows = dWRows; // that is actually to indicate that we CHANGE contents inside dWRows, so it should be passed by non-const reference.
 
 	dRows.Sort ( Lesser ( [&dDocids] ( auto& a, auto& b ) { return dDocids[a.m_iIdx]<dDocids[b.m_iIdx]; } ) );
-	LookupReaderIterator_c tLookupReader ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tLookupReader ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 
 	RowID_t tRowID = INVALID_ROWID;
 	DocID_t tDocID = 0;
@@ -2941,12 +2967,31 @@ bool CSphIndex_VLN::Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride )
 
 bool CSphIndex_VLN::AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, const ISphSchema & tOldSchema, const ISphSchema & tNewSchema, CSphString & sError )
 {
+	bool bHaveColumnar = false;
+	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
+		bHaveColumnar |= tNewSchema.GetAttr(i).IsColumnar();
+
+	if ( !bHaveColumnar )
+		return true;
+
 	BuildBufferSettings_t tSettings; // use default buffer settings
-	auto pBuilder = CreateColumnarBuilder ( tNewSchema, GetTmpFilename ( SPH_EXT_SPC ), tSettings.m_iBufferColumnar, sError );
+	CSphString sTmpSPC = GetTmpFilename ( SPH_EXT_SPC );
+	bool bKeepTmp = false;
+	AT_SCOPE_EXIT ( [&sTmpSPC, &bKeepTmp]
+	{
+		if ( !bKeepTmp )
+			DeleteTmpFilesWithPrefix ( sTmpSPC );
+	} );
+
+	auto pBuilder = CreateColumnarBuilder ( tNewSchema, sTmpSPC, tSettings.m_iBufferColumnar, sError );
 	if ( !pBuilder )
 		return false;
 
-	return Alter_AddRemoveColumnar ( bAddAttr, m_tSchema, tNewSchema, m_pColumnar.get(), pBuilder.get(), (DWORD)m_iDocinfo, GetName(), sError );
+	if ( !Alter_AddRemoveColumnar ( bAddAttr, tOldSchema, tNewSchema, m_pColumnar.get(), pBuilder.get(), (DWORD)m_iDocinfo, GetName(), sError ) )
+		return false;
+
+	bKeepTmp = true;
+	return true;
 }
 
 
@@ -3029,8 +3074,10 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	}
 
 	if ( bColumnar )
-		AddRemoveColumnarAttr ( bAddAttr, tCtx.m_sName, tCtx.m_eType, m_tSchema, tNewSchema, sError );
-	else
+	{
+		if ( !AddRemoveColumnarAttr ( bAddAttr, tCtx.m_sName, tCtx.m_eType, m_tSchema, tNewSchema, sError ) )
+			return false;
+	} else
 	{
 		int64_t iTotalRows = m_iDocinfo + (m_iDocinfoIndex+1)*2;
 		Alter_AddRemoveRowwiseAttr ( m_tSchema, tNewSchema, m_tAttr.GetReadPtr(), (DWORD)iTotalRows, m_tBlobAttrs.GetReadPtr(), *pSPAWriteWrapper, *pSPBWriteWrapper, bAddAttr, tCtx.m_sName );
@@ -3086,7 +3133,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 
 		if ( tNewSchema.HasColumnarAttrs() )
 		{
-			m_pColumnar = CreateColumnarStorageReader ( GetFilename ( SPH_EXT_SPC ), (DWORD)m_iDocinfo, sError );
+			m_pColumnar = CreateColumnarStorageReader ( GetFilename ( SPH_EXT_SPC ), (DWORD)m_iDocinfo, false, sError );
 			if ( !m_pColumnar )
 				return false;
 		}
@@ -3296,7 +3343,7 @@ bool CSphIndex_VLN::AlterKillListTarget ( KillListTargets_c & tTargets, CSphStri
 void CSphIndex_VLN::KillExistingDocids ( CSphIndex * pTarget ) const
 {
 	// FIXME! collecting all docids is a waste of memory
-	LookupReaderIterator_c tLookup ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tLookup ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 	CSphFixedVector<DocID_t> dKillList ( m_iDocinfo );
 	for ( auto& dKill : dKillList )
 		tLookup.ReadDocID ( dKill );
@@ -3307,7 +3354,7 @@ void CSphIndex_VLN::KillExistingDocids ( CSphIndex * pTarget ) const
 
 int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 {
-	LookupReaderIterator_c tTargetReader ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tTargetReader ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 	DocidListReader_c tKillerReader ( dKlist );
 
 	int iTotalKilled;
@@ -3330,7 +3377,7 @@ int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 
 int CSphIndex_VLN::KillDupes()
 {
-	LookupReaderIterator_c tLookup ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tLookup ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 	int iTotalKilled = 0;
 
 	RowID_t tRowID = INVALID_ROWID;
@@ -3355,7 +3402,7 @@ int CSphIndex_VLN::KillDupes()
 
 int CSphIndex_VLN::CheckThenKillMulti ( const VecTraits_T<DocID_t>& dKlist, BlockerFn&& fnWatcher )
 {
-	LookupReaderIterator_c tTargetReader ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tTargetReader ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 	DocidListReader_c tKillerReader ( dKlist );
 
 	int iTotalKilled = ProcessIntersected ( tTargetReader, tKillerReader, [this,fnWatcher=std::move(fnWatcher)] ( RowID_t tRow, DocID_t tDoc )
@@ -7235,8 +7282,8 @@ std::pair<DWORD,DWORD> CSphIndex_VLN::CreateRowMapsAndCountTotalDocs ( const CSp
 	{
 		tExtraDeadMap.Reset ( dDstRowMap.GetLength() );
 
-		LookupReaderIterator_c tDstLookupReader ( pDstIndex->m_tDocidLookup.GetReadPtr() );
-		LookupReaderIterator_c tSrcLookupReader ( pSrcIndex->m_tDocidLookup.GetReadPtr() );
+		LookupReaderIterator_c tDstLookupReader ( pDstIndex->m_tDocidLookup.GetReadPtr(), pDstIndex->m_uVersion );
+		LookupReaderIterator_c tSrcLookupReader ( pSrcIndex->m_tDocidLookup.GetReadPtr(), pSrcIndex->m_uVersion );
 
 		KillByLookup ( tDstLookupReader, tSrcLookupReader, tExtraDeadMap );
 	}
@@ -7333,11 +7380,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	// unlink prepared attribute files on exit, if any
 	AT_SCOPE_EXIT ( [&dDeleteOnInterrupt]
 	{
-		dDeleteOnInterrupt.for_each ( [] ( const auto & sFile )
-		{
-			if ( !sFile.IsEmpty() && sphFileExists ( sFile.cstr() ) )
-				::unlink ( sFile.cstr() );
-		} ); 
+		DeleteTmpFilesWithPrefix ( dDeleteOnInterrupt );
 	});
 
 	// merging attributes
@@ -7514,11 +7557,7 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 	StrVec_t dDeleteOnInterrupt;
 	AT_SCOPE_EXIT ( [&dDeleteOnInterrupt]
 	{
-		dDeleteOnInterrupt.for_each ( [] ( const auto & sFile )
-		{
-			if ( !sFile.IsEmpty() && sphFileExists ( sFile.cstr() ) )
-				::unlink ( sFile.cstr() );
-		} );
+		DeleteTmpFilesWithPrefix ( dDeleteOnInterrupt );
 	} );
 
 	{
@@ -8110,6 +8149,14 @@ bool CSphIndex_VLN::IsAlive ( DocID_t tDocID ) const
 		return false;
 
 	return ( !m_tDeadRowMap.IsSet ( tRow ) );
+}
+
+
+DocID_t CSphIndex_VLN::FindAliveUuidDocid ( const UuidDocidKey_t & tKey ) const
+{
+	assert ( m_tSchema.GetAttr(0).IsUuidLinkedDocid() );
+	DocID_t tDocID = m_tUuidLookupReader.Find ( tKey );
+	return tDocID && IsAlive ( tDocID ) ? tDocID : 0;
 }
 
 
@@ -8938,7 +8985,7 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	dSIIterators = m_tSI.CreateSecondaryIndexIterator ( dSIInfo, dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), iCutoff, bUseSICache, tMeta.m_sWarning );
 
 	// lookup-by-id (.SPT) iterators
-	dLookupIterators = CreateLookupIterator ( dSIInfo, dFilters, m_tDocidLookup.GetReadPtr(), RowID_t(m_iDocinfo) );
+	dLookupIterators = CreateLookupIterator ( dSIInfo, dFilters, m_tDocidLookup.GetReadPtr(), m_uVersion, RowID_t(m_iDocinfo) );
 
 	// try to spawn analyzers or prefilters from columnar storage
 	// if we already created an iterator at prev stage, we need to recreate filters here,
@@ -10177,7 +10224,11 @@ bool CSphIndex_VLN::PreallocDocidLookup()
 	if ( !m_tDocidLookup.Setup ( GetFilename ( SPH_EXT_SPT ), m_sLastError, false ) )
 		return false;
 
-	m_tLookupReader.SetData ( m_tDocidLookup.GetReadPtr() );
+	auto [ tUuidEntriesOffset, nDocs ] = m_tLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), m_uVersion );
+	const bool bUuidLinked = m_tSchema.GetAttr(0).IsUuidLinkedDocid();
+	assert ( !!tUuidEntriesOffset==bUuidLinked );
+	if ( bUuidLinked )
+		m_tUuidLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), tUuidEntriesOffset, nDocs );
 
 	return true;
 }
@@ -10242,7 +10293,8 @@ bool CSphIndex_VLN::PreallocColumnar()
 	if ( !m_tSchema.HasColumnarAttrs() )
 		return true;
 
-	m_pColumnar = CreateColumnarStorageReader ( GetFilename ( SPH_EXT_SPC ), (DWORD)m_iDocinfo, m_sLastError );
+	bool bMmap = m_tMutableSettings.m_tFileAccess.m_eColumnar==FileAccess_e::MMAP;
+	m_pColumnar = CreateColumnarStorageReader ( GetFilename ( SPH_EXT_SPC ), (DWORD)m_iDocinfo, bMmap, m_sLastError );
 	return !!m_pColumnar;
 }
 
@@ -10311,7 +10363,8 @@ bool CSphIndex_VLN::LoadSecondaryIndex ( const CSphString & sFile )
 		return GetSecondaryIndexDefault()!=SIDefault_e::FORCE;
 	}
 
-	if ( !m_tSI.Load ( sFile, m_sLastError ) && GetSecondaryIndexDefault()!=SIDefault_e::DISABLED )
+	bool bMmap = m_tMutableSettings.m_tFileAccess.m_eSecondary==FileAccess_e::MMAP;
+	if ( !m_tSI.Load ( sFile, bMmap, m_sLastError ) && GetSecondaryIndexDefault()!=SIDefault_e::DISABLED )
 	{
 		if ( GetSecondaryIndexDefault()!=SIDefault_e::FORCE )
 		{
@@ -10647,6 +10700,18 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 		}
 	}
 
+	const CSphString & sBlendMode = pTokenizer->GetSettings().m_sBlendMode;
+	if ( !sBlendMode.IsEmpty() )
+	{
+		CSphString sError;
+		if ( !pTokenizer->SetBlendMode ( sBlendMode.cstr(), sError ) )
+		{
+			if ( pError )
+				*pError = sError;
+			return false;
+		}
+	}
+
 	pTokenizer->SetBuffer ( sModifiedQuery, (int)strlen ( (const char*)sModifiedQuery ) );
 
 	ExpansionContext_t tExpCtx;
@@ -10691,6 +10756,12 @@ static int sphQueryHeightCalc ( const XQNode_t * pNode )
 {
 	if ( pNode->dChildren().IsEmpty() )
 	{
+		// Phrase-like plain nodes are later expanded into one ExtNode per word.
+		// Account for that width here, otherwise a long quoted phrase can pass
+		// the stack guard and overrun/corrupt the small worker coroutine stack.
+		if ( pNode->GetOp()==SPH_QUERY_PHRASE || pNode->GetOp()==SPH_QUERY_PROXIMITY || pNode->GetOp()==SPH_QUERY_NEAR || pNode->GetOp()==SPH_QUERY_QUORUM )
+			return pNode->dWords().GetLength();
+
 		// exception, pre-cached OR of tiny (rare) keywords is just one node
 		if ( pNode->GetOp()==SPH_QUERY_OR )
 		{
@@ -12536,77 +12607,6 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i
 } // NOLINT function length
 
 
-static void AddFields ( const char * sQuery, CSphSchema & tSchema )
-{
-	CSphColumnInfo tField;
-
-	const char * sToken = sQuery;
-	if ( !sToken )
-	{
-		tField.m_sName = "dummy_field"; // for query with only all fields, @*
-		tSchema.AddField ( tField );
-		return;
-	}
-
-	const char * OPTION_RELAXED = "@@relaxed";
-	const auto OPTION_RELAXED_LEN = (int) strlen ( OPTION_RELAXED );
-	if ( strncmp ( sToken, OPTION_RELAXED, OPTION_RELAXED_LEN )==0 && !sphIsAlpha ( sToken[OPTION_RELAXED_LEN] ) )
-		sToken += OPTION_RELAXED_LEN;
-
-	while ( *sToken )
-	{
-		if ( *sToken!='@' )
-		{
-			sToken++;
-			continue;
-		}
-
-		sToken++;
-		if ( !*sToken )
-			break;
-		if ( *sToken=='!' || *sToken=='*' )
-			sToken++;
-		if ( !*sToken )
-			break;
-		bool bBlock = ( *sToken=='(' );
-		if ( bBlock )
-			sToken++;
-		if ( !*sToken )
-			break;
-
-		// handle block with field names
-		while ( *sToken )
-		{
-			const char * sField = sToken;
-			while ( *sToken && sphIsAlpha( *sToken ) )
-				sToken++;
-
-			int iLen = int ( sToken - sField );
-			if ( iLen )
-			{
-				tField.m_sName.SetBinary ( sField, iLen );
-				if ( !tSchema.GetField ( tField.m_sName.cstr() ) )
-					tSchema.AddField ( tField );
-			}
-
-			if ( !bBlock )
-				break;
-
-			if ( *sToken && *sToken==',' )
-				sToken++;
-
-			if ( *sToken && *sToken==')' )
-				break;
-		}
-	}
-
-	if ( !tSchema.GetFieldsCount() )
-	{
-		tField.m_sName = "dummy_field"; // for query with only all fields, @*
-		tSchema.AddField ( tField );
-	}
-}
-
 Bson_t EmptyBson ()
 {
 	Bson_t dEmpty;
@@ -12618,8 +12618,6 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 	if ( !tArgs.m_szQuery )
 		return EmptyBson ();
 
-	std::unique_ptr<QueryParser_i> pQueryParser ( sphCreatePlainQueryParser() );
-
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (const BYTE *)tArgs.m_szQuery;
 
@@ -12630,11 +12628,27 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 	const CSphSchema * pSchema = tArgs.m_pSchema;
 	if ( !pSchema )
 	{
+		// Template tables have no match schema. Discover valid named selectors with
+		// the real parser, then parse again once negated selectors can see all fields.
+		XQQuery_t tDiscovery;
+		QueryExecutionSettings_t tExecutionSettings;
+		if ( !sphDiscoverExtendedQuerySchema ( tDiscovery, (const char*)sModifiedQuery, nullptr, tExecutionSettings, tArgs.m_pQueryTokenizer, tSchema, tArgs.m_pDict, *tArgs.m_pSettings, tArgs.m_pMorphFields ) )
+		{
+			TlsMsg::Err ( tDiscovery.m_sParseError );
+			return EmptyBson ();
+		}
+
+		if ( !tSchema.GetFieldsCount() )
+		{
+			CSphColumnInfo tField;
+			tField.m_sName = "dummy_field"; // for query with only all fields, @*
+			tSchema.AddField ( tField );
+		}
+
 		pSchema = &tSchema;
-		// need to fill up schema with fields from query
-		AddFields ( tArgs.m_szQuery, tSchema );
 	}
 
+	std::unique_ptr<QueryParser_i> pQueryParser ( sphCreatePlainQueryParser() );
 	XQQuery_t tParsed;
 	if ( !pQueryParser->ParseQuery ( tParsed, (const char*)sModifiedQuery, nullptr, tArgs.m_pQueryTokenizer, nullptr, pSchema, tArgs.m_pDict, *tArgs.m_pSettings, tArgs.m_pMorphFields ) )
 	{
@@ -12756,7 +12770,7 @@ bool CSphIndex_VLN::AlterSI ( CSphString & sError )
 		if ( !RenameWithRollback ( dFilesFrom, dFilesTo, sError ) )
 			return false;
 
-		if ( !m_tSI.Load ( dCurFiles[i].cstr(), sError ) )
+		if ( !m_tSI.Load ( dCurFiles[i].cstr(), m_tMutableSettings.m_tFileAccess.m_eSecondary==FileAccess_e::MMAP, sError ) )
 			return false;
 
 		if ( bCurExists )

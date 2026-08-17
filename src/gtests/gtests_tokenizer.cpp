@@ -700,7 +700,8 @@ protected:
 		ASSERT_TRUE ( pDict );
 	}
 
-	void Transform( const char * szQuery, const char * szReconst, const char * szReconstTransformed, const struct CKeywordHits * pKeywordHits = nullptr) const;
+	void Transform ( const char * szQuery, const char * szReconst, const char * szReconstTransformed,
+			const struct CKeywordHits * pKeywordHits = nullptr, bool bWithKeywordStats = true ) const;
 	void TestMany ( const char * szQuery, const char * szReconst );
 
 	DictRefPtr_c pDict;
@@ -842,7 +843,8 @@ bool CSphDummyIndex::FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) c
 	return true;
 }
 
-void QueryParser::Transform ( const char * szQuery, const char * szReconst, const char *szReconstTransformed, const CKeywordHits * pKeywordHits ) const
+void QueryParser::Transform ( const char * szQuery, const char * szReconst, const char *szReconstTransformed,
+		const CKeywordHits * pKeywordHits, bool bWithKeywordStats ) const
 {
 	CSphIndexSettings tTmpSettings;
 	XQQuery_t tQuery;
@@ -858,7 +860,7 @@ void QueryParser::Transform ( const char * szQuery, const char * szReconst, cons
 			EXPECT_TRUE ( tIndex.m_hHits.Add ( pHits->m_iHits, pHits->m_szKeyword ) );
 	}
 	
-	TransformExtendedQueryArgs_t tTranformArgs { true, tQuery.m_bNeedPhraseTransform, &tIndex };
+	TransformExtendedQueryArgs_t tTranformArgs { true, tQuery.m_bNeedPhraseTransform, bWithKeywordStats ? &tIndex : nullptr };
 	EXPECT_TRUE ( sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, tQuery.m_sParseError, tTranformArgs, tQuery.m_sParseWarning ) );
 
 	CSphString sReconstTransformed = sphReconstructNode ( tQuery.m_pRoot, &tSchema, &tQuery.m_dZones );
@@ -973,6 +975,17 @@ TEST_F ( QueryParser, transform_common_compound_not_1 )
 	);
 }
 
+TEST_F ( QueryParser, transform_common_compound_not_without_keyword_stats )
+{
+	Transform (
+		"(aaa !(nnn ccc)) | (bbb !(nnn ddd))",
+		"( ( aaa AND NOT ( nnn   ccc ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
+		"( ( aaa AND NOT ( nnn   ccc ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
+		nullptr,
+		false
+	);
+}
+
 TEST_F ( QueryParser, transform_common_compound_not_2 )
 {
 	Transform (
@@ -1047,6 +1060,17 @@ TEST_F ( QueryParser, transform_common_subterm_1 )
 	);
 }
 
+TEST_F ( QueryParser, transform_common_subterm_without_keyword_stats )
+{
+	Transform (
+		"(aaa (nnn | ccc)) | (bbb (nnn | ddd))",
+		"( ( aaa   ( nnn | ccc ) ) | ( bbb   ( nnn | ddd ) ) )",
+		"( ( aaa   ( nnn | ccc ) ) | ( bbb   ( nnn | ddd ) ) )",
+		nullptr,
+		false
+	);
+}
+
 TEST_F ( QueryParser, transform_common_subterm_2 )
 {
 	Transform (
@@ -1098,6 +1122,17 @@ TEST_F ( QueryParser, transform_common_keywords_1 )
 		"\"aaa bbb ccc ddd jjj\" | \"aaa bbb\"",
 		"( \"aaa bbb ccc ddd jjj\" | \"aaa bbb\" )",
 		"\"aaa bbb\""
+	);
+}
+
+TEST_F ( QueryParser, transform_common_keywords_without_keyword_stats )
+{
+	Transform (
+		"\"aaa bbb ccc ddd jjj\" | \"aaa bbb\"",
+		"( \"aaa bbb ccc ddd jjj\" | \"aaa bbb\" )",
+		"\"aaa bbb\"",
+		nullptr,
+		false
 	);
 }
 

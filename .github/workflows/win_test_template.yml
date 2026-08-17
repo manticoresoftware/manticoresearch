@@ -56,18 +56,18 @@ jobs:
       test_outcome: ${{ steps.test.outcome }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           submodules: recursive
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Download build artifacts
-        uses: manticoresoftware/download_artifact_with_retries@v3
+        uses: manticoresoftware/download_artifact_with_retries@v5
         with:
           name: build_windows_Debug_x64
           path: .
       - name: Download MCL runtime artifact
         if: ${{ inputs.MCL_RUNTIME_ARTIFACT_NAME != '' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: ${{ inputs.MCL_RUNTIME_ARTIFACT_NAME }}
           path: mcl-runtime
@@ -100,7 +100,7 @@ jobs:
           Get-ChildItem "mcl-runtime" | Select-Object -ExpandProperty FullName
       - name: Check out Windows bundle cache
         id: windows_bundle_cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             bundle
@@ -109,7 +109,7 @@ jobs:
           key: win_bundle
       - name: Download Windows bundle artifact on cache miss
         if: steps.windows_bundle_cache.outputs.cache-hit != 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: windows_bundle
           path: .
@@ -121,14 +121,14 @@ jobs:
           }
       - name: Check out cache
         id: build_cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: cache
           enableCrossOsArchive: true
           key: build_windows_x64
       - name: Download Windows build cache artifact on cache miss
         if: steps.build_cache.outputs.cache-hit != 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: cache_build_windows_x64
           path: cache
@@ -160,27 +160,26 @@ jobs:
             echo "Windows CTest failed"
             exit 1
           fi
-      - name: Prepare test results
+      - name: Prepare CTest XML artifact
         if: always()
         shell: bash
         run: |
           mkdir -p build/test_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
           cp -r build/Testing/*/Test.xml build/test_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}/
-          cp -r build/test build/test_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
         continue-on-error: true
       - name: Upload CTest XML artifact
         if: always()
-        uses: manticoresoftware/upload_artifact_with_retries@v4
+        uses: manticoresoftware/upload_artifact_with_retries@v5
         with:
           name: ${{ inputs.artifact_name }}_ctest_xml
           path: "build/test*/Test.xml"
       - name: Upload test artifacts
         if: always()
         continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@v4
+        uses: manticoresoftware/upload_artifact_with_retries@v5
         with:
           name: ${{ inputs.artifact_name }}
-          path: "build/test*/Test.xml build/test_*/test/**/report* build/test_*/test/**/error*.txt build/test_*/test/**/*.log build/test_*/test/**/*log build/test_*/test/**/*.txt build/test/*.mdmp build/test/*.dmp build/test/**/*.mdmp build/test/**/*.dmp build/test_*/test/**/*.mdmp build/test_*/test/**/*.dmp"
+          path: "build/test*/Test.xml build/test/**/report* build/test/**/error*.txt build/test/**/*.log build/test/**/*log build/test/**/*.txt build/test/*.mdmp build/test/*.dmp build/test/**/*.mdmp build/test/**/*.dmp"
 
   report_windows:
     name: Windows tests summary and report (${{ inputs.suite_name || format('{0}_{1}', inputs.CTEST_START, inputs.CTEST_END) }})
@@ -193,18 +192,18 @@ jobs:
       image: manticoresearch/ubertests_public:332_aot
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           submodules: recursive
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Download test report artifacts
-        uses: manticoresoftware/download_artifact_with_retries@v3
+        uses: manticoresoftware/download_artifact_with_retries@v5
         continue-on-error: true
         with:
           name: ${{ inputs.artifact_name }}
           path: .
       - name: Download CTest XML artifact
-        uses: manticoresoftware/download_artifact_with_retries@v3
+        uses: manticoresoftware/download_artifact_with_retries@v5
         with:
           name: ${{ inputs.artifact_name }}_ctest_xml
           path: .
@@ -230,6 +229,7 @@ jobs:
           compare_to_earlier_commit: false
           files: build/junit_*.xml
           comment_mode: failures
+          job_summary: ${{ steps.test.outcome == 'failure' }}
       - name: Verify test job result
         run: |
           if [[ "${{ needs.test_windows.result }}" != "success" ]]; then

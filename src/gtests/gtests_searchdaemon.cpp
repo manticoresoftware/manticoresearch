@@ -36,6 +36,75 @@ TEST ( functions, QueryStatElement_t_ctr )
 	ASSERT_EQ ( tElem.m_dData[TYPE_99], 0 );
 }
 
+TEST ( functions, ServedStatsConcurrentCalculations )
+{
+	// Default TDigest compression is 200, so BufferLimit() is 1600.
+	// Stop one sample before the automatic flush, then make many readers
+	// calculate percentiles at once. CalculateQueryStats() must serialize this
+	// because TDigest_c::Percentile() can flush/mutate buffered centroids.
+	constexpr int QUERY_STATS_BEFORE_FLUSH = 1599;
+	constexpr int CONCURRENT_READERS = 64;
+	constexpr int ROUNDS = 8;
+
+	ServedStats_c tStats;
+
+	for ( int iRound = 0; iRound < ROUNDS; ++iRound )
+	{
+		for ( int i = 0; i < QUERY_STATS_BEFORE_FLUSH; ++i )
+			tStats.AddQueryStat ( ( i + iRound ) % 31, ( i * 7 + iRound ) % 1000 );
+
+		std::atomic<int> iReady { 0 };
+		std::atomic<bool> bStart { false };
+		std::atomic<int> iDone { 0 };
+		std::atomic<bool> bBadStats { false };
+		std::mutex tDoneMutex;
+		std::condition_variable tDoneCv;
+		std::vector<std::thread> dThreads;
+		dThreads.reserve ( CONCURRENT_READERS );
+
+		for ( int i = 0; i < CONCURRENT_READERS; ++i )
+		{
+			dThreads.emplace_back ( [&] {
+				iReady.fetch_add ( 1, std::memory_order_release );
+				while ( !bStart.load ( std::memory_order_acquire ) )
+					std::this_thread::yield();
+
+				QueryStats_t tRowsFoundStats;
+				QueryStats_t tQueryTimeStats;
+				tStats.CalculateQueryStats ( tRowsFoundStats, tQueryTimeStats );
+
+				const uint64_t uExpectedQueries = uint64_t ( iRound + 1 ) * QUERY_STATS_BEFORE_FLUSH;
+				if ( tRowsFoundStats.m_dStats[QueryStats::INTERVAL_ALLTIME].m_uTotalQueries != uExpectedQueries ||
+					tQueryTimeStats.m_dStats[QueryStats::INTERVAL_ALLTIME].m_uTotalQueries != uExpectedQueries )
+					bBadStats.store ( true, std::memory_order_release );
+
+				{
+					std::lock_guard<std::mutex> tGuard ( tDoneMutex );
+					iDone.fetch_add ( 1, std::memory_order_release );
+				}
+				tDoneCv.notify_one();
+			} );
+		}
+
+		while ( iReady.load ( std::memory_order_acquire ) != CONCURRENT_READERS )
+			std::this_thread::yield();
+
+		bStart.store ( true, std::memory_order_release );
+
+		{
+			std::unique_lock<std::mutex> tLock ( tDoneMutex );
+			ASSERT_TRUE ( tDoneCv.wait_for ( tLock, std::chrono::seconds ( 30 ), [&] {
+				return iDone.load ( std::memory_order_acquire ) == CONCURRENT_READERS;
+			} ) );
+		}
+
+		for ( auto & tThread : dThreads )
+			tThread.join();
+
+		ASSERT_FALSE ( bBadStats.load ( std::memory_order_acquire ) );
+	}
+}
+
 TEST ( functions, SecretEqual )
 {
 	BYTE dA[] = { 1, 2, 3, 4 };

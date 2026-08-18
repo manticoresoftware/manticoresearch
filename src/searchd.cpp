@@ -10012,15 +10012,15 @@ void HandleMysqlFlushRamchunk ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 
 	RIdx_T<RtIndex_i*> pRt { pIndex };
 	auto eFlushResult = pRt->ForceDiskChunkResult();
-	if ( eFlushResult!=RtIndexActionResult_e::OK )
+	if ( eFlushResult!=RtActionResult_e::OK )
 	{
 		CSphString sError;
-		if ( eFlushResult==RtIndexActionResult_e::ERROR_TABLE_USABLE )
+		if ( eFlushResult==RtActionResult_e::TABLE_USABLE )
 			sError.SetSprintf ( "table '%s': FLUSH RAMCHUNK failed; metadata was not committed, table remains available, binlog retained for recovery (%s)", tStmt.m_sIndex.cstr(), pRt->GetLastError().cstr() );
 		else
 			sError.SetSprintf ( "table '%s': FLUSH RAMCHUNK failed; TABLE UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRt->GetLastError().cstr() );
 		tOut.Error ( sError.cstr () );
-		if ( eFlushResult!=RtIndexActionResult_e::ERROR_TABLE_USABLE )
+		if ( eFlushResult!=RtActionResult_e::TABLE_USABLE )
 			g_pLocalIndexes->Delete ( tStmt.m_sIndex );
 		return;
 	}
@@ -11793,9 +11793,9 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	if ( !pRT->IsSameSettings ( tSettings, tSetup, dWarnings, sError ) && sError.IsEmpty() )
 	{
 		auto eReconfigureResult = pRT->ReconfigureResult ( tSetup );
-		if ( eReconfigureResult!=RtIndexActionResult_e::OK )
+		if ( eReconfigureResult!=RtActionResult_e::OK )
 		{
-			if ( eReconfigureResult==RtIndexActionResult_e::ERROR_TABLE_USABLE )
+			if ( eReconfigureResult==RtActionResult_e::TABLE_USABLE )
 				sError.SetSprintf ( "table '%s': reconfigure failed; metadata was not committed, table remains available, binlog retained for recovery (%s)", tStmt.m_sIndex.cstr(), pRT->GetLastError().cstr() );
 			else
 			{
@@ -11990,7 +11990,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	{
 		auto eReconfigureResult = pRtIndex->ReconfigureResult ( tSetup );
 
-		if ( eReconfigureResult==RtIndexActionResult_e::OK && tSetup.m_tMutableSettings.IsSet ( MutableName_e::GLOBAL_IDF ) )
+		if ( eReconfigureResult==RtActionResult_e::OK && tSetup.m_tMutableSettings.IsSet ( MutableName_e::GLOBAL_IDF ) )
 		{
 			const CSphString sNewIDF = tSetup.m_tMutableSettings.m_sGlobalIDFPath;
 			sph::PrereadGlobalIDF ( sNewIDF, sError );
@@ -12003,9 +12003,9 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 			}
 		}
 
-		if ( eReconfigureResult!=RtIndexActionResult_e::OK )
+		if ( eReconfigureResult!=RtActionResult_e::OK )
 		{
-			if ( eReconfigureResult==RtIndexActionResult_e::ERROR_TABLE_USABLE )
+			if ( eReconfigureResult==RtActionResult_e::TABLE_USABLE )
 				sError.SetSprintf ( "table '%s': alter failed; metadata was not committed, table remains available, binlog retained for recovery (%s)", tStmt.m_sIndex.cstr(), pRtIndex->GetLastError().cstr() );
 			else
 			{

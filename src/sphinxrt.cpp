@@ -1593,7 +1593,7 @@ public:
 	void				ForceRamFlush ( const char * szReason ) final;
 	bool				IsFlushNeed() const final;
 	bool				ForceDiskChunk() final;
-	RtIndexActionResult_e ForceDiskChunkResult() final;
+	RtActionResult_e ForceDiskChunkResult() final;
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) final;
 	bool				AttachRtIndex ( AttachArgs_t & tArgs, CSphString & sError ) final;
 	bool				Truncate ( CSphString & sError, Truncate_e eAction ) final;
@@ -1693,7 +1693,7 @@ public:
 
 	bool				IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const final;
 	bool				Reconfigure ( CSphReconfigureSetup & tSetup ) final;
-	RtIndexActionResult_e ReconfigureResult ( CSphReconfigureSetup & tSetup ) final;
+	RtActionResult_e ReconfigureResult ( CSphReconfigureSetup & tSetup ) final;
 	int64_t				GetLastFlushTimestamp() const final;
 	void				ProhibitSave() final;
 	void				EnableSave() final;
@@ -1809,7 +1809,7 @@ private:
 	bool						SaveMeta ();
 	bool						SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats, CSphString & sError ) const;
 	bool						SaveDiskData ( const char * szFilename, const ConstRtSegmentSlice_t & tSegs, const ChunkStats_t & tStats, CSphString & sError, SaveDiskDataTimings_t * pTimings = nullptr ) const;
-	RtIndexActionResult_e		SaveDiskChunk ( bool bForced, bool bEmergent=false ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
+	RtActionResult_e		SaveDiskChunk ( bool bForced, bool bEmergent=false ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	void						ConditionalDiskChunk ();
 
 	std::unique_ptr<CSphIndex>	PreallocDiskChunk ( const CSphString& sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * szName=nullptr ) const;
@@ -4266,10 +4266,10 @@ struct Checkpoint_t
 
 bool RtIndex_c::ForceDiskChunk()
 {
-	return ForceDiskChunkResult()==RtIndexActionResult_e::OK;
+	return ForceDiskChunkResult()==RtActionResult_e::OK;
 }
 
-RtIndexActionResult_e RtIndex_c::ForceDiskChunkResult()
+RtActionResult_e RtIndex_c::ForceDiskChunkResult()
 {
 	MEMORY ( MEM_INDEX_RT );
 
@@ -5300,10 +5300,10 @@ int64_t RtIndex_c::GetMemCount ( PRED&& fnPred ) const
 }
 
 // i.e. create new disk chunk from ram segments
-RtIndexActionResult_e RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
+RtActionResult_e RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	if ( !m_tSaving.WaitEnabledOrShutdown() )
-		return RtIndexActionResult_e::OK;
+		return RtActionResult_e::OK;
 
 	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 
@@ -5354,7 +5354,7 @@ RtIndexActionResult_e RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) 
 	RTSAVELOG << "SaveDiskChunk process " << dSegments.GetLength() << " segments. Active jobs " << m_tNSavesNow.GetValue() << ", op " << iSaveOp
 		<< " RAM visible+retired/locked/acquired " << iNotMyOpRAM + iMyOpRAM << "+" << m_iRamChunksAllocatedRAM.load ( std::memory_order_relaxed )- iNotMyOpRAM - iMyOpRAM << "/" << iNotMyOpRAM << "/" << iMyOpRAM;
 	if ( dSegments.IsEmpty() )
-		return RtIndexActionResult_e::OK;
+		return RtActionResult_e::OK;
 
 	auto iTID = m_iTID;
 	m_tSaveTIDS.ModifyValue ( [iTID] ( CSphVector<int64_t>& dSaves ) { dSaves.Add ( iTID ); } );
@@ -5421,7 +5421,7 @@ RtIndexActionResult_e RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) 
 	if ( !pNewChunk )
 	{
 		sphWarning ( "rt: table %s failed to load disk chunk after RAM save: %s", GetName(), m_sLastError.cstr () );
-		return RtIndexActionResult_e::ERROR;
+		return RtActionResult_e::TABLE_UNUSABLE;
 	}
 
 	// applying postponed kills is ok now, since no other kills would happen as we're in serial fiber.
@@ -5487,7 +5487,7 @@ RtIndexActionResult_e RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) 
 	if ( !SaveMeta ( iTID, dChunks ) )
 	{
 		sphWarning ( "rt: table %s: metadata save FAILED after disk chunk %s: %s; keeping binlog for recovery", GetName(), sChunk.cstr(), m_sLastError.cstr() );
-		return RtIndexActionResult_e::ERROR_TABLE_USABLE;
+		return RtActionResult_e::TABLE_USABLE;
 	}
 
 	m_iSavedTID = iTID;
@@ -5528,7 +5528,7 @@ RtIndexActionResult_e RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) 
 
 	Preread();
 	CheckStartAutoOptimize();
-	return RtIndexActionResult_e::OK;
+	return RtActionResult_e::OK;
 }
 
 std::unique_ptr<CSphIndex> RtIndex_c::PreallocDiskChunk ( const CSphString& sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * szName ) const
@@ -10005,7 +10005,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 		return false;
 
 	// attach to non-empty RT: first flush RAM segments to disk chunk, then apply upcoming index'es docs as k-list.
-	if ( !m_tRtChunks.RamSegs()->IsEmpty() && SaveDiskChunk ( true )!=RtIndexActionResult_e::OK )
+	if ( !m_tRtChunks.RamSegs()->IsEmpty() && SaveDiskChunk ( true )!=RtActionResult_e::OK )
 		return false;
 
 	if ( !AttachDiskChunkMove ( pIndex, bFatal, sError ) )
@@ -10149,7 +10149,7 @@ bool RtIndex_c::AttachRtIndex ( AttachArgs_t & tArgs, CSphString & sError )
 		return false;
 
 	// attach to non-empty RT: first flush RAM segments to disk chunk, then apply upcoming index'es docs as k-list.
-	if ( !m_tRtChunks.RamSegs()->IsEmpty() && SaveDiskChunk ( true )!=RtIndexActionResult_e::OK )
+	if ( !m_tRtChunks.RamSegs()->IsEmpty() && SaveDiskChunk ( true )!=RtActionResult_e::OK )
 		return false;
 
 	auto * pSrcRtIndex = static_cast<RtIndex_c *>( pSrcIndex );
@@ -10207,7 +10207,7 @@ bool RtIndex_c::AttachSaveDiskChunk()
 		return true;
 
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
-	return SaveDiskChunk ( true )==RtIndexActionResult_e::OK;
+	return SaveDiskChunk ( true )==RtActionResult_e::OK;
 }
 
 ConstDiskChunkRefPtr_t RtIndex_c::PopDiskChunk()
@@ -11956,17 +11956,17 @@ bool RtIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconf
 
 bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 {
-	return ReconfigureResult ( tSetup )==RtIndexActionResult_e::OK;
+	return ReconfigureResult ( tSetup )==RtActionResult_e::OK;
 }
 
-RtIndexActionResult_e RtIndex_c::ReconfigureResult ( CSphReconfigureSetup & tSetup )
+RtActionResult_e RtIndex_c::ReconfigureResult ( CSphReconfigureSetup & tSetup )
 {
 	// strength single-fiber access (don't rely upon to upstream w-lock)
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 	TRACE_SCHED ( "rt", "Reconfigure" );
 
 	auto eFlushResult = ForceDiskChunkResult();
-	if ( eFlushResult!=RtIndexActionResult_e::OK )
+	if ( eFlushResult!=RtActionResult_e::OK )
 		return eFlushResult;
 
 	if ( tSetup.m_bChangeSchema )
@@ -12005,7 +12005,7 @@ RtIndexActionResult_e RtIndex_c::ReconfigureResult ( CSphReconfigureSetup & tSet
 	if ( m_sGlobalIDFPath != m_tMutableSettings.m_sGlobalIDFPath )
 		SetGlobalIDFPath ( m_tMutableSettings.m_sGlobalIDFPath );
 
-	return RtIndexActionResult_e::OK;
+	return RtActionResult_e::OK;
 }
 
 
@@ -13152,7 +13152,7 @@ bool RtIndex_c::InitUpdateEmbeddingState ( const CSphString & sAttr, EmbeddingPo
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 
 	// Force current RAM segments to disk so the populate loop runs against disk chunks only.
-	if ( SaveDiskChunk ( true )!=RtIndexActionResult_e::OK )
+	if ( SaveDiskChunk ( true )!=RtActionResult_e::OK )
 	{
 		sError = m_sLastError;
 		if ( sError.IsEmpty() )

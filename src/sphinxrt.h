@@ -133,12 +133,12 @@ struct AttachArgs_t
 	AttachArgs_t ( RtIndex_i * pSrcIndex ) : m_pSrcIndex ( pSrcIndex ) {}
 };
 
-enum class RtIndexActionResult_e
+enum class RtActionResult_e
 {
 	OK,
-	ERROR,
+	TABLE_UNUSABLE,
 	// operation failed after publishing valid table state; report the error without dropping the table
-	ERROR_TABLE_USABLE
+	TABLE_USABLE
 };
 
 class RtIndex_i : public CSphIndexStub
@@ -180,9 +180,9 @@ public:
 
 	/// forcibly save RAM chunk as a new disk chunk
 	virtual bool ForceDiskChunk () = 0;
-	virtual RtIndexActionResult_e ForceDiskChunkResult ()
+	virtual RtActionResult_e ForceDiskChunkResult ()
 	{
-		return ForceDiskChunk() ? RtIndexActionResult_e::OK : RtIndexActionResult_e::ERROR;
+		return ForceDiskChunk() ? RtActionResult_e::OK : RtActionResult_e::TABLE_UNUSABLE;
 	}
 
 	/// attach a disk chunk to current index
@@ -208,9 +208,9 @@ public:
 	/// reconfigure index by using new tokenizer, dictionary and index settings
 	/// current data got saved with current settings
 	virtual bool Reconfigure ( CSphReconfigureSetup & tSetup ) = 0;
-	virtual RtIndexActionResult_e ReconfigureResult ( CSphReconfigureSetup & tSetup )
+	virtual RtActionResult_e ReconfigureResult ( CSphReconfigureSetup & tSetup )
 	{
-		return Reconfigure ( tSetup ) ? RtIndexActionResult_e::OK : RtIndexActionResult_e::ERROR;
+		return Reconfigure ( tSetup ) ? RtActionResult_e::OK : RtActionResult_e::TABLE_UNUSABLE;
 	}
 
 	// generation typically changes on Reconfigure

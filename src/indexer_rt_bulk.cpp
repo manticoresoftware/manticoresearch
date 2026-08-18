@@ -89,19 +89,22 @@ static void AppendCsvQuoted ( StringBuilder_c & sOut, const char * szValue )
 }
 
 
-static CSphString GetIndexerPath()
+static bool GetIndexerPath ( CSphString & sIndexer, CSphString & sError )
 {
-	const char * szIndexer = getenv ( "MANTICORE_INDEXER_RT_INDEXER" );
-	if ( szIndexer )
-		return szIndexer;
-
+#if STATIC_BINARY
+	sError = "indexer RT bulk is unavailable in static builds";
+	return false;
+#else
 	CSphString sExecutable = GetExecutablePath();
 	if ( sExecutable.IsEmpty() )
-		return "indexer";
+	{
+		sError = "failed to locate the running searchd executable for indexer RT bulk";
+		return false;
+	}
 
-	CSphString sIndexer;
-	sIndexer.SetSprintf ( "%s/indexer", GetPathOnly ( sExecutable ).cstr() );
-	return sIndexer;
+	sIndexer.SetSprintf ( "%sindexer", GetPathOnly ( sExecutable ).cstr() );
+	return true;
+#endif
 }
 
 
@@ -168,6 +171,10 @@ static void StopIndexerRtBulk ( ClientSession_c & tSession )
 
 static bool StartIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError )
 {
+	CSphString sIndexer;
+	if ( !GetIndexerPath ( sIndexer, sError ) )
+		return false;
+
 	int dSockets[2] = { -1, -1 };
 	int iSocketType = SOCK_STREAM;
 	#ifdef SOCK_CLOEXEC
@@ -188,7 +195,6 @@ static bool StartIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError
 	}
 	#endif
 
-	CSphString sIndexer = GetIndexerPath();
 	const char * szIndexer = sIndexer.cstr();
 	const char * szConfig = tSession.m_sIndexerRtBulkConfig.cstr();
 	posix_spawn_file_actions_t tActions;
@@ -238,7 +244,7 @@ static bool StartIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError
 		char sIndexArg[] = "indexer_rt_bulk_chunk";
 		char sQuietArg[] = "--quiet";
 		char * dArgv[] = { const_cast<char *>( szIndexer ), sConfigArg, const_cast<char *>( szConfig ), sIndexArg, sQuietArg, nullptr };
-		iSpawnError = posix_spawnp ( &iPid, szIndexer, &tActions, &tAttrs, dArgv, environ );
+		iSpawnError = posix_spawn ( &iPid, szIndexer, &tActions, &tAttrs, dArgv, environ );
 	}
 	if ( bAttrsInit )
 		posix_spawnattr_destroy ( &tAttrs );
@@ -248,7 +254,7 @@ static bool StartIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError
 	if ( iSpawnError )
 	{
 		close ( dSockets[0] );
-		sError.SetSprintf ( "failed to start indexer RT bulk process: %s", strerrorm ( iSpawnError ) );
+		sError.SetSprintf ( "failed to start indexer RT bulk process '%s': %s", szIndexer, strerrorm ( iSpawnError ) );
 		return false;
 	}
 

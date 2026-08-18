@@ -15,6 +15,10 @@
 #include "std/crc32.h"
 #include <sys/stat.h>
 
+#if defined(__APPLE__)
+	#include <mach-o/dyld.h>
+#endif
+
 #if _WIN32
 	#define getcwd		_getcwd
 	#include <shlwapi.h>
@@ -976,6 +980,23 @@ CSphString GetExecutablePath()
 	CHAR szPath[MAX_PATH];
 	GetModuleFileName ( hModule, szPath, MAX_PATH );
 	return szPath;
+#elif defined(__APPLE__)
+	uint32_t uPathSize = 0;
+	if ( _NSGetExecutablePath ( nullptr, &uPathSize )!=-1 || !uPathSize )
+		return "";
+
+	CSphVector<char> dPath;
+	dPath.Resize ( uPathSize );
+	if ( _NSGetExecutablePath ( dPath.Begin(), &uPathSize ) )
+		return "";
+
+	char * szResolved = realpath ( dPath.Begin(), nullptr );
+	if ( !szResolved )
+		return dPath.Begin();
+
+	CSphString sExecutable = szResolved;
+	free ( szResolved );
+	return sExecutable;
 #else
 	char szPath[PATH_MAX];
 	ssize_t tLen;

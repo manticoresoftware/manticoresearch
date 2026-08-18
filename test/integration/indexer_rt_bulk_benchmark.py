@@ -7,8 +7,8 @@ then start searchd and run this script under a one-CPU limiter, for example:
     ROWS=1000000 REPS=3 DATA=/path/to/taxi.ndjson \
       cpulimit --include-children -l 100 python3 indexer_rt_bulk_benchmark.py
 
-The daemon must listen on MYSQL_PORT/HTTP_PORT and have
-MANTICORE_INDEXER_RT_INDEXER pointing to the matching indexer binary.
+The daemon must listen on MYSQL_PORT/HTTP_PORT and have the matching indexer
+binary beside the running searchd executable.
 """
 import http.client
 import json

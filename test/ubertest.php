@@ -195,7 +195,6 @@ if ( !empty ( $locals['rt_indexer_mode'] ) )
 	if ( $windows )
 		die ( "--rt-indexer is not supported on Windows\n" );
 
-	putenv ( "MANTICORE_INDEXER_RT_INDEXER=".$locals['indexer'] );
 	putenv ( "MANTICORE_NO_BUDDY=1" );
 }
 

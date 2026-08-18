@@ -1548,7 +1548,7 @@ BinlogFileState_e Binlog_c::ReplayBinlog ( BinlogReplayFileDesc_t & tLog, const 
 	BinlogReader_c tReader;
 	if ( !tReader.Open ( sLog, sError ) )
 	{
-		Log ( REPLAY_IGNORE_OPEN_ERROR, "binlog: log open error: %s", sError.cstr() );
+		Log ( REPLAY_IGNORE_OPEN_ERROR, "binlog: log open error: %s; use --replay-flags=ignore-open-errors to skip missing binlog files", sError.cstr() );
 		return BinlogFileState_e::ERROR_NON_READABLE;
 	}
 
@@ -1875,7 +1875,7 @@ bool Binlog_c::ReplayTxn ( const BinlogReplayFileDesc_t & tLog, BinlogReader_c &
 	// could be invalid TXN in binlog
 	if ( !tReplayed.m_bValid )
 	{
-		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: %s (table=%s, lasttid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ", error=%s)",
+		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: %s (table=%s, lasttid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ", error=%s); use --replay-flags=ignore-trx-errors to skip binlog transaction replay errors",
 			  sOp.cstr (), tIndex.m_sName.cstr(), tIndex.m_iMaxTID, iTID, iTxnPos, sError.cstr() );
 		return false;
 	}

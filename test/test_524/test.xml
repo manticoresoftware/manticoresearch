@@ -16,7 +16,7 @@ searchd
 source src
 {
 	type = csvpipe
-	csvpipe_command = echo "1,hello world"; echo "2,another document"
+	csvpipe_command = echo "1,hello world"
 	csvpipe_field = title
 }
 

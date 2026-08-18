@@ -15,6 +15,8 @@
 #include "tokenizer/tokenizer.h"
 #include "sphinxint.h"
 
+#include <cmath>
+
 void CSphSource::SetDict ( const DictRefPtr_c& pDict )
 {
 	assert ( pDict );

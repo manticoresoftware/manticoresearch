@@ -280,6 +280,6 @@ bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char 
 bool WriteNonThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError );
 
 /// read blob from file honoring throttling
-size_t sphReadThrottled ( int iFD, void* pBuf, size_t iCount, bool bInterruptible=true );
+size_t sphReadThrottled ( int iFD, void* pBuf, size_t iCount );
 
 #endif // _sphinxint_

@@ -644,7 +644,7 @@ bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
 	using namespace bson;
 
 	CSphVector<BYTE> dData;
-	if ( !sphJsonParse ( dData, GetFilename ( SPH_EXT_SPH ), sError ) )
+	if ( sphJsonParse ( dData, GetFilename ( SPH_EXT_SPH ), sError )!=JsonFileParse_e::OK )
 		return false;
 
 	Bson_c tBson ( dData );

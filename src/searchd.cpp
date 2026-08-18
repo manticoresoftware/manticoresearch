@@ -278,14 +278,14 @@ const char * szStatusVersion () noexcept
 	return g_sStatusVersion.cstr();
 }
 
-void Shutdown (); // forward
+bool Shutdown (); // forward
 
 bool DieOrFatalWithShutdownCb ( bool bDie, const char * sFmt, va_list ap )
 {
 	if ( bDie )
 		g_pLogger () ( SPH_LOG_FATAL, sFmt, ap );
 	else
-		Shutdown ();
+		(void)Shutdown ();
 	return false; // don't lot to stdout
 }
 
@@ -306,7 +306,7 @@ bool DieOrFatalCb ( bool bDie, const char * sFmt, va_list ap )
 /////////////////////////////////////////////////////////////////////////////
 // SIGNAL HANDLERS
 /////////////////////////////////////////////////////////////////////////////
-void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
+bool Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 {
 	sd::stopping();
 
@@ -322,7 +322,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 #if !_WIN32
 	int fdStopwait = -1;
 #endif
-	bool bAttrsSaveOk = true;
+	bool bShutdownOk = true;
 	if ( g_pShared )
 		g_pShared->m_bDaemonAtShutdown = true;
 
@@ -355,7 +355,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	// save attribute updates for all local indexes
 	SHUTINFO << "Finally save tables ...";
-	bAttrsSaveOk = FinallySaveIndexes();
+	bShutdownOk = FinallySaveIndexes();
 	sd::extend30s();
 
 	// right before unlock loop
@@ -452,6 +452,15 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	sphDoneIOStats();
 	sd::extend30s();
 
+	SHUTINFO << "Finalize binlog ...";
+	CSphString sBinlogError;
+	if ( !Binlog::FinalizeForShutdown ( sBinlogError ) )
+	{
+		sphWarning ( "%s", sBinlogError.cstr() );
+		bShutdownOk = false;
+	}
+	sd::extend30s();
+
 	SHUTINFO << "Finish binlog serving ...";
 	Binlog::Deinit();
 	sd::extend30s();
@@ -522,7 +531,10 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	sd::extend30s();
 
 	sphInfo ( "shutdown daemon version '%s' ...", g_sStatusVersion.cstr() );
-	sphInfo ( "shutdown complete" );
+	if ( bShutdownOk )
+		sphInfo ( "shutdown complete" );
+	else
+		sphWarning ( "shutdown incomplete; table persistence errors or recovery binlogs remain" );
 
 	Threads::Done ( GetDaemonLogFD() );
 	sd::extend30s();
@@ -532,11 +544,13 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 #else
 	if ( fdStopwait>=0 )
 	{
-		DWORD uStatus = bAttrsSaveOk;
+		DWORD uStatus = bShutdownOk;
 		int VARIABLE_IS_NOT_USED iDummy = ::write ( fdStopwait, &uStatus, sizeof(DWORD) );
 		::close ( fdStopwait );
 	}
 #endif
+
+	return bShutdownOk;
 }
 
 static void ShutdownEarlyLoadedLibraries()
@@ -9997,12 +10011,17 @@ void HandleMysqlFlushRamchunk ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	}
 
 	RIdx_T<RtIndex_i*> pRt { pIndex };
-	if ( !pRt->ForceDiskChunk() )
+	auto eFlushResult = pRt->ForceDiskChunkResult();
+	if ( eFlushResult!=RtIndexActionResult_e::OK )
 	{
 		CSphString sError;
-		sError.SetSprintf ( "table '%s': FLUSH RAMCHUNK failed; TABLE UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRt->GetLastError().cstr() );
+		if ( eFlushResult==RtIndexActionResult_e::ERROR_TABLE_USABLE )
+			sError.SetSprintf ( "table '%s': FLUSH RAMCHUNK failed; metadata was not committed, table remains available, binlog retained for recovery (%s)", tStmt.m_sIndex.cstr(), pRt->GetLastError().cstr() );
+		else
+			sError.SetSprintf ( "table '%s': FLUSH RAMCHUNK failed; TABLE UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRt->GetLastError().cstr() );
 		tOut.Error ( sError.cstr () );
-		g_pLocalIndexes->Delete ( tStmt.m_sIndex );
+		if ( eFlushResult!=RtIndexActionResult_e::ERROR_TABLE_USABLE )
+			g_pLocalIndexes->Delete ( tStmt.m_sIndex );
 		return;
 	}
 
@@ -11773,10 +11792,16 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	WIdx_T<RtIndex_i*> pRT { pServed };
 	if ( !pRT->IsSameSettings ( tSettings, tSetup, dWarnings, sError ) && sError.IsEmpty() )
 	{
-		if ( !pRT->Reconfigure ( tSetup ) )
+		auto eReconfigureResult = pRT->ReconfigureResult ( tSetup );
+		if ( eReconfigureResult!=RtIndexActionResult_e::OK )
 		{
-			sError.SetSprintf ( "table '%s': reconfigure failed; TABLE UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRT->GetLastError().cstr() );
-			g_pLocalIndexes->Delete ( tStmt.m_sIndex );
+			if ( eReconfigureResult==RtIndexActionResult_e::ERROR_TABLE_USABLE )
+				sError.SetSprintf ( "table '%s': reconfigure failed; metadata was not committed, table remains available, binlog retained for recovery (%s)", tStmt.m_sIndex.cstr(), pRT->GetLastError().cstr() );
+			else
+			{
+				sError.SetSprintf ( "table '%s': reconfigure failed; TABLE UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRT->GetLastError().cstr() );
+				g_pLocalIndexes->Delete ( tStmt.m_sIndex );
+			}
 		}
 	}
 
@@ -11963,9 +11988,9 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 
 	if ( !bSame && sError.IsEmpty() )
 	{
-		bool bOk = pRtIndex->Reconfigure(tSetup);
+		auto eReconfigureResult = pRtIndex->ReconfigureResult ( tSetup );
 
-		if ( tSetup.m_tMutableSettings.IsSet ( MutableName_e::GLOBAL_IDF ) )
+		if ( eReconfigureResult==RtIndexActionResult_e::OK && tSetup.m_tMutableSettings.IsSet ( MutableName_e::GLOBAL_IDF ) )
 		{
 			const CSphString sNewIDF = tSetup.m_tMutableSettings.m_sGlobalIDFPath;
 			sph::PrereadGlobalIDF ( sNewIDF, sError );
@@ -11978,10 +12003,15 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 			}
 		}
 
-		if ( !bOk )
+		if ( eReconfigureResult!=RtIndexActionResult_e::OK )
 		{
-			sError.SetSprintf ( "table '%s': alter failed; TABLE UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRtIndex->GetLastError().cstr() );
-			g_pLocalIndexes->Delete ( tStmt.m_sIndex );
+			if ( eReconfigureResult==RtIndexActionResult_e::ERROR_TABLE_USABLE )
+				sError.SetSprintf ( "table '%s': alter failed; metadata was not committed, table remains available, binlog retained for recovery (%s)", tStmt.m_sIndex.cstr(), pRtIndex->GetLastError().cstr() );
+			else
+			{
+				sError.SetSprintf ( "table '%s': alter failed; TABLE UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRtIndex->GetLastError().cstr() );
+				g_pLocalIndexes->Delete ( tStmt.m_sIndex );
+			}
 		}
 	}
 
@@ -14997,6 +15027,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 	bool bShutdown = false;
 	bool bStreamsActive = true;
 	int iChild = 0;
+	int iWatchdogExit = 0;
 	g_iParentPID = getpid();
 	assert ( g_pShared );
 	while (true)
@@ -15054,7 +15085,11 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 					eReincarnate = EFork::Restart;
 				} else
 				{
-					sphInfo ( "watchdog: main process %d exited cleanly (exit code %d), shutting down", iPid, iExit );
+					iWatchdogExit = iExit;
+					if ( iExit )
+						sphWarning ( "watchdog: main process %d exited with failure (exit code %d), shutting down", iPid, iExit );
+					else
+						sphInfo ( "watchdog: main process %d exited cleanly (exit code 0), shutting down", iPid );
 					bShutdown = true;
 				}
 			} else if ( WIFSIGNALED ( iStatus ) )
@@ -15102,7 +15137,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 		if ( bShutdown || sphInterrupted() || g_pShared->m_bDaemonAtShutdown )
 		{
 			ShutdownEarlyLoadedLibraries();
-			exit ( 0 );
+			exit ( iWatchdogExit );
 		}
 	}
 }
@@ -15114,9 +15149,9 @@ void CheckSignals () REQUIRES ( MainThread )
 #if _WIN32
 	if ( WinService() && StopWinService() )
 	{
-		Shutdown ();
+		const bool bShutdownOk = Shutdown ();
 		SetWinServiceStopped();
-		exit ( 0 );
+		exit ( bShutdownOk ? 0 : 1 );
 	}
 #endif
 
@@ -15130,8 +15165,8 @@ void CheckSignals () REQUIRES ( MainThread )
 	if ( sphInterrupted() )
 	{
 		sphInfo ( "caught SIGTERM, shutting down" );
-		Shutdown ();
-		exit ( 0 );
+		const bool bShutdownOk = Shutdown ();
+		exit ( bShutdownOk ? 0 : 1 );
 	}
 
 #if _WIN32
@@ -16567,6 +16602,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	sphRTInit ( hSearchd.GetStr ( "binlog_path", bTestMode ? "" : LOCALDATADIR ),
 		hSearchd.GetBool ( "binlog_common", env_exists ( "MANTICORE_BINLOG_COMMON" ) ),
 		hConf("common") ? hConf["common"]("common") : nullptr );
+	Binlog::Configure ( hSearchd, uReplayFlags );
 	// after next line executed we're in mt env, need to take rwlock accessing config.
 	StartGlobalWorkPool ();
 
@@ -16676,7 +16712,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( bHasPIDFile && !bWatched )
 		sphLockUn ( g_iPidFD );
 
-	Binlog::Configure ( hSearchd, uReplayFlags );
 	SetUidShort ( GetMacAddress(), g_sPidFile, bTestMode );
 	InitDocstore ( g_iDocstoreCache );
 	InitSkipCache ( g_iSkipCache );

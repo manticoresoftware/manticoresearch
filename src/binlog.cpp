@@ -29,13 +29,6 @@ static constexpr DWORD		BINLOG_META_MAGIC_SPLI = 0x494c5053;	/// magic 'SPLI' he
 // 16 : keywords_v2 RT dictionary payload versioning
 
 constexpr unsigned int BINLOG_VERSION = 16;
-// v16 only added keywords_v2 payloads; v15 tables use legacy encodings that remain supported.
-constexpr unsigned int BINLOG_COMPAT_VERSION = 15;
-
-static bool IsReplayableVersion ( DWORD uVersion )
-{
-	return uVersion==BINLOG_VERSION || uVersion==BINLOG_COMPAT_VERSION;
-}
 
 /// Bin Log Operation
 enum Blop_e : BYTE
@@ -227,6 +220,7 @@ public:
 	bool	IsFlushingEnabled() const;
 	void	DoFlush (); // invoked by task binlog flush, every BINLOG_AUTO_FLUSH (1 sec)
 	int64_t	NextFlushingTime() const noexcept;
+	bool	FinalizeForShutdown ( CSphString & sError );
 
 	inline CSphString GetLogPath() const noexcept { return m_sLogPath; }
 	int64_t LastTidFor ( const CSphString & sIndex ) const noexcept EXCLUDES ( m_tHashAccess );
@@ -260,7 +254,7 @@ private:
 	CSphString				m_sBinlogFileNameTemplate;
 
 	std::atomic<int>		m_iNextBinlog { 0 };
-	std::atomic<int>		m_iNumFiles;
+	std::atomic<int>		m_iNumFiles { 0 };
 
 private:
 
@@ -269,9 +263,10 @@ private:
 
 	SingleBinlog_c *		GetFlushIndexBinlog ( const char * szIndexName ) const REQUIRES ( m_tHashAccess );
 
-	void					LoadMeta ();
+	DWORD					LoadMeta ();
+	void					PreflightReplayVersion ( DWORD uMetaVersion );
 	enum SaveMeta_e : bool { eNoForce, eForce };
-	void					DoSaveMeta ( IntVec_t dFiles, SaveMeta_e eForce ) EXCLUDES ( m_tCurrentFilesAccess );
+	bool					DoSaveMeta ( IntVec_t dFiles, SaveMeta_e eForce ) EXCLUDES ( m_tCurrentFilesAccess );
 	void					SaveMeta () EXCLUDES ( m_tHashAccess ) EXCLUDES ( m_tCurrentFilesAccess );
 	void					SaveMetaUnlock ( SaveMeta_e eForce = eNoForce ) REQUIRES_SHARED ( m_tHashAccess ) EXCLUDES ( m_tCurrentFilesAccess );
 	IntVec_t				CollectBinlogFiles() EXCLUDES ( m_tHashAccess );
@@ -1095,6 +1090,42 @@ Binlog_c::~Binlog_c ()
 	UnlockBinlog ();
 }
 
+
+bool Binlog_c::FinalizeForShutdown ( CSphString & sError )
+{
+	if ( m_bDisabled )
+		return true;
+
+	CSphVector<SingleBinlogPtr> dBinlogs;
+	{
+		Threads::SccRL_t tLock ( m_tHashAccess );
+		for ( auto & tBinlog : m_hBinlogs )
+			dBinlogs.Add ( tBinlog.second );
+	}
+
+	// Closing a writer removes its normal empty current log. Anything that is
+	// still tracked afterwards contains recovery state that must survive shutdown.
+	for ( auto & pBinlog : dBinlogs )
+		pBinlog->Deinit();
+
+	IntVec_t dFiles = CollectBinlogFiles();
+	int iRecoveryFiles = dFiles.GetLength();
+	if ( !DoSaveMeta ( std::move ( dFiles ), eForce ) )
+	{
+		sError.SetSprintf ( "shutdown incomplete: failed to commit binlog metadata in '%s'", m_sLogPath.cstr() );
+		return false;
+	}
+
+	if ( iRecoveryFiles )
+	{
+		sError.SetSprintf ( "shutdown incomplete: %d recovery binlog file(s) remain in '%s'; restart this daemon version and stop it cleanly before upgrading",
+			iRecoveryFiles, m_sLogPath.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
 void Binlog_c::MakeBinlogFilenameTemplate() noexcept
 {
 	m_sBinlogFileNameTemplate = SphSprintf ( "%s/binlog.%%0%dd", m_sLogPath.cstr (), m_iBinlogFileDigits );
@@ -1196,8 +1227,9 @@ void Binlog_c::Configure ( const CSphConfigSection & hSearchd, DWORD uReplayFlag
 		return;
 
 	LockBinlog ();
-	LoadMeta();
+	DWORD uMetaVersion = LoadMeta();
 	MakeBinlogFilenameTemplate ();
+	PreflightReplayVersion ( uMetaVersion );
 }
 
 void Binlog_c::SetCommon ( bool bCommonBinlog )
@@ -1261,10 +1293,10 @@ int64_t Binlog_c::LastTidFor ( const CSphString & sIndex ) const noexcept
 static constexpr int SAVE_TRIES = 4;
 static constexpr int SAVE_TRIE_DELAY = 50;
 
-void Binlog_c::DoSaveMeta ( IntVec_t dFiles, SaveMeta_e eForce )
+bool Binlog_c::DoSaveMeta ( IntVec_t dFiles, SaveMeta_e eForce )
 {
 	if ( eForce==eNoForce && CompareCurrentFiles ( dFiles ) )
-		return; // files are same as stored; no need to rewrite meta
+		return true; // files are same as stored; no need to rewrite meta
 
 	CSphVector<BYTE> dMeta;
 	MemoryWriter2_c wrMeta ( dMeta );
@@ -1275,7 +1307,6 @@ void Binlog_c::DoSaveMeta ( IntVec_t dFiles, SaveMeta_e eForce )
 //	StringBuilder_c sMetaLog;
 //	sMetaLog << "SaveMeta: " << m_bReplayMode << " " << dFiles.GetLength () << ": ";
 //	sMetaLog.StartBlock ();
-	m_iNumFiles.store ( dFiles.GetLength (), std::memory_order_relaxed );
 	wrMeta.ZipInt ( dFiles.GetLength () );
 	for ( const auto & iExt: dFiles )
 	{
@@ -1287,16 +1318,12 @@ void Binlog_c::DoSaveMeta ( IntVec_t dFiles, SaveMeta_e eForce )
 
 	Threads::SccWL_t rLock { m_tCurrentFilesAccess };
 	if ( eForce==eNoForce && m_dCurrentFiles==(const IntVec_t &)dFiles )
-		return;
-
-	if ( dFiles.IsEmpty() )
-		m_iNextBinlog.store ( 0, std::memory_order_release );
-
-	m_dCurrentFiles.SwapData ( dFiles );
+		return true;
 
 	auto sMetaNew = SphSprintf ( "%s/binlog.meta.new", m_sLogPath.cstr () );
 	auto sMeta = SphSprintf ( "%s/binlog.meta", m_sLogPath.cstr () );
 
+	bool bSaved = false;
 	for ( int i=0; i<SAVE_TRIES; ++i )
 	{
 		CSphString sError;
@@ -1310,7 +1337,7 @@ void Binlog_c::DoSaveMeta ( IntVec_t dFiles, SaveMeta_e eForce )
 
 		if ( wrMetaFile.IsError() )
 		{
-			sphWarning ( "Error when closing file %s, errno=%d, error=%s, try=%d", sError.cstr(), errno, strerrorm ( errno ), i+1 );
+			sphWarning ( "Error when closing file %s: %s, errno=%d, error=%s, try=%d", sMetaNew.cstr(), sError.cstr(), errno, strerrorm ( errno ), i+1 );
 			continue;
 		}
 
@@ -1329,10 +1356,28 @@ void Binlog_c::DoSaveMeta ( IntVec_t dFiles, SaveMeta_e eForce )
 					sphDie ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)",
 							 sMetaNew.cstr (), sMeta.cstr (), errno,
 							 strerrorm ( errno ) ); // !COMMIT handle this gracefully
-			} else break;
-		} else break;
+			} else
+			{
+				bSaved = true;
+				break;
+			}
+		} else
+		{
+			bSaved = true;
+			break;
+		}
 	}
+
+	if ( !bSaved )
+		return false;
+
+	m_iNumFiles.store ( dFiles.GetLength (), std::memory_order_relaxed );
+	if ( dFiles.IsEmpty() )
+		m_iNextBinlog.store ( 0, std::memory_order_release );
+	m_dCurrentFiles.SwapData ( dFiles );
+
 	sphLogDebug ( "Binlog::SaveMeta: Done (%s)", sMetaNew.cstr() );
+	return true;
 }
 
 
@@ -1412,13 +1457,13 @@ bool Binlog_c::BinlogCommit ( int64_t * pTID, const char* szIndexName, FnWriteCo
 
 
 // called once on startup from Configure()
-void Binlog_c::LoadMeta ()
+DWORD Binlog_c::LoadMeta ()
 {
 	MEMORY ( MEM_BINLOG );
 
 	auto sMeta = SphSprintf ( "%s/binlog.meta", m_sLogPath.cstr () );
 	if ( !sphIsReadable ( sMeta.cstr () ) )
-		return;
+		return BINLOG_VERSION;
 
 	CSphString sError;
 
@@ -1442,11 +1487,11 @@ void Binlog_c::LoadMeta ()
 	m_dSavedFiles.Resize ( rdMeta.UnzipInt () ); // FIXME! sanity check
 
 	if ( m_dSavedFiles.IsEmpty () )
-		return;
+		return uVersion;
 
 	// ok, so there is actual recovery data
-	// could be incompatible version of the empty binlog
-	m_bWrongVersion = !IsReplayableVersion ( uVersion );
+	// could be wrong version of the empty binlog
+	m_bWrongVersion = ( uVersion!=BINLOG_VERSION );
 
 	// let's require that bitness
 	if ( uVersion < 15 )
@@ -1469,6 +1514,71 @@ void Binlog_c::LoadMeta ()
 	}
 
 	m_iNextBinlog.store ( iMaxExt+1, std::memory_order_release );
+	return uVersion;
+}
+
+
+static void RejectReplayVersion ( const CSphString & sLog, DWORD uVersion )
+{
+	sphDie ( "binlog: log %s is v.%d, binary is v.%d; recovery requires previous binary version",
+		sLog.cstr(), uVersion, BINLOG_VERSION );
+}
+
+
+void Binlog_c::PreflightReplayVersion ( DWORD uMetaVersion )
+{
+	for ( int iExt : m_dSavedFiles )
+	{
+		CSphString sError;
+		const CSphString sLog ( MakeBinlogName ( iExt ) );
+		BinlogReader_c tReader;
+		if ( !tReader.Open ( sLog, sError ) )
+		{
+			if ( uMetaVersion!=BINLOG_VERSION )
+				sphDie ( "binlog: unable to verify that log %s from v.%d metadata is empty: %s; recovery requires previous binary version",
+					sLog.cstr(), uMetaVersion, sError.cstr() );
+			continue;
+		}
+
+		const SphOffset_t iFileSize = tReader.GetFilesize();
+		if ( !iFileSize )
+			continue;
+
+		if ( tReader.GetDword()!=BINLOG_HEADER_MAGIC_SPBL || tReader.GetErrorFlag() )
+		{
+			if ( uMetaVersion!=BINLOG_VERSION )
+				sphDie ( "binlog: log %s listed by v.%d metadata is not a valid empty binlog; recovery requires previous binary version",
+					sLog.cstr(), uMetaVersion );
+			continue;
+		}
+
+		DWORD uVersion = tReader.GetDword();
+		if ( tReader.GetErrorFlag() )
+		{
+			if ( uMetaVersion!=BINLOG_VERSION )
+				sphDie ( "binlog: log %s listed by v.%d metadata has an incomplete header; recovery requires previous binary version",
+					sLog.cstr(), uMetaVersion );
+			continue;
+		}
+
+		// Header-only files do not contain recovery work, regardless of their version.
+		if ( iFileSize==8 || uVersion==BINLOG_VERSION )
+			continue;
+
+		// The only non-header record that can still represent an empty binlog is
+		// one valid cache record with zero table entries and no following data.
+		const int64_t iTxnPos = tReader.GetPos();
+		if ( tReader.GetDword()!=BLOP_MAGIC_TXN_ || tReader.GetErrorFlag() )
+			RejectReplayVersion ( sLog, uVersion );
+
+		tReader.ResetCrc ();
+		if ( (Blop_e)tReader.GetByte()!=ADD_CACHE || tReader.GetErrorFlag() )
+			RejectReplayVersion ( sLog, uVersion );
+		if ( tReader.UnzipOffset()!=0 || tReader.GetErrorFlag() )
+			RejectReplayVersion ( sLog, uVersion );
+		if ( !tReader.CheckCrc ( "cache", "", 0, iTxnPos ) || tReader.GetErrorFlag() || tReader.GetPos()!=iFileSize )
+			RejectReplayVersion ( sLog, uVersion );
+	}
 }
 
 // primary call - invoked from daemon once on start
@@ -1577,7 +1687,7 @@ BinlogFileState_e Binlog_c::ReplayBinlog ( BinlogReplayFileDesc_t & tLog, const 
 		sphWarning ( "binlog: log io error at pos=" INT64_FMT ": %s", tReader.GetPos(), sError.cstr() );
 
 	// could replay empty binlog of the old version
-	m_bWrongVersion = !IsReplayableVersion ( uVersion );
+	m_bWrongVersion = ( uVersion!=BINLOG_VERSION );
 
 	if ( iFileSize==8 ) // couple of DWORDs we just read - header and version
 	{
@@ -1956,6 +2066,14 @@ void Binlog::Deinit ()
 }
 
 
+bool Binlog::FinalizeForShutdown ( CSphString & sError )
+{
+	if ( !g_pRtBinlog )
+		return true;
+	return g_pRtBinlog->FinalizeForShutdown ( sError );
+}
+
+
 void Binlog::Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback )
 {
 	MEMORY ( MEM_BINLOG );
@@ -2046,7 +2164,7 @@ void Binlog_c::Log ( DWORD uFlag, const char * sTemplate, ... ) const
 	if ( ( m_uReplayFlags & uFlag )==0 )
 	{
 		sphDieVa ( sTemplate, ap );
-		std::_Exit ( 1 );
+		exit ( 1 );
 	} else if ( g_eLogLevel>=SPH_LOG_WARNING )
 	{
 		sphLogVa ( sTemplate, ap, SPH_LOG_WARNING );

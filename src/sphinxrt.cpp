@@ -1593,6 +1593,7 @@ public:
 	void				ForceRamFlush ( const char * szReason ) final;
 	bool				IsFlushNeed() const final;
 	bool				ForceDiskChunk() final;
+	RtIndexActionResult_e ForceDiskChunkResult() final;
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) final;
 	bool				AttachRtIndex ( AttachArgs_t & tArgs, CSphString & sError ) final;
 	bool				Truncate ( CSphString & sError, Truncate_e eAction ) final;
@@ -1692,6 +1693,7 @@ public:
 
 	bool				IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const final;
 	bool				Reconfigure ( CSphReconfigureSetup & tSetup ) final;
+	RtIndexActionResult_e ReconfigureResult ( CSphReconfigureSetup & tSetup ) final;
 	int64_t				GetLastFlushTimestamp() const final;
 	void				ProhibitSave() final;
 	void				EnableSave() final;
@@ -1803,11 +1805,11 @@ private:
 	LOAD_E						LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
 	LOAD_E						LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
 	bool						PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings );
-	void						SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames );
-	void						SaveMeta ();
+	bool						SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames );
+	bool						SaveMeta ();
 	bool						SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats, CSphString & sError ) const;
 	bool						SaveDiskData ( const char * szFilename, const ConstRtSegmentSlice_t & tSegs, const ChunkStats_t & tStats, CSphString & sError, SaveDiskDataTimings_t * pTimings = nullptr ) const;
-	bool						SaveDiskChunk ( bool bForced, bool bEmergent=false ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
+	RtIndexActionResult_e		SaveDiskChunk ( bool bForced, bool bEmergent=false ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	void						ConditionalDiskChunk ();
 
 	std::unique_ptr<CSphIndex>	PreallocDiskChunk ( const CSphString& sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * szName=nullptr ) const;
@@ -1992,7 +1994,7 @@ RtIndex_c::~RtIndex_c ()
 		bValid &= SaveRamChunk();
 
 	if ( bValid )
-		SaveMeta();
+		bValid &= SaveMeta();
 
 	if ( m_iLockFD>=0 )
 		::close ( m_iLockFD );
@@ -2316,7 +2318,12 @@ void RtIndex_c::ForceRamFlush ( const char* szReason )
 		return;
 	}
 
-	SaveMeta();
+	if ( !SaveMeta() )
+	{
+		sphWarning ( "rt: table %s: metadata save FAILED after ramchunk save: %s; keeping binlog for recovery", GetName(), m_sLastError.cstr() );
+		return;
+	}
+
 	auto pChunks = m_tRtChunks.DiskChunks();
 	pChunks->for_each ( [] ( ConstDiskChunkRefPtr_t & pIdx ) { pIdx->Cidx().FlushDeadRowMap ( true ); } );
 	Binlog::NotifyIndexFlush ( m_iTID, GetName(), Binlog::NoShutdown, Binlog::NoSave );
@@ -4259,6 +4266,11 @@ struct Checkpoint_t
 
 bool RtIndex_c::ForceDiskChunk()
 {
+	return ForceDiskChunkResult()==RtIndexActionResult_e::OK;
+}
+
+RtIndexActionResult_e RtIndex_c::ForceDiskChunkResult()
+{
 	MEMORY ( MEM_INDEX_RT );
 
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
@@ -5168,14 +5180,14 @@ bool RtIndex_c::SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_
 	return true;
 }
 
-void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
+bool RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 {
 	if ( !m_tSaving.ActiveStateIs ( SaveState_c::ENABLED ) )
-		return;
+		return false;
 
 	// sanity check
 	if ( m_iLockFD<0 )
-		return;
+		return false;
 
 	// write new meta
 	auto sMeta = GetFilename ( "meta" );
@@ -5193,8 +5205,9 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 	// no need to remove old but good meta in case new meta failed to save
 	if ( wrMeta.IsError() )
 	{
+		m_sLastError = sError;
 		sphWarning ( "%s", sError.cstr() );
-		return;
+		return false;
 	}
 
 	// rename
@@ -5203,6 +5216,7 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 			sMetaNew.cstr(), sMeta.cstr(), errno, strerrorm(errno) ); // !COMMIT handle this gracefully
 
 	SaveMutableSettings ( m_tMutableSettings, GetFilename ( SPH_EXT_SETTINGS ) );
+	return true;
 }
 
 void RtIndex_c::WriteMeta ( int64_t iTID, const VecTraits_T<int>& dChunkNames, CSphWriter& wrMeta ) const
@@ -5261,9 +5275,9 @@ void RtIndex_c::WriteMeta ( int64_t iTID, const VecTraits_T<int>& dChunkNames, C
 	assert ( bson::ValidateJson ( sNewMeta.cstr() ) );
 }
 
-void RtIndex_c::SaveMeta()
+bool RtIndex_c::SaveMeta()
 {
-	SaveMeta ( m_iTID, GetChunkIds ( *m_tRtChunks.DiskChunks() ) );
+	return SaveMeta ( m_iTID, GetChunkIds ( *m_tRtChunks.DiskChunks() ) );
 }
 
 // looks like spinlock, but actually we switch to parallel strand and back on every tick, so it should not burn CPU
@@ -5286,10 +5300,10 @@ int64_t RtIndex_c::GetMemCount ( PRED&& fnPred ) const
 }
 
 // i.e. create new disk chunk from ram segments
-bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
+RtIndexActionResult_e RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	if ( !m_tSaving.WaitEnabledOrShutdown() )
-		return true;
+		return RtIndexActionResult_e::OK;
 
 	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 
@@ -5340,7 +5354,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 	RTSAVELOG << "SaveDiskChunk process " << dSegments.GetLength() << " segments. Active jobs " << m_tNSavesNow.GetValue() << ", op " << iSaveOp
 		<< " RAM visible+retired/locked/acquired " << iNotMyOpRAM + iMyOpRAM << "+" << m_iRamChunksAllocatedRAM.load ( std::memory_order_relaxed )- iNotMyOpRAM - iMyOpRAM << "/" << iNotMyOpRAM << "/" << iMyOpRAM;
 	if ( dSegments.IsEmpty() )
-		return true;
+		return RtIndexActionResult_e::OK;
 
 	auto iTID = m_iTID;
 	m_tSaveTIDS.ModifyValue ( [iTID] ( CSphVector<int64_t>& dSaves ) { dSaves.Add ( iTID ); } );
@@ -5407,7 +5421,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 	if ( !pNewChunk )
 	{
 		sphWarning ( "rt: table %s failed to load disk chunk after RAM save: %s", GetName(), m_sLastError.cstr () );
-		return false;
+		return RtIndexActionResult_e::ERROR;
 	}
 
 	// applying postponed kills is ok now, since no other kills would happen as we're in serial fiber.
@@ -5467,11 +5481,16 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 		m_dFieldLensDisk.SwapData ( dNewFieldLensDisk );
 	}
 
-	SaveMeta ( iTID, dChunks );
-	m_iSavedTID = iTID;
-
 	// from this point all readers will see new state of the index.
 	m_dSavingTickets.RemoveValue ( iSaveOp );
+
+	if ( !SaveMeta ( iTID, dChunks ) )
+	{
+		sphWarning ( "rt: table %s: metadata save FAILED after disk chunk %s: %s; keeping binlog for recovery", GetName(), sChunk.cstr(), m_sLastError.cstr() );
+		return RtIndexActionResult_e::ERROR_TABLE_USABLE;
+	}
+
+	m_iSavedTID = iTID;
 	Binlog::NotifyIndexFlush ( iTID, GetName(), Binlog::NoShutdown, Binlog::NoSave );
 
 	// abandon .ram file
@@ -5509,7 +5528,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 
 	Preread();
 	CheckStartAutoOptimize();
-	return true;
+	return RtIndexActionResult_e::OK;
 }
 
 std::unique_ptr<CSphIndex> RtIndex_c::PreallocDiskChunk ( const CSphString& sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * szName ) const
@@ -5685,14 +5704,15 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder
 	CSphString sMeta = GetFilename ( "meta" );
 
 	CSphVector<BYTE> dData;
-	if ( !sphJsonParse ( dData, sMeta, m_sLastError ) )
-		return LOAD_E::ParseError_e;
+	auto eParse = sphJsonParse ( dData, sMeta, m_sLastError );
+	if ( eParse!=JsonFileParse_e::OK )
+		return eParse==JsonFileParse_e::FORMAT_ERROR ? LOAD_E::ParseError_e : LOAD_E::GeneralError_e;
 
 	Bson_c tBson ( dData );
 	if ( tBson.IsEmpty() || !tBson.IsAssoc() )
 	{
 		m_sLastError = "Something wrong read from json meta - it is either empty, either not root object.";
-		return LOAD_E::ParseError_e;
+		return LOAD_E::GeneralError_e;
 	}
 
 	// version
@@ -9853,10 +9873,13 @@ void RtIndex_c::AlterSave ( bool bSaveRam )
 		Verify ( SaveRamChunk () );
 	}
 
-	SaveMeta ();
+	bool bMetaSaved = SaveMeta ();
+	if ( !bMetaSaved )
+		sphWarning ( "rt: table %s: metadata save FAILED after alter: %s; keeping binlog for recovery", GetName(), m_sLastError.cstr() );
 
 	// fixme: notify that it was ALTER that caused the flush
-	Binlog::NotifyIndexFlush ( m_iTID, GetName(), Binlog::NoShutdown, Binlog::NoSave );
+	if ( bMetaSaved )
+		Binlog::NotifyIndexFlush ( m_iTID, GetName(), Binlog::NoShutdown, Binlog::NoSave );
 
 	QcacheClearByIndexId ( GetIndexId() );
 }
@@ -9982,7 +10005,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 		return false;
 
 	// attach to non-empty RT: first flush RAM segments to disk chunk, then apply upcoming index'es docs as k-list.
-	if ( !m_tRtChunks.RamSegs()->IsEmpty() && !SaveDiskChunk ( true ) )
+	if ( !m_tRtChunks.RamSegs()->IsEmpty() && SaveDiskChunk ( true )!=RtIndexActionResult_e::OK )
 		return false;
 
 	if ( !AttachDiskChunkMove ( pIndex, bFatal, sError ) )
@@ -10126,7 +10149,7 @@ bool RtIndex_c::AttachRtIndex ( AttachArgs_t & tArgs, CSphString & sError )
 		return false;
 
 	// attach to non-empty RT: first flush RAM segments to disk chunk, then apply upcoming index'es docs as k-list.
-	if ( !m_tRtChunks.RamSegs()->IsEmpty() && !SaveDiskChunk ( true ) )
+	if ( !m_tRtChunks.RamSegs()->IsEmpty() && SaveDiskChunk ( true )!=RtIndexActionResult_e::OK )
 		return false;
 
 	auto * pSrcRtIndex = static_cast<RtIndex_c *>( pSrcIndex );
@@ -10184,7 +10207,7 @@ bool RtIndex_c::AttachSaveDiskChunk()
 		return true;
 
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
-	return SaveDiskChunk ( true );
+	return SaveDiskChunk ( true )==RtIndexActionResult_e::OK;
 }
 
 ConstDiskChunkRefPtr_t RtIndex_c::PopDiskChunk()
@@ -10217,7 +10240,7 @@ void RtIndex_c::UnlinkRAMChunk ( const char* szInfo )
 		sphWarning ( "rt: %s failed to unlink %s: (errno=%d, error=%s)", szInfo, sFile.cstr(), errno, strerrorm ( errno ) );
 }
 
-bool RtIndex_c::Truncate ( CSphString&, Truncate_e eAction )
+bool RtIndex_c::Truncate ( CSphString & sError, Truncate_e eAction )
 {
 	// TRUNCATE will drop everything; so all 'optimizing' should be discarded as useless
 	OptimizeGuard_c tStopOptimize ( *this );
@@ -10233,8 +10256,14 @@ bool RtIndex_c::Truncate ( CSphString&, Truncate_e eAction )
 	// update and save meta
 	// indicate 0 disk chunks, we are about to kill them anyway
 	// current TID will be saved, so replay will properly skip preceding txns
+	CSphSourceStats tOldStats = m_tStats;
 	m_tStats.Reset();
-	SaveMeta ( m_iTID, { nullptr, 0 } );
+	if ( eAction==TRUNCATE && !SaveMeta ( m_iTID, { nullptr, 0 } ) )
+	{
+		m_tStats = tOldStats;
+		sError.SetSprintf ( "failed to save metadata for table '%s': %s; keeping binlog for recovery", GetName(), m_sLastError.cstr() );
+		return false;
+	}
 
 	// allow binlog to unlink now-redundant data files
 	Binlog::NotifyIndexFlush ( m_iTID, GetName(), Binlog::NoShutdown, eAction==TRUNCATE ? Binlog::ForceSave : Binlog::DropTable );
@@ -11927,12 +11956,18 @@ bool RtIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconf
 
 bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 {
+	return ReconfigureResult ( tSetup )==RtIndexActionResult_e::OK;
+}
+
+RtIndexActionResult_e RtIndex_c::ReconfigureResult ( CSphReconfigureSetup & tSetup )
+{
 	// strength single-fiber access (don't rely upon to upstream w-lock)
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 	TRACE_SCHED ( "rt", "Reconfigure" );
 
-	if ( !ForceDiskChunk() )
-		return false;
+	auto eFlushResult = ForceDiskChunkResult();
+	if ( eFlushResult!=RtIndexActionResult_e::OK )
+		return eFlushResult;
 
 	if ( tSetup.m_bChangeSchema )
 		SetSchema ( tSetup.m_tSchema );
@@ -11970,7 +12005,7 @@ bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 	if ( m_sGlobalIDFPath != m_tMutableSettings.m_sGlobalIDFPath )
 		SetGlobalIDFPath ( m_tMutableSettings.m_sGlobalIDFPath );
 
-	return true;
+	return RtIndexActionResult_e::OK;
 }
 
 
@@ -13117,7 +13152,7 @@ bool RtIndex_c::InitUpdateEmbeddingState ( const CSphString & sAttr, EmbeddingPo
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 
 	// Force current RAM segments to disk so the populate loop runs against disk chunks only.
-	if ( !SaveDiskChunk ( true ) )
+	if ( SaveDiskChunk ( true )!=RtIndexActionResult_e::OK )
 	{
 		sError = m_sLastError;
 		if ( sError.IsEmpty() )

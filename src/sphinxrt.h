@@ -133,6 +133,14 @@ struct AttachArgs_t
 	AttachArgs_t ( RtIndex_i * pSrcIndex ) : m_pSrcIndex ( pSrcIndex ) {}
 };
 
+enum class RtIndexActionResult_e
+{
+	OK,
+	ERROR,
+	// operation failed after publishing valid table state; report the error without dropping the table
+	ERROR_TABLE_USABLE
+};
+
 class RtIndex_i : public CSphIndexStub
 {
 public:
@@ -172,6 +180,10 @@ public:
 
 	/// forcibly save RAM chunk as a new disk chunk
 	virtual bool ForceDiskChunk () = 0;
+	virtual RtIndexActionResult_e ForceDiskChunkResult ()
+	{
+		return ForceDiskChunk() ? RtIndexActionResult_e::OK : RtIndexActionResult_e::ERROR;
+	}
 
 	/// attach a disk chunk to current index
 	virtual bool AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) { return true; }
@@ -196,6 +208,10 @@ public:
 	/// reconfigure index by using new tokenizer, dictionary and index settings
 	/// current data got saved with current settings
 	virtual bool Reconfigure ( CSphReconfigureSetup & tSetup ) = 0;
+	virtual RtIndexActionResult_e ReconfigureResult ( CSphReconfigureSetup & tSetup )
+	{
+		return Reconfigure ( tSetup ) ? RtIndexActionResult_e::OK : RtIndexActionResult_e::ERROR;
+	}
 
 	// generation typically changes on Reconfigure
 	virtual int GetAlterGeneration() const { return 0; }

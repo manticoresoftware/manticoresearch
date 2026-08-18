@@ -14,16 +14,186 @@
 
 #include "sphinxint.h"
 #include "sphinxutils.h"
+#include "fileutils.h"
+#include "indexsettings.h"
+
+#include <uni_algo/conv.h>
 #include "json/cJSON.h"
 #include "threadutils.h"
 #include <cmath>
+#include <string>
 #include "histogram.h"
 #include "conversion.h"
 #include "digest_sha1.h"
 #include "std/openhash.h"
 
+#include <climits>
+
 // Miscelaneous short functional tests: TDigest, SpanSearch,
 // stringbuilder, CJson, TaggedHash, Log2
+
+//////////////////////////////////////////////////////////////////////////
+
+TEST ( IdentifierValidation, ValidNamesAndLimits )
+{
+	CSphString sError;
+	EXPECT_TRUE ( sphValidateIdentifier ( "product_2026", false, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "товары2026", false, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "📦метка", false, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "@timestamp", false, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "@version", false, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "@uuid_id", false, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "@timestamp", false, 0, sError, true ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "@version", false, 0, sError, true ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "@uuid_id", false, 0, sError, true ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "@user_field", false, 0, sError, true ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "task.params", true, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "graph-workspace.description", true, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "task.params", true, 0, sError, true ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "graph-workspace.description", true, 0, sError, true ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "2026_архив", true, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "2026_архив", false, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "123", true, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "123", true, 0, sError, true ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad-name", true, 0, sError ) );
+	EXPECT_TRUE ( sphValidateTableName ( "system.товары", false, sError ) );
+	EXPECT_FALSE ( sphValidateTableName ( "system.bad-name", false, sError ) );
+
+	std::string sMax ( SPH_MAX_TABLE_NAME_BYTES, 'a' );
+	EXPECT_TRUE ( sphValidateIdentifier ( sMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
+	sMax.push_back ( 'a' );
+	EXPECT_FALSE ( sphValidateIdentifier ( sMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
+
+	std::string sMultibyteMax ( SPH_MAX_TABLE_NAME_BYTES-2, 'a' );
+	sMultibyteMax += "é";
+	ASSERT_EQ ( sMultibyteMax.length(), SPH_MAX_TABLE_NAME_BYTES );
+	EXPECT_TRUE ( sphValidateIdentifier ( sMultibyteMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
+	sMultibyteMax.push_back ( 'a' );
+	EXPECT_FALSE ( sphValidateIdentifier ( sMultibyteMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
+
+	std::string sSystemMax = "system." + std::string ( SPH_MAX_TABLE_NAME_BYTES + SPH_MAX_GENERATED_TABLE_SUFFIX_BYTES, 'a' );
+	EXPECT_TRUE ( sphValidateTableName ( sSystemMax.c_str(), false, sError ) );
+	sSystemMax.push_back ( 'a' );
+	EXPECT_FALSE ( sphValidateTableName ( sSystemMax.c_str(), false, sError ) );
+
+	std::string sLongestTail = "." + std::to_string ( INT_MAX ) + ".tmp.spjidx.jsonsi.tmp." + std::to_string ( INT_MAX ) + ".tmp";
+	EXPECT_EQ ( sLongestTail.length(), 48 );
+	EXPECT_EQ ( SPH_MAX_TABLE_NAME_BYTES + sLongestTail.length(), 248 );
+	EXPECT_LE ( SPH_MAX_TABLE_NAME_BYTES + sLongestTail.length(), 255 );
+	EXPECT_LE ( sphGetTablePhysicalName ( sMax.c_str() ).Length() + sLongestTail.length(), 255 );
+}
+
+
+TEST ( IdentifierValidation, ExistingConfiglessPathFallsBackToLegacyLayout )
+{
+	CSphString sRoot;
+	sRoot.SetSprintf ( "%s/gtests-legacy-path-%lld", sphGetCwd().cstr(), (long long)sphMicroTimer() );
+	ASSERT_TRUE ( MkDir ( sRoot.cstr() ) );
+	AT_SCOPE_EXIT ( [&sRoot] { ::rmdir ( sRoot.cstr() ); } );
+
+	CSphString sLegacyPath;
+	sLegacyPath.SetSprintf ( "%s/legacy-name", sRoot.cstr() );
+	ASSERT_TRUE ( MkDir ( sLegacyPath.cstr() ) );
+	AT_SCOPE_EXIT ( [&sLegacyPath] { ::rmdir ( sLegacyPath.cstr() ); } );
+
+	EXPECT_STREQ ( sphGetExistingConfiglessTablePath ( sRoot, "legacy-name" ).cstr(), sLegacyPath.cstr() );
+
+	CSphString sMappedPath = sphGetConfiglessTablePath ( sRoot, "legacy-name" );
+	ASSERT_TRUE ( MkDir ( sMappedPath.cstr() ) );
+	AT_SCOPE_EXIT ( [&sMappedPath] { ::rmdir ( sMappedPath.cstr() ); } );
+	EXPECT_STREQ ( sphGetExistingConfiglessTablePath ( sRoot, "legacy-name" ).cstr(), sMappedPath.cstr() );
+}
+
+
+TEST ( IdentifierValidation, GeneratedDdlQuotesIdentifiersWhenNeeded )
+{
+	EXPECT_STREQ ( FormatCreateTableIdentifier ( "ordinary_name" ).cstr(), "ordinary_name" );
+	EXPECT_STREQ ( FormatCreateTableIdentifier ( "2026_архив" ).cstr(), "`2026_архив`" );
+	EXPECT_STREQ ( FormatCreateTableIdentifier ( "from" ).cstr(), "`from`" );
+	EXPECT_STREQ ( FormatCreateTableIdentifier ( "system.from" ).cstr(), "system.`from`" );
+	EXPECT_STREQ ( FormatCreateTableIdentifier ( "ordinary_name", true ).cstr(), "`ordinary_name`" );
+}
+
+
+TEST ( IdentifierValidation, ConfigParserAcceptsUtf8SectionNames )
+{
+	constexpr char sConfig[] =
+		"index таблица-4770\n"
+		"{\n"
+		"  type = rt\n"
+		"  path = utf8_section\n"
+		"  rt_field = название-поля\n"
+		"}\n";
+
+	CSphConfig hConfig;
+	ASSERT_TRUE ( ParseConfig ( &hConfig, "utf8-section.conf", FROMS ( sConfig ) ) ) << TlsMsg::szError();
+	ASSERT_TRUE ( hConfig.Exists ( "index" ) );
+	ASSERT_TRUE ( hConfig["index"].Exists ( "таблица-4770" ) );
+}
+
+
+TEST ( IdentifierValidation, PortablePhysicalTableNames )
+{
+	EXPECT_STREQ ( sphGetTablePhysicalName ( "products_2026" ).cstr(), "products_2026" );
+	EXPECT_STRNE ( sphGetTablePhysicalName ( "con" ).cstr(), "con" );
+	EXPECT_STRNE ( sphGetTablePhysicalName ( "aux" ).cstr(), "aux" );
+	EXPECT_STRNE ( sphGetTablePhysicalName ( "com1" ).cstr(), "com1" );
+	EXPECT_STREQ ( sphGetTablePhysicalName ( "__manticore_u_41" ).cstr(), "__manticore_u_41" );
+
+	CSphString sNfc = sphGetTablePhysicalName ( "é" );
+	CSphString sNfd = sphGetTablePhysicalName ( "é" );
+	EXPECT_STRNE ( sNfc.cstr(), sNfd.cstr() );
+	EXPECT_TRUE ( sNfc.Begins ( "@manticore_u_" ) );
+	EXPECT_TRUE ( sNfd.Begins ( "@manticore_u_" ) );
+
+	std::string sLong ( SPH_MAX_TABLE_NAME_BYTES, 'a' );
+	CSphString sPhysical = sphGetTablePhysicalName ( sLong.c_str() );
+	EXPECT_TRUE ( sPhysical.Begins ( "@manticore_h_" ) );
+	EXPECT_STREQ ( sPhysical.cstr(), "@manticore_h_bc8331b8793fe78af2373387e1917423f6f1b16bfec5ef36691deb73ad8e5420" );
+	EXPECT_LE ( sPhysical.Length(), SPH_MAX_TABLE_NAME_BYTES );
+	EXPECT_EQ ( sPhysical, sphGetTablePhysicalName ( sLong.c_str() ) );
+}
+
+
+TEST ( IdentifierValidation, InvalidUtf8AndUnsafeCodepoints )
+{
+	CSphString sError;
+	const char dInvalid[][5] =
+	{
+		{ (char)0x80, 0, 0, 0, 0 },
+		{ (char)0xC0, (char)0xAF, 0, 0, 0 },
+		{ (char)0xE2, (char)0x82, 0, 0, 0 },
+		{ (char)0xED, (char)0xA0, (char)0x80, 0, 0 },
+		{ (char)0xF4, (char)0x90, (char)0x80, (char)0x80, 0 }
+	};
+	for ( const auto & szInvalid : dInvalid )
+	{
+		EXPECT_FALSE ( una::is_valid_utf8 ( std::string_view ( szInvalid ) ) );
+		EXPECT_FALSE ( sphValidateIdentifier ( szInvalid, false, 0, sError ) );
+	}
+
+	EXPECT_TRUE ( una::is_valid_utf8 ( std::string_view ( "@название клавиатура" ) ) );
+
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad name", false, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad​name", false, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad‮name", false, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "a‍name", false, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xB0name", false, 0, sError ) ); // U+FFF0
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xB9name", false, 0, sError ) ); // U+FFF9
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xBAname", false, 0, sError ) ); // U+FFFA
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xBBname", false, 0, sError ) ); // U+FFFB
+}
+
+
+TEST ( IdentifierValidation, AsciiCaseConversionPreservesUtf8 )
+{
+	CSphString sLower = "ASCII_ÉЖ";
+	EXPECT_STREQ ( sLower.ToLower().cstr(), "ascii_ÉЖ" );
+
+	CSphString sUpper = "ascii_éж";
+	EXPECT_STREQ ( sUpper.ToUpper().cstr(), "ASCII_éж" );
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 

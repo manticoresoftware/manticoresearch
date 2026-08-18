@@ -12,6 +12,7 @@
 
 #include "fileutils.h"
 #include "sphinxint.h"
+#include "std/hash.h"
 #include "std/crc32.h"
 #include <sys/stat.h>
 
@@ -26,6 +27,103 @@
 // whether to collect IO stats
 static bool g_bCollectIOStats = false;
 static thread_local CSphIOStats* g_pTlsIOStats;
+
+namespace
+{
+
+static constexpr int TABLE_LITERAL_MAX = 64;
+static constexpr int TABLE_ENCODE_MAX = 64;
+static const char * TABLE_PHYSICAL_PREFIX = "@manticore_";
+
+
+bool IsPortableTableLiteral ( const CSphString & sName )
+{
+	if ( sName.IsEmpty() || sName.Length()>TABLE_LITERAL_MAX )
+		return false;
+
+	for ( const BYTE * p = (const BYTE *)sName.cstr(); *p; ++p )
+		if ( !( *p>='a' && *p<='z' ) && !( *p>='0' && *p<='9' ) && *p!='_' )
+			return false;
+
+	static const char * dReserved[] =
+	{
+		"con", "prn", "aux", "nul",
+		"com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
+		"lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9"
+	};
+
+	for ( const char * szReserved : dReserved )
+		if ( sName==szReserved )
+			return false;
+
+	return true;
+}
+
+} // namespace
+
+
+CSphString sphGetTablePhysicalName ( const CSphString & sName )
+{
+	if ( IsPortableTableLiteral(sName) )
+		return sName;
+
+	static const char dHex[] = "0123456789abcdef";
+	StringBuilder_c sPhysical;
+	if ( sName.Length()<=TABLE_ENCODE_MAX )
+	{
+		sPhysical << TABLE_PHYSICAL_PREFIX << "u_";
+		for ( const BYTE * p = (const BYTE *)sName.cstr(); *p; ++p )
+			sPhysical.Appendf ( "%c%c", dHex[*p>>4], dHex[*p&0x0f] );
+	}
+	else
+	{
+		sPhysical << TABLE_PHYSICAL_PREFIX << "h_";
+		static constexpr uint64_t dSeeds[] =
+		{
+			0x243f6a8885a308d3ULL,
+			0x13198a2e03707344ULL,
+			0xa4093822299f31d0ULL,
+			0x082efa98ec4e6c89ULL
+		};
+		for ( uint64_t uSeed : dSeeds )
+		{
+			uint64_t uHash = HashWithSeed ( sName.cstr(), sName.Length(), uSeed );
+			for ( int iShift=60; iShift>=0; iShift-=4 )
+				sPhysical.Appendf ( "%c", dHex[(uHash>>iShift)&0x0f] );
+		}
+	}
+
+	return sPhysical.cstr();
+}
+
+
+CSphString sphGetConfiglessTablePath ( const CSphString & sDataDir, const CSphString & sName )
+{
+	CSphString sPhysicalName = sphGetTablePhysicalName ( sName );
+	CSphString sPath;
+	if ( sDataDir.Length() && !sDataDir.Ends("/") && !sDataDir.Ends("\\") )
+		sPath.SetSprintf ( "%s/%s", sDataDir.cstr(), sPhysicalName.cstr() );
+	else
+		sPath.SetSprintf ( "%s%s", sDataDir.cstr(), sPhysicalName.cstr() );
+
+	return sPath;
+}
+
+
+CSphString sphGetExistingConfiglessTablePath ( const CSphString & sDataDir, const CSphString & sName )
+{
+	CSphString sPath = sphGetConfiglessTablePath ( sDataDir, sName );
+	CSphString sLegacyPath;
+	if ( sDataDir.Length() && !sDataDir.Ends("/") && !sDataDir.Ends("\\") )
+		sLegacyPath.SetSprintf ( "%s/%s", sDataDir.cstr(), sName.cstr() );
+	else
+		sLegacyPath.SetSprintf ( "%s%s", sDataDir.cstr(), sName.cstr() );
+
+	if ( sPath!=sLegacyPath && !sphDirExists ( sPath.cstr() ) && sphDirExists ( sLegacyPath.cstr() ) )
+		return sLegacyPath;
+
+	return sPath;
+}
 
 
 CSphIOStats::~CSphIOStats ()

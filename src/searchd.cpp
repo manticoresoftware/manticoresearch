@@ -6815,20 +6815,25 @@ static bool CheckAttrs ( const VecTraits_T<T> & dAttrs, GETNAME && fnGetName, CS
 }
 
 
-static bool CheckExistingTables ( const CSphString & sIndex, bool bIfNotExists, CSphString & sError )
+static bool CheckExistingTables ( const CSphString & sIndex, bool bIfNotExists, bool bNameQuoted, CSphString & sError )
 {
+	if ( !sphValidateTableName ( sIndex.cstr(), bNameQuoted, sError ) )
+		return false;
+
+	const char * szIdentifier = sIndex.Begins ( "system." ) ? sIndex.cstr()+7 : sIndex.cstr();
+
+	if ( !bNameQuoted && CSphSchema::IsReserved ( szIdentifier ) )
+	{
+		sError.SetSprintf ( "'%s' is a reserved keyword", sIndex.cstr() );
+		return false;
+	}
+
 	if ( g_pLocalIndexes->Contains ( sIndex ) || g_pDistIndexes->Contains ( sIndex ) )
 	{
 		if ( bIfNotExists )
 			return true;
 
 		sError.SetSprintf ( "table '%s' already exists", sIndex.cstr() );
-		return false;
-	}
-
-	if ( CSphSchema::IsReserved ( sIndex.cstr() ) )
-	{
-		sError.SetSprintf ( "'%s' is a reserved keyword", sIndex.cstr() );
 		return false;
 	}
 
@@ -6850,7 +6855,7 @@ static int CheckShardIntOpt ( const char * sName, const CSphString & sIndex, con
 
 static bool CheckCreateTable ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, CSphString & sError )
 {
-	if ( !CheckExistingTables ( sIndex, tCreateTable.m_bIfNotExists, sError ) )
+	if ( !CheckExistingTables ( sIndex, tCreateTable.m_bIfNotExists, tCreateTable.m_bNameQuoted, sError ) )
 		return false;
 
 	bool bUuidDocid = false;
@@ -6996,7 +7001,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 		return;
 	}
 
-	if ( !CheckExistingTables ( tStmt.m_sIndex, tStmt.m_tCreateTable.m_bIfNotExists, sError ) )
+	if ( !CheckExistingTables ( tStmt.m_sIndex, tStmt.m_tCreateTable.m_bIfNotExists, tStmt.m_tCreateTable.m_bNameQuoted, sError ) )
 	{
 		sError.SetSprintf ( "table '%s': CREATE TABLE failed: %s", tStmt.m_sIndex.cstr(), sError.cstr() );
 		tOut.Error ( sError.cstr() );
@@ -7049,6 +7054,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 
 	SqlStmt_t & tNewCreateTable = dCreateTableStmts[0];
 	tNewCreateTable.m_tCreateTable.m_bIfNotExists = tStmt.m_tCreateTable.m_bIfNotExists;
+	tNewCreateTable.m_tCreateTable.m_bNameQuoted = tStmt.m_tCreateTable.m_bNameQuoted;
 
 	HandleMysqlCreateTable ( tOut, tNewCreateTable, sWarning );
 }

@@ -37,13 +37,13 @@ static bool IsConfigless()
 
 static CSphString GetPathForNewIndex ( const CSphString & sIndexName )
 {
-	CSphString sRes;
-	if ( g_sDataDir.Length() && !g_sDataDir.Ends("/") && !g_sDataDir.Ends("\\") )
-		sRes.SetSprintf ( "%s/%s", g_sDataDir.cstr(), sIndexName.cstr() );
-	else
-		sRes.SetSprintf ( "%s%s", g_sDataDir.cstr(), sIndexName.cstr() );
+	CSphString sPath = sphGetConfiglessTablePath ( g_sDataDir, sIndexName );
+	CSphString sLegacyPath;
+	sLegacyPath.SetSprintf ( "%s/%s", g_sDataDir.cstr(), sIndexName.cstr() );
+	if ( sPath!=sLegacyPath && !sphDirExists ( sPath.cstr() ) && sphDirExists ( sLegacyPath.cstr() ) )
+		return sLegacyPath;
 
-	return sRes;
+	return sPath;
 }
 
 static void MakeRelativePath ( CSphString & sPath )

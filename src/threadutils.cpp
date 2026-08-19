@@ -860,7 +860,7 @@ public:
 		ScopedMutex_t dLock { m_dMutex };
 		m_bStop = true;
 		m_dWork.reset ();
-		if ( sphIsDied() )
+		if ( sphIsDied() || sphInterrupted() )
 			m_tService.stop();
 		dLock.Unlock ();
 		LOG ( DEBUG, TP ) << "stopping thread pool";

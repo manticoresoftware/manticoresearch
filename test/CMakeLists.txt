@@ -100,6 +100,7 @@ function (add_ubertest testN tst_name LABELS prefix label flags)
 	_test_prop ("${_tstn}")
 	if ("${flags}" MATCHES "--rt-indexer")
 		set_property (TEST "${_tstn}" APPEND PROPERTY ENVIRONMENT "MANTICORE_NO_BUDDY=1")
+		SET_TESTS_PROPERTIES ("${_tstn}" PROPERTIES RUN_SERIAL TRUE)
 	endif ()
 endfunction ()
 

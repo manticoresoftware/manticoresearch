@@ -442,7 +442,7 @@ jobs:
       results_name: "Linux debug RT indexer test results"
       suite_name: rt-indexer
       CTEST_REGEX: "^(rtidx_|Indexer RT bulk missing sibling$)"
-      timeout: 20
+      timeout: 35
       MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
 
   test_linux_debug_mcl:

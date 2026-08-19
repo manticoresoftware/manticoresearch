@@ -826,6 +826,7 @@ bool CSphSource_CSV::SetupSchema ( const CSphConfigSection & hSource, bool bWord
 		StrVec_t dNames;
 		sphSplit ( dNames, sAttrOrder.cstr(), "," );
 		CSphVector<bool> dUsed ( m_tSchema.GetAttrsCount() );
+		dUsed.ZeroVec();
 		CSphSchema tOrdered ( m_tSchema.GetName() );
 		for ( const CSphString & sName : dNames )
 		{

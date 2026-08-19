@@ -109,6 +109,24 @@ static bool GetIndexerPath ( CSphString & sIndexer, CSphString & sError )
 
 
 #if !_WIN32
+static CSphString GetIndexerRtBulkOutput ( const ClientSession_c & tSession )
+{
+	CSphString sPath;
+	sPath.SetSprintf ( "%s/indexer.log", tSession.m_sIndexerRtBulkDir.cstr() );
+	FILE * fp = fopen ( sPath.cstr(), "rb" );
+	if ( !fp )
+		return {};
+
+	char sBuffer[4097];
+	size_t iLength = fread ( sBuffer, 1, sizeof(sBuffer)-1, fp );
+	fclose ( fp );
+	while ( iLength && sphIsSpace ( sBuffer[iLength-1] ) )
+		--iLength;
+	sBuffer[iLength] = '\0';
+	return CSphString ( sBuffer );
+}
+
+
 static bool WaitIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError )
 {
 	if ( tSession.m_iIndexerRtBulkPid<0 )
@@ -135,6 +153,12 @@ static bool WaitIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError 
 		sError.SetSprintf ( "indexer RT bulk build was killed by signal %d", WTERMSIG ( iStatus ) );
 	else
 		sError = "indexer RT bulk build failed";
+	CSphString sOutput = GetIndexerRtBulkOutput ( tSession );
+	if ( !sOutput.IsEmpty() )
+	{
+		CSphString sStatus = sError;
+		sError.SetSprintf ( "%s: %s", sStatus.cstr(), sOutput.cstr() );
+	}
 	return false;
 }
 
@@ -197,6 +221,16 @@ static bool StartIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError
 
 	const char * szIndexer = sIndexer.cstr();
 	const char * szConfig = tSession.m_sIndexerRtBulkConfig.cstr();
+	CSphString sOutput;
+	sOutput.SetSprintf ( "%s/indexer.log", tSession.m_sIndexerRtBulkDir.cstr() );
+	int iOutput = open ( sOutput.cstr(), O_WRONLY | O_CREAT | O_TRUNC, 0600 );
+	if ( iOutput<0 )
+	{
+		close ( dSockets[0] );
+		close ( dSockets[1] );
+		sError.SetSprintf ( "failed to create indexer RT bulk log '%s': %s", sOutput.cstr(), strerrorm ( errno ) );
+		return false;
+	}
 	posix_spawn_file_actions_t tActions;
 	posix_spawnattr_t tAttrs;
 	bool bActionsInit = false;
@@ -211,6 +245,12 @@ static bool StartIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError
 		iSpawnError = posix_spawn_file_actions_addclose ( &tActions, dSockets[0] );
 	if ( !iSpawnError && dSockets[1]!=STDIN_FILENO )
 		iSpawnError = posix_spawn_file_actions_addclose ( &tActions, dSockets[1] );
+	if ( !iSpawnError )
+		iSpawnError = posix_spawn_file_actions_adddup2 ( &tActions, iOutput, STDOUT_FILENO );
+	if ( !iSpawnError )
+		iSpawnError = posix_spawn_file_actions_adddup2 ( &tActions, iOutput, STDERR_FILENO );
+	if ( !iSpawnError && iOutput!=STDOUT_FILENO && iOutput!=STDERR_FILENO )
+		iSpawnError = posix_spawn_file_actions_addclose ( &tActions, iOutput );
 	#if defined(__linux__)
 	if ( !iSpawnError )
 		iSpawnError = posix_spawn_file_actions_addclosefrom_np ( &tActions, STDERR_FILENO+1 );
@@ -242,14 +282,14 @@ static bool StartIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError
 	{
 		char sConfigArg[] = "--config";
 		char sIndexArg[] = "indexer_rt_bulk_chunk";
-		char sQuietArg[] = "--quiet";
-		char * dArgv[] = { const_cast<char *>( szIndexer ), sConfigArg, const_cast<char *>( szConfig ), sIndexArg, sQuietArg, nullptr };
+		char * dArgv[] = { const_cast<char *>( szIndexer ), sConfigArg, const_cast<char *>( szConfig ), sIndexArg, nullptr };
 		iSpawnError = posix_spawn ( &iPid, szIndexer, &tActions, &tAttrs, dArgv, environ );
 	}
 	if ( bAttrsInit )
 		posix_spawnattr_destroy ( &tAttrs );
 	if ( bActionsInit )
 		posix_spawn_file_actions_destroy ( &tActions );
+	close ( iOutput );
 	close ( dSockets[1] );
 	if ( iSpawnError )
 	{
@@ -382,6 +422,12 @@ void CleanupIndexerRtBulk ( ClientSession_c & tSession )
 
 	if ( !tSession.m_sIndexerRtBulkConfig.IsEmpty() )
 		::unlink ( tSession.m_sIndexerRtBulkConfig.cstr() );
+	if ( !tSession.m_sIndexerRtBulkDir.IsEmpty() )
+	{
+		CSphString sOutput;
+		sOutput.SetSprintf ( "%s/indexer.log", tSession.m_sIndexerRtBulkDir.cstr() );
+		::unlink ( sOutput.cstr() );
+	}
 
 	if ( !tSession.m_sIndexerRtBulkDir.IsEmpty() )
 		::rmdir ( tSession.m_sIndexerRtBulkDir.cstr() );

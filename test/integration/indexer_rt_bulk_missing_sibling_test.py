@@ -135,6 +135,14 @@ def main():
         assert "indexer" in payload.lower(), payload
         assert not os.path.exists(path_marker), "searchd launched indexer from PATH"
 
+        diagnostic = "diagnostic-marker-from-indexer"
+        with open(missing_indexer, "w") as script:
+            script.write("#!/bin/sh\n/bin/cat >/dev/null\necho '{}' >&2\nexit 1\n".format(diagnostic))
+        os.chmod(missing_indexer, 0o755)
+        status, payload = request(port, "/bulk?indexer_rt_bulk=1", body)
+        assert status != 200, payload
+        assert diagnostic in payload, payload
+
         status, payload = sql(port, "SELECT COUNT(*) FROM missing_sibling")
         assert status == 200 and '"count(*)":0' in payload.lower(), payload
         assert process.poll() is None, "missing sibling stopped searchd"

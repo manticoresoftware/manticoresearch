@@ -68,7 +68,3 @@ Cleanup (force-kill any deadlocked node so the container exits cleanly)
 pkill -9 searchd 2>/dev/null; sleep 1; echo done
 ––– output –––
 done
-––– input –––
-cat /var/log/manticore-2/searchd.log
-cat /var/log/manticore-1/searchd.log
-cat /var/log/manticore-3/searchd.log

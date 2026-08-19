@@ -846,7 +846,6 @@ CALL UUID_SHORT(3)
 ```
 <!-- end -->
 
-<!-- example bulk_insert -->
 ## Bulk adding documents
 You can insert not just a single document into a real-time table, but as many as you'd like. It's perfectly fine to insert batches of tens of thousands of documents into a real-time table. However, it's important to keep the following points in mind:
 * The larger the batch, the higher the latency of each insert operation
@@ -877,6 +876,53 @@ The `/bulk` (Manticore mode) endpoint supports [Chunked transfer encoding](https
 * decreases response time
 * allows you to bypass [max_packet_size](../../Server_settings/Searchd.md#max_packet_size) and transfer batches much larger than the maximum allowed value of `max_packet_size` (128MB), for example, 1GB at a time.
 
+### Indexer-assisted bulk insertion
+
+> NOTE: This insertion mode is experimental.
+
+For large append-only loads into a local real-time table, Manticore Search can stream `INSERT` rows through `indexer`, build one disk chunk, and attach that chunk to the table when the transaction commits. This avoids adding every row through the regular real-time insertion path. Rows remain invisible until the chunk is attached, and a failed operation or `ROLLBACK` leaves the table unchanged.
+
+Use this mode when loading a large batch for which producing a disk chunk directly is preferable to building a RAM chunk first. It supports both row-wise and columnar tables, including full-text fields, numeric attributes, strings, JSON, MVA/MVA64, and float vectors with KNN indexes.
+
+#### SQL
+
+Enable the mode for the current SQL session, start an explicit transaction, run one or more `INSERT` statements against the same table, and commit:
+
+```sql
+SET indexer_rt_bulk=1;
+BEGIN;
+INSERT INTO products(id,title,price) VALUES
+  (101,'Crossbody Bag with Tassel',19.85),
+  (102,'Microfiber Sheet Set',19.99);
+INSERT INTO products(id,title,price) VALUES
+  (103,'Pet Hair Remover Glove',7.99);
+COMMIT;
+SET indexer_rt_bulk=0;
+```
+
+`SET indexer_rt_bulk=1` applies to the current connection. While it is enabled, every `INSERT` requires an active transaction started with `BEGIN` or `START TRANSACTION`. `COMMIT` builds and atomically attaches the disk chunk; `ROLLBACK`, a failed insert, or closing the connection discards the staged batch.
+
+#### HTTP `/bulk`
+
+Add `indexer_rt_bulk=1` to the `/bulk` query string. The request body remains standard newline-delimited JSON (NDJSON), and each operation must be `insert`:
+
+```bash
+curl -X POST 'http://localhost:9308/bulk?indexer_rt_bulk=1' \
+  -H 'Content-Type: application/x-ndjson' \
+  --data-binary $'{"insert":{"table":"products","id":101,"doc":{"title":"Crossbody Bag with Tassel","price":19.85}}}\n{"insert":{"table":"products","id":102,"doc":{"title":"Microfiber Sheet Set","price":19.99}}}\n'
+```
+
+The endpoint also supports chunked transfer encoding in this mode, so the server can stream a request larger than `max_packet_size` into `indexer` without buffering the complete request body. As with ordinary `/bulk` transactions, changing the target table or adding an empty line commits the preceding group; the entire multi-table request is therefore not one atomic transaction.
+
+#### Current limitations
+
+* The target must be one local real-time table per transaction. Distributed, sharded, replicated, percolate, and plain tables are not supported.
+* Only `INSERT` is supported. `REPLACE`, `UPDATE`, and `DELETE` are rejected.
+* Every row must provide an explicit numeric, non-zero document ID. Auto-generated and UUID document IDs are not supported.
+* The feature is unavailable on Windows and in static builds.
+* The `indexer` executable from the same Manticore Search build or installation must be next to the running `searchd` executable. Manticore Search resolves only that sibling executable; it does not search `PATH`. If it is missing or cannot be executed, only the assisted insertion fails—normal startup and regular insertion remain available.
+
+<!-- example bulk_insert -->
 <!-- intro -->
 ### Bulk insert examples
 ##### SQL:

@@ -2932,6 +2932,106 @@ table products
 
 <!-- end -->
 
+## Float vector array
+
+A `float_vector_array` attribute stores several vectors per document rather than a single one. A value is written as an array of vectors, and every document carries its own number of them:
+
+```
+[[0.1, 0.2, 0.3, 0.4], [0.5, 0.6, 0.7, 0.8]]
+```
+
+This suits documents that do not reduce cleanly to one embedding - a long article split into chunks, a product photographed from several angles, a video sampled at keyframes. Instead of storing one row per chunk and deduplicating results afterwards, you keep all of a document's vectors on the document itself.
+
+When the attribute is configured for [KNN](../Searching/KNN.md), all vectors of all documents are indexed together and a document matches if **any** of its vectors is close to the query. See [Multiple vectors per document](../Searching/KNN.md#Multiple-vectors-per-document) for the search semantics.
+
+### Value syntax
+
+- A value is always an array of vectors: `[[1,2],[3,4]]`. A flat list such as `(1,2,3,4)` is rejected, because there would be no way to tell one 4-dimensional vector from two 2-dimensional ones.
+- `[]` means "no vectors". It is a valid stored value, and it is what an omitted attribute defaults to.
+- All vectors within one value must have the same number of entries.
+- An empty inner vector (`[[]]`) cannot be represented and is rejected. Use `[]` for "none".
+- Values are returned in the same nested form they were inserted in.
+
+### General limitations
+
+- Currently only supported in real-time tables (not in plain tables)
+- Not supported in functions or expressions
+- Cannot be used in regular filters or sorting
+- [Auto embeddings](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29) are not available for this type: a model produces one vector per document, so `MODEL_NAME` is rejected. Vectors must be supplied explicitly.
+- Not compatible with the [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) mechanism
+
+### Using float vector arrays with KNN
+
+The parameters are the same ones [`float_vector`](../Creating_a_table/Data_types.md#Float-vector) takes: `KNN_TYPE`, `KNN_DIMS`, `HNSW_SIMILARITY`, plus the optional `HNSW_M`, `HNSW_EF_CONSTRUCTION` and [quantization](../Searching/KNN.md#Vector-quantization), with two differences:
+
+- `KNN_DIMS` is required, and **every** vector in **every** row must have exactly that many entries. A row whose vectors are a different width is rejected on insert.
+- `MODEL_NAME` and `FROM` are not accepted.
+
+**What you can do:**
+- Run KNN searches that match a document on its closest vector
+- Store a different number of vectors per document, including none at all
+
+**What you cannot do:**
+- `UPDATE` the attribute: use `REPLACE`, exactly as with a KNN-indexed `float_vector`
+- Use the values in regular filters or sorting
+
+A document whose value is `[]`, or whose attribute was omitted, is never returned by a KNN search as it is not close to anything.
+
+### Using float vector arrays without KNN
+
+Without KNN configuration the vectors are stored but not searchable, and the column needs no options at all. In this mode each value is fully self-describing, so different rows may hold vectors of different widths:
+
+```sql
+CREATE TABLE products(title text, chunk_vectors float_vector_array);
+INSERT INTO products VALUES (1, 'a', [[1,2]]), (2, 'b', [[1,2,3],[4,5,6]]);
+```
+
+`UPDATE` works in this mode, as it does for a non-KNN `float_vector`, and `[]` clears the value.
+
+<!-- example for creating float_vector_array -->
+
+Creating a KNN-indexed float vector array, filling it, and searching it:
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+
+INSERT INTO articles VALUES
+  (1, 'first',  [[1,0,0,0],[0,1,0,0]]),
+  (2, 'second', [[0,0,1,0]]),
+  (3, 'no vectors yet', []);
+
+SELECT id, knn_dist() FROM articles WHERE knn(chunk_vectors, 5, (1,0,0,0));
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')"
+
+POST /insert
+{
+  "table": "articles",
+  "id": 1,
+  "doc": { "title": "first", "chunk_vectors": [[1,0,0,0],[0,1,0,0]] }
+}
+
+POST /search
+{
+  "table": "articles",
+  "knn": { "field": "chunk_vectors", "query_vector": [1,0,0,0], "k": 5 }
+}
+```
+
+<!-- end -->
+
 ## Multi-value integer (MVA)
 
 <!-- example for creating MVA32 -->

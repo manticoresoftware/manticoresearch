@@ -16,6 +16,7 @@
 #include "searchdaemon.h"
 #include "search_handler.h"
 #include "logger.h"
+#include "attribute.h"
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -426,6 +427,23 @@ static void ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tReq, const CSph
 			auto * pFloatVec = (float *)pData;
 			while ( iValues-- )
 				sphUnalignedWrite ( pFloatVec++, tReq.GetFloat() );
+		}
+		break;
+
+		case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
+		{
+			int iValues = tReq.GetDword ();
+			DWORD uDims = tReq.GetDword ();
+			BYTE * pData = nullptr;
+			BYTE * pPacked = sphPackPtrAttr ( iValues ? ( sizeof(DWORD) + iValues*sizeof(float) ) : 0, &pData );
+			tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t)pPacked );
+			if ( iValues )
+			{
+				sphUnalignedWrite ( (DWORD*)pData, uDims );
+				auto * pFloatVec = (float *)( pData + sizeof(DWORD) );
+				while ( iValues-- )
+					sphUnalignedWrite ( pFloatVec++, tReq.GetFloat() );
+			}
 		}
 		break;
 
@@ -1536,6 +1554,45 @@ static void SendMVA ( ISphOutputBuffer& tOut, const BYTE * pMVA, bool b64bit )
 	}
 }
 
+// float_vector_array layout: [uint32 value_count][uint32 dims][float32 x value_count].
+static void SendFloatVecArrayNative ( ISphOutputBuffer & tOut, const BYTE * pData )
+{
+	if ( !pData )
+	{
+		tOut.SendDword(0);
+		tOut.SendDword(0);
+		return;
+	}
+
+	FloatVecArray_t tArray = ParseFloatVecArray ( sphUnpackPtrAttr(pData) );
+	tOut.SendDword ( tArray.m_dValues.GetLength() );
+	tOut.SendDword ( tArray.m_iDims );
+	for ( float fValue : tArray.m_dValues )
+		tOut.SendFloat ( fValue );
+}
+
+
+static void SendFloatVecArrayAsString ( ISphOutputBuffer & tOut, const BYTE * pData )
+{
+	StringBuilder_c dStr;
+	if ( pData )
+		sphPackedFloatVecArray2Str ( pData, dStr );
+	else
+		dStr << "[]";
+
+	tOut.SendArray ( dStr );
+}
+
+
+static void SendFloatVecArray ( ISphOutputBuffer & tOut, const BYTE * pData, bool bSendVecArray )
+{
+	if ( bSendVecArray )
+		SendFloatVecArrayNative ( tOut, pData );
+	else
+		SendFloatVecArrayAsString ( tOut, pData );
+}
+
+
 static void SendFloatVec ( ISphOutputBuffer & tOut, const BYTE * pData )
 {
 	if ( !pData )
@@ -1553,6 +1610,12 @@ static void SendFloatVec ( ISphOutputBuffer & tOut, const BYTE * pData )
 		tOut.SendFloat ( *pValues++ );
 }
 
+static bool CanSendVecArray ( int iVer, WORD uMasterVer, bool bAgentMode )
+{
+	return bAgentMode ? ( uMasterVer>=VER_COMMAND_SEARCH_MASTER ) : ( iVer>=0x128 );
+}
+
+
 static ESphAttr FixupAttrForNetwork ( const CSphColumnInfo & tCol, const CSphSchema & tSchema, int iVer, WORD uMasterVer, bool bAgentMode )
 {
 	bool bSendJson = ( bAgentMode && uMasterVer>=3 );
@@ -1568,6 +1631,9 @@ static ESphAttr FixupAttrForNetwork ( const CSphColumnInfo & tCol, const CSphSch
 
 	case SPH_ATTR_FLOAT_VECTOR_PTR:
 		return SPH_ATTR_FLOAT_VECTOR;
+
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
+		return CanSendVecArray ( iVer, uMasterVer, bAgentMode ) ? SPH_ATTR_FLOAT_VECTOR_ARRAY : SPH_ATTR_STRING;
 
 	case SPH_ATTR_STRINGPTR:
 	{
@@ -1636,6 +1702,10 @@ static void SendAttribute ( ISphOutputBuffer & tOut, const CSphMatch & tMatch, c
 
 	case SPH_ATTR_FLOAT_VECTOR_PTR:
 		SendFloatVec ( tOut, (const BYTE*)tMatch.GetAttr(tLoc) );
+		break;
+
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
+		SendFloatVecArray ( tOut, (const BYTE*)tMatch.GetAttr(tLoc), CanSendVecArray ( iVer, uMasterVer, bAgentMode ) );
 		break;
 
 	case SPH_ATTR_JSON_PTR:

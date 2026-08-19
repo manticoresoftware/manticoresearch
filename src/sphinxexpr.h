@@ -48,6 +48,7 @@ enum ESphAttr
 	SPH_ATTR_DOUBLE		= 13,			///< floating point number (IEEE 64-bit)
 	SPH_ATTR_UINT64		= 14,			///< unsigned 64-bit integer
 	SPH_ATTR_FLOAT_VECTOR = 15,
+	SPH_ATTR_FLOAT_VECTOR_ARRAY = 16,	///< array of N fixed-width float vectors, stored as [uint32 dims][N*dims floats]
 
 	SPH_ATTR_UINT32SET	= 0x40000001UL,	///< MVA, set of unsigned 32-bit integers
 	SPH_ATTR_INT64SET	= 0x40000002UL,	///< MVA, set of signed 64-bit integers
@@ -58,14 +59,14 @@ enum ESphAttr
 	SPH_ATTR_FACTORS	= 1001,			///< packed search factors (binary, in-memory, pooled)
 	SPH_ATTR_JSON_FIELD	= 1002,			///< points to particular field in JSON column subset
 	SPH_ATTR_FACTORS_JSON	= 1003,		///< packed search factors (binary, in-memory, pooled, provided to client json encoded)
-
-	SPH_ATTR_UINT32SET_PTR,				// in-memory version of MVA32
-	SPH_ATTR_INT64SET_PTR,				// in-memory version of MVA64
-	SPH_ATTR_JSON_PTR,					// in-memory version of JSON
-	SPH_ATTR_JSON_FIELD_PTR,			// in-memory version of JSON_FIELD
-	SPH_ATTR_STORED_FIELD,
-	SPH_ATTR_FLOAT_VECTOR_PTR,			// in-memory version of FLOAT_VECTOR
-	SPH_ATTR_TDIGEST_PTR				// in-memory TDigest state (runtime or serialized)
+	SPH_ATTR_UINT32SET_PTR		= 1004,	// in-memory version of MVA32
+	SPH_ATTR_INT64SET_PTR		= 1005,	// in-memory version of MVA64
+	SPH_ATTR_JSON_PTR			= 1006,	// in-memory version of JSON
+	SPH_ATTR_JSON_FIELD_PTR		= 1007,	// in-memory version of JSON_FIELD
+	SPH_ATTR_STORED_FIELD		= 1008,
+	SPH_ATTR_FLOAT_VECTOR_PTR	= 1009,	// in-memory version of FLOAT_VECTOR
+	SPH_ATTR_TDIGEST_PTR		= 1010,	// in-memory TDigest state (runtime or serialized)
+	SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR = 1011	// in-memory version of FLOAT_VECTOR_ARRAY
 };
 
 /// column evaluation stage

@@ -69,12 +69,24 @@ public:
 	static std::pair<int, bool>			ReadMVALength ( const int64_t * & pMVA );
 	void								SwapMVAs ( InsertDocData_c & tSrc )					{ Swap ( m_dMvas, tSrc.m_dMvas ); }
 
+	// append [dims][N*dims float bits] as one mva entry
+	void								AddFloatVecArray ( int iDims, const VecTraits_T<const float> & dValues );
+
 private:
 	static const uint64_t DEFAULT_FLAG = 1ULL << 63;
 
 	CSphVector<int64_t>					m_dMvas;
 	CSphString							m_sOwnedUuidDocid;
 };
+
+struct FloatVecArrayMVA_t
+{
+	int					m_iDims = 0;		// 0 == empty array
+	const int64_t *		m_pValues = nullptr;
+	int					m_iNumValues = 0;	// N*m_iDims
+};
+
+FloatVecArrayMVA_t ParseFloatVecArrayMVA ( const int64_t * pMva, int iNumValues );
 
 struct OptimizeTask_t
 {

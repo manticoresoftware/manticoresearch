@@ -12,6 +12,7 @@
 
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
+#include "attribute.h"
 #include "docstore.h"
 #include "searchdha.h"
 #include "searchdreplication.h"
@@ -4618,11 +4619,71 @@ bool AttributeConverter_c::CheckJson ( const CSphColumnInfo & tCol, const SqlIns
 	return true;
 }
 
+// emits [dims][N*dims float bits] as a single mva entry
+bool AttributeConverter_c::ConvertFloatVecArray ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, const AttrValueVec_t & tAddVals, int iCol, int iRow )
+{
+	if ( tVal.m_dGroupLens.IsEmpty() )
+	{
+		if ( tAddVals.GetLength() )
+		{
+			m_sError.SetSprintf ( "column %d at row %d: float_vector_array requires an array of vectors, e.g. [[1,2],[3,4]]", iCol, iRow );
+			return false;
+		}
+
+		AddMVALength(0); // empty array: zero-length blob, no header
+		return true;
+	}
+
+	CSphString sVecError;
+	const int iDims = ValidateFloatVecArrayGroups ( tVal.m_dGroupLens, sVecError );
+	if ( !sVecError.IsEmpty() )
+	{
+		m_sError.SetSprintf ( "column %d at row %d: %s", iCol, iRow, sVecError.cstr() );
+		return false;
+	}
+
+	if ( !tAddVals.GetLength() )
+	{
+		AddMVALength(0);
+		return true;
+	}
+
+	m_dTmpFloats.Resize ( tAddVals.GetLength() );
+	ARRAY_FOREACH ( i, m_dTmpFloats )
+		m_dTmpFloats[i] = tAddVals[i].m_fValue;
+
+	// cosine normalization is per vector slot
+	if ( tCol.IsIndexedKNN() && tCol.m_tKNN.m_eHNSWSimilarity==knn::HNSWSimilarity_e::COSINE )
+	{
+		const int iVectors = m_dTmpFloats.GetLength() / iDims;
+		for ( int i = 0; i < iVectors; i++ )
+		{
+			VecTraits_T<float> dSlot ( m_dTmpFloats.Begin() + i*iDims, iDims );
+			NormalizeVec(dSlot);
+		}
+	}
+
+	AddMVALength ( 1 + m_dTmpFloats.GetLength() );
+	AddMVAValue ( iDims );
+	for ( float fValue : m_dTmpFloats )
+		AddMVAValue ( sphF2DW(fValue) );
+
+	return true;
+}
+
 
 bool AttributeConverter_c::CheckMVA ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iCol, int iRow )
 {
-	if ( tCol.m_eAttrType!=SPH_ATTR_UINT32SET && tCol.m_eAttrType!=SPH_ATTR_INT64SET && tCol.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR )
+	if ( tCol.m_eAttrType!=SPH_ATTR_UINT32SET && tCol.m_eAttrType!=SPH_ATTR_INT64SET && tCol.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR && tCol.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR_ARRAY )
+	{
+		if ( !tVal.m_dGroupLens.IsEmpty() )
+		{
+			m_sError.SetSprintf ( "column %d at row %d: nested vector syntax is only valid for float_vector_array attributes", iCol, iRow );
+			return false;
+		}
+
 		return true;
+	}
 
 	if ( !tVal.m_pVals )
 	{
@@ -4631,6 +4692,16 @@ bool AttributeConverter_c::CheckMVA ( const CSphColumnInfo & tCol, const SqlInse
 	}
 
 	auto & tAddVals = *tVal.m_pVals;
+
+	if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY )
+		return ConvertFloatVecArray ( tCol, tVal, tAddVals, iCol, iRow );
+
+	if ( !tVal.m_dGroupLens.IsEmpty() )
+	{
+		m_sError.SetSprintf ( "column %d at row %d: nested vector syntax is only valid for float_vector_array attributes", iCol, iRow );
+		return false;
+	}
+
 	if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
 	{
 		AddMVALength ( tAddVals.GetLength() );
@@ -4700,7 +4771,7 @@ bool AttributeConverter_c::CheckInsertTypes ( const CSphColumnInfo & tCol, const
 		return false;
 	}
 
-	if ( tVal.m_iType==SqlInsert_t::CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_JSON || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR ) )
+	if ( tVal.m_iType==SqlInsert_t::CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_JSON || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY ) )
 	{
 		m_sError.SetSprintf ( "row %d, column %d: MVA value specified for a non-MVA column", 1+iRow, 1+iQuerySchemaIdx ); // 1 for human base
 		return false;
@@ -4712,7 +4783,7 @@ bool AttributeConverter_c::CheckInsertTypes ( const CSphColumnInfo & tCol, const
 		return false;
 	}
 
-	if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tVal.m_iType!=SqlInsert_t::CONST_MVA )
+	if ( ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY ) && tVal.m_iType!=SqlInsert_t::CONST_MVA )
 	{
 		m_sError.SetSprintf ( "row %d, column %d: incompatible value specified for a float vector column", 1+iRow, 1+iQuerySchemaIdx ); // 1 for human base
 		return false;
@@ -4732,7 +4803,7 @@ void AttributeConverter_c::SetDefaultAttrValue ( int iCol )
 		|| tCol.m_eAttrType==SPH_ATTR_TDIGEST_PTR || tCol.m_eAttrType==SPH_ATTR_JSON )
 		m_dStrings.Add(nullptr);
 
-	if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
+	if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY )
 		AddMVALength ( 0, true );
 
 	SqlInsert_t tDefaultVal;
@@ -8371,6 +8442,14 @@ static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrs
 		{
 			StringBuilder_c dStr;
 			sphPackedFloatVec2Str ( (const BYTE *)tMatch.GetAttr(tLoc), dStr );
+			dRows.PutArray ( dStr, false );
+		}
+		break;
+
+		case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
+		{
+			StringBuilder_c dStr;
+			sphPackedFloatVecArray2Str ( (const BYTE *)tMatch.GetAttr(tLoc), dStr );
 			dRows.PutArray ( dStr, false );
 		}
 		break;

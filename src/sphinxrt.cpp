@@ -426,6 +426,37 @@ std::pair<int, bool> InsertDocData_c::ReadMVALength ( const int64_t * & pMVA )
 }
 
 
+void InsertDocData_c::AddFloatVecArray ( int iDims, const VecTraits_T<const float> & dValues )
+{
+	assert ( iDims>=1 );						// dims==0 is reserved for the empty encoding
+	assert ( !( dValues.GetLength() % iDims ) );
+
+	AddMVALength ( 1 + dValues.GetLength() );	// header word + payload
+	AddMVAValue ( iDims );						// plain integer
+	for ( float fValue : dValues )
+		AddMVAValue ( sphF2DW ( fValue ) );
+}
+
+
+FloatVecArrayMVA_t ParseFloatVecArrayMVA ( const int64_t * pMva, int iNumValues )
+{
+	FloatVecArrayMVA_t tRes;
+
+	if ( !iNumValues )
+		return tRes;							// empty array
+
+	const int iDims = (int)pMva[0];
+	const int iPayload = iNumValues-1;
+	assert ( iDims>0 );
+	assert ( iPayload>0 && !( iPayload % iDims ) );
+
+	tRes.m_iDims		= iDims;
+	tRes.m_pValues		= pMva+1;
+	tRes.m_iNumValues	= iPayload;
+	return tRes;
+}
+
+
 void InsertDocData_c::FixParsedMVAs ( const CSphVector<int64_t> & dParsed, int iCount )
 {
 	if ( !iCount )
@@ -1722,7 +1753,8 @@ private:
 	// NOTICE! meta version 21 was introduced in 2a6ea8f7 and rolled back to 20 in e1709760.
 	// v22: keywords_v2 dictionary layout versioning.
 	// v23: UUID primary ID linked-schema semantics.
-	static constexpr DWORD		META_VERSION		= 23; // next should be 24
+	// v24: float_vector_array attribute type
+	static constexpr DWORD		META_VERSION		= 24; // next should be 25
 	// Since v20, RT meta is JSON. indextool.cpp's separate v18 constant only handles legacy binary meta.
 
 	int							m_iStride;
@@ -2451,6 +2483,7 @@ static void ProcessStoredAttrs ( DocstoreBuilder_i::Doc_t & tStoredDoc, const In
 		case SPH_ATTR_UINT32SET:
 		case SPH_ATTR_INT64SET:
 		case SPH_ATTR_FLOAT_VECTOR:
+		case SPH_ATTR_FLOAT_VECTOR_ARRAY:
 			{
 				int iNumValues = 0;
 				bool bDefault = false;
@@ -2534,7 +2567,24 @@ bool RtIndex_c::VerifyKNN ( InsertDocData_c & tDoc, CSphString & sError ) const
 		std::tie ( iNumValues, bDefault ) = tDoc.ReadMVALength(pMva);
 		iMva += iNumValues + 1;
 
-		if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR || !tAttr.IsIndexedKNN() )
+		if ( !tAttr.IsIndexedKNN() )
+			continue;
+
+		if ( tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY )
+		{
+			if ( !bDefault && iNumValues )
+			{
+				FloatVecArrayMVA_t tArray = ParseFloatVecArrayMVA ( pMva, iNumValues );
+				if ( tArray.m_iDims!=tAttr.m_tKNN.m_iDims )
+				{
+					sError.SetSprintf ( "KNN error: vectors have %d values, index '%s' needs %d values", tArray.m_iDims, tAttr.m_sName.cstr(), tAttr.m_tKNN.m_iDims );
+					return false;
+				}
+			}
+			continue;
+		}
+
+		if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR )
 			continue;
 
 		if ( m_dAttrsWithModels.GetLength() && m_dAttrsWithModels[i].m_pModel )
@@ -12334,9 +12384,9 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 	tSchema.AddAttr ( tDocIdCol, false );
 
 	// attrs
-	constexpr int iNumTypes = 10;
-	const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_timestamp", "rt_attr_bool", "rt_attr_float", "rt_attr_string", "rt_attr_json", "rt_attr_multi", "rt_attr_multi_64", "rt_attr_float_vector" };
-	const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_TIMESTAMP, SPH_ATTR_BOOL, SPH_ATTR_FLOAT, SPH_ATTR_STRING, SPH_ATTR_JSON, SPH_ATTR_UINT32SET, SPH_ATTR_INT64SET, SPH_ATTR_FLOAT_VECTOR };
+	constexpr int iNumTypes = 11;
+	const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_timestamp", "rt_attr_bool", "rt_attr_float", "rt_attr_string", "rt_attr_json", "rt_attr_multi", "rt_attr_multi_64", "rt_attr_float_vector", "rt_attr_float_vector_array" };
+	const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_TIMESTAMP, SPH_ATTR_BOOL, SPH_ATTR_FLOAT, SPH_ATTR_STRING, SPH_ATTR_JSON, SPH_ATTR_UINT32SET, SPH_ATTR_INT64SET, SPH_ATTR_FLOAT_VECTOR, SPH_ATTR_FLOAT_VECTOR_ARRAY };
 
 	CSphVector<std::pair<int, CSphColumnInfo>> dOrderedColumns;
 

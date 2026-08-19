@@ -47,6 +47,7 @@ common::AttrType_e ToColumnarType ( ESphAttr eAttrType, int iBitCount )
 	case SPH_ATTR_UINT32SET:	return common::AttrType_e::UINT32SET;
 	case SPH_ATTR_INT64SET:		return common::AttrType_e::INT64SET;
 	case SPH_ATTR_FLOAT_VECTOR:	return common::AttrType_e::FLOATVEC;
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY:	return common::AttrType_e::FLOATVEC;
 	default:
 		assert ( 0 && "Unknown columnar type");
 		return common::AttrType_e::NONE;
@@ -97,8 +98,10 @@ std::unique_ptr<columnar::Builder_i> CreateColumnarBuilder ( const ISphSchema & 
 		if ( eAttrType==common::AttrType_e::STRING && tAttr.HasStringHashes() )
 			fnStringCalcHash = LibcCIHash_fn::Hash;
 
+		// m_bKNN means "use the constant-length optimized packer". It must stay off for float_vector_array
 		const int MIN_KNN_PACK_DIMS = 128;
-		tColumnarSchema.push_back ( { tAttr.m_sName.cstr(), eAttrType, fnStringCalcHash, tAttr.m_tKNN.m_iDims>=MIN_KNN_PACK_DIMS } );
+		bool bPackedKNN = tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tAttr.m_tKNN.m_iDims>=MIN_KNN_PACK_DIMS;
+		tColumnarSchema.push_back ( { tAttr.m_sName.cstr(), eAttrType, fnStringCalcHash, bPackedKNN } );
 	}
 
 	if ( tColumnarSchema.empty() )

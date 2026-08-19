@@ -914,6 +914,51 @@ curl -X POST 'http://localhost:9308/bulk?indexer_rt_bulk=1' \
 
 The endpoint also supports chunked transfer encoding in this mode, so the server can stream a request larger than `max_packet_size` into `indexer` without buffering the complete request body. As with ordinary `/bulk` transactions, changing the target table or adding an empty line commits the preceding group; the entire multi-table request is therefore not one atomic transaction.
 
+#### Fluent Bit
+
+Fluent Bit's Elasticsearch output sends data to `/_bulk` rather than `/bulk`. To enable indexer-assisted insertion for that output, set its `pipeline` option to the reserved value `indexer_rt_bulk`, use the `index` write operation, and provide the name of a record field that contains the document ID:
+
+```ini
+[OUTPUT]
+    name            es
+    match           site_access_logs
+    host            manticore
+    port            9308
+    index           site_access_logs
+    pipeline        indexer_rt_bulk
+    write_operation index
+    id_key          id
+```
+
+Every record's `id` value must be a non-zero decimal string, for example `"123"`. Fluent Bit does not add `_id` when `id_key` refers to a numeric value, and `generate_id On` produces UUID strings, which this experimental mode does not support. If the source does not already contain a suitable stable numeric string, add one with a Fluent Bit filter before the output runs. IDs must remain stable when Fluent Bit retries a chunk. For a single tailed file, one option is to expose its byte offset and convert it to a string with a Lua filter:
+
+```ini
+[INPUT]
+    name       tail
+    path       /var/log/example.log
+    offset_key fluent_bit_offset
+
+[FILTER]
+    name   lua
+    match  site_access_logs
+    script add_numeric_id.lua
+    call   add_numeric_id
+```
+
+```lua
+function add_numeric_id(tag, timestamp, record)
+    record["id"] = tostring(record["fluent_bit_offset"] + 1)
+    record["fluent_bit_offset"] = nil
+    return 2, timestamp, record
+end
+```
+
+Offsets are unique only within one file. Pipelines that tail multiple files should derive a collision-free numeric ID from a stable source identifier and offset instead.
+
+With `pipeline indexer_rt_bulk`, each Fluent Bit request is committed as one disk chunk. The `index` action replaces a document when its ID already exists in the table. IDs must be unique within each request; duplicate IDs in one request and other bulk actions are rejected. If any record in the request is invalid, Manticore Search rejects the request and attaches none of its records. Successful assisted responses for this reserved Fluent Bit pipeline contain `"errors": false` and an empty `items` array to avoid serializing, transferring, and parsing one redundant success object per record. Error responses retain per-record details.
+
+Without `pipeline indexer_rt_bulk`, the same output continues to use regular real-time insertion. The assisted mode is most useful when bulk success responses or indexing work are a bottleneck. Fluent Bit flushes independent chunks, and assisted mode starts `indexer` for each request, so small batches on a low-latency connection may not improve wall-clock time. Benchmark with representative records, schema, chunking, workers, and network conditions before enabling it in production.
+
 #### Current limitations
 
 * The target must be one local real-time table per transaction. Distributed, sharded, replicated, percolate, and plain tables are not supported.

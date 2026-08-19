@@ -504,6 +504,155 @@ def unsupported_http_operation_test(sql_port, http_port, data_dir):
     reader.close()
 
 
+
+def es_bulk_fluent_bit_test(sql_port, http_port, data_dir):
+    reader = sql_conn(sql_port)
+    table = "indexer_rt_fluent_bit"
+    query(reader, f"DROP TABLE IF EXISTS {table}")
+    query(reader, f"CREATE TABLE {table}(title TEXT, gid INTEGER)")
+
+    docs = [
+        {"index": {"_index": table, "_id": "401"}},
+        {"title": "first fluent bit row", "gid": 1},
+        {"index": {"_index": table, "_id": "402"}},
+        {"title": "second fluent bit row", "gid": 2},
+    ]
+    body = "".join(json.dumps(doc, separators=(",", ":")) + "\n" for doc in docs)
+    conn = http.client.HTTPConnection("127.0.0.1", http_port, timeout=30)
+    conn.request("POST", "/_bulk/?pipeline=indexer_rt_bulk", body=body, headers={"Content-Type": "application/x-ndjson"})
+    reply = conn.getresponse()
+    payload = json.loads(reply.read())
+    conn.close()
+    assert reply.status == 200, (reply.status, payload)
+    assert payload["errors"] is False, payload
+    assert payload["items"] == [], payload
+    assert count(reader, table) == 2
+    assert disk_chunks(reader, table) == 1
+    assert {row[0] for row in query(reader, f"SELECT id FROM {table}")} == {401, 402}
+    assert not staging_dirs(data_dir), "successful Fluent Bit bulk left staging state behind"
+
+    replacement = (
+        json.dumps({"index": {"_index": table, "_id": "401"}})
+        + "\n"
+        + json.dumps({"title": "replaced fluent bit row", "gid": 10})
+        + "\n"
+    )
+    conn = http.client.HTTPConnection("127.0.0.1", http_port, timeout=30)
+    conn.request("POST", "/_bulk/?pipeline=indexer_rt_bulk", body=replacement, headers={"Content-Type": "application/x-ndjson"})
+    reply = conn.getresponse()
+    payload = json.loads(reply.read())
+    conn.close()
+    assert reply.status == 200, (reply.status, payload)
+    assert payload["items"] == [], payload
+    assert count(reader, table) == 2
+    assert query(reader, f"SELECT title, gid FROM {table} WHERE id=401")[0] == ("replaced fluent bit row", 10)
+
+    other_table = table + "_other"
+    query(reader, f"DROP TABLE IF EXISTS {other_table}")
+    query(reader, f"CREATE TABLE {other_table}(title TEXT, gid INTEGER)")
+    multiple_tables = (
+        json.dumps({"index": {"_index": table, "_id": "405"}})
+        + "\n"
+        + json.dumps({"title": "must not attach to first", "gid": 5})
+        + "\n"
+        + json.dumps({"index": {"_index": other_table, "_id": "406"}})
+        + "\n"
+        + json.dumps({"title": "must not attach to second", "gid": 6})
+        + "\n"
+    )
+    conn = http.client.HTTPConnection("127.0.0.1", http_port, timeout=30)
+    conn.request("POST", "/_bulk/?pipeline=indexer_rt_bulk", body=multiple_tables, headers={"Content-Type": "application/x-ndjson"})
+    reply = conn.getresponse()
+    payload = json.loads(reply.read())
+    conn.close()
+    assert reply.status == 400, (reply.status, payload)
+    assert "one target table" in payload["error"]["reason"], payload
+    assert count(reader, table) == 2
+    assert count(reader, other_table) == 0
+    assert not staging_dirs(data_dir), "rejected multi-table bulk left staging state behind"
+
+    duplicate_ids = (
+        json.dumps({"index": {"_index": table, "_id": "408"}})
+        + "\n"
+        + json.dumps({"title": "first duplicate", "gid": 8})
+        + "\n"
+        + json.dumps({"index": {"_index": table, "_id": "408"}})
+        + "\n"
+        + json.dumps({"title": "second duplicate", "gid": 9})
+        + "\n"
+    )
+    conn = http.client.HTTPConnection("127.0.0.1", http_port, timeout=30)
+    conn.request("POST", "/_bulk/?pipeline=indexer_rt_bulk", body=duplicate_ids, headers={"Content-Type": "application/x-ndjson"})
+    reply = conn.getresponse()
+    payload = json.loads(reply.read())
+    conn.close()
+    assert reply.status == 400, (reply.status, payload)
+    assert "unique document ids" in payload["error"]["reason"], payload
+    assert count(reader, table) == 2
+
+    create_action = (
+        json.dumps({"create": {"_index": table, "_id": "407"}})
+        + "\n"
+        + json.dumps({"title": "unsupported create", "gid": 7})
+        + "\n"
+    )
+    conn = http.client.HTTPConnection("127.0.0.1", http_port, timeout=30)
+    conn.request("POST", "/_bulk/?pipeline=indexer_rt_bulk", body=create_action, headers={"Content-Type": "application/x-ndjson"})
+    reply = conn.getresponse()
+    payload = json.loads(reply.read())
+    conn.close()
+    assert reply.status == 400, (reply.status, payload)
+    assert "bulk index actions only" in payload["error"]["reason"], payload
+    assert count(reader, table) == 2
+
+    conn = http.client.HTTPConnection("127.0.0.1", http_port, timeout=30)
+    conn.request("POST", "/_bulk/?pipeline=indexer_rt_bulk", body="\n", headers={"Content-Type": "application/x-ndjson"})
+    reply = conn.getresponse()
+    payload = json.loads(reply.read())
+    conn.close()
+    assert reply.status == 400, (reply.status, payload)
+    assert "at least one document" in payload["error"]["reason"], payload
+    assert count(reader, table) == 2
+
+    ordinary = (
+        json.dumps({"create": {"_index": table, "_id": "403"}})
+        + "\n"
+        + json.dumps({"title": "ordinary trailing slash", "gid": 3})
+        + "\n"
+    )
+    conn = http.client.HTTPConnection("127.0.0.1", http_port, timeout=30)
+    conn.request("POST", "/_bulk/", body=ordinary, headers={"Content-Type": "application/x-ndjson"})
+    reply = conn.getresponse()
+    payload = json.loads(reply.read())
+    conn.close()
+    assert reply.status == 200, (reply.status, payload)
+    assert payload["errors"] is False, payload
+    assert len(payload["items"]) == 1, payload
+    assert count(reader, table) == 3
+
+    before_chunks = disk_chunks(reader, table)
+    missing_id = (
+        json.dumps({"index": {"_index": table, "_id": "404"}})
+        + "\n"
+        + json.dumps({"title": "must not attach", "gid": 4})
+        + "\n"
+        + json.dumps({"index": {"_index": table}})
+        + "\n"
+        + json.dumps({"title": "no id", "gid": 5})
+        + "\n"
+    )
+    conn = http.client.HTTPConnection("127.0.0.1", http_port, timeout=30)
+    conn.request("POST", "/_bulk/?pipeline=indexer_rt_bulk", body=missing_id, headers={"Content-Type": "application/x-ndjson"})
+    reply = conn.getresponse()
+    payload = json.loads(reply.read())
+    conn.close()
+    assert reply.status == 400, (reply.status, payload)
+    assert "explicit non-zero numeric _id" in payload["error"]["reason"], payload
+    assert count(reader, table) == 3, "rejected Elasticsearch bulk attached a partial chunk"
+    assert disk_chunks(reader, table) == before_chunks
+    assert not staging_dirs(data_dir), "rejected Fluent Bit bulk left staging state behind"
+    reader.close()
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sql-port", type=int, default=19306)
@@ -523,7 +672,8 @@ def main():
     http_streaming_test(args.sql_port, args.http_port, args.data_dir)
     malformed_http_cleanup_test(args.sql_port, args.http_port, args.data_dir)
     unsupported_http_operation_test(args.sql_port, args.http_port, args.data_dir)
-    print("indexer-assisted SQL transaction and chunked HTTP bulk tests: PASS")
+    es_bulk_fluent_bit_test(args.sql_port, args.http_port, args.data_dir)
+    print("indexer-assisted SQL, HTTP bulk, and Fluent Bit tests: PASS")
 
 
 if __name__ == "__main__":

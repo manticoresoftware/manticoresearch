@@ -441,7 +441,7 @@ jobs:
       artifact_name: debug_test_results_rt_indexer
       results_name: "Linux debug RT indexer test results"
       suite_name: rt-indexer
-      CTEST_REGEX: "^(rtidx_|Indexer RT bulk missing sibling$)"
+      CTEST_REGEX: "^(rtidx_|Indexer RT bulk)"
       timeout: 35
       MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
 
@@ -865,7 +865,7 @@ jobs:
       artifact_name: release_test_results_rt_indexer
       results_name: "Linux release RT indexer test results"
       suite_name: rt-indexer
-      CTEST_REGEX: "^(rtidx_|Indexer RT bulk missing sibling$)"
+      CTEST_REGEX: "^(rtidx_|Indexer RT bulk)"
       timeout: 15
       MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_release_x86_64
 

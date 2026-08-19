@@ -444,6 +444,12 @@ if (NOT TEST_SPECIAL_EXTERNAL)
 					COMMAND ${PYTHON_EXECUTABLE} ${MANTICORE_SOURCE_DIR}/test/integration/indexer_rt_bulk_missing_sibling_test.py
 						--searchd $<TARGET_FILE:searchd> )
 			SET_TESTS_PROPERTIES ( ${INDEXER_RT_MISSING_SIBLING_TEST} PROPERTIES LABELS RT_INDEXER RUN_SERIAL TRUE )
+
+			fixup_test_name ( INDEXER_RT_FLUENTBIT_TEST "Indexer RT bulk Fluent Bit" )
+			add_test ( NAME ${INDEXER_RT_FLUENTBIT_TEST}
+					COMMAND ${PYTHON_EXECUTABLE} ${MANTICORE_SOURCE_DIR}/test/integration/indexer_rt_bulk_fluentbit_test.py
+						--searchd $<TARGET_FILE:searchd> )
+			SET_TESTS_PROPERTIES ( ${INDEXER_RT_FLUENTBIT_TEST} PROPERTIES LABELS RT_INDEXER RUN_SERIAL TRUE )
 		endif ()
 	endif ()
 

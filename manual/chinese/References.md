@@ -70,10 +70,10 @@
 * [SHOW TOKEN](Security/Authentication_and_authorization.md#Users-and-tokens) - 显示已存储的 token 哈希
 * [RELOAD AUTH](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - 重新加载身份验证数据
 
-##### 实时表优化
+##### 表优化
 * [FLUSH RAMCHUNK](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK) - 强制创建新磁盘块
 * [FLUSH TABLE](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#FLUSH-TABLE) - 将实时表的 RAM 块刷新到磁盘
-* [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) - 将实时表加入优化队列
+* [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) - 压缩 RT 表或分布式表、分片表的物理 RT 目标
 
 ##### 导入到实时表
 * [ATTACH TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) - 将数据从普通表移动到实时表
@@ -695,5 +695,7 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [15.1.0](https://manual.manticoresearch.com/manticore-15-1-0/). [安装页面](https://manticoresearch.com/install-15.1.0/)
 * [17.5.1](https://manual.manticoresearch.com/manticore-17-5-1/). [安装页面](https://manticoresearch.com/install-17.5.1/)
 * [25.0.0](https://manual.manticoresearch.com/manticore-25-0-0/). [安装页面](https://manticoresearch.com/install-25.0.0/)
-* [27.1.5](https://manual.manticoresearch.com/manticore-25-0-0/). [安装页面](https://manticoresearch.com/install-27.1.5/)
+* [27.1.5](https://manual.manticoresearch.com/manticore-27-1-5/). [安装页面](https://manticoresearch.com/install-27.1.5/)
+* [28.6.6](https://manual.manticoresearch.com/manticore-28-6-6/). [安装页面](https://manticoresearch.com/install-28.6.6/)
+* [29.0.2](https://manual.manticoresearch.com/manticore-29-0-2/). [安装页面](https://manticoresearch.com/install-29.0.2/)
 <!-- proofread -->

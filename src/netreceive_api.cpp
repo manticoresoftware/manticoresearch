@@ -17,6 +17,7 @@ extern int g_iClientTimeoutS; // from searchd.cpp
 extern volatile bool g_bMaintenance;
 static auto & g_bGotSighup = sphGetGotSighup ();    // we just received SIGHUP; need to log
 
+
 // mostly repeats HandleClientSphinx
 void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 {
@@ -77,8 +78,6 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	// main loop for one or more commands (if persist)
 	do
 	{
-		int iPacketOff = tOut.GetSentCount();
-
 		if ( !tIn.HasBytes ())
 			tIn.DiscardProcessed ();
 
@@ -226,9 +225,15 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			sphLogDebugv ( "conn %s(%d): pconn is now %s", tSess.szClientName (), tSess.GetConnID(), bPersist ? "on" : "off" );
 			tSess.SetPersistent ( bPersist );
 		}
+		const int iPacketOff = tOut.GetSentCount ();
+		const int64_t iTotalSentBeforeCommand = tOut.GetTotalSent ();
 		ExecuteApiCommand ( eCommand, uVer, iReplySize, tIn, tOut );
 
-		if ( !ApiEncryptReply ( sUser, tOut, iPacketOff, sError ) )
+		if ( tOut.GetError () )
+			break;
+
+		const int iReplyPacketOff = tOut.GetTotalSent ()>iTotalSentBeforeCommand ? 0 : iPacketOff;
+		if ( !ApiEncryptReply ( sUser, tOut, iReplyPacketOff, sError ) )
 		{
 			tOut.Rewind ( 0 );
 			SendErrorReply ( tOut, "%s", sError.cstr() );

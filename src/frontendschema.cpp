@@ -483,7 +483,7 @@ void FrontendSchemaBuilder_c::RemapFacets()
 	{
 		ESphAttr eAttr = tFrontend.m_eAttrType;
 		// checking _PTR attrs only because we should not have and non-ptr attr at this point
-		if ( hFacet[tFrontend.m_sName] && ( eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_FLOAT_VECTOR_PTR || eAttr==SPH_ATTR_JSON_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR ) )
+		if ( hFacet[tFrontend.m_sName] && ( eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_FLOAT_VECTOR_PTR || eAttr==SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR || eAttr==SPH_ATTR_JSON_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR ) )
 		{
 			tFrontend.m_tLocator = pRemapCol->m_tLocator;
 			tFrontend.m_eAttrType = pRemapCol->m_eAttrType;

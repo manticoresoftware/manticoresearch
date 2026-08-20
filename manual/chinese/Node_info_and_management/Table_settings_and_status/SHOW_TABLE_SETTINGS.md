@@ -20,6 +20,8 @@ SHOW TABLE table_name[.N | CHUNK N] SETTINGS
 
 输出类似于 [indextool](../../Miscellaneous_tools.md#indextool) 工具的 [--dumpconfig](../../Miscellaneous_tools.md#indextool) 选项。该报告详细列出了所有表设置，包括分词器和词典选项。
 
+该语句适用于实时表、普通表和[分片表](../../Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md)（分片表会报告所有分片共享的设置）。分布式表不支持该语句，因为它们没有自己的设置。
+
 如果一个表是通过 SQL `profile=...` 快捷方式创建的，`SHOW TABLE SETTINGS` 会显示展开后的已保存设置（例如 `ranker` 和 `boolean_mode`），而不是配置文件名称本身。
 
 <!-- intro -->

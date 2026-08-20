@@ -82,7 +82,7 @@ protected:
 	virtual bool	NeedTrailingSeparator() { return true; }
 
 private:
-	XQNode_t *		SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed );
+	XQNode_t *		SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed, bool bSweepHappened );
 	bool			FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode_t ** ppRoot );
 	void			FixupNulls ( XQNode_t * pNode );
 	void			DeleteNodesWOFields ( XQNode_t * pNode );

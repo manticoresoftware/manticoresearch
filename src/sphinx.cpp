@@ -726,6 +726,32 @@ UpdateContext_t::UpdateContext_t ( AttrUpdateInc_t & tUpd, const ISphSchema & tS
 
 //////////////////////////////////////////////////////////////////////////
 
+static void IncUpdatePoolPos ( const CSphAttrUpdate & tUpdate, int iAttr, int & iPos );
+
+static bool IsEmptyMvaUpdate ( const CSphAttrUpdate & tUpd, int iTargetAttr )
+{
+	const int iAttrs = tUpd.m_dAttributes.GetLength();
+	ARRAY_FOREACH ( iDoc, tUpd.m_dDocids )
+	{
+		int iPos = tUpd.GetRowOffset(iDoc);
+		for ( int iAttr = 0; iAttr < iAttrs; iAttr++ )
+		{
+			if ( iAttr==iTargetAttr )
+			{
+				if ( tUpd.m_dPool[iPos] )		// leading length word of this attr's value
+					return false;
+
+				break;
+			}
+
+			IncUpdatePoolPos ( tUpd, iAttr, iPos );
+		}
+	}
+
+	return true;
+}
+
+
 bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tSchema, CSphString & sError, CSphString & sWarning )
 {
 	for ( const auto & tUpdAttr : tUpd.m_dAttributes )
@@ -768,6 +794,7 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 		case SPH_ATTR_UINT32SET:
 		case SPH_ATTR_INT64SET:
 		case SPH_ATTR_FLOAT_VECTOR:
+		case SPH_ATTR_FLOAT_VECTOR_ARRAY:
 		case SPH_ATTR_BIGINT:
 		case SPH_ATTR_FLOAT:
 		case SPH_ATTR_JSON:
@@ -789,11 +816,21 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 			return false;
 		}
 
-		bool bSrcMva = tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR;
-		bool bDstMva = tUpdAttr.m_eType==SPH_ATTR_UINT32SET || tUpdAttr.m_eType==SPH_ATTR_INT64SET || tUpdAttr.m_eType==SPH_ATTR_FLOAT_VECTOR;
+		bool bSrcMva = tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY;
+		bool bDstMva = tUpdAttr.m_eType==SPH_ATTR_UINT32SET || tUpdAttr.m_eType==SPH_ATTR_INT64SET || tUpdAttr.m_eType==SPH_ATTR_FLOAT_VECTOR || tUpdAttr.m_eType==SPH_ATTR_FLOAT_VECTOR_ARRAY;
 		if ( bSrcMva!=bDstMva )
 		{
 			sError.SetSprintf ( "attribute '%s' MVA flag mismatch", sUpdAttrName.cstr() );
+			return false;
+		}
+
+		if ( ( tUpdAttr.m_eType==SPH_ATTR_FLOAT_VECTOR_ARRAY ) != ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY ) && !IsEmptyMvaUpdate ( tUpd, int ( &tUpdAttr - tUpd.m_dAttributes.Begin() ) ) )
+		{
+			if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY )
+				sError.SetSprintf ( "attribute '%s': float_vector_array requires an array of vectors, e.g. [[1,2],[3,4]]", sUpdAttrName.cstr() );
+			else
+				sError.SetSprintf ( "attribute '%s': nested vector syntax is only valid for float_vector_array attributes", sUpdAttrName.cstr() );
+
 			return false;
 		}
 
@@ -833,6 +870,7 @@ static void IncUpdatePoolPos ( const CSphAttrUpdate & tUpdate, int iAttr, int & 
 	case SPH_ATTR_UINT32SET:
 	case SPH_ATTR_INT64SET:
 	case SPH_ATTR_FLOAT_VECTOR:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY:
 		iPos += tUpdate.m_dPool[iPos] + 1;
 		break;
 
@@ -1045,7 +1083,7 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 			int iLengthBytes = 0;
 			const BYTE* pData = sphGetBlobAttr ( pDocinfo, tAttr.m_tLocator, tCtx.m_pBlobPool, iLengthBytes );
 			BlobAttrInput_e eInput = BlobAttrInput_e::RAW_BYTES;
-			if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
+			if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR || tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY )
 				eInput = BlobAttrInput_e::MVA_DWORD;
 			else if ( tAttr.m_eAttrType==SPH_ATTR_INT64SET )
 				eInput = BlobAttrInput_e::MVA_INT64;
@@ -1072,6 +1110,7 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 			case SPH_ATTR_UINT32SET:
 			case SPH_ATTR_INT64SET:
 			case SPH_ATTR_FLOAT_VECTOR:
+			case SPH_ATTR_FLOAT_VECTOR_ARRAY:
 				{
 					DWORD uLength = tUpd.m_dPool[iPos++];
 					if ( iBlobId!=-1 )
@@ -9090,7 +9129,9 @@ bool CSphIndex_VLN::SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilt
 	tFlx.m_iTotalDocs	= m_iDocinfo;
 	tFlx.m_sJoinIdx		= tQuery.m_sJoinIdx;
 	tFlx.m_eJoinType	= tQuery.m_eJoinType;
-	tFlx.m_bAddKNNDistFilter = tQuery.HasKnn() && HasKNNDistFilter(tQuery);
+	// the knn iterator is what normally keeps vector-less docs out of the result. it is skipped when the planner brute-forces instead,
+	// and a scan cannot tell an empty vector from a far one, so guard those cases with the knn_dist filter too
+	tFlx.m_bAddKNNDistFilter = tQuery.HasKnn() && ( HasKNNDistFilter(tQuery) || tQuery.m_dFilters.GetLength() || tQuery.SingleKnnSettings().m_bFullscan );
 
 	// may modify eval stages in schema; needs to be before SetupCalc
 	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, pModifiedMatchSchema, tQuery.m_dItems, tMeta.m_sError, &dJsonSITransforms ) )
@@ -9753,14 +9794,15 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 	using namespace bson;
 
 	CSphVector<BYTE> dData;
-	if ( !sphJsonParse ( dData, sHeaderName, m_sLastError ) )
-		return LOAD_E::ParseError_e;
+	auto eParse = sphJsonParse ( dData, sHeaderName, m_sLastError );
+	if ( eParse!=JsonFileParse_e::OK )
+		return eParse==JsonFileParse_e::FORMAT_ERROR ? LOAD_E::ParseError_e : LOAD_E::GeneralError_e;
 
 	Bson_c tBson ( dData );
 	if ( tBson.IsEmpty() || !tBson.IsAssoc() )
 	{
 		m_sLastError = "Something wrong read from json header - it is either empty, either not root object.";
-		return LOAD_E::ParseError_e;
+		return LOAD_E::GeneralError_e;
 	}
 
 	// version

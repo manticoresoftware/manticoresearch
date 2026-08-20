@@ -21,7 +21,11 @@ INSERT INTO rt(title) VALUES
 OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
 ```
 
-Оператор `OPTIMIZE` добавляет RT-таблицу в очередь оптимизации, которая будет обработана в фоновом потоке.
+`OPTIMIZE TABLE` поддерживает таблицы real-time (RT), [distributed](../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md) и [sharded](../Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md).
+
+Для RT-таблицы этот оператор добавляет таблицу в очередь оптимизации, которая по умолчанию обрабатывается фоновым потоком. Для distributed-таблицы требуется `OPTION sync=1`: команда оптимизирует каждый локальный RT-компонент и каждый настроенный удаленный mirror, кроме blackhole agents. Sharded-таблица поддерживает тот же нативный синхронный fan-out по своим физическим RT-целям. Значение `cutoff` применяется к каждой физической RT-цели.
+
+Когда доступен Manticore Buddy, sharded-таблицы, созданные с опциями `shards` и `rf`, также сохраняют асинхронную форму `OPTIMIZE TABLE table_name`, которую обрабатывает Buddy. Используйте `OPTION sync=1`, чтобы запускать нативный синхронный fan-out напрямую в Manticore Search.
 
 <!-- intro -->
 ##### SQL:
@@ -83,7 +87,9 @@ POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION cutoff=4"
 
 <!-- example optimize_sync -->
 
-При использовании `OPTION sync=1` (по умолчанию 0) команда будет ждать завершения процесса оптимизации перед возвратом. Если соединение прервется, оптимизация продолжит выполняться на сервере.
+Для RT-таблицы `sync=0` используется по умолчанию. Если задать `OPTION sync=1`, команда будет ждать завершения оптимизации перед возвратом. Если соединение прервется, оптимизация продолжит выполняться на сервере.
+
+Distributed-таблицы требуют `OPTION sync=1`. Sharded-таблицы используют `OPTION sync=1` для нативного синхронного fan-out. Команда ждет все выбранные физические цели и сообщает об ошибке, если какая-либо цель не удалась; уже выполненная работа на других целях не откатывается.
 
 <!-- intro -->
 ##### SQL:
@@ -104,6 +110,13 @@ POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION sync=1"
 ```
 
 <!-- end -->
+
+Для distributed- и sharded-таблиц используйте синхронную форму:
+
+```sql
+OPTIMIZE TABLE distributed_table OPTION sync=1, cutoff=1;
+OPTIMIZE TABLE sharded_table OPTION sync=1, cutoff=1;
+```
 
 ### Ограничение влияния на ввод-вывод
 

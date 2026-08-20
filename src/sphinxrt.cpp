@@ -1850,7 +1850,6 @@ private:
 	void						StopMergeSegmentsWorker();
 	bool						NeedStoreWordID () const override;
 	int64_t						GetMemLimit() const final { return m_iRtMemLimit; }
-	void						PrepareShutdown() final;
 
 	bool						LoadEmbeddingModels ( CSphString & sError );
 	const CSphQuery *			SetupAutoEmbeddings ( const CSphQuery & tQuery, CSphQuery & tUpdatedQuery, const ISphSchema & tMatchSchema, CSphString & sError ) const;
@@ -3984,12 +3983,6 @@ void RtIndex_c::StopMergeSegmentsWorker()
 {
 	TRACE_SCHED ( "rt", "StopMergeSegmentsWorker" );
 	m_eSegMergeQueued.SetValueAndNotifyOne ( MergeSeg_e::EXIT );
-}
-
-
-void RtIndex_c::PrepareShutdown()
-{
-	StopMergeSegmentsWorker();
 }
 
 bool RtIndex_c::MergeSegmentsStep ( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.SerialChunkAccess() )

@@ -223,9 +223,6 @@ public:
 	virtual void EnableSave() = 0;
 	virtual void LockFileState ( CSphVector<CSphString> & dFiles ) = 0;
 
-	// stop idle background workers after all client operations have drained
-	virtual void PrepareShutdown() {}
-
 	virtual void WaitLockEnabledState() noexcept {};
 	virtual void UnlockEnabledState () noexcept {};
 	

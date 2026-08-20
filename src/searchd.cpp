@@ -402,13 +402,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 		int64_t tmDelta = sphMicroTimer ()-tmShutStarted;
 		sphWarning ( "still %d alive tasks during shutdown, after %d.%03d sec", myinfo::CountClients (), (int) ( tmDelta
 				/ 1000000 ), (int) ( ( tmDelta / 1000 ) % 1000 ) );
-	} else
-	{
-		SHUTINFO << "Prepare mutable tables for shutdown ...";
-		ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
-		for ( const auto & tIt : *hLocal )
-			if ( ServedDesc_t::IsMutable ( tIt.second ) )
-				RIdx_T<RtIndex_i*> ( tIt.second )->PrepareShutdown();
 	}
 
 	// unlock indexes and release locks if needed

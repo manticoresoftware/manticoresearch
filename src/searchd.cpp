@@ -70,6 +70,7 @@
 #include "taskflushmutable.h"
 #include "taskpreread.h"
 #include "searchdbuddy.h"
+#include "net_action_accept.h"
 #include "detail/indexlink.h"
 #include "detail/expmeter.h"
 
@@ -337,7 +338,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	}
 #endif
 
-	int64_t tmShutStarted = sphMicroTimer ();
 	sd::extend30s();
 
 	// release all planned/scheduled tasks
@@ -379,8 +379,40 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// stop netloop threads
 	SHUTINFO << "Stop netloop pool ...";
 	if ( g_pTickPoolThread )
-		g_pTickPoolThread->StopAll ( Threads::WorkerShutdown_e::ABORT );
+	{
+		auto fnHasNetloopWork = [] { return g_pTickPoolThread->Works()>1; }; // one work is the pool guard
+		int64_t tmNetloopWaitStarted = sphMicroTimer ();
+		while ( fnHasNetloopWork() && sphMicroTimer ()-tmNetloopWaitStarted<g_iShutdownTimeoutUs )
+		{
+			sd::extend30s();
+			sphSleepMsec ( 50 );
+		}
+
+		int iOutstandingWorks = Max ( g_pTickPoolThread->Works()-1, 0 );
+		if ( iOutstandingWorks )
+			sphWarning ( "netloop pool did not drain before shutdown timeout; forcing stop with %d outstanding works", iOutstandingWorks );
+		auto eShutdown = iOutstandingWorks ? Threads::WorkerShutdown_e::ABORT : Threads::WorkerShutdown_e::DRAIN;
+		g_pTickPoolThread->StopAll ( eShutdown );
+	}
 	sd::extend30s();
+
+	// The admission counter is incremented before scheduling a client coroutine,
+	// so draining the netloop closes the registration race as well as new accepts.
+	auto fnActiveClients = [] { return GetActiveNonVipSessions(); };
+	SHUTINFO << "Waiting clients to finish ... (" << fnActiveClients () << ")";
+	int64_t tmClientsWaitStarted = sphMicroTimer ();
+	while ( fnActiveClients ()>0 && sphMicroTimer ()-tmClientsWaitStarted<g_iShutdownTimeoutUs )
+	{
+		sd::extend30s();
+		sphSleepMsec ( 50 );
+	}
+
+	if ( fnActiveClients ()>0 )
+	{
+		int64_t tmDelta = sphMicroTimer ()-tmClientsWaitStarted;
+		sphWarning ( "still %d alive tasks during shutdown, after %d.%03d sec", fnActiveClients (), (int) ( tmDelta
+				/ 1000000 ), (int) ( ( tmDelta / 1000 ) % 1000 ) );
+	}
 
 	// call scheduled callbacks:
 	// shutdown replication,
@@ -389,20 +421,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	SHUTINFO << "Invoke shutdown callbacks ...";
 	searchd::FireShutdownCbs ();
 	sd::extend30s();
-
-	SHUTINFO << "Waiting clients to finish ... (" << myinfo::CountClients() << ")";
-	while ( ( myinfo::CountClients ()>0 ) && ( sphMicroTimer ()-tmShutStarted )<g_iShutdownTimeoutUs )
-	{
-		sd::extend30s();
-		sphSleepMsec ( 50 );
-	}
-
-	if ( myinfo::CountClients ()>0 )
-	{
-		int64_t tmDelta = sphMicroTimer ()-tmShutStarted;
-		sphWarning ( "still %d alive tasks during shutdown, after %d.%03d sec", myinfo::CountClients (), (int) ( tmDelta
-				/ 1000000 ), (int) ( ( tmDelta / 1000 ) % 1000 ) );
-	}
 
 	// unlock indexes and release locks if needed
 	SHUTINFO << "Unlock tables ...";
@@ -437,8 +455,24 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	Detached::ShutdownAllAlones();
 	sd::extend30s();
 
+	// Works() includes the pool's own guard. Give actual owner-held routines
+	// a bounded chance to finish before falling back to a forced stop.
+	SHUTINFO << "Waiting main work pool to drain ...";
+	auto pWorkPool = GlobalWorkPool ();
+	auto fnHasWork = [pWorkPool] { return pWorkPool->Works()>1; };
+	int64_t tmWorkPoolWaitStarted = sphMicroTimer ();
+	while ( fnHasWork() && sphMicroTimer ()-tmWorkPoolWaitStarted<g_iShutdownTimeoutUs )
+	{
+		sd::extend30s();
+		sphSleepMsec ( 50 );
+	}
+
 	SHUTINFO << "Shutdown main work pool ...";
-	StopGlobalWorkPool ( Threads::WorkerShutdown_e::ABORT );
+	int iOutstandingWorks = Max ( pWorkPool->Works()-1, 0 );
+	if ( iOutstandingWorks )
+		sphWarning ( "global work pool did not drain before shutdown timeout; forcing stop with %d outstanding works", iOutstandingWorks );
+	auto eWorkPoolShutdown = iOutstandingWorks ? Threads::WorkerShutdown_e::ABORT : Threads::WorkerShutdown_e::DRAIN;
+	StopGlobalWorkPool ( eWorkPoolShutdown );
 	sd::extend30s();
 
 	SHUTINFO << "Remove local tables list ...";

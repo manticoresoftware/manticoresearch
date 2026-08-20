@@ -17,9 +17,49 @@
 #include "searchdha.h"
 #include "searchdssl.h"
 #include "searchdreplication.h"
+#include "net_action_accept.h"
 #include "replication/wsrep_cxx.h"
 #include "replication/cluster_binlog.h"
 
+
+TEST ( functions, AcceptedSessionAdmissionAccounting )
+{
+	ASSERT_EQ ( GetActiveNonVipSessions(), 0 );
+
+	auto pSession = TrackAcceptedSession ( false );
+	EXPECT_EQ ( GetActiveNonVipSessions(), 1 );
+
+	auto pCoroutineOwner = pSession;
+	pSession.reset();
+	EXPECT_EQ ( GetActiveNonVipSessions(), 1 );
+
+	pCoroutineOwner.reset();
+	EXPECT_EQ ( GetActiveNonVipSessions(), 0 );
+
+	auto pVipSession = TrackAcceptedSession ( true );
+	EXPECT_EQ ( GetActiveNonVipSessions(), 0 );
+
+	constexpr int NUM_SESSIONS = 32;
+	std::atomic<int> iReady { 0 };
+	std::atomic<bool> bRelease { false };
+	std::vector<std::thread> dSessions;
+	dSessions.reserve ( NUM_SESSIONS );
+	for ( int i = 0; i<NUM_SESSIONS; ++i )
+		dSessions.emplace_back ( [&] {
+			auto pAccepted = TrackAcceptedSession ( false );
+			iReady.fetch_add ( 1, std::memory_order_release );
+			while ( !bRelease.load ( std::memory_order_acquire ) )
+				std::this_thread::yield();
+		} );
+
+	while ( iReady.load ( std::memory_order_acquire )!=NUM_SESSIONS )
+		std::this_thread::yield();
+	EXPECT_EQ ( GetActiveNonVipSessions(), NUM_SESSIONS );
+	bRelease.store ( true, std::memory_order_release );
+	for ( auto & tSession : dSessions )
+		tSession.join();
+	EXPECT_EQ ( GetActiveNonVipSessions(), 0 );
+}
 
 // QueryStatElement_t uses default ctr with inline initializer;
 // this test is just to be sure it works correctly

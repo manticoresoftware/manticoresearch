@@ -1,4 +1,4 @@
-Daemon shutdown deadlock: graceful `searchd --stopwait` of a node hangs in ThreadPool_c::StopAll() during a sharded-table rebalance on rejoin. Pure daemon bug (no Buddy involved). Expected: graceful stop returns 0; buggy daemon never returns (timeout -> exit 124).
+Daemon shutdown deadlock: graceful `searchd --stopwait` of a node hangs in ThreadPool_c::StopAll() while a Buddy sharded-table rebalance owns an index reference during rejoin. Expected: the request exits cooperatively, the RT index is released, and the global work pool drains without forced fallback.
 
 ––– comment –––
 Start 3-node cluster
@@ -57,13 +57,17 @@ timeout 60 bash -c 'until for i in 1 2 3; do mysql -h0 -P${i}306 -e "SHOW STATUS
 ––– output –––
 rejoined=0
 ––– comment –––
-Second failure: stop node 2 GRACEFULLY during the sharded rebalance. This is where the daemon deadlocks: searchd --stopwait enters Shutdown() -> ThreadPool_c::StopAll() and blocks forever joining a worker thread that was never signalled to exit (a galera ServiceThd outlives provider destruction). Guarded with timeout 40 so the test fails fast instead of hanging. A healthy daemon returns exit 0; the buggy daemon yields exit 124 (timed out = deadlocked).
+Stop node 2 gracefully during the sharded rebalance. The affected daemon used to clear the table registry while a Buddy ClusterAlter/SendIndex request still owned the RT index; the request and merge coroutine then kept the global pool alive forever. A healthy daemon waits for that owner before releasing indexes, returns exit 0, and does not use the bounded forced-stop fallback.
 ––– input –––
 export INSTANCE=2; timeout 40 searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null 2>&1; echo "node2_stopwait_exit=$?"
 ––– output –––
 node2_stopwait_exit=0
+––– input –––
+if grep -Eq "(netloop|global work) pool did not drain" /var/log/manticore-2/searchd.log; then echo fallback_used=1; else echo fallback_used=0; fi
+––– output –––
+fallback_used=0
 ––– comment –––
-Cleanup (force-kill any deadlocked node so the container exits cleanly)
+Cleanup any remaining repro-owned daemons so the container exits cleanly
 ––– input –––
 pkill -9 searchd 2>/dev/null; sleep 1; echo done
 ––– output –––

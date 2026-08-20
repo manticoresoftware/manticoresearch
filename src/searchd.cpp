@@ -379,7 +379,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// stop netloop threads
 	SHUTINFO << "Stop netloop pool ...";
 	if ( g_pTickPoolThread )
-		g_pTickPoolThread->StopAll ();
+		g_pTickPoolThread->StopAll ( Threads::WorkerShutdown_e::ABORT );
 	sd::extend30s();
 
 	// call scheduled callbacks:
@@ -402,6 +402,13 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 		int64_t tmDelta = sphMicroTimer ()-tmShutStarted;
 		sphWarning ( "still %d alive tasks during shutdown, after %d.%03d sec", myinfo::CountClients (), (int) ( tmDelta
 				/ 1000000 ), (int) ( ( tmDelta / 1000 ) % 1000 ) );
+	} else
+	{
+		SHUTINFO << "Prepare mutable tables for shutdown ...";
+		ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
+		for ( const auto & tIt : *hLocal )
+			if ( ServedDesc_t::IsMutable ( tIt.second ) )
+				RIdx_T<RtIndex_i*> ( tIt.second )->PrepareShutdown();
 	}
 
 	// unlock indexes and release locks if needed
@@ -438,7 +445,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	sd::extend30s();
 
 	SHUTINFO << "Shutdown main work pool ...";
-	StopGlobalWorkPool();
+	StopGlobalWorkPool ( Threads::WorkerShutdown_e::ABORT );
 	sd::extend30s();
 
 	SHUTINFO << "Remove local tables list ...";

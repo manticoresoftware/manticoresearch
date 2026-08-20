@@ -46,6 +46,16 @@ TEST ( ThreadPool, Counter100 )
 	ASSERT_EQ ( v, 100 );
 }
 
+
+TEST ( ThreadPool, AbortWithOutstandingKeeper )
+{
+	auto pPool = Threads::MakeThreadPool ( 1, "tp" );
+	auto tKeeper = pPool->KeepWorking();
+	pPool->StopAll ( Threads::WorkerShutdown_e::ABORT );
+	tKeeper = nullptr;
+}
+
+
 void Counter100c()
 {
 	using namespace Threads;

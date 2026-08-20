@@ -14,7 +14,7 @@
 
 #include "networking_daemon.h"
 
-std::shared_ptr<void> TrackAcceptedSession ( bool bVip );
+SharedPtrCustom_t<void> TrackAcceptedSession ( bool bVip );
 int GetActiveNonVipSessions();
 
 enum class NetloopState_e : BYTE;

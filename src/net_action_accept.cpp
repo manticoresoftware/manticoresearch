@@ -167,30 +167,16 @@ namespace {
 
 std::atomic<int> g_iActiveNonVipSessions { 0 };
 
-class AcceptedSessionGuard_c
-{
-	bool m_bVip;
-
-public:
-	explicit AcceptedSessionGuard_c ( bool bVip )
-		: m_bVip ( bVip )
-	{
-		if ( !m_bVip )
-			g_iActiveNonVipSessions.fetch_add ( 1, std::memory_order_relaxed );
-	}
-
-	~AcceptedSessionGuard_c()
-	{
-		if ( !m_bVip )
-			g_iActiveNonVipSessions.fetch_sub ( 1, std::memory_order_relaxed );
-	}
-};
-
 } // namespace
 
-std::shared_ptr<void> TrackAcceptedSession ( bool bVip )
+SharedPtrCustom_t<void> TrackAcceptedSession ( bool bVip )
 {
-	return std::make_shared<AcceptedSessionGuard_c> ( bVip );
+	if ( bVip )
+		return SharedPtrCustom_t<void>();
+
+	SharedPtrCustom_t<void> pSession { nullptr, [] ( void * ) { g_iActiveNonVipSessions.fetch_sub ( 1, std::memory_order_relaxed ); } };
+	g_iActiveNonVipSessions.fetch_add ( 1, std::memory_order_relaxed );
+	return pSession;
 }
 
 int GetActiveNonVipSessions()

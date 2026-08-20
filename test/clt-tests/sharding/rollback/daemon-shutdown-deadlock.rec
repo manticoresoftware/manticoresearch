@@ -63,7 +63,7 @@ export INSTANCE=2; timeout 40 searchd --stopwait -c test/clt-tests/base/searchd-
 ––– output –––
 node2_stopwait_exit=0
 ––– input –––
-if grep -Eq "(netloop|global work) pool did not drain" /var/log/manticore-2/searchd.log; then echo fallback_used=1; else echo fallback_used=0; fi
+if grep -q "global work pool did not drain" /var/log/manticore-2/searchd.log; then echo fallback_used=1; else echo fallback_used=0; fi
 ––– output –––
 fallback_used=0
 ––– comment –––

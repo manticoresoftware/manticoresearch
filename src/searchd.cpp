@@ -379,21 +379,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// stop netloop threads
 	SHUTINFO << "Stop netloop pool ...";
 	if ( g_pTickPoolThread )
-	{
-		auto fnHasNetloopWork = [] { return g_pTickPoolThread->Works()>1; }; // one work is the pool guard
-		int64_t tmNetloopWaitStarted = sphMicroTimer ();
-		while ( fnHasNetloopWork() && sphMicroTimer ()-tmNetloopWaitStarted<g_iShutdownTimeoutUs )
-		{
-			sd::extend30s();
-			sphSleepMsec ( 50 );
-		}
-
-		int iOutstandingWorks = Max ( g_pTickPoolThread->Works()-1, 0 );
-		if ( iOutstandingWorks )
-			sphWarning ( "netloop pool did not drain before shutdown timeout; forcing stop with %d outstanding works", iOutstandingWorks );
-		auto eShutdown = iOutstandingWorks ? Threads::WorkerShutdown_e::ABORT : Threads::WorkerShutdown_e::DRAIN;
-		g_pTickPoolThread->StopAll ( eShutdown );
-	}
+		g_pTickPoolThread->StopAll ();
 	sd::extend30s();
 
 	// The admission counter is incremented before scheduling a client coroutine,

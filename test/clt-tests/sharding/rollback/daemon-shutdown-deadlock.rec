@@ -70,5 +70,13 @@ pkill -9 searchd 2>/dev/null; sleep 1; echo done
 done
 ––– input –––
 cat /var/log/manticore-2/searchd.log
+––– output –––
+done 2
+––– input –––
 cat /var/log/manticore-1/searchd.log
+––– output –––
+done 1
+––– input –––
 cat /var/log/manticore-3/searchd.log
+––– output –––
+done 3

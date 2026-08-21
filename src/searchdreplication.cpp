@@ -2682,6 +2682,8 @@ static bool SendIndex ( const CSphString & sIndex, ReplicationClusterRefPtr_c pC
 	int64_t tmStart = sphMicroTimer();
 	while ( true )
 	{
+		if ( sphInterrupted() )
+			return TlsMsg::Err ("Abort SendIndex() due to daemon's shutdown");
 		pCluster->m_pSstProgress->StageBegin ( SstStage_e::WAIT_NODES );
 		if ( HasNotReadyNodes ( pCluster ) )
 		{

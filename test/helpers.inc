@@ -5036,8 +5036,11 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 		}
 		$config->WriteConfig ( scriptdir(config_conf()), "all", $msg, $config->NumAgents () < 2 );
 
+		// A fresh test must remove persisted table directories as well as root files.
+		// Leaving those directories behind makes a later CREATE TABLE fail even though
+		// the table is no longer registered in the new daemon.
 		if ( !$sd_skip_indexer )
-			EraseDirContents ( $index_data_path );
+			EraseDirContents ( $index_data_path, true );
 
 		if ( $config->Requires( "pre_copy_ref" ) )
 			CopyDirContents ( $test_dir . "/refdata/", "$index_data_path/" );

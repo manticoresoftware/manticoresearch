@@ -14,6 +14,9 @@
 
 #include "networking_daemon.h"
 
+SharedPtrCustom_t<void> TrackAcceptedSession ( bool bVip );
+int GetActiveNonVipSessions();
+
 enum class NetloopState_e : BYTE;
 struct ListenTaskInfo_t : public TaskInfo_t
 {

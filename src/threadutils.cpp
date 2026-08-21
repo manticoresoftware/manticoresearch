@@ -783,7 +783,7 @@ public:
 	~ThreadPool_c ()
 	{
 		LOGINFO ( TPLIFE, TP ) << "thread pool destroying";
-		StopAll();
+		StopAll ( WorkerShutdown_e::DRAIN );
 		ScWL_t _ ( m_dChildGuard ); // that will keep children list if smbody still iterates over it
 	}
 
@@ -855,13 +855,18 @@ public:
 			fnHandler ( tThd.m_pChild );
 	}
 
-	void StopAll () NO_THREAD_SAFETY_ANALYSIS
+	void StopAll ( WorkerShutdown_e eMode ) NO_THREAD_SAFETY_ANALYSIS
 	{
 		ScopedMutex_t dLock { m_dMutex };
 		m_bStop = true;
 		m_dWork.reset ();
-		if ( sphIsDied() )
+		if ( sphIsDied() || eMode==WorkerShutdown_e::ABORT )
+		{
+			auto tTasks = m_tService.tasks();
+			if ( !sphIsDied() && ( m_tService.works() || tTasks.iPri || tTasks.iSec ) )
+				sphWarning ( "forcing thread pool '%s' to stop with %d outstanding works and %d/%d queued tasks", m_szName ? m_szName : "unnamed", (int)m_tService.works(), tTasks.iPri, tTasks.iSec );
 			m_tService.stop();
+		}
 		dLock.Unlock ();
 		LOG ( DEBUG, TP ) << "stopping thread pool";
 		LOGINFO ( TPLIFE, TP ) << "stopping thread pool";
@@ -956,7 +961,7 @@ public:
 	}
 #endif
 
-	void StopAll () {}
+	void StopAll ( WorkerShutdown_e ) {}
 
 	static int GetRunners () { return m_iRunningAlones; }
 
@@ -1133,12 +1138,12 @@ void StartGlobalWorkPool ()
 		pPool = new ThreadPool_c ( g_iMaxChildrenThreads, "work" );
 }
 
-void StopGlobalWorkPool()
+void StopGlobalWorkPool ( Threads::WorkerShutdown_e eMode )
 {
 	sphLogDebug ( "StopGlobalWorkPool" );
 	WorkerSharedPtr_t& pPool = GlobalPoolSingletone();
 	if ( pPool )
-		pPool->StopAll();
+		pPool->StopAll ( eMode );
 }
 
 void SetMaxChildrenThreads ( int iThreads )

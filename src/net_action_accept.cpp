@@ -163,6 +163,27 @@ static DWORD NextConnectionID()
 	return g_iConnectionID.fetch_add ( 1, std::memory_order_relaxed );
 }
 
+namespace {
+
+std::atomic<int> g_iActiveNonVipSessions { 0 };
+
+} // namespace
+
+SharedPtrCustom_t<void> TrackAcceptedSession ( bool bVip )
+{
+	if ( bVip )
+		return SharedPtrCustom_t<void>();
+
+	SharedPtrCustom_t<void> pSession { nullptr, [] ( void * ) { g_iActiveNonVipSessions.fetch_sub ( 1, std::memory_order_relaxed ); } };
+	g_iActiveNonVipSessions.fetch_add ( 1, std::memory_order_relaxed );
+	return pSession;
+}
+
+int GetActiveNonVipSessions()
+{
+	return g_iActiveNonVipSessions.load ( std::memory_order_relaxed );
+}
+
 class ScopedClientInfo_c: public ScopedInfo_T<ClientTaskInfo_t>
 {
 public:
@@ -309,7 +330,8 @@ void NetActionAccept_c::Impl_c::ProcessAccept ()
 			case Proto_e::HTTP :
 			case Proto_e::MYSQL41:
 			{
-				Threads::Coro::Go ( [pRawBuf = pBuf.release(), tConn, _pInfo = pClientInfo.release(), eProto]() mutable
+				auto pAcceptedSession = TrackAcceptedSession ( m_tListener.m_bVIP );
+				Threads::Coro::Go ( [pRawBuf = pBuf.release(), tConn, _pInfo = pClientInfo.release(), eProto, pAcceptedSession = std::move ( pAcceptedSession )]() mutable
 					{
 						ScopedClientInfo_c pInfo { _pInfo }; // make visible task info
 						MultiServe ( std::unique_ptr<AsyncNetBuffer_c> ( pRawBuf ), tConn, eProto );

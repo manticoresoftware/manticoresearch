@@ -167,12 +167,18 @@ struct NTasks_t { // snapshot length of Op queue
 	int iSec;
 };
 
+enum class WorkerShutdown_e
+{
+	DRAIN,
+	ABORT
+};
+
 struct Worker_i: public Scheduler_i
 {
 	virtual int Works() const = 0;
 	virtual NTasks_t Tasks() const noexcept = 0;
 	virtual int CurTasks() const noexcept = 0;
-	virtual void StopAll () = 0;
+	virtual void StopAll ( WorkerShutdown_e eMode = WorkerShutdown_e::DRAIN ) = 0;
 	virtual void DiscardOnFork() {}
 	virtual void IterateChildren ( ThreadFN & fnHandler ) noexcept {}
 };
@@ -266,7 +272,7 @@ Threads::Worker_i* GlobalWorkPool ();
 void SetMaxChildrenThreads ( int iThreads );
 int MaxChildrenThreads() noexcept;
 void StartGlobalWorkPool ();
-void StopGlobalWorkPool();
+void StopGlobalWorkPool ( Threads::WorkerShutdown_e eMode = Threads::WorkerShutdown_e::DRAIN );
 
 /// schedule stop of the global thread pool
 void WipeGlobalSchedulerOnShutdownAndFork ();

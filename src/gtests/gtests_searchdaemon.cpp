@@ -17,9 +17,25 @@
 #include "searchdha.h"
 #include "searchdssl.h"
 #include "searchdreplication.h"
+#include "net_action_accept.h"
 #include "replication/wsrep_cxx.h"
 #include "replication/cluster_binlog.h"
 
+
+TEST ( functions, AcceptedSessionAdmissionAccounting )
+{
+	ASSERT_EQ ( GetActiveNonVipSessions(), 0 );
+
+	auto pSession = TrackAcceptedSession ( false );
+	EXPECT_EQ ( GetActiveNonVipSessions(), 1 );
+
+	std::thread tCoroutineOwner ( [pSession = std::move ( pSession )] {} );
+	tCoroutineOwner.join();
+	EXPECT_EQ ( GetActiveNonVipSessions(), 0 );
+
+	auto pVipSession = TrackAcceptedSession ( true );
+	EXPECT_EQ ( GetActiveNonVipSessions(), 0 );
+}
 
 // QueryStatElement_t uses default ctr with inline initializer;
 // this test is just to be sure it works correctly

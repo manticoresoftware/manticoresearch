@@ -16,6 +16,7 @@
 #include "fileio.h"
 #include "fileutils.h"
 #include "sphinxint.h"
+#include "sphinxjson.h"
 #include "tokenizer/tokenizer.h"
 
 static IndexFileExt_t g_dIndexFilesExts[SPH_EXT_TOTAL] =
@@ -272,10 +273,46 @@ bool IndexFiles_c::CheckHeader ( const char * sType )
 	if ( !rdHeader.Open ( sPath, m_sLastError ) )
 		return false;
 
-	// check magic header
+	// Check the legacy binary magic first. JSON headers do not have that magic;
+	// they are identified by their opening brace below.
 	auto uMagic = rdHeader.GetDword();
-	if ( dBuffer[0] == '{' ) // that is new style json header, no need to check further...
+	if ( dBuffer[0] == '{' ) // new style JSON header
+	{
+		// Do not merely report that a JSON header exists. CheckHeader() also owns
+		// the invariant that GetVersion() returns the version read from disk.
+		// In particular, indextool --apply-killlists passes that value to the
+		// lookup reader. If m_uVersion is left at INDEX_FORMAT_VERSION, an older
+		// lookup can be decoded with the current layout. Version 71 added an
+		// SphOffset_t to the .spt preamble, so making that mistake shifts every
+		// checkpoint and eventually produces invalid row IDs and memory offsets.
+		CSphVector<BYTE> dData;
+		if ( !sphJsonParse ( dData, sPath, m_sLastError ) )
+			return false;
+
+		bson::Bson_c tBson ( dData );
+		if ( tBson.IsEmpty() || !tBson.IsAssoc() )
+		{
+			m_sLastError.SetSprintf ( "invalid JSON index header %s", sPath.cstr() );
+			return false;
+		}
+
+		// Keep the field name and layout-version rules in sync with the full header
+		// readers in sphinx.cpp and indexcheck.cpp. A missing, invalid, or future
+		// version must fail instead of falling back to the running binary's version.
+		// This is only the broad format check; callers may impose a newer minimum.
+		m_uVersion = (DWORD)bson::Int ( tBson.ChildByName ( "index_format_version" ) );
+		if ( m_uVersion<=1 || m_uVersion>INDEX_FORMAT_VERSION )
+		{
+			m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sPath.cstr(), m_uVersion, INDEX_FORMAT_VERSION );
+			return false;
+		}
+
+		// JSON detection currently assumes that '{' is the first byte. If headers
+		// ever permit a BOM or leading whitespace, update this probe together with
+		// the initial read above; otherwise a valid JSON header will be handled as
+		// a legacy binary header.
 		return true;
+	}
 
 	const char* sMsg = CheckFmtMagic ( uMagic );
 	if ( sMsg )

@@ -9739,9 +9739,8 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderLegacy ( const CSphString& sHeade
 		return LOAD_E::GeneralError_e;
 
 	if ( tDictSettings.m_sMorphFingerprint!=pDict->GetMorphDataFingerprint() )
-		sWarning.SetSprintf ( "different lemmatizer dictionaries (table='%s', current='%s')",
-			tDictSettings.m_sMorphFingerprint.cstr(),
-			pDict->GetMorphDataFingerprint().cstr() );
+		sWarning.SetSprintf ( "morphology data fingerprint changed (stored='%s', current='%s'); rebuild or reindex the table",
+			tDictSettings.m_sMorphFingerprint.cstr(), pDict->GetMorphDataFingerprint().cstr() );
 
 	SetDictionary ( pDict );
 
@@ -9879,9 +9878,8 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 		return LOAD_E::GeneralError_e;
 
 	if ( tDictSettings.m_sMorphFingerprint!=pDict->GetMorphDataFingerprint() )
-		sWarning.SetSprintf ( "different lemmatizer dictionaries (table='%s', current='%s')",
-			tDictSettings.m_sMorphFingerprint.cstr(),
-			pDict->GetMorphDataFingerprint().cstr() );
+		sWarning.SetSprintf ( "morphology data fingerprint changed (stored='%s', current='%s'); rebuild or reindex the table",
+			tDictSettings.m_sMorphFingerprint.cstr(), pDict->GetMorphDataFingerprint().cstr() );
 
 	SetDictionary ( pDict );
 

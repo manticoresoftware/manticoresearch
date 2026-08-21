@@ -6,6 +6,9 @@
 * 🆕 Added testing for Grafana versions 13.1 and 13.2.
 * 🆕 Added testing for Logstash version 9.5.
 
+### Bug Fixes
+* 🪲 [Issue #4827](https://github.com/manticoresoftware/manticoresearch/issues/4827) The new `german` charset alias preserves German umlauts and sharp s when used as `charset_table=non_cont,german`. German AOT morphology now treats `ß`, capital `ẞ`, and `ss` as search equivalents using Unicode full case folding while retaining exact-word distinctions. Existing tables that use `lemmatize_de` or `lemmatize_de_all` must be rebuilt; the morphology fingerprint now reports stale indexes.
+
 ## Version 29.0.2
 **Released**: August 14th 2026
 

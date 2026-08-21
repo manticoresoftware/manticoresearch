@@ -189,6 +189,45 @@ index noaot_blend_all
 	blend_mode		= trim_all
 }
 
+source german_source
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre	= set names utf8mb4
+	sql_query		= select id, title from german_table
+}
+
+index german_plain_single
+{
+	source			= german_source
+	path			= <data_path/>/german_plain_single
+	morphology		= lemmatize_de
+	index_exact_words = 1
+	charset_table	= non_cont, german
+}
+
+index german_plain_all : german_plain_single
+{
+	path			= <data_path/>/german_plain_all
+	morphology		= lemmatize_de_all
+}
+
+index german_single
+{
+	type			= rt
+	path			= <data_path/>/german_single
+	rt_field		= title
+	morphology		= lemmatize_de
+	index_exact_words = 1
+	charset_table	= non_cont, german
+}
+
+index german_all : german_single
+{
+	path			= <data_path/>/german_all
+	morphology		= lemmatize_de_all
+}
+
 </config>
 
 <metaindex name='META:rt'>
@@ -206,6 +245,16 @@ index noaot_blend_all
 	<index>testrt2</index>
 	<index>testrt2ruen</index>
 	<index>testrt2red</index>
+</metaindex>
+
+<metaindex name='META:german_plain'>
+	<index>german_plain_single</index>
+	<index>german_plain_all</index>
+</metaindex>
+
+<metaindex name='META:german'>
+	<index>german_single</index>
+	<index>german_all</index>
 </metaindex>
 
 <metaindex name='META:aot'>
@@ -252,6 +301,27 @@ CREATE TABLE blend_table
 </db_insert>
 
 <db_create>
+CREATE TABLE german_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	title VARCHAR(255) CHARACTER SET utf8mb4 NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS german_table</db_drop>
+<db_insert>SET NAMES utf8mb4</db_insert>
+<db_insert>INSERT INTO german_table VALUES
+	( 101, 'Straße' ),
+	( 102, 'Strasse' ),
+	( 103, 'STRAẞE' ),
+	( 104, 'GROß' ),
+	( 105, 'GROSS' ),
+	( 106, 'Maße' ),
+	( 107, 'Masse' ),
+	( 108, 'Fußball' ),
+	( 109, 'Fussball' )
+</db_insert>
+
+<db_create>
 CREATE TABLE lem_stops
 (
 	id INTEGER PRIMARY KEY NOT NULL,
@@ -263,6 +333,51 @@ CREATE TABLE lem_stops
 <db_insert>INSERT INTO lem_stops VALUES ( 1, 11, 'apple and b' )</db_insert>
 
 <queries><sphinxql>
+<!-- issue #4827: German sharp-s and ss are search equivalents, while exact forms stay distinct -->
+INSERT INTO META:german VALUES ( 101, 'Straße' );
+INSERT INTO META:german VALUES ( 102, 'Strasse' );
+INSERT INTO META:german VALUES ( 103, 'STRAẞE' );
+INSERT INTO META:german VALUES ( 104, 'GROß' );
+INSERT INTO META:german VALUES ( 105, 'GROSS' );
+INSERT INTO META:german VALUES ( 106, 'Maße' );
+INSERT INTO META:german VALUES ( 107, 'Masse' );
+INSERT INTO META:german VALUES ( 108, 'Fußball' );
+INSERT INTO META:german VALUES ( 109, 'Fussball' );
+
+CALL KEYWORDS ( 'Straße', 'german_single', 0 );
+CALL KEYWORDS ( 'Strasse', 'german_single', 0 );
+CALL KEYWORDS ( 'STRAẞE', 'german_single', 0 );
+CALL KEYWORDS ( 'Straße', 'german_all', 0 );
+CALL KEYWORDS ( 'Strasse', 'german_all', 0 );
+CALL KEYWORDS ( 'STRAẞE', 'german_all', 0 );
+
+SELECT id FROM german_single WHERE MATCH('Straße');
+SELECT id FROM german_single WHERE MATCH('Strasse');
+SELECT id FROM german_single WHERE MATCH('GROß');
+SELECT id FROM german_single WHERE MATCH('GROSS');
+SELECT id FROM german_single WHERE MATCH('Maße');
+SELECT id FROM german_single WHERE MATCH('Masse');
+SELECT id FROM german_single WHERE MATCH('Fußball');
+SELECT id FROM german_single WHERE MATCH('Fussball');
+SELECT id FROM german_single WHERE MATCH('=straße');
+SELECT id FROM german_single WHERE MATCH('=strasse');
+
+SELECT id FROM german_all WHERE MATCH('Straße');
+SELECT id FROM german_all WHERE MATCH('Strasse');
+SELECT id FROM german_all WHERE MATCH('GROß');
+SELECT id FROM german_all WHERE MATCH('GROSS');
+SELECT id FROM german_all WHERE MATCH('Maße');
+SELECT id FROM german_all WHERE MATCH('Masse');
+SELECT id FROM german_all WHERE MATCH('Fußball');
+SELECT id FROM german_all WHERE MATCH('Fussball');
+SELECT id FROM german_all WHERE MATCH('=straße');
+SELECT id FROM german_all WHERE MATCH('=strasse');
+
+FLUSH RAMCHUNK german_single;
+FLUSH RAMCHUNK german_all;
+SELECT id FROM german_single WHERE MATCH('STRAẞE');
+SELECT id FROM german_all WHERE MATCH('STRAẞE');
+
 INSERT INTO META:rt VALUES ( 1, 'wives and men', 11 );
 INSERT INTO META:rt VALUES ( 2, 'wife and man', 11 );
 INSERT INTO META:rt VALUES ( 3, 'children and women', 11 );
@@ -285,6 +400,29 @@ SELECT * FROM META:all WHERE MATCH('путина knew стали'); SHOW META;
 SELECT * FROM META:all WHERE MATCH('путин стал knows'); SHOW META;
 SELECT * FROM META:all WHERE MATCH('путина markierte'); SHOW META;
 SELECT * FROM META:all WHERE MATCH('knew markierte'); SHOW META;
+
+<!-- the same issue #4827 matrix through plain-table indexing -->
+SELECT id FROM german_plain_single WHERE MATCH('Straße');
+SELECT id FROM german_plain_single WHERE MATCH('Strasse');
+SELECT id FROM german_plain_single WHERE MATCH('GROß');
+SELECT id FROM german_plain_single WHERE MATCH('GROSS');
+SELECT id FROM german_plain_single WHERE MATCH('Maße');
+SELECT id FROM german_plain_single WHERE MATCH('Masse');
+SELECT id FROM german_plain_single WHERE MATCH('Fußball');
+SELECT id FROM german_plain_single WHERE MATCH('Fussball');
+SELECT id FROM german_plain_single WHERE MATCH('=straße');
+SELECT id FROM german_plain_single WHERE MATCH('=strasse');
+
+SELECT id FROM german_plain_all WHERE MATCH('Straße');
+SELECT id FROM german_plain_all WHERE MATCH('Strasse');
+SELECT id FROM german_plain_all WHERE MATCH('GROß');
+SELECT id FROM german_plain_all WHERE MATCH('GROSS');
+SELECT id FROM german_plain_all WHERE MATCH('Maße');
+SELECT id FROM german_plain_all WHERE MATCH('Masse');
+SELECT id FROM german_plain_all WHERE MATCH('Fußball');
+SELECT id FROM german_plain_all WHERE MATCH('Fussball');
+SELECT id FROM german_plain_all WHERE MATCH('=straße');
+SELECT id FROM german_plain_all WHERE MATCH('=strasse');
 
 <!-- regressoin aot lemmas at excerpt -->
 CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'META:aot', 'молоком', 1 as query_mode);

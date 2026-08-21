@@ -38,7 +38,7 @@ Manticore 支持多种语言，大多数语言通过 `charset_table = non_cont`�
 | 法语 | charset_table=non_cont | fr | morphology=libstemmer_fr | |
 | 加利西亚语 | charset_table=non_cont | gl | - | |
 | 加罗语 | 需手动指定charset_table | - | - | |
-| 德语 | charset_table=non_cont | de | morphology=lemmatize_de (单根形式); morphology=lemmatize_de_all (所有根形式); morphology=libstemmer_de | |
+| 德语 | charset_table=non_cont,german | de | morphology=lemmatize_de (单根形式); morphology=lemmatize_de_all (所有根形式); morphology=libstemmer_de | 在应用词形处理前保留德语字母 |
 | 希腊语 | charset_table=non_cont | el | morphology=libstemmer_el | |
 | 希伯来语 | charset_table=non_cont | he | - | |
 | 印地语 | charset_table=non_cont | hi | morphology=libstemmer_hi | |
@@ -88,4 +88,19 @@ Manticore 支持多种语言，大多数语言通过 `charset_table = non_cont`�
 | 越南语 | charset_table=non_cont | - | - | 使用拉丁字母。越南语变音符号（ă, â, ê, ô, ơ, ư, đ 和声调符号）默认会自动映射到其基本拉丁字符，因此无需额外配置，“tiếng”会匹配“tieng” |
 | 约鲁巴语 | charset_table=non_cont | yo | - | |
 | 祖鲁语 | charset_table=non_cont | zu | - |  |
+
+### 德语尖音 s
+
+使用德语词形处理时，请在 `non_cont` 后添加内置的 `german` 字符集别名，使分词器在词形处理之前保留德语元音变音字母以及尖音 s 的两种形式：
+
+```ini
+charset_table = non_cont, german
+```
+
+使用 `lemmatize_de` 和 `lemmatize_de_all` 时，Manticore Search 会在 AOT 词形还原之前对尖音 s 应用 Unicode 完整大小写折叠（`ß` 和 `ẞ` → `ss`）。因此，`Straße`/`Strasse`、`Maße`/`Masse` 和 `Fußball`/`Fussball` 等拼写在搜索中等价。配合上述字符集使用时，`libstemmer_de` 也会折叠这些拼写。
+
+对于普通全文匹配，此折叠会有意消除 `Maße` 与 `Masse` 等词之间的区别。若要保留该区别，请启用 `index_exact_words=1`，并使用 `MATCH('=straße')` 等精确词查询。
+
+升级使用 `lemmatize_de` 或 `lemmatize_de_all` 的现有表后，请重建或重新索引该表。德语 AOT 规范化版本包含在词形指纹中，因此当旧磁盘索引需要重建时，Manticore Search 会发出警告。
+
 <!-- proofread -->

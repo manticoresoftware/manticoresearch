@@ -38,7 +38,7 @@ Manticore поддерживает широкий спектр языков, п�
 | Французский | charset_table=non_cont | fr | morphology=libstemmer_fr | |
 | Галисийский | charset_table=non_cont | gl | - | |
 | Гаро | задать charset_table вручную | - | - | |
-| Немецкий | charset_table=non_cont | de | morphology=lemmatize_de (единственная корневая форма); morphology=lemmatize_de_all (все корневые формы); morphology=libstemmer_de | |
+| Немецкий | charset_table=non_cont,german | de | morphology=lemmatize_de (единственная корневая форма); morphology=lemmatize_de_all (все корневые формы); morphology=libstemmer_de | Сохраняйте немецкие буквы до применения морфологии |
 | Греческий | charset_table=non_cont | el | morphology=libstemmer_el | |
 | Иврит | charset_table=non_cont | he | - | |
 | Хинди | charset_table=non_cont | hi | morphology=libstemmer_hi | |
@@ -88,4 +88,19 @@ Manticore поддерживает широкий спектр языков, п�
 | Вьетнамский | charset_table=non_cont | - | - | Использует латинский алфавит. Вьетнамские диакритические знаки (ă, â, ê, ô, ơ, ư, đ и знаки тонов) автоматически преобразуются в их базовые латинские символы по умолчанию, поэтому "tiếng" соответствует "tieng" без дополнительной конфигурации. |
 | Йоруба | charset_table=non_cont | yo | - | |
 | Зулу | charset_table=non_cont | zu | - |  |
+
+### Немецкая буква ß
+
+При использовании немецкой морфологии добавьте встроенный алиас `german` после `non_cont`, чтобы токенизатор сохранял немецкие умлауты и обе формы буквы ß до применения морфологии:
+
+```ini
+charset_table = non_cont, german
+```
+
+С `lemmatize_de` и `lemmatize_de_all` Manticore Search выполняет полное Unicode-приведение регистра для ß (`ß` и `ẞ` → `ss`) перед AOT-лемматизацией. Поэтому варианты `Straße`/`Strasse`, `Maße`/`Masse` и `Fußball`/`Fussball` становятся эквивалентными при поиске. `libstemmer_de` также сводит эти варианты при использовании набора символов выше.
+
+Такое преобразование намеренно устраняет различие, например, между `Maße` и `Masse` при обычном полнотекстовом поиске. Чтобы сохранить различие, включите `index_exact_words=1` и используйте запросы точного слова, например `MATCH('=straße')`.
+
+После обновления существующей таблицы с `lemmatize_de` или `lemmatize_de_all` пересоберите или переиндексируйте её. Версия нормализации немецкой AOT-морфологии включена в fingerprint морфологии, поэтому Manticore Search предупреждает, если старый дисковый индекс нужно пересобрать.
+
 <!-- proofread -->

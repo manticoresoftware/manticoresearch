@@ -38,7 +38,7 @@ U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451
 charset_table = 0..9, english, _
 
 # you can override character mappings by redefining them, e.g. for case insensitive search with German umlauts you can use:
-charset_table = non_cont, U+00E4, U+00C4->U+00E4, U+00F6, U+00D6->U+00F6, U+00FC, U+00DC->U+00FC, U+00DF, U+1E9E->U+00DF
+charset_table = non_cont, german
 ```
 
 <!-- example charset_table -->
@@ -171,6 +171,7 @@ Besides definitions of characters and mappings, there are several built-in alias
 * `cjk`
 * `cont`
 * `english`
+* `german`
 * `japanese`
 * `korean`
 * `non_cont` (`non_cjk`)

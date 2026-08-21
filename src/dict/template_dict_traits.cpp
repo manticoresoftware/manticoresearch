@@ -184,6 +184,17 @@ int TemplateDictTraits_c::InitMorph ( const char* szMorph, int iLength, CSphStri
 		return AddMorph ( (int)EMORPH::STEM_RU_UTF8 );
 	}
 
+	auto AddAotFingerprint = [this] ( int iLang )
+	{
+		auto [sDict, uCRC] = sphAotDictinfo ( iLang );
+		if ( m_sMorphFingerprint.IsEmpty() )
+			m_sMorphFingerprint.SetSprintf ( "%s:%08x", sDict.cstr(), uCRC );
+		else
+			m_sMorphFingerprint.SetSprintf ( "%s;%s:%08x", m_sMorphFingerprint.cstr(), sDict.cstr(), uCRC );
+		if ( iLang == AOT_DE )
+			m_sMorphFingerprint.SetSprintf ( "%s;de-sharp-s:1", m_sMorphFingerprint.cstr() );
+	};
+
 	for ( int j = 0; j < AOT_LENGTH; ++j )
 	{
 		char buf[20];
@@ -234,10 +245,7 @@ int TemplateDictTraits_c::InitMorph ( const char* szMorph, int iLength, CSphStri
 
 			if ( !m_dMorph.Contains ( iMorph ) )
 			{
-				if ( m_sMorphFingerprint.IsEmpty() )
-					m_sMorphFingerprint.SetSprintf ( "%s:%08x", sphAotDictinfo ( j ).first.cstr(), sphAotDictinfo ( j ).second );
-				else
-					m_sMorphFingerprint.SetSprintf ( "%s;%s:%08x", m_sMorphFingerprint.cstr(), sphAotDictinfo ( j ).first.cstr(), sphAotDictinfo ( j ).second );
+				AddAotFingerprint ( j );
 				m_dMorph.Add ( iMorph );
 			}
 			return ST_OK;
@@ -264,7 +272,10 @@ int TemplateDictTraits_c::InitMorph ( const char* szMorph, int iLength, CSphStri
 			if ( j == AOT_UK && !m_tLemmatizer )
 				m_tLemmatizer = CreateLemmatizer ( j );
 
-			return AddMorph ( (int)EMORPH::AOTLEMMER_BASE_ALL + j );
+			int iMorph = (int)EMORPH::AOTLEMMER_BASE_ALL + j;
+			if ( j == AOT_DE && !m_dMorph.Contains ( iMorph ) )
+				AddAotFingerprint ( j );
+			return AddMorph ( iMorph );
 		}
 	}
 

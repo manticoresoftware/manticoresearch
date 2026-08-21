@@ -15,6 +15,7 @@
 #include <cstring>
 
 #include "fileio.h"
+#include "indexfiles.h"
 #include "json/cJSON.h"
 #include "sphinx.h"
 #include "sphinxjson.h"
@@ -60,6 +61,28 @@ TEST_F ( JsonFileParseTest, ValidJson )
 	CSphVector<BYTE> dData;
 	CSphString sError;
 	EXPECT_EQ ( sphJsonParse ( dData, m_sFile, sError ), JsonFileParse_e::OK );
+}
+
+
+TEST ( IndexFiles, ReadsVersionFromJsonHeader )
+{
+	CSphString sBase;
+	sBase.SetSprintf ( "__indexfiles_%d_json_header", GetOsProcessId() );
+	CSphString sHeader;
+	sHeader.SetSprintf ( "%s.sph", sBase.cstr() );
+
+	CSphString sError;
+	CSphWriterNonThrottled tWriter;
+	ASSERT_TRUE ( tWriter.OpenFile ( sHeader, sError ) ) << sError.cstr();
+	tWriter.PutBytes ( R"({"index_format_version":67})", strlen ( R"({"index_format_version":67})" ) );
+	tWriter.CloseFile();
+	ASSERT_FALSE ( tWriter.IsError() );
+
+	IndexFiles_c tFiles ( sBase );
+	ASSERT_TRUE ( tFiles.CheckHeader() ) << tFiles.ErrorMsg();
+	EXPECT_EQ ( tFiles.GetVersion(), 67U );
+
+	unlink ( sHeader.cstr() );
 }
 
 

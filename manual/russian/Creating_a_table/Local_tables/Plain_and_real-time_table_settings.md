@@ -45,6 +45,8 @@ table <table name> {
   [rt_attr_float = <another float field name>]
   [rt_attr_float_vector = <float vector field name>]
   [rt_attr_float_vector = <another float vector field name>]
+  [rt_attr_float_vector_array = <float vector array field name>]
+  [rt_attr_float_vector_array = <another float vector array field name>]
   [rt_attr_bool = <boolean field name>]
   [rt_attr_bool = <another boolean field name>]
   [rt_attr_string = <string field name>]
@@ -538,6 +540,30 @@ knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2",
 
 Для получения более подробной информации о векторном поиске KNN и автоматических эмбеддингах см. [документацию KNN](../../Searching/KNN.md).
 
+#### rt_attr_float_vector_array
+
+```ini
+rt_attr_float_vector_array = chunk_vectors
+```
+
+Объявляет атрибут, который хранит несколько векторов float на документ, для документов, которые естественным образом представлены более чем одним embedding: фрагментами статьи, фотографиями товара, ключевыми кадрами видео.
+
+Значение: имя поля. Допускается несколько записей.
+
+KNN настраивается точно так же, как для [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector), с тем же блоком `knn`:
+
+```ini
+rt_attr_float_vector_array = chunk_vectors
+knn = {"attrs":[{"name":"chunk_vectors","type":"hnsw","dims":768,"hnsw_similarity":"COSINE","hnsw_m":16,"hnsw_ef_construction":200}]}
+```
+
+Применяются два отличия:
+
+- `dims` **обязателен**, и каждый вектор в каждой строке должен содержать ровно столько элементов.
+- `model_name` и `from` **не** поддерживаются — auto embeddings создают по одному вектору на документ, поэтому для этого типа они не подходят. Векторы нужно задавать явно.
+
+Все векторы индексируются вместе, а KNN-поиск возвращает каждый документ один раз, с оценкой по ближайшему вектору. См. [Массив float-векторов](../../Creating_a_table/Data_types.md#Float-vector-array) и [Несколько векторов на документ](../../Searching/KNN.md#Multiple-vectors-per-document).
+
 #### rt_attr_bool
 
 ```ini
@@ -702,6 +728,7 @@ CREATE TABLE [IF NOT EXISTS] name ( <field name> <field data type> [data type op
 | [bigint](../../Creating_a_table/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bigint)	| большое целое число	 |   |
 | [float](../../Creating_a_table/Data_types.md#Float) | [rt_attr_float](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float)   | число с плавающей запятой  |   |
 | [float_vector](../../Creating_a_table/Data_types.md#Float-vector) | [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) | вектор значений с плавающей запятой  |   |
+| [float_vector_array](../../Creating_a_table/Data_types.md#Float-vector-array) | [rt_attr_float_vector_array](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector_array) | несколько векторов float на документ  |   |
 | [multi](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi)   | мульти-целое число | mva |
 | [multi64](../../Creating_a_table/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi_64) | мульти-большое целое число  | mva64 |
 | [bool](../../Creating_a_table/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bool) | логический |   |

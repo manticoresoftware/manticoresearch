@@ -57,7 +57,8 @@ bool CSphTransformation::TransformCommonSubTerm () noexcept
 			// Load cost of the first node from the group
 			// of the common nodes. The cost of nodes from
 			// TransformableNodes are the same.
-			SetCosts ( dX[0], m_dRelatedNodes );
+			if ( !SetCosts ( dX[0], m_dRelatedNodes ) )
+				return false;
 			const int iCostCommonSubTermNode = dX[0]->m_iUser;
 			const int iCostRelatedNodes = m_dRelatedNodes.sum_of<int> ( [] ( auto & tNode ) { return tNode->m_iUser; } );
 

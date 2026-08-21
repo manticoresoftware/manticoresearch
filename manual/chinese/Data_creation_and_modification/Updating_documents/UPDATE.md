@@ -118,7 +118,7 @@ res = await indexApi.update({"table" : "products", "id" : 1, "doc" : {"price":10
 
 <!-- response javascript -->
 ```javascript
-{"table":"products","_id":1,"result":"updated"}
+{"table":"products","id":1,"result":"updated"}
 ```
 <!-- intro -->
 ##### java:
@@ -202,7 +202,7 @@ res = await indexApi.update({ index: "test", id: 1, doc: { cat: 10 } });
 ```typescript
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"result":"updated"
 }
 ```
@@ -222,7 +222,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 ```go
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"result":"updated"
 }
 ```
@@ -361,7 +361,7 @@ res = await indexApi.update({"table" : "products", "id" : 1, "doc" : {
 
 <!-- response javascript -->
 ```javascript
-{"table":"products","_id":1,"result":"updated"}
+{"table":"products","id":1,"result":"updated"}
 ```
 <!-- intro -->
 ##### java:
@@ -455,7 +455,7 @@ res = await indexApi.update({ index: "test", id: 1, doc: { name: "Doc 21", cat: 
 ```go
 {
   "table":"test",
-  "_id":1,
+  "id":1,
   "result":"updated"
 }
 ```
@@ -475,7 +475,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 ```go
 {
   "table":"test",
-  "_id":1,
+  "id":1,
   "result":"updated"
 }
 ```
@@ -540,7 +540,7 @@ POST /update
 ```JSON
 {
    "table":"products",
-   "_id":100,
+   "id":100,
    "created":true,
    "result":"created",
    "status":201
@@ -623,7 +623,7 @@ res = await indexApi.update({"table" : "products", "id" : 1, "doc" : {
 
 <!-- response javascript -->
 ```javascript
-{"table":"products","_id":1,"result":"updated"}
+{"table":"products","id":1,"result":"updated"}
 ```
 
 <!-- intro -->
@@ -708,7 +708,7 @@ res = await indexApi.update({"table" : "test", "id" : 1, "doc" : { "meta.tags[0]
 
 <!-- response TypeScript -->
 ```typescript
-{"table":"test","_id":1,"result":"updated"}
+{"table":"test","id":1,"result":"updated"}
 ```
 
 <!-- intro -->
@@ -726,7 +726,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 ```go
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"result":"updated"
 }
 ```
@@ -794,7 +794,7 @@ POST /update
 ```JSON
 {
   "table":"products",
-  "_id":1,
+  "id":1,
   "created":true,
   "result":"created",
   "status":201
@@ -891,8 +891,8 @@ res = await indexApi.update({"table" : "products", "id" : 100, "doc" : {"meta" :
 
 <!-- response javascript -->
 ```javascript
-{"table":"products","_id":100,"created":true,"result":"created"}
-{"table":"products","_id":100,"result":"updated"}
+{"table":"products","id":100,"created":true,"result":"created"}
+{"table":"products","id":100,"result":"updated"}
 
 ```
 
@@ -1050,14 +1050,14 @@ res = await indexApi.update({ index: 'test', id: 1, doc: { meta: { tags:['one','
 ```typescript
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"created":true,
 	"result":"created"
 }
 
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"result":"updated"
 }
 ```
@@ -1083,14 +1083,14 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 ```go
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"created":true,
 	"result":"created"
 }
 
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"result":"updated"
 }
 ```
@@ -1280,7 +1280,7 @@ POST /update
 
 {
 	"table":"products",
-	"_id":1,
+	"id":1,
 	"doc":
 	{
 		"tags1": []
@@ -1351,7 +1351,7 @@ indexApi.update({"table" : "products", "id" : 1, "doc" : {"tags1": []}})
 
 <!-- response javascript -->
 ```javascript
-{"table":"products","_id":1,"result":"updated"}
+{"table":"products","id":1,"result":"updated"}
 ```
 <!-- intro -->
 ##### java:
@@ -1436,7 +1436,7 @@ res = await indexApi.update({ index: 'test', id: 1, doc: { cat: 10 } });
 ```typescript
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"result":"updated"
 }
 ```
@@ -1456,7 +1456,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 ```go
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"result":"updated"
 }
 ```
@@ -1518,7 +1518,7 @@ POST /update
 ``` JSON
 {
   "table": "test",
-  "_id": 1,
+  "id": 1,
   "result": "updated"
 }
 ```
@@ -1615,7 +1615,7 @@ POST /bulk
          "update":
          {
             "table":"products",
-            "_id":1,
+            "id":1,
             "result":"updated"
          }
       },
@@ -1623,7 +1623,7 @@ POST /bulk
          "update":
          {
             "table":"products",
-            "_id":2,
+            "id":2,
             "result":"updated"
          }
       }

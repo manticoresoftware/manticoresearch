@@ -90,6 +90,12 @@ bool CSphColumnInfo::IsStored() const
 }
 
 
+bool CSphColumnInfo::IsUuidLinkedDocid() const
+{
+	return !!(m_uAttrFlags & CSphColumnInfo::ATTR_UUID_LINK);
+}
+
+
 CSphString sphDumpAttr ( const CSphColumnInfo & tAttr )
 {
 	CSphString sRes;

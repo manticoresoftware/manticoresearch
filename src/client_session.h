@@ -17,6 +17,7 @@
 #include "queryprofile.h"
 #include "searchdaemon.h"
 #include "searchdsql.h"
+#include "searchd_shard.h"
 #include "sphinxpq.h"
 
 constexpr const char* szManticore = "Manticore";
@@ -42,6 +43,7 @@ public:
 	CSphString m_sError;
 	CSphQueryResultMeta m_tLastMeta;
 	CSphSessionAccum m_tAcc;
+	ShardTxnState_t m_tShardTxn;
 	CPqResult m_tPercolateMeta;
 	SqlStmt_e m_eLastStmt { STMT_DUMMY };
 	bool m_bFederatedUser = false;
@@ -53,12 +55,16 @@ public:
 	bool m_bAutoCommit = true;
 	bool m_bInTransaction = false;
 	CSphVector<int64_t> m_dLastIds;
+	CSphVector<CSphString> m_dLastIdStrings;
 	QueryProfile_c m_tProfile;
 	QueryProfile_c m_tLastProfile;
 	bool m_bOptimizeById = true;
 	bool m_bDeprecatedEOF = false;
+	bool m_bShardPhysicalUpdate = false;
 	StrVec_t m_dLockedTables;
 	PreparedStatements m_dPreparedStatements;
+	bool m_bAuthAllowBuddy = false;
+	bool m_bAuthErrorSkipBuddy = false;
 
 public:
 	NONCOPYMOVABLE ( ClientSession_c );

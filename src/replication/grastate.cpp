@@ -61,7 +61,7 @@ bool CheckClusterNew ( const CSphString& sPath )
 		if ( dKeyVal[0] != sSafePattern )
 			return true;
 
-		assert ( dKeyVal.GetLength() > 2 );
+		assert ( dKeyVal.GetLength() >= 2 );
 		iVal = atoi ( dKeyVal[1].cstr() );
 
 		return false;

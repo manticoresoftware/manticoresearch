@@ -3,14 +3,14 @@
 Компиляция Manticore Search из исходных кодов позволяет настраивать сборку, например, отключать определенные функции или добавлять патчи для тестирования. Например, вы можете захотеть скомпилировать из исходных кодов и отключить встроенную ICU, чтобы использовать другую версию, установленную в вашей системе, которую можно обновлять независимо от Manticore. Это также полезно, если вы заинтересованы в участии в проекте Manticore Search.
 
 ## Сборка с использованием Docker CI
-Для подготовки [официальных релизных и разрабатываемых пакетов](https://repo.manticoresearch.com/) мы используем Docker и специальный образ для сборки. Этот образ включает основные инструменты и предназначен для использования с внешними системными корнями (sysroots), поэтому один контейнер может собирать пакеты для всех операционных систем. Вы можете собрать образ, используя [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/cross/external_toolchain/Dockerfile) и [README](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/README.md), или использовать образ из [Docker Hub](https://hub.docker.com/r/manticoresearch/external_toolchain/tags). Это самый простой способ создания бинарных файлов для любой поддерживаемой операционной системы и архитектуры. При запуске контейнера также необходимо указать следующие переменные окружения:
+Для подготовки [официальных релизных и development-пакетов](https://repo.manticoresearch.com/) мы используем Docker и специальный образ для сборки. Этот образ включает в себя необходимый инструментарий и предназначен для работы с внешними sysroot, поэтому один контейнер может собирать пакеты для всех операционных систем. Вы можете собрать образ, используя [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/main/dist/build_dockers/cross/external_toolchain/Dockerfile) и [README](https://github.com/manticoresoftware/manticoresearch/blob/main/dist/build_dockers/README.md), или использовать образ из [Docker Hub](https://hub.docker.com/r/manticoresearch/external_toolchain/tags). Это самый простой способ создания бинарных файлов для любой поддерживаемой операционной системы и архитектуры. Вам также потребуется указать следующие переменные окружения при запуске контейнера:
 
 * `DISTR`: целевая платформа: `bionic`, `focal`, `jammy`, `buster`, `bullseye`, `bookworm`, `rhel8`, `rhel9`, `rhel10`, `macos`, `windows`, `freebsd13`
 * `arch`: архитектура: `x86_64`, `x64` (для Windows), `aarch64`, `arm64` (для Macos)
-* `SYSROOT_URL`: URL архива системных корней. Вы можете использовать https://repo.manticoresearch.com/repository/sysroots, если вы не собираете системные корни самостоятельно (инструкции можно найти [здесь](https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers/cross/sysroots)).
+* `SYSROOT_URL`: URL-адрес архивов системных корней. Вы можете использовать https://repo.manticoresearch.com/repository/sysroots, если не собираете sysroot самостоятельно (инструкции можно найти [здесь](https://github.com/manticoresoftware/manticoresearch/tree/main/dist/build_dockers/cross/sysroots)).
 * Используйте файлы рабочих процессов CI в качестве справочника, чтобы найти другие переменные окружения, которые могут вам понадобиться:
-  - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/pack_publish.yml
-  - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/build_template.yml
+  - https://github.com/manticoresoftware/manticoresearch/blob/main/.github/workflows/pack_publish.yml
+  - https://github.com/manticoresoftware/manticoresearch/blob/main/.github/workflows/build_template.yml
 
 Чтобы найти возможные значения для `DISTR` и `arch`, вы можете использовать каталог https://repo.manticoresearch.com/repository/sysroots/roots_with_zstd/ в качестве справочника, так как он включает системные корни для всех поддерживаемых комбинаций.
 
@@ -131,22 +131,24 @@ ls ~/rpmbuild/RPMS/*/manticore*
 #### Из git
 
 Исходный код Manticore [размещен на GitHub](https://github.com/manticoresoftware/manticoresearch).
-Чтобы получить исходный код, клонируйте репозиторий, а затем проверьте нужную ветку или тег. Ветка `master` представляет основную ветку разработки. При выпуске создается версионный тег, например `3.6.0`, и начинается новая ветка для текущего релиза, в данном случае `manticore-3.6.0`. Голова версионной ветки после всех изменений используется как исходник для сборки всех бинарных релизов. Например, чтобы взять исходники версии 3.6.0, вы можете выполнить:
+Чтобы получить исходный код, клонируйте репозиторий, а затем переключитесь на нужную ветку или тег. Ветка `main` представляет основную ветку разработки. При выпуске релиза создаётся версионный тег, например `3.6.0`, и начинается новая ветка для текущего релиза, в данном случае `manticore-3.6.0`. Голова версионной ветки после всех изменений используется в качестве источника для сборки всех бинарных релизов. Например, чтобы взять исходники версии 3.6.0, вы можете выполнить:
 
 ```bash
-git clone https://github.com/manticoresoftware/manticoresearch.git
+git clone --recurse-submodules https://github.com/manticoresoftware/manticoresearch.git
 cd manticoresearch
 git checkout manticore-3.6.0
+git submodule update --init --recursive
 ```
 
 #### Из архива
 
-Вы можете скачать нужный код с GitHub, используя кнопку "Download ZIP". Подходят как форматы .zip, так и .tar.gz.
+Git — рекомендуемый способ получить исходники, потому что Manticore зависит от подмодуля `mcl`. Архивы .zip и .tar.gz, созданные GitHub, не содержат содержимое подмодулей, поэтому настройка из такого архива завершится ошибкой, если только вы не заполните каталог `mcl` соответствующей ревизией [MCL](https://github.com/manticoresoftware/columnar).
 
 ```bash
 wget -c https://github.com/manticoresoftware/manticoresearch/archive/refs/tags/3.6.0.tar.gz
 tar -zxf 3.6.0.tar.gz
 cd manticoresearch-3.6.0
+# Populate ./mcl with the matching columnar/MCL revision before running cmake.
 ```
 
 ### Конфигурация
@@ -155,10 +157,20 @@ Manticore использует CMake. Предполагая, что вы нах
 
 ```bash
 mkdir build && cd build
-cmake ..
+cmake -DMCL_LOCAL_RUNTIME=OFF ..
 ```
 
 CMake проанализирует доступные функции и настроит сборку в соответствии с ними. По умолчанию все функции считаются включенными, если они доступны. Скрипт также скачивает и собирает некоторые внешние библиотеки, предполагая, что вы хотите их использовать. Неявно вы получаете поддержку максимального количества функций.
+
+Дерево исходников MCL берется из git-подмодуля `mcl`. Команда выше использует заголовки MCL API из этого подмодуля, но не собирает локальные модули выполнения MCL. Если подмодуль отсутствует, CMake остановится с ошибкой и предложит выполнить `git submodule update --init --recursive mcl`.
+
+Чтобы также собрать локальные модули выполнения MCL из подмодуля, настройте сборку так:
+
+```bash
+cmake -DMCL_LOCAL_RUNTIME=ON ..
+```
+
+Это собирает `columnar_lib`, `secondary_index`, `knn_lib` и библиотеку embeddings вместе с Manticore. В Windows эти цели видны в сгенерированном решении Visual Studio. Этот режим требует Rust и Cargo для библиотеки embeddings, если только вы не укажете уже существующую библиотеку embeddings с `-DMANTICORE_KNN_EMBEDDINGS_LIB=/path/to/lib_manticore_knn_embeddings.so` (или `.dll` в Windows).
 
 Вы также можете явно настроить сборку с помощью флагов и опций. Чтобы включить функцию `FOO`, добавьте `-DFOO=1` к вызову CMake.
 Чтобы отключить её, используйте `-DFOO=0`. Если не указано явно, включение функции, которая недоступна (например, `WITH_GALERA` в сборке для MS Windows), приведет к ошибке конфигурации. Отключение функции, помимо исключения её из сборки, также отключает её проверку в системе и отключает загрузку/сборку любых связанных внешних библиотек.
@@ -198,6 +210,10 @@ CMake проанализирует доступные функции и наст
 - **FULL_SHARE_DIR** - путь по умолчанию, где хранятся все ресурсы. Он может быть переопределён переменной окружения `FULL_SHARE_DIR` перед запуском любого инструмента, использующего файлы из этой папки. Это важный путь, так как там по умолчанию ожидается найти множество вещей. Сюда входят предопределённые таблицы кодировок, стоп-слова, модули manticore и файлы данных icu, все помещённые в эту папку. Скрипт конфигурации обычно определяет этот путь как что-то вроде `/usr/share/manticore` или `/usr/local/share/manticore`.
 - **DISTR_BUILD** - ярлык для опций создания пакетов. Это строковое значение с названием целевой платформы. Оно может использоваться вместо ручной настройки всех опций. В Debian и Redhat Linux значение по умолчанию может быть определено путём лёгкой инспекции и установлено как обобщённое 'Debian' или 'RHEL'. В противном случае значение не определяется.
 - **PACK** - ещё более удобный ярлык. Он читает переменную окружения `DISTR`, присваивает её параметру **DISTR_BUILD** и затем работает как обычно. Это очень полезно при сборке в подготовленных системах сборки, таких как контейнеры Docker, где переменная `DISTR` задаётся на уровне системы и отражает целевую систему, для которой предназначен контейнер.
+- **MCL_LOCAL_RUNTIME** - управляет тем, будут ли при локальной немакетной сборке также собираться модули выполнения MCL из подмодуля `mcl`. Установите `OFF` для базовой сборки демона, описанной выше, или `ON`, если нужно также собирать локальные модули выполнения MCL.
+- **MCL_RUNTIME_ARTIFACT_DIR** - путь к каталогу с заранее собранными модулями выполнения MCL. Это в основном используется в CI-тестах, которые собирают или восстанавливают артефакты MCL с точным SHA, а затем запускают против них тесты демона.
+- **BUILD_EMBEDDINGS_LOCALLY** - управляет тем, будет ли библиотека embeddings MCL собираться локально. Для локальных сборок runtime по умолчанию имеет значение `ON`, если только `MANTICORE_KNN_EMBEDDINGS_LIB` уже не задана.
+- **MANTICORE_KNN_EMBEDDINGS_LIB** - путь к существующей библиотеке embeddings. Используйте его, когда хотите переиспользовать заранее собранную библиотеку `lib_manticore_knn_embeddings` вместо того, чтобы собирать ее через Cargo.
 - **CMAKE_INSTALL_PREFIX** (path) - путь, куда предполагается установить Manticore. Сборка не выполняет установку, но подготавливает правила установки, которые выполняются при запуске команды `cmake --install` или при создании пакета и последующей его установке. Префикс может быть изменён в любой момент, даже во время установки, вызовом
   `cmake --install . --prefix /path/to/installation`. Однако на этапе конфигурирования эта переменная используется для инициализации значений по умолчанию для `LOCALDATADIR` и `FULL_SHARE_DIR`. Например, установка её в `/my/custom` на этапе конфигурирования
   приведёт к тому, что `LOCALDATADIR` будет жёстко задан как `/my/custom/var/lib/manticore/data`, а `FULL_SHARE_DIR` как

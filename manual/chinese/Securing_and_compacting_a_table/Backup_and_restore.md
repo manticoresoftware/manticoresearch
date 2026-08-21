@@ -351,7 +351,7 @@ Manticore config
 
 ## 使用 mysqldump 备份和恢复
 
-Manticore 支持来自 MySQL 的 `mysqldump` 工具（最高到 9.7 版本）和来自 MariaDB 的 `mariadb-dump` 工具（最高到 12.2 版本）。
+Manticore 支持 MySQL 的 `mysqldump` 工具直至 26.7，以及 MariaDB 的 `mariadb-dump` 工具直至 12.3。
 
 <!-- example mysqldump_backup -->
 
@@ -387,6 +387,10 @@ mariadb-dump -etc --replace -h0 -P9306 -ucluster manticore --skip-lock-tables cl
 
 <!-- end -->
 
+要将已更改的全文设置应用到现有文档，请参见[在更改 FT 设置后重新索引现有文档](../Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings)。
+
+当将转储直接通过管道输入 `mysql` 以重新索引同一张表时，必须使用 `--skip-lock-tables`。如果是导出到文件并在 `mysqldump` 退出后再回放，则不需要。
+
 <!-- example mysqldump_restore -->
 ### 恢复
 
@@ -409,10 +413,10 @@ mariadb -h0 -P9306 < manticore_backup.sql
 
 以下是一些可以与 mysqldump 一起使用以定制备份的更多设置：
 
-- `-t` 跳过 `drop`/`create` 表命令。对更改分词设置后进行全文重建索引非常有用。
+- `-t` 会跳过 `drop`/`create` 表命令。在更改全文设置后重新索引表时使用它。
 - `--no-data`：此设置将忽略表数据，只备份表结构。
 - `--ignore-table=[database_name].[table_name]`：此选项允许在备份时跳过特定表。注意数据库名称必须为 `manticore`。
-- `--replace` 使用 `replace` 替代 `insert`。对更改分词设置后全文重建索引非常有用。
+- `--replace` 用于执行 `replace` 而不是 `insert`。在更改全文设置后重新索引表时使用它。
 - `--net-buffer-length=16M` 将批处理大小调整为最多 16 兆字节，以加快恢复速度。
 - `-e` 用于批处理文档。加速恢复。
 - `-c` 保留列名称。在更改表架构（例如字段顺序改变）后重建索引时很有用。

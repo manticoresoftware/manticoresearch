@@ -22,6 +22,8 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- example create_buddy_plugin -->
 
+> 已弃用：此内容已弃用，并将在未来版本中移除。
+
 Buddy 插件可以扩展 Manticore Search 的功能，启用某些原生不支持的查询。要了解更多关于创建 Buddy 插件的内容，建议阅读[这篇文章](https://manticoresearch.com/blog/manticoresearch-buddy-pluggable-design/)。
 
 要创建 Buddy 插件，请运行以下 SQL 命令：

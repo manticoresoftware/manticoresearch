@@ -20,7 +20,7 @@ class ExceptionsTrie_c;
 class CSphTokenizerBase: public ISphTokenizer
 {
 public:
-	CSphTokenizerBase();
+	explicit CSphTokenizerBase ( int iTokenBytes = SPH_LEGACY_TOKEN_BYTES );
 
 	bool SetCaseFolding ( const char* sConfig, CSphString& sError ) final;
 	bool LoadSynonyms ( const char* sFilename, const CSphEmbeddedFiles* pFiles, StrVec_t& dWarnings, CSphString& sError ) final;
@@ -46,6 +46,9 @@ public:
 	}
 	void SetBufferPtr ( const char* sNewPtr ) final;
 	uint64_t GetSettingsFNV() const noexcept final;
+	int GetMaxTokenBytes () const noexcept final { return m_iTokenBytes; }
+	int GetOversizedTokenCount () const noexcept final { return m_iOversizedTokenCount; }
+	int ResetOversizedTokenCount () noexcept final { int iSkipped = m_iOversizedTokenCount; m_iOversizedTokenCount = 0; return iSkipped; }
 
 	bool SetBlendChars ( const char* sConfig, CSphString& sError ) final;
 	bool WasTokenMultiformDestination ( bool&, int& ) const noexcept final
@@ -64,6 +67,15 @@ protected:
 	bool BlendAdjust ( const BYTE* pPosition );
 	int CodepointArbitrationI ( int iCodepoint );
 	int CodepointArbitrationQ ( int iCodepoint, bool bWasEscaped, BYTE uNextByte );
+	BYTE * Accum() noexcept { return m_dAccum.Begin(); }
+	const BYTE * Accum() const noexcept { return m_dAccum.Begin(); }
+	BYTE * AccumBlend() noexcept { return m_dAccumBlend.Begin(); }
+	const BYTE * AccumBlend() const noexcept { return m_dAccumBlend.Begin(); }
+	int AccumCapacity() const noexcept { return m_iTokenBytes+1; }
+	int AccumBufferCapacity() const noexcept { return m_dAccum.GetLength(); }
+	int AccumBytes() const noexcept { return (int)( m_pAccum - Accum() ); }
+	void ResetAccum() noexcept { m_iAccum = 0; m_pAccum = Accum(); }
+	bool ConsumeLastTokenOverLimit() noexcept;
 
 protected:
 	const BYTE* m_pBuffer = nullptr;	 ///< my buffer
@@ -72,11 +84,17 @@ protected:
 	const BYTE* m_pTokenStart = nullptr; ///< last token start point
 	const BYTE* m_pTokenEnd = nullptr;	 ///< last token end point
 
-	BYTE m_sAccum[3 * SPH_MAX_WORD_LEN + 3]; ///< folded token accumulator
-	BYTE* m_pAccum = nullptr;				 ///< current accumulator position
-	int m_iAccum = 0;						 ///< boundary token size
+	CSphFixedVector<BYTE> m_dAccum;		///< folded token accumulator
+	CSphFixedVector<BYTE> m_dAccumBlend;	///< blend-acc, an accumulator copy for additional blended variants
+	BYTE* m_pAccum = nullptr;				///< current accumulator position
+	int m_iAccum = 0;						///< boundary token size, codepoints
+	int m_iTokenBytes = SPH_LEGACY_TOKEN_BYTES;
+	int m_iTokenCodepoints = SPH_MAX_WORD_LEN;
+	bool m_bSkipOverLimit = false;
+	bool m_bAccumOverLimit = false;
+	bool m_bLastTokenOverLimit = false;
+	int m_iOversizedTokenCount = 0;
 
-	BYTE m_sAccumBlend[3 * SPH_MAX_WORD_LEN + 3]; ///< blend-acc, an accumulator copy for additional blended variants
 	int m_iBlendNormalStart = 0;				  ///< points to first normal char in the accumulators (might be NULL)
 	int m_iBlendNormalEnd = 0;					  ///< points just past (!) last normal char in the accumulators (might be NULL)
 

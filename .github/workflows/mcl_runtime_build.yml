@@ -1,0 +1,277 @@
+name: MCL runtime build
+
+on:
+  workflow_call:
+    inputs:
+      enabled:
+        required: false
+        type: boolean
+        default: true
+      mcl_full_sha:
+        required: true
+        type: string
+      source_ref:
+        required: false
+        type: string
+        default: ""
+      artifact_name:
+        required: true
+        type: string
+      cache_key:
+        required: true
+        type: string
+      distr:
+        required: false
+        type: string
+        default: jammy
+      arch:
+        required: false
+        type: string
+        default: x86_64
+      CTEST_CMAKE_GENERATOR:
+        required: false
+        type: string
+        default: Ninja
+      CTEST_CONFIGURATION_TYPE:
+        required: false
+        type: string
+        default: RelWithDebInfo
+      boost_url_key:
+        required: false
+        type: string
+        default: boost_nov22
+      sysroot_url_key:
+        required: false
+        type: string
+        default: roots_nov22
+      embeddings_artifact:
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  build:
+    if: ${{ inputs.enabled }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: manticoresearch/external_toolchain:vcpkg331_20260310
+      env:
+        CACHEB: "../cache"
+        DIAGNOSTIC: 1
+        PACK_ICUDATA: 0
+        NO_BUILD: 1
+        NO_TESTS: 1
+        DISTR: ${{ inputs.distr }}
+        boost: ${{ inputs.boost_url_key }}
+        sysroot: ${{ inputs.sysroot_url_key }}
+        arch: ${{ inputs.arch }}
+        CTEST_CMAKE_GENERATOR: ${{ inputs.CTEST_CMAKE_GENERATOR }}
+        CTEST_CONFIGURATION_TYPE: ${{ inputs.CTEST_CONFIGURATION_TYPE }}
+        SYSROOT_URL: https://repo.manticoresearch.com/repository/sysroots
+    steps:
+      - name: Checkout daemon repository with MCL submodule
+        uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
+          ref: ${{ inputs.source_ref != '' && inputs.source_ref || github.sha }}
+          set-safe-directory: true
+          submodules: recursive
+
+      - name: Verify MCL submodule SHA
+        run: |
+          set -euo pipefail
+          actual_sha="$(git -C mcl rev-parse HEAD)"
+          if [[ "$actual_sha" != "${{ inputs.mcl_full_sha }}" ]]; then
+            echo "Expected MCL submodule SHA ${{ inputs.mcl_full_sha }}, got $actual_sha" >&2
+            exit 1
+          fi
+
+      - name: Initialization
+        run: |
+          bash /sysroot/root/entry_point.sh
+          git config --global --add safe.directory /__w/manticoresearch/manticoresearch
+          git config --global core.abbrev 9
+
+      - name: Restore exact MCL runtime cache
+        id: runtime_cache
+        uses: actions/cache/restore@v5
+        with:
+          path: .mcl-runtime-cache
+          key: ${{ inputs.cache_key }}
+
+      - name: Validate restored MCL runtime cache
+        id: restored
+        run: |
+          set -euo pipefail
+          ext=so
+          if [[ "${{ inputs.distr }}" == "windows" ]]; then
+            ext=dll
+          fi
+          ok=true
+          for lib in \
+            "lib_manticore_columnar.${ext}" \
+            "lib_manticore_secondary.${ext}" \
+            "lib_manticore_knn.${ext}" \
+            "lib_manticore_knn_embeddings.${ext}"
+          do
+            if [[ ! -f ".mcl-runtime-cache/${lib}" ]]; then
+              ok=false
+            fi
+          done
+          if [[ "${{ inputs.distr }}" == "windows" && ! -f ".mcl-runtime-cache/libiomp5md.dll" ]]; then
+            ok=false
+          fi
+          echo "ok=${ok}" >> "$GITHUB_OUTPUT"
+          if [[ "${ok}" == "true" ]]; then
+            mkdir -p mcl-runtime
+            cp .mcl-runtime-cache/* mcl-runtime/
+            find mcl-runtime -maxdepth 1 -type f | sort
+          else
+            echo "MCL runtime cache miss or incomplete for ${{ inputs.cache_key }}"
+            find .mcl-runtime-cache -maxdepth 2 -type f | sort || true
+            if [[ "${{ steps.runtime_cache.outputs['cache-hit'] }}" == "true" ]]; then
+              echo "Exact MCL runtime cache was restored but is incomplete; refusing to overwrite it" >&2
+              exit 1
+            fi
+          fi
+
+      - name: Download embeddings artifact
+        if: ${{ steps.restored.outputs.ok != 'true' && inputs.embeddings_artifact != '' }}
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ inputs.embeddings_artifact }}
+          path: ./embeddings-lib
+
+      - name: Prepare prebuilt embeddings
+        if: ${{ steps.restored.outputs.ok != 'true' && inputs.embeddings_artifact != '' }}
+        run: |
+          set -euo pipefail
+          if [[ -f ./embeddings-lib/artifact.tar ]]; then
+            tar -xf ./embeddings-lib/artifact.tar -C ./embeddings-lib
+          fi
+          mkdir -p prebuilt-embeddings
+          mapfile -t libs < <(find ./embeddings-lib -type f \( -name 'lib_manticore_knn_embeddings.*' -o -name 'manticore_knn_embeddings.dll' \) | sort)
+          if [[ "${#libs[@]}" -eq 0 ]]; then
+            echo "No embeddings library found in artifact ${{ inputs.embeddings_artifact }}" >&2
+            find ./embeddings-lib -maxdepth 5 -type f | sort || true
+            exit 1
+          fi
+          src="${libs[0]}"
+          case "$src" in
+            *.dll) dst="prebuilt-embeddings/lib_manticore_knn_embeddings.dll" ;;
+            *.dylib) dst="prebuilt-embeddings/lib_manticore_knn_embeddings.dylib" ;;
+            *) dst="prebuilt-embeddings/lib_manticore_knn_embeddings.so" ;;
+          esac
+          cp "$src" "$dst"
+          src_dir="$(dirname "$src")"
+          for pdb in \
+            "${src_dir}/$(basename "${src%.*}").pdb" \
+            "${src_dir}/manticore_knn_embeddings.pdb" \
+            "${src_dir}/lib_manticore_knn_embeddings.pdb"
+          do
+            if [[ -f "$pdb" ]]; then
+              cp "$pdb" prebuilt-embeddings/lib_manticore_knn_embeddings.pdb
+              break
+            fi
+          done
+          if [[ "${{ inputs.distr }}" == "windows" ]]; then
+            mapfile -t runtime_deps < <(find ./embeddings-lib -type f -iname 'libiomp5md.dll' | sort)
+            if [[ "${#runtime_deps[@]}" -eq 0 ]]; then
+              echo "No Windows embeddings runtime dependency libiomp5md.dll found in artifact ${{ inputs.embeddings_artifact }}" >&2
+              find ./embeddings-lib -maxdepth 5 -type f | sort || true
+              exit 1
+            fi
+            cp "${runtime_deps[0]}" prebuilt-embeddings/libiomp5md.dll
+          fi
+          echo "MANTICORE_KNN_EMBEDDINGS_LIB=$(pwd)/$dst" >> "$GITHUB_ENV"
+          echo "BUILD_EMBEDDINGS_LOCALLY=OFF" >> "$GITHUB_ENV"
+
+      - name: Ensure local Cargo for Linux embeddings fallback
+        if: ${{ steps.restored.outputs.ok != 'true' && inputs.embeddings_artifact == '' && inputs.distr != 'windows' }}
+        run: |
+          set -euo pipefail
+          if command -v cargo >/dev/null 2>&1; then
+            exit 0
+          fi
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get -o Acquire::Retries=3 update || apt-get -o Acquire::Retries=3 update
+          apt-get -o Acquire::Retries=3 -y install cargo rustc
+
+      - name: Build MCL runtime modules
+        if: ${{ steps.restored.outputs.ok != 'true' }}
+        run: |
+          set -euo pipefail
+          export MCL_LOCAL_RUNTIME=ON
+          export NO_BUILD=1
+          export NO_TESTS=1
+          ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
+          cmake --build build --config "${CTEST_CONFIGURATION_TYPE}" --target columnar_lib secondary_index knn_lib
+
+      - name: Collect MCL runtime modules
+        if: ${{ steps.restored.outputs.ok != 'true' }}
+        run: |
+          set -euo pipefail
+          rm -rf mcl-runtime .mcl-runtime-cache
+          mkdir -p mcl-runtime .mcl-runtime-cache
+          ext=so
+          if [[ "${{ inputs.distr }}" == "windows" ]]; then
+            ext=dll
+          fi
+          find build -type f \( \
+            -name "lib_manticore_columnar*.${ext}" -o \
+            -name "lib_manticore_secondary*.${ext}" -o \
+            -name "lib_manticore_knn*.${ext}" \
+          \) -exec cp {} mcl-runtime/ \;
+          if [[ -n "${MANTICORE_KNN_EMBEDDINGS_LIB:-}" ]]; then
+            cp "${MANTICORE_KNN_EMBEDDINGS_LIB}" "mcl-runtime/lib_manticore_knn_embeddings.${ext}"
+          fi
+          if [[ "${{ inputs.distr }}" == "windows" ]]; then
+            find build -type f \( \
+              -name "lib_manticore_columnar*.pdb" -o \
+              -name "lib_manticore_secondary*.pdb" -o \
+              -name "lib_manticore_knn*.pdb" -o \
+              -name "manticore_knn_embeddings.pdb" \
+            \) -exec cp {} mcl-runtime/ \;
+            if [[ -f prebuilt-embeddings/lib_manticore_knn_embeddings.pdb ]]; then
+              cp prebuilt-embeddings/lib_manticore_knn_embeddings.pdb mcl-runtime/
+            fi
+            if [[ -f prebuilt-embeddings/libiomp5md.dll ]]; then
+              cp prebuilt-embeddings/libiomp5md.dll mcl-runtime/
+            fi
+          fi
+          for lib in \
+            "lib_manticore_columnar.${ext}" \
+            "lib_manticore_secondary.${ext}" \
+            "lib_manticore_knn.${ext}" \
+            "lib_manticore_knn_embeddings.${ext}"
+          do
+            if [[ ! -f "mcl-runtime/${lib}" ]]; then
+              echo "Missing collected MCL runtime library: ${lib}" >&2
+              find build -type f \( -name '*.so' -o -name '*.dll' \) | sort || true
+              exit 1
+            fi
+          done
+          if [[ "${{ inputs.distr }}" == "windows" && ! -f "mcl-runtime/libiomp5md.dll" ]]; then
+            echo "Missing collected Windows embeddings runtime dependency: libiomp5md.dll" >&2
+            find . -type f -iname 'libiomp5md.dll' | sort || true
+            exit 1
+          fi
+          cp mcl-runtime/* .mcl-runtime-cache/
+          find mcl-runtime -maxdepth 1 -type f | sort
+
+      - name: Save exact MCL runtime cache
+        if: ${{ steps.restored.outputs.ok != 'true' }}
+        uses: actions/cache/save@v5
+        with:
+          path: .mcl-runtime-cache
+          key: ${{ inputs.cache_key }}
+
+      - name: Upload MCL runtime artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: mcl-runtime

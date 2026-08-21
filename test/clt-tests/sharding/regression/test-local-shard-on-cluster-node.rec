@@ -1,0 +1,30 @@
+––– comment –––
+Regression: FAIL_017 — attempting to create a LOCAL sharded table on a
+node that is already part of a replication cluster (one that owns the
+sharding metadata tables) must be rejected with a clear hint, because
+the unprefixed CREATE would otherwise drop its sharding_table row.
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:seed(id bigint, body text) shards='2' rf='2';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "create table local_on_cluster(id bigint, body text) shards='2' rf='1';"
+––– output –––
+ERROR 1064 (42000) at line 1: Local sharded tables cannot be created on a node that is part of a replication cluster ('c'). Use CREATE TABLE c:local_on_cluster instead.
+––– input –––
+mysql -h0 -P1306 -e "show tables like 'local_on_cluster';"
+––– output –––

@@ -105,8 +105,9 @@ searchd
 	drop table t3;
 
 	<!-- Multiple KNN searches in one query -->
+	<!-- Keep the vec2 query slightly off-axis to avoid equal-distance KNN ties in RRF rank windows. -->
 	create table t4 (title text, vec1 float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='L2', vec2 float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='L2');
-	insert into t4 (id, title, vec1, vec2) values (1, 'machine learning basics', (0.1, 0.1, 0.1, 0.1), (1.0, 0.0, 0.0, 0.0));
+	insert into t4 (id, title, vec1, vec2) values (1, 'machine learning basics', (0.1, 0.1, 0.1, 0.1), (1.0, 0.01, 0.02, 0.03));
 	insert into t4 (id, title, vec1, vec2) values (2, 'deep learning for machine vision', (0.15, 0.12, 0.08, 0.11), (0.0, 1.0, 0.0, 0.0));
 	insert into t4 (id, title, vec1, vec2) values (3, 'machine learning algorithms', (0.2, 0.15, 0.12, 0.09), (0.0, 0.0, 1.0, 0.0));
 	insert into t4 (id, title, vec1, vec2) values (4, 'cooking recipes italian', (0.11, 0.09, 0.13, 0.1), (0.0, 0.0, 0.0, 1.0));
@@ -114,24 +115,24 @@ searchd
 	insert into t4 (id, title, vec1, vec2) values (6, 'machine learning production', (6.0, 6.0, 6.0, 6.0), (0.9, 0.1, 0.0, 0.0));
 	flush ramchunk t4;
 
-	select id, hybrid_score() from t4 where match('machine learning') and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) and knn(vec2, 5, (1.0, 0.0, 0.0, 0.0)) option fusion_method='rrf';
-	select id, hybrid_score() from t4 where match('machine learning') and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) and knn(vec2, 5, (1.0, 0.0, 0.0, 0.0)) option fusion_method='rrf', rank_constant=10;
-	select id, hybrid_score() from t4 where knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) and knn(vec2, 5, (1.0, 0.0, 0.0, 0.0)) option fusion_method='rrf';
+	select id, hybrid_score() from t4 where match('machine learning') and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) and knn(vec2, 5, (1.0, 0.01, 0.02, 0.03)) option fusion_method='rrf';
+	select id, hybrid_score() from t4 where match('machine learning') and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) and knn(vec2, 5, (1.0, 0.01, 0.02, 0.03)) option fusion_method='rrf', rank_constant=10;
+	select id, hybrid_score() from t4 where knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) and knn(vec2, 5, (1.0, 0.01, 0.02, 0.03)) option fusion_method='rrf';
 
 	<!-- WHERE-item aliases + fusion_weights -->
-	select id, hybrid_score() from t4 where match('machine learning') as text and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) as dense1 and knn(vec2, 5, (1.0, 0.0, 0.0, 0.0)) as dense2 option fusion_method='rrf', fusion_weights=(text=0.7, dense1=0.2, dense2=0.1);
+	select id, hybrid_score() from t4 where match('machine learning') as text and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) as dense1 and knn(vec2, 5, (1.0, 0.01, 0.02, 0.03)) as dense2 option fusion_method='rrf', fusion_weights=(text=0.7, dense1=0.2, dense2=0.1);
 
 	<!-- Error: no default aliases in SQL -->
-	select id, hybrid_score() from t4 where match('machine learning') and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) as dense1 and knn(vec2, 5, (1.0, 0.0, 0.0, 0.0)) as dense2 option fusion_method='rrf', fusion_weights=(query=0.7, dense1=0.2, dense2=0.1);
+	select id, hybrid_score() from t4 where match('machine learning') and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) as dense1 and knn(vec2, 5, (1.0, 0.01, 0.02, 0.03)) as dense2 option fusion_method='rrf', fusion_weights=(query=0.7, dense1=0.2, dense2=0.1);
 
 	<!-- Error: explicit AS 'text' but fusion_weights uses 'query' -->
-	select id, hybrid_score() from t4 where match('machine learning') as text and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) as dense1 and knn(vec2, 5, (1.0, 0.0, 0.0, 0.0)) as dense2 option fusion_method='rrf', fusion_weights=(query=0.7, dense1=0.2, dense2=0.1);
+	select id, hybrid_score() from t4 where match('machine learning') as text and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) as dense1 and knn(vec2, 5, (1.0, 0.01, 0.02, 0.03)) as dense2 option fusion_method='rrf', fusion_weights=(query=0.7, dense1=0.2, dense2=0.1);
 
 	<!-- Error: implicit alias (no AS on match, refers to attr name for KNN) -->
-	select id, hybrid_score() from t4 where match('machine learning') and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) and knn(vec2, 5, (1.0, 0.0, 0.0, 0.0)) option fusion_method='rrf', fusion_weights=(vec1=0.2, vec2=0.1);
+	select id, hybrid_score() from t4 where match('machine learning') and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) and knn(vec2, 5, (1.0, 0.01, 0.02, 0.03)) option fusion_method='rrf', fusion_weights=(vec1=0.2, vec2=0.1);
 
 	<!-- Partial weights with explicit aliases (only specify some, rest default to 1.0) -->
-	select id, hybrid_score() from t4 where match('machine learning') as text and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) as dense1 and knn(vec2, 5, (1.0, 0.0, 0.0, 0.0)) as dense2 option fusion_method='rrf', fusion_weights=(text=2.0);
+	select id, hybrid_score() from t4 where match('machine learning') as text and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) as dense1 and knn(vec2, 5, (1.0, 0.01, 0.02, 0.03)) as dense2 option fusion_method='rrf', fusion_weights=(text=2.0);
 
 	<!-- Unknown alias in fusion_weights (should error) -->
 	select id, hybrid_score() from t4 where match('machine learning') and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) option fusion_method='rrf', fusion_weights=(nonexistent=0.5);
@@ -340,7 +341,7 @@ searchd
 	"index": "t4",
 	"knn": [
 		{ "field": "vec1", "query_vector": [0.1, 0.1, 0.1, 0.1], "k": 5 },
-		{ "field": "vec2", "query_vector": [1.0, 0.0, 0.0, 0.0], "k": 5 }
+		{ "field": "vec2", "query_vector": [1.0, 0.01, 0.02, 0.03], "k": 5 }
 	],
 	"query": { "match": { "title": "machine learning" } },
 	"options": { "fusion_method": "rrf" }
@@ -353,7 +354,7 @@ searchd
 	"index": "t4",
 	"knn": [
 		{ "field": "vec1", "query_vector": [0.1, 0.1, 0.1, 0.1], "k": 5 },
-		{ "field": "vec2", "query_vector": [1.0, 0.0, 0.0, 0.0], "k": 5 }
+		{ "field": "vec2", "query_vector": [1.0, 0.01, 0.02, 0.03], "k": 5 }
 	],
 	"query": { "match": { "title": "machine learning" } },
 	"options": { "fusion_method": "rrf", "rank_constant": 10 }
@@ -366,7 +367,7 @@ searchd
 	"index": "t4",
 	"knn": [
 		{ "field": "vec1", "query_vector": [0.1, 0.1, 0.1, 0.1], "k": 5 },
-		{ "field": "vec2", "query_vector": [1.0, 0.0, 0.0, 0.0], "k": 5 }
+		{ "field": "vec2", "query_vector": [1.0, 0.01, 0.02, 0.03], "k": 5 }
 	],
 	"options": { "fusion_method": "rrf" }
 }
@@ -378,7 +379,7 @@ searchd
 	"index": "t4",
 	"knn": [
 		{ "field": "vec1", "query_vector": [0.1, 0.1, 0.1, 0.1], "k": 5 },
-		{ "field": "vec2", "query_vector": [1.0, 0.0, 0.0, 0.0], "k": 5 }
+		{ "field": "vec2", "query_vector": [1.0, 0.01, 0.02, 0.03], "k": 5 }
 	]
 }
 </query>
@@ -389,7 +390,7 @@ searchd
 	"index": "t4",
 	"knn": [
 		{ "field": "vec1", "query_vector": [0.1, 0.1, 0.1, 0.1], "k": 5, "name": "dense1" },
-		{ "field": "vec2", "query_vector": [1.0, 0.0, 0.0, 0.0], "k": 5, "name": "dense2" }
+		{ "field": "vec2", "query_vector": [1.0, 0.01, 0.02, 0.03], "k": 5, "name": "dense2" }
 	],
 	"query": { "match": { "title": "machine learning" } },
 	"options": { "fusion_method": "rrf", "fusion_weights": { "dense1": 0.2, "dense2": 0.1 } }
@@ -402,7 +403,7 @@ searchd
 	"index": "t4",
 	"knn": [
 		{ "field": "vec1", "query_vector": [0.1, 0.1, 0.1, 0.1], "k": 5, "name": "dense1" },
-		{ "field": "vec2", "query_vector": [1.0, 0.0, 0.0, 0.0], "k": 5, "name": "dense2" }
+		{ "field": "vec2", "query_vector": [1.0, 0.01, 0.02, 0.03], "k": 5, "name": "dense2" }
 	],
 	"query": { "match": { "title": "machine learning" } },
 	"options": { "fusion_method": "rrf", "fusion_weights": { "query": 0.7, "dense1": 0.2, "dense2": 0.1 } }
@@ -415,7 +416,7 @@ searchd
 	"index": "t4",
 	"knn": [
 		{ "field": "vec1", "query_vector": [0.1, 0.1, 0.1, 0.1], "k": 5, "name": "query" },
-		{ "field": "vec2", "query_vector": [1.0, 0.0, 0.0, 0.0], "k": 5, "name": "dense2" }
+		{ "field": "vec2", "query_vector": [1.0, 0.01, 0.02, 0.03], "k": 5, "name": "dense2" }
 	],
 	"query": { "match": { "title": "machine learning" } },
 	"options": { "fusion_method": "rrf", "fusion_weights": { "query": 0.7, "dense2": 0.1 } }
@@ -428,7 +429,7 @@ searchd
 	"index": "t4",
 	"knn": [
 		{ "field": "vec1", "query_vector": [0.1, 0.1, 0.1, 0.1], "k": 5 },
-		{ "field": "vec2", "query_vector": [1.0, 0.0, 0.0, 0.0], "k": 5 }
+		{ "field": "vec2", "query_vector": [1.0, 0.01, 0.02, 0.03], "k": 5 }
 	],
 	"query": { "match": { "title": "machine learning" } },
 	"options": { "fusion_method": "rrf", "fusion_weights": { "vec1": 0.2, "vec2": 0.1 } }
@@ -441,7 +442,7 @@ searchd
 	"index": "t4",
 	"knn": [
 		{ "field": "vec1", "query_vector": [0.1, 0.1, 0.1, 0.1], "k": 5 },
-		{ "field": "vec2", "query_vector": [1.0, 0.0, 0.0, 0.0], "k": 5 }
+		{ "field": "vec2", "query_vector": [1.0, 0.01, 0.02, 0.03], "k": 5 }
 	],
 	"query": { "match": { "title": "machine learning" } },
 	"options": { "fusion_method": "rrf", "fusion_weights": { "nonexistent": 0.5 } }

@@ -419,7 +419,7 @@ void BaseGroupSorter_c::AggrUngroup ( CSphMatch & tMatch )
 
 void BaseGroupSorter_c::AggrDiscard ( CSphMatch & tMatch )
 {
-	if ( !m_bHasDiscardableAggregates )
+	if ( !m_bHasDiscardableAggregates || !tMatch.m_pDynamic )
 		return;
 
 	for ( auto * pAggregate : this->m_dAggregates )

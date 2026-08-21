@@ -10,10 +10,10 @@
 
 <!-- request Config -->
 ```ini
-table index_dist {
+table table_dist {
   type  = distributed
-  local = index1
-  local = index2
+  local = tbl1
+  local = tbl2
   ...
  }
 ```
@@ -23,7 +23,7 @@ table index_dist {
 
 <!-- request SQL -->
 ```sql
-CREATE TABLE local_dist type='distributed' local='index1' local='index2';
+CREATE TABLE local_dist type='distributed' local='tbl1' local='tbl2';
 ```
 
 <!-- request SQL -->
@@ -42,15 +42,15 @@ $params = [
         'settings' => [
             'type' => 'distributed',
             'local' => [
-                'index1',
-                'index2'
+                'tbl1',
+                'tbl2'
             ]
         ]
     ],
     'table' => 'products'
 ];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+$table = new \Manticoresearch\Table($client);
+$table->create($params);
 ```
 <!-- intro -->
 ##### Python：
@@ -58,7 +58,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('CREATE TABLE local_dist type=\'distributed\' local=\'index1\' local=\'index2\'')
+utilsApi.sql('CREATE TABLE local_dist type=\'distributed\' local=\'tbl1\' local=\'tbl2\'')
 ```
 
 <!-- intro -->
@@ -76,21 +76,21 @@ await utilsApi.sql('CREATE TABLE local_dist type=\'distributed\' local=\'index1\
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('CREATE TABLE local_dist type=\'distributed\' local=\'index1\' local=\'index2\'');
+res = await utilsApi.sql('CREATE TABLE local_dist type=\'distributed\' local=\'tbl1\' local=\'tbl2\'');
 ```
 
 <!-- intro -->
 ##### Java：
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE local_dist type='distributed' local='index1' local='index2'");
+utilsApi.sql("CREATE TABLE local_dist type='distributed' local='tbl1' local='tbl2'");
 ```
 
 <!-- intro -->
 ##### C#：
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE local_dist type='distributed' local='index1' local='index2'");
+utilsApi.Sql("CREATE TABLE local_dist type='distributed' local='tbl1' local='tbl2'");
 ```
 
 <!-- intro -->

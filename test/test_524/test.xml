@@ -1,0 +1,289 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>float_vector_array knn index</name>
+
+<requires>
+	<knn/>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	create table t (title text, v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+	desc t;
+	show create table t;
+	drop table t;
+
+	<!-- non-KNN array needs no options at all -->
+	create table t (title text, v float_vector_array);
+	desc t;
+	show create table t;
+	drop table t;
+
+	<!-- auto-embeddings produce one vector per doc, so they are meaningless here and are rejected -->
+	create table t (title text, v float_vector_array knn_type='hnsw' model_name='sentence-transformers/all-MiniLM-L6-v2');
+	<!-- knn_type on a non-vector column stays rejected, now naming both vector types -->
+	create table t (title text, v int knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+
+	<!-- ============ input validation: nested only, dims>=1, equal widths ============ -->
+	create table t (title text, v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+
+	<!-- accepted: several vectors, one vector, empty, and omitted -->
+	insert into t values (1, 'multi', [[1,0,0,0],[0,1,0,0]]);
+	insert into t values (2, 'single', [[0,0,1,0]]);
+	insert into t values (3, 'empty', []);
+	insert into t (id,title) values (4, 'omitted');
+	select * from t order by id asc;
+
+	<!-- rejected: flat input -->
+	insert into t values (5, 'flat', (1,0,0,0));
+	<!-- rejected: dims==0 is reserved for the empty array, so [[]] must not collapse onto [] -->
+	insert into t values (5, 'inner empty', [[]]);
+	insert into t values (5, 'inner empty 2', [[],[]]);
+	insert into t values (5, 'ragged', [[1,2,3,4],[5,6,7]]);
+	<!-- rejected: width must match knn_dims -->
+	insert into t values (5, 'wrong dims', [[1,2],[3,4]]);
+	<!-- [] and [[]] must NOT behave the same -->
+	select id, title from t order by id asc;
+
+	<!-- integer literals must coerce to float exactly like the scalar type -->
+	insert into t values (5, 'ints', [[1,0,0,0],[0,1,0,0]]);
+	select id, v from t where id=5;
+
+	<!-- ============ search: one row per doc, at its CLOSEST vector ============ -->
+	<!-- doc 1 owns a vector equal to the anchor and one far from it: it must appear ONCE, at the min -->
+	select id, knn_dist() from t where knn(v,10,(1,0,0,0)) order by id asc;
+	select id, knn_dist() from t where knn(v,10,(1,0,0,0),{rescore=1}) order by id asc;
+	flush ramchunk t;
+	select id, knn_dist() from t where knn(v,10,(1,0,0,0)) order by id asc;
+	select id, knn_dist() from t where knn(v,10,(1,0,0,0),{rescore=1}) order by id asc;
+
+	<!-- k here counts DOCUMENTS rather than vectors, so each doc appears at most once -->
+	select id from t where knn(v,1,(1,0,0,0));
+	select id from t where knn(v,2,(1,0,0,0)) order by id asc;
+	select id, count(*) c from t where knn(v,10,(1,0,0,0)) group by id order by id asc;
+
+	<!-- a wrong-length anchor is still rejected against knn_dims -->
+	select id from t where knn(v,10,(1,0,0));
+
+	<!-- Filtered KNN. Docs 3 and 4 hold no vectors, so they are excluded here even though the filter alone would admit them: a doc with no vector is near nothing -->
+	select id, knn_dist() from t where id!=1 and knn(v,10,(1,0,0,0)) order by id asc;
+	<!-- an explicit distance predicate is then redundant, not load-bearing: same rows either way -->
+	select id, knn_dist() from t where id!=1 and @knn_dist &lt; 1e38 and knn(v,10,(1,0,0,0)) order by id asc;
+	select id, knn_dist() d from t where id!=1 and d &lt; 1e38 and knn(v,10,(1,0,0,0)) order by id asc;
+	<!-- and it must work inside a filter tree too -->
+	select id, knn_dist() d from t where (id=2 or id=3 or id=4) and d &lt; 1e38 and knn(v,10,(1,0,0,0)) order by id asc;
+	drop table t;
+
+	<!-- ============ empty index: every row empty, plus a zero-row table ============ -->
+	create table t (title text, v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2', tag int);
+	select id from t where knn(v,10,(1,0,0,0));
+	select id from t where tag=1 and knn(v,10,(1,0,0,0));
+	insert into t values (1, 'a', [], 1);
+	insert into t values (2, 'b', [], 2);
+	select id from t where knn(v,10,(1,0,0,0));
+	<!-- a filter is what reaches the planner's graph-size heuristics; an unfiltered knn returns before them -->
+	select id from t where tag=1 and knn(v,10,(1,0,0,0));
+	select id from t where tag&lt;9 and knn(v,10,(1,0,0,0));
+	flush ramchunk t;
+	<!-- ...and again now that the zero-vector graph has been through save/load -->
+	select id from t where knn(v,10,(1,0,0,0));
+	select id from t where tag=1 and knn(v,10,(1,0,0,0));
+	select id from t where tag&lt;9 and knn(v,10,(1,0,0,0));
+	select * from t order by id asc;
+	drop table t;
+
+	<!-- ============ partially empty index: a filter must not resurrect vector-less docs ============ -->
+	<!-- docs 2 and 4 own no vectors, so no knn query may return them -->
+	create table t (v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2', tag int);
+	insert into t values (1, [[1,0,0,0]], 1), (2, [], 1), (3, [[0,1,0,0]], 1), (4, [], 1), (5, [[0,0,1,0]], 1);
+	select id from t where knn(v,10,(1,0,0,0)) order by id asc;
+	select id from t where tag=1 and knn(v,10,(1,0,0,0)) order by id asc;
+	flush ramchunk t;
+	<!-- ...and the disk chunk must answer both exactly as the ram chunk did -->
+	select id from t where knn(v,10,(1,0,0,0)) order by id asc;
+	select id from t where tag=1 and knn(v,10,(1,0,0,0)) order by id asc;
+	drop table t;
+
+	<!-- ============ real coordinates: fractional and negative ============ -->
+	create table t (v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+	<!-- doc 1 slot 1 equals the anchor exactly and slot 2 is far, so min-over-slots must pick slot 1 -->
+	insert into t values (1, [[0.1,-0.2,0.3,-0.4],[0.9,0.8,-0.7,0.6]]);
+	insert into t values (2, [[-0.5,0.5,-0.5,0.5]]);
+	insert into t values (3, [[0.11,-0.21,0.31,-0.41]]);
+	<!-- integer and fractional literals mixed inside one vector, and across vectors of one value -->
+	insert into t values (4, [[1,-0.5,0,0.25],[-1,2,-3,4]]);
+	select id, v from t order by id asc;
+	select id, knn_dist() d from t where knn(v,10,(0.1,-0.2,0.3,-0.4)) order by d asc;
+	flush ramchunk t;
+	select id, v from t order by id asc;
+	select id, knn_dist() d from t where knn(v,10,(0.1,-0.2,0.3,-0.4)) order by d asc;
+	drop table t;
+
+	<!-- ============ cosine must normalize per vector, not over the whole row ============ -->
+	<!-- the array row holds the same two vectors that the scalar table holds as separate rows, so matching distances prove each slot was normalized on its own -->
+	<!-- signed fractional values, where a whole-row normalization would be most visible -->
+	create table sc2 (v float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='cosine');
+	insert into sc2 values (1, (0.1,-0.2,0.3,-0.4)), (2, (-0.5,0.5,-0.5,0.5));
+	create table ar2 (v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='cosine');
+	insert into ar2 values (1, [[0.1,-0.2,0.3,-0.4]]), (2, [[-0.5,0.5,-0.5,0.5]]);
+	select id, knn_dist() d from sc2 where knn(v,5,(0.2,-0.1,0.4,-0.3)) order by id asc;
+	select id, knn_dist() d from ar2 where knn(v,5,(0.2,-0.1,0.4,-0.3)) order by id asc;
+	<!-- and one array row holding BOTH vectors: each slot must normalize on its own, so its distance
+	     must equal the better of the two scalar rows above -->
+	insert into ar2 values (3, [[0.1,-0.2,0.3,-0.4],[-0.5,0.5,-0.5,0.5]]);
+	select id, knn_dist() d from ar2 where knn(v,5,(0.2,-0.1,0.4,-0.3)) order by id asc;
+	drop table sc2;
+	drop table ar2;
+
+	create table sc (v float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='cosine');
+	insert into sc values (1, (1,2,3,4)), (2, (4,3,2,1));
+	create table ar (v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='cosine');
+	insert into ar values (1, [[1,2,3,4]]), (2, [[4,3,2,1]]);
+	select id, knn_dist() from sc where knn(v,5,(1,0,0,0)) order by id asc;
+	select id, knn_dist() from ar where knn(v,5,(1,0,0,0)) order by id asc;
+	flush ramchunk sc;
+	flush ramchunk ar;
+	select id, knn_dist() from sc where knn(v,5,(1,0,0,0)) order by id asc;
+	select id, knn_dist() from ar where knn(v,5,(1,0,0,0)) order by id asc;
+	drop table sc;
+	drop table ar;
+
+	<!-- ============ UPDATE / REPLACE ============ -->
+	<!-- KNN-indexed: UPDATE rejected, REPLACE allowed -->
+	create table t (v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+	insert into t values (1, [[1,0,0,0]]);
+	update t set v=[[0,1,0,0]] where id=1;
+	replace into t values (1, [[0,1,0,0],[0,0,1,0]]);
+	select id, v from t;
+	select id, knn_dist() from t where knn(v,5,(0,1,0,0));
+	drop table t;
+
+	<!-- non-KNN: UPDATE works, and every spelling of "clear" is accepted -->
+	create table t (v float_vector_array);
+	insert into t values (1, [[1,2],[3,4]]), (2, [[5,6]]);
+	select id, v from t order by id asc;
+	update t set v=[[7,8],[9,10]] where id=1;
+	select id, v from t order by id asc;
+	<!-- [] clears; so does the legacy () spelling, which types the update as a plain mva -->
+	update t set v=[] where id=1;
+	update t set v=() where id=2;
+	select id, v from t order by id asc;
+	<!-- flat and nested-into-wrong-type are rejected on UPDATE too -->
+	update t set v=(1,2,3,4) where id=1;
+	select id, v from t order by id asc;
+	drop table t;
+
+	<!-- a nested literal aimed at a non-array column is a clear type error, not a silent flatten -->
+	create table t (v float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2', m multi);
+	insert into t values (1, (1,0,0,0), (1,2,3));
+	update t set m=[[1,2],[3,4]] where id=1;
+	insert into t values (2, [[1,0,0,0]], (1,2,3));
+	drop table t;
+
+	<!-- ============ non-KNN arrays are self-describing: widths may differ per row ============ -->
+	create table t (v float_vector_array);
+	insert into t values (1, [[1,2]]), (2, [[1,2,3],[4,5,6]]), (3, []);
+	select id, v from t order by id asc;
+	flush ramchunk t;
+	select id, v from t order by id asc;
+	drop table t;
+
+	<!-- ============ output surfaces must all nest, and never leak the dims header ============ -->
+	<!-- for a dims=4 two-vector row every surface must show exactly 8 floats -->
+	create table t (v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+	insert into t values (1, [[1,2,3,4],[5,6,7,8]]), (2, []);
+	select id, v from t order by id asc;
+	select id, to_string(v) from t order by id asc;
+	<!-- the sorter/streamed path formats independently of the normal attribute switch -->
+	select id, v from t order by id desc;
+	flush ramchunk t;
+	select id, v from t order by id asc;
+	select id, to_string(v) from t order by id asc;
+
+	<!-- distributed: exercises the agent wire format and the aggregation merge -->
+	create table d type='distributed' agent='<agent0_address/>:t';
+	select id, v from d order by id asc;
+	select id, knn_dist() from d where knn(v,5,(1,2,3,4)) order by id asc;
+	drop table d;
+	drop table t;
+
+	<!-- ============ two knn attrs, one scalar and one array, in one .spknn ============ -->
+	<!-- the array's vector->rowid map must not bleed into the next index's parse, in either order -->
+	create table t (a float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2', b float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+	insert into t values (1, (1,0,0,0), [[0,1,0,0],[0,0,1,0]]);
+	insert into t values (2, (0,1,0,0), [[1,0,0,0]]);
+	flush ramchunk t;
+	select id, knn_dist() from t where knn(a,5,(1,0,0,0)) order by id asc;
+	select id, knn_dist() from t where knn(b,5,(1,0,0,0)) order by id asc;
+	drop table t;
+
+	create table t (b float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2', a float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+	insert into t values (1, [[0,1,0,0],[0,0,1,0]], (1,0,0,0));
+	insert into t values (2, [[1,0,0,0]], (0,1,0,0));
+	flush ramchunk t;
+	select id, knn_dist() from t where knn(a,5,(1,0,0,0)) order by id asc;
+	select id, knn_dist() from t where knn(b,5,(1,0,0,0)) order by id asc;
+	drop table t;
+
+	<!-- ============ quantized + all-empty ============ -->
+	create table t (v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' quantization='1bit', tag int);
+	insert into t values (1, [], 1), (2, [], 2);
+	flush ramchunk t;
+	select id from t where knn(v,5,(1,0,0,0));
+	select id from t where tag=1 and knn(v,5,(1,0,0,0));
+	insert into t values (3, [[1,0,0,0],[0,1,0,0]], 3);
+	flush ramchunk t;
+	select id, knn_dist() from t where knn(v,5,(1,0,0,0));
+	drop table t;
+
+	<!-- ============ filtered search: all three hnsw code paths ============ -->
+	create table t (v float_vector_array knn_type='hnsw' knn_dims='2' hnsw_similarity='l2', tag int);
+	<!-- 100 docs, tag = id%10 -->
+	insert into t values (1,[[1,0],[0,1]],1),(2,[[2,0],[0,2]],2),(3,[[3,0],[0,3]],3),(4,[[4,0],[0,4]],4),(5,[[5,0],[0,5]],5),(6,[[6,0],[0,6]],6),(7,[[7,0],[0,7]],7),(8,[[8,0],[0,8]],8),(9,[[9,0],[0,9]],9),(10,[[10,0],[0,10]],0),(11,[[11,0],[0,11]],1),(12,[[12,0],[0,12]],2),(13,[[13,0],[0,13]],3),(14,[[14,0],[0,14]],4),(15,[[15,0],[0,15]],5),(16,[[16,0],[0,16]],6),(17,[[17,0],[0,17]],7),(18,[[18,0],[0,18]],8),(19,[[19,0],[0,19]],9),(20,[[20,0],[0,20]],0),(21,[[21,0],[0,21]],1),(22,[[22,0],[0,22]],2),(23,[[23,0],[0,23]],3),(24,[[24,0],[0,24]],4),(25,[[25,0],[0,25]],5),(26,[[26,0],[0,26]],6),(27,[[27,0],[0,27]],7),(28,[[28,0],[0,28]],8),(29,[[29,0],[0,29]],9),(30,[[30,0],[0,30]],0),(31,[[31,0],[0,31]],1),(32,[[32,0],[0,32]],2),(33,[[33,0],[0,33]],3),(34,[[34,0],[0,34]],4),(35,[[35,0],[0,35]],5),(36,[[36,0],[0,36]],6),(37,[[37,0],[0,37]],7),(38,[[38,0],[0,38]],8),(39,[[39,0],[0,39]],9),(40,[[40,0],[0,40]],0),(41,[[41,0],[0,41]],1),(42,[[42,0],[0,42]],2),(43,[[43,0],[0,43]],3),(44,[[44,0],[0,44]],4),(45,[[45,0],[0,45]],5),(46,[[46,0],[0,46]],6),(47,[[47,0],[0,47]],7),(48,[[48,0],[0,48]],8),(49,[[49,0],[0,49]],9),(50,[[50,0],[0,50]],0),(51,[[51,0],[0,51]],1),(52,[[52,0],[0,52]],2),(53,[[53,0],[0,53]],3),(54,[[54,0],[0,54]],4),(55,[[55,0],[0,55]],5),(56,[[56,0],[0,56]],6),(57,[[57,0],[0,57]],7),(58,[[58,0],[0,58]],8),(59,[[59,0],[0,59]],9),(60,[[60,0],[0,60]],0),(61,[[61,0],[0,61]],1),(62,[[62,0],[0,62]],2),(63,[[63,0],[0,63]],3),(64,[[64,0],[0,64]],4),(65,[[65,0],[0,65]],5),(66,[[66,0],[0,66]],6),(67,[[67,0],[0,67]],7),(68,[[68,0],[0,68]],8),(69,[[69,0],[0,69]],9),(70,[[70,0],[0,70]],0),(71,[[71,0],[0,71]],1),(72,[[72,0],[0,72]],2),(73,[[73,0],[0,73]],3),(74,[[74,0],[0,74]],4),(75,[[75,0],[0,75]],5),(76,[[76,0],[0,76]],6),(77,[[77,0],[0,77]],7),(78,[[78,0],[0,78]],8),(79,[[79,0],[0,79]],9),(80,[[80,0],[0,80]],0),(81,[[81,0],[0,81]],1),(82,[[82,0],[0,82]],2),(83,[[83,0],[0,83]],3),(84,[[84,0],[0,84]],4),(85,[[85,0],[0,85]],5),(86,[[86,0],[0,86]],6),(87,[[87,0],[0,87]],7),(88,[[88,0],[0,88]],8),(89,[[89,0],[0,89]],9),(90,[[90,0],[0,90]],0),(91,[[91,0],[0,91]],1),(92,[[92,0],[0,92]],2),(93,[[93,0],[0,93]],3),(94,[[94,0],[0,94]],4),(95,[[95,0],[0,95]],5),(96,[[96,0],[0,96]],6),(97,[[97,0],[0,97]],7),(98,[[98,0],[0,98]],8),(99,[[99,0],[0,99]],9),(100,[[100,0],[0,100]],0);
+	flush ramchunk t;
+
+	<!-- ACORN path. Expected 1,2,3 at distances 0,1,4 -->
+	select id, knn_dist() d from t where tag&lt;4 and knn(v,5,(1,0)) order by d asc limit 3;
+	<!-- generic filtered path. Same three docs: the chosen path must not change the answer -->
+	select id, knn_dist() d from t where tag&lt;7 and knn(v,5,(1,0)) order by d asc limit 3;
+	<!-- brute-force bypass. Only ids ending in 5 qualify: 5,15,25 at 16,196,576 -->
+	select id, knn_dist() d from t where tag=5 and knn(v,5,(1,0)) order by d asc limit 3;
+	<!-- unfiltered, for reference: the filters above must not have perturbed the ranking -->
+	select id, knn_dist() d from t where knn(v,5,(1,0)) order by d asc limit 3;
+
+	<!-- no doc may appear twice, whichever path ran -->
+	select id, count(*) c from t where tag&lt;4 and knn(v,20,(1,0)) group by id order by c desc, id asc limit 3;
+	drop table t;
+
+	<!-- ============ faceting / grouping by a vector column ============ -->
+	<!-- one group per coordinate, so a doc with N coordinates joins N groups -->
+	create table t (s float_vector knn_type='hnsw' knn_dims='2' hnsw_similarity='l2', v float_vector_array, tag int);
+	insert into t values (1, (1,2), [[1,2]], 7);
+	insert into t values (2, (2,3), [[2,3],[1,2]], 8);
+	insert into t values (3, (0,0), [], 9);
+	select id from t facet s;;
+	select id from t facet v;;
+	select v, count(*) from t group by v order by v asc;
+	select count(distinct v) from t;
+	flush ramchunk t;
+	select id from t facet s;;
+	select id from t facet v;;
+	select v, count(*) from t group by v order by v asc;
+	select count(distinct v) from t;
+	drop table t;
+</sphinxql>
+</queries>
+
+</test>

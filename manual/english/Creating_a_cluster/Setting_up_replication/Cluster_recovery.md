@@ -55,9 +55,11 @@ If nodes A and B are stopped cleanly and node C remains online, node C can conti
 
 When nodes A and B start again, they rejoin automatically and synchronize from node C. While they are rejoining, check `SHOW STATUS LIKE 'cluster_<name>_status'`, `SHOW STATUS LIKE 'cluster_<name>_node_state'`, and `SHOW STATUS LIKE 'cluster_<name>_size'`. Wait until all nodes show `primary` / `synced` and the expected cluster size before treating recovery as complete.
 
+If nodes A and B were intentionally removed from the cluster, for example with `EXIT CLUSTER`, and node C is now the only persisted node in the cluster, node C can also recover after its own clean restart with a normal daemon start. In that self-only case, `--new-cluster` is not required.
+
 ### All nodes were shut down cleanly
 
-If all nodes were stopped normally, the cluster is fully offline and must be started again in a special way so it can become the first running node of the cluster.
+If all nodes in a multi-node cluster were stopped normally, the cluster is fully offline and must be started again in a special way so one node can become the first running node of the cluster.
 
 On clean shutdown, each node writes its last transaction number to `grastate.dat`. The node that was stopped last is the safest node to start first:
 
@@ -69,6 +71,40 @@ Start that node with [`--new-cluster`](../../Creating_a_cluster/Setting_up_repli
 After that, start the remaining nodes normally and let them rejoin. Verify recovery with `SHOW STATUS LIKE 'cluster_<name>_status'`, `SHOW STATUS LIKE 'cluster_<name>_node_state'`, and `SHOW STATUS LIKE 'cluster_<name>_size'`.
 
 If you bootstrap a less advanced node first, a more advanced node may later join it and receive a full SST from an older state, which can discard transactions that existed only on the more advanced node. That is why the node with `safe_to_bootstrap: 1` should be your first choice.
+
+### Recreate a cluster from existing local tables
+
+Use this procedure as a last resort when no node can restore the cluster through the normal recovery methods above, but the cluster's tables are still present in the local data directories. This can happen when saved cluster metadata is incomplete or incompatible with the running version, or when another startup failure leaves the old cluster membership unusable.
+
+This procedure creates a new cluster. It discards the old cluster membership and replication history, then copies the tables from one selected node to the other nodes. Do not use it while any node still has a healthy `primary` / `synced` copy of the old cluster. In that case, keep the healthy cluster and recover the other nodes through [JOIN CLUSTER](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md#Joining-a-replication-cluster).
+
+1. Stop Manticore on every node that belonged to the failed cluster. Do not write to the local tables during this procedure.
+2. Back up the full `data_dir` on every node. Keep a copy of the old cluster descriptor if it contains custom `path`, `nodes`, or provider `options` that you need when recreating the cluster.
+3. Choose the node whose local tables contain the data you want to keep. This node will become the source for the new cluster. Adding its tables to the cluster later replaces tables with the same names on the other nodes.
+4. On every node, edit `<data_dir>/manticore.json`. From the top-level `clusters` object, remove only the entry for the failed cluster. For example, remove `clusters.posts` for a cluster named `posts`.
+
+   Leave the `indexes` object and every table directory in place. Do not delete or recreate the tables.
+
+5. Start Manticore normally on every node. The former cluster tables should now appear as local tables. Check the tables on the selected source node before continuing. If they are missing or incomplete, stop and restore the backup.
+6. On the selected source node, create the cluster. Include any saved `path`, `nodes`, or provider options if you still need them. If authentication is enabled, add `'<replication-user>' AS user` to this statement and the `JOIN CLUSTER` statements below. The account must have matching stored authentication data and `replication` permission on every node. See [setting up replication](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Setting-up-replication).
+
+   ```sql
+   CREATE CLUSTER posts
+   ```
+
+7. On every other node, join the new cluster through the first node:
+
+   ```sql
+   JOIN CLUSTER posts AT 'node-a.example:9312'
+   ```
+
+8. On the selected source node, attach the existing local tables to the new cluster:
+
+   ```sql
+   ALTER CLUSTER posts ADD table_a, table_b
+   ```
+
+9. Wait until every node reports `cluster_posts_status=primary` and `cluster_posts_node_state=synced` before resuming writes.
 
 ### One node crashed or became unreachable
 

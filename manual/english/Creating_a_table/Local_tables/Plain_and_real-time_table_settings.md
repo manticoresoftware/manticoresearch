@@ -45,6 +45,8 @@ table <table name> {
   [rt_attr_float = <another float field name>]
   [rt_attr_float_vector = <float vector field name>]
   [rt_attr_float_vector = <another float vector field name>]
+  [rt_attr_float_vector_array = <float vector array field name>]
+  [rt_attr_float_vector_array = <another float vector array field name>]
   [rt_attr_bool = <boolean field name>]
   [rt_attr_bool = <another boolean field name>]
   [rt_attr_string = <string field name>]
@@ -65,6 +67,30 @@ table <table name> {
 
 ### Common plain and real-time tables settings
 
+#### profile
+
+`profile` is a SQL-only shortcut for applying a predefined bundle of table settings in `CREATE TABLE` only. It is not supported in `ALTER TABLE`. The profile name itself is **not** stored in table metadata; Manticore stores only the expanded settings, so `SHOW CREATE TABLE` prints the resulting options rather than `profile=...`.
+
+Currently supported values:
+
+* `relevance` - expands to:
+  * [`min_infix_len='2'`](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)
+  * [`index_field_lengths='1'`](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths)
+  * [`index_exact_words='1'`](../../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words)
+  * [`ranker=expr('1000*bm25a(1.2,0.75,256)')`](../../Searching/Options.md#ranker)
+  * [`morphology='stem_en'`](../../Creating_a_table/NLP_and_tokenization/Morphology.md#morphology)
+  * [`boolean_mode='or'`](../../Searching/Options.md#boolean_mode)
+
+The `relevance` profile can improve ranking and recall for many English full-text workloads, but it also increases work done at indexing and query time, so it may cost extra CPU, storage, and memory compared to the defaults.
+
+If you also specify one of these options explicitly, `profile` follows the same duplicate-option semantics as ordinary `CREATE TABLE` settings: the first occurrence wins. Because the profile expands into ordinary settings at create time, `profile='relevance' ranker='bm25'` keeps the profile ranker, and the fully expanded explicit form does the same. Likewise, `ranker='bm25' profile='relevance'` keeps `ranker='bm25'`.
+
+The expanded settings are stored in table metadata. Query-level `OPTION ranker=...` still overrides any stored table ranker. If a query searches multiple tables and does not specify a ranker, each table keeps using its own stored default ranker, including local and remote distributed tables. In that case, Manticore merges results using the raw returned weights; it does **not** normalize weights across different rankers or expressions, so mixing different per-table rankers can produce non-comparable global ordering.
+
+```sql
+CREATE TABLE products(title text) profile='relevance';
+```
+
 #### type
 
 ```ini
@@ -83,7 +109,7 @@ Value: **plain** (default), rt
 path = path/to/table
 ```
 
-The path to where the table will be stored or located, either absolute or relative, without the extension. 
+The path to where the table will be stored or located, either absolute or relative, without the extension. When `indexer` builds a plain table, it creates any missing parent directories in this path. The user running `indexer` must have write permission for the nearest existing parent directory.
 
 Value: The path to the table, **mandatory**
 
@@ -488,7 +514,7 @@ knn = {"attrs":[{"name":"image_vector","type":"hnsw","dims":768,"hnsw_similarity
 rt_attr_float_vector = embedding_vector
 rt_field = title
 rt_field = description
-knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}
+knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":"title"}]}
 ```
 
 **Required KNN parameters:**
@@ -502,15 +528,41 @@ knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2",
 - `hnsw_ef_construction`: Construction time/accuracy trade-off (default: 200)
 
 **Auto-embeddings parameters** (when using `model_name`):
-- `model_name`: The embedding model to use (e.g., `"sentence-transformers/all-MiniLM-L6-v2"`, `"openai/text-embedding-ada-002"`). When specified, `dims` must be omitted as the model determines the dimensions automatically.
+- `model_name`: The embedding model to use (e.g., `"Xenova/all-MiniLM-L6-v2"` for the fast ONNX path — browse [ONNX models on Hugging Face](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm); `"sentence-transformers/all-MiniLM-L6-v2"` is also supported; `"openai/text-embedding-ada-002"` for OpenAI). When specified, `dims` must be omitted as the model determines the dimensions automatically.
 - `from`: Comma-separated list of field names to use for embedding generation, or empty string `""` to use all text/string fields. This parameter is required when `model_name` is specified.
 - `api_key`: API key for API-based models (OpenAI, Voyage, Jina). Only required for API-based embedding services.
 - `cache_path`: Optional path for caching downloaded models (for sentence-transformers models).
 - `use_gpu`: Optional boolean to enable GPU acceleration if available.
 
+For custom remote endpoints, you can use `provider:model` syntax in `model_name`. In that form, the part before `:` selects the request format, while the part after `:` is sent to the remote endpoint unchanged.
+
 **Important:** You cannot specify both `dims` and `model_name` in the same configuration - they are mutually exclusive. Use `dims` for manual vector insertion, or `model_name` for auto-embeddings. Use `dims` for manual vector insertion, or `model_name` for auto-embeddings.
 
 For more details on KNN vector search and auto-embeddings, see the [KNN documentation](../../Searching/KNN.md).
+
+#### rt_attr_float_vector_array
+
+```ini
+rt_attr_float_vector_array = chunk_vectors
+```
+
+Declares an attribute holding several float vectors per document, for documents that are naturally represented by more than one embedding: the chunks of an article, the photos of a product, the keyframes of a video.
+
+Value: field name. Multiple records allowed.
+
+KNN is configured exactly as for [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector), with the same `knn` block:
+
+```ini
+rt_attr_float_vector_array = chunk_vectors
+knn = {"attrs":[{"name":"chunk_vectors","type":"hnsw","dims":768,"hnsw_similarity":"COSINE","hnsw_m":16,"hnsw_ef_construction":200}]}
+```
+
+Two differences apply:
+
+- `dims` is **required**, and every vector in every row must have exactly that many entries.
+- `model_name` and `from` are **not** accepted — auto embeddings produce one vector per document, so they do not apply to this type. Vectors must be supplied explicitly.
+
+All vectors are indexed together, and a KNN search returns each document once, scored by its closest vector. See [Float vector array](../../Creating_a_table/Data_types.md#Float-vector-array) and [Multiple vectors per document](../../Searching/KNN.md#Multiple-vectors-per-document).
 
 #### rt_attr_bool
 
@@ -676,6 +728,7 @@ For more information on data types, see [more about data types here](../../Creat
 | [bigint](../../Creating_a_table/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bigint)	| big integer	 |   |
 | [float](../../Creating_a_table/Data_types.md#Float) | [rt_attr_float](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float)   | float  |   |
 | [float_vector](../../Creating_a_table/Data_types.md#Float-vector) | [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) | a vector of float values  |   |
+| [float_vector_array](../../Creating_a_table/Data_types.md#Float-vector-array) | [rt_attr_float_vector_array](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector_array) | several float vectors per document  |   |
 | [multi](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi)   | multi-integer | mva |
 | [multi64](../../Creating_a_table/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi_64) | multi-bigint  | mva64 |
 | [bool](../../Creating_a_table/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bool) | boolean |   |
@@ -992,6 +1045,7 @@ The following settings are supported. They are all described in section [NLP and
 * [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
 * [blend_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)
 * [blend_mode](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
+* [boolean_mode](../../Searching/Options.md#boolean_mode)
 * [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)
 * [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)
 * [embedded_limit](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)

@@ -13,29 +13,44 @@
   * 21.04 (Hirsute Hippo)
   * 22.04 (Jammy)
   * 24.04 (Noble)
+  * 26.04（Resolute）
 
 * Mint
   * 19
   * 20
   * 21
 
-### APT 仓库
+### 快速安装
+
+```bash
+curl https://manticoresearch.com | sh
+```
+
+###### 开发包
+
+如果你更喜欢“Nightly”（开发版），请执行：
+
+```bash
+curl https://manticoresearch.com | sh -s dev
+```
+
+### 手动安装
 在 Ubuntu/Debian/Mint 上安装 Manticore 最简单的方法是使用我们的 APT 仓库。
 
 安装仓库：
 ```bash
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
+sudo apt install ./manticore-repo.noarch.deb
 sudo apt update
 ```
-（如果未安装，请安装 `wget`；如果 `apt-key` 失败，请安装 `gnupg2`）。
+（如果未安装，请安装 `wget`）。
 
 然后安装 Manticore Search：
 ```
 sudo apt install manticore
 ```
 
-如果您是从旧版本升级到 Manticore 6，建议先删除旧包以避免因更新的包结构导致的冲突：
+如果你是从旧版本升级到 Manticore 6 或更高版本，建议先移除旧软件包，以避免因更新后的软件包结构引起冲突：
 
 ```bash
 sudo apt remove manticore*
@@ -47,7 +62,7 @@ sudo apt remove manticore*
 如果您更喜欢使用“Nightly”（开发）版本，请执行以下操作：
 ```bash
 wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb && \
-sudo dpkg -i manticore-dev-repo.noarch.deb && \
+sudo apt install ./manticore-dev-repo.noarch.deb && \
 sudo apt -y update && \
 sudo apt -y install manticore
 ```

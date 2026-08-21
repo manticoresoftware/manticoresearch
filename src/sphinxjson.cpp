@@ -898,23 +898,29 @@ inline static int yylex ( YYSTYPE * lvalp, JsonParser_c * pParser )
 #include "bissphinxjson.c"
 #include "sphinxutils.h"
 
-bool sphJsonParse ( CSphVector<BYTE>& dData, const CSphString& sFileName, CSphString& sError )
+JsonFileParse_e sphJsonParse ( CSphVector<BYTE>& dData, const CSphString& sFileName, CSphString& sError )
 {
 	auto iFileSize = sphGetFileSize ( sFileName, &sError );
 	if ( iFileSize<0 )
-		return false;
+		return JsonFileParse_e::READ_ERROR;
 
 	CSphAutofile tFile;
 	if ( tFile.Open ( sFileName, SPH_O_READ, sError )<0 )
-		return false;
+		return JsonFileParse_e::READ_ERROR;
 
 	CSphFixedVector<char> dJsonText { iFileSize + 2 }; // +4 for zero-gap at the end
 	auto iRead = (int64_t)sphReadThrottled ( tFile.GetFD (), dJsonText.begin (), iFileSize );
 	if ( iRead!=iFileSize )
-		return false;
+	{
+		sError.SetSprintf ( "%s while reading %s; " INT64_FMT " of " INT64_FMT " bytes read",
+			sphInterrupted() ? "read interrupted" : "short read", sFileName.cstr(), iRead, iFileSize );
+		return JsonFileParse_e::READ_ERROR;
+	}
 
 	decltype ( dJsonText )::POLICY_T::Zero ( dJsonText.begin() + iFileSize, 2 );
-	return sphJsonParse ( dData, dJsonText.begin(), false, false, false, sError );
+	return sphJsonParse ( dData, dJsonText.begin(), false, false, false, sError )
+		? JsonFileParse_e::OK
+		: JsonFileParse_e::FORMAT_ERROR;
 }
 
 bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, bool bCheckSize, CSphString & sError )
@@ -3152,9 +3158,14 @@ bool Bson_c::BsonToBson ( CSphVector<BYTE> &dOutput ) const
 }
 
 
-const char * Bson_c::sError () const
+const char * Bson_c::Error () const
 {
 	return m_sError.cstr();
+}
+
+bool Bson_c::HasError () const
+{
+	return !m_sError.IsEmpty();
 }
 
 BsonIterator_c::BsonIterator_c ( const NodeHandle_t &dParent )

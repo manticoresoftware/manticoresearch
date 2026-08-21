@@ -53,6 +53,7 @@ T GetVal( MemoryReader_c& tReader );
 template<typename VECTOR>
 void GetArray ( VECTOR& dBuf, MemoryReader_c& tIn );
 void GetArray ( CSphVector<CSphString>& dBuf, MemoryReader_c& tIn );
+void GetArrayFixed ( CSphFixedVector<BYTE> & dBuf, MemoryReader_c & tIn );
 
 class MemoryWriter_c : public Writer_i
 {

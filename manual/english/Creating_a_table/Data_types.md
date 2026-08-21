@@ -62,9 +62,9 @@ POST /cli -d "CREATE TABLE forum(title text, content text, author_id int, forum_
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('forum');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('forum');
+$table->create([
     'title'=>['type'=>'text'],
 	'content'=>['type'=>'text'],
 	'author_id'=>['type'=>'int'],
@@ -264,7 +264,7 @@ Map<String,Object> query = new HashMap<String,Object>();
 query.put("match_all",null);
 query.put("bool",filters);
 SearchRequest searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 searchRequest.setQuery(query);
 searchRequest.setSort(new ArrayList<Object>(){{
     add(new HashMap<String,String>(){{ put("post_date","desc");}});
@@ -358,9 +358,9 @@ Below is the list of data types supported by Manticore Search:
 
 ## Document ID
 
-The document identifier is a mandatory attribute that must be a unique 64-bit unsigned integer. Document IDs can be explicitly specified when creating a table, but they are always enabled even if not specified. Document IDs cannot be updated.
+Every table has a document ID. It must be unique and cannot be updated. By default, document IDs are unsigned 64-bit values. Explicit numeric document IDs must be non-zero; negative document IDs are not allowed. Real-time tables can instead use UUID document IDs, as described in [UUID document IDs](../Creating_a_table/Data_types.md#UUID-document-IDs).
 
-When you create a table, you can specify ID explicitly, but regardless of the data type you use, it will always behave as described above - stored as unsigned 64-bit but exposed as signed 64-bit integer.
+For a numeric document ID, you can declare `id bigint` in the `CREATE TABLE` schema or omit it and let Manticore add it automatically. In the MySQL/SQL interface, a numeric ID is exposed as a signed 64-bit `bigint`, so large unsigned ID values may appear as negative numbers there.
 
 ```sql
 mysql> CREATE TABLE tbl(id bigint, content text);
@@ -387,17 +387,20 @@ DESC tbl;
 2 rows in set (0.00 sec)
 ```
 
-When working with document IDs, it's important to know that they are stored internally as unsigned 64-bit integers but are handled differently depending on the interface:
+Auto-ID generation depends on the table and ID type. RT and PQ tables with numeric IDs can generate an ID when it is omitted from an insert or replace request, or when `0` is used. An RT table with [id uuid](../Creating_a_table/Data_types.md#UUID-document-IDs) generates a UUID only when `id` is omitted. Plain tables built from external sources do not support automatic ID generation; their source data must provide explicit, unique, non-zero unsigned 64-bit document IDs.
+
+When working with numeric document IDs, it's important to know that unsigned 64-bit values are handled differently depending on the interface:
 
 **MySQL/SQL interface:**
 * IDs greater than 2^63-1 will appear as negative numbers.
 * When filtering by such large IDs, you must use their signed representation.
+* This signed representation is only for displaying or filtering existing large IDs; negative IDs are not accepted when inserting or indexing documents.
 * Use the [UINT64()](../Functions/Type_casting_functions.md#UINT64%28%29) function to view the actual unsigned value.
 
 **JSON/HTTP interface:**
 * IDs are always displayed as their original unsigned values, regardless of size.
-* Both signed and unsigned representations can be used for filtering.
-* Insert operations accept the full unsigned 64-bit range.
+* Both signed and unsigned representations can be used for filtering existing large IDs.
+* Insert operations accept the full unsigned 64-bit range, but negative `id` values are rejected.
 
 For example, let's create a table and insert some values around 2^63:
 ```sql
@@ -512,7 +515,7 @@ curl -s 0:9308/search -d '{"table": "t"}'
   }
 }
 
-# Both signed and unsigned values work for filtering
+# Both signed and unsigned values work for filtering the same stored ID
 curl -s 0:9308/search -d '{"table": "t", "query": {"equals": {"id": 17581446260360033510}}}'
 curl -s 0:9308/search -d '{"table": "t", "query": {"equals": {"id": -865297813349518106}}}'
 
@@ -523,6 +526,54 @@ curl -s 0:9308/insert -d '{"table": "t", "id": 18446744073709551615, "doc": {}}'
 This means when working with large document IDs:
 1. **MySQL interface** requires using the signed representation for queries but can display the unsigned value with `UINT64()`
 2. **JSON interface** consistently uses unsigned values for display and accepts both representations for filtering
+
+### UUID document IDs
+
+<!-- example uuid document ids -->
+
+Real-time tables can use UUID document IDs with `id uuid`. Explicit IDs must be strings in the 36-character `8-4-4-4-12` hexadecimal format, for example `550e8400-e29b-41d4-a716-446655440000`. Manticore accepts UUID versions `1` through `8` and RFC variants `8`, `9`, `a`, and `b`. Uppercase letters are accepted and normalized to lowercase.
+
+Omit `id` to generate a UUID automatically. This works with SQL `INSERT` and `REPLACE`, native JSON insert and replace requests, and Elasticsearch-compatible `_bulk` `index` and `create` operations. Generated IDs use a UUIDv8-style layout and have [the same uniqueness guarantees](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) as numeric auto-IDs. They are not random UUIDv4 values and must not be used as cryptographic secrets.
+
+SQL returns UUID IDs as strings. For UUID-ID tables, native JSON write responses use key name `id`, while JSON search and Elasticsearch-compatible responses use `_id`.
+
+UUID IDs can be used in equality and `IN` filters and to identify documents in `REPLACE`, `UPDATE`, and `DELETE`. `INSERT` rejects an ID that already exists; use `REPLACE` to overwrite the document with that ID. After an `INSERT` or `REPLACE` on a UUID-ID table, `LAST_INSERT_ID()` and `@@session.last_insert_id` return the UUID IDs of the affected documents.
+
+Limitations:
+
+* Only the `id` column can use the `uuid` type; regular attributes cannot be declared as `uuid`.
+* UUID document IDs are supported only for real-time tables, including columnar and replicated real-time tables. They are not supported for plain (indexer-created), percolate/PQ, or shard tables.
+* `ALTER TABLE` cannot convert an existing table to or from `id uuid`.
+* Range filters (`<`, `<=`, `>`, `>=`) and numeric or arithmetic expressions on UUID `id` are not supported.
+* Unlike numeric-ID tables, UUID-ID tables do not treat `0` as an auto-ID marker.
+
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products_uuid(id uuid, title text, price int);
+INSERT INTO products_uuid(id, title, price) VALUES('550e8400-e29b-41d4-a716-446655440000', 'Crossbody Bag', 19);
+INSERT INTO products_uuid(title, price) VALUES('Generated UUID Bag', 29);
+SELECT id, price FROM products_uuid WHERE id='550e8400-e29b-41d4-a716-446655440000';
+```
+
+<!-- response SQL -->
+
+```sql
+Query OK, 0 rows affected (0.00 sec)
+Query OK, 1 rows affected (0.00 sec)
+Query OK, 1 rows affected (0.00 sec)
++--------------------------------------+-------+
+| id                                   | price |
++--------------------------------------+-------+
+| 550e8400-e29b-41d4-a716-446655440000 |    19 |
++--------------------------------------+-------+
+1 row in set (0.00 sec)
+```
+
+<!-- end -->
 
 ## Character data types
 
@@ -578,9 +629,9 @@ POST /cli -d "CREATE TABLE products(title text)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text']
 ]);
 ```
@@ -685,9 +736,9 @@ POST /cli -d "CREATE TABLE products(title text indexed)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text','options'=>['indexed']]
 ]);
 ```
@@ -798,7 +849,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('@title')->get();
+$table->setName('products')->search('@title')->get();
 
 ```
 
@@ -887,9 +938,9 @@ POST /cli -d "CREATE TABLE products(title text, keys string)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'keys'=>['type'=>'string']
 ]);
@@ -997,9 +1048,9 @@ POST /cli -d "CREATE TABLE products ( title string attribute indexed )"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'string','options'=>['indexed','attribute']]
 ]);
 ```
@@ -1124,9 +1175,9 @@ POST /cli -d "CREATE TABLE products(title text, price int)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'price'=>['type'=>'int']
 ]);
@@ -1231,9 +1282,9 @@ POST /cli -d "CREATE TABLE products(title text, flags bit(3), tags bit(2))"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'flags'=>['type'=>'bit(3)'],
 	'tags'=>['type'=>'bit(2)']
@@ -1341,9 +1392,9 @@ POST /cli -d "CREATE TABLE products(title text, price bigint)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'price'=>['type'=>'bigint']
 ]);
@@ -1450,9 +1501,9 @@ POST /cli -d "CREATE TABLE products(title text, sold bool)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'sold'=>['type'=>'bool']
 ]);
@@ -1574,9 +1625,9 @@ POST /cli -d "CREATE TABLE products(title text, date timestamp)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'date'=>['type'=>'timestamp']
 ]);
@@ -1682,9 +1733,9 @@ POST /cli -d "CREATE TABLE products(title text, coeff float)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'coeff'=>['type'=>'float']
 ]);
@@ -1794,7 +1845,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->expression('eps','abs(a-b)')->get();
+$table->setName('products')->search('')->expression('eps','abs(a-b)')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -1829,7 +1880,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{}},"expre
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -1906,7 +1957,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->expression('inc','in(ceil(attr*100),200,250,350)')->get();
+$table->setName('products')->search('')->expression('inc','in(ceil(attr*100),200,250,350)')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -1942,7 +1993,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{}}},"expr
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -2047,9 +2098,9 @@ POST /cli -d "CREATE TABLE products(title text, data json)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'data'=>['type'=>'json']
 ]);
@@ -2160,7 +2211,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->expression('idx','indexof(x>2 for x in data.intarray)')->get();
+$table->setName('products')->search('')->expression('idx','indexof(x>2 for x in data.intarray)')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -2196,7 +2247,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{}},"expre
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -2279,7 +2330,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->expression('idx',"regex(data.name, 'est')")->filter('c','gt',0)->get();
+$table->setName('products')->search('')->expression('idx',"regex(data.name, 'est')")->filter('c','gt',0)->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -2315,7 +2366,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{},"range"
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 query.put("range", new HashMap<String,Object>(){{
@@ -2402,7 +2453,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->sort('double(data.myfloat)','desc')->get();
+$table->setName('products')->search('')->sort('double(data.myfloat)','desc')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -2437,7 +2488,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{}}},"sort
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -2526,7 +2577,7 @@ When creating a table with `float_vector` attributes for KNN search, you can spe
 - `HNSW_EF_CONSTRUCTION`: Construction time/accuracy trade-off (default: 200)
 
 **Auto-embeddings parameters** (when using `MODEL_NAME`):
-- `MODEL_NAME`: The embedding model to use (e.g., `'sentence-transformers/all-MiniLM-L6-v2'`, `'openai/text-embedding-ada-002'`)
+- `MODEL_NAME`: The embedding model to use (e.g., `'Xenova/all-MiniLM-L6-v2'` for the fast ONNX path, `'sentence-transformers/all-MiniLM-L6-v2'`, or `'openai/text-embedding-ada-002'`)
 - `FROM`: Comma-separated list of field names to use for embedding generation, or empty string `''` to use all text/string fields
 - `API_KEY`: API key for API-based models (OpenAI, Voyage, Jina)
 
@@ -2541,7 +2592,7 @@ The most convenient way to work with float vectors is using **auto embeddings**.
 - **Simplified workflow**: Just insert text, embeddings are generated automatically
 - **No manual vector computation**: No need to run separate embedding models
 - **Consistent embeddings**: Same model ensures consistent vector representations
-- **Multiple model support**: Choose from [sentence-transformers](https://huggingface.co/sentence-transformers/models), [Qwen](https://huggingface.co/Qwen/models) embedding models, OpenAI, Voyage, and Jina models
+- **Multiple model support**: Choose from [ONNX models on Hugging Face](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) (recommended — runs on Manticore's fast ONNX Runtime backend), [sentence-transformers](https://huggingface.co/sentence-transformers/models), [Qwen](https://huggingface.co/Qwen/models) embedding models, OpenAI, Voyage, and Jina models
 - **Flexible field selection**: Control which fields are used for embedding generation
 
 #### Creating tables with auto embeddings
@@ -2553,18 +2604,31 @@ When creating a table with auto embeddings, specify these additional parameters:
 - `API_URL`: Optional. Custom API endpoint URL. If not specified, uses the default provider endpoint (e.g., `https://api.openai.com/v1/embeddings` for OpenAI).
 - `API_TIMEOUT`: Optional. HTTP timeout in seconds for API requests. Default is 10 seconds. Set to `'0'` to use the default timeout. Applies to both validation requests during table creation and embedding generation during INSERT operations.
 
+For remote models, `MODEL_NAME` can use either the legacy `provider/model` form or the explicit `provider:model` form. Use `provider:model` with `API_URL` when you want the part after `:` to be forwarded to a custom provider-compatible endpoint exactly as written.
+
 **Supported embedding models:**
-- **Sentence Transformers**: Any [suitable BERT-based Hugging Face model](https://huggingface.co/sentence-transformers/models) (e.g., `sentence-transformers/all-MiniLM-L6-v2`) — no API key needed. Manticore downloads the model when you create the table.
+- **ONNX (recommended)**: Any Hugging Face model that ships an `.onnx` file — e.g. `Xenova/all-MiniLM-L6-v2`, `Xenova/all-MiniLM-L12-v2`, `Xenova/bge-small-en-v1.5`, `Xenova/multilingual-e5-small`. No API key needed. Runs on Manticore's fast ONNX Runtime backend (~14× faster than the SentenceTransformers path on the same hardware — see [14× faster embeddings](https://manticoresearch.com/blog/onnx-embeddings-speedup/)). Both [Xenova](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) and [onnx-models](https://huggingface.co/onnx-models/models?pipeline_tag=feature-extraction) publish a lot of ONNX-converted models; for embeddings, look for ones tagged with the **feature-extraction** task.
+- **Sentence Transformers**: Any [suitable BERT-based Hugging Face model](https://huggingface.co/sentence-transformers/models) (e.g., `sentence-transformers/all-MiniLM-L6-v2`) — no API key needed. Still supported; use this if the model you want isn't published as ONNX.
 - **Qwen local embeddings**: Qwen embedding models such as `Qwen/Qwen3-Embedding-0.6B` — no API key needed. Manticore downloads the model when you create the table.
-- **OpenAI, Voyage, Jina**: Remote embedding models (e.g., `openai/text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v2-base-en`) - require `API_KEY='<API_KEY>'` parameter. Optionally specify `API_URL='<CUSTOM_URL>'` to use a custom API endpoint, and `API_TIMEOUT='<SECONDS>'` to configure HTTP timeout (default is 10 seconds).
+- **OpenAI, Voyage, Jina**: Remote embedding models (e.g., `openai/text-embedding-ada-002`, `openai:text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v2-base-en`) - require `API_KEY='***'` parameter. Optionally specify `API_URL='<CUSTOM_URL>'` to use a custom API endpoint, and `API_TIMEOUT='<SECONDS>'` to configure HTTP timeout (default is 10 seconds).
 
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
 
-Using [sentence-transformers model](https://huggingface.co/sentence-transformers/models) (no API key needed)
+Using a local [ONNX model](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) — recommended, runs on the fast ONNX path (no API key needed)
 ```sql
 CREATE TABLE products (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+Using a [sentence-transformers model](https://huggingface.co/sentence-transformers/models) (no API key needed; runs on the Candle path — use ONNX above when available)
+```sql
+CREATE TABLE products_st (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
@@ -2591,15 +2655,25 @@ CREATE TABLE products_openai (
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='<OPENAI_API_KEY>'
 );
 ```
-
 Using OpenAI with custom API URL and timeout (optional)
 ```sql
 CREATE TABLE products_openai_custom (
     title TEXT,
     content TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
-    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content'
-    API_KEY='<OPENAI_API_KEY>' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+    MODEL_NAME='openai:text-embedding-ada-002' FROM='title,content'
+    API_KEY='***' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+);
+```
+
+Using OpenRouter with a provider-qualified model ID
+```sql
+CREATE TABLE products_openrouter (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='openai:openai/text-embedding-ada-002' FROM='title,content'
+    API_KEY='***' API_URL='https://openrouter.ai/api/v1/embeddings' API_TIMEOUT='30'
 );
 ```
 
@@ -2610,7 +2684,7 @@ CREATE TABLE products_all_fields (
     description TEXT,
     tags TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM=''
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM=''
 );
 ```
 
@@ -2618,9 +2692,9 @@ CREATE TABLE products_all_fields (
 ##### JSON:
 <!-- request JSON -->
 
-Using [sentence-transformers model](https://huggingface.co/sentence-transformers/models) (no API key needed)
+Using a local [ONNX model](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) — recommended (no API key needed)
 ```JSON
-POST /sql?mode=raw -d "CREATE TABLE products (title TEXT, description TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title')"
+POST /sql?mode=raw -d "CREATE TABLE products (title TEXT, description TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title')"
 ```
 
 Using OpenAI model (requires API_KEY parameter)
@@ -2630,7 +2704,7 @@ POST /sql?mode=raw -d "CREATE TABLE products_openai (title TEXT, content TEXT, e
 
 Using all text fields for embeddings (FROM is empty)
 ```JSON
-POST /sql?mode=raw -d "CREATE TABLE products_all_fields (title TEXT, description TEXT, tags TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='')"
+POST /sql?mode=raw -d "CREATE TABLE products_all_fields (title TEXT, description TEXT, tags TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='')"
 ```
 
 <!-- end -->
@@ -2726,7 +2800,7 @@ INSERT INTO products (id, title, description) VALUES
 
 ALTER TABLE products
 ADD COLUMN embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title,description';
+MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title,description';
 ```
 
 For more details, see [Updating table schema](../Updating_table_schema_and_settings.md#Rebuilding-embeddings).
@@ -2777,9 +2851,9 @@ POST /cli -d "CREATE TABLE products(title text, image_vector float_vector)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'image_vector'=>['type'=>'float_vector']
 ]);
@@ -2858,6 +2932,106 @@ table products
 
 <!-- end -->
 
+## Float vector array
+
+A `float_vector_array` attribute stores several vectors per document rather than a single one. A value is written as an array of vectors, and every document carries its own number of them:
+
+```
+[[0.1, 0.2, 0.3, 0.4], [0.5, 0.6, 0.7, 0.8]]
+```
+
+This suits documents that do not reduce cleanly to one embedding - a long article split into chunks, a product photographed from several angles, a video sampled at keyframes. Instead of storing one row per chunk and deduplicating results afterwards, you keep all of a document's vectors on the document itself.
+
+When the attribute is configured for [KNN](../Searching/KNN.md), all vectors of all documents are indexed together and a document matches if **any** of its vectors is close to the query. See [Multiple vectors per document](../Searching/KNN.md#Multiple-vectors-per-document) for the search semantics.
+
+### Value syntax
+
+- A value is always an array of vectors: `[[1,2],[3,4]]`. A flat list such as `(1,2,3,4)` is rejected, because there would be no way to tell one 4-dimensional vector from two 2-dimensional ones.
+- `[]` means "no vectors". It is a valid stored value, and it is what an omitted attribute defaults to.
+- All vectors within one value must have the same number of entries.
+- An empty inner vector (`[[]]`) cannot be represented and is rejected. Use `[]` for "none".
+- Values are returned in the same nested form they were inserted in.
+
+### General limitations
+
+- Currently only supported in real-time tables (not in plain tables)
+- Not supported in functions or expressions
+- Cannot be used in regular filters or sorting
+- [Auto embeddings](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29) are not available for this type: a model produces one vector per document, so `MODEL_NAME` is rejected. Vectors must be supplied explicitly.
+- Not compatible with the [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) mechanism
+
+### Using float vector arrays with KNN
+
+The parameters are the same ones [`float_vector`](../Creating_a_table/Data_types.md#Float-vector) takes: `KNN_TYPE`, `KNN_DIMS`, `HNSW_SIMILARITY`, plus the optional `HNSW_M`, `HNSW_EF_CONSTRUCTION` and [quantization](../Searching/KNN.md#Vector-quantization), with two differences:
+
+- `KNN_DIMS` is required, and **every** vector in **every** row must have exactly that many entries. A row whose vectors are a different width is rejected on insert.
+- `MODEL_NAME` and `FROM` are not accepted.
+
+**What you can do:**
+- Run KNN searches that match a document on its closest vector
+- Store a different number of vectors per document, including none at all
+
+**What you cannot do:**
+- `UPDATE` the attribute: use `REPLACE`, exactly as with a KNN-indexed `float_vector`
+- Use the values in regular filters or sorting
+
+A document whose value is `[]`, or whose attribute was omitted, is never returned by a KNN search as it is not close to anything.
+
+### Using float vector arrays without KNN
+
+Without KNN configuration the vectors are stored but not searchable, and the column needs no options at all. In this mode each value is fully self-describing, so different rows may hold vectors of different widths:
+
+```sql
+CREATE TABLE products(title text, chunk_vectors float_vector_array);
+INSERT INTO products VALUES (1, 'a', [[1,2]]), (2, 'b', [[1,2,3],[4,5,6]]);
+```
+
+`UPDATE` works in this mode, as it does for a non-KNN `float_vector`, and `[]` clears the value.
+
+<!-- example for creating float_vector_array -->
+
+Creating a KNN-indexed float vector array, filling it, and searching it:
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+
+INSERT INTO articles VALUES
+  (1, 'first',  [[1,0,0,0],[0,1,0,0]]),
+  (2, 'second', [[0,0,1,0]]),
+  (3, 'no vectors yet', []);
+
+SELECT id, knn_dist() FROM articles WHERE knn(chunk_vectors, 5, (1,0,0,0));
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')"
+
+POST /insert
+{
+  "table": "articles",
+  "id": 1,
+  "doc": { "title": "first", "chunk_vectors": [[1,0,0,0],[0,1,0,0]] }
+}
+
+POST /search
+{
+  "table": "articles",
+  "knn": { "field": "chunk_vectors", "query_vector": [1,0,0,0], "k": 5 }
+}
+```
+
+<!-- end -->
+
 ## Multi-value integer (MVA)
 
 <!-- example for creating MVA32 -->
@@ -2891,9 +3065,9 @@ POST /cli -d "CREATE TABLE products(title text, product_codes multi)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'product_codes'=>['type'=>'multi']
 ]);
@@ -3007,7 +3181,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->filter('any(product_codes)','equals',3)->get();
+$table->setName('products')->search('')->filter('any(product_codes)','equals',3)->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -3042,7 +3216,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{},"equals
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 query.put("equals",new HashMap<String,Integer>(){{
@@ -3115,7 +3289,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->sort('product_codes','asc','min')->get();
+$table->setName('products')->search('')->sort('product_codes','asc','min')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -3151,7 +3325,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{},"sort":
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -3279,7 +3453,7 @@ POST /search
 ```JSON
 {
    "table":"products",
-   "_id":1,
+   "id":1,
    "created":true,
    "result":"created",
    "status":201
@@ -3315,11 +3489,11 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->addDocument([
+$table->addDocument([
     "title"=>"first",
     "product_codes"=>[4,2,1,3]
 ]);
-$index->search('')-get();
+$table->search('')-get();
 ```
 
 <!-- response PHP -->
@@ -3442,12 +3616,12 @@ HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","first");
     put("product_codes",new int[] {4,2,1,3});
 }};
-newdoc.index("products").id(1L).setDoc(doc);
+newdoc.table("products").id(1L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 Map<String,Object> query = new HashMap<String,Object>();
 query.put("match_all",null);
 SearchRequest searchRequest = new SearchRequest();
-searchRequest.setIndex("products");
+searchRequest.setTable("products");
 searchRequest.setQuery(query);
 SearchResponse searchResponse = searchApi.search(searchRequest);
 System.out.println(searchResponse.toString() );
@@ -3477,7 +3651,7 @@ class SearchResponse {
 Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "first");
 doc.Add("product_codes", new List<Object> {4,2,1,3});
-InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 1, doc: doc);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "products", id: 1, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 object query =  new { match_all=null };
 var searchRequest = new SearchRequest("products", query);
@@ -3572,9 +3746,9 @@ POST /cli -d "CREATE TABLE products(title text, values multi64)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'values'=>['type'=>'multi64']
 ]);

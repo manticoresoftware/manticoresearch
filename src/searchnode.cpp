@@ -956,18 +956,25 @@ private:
 
 static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordSetup & tSetup, DictRefPtr_c pZonesDict = nullptr )
 {
-	BYTE sTmp [ 3*SPH_MAX_WORD_LEN + 16 ];
-	strncpy ( (char*)sTmp, tWord.m_sWord.cstr(), sizeof(sTmp)-1 );
-	sTmp[sizeof(sTmp)-1] = '\0';
+	if ( !pZonesDict )
+		pZonesDict = tSetup.Dict();
+
+	assert ( tSetup.m_tKeywordBuf.GetLength()>=GetKeywordBufSize ( pZonesDict->GetSettings().GetDictFormat() ) );
+	BYTE * pWordBuf = tSetup.m_tKeywordBuf.Begin();
+	const int iWordBufLen = tSetup.m_tKeywordBuf.GetLength();
 
 	ISphQword * pWord = tSetup.QwordSpawn ( tWord );
 	pWord->m_sWord = tWord.m_sWord;
-	if (!pZonesDict)
-		pZonesDict = tSetup.Dict();
+
+	int iWordBytes = Min ( tWord.m_sWord.Length(), iWordBufLen-1 );
+	memcpy ( pWordBuf, tWord.m_sWord.cstr(), iWordBytes );
+	pWordBuf[iWordBytes] = '\0';
+
 	pWord->m_uWordID = tWord.m_bMorphed
-		? pZonesDict->GetWordIDNonStemmed ( sTmp )
-		: pZonesDict->GetWordID ( sTmp );
-	pWord->m_sDictWord = (char*)sTmp;
+		? pZonesDict->GetWordIDNonStemmed ( pWordBuf )
+		: pZonesDict->GetWordID ( pWordBuf );
+	pWord->m_sDictWord.SetBinary ( (const char*)pWordBuf, (int)strlen ( (const char*)pWordBuf ) );
+
 	pWord->m_bExpanded = tWord.m_bExpanded;
 	tSetup.QwordSetup ( pWord );
 

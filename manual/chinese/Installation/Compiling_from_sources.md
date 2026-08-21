@@ -3,14 +3,14 @@
 从源代码编译 Manticore Search 可以启用自定义构建配置，例如禁用某些功能或添加新补丁进行测试。例如，您可能希望从源代码编译并禁用嵌入式 ICU，以便使用系统上安装的不同版本，该版本可以独立于 Manticore 进行升级。如果您有兴趣为 Manticore Search 项目做出贡献，这也非常有用。
 
 ## 使用 CI Docker 构建
-为了准备 [官方发布和开发包](https://repo.manticoresearch.com/)，我们使用 Docker 和一个特殊的构建镜像。此镜像包含必要的工具，并设计为与外部 sysroots 一起使用，因此一个容器可以为所有操作系统构建包。您可以使用 [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/cross/external_toolchain/Dockerfile) 和 [README](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/README.md) 构建该镜像，或使用来自 [Docker Hub](https://hub.docker.com/r/manticoresearch/external_toolchain/tags) 的镜像。这是为任何受支持的操作系统和架构创建二进制文件的最简单方法。运行容器时，您还需要指定以下环境变量：
+为了准备 [官方发布和开发包](https://repo.manticoresearch.com/)，我们使用 Docker 和一个特殊的构建镜像。此镜像包含必要的工具，并设计为与外部 sysroots 一起使用，因此一个容器可以为所有操作系统构建包。您可以使用 [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/main/dist/build_dockers/cross/external_toolchain/Dockerfile) 和 [README](https://github.com/manticoresoftware/manticoresearch/blob/main/dist/build_dockers/README.md) 构建该镜像，或使用 [Docker Hub](https://hub.docker.com/r/manticoresearch/external_toolchain/tags) 上的镜像。这是为任何受支持的操作系统和架构创建二进制文件的最简单方法。运行容器时，您还需要指定以下环境变量：
 
 * `DISTR`：目标平台：`bionic`，`focal`，`jammy`，`buster`，`bullseye`，`bookworm`，`rhel8`，`rhel9`，`rhel10`，`macos`，`windows`，`freebsd13`
 * `arch`：架构：`x86_64`，`x64`（用于 Windows），`aarch64`，`arm64`（用于 Macos）
-* `SYSROOT_URL`：系统根存档的 URL。您可以使用 https://repo.manticoresearch.com/repository/sysroots，除非您自己构建 sysroots（说明可在 [此处](https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers/cross/sysroots) 找到）。
+* `SYSROOT_URL`：系统根存档的 URL。除非您自己构建 sysroots（可在 [此处](https://github.com/manticoresoftware/manticoresearch/tree/main/dist/build_dockers/cross/sysroots) 找到说明），否则可以使用 https://repo.manticoresearch.com/repository/sysroots
 * 使用 CI 工作流文件作为参考，找到您可能需要使用的其他环境变量：
-  - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/pack_publish.yml
-  - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/build_template.yml
+  - https://github.com/manticoresoftware/manticoresearch/blob/main/.github/workflows/pack_publish.yml
+  - https://github.com/manticoresoftware/manticoresearch/blob/main/.github/workflows/build_template.yml
 
 要找到 `DISTR` 和 `arch` 的可能值，您可以使用目录 https://repo.manticoresearch.com/repository/sysroots/roots_with_zstd/ 作为参考，因为它包含所有受支持组合的 sysroots。
 
@@ -131,22 +131,24 @@ ls ~/rpmbuild/RPMS/*/manticore*
 #### 从 git
 
 Manticore 源代码 [托管在 GitHub](https://github.com/manticoresoftware/manticoresearch)。
-要获取源代码，请克隆仓库，然后检出所需的分支或标签。分支 `master` 表示主开发分支。发布时，会创建一个版本标签，例如 `3.6.0`，并开始一个新的当前发布分支，即 `manticore-3.6.0`。在所有更改之后，版本分支的头部将用作构建所有二进制发布版本的源代码。例如，要获取 3.6.0 版本的源代码，您可以运行：
+要获取源代码，请克隆仓库，然后检出所需的分支或标签。分支 `main` 表示主开发分支。发布时，会创建一个版本标签，例如 `3.6.0`，并开始一个新的当前发布分支，即 `manticore-3.6.0`。在所有更改完成后，版本分支的头部将用作构建所有二进制发布版本的源代码。例如，要获取 3.6.0 版本的源代码，您可以运行：
 
 ```bash
-git clone https://github.com/manticoresoftware/manticoresearch.git
+git clone --recurse-submodules https://github.com/manticoresoftware/manticoresearch.git
 cd manticoresearch
 git checkout manticore-3.6.0
+git submodule update --init --recursive
 ```
 
 #### 从存档
 
-您可以通过使用 GitHub 上的 "Download ZIP" 按钮下载所需的代码。.zip 和 .tar.gz 格式都适用。
+获取源码的推荐方式是使用 Git，因为 Manticore 依赖 `mcl` 子模块。GitHub 生成的 .zip 和 .tar.gz 压缩包不包含子模块内容，所以直接用这类压缩包配置会失败，除非你还把匹配的 [MCL](https://github.com/manticoresoftware/columnar) 版本填充到 `mcl` 目录中。
 
 ```bash
 wget -c https://github.com/manticoresoftware/manticoresearch/archive/refs/tags/3.6.0.tar.gz
 tar -zxf 3.6.0.tar.gz
 cd manticoresearch-3.6.0
+# Populate ./mcl with the matching columnar/MCL revision before running cmake.
 ```
 
 ### 配置
@@ -155,56 +157,70 @@ Manticore 使用 CMake。假设您在克隆的仓库根目录内：
 
 ```bash
 mkdir build && cd build
-cmake ..
+cmake -DMCL_LOCAL_RUNTIME=OFF ..
 ```
 
 CMake 将调查可用功能并根据这些功能配置构建。默认情况下，如果功能可用，所有功能都将被视为启用。该脚本还会下载并构建一些外部库，假设您想使用它们。隐式地，您将获得对最大数量功能的支持。
 
+MCL 源码树来自 `mcl` git 子模块。上面的命令使用的是该子模块中的 MCL API 头文件，但不会构建本地 MCL 运行时模块。如果子模块缺失，CMake 会停止并报错，提示你运行 `git submodule update --init --recursive mcl`。
+
+如果还要从该子模块构建本地 MCL 运行时模块，请按如下方式配置：
+
+```bash
+cmake -DMCL_LOCAL_RUNTIME=ON ..
+```
+
+这会将 `columnar_lib`、`secondary_index`、`knn_lib` 以及 embeddings 库与 Manticore 一起构建。在 Windows 上，这些目标会显示在生成的 Visual Studio 解决方案中。此模式需要 Rust 和 Cargo 来构建 embeddings 库，除非你通过 `-DMANTICORE_KNN_EMBEDDINGS_LIB=/path/to/lib_manticore_knn_embeddings.so`（Windows 上为 `.dll`）提供现成的 embeddings 库。
+
 您也可以通过标志和选项显式地配置构建。要启用功能 `FOO`，请在 CMake 调用中添加 `-DFOO=1`。
-要禁用它，请使用 `-DFOO=0`。如果没有明确说明，启用一个不可用的功能（例如，在 MS Windows 构建中 `WITH_GALERA`）会导致配置失败并出现错误。禁用一个功能不仅会从构建中排除该功能，还会禁用对该系统的检查，并禁用任何相关外部库的下载/构建。  
+要禁用它，请使用 `-DFOO=0`。如果没有明确说明，启用一个不可用的功能（例如，在 MS Windows 构建中 `WITH_GALERA`）会导致配置失败并出现错误。禁用一个功能不仅会从构建中排除该功能，还会禁用对该系统的检查，并禁用任何相关外部库的下载/构建。
 
 #### 配置标志和选项
 
-- **USE_SYSLOG** - 允许在 [query logging](../Logging/Query_logging.md) 中使用`syslog`。  
-- **WITH_GALERA** -启用对搜索守护进程复制的支持。将在构建时配置此支持，并下载、构建并包含 Galera 库的源代码到发行/安装包中。通常，使用 Galera 构建是安全的，但不分发库本身（即没有 Galera 模块，没有复制）。然而，有时您可能需要显式地禁用它，例如如果您想构建一个设计上无法加载任何库的静态二进制文件，以便即使守护进程内部存在对 'dlopen' 函数的调用也会导致链接错误。  
-- **WITH_RE2** - 使用 RE2 正则表达式库构建。这对于 [REGEX()](../Functions/String_functions.md#REGEX%28%29) 等函数以及 [regexp_filter](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)  
-  功能。  
-- **WITH_RE2_FORCE_STATIC** - 下载 RE2 的源代码，编译并静态链接，以便最终二进制文件不依赖系统中共享的  `RE2` 库。  
-- **WITH_STEMMER** - 使用 Snowball 词干提取库构建。  
-- **WITH_STEMMER_FORCE_STATIC** - 下载 Snowball 的源代码，编译并静态链接，以便最终二进制文件不依赖系统中共享的  `libstemmer` 库。  
-- **WITH_ICU** -  使用 ICU (International Components for Unicode) 库构建。它用于对中文文本进行分词。当设置 morphology=`icu_chinese` 时会使用它。  
-- **WITH_JIEBA** -  使用 Jieba 中文分词工具构建。它用于对中文文本进行分词。当设置 morphology=`jieba_chinese` 时会使用它。  
-- **WITH_ICU_FORCE_STATIC** - 下载 ICU 的源代码，编译并静态链接，以便最终二进制文件不依赖系统中共享的 `icu` 库。还会将 ICU 数据文件包含到安装/发行包中。静态链接的 ICU 的目的是使用已知版本的库，以确保行为确定且不依赖任何系统库。您更可能希望使用系统 ICU，因为它可以随着时间更新而无需重新编译 Manticore 守护进程。在这种情况下，您需要显式禁用此选项。这样还可以节省 ICU 数据文件占用的空间（约 30M），因为它不会包含在发行包中。  
-- **WITH_SSL** - 用于支持 HTTPS 以及与守护进程的加密 MySQL 连接。系统的 OpenSSL 库将链接到守护进程。这意味着启动守护进程时需要 OpenSSL。对于支持 HTTPS，这是强制性的，但对于服务器本身并非严格必要（即没有 SSL 则无法通过 HTTPS 连接，但其他协议仍可工作）。Manticore 可以使用从 1.0.2 到 1.1.1 的 SSL 库版本，  但请注意 **出于安全考虑，强烈建议使用最新的 SSL  
-  库**。目前仅支持 v1.1.1，其余版本已过时（  
-  参见 [openssl 发布策略](https://www.openssl.org/policies/releasestrat.html)  
-- **WITH_ZLIB** - 索引器用于处理来自 MySQL 的压缩列。守护进程用于提供对压缩 MySQL 协议的支持。  
-- **WITH_ODBC** - 索引器用于支持来自 ODBC 提供者的索引源（它们通常是 UnixODBC 和 iODBC）。在 MS Windows 上，ODBC 是处理 MS SQL 源的正确方法，因此对 `MSSQL` 的索引也意味着启用此标志。  
-- **DL_ODBC** - 不与 ODBC 库链接。如果 ODBC 已链接但不可用，则即使您想处理与 ODBC 无关的内容，也无法启动 indexer 工具。此选项要求索引器仅在处理 ODBC 源时才在运行时加载该库。  
-- **ODBC_LIB** - ODBC 库文件的名称。当您想处理 ODBC 源时，索引器将尝试加载该文件。此选项根据可用的 ODBC 共享库检测自动写入。您也可以在运行索引器之前，通过设置环境变量 `ODBC_LIB` 并指定备用库的正确路径来覆盖该名称。  
-- **WITH_EXPAT** - 索引器用于支持对 xmlpipe 源的索引。  
-- **DL_EXPAT** - 不与 EXPAT 库链接。如果 EXPAT 已链接但不可用，则即使您想处理与 xmlpipe 无关的内容，也无法启动 `indexer` 工具。此选项要求索引器仅在处理 xmlpipe 源时才在运行时加载该库。  
-- **EXPAT_LIB** - EXPAT 库文件的名称。当您想处理 xmlpipe 源时，索引器将尝试加载该文件。此选项根据可用的 EXPAT 共享库检测自动写入。您也可以在运行索引器之前，通过设置环境变量 `EXPAT_LIB` 并指定备用库的正确路径来覆盖该名称。  
-- **WITH_ICONV** - 在使用索引器索引 xmlpipe 源时，用于支持不同的编码。  
-- **DL_ICONV** - 不与 iconv 库链接。如果 iconv 已链接但不可用，则即使您想处理与 xmlpipe 无关的内容，也无法启动 `indexer` 工具。此选项要求索引器仅在处理 xmlpipe 源时才在运行时加载该库。  
-- **ICONV_LIB** - iconv 库文件的名称。当您想处理 xmlpipe 源时，索引器将尝试加载该文件。此选项根据可用的 iconv 共享库检测自动写入。您也可以在运行索引器之前，通过设置环境变量 `ICONV_LIB` 并指定备用库的正确路径来覆盖该名称。  
-- **WITH_MYSQL** - 索引器用于支持索引 MySQL 源。  
-- **DL_MYSQL** - 不与 MySQL 库链接。如果 MySQL 已链接但不可用，则即使您想处理与 MySQL 无关的内容，也无法启动 the`indexer` 工具。此选项要求索引器仅在处理 MySQL 源时才在运行时加载该库。  
-- **MYSQL_LIB** -- MySQL 库文件的名称。当您想处理 MySQL 源时，索引器将尝试加载该文件。此选项根据可用的 MySQL 共享库检测自动写入。您也可以在运行索引器之前，通过设置环境变量 `MYSQL_LIB` 并指定备用库的正确路径来覆盖该名称。  
-- **WITH_POSTGRESQL** - 索引器用于支持索引 PostgreSQL 源。  
-- **DL_POSTGRESQL** - 不与 PostgreSQL 库链接。如果 PostgreSQL 已链接但不可用，则即使您想处理与 PostgreSQL 无关的内容，也无法启动 `indexer` ool。此选项要求索引器仅在处理 PostgreSQL 源时才在运行时加载该库。  
-- **POSTGRESQL_LIB** - PostgreSQL 库文件的名称。索引器在处理 PostgreSQL 源时将尝试加载指定的 PostgreSQL 库文件。此选项根据可用的 PostgreSQL 共享库检测自动确定。您也可以在运行索引器之前，通过提供环境变量  `POSTGRESQL_LIB` 并指定备用库的正确路径来覆盖该名称。  
-- **LOCALDATADIR** - 守护进程存储 binlogs 的默认路径。如果此路径未在守护进程的运行时配置中提供或被显式禁用（即与此构建配置无关的 `manticore.conf` 文件），则 binlogs 将放置在此路径。它通常是绝对路径，但也可以使用相对路径。您通常无需更改此配置定义的默认值，根据目标系统，可能类似 `/var/data`、`/var/lib/manticore/data` 或 `/usr/local/var/lib/manticore/data`。  
-- **FULL_SHARE_DIR** - 存储所有资源的默认路径。在启动任何使用该文件夹中文件的工具之前，可以通过环境变量 `FULL_SHARE_DIR` 覆盖此路径。这是一个重要路径，因为许多内容默认都期望在此处找到，包括预定义字符集表、停用词、manticore 模块和 icu 数据文件，均放置于该文件夹中。配置脚本通常会将此路径确定为类似 `/usr/share/manticore` 或 `/usr/local/share/manticore`。  
-- **DISTR_BUILD** - 发布软件包选项的快捷方式。它是一个字符串值，表示目标平台的名称。可以用它来代替手动配置所有选项。在 Debian 和 Redhat Linux 上，默认值可能通过轻量级检测确定并设置为通用的 'Debian' 或 'RHEL'。否则，该值未定义。  
-- **PACK** - 更方便的快捷方式。它读取环境变量  `DISTR`，将其赋值给 **DISTR_BUILD** 参数，然后按常规方式工作。这在使用预先准备的构建系统（如 Docker 容器）中构建时非常有用，  `DISTR` 变量在系统级别设置，并反映容器所针对的目标系统。  
-- **CMAKE_INSTALL_PREFIX** (path) - Manticore 预期安装的位置。构建不会执行任何安装，但会准备在运行 `cmake --install` 命令或创建包然后安装时执行的安装规则。前缀可以随时更改，即使在安装过程中，也可以通过调用  
-  `cmake --install . --prefix /path/to/installation`。但是，在配置时，此变量用于初始化  `LOCALDATADIR` 和 `FULL_SHARE_DIR` 的默认值。例如，在配置时将其设置为 `/my/custom` 会  
-  强制将 `LOCALDATADIR` 硬编码为 `/my/custom/var/lib/manticore/data`，并将 `FULL_SHARE_DIR` 硬编码为  
-  `/my/custom/usr/share/manticore`。  
-- **BUILD_TESTING** (bool) 是否支持测试。如果启用，则在构建后可以运行 'ctest' 来测试构建。请注意，测试需要额外的依赖，例如至少需要 PHP cli、Python 以及可用的 MySQL 服务器和测试数据库。默认情况下，此参数为开启。因此，如果仅想构建，您可能需要通过显式指定 'off' 值来禁用此选项。  
-- **BUILD_SRPMS** (bool) 是否显示构建 Source RPM (SRPM) 的说明。由于 CPack 在基于组件的打包方面的限制，SRPM 无法与二进制 RPM 同时生成。启用时，构建系统将显示使用源配置方法正确生成 SRPM 的说明。默认情况下，此参数为关闭。  
-- **LIBS_BUNDLE** - 存放各种库的文件夹路径。这主要与 Windows 构建相关，但如果您需要频繁构建以避免每次都下载第三方源代码，也可能很有帮助。默认情况下，配置脚本不会修改此路径；您应手动将所有内容放在其中。例如，当我们需要支持词干提取器时，会从 Snowball 主页下载源代码包，然后解压、配置、构建等。相反，您可以将原始源代码 tarball（即 `libstemmer_c.tgz`）存放在此文件夹中。下次从头开始构建时，配置脚本将首先在 bundle 中查找，如果在那里找到词干提取器，就不会再次从 Internet 下载。  
+- **USE_SYSLOG** - 允许在 [query logging](../Logging/Query_logging.md) 中使用`syslog`。
+- **WITH_GALERA** -启用对搜索守护进程复制的支持。将在构建时配置此支持，并下载、构建并包含 Galera 库的源代码到发行/安装包中。通常，使用 Galera 构建是安全的，但不分发库本身（即没有 Galera 模块，没有复制）。然而，有时您可能需要显式地禁用它，例如如果您想构建一个设计上无法加载任何库的静态二进制文件，以便即使守护进程内部存在对 'dlopen' 函数的调用也会导致链接错误。
+- **WITH_RE2** - 使用 RE2 正则表达式库构建。这对于 [REGEX()](../Functions/String_functions.md#REGEX%28%29) 等函数以及 [regexp_filter](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)
+  功能。
+- **WITH_RE2_FORCE_STATIC** - 下载 RE2 的源代码，编译并静态链接，以便最终二进制文件不依赖系统中共享的  `RE2` 库。
+- **WITH_STEMMER** - 使用 Snowball 词干提取库构建。
+- **WITH_STEMMER_FORCE_STATIC** - 下载 Snowball 的源代码，编译并静态链接，以便最终二进制文件不依赖系统中共享的  `libstemmer` 库。
+- **WITH_ICU** -  使用 ICU (International Components for Unicode) 库构建。它用于对中文文本进行分词。当设置 morphology=`icu_chinese` 时会使用它。
+- **WITH_JIEBA** -  使用 Jieba 中文分词工具构建。它用于对中文文本进行分词。当设置 morphology=`jieba_chinese` 时会使用它。
+- **WITH_ICU_FORCE_STATIC** - 下载 ICU 的源代码，编译并静态链接，以便最终二进制文件不依赖系统中共享的 `icu` 库。还会将 ICU 数据文件包含到安装/发行包中。静态链接的 ICU 的目的是使用已知版本的库，以确保行为确定且不依赖任何系统库。您更可能希望使用系统 ICU，因为它可以随着时间更新而无需重新编译 Manticore 守护进程。在这种情况下，您需要显式禁用此选项。这样还可以节省 ICU 数据文件占用的空间（约 30M），因为它不会包含在发行包中。
+- **WITH_SSL** - 用于支持 HTTPS 以及与守护进程的加密 MySQL 连接。系统的 OpenSSL 库将链接到守护进程。这意味着启动守护进程时需要 OpenSSL。对于支持 HTTPS，这是强制性的，但对于服务器本身并非严格必要（即没有 SSL 则无法通过 HTTPS 连接，但其他协议仍可工作）。Manticore 可以使用从 1.0.2 到 1.1.1 的 SSL 库版本，  但请注意 **出于安全考虑，强烈建议使用最新的 SSL
+  库**。目前仅支持 v1.1.1，其余版本已过时（
+  参见 [openssl 发布策略](https://www.openssl.org/policies/releasestrat.html)
+- **WITH_ZLIB** - 索引器用于处理来自 MySQL 的压缩列。守护进程用于提供对压缩 MySQL 协议的支持。
+- **WITH_ODBC** - 索引器用于支持来自 ODBC 提供者的索引源（它们通常是 UnixODBC 和 iODBC）。在 MS Windows 上，ODBC 是处理 MS SQL 源的正确方法，因此对 `MSSQL` 的索引也意味着启用此标志。
+- **DL_ODBC** - 不与 ODBC 库链接。如果 ODBC 已链接但不可用，则即使您想处理与 ODBC 无关的内容，也无法启动 indexer 工具。此选项要求索引器仅在处理 ODBC 源时才在运行时加载该库。
+- **ODBC_LIB** - ODBC 库文件的名称。当您想处理 ODBC 源时，索引器将尝试加载该文件。此选项根据可用的 ODBC 共享库检测自动写入。您也可以在运行索引器之前，通过设置环境变量 `ODBC_LIB` 并指定备用库的正确路径来覆盖该名称。
+- **WITH_EXPAT** - 索引器用于支持对 xmlpipe 源的索引。
+- **DL_EXPAT** - 不与 EXPAT 库链接。如果 EXPAT 已链接但不可用，则即使您想处理与 xmlpipe 无关的内容，也无法启动 `indexer` 工具。此选项要求索引器仅在处理 xmlpipe 源时才在运行时加载该库。
+- **EXPAT_LIB** - EXPAT 库文件的名称。当您想处理 xmlpipe 源时，索引器将尝试加载该文件。此选项根据可用的 EXPAT 共享库检测自动写入。您也可以在运行索引器之前，通过设置环境变量 `EXPAT_LIB` 并指定备用库的正确路径来覆盖该名称。
+- **WITH_ICONV** - 在使用索引器索引 xmlpipe 源时，用于支持不同的编码。
+- **DL_ICONV** - 不与 iconv 库链接。如果 iconv 已链接但不可用，则即使您想处理与 xmlpipe 无关的内容，也无法启动 `indexer` 工具。此选项要求索引器仅在处理 xmlpipe 源时才在运行时加载该库。
+- **ICONV_LIB** - iconv 库文件的名称。当您想处理 xmlpipe 源时，索引器将尝试加载该文件。此选项根据可用的 iconv 共享库检测自动写入。您也可以在运行索引器之前，通过设置环境变量 `ICONV_LIB` 并指定备用库的正确路径来覆盖该名称。
+- **WITH_MYSQL** - 索引器用于支持索引 MySQL 源。
+- **DL_MYSQL** - 不与 MySQL 库链接。如果 MySQL 已链接但不可用，则即使您想处理与 MySQL 无关的内容，也无法启动 the`indexer` 工具。此选项要求索引器仅在处理 MySQL 源时才在运行时加载该库。
+- **MYSQL_LIB** -- MySQL 库文件的名称。当您想处理 MySQL 源时，索引器将尝试加载该文件。此选项根据可用的 MySQL 共享库检测自动写入。您也可以在运行索引器之前，通过设置环境变量 `MYSQL_LIB` 并指定备用库的正确路径来覆盖该名称。
+- **WITH_POSTGRESQL** - 索引器用于支持索引 PostgreSQL 源。
+- **DL_POSTGRESQL** - 不与 PostgreSQL 库链接。如果 PostgreSQL 已链接但不可用，则即使您想处理与 PostgreSQL 无关的内容，也无法启动 `indexer` ool。此选项要求索引器仅在处理 PostgreSQL 源时才在运行时加载该库。
+- **POSTGRESQL_LIB** - PostgreSQL 库文件的名称。索引器在处理 PostgreSQL 源时将尝试加载指定的 PostgreSQL 库文件。此选项根据可用的 PostgreSQL 共享库检测自动确定。您也可以在运行索引器之前，通过提供环境变量  `POSTGRESQL_LIB` 并指定备用库的正确路径来覆盖该名称。
+- **LOCALDATADIR** - 守护进程存储 binlogs 的默认路径。如果此路径未在守护进程的运行时配置中提供或被显式禁用（即与此构建配置无关的 `manticore.conf` 文件），则 binlogs 将放置在此路径。它通常是绝对路径，但也可以使用相对路径。您通常无需更改此配置定义的默认值，根据目标系统，可能类似 `/var/data`、`/var/lib/manticore/data` 或 `/usr/local/var/lib/manticore/data`。
+- **FULL_SHARE_DIR** - 存储所有资源的默认路径。在启动任何使用该文件夹中文件的工具之前，可以通过环境变量 `FULL_SHARE_DIR` 覆盖此路径。这是一个重要路径，因为许多内容默认都期望在此处找到，包括预定义字符集表、停用词、manticore 模块和 icu 数据文件，均放置于该文件夹中。配置脚本通常会将此路径确定为类似 `/usr/share/manticore` 或 `/usr/local/share/manticore`。
+- **DISTR_BUILD** - 发布软件包选项的快捷方式。它是一个字符串值，表示目标平台的名称。可以用它来代替手动配置所有选项。在 Debian 和 Redhat Linux 上，默认值可能通过轻量级检测确定并设置为通用的 'Debian' 或 'RHEL'。否则，该值未定义。
+- **PACK** - 更方便的快捷方式。它读取环境变量  `DISTR`，将其赋值给 **DISTR_BUILD** 参数，然后按常规方式工作。这在使用预先准备的构建系统（如 Docker 容器）中构建时非常有用，  `DISTR` 变量在系统级别设置，并反映容器所针对的目标系统。
+- **MCL_LOCAL_RUNTIME** - 控制本地非打包构建是否也从 `mcl` 子模块构建 MCL 运行时模块。基础 daemon 构建如上所述时将其设为 `OFF`，如果还想构建本地 MCL 运行时模块则设为 `ON`。
+- **MCL_RUNTIME_ARTIFACT_DIR** - 指向包含预构建 MCL 运行时模块的目录路径。主要用于 CI 测试，这些测试会构建或恢复精确 SHA 的 MCL 构件，然后针对它们运行 daemon 测试。
+- **BUILD_EMBEDDINGS_LOCALLY** - 控制是否在本地构建 MCL embeddings 库。对于本地运行时构建，默认值为 `ON`，前提是尚未提供 `MANTICORE_KNN_EMBEDDINGS_LIB`。
+- **MANTICORE_KNN_EMBEDDINGS_LIB** - 指向现有 embeddings 库的路径。当你希望复用预构建的 `lib_manticore_knn_embeddings` 库，而不是用 Cargo 重新构建它时，请使用此项。
+- **CMAKE_INSTALL_PREFIX** (path) - Manticore 预期安装的位置。构建不会执行任何安装，但会准备在运行 `cmake --install` 命令或创建包然后安装时执行的安装规则。前缀可以随时更改，即使在安装过程中，也可以通过调用
+  `cmake --install . --prefix /path/to/installation`。但是，在配置时，此变量用于初始化  `LOCALDATADIR` 和 `FULL_SHARE_DIR` 的默认值。例如，在配置时将其设置为 `/my/custom` 会
+  强制将 `LOCALDATADIR` 硬编码为 `/my/custom/var/lib/manticore/data`，并将 `FULL_SHARE_DIR` 硬编码为
+  `/my/custom/usr/share/manticore`。
+- **BUILD_TESTING** (bool) 是否支持测试。如果启用，则在构建后可以运行 'ctest' 来测试构建。请注意，测试需要额外的依赖，例如至少需要 PHP cli、Python 以及可用的 MySQL 服务器和测试数据库。默认情况下，此参数为开启。因此，如果仅想构建，您可能需要通过显式指定 'off' 值来禁用此选项。
+- **BUILD_SRPMS** (bool) 是否显示构建 Source RPM (SRPM) 的说明。由于 CPack 在基于组件的打包方面的限制，SRPM 无法与二进制 RPM 同时生成。启用时，构建系统将显示使用源配置方法正确生成 SRPM 的说明。默认情况下，此参数为关闭。
+- **LIBS_BUNDLE** - 存放各种库的文件夹路径。这主要与 Windows 构建相关，但如果您需要频繁构建以避免每次都下载第三方源代码，也可能很有帮助。默认情况下，配置脚本不会修改此路径；您应手动将所有内容放在其中。例如，当我们需要支持词干提取器时，会从 Snowball 主页下载源代码包，然后解压、配置、构建等。相反，您可以将原始源代码 tarball（即 `libstemmer_c.tgz`）存放在此文件夹中。下次从头开始构建时，配置脚本将首先在 bundle 中查找，如果在那里找到词干提取器，就不会再次从 Internet 下载。
 - **CACHEB** - 存放第三方库构建结果的文件夹路径。通常，在使用 galera、re2、icu 等功能时，会先从 bundle 下载或获取源代码，然后解压、构建并安装到一个临时内部文件夹。当构建 manticore 时，该文件夹将作为所需功能的依赖所在位置。最后，它们要么与 manticore 链接（如果是库）；要么直接进入发行/安装包（如 galera 或 icu 数据）。当 **CACHEB** 被定义为 cmake 配置参数或系统环境变量时，它将被用作这些构建的目标文件夹。此文件夹可以在多次构建之间保留，这样存储在其中的库就不需要再次构建，从而大大缩短了整个构建过程。
 
 
@@ -323,7 +339,7 @@ CMake 是一个本身不执行构建的工具，但它为本地构建系统生�
 可以运行 `cmake -G` 并查看可用生成器的列表。
 
 - 在 Windows 上，如果你安装了多个版本的 Visual Studio，你可能需要指定使用哪一个，
-  例如：
+例如：
 ```bash
 cmake -G "Visual Studio 16 2019" ....
   ```
@@ -341,7 +357,7 @@ Ninja Multi-Config 非常有用，因为它确实是“多配置”的，并且�
 ### 注意事项
 
 1. 如果你最终要构建一个功能齐全的 RPM 包，构建目录的路径必须足够长，以便正确构建调试符号。
-   例如，像 `/manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789` 这样的路径。这是因为 RPM 工具在构建调试信息时会修改编译后的二进制文件的路径，它可能会覆盖现有空间而不会分配更多空间。上述长路径有 100 个字符，这在这种情况中已经足够。
+例如，像 `/manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789` 这样的路径。这是因为 RPM 工具在构建调试信息时会修改编译后的二进制文件的路径，它可能会覆盖现有空间而不会分配更多空间。上述长路径有 100 个字符，这在这种情况中已经足够。
 
 ## 外部依赖项
 

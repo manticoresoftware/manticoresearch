@@ -15,6 +15,7 @@
 
 #include "xqparser.h"
 #include "xqdebug.h"
+#include "tokenizer/tokenizer.h"
 
 NodeEstimate_t & NodeEstimate_t::operator+= ( const NodeEstimate_t & tRhs )
 {
@@ -309,3 +310,12 @@ void DotDump (const XQNode_t * pNode)
 	sph::RenderBsonPlan ( sRes, bson::MakeHandle ( dPlan ), true );
 	printf ( "\nhttps://dreampuf.github.io/GraphvizOnline/#%s\n", UrlEncode ( CSphString{sRes} ).cstr() );
 }
+
+bool QueryParser_i::ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const
+{
+	QueryExecutionSettings_t tExecutionSettings;
+	if ( pQuery )
+		tExecutionSettings = QueryExecutionSettings_t ( *pQuery );
+	return ParseQuery ( tParsed, sQuery, pQuery, tExecutionSettings, std::move ( pQueryTokenizer ), std::move ( pQueryTokenizerJson ), pSchema, pDict, tSettings, pMorphFields );
+}
+

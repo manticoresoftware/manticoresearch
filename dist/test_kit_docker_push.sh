@@ -34,7 +34,7 @@ fi
 
 hub_repo="ghcr.io/${REPO_OWNER}/manticoresearch"
 img_url="${hub_repo}:test-kit-${BUILD_COMMIT}"
-[[ $current_branch == "master" ]] \
+[[ $current_branch == "main" ]] \
   && img_url_latest="${hub_repo}:test-kit-latest" \
   || img_url_latest=""
 
@@ -47,7 +47,7 @@ if [ -n "$latest_tag" ]; then
 	img_url_tag="${hub_repo}:test-kit-$(sanitize_tag "$latest_tag")"
 fi
 
-if [ "$current_branch" != "master" ]; then
+if [ "$current_branch" != "main" ]; then
 	img_url_branch="${hub_repo}:test-kit-$(sanitize_tag "$current_branch")"
 fi
 
@@ -78,8 +78,12 @@ docker import \
 [ -n "$img_url_branch" ] && docker tag "$img_url" "$img_url_branch"
 [ -n "$img_url_hash" ] && docker tag "$img_url" "$img_url_hash"
 
+docker load -i test_kit_light_docker.tar.gz
+light_images=( "${hub_repo}:test-kit-light-${BUILD_COMMIT}" "${hub_repo}:test-kit-light-${BRANCH_TAG}" )
+for img in "${light_images[@]}"; do docker tag test-kit-light:img "$img"; done
+
 # pusing to ghcr.io
-[ -n "$GHCR_USER" ] && for img in "$img_url" "$img_url_latest" "$img_url_tag" "$img_url_branch" "$img_url_hash"; do
+[ -n "$GHCR_USER" ] && for img in "$img_url" "$img_url_latest" "$img_url_tag" "$img_url_branch" "$img_url_hash" "${light_images[@]}"; do
 	[ -n "$img" ] || continue
 	docker push "$img" \
 	  && echo "❗ Pushed the image to $img" \

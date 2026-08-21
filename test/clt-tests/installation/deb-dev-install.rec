@@ -20,16 +20,10 @@ wget -q https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb > /dev/nu
 ––– input –––
 dpkg -i manticore-dev-repo.noarch.deb > /dev/null; echo $?
 ––– output –––
-gpg: keyring '/etc/apt/trusted.gpg.d/manticore-keyring.gpg' created
-gpg: directory '/root/.gnupg' created
-gpg: /root/.gnupg/trustdb.gpg: trustdb created
-gpg: key 14D612DB3D2730E2: public key "Manticore Search <support@manticoresearch.com>" imported
-gpg: Total number processed: 1
-gpg:               imported: 1
-gpg: keyring '/etc/apt/trusted.gpg.d/manticore-sha256-keyring.gpg' created
-gpg: key B48FF4F279F5BFA6: public key "ManticoreSearch <support@manticoresearch.com>" imported
-gpg: Total number processed: 1
-gpg:               imported: 1
+0
+––– input –––
+test -s /usr/share/keyrings/manticore-archive-keyring.gpg && grep -qx 'Signed-By: /usr/share/keyrings/manticore-archive-keyring.gpg' /etc/apt/sources.list.d/manticoresearch.sources && test ! -e /etc/apt/trusted.gpg.d/manticore-keyring.gpg && test ! -e /etc/apt/trusted.gpg.d/manticore-sha256-keyring.gpg; echo $?
+––– output –––
 0
 ––– input –––
 apt-get update -y > /dev/null; echo $?

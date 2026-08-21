@@ -1,10 +1,36 @@
 #!/bin/bash
 set -e
 
+docker_pull_with_retries() {
+    local image="$1"
+    local err_file
+    local attempt
+    local max_attempts=3
+    local delay=5
+
+    err_file=$(mktemp)
+
+    for attempt in $(seq 1 "$max_attempts"); do
+        if docker pull --platform linux/amd64 -q "$image" > /dev/null 2>"$err_file"; then
+            rm -f "$err_file"
+            return 0
+        fi
+
+        if [ "$attempt" -lt "$max_attempts" ]; then
+            sleep "$delay"
+            delay=$((delay * 2))
+        fi
+    done
+
+    cat "$err_file" >&2
+    rm -f "$err_file"
+    return 1
+}
+
 # Check for new major.minor versions
 echo "🔍 Checking for new MySQL major.minor versions..."
 
-LATEST_MYSQL="9.7"
+LATEST_MYSQL="26.7"
 
 if command -v curl >/dev/null 2>&1; then
     found_new=false
@@ -43,7 +69,7 @@ fi
 echo ""
 
 # MySQL versions
-versions=("mysql:5.6" "mysql:5.7" "mysql:8.0" "mysql:8.2" "mysql:8.3" "mysql:8.4" "mysql:9.0" "mysql:9.1" "mysql:9.2" "mysql:9.3" "mysql:9.4" "mysql:9.5" "mysql:9.6" "mysql:9.7" "mysql:latest")
+versions=("mysql:5.6" "mysql:5.7" "mysql:8.0" "mysql:8.2" "mysql:8.3" "mysql:8.4" "mysql:9.0" "mysql:9.1" "mysql:9.2" "mysql:9.3" "mysql:9.4" "mysql:9.5" "mysql:9.6" "mysql:9.7" "mysql:26.7" "mysql:latest")
 
 # Going through all the versions
 for version in "${versions[@]}"; do
@@ -53,7 +79,7 @@ for version in "${versions[@]}"; do
     echo "Testing version: $version"
 
     # Start the container
-    docker pull --platform linux/amd64 -q $version > /dev/null
+    docker_pull_with_retries "$version"
     docker run --rm -d --network=test_network --platform linux/amd64 --name db-test -e MYSQL_ROOT_PASSWORD=my-secret-pw $version bash -c "tail -f /dev/null" > /dev/null
     sleep 5
 

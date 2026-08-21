@@ -47,16 +47,32 @@
 // MISC GLOBALS
 /////////////////////////////////////////////////////////////////////////////
 
+static const char* g_sCommands[SEARCHD_COMMAND_TOTAL] = {"command_search", "command_excerpt", "command_update",
+	"command_keywords", "command_persist", "command_status", "gap_6", "command_flushattrs", "command_sphinxql",
+	"command_ping", "command_delete", "command_set", "command_insert", "command_replace", "command_commit",
+	"command_suggest", "command_json", "command_callpq", "command_cluster", "command_getfield", "command_shard_write",
+	"command_optimize"};
+
 const char * szCommand ( int eCmd)
 {
-	const char* szCommands[SEARCHD_COMMAND_TOTAL] = {"command_search", "command_excerpt", "command_update",
-		"command_keywords", "command_persist", "command_status", "gap_6", "command_flushattrs", "command_sphinxql",
-		"command_ping", "command_delete", "command_set", "command_insert", "command_replace", "command_commit",
-		"command_suggest", "command_json", "command_callpq", "command_cluster", "command_getfield"};
 	if ( eCmd<SEARCHD_COMMAND_TOTAL )
-		return szCommands[eCmd];
+		return g_sCommands[eCmd];
 	return "***WRONG COMMAND!***";
 }
+
+
+SearchdCommand_e ParseCommand ( const CSphString & sCommand )
+{
+	for ( int i=0; i<SEARCHD_COMMAND_TOTAL; i++ )
+	{
+		const char * sCmdName = g_sCommands[i];
+		if ( sCommand==sCmdName )
+			return SearchdCommand_e(i);
+	}
+
+	return SEARCHD_COMMAND_WRONG;
+}
+
 
 // 'like' matcher
 CheckLike::CheckLike( const char* sPattern )
@@ -257,6 +273,7 @@ const char* GetIndexTypeName ( IndexType_e eType )
 	case IndexType_e::RT: return "rt";
 	case IndexType_e::PERCOLATE: return "percolate";
 	case IndexType_e::DISTR: return "distributed";
+	case IndexType_e::SHARD: return "shard";
 	default: return "invalid";
 	}
 }
@@ -265,6 +282,9 @@ IndexType_e TypeOfIndexConfig( const CSphString& sType )
 {
 	if ( sType=="distributed" )
 		return IndexType_e::DISTR;
+
+	if ( sType=="shard" )
+		return IndexType_e::SHARD;
 
 	if ( sType=="rt" )
 		return IndexType_e::RT;
@@ -844,8 +864,7 @@ void SmartOutputBuffer_t::Reset()
 	m_dBuf.Reserve( NETOUTBUF );
 };
 
-#if _WIN32
-void SmartOutputBuffer_t::LeakTo ( CSphVector<ISphOutputBuffer *> dOut )
+void SmartOutputBuffer_t::LeakTo ( CSphVector<ISphOutputBuffer *> & dOut )
 {
 	for ( auto & pChunk : m_dChunks )
 		dOut.Add ( pChunk );
@@ -853,8 +872,13 @@ void SmartOutputBuffer_t::LeakTo ( CSphVector<ISphOutputBuffer *> dOut )
 	dOut.Add ( new ISphOutputBuffer ( m_dBuf ) );
 	m_dBuf.Reserve ( NETOUTBUF );
 }
-#endif
 
+void SmartOutputBuffer_t::SwapData ( CSphVector<ISphOutputBuffer *> & dChunks )
+{
+	m_dChunks.SwapData ( dChunks );
+	m_dBuf.Reset();
+	m_dBuf.Reserve( NETOUTBUF );
+}
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -987,9 +1011,10 @@ bool InputBuffer_c::IsDataSizeValid ( int iSize )
 		return false;
 	}
 
-	if ( m_pCur + iSize>m_pBuf + m_iLen )
+	const int iRemaining = HasBytes ();
+	if ( iSize>iRemaining )
 	{
-		SetError( "read overflows buffer by %d byte, data size %d", (int)( m_pCur + iSize - ( m_pBuf + m_iLen ) ), iSize );
+		SetError( "read overflows buffer by %d byte, data size %d", iSize-iRemaining, iSize );
 		return false;
 	}
 
@@ -1078,7 +1103,7 @@ static const uint64_t g_dStatsIntervals[] =
 
 void ServedStats_c::CalculateQueryStats( QueryStats_t& tRowsFoundStats, QueryStats_t& tQueryTimeStats ) const
 {
-	ScRL_t rLock { m_tStatsLock };
+	ScWL_t wLock { m_tStatsLock };
 	DoStatCalcStats ( m_pQueryStatRecords.get(), tRowsFoundStats, tQueryTimeStats );
 }
 
@@ -1087,7 +1112,7 @@ void ServedStats_c::CalculateQueryStats( QueryStats_t& tRowsFoundStats, QuerySta
 
 void ServedStats_c::CalculateQueryStatsExact( QueryStats_t& tRowsFoundStats, QueryStats_t& tQueryTimeStats ) const
 {
-	ScRL_t rLock { m_tStatsLock };
+	ScWL_t wLock { m_tStatsLock };
 	DoStatCalcStats ( m_pQueryStatRecordsExact.get(), tRowsFoundStats, tQueryTimeStats );
 }
 
@@ -1173,7 +1198,7 @@ void ServedStats_c::DoStatCalcStats( const QueryStatContainer_i* pContainer, Que
 
 	auto uTimestamp = sphMicroTimer();
 
-	int iRecords = m_pQueryStatRecords->GetNumRecords();
+	int iRecords = pContainer->GetNumRecords();
 	for ( int i = INTERVAL_1MIN; i<=INTERVAL_15MIN; ++i )
 		CalcStatsForInterval( pContainer, tRowsFoundStats.m_dStats[i], tQueryTimeStats.m_dStats[i], uTimestamp, g_dStatsIntervals[i], iRecords );
 

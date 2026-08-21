@@ -1,6 +1,8 @@
 # 通配符搜索设置
 
-通配符搜索是一种常见的文本搜索类型。在 Manticore 中，它是在字典级别进行的。默认情况下，普通表和 RT 表都使用一种名为 [dict] 的字典类型（参见 ../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict）。在这种模式下，单词以原样存储，因此启用通配符不会影响表的大小。当执行通配符搜索时，会在字典中查找所有可能扩展的通配符单词。这种扩展在查询时可能会导致计算问题，尤其是当扩展的单词提供许多扩展或具有巨大的命中列表时，特别是在通配符添加到单词开头和结尾的情况下。为了避免这些问题，可以使用 [expansion_limit]（参见 ../../Server_settings/Searchd.md#expansion_limit）。
+通配符搜索是一种常见的文本搜索类型。在 Manticore 中，它是在词典级别执行的。默认情况下，普通表和 RT 表都使用一种名为 [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict) 的词典类型。在这种模式下，单词会按原样存储，因此启用通配符不会影响表的大小。执行通配符搜索时，系统会在词典中查找该通配词的所有可能展开形式。当展开结果很多，或者展开结果对应的命中列表很大时，这种展开在查询时的计算开销会成为问题，尤其是在中缀的情况下，因为通配符会同时加在单词的开头和结尾。为避免这类问题，可以使用 [expansion_limit](../../Server_settings/Searchd.md#expansion_limit)。
+
+> 注意：更改已填充表的索引时通配符设置，例如 `min_prefix_len` 或 `min_infix_len`，只会影响更改之后被索引的文档。要将新设置应用到现有文档，请[重新索引它们](../../Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings)。
 
 ## min_prefix_len
 
@@ -16,14 +18,14 @@ min_prefix_len = length
 
 例如，如果单词 "example" 使用 min_prefix_len=3 索引，则可以通过搜索 "exa"、"exam"、"examp" 和 "exampl" 以及完整的单词来找到它。
 
-请注意，在 [dict]=crc 模式下，min_prefix_len 将会影响全文索引的大小，因为每个单词扩展都会额外存储。
+请注意，在 [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=crc 模式下，`min_prefix_len` 会影响全文索引的大小，因为每个单词展开形式都会被额外存储。
 
 Manticore 可以区分完美匹配的单词和前缀匹配，并在满足以下条件时将前者排名更高：
-* [dict]=keywords（默认开启）
-* [index_exact_words]=1（默认关闭）
-* [expand_keywords]=1（也默认关闭）
+* [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=keywords（默认开启）或 dict=keywords_32k
+* [index_exact_words](../../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words)=1（默认关闭），
+* [expand_keywords](../../Searching/Options.md#expand_keywords)=1（默认也关闭）
 
-请注意，如果使用 [dict]=crc 模式或上述任一选项禁用，则无法区分前缀和完整单词，也无法将完美匹配的单词排名更高。
+请注意，在 [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=crc 模式下，或者在禁用上述任一选项时，都无法区分前缀和完整单词，因此无法对完全匹配的单词赋予更高排名。
 
 当设置了 [最小后缀长度](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) 为正数时，最小前缀长度始终被视为 1。
 
@@ -133,19 +135,19 @@ min_infix_len 设置确定要索引和搜索的最小后缀前缀长度。它是
 启用后，后缀允许使用如 `start*`、`*end`、`*middle*` 等术语模式进行通配符搜索。它还允许您禁用太短且搜索成本过高的通配符。
 
 如果满足以下条件，Manticore 可以区分完美匹配的单词和后缀匹配，并将前者排名更高：
-* [dict]=keywords（默认开启）
-* [index_exact_words]=1（默认关闭）
-* [expand_keywords]=1（也默认关闭）
+* [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=keywords（默认开启）或 dict=keywords_32k
+* [index_exact_words](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=1（默认关闭），
+* [expand_keywords](../../Searching/Options.md#expand_keywords)=1（默认也关闭）
 
-请注意，如果使用 [dict]=crc 模式或上述任一选项禁用，则无法区分后缀和完整单词，因此无法将完美匹配的单词排名更高。
+请注意，在 [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=crc 模式下，或者在禁用上述任一选项时，都无法区分中缀和完整单词，因此无法对完全匹配的单词赋予更高排名。
 
 后缀通配符搜索的查询时间可能会有很大差异，这取决于子字符串实际扩展成多少关键词。像 `*in*` 或 `*ti*` 这样的短而频繁的音节可能会扩展成太多关键词，所有这些都需要匹配和处理。因此，为了启用子字符串搜索，通常会将 min_infix_len 设置为 2。为了限制来自太短通配符的搜索的影响，可能会将其设置得更高。
 
 后缀必须至少为两个字符长，出于性能原因，`*a*` 类似的通配符是不允许的。
 
-当 min_infix_len 设置为正数时，[最小前缀长度](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len) 被视为 1。对于 [dict] 字段，前后缀不能同时启用。如果要在 [dict] 和其他字段中声明前缀字段 [prefix_fields]，则禁止在同一列表中声明相同的字段。
+当 `min_infix_len` 设置为正数时， [minimum prefix length](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len) 会被视为 1。对于 [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict) 词形中缀和前缀不能同时启用。对于 [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict) 以及通过 [prefix_fields](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#prefix_fields) 声明前缀的其他字段，禁止在两个列表中声明同一个字段。
 
-如果 dict=keywords，除了通配符 `*` 外，还可以使用另外两个通配符字符：
+在 dict=keywords 或 dict=keywords_32k 下，除了通配符 `*` 之外，还可以使用另外两个通配符字符：
 * `?` 可匹配任何（一个）字符：`t?st` 将匹配 `test`，但不匹配 `teast`
 * `%` 可匹配零个或一个字符：`tes%` 将匹配 `tes` 或 `test`，但不匹配 `testing`
 
@@ -300,9 +302,9 @@ table products {
 max_substring_len = length
 ```
 
-max_substring_len 指令设置了前缀或中缀搜索时要索引的最大子字符串长度。此设置是可选的，默认值为 0（即索引所有可能的子字符串）。它仅适用于 [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)。
+max_substring_len 指令设置为前缀或中缀搜索建立索引的最大子串长度。该设置是可选的，默认值为 0（这意味着所有可能的子串都会被建立索引）。它仅适用于 [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=crc。
 
-默认情况下，在 [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict) 中，子字符串索引会将所有可能的子字符串作为单独的关键字进行索引，这可能会导致一个过于庞大的全文索引。因此，max_substring_len 指令允许跳过那些几乎永远不会被搜索的太长的子字符串。
+默认情况下， [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=crc 的子串索引会把 **所有** 可能的子串都作为独立关键词建立索引，这可能会导致全文索引过大。因此，max_substring_len 指令允许你跳过过长的子串，因为这些子串很可能永远不会被搜索到。
 
 例如，一个包含 10,000 篇博客文章的测试表在不同设置下的磁盘空间使用量如下：
 * 基线：6.4 MB（没有子字符串）
@@ -315,7 +317,7 @@ max_substring_len 指令设置了前缀或中缀搜索时要索引的最大子�
 
 因此，限制最大子字符串长度可以节省 10-15% 的表大小。
 
-在使用 dict=keywords 模式时，子字符串长度不会影响性能。因此，此指令在此情况下是不适用的，并且有意禁止。然而，如果需要，你仍然可以在应用程序代码中限制你要搜索的子字符串的长度。
+在使用 dict=keywords 或 dict=keywords_32k 模式时，子串索引由词典处理，而不是通过预先建立 CRC 子串索引。因此，该指令不适用，并且在这种情况下会被刻意禁止。不过，如果需要，你仍然可以在应用代码中限制要搜索的子串长度。
 
 
 <!-- intro -->

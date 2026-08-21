@@ -782,10 +782,14 @@ static ByteBlob_t & operator>> ( ByteBlob_t & dIn, VecTraits_T<BYTE> & tData )
 class AggrConcat_c final : public AggrFunc_i
 {
 	CSphAttrLocator	m_tLoc;
+	CSphString		m_sSeparator;
+	int				m_iSeparatorLength = 0;
 
 public:
-	explicit AggrConcat_c ( const CSphColumnInfo & tCol )
+	AggrConcat_c ( const CSphColumnInfo & tCol, const CSphString & sSeparator )
 		: m_tLoc ( tCol.m_tLocator )
+		, m_sSeparator ( sSeparator )
+		, m_iSeparatorLength ( sSeparator.Length() )
 	{
 		assert ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR );
 		assert ( !m_tLoc.IsBlobAttr ()); // otherwise we will fail on fetching data!
@@ -811,12 +815,13 @@ public:
 
 		BYTE uZero; dBlob >> uZero;
 		dBlob >> iSize;
-		iFinalSize = dBlob.second - ( iSize * 2 * sizeof ( int ) ) + iSize - 1 + 20; // -tag, -len, +commas-1, +packlen
+		iFinalSize = dBlob.second - iSize * 2 * sizeof ( int ) + Max ( iSize-1, 0 ) * m_iSeparatorLength + 20;
 		dOut.Reserve ( iFinalSize );
 
 		for ( int i=0; i<iSize; ++i )
 		{
-			if ( i>0 ) dOut << ',';
+			if ( i>0 )
+				AppendSeparator ( dOut );
 			dBlob >> iTag >> dString;
 			dOut << ByteBlob_t { dString.begin (), dString.GetLength () }; // write raw blob, without length
 		}
@@ -857,12 +862,21 @@ public:
 	}
 
 private:
+	void AppendSeparator ( BStream_c & dOut ) const
+	{
+		if ( m_iSeparatorLength )
+			dOut << ByteBlob_t { (const BYTE *)m_sSeparator.cstr(), m_iSeparatorLength };
+	}
 
 	// merge two simple matches
-	static void AppendStringToString ( BStream_c & dOut, const ByteBlob_t & dInDst, int iTagDst, const ByteBlob_t & dInSrc, int iTagSrc )
+	void AppendStringToString ( BStream_c & dOut, const ByteBlob_t & dInDst, int iTagDst, const ByteBlob_t & dInSrc, int iTagSrc ) const
 	{
 		if ( iTagDst==iTagSrc ) // plain concat of 2 strings
-			dOut << dInDst << ',' << dInSrc;
+		{
+			dOut << dInDst;
+			AppendSeparator ( dOut );
+			dOut << dInSrc;
+		}
 		else // produce complex match
 			dOut << '\0' << int(2)
 			<< iTagDst << dInDst.second << dInDst
@@ -879,7 +893,7 @@ private:
 	}
 
 	// merge two complex matches
-	static void AppendBlobToBlob ( BStream_c& dOut, ByteBlob_t dInDst, ByteBlob_t dInSrc )
+	void AppendBlobToBlob ( BStream_c& dOut, ByteBlob_t dInDst, ByteBlob_t dInSrc ) const
 	{
 		int iOut = 0;
 		dOut << '\0' << iOut; // mark of complex and placeholder to num of elems.
@@ -914,9 +928,12 @@ private:
 				if ( dBlobDst.IsEmpty() )
 					dOut << dBlobSrc;
 				else
-					dOut << dBlobDst.GetLength() + dBlobSrc.GetLength() + 1
-					<< ByteBlob_t ( dBlobDst.begin(), dBlobDst.GetLength() )
-					<< ',' << ByteBlob_t ( dBlobSrc.begin(), dBlobSrc.GetLength() );
+				{
+					dOut << dBlobDst.GetLength() + dBlobSrc.GetLength() + m_iSeparatorLength
+						<< ByteBlob_t ( dBlobDst.begin(), dBlobDst.GetLength() );
+					AppendSeparator ( dOut );
+					dOut << ByteBlob_t ( dBlobSrc.begin(), dBlobSrc.GetLength() );
+				}
 				fnNextSrc();
 				fnNextDst();
 			}
@@ -927,7 +944,7 @@ private:
 	}
 
 	// merge string and blob. Last bool determines what will came first
-	static void AppendBlobToString ( BStream_c & dOut, const ByteBlob_t & dString, int iTagString, ByteBlob_t dBlob, bool bStringFirst=true )
+	void AppendBlobToString ( BStream_c & dOut, const ByteBlob_t & dString, int iTagString, ByteBlob_t dBlob, bool bStringFirst=true ) const
 	{
 		int iOut;
 		char cZero;
@@ -954,11 +971,19 @@ private:
 					bCopied = true;
 				} else if ( !bCopied && iTagString==iTagSrc )
 				{
-					dOut << iTagString << dString.second + dBlobSrc.GetLength() + 1;
+					dOut << iTagString << dString.second + dBlobSrc.GetLength() + m_iSeparatorLength;
 					if ( bStringFirst )
-						dOut << dString << ',' << ByteBlob_t ( dBlobSrc.begin(), dBlobSrc.GetLength() );
+					{
+						dOut << dString;
+						AppendSeparator ( dOut );
+						dOut << ByteBlob_t ( dBlobSrc.begin(), dBlobSrc.GetLength() );
+					}
 					else
-						dOut << ByteBlob_t ( dBlobSrc.begin(), dBlobSrc.GetLength() ) << ',' << dString;
+					{
+						dOut << ByteBlob_t ( dBlobSrc.begin(), dBlobSrc.GetLength() );
+						AppendSeparator ( dOut );
+						dOut << dString;
+					}
 					bCopied = true;
 				} else
 					dOut << iTagSrc << dBlobSrc;
@@ -1154,7 +1179,12 @@ AggrFunc_i * CreateAggrMax ( const CSphColumnInfo & tAttr )
 
 AggrFunc_i * CreateAggrConcat ( const CSphColumnInfo & tAttr )
 {
-	return new AggrConcat_c(tAttr);
+	return CreateAggrConcat ( tAttr, tAttr.m_tAggrSettings.m_tGroupConcat.m_sSeparator );
+}
+
+AggrFunc_i * CreateAggrConcat ( const CSphColumnInfo & tAttr, const CSphString & sSeparator )
+{
+	return new AggrConcat_c ( tAttr, sSeparator );
 }
 
 AggrFunc_i * CreateAggrPercentiles ( const CSphColumnInfo & tAttr )

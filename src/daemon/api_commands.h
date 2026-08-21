@@ -14,5 +14,11 @@
 
 #include "searchdaemon.h"
 
+enum class SearchQueryOrigin_e
+{
+	ApiClient,
+	MasterAgent
+};
+
 void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
-void PrepareQueryEmulation ( CSphQuery * pQuery );
+void PrepareQueryEmulation ( CSphQuery * pQuery, SearchQueryOrigin_e eOrigin );

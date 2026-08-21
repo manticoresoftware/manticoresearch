@@ -1,0 +1,7 @@
+a:1:{i:0;a:1:{i:0;a:14:{i:0;s:8:"rt setup";i:1;s:3:"
+OK";i:2;s:3:"
+OK";i:3;s:3:"
+OK";i:4;s:3:"
+OK";i:5;s:3:"
+OK";i:6;s:3:"
+OK";i:7;s:50:"binary api direct ranker override on profile table";i:8;a:3:{s:4:"hits";a:2:{i:4;i:648;i:5;i:675;}s:5:"total";i:2;s:11:"total_found";i:2;}i:9;a:3:{s:4:"hits";a:2:{i:4;i:1;i:5;i:1;}s:5:"total";i:2;s:11:"total_found";i:2;}i:10;s:42:"binary api legacy match modes on rt tables";i:11;a:3:{s:4:"hits";a:1:{i:1;i:2;}s:5:"total";i:1;s:11:"total_found";i:1;}i:12;a:3:{s:4:"hits";a:1:{i:1;i:2;}s:5:"total";i:1;s:11:"total_found";i:1;}i:13;a:3:{s:4:"hits";a:1:{i:1;i:2;}s:5:"total";i:1;s:11:"total_found";i:1;}}}}

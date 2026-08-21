@@ -1,0 +1,57 @@
+––– comment –––
+Regression: FAIL_020 — DROP a clustered sharded table while a cluster member
+is unreachable used to time out, wipe sharding_table metadata, and leave
+public wrappers + physical shards + ~30 stalled queue items on the surviving
+nodes (manual cleanup required). Buddy now fast-fails when cluster size
+< persistent member set, leaving everything intact for the operator to retry
+after the missing node returns.
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "create table c:t20(id bigint, body text) shards='2' rf='2';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "insert into t20(id,body) values(1,'a'),(2,'b');"; echo $?
+––– output –––
+0
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/stop-searchd –––
+––– input –––
+for _ in $(seq 1 60); do v=$(mysql -h0 -P1306 -e "show status like 'cluster_c_size'" | awk 'NR==4{print $4}'); [ "$v" = "1" ] && break; sleep 1; done; echo "size=$v"
+––– output –––
+size=1
+––– input –––
+mysql -h0 -P1306 -e "drop table c:t20;"
+––– output –––
+ERROR 1064 (42000) at line 1: cluster 'c' has unreachable members (1 of 2 alive): refusing to DROP — retry when the cluster is fully synced
+––– input –––
+mysql -h0 -P1306 -e "select count(*) c from system.sharding_table where table='t20'"
+––– output –––
++------+
+| c    |
++------+
+|    2 |
++------+
+––– input –––
+mysql -h0 -P1306 -e "show tables like 't20';"
+––– output –––
++-------+-------+
+| Table | Type  |
++-------+-------+
+| t20   | shard |
++-------+-------+

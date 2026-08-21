@@ -794,3 +794,13 @@ TEST ( Text, sphNormalizeRelativePath )
 	ASSERT_STREQ ( sphNormalizePath( "aaa/bbb/ccc/ddd/../../../../../../../" ).cstr(), "../../.." );
 	ASSERT_STREQ ( sphNormalizePath( "..//bbb" ).cstr(), "../bbb" );
 }
+
+#if !_WIN32
+TEST ( FileUtils, LongDirectoryCreate )
+{
+	const char* szPath = "/tmp/literaly/long/path/here";
+	auto bPath = MkDir ( szPath );
+	ASSERT_TRUE ( bPath );
+	ASSERT_TRUE ( sphDirExists(szPath));
+}
+#endif

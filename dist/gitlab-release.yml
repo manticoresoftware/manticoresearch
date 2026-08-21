@@ -76,7 +76,7 @@ variables:
       when: manual
     - if: $CI_COMMIT_BRANCH == "maintenance-release"
       when: manual
-    - if: $CI_COMMIT_BRANCH == "master"
+    - if: $CI_COMMIT_BRANCH == "main"
       when: on_success
 
 .collect_deb:
@@ -348,7 +348,7 @@ bookworm_arm:
       when: manual
     - if: $CI_COMMIT_BRANCH == "maintenance-release"
       when: manual
-    - if: $CI_COMMIT_BRANCH == "master"
+    - if: $CI_COMMIT_BRANCH == "main"
       when: on_success
   tags:
     - dev-host

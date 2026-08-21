@@ -27,6 +27,7 @@ bool LoadExFunctions ();
 #include "sphinxutils.h"
 #include "searchdaemon.h"
 #include "timeout_queue.h"
+#include "auth/auth_proto_api.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES
@@ -60,7 +61,8 @@ enum SearchdStatus_e : WORD
 	SEARCHD_OK		= 0,	///< general success, command-specific reply follows
 	SEARCHD_ERROR	= 1,	///< general failure, error message follows
 	SEARCHD_RETRY	= 2,	///< temporary failure, error message follows, client should retry later
-	SEARCHD_WARNING	= 3		///< general success, warning message and command-specific reply follow
+	SEARCHD_WARNING	= 3,	///< general success, warning message and command-specific reply follow
+	SEARCHD_IN_PROGRESS = 4	///< command is still running; empty interim reply follows
 };
 
 /// remote agent state
@@ -80,6 +82,7 @@ enum AgentStats_e
 	eTimeoutsConnect,	///< number of time-outed connections
 	eConnectFailures,	///< failed to connect
 	eNetworkErrors,		///< network error
+	eWrongQuery,		///< bad query
 	eWrongReplies,		///< incomplete reply
 	eUnexpectedClose,	///< agent closed the connection
 	eNetworkCritical,		///< agent answered, but with warnings
@@ -493,6 +496,8 @@ public:
 	LPKEY			m_pPollerTask = nullptr; ///< internal for poller. fixme! privatize?
 	volatile bool	m_bSuccess {false};	///< agent got processed, no need to retry
 
+	ApiKey_t m_tApiKey;
+
 public:
 	AgentConn_t () = default;
 
@@ -512,6 +517,10 @@ public:
 	void AbortCallback();
 	bool CheckOrphaned();
 	void SetNoLimitReplySize();
+	/// Keep the current reply buffer alive after parsing because a parser published a borrowed view into it.
+	void KeepReplyBufferAfterParse() { m_bKeepReplyBufferAfterParse = true; }
+	void EnableRemoteReplyHeartbeats ();
+	bool ExpectsRemoteReplyHeartbeat () const;
 
 #if _WIN32
 	// move recv buffer to dOut, reinit mine.
@@ -523,6 +532,7 @@ public:
 	inline const char * StateName () const 	{ return Agent_e_Name ( m_eConnState ); }
 
 private:
+	friend class AgentConnTestPeer_c;
 
 	// prepare buf, parse result
 	RequestBuilder_i * m_pBuilder = nullptr; ///< fixme! check if it is ok to have as the member, or we don't need it actually
@@ -546,6 +556,7 @@ private:
 	CSphFixedVector<BYTE>	m_dReplyHeader { REPLY_HEADER_SIZE };
 	BYTE *					m_pReplyCur = nullptr;
 	bool					m_bReplyLimitSize = true;
+	bool					m_bRemoteReplyHeartbeats = false;
 
 	// sending buffer stuff
 	SmartOutputBuffer_t m_tOutput;		///< chain of blobs we're sending to a host
@@ -556,6 +567,7 @@ private:
 	bool m_bInNetLoop	= false;		///< if we're inside netloop (1-thread work with schedule)
 	bool m_bNeedKick	= false;		///< if we've installed callback from outside th and need to kick netloop
 	bool m_bManyTries = false;			///< to avoid report 'retries limit esceeded' if we have ONLY one retry
+	bool m_bKeepReplyBufferAfterParse = false;	///< current parser published a borrowed view into m_dReplyBuf
 
 	Agent_e			m_eConnState { Agent_e::HEALTHY };	///< current state
 	SearchdStatus_e m_eReplyStatus { SEARCHD_ERROR };    ///< reply status code
@@ -584,10 +596,11 @@ private:
 	void ScheduleCallbacks ();
 	void DisableWrite();
 
-	void BuildData ();
+	bool BuildData ();
 	size_t ReplyBufPlace () const;
 	void InitReplyBuf ( int iSize = 0 );
 	inline bool IsReplyHeader() const { return m_iReplySize<0; }
+	void AcceptRemoteReplyHeartbeat ();
 
 	SSIZE_T SendChunk (); // low-level (platform specific) send
 	SSIZE_T RecvChunk (); // low-level (platform specific) recv
@@ -635,7 +648,7 @@ bool RunRemoteTask ( AgentConn_t* pConnection, RequestBuilder_i* pQuery, ReplyPa
 
 // simplified full task - schedule jobs, wait for complete, report num of succeeded
 // uses cooperated wait - i.e. yield instead of pause
-int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser, int iQueryRetry = -1, int iQueryDelay = -1 );
+int PerformRemoteTasks ( VectorAgentConn_t & dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser, int iQueryRetry = -1, int iQueryDelay = -1 );
 
 /////////////////////////////////////////////////////////////////////////////
 // DISTRIBUTED QUERIES
@@ -680,14 +693,45 @@ struct DistributedIndex_t : public ISphRefcountedMT
 	int GetAgentQueryTimeoutMs ( bool bRaw=false ) const;
 	void SetAgentConnectTimeoutMs ( int iAgentConnectTimeoutMs );
 	void SetAgentQueryTimeoutMs ( int iAgentQueryTimeoutMs );
-	DistributedIndex_t * Clone() const;
+	virtual IndexType_e GetType() const { return IndexType_e::DISTR; }
+	virtual DistributedIndex_t * Clone() const;
 
-private:
+protected:
 	~DistributedIndex_t() override;
 
 	int m_iAgentConnectTimeoutMs	= 0;	///< in msec, 0 means g_iAgentConnectTimeoutMs
 	int m_iAgentQueryTimeoutMs		= 0;	///< in msec, 0 means g_iAgentQueryTimeoutMs
 };
+
+struct ShardIndex_c : public DistributedIndex_t
+{
+	struct RouteTarget_t
+	{
+		CSphString				m_sName;
+		MultiAgentDescRefPtr_c	m_pAgent;
+		int						m_iOrderId = -1;
+		int						m_iRouteId = -1;
+		int64_t					m_iLocalIndexId = 0;
+		int						m_iLocalAlterGeneration = 0;
+		bool					m_bLocal = true;
+
+		bool IsLocal () const { return m_bLocal; }
+	};
+
+	CSphString				m_sIndexPath;
+	CSphSchema				m_tSchema;
+	CSphIndexSettings		m_tSettings;
+	CSphTokenizerSettings	m_tTokenizerSettings;
+	CSphDictSettings		m_tDictSettings;
+	CSphFieldFilterSettings	m_tFieldFilterSettings;
+	CSphVector<RouteTarget_t> m_dRouteTargets; // shard-only runtime order used for write routing
+
+	IndexType_e GetType() const override { return IndexType_e::SHARD; }
+	DistributedIndex_t * Clone() const override;
+};
+
+const ShardIndex_c * AsShard ( const DistributedIndex_t * pIndex );
+ShardIndex_c * AsShard ( DistributedIndex_t * pIndex );
 
 using DistributedIndexRefPtr_t = CSphRefcountedPtr<DistributedIndex_t>;
 using cDistributedIndexRefPtr_t = CSphRefcountedPtr<const DistributedIndex_t>;
@@ -778,12 +822,13 @@ bool sphNBSockEof ( int iSock );
 class SphinxqlRequestBuilder_c : public RequestBuilder_i
 {
 public:
-			SphinxqlRequestBuilder_c ( Str_t sQuery, const SqlStmt_t & tStmt );
+			SphinxqlRequestBuilder_c ( Str_t sQuery, const SqlStmt_t & tStmt, DWORD uApiFlags );
 	void	BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final;
 
 protected:
 	const Str_t m_sBegin;
 	const Str_t m_sEnd;
+	DWORD		m_uApiFlags = 0;
 };
 
 class SphinxqlReplyParser_c : public ReplyParser_i
@@ -799,7 +844,7 @@ protected:
 	CSphString * m_pWarning;
 };
 
-void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery );
+bool RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery );
 void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
 
 #endif // _searchdha_

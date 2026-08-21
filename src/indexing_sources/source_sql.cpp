@@ -511,7 +511,7 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 	ARRAY_FOREACH ( i, dFound )
 		dFound[i] = false;
 
-	const bool bWordDict = m_pDict->GetSettings().m_bWordDict;
+	const bool bWordDict = m_pDict->GetSettings().IsWordDict();
 
 	// map plain attrs from SQL
 	for ( int i=0; i<m_iSqlFields; i++ )
@@ -1545,7 +1545,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphReader & tReader, CSphString 
 				m_iJoinedHitPos = 0;
 			}
 
-			m_tState = CSphBuildHitsState_t();
+			m_tState.Reset();
 			m_tState.m_iField = m_iJoinedHitField;
 			m_tState.m_iStartField = m_iJoinedHitField;
 			m_tState.m_iEndField = m_iJoinedHitField+1;

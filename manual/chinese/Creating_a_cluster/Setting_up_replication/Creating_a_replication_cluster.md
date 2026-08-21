@@ -127,7 +127,17 @@ utils_api.sql("CREATE CLUSTER click_query '/var/data/click_query/' as path, 'cli
 
 <!-- end -->
 
+如果启用了[认证和授权](../../Security/Authentication_and_authorization.md)，实际生效的复制用户必须对集群目标具有 `replication` 权限。你可以在 `CREATE CLUSTER` 语句中指定该用户：
+
+```sql
+GRANT replication ON 'posts' TO 'repl_user';
+CREATE CLUSTER posts 'repl_user' AS user;
+```
+
+如果未指定用户，则该语句会使用当前会话用户，并在成功创建后将其存储为集群用户。
+
+在其他启用了认证的节点加入或管理该集群之前，请先在这些节点上为已存储的集群用户配置匹配的认证数据和 `replication` 权限。
+
 如果在创建集群时未指定[nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes)选项，则加入集群的第一个节点将被保存为[nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes)选项。
 
 <!-- proofread -->
-

@@ -20,6 +20,7 @@ template<typename ACTION>
 class AtScopeExit_T
 {
 	ACTION m_dAction;
+	bool m_bActive = true;
 
 public:
 	explicit AtScopeExit_T ( ACTION&& tAction )
@@ -28,11 +29,20 @@ public:
 
 	AtScopeExit_T ( AtScopeExit_T&& rhs ) noexcept
 		: m_dAction { std::move ( rhs.m_dAction ) }
-	{}
+		, m_bActive { rhs.m_bActive }
+	{
+		rhs.Release();
+	}
 
 	~AtScopeExit_T()
 	{
-		m_dAction();
+		if ( m_bActive )
+			m_dAction();
+	}
+
+	void Release() noexcept
+	{
+		m_bActive = false;
 	}
 };
 

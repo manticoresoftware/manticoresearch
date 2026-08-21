@@ -46,6 +46,7 @@
 %token	TOK_FAST_FETCH
 %token	TOK_FLOAT
 %token	TOK_FLOAT_VECTOR
+%token	TOK_FLOAT_VECTOR_ARRAY
 %token	TOK_FROM
 %token	TOK_FUNCTION
 %token	TOK_HASH
@@ -88,6 +89,7 @@
 %token	TOK_TEXT
 %token	TOK_TIMESTAMP
 %token	TOK_TYPE
+%token	TOK_USER
 %token	TOK_UINT
 %token	TOK_UPDATE
 %token	TOK_USE_GPU
@@ -119,6 +121,7 @@ tableident:
     | TOK_ENGINE
     | TOK_MVA
     | TOK_MVA64
+    | TOK_USER
 	;
 
 ident:
@@ -145,6 +148,7 @@ attribute_type:
 	| TOK_UINT		{ $$.SetValueInt ( SPH_ATTR_INTEGER ); }
 	| TOK_TIMESTAMP	{ $$.SetValueInt ( SPH_ATTR_TIMESTAMP ); }
 	| TOK_FLOAT_VECTOR { $$.SetValueInt ( SPH_ATTR_FLOAT_VECTOR ); }
+	| TOK_FLOAT_VECTOR_ARRAY { $$.SetValueInt ( SPH_ATTR_FLOAT_VECTOR_ARRAY ); }
 	;
 
 
@@ -274,6 +278,13 @@ alter:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CLUSTER_ALTER_DROP;
+		}
+	| alter_cluster_ident TOK_UPDATE TOK_USER TOK_QUOTED_STRING
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_CLUSTER_ALTER_UPDATE;
+			tStmt.m_sSetName = "user";
+			pParser->ToString ( tStmt.m_sStringParam, $4 ).Unquote();
 		}
 	| alter_cluster_ident TOK_UPDATE tablename
 		{
@@ -459,6 +470,14 @@ create_table_item:
 		 	yyerror ( pParser, pParser->GetLastError() );
             YYERROR;
 		 }
+	}
+	| ident TOK_TABLEIDENT item_option_list
+	{
+		if ( !pParser->AddCreateTableUuidId ( $1, $2 ) )
+		{
+			yyerror ( pParser, pParser->GetLastError() );
+			YYERROR;
+		}
 	}
 	| ident item_option_list
 	{

@@ -32,7 +32,6 @@ public:
 SphWordID_t DictExact_c::GetWordID ( BYTE* pWord )
 {
 	auto iLen = (int)strlen ( (const char*)pWord );
-	iLen = Min ( iLen, 16 + 3 * SPH_MAX_WORD_LEN - 1 );
 
 	if ( !iLen )
 		return 0;

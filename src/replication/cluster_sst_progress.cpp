@@ -521,7 +521,21 @@ void SstProgress_c::SetDonor4Joiner ( int iFilesCount, SstProgressContext_t & tC
 
 	tCtx.m_fTotalBefore = tStatus.m_fTotal;
 
-	assert ( m_iTable!=-1 );
+	// m_pSstProgress is shared per-cluster and reporting-only. During a chaotic rejoin a concurrent
+	// Galera SST Init() can clear m_iTable (->-1) and empty m_dProgress/m_dTables between this donor's
+	// SetTable() and the call below. The asserts are compiled out in release, so GetTableStage(-1) then
+	// returns an out-of-bounds pointer whose deref SIGSEGVs the donor mid ALTER CLUSTER ADD -> the node
+	// dies, the cluster drops to non-primary and the rollback test fails. Guard it: the progress weight
+	// is non-critical, so on a torn read just use a neutral weight instead of crashing.
+	if ( m_iTable<0 || m_iTable>=m_dTables.GetLength() )
+	{
+		sphWarning ( "SST SetDonor4Joiner: invalid table index %d (tables=%d); using neutral stage weight",
+			m_iTable, m_dTables.GetLength() );
+		tCtx.m_fStageWeight = 0.0f;
+		tCtx.m_uStageTotal = iFilesCount;
+		return;
+	}
+
 	const SstStageProgress_t * pTableStages = GetTableStage ( m_iTable );
 	// FIXME!!! make it work for all other stages
 	const SstStageProgress_t & tReserve = pTableStages[(int)SstStage_e::RESERVE_FILES];
@@ -587,14 +601,14 @@ void operator>> ( InputBuffer_c & tIn, UpdateSstProgress_t & tReq )
 	tIn >> tReq.m_tStatus;
 }
 
-static bool SendSstProgress ( const CSphString & sCluster, const VecTraits_T<AgentDesc_t> & dDesc, const SstProgressStatus_t & tStatus )
+static bool SendSstProgress ( const CSphString & sCluster, const CSphString & sUser, const VecTraits_T<AgentDesc_t> & dDesc, const SstProgressStatus_t & tStatus )
 {
 	UpdateSstProgress_t tReqData;
 	tReqData.m_tStatus = tStatus;
 	tReqData.m_sCluster = sCluster;
 
 	CmdUpdateSstProgress_c tReq;
-	auto dNodes = tReq.MakeAgents ( dDesc, ReplicationTimeoutQuery(), tReqData );
+	auto dNodes = tReq.MakeAgents ( dDesc, sUser, ReplicationTimeoutQuery(), tReqData );
 	return PerformRemoteTasksWrap ( dNodes, tReq, tReq, true );
 }
 
@@ -616,14 +630,14 @@ void ReceiveSstProgress ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSphStr
 	}
 }
 
-static void CoPushSstProgress(  const CSphString & sCluster, const CSphVector<AgentDesc_t> & dDesc, CSphRefcountedPtr<SstProgress_i> pProgress )
+static void CoPushSstProgress(  const CSphString & sCluster, const CSphString & sUser, const CSphVector<AgentDesc_t> & dDesc, CSphRefcountedPtr<SstProgress_i> pProgress )
 {
 	while ( !pProgress->IsPushUpdateDone() )
 	{
 		SstProgressStatus_t tStatus;
 		pProgress->GetStatus ( tStatus );
 
-		SendSstProgress ( sCluster, dDesc, tStatus );
+		SendSstProgress ( sCluster, sUser, dDesc, tStatus );
 		if ( pProgress->IsPushUpdateDone() )
 			break;
 
@@ -631,7 +645,7 @@ static void CoPushSstProgress(  const CSphString & sCluster, const CSphVector<Ag
 	}
 }
 
-void SstProgress_i::StartPushUpdates ( const CSphString & sCluster, const VecTraits_T<AgentDesc_t> & dDesc, CSphRefcountedPtr<SstProgress_i> pProgress )
+void SstProgress_i::StartPushUpdates ( const CSphString & sCluster, const CSphString & sUser, const VecTraits_T<AgentDesc_t> & dDesc, CSphRefcountedPtr<SstProgress_i> pProgress )
 {
 	SstProgress_c * pProgressImpl = static_cast<SstProgress_c *> ( pProgress.Ptr() );
 	assert( pProgressImpl->m_eRole==Role_e::DONOR );
@@ -640,7 +654,7 @@ void SstProgress_i::StartPushUpdates ( const CSphString & sCluster, const VecTra
 	CSphVector<AgentDesc_t> dDescCopy;
 	dDescCopy.Append ( dDesc );
 
-	Threads::Coro::Go ( [sCluster, dDesc = std::move ( dDescCopy ), pProgress] { CoPushSstProgress( sCluster, dDesc, pProgress ); }, Threads::Coro::CurrentScheduler() );
+	Threads::Coro::Go ( [sCluster, sUser, dDesc = std::move ( dDescCopy ), pProgress] { CoPushSstProgress( sCluster, sUser, dDesc, pProgress ); }, Threads::Coro::CurrentScheduler() );
 }
 
 void SstProgress_c::StopPushUpdates ()

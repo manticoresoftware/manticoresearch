@@ -23,6 +23,16 @@ Manticore 的复制由 [Galera 库](https://github.com/codership/galera) 提供�
 * 必须指定一个包含其他节点可访问 IP 地址的 [listen](../../Server_settings/Searchd.md#listen) 指令，或一个有可访问 IP 的 [node_address](../../Server_settings/Searchd.md#node_address)。
 * 可以选择在每个集群节点上为 [server_id](../../Server_settings/Searchd.md#server_id) 设置唯一值。如果未设置该值，节点将尝试使用 MAC 地址或随机数生成 `server_id`。
 
+如果启用了[身份验证和授权](../../Security/Authentication_and_authorization.md)，集群操作需要 `replication` 权限。请将其授予应当拥有该集群复制操作的用户：
+
+```sql
+GRANT replication ON 'posts' TO 'repl_user';
+```
+
+`CREATE CLUSTER` 和 `JOIN CLUSTER` 可以通过 `'<user>' AS user` 指定该用户。参与该操作的各节点上必须存在该用户，且存储的认证数据必须匹配。仅在每个节点上独立创建相同的用户名和密码还不够，因为存储的认证数据可能不同。如果你在 daemon 之外更改了 auth data，请先在受影响的节点上运行 `RELOAD AUTH`，然后再使用集群操作。
+
+后续的 `ALTER CLUSTER ... ADD`、`ALTER CLUSTER ... DROP`、`ALTER CLUSTER ... UPDATE nodes` 和 `DELETE CLUSTER` 会使用已存储的集群用户。启用身份验证时，成功执行的 `JOIN CLUSTER` 会用 donor 集群的认证数据替换加入节点上的所有本地认证数据。
+
 如果没有设置 `replication` 类型的 [listen](../../Server_settings/Searchd.md#listen) 指令，Manticore 将在默认协议监听端口之后的 200 端口范围内为每个创建的集群使用前两个空闲端口。若要手动设置复制端口，必须定义 [listen](../../Server_settings/Searchd.md#listen) 指令（类型为 `replication`）的端口范围，且同一服务器不同节点的地址/端口范围不能交叉。通常，端口范围应为每个集群指定至少两个端口。当定义带端口范围的复制监听器（例如 `listen = 192.168.0.1:9320-9328:replication`）时，Manticore 不会立即在这些端口监听。它仅在开始使用复制时，从指定范围内随机选取空闲端口。
 
 ## 复制集群
@@ -39,7 +49,9 @@ Manticore 的复制由 [Galera 库](https://github.com/codership/galera) 提供�
 
 ### path
 
-该选项指定用于[写集缓存复制](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache)和从其他节点接收表的数据目录。此路径应在所有集群中唯一，且以相对于 [data_dir](../../Server_settings/Searchd.md#data_dir) 目录的相对路径给出。默认值为 [data_dir](../../Server_settings/Searchd.md#data_dir) 的值。
+path 选项指定 [write-set cache replication](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) 以及其他集群提供程序文件的数据目录。它不会改变复制表的存储位置。传入的复制表会存储在 [data_dir](../../Server_settings/Searchd.md#data_dir) 下它们各自的正常表目录中。此值在系统中的所有集群之间都应唯一，并且应作为相对于 [data_dir](../../Server_settings/Searchd.md#data_dir) 目录的相对路径指定。默认情况下，它设置为 [data_dir](../../Server_settings/Searchd.md#data_dir) 的值。
+
+> **破坏性变更：** 较早版本也会将传入的复制表文件存储在 cluster path 下。如果你使用了自定义的 cluster `path`，升级时请格外小心，因为较早版本接收的复制表可能需要移动到正常的 `data_dir/<table>` 布局中，或者重新同步。
 
 ### nodes
 
@@ -56,7 +68,7 @@ Manticore 的复制由 [Galera 库](https://github.com/codership/galera) 提供�
 
 在JSON接口中，所有写入集群表的语句都必须设置`cluster`属性以及`table`名称。如果没有设置`cluster`属性，将会导致错误。
 
-集群中表的[Auto ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) 只要`server_id`正确配置，就是有效的。
+集群中某个表的 [Auto ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) 只要 [server_id](../../Server_settings/Searchd.md#server_id) 配置正确，就应该是有效的。
 
 <!-- intro -->
 ##### SQL：
@@ -64,8 +76,8 @@ Manticore 的复制由 [Galera 库](https://github.com/codership/galera) 提供�
 <!-- request SQL -->
 
 ```sql
-INSERT INTO posts:weekly_index VALUES ( 'iphone case' )
-TRUNCATE RTINDEX click_query:weekly_index
+INSERT INTO posts:weekly_table VALUES ( 'iphone case' )
+TRUNCATE TABLE click_query:weekly_table
 UPDATE INTO posts:rt_tags SET tags=(101, 302, 304) WHERE MATCH ('use') AND id IN (1,101,201)
 DELETE FROM clicks:rt WHERE MATCH ('dumy') AND gid>206
 ```
@@ -76,7 +88,7 @@ DELETE FROM clicks:rt WHERE MATCH ('dumy') AND gid>206
 POST /insert -d '
 {
   "cluster":"posts",
-  "table":"weekly_index",
+  "table":"weekly_table",
   "doc":
   {
     "title" : "iphone case",
@@ -86,7 +98,7 @@ POST /insert -d '
 POST /delete -d '
 {
   "cluster":"posts",
-  "table": "weekly_index",
+  "table": "weekly_table",
   "id":1
 }'
 ```
@@ -94,10 +106,10 @@ POST /delete -d '
 <!-- request PHP -->
 
 ```php
-$index->addDocuments([
+$table->addDocuments([
         1, ['title' => 'iphone case', 'price' => 19.85]
 ]);
-$index->deleteDocument(1);
+$table->deleteDocument(1);
 ```
 
 <!-- intro -->
@@ -106,8 +118,8 @@ $index->deleteDocument(1);
 <!-- request Python -->
 
 ``` python
-indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}})
-indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
+indexApi.insert({"cluster":"posts","table":"weekly_table","doc":{"title":"iphone case","price":19.85}})
+indexApi.delete({"cluster":"posts","table":"weekly_table","id":1})
 ```
 
 <!-- intro -->
@@ -116,8 +128,8 @@ indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
 <!-- request Python-asyncio -->
 
 ``` python
-await indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}})
-await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
+await indexApi.insert({"cluster":"posts","table":"weekly_table","doc":{"title":"iphone case","price":19.85}})
+await indexApi.delete({"cluster":"posts","table":"weekly_table","id":1})
 ```
 
 <!-- intro -->
@@ -126,8 +138,8 @@ await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
 <!-- request Javascript -->
 
 ``` javascript
-res = await indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}});
- res = await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1});
+res = await indexApi.insert({"cluster":"posts","table":"weekly_table","doc":{"title":"iphone case","price":19.85}});
+ res = await indexApi.delete({"cluster":"posts","table":"weekly_table","id":1});
 ```
 
 <!-- intro -->
@@ -141,11 +153,11 @@ HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","Crossbody Bag with Tassel");
     put("price",19.85);
 }};
-newdoc.index("weekly_index").cluster("posts").id(1L).setDoc(doc);
+newdoc.table("weekly_table").cluster("posts").id(1L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 
 DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest();
-deleteRequest.index("weekly_index").cluster("posts").setId(1L);
+deleteRequest.table("weekly_table").cluster("posts").setId(1L);
 indexApi.delete(deleteRequest);
 
 ```
@@ -159,10 +171,10 @@ indexApi.delete(deleteRequest);
 Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "Crossbody Bag with Tassel");
 doc.Add("price", 19.85);
-InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "weekly_index", cluster:posts, id: 1, doc: doc);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "weekly_table", cluster:posts, id: 1, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 
-DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(table: "weekly_index", cluster: "posts", id: 1);
+DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(table: "weekly_table", cluster: "posts", id: 1);
 indexApi.Delete(deleteDocumentRequest);
 ```
 
@@ -176,7 +188,7 @@ let mut doc = HashMap::new();
 doc.insert("title".to_string(), serde_json::json!("Crossbody Bag with Tassel"));
 doc.insert("price".to_string(), serde_json::json!(19.85));
 let insert_req = InsertDocumentRequest {
-    table: serde_json::json!("weekly_index"),
+    table: serde_json::json!("weekly_table"),
     doc: serde_json::json!(doc),
     cluster: serde_json::json!("posts"),
     id: serde_json::json!(1),
@@ -184,7 +196,7 @@ let insert_req = InsertDocumentRequest {
 let insert_res = index_api.insert(insert_req).await;
 
 let delete_req = DeleteDocumentRequest {
-    table: serde_json::json!("weekly_index"),
+    table: serde_json::json!("weekly_table"),
     cluster: serde_json::json!("posts"),
     id: serde_json::json!(1),
 };
@@ -207,8 +219,8 @@ index_api.delete(delete_req).await;
 <!-- request SQL -->
 
 ```sql
-SELECT * FROM weekly_index
-CALL PQ('posts:weekly_index', 'document is here')
+SELECT * FROM weekly_table
+CALL PQ('posts:weekly_table', 'document is here')
 ```
 
 <!-- request JSON -->
@@ -217,12 +229,12 @@ CALL PQ('posts:weekly_index', 'document is here')
 POST /search -d '
 {
   "cluster":"posts",
-  "table":"weekly_index",
+  "table":"weekly_table",
   "query":{"match":{"title":"keyword"}}
 }'
 POST /search -d '
 {
-  "table":"weekly_index",
+  "table":"weekly_table",
   "query":{"match":{"title":"keyword"}}
 }'
 ```
@@ -284,7 +296,7 @@ SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 ## 复制和集群
 
 <!-- example replication and cluster 1 -->
-要使用复制，需要在配置文件中为SphinxAPI协议定义一个[listen](../../Server_settings/Searchd.md#listen)端口，并为复制地址和端口范围定义一个[listen](../../Server_settings/Searchd.md#listen)。还需要指定[数据目录](../../Server_settings/Searchd.md#data_dir)以接收传入的表。
+要使用复制，你需要在配置文件中为 SphinxAPI 协议定义一个 [listen](../../Server_settings/Searchd.md#listen) 端口，并为复制地址和端口范围再定义一个 [listen](../../Server_settings/Searchd.md#listen)。另外，还要指定用于存储传入复制表的 [data_dir](../../Server_settings/Searchd.md#data_dir) 文件夹。
 
 
 <!-- intro -->
@@ -617,7 +629,7 @@ POST /insert -d '
 <!-- request PHP -->
 
 ```php
-$index->addDocuments([
+$table->addDocuments([
         3, ['title' => 'test me']
 ]);
 
@@ -660,7 +672,7 @@ InsertDocumentRequest newdoc = new InsertDocumentRequest();
 HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","test me");
 }};
-newdoc.index("pq_title").cluster("posts").id(3L).setDoc(doc);
+newdoc.table("pq_title").cluster("posts").id(3L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 ```
 
@@ -672,7 +684,7 @@ sqlresult = indexApi.insert(newdoc);
 ``` clike
 Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "test me");
-InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "pq_title", cluster: "posts", id: 3, doc: doc);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "pq_title", cluster: "posts", id: 3, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 ```
 
@@ -696,4 +708,3 @@ let insert_res = index_api.insert(insert_req).await;
 
 集群中所有修改表的查询现在都会复制到集群中的所有节点。
 <!-- proofread -->
-

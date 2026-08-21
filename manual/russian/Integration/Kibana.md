@@ -1,71 +1,73 @@
 # Интеграция Manticore с Kibana
 
-[Kibana](https://www.elastic.co/kibana) — это визуальный интерфейс, который позволяет исследовать, визуализировать и создавать панели управления для ваших логов. Интеграция Kibana с Manticore Search может ускорить загрузку визуализаций Kibana до 3 раз по сравнению с Elasticsearch, как продемонстрировано в этом [демо](https://github.com/manticoresoftware/kibana-demo#manticore-search-kibana-demo). Эта интеграция позволяет пользователям беспрепятственно анализировать данные с помощью интерактивных панелей управления, пользовательских визуализаций и возможностей поиска в реальном времени. Она также упрощает работу с различными источниками данных, поддерживая инструменты, такие как Logstash и Filebeat для упрощённой загрузки данных, что делает её отличным выбором для рабочих процессов анализа логов.
+[Kibana](https://www.elastic.co/kibana) — это визуальный интерфейс, который позволяет исследовать, визуализировать и создавать дашборды для ваших лог-данных. Интеграция Kibana с Manticore Search может ускорить загрузку визуализаций Kibana до 3 раз по сравнению с Elasticsearch, как показано в этом [демо](https://github.com/manticoresoftware/kibana-demo#manticore-search-kibana-demo). Эта интеграция позволяет пользователям без лишних усилий анализировать данные с помощью интерактивных дашбордов, пользовательских визуализаций и возможностей поиска в реальном времени. Она также упрощает работу с разнородными источниками данных благодаря поддержке таких инструментов, как Logstash и Filebeat, для упрощенного импорта данных, что делает ее отличным выбором для рабочих процессов анализа логов.
 
-## Требования
-1. **Скачать Kibana**: Убедитесь, что вы скачали версию Kibana, совместимую с Manticore. В настоящее время протестирована и рекомендована версия 7.6.0. Другие версии 7.x могут работать, но возможно возникновение проблем. Версия 8.x не поддерживается.
-2. **Проверить Manticore**: Убедитесь, что ваш экземпляр Manticore работает и его HTTP API доступен (по умолчанию: `http://localhost:9308`).
+## Необходимые условия
+1. **Скачайте Kibana**: Убедитесь, что вы загружаете версию Kibana, совместимую с Manticore. На данный момент протестирована и рекомендуется версия 7.6.0. Другие версии 7.x могут работать, но способны вызвать проблемы. Версия 8.x не поддерживается.
+2. **Проверьте Manticore**: Убедитесь, что ваш экземпляр Manticore запущен и его HTTP API доступен (по умолчанию: `http://localhost:9308`).
 
-## Конфигурация
+## Настройка
 1. Откройте [файл конфигурации Kibana](https://www.elastic.co/guide/en/kibana/current/settings.html) (`kibana.yml`).
-2. Установите URL вашего экземпляра Manticore:
+2. Укажите URL вашего экземпляра Manticore:
    ```yaml
    elasticsearch.hosts: ["http://localhost:9308"]
    ```
-3. Запустите Kibana и откройте её в браузере по адресу `http://localhost:5601`. При необходимости замените `localhost` на IP-адрес или имя хоста вашего сервера.
+3. Запустите Kibana и откройте ее в браузере по адресу `http://localhost:5601`. При необходимости замените `localhost` на IP-адрес или имя хоста вашего сервера.
 
-> Примечание: Для работы с Kibana Manticore не требует настройки аутентификации. Также обратите внимание, что Manticore должен работать в [режиме реального времени](../Read_this_first.md#Real-time-mode-vs-plain-mode) для интеграции с Kibana.
+> Примечание: Manticore не требует настройки аутентификации при работе с Kibana. Также учтите, что для интеграции с Kibana Manticore должен работать в [режиме реального времени](../Read_this_first.md#Real-time-mode-vs-plain-mode).
 
 ### Пример конфигурации Manticore
+
 ```searchd {
     listen = 127.0.0.1:9308:http
     pid_file = /var/run/manticore/searchd.pid
     data_dir = /var/lib/manticore
  }
+```
 
-## Supported Features
+## Поддерживаемые возможности
 ### Discover
-- Use the **Discover** tab in Kibana to search and filter your data interactively.
-- Refine your searches using the query bar with simple queries in the [Kibana query language](https://www.elastic.co/guide/en/kibana/current/kuery-query.html).
+- Используйте вкладку **Discover** в Kibana, чтобы интерактивно искать и фильтровать данные.
+- Уточняйте поиск с помощью строки запросов и простых запросов на [языке запросов Kibana](https://www.elastic.co/guide/en/kibana/current/kuery-query.html).
 
-### Visualizations
-- Navigate to **Visualizations** to create custom visualizations:
-  - Create a table pattern (it’s called an 'index pattern' in Kibana) if one doesn’t already exist to define your data source.
-  - Choose a visualization type (e.g., bar chart, line chart, or pie chart).
-  - Configure your visualization, execute it, and explore your data.
-  - Save your visualizations for future use.
+### Визуализации
+- Перейдите в раздел **Visualizations**, чтобы создавать собственные визуализации:
+  - Создайте шаблон таблицы (в Kibana он называется 'index pattern'), если его еще нет, чтобы определить источник данных.
+  - Выберите тип визуализации (например, столбчатую диаграмму, линейный график или круговую диаграмму).
+  - Настройте визуализацию, запустите ее и изучайте данные.
+  - Сохраняйте визуализации для будущего использования.
 
-### Dashboards
-- Access **Dashboards** to create or view interactive dashboards:
-  - Add visualizations, filters, or controls for a personalized experience.
-  - Interact with your data directly from the dashboard.
-  - Save dashboards for future use.
+### Дашборды
+- Откройте **Dashboards**, чтобы создавать или просматривать интерактивные дашборды:
+  - Добавляйте визуализации, фильтры или элементы управления для персонализированного опыта.
+  - Работайте с данными прямо с дашборда.
+  - Сохраняйте дашборды для будущего использования.
 
-### Management
-- Go to **Management > Kibana** to customize settings like default time zones and visualization preferences.
+### Управление
+- Перейдите в **Management > Kibana**, чтобы настроить такие параметры, как часовые пояса по умолчанию и предпочтения визуализации.
 
-## Limitations
-- Currently, Kibana version 7.6.0 is tested and recommended. Other 7.x versions may work but could cause issues. Versions 8.x are not supported.
-- The following Elasticsearch-specific field types are not supported:
-  - [Spatial data types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#spatial_datatypes)
-  - [Structured data types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#structured-data-types)
-  - [Document ranking types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#document-ranking-types)
-  - [Text search types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#text-search-types) (except for plain 'text')
-  - [Relational data types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#object-types)
-- Metric aggregation functions are limited to [those supported by Manticore](../Searching/Grouping.md#Aggregation-functions).
-- The following Kibana tools are not supported:
-  - [Canvas](https://www.elastic.co/guide/en/kibana/7.6/canvas.html) – A visualization and presentation tool for combining data with colors and images.
-  - [Elastic Maps](https://www.elastic.co/guide/en/kibana/7.6/maps.html) – A tool for analyzing geographical data.
-  - [Metrics](https://www.elastic.co/guide/en/kibana/7.6/xpack-infra.html) – An app for monitoring infrastructure metrics.
-  - [Logs](https://www.elastic.co/guide/en/kibana/7.6/xpack-logs.html) – A console-like display for exploring logs from common services.
-  - Monitoring:
-    - [Uptime](https://www.elastic.co/guide/en/kibana/7.6/xpack-uptime.html) – Monitors the status of network endpoints via HTTP/S, TCP, and ICMP.
-    - [APM (Application Performance Monitoring)](https://www.elastic.co/guide/en/kibana/7.6/xpack-apm.html) – Collects in-depth performance metrics from applications.
-    - [SIEM (Security Information and Event Management)](https://www.elastic.co/guide/en/kibana/7.6/xpack-siem.html) – An interactive workspace for security teams to triage events and conduct initial investigations.
-    - [ILM (Index lifecycle management)](https://www.elastic.co/guide/en/elasticsearch/reference/7.6/index-lifecycle-management.html) - Automatically manage indices according to performance, resiliency, and retention requirements.
-    - [Stack Monitoring](https://www.elastic.co/guide/en/kibana/7.6/xpack-monitoring.html) – Provides visualizations of monitoring data across the Elastic Stack.
-  - [Elasticsearch Management](https://www.elastic.co/guide/en/kibana/7.6/management.html) – A UI for managing Elastic Stack objects, including ILM (Index Lifecycle Management), etc.
+## Ограничения
+- На данный момент протестирована и рекомендуется версия Kibana 7.6.0. Другие версии 7.x могут работать, но способны вызвать проблемы. Версии 8.x не поддерживаются.
+- Следующие типы полей, специфичные для Elasticsearch, не поддерживаются:
+  - [Пространственные типы данных](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#spatial_datatypes)
+  - [Структурированные типы данных](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#structured-data-types)
+  - [Типы ранжирования документов](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#document-ranking-types)
+  - [Типы полнотекстового поиска](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#text-search-types) (кроме обычного 'text')
+  - [Реляционные типы данных](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#object-types)
+- Функции агрегации метрик ограничены [поддерживаемыми Manticore](../Searching/Grouping.md#Aggregation-functions).
+- Следующие инструменты Kibana не поддерживаются:
+  - [Canvas](https://www.elastic.co/guide/en/kibana/7.6/canvas.html) – инструмент для визуализации и презентаций, позволяющий объединять данные с цветами и изображениями.
+  - [Elastic Maps](https://www.elastic.co/guide/en/kibana/7.6/maps.html) – инструмент для анализа географических данных.
+  - [Metrics](https://www.elastic.co/guide/en/kibana/7.6/xpack-infra.html) – приложение для мониторинга метрик инфраструктуры.
+  - [Logs](https://www.elastic.co/guide/en/kibana/7.6/xpack-logs.html) – представление в стиле консоли для изучения логов из распространенных сервисов.
+  - Мониторинг:
+    - [Uptime](https://www.elastic.co/guide/en/kibana/7.6/xpack-uptime.html) – отслеживает состояние сетевых конечных точек по HTTP/S, TCP и ICMP.
+    - [APM (Application Performance Monitoring)](https://www.elastic.co/guide/en/kibana/7.6/xpack-apm.html) – собирает подробные метрики производительности приложений.
+    - [SIEM (Security Information and Event Management)](https://www.elastic.co/guide/en/kibana/7.6/xpack-siem.html) – интерактивное рабочее пространство для команд безопасности, чтобы разбирать события и проводить первичные расследования.
+    - [ILM (Index lifecycle management)](https://www.elastic.co/guide/en/elasticsearch/reference/7.6/index-lifecycle-management.html) - Автоматически управляет индексами в соответствии с требованиями к производительности, отказоустойчивости и сроку хранения.
+    - [Stack Monitoring](https://www.elastic.co/guide/en/kibana/7.6/xpack-monitoring.html) – предоставляет визуализации данных мониторинга по всему Elastic Stack.
+  - [Elasticsearch Management](https://www.elastic.co/guide/en/kibana/7.6/management.html) – интерфейс для управления объектами Elastic Stack, включая ILM (Index Lifecycle Management) и другие.
 
-## Data Ingestion and Exploration
-Integrate Manticore with tools like [Logstash](../Integration/Logstash.md), [Filebeat](../Integration/Filebeat.md), [Fluentbit](https://manticoresearch.com/blog/integration-of-manticore-with-fluentbit/), or [Vector.dev](https://manticoresearch.com/blog/integration-of-manticore-with-vectordev/) to ingest data from sources like web logs. Once the data is loaded into Manticore, you can explore and visualize it in Kibana.
+## Загрузка и исследование данных
+Интегрируйте Manticore с такими инструментами, как [Logstash](../Integration/Logstash.md), [Filebeat](../Integration/Filebeat.md), [Fluentbit](https://manticoresearch.com/blog/integration-of-manticore-with-fluentbit/) или [Vector.dev](https://manticoresearch.com/blog/integration-of-manticore-with-vectordev/), чтобы загружать данные из таких источников, как веб-логи. После того как данные загружены в Manticore, вы можете изучать и визуализировать их в Kibana.
 

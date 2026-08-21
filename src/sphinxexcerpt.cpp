@@ -1434,7 +1434,7 @@ void SnippetBuilder_c::Impl_c::Setup ( const CSphIndex * pIndex, const SnippetQu
 
 	if ( tSettings.m_bJsonQuery )
 	{
-		bool bWordDict = m_pDict->GetSettings().m_bWordDict;
+		bool bWordDict = m_pDict->GetSettings().IsWordDict();
 		// caveat: here we clone from Tokenizer, not from QueryTokenizer, as last was cloned as non-json, and so, includes different extra symbols.
 		m_pState->m_pTokenizerJson = sphCloneAndSetupQueryTokenizer ( pIndex->GetTokenizer(), pIndex->IsStarDict ( bWordDict ), tIndexSettings.m_bIndexExactWords, true );
 	}
@@ -1488,7 +1488,7 @@ bool SnippetBuilder_c::Impl_c::SetQuery ( const CSphString & sQuery, bool bIgnor
 		return false;
 
 	const auto & tMutable = m_pState->m_pIndex->GetMutableSettings();
-	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
+	bool bWordDict = m_pDict->GetSettings().IsWordDict();
 	int iExpandKeywords = ExpandKeywords ( tMutable.m_iExpandKeywords, QUERY_OPT_DEFAULT, tIndexSettings, bWordDict );
 	if ( iExpandKeywords!=KWE_DISABLED )
 	{

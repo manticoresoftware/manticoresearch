@@ -19,8 +19,7 @@
 #include "digest_sha1.h"
 #include "send_files.h"
 #include "recv_state.h"
-
-#include <cmath>
+#include "api_reply_stream.h"
 
 void GetArray ( StrVec_t& dBuf, InputBuffer_c& tIn )
 {
@@ -130,17 +129,13 @@ void operator<< ( ISphOutputBuffer& tOut, const FileReserveReply_t& tReq )
 	SendArray ( tReq.m_dRemotePaths, tOut );
 	tOut.SendInt ( tReq.m_dNodeChunksMask.GetSize() );
 	tOut.SendBytes ( tReq.m_dNodeChunksMask.Begin(), tReq.m_dNodeChunksMask.GetSizeBytes() );
-	tOut.SendUint64 ( tReq.m_tmTimeout );
-	tOut.SendUint64 ( tReq.m_tmTimeoutFile );
 }
 
 StringBuilder_c& operator<< ( StringBuilder_c& tOut, const FileReserveReply_t& tReq )
 {
 	tOut << "index active:" << (tReq.m_bIndexActive?"yes":"no")
 		<< "remote paths:" << tReq.m_dRemotePaths
-		<< "mask size:" << tReq.m_dNodeChunksMask.GetSize()
-		<< "timeout:"<< tReq.m_tmTimeout
-		<< "timeout file:" << tReq.m_tmTimeoutFile;
+		<< "mask size:" << tReq.m_dNodeChunksMask.GetSize();
 	return tOut;
 }
 
@@ -151,8 +146,6 @@ void operator>> ( InputBuffer_c& tIn, FileReserveReply_t& tReq )
 	int iBits = tIn.GetInt();
 	tReq.m_dNodeChunksMask.Init ( iBits );
 	tIn.GetBytes ( tReq.m_dNodeChunksMask.Begin(), tReq.m_dNodeChunksMask.GetSizeBytes() );
-	tReq.m_tmTimeout = (int64_t)tIn.GetUint64();
-	tReq.m_tmTimeoutFile = (int64_t)tIn.GetUint64();
 }
 
 
@@ -176,13 +169,15 @@ struct ScopedFilesRemoval_t: public ISphNoncopyable
 };
 
 // command at remote node for CLUSTER_FILE_RESERVE to check
-// - file could be allocated on disk at cluster path and reserve disk space for a file
+// - file could be allocated on disk at table path and reserve disk space for a file
 // - or make sure that index has exact same index file, ie sha1 matched
 bool ClusterFileReserve ( const FileReserveRequest_t & tCmd, FileReserveReply_t & tRes )
 {
 	sphLogDebugRpl ( "reserve table '%s'", tCmd.m_sIndex.cstr() );
 
-	int64_t tmStartReserve = sphMicroTimer();
+	if ( !CanReplaceIndex ( tCmd.m_sCluster, tCmd.m_sIndex ) )
+		return false;
+
 	CSphString sLocalIndexPath;
 
 	auto pProgressSst = GetClusterProgress ( tCmd.m_sCluster );
@@ -204,7 +199,7 @@ bool ClusterFileReserve ( const FileReserveRequest_t & tCmd, FileReserveReply_t 
 
 	tRes.m_dRemotePaths.Resize ( tCmd.m_pChunks->m_dBaseNames.GetLength ());
 
-	// use cluster path as head of index path or existed index path
+	// use regular table path or existing index path
 	if ( tRes.m_bIndexActive )
 	{
 		CSphString sPathOnly = GetPathOnly ( sLocalIndexPath );
@@ -216,27 +211,23 @@ bool ClusterFileReserve ( const FileReserveRequest_t & tCmd, FileReserveReply_t 
 		}
 	} else
 	{
-		auto tIndexPath = GetClusterPath ( tCmd.m_sCluster );
-		if ( !tIndexPath )
-			return false;
-		// index in its own directory
-		sLocalIndexPath.SetSprintf ( "%s/%s", tIndexPath->cstr(), tCmd.m_sIndexFileName.cstr() );
-		MkDir ( sLocalIndexPath.cstr() );
+		// index in its own data_dir directory
+		CSphString sIndexDir = GetDatadirPath ( tCmd.m_sIndexFileName );
+		MkDir ( sIndexDir.cstr() );
 
-		// set index files names into cluster folder
+		// set index files names into table folder
 		ARRAY_FOREACH ( iFile, tCmd.m_pChunks->m_dBaseNames )
 		{
 			const CSphString & sFile = tCmd.m_pChunks->m_dBaseNames[iFile];
-			tRes.m_dRemotePaths[iFile].SetSprintf ( "%s/%s", sLocalIndexPath.cstr(), sFile.cstr() );
+			tRes.m_dRemotePaths[iFile].SetSprintf ( "%s/%s", sIndexDir.cstr(), sFile.cstr() );
 		}
-		sLocalIndexPath.SetSprintf ( "%s/%s/%s", tIndexPath->cstr(), tCmd.m_sIndexFileName.cstr(), tCmd.m_sIndexFileName.cstr() );
+		sLocalIndexPath.SetSprintf ( "%s/%s", sIndexDir.cstr(), tCmd.m_sIndexFileName.cstr() );
 	}
 
 	int iBits = tCmd.m_pChunks->m_dChunks.Last().m_iHashStartItem + tCmd.m_pChunks->m_dChunks.Last().GetChunksCount();
 	tRes.m_dNodeChunksMask.Init ( iBits );
 
 	CSphVector<BYTE> dReadBuf;
-	int64_t tmTimeoutFile = 0;
 
 	// check file exists, same size and same hash
 	ARRAY_FOREACH ( iFile, tRes.m_dRemotePaths )
@@ -259,13 +250,8 @@ bool ClusterFileReserve ( const FileReserveRequest_t & tCmd, FileReserveReply_t 
 			// check only in case size matched
 			if ( iLen==tFile.m_iFileSize )
 			{
-				int64_t tmReadStart = sphMicroTimer();
-
 				if ( !VerifyFileHash ( iFile, sFile, *tCmd.m_pChunks, tRes.m_dNodeChunksMask, dReadBuf, sError ) )
 					return false;
-
-				int64_t tmReadDelta = sphMicroTimer() - tmReadStart;
-				tmTimeoutFile = Max ( tmReadDelta, tmTimeoutFile );
 			}
 		}
 
@@ -305,8 +291,6 @@ bool ClusterFileReserve ( const FileReserveRequest_t & tCmd, FileReserveReply_t 
 
 	tFilesCleanup.m_pFiles = nullptr;
 	tRes.m_dRemotePaths.SwapData ( dLocalPaths );
-	tRes.m_tmTimeoutFile = tmTimeoutFile / 1000;
-	tRes.m_tmTimeout = ( sphMicroTimer() - tmStartReserve ) / 1000;
 
 	uint64_t uKey = DoubleStringKey ( tCmd.m_sCluster, tCmd.m_sIndex );
 	if ( RecvState::HasState ( uKey ) )
@@ -318,7 +302,7 @@ bool ClusterFileReserve ( const FileReserveRequest_t & tCmd, FileReserveReply_t 
 	return true;
 }
 
-void ReceiveClusterFileReserve ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSphString& sCluster )
+bool ReceiveClusterFileReserve ( GenericOutputBuffer_c & tOut, InputBuffer_c & tBuf, CSphString& sCluster, WORD uReplyVersion, DWORD uHeartbeatIntervalMs )
 {
 	SyncSrc_t tSrc;
 	FileReserveRequest_t tCmd;
@@ -327,8 +311,15 @@ void ReceiveClusterFileReserve ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, 
 	sCluster = tCmd.m_sCluster;
 
 	FileReserveReply_t tRes;
-	if ( ClusterFileReserve ( tCmd, tRes ) )
+	ApiReplyStream_c tStream ( uHeartbeatIntervalMs, uReplyVersion, tOut );
+	tStream.Start ();
+	const bool bReserved = ClusterFileReserve ( tCmd, tRes );
+	if ( !tStream.StopAndHandoff () )
+		return false;
+
+	if ( bReserved )
 		ClusterFileReserve_c::BuildReply ( tOut, tRes );
+	return true;
 }
 
 

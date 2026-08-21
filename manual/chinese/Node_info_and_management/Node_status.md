@@ -960,7 +960,7 @@ SHOW AGENT ['agent_or_index'] STATUS [ LIKE pattern ]
 
 <!-- example SHOW AGENT STATUS -->
 
-`SHOW AGENT 状态`显示远程代理或分布式表的统计信息。它包括诸如上次请求的年龄、最后回答的年龄、各种类型错误和成功的数量等值。统计信息按[ha_period_karma](../Server_settings/Searchd.md#ha_period_karma)秒为单位，显示每个代理过去1分钟、5分钟和15分钟的统计信息。
+`SHOW AGENT STATUS` 会显示 [远程 agent](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) 或分布式表的统计信息。它包括诸如最后一次请求距今时间、最后一次应答、各类错误和成功次数等数值。系统会为每个 agent 显示最近 1、5 和 15 个区间的统计数据，每个区间都由 [ha_period_karma](../Server_settings/Searchd.md#ha_period_karma) 秒组成。
 
 <!-- intro -->
 ##### SQL：
@@ -2318,7 +2318,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:67
 <!-- end -->
 <!-- example show agent table status -->
 
-最后，您可以使用 `SHOW AGENT table_name STATUS` 语句检查特定分布式表中代理的状态。此语句会显示表的HA状态（即是否使用代理镜像）以及镜像的信息，包括：地址、黑洞和持久性标志，以及在使用加权概率策略之一时使用的镜像选择概率。
+最后，你可以使用 `SHOW AGENT table_name STATUS` 语句检查特定分布式表中 agent 的状态。该语句会显示表的 HA 状态（即是否使用 agent mirror），并提供关于各个 mirror 的信息，包括：地址、blackhole 和 persistent 标志，以及当某种 [weighted probability strategies](../Creating_a_cluster/Remote_nodes/Load_balancing.md) 生效时所使用的 mirror 选择概率。
 
 <!-- intro -->
 ##### SQL:

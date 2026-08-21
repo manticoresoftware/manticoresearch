@@ -21,7 +21,11 @@ INSERT INTO rt(title) VALUES
 OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
 ```
 
-`OPTIMIZE` statement adds an RT table to the optimization queue, which will be processed in a background thread.
+`OPTIMIZE TABLE` supports real-time (RT), [distributed](../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md), and [sharded](../Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md) tables.
+
+For an RT table, the statement adds the table to the optimization queue, which is processed by a background thread by default. For a distributed table, `OPTION sync=1` is required: the command optimizes every local RT component and every configured remote mirror except blackhole agents. A sharded table supports the same native synchronous fan-out across its physical RT targets. The `cutoff` value is applied to every physical RT target.
+
+When Manticore Buddy is available, sharded tables created with the `shards` and `rf` options also retain the asynchronous `OPTIMIZE TABLE table_name` form handled by Buddy. Use `OPTION sync=1` to run the native synchronous fan-out directly in Manticore Search.
 
 <!-- intro -->
 ##### SQL:
@@ -50,6 +54,8 @@ POST /sql?mode=raw -d "OPTIMIZE TABLE rt"
 By default, OPTIMIZE merges the RT table's disk chunks down to a number less than or equal to the number of logical CPU cores multiplied by 2.
 
 However, if the table has attributes with KNN indexes, this threshold is different. In this case, it is set to the number of physical CPU cores divided by 2 to improve KNN search performance.
+
+Note that when no `optimize_cutoff` is set explicitly (neither the server-wide [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) setting nor the per-table [optimize_cutoff](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#optimize_cutoff) option), [automatic compaction](../Server_settings/Searchd.md#auto_optimize) never merges a table below 2 disk chunks, even if the computed default threshold is lower (for example, on servers with few CPU cores, especially for KNN tables). Keeping at least 2 disk chunks avoids the cost of repeatedly merging everything into a single chunk. To force automatic compaction down to a single disk chunk, set `optimize_cutoff` explicitly to `1`. A manual `OPTIMIZE ... OPTION cutoff=1` is not affected by this and still compacts down to one chunk.
 
 You can also control the number of optimized disk chunks manually using the `cutoff` option.
 
@@ -81,7 +87,9 @@ POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION cutoff=4"
 
 <!-- example optimize_sync -->
 
-When using `OPTION sync=1` (0 by default), the command will wait for the optimization process to complete before returning. If the connection is interrupted, the optimization will continue running on the server.
+For an RT table, `sync=0` is the default. Using `OPTION sync=1` makes the command wait for optimization to complete before returning. If the connection is interrupted, the optimization continues running on the server.
+
+Distributed tables require `OPTION sync=1`. Sharded tables use `OPTION sync=1` for native synchronous fan-out. The command waits for all selected physical targets and reports an error if any target fails; work already completed on other targets is not rolled back.
 
 <!-- intro -->
 ##### SQL:
@@ -102,6 +110,13 @@ POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION sync=1"
 ```
 
 <!-- end -->
+
+For distributed and sharded tables, use the synchronous form:
+
+```sql
+OPTIMIZE TABLE distributed_table OPTION sync=1, cutoff=1;
+OPTIMIZE TABLE sharded_table OPTION sync=1, cutoff=1;
+```
 
 ### Throttling the IO impact
 

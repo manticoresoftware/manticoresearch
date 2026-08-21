@@ -16,6 +16,13 @@
 #include "tokenizer/tokenizer.h"
 #include "dict/dict_base.h"
 
+void SetKeywordWithMarkers ( CSphString & sDst, const char * sPrefix, const CSphString & sWord, const char * sSuffix )
+{
+	StringBuilder_c sBuf;
+	sBuf << sPrefix << sWord << sSuffix;
+	sBuf.MoveTo ( sDst );
+}
+
 namespace { // static
 
 void TransformMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec & tMorphDisabledFields )
@@ -42,7 +49,7 @@ void TransformMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec & tMorphDisab
 					dWords.for_each ( [] ( XQKeyword_t & tKw )
 					{
 						if ( !tKw.m_sWord.IsEmpty() && !tKw.m_sWord.Begins( "=" ) && !tKw.m_sWord.Begins("*") && !tKw.m_sWord.Ends("*") )
-							tKw.m_sWord.SetSprintf ( "=%s", tKw.m_sWord.cstr() );
+							SetKeywordWithMarkers ( tKw.m_sWord, "=", tKw.m_sWord );
 					});
 				});
 			}
@@ -144,6 +151,17 @@ bool XQParseHelper_c::AddField ( FieldMask_t & dFields, const char * szField, in
 	sField.SetBinary ( szField, iLen );
 
 	int iField = m_pSchema->GetFieldIndex ( sField.cstr() );
+	if ( iField < 0 && m_pDiscoverySchema )
+	{
+		if ( m_pDiscoverySchema->GetFieldsCount()>=SPH_MAX_FIELDS )
+			return Error ( " max %d fields allowed", SPH_MAX_FIELDS );
+
+		CSphColumnInfo tField;
+		tField.m_sName.SetBinary ( szField, iLen );
+		m_pDiscoverySchema->AddField ( tField );
+		iField = m_pSchema->GetFieldIndex ( sField.cstr() );
+	}
+
 	if ( iField < 0 )
 	{
 		if ( m_bStopOnInvalid )
@@ -307,14 +325,28 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 }
 
 
-void XQParseHelper_c::Setup ( const CSphSchema * pSchema, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, XQQuery_t * pXQQuery, const CSphIndexSettings & tSettings )
+void XQParseHelper_c::Setup ( const CSphSchema * pSchema, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, XQQuery_t * pXQQuery, const CSphIndexSettings & tSettings, CSphSchema * pDiscoverySchema )
 {
 	m_pSchema = pSchema;
+	m_pDiscoverySchema = pDiscoverySchema;
 	m_pTokenizer = std::move ( pTokenizer );
 	m_pDict = std::move (pDict);
 	m_pParsed = pXQQuery;
 	m_iAtomPos = 0;
 	m_bEmptyStopword = ( tSettings.m_iStopwordStep==0 );
+	m_dQueryTokenScratch.Reset ( GetKeywordBufSize ( m_pDict->GetSettings().GetDictFormat() ) );
+}
+
+
+BYTE * XQParseHelper_c::CopyQueryTokenToScratch ( const char * sToken )
+{
+	assert ( sToken );
+	assert ( m_dQueryTokenScratch.GetLength()>0 );
+
+	int iLen = Min ( (int)strlen ( sToken ), m_dQueryTokenScratch.GetLength()-1 );
+	memcpy ( m_dQueryTokenScratch.Begin(), sToken, iLen );
+	m_dQueryTokenScratch[iLen] = '\0';
+	return m_dQueryTokenScratch.Begin();
 }
 
 
@@ -410,7 +442,7 @@ XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & 
 	if constexpr ( bDump ) Dump ( pRoot, "FixupBlend" );
 	DeleteNodesWOFields ( pRoot );
 	if constexpr ( bDump ) Dump ( pRoot, "DeleteNodesWOFields" );
-	pRoot = SweepNulls ( pRoot, bOnlyNotAllowed );
+	pRoot = SweepNulls ( pRoot, bOnlyNotAllowed, false );
 	if constexpr ( bDump ) Dump ( pRoot, "SweepNulls" );
 	FixupDegenerates ( pRoot, m_pParsed->m_sParseWarning );
 	if constexpr ( bDump ) Dump ( pRoot, "FixupDegenerates" );
@@ -457,7 +489,7 @@ XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & 
 }
 
 
-XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed )
+XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed, bool bSweepHappened )
 {
 	if ( !pNode )
 		return nullptr;
@@ -481,15 +513,14 @@ XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed 
 	}
 
 	// sweep op node
-	pNode->WithChildren ( [this,bOnlyNotAllowed,pNode] ( CSphVector<XQNode_t*>& dChildren ) {
+	pNode->WithChildren ( [this,bOnlyNotAllowed,&bSweepHappened] ( CSphVector<XQNode_t*>& dChildren ) {
 	ARRAY_FOREACH ( i, dChildren )
 	{
-		dChildren[i] = SweepNulls ( dChildren[i], bOnlyNotAllowed );
+		dChildren[i] = SweepNulls ( dChildren[i], bOnlyNotAllowed, false );
 		if ( !dChildren[i] )
 		{
 			dChildren.Remove ( i-- );
-			// use non-null iOpArg as a flag indicating that the sweeping happened.
-			++pNode->m_iOpArg;
+			bSweepHappened = true;
 		}
 	}});
 
@@ -506,7 +537,7 @@ XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed 
 		pNode->ResetChildren();
 		pRet->m_pParent = pNode->m_pParent;
 		// expressions like 'la !word' (having min_word_len>len(la)) became a 'null' node.
-		if ( pNode->m_iOpArg && pRet->GetOp()==SPH_QUERY_NOT && !bOnlyNotAllowed )
+		if ( bSweepHappened && pRet->GetOp()==SPH_QUERY_NOT && !bOnlyNotAllowed )
 		{
 			pRet->SetOp ( SPH_QUERY_NULL );
 			pRet->WithChildren ( [this] ( auto& dChildren ) {
@@ -514,10 +545,8 @@ XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed 
 				dChildren.Reset();
 			});
 		}
-		pRet->m_iOpArg = pNode->m_iOpArg;
-
 		DeleteSpawned ( pNode ); // OPTIMIZE!
-		return SweepNulls ( pRet, bOnlyNotAllowed );
+		return SweepNulls ( pRet, bOnlyNotAllowed, bSweepHappened );
 	}
 
 	// done
@@ -730,7 +759,7 @@ void XQParseHelper_c::FixupDestForms ()
 			const auto& sWord =  m_dDestForms [ tDesc.m_iDestStart + iForm ];
 			// propagate exact word flag to all destination forms
 			if ( bExact )
-				tKeyword.m_sWord.SetSprintf ( "=%s", sWord.cstr() );
+				SetKeywordWithMarkers ( tKeyword.m_sWord, "=", sWord );
 			else
 				tKeyword.m_sWord = sWord;
 

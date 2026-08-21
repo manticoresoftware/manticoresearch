@@ -76,6 +76,104 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 ```
 <!-- end -->
 
+### auth
+
+<!-- example conf auth -->
+Включает [аутентификацию и авторизацию](../Security/Authentication_and_authorization.md). Необязательный параметр, по умолчанию пустой, что отключает аутентификацию.
+
+В [режиме RT](../Read_this_first.md#Real-time-mode-vs-plain-mode) используйте `auth = 1`, чтобы включить аутентификацию. Manticore хранит данные аутентификации в `auth.json` внутри [data_dir](../Server_settings/Searchd.md#data_dir). Используйте `auth = 0` или не задавайте этот параметр, чтобы отключить аутентификацию.
+
+В [plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode) задайте `auth` как путь к файлу аутентификации. Не используйте `auth = 1` в plain mode.
+
+Если аутентификация включена, демон создаёт файл аутентификации, если его нет. До первого запуска допустимо отсутствие данных или пустое хранилище, включая файл нулевого размера, файл только с пробелами, пустой JSON-объект или пустые массивы users и permissions. Полный JSON аутентификации записывается после запуска. При старте демон отклоняет неверные пути, нечитаемые файлы, файлы с правами на чтение для группы или всех пользователей, некорректный JSON, дублирующиеся сохранённые секреты и неверную структуру auth-данных. Храните файл в секрете; файлы, создаваемые демоном, имеют режим `600`.
+
+<!-- intro -->
+##### RT mode:
+
+<!-- request RT mode -->
+```ini
+searchd {
+    data_dir = /var/lib/manticore
+    auth = 1
+}
+```
+
+<!-- request Disable -->
+```ini
+searchd {
+    data_dir = /var/lib/manticore
+    auth = 0
+}
+```
+
+<!-- intro -->
+##### Plain mode:
+
+<!-- request Plain mode -->
+```ini
+searchd {
+    auth = /path/to/auth.json
+}
+```
+<!-- end -->
+
+### auth_log_level
+
+<!-- example conf auth_log_level -->
+Управляет подробностью журнала аутентификации. Необязательный параметр, по умолчанию `info`.
+
+События аутентификации записываются в отдельный файл журнала рядом с журналом демона. Если [log](../Server_settings/Searchd.md#log) равен `/var/log/manticore/searchd.log`, журнал аутентификации будет `/var/log/manticore/searchd.log.auth`.
+
+Поддерживаемые значения:
+
+* `disabled` - не записывать события аутентификации.
+* `error` - записывать отказы в доступе и критические сбои.
+* `warning` - записывать ошибки и неудачные попытки аутентификации.
+* `info` - записывать предупреждения, успешные изменения управления аутентификацией и резервные копии данных аутентификации при присоединении к кластеру.
+* `all` - записывать события уровня `info` и успешные пользовательские события аутентификации.
+* `trace` - записывать все события уровня `all` плюс успешную внутреннюю транспортную аутентификацию, например аутентификацию Manticore Buddy и API между демонами.
+
+Успешные проверки авторизации на разрешение не записываются на любом уровне. Отказы в доступе логируются, но проверки на разрешение могут выполняться для каждого запроса и засоряли бы журнал аутентификации даже в режиме `trace`.
+
+Когда `JOIN CLUSTER` заменяет локальные данные аутентификации, при уровнях `info`, `all` и `trace` в `searchd.log.auth` записывается JSON-резервная копия прежних локальных auth-данных. Эта копия может содержать имена пользователей, salt, хэши паролей и bearer-хэши. Рассматривайте журнал аутентификации как чувствительные операционные данные и удаляйте из него конфиденциальные сведения перед передачей.
+
+<!-- request Example -->
+```ini
+auth_log_level = warning
+```
+<!-- end -->
+
+### auth_password_policy
+
+<!-- example conf auth_password_policy -->
+Управляет проверкой паролей для пользователей аутентификации. Необязательный параметр, по умолчанию `LOW`.
+
+Поддерживаемые значения:
+
+* `LOW` - требуется непустой пароль, соответствующий [auth_password_min_length](../Server_settings/Searchd.md#auth_password_min_length).
+* `MEDIUM` - требования `LOW` плюс как минимум одна строчная буква, одна прописная буква, одна цифра и один неалфавитно-цифровой символ.
+
+Политика применяется к `searchd --auth`, `CREATE USER` и `SET PASSWORD`.
+
+<!-- request Example -->
+```ini
+auth_password_policy = MEDIUM
+```
+<!-- end -->
+
+### auth_password_min_length
+
+<!-- example conf auth_password_min_length -->
+Задаёт минимальную длину пароля для пользователей аутентификации. Необязательный параметр, по умолчанию `8`.
+
+Минимальная длина применяется к `searchd --auth`, `CREATE USER` и `SET PASSWORD`.
+
+<!-- request Example -->
+```ini
+auth_password_min_length = 12
+```
+<!-- end -->
+
 ### auto_optimize
 
 <!-- example conf auto_optimize -->
@@ -89,6 +187,8 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 По умолчанию порог равен количеству логических ядер ЦП, умноженному на 2.
 
 Однако, если таблица имеет атрибуты с KNN-индексами, порог по умолчанию отличается. В этом случае он устанавливается как количество физических ядер ЦП, делённое на 2, с минимальным значением 1, для улучшения производительности KNN-поиска.
+
+Если [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) не задан явно (ни на уровне сервера, ни на уровне таблицы), автоматическая компакция никогда не объединяет таблицу, пока в ней меньше 2 дисковых чанков, даже если вычисленный порог по умолчанию ниже (такое может происходить на серверах с малым числом ядер CPU, особенно для таблиц KNN). Чтобы разрешить автоматическую компакцию до одного дискового чанка, задайте `optimize_cutoff` явно как `1`.
 
 Обратите внимание, что включение или отключение `auto_optimize` не мешает вам вручную запускать [OPTIMIZE TABLE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE).
 
@@ -170,7 +270,7 @@ merge_chunks_per_job = 4
 
 Параллельное построение HNSW может вставлять векторы в порядке, отличном от последовательного пути, поэтому результирующий граф `.spknn` не гарантированно будет битово идентичен графу, построенному с `knn_parallel_build = 1`.
 
-Обратите внимание, что при [`parallel_chunk_merges`](#parallel_chunk_merges) > 1 несколько слияний могут выполняться одновременно, и каждое потребляет до `knn_parallel_build` рабочих.
+Обратите внимание: при [`parallel_chunk_merges`](../Server_settings/Searchd.md#parallel_chunk_merges) > 1 несколько слияний могут выполняться одновременно, и каждое из них использует до `knn_parallel_build` рабочих потоков.
 
 По умолчанию Manticore выводит значение из настройки [threads](../Server_settings/Searchd.md#threads): `max(1, min(4, threads/4))`. То есть `1` (последовательно), когда `threads` меньше 8, `2`, когда `threads` <= 11, `3`, когда `threads` <= 15, и `4`, когда 16 или больше (ограничено 4 по умолчанию). Операторы с более крупными хостами, желающие большего параллелизма, могут установить значение явно.
 
@@ -187,6 +287,32 @@ knn_parallel_build = 1
 <!-- request Increase -->
 ```ini
 knn_parallel_build = 4
+```
+
+<!-- end -->
+
+### embeddings_threads
+
+<!-- example conf embeddings_threads -->
+Этот параметр ограничивает число потоков CPU, которые Manticore использует при преобразовании текста в векторы. Он применяется всякий раз, когда запускаются автоэмбеддинги: при вставке строк в таблицу, использующую `model_name`/`from`, когда `ALTER TABLE` перестраивает автоматически встроенный столбец `float_vector`, а также когда поиск `knn(<field>, '<text>', ...)` передает запрос в виде текста.
+
+Фактическое число используемых потоков также ограничивается количеством свободных воркеров, поэтому на загруженном сервере будет использоваться меньше потоков, даже если предел высокий. Используйте этот параметр, чтобы один большой пакет эмбеддингов не лишал ресурсов параллельные поиски.
+
+По умолчанию `4`. Установите `0`, чтобы снять ограничение, и тогда библиотека embeddings сама определит число потоков (по-прежнему с учетом количества свободных воркеров).
+
+Это значение можно изменить во время работы с помощью `SET GLOBAL embeddings_threads = N` и просмотреть через `SHOW VARIABLES`. Для запросов `SELECT` с KNN его также можно переопределить для конкретного запроса через `OPTION embeddings_threads = N` (см. [поиск вектором KNN](../Searching/KNN.md#KNN-vector-search)).
+
+<!-- intro -->
+##### Пример:
+
+<!-- request Default -->
+```ini
+embeddings_threads = 4
+```
+
+<!-- request Uncapped -->
+```ini
+embeddings_threads = 0
 ```
 
 <!-- end -->
@@ -772,6 +898,12 @@ listen = ( address ":" port | port | path | address ":" port start - port end ) 
 
 Если вы укажете номер порта, но не адрес, `searchd` будет слушать на всех сетевых интерфейсах. Unix-путь определяется по начальному слешу. Диапазон портов можно установить только для протокола репликации.
 
+Примечание по безопасности: привязывайте каждый listener только к той сети, которой он нужен.
+
+Для доступа клиентов из публичного Интернета используйте выделенный listener `https` и настройте [SSL](../Security/SSL.md) с `ssl_cert` и `ssl_key`. Не выводите в публичный Интернет listeners, совместимые с API (`listen` без явного протокола, `http` и `sphinx`). Эти listeners могут принимать двоичный API Manticore/Sphinx, который используется master-agent распределенными запросами и устаревшими клиентами, а трафик двоичного API не защищен SSL.
+
+Привязывайте listeners, совместимые с API, к loopback, VPN или доверенной внутренней сети, либо ограничивайте их правилами firewall. Listeners `replication` тоже предназначены только для внутреннего использования и должны быть доступны только replication-узлам.
+
 Вы также можете указать обработчик протокола (слушатель), который будет использоваться для соединений на этом сокете. Слушатели:
 
 * **Не указан** - Manticore будет принимать соединения на этом порту от:
@@ -798,15 +930,15 @@ listen = ( address ":" port | port | path | address ":" port start - port end ) 
 ```ini
 listen = localhost
 listen = localhost:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at localhost
-listen = 192.168.0.1:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at 192.168.0.1
+listen = 192.168.0.1:5000 # слушать удаленных агентов (binary API) и запросы http/https на порту 5000 на 192.168.0.1; оставьте это внутри сети
 listen = /var/run/manticore/manticore.s # listen for binary API requests on unix socket
 listen = /var/run/manticore/manticore.s:mysql # listen for mysql requests on unix socket
-listen = 9312 # listen for remote agents (binary API) and http/https requests on port 9312 on any interface
+listen = 9312 # слушать удаленных агентов (binary API) и запросы http/https на порту 9312 на любом интерфейсе; только внутренние сети
 listen = localhost:9306:mysql # listen for mysql requests on port 9306 at localhost
 listen = localhost:9307:mysql_readonly # listen for mysql requests on port 9307 at localhost and accept only read queries
 listen = 127.0.0.1:9308:http # listen for http requests as well as connections from remote agents (and binary API) on port 9308 at localhost
-listen = 192.168.0.1:9320-9328:replication # listen for replication connections on ports 9320-9328 at 192.168.0.1
-listen = 127.0.0.1:9443:https # listen for https requests (not http) on port 9443 at 127.0.0.1
+listen = 192.168.0.1:9320-9328:replication # слушать подключения replication на портах 9320-9328 на 192.168.0.1; оставьте это внутри сети
+listen = 127.0.0.1:9443:https # слушать запросы https (не http) на порту 9443 на 127.0.0.1; используйте этот тип listener для доступа из публичного Интернета с ssl_cert и ssl_key
 listen = 127.0.0.1:9312:sphinx # listen for legacy Sphinx requests (e.g. from SphinxSE) on port 9312 at 127.0.0.1
 ```
 <!-- end -->

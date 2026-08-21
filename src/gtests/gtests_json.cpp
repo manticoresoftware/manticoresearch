@@ -80,7 +80,9 @@ TEST ( IndexFiles, ReadsVersionFromJsonHeader )
 
 	IndexFiles_c tFiles ( sBase );
 	ASSERT_TRUE ( tFiles.CheckHeader() ) << tFiles.ErrorMsg();
-	EXPECT_EQ ( tFiles.GetVersion(), 67U );
+	DWORD uVersion;
+	ASSERT_TRUE ( tFiles.GetVersion ( uVersion ) ) << tFiles.ErrorMsg();
+	EXPECT_EQ ( uVersion, 67U );
 
 	unlink ( sHeader.cstr() );
 }

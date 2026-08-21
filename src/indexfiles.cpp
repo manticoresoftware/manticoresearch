@@ -16,7 +16,7 @@
 #include "fileio.h"
 #include "fileutils.h"
 #include "sphinxint.h"
-#include "sphinxjson.h"
+#include "indexcheck.h"
 #include "tokenizer/tokenizer.h"
 
 static IndexFileExt_t g_dIndexFilesExts[SPH_EXT_TOTAL] =
@@ -104,7 +104,7 @@ bool IndexFiles_c::HasAllFiles ( const char * sType )
 {
 	for ( const auto & dExt : g_dIndexFilesExts )
 	{
-		if ( m_uVersion<dExt.m_uMinVer || dExt.m_bOptional )
+		if ( GetVersionForFiles()<dExt.m_uMinVer || dExt.m_bOptional )
 			continue;
 
 		if ( !sphIsReadable ( FullPath ( dExt.m_szExt, sType ) ) )
@@ -141,7 +141,7 @@ bool IndexFiles_c::TryRename ( const CSphString& sFrom, const CSphString& sTo ) 
 	for ( int i = 0; i<SPH_EXT_TOTAL; i++ )
 	{
 		const auto & dExt = g_dIndexFilesExts[i];
-		if ( m_uVersion<dExt.m_uMinVer || !dExt.m_bCopy )
+		if ( GetVersionForFiles()<dExt.m_uMinVer || !dExt.m_bCopy )
 			continue;
 
 		auto sFullFrom = FullPath ( dExt.m_szExt, "", sFrom );
@@ -266,69 +266,51 @@ bool IndexFiles_c::RenameSuffix ( const CSphString& sFrom, const CSphString& sTo
 
 bool IndexFiles_c::CheckHeader ( const char * sType )
 {
-	auto sPath = FullPath ( sphGetExt(SPH_EXT_SPH), sType );
+	m_sHeaderPath = FullPath ( sphGetExt(SPH_EXT_SPH), sType );
+	m_uVersion.reset();
 	BYTE dBuffer[8];
 
 	CSphAutoreader rdHeader ( dBuffer, sizeof ( dBuffer ) );
-	if ( !rdHeader.Open ( sPath, m_sLastError ) )
+	if ( !rdHeader.Open ( m_sHeaderPath, m_sLastError ) )
 		return false;
 
-	// Check the legacy binary magic first. JSON headers do not have that magic;
-	// they are identified by their opening brace below.
 	auto uMagic = rdHeader.GetDword();
 	if ( dBuffer[0] == '{' ) // new style JSON header
-	{
-		// Do not merely report that a JSON header exists. CheckHeader() also owns
-		// the invariant that GetVersion() returns the version read from disk.
-		// In particular, indextool --apply-killlists passes that value to the
-		// lookup reader. If m_uVersion is left at INDEX_FORMAT_VERSION, an older
-		// lookup can be decoded with the current layout. Version 71 added an
-		// SphOffset_t to the .spt preamble, so making that mistake shifts every
-		// checkpoint and eventually produces invalid row IDs and memory offsets.
-		CSphVector<BYTE> dData;
-		if ( sphJsonParse ( dData, sPath, m_sLastError )!=JsonFileParse_e::OK )
-			return false;
-
-		bson::Bson_c tBson ( dData );
-		if ( tBson.IsEmpty() || !tBson.IsAssoc() )
-		{
-			m_sLastError.SetSprintf ( "invalid JSON index header %s", sPath.cstr() );
-			return false;
-		}
-
-		// Keep the field name and layout-version rules in sync with the full header
-		// readers in sphinx.cpp and indexcheck.cpp. A missing, invalid, or future
-		// version must fail instead of falling back to the running binary's version.
-		// This is only the broad format check; callers may impose a newer minimum.
-		m_uVersion = (DWORD)bson::Int ( tBson.ChildByName ( "index_format_version" ) );
-		if ( m_uVersion<=1 || m_uVersion>INDEX_FORMAT_VERSION )
-		{
-			m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sPath.cstr(), m_uVersion, INDEX_FORMAT_VERSION );
-			return false;
-		}
-
-		// JSON detection currently assumes that '{' is the first byte. If headers
-		// ever permit a BOM or leading whitespace, update this probe together with
-		// the initial read above; otherwise a valid JSON header will be handled as
-		// a legacy binary header.
 		return true;
-	}
 
 	const char* sMsg = CheckFmtMagic ( uMagic );
 	if ( sMsg )
 	{
-		m_sLastError.SetSprintf ( sMsg, sPath.cstr() );
+		m_sLastError.SetSprintf ( sMsg, m_sHeaderPath.cstr() );
 		return false;
 	}
 
-	// get version
 	DWORD uVersion = rdHeader.GetDword ();
 	if ( uVersion==0 || uVersion>INDEX_FORMAT_VERSION )
 	{
-		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sPath.cstr(), uVersion, INDEX_FORMAT_VERSION );
+		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", m_sHeaderPath.cstr(), uVersion, INDEX_FORMAT_VERSION );
 		return false;
 	}
 	m_uVersion = uVersion;
+	return true;
+}
+
+
+bool IndexFiles_c::GetVersion ( DWORD & uVersion )
+{
+	if ( !m_uVersion )
+	{
+		if ( m_sHeaderPath.IsEmpty() && !CheckHeader() )
+			return false;
+
+		CSphVector<BYTE> dData;
+		DWORD uHeaderVersion;
+		if ( !ReadIndexJsonHeaderVersion ( dData, m_sHeaderPath, uHeaderVersion, m_sLastError ) )
+			return false;
+		m_uVersion = uHeaderVersion;
+	}
+
+	uVersion = *m_uVersion;
 	return true;
 }
 

@@ -44,6 +44,9 @@ public:
 
 DebugCheckError_i* MakeDebugCheckError ( FILE* fp, DocID_t* pExtract );
 
+// Read and validate the format version from a JSON plain-index header.
+bool ReadIndexJsonHeaderVersion ( CSphVector<BYTE> & dData, const CSphString & sHeader, DWORD & uVersion, CSphString & sError );
+
 // disk index checker
 class DiskIndexChecker_c
 {

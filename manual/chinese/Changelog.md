@@ -6,6 +6,9 @@
 * 🆕 添加了对 Grafana 13.1 和 13.2 版本的测试。
 * 🆕 添加了对 Logstash 9.5 版本的测试。
 
+### Bug 修复
+* 🪲 [Issue #4827](https://github.com/manticoresoftware/manticoresearch/issues/4827) 新的 `german` 字符集别名在使用 `charset_table=non_cont,german` 时会保留德语元音变音字母和尖音 s。德语 AOT 词形处理现在通过 Unicode 完整大小写折叠，将 `ß`、大写 `ẞ` 和 `ss` 视为搜索等价形式，同时保留精确词查询中的区别。使用 `lemmatize_de` 或 `lemmatize_de_all` 的现有表必须重建；词形指纹现在会报告过期索引。
+
 ## 版本 29.0.2
 **发布日期**：2026 年 8 月 14 日
 

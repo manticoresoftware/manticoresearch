@@ -863,7 +863,8 @@ inline BYTE * Emit ( BYTE * sOut, BYTE uChar )
 {
 	if ( uChar=='-' )
 		return sOut;
-	*sOut++ = uChar | 0x20;
+	// German sharp s has no one-byte uppercase equivalent; applying the ASCII bit trick turns 0xDF into 0xFF.
+	*sOut++ = uChar == 0xDF ? uChar : ( uChar | 0x20 );
 	return sOut;
 }
 
@@ -1266,12 +1267,30 @@ static inline int Utf8ToWin1251 ( BYTE * pOut, const BYTE * pWord )
 }
 
 /// returns length in bytes (aka chars) if all letters were converted
-/// returns 0 and aborts early if non-western letters are encountered
-static inline int Utf8ToWin1252 ( BYTE * pOut, const BYTE * pWord )
+/// returns 0 and aborts early if non-western letters are encountered or the output buffer is too small
+template<size_t SIZE>
+static inline int Utf8ToWin1252 ( BYTE ( &dOut )[SIZE], const BYTE * pWord )
 {
-	BYTE * pStart = pOut;
+	BYTE * pOut = dOut;
+	BYTE * pStart = dOut;
+	BYTE * pEnd = dOut + SIZE - 1;
 	while ( *pWord )
 	{
+		// Unicode full case folding maps both forms of German sharp s to "ss".
+		// Normalize before AOT so Straße and Strasse follow the same lemmatization path.
+		if ( ( pWord[0]==0xC3 && pWord[1]==0x9F ) ||
+			( pWord[0]==0xE1 && pWord[1]==0xBA && pWord[2]==0x9E ) )
+		{
+			if ( pEnd-pOut<2 )
+				return 0;
+			*pOut++ = 's';
+			*pOut++ = 's';
+			pWord += pWord[0]==0xC3 ? 2 : 3;
+			continue;
+		}
+
+		if ( pOut==pEnd )
+			return 0;
 		if ( (*pWord)&0x80 )
 		{
 			if ( ((*pWord)&0xFC)==0xC0 )
@@ -1301,6 +1320,10 @@ static inline bool IsGermanAlphaUtf8 ( const BYTE * pWord )
 
 	// mu, 0xb5
 	if ( pWord[0]==0xC2 && pWord[1]==0xB5 )
+		return true;
+
+	// capital sharp s U+1E9E
+	if ( pWord[0]==0xE1 && pWord[1]==0xBA && pWord[2]==0x9E )
 		return true;
 
 	// some upper

@@ -38,7 +38,7 @@ The table below lists all supported languages and indicates how to enable:
 | French | charset_table=non_cont | fr | morphology=libstemmer_fr | |
 | Galician | charset_table=non_cont | gl | - | |
 | Garo | specify charset_table manually | - | - | |
-| German | charset_table=non_cont | de | morphology=lemmatize_de (single root form); morphology=lemmatize_de_all (all root forms); morphology=libstemmer_de | |
+| German | charset_table=non_cont,german | de | morphology=lemmatize_de (single root form); morphology=lemmatize_de_all (all root forms); morphology=libstemmer_de | Preserve German letters before applying morphology |
 | Greek | charset_table=non_cont | el | morphology=libstemmer_el | |
 | Hebrew | charset_table=non_cont | he | - | |
 | Hindi | charset_table=non_cont | hi | morphology=libstemmer_hi | |
@@ -88,4 +88,19 @@ The table below lists all supported languages and indicates how to enable:
 | Vietnamese | charset_table=non_cont | - | - | Uses Latin script. Vietnamese diacritics (ă, â, ê, ô, ơ, ư, đ, and tone marks) are automatically mapped to their base Latin characters by default, so "tiếng" matches "tieng" without additional configuration. |
 | Yoruba | charset_table=non_cont | yo | - | |
 | Zulu | charset_table=non_cont | zu | - |  |
+
+### German sharp s
+
+When using German morphology, add the built-in `german` charset alias after `non_cont` so the tokenizer preserves German umlauts and both forms of sharp s before morphology runs:
+
+```ini
+charset_table = non_cont, german
+```
+
+With `lemmatize_de` and `lemmatize_de_all`, Manticore Search applies Unicode full case folding for sharp s (`ß` and `ẞ` → `ss`) before AOT lemmatization. This makes spellings such as `Straße`/`Strasse`, `Maße`/`Masse`, and `Fußball`/`Fussball` search equivalents. `libstemmer_de` also folds these spellings when used with the charset above.
+
+The fold intentionally removes distinctions such as `Maße` versus `Masse` for normal full-text matching. To retain that distinction, enable `index_exact_words=1` and use exact-word queries such as `MATCH('=straße')`.
+
+After upgrading an existing table that uses `lemmatize_de` or `lemmatize_de_all`, rebuild or reindex it. The German AOT normalization version is included in the morphology fingerprint, so Manticore Search warns when an older disk index needs rebuilding.
+
 <!-- proofread -->

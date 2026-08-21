@@ -15,9 +15,20 @@
 #include "detail/indexlink.h"
 
 namespace {
+inline bool CheckHeader ( const CSphString & sPath, const char * sType = "" )
+{
+	IndexFiles_c tFiles ( sPath );
+	if ( !tFiles.CheckHeader ( sType ) )
+		return false;
+
+	DWORD uVersion;
+	return tFiles.GetVersion ( uVersion );
+}
+
+
 inline RotateFrom_e Check ( const CSphString& sPath ) noexcept
 {
-	switch ( ( IndexFiles_c ( sPath ).CheckHeader() ? 1 : 0 ) + ( IndexFiles_c ( sPath ).CheckHeader ( ".new" ) ? 2 : 0 ) )
+	switch ( ( CheckHeader ( sPath ) ? 1 : 0 ) + ( CheckHeader ( sPath, ".new" ) ? 2 : 0 ) )
 	{
 	case 0: return RotateFrom_e::NONE;
 	case 1: return RotateFrom_e::REENABLE;

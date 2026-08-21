@@ -286,7 +286,7 @@ bool IndexFiles_c::CheckHeader ( const char * sType )
 		// SphOffset_t to the .spt preamble, so making that mistake shifts every
 		// checkpoint and eventually produces invalid row IDs and memory offsets.
 		CSphVector<BYTE> dData;
-		if ( !sphJsonParse ( dData, sPath, m_sLastError ) )
+		if ( sphJsonParse ( dData, sPath, m_sLastError )!=JsonFileParse_e::OK )
 			return false;
 
 		bson::Bson_c tBson ( dData );

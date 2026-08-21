@@ -12617,6 +12617,25 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	if ( StrEq ( mysqldump_8_0_39_30_hack, sQuery) )
 		return tOut.DataTableOneline ( "count(*)" );
 
+	// Sequel Ace 5.3.1+ uses these probes before running a query.
+	// Keep this compatibility shim narrow instead of accepting CAST(... AS BINARY) generally.
+	constexpr Str_t sSequelAceDatabase { FROMS("SELECT CAST(DATABASE() AS BINARY)") };
+	constexpr Str_t sSequelAceCharset { FROMS("SELECT CAST(@@character_set_client AS BINARY)") };
+	const bool bSequelAceDatabase = StrEq ( sSequelAceDatabase, sQuery );
+	if ( session::GetProto()==Proto_e::MYSQL41 && ( bSequelAceDatabase || StrEq ( sSequelAceCharset, sQuery ) ) )
+	{
+		tOut.HeadBegin();
+		tOut.HeadColumn ( bSequelAceDatabase ? "CAST(DATABASE() AS BINARY)" : "CAST(@@character_set_client AS BINARY)", MYSQL_TYPE_VAR_STRING );
+		tOut.HeadEnd();
+		if ( bSequelAceDatabase )
+			tOut.PutNULL();
+		else
+			tOut.PutString ( "utf8" );
+		tOut.Commit();
+		tOut.Eof();
+		return true;
+	}
+
 	// parse SQL query
 	if ( tSess.IsProfile() )
 		m_tProfile.Switch ( SPH_QSTATE_SQL_PARSE );

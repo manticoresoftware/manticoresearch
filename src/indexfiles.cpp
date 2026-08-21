@@ -16,6 +16,7 @@
 #include "fileio.h"
 #include "fileutils.h"
 #include "sphinxint.h"
+#include "indexcheck.h"
 #include "tokenizer/tokenizer.h"
 
 static IndexFileExt_t g_dIndexFilesExts[SPH_EXT_TOTAL] =
@@ -103,7 +104,7 @@ bool IndexFiles_c::HasAllFiles ( const char * sType )
 {
 	for ( const auto & dExt : g_dIndexFilesExts )
 	{
-		if ( m_uVersion<dExt.m_uMinVer || dExt.m_bOptional )
+		if ( GetVersionForFiles()<dExt.m_uMinVer || dExt.m_bOptional )
 			continue;
 
 		if ( !sphIsReadable ( FullPath ( dExt.m_szExt, sType ) ) )
@@ -140,7 +141,7 @@ bool IndexFiles_c::TryRename ( const CSphString& sFrom, const CSphString& sTo ) 
 	for ( int i = 0; i<SPH_EXT_TOTAL; i++ )
 	{
 		const auto & dExt = g_dIndexFilesExts[i];
-		if ( m_uVersion<dExt.m_uMinVer || !dExt.m_bCopy )
+		if ( GetVersionForFiles()<dExt.m_uMinVer || !dExt.m_bCopy )
 			continue;
 
 		auto sFullFrom = FullPath ( dExt.m_szExt, "", sFrom );
@@ -265,33 +266,51 @@ bool IndexFiles_c::RenameSuffix ( const CSphString& sFrom, const CSphString& sTo
 
 bool IndexFiles_c::CheckHeader ( const char * sType )
 {
-	auto sPath = FullPath ( sphGetExt(SPH_EXT_SPH), sType );
+	m_sHeaderPath = FullPath ( sphGetExt(SPH_EXT_SPH), sType );
+	m_uVersion.reset();
 	BYTE dBuffer[8];
 
 	CSphAutoreader rdHeader ( dBuffer, sizeof ( dBuffer ) );
-	if ( !rdHeader.Open ( sPath, m_sLastError ) )
+	if ( !rdHeader.Open ( m_sHeaderPath, m_sLastError ) )
 		return false;
 
-	// check magic header
 	auto uMagic = rdHeader.GetDword();
-	if ( dBuffer[0] == '{' ) // that is new style json header, no need to check further...
+	if ( dBuffer[0] == '{' ) // new style JSON header
 		return true;
 
 	const char* sMsg = CheckFmtMagic ( uMagic );
 	if ( sMsg )
 	{
-		m_sLastError.SetSprintf ( sMsg, sPath.cstr() );
+		m_sLastError.SetSprintf ( sMsg, m_sHeaderPath.cstr() );
 		return false;
 	}
 
-	// get version
 	DWORD uVersion = rdHeader.GetDword ();
 	if ( uVersion==0 || uVersion>INDEX_FORMAT_VERSION )
 	{
-		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sPath.cstr(), uVersion, INDEX_FORMAT_VERSION );
+		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", m_sHeaderPath.cstr(), uVersion, INDEX_FORMAT_VERSION );
 		return false;
 	}
 	m_uVersion = uVersion;
+	return true;
+}
+
+
+bool IndexFiles_c::GetVersion ( DWORD & uVersion )
+{
+	if ( !m_uVersion )
+	{
+		if ( m_sHeaderPath.IsEmpty() && !CheckHeader() )
+			return false;
+
+		CSphVector<BYTE> dData;
+		DWORD uHeaderVersion;
+		if ( !ReadIndexJsonHeaderVersion ( dData, m_sHeaderPath, uHeaderVersion, m_sLastError ) )
+			return false;
+		m_uVersion = uHeaderVersion;
+	}
+
+	uVersion = *m_uVersion;
 	return true;
 }
 

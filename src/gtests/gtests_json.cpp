@@ -15,6 +15,8 @@
 #include <cstring>
 
 #include "fileio.h"
+#include "indexfiles.h"
+#include "index_rotator.h"
 #include "json/cJSON.h"
 #include "sphinx.h"
 #include "sphinxjson.h"
@@ -60,6 +62,62 @@ TEST_F ( JsonFileParseTest, ValidJson )
 	CSphVector<BYTE> dData;
 	CSphString sError;
 	EXPECT_EQ ( sphJsonParse ( dData, m_sFile, sError ), JsonFileParse_e::OK );
+}
+
+
+TEST ( IndexFiles, ReadsVersionFromJsonHeader )
+{
+	CSphString sBase;
+	sBase.SetSprintf ( "__indexfiles_%d_json_header", GetOsProcessId() );
+	CSphString sHeader;
+	sHeader.SetSprintf ( "%s.sph", sBase.cstr() );
+
+	CSphString sError;
+	CSphWriterNonThrottled tWriter;
+	ASSERT_TRUE ( tWriter.OpenFile ( sHeader, sError ) ) << sError.cstr();
+	tWriter.PutBytes ( R"({"index_format_version":67})", strlen ( R"({"index_format_version":67})" ) );
+	tWriter.CloseFile();
+	ASSERT_FALSE ( tWriter.IsError() );
+
+	IndexFiles_c tFiles ( sBase );
+	ASSERT_TRUE ( tFiles.CheckHeader() ) << tFiles.ErrorMsg();
+	DWORD uVersion;
+	ASSERT_TRUE ( tFiles.GetVersion ( uVersion ) ) << tFiles.ErrorMsg();
+	EXPECT_EQ ( uVersion, 67U );
+
+	unlink ( sHeader.cstr() );
+}
+
+
+TEST ( IndexRotator, IgnoresMalformedJsonNewHeader )
+{
+	CSphString sBase;
+	sBase.SetSprintf ( "__indexfiles_%d_rotation", GetOsProcessId() );
+	CSphString sHeader;
+	sHeader.SetSprintf ( "%s.sph", sBase.cstr() );
+	CSphString sNewHeader;
+	sNewHeader.SetSprintf ( "%s.new.sph", sBase.cstr() );
+
+	auto fnWriteHeader = [] ( const CSphString & sFile, const char * sData )
+	{
+		CSphString sError;
+		CSphWriterNonThrottled tWriter;
+		if ( !tWriter.OpenFile ( sFile, sError ) )
+			return false;
+		tWriter.PutBytes ( sData, strlen ( sData ) );
+		tWriter.CloseFile();
+		return !tWriter.IsError();
+	};
+
+	ASSERT_TRUE ( fnWriteHeader ( sHeader, R"({"index_format_version":67})" ) );
+	ASSERT_TRUE ( fnWriteHeader ( sNewHeader, "{\n" ) );
+
+	CheckIndexRotate_c tCheck ( sBase );
+	EXPECT_FALSE ( tCheck.RotateFromNew() );
+	EXPECT_TRUE ( tCheck.RotateReenable() );
+
+	unlink ( sHeader.cstr() );
+	unlink ( sNewHeader.cstr() );
 }
 
 

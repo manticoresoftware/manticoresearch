@@ -16,6 +16,7 @@
 #include "sphinxint.h"
 #include "indexfilebase.h"
 
+#include <optional>
 #include <utility>
 
 enum ESphExt : BYTE
@@ -59,16 +60,18 @@ const char*					sphGetExt ( ESphExt eExt );
 /// encapsulates all common actions over index files in general (copy/rename/delete etc.)
 class IndexFiles_c : public IndexFileBase_c
 {
-	DWORD		m_uVersion = INDEX_FORMAT_VERSION;
-	CSphString	m_sIndexName;	// used for information purposes (logs)
+	std::optional<DWORD>	m_uVersion;
+	CSphString		m_sHeaderPath;
+	CSphString		m_sIndexName;	// used for information purposes (logs)
 	CSphString	m_sLastError;
 	bool		m_bFatal = false; // if fatal fail happened (unable to rename during rollback)
 	CSphString FullPath ( const char * szExt, const CSphString& sSuffix = "", const CSphString& sBase = "" );
+	DWORD GetVersionForFiles() const { return m_uVersion.value_or ( INDEX_FORMAT_VERSION ); }
 	inline void SetName ( CSphString sIndex ) { m_sIndexName = std::move(sIndex); }
 
 public:
 	IndexFiles_c() = default;
-	explicit IndexFiles_c ( CSphString sBase, const char* sIndex=nullptr, DWORD uVersion = INDEX_FORMAT_VERSION )
+	explicit IndexFiles_c ( CSphString sBase, const char* sIndex=nullptr, std::optional<DWORD> uVersion = std::nullopt )
 		: IndexFileBase_c { std::move ( sBase ) }
 		, m_uVersion ( uVersion )
 	{
@@ -79,13 +82,14 @@ public:
 	inline const char * ErrorMsg () const { return m_sLastError.cstr(); }
 	inline bool IsFatal() const { return m_bFatal; }
 
-	// read .sph and adopt index version from there.
+	// check that .sph is readable and has a supported legacy header, if applicable.
 	bool CheckHeader ( const char * sType="" );
 
 	// read the beginning of .spk and parse killlist targets
 	bool ReadKlistTargets ( StrVec_t & dTargets, const char * sType="" );
 
-	DWORD GetVersion() const { return m_uVersion; }
+	// lazily read the version from a JSON header when CheckHeader() could not obtain it.
+	bool GetVersion ( DWORD & uVersion );
 
 	// simple make decorated path, like '.old' -> /path/to/index.old
 	CSphString MakePath ( const char * szSuffix = "" );

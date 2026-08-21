@@ -622,6 +622,31 @@ bool DiskIndexChecker_c::Impl_c::ReadLegacyHeader ( CSphString& sError )
 
 }
 
+bool ReadIndexJsonHeaderVersion ( CSphVector<BYTE> & dData, const CSphString & sHeader, DWORD & uVersion, CSphString & sError )
+{
+	using namespace bson;
+
+	if ( sphJsonParse ( dData, sHeader, sError )!=JsonFileParse_e::OK )
+		return false;
+
+	Bson_c tBson ( dData );
+	if ( tBson.IsEmpty() || !tBson.IsAssoc() )
+	{
+		sError = "Something wrong read from json header - it is either empty, either not root object.";
+		return false;
+	}
+
+	uVersion = (DWORD)Int ( tBson.ChildByName ( "index_format_version" ) );
+	if ( uVersion<=1 || uVersion>INDEX_FORMAT_VERSION )
+	{
+		sError.SetSprintf ( "%s is v.%u, binary is v.%u", sHeader.cstr(), uVersion, INDEX_FORMAT_VERSION );
+		return false;
+	}
+
+	return true;
+}
+
+
 bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
 {
 	bool bHeaderIsJson;
@@ -640,33 +665,19 @@ bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
 
 
 	auto sHeader = GetFilename ( SPH_EXT_SPH );
-	const char* szHeader = sHeader.scstr();
 	using namespace bson;
 
 	CSphVector<BYTE> dData;
-	if ( sphJsonParse ( dData, GetFilename ( SPH_EXT_SPH ), sError )!=JsonFileParse_e::OK )
+	if ( !ReadIndexJsonHeaderVersion ( dData, sHeader, m_uVersion, sError ) )
 		return false;
 
 	Bson_c tBson ( dData );
-	if ( tBson.IsEmpty() || !tBson.IsAssoc() )
-	{
-		sError = "Something wrong read from json header - it is either empty, either not root object.";
-		return false;
-	}
-
-	// version
-	m_uVersion = (DWORD)Int ( tBson.ChildByName ( "index_format_version" ) );
-	if ( m_uVersion <= 1 || m_uVersion > INDEX_FORMAT_VERSION )
-	{
-		sError.SetSprintf ( "%s is v.%u, binary is v.%u", szHeader, m_uVersion, INDEX_FORMAT_VERSION );
-		return false;
-	}
 
 	// we don't support anything prior to v64 with json format
 	DWORD uMinFormatVer = 64;
 	if ( m_uVersion < uMinFormatVer )
 	{
-		sError.SetSprintf ( "tables prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, szHeader, m_uVersion );
+		sError.SetSprintf ( "tables prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, sHeader.cstr(), m_uVersion );
 		return false;
 	}
 

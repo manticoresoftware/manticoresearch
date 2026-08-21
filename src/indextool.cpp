@@ -887,12 +887,16 @@ static void ApplyKilllists ( CSphConfig & hConf )
 			fprintf ( stdout, "WARNING: unable to index header for table %s\n", tIndex.m_sName.cstr() );
 			continue;
 		}
-		tIndex.m_uVersion = tIndexFiles.GetVersion();
+		if ( !tIndexFiles.GetVersion ( tIndex.m_uVersion ) )
+		{
+			fprintf ( stdout, "WARNING: unable to read header version for table %s: %s\n", tIndex.m_sName.cstr(), tIndexFiles.ErrorMsg() );
+			continue;
+		}
 
 		// no lookups prior to v.54
-		if ( tIndexFiles.GetVersion() < 54 )
+		if ( tIndex.m_uVersion < 54 )
 		{
-			fprintf ( stdout, "WARNING: table '%s' version: %u, min supported is 54\n", tIndex.m_sName.cstr(), tIndexFiles.GetVersion() );
+			fprintf ( stdout, "WARNING: table '%s' version: %u, min supported is 54\n", tIndex.m_sName.cstr(), tIndex.m_uVersion );
 			continue;
 		}
 

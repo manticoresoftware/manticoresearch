@@ -14,6 +14,7 @@
 
 #include "docidlookup.h"
 #include "fileutils.h"
+#include "killlist.h"
 #include "threadutils.h"
 
 #include <cstring>
@@ -84,6 +85,7 @@ protected:
 	CSphString m_sFile;
 };
 
+
 TEST_F ( UuidDocidLookupTest, NumericPrefixCompatibility )
 {
 	WriteNumericLookup();
@@ -124,6 +126,76 @@ TEST_F ( UuidDocidLookupTest, WriterReaderRoundTripAndSearch )
 	EXPECT_EQ ( tReader.Find ( UuidKey ( "ffffffff-ffff-8fff-bfff-ffffffffffff" ) ), 33U );
 	EXPECT_EQ ( tReader.Find ( UuidKey ( "00000000-0000-1000-8000-000000000000" ) ), 0U );
 	EXPECT_EQ ( tReader.Find ( UuidKey ( "00000000-0000-1000-8000-000000000002" ) ), 0U );
+}
+
+
+class LookupReaderForTest_c
+{
+public:
+	explicit LookupReaderForTest_c ( const CSphVector<DocidRowidPair_t> & dEntries )
+		: m_dEntries ( dEntries )
+	{}
+
+	bool Read ( DocID_t & tDocID, RowID_t & tRowID )
+	{
+		if ( m_iEntry==m_dEntries.GetLength() )
+			return false;
+
+		const DocidRowidPair_t & tEntry = m_dEntries[m_iEntry++];
+		tDocID = tEntry.m_tDocID;
+		tRowID = tEntry.m_tRowID;
+		return true;
+	}
+
+	void HintDocID ( DocID_t ) {}
+
+private:
+	const CSphVector<DocidRowidPair_t> & m_dEntries;
+	int m_iEntry {0};
+};
+
+
+class KillerReaderForTest_c
+{
+public:
+	explicit KillerReaderForTest_c ( const CSphVector<DocID_t> & dEntries )
+		: m_dEntries ( dEntries )
+	{}
+
+	bool ReadDocID ( DocID_t & tDocID )
+	{
+		if ( m_iEntry==m_dEntries.GetLength() )
+			return false;
+
+		tDocID = m_dEntries[m_iEntry++];
+		return true;
+	}
+
+	void HintDocID ( DocID_t ) {}
+
+private:
+	const CSphVector<DocID_t> & m_dEntries;
+	int m_iEntry {0};
+};
+
+
+TEST ( KillByLookupTest, SkipsOutOfRangeRowids )
+{
+	CSphVector<DocidRowidPair_t> dTarget;
+	dTarget.Add ( { 1, 0 } );
+	dTarget.Add ( { 2, 4076938452 } );
+
+	CSphVector<DocID_t> dKiller;
+	dKiller.Add ( 1 );
+	dKiller.Add ( 2 );
+
+	LookupReaderForTest_c tTargetReader ( dTarget );
+	KillerReaderForTest_c tKillerReader ( dKiller );
+	DeadRowMap_Ram_c tDeadRows ( 2 );
+
+	EXPECT_EQ ( KillByLookup ( tTargetReader, tKillerReader, tDeadRows ), 1 );
+	EXPECT_TRUE ( tDeadRows.IsSet ( 0 ) );
+	EXPECT_FALSE ( tDeadRows.IsSet ( 1 ) );
 }
 
 } // namespace

@@ -25,6 +25,7 @@ public:
 
 	bool			HasDead() const;
 	DWORD			GetNumDeads() const;
+	bool			IsValidRowID ( RowID_t tRowID ) const { return tRowID!=INVALID_ROWID && tRowID<m_uRows; }
 	virtual	int64_t	GetLengthBytes() const = 0;
 	virtual uint64_t GetCoreSize () const = 0;
 
@@ -174,7 +175,9 @@ int ProcessIntersected ( TARGETREADER& tReader1, KILLERREADER& tReader2, FNACTIO
 template <typename TARGET, typename KILLER, typename MAP>
 int KillByLookup ( TARGET & tTargetReader, KILLER & tKillerReader, MAP & tDeadRowMap )
 {
-	return ProcessIntersected ( tTargetReader, tKillerReader, [&tDeadRowMap] ( RowID_t tRowID, DocID_t ) { return tDeadRowMap.Set ( tRowID ); } );
+	return ProcessIntersected ( tTargetReader, tKillerReader, [&tDeadRowMap] ( RowID_t tRowID, DocID_t ) {
+		return tDeadRowMap.IsValidRowID ( tRowID ) && tDeadRowMap.Set ( tRowID );
+	} );
 }
 
 

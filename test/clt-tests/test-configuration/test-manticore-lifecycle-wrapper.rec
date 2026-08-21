@@ -1,0 +1,329 @@
+––– comment –––
+The manticore lifecycle wrapper fails closed on fake-success launchers and stale local metadata, verifies stop postconditions, and returns 130 without killing a backend after Ctrl-C.
+––– input –––
+MANTICORE_BIN="${MANTICORE_BIN:-manticore}" SEARCHD_BIN="${SEARCHD_BIN:-searchd}" python3 <<'PY'
+import os
+import fcntl
+import pathlib
+import shutil
+import signal
+import socket
+import subprocess
+import tempfile
+import threading
+import time
+
+source = pathlib.Path(shutil.which(os.environ['MANTICORE_BIN']) or os.environ['MANTICORE_BIN']).resolve()
+searchd_source = pathlib.Path(shutil.which(os.environ['SEARCHD_BIN']) or os.environ['SEARCHD_BIN']).resolve()
+
+def fixture(searchd_body):
+    root = pathlib.Path(tempfile.mkdtemp(prefix='mc-life-', dir='/tmp'))
+    bindir = root / 'bin'
+    work = root / 'work'
+    bindir.mkdir()
+    work.mkdir()
+    (work / 'manticore_data').mkdir()
+    shutil.copy2(source, bindir / 'manticore')
+    fake = bindir / 'searchd'
+    fake.write_text('#!/bin/sh\nset -eu\n' + searchd_body)
+    fake.chmod(0o755)
+    return root, bindir, work
+
+def bind_socket(work):
+    previous = os.getcwd()
+    os.chdir(work)
+    try:
+        sock = socket.socket(socket.AF_UNIX)
+        sock.bind('manticore_data/searchd.sock')
+        sock.close()
+    finally:
+        os.chdir(previous)
+
+def fake_ready_socket(work, body=b'[{"columns":[{"1":{"type":"long"}}],"data":[{"1":1}],"total":1,"error":"","warning":""}]'):
+    sock = socket.socket(socket.AF_UNIX)
+    sock.bind(str(work / 'manticore_data/searchd.sock'))
+    sock.listen(1)
+    def respond():
+        sock.settimeout(2)
+        try:
+            client, _ = sock.accept()
+            with client:
+                client.recv(8192)
+                client.sendall(b'HTTP/1.1 200 OK\r\nContent-Length: ' + str(len(body)).encode() + b'\r\nConnection: close\r\n\r\n' + body)
+        except (OSError, TimeoutError, socket.timeout):
+            pass
+        finally:
+            sock.close()
+    thread = threading.Thread(target=respond)
+    thread.start()
+    return sock, thread
+
+def locked_pid_process(path):
+    code = '''
+import fcntl, os, signal, sys, time
+fd = os.open(sys.argv[1], os.O_CREAT | os.O_RDWR, 0o600)
+fcntl.lockf(fd, fcntl.LOCK_EX)
+os.write(fd, f"{os.getpid()}\\n".encode())
+print("ready", flush=True)
+signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+while True: time.sleep(1)
+'''
+    process = subprocess.Popen(['python3', '-c', code, str(path)], stdout=subprocess.PIPE, text=True)
+    assert process.stdout.readline().strip() == 'ready'
+    return process
+
+root, bindir, work = fixture('exit 0\n')
+(bindir / 'searchd').unlink()
+result = subprocess.run([bindir / 'manticore', 'status', 'local'], cwd=work, env=dict(os.environ, PATH=str(bindir)), text=True, capture_output=True, timeout=5)
+assert result.returncode != 127 and 'Target: local' in result.stdout
+assert 'matching searchd executable was not found' not in result.stderr
+shutil.rmtree(root)
+
+root, bindir, work = fixture('exit 0\n')
+started = time.monotonic()
+result = subprocess.run([bindir / 'manticore', 'start', 'local'], cwd=work, text=True, capture_output=True, timeout=5)
+assert result.returncode != 0 and time.monotonic() - started < 5
+assert 'did not establish owned, live PID metadata' in result.stderr
+shutil.rmtree(root)
+
+root, bindir, work = fixture('touch launcher-invoked\nexit 0\n')
+sock, thread = fake_ready_socket(work)
+try:
+    client_result = subprocess.run([bindir / 'manticore', '--local', '-e', 'SELECT 1'], cwd=work, text=True, capture_output=True, timeout=5)
+    assert client_result.returncode != 0 and 'PID file' in client_result.stderr
+    result = subprocess.run([bindir / 'manticore', 'start', 'local'], cwd=work, text=True, capture_output=True, timeout=5)
+    assert result.returncode != 0 and 'stale socket metadata' in result.stderr
+    assert not (work / 'launcher-invoked').exists()
+finally:
+    sock.close()
+    thread.join(timeout=3)
+    shutil.rmtree(root)
+
+root, bindir, work = fixture('touch launcher-invoked\nexit 0\n')
+pid_fd = os.open(work / 'manticore_data/searchd.pid', os.O_CREAT | os.O_RDWR, 0o600)
+fcntl.lockf(pid_fd, fcntl.LOCK_EX)
+os.write(pid_fd, f'{os.getpid()}\n'.encode())
+sock, thread = fake_ready_socket(work, b'[]')
+try:
+    env = dict(os.environ, MANTICORE_START_TIMEOUT='1')
+    result = subprocess.run([bindir / 'manticore', 'start', 'local'], cwd=work, env=env, text=True, capture_output=True, timeout=5)
+    assert result.returncode != 0 and 'startup readiness timed out' in result.stderr
+    assert not (work / 'launcher-invoked').exists()
+finally:
+    sock.close()
+    thread.join(timeout=3)
+    os.close(pid_fd)
+    shutil.rmtree(root)
+
+root, bindir, work = fixture('exit 99\n')
+bind_socket(work)
+result = subprocess.run([bindir / 'manticore', 'stop', 'local'], cwd=work, text=True, capture_output=True, timeout=5)
+assert result.returncode != 0 and 'stale local socket' in result.stderr
+shutil.rmtree(root)
+
+root, bindir, work = fixture('exit 99\n')
+(work / 'manticore_data/searchd.pid').write_text('99999999\n')
+result = subprocess.run([bindir / 'manticore', 'stop', 'local'], cwd=work, text=True, capture_output=True, timeout=5)
+assert result.returncode != 0 and 'stale PID file' in result.stderr
+shutil.rmtree(root)
+
+root, bindir, work = fixture('touch stop-invoked\nexit 0\n')
+sleeper = subprocess.Popen(['sleep', '30'])
+try:
+    (work / 'manticore_data/searchd.pid').write_text(f'{sleeper.pid}\n')
+    bind_socket(work)
+    result = subprocess.run([bindir / 'manticore', 'stop', 'local'], cwd=work, text=True, capture_output=True, timeout=5)
+    assert result.returncode != 0 and 'refusing to stop an unowned process' in result.stderr
+    assert sleeper.poll() is None
+    assert not (work / 'stop-invoked').exists()
+finally:
+    sleeper.terminate()
+    sleeper.wait()
+    shutil.rmtree(root)
+
+root = pathlib.Path(tempfile.mkdtemp(prefix='mc-searchd-stop-', dir='/tmp'))
+work = root / 'work'
+(work / 'manticore_data').mkdir(parents=True)
+sleeper = subprocess.Popen(['sleep', '30'])
+try:
+    (work / 'manticore_data/searchd.pid').write_text(f'{sleeper.pid}\n')
+    bind_socket(work)
+    result = subprocess.run([searchd_source, '--local', '--stopwait'], cwd=work, text=True, capture_output=True, timeout=5)
+    assert result.returncode != 0 and 'is not owned by recorded pid' in result.stdout + result.stderr
+    assert sleeper.poll() is None
+finally:
+    sleeper.terminate()
+    sleeper.wait()
+    shutil.rmtree(root)
+
+root, bindir, work = fixture('touch stop-invoked\nexit 99\n')
+pid_fd = os.open(work / 'manticore_data/searchd.pid', os.O_CREAT | os.O_RDWR, 0o600)
+fcntl.lockf(pid_fd, fcntl.LOCK_EX)
+os.write(pid_fd, f'{os.getpid()}\n'.encode())
+try:
+    result = subprocess.run([bindir / 'manticore', 'stop', 'local'], cwd=work, text=True, capture_output=True, timeout=5)
+    assert result.returncode == 99
+    assert (work / 'stop-invoked').exists(), 'owned early-start daemon was not passed to the stop backend'
+finally:
+    os.close(pid_fd)
+    shutil.rmtree(root)
+
+root, bindir, work = fixture('exit 99\n')
+fifo = work / 'manticore_data/searchd.pid'
+os.mkfifo(fifo)
+try:
+    result = subprocess.run([bindir / 'manticore', '--local', '-e', 'SELECT 1'], cwd=work, text=True, capture_output=True, timeout=2)
+    assert result.returncode != 0 and 'regular file' in result.stderr
+    result = subprocess.run([searchd_source, '--local', '--stopwait'], cwd=work, text=True, capture_output=True, timeout=2)
+    assert result.returncode != 0 and 'regular file' in result.stdout + result.stderr
+finally:
+    shutil.rmtree(root)
+
+root = pathlib.Path(tempfile.mkdtemp(prefix='mc-searchd-symlink-', dir='/tmp'))
+work = root / 'work'
+(work / 'manticore_data').mkdir(parents=True)
+owned = locked_pid_process(root / 'owned.pid')
+try:
+    (work / 'manticore_data/searchd.pid').symlink_to(root / 'owned.pid')
+    result = subprocess.run([searchd_source, '--local', '--stopwait'], cwd=work, text=True, capture_output=True, timeout=5)
+    assert result.returncode != 0 and owned.poll() is None
+finally:
+    if owned.poll() is None:
+        owned.terminate()
+    owned.wait()
+    shutil.rmtree(root)
+
+root, bindir, work = fixture('touch direct-invoked\nexit 7\n')
+systemctl = bindir / 'systemctl'
+systemctl.write_text('''#!/bin/sh
+case "$*" in
+  "show --property=Version --value") echo 255 ;;
+  "show --property=LoadState --value manticore.service") echo not-found; echo warning >&2 ;;
+  "start manticore.service") touch systemd-invoked; exit 9 ;;
+  *) exit 1 ;;
+esac
+''')
+systemctl.chmod(0o755)
+env = dict(os.environ, PATH=str(bindir) + os.pathsep + os.environ.get('PATH', ''))
+result = subprocess.run([bindir / 'manticore', 'start', 'global'], cwd=work, env=env, text=True, capture_output=True, timeout=5)
+if result.returncode == 0 and 'already ready' in result.stdout:
+    # A source build can discover and validate the host's installed global daemon.
+    # In that case neither backend may be invoked; the isolated Linux CLT covers
+    # the direct-launch exit code path with a controlled global configuration.
+    assert not (work / 'direct-invoked').exists() and not (work / 'systemd-invoked').exists()
+else:
+    assert result.returncode == 7
+    assert (work / 'direct-invoked').exists() and not (work / 'systemd-invoked').exists()
+    assert str(bindir / 'searchd') in result.stderr
+    assert 'configured/global instance' in result.stderr
+shutil.rmtree(root)
+
+root, bindir, work = fixture('exit 7\n')
+child_pid_file = root / 'helper-child.pid'
+systemctl = bindir / 'systemctl'
+systemctl.write_text(f'''#!/bin/sh
+case "$*" in
+  "show --property=Version --value")
+    sh -c 'trap "" TERM; echo $$ > "{child_pid_file}"; while :; do sleep 1; done' &
+    wait
+    ;;
+  *) exit 1 ;;
+esac
+''')
+systemctl.chmod(0o755)
+env = dict(os.environ, PATH=str(bindir) + os.pathsep + os.environ.get('PATH', ''))
+started = time.monotonic()
+result = subprocess.run([bindir / 'manticore', 'start', 'global'], cwd=work, env=env, text=True, capture_output=True, timeout=8)
+elapsed = time.monotonic() - started
+assert elapsed < 7, f'timed-out helper exceeded its bounded cleanup: {elapsed:.2f}s'
+child_pid = int(child_pid_file.read_text())
+for _ in range(50):
+    try:
+        os.kill(child_pid, 0)
+        stat = pathlib.Path(f'/proc/{child_pid}/stat')
+        if stat.exists() and stat.read_text().split()[2] == 'Z':
+            break
+    except ProcessLookupError:
+        break
+    time.sleep(0.02)
+else:
+    raise AssertionError('TERM-ignoring capture-helper descendant survived timeout cleanup')
+shutil.rmtree(root)
+
+root, bindir, work = fixture('touch launcher-invoked\nexit 0\n')
+pid_fd = os.open(work / 'manticore_data/searchd.pid', os.O_CREAT | os.O_RDWR, 0o600)
+fcntl.lockf(pid_fd, fcntl.LOCK_EX)
+os.write(pid_fd, f'{os.getpid()}\n'.encode())
+listener = socket.socket(socket.AF_UNIX)
+listener.bind(str(work / 'manticore_data/searchd.sock'))
+listener.listen(1)
+def stall_probe():
+    try:
+        client, _ = listener.accept()
+        with client:
+            client.recv(8192)
+            time.sleep(3)
+    except OSError:
+        pass
+    finally:
+        listener.close()
+thread = threading.Thread(target=stall_probe)
+thread.start()
+try:
+    started = time.monotonic()
+    env = dict(os.environ, MANTICORE_START_TIMEOUT='1')
+    result = subprocess.run([bindir / 'manticore', 'start', 'local'], cwd=work, env=env, text=True, capture_output=True, timeout=6)
+    elapsed = time.monotonic() - started
+    assert result.returncode != 0 and elapsed < 2.2, f'readiness deadline exceeded: {elapsed:.2f}s'
+    assert not (work / 'launcher-invoked').exists()
+finally:
+    listener.close()
+    thread.join(timeout=4)
+    os.close(pid_fd)
+    shutil.rmtree(root)
+
+root, bindir, work = fixture('touch stop-invoked\nexit 0\n')
+sleeper = subprocess.Popen(['sleep', '30'])
+try:
+    (work / 'manticore_data/searchd.pid').write_text(f'{sleeper.pid}\njunk')
+    bind_socket(work)
+    result = subprocess.run([bindir / 'manticore', 'stop', 'local'], cwd=work, text=True, capture_output=True, timeout=5)
+    assert result.returncode != 0 and 'invalid PID file' in result.stderr
+    assert sleeper.poll() is None
+    assert not (work / 'stop-invoked').exists()
+finally:
+    sleeper.terminate()
+    sleeper.wait()
+    shutil.rmtree(root)
+
+done = pathlib.Path('/tmp/manticore-interrupt-child-done')
+done.unlink(missing_ok=True)
+root, bindir, work = fixture(f'printf started > started-marker\nsleep 2\nprintf backend-output\nprintf done > {done}\nexit 0\n')
+stdout_path = root / 'stdout'
+stderr_path = root / 'stderr'
+with stdout_path.open('w') as stdout, stderr_path.open('w') as stderr:
+    process = subprocess.Popen([bindir / 'manticore', 'start', 'local'], cwd=work, stdout=stdout, stderr=stderr, text=True)
+    for _ in range(100):
+        if (work / 'started-marker').exists():
+            break
+        assert process.poll() is None, 'start command exited before interrupt'
+        time.sleep(0.02)
+    else:
+        raise AssertionError('backend did not start before interrupt')
+    started = time.monotonic()
+    process.send_signal(signal.SIGINT)
+    assert process.wait(timeout=2) == 130
+    assert time.monotonic() - started < 1
+assert 'waiting was interrupted' in stderr_path.read_text()
+for _ in range(40):
+    if done.exists():
+        break
+    time.sleep(0.1)
+assert done.exists(), 'backend child did not survive wrapper interruption'
+done.unlink()
+shutil.rmtree(root)
+
+print('ok - lifecycle wrapper fails closed and preserves interrupted backends')
+PY
+––– output –––
+ok - lifecycle wrapper fails closed and preserves interrupted backends

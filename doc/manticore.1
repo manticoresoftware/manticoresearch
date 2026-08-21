@@ -1,0 +1,113 @@
+'\" t
+.\"     Title: manticore
+.\"    Manual: Manticore Search
+.\"    Source: Manticore Search
+.\"  Language: English
+.\"
+.TH "MANTICORE" "1" "August 9, 2026" "Manticore Search" ""
+.SH "NAME"
+manticore \- Manticore Search SQL client and lifecycle manager
+.SH "SYNOPSIS"
+.HP \w'\fBmanticore\fR\ 'u
+\fBmanticore\fR [\fICLIENT_OPTIONS\fR]
+.HP \w'\fBmanticore\fR\ 'u
+\fBmanticore\fR \fBstart\fR [\fBlocal\fR|\fBglobal\fR]
+.HP \w'\fBmanticore\fR\ 'u
+\fBmanticore\fR \fBstop\fR [\fBlocal\fR|\fBglobal\fR]
+.HP \w'\fBmanticore\fR\ 'u
+\fBmanticore\fR \fBstatus\fR [\fBlocal\fR|\fBglobal\fR]
+.SH "DESCRIPTION"
+\fBmanticore\fR is the primary user-facing command for querying and managing
+Manticore Search. With no lifecycle command it starts the SQL client. When
+\fB./manticore_data\fR exists, the command selects that current-directory
+local instance; otherwise it selects the normally configured instance.
+.PP
+An existing local marker is authoritative. A malformed, inaccessible, stale,
+or unavailable local instance causes an error rather than an implicit fallback
+to the configured instance.
+.SH "CLIENT OPTIONS"
+.TP
+\fB\-c\fR, \fB\-\-config\fR \fIFILE\fR
+Ignore \fB./manticore_data\fR and use exactly this configuration file.
+.TP
+\fB\-e\fR, \fB\-\-execute\fR \fISQL\fR
+Execute SQL once and exit. Without this option, the client reads interactively
+or from standard input.
+.TP
+\fB\-\-local\fR
+Require the current-directory local instance. Do not consult global
+configuration.
+.TP
+\fB\-\-global\fR
+Ignore \fB./manticore_data\fR and use normal configuration discovery.
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Show command help.
+.TP
+\fB\-v\fR, \fB\-\-version\fR
+Show the matching Manticore Search build version.
+.PP
+\fB\-\-local\fR, \fB\-\-global\fR, and \fB\-\-config\fR are mutually exclusive.
+.SH "LIFECYCLE COMMANDS"
+.TP
+\fBstart\fR [\fBlocal\fR|\fBglobal\fR]
+Start the selected instance and return only after it is ready. \fBstart
+local\fR creates the first \fB./manticore_data\fR instance when the directory
+is absent.
+.TP
+\fBstop\fR [\fBlocal\fR|\fBglobal\fR]
+Stop the selected instance and wait for shutdown to complete. There is no
+separate \fBstopwait\fR command.
+.TP
+\fBstatus\fR [\fBlocal\fR|\fBglobal\fR]
+Report local PID, socket, process, and SQL readiness, or wrap \fBsearchd
+--status\fR for the configured instance.
+.PP
+Without an explicit target, lifecycle commands select local mode when
+\fB./manticore_data\fR exists and global mode otherwise. For global lifecycle
+operations, an installed and usable \fBmanticore.service\fR is authoritative;
+otherwise the matching \fBsearchd\fR executable is invoked directly.
+.SH "EXAMPLES"
+Start a local instance and query it:
+.PP
+.RS
+.nf
+$ manticore start local
+$ manticore -e 'SELECT 1 AS value'
+$ manticore status
+$ manticore stop
+.fi
+.RE
+.PP
+Query the configured instance while inside a local project directory:
+.PP
+.RS
+.nf
+$ manticore --global -e 'SHOW TABLES'
+.fi
+.RE
+.PP
+Read SQL from standard input:
+.PP
+.RS
+.nf
+$ printf 'SHOW TABLES;\n' | manticore
+.fi
+.RE
+.SH "FILES"
+.TP
+\fB./manticore_data/searchd.sock\fR
+Local HTTP Unix socket.
+.TP
+\fB./manticore_data/searchd.pid\fR
+Local daemon PID file.
+.TP
+\fB./manticore_data/searchd.log\fR
+Local daemon log.
+.TP
+\fB./manticore_data/.history\fR
+Local interactive client history.
+.SH "SEE ALSO"
+.BR searchd (1)
+.SH "AUTHOR"
+Manticore Software LTD (https://manticoresearch.com)

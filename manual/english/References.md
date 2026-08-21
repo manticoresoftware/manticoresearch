@@ -438,6 +438,29 @@ index_converter {--config /path/to/config|--path}
 * [--all](Installation/Migration_from_Sphinx.md#index_converter) - Converts all tables from the configuration file / path
 * [--killlist-target](Installation/Migration_from_Sphinx.md#index_converter) - Sets target tables for applying kill-lists
 
+## [`manticore` command-line tool](Starting_the_server/Manticore.md)
+`manticore` is the primary SQL client and lifecycle manager for Manticore Search.
+
+```bash
+manticore [CLIENT_OPTIONS]
+manticore start [local|global]
+manticore stop [local|global]
+manticore status [local|global]
+```
+
+##### Client options
+* [`--config, -c`](Starting_the_server/Manticore.md#Client-options) - Uses exactly the specified configuration file
+* [`--execute, -e`](Starting_the_server/Manticore.md#Connecting-to-Manticore-Search) - Executes SQL once and exits
+* [`--global`](Starting_the_server/Manticore.md#Automatic-target-selection) - Ignores `./manticore_data` and uses normal configuration discovery
+* [`--local`](Starting_the_server/Manticore.md#Automatic-target-selection) - Requires the current-directory local instance
+* [`--help, -h`](Starting_the_server/Manticore.md#Client-options) - Displays command help
+* [`--version, -v`](Starting_the_server/Manticore.md#Client-options) - Displays the matching Manticore Search version
+
+##### Lifecycle commands
+* [`start [local|global]`](Starting_the_server/Manticore.md#Starting-an-instance) - Starts the selected instance and waits until SQL is ready
+* [`stop [local|global]`](Starting_the_server/Manticore.md#Stopping-an-instance) - Stops the selected instance and waits for shutdown
+* [`status [local|global]`](Starting_the_server/Manticore.md#Checking-status) - Checks local readiness or reports configured-instance status
+
 ## [Searchd](Starting_the_server/Manually.md)
 `searchd` is the Manticore server.
 
@@ -554,7 +577,8 @@ searchd [OPTIONS]
 * [--table (--index)](Starting_the_server/Manually.md#searchd-command-line-options) - Restricts the server to serve only the specified table
 * [--install](Starting_the_server/Manually.md#searchd-command-line-options) - Installs searchd as a service in Microsoft Management Console
 * [--iostats](Starting_the_server/Manually.md#searchd-command-line-options) - Enables input/output reporting
-* [--listen, -l](Starting_the_server/Manually.md#searchd-command-line-options) - Overrides [listen](Server_settings/Searchd.md#listen) from the configuration file
+* [--listen](Starting_the_server/Manually.md#searchd-command-line-options) - Overrides [listen](Server_settings/Searchd.md#listen) from the configuration file
+* [--local, -l](Starting_the_server/Manually.md#Local-configless-mode) - Starts an isolated zero-configuration instance in `./manticore_data`
 * [--logdebug, --logdebugv, --logdebugvv](Starting_the_server/Manually.md#searchd-command-line-options) - Enables additional debug output in the server log
 * [--logreplication](Starting_the_server/Manually.md#searchd-command-line-options) - Enables extra replication debug output in the server log
 * [--new-cluster](Starting_the_server/Manually.md#searchd-command-line-options) - Initializes a replication cluster and sets the server as a reference node with [cluster restart](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) protection

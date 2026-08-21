@@ -196,7 +196,7 @@ target_link_libraries ( lmanticore PUBLIC uni-algo::uni-algo )
 add_library ( lsearchd OBJECT searchdha.cpp api_reply_stream.cpp http/http_parser.c searchdhttp.cpp
 		searchdtask.cpp taskping.cpp taskmalloctrim.cpp taskglobalidf.cpp tasksavestate.cpp
 		taskflushbinlog.cpp taskflushattrs.cpp taskflushmutable.cpp taskpreread.cpp
-		searchdaemon.cpp searchdfields.cpp searchdconfig.cpp
+		searchdaemon.cpp searchdfields.cpp searchdconfig.cpp searchdlocal.cpp
 		searchdsql.cpp searchdddl.cpp networking_daemon.cpp
 		net_action_accept.cpp netreceive_api.cpp
 		netreceive_http.cpp netreceive_ql.cpp query_status.cpp
@@ -206,15 +206,37 @@ add_library ( lsearchd OBJECT searchdha.cpp api_reply_stream.cpp http/http_parse
 		searchd_shard.cpp
 		facetutils.cpp
 		auth/auth.cpp auth/auth_common.cpp auth/auth_proto_http.cpp auth/auth_proto_mysql.cpp auth/auth_proto_api.cpp auth/auth_perms.cpp auth/gcm_nonce.cpp auth/auth_log.cpp auth/auth_bootstrap.cpp)
-		
+
 target_sources ( lsearchd PUBLIC ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
 add_library ( digest_sha1 digest_sha1.cpp )
 add_library ( digest_sha256 digest_sha256.cpp )
 target_link_libraries ( digest_sha1 PRIVATE lextra )
 target_link_libraries ( digest_sha256 PRIVATE lextra )
 add_subdirectory ( sqlchecks )
-target_link_libraries ( lsearchd PUBLIC sqlchecks digest_sha1 digest_sha256 lextra nlohmann_json::nlohmann_json )
+add_library ( listener_parser STATIC listenerparser.cpp )
+target_link_libraries ( listener_parser PUBLIC lmanticore )
+
+target_link_libraries ( lsearchd PUBLIC listener_parser sqlchecks digest_sha1 digest_sha256 lextra nlohmann_json::nlohmann_json )
 target_link_libraries ( lsearchd INTERFACE Boost::filesystem )
+
+add_library ( manticore_client STATIC manticoreclient.cpp searchdlocalclient.cpp searchdlocalhistory.cpp )
+target_link_libraries ( manticore_client PUBLIC lmanticore listener_parser )
+
+# Interactive client mode loads LibEdit at runtime so package builds do not
+# need its headers. Prefer the SONAME found by the build system, while the
+# client keeps fallbacks for installations without a development link.
+if (NOT WIN32 AND NOT APPLE AND HAVE_DLOPEN)
+	find_library ( LOCAL_LIBEDIT_PATH NAMES edit )
+	if (LOCAL_LIBEDIT_PATH)
+		GET_SONAME ( "${LOCAL_LIBEDIT_PATH}" LOCAL_LIBEDIT_SONAME )
+		if (LOCAL_LIBEDIT_SONAME)
+			target_compile_definitions ( manticore_client PRIVATE LOCAL_LIBEDIT_LIBRARY="${LOCAL_LIBEDIT_SONAME}" )
+		endif ()
+	endif ()
+endif ()
+
+add_library ( manticore_cli STATIC manticorecli.cpp )
+target_link_libraries ( manticore_cli PUBLIC manticore_client lmanticore )
 if (WIN32)
 target_link_libraries ( lsearchd PRIVATE iphlpapi WS2_32 wsock32 )
 endif()
@@ -287,6 +309,9 @@ add_subdirectory ( daemon )
 # our executables
 add_executable ( searchd searchd.cpp )
 target_link_libraries ( searchd daemon searchd_ssl lmanticore lsearchd )
+add_executable ( manticore manticore.cpp )
+target_link_libraries ( manticore manticore_cli lmanticore )
+target_compile_definitions ( manticore_cli PRIVATE MANTICORE_INSTALL_BINDIR="${CMAKE_INSTALL_FULL_BINDIR}" )
 
 if (NOT STATIC_BINARY)
 	add_executable ( indexer indexer.cpp )
@@ -308,6 +333,7 @@ if (SPLIT_SYMBOLS)
 	split_dbg ( indexer )
 	split_dbg ( indextool )
 	split_dbg ( searchd )
+	split_dbg ( manticore )
 	split_dbg ( spelldump )
 	split_dbg ( wordbreaker )
 	split_dbg ( index_converter )
@@ -315,7 +341,8 @@ endif ()
 
 # These targets remain in their split components, but bundle builds stage the
 # same payload into the bundle component too via install_component_and_bundle().
-install_component_and_bundle ( searchd TARGETS searchd RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} )
+install_component_and_bundle ( searchd TARGETS searchd manticore RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} )
+install_component_and_bundle ( searchd FILES "${MANTICORE_SOURCE_DIR}/doc/searchd.1" "${MANTICORE_SOURCE_DIR}/doc/manticore.1" DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 )
 if (NOT STATIC_BINARY)
 	install_component_and_bundle ( tools TARGETS indexer indextool spelldump wordbreaker RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} )
 	install_component_and_bundle ( converter TARGETS index_converter RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} )

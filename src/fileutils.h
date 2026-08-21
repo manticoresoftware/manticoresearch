@@ -143,6 +143,19 @@ void			RawFileUnLock ( const CSphString& sFile, int& iLockFD );
 
 void			SafeClose ( int& iFD );
 
+#if !_WIN32
+/// Open a PID file without following links or blocking on special files,
+/// validate its regular-file shape, and parse one strict positive decimal PID.
+/// The validated descriptor remains open in iFD for a subsequent lock check.
+bool			OpenPidFile ( const CSphString & sPath, int & iFD, int & iPid, CSphString & sError );
+
+/// Require an advisory write-lock owner matching the parsed PID.
+bool			ValidatePidFileOwner ( int iFD, int iPid, CSphString & sError );
+
+/// Unlink a regular-file pathname only when it still names the open descriptor.
+bool			UnlinkFileIfSameDescriptor ( int iFD, const CSphString & sPath, CSphString & sError );
+#endif
+
 /// simple write wrapper
 /// simplifies partial write checks, and also supresses "fortified" glibc warnings
 bool			sphWrite ( int iFD, const void * pBuf, size_t iSize );

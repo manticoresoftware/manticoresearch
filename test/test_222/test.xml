@@ -3,6 +3,7 @@
 
 <requires>
 <lemmatizer_base/>
+<non-rt-indexer/>
 </requires>
 
 <name>cooperation of index_exact_word with expanding by lematizer, expand</name>

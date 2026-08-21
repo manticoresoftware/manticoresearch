@@ -3,6 +3,8 @@
 
 <name>stopwords vs wordforms vs multiforms</name>
 
+<requires><non-rt-indexer/></requires>
+
 <config>
 indexer
 {

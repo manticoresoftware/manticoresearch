@@ -1,6 +1,8 @@
 <test>
 <name>global idf in non RT mode</name>
 
+<requires><non-rt-indexer/></requires>
+
 <config>
 indexer
 {

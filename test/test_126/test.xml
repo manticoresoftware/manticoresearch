@@ -3,6 +3,8 @@
 
 <name>expand keywords</name>
 
+<requires><non-rt-indexer/></requires>
+
 <config>
 indexer
 {

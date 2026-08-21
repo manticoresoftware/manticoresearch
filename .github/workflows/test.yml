@@ -427,6 +427,24 @@ jobs:
       timeout: 20
       MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
 
+  test_linux_debug_rt_indexer:
+    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_linux_debug.result == 'success' && (needs.mcl_runtime_linux_debug_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_linux_debug.result == 'success')
+    name: Linux debug mode tests (rt-indexer)
+    needs: [build_linux_debug, mcl_runtime_linux_debug_cached, mcl_runtime_linux_debug, meta]
+    permissions:
+      checks: write
+      contents: read
+    uses: ./.github/workflows/test_template.yml
+    secrets: inherit
+    with:
+      build_artifact_name: debug_build
+      artifact_name: debug_test_results_rt_indexer
+      results_name: "Linux debug RT indexer test results"
+      suite_name: rt-indexer
+      CTEST_REGEX: "^(rtidx_|Indexer RT bulk)"
+      timeout: 35
+      MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
+
   test_linux_debug_mcl:
     if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_linux_debug.result == 'success' && (needs.mcl_runtime_linux_debug_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_linux_debug.result == 'success')
     name: Linux debug mode tests (MCL)
@@ -830,6 +848,24 @@ jobs:
       results_name: "Linux release RT test results"
       suite_name: rt
       CTEST_REGEX: "^rt_"
+      timeout: 15
+      MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_release_x86_64
+
+  test_linux_release_rt_indexer:
+    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_linux_release_tests.result == 'success' && (needs.mcl_runtime_linux_release_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_linux_release.result == 'success')
+    name: Linux release mode tests (rt-indexer)
+    needs: [build_linux_release_tests, mcl_runtime_linux_release_cached, mcl_runtime_linux_release, meta]
+    permissions:
+      checks: write
+      contents: read
+    uses: ./.github/workflows/test_template.yml
+    secrets: inherit
+    with:
+      build_artifact_name: release_test_build
+      artifact_name: release_test_results_rt_indexer
+      results_name: "Linux release RT indexer test results"
+      suite_name: rt-indexer
+      CTEST_REGEX: "^(rtidx_|Indexer RT bulk)"
       timeout: 15
       MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_release_x86_64
 

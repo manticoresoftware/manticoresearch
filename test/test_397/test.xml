@@ -6,6 +6,7 @@
 <requires>
 <re2/>
 <lemmatizer_base/>
+<non-rt-indexer/>
 </requires>
 
 <config>

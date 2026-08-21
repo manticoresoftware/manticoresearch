@@ -17,6 +17,7 @@
 #include "queryprofile.h"
 #include "searchdaemon.h"
 #include "searchdsql.h"
+#include <cstdio>
 #include "searchd_shard.h"
 #include "sphinxpq.h"
 
@@ -54,6 +55,15 @@ public:
 public:
 	bool m_bAutoCommit = true;
 	bool m_bInTransaction = false;
+	bool m_bIndexerRtBulk = false;
+	FILE * m_pIndexerRtBulkStream = nullptr;
+	std::unique_ptr<char[]> m_pIndexerRtBulkBuffer;
+	int m_iIndexerRtBulkPid = -1;
+	int64_t m_iIndexerRtBulkIndexId = -1;
+	CSphString m_sIndexerRtBulkTable;
+	CSphString m_sIndexerRtBulkDir;
+	CSphString m_sIndexerRtBulkConfig;
+	CSphString m_sIndexerRtBulkIndex;
 	CSphVector<int64_t> m_dLastIds;
 	CSphVector<CSphString> m_dLastIdStrings;
 	QueryProfile_c m_tProfile;

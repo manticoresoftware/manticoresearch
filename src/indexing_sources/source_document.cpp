@@ -15,6 +15,8 @@
 #include "tokenizer/tokenizer.h"
 #include "sphinxint.h"
 
+#include <cmath>
+
 void CSphSource::SetDict ( const DictRefPtr_c& pDict )
 {
 	assert ( pDict );
@@ -986,4 +988,32 @@ void CSphSource::ParseFieldMVA ( int iAttr, const char * szValue )
 
 	if ( pDigit )
 		m_dMvas[iAttr].Add ( sphToInt64 ( pDigit ) );
+}
+
+
+bool CSphSource::ParseFieldFloatVector ( int iAttr, const char * szValue )
+{
+	if ( !szValue )
+		return true;
+
+	const char * pValue = szValue;
+	while ( *pValue )
+	{
+		while ( *pValue && ( sphIsSpace ( *pValue ) || *pValue==',' || *pValue=='(' || *pValue==')' ) )
+			++pValue;
+		if ( !*pValue )
+			break;
+
+		char * pEnd = nullptr;
+		float fValue = strtof ( pValue, &pEnd );
+		if ( pEnd==pValue )
+			return false;
+		if ( !std::isfinite ( fValue ) )
+			return false;
+
+		m_dMvas[iAttr].Add ( sphF2DW ( fValue ) );
+		pValue = pEnd;
+	}
+
+	return true;
 }

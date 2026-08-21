@@ -3,6 +3,8 @@
 
 <name>wordforms: comments, after morph modifier, multiple wordform files</name>
 
+<requires><non-rt-indexer/></requires>
+
 <config>
 indexer
 {

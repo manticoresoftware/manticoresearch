@@ -846,7 +846,6 @@ CALL UUID_SHORT(3)
 ```
 <!-- end -->
 
-<!-- example bulk_insert -->
 ## Bulk adding documents
 You can insert not just a single document into a real-time table, but as many as you'd like. It's perfectly fine to insert batches of tens of thousands of documents into a real-time table. However, it's important to keep the following points in mind:
 * The larger the batch, the higher the latency of each insert operation
@@ -877,6 +876,98 @@ The `/bulk` (Manticore mode) endpoint supports [Chunked transfer encoding](https
 * decreases response time
 * allows you to bypass [max_packet_size](../../Server_settings/Searchd.md#max_packet_size) and transfer batches much larger than the maximum allowed value of `max_packet_size` (128MB), for example, 1GB at a time.
 
+### Indexer-assisted bulk insertion
+
+> NOTE: This insertion mode is experimental.
+
+For large append-only loads into a local real-time table, Manticore Search can stream `INSERT` rows through `indexer`, build one disk chunk, and attach that chunk to the table when the transaction commits. This avoids adding every row through the regular real-time insertion path. Rows remain invisible until the chunk is attached, and a failed operation or `ROLLBACK` leaves the table unchanged.
+
+Use this mode when loading a large batch for which producing a disk chunk directly is preferable to building a RAM chunk first. It supports both row-wise and columnar tables, including full-text fields, numeric attributes, strings, JSON, MVA/MVA64, and float vectors with KNN indexes.
+
+#### SQL
+
+Enable the mode for the current SQL session, start an explicit transaction, run one or more `INSERT` statements against the same table, and commit:
+
+```sql
+SET indexer_rt_bulk=1;
+BEGIN;
+INSERT INTO products(id,title,price) VALUES
+  (101,'Crossbody Bag with Tassel',19.85),
+  (102,'Microfiber Sheet Set',19.99);
+INSERT INTO products(id,title,price) VALUES
+  (103,'Pet Hair Remover Glove',7.99);
+COMMIT;
+SET indexer_rt_bulk=0;
+```
+
+`SET indexer_rt_bulk=1` applies to the current connection. While it is enabled, every `INSERT` requires an active transaction started with `BEGIN` or `START TRANSACTION`. `COMMIT` builds and atomically attaches the disk chunk; `ROLLBACK`, a failed insert, or closing the connection discards the staged batch.
+
+#### HTTP `/bulk`
+
+Add `indexer_rt_bulk=1` to the `/bulk` query string. The request body remains standard newline-delimited JSON (NDJSON), and each operation must be `insert`:
+
+```bash
+curl -X POST 'http://localhost:9308/bulk?indexer_rt_bulk=1' \
+  -H 'Content-Type: application/x-ndjson' \
+  --data-binary $'{"insert":{"table":"products","id":101,"doc":{"title":"Crossbody Bag with Tassel","price":19.85}}}\n{"insert":{"table":"products","id":102,"doc":{"title":"Microfiber Sheet Set","price":19.99}}}\n'
+```
+
+The endpoint also supports chunked transfer encoding in this mode, so the server can stream a request larger than `max_packet_size` into `indexer` without buffering the complete request body. As with ordinary `/bulk` transactions, changing the target table or adding an empty line commits the preceding group; the entire multi-table request is therefore not one atomic transaction.
+
+#### Fluent Bit
+
+Fluent Bit's Elasticsearch output sends data to `/_bulk` rather than `/bulk`. To enable indexer-assisted insertion for that output, set its `pipeline` option to the reserved value `indexer_rt_bulk`, use the `index` write operation, and provide the name of a record field that contains the document ID:
+
+```ini
+[OUTPUT]
+    name            es
+    match           site_access_logs
+    host            manticore
+    port            9308
+    index           site_access_logs
+    pipeline        indexer_rt_bulk
+    write_operation index
+    id_key          id
+```
+
+Every record's `id` value must be a non-zero decimal string, for example `"123"`. Fluent Bit does not add `_id` when `id_key` refers to a numeric value, and `generate_id On` produces UUID strings, which this experimental mode does not support. If the source does not already contain a suitable stable numeric string, add one with a Fluent Bit filter before the output runs. IDs must remain stable when Fluent Bit retries a chunk. For a single tailed file, one option is to expose its byte offset and convert it to a string with a Lua filter:
+
+```ini
+[INPUT]
+    name       tail
+    path       /var/log/example.log
+    offset_key fluent_bit_offset
+
+[FILTER]
+    name   lua
+    match  site_access_logs
+    script add_numeric_id.lua
+    call   add_numeric_id
+```
+
+```lua
+function add_numeric_id(tag, timestamp, record)
+    record["id"] = tostring(record["fluent_bit_offset"] + 1)
+    record["fluent_bit_offset"] = nil
+    return 2, timestamp, record
+end
+```
+
+Offsets are unique only within one file. Pipelines that tail multiple files should derive a collision-free numeric ID from a stable source identifier and offset instead.
+
+With `pipeline indexer_rt_bulk`, each Fluent Bit request is committed as one disk chunk. The `index` action replaces a document when its ID already exists in the table. IDs must be unique within each request; duplicate IDs in one request and other bulk actions are rejected. If any record in the request is invalid, Manticore Search rejects the request and attaches none of its records. Successful assisted responses for this reserved Fluent Bit pipeline contain `"errors": false` and an empty `items` array to avoid serializing, transferring, and parsing one redundant success object per record. Error responses retain per-record details.
+
+Without `pipeline indexer_rt_bulk`, the same output continues to use regular real-time insertion. The assisted mode is most useful when bulk success responses or indexing work are a bottleneck. Fluent Bit flushes independent chunks, and assisted mode starts `indexer` for each request, so small batches on a low-latency connection may not improve wall-clock time. Benchmark with representative records, schema, chunking, workers, and network conditions before enabling it in production.
+
+#### Current limitations
+
+* The target must be one local real-time table per transaction. Distributed, sharded, replicated, percolate, and plain tables are not supported.
+* Only `INSERT` is supported. `REPLACE`, `UPDATE`, and `DELETE` are rejected.
+* Every row must provide an explicit numeric, non-zero document ID. Auto-generated and UUID document IDs are not supported.
+* The feature is unavailable on Windows and in static builds.
+* The `indexer` executable from the same Manticore Search build or installation must be next to the running `searchd` executable. Manticore Search resolves only that sibling executable; it does not search `PATH`. If it is missing or cannot be executed, only the assisted insertion fails—normal startup and regular insertion remain available.
+
+<!-- example bulk_insert -->
 <!-- intro -->
 ### Bulk insert examples
 ##### SQL:

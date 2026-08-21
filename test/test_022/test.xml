@@ -3,6 +3,8 @@
 
 <name>wordforms vs case folding</name>
 
+<requires><non-rt-indexer/></requires>
+
 <config>
 indexer
 {

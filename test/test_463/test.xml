@@ -3,6 +3,7 @@
 
 <requires>
 <lemmatizer_base/>
+<non-rt-indexer/>
 </requires>
 
 <name>aot morphology vs original forms</name>

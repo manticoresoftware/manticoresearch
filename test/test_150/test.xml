@@ -3,6 +3,8 @@
 
 <name>keywords dictionary vs expansion limit</name>
 
+<requires><non-rt-indexer/></requires>
+
 <config>
 indexer
 {

@@ -188,6 +188,9 @@ bool CSphSource_BaseSV::SetupPipe ( const CSphConfigSection & hSource, FILE * pP
 	CSphString sColumn;
 	for ( const auto& tVal : hSource )
 	{
+		if ( tVal.first=="csvpipe_attr_order" )
+			continue;
+
 		const CSphVariant * pVal = &tVal.second;
 		while ( pVal )
 		{
@@ -390,6 +393,14 @@ bool CSphSource_BaseSV::StoreAttribute ( int iAttr, int iOff )
 		ParseFieldMVA ( tRemap.m_iAttr, sVal );
 		break;
 
+	case SPH_ATTR_FLOAT_VECTOR:
+		if ( !ParseFieldFloatVector ( tRemap.m_iAttr, sVal ) )
+		{
+			DecorateMessage ( "invalid float vector value '%s'", sVal );
+			return false;
+		}
+		break;
+
 	case SPH_ATTR_TOKENCOUNT:
 		m_tDocInfo.SetAttr ( tAttr.m_tLocator, 0 );
 		break;
@@ -572,6 +583,7 @@ bool CSphSource_TSV::SetupSchema ( const CSphConfigSection & hSource, bool bWord
 	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_bigint"),		SPH_ATTR_BIGINT,	m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_multi"),		SPH_ATTR_UINT32SET,	m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_multi_64"),	SPH_ATTR_INT64SET,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_float_vector"), SPH_ATTR_FLOAT_VECTOR, m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_string"),		SPH_ATTR_STRING,	m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_json"),		SPH_ATTR_JSON,		m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("tsvpipe_field_string"),	SPH_ATTR_STRING,	m_tSchema, sError );
@@ -800,12 +812,38 @@ bool CSphSource_CSV::SetupSchema ( const CSphConfigSection & hSource, bool bWord
 	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_bigint"),		SPH_ATTR_BIGINT,	m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_multi"),		SPH_ATTR_UINT32SET,	m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_multi_64"),	SPH_ATTR_INT64SET,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_float_vector"), SPH_ATTR_FLOAT_VECTOR, m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_string"),		SPH_ATTR_STRING,	m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_json"),		SPH_ATTR_JSON,		m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("csvpipe_field_string"),	SPH_ATTR_STRING,	m_tSchema, sError );
 
 	if ( !bOk )
 		return false;
+
+	CSphString sAttrOrder = hSource.GetStr ( "csvpipe_attr_order" );
+	if ( !sAttrOrder.IsEmpty() )
+	{
+		StrVec_t dNames;
+		sphSplit ( dNames, sAttrOrder.cstr(), "," );
+		CSphVector<bool> dUsed ( m_tSchema.GetAttrsCount() );
+		dUsed.ZeroVec();
+		CSphSchema tOrdered ( m_tSchema.GetName() );
+		for ( const CSphString & sName : dNames )
+		{
+			int iAttr = m_tSchema.GetAttrIndex ( sName.cstr() );
+			if ( iAttr<0 || dUsed[iAttr] )
+			{
+				sError.SetSprintf ( "csvpipe_attr_order contains %s attribute '%s'", iAttr<0 ? "unknown" : "duplicate", sName.cstr() );
+				return false;
+			}
+			tOrdered.AddAttr ( m_tSchema.GetAttr(iAttr), true );
+			dUsed[iAttr] = true;
+		}
+		for ( int i=0; i<m_tSchema.GetAttrsCount(); ++i )
+			if ( !dUsed[i] )
+				tOrdered.AddAttr ( m_tSchema.GetAttr(i), true );
+		m_tSchema = std::move ( tOrdered );
+	}
 
 	ConfigureFields ( hSource("csvpipe_field"), bWordDict, m_tSchema );
 	ConfigureFields ( hSource("csvpipe_field_string"), bWordDict, m_tSchema );

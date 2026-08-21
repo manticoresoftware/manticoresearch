@@ -3,6 +3,8 @@
 
 <name>document storage vs highlighting</name>
 
+<requires><non-rt-indexer/></requires>
+
 <config>
 indexer
 {

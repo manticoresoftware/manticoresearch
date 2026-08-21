@@ -22,6 +22,7 @@
 #include "accumulator.h"
 #include "networking_daemon.h"
 #include "client_session.h"
+#include "indexer_rt_bulk.h"
 #include "tracer.h"
 #include "searchdbuddy.h"
 #include "compressed_http.h"
@@ -31,6 +32,8 @@
 #include "aggrexpr.h"
 #include "auth/auth_proto_http.h"
 #include "netfetch.h"
+
+#include <unordered_set>
 
 static bool g_bLogBadHttpReq = env_exists ( "MANTICORE_LOG_HTTP_BAD_REQ" ); // log content of bad http requests, ruled by this env variable
 static int g_iLogHttpData = env_long ( "MANTICORE_LOG_HTTP_DATA" ).value_or(0); // verbose logging of http data, ruled by this env variable
@@ -175,7 +178,7 @@ static Endpoint_t g_dEndpoints[(size_t)EHTTP_ENDPOINT::TOTAL] =
 		{ "pq", "json/pq" },
 		{ "cli", nullptr },
 		{ "cli_json", nullptr },
-		{ "_bulk", nullptr },
+		{ "_bulk", "_bulk/" },
 		{ "token", nullptr }
 };
 
@@ -2279,6 +2282,18 @@ public:
 		if ( !CheckNDJson() )
 			return false;
 
+		auto pSession = session::Info().GetClientSession();
+		const bool bIndexerRtBulk = m_tOptions.Exists ( "indexer_rt_bulk" ) && m_tOptions["indexer_rt_bulk"]=="1";
+		if ( bIndexerRtBulk )
+			pSession->m_bIndexerRtBulk = true;
+		AT_SCOPE_EXIT ( [pSession, bIndexerRtBulk] {
+			if ( bIndexerRtBulk )
+			{
+				CleanupIndexerRtBulk ( *pSession );
+				pSession->m_bIndexerRtBulk = false;
+			}
+		});
+
 		JsonObj_c tResults ( true );
 		bool bResult = false;
 		int iCurLine = 0;
@@ -2364,6 +2379,12 @@ public:
 			}
 
 			SetQueryOptions ( m_tOptions, tStmt );
+			if ( bIndexerRtBulk && tStmt.m_eStmt!=STMT_INSERT )
+			{
+				m_sError = "indexer_rt_bulk prototype supports INSERT only";
+				RollbackBulkTxn ( tTxnState );
+				return FinishBulk ( tResults, false, iCurLine, iLastTxStartLine, EHTTP_STATUS::_400 );
+			}
 
 			switch ( tStmt.m_eStmt )
 			{
@@ -2578,6 +2599,9 @@ private:
 	bool ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecTraits_T<BulkDoc_t> & dDocs, JsonObj_c & tItems );
 	bool Validate();
 	void ReportLogError ( const char * sError, HttpErrorType_e eType , EHTTP_STATUS eStatus, bool bLogOnly );
+	bool IsIndexerRtBulk() const;
+
+	bool m_bIndexerRtBulk { false };
 };
 
 class HttpTokenHandler_c final: public HttpHandler_c, public HttpOptionTrait_t
@@ -3617,10 +3641,30 @@ bool HttpHandlerEsBulk_c::Validate()
 	return true;
 }
 
+
+bool HttpHandlerEsBulk_c::IsIndexerRtBulk() const
+{
+	return ( m_hOpts.Exists ( "indexer_rt_bulk" ) && m_hOpts["indexer_rt_bulk"]=="1" )
+		|| ( m_hOpts.Exists ( "pipeline" ) && m_hOpts["pipeline"]=="indexer_rt_bulk" );
+}
+
+
 bool HttpHandlerEsBulk_c::Process()
 {
 	if ( !Validate() )
 		return false;
+
+	m_bIndexerRtBulk = IsIndexerRtBulk();
+	auto pSession = session::Info().GetClientSession();
+	if ( m_bIndexerRtBulk )
+		pSession->m_bIndexerRtBulk = true;
+	AT_SCOPE_EXIT ( [pSession, bIndexerRtBulk=m_bIndexerRtBulk] {
+		if ( bIndexerRtBulk )
+		{
+			CleanupIndexerRtBulk ( *pSession );
+			pSession->m_bIndexerRtBulk = false;
+		}
+	});
 
 	auto & tCrashQuery = GlobalCrashQueryGetRef();
 	tCrashQuery.m_dQuery = S2B ( GetBody() );
@@ -3664,6 +3708,42 @@ bool HttpHandlerEsBulk_c::Process()
 				return false;
 		}
 	}
+
+	if ( m_bIndexerRtBulk )
+	{
+		if ( dDocs.IsEmpty() )
+		{
+			ReportLogError ( "indexer_rt_bulk requires at least one document", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+			return false;
+		}
+
+		const CSphString & sIndex = dDocs[0].m_sIndex;
+		std::unordered_set<DocID_t> hDocids;
+		for ( const BulkDoc_t & tDoc : dDocs )
+		{
+			if ( tDoc.m_sAction!="index" )
+			{
+				ReportLogError ( "indexer_rt_bulk supports Elasticsearch bulk index actions only", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+				return false;
+			}
+			if ( tDoc.m_sIndex!=sIndex )
+			{
+				ReportLogError ( "indexer_rt_bulk requires one target table per request", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+				return false;
+			}
+			if ( tDoc.m_eDocid!=BulkDocid_e::NUMERIC || !tDoc.m_tDocid )
+			{
+				ReportLogError ( "indexer_rt_bulk requires an explicit non-zero numeric _id", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+				return false;
+			}
+			if ( !hDocids.insert ( tDoc.m_tDocid ).second )
+			{
+				ReportLogError ( "indexer_rt_bulk requires unique document ids within one request", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+				return false;
+			}
+		}
+	}
+
 	CSphVector<BulkTnx_t> dTnx;
 	const BulkDoc_t * pLastDoc = dDocs.Begin();
 	for ( const BulkDoc_t * pCurDoc = pLastDoc + 1; pCurDoc<dDocs.End(); pCurDoc++ )
@@ -3787,6 +3867,9 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 				dErrors.Add ( { iDoc, m_sError } );
 				continue;
 			}
+			// Atomic plain-chunk attachment replaces matching ids; feed the reserved ES index action through the INSERT-only CSV serializer.
+			if ( m_bIndexerRtBulk && tStmt.m_eStmt==STMT_REPLACE )
+				tStmt.m_eStmt = STMT_INSERT;
 			bool bAction = false;
 			JsonObj_c tResult = JsonNull;
 
@@ -3843,6 +3926,16 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			}
 		}
 
+		if ( m_bIndexerRtBulk && !dErrors.IsEmpty() )
+		{
+			ProcessRollback ( FromStr ( sIdx ) );
+			session::SetInTrans ( false );
+			bOk = false;
+			for ( const auto & tErr : dErrors )
+				AddEsError ( tErr.first, tErr.second, "mapper_parsing_exception", dDocs[tErr.first], tItems );
+			continue;
+		}
+
 		// FIXME!!! check commit of empty accum
 		JsonObj_c tResult;
 		DocID_t tDocId = 0;
@@ -3856,7 +3949,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 				CSphString sUpdError;
 				sUpdError.SetSprintf ( "[_doc][%s]: document missing", tUpdDoc.m_sDocid.scstr() );
 				AddEsError ( -1, sUpdError, "document_missing_exception", tUpdDoc, tItems );
-			} else
+			} else if ( !m_bIndexerRtBulk )
 			{
 				for ( int i=0; i<tTnx.m_iCount; i++ )
 					AddEsReply ( dDocs[tTnx.m_iFrom+i], tItems );

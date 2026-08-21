@@ -185,6 +185,7 @@ public:
 
 protected:
 	void					ParseFieldMVA ( int iAttr, const char * szValue );
+	bool					ParseFieldFloatVector ( int iAttr, const char * szValue );
 	bool					CheckFileField ( const BYTE * sField );
 	int						LoadFileField ( BYTE ** ppField, CSphString & sError );
 

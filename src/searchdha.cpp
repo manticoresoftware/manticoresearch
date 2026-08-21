@@ -3714,8 +3714,8 @@ private:
 			m_dInternalTasks.Add ( pTask );
 		} else
 		{
-			sphLogDebugL ( "- AddToQueue, ext=%d", m_pEnqueuedTasks ? m_pEnqueuedTasks->GetLength () + 1 : 1 );
 			ScopedMutex_t tLock ( m_dActiveLock );
+			sphLogDebugL ( "- AddToQueue, ext=%d", m_pEnqueuedTasks ? m_pEnqueuedTasks->GetLength () + 1 : 1 );
 			if ( !m_pEnqueuedTasks )
 				m_pEnqueuedTasks = new VectorTask_c;
 			m_pEnqueuedTasks->Add ( pTask );
@@ -3799,8 +3799,8 @@ public:
 
 		if ( bRemoveClosingFromEpoll )
 			events_change_io (pTask);
-		else
-			AddToQueue ( pTask, pConnection->InNetLoop () );
+
+		AddToQueue ( pTask, pConnection->InNetLoop () );
 	}
 
 	void DisableWrite ( AgentConn_t * pConnection )

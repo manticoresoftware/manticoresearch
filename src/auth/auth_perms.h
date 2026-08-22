@@ -19,6 +19,7 @@ enum class AuthAction_e
 	SCHEMA,
 	REPLICATION,
 	ADMIN,
+	BACKUP,
 
 	UNKNOWN
 };
@@ -39,6 +40,8 @@ struct UserPerm_t
 // FIME!!! add offset for each action inside perms vector
 using UserPerms_t = CSphVector<UserPerm_t>;
 
+bool HasPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, bool bAllowEmpty );
 bool CheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, bool bAllowEmpty, CSphString & sError );
+bool CheckPermsForAllTargets ( const CSphString & sUser, AuthAction_e eAction, CSphString & sError );
 AuthAction_e ReadAction ( Str_t sAction );
 const char * GetActionName (  AuthAction_e eAction );

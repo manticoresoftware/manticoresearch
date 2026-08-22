@@ -2579,7 +2579,7 @@ When creating a table with `float_vector` attributes for KNN search, you can spe
 **Chunking parameters** (when using `MODEL_NAME`, see [Chunking strategies](../Searching/KNN.md#Chunking-strategies)):
 - `CHUNK_STRATEGY`: how a document becomes vectors: `'truncate'` (default), `'mean'`, `'fixed'`, `'recursive'` or `'sentence'`. The last three produce several vectors per document and require a [`float_vector_array`](../Creating_a_table/Data_types.md#Float-vector-array) column.
 - `MAX_TOKENS`: chunk size in tokens; `0` (default) uses the model's own limit
-- `OVERLAP_TOKENS`: tokens shared between consecutive chunks; requires an explicit non-zero `MAX_TOKENS`, and is clamped to half of it
+- `OVERLAP_TOKENS`: tokens shared between consecutive chunks; requires an explicit non-zero `MAX_TOKENS`; a large overlap is reduced so chunks still advance
 - `MAX_CHUNKS`: ceiling on vectors per document; `0` (default) means unlimited
 
 **Auto-embeddings parameters** (when using `MODEL_NAME`):

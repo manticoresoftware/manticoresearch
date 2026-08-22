@@ -148,13 +148,55 @@ static bool RepackBlob ( const CSphColumnInfo & tAttr, const CSphColumnInfo & tB
 }
 
 
-static bool StoreEmbeddings ( const CSphSchema & tSchema, int iAttr, int iBlobAttr, int iColumnarAttr, DocstoreDoc_t & tDoc, std::unique_ptr<BlobRowBuilder_i> & pNewBlobBuilder, std::unique_ptr<ColumnarBuilderRT_i> & pNewColumnarBuilder, const IntVec_t & dDocstoreRemap, const std::vector<float> & dEmbedding, CSphVector<int64_t> & dTmp, CSphString & sError )
+static bool StoreEmbeddings ( const CSphSchema & tSchema, int iAttr, int iBlobAttr, int iColumnarAttr, DocstoreDoc_t & tDoc, std::unique_ptr<BlobRowBuilder_i> & pNewBlobBuilder, std::unique_ptr<ColumnarBuilderRT_i> & pNewColumnarBuilder, const IntVec_t & dDocstoreRemap, const std::vector<std::vector<float>> & dEmbeddings, size_t iFrom, size_t iTo, CSphVector<int64_t> & dTmp, CSphString & sError )
 {
 	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
 
-	dTmp.Resize ( dEmbedding.size() );
-	ARRAY_FOREACH ( iEmb, dTmp )
-		dTmp[iEmb] = sphF2DW ( dEmbedding[iEmb] );
+	dTmp.Resize(0);
+
+	const int iExpectedDims = tAttr.m_tKNN.m_iDims;
+	if ( iExpectedDims>0 )
+		for ( size_t i = iFrom; i < iTo; i++ )
+			if ( (int)dEmbeddings[i].size()!=iExpectedDims )
+			{
+				sError.SetSprintf ( "attribute '%s': model returned a %d-value vector, index needs %d values", tAttr.m_sName.cstr(), (int)dEmbeddings[i].size(), iExpectedDims );
+				return false;
+			}
+
+	if ( tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY )
+	{
+		// [dims][N*dims floats]. An empty range is a legal "no vectors" value
+		if ( iTo>iFrom )
+		{
+			const int iDims = (int)dEmbeddings[iFrom].size();
+			if ( !iDims )
+			{
+				sError.SetSprintf ( "attribute '%s': model returned an empty vector", tAttr.m_sName.cstr() );
+				return false;
+			}
+
+			dTmp.Add(iDims);
+			for ( size_t i = iFrom; i < iTo; i++ )
+			{
+				const std::vector<float> & dVec = dEmbeddings[i];
+				if ( (int)dVec.size()!=iDims )
+				{
+					sError.SetSprintf ( "attribute '%s': model returned vectors of different widths (%d and %d) for one document", tAttr.m_sName.cstr(), iDims, (int)dVec.size() );
+					return false;
+				}
+
+				for ( float fVal : dVec )
+					dTmp.Add ( sphF2DW(fVal) );
+			}
+		}
+	}
+	else
+	{
+		assert ( iTo-iFrom<=1 );
+		if ( iTo>iFrom )
+			for ( float fVal : dEmbeddings[iFrom] )
+				dTmp.Add ( sphF2DW(fVal) );
+	}
 
 	if ( tAttr.IsColumnar() )
 		pNewColumnarBuilder->SetAttr ( iColumnarAttr, dTmp.Begin(), dTmp.GetLength() );
@@ -167,11 +209,11 @@ static bool StoreEmbeddings ( const CSphSchema & tSchema, int iAttr, int iBlobAt
 	if ( tAttr.IsStored() )
 	{
 		int iId = dDocstoreRemap[iAttr];
-		tDoc.m_dFields[iId].Resize ( dEmbedding.size()*sizeof(DWORD) );
-		const BYTE * pStart = tDoc.m_dFields[iId].Begin();
-		for ( auto i : dEmbedding )
+		tDoc.m_dFields[iId].Resize ( dTmp.GetLength()*sizeof(DWORD) );
+		BYTE * pStart = tDoc.m_dFields[iId].Begin();
+		for ( auto i : dTmp )
 		{
-			*(DWORD*)pStart = sphF2DW(i);
+			*(DWORD*)pStart = (DWORD)i;
 			pStart += sizeof(DWORD);
 		}
 	}
@@ -180,7 +222,7 @@ static bool StoreEmbeddings ( const CSphSchema & tSchema, int iAttr, int iBlobAt
 }
 
 
-bool RtAccum_t::RebuildStoragesForEmbeddings ( RowID_t tRowID, CSphRowitem * pRow, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::unique_ptr<BlobRowBuilder_i> & pNewBlobBuilder, std::unique_ptr<ColumnarBuilderRT_i> & pNewColumnarBuilder, std::unique_ptr<DocstoreRT_i> & pNewDocstoreBuilder, CSphVector<ScopedTypedIterator_t> & dAllIterators, const IntVec_t & dDocstoreRemap, const CSphColumnInfo * pBlobLoc, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, CSphVector<int64_t> & dTmp, CSphString & sError )
+bool RtAccum_t::RebuildStoragesForEmbeddings ( RowID_t tRowID, CSphRowitem * pRow, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::unique_ptr<BlobRowBuilder_i> & pNewBlobBuilder, std::unique_ptr<ColumnarBuilderRT_i> & pNewColumnarBuilder, std::unique_ptr<DocstoreRT_i> & pNewDocstoreBuilder, CSphVector<ScopedTypedIterator_t> & dAllIterators, const IntVec_t & dDocstoreRemap, const CSphColumnInfo * pBlobLoc, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, std::vector<std::vector<size_t>> & dAllOffsets, CSphVector<int64_t> & dTmp, CSphString & sError )
 {
 	int iBlobAttr = 0;
 	int iColumnarAttr = 0;
@@ -208,7 +250,9 @@ bool RtAccum_t::RebuildStoragesForEmbeddings ( RowID_t tRowID, CSphRowitem * pRo
 
 		if ( bStoreGenerated )
 		{
-			if ( !StoreEmbeddings ( tSchema, i, iBlobAttr, iColumnarAttr, tDoc, pNewBlobBuilder, pNewColumnarBuilder, dDocstoreRemap, dAllEmbeddings[i][tRowID], dTmp, sError ) )
+			const std::vector<size_t> & dOffsets = dAllOffsets[i];
+			assert ( (size_t)tRowID+1 < dOffsets.size() );
+			if ( !StoreEmbeddings ( tSchema, i, iBlobAttr, iColumnarAttr, tDoc, pNewBlobBuilder, pNewColumnarBuilder, dDocstoreRemap, dAllEmbeddings[i], dOffsets[tRowID], dOffsets[tRowID+1], dTmp, sError ) )
 				return false;
 		}
 		else
@@ -250,7 +294,7 @@ bool RtAccum_t::RebuildStoragesForEmbeddings ( RowID_t tRowID, CSphRowitem * pRo
 }
 
 
-bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, CSphString & sError )
+bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, std::vector<std::vector<size_t>> & dAllOffsets, CSphString & sError )
 {
 	const AttrWithModel_t & tAttrWithModel = dAttrsWithModels[iAttr];
 	if ( !tAttrWithModel.m_pModel )
@@ -260,6 +304,7 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 	const auto & tAttr = m_pIndex->GetInternalSchema().GetAttr(iAttr);
 
 	std::vector<std::vector<float>> & dEmbeddingsForAttr = dAllEmbeddings[iAttr];
+	std::vector<size_t> & dOffsetsForAttr = dAllOffsets[iAttr];
 	std::vector<std::string_view> dTexts;
 	DWORD uNumSkipped = 0;
 	IntVec_t dResultIds(m_uAccumDocs);
@@ -287,14 +332,16 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 	}
 
 	std::string sErrorSTL;
-	std::vector<std::vector<float>> dEmbeddingsForAttrTmp;
+	std::vector<std::vector<float>> dTmpEmbeddings;
+	std::vector<size_t> dTmpOffsets;
 	bool bConverted = true;
 	if ( uNumSkipped!=m_uAccumDocs )
 	{
-		auto & dEmbeddingsTarget = uNumSkipped ? dEmbeddingsForAttrTmp : dEmbeddingsForAttr;
+		// a multi-vector strategy returns several vectors per text; the single-vector ones still report
+		// offsets, they are just the identity. Asking for them always keeps one code path here
 		auto fnConvert = [&]
 		{
-			return tAttrWithModel.m_pModel->Convert ( dTexts, dEmbeddingsTarget, sErrorSTL, GetEmbeddingsThreadsToUse() );
+			return tAttrWithModel.m_pModel->Convert ( dTexts, dTmpEmbeddings, sErrorSTL, GetEmbeddingsThreadsToUse(), &tAttr.m_tKNNChunk, &dTmpOffsets );
 		};
 
 		if ( Threads::IsInsideCoroutine() )
@@ -309,20 +356,32 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 		return false;
 	}
 
-	if ( uNumSkipped )
+	if ( !dTexts.empty() )
 	{
-		dEmbeddingsForAttr.resize ( dResultIds.GetLength() );
-		ARRAY_FOREACH ( i, dResultIds )
+		bool bOk = dTmpOffsets.size()==dTexts.size()+1 && dTmpOffsets.front()==0 && dTmpOffsets.back()==dTmpEmbeddings.size();
+		for ( size_t i = 1; bOk && i < dTmpOffsets.size(); i++ )
+			bOk = dTmpOffsets[i]>=dTmpOffsets[i-1];
+
+		if ( !bOk )
 		{
-			int iResultId = dResultIds[i];
-			if ( iResultId!=-1 )
-				dEmbeddingsForAttr[i] = dEmbeddingsForAttrTmp[iResultId];
+			sError.SetSprintf ( "Error generating embeddings for attribute '%s': model returned %d vectors for %d input texts, grouped inconsistently", tAttr.m_sName.cstr(), (int)dTmpEmbeddings.size(), (int)dTexts.size() );
+			return false;
 		}
 	}
-	else if ( dEmbeddingsForAttr.size()!=dResultIds.GetLength() )
+
+	// flatten into row order: row r owns dEmbeddingsForAttr[ dOffsetsForAttr[r] .. dOffsetsForAttr[r+1] ).
+	// a row that supplied its own vector keeps an empty range
+	dEmbeddingsForAttr.clear();
+	dOffsetsForAttr.resize ( (size_t)m_uAccumDocs+1 );
+	dOffsetsForAttr[0] = 0;
+	ARRAY_FOREACH ( i, dResultIds )
 	{
-		sError = "Error generating embeddings";
-		return false;
+		int iResultId = dResultIds[i];
+		if ( iResultId!=-1 )
+			for ( size_t v = dTmpOffsets[iResultId]; v < dTmpOffsets[iResultId+1]; v++ )
+				dEmbeddingsForAttr.push_back ( std::move ( dTmpEmbeddings[v] ) );
+
+		dOffsetsForAttr[i+1] = dEmbeddingsForAttr.size();
 	}
 
 	return true;
@@ -356,7 +415,7 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 		if ( !dAttrsWithModels[i].m_pModel )
 			continue;
 
-		assert ( tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR );
+		assert ( tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR || tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY );
 		bRebuildColumnar |= bColumnar;
 		bRebuildBlobs |= !bColumnar;
 		bRebuildDocstore |= tAttr.IsStored();
@@ -385,10 +444,12 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 	int iRowSize = tSchema.GetRowSize();
 	int iAttrWithModel = 0;
 	std::vector<std::vector<std::vector<float>>> dAllEmbeddings;
+	std::vector<std::vector<size_t>> dAllOffsets;
 	dAllEmbeddings.resize ( dAttrsWithModels.GetLength() );
+	dAllOffsets.resize ( dAttrsWithModels.GetLength() );
 	ARRAY_FOREACH ( i, dAttrsWithModels )
 	{
-		if ( !GenerateEmbeddings( i, iAttrWithModel, dAttrsWithModels, dAllEmbeddings, sError ) )
+		if ( !GenerateEmbeddings( i, iAttrWithModel, dAttrsWithModels, dAllEmbeddings, dAllOffsets, sError ) )
 			return false;
 
 		if ( dAttrsWithModels[i].m_pModel )
@@ -400,7 +461,7 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 	CSphVector<int64_t> dTmp;
 	CSphRowitem * pRow = m_dAccumRows.Begin();
 	for ( RowID_t tRowID = 0; tRowID < m_uAccumDocs; ++tRowID, pRow += iRowSize )
-		if ( !RebuildStoragesForEmbeddings ( tRowID, pRow, dAttrsWithModels, pNewBlobBuilder, pNewColumnarBuilder, pNewDocstoreBuilder, dAllIterators, dDocstoreRemap, pBlobLoc, dAllEmbeddings, dTmp, sError ) )
+		if ( !RebuildStoragesForEmbeddings ( tRowID, pRow, dAttrsWithModels, pNewBlobBuilder, pNewColumnarBuilder, pNewDocstoreBuilder, dAllIterators, dDocstoreRemap, pBlobLoc, dAllEmbeddings, dAllOffsets, dTmp, sError ) )
 			return false;
 
 	if ( bRebuildBlobs )

@@ -34,6 +34,7 @@
 %token	TOK_BIT
 %token	TOK_BOOL
 %token	TOK_CACHE_PATH
+%token	TOK_CHUNK_STRATEGY
 %token	TOK_CLUSTER
 %token	TOK_COLUMN
 %token	TOK_COLUMNAR
@@ -65,6 +66,8 @@
 %token	TOK_KNN_DIMS
 %token	TOK_KNN_TYPE
 %token	TOK_LIKE
+%token	TOK_MAX_CHUNKS
+%token	TOK_MAX_TOKENS
 %token	TOK_MODEL_NAME
 %token	TOK_MODIFY
 %token	TOK_MODIFY_COLUMN
@@ -74,6 +77,7 @@
 %token	TOK_MVA64 "mva64"
 %token	TOK_NOT
 %token	TOK_OPTION
+%token	TOK_OVERLAP_TOKENS
 %token	TOK_PLUGIN
 %token	TOK_QUANTIZATION
 %token	TOK_REBUILD
@@ -394,6 +398,38 @@ item_option:
 	| TOK_FROM '=' TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddItemOptionFrom ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_CHUNK_STRATEGY '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionChunkStrategy ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_MAX_TOKENS '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionMaxTokens ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_OVERLAP_TOKENS '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionOverlapTokens ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_MAX_CHUNKS '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionMaxChunks ( $3 ) )
 			{
 				yyerror ( pParser, pParser->GetLastError() );
     	    	YYERROR;

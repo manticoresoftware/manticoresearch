@@ -9993,6 +9993,7 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 		tNewCtx.m_tKNN = pAttr->m_tKNN;
 		tNewCtx.m_tKNNModel = pAttr->m_tKNNModel;
 		tNewCtx.m_sKNNFrom = pAttr->m_sKNNFrom;
+		tNewCtx.m_tKNNChunk = pAttr->m_tKNNChunk;
 	}
 
 	m_tSchema = tNewSchema;
@@ -13171,6 +13172,12 @@ bool RtIndex_c::InitUpdateEmbeddingState ( const CSphString & sAttr, EmbeddingPo
 	}
 
 	const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( iAttrIdx );
+	if ( tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY )
+	{
+		sError.SetSprintf ( "attribute '%s' is a float_vector_array; rebuilding embeddings is not supported for it yet, use REPLACE", sAttr.cstr() );
+		return false;
+	}
+
 	if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR || !tAttr.IsIndexedKNN() )
 	{
 		sError.SetSprintf ( "attribute '%s' is not indexed float_vector", sAttr.cstr() );
@@ -13307,8 +13314,10 @@ bool RtIndex_c::GetUpdateEmbedding ( ExtUpdState_t & tState, AttrUpdateSharedPtr
 	if ( dDocids.IsEmpty() )
 		return true;
 
+	const CSphColumnInfo & tEmbAttr = m_tSchema.GetAttr ( tState.m_iAttrIdx ); 	// use the column's persisted chunking settings 
+
 	std::vector<std::vector<float>> dEmbeddings;
-	if ( !ConvertEmbeddings ( tAttrWithModel.m_pModel, tState.m_sAttr, dFromTexts, dEmbeddings, sError ) )
+	if ( !ConvertEmbeddings ( tAttrWithModel.m_pModel, tState.m_sAttr, dFromTexts, dEmbeddings, &tEmbAttr.m_tKNNChunk, sError ) )
 		return false;
 
 	pUpdate = CreateFloatVectorAttrUpdate ( tState.m_sAttr, dDocids, dEmbeddings, tState.m_iDims );

@@ -332,6 +332,7 @@ public:
 	knn::ModelSettings_t	m_tAlterKNNModel;
 	CSphString				m_sAlterKnnFrom;
 	bool					m_bAlterKnnFromSet = false;
+	knn::ChunkSettings_t	m_tAlterKNNChunk;
 
 	// CREATE TABLE specific
 	CreateTableSettings_t	m_tCreateTable;

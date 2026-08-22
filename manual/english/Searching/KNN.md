@@ -666,7 +666,7 @@ The difference is what a match means. With one vector per document, search asks 
 
 * `CHUNK_STRATEGY`: one of the five above. Default `truncate`.
 * `MAX_TOKENS`: chunk size in tokens. `0` (default) means the model's own limit; a larger value is clamped down to it.
-* `OVERLAP_TOKENS`: how many tokens consecutive chunks share, so an idea split across a boundary still appears whole in one of them. Requires an explicit non-zero `MAX_TOKENS`. Values above half of `MAX_TOKENS` are accepted but clamped down to half.
+* `OVERLAP_TOKENS`: how many tokens consecutive chunks share, so an idea split across a boundary still appears whole in one of them. Requires an explicit non-zero `MAX_TOKENS`. A large overlap is reduced so that chunks still advance through the document — currently anything above half of `MAX_TOKENS` is capped at half.
 * `MAX_CHUNKS`: ceiling on vectors per document. `0` (default) means unlimited.
 
 Important points:

@@ -629,6 +629,38 @@ static const char * Quantization2Str ( knn::Quantization_e eQuant )
 }
 
 
+const char * ChunkStrategy2Str ( knn::ChunkStrategy_e eStrategy )
+{
+	switch ( eStrategy )
+	{
+	case knn::ChunkStrategy_e::TRUNCATE:	return "truncate";
+	case knn::ChunkStrategy_e::MEAN:		return "mean";
+	case knn::ChunkStrategy_e::FIXED:		return "fixed";
+	case knn::ChunkStrategy_e::RECURSIVE:	return "recursive";
+	case knn::ChunkStrategy_e::SENTENCE:	return "sentence";
+	default:								return "unknown";
+	}
+}
+
+
+bool Str2ChunkStrategy ( const CSphString & sStrategy, knn::ChunkStrategy_e & eStrategy, CSphString * pError )
+{
+	CSphString sVal = sStrategy;
+	sVal.ToUpper();
+
+	if ( sVal=="TRUNCATE" )		{ eStrategy = knn::ChunkStrategy_e::TRUNCATE;	return true; }
+	if ( sVal=="MEAN" )			{ eStrategy = knn::ChunkStrategy_e::MEAN;		return true; }
+	if ( sVal=="FIXED" )		{ eStrategy = knn::ChunkStrategy_e::FIXED;		return true; }
+	if ( sVal=="RECURSIVE" )	{ eStrategy = knn::ChunkStrategy_e::RECURSIVE;	return true; }
+	if ( sVal=="SENTENCE" )		{ eStrategy = knn::ChunkStrategy_e::SENTENCE;	return true; }
+
+	if ( pError )
+		pError->SetSprintf ( "unknown chunk_strategy '%s'; expected truncate, mean, fixed, recursive or sentence", sStrategy.cstr() );
+
+	return false;
+}
+
+
 bool Str2HNSWSimilarity ( const CSphString & sSimilarity, knn::HNSWSimilarity_e & eSimilarity, CSphString * pError )
 {
 	CSphString sSim = sSimilarity;
@@ -745,11 +777,33 @@ void AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 
 	if ( tKNN.m_eQuantization!=tDefault.m_eQuantization )
 		sRes << " quantization='" << Quantization2Str ( tKNN.m_eQuantization ) << "'";
+
+	{
+		const auto & tChunk = tAttr.m_tKNNChunk;
+		knn::ChunkSettings_t tDefaultChunk;
+
+		if ( tChunk.m_eStrategy!=tDefaultChunk.m_eStrategy )
+			sRes << " chunk_strategy='" << ChunkStrategy2Str ( tChunk.m_eStrategy ) << "'";
+
+		if ( tChunk.m_uMaxTokens!=tDefaultChunk.m_uMaxTokens )
+			sRes << " max_tokens='" << tChunk.m_uMaxTokens << "'";
+
+		if ( tChunk.m_uOverlapTokens!=tDefaultChunk.m_uOverlapTokens )
+			sRes << " overlap_tokens='" << tChunk.m_uOverlapTokens << "'";
+
+		if ( tChunk.m_uMaxChunks!=tDefaultChunk.m_uMaxChunks )
+			sRes << " max_chunks='" << tChunk.m_uMaxChunks << "'";
+	}
 }
 
 
-void ReadKNNJson ( bson::Bson_c tRoot, knn::IndexSettings_t & tIS, knn::ModelSettings_t & tMS, CSphString & sKNNFrom )
+void ReadKNNJson ( bson::Bson_c tRoot, knn::IndexSettings_t & tIS, knn::ModelSettings_t & tMS, CSphString & sKNNFrom, knn::ChunkSettings_t & tChunk )
 {
+	Str2ChunkStrategy ( bson::String ( tRoot.ChildByName ( "chunk_strategy" ) ), tChunk.m_eStrategy );
+	tChunk.m_uMaxTokens		= (uint32_t) bson::Int ( tRoot.ChildByName ( "max_tokens" ), tChunk.m_uMaxTokens );
+	tChunk.m_uOverlapTokens	= (uint32_t) bson::Int ( tRoot.ChildByName ( "overlap_tokens" ), tChunk.m_uOverlapTokens );
+	tChunk.m_uMaxChunks		= (uint32_t) bson::Int ( tRoot.ChildByName ( "max_chunks" ), tChunk.m_uMaxChunks );
+
 	tIS.m_iDims				= (int) bson::Int ( tRoot.ChildByName ( "knn_dims" ) );
 	Str2HNSWSimilarity ( bson::String ( tRoot.ChildByName ( "hnsw_similarity" ) ), tIS.m_eHNSWSimilarity );
 	tIS.m_iHNSWM			= (int) bson::Int ( tRoot.ChildByName ( "hnsw_m" ), tIS.m_iHNSWM );
@@ -766,7 +820,7 @@ void ReadKNNJson ( bson::Bson_c tRoot, knn::IndexSettings_t & tIS, knn::ModelSet
 }
 
 
-void FormatKNNSettings ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t & tIS, const knn::ModelSettings_t & tMS, const CSphString & sKNNFrom )
+void FormatKNNSettings ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t & tIS, const knn::ModelSettings_t & tMS, const CSphString & sKNNFrom, const knn::ChunkSettings_t & tChunk )
 {
 	auto _ = tOut.Object();
 
@@ -792,6 +846,11 @@ void FormatKNNSettings ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t &
 			tOut.NamedVal ( "api_timeout", tMS.m_iAPITimeout );
 		tOut.NamedVal ( "use_gpu", tMS.m_bUseGPU );
 	}
+
+	tOut.NamedString ( "chunk_strategy", ChunkStrategy2Str ( tChunk.m_eStrategy ) );
+	tOut.NamedVal ( "max_tokens", tChunk.m_uMaxTokens );
+	tOut.NamedVal ( "overlap_tokens", tChunk.m_uOverlapTokens );
+	tOut.NamedVal ( "max_chunks", tChunk.m_uMaxChunks );
 }
 
 
@@ -824,6 +883,11 @@ CSphString FormatKNNConfigStr ( const CSphVector<NamedKNNSettings_t> & dAttrs )
 				tObj.AddInt ( "api_timeout", i.m_iAPITimeout );
 			tObj.AddBool ( "use_gpu", i.m_bUseGPU );
 		}
+
+		tObj.AddStr ( "chunk_strategy", ChunkStrategy2Str ( i.m_tChunk.m_eStrategy ) );
+		tObj.AddInt ( "max_tokens", i.m_tChunk.m_uMaxTokens );
+		tObj.AddInt ( "overlap_tokens", i.m_tChunk.m_uOverlapTokens );
+		tObj.AddInt ( "max_chunks", i.m_tChunk.m_uMaxChunks );
 
 		tArray.AddItem(tObj);
 	}
@@ -895,6 +959,22 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 			sError = "4-bit quantization is no longer supported";
 			return false;
 		}
+
+		JsonObj_c tChunkStrategy = i.GetStrItem ( "chunk_strategy", sError, true );
+		if ( !sError.IsEmpty() )
+			return false;
+
+		if ( tChunkStrategy && !Str2ChunkStrategy ( tChunkStrategy.StrVal(), tParsed.m_tChunk.m_eStrategy, &sError ) )
+			return false;
+
+		int iMaxTokens = 0, iOverlapTokens = 0, iMaxChunks = 0;
+		if ( !i.FetchIntItem ( iMaxTokens, "max_tokens", sError, true ) ) return false;
+		if ( !i.FetchIntItem ( iOverlapTokens, "overlap_tokens", sError, true ) ) return false;
+		if ( !i.FetchIntItem ( iMaxChunks, "max_chunks", sError, true ) ) return false;
+
+		tParsed.m_tChunk.m_uMaxTokens		= (uint32_t)iMaxTokens;
+		tParsed.m_tChunk.m_uOverlapTokens	= (uint32_t)iOverlapTokens;
+		tParsed.m_tChunk.m_uMaxChunks		= (uint32_t)iMaxChunks;
 
 		if ( !tParsed.m_sModelName.empty() )
 		{

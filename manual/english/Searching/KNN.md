@@ -604,7 +604,7 @@ The query vector is still a single vector of `KNN_DIMS` entries, exactly as for 
 
 With `HNSW_SIMILARITY='cosine'`, each stored vector is normalized on its own, so a document's vectors are compared against the query individually rather than as one long concatenated vector.
 
-Everything else on this page applies unchanged: [filtering](../Searching/KNN.md#Filtering-KNN-vector-search-results), [prefilter/postfilter](../Searching/KNN.md#Filtering-strategies:-prefilter-vs.-postfilter), [quantization](../Searching/KNN.md#Vector-quantization), [early termination](../Searching/KNN.md#Early-termination) and rescoring behave the same way. The only capability that is unavailable is [auto embeddings](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29), since a model yields one vector per document.
+Everything else on this page applies unchanged: [filtering](../Searching/KNN.md#Filtering-KNN-vector-search-results), [prefilter/postfilter](../Searching/KNN.md#Filtering-strategies:-prefilter-vs.-postfilter), [quantization](../Searching/KNN.md#Vector-quantization), [early termination](../Searching/KNN.md#Early-termination) and rescoring behave the same way. [Auto embeddings](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29) can fill the array for you, one vector per chunk - see [Chunking strategies](../Searching/KNN.md#Chunking-strategies) below.
 
 <!-- example multi_vector -->
 
@@ -639,6 +639,77 @@ POST /search
     "query_vector": [1,0,0,0],
     "k": 5
   }
+}
+```
+
+<!-- end -->
+
+### Chunking strategies
+
+By default an embedding model reads only as much of a document as fits its input window (typically a few hundred tokens) and the rest is silently dropped. For a title or a short description that is complete. For a long article it is not: nothing written past the cut-off can ever be retrieved, and no error reports it.
+
+A **chunking strategy** decides how a document becomes vectors. Set it with `CHUNK_STRATEGY` on a model-backed column:
+
+| Strategy | Vectors per document | What it does |
+|---|---|---|
+| `truncate` | 1 | Embeds as much as fits the model's window and drops the rest. The default, and the historical behavior. |
+| `mean` | 1 | Splits the whole document, embeds every piece, and averages them into one vector. No tail loss, but a document covering several topics collapses to their average. |
+| `fixed` | N | Fixed-size windows of `MAX_TOKENS` tokens. |
+| `recursive` | N | Splits on a separator hierarchy: paragraph, then line, then sentence, then space; keeping each piece within `MAX_TOKENS`. |
+| `sentence` | N | Sentence boundaries, packed up to `MAX_TOKENS`. |
+
+`truncate` and `mean` produce one vector per document and work on a [`float_vector`](../Creating_a_table/Data_types.md#Float-vector) column. `fixed`, `recursive` and `sentence` produce several, so they require a [`float_vector_array`](../Creating_a_table/Data_types.md#Float-vector-array) column; using one on a plain `float_vector` is rejected.
+
+The difference is what a match means. With one vector per document, search asks "is this document, as a whole, similar to the query?", and a single relevant paragraph is diluted by everything around it. With one vector per chunk, it asks "does this document *contain* something similar?": each chunk competes on its own, and the document is returned once, scored by its closest chunk (see [Multiple vectors per document](../Searching/KNN.md#Multiple-vectors-per-document)).
+
+**Options**, all valid only alongside `MODEL_NAME` and `KNN_TYPE='hnsw'`:
+
+* `CHUNK_STRATEGY`: one of the five above. Default `truncate`.
+* `MAX_TOKENS`: chunk size in tokens. `0` (default) means the model's own limit; a larger value is clamped down to it.
+* `OVERLAP_TOKENS`: how many tokens consecutive chunks share, so an idea split across a boundary still appears whole in one of them. Requires an explicit non-zero `MAX_TOKENS`. Values above half of `MAX_TOKENS` are accepted but clamped down to half.
+* `MAX_CHUNKS`: ceiling on vectors per document. `0` (default) means unlimited.
+
+Important points:
+
+* **`MAX_CHUNKS` discards text.** On overflow the remainder is merged into the last kept chunk, which then exceeds `MAX_TOKENS` and is truncated when embedded. Nothing is left as a visible gap, but the tail is gone.
+* **Local and remote models chunk differently.** Local models split on the model's real tokens. Remote API models (OpenAI, Voyage, Jina) have no local tokenizer and use a conservative byte estimate instead, so the same text and settings will produce a different number of chunks than a local model would.
+
+`ALTER TABLE ... ADD COLUMN` with a model-backed `float_vector_array`, and `ALTER TABLE ... REBUILD EMBEDDINGS` on one, are not supported yet; existing rows can not be backfilled, so the column would stay empty. Declare such a column when creating the table. Both work normally for a `float_vector` column, including with `mean`.
+
+<!-- example chunking -->
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+-- one vector per sentence group, filled automatically from the text
+CREATE TABLE articles (
+  title text,
+  content text,
+  chunks float_vector_array knn_type='hnsw' hnsw_similarity='cosine'
+     model_name='Xenova/all-MiniLM-L6-v2' from='title,content'
+     chunk_strategy='sentence' max_tokens='256' overlap_tokens='32'
+);
+
+INSERT INTO articles (id, title, content) VALUES (1, 'Rotating certificates', 'A long guide with many sections ...');
+
+SELECT id, knn_dist() FROM articles WHERE knn(chunks, 5, 'how do I rotate a certificate');
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "CREATE TABLE articles (title text, content text, chunks float_vector_array knn_type='hnsw' hnsw_similarity='cosine' model_name='Xenova/all-MiniLM-L6-v2' from='title,content' chunk_strategy='sentence' max_tokens='256')"
+
+POST /search
+{
+  "table": "articles",
+  "knn": { "field": "chunks", "query": "how do I rotate a certificate", "k": 5 }
 }
 ```
 

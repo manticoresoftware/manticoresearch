@@ -23,7 +23,7 @@ namespace knn { class TextToEmbeddings_i; }
 bool ValidateSettingModel ( const CreateTableAttr_t & tAttr, CSphString & sError );
 bool ParseEmbeddingSources ( CSphVector<std::pair<int,bool>> & dFrom, const CSphString & sFrom, const ISphSchema & tSchema, CSphString & sError );
 bool CheckAlterAddEmbedding ( bool bModify, const CSphString & sAttrToAdd, const SqlStmt_t & tStmt, const CSphSchema & tBaseSchema, CSphString & sError );
-bool ConvertEmbeddings ( knn::TextToEmbeddings_i * pModel, const CSphString & sAttrName, const CSphVector<CSphString> & dFromTexts, std::vector<std::vector<float>> & dEmbeddings, CSphString & sError );
+bool ConvertEmbeddings ( knn::TextToEmbeddings_i * pModel, const CSphString & sAttrName, const CSphVector<CSphString> & dFromTexts, std::vector<std::vector<float>> & dEmbeddings, const knn::ChunkSettings_t * pChunk, CSphString & sError );
 AttrUpdateSharedPtr_t CreateFloatVectorAttrUpdate ( const CSphString & sAttrName, const CSphVector<DocID_t> & dDocids, const std::vector<std::vector<float>> & dEmbeddings, int iEmptyVectorDims );
 bool EmbeddingFromNeedsDocstore ( const VecTraits_T<std::pair<int,bool>> & dFrom );
 void GetEmbeddingColumnar ( const ISphSchema & tSchema, const VecTraits_T<std::pair<int,bool>> & dFrom, columnar::Columnar_i * pColumnar, CSphVector<ScopedTypedIterator_t> & dIters );

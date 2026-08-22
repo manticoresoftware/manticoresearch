@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>UUID id SQL projection preserves stored text fields</name>
+
+<requires>
+	<force-rt/>
+</requires>
+<skip_indexer/>
+<skip_db/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<queries>
+<sphinxql>
+	CREATE TABLE uuid_stored_text ( id uuid, merchant_id string, title text );
+	CREATE TABLE bigint_stored_text ( id bigint, merchant_id string, title text );
+	REPLACE INTO uuid_stored_text ( id, merchant_id, title ) VALUES ( '550e8400-e29b-41d4-a716-846655440001', 'merchant-1', 'Widget Alpha' );
+	REPLACE INTO bigint_stored_text ( id, merchant_id, title ) VALUES ( 1, 'merchant-1', 'Widget Alpha' );
+	SELECT id, merchant_id, title FROM uuid_stored_text WHERE MATCH('Widget');
+	SELECT id, merchant_id, title FROM bigint_stored_text WHERE MATCH('Widget');
+</sphinxql>
+</queries>
+</test>

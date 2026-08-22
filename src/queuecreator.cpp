@@ -1128,10 +1128,11 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 
 	if ( sExpr==sphGetDocidName() || sExpr=="@id" )
 	{
+		// Preserve the internal numeric DocID_t in the sorter schema: post-limit
+		// docstore expressions use it to fetch stored fields. The frontend maps
+		// @uuid_id back to the public `id` column for UUID tables.
 		CSphQueryItem tUuidItem = tItem;
-		tUuidItem.m_sExpr = sphGetUuidDocidName();
-		if ( tUuidItem.m_sAlias.IsEmpty() || tUuidItem.m_sAlias==sphGetDocidName() )
-			tUuidItem.m_sAlias = sphGetDocidName();
+		tUuidItem.m_sExpr = tUuidItem.m_sAlias = sphGetUuidDocidName();
 		return ParseResolvedQueryItem ( tUuidItem );
 	}
 

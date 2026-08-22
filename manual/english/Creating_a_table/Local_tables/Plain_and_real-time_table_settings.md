@@ -559,8 +559,15 @@ knn = {"attrs":[{"name":"chunk_vectors","type":"hnsw","dims":768,"hnsw_similarit
 
 Two differences apply:
 
-- `dims` is **required**, and every vector in every row must have exactly that many entries.
-- `model_name` and `from` are **not** accepted — auto embeddings produce one vector per document, so they do not apply to this type. Vectors must be supplied explicitly.
+- `dims` is **required** when vectors are supplied explicitly, and every vector in every row must have exactly that many entries. It must be **omitted** when `model_name` is used.
+- `model_name`/`from` are accepted together with a multi-vector `chunk_strategy` (`fixed`, `recursive` or `sentence`), which fills the array with one vector per chunk:
+
+```ini
+rt_attr_float_vector_array = chunk_vectors
+knn = {"attrs":[{"name":"chunk_vectors","type":"hnsw","hnsw_similarity":"COSINE","model_name":"Xenova/all-MiniLM-L6-v2","from":"title,content","chunk_strategy":"sentence","max_tokens":256,"overlap_tokens":32}]}
+```
+
+  See [Chunking strategies](../../Searching/KNN.md#Chunking-strategies) for the full option list and the `ALTER` limitations.
 
 All vectors are indexed together, and a KNN search returns each document once, scored by its closest vector. See [Float vector array](../../Creating_a_table/Data_types.md#Float-vector-array) and [Multiple vectors per document](../../Searching/KNN.md#Multiple-vectors-per-document).
 

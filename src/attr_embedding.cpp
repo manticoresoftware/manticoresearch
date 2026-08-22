@@ -81,6 +81,7 @@ void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphString & sE
 	tCtx.m_tKNN = tStmt.m_tAlterKNN;
 	tCtx.m_tKNNModel = tStmt.m_tAlterKNNModel;
 	tCtx.m_sKNNFrom = tStmt.m_sAlterKnnFrom;
+	tCtx.m_tKNNChunk = tStmt.m_tAlterKNNChunk;
 
 	if ( bIndexed || bStored )
 	{

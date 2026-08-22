@@ -1902,6 +1902,7 @@ bool IndexSettingsContainer_c::SetupKNNAttrs ( const CreateTableSettings_t & tCr
 			(knn::ModelSettings_t&)tNamedKNN = i.m_tKNNModel;
 			tNamedKNN.m_sName = i.m_tAttr.m_sName;
 			tNamedKNN.m_sFrom = i.m_sKNNFrom;
+			tNamedKNN.m_tChunk = i.m_tKNNChunk;
 
 			if ( !ValidateSettingModel ( i, m_sError ) )
 				return false;

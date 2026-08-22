@@ -1,0 +1,53 @@
+Issue #4842: ALTER TABLE ... RENAME must preserve the hidden API key for
+remote OpenAI auto-embedding float_vector columns. SHOW CREATE TABLE intentionally
+omits api_key, and Buddy recreates the destination table through the
+CREATE TABLE ... LIKE path, so the hidden key must be copied from the source schema.
+
+––– comment –––
+Start Manticore Search with Buddy because ALTER TABLE ... RENAME is handled there.
+––– block: ../base/start-searchd-with-buddy –––
+––– block: ./base –––
+––– comment –––
+Create and use the source table with the same real OpenAI API-key pattern as other
+OpenAI remote embedding tests. No local mock or custom API_URL is needed.
+––– input –––
+retry_remote_embedding_create_table "CREATE TABLE issue4842_src (title text, embedding float_vector knn_type='hnsw' hnsw_similarity='cosine' model_name='openai/text-embedding-ada-002' from='title' api_key='${OPENAI_API_KEY}')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO issue4842_src (id,title) VALUES (1,'green pear')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+The regression happened here: the recreated destination table used to lose api_key
+and fail with "Invalid API key for remote model".
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE issue4842_src RENAME issue4842_dst" 2>&1; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES LIKE 'issue4842%'" 2>&1 | grep -oE 'issue4842_[a-z]+' | sort
+––– output –––
+issue4842_dst
+––– comment –––
+The renamed table must still have the hidden key internally for subsequent
+remote embedding calls, but SHOW CREATE TABLE must not expose it.
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO issue4842_dst (id,title) VALUES (2,'red apple')" 2>&1; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) as count FROM issue4842_dst"
+––– output –––
++-------+
+| count |
++-------+
+|     2 |
++-------+
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE issue4842_dst" 2>&1 | grep -o 'api_key' || echo 'api_key hidden'
+––– output –––
+api_key hidden
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS issue4842_dst" >/dev/null 2>&1 || true
+––– output –––

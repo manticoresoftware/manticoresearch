@@ -1,0 +1,88 @@
+––– comment –––
+Test BACKUP permission enforcement and delegated authorization.
+Issues: https://github.com/manticoresoftware/manticoresearch/issues/4844 and https://github.com/manticoresoftware/manticoresearch/issues/2983
+Admin credentials are test-only and are bootstrapped by start-searchd-with-auth.
+
+Security contract:
+- read, schema, or admin alone cannot run BACKUP
+- backup alone cannot read table data
+- selected backup requires backup ON * plus read on every selected table
+- full backup requires unrestricted read ON * and cannot bypass an explicit read deny
+- Buddy's internal HTTP requests remain authorized as the original SQL user
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– input –––
+rm -rf /tmp/auth-backup-selected /tmp/auth-backup-full && mkdir -p /tmp/auth-backup-selected /tmp/auth-backup-full
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE TABLE backup_allowed(content text); CREATE TABLE backup_private(content text); INSERT INTO backup_allowed(id,content) VALUES(1,'allowed'); INSERT INTO backup_private(id,content) VALUES(2,'private');"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE USER 'backup_only' IDENTIFIED BY 'backup_only1'; CREATE USER 'read_only' IDENTIFIED BY 'read_only123'; CREATE USER 'admin_only' IDENTIFIED BY 'admin_only123'; CREATE USER 'backup_selected' IDENTIFIED BY 'backup_selected1';" >/dev/null
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT backup ON * TO 'backup_only'; GRANT read ON 'backup_allowed' TO 'read_only'; GRANT admin ON * TO 'admin_only'; GRANT backup ON * TO 'backup_selected'; GRANT read ON 'backup_allowed' TO 'backup_selected';"
+––– output –––
+––– comment –––
+READ alone must not authorize BACKUP.
+––– comment –––
+––– input –––
+MYSQL_PWD=read_only123 mysql -uread_only -h0 -P9306 -e "BACKUP TABLE backup_allowed TO /tmp/auth-backup-selected;" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'read_only'
+––– comment –––
+BACKUP alone must not authorize access to table data.
+––– comment –––
+––– input –––
+MYSQL_PWD=backup_only1 mysql -ubackup_only -h0 -P9306 -e "BACKUP TABLE backup_allowed TO /tmp/auth-backup-selected;" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'backup_only'
+––– comment –––
+ADMIN alone must not imply BACKUP.
+––– comment –––
+––– input –––
+MYSQL_PWD=admin_only123 mysql -uadmin_only -h0 -P9306 -e "BACKUP TABLE backup_allowed TO /tmp/auth-backup-selected;" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'admin_only'
+––– comment –––
+The selected-table operator can back up the authorized table through Buddy.
+––– comment –––
+––– input –––
+MYSQL_PWD=backup_selected1 mysql -ubackup_selected -h0 -P9306 -e "BACKUP TABLE backup_allowed TO /tmp/auth-backup-selected;" >/dev/null && test -n "$(find /tmp/auth-backup-selected -path '*/data/backup_allowed/*' -type f -print -quit)" && echo "selected_backup: OK"
+––– output –––
+selected_backup: OK
+––– input –––
+if find /tmp/auth-backup-selected -path '*/data/backup_private/*' -type f | grep -q .; then echo "private_table_leaked"; else echo "selected_scope: OK"; fi
+––– output –––
+selected_scope: OK
+––– comment –––
+The same operator cannot name another table and cannot request an unrestricted full backup.
+––– comment –––
+––– input –––
+MYSQL_PWD=backup_selected1 mysql -ubackup_selected -h0 -P9306 -e "BACKUP TABLE backup_private TO /tmp/auth-backup-selected;" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'backup_selected'
+––– input –––
+MYSQL_PWD=backup_selected1 mysql -ubackup_selected -h0 -P9306 -e "BACKUP TO /tmp/auth-backup-full;" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'backup_selected'
+––– comment –––
+A wildcard read grant does not let full BACKUP bypass an explicit table deny.
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'backup_selected'; GRANT read ON 'backup_private' TO 'backup_selected' WITH ALLOW 0;"
+––– output –––
+––– input –––
+MYSQL_PWD=backup_selected1 mysql -ubackup_selected -h0 -P9306 -e "BACKUP TO /tmp/auth-backup-full;" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'backup_selected'
+––– comment –––
+After removing the deny, unrestricted read ON * permits a full backup.
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE read ON 'backup_private' FROM 'backup_selected';"
+––– output –––
+––– input –––
+MYSQL_PWD=backup_selected1 mysql -ubackup_selected -h0 -P9306 -e "BACKUP TO /tmp/auth-backup-full;" >/dev/null && test -n "$(find /tmp/auth-backup-full -path '*/data/backup_allowed/*' -type f -print -quit)" && test -n "$(find /tmp/auth-backup-full -path '*/data/backup_private/*' -type f -print -quit)" && echo "full_backup: OK"
+––– output –––
+full_backup: OK

@@ -298,6 +298,8 @@ AuthAction_e ReadAction ( Str_t sAction )
 		return AuthAction_e::WRITE;
 	else if ( StrEqN ( sAction, "schema" ) )
 		return AuthAction_e::SCHEMA;
+	else if ( StrEqN ( sAction, "backup" ) )
+		return AuthAction_e::BACKUP;
 	else if ( StrEqN ( sAction, "replication" ) )
 		return AuthAction_e::REPLICATION;
 	else if ( StrEqN ( sAction, "admin" ) )
@@ -313,6 +315,7 @@ const char * GetActionName (  AuthAction_e eAction )
 	case AuthAction_e::READ: return "read";
 	case AuthAction_e::WRITE: return "write";
 	case AuthAction_e::SCHEMA: return "schema";
+	case AuthAction_e::BACKUP: return "backup";
 	case AuthAction_e::REPLICATION: return "replication";
 	case AuthAction_e::ADMIN: return "admin";
 	default:

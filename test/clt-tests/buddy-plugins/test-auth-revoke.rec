@@ -5,7 +5,7 @@ Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
 Admin credentials: admin / adminpass (bootstrap via auth.json)
 
 Per spec: REVOKE action ON target FROM 'username'
-Actions: read, write, schema, admin, replication (lowercase!)
+Actions: read, write, schema, backup, admin, replication (lowercase!)
 Target: '*' (all) or 'tablename'
 
 IMPORTANT: Actions must be lowercase (same bug as GRANT)
@@ -26,6 +26,9 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'revokeuser'
 ––– output –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT write ON 'testtable' TO 'revokeuser';"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT backup ON * TO 'revokeuser';"
 ––– output –––
 ––– comment –––
 ––– 2.6.1 Successful REVOKE of existing permission –––

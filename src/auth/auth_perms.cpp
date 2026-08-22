@@ -46,18 +46,46 @@ static bool ProcessPerms ( const UserPerms_t * pPerms, AuthAction_e eAction, con
 	return ( bAllowEmpty && bHasAllow );
 }
 
-bool CheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, bool bAllowEmpty, CSphString & sError )
+bool HasPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, bool bAllowEmpty )
 {
 	assert ( IsAuthEnabled() );
 
 	AuthUsersPtr_t pUsers = GetAuth();
 	const UserPerms_t * pPerms = pUsers->m_hUserPerms ( sUser );
-	if ( pPerms && pPerms->GetLength() && ProcessPerms ( pPerms, eAction, sTarget, bAllowEmpty ) )
+	return pPerms && pPerms->GetLength() && ProcessPerms ( pPerms, eAction, sTarget, bAllowEmpty );
+}
+
+
+bool CheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, bool bAllowEmpty, CSphString & sError )
+{
+	assert ( IsAuthEnabled() );
+
+	if ( HasPerms ( sUser, eAction, sTarget, bAllowEmpty ) )
 		return true;
 
 	sError.SetSprintf ( "Permission denied for user '%s'", sUser.cstr() );
 	AuthLog().AuthDenied ( sUser, session::szClientName(), eAction, sTarget );
 
+	return false;
+}
+
+
+bool CheckPermsForAllTargets ( const CSphString & sUser, AuthAction_e eAction, CSphString & sError )
+{
+	assert ( IsAuthEnabled() );
+
+	AuthUsersPtr_t pUsers = GetAuth();
+	const UserPerms_t * pPerms = pUsers->m_hUserPerms ( sUser );
+	bool bHasDeny = false;
+	if ( pPerms )
+		for ( const auto & tPerm : *pPerms )
+			bHasDeny |= ( tPerm.m_eAction==eAction && !tPerm.m_bAllow );
+
+	if ( !bHasDeny && HasPerms ( sUser, eAction, "*", false ) )
+		return true;
+
+	sError.SetSprintf ( "Permission denied for user '%s'", sUser.cstr() );
+	AuthLog().AuthDenied ( sUser, session::szClientName(), eAction, "*" );
 	return false;
 }
 

@@ -12698,7 +12698,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		}
 	}
 
-	if ( bParsedOK && !SqlCheckPerms ( session::GetUser(), dStmt, m_sError ) )
+	if ( ( bParsedOK && !SqlCheckPerms ( session::GetUser(), dStmt, m_sError ) ) || ( !bParsedOK && !SqlCheckBuddyQueryPerms ( session::GetUser(), sQuery, m_sError ) ) )
 	{
 		FreezeLastMeta();
 		m_bAuthErrorSkipBuddy = true;

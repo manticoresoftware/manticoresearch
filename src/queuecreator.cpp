@@ -1137,7 +1137,7 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 		} );
 		if ( bNeedsDocid )
 			tUuidItem.m_sAlias = sphGetUuidDocidName();
-		else if ( tUuidItem.m_sAlias.IsEmpty() || tUuidItem.m_sAlias==sphGetDocidName() )
+		else if ( tUuidItem.m_sAlias.IsEmpty() )
 			tUuidItem.m_sAlias = sphGetDocidName();
 		return ParseResolvedQueryItem ( tUuidItem );
 	}

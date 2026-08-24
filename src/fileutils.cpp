@@ -36,6 +36,12 @@ static constexpr int TABLE_ENCODE_MAX = 64;
 static const char * TABLE_PHYSICAL_PREFIX = "@manticore_";
 
 
+bool IsSlash ( char c )
+{
+	return c=='/' || c=='\\';
+}
+
+
 bool IsPortableTableLiteral ( const CSphString & sName )
 {
 	if ( sName.IsEmpty() || sName.Length()>TABLE_LITERAL_MAX )
@@ -101,7 +107,7 @@ CSphString sphGetConfiglessTablePath ( const CSphString & sDataDir, const CSphSt
 {
 	CSphString sPhysicalName = sphGetTablePhysicalName ( sName );
 	CSphString sPath;
-	if ( sDataDir.Length() && !sDataDir.Ends("/") && !sDataDir.Ends("\\") )
+	if ( sDataDir.Length() && !IsSlash ( sDataDir.cstr()[sDataDir.Length()-1] ) )
 		sPath.SetSprintf ( "%s/%s", sDataDir.cstr(), sPhysicalName.cstr() );
 	else
 		sPath.SetSprintf ( "%s%s", sDataDir.cstr(), sPhysicalName.cstr() );
@@ -114,7 +120,7 @@ CSphString sphGetExistingConfiglessTablePath ( const CSphString & sDataDir, cons
 {
 	CSphString sPath = sphGetConfiglessTablePath ( sDataDir, sName );
 	CSphString sLegacyPath;
-	if ( sDataDir.Length() && !sDataDir.Ends("/") && !sDataDir.Ends("\\") )
+	if ( sDataDir.Length() && !IsSlash ( sDataDir.cstr()[sDataDir.Length()-1] ) )
 		sLegacyPath.SetSprintf ( "%s/%s", sDataDir.cstr(), sName.cstr() );
 	else
 		sLegacyPath.SetSprintf ( "%s%s", sDataDir.cstr(), sName.cstr() );
@@ -568,12 +574,6 @@ void sphInitIOStats()
 void sphDoneIOStats()
 {
 	g_bCollectIOStats = false;
-}
-
-
-static bool IsSlash ( char c )
-{
-	return c=='/' || c=='\\';
 }
 
 

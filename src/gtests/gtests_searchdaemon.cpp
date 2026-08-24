@@ -203,12 +203,13 @@ TEST ( functions, DdlGenericIdentifiersValidateUtf8 )
 	sError = "";
 	EXPECT_FALSE ( ParseDdlForTest ( sMaxSystem.c_str(), sError ) );
 
+	// U+200B ZERO WIDTH SPACE is encoded explicitly in every rejected identifier.
 	const char * dUnsafe[] =
 	{
-		"CREATE FUNCTION bad​name RETURNS INT SONAME 'missing.so'",
-		"CREATE PLUGIN bad​name TYPE 'ranker' SONAME 'missing.so'",
-		"CREATE CLUSTER bad​name",
-		"JOIN CLUSTER bad​name"
+		"CREATE FUNCTION bad" "\xE2\x80\x8B" "name RETURNS INT SONAME 'missing.so'",
+		"CREATE PLUGIN bad" "\xE2\x80\x8B" "name TYPE 'ranker' SONAME 'missing.so'",
+		"CREATE CLUSTER bad" "\xE2\x80\x8B" "name",
+		"JOIN CLUSTER bad" "\xE2\x80\x8B" "name"
 	};
 	for ( const char * szQuery : dUnsafe )
 	{

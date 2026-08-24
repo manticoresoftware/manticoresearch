@@ -181,10 +181,10 @@ TEST ( IdentifierValidation, InvalidUtf8AndUnsafeCodepoints )
 
 	EXPECT_TRUE ( una::is_valid_utf8 ( std::string_view ( "@название клавиатура" ) ) );
 
-	EXPECT_FALSE ( sphValidateIdentifier ( "bad name", false, 0, sError ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "bad​name", false, 0, sError ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "bad‮name", false, 0, sError ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "a‍name", false, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xC2\xA0" "name", false, 0, sError ) ); // U+00A0
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xE2\x80\x8B" "name", false, 0, sError ) ); // U+200B
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xE2\x80\xAE" "name", false, 0, sError ) ); // U+202E
+	EXPECT_FALSE ( sphValidateIdentifier ( "a\xE2\x80\x8D" "name", false, 0, sError ) ); // U+200D
 	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xB0name", false, 0, sError ) ); // U+FFF0
 	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xB9name", false, 0, sError ) ); // U+FFF9
 	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xBAname", false, 0, sError ) ); // U+FFFA

@@ -147,8 +147,10 @@ TEST ( IdentifierValidation, PortablePhysicalTableNames )
 	EXPECT_STRNE ( sphGetTablePhysicalName ( "com1" ).cstr(), "com1" );
 	EXPECT_STREQ ( sphGetTablePhysicalName ( "__manticore_u_41" ).cstr(), "__manticore_u_41" );
 
-	CSphString sNfc = sphGetTablePhysicalName ( "é" );
-	CSphString sNfd = sphGetTablePhysicalName ( "é" );
+	constexpr char sNfcName[] = "\xC3\xA9"; // U+00E9 LATIN SMALL LETTER E WITH ACUTE
+	constexpr char sNfdName[] = "e\xCC\x81"; // U+0065 LATIN SMALL LETTER E + U+0301 COMBINING ACUTE ACCENT
+	CSphString sNfc = sphGetTablePhysicalName ( sNfcName );
+	CSphString sNfd = sphGetTablePhysicalName ( sNfdName );
 	EXPECT_STRNE ( sNfc.cstr(), sNfd.cstr() );
 	EXPECT_TRUE ( sNfc.Begins ( "@manticore_u_" ) );
 	EXPECT_TRUE ( sNfd.Begins ( "@manticore_u_" ) );

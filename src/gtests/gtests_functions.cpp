@@ -67,12 +67,16 @@ TEST ( IdentifierValidation, ValidNamesAndLimits )
 	sMax.push_back ( 'a' );
 	EXPECT_FALSE ( sphValidateIdentifier ( sMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
 
-	std::string sMultibyteMax ( SPH_MAX_TABLE_NAME_BYTES-2, 'a' );
-	sMultibyteMax += "é";
-	ASSERT_EQ ( sMultibyteMax.length(), SPH_MAX_TABLE_NAME_BYTES );
-	EXPECT_TRUE ( sphValidateIdentifier ( sMultibyteMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
-	sMultibyteMax.push_back ( 'a' );
-	EXPECT_FALSE ( sphValidateIdentifier ( sMultibyteMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
+	CSphVector<char> dMultibyteMax ( SPH_MAX_TABLE_NAME_BYTES+2 );
+	for ( int i=0; i<SPH_MAX_TABLE_NAME_BYTES-2; ++i )
+		dMultibyteMax[i] = 'a';
+	dMultibyteMax[SPH_MAX_TABLE_NAME_BYTES-2] = (char)0xC3;
+	dMultibyteMax[SPH_MAX_TABLE_NAME_BYTES-1] = (char)0xA9;
+	dMultibyteMax[SPH_MAX_TABLE_NAME_BYTES] = '\0';
+	EXPECT_TRUE ( sphValidateIdentifier ( dMultibyteMax.Begin(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
+	dMultibyteMax[SPH_MAX_TABLE_NAME_BYTES] = 'a';
+	dMultibyteMax[SPH_MAX_TABLE_NAME_BYTES+1] = '\0';
+	EXPECT_FALSE ( sphValidateIdentifier ( dMultibyteMax.Begin(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
 
 	std::string sSystemMax = "system." + std::string ( SPH_MAX_TABLE_NAME_BYTES + SPH_MAX_GENERATED_TABLE_SUFFIX_BYTES, 'a' );
 	EXPECT_TRUE ( sphValidateTableName ( sSystemMax.c_str(), false, sError ) );

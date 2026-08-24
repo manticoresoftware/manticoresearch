@@ -133,12 +133,14 @@ TEST ( functions, ParseUnicodeIndexList )
 }
 
 
-static bool ParseDdlForTest ( const std::string & sQuery, CSphString & sError )
+static bool ParseDdlForTest ( const CSphString & sQuery, CSphString & sError )
 {
-	std::vector<char> dQuery ( sQuery.begin(), sQuery.end() );
-	dQuery.resize ( sQuery.length()+2 );
+	CSphVector<char> dQuery ( sQuery.Length()+2 );
+	memcpy ( dQuery.Begin(), sQuery.cstr(), sQuery.Length() );
+	dQuery[sQuery.Length()] = '\0';
+	dQuery[sQuery.Length()+1] = '\0';
 	CSphVector<SqlStmt_t> dStmt;
-	return ParseDdl ( { dQuery.data(), (int)sQuery.length() }, dStmt, sError );
+	return ParseDdl ( { dQuery.Begin(), sQuery.Length() }, dStmt, sError );
 }
 
 
@@ -148,10 +150,10 @@ TEST ( functions, DdlGenericIdentifiersValidateUtf8 )
 	EXPECT_TRUE ( ParseDdlForTest ( "CREATE FUNCTION функция RETURNS INT SONAME 'missing.so'", sError ) ) << sError.cstr();
 
 	std::string sMaxTable = "CREATE TABLE `" + std::string ( SPH_MAX_TABLE_NAME_BYTES, 'a' ) + "` (body text)";
-	EXPECT_TRUE ( ParseDdlForTest ( sMaxTable, sError ) ) << sError.cstr();
+	EXPECT_TRUE ( ParseDdlForTest ( sMaxTable.c_str(), sError ) ) << sError.cstr();
 	sMaxTable.insert ( sMaxTable.find ( '`' )+1, 1, 'a' );
 	sError = "";
-	EXPECT_FALSE ( ParseDdlForTest ( sMaxTable, sError ) );
+	EXPECT_FALSE ( ParseDdlForTest ( sMaxTable.c_str(), sError ) );
 
 	sError = "";
 	EXPECT_FALSE ( ParseDdlForTest ( "CREATE TABLE `123` (body text)", sError ) );
@@ -196,10 +198,10 @@ TEST ( functions, DdlGenericIdentifiersValidateUtf8 )
 
 	std::string sMaxSystem = "CREATE TABLE system.`" + std::string ( SPH_MAX_TABLE_NAME_BYTES + SPH_MAX_GENERATED_TABLE_SUFFIX_BYTES, 'a' ) + "` (body text)";
 	sError = "";
-	EXPECT_TRUE ( ParseDdlForTest ( sMaxSystem, sError ) ) << sError.cstr();
+	EXPECT_TRUE ( ParseDdlForTest ( sMaxSystem.c_str(), sError ) ) << sError.cstr();
 	sMaxSystem.insert ( sMaxSystem.find ( '`' )+1, 1, 'a' );
 	sError = "";
-	EXPECT_FALSE ( ParseDdlForTest ( sMaxSystem, sError ) );
+	EXPECT_FALSE ( ParseDdlForTest ( sMaxSystem.c_str(), sError ) );
 
 	const char * dUnsafe[] =
 	{
@@ -219,7 +221,7 @@ TEST ( functions, DdlGenericIdentifiersValidateUtf8 )
 	sMalformed.push_back ( (char)0x80 );
 	sMalformed += "name RETURNS INT SONAME 'missing.so'";
 	sError = "";
-	EXPECT_FALSE ( ParseDdlForTest ( sMalformed, sError ) );
+	EXPECT_FALSE ( ParseDdlForTest ( sMalformed.c_str(), sError ) );
 	EXPECT_NE ( strstr ( sError.cstr(), "invalid UTF-8 in identifier" ), nullptr ) << sError.cstr();
 }
 

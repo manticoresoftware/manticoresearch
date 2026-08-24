@@ -95,19 +95,19 @@ TEST ( IdentifierValidation, ExistingConfiglessPathFallsBackToLegacyLayout )
 {
 	CSphString sRoot;
 	sRoot.SetSprintf ( "%s/gtests-legacy-path-%lld", sphGetCwd().cstr(), (long long)sphMicroTimer() );
-	ASSERT_TRUE ( MkDir ( sRoot.cstr() ) );
 	AT_SCOPE_EXIT ( [&sRoot] { ::rmdir ( sRoot.cstr() ); } );
+	ASSERT_TRUE ( MkDir ( sRoot.cstr() ) );
 
 	CSphString sLegacyPath;
 	sLegacyPath.SetSprintf ( "%s/legacy-name", sRoot.cstr() );
-	ASSERT_TRUE ( MkDir ( sLegacyPath.cstr() ) );
 	AT_SCOPE_EXIT ( [&sLegacyPath] { ::rmdir ( sLegacyPath.cstr() ); } );
+	ASSERT_TRUE ( MkDir ( sLegacyPath.cstr() ) );
 
 	EXPECT_STREQ ( sphGetExistingConfiglessTablePath ( sRoot, "legacy-name" ).cstr(), sLegacyPath.cstr() );
 
 	CSphString sMappedPath = sphGetConfiglessTablePath ( sRoot, "legacy-name" );
-	ASSERT_TRUE ( MkDir ( sMappedPath.cstr() ) );
 	AT_SCOPE_EXIT ( [&sMappedPath] { ::rmdir ( sMappedPath.cstr() ); } );
+	ASSERT_TRUE ( MkDir ( sMappedPath.cstr() ) );
 	EXPECT_STREQ ( sphGetExistingConfiglessTablePath ( sRoot, "legacy-name" ).cstr(), sMappedPath.cstr() );
 }
 

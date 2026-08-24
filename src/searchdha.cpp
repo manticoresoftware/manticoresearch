@@ -1208,7 +1208,7 @@ CSphString HAStrategyToStr ( HAStrategies_e eStrategy )
 static bool IsIndexListChar ( char cChar )
 {
 	const BYTE uChar = (BYTE)cChar;
-	return uChar>=0x80 || isalpha ( uChar ) || isdigit ( uChar ) || cChar=='_' || cChar=='.' || cChar=='-';
+	return uChar>=0x80 || sphIsAlpha ( cChar ) || cChar=='.';
 }
 
 

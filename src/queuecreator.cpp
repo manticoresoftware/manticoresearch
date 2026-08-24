@@ -1130,7 +1130,14 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	{
 		CSphQueryItem tUuidItem = tItem;
 		tUuidItem.m_sExpr = sphGetUuidDocidName();
-		if ( tUuidItem.m_sAlias.IsEmpty() || tUuidItem.m_sAlias==sphGetDocidName() )
+		bool bNeedsDocid = m_tQuery.m_eQueryType==QUERY_SQL && m_tQuery.m_dItems.any_of ( [&] ( const CSphQueryItem & tQueryItem )
+		{
+			const CSphColumnInfo * pField = m_tSettings.m_tSchema.GetField ( tQueryItem.m_sExpr.cstr() );
+			return tQueryItem.m_sExpr=="*" || ( pField && ( pField->m_uFieldFlags & CSphColumnInfo::FIELD_STORED ) );
+		} );
+		if ( bNeedsDocid )
+			tUuidItem.m_sAlias = sphGetUuidDocidName();
+		else if ( tUuidItem.m_sAlias.IsEmpty() )
 			tUuidItem.m_sAlias = sphGetDocidName();
 		return ParseResolvedQueryItem ( tUuidItem );
 	}

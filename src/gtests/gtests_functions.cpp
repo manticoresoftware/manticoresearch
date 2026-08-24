@@ -36,10 +36,13 @@
 
 TEST ( IdentifierValidation, ValidNamesAndLimits )
 {
+	constexpr char sCyrillicName[] = "\xD1\x82\xD0\xBE\xD0\xB2\xD0\xB0\xD1\x80\xD1\x8B" "2026";
+	constexpr char sEmojiCyrillicName[] = "\xF0\x9F\x93\xA6\xD0\xBC\xD0\xB5\xD1\x82\xD0\xBA\xD0\xB0";
+
 	CSphString sError;
 	EXPECT_TRUE ( sphValidateIdentifier ( "product_2026", false, 0, sError ) );
-	EXPECT_TRUE ( sphValidateIdentifier ( "товары2026", false, 0, sError ) );
-	EXPECT_TRUE ( sphValidateIdentifier ( "📦метка", false, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( sCyrillicName, false, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( sEmojiCyrillicName, false, 0, sError ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "@timestamp", false, 0, sError ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "@version", false, 0, sError ) );
 	EXPECT_FALSE ( sphValidateIdentifier ( "@uuid_id", false, 0, sError ) );

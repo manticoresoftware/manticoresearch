@@ -1600,6 +1600,22 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 	}
 	int64_t iLookupEnd = tLookup.GetFilesize();
 
+	// the layout depends on the header version (v.71 added a field); a mismatch makes every lookup return garbage
+	{
+		CSphMappedBuffer<BYTE> tLookupData;
+		if ( !tLookupData.Setup ( GetFilename(SPH_EXT_SPT), sError, false ) )
+		{
+			m_tReporter.Fail ( "unable to map lookup file: %s", sError.cstr() );
+			return;
+		}
+
+		if ( !CheckDocidLookupFormat ( tLookupData.GetReadPtr(), tLookupData.GetLengthBytes(), m_uVersion, sError ) )
+		{
+			m_tReporter.Fail ( "%s (a daemon with this check repairs a pre-v.71 lookup under a newer header on load; otherwise rebuild the table)", sError.cstr() );
+			return;
+		}
+	}
+
 	const CSphColumnInfo * pId = m_tSchema.GetAttr("id");
 	assert(pId);
 

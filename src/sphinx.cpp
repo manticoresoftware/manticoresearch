@@ -1367,6 +1367,7 @@ public:
 	bool				PreallocWordlist();
 	bool				PreallocAttributes();
 	bool				PreallocDocidLookup();
+	bool				UpgradeDocidLookup ( CSphString & sError );
 	bool				PreallocKilllist();
 	bool				PreallocHistograms ( StrVec_t & dWarnings );
 	bool				PreallocDocstore();
@@ -3035,6 +3036,10 @@ bool CSphIndex_VLN::AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sA
 
 bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t & tCtx, CSphString & sError )
 {
+	// the header gets rewritten with the current format version below
+	if ( !UpgradeDocidLookup ( sError ) )
+		return false;
+
 	AttrEngine_e eAttrEngine = CombineEngines ( m_tSettings.m_eEngine, tCtx.m_eEngine );
 	AttrAddRemoveCtx_t tNewCtx = tCtx;
 	if ( eAttrEngine==AttrEngine_e::COLUMNAR )
@@ -3258,6 +3263,9 @@ void CSphIndex_VLN::PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t
 
 bool CSphIndex_VLN::SaveHeader ( CSphString & sError )
 {
+	if ( !UpgradeDocidLookup ( sError ) )
+		return false;
+
 	BuildHeader_t tBuildHeader;
 	WriteHeader_t tWriteHeader;
 	PrepareHeaders ( tBuildHeader, tWriteHeader );
@@ -8020,6 +8028,10 @@ bool CSphIndex_VLN::AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSph
 
 bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError )
 {
+	// the header gets rewritten with the current format version below
+	if ( !UpgradeDocidLookup ( sError ) )
+		return false;
+
 	CSphSchema tOldSchema = m_tSchema;
 	CSphSchema tNewSchema = m_tSchema;
 	if ( !Alter_AddRemoveFieldFromSchema ( bAddField, tNewSchema, sFieldName, uFieldFlags, sError ) )
@@ -10321,12 +10333,78 @@ bool CSphIndex_VLN::PreallocDocidLookup()
 	if ( !m_tDocidLookup.Setup ( GetFilename ( SPH_EXT_SPT ), m_sLastError, false ) )
 		return false;
 
+	// the lookup layout depends on the index format version (v.71 added a header field); a mismatch would
+	// yield garbage rowids and crash every docid lookup (UPDATE, DELETE, REPLACE kill-lists, id filters)
+	CSphString sFormatError;
+	if ( !CheckDocidLookupFormat ( m_tDocidLookup.GetReadPtr(), m_tDocidLookup.GetLengthBytes(), m_uVersion, sFormatError ) )
+	{
+		CSphString sFile = GetFilename ( SPH_EXT_SPT );
+
+		// a header rewritten with v.71+ over a pre-v.71 lookup (older daemons did that on ALTER, see manticoresearch#4852)
+		// is unambiguous: the pre-v.71 layout is recognizable and the conversion is exact, so repair it in place
+		DWORD uActual = DetectDocidLookupVersion ( m_tDocidLookup.GetReadPtr(), m_tDocidLookup.GetLengthBytes() );
+		if ( m_uVersion<DOCID_LOOKUP_UUID_VERSION || uActual!=DOCID_LOOKUP_UUID_VERSION-1 )
+		{
+			m_sLastError.SetSprintf ( "%s: %s", sFile.cstr(), sFormatError.cstr() );
+			return false;
+		}
+
+		sphWarning ( "%s: docid lookup is in the pre-v.%u layout while the header is v.%u; upgrading the lookup in place", sFile.cstr(), DOCID_LOOKUP_UUID_VERSION, m_uVersion );
+		m_tDocidLookup.Reset();
+		if ( !UpgradeDocidLookupFile ( sFile, uActual, m_sLastError ) || !m_tDocidLookup.Setup ( sFile, m_sLastError, false ) )
+			return false;
+
+		if ( !CheckDocidLookupFormat ( m_tDocidLookup.GetReadPtr(), m_tDocidLookup.GetLengthBytes(), m_uVersion, sFormatError ) )
+		{
+			m_sLastError.SetSprintf ( "%s: %s (after upgrade)", sFile.cstr(), sFormatError.cstr() );
+			return false;
+		}
+	}
+
 	auto [ tUuidEntriesOffset, nDocs ] = m_tLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 	const bool bUuidLinked = m_tSchema.GetAttr(0).IsUuidLinkedDocid();
 	assert ( !!tUuidEntriesOffset==bUuidLinked );
 	if ( bUuidLinked )
 		m_tUuidLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), tUuidEntriesOffset, nDocs );
 
+	return true;
+}
+
+
+// in-place operations (ALTER TABLE ADD/DROP COLUMN or field, header rewrites) save the header with the
+// current INDEX_FORMAT_VERSION, so every version-gated data file must be brought to the current format
+// as well - the readers are gated on the header version. since v.68 only the docid lookup changed (v.71)
+bool CSphIndex_VLN::UpgradeDocidLookup ( CSphString & sError )
+{
+	if ( m_uVersion>=DOCID_LOOKUP_UUID_VERSION )
+		return true;
+
+	CSphString sFile = GetFilename ( SPH_EXT_SPT );
+	bool bMapped = !!m_tDocidLookup.GetReadPtr();
+	m_tDocidLookup.Reset();
+
+	CSphString sUpgradeError;
+	if ( sphIsReadable ( sFile.cstr() ) && !UpgradeDocidLookupFile ( sFile, m_uVersion, sUpgradeError ) )
+	{
+		sError.SetSprintf ( "%s: %s", sFile.cstr(), sUpgradeError.cstr() );
+		if ( bMapped )
+		{
+			CSphString sRemapError;
+			if ( m_tDocidLookup.Setup ( sFile, sRemapError, false ) )
+				m_tLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), m_uVersion );
+		}
+		return false;
+	}
+
+	if ( bMapped )
+	{
+		if ( !m_tDocidLookup.Setup ( sFile, sError, false ) )
+			return false;
+
+		m_tLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), INDEX_FORMAT_VERSION );
+	}
+
+	m_uVersion = INDEX_FORMAT_VERSION;
 	return true;
 }
 
@@ -14195,6 +14273,10 @@ bool CSphIndex_VLN::RewriteHeader ( CSphString & sError ) const
 {
 	CSphString sHeader = GetFilename ( SPH_EXT_SPH );
 	if ( !sphIsReadable ( sHeader.cstr(), &sError ) )
+		return false;
+
+	// the new header carries the current format version; the data files must match it
+	if ( !const_cast<CSphIndex_VLN*>(this)->UpgradeDocidLookup ( sError ) )
 		return false;
 
 	CSphString sHeaderNew;

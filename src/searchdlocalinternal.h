@@ -16,6 +16,8 @@ namespace localmode
 std::string TrimInput ( const std::string & sValue );
 enum class SqlInputState_e { EMPTY, PENDING, COMPLETE, UNTERMINATED_QUOTE, UNTERMINATED_BLOCK_COMMENT };
 SqlInputState_e InspectSqlInput ( const char * szSql );
+bool ExtractCompleteSqlPrefix ( std::string & sInput, std::string & sComplete );
+std::string NormalizeSqlForHistory ( const char * szSql );
 bool PrintSqlResponse ( const std::string & sBody, CSphString & sError, bool bInteractive, int64_t iElapsedUS=-1, bool bAffectedRows=false, bool bVertical=false );
 using CompletionProvider_fn = std::function<std::vector<std::string> ( const std::string & )>;
 

@@ -174,6 +174,44 @@ bool ValidateLocalDaemonOwnership ( int & iPid, CSphString & sError )
 	}
 	return true;
 }
+
+volatile sig_atomic_t g_iBasicInputSignal = 0;
+
+void HandleBasicInputSignal ( int iSignal )
+{
+	g_iBasicInputSignal = iSignal;
+	const char cNewline = '\n';
+	(void)write ( STDOUT_FILENO, &cNewline, 1 );
+}
+
+class ScopedBasicInputSignals_c
+{
+	bool m_bActive = false;
+	struct sigaction m_tOldInt {};
+	struct sigaction m_tOldQuit {};
+
+public:
+	explicit ScopedBasicInputSignals_c ( bool bActive )
+		: m_bActive ( bActive )
+	{
+		if ( !m_bActive )
+			return;
+		g_iBasicInputSignal = 0;
+		struct sigaction tHandler {};
+		sigemptyset ( &tHandler.sa_mask );
+		tHandler.sa_handler = HandleBasicInputSignal;
+		sigaction ( SIGINT, &tHandler, &m_tOldInt );
+		sigaction ( SIGQUIT, &tHandler, &m_tOldQuit );
+	}
+
+	~ScopedBasicInputSignals_c()
+	{
+		if ( !m_bActive )
+			return;
+		sigaction ( SIGINT, &m_tOldInt, nullptr );
+		sigaction ( SIGQUIT, &m_tOldQuit, nullptr );
+	}
+};
 #endif
 }
 
@@ -297,6 +335,7 @@ int ExecuteManticoreSql ( const char * szSql, ManticoreClientTarget_e eTarget, c
 		if ( !pEditor )
 			fprintf ( stderr, "Warning: interactive history is unavailable; using basic input\n" );
 	}
+	ScopedBasicInputSignals_c tBasicInputSignals ( bShowPrompt && !pEditor );
 	int iResult = 0;
 	std::string sPending;
 	auto ReportIncompleteInput = [&] ( localmode::SqlInputState_e eState )
@@ -307,18 +346,14 @@ int ExecuteManticoreSql ( const char * szSql, ManticoreClientTarget_e eTarget, c
 			fputs ( "ERROR: unterminated quoted string\n", stderr );
 		iResult = 1;
 	};
-	auto ExecutePending = [&] ()
+	auto ExecuteSql = [&] ( const std::string & sInput )
 	{
-		std::string sSql = localmode::TrimInput ( sPending );
-		sPending.clear();
+		std::string sSql = localmode::TrimInput ( sInput );
 		if ( sSql.empty() )
 			return true;
 		if ( pEditor )
 		{
-			std::string sHistory = sSql;
-			for ( char & c : sHistory )
-				if ( c=='\n' || c=='\r' )
-					c = ' ';
+			std::string sHistory = localmode::NormalizeSqlForHistory ( sSql.c_str() );
 			CSphString sHistoryError;
 			if ( !pEditor->AddHistory(sHistory,sHistoryError) )
 				fprintf ( stderr, "Warning: %s\n", sHistoryError.cstr() );
@@ -357,6 +392,12 @@ int ExecuteManticoreSql ( const char * szSql, ManticoreClientTarget_e eTarget, c
 				fflush ( stdout );
 			}
 			bRead = (bool)std::getline ( std::cin, sLine );
+			if ( !bRead && g_iBasicInputSignal )
+			{
+				g_iBasicInputSignal = 0;
+				std::cin.clear();
+				bInterrupted = true;
+			}
 		}
 
 		if ( bInterrupted )
@@ -372,7 +413,7 @@ int ExecuteManticoreSql ( const char * szSql, ManticoreClientTarget_e eTarget, c
 			if ( eState==localmode::SqlInputState_e::UNTERMINATED_QUOTE || eState==localmode::SqlInputState_e::UNTERMINATED_BLOCK_COMMENT )
 				ReportIncompleteInput ( eState );
 			else
-				ExecutePending(); // EOF terminates a final un-delimited statement for compatibility.
+				ExecuteSql ( sPending ); // EOF terminates a final un-delimited statement for compatibility.
 			break;
 		}
 
@@ -391,16 +432,12 @@ int ExecuteManticoreSql ( const char * szSql, ManticoreClientTarget_e eTarget, c
 		if ( !sPending.empty() )
 			sPending.push_back ( '\n' );
 		sPending += sLine;
+		std::string sComplete;
+		if ( localmode::ExtractCompleteSqlPrefix(sPending,sComplete) && !ExecuteSql(sComplete) )
+			break;
 		localmode::SqlInputState_e eState = localmode::InspectSqlInput ( sPending.c_str() );
 		if ( eState==localmode::SqlInputState_e::EMPTY )
-		{
 			sPending.clear();
-			continue;
-		}
-		if ( eState!=localmode::SqlInputState_e::COMPLETE )
-			continue;
-		if ( !ExecutePending() )
-			break;
 	}
 
 	close ( iSocket );

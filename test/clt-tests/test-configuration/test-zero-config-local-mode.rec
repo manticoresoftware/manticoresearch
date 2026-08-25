@@ -698,6 +698,30 @@ if os.stat(history).st_mode & 0o777 != 0o600:
 history_lock = os.path.join(os.environ['LOCAL_DIR'], 'manticore_data', '.history.lock')
 if os.stat(history_lock).st_mode & 0o777 != 0o600:
     raise RuntimeError('history lock mode is not 0600')
+
+multiline_history_session = Session()
+try:
+    multiline_history = multiline_history_session.command(b'SELECT 1 -- keep semantics\n+ 2 AS multiline_history;\n')
+    if b'       -> ' not in multiline_history or not has_result(multiline_history, b'multiline_history', b'3'):
+        raise RuntimeError(f'multiline history command or continuation prompt failed: {multiline_history!r}')
+    multiline_recall = multiline_history_session.command(b'\x1b[A\n')
+    if not has_result(multiline_recall, b'multiline_history', b'3'):
+        raise RuntimeError(f'normalized multiline history changed semantics on recall: {multiline_recall!r}')
+    multiline_interrupt = multiline_history_session.command((b'SELECT\n  999 AS multiline_discarded', signal.SIGINT))
+    if b'^C' not in multiline_interrupt or not multiline_interrupt.endswith(b'manticore> '):
+        raise RuntimeError(f'Ctrl-C did not clear a multiline draft and return to the primary prompt: {multiline_interrupt!r}')
+    after_multiline_interrupt = multiline_history_session.command(b'SELECT 405 AS after_multiline_interrupt;\n')
+    if not has_result(after_multiline_interrupt, b'after_multiline_interrupt', b'405'):
+        raise RuntimeError(f'client did not recover after multiline Ctrl-C: {after_multiline_interrupt!r}')
+finally:
+    multiline_history_session.close()
+
+with open(history, 'rb') as source:
+    multiline_history_data = source.read()
+if multiline_history_data.count(b'SELECT 1 + 2 AS multiline_history;') != 2:
+    raise RuntimeError(f'multiline history was not stored as a safe single record: {multiline_history_data!r}')
+if b'keep semantics' in multiline_history_data or b'multiline_discarded' in multiline_history_data:
+    raise RuntimeError(f'comments or interrupted multiline drafts leaked into history: {multiline_history_data!r}')
 print('ok - interactive history persists and terminal interrupts clear the draft')
 history = os.path.join(os.environ['LOCAL_DIR'], 'manticore_data', '.history')
 try:
@@ -832,8 +856,8 @@ pass 'concurrent clients merge bounded plain-text history and preserve invalid f
 
 interactive=$(cd "$local_dir" && printf ';\nSET SESSION wait_timeout=123;\nSELECT @@wait_timeout;\nexit;\n' | "$MANTICORE") || fail 'interactive manticore failed'
 printf '%s' "$interactive" | grep -q $'@@wait_timeout\n123' || fail 'interactive statements did not share one SQL session'
-eof_result=$(cd "$local_dir" && printf 'SELECT 302 AS eof_query;\n' | "$MANTICORE") || fail 'interactive manticore did not exit cleanly on EOF'
-printf '%s' "$eof_result" | grep -q $'eof_query\n302' || fail 'interactive EOF mode omitted its result'
+eof_result=$(cd "$local_dir" && printf 'SELECT 302 AS eof_query\n' | "$MANTICORE") || fail 'interactive manticore did not execute a final undelimited statement at EOF'
+printf '%s' "$eof_result" | grep -q $'eof_query\n302' || fail 'interactive EOF mode omitted its final undelimited result'
 pass 'manticore supports interactive exit, EOF, and persistent session state'
 
 
@@ -868,6 +892,25 @@ set -e
 [ "$unfinished_file_rc" -ne 0 ] || fail 'unterminated SQL file unexpectedly succeeded'
 printf '%s' "$unfinished_file" | grep -q 'ERROR: unterminated block comment' || fail 'unterminated SQL file error was unclear'
 printf '%s' "$unfinished_file" | grep -q $'must_not_run\n499' && fail 'unterminated SQL file executed its SQL prefix'
+for unfinished_quote in "SELECT 'open" 'SELECT "open' 'SELECT `open'; do
+  set +e
+  unfinished_quote_output=$(cd "$local_dir" && printf '%s\n' "$unfinished_quote" | "$MANTICORE" 2>&1)
+  unfinished_quote_rc=$?
+  set -e
+  [ "$unfinished_quote_rc" -ne 0 ] || fail 'unterminated quoted SQL file unexpectedly succeeded'
+  printf '%s' "$unfinished_quote_output" | grep -q 'ERROR: unterminated quoted string' || fail 'unterminated quoted SQL file error was unclear'
+done
+(cd "$local_dir" && "$MANTICORE" -e 'DROP TABLE IF EXISTS completed_prefix; CREATE TABLE completed_prefix(value int)') >/dev/null || fail 'completed-prefix setup failed'
+set +e
+prefix_suffix_output=$(cd "$local_dir" && printf "INSERT INTO completed_prefix(id,value) VALUES(1,407);\nSELECT 'open\n" | "$MANTICORE" 2>&1)
+prefix_suffix_rc=$?
+set -e
+[ "$prefix_suffix_rc" -ne 0 ] || fail 'invalid pending suffix unexpectedly succeeded'
+prefix_value=$(cd "$local_dir" && "$MANTICORE" -e 'SELECT value FROM completed_prefix WHERE id=1') || fail 'completed-prefix verification failed'
+printf '%s' "$prefix_value" | grep -q $'value\n407' || fail 'completed statement before invalid pending suffix was discarded'
+g_markers=$(cd "$local_dir" && "$MANTICORE" -e $'SELECT 405 AS before_g; # \\G comment\nSELECT 406 AS after_g;') || fail '\G inside a comment split the SQL batch'
+printf '%s' "$g_markers" | grep -q $'before_g\n405' || fail 'statement before commented \G was not executed'
+printf '%s' "$g_markers" | grep -q $'after_g\n406' || fail 'statement after commented \G was not executed'
 pass 'manticore accumulates multiline SQL and reads SQL files from stdin'
 
 set +e

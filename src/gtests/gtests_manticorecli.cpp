@@ -6,6 +6,7 @@
 #include "daemon/daemon_ipc.h"
 #include "fileutils.h"
 #include "searchdaemon.h"
+#include "searchdlocal.h"
 #include "searchdlocalinternal.h"
 
 #include <string>
@@ -102,6 +103,30 @@ TEST ( manticore_cli, recognizes_complete_multiline_sql_input )
 	EXPECT_EQ ( localmode::InspectSqlInput("SELECT 1; /* open"), SqlInputState_e::UNTERMINATED_BLOCK_COMMENT );
 	EXPECT_EQ ( localmode::InspectSqlInput("SELECT\n  1\\G"), SqlInputState_e::COMPLETE );
 	EXPECT_EQ ( localmode::InspectSqlInput(nullptr), SqlInputState_e::EMPTY );
+}
+
+TEST ( manticore_cli, keeps_vertical_marker_inside_quotes )
+{
+	auto dStatements = SplitLocalSqlStatements ( "SELECT '\\G' AS value; SELECT 2" );
+	ASSERT_EQ ( dStatements.size(), 2 );
+	EXPECT_EQ ( dStatements[0], "SELECT '\\G' AS value" );
+	EXPECT_EQ ( dStatements[1], "SELECT 2" );
+}
+
+TEST ( manticore_cli, extracts_completed_prefix_before_pending_suffix )
+{
+	std::string sInput = "SELECT 1;\nSELECT\n  2";
+	std::string sComplete;
+	ASSERT_TRUE ( localmode::ExtractCompleteSqlPrefix(sInput,sComplete) );
+	EXPECT_EQ ( sComplete, "SELECT 1;" );
+	EXPECT_EQ ( sInput, "\nSELECT\n  2" );
+	EXPECT_FALSE ( localmode::ExtractCompleteSqlPrefix(sInput,sComplete) );
+}
+
+TEST ( manticore_cli, normalizes_multiline_history_without_extending_line_comments )
+{
+	EXPECT_EQ ( localmode::NormalizeSqlForHistory("SELECT 1 -- keep semantics\n+ 2 AS value;"), "SELECT 1 + 2 AS value;" );
+	EXPECT_EQ ( localmode::NormalizeSqlForHistory("SELECT ';' AS value\\G"), "SELECT ';' AS value \\G" );
 }
 
 TEST ( manticore_cli, parses_client_target_overrides )

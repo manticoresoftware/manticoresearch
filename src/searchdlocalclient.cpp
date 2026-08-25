@@ -59,13 +59,19 @@ struct LocalStatement_t
 	bool m_bUnterminatedBlockComment = false;
 };
 
-SqlInputState_e InspectSqlInput ( const char * szSql )
+struct SqlInputAnalysis_t
+{
+	SqlInputState_e m_eState = SqlInputState_e::EMPTY;
+	size_t m_iCompleteEnd = 0;
+};
+
+SqlInputAnalysis_t AnalyzeSqlInput ( const char * szSql )
 {
 	enum class State_e { NORMAL, QUOTE, LINE_COMMENT, BLOCK_COMMENT };
 	State_e eState = State_e::NORMAL;
 	char cQuote = 0;
 	bool bPending = false;
-	bool bCompleted = false;
+	SqlInputAnalysis_t tResult;
 	const size_t iLength = szSql ? strlen ( szSql ) : 0;
 	for ( size_t i=0; i<iLength; ++i )
 	{
@@ -122,7 +128,7 @@ SqlInputState_e InspectSqlInput ( const char * szSql )
 			if ( c=='\\' )
 				++i;
 			if ( bPending )
-				bCompleted = true;
+				tResult.m_iCompleteEnd = i+1;
 			bPending = false;
 		}
 		else if ( !isspace ( (unsigned char)c ) )
@@ -130,12 +136,29 @@ SqlInputState_e InspectSqlInput ( const char * szSql )
 	}
 
 	if ( eState==State_e::QUOTE )
-		return SqlInputState_e::UNTERMINATED_QUOTE;
-	if ( eState==State_e::BLOCK_COMMENT )
-		return SqlInputState_e::UNTERMINATED_BLOCK_COMMENT;
-	if ( bPending )
-		return SqlInputState_e::PENDING;
-	return bCompleted ? SqlInputState_e::COMPLETE : SqlInputState_e::EMPTY;
+		tResult.m_eState = SqlInputState_e::UNTERMINATED_QUOTE;
+	else if ( eState==State_e::BLOCK_COMMENT )
+		tResult.m_eState = SqlInputState_e::UNTERMINATED_BLOCK_COMMENT;
+	else if ( bPending )
+		tResult.m_eState = SqlInputState_e::PENDING;
+	else if ( tResult.m_iCompleteEnd )
+		tResult.m_eState = SqlInputState_e::COMPLETE;
+	return tResult;
+}
+
+SqlInputState_e InspectSqlInput ( const char * szSql )
+{
+	return AnalyzeSqlInput ( szSql ).m_eState;
+}
+
+bool ExtractCompleteSqlPrefix ( std::string & sInput, std::string & sComplete )
+{
+	size_t iCompleteEnd = AnalyzeSqlInput ( sInput.c_str() ).m_iCompleteEnd;
+	if ( !iCompleteEnd )
+		return false;
+	sComplete.assign ( sInput, 0, iCompleteEnd );
+	sInput.erase ( 0, iCompleteEnd );
+	return true;
 }
 
 std::vector<LocalStatement_t> SplitSqlBatch ( const char * szSql )
@@ -228,6 +251,21 @@ std::vector<LocalStatement_t> SplitSqlBatch ( const char * szSql )
 
 	AddStatement ( false, eState==State_e::BLOCK_COMMENT );
 	return dStatements;
+}
+
+std::string NormalizeSqlForHistory ( const char * szSql )
+{
+	std::string sHistory;
+	for ( const LocalStatement_t & tStatement : SplitSqlBatch(szSql) )
+	{
+		if ( tStatement.m_sSql.empty() )
+			continue;
+		if ( !sHistory.empty() )
+			sHistory.push_back ( ' ' );
+		sHistory += tStatement.m_sSql;
+		sHistory += tStatement.m_bVertical ? " \\G" : ";";
+	}
+	return sHistory;
 }
 
 std::vector<std::string> SplitSqlStatements ( const char * szSql )

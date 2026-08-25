@@ -24,6 +24,7 @@ struct SqlEndpoint_t
 	CSphString m_sUnix;
 	DWORD m_uIP = 0;
 	int m_iPort = 0;
+	bool m_bMysql = false;
 	CSphString m_sDescription;
 };
 

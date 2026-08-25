@@ -20,7 +20,8 @@ enum class Target_e
 {
 	AUTO,
 	LOCAL,
-	GLOBAL
+	GLOBAL,
+	REMOTE
 };
 
 enum class Marker_e
@@ -36,6 +37,8 @@ struct Options_t
 	Command_e m_eCommand = Command_e::CLIENT;
 	Target_e m_eTarget = Target_e::AUTO;
 	std::string m_sConfig;
+	std::string m_sHost = "127.0.0.1";
+	int m_iPort = 9306;
 	std::string m_sQuery;
 	bool m_bExecute = false;
 };

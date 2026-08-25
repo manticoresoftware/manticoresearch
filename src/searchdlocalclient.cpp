@@ -238,6 +238,136 @@ bool SendAll ( int iSocket, const char * pData, size_t iLength, CSphString & sEr
 	return true;
 }
 
+struct MysqlPacket_t
+{
+	BYTE m_uSequence = 0;
+	std::vector<BYTE> m_dBody;
+};
+
+bool ReadExact ( int iSocket, BYTE * pData, size_t iLength, CSphString & sError, int64_t iDeadlineUS )
+{
+	iDeadlineUS = EffectiveDeadline ( iDeadlineUS );
+	while ( iLength )
+	{
+		ssize_t iRead = recv ( iSocket, pData, iLength, 0 );
+		if ( iRead<0 && ( errno==EAGAIN || errno==EWOULDBLOCK ) )
+		{
+			if ( !WaitSocket(iSocket,POLLIN,iDeadlineUS,sError) )
+				return false;
+			continue;
+		}
+		if ( iRead<0 && errno==EINTR )
+			return ClientError ( sError, false, "Manticore socket operation interrupted" );
+		if ( iRead<=0 )
+			return ClientError ( sError, false, "failed to read Manticore MySQL response", iRead==0 ? "connection closed" : strerror(errno) );
+		pData += iRead;
+		iLength -= (size_t)iRead;
+	}
+	return true;
+}
+
+bool ReadMysqlPacket ( int iSocket, MysqlPacket_t & tPacket, CSphString & sError, int64_t iDeadlineUS=0 )
+{
+	static constexpr size_t MAX_CHUNK = 0xffffff;
+	static constexpr size_t MAX_PACKET = 64*1024*1024;
+	tPacket.m_dBody.clear();
+	BYTE uExpectedSequence = 0;
+	bool bFirst = true;
+	while ( true )
+	{
+		BYTE dHeader[4];
+		if ( !ReadExact(iSocket,dHeader,sizeof(dHeader),sError,iDeadlineUS) )
+			return false;
+		size_t iLength = dHeader[0] | ( (size_t)dHeader[1]<<8 ) | ( (size_t)dHeader[2]<<16 );
+		if ( bFirst )
+		{
+			tPacket.m_uSequence = dHeader[3];
+			uExpectedSequence = dHeader[3];
+			bFirst = false;
+		}
+		if ( dHeader[3]!=uExpectedSequence )
+			return ClientError ( sError, false, "invalid MySQL packet sequence from Manticore listener" );
+		++uExpectedSequence;
+		if ( iLength>MAX_PACKET-tPacket.m_dBody.size() )
+			return ClientError ( sError, false, "Manticore MySQL packet is too large" );
+		size_t iOldSize = tPacket.m_dBody.size();
+		tPacket.m_dBody.resize ( iOldSize+iLength );
+		if ( iLength && !ReadExact(iSocket,tPacket.m_dBody.data()+iOldSize,iLength,sError,iDeadlineUS) )
+			return false;
+		if ( iLength<MAX_CHUNK )
+			return true;
+	}
+}
+
+bool SendMysqlPacket ( int iSocket, BYTE uSequence, const std::vector<BYTE> & dBody, CSphString & sError, int64_t iDeadlineUS=0 )
+{
+	static constexpr size_t MAX_CHUNK = 0xffffff;
+	size_t iOffset = 0;
+	while ( true )
+	{
+		size_t iLength = std::min ( MAX_CHUNK, dBody.size()-iOffset );
+		BYTE dHeader[4] { (BYTE)iLength, (BYTE)(iLength>>8), (BYTE)(iLength>>16), uSequence++ };
+		if ( !SendAll(iSocket,(const char*)dHeader,sizeof(dHeader),sError,iDeadlineUS)
+			|| ( iLength && !SendAll(iSocket,(const char*)dBody.data()+iOffset,iLength,sError,iDeadlineUS) ) )
+			return false;
+		iOffset += iLength;
+		if ( iLength<MAX_CHUNK )
+			return true;
+	}
+}
+
+std::string MysqlErrorText ( const std::vector<BYTE> & dBody )
+{
+	if ( dBody.size()<3 || dBody[0]!=0xff )
+		return "invalid MySQL error packet";
+	unsigned iCode = dBody[1] | ( (unsigned)dBody[2]<<8 );
+	size_t iMessage = dBody.size()>=9 && dBody[3]=='#' ? 9 : 3;
+	return "[" + std::to_string(iCode) + "] " + std::string ( (const char*)dBody.data()+iMessage, dBody.size()-iMessage );
+}
+
+bool InitializeMysqlConnection ( int iSocket, CSphString & sError, int64_t iDeadlineUS )
+{
+	MysqlPacket_t tHandshake;
+	if ( !ReadMysqlPacket(iSocket,tHandshake,sError,iDeadlineUS) )
+		return false;
+	if ( tHandshake.m_dBody.empty() || tHandshake.m_dBody[0]!=10 )
+		return ClientError ( sError, false, "invalid handshake from Manticore MySQL listener" );
+
+	constexpr DWORD CLIENT_LONG_PASSWORD = 1;
+	constexpr DWORD CLIENT_LONG_FLAG = 4;
+	constexpr DWORD CLIENT_PROTOCOL_41 = 0x0200;
+	constexpr DWORD CLIENT_TRANSACTIONS = 0x2000;
+	constexpr DWORD CLIENT_SECURE_CONNECTION = 0x8000;
+	constexpr DWORD CLIENT_MULTI_RESULTS = 0x20000;
+	constexpr DWORD CLIENT_PLUGIN_AUTH = 0x80000;
+	DWORD uCapabilities = CLIENT_LONG_PASSWORD | CLIENT_LONG_FLAG | CLIENT_PROTOCOL_41 | CLIENT_TRANSACTIONS
+		| CLIENT_SECURE_CONNECTION | CLIENT_MULTI_RESULTS | CLIENT_PLUGIN_AUTH;
+	std::vector<BYTE> dReply;
+	auto PutDword = [&] ( DWORD uValue ) { for ( int i=0; i<4; ++i ) dReply.push_back ( (BYTE)(uValue>>(i*8)) ); };
+	PutDword ( uCapabilities );
+	PutDword ( 16*1024*1024 );
+	dReply.push_back ( 33 );
+	dReply.insert ( dReply.end(), 23, 0 );
+	dReply.push_back ( 0 ); // anonymous user
+	dReply.push_back ( 0 ); // empty authentication response
+	static constexpr char sPlugin[] = "mysql_native_password";
+	dReply.insert ( dReply.end(), sPlugin, sPlugin+sizeof(sPlugin) );
+	if ( !SendMysqlPacket(iSocket,1,dReply,sError,iDeadlineUS) )
+		return false;
+
+	MysqlPacket_t tAuth;
+	if ( !ReadMysqlPacket(iSocket,tAuth,sError,iDeadlineUS) )
+		return false;
+	if ( !tAuth.m_dBody.empty() && tAuth.m_dBody[0]==0x00 )
+		return true;
+	if ( !tAuth.m_dBody.empty() && tAuth.m_dBody[0]==0xff )
+	{
+		sError = MysqlErrorText ( tAuth.m_dBody ).c_str();
+		return false;
+	}
+	return ClientError ( sError, false, "unsupported authentication response from Manticore MySQL listener" );
+}
+
 bool StartNonblockingConnect ( int iSocket, const sockaddr * pAddress, socklen_t iLength, int64_t iDeadlineUS, CSphString & sError )
 {
 	int iFlags = fcntl ( iSocket, F_GETFL, 0 );
@@ -277,6 +407,11 @@ int ConnectSocket ( CSphString & sError, const SqlEndpoint_t & tEndpoint, int64_
 		{
 			if ( sError.IsEmpty() )
 				sError.SetSprintf ( "cannot connect to Manticore instance at %s: %s", tEndpoint.m_sDescription.cstr(), strerror(errno) );
+			close ( iSocket );
+			return -1;
+		}
+		if ( tEndpoint.m_bMysql && !InitializeMysqlConnection(iSocket,sError,iDeadlineUS) )
+		{
 			close ( iSocket );
 			return -1;
 		}
@@ -808,6 +943,212 @@ bool ParseHttpError ( const std::string & sBody, CSphString & sError )
 }
 
 #if !_WIN32
+bool ReadLengthEncodedInteger ( const std::vector<BYTE> & dBody, size_t & iPos, uint64_t & uValue, bool & bNull )
+{
+	if ( iPos>=dBody.size() )
+		return false;
+	BYTE uFirst = dBody[iPos++];
+	bNull = uFirst==0xfb;
+	if ( bNull ) { uValue = 0; return true; }
+	if ( uFirst<0xfb ) { uValue = uFirst; return true; }
+	size_t iBytes = uFirst==0xfc ? 2 : uFirst==0xfd ? 3 : uFirst==0xfe ? 8 : 0;
+	if ( !iBytes || iPos+iBytes>dBody.size() )
+		return false;
+	uValue = 0;
+	for ( size_t i=0; i<iBytes; ++i )
+		uValue |= (uint64_t)dBody[iPos++] << ( i*8 );
+	return true;
+}
+
+bool ReadLengthEncodedString ( const std::vector<BYTE> & dBody, size_t & iPos, std::string & sValue, bool & bNull )
+{
+	uint64_t uLength = 0;
+	if ( !ReadLengthEncodedInteger(dBody,iPos,uLength,bNull) || ( !bNull && ( uLength>dBody.size() || iPos+uLength>dBody.size() ) ) )
+		return false;
+	if ( bNull )
+		sValue = "NULL";
+	else
+	{
+		sValue.assign ( (const char*)dBody.data()+iPos, (size_t)uLength );
+		iPos += (size_t)uLength;
+	}
+	return true;
+}
+
+std::string EscapeJsonString ( const std::string & sValue )
+{
+	static constexpr char dHex[] = "0123456789abcdef";
+	std::string sEscaped;
+	for ( unsigned char c : sValue )
+	{
+		switch ( c )
+		{
+		case '"': sEscaped += "\\\""; break;
+		case '\\': sEscaped += "\\\\"; break;
+		case '\b': sEscaped += "\\b"; break;
+		case '\f': sEscaped += "\\f"; break;
+		case '\n': sEscaped += "\\n"; break;
+		case '\r': sEscaped += "\\r"; break;
+		case '\t': sEscaped += "\\t"; break;
+		default:
+			if ( c<0x20 )
+			{
+				sEscaped += "\\u00";
+				sEscaped.push_back ( dHex[c>>4] );
+				sEscaped.push_back ( dHex[c&15] );
+			}
+			else
+				sEscaped.push_back ( (char)c );
+		}
+	}
+	return sEscaped;
+}
+
+bool IsMysqlNumericType ( BYTE uType )
+{
+	switch ( uType )
+	{
+	case 1: case 2: case 3: case 4: case 5: case 8: case 9: case 13: case 16: case 246:
+		return true;
+	default:
+		return false;
+	}
+}
+
+bool ParseMysqlColumn ( const std::vector<BYTE> & dBody, LocalColumn_t & tColumn )
+{
+	size_t iPos = 0;
+	std::string sIgnored;
+	bool bNull = false;
+	for ( int i=0; i<4; ++i )
+		if ( !ReadLengthEncodedString(dBody,iPos,sIgnored,bNull) ) return false;
+	if ( !ReadLengthEncodedString(dBody,iPos,tColumn.m_sName,bNull) || bNull ) return false;
+	if ( !ReadLengthEncodedString(dBody,iPos,sIgnored,bNull) ) return false;
+	if ( iPos>=dBody.size() ) return false;
+	BYTE uFixedLength = dBody[iPos++];
+	if ( uFixedLength<7 || iPos+uFixedLength>dBody.size() ) return false;
+	tColumn.m_bNumeric = IsMysqlNumericType ( dBody[iPos+6] );
+	return true;
+}
+
+std::string BuildMysqlJsonResult ( const std::vector<LocalColumn_t> & dColumns, const std::vector<std::vector<std::string>> & dRows, uint64_t uAffected )
+{
+	std::string sJson = "[{";
+	if ( !dColumns.empty() )
+	{
+		sJson += "\"columns\":[";
+		for ( size_t i=0; i<dColumns.size(); ++i )
+		{
+			if ( i ) sJson += ',';
+			sJson += "{\"" + EscapeJsonString(dColumns[i].m_sName) + "\":{\"type\":\"" + ( dColumns[i].m_bNumeric ? "int" : "string" ) + "\"}}";
+		}
+		sJson += "],\"data\":[";
+		for ( size_t iRow=0; iRow<dRows.size(); ++iRow )
+		{
+			if ( iRow ) sJson += ',';
+			sJson += '{';
+			for ( size_t iCol=0; iCol<dColumns.size(); ++iCol )
+			{
+				if ( iCol ) sJson += ',';
+				sJson += "\"" + EscapeJsonString(dColumns[iCol].m_sName) + "\":\"" + EscapeJsonString(dRows[iRow][iCol]) + "\"";
+			}
+			sJson += '}';
+		}
+		sJson += "],";
+	}
+	sJson += "\"total\":" + std::to_string ( dColumns.empty() ? uAffected : dRows.size() ) + ",\"error\":\"\",\"warning\":\"\"}]";
+	return sJson;
+}
+
+QueryResult_e ExecuteMysqlStatement ( int iSocket, const std::string & sStatement, std::string & sBody, CSphString & sError )
+{
+	std::vector<BYTE> dQuery { 3 }; // COM_QUERY
+	dQuery.insert ( dQuery.end(), sStatement.begin(), sStatement.end() );
+	if ( !SendMysqlPacket(iSocket,0,dQuery,sError) )
+		return QueryResult_e::CONNECTION_ERROR;
+
+	MysqlPacket_t tPacket;
+	if ( !ReadMysqlPacket(iSocket,tPacket,sError) )
+		return QueryResult_e::CONNECTION_ERROR;
+	if ( tPacket.m_dBody.empty() )
+	{
+		sError = "empty response from Manticore MySQL listener";
+		return QueryResult_e::SQL_ERROR;
+	}
+	if ( tPacket.m_dBody[0]==0xff )
+	{
+		sError = MysqlErrorText ( tPacket.m_dBody ).c_str();
+		return QueryResult_e::SQL_ERROR;
+	}
+	if ( tPacket.m_dBody[0]==0x00 )
+	{
+		size_t iPos = 1;
+		uint64_t uAffected = 0;
+		bool bNull = false;
+		if ( !ReadLengthEncodedInteger(tPacket.m_dBody,iPos,uAffected,bNull) )
+		{
+			sError = "invalid OK packet from Manticore MySQL listener";
+			return QueryResult_e::SQL_ERROR;
+		}
+		sBody = BuildMysqlJsonResult ( {}, {}, uAffected );
+		return QueryResult_e::OK;
+	}
+
+	size_t iPos = 0;
+	uint64_t uColumnCount = 0;
+	bool bNull = false;
+	if ( !ReadLengthEncodedInteger(tPacket.m_dBody,iPos,uColumnCount,bNull) || bNull || uColumnCount>4096 )
+	{
+		sError = "invalid column count from Manticore MySQL listener";
+		return QueryResult_e::SQL_ERROR;
+	}
+	std::vector<LocalColumn_t> dColumns ( (size_t)uColumnCount );
+	for ( LocalColumn_t & tColumn : dColumns )
+	{
+		if ( !ReadMysqlPacket(iSocket,tPacket,sError) ) return QueryResult_e::CONNECTION_ERROR;
+		if ( !ParseMysqlColumn(tPacket.m_dBody,tColumn) )
+		{
+			sError = "invalid column metadata from Manticore MySQL listener";
+			return QueryResult_e::SQL_ERROR;
+		}
+	}
+	if ( !ReadMysqlPacket(iSocket,tPacket,sError) ) return QueryResult_e::CONNECTION_ERROR;
+	if ( tPacket.m_dBody.empty() || tPacket.m_dBody[0]!=0xfe || tPacket.m_dBody.size()>=9 )
+	{
+		sError = "missing column terminator from Manticore MySQL listener";
+		return QueryResult_e::SQL_ERROR;
+	}
+
+	std::vector<std::vector<std::string>> dRows;
+	while ( true )
+	{
+		if ( !ReadMysqlPacket(iSocket,tPacket,sError) ) return QueryResult_e::CONNECTION_ERROR;
+		if ( !tPacket.m_dBody.empty() && tPacket.m_dBody[0]==0xfe && tPacket.m_dBody.size()<9 )
+			break;
+		if ( !tPacket.m_dBody.empty() && tPacket.m_dBody[0]==0xff )
+		{
+			sError = MysqlErrorText ( tPacket.m_dBody ).c_str();
+			return QueryResult_e::SQL_ERROR;
+		}
+		std::vector<std::string> dRow;
+		dRow.reserve ( dColumns.size() );
+		size_t iRowPos = 0;
+		for ( size_t i=0; i<dColumns.size(); ++i )
+		{
+			std::string sValue;
+			if ( !ReadLengthEncodedString(tPacket.m_dBody,iRowPos,sValue,bNull) )
+			{
+				sError = "invalid row from Manticore MySQL listener";
+				return QueryResult_e::SQL_ERROR;
+			}
+			dRow.push_back ( std::move(sValue) );
+		}
+		dRows.push_back ( std::move(dRow) );
+	}
+	sBody = BuildMysqlJsonResult ( dColumns, dRows, 0 );
+	return QueryResult_e::OK;
+}
+
 bool FetchCompletionColumn ( const std::string & sStatement, std::vector<std::string> & dValues, const SqlEndpoint_t & tEndpoint )
 {
 	CSphString sError;
@@ -905,6 +1246,11 @@ CompletionProvider_fn CreateCompletionProvider ( SqlEndpoint_t tEndpoint )
 
 		std::vector<std::string> dWords ( std::begin(dKeywords), std::end(dKeywords) );
 #if !_WIN32
+		if ( tEndpoint.m_bMysql )
+		{
+			*pCachedWords = std::move(dWords);
+			return *pCachedWords;
+		}
 		std::vector<std::string> dTables;
 		if ( FetchCompletionColumn ( "SHOW TABLES", dTables, tEndpoint ) )
 		{
@@ -951,23 +1297,36 @@ QueryResult_e ExecuteSqlBatch ( int & iSocket, const char * szQuery, bool bPrint
 		}
 
 		int64_t iStartedUS = sphMicroTimer();
-		std::string sRequest = "POST /sql?mode=raw HTTP/1.1\r\nHost: localhost\r\nContent-Type: text/plain\r\nConnection: keep-alive\r\nContent-Length: ";
-		sRequest += std::to_string ( sStatement.size() );
-		sRequest += "\r\n\r\n";
-		sRequest += sStatement;
-		if ( !SendAll ( iSocket, sRequest.data(), sRequest.size(), sQueryError ) )
-			return ConnectionError();
-
-		int iStatus = 0;
 		std::string sBody;
-		if ( !ReadHttpResponse ( iSocket, iStatus, sBody, sQueryError ) )
-			return ConnectionError();
-
-		if ( iStatus<200 || iStatus>=300 )
+		if ( tEndpoint.m_bMysql )
 		{
-			ParseHttpError ( sBody, sQueryError );
-			fprintf ( stderr, "ERROR %d: %s\n", iStatus, sQueryError.cstr() );
-			return QueryResult_e::SQL_ERROR;
+			QueryResult_e eMysql = ExecuteMysqlStatement ( iSocket, sStatement, sBody, sQueryError );
+			if ( eMysql==QueryResult_e::CONNECTION_ERROR ) return ConnectionError();
+			if ( eMysql==QueryResult_e::SQL_ERROR )
+			{
+				fprintf ( stderr, "ERROR: %s\n", sQueryError.cstr() );
+				return eMysql;
+			}
+		}
+		else
+		{
+			std::string sRequest = "POST /sql?mode=raw HTTP/1.1\r\nHost: localhost\r\nContent-Type: text/plain\r\nConnection: keep-alive\r\nContent-Length: ";
+			sRequest += std::to_string ( sStatement.size() );
+			sRequest += "\r\n\r\n";
+			sRequest += sStatement;
+			if ( !SendAll ( iSocket, sRequest.data(), sRequest.size(), sQueryError ) )
+				return ConnectionError();
+
+			int iStatus = 0;
+			if ( !ReadHttpResponse ( iSocket, iStatus, sBody, sQueryError ) )
+				return ConnectionError();
+
+			if ( iStatus<200 || iStatus>=300 )
+			{
+				ParseHttpError ( sBody, sQueryError );
+				fprintf ( stderr, "ERROR %d: %s\n", iStatus, sQueryError.cstr() );
+				return QueryResult_e::SQL_ERROR;
+			}
 		}
 
 		if ( !PrintSqlResponse ( sBody, sQueryError, bAligned, sphMicroTimer()-iStartedUS, ReportsAffectedRows(sStatement), tStatement.m_bVertical ) )

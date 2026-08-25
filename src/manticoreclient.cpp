@@ -22,6 +22,7 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <netdb.h>
 #include <strings.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -131,6 +132,29 @@ bool ResolveConfiguredEndpoint ( const char * szConfigFile, localmode::SqlEndpoi
 	return true;
 }
 
+bool ResolveRemoteEndpoint ( const char * szHost, int iPort, localmode::SqlEndpoint_t & tEndpoint, CSphString & sError )
+{
+	const char * szEffectiveHost = szHost && *szHost ? szHost : "127.0.0.1";
+	addrinfo tHints {};
+	tHints.ai_family = AF_INET;
+	tHints.ai_socktype = SOCK_STREAM;
+	addrinfo * pAddresses = nullptr;
+	int iResult = getaddrinfo ( szEffectiveHost, nullptr, &tHints, &pAddresses );
+	if ( iResult || !pAddresses )
+	{
+		sError.SetSprintf ( "cannot resolve Manticore host '%s': %s", szEffectiveHost, gai_strerror(iResult) );
+		return false;
+	}
+	AT_SCOPE_EXIT ( [&] { freeaddrinfo(pAddresses); } );
+
+	const auto * pAddress = (const sockaddr_in*)pAddresses->ai_addr;
+	tEndpoint.m_uIP = pAddress->sin_addr.s_addr;
+	tEndpoint.m_iPort = iPort;
+	tEndpoint.m_bMysql = true;
+	tEndpoint.m_sDescription.SetSprintf ( "%s:%d", szEffectiveHost, iPort );
+	return true;
+}
+
 bool ValidateLocalDaemonOwnership ( int & iPid, CSphString & sError )
 {
 	CSphString sPidPath = LocalPath ( LOCAL_PID );
@@ -153,14 +177,17 @@ bool ValidateLocalDaemonOwnership ( int & iPid, CSphString & sError )
 #endif
 }
 
-int ExecuteManticoreSql ( const char * szSql, ManticoreClientTarget_e eTarget, const char * szConfigFile )
+int ExecuteManticoreSql ( const char * szSql, ManticoreClientTarget_e eTarget, const char * szConfigFile, const char * szHost, int iPort )
 {
 #if _WIN32
+	(void)szHost;
+	(void)iPort;
 	fprintf ( stderr, "manticore: client mode is not supported on Windows\n" );
 	return 1;
 #else
 	bool bLocal = eTarget==ManticoreClientTarget_e::LOCAL;
-	if ( eTarget!=ManticoreClientTarget_e::GLOBAL )
+	bool bRemote = eTarget==ManticoreClientTarget_e::REMOTE;
+	if ( eTarget==ManticoreClientTarget_e::AUTO || eTarget==ManticoreClientTarget_e::LOCAL )
 	{
 		CSphString sCwd = sphGetCwd();
 		if ( sCwd.IsEmpty() )
@@ -199,7 +226,15 @@ int ExecuteManticoreSql ( const char * szSql, ManticoreClientTarget_e eTarget, c
 	localmode::SqlEndpoint_t tEndpoint;
 	CSphString sError;
 	int iOwnedPid = 0;
-	if ( bLocal )
+	if ( bRemote )
+	{
+		if ( !ResolveRemoteEndpoint(szHost,iPort,tEndpoint,sError) )
+		{
+			fprintf ( stderr, "manticore: %s\n", sError.cstr() );
+			return 1;
+		}
+	}
+	else if ( bLocal )
 	{
 		tEndpoint.m_sUnix.SetSprintf ( "%s/%s", LOCAL_DATA_DIR, LOCAL_SOCKET );
 		tEndpoint.m_sDescription = tEndpoint.m_sUnix;

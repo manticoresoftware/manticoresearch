@@ -155,6 +155,14 @@ configured_http_execute=$(cd "$local_dir" && "$MANTICORE" -c "$configured_http_c
 printf '%s' "$configured_http_execute" | grep -q $'configured_http_execute\n911' || fail 'manticore -c -e omitted its configured HTTP result row'
 pass 'manticore -c/--config -e uses configured binary and HTTP listeners'
 
+remote_execute=$(cd "$local_dir" && "$MANTICORE" -h 127.0.0.1 -P "$configured_mysql_port" -e 'SELECT 912 AS remote_execute') \
+  || fail 'manticore -h/-P did not connect to the explicit MySQL listener'
+[ "$remote_execute" = $'remote_execute\n912' ] || fail 'explicit MySQL listener output is not exact TSV'
+remote_long_execute=$(cd "$local_dir" && "$MANTICORE" --host 127.0.0.1 --port "$configured_mysql_port" -e 'SELECT value FROM configured_route_probe WHERE id=1') \
+  || fail 'manticore --host/--port did not connect to the explicit MySQL listener'
+[ "$remote_long_execute" = $'value\n818181' ] || fail 'explicit MySQL listener reached the wrong instance'
+pass 'manticore -h/--host and -P/--port connect directly through MySQL protocol'
+
 # The CLT container has a packaged default config but no default daemon. Point
 # that config at the test-owned daemon so normal discovery is deterministic.
 if [ -e /.dockerenv ]; then
@@ -991,6 +999,7 @@ SEARCHD_BIN="${SEARCHD_BIN:-searchd}" MANTICORE_BIN="${MANTICORE_BIN:-manticore}
 ––– output –––
 ok - --config preserves configured mode
 ok - manticore -c/--config -e uses configured binary and HTTP listeners
+ok - manticore -h/--host and -P/--port connect directly through MySQL protocol
 ok - manticore uses the normally discovered config when no local instance exists
 ok - systemd selection is authoritative and never falls back after failure
 ok - systemd capability checks reject unreachable managers and absent units

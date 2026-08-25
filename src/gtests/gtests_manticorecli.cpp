@@ -102,14 +102,48 @@ TEST ( manticore_cli, parses_client_target_overrides )
 	ASSERT_TRUE ( tConfig.m_bOk ) << tConfig.m_sError;
 	EXPECT_EQ ( tConfig.m_tOptions.m_eTarget, manticorecli::Target_e::GLOBAL );
 	EXPECT_EQ ( tConfig.m_tOptions.m_sConfig, "/tmp/manticore.conf" );
+
+	auto tRemote = Parse ( { "-h", "search.example.com", "-P", "9306", "-e", "SELECT 1" } );
+	ASSERT_TRUE ( tRemote.m_bOk ) << tRemote.m_sError;
+	EXPECT_EQ ( tRemote.m_tOptions.m_eTarget, manticorecli::Target_e::REMOTE );
+	EXPECT_EQ ( tRemote.m_tOptions.m_sHost, "search.example.com" );
+	EXPECT_EQ ( tRemote.m_tOptions.m_iPort, 9306 );
+
+	auto tHostOnly = Parse ( { "--host", "db.internal" } );
+	ASSERT_TRUE ( tHostOnly.m_bOk ) << tHostOnly.m_sError;
+	EXPECT_EQ ( tHostOnly.m_tOptions.m_eTarget, manticorecli::Target_e::REMOTE );
+	EXPECT_EQ ( tHostOnly.m_tOptions.m_sHost, "db.internal" );
+	EXPECT_EQ ( tHostOnly.m_tOptions.m_iPort, 9306 );
+
+	auto tPortOnly = Parse ( { "--port", "19306" } );
+	ASSERT_TRUE ( tPortOnly.m_bOk ) << tPortOnly.m_sError;
+	EXPECT_EQ ( tPortOnly.m_tOptions.m_eTarget, manticorecli::Target_e::REMOTE );
+	EXPECT_EQ ( tPortOnly.m_tOptions.m_sHost, "127.0.0.1" );
+	EXPECT_EQ ( tPortOnly.m_tOptions.m_iPort, 19306 );
 }
 
 TEST ( manticore_cli, rejects_conflicting_client_targets_and_missing_values )
 {
 	EXPECT_FALSE ( Parse ( { "--local", "--global" } ).m_bOk );
 	EXPECT_FALSE ( Parse ( { "--local", "--config", "/tmp/manticore.conf" } ).m_bOk );
+	EXPECT_FALSE ( Parse ( { "--local", "--host", "127.0.0.1" } ).m_bOk );
+	EXPECT_FALSE ( Parse ( { "--config", "/tmp/manticore.conf", "--port", "9306" } ).m_bOk );
+	EXPECT_FALSE ( Parse ( { "--host" } ).m_bOk );
+	EXPECT_FALSE ( Parse ( { "--host", "" } ).m_bOk );
+	EXPECT_FALSE ( Parse ( { "--port" } ).m_bOk );
+	EXPECT_FALSE ( Parse ( { "--port", "0" } ).m_bOk );
+	EXPECT_FALSE ( Parse ( { "--port", "65536" } ).m_bOk );
+	EXPECT_FALSE ( Parse ( { "--port", "9306x" } ).m_bOk );
 	EXPECT_FALSE ( Parse ( { "-e" } ).m_bOk );
 	EXPECT_FALSE ( Parse ( { "--config" } ).m_bOk );
+}
+
+TEST ( manticore_cli, help_uses_question_mark_after_h_becomes_host )
+{
+	auto tHelp = Parse ( { "-?" } );
+	ASSERT_TRUE ( tHelp.m_bOk ) << tHelp.m_sError;
+	EXPECT_EQ ( tHelp.m_tOptions.m_eCommand, manticorecli::Command_e::HELP );
+	EXPECT_FALSE ( Parse ( { "-h" } ).m_bOk );
 }
 
 TEST ( manticore_cli, parses_lifecycle_targets )

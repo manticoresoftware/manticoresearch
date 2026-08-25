@@ -736,7 +736,7 @@ bool SystemdInactive ( const std::string & sSystemctl, int64_t iDeadlineUS=0 )
 
 ManticoreClientTarget_e ClientTarget ( Target_e eTarget )
 {
-	return eTarget==Target_e::LOCAL ? ManticoreClientTarget_e::LOCAL : eTarget==Target_e::GLOBAL ? ManticoreClientTarget_e::GLOBAL : ManticoreClientTarget_e::AUTO;
+	return eTarget==Target_e::LOCAL ? ManticoreClientTarget_e::LOCAL : eTarget==Target_e::GLOBAL ? ManticoreClientTarget_e::GLOBAL : eTarget==Target_e::REMOTE ? ManticoreClientTarget_e::REMOTE : ManticoreClientTarget_e::AUTO;
 }
 
 bool ValidateLocalMarker ( Marker_e eMarker, Command_e eCommand, Target_e eRequested, const std::string & sMarkerError )
@@ -877,7 +877,7 @@ ParseResult_t ParseArgs ( int iArgc, const char * const * dArgv )
 		return tResult;
 	}
 
-	if ( strcmp ( szFirst, "-h" )==0 || strcmp ( szFirst, "--help" )==0 )
+	if ( strcmp ( szFirst, "-?" )==0 || strcmp ( szFirst, "--help" )==0 )
 	{
 		if ( iArgc!=2 ) return Error ( "--help cannot be combined with other arguments" );
 		tOptions.m_eCommand = Command_e::HELP;
@@ -910,6 +910,27 @@ ParseResult_t ParseArgs ( int iArgc, const char * const * dArgv )
 			tOptions.m_eTarget = Target_e::GLOBAL;
 			tOptions.m_sConfig = dArgv[i];
 			if ( tOptions.m_sConfig.empty() ) return Error ( "--config requires a non-empty file" );
+		}
+		else if ( IsOption ( szArg, "-h", "--host" ) )
+		{
+			if ( bTargetSelected && tOptions.m_eTarget!=Target_e::REMOTE ) return Error ( "--host/--port cannot be combined with --local, --global, or --config" );
+			if ( ++i>=iArgc ) return Error ( "--host requires a host name or address" );
+			bTargetSelected = true;
+			tOptions.m_eTarget = Target_e::REMOTE;
+			tOptions.m_sHost = dArgv[i];
+			if ( tOptions.m_sHost.empty() ) return Error ( "--host requires a non-empty host name or address" );
+		}
+		else if ( IsOption ( szArg, "-P", "--port" ) )
+		{
+			if ( bTargetSelected && tOptions.m_eTarget!=Target_e::REMOTE ) return Error ( "--host/--port cannot be combined with --local, --global, or --config" );
+			if ( ++i>=iArgc ) return Error ( "--port requires a port number" );
+			char * pEnd = nullptr;
+			errno = 0;
+			long iPort = strtol ( dArgv[i], &pEnd, 10 );
+			if ( errno || !pEnd || *pEnd || iPort<1 || iPort>65535 ) return Error ( "--port must be an integer from 1 to 65535" );
+			bTargetSelected = true;
+			tOptions.m_eTarget = Target_e::REMOTE;
+			tOptions.m_iPort = (int)iPort;
 		}
 		else if ( IsOption ( szArg, "-e", "--execute" ) )
 		{
@@ -970,10 +991,12 @@ void ShowHelp()
 		"  manticore status [local|global]\n\n"
 		"Client options:\n"
 		"  -c, --config FILE  ignore ./manticore_data and use FILE\n"
+		"  -h, --host HOST    connect directly to a MySQL listener (default 127.0.0.1)\n"
+		"  -P, --port PORT    direct MySQL listener port (default 9306)\n"
 		"  -e, --execute SQL  execute SQL once and exit\n"
 		"      --local        require the current-directory local instance\n"
 		"      --global       ignore ./manticore_data and use normal config discovery\n"
-		"  -h, --help         show this help\n"
+		"  -?, --help         show this help\n"
 		"  -v, --version      show the Manticore Search version\n\n"
 		"Without an explicit target, manticore uses ./manticore_data when present\n"
 		"and the globally configured instance otherwise. 'manticore stop' always waits.\n",
@@ -1015,7 +1038,7 @@ int Run ( const Options_t & tOptions, const char * szArgv0 )
 		sphInitCJson();
 		const char * szQuery = tOptions.m_bExecute ? tOptions.m_sQuery.c_str() : nullptr;
 		const char * szConfig = tOptions.m_sConfig.empty() ? nullptr : tOptions.m_sConfig.c_str();
-		return ExecuteManticoreSql ( szQuery, ClientTarget(eTarget), szConfig );
+		return ExecuteManticoreSql ( szQuery, ClientTarget(eTarget), szConfig, tOptions.m_sHost.c_str(), tOptions.m_iPort );
 	}
 
 	if ( eTarget==Target_e::LOCAL && !ValidateLocalMarker ( eMarker, tOptions.m_eCommand, tOptions.m_eTarget, sMarkerError ) )

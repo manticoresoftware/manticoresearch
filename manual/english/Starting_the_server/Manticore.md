@@ -49,14 +49,29 @@ When output is redirected, query results use a tab-separated format suitable for
 
 ### Client options
 
+- `-h HOST`, `--host HOST` connects directly to a MySQL-protocol listener. If only the host is specified, the port defaults to `9306`.
+- `-P PORT`, `--port PORT` sets the direct MySQL listener port. If only the port is specified, the host defaults to `127.0.0.1`.
 - `-e SQL`, `--execute SQL` executes SQL once and exits.
 - `-c FILE`, `--config FILE` ignores `./manticore_data` and uses exactly the specified configuration file.
 - `--local` requires the current-directory local instance.
 - `--global` ignores `./manticore_data` and uses normal configuration discovery.
-- `-h`, `--help` displays command help.
+- `-?`, `--help` displays command help.
 - `-v`, `--version` displays the matching Manticore Search version.
 
-`--local`, `--global`, and `--config` are mutually exclusive.
+Direct `--host`/`--port` selection is mutually exclusive with `--local`, `--global`, and `--config`.
+
+### Connecting directly to a host and port
+
+Use `-h`/`--host` and `-P`/`--port` to connect directly to a Manticore Search MySQL listener without reading local or global server configuration:
+
+```bash
+manticore -h search.example.com -P 9306
+manticore -h search.example.com -P 9306 -e 'SHOW TABLES'
+```
+
+`--host` without `--port` uses port `9306`. `--port` without `--host` uses `127.0.0.1`.
+
+Direct connections currently support the standard anonymous Manticore Search MySQL listener. Username/password authentication and TLS options are not yet supported. Use a trusted network, SSH tunnel, or another client when authentication or TLS is required.
 
 ### Automatic target selection
 

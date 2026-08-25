@@ -4,7 +4,7 @@
 .\"    Source: Manticore Search
 .\"  Language: English
 .\"
-.TH "MANTICORE" "1" "August 9, 2026" "Manticore Search" ""
+.TH "MANTICORE" "1" "August 25, 2026" "Manticore Search" ""
 .SH "NAME"
 manticore \- Manticore Search SQL client and lifecycle manager
 .SH "SYNOPSIS"
@@ -30,6 +30,14 @@ to the configured instance.
 \fB\-c\fR, \fB\-\-config\fR \fIFILE\fR
 Ignore \fB./manticore_data\fR and use exactly this configuration file.
 .TP
+\fB\-h\fR, \fB\-\-host\fR \fIHOST\fR
+Connect directly to a MySQL-protocol listener on HOST. The default host is
+\fB127.0.0.1\fR when only \fB--port\fR is specified.
+.TP
+\fB\-P\fR, \fB\-\-port\fR \fIPORT\fR
+Use PORT for a direct MySQL-protocol connection. The default port is
+\fB9306\fR when only \fB--host\fR is specified.
+.TP
 \fB\-e\fR, \fB\-\-execute\fR \fISQL\fR
 Execute SQL once and exit. Without this option, the client reads interactively
 or from standard input.
@@ -41,13 +49,15 @@ configuration.
 \fB\-\-global\fR
 Ignore \fB./manticore_data\fR and use normal configuration discovery.
 .TP
-\fB\-h\fR, \fB\-\-help\fR
+\fB\-?\fR, \fB\-\-help\fR
 Show command help.
 .TP
 \fB\-v\fR, \fB\-\-version\fR
 Show the matching Manticore Search build version.
 .PP
-\fB\-\-local\fR, \fB\-\-global\fR, and \fB\-\-config\fR are mutually exclusive.
+Direct \fB--host/--port\fR selection is mutually exclusive with
+\fB--local\fR, \fB--global\fR, and \fB--config\fR. Direct connections
+currently use anonymous MySQL-protocol authentication without TLS.
 .SH "LIFECYCLE COMMANDS"
 .TP
 \fBstart\fR [\fBlocal\fR|\fBglobal\fR]
@@ -84,6 +94,16 @@ Query the configured instance while inside a local project directory:
 .RS
 .nf
 $ manticore --global -e 'SHOW TABLES'
+.fi
+.RE
+
+.PP
+Connect directly to a Manticore Search MySQL listener:
+.PP
+.RS
+.nf
+$ manticore -h search.example.com -P 9306
+$ manticore -h search.example.com -P 9306 -e 'SHOW TABLES'
 .fi
 .RE
 .PP

@@ -30,8 +30,12 @@ manticore
 ```
 
 ```text
-manticore> SELECT 1;
+manticore> SELECT
+       ->   1 AS value
+       -> ;
 ```
+
+The interactive client accumulates lines until `;` or `\G`. Pressing Ctrl-C clears the statement currently being entered without closing the client. A completed multiline statement is stored as one history entry.
 
 Use `-e` or `--execute` to execute SQL once and exit:
 
@@ -39,11 +43,15 @@ Use `-e` or `--execute` to execute SQL once and exit:
 manticore -e 'SHOW TABLES'
 ```
 
-You can also pipe SQL to the client:
+You can also pipe SQL or read an SQL file through standard input:
 
 ```bash
 printf 'SHOW TABLES;\n' | manticore
+cat queries.sql | manticore
+manticore < queries.sql
 ```
+
+Piped and redirected input use the same quote- and comment-aware multiline parser as the interactive client. Statements are terminated by `;` or `\G`; a final statement without a delimiter is executed at end of file for compatibility. An unclosed quote or block comment at end of file is reported as an error and is not executed.
 
 When output is redirected, query results use a tab-separated format suitable for scripts.
 

@@ -59,6 +59,85 @@ struct LocalStatement_t
 	bool m_bUnterminatedBlockComment = false;
 };
 
+SqlInputState_e InspectSqlInput ( const char * szSql )
+{
+	enum class State_e { NORMAL, QUOTE, LINE_COMMENT, BLOCK_COMMENT };
+	State_e eState = State_e::NORMAL;
+	char cQuote = 0;
+	bool bPending = false;
+	bool bCompleted = false;
+	const size_t iLength = szSql ? strlen ( szSql ) : 0;
+	for ( size_t i=0; i<iLength; ++i )
+	{
+		char c = szSql[i];
+		if ( eState==State_e::QUOTE )
+		{
+			if ( c=='\\' && i+1<iLength )
+				++i;
+			else if ( c==cQuote )
+			{
+				if ( i+1<iLength && szSql[i+1]==cQuote )
+					++i;
+				else
+					eState = State_e::NORMAL;
+			}
+			continue;
+		}
+		if ( eState==State_e::LINE_COMMENT )
+		{
+			if ( c=='\n' || c=='\r' )
+				eState = State_e::NORMAL;
+			continue;
+		}
+		if ( eState==State_e::BLOCK_COMMENT )
+		{
+			if ( c=='*' && i+1<iLength && szSql[i+1]=='/' )
+			{
+				++i;
+				eState = State_e::NORMAL;
+			}
+			continue;
+		}
+
+		if ( c=='\'' || c=='"' || c=='`' )
+		{
+			bPending = true;
+			cQuote = c;
+			eState = State_e::QUOTE;
+		}
+		else if ( c=='#' )
+			eState = State_e::LINE_COMMENT;
+		else if ( c=='-' && i+1<iLength && szSql[i+1]=='-' && ( i+2==iLength || isspace ( (unsigned char)szSql[i+2] ) ) )
+		{
+			++i;
+			eState = State_e::LINE_COMMENT;
+		}
+		else if ( c=='/' && i+1<iLength && szSql[i+1]=='*' )
+		{
+			++i;
+			eState = State_e::BLOCK_COMMENT;
+		}
+		else if ( c==';' || ( c=='\\' && i+1<iLength && szSql[i+1]=='G' ) )
+		{
+			if ( c=='\\' )
+				++i;
+			if ( bPending )
+				bCompleted = true;
+			bPending = false;
+		}
+		else if ( !isspace ( (unsigned char)c ) )
+			bPending = true;
+	}
+
+	if ( eState==State_e::QUOTE )
+		return SqlInputState_e::UNTERMINATED_QUOTE;
+	if ( eState==State_e::BLOCK_COMMENT )
+		return SqlInputState_e::UNTERMINATED_BLOCK_COMMENT;
+	if ( bPending )
+		return SqlInputState_e::PENDING;
+	return bCompleted ? SqlInputState_e::COMPLETE : SqlInputState_e::EMPTY;
+}
+
 std::vector<LocalStatement_t> SplitSqlBatch ( const char * szSql )
 {
 	enum class State_e { NORMAL, QUOTE, LINE_COMMENT, BLOCK_COMMENT };

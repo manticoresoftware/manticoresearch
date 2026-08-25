@@ -569,8 +569,9 @@ public:
 	bool IsActive() const { return m_fnReadline && m_fnAddHistory && m_fnClearHistory && m_fnStifleHistory && g_fnFreeLineState && g_fnCleanupAfterSignal && g_fnInitialize && g_pLineEnd && g_pLinePoint && g_ppLineBuffer; }
 	const CSphString & GetWarning() const { return m_sWarning; }
 
-	bool Read ( std::string & sLine ) override
+	bool Read ( std::string & sLine, const char * szPrompt, bool & bInterrupted ) override
 	{
+		bInterrupted = false;
 		while ( true )
 		{
 			// Metadata requests own sockets and C++ scope guards; never run them from
@@ -602,10 +603,12 @@ public:
 				g_fnInitialize();
 				ReplayHistory();
 				InstallCompletion();
-				continue;
+				bInterrupted = true;
+				sLine.clear();
+				return true;
 			}
 			g_bLineEditorCanJump = 1;
-			char * szLine = m_fnReadline ( "manticore> " );
+			char * szLine = m_fnReadline ( szPrompt );
 			g_bLineEditorCanJump = 0;
 			tSavedSignals.Restore();
 			if ( !szLine )

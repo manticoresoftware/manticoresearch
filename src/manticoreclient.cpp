@@ -298,48 +298,35 @@ int ExecuteManticoreSql ( const char * szSql, ManticoreClientTarget_e eTarget, c
 			fprintf ( stderr, "Warning: interactive history is unavailable; using basic input\n" );
 	}
 	int iResult = 0;
-	while ( true )
+	std::string sPending;
+	auto ReportIncompleteInput = [&] ( localmode::SqlInputState_e eState )
 	{
-		std::string sLine;
-		if ( pEditor )
-		{
-			if ( !pEditor->Read ( sLine ) )
-				break;
-		}
+		if ( eState==localmode::SqlInputState_e::UNTERMINATED_BLOCK_COMMENT )
+			fputs ( "ERROR: unterminated block comment\n", stderr );
 		else
-		{
-			if ( bShowPrompt )
-			{
-				fputs ( "manticore> ", stdout );
-				fflush ( stdout );
-			}
-			if ( !std::getline ( std::cin, sLine ) )
-				break;
-		}
-		sLine = localmode::TrimInput ( sLine );
-		if ( sLine.empty() )
-			continue;
-
-		std::string sCommand = sLine;
-		while ( !sCommand.empty() && sCommand.back()==';' )
-		{
-			sCommand.pop_back();
-			sCommand = localmode::TrimInput ( sCommand );
-		}
-		if ( sCommand.empty() )
-			continue;
-		if ( strcasecmp ( sCommand.c_str(), "exit" )==0 || strcasecmp ( sCommand.c_str(), "quit" )==0 )
-			break;
+			fputs ( "ERROR: unterminated quoted string\n", stderr );
+		iResult = 1;
+	};
+	auto ExecutePending = [&] ()
+	{
+		std::string sSql = localmode::TrimInput ( sPending );
+		sPending.clear();
+		if ( sSql.empty() )
+			return true;
 		if ( pEditor )
 		{
+			std::string sHistory = sSql;
+			for ( char & c : sHistory )
+				if ( c=='\n' || c=='\r' )
+					c = ' ';
 			CSphString sHistoryError;
-			if ( !pEditor->AddHistory ( sLine, sHistoryError ) )
+			if ( !pEditor->AddHistory(sHistory,sHistoryError) )
 				fprintf ( stderr, "Warning: %s\n", sHistoryError.cstr() );
 		}
 
-		localmode::QueryResult_e eResult = localmode::ExecuteSqlBatch ( iSocket, sLine.c_str(), false, bShowPrompt, tEndpoint );
+		localmode::QueryResult_e eResult = localmode::ExecuteSqlBatch ( iSocket, sSql.c_str(), false, bShowPrompt, tEndpoint );
 		if ( pEditor )
-			pEditor->RefreshCompletions ( sLine, eResult==localmode::QueryResult_e::OK );
+			pEditor->RefreshCompletions ( sSql, eResult==localmode::QueryResult_e::OK );
 		if ( eResult!=localmode::QueryResult_e::OK )
 			iResult = 1;
 		if ( eResult==localmode::QueryResult_e::SQL_ERROR )
@@ -349,10 +336,70 @@ int ExecuteManticoreSql ( const char * szSql, ManticoreClientTarget_e eTarget, c
 			if ( iSocket<0 )
 			{
 				fprintf ( stderr, "manticore: %s\n", sError.cstr() );
-				break;
+				return false;
 			}
 		}
-		else if ( eResult==localmode::QueryResult_e::CONNECTION_ERROR )
+		return eResult!=localmode::QueryResult_e::CONNECTION_ERROR;
+	};
+
+	while ( true )
+	{
+		std::string sLine;
+		bool bInterrupted = false;
+		bool bRead = false;
+		if ( pEditor )
+			bRead = pEditor->Read ( sLine, sPending.empty() ? "manticore> " : "       -> ", bInterrupted );
+		else
+		{
+			if ( bShowPrompt )
+			{
+				fputs ( sPending.empty() ? "manticore> " : "       -> ", stdout );
+				fflush ( stdout );
+			}
+			bRead = (bool)std::getline ( std::cin, sLine );
+		}
+
+		if ( bInterrupted )
+		{
+			sPending.clear();
+			continue;
+		}
+		if ( !bRead )
+		{
+			if ( sPending.empty() )
+				break;
+			localmode::SqlInputState_e eState = localmode::InspectSqlInput ( sPending.c_str() );
+			if ( eState==localmode::SqlInputState_e::UNTERMINATED_QUOTE || eState==localmode::SqlInputState_e::UNTERMINATED_BLOCK_COMMENT )
+				ReportIncompleteInput ( eState );
+			else
+				ExecutePending(); // EOF terminates a final un-delimited statement for compatibility.
+			break;
+		}
+
+		if ( sPending.empty() )
+		{
+			std::string sCommand = localmode::TrimInput ( sLine );
+			while ( !sCommand.empty() && sCommand.back()==';' )
+			{
+				sCommand.pop_back();
+				sCommand = localmode::TrimInput ( sCommand );
+			}
+			if ( strcasecmp ( sCommand.c_str(), "exit" )==0 || strcasecmp ( sCommand.c_str(), "quit" )==0 )
+				break;
+		}
+
+		if ( !sPending.empty() )
+			sPending.push_back ( '\n' );
+		sPending += sLine;
+		localmode::SqlInputState_e eState = localmode::InspectSqlInput ( sPending.c_str() );
+		if ( eState==localmode::SqlInputState_e::EMPTY )
+		{
+			sPending.clear();
+			continue;
+		}
+		if ( eState!=localmode::SqlInputState_e::COMPLETE )
+			continue;
+		if ( !ExecutePending() )
 			break;
 	}
 

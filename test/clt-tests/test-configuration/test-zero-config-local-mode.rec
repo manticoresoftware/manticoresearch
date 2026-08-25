@@ -836,6 +836,40 @@ eof_result=$(cd "$local_dir" && printf 'SELECT 302 AS eof_query;\n' | "$MANTICOR
 printf '%s' "$eof_result" | grep -q $'eof_query\n302' || fail 'interactive EOF mode omitted its result'
 pass 'manticore supports interactive exit, EOF, and persistent session state'
 
+
+multiline=$(cd "$local_dir" && printf 'SELECT\n  401 AS multiline_value\n;\nexit\n' | "$MANTICORE") || fail 'multiline interactive statement failed'
+printf '%s' "$multiline" | grep -q $'multiline_value\n401' || fail 'multiline interactive statement was not accumulated until its terminator'
+
+cat > "$root/multiline.sql" <<'SQL'
+DROP TABLE IF EXISTS multiline_file_values;
+CREATE TABLE multiline_file_values(value string);
+INSERT INTO multiline_file_values(id,value) VALUES(
+  1,
+  'file;value'
+);
+SELECT
+  value AS file_value
+FROM multiline_file_values
+WHERE id=1
+;
+SELECT
+  402 AS second_value
+\G
+SQL
+file_output=$(cd "$local_dir" && cat "$root/multiline.sql" | "$MANTICORE") || fail 'cat SQL file into manticore failed'
+printf '%s' "$file_output" | grep -q $'file_value\nfile;value' || fail 'piped multiline SQL file lost its quoted semicolon'
+printf '%s' "$file_output" | grep -q $'second_value\n402' || fail 'piped multiline SQL file did not execute its vertical statement'
+redirected_file_output=$(cd "$local_dir" && "$MANTICORE" < "$root/multiline.sql") || fail 'stdin-redirection SQL file failed'
+[ "$redirected_file_output" = "$file_output" ] || fail 'cat file pipe and stdin redirection produced different output'
+set +e
+unfinished_file=$(cd "$local_dir" && printf "SELECT 499 AS must_not_run /* open\n" | "$MANTICORE" 2>&1)
+unfinished_file_rc=$?
+set -e
+[ "$unfinished_file_rc" -ne 0 ] || fail 'unterminated SQL file unexpectedly succeeded'
+printf '%s' "$unfinished_file" | grep -q 'ERROR: unterminated block comment' || fail 'unterminated SQL file error was unclear'
+printf '%s' "$unfinished_file" | grep -q $'must_not_run\n499' && fail 'unterminated SQL file executed its SQL prefix'
+pass 'manticore accumulates multiline SQL and reads SQL files from stdin'
+
 set +e
 interactive_error=$(cd "$local_dir" && printf 'THIS IS INVALID SQL;\nSELECT 303 AS after_error;\nexit\n' | "$MANTICORE" 2>&1)
 interactive_error_rc=$?
@@ -1018,6 +1052,7 @@ ok - interactive completion expands SQL keywords, tables, and columns
 ok - interactive history persists and terminal interrupts clear the draft
 ok - concurrent clients merge bounded plain-text history and preserve invalid files
 ok - manticore supports interactive exit, EOF, and persistent session state
+ok - manticore accumulates multiline SQL and reads SQL files from stdin
 ok - interactive mode reports errors and continues with the next line
 ok - low-level duplicate local startup fails while manticore start is idempotent
 ok - manticore preserves semicolons inside strings

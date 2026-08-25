@@ -6,6 +6,7 @@
 #include "daemon/daemon_ipc.h"
 #include "fileutils.h"
 #include "searchdaemon.h"
+#include "searchdlocalinternal.h"
 
 #include <string>
 #include <vector>
@@ -84,6 +85,23 @@ TEST ( manticore_cli, bare_command_selects_automatic_client )
 	EXPECT_EQ ( tResult.m_tOptions.m_eCommand, manticorecli::Command_e::CLIENT );
 	EXPECT_EQ ( tResult.m_tOptions.m_eTarget, manticorecli::Target_e::AUTO );
 	EXPECT_FALSE ( tResult.m_tOptions.m_bExecute );
+}
+
+TEST ( manticore_cli, recognizes_complete_multiline_sql_input )
+{
+	using localmode::SqlInputState_e;
+	EXPECT_EQ ( localmode::InspectSqlInput("SELECT\n  1"), SqlInputState_e::PENDING );
+	EXPECT_EQ ( localmode::InspectSqlInput("SELECT\n  1;"), SqlInputState_e::COMPLETE );
+	EXPECT_EQ ( localmode::InspectSqlInput("SELECT 'unterminated\n"), SqlInputState_e::UNTERMINATED_QUOTE );
+	EXPECT_EQ ( localmode::InspectSqlInput("SELECT ';' AS value; -- trailing comment\n"), SqlInputState_e::COMPLETE );
+	EXPECT_EQ ( localmode::InspectSqlInput("SELECT 'first\nsecond';"), SqlInputState_e::COMPLETE );
+	EXPECT_EQ ( localmode::InspectSqlInput("SELECT '\\G' AS value"), SqlInputState_e::PENDING );
+	EXPECT_EQ ( localmode::InspectSqlInput("SELECT 1 /* ;\ncomment */;"), SqlInputState_e::COMPLETE );
+	EXPECT_EQ ( localmode::InspectSqlInput("SELECT 1;\nSELECT 2"), SqlInputState_e::PENDING );
+	EXPECT_EQ ( localmode::InspectSqlInput("SELECT 1 /* open"), SqlInputState_e::UNTERMINATED_BLOCK_COMMENT );
+	EXPECT_EQ ( localmode::InspectSqlInput("SELECT 1; /* open"), SqlInputState_e::UNTERMINATED_BLOCK_COMMENT );
+	EXPECT_EQ ( localmode::InspectSqlInput("SELECT\n  1\\G"), SqlInputState_e::COMPLETE );
+	EXPECT_EQ ( localmode::InspectSqlInput(nullptr), SqlInputState_e::EMPTY );
 }
 
 TEST ( manticore_cli, parses_client_target_overrides )

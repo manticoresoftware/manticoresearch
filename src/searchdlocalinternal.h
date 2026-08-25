@@ -14,6 +14,8 @@
 namespace localmode
 {
 std::string TrimInput ( const std::string & sValue );
+enum class SqlInputState_e { EMPTY, PENDING, COMPLETE, UNTERMINATED_QUOTE, UNTERMINATED_BLOCK_COMMENT };
+SqlInputState_e InspectSqlInput ( const char * szSql );
 bool PrintSqlResponse ( const std::string & sBody, CSphString & sError, bool bInteractive, int64_t iElapsedUS=-1, bool bAffectedRows=false, bool bVertical=false );
 using CompletionProvider_fn = std::function<std::vector<std::string> ( const std::string & )>;
 
@@ -38,7 +40,7 @@ class LineEditor_i
 {
 public:
 	virtual ~LineEditor_i() = default;
-	virtual bool Read ( std::string & sLine ) = 0;
+	virtual bool Read ( std::string & sLine, const char * szPrompt, bool & bInterrupted ) = 0;
 	virtual bool AddHistory ( const std::string & sLine, CSphString & sError ) = 0;
 	virtual void RefreshCompletions ( const std::string & sLine, bool bSuccessful ) = 0;
 };

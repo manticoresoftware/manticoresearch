@@ -40,7 +40,9 @@ Use PORT for a direct MySQL-protocol connection. The default port is
 .TP
 \fB\-e\fR, \fB\-\-execute\fR \fISQL\fR
 Execute SQL once and exit. Without this option, the client reads interactively
-or from standard input.
+or from standard input. Interactive input is accumulated until \fB;\fR or
+\fB\eG\fR. SQL read from standard input uses the same multiline parser; a
+final statement without a delimiter is executed at end of file.
 .TP
 \fB\-\-local\fR
 Require the current-directory local instance. Do not consult global

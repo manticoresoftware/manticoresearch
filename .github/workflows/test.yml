@@ -851,6 +851,24 @@ jobs:
       timeout: 15
       MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_release_x86_64
 
+  test_linux_release_non_uber:
+    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_linux_release_tests.result == 'success' && (needs.mcl_runtime_linux_release_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_linux_release.result == 'success')
+    name: Linux release mode tests (non-uber)
+    needs: [build_linux_release_tests, mcl_runtime_linux_release_cached, mcl_runtime_linux_release, meta]
+    permissions:
+      checks: write
+      contents: read
+    uses: ./.github/workflows/test_template.yml
+    secrets: inherit
+    with:
+      build_artifact_name: release_test_build
+      artifact_name: release_test_results_non_uber
+      results_name: "Linux release non-uber test results"
+      suite_name: non-uber
+      CTEST_EXCLUDE_REGEX: "^(test_|rt_|col_|secondary_)"
+      timeout: 15
+      MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_release_x86_64
+
 
   # When only CLT changed and a cached image exists, build jobs are skipped. A job that needs
   # build_linux_release would then be skipped too (GitHub skips dependents of skipped jobs),
@@ -974,6 +992,7 @@ jobs:
       - test_linux_release_plain
       - test_linux_release_rt
       - test_linux_release_mcl
+      - test_linux_release_non_uber
       - test_windows_plain
       - test_windows_rt
       - test_windows_mcl
@@ -1158,6 +1177,7 @@ jobs:
       - test_linux_release_plain
       - test_linux_release_rt
       - test_linux_release_mcl
+      - test_linux_release_non_uber
       - mcl_runtime_windows_debug_cached
       - mcl_runtime_windows_debug
       - build_windows
@@ -1190,6 +1210,7 @@ jobs:
             "test_linux_release_plain:${{ needs.test_linux_release_plain.result }}:${{ needs.test_linux_release_plain.outputs.test_outcome }}"
             "test_linux_release_rt:${{ needs.test_linux_release_rt.result }}:${{ needs.test_linux_release_rt.outputs.test_outcome }}"
             "test_linux_release_mcl:${{ needs.test_linux_release_mcl.result }}:${{ needs.test_linux_release_mcl.outputs.test_outcome }}"
+            "test_linux_release_non_uber:${{ needs.test_linux_release_non_uber.result }}:${{ needs.test_linux_release_non_uber.outputs.test_outcome }}"
             "mcl_runtime_windows_debug_cached:${{ needs.mcl_runtime_windows_debug_cached.result }}"
             "mcl_runtime_windows_debug:${{ needs.mcl_runtime_windows_debug.result }}"
             "build_windows:${{ needs.build_windows.result }}"

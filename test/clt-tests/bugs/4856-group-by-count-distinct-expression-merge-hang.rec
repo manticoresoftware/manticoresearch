@@ -1,0 +1,44 @@
+GROUP BY on an MVA with count(distinct) + ORDER BY the distinct count + an expression column must not hang (manticoresearch#4856)
+
+With more groups than max_matches, an expression column makes the daemon finalize each chunk sorter before merging them. A finalized sorter did not rebuild its group hash, so the merge pushed duplicate group entries; the next cut then deleted the same distinct container twice, and the hash lookup of the missing key never terminated (all workers pinned, SIGTERM never completes).
+
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE t (title TEXT, vg STRING, vis INT, fm MULTI)"; echo $?
+––– output –––
+0
+––– comment –––
+3 disk chunks + a RAM chunk, ~1200 distinct MVA values (> max_matches), one distinct string per 3 docs
+––– input –––
+RANDOM=4856; for c in 1 2 3 4; do vals=""; for i in $(seq $(( (c-1)*1500+1 )) $(( c*1500 )) ); do n=$(( RANDOM % 8 + 1 )); m=""; for k in $(seq 1 $n); do m="$m,$(( RANDOM % 1200 + 1 ))"; done; vals="$vals($i,'gt 1 product $i','vg$((i/3))',$(( i % 10 ? 1 : 0 )),(${m#,}))," ; done; mysql -h0 -P9306 -e "INSERT INTO t (id,title,vg,vis,fm) VALUES ${vals%,}" || echo "insert failed"; [ $c -lt 4 ] && mysql -h0 -P9306 -e "FLUSH RAMCHUNK t"; done; mysql -h0 -P9306 -N -e "SELECT count(*) FROM t"
+––– output –––
+6000
+––– comment –––
+Baseline: no expression column - returns quickly
+––– input –––
+timeout 60 mysql -h0 -P9306 -N -e "SELECT groupby() AS vid, count(distinct vg) AS cnt FROM t WHERE MATCH('gt 1') AND vis=1 GROUP BY fm ORDER BY cnt DESC LIMIT 500" | wc -l; echo "exit=${PIPESTATUS[0]}"
+––– output –––
+500
+exit=0
+––– comment –––
+The hanging shape: expression column + count(distinct) + ORDER BY the distinct count, > max_matches groups
+––– input –––
+timeout 60 mysql -h0 -P9306 -N -e "SELECT groupby() AS vid, min(if(vis>0, vis, 1.0), 2.0) AS x, count(distinct vg) AS cnt FROM t WHERE MATCH('gt 1') AND vis=1 GROUP BY fm ORDER BY cnt DESC LIMIT 500" | wc -l; echo "exit=${PIPESTATUS[0]}"
+––– output –––
+500
+exit=0
+––– comment –––
+Same with an explicit max_matches below the group count, and ordered by the group key
+––– input –––
+timeout 60 mysql -h0 -P9306 -N -e "SELECT groupby() AS vid, min(if(vis>0, vis, 1.0), 2.0) AS x, count(distinct vg) AS cnt FROM t WHERE MATCH('gt 1') AND vis=1 GROUP BY fm ORDER BY cnt DESC LIMIT 300 OPTION max_matches=300" | wc -l; echo "exit=${PIPESTATUS[0]}"; timeout 60 mysql -h0 -P9306 -N -e "SELECT groupby() AS vid, min(if(vis>0, vis, 1.0), 2.0) AS x, count(distinct vg) AS cnt FROM t WHERE MATCH('gt 1') AND vis=1 GROUP BY fm ORDER BY vid DESC LIMIT 500" | wc -l; echo "exit=${PIPESTATUS[0]}"
+––– output –––
+300
+exit=0
+500
+exit=0
+––– comment –––
+The daemon is still responsive
+––– input –––
+mysql -h0 -P9306 -N -e "SHOW STATUS LIKE 'uptime'" | awk '{print $1}'
+––– output –––
+uptime

@@ -597,6 +597,30 @@ TEST ( functions, OneshotAutoEvent )
 #pragma warning(disable:4101)
 #endif
 
+// manticoresearch#4856: FindAndDelete() of a missing key must return a default value and terminate
+// (it used to dereference null, and the optimizer turned the lookup into an endless probe loop)
+TEST ( functions, Hash_find_and_delete_missing )
+{
+	OpenHashTable_T<int64_t, int> h;
+	h.Add ( 267140, 7 );
+	h.Add ( 267141, 8 );
+
+	ASSERT_EQ ( h.FindAndDelete ( 267140 ), 7 );
+	ASSERT_FALSE ( h.Find ( 267140 ) );
+	ASSERT_EQ ( h.GetLength(), 1 );
+
+	// second delete of the same key (a group listed twice) and a key that never existed
+	ASSERT_EQ ( h.FindAndDelete ( 267140 ), 0 );
+	ASSERT_EQ ( h.FindAndDelete ( 12345 ), 0 );
+	ASSERT_EQ ( h.GetLength(), 1 );
+	ASSERT_EQ ( *h.Find ( 267141 ), 8 );
+
+	// empty table
+	OpenHashTable_T<int64_t, int> hEmpty;
+	ASSERT_EQ ( hEmpty.FindAndDelete ( 1 ), 0 );
+}
+
+
 TEST ( functions, Hash_simple )
 {
 	// add and verify a couple keys manually

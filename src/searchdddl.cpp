@@ -53,6 +53,7 @@ public:
 		CSphString		m_sFrom;
 		bool			m_bKNNFromSet = false;
 		bool			m_bUseGPU = false;
+		int				m_iMaxInputTokens = 0; // 0 means the model's own limit
 
 		knn::ChunkStrategy_e m_eChunkStrategy = knn::ChunkStrategy_e::TRUNCATE;
 		uint32_t		m_uMaxTokens = 0;
@@ -103,6 +104,7 @@ public:
 	bool	AddItemOptionAPIUrl ( const SqlNode_t & tOption );
 	bool	AddItemOptionAPITimeout ( const SqlNode_t & tOption );
 	bool	AddItemOptionUseGPU ( const SqlNode_t & tOption );
+	bool	AddItemOptionMaxInputTokens ( const SqlNode_t & tOption );
 	bool	AddItemOptionQuantization ( const SqlNode_t & tOption );
 
 	void	AddCreateTableOption ( const SqlNode_t & tName, const SqlNode_t & tValue );
@@ -215,6 +217,7 @@ knn::ModelSettings_t DdlParser_c::ItemOptions_t::ToKNNModel() const
 	tModel.m_iAPITimeout = m_iAPITimeout;
 	tModel.m_sCachePath = m_sCachePath.scstr();
 	tModel.m_bUseGPU	= m_bUseGPU;
+	tModel.m_iMaxInputTokens = m_iMaxInputTokens;
 
 	return tModel;
 }
@@ -801,6 +804,20 @@ bool DdlParser_c::AddItemOptionUseGPU ( const SqlNode_t & tOption )
 {
 	CSphString sValue = ToStringUnescape(tOption);
 	m_tItemOptions.m_bUseGPU = !!strtoull ( sValue.cstr(), NULL, 10 );
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionMaxInputTokens ( const SqlNode_t & tOption )
+{
+	CSphString sValue = ToStringUnescape(tOption);
+
+	int iMaxInputTokens = 0;
+	if ( !ValidateEmbeddingsMaxInputTokens ( sValue, iMaxInputTokens, m_sError ) )
+		return false;
+
+	// 0 means the model's own limit, positive value caps the tokens taken from each input text
+	m_tItemOptions.m_iMaxInputTokens = iMaxInputTokens;
 	return true;
 }
 

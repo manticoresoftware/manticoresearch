@@ -1487,6 +1487,7 @@ public:
 	virtual bool					AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError ) { return false; }
 	virtual bool					AlterApiUrl ( const CSphString & sAttr, const CSphString & sUrl, CSphString & sError ) { return false; }
 	virtual bool					AlterApiTimeout ( const CSphString & sAttr, int iTimeout, CSphString & sError ) { return false; }
+	virtual bool					AlterMaxInputTokens ( const CSphString & sAttr, int iMaxInputTokens, CSphString & sError ) { return false; }
 	const CSphBitvec &				GetMorphFields () const { return m_tMorphFields; }
 
 	virtual bool					ReserveEmbeddingSpace ( int64_t iDocsToFill, int iDims, CSphString & sError ) { return true; }

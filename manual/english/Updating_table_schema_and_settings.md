@@ -396,6 +396,7 @@ Query OK, 0 rows affected (0.00 sec)
 ALTER TABLE table_name MODIFY COLUMN column_name API_KEY='key';
 ALTER TABLE table_name MODIFY COLUMN column_name API_URL='url';
 ALTER TABLE table_name MODIFY COLUMN column_name API_TIMEOUT='seconds';
+ALTER TABLE table_name MODIFY COLUMN column_name MAX_INPUT_TOKENS='tokens';
 ```
 
 <!-- request Example -->
@@ -403,12 +404,14 @@ ALTER TABLE table_name MODIFY COLUMN column_name API_TIMEOUT='seconds';
 ALTER TABLE rt MODIFY COLUMN vector API_KEY='new-key';
 ALTER TABLE rt MODIFY COLUMN vector API_URL='https://custom-api.example.com/v1/embeddings';
 ALTER TABLE rt MODIFY COLUMN vector API_TIMEOUT='30';
+ALTER TABLE rt MODIFY COLUMN vector MAX_INPUT_TOKENS='512';
 ```
 
 **Notes:**
 - `API_KEY`: The new API key is validated during the ALTER operation by making a real API request.
 - `API_URL`: Set to an empty string (`''`) to revert to the default provider endpoint.
 - `API_TIMEOUT`: Set to `'0'` to use the default timeout (10 seconds). Must be a non-negative integer.
+- `MAX_INPUT_TOKENS`: Caps the number of tokens taken from each input text when generating embeddings. Set to `'0'` to use the model's own limit. Must be a non-negative integer. Existing rows keep their vectors; the cap applies to embeddings generated after the change.
 
 <!-- end -->
 

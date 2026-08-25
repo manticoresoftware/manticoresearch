@@ -591,10 +591,18 @@ bool DiskIndexChecker_c::Impl_c::ReadLegacyHeader ( CSphString& sError )
 	}
 
 	// we don't support anything prior to v54
-	DWORD uMinFormatVer = 54;
+	const DWORD uMinFormatVer = 54;
 	if ( m_uVersion<uMinFormatVer )
 	{
 		sError.SetSprintf ( "tables prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, szHeader, m_uVersion );
+		return false;
+	}
+
+	// 63 is the last version with legacy (binary) header; starting from 64 header stored in json format, so it can't be here.
+	const DWORD uMaxLegacyVer = 63;
+	if ( m_uVersion>uMaxLegacyVer )
+	{
+		sError.SetSprintf ( "tables after to v.%u are stored as json, but here is plain legacy file. Looks, like it is damaged. %s is v.%u", uMaxLegacyVer, szHeader, m_uVersion );
 		return false;
 	}
 

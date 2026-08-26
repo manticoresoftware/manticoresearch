@@ -1,0 +1,20 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE t (txt text, embedding float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='cosine'); INSERT INTO t (id, txt, embedding) VALUES (1,'modern flat near the tube',(0.1,0.2,0.3,0.4)), (2,'quiet house with garden',(0.9,0.1,0.1,0.1)), (3,'modern studio in the city',(0.2,0.3,0.4,0.1));"
+––– output –––
+––– input –––
+curl -s 127.0.0.1:9308/sql -d mode=raw --data-urlencode "query=SELECT COUNT(*) AS c FROM t; SELECT id FROM t WHERE match('modern') AND knn(embedding,(0.1,0.2,0.3,0.4),{k=10}) OPTION fusion_method='rrf'"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK t"
+––– output –––
+––– input –––
+curl -s 127.0.0.1:9308/sql -d mode=raw --data-urlencode "query=SELECT COUNT(*) AS c FROM t; SELECT id FROM t WHERE match('modern') AND knn(embedding,(0.1,0.2,0.3,0.4),{k=10}) OPTION fusion_method='rrf'"
+––– output –––
+––– input –––
+curl -s 127.0.0.1:9308/sql -d mode=raw --data-urlencode "query=SELECT id FROM t WHERE match('modern') AND knn(embedding,(0.1,0.2,0.3,0.4),{k=10}) OPTION fusion_method='rrf'; SELECT COUNT(*) AS c FROM t"
+––– output –––
+––– input –––
+grep -c 'Handling signal' /var/log/manticore/searchd.log
+––– output –––
+0

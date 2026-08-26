@@ -162,6 +162,18 @@ void	sphPackedMVA2Str ( const BYTE * pMVA, bool b64bit, StringBuilder_c & dStr )
 void	sphFloatVec2Str ( ByteBlob_t dFloatVec, StringBuilder_c & dStr );
 void	sphPackedFloatVec2Str ( const BYTE * pData, StringBuilder_c & dStr );
 
+struct FloatVecArray_t
+{
+	int							m_iDims = 0;	// 0 == empty array
+	VecTraits_T<const float>	m_dValues;		// flat payload, GetLength() == N*m_iDims
+};
+
+FloatVecArray_t	ParseFloatVecArray ( ByteBlob_t dBlob );
+void	sphFloatVecArray2Str ( ByteBlob_t dBlob, StringBuilder_c & dStr );
+void	sphPackedFloatVecArray2Str ( const BYTE * pData, StringBuilder_c & dStr );
+int		ValidateFloatVecArrayGroups ( const VecTraits_T<const int> & dGroupLens, CSphString & sError );
+void	AppendFloatVecArrayToUpdatePool ( int iDims, const VecTraits_T<const float> & dValues, CSphVector<DWORD> & dPool );
+
 /// check if tColumn is actually stored field (so, can't be used in filters/expressions)
 bool	IsNotRealAttribute ( const CSphColumnInfo & tColumn );
 

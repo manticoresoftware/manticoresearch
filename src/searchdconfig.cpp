@@ -2036,7 +2036,7 @@ bool LoadShardMeta ( const char * szIndexName, const CSphString & sIndexPath, Sh
 
 	CSphVector<BYTE> dData;
 	CSphString sMeta = GetShardFilename ( sIndexPath );
-	if ( !sphJsonParse ( dData, sMeta, sError ) )
+	if ( sphJsonParse ( dData, sMeta, sError )!=JsonFileParse_e::OK )
 		return false;
 
 	Bson_c tBson ( dData );

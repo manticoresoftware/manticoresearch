@@ -453,7 +453,7 @@ XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & 
 	if constexpr ( bDump ) Dump ( pRoot, "FixupBlend" );
 	DeleteNodesWOFields ( pRoot );
 	if constexpr ( bDump ) Dump ( pRoot, "DeleteNodesWOFields" );
-	pRoot = SweepNulls ( pRoot, bOnlyNotAllowed );
+	pRoot = SweepNulls ( pRoot, bOnlyNotAllowed, false );
 	if constexpr ( bDump ) Dump ( pRoot, "SweepNulls" );
 	FixupDegenerates ( pRoot, m_pParsed->m_sParseWarning );
 	if constexpr ( bDump ) Dump ( pRoot, "FixupDegenerates" );
@@ -500,7 +500,7 @@ XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & 
 }
 
 
-XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed )
+XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed, bool bSweepHappened )
 {
 	if ( !pNode )
 		return nullptr;
@@ -524,15 +524,14 @@ XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed 
 	}
 
 	// sweep op node
-	pNode->WithChildren ( [this,bOnlyNotAllowed,pNode] ( CSphVector<XQNode_t*>& dChildren ) {
+	pNode->WithChildren ( [this,bOnlyNotAllowed,&bSweepHappened] ( CSphVector<XQNode_t*>& dChildren ) {
 	ARRAY_FOREACH ( i, dChildren )
 	{
-		dChildren[i] = SweepNulls ( dChildren[i], bOnlyNotAllowed );
+		dChildren[i] = SweepNulls ( dChildren[i], bOnlyNotAllowed, false );
 		if ( !dChildren[i] )
 		{
 			dChildren.Remove ( i-- );
-			// use non-null iOpArg as a flag indicating that the sweeping happened.
-			++pNode->m_iOpArg;
+			bSweepHappened = true;
 		}
 	}});
 
@@ -549,7 +548,7 @@ XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed 
 		pNode->ResetChildren();
 		pRet->m_pParent = pNode->m_pParent;
 		// expressions like 'la !word' (having min_word_len>len(la)) became a 'null' node.
-		if ( pNode->m_iOpArg && pRet->GetOp()==SPH_QUERY_NOT && !bOnlyNotAllowed )
+		if ( bSweepHappened && pRet->GetOp()==SPH_QUERY_NOT && !bOnlyNotAllowed )
 		{
 			pRet->SetOp ( SPH_QUERY_NULL );
 			pRet->WithChildren ( [this] ( auto& dChildren ) {
@@ -557,10 +556,8 @@ XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed 
 				dChildren.Reset();
 			});
 		}
-		pRet->m_iOpArg = pNode->m_iOpArg;
-
 		DeleteSpawned ( pNode ); // OPTIMIZE!
-		return SweepNulls ( pRet, bOnlyNotAllowed );
+		return SweepNulls ( pRet, bOnlyNotAllowed, bSweepHappened );
 	}
 
 	// done

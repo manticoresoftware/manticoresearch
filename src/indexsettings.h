@@ -571,6 +571,7 @@ void		SaveTokenizerSettings ( Writer_i & tWriter, const TokenizerRefPtr_c& pToke
 void		SaveDictionarySettings ( Writer_i & tWriter, const DictRefPtr_c& pDict, bool bForceWordDict, int iEmbeddedLimit );
 
 void		DumpSettings ( StringBuilder_c & tBuf, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder );
+void		DumpSettings ( StringBuilder_c & tBuf, const CSphIndexSettings & tSettings, const CSphFieldFilterSettings & tFieldFilterSettings, const CSphTokenizerSettings & tTokenizerSettings, const CSphDictSettings & tDictSettings, const MutableIndexSettings_c & tMutableSettings, FilenameBuilder_i * pFilenameBuilder );
 void		DumpSettingsCfg ( FILE * fp, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder );
 void		DumpReadable ( FILE * fp, const CSphIndex & tIndex, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder );
 

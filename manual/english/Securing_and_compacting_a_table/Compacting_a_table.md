@@ -21,7 +21,11 @@ INSERT INTO rt(title) VALUES
 OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
 ```
 
-`OPTIMIZE` statement adds an RT table to the optimization queue, which will be processed in a background thread.
+`OPTIMIZE TABLE` supports real-time (RT), [distributed](../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md), and [sharded](../Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md) tables.
+
+For an RT table, the statement adds the table to the optimization queue, which is processed by a background thread by default. For a distributed table, `OPTION sync=1` is required: the command optimizes every local RT component and every configured remote mirror except blackhole agents. A sharded table supports the same native synchronous fan-out across its physical RT targets. The `cutoff` value is applied to every physical RT target.
+
+When Manticore Buddy is available, sharded tables created with the `shards` and `rf` options also retain the asynchronous `OPTIMIZE TABLE table_name` form handled by Buddy. Use `OPTION sync=1` to run the native synchronous fan-out directly in Manticore Search.
 
 <!-- intro -->
 ##### SQL:
@@ -83,7 +87,9 @@ POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION cutoff=4"
 
 <!-- example optimize_sync -->
 
-When using `OPTION sync=1` (0 by default), the command will wait for the optimization process to complete before returning. If the connection is interrupted, the optimization will continue running on the server.
+For an RT table, `sync=0` is the default. Using `OPTION sync=1` makes the command wait for optimization to complete before returning. If the connection is interrupted, the optimization continues running on the server.
+
+Distributed tables require `OPTION sync=1`. Sharded tables use `OPTION sync=1` for native synchronous fan-out. The command waits for all selected physical targets and reports an error if any target fails; work already completed on other targets is not rolled back.
 
 <!-- intro -->
 ##### SQL:
@@ -104,6 +110,13 @@ POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION sync=1"
 ```
 
 <!-- end -->
+
+For distributed and sharded tables, use the synchronous form:
+
+```sql
+OPTIMIZE TABLE distributed_table OPTION sync=1, cutoff=1;
+OPTIMIZE TABLE sharded_table OPTION sync=1, cutoff=1;
+```
 
 ### Throttling the IO impact
 

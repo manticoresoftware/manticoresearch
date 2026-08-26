@@ -1,11 +1,43 @@
 # Changelog
 
+## Version Dev
+
+### New Features and Improvements
+* 🆕 Added testing for Grafana versions 13.1 and 13.2.
+* 🆕 Added testing for Logstash version 9.5.
+
+## Version 29.0.2
+**Released**: August 14th 2026
+
+This release adds sharded-table settings inspection, distributed and sharded table optimization, Unix-socket Buddy callbacks, more reliable conversational search, configurable file access, and faster columnar KNN rescoring, with fixes across backups, JDBC compatibility, highlighting, query inspection, KNN compaction, distributed-query memory use, template tables, and concurrent RT-table optimization.
+
+### New Features and Improvements
+* 🆕 [v29.0.0](https://github.com/manticoresoftware/manticoresearch/tree/29.0.0) [Issue #4802](https://github.com/manticoresoftware/manticoresearch/issues/4802) Added synchronous [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) support for distributed and sharded tables via `OPTION sync=1`, applying the requested cutoff to every local RT component and configured remote mirror.
+* 🆕 [v28.10.0](https://github.com/manticoresoftware/manticoresearch/tree/28.10.0) [PR #4799](https://github.com/manticoresoftware/manticoresearch/pull/4799) Added [SHOW TABLE SETTINGS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS.md) support for native sharded tables.
+* 🆕 [v28.8.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.8.0) [Buddy PR #691](https://github.com/manticoresoftware/manticoresearch-buddy/pull/691) Improved [conversational search](Searching/Conversational_search.md) reliability by retrying failed LLM route-selection tool calls up to three times before returning an error.
+* 🆕 [v28.7.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.7.0) [Issue #3837](https://github.com/manticoresoftware/manticoresearch/issues/3837) Added `access_columnar_attrs` and `access_secondary` settings for selecting buffered `file` or `mmap` access to columnar and secondary-index files, and improved columnar [KNN search](Searching/KNN.md#KNN-vector-search) performance by batching distance calculations during rescoring.
+
+## Breaking Changes
+* ⚠️ [v29.0.0](https://github.com/manticoresoftware/manticoresearch/tree/29.0.0) [Issue #4739](https://github.com/manticoresoftware/manticoresearch/issues/4739) Added streamed heartbeat replies for long-running shard writes and replication SST, changing the `SHARD_WRITE` API and the cluster protocol. **This matters only when upgrading or downgrading mixed-version deployments that use native sharded-table writes or replication**; standalone nodes and deployments that use neither require no special action. Existing data and configuration remain compatible, with no migration required. During upgrades, update remote shard agents before their coordinators and all replication peers before initiating SST. Downgrade remains possible without rebuilding data, but coordinators should be downgraded before agents and SST must be avoided while peers run mixed versions.
+
+### Bug Fixes
+* 🪲 [v29.0.2](https://github.com/manticoresoftware/manticoresearch/tree/29.0.2) [Backup PR #140](https://github.com/manticoresoftware/manticoresearch-backup/pull/140) Updated [manticore-backup](https://github.com/manticoresoftware/manticoresearch-backup) to 1.10.3, fixing failed backups leaving RT tables frozen when an error occurs after a per-table `FREEZE`.
+* 🪲 [v29.0.2](https://github.com/manticoresoftware/manticoresearch/tree/29.0.2) [Issue #4434](https://github.com/manticoresoftware/manticoresearch/issues/4434) Updated Buddy to 4.4.1, restoring MySQL Connector/J initialization by supporting the `@@query_cache_size` system variable and numeric system-variable values.
+* 🪲 [v29.0.1](https://github.com/manticoresoftware/manticoresearch/tree/29.0.1) [Issue #4780](https://github.com/manticoresoftware/manticoresearch/issues/4780) Fixed `searchd` crashes during RT-table optimization when concurrent updates resized blob-backed attributes, including KNN tables, by preventing merge workers from reading stale source memory.
+* 🪲 [v29.0.0](https://github.com/manticoresoftware/manticoresearch/tree/29.0.0) [Issue #4739](https://github.com/manticoresoftware/manticoresearch/issues/4739) Fixed long-running shard writes timing out while a physical table was flushing or performing other expensive work; heartbeat replies now keep the connection alive without requiring an excessively large `agent_query_timeout`.
+* 🪲 [v28.9.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.9.3) [Issue #4792](https://github.com/manticoresoftware/manticoresearch/issues/4792) Fixed [CALL SNIPPETS and HIGHLIGHT()](Searching/Highlighting.md) producing invalid nested HTML with `html_strip_mode=retain`; highlight wrappers now preserve existing element boundaries and generate well-formed markup.
+* 🪲 [v28.9.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.9.2) [Issue #4678](https://github.com/manticoresoftware/manticoresearch/issues/4678) Fixed a use-after-free that could crash `searchd` when [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) inspected concurrently running HTTP SQL queries.
+* 🪲 [v28.9.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.9.1) [Issue #4738](https://github.com/manticoresoftware/manticoresearch/issues/4738) Fixed explicit [optimize_cutoff](Server_settings/Searchd.md#optimize_cutoff) values not applying to the KNN compaction threshold, so server-wide and per-table settings now control automatic chunk merging for vector tables as expected.
+* 🪲 [v28.6.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.6.8) [PR #4777](https://github.com/manticoresoftware/manticoresearch/pull/4777) Fixed [EXPLAIN QUERY](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) hanging on template tables when a full-text query contains field selectors; valid selectors are now discovered by the full-text parser, while malformed selectors return syntax errors.
+* 🪲 [v28.6.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.6.7) [Issue #4771](https://github.com/manticoresoftware/manticoresearch/issues/4771) Fixed high master-daemon memory use after completed distributed-agent operations by releasing large request and reply buffers immediately after parsing instead of retaining them until `agent_query_timeout` expires.
+
 ## Version 28.6.6
 **Released**: July 31st 2026
 
 This release adds UUID document IDs and ordered, limited `GROUP_CONCAT()`, with fixes across replication, backups, query processing, SQL compatibility, and secondary indexes.
 
 ### New Features and Improvements
+* 🆕 Added testing for Filebeat version 9.5.
 * 🆕 [v28.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.6.0) [Issue #4746](https://github.com/manticoresoftware/manticoresearch/issues/4746) Added ordered, limited [GROUP_CONCAT()](Searching/Grouping.md#GROUP_CONCAT%28field%29) for explicit SphinxQL `GROUP BY` queries: `GROUP_CONCAT(expression ORDER BY ... [SEPARATOR '...'] LIMIT N)` keeps the top `N` values per group in the requested order.
 * 🆕 [v28.5.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.5.0) [Issue #1429](https://github.com/manticoresoftware/manticoresearch/issues/1429) Added [UUID document IDs](Creating_a_table/Data_types.md#UUID-document-IDs) for real-time tables via `id uuid`, including explicit or automatically generated IDs, UUID equality and `IN` filters, and UUID-based `REPLACE`, `UPDATE`, and `DELETE`.
 

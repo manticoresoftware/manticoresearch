@@ -301,6 +301,14 @@ public:
 		return pEntry ? pEntry->intval() : iDefault;
 	}
 
+	std::optional<int> OptInt ( const char * sKey ) const
+	{
+		CSphVariant * pEntry = (*this)( sKey );
+		if (!pEntry)
+			return std::nullopt;
+		return pEntry->intval();
+	}
+
 	/// get float option value by key and default value
 	float GetFloat ( const char * sKey, float fDefault=0.0f ) const
 	{

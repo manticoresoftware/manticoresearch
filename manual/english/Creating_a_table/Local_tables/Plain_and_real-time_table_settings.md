@@ -45,6 +45,8 @@ table <table name> {
   [rt_attr_float = <another float field name>]
   [rt_attr_float_vector = <float vector field name>]
   [rt_attr_float_vector = <another float vector field name>]
+  [rt_attr_float_vector_array = <float vector array field name>]
+  [rt_attr_float_vector_array = <another float vector array field name>]
   [rt_attr_bool = <boolean field name>]
   [rt_attr_bool = <another boolean field name>]
   [rt_attr_string = <string field name>]
@@ -107,7 +109,7 @@ Value: **plain** (default), rt
 path = path/to/table
 ```
 
-The path to where the table will be stored or located, either absolute or relative, without the extension. 
+The path to where the table will be stored or located, either absolute or relative, without the extension. When `indexer` builds a plain table, it creates any missing parent directories in this path. The user running `indexer` must have write permission for the nearest existing parent directory.
 
 Value: The path to the table, **mandatory**
 
@@ -538,6 +540,30 @@ For custom remote endpoints, you can use `provider:model` syntax in `model_name`
 
 For more details on KNN vector search and auto-embeddings, see the [KNN documentation](../../Searching/KNN.md).
 
+#### rt_attr_float_vector_array
+
+```ini
+rt_attr_float_vector_array = chunk_vectors
+```
+
+Declares an attribute holding several float vectors per document, for documents that are naturally represented by more than one embedding: the chunks of an article, the photos of a product, the keyframes of a video.
+
+Value: field name. Multiple records allowed.
+
+KNN is configured exactly as for [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector), with the same `knn` block:
+
+```ini
+rt_attr_float_vector_array = chunk_vectors
+knn = {"attrs":[{"name":"chunk_vectors","type":"hnsw","dims":768,"hnsw_similarity":"COSINE","hnsw_m":16,"hnsw_ef_construction":200}]}
+```
+
+Two differences apply:
+
+- `dims` is **required**, and every vector in every row must have exactly that many entries.
+- `model_name` and `from` are **not** accepted — auto embeddings produce one vector per document, so they do not apply to this type. Vectors must be supplied explicitly.
+
+All vectors are indexed together, and a KNN search returns each document once, scored by its closest vector. See [Float vector array](../../Creating_a_table/Data_types.md#Float-vector-array) and [Multiple vectors per document](../../Searching/KNN.md#Multiple-vectors-per-document).
+
 #### rt_attr_bool
 
 ```ini
@@ -702,6 +728,7 @@ For more information on data types, see [more about data types here](../../Creat
 | [bigint](../../Creating_a_table/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bigint)	| big integer	 |   |
 | [float](../../Creating_a_table/Data_types.md#Float) | [rt_attr_float](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float)   | float  |   |
 | [float_vector](../../Creating_a_table/Data_types.md#Float-vector) | [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) | a vector of float values  |   |
+| [float_vector_array](../../Creating_a_table/Data_types.md#Float-vector-array) | [rt_attr_float_vector_array](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector_array) | several float vectors per document  |   |
 | [multi](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi)   | multi-integer | mva |
 | [multi64](../../Creating_a_table/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi_64) | multi-bigint  | mva64 |
 | [bool](../../Creating_a_table/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bool) | boolean |   |

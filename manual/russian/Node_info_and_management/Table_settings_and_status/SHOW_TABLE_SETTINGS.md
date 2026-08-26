@@ -20,6 +20,8 @@ SHOW TABLE table_name[.N | CHUNK N] SETTINGS
 
 Вывод похож на опцию [--dumpconfig](../../Miscellaneous_tools.md#indextool) утилиты [indextool](../../Miscellaneous_tools.md#indextool). Отчет предоставляет расшифровку всех настроек таблицы, включая параметры токенизатора и словаря.
 
+Команда поддерживает real-time, plain и [шардированные](../../Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md) таблицы (шардированная таблица сообщает параметры, общие для всех её шардов). Для распределённых таблиц команда не поддерживается, поскольку у них нет собственных настроек.
+
 Если таблица была создана с помощью SQL-ярлыка `profile=...`, `SHOW TABLE SETTINGS` показывает развернутые сохраненные настройки (например, `ranker` и `boolean_mode`), а не само имя профиля.
 
 <!-- intro -->

@@ -1065,6 +1065,20 @@ select 1 as searchd_survived;
 
 drop table issue4633_right;
 drop table issue4633_left;
+
+<!-- regression for #4788: LEFT JOIN string sort helper must stay internal -->
+drop table if exists issue4788_b;
+drop table if exists issue4788_a;
+create table issue4788_a ( n text, t string );
+create table issue4788_b ( x int, aid int );
+insert into issue4788_a ( id, n, t ) values ( 1, 'x', 'b' ), ( 2, 'y', 'a' );
+insert into issue4788_b ( id, x, aid ) values ( 1, 1, 1 ), ( 2, 2, 2 );
+
+select n, issue4788_b.x from issue4788_a left join issue4788_b on issue4788_b.aid=issue4788_a.id order by t asc;
+select n, issue4788_b.x from issue4788_a inner join issue4788_b on issue4788_b.aid=issue4788_a.id order by t asc;
+
+drop table issue4788_b;
+drop table issue4788_a;
 </sphinxql>
 
 

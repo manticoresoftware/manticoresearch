@@ -139,7 +139,7 @@ SearchdCommand_e ParseCommand ( const CSphString & sCommand );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 34
+	VER_COMMAND_SEARCH_MASTER = 35
 };
 
 
@@ -147,7 +147,7 @@ enum
 /// (shared here because of REPLICATE)
 enum SearchdCommandV_e : WORD
 {
-	VER_COMMAND_SEARCH		= 0x127, // 1.39
+	VER_COMMAND_SEARCH		= 0x128, // 1.40
 	VER_COMMAND_EXCERPT		= 0x104,
 	VER_COMMAND_UPDATE		= 0x104,
 	VER_COMMAND_KEYWORDS	= 0x102,
@@ -158,12 +158,20 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
-	VER_COMMAND_CLUSTER		= 0x10E,
+	VER_COMMAND_CLUSTER		= 0x10F,
 	VER_COMMAND_GETFIELD	= 0x100,
 	VER_COMMAND_SUGGEST		= 0x102,
-	VER_COMMAND_SHARD_WRITE	= 0x100,
+	VER_COMMAND_SHARD_WRITE	= 0x101,
+	VER_COMMAND_OPTIMIZE	= 0x101,
 
 	VER_COMMAND_WRONG = 0,
+};
+
+enum SearchdCommandMinV_e : WORD
+{
+	VER_COMMAND_SHARD_WRITE_HEARTBEAT = 0x101,
+	VER_COMMAND_OPTIMIZE_HEARTBEAT = 0x101,
+	VER_COMMAND_CLUSTER_HEARTBEAT = 0x10F,
 };
 
 enum ApiCommandFlags_e : DWORD
@@ -1371,6 +1379,7 @@ int64_t				GetDocID ( const char * szID );
 
 void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, GenericOutputBuffer_c & tOut );
 void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
+void HandleCommandOptimize ( GenericOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq );
 
 void BuildStatusOneline ( StringBuilder_c& sOut );
 
@@ -1502,6 +1511,8 @@ inline constexpr MysqlColumnType_e ESphAttr2MysqlColumnStreamed ( ESphAttr eAttr
 	case SPH_ATTR_UINT32SET_PTR:
 	case SPH_ATTR_FLOAT_VECTOR:
 	case SPH_ATTR_FLOAT_VECTOR_PTR:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
 	case SPH_ATTR_INT64SET:
 	case SPH_ATTR_INT64SET_PTR: return MYSQL_COL_LONG; // long is treated as a number without interpretation (just copied from input to output)
 	case SPH_ATTR_JSON:
@@ -1742,6 +1753,20 @@ public:
 		HeadColumn (szTitle, MYSQL_COL_LONG);
 		HeadEnd();
 		PutDWORD ( iValue );
+		Commit();
+		Eof();
+		return true;
+	}
+
+	bool DataTableOneline ( const char * szTitle, const char * szValue )
+	{
+		HeadBegin();
+		HeadColumn ( szTitle, MYSQL_TYPE_VAR_STRING );
+		HeadEnd();
+		if ( szValue )
+			PutString ( szValue );
+		else
+			PutNULL();
 		Commit();
 		Eof();
 		return true;

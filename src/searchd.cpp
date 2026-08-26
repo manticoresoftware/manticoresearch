@@ -12,6 +12,7 @@
 
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
+#include "attribute.h"
 #include "docstore.h"
 #include "searchdha.h"
 #include "searchdreplication.h"
@@ -58,6 +59,7 @@
 #include "daemon/notifier.h"
 #include "facetutils.h"
 #include "daemon/daemon_ipc.h"
+#include "api_reply_stream.h"
 
 // services
 #include "taskping.h"
@@ -245,7 +247,7 @@ int64_t g_iNextSystemdWatchdogTick = -1;
 static const char * g_dApiCommands[SEARCHD_COMMAND_TOTAL] =
 {
 	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs", "query", "ping", "delete", "set",  "insert", "replace", "commit", "suggest", "json",
-	"callpq", "clusterpq", "getfield", "shard_write"
+	"callpq", "clusterpq", "getfield", "shard_write", "optimize"
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -277,14 +279,14 @@ const char * szStatusVersion () noexcept
 	return g_sStatusVersion.cstr();
 }
 
-void Shutdown (); // forward
+bool Shutdown (); // forward
 
 bool DieOrFatalWithShutdownCb ( bool bDie, const char * sFmt, va_list ap )
 {
 	if ( bDie )
 		g_pLogger () ( SPH_LOG_FATAL, sFmt, ap );
 	else
-		Shutdown ();
+		(void)Shutdown ();
 	return false; // don't lot to stdout
 }
 
@@ -305,7 +307,7 @@ bool DieOrFatalCb ( bool bDie, const char * sFmt, va_list ap )
 /////////////////////////////////////////////////////////////////////////////
 // SIGNAL HANDLERS
 /////////////////////////////////////////////////////////////////////////////
-void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
+bool Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 {
 	sd::stopping();
 
@@ -321,7 +323,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 #if !_WIN32
 	int fdStopwait = -1;
 #endif
-	bool bAttrsSaveOk = true;
+	bool bShutdownOk = true;
 	if ( g_pShared )
 		g_pShared->m_bDaemonAtShutdown = true;
 
@@ -354,7 +356,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	// save attribute updates for all local indexes
 	SHUTINFO << "Finally save tables ...";
-	bAttrsSaveOk = FinallySaveIndexes();
+	bShutdownOk = FinallySaveIndexes();
 	sd::extend30s();
 
 	// right before unlock loop
@@ -451,6 +453,15 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	sphDoneIOStats();
 	sd::extend30s();
 
+	SHUTINFO << "Finalize binlog ...";
+	CSphString sBinlogError;
+	if ( !Binlog::FinalizeForShutdown ( sBinlogError ) )
+	{
+		sphWarning ( "%s", sBinlogError.cstr() );
+		bShutdownOk = false;
+	}
+	sd::extend30s();
+
 	SHUTINFO << "Finish binlog serving ...";
 	Binlog::Deinit();
 	sd::extend30s();
@@ -521,7 +532,10 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	sd::extend30s();
 
 	sphInfo ( "shutdown daemon version '%s' ...", g_sStatusVersion.cstr() );
-	sphInfo ( "shutdown complete" );
+	if ( bShutdownOk )
+		sphInfo ( "shutdown complete" );
+	else
+		sphWarning ( "shutdown incomplete; table persistence errors or recovery binlogs remain" );
 
 	Threads::Done ( GetDaemonLogFD() );
 	sd::extend30s();
@@ -531,11 +545,13 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 #else
 	if ( fdStopwait>=0 )
 	{
-		DWORD uStatus = bAttrsSaveOk;
+		DWORD uStatus = bShutdownOk;
 		int VARIABLE_IS_NOT_USED iDummy = ::write ( fdStopwait, &uStatus, sizeof(DWORD) );
 		::close ( fdStopwait );
 	}
 #endif
+
+	return bShutdownOk;
 }
 
 static void ShutdownEarlyLoadedLibraries()
@@ -1021,14 +1037,10 @@ void sphGetAttrsToSend ( const ISphSchema & tSchema, bool bAgentMode, bool bNeed
 {
 	int iCount = tSchema.GetAttrsCount();
 	tAttrs.Init ( iCount );
-	if ( !bAgentMode && iCount && IsSortStringInternal ( tSchema.GetAttr ( iCount-1 ).m_sName ) )
-	{
-		for ( int i=iCount-1; i>=0 && IsSortStringInternal ( tSchema.GetAttr(i).m_sName ); --i )
-			iCount = i;
-	}
 
 	for ( int i = 0; i < iCount; ++i )
-		if ( !sphIsInternalAttr ( tSchema.GetAttr(i) ) )
+		if ( !sphIsInternalAttr ( tSchema.GetAttr(i) )
+			&& ( bAgentMode || !IsSortStringInternal ( tSchema.GetAttr(i).m_sName ) ) )
 			tAttrs.BitSet(i);
 
 	int iId = tSchema.GetAttrIndex ( sphGetDocidName() );
@@ -3256,6 +3268,7 @@ void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLengt
 		case SEARCHD_COMMAND_CLUSTER:	HandleAPICommandCluster ( tOut, uCommandVer, tBuf, tSess.szClientName() ); break;
 		case SEARCHD_COMMAND_GETFIELD:	HandleCommandGetField ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_SHARD_WRITE: HandleCommandShardWrite ( tOut, uCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_OPTIMIZE:	HandleCommandOptimize ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_SUGGEST:	HandleCommandSuggest ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_PERSIST: break; // already processes, here just for stat
 
@@ -4606,11 +4619,71 @@ bool AttributeConverter_c::CheckJson ( const CSphColumnInfo & tCol, const SqlIns
 	return true;
 }
 
+// emits [dims][N*dims float bits] as a single mva entry
+bool AttributeConverter_c::ConvertFloatVecArray ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, const AttrValueVec_t & tAddVals, int iCol, int iRow )
+{
+	if ( tVal.m_dGroupLens.IsEmpty() )
+	{
+		if ( tAddVals.GetLength() )
+		{
+			m_sError.SetSprintf ( "column %d at row %d: float_vector_array requires an array of vectors, e.g. [[1,2],[3,4]]", iCol, iRow );
+			return false;
+		}
+
+		AddMVALength(0); // empty array: zero-length blob, no header
+		return true;
+	}
+
+	CSphString sVecError;
+	const int iDims = ValidateFloatVecArrayGroups ( tVal.m_dGroupLens, sVecError );
+	if ( !sVecError.IsEmpty() )
+	{
+		m_sError.SetSprintf ( "column %d at row %d: %s", iCol, iRow, sVecError.cstr() );
+		return false;
+	}
+
+	if ( !tAddVals.GetLength() )
+	{
+		AddMVALength(0);
+		return true;
+	}
+
+	m_dTmpFloats.Resize ( tAddVals.GetLength() );
+	ARRAY_FOREACH ( i, m_dTmpFloats )
+		m_dTmpFloats[i] = tAddVals[i].m_fValue;
+
+	// cosine normalization is per vector slot
+	if ( tCol.IsIndexedKNN() && tCol.m_tKNN.m_eHNSWSimilarity==knn::HNSWSimilarity_e::COSINE )
+	{
+		const int iVectors = m_dTmpFloats.GetLength() / iDims;
+		for ( int i = 0; i < iVectors; i++ )
+		{
+			VecTraits_T<float> dSlot ( m_dTmpFloats.Begin() + i*iDims, iDims );
+			NormalizeVec(dSlot);
+		}
+	}
+
+	AddMVALength ( 1 + m_dTmpFloats.GetLength() );
+	AddMVAValue ( iDims );
+	for ( float fValue : m_dTmpFloats )
+		AddMVAValue ( sphF2DW(fValue) );
+
+	return true;
+}
+
 
 bool AttributeConverter_c::CheckMVA ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iCol, int iRow )
 {
-	if ( tCol.m_eAttrType!=SPH_ATTR_UINT32SET && tCol.m_eAttrType!=SPH_ATTR_INT64SET && tCol.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR )
+	if ( tCol.m_eAttrType!=SPH_ATTR_UINT32SET && tCol.m_eAttrType!=SPH_ATTR_INT64SET && tCol.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR && tCol.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR_ARRAY )
+	{
+		if ( !tVal.m_dGroupLens.IsEmpty() )
+		{
+			m_sError.SetSprintf ( "column %d at row %d: nested vector syntax is only valid for float_vector_array attributes", iCol, iRow );
+			return false;
+		}
+
 		return true;
+	}
 
 	if ( !tVal.m_pVals )
 	{
@@ -4619,6 +4692,16 @@ bool AttributeConverter_c::CheckMVA ( const CSphColumnInfo & tCol, const SqlInse
 	}
 
 	auto & tAddVals = *tVal.m_pVals;
+
+	if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY )
+		return ConvertFloatVecArray ( tCol, tVal, tAddVals, iCol, iRow );
+
+	if ( !tVal.m_dGroupLens.IsEmpty() )
+	{
+		m_sError.SetSprintf ( "column %d at row %d: nested vector syntax is only valid for float_vector_array attributes", iCol, iRow );
+		return false;
+	}
+
 	if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
 	{
 		AddMVALength ( tAddVals.GetLength() );
@@ -4688,7 +4771,7 @@ bool AttributeConverter_c::CheckInsertTypes ( const CSphColumnInfo & tCol, const
 		return false;
 	}
 
-	if ( tVal.m_iType==SqlInsert_t::CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_JSON || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR ) )
+	if ( tVal.m_iType==SqlInsert_t::CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_JSON || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY ) )
 	{
 		m_sError.SetSprintf ( "row %d, column %d: MVA value specified for a non-MVA column", 1+iRow, 1+iQuerySchemaIdx ); // 1 for human base
 		return false;
@@ -4700,7 +4783,7 @@ bool AttributeConverter_c::CheckInsertTypes ( const CSphColumnInfo & tCol, const
 		return false;
 	}
 
-	if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tVal.m_iType!=SqlInsert_t::CONST_MVA )
+	if ( ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY ) && tVal.m_iType!=SqlInsert_t::CONST_MVA )
 	{
 		m_sError.SetSprintf ( "row %d, column %d: incompatible value specified for a float vector column", 1+iRow, 1+iQuerySchemaIdx ); // 1 for human base
 		return false;
@@ -4720,7 +4803,7 @@ void AttributeConverter_c::SetDefaultAttrValue ( int iCol )
 		|| tCol.m_eAttrType==SPH_ATTR_TDIGEST_PTR || tCol.m_eAttrType==SPH_ATTR_JSON )
 		m_dStrings.Add(nullptr);
 
-	if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
+	if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY )
 		AddMVALength ( 0, true );
 
 	SqlInsert_t tDefaultVal;
@@ -7194,20 +7277,8 @@ enum ThreadInfoFormat_e
 
 static Str_t FormatInfo ( const PublicThreadDesc_t & tThd, ThreadInfoFormat_e eFmt, QuotationEscapedBuilder & tBuf )
 {
-	if ( tThd.m_pQuery && eFmt==THD_FORMAT_SPHINXQL && tThd.m_eProto!=Proto_e::MYSQL41 )
-	{
-		bool bGotQuery = false;
-		if ( tThd.m_pQuery )
-		{
-			tBuf.Clear();
-			FormatSphinxql ( *tThd.m_pQuery, {}, 0, tBuf );
-			bGotQuery = true;
-		}
-
-		// query might be removed prior to lock then go to common path
-		if ( bGotQuery )
-			return (Str_t)tBuf;
-	}
+	if ( eFmt==THD_FORMAT_SPHINXQL && !tThd.m_sPreParsedQuery.IsEmpty() && tThd.m_eProto!=Proto_e::MYSQL41 )
+		return FromStr ( tThd.m_sPreParsedQuery );
 
 	if ( tThd.m_sDescription.IsEmpty () && tThd.m_szCommand )
 		return FromSz ( tThd.m_szCommand );
@@ -7218,14 +7289,15 @@ void HandleShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
 	ThreadInfoFormat_e eFmt = THD_FORMAT_NATIVE;
 	bool bAll = false;
-	int iCols = -1;
+	std::optional<int> iCols { std::nullopt };
 	if ( pStmt )
 	{
 		if ( pStmt->m_sThreadFormat == "sphinxql" )
 			eFmt = THD_FORMAT_SPHINXQL;
 		else if ( pStmt->m_sThreadFormat == "all" )
 			bAll = true;
-		iCols = pStmt->m_iThreadsCols;
+		if ( pStmt->m_iThreadsCols>=0 )
+			iCols = pStmt->m_iThreadsCols;
 	}
 
 	tOut.HeadBegin ();
@@ -7302,8 +7374,8 @@ void HandleShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		if ( bAll )
 			tOut.PutString ( dThd.m_sChain ); // Chain
 		auto sInfo = FormatInfo ( dThd, eFmt, tBuf );
-		if ( iCols >= 0 && iCols < sInfo.second )
-			sInfo.second = iCols;
+		if ( iCols.has_value() )
+			sInfo.second = Min ( sInfo.second, iCols.value() );
 		tOut.PutString ( sInfo ); // Info m_pTaskInfo
 		if ( !tOut.Commit () )
 			break;
@@ -7317,14 +7389,15 @@ void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt )
 {
 	ThreadInfoFormat_e eFmt = THD_FORMAT_NATIVE;
 	bool bAll = false;
-	int iCols = -1;
+	std::optional<int> iCols { std::nullopt };
 	if ( pStmt )
 	{
 		if ( pStmt->m_sThreadFormat == "sphinxql" )
 			eFmt = THD_FORMAT_SPHINXQL;
 		else if ( pStmt->m_sThreadFormat == "all" )
 			bAll = true;
-		iCols = pStmt->m_iThreadsCols;
+		if ( pStmt->m_iThreadsCols>=0 )
+			iCols = pStmt->m_iThreadsCols;
 	}
 
 	tOut.HeadBegin ();
@@ -7370,8 +7443,8 @@ void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt )
 		else
 			tOut.PutTimeAsString ( dThd.m_tmLastJobDoneTimeUS - dThd.m_tmLastJobStartTimeUS );
 		auto sInfo = FormatInfo ( dThd, eFmt, tBuf );
-		if ( iCols >= 0 && iCols < sInfo.second )
-			sInfo.second = iCols;
+		if ( iCols.has_value() )
+			sInfo.second = Min ( sInfo.second, iCols.value() );
 		tOut.PutString ( sInfo ); // Info m_pTaskInfo
 		if ( !tOut.Commit() )
 			break;
@@ -8375,6 +8448,14 @@ static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrs
 		{
 			StringBuilder_c dStr;
 			sphPackedFloatVec2Str ( (const BYTE *)tMatch.GetAttr(tLoc), dStr );
+			dRows.PutArray ( dStr, false );
+		}
+		break;
+
+		case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
+		{
+			StringBuilder_c dStr;
+			sphPackedFloatVecArray2Str ( (const BYTE *)tMatch.GetAttr(tLoc), dStr );
 			dRows.PutArray ( dStr, false );
 		}
 		break;
@@ -10011,12 +10092,17 @@ void HandleMysqlFlushRamchunk ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	}
 
 	RIdx_T<RtIndex_i*> pRt { pIndex };
-	if ( !pRt->ForceDiskChunk() )
+	auto eFlushResult = pRt->ForceDiskChunkResult();
+	if ( eFlushResult!=RtActionResult_e::OK )
 	{
 		CSphString sError;
-		sError.SetSprintf ( "table '%s': FLUSH RAMCHUNK failed; TABLE UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRt->GetLastError().cstr() );
+		if ( eFlushResult==RtActionResult_e::TABLE_USABLE )
+			sError.SetSprintf ( "table '%s': FLUSH RAMCHUNK failed; metadata was not committed, table remains available, binlog retained for recovery (%s)", tStmt.m_sIndex.cstr(), pRt->GetLastError().cstr() );
+		else
+			sError.SetSprintf ( "table '%s': FLUSH RAMCHUNK failed; TABLE UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRt->GetLastError().cstr() );
 		tOut.Error ( sError.cstr () );
-		g_pLocalIndexes->Delete ( tStmt.m_sIndex );
+		if ( eFlushResult!=RtActionResult_e::TABLE_USABLE )
+			g_pLocalIndexes->Delete ( tStmt.m_sIndex );
 		return;
 	}
 
@@ -10152,80 +10238,307 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 		tOut.Ok ( 0, dWarnings.GetLength() );
 }
 
-static bool WaitOptimize ( RowBuffer_i & tOut, const CSphString & sIndex )
+static bool StartAndWaitOptimize ( const CSphString & sIndex, const cServedIndexRefPtr_c & pIndex, OptimizeTask_t & tTask, CSphString & sError )
 {
-	if ( PollOptimizeRunning ( sIndex ) )
+	if ( tTask.m_iCutoff>0 )
+		RIdx_T<RtIndex_i *> ( pIndex )->ManualOptimizeCutoff ( tTask.m_iCutoff );
+
+	if ( !RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( tTask ) )
+	{
+		sError = "Can't optimize frozen table";
+		return false;
+	}
+
+	if ( !PollOptimizeRunning ( sIndex ) )
+	{
+		sError = "RT table went away during waiting";
+		return false;
+	}
+
+	return true;
+}
+
+
+static bool RunSynchronousOptimize ( const CSphString & sIndex, const cServedIndexRefPtr_c & pIndex, int iCutoff, CSphString & sError )
+{
+	sError = "";
+	OptimizeTask_t tTask;
+	tTask.m_eVerb = OptimizeTask_t::eManualOptimize;
+	tTask.m_iCutoff = iCutoff>0 ? iCutoff : 0;
+
+	const bool bHasCutoff = ( tTask.m_iCutoff>0 );
+
+	if ( !StartAndWaitOptimize ( sIndex, pIndex, tTask, sError ) )
+		return false;
+	if ( !bHasCutoff )
 		return true;
 
-	tOut.Error ( "RT table went away during waiting" );
+	CSphIndexStatus tStatus;
+	RIdx_T<RtIndex_i *> ( pIndex )->GetStatus ( &tStatus );
+	if ( tStatus.m_iNumChunks<=tTask.m_iCutoff )
+		return true;
+
+	if ( !StartAndWaitOptimize ( sIndex, pIndex, tTask, sError ) )
+		return false;
+
+	RIdx_T<RtIndex_i *> ( pIndex )->GetStatus ( &tStatus );
+	if ( tStatus.m_iNumChunks<=tTask.m_iCutoff )
+		return true;
+
+	sError.SetSprintf ( "OPTIMIZE TABLE did not reach the requested cutoff %d, got %d disk chunks", tTask.m_iCutoff, tStatus.m_iNumChunks );
 	return false;
 }
+
+void BuildRemoteOptimizeRequest ( ISphOutputBuffer & tOut, DWORD uHeartbeatIntervalMs, const CSphString & sIndexes, int iCutoff )
+{
+	auto tHeader = APIHeader ( tOut, SEARCHD_COMMAND_OPTIMIZE, VER_COMMAND_OPTIMIZE );
+	tOut.SendDword ( uHeartbeatIntervalMs );
+	tOut.SendString ( sIndexes.cstr() );
+	tOut.SendInt ( iCutoff );
+}
+
+class RemoteOptimizeRequestBuilder_c final : public RequestBuilder_i
+{
+public:
+	RemoteOptimizeRequestBuilder_c ( DWORD uHeartbeatIntervalMs, int iCutoff )
+		: m_uHeartbeatIntervalMs ( uHeartbeatIntervalMs )
+		, m_iCutoff ( iCutoff )
+	{}
+
+	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
+	{
+		BuildRemoteOptimizeRequest ( tOut, m_uHeartbeatIntervalMs, tAgent.m_tDesc.m_sIndexes, m_iCutoff );
+	}
+
+private:
+	DWORD m_uHeartbeatIntervalMs = 0;
+	int m_iCutoff = 0;
+};
+
+
+class RemoteOptimizeReplyParser_c final : public ReplyParser_i
+{
+public:
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final
+	{
+		if ( !tReq.HasBytes () )
+			return true;
+
+		tAgent.m_sFailure.SetSprintf ( "unexpected remote optimize reply body (%d bytes)", tReq.HasBytes () );
+		return false;
+	}
+};
+
+
+static bool IsRtOptimizeTarget ( const cServedIndexRefPtr_c & pIndex )
+{
+	return pIndex && pIndex->m_eType==IndexType_e::RT;
+}
+
+void HandleCommandOptimize ( GenericOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq )
+{
+	if ( !CheckCommandVersion ( uVer, VER_COMMAND_OPTIMIZE, tOut ) )
+		return;
+	if ( uVer<VER_COMMAND_OPTIMIZE_HEARTBEAT )
+	{
+		SendErrorReply ( tOut, "optimize request requires a heartbeat-capable command version" );
+		return;
+	}
+
+	const DWORD uHeartbeatIntervalMs = tReq.GetDword ();
+	const CSphString sIndexes = tReq.GetString ();
+	const int iCutoff = tReq.GetInt ();
+	if ( tReq.GetError () || tReq.HasBytes () )
+	{
+		SendErrorReply ( tOut, "invalid or truncated optimize request" );
+		return;
+	}
+
+	if ( !uHeartbeatIntervalMs )
+	{
+		SendErrorReply ( tOut, "optimize request requires a positive heartbeat interval" );
+		return;
+	}
+
+	StrVec_t dIndexes;
+	ParseIndexList ( sIndexes, dIndexes );
+	if ( dIndexes.IsEmpty () )
+	{
+		SendErrorReply ( tOut, "optimize target table list is empty" );
+		return;
+	}
+
+	if ( iCutoff<0 )
+	{
+		SendErrorReply ( tOut, "optimize cutoff must be nonnegative" );
+		return;
+	}
+
+	for ( const CSphString & sIndex : dIndexes )
+		if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::WRITE, sIndex, tOut ) )
+			return;
+
+	CSphString sError;
+	if ( !sphCheckWeCanModify ( sError ) )
+	{
+		SendErrorReply ( tOut, "%s", sError.cstr() );
+		return;
+	}
+
+	CSphVector<cServedIndexRefPtr_c> dTargets;
+	dTargets.Resize ( dIndexes.GetLength() );
+	ARRAY_FOREACH ( i, dIndexes )
+	{
+		dTargets[i] = GetServed ( dIndexes[i] );
+		if ( !IsRtOptimizeTarget ( dTargets[i] ) )
+		{
+			SendErrorReply ( tOut, "remote table '%s' must be an existing RT table", dIndexes[i].cstr() );
+			return;
+		}
+	}
+
+	ApiReplyStream_c tStream ( uHeartbeatIntervalMs, uVer, tOut );
+	tStream.Start ();
+
+	SearchFailuresLog_c dFailures;
+	ARRAY_FOREACH ( i, dTargets )
+		if ( !RunSynchronousOptimize ( dIndexes[i], dTargets[i], iCutoff, sError ) )
+			dFailures.Submit ( dIndexes[i], nullptr, sError.cstr() );
+
+	if ( !tStream.StopAndHandoff () )
+		return;
+
+	if ( !dFailures.IsEmpty () )
+	{
+		StringBuilder_c sReport;
+		dFailures.BuildReport ( sReport );
+		SendErrorReply ( tOut, "%s", sReport.cstr() );
+		return;
+	}
+
+	{
+		auto tReply = APIAnswer ( tOut, uVer );
+	}
+}
+
 
 void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 
-	auto sIndex = tStmt.m_sIndex;
-	auto pIndex = GetServed ( sIndex );
-	if ( !ServedDesc_t::IsMutable ( pIndex ) )
-	{
-		tOut.Error ( "OPTIMIZE TABLE requires an existing RT table" );
-		return;
-	}
-
-	OptimizeTask_t tTask;
-	tTask.m_eVerb = OptimizeTask_t::eManualOptimize;
-	tTask.m_iCutoff = tStmt.m_tQuery.m_iCutoff<=0 ? 0 : tStmt.m_tQuery.m_iCutoff;
-
-	const bool bHasCutoff = ( tTask.m_iCutoff>0 );
+	const CSphString sIndex = tStmt.m_sIndex;
+	const cServedIndexRefPtr_c pIndex = GetServed ( sIndex );
+	const int iCutoff = tStmt.m_tQuery.m_iCutoff<=0 ? 0 : tStmt.m_tQuery.m_iCutoff;
 	const bool bSync = tStmt.m_tQuery.m_bSync;
-	if ( bHasCutoff )
-		RIdx_T<RtIndex_i *> ( pIndex )->ManualOptimizeCutoff ( tTask.m_iCutoff );
-
-	bool bStarted = RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( tTask );
-
-	if ( !bSync )
+	if ( ServedDesc_t::IsMutable ( pIndex ) )
 	{
+		if ( !bSync )
+		{
+			OptimizeTask_t tTask;
+			tTask.m_eVerb = OptimizeTask_t::eManualOptimize;
+			tTask.m_iCutoff = iCutoff;
+			if ( iCutoff>0 )
+				RIdx_T<RtIndex_i *> ( pIndex )->ManualOptimizeCutoff ( iCutoff );
+			RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( tTask );
+			tOut.Ok ();
+			return;
+		}
+
+		CSphString sError;
+		if ( !RunSynchronousOptimize ( sIndex, pIndex, iCutoff, sError ) )
+		{
+			tOut.Error ( sError.cstr() );
+			return;
+		}
+
 		tOut.Ok ();
 		return;
 	}
 
-	if ( !bStarted )
+	const cDistributedIndexRefPtr_t pRouted = GetDistr ( sIndex );
+	if ( !pRouted )
 	{
-		tOut.Error ( "Can't optimize frozen table" );
+		tOut.Error ( "OPTIMIZE TABLE requires an existing RT, distributed, or shard table" );
+		return;
+	}
+	const char * szRoutedType = GetIndexTypeName ( pRouted->GetType () );
+
+	if ( !bSync )
+	{
+		// Keep asynchronous public-shard OPTIMIZE delegated to Buddy.
+		if ( pRouted->GetType()==IndexType_e::SHARD )
+		{
+			tOut.Error ( "OPTIMIZE TABLE requires an existing RT table" );
+			return;
+		}
+
+		tOut.ErrorEx ( "OPTIMIZE TABLE on a %s table requires OPTION sync=1", szRoutedType );
 		return;
 	}
 
-	if ( !WaitOptimize ( tOut, sIndex ) )
-		return;
+	const int iQueryTimeoutMs = pRouted->GetAgentQueryTimeoutMs ();
+	const DWORD uHeartbeatIntervalMs = CalcRemoteHeartbeatIntervalMs ( iQueryTimeoutMs );
 
-	if ( bHasCutoff )
+	CSphVector<cServedIndexRefPtr_c> dLocalTargets;
+	dLocalTargets.Resize ( pRouted->m_dLocal.GetLength() );
+	ARRAY_FOREACH ( i, pRouted->m_dLocal )
 	{
-		CSphIndexStatus tStatus;
-		RIdx_T<RtIndex_i *> ( pIndex )->GetStatus ( &tStatus );
-		if ( tStatus.m_iNumChunks>tTask.m_iCutoff )
+		dLocalTargets[i] = GetServed ( pRouted->m_dLocal[i] );
+		if ( !IsRtOptimizeTarget ( dLocalTargets[i] ) )
 		{
-			if ( bHasCutoff )
-				RIdx_T<RtIndex_i *> ( pIndex )->ManualOptimizeCutoff ( tTask.m_iCutoff );
-
-			bStarted = RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( tTask );
-			if ( !bStarted )
-			{
-				tOut.Error ( "Can't optimize frozen table" );
-				return;
-			}
-
-			if ( !WaitOptimize ( tOut, sIndex ) )
-				return;
-
-			RIdx_T<RtIndex_i *> ( pIndex )->GetStatus ( &tStatus );
-			if ( tStatus.m_iNumChunks>tTask.m_iCutoff )
-			{
-				tOut.ErrorEx ( "OPTIMIZE TABLE did not reach the requested cutoff %d, got %d disk chunks", tTask.m_iCutoff, tStatus.m_iNumChunks );
-				return;
-			}
+			CSphString sError;
+			sError.SetSprintf ( "%s OPTIMIZE local table '%s' must be an existing RT table", szRoutedType, pRouted->m_dLocal[i].cstr() );
+			tOut.Error ( sError.cstr() );
+			return;
 		}
+	}
+
+	VecRefPtrsAgentConn_t dAgents;
+	pRouted->GetAllHosts ( dAgents );
+	int iRemoteTargets = 0;
+	for ( AgentConn_t * pAgent : dAgents )
+	{
+		pAgent->m_iMyConnectTimeoutMs = pRouted->GetAgentConnectTimeoutMs ();
+		pAgent->m_iMyQueryTimeoutMs = iQueryTimeoutMs;
+		pAgent->EnableRemoteReplyHeartbeats ();
+		if ( pAgent->IsBlackhole () )
+			continue;
+
+		++iRemoteTargets;
+	}
+
+	if ( dLocalTargets.IsEmpty () && !iRemoteTargets )
+	{
+		tOut.ErrorEx ( "%s OPTIMIZE has no local or remote targets", szRoutedType );
+		return;
+	}
+
+	SearchFailuresLog_c dFailures;
+	CSphString sError;
+	ARRAY_FOREACH ( i, dLocalTargets )
+		if ( !RunSynchronousOptimize ( pRouted->m_dLocal[i], dLocalTargets[i], iCutoff, sError ) )
+			dFailures.Submit ( pRouted->m_dLocal[i], sIndex.cstr(), sError.cstr() );
+
+	if ( !dAgents.IsEmpty () )
+	{
+		SetSessionAuth ( dAgents );
+		RemoteOptimizeRequestBuilder_c tRequest ( uHeartbeatIntervalMs, iCutoff );
+		RemoteOptimizeReplyParser_c tParser;
+		PerformRemoteTasks ( dAgents, &tRequest, &tParser, 0 );
+
+		for ( const AgentConn_t * pAgent : dAgents )
+			if ( !pAgent->m_bSuccess )
+				dFailures.SubmitEx ( pAgent->m_tDesc.m_sIndexes, sIndex.cstr(), "agent %s: %s",
+					pAgent->m_tDesc.GetMyUrl().cstr(), pAgent->m_sFailure.IsEmpty() ? "remote optimize failed" : pAgent->m_sFailure.cstr() );
+	}
+
+	if ( !dFailures.IsEmpty () )
+	{
+		StringBuilder_c sReport;
+		dFailures.BuildReport ( sReport );
+		tOut.Error ( sReport.cstr() );
+		return;
 	}
 
 	tOut.Ok ();
@@ -10667,7 +10980,7 @@ void ServedStats_c::GetIndexQueryStats ( VectorLike & dStatus ) const
 	AddFoundRowsStatsToOutput ( dStatus, "found_rows", tRowsFoundStats );
 
 	// command stats
-	SearchdCommand_e dCommands[] = { SEARCHD_COMMAND_SEARCH, SEARCHD_COMMAND_EXCERPT, SEARCHD_COMMAND_UPDATE, SEARCHD_COMMAND_KEYWORDS, SEARCHD_COMMAND_STATUS, SEARCHD_COMMAND_DELETE, SEARCHD_COMMAND_INSERT, SEARCHD_COMMAND_REPLACE, SEARCHD_COMMAND_COMMIT, SEARCHD_COMMAND_SUGGEST, SEARCHD_COMMAND_CALLPQ, SEARCHD_COMMAND_GETFIELD, SEARCHD_COMMAND_SHARD_WRITE };
+	SearchdCommand_e dCommands[] = { SEARCHD_COMMAND_SEARCH, SEARCHD_COMMAND_EXCERPT, SEARCHD_COMMAND_UPDATE, SEARCHD_COMMAND_KEYWORDS, SEARCHD_COMMAND_STATUS, SEARCHD_COMMAND_DELETE, SEARCHD_COMMAND_INSERT, SEARCHD_COMMAND_REPLACE, SEARCHD_COMMAND_COMMIT, SEARCHD_COMMAND_SUGGEST, SEARCHD_COMMAND_CALLPQ, SEARCHD_COMMAND_GETFIELD, SEARCHD_COMMAND_SHARD_WRITE, SEARCHD_COMMAND_OPTIMIZE };
 	for ( auto eCmd : dCommands )
 		dStatus.MatchTupletf ( szCommand ( eCmd ), "%l", m_tCommandsStats.Get ( eCmd ) );
 
@@ -10990,6 +11303,23 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !pServed )
 	{
+		// a shard table keeps the unified settings of its shards right in the wrapper;
+		// a regular distributed table has no settings of its own, so it keeps erroring
+		auto pDist = GetDistr ( tStmt.m_sIndex );
+		if ( const ShardIndex_c * pShard = AsShard ( pDist.Ptr() ) )
+		{
+			if ( !tOut.HeadOfStrings ( { "Variable_name", "Value" } ) )
+				return;
+
+			StringBuilder_c tBuf;
+			std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( tStmt.m_sIndex.cstr() );
+			DumpSettings ( tBuf, pShard->m_tSettings, pShard->m_tFieldFilterSettings, pShard->m_tTokenizerSettings, pShard->m_tDictSettings, MutableIndexSettings_c::GetDefaults(), pFilenameBuilder.get() );
+
+			tOut.DataTuplet ( "settings", tBuf.cstr () );
+			tOut.Eof ();
+			return;
+		}
+
 		tOut.Error ( "SHOW TABLE SETTINGS requires an existing table" );
 		return;
 	}
@@ -11543,10 +11873,16 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	WIdx_T<RtIndex_i*> pRT { pServed };
 	if ( !pRT->IsSameSettings ( tSettings, tSetup, dWarnings, sError ) && sError.IsEmpty() )
 	{
-		if ( !pRT->Reconfigure ( tSetup ) )
+		auto eReconfigureResult = pRT->ReconfigureResult ( tSetup );
+		if ( eReconfigureResult!=RtActionResult_e::OK )
 		{
-			sError.SetSprintf ( "table '%s': reconfigure failed; TABLE UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRT->GetLastError().cstr() );
-			g_pLocalIndexes->Delete ( tStmt.m_sIndex );
+			if ( eReconfigureResult==RtActionResult_e::TABLE_USABLE )
+				sError.SetSprintf ( "table '%s': reconfigure failed; metadata was not committed, table remains available, binlog retained for recovery (%s)", tStmt.m_sIndex.cstr(), pRT->GetLastError().cstr() );
+			else
+			{
+				sError.SetSprintf ( "table '%s': reconfigure failed; TABLE UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRT->GetLastError().cstr() );
+				g_pLocalIndexes->Delete ( tStmt.m_sIndex );
+			}
 		}
 	}
 
@@ -11733,9 +12069,9 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 
 	if ( !bSame && sError.IsEmpty() )
 	{
-		bool bOk = pRtIndex->Reconfigure(tSetup);
+		auto eReconfigureResult = pRtIndex->ReconfigureResult ( tSetup );
 
-		if ( tSetup.m_tMutableSettings.IsSet ( MutableName_e::GLOBAL_IDF ) )
+		if ( eReconfigureResult==RtActionResult_e::OK && tSetup.m_tMutableSettings.IsSet ( MutableName_e::GLOBAL_IDF ) )
 		{
 			const CSphString sNewIDF = tSetup.m_tMutableSettings.m_sGlobalIDFPath;
 			sph::PrereadGlobalIDF ( sNewIDF, sError );
@@ -11748,10 +12084,15 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 			}
 		}
 
-		if ( !bOk )
+		if ( eReconfigureResult!=RtActionResult_e::OK )
 		{
-			sError.SetSprintf ( "table '%s': alter failed; TABLE UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRtIndex->GetLastError().cstr() );
-			g_pLocalIndexes->Delete ( tStmt.m_sIndex );
+			if ( eReconfigureResult==RtActionResult_e::TABLE_USABLE )
+				sError.SetSprintf ( "table '%s': alter failed; metadata was not committed, table remains available, binlog retained for recovery (%s)", tStmt.m_sIndex.cstr(), pRtIndex->GetLastError().cstr() );
+			else
+			{
+				sError.SetSprintf ( "table '%s': alter failed; TABLE UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRtIndex->GetLastError().cstr() );
+				g_pLocalIndexes->Delete ( tStmt.m_sIndex );
+			}
 		}
 	}
 
@@ -12281,6 +12622,16 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	constexpr Str_t mysqldump_8_0_39_30_hack {FROMS("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE table_schema = 'performance_schema' AND table_name = 'session_variables'")};
 	if ( StrEq ( mysqldump_8_0_39_30_hack, sQuery) )
 		return tOut.DataTableOneline ( "count(*)" );
+
+	// Sequel Ace 5.3.1+ checks the current database before running a query
+	constexpr Str_t sSequelAceDatabase { FROMS("SELECT CAST(DATABASE() AS BINARY)") };
+	if ( session::GetProto()==Proto_e::MYSQL41 && StrEq ( sSequelAceDatabase, sQuery ) )
+		return tOut.DataTableOneline ( "CAST(DATABASE() AS BINARY)", nullptr );
+
+	// Sequel Ace 5.3.1+ checks the current character set before running a query
+	constexpr Str_t sSequelAceCharset { FROMS("SELECT CAST(@@character_set_client AS BINARY)") };
+	if ( session::GetProto()==Proto_e::MYSQL41 && StrEq ( sSequelAceCharset, sQuery ) )
+		return tOut.DataTableOneline ( "CAST(@@character_set_client AS BINARY)", "utf8" );
 
 	// parse SQL query
 	if ( tSess.IsProfile() )
@@ -14008,10 +14359,11 @@ bool ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnChec
 
 	if ( hIndex("agent_query_timeout") )
 	{
-		if ( hIndex["agent_query_timeout"].intval()<=0 )
+		const int iAgentQueryTimeoutMs = hIndex.GetMsTimeMs ( "agent_query_timeout" );
+		if ( iAgentQueryTimeoutMs<=0 )
 			sphWarning ( "table '%s': agent_query_timeout must be positive, ignored", szIndexName );
 		else
-			tIdx.SetAgentQueryTimeoutMs ( hIndex.GetMsTimeMs ( "agent_query_timeout") );
+			tIdx.SetAgentQueryTimeoutMs ( iAgentQueryTimeoutMs );
 	}
 
 	bool bHaveHA = tIdx.m_dAgents.any_of ( [] ( const auto& ag ) { return ag->IsHA (); } );
@@ -14766,6 +15118,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 	bool bShutdown = false;
 	bool bStreamsActive = true;
 	int iChild = 0;
+	int iWatchdogExit = 0;
 	g_iParentPID = getpid();
 	assert ( g_pShared );
 	while (true)
@@ -14823,7 +15176,11 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 					eReincarnate = EFork::Restart;
 				} else
 				{
-					sphInfo ( "watchdog: main process %d exited cleanly (exit code %d), shutting down", iPid, iExit );
+					iWatchdogExit = iExit;
+					if ( iExit )
+						sphWarning ( "watchdog: main process %d exited with failure (exit code %d), shutting down", iPid, iExit );
+					else
+						sphInfo ( "watchdog: main process %d exited cleanly (exit code 0), shutting down", iPid );
 					bShutdown = true;
 				}
 			} else if ( WIFSIGNALED ( iStatus ) )
@@ -14871,7 +15228,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 		if ( bShutdown || sphInterrupted() || g_pShared->m_bDaemonAtShutdown )
 		{
 			ShutdownEarlyLoadedLibraries();
-			exit ( 0 );
+			exit ( iWatchdogExit );
 		}
 	}
 }
@@ -14883,9 +15240,9 @@ void CheckSignals () REQUIRES ( MainThread )
 #if _WIN32
 	if ( WinService() && StopWinService() )
 	{
-		Shutdown ();
+		const bool bShutdownOk = Shutdown ();
 		SetWinServiceStopped();
-		exit ( 0 );
+		exit ( bShutdownOk ? 0 : 1 );
 	}
 #endif
 
@@ -14899,8 +15256,8 @@ void CheckSignals () REQUIRES ( MainThread )
 	if ( sphInterrupted() )
 	{
 		sphInfo ( "caught SIGTERM, shutting down" );
-		Shutdown ();
-		exit ( 0 );
+		const bool bShutdownOk = Shutdown ();
+		exit ( bShutdownOk ? 0 : 1 );
 	}
 
 #if _WIN32
@@ -15184,7 +15541,11 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 	g_iQueryLogMinMs = hSearchd.GetMsTimeMs ( "query_log_min_msec", g_iQueryLogMinMs );
 
 	g_iAgentConnectTimeoutMs = hSearchd.GetMsTimeMs ( "agent_connect_timeout", g_iAgentConnectTimeoutMs );
-	g_iAgentQueryTimeoutMs = hSearchd.GetMsTimeMs ( "agent_query_timeout", g_iAgentQueryTimeoutMs );
+	const int iAgentQueryTimeoutMs = hSearchd.GetMsTimeMs ( "agent_query_timeout", g_iAgentQueryTimeoutMs );
+	if ( iAgentQueryTimeoutMs>0 )
+		g_iAgentQueryTimeoutMs = iAgentQueryTimeoutMs;
+	else
+		sphWarning ( "agent_query_timeout must be positive, ignored" );
 	g_iAgentRetryDelayMs = hSearchd.GetMsTimeMs ( "agent_retry_delay", g_iAgentRetryDelayMs );
 	if ( g_iAgentRetryDelayMs > DAEMON_MAX_RETRY_DELAY )
 		sphWarning ( "agent_retry_delay %d exceeded max recommended %d", g_iAgentRetryDelayMs, DAEMON_MAX_RETRY_DELAY );
@@ -15193,7 +15554,11 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 		sphWarning ( "agent_retry_count %d exceeded max recommended %d", g_iAgentRetryCount, DAEMON_MAX_RETRY_COUNT );
 
 	g_iReplConnectTimeoutMs = hSearchd.GetMsTimeMs ( "replication_connect_timeout", g_iReplConnectTimeoutMs );
-	g_iReplQueryTimeoutMs = hSearchd.GetMsTimeMs ( "replication_query_timeout", g_iReplQueryTimeoutMs );
+	const int iReplQueryTimeoutMs = hSearchd.GetMsTimeMs ( "replication_query_timeout", g_iReplQueryTimeoutMs );
+	if ( iReplQueryTimeoutMs>=1000 )
+		g_iReplQueryTimeoutMs = iReplQueryTimeoutMs;
+	else
+		sphWarning ( "replication_query_timeout must be at least 1000 ms, ignored" );
 	g_iReplRetryCount = hSearchd.GetInt ( "replication_retry_count", g_iReplRetryCount );
 	g_iReplRetryDelayMs = hSearchd.GetMsTimeMs ( "replication_retry_delay", g_iReplRetryDelayMs );
 	ReplicationSetTimeouts ( g_iReplConnectTimeoutMs, g_iReplQueryTimeoutMs, g_iReplRetryCount, g_iReplRetryDelayMs );
@@ -15325,8 +15690,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 
 	g_iAutoOptimizeCutoffMultiplier = hSearchd.GetInt ( "auto_optimize", 1 );
 	g_bOptimizeCutoffExplicit = hSearchd.Exists ( "optimize_cutoff" );
-	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoff() );
-	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoffKNN = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoffKNN() );
+	const auto iOptimizeCutoff = hSearchd.OptInt("optimize_cutoff");
+	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = iOptimizeCutoff.value_or ( AutoOptimizeCutoff() );
+	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoffKNN = iOptimizeCutoff.value_or ( AutoOptimizeCutoffKNN() );
 
 	SetPseudoSharding ( hSearchd.GetInt ( "pseudo_sharding", 1 )!=0 );
 	SetOptionSI ( hSearchd, bTestMode );
@@ -16327,6 +16693,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	sphRTInit ( hSearchd.GetStr ( "binlog_path", bTestMode ? "" : LOCALDATADIR ),
 		hSearchd.GetBool ( "binlog_common", env_exists ( "MANTICORE_BINLOG_COMMON" ) ),
 		hConf("common") ? hConf["common"]("common") : nullptr );
+	Binlog::Configure ( hSearchd, uReplayFlags );
 	// after next line executed we're in mt env, need to take rwlock accessing config.
 	StartGlobalWorkPool ();
 
@@ -16436,7 +16803,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( bHasPIDFile && !bWatched )
 		sphLockUn ( g_iPidFD );
 
-	Binlog::Configure ( hSearchd, uReplayFlags );
 	SetUidShort ( GetMacAddress(), g_sPidFile, bTestMode );
 	InitDocstore ( g_iDocstoreCache );
 	InitSkipCache ( g_iSkipCache );

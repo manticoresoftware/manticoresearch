@@ -1,11 +1,43 @@
 # 更新日志
 
+## Dev 版本
+
+### 新功能和改进
+* 🆕 添加了对 Grafana 13.1 和 13.2 版本的测试。
+* 🆕 添加了对 Logstash 9.5 版本的测试。
+
+## 版本 29.0.2
+**发布日期**：2026 年 8 月 14 日
+
+本次发布新增了分片表设置检查、分布式表和分片表优化、Unix socket Buddy 回调、更可靠的会话式搜索、可配置的文件访问，以及更快的列式 KNN 重评分；同时修复了备份、JDBC 兼容性、高亮、查询检查、KNN 压缩、分布式查询内存使用、模板表以及并发 RT 表优化中的问题。
+
+### 新功能与改进
+* 🆕 [v29.0.0](https://github.com/manticoresoftware/manticoresearch/tree/29.0.0) [Issue #4802](https://github.com/manticoresoftware/manticoresearch/issues/4802) 通过 `OPTION sync=1` 新增对分布式表和分片表的同步 [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 支持，将请求的截断点应用到每个本地 RT 组件和已配置的远程镜像。
+* 🆕 [v28.10.0](https://github.com/manticoresoftware/manticoresearch/tree/28.10.0) [PR #4799](https://github.com/manticoresoftware/manticoresearch/pull/4799) 新增对原生分片表的 [SHOW TABLE SETTINGS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS.md) 支持。
+* 🆕 [v28.8.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.8.0) [Buddy PR #691](https://github.com/manticoresoftware/manticoresearch-buddy/pull/691) 通过在返回错误前最多重试三次失败的 LLM 路由选择工具调用，提高了 [对话式搜索](Searching/Conversational_search.md) 的可靠性。
+* 🆕 [v28.7.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.7.0) [Issue #3837](https://github.com/manticoresoftware/manticoresearch/issues/3837) 新增 `access_columnar_attrs` 和 `access_secondary` 设置，用于在列式文件和二级索引文件之间选择缓冲式 `file` 或 `mmap` 访问方式，并通过在重新评分期间批量计算距离来提升列式 [KNN 搜索](Searching/KNN.md#KNN-vector-search) 性能。
+
+## 破坏性变更
+* ⚠️ [v29.0.0](https://github.com/manticoresoftware/manticoresearch/tree/29.0.0) [Issue #4739](https://github.com/manticoresoftware/manticoresearch/issues/4739) 为长时间运行的分片写入和复制 SST 增加了流式心跳回复，这会改变 `SHARD_WRITE` API 和集群协议。**这只会影响升级或降级使用原生分片表写入或复制的混合版本部署**；独立节点以及不使用这两项功能的部署无需特殊处理。现有数据和配置保持兼容，无需迁移。升级时，请先更新远程分片代理，再更新其协调器，并在开始 SST 之前更新所有复制对等节点。降级仍可在无需重建数据的情况下进行，但应先将协调器降级，再降级代理，并且在对等节点运行混合版本时必须避免 SST。
+
+### Bug 修复
+* 🪲 [v29.0.2](https://github.com/manticoresoftware/manticoresearch/tree/29.0.2) [Backup PR #140](https://github.com/manticoresoftware/manticoresearch-backup/pull/140) 将 [manticore-backup](https://github.com/manticoresoftware/manticoresearch-backup) 更新到 1.10.3，修复了在每表 `FREEZE` 之后如果发生错误，会导致失败的备份使 RT 表保持冻结的问题。
+* 🪲 [v29.0.2](https://github.com/manticoresoftware/manticoresearch/tree/29.0.2) [Issue #4434](https://github.com/manticoresoftware/manticoresearch/issues/4434) 将 Buddy 更新到 4.4.1，通过支持 `@@query_cache_size` 系统变量和数值型系统变量值，恢复了 MySQL Connector/J 的初始化。
+* 🪲 [v29.0.1](https://github.com/manticoresoftware/manticoresearch/tree/29.0.1) [Issue #4780](https://github.com/manticoresoftware/manticoresearch/issues/4780) 修复了在 RT 表优化期间，当并发更新重新分配 blob 支持的属性时 `searchd` 崩溃的问题，包括 KNN 表；方法是防止合并工作线程读取过期的源内存。
+* 🪲 [v29.0.0](https://github.com/manticoresoftware/manticoresearch/tree/29.0.0) [Issue #4739](https://github.com/manticoresoftware/manticoresearch/issues/4739) 修复了物理表在刷新或执行其他耗时操作时，长时间运行的分片写入超时的问题；现在心跳回复可以保持连接存活，而无需将 `agent_query_timeout` 设得异常大。
+* 🪲 [v28.9.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.9.3) [Issue #4792](https://github.com/manticoresoftware/manticoresearch/issues/4792) 修复了在 `html_strip_mode=retain` 时 [CALL SNIPPETS and HIGHLIGHT()](Searching/Highlighting.md) 生成无效的嵌套 HTML 的问题；现在高亮包装器会保留现有元素边界并生成格式正确的标记。
+* 🪲 [v28.9.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.9.2) [Issue #4678](https://github.com/manticoresoftware/manticoresearch/issues/4678) 修复了 `searchd` 在 [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) 检查并发运行的 HTTP SQL 查询时可能出现的 use-after-free 崩溃问题。
+* 🪲 [v28.9.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.9.1) [Issue #4738](https://github.com/manticoresoftware/manticoresearch/issues/4738) 修复了显式设置的 [optimize_cutoff](Server_settings/Searchd.md#optimize_cutoff) 值未应用到 KNN 压缩阈值的问题，因此现在服务器级和按表设置会按预期控制向量表的自动 chunk 合并。
+* 🪲 [v28.6.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.6.8) [PR #4777](https://github.com/manticoresoftware/manticoresearch/pull/4777) 修复了在模板表上、当全文查询包含字段选择器时 [EXPLAIN QUERY](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) 卡住的问题；现在有效的选择器会由全文解析器识别，而格式错误的选择器会返回语法错误。
+* 🪲 [v28.6.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.6.7) [Issue #4771](https://github.com/manticoresoftware/manticoresearch/issues/4771) 修复了分布式代理操作完成后主守护进程内存占用过高的问题；现在在解析完成后会立即释放较大的请求和回复缓冲区，而不是一直保留到 `agent_query_timeout` 到期。
+
 ## 版本 28.6.6
 **发布时间**：2026年7月31日
 
 此版本新增了 UUID 文档 ID 和有序、受限的 `GROUP_CONCAT()`，并修复了复制、备份、查询处理、SQL 兼容性以及二级索引方面的问题。
 
 ### 新功能与改进
+* 🆕 为 Filebeat 9.5 版本添加了测试。
 * 🆕 [v28.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.6.0) [Issue #4746](https://github.com/manticoresoftware/manticoresearch/issues/4746) 为显式 SphinxQL `GROUP BY` 查询新增了有序、受限的 [GROUP_CONCAT()](Searching/Grouping.md#GROUP_CONCAT%28field%29)：`GROUP_CONCAT(expression ORDER BY ... [SEPARATOR '...'] LIMIT N)` 会按所需顺序保留每个分组中的前 `N` 个值。
 * 🆕 [v28.5.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.5.0) [Issue #1429](https://github.com/manticoresoftware/manticoresearch/issues/1429) 通过 `id uuid` 为实时表新增了 [UUID 文档 ID](Creating_a_table/Data_types.md#UUID-document-IDs)，支持显式指定或自动生成的 ID、UUID 相等和 `IN` 过滤，以及基于 UUID 的 `REPLACE`、`UPDATE` 和 `DELETE`。
 

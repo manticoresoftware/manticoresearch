@@ -151,7 +151,7 @@ set ( HEADERS sphinxfilter.h sphinxint.h sphinxpq.h sphinxrt.h
 		aggrexpr.h joinsorter.h queuecreator.h exprgeodist.h exprremap.h exprdocstore.h schematransform.h attr_embedding.h embeddingutils.h hybridexecutor.h sortergroup.h
 		sortertraits.h sorterprecalc.h querycontext.h skip_cache.h jsonsi.h jieba.h cjkpreprocessor.h sorterscroll.h )
 
-set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h searchdha.h searchdreplication.h searchdsql.h
+set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h searchdha.h searchdreplication.h searchdsql.h api_reply_stream.h
 		searchdtask.h client_task_info.h taskflushattrs.h taskflushbinlog.h taskflushmutable.h taskglobalidf.h
 		taskmalloctrim.h taskping.h taskpreread.h tasksavestate.h net_action_accept.h
 		netreceive_api.h netreceive_http.h netreceive_ql.h networking_daemon.h query_status.h
@@ -193,7 +193,7 @@ diag ( LMANTICORE_BISON SEARCHD_BISON LMANTICORE_FLEX SEARCHD_FLEX )
 target_sources ( lmanticore PUBLIC ${LMANTICORE_BISON} ${LMANTICORE_FLEX} ${HEADERS} ${CHARSET_FILES} ${CHARSET_TEMPLATE} "../misc/manticore.natvis" )
 target_link_libraries ( lmanticore PUBLIC uni-algo::uni-algo )
 
-add_library ( lsearchd OBJECT searchdha.cpp http/http_parser.c searchdhttp.cpp
+add_library ( lsearchd OBJECT searchdha.cpp api_reply_stream.cpp http/http_parser.c searchdhttp.cpp
 		searchdtask.cpp taskping.cpp taskmalloctrim.cpp taskglobalidf.cpp tasksavestate.cpp
 		taskflushbinlog.cpp taskflushattrs.cpp taskflushmutable.cpp taskpreread.cpp
 		searchdaemon.cpp searchdfields.cpp searchdconfig.cpp

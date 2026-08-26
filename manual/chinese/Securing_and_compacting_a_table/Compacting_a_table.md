@@ -21,7 +21,11 @@ INSERT INTO rt(title) VALUES
 OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
 ```
 
-`OPTIMIZE` 语句会将 RT 表添加到优化队列中，该队列将在后台线程中处理。
+`OPTIMIZE TABLE` 支持实时（RT）、[分布式](../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md)和[分片](../Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md)表。
+
+对于 RT 表，该语句会把表加入优化队列，默认由后台线程处理。对于分布式表，需要使用 `OPTION sync=1`：该命令会优化每个本地 RT 组件，以及所有已配置的远程镜像，但不包括 blackhole agents。分片表支持同样的原生同步扇出到其物理 RT 目标。`cutoff` 值会应用到每个物理 RT 目标。
+
+当 Manticore Buddy 可用时，使用 `shards` 和 `rf` 选项创建的分片表也会保留由 Buddy 处理的异步 `OPTIMIZE TABLE table_name` 形式。使用 `OPTION sync=1` 可直接在 Manticore Search 中运行原生同步扇出。
 
 <!-- intro -->
 ##### SQL:
@@ -83,7 +87,9 @@ POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION cutoff=4"
 
 <!-- example optimize_sync -->
 
-使用 `OPTION sync=1`（默认为 0）时，命令将在优化过程完成后才返回。如果连接中断，优化将在服务器上继续运行。
+对于 RT 表，`sync=0` 是默认值。使用 `OPTION sync=1` 会让命令在返回前等待优化完成。如果连接中断，优化仍会继续在服务器上运行。
+
+分布式表需要 `OPTION sync=1`。分片表使用 `OPTION sync=1` 进行原生同步扇出。该命令会等待所有选定的物理目标，并在任一目标失败时报告错误；其他目标上已完成的工作不会回滚。
 
 <!-- intro -->
 ##### SQL:
@@ -104,6 +110,13 @@ POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION sync=1"
 ```
 
 <!-- end -->
+
+对于分布式表和分片表，请使用同步形式：
+
+```sql
+OPTIMIZE TABLE distributed_table OPTION sync=1, cutoff=1;
+OPTIMIZE TABLE sharded_table OPTION sync=1, cutoff=1;
+```
 
 ### 限制 IO 影响
 

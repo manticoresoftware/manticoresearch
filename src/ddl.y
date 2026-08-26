@@ -46,6 +46,7 @@
 %token	TOK_FAST_FETCH
 %token	TOK_FLOAT
 %token	TOK_FLOAT_VECTOR
+%token	TOK_FLOAT_VECTOR_ARRAY
 %token	TOK_FROM
 %token	TOK_FUNCTION
 %token	TOK_HASH
@@ -184,6 +185,7 @@ attribute_type:
 	| TOK_UINT		{ $$.SetValueInt ( SPH_ATTR_INTEGER ); }
 	| TOK_TIMESTAMP	{ $$.SetValueInt ( SPH_ATTR_TIMESTAMP ); }
 	| TOK_FLOAT_VECTOR { $$.SetValueInt ( SPH_ATTR_FLOAT_VECTOR ); }
+	| TOK_FLOAT_VECTOR_ARRAY { $$.SetValueInt ( SPH_ATTR_FLOAT_VECTOR_ARRAY ); }
 	;
 
 

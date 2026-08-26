@@ -88,6 +88,7 @@ int64_t	Expr_GetStored_T<POSTLIMIT>::Int64Eval ( const CSphMatch & tMatch ) cons
 	case SPH_ATTR_UINT32SET_PTR:
 	case SPH_ATTR_INT64SET_PTR:
 	case SPH_ATTR_FLOAT_VECTOR_PTR:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
 		return (int64_t)sphPackPtrAttr ( GetBlob ( tDoc, tMatch ) );
 
 	default:

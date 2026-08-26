@@ -43,6 +43,7 @@ struct SqlNode_t final
 	int						m_iType = 0;	///< TOK_xxx type for insert values; SPHINXQL_TOK_xxx code for special idents
 	float					m_fValue = 0.0;
 	int 					m_iValues = -1;    ///< filter values vector (idx of vec stored in the parser)
+	int						m_iGroupLens = -1; ///< nested vector literal: idx of the group-lengths vec (-1 == flat)
 	uint64_t				m_uValue = 0;
 	int						m_iParsedOp = -1;
 	bool					m_bNegative = false;	// this flag means that '-' was explicitly specified before the integer const
@@ -245,6 +246,7 @@ struct SqlInsert_t
 	float					m_fVal = 0.0;
 	CSphString				m_sVal;		// OPTIMIZE? use char* and point to node?
 	AttrValues_p			m_pVals;
+	CSphVector<int>			m_dGroupLens; // nested vector literal: one length per inner vector, empty for ordinary flat input
 
 	void					SetValueInt ( uint64_t uValue, bool bNegative );
 	void					SetValueInt ( int64_t iValue );
@@ -428,6 +430,10 @@ public:
 	AttrValueVec_t&	GetMvaVec (int iIdx) const noexcept;
 	AttrValues_p	CloneMvaVecPtr ( int iIdx ) const noexcept;
 
+	int				AddGroupLensVec() noexcept;
+	CSphVector<int>& GetGroupLensVec ( int iIdx ) const noexcept;
+	void			CopyGroupLens ( int iIdx, CSphVector<int> & dOut ) const noexcept;
+
 	void			SetDefaultTableForOptions();
 	bool			SetTableForOptions ( const SqlNode_t & tNode );
 	bool			NumIsSaturated ( uint64_t uValue, bool bNegative );
@@ -435,6 +441,7 @@ public:
 protected:
 	CSphVector<SqlStmt_t> &		m_dStmt;
 	CSphVector<AttrValueVec_t>	m_dMultiValues;
+	CSphVector<CSphVector<int>>	m_dGroupLens;
 	CSphQuery *					m_pQueryForOptions = nullptr;
 
 					SqlParserTraits_c ( CSphVector<SqlStmt_t> &	dStmt, const char* szQuery, CSphString* pError );

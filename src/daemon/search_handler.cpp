@@ -269,7 +269,12 @@ void SearchHandler_c::RunQueries()
 	int iStart = 0;
 	ARRAY_FOREACH ( i, m_dQueries )
 	{
-		if ( m_dQueries[i].m_sIndexes!=m_dQueries[iStart].m_sIndexes )
+		if ( i==iStart )
+			continue;
+
+		// hybrid search runs one query per subset (RunLocalSearches routes by m_dNQueries.First()); never batch it with other statements, facet helpers stay with their head
+		bool bHybridBoundary = ( m_dQueries[i].m_bHybridSearch || m_dQueries[iStart].m_bHybridSearch ) && !m_dQueries[i].m_bFacet;
+		if ( m_dQueries[i].m_sIndexes!=m_dQueries[iStart].m_sIndexes || bHybridBoundary )
 		{
 			RunSubset ( iStart, i );
 			iStart = i;

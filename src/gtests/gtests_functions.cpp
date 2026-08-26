@@ -91,6 +91,23 @@ TEST ( IdentifierValidation, ValidNamesAndLimits )
 }
 
 
+TEST ( IdentifierValidation, TableNameValidationModes )
+{
+	CSphString sError;
+	EXPECT_TRUE ( sphValidateTableName ( "system.valid_name", IdentifierValidation_e::ALLOW_NONE, sError ) );
+	EXPECT_FALSE ( sphValidateTableName ( "system.2026_name", IdentifierValidation_e::ALLOW_NONE, sError ) );
+	EXPECT_FALSE ( sphValidateTableName ( "system.path-name", IdentifierValidation_e::ALLOW_NONE, sError ) );
+
+	EXPECT_TRUE ( sphValidateTableName ( "system.2026_name", IdentifierValidation_e::ALLOW_LEADING_DIGIT, sError ) );
+	EXPECT_FALSE ( sphValidateTableName ( "system.path-name", IdentifierValidation_e::ALLOW_LEADING_DIGIT, sError ) );
+
+	EXPECT_FALSE ( sphValidateTableName ( "system.2026_name", IdentifierValidation_e::ALLOW_PATH_PUNCTUATION, sError ) );
+	EXPECT_TRUE ( sphValidateTableName ( "system.path-name", IdentifierValidation_e::ALLOW_PATH_PUNCTUATION, sError ) );
+
+	EXPECT_TRUE ( sphValidateTableName ( "system.2026_path-name", IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION, sError ) );
+}
+
+
 TEST ( IdentifierValidation, ExistingConfiglessPathFallsBackToLegacyLayout )
 {
 	CSphString sRoot;

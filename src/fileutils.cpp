@@ -33,7 +33,7 @@ namespace
 
 static constexpr int TABLE_LITERAL_MAX = 64;
 static constexpr int TABLE_ENCODE_MAX = 64;
-static const char * TABLE_PHYSICAL_PREFIX = "@manticore_";
+static const char * AT_MANTICORE_ = "@manticore_";
 
 
 bool IsSlash ( char c )
@@ -77,13 +77,13 @@ CSphString sphGetTablePhysicalName ( const CSphString & sName )
 	StringBuilder_c sPhysical;
 	if ( sName.Length()<=TABLE_ENCODE_MAX )
 	{
-		sPhysical << TABLE_PHYSICAL_PREFIX << "u_";
+		sPhysical << AT_MANTICORE_ << "u_";
 		for ( const BYTE * p = (const BYTE *)sName.cstr(); *p; ++p )
 			sPhysical.Appendf ( "%c%c", dHex[*p>>4], dHex[*p&0x0f] );
 	}
 	else
 	{
-		sPhysical << TABLE_PHYSICAL_PREFIX << "h_";
+		sPhysical << AT_MANTICORE_ << "h_";
 		static constexpr uint64_t dSeeds[] =
 		{
 			0x243f6a8885a308d3ULL,

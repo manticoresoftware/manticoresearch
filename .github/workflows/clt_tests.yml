@@ -114,7 +114,7 @@ jobs:
           PY
 
       - id: balance
-        name: Balance CLT tests 
+        name: Balance CLT tests
         uses: manticoresoftware/clt/balance/plan@feat/timing-cache-action
         with:
           tests: ${{ steps.build.outputs.tests }}
@@ -152,7 +152,8 @@ jobs:
         shell: bash
         run: mkdir -p "${{ runner.temp }}/clt-model-cache" && chmod 777 "${{ runner.temp }}/clt-model-cache"
 
-      - uses: manticoresoftware/clt@feat/timing-cache-action
+      - id: run-clt
+        uses: manticoresoftware/clt@feat/timing-cache-action
         with:
           artifact: ${{ inputs.artifact_name }}
           image: ${{ inputs.docker_image }}
@@ -168,8 +169,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p "${{ runner.temp }}/clt-timing-artifact"
-          if [[ -f "${{ runner.temp }}/clt-timings/timings.tsv" ]]; then
-            cp "${{ runner.temp }}/clt-timings/timings.tsv" "${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv"
+          if [[ -f "${{ steps.run-clt.outputs.timing-results }}" ]]; then
+            cp "${{ steps.run-clt.outputs.timing-results }}" "${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv"
           else
             : > "${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv"
           fi

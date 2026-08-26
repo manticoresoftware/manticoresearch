@@ -34,7 +34,7 @@ searchd
 	DROP TABLE IF EXISTS `тест`;
 	DROP TABLE IF EXISTS `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`;
 
-	CREATE TABLE товары2026 (название TEXT, описание TEXT, цена INTEGER, ёмкость INTEGER, 📦метка INTEGER);
+	CREATE TABLE товары2026 (название TEXT, описание TEXT, цена INTEGER, ёмкость INTEGER, 📦метка INTEGER, характеристики JSON);
 	CREATE TABLE select (поле TEXT);
 	CREATE TABLE `select` (`from` TEXT);
 	INSERT INTO `select` (id, `from`) VALUES (20, 'reserved');
@@ -68,10 +68,11 @@ searchd
 	CREATE TABLE `bad&#xFFFB;name` (поле TEXT);
 	SELECT @@версия;
 	CREATE TABLE `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` (поле TEXT);
-	INSERT INTO товары2026 (id, название, описание, цена, ёмкость, 📦метка) VALUES
-		(1, 'Клавиатура', 'Игровая клавиатура', 100, 75, 1),
-		(2, 'Мышь', 'Игровая мышь', 60, 25, 0);
+	INSERT INTO товары2026 (id, название, описание, цена, ёмкость, 📦метка, характеристики) VALUES
+		(1, 'Клавиатура', 'Игровая клавиатура', 100, 75, 1, '{"внутри":{"жсона":42}}'),
+		(2, 'Мышь', 'Игровая мышь', 60, 25, 0, '{"внутри":{"жсона":7}}');
 	SELECT id, название, цена FROM товары2026 WHERE MATCH('@название клавиатура');
+	SELECT id, характеристики.внутри.жсона AS json_value FROM товары2026 WHERE характеристики.внутри.жсона=42;
 	UPDATE товары2026 SET цена=101 WHERE цена=100;
 	SELECT id, цена FROM товары2026 WHERE цена=101;
 

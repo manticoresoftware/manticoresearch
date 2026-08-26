@@ -43,7 +43,7 @@ jobs:
       VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
       JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
     outputs:
-      matrix: ${{ steps.build.outputs.matrix }}
+      matrix: ${{ steps.balance.outputs.matrix }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -105,28 +105,20 @@ jobs:
                   # clt appends "*.rec" to the prefix; strip the suffix to avoid ".rec*.rec"
                   tests.append(str(path.with_suffix("")))
 
-          total_jobs = 20
-          if not tests:
-              matrix = {"chunk": []}
-          else:
-              size = (len(tests) + total_jobs - 1) // total_jobs
-              chunks = []
-              for i in range(0, len(tests), size):
-                  group = tests[i : i + size]
-                  chunks.append(
-                      {
-                          "id": len(chunks),
-                          "tests": group,
-                          "test_prefix": "\n".join(group),
-                      }
-                  )
-              matrix = {"chunk": chunks}
-
-          print(f"Found {len(tests)} .rec tests across {len(matrix['chunk'])} jobs")
+          print(f"Found {len(tests)} .rec tests")
           output_path = os.environ["GITHUB_OUTPUT"]
           with open(output_path, "a", encoding="utf-8") as fh:
-              fh.write(f"matrix={json.dumps(matrix)}\n")
+              fh.write("tests<<EOF\n")
+              fh.write("\n".join(tests))
+              fh.write("\nEOF\n")
           PY
+
+      - id: balance
+        name: Balance CLT tests
+        uses: manticoresoftware/clt/balance/plan@feat/timing-cache-action
+        with:
+          tests: ${{ steps.build.outputs.tests }}
+          workers: 20
 
   clt:
     name: CLT
@@ -135,6 +127,7 @@ jobs:
     timeout-minutes: 30
     continue-on-error: ${{ inputs.continue_on_error }}
     env:
+      CLT_TIMINGS_PERSIST: 'false'
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
       JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
@@ -159,7 +152,7 @@ jobs:
         shell: bash
         run: mkdir -p "${{ runner.temp }}/clt-model-cache" && chmod 777 "${{ runner.temp }}/clt-model-cache"
 
-      - uses: manticoresoftware/clt@0.7.9
+      - uses: manticoresoftware/clt@feat/timing-cache-action
         with:
           artifact: ${{ inputs.artifact_name }}
           image: ${{ inputs.docker_image }}
@@ -169,6 +162,25 @@ jobs:
           comment_mode: failures
           run_args: "-e OPENAI_API_KEY -e VOYAGE_API_KEY -e JINA_API_KEY -v ${{ runner.temp }}/clt-model-cache:/var/lib/manticore/.cache"
           ui_host: "https://clt.manticoresearch.com"
+
+      - name: Stage timing measurements
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          mkdir -p "${{ runner.temp }}/clt-timing-artifact"
+          if [[ -f "${{ runner.temp }}/clt-timings/timings.tsv" ]]; then
+            cp "${{ runner.temp }}/clt-timings/timings.tsv" "${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv"
+          else
+            : > "${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv"
+          fi
+
+      - name: Upload timing measurements
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: clt-timings-${{ matrix.chunk.id }}
+          path: ${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv
+          retention-days: 1
 
       # Containers write model blobs as root with mode 600; make them readable so the
       # runner user can pack them into the cache.
@@ -184,3 +196,11 @@ jobs:
         with:
           path: ${{ runner.temp }}/clt-model-cache
           key: clt-models-v1-chunk-${{ matrix.chunk.id }}
+
+  persist-timing-cache:
+    name: Persist CLT timing cache
+    needs: [clt]
+    if: ${{ always() }}
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt/balance/merge-results@feat/timing-cache-action

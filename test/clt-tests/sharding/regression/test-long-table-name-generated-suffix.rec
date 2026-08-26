@@ -2,66 +2,86 @@
 Regression for issue #4770: a valid 191-byte logical table name used to fail
 when Buddy generated internal system.<name>_sN shard names, because the DDL
 parser applied the 200-byte public-name limit to the generated component.
-Verify the real Buddy-managed create, internal shard materialization, DML, and
-cleanup path.
-
+Verify a real two-node replication cluster with RF=2: Buddy-managed create,
+physical shard materialization on both nodes, replicated DML, restart, and
+cluster-wide cleanup.
+––– comment –––
+Start two nodes and join them into replication cluster c.
 ––– input –––
 export INSTANCE=1
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
 ––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– input –––
 LONG_TABLE_NAME="t$(printf '%0190d' 1)"; echo ${#LONG_TABLE_NAME}
 ––– output –––
 191
 ––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE ${LONG_TABLE_NAME}(body text) shards='2' rf='1';"; echo $?
+mysql -h0 -P1306 -e "CREATE TABLE c:${LONG_TABLE_NAME}(body text) shards='2' rf='2' timeout='60';"; echo $?
 ––– output –––
 0
+––– comment –––
+With two nodes and RF=2, each node must materialize both generated shards.
 ––– input –––
-mysql -h0 -P1306 -N -B -e "SHOW TABLES" | grep -c "${LONG_TABLE_NAME}"
+for port in 1306 2306; do for i in $(seq 1 100); do n=$(mysql --no-defaults -h0 -P$port -sN -e "SHOW TABLES FROM system" 2>/dev/null | grep -c "system.${LONG_TABLE_NAME}_s"); [ "$n" = "2" ] && break; sleep 0.1; done; echo "$port:$n"; done
+––– output –––
+1306:2
+2306:2
+––– input –––
+for port in 1306 2306; do mysql --no-defaults -h0 -P$port -sN -e "SHOW TABLES" | grep -c "${LONG_TABLE_NAME}"; done
 ––– output –––
 1
-––– input –––
-mysql -h0 -P1306 -N -B -e "SHOW TABLES FROM system" | grep -c "system.${LONG_TABLE_NAME}_s"
-––– output –––
-2
+1
 ––– input –––
 mysql -h0 -P1306 -e "INSERT INTO ${LONG_TABLE_NAME}(id,body) VALUES(1,'boundary');"; echo $?
 ––– output –––
 0
-––– input –––
-SHARD_HEARTBEAT=$(mysql -h0 -P1306 -N -B -e "SELECT value[0].seen_at FROM system.sharding_state WHERE REGEX(\`key\`, '^node:') LIMIT 1" 2>/dev/null | tr -cd '0-9'); test -n "$SHARD_HEARTBEAT"; echo $?
-––– output –––
-0
-––– block: ../../base/replication/stop-searchd –––
-––– block: ../../base/replication/start-searchd-precach –––
 ––– comment –––
-Wait for the persisted node heartbeat to advance, proving Buddy's sharding processor initialized its queue after restart.
+Read the replicated sharded table through the second node.
 ––– input –––
-for i in $(seq 1 100); do NEW_SHARD_HEARTBEAT=$(mysql -h0 -P1306 -N -B -e "SELECT value[0].seen_at FROM system.sharding_state WHERE REGEX(\`key\`, '^node:') LIMIT 1" 2>/dev/null | tr -cd '0-9'); [ "${NEW_SHARD_HEARTBEAT:-0}" -gt "$SHARD_HEARTBEAT" ] && break; sleep 0.1; done; [ "${NEW_SHARD_HEARTBEAT:-0}" -gt "$SHARD_HEARTBEAT" ]; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P1306 -N -B -e "SHOW TABLES" | grep -c "${LONG_TABLE_NAME}"
+for i in $(seq 1 100); do n=$(mysql --no-defaults -h0 -P2306 -sN -e "SELECT COUNT(*) FROM ${LONG_TABLE_NAME}" 2>/dev/null); [ "$n" = "1" ] && break; sleep 0.1; done; echo "$n"
 ––– output –––
 1
+––– comment –––
+Restart node 2 and verify its persisted cluster and long generated shard names.
 ––– input –––
-mysql -h0 -P1306 -N -B -e "SHOW TABLES FROM system" | grep -c "system.${LONG_TABLE_NAME}_s"
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/stop-searchd –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+for i in $(seq 1 100); do status=$(mysql --no-defaults -h0 -P2306 -sN -e "SHOW STATUS LIKE 'cluster_c_status'" 2>/dev/null | awk '{print $2}'); [ "$status" = "primary" ] && break; sleep 0.1; done; echo "$status"
+––– output –––
+primary
+––– input –––
+for i in $(seq 1 100); do n=$(mysql --no-defaults -h0 -P2306 -sN -e "SHOW TABLES FROM system" 2>/dev/null | grep -c "system.${LONG_TABLE_NAME}_s"); [ "$n" = "2" ] && break; sleep 0.1; done; echo "$n"
 ––– output –––
 2
 ––– input –––
-mysql -h0 -P1306 -N -B -e "SELECT COUNT(*) FROM ${LONG_TABLE_NAME}" | tr -cd '0-9\n' | grep '^1$'
+mysql --no-defaults -h0 -P2306 -sN -e "SELECT COUNT(*) FROM ${LONG_TABLE_NAME}"
 ––– output –––
 1
+––– comment –––
+Drop through the replication cluster and verify public and physical cleanup on both nodes.
 ––– input –––
-mysql -h0 -P1306 -e "DROP TABLE ${LONG_TABLE_NAME};"; echo $?
+mysql -h0 -P1306 -e "DROP TABLE c:${LONG_TABLE_NAME};"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -N -B -e "SHOW TABLES FROM system" | grep -c "system.${LONG_TABLE_NAME}_s"
+for port in 1306 2306; do for i in $(seq 1 100); do n=$(mysql --no-defaults -h0 -P$port -sN -e "SHOW TABLES FROM system" 2>/dev/null | grep -c "system.${LONG_TABLE_NAME}_s"); [ "$n" = "0" ] && break; sleep 0.1; done; echo "$port:$n"; done
+––– output –––
+1306:0
+2306:0
+––– input –––
+for port in 1306 2306; do mysql --no-defaults -h0 -P$port -sN -e "SHOW TABLES" | grep -c "${LONG_TABLE_NAME}"; true; done
 ––– output –––
 0
-––– input –––
-mysql -h0 -P1306 -N -B -e "SHOW TABLES" | grep -c "${LONG_TABLE_NAME}"; true
-––– output –––
 0

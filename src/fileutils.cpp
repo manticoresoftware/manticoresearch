@@ -33,9 +33,6 @@ namespace
 
 static constexpr int TABLE_LITERAL_MAX = 64;
 static constexpr int TABLE_ENCODE_MAX = 64;
-static const char * AT_MANTICORE_ = "@manticore_";
-
-
 bool IsSlash ( char c )
 {
 	return c=='/' || c=='\\';
@@ -83,7 +80,7 @@ CSphString sphGetTablePhysicalName ( const CSphString & sName )
 	}
 	else
 	{
-		sPhysical << AT_MANTICORE_ << "h_";
+		sPhysical << "@manticore_h_";
 		static constexpr uint64_t dSeeds[] =
 		{
 			0x243f6a8885a308d3ULL,

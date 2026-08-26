@@ -1,0 +1,94 @@
+––– comment –––
+Regression for issue 4860. A delayed remote auto-embedding bulk insert must not leave an RT accumulator with a dangling table pointer if DROP TABLE removes the table while PreCommit waits for embeddings.
+The bulk response can either succeed before drop wins or fail cleanly after drop wins. The required behavior is that searchd remains alive and the log has no crash dump.
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+cat > /tmp/issue4860_mock.py <<'PY'
+#!/usr/bin/env python3
+import json
+import re
+import sys
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args):
+        pass
+
+    def do_POST(self):
+        print(f"Mock embeddings request: POST {self.path}", flush=True)
+        length = int(self.headers.get('Content-Length', '0'))
+        body = self.rfile.read(length) if length else b'{}'
+        try:
+            payload = json.loads(body.decode('utf-8'))
+        except Exception:
+            payload = {}
+        inputs = payload.get('input', [])
+        if isinstance(inputs, str):
+            inputs = [inputs]
+        delay = 0.0
+        for text in inputs:
+            m = re.search(r'delay=(\d+(?:\.\d+)?)', str(text))
+            if m:
+                delay = float(m.group(1))
+        if delay:
+            time.sleep(delay)
+        embedding = [0.001] * 1536
+        response = json.dumps({
+            'data': [ {'embedding': embedding} for _ in inputs ],
+            'model': payload.get('model', 'text-embedding-ada-002'),
+            'usage': {'prompt_tokens': 0, 'total_tokens': 0},
+        }).encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(response)))
+        self.end_headers()
+        self.wfile.write(response)
+
+server = ThreadingHTTPServer(('127.0.0.1', 8086), Handler)
+print('Mock embeddings server listening', flush=True)
+server.serve_forever()
+PY
+python3 -u /tmp/issue4860_mock.py > /tmp/mock-server-4860.log 2>&1 &
+echo "Mock server started"
+for i in $(seq 1 50); do
+  if grep -q 'Mock embeddings server listening' /tmp/mock-server-4860.log 2>/dev/null; then break; fi
+  sleep 0.1
+done
+––– output –––
+Mock server started
+––– input –––
+mysql -E -h0 -P9306 -e "CREATE TABLE issue4860 (title TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://127.0.0.1:8086/v1/embeddings' API_TIMEOUT='15')"; echo $?
+––– output –––
+0
+––– input –––
+rm -f /tmp/issue4860_bulk.out /tmp/issue4860_bulk.rc /tmp/issue4860_drop.out
+(
+  curl -sS -X POST http://127.0.0.1:9308/bulk -H "Content-Type: application/x-ndjson" --data-binary @- > /tmp/issue4860_bulk.out 2>&1 <<'NDJSON'
+{"insert":{"index":"issue4860","id":1,"doc":{"title":"bulk delay=4.0 alpha"}}}
+{"insert":{"index":"issue4860","id":2,"doc":{"title":"bulk delay=4.0 beta"}}}
+NDJSON
+  echo $? > /tmp/issue4860_bulk.rc
+) &
+bulk_pid=$!
+for i in $(seq 1 50); do
+  if grep -q 'Mock embeddings request: POST /v1/embeddings' /tmp/mock-server-4860.log 2>/dev/null; then echo "embedding request observed"; break; fi
+  sleep 0.1
+done
+if ! grep -q 'Mock embeddings request: POST /v1/embeddings' /tmp/mock-server-4860.log 2>/dev/null; then echo "embedding request missing"; fi
+mysql -E -h0 -P9306 -e "DROP TABLE issue4860" > /tmp/issue4860_drop.out 2>&1
+drop_rc=$?
+wait "$bulk_pid" || true
+bulk_rc=$(cat /tmp/issue4860_bulk.rc 2>/dev/null || echo missing)
+echo "drop rc: $drop_rc"
+echo "bulk curl rc: $bulk_rc"
+if mysql -E -h0 -P9306 -e "SELECT 1" >/dev/null 2>&1; then echo "searchd alive"; else echo "searchd down"; fi
+if grep -qE 'FATAL: CRASH DUMP|Handling signal' /var/log/manticore/searchd.log; then echo "log crashed"; else echo "no crash"; fi
+if grep -qE 'RtAccum_t::RebuildStoragesForEmbeddings|PrepareAccForSave|PreCommit' /var/log/manticore/searchd.log; then echo "issue4860 stack"; else echo "no issue4860 stack"; fi
+––– output –––
+embedding request observed
+drop rc: 0
+bulk curl rc: 0
+searchd alive
+no crash
+no issue4860 stack

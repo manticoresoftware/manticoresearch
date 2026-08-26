@@ -156,10 +156,13 @@ TEST ( IdentifierValidation, ExistingConfiglessPathFallsBackToLegacyLayout )
 
 TEST ( IdentifierValidation, GeneratedDdlQuotesIdentifiersWhenNeeded )
 {
+	constexpr char sSystemUtf8Shard[] = "system.\xD1\x82\xD0\xBE\xD0\xB2\xD0\xB0\xD1\x80\xD1\x8B_s0";
+
 	EXPECT_STREQ ( FormatCreateTableIdentifier ( "ordinary_name" ).cstr(), "ordinary_name" );
 	EXPECT_STREQ ( FormatCreateTableIdentifier ( "2026_архив" ).cstr(), "`2026_архив`" );
 	EXPECT_STREQ ( FormatCreateTableIdentifier ( "from" ).cstr(), "`from`" );
 	EXPECT_STREQ ( FormatCreateTableIdentifier ( "system.from" ).cstr(), "system.`from`" );
+	EXPECT_STREQ ( FormatCreateTableIdentifier ( sSystemUtf8Shard ).cstr(), sSystemUtf8Shard );
 	EXPECT_STREQ ( FormatCreateTableIdentifier ( "ordinary_name", true ).cstr(), "`ordinary_name`" );
 }
 

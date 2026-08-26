@@ -6805,7 +6805,7 @@ static bool CheckAttrs ( const VecTraits_T<T> & dAttrs, GETNAME && fnGetName, CS
 
 static bool CheckExistingTables ( const CSphString & sIndex, bool bIfNotExists, bool bNameQuoted, CSphString & sError )
 {
-	if ( !sphValidateTableName ( sIndex.cstr(), bNameQuoted, sError ) )
+	if ( !sphValidateTableName ( sIndex.cstr(), bNameQuoted ? IdentifierValidation_e::ALLOW_LEADING_DIGIT : IdentifierValidation_e::ALLOW_NONE, sError ) )
 		return false;
 
 	const char * szIdentifier = sIndex.Begins ( "system." ) ? sIndex.cstr()+7 : sIndex.cstr();

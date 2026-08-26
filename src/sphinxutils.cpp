@@ -1314,8 +1314,11 @@ static bool IsNamedSection ( const KeySection_t * pSection )
 	return pSection->m_szKey && pSection->m_bNamed;
 }
 
-bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int iMaxBytes, CSphString & sError, bool bAllowPathPunctuation )
+bool sphValidateIdentifier ( const char * szName, IdentifierValidation_e eValidation, int iMaxBytes, CSphString & sError )
 {
+	bool bAllowLeadingDigit = eValidation==IdentifierValidation_e::ALLOW_LEADING_DIGIT || eValidation==IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION;
+	bool bAllowPathPunctuation = eValidation==IdentifierValidation_e::ALLOW_PATH_PUNCTUATION || eValidation==IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION;
+
 	auto IsUnsafeCodepoint = [] ( DWORD uCode )
 	{
 		return uCode<=0x1F || ( uCode>=0x7F && uCode<=0x9F ) ||
@@ -1387,13 +1390,13 @@ bool sphValidateIdentifier ( const char * szName, bool bAllowLeadingDigit, int i
 }
 
 
-bool sphValidateTableName ( const char * szName, bool bAllowLeadingDigit, CSphString & sError, bool bAllowLegacyPunctuation )
+bool sphValidateTableName ( const char * szName, IdentifierValidation_e eValidation, CSphString & sError )
 {
 	static constexpr int SYSTEM_PREFIX_LEN = 7;
 	bool bSystem = szName && !strncmp ( szName, "system.", SYSTEM_PREFIX_LEN );
 	const char * szIdentifier = bSystem ? szName+SYSTEM_PREFIX_LEN : szName;
 	int iMaxBytes = SPH_MAX_TABLE_NAME_BYTES + ( bSystem ? SPH_MAX_GENERATED_TABLE_SUFFIX_BYTES : 0 );
-	return sphValidateIdentifier ( szIdentifier, bAllowLeadingDigit, iMaxBytes, sError, bAllowLegacyPunctuation );
+	return sphValidateIdentifier ( szIdentifier, eValidation, iMaxBytes, sError );
 }
 
 
@@ -1402,7 +1405,7 @@ bool CSphConfigParser::AddSection ( const char * szType, const char * szSection 
 	if ( ( !strcasecmp ( szType, "table" ) || !strcasecmp ( szType, "index" ) ) )
 	{
 		CSphString sError;
-		if ( !sphValidateTableName ( szSection, true, sError, true ) )
+		if ( !sphValidateTableName ( szSection, IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION, sError ) )
 			return TlsMsg::Err ( "invalid table name '%s': %s", szSection, sError.cstr() );
 	}
 

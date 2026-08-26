@@ -250,7 +250,10 @@ bool DdlParser_c::ValidateIdentifier ( const SqlNode_t & tName, int iMaxBytes, b
 	CSphString sName;
 	ToString ( sName, tName );
 	bool bCompatibilityName = bAllowCompatibilityNames && ( !strcasecmp ( sName.cstr(), "@timestamp" ) || !strcasecmp ( sName.cstr(), "@version" ) );
-	return sphValidateIdentifier ( sName.cstr(), IsBacktickQuoted ( tName ), iMaxBytes, m_sError, bCompatibilityName );
+	IdentifierValidation_e eValidation = IsBacktickQuoted ( tName )
+		? ( bCompatibilityName ? IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION : IdentifierValidation_e::ALLOW_LEADING_DIGIT )
+		: ( bCompatibilityName ? IdentifierValidation_e::ALLOW_PATH_PUNCTUATION : IdentifierValidation_e::ALLOW_NONE );
+	return sphValidateIdentifier ( sName.cstr(), eValidation, iMaxBytes, m_sError );
 }
 
 

@@ -552,7 +552,7 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 		}
 
 		CSphString sNameError;
-		if ( !sphValidateIdentifier ( tCol.m_sName.cstr(), true, 0, sNameError ) )
+		if ( !sphValidateIdentifier ( tCol.m_sName.cstr(), IdentifierValidation_e::ALLOW_LEADING_DIGIT, 0, sNameError ) )
 		{
 			sError.SetSprintf ( "invalid column name '%s': %s", tCol.m_sName.cstr(), sNameError.cstr() );
 			return false;

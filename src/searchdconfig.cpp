@@ -363,7 +363,7 @@ bool IndexDesc_t::Parse ( const bson::Bson_c& tBson, const CSphString& sName, CS
 		return TlsMsg::Err ( "empty table name" );
 
 	CSphString sNameError;
-	if ( !sphValidateTableName ( sName.cstr(), true, sNameError, true ) )
+	if ( !sphValidateTableName ( sName.cstr(), IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION, sNameError ) )
 		return TlsMsg::Err ( "invalid table name '%s': %s", sName.cstr(), sNameError.cstr() );
 
 	m_sName = sName;

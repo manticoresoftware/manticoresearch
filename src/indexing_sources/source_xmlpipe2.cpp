@@ -845,7 +845,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 			{
 				Info.m_sName = dAttrs[1];
 				CSphString sNameError;
-				if ( !sphValidateIdentifier ( Info.m_sName.cstr(), true, 0, sNameError ) )
+				if ( !sphValidateIdentifier ( Info.m_sName.cstr(), IdentifierValidation_e::ALLOW_LEADING_DIGIT, 0, sNameError ) )
 				{
 					Error ( "invalid field name '%s': %s", Info.m_sName.cstr(), sNameError.cstr() );
 					return;
@@ -947,7 +947,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 		if ( !bError )
 		{
 			CSphString sNameError;
-			if ( !sphValidateIdentifier ( Info.m_sName.cstr(), true, 0, sNameError ) )
+			if ( !sphValidateIdentifier ( Info.m_sName.cstr(), IdentifierValidation_e::ALLOW_LEADING_DIGIT, 0, sNameError ) )
 			{
 				Error ( "invalid attribute name '%s': %s", Info.m_sName.cstr(), sNameError.cstr() );
 				return;

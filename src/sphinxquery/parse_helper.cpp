@@ -159,7 +159,7 @@ bool XQParseHelper_c::AddField ( FieldMask_t & dFields, const char * szField, in
 	if ( iField<0 )
 	{
 		CSphString sIdentifierError;
-		if ( !sphValidateIdentifier ( sField.cstr(), true, 0, sIdentifierError ) )
+		if ( !sphValidateIdentifier ( sField.cstr(), IdentifierValidation_e::ALLOW_LEADING_DIGIT, 0, sIdentifierError ) )
 			return Error ( "invalid field name '%s': %s", sField.cstr(), sIdentifierError.cstr() );
 	}
 	if ( iField < 0 && m_pDiscoverySchema )

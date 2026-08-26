@@ -2787,7 +2787,7 @@ CSphString FormatCreateTableIdentifier ( const CSphString & sName, bool bQuoteAl
 	const char * szIdentifier = bSystem ? sName.cstr()+7 : sName.cstr();
 	CSphString sIdentifier = szIdentifier;
 	CSphString sError;
-	bool bQuote = bQuoteAll || IsDDLToken ( sIdentifier ) || CSphSchema::IsReserved ( szIdentifier ) || !sphValidateIdentifier ( szIdentifier, false, 0, sError );
+	bool bQuote = bQuoteAll || IsDDLToken ( sIdentifier ) || CSphSchema::IsReserved ( szIdentifier ) || !sphValidateIdentifier ( szIdentifier, IdentifierValidation_e::ALLOW_NONE, 0, sError );
 	if ( !bQuote )
 		return sName;
 

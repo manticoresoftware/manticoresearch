@@ -40,32 +40,32 @@ TEST ( IdentifierValidation, ValidNamesAndLimits )
 	constexpr char sEmojiCyrillicName[] = "\xF0\x9F\x93\xA6\xD0\xBC\xD0\xB5\xD1\x82\xD0\xBA\xD0\xB0";
 
 	CSphString sError;
-	EXPECT_TRUE ( sphValidateIdentifier ( "product_2026", false, 0, sError ) );
-	EXPECT_TRUE ( sphValidateIdentifier ( sCyrillicName, false, 0, sError ) );
-	EXPECT_TRUE ( sphValidateIdentifier ( sEmojiCyrillicName, false, 0, sError ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "@timestamp", false, 0, sError ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "@version", false, 0, sError ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "@uuid_id", false, 0, sError ) );
-	EXPECT_TRUE ( sphValidateIdentifier ( "@timestamp", false, 0, sError, true ) );
-	EXPECT_TRUE ( sphValidateIdentifier ( "@version", false, 0, sError, true ) );
-	EXPECT_TRUE ( sphValidateIdentifier ( "@uuid_id", false, 0, sError, true ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "@user_field", false, 0, sError, true ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "task.params", true, 0, sError ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "graph-workspace.description", true, 0, sError ) );
-	EXPECT_TRUE ( sphValidateIdentifier ( "task.params", true, 0, sError, true ) );
-	EXPECT_TRUE ( sphValidateIdentifier ( "graph-workspace.description", true, 0, sError, true ) );
-	EXPECT_TRUE ( sphValidateIdentifier ( "2026_архив", true, 0, sError ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "2026_архив", false, 0, sError ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "123", true, 0, sError ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "123", true, 0, sError, true ) );
-	EXPECT_FALSE ( sphValidateIdentifier ( "bad-name", true, 0, sError ) );
-	EXPECT_TRUE ( sphValidateTableName ( "system.товары", false, sError ) );
-	EXPECT_FALSE ( sphValidateTableName ( "system.bad-name", false, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "product_2026", IdentifierValidation_e::ALLOW_NONE, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( sCyrillicName, IdentifierValidation_e::ALLOW_NONE, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( sEmojiCyrillicName, IdentifierValidation_e::ALLOW_NONE, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "@timestamp", IdentifierValidation_e::ALLOW_NONE, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "@version", IdentifierValidation_e::ALLOW_NONE, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "@uuid_id", IdentifierValidation_e::ALLOW_NONE, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "@timestamp", IdentifierValidation_e::ALLOW_PATH_PUNCTUATION, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "@version", IdentifierValidation_e::ALLOW_PATH_PUNCTUATION, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "@uuid_id", IdentifierValidation_e::ALLOW_PATH_PUNCTUATION, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "@user_field", IdentifierValidation_e::ALLOW_PATH_PUNCTUATION, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "task.params", IdentifierValidation_e::ALLOW_LEADING_DIGIT, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "graph-workspace.description", IdentifierValidation_e::ALLOW_LEADING_DIGIT, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "task.params", IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "graph-workspace.description", IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION, 0, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( "2026_архив", IdentifierValidation_e::ALLOW_LEADING_DIGIT, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "2026_архив", IdentifierValidation_e::ALLOW_NONE, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "123", IdentifierValidation_e::ALLOW_LEADING_DIGIT, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "123", IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION, 0, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad-name", IdentifierValidation_e::ALLOW_LEADING_DIGIT, 0, sError ) );
+	EXPECT_TRUE ( sphValidateTableName ( "system.товары", IdentifierValidation_e::ALLOW_NONE, sError ) );
+	EXPECT_FALSE ( sphValidateTableName ( "system.bad-name", IdentifierValidation_e::ALLOW_NONE, sError ) );
 
 	std::string sMax ( SPH_MAX_TABLE_NAME_BYTES, 'a' );
-	EXPECT_TRUE ( sphValidateIdentifier ( sMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( sMax.c_str(), IdentifierValidation_e::ALLOW_NONE, SPH_MAX_TABLE_NAME_BYTES, sError ) );
 	sMax.push_back ( 'a' );
-	EXPECT_FALSE ( sphValidateIdentifier ( sMax.c_str(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( sMax.c_str(), IdentifierValidation_e::ALLOW_NONE, SPH_MAX_TABLE_NAME_BYTES, sError ) );
 
 	CSphVector<char> dMultibyteMax ( SPH_MAX_TABLE_NAME_BYTES+2 );
 	for ( int i=0; i<SPH_MAX_TABLE_NAME_BYTES-2; ++i )
@@ -73,15 +73,15 @@ TEST ( IdentifierValidation, ValidNamesAndLimits )
 	dMultibyteMax[SPH_MAX_TABLE_NAME_BYTES-2] = (char)0xC3;
 	dMultibyteMax[SPH_MAX_TABLE_NAME_BYTES-1] = (char)0xA9;
 	dMultibyteMax[SPH_MAX_TABLE_NAME_BYTES] = '\0';
-	EXPECT_TRUE ( sphValidateIdentifier ( dMultibyteMax.Begin(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
+	EXPECT_TRUE ( sphValidateIdentifier ( dMultibyteMax.Begin(), IdentifierValidation_e::ALLOW_NONE, SPH_MAX_TABLE_NAME_BYTES, sError ) );
 	dMultibyteMax[SPH_MAX_TABLE_NAME_BYTES] = 'a';
 	dMultibyteMax[SPH_MAX_TABLE_NAME_BYTES+1] = '\0';
-	EXPECT_FALSE ( sphValidateIdentifier ( dMultibyteMax.Begin(), false, SPH_MAX_TABLE_NAME_BYTES, sError ) );
+	EXPECT_FALSE ( sphValidateIdentifier ( dMultibyteMax.Begin(), IdentifierValidation_e::ALLOW_NONE, SPH_MAX_TABLE_NAME_BYTES, sError ) );
 
 	std::string sSystemMax = "system." + std::string ( SPH_MAX_TABLE_NAME_BYTES + SPH_MAX_GENERATED_TABLE_SUFFIX_BYTES, 'a' );
-	EXPECT_TRUE ( sphValidateTableName ( sSystemMax.c_str(), false, sError ) );
+	EXPECT_TRUE ( sphValidateTableName ( sSystemMax.c_str(), IdentifierValidation_e::ALLOW_NONE, sError ) );
 	sSystemMax.push_back ( 'a' );
-	EXPECT_FALSE ( sphValidateTableName ( sSystemMax.c_str(), false, sError ) );
+	EXPECT_FALSE ( sphValidateTableName ( sSystemMax.c_str(), IdentifierValidation_e::ALLOW_NONE, sError ) );
 
 	std::string sLongestTail = "." + std::to_string ( INT_MAX ) + ".tmp.spjidx.jsonsi.tmp." + std::to_string ( INT_MAX ) + ".tmp";
 	EXPECT_EQ ( sLongestTail.length(), 48 );
@@ -178,19 +178,19 @@ TEST ( IdentifierValidation, InvalidUtf8AndUnsafeCodepoints )
 	for ( const auto & szInvalid : dInvalid )
 	{
 		EXPECT_FALSE ( una::is_valid_utf8 ( std::string_view ( szInvalid ) ) );
-		EXPECT_FALSE ( sphValidateIdentifier ( szInvalid, false, 0, sError ) );
+		EXPECT_FALSE ( sphValidateIdentifier ( szInvalid, IdentifierValidation_e::ALLOW_NONE, 0, sError ) );
 	}
 
 	EXPECT_TRUE ( una::is_valid_utf8 ( std::string_view ( "@название клавиатура" ) ) );
 
-	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xC2\xA0" "name", false, 0, sError ) ); // U+00A0
-	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xE2\x80\x8B" "name", false, 0, sError ) ); // U+200B
-	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xE2\x80\xAE" "name", false, 0, sError ) ); // U+202E
-	EXPECT_FALSE ( sphValidateIdentifier ( "a\xE2\x80\x8D" "name", false, 0, sError ) ); // U+200D
-	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xB0name", false, 0, sError ) ); // U+FFF0
-	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xB9name", false, 0, sError ) ); // U+FFF9
-	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xBAname", false, 0, sError ) ); // U+FFFA
-	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xBBname", false, 0, sError ) ); // U+FFFB
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xC2\xA0" "name", IdentifierValidation_e::ALLOW_NONE, 0, sError ) ); // U+00A0
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xE2\x80\x8B" "name", IdentifierValidation_e::ALLOW_NONE, 0, sError ) ); // U+200B
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xE2\x80\xAE" "name", IdentifierValidation_e::ALLOW_NONE, 0, sError ) ); // U+202E
+	EXPECT_FALSE ( sphValidateIdentifier ( "a\xE2\x80\x8D" "name", IdentifierValidation_e::ALLOW_NONE, 0, sError ) ); // U+200D
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xB0name", IdentifierValidation_e::ALLOW_NONE, 0, sError ) ); // U+FFF0
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xB9name", IdentifierValidation_e::ALLOW_NONE, 0, sError ) ); // U+FFF9
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xBAname", IdentifierValidation_e::ALLOW_NONE, 0, sError ) ); // U+FFFA
+	EXPECT_FALSE ( sphValidateIdentifier ( "bad\xEF\xBF\xBBname", IdentifierValidation_e::ALLOW_NONE, 0, sError ) ); // U+FFFB
 }
 
 

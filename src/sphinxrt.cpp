@@ -12234,7 +12234,7 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 	{
 		CSphString sFieldName = v->cstr();
 		CSphString sNameError;
-		if ( !sphValidateIdentifier ( sFieldName.cstr(), true, 0, sNameError, true ) )
+		if ( !sphValidateIdentifier ( sFieldName.cstr(), IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION, 0, sNameError ) )
 		{
 			sError.SetSprintf ( "invalid field name '%s': %s", sFieldName.cstr(), sNameError.cstr() );
 			return false;
@@ -12286,7 +12286,7 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 			sphSplit ( dNameParts, v->cstr(), ":");
 			CSphColumnInfo tCol ( dNameParts[0].cstr(), iTypes[iType]);
 			CSphString sNameError;
-			if ( !sphValidateIdentifier ( tCol.m_sName.cstr(), true, 0, sNameError, true ) )
+			if ( !sphValidateIdentifier ( tCol.m_sName.cstr(), IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION, 0, sNameError ) )
 			{
 				sError.SetSprintf ( "invalid attribute name '%s': %s", tCol.m_sName.cstr(), sNameError.cstr() );
 				return false;

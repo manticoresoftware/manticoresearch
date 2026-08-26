@@ -41,7 +41,7 @@ struct CSphSchemaConfigurator
 			}
 
 			CSphString sNameError;
-			if ( !sphValidateIdentifier ( tCol.m_sName.cstr(), true, 0, sNameError, true ) )
+			if ( !sphValidateIdentifier ( tCol.m_sName.cstr(), IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION, 0, sNameError ) )
 			{
 				sError.SetSprintf ( "invalid attribute name '%s': %s", tCol.m_sName.cstr(), sNameError.cstr() );
 				return false;
@@ -70,7 +70,7 @@ struct CSphSchemaConfigurator
 		{
 			const char * sFieldName = pCur->strval().cstr();
 			CSphString sNameError;
-			if ( !sphValidateIdentifier ( sFieldName, true, 0, sNameError, true ) )
+			if ( !sphValidateIdentifier ( sFieldName, IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION, 0, sNameError ) )
 			{
 				sError.SetSprintf ( "invalid field name '%s': %s", sFieldName, sNameError.cstr() );
 				return false;

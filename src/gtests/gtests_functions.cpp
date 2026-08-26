@@ -91,6 +91,31 @@ TEST ( IdentifierValidation, ValidNamesAndLimits )
 }
 
 
+TEST ( IdentifierValidation, LengthBoundaryInEveryMode )
+{
+	CSphString sError;
+	CSphVector<char> dName ( SPH_MAX_TABLE_NAME_BYTES+2 );
+	auto CheckBoundary = [&] ( IdentifierValidation_e eValidation, char cFirst, char cPunctuation )
+	{
+		for ( int i=0; i<SPH_MAX_TABLE_NAME_BYTES; ++i )
+			dName[i] = 'a';
+		dName[0] = cFirst;
+		if ( cPunctuation )
+			dName[SPH_MAX_TABLE_NAME_BYTES/2] = cPunctuation;
+		dName[SPH_MAX_TABLE_NAME_BYTES] = '\0';
+		EXPECT_TRUE ( sphValidateIdentifier ( dName.Begin(), eValidation, SPH_MAX_TABLE_NAME_BYTES, sError ) );
+		dName[SPH_MAX_TABLE_NAME_BYTES] = 'a';
+		dName[SPH_MAX_TABLE_NAME_BYTES+1] = '\0';
+		EXPECT_FALSE ( sphValidateIdentifier ( dName.Begin(), eValidation, SPH_MAX_TABLE_NAME_BYTES, sError ) );
+	};
+
+	CheckBoundary ( IdentifierValidation_e::ALLOW_NONE, 'a', '\0' );
+	CheckBoundary ( IdentifierValidation_e::ALLOW_LEADING_DIGIT, '1', '\0' );
+	CheckBoundary ( IdentifierValidation_e::ALLOW_PATH_PUNCTUATION, 'a', '.' );
+	CheckBoundary ( IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION, '1', '-' );
+}
+
+
 TEST ( IdentifierValidation, TableNameValidationModes )
 {
 	CSphString sError;

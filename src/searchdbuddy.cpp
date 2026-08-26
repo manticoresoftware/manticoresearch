@@ -24,7 +24,6 @@
 #include <boost/process/v1/error.hpp>
 #include <boost/process/v1/handles.hpp>
 #include <boost/process/v1/io.hpp>
-#include <boost/process/v1/env.hpp>
 #else
 #include <boost/process.hpp>
 #endif

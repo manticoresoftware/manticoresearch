@@ -77,7 +77,7 @@ CSphString sphGetTablePhysicalName ( const CSphString & sName )
 	StringBuilder_c sPhysical;
 	if ( sName.Length()<=TABLE_ENCODE_MAX )
 	{
-		sPhysical << AT_MANTICORE_ << "u_";
+		sPhysical << "@manticore_u_";
 		for ( const BYTE * p = (const BYTE *)sName.cstr(); *p; ++p )
 			sPhysical.Appendf ( "%c%c", dHex[*p>>4], dHex[*p&0x0f] );
 	}

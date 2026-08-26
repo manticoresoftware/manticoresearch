@@ -114,7 +114,7 @@ jobs:
           PY
 
       - id: balance
-        name: Balance CLT tests
+        name: Balance CLT tests 
         uses: manticoresoftware/clt/balance/plan@feat/timing-cache-action
         with:
           tests: ${{ steps.build.outputs.tests }}

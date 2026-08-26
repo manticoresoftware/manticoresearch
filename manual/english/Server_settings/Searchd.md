@@ -898,6 +898,12 @@ You can specify:
 
 If you specify a port number but not an address, `searchd` will listen on all network interfaces. Unix path is identified by a leading slash. Port range can be set only for the replication protocol.
 
+Security note: bind each listener only to the network that needs it.
+
+For public Internet client access, use a dedicated `https` listener and configure [SSL](../Security/SSL.md) with `ssl_cert` and `ssl_key`. Keep API-capable listeners (`listen` without an explicit protocol, `http`, and `sphinx`) off the public Internet. These listeners can accept the Manticore/Sphinx binary API used by master-agent distributed queries and legacy clients, and binary API traffic is not SSL-secured.
+
+Bind API-capable listeners to loopback, a VPN, or a trusted internal network, or restrict them with firewall rules. `replication` listeners are also internal-only and should be reachable only by replication nodes.
+
 You can also specify a protocol handler (listener) to be used for connections on this socket. The listeners are:
 
 * **Not specified** - Manticore will accept connections at this port from:
@@ -924,15 +930,15 @@ Suffix `_readonly` sets [read-only mode](../Security/Read_only.md) for the liste
 ```ini
 listen = localhost
 listen = localhost:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at localhost
-listen = 192.168.0.1:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at 192.168.0.1
+listen = 192.168.0.1:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at 192.168.0.1; keep this internal
 listen = /var/run/manticore/manticore.s # listen for binary API requests on unix socket
 listen = /var/run/manticore/manticore.s:mysql # listen for mysql requests on unix socket
-listen = 9312 # listen for remote agents (binary API) and http/https requests on port 9312 on any interface
+listen = 9312 # listen for remote agents (binary API) and http/https requests on port 9312 on any interface; internal networks only
 listen = localhost:9306:mysql # listen for mysql requests on port 9306 at localhost
 listen = localhost:9307:mysql_readonly # listen for mysql requests on port 9307 at localhost and accept only read queries
 listen = 127.0.0.1:9308:http # listen for http requests as well as connections from remote agents (and binary API) on port 9308 at localhost
-listen = 192.168.0.1:9320-9328:replication # listen for replication connections on ports 9320-9328 at 192.168.0.1
-listen = 127.0.0.1:9443:https # listen for https requests (not http) on port 9443 at 127.0.0.1
+listen = 192.168.0.1:9320-9328:replication # listen for replication connections on ports 9320-9328 at 192.168.0.1; keep this internal
+listen = 127.0.0.1:9443:https # listen for https requests (not http) on port 9443 at 127.0.0.1; use this listener type for public Internet access with ssl_cert and ssl_key
 listen = 127.0.0.1:9312:sphinx # listen for legacy Sphinx requests (e.g. from SphinxSE) on port 9312 at 127.0.0.1
 ```
 <!-- end -->

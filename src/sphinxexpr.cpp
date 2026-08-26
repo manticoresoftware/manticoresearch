@@ -1386,6 +1386,11 @@ public:
 				sphFloatVec2Str ( m_pFirst->MvaEval(tMatch), m_sBuilder );
 				break;
 
+			case SPH_ATTR_FLOAT_VECTOR_ARRAY:
+			case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
+				sphFloatVecArray2Str ( m_pFirst->MvaEval(tMatch), m_sBuilder );
+				break;
+
 			case SPH_ATTR_STRING:
 			{
 				CSphVector<BYTE> dTmp;
@@ -4499,7 +4504,8 @@ static int ConvertToColumnarType ( ESphAttr eAttr )
 	case SPH_ATTR_STRING:		return TOK_COLUMNAR_STRING;
 	case SPH_ATTR_UINT32SET:	return TOK_COLUMNAR_UINT32SET;
 	case SPH_ATTR_INT64SET:		return TOK_COLUMNAR_INT64SET;
-	case SPH_ATTR_FLOAT_VECTOR:	return TOK_COLUMNAR_FLOATVEC;
+	case SPH_ATTR_FLOAT_VECTOR:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY:	return TOK_COLUMNAR_FLOATVEC;
 	default:
 		assert ( 0 && "Unknown columnar type" );
 		return -1;
@@ -4549,7 +4555,9 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp ) noe
 	case SPH_ATTR_INT64SET_PTR:		iRes = TOK_ATTR_MVA64; break;
 
 	case SPH_ATTR_FLOAT_VECTOR:
-	case SPH_ATTR_FLOAT_VECTOR_PTR:	iRes = TOK_ATTR_MVA32; break; // packed blob fetch; actual type comes from the schema
+	case SPH_ATTR_FLOAT_VECTOR_PTR:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:	iRes = TOK_ATTR_MVA32; break; // packed blob fetch; actual type comes from the schema
 
 	case SPH_ATTR_STRING:
 	case SPH_ATTR_STRINGPTR:		iRes = TOK_ATTR_STRING; break;
@@ -9457,7 +9465,8 @@ int ExprParser_t::AddNodeAttr ( int iTokenType, uint64_t uAttrLocator )
 	case TOK_ATTR_MVA32:
 	{
 		ESphAttr eAttr = m_pSchema->GetAttr(tNode.m_iLocator).m_eAttrType;
-		tNode.m_eRetType = ( eAttr==SPH_ATTR_FLOAT_VECTOR || eAttr==SPH_ATTR_FLOAT_VECTOR_PTR )
+		tNode.m_eRetType = ( eAttr==SPH_ATTR_FLOAT_VECTOR || eAttr==SPH_ATTR_FLOAT_VECTOR_PTR
+			|| eAttr==SPH_ATTR_FLOAT_VECTOR_ARRAY || eAttr==SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR )
 			? eAttr
 			: ( bPtrAttr ? SPH_ATTR_UINT32SET_PTR : SPH_ATTR_UINT32SET );
 		break;
@@ -9489,7 +9498,11 @@ int ExprParser_t::AddNodeColumnar ( int iTokenType, uint64_t uAttrLocator )
 	case TOK_COLUMNAR_STRING:		tNode.m_eRetType = SPH_ATTR_STRINGPTR; break;
 	case TOK_COLUMNAR_UINT32SET:	tNode.m_eRetType = SPH_ATTR_UINT32SET_PTR; break;
 	case TOK_COLUMNAR_INT64SET:		tNode.m_eRetType = SPH_ATTR_INT64SET_PTR; break;
-	case TOK_COLUMNAR_FLOATVEC:		tNode.m_eRetType = SPH_ATTR_FLOAT_VECTOR_PTR; break;
+	case TOK_COLUMNAR_FLOATVEC: // both float_vector and float_vector_array map to the same columnar type (FLOATVEC) and thus to the same token, so recover the exact attr type from the schema
+		tNode.m_eRetType = m_pSchema->GetAttr(tNode.m_iLocator).m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY
+			? SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR
+			: SPH_ATTR_FLOAT_VECTOR_PTR;
+		break;
 	default:
 		assert ( 0 && "Unsupported columnar type" );
 		break;
@@ -10859,7 +10872,8 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	ESphAttr eAttrType = m_dNodes[m_iParsed].m_eRetType;
 
 	// pooled MVA/string attributes are ok to use in expressions, but storing them into schema requires their _PTR counterparts
-	if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET || eAttrType==SPH_ATTR_FLOAT_VECTOR || eAttrType==SPH_ATTR_STRING )
+	if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET || eAttrType==SPH_ATTR_FLOAT_VECTOR
+		|| eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY || eAttrType==SPH_ATTR_STRING )
 		eAttrType = sphPlainAttrToPtrAttr(eAttrType);
 
 	// Check expression stack to fit for mutual recursive function calls.

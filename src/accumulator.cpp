@@ -139,7 +139,7 @@ static bool RepackBlob ( const CSphColumnInfo & tAttr, const CSphColumnInfo & tB
 	ByteBlob_t tBlob = sphGetBlobAttr ( pBlobRow, tAttr.m_tLocator );
 
 	BlobAttrInput_e eInput = BlobAttrInput_e::RAW_BYTES;
-	if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
+	if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR || tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY )
 		eInput = BlobAttrInput_e::MVA_DWORD;
 	else if ( tAttr.m_eAttrType==SPH_ATTR_INT64SET )
 		eInput = BlobAttrInput_e::MVA_INT64;
@@ -733,6 +733,7 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 		case SPH_ATTR_UINT32SET:
 		case SPH_ATTR_INT64SET:
 		case SPH_ATTR_FLOAT_VECTOR:
+		case SPH_ATTR_FLOAT_VECTOR_ARRAY:
 			{
 				int iNumValues = 0;
 				bool bDefault = false;

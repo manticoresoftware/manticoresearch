@@ -11,11 +11,93 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdlib>
+#include <cstring>
+
+#include "fileio.h"
 #include "json/cJSON.h"
+#include "sphinx.h"
 #include "sphinxjson.h"
 #include "sphinxjsonquery.h"
+#include "threadutils.h"
 
 // Miscelaneous short tests for json/cjson
+
+//////////////////////////////////////////////////////////////////////////
+
+class JsonFileParseTest : public ::testing::Test
+{
+protected:
+	void SetUp () override
+	{
+		const testing::TestInfo * pInfo = testing::UnitTest::GetInstance()->current_test_info();
+		m_sFile.SetSprintf ( "__json_file_%d_%s.tmp", GetOsProcessId(), pInfo->name() );
+	}
+
+	void TearDown () override
+	{
+		unlink ( m_sFile.cstr() );
+	}
+
+	void Write ( const char * szData )
+	{
+		CSphString sError;
+		CSphWriterNonThrottled tWriter;
+		ASSERT_TRUE ( tWriter.OpenFile ( m_sFile, sError ) ) << sError.cstr();
+		tWriter.PutBytes ( szData, strlen ( szData ) );
+		tWriter.CloseFile();
+		ASSERT_FALSE ( tWriter.IsError() );
+	}
+
+	CSphString m_sFile;
+};
+
+
+TEST_F ( JsonFileParseTest, ValidJson )
+{
+	Write ( R"({"value":1})" );
+
+	CSphVector<BYTE> dData;
+	CSphString sError;
+	EXPECT_EQ ( sphJsonParse ( dData, m_sFile, sError ), JsonFileParse_e::OK );
+}
+
+
+TEST_F ( JsonFileParseTest, NonJsonFormat )
+{
+	Write ( "not json" );
+
+	CSphVector<BYTE> dData;
+	CSphString sError;
+	EXPECT_EQ ( sphJsonParse ( dData, m_sFile, sError ), JsonFileParse_e::FORMAT_ERROR );
+}
+
+
+TEST_F ( JsonFileParseTest, MissingFile )
+{
+	CSphVector<BYTE> dData;
+	CSphString sError;
+	EXPECT_EQ ( sphJsonParse ( dData, m_sFile, sError ), JsonFileParse_e::READ_ERROR );
+	EXPECT_FALSE ( sError.IsEmpty() );
+}
+
+
+TEST_F ( JsonFileParseTest, InterruptedRead )
+{
+	Write ( R"({"value":1})" );
+	::testing::FLAGS_gtest_death_test_style = "threadsafe";
+
+	EXPECT_EXIT (
+		{
+			sphInterruptNow();
+			CSphVector<BYTE> dData;
+			CSphString sError;
+			auto eResult = sphJsonParse ( dData, m_sFile, sError );
+			std::exit ( eResult==JsonFileParse_e::READ_ERROR && strstr ( sError.cstr(), "read interrupted" ) ? 0 : 1 );
+		},
+		::testing::ExitedWithCode ( 0 ), "" );
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 

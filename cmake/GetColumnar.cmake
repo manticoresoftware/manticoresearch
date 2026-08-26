@@ -7,7 +7,7 @@ include ( update_bundle )
 # Versions of API headers we are need to build with.
 set ( NEED_COLUMNAR_API 28 )
 set ( NEED_SECONDARY_API 21 )
-set ( NEED_KNN_API 16 )
+set ( NEED_KNN_API 17 )
 
 if (WIN32)
 	set ( EXTENSION dll )

@@ -1,5 +1,11 @@
 # Changelog
 
+## Version Dev
+
+### New Features and Improvements
+* 🆕 Added testing for Grafana versions 13.1 and 13.2.
+* 🆕 Added testing for Logstash version 9.5.
+
 ## Version 29.0.2
 **Released**: August 14th 2026
 

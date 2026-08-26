@@ -313,7 +313,8 @@ static RtTypedAttr_t g_dRtTypedAttrs[]=
 	{ SPH_ATTR_JSON,		"rt_attr_json" },
 	{ SPH_ATTR_UINT32SET,	"rt_attr_multi" },
 	{ SPH_ATTR_INT64SET,	"rt_attr_multi_64" },
-	{ SPH_ATTR_FLOAT_VECTOR,"rt_attr_float_vector" }
+	{ SPH_ATTR_FLOAT_VECTOR,"rt_attr_float_vector" },
+	{ SPH_ATTR_FLOAT_VECTOR_ARRAY,"rt_attr_float_vector_array" }
 };
 
 
@@ -2659,7 +2660,8 @@ static RtTypedAttr_t g_dTypeNames[] =
 	{ SPH_ATTR_STRINGPTR,	"string" },
 	{ SPH_ATTR_TDIGEST_PTR,	"tdigest" },
 	{ SPH_ATTR_TIMESTAMP,	"timestamp" },
-	{ SPH_ATTR_FLOAT_VECTOR, "float_vector" }
+	{ SPH_ATTR_FLOAT_VECTOR, "float_vector" },
+	{ SPH_ATTR_FLOAT_VECTOR_ARRAY, "float_vector_array" }
 };
 
 

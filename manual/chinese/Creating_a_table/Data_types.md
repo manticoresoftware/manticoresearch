@@ -2932,6 +2932,106 @@ table products
 
 <!-- end -->
 
+## 浮点向量数组
+
+`float_vector_array` 属性为每个文档存储多个向量，而不是单个向量。其值写成向量数组，每个文档都有自己的向量数量：
+
+```
+[[0.1, 0.2, 0.3, 0.4], [0.5, 0.6, 0.7, 0.8]]
+```
+
+这适合那些不能简单归结为单个 embedding 的文档 - 例如被拆成多个片段的长文章、从多个角度拍摄的产品、按关键帧采样的视频。与其为每个片段单独存一行再在之后去重结果，不如把文档的所有向量都保存在文档本身上。
+
+当该属性为 [KNN](../Searching/KNN.md) 配置后，所有文档的所有向量会一起建立索引；如果其中 **任何** 一个向量与查询足够接近，就算该文档匹配。搜索语义请参见 [每个文档多个向量](../Searching/KNN.md#Multiple-vectors-per-document)。
+
+### 值语法
+
+- 值始终是一个向量数组：`[[1,2],[3,4]]`。像 `(1,2,3,4)` 这样的扁平列表会被拒绝，因为无法区分这是一个 4 维向量，还是两个 2 维向量。
+- `[]` 表示“没有向量”。这是一个合法的已存储值，也是省略该属性时的默认值。
+- 同一个值中的所有向量必须具有相同的维度。
+- 空的内层向量（`[[]]`）无法表示，因此会被拒绝。表示“无”请使用 `[]`。
+- 返回的值会保持与插入时相同的嵌套形式。
+
+### 一般限制
+
+- 目前仅支持实时表（不支持普通表）
+- 不支持在函数或表达式中使用
+- 不能用于常规过滤或排序
+- [自动 embedding](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29) 不适用于此类型：模型会为每个文档生成一个向量，因此 `MODEL_NAME` 会被拒绝。必须显式提供向量。
+- 与 [自动模式](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) 机制不兼容
+
+### 将浮点向量数组用于 KNN
+
+参数与 [`float_vector`](../Creating_a_table/Data_types.md#Float-vector) 所使用的相同：`KNN_TYPE`、`KNN_DIMS`、`HNSW_SIMILARITY`，以及可选的 `HNSW_M`、`HNSW_EF_CONSTRUCTION` 和 [量化](../Searching/KNN.md#Vector-quantization)，但有两个区别：
+
+- `KNN_DIMS` 是必需的，并且 **每一行** 中的 **每个** 向量都必须恰好包含这么多维。插入时，如果某一行的向量宽度不同，该行会被拒绝。
+- 不接受 `MODEL_NAME` 和 `FROM`。
+
+**你可以做的：**
+- 运行 KNN 搜索，让文档按其最近的向量进行匹配
+- 为每个文档存储不同数量的向量，包括一个都不存
+
+**你不能做的：**
+- 对该属性执行 `UPDATE`：请像对带 KNN 索引的 `float_vector` 一样，使用 `REPLACE`
+- 在常规过滤或排序中使用这些值
+
+值为 `[]` 的文档，或省略了该属性的文档，不会被 KNN 搜索返回，因为它并不接近任何内容。
+
+### 不使用 KNN 的浮点向量数组
+
+如果不配置 KNN，向量仍会被存储，但不可搜索，而且该列完全不需要任何选项。在这种模式下，每个值都能自我描述，因此不同的行可以保存不同宽度的向量：
+
+```sql
+CREATE TABLE products(title text, chunk_vectors float_vector_array);
+INSERT INTO products VALUES (1, 'a', [[1,2]]), (2, 'b', [[1,2,3],[4,5,6]]);
+```
+
+在这种模式下，`UPDATE` 可以正常工作，就像对不带 KNN 的 `float_vector` 一样，`[]` 会清空该值。
+
+<!-- example for creating float_vector_array -->
+
+创建一个带 KNN 索引的浮点向量数组、填充数据并进行搜索：
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+
+INSERT INTO articles VALUES
+  (1, 'first',  [[1,0,0,0],[0,1,0,0]]),
+  (2, 'second', [[0,0,1,0]]),
+  (3, 'no vectors yet', []);
+
+SELECT id, knn_dist() FROM articles WHERE knn(chunk_vectors, 5, (1,0,0,0));
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')"
+
+POST /insert
+{
+  "table": "articles",
+  "id": 1,
+  "doc": { "title": "first", "chunk_vectors": [[1,0,0,0],[0,1,0,0]] }
+}
+
+POST /search
+{
+  "table": "articles",
+  "knn": { "field": "chunk_vectors", "query_vector": [1,0,0,0], "k": 5 }
+}
+```
+
+<!-- end -->
+
 ## 多值整数（MVA）
 
 <!-- example for creating MVA32 -->

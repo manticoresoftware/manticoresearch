@@ -648,22 +648,49 @@ StrVec_t FindFiles ( const char * szPath, bool bNeedDirs )
 	return dFilesFound;
 }
 
+bool wrap_mkdir ( const char* szPath)
+{
+	return mkdir ( szPath
+#if !_WIN32
+	, S_IRWXU
+#endif
+		);
+}
+
 
 bool MkDir ( const char * szDir )
 {
-	if ( sphDirExists ( szDir ) )
-		return true;
-
-#if _WIN32
-	if ( mkdir ( szDir ) )
-#else
-	if ( mkdir ( szDir, S_IRWXU ) )
-#endif
+	if ( !szDir || !*szDir )
 		return false;
 
-	return true;
-}
+	CSphString sDir = szDir;
+	while ( sDir.Length()>1 && IsSlash ( sDir.cstr()[sDir.Length()-1] ) )
+	{
+#if _WIN32
+		if ( ( sDir.Length()==3 && sDir.cstr()[1]==':' ) || ( sDir.Length()==2 && IsSlash ( sDir.cstr()[0] ) ) )
+			break;
+#endif
+		sDir = sDir.SubString ( 0, sDir.Length()-1 );
+	}
 
+	if ( sphDirExists ( sDir.cstr() ) )
+		return true;
+
+	if ( !wrap_mkdir ( sDir.cstr() ) )
+		return true;
+
+	if ( errno==EEXIST )
+		return sphDirExists ( sDir.cstr() );
+
+	if ( errno!=ENOENT )
+		return false;
+
+	CSphString sParent = GetPathOnly ( sDir );
+	if ( sParent==sDir || !MkDir ( sParent.cstr() ) )
+		return false;
+
+	return !wrap_mkdir ( sDir.cstr() ) || ( errno==EEXIST && sphDirExists ( sDir.cstr() ) );
+}
 
 bool CopyFile ( const CSphString & sSource, const CSphString & sDest, CSphString & sError, int iMode )
 {
@@ -827,7 +854,7 @@ CSphString & StripPath ( CSphString & sPath )
 CSphString GetPathOnly ( const CSphString & sFullPath )
 {
 	if ( sFullPath.IsEmpty() )
-		return CSphString();
+		return {};
 
 	const char * pStart = sFullPath.cstr();
 	const char * pCur = pStart + sFullPath.Length() - 1;

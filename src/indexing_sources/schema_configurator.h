@@ -40,6 +40,13 @@ struct CSphSchemaConfigurator
 					sphWarn ( "%s", ((T*)const_cast<CSphSchemaConfigurator*>(this))->DecorateMessage ( "attribute '%s': bitcount is only supported for integer types", tCol.m_sName.cstr() ) );
 			}
 
+			CSphString sNameError;
+			if ( !sphValidateIdentifier ( tCol.m_sName.cstr(), IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION, 0, sNameError ) )
+			{
+				sError.SetSprintf ( "invalid attribute name '%s': %s", tCol.m_sName.cstr(), sNameError.cstr() );
+				return false;
+			}
+
 			tCol.m_iIndex = tSchema.GetAttrsCount ();
 
 			if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET )
@@ -57,11 +64,17 @@ struct CSphSchemaConfigurator
 		return true;
 	}
 
-	void ConfigureFields ( const CSphVariant * pHead, bool bWordDict, CSphSchema & tSchema ) const
+	bool ConfigureFields ( const CSphVariant * pHead, bool bWordDict, CSphSchema & tSchema, CSphString & sError ) const
 	{
 		for ( const CSphVariant * pCur = pHead; pCur; pCur= pCur->m_pNext )
 		{
 			const char * sFieldName = pCur->strval().cstr();
+			CSphString sNameError;
+			if ( !sphValidateIdentifier ( sFieldName, IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION, 0, sNameError ) )
+			{
+				sError.SetSprintf ( "invalid field name '%s': %s", sFieldName, sNameError.cstr() );
+				return false;
+			}
 
 			bool bFound = false;
 			for ( int i = 0; i < tSchema.GetFieldsCount() && !bFound; i++ )
@@ -72,6 +85,8 @@ struct CSphSchemaConfigurator
 			else
 				AddFieldToSchema ( sFieldName, bWordDict, tSchema );
 		}
+
+		return true;
 	}
 
 	void AddFieldToSchema ( const char * sFieldName, bool bWordDict, CSphSchema & tSchema ) const

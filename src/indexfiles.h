@@ -79,13 +79,11 @@ public:
 	inline const char * ErrorMsg () const { return m_sLastError.cstr(); }
 	inline bool IsFatal() const { return m_bFatal; }
 
-	// read .sph and adopt index version from there.
+	// check if .sph is usable
 	bool CheckHeader ( const char * sType="" );
 
 	// read the beginning of .spk and parse killlist targets
 	bool ReadKlistTargets ( StrVec_t & dTargets, const char * sType="" );
-
-	DWORD GetVersion() const { return m_uVersion; }
 
 	// simple make decorated path, like '.old' -> /path/to/index.old
 	CSphString MakePath ( const char * szSuffix = "" );

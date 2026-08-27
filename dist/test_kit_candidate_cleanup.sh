@@ -26,7 +26,16 @@ if [[ "$match_count" != "1" ]]; then
 fi
 
 if ! jq -e --arg tag "$tag" '.[0].metadata.container.tags == [$tag]' <<< "$matching_versions" >/dev/null; then
-  echo "Refusing to delete a package version shared with another tag: $tag" >&2
+  if jq -e --arg tag "$tag" '
+    .[0].metadata.container.tags
+    | map(select(. != $tag and startswith("test-kit-") and (startswith("test-kit-ci-") | not)))
+    | length > 0
+  ' <<< "$matching_versions" >/dev/null; then
+    echo "Candidate image was promoted and shares a package version with permanent test-kit tags; keeping it: $tag"
+    exit 0
+  fi
+
+  echo "Refusing to delete a candidate image version shared with a non-test-kit tag: $tag" >&2
   exit 1
 fi
 

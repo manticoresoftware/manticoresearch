@@ -1085,6 +1085,34 @@ bool BuildStoreKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowitem * p
 }
 
 
+void KNNBuilderMT_c::Train ( int iAttr, uint32_t uRowID, const util::Span_T<float> & dData )
+{
+	ScopedMutex_t tLock ( m_tLock );
+	m_tBuilder.Train ( iAttr, uRowID, dData );
+}
+
+
+bool KNNBuilderMT_c::SetAttr ( int iAttr, uint32_t uRowID, const util::Span_T<float> & dData, knn::BuildContext_t & tBuildCtx )
+{
+	ScopedMutex_t tLock ( m_tLock );
+	return m_tBuilder.SetAttr ( iAttr, uRowID, dData, tBuildCtx );
+}
+
+
+bool KNNBuilderMT_c::FinalizeTraining ( std::string & sError )
+{
+	ScopedMutex_t tLock ( m_tLock );
+	return m_tBuilder.FinalizeTraining ( sError );
+}
+
+
+bool KNNBuilderMT_c::Save ( const std::string & sFilename, size_t tBufferSize, std::string & sError )
+{
+	ScopedMutex_t tLock ( m_tLock );
+	return m_tBuilder.Save ( sFilename, tBufferSize, sError );
+}
+
+
 void WarnOnRowsWithoutKNNVector ( int64_t iNoVectorRows, const char * szTable )
 {
 	if ( iNoVectorRows<=0 )
@@ -1128,7 +1156,11 @@ bool BuildStoreKNNParallelDiskIndex ( const CSphIndex & tIndex, knn::Builder_i &
 	const BYTE * pRawBlobs = pRawAttrs ? tIndex.GetRawBlobAttrs() : nullptr;
 	const int iStride = pRawAttrs ? tIndex.GetMatchSchema().GetRowSize() : 0;
 	std::atomic<int64_t> iNoVectorRows { 0 };
-	bool bOk = RunParallelKNNStore ( iTotalRows, sError, [&] ( int iIdx, int64_t iStart, int64_t iEnd, CSphString & sErr, std::atomic<bool> & bStop ) { RunDiskIndexKNNStoreWorker ( iStart, iEnd, tIndex, tBuilder, dAttrs, pRawAttrs, pRawBlobs, iStride, sErr, bStop, iNoVectorRows ); } );
+
+	// the knn builder is not thread safe; workers read and decode rows in parallel but must enter
+	// the graph one at a time, otherwise concurrent neighbour-list pruning can orphan a point
+	KNNBuilderMT_c tSafeBuilder ( tBuilder );
+	bool bOk = RunParallelKNNStore ( iTotalRows, sError, [&] ( int iIdx, int64_t iStart, int64_t iEnd, CSphString & sErr, std::atomic<bool> & bStop ) { RunDiskIndexKNNStoreWorker ( iStart, iEnd, tIndex, tSafeBuilder, dAttrs, pRawAttrs, pRawBlobs, iStride, sErr, bStop, iNoVectorRows ); } );
 	if ( bOk )
 		WarnOnRowsWithoutKNNVector ( iNoVectorRows.load ( std::memory_order_relaxed ), tIndex.GetName() );
 

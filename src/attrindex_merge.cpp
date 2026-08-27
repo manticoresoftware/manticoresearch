@@ -35,6 +35,7 @@ class AttrMerger_c::Impl_c
 	HistogramContainer_c					m_tHistograms;
 	CSphVector<PlainOrColumnar_t>			m_dAttrsForHistogram;
 	std::unique_ptr<knn::Builder_i>			m_pKNNBuilder;
+	std::unique_ptr<KNNBuilderMT_c>			m_pKNNBuilderMT;	// thread-safe view of m_pKNNBuilder, alive only during ParallelStoreKNN
 	std::unique_ptr<JsonSIBuilder_i>		m_pJsonSIBuilder;
 	CSphVector<PlainOrColumnar_t>			m_dAttrsForKNN;
 	CSphFixedVector<DocidRowidPair_t> 		m_dDocidLookup {0};
@@ -449,7 +450,7 @@ void AttrMerger_c::Impl_c::RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWo
 		}
 
 		const CSphRowitem * pRow = pRawAttrs ? pRawAttrs + (int64_t)tSrc * iStride : nullptr;
-		if ( !BuildStoreKNN ( tSrc, tDst, pRow, pRawBlobs, dWorkerIters[iInput], m_dAttrsForKNN, *m_pKNNBuilder, tBuildCtx, &iNoVectorRows ) )
+		if ( !BuildStoreKNN ( tSrc, tDst, pRow, pRawBlobs, dWorkerIters[iInput], m_dAttrsForKNN, *m_pKNNBuilderMT, tBuildCtx, &iNoVectorRows ) )
 		{
 			RecordKNNBuildError ( sWorkerError, tBuildCtx, "KNN index construction failed at input %d row %u", iInput, tSrc );
 			bStop.store ( true, std::memory_order_relaxed );
@@ -505,6 +506,10 @@ bool AttrMerger_c::Impl_c::ParallelStoreKNN()
 
 	std::atomic<bool> bInterrupted { false };
 	std::atomic<int64_t> iNoVectorRows { 0 };
+
+	// serialize graph insertion: the knn builder is not thread safe (see KNNBuilderMT_c)
+	m_pKNNBuilderMT = std::make_unique<KNNBuilderMT_c> ( *m_pKNNBuilder );
+	AT_SCOPE_EXIT ( [this] { m_pKNNBuilderMT.reset(); } );
 	bool bOk = RunParallelKNNStore ( iTotalAlive, m_sError, [&] ( int, int64_t iStart, int64_t iEnd, CSphString & sErr, std::atomic<bool> & bStop ) { RunKNNStoreWorker ( iStart, iEnd, dInputStarts, bStop, bInterrupted, sErr, iNoVectorRows ); } );
 	if ( bOk )
 		WarnOnRowsWithoutKNNVector ( iNoVectorRows.load ( std::memory_order_relaxed ), m_dKNNInputs.GetLength() ? m_dKNNInputs[0].m_pIndex->GetName() : nullptr );

@@ -4722,6 +4722,10 @@ bool RtIndex_c::StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i 
 	auto pDispatcher = Dispatcher::MakeTrivial ( iNumSegs, iConcurrency );
 	std::atomic<bool> bError { false };
 	std::atomic<int64_t> iNoVectorRows { 0 };
+
+	// segments are walked in parallel, but the knn builder is not thread safe: concurrent inserts
+	// can prune away the last edge pointing at a node, leaving that row unreachable by knn()
+	KNNBuilderMT_c tSafeBuilder ( tBuilder );
 	CSphFixedVector<CSphString> dErrors(iNumSegs);
 
 	Coro::ExecuteN ( iConcurrency, [&]
@@ -4758,7 +4762,7 @@ bool RtIndex_c::StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i 
 				}
 
 				const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID * iStride;
-				if ( !BuildStoreKNN ( tRowID, tRowOut, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, tBuilder, tBuildCtx, &iSegNoVector ) )
+				if ( !BuildStoreKNN ( tRowID, tRowOut, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, tSafeBuilder, tBuildCtx, &iSegNoVector ) )
 				{
 					RecordKNNBuildError ( dErrors[iSeg], tBuildCtx, "HNSW save: BuildStoreKNN failed for segment %d row %u (no detail)", iSeg, tRowID );
 					bError.store ( true, std::memory_order_relaxed );

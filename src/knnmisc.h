@@ -88,6 +88,29 @@ void							WarnOnRowsWithoutKNNVector ( int64_t iNoVectorRows, const char * szTa
 using KNNStoreWorkerFn_t = std::function<void ( int iWorkerIdx, int64_t iStart, int64_t iEnd, CSphString & sWorkerError, std::atomic<bool> & bStop )>;
 bool							RunParallelKNNStore ( int64_t iTotalUnits, CSphString & sError, KNNStoreWorkerFn_t fnWorker );
 
+/// serializes access to a knn::Builder_i shared by parallel store workers.
+///
+/// The builders returned by the knn library are not thread safe: HNSW linking is bidirectional and
+/// prunes neighbour lists, so two workers inserting at once can drop the last edge pointing at a
+/// node. That row then stays in the table - SELECT, filters and facets all return it - while no
+/// knn() query can reach it, and nothing reports the loss.
+///
+/// Rows are still read, decoded and normalized in parallel; only the graph insertion is serialized.
+class KNNBuilderMT_c final : public knn::Builder_i
+{
+public:
+	explicit		KNNBuilderMT_c ( knn::Builder_i & tBuilder ) : m_tBuilder ( tBuilder ) {}
+
+	void			Train ( int iAttr, uint32_t uRowID, const util::Span_T<float> & dData ) final;
+	bool			SetAttr ( int iAttr, uint32_t uRowID, const util::Span_T<float> & dData, knn::BuildContext_t & tBuildCtx ) final;
+	bool			FinalizeTraining ( std::string & sError ) final;
+	bool			Save ( const std::string & sFilename, size_t tBufferSize, std::string & sError ) final;
+
+private:
+	knn::Builder_i &	m_tBuilder;
+	CSphMutex			m_tLock;
+};
+
 std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, CSphString & sError );
 RowIteratorsWithEstimates_t		CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, bool & bError, CSphString & sError );
 std::unique_ptr<knn::KNNFilter_i> CreateKNNPrefilter ( const CSphQueryContext & tCtx, const CSphRowitem * pAttrPool, int iStride, int iDynamicSize, int64_t iFilterCount );

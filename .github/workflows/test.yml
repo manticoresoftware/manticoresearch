@@ -1055,7 +1055,7 @@ jobs:
       - uses: actions/checkout@v5
       - name: Delete candidate image
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GHCR_PASSWORD || github.token }}
           REPO_OWNER: ${{ github.repository_owner }}
           CANDIDATE_IMAGE: ${{ needs.test_kit_docker_build.outputs.candidate_image || needs.test_kit_docker_reuse.outputs.candidate_image }}
         run: ./dist/test_kit_candidate_cleanup.sh "$CANDIDATE_IMAGE"

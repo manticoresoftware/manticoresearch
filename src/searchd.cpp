@@ -7060,6 +7060,22 @@ static CSphString BuildCreateTableRt ( const CSphString & sName, const CSphIndex
 }
 
 
+static void CopyHiddenKNNCreateLikeSettings ( CreateTableSettings_t & tCreateTable, const CSphSchema & tSourceSchema )
+{
+	for ( auto & tAttr : tCreateTable.m_dAttrs )
+	{
+		if ( !tAttr.m_bKNN || tAttr.m_tKNNModel.m_sModelName.empty() || !tAttr.m_tKNNModel.m_sAPIKey.empty() )
+			continue;
+
+		const CSphColumnInfo * pSourceAttr = tSourceSchema.GetAttr ( tAttr.m_tAttr.m_sName.cstr() );
+		if ( !pSourceAttr || pSourceAttr->m_tKNNModel.m_sModelName!=tAttr.m_tKNNModel.m_sModelName )
+			continue;
+
+		tAttr.m_tKNNModel.m_sAPIKey = pSourceAttr->m_tKNNModel.m_sAPIKey;
+	}
+}
+
+
 static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	SearchFailuresLog_c dErrors;
@@ -7081,6 +7097,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 
 	const CSphString & sLike = tStmt.m_tCreateTable.m_sLike;
 	CSphString sCreateTable;
+	const CSphSchema * pSourceSchema = nullptr;
 	switch ( IndexIsServed ( sLike ) )
 	{
 	case RunIdx_e::NOTSERVED:
@@ -7097,7 +7114,8 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 			return;
 		}
 		RIdx_c pIdx { pServed };
-		sCreateTable = BuildCreateTableRt ( tStmt.m_sIndex, pIdx, GetSchemaForCreateTable ( pIdx ), ExtFilesFormat_e::FILE );
+		pSourceSchema = &GetSchemaForCreateTable ( pIdx );
+		sCreateTable = BuildCreateTableRt ( tStmt.m_sIndex, pIdx, *pSourceSchema, ExtFilesFormat_e::FILE );
 		break;
 	}
 	case RunIdx_e::DISTR:
@@ -7126,6 +7144,8 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 	SqlStmt_t & tNewCreateTable = dCreateTableStmts[0];
 	tNewCreateTable.m_tCreateTable.m_bIfNotExists = tStmt.m_tCreateTable.m_bIfNotExists;
 	tNewCreateTable.m_tCreateTable.m_bNameQuoted = tStmt.m_tCreateTable.m_bNameQuoted;
+	if ( pSourceSchema )
+		CopyHiddenKNNCreateLikeSettings ( tNewCreateTable.m_tCreateTable, *pSourceSchema );
 
 	HandleMysqlCreateTable ( tOut, tNewCreateTable, sWarning );
 }

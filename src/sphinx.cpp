@@ -1511,7 +1511,7 @@ private:
 	template<typename RUN>
 	bool						SplitQuery ( RUN && tRun, CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
 	bool						ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const;
-	std::pair<RowidIterator_i *, bool> SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, const CSphVector<const ISphSchema *> & dSorterSchemas, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker ) const;
+	std::pair<RowidIterator_i *, bool> SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, const CSphVector<const ISphSchema *> & dSorterSchemas, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker, bool & bKNNIteratorCreated ) const;
 	bool						SelectIteratorsFT ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tSorterSchema, ISphRanker * pRanker, CSphVector<SecondaryIndexInfo_t> & dSIInfo, int iCutoff, int iThreads, StrVec_t & dWarnings ) const;
 
 	bool						IsQueryFast ( const CSphQuery & tQuery, const CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, float fCost ) const;
@@ -8979,7 +8979,50 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 }
 
 
-std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, const CSphVector<const ISphSchema *> & dSorterSchemas, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker ) const
+// A knn query must not match documents that hold no vector: their distance is FLT_MAX, so they are near nothing.
+// When an hnsw iterator runs it never offers them in the first place, but a brute-force scan sees every row, so the guard has to be added explicitly.
+// Whether an iterator ran is only known after SpawnIterators, hence the late injection
+static bool AddLateKNNDistFilter ( const CSphQuery & tQuery, bool bKNNIteratorCreated, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta, const CSphVector<const ISphSchema *> & dSorterSchemas, const ISphSchema & tIndexSchema, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphVector<CSphFilterSettings> & dLateFilters, CSphVector<FilterTreeItem_t> & dLateFilterTree )
+{
+	if ( !tQuery.HasKnn() || bKNNIteratorCreated )
+		return true;
+
+	// already added eagerly (user-written knn_dist predicate, or explicit fullscan)
+	if ( tFlx.m_bAddKNNDistFilter )
+		return true;
+
+	assert ( tFlx.m_pMatchSchema );
+	if ( !CanAddKNNDistFilter ( *tFlx.m_pMatchSchema ) )
+		return true;
+
+	// copy whatever is live now 
+	dLateFilters.Resize(0);
+	for ( const auto & tFilter : *tFlx.m_pFilters )
+		dLateFilters.Add ( tFilter );
+
+	dLateFilterTree.Resize(0);
+	if ( tFlx.m_pFilterTree )
+		for ( const auto & tItem : *tFlx.m_pFilterTree )
+			dLateFilterTree.Add ( tItem );
+
+	// clone first, swap after: tFlx.m_pMatchSchema may point into pModifiedMatchSchema
+	std::unique_ptr<ISphSchema> pNewSchema = BuildKNNDistFilter ( *tFlx.m_pMatchSchema, dLateFilters, dLateFilterTree );
+
+	pModifiedMatchSchema = std::move(pNewSchema);
+	tFlx.m_pMatchSchema	= pModifiedMatchSchema.get();
+	tFlx.m_pFilters		= &dLateFilters;
+	tFlx.m_pFilterTree	= dLateFilterTree.GetLength() ? &dLateFilterTree : nullptr;
+
+	// the stage only dropped to prefilter just now, so the calc lists have to be rebuilt from it.
+	tCtx.ResetFilters();
+	if ( !tCtx.SetupCalc ( tMeta, *tFlx.m_pMatchSchema, tIndexSchema, tFlx.m_pBlobPool, tFlx.m_pColumnar, dSorterSchemas ) )
+		return false;
+
+	return tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
+}
+
+
+std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, const CSphVector<const ISphSchema *> & dSorterSchemas, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker, bool & bKNNIteratorCreated ) const
 {
 	std::unique_ptr<knn::KNNFilter_i> pKNNFilterWrapper;
 	if ( tQuery.HasKnn() && tQuery.SingleKnnSettings().m_bPrefilter && tCtx.m_pFilter )
@@ -8988,7 +9031,11 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	if ( !dFilters.GetLength() )
 	{
 		if ( tQuery.HasKnn() )
-			return CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.SingleKnnSettings().m_eTerminationPolicy, tMeta.m_pProfile, tMeta.m_sError );
+		{
+			auto tKNN = CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.SingleKnnSettings().m_eTerminationPolicy, tMeta.m_pProfile, tMeta.m_sError );
+			bKNNIteratorCreated = !!tKNN.first;
+			return tKNN;
+		}
 
 		return { nullptr, false };
 	}
@@ -9018,6 +9065,9 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	dKNNIterators = CreateKNNIterators ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.HasKnn() ? tQuery.SingleKnnSettings().m_eTerminationPolicy : knn::HNSWTerminationPolicy_e::QUANTILE, tMeta.m_pProfile, bError, tMeta.m_sError );
 	if ( bError )
 		return { nullptr, true };
+
+	// an empty result here means the planner chose brute force over the graph
+	bKNNIteratorCreated = !dKNNIterators.IsEmpty();
 
 	// secondary index iterators
 	dSIIterators = m_tSI.CreateSecondaryIndexIterator ( dSIInfo, dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), iCutoff, bUseSICache, tMeta.m_sWarning );
@@ -9128,9 +9178,9 @@ bool CSphIndex_VLN::SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilt
 	tFlx.m_iTotalDocs	= m_iDocinfo;
 	tFlx.m_sJoinIdx		= tQuery.m_sJoinIdx;
 	tFlx.m_eJoinType	= tQuery.m_eJoinType;
-	// the knn iterator is what normally keeps vector-less docs out of the result. it is skipped when the planner brute-forces instead,
-	// and a scan cannot tell an empty vector from a far one, so guard those cases with the knn_dist filter too
-	tFlx.m_bAddKNNDistFilter = tQuery.HasKnn() && ( HasKNNDistFilter(tQuery) || tQuery.m_dFilters.GetLength() || tQuery.SingleKnnSettings().m_bFullscan );
+	// the knn iterator is what normally keeps vector-less docs out of the result
+	// when there's no iterator, inject knn_dist filter to filter them out
+	tFlx.m_bAddKNNDistFilter = tQuery.HasKnn() && ( HasKNNDistFilter(tQuery) || tQuery.SingleKnnSettings().m_bFullscan );
 
 	// may modify eval stages in schema; needs to be before SetupCalc
 	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, pModifiedMatchSchema, tQuery.m_dItems, tMeta.m_sError, &dJsonSITransforms ) )
@@ -9246,14 +9296,20 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 	// try to spawn an iterator from a secondary index
 	CSphVector<CSphFilterSettings> dFiltersAfterIterator; // holds filter settings if they were modified. filters hold pointers to those settings
+	CSphVector<CSphFilterSettings> dLateFilters;	// same, for the late knn_dist guard
+	CSphVector<FilterTreeItem_t> dLateFilterTree;
 	std::unique_ptr<RowidIterator_i> pIterator;
+	bool bKNNIteratorCreated = false;
 	if ( bAllPrecalc )
 		tCtx.m_pFilter.reset();
 	else
 	{
-		auto tSpawned = SpawnIterators ( tQuery, dTransformedFilters, dJsonSITransforms, tCtx, tFlx, tMaxSorterSchema, dSorterSchemas, pModifiedMatchSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, nullptr );
+		auto tSpawned = SpawnIterators ( tQuery, dTransformedFilters, dJsonSITransforms, tCtx, tFlx, tMaxSorterSchema, dSorterSchemas, pModifiedMatchSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, nullptr, bKNNIteratorCreated );
 		pIterator = std::unique_ptr<RowidIterator_i> ( tSpawned.first );
 		if ( tSpawned.second )
+			return false;
+
+		if ( !AddLateKNNDistFilter ( tQuery, bKNNIteratorCreated, tCtx, tFlx, tMeta, dSorterSchemas, m_tSchema, pModifiedMatchSchema, dLateFilters, dLateFilterTree ) )
 			return false;
 	}
 
@@ -12337,16 +12393,19 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 		tMeta.m_tIteratorStats.m_iTotal = 1;
 
 	CSphVector<CSphFilterSettings> dFiltersAfterIterator; // holds filter settings if they were modified. filters hold pointers to those settings
-	
+	CSphVector<CSphFilterSettings> dLateFilters;	// same, for the late knn_dist guard
+	CSphVector<FilterTreeItem_t> dLateFilterTree;
+
 	// skip SI create if cache ranker used
 	bool bIsCacheRanker = pRanker->IsCache();
 	std::pair<RowidIterator_i *, bool>  tSpawned = {nullptr, false};
 	std::unique_ptr<RowidIterator_i> pIterator;
-	
+	bool bKNNIteratorCreated = false;
+
 	if ( !bIsCacheRanker )
 	{
 		// Not using cache - spawn SI iterators if needed
-		tSpawned = SpawnIterators ( tQuery, dTransformedFilters, dJsonSITransforms, tCtx, tFlx, tMaxSorterSchema, dSorterSchemas, pModifiedMatchSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, pRanker.get() );
+		tSpawned = SpawnIterators ( tQuery, dTransformedFilters, dJsonSITransforms, tCtx, tFlx, tMaxSorterSchema, dSorterSchemas, pModifiedMatchSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, pRanker.get(), bKNNIteratorCreated );
 		pIterator = std::unique_ptr<RowidIterator_i> ( tSpawned.first );
 		if ( tSpawned.second )
 			return false;
@@ -12357,6 +12416,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 			pRanker->ExtraData ( EXTRA_SET_ITERATOR, (void**)&pIter );
 		}
 	}
+
+	if ( !AddLateKNNDistFilter ( tQuery, bKNNIteratorCreated, tCtx, tFlx, tMeta, dSorterSchemas, m_tSchema, pModifiedMatchSchema, dLateFilters, dLateFilterTree ) )
+		return false;
 
 	//////////////////////////////////////
 	// find and weight matching documents

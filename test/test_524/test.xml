@@ -116,6 +116,26 @@ searchd
 	select id from t where tag=1 and knn(v,10,(1,0,0,0)) order by id asc;
 	drop table t;
 
+	<!-- ============ vector-less docs stay excluded on every no-iterator path ============ -->
+	create table t (title text, v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2', tag int);
+	insert into t values (1, 'alpha', [[1,0,0,0]], 1), (2, 'alpha', [], 1), (3, 'alpha', [[0,1,0,0]], 2);
+
+	<!-- full-text + knn, with and without an attribute filter alongside -->
+	select id from t where match('alpha') and knn(v,10,(1,0,0,0)) order by id asc;
+	select id from t where match('alpha') and tag&lt;9 and knn(v,10,(1,0,0,0)) order by id asc;
+
+	<!-- group by / facet: a different sorter, still must not admit doc 2 -->
+	select tag, count(*) c from t where knn(v,10,(1,0,0,0)) group by tag order by tag asc;
+	select id from t where knn(v,10,(1,0,0,0)) facet tag;;
+
+	flush ramchunk t;
+	<!-- ...and all of it identically once the graph exists on disk -->
+	select id from t where match('alpha') and knn(v,10,(1,0,0,0)) order by id asc;
+	select id from t where match('alpha') and tag&lt;9 and knn(v,10,(1,0,0,0)) order by id asc;
+	select tag, count(*) c from t where knn(v,10,(1,0,0,0)) group by tag order by tag asc;
+	select id from t where knn(v,10,(1,0,0,0)) facet tag;;
+	drop table t;
+
 	<!-- ============ real coordinates: fractional and negative ============ -->
 	create table t (v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
 	<!-- doc 1 slot 1 equals the anchor exactly and slot 2 is far, so min-over-slots must pick slot 1 -->

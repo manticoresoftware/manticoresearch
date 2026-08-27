@@ -13,6 +13,9 @@ else ()
 			-P ${CMAKE_CURRENT_SOURCE_DIR}/test.cmake
 			WORKING_DIRECTORY "${MANTICORE_BINARY_DIR}/test" )
 	SET_TESTS_PROPERTIES ( Perform_indextool PROPERTIES LABELS INDEXTOOL )
+    if ( COMMAND special_ubertest_properties )
+		special_ubertest_properties ( Perform_indextool )
+	endif ()
 	add_test ( NAME Apply_killlists_with_legacy_json_header COMMAND ${CMAKE_COMMAND}
 			-D INDEXER=$<TARGET_FILE:indexer>
 			-D INDEXTOOL=$<TARGET_FILE:indextool>

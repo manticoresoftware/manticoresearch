@@ -963,39 +963,10 @@ jobs:
       repository: ${{ github.repository }}
       ref: ${{ github.sha }}
 
-  prepare_clt_candidate_for_promotion:
-    name: Prepare CLT candidate for promotion
-    needs: [clt, test_kit_docker_build, test_kit_docker_reuse]
-    if: >-
-      always() &&
-      (needs.test_kit_docker_build.outputs.candidate_image != '' || needs.test_kit_docker_reuse.outputs.candidate_image != '')
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Export temporary CLT candidate image
-        env:
-          GHCR_USER: ${{ vars.GHCR_USER || github.actor }}
-          GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD || github.token }}
-          CANDIDATE_IMAGE: ${{ needs.test_kit_docker_build.outputs.candidate_image || needs.test_kit_docker_reuse.outputs.candidate_image }}
-        run: |
-          set -euo pipefail
-          echo "$GHCR_PASSWORD" | docker login -u"$GHCR_USER" --password-stdin ghcr.io
-          docker pull "$CANDIDATE_IMAGE"
-          docker create --name manticore-test-kit-candidate --entrypoint /bin/sh "$CANDIDATE_IMAGE" -c 'true'
-          docker export manticore-test-kit-candidate > manticore_test_kit.img
-          docker rm manticore-test-kit-candidate
-          tar -cf artifact.tar manticore_test_kit.img
-      - name: Upload image for post-CI promotion
-        uses: actions/upload-artifact@v6
-        with:
-          name: manticore_test_kit_for_promotion
-          path: artifact.tar
-          retention-days: 1
-
   test_kit_docker_push:
     if: always() && needs.meta.outputs.run_image_push == 'true' && (needs.test_kit_docker_build.result == 'success' || needs.test_kit_docker_reuse.result == 'success') && needs.test_kit_light_docker_build.result == 'success'
     needs:
       - clt
-      - prepare_clt_candidate_for_promotion
       - meta
       - test_kit_docker_build
       - test_kit_docker_reuse
@@ -1018,19 +989,10 @@ jobs:
       SOURCE_HASH: ${{ needs.meta.outputs.source_hash }}
       BRANCH_TAG: ${{ needs.meta.outputs.branch_tag }}
       HASH_TAG_OK: ${{ needs.meta.outputs.source_hash != '' }}
-      IMAGE_BUILD_COMMIT: ${{ github.sha }}
+      CANDIDATE_IMAGE: ${{ needs.test_kit_docker_build.outputs.candidate_image || needs.test_kit_docker_reuse.outputs.candidate_image }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v5
-      - name: Download image prepared after CLT
-        uses: actions/download-artifact@v7
-        with:
-          name: manticore_test_kit_for_promotion
-          path: .
-      - name: Unpack image prepared after CLT
-        run: |
-          set -euo pipefail
-          tar -xf artifact.tar
       - name: Download light image artifact
         uses: actions/download-artifact@v7
         with:
@@ -1046,7 +1008,7 @@ jobs:
 
   cleanup_clt_candidate_image:
     name: Remove temporary CLT candidate image
-    needs: [clt, test_kit_docker_build, test_kit_docker_reuse, prepare_clt_candidate_for_promotion]
+    needs: [clt, test_kit_docker_build, test_kit_docker_reuse, test_kit_docker_push]
     if: >-
       always() &&
       (needs.test_kit_docker_build.outputs.candidate_image != '' || needs.test_kit_docker_reuse.outputs.candidate_image != '')

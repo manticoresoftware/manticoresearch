@@ -22,8 +22,6 @@
 #include "tracer.h"
 #include "auth/auth.h"
 
-#include <optional>
-
 #include "replication/wsrep_cxx.h"
 #include "replication/common.h"
 #include "replication/portrange.h"
@@ -1513,39 +1511,31 @@ static bool PrepareAccForSave ( RtAccum_t & tAcc )
 	if ( !pIndex || !tAcc.IsRtTrxCommand() || !tAcc.m_uAccumDocs )
 		return true;
 
-	CSphString sError;
-	return ( pIndex->PreCommit ( &tAcc, sError ) || TlsMsg::Err ( "%s", sError.cstr() ) );
-}
-
-static bool CleanupAccumForMissingIndex ( RtAccum_t & tAcc, bool bMissed )
-{
-	TlsMsg::Err ( "can not finish transaction, table %s '%s'", ( bMissed ? "missed" : "changed" ), tAcc.GetIndexName().cstr() );
-	tAcc.Cleanup();
-	return false;
-}
-
-static bool LockAccumIndexForCommit ( RtAccum_t & tAcc, std::optional<RIdx_T<RtIndex_i*>> & tIndexGuard )
-{
-	RtIndex_i * pIndex = tAcc.GetIndex();
-	if ( !pIndex )
-		return true;
-
 	cServedIndexRefPtr_c pServed = GetServed ( tAcc.GetIndexName() );
 	if ( !pServed )
-		return CleanupAccumForMissingIndex ( tAcc, true );
+	{
+		TlsMsg::Err ( "can not finish transaction, table missed '%s'", tAcc.GetIndexName().cstr() );
+		tAcc.Cleanup();
+		return false;
+	}
 
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
-		return CleanupAccumForMissingIndex ( tAcc, false );
+	{
+		TlsMsg::Err ( "can not finish transaction, table changed '%s'", tAcc.GetIndexName().cstr() );
+		tAcc.Cleanup();
+		return false;
+	}
 
-	auto & tCurrent = tIndexGuard.emplace ( pServed );
-	if ( !tCurrent || pIndex!=tCurrent.Ptr() )
-		return CleanupAccumForMissingIndex ( tAcc, false );
+	RIdx_T<RtIndex_i*> pLockedIndex ( pServed );
+	if ( !pLockedIndex || pLockedIndex.Ptr()!=pIndex )
+	{
+		TlsMsg::Err ( "can not finish transaction, table changed '%s'", tAcc.GetIndexName().cstr() );
+		tAcc.Cleanup();
+		return false;
+	}
 
-	cServedIndexRefPtr_c pCurrent = GetServed ( tAcc.GetIndexName() );
-	if ( pCurrent.Ptr()!=pServed.Ptr() )
-		return CleanupAccumForMissingIndex ( tAcc, !pCurrent );
-
-	return true;
+	CSphString sError;
+	return ( pLockedIndex->PreCommit ( &tAcc, sError ) || TlsMsg::Err ( "%s", sError.cstr() ) );
 }
 
 
@@ -1553,10 +1543,6 @@ static bool LockAccumIndexForCommit ( RtAccum_t & tAcc, std::optional<RIdx_T<RtI
 static bool HandleCmdReplicateImpl ( RtAccum_t & tAcc, int * pDeletedCount, CSphString * pWarning, int * pUpdated ) EXCLUDES ( g_tClustersLock )
 {
 	TRACE_CORO ( "sph", "HandleCmdReplicateImpl" );
-
-	std::optional<RIdx_T<RtIndex_i*>> tIndexGuard;
-	if ( !LockAccumIndexForCommit ( tAcc, tIndexGuard ) )
-		return false;
 
 	if ( !PrepareAccForSave ( tAcc ) )
 		return false;

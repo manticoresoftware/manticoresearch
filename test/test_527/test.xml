@@ -30,16 +30,7 @@ FLUSH RAMCHUNK b;
 </queries>
 
 <httpqueries>
-<!-- GH-4822: before the fix this intermittent crash occurs in Expr_GetStored_T::Command via PreparedMinimize_t::Finish. -->
-<query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
-<query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
-<query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
-<query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
-<query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
-<query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
-<query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
-<query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
-<query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
+<!-- GH-4822: before the fix this crashes in Expr_GetStored_T::Command via PreparedMinimize_t::Finish. -->
 <query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
 <query endpoint="sql" method="post">mode=raw&amp;query=DROP TABLE t</query>
 <query endpoint="sql" method="post">mode=raw&amp;query=DROP TABLE a</query>

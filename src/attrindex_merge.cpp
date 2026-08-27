@@ -72,7 +72,7 @@ private:
 
 	bool AnalyzeMixedAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap );
 	bool ParallelStoreKNN();
-	void RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWorkerEnd, const CSphFixedVector<int64_t> & dInputStarts, std::atomic<bool> & bStop, std::atomic<bool> & bInterrupted, CSphString & sWorkerError );
+	void RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWorkerEnd, const CSphFixedVector<int64_t> & dInputStarts, std::atomic<bool> & bStop, std::atomic<bool> & bInterrupted, CSphString & sWorkerError, std::atomic<int64_t> & iNoVectorRows );
 
 	CSphString GetTmpFilename ( const CSphIndex* pIdx, ESphExt eExt )
 	{
@@ -357,8 +357,11 @@ bool AttrMerger_c::Impl_c::CopyAttributes ( const CSphIndex & tIndex, const VecT
 }
 
 
-void AttrMerger_c::Impl_c::RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWorkerEnd, const CSphFixedVector<int64_t> & dInputStarts, std::atomic<bool> & bStop, std::atomic<bool> & bInterrupted, CSphString & sWorkerError )
+void AttrMerger_c::Impl_c::RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWorkerEnd, const CSphFixedVector<int64_t> & dInputStarts, std::atomic<bool> & bStop, std::atomic<bool> & bInterrupted, CSphString & sWorkerError, std::atomic<int64_t> & iNoVectorRowsTotal )
 {
+	// counted locally and published once: the worker has several early exits
+	int64_t iNoVectorRows = 0;
+	AT_SCOPE_EXIT ( [&] { iNoVectorRowsTotal.fetch_add ( iNoVectorRows, std::memory_order_relaxed ); } );
 	Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
 
 	const int iNumInputs = m_dKNNInputs.GetLength();
@@ -434,9 +437,19 @@ void AttrMerger_c::Impl_c::RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWo
 
 		RowID_t tSrc = (RowID_t)iScan;
 		RowID_t tDst = pRowMap[iScan];
-		assert ( tDst != INVALID_ROWID );
+
+		// a killed row maps to INVALID_ROWID. Handing that to the builder stores the vector under a
+		// bogus id and silently loses the point: the row is still returned by SELECT but no knn()
+		// query can reach it. assert() alone does not protect release builds.
+		if ( tDst==INVALID_ROWID )
+		{
+			sWorkerError.SetSprintf ( "KNN index construction: input %d row %u maps to INVALID_ROWID", iInput, tSrc );
+			bStop.store ( true, std::memory_order_relaxed );
+			return;
+		}
+
 		const CSphRowitem * pRow = pRawAttrs ? pRawAttrs + (int64_t)tSrc * iStride : nullptr;
-		if ( !BuildStoreKNN ( tSrc, tDst, pRow, pRawBlobs, dWorkerIters[iInput], m_dAttrsForKNN, *m_pKNNBuilder, tBuildCtx ) )
+		if ( !BuildStoreKNN ( tSrc, tDst, pRow, pRawBlobs, dWorkerIters[iInput], m_dAttrsForKNN, *m_pKNNBuilder, tBuildCtx, &iNoVectorRows ) )
 		{
 			RecordKNNBuildError ( sWorkerError, tBuildCtx, "KNN index construction failed at input %d row %u", iInput, tSrc );
 			bStop.store ( true, std::memory_order_relaxed );
@@ -491,7 +504,10 @@ bool AttrMerger_c::Impl_c::ParallelStoreKNN()
 	}
 
 	std::atomic<bool> bInterrupted { false };
-	bool bOk = RunParallelKNNStore ( iTotalAlive, m_sError, [&] ( int, int64_t iStart, int64_t iEnd, CSphString & sErr, std::atomic<bool> & bStop ) { RunKNNStoreWorker ( iStart, iEnd, dInputStarts, bStop, bInterrupted, sErr ); } );
+	std::atomic<int64_t> iNoVectorRows { 0 };
+	bool bOk = RunParallelKNNStore ( iTotalAlive, m_sError, [&] ( int, int64_t iStart, int64_t iEnd, CSphString & sErr, std::atomic<bool> & bStop ) { RunKNNStoreWorker ( iStart, iEnd, dInputStarts, bStop, bInterrupted, sErr, iNoVectorRows ); } );
+	if ( bOk )
+		WarnOnRowsWithoutKNNVector ( iNoVectorRows.load ( std::memory_order_relaxed ), m_dKNNInputs.GetLength() ? m_dKNNInputs[0].m_pIndex->GetName() : nullptr );
 	if ( bInterrupted.load ( std::memory_order_relaxed ) )
 	{
 		m_sError = "KNN merge cancelled";

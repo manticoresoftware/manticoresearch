@@ -4721,6 +4721,7 @@ bool RtIndex_c::StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i 
 
 	auto pDispatcher = Dispatcher::MakeTrivial ( iNumSegs, iConcurrency );
 	std::atomic<bool> bError { false };
+	std::atomic<int64_t> iNoVectorRows { 0 };
 	CSphFixedVector<CSphString> dErrors(iNumSegs);
 
 	Coro::ExecuteN ( iConcurrency, [&]
@@ -4739,13 +4740,25 @@ bool RtIndex_c::StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i 
 
 			auto dColumnarIterators = CreateAllColumnarIterators ( tSeg.m_pColumnar.get(), m_tSchema );
 
+			int64_t iSegNoVector = 0;
 			for ( auto tRowID : RtLiveRows_c(tSeg) )
 			{
 				RowID_t tRowOut = tCtx.m_dRowMaps[iSeg][tRowID];
-				assert ( tRowOut!=INVALID_ROWID );
+
+				// the row map is built before this loop runs; a row killed in between maps to
+				// INVALID_ROWID. Feeding that to the builder stores the vector under a bogus id and
+				// silently drops the point from the graph: the row stays visible to SELECT but is
+				// unreachable by knn() forever. assert() is not enough here, it is compiled out in
+				// release builds, so fail the save and let the caller retry.
+				if ( tRowOut==INVALID_ROWID )
+				{
+					dErrors[iSeg].SetSprintf ( "HNSW save: segment %d row %u maps to INVALID_ROWID", iSeg, tRowID );
+					bError.store ( true, std::memory_order_relaxed );
+					break;
+				}
 
 				const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID * iStride;
-				if ( !BuildStoreKNN ( tRowID, tRowOut, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, tBuilder, tBuildCtx ) )
+				if ( !BuildStoreKNN ( tRowID, tRowOut, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, tBuilder, tBuildCtx, &iSegNoVector ) )
 				{
 					RecordKNNBuildError ( dErrors[iSeg], tBuildCtx, "HNSW save: BuildStoreKNN failed for segment %d row %u (no detail)", iSeg, tRowID );
 					bError.store ( true, std::memory_order_relaxed );
@@ -4753,6 +4766,7 @@ bool RtIndex_c::StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i 
 				}
 			}
 
+			iNoVectorRows.fetch_add ( iSegNoVector, std::memory_order_relaxed );
 			iSeg = -1; // mark consumed so FetchTask advances
 		}
 	});
@@ -4762,6 +4776,11 @@ bool RtIndex_c::StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i 
 		sError = ConcatKNNBuildErrors ( dErrors );
 		return false;
 	}
+
+	// rows without a vector cannot enter the graph and are invisible to knn() while still being
+	// returned by SELECT. That is legitimate for a hand-filled float_vector, but with auto-embeddings
+	// it means an embedding went missing, so make it visible instead of dropping it on the floor.
+	WarnOnRowsWithoutKNNVector ( iNoVectorRows.load ( std::memory_order_relaxed ), GetName() );
 
 	return true;
 }

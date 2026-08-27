@@ -18,23 +18,32 @@ searchd
 
 <queries>
 <sphinxql>
-DROP TABLE IF EXISTS t; DROP TABLE IF EXISTS a; DROP TABLE IF EXISTS b; CREATE TABLE a( x text, l string, k json ); CREATE TABLE b( x text, l string, k json ); CREATE TABLE t TYPE='distributed' LOCAL='a' LOCAL='b'; INSERT INTO b (id,x,l,k) VALUES (1,'a','b','["k"]'); FLUSH RAMCHUNK b;
+DROP TABLE IF EXISTS t;
+DROP TABLE IF EXISTS a;
+DROP TABLE IF EXISTS b;
+CREATE TABLE a( x text, l string, k json );
+CREATE TABLE b( x text, l string, k json );
+CREATE TABLE t TYPE='distributed' LOCAL='a' LOCAL='b';
+INSERT INTO b (id,x,l,k) VALUES (1,'a','b','["k"]');
+FLUSH RAMCHUNK b;
 </sphinxql>
 </queries>
 
 <httpqueries>
 <!-- GH-4822: before the fix this intermittent crash occurs in Expr_GetStored_T::Command via PreparedMinimize_t::Finish. -->
-<query endpoint="search">{"index":"t","sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
-<query endpoint="search">{"index":"t","sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
-<query endpoint="search">{"index":"t","sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
-<query endpoint="search">{"index":"t","sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
-<query endpoint="search">{"index":"t","sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
-<query endpoint="search">{"index":"t","sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
-<query endpoint="search">{"index":"t","sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
-<query endpoint="search">{"index":"t","sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
-<query endpoint="search">{"index":"t","sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
-<query endpoint="search">{"index":"t","sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
-<query endpoint="sql" method="post">mode=raw&amp;query=DROP TABLE t; DROP TABLE a; DROP TABLE b</query>
+<query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
+<query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
+<query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
+<query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
+<query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
+<query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
+<query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
+<query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
+<query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
+<query endpoint="search">{"index":"t","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
+<query endpoint="sql" method="post">mode=raw&amp;query=DROP TABLE t</query>
+<query endpoint="sql" method="post">mode=raw&amp;query=DROP TABLE a</query>
+<query endpoint="sql" method="post">mode=raw&amp;query=DROP TABLE b</query>
 </httpqueries>
 
 </test>

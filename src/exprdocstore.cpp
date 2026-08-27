@@ -116,7 +116,9 @@ void Expr_GetStored_T<POSTLIMIT>::Command ( ESphExprCommand eCmd, void * pArg )
 			m_dFieldIds.Resize(0);
 			assert(pArg);
 			m_tSessionDocID = *(DocstoreSession_c::InfoDocID_t*)pArg;
-			assert ( m_tSessionDocID.m_pDocstore );
+			if ( !m_tSessionDocID.m_pDocstore )
+				break;
+
 			int iFieldId = m_tSessionDocID.m_pDocstore->GetFieldId ( m_sField.cstr(), m_eDocstoreType );
 			if ( iFieldId!=-1 )
 				m_dFieldIds.Add(iFieldId);

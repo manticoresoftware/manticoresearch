@@ -35,7 +35,6 @@ class AttrMerger_c::Impl_c
 	HistogramContainer_c					m_tHistograms;
 	CSphVector<PlainOrColumnar_t>			m_dAttrsForHistogram;
 	std::unique_ptr<knn::Builder_i>			m_pKNNBuilder;
-	std::unique_ptr<KNNBuilderMT_c>			m_pKNNBuilderMT;	// thread-safe view of m_pKNNBuilder, alive only during ParallelStoreKNN
 	std::unique_ptr<JsonSIBuilder_i>		m_pJsonSIBuilder;
 	CSphVector<PlainOrColumnar_t>			m_dAttrsForKNN;
 	CSphFixedVector<DocidRowidPair_t> 		m_dDocidLookup {0};
@@ -73,7 +72,7 @@ private:
 
 	bool AnalyzeMixedAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap );
 	bool ParallelStoreKNN();
-	void RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWorkerEnd, const CSphFixedVector<int64_t> & dInputStarts, std::atomic<bool> & bStop, std::atomic<bool> & bInterrupted, CSphString & sWorkerError, std::atomic<int64_t> & iNoVectorRows );
+	void RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWorkerEnd, const CSphFixedVector<int64_t> & dInputStarts, knn::Builder_i & tBuilder, std::atomic<bool> & bStop, std::atomic<bool> & bInterrupted, CSphString & sWorkerError );
 
 	CSphString GetTmpFilename ( const CSphIndex* pIdx, ESphExt eExt )
 	{
@@ -358,11 +357,8 @@ bool AttrMerger_c::Impl_c::CopyAttributes ( const CSphIndex & tIndex, const VecT
 }
 
 
-void AttrMerger_c::Impl_c::RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWorkerEnd, const CSphFixedVector<int64_t> & dInputStarts, std::atomic<bool> & bStop, std::atomic<bool> & bInterrupted, CSphString & sWorkerError, std::atomic<int64_t> & iNoVectorRowsTotal )
+void AttrMerger_c::Impl_c::RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWorkerEnd, const CSphFixedVector<int64_t> & dInputStarts, knn::Builder_i & tBuilder, std::atomic<bool> & bStop, std::atomic<bool> & bInterrupted, CSphString & sWorkerError )
 {
-	// counted locally and published once: the worker has several early exits
-	int64_t iNoVectorRows = 0;
-	AT_SCOPE_EXIT ( [&] { iNoVectorRowsTotal.fetch_add ( iNoVectorRows, std::memory_order_relaxed ); } );
 	Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
 
 	const int iNumInputs = m_dKNNInputs.GetLength();
@@ -438,19 +434,10 @@ void AttrMerger_c::Impl_c::RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWo
 
 		RowID_t tSrc = (RowID_t)iScan;
 		RowID_t tDst = pRowMap[iScan];
-
-		// a killed row maps to INVALID_ROWID. Handing that to the builder stores the vector under a
-		// bogus id and silently loses the point: the row is still returned by SELECT but no knn()
-		// query can reach it. assert() alone does not protect release builds.
-		if ( tDst==INVALID_ROWID )
-		{
-			sWorkerError.SetSprintf ( "KNN index construction: input %d row %u maps to INVALID_ROWID", iInput, tSrc );
-			bStop.store ( true, std::memory_order_relaxed );
-			return;
-		}
+		assert ( tDst!=INVALID_ROWID );
 
 		const CSphRowitem * pRow = pRawAttrs ? pRawAttrs + (int64_t)tSrc * iStride : nullptr;
-		if ( !BuildStoreKNN ( tSrc, tDst, pRow, pRawBlobs, dWorkerIters[iInput], m_dAttrsForKNN, *m_pKNNBuilderMT, tBuildCtx, &iNoVectorRows ) )
+		if ( !BuildStoreKNN ( tSrc, tDst, pRow, pRawBlobs, dWorkerIters[iInput], m_dAttrsForKNN, tBuilder, tBuildCtx ) )
 		{
 			RecordKNNBuildError ( sWorkerError, tBuildCtx, "KNN index construction failed at input %d row %u", iInput, tSrc );
 			bStop.store ( true, std::memory_order_relaxed );
@@ -505,14 +492,10 @@ bool AttrMerger_c::Impl_c::ParallelStoreKNN()
 	}
 
 	std::atomic<bool> bInterrupted { false };
-	std::atomic<int64_t> iNoVectorRows { 0 };
 
-	// serialize graph insertion: the knn builder is not thread safe (see KNNBuilderMT_c)
-	m_pKNNBuilderMT = std::make_unique<KNNBuilderMT_c> ( *m_pKNNBuilder );
-	AT_SCOPE_EXIT ( [this] { m_pKNNBuilderMT.reset(); } );
-	bool bOk = RunParallelKNNStore ( iTotalAlive, m_sError, [&] ( int, int64_t iStart, int64_t iEnd, CSphString & sErr, std::atomic<bool> & bStop ) { RunKNNStoreWorker ( iStart, iEnd, dInputStarts, bStop, bInterrupted, sErr, iNoVectorRows ); } );
-	if ( bOk )
-		WarnOnRowsWithoutKNNVector ( iNoVectorRows.load ( std::memory_order_relaxed ), m_dKNNInputs.GetLength() ? m_dKNNInputs[0].m_pIndex->GetName() : nullptr );
+	// Keep graph insertion serial until MCL guarantees reachability under concurrent inserts.
+	KNNBuilderSerial_c tSafeBuilder ( *m_pKNNBuilder );
+	bool bOk = RunParallelKNNStore ( iTotalAlive, m_sError, [&] ( int, int64_t iStart, int64_t iEnd, CSphString & sErr, std::atomic<bool> & bStop ) { RunKNNStoreWorker ( iStart, iEnd, dInputStarts, tSafeBuilder, bStop, bInterrupted, sErr ); } );
 	if ( bInterrupted.load ( std::memory_order_relaxed ) )
 	{
 		m_sError = "KNN merge cancelled";

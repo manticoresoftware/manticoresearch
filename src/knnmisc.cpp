@@ -11,7 +11,6 @@
 #include <algorithm>
 #include <atomic>
 #include "knnmisc.h"
-#include "sphinxutils.h"
 #include "sortsetup.h"
 #include "sortcomp.h"
 #include "knnlib.h"
@@ -1025,12 +1024,8 @@ std::unique_ptr<knn::Builder_i> BuildCreateKNN ( const ISphSchema & tSchema, int
 }
 
 
-// a row whose vector attribute is empty carries no point to index. Skipping it is correct - the
-// graph has nothing to link - but it must not be silent: such a row is returned by SELECT and by
-// filters, yet no knn() query can ever reach it. pNoVector, when supplied, counts those rows so the
-// caller can surface them.
 template <typename ACTION>
-static bool BuildProcessKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const VecTraits_T<PlainOrColumnar_t> & dAttrs, ACTION && fnAction, int64_t * pNoVector = nullptr )
+static bool BuildProcessKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const VecTraits_T<PlainOrColumnar_t> & dAttrs, ACTION && fnAction )
 {
 	ARRAY_FOREACH ( i, dAttrs )
 	{
@@ -1042,30 +1037,14 @@ static bool BuildProcessKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BY
 		{
 			FloatVecArray_t tArray = ParseFloatVecArray ( { pSrc, iBytes } );
 			int iValues = tArray.m_dValues.GetLength();
-			if ( !iValues )
-			{
-				if ( pNoVector )
-					++(*pNoVector);
-
-				continue;
-			}
-
-			if ( !fnAction ( i, { (float*)tArray.m_dValues.Begin(), (size_t)iValues } ) )
+			if ( iValues && !fnAction ( i, { (float*)tArray.m_dValues.Begin(), (size_t)iValues } ) )
 				return false;
 
 			continue;
 		}
 
 		int iValues = iBytes / sizeof(float);
-		if ( !iValues )
-		{
-			if ( pNoVector )
-				++(*pNoVector);
-
-			continue;
-		}
-
-		if ( !fnAction ( i, { (float*)pSrc, (size_t)iValues } ) )
+		if ( iValues && !fnAction ( i, { (float*)pSrc, (size_t)iValues } ) )
 			return false;
 	}
 
@@ -1079,53 +1058,43 @@ void BuildTrainKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowitem * p
 }
 
 
-bool BuildStoreKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const VecTraits_T<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder, knn::BuildContext_t & tBuildCtx, int64_t * pNoVector )
+bool BuildStoreKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const VecTraits_T<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder, knn::BuildContext_t & tBuildCtx )
 {
-	return BuildProcessKNN ( tRowIDSrc, pRow, pPool, dIterators, dAttrs, [&tBuilder, &tBuildCtx, tRowIDDst]( int iAttr, const util::Span_T<float> & tValues ) { return tBuilder.SetAttr ( iAttr, tRowIDDst, tValues, tBuildCtx ); }, pNoVector );
+	return BuildProcessKNN ( tRowIDSrc, pRow, pPool, dIterators, dAttrs, [&tBuilder, &tBuildCtx, tRowIDDst]( int iAttr, const util::Span_T<float> & tValues ) { return tBuilder.SetAttr ( iAttr, tRowIDDst, tValues, tBuildCtx ); } );
 }
 
 
-void KNNBuilderMT_c::Train ( int iAttr, uint32_t uRowID, const util::Span_T<float> & dData )
+void KNNBuilderSerial_c::Train ( int iAttr, uint32_t uRowID, const util::Span_T<float> & dData )
 {
 	ScopedMutex_t tLock ( m_tLock );
 	m_tBuilder.Train ( iAttr, uRowID, dData );
 }
 
 
-bool KNNBuilderMT_c::SetAttr ( int iAttr, uint32_t uRowID, const util::Span_T<float> & dData, knn::BuildContext_t & tBuildCtx )
+bool KNNBuilderSerial_c::SetAttr ( int iAttr, uint32_t uRowID, const util::Span_T<float> & dData, knn::BuildContext_t & tBuildCtx )
 {
 	ScopedMutex_t tLock ( m_tLock );
 	return m_tBuilder.SetAttr ( iAttr, uRowID, dData, tBuildCtx );
 }
 
 
-bool KNNBuilderMT_c::FinalizeTraining ( std::string & sError )
+bool KNNBuilderSerial_c::FinalizeTraining ( std::string & sError )
 {
 	ScopedMutex_t tLock ( m_tLock );
 	return m_tBuilder.FinalizeTraining ( sError );
 }
 
 
-bool KNNBuilderMT_c::Save ( const std::string & sFilename, size_t tBufferSize, std::string & sError )
+bool KNNBuilderSerial_c::Save ( const std::string & sFilename, size_t tBufferSize, std::string & sError )
 {
 	ScopedMutex_t tLock ( m_tLock );
 	return m_tBuilder.Save ( sFilename, tBufferSize, sError );
 }
 
 
-void WarnOnRowsWithoutKNNVector ( int64_t iNoVectorRows, const char * szTable )
-{
-	if ( iNoVectorRows<=0 )
-		return;
-
-	sphWarning ( "table %s: " INT64_FMT " row(s) have no vector value and were not added to the KNN index; they are returned by SELECT but cannot be found by knn()", szTable ? szTable : "(unknown)", iNoVectorRows );
-}
-
-
-static void RunDiskIndexKNNStoreWorker ( int64_t iStart, int64_t iEnd, const CSphIndex & tIndex, knn::Builder_i & tBuilder, const VecTraits_T<PlainOrColumnar_t> & dAttrs, const CSphRowitem * pRawAttrs, const BYTE * pRawBlobs, int iStride, CSphString & sWorkerError, std::atomic<bool> & bStop, std::atomic<int64_t> & iNoVectorRows )
+static void RunDiskIndexKNNStoreWorker ( int64_t iStart, int64_t iEnd, const CSphIndex & tIndex, knn::Builder_i & tBuilder, const VecTraits_T<PlainOrColumnar_t> & dAttrs, const CSphRowitem * pRawAttrs, const BYTE * pRawBlobs, int iStride, CSphString & sWorkerError, std::atomic<bool> & bStop )
 {
 	knn::BuildContext_t tBuildCtx;
-	int64_t iNoVector = 0;
 	auto dIters = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
 	for ( int64_t i = iStart; i<iEnd; i++ )
 	{
@@ -1134,16 +1103,13 @@ static void RunDiskIndexKNNStoreWorker ( int64_t iStart, int64_t iEnd, const CSp
 
 		RowID_t tRow = (RowID_t)i;
 		const CSphRowitem * pRow = pRawAttrs ? pRawAttrs + i * iStride : nullptr;
-		if ( !BuildStoreKNN ( tRow, tRow, pRow, pRawBlobs, dIters, dAttrs, tBuilder, tBuildCtx, &iNoVector ) )
+		if ( !BuildStoreKNN ( tRow, tRow, pRow, pRawBlobs, dIters, dAttrs, tBuilder, tBuildCtx ) )
 		{
 			RecordKNNBuildError ( sWorkerError, tBuildCtx, "KNN construction failed at row %u", tRow );
 			bStop.store ( true, std::memory_order_relaxed );
-			iNoVectorRows.fetch_add ( iNoVector, std::memory_order_relaxed );
 			return;
 		}
 	}
-
-	iNoVectorRows.fetch_add ( iNoVector, std::memory_order_relaxed );
 }
 
 
@@ -1155,16 +1121,9 @@ bool BuildStoreKNNParallelDiskIndex ( const CSphIndex & tIndex, knn::Builder_i &
 	const CSphRowitem * pRawAttrs = tIndex.GetRawAttrs();
 	const BYTE * pRawBlobs = pRawAttrs ? tIndex.GetRawBlobAttrs() : nullptr;
 	const int iStride = pRawAttrs ? tIndex.GetMatchSchema().GetRowSize() : 0;
-	std::atomic<int64_t> iNoVectorRows { 0 };
-
-	// the knn builder is not thread safe; workers read and decode rows in parallel but must enter
-	// the graph one at a time, otherwise concurrent neighbour-list pruning can orphan a point
-	KNNBuilderMT_c tSafeBuilder ( tBuilder );
-	bool bOk = RunParallelKNNStore ( iTotalRows, sError, [&] ( int iIdx, int64_t iStart, int64_t iEnd, CSphString & sErr, std::atomic<bool> & bStop ) { RunDiskIndexKNNStoreWorker ( iStart, iEnd, tIndex, tSafeBuilder, dAttrs, pRawAttrs, pRawBlobs, iStride, sErr, bStop, iNoVectorRows ); } );
-	if ( bOk )
-		WarnOnRowsWithoutKNNVector ( iNoVectorRows.load ( std::memory_order_relaxed ), tIndex.GetName() );
-
-	return bOk;
+	// Keep graph insertion serial until MCL guarantees reachability under concurrent inserts.
+	KNNBuilderSerial_c tSafeBuilder ( tBuilder );
+	return RunParallelKNNStore ( iTotalRows, sError, [&] ( int iIdx, int64_t iStart, int64_t iEnd, CSphString & sErr, std::atomic<bool> & bStop ) { RunDiskIndexKNNStoreWorker ( iStart, iEnd, tIndex, tSafeBuilder, dAttrs, pRawAttrs, pRawBlobs, iStride, sErr, bStop ); } );
 }
 
 

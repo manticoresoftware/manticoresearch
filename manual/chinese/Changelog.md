@@ -1,5 +1,11 @@
 # 更新日志
 
+## Dev 版本
+
+### 新功能和改进
+* 🆕 添加了对 Grafana 13.1 和 13.2 版本的测试。
+* 🆕 添加了对 Logstash 9.5 版本的测试。
+
 ## 版本 29.0.2
 **发布日期**：2026 年 8 月 14 日
 
@@ -21,7 +27,7 @@
 * 🪲 [v29.0.0](https://github.com/manticoresoftware/manticoresearch/tree/29.0.0) [Issue #4739](https://github.com/manticoresoftware/manticoresearch/issues/4739) 修复了物理表在刷新或执行其他耗时操作时，长时间运行的分片写入超时的问题；现在心跳回复可以保持连接存活，而无需将 `agent_query_timeout` 设得异常大。
 * 🪲 [v28.9.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.9.3) [Issue #4792](https://github.com/manticoresoftware/manticoresearch/issues/4792) 修复了在 `html_strip_mode=retain` 时 [CALL SNIPPETS and HIGHLIGHT()](Searching/Highlighting.md) 生成无效的嵌套 HTML 的问题；现在高亮包装器会保留现有元素边界并生成格式正确的标记。
 * 🪲 [v28.9.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.9.2) [Issue #4678](https://github.com/manticoresoftware/manticoresearch/issues/4678) 修复了 `searchd` 在 [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) 检查并发运行的 HTTP SQL 查询时可能出现的 use-after-free 崩溃问题。
-* 🪲 [v28.9.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.9.1) [Issue #4738](https://github.com/manticoresoftware/manticoresearch/issues/4738) 修复了显式 `optimize_cutoff` 值未应用到 KNN 合并压缩阈值的问题，因此现在服务器级和表级设置能够按预期控制向量表的自动分块合并。
+* 🪲 [v28.9.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.9.1) [Issue #4738](https://github.com/manticoresoftware/manticoresearch/issues/4738) 修复了显式设置的 [optimize_cutoff](Server_settings/Searchd.md#optimize_cutoff) 值未应用到 KNN 压缩阈值的问题，因此现在服务器级和按表设置会按预期控制向量表的自动 chunk 合并。
 * 🪲 [v28.6.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.6.8) [PR #4777](https://github.com/manticoresoftware/manticoresearch/pull/4777) 修复了在模板表上、当全文查询包含字段选择器时 [EXPLAIN QUERY](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) 卡住的问题；现在有效的选择器会由全文解析器识别，而格式错误的选择器会返回语法错误。
 * 🪲 [v28.6.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.6.7) [Issue #4771](https://github.com/manticoresoftware/manticoresearch/issues/4771) 修复了分布式代理操作完成后主守护进程内存占用过高的问题；现在在解析完成后会立即释放较大的请求和回复缓冲区，而不是一直保留到 `agent_query_timeout` 到期。
 

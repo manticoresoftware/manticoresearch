@@ -1,3 +1,13 @@
+//
+// Copyright (c) 2026, Manticore Software LTD (https://manticoresearch.com)
+// All rights reserved
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License. You should have
+// received a copy of the GPL license along with this program; if you
+// did not, you can find it at http://www.gnu.org/
+//
+
 #pragma once
 
 #include "searchdsql.h"
@@ -150,6 +160,7 @@ private:
 	bool		CheckStrings ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iCol, int iRow );
 	bool		CheckJson ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal );
 	bool		CheckMVA ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iCol, int iRow );
+	bool		ConvertFloatVecArray ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, const AttrValueVec_t & tAddVals, int iCol, int iRow );
 	bool		CheckInsertTypes ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx );
 };
 

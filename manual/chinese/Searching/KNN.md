@@ -591,6 +591,59 @@ POST /search
 
 <!-- example knn_quantization -->
 
+### 每个文档包含多个向量
+
+一个 [`float_vector_array`](../Creating_a_table/Data_types.md#Float-vector-array) 属性为每个文档保存多个向量，而不是只有一个：比如一篇文章的多个分块、一款产品的多张照片，或者一段视频的关键帧。所有文档中的所有向量都会一起建立索引，搜索时会把文档的各个向量视为该文档的不同表示：
+
+* 如果某个文档的**任意**一个向量接近查询向量，就认为该文档匹配。
+* 每个匹配文档只返回**一次**，`knn_dist()` 报告它最近那个向量的距离。该文档的其他向量不会产生额外行。
+* `k` 统计的是**文档**，不是向量。`knn(v, 10, ...)` 要求返回 10 个最近的文档，而不管它们一共包含多少个向量。
+* 没有任何向量的文档（`[]`，或者省略该属性）绝不会返回，因为它不接近任何内容。
+
+查询向量仍然是一个包含 `KNN_DIMS` 个元素的单个向量，与 `float_vector` 完全相同。KNN 索引数组中存储的每个向量也必须包含 `KNN_DIMS` 个元素。
+
+当 `HNSW_SIMILARITY='cosine'` 时，每个存储向量都会单独归一化，因此会将文档中的各个向量分别与查询进行比较，而不是把它们当作一个长串联向量来比较。
+
+本页其余内容保持不变：[过滤](../Searching/KNN.md#Filtering-KNN-vector-search-results)、[预过滤/后过滤](../Searching/KNN.md#Filtering-strategies:-prefilter-vs.-postfilter)、[量化](../Searching/KNN.md#Vector-quantization)、[提前终止](../Searching/KNN.md#Early-termination) 和重评分的行为都一样。唯一不可用的能力是 [自动嵌入](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29)，因为一个模型每个文档只会生成一个向量。
+
+<!-- example multi_vector -->
+
+<!-- intro -->
+##### SQL：
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+
+INSERT INTO articles VALUES
+  (1, 'first',  [[1,0,0,0],[0,1,0,0]]),
+  (2, 'second', [[0,0,1,0]]);
+
+-- doc 1 owns a vector identical to the query and another far from it,
+-- so it is returned once, at distance 0
+SELECT id, knn_dist() FROM articles WHERE knn(chunk_vectors, 5, (1,0,0,0));
+```
+
+<!-- intro -->
+##### JSON：
+
+<!-- request JSON -->
+
+```JSON
+POST /search
+{
+  "table": "articles",
+  "knn": {
+    "field": "chunk_vectors",
+    "query_vector": [1,0,0,0],
+    "k": 5
+  }
+}
+```
+
+<!-- end -->
+
 ### 向量量化
 
 HNSW 索引必须完整加载到内存中才能执行 KNN 搜索，这可能导致较高的内存消耗。为了降低内存占用，可以应用标量量化 - 这是一种通过用有限数量的离散值表示每个分量（维度）来压缩高维向量的技术。Manticore 支持 8 位和 1 位量化，这意味着每个向量分量都会从 32 位浮点压缩为 8 位甚至 1 位，分别将内存占用降低 4 倍或 32 倍。这些压缩表示还可以加快距离计算，因为更多的向量分量可以在单条 SIMD 指令中处理。虽然标量量化会引入一定的近似误差，但它通常是在搜索精度与资源效率之间值得接受的权衡。若要获得更高精度，可以将量化与重新评分和过采样结合使用：检索出的候选数量会多于请求数量，然后使用原始 32 位浮点向量重新计算这些候选的距离。

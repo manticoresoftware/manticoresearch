@@ -391,9 +391,9 @@ jobs:
         export MCL_LOCAL_RUNTIME=OFF
         ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
 
-  test_linux_debug_plain:
+  test_linux_debug:
     if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_linux_debug.result == 'success' && (needs.mcl_runtime_linux_debug_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_linux_debug.result == 'success')
-    name: Linux debug mode tests (plain)
+    name: Linux debug mode tests
     needs: [build_linux_debug, mcl_runtime_linux_debug_cached, mcl_runtime_linux_debug, meta]
     permissions:
       checks: write
@@ -402,28 +402,10 @@ jobs:
     secrets: inherit
     with:
       build_artifact_name: debug_build
-      artifact_name: debug_test_results_plain
-      results_name: "Linux debug plain test results"
+      artifact_name: debug_test_results
+      results_name: "Linux debug test results"
       suite_name: plain
-      CTEST_REGEX: "^test_"
-      timeout: 20
-      MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
-
-  test_linux_debug_rt:
-    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_linux_debug.result == 'success' && (needs.mcl_runtime_linux_debug_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_linux_debug.result == 'success')
-    name: Linux debug mode tests (rt)
-    needs: [build_linux_debug, mcl_runtime_linux_debug_cached, mcl_runtime_linux_debug, meta]
-    permissions:
-      checks: write
-      contents: read
-    uses: ./.github/workflows/test_template.yml
-    secrets: inherit
-    with:
-      build_artifact_name: debug_build
-      artifact_name: debug_test_results_rt
-      results_name: "Linux debug RT test results"
-      suite_name: rt
-      CTEST_REGEX: "^rt_"
+      CTEST_PARAMS: "EXCLUDE_LABEL;(COLUMNAR|SECONDARY)"
       timeout: 20
       MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
 
@@ -986,8 +968,7 @@ jobs:
       - test_kit_docker_build
       - test_kit_docker_reuse
       - test_kit_light_docker_build
-      - test_linux_debug_plain
-      - test_linux_debug_rt
+      - test_linux_debug
       - test_linux_debug_rt_indexer
       - test_linux_debug_mcl
       - test_linux_release_plain
@@ -1167,8 +1148,7 @@ jobs:
       - build_linux_debug
       - mcl_runtime_linux_debug_cached
       - mcl_runtime_linux_debug
-      - test_linux_debug_plain
-      - test_linux_debug_rt
+      - test_linux_debug
       - test_linux_debug_rt_indexer
       - test_linux_debug_mcl
       - build_linux_release
@@ -1200,8 +1180,7 @@ jobs:
             "build_linux_debug:${{ needs.build_linux_debug.result }}"
             "mcl_runtime_linux_debug_cached:${{ needs.mcl_runtime_linux_debug_cached.result }}"
             "mcl_runtime_linux_debug:${{ needs.mcl_runtime_linux_debug.result }}"
-            "test_linux_debug_plain:${{ needs.test_linux_debug_plain.result }}:${{ needs.test_linux_debug_plain.outputs.test_outcome }}"
-            "test_linux_debug_rt:${{ needs.test_linux_debug_rt.result }}:${{ needs.test_linux_debug_rt.outputs.test_outcome }}"
+            "test_linux_debug:${{ needs.test_linux_debug.result }}:${{ needs.test_linux_debug.outputs.test_outcome }}"
             "test_linux_debug_rt_indexer:${{ needs.test_linux_debug_rt_indexer.result }}:${{ needs.test_linux_debug_rt_indexer.outputs.test_outcome }}"
             "test_linux_debug_mcl:${{ needs.test_linux_debug_mcl.result }}:${{ needs.test_linux_debug_mcl.outputs.test_outcome }}"
             "build_linux_release:${{ needs.build_linux_release.result }}"

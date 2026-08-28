@@ -834,6 +834,22 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 			}
 			break;
 
+		case SPH_ATTR_FLOAT_VECTOR_ARRAY:
+			{
+				StringBuilder_c dStr;
+				sphFloatVecArray2Str ( sphGetBlobAttr ( tMatch, tLoc, pBlobPool ), dStr );
+				dRows.PutArray ( dStr, false );
+			}
+			break;
+
+		case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
+			{
+				StringBuilder_c dStr;
+				sphPackedFloatVecArray2Str ( (const BYTE*)tMatch.GetAttr(tLoc), dStr );
+				dRows.PutArray ( dStr, false );
+			}
+			break;
+
 		case SPH_ATTR_JSON:
 			{
 				auto pJson = sphGetBlobAttr ( tMatch, tLoc, pBlobPool );

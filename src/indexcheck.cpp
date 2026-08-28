@@ -501,10 +501,22 @@ static DictReadResult_e ReadDictEntryForCheck ( CSphAutoreader & tReader, DictFo
 	return DictReadResult_e::ENTRY;
 }
 
+class DebugCheckStub_c final : public DebugCheckError_i
+{
+public:
+	bool Fail ( const char* szFmt, ... ) {return false;};
+	void Msg ( const char* szFmt, ... ) {};
+	void Progress ( const char* szFmt, ... ) {};
+	void Done() {};
+	int64_t GetNumFails() const { return 0; };
+	void CheckDocidDup ( DocID_t , DWORD  ) {};
+	void FinishDiskChunk ( int64_t ) {};
+};
+
 class DiskIndexChecker_c::Impl_c
 {
 public:
-			Impl_c ( CSphIndex & tIndex, DebugCheckError_i & tReporter );
+			Impl_c ( CSphIndex * pIndex, DebugCheckError_i & tReporter );
 
 	bool	OpenFiles ();
 	void	Setup ( int64_t iNumRows, int64_t iDocinfoIndex, int64_t iMinMaxIndex, bool bCheckIdDups );
@@ -513,8 +525,11 @@ public:
 	void	Check();
 	void	ExtractDocs ();
 
+	bool	ReadHeader ( const CSphString& sHeader );
+	DWORD	GetVersion() const noexcept { return m_uVersion; };
+
 private:
-	CSphIndex &				m_tIndex;
+	CSphIndex *				m_pIndex;
 	CSphAutoreader			m_tDictReader;
 	DataReaderFactoryPtr_c	m_pDocsReader;
 	DataReaderFactoryPtr_c	m_pHitsReader;
@@ -537,6 +552,7 @@ private:
 	bool					m_bCheckIdDups = false;
 	CSphSchema				m_tSchema;
 	CWordlist				m_tWordlist;
+	CSphString				m_sError;
 
 	RowID_t GetRowidByDocid ( DocID_t iDocid ) const;
 	RowID_t CheckIfKilled ( RowID_t iRowID ) const;
@@ -554,31 +570,39 @@ private:
 	void	CheckDocstore();
 	void	CheckSchema();
 
-	bool	ReadLegacyHeader ( CSphString& sError );
-	bool	ReadHeader ( CSphString& sError );
+	bool	ReadLegacyHeader ( const CSphString& sHeader );
 	CSphString	GetFilename ( ESphExt eExt ) const;
 };
 
 
-DiskIndexChecker_c::Impl_c::Impl_c ( CSphIndex & tIndex, DebugCheckError_i & tReporter )
-	: m_tIndex ( tIndex )
+std::optional<DWORD> ValidateHeaderAndReadVersion ( const CSphString& sHeader )
+{
+	DebugCheckStub_c tStub;
+	DiskIndexChecker_c tChecker { nullptr, tStub };
+	if (!tChecker.ReadHeader ( sHeader ))
+		return std::nullopt;
+	return tChecker.GetVersion();
+}
+
+DiskIndexChecker_c::Impl_c::Impl_c ( CSphIndex * pIndex, DebugCheckError_i & tReporter )
+	: m_pIndex ( pIndex )
 	, m_tReporter ( tReporter )
 {}
 
 
-bool DiskIndexChecker_c::Impl_c::ReadLegacyHeader ( CSphString& sError )
+bool DiskIndexChecker_c::Impl_c::ReadLegacyHeader ( const CSphString& sHeader )
 {
 	CSphAutoreader tHeaderReader;
-	if ( !tHeaderReader.Open ( GetFilename ( SPH_EXT_SPH ), sError ) )
+	if ( !tHeaderReader.Open ( sHeader, m_sError ) )
 		return false;
 
-	const char * szHeader = tHeaderReader.GetFilename().cstr();
+	const char* szHeader = sHeader.scstr();
 
 	// magic header
 	const char * szFmt = CheckFmtMagic ( tHeaderReader.GetDword() );
 	if ( szFmt )
 	{
-		sError.SetSprintf ( szFmt, szHeader );
+		m_sError.SetSprintf ( szFmt, szHeader );
 		return false;
 	}
 
@@ -586,20 +610,35 @@ bool DiskIndexChecker_c::Impl_c::ReadLegacyHeader ( CSphString& sError )
 	m_uVersion = tHeaderReader.GetDword();
 	if ( m_uVersion<=1 || m_uVersion>INDEX_FORMAT_VERSION )
 	{
-		sError.SetSprintf ( "%s is v.%u, binary is v.%u", szHeader, m_uVersion, INDEX_FORMAT_VERSION );
+		m_sError.SetSprintf ( "%s is v.%u, binary is v.%u", szHeader, m_uVersion, INDEX_FORMAT_VERSION );
 		return false;
 	}
 
 	// we don't support anything prior to v54
-	DWORD uMinFormatVer = 54;
+	const DWORD uMinFormatVer = 54;
 	if ( m_uVersion<uMinFormatVer )
 	{
-		sError.SetSprintf ( "tables prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, szHeader, m_uVersion );
+		m_sError.SetSprintf ( "tables prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, szHeader, m_uVersion );
+		return false;
+	}
+
+	// 63 is the last version with legacy (binary) header; starting from 64 header stored in json format, so it can't be here.
+	const DWORD uMaxLegacyVer = 63;
+	if ( m_uVersion>uMaxLegacyVer )
+	{
+		m_sError.SetSprintf ( "tables after to v.%u are stored as json, but here is plain legacy file. Looks, like it is damaged. %s is v.%u", uMaxLegacyVer, szHeader, m_uVersion );
 		return false;
 	}
 
 	// schema
 	ReadSchema ( tHeaderReader, m_tSchema, m_uVersion );
+
+	if ( !m_pIndex )
+	{
+		m_sError = "indexcheck read the the header and finished";
+		return true;
+	}
+	assert ( m_pIndex );
 
 	// dictionary header (wordlist checkpoints, infix blocks, etc)
 	m_tWordlist.m_iDictCheckpointsOffset = tHeaderReader.GetOffset();
@@ -610,25 +649,26 @@ bool DiskIndexChecker_c::Impl_c::ReadLegacyHeader ( CSphString& sError )
 
 	m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
 
-	auto eDictFormat = m_tIndex.GetDictionary()->GetSettings().GetDictFormat();
+
+	auto eDictFormat = m_pIndex->GetDictionary()->GetSettings().GetDictFormat();
 	if ( eDictFormat==DictFormat_e::KEYWORDS_V2 )
 	{
-		sError = "indexcheck for dict=keywords_32k is not implemented yet";
+		m_sError = "indexcheck for dict=keywords_32k is not implemented yet";
 		return false;
 	}
 
-	return m_tWordlist.Preread ( GetFilename(SPH_EXT_SPI), eDictFormat, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError );
+	return m_tWordlist.Preread ( GetFilename(SPH_EXT_SPI), eDictFormat, m_pIndex->GetSettings().m_iSkiplistBlockSize, m_sError );
 	// FIXME! add more header checks
 
 }
 
-bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
+bool DiskIndexChecker_c::Impl_c::ReadHeader ( const CSphString& sHeader )
 {
 	bool bHeaderIsJson;
 	{
 		BYTE dBuffer[8];
 		CSphAutoreader tHeaderReader ( dBuffer, sizeof ( dBuffer ) );
-		if ( !tHeaderReader.Open ( GetFilename ( SPH_EXT_SPH ), sError ) )
+		if ( !tHeaderReader.Open ( sHeader, m_sError ) )
 			return false;
 
 		tHeaderReader.GetDword();
@@ -636,21 +676,20 @@ bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
 	}
 
 	if ( !bHeaderIsJson ) // that is old style binary header
-		return ReadLegacyHeader ( sError );
+		return ReadLegacyHeader ( sHeader );
 
 
-	auto sHeader = GetFilename ( SPH_EXT_SPH );
 	const char* szHeader = sHeader.scstr();
 	using namespace bson;
 
 	CSphVector<BYTE> dData;
-	if ( sphJsonParse ( dData, GetFilename ( SPH_EXT_SPH ), sError )!=JsonFileParse_e::OK )
+	if ( sphJsonParse ( dData, sHeader, m_sError )!=JsonFileParse_e::OK )
 		return false;
 
 	Bson_c tBson ( dData );
 	if ( tBson.IsEmpty() || !tBson.IsAssoc() )
 	{
-		sError = "Something wrong read from json header - it is either empty, either not root object.";
+		m_sError = "Something wrong read from json header - it is either empty, either not root object.";
 		return false;
 	}
 
@@ -658,7 +697,7 @@ bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
 	m_uVersion = (DWORD)Int ( tBson.ChildByName ( "index_format_version" ) );
 	if ( m_uVersion <= 1 || m_uVersion > INDEX_FORMAT_VERSION )
 	{
-		sError.SetSprintf ( "%s is v.%u, binary is v.%u", szHeader, m_uVersion, INDEX_FORMAT_VERSION );
+		m_sError.SetSprintf ( "%s is v.%u, binary is v.%u", szHeader, m_uVersion, INDEX_FORMAT_VERSION );
 		return false;
 	}
 
@@ -666,12 +705,20 @@ bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
 	DWORD uMinFormatVer = 64;
 	if ( m_uVersion < uMinFormatVer )
 	{
-		sError.SetSprintf ( "tables prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, szHeader, m_uVersion );
+		m_sError.SetSprintf ( "tables prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, szHeader, m_uVersion );
 		return false;
 	}
 
 	// schema
 	ReadSchemaJson ( tBson.ChildByName ( "schema" ), m_tSchema );
+
+
+	if ( !m_pIndex )
+	{
+		m_sError = "indexcheck read the the header and finished";
+		return true;
+	}
+	assert ( m_pIndex );
 
 	// dictionary header (wordlist checkpoints, infix blocks, etc)
 	m_tWordlist.m_iDictCheckpointsOffset = Int ( tBson.ChildByName ( "dict_checkpoints_offset" ) );
@@ -682,52 +729,53 @@ bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
 
 	m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
 
-	auto eDictFormat = m_tIndex.GetDictionary()->GetSettings().GetDictFormat();
-	return m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), eDictFormat, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError );
+	auto eDictFormat = m_pIndex->GetDictionary()->GetSettings().GetDictFormat();
+	return m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), eDictFormat, m_pIndex->GetSettings().m_iSkiplistBlockSize, m_sError );
 	// FIXME! add more header checks
 }
 
 
 bool DiskIndexChecker_c::Impl_c::OpenFiles ()
 {
-	CSphString sError;
-	if ( !ReadHeader ( sError ) )
-		return m_tReporter.Fail ( "error reading table header: %s", sError.cstr() );
+	assert ( m_pIndex );
+	m_sError = "";
+	if ( !ReadHeader ( GetFilename ( SPH_EXT_SPH ) ) )
+		return m_tReporter.Fail ( "error reading table header: %s", m_sError.cstr() );
 
-	if ( !m_tDictReader.Open ( GetFilename ( SPH_EXT_SPI ), sError ) )
-		return m_tReporter.Fail ( "unable to open dictionary: %s", sError.cstr() );
+	if ( !m_tDictReader.Open ( GetFilename ( SPH_EXT_SPI ), m_sError ) )
+		return m_tReporter.Fail ( "unable to open dictionary: %s", m_sError.cstr() );
 
 	// use file reader during debug check to lower memory pressure
-	m_pDocsReader = NewProxyReader ( GetFilename(SPH_EXT_SPD), sError, DataReaderFactory_c::DOCS, m_tIndex.GetMutableSettings().m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE );
+	m_pDocsReader = NewProxyReader ( GetFilename(SPH_EXT_SPD), m_sError, DataReaderFactory_c::DOCS, m_pIndex->GetMutableSettings().m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE );
 	if ( !m_pDocsReader )
-		return m_tReporter.Fail ( "unable to open doclist: %s", sError.cstr() );
+		return m_tReporter.Fail ( "unable to open doclist: %s", m_sError.cstr() );
 
 	// use file reader during debug check to lower memory pressure
-	m_pHitsReader = NewProxyReader ( GetFilename(SPH_EXT_SPP), sError, DataReaderFactory_c::HITS, m_tIndex.GetMutableSettings().m_tFileAccess.m_iReadBufferHitList, FileAccess_e::FILE );
+	m_pHitsReader = NewProxyReader ( GetFilename(SPH_EXT_SPP), m_sError, DataReaderFactory_c::HITS, m_pIndex->GetMutableSettings().m_tFileAccess.m_iReadBufferHitList, FileAccess_e::FILE );
 	if ( !m_pHitsReader )
-		return m_tReporter.Fail ( "unable to open hitlist: %s", sError.cstr() );
+		return m_tReporter.Fail ( "unable to open hitlist: %s", m_sError.cstr() );
 
-	if ( !m_tSkipsReader.Open ( GetFilename(SPH_EXT_SPE), sError ) )
-		return m_tReporter.Fail ( "unable to open skiplist: %s", sError.cstr () );
+	if ( !m_tSkipsReader.Open ( GetFilename(SPH_EXT_SPE), m_sError ) )
+		return m_tReporter.Fail ( "unable to open skiplist: %s", m_sError.cstr () );
 
-	if ( !m_tDeadRowReader.Open ( GetFilename(SPH_EXT_SPM).cstr(), sError ) )
-		return m_tReporter.Fail ( "unable to open dead-row map: %s", sError.cstr() );
+	if ( !m_tDeadRowReader.Open ( GetFilename(SPH_EXT_SPM).cstr(), m_sError ) )
+		return m_tReporter.Fail ( "unable to open dead-row map: %s", m_sError.cstr() );
 
-	if ( m_tSchema.HasNonColumnarAttrs() && !m_tAttrReader.Open ( GetFilename(SPH_EXT_SPA).cstr(), sError ) )
-		return m_tReporter.Fail ( "unable to open attributes: %s", sError.cstr() );
+	if ( m_tSchema.HasNonColumnarAttrs() && !m_tAttrReader.Open ( GetFilename(SPH_EXT_SPA).cstr(), m_sError ) )
+		return m_tReporter.Fail ( "unable to open attributes: %s", m_sError.cstr() );
 
 	if ( m_tSchema.GetAttr ( sphGetBlobLocatorName() ) )
 	{
-		if ( !m_tBlobReader.Open ( GetFilename(SPH_EXT_SPB), sError ) )
-			return m_tReporter.Fail ( "unable to open blobs: %s", sError.cstr() );
+		if ( !m_tBlobReader.Open ( GetFilename(SPH_EXT_SPB), m_sError ) )
+			return m_tReporter.Fail ( "unable to open blobs: %s", m_sError.cstr() );
 
 		m_bHasBlobs = true;
 	}
 
 	if ( m_uVersion>=57 && ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() ) )
 	{
-		if ( !m_tDocstoreReader.Open ( GetFilename(SPH_EXT_SPDS).cstr(), sError ) )
-			return m_tReporter.Fail ( "unable to open docstore: %s", sError.cstr() );
+		if ( !m_tDocstoreReader.Open ( GetFilename(SPH_EXT_SPDS).cstr(), m_sError ) )
+			return m_tReporter.Fail ( "unable to open docstore: %s", m_sError.cstr() );
 
 		m_bHasDocstore = true;
 	}
@@ -899,9 +947,10 @@ void DiskIndexChecker_c::Impl_c::Check()
 void DiskIndexChecker_c::Impl_c::CheckDictionary()
 {
 	m_tReporter.Msg ( "checking dictionary..." );
+	assert ( m_pIndex );
 
-	const CSphIndexSettings & tIndexSettings = m_tIndex.GetSettings();
-	const auto & tDictSettings = m_tIndex.GetDictionary()->GetSettings();
+	const CSphIndexSettings & tIndexSettings = m_pIndex->GetSettings();
+	const auto & tDictSettings = m_pIndex->GetDictionary()->GetSettings();
 	const DictFormat_e eDictFormat = tDictSettings.GetDictFormat();
 
 	SphWordID_t uWordid = 0;
@@ -1064,9 +1113,10 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 
 void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 {
-	const CSphIndexSettings & tIndexSettings = m_tIndex.GetSettings();
+	assert ( m_pIndex );
+	const CSphIndexSettings & tIndexSettings = m_pIndex->GetSettings();
 	const bool bLegacySkiplistLayout = IsLegacyHitlessLayoutForCheck ( m_uVersion );
-	const auto & tDictSettings = m_tIndex.GetDictionary()->GetSettings();
+	const auto & tDictSettings = m_pIndex->GetDictionary()->GetSettings();
 	const DictFormat_e eDictFormat = tDictSettings.GetDictFormat();
 
 	if ( !fnCbWordid )
@@ -1777,12 +1827,13 @@ void DiskIndexChecker_c::Impl_c::CheckDocstore()
 
 CSphString DiskIndexChecker_c::Impl_c::GetFilename ( ESphExt eExt ) const
 {
-	return m_tIndex.GetFilename ( eExt );
+	assert ( m_pIndex );
+	return m_pIndex->GetFilename ( eExt );
 }
 
 /// public interface
-DiskIndexChecker_c::DiskIndexChecker_c ( CSphIndex& tIndex, DebugCheckError_i& tReporter )
-	: m_pImpl { std::make_unique<Impl_c> ( tIndex, tReporter ) }
+DiskIndexChecker_c::DiskIndexChecker_c ( CSphIndex* pIndex, DebugCheckError_i& tReporter )
+	: m_pImpl { std::make_unique<Impl_c> ( pIndex, tReporter ) }
 {}
 
 DiskIndexChecker_c::~DiskIndexChecker_c() = default;
@@ -1791,6 +1842,17 @@ bool DiskIndexChecker_c::OpenFiles ()
 {
 	return m_pImpl->OpenFiles();
 }
+
+bool	DiskIndexChecker_c::ReadHeader(const CSphString& sVersion)
+{
+	return m_pImpl->ReadHeader(sVersion);
+}
+
+DWORD	DiskIndexChecker_c::GetVersion()
+{
+	return m_pImpl->GetVersion();
+}
+
 
 void DiskIndexChecker_c::Setup ( int64_t iNumRows, int64_t iDocinfoIndex, int64_t iMinMaxIndex, bool bCheckIdDups )
 {

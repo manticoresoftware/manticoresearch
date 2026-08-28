@@ -12,6 +12,7 @@
 
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
+#include "attribute.h"
 #include "docstore.h"
 #include "searchdha.h"
 #include "searchdreplication.h"
@@ -4632,11 +4633,71 @@ bool AttributeConverter_c::CheckJson ( const CSphColumnInfo & tCol, const SqlIns
 	return true;
 }
 
+// emits [dims][N*dims float bits] as a single mva entry
+bool AttributeConverter_c::ConvertFloatVecArray ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, const AttrValueVec_t & tAddVals, int iCol, int iRow )
+{
+	if ( tVal.m_dGroupLens.IsEmpty() )
+	{
+		if ( tAddVals.GetLength() )
+		{
+			m_sError.SetSprintf ( "column %d at row %d: float_vector_array requires an array of vectors, e.g. [[1,2],[3,4]]", iCol, iRow );
+			return false;
+		}
+
+		AddMVALength(0); // empty array: zero-length blob, no header
+		return true;
+	}
+
+	CSphString sVecError;
+	const int iDims = ValidateFloatVecArrayGroups ( tVal.m_dGroupLens, sVecError );
+	if ( !sVecError.IsEmpty() )
+	{
+		m_sError.SetSprintf ( "column %d at row %d: %s", iCol, iRow, sVecError.cstr() );
+		return false;
+	}
+
+	if ( !tAddVals.GetLength() )
+	{
+		AddMVALength(0);
+		return true;
+	}
+
+	m_dTmpFloats.Resize ( tAddVals.GetLength() );
+	ARRAY_FOREACH ( i, m_dTmpFloats )
+		m_dTmpFloats[i] = tAddVals[i].m_fValue;
+
+	// cosine normalization is per vector slot
+	if ( tCol.IsIndexedKNN() && tCol.m_tKNN.m_eHNSWSimilarity==knn::HNSWSimilarity_e::COSINE )
+	{
+		const int iVectors = m_dTmpFloats.GetLength() / iDims;
+		for ( int i = 0; i < iVectors; i++ )
+		{
+			VecTraits_T<float> dSlot ( m_dTmpFloats.Begin() + i*iDims, iDims );
+			NormalizeVec(dSlot);
+		}
+	}
+
+	AddMVALength ( 1 + m_dTmpFloats.GetLength() );
+	AddMVAValue ( iDims );
+	for ( float fValue : m_dTmpFloats )
+		AddMVAValue ( sphF2DW(fValue) );
+
+	return true;
+}
+
 
 bool AttributeConverter_c::CheckMVA ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iCol, int iRow )
 {
-	if ( tCol.m_eAttrType!=SPH_ATTR_UINT32SET && tCol.m_eAttrType!=SPH_ATTR_INT64SET && tCol.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR )
+	if ( tCol.m_eAttrType!=SPH_ATTR_UINT32SET && tCol.m_eAttrType!=SPH_ATTR_INT64SET && tCol.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR && tCol.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR_ARRAY )
+	{
+		if ( !tVal.m_dGroupLens.IsEmpty() )
+		{
+			m_sError.SetSprintf ( "column %d at row %d: nested vector syntax is only valid for float_vector_array attributes", iCol, iRow );
+			return false;
+		}
+
 		return true;
+	}
 
 	if ( !tVal.m_pVals )
 	{
@@ -4645,6 +4706,16 @@ bool AttributeConverter_c::CheckMVA ( const CSphColumnInfo & tCol, const SqlInse
 	}
 
 	auto & tAddVals = *tVal.m_pVals;
+
+	if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY )
+		return ConvertFloatVecArray ( tCol, tVal, tAddVals, iCol, iRow );
+
+	if ( !tVal.m_dGroupLens.IsEmpty() )
+	{
+		m_sError.SetSprintf ( "column %d at row %d: nested vector syntax is only valid for float_vector_array attributes", iCol, iRow );
+		return false;
+	}
+
 	if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
 	{
 		AddMVALength ( tAddVals.GetLength() );
@@ -4714,7 +4785,7 @@ bool AttributeConverter_c::CheckInsertTypes ( const CSphColumnInfo & tCol, const
 		return false;
 	}
 
-	if ( tVal.m_iType==SqlInsert_t::CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_JSON || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR ) )
+	if ( tVal.m_iType==SqlInsert_t::CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_JSON || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY ) )
 	{
 		m_sError.SetSprintf ( "row %d, column %d: MVA value specified for a non-MVA column", 1+iRow, 1+iQuerySchemaIdx ); // 1 for human base
 		return false;
@@ -4726,7 +4797,7 @@ bool AttributeConverter_c::CheckInsertTypes ( const CSphColumnInfo & tCol, const
 		return false;
 	}
 
-	if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tVal.m_iType!=SqlInsert_t::CONST_MVA )
+	if ( ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY ) && tVal.m_iType!=SqlInsert_t::CONST_MVA )
 	{
 		m_sError.SetSprintf ( "row %d, column %d: incompatible value specified for a float vector column", 1+iRow, 1+iQuerySchemaIdx ); // 1 for human base
 		return false;
@@ -4746,7 +4817,7 @@ void AttributeConverter_c::SetDefaultAttrValue ( int iCol )
 		|| tCol.m_eAttrType==SPH_ATTR_TDIGEST_PTR || tCol.m_eAttrType==SPH_ATTR_JSON )
 		m_dStrings.Add(nullptr);
 
-	if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
+	if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY )
 		AddMVALength ( 0, true );
 
 	SqlInsert_t tDefaultVal;
@@ -6874,20 +6945,25 @@ static bool CheckAttrs ( const VecTraits_T<T> & dAttrs, GETNAME && fnGetName, CS
 }
 
 
-static bool CheckExistingTables ( const CSphString & sIndex, bool bIfNotExists, CSphString & sError )
+static bool CheckExistingTables ( const CSphString & sIndex, bool bIfNotExists, bool bNameQuoted, CSphString & sError )
 {
+	if ( !sphValidateTableName ( sIndex.cstr(), bNameQuoted ? IdentifierValidation_e::ALLOW_LEADING_DIGIT : IdentifierValidation_e::ALLOW_NONE, sError ) )
+		return false;
+
+	const char * szIdentifier = sIndex.Begins ( "system." ) ? sIndex.cstr()+7 : sIndex.cstr();
+
+	if ( !bNameQuoted && CSphSchema::IsReserved ( szIdentifier ) )
+	{
+		sError.SetSprintf ( "'%s' is a reserved keyword", sIndex.cstr() );
+		return false;
+	}
+
 	if ( g_pLocalIndexes->Contains ( sIndex ) || g_pDistIndexes->Contains ( sIndex ) )
 	{
 		if ( bIfNotExists )
 			return true;
 
 		sError.SetSprintf ( "table '%s' already exists", sIndex.cstr() );
-		return false;
-	}
-
-	if ( CSphSchema::IsReserved ( sIndex.cstr() ) )
-	{
-		sError.SetSprintf ( "'%s' is a reserved keyword", sIndex.cstr() );
 		return false;
 	}
 
@@ -6909,7 +6985,7 @@ static int CheckShardIntOpt ( const char * sName, const CSphString & sIndex, con
 
 static bool CheckCreateTable ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, CSphString & sError )
 {
-	if ( !CheckExistingTables ( sIndex, tCreateTable.m_bIfNotExists, sError ) )
+	if ( !CheckExistingTables ( sIndex, tCreateTable.m_bIfNotExists, tCreateTable.m_bNameQuoted, sError ) )
 		return false;
 
 	bool bUuidDocid = false;
@@ -7043,6 +7119,22 @@ static CSphString BuildCreateTableRt ( const CSphString & sName, const CSphIndex
 }
 
 
+static void CopyHiddenKNNCreateLikeSettings ( CreateTableSettings_t & tCreateTable, const CSphSchema & tSourceSchema )
+{
+	for ( auto & tAttr : tCreateTable.m_dAttrs )
+	{
+		if ( !tAttr.m_bKNN || tAttr.m_tKNNModel.m_sModelName.empty() || !tAttr.m_tKNNModel.m_sAPIKey.empty() )
+			continue;
+
+		const CSphColumnInfo * pSourceAttr = tSourceSchema.GetAttr ( tAttr.m_tAttr.m_sName.cstr() );
+		if ( !pSourceAttr || pSourceAttr->m_tKNNModel.m_sModelName!=tAttr.m_tKNNModel.m_sModelName )
+			continue;
+
+		tAttr.m_tKNNModel.m_sAPIKey = pSourceAttr->m_tKNNModel.m_sAPIKey;
+	}
+}
+
+
 static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	SearchFailuresLog_c dErrors;
@@ -7055,7 +7147,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 		return;
 	}
 
-	if ( !CheckExistingTables ( tStmt.m_sIndex, tStmt.m_tCreateTable.m_bIfNotExists, sError ) )
+	if ( !CheckExistingTables ( tStmt.m_sIndex, tStmt.m_tCreateTable.m_bIfNotExists, tStmt.m_tCreateTable.m_bNameQuoted, sError ) )
 	{
 		sError.SetSprintf ( "table '%s': CREATE TABLE failed: %s", tStmt.m_sIndex.cstr(), sError.cstr() );
 		tOut.Error ( sError.cstr() );
@@ -7064,6 +7156,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 
 	const CSphString & sLike = tStmt.m_tCreateTable.m_sLike;
 	CSphString sCreateTable;
+	const CSphSchema * pSourceSchema = nullptr;
 	switch ( IndexIsServed ( sLike ) )
 	{
 	case RunIdx_e::NOTSERVED:
@@ -7080,7 +7173,8 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 			return;
 		}
 		RIdx_c pIdx { pServed };
-		sCreateTable = BuildCreateTableRt ( tStmt.m_sIndex, pIdx, GetSchemaForCreateTable ( pIdx ), ExtFilesFormat_e::FILE );
+		pSourceSchema = &GetSchemaForCreateTable ( pIdx );
+		sCreateTable = BuildCreateTableRt ( tStmt.m_sIndex, pIdx, *pSourceSchema, ExtFilesFormat_e::FILE );
 		break;
 	}
 	case RunIdx_e::DISTR:
@@ -7108,6 +7202,9 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 
 	SqlStmt_t & tNewCreateTable = dCreateTableStmts[0];
 	tNewCreateTable.m_tCreateTable.m_bIfNotExists = tStmt.m_tCreateTable.m_bIfNotExists;
+	tNewCreateTable.m_tCreateTable.m_bNameQuoted = tStmt.m_tCreateTable.m_bNameQuoted;
+	if ( pSourceSchema )
+		CopyHiddenKNNCreateLikeSettings ( tNewCreateTable.m_tCreateTable, *pSourceSchema );
 
 	HandleMysqlCreateTable ( tOut, tNewCreateTable, sWarning );
 }
@@ -8435,6 +8532,14 @@ static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrs
 		{
 			StringBuilder_c dStr;
 			sphPackedFloatVec2Str ( (const BYTE *)tMatch.GetAttr(tLoc), dStr );
+			dRows.PutArray ( dStr, false );
+		}
+		break;
+
+		case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
+		{
+			StringBuilder_c dStr;
+			sphPackedFloatVecArray2Str ( (const BYTE *)tMatch.GetAttr(tLoc), dStr );
 			dRows.PutArray ( dStr, false );
 		}
 		break;
@@ -12801,6 +12906,16 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	constexpr Str_t mysqldump_8_0_39_30_hack {FROMS("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE table_schema = 'performance_schema' AND table_name = 'session_variables'")};
 	if ( StrEq ( mysqldump_8_0_39_30_hack, sQuery) )
 		return tOut.DataTableOneline ( "count(*)" );
+
+	// Sequel Ace 5.3.1+ checks the current database before running a query
+	constexpr Str_t sSequelAceDatabase { FROMS("SELECT CAST(DATABASE() AS BINARY)") };
+	if ( session::GetProto()==Proto_e::MYSQL41 && StrEq ( sSequelAceDatabase, sQuery ) )
+		return tOut.DataTableOneline ( "CAST(DATABASE() AS BINARY)", nullptr );
+
+	// Sequel Ace 5.3.1+ checks the current character set before running a query
+	constexpr Str_t sSequelAceCharset { FROMS("SELECT CAST(@@character_set_client AS BINARY)") };
+	if ( session::GetProto()==Proto_e::MYSQL41 && StrEq ( sSequelAceCharset, sQuery ) )
+		return tOut.DataTableOneline ( "CAST(@@character_set_client AS BINARY)", "utf8" );
 
 	// parse SQL query
 	if ( tSess.IsProfile() )

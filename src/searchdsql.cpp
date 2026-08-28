@@ -12,6 +12,7 @@
 
 #include "searchdsql.h"
 #include "sphinxint.h"
+#include "attribute.h"
 #include "sphinxplugin.h"
 #include "searchdaemon.h"
 #include "searchdddl.h"
@@ -289,6 +290,29 @@ AttrValueVec_t & SqlParserTraits_c::GetMvaVec ( int iIdx ) const noexcept
 }
 
 
+int SqlParserTraits_c::AddGroupLensVec () noexcept
+{
+	m_dGroupLens.Add();
+	return m_dGroupLens.GetLength()-1;
+}
+
+
+CSphVector<int> & SqlParserTraits_c::GetGroupLensVec ( int iIdx ) const noexcept
+{
+	return m_dGroupLens[iIdx];
+}
+
+
+void SqlParserTraits_c::CopyGroupLens ( int iIdx, CSphVector<int> & dOut ) const noexcept
+{
+	dOut.Reset();
+	if ( iIdx<0 )
+		return;
+
+	dOut = GetGroupLensVec(iIdx);
+}
+
+
 AttrValues_p SqlParserTraits_c::CloneMvaVecPtr ( int iIdx ) const noexcept
 {
 	if ( iIdx<0 )
@@ -459,6 +483,8 @@ public:
 
 	void			AddUpdatedAttr ( const SqlNode_t & tName, ESphAttr eType ) const;
 	void			UpdateMVAAttr ( const SqlNode_t & tName, const SqlNode_t& dValues );
+	bool			UpdateVecArrayAttr ( const SqlNode_t & tName, const SqlNode_t & dValues );
+	const char *	GetLastError() const { return m_pParseError ? m_pParseError->cstr() : "syntax error"; }
 	void			UpdateStringAttr ( const SqlNode_t & tCol, const SqlNode_t & tStr );
 	void			SetGroupbyLimit ( int iLimit );
 	void			SetLimit ( int iOffset, int iLimit );
@@ -1302,6 +1328,7 @@ void SqlParser_c::AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & 
 	if ( tIns.m_iType==TOK_QUOTED_STRING )
 		tIns.m_sVal = ToStringUnescape ( tNode );
 	tIns.m_pVals = CloneMvaVecPtr ( tNode.m_iValues );
+	CopyGroupLens ( tNode.m_iGroupLens, tIns.m_dGroupLens );
 }
 
 
@@ -2265,6 +2292,40 @@ void SqlParser_c::UpdateMVAAttr ( const SqlNode_t & tName, const SqlNode_t & dVa
 	}
 
 	AddUpdatedAttr ( tName, eType );
+}
+
+
+bool SqlParser_c::UpdateVecArrayAttr ( const SqlNode_t & tName, const SqlNode_t & dValues )
+{
+	CSphAttrUpdate & tUpd = m_pStmt->AttrUpdate();
+
+	// empty literal [] deletes the value, same convention as () for a plain mva
+	if ( dValues.m_iValues<0 || dValues.m_iGroupLens<0 )
+	{
+		tUpd.m_dPool.Add ( 0 );
+		AddUpdatedAttr ( tName, SPH_ATTR_FLOAT_VECTOR_ARRAY );
+		return true;
+	}
+
+	const auto & dGroupLens = GetGroupLensVec ( dValues.m_iGroupLens );
+	const auto & dData = GetMvaVec ( dValues.m_iValues );
+
+	CSphString sError;
+	const int iDims = ValidateFloatVecArrayGroups ( dGroupLens, sError );
+	if ( !sError.IsEmpty() )
+	{
+		*m_pParseError = sError;
+		return false;
+	}
+
+	CSphVector<float> dFloats;
+	dFloats.Reserve ( dData.GetLength() );
+	for ( const auto & tValue : dData )
+		dFloats.Add ( tValue.m_fValue );
+
+	AppendFloatVecArrayToUpdatePool ( iDims, dFloats, tUpd.m_dPool );
+	AddUpdatedAttr ( tName, SPH_ATTR_FLOAT_VECTOR_ARRAY );
+	return true;
 }
 
 

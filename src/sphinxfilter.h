@@ -106,6 +106,11 @@ void OptimizeFilters ( CSphVector<CSphFilterSettings> & dFilters );
 CSphString FilterType2Str ( ESphFilter eFilterType );
 bool HasKNNDistFilter ( const CSphQuery & tQuery );
 
+// true when @knn_dist exists and is a real computed distance
+bool CanAddKNNDistFilter ( const ISphSchema & tSchema );
+
+std::unique_ptr<ISphSchema> BuildKNNDistFilter ( const ISphSchema & tSrcSchema, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree );
+
 void SetFilterStackItemSize ( std::pair<int,int> );
 int GetFilterStackItemSize();
 int GetStartFilterStackItemSize();

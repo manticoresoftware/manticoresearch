@@ -67,7 +67,7 @@ public:
 	bool	AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t & tCol );
 	bool	AddCreateTableId ( const SqlNode_t & tName );
 	bool	AddCreateTableUuidId ( const SqlNode_t & tName, const SqlNode_t & tType );
-	void	AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits );
+	bool	AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits );
 
 	bool	AddItemOptionEngine ( const SqlNode_t & tOption );
 	bool	AddItemOptionHash ( const SqlNode_t & tOption );
@@ -97,6 +97,8 @@ public:
 	void	AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode );
 	CSphString	GetTableName ( const SqlNode_t& tName ) const noexcept;
 	CSphString	GetTableName ( const SqlNode_t& tDb, const SqlNode_t& tName ) const noexcept;
+	bool		IsBacktickQuoted ( const SqlNode_t & tName ) const noexcept { return tName.m_iStart>0 && m_pBuf[tName.m_iStart-1]=='`'; }
+	bool		ValidateIdentifier ( const SqlNode_t & tName, int iMaxBytes = 0, bool bAllowCompatibilityNames = false );
 
 private:
 	CSphString		m_sError;
@@ -223,16 +225,35 @@ DdlParser_c::DdlParser_c ( CSphVector<SqlStmt_t> & dStmt, const char* szQuery, C
 }
 
 
-void DdlParser_c::AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits )
+bool DdlParser_c::AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits )
 {
 	assert(m_pStmt);
 	CreateTableAttr_t & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
 	ToString ( tAttr.m_tAttr.m_sName, tCol );
+	if ( !ValidateIdentifier ( tCol, 0, true ) )
+	{
+		m_pStmt->m_tCreateTable.m_dAttrs.Pop();
+		m_tItemOptions.Reset();
+		return false;
+	}
 	tAttr.m_tAttr.m_sName.ToLower();
 	tAttr.m_tAttr.m_eAttrType = SPH_ATTR_INTEGER;
 	tAttr.m_tAttr.m_tLocator.m_iBitCount = iBits;
 	m_tItemOptions.CopyOptionsTo(tAttr);
 	m_tItemOptions.Reset();
+	return true;
+}
+
+
+bool DdlParser_c::ValidateIdentifier ( const SqlNode_t & tName, int iMaxBytes, bool bAllowCompatibilityNames )
+{
+	CSphString sName;
+	ToString ( sName, tName );
+	bool bCompatibilityName = bAllowCompatibilityNames && ( !strcasecmp ( sName.cstr(), "@timestamp" ) || !strcasecmp ( sName.cstr(), "@version" ) );
+	IdentifierValidation_e eValidation = IsBacktickQuoted ( tName )
+		? ( bCompatibilityName ? IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION : IdentifierValidation_e::ALLOW_LEADING_DIGIT )
+		: ( bCompatibilityName ? IdentifierValidation_e::ALLOW_PATH_PUNCTUATION : IdentifierValidation_e::ALLOW_NONE );
+	return sphValidateIdentifier ( sName.cstr(), eValidation, iMaxBytes, m_sError );
 }
 
 
@@ -259,9 +280,9 @@ static DWORD ConvertFlags ( int iFlags )
 
 bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphString & sName, const ItemOptions_t & tOpts, CSphString & sError )
 {
-	if ( eAttrType!=SPH_ATTR_FLOAT_VECTOR && !tOpts.m_sKNNType.IsEmpty() )
+	if ( eAttrType!=SPH_ATTR_FLOAT_VECTOR && eAttrType!=SPH_ATTR_FLOAT_VECTOR_ARRAY && !tOpts.m_sKNNType.IsEmpty() )
 	{
-		sError = "knn_type='hnsw' can only be used with float_vector attributes";
+		sError = "knn_type='hnsw' can only be used with float_vector and float_vector_array attributes";
 		return false;
 	}
 
@@ -273,8 +294,15 @@ bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphSt
 			return false;
 		}
 	}
-	else if ( eAttrType==SPH_ATTR_FLOAT_VECTOR )
+	else if ( eAttrType==SPH_ATTR_FLOAT_VECTOR || eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY )
 	{
+		// auto-embeddings produce exactly one vector per document, so they are meaningless for an array column
+		if ( eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY && !tOpts.m_sModelName.IsEmpty() )
+		{
+			sError = "model_name can't be used with float_vector_array attributes";
+			return false;
+		}
+
 		if ( !tOpts.m_sKNNType.IsEmpty() )
 		{
 			if ( ( !tOpts.m_bKNNDimsSpecified || !tOpts.m_bHNSWSimilaritySpecified ) && tOpts.m_sModelName.IsEmpty() )
@@ -316,6 +344,11 @@ bool DdlParser_c::SetupAlterTable ( const SqlNode_t & tAttr, ESphAttr eAttr, int
 
 	m_pStmt->m_eStmt = bModify ? STMT_ALTER_MODIFY : STMT_ALTER_ADD;
 	ToString ( m_pStmt->m_sAlterAttr, tAttr );
+	if ( !ValidateIdentifier ( tAttr, 0, true ) )
+	{
+		m_tItemOptions.Reset();
+		return false;
+	}
 	m_pStmt->m_sIndex.ToLower();
 	m_pStmt->m_sAlterAttr.ToLower();
 	m_pStmt->m_eAlterColType = eAttr;
@@ -353,6 +386,11 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 
 	CSphString sName;
 	ToString ( sName, tName );
+	if ( !ValidateIdentifier ( tName, 0, true ) )
+	{
+		m_tItemOptions.Reset();
+		return false;
+	}
 	sName.ToLower ();
 	if ( IsReservedUuidDocidAttr ( sName, m_sError ) )
 	{

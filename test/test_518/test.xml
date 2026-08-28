@@ -16,7 +16,7 @@
 searchd
 {
 	<searchd_settings/>
-	data_dir = <data_path/>
+	data_dir = <data_path path="data0"/>
 	auto_optimize = 0
 }
 </config>

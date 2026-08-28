@@ -177,6 +177,24 @@ bool CachedIterator_T<false>::ReturnRowIdChunk ( RowIdBlock_t & dRowIdBlock )
 	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 }
 
+struct CmpDocidUnsigned_fn
+{
+	static bool IsLess ( DocID_t a, DocID_t b )
+	{
+		return uint64_t(a) < uint64_t(b);
+	}
+};
+
+
+static CSphVector<DocID_t> CopyAndSortDocidsUnsigned ( const VecTraits_T<DocID_t> & tValues )
+{
+	CSphVector<DocID_t> dValues;
+	dValues.Append(tValues);
+	dValues.Sort ( CmpDocidUnsigned_fn() );
+	return dValues;
+}
+
+
 template <bool ROWID_LIMITS, bool BITMAP>
 class RowidIterator_LookupValues_T : public CachedIterator_T<BITMAP>
 {
@@ -193,6 +211,7 @@ public:
 private:
 	RowIdBoundaries_t	m_tBoundaries;
 	int64_t				m_iProcessed {0};
+	CSphVector<DocID_t>	m_dValues;
 	LookupReaderIterator_c m_tLookupReader;
 	DocidListReader_c	m_tFilterReader;
 
@@ -203,8 +222,9 @@ private:
 template <bool ROWID_LIMITS, bool BITMAP>
 RowidIterator_LookupValues_T<ROWID_LIMITS, BITMAP>::RowidIterator_LookupValues_T ( const VecTraits_T<DocID_t>& tValues, int64_t iRsetEstimate, DWORD uTotalDocs, const BYTE * pDocidLookup, DWORD uIndexVersion, const RowIdBoundaries_t * pBoundaries )
 	: BASE ( iRsetEstimate, uTotalDocs )
+	, m_dValues ( CopyAndSortDocidsUnsigned(tValues) )
 	, m_tLookupReader ( pDocidLookup, uIndexVersion )
-	, m_tFilterReader ( tValues )
+	, m_tFilterReader ( m_dValues )
 {
 	if ( pBoundaries )
 		m_tBoundaries = *pBoundaries;
@@ -241,12 +261,12 @@ bool RowidIterator_LookupValues_T<ROWID_LIMITS,BITMAP>::Fill()
 
 	while ( bHaveFilterDocs && bHaveLookupDocs )
 	{
-		if ( tFilterDocID < tLookupDocID )
+		if ( uint64_t(tFilterDocID) < uint64_t(tLookupDocID) )
 		{
 			m_tFilterReader.HintDocID(tLookupDocID);
 			bHaveFilterDocs = m_tFilterReader.ReadDocID ( tFilterDocID );
 		}
-		else if ( tFilterDocID > tLookupDocID )
+		else if ( uint64_t(tFilterDocID) > uint64_t(tLookupDocID) )
 		{
 			m_tLookupReader.HintDocID(tFilterDocID);
 			bHaveLookupDocs = m_tLookupReader.Read ( tLookupDocID, tLookupRowID );
@@ -383,7 +403,6 @@ public:
 		{
 			m_pReader->HintDocID(m_uValue);
 			m_bRewound = true;
-			return { false, false };
 		}
 
 		if constexpr ( EQ )

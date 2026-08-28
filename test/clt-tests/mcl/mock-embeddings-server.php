@@ -570,6 +570,8 @@ function main() {
                 'Access-Control-Allow-Headers: Content-Type, Authorization'
             ], '');
         } elseif ($parsed['method'] === 'POST' && $parsed['path'] === '/v1/embeddings') {
+            echo "Mock embeddings request: {$parsed['method']} {$parsed['path']}\n";
+            fflush(STDOUT);
             $result = handle_embeddings_request($parsed['headers'], $parsed['body'], $delay, $provider);
             $response = format_response($result['code'], $result['headers'], $result['body']);
         } else {
@@ -592,4 +594,3 @@ function main() {
 
 // Run main function
 main();
-

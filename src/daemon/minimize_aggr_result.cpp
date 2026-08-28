@@ -657,11 +657,15 @@ static void ProcessMultiPostlimit ( AggrResult_t & tRes, VecTraits_T<const CSphC
 	for ( auto & dMatch : dMatches )
 	{
 		int iTag = dMatch.m_iTag;
+		assert ( iTag<tRes.m_dResults.GetLength () );
+
 		if ( tRes.m_dResults[iTag].m_bTag )
 			continue; // remote match; everything should be precalculated
 
 		auto * pDocstore = tRes.m_dResults[iTag].Docstore ();
-		assert ( iTag<tRes.m_dResults.GetLength () );
+
+		if ( !pDocstore )
+			continue;
 
 		if ( iTag!=iLastTag )
 		{

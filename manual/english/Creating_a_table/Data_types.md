@@ -4,19 +4,37 @@
 
 Manticore's data types can be split into two categories: full-text fields and attributes.
 
-### Field name syntax
+### Table and field name syntax
 
-Field names in Manticore must follow these rules:
+Table, field, and attribute names can contain ASCII letters (`a-z`, `A-Z`), numbers (`0-9`), underscores (`_`), and safe non-ASCII UTF-8 characters. An unquoted SQL name must start with an ASCII letter, an underscore, or a non-ASCII UTF-8 character. Numbers are allowed after the first character.
 
-* Can contain letters (a-z, A-Z), numbers (0-9), and hyphens (-)
-* Must start with a letter
-* Numbers can only appear after letters
-* Underscore (`_`) is the only allowed special character
-* Field names are case-insensitive
+The same base syntax applies to every table type in each mode where that type is supported: real-time, percolate, and distributed tables in [RT mode](../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29), and real-time, percolate, plain, distributed, and template tables in [Plain mode](../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29). It also applies to every schema that defines fields or attributes, including the expected document schema of a percolate table and schemas inferred from SQL, CSV/TSV, or XML sources.
+
+Other user-defined SQL object names, including function, plugin, and replication cluster names, follow the same safe UTF-8 rules.
+
+Use backticks around SQL names that begin with a number and contain at least one letter, underscore, or non-ASCII UTF-8 character, and around names that match a reserved SQL keyword. For example, use `` `2026_архив` `` or `` `select` ``. Configuration-file names are not quoted and may begin with a number. All-numeric identifiers are rejected in every mode, including while loading existing configuration or metadata; rename any such object before upgrading. Backticks do not make arbitrary ASCII punctuation valid; characters such as `-`, `$`, spaces, and embedded backticks are not supported in user-defined names.
+
+For compatibility with common log-ingestion schemas, `CREATE TABLE` and `ALTER TABLE` also accept the column names `@timestamp` and `@version` case-insensitively, with or without backticks. Other user-defined names beginning with `@` remain invalid. This exception does not make `@` a general identifier character in SQL or configuration-file schemas.
+
+For backward compatibility, Plain-mode configuration loading accepts `.` and `-` after the first character in table, field, and attribute names that earlier releases allowed. Do not use this compatibility syntax in new schemas: SQL cannot address every such name consistently, and SQL DDL continues to reject arbitrary punctuation.
+
+Identifiers must be valid UTF-8. Control characters, Unicode whitespace, bidirectional controls, and invisible default-ignorable characters are rejected. This includes non-breaking spaces, zero-width spaces, and zero-width joiners.
+
+Table names are limited to 200 bytes after being encoded as UTF-8 in both RT and Plain modes. Each ASCII character uses one byte, while a non-ASCII character uses two, three, or four bytes. This means a name can contain up to 200 ASCII characters, but fewer non-ASCII characters depending on the characters used. The component after the `system.` qualifier may use up to 48 additional bytes for shard and other generated suffixes. This qualified namespace is used for internal tables and is also accepted explicitly in SQL; ordinary public logical table names remain limited to 200 bytes. The limit also applies when existing table definitions are loaded, so rename any longer table before upgrading.
+
+In RT mode, the exact logical table name is stored in Manticore's metadata while table files use a bounded portable ASCII basename. This lets byte-distinct names coexist on case- or normalization-insensitive filesystems and avoids Windows reserved filenames. The component mapping does not prevalidate the complete storage path; operating-system path limits still apply, and a later filesystem error reports the failing path and OS error.
+
+For table, field, and attribute names created through SQL, Manticore converts ASCII uppercase letters to lowercase. Non-ASCII characters retain their original spelling. Configuration section names in Plain mode are case-sensitive, including their ASCII letters. Unicode case folding and Unicode normalization are not applied in either mode, so use the exact Unicode spelling consistently.
 
 For example:
-* Valid field names: `title`, `product_id`, `user_name_2`
-* Invalid field names: `2title`, `-price`, `user@name`
+* Valid unquoted names: `title`, `product_id`, `user_name_2`, `товары2026`, `商品表`, `📦метка`
+* Valid quoted names: `` `2026_архив` ``, `` `select` ``
+* Valid SQL compatibility column names: `@timestamp`, `@version`
+* Invalid names: `2title` without backticks, `-price`, `user@name`, `user-name`, `@user_field`, and `bad​name` containing a zero-width space
+
+In Plain mode, table names are section names in the configuration file and are written without backticks there. Backticks can still be used when referring to those tables in SQL. For example, a config section can be named `таблица2026`, while a section named `2026_архив` is referenced as `` `2026_архив` `` in SQL.
+
+[Field-scoped full-text query operators](../Searching/Full_text_matching/Operators.md) also support non-ASCII UTF-8 field names. For example, `MATCH('@название клавиатура')` restricts the search to the `название` field. This also applies to field-scoped queries stored as percolate rules.
 
 ### Full-text fields
 
@@ -2927,6 +2945,106 @@ table products
 	stored_fields = title
 
 	rt_attr_float_vector = image_vector
+}
+```
+
+<!-- end -->
+
+## Float vector array
+
+A `float_vector_array` attribute stores several vectors per document rather than a single one. A value is written as an array of vectors, and every document carries its own number of them:
+
+```
+[[0.1, 0.2, 0.3, 0.4], [0.5, 0.6, 0.7, 0.8]]
+```
+
+This suits documents that do not reduce cleanly to one embedding - a long article split into chunks, a product photographed from several angles, a video sampled at keyframes. Instead of storing one row per chunk and deduplicating results afterwards, you keep all of a document's vectors on the document itself.
+
+When the attribute is configured for [KNN](../Searching/KNN.md), all vectors of all documents are indexed together and a document matches if **any** of its vectors is close to the query. See [Multiple vectors per document](../Searching/KNN.md#Multiple-vectors-per-document) for the search semantics.
+
+### Value syntax
+
+- A value is always an array of vectors: `[[1,2],[3,4]]`. A flat list such as `(1,2,3,4)` is rejected, because there would be no way to tell one 4-dimensional vector from two 2-dimensional ones.
+- `[]` means "no vectors". It is a valid stored value, and it is what an omitted attribute defaults to.
+- All vectors within one value must have the same number of entries.
+- An empty inner vector (`[[]]`) cannot be represented and is rejected. Use `[]` for "none".
+- Values are returned in the same nested form they were inserted in.
+
+### General limitations
+
+- Currently only supported in real-time tables (not in plain tables)
+- Not supported in functions or expressions
+- Cannot be used in regular filters or sorting
+- [Auto embeddings](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29) are not available for this type: a model produces one vector per document, so `MODEL_NAME` is rejected. Vectors must be supplied explicitly.
+- Not compatible with the [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) mechanism
+
+### Using float vector arrays with KNN
+
+The parameters are the same ones [`float_vector`](../Creating_a_table/Data_types.md#Float-vector) takes: `KNN_TYPE`, `KNN_DIMS`, `HNSW_SIMILARITY`, plus the optional `HNSW_M`, `HNSW_EF_CONSTRUCTION` and [quantization](../Searching/KNN.md#Vector-quantization), with two differences:
+
+- `KNN_DIMS` is required, and **every** vector in **every** row must have exactly that many entries. A row whose vectors are a different width is rejected on insert.
+- `MODEL_NAME` and `FROM` are not accepted.
+
+**What you can do:**
+- Run KNN searches that match a document on its closest vector
+- Store a different number of vectors per document, including none at all
+
+**What you cannot do:**
+- `UPDATE` the attribute: use `REPLACE`, exactly as with a KNN-indexed `float_vector`
+- Use the values in regular filters or sorting
+
+A document whose value is `[]`, or whose attribute was omitted, is never returned by a KNN search as it is not close to anything.
+
+### Using float vector arrays without KNN
+
+Without KNN configuration the vectors are stored but not searchable, and the column needs no options at all. In this mode each value is fully self-describing, so different rows may hold vectors of different widths:
+
+```sql
+CREATE TABLE products(title text, chunk_vectors float_vector_array);
+INSERT INTO products VALUES (1, 'a', [[1,2]]), (2, 'b', [[1,2,3],[4,5,6]]);
+```
+
+`UPDATE` works in this mode, as it does for a non-KNN `float_vector`, and `[]` clears the value.
+
+<!-- example for creating float_vector_array -->
+
+Creating a KNN-indexed float vector array, filling it, and searching it:
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+
+INSERT INTO articles VALUES
+  (1, 'first',  [[1,0,0,0],[0,1,0,0]]),
+  (2, 'second', [[0,0,1,0]]),
+  (3, 'no vectors yet', []);
+
+SELECT id, knn_dist() FROM articles WHERE knn(chunk_vectors, 5, (1,0,0,0));
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')"
+
+POST /insert
+{
+  "table": "articles",
+  "id": 1,
+  "doc": { "title": "first", "chunk_vectors": [[1,0,0,0],[0,1,0,0]] }
+}
+
+POST /search
+{
+  "table": "articles",
+  "knn": { "field": "chunk_vectors", "query_vector": [1,0,0,0], "k": 5 }
 }
 ```
 

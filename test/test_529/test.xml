@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>UTF-8 identifier policy in configless tables</name>
+
+<requires>
+	<force-rt/>
+</requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<queries>
+<sphinxql>
+	DROP TABLE IF EXISTS товары2026;
+	DROP TABLE IF EXISTS правила2026;
+	DROP TABLE IF EXISTS распределенная2026;
+	DROP TABLE IF EXISTS `é`;
+	DROP TABLE IF EXISTS `é`;
+	DROP TABLE IF EXISTS `CON`;
+	DROP TABLE IF EXISTS `😀`;
+	DROP TABLE IF EXISTS `select`;
+	DROP TABLE IF EXISTS `2026_архив`;
+	DROP TABLE IF EXISTS `2026_архив_like`;
+	DROP TABLE IF EXISTS `from`;
+	DROP TABLE IF EXISTS logs_mixed;
+	DROP TABLE IF EXISTS `ТЕСТ`;
+	DROP TABLE IF EXISTS `тест`;
+	DROP TABLE IF EXISTS `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`;
+
+	CREATE TABLE товары2026 (название TEXT, описание TEXT, цена INTEGER, ёмкость INTEGER, 📦метка INTEGER, характеристики JSON);
+	CREATE TABLE select (поле TEXT);
+	CREATE TABLE `select` (`from` TEXT);
+	INSERT INTO `select` (id, `from`) VALUES (20, 'reserved');
+	SELECT id, `from` FROM `select`;
+	CREATE TABLE `2026_архив` (`1поле` TEXT);
+	INSERT INTO `2026_архив` (id, `1поле`) VALUES (21, 'quoted-leading-digit');
+	SELECT id, `1поле` FROM `2026_архив`;
+	SHOW CREATE TABLE `2026_архив`;
+	CREATE TABLE `2026_архив_like` LIKE `2026_архив`;
+	INSERT INTO `2026_архив_like` (id, `1поле`) VALUES (22, 'generated-ddl');
+	SELECT id, `1поле` FROM `2026_архив_like`;
+	ALTER TABLE `2026_архив` min_infix_len='2';
+	SHOW CREATE TABLE `2026_архив`;
+	CREATE TABLE `from` LIKE `2026_архив`;
+	SHOW CREATE TABLE `from`;
+	DROP TABLE `from`;
+	CREATE TABLE `from` TYPE='distributed' LOCAL='товары2026';
+	SHOW CREATE TABLE `from`;
+	CREATE TABLE IF NOT EXISTS select (body TEXT);
+	CREATE TABLE `123` (body TEXT);
+	CREATE TABLE numeric_field (`456` TEXT);
+	CREATE TABLE logs_mixed (@TIMESTAMP TIMESTAMP, `@Version` STRING);
+	SHOW CREATE TABLE logs_mixed;
+
+	CREATE TABLE 2026архив (поле TEXT);
+	CREATE TABLE `bad-name` (поле TEXT);
+	CREATE TABLE badfield (`bad-name` TEXT);
+	CREATE TABLE `bad&#x200B;name` (поле TEXT);
+	CREATE TABLE `bad&#xFFF9;name` (поле TEXT);
+	CREATE TABLE `bad&#xFFFA;name` (поле TEXT);
+	CREATE TABLE `bad&#xFFFB;name` (поле TEXT);
+	SELECT @@версия;
+	CREATE TABLE `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` (поле TEXT);
+	INSERT INTO товары2026 (id, название, описание, цена, ёмкость, 📦метка, характеристики) VALUES
+		(1, 'Клавиатура', 'Игровая клавиатура', 100, 75, 1, '{"внутри":{"жсона":42}}'),
+		(2, 'Мышь', 'Игровая мышь', 60, 25, 0, '{"внутри":{"жсона":7}}');
+	SELECT id, название, цена FROM товары2026 WHERE MATCH('@название клавиатура');
+	SELECT id, характеристики.внутри.жсона AS json_value FROM товары2026 WHERE характеристики.внутри.жсона=42;
+	UPDATE товары2026 SET цена=101 WHERE цена=100;
+	SELECT id, цена FROM товары2026 WHERE цена=101;
+
+	CREATE TABLE правила2026 (название TEXT, описание TEXT, цена INTEGER) TYPE='pq';
+	INSERT INTO правила2026 (id, query) VALUES (1, '@название клавиатура');
+	CALL PQ('правила2026', '{"название":"клавиатура","описание":"товар","цена":100}');
+
+	CREATE TABLE распределенная2026 TYPE='distributed' LOCAL='товары2026';
+	SELECT id, название FROM распределенная2026 WHERE MATCH('@название клавиатура');
+
+	CREATE TABLE `é` (поле TEXT);
+	CREATE TABLE `é` (поле TEXT);
+	CREATE TABLE `CON` (поле TEXT);
+	CREATE TABLE `😀` (поле TEXT);
+	CREATE TABLE `ТЕСТ` (поле TEXT);
+	CREATE TABLE `тест` (поле TEXT);
+	CREATE TABLE `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` (поле TEXT);
+	INSERT INTO `é` VALUES (10, 'nfc');
+	INSERT INTO `é` VALUES (11, 'nfd');
+	INSERT INTO `CON` VALUES (12, 'device');
+	INSERT INTO `😀` VALUES (13, 'supplementary');
+	INSERT INTO `ТЕСТ` VALUES (14, 'upper');
+	INSERT INTO `тест` VALUES (15, 'lower');
+	INSERT INTO `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` VALUES (16, 'boundary');
+	FLUSH RAMCHUNK `é`;
+	FLUSH RAMCHUNK `é`;
+	FLUSH RAMCHUNK `CON`;
+	FLUSH RAMCHUNK `😀`;
+	FLUSH RAMCHUNK `ТЕСТ`;
+	FLUSH RAMCHUNK `тест`;
+	FLUSH RAMCHUNK `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`;
+	OPTIMIZE TABLE `é`;
+	OPTIMIZE TABLE `é`;
+	SELECT id, поле FROM `é`;
+	SELECT id, поле FROM `é`;
+	SELECT id, поле FROM `CON`;
+	SELECT id, поле FROM `😀`;
+	SELECT id, поле FROM `ТЕСТ`;
+	SELECT id, поле FROM `тест`;
+	SELECT id, поле FROM `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`;
+</sphinxql>
+
+<sphinxql system="restart-daemon-no-warnings"/>
+
+<sphinxql>
+	SELECT id, название, цена FROM товары2026 WHERE MATCH('@название клавиатура');
+	CALL PQ('правила2026', '{"название":"клавиатура","описание":"товар","цена":100}');
+	SELECT id, название FROM распределенная2026 WHERE MATCH('@название клавиатура');
+	SELECT id, поле FROM `é`;
+	SELECT id, поле FROM `é`;
+	SELECT id, поле FROM `CON`;
+	SELECT id, поле FROM `😀`;
+	SELECT id, поле FROM `ТЕСТ`;
+	SELECT id, поле FROM `тест`;
+	SELECT id, поле FROM `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`;
+
+	DROP TABLE распределенная2026;
+	DROP TABLE правила2026;
+	DROP TABLE товары2026;
+	DROP TABLE `é`;
+	DROP TABLE `é`;
+	DROP TABLE `CON`;
+	DROP TABLE `😀`;
+	DROP TABLE `select`;
+	DROP TABLE `2026_архив`;
+	DROP TABLE `2026_архив_like`;
+	DROP TABLE `from`;
+	DROP TABLE logs_mixed;
+	DROP TABLE `ТЕСТ`;
+	DROP TABLE `тест`;
+	DROP TABLE `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`;
+</sphinxql>
+</queries>
+</test>

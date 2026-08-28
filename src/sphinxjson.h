@@ -388,7 +388,15 @@ public:
 /// parse JSON, convert it into SphinxBSON blob
 bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, bool bCheckSize, CSphString & sError );
 bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, bool bCheckSize, StringBuilder_c & sMsg );
-bool sphJsonParse ( CSphVector<BYTE> & dData, const CSphString& sFileName, CSphString & sError );
+
+enum class JsonFileParse_e
+{
+	OK,
+	FORMAT_ERROR,	///< complete file read, but JSON parsing failed
+	READ_ERROR		///< file size, open, or complete read failed
+};
+
+JsonFileParse_e sphJsonParse ( CSphVector<BYTE> & dData, const CSphString& sFileName, CSphString & sError );
 
 /// convert SphinxBSON blob back to JSON document
 void sphJsonFormat ( JsonEscapedBuilder & dOut, const BYTE * pData );
@@ -1021,4 +1029,3 @@ void PushJsonFieldPtr ( const BYTE * pVal, ESphJsonType eJson, PUSH && fnPush )
 }
 
 #endif // _sphinxjson_
-

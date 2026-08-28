@@ -271,6 +271,7 @@ jobs:
             build/test/*log
             build/test/test_*/report*
             build/test/rt_*/report*
+            build/test/rtidx_*/report*
             build/test/col_*/report*
 
       - name: Publish test results

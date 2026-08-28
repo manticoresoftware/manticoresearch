@@ -20,7 +20,6 @@
 #include "histogram.h"
 #include "conversion.h"
 #include "digest_sha1.h"
-#include "fileutils.h"
 #include "std/openhash.h"
 
 // Miscelaneous short functional tests: TDigest, SpanSearch,
@@ -1600,19 +1599,6 @@ TEST ( functions, path )
 	CSphString sSrc14 ( "/pq2" );
 	CSphString sFile14 = GetBaseName ( sSrc14 );
 	ASSERT_STREQ ( sFile14.cstr(), "pq2" );
-}
-
-
-TEST ( functions, executable_path )
-{
-	CSphString sExecutable = GetExecutablePath();
-	ASSERT_FALSE ( sExecutable.IsEmpty() );
-	ASSERT_TRUE ( IsPathAbsolute ( sExecutable ) ) << sExecutable.cstr();
-#if _WIN32
-	ASSERT_STREQ ( GetBaseName ( sExecutable ), "gmanticoretest.exe" );
-#else
-	ASSERT_STREQ ( GetBaseName ( sExecutable ), "gmanticoretest" );
-#endif
 }
 
 TEST ( functions, IsTriviallyCopyable )

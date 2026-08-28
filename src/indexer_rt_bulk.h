@@ -1,11 +1,26 @@
-// Copyright (c) 2017-2026, Manticore Software LTD
-// Prototype implementation for dev#2761.
+// Copyright (c) 2026, Manticore Software LTD
+// Indexer-assisted RT bulk loader.
 #pragma once
 
-class ClientSession_c;
-struct SqlStmt_t;
-struct CSphString;
+#include "std/string.h"
 
-bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, CSphString & sError );
+enum class EMYSQL_ERR : WORD;
+
+class ClientSession_c;
+class RtIndex_i;
+struct SqlStmt_t;
+
+struct IndexerRtBulkFile_t
+{
+	CSphString	m_sPath;
+	int64_t		m_iSize = 0;
+};
+
+CSphString GetIndexerRtBulkRoot ( const RtIndex_i & tRt );
+bool ListIndexerRtBulkFiles ( const CSphString & sRoot, CSphVector<IndexerRtBulkFile_t> & dFiles, CSphString & sError );
+bool RemoveIndexerRtBulkRoot ( const CSphString & sRoot, CSphString & sError );
+bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTable, CSphString & sError );
+bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, EMYSQL_ERR & eError, CSphString & sError );
 bool FinalizeIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError );
+void AbortIndexerRtBulkBatch ( ClientSession_c & tSession );
 void CleanupIndexerRtBulk ( ClientSession_c & tSession );

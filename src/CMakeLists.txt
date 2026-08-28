@@ -207,7 +207,8 @@ add_library ( lsearchd OBJECT searchdha.cpp api_reply_stream.cpp http/http_parse
 		facetutils.cpp
 		auth/auth.cpp auth/auth_common.cpp auth/auth_proto_http.cpp auth/auth_proto_mysql.cpp auth/auth_proto_api.cpp auth/auth_perms.cpp auth/gcm_nonce.cpp auth/auth_log.cpp auth/auth_bootstrap.cpp)
 		
-target_compile_definitions ( lsearchd PRIVATE STATIC_BINARY=$<BOOL:${STATIC_BINARY}> )
+# Keep indexer-assisted bulk writes streaming without Boost.Process' 1 KiB write bottleneck.
+target_compile_definitions ( lsearchd PRIVATE STATIC_BINARY=$<BOOL:${STATIC_BINARY}> BOOST_PROCESS_PIPE_SIZE=4194304 )
 target_sources ( lsearchd PUBLIC ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
 add_library ( digest_sha1 digest_sha1.cpp )
 add_library ( digest_sha256 digest_sha256.cpp )
@@ -438,19 +439,6 @@ if (NOT TEST_SPECIAL_EXTERNAL)
 			SET_TESTS_PROPERTIES ( ${RESERVED_TEST} PROPERTIES LABELS LINTER )
 		endif ()
 
-		if (PYTHONINTERP_FOUND AND NOT STATIC_BINARY)
-			fixup_test_name ( INDEXER_RT_MISSING_SIBLING_TEST "Indexer RT bulk missing sibling" )
-			add_test ( NAME ${INDEXER_RT_MISSING_SIBLING_TEST}
-					COMMAND ${PYTHON_EXECUTABLE} ${MANTICORE_SOURCE_DIR}/test/integration/indexer_rt_bulk_missing_sibling_test.py
-						--searchd $<TARGET_FILE:searchd> )
-			SET_TESTS_PROPERTIES ( ${INDEXER_RT_MISSING_SIBLING_TEST} PROPERTIES LABELS RT_INDEXER RUN_SERIAL TRUE )
-
-			fixup_test_name ( INDEXER_RT_FLUENTBIT_TEST "Indexer RT bulk Fluent Bit" )
-			add_test ( NAME ${INDEXER_RT_FLUENTBIT_TEST}
-					COMMAND ${PYTHON_EXECUTABLE} ${MANTICORE_SOURCE_DIR}/test/integration/indexer_rt_bulk_fluentbit_test.py
-						--searchd $<TARGET_FILE:searchd> )
-			SET_TESTS_PROPERTIES ( ${INDEXER_RT_FLUENTBIT_TEST} PROPERTIES LABELS RT_INDEXER RUN_SERIAL TRUE )
-		endif ()
 	endif ()
 
 #	fixup_test_name ( tst "Internal src/tests" )

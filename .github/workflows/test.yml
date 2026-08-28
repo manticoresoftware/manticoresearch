@@ -441,7 +441,7 @@ jobs:
       artifact_name: debug_test_results_rt_indexer
       results_name: "Linux debug RT indexer test results"
       suite_name: rt-indexer
-      CTEST_REGEX: "^(rtidx_|Indexer RT bulk)"
+      CTEST_REGEX: "^rtidx_"
       timeout: 35
       MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
 
@@ -851,24 +851,6 @@ jobs:
       timeout: 15
       MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_release_x86_64
 
-  test_linux_release_rt_indexer:
-    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_linux_release_tests.result == 'success' && (needs.mcl_runtime_linux_release_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_linux_release.result == 'success')
-    name: Linux release mode tests (rt-indexer)
-    needs: [build_linux_release_tests, mcl_runtime_linux_release_cached, mcl_runtime_linux_release, meta]
-    permissions:
-      checks: write
-      contents: read
-    uses: ./.github/workflows/test_template.yml
-    secrets: inherit
-    with:
-      build_artifact_name: release_test_build
-      artifact_name: release_test_results_rt_indexer
-      results_name: "Linux release RT indexer test results"
-      suite_name: rt-indexer
-      CTEST_REGEX: "^(rtidx_|Indexer RT bulk)"
-      timeout: 15
-      MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_release_x86_64
-
   test_linux_release_mcl:
     if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_linux_release_tests.result == 'success' && (needs.mcl_runtime_linux_release_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_linux_release.result == 'success')
     name: Linux release mode tests (MCL)
@@ -1006,6 +988,7 @@ jobs:
       - test_kit_light_docker_build
       - test_linux_debug_plain
       - test_linux_debug_rt
+      - test_linux_debug_rt_indexer
       - test_linux_debug_mcl
       - test_linux_release_plain
       - test_linux_release_rt
@@ -1186,6 +1169,7 @@ jobs:
       - mcl_runtime_linux_debug
       - test_linux_debug_plain
       - test_linux_debug_rt
+      - test_linux_debug_rt_indexer
       - test_linux_debug_mcl
       - build_linux_release
       - build_linux_release_tests
@@ -1218,6 +1202,7 @@ jobs:
             "mcl_runtime_linux_debug:${{ needs.mcl_runtime_linux_debug.result }}"
             "test_linux_debug_plain:${{ needs.test_linux_debug_plain.result }}:${{ needs.test_linux_debug_plain.outputs.test_outcome }}"
             "test_linux_debug_rt:${{ needs.test_linux_debug_rt.result }}:${{ needs.test_linux_debug_rt.outputs.test_outcome }}"
+            "test_linux_debug_rt_indexer:${{ needs.test_linux_debug_rt_indexer.result }}:${{ needs.test_linux_debug_rt_indexer.outputs.test_outcome }}"
             "test_linux_debug_mcl:${{ needs.test_linux_debug_mcl.result }}:${{ needs.test_linux_debug_mcl.outputs.test_outcome }}"
             "build_linux_release:${{ needs.build_linux_release.result }}"
             "build_linux_release_tests:${{ needs.build_linux_release_tests.result }}"

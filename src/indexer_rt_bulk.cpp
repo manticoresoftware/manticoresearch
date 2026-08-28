@@ -1,40 +1,38 @@
-#if defined(__linux__) && !defined(_GNU_SOURCE)
-#define _GNU_SOURCE
-#endif
+//
+// Copyright (c) 2026, Manticore Software LTD
+//
+// Indexer-assisted RT bulk loader.
+//
 
-//
-// Copyright (c) 2017-2026, Manticore Software LTD
-//
-// Experimental indexer-assisted RT bulk loader (dev#2761).
-//
+#include "client_session.h"
+
+#include <filesystem>
 
 #include "indexer_rt_bulk.h"
 
-#include "client_session.h"
-#include "fileutils.h"
-#include "indexfiles.h"
-#include "indexsettings.h"
-#include "knnmisc.h"
-#include "searchdaemon.h"
-#include "searchdsql.h"
-#include "sphinxrt.h"
-#include "threadutils.h"
-
-#include <atomic>
-#include <cmath>
-
-#if !_WIN32
-#include <fcntl.h>
-#include <signal.h>
-#include <spawn.h>
-#include <sys/socket.h>
-#include <sys/wait.h>
-#include <unistd.h>
-
-extern char ** environ;
+#include <boost/version.hpp>
+#if BOOST_VERSION >= 108800
+#define BOOST_PROCESS_VERSION 1
+#include <boost/process/v1/args.hpp>
+#include <boost/process/v1/child.hpp>
+#include <boost/process/v1/env.hpp>
+#include <boost/process/v1/error.hpp>
+#include <boost/process/v1/extend.hpp>
+#include <boost/process/v1/handles.hpp>
+#include <boost/process/v1/io.hpp>
+#include <boost/process/v1/pipe.hpp>
+#else
+#include <boost/process.hpp>
+#include <boost/process/extend.hpp>
 #endif
 
-bool AttachIndexerRtBulkChunk ( const CSphString & sTable, int64_t iIndexId, const CSphString & sPath, CSphString & sError );
+#if !_WIN32
+#include <signal.h>
+#endif
+
+namespace fs = std::filesystem;
+
+DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const ServedIndexWriteReservation_c & tReservation, int64_t iIndexId, int iAlterGeneration, const CSphString & sPath, bool & bTargetStale, CSphString & sError );
 
 
 static bool ValidateFloatVectorValue ( const CSphColumnInfo & tAttr, const SqlInsert_t & tValue, int iRow, CSphString & sError )
@@ -65,27 +63,27 @@ static bool ValidateFloatVectorValue ( const CSphColumnInfo & tAttr, const SqlIn
 	return true;
 }
 
-static void AppendCsvEscaped ( StringBuilder_c & sOut, const char * szValue )
+static void AppendCsvEscaped ( std::ostream & tOut, const char * szValue )
 {
 	const char * pStart = szValue ? szValue : "";
 	for ( const char * p = pStart; ; ++p )
 	{
 		if ( *p!='"' && *p!='\0' )
 			continue;
-		sOut.AppendRawChunk ( Str_t { pStart, int ( p-pStart ) } );
+		tOut.write ( pStart, p-pStart );
 		if ( !*p )
 			break;
-		sOut.AppendRawChunk ( Str_t { "\"\"", 2 } );
+		tOut.write ( "\"\"", 2 );
 		pStart = p+1;
 	}
 }
 
 
-static void AppendCsvQuoted ( StringBuilder_c & sOut, const char * szValue )
+static void AppendCsvQuoted ( std::ostream & tOut, const char * szValue )
 {
-	sOut << '"';
-	AppendCsvEscaped ( sOut, szValue );
-	sOut << '"';
+	tOut.put ( '"' );
+	AppendCsvEscaped ( tOut, szValue );
+	tOut.put ( '"' );
 }
 
 
@@ -102,17 +100,401 @@ static bool GetIndexerPath ( CSphString & sIndexer, CSphString & sError )
 		return false;
 	}
 
-	sIndexer.SetSprintf ( "%sindexer", GetPathOnly ( sExecutable ).cstr() );
+	#if _WIN32
+	const char * szIndexer = "indexer.exe";
+	#else
+	const char * szIndexer = "indexer";
+	#endif
+	sIndexer.SetSprintf ( "%s%s", GetPathOnly ( sExecutable ).cstr(), szIndexer );
 	return true;
 #endif
 }
 
 
-#if !_WIN32
-static CSphString GetIndexerRtBulkOutput ( const ClientSession_c & tSession )
+static CSphString GetIndexerRtBulkFile ( const IndexerRtBulkState_t & tState, const char * szFile )
 {
 	CSphString sPath;
-	sPath.SetSprintf ( "%s/indexer.log", tSession.m_sIndexerRtBulkDir.cstr() );
+	sPath.SetSprintf ( "%s/%s", tState.m_sDir.cstr(), szFile );
+	return sPath;
+}
+
+
+CSphString GetIndexerRtBulkRoot ( const RtIndex_i & tRt )
+{
+	return SphSprintf ( "%s.indexer-rt-bulk", tRt.GetFilebase() );
+}
+
+
+static CSphString EscapeIndexerRtBulkConfigPath ( const CSphString & sPath )
+{
+	std::string sResult;
+	sResult.reserve ( sPath.Length() );
+	for ( const char * p=sPath.cstr(); *p; ++p )
+	{
+		if ( *p=='#' )
+			sResult.push_back ( '\\' );
+		sResult.push_back ( *p );
+	}
+	return sResult.c_str();
+}
+
+
+static bool ListStagingDir ( const CSphString & sDir, CSphVector<IndexerRtBulkFile_t> & dFiles, CSphString & sError )
+{
+	std::error_code tError;
+	fs::recursive_directory_iterator tIt ( sDir.cstr(), tError );
+	for ( const fs::recursive_directory_iterator tEnd; !tError && tIt!=tEnd; tIt.increment ( tError ) )
+	{
+		auto & tFile = dFiles.Add();
+		tFile.m_sPath = tIt->path().string().c_str();
+		if ( tIt->is_regular_file ( tError ) )
+		{
+			auto iSize = tIt->file_size ( tError );
+			if ( !tError )
+				tFile.m_iSize = (int64_t)iSize;
+		}
+	}
+	if ( tError )
+	{
+		sError.SetSprintf ( "failed to list bulk staging directory '%s': %s", sDir.cstr(), tError.message().c_str() );
+		return false;
+	}
+	return true;
+}
+
+
+static bool PrepareStagingRoot ( const CSphString & sRoot, CSphString & sError )
+{
+	std::error_code tError;
+	if ( fs::create_directory ( sRoot.cstr(), tError ) || !tError )
+		return true;
+
+	sError.SetSprintf ( "failed to create bulk staging root '%s': %s", sRoot.cstr(), tError.message().c_str() );
+	return false;
+}
+
+
+static bool CreateStagingDir ( const CSphString & sRoot, CSphString & sDir, CSphString & sError )
+{
+	static const int64_t iDaemonId = GetIndexUid();
+	static std::atomic<int64_t> iBulkId { 0 };
+
+	for ( ;; )
+	{
+		sDir.SetSprintf ( "%s/" INT64_FMT "-" INT64_FMT, sRoot.cstr(), iDaemonId, iBulkId.fetch_add ( 1, std::memory_order_relaxed ) + 1 );
+		std::error_code tError;
+		if ( fs::create_directory ( sDir.cstr(), tError ) )
+			return true;
+		if ( !tError )
+			continue;
+
+		sError.SetSprintf ( "failed to create bulk staging directory '%s': %s", sDir.cstr(), tError.message().c_str() );
+		return false;
+	}
+}
+
+enum class IndexerRtBulkWait_e
+{
+	OK,
+	FAILED,
+	CANCELLED
+};
+
+constexpr int INDEXER_RT_BULK_WAIT_INTERVAL_MS = 25;
+
+
+static bool CheckIndexerRtBulkCancelled ( CSphString & sError )
+{
+	if ( sphInterrupted() )
+	{
+		sError = "Server shutdown in progress";
+		return true;
+	}
+
+	if ( session::GetKilled() )
+	{
+		sError = "query was killed";
+		return true;
+	}
+
+	return false;
+}
+
+#if !_WIN32
+struct ResetSignalMask_t : boost::process::extend::handler
+{
+	template <typename EXECUTOR>
+	void on_exec_setup ( EXECUTOR & tExecutor ) const
+	{
+		sigset_t tSignals;
+		if ( sigemptyset ( &tSignals )!=0 )
+		{
+			tExecutor.set_error ( std::error_code ( errno, std::generic_category() ), "sigemptyset() failed" );
+			return;
+		}
+
+		if ( sigprocmask ( SIG_SETMASK, &tSignals, nullptr )!=0 )
+			tExecutor.set_error ( std::error_code ( errno, std::generic_category() ), "sigprocmask() failed" );
+	}
+};
+#endif
+
+
+static void AppendIndexerRtBulkError ( CSphString & sError, const CSphString & sExtra )
+{
+	if ( sExtra.IsEmpty() )
+		return;
+	if ( sError.IsEmpty() )
+	{
+		sError = sExtra;
+		return;
+	}
+
+	CSphString sPrevious = sError;
+	sError.SetSprintf ( "%s; %s", sPrevious.cstr(), sExtra.cstr() );
+}
+
+
+bool ListIndexerRtBulkFiles ( const CSphString & sRoot, CSphVector<IndexerRtBulkFile_t> & dFiles, CSphString & sError )
+{
+	dFiles.Reset();
+	std::error_code tError;
+	auto tStatus = fs::status ( sRoot.cstr(), tError );
+	if ( tError==std::errc::no_such_file_or_directory )
+		return true;
+	if ( tError )
+	{
+		sError.SetSprintf ( "failed to inspect bulk staging root '%s': %s", sRoot.cstr(), tError.message().c_str() );
+		return false;
+	}
+	if ( !fs::is_directory ( tStatus ) )
+	{
+		sError.SetSprintf ( "bulk staging root '%s' is not a directory", sRoot.cstr() );
+		return false;
+	}
+
+	return ListStagingDir ( sRoot, dFiles, sError );
+}
+
+
+bool RemoveIndexerRtBulkRoot ( const CSphString & sRoot, CSphString & sError )
+{
+	sError = "";
+	std::error_code tError;
+	fs::remove_all ( sRoot.cstr(), tError );
+	if ( !tError )
+		return true;
+
+	sError.SetSprintf ( "failed to remove bulk staging root '%s': %s", sRoot.cstr(), tError.message().c_str() );
+	return false;
+}
+
+
+class IndexerRtBulkState_t::Impl_c
+{
+public:
+	~Impl_c()
+	{
+		Abort();
+	}
+
+	bool Start ( const CSphString & sIndexer, const CSphString & sConfig, const CSphString & sOutput, CSphString & sError )
+	{
+		assert ( !m_tChild.valid() );
+		m_sExecutable = sIndexer;
+
+		std::vector<std::string> dArgs { "--config", sConfig.cstr(), "--remove_dups", "indexer_rt_bulk_chunk" };
+		boost::process::environment tEnvironment = boost::this_process::environment();
+		std::error_code tError;
+		try
+		{
+			m_tChild = boost::process::child
+			(
+				sIndexer.cstr(),
+				boost::process::args ( dArgs ),
+				boost::process::std_in < m_tInput,
+				( boost::process::std_out & boost::process::std_err ) > sOutput.cstr(),
+				boost::process::limit_handles,
+				#if !_WIN32
+				ResetSignalMask_t {},
+				#endif
+				boost::process::error ( tError ),
+				tEnvironment
+			);
+		}
+		catch ( const std::exception & tException )
+		{
+			sError.SetSprintf ( "failed to start indexer RT bulk process '%s': %s", sIndexer.cstr(), tException.what() );
+			Abort();
+			return false;
+		}
+		catch ( ... )
+		{
+			sError.SetSprintf ( "failed to start indexer RT bulk process '%s'", sIndexer.cstr() );
+			Abort();
+			return false;
+		}
+
+		if ( tError || !m_tChild.valid() )
+		{
+			if ( tError )
+				sError.SetSprintf ( "failed to start indexer RT bulk process '%s': %s", sIndexer.cstr(), tError.message().c_str() );
+			else
+				sError.SetSprintf ( "failed to start indexer RT bulk process '%s'", sIndexer.cstr() );
+			Abort();
+			return false;
+		}
+
+		return true;
+	}
+
+	std::ostream & Input()
+	{
+		return m_tInput;
+	}
+
+	IndexerRtBulkWait_e CloseInputAndWait ( CSphString & sError )
+	{
+		if ( CheckIndexerRtBulkCancelled ( sError ) )
+		{
+			Abort();
+			return IndexerRtBulkWait_e::CANCELLED;
+		}
+
+		CSphString sInputError;
+		bool bInputOk = CloseInput ( sInputError );
+
+		CSphString sChildError;
+		if ( !m_tChild.valid() )
+			sChildError = "indexer RT bulk process is unavailable";
+		else
+		{
+			while ( true )
+			{
+				if ( CheckIndexerRtBulkCancelled ( sChildError ) )
+				{
+					Abort();
+					AppendIndexerRtBulkError ( sError, sInputError );
+					AppendIndexerRtBulkError ( sError, sChildError );
+					return IndexerRtBulkWait_e::CANCELLED;
+				}
+
+				std::error_code tRunningError;
+				if ( !m_tChild.running ( tRunningError ) )
+				{
+					if ( tRunningError )
+						sChildError.SetSprintf ( "failed checking indexer RT bulk process: %s", tRunningError.message().c_str() );
+					break;
+				}
+
+				Threads::Coro::SleepMsec ( INDEXER_RT_BULK_WAIT_INTERVAL_MS );
+			}
+
+			if ( sChildError.IsEmpty() )
+			{
+				std::error_code tWaitError;
+				m_tChild.wait ( tWaitError );
+				if ( tWaitError )
+					sChildError.SetSprintf ( "failed waiting for indexer RT bulk process: %s", tWaitError.message().c_str() );
+				else if ( m_tChild.exit_code()!=0 )
+					sChildError.SetSprintf ( "indexer RT bulk build process '%s' failed with status %d", m_sExecutable.cstr(), m_tChild.exit_code() );
+			}
+		}
+
+		if ( !sChildError.IsEmpty() )
+			Abort();
+
+		AppendIndexerRtBulkError ( sError, sInputError );
+		AppendIndexerRtBulkError ( sError, sChildError );
+		return bInputOk && sChildError.IsEmpty() ? IndexerRtBulkWait_e::OK : IndexerRtBulkWait_e::FAILED;
+	}
+
+	void Abort() noexcept
+	{
+		DiscardInput();
+
+		if ( m_tChild.valid() )
+		{
+			std::error_code tRunningError;
+			if ( m_tChild.running ( tRunningError ) )
+			{
+				std::error_code tTerminateError;
+				m_tChild.terminate ( tTerminateError );
+			}
+
+			std::error_code tFinalWaitError;
+			m_tChild.wait ( tFinalWaitError );
+		}
+	}
+
+private:
+	bool CloseInput ( CSphString & sError )
+	{
+		bool bOk = true;
+		try
+		{
+			m_tInput.flush();
+			if ( !m_tInput )
+			{
+				sError = "failed flushing indexer RT bulk stream";
+				bOk = false;
+			}
+		}
+		catch ( const std::exception & tException )
+		{
+			sError.SetSprintf ( "failed flushing indexer RT bulk stream: %s", tException.what() );
+			bOk = false;
+		}
+		catch ( ... )
+		{
+			sError = "failed flushing indexer RT bulk stream";
+			bOk = false;
+		}
+
+		try
+		{
+			// Boost 1.71-1.87 opstream::close() flushes but does not close the pipe.
+			// Close the underlying pipe explicitly after the checked flush to deliver EOF.
+			if ( m_tInput.pipe().is_open() )
+				m_tInput.pipe().close();
+		}
+		catch ( const std::exception & tException )
+		{
+			CSphString sCloseError;
+			sCloseError.SetSprintf ( "failed closing indexer RT bulk stream: %s", tException.what() );
+			AppendIndexerRtBulkError ( sError, sCloseError );
+			bOk = false;
+		}
+		catch ( ... )
+		{
+			AppendIndexerRtBulkError ( sError, CSphString ( "failed closing indexer RT bulk stream" ) );
+			bOk = false;
+		}
+
+		return bOk;
+	}
+
+	void DiscardInput() noexcept
+	{
+		try
+		{
+			// Do not flush a partially staged statement on abort.
+			if ( m_tInput.pipe().is_open() )
+				m_tInput.pipe().close();
+		}
+		catch ( ... )
+		{}
+	}
+
+	boost::process::opstream m_tInput;
+	boost::process::child m_tChild;
+	CSphString m_sExecutable;
+};
+
+
+static CSphString GetIndexerRtBulkOutput ( const IndexerRtBulkState_t & tState )
+{
+	CSphString sPath = GetIndexerRtBulkFile ( tState, "indexer.log" );
 	FILE * fp = fopen ( sPath.cstr(), "rb" );
 	if ( !fp )
 		return {};
@@ -127,221 +509,88 @@ static CSphString GetIndexerRtBulkOutput ( const ClientSession_c & tSession )
 }
 
 
-static bool WaitIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError )
+static IndexerRtBulkWait_e WaitIndexerRtBulk ( IndexerRtBulkState_t & tState, CSphString & sError )
 {
-	if ( tSession.m_iIndexerRtBulkPid<0 )
-		return true;
+	if ( !tState.m_pImpl )
+		return IndexerRtBulkWait_e::OK;
 
-	int iStatus = 0;
-	pid_t iResult;
-	do
-	{
-		iResult = waitpid ( tSession.m_iIndexerRtBulkPid, &iStatus, 0 );
-	} while ( iResult<0 && errno==EINTR );
-	tSession.m_iIndexerRtBulkPid = -1;
+	auto eResult = tState.m_pImpl->CloseInputAndWait ( sError );
+	if ( eResult==IndexerRtBulkWait_e::OK )
+		return eResult;
 
-	if ( iResult<0 )
-	{
-		sError.SetSprintf ( "failed waiting for indexer RT bulk process: %s", strerrorm ( errno ) );
-		return false;
-	}
-	if ( WIFEXITED ( iStatus ) && WEXITSTATUS ( iStatus )==0 )
-		return true;
-	if ( WIFEXITED ( iStatus ) )
-		sError.SetSprintf ( "indexer RT bulk build failed with status %d", WEXITSTATUS ( iStatus ) );
-	else if ( WIFSIGNALED ( iStatus ) )
-		sError.SetSprintf ( "indexer RT bulk build was killed by signal %d", WTERMSIG ( iStatus ) );
-	else
-		sError = "indexer RT bulk build failed";
-	CSphString sOutput = GetIndexerRtBulkOutput ( tSession );
+	CSphString sOutput = GetIndexerRtBulkOutput ( tState );
 	if ( !sOutput.IsEmpty() )
-	{
-		CSphString sStatus = sError;
-		sError.SetSprintf ( "%s: %s", sStatus.cstr(), sOutput.cstr() );
-	}
-	return false;
+		AppendIndexerRtBulkError ( sError, sOutput );
+	return eResult;
 }
 
 
-static void StopIndexerRtBulk ( ClientSession_c & tSession )
-{
-	if ( tSession.m_iIndexerRtBulkPid<0 )
-		return;
-
-	// The indexer's csvpipe command is its child, so terminate the entire process group.
-	const pid_t iPid = tSession.m_iIndexerRtBulkPid;
-	kill ( -iPid, SIGTERM );
-	kill ( iPid, SIGTERM );
-	int iStatus = 0;
-	for ( int i=0; i<100; ++i )
-	{
-		pid_t iResult = waitpid ( iPid, &iStatus, WNOHANG );
-		if ( iResult==iPid || ( iResult<0 && errno==ECHILD ) )
-		{
-			tSession.m_iIndexerRtBulkPid = -1;
-			return;
-		}
-		if ( iResult<0 && errno!=EINTR )
-			break;
-		usleep ( 10000 );
-	}
-
-	kill ( -iPid, SIGKILL );
-	kill ( iPid, SIGKILL );
-	while ( waitpid ( iPid, &iStatus, 0 )<0 && errno==EINTR ) {}
-	tSession.m_iIndexerRtBulkPid = -1;
-}
-
-
-static bool StartIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError )
+static bool StartIndexerRtBulk ( IndexerRtBulkState_t & tState, CSphString & sError )
 {
 	CSphString sIndexer;
 	if ( !GetIndexerPath ( sIndexer, sError ) )
 		return false;
 
-	int dSockets[2] = { -1, -1 };
-	int iSocketType = SOCK_STREAM;
-	#ifdef SOCK_CLOEXEC
-	iSocketType |= SOCK_CLOEXEC;
-	#endif
-	if ( socketpair ( AF_UNIX, iSocketType, 0, dSockets )<0 )
-	{
-		sError.SetSprintf ( "failed to create indexer RT bulk stream: %s", strerrorm ( errno ) );
-		return false;
-	}
-	#ifndef SOCK_CLOEXEC
-	if ( fcntl ( dSockets[0], F_SETFD, FD_CLOEXEC )<0 || fcntl ( dSockets[1], F_SETFD, FD_CLOEXEC )<0 )
-	{
-		close ( dSockets[0] );
-		close ( dSockets[1] );
-		sError.SetSprintf ( "failed to protect indexer RT bulk stream descriptors: %s", strerrorm ( errno ) );
-		return false;
-	}
-	#endif
+	CSphString sConfig = GetIndexerRtBulkFile ( tState, "indexer.conf" );
+	CSphString sOutput = GetIndexerRtBulkFile ( tState, "indexer.log" );
+	tState.m_pImpl = std::make_unique<IndexerRtBulkState_t::Impl_c>();
+	if ( tState.m_pImpl->Start ( sIndexer, sConfig, sOutput, sError ) )
+		return true;
 
-	const char * szIndexer = sIndexer.cstr();
-	const char * szConfig = tSession.m_sIndexerRtBulkConfig.cstr();
-	CSphString sOutput;
-	sOutput.SetSprintf ( "%s/indexer.log", tSession.m_sIndexerRtBulkDir.cstr() );
-	int iOutput = open ( sOutput.cstr(), O_WRONLY | O_CREAT | O_TRUNC, 0600 );
-	if ( iOutput<0 )
-	{
-		close ( dSockets[0] );
-		close ( dSockets[1] );
-		sError.SetSprintf ( "failed to create indexer RT bulk log '%s': %s", sOutput.cstr(), strerrorm ( errno ) );
-		return false;
-	}
-	posix_spawn_file_actions_t tActions;
-	posix_spawnattr_t tAttrs;
-	bool bActionsInit = false;
-	bool bAttrsInit = false;
-	int iSpawnError = posix_spawn_file_actions_init ( &tActions );
-	if ( !iSpawnError )
-	{
-		bActionsInit = true;
-		iSpawnError = posix_spawn_file_actions_adddup2 ( &tActions, dSockets[1], STDIN_FILENO );
-	}
-	if ( !iSpawnError && dSockets[0]!=STDIN_FILENO )
-		iSpawnError = posix_spawn_file_actions_addclose ( &tActions, dSockets[0] );
-	if ( !iSpawnError && dSockets[1]!=STDIN_FILENO )
-		iSpawnError = posix_spawn_file_actions_addclose ( &tActions, dSockets[1] );
-	if ( !iSpawnError )
-		iSpawnError = posix_spawn_file_actions_adddup2 ( &tActions, iOutput, STDOUT_FILENO );
-	if ( !iSpawnError )
-		iSpawnError = posix_spawn_file_actions_adddup2 ( &tActions, iOutput, STDERR_FILENO );
-	if ( !iSpawnError && iOutput!=STDOUT_FILENO && iOutput!=STDERR_FILENO )
-		iSpawnError = posix_spawn_file_actions_addclose ( &tActions, iOutput );
-	#if defined(__linux__)
-	if ( !iSpawnError )
-		iSpawnError = posix_spawn_file_actions_addclosefrom_np ( &tActions, STDERR_FILENO+1 );
-	#endif
-	if ( !iSpawnError )
-	{
-		iSpawnError = posix_spawnattr_init ( &tAttrs );
-		bAttrsInit = !iSpawnError;
-	}
-	if ( !iSpawnError )
-	{
-		sigset_t tSignals;
-		sigemptyset ( &tSignals );
-		iSpawnError = posix_spawnattr_setsigmask ( &tAttrs, &tSignals );
-		if ( !iSpawnError )
-			iSpawnError = posix_spawnattr_setpgroup ( &tAttrs, 0 );
-		if ( !iSpawnError )
-		{
-			short iFlags = POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_SETSIGMASK;
-			#ifdef POSIX_SPAWN_CLOEXEC_DEFAULT
-			iFlags |= POSIX_SPAWN_CLOEXEC_DEFAULT;
-			#endif
-			iSpawnError = posix_spawnattr_setflags ( &tAttrs, iFlags );
-		}
-	}
-
-	pid_t iPid = -1;
-	if ( !iSpawnError )
-	{
-		char sConfigArg[] = "--config";
-		char sIndexArg[] = "indexer_rt_bulk_chunk";
-		char * dArgv[] = { const_cast<char *>( szIndexer ), sConfigArg, const_cast<char *>( szConfig ), sIndexArg, nullptr };
-		iSpawnError = posix_spawn ( &iPid, szIndexer, &tActions, &tAttrs, dArgv, environ );
-	}
-	if ( bAttrsInit )
-		posix_spawnattr_destroy ( &tAttrs );
-	if ( bActionsInit )
-		posix_spawn_file_actions_destroy ( &tActions );
-	close ( iOutput );
-	close ( dSockets[1] );
-	if ( iSpawnError )
-	{
-		close ( dSockets[0] );
-		sError.SetSprintf ( "failed to start indexer RT bulk process '%s': %s", szIndexer, strerrorm ( iSpawnError ) );
-		return false;
-	}
-
-	tSession.m_iIndexerRtBulkPid = iPid;
-	tSession.m_pIndexerRtBulkStream = fdopen ( dSockets[0], "wb" );
-	if ( !tSession.m_pIndexerRtBulkStream )
-	{
-		int iFdopenErrno = errno;
-		close ( dSockets[0] );
-		StopIndexerRtBulk ( tSession );
-		sError.SetSprintf ( "failed to open indexer RT bulk stream: %s", strerrorm ( iFdopenErrno ) );
-		return false;
-	}
-	constexpr size_t iBufferSize = 256*1024;
-	tSession.m_pIndexerRtBulkBuffer = std::make_unique<char[]> ( iBufferSize );
-	if ( setvbuf ( tSession.m_pIndexerRtBulkStream, tSession.m_pIndexerRtBulkBuffer.get(), _IOFBF, iBufferSize ) )
-	{
-		fclose ( tSession.m_pIndexerRtBulkStream );
-		tSession.m_pIndexerRtBulkStream = nullptr;
-		tSession.m_pIndexerRtBulkBuffer.reset();
-		StopIndexerRtBulk ( tSession );
-		sError = "failed to configure indexer RT bulk stream buffering";
-		return false;
-	}
-	return true;
+	tState.m_pImpl.reset();
+	return false;
 }
-#endif
 
 
-static void AppendInsertValueToCsv ( StringBuilder_c & sOut, const SqlInsert_t & tValue, ESphAttr eType, bool bDocid )
+IndexerRtBulkState_t::IndexerRtBulkState_t() = default;
+IndexerRtBulkState_t::~IndexerRtBulkState_t() = default;
+
+
+template <typename VALUE>
+static void AppendCsvInteger ( std::ostream & tOut, VALUE tValue )
 {
-	sOut << '"';
+	char sValue[32];
+	auto tResult = std::to_chars ( sValue, sValue+sizeof(sValue), tValue );
+	if ( tResult.ec!=std::errc() )
+	{
+		tOut.setstate ( std::ios_base::badbit );
+		return;
+	}
+	tOut.write ( sValue, tResult.ptr-sValue );
+}
+
+
+static void AppendCsvFloat ( std::ostream & tOut, double fValue )
+{
+	char sValue[64];
+	int iLength = snprintf ( sValue, sizeof(sValue), "%.9g", fValue );
+	if ( iLength<0 || iLength>=int(sizeof(sValue)) )
+	{
+		tOut.setstate ( std::ios_base::badbit );
+		return;
+	}
+	tOut.write ( sValue, iLength );
+}
+
+
+static void AppendInsertValueToCsv ( std::ostream & tOut, const SqlInsert_t & tValue, ESphAttr eType, bool bDocid )
+{
+	tOut.put ( '"' );
 	switch ( tValue.m_iType )
 	{
 	case SqlInsert_t::QUOTED_STRING:
-		AppendCsvEscaped ( sOut, tValue.m_sVal.cstr() );
+		AppendCsvEscaped ( tOut, tValue.m_sVal.cstr() );
 		break;
 
 	case SqlInsert_t::CONST_FLOAT:
-		sOut.Appendf ( "%.9g", tValue.m_fVal );
+		AppendCsvFloat ( tOut, tValue.m_fVal );
 		break;
 
 	case SqlInsert_t::CONST_INT:
 		if ( bDocid )
-			sOut << tValue.GetValueUint();
+			AppendCsvInteger ( tOut, tValue.GetValueUint() );
 		else
-			sOut << tValue.GetValueInt();
+			AppendCsvInteger ( tOut, tValue.GetValueInt() );
 		break;
 
 	case SqlInsert_t::CONST_MVA:
@@ -351,12 +600,12 @@ static void AppendInsertValueToCsv ( StringBuilder_c & sOut, const SqlInsert_t &
 			for ( const auto & tItem : *tValue.m_pVals )
 			{
 				if ( !bFirst )
-					sOut.RawC ( ' ' );
+					tOut.put ( ' ' );
 				bFirst = false;
 				if ( eType==SPH_ATTR_FLOAT_VECTOR )
-					sOut.Appendf ( "%.9g", tItem.m_fValue );
+					AppendCsvFloat ( tOut, tItem.m_fValue );
 				else
-					sOut << tItem.m_iValue;
+					AppendCsvInteger ( tOut, tItem.m_iValue );
 			}
 		}
 		break;
@@ -365,10 +614,10 @@ static void AppendInsertValueToCsv ( StringBuilder_c & sOut, const SqlInsert_t &
 		break;
 
 	default:
-		AppendCsvEscaped ( sOut, tValue.m_sVal.cstr() );
+		AppendCsvEscaped ( tOut, tValue.m_sVal.cstr() );
 		break;
 	}
-	sOut << '"';
+	tOut.put ( '"' );
 }
 
 
@@ -404,39 +653,41 @@ static constexpr ESphAttr g_dCsvAttrOrder[] =
 };
 
 
+void AbortIndexerRtBulkBatch ( ClientSession_c & tSession )
+{
+	auto & tState = tSession.m_tIndexerRtBulk;
+	auto pImpl = std::move ( tState.m_pImpl );
+	if ( pImpl )
+		pImpl->Abort();
+
+	if ( !tState.m_sDir.IsEmpty() )
+	{
+		fs::path tDir ( tState.m_sDir.cstr() );
+		std::error_code tError;
+		fs::remove_all ( tDir, tError );
+		if ( tError )
+			sphWarning ( "indexer RT bulk cleanup failed for '%s': %s", tState.m_sDir.cstr(), tError.message().c_str() );
+		else
+		{
+			tError.clear();
+			fs::remove ( tDir.parent_path(), tError );
+			if ( tError && tError!=std::errc::directory_not_empty )
+				sphWarning ( "indexer RT bulk cleanup failed for '%s': %s", tDir.parent_path().string().c_str(), tError.message().c_str() );
+		}
+	}
+
+	tState.m_sDir = "";
+}
+
+
 void CleanupIndexerRtBulk ( ClientSession_c & tSession )
 {
-	if ( tSession.m_pIndexerRtBulkStream )
-	{
-		fclose ( tSession.m_pIndexerRtBulkStream );
-		tSession.m_pIndexerRtBulkStream = nullptr;
-	}
-	tSession.m_pIndexerRtBulkBuffer.reset();
-
-	#if !_WIN32
-	StopIndexerRtBulk ( tSession );
-	#endif
-
-	if ( !tSession.m_sIndexerRtBulkIndex.IsEmpty() )
-		IndexFiles_c ( tSession.m_sIndexerRtBulkIndex, "indexer RT bulk" ).UnlinkExisted();
-
-	if ( !tSession.m_sIndexerRtBulkConfig.IsEmpty() )
-		::unlink ( tSession.m_sIndexerRtBulkConfig.cstr() );
-	if ( !tSession.m_sIndexerRtBulkDir.IsEmpty() )
-	{
-		CSphString sOutput;
-		sOutput.SetSprintf ( "%s/indexer.log", tSession.m_sIndexerRtBulkDir.cstr() );
-		::unlink ( sOutput.cstr() );
-	}
-
-	if ( !tSession.m_sIndexerRtBulkDir.IsEmpty() )
-		::rmdir ( tSession.m_sIndexerRtBulkDir.cstr() );
-
-	tSession.m_sIndexerRtBulkTable = "";
-	tSession.m_iIndexerRtBulkIndexId = -1;
-	tSession.m_sIndexerRtBulkDir = "";
-	tSession.m_sIndexerRtBulkConfig = "";
-	tSession.m_sIndexerRtBulkIndex = "";
+	auto & tState = tSession.m_tIndexerRtBulk;
+	AbortIndexerRtBulkBatch ( tSession );
+	tState.m_sTable = "";
+	tState.m_iIndexId = -1;
+	tState.m_iAlterGeneration = -1;
+	tState.m_tReservation.Reset();
 }
 
 
@@ -445,7 +696,7 @@ static bool CheckSchemaSupported ( const CSphSchema & tSchema, CSphString & sErr
 	const CSphColumnInfo * pDocid = tSchema.GetAttr ( sphGetDocidName() );
 	if ( !pDocid || pDocid->IsUuidLinkedDocid() )
 	{
-		sError = "indexer RT bulk prototype supports numeric document ids only";
+		sError = "indexer RT bulk supports numeric document ids only";
 		return false;
 	}
 
@@ -457,7 +708,7 @@ static bool CheckSchemaSupported ( const CSphSchema & tSchema, CSphString & sErr
 		ESphAttr eType = tAttr.m_eAttrType;
 		if ( eType!=SPH_ATTR_TOKENCOUNT && !CsvAttrDirective ( eType ) )
 		{
-			sError.SetSprintf ( "indexer RT bulk prototype does not support attribute '%s'", tAttr.m_sName.cstr() );
+			sError.SetSprintf ( "indexer RT bulk does not support attribute '%s'", tAttr.m_sName.cstr() );
 			return false;
 		}
 	}
@@ -465,43 +716,196 @@ static bool CheckSchemaSupported ( const CSphSchema & tSchema, CSphString & sErr
 }
 
 
-static bool InitIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, const cServedIndexRefPtr_c & pServed, CSphString & sError )
+static bool CheckIndexerRtBulkExecutable ( CSphString & sError )
 {
-	if ( !tSession.m_sIndexerRtBulkTable.IsEmpty() )
-	{
-		if ( tSession.m_sIndexerRtBulkTable!=tStmt.m_sIndex )
-		{
-			sError = "indexer RT bulk transaction may target only one table";
-			return false;
-		}
+	CSphString sIndexer;
+	if ( !GetIndexerPath ( sIndexer, sError ) )
+		return false;
+
+	CSphString sFileError;
+	if ( sphIsReadable ( sIndexer, &sFileError ) )
 		return true;
+
+	sError.SetSprintf ( "indexer RT bulk executable '%s' is unavailable: %s", sIndexer.cstr(), sFileError.cstr() );
+	return false;
+}
+
+
+struct IndexerRtBulkTarget_t
+{
+	cServedIndexRefPtr_c	m_pServed;
+	int64_t				m_iIndexId = -1;
+	int					m_iAlterGeneration = -1;
+};
+
+
+static bool CheckIndexerRtBulkTarget ( const CSphString & sTable, IndexerRtBulkTarget_t & tTarget, CSphString & sError )
+{
+	tTarget.m_pServed = GetServed ( sTable );
+	if ( !tTarget.m_pServed )
+	{
+		sError.SetSprintf ( "indexer_rt_bulk requires an existing local RT table; table '%s' is absent or distributed", sTable.cstr() );
+		return false;
 	}
 
-	RIdx_T<RtIndex_i *> pRt { pServed };
-	const CSphSchema & tSchema = pRt->GetMatchSchema();
-	if ( !CheckSchemaSupported ( tSchema, sError ) )
-		return false;
-
-	static std::atomic<DWORD> uBulkId { 0 };
-	CSphString sParent = GetPathOnly ( pRt->GetFilebase() );
-	tSession.m_sIndexerRtBulkDir.SetSprintf ( "%s/indexer-rt-bulk-%d-%u", sParent.cstr(), GetOsProcessId(), ++uBulkId );
-	if ( !MkDir ( tSession.m_sIndexerRtBulkDir.cstr() ) )
+	if ( tTarget.m_pServed->m_eType!=IndexType_e::RT )
 	{
-		sError.SetSprintf ( "failed to create bulk staging directory '%s': %s", tSession.m_sIndexerRtBulkDir.cstr(), strerrorm ( errno ) );
+		sError.SetSprintf ( "indexer_rt_bulk requires an RT table; table '%s' has type %s", sTable.cstr(), szIndexType ( tTarget.m_pServed->m_eType ) );
 		return false;
 	}
 
-	tSession.m_sIndexerRtBulkConfig.SetSprintf ( "%s/indexer.conf", tSession.m_sIndexerRtBulkDir.cstr() );
-	tSession.m_sIndexerRtBulkIndex.SetSprintf ( "%s/chunk", tSession.m_sIndexerRtBulkDir.cstr() );
-	FILE * fpConfig = fopen ( tSession.m_sIndexerRtBulkConfig.cstr(), "wb" );
-	if ( !fpConfig )
+	if ( ServedDesc_t::IsCluster ( tTarget.m_pServed ) )
 	{
-		sError.SetSprintf ( "failed to create bulk staging config in '%s': %s", tSession.m_sIndexerRtBulkDir.cstr(), strerrorm ( errno ) );
+		sError.SetSprintf ( "indexer_rt_bulk does not support cluster table '%s'", sTable.cstr() );
+		return false;
+	}
+
+	RIdx_T<RtIndex_i *> pRt { tTarget.m_pServed };
+	if ( !pRt->IsSaveEnabled() )
+	{
+		sError.SetSprintf ( "table '%s' is frozen", sTable.cstr() );
+		return false;
+	}
+
+	if ( !CheckSchemaSupported ( pRt->GetMatchSchema(), sError ) )
+		return false;
+
+	tTarget.m_iIndexId = pRt->GetIndexId();
+	tTarget.m_iAlterGeneration = pRt->GetAlterGeneration();
+	return true;
+}
+
+
+static bool CheckReservation ( const IndexerRtBulkState_t & tState, const cServedIndexRefPtr_c & pServed, CSphString & sError )
+{
+	if ( tState.m_tReservation.Matches ( pServed ) )
+		return true;
+
+	sError.SetSprintf ( "table '%s' was replaced while indexer_rt_bulk was active", tState.m_sTable.cstr() );
+	return false;
+}
+
+
+static bool CheckGeneration ( const IndexerRtBulkState_t & tState, const RtIndex_i & tRt, CSphString & sError )
+{
+	if ( tRt.GetIndexId()==tState.m_iIndexId && tRt.GetAlterGeneration()==tState.m_iAlterGeneration )
+		return true;
+
+	sError.SetSprintf ( "table '%s' was altered while indexer_rt_bulk was active", tState.m_sTable.cstr() );
+	return false;
+}
+
+
+static bool RecheckTarget ( ClientSession_c & tSession, CSphString & sError, const char * szAction=nullptr )
+{
+	auto & tState = tSession.m_tIndexerRtBulk;
+	auto pServed = GetServed ( tState.m_sTable );
+	if ( !CheckReservation ( tState, pServed, sError ) )
+	{
+		if ( szAction )
+			sError.SetSprintf ( "table '%s' was replaced while %s", tState.m_sTable.cstr(), szAction );
 		CleanupIndexerRtBulk ( tSession );
 		return false;
 	}
 
-	fprintf ( fpConfig, "source indexer_rt_bulk_source {\n  type = csvpipe\n  csvpipe_command = /bin/cat\n" );
+	RIdx_T<RtIndex_i *> pRt { pServed };
+	if ( CheckGeneration ( tState, *pRt.Ptr(), sError ) )
+		return true;
+
+	if ( szAction )
+		sError.SetSprintf ( "table '%s' was altered while %s", tState.m_sTable.cstr(), szAction );
+	CleanupIndexerRtBulk ( tSession );
+	return false;
+}
+
+
+bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTable, CSphString & sError )
+{
+	auto & tState = tSession.m_tIndexerRtBulk;
+	if ( sTable.IsEmpty() )
+	{
+		sError = "indexer_rt_bulk requires a target table; use SET indexer_rt_bulk=<table>";
+		return false;
+	}
+
+	if ( tState.IsEnabled() )
+	{
+		if ( tState.m_sTable!=sTable )
+		{
+			sError.SetSprintf ( "indexer_rt_bulk is already active for table '%s'", tState.m_sTable.cstr() );
+			return false;
+		}
+
+		return RecheckTarget ( tSession, sError );
+	}
+
+	if ( tSession.m_bInTransaction || tSession.m_tAcc.GetIndex() || tSession.m_tShardTxn.HasPendingData() )
+	{
+		sError = "indexer_rt_bulk requires a clean session with no active transaction or pending writes";
+		return false;
+	}
+
+	IndexerRtBulkTarget_t tTarget;
+	if ( !CheckIndexerRtBulkTarget ( sTable, tTarget, sError ) )
+		return false;
+
+	if ( !CheckIndexerRtBulkExecutable ( sError ) )
+		return false;
+
+	ServedIndexWriteReservation_c tReservation;
+	if ( !tReservation.TryAcquire ( tTarget.m_pServed ) )
+	{
+		sError.SetSprintf ( "table '%s' is locked", sTable.cstr() );
+		return false;
+	}
+
+	IndexerRtBulkTarget_t tCurrent;
+	if ( !CheckIndexerRtBulkTarget ( sTable, tCurrent, sError ) )
+		return false;
+	if ( !tReservation.Matches ( tCurrent.m_pServed ) || tCurrent.m_iIndexId!=tTarget.m_iIndexId || tCurrent.m_iAlterGeneration!=tTarget.m_iAlterGeneration )
+	{
+		sError.SetSprintf ( "table '%s' changed while enabling indexer_rt_bulk", sTable.cstr() );
+		return false;
+	}
+
+	tState.m_sTable = sTable;
+	tState.m_iIndexId = tCurrent.m_iIndexId;
+	tState.m_iAlterGeneration = tCurrent.m_iAlterGeneration;
+	tState.m_tReservation = std::move ( tReservation );
+	return true;
+}
+
+
+static bool InitIndexerRtBulk ( ClientSession_c & tSession, const RtIndex_i & tRt, CSphString & sError )
+{
+	auto & tState = tSession.m_tIndexerRtBulk;
+	if ( tState.HasPendingData() )
+		return true;
+
+	const CSphSchema & tSchema = tRt.GetMatchSchema();
+	if ( !CheckSchemaSupported ( tSchema, sError ) )
+		return false;
+
+	CSphString sRoot = GetIndexerRtBulkRoot ( tRt );
+	if ( !PrepareStagingRoot ( sRoot, sError ) )
+		return false;
+
+	CSphString sDir;
+	if ( !CreateStagingDir ( sRoot, sDir, sError ) )
+		return false;
+	tState.m_sDir = sDir;
+
+	CSphString sConfig = GetIndexerRtBulkFile ( tState, "indexer.conf" );
+	CSphString sIndex = GetIndexerRtBulkFile ( tState, "chunk" );
+	FILE * fpConfig = fopen ( sConfig.cstr(), "wb" );
+	if ( !fpConfig )
+	{
+		sError.SetSprintf ( "failed to create bulk staging config in '%s': %s", tState.m_sDir.cstr(), strerrorm ( errno ) );
+		AbortIndexerRtBulkBatch ( tSession );
+		return false;
+	}
+
+	fprintf ( fpConfig, "source indexer_rt_bulk_source {\n  type = csvpipe\n  csvpipe_command = -\n" );
 	for ( int i=0; i<tSchema.GetFieldsCount(); ++i )
 	{
 		const CSphColumnInfo & tField = tSchema.GetField(i);
@@ -533,59 +937,88 @@ static bool InitIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tS
 		bFirstAttr = false;
 	}
 	fprintf ( fpConfig, "\n" );
-	fprintf ( fpConfig, "}\n\nindex indexer_rt_bulk_chunk {\n  type = plain\n  source = indexer_rt_bulk_source\n  path = %s\n", tSession.m_sIndexerRtBulkIndex.cstr() );
-	DumpSettingsCfg ( fpConfig, *pRt, nullptr );
-	if ( pRt->GetSettings().m_dKNN.GetLength() )
-		fprintf ( fpConfig, "\n	knn = %s", FormatKNNConfigStr ( pRt->GetSettings().m_dKNN ).cstr() );
+	CSphString sConfigIndex = EscapeIndexerRtBulkConfigPath ( sIndex );
+	fprintf ( fpConfig, "}\n\nindex indexer_rt_bulk_chunk {\n  type = plain\n  source = indexer_rt_bulk_source\n  path = %s\n", sConfigIndex.cstr() );
+	DumpSettingsCfg ( fpConfig, tRt, nullptr );
+	if ( tRt.GetSettings().m_dKNN.GetLength() )
+		fprintf ( fpConfig, "\n	knn = %s", FormatKNNConfigStr ( tRt.GetSettings().m_dKNN ).cstr() );
 	fprintf ( fpConfig, "\n}\n" );
 	fclose ( fpConfig );
 
-	tSession.m_sIndexerRtBulkTable = tStmt.m_sIndex;
-	tSession.m_iIndexerRtBulkIndexId = pRt->GetIndexId();
-	#if _WIN32
-	sError = "streaming indexer RT bulk is not implemented on Windows";
-	CleanupIndexerRtBulk ( tSession );
-	return false;
-	#else
-	if ( !StartIndexerRtBulk ( tSession, sError ) )
+	if ( !StartIndexerRtBulk ( tState, sError ) )
 	{
-		CleanupIndexerRtBulk ( tSession );
+		AbortIndexerRtBulkBatch ( tSession );
 		return false;
 	}
-	#endif
 	return true;
 }
 
 
-bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, CSphString & sError )
+class MapError_c final : public StmtErrorReporter_i
 {
-	if ( !tSession.m_bInTransaction )
+public:
+	MapError_c ( EMYSQL_ERR & eError, CSphString & sError )
+		: m_eError ( eError )
+		, m_sError ( sError )
+	{}
+
+	void Ok ( int, const CSphString &, int64_t ) final { assert ( 0 ); }
+	void Ok ( int, int ) final { assert ( 0 ); }
+	void ErrorEx ( EMYSQL_ERR eError, const char * sError ) final
 	{
-		sError = "indexer_rt_bulk requires an active transaction; use BEGIN before INSERT";
-		return false;
+		m_eError = eError;
+		m_sError = sError;
 	}
+	RowBuffer_i * GetBuffer() final { return nullptr; }
+
+private:
+	EMYSQL_ERR &	m_eError;
+	CSphString &	m_sError;
+};
+
+
+bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, EMYSQL_ERR & eError, CSphString & sError )
+{
+	eError = EMYSQL_ERR::PARSE_ERROR;
+	auto & tState = tSession.m_tIndexerRtBulk;
+	assert ( tState.IsEnabled() );
 	if ( tStmt.m_eStmt!=STMT_INSERT )
 	{
-		sError = "indexer_rt_bulk prototype supports INSERT only";
+		sError = "indexer_rt_bulk supports INSERT only";
+		return false;
+	}
+	if ( tStmt.m_sIndex!=tState.m_sTable )
+	{
+		sError.SetSprintf ( "indexer_rt_bulk is active for table '%s', not '%s'", tState.m_sTable.cstr(), tStmt.m_sIndex.cstr() );
 		return false;
 	}
 
-	auto pServed = GetServed ( tStmt.m_sIndex );
-	if ( !ServedDesc_t::IsMutable ( pServed ) )
+	auto pServed = GetServed ( tState.m_sTable );
+	if ( !CheckReservation ( tState, pServed, sError ) )
 	{
-		sError.SetSprintf ( "table '%s' is absent, or not real-time", tStmt.m_sIndex.cstr() );
+		CleanupIndexerRtBulk ( tSession );
 		return false;
 	}
-	if ( FindInsertColumn ( tStmt, sphGetDocidName() )<0 )
-	{
-		sError = "indexer RT bulk prototype requires an explicit id";
-		return false;
-	}
-	if ( !InitIndexerRtBulk ( tSession, tStmt, pServed, sError ) )
-		return false;
-
 	RIdx_T<RtIndex_i *> pRt { pServed };
+	if ( !CheckGeneration ( tState, *pRt.Ptr(), sError ) )
+	{
+		CleanupIndexerRtBulk ( tSession );
+		return false;
+	}
 	const CSphSchema & tSchema = pRt->GetMatchSchema();
+	CSphVector<int> dAttrSchema ( tSchema.GetAttrsCount() );
+	CSphVector<int> dFieldSchema ( tSchema.GetFieldsCount() );
+	CSphVector<bool> dFieldAttrs ( tSchema.GetFieldsCount() );
+	MapError_c tError { eError, sError };
+	if ( !CreateAttrMaps ( dAttrSchema, dFieldSchema, dFieldAttrs, tSchema, tStmt.m_dInsertSchema, tError ) )
+		return false;
+
+	const int iIdColumn = FindInsertColumn ( tStmt, sphGetDocidName() );
+	if ( iIdColumn<0 )
+	{
+		sError = "indexer RT bulk requires an explicit id";
+		return false;
+	}
 	const int iColumns = tStmt.m_iSchemaSz;
 	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
 	{
@@ -593,26 +1026,22 @@ bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, C
 		if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR )
 			continue;
 
-		int iColumn = FindInsertColumn ( tStmt, tAttr.m_sName );
+		const int iColumn = dAttrSchema[i];
 		if ( iColumn<0 )
 			continue;
 
 		for ( int iRow=0; iRow<tStmt.m_iRowsAffected; ++iRow )
 			if ( !ValidateFloatVectorValue ( tAttr, tStmt.m_dInsertValues[iRow*iColumns+iColumn], iRow, sError ) )
-			{
-				CleanupIndexerRtBulk ( tSession );
 				return false;
-			}
 	}
+	if ( !InitIndexerRtBulk ( tSession, *pRt.Ptr(), sError ) )
+		return false;
 
 	struct CsvColumn_t { int m_iColumn; ESphAttr m_eType; bool m_bDocid; };
 	CSphVector<CsvColumn_t> dColumns;
-	auto AddColumn = [&] ( const CSphString & sName, ESphAttr eType, bool bDocid ) {
-		dColumns.Add ( { FindInsertColumn ( tStmt, sName ), eType, bDocid } );
-	};
-	AddColumn ( sphGetDocidName(), SPH_ATTR_BIGINT, true );
+	dColumns.Add ( { iIdColumn, SPH_ATTR_BIGINT, true } );
 	for ( int i=0; i<tSchema.GetFieldsCount(); ++i )
-		AddColumn ( tSchema.GetField(i).m_sName, SPH_ATTR_STRING, false );
+		dColumns.Add ( { dFieldSchema[i], SPH_ATTR_STRING, false } );
 	for ( ESphAttr eType : g_dCsvAttrOrder )
 		for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
 		{
@@ -621,32 +1050,35 @@ bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, C
 				continue;
 			if ( tSchema.GetField ( tAttr.m_sName.cstr() ) && tAttr.m_eAttrType==SPH_ATTR_STRING )
 				continue;
-			AddColumn ( tAttr.m_sName, tAttr.m_eAttrType, false );
+			dColumns.Add ( { dAttrSchema[i], tAttr.m_eAttrType, false } );
 		}
 
-	StringBuilder_c sBatch;
+	assert ( tState.m_pImpl );
+	std::ostream & tStream = tState.m_pImpl->Input();
+	errno = 0;
 	for ( int iRow=0; iRow<tStmt.m_iRowsAffected; ++iRow )
 	{
 		bool bFirst = true;
 		for ( const auto & tColumn : dColumns )
 		{
 			if ( !bFirst )
-				sBatch << ',';
+				tStream.put ( ',' );
 			bFirst = false;
 			if ( tColumn.m_iColumn<0 )
-				AppendCsvQuoted ( sBatch, "" );
+				AppendCsvQuoted ( tStream, "" );
 			else
-				AppendInsertValueToCsv ( sBatch, tStmt.m_dInsertValues[iRow*iColumns+tColumn.m_iColumn], tColumn.m_eType, tColumn.m_bDocid );
+				AppendInsertValueToCsv ( tStream, tStmt.m_dInsertValues[iRow*iColumns+tColumn.m_iColumn], tColumn.m_eType, tColumn.m_bDocid );
 		}
-		sBatch << '\n';
+		tStream.put ( '\n' );
 	}
 
-	CSphString sCsv;
-	sBatch.MoveTo ( sCsv );
-	if ( fwrite ( sCsv.cstr(), 1, sCsv.Length(), tSession.m_pIndexerRtBulkStream )!=size_t ( sCsv.Length() ) )
+	if ( !tStream )
 	{
-		sError.SetSprintf ( "failed streaming bulk CSV to indexer: %s", strerrorm ( errno ) );
-		CleanupIndexerRtBulk ( tSession );
+		if ( errno )
+			sError.SetSprintf ( "failed streaming bulk CSV to indexer: %s", strerrorm ( errno ) );
+		else
+			sError = "failed streaming bulk CSV to indexer";
+		AbortIndexerRtBulkBatch ( tSession );
 		return false;
 	}
 	return true;
@@ -655,35 +1087,37 @@ bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, C
 
 bool FinalizeIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError )
 {
-	if ( tSession.m_sIndexerRtBulkTable.IsEmpty() )
+	auto & tState = tSession.m_tIndexerRtBulk;
+	if ( !tState.HasPendingData() )
 		return true;
 
-	bool bClosed = true;
-	int iCloseErrno = 0;
-	if ( tSession.m_pIndexerRtBulkStream )
+	auto eWaitResult = WaitIndexerRtBulk ( tState, sError );
+	if ( eWaitResult!=IndexerRtBulkWait_e::OK )
 	{
-		bClosed = fclose ( tSession.m_pIndexerRtBulkStream )==0;
-		if ( !bClosed )
-			iCloseErrno = errno;
-		tSession.m_pIndexerRtBulkStream = nullptr;
+		if ( eWaitResult==IndexerRtBulkWait_e::CANCELLED )
+			CleanupIndexerRtBulk ( tSession );
+		else
+		{
+			CSphString sTargetError;
+			if ( RecheckTarget ( tSession, sTargetError, "finalizing indexer RT bulk" ) )
+				AbortIndexerRtBulkBatch ( tSession );
+			else
+				sError = sTargetError;
+		}
+		return false;
 	}
-	tSession.m_pIndexerRtBulkBuffer.reset();
 
-	#if !_WIN32
-	if ( !WaitIndexerRtBulk ( tSession, sError ) )
+	if ( CheckIndexerRtBulkCancelled ( sError ) )
 	{
 		CleanupIndexerRtBulk ( tSession );
 		return false;
 	}
-	#endif
-	if ( !bClosed )
-	{
-		sError.SetSprintf ( "failed closing indexer RT bulk stream: %s", strerrorm ( iCloseErrno ) );
-		CleanupIndexerRtBulk ( tSession );
-		return false;
-	}
 
-	bool bAttached = AttachIndexerRtBulkChunk ( tSession.m_sIndexerRtBulkTable, tSession.m_iIndexerRtBulkIndexId, tSession.m_sIndexerRtBulkIndex, sError );
-	CleanupIndexerRtBulk ( tSession );
-	return bAttached;
+	bool bTargetStale = false;
+	auto eResult = AttachIndexerRtBulkChunk ( tState.m_sTable, tState.m_tReservation, tState.m_iIndexId, tState.m_iAlterGeneration, GetIndexerRtBulkFile ( tState, "chunk" ), bTargetStale, sError );
+	if ( bTargetStale )
+		CleanupIndexerRtBulk ( tSession );
+	else
+		AbortIndexerRtBulkBatch ( tSession );
+	return eResult==DiskAttachRes_e::OK;
 }

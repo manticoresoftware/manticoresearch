@@ -20,6 +20,7 @@
 #include "sphinxpq.h"
 #include "binlog.h"
 #include "global_idf.h"
+#include "indexer_rt_bulk.h"
 
 using namespace Threads;
 
@@ -1794,6 +1795,18 @@ static bool DropLocalIndexWithCb ( const CSphString & sIndex, CSphString & sErro
 	{
 		sError.SetSprintf ( "DROP TABLE failed: unable to drop a cluster table '%s'", sIndex.cstr() );
 		return false;
+	}
+
+	if ( pServed->m_eType==IndexType_e::RT )
+	{
+		CSphString sRoot;
+		{
+			RIdx_T<const RtIndex_i *> pRt { pServed };
+			sRoot = GetIndexerRtBulkRoot ( *pRt.Ptr() );
+		}
+
+		if ( !RemoveIndexerRtBulkRoot ( sRoot, sError ) )
+			return false;
 	}
 
 	// need to stop all long time write operation at the index as it will be dropped anyway

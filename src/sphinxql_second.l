@@ -114,6 +114,7 @@ FLOAT_CONSTANT      ({INT}\.{INT}?|{INT}?\.{INT}){EXPONENT}?
 "ON"				{ STORE_BOUNDS; return TOK_ON; }
 "OPTION"			{ STORE_BOUNDS; return TOK_OPTION; }
 "PLUGINS"           { STORE_BOUNDS; return TOK_PLUGINS; }
+"PURGE"             { STORE_BOUNDS; return TOK_PURGE; }
 "QUERY"				{ STORE_BOUNDS; return TOK_QUERY; }
 "RAMCHUNK"          { STORE_BOUNDS; return TOK_RAMCHUNK; }
 "READ"				{ STORE_BOUNDS; return TOK_READ; }

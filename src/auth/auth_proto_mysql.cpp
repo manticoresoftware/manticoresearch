@@ -251,7 +251,18 @@ static bool SqlCheckStmtPerms ( const CSphString & sUser, const SqlStmt_t & tStm
 		return CheckPerms ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, false, sError );
 
 	case STMT_SET:
-		if ( tStmt.m_eSet==SET_LOCAL || IsSessionOnlySetExtra ( tStmt ) )
+		if ( tStmt.m_eSet==SET_LOCAL )
+		{
+			CSphString sSetName = tStmt.m_sSetName;
+			sSetName.ToLower();
+			if ( sSetName!="indexer_rt_bulk" || tStmt.m_sIndex.IsEmpty() )
+				return true;
+
+			if ( DenyInternalAuthStorageTarget ( sUser, tStmt.m_sIndex, sError ) )
+				return false;
+			return CheckPerms ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, false, sError );
+		}
+		if ( IsSessionOnlySetExtra ( tStmt ) )
 			return true;
 		return CheckPerms ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, true, sError );
 
@@ -282,6 +293,7 @@ static bool SqlCheckStmtPerms ( const CSphString & sUser, const SqlStmt_t & tStm
 	case STMT_ALTER_INDEX_SETTINGS:
 	case STMT_IMPORT_TABLE:
 	case STMT_ALTER_REBUILD_SI:
+	case STMT_PURGE:
 		return CheckPerms ( sUser, AuthAction_e::SCHEMA, tStmt.m_sIndex, false, sError );
 
 	case STMT_JOIN_CLUSTER:

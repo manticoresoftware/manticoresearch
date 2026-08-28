@@ -4428,7 +4428,7 @@ class SphinxConfig
 	function InsertIntoIndexer ( &$error )
 	{
 		global $sd_address;
-		$assisted_commits = 0;
+		$rt_indexer = IsRtIndexer();
 		$address = $sd_address;
 		if ($address == "localhost")
 			$address = "127.0.0.1";
@@ -4449,13 +4449,6 @@ class SphinxConfig
 					$error = "failed to connect to $connect_string: ".$cn->connect_error;
 					return false;
 				}
-
-				if ( IsRtIndexer() && mysqli_wr ( "SET indexer_rt_bulk=1", $cn ) === false )
-				{
-					$error = $cn->error;
-					$cn->close();
-					return false;
-				}
 			}
 
 			$corrected_cols = array();
@@ -4464,11 +4457,19 @@ class SphinxConfig
 
 			$cols = join ( ", ", $corrected_cols );
 			$prefix = "INSERT INTO $name ($cols) VALUES ";
+
 			$accum = "";
 			$in_transaction = false;
 
-			if ( IsRtIndexer() && count ( $data['values'] ) )
+			if ( $rt_indexer && count ( $data['values'] ) )
 			{
+				$escaped_name = str_replace ( "`", "``", $name );
+				if ( mysqli_wr ( "SET indexer_rt_bulk=`$escaped_name`", $cn ) === false )
+				{
+					$error = $cn->error;
+					$cn->close();
+					return false;
+				}
 				if ( mysqli_wr ( "BEGIN", $cn ) === false )
 				{
 					$error = $cn->error;
@@ -4496,14 +4497,16 @@ class SphinxConfig
 					$i++;
 				}
 
-				if ( ( !IsRtIndexer() || $accum!="" ) && ( strlen ($accum) + strlen ($query) ) > 8192000 ) ///<checkit!
+				if ( $accum!="" && ( strlen ($accum) + strlen ($query) ) > 8192000 ) ///<checkit!
 				{
 					if ( mysqli_wr ( $prefix.$accum, $cn ) === false )
 					{
 						$error = $cn->error;
 						if ( $in_transaction )
+						{
 							mysqli_wr ( "ROLLBACK", $cn );
-						$cn->close();
+							$cn->close();
+						}
 						return false;
 					}
 					$accum="";
@@ -4518,8 +4521,10 @@ class SphinxConfig
 			{
 				$error = $cn->error;
 				if ( $in_transaction )
+				{
 					mysqli_wr ( "ROLLBACK", $cn );
-				$cn->close();
+					$cn->close();
+				}
 				return false;
 			}
 
@@ -4530,16 +4535,15 @@ class SphinxConfig
 				$cn->close();
 				return false;
 			}
-			if ( $in_transaction )
-				$assisted_commits++;
+			if ( $in_transaction && mysqli_wr ( "SET indexer_rt_bulk=0", $cn ) === false )
+			{
+				$error = $cn->error;
+				$cn->close();
+				return false;
+			}
 		}
 		if ( $cn )
 			$cn->close();
-		if ( IsRtIndexer() && !$assisted_commits )
-		{
-			$error = "RT indexer mode did not load any fixture data";
-			return false;
-		}
 		return true;
 	}
 
@@ -4835,12 +4839,6 @@ function CheckConfig ( $config, $path )
 	if ( $config->Requires("non-rt") && IsRt() )
 	{
 		printf ( "SKIPPING %s, %s - explicitly non-RT test skipped in RT mode\n", $path, $config->Name () );
-		return false;
-	}
-
-	if ( $config->Requires("non-rt-indexer") && IsRtIndexer() )
-	{
-		printf ( "SKIPPING %s, %s - explicitly incompatible test skipped in RT indexer mode\n", $path, $config->Name () );
 		return false;
 	}
 
@@ -5199,7 +5197,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 		if ( IsRt () && !$config->InsertIntoIndexer ( $error ) && IsRtIndexer() )
 		{
 			if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
-				$log .= "	subtest $subtest: error loading RT fixture data; see $report_file\n";
+				$log .= "\tsubtest $subtest: error loading RT fixture data; see $report_file\n";
 			continue;
 		}
 

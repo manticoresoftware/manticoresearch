@@ -1594,7 +1594,9 @@ public:
 	bool				IsFlushNeed() const final;
 	bool				ForceDiskChunk() final;
 	RtActionResult_e ForceDiskChunkResult() final;
+	bool				CanAttachDiskIndex ( const CSphIndex * pIndex, CSphString & sError ) const final;
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) final;
+	DiskAttachRes_e AttachDiskIndexWithMeta ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) final;
 	bool				AttachRtIndex ( AttachArgs_t & tArgs, CSphString & sError ) final;
 	bool				Truncate ( CSphString & sError, Truncate_e eAction ) final;
 	bool				CheckValidateOptimizeParams ( OptimizeTask_t& tTask ) const;
@@ -1697,6 +1699,7 @@ public:
 	int64_t				GetLastFlushTimestamp() const final;
 	void				ProhibitSave() final;
 	void				EnableSave() final;
+	bool				IsSaveEnabled() const final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
 
 	void				WaitLockEnabledState () noexcept final;
@@ -1909,6 +1912,7 @@ private:
 	bool						AlterRebuild ( AlterOp_fn && operation, CSphString & sError, const char * sTrace );
 
 	bool						CanAttach ( const CSphIndex * pIndex, bool bCheckFT, CSphString & sError ) const;
+	DiskAttachRes_e	AttachDiskIndexImpl ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError );
 	bool						AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	void						AttachSetSettings ( CSphIndex * pIndex );
 	bool						AttachSaveDiskChunk ();
@@ -9982,7 +9986,22 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 //////////////////////////////////////////////////////////////////////////
 
 // ClientSession_c::Execute->HandleMysqlAttach->AttachDiskIndex
+bool RtIndex_c::CanAttachDiskIndex ( const CSphIndex * pIndex, CSphString & sError ) const
+{
+	return CanAttach ( pIndex, true, sError );
+}
+
 bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError )
+{
+	return AttachDiskIndexImpl ( pIndex, bTruncate, bFatal, sError )!=DiskAttachRes_e::NOT_ATTACHED;
+}
+
+DiskAttachRes_e RtIndex_c::AttachDiskIndexWithMeta ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError )
+{
+	return AttachDiskIndexImpl ( pIndex, bTruncate, bFatal, sError );
+}
+
+DiskAttachRes_e RtIndex_c::AttachDiskIndexImpl ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError )
 {
 	// from the next line we work in index simple scheduler. That made everything much simpler
 	// (no need to care about locks and order of access to ram segments and disk chunks)
@@ -9992,24 +10011,24 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 	bFatal = false;
 
 	if ( bTruncate && !Truncate ( sError, TRUNCATE ) )
-		return false;
+		return DiskAttachRes_e::NOT_ATTACHED;
 
 	// safeguards
 	// we do not support some disk index features in RT just yet
 	if ( !CanAttach ( pIndex, true, sError ) )
-		return false;
+		return DiskAttachRes_e::NOT_ATTACHED;
 
 	// note: that is important. Active readers prohibited by topmost w-lock, but internal processes not!
 	// fixme! Looks like a dupe, look at few lines above
 	if ( bTruncate && !Truncate ( sError, TRUNCATE ) )
-		return false;
+		return DiskAttachRes_e::NOT_ATTACHED;
 
 	// attach to non-empty RT: first flush RAM segments to disk chunk, then apply upcoming index'es docs as k-list.
 	if ( !m_tRtChunks.RamSegs()->IsEmpty() && SaveDiskChunk ( true )!=RtActionResult_e::OK )
-		return false;
+		return DiskAttachRes_e::NOT_ATTACHED;
 
 	if ( !AttachDiskChunkMove ( pIndex, bFatal, sError ) )
-		return false;
+		return DiskAttachRes_e::NOT_ATTACHED;
 
 	// FIXME? what about copying m_TID etc?
 
@@ -10023,7 +10042,9 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 	PostSetup();
 
 	// resave header file
-	SaveMeta();
+	const bool bMetaSaved = SaveMeta();
+	if ( !bMetaSaved )
+		sError.SetSprintf ( "failed to save metadata for table '%s' after attaching disk chunk", GetName() );
 
 	// FIXME? do something about binlog too?
 	// Binlog::NotifyIndexFlush ( GetName(), m_iTID, false );
@@ -10031,7 +10052,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 	// all done, reset cache
 	QcacheClearByIndexId ( GetIndexId() );
 	QcacheClearByIndexId ( pIndex->GetIndexId() );
-	return true;
+	return bMetaSaved ? DiskAttachRes_e::OK : DiskAttachRes_e::META_FAILED;
 }
 
 bool RtIndex_c::CanAttach ( const CSphIndex * pIndex, bool bCheckFT, CSphString & sError ) const
@@ -10065,11 +10086,12 @@ bool RtIndex_c::AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphStr
 {
 	int iTotalKilled = 0;
 	DWORD uAliveDocuments = 0;
+	CSphVector<SphAttr_t> dIndexDocs;
 
-	// attach to non-empty RT: apply upcoming index'es docs as k-list.
+	// attach to non-empty RT: prepare upcoming index'es docs as k-list.
 	if ( !m_tRtChunks.IsEmpty() )
 	{
-		auto dIndexDocs = pIndex->BuildDocList();
+		dIndexDocs = pIndex->BuildDocList();
 		if ( TlsMsg::HasErr () )
 		{
 			sError.SetSprintf ( "ATTACH failed, %s", TlsMsg::szError () );
@@ -10078,9 +10100,8 @@ bool RtIndex_c::AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphStr
 
 		uAliveDocuments = dIndexDocs.GetLength();
 		dIndexDocs.Uniq();
-		iTotalKilled = ApplyKillList ( dIndexDocs );
 	} else
-		uAliveDocuments = pIndex->GetStats().m_iTotalDocuments;
+		uAliveDocuments = pIndex->GetCount();
 
 	// rename that source index to our last chunk
 	int iChunk = m_tChunkID.MakeChunkId ( m_tRtChunks );
@@ -10095,6 +10116,8 @@ bool RtIndex_c::AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphStr
 		return false;
 	default: break;
 	}
+
+	iTotalKilled = ApplyKillList ( dIndexDocs );
 
 	m_tStats.m_iTotalBytes += pIndex->GetStats().m_iTotalBytes;
 	m_tStats.m_iTotalDocuments += uAliveDocuments-iTotalKilled;
@@ -12135,6 +12158,11 @@ void RtIndex_c::EnableSave()
 	m_tSaving.SetState ( SaveState_c::ENABLED );
 	m_bOptimizeStop.store ( false, std::memory_order_relaxed );
 	std::atomic_thread_fence ( std::memory_order_release );
+}
+
+bool RtIndex_c::IsSaveEnabled() const
+{
+	return m_tSaving.ActiveStateIs ( SaveState_c::ENABLED );
 }
 
 // fixme! Review, if it still necessary, as SST locks everything itself.

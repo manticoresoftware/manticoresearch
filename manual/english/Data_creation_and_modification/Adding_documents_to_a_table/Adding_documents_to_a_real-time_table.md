@@ -878,19 +878,18 @@ The `/bulk` (Manticore mode) endpoint supports [Chunked transfer encoding](https
 
 ### Indexer-assisted bulk insertion
 
-> NOTE: This insertion mode is experimental.
-
 For large append-only loads into a local real-time table, Manticore Search can stream `INSERT` rows through `indexer`, build one disk chunk, and attach that chunk to the table when the transaction commits. This avoids adding every row through the regular real-time insertion path. Rows remain invisible until the chunk is attached, and a failed operation or `ROLLBACK` leaves the table unchanged.
 
 Use this mode when loading a large batch for which producing a disk chunk directly is preferable to building a RAM chunk first. It supports both row-wise and columnar tables, including full-text fields, numeric attributes, strings, JSON, MVA/MVA64, and float vectors with KNN indexes.
 
+Assisted table names are canonical lowercase. Both the SQL setting and the Manticore `/bulk` query parameter normalize their target to lowercase before authorization and activation.
+
 #### SQL
 
-Enable the mode for the current SQL session, start an explicit transaction, run one or more `INSERT` statements against the same table, and commit:
+Enable the mode for the current SQL session, run one or more `INSERT` statements against the bound table, and commit:
 
 ```sql
-SET indexer_rt_bulk=1;
-BEGIN;
+SET indexer_rt_bulk=products;
 INSERT INTO products(id,title,price) VALUES
   (101,'Crossbody Bag with Tassel',19.85),
   (102,'Microfiber Sheet Set',19.99);
@@ -900,72 +899,74 @@ COMMIT;
 SET indexer_rt_bulk=0;
 ```
 
-`SET indexer_rt_bulk=1` applies to the current connection. While it is enabled, every `INSERT` requires an active transaction started with `BEGIN` or `START TRANSACTION`. `COMMIT` builds and atomically attaches the disk chunk; `ROLLBACK`, a failed insert, or closing the connection discards the staged batch.
+`SET indexer_rt_bulk=<table>` requires a clean session and acquires a write reservation for that table. Searches remain available, but other sessions cannot run `INSERT`, `REPLACE`, `UPDATE`, or `DELETE` against the reserved table. `BEGIN` and `START TRANSACTION` are optional compatibility no-ops in assisted mode. `COMMIT` builds and atomically attaches the current disk chunk; `ROLLBACK` discards the current batch. Both keep the mode and reservation active for another batch. Autocommit cannot be changed while assisted mode is active. `SET indexer_rt_bulk=0` or closing the connection discards any pending batch and releases the reservation.
 
 #### HTTP `/bulk`
 
-Add `indexer_rt_bulk=1` to the `/bulk` query string. The request body remains standard newline-delimited JSON (NDJSON), and each operation must be `insert`:
+Add `indexer_rt_bulk=<table>` to a Manticore `/bulk` or `/json/bulk` request. The request body remains standard newline-delimited JSON (NDJSON), and each operation must be `insert` or `create` for the bound table:
 
 ```bash
-curl -X POST 'http://localhost:9308/bulk?indexer_rt_bulk=1' \
+curl --http1.1 \
   -H 'Content-Type: application/x-ndjson' \
-  --data-binary $'{"insert":{"table":"products","id":101,"doc":{"title":"Crossbody Bag with Tassel","price":19.85}}}\n{"insert":{"table":"products","id":102,"doc":{"title":"Microfiber Sheet Set","price":19.99}}}\n'
+  --data-binary $'{"insert":{"table":"products","id":101,"doc":{"title":"Crossbody Bag with Tassel","price":19.85}}}\n{"insert":{"table":"products","id":102,"doc":{"title":"Microfiber Sheet Set","price":19.99}}}\n' \
+  'http://localhost:9308/bulk?indexer_rt_bulk=products' \
+  --next --http1.1 \
+  -H 'Content-Type: application/x-ndjson' \
+  --data-binary $'{"create":{"table":"products","id":103,"doc":{"title":"Pet Hair Remover Glove","price":7.99}}}\n' \
+  'http://localhost:9308/bulk' \
+  --next --http1.1 \
+  -H 'Content-Type: application/x-ndjson' \
+  --data-binary '' \
+  'http://localhost:9308/bulk?indexer_rt_bulk=0'
 ```
 
-The endpoint also supports chunked transfer encoding in this mode, so the server can stream a request larger than `max_packet_size` into `indexer` without buffering the complete request body. As with ordinary `/bulk` transactions, changing the target table or adding an empty line commits the preceding group; the entire multi-table request is therefore not one atomic transaction.
+The activating request does not have to keep the connection open. A one-shot request publishes its completed groups before replying and releases the mode and reservation when the connection closes. Keep the connection persistent only when later requests need to inherit the active target or send `indexer_rt_bulk=0` explicitly. HTTP/1.1 is persistent by default, while HTTP/1.0 requires `Connection: keep-alive`.
 
-#### Fluent Bit
+A successful data request publishes all of its completed groups before replying. An empty line publishes the preceding group, and request EOF publishes the final group. No unpublished batch crosses a response boundary; only the target and its reservation can remain active on a persistent connection. A later optionless `/bulk` or `/json/bulk` request on that connection inherits the target. Once active, the session target is authoritative; another target-valued query option does not switch it, and the ordinary bulk/DML path still rejects operations for another table. An active `indexer_rt_bulk=0` request follows the same assisted bulk processing and then disables the mode and releases its reservation. It may carry the final data group; an empty or whitespace-only body is a successful no-op that only disables the mode.
 
-Fluent Bit's Elasticsearch output sends data to `/_bulk` rather than `/bulk`. To enable indexer-assisted insertion for that output, set its `pipeline` option to the reserved value `indexer_rt_bulk`, use the `index` write operation, and provide the name of a record field that contains the document ID:
+The example uses one `curl` process with `--next` so all three transfers can reuse one connection. Separate `curl` processes create separate sessions and cannot inherit or disable each other's assisted mode. See [Persistent connections and HTTP state](../../Connecting_to_the_server/HTTP.md#Persistent-connections) for the general connection rules. Closing the connection also releases the reservation. An already-active final data request may use `Connection: close`; Manticore publishes that request before teardown.
 
-```ini
-[OUTPUT]
-    name            es
-    match           site_access_logs
-    host            manticore
-    port            9308
-    index           site_access_logs
-    pipeline        indexer_rt_bulk
-    write_operation index
-    id_key          id
+Assisted responses use the ordinary Manticore bulk envelope and contain one aggregate `bulk` item per published group. The endpoint supports chunked transfer encoding, so it can stream bodies larger than `max_packet_size` into `indexer` without buffering the whole request. A failed request does not publish its current group and closes that HTTP session; groups already published at earlier ordinary bulk boundaries, such as an empty line or table change, remain visible.
+
+Elasticsearch-compatible `/_bulk` does not support assisted mode. An `indexer_rt_bulk` query value on a clean `/_bulk` session does not activate the feature, and `/_bulk` is rejected while assisted mode is already active on that connection. Fluent Bit's Elasticsearch output uses `/_bulk`, so it continues to use regular real-time insertion.
+
+#### Duplicate document IDs
+
+Assisted mode starts `indexer` with duplicate removal enabled. Within one assisted batch, the first row for a numeric document ID remains visible and later rows with the same ID are logically removed. For SQL, a batch consists of the rows staged before `COMMIT` or `ROLLBACK`. For Manticore `/bulk`, each group published at an empty line, table change, or request EOF is a separate batch.
+
+An ID that is already visible in the target table is replaced when a later assisted chunk containing that ID is attached. This also applies to an ID published by an earlier HTTP group. As a result, retrying a previously published batch replaces its rows, while duplicates inside the retried batch still keep the first row. The assisted `create` action follows the same behavior as `insert`; it does not fail merely because the ID already exists in the target table.
+
+The duplicate-removal behavior is also available for ordinary plain-table builds through the [`indexer --remove_dups`](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) option. Without this option, standalone `indexer` keeps duplicate document IDs.
+
+#### Staging files and cleanup
+
+Manticore removes the current staging directory after a normal `COMMIT`, `ROLLBACK`, mode disable, or session close. A daemon or host crash can leave an abandoned staging directory behind. A later assisted load creates a new uniquely named directory and does not reuse or attach files left by the crashed load.
+
+Use the following query to inspect all assisted staging entries for a table:
+
+```sql
+SELECT file, normalized, size
+FROM products.@files
+OPTION format='indexer_rt_bulk';
 ```
 
-Every record's `id` value must be a non-zero decimal string, for example `"123"`. Fluent Bit does not add `_id` when `id_key` refers to a numeric value, and `generate_id On` produces UUID strings, which this experimental mode does not support. If the source does not already contain a suitable stable numeric string, add one with a Fluent Bit filter before the output runs. IDs must remain stable when Fluent Bit retries a chunk. For a single tailed file, one option is to expose its byte offset and convert it to a string with a Lua filter:
+The result recursively lists files and directories below the table's assisted staging root. Directories and other non-regular entries have a reported size of `0`.
 
-```ini
-[INPUT]
-    name       tail
-    path       /var/log/example.log
-    offset_key fluent_bit_offset
+After confirming that no assisted load is active for the table, remove its entire assisted staging root with [`PURGE INDEXER_RT_BULK`](../../Node_info_and_management/PURGE.md#PURGE-INDEXER_RT_BULK):
 
-[FILTER]
-    name   lua
-    match  site_access_logs
-    script add_numeric_id.lua
-    call   add_numeric_id
+```sql
+PURGE INDEXER_RT_BULK FROM TABLE products;
 ```
 
-```lua
-function add_numeric_id(tag, timestamp, record)
-    record["id"] = tostring(record["fluent_bit_offset"] + 1)
-    record["fluent_bit_offset"] = nil
-    return 2, timestamp, record
-end
-```
-
-Offsets are unique only within one file. Pipelines that tail multiple files should derive a collision-free numeric ID from a stable source identifier and offset instead.
-
-With `pipeline indexer_rt_bulk`, each Fluent Bit request is committed as one disk chunk. The `index` action replaces a document when its ID already exists in the table. IDs must be unique within each request; duplicate IDs in one request and other bulk actions are rejected. If any record in the request is invalid, Manticore Search rejects the request and attaches none of its records. Successful assisted responses for this reserved Fluent Bit pipeline contain `"errors": false` and an empty `items` array to avoid serializing, transferring, and parsing one redundant success object per record. Error responses retain per-record details.
-
-Without `pipeline indexer_rt_bulk`, the same output continues to use regular real-time insertion. The assisted mode is most useful when bulk success responses or indexing work are a bottleneck. Fluent Bit flushes independent chunks, and assisted mode starts `indexer` for each request, so small batches on a low-latency connection may not improve wall-clock time. Benchmark with representative records, schema, chunking, workers, and network conditions before enabling it in production.
+`PURGE` requires an existing local real-time table that is not in a replication cluster. It removes only assisted staging state and does not change the table schema or indexed rows. It succeeds as a no-op when the staging root is absent. In configless mode, `DROP TABLE` also removes the table's assisted staging root.
 
 #### Current limitations
 
-* The target must be one local real-time table per transaction. Distributed, sharded, replicated, percolate, and plain tables are not supported.
-* Only `INSERT` is supported. `REPLACE`, `UPDATE`, and `DELETE` are rejected.
+* The target must be one existing, unfrozen local real-time table that is not a replication-cluster member. Distributed, sharded, replicated, percolate, and plain tables are not supported.
+* SQL supports only `INSERT`. Manticore `/bulk` accepts `insert` and `create`; `index`, `replace`, `update`, and `delete` are rejected.
 * Every row must provide an explicit numeric, non-zero document ID. Auto-generated and UUID document IDs are not supported.
-* The feature is unavailable on Windows and in static builds.
-* The `indexer` executable from the same Manticore Search build or installation must be next to the running `searchd` executable. Manticore Search resolves only that sibling executable; it does not search `PATH`. If it is missing or cannot be executed, only the assisted insertion fails—normal startup and regular insertion remain available.
+* Static builds are not supported. Dynamic Linux and Windows builds resolve the platform-named `indexer` executable next to the running `searchd`; macOS support is not currently claimed.
+* The `indexer` executable must come from the same Manticore Search build or installation as `searchd`. Manticore Search resolves only that sibling executable and does not search `PATH`. If it is missing or cannot be executed, only the assisted insertion fails—normal startup and regular insertion remain available.
 
 <!-- example bulk_insert -->
 <!-- intro -->
@@ -1000,7 +1001,7 @@ The syntax is generally the same as for [inserting a single document](../../Quic
 * `Content-Type: application/x-ndjson`
 * The data should be formatted as newline-delimited JSON (NDJSON). Essentially, this means that each line should contain exactly one JSON statement and end with a newline `\n` and possibly `\r`.
 
-The `/bulk` endpoint supports 'insert', 'replace', 'delete', and 'update' queries. Keep in mind that you can direct operations to multiple tables, but transactions are only possible for a single table. If you specify more, Manticore will gather operations directed to one table into a single transaction. When the table changes, it will commit the collected operations and initiate a new transaction on the new table. An empty line separating batches also leads to committing the previous batch and starting a new transaction.
+The `/bulk` endpoint supports 'insert', 'replace', 'delete', and 'update' queries. Keep in mind that you can direct operations to multiple tables, but transactions are only possible for a single table. If you specify more, Manticore will gather operations directed to one table into a single transaction. When the table changes, it will commit the collected operations and initiate a new transaction. An empty line separating batches also leads to committing the previous batch and starting a new transaction. A request containing no operations, whether its body is empty or contains only empty or whitespace-only lines, is a successful no-op and returns an empty `items` array.
 
 In the response for a `/bulk` request, you can find the following fields:
 * "errors": shows whether any errors occurred (true/false)

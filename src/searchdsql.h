@@ -183,6 +183,7 @@ enum SqlStmt_e : BYTE
 	STMT_DROP_USER,
 	STMT_GRANT,
 	STMT_REVOKE,
+	STMT_PURGE,
 
 	STMT_TOTAL
 };
@@ -203,10 +204,17 @@ constexpr const char* SqlStmt2Str(SqlStmt_e eStmt)
 	"alter_index_settings", "alter_embeddings_api_key", "alter_embeddings_api_url", "alter_embeddings_api_timeout", "join_cluster", "cluster_create", "cluster_delete", "cluster_exit", "cluster_index_add",
 	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
 	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes", "alter_rebuild_knn", "alter_rebuild_embeddings", "lock_tables", "unlock_tables",
-	"reload_auth", "show_usage", "show_permissions", "show_users", "show_token", "set_password", "token", "create_user", "drop_user", "grant", "revoke"
+	"reload_auth", "show_usage", "show_permissions", "show_users", "show_token", "set_password", "token", "create_user", "drop_user", "grant", "revoke", "purge"
 			};
 	return dNames[eStmt];
 }
+
+
+enum class PurgeTarget_e : BYTE
+{
+	NONE,
+	INDEXER_RT_BULK
+};
 
 
 enum SqlSet_e
@@ -336,6 +344,9 @@ public:
 
 	// DROP TABLE specific
 	bool					m_bIfExists = false;
+
+	// PURGE specific
+	PurgeTarget_e			m_ePurgeTarget = PurgeTarget_e::NONE;
 
 	// SHOW THREADS specific
 	int						m_iThreadsCols = -1;

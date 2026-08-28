@@ -22,7 +22,6 @@
 #include "accumulator.h"
 #include "networking_daemon.h"
 #include "client_session.h"
-#include "indexer_rt_bulk.h"
 #include "tracer.h"
 #include "searchdbuddy.h"
 #include "compressed_http.h"
@@ -32,8 +31,7 @@
 #include "aggrexpr.h"
 #include "auth/auth_proto_http.h"
 #include "netfetch.h"
-
-#include <unordered_set>
+#include "indexer_rt_bulk.h"
 
 static bool g_bLogBadHttpReq = env_exists ( "MANTICORE_LOG_HTTP_BAD_REQ" ); // log content of bad http requests, ruled by this env variable
 static int g_iLogHttpData = env_long ( "MANTICORE_LOG_HTTP_DATA" ).value_or(0); // verbose logging of http data, ruled by this env variable
@@ -2283,24 +2281,20 @@ public:
 			return false;
 
 		auto pSession = session::Info().GetClientSession();
-		const bool bIndexerRtBulk = m_tOptions.Exists ( "indexer_rt_bulk" ) && m_tOptions["indexer_rt_bulk"]=="1";
-		if ( bIndexerRtBulk )
-			pSession->m_bIndexerRtBulk = true;
-		AT_SCOPE_EXIT ( [pSession, bIndexerRtBulk] {
-			if ( bIndexerRtBulk )
-			{
-				CleanupIndexerRtBulk ( *pSession );
-				pSession->m_bIndexerRtBulk = false;
-			}
-		});
+		auto & tIndexerState = pSession->m_tIndexerRtBulk;
+		const CSphString * pIndexerRtBulk = m_tOptions ( "indexer_rt_bulk" );
+		CSphString sActivateIndexerRtBulk = pIndexerRtBulk ? *pIndexerRtBulk : CSphString();
+		const bool bExitIndexerRtBulk = tIndexerState.IsEnabled() && sActivateIndexerRtBulk=="0";
+		const bool bHadPendingIndexerRtBulk = tIndexerState.HasPendingData();
+		if ( tIndexerState.IsEnabled() || sActivateIndexerRtBulk=="0" )
+			sActivateIndexerRtBulk = "";
+		else
+			sActivateIndexerRtBulk.ToLower();
 
 		JsonObj_c tResults ( true );
-		bool bResult = false;
+		bool bResult = true;
 		int iCurLine = 0;
 		int iLastTxStartLine = 0;
-
-		if ( m_tSource.Eof() )
-			return FinishBulk ( tResults, bResult, iCurLine, iLastTxStartLine );
 
 		// originally we execute txn for single index
 		// if there is combo, we fall back to query-by-query commits
@@ -2319,7 +2313,7 @@ public:
 
 			if ( IsEmpty ( tQuery ) )
 			{
-				if ( session::IsInTrans() )
+				if ( IsGroupOpen ( tTxnState ) )
 				{
 					assert ( tTxnState.HasIndex() );
 					// empty query finishes current txn
@@ -2354,7 +2348,29 @@ public:
 			if ( ( !tTxnState.HasIndex() || tStmt.m_sIndex!=tTxnState.m_sIndex ) && !HttpCheckPerms ( session::GetUser(), AuthAction_e::WRITE, tStmt.m_sIndex, m_eHttpCode, m_sError, m_dData ) )
 				return false;
 
-			if ( session::IsInTrans() && tTxnState.m_sIndex!=tStmt.m_sIndex )
+			if ( bHadPendingIndexerRtBulk )
+			{
+				m_sError = "indexer_rt_bulk already has pending data in this session";
+				return FinishBulk ( tResults, false, iCurLine, iLastTxStartLine, EHTTP_STATUS::_400 );
+			}
+
+			if ( !sActivateIndexerRtBulk.IsEmpty() )
+			{
+				if ( tStmt.m_sIndex!=sActivateIndexerRtBulk )
+				{
+					m_sError.SetSprintf ( "indexer_rt_bulk target '%s' does not match operation table '%s'", sActivateIndexerRtBulk.cstr(), tStmt.m_sIndex.cstr() );
+					return FinishBulk ( tResults, false, iCurLine, iLastTxStartLine, EHTTP_STATUS::_400 );
+				}
+				if ( !ActivateIndexerRtBulk ( *pSession, sActivateIndexerRtBulk, m_sError ) )
+				{
+					tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), m_sError.cstr(), ResultSetFormat_e::MntSearch );
+					AddBulkResult ( tResults, sStmt.cstr(), tResult );
+					return FinishBulk ( tResults, false, iCurLine, iLastTxStartLine );
+				}
+				sActivateIndexerRtBulk = "";
+			}
+
+			if ( IsGroupOpen ( tTxnState ) && tTxnState.m_sIndex!=tStmt.m_sIndex )
 			{
 				assert ( tTxnState.HasIndex() );
 				// we should finish current txn, as we got another index
@@ -2379,13 +2395,6 @@ public:
 			}
 
 			SetQueryOptions ( m_tOptions, tStmt );
-			if ( bIndexerRtBulk && tStmt.m_eStmt!=STMT_INSERT )
-			{
-				m_sError = "indexer_rt_bulk prototype supports INSERT only";
-				RollbackBulkTxn ( tTxnState );
-				return FinishBulk ( tResults, false, iCurLine, iLastTxStartLine, EHTTP_STATUS::_400 );
-			}
-
 			switch ( tStmt.m_eStmt )
 			{
 			case STMT_INSERT:
@@ -2424,18 +2433,18 @@ public:
 				continue;
 			}
 
-			if ( !bResult || !session::IsInTrans() )
+			if ( !bResult || !IsGroupOpen ( tTxnState ) )
 				AddBulkResult ( tResults, sStmt.cstr(), tResult );
 
 			// no further than the first error
 			if ( !bResult )
 				break;
 
-			if ( !session::IsInTrans() )
+			if ( !IsGroupOpen ( tTxnState ) )
 				iLastTxStartLine = iCurLine;
 		}
 
-		if ( bResult && session::IsInTrans() )
+		if ( bResult && IsGroupOpen ( tTxnState ) )
 		{
 			assert ( tTxnState.HasIndex() );
 			// We're in txn - that is, nothing committed, and we should do it right now
@@ -2446,17 +2455,26 @@ public:
 
 		if ( !bResult )
 			RollbackBulkTxn ( tTxnState );
-		else
+		else if ( tTxnState.HasIndex() )
 		{
 			session::SetInTrans ( false );
 			tTxnState.Reset ();
 		}
+
+		if ( bExitIndexerRtBulk )
+			CleanupIndexerRtBulk ( *pSession );
 
 		HTTPINFO << "inserted  " << iCurLine << " result: " << (int)bResult << ", error:" << m_sError;
 		return FinishBulk ( tResults, bResult, iCurLine, iLastTxStartLine );
 	}
 
 private:
+	static bool IsGroupOpen ( const BulkTxnState_t & tTxnState )
+	{
+		return tTxnState.HasIndex()
+			&& ( session::IsInTrans() || session::Info().GetClientSession()->m_tIndexerRtBulk.IsEnabled() );
+	}
+
 	bool FinishBulk ( JsonObj_c & tResults, bool bResult, int iCurLine, int iLastTxStartLine, EHTTP_STATUS eStatus = EHTTP_STATUS::_200 )
 	{
 		JsonObj_c tRoot;
@@ -2513,7 +2531,7 @@ private:
 
 	void RollbackBulkTxn ( BulkTxnState_t & tTxnState ) const
 	{
-		if ( session::IsInTrans() && tTxnState.HasIndex() )
+		if ( IsGroupOpen ( tTxnState ) )
 			ProcessRollback ( FromStr ( tTxnState.m_sIndex ) );
 
 		session::SetInTrans ( false );
@@ -2599,9 +2617,6 @@ private:
 	bool ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecTraits_T<BulkDoc_t> & dDocs, JsonObj_c & tItems );
 	bool Validate();
 	void ReportLogError ( const char * sError, HttpErrorType_e eType , EHTTP_STATUS eStatus, bool bLogOnly );
-	bool IsIndexerRtBulk() const;
-
-	bool m_bIndexerRtBulk { false };
 };
 
 class HttpTokenHandler_c final: public HttpHandler_c, public HttpOptionTrait_t
@@ -2761,6 +2776,14 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 
 	// should set client user to pass it further into distributed index
 	session::SetUser ( sUser );
+	if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::ES_BULK && session::Info().GetClientSession()->m_tIndexerRtBulk.IsEnabled() )
+	{
+		tRes.m_eReplyHttpCode = EHTTP_STATUS::_400;
+		tRes.m_sError = "Elasticsearch /_bulk is unavailable while indexer_rt_bulk is active; use SQL or Manticore /bulk";
+		tRes.m_bSkipBuddy = true;
+		sphHttpErrorReply ( dResult, tRes.m_eReplyHttpCode, tRes.m_sError.cstr() );
+		return tRes;
+	}
 
 	std::unique_ptr<HttpHandler_c> pHandler = CreateHttpHandler ( tRes.m_eEndpoint, tSource, sSrcQuery, hOptions, eRequestType );
 	if ( !pHandler )
@@ -2793,7 +2816,7 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 	tRes.m_bOk = pHandler->Process();
 	tRes.m_sError = pHandler->GetError();
 	tRes.m_eReplyHttpCode = pHandler->GetStatusCode();
-	tRes.m_bSkipBuddy = ( tRes.m_eReplyHttpCode==EHTTP_STATUS::_403 ); // error with status code 403 Forbidden should not route into buddy
+	tRes.m_bSkipBuddy = ( tRes.m_eReplyHttpCode==EHTTP_STATUS::_403 || tRes.m_eEndpoint==EHTTP_ENDPOINT::JSON_BULK );
 	dResult = std::move ( pHandler->GetResult() );
 
 	return tRes;
@@ -2842,6 +2865,7 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 		eEndpoint = EHTTP_ENDPOINT::ES_BULK;
 
 	HttpProcessResult_t tRes;
+	tRes.m_eEndpoint = eEndpoint;
 	Str_t sSrcQuery;
 
 	if ( bCompressed && !HasGzip() )
@@ -2865,6 +2889,8 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 		tRes = ProcessHttpQuery ( *pSource, sSrcQuery, m_hOptions, dResult, true, m_eType, false );
 	}
 
+	if ( eEndpoint==EHTTP_ENDPOINT::JSON_BULK )
+		tRes.m_bSkipBuddy = true;
 	return ProcessHttpQueryBuddy ( tRes, sSrcQuery, m_hOptions, dResult, true, m_eType );
 }
 
@@ -3642,29 +3668,17 @@ bool HttpHandlerEsBulk_c::Validate()
 }
 
 
-bool HttpHandlerEsBulk_c::IsIndexerRtBulk() const
-{
-	return ( m_hOpts.Exists ( "indexer_rt_bulk" ) && m_hOpts["indexer_rt_bulk"]=="1" )
-		|| ( m_hOpts.Exists ( "pipeline" ) && m_hOpts["pipeline"]=="indexer_rt_bulk" );
-}
-
-
 bool HttpHandlerEsBulk_c::Process()
 {
+	if ( ( m_hOpts.Exists ( "indexer_rt_bulk" ) && m_hOpts["indexer_rt_bulk"]=="1" )
+		|| ( m_hOpts.Exists ( "pipeline" ) && m_hOpts["pipeline"]=="indexer_rt_bulk" ) )
+	{
+		ReportLogError ( "indexer_rt_bulk assisted writes are unsupported on Elasticsearch /_bulk; use SQL or Manticore /bulk", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+		return false;
+	}
+
 	if ( !Validate() )
 		return false;
-
-	m_bIndexerRtBulk = IsIndexerRtBulk();
-	auto pSession = session::Info().GetClientSession();
-	if ( m_bIndexerRtBulk )
-		pSession->m_bIndexerRtBulk = true;
-	AT_SCOPE_EXIT ( [pSession, bIndexerRtBulk=m_bIndexerRtBulk] {
-		if ( bIndexerRtBulk )
-		{
-			CleanupIndexerRtBulk ( *pSession );
-			pSession->m_bIndexerRtBulk = false;
-		}
-	});
 
 	auto & tCrashQuery = GlobalCrashQueryGetRef();
 	tCrashQuery.m_dQuery = S2B ( GetBody() );
@@ -3706,41 +3720,6 @@ bool HttpHandlerEsBulk_c::Process()
 
 			if ( !HttpCheckPerms ( session::GetUser(), AuthAction_e::WRITE, tDoc.m_sIndex, m_eHttpCode, m_sError, m_dData ) )
 				return false;
-		}
-	}
-
-	if ( m_bIndexerRtBulk )
-	{
-		if ( dDocs.IsEmpty() )
-		{
-			ReportLogError ( "indexer_rt_bulk requires at least one document", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
-			return false;
-		}
-
-		const CSphString & sIndex = dDocs[0].m_sIndex;
-		std::unordered_set<DocID_t> hDocids;
-		for ( const BulkDoc_t & tDoc : dDocs )
-		{
-			if ( tDoc.m_sAction!="index" )
-			{
-				ReportLogError ( "indexer_rt_bulk supports Elasticsearch bulk index actions only", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
-				return false;
-			}
-			if ( tDoc.m_sIndex!=sIndex )
-			{
-				ReportLogError ( "indexer_rt_bulk requires one target table per request", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
-				return false;
-			}
-			if ( tDoc.m_eDocid!=BulkDocid_e::NUMERIC || !tDoc.m_tDocid )
-			{
-				ReportLogError ( "indexer_rt_bulk requires an explicit non-zero numeric _id", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
-				return false;
-			}
-			if ( !hDocids.insert ( tDoc.m_tDocid ).second )
-			{
-				ReportLogError ( "indexer_rt_bulk requires unique document ids within one request", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
-				return false;
-			}
 		}
 	}
 
@@ -3867,9 +3846,6 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 				dErrors.Add ( { iDoc, m_sError } );
 				continue;
 			}
-			// Atomic plain-chunk attachment replaces matching ids; feed the reserved ES index action through the INSERT-only CSV serializer.
-			if ( m_bIndexerRtBulk && tStmt.m_eStmt==STMT_REPLACE )
-				tStmt.m_eStmt = STMT_INSERT;
 			bool bAction = false;
 			JsonObj_c tResult = JsonNull;
 
@@ -3926,16 +3902,6 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			}
 		}
 
-		if ( m_bIndexerRtBulk && !dErrors.IsEmpty() )
-		{
-			ProcessRollback ( FromStr ( sIdx ) );
-			session::SetInTrans ( false );
-			bOk = false;
-			for ( const auto & tErr : dErrors )
-				AddEsError ( tErr.first, tErr.second, "mapper_parsing_exception", dDocs[tErr.first], tItems );
-			continue;
-		}
-
 		// FIXME!!! check commit of empty accum
 		JsonObj_c tResult;
 		DocID_t tDocId = 0;
@@ -3949,7 +3915,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 				CSphString sUpdError;
 				sUpdError.SetSprintf ( "[_doc][%s]: document missing", tUpdDoc.m_sDocid.scstr() );
 				AddEsError ( -1, sUpdError, "document_missing_exception", tUpdDoc, tItems );
-			} else if ( !m_bIndexerRtBulk )
+			} else
 			{
 				for ( int i=0; i<tTnx.m_iCount; i++ )
 					AddEsReply ( dDocs[tTnx.m_iFrom+i], tItems );

@@ -41,7 +41,7 @@ public:
 	bool	IterateKillListNext ( DocID_t & ) override				{ return false; }
 
 	void	Setup ( const CSphSourceSettings & tSettings, StrVec_t * pWarnings ) override;
-	bool	SetupPipe ( const CSphConfigSection & hSource, FILE * pPipe, CSphString & sError );
+	bool	SetupPipe ( const CSphConfigSection & hSource, FILE * pPipe, bool bOwnPipe, CSphString & sError );
 
 protected:
 	enum ESphParseResult
@@ -61,6 +61,7 @@ protected:
 	CSphFixedVector<int>		m_dFieldLengths {0};
 
 	FILE *						m_pFP = nullptr;
+	bool						m_bOwnPipe = false;
 	int							m_iDataStart = 0;	///< where the next line to parse starts in m_dBuf
 	int							m_iDocStart = 0;	///< where the last parsed document stats in m_dBuf
 	int							m_iBufUsed = 0;		///< bytes [0,m_iBufUsed) are actually currently used; the rest of m_dBuf is free
@@ -103,7 +104,7 @@ CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * 
 {
 	CSphString sError;
 	auto * pTSV = new CSphSource_TSV(sSourceName);
-	if ( !pTSV->SetupPipe ( *pSource, pPipe, sError ) )
+	if ( !pTSV->SetupPipe ( *pSource, pPipe, true, sError ) )
 	{
 		SafeDelete ( pTSV );
 		fprintf ( stdout, "ERROR: tsvpipe: %s", sError.cstr() );
@@ -113,13 +114,13 @@ CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * 
 }
 
 
-CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName )
+CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool bOwnPipe )
 {
 	CSphString sError;
 	auto sDelimiter = pSource->GetStr ( "csvpipe_delimiter" );
 	auto * pCSV = new CSphSource_CSV(sSourceName);
 	pCSV->SetDelimiter ( sDelimiter.cstr() );
-	if ( !pCSV->SetupPipe ( *pSource, pPipe, sError ) )
+	if ( !pCSV->SetupPipe ( *pSource, pPipe, bOwnPipe, sError ) )
 	{
 		SafeDelete ( pCSV );
 		fprintf ( stdout, "ERROR: csvpipe: %s", sError.cstr() );
@@ -141,9 +142,10 @@ CSphSource_BaseSV::~CSphSource_BaseSV ()
 }
 
 
-bool CSphSource_BaseSV::SetupPipe ( const CSphConfigSection & hSource, FILE * pPipe, CSphString & sError )
+bool CSphSource_BaseSV::SetupPipe ( const CSphConfigSection & hSource, FILE * pPipe, bool bOwnPipe, CSphString & sError )
 {
 	m_pFP = pPipe;
+	m_bOwnPipe = bOwnPipe;
 	m_tSchema.Reset ();
 	bool bWordDict = ( m_pDict && m_pDict->GetSettings().IsWordDict() );
 
@@ -276,8 +278,10 @@ void CSphSource_BaseSV::Disconnect()
 {
 	if ( m_pFP )
 	{
-		pclose ( m_pFP );
+		if ( m_bOwnPipe )
+			pclose ( m_pFP );
 		m_pFP = nullptr;
+		m_bOwnPipe = false;
 	}
 
 	m_tHits.Reset();
@@ -857,4 +861,3 @@ void CSphSource_CSV::SetDelimiter ( const char * sDelimiter )
 	if ( sDelimiter && *sDelimiter )
 		m_iDelimiter = *sDelimiter;
 }
-

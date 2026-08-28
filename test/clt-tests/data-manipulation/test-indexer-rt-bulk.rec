@@ -1,0 +1,43 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 <<'SQL'
+DROP TABLE IF EXISTS rt_bulk_sql;
+CREATE TABLE rt_bulk_sql (title TEXT, gid INTEGER DEFAULT 7);
+INSERT INTO rt_bulk_sql(id,title,gid) VALUES (1,'regular row',1);
+SET indexer_rt_bulk=rt_bulk_sql;
+BEGIN;
+INSERT INTO rt_bulk_sql(id,title,gid) VALUES (1,'assisted replacement',11),(2,'assisted row',12);
+COMMIT;
+SET indexer_rt_bulk=0;
+SQL
+––– output –––
+––– input –––
+mysql -N -B -h0 -P9306 -e "SELECT id,title,gid FROM rt_bulk_sql ORDER BY id"
+––– output –––
+1	assisted replacement	11
+2	assisted row	12
+––– input –––
+mysql -h0 -P9306 <<'SQL'
+SET indexer_rt_bulk=rt_bulk_sql;
+INSERT INTO rt_bulk_sql(id,title,gid) VALUES (3,'rolled back row',13);
+ROLLBACK;
+SET indexer_rt_bulk=0;
+SQL
+mysql -N -B -h0 -P9306 -e "SELECT COUNT(*) FROM rt_bulk_sql"
+––– output –––
+2
+––– input –––
+out=$(mysql --force -h0 -P9306 2>&1 <<'SQL'
+SET indexer_rt_bulk=rt_bulk_sql;
+INSERT INTO rt_bulk_sql(unknown_column) VALUES ('rejected before staging');
+INSERT INTO rt_bulk_sql(id,title) VALUES (4,'valid after error');
+COMMIT;
+SET indexer_rt_bulk=0;
+SQL
+); rows=$(mysql -N -B -h0 -P9306 -e "SELECT id,title,gid FROM rt_bulk_sql WHERE id=4"); expected=$(printf '4\tvalid after error\t7'); if printf '%s\n' "$out" | grep -qi 'unknown column' && [ "$rows" = "$expected" ]; then echo ASSISTED_COLUMN_VALIDATION_OK; else printf 'FAIL_ASSISTED_COLUMN_VALIDATION output=%s rows=%s\n' "$out" "$rows"; fi
+––– output –––
+ASSISTED_COLUMN_VALIDATION_OK
+––– input –––
+chunks=$(mysql -N -B -h0 -P9306 -e "SHOW TABLE rt_bulk_sql STATUS LIKE 'disk_chunks'" | awk '{print $2}'); root=/var/lib/manticore/rt_bulk_sql/rt_bulk_sql.indexer-rt-bulk; if [ "$chunks" = 2 ] && [ ! -e "$root" ]; then echo ASSISTED_SQL_PUBLISHED; else echo "FAIL_ASSISTED_SQL chunks=$chunks staging=$root"; fi
+––– output –––
+ASSISTED_SQL_PUBLISHED

@@ -1825,8 +1825,7 @@ set_stmt:
 		}
 	| TOK_SET ident_for_set_stmt '=' set_string_value
 		{
-			pParser->SetLocalStatement ( $2 );
-			pParser->ToString ( pParser->m_pStmt->m_sSetValue, $4 );
+			pParser->SetLocalStatement ( $2, $4 );
 		}
 	| TOK_SET ident_for_set_stmt '=' TOK_NULL
 		{

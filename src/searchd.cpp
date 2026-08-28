@@ -2521,6 +2521,19 @@ static void DoCommandUpdate ( const CSphString & sIndex, const CSphString& sClus
 	bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails )
 {
 	TRACE_CORO ( "rt", "DoCommandUpdate" );
+	auto pServed = GetServed ( sIndex );
+	if ( !pServed )
+	{
+		dFails.Submit ( sIndex, sDistributed, "requires an existing table" );
+		return;
+	}
+
+	Threads::Coro::ScopedDmlWriteTable_c tWriting { pServed->Locker() };
+	if ( !tWriting.CanWrite() )
+	{
+		dFails.Submit ( sIndex, sDistributed, "table is locked" );
+		return;
+	}
 
 	int iUpd = 0;
 	CSphString sWarning;
@@ -4953,6 +4966,12 @@ void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery )
 	auto& sError = pSession->m_sError;
 
 	MEMORY ( MEM_SQL_BEGIN );
+	if ( pSession->m_tIndexerRtBulk.IsEnabled() )
+	{
+		tOut.Ok ( 0 );
+		return;
+	}
+
 	if ( pSession->m_tShardTxn.HasPendingData() )
 	{
 		CSphVector<int64_t> dCommittedDocIDs;
@@ -4974,8 +4993,6 @@ void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery )
 			return tOut.Error ( "%s", sError.cstr() );
 		}
 	}
-	if ( pSession->m_bIndexerRtBulk )
-		CleanupIndexerRtBulk ( *pSession );
 	pSession->m_bInTransaction = true;
 	tOut.Ok ( 0 );
 }
@@ -4992,15 +5009,17 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 	pSession->m_bInTransaction = false;
 	int iDeleted = 0;
 
-	if ( pSession->m_bIndexerRtBulk && !pSession->m_sIndexerRtBulkTable.IsEmpty() )
+	if ( pSession->m_tIndexerRtBulk.IsEnabled() )
 	{
 		if ( !bCommit )
-			CleanupIndexerRtBulk ( *pSession );
+			AbortIndexerRtBulkBatch ( *pSession );
 		else if ( !FinalizeIndexerRtBulk ( *pSession, sError ) )
 		{
 			tOut.Error ( "%s", sError.cstr() );
 			return;
 		}
+		tOut.Ok ( 0 );
+		return;
 	}
 
 	if ( pSession->m_tShardTxn.HasPendingData() )
@@ -5032,6 +5051,23 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 
 		if ( bCommit )
 		{
+			auto pServed = GetServed ( pAccum->GetIndexName() );
+			if ( !pServed )
+			{
+				CleanupAcc ( true, pAccum, sError );
+				tOut.Error ( "%s", sError.cstr() );
+				return;
+			}
+
+			Threads::Coro::ScopedDmlWriteTable_c tWriting { pServed->Locker() };
+			if ( !tWriting.CanWrite() )
+			{
+				sError.SetSprintf ( "table '%s' is locked", pAccum->GetIndexName().cstr() );
+				pAccum->Cleanup();
+				tOut.Error ( "%s", sError.cstr() );
+				return;
+			}
+
 			StatCountCommand ( SEARCHD_COMMAND_COMMIT );
 			if ( !HandleCmdReplicateDelete ( *pAccum, iDeleted ) )
 			{
@@ -5063,6 +5099,15 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	MEMORY ( MEM_SQL_INSERT );
 
 	auto tmStart = sphMicroTimer ();
+	if ( pSession->m_tIndexerRtBulk.IsEnabled() )
+	{
+		EMYSQL_ERR eError;
+		if ( !StageIndexerRtBulk ( *pSession, tStmt, eError, pSession->m_sError ) )
+			tOut.ErrorEx ( eError, pSession->m_sError.cstr() );
+		else
+			tOut.Ok ( tStmt.m_iRowsAffected );
+		return;
+	}
 
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
@@ -5090,18 +5135,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	}
 
 	assert ( pServed );
-	if ( pSession->m_bIndexerRtBulk )
-	{
-		if ( !StageIndexerRtBulk ( *pSession, tStmt, pSession->m_sError ) )
-		{
-			CleanupIndexerRtBulk ( *pSession );
-			tOut.Error ( "%s", pSession->m_sError.cstr() );
-		}
-		else
-			tOut.Ok ( tStmt.m_iRowsAffected );
-		return;
-	}
-	Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+	Threads::Coro::ScopedDmlWriteTable_c tWriting { pServed->Locker() };
 	if ( !tWriting.CanWrite() )
 	{
 		tOut.Error ( "table '%s' is locked", tStmt.m_sIndex.cstr ());
@@ -7708,7 +7742,7 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 		return;
 	}
 
-	Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+	Threads::Coro::ScopedDmlWriteTable_c tWriting { pServed->Locker() };
 	if ( !tWriting.CanWrite() )
 	{
 		dFails.Submit ( sIndex, szDistributed, "table is locked" );
@@ -7800,6 +7834,11 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 	auto* pSession = session::GetClientSession();
 	pSession->FreezeLastMeta();
+	if ( pSession->m_tIndexerRtBulk.IsEnabled() )
+	{
+		tOut.Error ( "indexer_rt_bulk supports INSERT only" );
+		return;
+	}
 	auto& sWarning = pSession->m_tLastMeta.m_sWarning;
 	StatCountCommand ( SEARCHD_COMMAND_UPDATE );
 
@@ -8777,7 +8816,7 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 		return 0;
 	}
 
-	Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+	Threads::Coro::ScopedDmlWriteTable_c tWriting { pServed->Locker() };
 	if ( !tWriting.CanWrite() )
 		return err ( "table is locked" );
 
@@ -8856,6 +8895,11 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 	auto* pSession = session::GetClientSession();
 	pSession->FreezeLastMeta();
+	if ( pSession->m_tIndexerRtBulk.IsEnabled() )
+	{
+		tOut.Error ( "indexer_rt_bulk supports INSERT only" );
+		return;
+	}
 	bool bCommit = pSession->m_bAutoCommit && !pSession->m_bInTransaction;
 	auto& tAcc = pSession->m_tAcc;
 	StatCountCommand ( SEARCHD_COMMAND_DELETE );
@@ -9402,10 +9446,14 @@ static bool HandleSetLocal ( CSphString& sError, const CSphString& sName, int64_
 	if ( sName == "autocommit" )
 	{
 		// per-session AUTOCOMMIT
-		bool bAutoCommit = ( iSetValue != 0 );
 		auto pSession = session::Info().GetClientSession();
-		if ( !pSession->m_sIndexerRtBulkTable.IsEmpty() )
-			CleanupIndexerRtBulk ( *pSession );
+		if ( pSession->m_tIndexerRtBulk.IsEnabled() )
+		{
+			sError = "autocommit cannot be changed while indexer_rt_bulk is active";
+			return true;
+		}
+
+		bool bAutoCommit = ( iSetValue != 0 );
 		pSession->m_bAutoCommit = bAutoCommit;
 		pSession->m_bInTransaction = false;
 
@@ -9425,15 +9473,6 @@ static bool HandleSetLocal ( CSphString& sError, const CSphString& sName, int64_
 			TlsMsg::MoveError(sError);
 			return false;
 		}
-		return true;
-	}
-
-	if ( sName == "indexer_rt_bulk" )
-	{
-		auto pSession = session::Info().GetClientSession();
-		if ( !iSetValue )
-			CleanupIndexerRtBulk ( *pSession );
-		pSession->m_bIndexerRtBulk = !!iSetValue;
 		return true;
 	}
 
@@ -9824,6 +9863,25 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 	switch ( tStmt.m_eSet )
 	{
 	case SET_LOCAL: // SET foo = value|'svalue'|null
+		if ( tStmt.m_sSetName=="indexer_rt_bulk" )
+		{
+			auto pSession = session::Info().GetClientSession();
+			bool bOk = false;
+			if ( !tStmt.m_sIndex.IsEmpty() )
+				bOk = ActivateIndexerRtBulk ( *pSession, tStmt.m_sIndex, sError );
+			else if ( !tStmt.m_iSetValue )
+			{
+				CleanupIndexerRtBulk ( *pSession );
+				bOk = true;
+			} else
+				sError = "indexer_rt_bulk requires a target table; use SET indexer_rt_bulk=<table>";
+
+			if ( bOk )
+				tOut.Ok();
+			else
+				tOut.ErrorEx ( "%s", sError.cstr() );
+			return;
+		}
 
 		if ( !HandleSetLocal ( sError, tStmt.m_sSetName, tStmt.m_iSetValue, tStmt.m_sSetValue, tAcc) )
 		{
@@ -10017,20 +10075,23 @@ void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString
 }
 
 
-bool AttachIndexerRtBulkChunk ( const CSphString & sTable, int64_t iIndexId, const CSphString & sPath, CSphString & sError )
+DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const ServedIndexWriteReservation_c & tReservation, int64_t iIndexId, int iAlterGeneration, const CSphString & sPath, bool & bTargetStale, CSphString & sError )
 {
+	bTargetStale = false;
 	auto pServed = GetServed ( sTable );
-	if ( !ServedDesc_t::IsMutable ( pServed ) )
+	if ( !tReservation.Matches ( pServed ) )
 	{
-		sError.SetSprintf ( "table '%s' disappeared while finalizing indexer RT bulk", sTable.cstr() );
-		return false;
+		bTargetStale = true;
+		sError.SetSprintf ( "table '%s' was replaced while finalizing indexer RT bulk", sTable.cstr() );
+		return DiskAttachRes_e::NOT_ATTACHED;
 	}
 	{
 		RIdx_T<RtIndex_i *> pRt { pServed };
-		if ( pRt->GetIndexId()!=iIndexId )
+		if ( pRt->GetIndexId()!=iIndexId || pRt->GetAlterGeneration()!=iAlterGeneration )
 		{
-			sError.SetSprintf ( "table '%s' was replaced while finalizing indexer RT bulk", sTable.cstr() );
-			return false;
+			bTargetStale = true;
+			sError.SetSprintf ( "table '%s' was altered while finalizing indexer RT bulk", sTable.cstr() );
+			return DiskAttachRes_e::NOT_ATTACHED;
 		}
 	}
 
@@ -10039,38 +10100,45 @@ bool AttachIndexerRtBulkChunk ( const CSphString & sTable, int64_t iIndexId, con
 	if ( !pPlain->Prealloc ( false, nullptr, dWarnings ) )
 	{
 		sError.SetSprintf ( "failed loading indexer RT bulk chunk: %s", pPlain->GetLastError().cstr() );
-		return false;
+		return DiskAttachRes_e::NOT_ATTACHED;
 	}
 
 	if ( pPlain->GetMatchSchema().HasKNNAttrs() && !pPlain->AlterKNN ( sError ) )
 	{
 		sError.SetSprintf ( "failed building KNN index for indexer RT bulk chunk: %s", sError.cstr() );
-		return false;
+		return DiskAttachRes_e::NOT_ATTACHED;
 	}
 
 	bool bFatal = false;
-	bool bAttached = false;
+	auto eResult = DiskAttachRes_e::NOT_ATTACHED;
 	{
 		auto pCurrent = GetServed ( sTable );
-		if ( !ServedDesc_t::IsMutable ( pCurrent ) )
+		if ( !tReservation.Matches ( pCurrent ) )
 		{
-			sError.SetSprintf ( "table '%s' disappeared while finalizing indexer RT bulk", sTable.cstr() );
-			return false;
+			bTargetStale = true;
+			sError.SetSprintf ( "table '%s' was replaced while finalizing indexer RT bulk", sTable.cstr() );
+			return DiskAttachRes_e::NOT_ATTACHED;
 		}
 
 		WIdx_T<RtIndex_i *> pRt { pCurrent };
 		auto pRegistered = GetServed ( sTable );
-		if ( pRegistered.Ptr()!=pCurrent.Ptr() || pRt->GetIndexId()!=iIndexId )
+		if ( !tReservation.Matches ( pRegistered ) || pRt->GetIndexId()!=iIndexId || pRt->GetAlterGeneration()!=iAlterGeneration )
 		{
-			sError.SetSprintf ( "table '%s' was replaced while finalizing indexer RT bulk", sTable.cstr() );
-			return false;
+			bTargetStale = true;
+			sError.SetSprintf ( "table '%s' changed while finalizing indexer RT bulk", sTable.cstr() );
+			return DiskAttachRes_e::NOT_ATTACHED;
+		}
+		if ( !pRt->CanAttachDiskIndex ( pPlain.get(), sError ) )
+		{
+			bTargetStale = true;
+			return DiskAttachRes_e::NOT_ATTACHED;
 		}
 
-		bAttached = pRt->AttachDiskIndex ( pPlain.get(), false, bFatal, sError );
+		eResult = pRt->AttachDiskIndexWithMeta ( pPlain.get(), false, bFatal, sError );
 	}
-	if ( bAttached )
+	if ( eResult!=DiskAttachRes_e::NOT_ATTACHED )
 		pPlain.release();
-	return bAttached;
+	return eResult;
 }
 
 
@@ -10134,7 +10202,7 @@ void HandleMysqlFlush ( RowBuffer_i & tOut, const SqlStmt_t & )
 }
 
 // same for select ... from index.files
-void HandleSelectFiles ( RowBuffer_i & tOut, const CSphString & sIndex, const CSphString & sThreadFormat )
+void HandleSelectFiles ( RowBuffer_i & tOut, const CSphString & sIndex, const CSphString & sFilesFormat )
 {
 	tOut.HeadBegin ();
 	tOut.HeadColumn ( "file" );
@@ -10150,11 +10218,60 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const CSphString & sIndex, const CS
 		return;
 	}
 
+	if ( !sFilesFormat.IsEmpty() && sFilesFormat!="default" && sFilesFormat!="all" && sFilesFormat!="external" && sFilesFormat!="indexer_rt_bulk" )
+	{
+		CSphString sError;
+		sError.SetSprintf ( "unknown FILES format '%s'", sFilesFormat.cstr() );
+		tOut.Error ( sError.cstr() );
+		return;
+	}
+
+	if ( sFilesFormat=="indexer_rt_bulk" )
+	{
+		if ( pServed->m_eType!=IndexType_e::RT )
+		{
+			tOut.Error ( "FILES format 'indexer_rt_bulk' requires an RT table" );
+			return;
+		}
+
+		if ( ServedDesc_t::IsCluster ( pServed ) )
+		{
+			tOut.Error ( "FILES format 'indexer_rt_bulk' does not support cluster tables" );
+			return;
+		}
+
+		CSphString sRoot;
+		{
+			RIdx_T<const RtIndex_i *> pRt { pServed };
+			sRoot = GetIndexerRtBulkRoot ( *pRt.Ptr() );
+		}
+		pServed = nullptr;
+
+		CSphVector<IndexerRtBulkFile_t> dStagingFiles;
+		CSphString sError;
+		if ( !ListIndexerRtBulkFiles ( sRoot, dStagingFiles, sError ) )
+		{
+			tOut.Error ( sError.cstr() );
+			return;
+		}
+
+		for ( const auto & tFile : dStagingFiles )
+		{
+			tOut.PutString ( tFile.m_sPath );
+			tOut.PutString ( sphNormalizePath ( tFile.m_sPath ) );
+			tOut.PutInt64 ( tFile.m_iSize );
+			if ( !tOut.Commit() )
+				return;
+		}
+		tOut.Eof();
+		return;
+	}
+
 	StrVec_t dFiles;
 	StrVec_t dExt;
 	RIdx_c ( pServed )->GetIndexFiles ( dFiles, dExt );
 
-	auto sFormat = sThreadFormat;
+	auto sFormat = sFilesFormat;
 	if ( sFormat!="external" )
 		ARRAY_CONSTFOREACH( i, dFiles )
 		{
@@ -10178,6 +10295,42 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const CSphString & sIndex, const CS
 		}
 	}
 	tOut.Eof();
+}
+
+
+static void HandleMysqlPurge ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+{
+	if ( !sphCheckWeCanModify ( tOut ) )
+		return;
+
+	if ( tStmt.m_ePurgeTarget!=PurgeTarget_e::INDEXER_RT_BULK )
+	{
+		tOut.Error ( "unsupported PURGE target" );
+		return;
+	}
+
+	auto pServed = GetServed ( tStmt.m_sIndex );
+	if ( !pServed || pServed->m_eType!=IndexType_e::RT || ServedDesc_t::IsCluster ( pServed ) )
+	{
+		tOut.ErrorEx ( "PURGE INDEXER_RT_BULK requires an existing local RT table; table '%s' is absent or unsupported", tStmt.m_sIndex.cstr() );
+		return;
+	}
+
+	CSphString sRoot;
+	{
+		RIdx_T<const RtIndex_i *> pRt { pServed };
+		sRoot = GetIndexerRtBulkRoot ( *pRt.Ptr() );
+	}
+	pServed = nullptr;
+
+	CSphString sError;
+	if ( !RemoveIndexerRtBulkRoot ( sRoot, sError ) )
+	{
+		tOut.Error ( sError.cstr() );
+		return;
+	}
+
+	tOut.Ok();
 }
 
 // fwd
@@ -12363,6 +12516,12 @@ void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const SqlStmt_t& tStmt, CSphS
 			dNonlockedIndexes.Add ( sIndex );
 			continue;
 		}
+		Threads::Coro::ScopedFreezeTransition_c tFreezing { pIndex->Locker() };
+		if ( !tFreezing.CanFreeze() )
+		{
+			dNonlockedIndexes.Add ( sIndex );
+			continue;
+		}
 
 		// here we get non-locked instance to avoid deadlock with update.
 		// Deadlock happens by this sequence:
@@ -12481,8 +12640,12 @@ void HandleMysqlShowLocks ( RowBuffer_i & tOut )
 		}
 		if ( ServedDesc_t::IsLocal ( pIndex ) )
 		{
-			const int iRLocks = pIndex->GetReadLocks();
+			const auto tLocks = pIndex->GetLocks();
+			const int iRLocks = tLocks.m_uReads;
 			if ( iRLocks>0 && !fnLine ( dPair, iRLocks, "read" ) )
+				return;
+
+			if ( tLocks.m_bWriteAllowReaders && !fnLine ( dPair, 1, "write_allow_readers" ) )
 				return;
 		}
 	}
@@ -12532,16 +12695,23 @@ void HandleMysqlLockTables ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphSt
 		auto pLocal = GetServed ( sIndex );
 		if ( !(pLocal && ServedDesc_t::IsLocal ( pLocal ) ) )
 		{
+			UnlockTables(pSess);
 			tOut.ErrorEx ( "Table %s absent, or not suitable for lock", sIndex.cstr() );
 			return;
 		}
 		if ( ServedDesc_t::IsCluster ( pLocal ) )
 		{
+			UnlockTables(pSess);
 			tOut.ErrorEx ( "Table %s is member of a cluster; not suitable for lock", sIndex.cstr() );
 			return;
 		}
 
-		pLocal->LockRead();
+		if ( !pLocal->LockRead() )
+		{
+			UnlockTables(pSess);
+			tOut.ErrorEx ( "table '%s' is locked", sIndex.cstr() );
+			return;
+		}
 		pSess->m_dLockedTables.Add(sIndex);
 		sphLogDebug ( "Locked %s", sIndex.cstr() );
 	}
@@ -12864,6 +13034,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	case STMT_DROP_CACHE:
 		m_tLastMeta = CSphQueryResultMeta();
 		HandleMysqlDropCache ( tOut );
+		return true;
+
+	case STMT_PURGE:
+		HandleMysqlPurge ( tOut, *pStmt );
 		return true;
 
 	case STMT_SHOW_CREATE_TABLE:

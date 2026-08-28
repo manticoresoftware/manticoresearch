@@ -3,7 +3,6 @@
 
 <requires>
 <lemmatizer_base/>
-<non-rt-indexer/>
 </requires>
 
 <name>aot morphology for english and german</name>

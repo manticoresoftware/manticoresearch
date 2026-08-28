@@ -40,10 +40,10 @@ if ( !is_array($args) || empty($args) )
 	print ( "--strict\t\tterminate on the first failure (for automatic runs)\n" );
 	print ( "--strict-verbose\tterminate on the first failure and copy the last report to report.txt (for automatic runs)\n" );
 	print ( "--managed\t\tdon't run searchd during test (for debugging)\n" );
-	print ( "--skip-indexer		skip DB creation and indexer stages and go directly to queries/custom tests\n");
-	print ( "--rt			test RT backend (auto-convert all local indexes)\n" );
-	print ( "--rt-indexer		test RT backend and load converted indexes through indexer\n" );
-	print ( "--columnar			test attrs as columnar\n" );
+	print ( "--skip-indexer\t\tskip DB creation and indexer stages and go directly to queries/custom tests\n");
+	print ( "--rt\t\t\ttest RT backend (auto-convert all local indexes)\n" );
+	print ( "--rt-indexer\t\ttest RT backend and load converted indexes through indexer\n" );
+	print ( "--columnar\t\t\ttest attrs as columnar\n" );
 	print ( "--no-drop-db\t\tKeep test db tables after the test (for debugging)\n");
 	print ( "--keep-all\t\tKeep test db and all test data (like generated configs, etc.) after the test (for debugging)\n");
 	print ( "--no-demo\t\tJust skip all tests without models. Else - run them, but never fail (for debugging)\n");
@@ -191,12 +191,7 @@ $index_data_path = $locals['testdir'].$index_data_prefix;
 PublishLocals ( $locals, false );
 
 if ( !empty ( $locals['rt_indexer_mode'] ) )
-{
-	if ( $windows )
-		die ( "--rt-indexer is not supported on Windows\n" );
-
 	putenv ( "MANTICORE_NO_BUDDY=1" );
-}
 
 if ( !getenv("MANTICORE_MODULES") )
 {

@@ -402,6 +402,7 @@ public:
 	void			AliasLastWhereItem ( const SqlNode_t & tAlias );
 	void			AddConst ( int iList, const SqlNode_t& tValue );
 	void			SetLocalStatement ( const SqlNode_t & tName );
+	void			SetLocalStatement ( const SqlNode_t & tName, const SqlNode_t & tValue );
 	bool			AddFloatRangeFilter ( const SqlNode_t & tAttr, float fMin, float fMax, bool bHasEqual, bool bExclude=false );
 	bool			AddFloatFilterGreater ( const SqlNode_t & tAttr, float fVal, bool bHasEqual );
 	bool			AddFloatFilterLesser ( const SqlNode_t & tAttr, float fVal, bool bHasEqual );
@@ -2154,6 +2155,20 @@ void SqlParser_c::SetLocalStatement ( const YYSTYPE & tName )
 	m_pStmt->m_eStmt = STMT_SET;
 	m_pStmt->m_eSet = SET_LOCAL;
 	ToString ( m_pStmt->m_sSetName, tName );
+}
+
+void SqlParser_c::SetLocalStatement ( const YYSTYPE & tName, const YYSTYPE & tValue )
+{
+	SetLocalStatement ( tName );
+	ToString ( m_pStmt->m_sSetValue, tValue );
+
+	CSphString sSetName = m_pStmt->m_sSetName;
+	sSetName.ToLower();
+	if ( sSetName=="indexer_rt_bulk" )
+	{
+		ToString ( m_pStmt->m_sIndex, tValue ).Unquote();
+		m_pStmt->m_sIndex.ToLower();
+	}
 }
 
 void SqlParser_c::SwapSubkeys ()

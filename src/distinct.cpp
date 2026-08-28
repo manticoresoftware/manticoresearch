@@ -393,13 +393,7 @@ void UniqHLL_c::Compact ( VecTraits_T<SphGroupKey_t> & dRemoveGroups )
 {
 	for ( auto i : dRemoveGroups )
 	{
-		// a group may be listed twice (or have no container at all); only free what is really there
-		Container_t * pContainer = m_hGroups.Find(i);
-		if ( !pContainer )
-			continue;
-
-		Container_t tContainer = *pContainer;
-		m_hGroups.Delete(i);
+		Container_t tContainer = m_hGroups.FindAndDelete(i);
 		FreeContainer(tContainer);
 	}
 }

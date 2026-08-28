@@ -255,12 +255,7 @@ template <typename KEY, typename VALUE, typename HASHFUNC, typename ENTRY, typen
 VALUE OpenHashTable_T<KEY,VALUE,HASHFUNC,ENTRY,STATE>::FindAndDelete ( KEY k )
 {
 	ENTRY * pEntry = BASE::FindEntry(k);
-
-	// a missing key must yield a default value, never a null dereference: apart from the crash, an
-	// unconditional dereference lets the optimizer remove the empty-slot exit from FindEntry() (it may
-	// assume the key is always found), and a lookup of a missing key then never terminates
-	if ( !pEntry )
-		return VALUE();
+	assert(pEntry);
 
 	VALUE tRes = pEntry->m_Value;
 	BASE::DeleteEntry(pEntry);

@@ -1,0 +1,17 @@
+a:1:{i:0;a:10:{i:0;a:2:{s:8:"sphinxql";s:126:"create table knn_local (
+		embedding float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='cosine' quantization='1bit'
+	)";s:14:"total_affected";i:0;}i:1;a:2:{s:8:"sphinxql";s:70:"insert into knn_local (id, embedding) values (1, (0.1, 0.2, 0.3, 0.4))";s:14:"total_affected";i:1;}i:2;a:3:{s:5:"agent";s:1:"1";s:8:"sphinxql";s:127:"create table knn_remote (
+		embedding float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='cosine' quantization='1bit'
+	)";s:14:"total_affected";i:0;}i:3;a:3:{s:5:"agent";s:1:"1";s:8:"sphinxql";s:71:"insert into knn_remote (id, embedding) values (2, (0.4, 0.3, 0.2, 0.1))";s:14:"total_affected";i:1;}i:4;a:2:{s:8:"sphinxql";s:99:"create table knn_dist type='distributed'
+		local='knn_local'
+		agent='<AGENT1_ADDRESS/>:knn_remote'";s:14:"total_affected";i:0;}i:5;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:169:"{
+	"table": "knn_dist",
+	"_source": { "excludes": ["*"] },
+	"knn": {
+		"field": "embedding",
+		"query": [0.15, 0.25, 0.35, 0.45],
+		"k": 1,
+		"ef": 100
+	},
+	"limit": 1
+}";s:4:"rows";s:126:"{"timed_out":false,"hits":{"total":2,"total_relation":"eq","hits":[{"_id":1,"_score":1,"_knn_dist":0.00203466,"_source":{}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:6;a:3:{s:8:"sphinxql";s:27:"show tables like 'knn_dist'";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:8:"knn_dist";s:4:"Type";s:11:"distributed";}}}i:7;a:2:{s:8:"sphinxql";s:19:"drop table knn_dist";s:14:"total_affected";i:0;}i:8;a:2:{s:8:"sphinxql";s:20:"drop table knn_local";s:14:"total_affected";i:0;}i:9;a:3:{s:5:"agent";s:1:"1";s:8:"sphinxql";s:21:"drop table knn_remote";s:14:"total_affected";i:0;}}}

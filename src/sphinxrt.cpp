@@ -5983,20 +5983,23 @@ bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVe
 }
 
 
-static bool PrepareEmbeddingModelsForSchema ( CSphSchema & tSchema, std::unique_ptr<TableEmbeddings_c> & pEmbeddings, CSphVector<AttrWithModel_t> & dAttrsWithModels, CSphString & sError )
+static bool SchemaHasEmbeddingModels ( const CSphSchema & tSchema )
 {
-	pEmbeddings.reset();
-	dAttrsWithModels.Reset();
-
-	bool bHaveModels = false;
 	for ( int i = 0 ; i < tSchema.GetAttrsCount(); i++ )
-		bHaveModels |= !tSchema.GetAttr(i).m_tKNNModel.m_sModelName.empty();
+		if ( !tSchema.GetAttr(i).m_tKNNModel.m_sModelName.empty() )
+			return true;
 
-	if ( !bHaveModels )
-		return true;
+	return false;
+}
 
+
+// fills the per-attribute model table for tSchema (the accumulator walks it in parallel with the schema attributes,
+// so it must be rebuilt whenever the attributes change); models that tEmbeddings already holds are reused, the
+// others are loaded into it
+static bool PrepareAttrsWithModels ( CSphSchema & tSchema, TableEmbeddings_c & tEmbeddings, CSphVector<AttrWithModel_t> & dAttrsWithModels, CSphString & sError )
+{
+	dAttrsWithModels.Reset();
 	dAttrsWithModels.Resize ( tSchema.GetAttrsCount() );
-	pEmbeddings = std::make_unique<TableEmbeddings_c>();
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		const auto & tAttr = tSchema.GetAttr(i);
@@ -6008,12 +6011,16 @@ static bool PrepareEmbeddingModelsForSchema ( CSphSchema & tSchema, std::unique_
 		if ( !ParseEmbeddingSources ( dAttrsWithModels[i].m_dFrom, tAttr.m_sKNNFrom, tSchema, sError ) )
 			return false;
 
-		if ( !pEmbeddings->Load ( tAttr.m_sName, tAttr.m_tKNNModel, sError ) )
-			return false;
+		auto pModel = tEmbeddings.GetModel ( tAttr.m_sName );
+		if ( !pModel )
+		{
+			if ( !tEmbeddings.Load ( tAttr.m_sName, tAttr.m_tKNNModel, sError ) )
+				return false;
 
-		auto pModel = pEmbeddings->GetModel ( tAttr.m_sName );
+			pModel = tEmbeddings.GetModel ( tAttr.m_sName );
+		}
+
 		assert(pModel);
-
 		dAttrsWithModels[i].m_pModel = pModel;
 
 		// fixme! modifying the schema
@@ -6021,6 +6028,20 @@ static bool PrepareEmbeddingModelsForSchema ( CSphSchema & tSchema, std::unique_
 	}
 
 	return true;
+}
+
+
+// loads the models of tSchema from scratch and fills the per-attribute model table
+static bool PrepareEmbeddingModelsForSchema ( CSphSchema & tSchema, std::unique_ptr<TableEmbeddings_c> & pEmbeddings, CSphVector<AttrWithModel_t> & dAttrsWithModels, CSphString & sError )
+{
+	pEmbeddings.reset();
+	dAttrsWithModels.Reset();
+
+	if ( !SchemaHasEmbeddingModels ( tSchema ) )
+		return true;
+
+	pEmbeddings = std::make_unique<TableEmbeddings_c>();
+	return PrepareAttrsWithModels ( tSchema, *pEmbeddings, dAttrsWithModels, sError );
 }
 
 bool RtIndex_c::LoadEmbeddingModels ( CSphString & sError )
@@ -9894,6 +9915,12 @@ bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD
 	if ( !Alter_AddRemoveFieldFromSchema ( bAdd, tNewSchema, sFieldName, uFieldFlags, sError ) )
 		return false;
 
+	// the embedding sources (FROM=...) are resolved to field ids, so they must follow the new schema;
+	// dropping a field an embedding is built from is refused here
+	CSphVector<AttrWithModel_t> dPreparedAttrsWithModels;
+	if ( m_pEmbeddings && !PrepareAttrsWithModels ( tNewSchema, *m_pEmbeddings, dPreparedAttrsWithModels, sError ) )
+		return false;
+
 	m_tSchema = tNewSchema;
 
 	auto tGuard = RtGuard();
@@ -9908,6 +9935,9 @@ bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD
 		AddFieldToRamchunk ( sFieldName, uFieldFlags, tOldSchema, tNewSchema );
 	else
 		RemoveFieldFromRamchunk ( sFieldName, tOldSchema, tNewSchema );
+
+	if ( m_pEmbeddings )
+		m_dAttrsWithModels.SwapData ( dPreparedAttrsWithModels );
 
 	// fixme: we can't rollback at this point
 	RaiseAlterGeneration();
@@ -9976,7 +10006,18 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 	std::unique_ptr<TableEmbeddings_c> pPreparedEmbeddings;
 	CSphVector<AttrWithModel_t> dPreparedAttrsWithModels;
 
+	// the per-attribute model table is parallel to the schema attributes, so it must be rebuilt on EVERY attribute
+	// change, not only when the added column is model-backed: the accumulator repacks the blob storage of each
+	// inserted document along that table, and a blob attribute added past its end was never copied - an MVA added
+	// with ALTER to a table with an auto-embedding column silently lost every value (manticoresearch#4872).
+	// a model-backed column loads its models from scratch (its settings are new); any other change keeps the loaded ones
 	const bool bModelBackedEmbedding = ( bAdd && IsModelBackedEmbedding ( tNewCtx ) );
+	if ( !bModelBackedEmbedding && m_pEmbeddings )
+	{
+		if ( !PrepareAttrsWithModels ( tNewSchema, *m_pEmbeddings, dPreparedAttrsWithModels, sError ) )
+			return false;
+	}
+
 	if ( bModelBackedEmbedding )
 	{
 		if ( !PrepareEmbeddingModelsForSchema ( tNewSchema, pPreparedEmbeddings, dPreparedAttrsWithModels, sError ) )
@@ -10018,6 +10059,15 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 	{
 		m_pEmbeddings = std::move ( pPreparedEmbeddings );
 		m_dAttrsWithModels.SwapData ( dPreparedAttrsWithModels );
+	}
+	else if ( m_pEmbeddings )
+	{
+		m_dAttrsWithModels.SwapData ( dPreparedAttrsWithModels );
+		if ( !SchemaHasEmbeddingModels ( m_tSchema ) ) // the last model-backed column was dropped
+		{
+			m_pEmbeddings.reset();
+			m_dAttrsWithModels.Reset();
+		}
 	}
 
 	// fixme: we can't rollback at this point

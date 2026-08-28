@@ -336,6 +336,7 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 
 	assert(m_pIndex);
 	const CSphSchema & tSchema = m_pIndex->GetInternalSchema();
+	assert ( dAttrsWithModels.GetLength()==tSchema.GetAttrsCount() ); // the table is walked in parallel with the attributes (manticoresearch#4872)
 
 	// we need to rebuild our blobs/columnar storage (to replace empty data with fetched floatvectors), but they are immutable by design
 	// so we'll have to rebuild the blobs/columnar storage fully

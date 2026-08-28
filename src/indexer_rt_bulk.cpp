@@ -905,6 +905,8 @@ static bool InitIndexerRtBulk ( ClientSession_c & tSession, const RtIndex_i & tR
 		return false;
 	}
 
+	CSphString sConfigLemmatizerBase = EscapeIndexerRtBulkConfigPath ( g_sLemmatizerBase );
+	fprintf ( fpConfig, "common {\n  lemmatizer_base = %s\n}\n\n", sConfigLemmatizerBase.cstr() );
 	fprintf ( fpConfig, "source indexer_rt_bulk_source {\n  type = csvpipe\n  csvpipe_command = -\n" );
 	for ( int i=0; i<tSchema.GetFieldsCount(); ++i )
 	{

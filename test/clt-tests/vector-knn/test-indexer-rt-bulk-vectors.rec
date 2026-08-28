@@ -13,16 +13,16 @@ SET indexer_rt_bulk=0;
 SQL
 ––– output –––
 ––– input –––
-mysql -N -B -h0 -P9306 -e "SELECT id,embedding,raw_vector FROM rt_bulk_vectors ORDER BY id"
+mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,embedding,raw_vector FROM rt_bulk_vectors" | sort -n
 ––– output –––
 1	1.000000,0.000000,0.000000,0.000000	1.000000,2.000000
 2	0.000000,1.000000,0.000000,0.000000	3.000000,4.000000
 3	0.000000,0.000000,1.000000,0.000000	5.000000,6.000000
 ––– input –––
-mysql -N -B -h0 -P9306 -e "SELECT id FROM rt_bulk_vectors WHERE knn(embedding,1,(0,1,0,0))"
+mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id FROM rt_bulk_vectors WHERE knn(embedding,1,(0,1,0,0)) LIMIT 1"
 ––– output –––
 2
 ––– input –––
-chunks=$(mysql -N -B -h0 -P9306 -e "SHOW TABLE rt_bulk_vectors STATUS LIKE 'disk_chunks'" | awk '{print $2}'); if [ "$chunks" = 1 ]; then echo ASSISTED_VECTOR_CHUNK_OK; else echo "FAIL_ASSISTED_VECTOR_CHUNKS=$chunks"; fi
+chunks=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SHOW TABLE rt_bulk_vectors STATUS LIKE 'disk_chunks'" | awk '{print $2}'); if [ "$chunks" = 1 ]; then echo ASSISTED_VECTOR_CHUNK_OK; else echo "FAIL_ASSISTED_VECTOR_CHUNKS=$chunks"; fi
 ––– output –––
 ASSISTED_VECTOR_CHUNK_OK

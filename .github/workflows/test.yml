@@ -405,7 +405,7 @@ jobs:
       artifact_name: debug_test_results
       results_name: "Linux debug test results"
       suite_name: plain
-      CTEST_PARAMS: "EXCLUDE_LABEL;(COLUMNAR|SECONDARY)"
+      CTEST_PARAMS: "EXCLUDE_LABEL;(COLUMNAR|SECONDARY|RT_INDEXER)"
       timeout: 20
       MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
 

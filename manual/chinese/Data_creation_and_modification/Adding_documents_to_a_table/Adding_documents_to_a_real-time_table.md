@@ -846,7 +846,6 @@ CALL UUID_SHORT(3)
 ```
 <!-- end -->
 
-<!-- example bulk_insert -->
 ## 批量添加文档
 你不仅可以向实时表插入单个文档，还可以插入任意数量的文档。向实时表一次插入数万个文档是完全可以的。然而，需要注意以下几点：
 * 批量越大，每次插入操作的延迟越高
@@ -877,6 +876,99 @@ CALL UUID_SHORT(3)
 * 缩短响应时间
 * 允许绕过 [max_packet_size](../../Server_settings/Searchd.md#max_packet_size) 限制，传输远大于最大允许值（128MB）的批量，例如一次 1GB。
 
+### 索引器辅助批量插入
+
+对于向本地实时表进行的大规模只追加加载，Manticore Search 可以通过 `indexer` 流式传递 `INSERT` 行，构建一个磁盘块，并在事务提交时将该块附加到表中。这样就不需要通过常规实时插入路径逐行添加。行在块附加之前保持不可见，失败的操作或 `ROLLBACK` 会让表保持不变。
+
+当你要加载一个大批次，并且直接生成磁盘块比先构建 RAM 块更合适时，使用此模式。它同时支持行式表和列式表，包括全文字段、数值属性、字符串、JSON、MVA/MVA64，以及带 KNN 索引的浮点向量。
+
+受辅助的表名使用规范的小写形式。SQL 设置和 Manticore `/bulk` 查询参数在授权和激活前都会把目标规范化为小写。
+
+#### SQL
+
+为当前 SQL 会话启用该模式，针对绑定的表执行一个或多个 `INSERT` 语句，然后提交：
+
+```sql
+SET indexer_rt_bulk=products;
+INSERT INTO products(id,title,price) VALUES
+  (101,'Crossbody Bag with Tassel',19.85),
+  (102,'Microfiber Sheet Set',19.99);
+INSERT INTO products(id,title,price) VALUES
+  (103,'Pet Hair Remover Glove',7.99);
+COMMIT;
+SET indexer_rt_bulk=0;
+```
+
+`SET indexer_rt_bulk=<table>` 要求会话是干净的，并为该表获取写入保留。搜索仍可用，但其他会话不能在该受保留的表上运行 `INSERT`、`REPLACE`、`UPDATE` 或 `DELETE`。`BEGIN` 和 `START TRANSACTION` 在辅助模式下是可选的兼容性空操作。`COMMIT` 会构建当前磁盘块并将其原子性地附加；`ROLLBACK` 会丢弃当前批次。两者都会让模式和保留状态继续保持，以便处理下一批。辅助模式激活期间不能更改自动提交。`SET indexer_rt_bulk=0` 或关闭连接会丢弃任何待处理批次并释放保留。
+
+#### HTTP `/bulk`
+
+在 Manticore `/bulk` 或 `/json/bulk` 请求中添加 `indexer_rt_bulk=<table>`。请求体仍然使用标准的换行分隔 JSON（NDJSON），且每个操作都必须是绑定表的 `insert` 或 `create`：
+
+```bash
+curl --http1.1 \
+  -H 'Content-Type: application/x-ndjson' \
+  --data-binary $'{"insert":{"table":"products","id":101,"doc":{"title":"Crossbody Bag with Tassel","price":19.85}}}\n{"insert":{"table":"products","id":102,"doc":{"title":"Microfiber Sheet Set","price":19.99}}}\n' \
+  'http://localhost:9308/bulk?indexer_rt_bulk=products' \
+  --next --http1.1 \
+  -H 'Content-Type: application/x-ndjson' \
+  --data-binary $'{"create":{"table":"products","id":103,"doc":{"title":"Pet Hair Remover Glove","price":7.99}}}\n' \
+  'http://localhost:9308/bulk' \
+  --next --http1.1 \
+  -H 'Content-Type: application/x-ndjson' \
+  --data-binary '' \
+  'http://localhost:9308/bulk?indexer_rt_bulk=0'
+```
+
+激活请求不需要保持连接打开。一次性请求会在回复前发布其已完成的分组，并在连接关闭时释放该模式和保留。只有后续请求需要继承当前目标，或者需要显式发送 `indexer_rt_bulk=0` 时，才保持连接持久。HTTP/1.1 默认是持久连接，而 HTTP/1.0 需要 `Connection: keep-alive`。
+
+成功的数据请求会在回复前发布其所有已完成的分组。空行会发布前一个分组，而请求 EOF 会发布最后一个分组。未发布的批次不会跨越响应边界；在持久连接上，只有目标及其保留可以保持激活。后续在该连接上的无参数 `/bulk` 或 `/json/bulk` 请求会继承该目标。一旦激活，会话目标就是权威的；其他带目标值的查询参数不会切换它，而普通 bulk/DML 路径仍会拒绝针对另一张表的操作。激活状态下的 `indexer_rt_bulk=0` 请求会沿用同样的辅助批量处理，然后禁用该模式并释放其保留。它可以携带最后的数据分组；空内容或仅包含空白字符的正文是成功的空操作，只会禁用该模式。
+
+示例使用一个带 `--next` 的 `curl` 进程，因此这三次传输可以复用同一个连接。不同的 `curl` 进程会创建不同会话，彼此不能继承或关闭对方的辅助模式。关于通用连接规则，请参见 [Persistent connections and HTTP state](../../Connecting_to_the_server/HTTP.md#Persistent-connections)。关闭连接也会释放保留。已经处于激活状态的最后一个数据请求可以使用 `Connection: close`；Manticore 会在拆除前先发布该请求。
+
+辅助响应使用普通的 Manticore bulk 信封，并为每个已发布分组包含一个汇总的 `bulk` 项。该端点支持分块传输编码，因此可以把大于 `max_packet_size` 的正文流式传给 `indexer`，而无需把整个请求缓存起来。失败的请求不会发布当前分组，并会关闭该 HTTP 会话；在更早的普通 bulk 边界已经发布的分组，例如空行或表切换，仍然保持可见。
+
+与 Elasticsearch 兼容的 `/_bulk` 不支持辅助模式。干净的 `/_bulk` 会话中的 `indexer_rt_bulk` 查询值不会激活该功能，而且当该连接上已经处于辅助模式时，`/_bulk` 会被拒绝。Fluent Bit 的 Elasticsearch 输出使用的是 `/_bulk`，因此它仍然会使用常规实时插入。
+
+#### 重复文档 ID
+
+辅助模式启动 `indexer` 时会启用重复项移除。对于一个辅助批次，数值型文档 ID 的第一行会保持可见，而后续具有相同 ID 的行会被逻辑移除。对于 SQL，一个批次由 `COMMIT` 或 `ROLLBACK` 之前暂存的行组成。对于 Manticore `/bulk`，在空行、表切换或请求 EOF 时发布的每个分组都是一个单独的批次。
+
+如果目标表中已经可见的 ID 在后续的辅助块中再次出现，那么在该块附加时会用它替换原有内容。这同样适用于先前 HTTP 分组已经发布的 ID。因此，重试一个先前已发布的批次会替换其中的行，而重试批次内部的重复项仍然会保留第一行。辅助 `create` 操作的行为与 `insert` 相同；仅仅因为目标表中已经存在该 ID，它不会失败。
+
+重复项移除行为也可通过普通平面表构建时的 [`indexer --remove_dups`](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) 选项获得。若不使用该选项，独立运行的 `indexer` 会保留重复文档 ID。
+
+#### 暂存文件与清理
+
+在正常的 `COMMIT`、`ROLLBACK`、禁用模式或会话关闭后，Manticore 会移除当前的暂存目录。守护进程或主机崩溃可能会留下一个被遗弃的暂存目录。之后的辅助加载会创建一个新的唯一命名目录，不会重用或附加崩溃加载遗留的文件。
+
+使用以下查询查看某个表的所有辅助暂存条目：
+
+```sql
+SELECT file, normalized, size
+FROM products.@files
+OPTION format='indexer_rt_bulk';
+```
+
+结果会递归列出该表辅助暂存根目录下的文件和目录。目录及其他非普通条目的报告大小为 `0`。
+
+在确认该表没有活动中的辅助加载后，使用 [`PURGE INDEXER_RT_BULK`](../../Node_info_and_management/PURGE.md#PURGE-INDEXER_RT_BULK) 删除其整个辅助暂存根目录：
+
+```sql
+PURGE INDEXER_RT_BULK FROM TABLE products;
+```
+
+`PURGE` 要求目标是一个已存在的本地实时表，且它不属于复制集群。它只会移除辅助暂存状态，不会改变表结构或已索引的行。如果暂存根目录不存在，它会作为空操作成功返回。在无配置模式下，`DROP TABLE` 也会移除该表的辅助暂存根目录。
+
+#### 当前限制
+
+* 目标必须是一个已存在、未冻结的本地实时表，并且不能是复制集群成员。分布式表、分片表、复制表、percolate 表和普通表都不受支持。
+* SQL 只支持 `INSERT`。Manticore `/bulk` 接受 `insert` 和 `create`；`index`、`replace`、`update` 和 `delete` 会被拒绝。
+* 每一行都必须提供显式的数值型、非零文档 ID。不支持自动生成的和 UUID 文档 ID。
+* 不支持静态构建。动态 Linux 和 Windows 构建会解析运行中的 `searchd` 旁边、按平台命名的 `indexer` 可执行文件；当前未声明支持 macOS。
+* `indexer` 可执行文件必须来自与 `searchd` 相同的 Manticore Search 构建或安装。Manticore Search 只会解析那个同级可执行文件，不会搜索 `PATH`。如果它缺失或无法执行，只有辅助插入会失败，正常启动和常规插入仍然可用。
+
+<!-- example bulk_insert -->
 <!-- intro -->
 ### 批量插入示例
 ##### SQL:
@@ -909,7 +1001,7 @@ Query OK, 3 rows affected (0.01 sec)
 * `Content-Type: application/x-ndjson`
 * 数据格式应为换行分隔 JSON（NDJSON）。本质上，这意味着每行应仅包含一条 JSON 声明，并以换行符 `\n`（可能还有 `\r`）结尾。
 
-`/bulk` 端点支持 'insert'、'replace'、'delete' 和 'update' 查询。请注意，您可以将操作定向到多个表，但事务仅适用于单个表。如果指定了多个表，Manticore 会将针对一个表的操作收集到单个事务中。当表发生变化时，它将提交已收集的操作，并在新表上启动新的事务。分隔批次的空行也会导致提交前一批次并开始新事务。
+`/bulk` 端点支持 `'insert'`、`'replace'`、`'delete'` 和 `'update'` 查询。请注意，你可以把操作定向到多张表，但事务只能针对单张表。如果你指定了多张，Manticore 会把指向同一张表的操作收集到一个事务中。当表发生变化时，它会提交已收集的操作并启动新的事务。分隔批次的空行也会导致提交前一个批次并启动新的事务。没有任何操作的请求，无论正文是空的还是只包含空行或仅空白字符行，都会作为成功的空操作返回一个空的 `items` 数组。
 
 在 `/bulk` 请求的响应中，您可以找到以下字段：
 * "errors"：显示是否发生了任何错误（true/false）

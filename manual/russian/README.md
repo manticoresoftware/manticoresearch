@@ -165,6 +165,7 @@
     * [• SHOW QUERIES](Node_info_and_management/SHOW_QUERIES.md)
     * [• SHOW VERSION](Node_info_and_management/SHOW_VERSION.md)
     * [• KILL](Node_info_and_management/KILL.md)
+    * [• PURGE](Node_info_and_management/PURGE.md)
     * [• SHOW WARNINGS](Node_info_and_management/SHOW_WARNINGS.md)
     * [• SHOW VARIABLES](Node_info_and_management/SHOW_VARIABLES.md)
     * [≫ Профилирование]

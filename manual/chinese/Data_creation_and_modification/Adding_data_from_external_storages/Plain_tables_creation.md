@@ -109,6 +109,11 @@ systemctl restart manticore-indexer
   ```shell
   sudo -u manticore indexer --rotate --all --noprogress
   ```
+* `--remove_dups` 在构建普通表时会逻辑上移除重复的数字文档 ID。每个 ID 最先索引的那一行会保持可见；后续具有相同 ID 的行会被标记为已失效。若不使用此选项，`indexer` 会保留重复 ID。示例用法：
+
+  ```shell
+  sudo -u manticore indexer --config /home/myuser/manticore.conf --remove_dups mytable
+  ```
 * `--buildstops <outputfile.text> <N>` 会审查表源，就像正在对数据进行索引一样，并生成正在被索引的术语列表。换句话说，它生成所有成为表一部分的可搜索术语列表。注意，它不会更新表本身，只是像索引那样处理数据，包括运行通过[sql_query_pre](../../Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md#sql_query_pre)或[sql_query_post](../../Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md#sql_query_post)定义的查询。`outputfile.txt` 将包含按频率排序的一系列单词列表，最频繁出现的单词排在前面，`N` 指定要列出的最大单词数。如果足够大以涵盖表中的每个单词，则只会返回这么多单词。这样的词典列表可以用于客户端应用程序中的“您是否是指…”功能，通常与 `--buildfreqs` 结合使用。示例：
 
   ```shell
@@ -305,4 +310,3 @@ ignore_non_plain = 1
    systemctl start manticore-indexer@idx1.timer
    ```
 5. 对于任何其他定时器重复步骤2-4。
-

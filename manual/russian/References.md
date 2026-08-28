@@ -113,6 +113,9 @@
 * [ENABLE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#ENABLE-BUDDY-PLUGIN) - повторная активация ранее отключенного Buddy плагина
 * [DISABLE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#DISABLE-BUDDY-PLUGIN) - деактивация активного Buddy плагина
 
+##### Управление узлом
+* [PURGE](Node_info_and_management/PURGE.md) - Удаляет выбранные данные, связанные с таблицей
+
 ##### Статус сервера
 * [SHOW STATUS](Node_info_and_management/Node_status.md#SHOW-STATUS) - вывод ряда полезных счетчиков производительности
 * [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) - список всех текущих активных клиентских потоков
@@ -416,6 +419,7 @@ indexer [OPTIONS] [indexname1 [indexname2 [...]]]
 * [--merge](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Объединяет две простые таблицы в одну
 * [--nohup](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Предотвращает отправку индексатором сигнала SIGHUP при включении данной опции
 * [--noprogress](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Скрывает подробности прогресса
+* [--remove_dups](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Логически удаляет повторяющиеся числовые ID документов, сохраняя первую строку
 * [--print-queries](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Выводит SQL-запросы, отправляемые индексатором в базу данных
 * [--print-rt](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Показывает данные, полученные из SQL источника(-ов), в виде INSERT-запросов в таблицу реального времени
 * [--quiet](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Подавляет весь вывод

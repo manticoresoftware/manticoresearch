@@ -1,17 +1,83 @@
-chown -R %{manticore_user}:%{manticore_group} @CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore
+# Helper function for directory creation
+create_runtime_dir() {
+    /bin/mkdir -p "@CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore" >/dev/null 2>&1 && return 0 || return 1
+}
 
-/bin/systemctl daemon-reload >/dev/null 2>&1 || :
+# Helper function for ownership setting
+set_runtime_ownership() {
+    if getent passwd %{manticore_user} >/dev/null 2>&1 && \
+       getent group %{manticore_group} >/dev/null 2>&1; then
+        chown -R %{manticore_user}:%{manticore_group} "@CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore" >/dev/null 2>&1 && return 0 || return 1
+    else
+        echo "  Warning: User %{manticore_user} or group %{manticore_group} not found" >&2
+        return 1
+    fi
+}
+
+# Reload systemd daemon with error logging
+/bin/systemctl daemon-reload >/dev/null 2>&1 || {
+    echo "  Warning: Failed to reload systemd daemon" >&2
+}
+
 if [ $1 == 1 ]; then
-    /usr/bin/systemctl enable manticore >/dev/null 2>&1 || :
-	systemd-tmpfiles --create /usr/lib/tmpfiles.d/searchd.conf
+    # Check if systemd is running before enabling service
+    if /bin/systemctl is-system-running >/dev/null 2>&1; then
+        /usr/bin/systemctl enable manticore >/dev/null 2>&1 || {
+            echo "  Warning: Failed to enable manticore service" >&2
+        }
+    fi
+
+    # Create runtime directory with robust fallback
+    if command -v systemd-tmpfiles >/dev/null 2>&1 || \
+       [ -x "/usr/bin/systemd-tmpfiles" ] || \
+       [ -x "/bin/systemd-tmpfiles" ]; then
+
+        # Check if tmpfiles.d config exists
+        if [ -f "/usr/lib/tmpfiles.d/searchd.conf" ]; then
+            systemd-tmpfiles --create /usr/lib/tmpfiles.d/searchd.conf >/dev/null 2>&1 || {
+                echo "  Warning: systemd-tmpfiles failed, using manual directory creation" >&2
+                create_runtime_dir || echo "  Warning: Failed to create runtime directory" >&2
+            }
+        else
+            echo "  Warning: tmpfiles.d config missing, using manual directory creation" >&2
+            create_runtime_dir || echo "  Warning: Failed to create runtime directory" >&2
+        fi
+    else
+        # systemd-tmpfiles not available, create directory manually
+        create_runtime_dir || echo "  Warning: Failed to create runtime directory" >&2
+    fi
+
+    # Set ownership with validation
+    if [ -d "@CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore" ]; then
+        set_runtime_ownership || echo "  Warning: Failed to set ownership on runtime directory" >&2
+    else
+        echo "  Warning: Runtime directory does not exist, cannot set ownership" >&2
+    fi
 fi
 if [ $1 == 2 ]; then
-        if [ -f @CMAKE_INSTALL_FULL_SYSCONFDIR@/sphinx/sphinx.conf ]; then
-	        echo "Moving existing configuration to new location..."
-		    mv @CMAKE_INSTALL_FULL_SYSCONFDIR@/sphinx/sphinx.conf @CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf
-	    fi
+    # Ensure runtime directory exists during upgrades
+    if [ ! -d "@CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore" ]; then
+        create_runtime_dir || echo "  Warning: Failed to create runtime directory during upgrade" >&2
+    fi
+
+    # Set ownership with validation during upgrades
+    if [ -d "@CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore" ]; then
+        set_runtime_ownership || echo "  Warning: Failed to set ownership during upgrade" >&2
+    else
+        echo "  Warning: Runtime directory missing during upgrade" >&2
+    fi
+
+    # Handle Sphinx to Manticore configuration migration
+    if [ -f "@CMAKE_INSTALL_FULL_SYSCONFDIR@/sphinx/sphinx.conf" ]; then
+        echo "  Migrating Sphinx configuration to Manticore..."
+        if mv "@CMAKE_INSTALL_FULL_SYSCONFDIR@/sphinx/sphinx.conf" "@CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf" 2>/dev/null; then
+            echo "  Configuration migration completed successfully"
+        else
+            echo "  Warning: Failed to migrate Sphinx configuration" >&2
+        fi
+    fi
 fi
 # print some further pointers
-echo "To start Manticore Search, run the following command:"
+echo "  To start Manticore Search, run the following command:"
 echo "  > systemctl start manticore"
 echo

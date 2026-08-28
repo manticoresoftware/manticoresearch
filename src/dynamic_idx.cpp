@@ -16,24 +16,145 @@
 
 using namespace Threads;
 
-class Feeder_c : public RowBuffer_i
+class GenericFeeder_c : public RowBuffer_i
 {
+protected:
+	enum class FeedState_e : BYTE
+	{
+		Idle,
+		SchemaReady,
+		RowReady
+	};
+
+	TableFeeder_fn				m_fnFeed;
+    bool 						m_bProducerStarted = false;
+	std::atomic<bool>			m_bProducerFinished { false };
+	std::atomic<FeedState_e>	m_eState { FeedState_e::Idle };
+	Coro::Event_c				m_tCanProduce;
+	Coro::Event_c				m_tCanConsume;
+
+	// feeder stuff
 	CSphSchema* 	m_pSchema = nullptr;
 	CSphMatch*		m_pMatch = nullptr;
-	Resumer_fn		m_fnCoro;
-	bool 			m_bCoroFinished = false;
 	bool			m_bHaveMoreMatches = true;
-	bool 			m_bAutoID = true;
-
-	int 			m_iCurCol = 0;
 	int				m_iCurMatch = 1;
 
-	bool CallCoro()
+	void StartProducer()
 	{
-		if ( !m_bCoroFinished )
-			m_bCoroFinished = m_fnCoro ();
-		return m_bCoroFinished;
+		if ( m_bProducerStarted )
+			return;
+
+		m_bProducerStarted = true;
+
+		auto * pScheduler = Coro::CurrentScheduler();
+		if ( !pScheduler )
+			pScheduler = GlobalWorkPool();
+
+		StartJob ( [this, fnFeed = std::move ( m_fnFeed )] () mutable {
+	 		m_tCanProduce.WaitEvent();
+	 		fnFeed ( this );
+	 		m_bProducerFinished.store ( true, std::memory_order_release );
+	 		m_eState.store ( FeedState_e::Idle, std::memory_order_release );
+	 		m_tCanConsume.SetEvent();
+	 	}, pScheduler );
 	}
+
+	void PublishAndWait ( FeedState_e eState )
+	{
+		m_eState.store ( eState, std::memory_order_release );
+		m_tCanConsume.SetEvent();
+		m_tCanProduce.WaitEvent();
+	}
+
+	FeedState_e ReleaseProducerAndWaitChunk()
+	{
+		m_tCanProduce.SetEvent();
+		m_tCanConsume.WaitEvent();
+		return m_eState.load ( std::memory_order_acquire );
+	}
+
+	void ReleaseProducerAndWaitForFinish()
+	{
+		m_bHaveMoreMatches = false;
+		m_tCanProduce.SetEvent();
+		while ( !m_bProducerFinished.load ( std::memory_order_acquire ) )
+			m_tCanConsume.WaitEvent();
+	}
+
+	void DrainProducer() noexcept
+	{
+		if ( !m_bProducerStarted || m_bProducerFinished.load ( std::memory_order_acquire ) )
+			return;
+
+		m_pMatch = nullptr; // ignore any payload while draining
+		while ( !m_bProducerFinished.load ( std::memory_order_acquire ) )
+			ReleaseProducerAndWaitChunk();
+	}
+
+	void ResetToIdle () noexcept
+	{
+		m_bHaveMoreMatches = false;
+		m_pMatch = nullptr; // that should stop any further feeding
+		PublishAndWait ( FeedState_e::Idle );
+	}
+
+	void PutStrt ( const CSphColumnInfo & tCol, Str_t sMsg )
+	{
+		assert ( m_pMatch );
+		assert ( tCol.m_eAttrType == SPH_ATTR_STRINGPTR );
+		BYTE * pData = nullptr;
+		m_pMatch->SetAttr ( tCol.m_tLocator, (SphAttr_t) sphPackPtrAttr ( sMsg.second, &pData ) );
+		memcpy ( pData, sMsg.first, sMsg.second );
+	}
+
+public:
+	explicit GenericFeeder_c ( TableFeeder_fn fnFeed )
+		: m_fnFeed ( std::move ( fnFeed ) )
+	{}
+
+	~GenericFeeder_c() override
+	{
+		DrainProducer();
+	}
+
+	// set upstream match
+	void SetSorterStuff ( CSphMatch * pMatch )
+	{
+		m_pMatch = pMatch;
+	}
+
+	virtual void PrepareFillNextMatch() noexcept = 0;
+
+	bool FillNextMatch()
+	{
+		if ( !m_bHaveMoreMatches )
+			return false;
+
+		PrepareFillNextMatch();
+
+		auto eState = ReleaseProducerAndWaitChunk();
+		if ( eState==FeedState_e::RowReady )
+			return m_bHaveMoreMatches;
+
+		ReleaseProducerAndWaitForFinish();
+		return false;
+	}
+
+	void Error ( const char * sError, EMYSQL_ERR ) override
+	{
+		m_bError = true;
+		m_sError = sError;
+		ResetToIdle ();
+	}
+	void Ok ( int, int, const char *, bool, int64_t ) override {}
+	void Add ( BYTE ) override {}
+};
+
+class Feeder_c final : public GenericFeeder_c
+{
+	bool 			m_bAutoID = true;
+	int 			m_iCurCol = 0;
+
 
 	const CSphColumnInfo & GetNextCol()
 	{
@@ -69,54 +190,38 @@ class Feeder_c : public RowBuffer_i
 
 public:
 	explicit Feeder_c ( TableFeeder_fn fnFeed )
+		: GenericFeeder_c ( std::move ( fnFeed ) )
 	{
-		m_fnCoro = MakeCoroExecutor ( [this, fnFeed = std::move ( fnFeed )] () { fnFeed ( this ); } );
-	}
-
-	~Feeder_c() override
-	{
-		while ( !m_bCoroFinished )
-			CallCoro ();
 	}
 
 	// collecting schema
 	void SetSchema ( CSphSchema * pSchema )
 	{
 		m_pSchema = pSchema;
-		CallCoro(); // at finish fnCoro will be before returning from HeadEnd().
+		StartProducer();
+		auto eState = ReleaseProducerAndWaitChunk();
+		assert ( eState==FeedState_e::SchemaReady || eState==FeedState_e::Idle );
+		if ( eState!=FeedState_e::SchemaReady )
+			ReleaseProducerAndWaitForFinish();
 	}
 
-	// set upstream match
-	void SetSorterStuff ( CSphMatch * pMatch )
+	void PrepareFillNextMatch() noexcept override
 	{
-		m_pMatch = pMatch;
-	}
-
-	bool FillNextMatch()
-	{
-		if ( m_bHaveMoreMatches )
+		m_iCurCol = 0;
+		if ( m_bAutoID )
 		{
-			m_iCurCol = 0;
-			if ( m_bAutoID )
-			{
-				auto * pID = m_pSchema->GetAttr ( sphGetDocidName () );
-				m_pMatch->SetAttr ( pID->m_tLocator, m_iCurMatch );
-				++m_iCurCol;
-			}
-			++m_iCurMatch;
-			CallCoro ();
+			auto * pID = m_pSchema->GetAttr ( sphGetDocidName () );
+			m_pMatch->SetAttr ( pID->m_tLocator, m_iCurMatch );
+			++m_iCurCol;
 		}
-
-		return m_bHaveMoreMatches;
+		++m_iCurMatch;
 	}
 
 	void PutStr ( const CSphColumnInfo & tCol, const StringBuilder_c & sMsg )
 	{
 		assert ( m_pMatch );
 		assert ( tCol.m_eAttrType == SPH_ATTR_STRINGPTR );
-		BYTE * pData = nullptr;
-		m_pMatch->SetAttr ( tCol.m_tLocator, (SphAttr_t) sphPackPtrAttr ( sMsg.GetLength (), &pData ) );
-		memcpy ( pData, sMsg.cstr (), sMsg.GetLength () );
+		PutStrt ( tCol, Str_t ( sMsg ) );
 	}
 
 public:
@@ -145,7 +250,7 @@ public:
 			return false;
 		}
 
-		Coro::Yield_();
+		PublishAndWait ( FeedState_e::SchemaReady );
 		return true;
 	}
 
@@ -187,9 +292,9 @@ public:
 	void PutPercentAsString ( int64_t iVal, int64_t iBase ) override
 	{
 		if ( iBase )
-			PutFloatAsString ( iVal * 100.0f / iBase, nullptr );
+			PutNumAsString ( iVal * 100 / iBase );
 		else
-			PutFloatAsString ( 100.0f, nullptr );
+			PutNumAsString ( 100 );
 	}
 
 	void PutNumAsString ( int64_t iVal ) override
@@ -260,6 +365,36 @@ public:
 		}
 	}
 
+	void PutFloat ( float fVal ) final
+	{
+		PutFloatAsString ( fVal, nullptr );
+	}
+
+	void PutDouble ( double fVal ) final
+	{
+		PutDoubleAsString ( fVal, nullptr );
+	}
+
+	void PutInt ( int iVal ) final
+	{
+		PutNumAsString ( iVal );
+	}
+
+	void PutInt64 ( int64_t iVal ) final
+	{
+		PutNumAsString ( iVal );
+	}
+
+	void PutDWORD ( DWORD uVal ) final
+	{
+		PutNumAsString ( uVal );
+	}
+
+	void PutUint64 ( uint64_t uVal ) final
+	{
+		PutNumAsString ( uVal );
+	}
+
 	void PutArray ( const ByteBlob_t&, bool ) override {}
 
 	// pack string
@@ -318,47 +453,21 @@ public:
 	// sends collected data, then reset
 	bool Commit() override
 	{
-		Coro::Yield_ ();
+		PublishAndWait ( FeedState_e::RowReady );
 		return m_bHaveMoreMatches; // true for continue iteration, false to stop
 	}
 
 	// wrappers for popular packets
 	void Eof ( bool bMoreResults, int iWarns, const char* ) override
 	{
-		m_bHaveMoreMatches = false;
-		m_pMatch = nullptr; // that should stop any further feeding
-		Coro::Yield_ (); // generally not need as eof is usually the last stmt, but if not it is safe
+		ResetToIdle();
 	}
 	using RowBuffer_i::Eof;
-
-	void Error ( const char * sError, EMYSQL_ERR ) override
-	{
-		m_bError = true;
-		m_sError = sError;
-		Eof ();
-	}
-	void Ok ( int, int, const char *, bool, int64_t ) override {}
-	void Add ( BYTE ) override {}
 };
 
 // feed schema only and skip all the data
-class FeederSchema_c : public RowBuffer_i
+class FeederSchema_c final : public GenericFeeder_c
 {
-	CSphSchema* 	m_pSchema = nullptr;
-	CSphMatch*		m_pMatch = nullptr;
-	Resumer_fn		m_fnCoro;
-	bool 			m_bCoroFinished = false;
-	bool			m_bHaveMoreMatches = true;
-
-	int				m_iCurMatch = 1;
-
-	bool CallCoro()
-	{
-		if ( !m_bCoroFinished )
-			m_bCoroFinished = m_fnCoro ();
-		return m_bCoroFinished;
-	}
-
 	void PutString ( int iCol, const char * sMsg )
 	{
 		if ( !m_pMatch )
@@ -368,22 +477,14 @@ class FeederSchema_c : public RowBuffer_i
 		if ( !sMsg )
 			sMsg = "";
 
-		BYTE * pData = nullptr;
-		m_pMatch->SetAttr ( m_pSchema->GetAttr ( iCol ).m_tLocator, (SphAttr_t) sphPackPtrAttr ( iLen, &pData ) );
-		memcpy ( pData, sMsg, iLen );
+		PutStrt (m_pSchema->GetAttr ( iCol ), {sMsg,iLen});
 	}
 
 public:
 	explicit FeederSchema_c ( TableFeeder_fn fnFeed )
-	{
-		m_fnCoro = MakeCoroExecutor ( [this, fnFeed = std::move ( fnFeed )] () { fnFeed ( this ); } );
-	}
+		: GenericFeeder_c ( std::move ( fnFeed ) )
+	{}
 
-	~FeederSchema_c() override
-	{
-		while ( !m_bCoroFinished )
-			CallCoro ();
-	}
 
 	// collecting schema
 	void SetSchema ( CSphSchema * pSchema )
@@ -395,18 +496,9 @@ public:
 		m_pSchema->AddAttr ( CSphColumnInfo ( "Properties", SPH_ATTR_STRINGPTR ), true );
 	}
 
-	// set upstream match
-	void SetSorterStuff ( CSphMatch * pMatch )
+	void PrepareFillNextMatch() noexcept override
 	{
-		m_pMatch = pMatch;
-	}
-
-	bool FillNextMatch()
-	{
-		if ( m_bHaveMoreMatches )
-			CallCoro ();
-
-		return m_bHaveMoreMatches;
+		StartProducer();
 	}
 
 public:
@@ -436,7 +528,7 @@ public:
 		}
 		PutString ( 3, "" );
 
-		Coro::Yield_ ();
+		PublishAndWait ( FeedState_e::RowReady );
 	}
 
 	bool HeadEnd ( bool bMoreResults, int iWarns ) override
@@ -447,10 +539,7 @@ public:
 			return false;
 		}
 
-		// fixme!
-		m_bHaveMoreMatches = false;
-		m_pMatch = nullptr; // that should stop any further feeding
-		Coro::Yield_ ();
+		ResetToIdle();
 		return false;
 	}
 
@@ -462,6 +551,12 @@ public:
 	void PutNumAsString ( uint64_t ) override {}
 	void PutNumAsString ( int ) override {}
 	void PutNumAsString ( DWORD ) override {}
+	void PutFloat ( float fVal ) override {}
+	void PutDouble ( double fVal ) override {}
+	void PutInt ( int iVal ) override {}
+	void PutInt64 ( int64_t iVal ) override {}
+	void PutDWORD ( DWORD uVal ) override {}
+	void PutUint64 ( uint64_t uVal ) override {}
 	void PutArray ( const ByteBlob_t&, bool ) override {}
 	void PutString ( Str_t ) override {}
 	void PutMicrosec ( int64_t ) override {}
@@ -469,32 +564,11 @@ public:
 	bool Commit() override { return false;}
 	void Eof ( bool, int, const char* ) override {}
 	using RowBuffer_i::Eof;
-	void Error ( const char * sError, EMYSQL_ERR ) override
-	{
-		m_bError = true;
-		m_sError = sError;
-		Eof ();
-	}
-	void Ok ( int, int, const char *, bool, int64_t ) override {}
-	void Add ( BYTE ) override {}
 };
 
-class GenericTableIndex_c : public CSphIndexStub
-{
-public:
-	GenericTableIndex_c ()
-		: CSphIndexStub ( "dynamic", nullptr )
-	{}
-
-	bool				MultiQuery ( CSphQueryResult & , const CSphQuery & , const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const final;
-
-private:
-	bool MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const;
-
-	virtual void SetSorterStuff ( CSphMatch * pMatch ) const = 0;
-	virtual bool FillNextMatch () const = 0;
-	virtual Str_t GetErrors() const = 0;
-};
+GenericTableIndex_c::GenericTableIndex_c()
+	: CSphIndexStub ( "dynamic", nullptr )
+{}
 
 bool GenericTableIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery,
 		const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs &tArgs ) const
@@ -556,10 +630,6 @@ bool GenericTableIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery
 	auto & tMeta = *tResult.m_pMeta;
 
 	QueryProfile_c * pProfiler = tMeta.m_pProfile;
-
-	// we count documents only (before filters)
-	if ( tQuery.m_iMaxPredictedMsec )
-		tMeta.m_bHasPrediction = true;
 
 	if ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
 		tMeta.m_sWarning.SetSprintf ( "packedfactors() will not work with a fullscan; you need to specify a query" );
@@ -669,13 +739,14 @@ bool GenericTableIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery
 	SwitchProfile ( pProfiler, SPH_QSTATE_FINALIZE );
 
 	// do final expression calculations
-	if ( tCtx.m_dCalcFinal.GetLength () )
+	// even if no final stage calc to finilize doc collector
+	if ( tCtx.m_dCalcFinal.GetLength() || m_bForceFinalize )
 	{
 		DynMatchProcessor_c tFinal ( tArgs.m_iTag, tCtx );
 		dSorters.Apply ( [&] ( ISphMatchSorter * p ) { p->Finalize ( tFinal, false, tArgs.m_bFinalizeSorters ); } );
 	}
 
-	tMeta.m_iQueryTime += ( int ) ( ( sphMicroTimer () - tmQueryStart ) / 1000 );
+	tMeta.AddQueryTimeUs ( sphMicroTimer() - tmQueryStart );
 
 	return bOk;
 }
@@ -780,7 +851,7 @@ Str_t DynamicIndexSchema_c::GetErrors () const
 	return FromStr ( m_tFeeder.GetError() );
 }
 
-static ServedIndexRefPtr_c MakeServed ( CSphIndex* pIndex )
+ServedIndexRefPtr_c MakeServed ( CSphIndex* pIndex )
 {
 	auto pServed = MakeServedIndex();
 	pServed->SetIdx ( std::unique_ptr<CSphIndex> ( pIndex ) );

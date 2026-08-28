@@ -1,0 +1,118 @@
+––– block: ../../base/dind/init –––
+––– comment –––
+Set Kafka version
+––– input –––
+KAFKA_VERSION="4.1.0"
+echo "Using Kafka version: $KAFKA_VERSION"
+––– output –––
+Using Kafka version: 4.1.0
+––– block: ../../base/basic-initialization-manticore-kafka –––
+––– block: ../../base/start-kafka-kraft –––
+––– comment –––
+Create Kafka topic with 2 partitions for data distribution testing
+––– input –––
+docker exec kafka /opt/kafka/bin/kafka-topics.sh --create --topic my-data --partitions 2 --bootstrap-server localhost:9092 2>&1 | grep -o 'Created topic my-data\.' | head -n 1
+––– output –––
+Created topic my-data.
+––– comment –––
+Verify topic creation and partition configuration
+––– input –––
+docker exec kafka /opt/kafka/bin/kafka-topics.sh --describe --topic my-data --bootstrap-server localhost:9092
+––– output –––
+Topic: my-data	TopicId: #!/[a-zA-Z0-9_-]+/!#	PartitionCount: 2	ReplicationFactor: 1	Configs: #!/.*min.insync.replicas=1.*/!#
+	Topic: my-data	Partition: 0	Leader: #!/[0-9]+/!#	Replicas: #!/[0-9]+/!#	Isr: #!/[0-9]+/!#	#!/.*Elr.*LastKnownElr.*/!#
+	Topic: my-data	Partition: 1	Leader: #!/[0-9]+/!#	Replicas: #!/[0-9]+/!#	Isr: #!/[0-9]+/!#	#!/.*Elr.*LastKnownElr.*/!#
+––– comment –––
+Create Kafka source for partition 0 with specific consumer configuration
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_p1 (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore' num_consumers='1' partition_list='0' batch=50;"; echo $?
+––– output –––
+0
+––– comment –––
+Create Kafka source for partition 1 with specific consumer configuration
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_p2 (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore' num_consumers='1' partition_list='1' batch=50;"; echo $?
+––– output –––
+0
+––– comment –––
+Create destination table for partition 0 data
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE destination_shard_1 (id bigint, name text);"; echo $?
+––– output –––
+0
+––– comment –––
+Create destination table for partition 1 data
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE destination_shard_2 (id bigint, name text);"; echo $?
+––– output –––
+0
+––– comment –––
+Create materialized view to route partition 0 data to destination table
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW mv_1 TO destination_shard_1 AS SELECT id, term AS name FROM kafka_p1;"; echo $?
+––– output –––
+0
+––– comment –––
+Create materialized view to route partition 1 data to destination table
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW mv_2 TO destination_shard_2 AS SELECT id, term AS name FROM kafka_p2;"; echo $?
+––– output –––
+0
+––– comment –––
+Verify both Kafka sources are created successfully
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SHOW SOURCES\G;"
+––– output –––
+*************************** 1. row ***************************
+name: kafka_p1
+*************************** 2. row ***************************
+name: kafka_p2
+––– comment –––
+Verify both materialized views are created successfully
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SHOW MVS\G;"
+––– output –––
+*************************** 1. row ***************************
+name: mv_1
+*************************** 2. row ***************************
+name: mv_2
+––– comment –––
+Execute data import script to load test data into Kafka topic
+––– input –––
+docker exec kafka bash /import.sh; echo $?
+––– output –––
+0
+––– comment –––
+Wait until lag becomes zero and current offset is not zero for all partitions
+––– input –––
+timeout 120 bash -c 'while true; do STATS=$(docker exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group manticore 2>/dev/null | grep -E "^manticore.*my-data"); if [ -z "$STATS" ]; then sleep 3; continue; fi; ALL_READY=true; while IFS= read -r line; do if [[ -n "$line" ]]; then read -r group topic partition current_offset log_end_offset lag rest <<< "$line"; if [[ "$lag" -ne 0 ]] || [[ "$current_offset" -eq 0 ]]; then ALL_READY=false; fi; fi; done <<< "$STATS"; if [ "$ALL_READY" = true ]; then echo "All partitions processed successfully"; break; fi; sleep 3; done' || echo "Processing timeout reached"
+––– output –––
+All partitions processed successfully
+––– comment –––
+Get partition counts from Kafka consumer group
+––– input –––
+KAFKA_STATS=$(docker exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group manticore | awk '/^manticore.*my-data/'); KAFKA_P0=$(echo "$KAFKA_STATS" | awk '$3==0 {print $4}'); KAFKA_P1=$(echo "$KAFKA_STATS" | awk '$3==1 {print $4}'); echo "Kafka Partition 0: $KAFKA_P0 records"; echo "Kafka Partition 1: $KAFKA_P1 records"
+––– output –––
+Consumer group 'manticore' has no active members.
+Kafka Partition 0: #!/[0-9]+/!# records
+Kafka Partition 1: #!/[0-9]+/!# records
+––– comment –––
+Check destination_shard_1 matches Kafka partition 0
+––– input –––
+SHARD1_COUNT=$(docker exec manticore mysql -h0 -P9306 -N -e "SELECT COUNT(*) FROM destination_shard_1" 2>/dev/null | tr -cd '0-9'); echo "Manticore Shard 1: $SHARD1_COUNT records"; if [ "$SHARD1_COUNT" -eq "$KAFKA_P0" ]; then echo "Shard 1 matches Kafka partition 0"; else echo "Shard 1 ($SHARD1_COUNT) != Kafka partition 0 ($KAFKA_P0)"; fi
+––– output –––
+Manticore Shard 1: #!/[0-9]+/!# records
+Shard 1 matches Kafka partition 0
+––– comment –––
+Check destination_shard_2 matches Kafka partition 1
+––– input –––
+SHARD2_COUNT=$(docker exec manticore mysql -h0 -P9306 -N -e "SELECT COUNT(*) FROM destination_shard_2" 2>/dev/null | tr -cd '0-9'); echo "Manticore Shard 2: $SHARD2_COUNT records"; if [ "$SHARD2_COUNT" -eq "$KAFKA_P1" ]; then echo "Shard 2 matches Kafka partition 1"; else echo "Shard 2 ($SHARD2_COUNT) != Kafka partition 1 ($KAFKA_P1)"; fi
+––– output –––
+Manticore Shard 2: #!/[0-9]+/!# records
+Shard 2 matches Kafka partition 1
+––– comment –––
+Verify data is distributed across both shards
+––– input –––
+if [ "$SHARD1_COUNT" -gt 0 ] && [ "$SHARD2_COUNT" -gt 0 ]; then echo "Data distributed across both shards"; else echo "Warning: Data went to single shard only"; fi
+––– output –––
+Data distributed across both shards

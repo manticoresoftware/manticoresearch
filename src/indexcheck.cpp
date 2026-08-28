@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -19,12 +19,24 @@
 #include "docstore.h"
 #include "conversion.h"
 #include "columnarlib.h"
+#include "secondarylib.h"
+#include "indexsettings.h"
 #include "indexfiles.h"
 #include "roaring/roaring64map.hh"
 
 #include "killlist.h"
 
 constexpr int FAILS_THRESH = 100;
+
+static inline bool IsLegacyHitlessLayoutForCheck ( DWORD uVersion )
+{
+	return uVersion<68;
+}
+
+static inline int GetDictDocsForCheck ( int iRawDocs, bool bLegacyLayout )
+{
+	return bLegacyLayout ? iRawDocs : ( iRawDocs & HITLESS_DOC_MASK );
+}
 
 class DebugCheckError_c final : public DebugCheckError_i
 {
@@ -361,10 +373,150 @@ static JsonEscapedBuilder& operator<< ( JsonEscapedBuilder& dOut, const Wordid_t
 
 using cbWordidFn = std::function<void ( RowID_t, Wordid_t, int iField, int iPos, bool bIsEnd )>;
 
+static SphOffset_t UnzipSkiplistOffsetForCheck ( CSphAutoreader & tReader, DWORD uVersion )
+{
+	return uVersion<=57 ? (SphOffset_t)tReader.UnzipInt() : tReader.UnzipOffset();
+}
+
+
+struct DictEntryForCheck_t
+{
+	int64_t			m_iDictPos = 0;
+	SphWordID_t		m_uWordid = 0;
+	SphOffset_t		m_iDoclistOffset = 0;
+	SphOffset_t		m_iSkiplistOffset = 0;
+	int				m_iRawDocs = 0;
+	int				m_iLayoutDocs = 0;
+	int				m_iDocs = 0;
+	int				m_iHits = 0;
+	int				m_iHint = 0;
+	bool			m_bHitless = false;
+	const char *	m_szWord = "";
+	int				m_iWordLen = 0;
+};
+
+
+enum class DictReadResult_e
+{
+	ENTRY,
+	CHECKPOINT
+};
+
+
+static bool UnpackWordDictKeywordForCheck ( CSphAutoreader & tReader, DictFormat_e eDictFormat, BYTE uPack, CSphVector<BYTE> & dWord, int64_t iDictPos, DebugCheckError_i & tReporter, DictEntryForCheck_t & tEntry )
+{
+	int iMatch = 0;
+	int iDelta = 0;
+
+	if ( uPack & 0x80 )
+	{
+		iDelta = ( ( uPack>>4 ) & 7 ) + 1;
+		iMatch = uPack & 15;
+	} else if ( eDictFormat==DictFormat_e::KEYWORDS_V2 && uPack==0x7f )
+	{
+		iDelta = tReader.UnzipInt();
+		iMatch = tReader.UnzipInt();
+	} else
+	{
+		iDelta = eDictFormat==DictFormat_e::KEYWORDS_V2 ? uPack : ( uPack & 127 );
+		iMatch = tReader.GetByte();
+	}
+
+	const int iLastWordLen = (int)strlen ( (const char*)dWord.Begin() );
+	const int iMaxWordLen = GetKeywordMaxStoredBytes ( eDictFormat );
+	if ( iDelta<=0 || iMatch<0 || iMatch>iLastWordLen || iMatch+iDelta>iMaxWordLen )
+	{
+		tReporter.Fail ( "wrong word-delta (pos=" INT64_FMT ", word=%s, len=%d, begin=%d, delta=%d)", iDictPos, (const char*)dWord.Begin(), iLastWordLen, iMatch, iDelta );
+		if ( iDelta>0 )
+			tReader.SkipBytes ( iDelta );
+		tEntry.m_szWord = (const char*)dWord.Begin();
+		tEntry.m_iWordLen = iLastWordLen;
+		return false;
+	}
+
+	tReader.GetBytes ( dWord.Begin()+iMatch, iDelta );
+	tEntry.m_iWordLen = iMatch+iDelta;
+	dWord[tEntry.m_iWordLen] = '\0';
+	tEntry.m_szWord = (const char*)dWord.Begin();
+	return true;
+}
+
+
+static DictReadResult_e ReadDictEntryForCheck ( CSphAutoreader & tReader, DictFormat_e eDictFormat, const CSphIndexSettings & tIndexSettings, DWORD uVersion, bool bLegacySkiplistLayout, const CSphVector<SphWordID_t> & dHitlessWords, SphWordID_t & uWordid, SphOffset_t & iDoclistOffset, CSphVector<BYTE> & dWord, DictEntryForCheck_t & tEntry, DebugCheckError_i & tReporter )
+{
+	const bool bWordDict = eDictFormat!=DictFormat_e::CRC;
+	tEntry = DictEntryForCheck_t();
+	tEntry.m_iDictPos = tReader.GetPos();
+
+	SphWordID_t iDeltaWord = 0;
+	if ( bWordDict )
+		iDeltaWord = tReader.GetByte();
+	else
+		iDeltaWord = tReader.UnzipWordid();
+
+	if ( !iDeltaWord )
+	{
+		tReader.UnzipOffset();
+		uWordid = 0;
+		iDoclistOffset = 0;
+		if ( bWordDict )
+			dWord[0] = '\0';
+		return DictReadResult_e::CHECKPOINT;
+	}
+
+	if ( bWordDict )
+	{
+		UnpackWordDictKeywordForCheck ( tReader, eDictFormat, (BYTE)iDeltaWord, dWord, tEntry.m_iDictPos, tReporter, tEntry );
+
+		tEntry.m_iDoclistOffset = tReader.UnzipOffset();
+		tEntry.m_iRawDocs = tReader.UnzipInt();
+		tEntry.m_iLayoutDocs = GetDictDocsForCheck ( tEntry.m_iRawDocs, bLegacySkiplistLayout );
+		tEntry.m_iDocs = tEntry.m_iRawDocs;
+		tEntry.m_iHits = tReader.UnzipInt();
+		if ( tEntry.m_iLayoutDocs>=DOCLIST_HINT_THRESH )
+			tEntry.m_iHint = DoclistHintUnpack ( tEntry.m_iLayoutDocs, (BYTE)tReader.GetByte() );
+
+		if ( tIndexSettings.m_eHitless==SPH_HITLESS_SOME && ( tEntry.m_iDocs & HITLESS_DOC_FLAG )!=0 )
+		{
+			tEntry.m_iDocs = ( tEntry.m_iDocs & HITLESS_DOC_MASK );
+			tEntry.m_bHitless = true;
+		}
+	} else
+	{
+		tEntry.m_uWordid = uWordid + iDeltaWord;
+		tEntry.m_iDoclistOffset = iDoclistOffset + tReader.UnzipOffset();
+		tEntry.m_iRawDocs = tReader.UnzipInt();
+		tEntry.m_iLayoutDocs = GetDictDocsForCheck ( tEntry.m_iRawDocs, bLegacySkiplistLayout );
+		tEntry.m_iDocs = tEntry.m_iRawDocs;
+		tEntry.m_iHits = tReader.UnzipInt();
+		tEntry.m_bHitless = ( dHitlessWords.BinarySearch ( tEntry.m_uWordid )!=nullptr );
+		if ( tEntry.m_bHitless )
+			tEntry.m_iDocs = ( tEntry.m_iDocs & HITLESS_DOC_MASK );
+	}
+
+	assert ( tIndexSettings.m_iSkiplistBlockSize>0 );
+	if ( tEntry.m_iLayoutDocs>tIndexSettings.m_iSkiplistBlockSize )
+		tEntry.m_iSkiplistOffset = UnzipSkiplistOffsetForCheck ( tReader, uVersion );
+
+	return DictReadResult_e::ENTRY;
+}
+
+class DebugCheckStub_c final : public DebugCheckError_i
+{
+public:
+	bool Fail ( const char* szFmt, ... ) {return false;};
+	void Msg ( const char* szFmt, ... ) {};
+	void Progress ( const char* szFmt, ... ) {};
+	void Done() {};
+	int64_t GetNumFails() const { return 0; };
+	void CheckDocidDup ( DocID_t , DWORD  ) {};
+	void FinishDiskChunk ( int64_t ) {};
+};
+
 class DiskIndexChecker_c::Impl_c
 {
 public:
-			Impl_c ( CSphIndex & tIndex, DebugCheckError_i & tReporter );
+			Impl_c ( CSphIndex * pIndex, DebugCheckError_i & tReporter );
 
 	bool	OpenFiles ();
 	void	Setup ( int64_t iNumRows, int64_t iDocinfoIndex, int64_t iMinMaxIndex, bool bCheckIdDups );
@@ -373,8 +525,11 @@ public:
 	void	Check();
 	void	ExtractDocs ();
 
+	bool	ReadHeader ( const CSphString& sHeader );
+	DWORD	GetVersion() const noexcept { return m_uVersion; };
+
 private:
-	CSphIndex &				m_tIndex;
+	CSphIndex *				m_pIndex;
 	CSphAutoreader			m_tDictReader;
 	DataReaderFactoryPtr_c	m_pDocsReader;
 	DataReaderFactoryPtr_c	m_pHitsReader;
@@ -397,6 +552,7 @@ private:
 	bool					m_bCheckIdDups = false;
 	CSphSchema				m_tSchema;
 	CWordlist				m_tWordlist;
+	CSphString				m_sError;
 
 	RowID_t GetRowidByDocid ( DocID_t iDocid ) const;
 	RowID_t CheckIfKilled ( RowID_t iRowID ) const;
@@ -407,36 +563,46 @@ private:
 	void	CheckKillList() const;
 	void	CheckBlockIndex();
 	void	CheckColumnar();
+	void	CheckSecondaryIndexes();
 	void	CheckDocidLookup();
+	void	CheckUuidDocidLookup ( CSphReader & tLookup, int64_t iDocs, SphOffset_t tEntriesOffset, SphOffset_t tNumericEnd );
 	void	CheckDocids();
 	void	CheckDocstore();
 	void	CheckSchema();
 
-	bool	ReadLegacyHeader ( CSphString& sError );
-	bool	ReadHeader ( CSphString& sError );
+	bool	ReadLegacyHeader ( const CSphString& sHeader );
 	CSphString	GetFilename ( ESphExt eExt ) const;
 };
 
 
-DiskIndexChecker_c::Impl_c::Impl_c ( CSphIndex & tIndex, DebugCheckError_i & tReporter )
-	: m_tIndex ( tIndex )
+std::optional<DWORD> ValidateHeaderAndReadVersion ( const CSphString& sHeader )
+{
+	DebugCheckStub_c tStub;
+	DiskIndexChecker_c tChecker { nullptr, tStub };
+	if (!tChecker.ReadHeader ( sHeader ))
+		return std::nullopt;
+	return tChecker.GetVersion();
+}
+
+DiskIndexChecker_c::Impl_c::Impl_c ( CSphIndex * pIndex, DebugCheckError_i & tReporter )
+	: m_pIndex ( pIndex )
 	, m_tReporter ( tReporter )
 {}
 
 
-bool DiskIndexChecker_c::Impl_c::ReadLegacyHeader ( CSphString& sError )
+bool DiskIndexChecker_c::Impl_c::ReadLegacyHeader ( const CSphString& sHeader )
 {
 	CSphAutoreader tHeaderReader;
-	if ( !tHeaderReader.Open ( GetFilename ( SPH_EXT_SPH ), sError ) )
+	if ( !tHeaderReader.Open ( sHeader, m_sError ) )
 		return false;
 
-	const char * szHeader = tHeaderReader.GetFilename().cstr();
+	const char* szHeader = sHeader.scstr();
 
 	// magic header
 	const char * szFmt = CheckFmtMagic ( tHeaderReader.GetDword() );
 	if ( szFmt )
 	{
-		sError.SetSprintf ( szFmt, szHeader );
+		m_sError.SetSprintf ( szFmt, szHeader );
 		return false;
 	}
 
@@ -444,20 +610,35 @@ bool DiskIndexChecker_c::Impl_c::ReadLegacyHeader ( CSphString& sError )
 	m_uVersion = tHeaderReader.GetDword();
 	if ( m_uVersion<=1 || m_uVersion>INDEX_FORMAT_VERSION )
 	{
-		sError.SetSprintf ( "%s is v.%u, binary is v.%u", szHeader, m_uVersion, INDEX_FORMAT_VERSION );
+		m_sError.SetSprintf ( "%s is v.%u, binary is v.%u", szHeader, m_uVersion, INDEX_FORMAT_VERSION );
 		return false;
 	}
 
 	// we don't support anything prior to v54
-	DWORD uMinFormatVer = 54;
+	const DWORD uMinFormatVer = 54;
 	if ( m_uVersion<uMinFormatVer )
 	{
-		sError.SetSprintf ( "tables prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, szHeader, m_uVersion );
+		m_sError.SetSprintf ( "tables prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, szHeader, m_uVersion );
+		return false;
+	}
+
+	// 63 is the last version with legacy (binary) header; starting from 64 header stored in json format, so it can't be here.
+	const DWORD uMaxLegacyVer = 63;
+	if ( m_uVersion>uMaxLegacyVer )
+	{
+		m_sError.SetSprintf ( "tables after to v.%u are stored as json, but here is plain legacy file. Looks, like it is damaged. %s is v.%u", uMaxLegacyVer, szHeader, m_uVersion );
 		return false;
 	}
 
 	// schema
 	ReadSchema ( tHeaderReader, m_tSchema, m_uVersion );
+
+	if ( !m_pIndex )
+	{
+		m_sError = "indexcheck read the the header and finished";
+		return true;
+	}
+	assert ( m_pIndex );
 
 	// dictionary header (wordlist checkpoints, infix blocks, etc)
 	m_tWordlist.m_iDictCheckpointsOffset = tHeaderReader.GetOffset();
@@ -468,18 +649,26 @@ bool DiskIndexChecker_c::Impl_c::ReadLegacyHeader ( CSphString& sError )
 
 	m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
 
-	return m_tWordlist.Preread ( GetFilename(SPH_EXT_SPI), m_tIndex.GetDictionary()->GetSettings().m_bWordDict, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError );
+
+	auto eDictFormat = m_pIndex->GetDictionary()->GetSettings().GetDictFormat();
+	if ( eDictFormat==DictFormat_e::KEYWORDS_V2 )
+	{
+		m_sError = "indexcheck for dict=keywords_32k is not implemented yet";
+		return false;
+	}
+
+	return m_tWordlist.Preread ( GetFilename(SPH_EXT_SPI), eDictFormat, m_pIndex->GetSettings().m_iSkiplistBlockSize, m_sError );
 	// FIXME! add more header checks
 
 }
 
-bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
+bool DiskIndexChecker_c::Impl_c::ReadHeader ( const CSphString& sHeader )
 {
 	bool bHeaderIsJson;
 	{
 		BYTE dBuffer[8];
 		CSphAutoreader tHeaderReader ( dBuffer, sizeof ( dBuffer ) );
-		if ( !tHeaderReader.Open ( GetFilename ( SPH_EXT_SPH ), sError ) )
+		if ( !tHeaderReader.Open ( sHeader, m_sError ) )
 			return false;
 
 		tHeaderReader.GetDword();
@@ -487,21 +676,20 @@ bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
 	}
 
 	if ( !bHeaderIsJson ) // that is old style binary header
-		return ReadLegacyHeader ( sError );
+		return ReadLegacyHeader ( sHeader );
 
 
-	auto sHeader = GetFilename ( SPH_EXT_SPH );
 	const char* szHeader = sHeader.scstr();
 	using namespace bson;
 
 	CSphVector<BYTE> dData;
-	if ( !sphJsonParse ( dData, GetFilename ( SPH_EXT_SPH ), sError ) )
+	if ( sphJsonParse ( dData, sHeader, m_sError )!=JsonFileParse_e::OK )
 		return false;
 
 	Bson_c tBson ( dData );
 	if ( tBson.IsEmpty() || !tBson.IsAssoc() )
 	{
-		sError = "Something wrong read from json header - it is either empty, either not root object.";
+		m_sError = "Something wrong read from json header - it is either empty, either not root object.";
 		return false;
 	}
 
@@ -509,7 +697,7 @@ bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
 	m_uVersion = (DWORD)Int ( tBson.ChildByName ( "index_format_version" ) );
 	if ( m_uVersion <= 1 || m_uVersion > INDEX_FORMAT_VERSION )
 	{
-		sError.SetSprintf ( "%s is v.%u, binary is v.%u", szHeader, m_uVersion, INDEX_FORMAT_VERSION );
+		m_sError.SetSprintf ( "%s is v.%u, binary is v.%u", szHeader, m_uVersion, INDEX_FORMAT_VERSION );
 		return false;
 	}
 
@@ -517,67 +705,77 @@ bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
 	DWORD uMinFormatVer = 64;
 	if ( m_uVersion < uMinFormatVer )
 	{
-		sError.SetSprintf ( "tables prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, szHeader, m_uVersion );
+		m_sError.SetSprintf ( "tables prior to v.%u are no longer supported (use index_converter tool); %s is v.%u", uMinFormatVer, szHeader, m_uVersion );
 		return false;
 	}
 
 	// schema
 	ReadSchemaJson ( tBson.ChildByName ( "schema" ), m_tSchema );
 
+
+	if ( !m_pIndex )
+	{
+		m_sError = "indexcheck read the the header and finished";
+		return true;
+	}
+	assert ( m_pIndex );
+
 	// dictionary header (wordlist checkpoints, infix blocks, etc)
 	m_tWordlist.m_iDictCheckpointsOffset = Int ( tBson.ChildByName ( "dict_checkpoints_offset" ) );
-	m_tWordlist.m_iDictCheckpoints = (int)Int ( tBson.ChildByName ( "dict_checkpoints" ) );
+	m_tWordlist.m_iDictCheckpoints = Int ( tBson.ChildByName ( "dict_checkpoints" ) );
 	m_tWordlist.m_iInfixCodepointBytes = (int)Int ( tBson.ChildByName ( "infix_codepoint_bytes" ) );
 	m_tWordlist.m_iInfixBlocksOffset = Int ( tBson.ChildByName ( "infix_blocks_offset" ) );
-	m_tWordlist.m_iInfixBlocksWordsSize = (int)Int ( tBson.ChildByName ( "infix_block_words_size" ) );
+	m_tWordlist.m_iInfixBlocksWordsSize = Int ( tBson.ChildByName ( "infix_block_words_size" ) );
 
 	m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
 
-	return m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), m_tIndex.GetDictionary()->GetSettings().m_bWordDict, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError );
+	auto eDictFormat = m_pIndex->GetDictionary()->GetSettings().GetDictFormat();
+	return m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), eDictFormat, m_pIndex->GetSettings().m_iSkiplistBlockSize, m_sError );
 	// FIXME! add more header checks
 }
 
 
 bool DiskIndexChecker_c::Impl_c::OpenFiles ()
 {
-	CSphString sError;
-	if ( !ReadHeader ( sError ) )
-		return m_tReporter.Fail ( "error reading table header: %s", sError.cstr() );
+	assert ( m_pIndex );
+	m_sError = "";
+	if ( !ReadHeader ( GetFilename ( SPH_EXT_SPH ) ) )
+		return m_tReporter.Fail ( "error reading table header: %s", m_sError.cstr() );
 
-	if ( !m_tDictReader.Open ( GetFilename ( SPH_EXT_SPI ), sError ) )
-		return m_tReporter.Fail ( "unable to open dictionary: %s", sError.cstr() );
+	if ( !m_tDictReader.Open ( GetFilename ( SPH_EXT_SPI ), m_sError ) )
+		return m_tReporter.Fail ( "unable to open dictionary: %s", m_sError.cstr() );
 
 	// use file reader during debug check to lower memory pressure
-	m_pDocsReader = NewProxyReader ( GetFilename(SPH_EXT_SPD), sError, DataReaderFactory_c::DOCS, m_tIndex.GetMutableSettings().m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE );
+	m_pDocsReader = NewProxyReader ( GetFilename(SPH_EXT_SPD), m_sError, DataReaderFactory_c::DOCS, m_pIndex->GetMutableSettings().m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE );
 	if ( !m_pDocsReader )
-		return m_tReporter.Fail ( "unable to open doclist: %s", sError.cstr() );
+		return m_tReporter.Fail ( "unable to open doclist: %s", m_sError.cstr() );
 
 	// use file reader during debug check to lower memory pressure
-	m_pHitsReader = NewProxyReader ( GetFilename(SPH_EXT_SPP), sError, DataReaderFactory_c::HITS, m_tIndex.GetMutableSettings().m_tFileAccess.m_iReadBufferHitList, FileAccess_e::FILE );
+	m_pHitsReader = NewProxyReader ( GetFilename(SPH_EXT_SPP), m_sError, DataReaderFactory_c::HITS, m_pIndex->GetMutableSettings().m_tFileAccess.m_iReadBufferHitList, FileAccess_e::FILE );
 	if ( !m_pHitsReader )
-		return m_tReporter.Fail ( "unable to open hitlist: %s", sError.cstr() );
+		return m_tReporter.Fail ( "unable to open hitlist: %s", m_sError.cstr() );
 
-	if ( !m_tSkipsReader.Open ( GetFilename(SPH_EXT_SPE), sError ) )
-		return m_tReporter.Fail ( "unable to open skiplist: %s", sError.cstr () );
+	if ( !m_tSkipsReader.Open ( GetFilename(SPH_EXT_SPE), m_sError ) )
+		return m_tReporter.Fail ( "unable to open skiplist: %s", m_sError.cstr () );
 
-	if ( !m_tDeadRowReader.Open ( GetFilename(SPH_EXT_SPM).cstr(), sError ) )
-		return m_tReporter.Fail ( "unable to open dead-row map: %s", sError.cstr() );
+	if ( !m_tDeadRowReader.Open ( GetFilename(SPH_EXT_SPM).cstr(), m_sError ) )
+		return m_tReporter.Fail ( "unable to open dead-row map: %s", m_sError.cstr() );
 
-	if ( m_tSchema.HasNonColumnarAttrs() && !m_tAttrReader.Open ( GetFilename(SPH_EXT_SPA).cstr(), sError ) )
-		return m_tReporter.Fail ( "unable to open attributes: %s", sError.cstr() );
+	if ( m_tSchema.HasNonColumnarAttrs() && !m_tAttrReader.Open ( GetFilename(SPH_EXT_SPA).cstr(), m_sError ) )
+		return m_tReporter.Fail ( "unable to open attributes: %s", m_sError.cstr() );
 
 	if ( m_tSchema.GetAttr ( sphGetBlobLocatorName() ) )
 	{
-		if ( !m_tBlobReader.Open ( GetFilename(SPH_EXT_SPB), sError ) )
-			return m_tReporter.Fail ( "unable to open blobs: %s", sError.cstr() );
+		if ( !m_tBlobReader.Open ( GetFilename(SPH_EXT_SPB), m_sError ) )
+			return m_tReporter.Fail ( "unable to open blobs: %s", m_sError.cstr() );
 
 		m_bHasBlobs = true;
 	}
 
 	if ( m_uVersion>=57 && ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() ) )
 	{
-		if ( !m_tDocstoreReader.Open ( GetFilename(SPH_EXT_SPDS).cstr(), sError ) )
-			return m_tReporter.Fail ( "unable to open docstore: %s", sError.cstr() );
+		if ( !m_tDocstoreReader.Open ( GetFilename(SPH_EXT_SPDS).cstr(), m_sError ) )
+			return m_tReporter.Fail ( "unable to open docstore: %s", m_sError.cstr() );
 
 		m_bHasDocstore = true;
 	}
@@ -734,6 +932,7 @@ void DiskIndexChecker_c::Impl_c::Check()
 	CheckAttributes();
 	CheckBlockIndex();
 	CheckColumnar();
+	CheckSecondaryIndexes();
 	CheckKillList();
 	CheckDocstore();
 
@@ -748,19 +947,28 @@ void DiskIndexChecker_c::Impl_c::Check()
 void DiskIndexChecker_c::Impl_c::CheckDictionary()
 {
 	m_tReporter.Msg ( "checking dictionary..." );
+	assert ( m_pIndex );
 
-	const CSphIndexSettings & tIndexSettings = m_tIndex.GetSettings();
+	const CSphIndexSettings & tIndexSettings = m_pIndex->GetSettings();
+	const auto & tDictSettings = m_pIndex->GetDictionary()->GetSettings();
+	const DictFormat_e eDictFormat = tDictSettings.GetDictFormat();
 
 	SphWordID_t uWordid = 0;
-	int64_t iDoclistOffset = 0;
+	SphOffset_t iDoclistOffset = 0;
 	int iWordsTotal = 0;
 
-	char sWord[MAX_KEYWORD_BYTES], sLastWord[MAX_KEYWORD_BYTES];
-	memset ( sWord, 0, sizeof(sWord) );
-	memset ( sLastWord, 0, sizeof(sLastWord) );
+	CSphVector<BYTE> dWord;
+	dWord.Resize ( GetKeywordBufSize ( eDictFormat ) );
+	dWord[0] = '\0';
+
+	CSphVector<BYTE> dLastWord;
+	dLastWord.Resize ( GetKeywordBufSize ( eDictFormat ) );
+	dLastWord[0] = '\0';
+	int iLastWordLen = 0;
 
 	const int iWordPerCP = SPH_WORDLIST_CHECKPOINT;
-	const bool bWordDict = m_tIndex.GetDictionary()->GetSettings().m_bWordDict;
+	const bool bWordDict = tDictSettings.IsWordDict();
+	const bool bLegacySkiplistLayout = IsLegacyHitlessLayoutForCheck ( m_uVersion );
 
 	CSphVector<CSphWordlistCheckpoint> dCheckpoints;
 	dCheckpoints.Reserve ( m_tWordlist.m_iDictCheckpoints );
@@ -769,7 +977,7 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 	CSphAutoreader & tDictReader = m_tDictReader;
 
 	tDictReader.GetByte();
-	int iLastSkipsOffset = 0;
+	SphOffset_t iLastSkipsOffset = 0;
 	SphOffset_t iWordsEnd = m_tWordlist.GetWordsEnd();
 
 	while ( tDictReader.GetPos()!=iWordsEnd && !m_bIsEmpty )
@@ -783,120 +991,55 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 
 		// store current entry pos (for checkpointing later), read next delta
 		const int64_t iDictPos = tDictReader.GetPos();
-		SphWordID_t iDeltaWord = 0;
-		if ( bWordDict )
-			iDeltaWord = tDictReader.GetByte();
-		else
-			iDeltaWord = tDictReader.UnzipWordid();
+		DictEntryForCheck_t tEntry;
+		DictReadResult_e eReadResult = ReadDictEntryForCheck ( tDictReader, eDictFormat, tIndexSettings, m_uVersion, bLegacySkiplistLayout, m_dHitlessWords, uWordid, iDoclistOffset, dWord, tEntry, m_tReporter );
 
 		// checkpoint encountered, handle it
-		if ( !iDeltaWord )
+		if ( eReadResult==DictReadResult_e::CHECKPOINT )
 		{
-			tDictReader.UnzipOffset();
-
 			if ( ( iWordsTotal%iWordPerCP )!=0 && tDictReader.GetPos()!=iWordsEnd )
 				m_tReporter.Fail ( "unexpected checkpoint (pos=" INT64_FMT ", word=%d, words=%d, expected=%d)", iDictPos, iWordsTotal, ( iWordsTotal%iWordPerCP ), iWordPerCP );
-
-			uWordid = 0;
-			iDoclistOffset = 0;
 			continue;
 		}
 
-		SphWordID_t uNewWordid = 0;
-		SphOffset_t iNewDoclistOffset = 0;
-		int iDocs = 0;
-		int iHits = 0;
-		bool bHitless = false;
-
 		if ( bWordDict )
 		{
-			// unpack next word
-			// must be in sync with DictEnd()!
-			BYTE uPack = (BYTE)iDeltaWord;
-			int iMatch, iDelta;
-			if ( uPack & 0x80 )
-			{
-				iDelta = ( ( uPack>>4 ) & 7 ) + 1;
-				iMatch = uPack & 15;
-			} else
-			{
-				iDelta = uPack & 127;
-				iMatch = tDictReader.GetByte();
-			}
-			auto iLastWordLen = (const int) strlen(sLastWord);
-			if ( iMatch+iDelta>=(int)sizeof(sLastWord)-1 || iMatch>iLastWordLen )
-			{
-				m_tReporter.Fail ( "wrong word-delta (pos=" INT64_FMT ", word=%s, len=%d, begin=%d, delta=%d)", iDictPos, sLastWord, iLastWordLen, iMatch, iDelta );
-				tDictReader.SkipBytes ( iDelta );
-			} else
-			{
-				tDictReader.GetBytes ( sWord+iMatch, iDelta );
-				sWord [ iMatch+iDelta ] = '\0';
-			}
-
-			iNewDoclistOffset = tDictReader.UnzipOffset();
-			iDocs = tDictReader.UnzipInt();
-			iHits = tDictReader.UnzipInt();
-			int iHint = 0;
-			if ( iDocs>=DOCLIST_HINT_THRESH )
-				iHint = tDictReader.GetByte();
-
-			iHint = DoclistHintUnpack ( iDocs, (BYTE)iHint );
-
-			if ( m_tIndex.GetSettings().m_eHitless==SPH_HITLESS_SOME && ( iDocs & HITLESS_DOC_FLAG )!=0 )
-			{
-				iDocs = ( iDocs & HITLESS_DOC_MASK );
-				bHitless = true;
-			}
-
-			auto iNewWordLen = (const int) strlen(sWord);
-
-			if ( iNewWordLen==0 )
+			if ( tEntry.m_iWordLen==0 )
 				m_tReporter.Fail ( "empty word in dictionary (pos=" INT64_FMT ")", iDictPos );
 
-			if ( iLastWordLen && iNewWordLen )
-				if ( sphDictCmpStrictly ( sWord, iNewWordLen, sLastWord, iLastWordLen )<=0 )
-					m_tReporter.Fail ( "word order decreased (pos=" INT64_FMT ", word=%s, prev=%s)", iDictPos, sLastWord, sWord );
+			if ( iLastWordLen && tEntry.m_iWordLen )
+				if ( sphDictCmpStrictly ( tEntry.m_szWord, tEntry.m_iWordLen, (const char*)dLastWord.Begin(), iLastWordLen )<=0 )
+					m_tReporter.Fail ( "word order decreased (pos=" INT64_FMT ", word=%s, prev=%s)", iDictPos, (const char*)dLastWord.Begin(), tEntry.m_szWord );
 
-			if ( iHint<0 )
-				m_tReporter.Fail ( "invalid word hint (pos=" INT64_FMT ", word=%s, hint=%d)", iDictPos, sWord, iHint );
+			if ( tEntry.m_iHint<0 )
+				m_tReporter.Fail ( "invalid word hint (pos=" INT64_FMT ", word=%s, hint=%d)", iDictPos, tEntry.m_szWord, tEntry.m_iHint );
 
-			if ( iDocs<=0 || iHits<=0 || iHits<iDocs )
-				m_tReporter.Fail ( "invalid docs/hits (pos=" INT64_FMT ", word=%s, docs=" INT64_FMT ", hits=" INT64_FMT ")", (int64_t)iDictPos, sWord, (int64_t)iDocs, (int64_t)iHits );
+			if ( tEntry.m_iDocs<=0 || tEntry.m_iHits<=0 || tEntry.m_iHits<tEntry.m_iDocs )
+				m_tReporter.Fail ( "invalid docs/hits (pos=" INT64_FMT ", word=%s, docs=" INT64_FMT ", hits=" INT64_FMT ")", (int64_t)iDictPos, tEntry.m_szWord, (int64_t)tEntry.m_iDocs, (int64_t)tEntry.m_iHits );
 
-			memcpy ( sLastWord, sWord, sizeof(sLastWord) );
+			memcpy ( dLastWord.Begin(), dWord.Begin(), tEntry.m_iWordLen+1 );
+			iLastWordLen = tEntry.m_iWordLen;
 		} else
 		{
-			// finish reading the entire entry
-			uNewWordid = uWordid + iDeltaWord;
-			iNewDoclistOffset = iDoclistOffset + tDictReader.UnzipOffset();
-			iDocs = tDictReader.UnzipInt();
-			iHits = tDictReader.UnzipInt();
-			bHitless = ( m_dHitlessWords.BinarySearch ( uNewWordid )!=NULL );
-			if ( bHitless )
-				iDocs = ( iDocs & HITLESS_DOC_MASK );
+			if ( tEntry.m_uWordid<=uWordid )
+				m_tReporter.Fail ( "wordid decreased (pos=" INT64_FMT ", wordid=" UINT64_FMT ", previd=" UINT64_FMT ")", (int64_t)iDictPos, (uint64_t)tEntry.m_uWordid, (uint64_t)uWordid );
 
-			if ( uNewWordid<=uWordid )
-				m_tReporter.Fail ( "wordid decreased (pos=" INT64_FMT ", wordid=" UINT64_FMT ", previd=" UINT64_FMT ")", (int64_t)iDictPos, (uint64_t)uNewWordid, (uint64_t)uWordid );
+			if ( tEntry.m_iDoclistOffset<=iDoclistOffset )
+				m_tReporter.Fail ( "doclist offset decreased (pos=" INT64_FMT ", wordid=" UINT64_FMT ")", (int64_t)iDictPos, (uint64_t)tEntry.m_uWordid );
 
-			if ( iNewDoclistOffset<=iDoclistOffset )
-				m_tReporter.Fail ( "doclist offset decreased (pos=" INT64_FMT ", wordid=" UINT64_FMT ")", (int64_t)iDictPos, (uint64_t)uNewWordid );
-
-			if ( iDocs<=0 || iHits<=0 || iHits<iDocs )
+			if ( tEntry.m_iDocs<=0 || tEntry.m_iHits<=0 || tEntry.m_iHits<tEntry.m_iDocs )
 				m_tReporter.Fail ( "invalid docs/hits (pos=" INT64_FMT ", wordid=" UINT64_FMT ", docs=" INT64_FMT ", hits=" INT64_FMT ", hitless=%s)",
-					(int64_t)iDictPos, (uint64_t)uNewWordid, (int64_t)iDocs, (int64_t)iHits, ( bHitless?"true":"false" ) );
+					(int64_t)iDictPos, (uint64_t)tEntry.m_uWordid, (int64_t)tEntry.m_iDocs, (int64_t)tEntry.m_iHits, ( tEntry.m_bHitless?"true":"false" ) );
 		}
 
-		assert ( tIndexSettings.m_iSkiplistBlockSize>0 );
-
-		// skiplist
-		if ( iDocs>tIndexSettings.m_iSkiplistBlockSize && !bHitless )
+		// Stream consumption depends on docs count in dictionary layout.
+		// Logical hitless masking must not affect optional field parsing.
+		if ( tEntry.m_iLayoutDocs>tIndexSettings.m_iSkiplistBlockSize )
 		{
-			int iSkipsOffset = tDictReader.UnzipInt();
-			if ( !bWordDict && iSkipsOffset<iLastSkipsOffset )
-				m_tReporter.Fail ( "descending skiplist pos (last=%d, cur=%d, wordid=" UINT64_FMT ")", iLastSkipsOffset, iSkipsOffset, UINT64 ( uNewWordid ) );
+			if ( !bWordDict && tEntry.m_iSkiplistOffset<iLastSkipsOffset )
+				m_tReporter.Fail ( "descending skiplist pos (last=" INT64_FMT ", cur=" INT64_FMT ", wordid=" UINT64_FMT ")", (int64_t)iLastSkipsOffset, (int64_t)tEntry.m_iSkiplistOffset, UINT64 ( tEntry.m_uWordid ) );
 
-			iLastSkipsOffset = iSkipsOffset;
+			iLastSkipsOffset = tEntry.m_iSkiplistOffset;
 		}
 
 		// update stats, add checkpoint
@@ -907,28 +1050,28 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 
 			if ( bWordDict )
 			{
-				auto iLen = (const int) strlen ( sWord );
+				auto iLen = tEntry.m_iWordLen;
 				char * sArenaWord = dCheckpointWords.AddN ( iLen + 1 );
-				memcpy ( sArenaWord, sWord, iLen );
+				memcpy ( sArenaWord, tEntry.m_szWord, iLen );
 				sArenaWord[iLen] = '\0';
 				tCP.m_uWordID = sArenaWord - dCheckpointWords.Begin();
 			} else
-				tCP.m_uWordID = uNewWordid;
+				tCP.m_uWordID = tEntry.m_uWordid;
 		}
 
 		// TODO add back infix checking
 
-		uWordid = uNewWordid;
-		iDoclistOffset = iNewDoclistOffset;
+		uWordid = tEntry.m_uWordid;
+		iDoclistOffset = tEntry.m_iDoclistOffset;
 		iWordsTotal++;
 	}
 
 	// check the checkpoints
 	if ( dCheckpoints.GetLength()!=m_tWordlist.m_iDictCheckpoints )
-		m_tReporter.Fail ( "checkpoint count mismatch (read=%d, calc=%d)", m_tWordlist.m_iDictCheckpoints, dCheckpoints.GetLength() );
+		m_tReporter.Fail ( "checkpoint count mismatch (read=" INT64_FMT ", calc=" INT64_FMT ")", m_tWordlist.m_iDictCheckpoints, dCheckpoints.GetLength64() );
 
 	m_tWordlist.DebugPopulateCheckpoints();
-	for ( int i=0; i < Min ( dCheckpoints.GetLength(), m_tWordlist.m_iDictCheckpoints ); i++ )
+	for ( int64_t i=0; i < Min ( dCheckpoints.GetLength64(), m_tWordlist.m_iDictCheckpoints ); i++ )
 	{
 		CSphWordlistCheckpoint tRefCP = dCheckpoints[i];
 		const CSphWordlistCheckpoint & tCP = m_tWordlist.m_dCheckpoints[i];
@@ -970,7 +1113,11 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 
 void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 {
-	const CSphIndexSettings & tIndexSettings = m_tIndex.GetSettings();
+	assert ( m_pIndex );
+	const CSphIndexSettings & tIndexSettings = m_pIndex->GetSettings();
+	const bool bLegacySkiplistLayout = IsLegacyHitlessLayoutForCheck ( m_uVersion );
+	const auto & tDictSettings = m_pIndex->GetDictionary()->GetSettings();
+	const DictFormat_e eDictFormat = tDictSettings.GetDictFormat();
 
 	if ( !fnCbWordid )
 		m_tReporter.Msg ( "checking data..." );
@@ -983,17 +1130,16 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 	m_pHitsReader->SeekTo ( 1 );
 
 	SphWordID_t uWordid = 0;
-	int64_t iDoclistOffset = 0;
-	int iDictDocs, iDictHits;
-	bool bHitless = false;
+	SphOffset_t iDoclistOffset = 0;
 
-	const bool bWordDict = m_tIndex.GetDictionary()->GetSettings().m_bWordDict;
+	const bool bWordDict = tDictSettings.IsWordDict();
 
 	Wordid_t tCbWordid;
 	tCbWordid.m_bWordDict = bWordDict;
 
-	char sWord[MAX_KEYWORD_BYTES];
-	memset ( sWord, 0, sizeof(sWord) );
+	CSphVector<BYTE> dWord;
+	dWord.Resize ( GetKeywordBufSize ( eDictFormat ) );
+	dWord[0] = '\0';
 
 	int iWordsChecked = 0;
 	int iWordsTotal = 0;
@@ -1001,92 +1147,33 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 	SphOffset_t iWordsEnd = m_tWordlist.GetWordsEnd();
 	while ( m_tDictReader.GetPos()<iWordsEnd )
 	{
-		bHitless = false;
-		SphWordID_t iDeltaWord = 0;
-		if ( bWordDict )
-			iDeltaWord = m_tDictReader.GetByte();
-		else
-			iDeltaWord = m_tDictReader.UnzipWordid();
-
-		if ( !iDeltaWord )
-		{
-			m_tDictReader.UnzipOffset();
-
-			uWordid = 0;
-			iDoclistOffset = 0;
+		DictEntryForCheck_t tEntry;
+		if ( ReadDictEntryForCheck ( m_tDictReader, eDictFormat, tIndexSettings, m_uVersion, bLegacySkiplistLayout, m_dHitlessWords, uWordid, iDoclistOffset, dWord, tEntry, m_tReporter )==DictReadResult_e::CHECKPOINT )
 			continue;
-		}
 
 		if ( bWordDict )
 		{
-			// unpack next word
-			// must be in sync with DictEnd()!
-			BYTE uPack = (BYTE)iDeltaWord;
-
-			int iMatch, iDelta;
-			if ( uPack & 0x80 )
-			{
-				iDelta = ( ( uPack>>4 ) & 7 ) + 1;
-				iMatch = uPack & 15;
-			} else
-			{
-				iDelta = uPack & 127;
-				iMatch = m_tDictReader.GetByte();
-			}
-			auto iLastWordLen = (const int) strlen(sWord);
-			if ( iMatch+iDelta>=(int)sizeof(sWord)-1 || iMatch>iLastWordLen )
-				m_tDictReader.SkipBytes ( iDelta );
-			else
-			{
-				m_tDictReader.GetBytes ( sWord+iMatch, iDelta );
-				sWord [ iMatch+iDelta ] = '\0';
-			}
-
-			iDoclistOffset = m_tDictReader.UnzipOffset();
-			iDictDocs = m_tDictReader.UnzipInt();
-			iDictHits = m_tDictReader.UnzipInt();
-			if ( iDictDocs>=DOCLIST_HINT_THRESH )
-				m_tDictReader.GetByte();
-
-			if ( tIndexSettings.m_eHitless==SPH_HITLESS_SOME && ( iDictDocs & HITLESS_DOC_FLAG ) )
-			{
-				iDictDocs = ( iDictDocs & HITLESS_DOC_MASK );
-				bHitless = true;
-			}
-			tCbWordid.m_szWordid = sWord;
+			tCbWordid.m_szWordid = tEntry.m_szWord;
 		} else
 		{
-			// finish reading the entire entry
-			uWordid = uWordid + iDeltaWord;
-			bHitless = ( m_dHitlessWords.BinarySearch ( uWordid )!=NULL );
-			iDoclistOffset = iDoclistOffset + m_tDictReader.UnzipOffset();
-			iDictDocs = m_tDictReader.UnzipInt();
-			if ( bHitless )
-				iDictDocs = ( iDictDocs & HITLESS_DOC_MASK );
-			iDictHits = m_tDictReader.UnzipInt();
-			tCbWordid.m_uWordid = uWordid;
+			tCbWordid.m_uWordid = tEntry.m_uWordid;
 		}
 
-		int64_t iSkipsOffset = 0;
-		if ( iDictDocs>tIndexSettings.m_iSkiplistBlockSize && !bHitless )
-		{
-			if ( m_uVersion<=57 )
-				iSkipsOffset = (int)m_tDictReader.UnzipInt();
-			else
-				iSkipsOffset = m_tDictReader.UnzipOffset();
-		}
+		uWordid = tEntry.m_uWordid;
+		iDoclistOffset = tEntry.m_iDoclistOffset;
+		bool bHitless = tEntry.m_bHitless;
 
 		// check whether the offset is as expected
 		if ( iDoclistOffset!=m_pDocsReader->GetPos() )
 		{
 			if ( !bWordDict )
 				m_tReporter.Fail ( "unexpected doclist offset (wordid=" UINT64_FMT "(%s)(%d), dictpos=" INT64_FMT ", doclistpos=" INT64_FMT ")",
-					(uint64_t)uWordid, sWord, iWordsChecked, iDoclistOffset, (int64_t) m_pDocsReader->GetPos() );
+					(uint64_t)uWordid, tEntry.m_szWord, iWordsChecked, iDoclistOffset, (int64_t) m_pDocsReader->GetPos() );
 
 			if ( iDoclistOffset>=iDocsSize || iDoclistOffset<0 )
 			{
 				m_tReporter.Fail ( "unexpected doclist offset, off the file (wordid=" UINT64_FMT "(%s)(%d), dictpos=" INT64_FMT ", doclistsize=" INT64_FMT ")",
-					(uint64_t)uWordid, sWord, iWordsChecked, iDoclistOffset, iDocsSize );
+					(uint64_t)uWordid, tEntry.m_szWord, iWordsChecked, iDoclistOffset, iDocsSize );
 				iWordsChecked++;
 				continue;
 			} else
@@ -1133,7 +1220,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 
 			// checks!
 			if ( tDoc.m_tRowID>m_iNumRows )
-				m_tReporter.Fail ( "rowid out of bounds (wordid=" UINT64_FMT "(%s), rowid=%u)",	uint64_t(uWordid), sWord, tDoc.m_tRowID );
+				m_tReporter.Fail ( "rowid out of bounds (wordid=" UINT64_FMT "(%s), rowid=%u)",	uint64_t(uWordid), tEntry.m_szWord, tDoc.m_tRowID );
 
 			++iDoclistDocs;
 			iDoclistHits += pQword->m_uMatchHits;
@@ -1143,7 +1230,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 			{
 				if ( !bWordDict && pQword->m_iHitlistPos!=pQword->m_rdHitlist->GetPos() )
 					m_tReporter.Fail ( "unexpected hitlist offset (wordid=" UINT64_FMT "(%s), rowid=%u, expected=" INT64_FMT ", actual=" INT64_FMT ")",
-						(uint64_t)uWordid, sWord, pQword->m_tDoc.m_tRowID, (int64_t)pQword->m_iHitlistPos, (int64_t)pQword->m_rdHitlist->GetPos() );
+						(uint64_t)uWordid, tEntry.m_szWord, pQword->m_tDoc.m_tRowID, (int64_t)pQword->m_iHitlistPos, (int64_t)pQword->m_rdHitlist->GetPos() );
 			}
 
 			// aim
@@ -1162,19 +1249,19 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 					break;
 
 				if ( !( uLastHit<uHit ) )
-					m_tReporter.Fail ( "hit entries sorting order decreased (wordid=" UINT64_FMT "(%s), rowid=%u, hit=%u, last=%u)", (uint64_t)uWordid, sWord, pQword->m_tDoc.m_tRowID, uHit, uLastHit );
+					m_tReporter.Fail ( "hit entries sorting order decreased (wordid=" UINT64_FMT "(%s), rowid=%u, hit=%u, last=%u)", (uint64_t)uWordid, tEntry.m_szWord, pQword->m_tDoc.m_tRowID, uHit, uLastHit );
 
 				if ( HITMAN::GetField ( uLastHit )==HITMAN::GetField ( uHit ) )
 				{
 					if ( !( HITMAN::GetPos ( uLastHit )<HITMAN::GetPos ( uHit ) ) )
-						m_tReporter.Fail ( "hit decreased (wordid=" UINT64_FMT "(%s), rowid=%u, hit=%u, last=%u)",	(uint64_t)uWordid, sWord, pQword->m_tDoc.m_tRowID, HITMAN::GetPos ( uHit ), HITMAN::GetPos ( uLastHit ) );
+						m_tReporter.Fail ( "hit decreased (wordid=" UINT64_FMT "(%s), rowid=%u, hit=%u, last=%u)",	(uint64_t)uWordid, tEntry.m_szWord, pQword->m_tDoc.m_tRowID, HITMAN::GetPos ( uHit ), HITMAN::GetPos ( uLastHit ) );
 
 					if ( HITMAN::IsEnd ( uLastHit ) )
-						m_tReporter.Msg ( "WARNING, multiple tail hits (wordid=" UINT64_FMT "(%s), rowid=%u, hit=0x%x, last=0x%x)", (uint64_t)uWordid, sWord, pQword->m_tDoc.m_tRowID, uHit, uLastHit );
+						m_tReporter.Msg ( "WARNING, multiple tail hits (wordid=" UINT64_FMT "(%s), rowid=%u, hit=0x%x, last=0x%x)", (uint64_t)uWordid, tEntry.m_szWord, pQword->m_tDoc.m_tRowID, uHit, uLastHit );
 				} else
 				{
 					if ( !( HITMAN::GetField ( uLastHit )<HITMAN::GetField ( uHit ) ) )
-						m_tReporter.Fail ( "hit field decreased (wordid=" UINT64_FMT "(%s), rowid=%u, hit field=%u, last field=%u)", (uint64_t)uWordid, sWord, pQword->m_tDoc.m_tRowID, HITMAN::GetField ( uHit ), HITMAN::GetField ( uLastHit ) );
+						m_tReporter.Fail ( "hit field decreased (wordid=" UINT64_FMT "(%s), rowid=%u, hit field=%u, last field=%u)", (uint64_t)uWordid, tEntry.m_szWord, pQword->m_tDoc.m_tRowID, HITMAN::GetField ( uHit ), HITMAN::GetField ( uLastHit ) );
 				}
 
 				if ( fnCbWordid )
@@ -1184,9 +1271,9 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 
 				int iField = HITMAN::GetField ( uHit );
 				if ( iField<0 || iField>=SPH_MAX_FIELDS )
-					m_tReporter.Fail ( "hit field out of bounds (wordid=" UINT64_FMT "(%s), rowid=%u, field=%d)", (uint64_t)uWordid, sWord, pQword->m_tDoc.m_tRowID, iField );
+					m_tReporter.Fail ( "hit field out of bounds (wordid=" UINT64_FMT "(%s), rowid=%u, field=%d)", (uint64_t)uWordid, tEntry.m_szWord, pQword->m_tDoc.m_tRowID, iField );
 				else if ( iField>=m_tSchema.GetFieldsCount() )
-					m_tReporter.Fail ( "hit field out of schema (wordid=" UINT64_FMT "(%s), rowid=%u, field=%d)", (uint64_t)uWordid, sWord, pQword->m_tDoc.m_tRowID, iField );
+					m_tReporter.Fail ( "hit field out of schema (wordid=" UINT64_FMT "(%s), rowid=%u, field=%d)", (uint64_t)uWordid, tEntry.m_szWord, pQword->m_tDoc.m_tRowID, iField );
 				else
 					dFieldMask.Set(iField);
 
@@ -1196,31 +1283,31 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 
 			// check hit count
 			if ( iDocHits!=(int)pQword->m_uMatchHits && !bHitless )
-				m_tReporter.Fail ( "doc hit count mismatch (wordid=" UINT64_FMT "(%s), rowid=%u, doclist=%d, hitlist=%d)", (uint64_t)uWordid, sWord, pQword->m_tDoc.m_tRowID, pQword->m_uMatchHits, iDocHits );
+				m_tReporter.Fail ( "doc hit count mismatch (wordid=" UINT64_FMT "(%s), rowid=%u, doclist=%d, hitlist=%d)", (uint64_t)uWordid, tEntry.m_szWord, pQword->m_tDoc.m_tRowID, pQword->m_uMatchHits, iDocHits );
 
 			if ( m_tSchema.GetFieldsCount()>32 )
 				pQword->CollectHitMask();
 
 			// check the mask
 			if ( memcmp ( dFieldMask.m_dMask, pQword->m_dQwordFields.m_dMask, sizeof(dFieldMask.m_dMask) ) && !bHitless )
-				m_tReporter.Fail ( "field mask mismatch (wordid=" UINT64_FMT "(%s), rowid=%u)", (uint64_t)uWordid, sWord, pQword->m_tDoc.m_tRowID );
+				m_tReporter.Fail ( "field mask mismatch (wordid=" UINT64_FMT "(%s), rowid=%u)", (uint64_t)uWordid, tEntry.m_szWord, pQword->m_tDoc.m_tRowID );
 
 			// update my hitlist reader
 			m_pHitsReader->SeekTo ( pQword->m_rdHitlist->GetPos() );
 		}
 
 		// do checks
-		if ( iDictDocs!=iDoclistDocs )
-			m_tReporter.Fail ( "doc count mismatch (wordid=" UINT64_FMT "(%s), dict=%d, doclist=%d, hitless=%s)", uint64_t(uWordid), sWord, iDictDocs, iDoclistDocs, ( bHitless?"true":"false" ) );
+		if ( tEntry.m_iDocs!=iDoclistDocs )
+			m_tReporter.Fail ( "doc count mismatch (wordid=" UINT64_FMT "(%s), dict=%d, doclist=%d, hitless=%s)", uint64_t(uWordid), tEntry.m_szWord, tEntry.m_iDocs, iDoclistDocs, ( bHitless?"true":"false" ) );
 
-		if ( ( iDictHits!=iDoclistHits || iDictHits!=iHitlistHits ) && !bHitless )
-			m_tReporter.Fail ( "hit count mismatch (wordid=" UINT64_FMT "(%s), dict=%d, doclist=%d, hitlist=%d)", uint64_t(uWordid), sWord, iDictHits, iDoclistHits, iHitlistHits );
+		if ( ( tEntry.m_iHits!=iDoclistHits || tEntry.m_iHits!=iHitlistHits ) && !bHitless )
+			m_tReporter.Fail ( "hit count mismatch (wordid=" UINT64_FMT "(%s), dict=%d, doclist=%d, hitlist=%d)", uint64_t(uWordid), tEntry.m_szWord, tEntry.m_iHits, iDoclistHits, iHitlistHits );
 
 		while ( iDoclistDocs>tIndexSettings.m_iSkiplistBlockSize && !bHitless )
 		{
-			if ( iSkipsOffset<=0 || iSkipsOffset>iSkiplistLen )
+			if ( tEntry.m_iSkiplistOffset<=0 || tEntry.m_iSkiplistOffset>iSkiplistLen )
 			{
-				m_tReporter.Fail ( "invalid skiplist offset (wordid=" UINT64_FMT "(%s), off=" INT64_FMT ", max=" INT64_FMT ")", UINT64 ( uWordid ), sWord, iSkipsOffset, iSkiplistLen );
+				m_tReporter.Fail ( "invalid skiplist offset (wordid=" UINT64_FMT "(%s), off=" INT64_FMT ", max=" INT64_FMT ")", UINT64 ( uWordid ), tEntry.m_szWord, (int64_t)tEntry.m_iSkiplistOffset, iSkiplistLen );
 				break;
 			}
 
@@ -1234,7 +1321,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 			t.m_iBaseHitlistPos = 0;
 
 			// hint is: dDoclistSkips * ZIPPED( sizeof(int64_t) * 3 ) == dDoclistSkips * 8
-			m_tSkipsReader.SeekTo ( iSkipsOffset, dDoclistSkips.GetLength ()*8 );
+			m_tSkipsReader.SeekTo ( tEntry.m_iSkiplistOffset, dDoclistSkips.GetLength ()*8 );
 			int i = 0;
 			while ( ++i<dDoclistSkips.GetLength() )
 			{
@@ -1246,7 +1333,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 
 				if ( m_tSkipsReader.GetErrorFlag () )
 				{
-					m_tReporter.Fail ( "skiplist reading error (wordid=" UINT64_FMT "(%s), exp=%d, got=%d, error='%s')", UINT64 ( uWordid ), sWord, i, dDoclistSkips.GetLength (), m_tSkipsReader.GetErrorMessage ().cstr () );
+					m_tReporter.Fail ( "skiplist reading error (wordid=" UINT64_FMT "(%s), exp=%d, got=%d, error='%s')", UINT64 ( uWordid ), tEntry.m_szWord, i, dDoclistSkips.GetLength (), m_tSkipsReader.GetErrorMessage ().cstr () );
 					m_tSkipsReader.ResetError();
 					break;
 				}
@@ -1257,7 +1344,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 				if ( t.m_tBaseRowIDPlus1!=r.m_tBaseRowIDPlus1 || t.m_iOffset!=r.m_iOffset || t.m_iBaseHitlistPos!=r.m_iBaseHitlistPos )
 				{
 					m_tReporter.Fail ( "skiplist entry %d mismatch (wordid=" UINT64_FMT "(%s), exp={%u, " UINT64_FMT ", " UINT64_FMT "}, got={%u, " UINT64_FMT ", " UINT64_FMT "})",
-						i, UINT64 ( uWordid ), sWord,
+						i, UINT64 ( uWordid ), tEntry.m_szWord,
 						r.m_tBaseRowIDPlus1, UINT64 ( r.m_iOffset ), UINT64 ( r.m_iBaseHitlistPos ),
 						t.m_tBaseRowIDPlus1, UINT64 ( t.m_iOffset ), UINT64 ( t.m_iBaseHitlistPos ) );
 					break;
@@ -1273,6 +1360,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 		SafeDelete ( pQword );
 
 		// progress bar
+		iWordsTotal++;
 		if ( (++iWordsChecked)%1000==0 )
 			m_tReporter.Progress ( "%d/%d", iWordsChecked, iWordsTotal );
 	}
@@ -1479,6 +1567,23 @@ void DiskIndexChecker_c::Impl_c::CheckColumnar()
 }
 
 
+void DiskIndexChecker_c::Impl_c::CheckSecondaryIndexes()
+{
+	CSphString sError;
+	if ( !sphFileExists ( GetFilename(SPH_EXT_SPIDX), &sError ) )
+		return;
+
+	m_tReporter.Msg ( "checking secondary indexes..." );
+	CheckSecondaryIndexStorage ( GetFilename(SPH_EXT_SPIDX), (DWORD)m_iNumRows,
+		[this]( const char * szError )
+		{
+			m_tReporter.Fail ( szError ? "\n%s" : "%s", szError ? szError : "" );
+			return m_tReporter.GetNumFails()<FAILS_THRESH;
+		},
+		[this]( const char * szProgress ){ m_tReporter.Progress ( "%s", szProgress ); } );
+}
+
+
 void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 {
 	CSphString sError;
@@ -1505,6 +1610,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 	int64_t iDocs = tLookup.GetDword();
 	int64_t iDocsPerCheckpoint = tLookup.GetDword();
 	tLookup.GetOffset(); // max docid
+	SphOffset_t tUuidEntriesOffset = m_uVersion>=71 ? tLookup.GetOffset() : 0;
 	int64_t iLookupBase = tLookup.GetPos();
 
 	int iCheckpoints = ( iDocs + iDocsPerCheckpoint - 1 ) / iDocsPerCheckpoint;
@@ -1594,6 +1700,54 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 			m_tReporter.Fail ( "row %u(" INT64_FMT ") not mapped at lookup, docid " UINT64_FMT, i, m_iNumRows, tDocID );
 		}
 	}
+
+	SphOffset_t tNumericEnd = tLookup.GetPos();
+	if ( pId->IsUuidLinkedDocid() )
+		CheckUuidDocidLookup ( tLookup, iDocs, tUuidEntriesOffset, tNumericEnd );
+	else if ( tUuidEntriesOffset )
+		m_tReporter.Fail ( "unexpected uuid lookup offset in .SPT" );
+}
+
+
+void DiskIndexChecker_c::Impl_c::CheckUuidDocidLookup ( CSphReader & tLookup, int64_t iDocs, SphOffset_t tEntriesOffset, SphOffset_t tNumericEnd )
+{
+	if ( m_uVersion<71 )
+	{
+		m_tReporter.Fail ( "uuid lookup requires index format 71 or newer" );
+		return;
+	}
+
+	if ( iDocs!=m_iNumRows )
+		m_tReporter.Fail ( "uuid lookup entry count " INT64_FMT " differs from row count " INT64_FMT, iDocs, m_iNumRows );
+
+	uint64_t uEntriesBytes = (uint64_t)iDocs*sizeof(UuidDocidLookupPair_t);
+	if ( tEntriesOffset!=tNumericEnd || tEntriesOffset<=0 || (uint64_t)tEntriesOffset>(uint64_t)tLookup.GetFilesize() || uEntriesBytes!=(uint64_t)tLookup.GetFilesize()-(uint64_t)tEntriesOffset )
+	{
+		m_tReporter.Fail ( "invalid uuid lookup bounds in .SPT" );
+		return;
+	}
+
+	tLookup.SeekTo ( tEntriesOffset, sizeof(UuidDocidLookupPair_t) );
+	UuidDocidLookupPair_t tPrev;
+	for ( int64_t i=0; i<iDocs; ++i )
+	{
+		UuidDocidLookupPair_t tPair;
+		tPair.m_tKey.m_uHi = (uint64_t)tLookup.GetOffset();
+		tPair.m_tKey.m_uLo = (uint64_t)tLookup.GetOffset();
+		tPair.m_tDocID = tLookup.GetOffset();
+		if ( tLookup.GetErrorFlag() )
+		{
+			m_tReporter.Fail ( "error reading uuid lookup entry " INT64_FMT ": %s", i, tLookup.GetErrorMessage().cstr() );
+			return;
+		}
+
+		if ( !tPair.m_tDocID )
+			m_tReporter.Fail ( "uuid lookup has zero docid at entry " INT64_FMT, i );
+		if ( i && !CmpUuidDocidLookup_fn::IsLess ( tPrev, tPair ) )
+			m_tReporter.Fail ( "uuid lookup keys are not strictly increasing at entry " INT64_FMT, i );
+
+		tPrev = tPair;
+	}
 }
 
 RowID_t DiskIndexChecker_c::Impl_c::GetRowidByDocid ( DocID_t iDocID ) const
@@ -1605,7 +1759,7 @@ RowID_t DiskIndexChecker_c::Impl_c::GetRowidByDocid ( DocID_t iDocID ) const
 		return INVALID_ROWID;
 
 	LookupReader_c tLookupReader;
-	tLookupReader.SetData ( tDocidLookup.GetReadPtr() );
+	tLookupReader.SetData ( tDocidLookup.GetReadPtr(), m_uVersion );
 
 	return tLookupReader.Find(iDocID);
 }
@@ -1673,12 +1827,13 @@ void DiskIndexChecker_c::Impl_c::CheckDocstore()
 
 CSphString DiskIndexChecker_c::Impl_c::GetFilename ( ESphExt eExt ) const
 {
-	return m_tIndex.GetFilename ( eExt );
+	assert ( m_pIndex );
+	return m_pIndex->GetFilename ( eExt );
 }
 
 /// public interface
-DiskIndexChecker_c::DiskIndexChecker_c ( CSphIndex& tIndex, DebugCheckError_i& tReporter )
-	: m_pImpl { std::make_unique<Impl_c> ( tIndex, tReporter ) }
+DiskIndexChecker_c::DiskIndexChecker_c ( CSphIndex* pIndex, DebugCheckError_i& tReporter )
+	: m_pImpl { std::make_unique<Impl_c> ( pIndex, tReporter ) }
 {}
 
 DiskIndexChecker_c::~DiskIndexChecker_c() = default;
@@ -1687,6 +1842,17 @@ bool DiskIndexChecker_c::OpenFiles ()
 {
 	return m_pImpl->OpenFiles();
 }
+
+bool	DiskIndexChecker_c::ReadHeader(const CSphString& sVersion)
+{
+	return m_pImpl->ReadHeader(sVersion);
+}
+
+DWORD	DiskIndexChecker_c::GetVersion()
+{
+	return m_pImpl->GetVersion();
+}
+
 
 void DiskIndexChecker_c::Setup ( int64_t iNumRows, int64_t iDocinfoIndex, int64_t iMinMaxIndex, bool bCheckIdDups )
 {
@@ -1796,7 +1962,7 @@ bool SchemaConfigureCheckAttribute ( const CSphSchema & tSchema, const CSphColum
 		return false;
 	}
 
-	if ( CSphSchema::IsReserved ( tCol.m_sName.cstr() ) )
+	if ( sphIsInternalAttr ( tCol.m_sName ) && tCol.m_sName!=sphGetUuidDocidName() )
 	{
 		sError.SetSprintf ( "%s is not a valid attribute name", tCol.m_sName.cstr() );
 		return false;

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -85,6 +85,7 @@ public:
 
 	int				m_iMaxMatches = 0;
 	int				m_iPseudoShards = 1;
+	int64_t			m_iKnnDistanceComputations = 0;
 															/// create empty and stopped profile
 					QueryProfile_c();
 	virtual 		~QueryProfile_c() {}

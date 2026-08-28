@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -48,8 +48,10 @@ const char * dlerror()
 
 ScopedHandle_c::~ScopedHandle_c ()
 {
+#if HAVE_DLOPEN
 	if ( m_pHandle )
 		dlclose ( m_pHandle );
+#endif
 }
 
 void * DlSym ( void * pHandle, const char * szFunc, const CSphString & sLib, CSphString & sError )
@@ -82,16 +84,33 @@ std::optional<CSphString> TryPath ( const CSphString & sFullpath, int iVersion )
 	return std::nullopt;
 }
 
-CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath, int iVersion )
+
+static CSphString AddLibPostfix ( const CSphString & sFilename, const char * szPostfix )
 {
-	auto sAnyPath = TryPath ( sFullpath, iVersion );
+	if ( !szPostfix )
+		return sFilename;
+
+	CSphString sExt = GetExtension(sFilename);
+	CSphString sPathName = GetPathNoExtension(sFilename);
+	CSphString sRes;
+	sRes.SetSprintf ( "%s%s.%s", sPathName.cstr(), szPostfix, sExt.cstr() );
+	return sRes;
+}
+
+
+CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath, int iVersion, const char * szPostfix )
+{
+	CSphString sPathWithPostfix = AddLibPostfix ( sFullpath, szPostfix );
+
+	auto sAnyPath = TryPath ( sPathWithPostfix, iVersion );
 	if ( sAnyPath )
 		return sAnyPath.value();
 
 #if _WIN32
 	CSphString sPathToExe = GetPathOnly ( GetExecutablePath() );
 	CSphString sPath;
-	sPath.SetSprintf ( "%s%s", sPathToExe.cstr(), sLibfile.cstr() );
+	CSphString sLibWithPostfix = AddLibPostfix (  sLibfile, szPostfix );
+	sPath.SetSprintf ( "%s%s", sPathToExe.cstr(), sLibWithPostfix.cstr() );
 	sAnyPath = TryPath ( sPath, iVersion );
 #endif
 

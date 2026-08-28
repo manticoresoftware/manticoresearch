@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -16,11 +16,15 @@
 #include "exceptions_trie.h"
 #include "sphinxint.h"
 
-static inline void CopySubstring ( BYTE* pDst, const BYTE* pSrc, int iLen )
+static inline int CopySubstring ( BYTE* pDst, const BYTE* pSrc, int iLen )
 {
-	while ( iLen-- > 0 && *pSrc )
+	assert ( iLen>=0 );
+	BYTE * pStart = pDst;
+	BYTE * pDstEnd = pDst+iLen;
+	while ( pDst<pDstEnd && *pSrc )
 		*pDst++ = *pSrc++;
-	*pDst++ = '\0';
+	*pDst = '\0';
+	return (int)( pDst-pStart );
 }
 
 
@@ -80,6 +84,10 @@ int CSphTokenizerBase2::SkipBlended()
 		iBlended++;
 
 	m_pBufferMax = pMax;
+	// reset flags
+	m_bBlendAdd = false;
+	m_uBlendVariantsPending = 0;
+
 	return iBlended;
 }
 
@@ -91,21 +99,21 @@ BYTE* CSphTokenizerBase2::GetBlendedVariant()
 	{
 		// fast path for the default case (trim_none)
 		if ( m_uBlendVariants == BLEND_TRIM_NONE )
-			return m_sAccum;
+			return Accum();
 
 		// analyze the full token, find non-blended bounds
 		m_iBlendNormalStart = -1;
 		m_iBlendNormalEnd = -1;
 
 		// OPTIMIZE? we can skip this based on non-blended flag from adjust
-		const BYTE* p = m_sAccum;
+		const BYTE* p = Accum();
 		while ( *p )
 		{
-			int iLast = (int)( p - m_sAccum );
+			int iLast = (int)( p - Accum() );
 			int iCode = sphUTF8Decode ( p );
 			if ( !( GetLowercaser().ToLower ( iCode ) & FLAG_CODEPOINT_BLEND ) )
 			{
-				m_iBlendNormalEnd = (int)( p - m_sAccum );
+				m_iBlendNormalEnd = (int)( p - Accum() );
 				if ( m_iBlendNormalStart < 0 )
 					m_iBlendNormalStart = iLast;
 			}
@@ -140,7 +148,7 @@ BYTE* CSphTokenizerBase2::GetBlendedVariant()
 		if ( m_uBlendVariantsPending & BLEND_TRIM_TAIL )
 		{
 			// either no trailing blended, or pure blended; revert TAIL to NONE
-			if ( m_iBlendNormalEnd <= 0 || m_sAccum[m_iBlendNormalEnd] == 0 )
+			if ( m_iBlendNormalEnd <= 0 || Accum()[m_iBlendNormalEnd] == 0 )
 			{
 				m_uBlendVariantsPending &= ~BLEND_TRIM_TAIL;
 				m_uBlendVariantsPending |= BLEND_TRIM_NONE;
@@ -154,7 +162,7 @@ BYTE* CSphTokenizerBase2::GetBlendedVariant()
 
 		// we also have to stash the original blended token
 		// because accumulator contents may get trashed by caller (say, when stemming)
-		strncpy ( (char*)m_sAccumBlend, (char*)m_sAccum, sizeof ( m_sAccumBlend ) - 1 );
+		CopySubstring ( AccumBlend(), Accum(), AccumCapacity()-1 );
 	}
 
 	// case 2, caller is checking for pending variants, have we even got any?
@@ -167,7 +175,7 @@ BYTE* CSphTokenizerBase2::GetBlendedVariant()
 	{
 		m_uBlendVariantsPending &= ~BLEND_TRIM_NONE;
 		m_bBlended = true;
-		return m_sAccum;
+		return Accum();
 	}
 
 	// handle trim_all
@@ -175,17 +183,17 @@ BYTE* CSphTokenizerBase2::GetBlendedVariant()
 	{
 		m_uBlendVariantsPending &= ~BLEND_TRIM_ALL;
 		m_bBlended = true;
-		const BYTE* pSrc = m_sAccumBlend;
-		BYTE* pDst = m_sAccum;
+		const BYTE* pSrc = AccumBlend();
+		BYTE* pDst = Accum();
 		while ( *pSrc )
 		{
 			int iCode = sphUTF8Decode ( pSrc );
 			if ( !( GetLowercaser().ToLower ( iCode ) & FLAG_CODEPOINT_BLEND ) )
-				pDst += sphUTF8Encode ( pDst, ( iCode & MASK_CODEPOINT ) );
+				pDst += sphUTF8Encode ( pDst, iCode & MASK_CODEPOINT );
 		}
 		*pDst = '\0';
 
-		return m_sAccum;
+		return Accum();
 	}
 
 	// handle trim_both
@@ -199,9 +207,9 @@ BYTE* CSphTokenizerBase2::GetBlendedVariant()
 		else
 		{
 			assert ( m_iBlendNormalStart < m_iBlendNormalEnd );
-			CopySubstring ( m_sAccum, m_sAccumBlend + m_iBlendNormalStart, m_iBlendNormalEnd - m_iBlendNormalStart );
+			CopySubstring ( Accum(), AccumBlend() + m_iBlendNormalStart, m_iBlendNormalEnd - m_iBlendNormalStart );
 			m_bBlended = true;
-			return m_sAccum;
+			return Accum();
 		}
 	}
 
@@ -212,9 +220,9 @@ BYTE* CSphTokenizerBase2::GetBlendedVariant()
 		if ( m_iBlendNormalStart >= 0 )
 		{
 			// FIXME! need we check for overshorts?
-			CopySubstring ( m_sAccum, m_sAccumBlend + m_iBlendNormalStart, sizeof ( m_sAccum ) );
+			CopySubstring ( Accum(), AccumBlend() + m_iBlendNormalStart, AccumCapacity()-1 );
 			m_bBlended = true;
-			return m_sAccum;
+			return Accum();
 		}
 	}
 
@@ -225,9 +233,9 @@ BYTE* CSphTokenizerBase2::GetBlendedVariant()
 		if ( m_iBlendNormalEnd > 0 )
 		{
 			// FIXME! need we check for overshorts?
-			CopySubstring ( m_sAccum, m_sAccumBlend, m_iBlendNormalEnd );
+			CopySubstring ( Accum(), AccumBlend(), m_iBlendNormalEnd );
 			m_bBlended = true;
-			return m_sAccum;
+			return Accum();
 		}
 	}
 
@@ -332,9 +340,8 @@ bool CSphTokenizerBase2::CheckException ( const BYTE* pStart, const BYTE* pCur, 
 	if ( !pMapTo )
 		return false;
 
-	strncpy ( (char*)m_sAccum, (char*)const_cast<BYTE*> ( pMapTo ), sizeof ( m_sAccum ) - 1 );
 	m_pTokenStart = pStart;
-	m_iLastTokenLen = (int)strlen ( (char*)m_sAccum );
+	m_iLastTokenLen = CopySubstring ( Accum(), pMapTo, AccumCapacity()-1 );
 	if ( bHasQueryQuote )
 	{
 		// move backpointer to the head of the quoting sequence
@@ -350,9 +357,10 @@ bool CSphTokenizerBase2::CheckException ( const BYTE* pStart, const BYTE* pCur, 
 
 void CSphTokenizerBase2::FlushAccum()
 {
-	assert ( m_pAccum - m_sAccum < (int)sizeof ( m_sAccum ) );
+	assert ( m_pAccum - Accum() < AccumCapacity() );
 	m_iLastTokenLen = m_iAccum;
 	*m_pAccum = 0;
-	m_iAccum = 0;
-	m_pAccum = m_sAccum;
+	m_bLastTokenOverLimit = m_bAccumOverLimit;
+	m_bAccumOverLimit = false;
+	ResetAccum();
 }

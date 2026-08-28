@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -45,6 +45,8 @@ bool CSphTransformation::TransformCommonNot () noexcept
 			// Nodes with the same iFuzzyHash
 			if ( dSimilarNodes.GetLength() < 2 )
 				continue;
+
+			assert (!HasSameParent ( dSimilarNodes ));
 
 			if ( !CollectRelatedNodes<ParentNode, GrandNode> ( dSimilarNodes ) )
 				continue;

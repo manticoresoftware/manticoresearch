@@ -14,27 +14,29 @@ apt-get install -y gnupg2 wget mariadb-client procps > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
-wget -q https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb
+wget -q https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb > /dev/null 2>&1; echo $?
 ––– output –––
+0
 ––– input –––
 dpkg -i manticore-dev-repo.noarch.deb > /dev/null; echo $?
 ––– output –––
-gpg: key 14D612DB3D2730E2: "Manticore Search <support@manticoresearch.com>" not changed
-gpg: Total number processed: 1
-gpg:              unchanged: 1
+0
+––– input –––
+test -s /usr/share/keyrings/manticore-archive-keyring.gpg && grep -qx 'Signed-By: /usr/share/keyrings/manticore-archive-keyring.gpg' /etc/apt/sources.list.d/manticoresearch.sources && test ! -e /etc/apt/trusted.gpg.d/manticore-keyring.gpg && test ! -e /etc/apt/trusted.gpg.d/manticore-sha256-keyring.gpg; echo $?
+––– output –––
 0
 ––– input –––
 apt-get update -y > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-apt-get install -y manticore manticore-extra > /dev/null 2>&1; echo $?
+apt-get install -y manticore > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
 stdbuf -oL searchd --version
 ––– output –––
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#)
+Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (embeddings %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
@@ -64,8 +66,5 @@ apt-get remove -y 'manticore*' > /dev/null 2>&1; echo $?
 ––– input –––
 dpkg -l | grep ^rc | awk '/^rc/ && /manticore/ { print $2 }'
 ––– output –––
-manticore-common
+manticore
 manticore-repo
-manticore-server
-manticore-server-core
-manticore-tools

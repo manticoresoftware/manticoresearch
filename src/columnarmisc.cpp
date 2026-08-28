@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -33,6 +33,24 @@ CSphVector<ScopedTypedIterator_t> CreateAllColumnarIterators ( const columnar::C
 }
 
 
+PlainOrColumnar_t CreatePlainOrColumnar ( const ISphSchema & tSchema, const CSphColumnInfo & tAttr )
+{
+	int iColumnar = 0;
+	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
+	{
+		const CSphColumnInfo & tSchemaAttr = tSchema.GetAttr(i);
+		if ( &tSchemaAttr==&tAttr )
+			return PlainOrColumnar_t ( tAttr, iColumnar );
+
+		if ( tSchemaAttr.IsColumnar() )
+			++iColumnar;
+	}
+
+	assert ( 0 && "attribute does not belong to schema" );
+	return {};
+}
+
+
 SphAttr_t SetColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * pBuilder, std::unique_ptr<columnar::Iterator_i> & pIterator, RowID_t tRowID, CSphVector<int64_t> & dTmp )
 {
 	switch ( eType )
@@ -40,10 +58,11 @@ SphAttr_t SetColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * pBu
 	case SPH_ATTR_UINT32SET:
 	case SPH_ATTR_INT64SET:
 	case SPH_ATTR_FLOAT_VECTOR:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY:
 	{
 		const BYTE * pResult = nullptr;
 		int iBytes = pIterator->Get ( tRowID, pResult );
-		bool b32Bits = eType==SPH_ATTR_UINT32SET || eType==SPH_ATTR_FLOAT_VECTOR;
+		bool b32Bits = eType==SPH_ATTR_UINT32SET || eType==SPH_ATTR_FLOAT_VECTOR || eType==SPH_ATTR_FLOAT_VECTOR_ARRAY;
 		int iValues = iBytes / (  b32Bits ? sizeof(DWORD) : sizeof(int64_t) );
 		if ( b32Bits )
 		{
@@ -101,6 +120,10 @@ void SetDefaultColumnarAttr ( int iAttr, const CSphColumnInfo & tAttr, columnar:
 		}
 		else
 			pBuilder->SetAttr ( iAttr, (const uint8_t *)0, 0 );
+		break;
+
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY:
+		pBuilder->SetAttr ( iAttr, (const int64_t *)0, 0 );
 		break;
 
 	default:

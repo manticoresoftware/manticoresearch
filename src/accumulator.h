@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -18,6 +18,9 @@
 #include "sphinxint.h"
 #include "docstore.h"
 #include "knnmisc.h"
+#include "uuid_docid.h"
+
+#include <functional>
 
 struct StoredQueryDesc_t
 {
@@ -47,6 +50,9 @@ enum class ReplCmd_e {
 	UPDATE_API,
 	UPDATE_QL,
 	UPDATE_JSON,
+	AUTH_ADD,
+	AUTH_DELETE,
+	CLUSTER_ALTER_UPDATE_USER,
 
 	TOTAL
 };
@@ -64,6 +70,7 @@ struct ReplicationCommand_t
 	WORD 					m_uVersion = 0;
 	CSphString				m_sIndex; // move to accumulator
 	CSphString				m_sCluster;
+	int64_t					m_iClusterEpoch = 0;
 
 	// add
 	std::unique_ptr<StoredQuery_i> m_pStored;
@@ -71,6 +78,7 @@ struct ReplicationCommand_t
 	// delete
 	CSphVector<int64_t>		m_dDeleteQueries;
 	CSphString				m_sDeleteTags;
+	StrVec_t				m_dUuidKeys;
 
 	// truncate
 	std::unique_ptr<CSphReconfigureSettings> m_tReconfigure;
@@ -113,6 +121,8 @@ class TableEmbeddings_c;
 class RtAccum_t
 {
 public:
+	~RtAccum_t();
+
 	DWORD							m_uAccumDocs = 0;
 	int64_t 						m_iAccumBytes = 0;
 	CSphTightVector<CSphWordHit>	m_dAccum;
@@ -123,12 +133,13 @@ public:
 	CSphVector<std::unique_ptr<ReplicationCommand_t>> m_dCmd;
 	ReplicatedCommand_t				m_tCmdReplicated;
 
-	bool						m_bKeywordDict = false;
+	DictFormat_e				m_eDictFormat = DictFormat_e::CRC;
 	DictRefPtr_c				m_pDict;
 	const void *				m_pRefDict = nullptr; // not owned, used only for comparing via ==
 
 public:
-	void			SetupDict ( const RtIndex_i * pIndex, const DictRefPtr_c& pDict, bool bKeywordDict );
+	bool			IsKeywordDict() const { return m_eDictFormat!=DictFormat_e::CRC; }
+	void			SetupDict ( const RtIndex_i * pIndex, const DictRefPtr_c& pDict, DictFormat_e eDictFormat );
 	void			Sort();
 	bool			FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVector<AttrWithModel_t> & dAttrsWithModels, CSphString & sError );
 	void			FetchEmbeddingsSrc ( InsertDocData_c & tDoc, const CSphVector<AttrWithModel_t> & dAttrsWithModels );
@@ -139,11 +150,16 @@ public:
 
 	void			AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t * pStoredDoc );
 	void			CleanupDuplicates ( int iRowSize );
+	void			ForEachUuidDocid ( const std::function<void ( ByteBlob_t )> & fnVisitor ) const;
 	void			GrabLastWarning ( CSphString & sWarning );
 	void			SetIndex ( RtIndex_i * pIndex );
 
 	RowID_t			GenerateRowID();
 	void			ResetRowID();
+	void			BindUuidRegistry ( const UuidDocidRegistryPtr_t & pRegistry );
+	bool			IsUuidRegistry ( const UuidDocidRegistry_i * pRegistry ) const;
+	void			AdoptUuidLease ( const UuidDocidRegistry_i * pRegistry, const UuidDocidKey_t & tKey );
+	void			ResetUuidLeases();
 	uint64_t		GetSchemaHash() const { return m_uSchemaHash; }
 
 	RtIndex_i *		GetIndex() const { return m_pIndex; }
@@ -161,12 +177,17 @@ public:
 
 	bool			SetupDocstore ( const RtIndex_i & tIndex, CSphString & sError );
 	bool			IsReplace () const { return m_bReplace; }
+	bool			IsPreparedForCommit () const noexcept { return m_bPreparedForCommit; }
+	void			MarkPreparedForCommit () noexcept { m_bPreparedForCommit = true; }
+	void			ResetPreparedForCommit () noexcept { m_bPreparedForCommit = false; }
 
 	[[nodiscard]] bool IsClusterCommand () const noexcept;
+	[[nodiscard]] bool IsRtTrxCommand () const noexcept;
 	[[nodiscard]] bool IsUpdateCommand ( ) const noexcept;
 
 private:
 	bool								m_bReplace = false;		///< insert or replace mode (affects CleanupDuplicates() behavior)
+	bool								m_bPreparedForCommit = false;
 
 	ISphRtDictWraperRefPtr_c			m_pDictRt;
 	std::unique_ptr<BlobRowBuilder_i>	m_pBlobWriter;
@@ -182,6 +203,8 @@ private:
 	int									m_iIndexGeneration = 0;
 	CSphString							m_sIndexName;
 	int64_t								m_iIndexId = 0;
+	UuidDocidRegistryPtr_t				m_pUuidRegistry;
+	CSphVector<UuidDocidKey_t>			m_dUuidLeases;
 
 	void			ResetDict();
 	void			SetupDocstore();

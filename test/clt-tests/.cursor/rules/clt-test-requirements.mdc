@@ -1,0 +1,49 @@
+---
+description: Requirements for writing and updating CLT (Command Line Test) test files
+globs:
+  - "test/clt-tests/**/*.rec"
+alwaysApply: false
+---
+
+# CLT Test Requirements
+
+When writing or updating CLT (Command Line Test) test files in `test/clt-tests/`, follow these requirements:
+
+## API Keys and Environment Variables
+- Replace `${OPENAI_API_KEY}` and other environment variable placeholders with actual API keys in test files
+- Do not use environment variable placeholders in test files
+
+## Mock Server Management
+- Start mock servers directly within the test file (not externally)
+- Use simple startup commands without readiness loops or complex checks
+- Remove mock server cleanup sections (no teardown in tests)
+- Use `sleep` for basic timing (e.g., `sleep 1` or `sleep 3`)
+
+## SQL Query Formatting
+- Use `mysql -E` for all SQL queries to get vertical output
+- Use `mysql -E` for all `SHOW CREATE TABLE` queries
+- Prefer vertical output to avoid table separator issues
+
+## Expected Outputs
+- Use exact error messages instead of regex patterns
+- Do not use too broad regexes for errors - we want to validate errors too
+- Match actual system behavior in expected outputs
+- Use patterns for dynamic content (PIDs, embedding vectors) when needed:
+  - `#!/[0-9]+/!#` for PIDs
+  - `#!/[-0-9.,]+/!#` for float vectors
+
+## Comment Formatting
+- Use multi-line comments (not single-line bullet points)
+- Do not use markdown formatting (no `===`, `####`, etc.)
+- Do not use numbered bullet points (no "6.1", "7.2", etc.)
+- Do not use "Section N" headers
+- Write comments in plain text only
+
+## Test Content
+- Convert instructional comments into executable test inputs
+- Verify actual data (e.g., check embedding vectors exist, not just `COUNT(*)`)
+- Use descriptive test names and clear expected behavior descriptions
+
+## File Structure
+- Remove empty lines after outputs if they cause test failures
+- Ensure proper file termination without extra blank lines

@@ -20,10 +20,12 @@ add_library ( sphinxquery OBJECT
 		transform_commonornot.cpp
 		transform_hungoperand.cpp
 		transform_excessandnot.cpp
+		transform_andnotnotnot.cpp
+		transform_phrase.cpp
 )
 
 include ( mybison )
 MY_BISON_ALLOWING_UNITY ( QueryParser sphinxquery xqparser.cpp SPHINXQUERY )
 source_group ( "Grammar sources" FILES ${SPHINXQUERY_BISON} )
 target_include_directories ( sphinxquery PRIVATE "${MANTICORE_SOURCE_DIR}/src" )
-target_link_libraries ( sphinxquery PRIVATE lextra )
+target_link_libraries ( sphinxquery PRIVATE lextra uni-algo::uni-algo )

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -20,7 +20,7 @@
 
 struct StoredToken_t
 {
-	BYTE m_sToken[3 * SPH_MAX_WORD_LEN + 4];
+	CSphVector<BYTE> m_dToken;
 	// tokenized state
 	const char* m_szTokenStart;
 	const char* m_szTokenEnd;
@@ -32,12 +32,27 @@ struct StoredToken_t
 	bool m_bSpecial;
 	bool m_bBlended;
 	bool m_bBlendedPart;
+	bool m_bBlendedHead;
+
+	const char * TokenStr() const noexcept { return m_dToken.GetLength() ? (const char*)m_dToken.Begin() : ""; }
+	BYTE * Token() noexcept { return m_dToken.Begin(); }
+	void StoreToken ( const BYTE * pToken )
+	{
+		int iLen = (int)strlen ( (const char*)pToken );
+		m_dToken.Resize ( Max ( iLen+5, MAX_KEYWORD_BYTES ) );
+		memcpy ( m_dToken.Begin(), pToken, iLen+1 );
+		memset ( m_dToken.Begin()+iLen+1, 0, 4 );
+	}
+	void StoreToken ( const CSphString & sToken )
+	{
+		StoreToken ( (const BYTE*)sToken.scstr() );
+	}
 };
 
 void FillStoredTokenInfo ( StoredToken_t& tToken, const BYTE* sToken, const TokenizerRefPtr_c& pTokenizer )
 {
 	assert ( sToken && pTokenizer );
-	strncpy ( (char*)tToken.m_sToken, (const char*)sToken, sizeof ( tToken.m_sToken ) - 1 );
+	tToken.StoreToken ( sToken );
 	tToken.m_szTokenStart = pTokenizer->GetTokenStart();
 	tToken.m_szTokenEnd = pTokenizer->GetTokenEnd();
 	tToken.m_iOvershortCount = pTokenizer->GetOvershortCount();
@@ -48,6 +63,7 @@ void FillStoredTokenInfo ( StoredToken_t& tToken, const BYTE* sToken, const Toke
 	tToken.m_bSpecial = pTokenizer->WasTokenSpecial();
 	tToken.m_bBlended = pTokenizer->TokenIsBlended();
 	tToken.m_bBlendedPart = pTokenizer->TokenIsBlendedPart();
+	tToken.m_bBlendedHead = pTokenizer->TokenIsBlendedHead();
 }
 
 /// token filter for multiforms support
@@ -94,10 +110,14 @@ public:
 	{
 		return m_iStart < m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_bBlendedPart : Base::TokenIsBlendedPart();
 	}
+	bool TokenIsBlendedHead() const noexcept final
+	{
+		return m_iStart < m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_bBlendedHead : Base::TokenIsBlendedHead();
+	}
 	int SkipBlended() final;
 
 public:
-	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode ) const noexcept final;
+	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode, int iTokenBytes=0 ) const noexcept final;
 	const char* GetTokenStart() const noexcept final
 	{
 		return m_iStart < m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_szTokenStart : Base::GetTokenStart();
@@ -149,14 +169,15 @@ BYTE* MultiformTokenizer::GetToken()
 		} else
 		{
 			StoredToken_t& tStart = m_dStoredTokens[m_iStart];
-			strncpy ( (char*)tStart.m_sToken, m_pCurrentForm->m_dNormalForm[m_iOutputPending].m_sForm.cstr(), sizeof ( tStart.m_sToken ) - 1 );
+			tStart.StoreToken ( m_pCurrentForm->m_dNormalForm[m_iOutputPending].m_sForm );
 
 			tStart.m_iTokenLen = m_pCurrentForm->m_dNormalForm[m_iOutputPending].m_iLengthCP;
 			tStart.m_bBoundary = false;
 			tStart.m_bSpecial = false;
 			tStart.m_bBlended = false;
 			tStart.m_bBlendedPart = false;
-			return tStart.m_sToken;
+			tStart.m_bBlendedHead = false;
+			return tStart.Token();
 		}
 	}
 
@@ -194,7 +215,7 @@ BYTE* MultiformTokenizer::GetToken()
 	{
 		if ( m_dStoredTokens[m_iStart].m_bBlended && m_iStart + 1 < m_dStoredTokens.GetLength() && m_dStoredTokens[m_iStart + 1].m_bBlendedPart )
 		{
-			pWordforms = m_pMultiWordforms->m_Hash ( (const char*)m_dStoredTokens[m_iStart + 1].m_sToken );
+			pWordforms = m_pMultiWordforms->m_Hash ( m_dStoredTokens[m_iStart + 1].TokenStr() );
 			if ( pWordforms )
 			{
 				bBlended = true;
@@ -210,7 +231,7 @@ BYTE* MultiformTokenizer::GetToken()
 		}
 	} else
 	{
-		pWordforms = m_pMultiWordforms->m_Hash ( (const char*)m_dStoredTokens[m_iStart].m_sToken );
+		pWordforms = m_pMultiWordforms->m_Hash ( m_dStoredTokens[m_iStart].TokenStr() );
 		if ( pWordforms )
 		{
 			int iTokensNeed = ( *pWordforms )->m_iMaxTokens + 1;
@@ -218,7 +239,7 @@ BYTE* MultiformTokenizer::GetToken()
 			bool bGotBlended = false;
 
 			// collect up ahead to multi-form tokens or all blended tokens or phrase starts or phrase ends
-			while ( ( iTokensGot<iTokensNeed || bGotBlended ) && m_dStoredTokens.Last().m_sToken[0]!='"' )
+			while ( ( iTokensGot<iTokensNeed || bGotBlended ) && m_dStoredTokens.Last().TokenStr()[0]!='"' )
 			{
 				iCur++;
 				if ( iCur >= m_dStoredTokens.GetLength() )
@@ -243,7 +264,7 @@ BYTE* MultiformTokenizer::GetToken()
 	}
 
 	if ( !pWordforms || iTokensGot < ( *pWordforms )->m_iMinTokens + 1 )
-		return m_dStoredTokens[m_iStart].m_sToken;
+		return m_dStoredTokens[m_iStart].Token();
 
 	int iStartToken = m_iStart + ( bBlended ? 1 : 0 );
 	for ( const auto& pCurForm : ( *pWordforms )->m_pForms )
@@ -257,7 +278,7 @@ BYTE* MultiformTokenizer::GetToken()
 		for ( ; iForm < iFormTokCount; iForm++ )
 		{
 			const StoredToken_t& tTok = m_dStoredTokens[iStartToken + 1 + iForm];
-			const char* szStored = (const char*)tTok.m_sToken;
+			const char* szStored = tTok.TokenStr();
 			const char* szNormal = pCurForm->m_dTokens[iForm].cstr();
 
 			if ( *szNormal != *szStored || strcasecmp ( szNormal, szStored ) )
@@ -272,18 +293,17 @@ BYTE* MultiformTokenizer::GetToken()
 		if ( m_bBuildMultiform )
 		{
 			BYTE* pOut = m_sTokenizedMultiform;
-			BYTE* pMax = pOut + sizeof ( m_sTokenizedMultiform );
+			BYTE* pMax = pOut + sizeof ( m_sTokenizedMultiform ) - 1;
 			for ( int j = 0; j < iFormTokCount + 1 && pOut < pMax; j++ )
 			{
 				const StoredToken_t& tTok = m_dStoredTokens[iStartToken + j];
-				const BYTE* sTok = tTok.m_sToken;
+				const BYTE* sTok = (const BYTE*)tTok.TokenStr();
 				if ( j && pOut < pMax )
 					*pOut++ = ' ';
 				while ( *sTok && pOut < pMax )
 					*pOut++ = *sTok++;
 			}
 			*pOut = '\0';
-			*( pMax - 1 ) = '\0';
 		}
 
 		if ( !bBlended )
@@ -293,7 +313,7 @@ BYTE* MultiformTokenizer::GetToken()
 			StoredToken_t& tEnd = m_dStoredTokens[m_iStart + iFormTokCount];
 			m_iStart += iFormTokCount;
 
-			strncpy ( (char*)tEnd.m_sToken, pCurForm->m_dNormalForm[0].m_sForm.cstr(), sizeof ( tEnd.m_sToken ) - 1 );
+			tEnd.StoreToken ( pCurForm->m_dNormalForm[0].m_sForm );
 			tEnd.m_szTokenStart = tStart.m_szTokenStart;
 			tEnd.m_iTokenLen = pCurForm->m_dNormalForm[0].m_iLengthCP;
 
@@ -301,6 +321,7 @@ BYTE* MultiformTokenizer::GetToken()
 			tEnd.m_bSpecial = false;
 			tEnd.m_bBlended = false;
 			tEnd.m_bBlendedPart = false;
+			tEnd.m_bBlendedHead = false;
 
 			if ( pCurForm->m_dNormalForm.GetLength() > 1 )
 			{
@@ -313,19 +334,19 @@ BYTE* MultiformTokenizer::GetToken()
 			// FIXME: add multiple destination token support here (if needed)
 			assert ( pCurForm->m_dNormalForm.GetLength() == 1 );
 			StoredToken_t& tDst = m_dStoredTokens[m_iStart];
-			strncpy ( (char*)tDst.m_sToken, pCurForm->m_dNormalForm[0].m_sForm.cstr(), sizeof ( tDst.m_sToken ) - 1 );
+			tDst.StoreToken ( pCurForm->m_dNormalForm[0].m_sForm );
 			tDst.m_iTokenLen = pCurForm->m_dNormalForm[0].m_iLengthCP;
 		}
 		break;
 	}
 
-	return m_dStoredTokens[m_iStart].m_sToken;
+	return m_dStoredTokens[m_iStart].Token();
 }
 
 
-TokenizerRefPtr_c MultiformTokenizer::Clone ( ESphTokenizerClone eMode ) const noexcept
+TokenizerRefPtr_c MultiformTokenizer::Clone ( ESphTokenizerClone eMode, int iTokenBytes ) const noexcept
 {
-	auto pClone = m_pTokenizer->Clone ( eMode );
+	auto pClone = m_pTokenizer->Clone ( eMode, iTokenBytes );
 	Tokenizer::AddToMultiformFilterTo ( pClone, m_pMultiWordforms );
 	return pClone;
 }

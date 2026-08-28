@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -40,6 +40,7 @@ FORCE_INLINE void CalcContextItem ( CSphMatch & tMatch, const ContextCalcItem_t 
 		break;
 
 	case SPH_ATTR_STRINGPTR:
+	case SPH_ATTR_TDIGEST_PTR:
 		tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t)tCalc.m_pExpr->StringEvalPacked ( tMatch ) );
 		break;
 
@@ -51,6 +52,7 @@ FORCE_INLINE void CalcContextItem ( CSphMatch & tMatch, const ContextCalcItem_t 
 	case SPH_ATTR_INT64SET_PTR:
 	case SPH_ATTR_UINT32SET_PTR:
 	case SPH_ATTR_FLOAT_VECTOR_PTR:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
 		tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t)tCalc.m_pExpr->Int64Eval ( tMatch ) );
 		break;
 
@@ -85,7 +87,10 @@ FORCE_INLINE void FreeDataPtrAttrs ( CSphMatch & tMatch, const CSphVector<Contex
 		// delete[] pData;
 		if ( pData )
 		{
-			sphDeallocatePacked ( pData );
+			if ( tItem.m_eType==SPH_ATTR_TDIGEST_PTR )
+				sphDeallocatePackedTdigest ( pData );
+			else
+				sphDeallocatePacked ( pData );
 			tMatch.SetAttr ( tItem.m_tLoc, 0 );
 		}
 	}
@@ -104,6 +109,7 @@ class CSphQueryContext : public ISphNoncopyable
 public:
 	// searching-only, per-query
 	const CSphQuery &				m_tQuery;
+	QueryExecutionSettings_t		m_tQuerySettings;
 
 	int								m_iWeights = 0;					///< search query field weights count
 	int								m_dWeights [ SPH_MAX_FIELDS ];	///< search query field weights
@@ -127,6 +133,7 @@ public:
 	int64_t							m_iIndexTotalDocs = 0;
 
 	explicit CSphQueryContext ( const CSphQuery & tQuery );
+	explicit CSphQueryContext ( const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings );
 			~CSphQueryContext () { 	ResetFilters(); }
 
 	void	BindWeights ( const CSphQuery & tQuery, const CSphSchema & tSchema, CSphString & sWarning );

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -358,7 +358,7 @@ uint64_t LibcCIHash_fn::Hash ( const BYTE * pStr, int iLen, uint64_t uPrev )
 	while ( iLen-- )
 	{
 		int iChar = tolower ( *pStr++ );
-		uAcc = sphFNV64 ( &iChar, 4, uAcc );
+		uAcc = sphFNV64_4x ( iChar, uAcc );
 	}
 
 	return uAcc;
@@ -375,7 +375,7 @@ uint64_t Utf8CIHash_fn::Hash ( const BYTE * pStr, int iLen, uint64_t uPrev )
 		const BYTE * pCur = pStr++;
 		int iCode = sphUTF8Decode ( pCur );
 		iCode = CollateUTF8CI ( iCode );
-		uAcc = sphFNV64 ( &iCode, 4, uAcc );
+		uAcc = sphFNV64 ( iCode, uAcc );
 	}
 
 	return uAcc;

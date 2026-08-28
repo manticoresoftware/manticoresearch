@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>using table with reserved keywords as columns</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+	<!-- words `regular` + from CSphSchema::IsReserved, file schema.cpp ~390 -->
+	<!-- words from IsDDLToken, indexsettings.cpp ~2550 -->
+	<repeat var="tok" variants="regular add alter and as at attribute bigint bit bool by cluster column columnar columnarscan create distinct div docidindex double drop engine exists explain facet false fast_fetch float force from function hash if ignore import in indexed indexes inner int integer is join json killlist_target knn left like limit mod multi multi64 no_columnarscan no_docidindex no_secondaryindex not null offset on or order plugin rebuild reconfigure reload returns rtindex secondary secondaryindex select soname stored string sysfilters table text timestamp true type uint update">
+		<sphinxql>
+			create table test (title text, `<tok/>` int);
+			desc test;
+			show create table test;
+			create table test_dupe like test;
+			desc test_dupe;
+			insert into test values (1,'hello',100),(2,'world',200);
+			select * from test where match('hello|world');
+
+			<!-- single token -->
+			select <tok/> from test;
+			select <tok/>+1 from test;
+			select 2*<tok/> from test;
+
+			<!-- aliased token -->
+			select <tok/> as a from test;
+			select <tok/>+1 as b from test;
+			select 2*<tok/> as c from test;
+
+			<!-- escaped token -->
+			select `<tok/>` from test;
+			select `<tok/>`+1 from test;
+			select 2*`<tok/>` from test;
+
+			<!-- escaped aliased token -->
+			select `<tok/>` as aa from test;
+			select `<tok/>`+1 as bb from test;
+			select 2*`<tok/>` as cc from test;
+
+			<!-- cleanup -->
+			drop table test;
+			drop table test_dupe;
+		</sphinxql>
+	</repeat>
+
+	<!-- expression reserved tokens -->
+	<repeat var="tok" variants="count weight groupby distinct and or not div mod for is null">
+		<sphinxql>
+			create table expr (title text, `<tok/>` int);
+			insert into expr values (1,'hello',100),(2,'world',200);
+			select * from expr where match('hello|world');
+
+			<!-- single token -->
+			select <tok/> from expr;
+			select <tok/>+1 from expr;
+			select 2*<tok/> from expr;
+
+			<!-- aliased token -->
+			select <tok/> as a from expr;
+			select <tok/>+1 as b from expr;
+			select 2*<tok/> as c from expr;
+
+			<!-- escaped token -->
+			select `<tok/>` from expr;
+			select `<tok/>`+1 from expr;
+			select 2*`<tok/>` from expr;
+
+			<!-- escaped aliased token -->
+			select `<tok/>` as aa from expr;
+			select `<tok/>`+1 as bb from expr;
+			select 2*`<tok/>` as cc from expr;
+
+			<!-- cleanup -->
+			drop table expr;
+		</sphinxql>
+	</repeat>
+</queries>
+</test>

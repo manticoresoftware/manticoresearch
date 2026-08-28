@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -12,6 +12,7 @@
 
 #include "frontendschema.h"
 
+#include "indexsettings.h"
 #include "queuecreator.h"
 
 /// returns internal magic names for expressions like COUNT(*) that have a corresponding one
@@ -24,7 +25,40 @@ static const char * GetMagicSchemaName ( const CSphString & s )
 		return "@weight";
 	if ( s=="groupby()" )
 		return "@groupby";
-	return s.cstr();
+	return s.IsEmpty() ? "" : s.cstr();
+}
+
+
+static int GetUuidIdIndex ( const ISphSchema & tSchema, const CSphString & sAttr, bool bProjectUuidId )
+{
+	if ( !bProjectUuidId )
+		return -1;
+
+	if ( sAttr.IsEmpty() || strcmp ( sAttr.cstr(), sphGetDocidName() )!=0 )
+		return -1;
+
+	int iUuid = tSchema.GetAttrIndex ( sphGetUuidDocidName() );
+	assert ( iUuid<0 || tSchema.GetAttr(iUuid).m_eAttrType==SPH_ATTR_STRING || tSchema.GetAttr(iUuid).m_eAttrType==SPH_ATTR_STRINGPTR );
+	return iUuid;
+}
+
+
+static bool IsFrontendAttrMatch ( const ISphSchema & tSchema, const CSphString & sSchemaAttr, const CSphString & sQueryAttr, bool bProjectUuidId )
+{
+	if ( GetUuidIdIndex ( tSchema, sQueryAttr, bProjectUuidId )>=0 )
+		return !sSchemaAttr.IsEmpty() && strcmp ( sSchemaAttr.cstr(), sphGetUuidDocidName() )==0;
+
+	return strcmp ( sSchemaAttr.cstr(), GetMagicSchemaName ( sQueryAttr ) )==0;
+}
+
+
+static int GetFrontendAttrIndex ( const ISphSchema & tSchema, const CSphString & sAttr, bool bProjectUuidId )
+{
+	int iUuidAttr = GetUuidIdIndex ( tSchema, sAttr, bProjectUuidId );
+	if ( iUuidAttr>=0 )
+		return iUuidAttr;
+
+	return tSchema.GetAttrIndex ( GetMagicSchemaName ( sAttr ) );
 }
 
 /// a functor to sort columns by (is_aggregate ASC, column_index ASC)
@@ -48,6 +82,23 @@ struct AggregateColumnSort_fn
 		return a.m_iIndex < b.m_iIndex;
 	}
 };
+
+
+static void MoveDocidFirst ( CSphVector<CSphColumnInfo> & dAttrs )
+{
+	int iDocid = 0;
+	while ( iDocid<dAttrs.GetLength() && dAttrs[iDocid].m_sName!=sphGetDocidName() )
+		++iDocid;
+
+	if ( iDocid==dAttrs.GetLength() )
+	{
+		assert ( 0 && "agent schema must contain numeric id" );
+		return;
+	}
+
+	for ( ; iDocid>0; --iDocid )
+		Swap ( dAttrs[iDocid], dAttrs[iDocid-1] );
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -86,13 +137,17 @@ bool FrontendSchemaBuilder_c::Build ( bool bMaster, CSphString & sError )
 
 void FrontendSchemaBuilder_c::CollectKnownItems()
 {
+	// Agent wire schemas keep numeric id as a normal attr; the master applies
+	// the public UUID id alias after it receives and merges agent results.
+	const bool bProjectUuidId = !m_bAgent;
+
 	ARRAY_CONSTFOREACH ( i, m_dItems )
 	{
 		const CSphQueryItem & tItem = m_dItems[i];
 
 		int iCol = -1;
 		if ( !m_bQueryFromAPI && tItem.m_sAlias.IsEmpty() )
-			iCol = m_tRes.m_tSchema.GetAttrIndex ( tItem.m_sExpr.cstr() );
+			iCol = GetFrontendAttrIndex ( m_tRes.m_tSchema, tItem.m_sExpr, bProjectUuidId );
 
 		if ( iCol>=0 )
 		{
@@ -109,6 +164,7 @@ void FrontendSchemaBuilder_c::CollectKnownItems()
 void FrontendSchemaBuilder_c::AddAttrs()
 {
 	bool bUsualApi = !m_bAgent && m_bQueryFromAPI;
+	const bool bProjectUuidId = !m_bAgent;
 
 	for ( int iCol=0; iCol<m_tRes.m_tSchema.GetAttrsCount(); ++iCol )
 	{
@@ -120,7 +176,9 @@ void FrontendSchemaBuilder_c::AddAttrs()
 		if ( !bMagic && tCol.m_pExpr )
 		{
 			ARRAY_FOREACH ( j, m_dUnmappedAttrs )
-				if ( m_dItems[ m_dUnmappedAttrs[j] ].m_sAlias==tCol.m_sName )
+				if ( m_dItems[ m_dUnmappedAttrs[j] ].m_sAlias==tCol.m_sName
+					|| ( IsGroupConcatValueAttr ( m_dItems[ m_dUnmappedAttrs[j] ].m_sExpr )
+						&& m_dItems[ m_dUnmappedAttrs[j] ].m_sExpr==tCol.m_sName ) )
 				{
 					int k = m_dUnmappedAttrs[j];
 					m_dFrontend[k].m_iIndex = iCol;
@@ -141,7 +199,7 @@ void FrontendSchemaBuilder_c::AddAttrs()
 		} else if ( bMagic && ( tCol.m_pExpr || bUsualApi ) )
 		{
 			ARRAY_FOREACH ( j, m_dUnmappedAttrs )
-				if ( tCol.m_sName==GetMagicSchemaName ( m_dItems[ m_dUnmappedAttrs[j] ].m_sExpr ) )
+				if ( IsFrontendAttrMatch ( m_tRes.m_tSchema, tCol.m_sName, m_dItems[ m_dUnmappedAttrs[j] ].m_sExpr, bProjectUuidId ) )
 				{
 					int k = m_dUnmappedAttrs[j];
 					m_dFrontend[k].m_iIndex = iCol;
@@ -163,9 +221,9 @@ void FrontendSchemaBuilder_c::AddAttrs()
 			{
 				int k = m_dUnmappedAttrs[j];
 				const CSphQueryItem & t = m_dItems[k];
-				if ( ( tCol.m_sName==GetMagicSchemaName ( t.m_sExpr ) && t.m_eAggrFunc==SPH_AGGR_NONE )
+				if ( ( IsFrontendAttrMatch ( m_tRes.m_tSchema, tCol.m_sName, t.m_sExpr, bProjectUuidId ) && t.m_eAggrFunc==SPH_AGGR_NONE )
 					|| ( t.m_sAlias==tCol.m_sName &&
-						( m_tRes.m_tSchema.GetAttrIndex ( GetMagicSchemaName ( t.m_sExpr ) )==-1 || t.m_eAggrFunc!=SPH_AGGR_NONE ) ) )
+						( GetFrontendAttrIndex ( m_tRes.m_tSchema, t.m_sExpr, bProjectUuidId )==-1 || t.m_eAggrFunc!=SPH_AGGR_NONE ) ) )
 				{
 					// tricky bit about naming
 					//
@@ -252,6 +310,8 @@ void FrontendSchemaBuilder_c::Finalize()
 		tFrontend.m_tLocator = s.m_tLocator;
 		tFrontend.m_eAttrType = s.m_eAttrType;
 		tFrontend.m_eAggrFunc = s.m_eAggrFunc; // for a sort loop just below
+		tFrontend.m_fTdigestCompression = s.m_fTdigestCompression;
+		tFrontend.m_tAggrSettings = s.m_tAggrSettings;
 		tFrontend.m_iIndex = i; // to make the aggr sort loop just below stable
 
 		tFrontend.m_uFieldFlags = s.m_uFieldFlags;
@@ -261,7 +321,12 @@ void FrontendSchemaBuilder_c::Finalize()
 	// in agents only, push aggregated columns, if any, to the end
 	// for that, sort the schema by (is_aggregate ASC, column_index ASC)
 	if ( m_bAgent )
+	{
 		m_dFrontend.Sort ( AggregateColumnSort_fn() );
+		// Parsed agent attributes get fresh locators in wire order, while reducers
+		// read the internal numeric docid directly from dynamic row item zero.
+		MoveDocidFirst ( m_dFrontend );
+	}
 }
 
 
@@ -305,6 +370,8 @@ void FrontendSchemaBuilder_c::RemapGroupBy()
 			tFrontend.m_tLocator = p->m_tLocator;
 			tFrontend.m_eAttrType = p->m_eAttrType;
 			tFrontend.m_eAggrFunc = p->m_eAggrFunc;
+			tFrontend.m_fTdigestCompression = p->m_fTdigestCompression;
+			tFrontend.m_tAggrSettings = p->m_tAggrSettings;
 		}
 
 	// check aliases too
@@ -319,10 +386,42 @@ void FrontendSchemaBuilder_c::RemapGroupBy()
 				tFrontend.m_tLocator = p->m_tLocator;
 				tFrontend.m_eAttrType = p->m_eAttrType;
 				tFrontend.m_eAggrFunc = p->m_eAggrFunc;
+				tFrontend.m_fTdigestCompression = p->m_fTdigestCompression;
+				tFrontend.m_tAggrSettings = p->m_tAggrSettings;
 			}
 	}
 }
 
+static void CollectAliases ( const VecTraits_T<CSphQueryItem> & dItems, const CSphString & sGroupBy, const CSphString & sJsonGroupBy, sph::StringSet & hFacet )
+{
+	ARRAY_CONSTFOREACH ( i, dItems )
+	{
+		const CSphQueryItem & tItem = dItems[i];
+		if ( tItem.m_sExpr.IsEmpty() ) 
+			continue;
+
+		bool bMatch = false;
+
+		// 1st check - exact string match (raw or json)
+		if ( tItem.m_sExpr == sGroupBy )
+		{
+			bMatch = true;
+		} else if ( !sJsonGroupBy.IsEmpty() )
+		{
+			// 2nd - normalize JSON path
+			if ( tItem.m_sExpr==sJsonGroupBy )
+				bMatch = true;
+			else if ( sphJsonNameSplit ( tItem.m_sExpr.cstr() ) )
+				bMatch = ( SortJsonInternalSet ( tItem.m_sExpr )==sJsonGroupBy );
+		}
+
+		if ( bMatch )
+		{
+			hFacet.Add ( tItem.m_sExpr );
+			hFacet.Add ( tItem.m_sAlias );
+		}
+	}
+}
 
 void FrontendSchemaBuilder_c::RemapFacets()
 {
@@ -330,34 +429,67 @@ void FrontendSchemaBuilder_c::RemapFacets()
 	if ( !m_tQuery.m_bFacet && !m_tQuery.m_bFacetHead )
 		return;
 
-	// remap MVA/JSON column to @groupby/@groupbystr in facet queries
-	const CSphColumnInfo * pGroupByCol = nullptr;
+	if ( m_tQuery.m_sGroupBy.IsEmpty() )
+		return;
+
+	CSphString sGroupBy = m_tQuery.m_sGroupBy;
 	CSphString sJsonGroupBy;
-	if ( sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr() ) )
+	const CSphColumnInfo * pGroupByCol = nullptr;
+
+	if ( sphJsonNameSplit ( sGroupBy.cstr() ) )
 	{
-		sJsonGroupBy = SortJsonInternalSet ( m_tQuery.m_sGroupBy );
+		sJsonGroupBy = SortJsonInternalSet ( sGroupBy );
 		pGroupByCol = m_tRes.m_tSchema.GetAttr ( sJsonGroupBy.cstr() );
 	}
 
 	if ( !pGroupByCol )
-	{
 		pGroupByCol = m_tRes.m_tSchema.GetAttr ( "@groupby" );
-		if ( !pGroupByCol )
-			return;
+	if ( !pGroupByCol )
+		return;
+
+	// JSON group by \ facet - 1st @groupbystr then @groupby
+	// @groupbystr has JSON items these grouped
+	// @groupby is the group key hash
+	const CSphColumnInfo * pGroupByStrCol = nullptr;
+	
+	// JSON path first - @groupbystr_j.field / @groupbystr_j['*']
+	if ( !sJsonGroupBy.IsEmpty() )
+	{
+		CSphString sGroupByStr;
+		sGroupByStr.SetSprintf ( "%s%s", GetInternalJsonPrefix(), sJsonGroupBy.cstr() );
+		pGroupByStrCol = m_tRes.m_tSchema.GetAttr ( sGroupByStr.cstr() );
+	}
+	
+	// if not found - plain attribute name - @groupbystr_j
+	if ( !pGroupByStrCol )
+	{
+		CSphString sGroupByStr;
+		sGroupByStr.SetSprintf ( "%s%s", GetInternalJsonPrefix(), sGroupBy.cstr() );
+		pGroupByStrCol = m_tRes.m_tSchema.GetAttr ( sGroupByStr.cstr() );
 	}
 
-	if ( m_tQuery.m_sGroupBy.IsEmpty() )
-		return;
+	const CSphColumnInfo * pRemapCol = pGroupByStrCol ? pGroupByStrCol : pGroupByCol;
+
+	sph::StringSet hFacet;
+	hFacet.Add ( sGroupBy );
+	if ( !sJsonGroupBy.IsEmpty() )
+		hFacet.Add ( sJsonGroupBy );
+
+	CollectAliases ( m_dItems, sGroupBy, sJsonGroupBy, hFacet );
+	CollectAliases ( m_tQuery.m_dItems, sGroupBy, sJsonGroupBy, hFacet );
+	CollectAliases ( m_tQuery.m_dRefItems, sGroupBy, sJsonGroupBy, hFacet );
 
 	for ( auto & tFrontend : m_dFrontend )
 	{
 		ESphAttr eAttr = tFrontend.m_eAttrType;
 		// checking _PTR attrs only because we should not have and non-ptr attr at this point
-		if ( m_tQuery.m_sGroupBy==tFrontend.m_sName && ( eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_FLOAT_VECTOR_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR ) )
+		if ( hFacet[tFrontend.m_sName] && ( eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_FLOAT_VECTOR_PTR || eAttr==SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR || eAttr==SPH_ATTR_JSON_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR ) )
 		{
-			tFrontend.m_tLocator = pGroupByCol->m_tLocator;
-			tFrontend.m_eAttrType = pGroupByCol->m_eAttrType;
-			tFrontend.m_eAggrFunc = pGroupByCol->m_eAggrFunc;
+			tFrontend.m_tLocator = pRemapCol->m_tLocator;
+			tFrontend.m_eAttrType = pRemapCol->m_eAttrType;
+			tFrontend.m_eAggrFunc = pRemapCol->m_eAggrFunc;
+			tFrontend.m_fTdigestCompression = pRemapCol->m_fTdigestCompression;
+			tFrontend.m_tAggrSettings = pRemapCol->m_tAggrSettings;
 		}
 	}
 }

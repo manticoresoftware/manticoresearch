@@ -21,6 +21,7 @@ PROJECT ( SPHINXCLIENT
 add_library ( sphinxclient STATIC sphinxclient.c )
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
 	target_compile_options ( sphinxclient PRIVATE /clang:-Wall )
+	target_compile_definitions ( sphinxclient PRIVATE _WINSOCK_DEPRECATED_NO_WARNINGS=1 )
 else ()
 	target_compile_options ( sphinxclient PRIVATE -g3 -Wall -O0 )
 endif ()

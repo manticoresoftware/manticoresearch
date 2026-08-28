@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2022-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -92,6 +92,10 @@ static decltype ( &curl_slist_free_all ) sph_curl_slist_free_all = nullptr;
 
 static bool InitDynamicCurl()
 {
+#if __APPLE__
+	static constexpr const char * sHomebrewCurlLibArm = "/opt/homebrew/opt/curl/lib/libcurl.4.dylib";
+	static constexpr const char * sHomebrewCurlLibX64 = "/usr/local/opt/curl/lib/libcurl.4.dylib";
+#endif
 	const char* sFuncs[] = {
 		"curl_global_init",
 		"curl_global_cleanup",
@@ -129,7 +133,21 @@ static bool InitDynamicCurl()
 		(void**)&sph_curl_slist_free_all,
 	};
 
-	static CSphDynamicLibrary dLib ( CURL_LIB );
+	const char * szCurlLib = getenv ( "MANTICORE_CURL_LIB" );
+	static const bool bHasOverride = szCurlLib && *szCurlLib;
+	static CSphDynamicLibrary dLib (
+#if __APPLE__
+		bHasOverride ? szCurlLib : sHomebrewCurlLibArm
+#else
+		bHasOverride ? szCurlLib : CURL_LIB
+#endif
+	);
+#if __APPLE__
+	if ( bHasOverride )
+		dLib.CSphDynamicLibraryAlternative ( sHomebrewCurlLibArm );
+	dLib.CSphDynamicLibraryAlternative ( sHomebrewCurlLibX64 );
+#endif
+	dLib.CSphDynamicLibraryAlternative ( CURL_LIB );
 	return dLib.LoadSymbols ( sFuncs, pFuncs, sizeof ( pFuncs ) / sizeof ( void** ) );
 }
 

@@ -7,6 +7,7 @@
 	<knn/>
 	<columnar/>
 	<force-rt/>
+	<embeddings/>
 </requires>
 
 <skip_indexer/>
@@ -63,6 +64,16 @@ searchd
 	flush ramchunk t;
 	drop table t;
 	create table t;
+	drop table t;
+
+	<!-- regression #4293: alter add column must add auto-embedding field with model_name and FROM -->
+	drop table if exists t;
+	create table t(f text, v float_vector knn_type='hnsw' from='f' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2');
+	show create table t;
+	alter table t drop column v;
+	show create table t;
+	alter table t add column v float_vector knn_type='hnsw' hnsw_similarity='l2' from='f' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2';
+	show create table t;
 	drop table t;
 </sphinxql>
 </queries>

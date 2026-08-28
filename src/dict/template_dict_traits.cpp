@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -16,7 +16,7 @@
 #include <libstemmer.h>
 #endif
 
-#include "sphinxstem.h"
+#include "stem/sphinxstem.h"
 
 #include "word_forms.h"
 #include "tokenizer/multiform_container.h"
@@ -345,6 +345,10 @@ int TemplateDictTraits_c::AddMorph ( int iMorph )
 
 void TemplateDictTraits_c::ApplyStemmers ( BYTE* pWord ) const
 {
+	const int iTokenBytes = (int)strnlen ( (const char*)pWord, SPH_LEGACY_TOKEN_BYTES+1 );
+	if ( ShouldBypassMorphology ( GetSettings().GetDictFormat(), iTokenBytes ) )
+		return;
+
 	// try wordforms
 	if ( m_pWordforms && m_pWordforms->ToNormalForm ( pWord, true, m_bDisableWordforms ) )
 		return;
@@ -374,13 +378,14 @@ uint64_t TemplateDictTraits_c::GetSettingsFNV() const
 	if ( m_pStopwords )
 		uHash = sphFNV64 ( m_pStopwords, m_iStopwords * sizeof ( *m_pStopwords ), uHash );
 
-	uHash = sphFNV64 ( &m_tSettings.m_iMinStemmingLen, sizeof ( m_tSettings.m_iMinStemmingLen ), uHash );
+	uHash = sphFNV64 ( m_tSettings.m_iMinStemmingLen, uHash );
 	DWORD uFlags = 0;
-	if ( m_tSettings.m_bWordDict )
+	if ( m_tSettings.IsWordDict() )
 		uFlags |= 1 << 0;
 	if ( m_tSettings.m_bStopwordsUnstemmed )
 		uFlags |= 1 << 2;
-	uHash = sphFNV64 ( &uFlags, sizeof ( uFlags ), uHash );
+	uHash = sphFNV64 ( uFlags, uHash );
+	uHash = sphFNV64 ( static_cast<int> ( m_tSettings.GetDictFormat() ), uHash );
 
 	uHash = sphFNV64 ( m_dMorph.Begin(), m_dMorph.GetLength() * sizeof ( m_dMorph[0] ), uHash );
 #if WITH_STEMMER
@@ -440,7 +445,7 @@ void TemplateDictTraits_c::LoadStopwords ( const char * sFiles, FilenameBuilder_
 
 	m_dSWFileInfos.Resize ( 0 );
 
-	TokenizerRefPtr_c pTokenizerClone = pTokenizer->Clone ( SPH_CLONE_INDEX );
+	TokenizerRefPtr_c pTokenizerClone = pTokenizer->Clone ( SPH_CLONE_INDEX, SPH_LEGACY_TOKEN_BYTES );
 	CSphFixedVector<char> dList ( 1 + (int)strlen ( sFiles ) );
 	strcpy ( dList.Begin(), sFiles ); // NOLINT
 
@@ -547,24 +552,13 @@ void TemplateDictTraits_c::LoadStopwords ( const char * sFiles, FilenameBuilder_
 	dStop.Uniq();
 
 	// store IDs
-	if ( dStop.GetLength() )
-	{
-		m_dStopwordContainer.Reset ( dStop.GetLength() );
-		ARRAY_FOREACH ( i, dStop )
-			m_dStopwordContainer[i] = dStop[i];
-
-		m_iStopwords = m_dStopwordContainer.GetLength();
-		m_pStopwords = m_dStopwordContainer.Begin();
-	}
+	LoadStopwords ( dStop );
 }
 
 
 void TemplateDictTraits_c::LoadStopwords ( const CSphVector<SphWordID_t>& dStopwords )
 {
-	m_dStopwordContainer.Reset ( dStopwords.GetLength() );
-	ARRAY_FOREACH ( i, dStopwords )
-		m_dStopwordContainer[i] = dStopwords[i];
-
+	m_dStopwordContainer.CopyFrom ( dStopwords );
 	m_iStopwords = m_dStopwordContainer.GetLength();
 	m_pStopwords = m_dStopwordContainer.Begin();
 }
@@ -930,7 +924,7 @@ CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CS
 	pContainer->m_uTokenizerFNV = pTokenizer->GetSettingsFNV();
 	pContainer->m_sIndexName = szIndex;
 
-	TokenizerRefPtr_c pMyTokenizer = pTokenizer->Clone ( SPH_CLONE_INDEX );
+	TokenizerRefPtr_c pMyTokenizer = pTokenizer->Clone ( SPH_CLONE_INDEX, SPH_LEGACY_TOKEN_BYTES );
 	const CSphTokenizerSettings& tSettings = pMyTokenizer->GetSettings();
 
 	CSphVector<int> dBlended;

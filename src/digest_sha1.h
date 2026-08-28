@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -79,8 +79,10 @@ private:
 	HASH20_t m_dHashValue{};
 };
 
-//CSphString BinToHex ( const VecTraits_T<BYTE>& dHash );
+CSphString BinToHex ( const VecTraits_T<BYTE> & dHash );
 CSphString BinToHex ( const HASH20_t& dHash );
-CSphString BinToHexx ( const BYTE* pHash, int iLen );
+CSphString BinToHex ( const BYTE* pHash, int iLen );
 CSphString CalcSHA1 ( const void* pData, int iLen );
 bool CalcSHA1 ( const CSphString& sFileName, CSphString& sRes, CSphString& sError );
+HASH20_t CalcBinarySHA1 ( const void * pData, int iLen );
+BYTE HexChar ( unsigned char c ) noexcept;

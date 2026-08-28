@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -291,7 +291,6 @@ bool IndexFiles_c::CheckHeader ( const char * sType )
 		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sPath.cstr(), uVersion, INDEX_FORMAT_VERSION );
 		return false;
 	}
-	m_uVersion = uVersion;
 	return true;
 }
 
@@ -316,4 +315,20 @@ bool IndexFiles_c::ReadKlistTargets ( StrVec_t & dTargets, const char * szType )
 	}
 
 	return true;
+}
+
+// remove all old files these are not in the list of current index files
+void RemoveOutdatedFiles ( const StrVec_t & dNewFiles, StrVec_t & dOldFiles )
+{
+	dOldFiles.Uniq();
+	sph::StringSet hNewFiles ( dNewFiles );
+
+	for ( const CSphString & tOldName : dOldFiles )
+	{
+		if ( hNewFiles[tOldName] )
+			continue;
+
+		if ( sphIsReadable ( tOldName ) )
+			::unlink ( tOldName.cstr() );
+	}
 }

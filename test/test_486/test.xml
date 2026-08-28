@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>alter auto-embeddings preflight and rebuild target column</name>
+
+<requires>
+	<knn/>
+	<force-rt/>
+	<embeddings/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	<!-- dedicated suite for new ALTER+embeddings cases; keep test_299 unchanged -->
+	drop table if exists t;
+
+	<!-- baseline flow similar to test_299 -->
+	create table t(f text);
+	insert into t values(1, 'abc');
+	flush ramchunk t;
+	alter table t add column v float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2';
+	select * from t;
+	drop table t;
+
+	<!-- model_name + FROM explicit source -->
+	create table t(f text);
+	insert into t values(1, 'hello');
+	alter table t add column v float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='f';
+	show create table t;
+	drop table t;
+
+	<!-- model_name + FROM empty (all text/string sources) -->
+	create table t(f text, s string);
+	insert into t values(1, 'hello', 'world');
+	alter table t add column v float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='';
+	show create table t;
+	drop table t;
+
+	<!-- preflight: model_name without FROM must fail before schema mutation -->
+	create table t(f text);
+	alter table t add column v float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2';
+	show create table t;
+	drop table t;
+
+	<!-- parity: CREATE with model_name and omitted FROM must fail too -->
+	create table t(f text, v float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2');
+	drop table if exists t;
+
+	<!-- parser/statement coverage for target-column rebuild -->
+	create table t(f text, v float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='f');
+	alter table t rebuild embeddings v;
+	alter table t rebuild embeddings;
+	drop table t;
+	
+	<!-- model_name + FROM empty on a table with no text/string sources -->
+	create table t(n uint);
+	insert into t values(1, 7);
+	alter table t add column v float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='';
+	show create table t;
+	select id, n from t;
+	drop table t;
+
+	<!-- LOCK TABLES must reject model-backed ALTER ADD COLUMN -->
+	create table t(f text);
+	insert into t values(1, 'hello');
+	LOCK TABLES `t` READ /*!32311 LOCAL */;
+	alter table t add column v float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='f';
+	UNLOCK TABLES;
+	show create table t;
+	drop table t;
+
+	<!-- LOCK TABLES must reject ALTER REBUILD EMBEDDINGS -->
+	create table t(f text, v float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='f');
+	insert into t(id, f) values(1, 'hello');
+	LOCK TABLES `t` READ /*!32311 LOCAL */;
+	alter table t rebuild embeddings v;
+	UNLOCK TABLES;
+	show create table t;
+	drop table t;
+
+	<!-- REBUILD EMBEDDINGS must also allow FROM='' when the table has no text/string sources -->
+	create table t(n uint, v float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='');
+	insert into t(id, n) values(1, 7);
+	alter table t rebuild embeddings v;
+	drop table t;
+
+	<!-- FROM='' should include text, row-wise string, and columnar string sources -->
+	create table t(f text, s string, c string engine='columnar');
+	insert into t values(1, 'hello', 'world', 'col');
+	alter table t add column v float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='';
+	drop table t;
+	
+</sphinxql>
+</queries>
+
+</test>

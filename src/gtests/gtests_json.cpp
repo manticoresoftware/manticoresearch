@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -11,11 +11,93 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdlib>
+#include <cstring>
+
+#include "fileio.h"
 #include "json/cJSON.h"
+#include "sphinx.h"
 #include "sphinxjson.h"
 #include "sphinxjsonquery.h"
+#include "threadutils.h"
 
 // Miscelaneous short tests for json/cjson
+
+//////////////////////////////////////////////////////////////////////////
+
+class JsonFileParseTest : public ::testing::Test
+{
+protected:
+	void SetUp () override
+	{
+		const testing::TestInfo * pInfo = testing::UnitTest::GetInstance()->current_test_info();
+		m_sFile.SetSprintf ( "__json_file_%d_%s.tmp", GetOsProcessId(), pInfo->name() );
+	}
+
+	void TearDown () override
+	{
+		unlink ( m_sFile.cstr() );
+	}
+
+	void Write ( const char * szData )
+	{
+		CSphString sError;
+		CSphWriterNonThrottled tWriter;
+		ASSERT_TRUE ( tWriter.OpenFile ( m_sFile, sError ) ) << sError.cstr();
+		tWriter.PutBytes ( szData, strlen ( szData ) );
+		tWriter.CloseFile();
+		ASSERT_FALSE ( tWriter.IsError() );
+	}
+
+	CSphString m_sFile;
+};
+
+
+TEST_F ( JsonFileParseTest, ValidJson )
+{
+	Write ( R"({"value":1})" );
+
+	CSphVector<BYTE> dData;
+	CSphString sError;
+	EXPECT_EQ ( sphJsonParse ( dData, m_sFile, sError ), JsonFileParse_e::OK );
+}
+
+
+TEST_F ( JsonFileParseTest, NonJsonFormat )
+{
+	Write ( "not json" );
+
+	CSphVector<BYTE> dData;
+	CSphString sError;
+	EXPECT_EQ ( sphJsonParse ( dData, m_sFile, sError ), JsonFileParse_e::FORMAT_ERROR );
+}
+
+
+TEST_F ( JsonFileParseTest, MissingFile )
+{
+	CSphVector<BYTE> dData;
+	CSphString sError;
+	EXPECT_EQ ( sphJsonParse ( dData, m_sFile, sError ), JsonFileParse_e::READ_ERROR );
+	EXPECT_FALSE ( sError.IsEmpty() );
+}
+
+
+TEST_F ( JsonFileParseTest, InterruptedRead )
+{
+	Write ( R"({"value":1})" );
+	::testing::FLAGS_gtest_death_test_style = "threadsafe";
+
+	EXPECT_EXIT (
+		{
+			sphInterruptNow();
+			CSphVector<BYTE> dData;
+			CSphString sError;
+			auto eResult = sphJsonParse ( dData, m_sFile, sError );
+			std::exit ( eResult==JsonFileParse_e::READ_ERROR && strstr ( sError.cstr(), "read interrupted" ) ? 0 : 1 );
+		},
+		::testing::ExitedWithCode ( 0 ), "" );
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -53,8 +135,9 @@ TEST ( CJson, basics )
 		}
 
 		char * szResult = cJSON_Print ( pRoot );
-		sResult.Adopt ( &szResult );
+		sResult = szResult;
 		cJSON_Delete ( pRoot );
+		cJSON_free ( szResult );
 	}
 
 	{
@@ -96,7 +179,7 @@ TEST ( CJson, format )
 	char * szResult = cJSON_PrintUnformatted ( pJson );
 	CSphString sResult ( szResult );
 	printf ( "\n%s\n", szResult );
-	SafeDeleteArray ( szResult );
+	cJSON_free ( szResult );
 	JsonEscapedBuilder tBuild;
 	tBuild.StartBlock (":", "{", "}");
 	tBuild.AppendString ("escaped", '\"');
@@ -593,10 +676,18 @@ TEST_F ( TJson, bson_rawblob )
 	for (int i=0; i<4; ++i)
 		ASSERT_EQ ( pValues[i], i);
 
-	// blob of mixed (must not work)
+	// blob of mixed work to convert to wides type
 	tst = Bson ( "[0,1,2,300000000000000,4]" );
 	dBlob = bson::RawBlob ( tst );
-	ASSERT_EQ ( dBlob.second, 0 ); // since values are different, Bson is mixed vector, which can't be blob
+	ASSERT_EQ ( dBlob.second, 5 ); // since values are different, Bson is mixed vector, with widest type \ int64
+	{
+		auto pValues64 = ( int64_t * ) dBlob.first;
+		ASSERT_EQ ( pValues64[0], 0);
+		ASSERT_EQ ( pValues64[1], 1 );
+		ASSERT_EQ ( pValues64[2], 2 );
+		ASSERT_EQ ( pValues64[3], 300000000000000 );
+		ASSERT_EQ ( pValues64[4], 4 );
+	}
 
 	// blob of int64
 	tst = Bson ( "[100000000000,100000000001,100000000002,100000000003,100000000004]" );

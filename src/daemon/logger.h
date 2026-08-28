@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -35,6 +35,8 @@ void SetDaemonLog ( CSphString && sLog, bool bCloseIfOpened = false );
 void SetLogFileMode ( int iMode ) noexcept;
 void DisableLogSyslog () noexcept;
 bool LogSyslogEnabled () noexcept;
+bool LogIsStdout () noexcept;
+bool LogIsSyslog () noexcept;
 
 // HTTP log
 void SetupHttpLog ( CSphString sHttpLog );
@@ -66,6 +68,7 @@ void FormatSphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptions, int i
 void LogQuery ( const CSphQuery & q, const CSphQuery & tJoinOptions, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes );
 void LogSphinxqlClause ( Str_t sQuery, int iRealTime );
 void LogQueryToSphinxlLog (const CSphString& sQuery, const CSphString& sError );
+void VacuumSpacesFromJson ( const char* szJson, StringBuilder_c & tBuf ) noexcept;
 
 class LogStmtGuard_c
 {
@@ -80,6 +83,6 @@ public:
 
 // used by Buddy
 enum class BuddyQuery_e : BYTE { SQL, HTTP };
-void LogSphinxqlError ( const char * sStmt, const Str_t & sError );
+void LogSphinxqlError ( const char * szStmt, const Str_t & sError );
 void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError );
 void LogBuddyQuery ( Str_t sQuery, BuddyQuery_e tType );

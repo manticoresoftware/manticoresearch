@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -32,6 +32,7 @@ struct XQKeyword_t
 	mutable bool		m_bMorphed = false;		///< morphology processing (wordforms, stemming etc) already done
 	mutable void *		m_pPayload = nullptr;
 	mutable bool		m_bRegex = false;
+	mutable int			m_iBlendedGroup = -1;	///< blended token group (-1 - not blended, >0 - group number)
 
 	XQKeyword_t() = default;
 	XQKeyword_t ( const char * sWord, int iPos )
@@ -39,6 +40,8 @@ struct XQKeyword_t
 		, m_iAtomPos ( iPos )
 	{}
 };
+
+void SetKeywordWithMarkers ( CSphString & sDst, const char * sPrefix, const CSphString & sWord, const char * sSuffix="" );
 
 
 /// extended query operator
@@ -135,6 +138,7 @@ public:
 
 	void SetZoneSpec ( const CSphVector<int> & dZones, bool bZoneSpan );
 	void SetFieldSpec ( const FieldMask_t& uMask, int iMaxPos );
+	uint64_t Hash () const noexcept;
 };
 
 /// extended query node
@@ -163,7 +167,7 @@ public:
 
 	int						m_iOpArg = 0;		///< operator argument (proximity distance, quorum count)
 	int						m_iAtomPos = -1;	///< atom position override (currently only used within expanded nodes)
-	int						m_iUser = 0;
+	int						m_iUser = -1;
 	bool					m_bVirtuallyPlain = false;	///< "virtually plain" flag (currently only used by expanded nodes)
 	bool					m_bNotWeighted = false;	///< this our expanded but empty word's node
 	bool					m_bPercentOp = false;
@@ -301,6 +305,7 @@ public:
 	void SetOp ( XQOperator_e eOp, CSphVector<XQNode_t*> & dArgs )
 	{
 		SetOp (eOp);
+		assert ( m_dChildren.IsEmpty() && "Ensure your node has no children. You need to explicitly reset them, or delete - to avoid memleak here" );
 		m_dChildren.SwapData(dArgs);
 		for ( auto* pChild : m_dChildren )
 			pChild->m_pParent = this;
@@ -356,6 +361,7 @@ struct XQQuery_t : ISphNoncopyable
 	bool					m_bEmpty = false;
 	// was node full-text (even folded into empty)
 	bool					m_bWasFullText = false;
+	bool					m_bNeedPhraseTransform = false;
 
 	/// dtor
 	~XQQuery_t ()
@@ -382,7 +388,8 @@ public:
 
 	virtual bool	IsFullscan ( const CSphQuery & tQuery ) const { return tQuery.m_sQuery.IsEmpty(); };
 	virtual bool	IsFullscan ( const XQQuery_t & tQuery ) const { return !tQuery.m_bWasFullText; };
-	virtual bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const = 0;
+	bool			ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const;
+	virtual bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const QueryExecutionSettings_t & tExecutionSettings, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const = 0;
 	virtual QueryParser_i * Clone() const = 0;
 };
 
@@ -399,8 +406,16 @@ XQNode_t * CloneKeyword ( const XQNode_t * pNode );
 /// whatever to allow alone operator NOT at query
 void	AllowOnlyNot ( bool bAllowed );
 bool	IsAllowOnlyNot();
-CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema = nullptr );
+
+/// global setting for boolean simplification
+void	SetBooleanSimplify ( bool bSimplify );
+bool	GetBooleanSimplify ( const CSphQuery & tQuery );
+bool	GetBooleanSimplify ();
+CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema = nullptr, StrVec_t * pZones = nullptr );
 inline int GetExpansionLimit ( int iQueryLimit, int iIndexLimit  )
 {
 	return ( iQueryLimit!=DEFAULT_QUERY_EXPANSION_LIMIT ? iQueryLimit : iIndexLimit );
 }
+
+bool TransformPhraseBased ( XQNode_t ** ppNode, CSphString & sError, CSphString & sWarning );
+void SetExpansionPhraseLimit ( int iMaxVariants, bool bExpansionPhraseWarning );

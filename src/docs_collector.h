@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -21,6 +21,7 @@ class DocsCollector_c : public ISphNoncopyable
 
 public:
 	DocsCollector_c ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError );
+	DocsCollector_c ( const CSphQuery& tQuery, bool bJson, QueryType_e eQueryType, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError );
 	DocsCollector_c ( DocsCollector_c&& rhs ) noexcept;
 	~DocsCollector_c();
 

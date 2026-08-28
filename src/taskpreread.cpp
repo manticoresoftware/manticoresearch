@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -12,6 +12,7 @@
 #include "taskpreread.h"
 #include "searchdtask.h"
 #include "searchdaemon.h"
+#include "daemon/notifier.h"
 
 namespace {
 OneshotEvent_c	g_tPrereadFinished; // invoked from main thread, so use raw (not coro) event.
@@ -57,6 +58,7 @@ void DoPreread ()
 		sphLogDebug ( "preread table '%s' in %0.3f sec", sName.cstr (), float ( tmRead ) / 1000000.0f );
 
 		++iRead;
+		sd::extend30s();
 	}
 
 	int64_t tmFinished = sphMicroTimer () - tmStart;
@@ -78,7 +80,10 @@ void PrereadIndexes ( bool bForce )
 	g_bPrereadStarted = true;
 
 	if ( bForce )
+	{
+		sd::status ("Prereading indexes...");
 		return Threads::CallCoroutine ( DoPreread );
+	}
 
 	Threads::StartJob ( DoPreread );
 }

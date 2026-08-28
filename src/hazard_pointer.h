@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -198,11 +198,17 @@ public:
 		return Protect ( (const std::atomic<PTR>&) pMtVal );
 	}
 
+	template <typename PTR>
+	void SetGuard ( PTR pPointer )
+	{
+		assert ( m_pGuard );
+		m_pGuard->Set ( pPointer );
+	}
+
 	// simple unset current guard - to reuse the slot without reallocating.
 	void Release ()
 	{
-		assert ( m_pGuard );
-		m_pGuard->Set ( nullptr );
+		SetGuard ( nullptr );
 	}
 };
 

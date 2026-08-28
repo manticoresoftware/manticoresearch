@@ -7,7 +7,7 @@
 //
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -700,7 +700,7 @@ class SphinxClient
 			while ( $left>0 && !feof($fp) )
 			{
 				$chunk = fread ( $fp, min ( 8192, $left ) );
-				if ( $chunk )
+				if ( $chunk !== false )
 				{
 					$response .= $chunk;
 					$left -= strlen($chunk);

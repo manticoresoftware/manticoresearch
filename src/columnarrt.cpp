@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -380,6 +380,7 @@ static std::unique_ptr<ColumnarAttrRT_i> CreateColumnarAttrRT ( ESphAttr eType, 
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_TIMESTAMP:
 	case SPH_ATTR_FLOAT:
+	case SPH_ATTR_TOKENCOUNT:
 		return std::make_unique<ColumnarAttr_Int_T<DWORD>> ( eType, iBits );
 
 	case SPH_ATTR_BOOL:			return std::make_unique<ColumnarAttr_Bool_c>();
@@ -388,6 +389,7 @@ static std::unique_ptr<ColumnarAttrRT_i> CreateColumnarAttrRT ( ESphAttr eType, 
 	case SPH_ATTR_UINT32SET:	return std::make_unique<ColumnarAttr_MVA_T<DWORD>>(eType);
 	case SPH_ATTR_INT64SET:		return std::make_unique<ColumnarAttr_MVA_T<int64_t>>(eType);
 	case SPH_ATTR_FLOAT_VECTOR:	return std::make_unique<ColumnarAttr_MVA_T<uint32_t>>(eType);
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY:	return std::make_unique<ColumnarAttr_MVA_T<uint32_t>>(eType);
 
 	default:
 		assert ( 0 && "Unsupported type" );

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -28,9 +28,9 @@
 #else
 #	include <dlfcn.h>
 #endif
+#endif // HAVE_DLOPEN
 #include "std/string.h"
 #include <utility>
-#endif // _WIN32
 
 
 class ScopedHandle_c final
@@ -62,4 +62,4 @@ bool LoadFunc ( T & pFunc, void * pHandle, const char * szFunc, const CSphString
 	return !!pFunc;
 }
 
-CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath, int iVersion );
+CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath, int iVersion, const char * szPostfix = nullptr );

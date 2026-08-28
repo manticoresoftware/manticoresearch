@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -109,4 +109,12 @@ inline void SaveArray ( const VecTraits_T<CSphString>& dBuf, MemoryWriter_c& tOu
 	tOut.PutDword ( dBuf.GetLength() );
 	for ( const CSphString& sVal : dBuf )
 		tOut.PutString ( sVal );
+}
+
+template<typename T>
+inline void SaveArray ( const std::vector<T> & dBuf, MemoryWriter_c& tOut )
+{
+	tOut.PutDword ( dBuf.size() );
+	if ( dBuf.size() )
+		tOut.PutBytes ( dBuf.data(), dBuf.size() * sizeof ( T ) );
 }

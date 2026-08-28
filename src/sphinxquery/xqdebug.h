@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -12,12 +12,14 @@
 
 #pragma once
 
-#define XQDEBUG 0
-#define XQ_DUMP_TRANSFORMED_TREE 0
-#define XQ_DUMP_NODE_ADDR 0
+#define XDEBUG_DEFAULT 0
+#define XQDEBUG XDEBUG_DEFAULT
+#define XQDEBUG_STAT XDEBUG_DEFAULT
+#define XQ_DUMP_TRANSFORMED_TREE XDEBUG_DEFAULT
+#define XQ_DUMP_NODE_ADDR XDEBUG_DEFAULT
 
 struct XQNode_t;
-void Dump ( const XQNode_t * pNode, const char * sHeader = "", bool bWithDot = true );
+void Dump ( const XQNode_t * pNode, const char * sHeader = "", bool bWithDot = false );
 
 #if XQ_DUMP_TRANSFORMED_TREE
 void xqDump ( const XQNode_t * pNode, int iIndent = 0 );

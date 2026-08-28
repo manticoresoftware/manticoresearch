@@ -1,0 +1,194 @@
+# Компактизация таблицы
+
+Со временем RT-таблицы могут фрагментироваться на множество дисковых чанков и/или содержать удаленные, но не очищенные данные, что влияет на производительность поиска. В таких случаях необходима оптимизация. По сути, процесс оптимизации объединяет дисковые чанки (N-путевое слияние), удаляя документы, которые ранее были удалены с помощью операторов DELETE.
+
+Начиная с Manticore 4, этот процесс происходит [автоматически по умолчанию](../Server_settings/Searchd.md#auto_optimize). Однако вы также можете использовать следующие команды для ручного запуска компактизации таблицы.
+
+## OPTIMIZE TABLE
+
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS rt;
+CREATE TABLE rt(title text);
+INSERT INTO rt(title) VALUES
+('doc one'),
+('doc two'),
+('doc three');
+-->
+<!-- example optimize -->
+```sql
+OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
+```
+
+`OPTIMIZE TABLE` поддерживает таблицы real-time (RT), [distributed](../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md) и [sharded](../Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md).
+
+Для RT-таблицы этот оператор добавляет таблицу в очередь оптимизации, которая по умолчанию обрабатывается фоновым потоком. Для distributed-таблицы требуется `OPTION sync=1`: команда оптимизирует каждый локальный RT-компонент и каждый настроенный удаленный mirror, кроме blackhole agents. Sharded-таблица поддерживает тот же нативный синхронный fan-out по своим физическим RT-целям. Значение `cutoff` применяется к каждой физической RT-цели.
+
+Когда доступен Manticore Buddy, sharded-таблицы, созданные с опциями `shards` и `rf`, также сохраняют асинхронную форму `OPTIMIZE TABLE table_name`, которую обрабатывает Buddy. Используйте `OPTION sync=1`, чтобы запускать нативный синхронный fan-out напрямую в Manticore Search.
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+OPTIMIZE TABLE rt;
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt"
+```
+
+<!-- end -->
+
+### Количество оптимизированных дисковых чанков
+
+<!-- example optimize_cutoff -->
+
+По умолчанию OPTIMIZE объединяет дисковые чанки RT-таблицы до количества, меньшего или равного количеству логических ядер CPU, умноженному на 2.
+
+Однако, если таблица имеет атрибуты с KNN-индексами, этот порог отличается. В этом случае он устанавливается равным количеству физических ядер CPU, деленному на 2, для повышения производительности KNN-поиска.
+
+Обратите внимание: если `optimize_cutoff` явно не задан ни на уровне сервера ([optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff)), ни на уровне таблицы (параметр [optimize_cutoff](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#optimize_cutoff)), [автоматическая компакция](../Server_settings/Searchd.md#auto_optimize) никогда не объединяет таблицу, если в ней меньше 2 дисковых чанков, даже если вычисленное значение по умолчанию ниже (например, на серверах с небольшим числом ядер CPU, особенно для таблиц KNN). Сохранение как минимум 2 дисковых чанков позволяет избежать затрат на постоянное слияние всего содержимого в один чанк. Чтобы принудительно довести автоматическую компакцию до одного дискового чанка, задайте `optimize_cutoff` явно равным `1`. На ручной `OPTIMIZE ... OPTION cutoff=1` это не влияет, и она по-прежнему компактирует данные до одного чанка.
+
+Вы также можете управлять количеством оптимизированных дисковых чанков вручную с помощью опции `cutoff`.
+
+Дополнительные опции включают:
+* Настройку сервера [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) для переопределения порога по умолчанию
+* Настройку для конкретной таблицы [optimize_cutoff](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#optimize_cutoff)
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+OPTIMIZE TABLE rt OPTION cutoff=4;
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION cutoff=4"
+```
+
+<!-- end -->
+
+### Запуск в foreground режиме
+
+<!-- example optimize_sync -->
+
+Для RT-таблицы `sync=0` используется по умолчанию. Если задать `OPTION sync=1`, команда будет ждать завершения оптимизации перед возвратом. Если соединение прервется, оптимизация продолжит выполняться на сервере.
+
+Distributed-таблицы требуют `OPTION sync=1`. Sharded-таблицы используют `OPTION sync=1` для нативного синхронного fan-out. Команда ждет все выбранные физические цели и сообщает об ошибке, если какая-либо цель не удалась; уже выполненная работа на других целях не откатывается.
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+OPTIMIZE TABLE rt OPTION sync=1;
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION sync=1"
+```
+
+<!-- end -->
+
+Для distributed- и sharded-таблиц используйте синхронную форму:
+
+```sql
+OPTIMIZE TABLE distributed_table OPTION sync=1, cutoff=1;
+OPTIMIZE TABLE sharded_table OPTION sync=1, cutoff=1;
+```
+
+### Ограничение влияния на ввод-вывод
+
+Оптимизация может быть длительным и ресурсоемким процессом ввода-вывода. Оператор `OPTIMIZE` добавляет задание в пул фоновых воркеров. Вы можете контролировать, сколько заданий выполняется параллельно, с помощью [parallel_chunk_merges](../Server_settings/Searchd.md#parallel_chunk_merges), и сколько чанков объединяет каждое задание, с помощью [merge_chunks_per_job](../Server_settings/Searchd.md#merge_chunks_per_job). Воркеры оптимизации могут быть ограничены по вводу-выводу, и вы можете контролировать максимальное количество операций ввода-вывода в секунду и максимальный размер операции ввода-вывода с помощью директив [rt_merge_iops](../Server_settings/Searchd.md#rt_merge_iops) и [rt_merge_maxiosize](../Server_settings/Searchd.md#rt_merge_maxiosize) соответственно.
+
+Во время оптимизации оптимизируемая RT-таблица остается онлайн и доступной как для поиска, так и для обновлений почти все время. Она блокируется на очень короткий период, когда пара дисковых чанков успешно объединяется, что позволяет переименовать старые и новые файлы и обновить заголовок таблицы.
+
+### Оптимизация кластерных таблиц
+
+Пока [auto_optimize](../Server_settings/Searchd.md#auto_optimize) не отключен, таблицы оптимизируются автоматически.
+
+Если вы сталкиваетесь с неожиданными SST или хотите, чтобы таблицы на всех узлах кластера были бинарно идентичными, вам необходимо:
+1. Отключить [auto_optimize](../Server_settings/Searchd.md#auto_optimize).
+2. Вручную оптимизировать таблицы:
+
+<!-- example cluster_manual_drop -->
+На одном из узлов удалить таблицу из кластера:
+<!-- request SQL -->
+```sql
+ALTER CLUSTER mycluster DROP myindex;
+```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "ALTER CLUSTER mycluster DROP myindex"
+```
+
+<!-- end -->
+<!-- example cluster_manual_optimize -->
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS myindex;
+CREATE TABLE myindex(title text);
+INSERT INTO myindex(title) VALUES ('cluster doc');
+-->
+Оптимизировать таблицу:
+<!-- request SQL -->
+```sql
+OPTIMIZE TABLE myindex;
+```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE myindex"
+```
+
+<!-- end -->
+<!-- example cluster_manual_add -->
+Добавить таблицу обратно в кластер:
+<!-- request SQL -->
+```sql
+ALTER CLUSTER mycluster ADD myindex;
+```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "ALTER CLUSTER mycluster ADD myindex"
+```
+
+<!-- end -->
+Когда таблица добавляется обратно, новые файлы, созданные в процессе оптимизации, будут реплицированы на другие узлы кластера.
+Любые локальные изменения, внесенные в таблицу на других узлах, будут потеряны.
+
+Модификации данных таблицы (вставки, замены, удаления, обновления) должны либо:
+
+1. Быть отложены, либо
+2. Направляться на узел, где выполняется процесс оптимизации.
+
+Обратите внимание, что пока таблица находится вне кластера, команды insert/replace/delete/update должны ссылаться на нее без префикса имени кластера (для SQL-запросов или свойства cluster в случае HTTP JSON запроса), иначе они завершатся ошибкой.
+После того как таблица будет добавлена обратно в кластер, вы должны возобновить операции записи в таблицу и снова включать префикс имени кластера, иначе они завершатся ошибкой.
+
+Операции поиска доступны как обычно в процессе на любом из узлов.
+
+<!-- proofread -->

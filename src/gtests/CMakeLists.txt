@@ -7,24 +7,28 @@ if (NOT TARGET GTest::gmock_main)
 endif ()
 
 set ( GTESTS_SRC
+		gtests_docidlookup.cpp
 		gtests_rtstuff.cpp
-		gtests_tokenizer.cpp
 		gtests_text.cpp
 		gtests_functions.cpp
 		gtests_globalstate.cpp
+		gtests_hugetokenizer.cpp
 		gtests_searchd.cpp
 		gtests_filter.cpp
 		gtests_searchdaemon.cpp
+		gtests_api_reply_stream.cpp
+		gtests_ssl.cpp
 		gtests_stringbuilder.cpp
 		gtests_strfmt.cpp
 		gtests_pqstuff.cpp
 		gtests_json.cpp
 		gtests_threadstuff.cpp
-		gtests_wsrep.cpp )
+		gtests_wsrep.cpp
+		gtests_uklemmatizer.cpp )
 
 add_executable ( gmanticoretest ${GTESTS_SRC} )
 target_include_directories ( gmanticoretest PRIVATE "${MANTICORE_SOURCE_DIR}/src" )
-target_link_libraries ( gmanticoretest
+target_link_libraries ( gmanticoretest PRIVATE
 		GTest::gmock_main
 		lmanticore
 		lsearchd
@@ -33,8 +37,12 @@ target_link_libraries ( gmanticoretest
 		daemon
 )
 
+if (WITH_SSL)
+	target_link_libraries ( gmanticoretest PRIVATE OpenSSL::SSL OpenSSL::Crypto )
+endif ()
+
 if (WITH_EXPAT)
-	target_link_libraries ( gmanticoretest source_xmlpipe2 )
+	target_link_libraries ( gmanticoretest PRIVATE source_xmlpipe2 )
 endif ()
 
 target_compile_options ( gmanticoretest PRIVATE $<$<OR:$<COMPILE_LANG_AND_ID:CXX,GNU>,$<COMPILE_LANG_AND_ID:C,GNU>>:-Wno-array-bounds -Wno-stringop-truncation -Wno-restrict -Wno-stringop-overflow> )
@@ -52,3 +60,7 @@ if (WIN32)
 	add_custom_command ( TARGET gmanticoretest POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${libs} "$<TARGET_FILE_DIR:gmanticoretest>" VERBATIM )
 	message ( STATUS "Collected libs is ${libs}" )
 endif ()
+
+if (QFUZZER)
+	target_link_libraries ( gmanticoretest PRIVATE -fsanitize=address )
+endif()

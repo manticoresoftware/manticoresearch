@@ -74,6 +74,21 @@ index test_rt1
 	rt_attr_string = str_col
 }
 
+source src_test_not
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select id, a, b from test_not
+	sql_attr_uint		= a
+    sql_attr_uint		= b
+}
+
+index test_not
+{
+	source				= src_test_not
+	path				= <data_path/>/test_not
+}
+
 </config>
 
 <db_drop>drop table if exists test_table</db_drop>
@@ -118,6 +133,17 @@ CREATE TABLE test_mva
 	( 4, '4,40', 'test four ')
 </db_insert>
 
+<db_drop>drop table if exists test_not</db_drop>
+<db_create>
+create table test_not
+(
+	id int not null,
+	a int,
+    b int
+)
+</db_create>
+<db_insert>insert into test_not (id, a, b) VALUES (10, 0, 0),(11, 0,1),(12, 1,0),(13, 1,1)</db_insert>
+
 <metaindex name='META:all'>
 <index>test1</index>
 <index>test_rt</index>
@@ -133,6 +159,11 @@ insert into test_rt values (6, '6th', 'No wonder, Trevize thought, it was indulg
 insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 </sphinxql>
 <sphinxql>insert into test_bigint values (2333444556, '1st', 2333444556 ), (2333444554, '2nd', 2333444554 ), (140739821799884, '3d', 140739821799884 )</sphinxql>
+
+<!-- should be the same as the last HTTP must_not -->
+<sphinxql>SELECT * FROM test_not WHERE a!=1 OR b!=1</sphinxql>
+<sphinxql>SELECT * FROM test_not WHERE a!=0 AND b!=0</sphinxql>
+
 </queries>
 
 <httpqueries>
@@ -500,6 +531,44 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 { "table":"test_bigint", "query": { "in": { "id": [140739821799884] } } }
 </query>
 
+<query endpoint="search">
+{
+    "index": "test_not",
+    "query": {
+        "bool": {
+            "must_not": [
+                {
+                    "bool": {
+                        "must": [
+                            { "equals": { "a": 1 } },
+                            { "equals": { "b": 1 } }
+                        ]
+                    }
+                }
+            ]
+        }
+    }
+}
+</query>
+<query endpoint="search">
+{
+    "index": "test_not",
+    "query": {
+        "bool": {
+            "must_not": [
+                {
+                    "bool": {
+                        "should": [
+                            { "equals": { "a": 0 } },
+                            { "equals": { "b": 0 } }
+                        ]
+                    }
+                }
+            ]
+        }
+    }
+}
+</query>
 
 </httpqueries>
 

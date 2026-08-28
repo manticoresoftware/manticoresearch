@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2020-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2020-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -14,6 +14,8 @@
 #include "secondary/builder.h"
 #include "secondary/secondary.h"
 
+#include <functional>
+
 // FWD
 struct CSphString;
 
@@ -22,7 +24,8 @@ void			ShutdownSecondary();
 const char *	GetSecondaryVersionStr();
 bool			IsSecondaryLibLoaded();
 
-SI::Index_i *		CreateSecondaryIndex ( const char * sFile, CSphString & sError );
+SI::Index_i *	CreateSecondaryIndex ( const char * szFile, bool bMmap, CSphString & sError );
+bool			CheckSecondaryIndexStorage ( const CSphString & sFile, uint32_t uNumRows, SI::ErrorReporter_fn && fnError, SI::ProgressReporter_fn && fnProgress );
 std::unique_ptr<SI::Builder_i> CreateSecondaryIndexBuilder ( const common::Schema_t & tSchema, int64_t iMemoryLimit, const CSphString & sFile, int iBufferSize, CSphString & sError );
 
 enum class SIDefault_e
@@ -33,6 +36,9 @@ enum class SIDefault_e
 };
 
 void				SetSecondaryIndexDefault ( SIDefault_e eState );
-SIDefault_e			GetSecondaryIndexDefault ();
+SIDefault_e			GetSecondaryIndexDefault();
+
+void				SetSIBlockCacheSize ( uint64_t uSize );
+uint64_t			GetSIBlockCacheSize();
 
 #endif // _secondarylib_

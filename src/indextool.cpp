@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -37,13 +37,13 @@ static bool IsConfigless()
 
 static CSphString GetPathForNewIndex ( const CSphString & sIndexName )
 {
-	CSphString sRes;
-	if ( g_sDataDir.Length() && !g_sDataDir.Ends("/") && !g_sDataDir.Ends("\\") )
-		sRes.SetSprintf ( "%s/%s", g_sDataDir.cstr(), sIndexName.cstr() );
-	else
-		sRes.SetSprintf ( "%s%s", g_sDataDir.cstr(), sIndexName.cstr() );
+	CSphString sPath = sphGetConfiglessTablePath ( g_sDataDir, sIndexName );
+	CSphString sLegacyPath;
+	sLegacyPath.SetSprintf ( "%s/%s", g_sDataDir.cstr(), sIndexName.cstr() );
+	if ( sPath!=sLegacyPath && !sphDirExists ( sPath.cstr() ) && sphDirExists ( sLegacyPath.cstr() ) )
+		return sLegacyPath;
 
-	return sRes;
+	return sPath;
 }
 
 static void MakeRelativePath ( CSphString & sPath )
@@ -825,6 +825,7 @@ struct IndexInfo_t
 {
 	bool							m_bEnabled {false};
 	DWORD							m_nDocs {0};
+	DWORD							m_uVersion {0};
 	CSphString						m_sName;
 	CSphString						m_sPath;
 	CSphFixedVector<DocID_t>		m_dKilllist;
@@ -843,15 +844,15 @@ static void ApplyKilllist ( IndexInfo_t & tTarget, const IndexInfo_t & tKiller, 
 {
 	if ( tSettings.m_uFlags & KillListTarget_t::USE_DOCIDS )
 	{
-		LookupReaderIterator_c tTargetReader ( tTarget.m_tLookup.GetReadPtr() );
-		LookupReaderIterator_c tKillerReader ( tKiller.m_tLookup.GetReadPtr() );
+		LookupReaderIterator_c tTargetReader ( tTarget.m_tLookup.GetReadPtr(), tTarget.m_uVersion );
+		LookupReaderIterator_c tKillerReader ( tKiller.m_tLookup.GetReadPtr(), tKiller.m_uVersion );
 
 		KillByLookup ( tTargetReader, tKillerReader, tTarget.m_tDeadRowMap );
 	}
 
 	if ( tSettings.m_uFlags & KillListTarget_t::USE_KLIST )
 	{
-		LookupReaderIterator_c tTargetReader ( tTarget.m_tLookup.GetReadPtr() );
+		LookupReaderIterator_c tTargetReader ( tTarget.m_tLookup.GetReadPtr(), tTarget.m_uVersion );
 		DocidListReader_c tKillerReader ( tKiller.m_dKilllist );
 
 		KillByLookup ( tTargetReader, tKillerReader, tTarget.m_tDeadRowMap );
@@ -879,18 +880,18 @@ static void ApplyKilllists ( CSphConfig & hConf )
 		tIndex.m_sName = tIndex_.first.cstr();
 		tIndex.m_sPath = RedirectToRealPath ( hIndex["path"].strval() );
 
-		IndexFiles_c tIndexFiles ( tIndex.m_sPath, tIndex.m_sName.cstr () );
-
-		if ( !tIndexFiles.CheckHeader() )
+		auto uVersion =	ValidateHeaderAndReadVersion ( SphSprintf ( "%s%s", tIndex.m_sPath.cstr(), sphGetExt(SPH_EXT_SPH) ) );
+		if ( !uVersion.has_value() )
 		{
 			fprintf ( stdout, "WARNING: unable to index header for table %s\n", tIndex.m_sName.cstr() );
 			continue;
 		}
+		tIndex.m_uVersion = uVersion.value();
 
 		// no lookups prior to v.54
-		if ( tIndexFiles.GetVersion() < 54 )
+		if ( uVersion.value() < 54 )
 		{
-			fprintf ( stdout, "WARNING: table '%s' version: %u, min supported is 54\n", tIndex.m_sName.cstr(), tIndexFiles.GetVersion() );
+			fprintf ( stdout, "WARNING: table '%s' version: %u, min supported is 54\n", tIndex.m_sName.cstr(), uVersion.value() );
 			continue;
 		}
 
@@ -982,6 +983,26 @@ static void ApplyKilllists ( CSphConfig & hConf )
 }
 
 
+static void DumpIndexKilllist ( CSphIndex * pIndex )
+{
+	CSphString sError;
+	IndexInfo_t tIndex;
+	if ( !pIndex->LoadKillList ( &tIndex.m_dKilllist, tIndex.m_tTargets, sError ) )
+	{
+		fprintf ( stdout, "WARNING: unable to load kill-list for table %s: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
+		return;
+	}
+
+	fprintf ( stdout, "killlist targets (%d entries):\n", tIndex.m_tTargets.m_dTargets.GetLength() );
+	for ( const auto & i : tIndex.m_tTargets.m_dTargets )
+		fprintf ( stdout, "\tindex: %s\tflags: %u\n", i.m_sIndex.cstr(), i.m_uFlags );
+
+	fprintf ( stdout, "killlist (%d entries):\n", tIndex.m_dKilllist.GetLength() );
+	for ( const auto & i : tIndex.m_dKilllist )
+		fprintf ( stdout, "\t" INT64_FMT "\n", i );
+}
+
+
 static void ShowVersion()
 {
 	const char * szColumnarVer = GetColumnarVersionStr();
@@ -1022,6 +1043,8 @@ Commands are:
 --dumphitlist <TABLE> <KEYWORD>
 --dumphitlist <TABLE> --wordid <ID>
 				dump hits for a given keyword
+--dumpkilllist <SPK-FILE>	dump killlist by file name
+--dumpkilllist <TABLE>		dump killlist by table name
 --docextract TBL DOCID		runs usual table check pass of whole dictionary/docs/hits,
 				and collects all the words and hits belonging to requested document.
 				Then all of the words are placed in the order according to their fields
@@ -1054,6 +1077,7 @@ enum class IndextoolCmd_e
 	DUMPDOCIDS,
 	DUMPHITLIST,
 	DUMPDICT,
+	DUMPKLIST,
 	CHECK,
 	EXTRACT,
 	STRIP,
@@ -1066,8 +1090,7 @@ enum class IndextoolCmd_e
 };
 
 static IndextoolCmd_e g_eCommand = IndextoolCmd_e::NOTHING;
-static const char * g_sCommands[] = {"", "dumpheader", "dumpconfig", "dumpdocids", "dumphitlist", "dumpdict",
-	"check", "htmlstrip", "morph", "buildidf", "mergeidf", "checkconfig", "fold", "apply-killlists" };
+static const char * g_sCommands[] = {"", "dumpheader", "dumpconfig", "dumpdocids", "dumphitlist", "dumpdict", "dumpkilllist", "check", "htmlstrip", "morph", "buildidf", "mergeidf", "checkconfig", "fold", "apply-killlists" };
 
 
 static void SetCmd ( IndextoolCmd_e eCmd )
@@ -1180,7 +1203,7 @@ static bool LoadJsonConfig ( CSphConfig & hConf, const CSphString & sConfigFile 
 	return true;
 }
 
-static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, CSphString sIndex, bool bDictKeywords, bool bRotate, StrVec_t * pWarnings, CSphString & sError )
+static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, CSphString sIndex, bool bRotate, StrVec_t * pWarnings, CSphString & sError )
 {
 	// don't expect complete index declarations from indexes created with CREATE TABLE
 	const auto& hIndex = hConf["index"][sIndex];
@@ -1191,7 +1214,7 @@ static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, CSphString s
 		CSphSchema tSchema;
 		CSphIndexSettings tSettings;
 		if ( bFromJson || sphRTSchemaConfigure ( hIndex, tSchema, tSettings, pWarnings, sError, false, false ) )
-			return sphCreateIndexRT ( std::move ( sIndex ), hIndex["path"].strval(), std::move ( tSchema ), 32*1024*1024, bDictKeywords );
+			return sphCreateIndexRT ( std::move ( sIndex ), hIndex["path"].strval(), std::move ( tSchema ), 32*1024*1024 );
 	} else
 	{
 		StringBuilder_c tPath;
@@ -1268,7 +1291,7 @@ int main ( int argc, char ** argv )
 	CSphString sOut;
 	bool bStats = false;
 	bool bSkipUnique = false;
-	CSphString sDumpDict;
+	CSphString sDumpDict, sDumpKlist;
 	bool bTraceToStdout = true;
 	bool bRotate = false;
 	bool bCheckIdDups = false;
@@ -1355,6 +1378,11 @@ int main ( int argc, char ** argv )
 		{
 			iCheckChunk = (int)strtoll ( argv[++i], NULL, 10 ); continue;
 		}
+		OPT1 ( "--dumpkilllist" )
+		{
+			SetCmd ( IndextoolCmd_e::DUMPKLIST );
+			sDumpKlist = argv[++i];
+		}
 
 		// options with 2 args
 		else if ( ( i + 2 ) >= argc ) // NOLINT
@@ -1428,18 +1456,27 @@ int main ( int argc, char ** argv )
 	if ( !hConf ( "index" ) )
 		sphDie ( "no tables found in config file '%s'", sOptConfig );
 
-	while (true)
+	switch ( g_eCommand )
 	{
-		if ( g_eCommand==IndextoolCmd_e::DUMPHEADER && sDumpHeader.Ends ( ".meta" ) )
+	case IndextoolCmd_e::DUMPHEADER:
+		if ( sDumpHeader.Ends ( ".meta" ) )
 		{
 			InfoMeta ( sDumpHeader );
 			return 0;
 		}
+		break;
 
-		if ( g_eCommand==IndextoolCmd_e::DUMPDICT && !sDumpDict.Ends ( ".spi" ) )
+	case IndextoolCmd_e::DUMPDICT:
+		if ( !sDumpDict.Ends ( ".spi" ) )
 			sIndex = sDumpDict;
 
 		break;
+
+	case IndextoolCmd_e::DUMPKLIST:
+		if ( !sDumpKlist.Ends ( ".spk" ) )
+			sIndex = sDumpKlist;
+
+	default: break;
 	}
 
 	///////////
@@ -1518,13 +1555,8 @@ int main ( int argc, char ** argv )
 		if ( !hConf["index"][sIndex]("path") )
 			sphDie ( "table '%s': missing 'path' in config'\n", sIndex.cstr() );
 
-		// preload that index
-		bool bDictKeywords = true;
-		if ( hConf["index"][sIndex].Exists ( "dict" ) )
-			bDictKeywords = ( hConf["index"][sIndex]["dict"]!="crc" );
-
 		StrVec_t dWarnings;
-		pIndex = CreateIndex ( hConf, sIndex, bDictKeywords, bRotate, &dWarnings, sError );
+		pIndex = CreateIndex ( hConf, sIndex, bRotate, &dWarnings, sError );
 
 		for ( const auto & i : dWarnings )
 			fprintf ( stdout, "WARNING: table '%s': %s\n", sIndex.cstr(), i.cstr() );
@@ -1635,6 +1667,23 @@ int main ( int argc, char ** argv )
 			pIndex->DebugDumpDict ( stdout, false );
 			break;
 		}
+
+		case IndextoolCmd_e::DUMPKLIST:
+			if ( sDumpKlist.Ends ( ".spk" ) )
+			{
+				fprintf ( stdout, "dumping killlist file '%s'...\n", sDumpKlist.cstr() );
+
+				sIndex = sDumpKlist.SubString ( 0, sDumpKlist.Length()-4 );
+				pIndex = sphCreateIndexPhrase ( sIndex, sIndex );
+
+				if ( !pIndex )
+					sphDie ( "table '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
+			}
+			else
+				fprintf ( stdout, "dumping killlist for table '%s'...\n", sIndex.cstr() );
+
+			DumpIndexKilllist ( pIndex.get() );
+			break;
 
 		case IndextoolCmd_e::CHECK:
 		case IndextoolCmd_e::EXTRACT:

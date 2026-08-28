@@ -1,6 +1,6 @@
 //
 //
-// Copyright (c) 2018-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2018-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -18,6 +18,7 @@
 #include "killlist.h"
 #include "attribute.h"
 #include "columnarfilter.h"
+#include "indexsettings.h"
 #include <queue>
 
 #include "util/util.h"
@@ -1130,9 +1131,9 @@ private:
 class SIIteratorCreator_c
 {
 public:
-						SIIteratorCreator_c ( const SIContainer_c & tSI, CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff );
+						SIIteratorCreator_c ( const SIContainer_c & tSI, CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff, bool bUseSICache );
 
-	RowIteratorsWithEstimates_t Create();
+	RowIteratorsWithEstimates_t Create ( CSphString & sWarning );
 
 private:
 	const SIContainer_c &					m_tSI;
@@ -1142,16 +1143,17 @@ private:
 	const ISphSchema &						m_tSchema;
 	RowID_t									m_uRowsCount = 0;
 	int										m_iCutoff = 0;
+	bool									m_bUseSICache = false;
 
 	RowIdBoundaries_t						m_tRowidBounds;
 	const CSphFilterSettings *				m_pRowIdFilter = nullptr;
 
-	bool				CreateSIIterators ( std::vector<common::BlockIterator_i *> & dFilterIt, const CSphFilterSettings & tFilter, int64_t iRsetSize );
+	bool				CreateSIIterators ( std::vector<common::BlockIterator_i *> & dFilterIt, const CSphFilterSettings & tFilter, int64_t iRsetSize, CSphString & sWarning );
 	RowidIterator_i *	CreateRowIdIteratorFromSI ( std::vector<common::BlockIterator_i *> & dFilterIt, const CSphFilterSettings & tFilter );
 };
 
 
-SIIteratorCreator_c::SIIteratorCreator_c ( const SIContainer_c & tSI, CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff )
+SIIteratorCreator_c::SIIteratorCreator_c ( const SIContainer_c & tSI, CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff, bool bUseSICache )
 	: m_tSI ( tSI )
 	, m_dSIInfo ( dSIInfo )
 	, m_dFilters ( dFilters )
@@ -1159,11 +1161,12 @@ SIIteratorCreator_c::SIIteratorCreator_c ( const SIContainer_c & tSI, CSphVector
 	, m_tSchema ( tSchema )
 	, m_uRowsCount ( uRowsCount )
 	, m_iCutoff ( iCutoff )
+	, m_bUseSICache ( bUseSICache )
 	, m_pRowIdFilter ( GetRowIdFilter ( dFilters, uRowsCount, m_tRowidBounds ) )
 {}
 
 
-bool SIIteratorCreator_c::CreateSIIterators ( std::vector<common::BlockIterator_i *> & dFilterIt, const CSphFilterSettings & tFilter, int64_t iRsetSize )
+bool SIIteratorCreator_c::CreateSIIterators ( std::vector<common::BlockIterator_i *> & dFilterIt, const CSphFilterSettings & tFilter, int64_t iRsetSize, CSphString & sWarning )
 {
 	common::RowidRange_t tRange { m_tRowidBounds.m_tMinRowID, m_tRowidBounds.m_tMaxRowID };
 
@@ -1172,17 +1175,15 @@ bool SIIteratorCreator_c::CreateSIIterators ( std::vector<common::BlockIterator_
 
 	bool bCreated = false;
 	common::Filter_t tColumnarFilter;
-	CSphString sWarning;
 	CSphString sError;
 	if ( ToColumnarFilter ( tColumnarFilter, tFilter, m_eCollation, m_tSchema, sWarning ) )
-		bCreated = m_tSI.CreateIterators ( dFilterIt, tColumnarFilter, m_pRowIdFilter ? &tRange : nullptr, m_uRowsCount, iRsetSize, m_iCutoff, sError );
+		bCreated = m_tSI.CreateIterators ( dFilterIt, tColumnarFilter, m_pRowIdFilter ? &tRange : nullptr, m_uRowsCount, iRsetSize, m_iCutoff, m_bUseSICache, sWarning, sError );
 	else
-		sphWarning ( "secondary index %s: %s", tFilter.m_sAttrName.cstr(), sWarning.cstr() );
+		sWarning.SetSprintf ( "secondary index %s: %s", tFilter.m_sAttrName.cstr(), sWarning.cstr() );
 
 	if ( !bCreated )
 	{
-		// FIXME!!! return as query warning
-		sphWarning ( "%s", sError.cstr() );
+		sWarning.SetSprintf ( "%s", sError.cstr() );
 		for ( auto * pIt : dFilterIt ) { SafeDelete ( pIt ); }
 		dFilterIt.resize ( 0 );
 		return false;
@@ -1190,8 +1191,7 @@ bool SIIteratorCreator_c::CreateSIIterators ( std::vector<common::BlockIterator_
 
 	if ( !sError.IsEmpty() )
 	{
-		// FIXME!!! return as query warning
-		sphWarning ( "secondary index %s:%s", tFilter.m_sAttrName.cstr(), sError.cstr() );
+		sWarning.SetSprintf ( "secondary index %s:%s", tFilter.m_sAttrName.cstr(), sError.cstr() );
 		sError = "";
 	}
 
@@ -1223,7 +1223,7 @@ RowidIterator_i * SIIteratorCreator_c::CreateRowIdIteratorFromSI ( std::vector<c
 }
 
 
-RowIteratorsWithEstimates_t SIIteratorCreator_c::Create()
+RowIteratorsWithEstimates_t SIIteratorCreator_c::Create ( CSphString & sWarning )
 {
 	RowIteratorsWithEstimates_t dRes;
 
@@ -1236,7 +1236,7 @@ RowIteratorsWithEstimates_t SIIteratorCreator_c::Create()
 		int64_t iRsetSize = tSIInfo.m_iRsetEstimate;
 		const CSphFilterSettings & tFilter = m_dFilters[i];
 		std::vector<common::BlockIterator_i *> dFilterIt;
-		if ( !CreateSIIterators ( dFilterIt, tFilter, iRsetSize ) )
+		if ( !CreateSIIterators ( dFilterIt, tFilter, iRsetSize, sWarning ) )
 			continue;
 		
 		RowidIterator_i * pIt = CreateRowIdIteratorFromSI ( dFilterIt, tFilter );
@@ -1249,13 +1249,13 @@ RowIteratorsWithEstimates_t SIIteratorCreator_c::Create()
 
 /////////////////////////////////////////////////////////////////////
 
-bool SIContainer_c::Load ( const CSphString & sFile, CSphString & sError )
+bool SIContainer_c::Load ( const CSphString & sFile, bool bMmap, CSphString & sError )
 {
-	SI::Index_i * pIndex = CreateSecondaryIndex ( sFile.cstr(), sError );
+	SI::Index_i * pIndex = CreateSecondaryIndex ( sFile.cstr(), bMmap, sError );
 	if ( !pIndex )
 		return false;
 
-	m_dIndexes.Add ( { std::unique_ptr<SI::Index_i>(pIndex), sFile } );
+	m_dIndexes.Add ( { std::unique_ptr<SI::Index_i>(pIndex) } );
 	return true;
 }
 
@@ -1263,7 +1263,7 @@ bool SIContainer_c::Load ( const CSphString & sFile, CSphString & sError )
 bool SIContainer_c::Drop ( const CSphString & sFile, CSphString & sError )
 {
 	ARRAY_FOREACH ( i, m_dIndexes )
-		if ( m_dIndexes[i].m_sFile==sFile )
+		if ( sFile==m_dIndexes[i].m_pIndex->GetFilename().c_str() )
 		{
 			m_dIndexes.Remove(i);
 			return true;
@@ -1274,11 +1274,27 @@ bool SIContainer_c::Drop ( const CSphString & sFile, CSphString & sError )
 }
 
 
-void SIContainer_c::ColumnUpdated ( const CSphString & sAttr )
+void SIContainer_c::UpdateFilename ( const CSphString & sOldFile, const CSphString & sNewFile )
 {
+	for ( auto & tIndex : m_dIndexes )
+		if ( sOldFile==tIndex.m_pIndex->GetFilename().c_str() )
+			tIndex.m_pIndex->UpdateFilename ( sNewFile.cstr() );
+}
+
+
+bool SIContainer_c::ColumnUpdated ( const CSphString & sAttr )
+{
+	bool bUpdated = false;
 	for ( auto & i : m_dIndexes )
+	{
 		if ( i.m_pIndex->IsEnabled ( sAttr.cstr() ) )
+		{
 			i.m_pIndex->ColumnUpdated ( sAttr.cstr() );
+			bUpdated = true;
+		}
+	}
+
+	return bUpdated;
 }
 
 
@@ -1296,13 +1312,15 @@ bool SIContainer_c::SaveMeta ( CSphString & sError ) const
 }
 
 
-bool SIContainer_c::CreateIterators ( std::vector<common::BlockIterator_i *> & dIterators, const common::Filter_t & tFilter, const common::RowidRange_t * pBounds, uint32_t uMaxValues, int64_t iRsetSize, int iCutoff, CSphString & sError ) const
+bool SIContainer_c::CreateIterators ( std::vector<common::BlockIterator_i *> & dIterators, const common::Filter_t & tFilter, const common::RowidRange_t * pBounds, uint32_t uMaxValues, int64_t iRsetSize, int iCutoff, bool bUseSICache, CSphString & sWarning, CSphString & sError ) const
 {
 	for ( auto & i : m_dIndexes )
 		if ( i.m_pIndex->IsEnabled ( tFilter.m_sName ) )
 		{
-			std::string sErrorSTL;
-			bool bOk = i.m_pIndex->CreateIterators ( dIterators, tFilter, pBounds, uMaxValues, iRsetSize, iCutoff, sErrorSTL );
+			std::string sWarningSTL, sErrorSTL;
+			SI::IteratorSettings_t tSettings { .m_pBounds = pBounds, .m_uMaxValues = uMaxValues, .m_iRsetSize = iRsetSize, .m_iCutoff = iCutoff, .m_bUseCache = bUseSICache };
+			bool bOk = i.m_pIndex->CreateIterators ( dIterators, tFilter, tSettings, sWarningSTL, sErrorSTL );
+			sWarning = sWarningSTL.c_str();
 			sError = sErrorSTL.c_str();
 			return bOk;
 		}
@@ -1363,16 +1381,21 @@ void SIContainer_c::GetIndexAttrInfo ( std::vector<SI::IndexAttrInfo_t> & dInfo 
 		i.m_pIndex->GetAttrInfo(dInfo);
 }
 
+void SIContainer_c::ClearCache()
+{
+	for ( auto & i : m_dIndexes )
+		i.m_pIndex->ClearCache();
+}
 
-RowIteratorsWithEstimates_t SIContainer_c::CreateSecondaryIndexIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff ) const
+RowIteratorsWithEstimates_t SIContainer_c::CreateSecondaryIndexIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff, bool bUseSICache, CSphString & sWarning ) const
 {
 	// don't use cutoff if we have more than one instance of SecondaryIndex/ColumnarScan/Filter
 	int iNumIterators = dSIInfo.count_of ( []( auto & tSI ){ return tSI.m_eType!=SecondaryIndexType_e::NONE; } );
 	if ( iNumIterators > 1 )
 		iCutoff = -1;
 
-	SIIteratorCreator_c tCreator ( *this, dSIInfo, dFilters, eCollation, tSchema, uRowsCount, iCutoff );
-	return tCreator.Create();
+	SIIteratorCreator_c tCreator ( *this, dSIInfo, dFilters, eCollation, tSchema, uRowsCount, iCutoff, bUseSICache );
+	return tCreator.Create(sWarning);
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -1382,13 +1405,17 @@ static void ConvertSchema ( const CSphSchema & tSchema, common::Schema_t & tSISc
 	for ( int iAttr=0; iAttr<tSchema.GetAttrsCount(); iAttr++ )
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr ( iAttr );
-		// skip special / iternal attributes
-		if ( sphIsInternalAttr ( tCol.m_sName ) )
+		// skip special/internal attributes, except for the hidden storage backing
+		// UUID public ids. Public id filters are rewritten to @uuid_id before SI
+		// planning, so this internal string attr needs a real secondary index.
+		if ( sphIsInternalAttr ( tCol.m_sName ) && tCol.m_sName!=sphGetUuidDocidName() )
 			continue;
 
 		if ( tCol.m_eAttrType==SPH_ATTR_JSON )
 			continue;
 		if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tCol.IsIndexedKNN() )
+			continue;
+		if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY ) // float_vector_array never gets a secondary index, KNN-indexed or not
 			continue;
 
 		common::StringHash_fn fnStringCalcHash = nullptr;
@@ -1491,4 +1518,9 @@ void BuildStoreSI ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool
 			break;
 		}
 	}
+}
+
+bool HasForceHints ( const VecTraits_T<IndexHint_t> & dHints )
+{
+	return dHints.any_of ( [] ( const auto & tHint ) { return ( tHint.m_bForce && tHint.m_eType==SecondaryIndexType_e::INDEX ); } );
 }

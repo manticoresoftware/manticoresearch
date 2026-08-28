@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libjemalloc-dev \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/* \
-    && cd / && curl -k -L https://boostorg.jfrog.io/artifactory/main/release/1.${boostminorver}.0/source/boost_1_${boostminorver}_0.tar.gz | tar -zx \
+    && cd / && curl -k -f -L https://archives.boost.io/release/1.${boostminorver}.0/source/boost_1_${boostminorver}_0.tar.gz | tar -zx \
     && cd boost_1_${boostminorver}_0 \
     && ./bootstrap.sh \
     && ./b2 install  --with-context --with-system --with-filesystem \
@@ -48,9 +48,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get update \
     && apt-get install -y --no-install-recommends llvm-${llvm} \
     && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /var/run/mysqld && chmod a+rwX /var/run/mysqld \
-    && { mysqld & } && sleep 5 \
-    && mysql -e "CREATE USER test@localhost; \
+    && mkdir -p /var/run/mysqld && chown mysql:mysql /var/run/mysqld \
+    && bash -euxo pipefail -c 'mysqld --user=mysql --socket=/var/run/mysqld/mysqld.sock & pid=$!; \
+    for i in {1..60}; do mysqladmin ping --silent && break; sleep 1; done; \
+    mysqladmin ping --silent; \
+    mysql -e "CREATE USER test@localhost; \
     CREATE DATABASE test; GRANT ALL PRIVILEGES ON test.* TO test@localhost; \
     CREATE DATABASE test1; GRANT ALL PRIVILEGES ON test1.* TO test@localhost; \
     CREATE DATABASE test2; GRANT ALL PRIVILEGES ON test2.* TO test@localhost; \
@@ -60,14 +62,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     CREATE DATABASE test6; GRANT ALL PRIVILEGES ON test6.* TO test@localhost; \
     CREATE DATABASE test7; GRANT ALL PRIVILEGES ON test7.* TO test@localhost; \
     CREATE DATABASE test8; GRANT ALL PRIVILEGES ON test8.* TO test@localhost; \
-    CREATE DATABASE test9; GRANT ALL PRIVILEGES ON test9.* TO test@localhost;" \
-    && mysqladmin shutdown
+    CREATE DATABASE test9; GRANT ALL PRIVILEGES ON test9.* TO test@localhost;"; \
+    mysqladmin shutdown; wait "$pid" || true'
 ADD resource.json /opt/work/resource.json
 ENV CTEST_RESOURCE /opt/work/resource.json
 ENV PATH $PATH:/usr/lib/llvm-${llvm}/bin
 
 # testing environment
-RUN curl -O -k https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb \
+RUN apt-get update && apt-get install -y --no-install-recommends wget \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -O -k https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb \
     && dpkg -i manticore-dev-repo.noarch.deb \
     && rm manticore-dev-repo.noarch.deb \
     && apt-get update && apt-get install -y --no-install-recommends \
@@ -77,7 +81,8 @@ RUN curl -O -k https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb \
     && mkdir -p /work/aot && cd /work/aot \
     && curl -k -L https://repo.manticoresearch.com/repository/morphology/de.pak.tar.xz | tar -Jx \
     && curl -k -L https://repo.manticoresearch.com/repository/morphology/en.pak.tar.xz | tar -Jx \
-    && curl -k -L https://repo.manticoresearch.com/repository/morphology/ru.pak.tar.xz | tar -Jx
+    && curl -k -L https://repo.manticoresearch.com/repository/morphology/ru.pak.tar.xz | tar -Jx \
+    && curl -k -L https://repo.manticoresearch.com/repository/morphology/uk.pak.tgz | tar -zx
 
 ADD sphinx /root/.sphinx
 ADD entry_point.sh /
@@ -86,6 +91,6 @@ WORKDIR /work
 ENTRYPOINT ["bash", "/entry_point.sh"]
 CMD []
 
-# docker build -t registry.gitlab.com/manticoresearch/dev/ubertests_public:331 .
-# docker tag registry.gitlab.com/manticoresearch/dev/ubertests_public:331 manticoresearch/ubertests_public:331
-# docker push manticoresearch/ubertests_public:331
+# docker build -t registry.gitlab.com/manticoresearch/dev/ubertests_public:332_aot .
+# docker tag registry.gitlab.com/manticoresearch/dev/ubertests_public:332_aot manticoresearch/ubertests_public:332_aot
+# docker push manticoresearch/ubertests_public:332_aot

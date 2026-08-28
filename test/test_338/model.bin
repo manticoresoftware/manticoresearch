@@ -215,7 +215,7 @@ a:1:{i:0;a:67:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_metho
 }";s:4:"rows";s:109:"{"error":{"type":"parse_exception","reason":"Document ids should be integer","table":"test_rt"},"status":400}";s:9:"http_code";i:400;s:4:"http";i:1;}i:56;a:6:{s:13:"http_endpoint";s:11:"json/delete";s:11:"http_method";s:4:"POST";s:12:"http_request";s:36:"{
 	"table":"test_rt",
 	"id":"1002"
-}";s:4:"rows";s:130:"{"error":{"type":"parse_exception","reason":"Document ids should be integer or array of integers","table":"test_rt"},"status":400}";s:9:"http_code";i:400;s:4:"http";i:1;}i:57;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:66:"{
+}";s:4:"rows";s:179:"{"error":{"type":"action_request_validation_exception","reason":"table test_rt: table test_rt: unsupported filter type 'string' on attribute 'id'","table":"test_rt"},"status":409}";s:9:"http_code";i:409;s:4:"http";i:1;}i:57;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:66:"{
 	"table":"test_rt",
 	"id":2001,
 	"doc":

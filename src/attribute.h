@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -25,12 +25,19 @@ struct CSphAttrLocator;
 struct ThrottleState_t;
 class DebugCheckReader_i;
 
+enum class BlobAttrInput_e
+{
+	RAW_BYTES,
+	MVA_INT64,
+	MVA_DWORD
+};
+
 class BlobRowBuilder_i
 {
 public:
 	virtual				~BlobRowBuilder_i() {}
 
-	virtual bool		SetAttr ( int iAttr, const BYTE * pData, int iDataLen, CSphString & sError ) = 0;
+	virtual bool		SetAttr ( int iAttr, const BYTE * pData, int iDataLen, BlobAttrInput_e eInput, CSphString & sError ) = 0;
 	virtual std::pair<SphOffset_t,SphOffset_t> Flush() = 0;
 	virtual std::pair<SphOffset_t,SphOffset_t> Flush ( const BYTE * pOldRow ) = 0;
 	virtual bool		Done ( CSphString & sError ) = 0;
@@ -71,6 +78,12 @@ ByteBlob_t			sphGetBlobAttr ( const CSphRowitem * pDocinfo, const CSphAttrLocato
 // returns blob attribute length
 int					sphGetBlobAttrLen ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool );
 
+// software-prefetch the match-row location that holds the blob-row offset, so a subsequent sphPrefetchBlobRow/sphGetBlobAttr doesn't stall reading that offset
+void				sphPrefetchBlobRowOffset ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator );
+
+// software-prefetch a match's blob row (row header + start of its blob data) so a subsequent sphGetBlobAttr on it doesn't stall on a cold pool miss
+void				sphPrefetchBlobRow ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool );
+
 // return the total length (in bytes) of a given blob row
 DWORD				sphGetBlobTotalLen ( const BYTE * pBlobRow, int nBlobAttrs );
 
@@ -103,6 +116,8 @@ bool				sphIsBlobAttr ( ESphAttr eAttr );
 bool				sphIsBlobAttr ( const CSphColumnInfo & tAttr );
 
 bool				IsMvaAttr ( ESphAttr eAttr );
+bool				IsBlobAttrEmpty ( const ByteBlob_t & tAttr );
+bool				IsBlobAttrZero ( const ByteBlob_t & tAttr, int iDims );
 
 //////////////////////////////////////////////////////////////////////////
 // data ptr attributes
@@ -134,7 +149,8 @@ ESphAttr			sphPlainAttrToPtrAttr ( ESphAttr eAttrType );
 bool				sphIsDataPtrAttr ( ESphAttr eAttrType );
 
 // just repack (matter of optimizing)
-FORCE_INLINE BYTE * sphCopyPackedAttr ( const BYTE * pData ) { return sphPackPtrAttr ( sphUnpackPtrAttr ( pData ) ); }
+BYTE *				sphCopyPackedAttr ( const BYTE * pData );
+BYTE *				sphCopyPackedTdigestAttr ( const BYTE * pData );
 
 //////////////////////////////////////////////////////////////////////////
 // misc attribute-related
@@ -145,6 +161,18 @@ void	sphMVA2Str ( ByteBlob_t dMVA, bool b64bit, StringBuilder_c & dStr );
 void	sphPackedMVA2Str ( const BYTE * pMVA, bool b64bit, StringBuilder_c & dStr );
 void	sphFloatVec2Str ( ByteBlob_t dFloatVec, StringBuilder_c & dStr );
 void	sphPackedFloatVec2Str ( const BYTE * pData, StringBuilder_c & dStr );
+
+struct FloatVecArray_t
+{
+	int							m_iDims = 0;	// 0 == empty array
+	VecTraits_T<const float>	m_dValues;		// flat payload, GetLength() == N*m_iDims
+};
+
+FloatVecArray_t	ParseFloatVecArray ( ByteBlob_t dBlob );
+void	sphFloatVecArray2Str ( ByteBlob_t dBlob, StringBuilder_c & dStr );
+void	sphPackedFloatVecArray2Str ( const BYTE * pData, StringBuilder_c & dStr );
+int		ValidateFloatVecArrayGroups ( const VecTraits_T<const int> & dGroupLens, CSphString & sError );
+void	AppendFloatVecArrayToUpdatePool ( int iDims, const VecTraits_T<const float> & dValues, CSphVector<DWORD> & dPool );
 
 /// check if tColumn is actually stored field (so, can't be used in filters/expressions)
 bool	IsNotRealAttribute ( const CSphColumnInfo & tColumn );
@@ -159,17 +187,8 @@ FORCE_INLINE DocID_t sphGetDocID ( const CSphRowitem * pData )
 #endif
 }
 
-FORCE_INLINE void sphDeallocatePacked ( const BYTE* pBlob )
-{
-	if ( !pBlob )
-		return;
-#if WITH_SMALLALLOC
-	const BYTE * pFoo = pBlob;
-	sphDeallocateSmall ( pBlob, sphCalcPackedLength ( UnzipIntBE ( pFoo ) ) );
-#else
-	sphDeallocateSmall ( pBlob );
-#endif
-}
+void				sphDeallocatePacked ( const BYTE* pBlob );
+void				sphDeallocatePackedTdigest ( const BYTE * pBlob );
 
 const char * AttrType2Str ( ESphAttr eAttrType );
 

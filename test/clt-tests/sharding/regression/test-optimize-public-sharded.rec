@@ -1,0 +1,41 @@
+––– comment –––
+Regression: FAIL_024 — OPTIMIZE TABLE on a public sharded table (type='shard')
+must fan out to physical system tables and compact every shard.
+
+The physical chunk count is the oracle. Buddy returning success is not enough
+because it can ignore daemon errors from the generated OPTIMIZE statements.
+Three chunks are merged in one job so this parser regression is independent
+of multi-pass optimize scheduling.
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "set global auto_optimize=0; set global optimize_cutoff=1; set global merge_chunks_per_job=3; create table t24(id bigint, title text) shards='2' rf='1';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "insert into system.t24_s0(id,title) values(1,'a'); flush ramchunk system.t24_s0; insert into system.t24_s0(id,title) values(2,'b'); flush ramchunk system.t24_s0; insert into system.t24_s0(id,title) values(3,'c'); flush ramchunk system.t24_s0; insert into system.t24_s1(id,title) values(4,'d'); flush ramchunk system.t24_s1; insert into system.t24_s1(id,title) values(5,'e'); flush ramchunk system.t24_s1; insert into system.t24_s1(id,title) values(6,'f'); flush ramchunk system.t24_s1;"; echo $?
+––– output –––
+0
+––– input –––
+chunks0=$(mysql -h0 -P1306 -N -B -e "select count(*) from system.t24_s0.@status;" | grep -Eo '[0-9]+' | tail -n1); chunks1=$(mysql -h0 -P1306 -N -B -e "select count(*) from system.t24_s1.@status;" | grep -Eo '[0-9]+' | tail -n1); if [ "$chunks0" = 3 ] && [ "$chunks1" = 3 ]; then echo OK_PREPARED; else echo "FAIL_PREPARED chunks0=$chunks0 chunks1=$chunks1"; fi
+––– output –––
+OK_PREPARED
+––– input –––
+mysql -h0 -P1306 -e "optimize table t24;"; echo $?
+––– output –––
+0
+––– input –––
+for attempt in $(seq 1 100); do chunks0=$(mysql -h0 -P1306 -N -B -e "select count(*) from system.t24_s0.@status;" | grep -Eo '[0-9]+' | tail -n1); chunks1=$(mysql -h0 -P1306 -N -B -e "select count(*) from system.t24_s1.@status;" | grep -Eo '[0-9]+' | tail -n1); if [ "$chunks0" = 1 ] && [ "$chunks1" = 1 ]; then break; fi; sleep 0.1; done; if [ "$chunks0" = 1 ] && [ "$chunks1" = 1 ]; then echo OK_OPTIMIZED; else echo "FAIL_OPTIMIZED chunks0=$chunks0 chunks1=$chunks1"; fi
+––– output –––
+OK_OPTIMIZED
+––– input –––
+mysql -h0 -P1306 -e "select count(*) c from t24 where id>0;"
+––– output –––
++------+
+| c    |
++------+
+|    6 |
++------+

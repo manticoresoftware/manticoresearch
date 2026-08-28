@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -24,7 +24,7 @@ bool CSphTransformation::CheckHungOperand ( const XQNode_t * pNode ) noexcept
 	return ParentNode::Valid(pNode)
 		&& ( ParentNode::From(pNode)->GetOp()==SPH_QUERY_OR || ParentNode::From(pNode)->GetOp()==SPH_QUERY_AND )
 		&& ParentNode::From(pNode)->dChildren().GetLength()<=1
-		&& pNode->dWords().IsEmpty()
+//		&& pNode->dWords().IsEmpty()
 		&& !( GrandNode::Valid(pNode)
 			&& ParentNode::From(pNode)->GetOp()==SPH_QUERY_AND
 			&& GrandNode::From(pNode)->GetOp()==SPH_QUERY_ANDNOT );

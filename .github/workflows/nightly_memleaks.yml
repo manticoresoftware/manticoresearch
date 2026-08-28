@@ -4,6 +4,7 @@ run-name: 🌙 Nightly valgrind checks ${{ github.sha }}
 on:
   schedule:
     - cron: '00 20 * * *'
+  workflow_dispatch:
   push:
     branches:
       - '**'
@@ -11,7 +12,7 @@ on:
       - '.github/workflows/nightly_memleaks.yml'    
       
   
-# cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
+# cancels the previous workflow run when a new one appears in the same branch (e.g. main or a PR's branch)
 concurrency:
   group: nightly_memleaks_${{ github.ref }}
   cancel-in-progress: true
@@ -34,12 +35,12 @@ jobs:
         CACHEB: "../cache"
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           set-safe-directory: true
       - name: Check out cache before building
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: cache
           key: build_linux_debug_x86_64
@@ -50,7 +51,7 @@ jobs:
       - name: Upload build artifacts
         if: always()
         continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@v4
+        uses: manticoresoftware/upload_artifact_with_retries@v5
         with:
           name: memleaks_${{ github.sha }}
           path: build/Testing

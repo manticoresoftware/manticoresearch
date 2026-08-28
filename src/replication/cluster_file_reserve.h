@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -12,6 +12,7 @@
 
 #include "searchdha.h"
 #include "api_command_cluster.h"
+#include "cluster_sst_progress.h"
 
 struct SyncSrc_t;
 struct FileReserveRequest_t: ClusterRequest_t
@@ -19,6 +20,9 @@ struct FileReserveRequest_t: ClusterRequest_t
 	CSphString m_sIndex;
 	CSphString m_sIndexFileName;
 	SyncSrc_t* m_pChunks = nullptr;
+
+	// donor - joiner progress related
+	SstProgressContext_t m_tProgressCtx;
 };
 
 void operator<< ( ISphOutputBuffer& tOut, const FileReserveRequest_t& tReq );
@@ -29,8 +33,6 @@ struct SyncDst_t
 {
 	CSphBitvec m_dNodeChunksMask;
 	StrVec_t m_dRemotePaths;
-	int64_t m_tmTimeout = 0;
-	int64_t m_tmTimeoutFile = 0;
 };
 
 struct FileReserveReply_t: SyncDst_t
@@ -46,6 +48,5 @@ StringBuilder_c& operator<< ( StringBuilder_c& tOut, const FileReserveReply_t& t
 using ClusterFileReserve_c = ClusterCommand_T<E_CLUSTER::FILE_RESERVE, FileReserveRequest_t, FileReserveReply_t>;
 
 bool SendClusterFileReserve ( VecRefPtrs_t<AgentConn_t*>& dAgents );
-
 
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -102,7 +102,7 @@ private:
 	void LoadNewLocalFromConfig ( const CSphString& sIndex, const CSphConfigSection& hIndex )
 	{
 		CSphString sError;
-		auto [ eAdd, pFreshLocal ] = AddIndex ( sIndex.cstr(), hIndex, false, false, nullptr, sError );
+		auto [ eAdd, pFreshLocal ] = AddIndex ( sIndex.cstr(), hIndex, false, false, true, nullptr, sError );
 		assert ( eAdd != ADD_DISTR && "internal error: distr table should not be here!" );
 
 		switch ( eAdd )
@@ -149,7 +149,12 @@ private:
 		assert ( pAlreadyServed );
 
 		ServedIndexRefPtr_c pClone = MakeFullClone ( pAlreadyServed );
-		ConfigureLocalIndex ( pClone, hIndex, false, nullptr );
+		CSphString sError;
+		if ( !ConfigureLocalIndex ( pClone, hIndex, false, nullptr, sError ) )
+		{
+			sphWarning ( "table '%s': failed to reconfigure, using last valid definition; error: %s", sIndex.cstr(), sError.cstr() );
+			return KeepExisting ( sIndex );
+		}
 		m_hNewLocalIndexes.Add ( pClone, sIndex );
 
 		// need w-lock of already served (exposed) idx, since we change settings.
@@ -186,7 +191,12 @@ private:
 			return LoadNewLocalFromConfig ( sIndex, hIndex );
 
 		ServedDesc_t tNewDesc;
-		ConfigureLocalIndex ( &tNewDesc, hIndex, false, nullptr );
+		CSphString sError;
+		if ( !ConfigureLocalIndex ( &tNewDesc, hIndex, false, nullptr, sError ) )
+		{
+			sphWarning ( "table '%s': failed to reconfigure, using last valid definition; error: %s", sIndex.cstr(), sError.cstr() );
+			return KeepExisting ( sIndex );
+		}
 		bool bReconfigured =
 			tNewDesc.m_tSettings.m_iExpandKeywords != pAlreadyServed->m_tSettings.m_iExpandKeywords
 			|| tNewDesc.m_tSettings.m_tFileAccess != pAlreadyServed->m_tSettings.m_tFileAccess

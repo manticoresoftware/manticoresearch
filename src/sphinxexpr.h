@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -17,6 +17,7 @@
 #include "std/refcounted_mt.h"
 #include "std/string.h"
 #include "std/sharedptr.h"
+#include "std/stringhash.h"
 
 /// forward decls
 class CSphMatch;
@@ -47,6 +48,7 @@ enum ESphAttr
 	SPH_ATTR_DOUBLE		= 13,			///< floating point number (IEEE 64-bit)
 	SPH_ATTR_UINT64		= 14,			///< unsigned 64-bit integer
 	SPH_ATTR_FLOAT_VECTOR = 15,
+	SPH_ATTR_FLOAT_VECTOR_ARRAY = 16,	///< array of N fixed-width float vectors, stored as [uint32 dims][N*dims floats]
 
 	SPH_ATTR_UINT32SET	= 0x40000001UL,	///< MVA, set of unsigned 32-bit integers
 	SPH_ATTR_INT64SET	= 0x40000002UL,	///< MVA, set of signed 64-bit integers
@@ -57,13 +59,14 @@ enum ESphAttr
 	SPH_ATTR_FACTORS	= 1001,			///< packed search factors (binary, in-memory, pooled)
 	SPH_ATTR_JSON_FIELD	= 1002,			///< points to particular field in JSON column subset
 	SPH_ATTR_FACTORS_JSON	= 1003,		///< packed search factors (binary, in-memory, pooled, provided to client json encoded)
-
-	SPH_ATTR_UINT32SET_PTR,				// in-memory version of MVA32
-	SPH_ATTR_INT64SET_PTR,				// in-memory version of MVA64
-	SPH_ATTR_JSON_PTR,					// in-memory version of JSON
-	SPH_ATTR_JSON_FIELD_PTR,			// in-memory version of JSON_FIELD
-	SPH_ATTR_STORED_FIELD,
-	SPH_ATTR_FLOAT_VECTOR_PTR			// in-memory version of FLOAT_VECTOR
+	SPH_ATTR_UINT32SET_PTR		= 1004,	// in-memory version of MVA32
+	SPH_ATTR_INT64SET_PTR		= 1005,	// in-memory version of MVA64
+	SPH_ATTR_JSON_PTR			= 1006,	// in-memory version of JSON
+	SPH_ATTR_JSON_FIELD_PTR		= 1007,	// in-memory version of JSON_FIELD
+	SPH_ATTR_STORED_FIELD		= 1008,
+	SPH_ATTR_FLOAT_VECTOR_PTR	= 1009,	// in-memory version of FLOAT_VECTOR
+	SPH_ATTR_TDIGEST_PTR		= 1010,	// in-memory TDigest state (runtime or serialized)
+	SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR = 1011	// in-memory version of FLOAT_VECTOR_ARRAY
 };
 
 /// column evaluation stage
@@ -86,6 +89,7 @@ enum ESphExprCommand
 	SPH_EXPR_SET_DOCSTORE_DOCID,	///< interface to fetch docs by docid (postlimit stage)
 	SPH_EXPR_SET_QUERY,
 	SPH_EXPR_SET_EXTRA_DATA,
+	SPH_EXPR_SET_KNN_VEC,
 	SPH_EXPR_GET_DEPENDENT_COLS,	///< used to determine proper evaluating stage
 	SPH_EXPR_GET_GEODIST_SETTINGS,
 	SPH_EXPR_GET_POLY2D_BBOX,
@@ -144,6 +148,9 @@ public:
 
 	/// was this expression spawned in place of a columnar attr?
 	virtual bool IsColumnar ( bool * pStored = nullptr ) const { return false; }
+
+	/// does this expression benefit from rowid-ordered final processing?
+	virtual bool PrefersRowIdOrder() const { return false; }
 
 	/// was this expression spawned in place of a columnar expression?
 	virtual bool IsStored() const { return false; }
@@ -347,6 +354,8 @@ struct ExprParseArgs_t
 	ESphEvalStage *		m_pEvalStage = nullptr;
 	DWORD *				m_pStoredField = nullptr;
 	bool *				m_pNeedDocIds = nullptr;
+	const CSphString *	m_pJoinIdx = nullptr;
+	const CSphString *	m_pJoinIdxLeft = nullptr;
 };
 
 struct JoinArgs_t
@@ -358,9 +367,19 @@ struct JoinArgs_t
 	JoinArgs_t ( const ISphSchema & tJoinedSchema, const CSphString & sIndex1, const CSphString & sIndex2 );
 };
 
+class AttrDependencyMap_c
+{
+public:
+			AttrDependencyMap_c ( const ISphSchema & tSchema );
+
+	bool	IsIndependent ( const CSphString & sAttr ) const;
+
+private:
+	SmallStringHash_T<sph::StringSet> m_hDependents;
+};
 
 struct CommonFilterSettings_t;
-ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, const CSphString * pJoinIdx, CSphString & sError, ExprParseArgs_t & tArgs );
+ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, CSphString & sError, ExprParseArgs_t & tArgs );
 ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr );
 ISphExpr * ExprJsonIn ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg, ESphCollation eCollation );
 ISphExpr * ExprJsonIn ( const VecTraits_T<int64_t> & dVals, ISphExpr * pArg, ESphCollation eCollation );
@@ -377,4 +396,3 @@ CSphString& MySQLVersion();
 }
 
 #endif // _sphinxexpr_
-

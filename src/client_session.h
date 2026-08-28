@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -17,16 +17,33 @@
 #include "queryprofile.h"
 #include "searchdaemon.h"
 #include "searchdsql.h"
+#include "searchd_shard.h"
 #include "sphinxpq.h"
 
 constexpr const char* szManticore = "Manticore";
 
-class ClientSession_c
+struct BinaryPreparedStmt_t;
+class PreparedStatements
+{
+	class Impl_c;
+	std::unique_ptr<Impl_c> m_pImpl;
+
+public:
+	PreparedStatements();
+	~PreparedStatements();
+	DWORD GetNextStmtID();
+	void AddPreparedStatement (DWORD uStmtID, BinaryPreparedStmt_t&& tStmt);
+	BinaryPreparedStmt_t* GetStmt(DWORD uStmtID);
+	void RemoveStatement (DWORD uStmtID);
+};
+
+class ClientSession_c final
 {
 public:
 	CSphString m_sError;
 	CSphQueryResultMeta m_tLastMeta;
 	CSphSessionAccum m_tAcc;
+	ShardTxnState_t m_tShardTxn;
 	CPqResult m_tPercolateMeta;
 	SqlStmt_e m_eLastStmt { STMT_DUMMY };
 	bool m_bFederatedUser = false;
@@ -38,12 +55,21 @@ public:
 	bool m_bAutoCommit = true;
 	bool m_bInTransaction = false;
 	CSphVector<int64_t> m_dLastIds;
+	CSphVector<CSphString> m_dLastIdStrings;
 	QueryProfile_c m_tProfile;
 	QueryProfile_c m_tLastProfile;
 	bool m_bOptimizeById = true;
 	bool m_bDeprecatedEOF = false;
+	bool m_bShardPhysicalUpdate = false;
+	StrVec_t m_dLockedTables;
+	PreparedStatements m_dPreparedStatements;
+	bool m_bAuthAllowBuddy = false;
+	bool m_bAuthErrorSkipBuddy = false;
 
 public:
+	NONCOPYMOVABLE ( ClientSession_c );
+	ClientSession_c() = default;
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
 	void FreezeLastMeta();
+	~ClientSession_c();
 };

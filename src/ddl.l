@@ -28,6 +28,10 @@
 
 %}
 
+TABLE_IDENT			[a-zA-Z_\200-\377][a-zA-Z0-9_\200-\377]*
+QUOTED_TABLE_IDENT	[0-9]*[a-zA-Z_\200-\377][a-zA-Z0-9_\200-\377]*
+IDENT				[@a-zA-Z_\200-\377][a-zA-Z0-9_\200-\377]*
+QUOTED_IDENT		[0-9]*[@a-zA-Z_\200-\377][a-zA-Z0-9_\200-\377]*
 
 
 
@@ -53,6 +57,8 @@
 "AT"				{ YYSTOREBOUNDS; return TOK_AT; }
 "ATTRIBUTE"			{ YYSTOREBOUNDS; return TOK_ATTRIBUTE; }
 "API_KEY"			{ YYSTOREBOUNDS; return TOK_API_KEY; }
+"API_URL"			{ YYSTOREBOUNDS; return TOK_API_URL; }
+"API_TIMEOUT"		{ YYSTOREBOUNDS; return TOK_API_TIMEOUT; }
 "BIGINT"			{ YYSTOREBOUNDS; return TOK_BIGINT; }
 "BIT"				{ YYSTOREBOUNDS; return TOK_BIT; }
 "BOOL"				{ YYSTOREBOUNDS; return TOK_BOOL; }
@@ -63,11 +69,13 @@
 "CREATE"			{ YYSTOREBOUNDS; return TOK_CREATE; }
 "DOUBLE"			{ YYSTOREBOUNDS; return TOK_DOUBLE; }
 "DROP"				{ YYSTOREBOUNDS; return TOK_DROP; }
+"EMBEDDINGS"		{ YYSTOREBOUNDS; return TOK_EMBEDDINGS; }
 "ENGINE"			{ YYSTOREBOUNDS; return TOK_ENGINE; }
 "EXISTS"			{ YYSTOREBOUNDS; return TOK_EXISTS; }
 "FAST_FETCH"		{ YYSTOREBOUNDS; return TOK_FAST_FETCH; }
 "FLOAT"				{ YYSTOREBOUNDS; return TOK_FLOAT; }
 "FLOAT_VECTOR"		{ YYSTOREBOUNDS; return TOK_FLOAT_VECTOR; }
+"FLOAT_VECTOR_ARRAY"	{ YYSTOREBOUNDS; return TOK_FLOAT_VECTOR_ARRAY; }
 "FROM"				{ YYSTOREBOUNDS; return TOK_FROM; }
 "FUNCTION"			{ YYSTOREBOUNDS; return TOK_FUNCTION; }
 "HASH"				{ YYSTOREBOUNDS; return TOK_HASH; }
@@ -90,7 +98,9 @@
 "MODIFY"			{ YYSTOREBOUNDS; return TOK_MODIFY; }
 "MODIFY"[ \t\n\r]+"COLUMN" { return TOK_MODIFY_COLUMN; }
 "MULTI"				{ YYSTOREBOUNDS; return TOK_MULTI; }
+"MVA"				{ YYSTOREBOUNDS; return TOK_MVA; }
 "MULTI64"			{ YYSTOREBOUNDS; return TOK_MULTI64; }
+"MVA64" 			{ YYSTOREBOUNDS; return TOK_MVA64; }
 "NOT"				{ YYSTOREBOUNDS; return TOK_NOT; }
 "OPTION"			{ YYSTOREBOUNDS; return TOK_OPTION; }
 "PLUGIN"			{ YYSTOREBOUNDS; return TOK_PLUGIN; }
@@ -108,6 +118,7 @@
 "TEXT"				{ YYSTOREBOUNDS; return TOK_TEXT; }
 "TIMESTAMP"			{ YYSTOREBOUNDS; return TOK_TIMESTAMP; }
 "TYPE"				{ YYSTOREBOUNDS; return TOK_TYPE; }
+"USER"				{ YYSTOREBOUNDS; return TOK_USER; }
 "UINT"				{ YYSTOREBOUNDS; return TOK_UINT; }
 "UPDATE"			{ YYSTOREBOUNDS; return TOK_UPDATE; }
 "USE_GPU"			{ YYSTOREBOUNDS; return TOK_USE_GPU; }
@@ -117,11 +128,11 @@
 \-?[0-9]+			{ YYSTOREBOUNDS; lvalp->SetValueInt ( strtoull ( yytext, NULL, 10 ), false ); return TOK_CONST_INT; }
 [-+]?([0-9]*\.?[0-9]+|[0-9]+\.)([Ee][-+]?[0-9]+)?	{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
 
-[a-zA-Z_][a-zA-Z0-9_]*          { YYSTOREBOUNDS; return TOK_TABLEIDENT; }
-`[a-zA-Z0-9_]+`	                { YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLEIDENT; } // allow `123xyz` table names
+{TABLE_IDENT}                     { YYSTOREBOUNDS; return TOK_TABLEIDENT; }
+`{QUOTED_TABLE_IDENT}`            { YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLEIDENT; } // allow `123xyz` table names
 
-[@a-zA-Z_][a-zA-Z0-9_]* 		{ YYSTOREBOUNDS; return TOK_IDENT; }
-`[@a-zA-Z0-9_][a-zA-Z0-9_]*`	{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; } // allow `123xyz` column names
+{IDENT}                           { YYSTOREBOUNDS; return TOK_IDENT; }
+`{QUOTED_IDENT}`                  { YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; } // allow `123xyz` column names
 
 [ \t\n\r]+			{ ; }
 .					{ YYSTOREBOUNDS; return yytext[0]; }

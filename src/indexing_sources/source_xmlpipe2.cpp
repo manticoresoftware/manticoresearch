@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -369,7 +369,7 @@ bool CSphSource_XMLPipe2::SetupXML ( int iFieldBufferMax, bool bFixupUTF8, FILE 
 	m_bFixupUTF8 = bFixupUTF8;
 	m_pPipe = pPipe;
 	m_tSchema.Reset ();
-	bool bWordDict = ( m_pDict && m_pDict->GetSettings().m_bWordDict );
+	bool bWordDict = ( m_pDict && m_pDict->GetSettings().IsWordDict() );
 	bool bOk = true;
 
 	bOk &= ConfigureAttrs ( hSource("xmlpipe_attr_uint"),		SPH_ATTR_INTEGER,	m_tSchema, sError );
@@ -390,8 +390,10 @@ bool CSphSource_XMLPipe2::SetupXML ( int iFieldBufferMax, bool bFixupUTF8, FILE 
 	if ( !DebugCheckSchema ( m_tSchema, sError ) )
 		return false;
 
-	ConfigureFields ( hSource("xmlpipe_field"), bWordDict, m_tSchema );
-	ConfigureFields ( hSource("xmlpipe_field_string"), bWordDict, m_tSchema );
+	bOk &= ConfigureFields ( hSource("xmlpipe_field"), bWordDict, m_tSchema, sError );
+	bOk &= ConfigureFields ( hSource("xmlpipe_field_string"), bWordDict, m_tSchema, sError );
+	if ( !bOk )
+		return false;
 
 	AllocDocinfo();
 	return true;
@@ -405,7 +407,7 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 	// source settings have been updated after ::Setup
 	for ( int i = 0; i < m_tSchema.GetFieldsCount(); ++i )
 	{
-		ESphWordpart eWordpart = GetWordpart ( m_tSchema.GetFieldName(i), m_pDict && m_pDict->GetSettings().m_bWordDict );
+		ESphWordpart eWordpart = GetWordpart ( m_tSchema.GetFieldName(i), m_pDict && m_pDict->GetSettings().IsWordDict() );
 		m_tSchema.SetFieldWordpart ( i, eWordpart );
 	}
 
@@ -835,13 +837,19 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 		CSphColumnInfo Info;
 		CSphString sDefault;
 		bool bIsAttr = false;
-		bool bWordDict = ( m_pDict && m_pDict->GetSettings().m_bWordDict );
+		bool bWordDict = ( m_pDict && m_pDict->GetSettings().IsWordDict() );
 
 		while ( dAttrs[0] && dAttrs[1] && dAttrs[0][0] && dAttrs[1][0] )
 		{
 			if ( !strcmp ( *dAttrs, "name" ) )
 			{
 				Info.m_sName = dAttrs[1];
+				CSphString sNameError;
+				if ( !sphValidateIdentifier ( Info.m_sName.cstr(), IdentifierValidation_e::ALLOW_LEADING_DIGIT, 0, sNameError ) )
+				{
+					Error ( "invalid field name '%s': %s", Info.m_sName.cstr(), sNameError.cstr() );
+					return;
+				}
 				if ( m_tSchema.GetField ( Info.m_sName.cstr() ) )
 				{
 					Error ( "field '%s' is added twice", Info.m_sName.cstr() );
@@ -938,6 +946,12 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 
 		if ( !bError )
 		{
+			CSphString sNameError;
+			if ( !sphValidateIdentifier ( Info.m_sName.cstr(), IdentifierValidation_e::ALLOW_LEADING_DIGIT, 0, sNameError ) )
+			{
+				Error ( "invalid attribute name '%s': %s", Info.m_sName.cstr(), sNameError.cstr() );
+				return;
+			}
 			if ( Info.m_sName.IsEmpty() || CSphSchema::IsReserved ( Info.m_sName.cstr() ) )
 			{
 				Error ( "%s is not a valid attribute name", Info.m_sName.cstr() );

@@ -32,6 +32,32 @@ index test
 	source	= test
 	path	= <data_path/>/test
 }
+
+source test_ms_base
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_attr_uint = n
+	sql_attr_multi = uint mva from query; select doc_id, tag from test_tags order by doc_id, tag
+}
+
+source test_ms_a : test_ms_base
+{
+	sql_query = SELECT id, n, text FROM test_docs WHERE src='a' ORDER BY id
+}
+
+source test_ms_b : test_ms_base
+{
+	sql_query = SELECT id, n, text FROM test_docs WHERE src='b' ORDER BY id
+}
+
+index test_ms
+{
+	source	= test_ms_a
+	source	= test_ms_b
+	path	= <data_path/>/test_ms
+}
 </config>
 
 <db_create>
@@ -42,8 +68,34 @@ CREATE TABLE test_table
 );
 </db_create>
 
+<db_create>
+CREATE TABLE test_docs
+(
+	id INT NOT NULL,
+	src CHAR(1) NOT NULL,
+	n INT UNSIGNED NOT NULL,
+	text VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_create>
+CREATE TABLE test_tags
+(
+	doc_id INT NOT NULL,
+	tag INT UNSIGNED NOT NULL
+);
+</db_create>
+
 <db_drop>
 DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_drop>
+DROP TABLE IF EXISTS test_docs;
+</db_drop>
+
+<db_drop>
+DROP TABLE IF EXISTS test_tags;
 </db_drop>
 
 <db_insert>
@@ -56,15 +108,44 @@ INSERT INTO test_table (id, n) VALUES
 ( 6, 1329722356 );
 </db_insert>
 
+<db_insert>
+INSERT INTO test_docs (id, src, n, text) VALUES
+( 101, 'a', 2582995467, 'alpha' ),
+( 102, 'a', 3650268775, 'alpha' ),
+( 103, 'a', 1452351953, 'alpha' ),
+( 201, 'b', 1022026391, 'beta' ),
+( 202, 'b', 3802901620, 'beta' ),
+( 203, 'b', 1329722356, 'beta' );
+</db_insert>
+
+<db_insert>
+INSERT INTO test_tags (doc_id, tag) VALUES
+( 101, 100 ),
+( 101, 101 ),
+( 102, 110 ),
+( 103, 120 ),
+( 201, 200 ),
+( 201, 201 ),
+( 202, 210 ),
+( 203, 220 );
+</db_insert>
+
 <query_attributes>
 	<attr>n</attr>
 	<attr>mva</attr>
 </query_attributes>
 
 <queries>
-	<query />
-	<query sortmode="expr" sortby="n"/>
-	<query sortmode="expr" sortby="-n"/>
+	<query index="test"/>
+	<query index="test" sortmode="expr" sortby="n"/>
+	<query index="test" sortmode="expr" sortby="-n"/>
+	<sphinxql>
+		SELECT id, n, mva FROM test_ms ORDER BY id ASC;
+		SELECT id FROM test_ms WHERE any(mva)=100 ORDER BY id ASC;
+		SELECT id FROM test_ms WHERE any(mva)=201 ORDER BY id ASC;
+		SELECT id, n, mva FROM test_ms WHERE MATCH('alpha') ORDER BY id ASC;
+		SELECT id, n, mva FROM test_ms WHERE MATCH('beta') ORDER BY id ASC;
+	</sphinxql>
 </queries>
 
 </test>

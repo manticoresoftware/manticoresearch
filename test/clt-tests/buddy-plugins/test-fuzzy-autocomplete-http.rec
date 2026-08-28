@@ -1,0 +1,883 @@
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+apt-get update -y > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+apt-get install jq -y > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– input –––
+php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=100000 --concurrency=1 --docs=1000000 --start-id=1 --min-infix-len=2 > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name ORDER BY id ASC LIMIT 1000000 OPTION max_matches=1000000;" > /tmp/name_data.txt
+––– output –––
+––– input –––
+md5sum /tmp/name_data.txt
+––– output –––
+1995eec70e60c584bc35ff0688556b94  /tmp/name_data.txt
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE name;" | grep "min_infix_len='2'" | sed "s/.\(min_infix_len='2'\)./\1/"
+––– output –––
+)min_infix_len='2'expand_keywords='1' |
+––– input –––
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM name"
+––– output –––
+*************************** 1. row ***************************
+1000000
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK name; OPTIMIZE TABLE name OPTION sync=1, cutoff=1;"
+––– output –––
+––– input –––
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"EBGRNA"}}]}},"options":{"fuzzy":true}}' | jq -r '.hits.hits[]._source.username'
+––– output –––
+BERNA TALBOTT
+BERNA WEBER
+BERNA PULLEY
+BERNA JAQUEZ
+BERNA CHEEK
+BERNA WARREN
+BERNA KATZ
+BERNA CHRISTY
+BERNA FERRELL
+BERNA HYLTON
+BERNA CARLOS
+BERNA YOUNGER
+BERNA SERRANO
+BERNA TORRES
+BERNA HARPER
+BERNA WADSWORTH
+BERNA KYLE
+BERNA KOHLER
+BERNA TRAHAN
+BERNA DONOHUE
+––– input –––
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"ANT"}}]}},"options":{"fuzzy":true}}' | jq -r '.hits.hits[]._source.username'
+––– output –––
+AN GANT
+KEENAN GANT
+FRANK GANT
+SANTOS GANT
+SANTOS GANT
+SHANE GANT
+TRISTAN GANT
+ANDREW GANT
+ANDREA SANTANA
+OTELIA GANT
+ORLANDO HANNA
+ANGEL LANE
+STANTON REAGAN
+ANTONIA CARMAN
+TRAN SHANE
+CHRISTIAN JORDAN
+DANNIE HAN
+NORMAN CHAN
+AMEE GANT
+JAN CHAN
+––– input –––
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"tony"}}]}},"options":{"fuzzy":true}}' | jq -M
+––– output –––
+{
+  "took": %{NUMBER},
+  "timed_out": false,
+  "hits": {
+    "total": 1862,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 688,
+        "_score": 1528,
+        "_source": {
+          "username": "SHERIE STORY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 1627,
+        "_score": 1528,
+        "_source": {
+          "username": "RUPERT STORY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 9293,
+        "_score": 1528,
+        "_source": {
+          "username": "ZENA STORY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 10167,
+        "_score": 1528,
+        "_source": {
+          "username": "LANA STORY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 13672,
+        "_score": 1528,
+        "_source": {
+          "username": "LEZLIE STORY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 14690,
+        "_score": 1528,
+        "_source": {
+          "username": "ZACHERY STORY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 18896,
+        "_score": 1528,
+        "_source": {
+          "username": "HAN STORY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 21612,
+        "_score": 1528,
+        "_source": {
+          "username": "DORIAN STORY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 25257,
+        "_score": 1528,
+        "_source": {
+          "username": "DARLINE STORY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 32213,
+        "_score": 1528,
+        "_source": {
+          "username": "KAYLEE STORY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 32291,
+        "_score": 1528,
+        "_source": {
+          "username": "CLAUDINE STORY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 34844,
+        "_score": 1528,
+        "_source": {
+          "username": "KATHIE STORY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 35953,
+        "_score": 1528,
+        "_source": {
+          "username": "MIRTHA STORY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 49790,
+        "_score": 1528,
+        "_source": {
+          "username": "LITA STORY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 63161,
+        "_score": 1528,
+        "_source": {
+          "username": "LINA STORY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 64160,
+        "_score": 1528,
+        "_source": {
+          "username": "STEFANI STORY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 65409,
+        "_score": 1528,
+        "_source": {
+          "username": "CHERISH STORY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 68797,
+        "_score": 1528,
+        "_source": {
+          "username": "KELLEE STORY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 72998,
+        "_score": 1528,
+        "_source": {
+          "username": "ANTONIETTA STORY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 73109,
+        "_score": 1528,
+        "_source": {
+          "username": "VENICE STORY",
+          "s": "a"
+        }
+      }
+    ]
+  }
+}
+––– input –––
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"SMITH"}}]}}, "sort":[{"id":"desc"},{"username":"asc"}], "options":{"fuzzy":true}}' | jq -M
+––– output –––
+{
+  "took": %{NUMBER},
+  "timed_out": false,
+  "hits": {
+    "total": 1304,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 999737,
+        "_score": 1,
+        "_source": {
+          "username": "KEITH STUMP",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 999039,
+        "_score": 1,
+        "_source": {
+          "username": "KEITH JAMIESON",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 996439,
+        "_score": 1,
+        "_source": {
+          "username": "KEITHA CARBAJAL",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 995770,
+        "_score": 1,
+        "_source": {
+          "username": "KEITH GONZALES",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 990882,
+        "_score": 1,
+        "_source": {
+          "username": "MINH SANTANA",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 990643,
+        "_score": 1,
+        "_source": {
+          "username": "KEITH MENDES",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 989972,
+        "_score": 1,
+        "_source": {
+          "username": "KEITHA WALTERS",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 989954,
+        "_score": 1,
+        "_source": {
+          "username": "GWENN SMYTH",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 989444,
+        "_score": 1,
+        "_source": {
+          "username": "KEITH KEATON",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 988755,
+        "_score": 1,
+        "_source": {
+          "username": "SHERRON SMYTH",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 988366,
+        "_score": 1,
+        "_source": {
+          "username": "LAVONIA SMYTH",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 988254,
+        "_score": 1,
+        "_source": {
+          "username": "MAYOLA KEITH",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 987106,
+        "_score": 1,
+        "_source": {
+          "username": "KEITH FAULK",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 986580,
+        "_score": 1,
+        "_source": {
+          "username": "DARNELL SMYTH",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 984012,
+        "_score": 1,
+        "_source": {
+          "username": "KEITH CORONEL",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 982759,
+        "_score": 1,
+        "_source": {
+          "username": "MORGAN KEITH",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 982421,
+        "_score": 1,
+        "_source": {
+          "username": "KEITH SHIFFLETT",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 982223,
+        "_score": 1,
+        "_source": {
+          "username": "TELMA KEITH",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 982056,
+        "_score": 1,
+        "_source": {
+          "username": "RENITA KEITH",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 981115,
+        "_score": 1,
+        "_source": {
+          "username": "KATIE SMYTH",
+          "s": "a"
+        }
+      }
+    ]
+  }
+}
+––– input –––
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"SMYTH"}}]}}, "sort":[{"id":"desc"},{"username":"asc"}], "options":{"fuzzy":true}}' | jq -M
+––– output –––
+{
+  "took": %{NUMBER},
+  "timed_out": false,
+  "hits": {
+    "total": 1402,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 999921,
+        "_score": 1,
+        "_source": {
+          "username": "VICKI SOUTHARD",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 998829,
+        "_score": 1,
+        "_source": {
+          "username": "EDYTHE VACA",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 995690,
+        "_score": 1,
+        "_source": {
+          "username": "ROBERTO SOUTHARD",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 995663,
+        "_score": 1,
+        "_source": {
+          "username": "CHUNG SOUTH",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 995119,
+        "_score": 1,
+        "_source": {
+          "username": "EDYTHE JOHN",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 993455,
+        "_score": 1,
+        "_source": {
+          "username": "EDYTH ROSADO",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 993278,
+        "_score": 1,
+        "_source": {
+          "username": "LAKITA SOUTHARD",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 992097,
+        "_score": 1,
+        "_source": {
+          "username": "EDYTH RAGAN",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 989954,
+        "_score": 1,
+        "_source": {
+          "username": "GWENN SMYTH",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 988936,
+        "_score": 1,
+        "_source": {
+          "username": "LARISA SOUTHERLAND",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 988759,
+        "_score": 1,
+        "_source": {
+          "username": "LIEN SOUTHARD",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 988755,
+        "_score": 1,
+        "_source": {
+          "username": "SHERRON SMYTH",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 988366,
+        "_score": 1,
+        "_source": {
+          "username": "LAVONIA SMYTH",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 987165,
+        "_score": 1,
+        "_source": {
+          "username": "TULA SOUTHARD",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 987136,
+        "_score": 1,
+        "_source": {
+          "username": "LUANN SOUTHARD",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 986847,
+        "_score": 1,
+        "_source": {
+          "username": "JORDAN SOUTHERN",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 986711,
+        "_score": 1,
+        "_source": {
+          "username": "MARLIN SOUTHERN",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 986580,
+        "_score": 1,
+        "_source": {
+          "username": "DARNELL SMYTH",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 986231,
+        "_score": 1,
+        "_source": {
+          "username": "EDYTH BLODGETT",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 985784,
+        "_score": 1,
+        "_source": {
+          "username": "OPAL SOUTHERN",
+          "s": "a"
+        }
+      }
+    ]
+  }
+}
+––– input –––
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"layouts":"us,ru"}}' | jq -M
+––– output –––
+[
+  {
+    "total": 10,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "query": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "query": "jordan"
+      },
+      {
+        "query": "joseph"
+      },
+      {
+        "query": "jose"
+      },
+      {
+        "query": "joe"
+      },
+      {
+        "query": "john"
+      },
+      {
+        "query": "joy"
+      },
+      {
+        "query": "joyce"
+      },
+      {
+        "query": "joey"
+      },
+      {
+        "query": "johnny"
+      },
+      {
+        "query": "major"
+      }
+    ]
+  }
+]
+––– input –––
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"append":1}}' | jq -M
+––– output –––
+[
+  {
+    "total": 10,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "query": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "query": "jordan"
+      },
+      {
+        "query": "joseph"
+      },
+      {
+        "query": "jose"
+      },
+      {
+        "query": "joe"
+      },
+      {
+        "query": "john"
+      },
+      {
+        "query": "joy"
+      },
+      {
+        "query": "joyce"
+      },
+      {
+        "query": "joey"
+      },
+      {
+        "query": "johnny"
+      },
+      {
+        "query": "major"
+      }
+    ]
+  }
+]
+––– input –––
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"prepend":0}}' | jq -M
+––– output –––
+[
+  {
+    "total": 10,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "query": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "query": "jordan"
+      },
+      {
+        "query": "joseph"
+      },
+      {
+        "query": "jose"
+      },
+      {
+        "query": "joe"
+      },
+      {
+        "query": "john"
+      },
+      {
+        "query": "joy"
+      },
+      {
+        "query": "joyce"
+      },
+      {
+        "query": "joey"
+      },
+      {
+        "query": "johnny"
+      },
+      {
+        "query": "jon"
+      }
+    ]
+  }
+]
+––– input –––
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"prepend":1,"append":1}}' | jq -M
+––– output –––
+[
+  {
+    "total": 10,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "query": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "query": "jordan"
+      },
+      {
+        "query": "joseph"
+      },
+      {
+        "query": "jose"
+      },
+      {
+        "query": "joe"
+      },
+      {
+        "query": "john"
+      },
+      {
+        "query": "joy"
+      },
+      {
+        "query": "joyce"
+      },
+      {
+        "query": "joey"
+      },
+      {
+        "query": "johnny"
+      },
+      {
+        "query": "major"
+      }
+    ]
+  }
+]
+––– input –––
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"fuzziness":1,"layouts":"","append":1,"prepend":1}}' | jq -M
+––– output –––
+[
+  {
+    "total": 10,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "query": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "query": "jordan"
+      },
+      {
+        "query": "joseph"
+      },
+      {
+        "query": "jose"
+      },
+      {
+        "query": "joe"
+      },
+      {
+        "query": "john"
+      },
+      {
+        "query": "joy"
+      },
+      {
+        "query": "joyce"
+      },
+      {
+        "query": "joey"
+      },
+      {
+        "query": "johnny"
+      },
+      {
+        "query": "major"
+      }
+    ]
+  }
+]
+––– input –––
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"fuzziness":2,"layouts":"us,ru","append":1,"prepend":1,"expansion_len":2}}' | jq -M
+––– output –––
+[
+  {
+    "total": 5,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "query": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "query": "jose"
+      },
+      {
+        "query": "joe"
+      },
+      {
+        "query": "john"
+      },
+      {
+        "query": "joy"
+      },
+      {
+        "query": "joey"
+      }
+    ]
+  }
+]
+––– input –––
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"gr","options":{"fuzziness":1,"layouts":"ru","append":1,"prepend":1}}' | jq -M
+––– output –––
+{
+  "error": "At least two languages are required in layouts"
+}

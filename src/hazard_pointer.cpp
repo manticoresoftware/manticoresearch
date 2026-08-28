@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -218,7 +218,7 @@ CSphVector<Pointer_t> CollectActiveHazardPointers()
 	});
 
 	// stage 2. sort and uniq; we will use binsearch then
-	dActive.Uniq();
+	dActive.Uniq(sph::unstable);
 	return dActive;
 }
 

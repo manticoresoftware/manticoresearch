@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -122,9 +122,9 @@ void Sort ( T* pData, INT iCount, U&& COMP, V&& ACC )
 		{
 			while ( i <= j )
 			{
-				while ( COMP.IsLess ( ACC.Key ( i ), x ) )
+				while ( i<=b && COMP.IsLess ( ACC.Key ( i ), x ) )
 					i = ACC.Add ( i, 1 );
-				while ( COMP.IsLess ( x, ACC.Key ( j ) ) )
+				while ( j>=a && COMP.IsLess ( x, ACC.Key ( j ) ) )
 					j = ACC.Add ( j, -1 );
 				if ( i <= j )
 				{

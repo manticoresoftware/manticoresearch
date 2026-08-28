@@ -1,0 +1,43 @@
+––– comment –––
+Regression: FAIL_013 — on a 3-node RF=1 sharded table, the public wrapper
+emitted on every node must include agents for the shards that live on
+the OTHER two nodes. Old behaviour filtered against the master's nodeId
+in every wrapper, dropping the master's shard from non-master nodes.
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:t13(id bigint, body text) shards='3' rf='1';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "insert into t13(id,body) values(1,'a'),(2,'b'),(3,'c'),(4,'d'),(5,'e'),(6,'f');"; echo $?
+––– output –––
+0
+––– input –––
+sleep 2; mysql -h0 -P1306 -e "select count(*) c from t13 where id>0;" | tail -2 | head -1
+––– output –––
+|    6 |
+––– input –––
+mysql -h0 -P2306 -e "select count(*) c from t13 where id>0;" | tail -2 | head -1
+––– output –––
+|    6 |
+––– input –––
+mysql -h0 -P3306 -e "select count(*) c from t13 where id>0;" | tail -2 | head -1
+––– output –––
+|    6 |

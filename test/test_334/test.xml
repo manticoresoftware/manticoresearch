@@ -747,5 +747,61 @@ select * from dist_gr2 facet gid facet tag;;
 }
 </query>
 
+<!-- multiple query_string cases -->
+<query endpoint="json/search">
+{
+  "table": "test1",
+  "query":{
+    "bool":{
+      "must":[
+        {"query_string":"*"}
+      ]
+    }
+  }
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "table": "test1",
+  "query":{
+    "bool":{
+      "must":[
+        {"query_string":"*"},
+        {"query_string":"*"}
+      ]
+    }
+  }
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "table": "test2",
+  "query":{
+    "bool":{
+      "must":[
+        {"query_string":"trevize"},
+        {"query_string":"on"}
+      ]
+    }
+  }
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "table": "test2",
+  "query":{
+    "bool":{
+      "should":[
+        {"query_string":"trevize"},
+        {"query_string":"on"}
+      ]
+    }
+  }
+}
+</query>
+
 </queries>
 </test>

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -467,7 +467,7 @@ std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::Cons
 		}
 		else if ( sName=="must_not" )
 		{
-			std::tie ( bOk, pMustNotTreeRoot ) = ConstructBoolNodeFilters ( tClause, dMustNotQI, false );
+			std::tie ( bOk, pMustNotTreeRoot ) = ConstructBoolNodeFilters ( tClause, dMustNotQI, true );
 			if ( !bOk )
 				return { false, nullptr };
 		} else if ( sName=="filter" )
@@ -495,8 +495,16 @@ std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::Cons
 
 	if ( pMustNotTreeRoot )
 	{
-		// fixme! this may not work as expected; better add a NOT node
-		WalkTree ( pMustNotTreeRoot, []( auto & pNode ) { if ( pNode->m_pFilter ) pNode->m_pFilter->m_bExclude = !pNode->m_pFilter->m_bExclude; } );
+		// also de morgan laws transform
+		// NOT (A AND B) > (NOT A) OR (NOT B)
+		// and NOT (A OR B) > (NOT A) AND (NOT B).
+		WalkTree ( pMustNotTreeRoot, []( auto & pNode )
+		{
+			if ( pNode->m_pFilter )
+				pNode->m_pFilter->m_bExclude = !pNode->m_pFilter->m_bExclude;
+			else
+				pNode->m_bOr = !pNode->m_bOr;
+		});
 
 		for ( auto & i : dMustNotQI )
 			dMustQI.Add(i);
@@ -1062,10 +1070,11 @@ static bool ConstructFilters ( const JsonObj_c & tJson, CSphQuery & tQuery, CSph
 	bool bKNN = sName=="knn";
 	if ( sName!="query" && !bKNN )
 	{
-		sError.SetSprintf ( R"("query" or "knn" expected, got %s)", sName.cstr() );
+		sError.SetSprintf ( R"("query" expected, got %s)", sName.cstr() );
 		return false;
 	}
 
+	// legacy: extract "filter" from the KNN object
 	JsonObj_c tKNNFilter;
 	if ( bKNN )
 	{
@@ -1098,11 +1107,17 @@ bool ParseJsonQueryFilters ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphSt
 
 	if ( !bFullscan )
 	{
+		// legacy: when called with the KNN object, extract "filter" child for the query string
 		if ( CSphString ( tJson.Name() )=="knn" )
 		{
 			JsonObj_c tFilter = tJson.GetObjItem ( "filter", sError, true );
 			if ( tFilter )
+			{
+				for ( auto & tKNN : tQuery.m_dKnnSettings )
+					tKNN.m_bPrefilter = true;
+
 				tQuery.m_sQuery = tFilter.AsString();
+			}
 		}
 		else
 			tQuery.m_sQuery = tJson.AsString();

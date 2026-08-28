@@ -186,6 +186,11 @@ index phrase1
 <sphinxql>select * from phrase1 where match ( ' "=9 =7900" ' ); show meta</sphinxql>
 <sphinxql>select * from phrase1 where match ( ' ="9 7900" ' ); show meta</sphinxql>
 <sphinxql>select * from phrase1 where match ( ' "9 =7900" ' ); show meta</sphinxql>
+
+<!-- match with empty group should not produce the error -->
+<sphinxql>select * from test where match ('()');</sphinxql>
+<sphinxql>select * from test where match ('camera()');</sphinxql>
+<sphinxql>select * from test where match ('camera ()');</sphinxql>
     
 </queries>
 

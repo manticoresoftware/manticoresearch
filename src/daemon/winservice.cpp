@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -11,6 +11,7 @@
 //
 
 #include "winservice.h"
+#include "daemon_ipc.h"
 
 static bool				g_bService		= false;
 bool WinService () noexcept
@@ -299,6 +300,7 @@ void WinSetConsoleCtrlHandler () noexcept
 }
 
 static StrVec_t g_dArgs;
+static CSphVector<char *> g_dArgPtrs;
 
 bool ParseArgsAndStartWinService ( int argc, char ** argv, void * ServiceFunction )
 {
@@ -335,9 +337,8 @@ bool ParseArgsAndStartWinService ( int argc, char ** argv, void * ServiceFunctio
 	return true;
 }
 
-void SetupWinService ( int argc, char ** argv )
+void SetupWinService ( int& argc, char **& argv )
 {
-	CSphVector<char *> dArgs;
 	if ( WinService() )
 	{
 		g_ssHandle = RegisterServiceCtrlHandler ( g_sServiceName, ServiceControl );
@@ -349,20 +350,19 @@ void SetupWinService ( int argc, char ** argv )
 
 		if ( argc <= 1 )
 		{
-			dArgs.Resize ( g_dArgs.GetLength() );
+			g_dArgPtrs.Resize ( g_dArgs.GetLength() );
 			ARRAY_FOREACH ( i, g_dArgs )
-				dArgs[i] = (char *) g_dArgs[i].cstr();
+				g_dArgPtrs[i] = (char *) g_dArgs[i].cstr();
 
 			argc = g_dArgs.GetLength();
-			argv = &dArgs[0];
+			argv = &g_dArgPtrs[0];
 		}
 	}
 
-	char szPipeName[64];
-	snprintf ( szPipeName, sizeof(szPipeName), "\\\\.\\pipe\\searchd_%d", getpid() );
-	g_hPipe = CreateNamedPipe ( szPipeName, PIPE_ACCESS_INBOUND,
-	                            PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_NOWAIT,
-	                            PIPE_UNLIMITED_INSTANCES, 0, WIN32_PIPE_BUFSIZE, NMPWAIT_NOWAIT, NULL );
+	CSphString sPipeName = GetSignalPipeName ( getpid() );
+	g_hPipe = CreateNamedPipe ( sPipeName.cstr(), PIPE_ACCESS_INBOUND,
+								PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_NOWAIT,
+								PIPE_UNLIMITED_INSTANCES, 0, WIN32_PIPE_BUFSIZE, NMPWAIT_NOWAIT, NULL );
 	ConnectNamedPipe ( g_hPipe, NULL );
 }
 
@@ -386,7 +386,7 @@ void CloseWinPipe ()
 
 void CheckWinSignals ()
 {
-	 auto & g_bGotSighup = sphGetGotSighup();
+	auto & g_bGotSighup = sphGetGotSighup();
 	BYTE dPipeInBuf[WIN32_PIPE_BUFSIZE];
 	DWORD nBytesRead = 0;
 	BOOL bSuccess = ReadFile ( g_hPipe, dPipeInBuf, WIN32_PIPE_BUFSIZE, &nBytesRead, NULL );
@@ -405,6 +405,11 @@ void CheckWinSignals ()
 				if ( g_bService )
 					g_bServiceStop = true;
 				break;
+
+			case PIPE_CMD_CHECK_CMD:
+				ProcessAuthReloadPipe ( getpid() );
+				break;
+
 			}
 		}
 
@@ -415,17 +420,13 @@ void CheckWinSignals ()
 
 int WinStopOrWaitAnother(int iPid, int iWaitTimeout)
 {
-
 	bool bTerminatedOk = false;
-
-	char szPipeName[64];
-	snprintf ( szPipeName, sizeof(szPipeName), "\\\\.\\pipe\\searchd_%d", iPid );
+	CSphString sPipeName = GetSignalPipeName ( iPid );
 
 	HANDLE hPipe = INVALID_HANDLE_VALUE;
-
 	while ( hPipe==INVALID_HANDLE_VALUE )
 	{
-		hPipe = CreateFile ( szPipeName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL );
+		hPipe = CreateFile ( sPipeName.cstr(), GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL );
 
 		if ( hPipe==INVALID_HANDLE_VALUE )
 		{
@@ -435,7 +436,7 @@ int WinStopOrWaitAnother(int iPid, int iWaitTimeout)
 				break;
 			}
 
-			if ( !WaitNamedPipe ( szPipeName, iWaitTimeout/1000 ) )
+			if ( !WaitNamedPipe ( sPipeName.cstr(), iWaitTimeout/1000 ) )
 			{
 				fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
 				break;
@@ -465,3 +466,10 @@ int WinStopOrWaitAnother(int iPid, int iWaitTimeout)
 }
 
 #endif // _WIN32
+
+CSphString GetSignalPipeName ( int iPid )
+{
+	CSphString sName;
+	sName.SetSprintf ( "\\\\.\\pipe\\searchd_%d", iPid );
+	return sName;
+}

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -33,6 +33,7 @@ public:
 
 using GetBlobPoolFromMatch_fn = std::function< const BYTE* ( const CSphMatch * )>;
 using GetColumnarFromMatch_fn = std::function< columnar::Columnar_i * ( const CSphMatch * )>;
+using VisitMatch_fn = std::function<void ( CSphMatch & )>;
 
 /// generic match sorter interface
 class ISphMatchSorter
@@ -83,6 +84,12 @@ public:
 
 	/// process collected entries up to length count
 	virtual void		Finalize ( MatchProcessor_i & tProcessor, bool bCallProcessInResultSetOrder, bool bFinalizeMatches ) = 0;
+
+	/// finalize retained groups for keyed access and return their count; negative means unsupported
+	virtual int			PrepareGroupAccess() { return -1; }
+
+	/// visit all retained representatives for one grouped key without flattening
+	virtual bool		VisitGroup ( SphAttr_t, const VisitMatch_fn & ) { return false; }
 
 	/// store all entries into specified location and remove them from the queue
 	/// entries are stored in properly sorted order

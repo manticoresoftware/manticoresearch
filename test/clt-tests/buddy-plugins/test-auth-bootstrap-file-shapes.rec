@@ -1,0 +1,150 @@
+––– comment –––
+Test auth bootstrap accepts valid empty auth.json shapes and rejects unsafe ones.
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+––– comment –––
+––– input –––
+sed -i '/^[[:space:]]*auth[[:space:]]*=/d' /etc/manticoresearch/manticore.conf; sed -i '/^searchd/a\    auth = 1' /etc/manticoresearch/manticore.conf; echo "auth shape preconditions ready"
+––– output –––
+auth shape preconditions ready
+––– comment –––
+––– 8.2.1 Empty pre-bootstrap auth.json shapes can start and bootstrap –––
+EXPECTED: missing, zero-byte, {}, and whitespace-only auth.json all behave as empty auth state
+––– comment –––
+––– input –––
+set -e
+AUTH_JSON=/var/lib/manticore/auth.json
+VALID_AUTH='{"users":[{"username":"admin","salt":"aabbccddeeff00112233aabbccddeeff00112233","hashes":{"password_sha1_no_salt":"74913f5cd5f61ec0bcfdb775414c2fb3d161b620","password_sha256":"bc723b5179630195129574a9cf534e1fa7397f9bd166dd10b1babbe37ea52589","bearer_sha256":"4b72aa7367f065146c7a028bc739c69c8e4bdebf7fe2d1133255c51bf36d8056"}}],"permissions":[{"username":"admin","action":"read","target":"*","allow":true},{"username":"admin","action":"write","target":"*","allow":true},{"username":"admin","action":"schema","target":"*","allow":true},{"username":"admin","action":"admin","target":"*","allow":true}]}'
+
+stop_daemon() {
+    searchd --stopwait >/dev/null 2>&1 || true
+    sleep 0.5
+}
+
+reset_auth_file() {
+    stop_daemon
+    rm -f /var/log/manticore/searchd.log /var/log/manticore/searchd.pid "$AUTH_JSON"
+    mkdir -p /var/lib/manticore /var/log/manticore /run/manticore
+}
+
+start_daemon() {
+    rm -f /tmp/auth_shape_start.out
+    if stdbuf -oL searchd ${SEARCHD_FLAGS:-} >/tmp/auth_shape_start.out 2>&1; then
+        if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore/searchd.log); then
+            return 0
+        fi
+    fi
+    cat /tmp/auth_shape_start.out 2>/dev/null || true
+    cat /var/log/manticore/searchd.log 2>/dev/null || true
+    return 1
+}
+
+bootstrap_auth() {
+    printf 'admin\nadminpass\nadminpass\n' | searchd --auth-non-interactive 2>&1 | grep -q "authentication settings successfully created and reloaded"
+}
+
+check_admin() {
+    python3 -c "import json; d=json.load(open('/var/lib/manticore/auth.json')); print(any(u.get('username')=='admin' for u in d.get('users', [])))" | grep -q True
+}
+
+run_empty_case() {
+    name="$1"
+    shape="$2"
+    reset_auth_file
+    case "$shape" in
+        missing) ;;
+        zero) : > "$AUTH_JSON"; chmod 600 "$AUTH_JSON" ;;
+        object) printf '{}' > "$AUTH_JSON"; chmod 600 "$AUTH_JSON" ;;
+        spaces) printf '  \n\t \n' > "$AUTH_JSON"; chmod 600 "$AUTH_JSON" ;;
+    esac
+    start_daemon
+    echo "$name start ok"
+    bootstrap_auth
+    echo "$name bootstrap ok"
+    check_admin
+    echo "$name admin present"
+    stop_daemon
+}
+
+run_rejected_start_case() {
+    name="$1"
+    content="$2"
+    mode="${3:-600}"
+    expected_error="$4"
+    reset_auth_file
+    printf '%s' "$content" > "$AUTH_JSON"
+    chmod "$mode" "$AUTH_JSON"
+    if stdbuf -oL searchd ${SEARCHD_FLAGS:-} >/tmp/auth_shape_start.out 2>&1; then
+        cat /tmp/auth_shape_start.out
+        searchd --stopwait >/dev/null 2>&1 || true
+        echo "$name startup unexpectedly ok"
+        exit 1
+    else
+        echo "$name startup rejected"
+        if [ -n "$expected_error" ]; then
+            if cat /tmp/auth_shape_start.out /var/log/manticore/searchd.log 2>/dev/null | grep -q "$expected_error"; then
+                echo "$name error matched"
+            else
+                echo "$name error missing"
+                cat /tmp/auth_shape_start.out 2>/dev/null || true
+                cat /var/log/manticore/searchd.log 2>/dev/null || true
+                exit 1
+            fi
+        fi
+    fi
+}
+
+run_created_file_mode_case() {
+    reset_auth_file
+    start_daemon
+    mode=$(stat -c %a "$AUTH_JSON")
+    if [ "$mode" != "600" ]; then
+        echo "missing created mode unexpected: $mode"
+        exit 1
+    fi
+    echo "missing created mode 600"
+    stop_daemon
+}
+
+run_rejected_bootstrap_case() {
+    reset_auth_file
+    printf '%s' "$VALID_AUTH" > "$AUTH_JSON"
+    chmod 600 "$AUTH_JSON"
+    start_daemon
+    echo "nonempty start ok"
+    if printf 'admin2\nadminpass\nadminpass\n' | searchd --auth-non-interactive 2>&1 | grep -q "is not empty, can not create administrator login"; then
+        echo "nonempty bootstrap rejected"
+    else
+        echo "nonempty bootstrap unexpectedly ok"
+        exit 1
+    fi
+    stop_daemon
+}
+
+run_created_file_mode_case
+run_empty_case missing missing
+run_empty_case zero-byte zero
+run_empty_case object object
+run_empty_case whitespace spaces
+run_rejected_start_case malformed '['
+run_rejected_start_case group-readable '{}' 640 "file '$AUTH_JSON' has permissions to all"
+run_rejected_bootstrap_case
+––– output –––
+missing created mode 600
+missing start ok
+missing bootstrap ok
+missing admin present
+zero-byte start ok
+zero-byte bootstrap ok
+zero-byte admin present
+object start ok
+object bootstrap ok
+object admin present
+whitespace start ok
+whitespace bootstrap ok
+whitespace admin present
+malformed startup rejected
+group-readable startup rejected
+group-readable error matched
+nonempty start ok
+nonempty bootstrap rejected

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -121,6 +121,9 @@ extern int g_iReadTimeoutS;        // defined in searchd.cpp
 extern int g_iWriteTimeoutS;    // sec
 extern bool g_bTimeoutEachPacket;
 
+constexpr int SPH_MIN_PACKET_SIZE = 128*1024;
+constexpr int SPH_MAX_PACKET_SIZE = 128*1024*1024;
+
 extern int g_iMaxPacketSize;    // in bytes; for both query packets from clients and response packets from agents
 
 
@@ -131,11 +134,12 @@ static const int64_t S2US = I64C ( 1000000 );
 /////////////////////////////////////////////////////////////////////////////
 
 const char* szCommand ( int );
+SearchdCommand_e ParseCommand ( const CSphString & sCommand );
 
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 24
+	VER_COMMAND_SEARCH_MASTER = 35
 };
 
 
@@ -143,22 +147,36 @@ enum
 /// (shared here because of REPLICATE)
 enum SearchdCommandV_e : WORD
 {
-	VER_COMMAND_SEARCH		= 0x126, // 1.38
+	VER_COMMAND_SEARCH		= 0x128, // 1.40
 	VER_COMMAND_EXCERPT		= 0x104,
 	VER_COMMAND_UPDATE		= 0x104,
 	VER_COMMAND_KEYWORDS	= 0x102,
 	VER_COMMAND_STATUS		= 0x101,
 	VER_COMMAND_FLUSHATTRS	= 0x100,
-	VER_COMMAND_SPHINXQL	= 0x100,
-	VER_COMMAND_JSON		= 0x101,
+	VER_COMMAND_SPHINXQL	= 0x101,
+	VER_COMMAND_JSON		= 0x103,
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
-	VER_COMMAND_CLUSTER		= 0x10A,
+	VER_COMMAND_CLUSTER		= 0x10F,
 	VER_COMMAND_GETFIELD	= 0x100,
-	VER_COMMAND_SUGGEST		= 0x101,
+	VER_COMMAND_SUGGEST		= 0x102,
+	VER_COMMAND_SHARD_WRITE	= 0x101,
+	VER_COMMAND_OPTIMIZE	= 0x101,
 
 	VER_COMMAND_WRONG = 0,
+};
+
+enum SearchdCommandMinV_e : WORD
+{
+	VER_COMMAND_SHARD_WRITE_HEARTBEAT = 0x101,
+	VER_COMMAND_OPTIMIZE_HEARTBEAT = 0x101,
+	VER_COMMAND_CLUSTER_HEARTBEAT = 0x10F,
+};
+
+enum ApiCommandFlags_e : DWORD
+{
+	API_FLAG_SHARD_PHYSICAL_UPDATE = 1U << 0,
 };
 
 enum UpdateType_e
@@ -427,8 +445,10 @@ public:
 	}
 };
 
+struct ApiAuthToken_t;
+
 // RAII Start Sphinx API command/request header
-APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer = 0 /* SEARCHD_OK */ );
+APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer );
 
 // RAII Sphinx API answer
 APIBlob_c APIAnswer ( ISphOutputBuffer & dBuff, WORD uVer = 0, WORD uStatus = 0 /* SEARCHD_OK */ );
@@ -446,9 +466,8 @@ public:
 //	void PrependBuf ( SmartOutputBuffer_t &dBuf );
 	size_t GetIOVec ( CSphVector<sphIovec> &dOut ) const;
 	void Reset();
-#if _WIN32
-	void LeakTo ( CSphVector<ISphOutputBuffer *> dOut );
-#endif
+	void LeakTo ( CSphVector<ISphOutputBuffer *> & dOut );
+	void SwapData ( CSphVector<ISphOutputBuffer *> & dChunks );
 };
 
 class GenericOutputBuffer_c : public ISphOutputBuffer
@@ -491,6 +510,17 @@ public:
 	int				GetInt () { return ntohl ( GetT<int> () ); }
 	WORD			GetWord () { return ntohs ( GetT<WORD> () ); }
 	DWORD			GetDword () { return ntohl ( GetT<DWORD> () ); }
+	WORD			GetLSBWord ()
+	{
+#if USE_LITTLE_ENDIAN
+		return GetT<WORD> ();
+#else
+		BYTE dB[2];
+		GetBytes(dB,2);
+		return dB[0] + ( dB[1]<<8 );
+#endif
+	}
+
 	DWORD			GetLSBDword ()
 	{
 #if USE_LITTLE_ENDIAN
@@ -499,6 +529,17 @@ public:
 		BYTE dB[4];
 		GetBytes(dB,4);
 		return dB[0] + ( dB[1]<<8 ) + ( dB[2]<<16 ) + ( dB[3]<<24 );
+#endif
+	}
+
+	uint64_t		GetLSBUint64 ()
+	{
+#if USE_LITTLE_ENDIAN
+		return GetT<uint64_t> ();
+#else
+		BYTE dB[8];
+		GetBytes(dB,8);
+		return (uint64_t)dB[0] + ( (uint64_t)dB[1]<<8 ) + ( (uint64_t)dB[2]<<16 ) + ( (uint64_t)dB[3]<<24 ) + ( (uint64_t)dB[4]<<32 ) + ( (uint64_t)dB[5]<<40 ) + ( (uint64_t)dB[6]<<48 ) + ( (uint64_t)dB[7]<<56 );
 #endif
 	}
 
@@ -598,7 +639,7 @@ private:
 	uint64_t			m_uTotalQueries GUARDED_BY ( m_tStatsLock ) = 0;
 
 	void				DoStatCalcStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats,
-							QueryStats_t & tQueryTimeStats ) const REQUIRES_SHARED ( m_tStatsLock );
+							QueryStats_t & tQueryTimeStats ) const REQUIRES ( m_tStatsLock );
 
 	CommandStats_t		m_tCommandsStats;
 };
@@ -705,6 +746,7 @@ using RunningIndexRefPtr_t = CSphRefcountedPtr<RunningIndex_c>;
 class ServedIndex_c : public ServedDesc_t
 {
 	mutable int64_t			m_iMass = 0;	// relative weight (by access speed) of the index
+	mutable Threads::Coro::ReadTableLock_c  m_tTableLock;
 
 	ServedIndex_c() = default;
 	friend CSphRefcountedPtr<ServedIndex_c> MakeServedIndex();
@@ -737,6 +779,11 @@ public:
 	void SetIdxAndStatsFrom ( const ServedIndex_c& tIndex );
 	void SetStatsFrom ( const ServedIndex_c& tIndex );
 	void SetUnlink ( CSphString sUnlink ) const;
+
+	void LockRead() const noexcept;
+	[[nodiscard]] bool UnlockRead() const noexcept;
+	[[nodiscard]] DWORD GetReadLocks() const noexcept;
+	[[nodiscard]] Threads::Coro::ReadTableLock_c& Locker() const noexcept;
 };
 
 using cServedIndexRefPtr_c = CSphRefcountedPtr<const ServedIndex_c>;
@@ -1070,6 +1117,8 @@ inline cServedIndexRefPtr_c GetServed ( const CSphString &sName )
 	return g_pLocalIndexes->Get ( sName );
 }
 
+void CanonicalizeIndexName ( CSphString & sName ) noexcept;
+
 class ServedClone_c: ISphNoncopyable
 {
 	cServedIndexRefPtr_c m_pSource;
@@ -1101,7 +1150,7 @@ public:
 using ResultAndIndex_t = std::pair<ESphAddIndex, ServedIndexRefPtr_c>;
 
 ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError );
-ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bCheckDupe, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError );
+ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bCheckDupe, bool bMutableOpt, bool bShardLoadMeta, StrVec_t * pWarnings, CSphString & sError );
 bool PreallocNewIndex ( ServedIndex_c & tIdx, const CSphConfigSection * pConfig, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError );
 
 struct AttrUpdateArgs: public CSphAttrUpdateEx
@@ -1119,7 +1168,7 @@ bool PreloadKlistTarget ( const CSphString& sBase, RotateFrom_e eFrom, StrVec_t&
 ServedIndexRefPtr_c MakeCloneForRotation ( const cServedIndexRefPtr_c& pSource, const CSphString& sIndex );
 
 bool ConfigureDistributedIndex ( std::function<bool ( const CSphString& )>&& fnCheck, DistributedIndex_t& tIdx, const char * szIndexName, const CSphConfigSection& hIndex, CSphString & sError, StrVec_t* pWarnings = nullptr );
-void ConfigureLocalIndex ( ServedDesc_t* pIdx, const CSphConfigSection& hIndex, bool bMutableOpt, StrVec_t* pWarnings );
+bool ConfigureLocalIndex ( ServedDesc_t* pIdx, const CSphConfigSection& hIndex, bool bMutableOpt, StrVec_t* pWarnings, CSphString& sError );
 
 volatile bool& sphGetSeamlessRotate() noexcept;
 
@@ -1221,6 +1270,7 @@ public:
 // from mysqld_error.h
 enum class EMYSQL_ERR : WORD
 {
+	ACCESS_DENIED_ERROR			= 1045,
 	NO_DB_ERROR					= 1046,
 	UNKNOWN_COM_ERROR			= 1047,
 	SERVER_SHUTDOWN				= 1053,
@@ -1254,10 +1304,11 @@ public:
 class QueryParser_i;
 class RequestBuilder_i;
 class ReplyParser_i;
+class SearchFailuresLog_c;
 
 std::unique_ptr<QueryParser_i> CreateQueryParser ( bool bJson ) noexcept;
-std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt );
-std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings );
+std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt, bool bShardPhysicalUpdate );
+std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings, SearchFailuresLog_c & dFails, CSphString * pWarning = nullptr );
 StmtErrorReporter_i * CreateHttpErrorReporter();
 
 enum class EHTTP_STATUS : BYTE
@@ -1266,6 +1317,7 @@ enum class EHTTP_STATUS : BYTE
 	_200,
 	_206,
 	_400,
+	_401,
 	_403,
 	_404,
 	_405,
@@ -1294,6 +1346,7 @@ enum class EHTTP_ENDPOINT : BYTE
 	CLI,
 	CLI_JSON,
 	ES_BULK,
+	TOKEN,
 
 	TOTAL
 };
@@ -1313,8 +1366,10 @@ bool sphCheckWeCanModify ( RowBuffer_i& tOut );
 bool PollOptimizeRunning ( const CSphString & sIndex );
 void FixPathAbsolute ( CSphString & sPath );
 
-void				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
+using OptionsHash_t = SmallStringHash_T<CSphString>;
+void				ProcessHttpJsonQuery ( const CSphString & sQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError );
+void				sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sError, const char * sHeaderField );
 void				LoadCompatHttp ( const char * sData );
 void				SaveCompatHttp ( JsonEscapedBuilder & tOut );
 void				SetupCompatHttp();
@@ -1324,10 +1379,11 @@ int64_t				GetDocID ( const char * szID );
 
 void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, GenericOutputBuffer_c & tOut );
 void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
+void HandleCommandOptimize ( GenericOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq );
 
 void BuildStatusOneline ( StringBuilder_c& sOut );
 
-void UpdateLastMeta (VecTraits_T<AggrResult_t> tResults );
+void UpdateLastMeta ( VecTraits_T<AggrResult_t> tResults, const VecTraits_T<CSphQuery> & dQueries );
 
 namespace session {
 	bool IsAutoCommit ( const ClientSession_c* );
@@ -1336,6 +1392,7 @@ namespace session {
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
 	void SetFederatedUser();
 	void SetUser ( const CSphString & sUser );
+	const CSphString & GetUser();
 	void SetCurrentDbName ( CSphString sDb );
 	const char* GetCurrentDbName ();
 	void SetAutoCommit ( bool bAutoCommit );
@@ -1345,6 +1402,7 @@ namespace session {
 	QueryProfile_c* StartProfiling ( ESphQueryState );
 	void SaveLastProfile();
 	VecTraits_T<int64_t> LastIds();
+	VecTraits_T<CSphString> LastIdStrings();
 	void SetOptimizeById ( bool bOptimizeById );
 	bool GetOptimizeById();
 	void SetDeprecatedEOF ( bool bDeprecatedEOF );
@@ -1383,7 +1441,20 @@ void LogToConsole(const char* szKind, const char* szMsg) noexcept;
 void SetLogHttpFilter ( const CSphString & sVal );
 int HttpGetStatusCodes ( EHTTP_STATUS eStatus ) noexcept;
 EHTTP_STATUS HttpGetStatusCodes ( int iStatus ) noexcept;
-void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHtml );
+
+struct HttpReplyTrait_t
+{
+	EHTTP_STATUS m_eCode = EHTTP_STATUS::_503;
+	Str_t m_sBody;
+	bool m_bHtml = false;
+	bool m_bHeadReply = false;
+	const char * m_sContentType = nullptr;
+	bool m_bSendHeaders = true;
+};
+
+void HttpBuildReply ( const HttpReplyTrait_t & tReply, CSphVector<BYTE> & dData );
+void ReplyBuf ( const HttpReplyTrait_t & tReply, CSphVector<BYTE> & dData );
+
 void HttpBuildReplyHead ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHeadReply );
 void HttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError );
 
@@ -1402,6 +1473,7 @@ enum MysqlColumnType_e
 	MYSQL_COL_FLOAT		= 4,
 	MYSQL_COL_DOUBLE	= 5,
 	MYSQL_COL_LONGLONG	= 8,
+	MYSQL_TYPE_VAR_STRING = 253,
 	MYSQL_COL_STRING	= 254,
 	MYSQL_COL_UINT64	= 508
 };
@@ -1413,6 +1485,7 @@ inline constexpr MysqlColumnType_e ESphAttr2MysqlColumn ( ESphAttr eAttrType )
 	{
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_TIMESTAMP:
+	case SPH_ATTR_TOKENCOUNT:
 	case SPH_ATTR_BOOL: return MYSQL_COL_LONG;
 	case SPH_ATTR_FLOAT: return MYSQL_COL_FLOAT;
 	case SPH_ATTR_DOUBLE: return MYSQL_COL_DOUBLE;
@@ -1438,6 +1511,8 @@ inline constexpr MysqlColumnType_e ESphAttr2MysqlColumnStreamed ( ESphAttr eAttr
 	case SPH_ATTR_UINT32SET_PTR:
 	case SPH_ATTR_FLOAT_VECTOR:
 	case SPH_ATTR_FLOAT_VECTOR_PTR:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
 	case SPH_ATTR_INT64SET:
 	case SPH_ATTR_INT64SET_PTR: return MYSQL_COL_LONG; // long is treated as a number without interpretation (just copied from input to output)
 	case SPH_ATTR_JSON:
@@ -1449,7 +1524,7 @@ inline constexpr MysqlColumnType_e ESphAttr2MysqlColumnStreamed ( ESphAttr eAttr
 class RowBuffer_i : public ISphNoncopyable
 {
 public:
-	virtual ~RowBuffer_i() {}
+	virtual ~RowBuffer_i() = default;
 
 	virtual void PutFloatAsString ( float fVal, const char * sFormat=nullptr ) = 0;
 	virtual void PutDoubleAsString ( double fVal, const char * szFormat=nullptr ) = 0;
@@ -1458,16 +1533,27 @@ public:
 	{
 		StringBuilder_c sTime;
 		if ( iBase )
-			sTime.Sprintf ( "%0.2F%%", iVal*10000/iBase );
+			sTime.Sprintf ( "%d%%", (int)(iVal*100/iBase) );
 		else
 			sTime << "100%";
 		PutString ( sTime );
+	}
+
+	virtual MysqlColumnType_e ESphAttr2MysqlColumnStreamed ( ESphAttr eAttrType ) const noexcept
+	{
+		return ::ESphAttr2MysqlColumnStreamed ( eAttrType );
 	}
 
 	virtual void PutNumAsString ( int64_t iVal ) = 0;
 	virtual void PutNumAsString ( uint64_t uVal ) = 0;
 	virtual void PutNumAsString ( int iVal ) = 0;
 	virtual void PutNumAsString ( DWORD uVal ) = 0;
+	virtual void PutFloat ( float fVal ) = 0;
+	virtual void PutDouble ( double fVal ) = 0;
+	virtual void PutInt ( int iVal ) = 0;
+	virtual void PutInt64 ( int64_t iVal ) = 0;
+	virtual void PutDWORD ( DWORD uVal ) = 0;
+	virtual void PutUint64 ( uint64_t uVal ) = 0;
 
 	// pack raw array (i.e. packed length, then blob)
 	virtual void PutArray ( const ByteBlob_t&, bool bSendEmpty = false ) = 0;
@@ -1478,6 +1564,8 @@ public:
 	virtual void PutMicrosec ( int64_t iUsec ) = 0;
 
 	virtual void PutNULL() = 0;
+
+	virtual void SkipNULL() {}
 
 	/// more high level. Processing the whole tables.
 	// sends collected data, then reset
@@ -1500,6 +1588,11 @@ public:
 
 	// add the next column. The EOF after the full set will be fired automatically
 	virtual void HeadColumn ( const char * sName, MysqlColumnType_e uType=MYSQL_COL_STRING ) = 0;
+
+	virtual void HeadColumnRaw ( const char * sName, ESphAttr uType )
+	{
+		HeadColumn ( sName, ESphAttr2MysqlColumn ( uType ) );
+	};
 
 	virtual void Add ( BYTE uVal ) = 0;
 
@@ -1659,7 +1752,21 @@ public:
 		HeadBegin();
 		HeadColumn (szTitle, MYSQL_COL_LONG);
 		HeadEnd();
-		PutNumAsString ( iValue );
+		PutDWORD ( iValue );
+		Commit();
+		Eof();
+		return true;
+	}
+
+	bool DataTableOneline ( const char * szTitle, const char * szValue )
+	{
+		HeadBegin();
+		HeadColumn ( szTitle, MYSQL_TYPE_VAR_STRING );
+		HeadEnd();
+		if ( szValue )
+			PutString ( szValue );
+		else
+			PutNULL();
 		Commit();
 		Eof();
 		return true;
@@ -1672,6 +1779,15 @@ public:
 	{
 		m_bError = false;
 		m_sError = "";
+	}
+
+	virtual void StoreCurrentPositionState() noexcept
+	{
+	};
+
+	virtual void RestoreLastPositionState () noexcept
+	{
+		Reset();
 	}
 
 protected:

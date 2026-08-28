@@ -47,7 +47,7 @@
 %option prefix="yy5"
 %option align
 
-ID					[a-zA-Z_@][a-zA-Z_0-9]*
+ID					[a-zA-Z_@\200-\377][a-zA-Z_0-9\200-\377]*
 SYS_ID				[a-zA-Z_][a-zA-Z_0-9]*
 ALPHA				[a-zA-Z_]+
 SPACE				[ \t\n\r]
@@ -90,10 +90,14 @@ FLOAT_CONSTANT      ({INT}\.{INT}?|{INT}?\.{INT}){EXPONENT}?
 
 "ATTACH"    		{ STORE_BOUNDS; return TOK_ATTACH; }
 "ATTRIBUTES"   		{ STORE_BOUNDS; return TOK_ATTRIBUTES; }
+"AUTH"    			{ STORE_BOUNDS; return TOK_AUTH; }
+"CACHE"				{ STORE_BOUNDS; return TOK_CACHE; }
 "CLUSTER"			{ STORE_BOUNDS; return TOK_CLUSTER; }
 "COMMITTED"         { STORE_BOUNDS; return TOK_COMMITTED; }
 "COMPRESS"			{ STORE_BOUNDS; return TOK_COMPRESS; }
 "DELETE"			{ STORE_BOUNDS; return TOK_DELETE; }
+"DROP"				{ STORE_BOUNDS; return TOK_DROP; }
+"EXIT"				{ STORE_BOUNDS; return TOK_EXIT; }
 "FLUSH"             { STORE_BOUNDS; return TOK_FLUSH; }
 "FREEZE"			{ STORE_BOUNDS; return TOK_FREEZE; }
 "FROM"              { STORE_BOUNDS; return TOK_FROM; }

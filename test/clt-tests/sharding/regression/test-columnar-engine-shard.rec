@@ -1,0 +1,25 @@
+––– comment –––
+Regression: FAIL_007 — sharded table with engine='columnar' must create cleanly
+and not trip the "local table incompatible with shard table" check on the
+public wrapper.
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "create table t7(id bigint, body text, n integer) engine='columnar' shards='2' rf='1';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "insert into t7(id,body,n) values(1,'a',10),(2,'b',20);"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "select count(*) as c from t7 where id>0;"
+––– output –––
++------+
+| c    |
++------+
+|    2 |
++------+

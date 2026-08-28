@@ -1,0 +1,11 @@
+{
+  "name": "manticore-node-prepared-stmt-test",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Prepared statement test for Manticore via MySQL protocol",
+  "main": "index.js",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "mysql2": "^3.11.0"
+  }
+}

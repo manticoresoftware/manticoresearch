@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -11,10 +11,12 @@
 //
 
 #include "netreceive_api.h"
+#include "auth/auth.h"
 
 extern int g_iClientTimeoutS; // from searchd.cpp
 extern volatile bool g_bMaintenance;
 static auto & g_bGotSighup = sphGetGotSighup ();    // we just received SIGHUP; need to log
+
 
 // mostly repeats HandleClientSphinx
 void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
@@ -52,9 +54,9 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	}
 	auto uHandshake = tIn.GetDword();
 	sphLogDebugv ( "conn %s(%d): got handshake, major v.%d", sClientIP, iCID, uHandshake );
-	if ( uHandshake!=SPHINX_CLIENT_VERSION && uHandshake!=0x01000000UL )
+	if ( uHandshake!=SPHINX_CLIENT_VERSION && uHandshake!=1 && uHandshake!=0x01000000UL )
 	{
-		sphLogDebugv ( "conn %s(%d): got handshake, major v.%d", sClientIP, iCID, uHandshake );
+		sphLogDebugv ( "conn %s(%d): got invalid handshake, major v.%d", sClientIP, iCID, uHandshake );
 		return;
 	}
 	// legacy client - sends us exactly 4 bytes of handshake, so we have to flush our handshake also before continue.
@@ -132,40 +134,63 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 		iPconnIdleS = 0;
 
-		auto eCommand = (SearchdCommand_e)  tIn.GetWord ();
+		auto eCommand = (SearchdCommand_e)tIn.GetWord ();
 		auto uVer = tIn.GetWord ();
-		auto iReplySize = tIn.GetInt ();
-		sphLogDebugv ( "read command %d, version %d, reply size %d", eCommand, uVer, iReplySize );
+		auto iWireSize = tIn.GetInt ();
+		sphLogDebugv ( "read command %d, version %d, reply size %d", eCommand, uVer, iWireSize );
 
-
-		bool bCheckLen = ( eCommand!= SEARCHD_COMMAND_CLUSTER );
+		bool bClusterCommand = ( eCommand==SEARCHD_COMMAND_CLUSTER );
 		bool bBadCommand = ( eCommand>=SEARCHD_COMMAND_WRONG );
-		// should not fail replication commands from other nodes as max_packet_size could be different between nodes
-		bool bBadLength = ( iReplySize<0 || ( bCheckLen && iReplySize>tIn.GetMaxPacketSize() ) );
-		if ( bBadCommand || bBadLength )
+		// Cluster peers can have different max_packet_size values. Never let the
+		// unencrypted header raise the receive limit beyond the product-wide cap.
+		bool bBadWireLength = ( iWireSize<0 || ( bClusterCommand ? iWireSize>SPH_MAX_PACKET_SIZE : iWireSize>g_iMaxPacketSize ) );
+		if ( bBadCommand || bBadWireLength )
 		{
 			// unknown command, default response header
-			if ( bBadLength )
-				sphWarning ( "ill-formed client request (length=%d out of bounds)", iReplySize );
+			if ( bBadWireLength )
+				sphWarning ( "ill-formed client request (length=%d out of bounds)", iWireSize );
 			// if command is insane, low level comm is broken, so we bail out
 			if ( bBadCommand )
 				sphWarning ( "ill-formed client request (command=%d, SEARCHD_COMMAND_TOTAL=%d)", eCommand,
 							 SEARCHD_COMMAND_TOTAL );
 
-			SendErrorReply ( tOut, "invalid %s (code=%d, len=%d)", ( bBadLength ? "length" : "command" ), eCommand, iReplySize );
+			SendErrorReply ( tOut, "invalid %s (code=%d, len=%d)", ( bBadWireLength ? "length" : "command" ), eCommand, iWireSize );
 			tOut.Flush(); // no need to check return code since we anyway break
 			break;
 		}
 
-		if ( !bCheckLen )
-			tIn.SetMaxPacketSize ( tIn.GetBufferPos() + iReplySize );
+		if ( bClusterCommand )
+			tIn.SetMaxPacketSize ( tIn.GetBufferPos() + SPH_MAX_PACKET_SIZE );
 
-		if ( iReplySize && !tIn.ReadFrom ( iReplySize, true ))
+		if ( iWireSize && !tIn.ReadFrom ( iWireSize, true ))
 		{
 			sphWarning ( "failed to receive API body (client=%s(%d), exp=%d(%d), error='%s')",
-					sClientIP, iCID, iReplySize, tIn.HasBytes(), sphSockError ());
+					sClientIP, iCID, iWireSize, tIn.HasBytes(), sphSockError ());
 			break;
 		}
+
+		int iReplySize = iWireSize;
+		CSphString sUser;
+		CSphString sError;
+		if ( !ApiDecrypt ( eCommand, uVer, tIn, iReplySize, sUser, sError ) )
+		{
+			SendErrorReply ( tOut, "%s", sError.cstr() );
+			tOut.Flush(); // no need to check return code since we anyway break
+			break;
+		}
+
+		int iMaxReplySize = bClusterCommand ? SPH_MAX_PACKET_SIZE : g_iMaxPacketSize;
+		bool bBadReplyLength = ( iReplySize<0 || iReplySize>iMaxReplySize );
+		if ( bBadReplyLength )
+		{
+			sphWarning ( "ill-formed decrypted API request (length=%d out of bounds)", iReplySize );
+			SendErrorReply ( tOut, "invalid decrypted length (code=%d, len=%d)", eCommand, iReplySize );
+			tOut.Flush(); // no need to check return code since we anyway break
+			break;
+		}
+
+		// should set client user to pass it further into distributed index
+		session::SetUser ( sUser );
 
 		auto& tCrashQuery = GlobalCrashQueryGetRef();
 		tCrashQuery.m_dQuery = { tIn.GetBufferPtr (), iReplySize };
@@ -185,7 +210,7 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		{
 			sphWarning ( "%s", g_sMaxedOutMessage.first );
 			{
-				auto tHdr = APIHeader ( tOut, SEARCHD_RETRY );
+				auto tHdr = APIAnswer ( tOut, 0, SEARCHD_RETRY );
 				tOut.SendString ( g_sMaxedOutMessage );
 			}
 			tOut.Flush(); // no need to check return code since we anyway break
@@ -200,7 +225,21 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			sphLogDebugv ( "conn %s(%d): pconn is now %s", tSess.szClientName (), tSess.GetConnID(), bPersist ? "on" : "off" );
 			tSess.SetPersistent ( bPersist );
 		}
+		const int iPacketOff = tOut.GetSentCount ();
+		const int64_t iTotalSentBeforeCommand = tOut.GetTotalSent ();
 		ExecuteApiCommand ( eCommand, uVer, iReplySize, tIn, tOut );
+
+		if ( tOut.GetError () )
+			break;
+
+		const int iReplyPacketOff = tOut.GetTotalSent ()>iTotalSentBeforeCommand ? 0 : iPacketOff;
+		if ( !ApiEncryptReply ( sUser, tOut, iReplyPacketOff, sError ) )
+		{
+			tOut.Rewind ( 0 );
+			SendErrorReply ( tOut, "%s", sError.cstr() );
+			tOut.Flush(); // no need to check return code since we anyway break
+			break;
+		}
 
 		if ( !tOut.Flush () )
 			break;

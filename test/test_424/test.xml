@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>normalize table names http</name>
+
+<requires>
+	<force-rt/>
+	<http/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<metaindex name='META:test'>
+	<index>test</index>
+	<index>TeST1</index>
+</metaindex>
+
+<metaindex name='META:alias'>
+	<index>test</index>
+	<index>tEsT</index>
+	<index>TeST1</index>
+	<index>test1</index>
+	<index>test,tEsT,teST1,test1</index>
+</metaindex>
+
+<queries>
+<sphinxql>
+	drop table if exists META:test;
+	create table META:test (tt text, val integer);
+	desc META:test;
+	show tables;
+	insert into META:test values (1,'ttext',20);
+</sphinxql>
+<query endpoint="json/search">{"table": "META:alias", "query": { "match_all": {} }}</query>
+<query endpoint="json/insert">
+{
+	"table":"META:test",
+	"id":10,
+	"doc":
+	{
+		"val" : 155,
+	    "tt" : "document one"
+	}
+}
+</query>
+<query endpoint="json/search">{"table": "META:alias", "query": {"equals": {"id": 10}}}</query>
+<query endpoint="json/replace">
+{
+	"table":"META:test",
+	"id":10,
+	"doc":
+	{
+	    "val" : 365,
+	    "tt" : "document three (replaced)"
+	}
+}
+</query>
+<query endpoint="json/search">{"table": "META:alias", "query": {"equals": {"id": 10}}}</query>
+<query endpoint="json/update">
+{
+	"table":"META:test",
+	"id":1,
+	"doc":
+	{
+	    "val" : 333
+	}
+}
+</query>
+<query endpoint="json/search">{"table": "META:alias", "query": {"equals": {"id": 1}}}</query>
+<query endpoint="json/delete">
+{
+	"table":"META:test",
+	"id":10
+}
+</query>
+<query endpoint="json/search">{"table": "META:alias", "query": { "match_all": {} }}</query>
+<sphinxql>
+	drop table META:test;
+</sphinxql>
+</queries>
+
+</test>

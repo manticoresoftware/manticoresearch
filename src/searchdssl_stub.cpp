@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -11,6 +11,18 @@
 //
 
 #include "searchdssl.h"
+
+bool SecretEqual ( const VecTraits_T<BYTE> & dA, const VecTraits_T<BYTE> & dB )
+{
+	if ( dA.IsEmpty() || dB.IsEmpty() || dA.GetLength()!=dB.GetLength() )
+		return false;
+
+	unsigned int uDiff = 0;
+	for ( int i = 0; i<dA.GetLength(); ++i )
+		uDiff |= dA[i] ^ dB[i];
+
+	return uDiff==0;
+}
 
 #if WITH_SSL
 

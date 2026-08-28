@@ -1,0 +1,16 @@
+––– comment –––
+Regression: FAIL_038 — timeout='' used to flow through to the wait loop and
+report 'Waiting timeout exceeded' while the table got created. Empty option
+values are now rejected up-front.
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "create table t38(id bigint, title text) shards='2' rf='1' timeout='';"
+––– output –––
+ERROR 1064 (42000) at line 1: Parameter 'timeout' requires to have a value
+––– input –––
+mysql -h0 -P1306 -e "show tables like 't38';"
+––– output –––

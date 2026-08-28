@@ -10345,7 +10345,7 @@ bool CSphIndex_VLN::PreallocDocidLookup()
 		DWORD uActual = DetectDocidLookupVersion ( m_tDocidLookup.GetReadPtr(), m_tDocidLookup.GetLengthBytes() );
 		if ( m_uVersion<DOCID_LOOKUP_UUID_VERSION || uActual!=DOCID_LOOKUP_UUID_VERSION-1 )
 		{
-			m_sLastError.SetSprintf ( "%s: %s", sFile.cstr(), sFormatError.cstr() );
+			m_sLastError.SetSprintf ( "%s: %s; the table must be rebuilt (the lookup is damaged, or it predates the v.%u layout and the header was rewritten by ALTER)", sFile.cstr(), sFormatError.cstr(), DOCID_LOOKUP_SPLIT_VERSION );
 			return false;
 		}
 

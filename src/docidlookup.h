@@ -269,6 +269,11 @@ RowIteratorsWithEstimates_t CreateLookupIterator ( CSphVector<SecondaryIndexInfo
 bool	WriteDocidLookup ( const CSphString & sFilename, const VecTraits_T<DocidRowidPair_t> & dLookup, CSphString & sError );
 bool	WriteDocidLookup ( const CSphString & sFilename, const VecTraits_T<DocidRowidPair_t> & dLookup, const VecTraits_T<UuidDocidLookupPair_t> & dUuidLookup, CSphString & sError );
 
+/// first index format version guaranteed to carry the current .spt header layout (docs, docs per checkpoint,
+/// max docid; the 2022 "split docid lookup" rewrite landed inside v.64 without a version bump, so v.64 files
+/// exist in both layouts). Lookups of older tables (down to the supported v.54) are read as-is and never validated
+constexpr DWORD DOCID_LOOKUP_SPLIT_VERSION = 65;
+
 /// index format version that added the UUID entries offset to the .spt header
 /// the lookup readers are gated on the index header version, so the header and the .spt must agree
 constexpr DWORD DOCID_LOOKUP_UUID_VERSION = 71;

@@ -885,6 +885,10 @@ static int64_t GetDocidLookupHeaderSize ( DWORD uIndexVersion )
 
 bool CheckDocidLookupFormat ( const BYTE * pData, int64_t iDataLen, DWORD uIndexVersion, CSphString & sError )
 {
+	// older layouts (a 2019 lookup is 10 bytes) were never validated; keep reading them as before
+	if ( uIndexVersion<DOCID_LOOKUP_SPLIT_VERSION )
+		return true;
+
 	int64_t iHeader = GetDocidLookupHeaderSize ( uIndexVersion );
 	if ( !pData || iDataLen<iHeader )
 	{
@@ -944,7 +948,8 @@ DWORD DetectDocidLookupVersion ( const BYTE * pData, int64_t iDataLen )
 
 bool UpgradeDocidLookupFile ( const CSphString & sFilename, DWORD uIndexVersion, CSphString & sError )
 {
-	if ( uIndexVersion>=DOCID_LOOKUP_UUID_VERSION )
+	// current layout already, or a legacy layout we do not convert (it is read as-is, see CheckDocidLookupFormat)
+	if ( uIndexVersion>=DOCID_LOOKUP_UUID_VERSION || uIndexVersion<DOCID_LOOKUP_SPLIT_VERSION )
 		return true;
 
 	CSphMappedBuffer<BYTE> tOld;

@@ -184,6 +184,13 @@ TEST_F ( UuidDocidLookupTest, FormatCheckAndUpgrade )
 		EXPECT_TRUE ( strstr ( sError.cstr(), "pre-v.71" ) ) << sError.cstr();
 		EXPECT_EQ ( DetectDocidLookupVersion ( tData.GetReadPtr(), tData.GetLengthBytes() ), UUID_INDEX_VERSION-1 );
 
+		// lookups of tables older than the split-lookup layout are never validated (a v.54 lookup is 10 bytes)
+		const BYTE dLegacy[10] = { 3, 0, 0, 0, 0, 1, 1, 0, 0, 0 };
+		EXPECT_TRUE ( CheckDocidLookupFormat ( dLegacy, sizeof(dLegacy), DOCID_LOOKUP_SPLIT_VERSION-1, sError ) ) << sError.cstr();
+		EXPECT_FALSE ( CheckDocidLookupFormat ( dLegacy, sizeof(dLegacy), DOCID_LOOKUP_SPLIT_VERSION, sError ) );
+		EXPECT_TRUE ( UpgradeDocidLookupFile ( m_sFile, DOCID_LOOKUP_SPLIT_VERSION-1, sError ) ) << sError.cstr(); // no-op below the gate
+		EXPECT_EQ ( DetectDocidLookupVersion ( tData.GetReadPtr(), tData.GetLengthBytes() ), UUID_INDEX_VERSION-1 ); // the file is untouched
+
 		LookupReader_c tOld;
 		tOld.SetData ( tData.GetReadPtr(), UUID_INDEX_VERSION-1 );
 		EXPECT_EQ ( tOld.Find(11), 0U );

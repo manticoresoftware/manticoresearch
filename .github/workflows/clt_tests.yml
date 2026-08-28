@@ -137,7 +137,7 @@ jobs:
 
     steps:
       # Reuse the embedding-model cache from a previous run if one exists. It is bind-mounted
-      # at /var/lib/manticore/.cache, where Manticore caches downloaded HuggingFace models.
+      # at /var/lib/manticore/.cache, where Manticore caches downloaded  HuggingFace models.
       # After the tests, whatever the chunk downloaded is saved for the next run.
       # NOTE: this makes .cache a mountpoint, so tests must never `rm -rf /var/lib/manticore`
       # itself — wipe its contents instead (`rm -rf /var/lib/manticore/*` leaves .cache alone).

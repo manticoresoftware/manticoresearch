@@ -37,13 +37,13 @@ static bool IsConfigless()
 
 static CSphString GetPathForNewIndex ( const CSphString & sIndexName )
 {
-	CSphString sRes;
-	if ( g_sDataDir.Length() && !g_sDataDir.Ends("/") && !g_sDataDir.Ends("\\") )
-		sRes.SetSprintf ( "%s/%s", g_sDataDir.cstr(), sIndexName.cstr() );
-	else
-		sRes.SetSprintf ( "%s%s", g_sDataDir.cstr(), sIndexName.cstr() );
+	CSphString sPath = sphGetConfiglessTablePath ( g_sDataDir, sIndexName );
+	CSphString sLegacyPath;
+	sLegacyPath.SetSprintf ( "%s/%s", g_sDataDir.cstr(), sIndexName.cstr() );
+	if ( sPath!=sLegacyPath && !sphDirExists ( sPath.cstr() ) && sphDirExists ( sLegacyPath.cstr() ) )
+		return sLegacyPath;
 
-	return sRes;
+	return sPath;
 }
 
 static void MakeRelativePath ( CSphString & sPath )
@@ -880,19 +880,18 @@ static void ApplyKilllists ( CSphConfig & hConf )
 		tIndex.m_sName = tIndex_.first.cstr();
 		tIndex.m_sPath = RedirectToRealPath ( hIndex["path"].strval() );
 
-		IndexFiles_c tIndexFiles ( tIndex.m_sPath, tIndex.m_sName.cstr () );
-
-		if ( !tIndexFiles.CheckHeader() )
+		auto uVersion =	ValidateHeaderAndReadVersion ( SphSprintf ( "%s%s", tIndex.m_sPath.cstr(), sphGetExt(SPH_EXT_SPH) ) );
+		if ( !uVersion.has_value() )
 		{
 			fprintf ( stdout, "WARNING: unable to index header for table %s\n", tIndex.m_sName.cstr() );
 			continue;
 		}
-		tIndex.m_uVersion = tIndexFiles.GetVersion();
+		tIndex.m_uVersion = uVersion.value();
 
 		// no lookups prior to v.54
-		if ( tIndexFiles.GetVersion() < 54 )
+		if ( uVersion.value() < 54 )
 		{
-			fprintf ( stdout, "WARNING: table '%s' version: %u, min supported is 54\n", tIndex.m_sName.cstr(), tIndexFiles.GetVersion() );
+			fprintf ( stdout, "WARNING: table '%s' version: %u, min supported is 54\n", tIndex.m_sName.cstr(), uVersion.value() );
 			continue;
 		}
 

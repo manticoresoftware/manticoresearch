@@ -4,19 +4,37 @@
 
 Manticore 的数据类型可以分为两类：全文字段和属性。
 
-### 字段名语法
+### 表和字段名语法
 
-Manticore 中的字段名必须遵循以下规则：
+表名、字段名和属性名可以包含 ASCII 字母（`a-z`、`A-Z`）、数字（`0-9`）、下划线（`_`）以及安全的非 ASCII UTF-8 字符。未加引号的 SQL 名称必须以 ASCII 字母、下划线或非 ASCII UTF-8 字符开头。首字符之后可以使用数字。
 
-* 可以包含字母（a-z, A-Z）、数字（0-9）和连字符（-）
-* 必须以字母开头
-* 数字只能出现在字母之后
-* 下划线（`_`）是唯一允许的特殊字符
-* 字段名不区分大小写
+相同的基础语法适用于各模式下支持该类型的所有表类型：[RT mode](../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29) 中的实时表、percolate 表和分布式表，以及 [Plain mode](../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29) 中的实时表、percolate 表、普通表、分布式表和模板表。它也适用于定义字段或属性的所有 schema，包括 percolate 表预期的文档 schema，以及从 SQL、CSV/TSV 或 XML 源推断出的 schema。
+
+其他用户定义的 SQL 对象名，包括函数名、插件名和复制集群名，也遵循相同的安全 UTF-8 规则。
+
+对于以数字开头且至少包含一个字母、下划线或非 ASCII UTF-8 字符的 SQL 名称，以及与保留 SQL 关键字完全匹配的名称，请用反引号包起来。例如，使用 `` `2026_архив` `` 或 `` `select` ``。配置文件名不加引号，并且可以以数字开头。纯数字标识符在所有模式下都会被拒绝，包括加载现有配置或元数据时；升级前请重命名任何此类对象。反引号不会让任意 ASCII 标点变成合法字符；`-`、`$`、空格以及嵌入的反引号等字符都不支持用于用户定义名称。
+
+为了兼容常见的日志采集 schema，`CREATE TABLE` 和 `ALTER TABLE` 也不区分大小写地接受列名 `@timestamp` 和 `@version`，加不加反引号都可以。其他以 `@` 开头的用户定义名称仍然无效。这个例外并不意味着 `@` 会成为 SQL 或配置文件 schema 中的通用标识符字符。
+
+为了向后兼容，Plain 模式加载配置时允许在表名、字段名和属性名的首字符之后使用早期版本曾接受的 `.` 和 `-`。请勿在新 schema 中使用这种兼容语法：SQL 无法始终如一地引用所有此类名称，SQL DDL 仍会拒绝任意标点。
+
+标识符必须是有效的 UTF-8。控制字符、Unicode 空白字符、双向控制字符以及默认忽略的不可见字符都会被拒绝。这包括不间断空格、零宽空格和零宽连接符。
+
+在 RT 模式和 Plain 模式下，表名编码为 UTF-8 后最多为 200 字节。每个 ASCII 字符占一个字节，而非 ASCII 字符占两个、三个或四个字节。因此，表名最多可包含 200 个 ASCII 字符；如果包含非 ASCII 字符，可用字符数会更少，具体取决于所用字符。`system.` 限定符之后的名称部分可以额外使用最多 48 字节，用于分片后缀和其他生成的后缀。该限定命名空间用于内部表，也可以在 SQL 中显式使用；普通的公开逻辑表名仍限制为 200 字节。这个限制在加载现有表定义时同样适用，因此升级前请先重命名任何更长的表。
+
+在 RT 模式下，精确的逻辑表名会存储在 Manticore 的元数据中，而表文件则使用长度受限、可移植的 ASCII 基名。这样可以让字节不同的名称在大小写不敏感或归一化不敏感的文件系统上共存，并避免 Windows 保留文件名。组件映射不会预先校验完整的存储路径；操作系统的路径长度限制仍然适用，后续的文件系统错误会报告失败路径和操作系统错误。
+
+通过 SQL 创建的表名、字段名和属性名会把 ASCII 大写字母转换为小写。非 ASCII 字符会保留原样。Plain 模式中的配置节名区分大小写，包括其中的 ASCII 字母。两种模式都不会应用 Unicode 大小写折叠或 Unicode 归一化，因此请始终使用完全一致的 Unicode 拼写。
 
 例如：
-* 有效的字段名：`title`、`product_id`、`user_name_2`
-* 无效的字段名：`2title`、`-price`、`user@name`
+* 有效的未加引号名称：`title`、`product_id`、`user_name_2`、`товары2026`、`商品表`、`📦метка`
+* 有效的带引号名称：`` `2026_архив` ``、`` `select` ``
+* 有效的 SQL 兼容列名：`@timestamp`、`@version`
+* 无效名称：未加反引号的 `2title`、`-price`、`user@name`、`user-name`、`@user_field`，以及包含零宽空格的 `bad​name`
+
+在 Plain 模式下，表名就是配置文件中的节名，并且在配置里不写反引号。不过在 SQL 中引用这些表时仍然可以使用反引号。例如，配置节可以命名为 `таблица2026`，而名为 `2026_архив` 的节在 SQL 中要写成 `` `2026_архив` ``。
+
+[按字段限定的全文检索操作符](../Searching/Full_text_matching/Operators.md) 也支持非 ASCII UTF-8 字段名。例如，`MATCH('@название клавиатура')` 会将搜索范围限制在 `название` 字段。这同样适用于存储为 percolate 规则的按字段限定查询。
 
 ### 全文字段
 
@@ -2927,6 +2945,106 @@ table products
 	stored_fields = title
 
 	rt_attr_float_vector = image_vector
+}
+```
+
+<!-- end -->
+
+## 浮点向量数组
+
+`float_vector_array` 属性为每个文档存储多个向量，而不是单个向量。其值写成向量数组，每个文档都有自己的向量数量：
+
+```
+[[0.1, 0.2, 0.3, 0.4], [0.5, 0.6, 0.7, 0.8]]
+```
+
+这适合那些不能简单归结为单个 embedding 的文档 - 例如被拆成多个片段的长文章、从多个角度拍摄的产品、按关键帧采样的视频。与其为每个片段单独存一行再在之后去重结果，不如把文档的所有向量都保存在文档本身上。
+
+当该属性为 [KNN](../Searching/KNN.md) 配置后，所有文档的所有向量会一起建立索引；如果其中 **任何** 一个向量与查询足够接近，就算该文档匹配。搜索语义请参见 [每个文档多个向量](../Searching/KNN.md#Multiple-vectors-per-document)。
+
+### 值语法
+
+- 值始终是一个向量数组：`[[1,2],[3,4]]`。像 `(1,2,3,4)` 这样的扁平列表会被拒绝，因为无法区分这是一个 4 维向量，还是两个 2 维向量。
+- `[]` 表示“没有向量”。这是一个合法的已存储值，也是省略该属性时的默认值。
+- 同一个值中的所有向量必须具有相同的维度。
+- 空的内层向量（`[[]]`）无法表示，因此会被拒绝。表示“无”请使用 `[]`。
+- 返回的值会保持与插入时相同的嵌套形式。
+
+### 一般限制
+
+- 目前仅支持实时表（不支持普通表）
+- 不支持在函数或表达式中使用
+- 不能用于常规过滤或排序
+- [自动 embedding](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29) 不适用于此类型：模型会为每个文档生成一个向量，因此 `MODEL_NAME` 会被拒绝。必须显式提供向量。
+- 与 [自动模式](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) 机制不兼容
+
+### 将浮点向量数组用于 KNN
+
+参数与 [`float_vector`](../Creating_a_table/Data_types.md#Float-vector) 所使用的相同：`KNN_TYPE`、`KNN_DIMS`、`HNSW_SIMILARITY`，以及可选的 `HNSW_M`、`HNSW_EF_CONSTRUCTION` 和 [量化](../Searching/KNN.md#Vector-quantization)，但有两个区别：
+
+- `KNN_DIMS` 是必需的，并且 **每一行** 中的 **每个** 向量都必须恰好包含这么多维。插入时，如果某一行的向量宽度不同，该行会被拒绝。
+- 不接受 `MODEL_NAME` 和 `FROM`。
+
+**你可以做的：**
+- 运行 KNN 搜索，让文档按其最近的向量进行匹配
+- 为每个文档存储不同数量的向量，包括一个都不存
+
+**你不能做的：**
+- 对该属性执行 `UPDATE`：请像对带 KNN 索引的 `float_vector` 一样，使用 `REPLACE`
+- 在常规过滤或排序中使用这些值
+
+值为 `[]` 的文档，或省略了该属性的文档，不会被 KNN 搜索返回，因为它并不接近任何内容。
+
+### 不使用 KNN 的浮点向量数组
+
+如果不配置 KNN，向量仍会被存储，但不可搜索，而且该列完全不需要任何选项。在这种模式下，每个值都能自我描述，因此不同的行可以保存不同宽度的向量：
+
+```sql
+CREATE TABLE products(title text, chunk_vectors float_vector_array);
+INSERT INTO products VALUES (1, 'a', [[1,2]]), (2, 'b', [[1,2,3],[4,5,6]]);
+```
+
+在这种模式下，`UPDATE` 可以正常工作，就像对不带 KNN 的 `float_vector` 一样，`[]` 会清空该值。
+
+<!-- example for creating float_vector_array -->
+
+创建一个带 KNN 索引的浮点向量数组、填充数据并进行搜索：
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+
+INSERT INTO articles VALUES
+  (1, 'first',  [[1,0,0,0],[0,1,0,0]]),
+  (2, 'second', [[0,0,1,0]]),
+  (3, 'no vectors yet', []);
+
+SELECT id, knn_dist() FROM articles WHERE knn(chunk_vectors, 5, (1,0,0,0));
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')"
+
+POST /insert
+{
+  "table": "articles",
+  "id": 1,
+  "doc": { "title": "first", "chunk_vectors": [[1,0,0,0],[0,1,0,0]] }
+}
+
+POST /search
+{
+  "table": "articles",
+  "knn": { "field": "chunk_vectors", "query_vector": [1,0,0,0], "k": 5 }
 }
 ```
 

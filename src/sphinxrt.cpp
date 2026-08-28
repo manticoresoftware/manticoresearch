@@ -12351,6 +12351,12 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 	for ( CSphVariant * v=hIndex("rt_field"); v; v=v->m_pNext )
 	{
 		CSphString sFieldName = v->cstr();
+		CSphString sNameError;
+		if ( !sphValidateIdentifier ( sFieldName.cstr(), IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION, 0, sNameError ) )
+		{
+			sError.SetSprintf ( "invalid field name '%s': %s", sFieldName.cstr(), sNameError.cstr() );
+			return false;
+		}
 		sFieldName.ToLower();
 		tSchema.AddField ( sFieldName.cstr() );
 		hFields.Add ( 1, sFieldName );
@@ -12397,6 +12403,12 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 			StrVec_t dNameParts;
 			sphSplit ( dNameParts, v->cstr(), ":");
 			CSphColumnInfo tCol ( dNameParts[0].cstr(), iTypes[iType]);
+			CSphString sNameError;
+			if ( !sphValidateIdentifier ( tCol.m_sName.cstr(), IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION, 0, sNameError ) )
+			{
+				sError.SetSprintf ( "invalid attribute name '%s': %s", tCol.m_sName.cstr(), sNameError.cstr() );
+				return false;
+			}
 			tCol.m_sName.ToLower();
 
 			// ignore doc id, it was added via create table to pass id attribute settings

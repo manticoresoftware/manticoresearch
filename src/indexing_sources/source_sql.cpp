@@ -551,6 +551,13 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 			tCol.m_eAttrType = SPH_ATTR_BIGINT;
 		}
 
+		CSphString sNameError;
+		if ( !sphValidateIdentifier ( tCol.m_sName.cstr(), IdentifierValidation_e::ALLOW_LEADING_DIGIT, 0, sNameError ) )
+		{
+			sError.SetSprintf ( "invalid column name '%s': %s", tCol.m_sName.cstr(), sNameError.cstr() );
+			return false;
+		}
+
 		ARRAY_FOREACH ( j, m_tParams.m_dFileFields )
 		{
 			if ( !strcasecmp ( tCol.m_sName.cstr(), m_tParams.m_dFileFields[j].cstr() ) )

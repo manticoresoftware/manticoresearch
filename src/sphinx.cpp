@@ -614,8 +614,7 @@ const char* CheckFmtMagic ( DWORD uHeader )
 #else
 			return "This instance is working on big-endian platform, but %s seems built on little-endian host.";
 #endif
-		else
-			return "%s is invalid header file (too old table version?)";
+		return "%s is invalid header file (too old table version?)";
 	}
 	return nullptr;
 }
@@ -12638,7 +12637,7 @@ size_t strnlen ( const char * s, size_t iMaxLen )
 
 int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i * pFilenameBuilder )
 {
-	DiskIndexChecker_c tIndexChecker { *this, tReporter };
+	DiskIndexChecker_c tIndexChecker { this, tReporter };
 
 	tIndexChecker.Setup ( m_iDocinfo, m_iDocinfoIndex, m_iMinMaxIndex, m_bCheckIdDups );
 

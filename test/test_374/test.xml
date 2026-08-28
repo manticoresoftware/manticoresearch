@@ -61,6 +61,8 @@ select count(*) from test where id>=-8512036305353430386 /*+ DocidIndex(id) */;
 select count(*) from test where id>-8512036305353430386 /*+ DocidIndex(id) */;
 select id from test where id in (-8512036305353430386) /*+ DocidIndex(id) */;
 select id from test where id in (-8512036305353430386,1,64) order by id asc /*+ DocidIndex(id) */;
+set global @negative_ids = (-8512036305353430386,1,64);
+select id from test where id in @negative_ids order by id asc /*+ DocidIndex(id) */;
 
 <!-- missed exclude filter for value at the lookup iterator -->
 select id from test where id &lt;&gt; 60 order by id desc limit 5 /*+ DocidIndex(id) */;

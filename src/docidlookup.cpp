@@ -177,22 +177,36 @@ bool CachedIterator_T<false>::ReturnRowIdChunk ( RowIdBlock_t & dRowIdBlock )
 	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 }
 
-struct CmpDocidUnsigned_fn
+// filter values are signed-sorted; unsigned order is the non-negative suffix followed by the negative prefix
+class DocidListReaderUnsigned_c
 {
-	static bool IsLess ( DocID_t a, DocID_t b )
+public:
+	explicit DocidListReaderUnsigned_c ( const VecTraits_T<DocID_t> & dValues )
+		: m_dValues ( dValues )
+		, m_iLeft ( dValues.GetLength() )
 	{
-		return uint64_t(a) < uint64_t(b);
+		if ( !dValues.IsEmpty() && dValues.Last()>=0 )
+			m_iIndex = int ( std::lower_bound ( dValues.Begin(), dValues.End(), DocID_t(0) ) - dValues.Begin() );
 	}
+
+	bool ReadDocID ( DocID_t & tDocID )
+	{
+		if ( !m_iLeft )
+			return false;
+
+		tDocID = m_dValues[m_iIndex++];
+		if ( m_iIndex==m_dValues.GetLength() )
+			m_iIndex = 0;
+
+		--m_iLeft;
+		return true;
+	}
+
+private:
+	VecTraits_T<DocID_t> m_dValues;
+	int m_iIndex {0};
+	int m_iLeft {0};
 };
-
-
-static CSphVector<DocID_t> CopyAndSortDocidsUnsigned ( const VecTraits_T<DocID_t> & tValues )
-{
-	CSphVector<DocID_t> dValues;
-	dValues.Append(tValues);
-	dValues.Sort ( CmpDocidUnsigned_fn() );
-	return dValues;
-}
 
 
 template <bool ROWID_LIMITS, bool BITMAP>
@@ -211,9 +225,8 @@ public:
 private:
 	RowIdBoundaries_t	m_tBoundaries;
 	int64_t				m_iProcessed {0};
-	CSphVector<DocID_t>	m_dValues;
 	LookupReaderIterator_c m_tLookupReader;
-	DocidListReader_c	m_tFilterReader;
+	DocidListReaderUnsigned_c m_tFilterReader;
 
 	bool				Fill();
 	FORCE_INLINE bool	FillIfFirstTime();
@@ -222,9 +235,8 @@ private:
 template <bool ROWID_LIMITS, bool BITMAP>
 RowidIterator_LookupValues_T<ROWID_LIMITS, BITMAP>::RowidIterator_LookupValues_T ( const VecTraits_T<DocID_t>& tValues, int64_t iRsetEstimate, DWORD uTotalDocs, const BYTE * pDocidLookup, DWORD uIndexVersion, const RowIdBoundaries_t * pBoundaries )
 	: BASE ( iRsetEstimate, uTotalDocs )
-	, m_dValues ( CopyAndSortDocidsUnsigned(tValues) )
 	, m_tLookupReader ( pDocidLookup, uIndexVersion )
-	, m_tFilterReader ( m_dValues )
+	, m_tFilterReader ( tValues )
 {
 	if ( pBoundaries )
 		m_tBoundaries = *pBoundaries;
@@ -263,7 +275,6 @@ bool RowidIterator_LookupValues_T<ROWID_LIMITS,BITMAP>::Fill()
 	{
 		if ( uint64_t(tFilterDocID) < uint64_t(tLookupDocID) )
 		{
-			m_tFilterReader.HintDocID(tLookupDocID);
 			bHaveFilterDocs = m_tFilterReader.ReadDocID ( tFilterDocID );
 		}
 		else if ( uint64_t(tFilterDocID) > uint64_t(tLookupDocID) )

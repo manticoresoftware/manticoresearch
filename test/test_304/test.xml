@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>bufer overflow processing long zones</name>
+<requires>
+	<force-rt/>
+</requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>
+create table t(f text) min_infix_len='2' html_strip='1' index_zones='a*';
+insert into t(f) values ('&lt;abcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmnopqr>t&lt;/abcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmnopqr>');
+show warnings;
+insert into t(f) values ('&lt;abcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmnopqrabcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmnopqrabcdefghijklmn>t&lt;/abcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmnopqrabcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmnopqrabcdefghijklmn>');
+show warnings;
+insert into t(f) values ('&lt;abcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmnopqrabcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmnopqrabcdefghijklmnopqrst>t&lt;/abcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmnopqrabcdefghijklmnopqrstuvwxyz01234567890abcdefghijklmnopqrabcdefghijklmnopqrst>');
+show warnings;
+select * from t;
+drop table t;
+</sphinxql>
+</queries>
+
+</test>

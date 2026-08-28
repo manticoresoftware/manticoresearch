@@ -17,7 +17,7 @@ searchd
 <sphinxql>
 CREATE TABLE rt_no_idf(title text, brand text) index_field_lengths='1' index_exact_words = '1' morphology = 'stem_ru,stem_en';
 CREATE TABLE rt_idf(title text, brand text) index_field_lengths='1' index_exact_words = '1' morphology = 'stem_ru,stem_en' global_idf = '<this_test/>/global.idf';
-    
+
 INSERT INTO rt_no_idf VALUES
 (1, 'Crossbody Bag with Tassel', 'Burberry'),
 (2, 'Some other bag', 'Gucci'),
@@ -33,12 +33,17 @@ INSERT INTO rt_idf VALUES
 SELECT id, weight() as score FROM rt_no_idf WHERE MATCH('burberry') LIMIT 0,200 OPTION ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'; show meta;
 SELECT id, weight() as score FROM rt_idf WHERE MATCH('burberry') LIMIT 0,200 OPTION global_idf=1, ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'; show meta;
 
+ALTER TABLE rt_idf global_idf = '<this_test/>/global2.idf';
+SELECT id, weight() as score FROM rt_idf WHERE MATCH('burberry') LIMIT 0,200 OPTION global_idf=1, ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized';
+
 FLUSH RAMCHUNK rt_no_idf;
 FLUSH RAMCHUNK rt_idf;
 
 SELECT id, weight() as score FROM rt_no_idf WHERE MATCH('burberry') LIMIT 0,200 OPTION ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'; show meta;
 SELECT id, weight() as score FROM rt_idf WHERE MATCH('burberry') LIMIT 0,200 OPTION global_idf=1, ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'; show meta;
 
+ALTER TABLE rt_idf global_idf = '<this_test/>/global.idf';
+SELECT id, weight() as score FROM rt_idf WHERE MATCH('burberry') LIMIT 0,200 OPTION global_idf=1, ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized';
 </sphinxql>
 
 <sphinxql system="restart-daemon"/>
@@ -47,11 +52,13 @@ SELECT id, weight() as score FROM rt_idf WHERE MATCH('burberry') LIMIT 0,200 OPT
 SELECT id, weight() as score FROM rt_no_idf WHERE MATCH('burberry') LIMIT 0,200 OPTION ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'; show meta;
 SELECT id, weight() as score FROM rt_idf WHERE MATCH('burberry') LIMIT 0,200 OPTION global_idf=1, ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'; show meta;
 
+ALTER TABLE rt_idf global_idf = '<this_test/>/global2.idf';
+SELECT id, weight() as score FROM rt_idf WHERE MATCH('burberry') LIMIT 0,200 OPTION global_idf=1, ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized';
+
 drop table rt_no_idf;
 drop table rt_idf;
 
 </sphinxql>
-
 </queries>
 
 </test>

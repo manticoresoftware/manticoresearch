@@ -1,0 +1,408 @@
+# Обновление схемы таблицы
+
+## Обновление схемы таблицы в режиме RT
+
+<!-- example ALTER -->
+
+```sql
+ALTER TABLE table ADD COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON [secondary_index='1']|STRING|TEXT [INDEXED [ATTRIBUTE]]|TIMESTAMP|FLOAT_VECTOR [KNN options]}] [engine='columnar']
+
+ALTER TABLE table DROP COLUMN column_name
+
+ALTER TABLE table MODIFY COLUMN column_name bigint
+```
+
+Эта функция поддерживает добавление только одного поля за раз для RT-таблиц или расширение столбца `int` до `bigint`. Поддерживаемые типы данных:
+* `int` - целочисленный атрибут
+* `timestamp` - атрибут временной метки
+* `bigint` - атрибут большого целого числа
+* `float` - атрибут с плавающей запятой
+* `bool` - булев атрибут
+* `multi` - многозначный целочисленный атрибут
+* `multi64` - многозначный атрибут bigint
+* `json` - атрибут json; используйте `secondary_index='1'` для создания вторичного индекса по JSON
+* `string` / `text attribute` / `string attribute` - строковый атрибут
+* `text` / `text indexed stored` / `string indexed stored` - полнотекстовое индексируемое поле с исходным значением, хранящимся в docstore
+* `text indexed` / `string indexed` - полнотекстовое индексируемое поле, только индексируемое (исходное значение не хранится в docstore)
+* `text indexed attribute` / `string indexed attribute` - полнотекстовое индексируемое поле + строковый атрибут (исходное значение не хранится в docstore)
+* `text stored` / `string stored` - значение будет храниться только в docstore, не полнотекстово индексироваться и не является строковым атрибутом
+* `float_vector` - векторный атрибут. Вы можете использовать те же опции KNN и авто-встраивания, что и в [`CREATE TABLE`](Creating_a_table/Data_types.md#Float-vector)
+* добавление `engine='columnar'` к любому атрибуту (кроме json) приведет к его хранению в [колоночном хранилище](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)
+
+#### Важные замечания:
+* ❗Рекомендуется **создать резервную копию файлов таблицы** перед выполнением `ALTER`, чтобы избежать повреждения данных в случае внезапного отключения питания или других подобных проблем.
+* Запросы к таблице невозможны, пока добавляется столбец.
+* Вновь созданные скалярные атрибуты устанавливаются в `0`.
+* Вновь добавленные столбцы `float_vector` без `MODEL_NAME` инициализируются нулевыми векторами.
+* Если вы добавляете столбец `float_vector` с `MODEL_NAME` и `FROM`, существующие строки автоматически встраиваются во время выполнения `ALTER TABLE ... ADD COLUMN`.
+* Когда указан `MODEL_NAME`, требуется `FROM`. Используйте `FROM=''` для встраивания из всех полей `text` и строковых атрибутов.
+* `ALTER` не будет работать для распределенных таблиц и таблиц без каких-либо атрибутов.
+* Нельзя удалить столбец `id`.
+* При удалении поля, которое одновременно является полнотекстовым полем и строковым атрибутом, первый `ALTER DROP` удаляет атрибут, второй — полнотекстовое поле.
+* Добавление/удаление полнотекстового поля поддерживается только в [режиме RT](Read_this_first.md#Real-time-mode-vs-plain-mode).
+
+<!-- request Example -->
+```sql
+
+mysql> desc rt;
++------------+-----------+
+| Field      | Type      |
++------------+-----------+
+| id         | bigint    |
+| text       | field     |
+| group_id   | uint      |
+| date_added | timestamp |
++------------+-----------+
+
+mysql> alter table rt add column test integer;
+
+mysql> desc rt;
++------------+-----------+
+| Field      | Type      |
++------------+-----------+
+| id         | bigint    |
+| text       | field     |
+| group_id   | uint      |
+| date_added | timestamp |
+| test       | uint      |
++------------+-----------+
+
+mysql> alter table rt drop column group_id;
+
+mysql> desc rt;
++------------+-----------+
+| Field      | Type      |
++------------+-----------+
+| id         | bigint    |
+| text       | field     |
+| date_added | timestamp |
+| test       | uint      |
++------------+-----------+
+
+mysql> alter table rt add column title text indexed;
+
+mysql> desc rt;
++------------+-----------+------------+
+| Field      | Type      | Properties |
++------------+-----------+------------+
+| id         | bigint    |            |
+| text       | text      | indexed    |
+| title      | text      | indexed    |
+| date_added | timestamp |            |
+| test       | uint      |            |
++------------+-----------+------------+
+
+mysql> alter table rt add column title text attribute;
+
+mysql> desc rt;
++------------+-----------+------------+
+| Field      | Type      | Properties |
++------------+-----------+------------+
+| id         | bigint    |            |
+| text       | text      | indexed    |
+| title      | text      | indexed    |
+| date_added | timestamp |            |
+| test       | uint      |            |
+| title      | string    |            |
++------------+-----------+------------+
+
+mysql> alter table rt drop column title;
+
+mysql> desc rt;
++------------+-----------+------------+
+| Field      | Type      | Properties |
++------------+-----------+------------+
+| id         | bigint    |            |
+| text       | text      | indexed    |
+| title      | text      | indexed    |
+| date_added | timestamp |            |
+| test       | uint      |            |
++------------+-----------+------------+
+mysql> alter table rt drop column title;
+
+mysql> desc rt;
++------------+-----------+------------+
+| Field      | Type      | Properties |
++------------+-----------+------------+
+| id         | bigint    |            |
+| text       | text      | indexed    |
+| date_added | timestamp |            |
+| test       | uint      |            |
++------------+-----------+------------+
+```
+
+<!-- end -->
+
+## Обновление FT-настроек таблицы в режиме RT
+
+<!-- example ALTER FT -->
+
+```sql
+ALTER TABLE table ft_setting='value'[, ft_setting2='value']
+```
+
+Вы можете использовать `ALTER` для изменения полнотекстовых настроек вашей таблицы в [режиме RT](Read_this_first.md#Real-time-mode-vs-plain-mode). Однако это влияет только на новые документы, а не на существующие.
+Пример:
+* создаем таблицу с полнотекстовым полем и `charset_table`, которая позволяет только 3 поисковых символа: `a`, `b` и `c`.
+* затем мы вставляем документ 'abcd' и находим его по запросу `abcd`, `d` просто игнорируется, так как его нет в массиве `charset_table`
+* затем мы понимаем, что хотим, чтобы `d` тоже был доступен для поиска, поэтому добавляем его с помощью `ALTER`
+* но тот же запрос `where match('abcd')` все равно говорит, что поиск был по `abc`, потому что существующий документ помнит предыдущее содержимое `charset_table`
+* затем мы добавляем еще один документ `abcd` и снова ищем по `abcd`
+* теперь он находит оба документа, и `show meta` говорит, что использовалось два ключевых слова: `abc` (для поиска старого документа) и `abcd` (для нового).
+
+<!-- request Example -->
+```sql
+mysql> create table rt(title text) charset_table='a,b,c';
+
+mysql> insert into rt(title) values('abcd');
+
+mysql> select * from rt where match('abcd');
++---------------------+-------+
+| id                  | title |
++---------------------+-------+
+| 1514630637682688054 | abcd  |
++---------------------+-------+
+
+mysql> show meta;
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| total         | 1     |
+| total_found   | 1     |
+| time          | 0.000 |
+| keyword[0]    | abc   |
+| docs[0]       | 1     |
+| hits[0]       | 1     |
++---------------+-------+
+
+mysql> alter table rt charset_table='a,b,c,d';
+mysql> select * from rt where match('abcd');
++---------------------+-------+
+| id                  | title |
++---------------------+-------+
+| 1514630637682688054 | abcd  |
++---------------------+-------+
+
+mysql> show meta
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| total         | 1     |
+| total_found   | 1     |
+| time          | 0.000 |
+| keyword[0]    | abc   |
+| docs[0]       | 1     |
+| hits[0]       | 1     |
++---------------+-------+
+
+mysql> insert into rt(title) values('abcd');
+mysql> select * from rt where match('abcd');
++---------------------+-------+
+| id                  | title |
++---------------------+-------+
+| 1514630637682688055 | abcd  |
+| 1514630637682688054 | abcd  |
++---------------------+-------+
+
+mysql> show meta;
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| total         | 2     |
+| total_found   | 2     |
+| time          | 0.000 |
+| keyword[0]    | abc   |
+| docs[0]       | 1     |
+| hits[0]       | 1     |
+| keyword[1]    | abcd  |
+| docs[1]       | 1     |
+| hits[1]       | 1     |
++---------------+-------+
+```
+
+<!-- end -->
+
+## Переименование реальной таблицы
+
+<!-- example Renaming RT tables -->
+
+Вы можете изменить имя реальной таблицы в режиме RT.
+```sql
+ALTER TABLE table_name RENAME new_table_name;
+```
+
+> ПРИМЕЧАНИЕ: Переименование реальной таблицы требует наличия [Manticore Buddy](Installation/Manticore_Buddy.md). Если это не работает, убедитесь, что Buddy установлен.
+
+<!-- request Example -->
+```sql
+ALTER TABLE table_name RENAME new_table_name;
+```
+
+<!-- response Example -->
+
+```sql
+Query OK, 0 rows affected (0.00 sec)
+```
+
+<!-- end -->
+
+## Обновление FT-настроек таблицы в обычном режиме
+
+<!-- example ALTER RECONFIGURE -->
+```sql
+ALTER TABLE table RECONFIGURE
+```
+
+`ALTER` также может перенастроить RT-таблицу в [обычном режиме](Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29), чтобы новые настройки токенизации, морфологии и другие настройки обработки текста из файла конфигурации вступили в силу для новых документов. Обратите внимание, что существующие документы останутся нетронутыми. Внутренне он принудительно сохраняет текущий RAM-чанк как новый дисковый чанк и корректирует заголовок таблицы, чтобы новые документы токенизировались с использованием обновленных полнотекстовых настроек.
+
+<!-- request Example -->
+```sql
+mysql> show table rt settings;
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| settings      |       |
++---------------+-------+
+1 row in set (0.00 sec)
+
+mysql> alter table rt reconfigure;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> show table rt settings;
++---------------+----------------------+
+| Variable_name | Value                |
++---------------+----------------------+
+| settings      | morphology = stem_en |
++---------------+----------------------+
+1 row in set (0.00 sec)
+```
+<!-- end -->
+
+## Перестроение вторичного индекса
+
+<!-- example ALTER REBUILD SECONDARY -->
+```sql
+ALTER TABLE table REBUILD SECONDARY
+```
+
+Вы также можете использовать `ALTER` для перестроения вторичных индексов в заданной таблице. Иногда вторичный индекс может быть отключен для всей таблицы или для одного или нескольких атрибутов внутри таблицы:
+* Когда атрибут обновляется, его вторичный индекс отключается.
+* Если Manticore загружает таблицу со старой версией вторичных индексов, которая больше не поддерживается, вторичные индексы будут отключены для всей таблицы.
+
+`ALTER TABLE table REBUILD SECONDARY` перестраивает вторичные индексы из данных атрибутов и снова включает их.
+
+Кроме того, старая версия вторичных индексов может поддерживаться, но будет лишена определенных функций. `REBUILD SECONDARY` можно использовать для обновления вторичных индексов.
+
+<!-- request Example -->
+```sql
+ALTER TABLE rt REBUILD SECONDARY;
+```
+
+<!-- response Example -->
+
+```sql
+Query OK, 0 rows affected (0.00 sec)
+```
+
+<!-- end -->
+
+
+## Перестроение KNN-индекса
+
+<!-- example ALTER REBUILD KNN -->
+```sql
+ALTER TABLE table REBUILD KNN
+```
+
+Команда перерабатывает все векторные данные в таблице и перестраивает KNN-индекс с нуля.
+
+<!-- request Example -->
+```sql
+ALTER TABLE rt REBUILD KNN;
+```
+
+<!-- response Example -->
+```sql
+Query OK, 0 rows affected (0.00 sec)
+```
+
+<!-- end -->
+
+## Перестроение встраиваний
+
+<!-- example ALTER REBUILD EMBEDDINGS -->
+```sql
+ALTER TABLE table REBUILD EMBEDDINGS column_name
+```
+
+Эта команда повторно генерирует встраивания для одного целевого столбца `float_vector`, у которого настроены `MODEL_NAME` и `FROM`.
+
+Используйте его, когда требуется перестроить векторы для существующей колонки с эмбеддингами, например, при необходимости повторной обработки строк после добавления колонки позже с помощью `ALTER TABLE ... ADD COLUMN`, или когда нужно принудительно перегенерировать все строки.
+
+Важное поведение:
+* Имя колонки обязательно. Команда перестраивает одну колонку с эмбеддингами за раз.
+* Она заново генерирует эмбеддинги для всех строк в этой колонке, а не только для строк с нулевыми векторами.
+* Она также перезаписывает строки, векторы которых были вставлены вручную, и строки, где использовалось `()` для пропуска генерации и сохранения нулевого вектора.
+* Целевая колонка должна быть индексированным `float_vector` с настроенной моделью эмбеддингов.
+* `FROM=''` разрешено и означает "использовать все поля `text` и атрибуты `string`".
+
+Manticore не сохраняет информацию о том, был ли текущий вектор в этой колонке сгенерирован автоматически, предоставлен явно пользователем или создан из `()`. Если вы запустите `REBUILD EMBEDDINGS`, сохранённые значения будут перегенерированы из настроенного источника `FROM` для каждой строки в колонке, включая строки, чьё текущее значение является полностью нулевым вектором.
+
+<!-- request Example -->
+```sql
+ALTER TABLE products ADD COLUMN embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title';
+ALTER TABLE products REBUILD EMBEDDINGS embedding;
+```
+
+<!-- response Example -->
+```sql
+Query OK, 0 rows affected (0.00 sec)
+```
+
+<!-- end -->
+
+## Обновление параметров API атрибутов (для генерации эмбеддингов) в режиме RT
+
+<!-- example api_key -->
+
+`ALTER` может использоваться для изменения параметров API, когда для авто-эмбеддингов используется удалённая модель:
+
+```sql
+ALTER TABLE table_name MODIFY COLUMN column_name API_KEY='key';
+ALTER TABLE table_name MODIFY COLUMN column_name API_URL='url';
+ALTER TABLE table_name MODIFY COLUMN column_name API_TIMEOUT='seconds';
+```
+
+<!-- request Example -->
+```sql
+ALTER TABLE rt MODIFY COLUMN vector API_KEY='new-key';
+ALTER TABLE rt MODIFY COLUMN vector API_URL='https://custom-api.example.com/v1/embeddings';
+ALTER TABLE rt MODIFY COLUMN vector API_TIMEOUT='30';
+```
+
+**Примечания:**
+- `API_KEY`: Новый API-ключ проверяется во время операции ALTER путём выполнения реального API-запроса.
+- `API_URL`: Установите в пустую строку (`''`), чтобы вернуться к конечной точке провайдера по умолчанию.
+- `API_TIMEOUT`: Установите в `'0'`, чтобы использовать таймаут по умолчанию (10 секунд). Должно быть неотрицательным целым числом.
+
+<!-- end -->
+
+## Изменение распределенной таблицы
+
+<!-- example local_dist -->
+
+Чтобы изменить список локальных или удаленных узлов в распределенной таблице, используйте тот же синтаксис, который вы использовали для [создания таблицы](Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#Creating-a-local-distributed-table). Просто замените `CREATE` на `ALTER` в команде и удалите `type='distributed'`:
+
+```sql
+ALTER TABLE `distr_table_name` [[local='local_table_name'], [agent='host:port:remote_table'] ... ]
+```
+
+> ПРИМЕЧАНИЕ: Изменение схемы распределенной таблицы онлайн требует наличия [Manticore Buddy](Installation/Manticore_Buddy.md). Если это не работает, убедитесь, что Buddy установлен.
+
+<!-- request Example -->
+```sql
+ALTER TABLE local_dist local='index1' local='index2' agent='127.0.0.1:9312:remote_table';
+```
+
+<!-- end -->
+<!-- proofread -->

@@ -119,6 +119,9 @@ insert into test_table values
 <query endpoint="json/search">{ "table": "test1", "highlight":{"fields":["content"],"html_strip_mode":"strip"},"query":{"bool":{"must":[{"query_string":"error"}]}} }</query>
 <query endpoint="json/search">{ "table": "test1", "highlight":{"fields":["content"],"html_strip_mode":"strip123"},"query":{"bool":{"must":[{"query_string":"error"}]}} }</query>
 
+<!-- crash at daemon with fullscan query with highlight -->
+<query endpoint="json/search">{"table":"test1","query":{"bool":{"must":[{"equals":{"gid":1}}]}},"highlight":{"fields":["title"]},"_source":["content"]}</query>
+
 </httpqueries>
 
 </test>

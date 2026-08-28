@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -16,6 +16,8 @@
 #include "searchdaemon.h"
 #include "searchdha.h"
 #include "searchdreplication.h"
+#include "replication/wsrep_cxx.h"
+#include "replication/cluster_binlog.h"
 
 
 // QueryStatElement_t uses default ctr with inline initializer;
@@ -71,7 +73,7 @@ class tstlogger
 protected:
 	void setup ()
 	{
-		g_pLogger() = TestLogger;
+		SetLogger ( &TestLogger );
 		sLogBuff[0] = '\0';
 	}
 
@@ -84,7 +86,7 @@ public:
 	{
 		m_eMaxLevel = SPH_LOG_DEBUG;
 		m_bOutToStderr = true;
-		g_pLogger () = TestLogger;
+		SetLogger ( &TestLogger );
 	}
 };
 
@@ -115,6 +117,25 @@ protected:
 void SetStderrLogger()
 {
 	tstlogger::SetStderrLogger ();
+}
+
+
+TEST ( replication, cluster_binlog_long_datadir_uses_short_hash_name )
+{
+#if _WIN32
+	GTEST_SKIP() << "SharedMemory_c is unsupported on Windows";
+#else
+	const CSphString sDataDir { "/tmp/123456789012345678901234567" };
+	ReplicationBinlogStart ( sDataDir, false );
+	AT_SCOPE_EXIT ( [] { ReplicationBinlogStop(); } );
+
+	ClusterBinlogData_c tCluster;
+	tCluster.m_sName = "long_path_cluster";
+	tCluster.m_tGtid.m_iSeqNo = 1;
+	memset ( tCluster.m_tGtid.m_tUuid.data(), 0x11, tCluster.m_tGtid.m_tUuid.size() );
+
+	EXPECT_NO_FATAL_FAILURE ( RplBinlog()->OnClusterSynced ( tCluster ) );
+#endif
 }
 
 // check how ParseAddressPort holds different cases
@@ -824,4 +845,48 @@ TEST_F ( DeathLogger_c, ParseListener_wrong_port )
 		ParseListener ( sCase.sSpec, &sFatal );
 		EXPECT_STREQ ( "port 65536 is out of range", sFatal.cstr() );
 	}
+}
+
+TEST ( PersistentConnectionsPool, functionality )
+{
+	PersistentConnectionsPool_c dPool;
+	dPool.ReInit ( 10 );
+	int iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	dPool.ReturnConnection(13);
+	dPool.ReturnConnection(15);
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, 13 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, 15 );
+	dPool.ReturnConnection(17);
+	dPool.ReturnConnection(16);
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, 17 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, 16 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+
+	// limit (10 buckets) exhaused
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -2 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -2 );
 }

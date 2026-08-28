@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -296,7 +296,7 @@ ISphHits * CSphSource::IterateHits ( CSphString & sError )
 
 	m_tHits.Resize ( 0 );
 
-	BuildHits ( sError, false );
+	BuildHits ( sError );
 
 	return &m_tHits;
 }
@@ -824,7 +824,7 @@ static void ProcessCollectedHits ( VecTraits_T<CSphWordHit> & dHits, int iHitsBe
 
 }
 
-void CSphSource::BuildHits ( CSphString & sError, bool bSkipEndMarker )
+void CSphSource::BuildHits ( CSphString & sError )
 {
 	RowID_t tRowID = m_tDocInfo.m_tRowID;
 
@@ -897,7 +897,7 @@ void CSphSource::BuildHits ( CSphString & sError, bool bSkipEndMarker )
 			else
 				BuildRegularHits ( tRowID, tField.m_bPayload, iBlendedHitsStart );
 
-			ProcessCollectedHits ( m_tHits, iHitsBegin, ( !bSkipEndMarker && !m_tState.m_bProcessingHits && m_tHits.GetLength() ), iBlendedHitsStart, !m_pDict->GetSettings().m_sStopwords.IsEmpty(), m_pFieldLengthAttrs );
+			ProcessCollectedHits ( m_tHits, iHitsBegin, ( !m_tState.m_bProcessingHits && m_tHits.GetLength() ), iBlendedHitsStart, !m_pDict->GetSettings().m_sStopwords.IsEmpty(), m_pFieldLengthAttrs );
 		}
 
 		if ( m_tState.m_bProcessingHits )

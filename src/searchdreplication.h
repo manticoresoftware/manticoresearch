@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -20,6 +20,9 @@
 
 // return path to given cluster, or empty and error
 std::optional<CSphString> GetClusterPath ( const CSphString& sCluster );
+
+class SstProgress_i;
+CSphRefcountedPtr<SstProgress_i> GetClusterProgress ( const CSphString & sCluster );
 
 // collect all available into an array
 CSphVector<ClusterDesc_t> ReplicationCollectClusters ();
@@ -53,12 +56,13 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 
 // cluster deletes
 bool GloballyDeleteCluster ( const CSphString & sCluster, CSphString & sError );
+bool ClusterExit ( const CSphString & sCluster, CSphString & sError, CSphString & sWarning );
 
 // Return actual nodes list at cluster
 StrVec_t ClusterGetAllNodes ( const CSphString& sCluster );
 
 // cluster ALTER statement
-bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool bAdd, CSphString & sError );
+bool ClusterAlter ( const CSphString & sCluster, StrVec_t& dIndexes, bool bAdd, CSphString & sError );
 
 // cluster ALTER statement that updates nodes option from view nodes at all nodes at cluster
 bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, CSphString & sError );
@@ -76,8 +80,12 @@ bool AssignClusterToIndex ( const CSphString & sIndex, const CSphString & sClust
 bool AssignClusterToIndexes ( const VecTraits_T<CSphString> & dIndexes, const CSphString & sCluster );
 
 bool SetIndexesClusterTOI ( const ReplicationCommand_t * pCmd );
+int64_t ClusterGetRemoteEpoch ( const CSphString & sCluster );
 
 CSphString WaitClusterReady ( const CSphString& sCluster, int64_t iTimeoutS );
 std::pair<int,CSphString> WaitClusterCommit ( const CSphString& sCluster, int iTxn, int64_t iTimeoutS );
+
+void ReplicationBinlogStart ( const CSphString & sDataDir, bool bDisabled );
+void ReplicationBinlogStop();
 
 #endif // _searchdreplication_

@@ -1,3 +1,49 @@
+; ========================================
+; Manticore Search Installer
+; ========================================
+; 
+; This installer supports both GUI and command-line installation modes.
+;
+; COMMAND-LINE USAGE:
+; 
+; Silent installation (no GUI):
+;   manticore_installer.exe /S
+;
+; Custom installation directory:
+;   manticore_installer.exe /S /D=C:\MyInstallDir
+;
+; Component selection:
+;   manticore_installer.exe /S /COMPONENTS=core,executor
+;   Available components: core, executor, columnar
+;
+; Exclude specific components:
+;   manticore_installer.exe /S /NOEXECUTOR /NOCOLUMNAR
+;
+; Quiet mode (suppress error dialogs, use exit codes instead):
+;   manticore_installer.exe /QUIET
+;
+; EXIT CODES:
+;   0 = Success
+;   1 = Download error
+;   2 = Unzip error  
+;   3 = File read error
+;   4 = Config creation error
+;   5 = Docker not available
+;   6 = Docker pull failed
+;   7-9 = Executor file errors
+;
+; ========================================
+
+; Include necessary headers for parameter parsing and logic
+!include "MUI2.nsh"
+!include "LogicLib.nsh"
+!include "Sections.nsh"
+!include "FileFunc.nsh"
+
+; Insert function declarations
+!insertmacro GetParameters
+!insertmacro GetOptions
+
 ; The name of the installer
 Name "Manticore Search"
 
@@ -5,7 +51,7 @@ Name "Manticore Search"
 OutFile "manticore_installer.exe"
 
 ; Request application privileges for Windows Vista and higher
-;RequestExecutionLevel admin
+RequestExecutionLevel admin
 
 ; Build Unicode installer
 Unicode True
@@ -19,14 +65,146 @@ InstallDirRegKey HKLM "SOFTWARE\Manticore Software LTD" "manticore"
 
 ;--------------------------------
 
-; Pages
+; Command-line parameters
+; /S or /SILENT = silent installation
+; /D=<dir> = installation directory
+; /COMPONENTS=<components> = comma-separated list of components to install
+; /NOCORE = skip core installation (normally required)
+; /NOEXECUTOR = skip executor installation
+; /NOCOLUMNAR = skip columnar library installation
 
-Page components
-Page directory
-Page instfiles
+;--------------------------------
 
-UninstPage uninstConfirm
-UninstPage instfiles
+; Initialize command-line parameter variables
+Var COMPONENT_CORE
+Var COMPONENT_EXECUTOR  
+Var COMPONENT_COLUMNAR
+Var INSTALL_QUIET
+
+
+
+Function .onInit
+    ; Initialize component variables (1 = install, 0 = skip)
+    StrCpy $COMPONENT_CORE "1"
+    StrCpy $COMPONENT_EXECUTOR "1"
+    StrCpy $COMPONENT_COLUMNAR "1"
+    StrCpy $INSTALL_QUIET "0"
+
+    ; Parse command line parameters
+    ${GetParameters} $R0
+    
+    ; Check for component exclusion flags
+    ClearErrors
+    ${GetOptions} $R0 "/NOCORE" $R1
+    IfErrors +2 0
+    StrCpy $COMPONENT_CORE "0"
+    
+    ClearErrors
+    ${GetOptions} $R0 "/NOEXECUTOR" $R1
+    IfErrors +2 0
+    StrCpy $COMPONENT_EXECUTOR "0"
+    
+    ClearErrors
+    ${GetOptions} $R0 "/NOCOLUMNAR" $R1
+    IfErrors +2 0
+    StrCpy $COMPONENT_COLUMNAR "0"
+    
+    ClearErrors
+    ${GetOptions} $R0 "/QUIET" $R1
+    IfErrors +2 0
+    StrCpy $INSTALL_QUIET "1"
+
+    ; Parse components parameter
+    ClearErrors
+    ${GetOptions} $R0 "/COMPONENTS=" $R1
+    IfErrors skip_components
+        ; Reset all components to 0 first when specific components are listed
+        StrCpy $COMPONENT_CORE "0"
+        StrCpy $COMPONENT_EXECUTOR "0"
+        StrCpy $COMPONENT_COLUMNAR "0"
+        
+        ; Check which components are specified
+        Push $R1
+        Push "core"
+        Call StrStr
+        Pop $R2
+        StrCmp $R2 "" +2
+        StrCpy $COMPONENT_CORE "1"
+        
+        Push $R1
+        Push "executor" 
+        Call StrStr
+        Pop $R2
+        StrCmp $R2 "" +2
+        StrCpy $COMPONENT_EXECUTOR "1"
+        
+        Push $R1
+        Push "columnar"
+        Call StrStr
+        Pop $R2
+        StrCmp $R2 "" +2
+        StrCpy $COMPONENT_COLUMNAR "1"
+        
+    skip_components:
+
+    ; Check if running in silent mode and set quiet flag
+    IfSilent 0 +2
+    StrCpy $INSTALL_QUIET "1"
+FunctionEnd
+
+; String search function
+Function StrStr
+    Exch $R1 ; st=haystack,old$R1, $R1=needle
+    Exch    ; st=old$R1,haystack
+    Exch $R2 ; st=old$R1,old$R2, $R2=haystack
+    Push $R3
+    Push $R4
+    Push $R5
+    StrLen $R3 $R1
+    StrCpy $R4 0
+    ; $R1=needle
+    ; $R2=haystack
+    ; $R3=len(needle)
+    ; $R4=cnt
+    ; $R5=tmp
+    loop:
+        StrCpy $R5 $R2 $R3 $R4
+        StrCmp $R5 $R1 done
+        StrCmp $R5 "" done
+        IntOp $R4 $R4 + 1
+        Goto loop
+    done:
+        StrCpy $R1 $R2 "" $R4
+        Pop $R5
+        Pop $R4
+        Pop $R3
+        Pop $R2
+        Exch $R1
+FunctionEnd
+
+; Pages - skip in silent mode
+!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipComponentsPage  
+!insertmacro MUI_PAGE_COMPONENTS
+
+!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipDirectoryPage
+!insertmacro MUI_PAGE_DIRECTORY
+
+!insertmacro MUI_PAGE_INSTFILES
+
+!insertmacro MUI_UNPAGE_CONFIRM
+!insertmacro MUI_UNPAGE_INSTFILES
+
+!insertmacro MUI_LANGUAGE "English"
+
+Function SkipComponentsPage
+    IfSilent 0 +2
+    Abort
+FunctionEnd
+
+Function SkipDirectoryPage
+    IfSilent 0 +2
+    Abort
+FunctionEnd
 
 ;--------------------------------
 
@@ -43,6 +221,12 @@ Function unpackInstall
 	StrCmp $0 success success1
 	SetDetailsView show
 	DetailPrint "Error! Unable to download $R1!"
+	; Show error message only if not in quiet mode
+	StrCmp $INSTALL_QUIET "1" +3
+	MessageBox MB_OK "Error! Unable to download $R1!"
+	Abort
+	; In quiet mode, set error level and exit
+	SetErrorLevel 1
 	Abort
 
 success1:
@@ -51,13 +235,25 @@ success1:
 	Pop $0
 	StrCmp $0 success success2
 	DetailPrint "Error! Unable to unzip $R1!"
+	; Show error message only if not in quiet mode
+	StrCmp $INSTALL_QUIET "1" +3
+	MessageBox MB_OK "Error! Unable to unzip $R1!"
+	Abort
+	; In quiet mode, set error level and exit
+	SetErrorLevel 2
+	Abort
 
 success2:
 	Delete $INSTDIR\$R1
 	Goto Ok
 
 Fail1:
+	; Show error message only if not in quiet mode
+	StrCmp $INSTALL_QUIET "1" +3
 	MessageBox MB_OK "Error! Unable to read $R0!"
+	Abort
+	; In quiet mode, set error level and exit
+	SetErrorLevel 3
 	Abort
 
 Ok:
@@ -77,17 +273,26 @@ Function createConfig
 	FileWrite $0 "    data_dir = $INSTDIR/var/data$\n"
 	FileWrite $0 "    query_log_format = sphinxql$\n"
 	FileWrite $0 "}$\n"
+	FileClose $0
 	IfErrors Fail1
 	Goto Ok
 
 Fail1:
+	; Show error message only if not in quiet mode
+	StrCmp $INSTALL_QUIET "1" +3
 	MessageBox MB_OK "Error! Unable to write to $R0!"
+	Abort
+	; In quiet mode, set error level and exit
+	SetErrorLevel 4
 	Abort
 
 Ok:
 FunctionEnd
 
-Section "Manticore Search"
+Section "Manticore Search Core"
+	; Skip this section if COMPONENT_CORE is 0
+	StrCmp $COMPONENT_CORE "0" skip_core
+	
 	SectionIn RO
 	SetOutPath $INSTDIR
 
@@ -118,15 +323,26 @@ Section "Manticore Search"
 	WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Manticore" "NoRepair" 1
 
 	WriteUninstaller "$INSTDIR\uninstall.exe"
+	
+	skip_core:
 SectionEnd
 
 Section "Manticore Executor"
+	; Skip this section if COMPONENT_EXECUTOR is 0
+	StrCmp $COMPONENT_EXECUTOR "0" skip_executor
+	
 	File "executor_src.txt"
 	; Check if Docker is installed and working
 	nsExec::ExecToStack 'docker --version'
 	Pop $0  ; Pop the exit code from the stack
 	StrCmp $0 0 docker_installed  ; Compare the exit code to 0 (success)
+	
+	; Show error message only if not in quiet mode
+	StrCmp $INSTALL_QUIET "1" +3
 	MessageBox MB_OK "Docker is not installed or not working correctly. Please ensure Docker is installed and try again."
+	Abort
+	; In quiet mode, set error level and exit
+	SetErrorLevel 5
 	Abort
 
 	docker_installed:
@@ -152,35 +368,62 @@ Section "Manticore Executor"
 	Pop $0  ; Pop the exit code from the stack
 	StrCmp $0 0 docker_pull_succeed
 
+	; Show error message only if not in quiet mode
+	StrCmp $INSTALL_QUIET "1" +3
 	MessageBox MB_OK "Failed to pull Docker image from: $R0"
+	Abort
+	; In quiet mode, set error level and exit
+	SetErrorLevel 6
 	Abort
 
 	; Error handling labels
 	file_open_failed:
+	; Show error message only if not in quiet mode
+	StrCmp $INSTALL_QUIET "1" +3
     MessageBox MB_ICONEXCLAMATION "Failed to open executor_src.txt."
     Abort
+	; In quiet mode, set error level and exit
+	SetErrorLevel 7
+	Abort
 
 	file_read_failed:
+	; Show error message only if not in quiet mode
+	StrCmp $INSTALL_QUIET "1" +3
     MessageBox MB_ICONEXCLAMATION "Failed to read from executor_src.txt."
     Abort
+	; In quiet mode, set error level and exit
+	SetErrorLevel 8
+	Abort
 
 	read_no_data:
+	; Show error message only if not in quiet mode
+	StrCmp $INSTALL_QUIET "1" +3
     MessageBox MB_ICONEXCLAMATION "No data read from executor_src.txt."
     Abort
+	; In quiet mode, set error level and exit
+	SetErrorLevel 9
+	Abort
 
-  SetDetailsView show
+	SetDetailsView show
 	docker_pull_succeed:
 		File "buddy_src.txt"
 		Push "buddy.zip"
 		Push "buddy_src.txt"
 		Call unpackInstall
+		
+	skip_executor:
 SectionEnd
 
-Section "Manticore Columnar Library"
+Section "Manticore Columnar Library"  
+	; Skip this section if COMPONENT_COLUMNAR is 0
+	StrCmp $COMPONENT_COLUMNAR "0" skip_columnar
+	
 	File "mcl_src.txt"
 	Push "mcl.zip"
 	Push "mcl_src.txt"
 	Call unpackInstall
+	
+	skip_columnar:
 SectionEnd
 
 ;--------------------------------

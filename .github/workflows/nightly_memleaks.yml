@@ -1,10 +1,12 @@
-name: Nightly memleak tests
-run-name: 🌙 Nightly memleak tests ${{ github.sha }}
+name: Nightly valgrind checks
+run-name: 🌙 Nightly valgrind checks ${{ github.sha }}
 
 on:
   schedule:
     - cron: '00 20 * * *'
   push:
+    branches:
+      - '**'
     paths:
       - '.github/workflows/nightly_memleaks.yml'    
       

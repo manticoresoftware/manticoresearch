@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -171,7 +171,7 @@ private:
 			m_dWorkExternal.Add ( (ISphNetAction*) pWork );
 		});
 
-		m_dWorkExternal.Uniq();
+		m_dWorkExternal.Uniq(sph::unstable);
 		for ( auto* pWork : m_dWorkExternal )
 		{
 			// deal with closed sockets which lives exclusively in m_pPoll (and so, would be removed immediately on RemoveEvent() )

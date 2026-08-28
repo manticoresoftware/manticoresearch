@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -40,6 +40,7 @@ FORCE_INLINE void CalcContextItem ( CSphMatch & tMatch, const ContextCalcItem_t 
 		break;
 
 	case SPH_ATTR_STRINGPTR:
+	case SPH_ATTR_TDIGEST_PTR:
 		tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t)tCalc.m_pExpr->StringEvalPacked ( tMatch ) );
 		break;
 
@@ -85,7 +86,10 @@ FORCE_INLINE void FreeDataPtrAttrs ( CSphMatch & tMatch, const CSphVector<Contex
 		// delete[] pData;
 		if ( pData )
 		{
-			sphDeallocatePacked ( pData );
+			if ( tItem.m_eType==SPH_ATTR_TDIGEST_PTR )
+				sphDeallocatePackedTdigest ( pData );
+			else
+				sphDeallocatePacked ( pData );
 			tMatch.SetAttr ( tItem.m_tLoc, 0 );
 		}
 	}

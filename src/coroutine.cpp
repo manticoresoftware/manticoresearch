@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -33,7 +33,7 @@ bool StackMockingAllowed()
 		return false;
 	}
 #endif
-	return !val_from_env ( "NO_STACK_CALCULATION", false );
+	return !env_exists ( "NO_STACK_CALCULATION" );
 }
 
 
@@ -102,6 +102,11 @@ public:
 	bool IsFinished () const
 	{
 		return m_eState==State_e::Finished;
+	}
+
+	bool IsMocked () const noexcept
+	{
+		return m_tStack.second==StackFlavour_E::mocked_prealloc;
 	}
 
 	// yield to external context
@@ -354,7 +359,7 @@ public:
 		( new Worker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack ) )->ScheduleContinuation ();
 	}
 
-	static void MockRun ( Handler fnHandler, VecTraits_T<BYTE> dStack )
+	ATTRIBUTE_NO_SANITIZE_ADDRESS static void MockRun ( Handler fnHandler, VecTraits_T<BYTE> dStack )
 	{
 		Worker_c tAction ( std::move ( fnHandler ), dStack );
 		auto pOldStack = Threads::TopOfStack ();
@@ -449,6 +454,11 @@ public:
 	int GetStackSize () const noexcept
 	{
 		return m_tCoroutine.GetStackSize ();
+	}
+
+	bool IsMocked () const noexcept
+	{
+		return m_tCoroutine.IsMocked ();
 	}
 
 	inline Scheduler_i * CurrentScheduler() const noexcept
@@ -630,12 +640,6 @@ int NumOfRestarts() noexcept
 
 } // namespace Coro
 
-Resumer_fn MakeCoroExecutor ( Handler fnHandler )
-{
-	auto* pWorker = Coro::Worker ()->MakeWorker ( std::move ( fnHandler ) );
-	return [pWorker] () -> bool { return pWorker->Resume(); };
-}
-
 void CallPlainCoroutine ( Handler fnHandler, Scheduler_i* pScheduler )
 {
 	if ( !pScheduler )
@@ -646,7 +650,12 @@ void CallPlainCoroutine ( Handler fnHandler, Scheduler_i* pScheduler )
 	tEvent.WaitEvent ();
 }
 
-void MockCallCoroutine ( VecTraits_T<BYTE> dStack, Handler fnHandler )
+void StartCall ( Handler fnHandler, Waiter_t tWait, Scheduler_i* pScheduler )
+{
+	Coro::Worker_c::StartCall ( std::move ( fnHandler ), pScheduler, std::move(tWait) );
+}
+
+ATTRIBUTE_NO_SANITIZE_ADDRESS void MockCallCoroutine ( VecTraits_T<BYTE> dStack, Handler fnHandler )
 {
 	Coro::Worker_c::MockRun ( std::move ( fnHandler ), dStack );
 }
@@ -775,7 +784,15 @@ int MyStackSize()
 	return Threads::STACK_SIZE;
 }
 
-int64_t GetStackUsed()
+bool IsIMocked ()
+{
+	auto pWorker = Coro::Worker_c::CurrentWorker();
+	if ( pWorker )
+		return pWorker->IsMocked();
+	return false;
+}
+
+int64_t ATTRIBUTE_NO_SANITIZE_ADDRESS GetStackUsed ()
 {
 	BYTE cStack;
 	auto* pStackTop = (const BYTE*)MyStack();
@@ -891,15 +908,15 @@ Event_c::~Event_c ()
 // else atomically set flag 'signaled'
 void Event_c::SetEvent()
 {
-	BYTE uState = m_uState.load ( std::memory_order_relaxed );
+	BYTE uState = m_uState.load ( std::memory_order_acquire );
 	do
 	{
 		if ( uState & Waited_e )
 		{
-			m_uState.store ( Signaled_e ); // memory_order_sec_cst - to ensure that next call will not resume again
+			m_uState.store ( Signaled_e, std::memory_order_release );
 			return fnResume ( m_pCtx );
 		}
-	} while ( !m_uState.compare_exchange_weak ( uState, uState | Signaled_e, std::memory_order_relaxed ) );
+	} while ( !m_uState.compare_exchange_weak ( uState, uState | Signaled_e, std::memory_order_release, std::memory_order_acquire ) );
 }
 
 // if 'signaled' state detected, clean all flags and return.
@@ -907,22 +924,22 @@ void Event_c::SetEvent()
 // on resume clean all flags.
 void Event_c::WaitEvent()
 {
-	if ( !( m_uState.load ( std::memory_order_relaxed ) & Signaled_e ) )
+	if ( !( m_uState.load ( std::memory_order_acquire ) & Signaled_e ) )
 	{
 		if ( m_pCtx != Worker() )
 			m_pCtx = Worker();
 		YieldWith ( [this] {
-			BYTE uState = m_uState.load ( std::memory_order_relaxed );
+			BYTE uState = m_uState.load ( std::memory_order_acquire );
 			do
 			{
 				if ( uState & Signaled_e )
 					return fnResume ( m_pCtx );
-			} while ( !m_uState.compare_exchange_weak ( uState, uState | Waited_e, std::memory_order_relaxed ) );
+			} while ( !m_uState.compare_exchange_weak ( uState, uState | Waited_e, std::memory_order_acq_rel, std::memory_order_acquire ) );
 		} );
 	}
 
-	m_uState.store ( 0, std::memory_order_relaxed );
-	std::atomic_thread_fence ( std::memory_order_release );
+	std::atomic_thread_fence ( std::memory_order_acquire );
+	m_uState.store ( 0, std::memory_order_release );
 }
 
 
@@ -1114,6 +1131,61 @@ bool RWLock_c::TestNextWlock () const noexcept
 	return !m_tWaitWQueue.Empty ();
 }
 
+void ReadTableLock_c::WaitRead() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+	++m_uReads;
+	while ( m_uWrites )
+		m_tWaitRQueue.SuspendAndWait ( tLock, Worker() );
+}
+
+bool ReadTableLock_c::TryWrite() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+	if ( m_uReads )
+		return false;
+	++m_uWrites;
+	return true;
+}
+
+void ReadTableLock_c::FinishWrite() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+	if ( !--m_uWrites )
+		m_tWaitRQueue.NotifyAll();
+}
+
+bool ReadTableLock_c::UnlockRead() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+
+	if ( !m_uReads )
+		return false;
+
+	--m_uReads;
+	return true;
+}
+
+[[nodiscard]] DWORD ReadTableLock_c::GetReads() const noexcept
+{
+	return m_uReads;
+}
+
+ScopedWriteTable_c::ScopedWriteTable_c ( ReadTableLock_c& tTableLock )
+	: m_tTableLock { tTableLock }
+	, m_bCanWrite { tTableLock.TryWrite() }
+{}
+
+ScopedWriteTable_c::~ScopedWriteTable_c()
+{
+	if (m_bCanWrite)
+		m_tTableLock.FinishWrite();
+}
+
+bool ScopedWriteTable_c::CanWrite() const noexcept
+{
+	return m_bCanWrite;
+}
 
 } // namespace Coro
 } // namespace Threads

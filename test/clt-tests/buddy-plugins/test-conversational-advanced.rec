@@ -1,0 +1,219 @@
+––– comment –––
+This test verifies advanced ConversationalSearch plugin features:
+- Multiple CHAT models with different configurations
+- Multiple content fields handling
+- Conversation tracking across multiple queries
+- Complex document structures with multiple text fields
+––– input –––
+export SEARCHD_FLAGS="--iostats --cpustats"
+––– output –––
+––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Install jq for JSON parsing
+––– input –––
+apt-get install jq -y > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– comment –––
+Clean up any existing data
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS knowledge_base;"
+––– output –––
+––– comment –––
+Create a complex table with multiple text fields and auto-embeddings
+––– input –––
+mysql -h0 -P9306 << EOF
+CREATE TABLE knowledge_base (
+    id BIGINT,
+    title TEXT,
+    summary TEXT,
+    content TEXT,
+    category TEXT,
+    tags TEXT,
+    embedding_vector FLOAT_VECTOR
+    knn_type='hnsw'
+    hnsw_similarity='cosine'
+    model_name='sentence-transformers/all-MiniLM-L6-v2'
+    from='title,content'
+    api_key='\${OPENAI_API_KEY}'
+) TYPE='rt';
+EOF
+––– output –––
+––– comment –––
+Insert test documents with rich content
+––– input –––
+mysql -h0 -P9306 << 'EOF'
+INSERT INTO knowledge_base (id, title, summary, content, category, tags)
+VALUES
+(1, 'Getting Started with Manticore', 'Quick start guide', 'Install Manticore Search and configure your first index', 'Tutorial', 'installation,quickstart'),
+(2, 'Vector Search Explained', 'Understanding vectors', 'Vector search uses embeddings to find semantically similar documents', 'Concepts', 'vectors,knn,similarity'),
+(3, 'Full-Text Search Guide', 'Text search basics', 'Use MATCH() operator for full-text search with ranking', 'Tutorial', 'fulltext,match,ranking'),
+(4, 'RAG Architecture', 'RAG pattern overview', 'Retrieval-Augmented Generation combines search with LLM for intelligent responses', 'Advanced', 'rag,llm,ai'),
+(5, 'Clustering Setup', 'Distributed search', 'Configure replication and sharding for high availability', 'Advanced', 'cluster,replication,sharding');
+EOF
+––– output –––
+––– comment –––
+Verify all documents are inserted
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM knowledge_base;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        5 |
++----------+
+––– comment –––
+Create multiple CHAT models with different configurations
+––– input –––
+mysql -h0 -P9306 -e "CREATE CHAT MODEL fast_assistant (model='openai:gpt-3.5-turbo', max_document_length=0, retrieval_limit=3);"
+––– output –––
++--------------------------------------+
+| uuid                                 |
++--------------------------------------+
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
++--------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "CREATE CHAT MODEL detailed_assistant (model='openai:gpt-4o', max_document_length=0, retrieval_limit=5);"
+––– output –––
++--------------------------------------+
+| uuid                                 |
++--------------------------------------+
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
++--------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "CREATE CHAT MODEL creative_assistant (model='openai:gpt-4o-mini', max_document_length=2000, retrieval_limit=4);"
+––– output –––
++--------------------------------------+
+| uuid                                 |
++--------------------------------------+
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
++--------------------------------------+
+––– comment –––
+Verify all models are created (check count, order may vary)
+––– input –––
+mysql -h0 -P9306 -e "SHOW CHAT MODELS;" | grep -c "openai"
+––– output –––
+3
+––– comment –––
+Test with single content field
+––– input –––
+mysql -h0 -P9306 -e "CALL CHAT('Tell me about vector search', 'knowledge_base', 'fast_assistant')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }' | tee /tmp/output_1.txt
+––– output –––
+*************************** 1. row ***************************
+conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
+       user_query: Tell me about vector search
+     search_query: #!/.*[Vv]ector.*[Ss]earch.*/!#
+         response: #!/.*[Vv]ector.*[Ss]earch.*/!#
+          sources: #!/.*/!#
+––– input –––
+grep 'sources:' /tmp/output_1.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([2,3,4])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+––– output –––
+OK
+––– comment –––
+Test with two content fields (title, content)
+––– input –––
+mysql -h0 -P9306 -e "CALL CHAT('Explain vector search', 'knowledge_base', 'detailed_assistant')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }' | tee /tmp/output_2.txt
+––– output –––
+*************************** 1. row ***************************
+conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
+       user_query: Explain vector search
+     search_query: #!/.*[Vv]ector.*[Ss]earch.*/!#
+         response: #!/.*[Vv]ector.*[Ss]earch.*[Ee]mbedding.*/!#
+          sources: #!/.*/!#
+––– input –––
+grep 'sources:' /tmp/output_2.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([2,3,4])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+––– output –––
+OK
+––– comment –––
+Test with multiple content fields (title, summary, content)
+––– input –––
+mysql -h0 -P9306 -e "CALL CHAT('Tell me about RAG architecture', 'knowledge_base', 'creative_assistant')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }' | tee /tmp/output_3.txt
+––– output –––
+*************************** 1. row ***************************
+conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
+       user_query: Tell me about RAG architecture
+     search_query: #!/.*(RAG|[Rr]etrieval|[Gg]eneration).*/!#
+         response: #!/.*(RAG|[Rr]etrieval|[Gg]eneration).*/!#
+          sources: #!/.*/!#
+––– input –––
+grep 'sources:' /tmp/output_3.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([4])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+––– output –––
+OK
+––– comment –––
+Test conversation tracking - first message in a new conversation
+––– input –––
+mysql -h0 -P9306 -e "CALL CHAT('What is clustering?', 'knowledge_base', 'fast_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }' | tee /tmp/output_4.txt
+––– output –––
+*************************** 1. row ***************************
+conversation_uuid: conv-test-1234-5678-90ab-cdef12345678
+       user_query: What is clustering?
+     search_query: #!/.*[Cc]luster.*/!#
+         response: #!/.*[Cc]luster.*/!#
+          sources: #!/.*/!#
+––– input –––
+grep 'sources:' /tmp/output_4.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+––– output –––
+OK
+––– comment –––
+Test conversation tracking - follow-up message (should maintain context)
+––– input –––
+mysql -h0 -P9306 -e "CALL CHAT('How do I configure it?', 'knowledge_base', 'fast_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }' | tee /tmp/output_5.txt
+––– output –––
+*************************** 1. row ***************************
+conversation_uuid: conv-test-1234-5678-90ab-cdef12345678
+       user_query: How do I configure it?
+     search_query: #!/.*[Cc]luster.*/!#
+         response: #!/.*[Cc]luster.*/!#
+          sources: #!/.*/!#
+––– input –––
+grep 'sources:' /tmp/output_5.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+––– output –––
+OK
+––– comment –––
+Test different model on same conversation
+––– input –––
+mysql -h0 -P9306 -e "CALL CHAT('What are best practices?', 'knowledge_base', 'detailed_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }' | tee /tmp/output_6.txt
+––– output –––
+*************************** 1. row ***************************
+conversation_uuid: conv-test-1234-5678-90ab-cdef12345678
+       user_query: What are best practices?
+     search_query: #!/.*[Cc]luster.*/!#
+         response: #!/.*[Cc]luster.*/!#
+          sources: #!/.*/!#
+––– input –––
+grep 'sources:' /tmp/output_6.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+––– output –––
+OK
+––– comment –––
+Test independent conversation - different context
+––– input –––
+mysql -h0 -P9306 -e "CALL CHAT('Show me tutorials', 'knowledge_base', 'creative_assistant', 'conv-other-aaaa-bbbb-cccc-dddddddddddd')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }'
+––– output –––
+*************************** 1. row ***************************
+conversation_uuid: conv-other-aaaa-bbbb-cccc-dddddddddddd
+       user_query: Show me tutorials
+     search_query: #!/.*tutorials.*/!#
+         response: #!/.*/!#
+          sources: []
+––– comment –––
+Cleanup - drop all models
+––– input –––
+mysql -h0 -P9306 -e "DROP CHAT MODEL fast_assistant;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DROP CHAT MODEL detailed_assistant;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DROP CHAT MODEL creative_assistant;"
+––– output –––
+––– comment –––
+Verify all models are dropped
+––– input –––
+mysql -h0 -P9306 -e "SHOW CHAT MODELS;"
+––– output –––
+––– comment –––
+Cleanup table
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS knowledge_base;"
+––– output –––

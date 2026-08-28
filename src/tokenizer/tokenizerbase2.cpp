@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -80,6 +80,10 @@ int CSphTokenizerBase2::SkipBlended()
 		iBlended++;
 
 	m_pBufferMax = pMax;
+	// reset flags
+	m_bBlendAdd = false;
+	m_uBlendVariantsPending = 0;
+
 	return iBlended;
 }
 
@@ -350,7 +354,7 @@ bool CSphTokenizerBase2::CheckException ( const BYTE* pStart, const BYTE* pCur, 
 
 void CSphTokenizerBase2::FlushAccum()
 {
-	assert ( m_pAccum - m_sAccum < (int)sizeof ( m_sAccum ) );
+	assert ( m_pAccum - m_sAccum <= (int)sizeof ( m_sAccum ) );
 	m_iLastTokenLen = m_iAccum;
 	*m_pAccum = 0;
 	m_iAccum = 0;

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -184,7 +184,7 @@ uint64_t CSphTokenizerBase::GetSettingsFNV() const noexcept
 	DWORD uFlags = 0;
 	if ( m_bHasBlend )
 		uFlags |= 1 << 0;
-	uHash = sphFNV64 ( &uFlags, sizeof ( uFlags ), uHash );
+	uHash = sphFNV64 ( uFlags, uHash );
 
 	return uHash;
 }
@@ -198,12 +198,19 @@ void CSphTokenizerBase::SetBufferPtr ( const char* sNewPtr )
 	m_pAccum = m_sAccum;
 	m_pTokenStart = m_pTokenEnd = nullptr;
 	m_pBlendStart = m_pBlendEnd = nullptr;
+	m_bBlended = false;
+	m_bBlendedPart = false;
+	m_bBlendAdd = false;
+	m_uBlendVariantsPending = 0;
+	m_bBlendedHead = false;
 }
 
 /// adjusts blending magic when we're about to return a token (any token)
 /// returns false if current token should be skipped, true otherwise
 bool CSphTokenizerBase::BlendAdjust ( const BYTE* pCur )
 {
+	m_bBlendedHead = false;
+
 	// check if all we got is a bunch of blended characters (pure-blended case)
 	if ( m_bBlended && !m_bNonBlended )
 	{
@@ -230,6 +237,7 @@ bool CSphTokenizerBase::BlendAdjust ( const BYTE* pCur )
 		m_pBlendEnd = pCur;
 		m_pBlendStart = nullptr;
 		m_bBlendedPart = true;
+		m_bBlendedHead = true;
 	} else if ( pCur >= m_pBlendEnd )
 	{
 		// tricky bit, as at this point, token we're about to return
@@ -373,7 +381,7 @@ int CSphTokenizerBase::CodepointArbitrationQ ( int iCode, bool bWasEscaped, BYTE
 		if ( bWasEscaped
 				|| bDashInside
 				|| ( m_iAccum && iSymbol == '$' && !IsBoundary ( uNextByte, m_bPhrase ) )
-				|| ( m_bPhrase && iSymbol != '"' && !sphIsModifier ( iSymbol ) ) )
+				|| ( m_bPhrase && iSymbol != '"' && !sphIsModifier ( iSymbol ) && iSymbol!='|' && iSymbol!='(' && iSymbol!=')' ) )
 		{
 			if ( iCode & FLAG_CODEPOINT_DUAL )
 				iCode &= ~( FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL );

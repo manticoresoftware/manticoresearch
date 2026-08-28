@@ -1,0 +1,66 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "create table tbl1(id bigint) shards='5' rf='2'"
+––– output –––
+ERROR 1064 (42000) at line 1: You cannot set rf greater than 1 when creating single node sharded table.
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tbl2 shards='1000' rf='1000';"
+––– output –––
+ERROR 1064 (42000) at line 1: You cannot set rf greater than 1 when creating single node sharded table.
+––– input –––
+mysql -h0 -P1306 -e "create table tbl3(id bigint) shards='0' rf='1'"
+––– output –––
+ERROR 1064 (42000) at line 1: Invalid shards or rf options are set
+––– input –––
+mysql -h0 -P1306 -e "create table tbl4(id bigint) shards='9999999999' rf='1'"
+––– output –––
+ERROR 1064 (42000) at line 1: Shard count cannot be greater than 3000
+––– input –––
+export CLUSTER_NAME=replication
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "create table c:tbl5 shards='10' rf='2'"
+––– output –––
+ERROR 1064 (42000) at line 1: Cluster 'c' does not exist
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl6(id bigint) shards='3' rf='4'"
+––– output –––
+ERROR 1064 (42000) at line 1: The node count (3) is lower than replication factor (4)
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl7(id bigint) shards='10' rf='10'"
+––– output –––
+ERROR 1064 (42000) at line 1: The node count (3) is lower than replication factor (10)
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=single_node
+––– output –––
+––– input –––
+mysql -h0 -P4306 -e "create cluster ${CLUSTER_NAME}"
+––– output –––
+––– input –––
+timeout 30 mysql -h0 -P4306 -e "SHOW STATUS LIKE 'cluster_single_node_status'\G" > /tmp/status_4306.log && grep -q "Value: primary" /tmp/status_4306.log && echo "Port 4306: Node synced" && cat /tmp/status_4306.log
+––– output –––
+Port 4306: Node synced
+*************************** 1. row ***************************
+Counter: cluster_single_node_status
+  Value: primary
+––– input –––
+mysql -h0 -P4306 -e "create table ${CLUSTER_NAME}:tbl8(id bigint) shards='3' rf='2'"
+––– output –––
+ERROR 1064 (42000) at line 1: The node count for cluster single_node is too low: 1. You can create local sharded table.

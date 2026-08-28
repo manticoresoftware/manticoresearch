@@ -1,0 +1,82 @@
+––– block: ../base/start-searchd –––
+––– input –––
+manticore-load --quiet --json --port=9306 --init="CREATE TABLE task (id BIGINT, status UINT, enddatetime TIMESTAMP, isoverdue BOOL)" --load="INSERT INTO task (id, status, enddatetime, isoverdue) VALUES (<increment>, <int/1/8>, <int/1577836800/1672531200>, 0)" --batch-size=1000 --threads=4 --total=10000 > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+mysql -P9306 -h0 -e "FLUSH RAMCHUNK task;"
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "OPTIMIZE TABLE task OPTION cutoff=1;"
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "SHOW TABLE task STATUS LIKE 'disk_chunks';"
+––– output –––
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| disk_chunks   | 1     |
++---------------+-------+
+––– input –––
+mysql -P9306 -h0 -e "DESCRIBE task;"
+––– output –––
++-------------+-----------+------------+
+| Field       | Type      | Properties |
++-------------+-----------+------------+
+| id          | bigint    |            |
+| status      | uint      |            |
+| enddatetime | timestamp |            |
+| isoverdue   | bool      |            |
++-------------+-----------+------------+
+––– input –––
+mysql -P9306 -h0 -e "SET GLOBAL secondary_indexes=1; select id,status from task where  isOverdue = 0 and status not in (1,4,5,6,7,8) ORDER BY id ASC LIMIT 10 /*+ SecondaryIndex(status) */; show meta;"
+––– output –––
++------+--------+
+| id   | status |
++------+--------+
+|    5 |      2 |
+|    7 |      3 |
+|   10 |      3 |
+|   14 |      2 |
+|   17 |      2 |
+|   20 |      3 |
+|   33 |      2 |
+|   36 |      2 |
+|   37 |      2 |
+|   38 |      2 |
++------+--------+
++----------------+------------------------------+
+| Variable_name  | Value                        |
++----------------+------------------------------+
+| total          | %{NUMBER}                           |
+| total_found    | %{NUMBER}                         |
+| total_relation | eq                           |
+| time           | %{NUMBER}.%{NUMBER}                        |
+| index          | status:SecondaryIndex (100%) |
++----------------+------------------------------+
+––– input –––
+mysql -P9306 -h0 -e "SET GLOBAL secondary_indexes=0; select id,status from task where  isOverdue = 0 and status not in (1,4,5,6,7,8) ORDER BY id ASC LIMIT 10 /*+ SecondaryIndex(status) */; show meta;"
+––– output –––
++------+--------+
+| id   | status |
++------+--------+
+|    5 |      2 |
+|    7 |      3 |
+|   10 |      3 |
+|   14 |      2 |
+|   17 |      2 |
+|   20 |      3 |
+|   33 |      2 |
+|   36 |      2 |
+|   37 |      2 |
+|   38 |      2 |
++------+--------+
++----------------+------------------------------------------------------------------------------------------------------------------------------+
+| Variable_name  | Value                                                                                                                        |
++----------------+------------------------------------------------------------------------------------------------------------------------------+
+| warning        | table task: hint error: secondary indexes are disabled; hint error: requested hint type not supported for attribute 'status' |
+| total          | %{NUMBER}                                                                                                                           |
+| total_found    | %{NUMBER}                                                                                                                         |
+| total_relation | eq                                                                                                                           |
+| time           | %{NUMBER}.%{NUMBER}                                                                                                                        |
++----------------+------------------------------------------------------------------------------------------------------------------------------+

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -13,7 +13,9 @@
 #pragma once
 
 #include "std/ints.h"
-#include "fileio.h"
+#include "std/blobs.h"
+#include "std/vector.h"
+#include <memory>
 
 static constexpr Str_t g_sTagInfixBlocks = FROMS ( "infix-blocks" );
 static constexpr Str_t g_sTagInfixEntries = FROMS ( "infix-entries" );
@@ -28,6 +30,7 @@ struct InfixBlock_t
 	DWORD m_iOffset;
 };
 
+class CSphWriter;
 
 /// infix hash builder
 class ISphInfixBuilder

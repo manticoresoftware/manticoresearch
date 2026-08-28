@@ -1,4 +1,7 @@
 ––– input –––
+set -b +m
+––– output –––
+––– input –––
 export INSTANCE=1
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
@@ -11,16 +14,19 @@ export INSTANCE=3
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
 ––– input –––
-mysql -h0 -P1306 -e "create cluster a 'a' as path"
+mkdir /var/{lib,log}/manticore-{1,2,3}/{a,b,c}
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "create cluster b 'b' as path"
+mysql -h0 -P1306 -e "CREATE CLUSTER a 'a' as path"
 ––– output –––
 ––– input –––
-mysql -h0 -P2306 -e "join cluster a at '127.0.0.1:1312' 'a' as path" &
+mysql -h0 -P1306 -e "create cluster b 'b' as path" &
 ––– output –––
 ––– input –––
-mysql -h0 -P3306 -e "join cluster b at '127.0.0.1:1312' 'a' as path" &
+mysql -h0 -P2306 -e "join cluster a at '127.0.0.1:1312'" &
+––– output –––
+––– input –––
+mysql -h0 -P3306 -e "join cluster b at '127.0.0.1:1312'" &
 ––– output –––
 ––– input –––
 wait 1>/dev/null 2>&1; echo $?
@@ -35,10 +41,5 @@ for i in 1 2 3; do grep -q 'FATAL:' /var/log/manticore-${i}/searchd.log ; echo "
 ––– input –––
 for i in 1 2 3; do mysql -h0 -P${i}306 -e "show status like 'cluster_a_nodes_view'\G" | grep Value; done
 ––– output –––
-Value: 127.0.0.1:1312,127.0.0.1:1322:replication,127.0.0.1:2312,127.0.0.1:2322:replication
-Value: 127.0.0.1:1312,127.0.0.1:1322:replication,127.0.0.1:2312,127.0.0.1:2322:replication
-––– input –––
-for i in 1 2 3; do mysql -h0 -P${i}306 -e "show status like 'cluster_b_nodes_view'\G" | grep Value; done
-––– output –––
-Value: 127.0.0.1:1312,127.0.0.1:1324:replication,127.0.0.1:3312,127.0.0.1:3322:replication
-Value: 127.0.0.1:1312,127.0.0.1:1324:replication,127.0.0.1:3312,127.0.0.1:3322:replication
+  Value: 127.0.0.1:1312,127.0.0.1:1322:replication,127.0.0.1:2312,127.0.0.1:2322:replication
+  Value: 127.0.0.1:1312,127.0.0.1:1322:replication,127.0.0.1:2312,127.0.0.1:2322:replication

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -16,7 +16,6 @@
 #include "searchdaemon.h"
 #include "http/http_parser.h"
 
-using OptionsHash_t = SmallStringHash_T<CSphString>;
 class AsyncNetInputBuffer_c;
 
 class HttpRequestParser_c : public ISphNoncopyable
@@ -80,8 +79,6 @@ private:
 	http_parser m_tParser;
 };
 
-void HttpBuildReply ( CSphVector<BYTE>& dData, EHTTP_STATUS eCode, Str_t sReply, bool bHtml );
-
 ///////////////////////////////////////////////////////////////////////
 /// Stream reader
 class CharStream_c
@@ -118,7 +115,6 @@ struct HttpProcessResult_t
 	CSphString m_sError;
 };
 
-void ReplyBuf ( Str_t sResult, EHTTP_STATUS eStatus, bool bNeedHttpResponse, CSphVector<BYTE> & dData );
 HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType );
 
 namespace bson {

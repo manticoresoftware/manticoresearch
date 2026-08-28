@@ -1,0 +1,90 @@
+Test for issue #599: Error Code: 1064. no such table after adding fuzzy with JOIN and FACET
+https://github.com/manticoresoftware/manticoresearch-buddy/issues/599
+
+Bug: Query with LEFT JOIN, FACET, and OPTION fuzzy=1 fails with 'no such table' error.
+The query works without fuzzy option but fails when fuzzy is added.
+
+––– comment –––
+Start Manticore Search with Buddy
+––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Create products table with min_infix_len='2' required for fuzzy search
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS products; CREATE TABLE products (id BIGINT, name TEXT, brand_name TEXT) min_infix_len='2';"
+––– output –––
+––– comment –––
+Create property table for JOIN
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS property; CREATE TABLE property (id BIGINT, product_variant_id UINT, property_id UINT, value STRING);"
+––– output –––
+––– comment –––
+Insert test data into products
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO products (id, name, brand_name) VALUES (1, 'motor oil', 'BrandA'), (2, 'engine oil', 'BrandB');"
+––– output –––
+––– comment –––
+Insert test data into property
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO property (id, product_variant_id, property_id, value) VALUES (1, 1, 10, 'red'), (2, 2, 10, 'blue');"
+––– output –––
+––– comment –––
+Test 1: Query without fuzzy - should work (single line)
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, name FROM products LEFT JOIN property ON property.product_variant_id = products.id WHERE MATCH('oil') GROUP BY id ORDER BY weight() DESC LIMIT 10 FACET property.value, property.property_id BY property.property_id, property.value LIMIT 100;"
+––– output –––
++------+------------+
+| id   | name       |
++------+------------+
+|    1 | motor oil  |
+|    2 | engine oil |
++------+------------+
++----------------+----------------------+----------+
+| property.value | property.property_id | count(*) |
++----------------+----------------------+----------+
+| red            |                   10 |        1 |
+| blue           |                   10 |        1 |
++----------------+----------------------+----------+
+––– comment –––
+Test 2: Query with fuzzy option (single line) - BUG: was failing with 'no such table' error
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, name FROM products LEFT JOIN property ON property.product_variant_id = products.id WHERE MATCH('oil') GROUP BY id ORDER BY weight() DESC LIMIT 10 OPTION fuzzy=1 FACET property.value, property.property_id BY property.property_id, property.value LIMIT 100;"
+––– output –––
++------+------------+
+| id   | name       |
++------+------------+
+|    1 | motor oil  |
+|    2 | engine oil |
++------+------------+
++----------------+----------------------+----------+
+| property.value | property.property_id | count(*) |
++----------------+----------------------+----------+
+| red            |                   10 |        1 |
+| blue           |                   10 |        1 |
++----------------+----------------------+----------+
+––– comment –––
+Test 3: Query with fuzzy option (multiline format) - should also work
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, name FROM products LEFT JOIN property ON property.product_variant_id = products.id WHERE MATCH('oil') GROUP BY id ORDER BY weight() DESC LIMIT 10 OPTION fuzzy=1 FACET property.value, property.property_id BY property.property_id, property.value LIMIT 100;"
+––– output –––
++------+------------+
+| id   | name       |
++------+------------+
+|    1 | motor oil  |
+|    2 | engine oil |
++------+------------+
++----------------+----------------------+----------+
+| property.value | property.property_id | count(*) |
++----------------+----------------------+----------+
+| red            |                   10 |        1 |
+| blue           |                   10 |        1 |
++----------------+----------------------+----------+
+––– comment –––
+Test 4: Verify fuzzy actually expands the search with typo
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, name FROM products WHERE MATCH('moter') OPTION fuzzy=1;"
+––– output –––
++------+-----------+
+| id   | name      |
++------+-----------+
+|    1 | motor oil |
++------+-----------+

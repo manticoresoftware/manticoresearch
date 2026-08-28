@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -188,6 +188,7 @@ StringBuilder_c & StringBuilder_c::vSprintf ( const char * sTemplate, va_list ap
 
 	'uint64_t' (unsigned) values:
 	%U - decimal uint64
+	%X - hex uint64
 
 	z-terminated string:
 	%s - print string, or "(null)"
@@ -277,10 +278,7 @@ StringBuilder_c& StringBuilder_c::operator<< ( double fVal )
 
 StringBuilder_c& StringBuilder_c::operator<< ( float fVal )
 {
-	InitAddPrefix();
-	GrowEnough ( 32 );
-	m_iUsed += sph::PrintVarFloat ( end(), 31, fVal );
-	m_szBuffer[m_iUsed] = '\0';
+	FtoA ( fVal );
 	return *this;
 }
 
@@ -342,12 +340,4 @@ const Str_t& StringBuilder_c::LazyComma_c::RawComma ( const std::function<void (
 	m_bStarted = true;
 	fnAddNext();
 	return m_sPrefix;
-}
-
-
-CSphString StrVec2Str ( const VecTraits_T<CSphString>& tVec, const char* szDelim ) noexcept
-{
-	StringBuilder_c tOut ( szDelim );
-	tVec.Apply ( [&tOut] ( const CSphString& sNode ) { tOut << sNode; } );
-	return CSphString { tOut };
 }

@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>columnar attr hidden after replace</name>
+
+<requires>
+	<force-rt/>
+	<columnar/>
+	<secondary/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+	secondary_indexes = 1
+}
+</config>
+
+<queries>
+<sphinxql>
+	drop table if exists tbl;
+	create table tbl (
+		id BIGINT,
+		model TEXT,
+		storage_capacity INTEGER,
+		color string,
+		release_year INTEGER,
+		price FLOAT,
+		discounted_price FLOAT,
+		sold BOOL,
+		date_added TIMESTAMP,
+		product_codes MULTI,
+		`values` MULTI64,
+		additional_info JSON,
+		region_id INTEGER,
+		warranty_months INTEGER,
+		customer_score FLOAT,
+		units_left INTEGER,
+		serials MULTI64,
+		category string,
+		promo_score FLOAT,
+		supplier_id BIGINT,
+		batch_no INTEGER,
+		flags MULTI
+	) engine='columnar';
+
+	insert into tbl
+		(id,model,storage_capacity,color,release_year,price,discounted_price,sold,date_added,product_codes,`values`,additional_info,region_id,warranty_months,customer_score,units_left,serials,category,promo_score,supplier_id,batch_no,flags)
+	values
+		(101,'iPhone 13 Pro',256,'silver',2021,1099.98999,989.98999,1,2224442480,(1,2,3),(523456764345678976,9223372036854775807),'{"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}',1,24,4.5,35,(101001,101002),'smartphones',0.91,5001,77,(1,3,5));
+</sphinxql>
+
+<var name="bulk_rows" />
+<repeat count="1024">
+	<var name="bulk_rows" delimiter=",">
+		(0,'bulk phone',128,'gray',2020,399.99,299.99,0,1700000000,(7,8,9),(111111111111111111,222222222222222222),'{"features":["bulk"]}',2,12,3.1,100,(7001,7002),'bulkcat',0.20,6001,11,(2,4)),
+		(0,'bulk phone',128,'gray',2020,399.99,299.99,0,1700000000,(7,8,9),(111111111111111111,222222222222222222),'{"features":["bulk"]}',2,12,3.1,100,(7001,7002),'bulkcat',0.20,6001,11,(2,4)),
+		(0,'bulk phone',128,'gray',2020,399.99,299.99,0,1700000000,(7,8,9),(111111111111111111,222222222222222222),'{"features":["bulk"]}',2,12,3.1,100,(7001,7002),'bulkcat',0.20,6001,11,(2,4)),
+		(0,'bulk phone',128,'gray',2020,399.99,299.99,0,1700000000,(7,8,9),(111111111111111111,222222222222222222),'{"features":["bulk"]}',2,12,3.1,100,(7001,7002),'bulkcat',0.20,6001,11,(2,4)),
+		(0,'bulk phone',128,'gray',2020,399.99,299.99,0,1700000000,(7,8,9),(111111111111111111,222222222222222222),'{"features":["bulk"]}',2,12,3.1,100,(7001,7002),'bulkcat',0.20,6001,11,(2,4)),
+		(0,'bulk phone',128,'gray',2020,399.99,299.99,0,1700000000,(7,8,9),(111111111111111111,222222222222222222),'{"features":["bulk"]}',2,12,3.1,100,(7001,7002),'bulkcat',0.20,6001,11,(2,4)),
+		(0,'bulk phone',128,'gray',2020,399.99,299.99,0,1700000000,(7,8,9),(111111111111111111,222222222222222222),'{"features":["bulk"]}',2,12,3.1,100,(7001,7002),'bulkcat',0.20,6001,11,(2,4)),
+		(0,'bulk phone',128,'gray',2020,399.99,299.99,0,1700000000,(7,8,9),(111111111111111111,222222222222222222),'{"features":["bulk"]}',2,12,3.1,100,(7001,7002),'bulkcat',0.20,6001,11,(2,4))
+	</var>
+</repeat>
+
+<sphinxql skip="1">
+	insert into tbl
+		(id,model,storage_capacity,color,release_year,price,discounted_price,sold,date_added,product_codes,`values`,additional_info,region_id,warranty_months,customer_score,units_left,serials,category,promo_score,supplier_id,batch_no,flags)
+	values <bulk_rows/>;
+</sphinxql>
+
+<sphinxql>
+	flush ramchunk tbl;
+	optimize index tbl option sync=1;
+
+	select * from tbl where id=101;
+
+	replace into tbl
+		(id,model,storage_capacity,color,release_year,price,discounted_price,sold,date_added,product_codes,`values`,additional_info,region_id,warranty_months,customer_score,units_left,serials,category,promo_score,supplier_id,batch_no,flags)
+	values
+		(101,'iPhone 15 PRO',256,'silver',2021,1099.98999,989.98999,1,2224442480,(1,2,3),(523456764345678976,9223372036854775807),'{"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}',1,24,4.8,28,(101003,101004),'smartphones',0.93,5001,78,(1,3,7));
+
+	select * from tbl where id=101;
+	flush ramchunk tbl;
+	select * from tbl where id=101;
+
+	drop table tbl;
+</sphinxql>
+</queries>
+
+</test>

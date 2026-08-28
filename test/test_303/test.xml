@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>reject saturated integer values</name>
+<requires>
+	<force-rt/>
+</requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>
+create table t;
+insert into t values (9223372036854775807),(9223372036854775808);
+select * from t;
+select * from t where id=-9223372036854775808;
+select * from t where id=-9223372036854775809;
+select * from t where id=9223372036854775807;
+select * from t where id=9223372036854775808;
+drop table t;
+</sphinxql>
+</queries>
+
+</test>

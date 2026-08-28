@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -40,6 +40,8 @@ struct MergeState_t
 	CSphFixedVector<HASH20_t> m_dHashes { 0 };
 };
 
+class SstProgress_i;
+
 struct SyncSrc_t
 {
 	// index file names (full path, file name, extension) at source node
@@ -62,7 +64,8 @@ public:
 	explicit SyncSrc_t ( StrVec_t&& dIndexFiles );
 	[[nodiscard]] HASH20_t& GetFileHash ( int iFile ) const noexcept;
 	[[nodiscard]] HASH20_t& GetChunkHash ( int iFile, int iChunk ) const noexcept;
-	bool CalculateFilesSignatures ();
+	bool CalculateFilesSignatures ( SstProgress_i & tProgress );
+	uint64_t CalculateNeededBytes ( const CSphBitvec & dNeededChunks ) const;
 
 private:
 	std::optional<int> InitSyncSrc ();

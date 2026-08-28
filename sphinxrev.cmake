@@ -117,17 +117,6 @@ endif ()
 
 set ( GDB_SOURCE_DIR "${MANTICORE_SOURCE_DIR}" )
 
-# determine build tag as even/odd value of patch version
-if (NOT BUILD_TAG)
-	string ( REGEX MATCH "[0-9]+.[0-9]+.([0-9]+)" _ ${VERNUMBERS} )
-	math ( EXPR oddvalue "${CMAKE_MATCH_1} % 2" OUTPUT_FORMAT DECIMAL )
-
-	if (oddvalue)
-		set ( BUILD_TAG "dev" )
-		set ( DEV_BUILD ON )
-	endif ()
-endif ()
-
 # All info collected (we need SPH_GIT_COMMIT_ID, GIT_TIMESTAMP_ID, GIT_BRANCH_ID and BUILD_TAG, if any)
 set ( VERFILE "${MANTICORE_BINARY_DIR}/config/gen_sphinxversion.h" )
 

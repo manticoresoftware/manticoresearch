@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2020-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2020-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -12,7 +12,6 @@
 #include "sphinxutils.h"
 #include "sphinxexpr.h"
 #include "libutils.h"
-#include "fileutils.h"
 #include "schema/columninfo.h"
 #include "schema/schema.h"
 
@@ -98,7 +97,8 @@ std::unique_ptr<columnar::Builder_i> CreateColumnarBuilder ( const ISphSchema & 
 		if ( eAttrType==common::AttrType_e::STRING && tAttr.HasStringHashes() )
 			fnStringCalcHash = LibcCIHash_fn::Hash;
 
-		tColumnarSchema.push_back ( { tAttr.m_sName.cstr(), eAttrType, fnStringCalcHash } );
+		const int MIN_KNN_PACK_DIMS = 128;
+		tColumnarSchema.push_back ( { tAttr.m_sName.cstr(), eAttrType, fnStringCalcHash, tAttr.m_tKNN.m_iDims>=MIN_KNN_PACK_DIMS } );
 	}
 
 	if ( tColumnarSchema.empty() )
@@ -131,7 +131,16 @@ bool InitColumnar ( CSphString & sError )
 {
 	assert ( !g_pColumnarLib );
 
-	CSphString sLibfile = TryDifferentPaths ( LIB_MANTICORE_COLUMNAR, GetColumnarFullpath(), columnar::LIB_VERSION );
+	CSphString sLibfile;
+	if ( IsAVX512Supported() )
+		sLibfile = TryDifferentPaths ( LIB_MANTICORE_COLUMNAR, GetColumnarFullpath(), columnar::LIB_VERSION, "_avx512" );
+
+	if ( sLibfile.IsEmpty() && IsAVX2Supported() )
+		sLibfile = TryDifferentPaths ( LIB_MANTICORE_COLUMNAR, GetColumnarFullpath(), columnar::LIB_VERSION, "_avx2" );
+
+	if ( sLibfile.IsEmpty() )
+		sLibfile = TryDifferentPaths ( LIB_MANTICORE_COLUMNAR, GetColumnarFullpath(), columnar::LIB_VERSION );
+
 	if ( sLibfile.IsEmpty() )
 		return true;
 

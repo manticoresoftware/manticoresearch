@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -218,11 +218,8 @@ DictRefPtr_c sphCreateDictionaryKeywords ( const CSphDictSettings& tSettings, co
 /// exact dict
 void SetupExactDict ( DictRefPtr_c& pDict );
 
-/// star dict old format (pre v8)
-void SetupStarDictOld ( DictRefPtr_c& pDict );
-
-/// star dict v8
-void SetupStarDictV8 ( DictRefPtr_c& pDict, bool bInfixes = true );
+/// star dict
+void SetupStarDict ( DictRefPtr_c& pDict, bool bInfixes = true );
 
 /// clear wordform cache
 void sphShutdownWordforms();

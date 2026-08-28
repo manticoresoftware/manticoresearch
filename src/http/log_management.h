@@ -1,10 +1,9 @@
 
 static nljson GetSystemTable()
 {
-    nljson tSystemTable = R"({})"_json;
+    nljson tSystemTable = nljson::parse ( R"({})" );
 
-tSystemTable["_xpack"] =
-R"(
+tSystemTable["_xpack"] = nljson::parse ( R"(
 {
   "license": {
     "type": "basic",
@@ -83,11 +82,10 @@ R"(
   },
   "tagline": "You know, for X"
 }
-)"_json;
+)" );
 
 
-tSystemTable["_cluster"] = 
-R"(
+tSystemTable["_cluster"] = nljson::parse ( R"(
 {
   "settings" : {
   "persistent": {},
@@ -95,23 +93,21 @@ R"(
   "defaults": {}
   }
 }
-)"_json;  
+)" );  
 
 
-tSystemTable["_nodes"] = 
-R"(
+tSystemTable["_nodes"] = nljson::parse ( R"(
 {
 }
-)"_json;  
+)" );  
 
 
-tSystemTable["master"] = 
-R"(
+tSystemTable["master"] = nljson::parse ( R"(
 {
 }
-)"_json;
+)" );
 
-tSystemTable["templates"] = R"({})"_json;
+tSystemTable["templates"] = nljson::parse ( R"({})" );
 
 return tSystemTable;
 }

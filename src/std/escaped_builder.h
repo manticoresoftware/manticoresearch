@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -99,6 +99,10 @@ public:
 	void AppendEscapedSkippingComma ( const char* sText );
 	void AppendEscapedSkippingCommaNoQuotes ( const char* sText );
 
+	// dedicated EscBld::eEscape | EscBld::eSkipComma
+	void AppendEscapedSkippingComma ( const char* sText, int iLen );
+	void AppendEscapedSkippingCommaNoQuotes ( const char* sText, int iLen );
+
 	// dedicated EscBld::eEscape with comma
 	void AppendEscapedWithComma ( const char* sText );
 	void AppendEscapedWithCommaNoQuotes ( const char* sText );
@@ -128,6 +132,8 @@ public:
 private:
 	template<bool BQUOTE = true>
 	void AppendEscapedSkippingCommaT ( const char* sText );
+	template<bool BQUOTE = true>
+	void AppendEscapedSkippingCommaT ( const char* sText, int iLen );
 	template<bool BQUOTE = true>
 	void AppendEscapedWithCommaT ( const char* sText );
 	template <bool BQUOTE = true>

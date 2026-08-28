@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -189,6 +189,51 @@ public:
 
 	// same as above, but without messing of return value/return param
 	std::pair<KEY,VALUE*>	Iterate ( int64_t & iIndex ) const;
+
+	class Iterator_c
+	{
+		const MYTYPE* m_pHash;
+		int64_t m_iIndex = 0;
+		std::pair<KEY, VALUE *> m_uLastVal {0,nullptr};
+
+	public:
+		explicit Iterator_c ( const MYTYPE* pHash = nullptr )
+			: m_pHash ( pHash )
+		{
+			if ( pHash )
+				m_uLastVal = pHash->Iterate( m_iIndex );
+		}
+
+		std::pair<KEY, VALUE *>& operator* () noexcept { return m_uLastVal; }
+		const std::pair<KEY, VALUE *>* operator->() const noexcept { return &m_uLastVal; };
+
+		Iterator_c& operator++() noexcept
+		{
+			m_uLastVal = m_pHash->Iterate(m_iIndex);
+			return *this;
+		}
+
+		bool operator== ( const Iterator_c& rhs ) const noexcept
+		{
+			return m_uLastVal == rhs.m_uLastVal;
+		}
+
+		bool operator!= ( const Iterator_c& rhs ) const noexcept
+		{
+			return !operator== ( rhs );
+		}
+	};
+
+	// c++11 style iteration
+	Iterator_c begin() const
+	{
+		return Iterator_c { this };
+	}
+
+	static Iterator_c end()
+	{
+		return Iterator_c { nullptr };
+	}
 };
 
 template <typename KEY, typename VALUE, typename HASHFUNC=HashFunc_Int64_t, typename ENTRY=OpenHashVersionEntry_T<KEY,VALUE>>
@@ -208,6 +253,7 @@ class OpenHashSet_T : public OpenHashTraits_T<KEY,ENTRY,HASHFUNC,STATE>
 	using BASE::BASE;
 
 public:
+	explicit OpenHashSet_T (int iSize=256) : BASE (iSize) {}
 	FORCE_INLINE bool	Find ( KEY k ) const { return !!BASE::FindEntry(k); }
 	FORCE_INLINE bool	Add ( KEY k );
 

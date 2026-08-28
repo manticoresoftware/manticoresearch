@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -21,6 +21,13 @@
 struct CSphStrHashFunc
 {
 	static int Hash ( const CSphString& sKey );
+};
+
+template <typename HashFunc = CSphStrHashFunc>
+struct CSphStrPtrHashFunc : HashFunc
+{
+	static int GetHash ( const CSphString* sKey ) { return HashFunc::Hash ( *sKey ); };
+	static bool Equal ( const CSphString* sKey1, const CSphString* sKey2 ) { return *sKey1 == *sKey2; };
 };
 
 /// small hash with string keys

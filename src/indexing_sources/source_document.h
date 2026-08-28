@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -171,7 +171,7 @@ public:
 	virtual void			PostIndex () {}
 
 	// returns false when there are no more documents
-	void					BuildHits ( CSphString & sError, bool bSkipEndMarker );
+	void					BuildHits ( CSphString & sError );
 
 	/// field data getter
 	/// to be implemented by descendants

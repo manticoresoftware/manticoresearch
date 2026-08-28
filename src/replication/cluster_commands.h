@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -20,8 +20,9 @@ void ReceiveClusterGetNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphS
 void ReceiveClusterIndexAddLocal ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
 void ReceiveClusterSynced ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
 void ReceiveClusterUpdateNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
+void ReceiveClusterExitUpdateNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
 void ReceiveClusterGetState ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSphString & sCluster );
-void ReceiveClusterGetVer ( bool bServerid, ISphOutputBuffer & tOut );
+void ReceiveClusterGetVer ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf );
 
 // sending doesn't include cluster name
 void ReceiveClusterFileSend ( ISphOutputBuffer& tOutb, InputBuffer_c& tBuf );

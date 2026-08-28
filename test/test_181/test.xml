@@ -61,6 +61,24 @@ index test4
 	rt_field		= title
 	rt_attr_uint 	= dummy
 }
+
+source test3301
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id, title, attr1, attr2, mva1, mva2 from test_table3301
+	sql_attr_uint	= attr1
+	sql_attr_uint	= attr2
+	sql_attr_multi = uint mva1 from field
+    sql_attr_multi = uint mva2 from field
+}
+
+index test3301
+{
+	source			= test3301
+	path			= <data_path/>/test3301
+}
+
 </config>
 
 <db_create>
@@ -77,6 +95,24 @@ create table test_table
 <db_insert>insert into test_table values ( 1, 'asdf asdf asdf', 11, 1, 1 );</db_insert>
 <db_insert>insert into test_table values ( 2, 'asdf', 22, 2, 2 );</db_insert>
 
+<db_create>
+create table test_table3301
+(
+	id int not null,
+	title varchar(255) not null,
+	attr1 int not null,
+	attr2 int not null,
+	mva1 varchar(255) not null,
+    mva2 varchar(255) not null
+);
+</db_create>
+<db_drop>drop table if exists test_table3301;</db_drop>
+<db_insert>
+insert into test_table3301 ( id, title, attr1, attr2, mva1, mva2 ) values
+( 1, 'test1', 50, 901, '0,1,2,9,11,12,16,22,23,26,27,28,29,30,32,34,36,37,38,40,45', '2,4,5,6,7,8,9,10,11,12,13,14,15,16,18,19,20,21,22,23,24,25,28,33,35,36,37,38,39,41' ),
+( 2, 'test2', 60, 902, '30,32,34,36,37,38,40', '10,11,12,13,14,15,16,18,19,20' );
+</db_insert>
+
 <queries>
 <query mode="extended2" index="test1 test2" ranker="wordcount" sortmode="expr" sortby="@weight" index_weights="test1:10 test2:1">asdf</query>
 <query mode="extended2" index="test1" index_weights="test1:11"/>
@@ -91,6 +127,18 @@ select id from test3 option index_weights=(test3=10);
 <!-- regression crash on reverse_scan, MOVED to separete test 239 to pass rt mode -->
 <!-- regression for a crash on fetching attr dependencies at rset merge -->
 select ( weight() + attr3 ) as sort_expr1 from test1, test2 order by sort_expr1 desc;
+
+<!-- regression for a crash on fetching attr dependencies in the loop -->
+SELECT id,
+    attr1 as a1,
+    mva1,
+    mva2,
+    attr2,
+    IF ( attr1 != 40 AND attr1 != 50 AND GREATEST(mva1) > 0, 20, attr1 ) as attr1,
+    IF (attr1 IN (40, 50), 100,IF (IN(mva1, -1),35,IF (IN(mva2, -1),30,IF (GREATEST(mva1) > 0,20,attr1)))) as availability
+FROM test3301
+WHERE id IN (1,2)
+ORDER BY availability DESC, attr2 ASC;
 </sphinxql></queries>
 
 </test>

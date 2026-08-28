@@ -1,0 +1,42 @@
+––– comment –––
+Issue #4484 repro in a CLT-friendly form.
+The only contract we care about is that interactive mysql with `-D manticore`
+does not crash searchd when a template table exists.
+––– input –––
+cat > /tmp/issue-4484.conf <<'EOF'
+index common
+{
+    type = template
+    path = /tmp/manticore-template-repro/common
+}
+
+searchd
+{
+    listen = 9306:mysql
+    log = /tmp/issue-4484-searchd.log
+    pid_file = /tmp/issue-4484-searchd.pid
+    watchdog = 0
+}
+EOF
+––– output –––
+––– input –––
+rm -rf /tmp/manticore-template-repro /tmp/issue-4484-searchd.log /tmp/issue-4484-searchd.pid
+mkdir -p /tmp/manticore-template-repro
+stdbuf -oL searchd --stopwait > /dev/null || true
+stdbuf -oL searchd -c /tmp/issue-4484.conf > /dev/null
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /tmp/issue-4484-searchd.log); then echo ready; else echo failed; fi
+––– output –––
+ready
+––– input –––
+script -q -c "mysql --no-defaults -h127.0.0.1 -P9306 -D manticore" /dev/null <<'EOS' >/dev/null 2>&1 || true
+show tables;
+quit
+EOS
+sleep 1
+ps aux | grep '[s]earchd -c /tmp/issue-4484.conf' >/dev/null && echo alive || echo dead
+––– output –––
+alive
+––– input –––
+grep -c 'FATAL: CRASH DUMP' /tmp/issue-4484-searchd.log || true
+––– output –––
+0

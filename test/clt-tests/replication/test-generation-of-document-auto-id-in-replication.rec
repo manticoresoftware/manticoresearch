@@ -1,0 +1,38 @@
+––– input –––
+mkdir -p /tmp/{run,lib,log}/manticore-1 /tmp/{run,lib,log}/manticore-2
+––– output –––
+––– input –––
+echo -e "searchd {\n  listen = 1306:mysql\n  listen = 1312\n  log = /tmp/log/manticore-1/searchd.log\n  query_log = /tmp/log/manticore-1/query.log\n  pid_file = /tmp/run/manticore-1/searchd.pid\n  data_dir = /tmp/lib/manticore-1\n  server_id = 1\n}" > /tmp/manticore1.conf; echo $?
+––– output –––
+0
+––– input –––
+searchd -c /tmp/manticore1.conf > /dev/null
+––– output –––
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /tmp/log/manticore-1/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Accepting connections!
+––– input –––
+echo -e "searchd {\n  listen = 2306:mysql\n  listen = 2312\n  log = /tmp/log/manticore-2/searchd.log\n  query_log = /tmp/log/manticore-2/query.log\n  pid_file = /tmp/run/manticore-2/searchd.pid\n  data_dir = /tmp/lib/manticore-2\n  server_id = 1\n}" > /tmp/manticore2.conf; echo $?
+––– output –––
+0
+––– input –––
+searchd -c /tmp/manticore2.conf > /dev/null
+––– output –––
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /tmp/log/manticore-2/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Accepting connections!
+––– input –––
+mysql -h0 -P1306 -e "CREATE CLUSTER t"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE t(id bigint)"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER t ADD t;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "JOIN CLUSTER t AT '127.0.0.1:1312';"
+––– output –––
+ERROR 1064 (42000) at line 1: server_id conflict, duplicate server_id:1 detected in the cluster 't'. Please set a unique server_id at the config.

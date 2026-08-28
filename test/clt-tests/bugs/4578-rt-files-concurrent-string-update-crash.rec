@@ -1,0 +1,18 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "drop table if exists t4578; create table t4578(title text, tag string, grp uint, active bool); insert into t4578(id,title,tag,grp,active) values(1,'x','seed',1,1);"; echo $?
+––– output –––
+0
+––– input –––
+( sh -lc 'while true; do mysql -N -B -h0 -P9306 -e "select file,size from t4578.@files;" >/dev/null 2>&1 || exit 0; done' >/tmp/rt-files-reader.log 2>&1 & echo $! > /tmp/rt-files-reader.pid )
+( sh -lc "while true; do mysql -N -B -h0 -P9306 -e \"update t4578 set tag='u' where id=1;\" >/dev/null 2>&1 || exit 0; done" >/tmp/rt-files-writer.log 2>&1 & echo $! > /tmp/rt-files-writer.pid )
+sleep 10
+if grep -q "FATAL: CRASH DUMP" /var/log/manticore/searchd.log 2>/dev/null; then echo crashed; else echo not_crashed; fi
+––– output –––
+not_crashed
+––– input –––
+mysql -N -B -h0 -P9306 -e "select 1;"
+––– output –––
++------+
+|    1 |
++------+

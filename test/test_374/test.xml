@@ -53,6 +53,10 @@ select id from test where id>0 /*+ NO_DocidIndex(id) */;
 
 select * from test where id>60;
 
+<!-- missed exclude filter for value at the lookup iterator -->
+select id from test where id &lt;&gt; 60 order by id desc limit 5 /*+ DocidIndex(id) */;
+select id from test where match ('test') and id &lt;&gt; 60 order by id desc limit 5 /*+ DocidIndex(id) */;
+
 </sphinxql></queries>
 
 

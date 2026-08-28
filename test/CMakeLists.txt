@@ -1,4 +1,4 @@
-cmake_minimum_required ( VERSION 3.3 )
+cmake_minimum_required ( VERSION 3.17 )
 
 FOREACH (policy CMP0070 CMP0110)
 	IF (POLICY ${policy})
@@ -245,5 +245,4 @@ foreach ( test ${tests} )
 endforeach ()
 
 add_subdirectory(indextool)
-
 

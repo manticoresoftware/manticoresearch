@@ -53,8 +53,8 @@ variables:
     boost: boost_rhel_feb17
   before_script:
     - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
-    - ln -s $(pwd) /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
-    - cd /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
+    - ln -s $(pwd) /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0_0
+    - cd /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0_0
   artifacts:
     paths:
       - build/manticore*rpm

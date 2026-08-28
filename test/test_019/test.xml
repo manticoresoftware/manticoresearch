@@ -103,6 +103,21 @@ index dist1
 	agent = <my_address/>:i1
 	agent = <my_address/>:i2
 }
+
+source src_i3
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT *, 11 as idd FROM test_table3
+	sql_attr_uint = idd
+    sql_field_string = body
+}
+
+index i3
+{
+	source			= src_i3
+	path			= <data_path/>/i3
+}
 </config>
 
 <queries>
@@ -173,6 +188,20 @@ index dist1
 	select * from i1 where match ( '-hello' ) order by id asc option not_terms_only_allowed=1;
 	select * from i2 where match ( '-hello' ) order by id asc option not_terms_only_allowed=1;
 	select * from dist1 where match ( '-hello' ) order by id asc option not_terms_only_allowed=1;
+    
+    <!-- OR inside phrase related operators -->
+    select * from i3 where match ( ' " ( ( a b c ) | d ) e" ' ) order by id asc;
+    select * from i3 where match ( ' " ( ( aa bb cc ) | dd ) ee"~3 ' ) order by id asc;
+    select * from i3 where match ( ' " a ( c | d ) e"/2 ' ) order by id asc;
+
+    select * from i3 where match ( ' " e ( ( a b c ) | d )" ' ) order by id asc;
+    select * from i3 where match ( ' " ee ( ( a b c ) | d )"~2 ' ) order by id asc;
+    select * from i3 where match ( ' " ee ( ( a b c ) | d )"/2 ' ) order by id asc;
+
+    select * from i3 where match ( ' "dead ( alive | poor ) but all ( ( as good ) | ( as fast ) )" ' ) order by id asc;
+    select * from i3 where match ( ' "dead ( alive | poor ) but all ( ( as good ) | ( as fast ) )"~5 ' ) order by id asc;
+    select * from i3 where match ( ' "dead ( alive | poor ) but all ( ( as good ) | ( as fast ) )"/3 ' ) order by id asc;
+    
 </sphinxql>
 
 </queries>
@@ -249,6 +278,29 @@ CREATE TABLE `test_table2`
 <db_insert>
 INSERT INTO `test_table2` VALUES
 ( 910, 'wordbefore\0\0wordafter' )
+</db_insert>
+
+<db_create>
+CREATE TABLE `test_table3`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+) CHARACTER SET utf8
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `test_table3`</db_drop>
+<db_insert>
+INSERT INTO `test_table3` VALUES
+( 1, 'a b c e' ),
+( 2, 'd e' ),
+( 3, 'e a b c' ),
+( 4, 'dd ff kk ee' ),
+( 5, 'dd ff kk uu yy xx ee' ),
+( 6, 'dd aa bb cc ff kk uu ee' ),
+( 7, 'ee xx a b c' ),
+( 8, 'ee xx yy a b c' ),
+( 9, 'dead xx yy poor but all as fast' ),
+( 10, 'dead x1 x2 x3 x4 poor but all as good' ),
+( 11, 'dead poor but all as fast' )
 </db_insert>
 
 

@@ -1,0 +1,18 @@
+––– comment –––
+Create bridge network for container communication
+––– input –––
+docker network create app-network --driver bridge > /dev/null; echo $?
+––– output –––
+0
+––– comment –––
+Start Manticore Search container with test-kit image
+––– input –––
+docker run -it --network=app-network --platform linux/amd64 --name manticore -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest bash > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Start Manticore Search daemon with verbose debug logging
+––– input –––
+docker exec manticore stdbuf -oL searchd --logdebugvv > /dev/null 2>&1; echo $?
+––– output –––
+0

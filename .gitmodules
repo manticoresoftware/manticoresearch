@@ -1,0 +1,3 @@
+[submodule "translator"]
+	path = translator
+	url = https://github.com/manticoresoftware/translator.git

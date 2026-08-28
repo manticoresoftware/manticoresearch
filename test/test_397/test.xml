@@ -58,6 +58,26 @@ index rt1
 	morphology		= lemmatize_en_all
 }
 
+index t480
+{
+	type = rt
+	path =<data_path/>/t480
+	rt_field = content
+	rt_field = f
+	rt_field = f2
+	rt_field = f3
+}
+
+index z480
+{
+	type = rt
+	path =<data_path/>/z480
+	rt_field = title
+	rt_field = content
+	index_zones=aa,bb,cc
+	html_strip = 1
+}
+
 index pq1
 {
 	type			= percolate
@@ -75,6 +95,12 @@ index tmpl1 : plain1
 {
 	type = template
 	path			= <data_path/>/tmpl1
+}
+
+index exp1
+{
+	source			= plain1
+	path			= <data_path/>/exp1
 }
 
 </config>
@@ -146,6 +172,61 @@ EXPLAIN QUERY plain1 'her @!title box @(title,content) with me';
 EXPLAIN QUERY rt1 'her @!title box @(title,content) with me';
 EXPLAIN QUERY pq1 'her @!title box @(title,content) with me';
 EXPLAIN QUERY tmpl1 'her @!title box @(title,content) with me';
+
+<!-- OR inside phrase related operators -->
+explain query exp1 ' " ( ( a b c ) | d ) e" ';
+explain query exp1 ' " ( ( a b c ) | d ) e"~5 ';
+explain query exp1 ' " ( ( a b c ) | d ) e"/2 ';
+
+explain query exp1 ' " e ( ( a b c ) | d )" ';
+explain query exp1 ' " e ( ( a b c ) | d )"~5 ';
+explain query exp1 ' " e ( ( a b c ) | d )"/2 ';
+
+explain query exp1 ' "dead ( alive | poor ) but all ( ( as good ) | ( as fast ) )" ';
+explain query exp1 ' "dead ( alive | poor ) but all ( ( as good ) | ( as fast ) )"~5 ';
+explain query exp1 ' "dead ( alive | poor ) but all ( ( as good ) | ( as fast ) )"/3 ';
+
+explain query exp1 ' "( a | b | c | aa | bb ) ( d | e | f | dd ) ( g | h | j | gg ) ( k | m | n | kk ) ( o | p | q | oo )" ';
+explain query exp1 ' "( a | b | c | aa | bb ) ( d | e | f | dd ) ( g | h | j | gg ) ( k | m | n | kk ) ( o | p | q | oo )"~5 ';
+explain query exp1 ' "( a | b | c | aa | bb ) ( d | e | f | dd ) ( g | h | j | gg ) ( k | m | n | kk ) ( o | p | q | oo )"/3 ';
+
+<!-- the case with just OR terms at the phrase node that transformed to jsut the pure phrase -->
+insert into rt1 (id, content) values(1, 'abc'),(2, 'def');
+select * from rt1 where match('"(abc|def)"') order by id asc; show meta;
+explain query rt1 '"(abc|def)"';
+
+insert into t480 (id, content, f, f2, f3) values (1, '', 'a b', 'a b', ''), (2, '', '', '', 'a b'), (20, 'xray alpha beta', '', '', ''), (21, 'yankee alpha beta', '', '', '');
+insert into z480 (id, title, content) values (1, 'a b', ''), (2, '', 'a b'), (20, '&lt;aa> a b &lt;/aa>', ''), (21, '&lt;bb> a b &lt;/bb>', '&lt;cc> a b &lt;/cc>');
+set profiling=1;
+
+explain query t480 '"a b" | "a b"';
+select min(id) from t480 where match ('"a b" | "a b"'); show plan;
+explain query t480 '(@f "a b") | (@f "a b")';
+select min(id) from t480 where match ('(@f "a b") | (@f "a b")'); show plan;
+explain query t480 '(@f "a b") | (@f2 "a b")';
+select min(id) from t480 where match ('(@f "a b") | (@f2 "a b")'); show plan;
+explain query t480 '(@f "a b") | (@f[10] "a b")';
+select min(id) from t480 where match ('(@f "a b") | (@f[10] "a b")'); show plan;
+explain query t480 '(@f[10] "a b") | (@f[10] "a b")';
+select min(id) from t480 where match ('(@f[10] "a b") | (@f[10] "a b")'); show plan;
+explain query t480 '@content ("xray alpha beta" | "yankee alpha beta")';
+select min(id) from t480 where match ('@content ("xray alpha beta" | "yankee alpha beta")'); show plan;
+explain query t480 '@content "(xray|yankee) alpha beta"';
+select min(id) from t480 where match ('@content "(xray|yankee) alpha beta"'); show plan;
+explain query z480 '(ZONE:cc "a b") | (ZONE:bb "a b")';
+select min(id) from z480 where match ('(ZONE:cc "a b") | (ZONE:bb "a b")'); show plan;
+explain query z480 '@content (ZONE:aa "a b") | (ZONE:bb "a b")';
+select min(id) from z480 where match ('@content (ZONE:aa "a b") | (ZONE:bb "a b")'); show plan;
+explain query z480 '@content (ZONE:aa "a b") | (ZONE:cc "a b")';
+select min(id) from z480 where match ('@content (ZONE:aa "a b") | (ZONE:cc "a b")'); show plan;
+explain query z480 '(ZONESPAN:aa "a b") | (ZONESPAN:aa "a b")';
+select min(id) from z480 where match ('(ZONESPAN:aa "a b") | (ZONESPAN:aa "a b")'); show plan;
+explain query z480 '(ZONE:aa "a b") | (ZONESPAN:aa "a b")';
+select min(id) from z480 where match ('(ZONE:aa "a b") | (ZONESPAN:aa "a b")'); show plan;
+explain query z480 '(ZONE:aa "a b") | (ZONESPAN:cc "a b")';
+select min(id) from z480 where match ('(ZONE:aa "a b") | (ZONESPAN:cc "a b")'); show plan;
+explain query z480 '@title (ZONE:aa "a b") | @content (ZONE:cc "a b")';
+select min(id) from z480 where match ('@title (ZONE:aa "a b") | @content (ZONE:cc "a b")'); show plan;
 
 </sphinxql></queries>
 

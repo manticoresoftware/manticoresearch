@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -16,7 +16,17 @@
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/read_until.hpp>
+#include <boost/version.hpp>
+#if BOOST_VERSION >= 108800
+#define BOOST_PROCESS_VERSION 1
+#include <boost/process/v1/async.hpp>
+#include <boost/process/v1/child.hpp>
+#include <boost/process/v1/error.hpp>
+#include <boost/process/v1/handles.hpp>
+#include <boost/process/v1/io.hpp>
+#else
 #include <boost/process.hpp>
+#endif
 #if _WIN32
 #include <boost/winapi/process.hpp>
 #endif
@@ -24,6 +34,7 @@
 
 #include "netfetch.h"
 #include "searchdbuddy.h"
+#include "daemon/logger.h"
 
 static std::unique_ptr<boost::process::child> g_pBuddy;
 static CSphString g_sPath;
@@ -51,7 +62,7 @@ static int g_iTask = 0;
 static const int g_iBuddyLoopSleep = 15;
 
 static const int g_iRestartMax = 3;
-static const int g_iStartMaxTimeout = val_from_env ( "MANTICORE_BUDDY_TIMEOUT", 3 ); // max start timeout 3 sec
+static const int g_iStartMaxTimeout = env_long ( "MANTICORE_BUDDY_TIMEOUT" ).value_or ( 3 ); // max start timeout 3 sec
 
 static int g_iBuddyVersion = 3;
 static bool g_bBuddyVersion = false;
@@ -64,8 +75,9 @@ ScopedPort_c g_tBuddyPort;
 
 static BuddyState_e TryToStart ( const char * sArgs, CSphString & sError );
 static CSphString GetUrl ( const ListenerDesc_t & tDesc );
-static CSphString BuddyGetPath ( const CSphString & sPath, const CSphString & sPluginDir, bool bHasBuddyPath, int iHostPort, const CSphString & sDataDir );
+static CSphString BuddyGetPath ( const std::optional<CSphString> & sPath, const CSphString & sPluginDir, int iHostPort, const CSphString & sDataDir );
 static void BuddyStop ();
+static CSphString GetLogLevel();
 
 #if _WIN32
 static CSphString g_sBuddyBind = "--bind=0.0.0.0:9999";
@@ -419,7 +431,7 @@ static void BuddyStopContainer()
 #endif
 }
 
-void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir, bool bHasBuddyPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads, const CSphString & sConfigFilePath, const CSphString & sDataDir )
+void BuddyStart ( const std::optional<CSphString>& sConfigPath, const CSphString & sPluginDir, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads, const CSphString & sConfigFilePath, const CSphString & sDataDir )
 {
 	const char* szHelperUrl = getenv ( "MANTICORE_HELPER_URL" );
 	if ( szHelperUrl )
@@ -433,7 +445,7 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 
 	SetContainerName ( sConfigFilePath );
 	// should not check buddy related code if buddy disabled at config
-	if ( bHasBuddyPath && sConfigPath.IsEmpty() )
+	if ( sConfigPath && sConfigPath->IsEmpty() )
 		return;
 
 	ARRAY_FOREACH ( i, dListeners )
@@ -461,7 +473,7 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 		return;
 	}
 
-	CSphString sPath = BuddyGetPath ( sConfigPath, sPluginDir, bHasBuddyPath, (int)g_tBuddyPort, sDataDir );
+	CSphString sPath = BuddyGetPath ( sConfigPath, sPluginDir, (int)g_tBuddyPort, sDataDir );
 	if ( sPath.IsEmpty() )
 		return;
 
@@ -471,12 +483,14 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 	g_dLogBuf.Resize ( 0 );
 	g_sPath = sPath;
 
-	g_sStartArgs.SetSprintf ( "%s --listen=%s %s %s --threads=%d",
+	CSphString sLogLevel = GetLogLevel();
+
+	g_sStartArgs.SetSprintf ( "%s --listen=%s %s %s --threads=%d %s",
 		g_sPath.cstr(),
 		g_sListener4Buddy.cstr(),
 		g_sBuddyBind.scstr(),
 		( bTelemetry ? "" : "--disable-telemetry" ),
-		iThreads );
+		iThreads, sLogLevel.scstr() );
 
 	sphLogDebug ( "[BUDDY] start args: %s", g_sStartArgs.cstr() );
 
@@ -561,6 +575,13 @@ static bool BuddyQueryAddErrorBody ( JsonEscapedBuilder & tBuddyQuery, const Vec
 	return true;
 }
 
+// disable Expect: 100-continue
+// as Expect: 100-continue header option added by curl library does not work with the buddy
+static void DisableExpectHeader ( StrVec_t & dHeaders )
+{
+	dHeaders.Add ( "Expect:" );
+}
+
 static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, Str_t sPathQuery, Str_t sQuery, http_method eRequestType, const VecTraits_T<BYTE> & dSrcHttpReply )
 {
 	if ( !HasBuddy() )
@@ -593,9 +614,7 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 
 	StrVec_t dHeaders;
 	dHeaders.Add ( SphSprintf ( "Request-ID: %d_%u", session::GetConnID(), sphCRC32 ( sQuery.first, sQuery.second, sphRand() ) ) );
-	// disable Expect: 100-continue
-	// as Expect: 100-continue header added by curl library do not with the buddy
-	dHeaders.Add ( "Expect:" );
+	DisableExpectHeader ( dHeaders );
 
 	return PostToHelperUrl ( g_sUrlBuddy, (Str_t)tBuddyQuery, dHeaders );
 }
@@ -613,6 +632,7 @@ struct BuddyReply_t
 	CSphString m_sType;
 	JsonObj_c m_tMessage;
 	int m_iReplyHttpCode = 0;
+	CSphString m_sContentType;
 };
 
 static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & sError )
@@ -652,6 +672,9 @@ static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & 
 		return false;
 
 	if ( !tParsed.m_tRoot.FetchIntItem ( tParsed.m_iReplyHttpCode, "error_code", sError, false ) )
+		return false;
+
+	if ( !tParsed.m_tRoot.FetchStrItem ( tParsed.m_sContentType, "content_type", sError, true ) )
 		return false;
 
 	return true;
@@ -703,14 +726,18 @@ static bool SetSessionMeta ( const JsonObj_c & tBudyyReply )
 	// if no meta.total this is not a search query - do not log it into query.log
 	if ( !ConvertValue ( "total", tSrcMeta, tLastMeta.m_iMatches ) )
 		return false;
-		
+
 	// total_found => m_iTotalMatches
 	ConvertValue ( "total_found", tSrcMeta, tLastMeta.m_iTotalMatches );
 
-	// time => m_iQueryTime \ m_iRealQueryTime
+	// time => query/real time stored canonically in microseconds
 	float fTime = 0.0f;
 	if ( ConvertValue ( "time", tSrcMeta, fTime ) )
-		tLastMeta.m_iRealQueryTime = tLastMeta.m_iQueryTime = (int)( fTime * 1000.0f );
+	{
+		int iTimeMs = (int)( fTime * 1000.0f );
+		tLastMeta.SetQueryTimeMs ( iTimeMs );
+		tLastMeta.SetRealQueryTimeMs ( iTimeMs );
+	}
 
 	// total_relation => m_bTotalMatchesApprox
 	CSphString sRel;
@@ -742,9 +769,9 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
 	bool bHttpEndpoint = true;
-	if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::SQL )
+	if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::SQL || tRes.m_eEndpoint==EHTTP_ENDPOINT::CLI || tRes.m_eEndpoint==EHTTP_ENDPOINT::CLI_JSON )
 	{
-		bHttpEndpoint = false;
+		bHttpEndpoint = ( tRes.m_eEndpoint!=EHTTP_ENDPOINT::SQL );
 
 		// sql parser put \0 at error position at the reference string
 		// should use raw_query for buddy request
@@ -793,8 +820,11 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 
 	} else
 	{
+		// kubana related endpoints should be converted
+		bool bConvert = ( bHttpEndpoint && hOptions["endpoint"].Begins ( "_" ) );
+
 		CSphVector<BYTE> dBson;
-		bson::JsonObjToBson ( tReplyParsed.m_tMessage, dBson, true, false );
+		bson::JsonObjToBson ( tReplyParsed.m_tMessage, dBson, bConvert, false );
 		bson::Bson_c ( dBson ).BsonToJson ( sDumpBuf, false );
 		sDump = FromStr ( sDumpBuf );
 	}
@@ -802,15 +832,19 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 	EHTTP_STATUS eHttpStatus = GetHttpStatusCode ( tReplyParsed.m_iReplyHttpCode, tRes.m_eReplyHttpCode );
 
 	dResult.Resize ( 0 );
-	ReplyBuf ( FromStr ( sDump ), eHttpStatus, bNeedHttpResponse, dResult );
-	
+
+	HttpReplyTrait_t tReplyBuf { eHttpStatus, sDump };
+	tReplyBuf.m_bSendHeaders = bNeedHttpResponse;
+	tReplyBuf.m_sContentType = tReplyParsed.m_sContentType.cstr();
+	ReplyBuf ( tReplyBuf, dResult );
+
 	if ( SetSessionMeta ( tReplyParsed.m_tRoot ) )
 		LogBuddyQuery ( sSrcQuery, BuddyQuery_e::HTTP );
 
 	return true;
 }
 
-static bool ConvertErrorMessage ( const Str_t & sStmt, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, const JsonObj_c & tMessage, GenericOutputBuffer_c & tOut )
+static bool ConvertErrorMessage ( const Str_t & sStmt, RowBuffer_i* pRows, const JsonObj_c & tMessage )
 {
 	if ( !tMessage.IsObj() )
 		return false;
@@ -821,19 +855,18 @@ static bool ConvertErrorMessage ( const Str_t & sStmt, std::pair<int, BYTE> tSav
 		return false;
 
 	// reset back out buff and packet
-	uPacketID = tSavedPos.second;
-	tOut.Rewind ( tSavedPos.first );
-	std::unique_ptr<RowBuffer_i> tBuddyRows ( CreateSqlRowBuffer ( &uPacketID, &tOut ) );
+	pRows->RestoreLastPositionState ();
 
 	LogSphinxqlError ( sStmt, FromStr ( sMsgError ) );
 	session::GetClientSession()->m_sError = sMsgError;
 	session::GetClientSession()->m_tLastMeta.m_sError = sMsgError;
-	tBuddyRows->Error ( sMsgError.cstr() );
+	pRows->Error ( sMsgError.cstr() );
 	return true;
 }
 
-void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, GenericOutputBuffer_c & tOut )
+void ProcessSqlQueryBuddy ( Str_t sSrcQuery, RowBuffer_i* pRows )
 {
+	Str_t tError = FromStr ( pRows->GetError() );
 	auto tReplyRaw = BuddyQuery ( false, tError, Str_t(), sSrcQuery, HTTP_GET, VecTraits_T<BYTE>() );
 	if ( !tReplyRaw.first )
 	{
@@ -859,7 +892,7 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 
 	if ( !tReplyParsed.m_tMessage.IsArray() )
 	{
-		if ( ConvertErrorMessage ( sSrcQuery, tSavedPos, uPacketID, tReplyParsed.m_tMessage, tOut ) )
+		if ( ConvertErrorMessage ( sSrcQuery, pRows, tReplyParsed.m_tMessage ) )
 			return;
 
 		LogSphinxqlError ( sSrcQuery.first, tError );
@@ -868,21 +901,18 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 	}
 
 	// reset back out buff and packet
-	uPacketID = tSavedPos.second;
-	tOut.Rewind ( tSavedPos.first );
-	std::unique_ptr<RowBuffer_i> tBuddyRows ( CreateSqlRowBuffer ( &uPacketID, &tOut ) );
-
-	ConvertJsonDataset ( tReplyParsed.m_tMessage, sSrcQuery.first, *tBuddyRows );
+	pRows->RestoreLastPositionState ();
+	ConvertJsonDataset ( tReplyParsed.m_tMessage, sSrcQuery.first, *pRows );
 
 	if ( SetSessionMeta ( tReplyParsed.m_tRoot ) )
 		LogBuddyQuery ( sSrcQuery, BuddyQuery_e::SQL );
 }
 
 #ifdef _WIN32
-CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & , bool bHasBuddyPath, int iHostPort, const CSphString & sDataDir )
+CSphString BuddyGetPath ( const std::optional<CSphString> & sConfigPath, const CSphString & , int iHostPort, const CSphString & sDataDir )
 {
-	if ( bHasBuddyPath )
-		return sConfigPath;
+	if ( sConfigPath )
+		return *sConfigPath;
 
 	const char * sDefaultBuddyName ( "manticore-buddy" );
 	const char * sDefaultBuddyDockerImage ( "manticoresearch/manticore-executor:" BUDDY_EXECUTOR_VERNUM );
@@ -901,10 +931,10 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & , b
 	return CSphString ( sCmd );
 }
 #else
-CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPluginDir, bool bHasBuddyPath, int iHostPort, const CSphString & )
+CSphString BuddyGetPath ( const std::optional<CSphString> & sConfigPath, const CSphString & sPluginDir, int iHostPort, const CSphString & )
 {
-	if ( bHasBuddyPath )
-		return sConfigPath;
+	if ( sConfigPath )
+		return *sConfigPath;
 
 	const char * sExecutor = "manticore-executor";
 	const char * sDefaultBuddyName = "manticore-buddy/src/main.php";
@@ -933,3 +963,46 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPl
 	return sFullPath;
 }
 #endif
+
+static const char * GetBuddyLogLevel ( ESphLogLevel eLogLevel )
+{
+	switch ( eLogLevel )
+	{
+	case SPH_LOG_DEBUG: return "debug";
+	case SPH_LOG_RPL_DEBUG: return "debug";
+	case SPH_LOG_VERBOSE_DEBUG: return "debugv";
+	case SPH_LOG_VERY_VERBOSE_DEBUG: return "debugvv";
+
+	default: return "info";
+	}
+}
+
+CSphString GetLogLevel()
+{
+	CSphString sLogLevel;
+	if ( g_eLogLevel==SPH_LOG_INFO )
+		return sLogLevel;
+
+	sLogLevel.SetSprintf ( "--log-level=%s", GetBuddyLogLevel ( g_eLogLevel ) );
+	return sLogLevel;
+}
+
+void BuddySetLogLevel ( ESphLogLevel eLogLevel )
+{
+	if ( !HasBuddy() )
+		return;
+
+	JsonEscapedBuilder tBuddyQuery;
+	{
+		auto tRoot = tBuddyQuery.Object();
+		tBuddyQuery.NamedString ( "log_level", GetBuddyLogLevel ( eLogLevel ) );
+	}
+
+	StrVec_t dHeaders;
+	DisableExpectHeader ( dHeaders );
+
+	CSphString sUrl;
+	sUrl.SetSprintf ( "%s/config", g_sUrlBuddy.cstr() );
+
+	PostToHelperUrl ( sUrl, (Str_t)tBuddyQuery, dHeaders );
+}

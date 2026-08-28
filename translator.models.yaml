@@ -1,0 +1,17 @@
+# Translation models configuration
+models:
+  default:
+    - deepseek/deepseek-v3.2
+    - openai:gpt-4.1-mini
+    - openai:gpt-4o-mini
+    - openai:gpt-4o
+    - openai:gpt-4.1
+
+  chinese:
+    - qwen/qwen3-14b
+    - qwen/qwen-2.5-7b-instruct
+    - deepseek/deepseek-v3.2
+    - openai:gpt-4.1-mini
+    - openai:gpt-4o-mini
+    - openai:gpt-4o
+    - openai:gpt-4.1

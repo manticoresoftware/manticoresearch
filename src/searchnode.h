@@ -12,7 +12,7 @@
 #ifndef _searchnode_
 #define _searchnode_
 
-#include "sphinxquery.h"
+#include "sphinxquery/sphinxquery.h"
 
 
 enum

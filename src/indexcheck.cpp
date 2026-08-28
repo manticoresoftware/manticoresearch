@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -20,10 +20,21 @@
 #include "conversion.h"
 #include "columnarlib.h"
 #include "indexfiles.h"
+#include "roaring/roaring64map.hh"
 
 #include "killlist.h"
 
 constexpr int FAILS_THRESH = 100;
+
+static inline bool IsLegacyHitlessLayoutForCheck ( DWORD uVersion )
+{
+	return uVersion<68;
+}
+
+static inline int GetDictDocsForCheck ( int iRawDocs, bool bLegacyLayout )
+{
+	return bLegacyLayout ? iRawDocs : ( iRawDocs & HITLESS_DOC_MASK );
+}
 
 class DebugCheckError_c final : public DebugCheckError_i
 {
@@ -38,6 +49,9 @@ public:
 	int64_t GetNumFails() const final;
 	const DocID_t* GetExtractDocs() const final { return m_pExtract; };
 
+	void CheckDocidDup ( DocID_t tDocid, DWORD uRowid ) final;
+	void FinishDiskChunk ( int64_t iNumRows ) final;
+
 private:
 	FILE* m_pFile { nullptr };
 	bool m_bProgress { false };
@@ -45,6 +59,8 @@ private:
 	int64_t m_nFails { 0 };
 	int64_t m_nFailsPrinted { 0 };
 	const DocID_t* m_pExtract;
+
+	roaring::Roaring64Map m_tDocids;
 };
 
 DebugCheckError_c::DebugCheckError_c ( FILE * pFile, const DocID_t* pExtract )
@@ -129,6 +145,19 @@ int64_t DebugCheckError_c::GetNumFails() const
 	return m_nFails;
 }
 
+void DebugCheckError_c::CheckDocidDup ( DocID_t tDocid, DWORD uRowid )
+{
+	if ( !m_tDocids.addChecked ( (uint64_t)tDocid ) )
+		Fail ( "duplicate of docid " INT64_FMT " found at row %u", tDocid, uRowid );
+}
+
+void DebugCheckError_c::FinishDiskChunk ( int64_t iNumRows )
+{
+	m_tDocids.runOptimize();
+	m_tDocids.shrinkToFit();
+}
+
+
 DebugCheckError_i* MakeDebugCheckError ( FILE* fp, DocID_t* pExtract )
 {
 	return new DebugCheckError_c ( fp, pExtract );
@@ -171,7 +200,7 @@ private:
 };
 
 
-void DebugCheckHelper_c::DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, DebugCheckReader_i & tBlobs, int64_t nRows, int64_t iMinMaxBytes, const CSphSchema & tSchema, DebugCheckError_i & tReporter ) const
+void DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, DebugCheckReader_i & tBlobs, int64_t nRows, int64_t iMinMaxBytes, const CSphSchema & tSchema, DebugCheckError_i & tReporter )
 {
 	// empty?
 	if ( !tAttrs.GetLengthBytes() )
@@ -276,7 +305,7 @@ void DebugCheckHelper_c::DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, De
 }
 
 
-void DebugCheckHelper_c::DebugCheck_DeadRowMap ( int64_t iSizeBytes, int64_t nRows, DebugCheckError_i & tReporter ) const
+void DebugCheck_DeadRowMap ( int64_t iSizeBytes, int64_t nRows, DebugCheckError_i & tReporter )
 {
 	tReporter.Msg ( "checking dead row map..." );
 
@@ -342,7 +371,7 @@ static JsonEscapedBuilder& operator<< ( JsonEscapedBuilder& dOut, const Wordid_t
 
 using cbWordidFn = std::function<void ( RowID_t, Wordid_t, int iField, int iPos, bool bIsEnd )>;
 
-class DiskIndexChecker_c::Impl_c : public DebugCheckHelper_c
+class DiskIndexChecker_c::Impl_c
 {
 public:
 			Impl_c ( CSphIndex & tIndex, DebugCheckError_i & tReporter );
@@ -742,6 +771,7 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 
 	const int iWordPerCP = SPH_WORDLIST_CHECKPOINT;
 	const bool bWordDict = m_tIndex.GetDictionary()->GetSettings().m_bWordDict;
+	const bool bLegacySkiplistLayout = IsLegacyHitlessLayoutForCheck ( m_uVersion );
 
 	CSphVector<CSphWordlistCheckpoint> dCheckpoints;
 	dCheckpoints.Reserve ( m_tWordlist.m_iDictCheckpoints );
@@ -785,6 +815,8 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 
 		SphWordID_t uNewWordid = 0;
 		SphOffset_t iNewDoclistOffset = 0;
+		int iRawDocs = 0;
+		int iLayoutDocs = 0;
 		int iDocs = 0;
 		int iHits = 0;
 		bool bHitless = false;
@@ -816,13 +848,15 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 			}
 
 			iNewDoclistOffset = tDictReader.UnzipOffset();
-			iDocs = tDictReader.UnzipInt();
+			iRawDocs = tDictReader.UnzipInt();
+			iLayoutDocs = GetDictDocsForCheck ( iRawDocs, bLegacySkiplistLayout );
+			iDocs = iRawDocs;
 			iHits = tDictReader.UnzipInt();
 			int iHint = 0;
-			if ( iDocs>=DOCLIST_HINT_THRESH )
+			if ( iLayoutDocs>=DOCLIST_HINT_THRESH )
 				iHint = tDictReader.GetByte();
 
-			iHint = DoclistHintUnpack ( iDocs, (BYTE)iHint );
+			iHint = DoclistHintUnpack ( iLayoutDocs, (BYTE)iHint );
 
 			if ( m_tIndex.GetSettings().m_eHitless==SPH_HITLESS_SOME && ( iDocs & HITLESS_DOC_FLAG )!=0 )
 			{
@@ -851,7 +885,9 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 			// finish reading the entire entry
 			uNewWordid = uWordid + iDeltaWord;
 			iNewDoclistOffset = iDoclistOffset + tDictReader.UnzipOffset();
-			iDocs = tDictReader.UnzipInt();
+			iRawDocs = tDictReader.UnzipInt();
+			iLayoutDocs = GetDictDocsForCheck ( iRawDocs, bLegacySkiplistLayout );
+			iDocs = iRawDocs;
 			iHits = tDictReader.UnzipInt();
 			bHitless = ( m_dHitlessWords.BinarySearch ( uNewWordid )!=NULL );
 			if ( bHitless )
@@ -870,8 +906,9 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 
 		assert ( tIndexSettings.m_iSkiplistBlockSize>0 );
 
-		// skiplist
-		if ( iDocs>tIndexSettings.m_iSkiplistBlockSize && !bHitless )
+		// Stream consumption depends on docs count in dictionary layout.
+		// Logical hitless masking must not affect optional field parsing.
+		if ( iLayoutDocs>tIndexSettings.m_iSkiplistBlockSize )
 		{
 			int iSkipsOffset = tDictReader.UnzipInt();
 			if ( !bWordDict && iSkipsOffset<iLastSkipsOffset )
@@ -952,6 +989,7 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 {
 	const CSphIndexSettings & tIndexSettings = m_tIndex.GetSettings();
+	const bool bLegacySkiplistLayout = IsLegacyHitlessLayoutForCheck ( m_uVersion );
 
 	if ( !fnCbWordid )
 		m_tReporter.Msg ( "checking data..." );
@@ -965,6 +1003,8 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 
 	SphWordID_t uWordid = 0;
 	int64_t iDoclistOffset = 0;
+	int iRawDictDocs = 0;
+	int iLayoutDictDocs = 0;
 	int iDictDocs, iDictHits;
 	bool bHitless = false;
 
@@ -1024,9 +1064,11 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 			}
 
 			iDoclistOffset = m_tDictReader.UnzipOffset();
-			iDictDocs = m_tDictReader.UnzipInt();
+			iRawDictDocs = m_tDictReader.UnzipInt();
+			iLayoutDictDocs = GetDictDocsForCheck ( iRawDictDocs, bLegacySkiplistLayout );
+			iDictDocs = iRawDictDocs;
 			iDictHits = m_tDictReader.UnzipInt();
-			if ( iDictDocs>=DOCLIST_HINT_THRESH )
+			if ( iLayoutDictDocs>=DOCLIST_HINT_THRESH )
 				m_tDictReader.GetByte();
 
 			if ( tIndexSettings.m_eHitless==SPH_HITLESS_SOME && ( iDictDocs & HITLESS_DOC_FLAG ) )
@@ -1041,7 +1083,9 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 			uWordid = uWordid + iDeltaWord;
 			bHitless = ( m_dHitlessWords.BinarySearch ( uWordid )!=NULL );
 			iDoclistOffset = iDoclistOffset + m_tDictReader.UnzipOffset();
-			iDictDocs = m_tDictReader.UnzipInt();
+			iRawDictDocs = m_tDictReader.UnzipInt();
+			iLayoutDictDocs = GetDictDocsForCheck ( iRawDictDocs, bLegacySkiplistLayout );
+			iDictDocs = iRawDictDocs;
 			if ( bHitless )
 				iDictDocs = ( iDictDocs & HITLESS_DOC_MASK );
 			iDictHits = m_tDictReader.UnzipInt();
@@ -1049,7 +1093,9 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 		}
 
 		int64_t iSkipsOffset = 0;
-		if ( iDictDocs>tIndexSettings.m_iSkiplistBlockSize && !bHitless )
+		// Stream consumption depends on docs count in dictionary layout.
+		// Logical hitless masking must not affect optional field parsing.
+		if ( iLayoutDictDocs>tIndexSettings.m_iSkiplistBlockSize )
 		{
 			if ( m_uVersion<=57 )
 				iSkipsOffset = (int)m_tDictReader.UnzipInt();
@@ -1481,10 +1527,10 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 
 	CSphFixedVector<CSphRowitem> dRow ( m_tSchema.GetRowSize() );
 	m_tAttrReader.SeekTo ( 0, (int) dRow.GetLengthBytes() );
-	CSphBitvec dRowids ( (int)m_iNumRows );
+	CSphBitvec dRowids ( m_iNumRows );
 
-	int iDocs = tLookup.GetDword();
-	int iDocsPerCheckpoint = tLookup.GetDword();
+	int64_t iDocs = tLookup.GetDword();
+	int64_t iDocsPerCheckpoint = tLookup.GetDword();
 	tLookup.GetOffset(); // max docid
 	int64_t iLookupBase = tLookup.GetPos();
 
@@ -1515,7 +1561,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 			iCpDocs = ( iLefover ? iLefover : iDocsPerCheckpoint );
 		}
 
-		for ( int i=0; i<iCpDocs; i++ )
+		for ( int i=0; i<iCpDocs; ++i )
 		{
 			uint64_t tDelta = 0;
 			DocID_t tDocID = 0;
@@ -1557,12 +1603,12 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 			tLastDocID = tDocID;
 		}
 
-		iCp++;
+		++iCp;
 	}
 
 	if ( !pId->IsColumnar() )
 	{
-		for ( int i=0; i<m_iNumRows; i++ )
+		for ( int64_t i=0; i<m_iNumRows; ++i )
 		{
 			if ( dRowids.BitGet ( i ) )
 				continue;
@@ -1614,31 +1660,30 @@ struct DocRow_fn
 	}
 };
 
-
 void DiskIndexChecker_c::Impl_c::CheckDocids()
 {
+	m_tReporter.Msg ( "checking docid duplicates ..." );
+
 	CSphString sError;
-	m_tReporter.Msg ( "checking docid douplicates ..." );
+	DeadRowMap_Disk_c tDeadRowMap;
+	tDeadRowMap.Prealloc ( (DWORD)m_iNumRows, GetFilename ( SPH_EXT_SPM ), sError );
+	tDeadRowMap.Preread ( GetFilename ( SPH_EXT_SPM ).cstr(), "checking docid duplicates", false );
 
 	CSphFixedVector<CSphRowitem> dRow ( m_tSchema.GetRowSize() );
 	m_tAttrReader.SeekTo ( 0, (int) dRow.GetLengthBytes() );
 
-	CSphFixedVector<DocidRowidPair_t> dRows ( m_iNumRows );
-	for ( int i=0; i<m_iNumRows; i++ )
+	for ( int iRowID=0; iRowID<m_iNumRows; iRowID++ )
 	{
-		m_tAttrReader.SeekTo ( dRow.GetLengthBytes() * i, sizeof(DocID_t) );
+		if ( tDeadRowMap.IsSet ( iRowID ) )
+			continue;
+
+		m_tAttrReader.SeekTo ( dRow.GetLengthBytes() * iRowID, sizeof(DocID_t) );
 		m_tAttrReader.GetBytes ( dRow.Begin(), sizeof(DocID_t) );
 
-		dRows[i].m_tRowID = i;
-		dRows[i].m_tDocID = sphGetDocID ( dRow.Begin() );
+		m_tReporter.CheckDocidDup ( sphGetDocID ( dRow.Begin() ), iRowID );
 	}
 
-	dRows.Sort ( DocRow_fn() );
-	for ( int i=1; i<dRows.GetLength(); i++ )
-	{
-		if ( dRows[i].m_tDocID==dRows[i-1].m_tDocID )
-			m_tReporter.Fail ( "duplicate of docid " INT64_FMT " found at rows %u %u", dRows[i].m_tDocID, dRows[i-1].m_tRowID, dRows[i].m_tRowID );
-	}
+	m_tReporter.FinishDiskChunk ( m_iNumRows );
 }
 
 
@@ -1761,4 +1806,28 @@ bool DebugCheckSchema ( const ISphSchema & tSchema, CSphString & sError )
 void DebugCheckSchema ( const ISphSchema & tSchema, DebugCheckError_i & tReporter )
 {
 	DebugCheckSchema_T ( tSchema, tReporter );
+}
+
+
+bool SchemaConfigureCheckAttribute ( const CSphSchema & tSchema, const CSphColumnInfo & tCol, CSphString & sError )
+{
+	if ( tCol.m_sName.IsEmpty() )
+	{
+		sError.SetSprintf ( "column number %d has no name", tCol.m_iIndex );
+		return false;
+	}
+
+	if ( tSchema.GetAttr ( tCol.m_sName.cstr() ) )
+	{
+		sError.SetSprintf ( "can not add multiple attributes with same name '%s'", tCol.m_sName.cstr () );
+		return false;
+	}
+
+	if ( sphIsInternalAttr ( tCol.m_sName ) )
+	{
+		sError.SetSprintf ( "%s is not a valid attribute name", tCol.m_sName.cstr() );
+		return false;
+	}
+
+	return true;
 }

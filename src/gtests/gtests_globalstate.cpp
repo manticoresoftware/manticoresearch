@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -15,6 +15,7 @@
 #include "sphinxint.h"
 #include "threadutils.h"
 #include "tracer.h"
+#include "stackmock.h"
 
 // global stuff
 
@@ -58,12 +59,19 @@ class Environment : public ::testing::Environment
 	CSphString m_sTmp2;
 public:
 	// Override this to define how to set up the environment.
-	void SetUp () override
+	void ATTRIBUTE_NO_SANITIZE_ADDRESS SetUp () override
 	{
 		char cTopOfMainStack;
 		Threads::Init ();
 		Threads::PrepareMainThread ( &cTopOfMainStack );
 		Tracer::Init();
+
+		StringBuilder_c sStack;
+		DetermineNodeItemStackSize ( sStack );
+		DetermineFilterItemStackSize ( sStack );
+		DetermineMatchStackSize ( sStack );
+		printf ( "%s\n", sStack.cstr() );
+
 		m_szDict = getenv ( "GTEST_DICT" );
 		if ( m_szDict )
 		{

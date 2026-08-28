@@ -1,0 +1,4 @@
+---
+alwaysApply: true
+---
+When you write a CLT test, use "mysql -E" to get vertical output. It helps avoid long table separators.

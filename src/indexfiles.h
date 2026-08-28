@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -105,3 +105,6 @@ public:
 	// if prev op fails with fatal error - log the message and terminate
 	CSphString FatalMsg(const char * szMsg=nullptr);
 };
+
+// remove all old files these are not in the list of current index files
+void		RemoveOutdatedFiles ( const StrVec_t & dNewFiles, StrVec_t & dOldFiles );

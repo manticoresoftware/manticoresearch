@@ -122,6 +122,9 @@ jobs:
       source_ref: ${{ inputs.source_ref }}
       distr: ${{ matrix.distr }}
       arch: ${{ matrix.arch }}
+      # quality checks (cargo test + clippy) are owned by the columnar repo CI,
+      # which runs them on every push; don't repeat them on release builds
+      run_quality_checks: false
 
   pack_debian_ubuntu:
     if: ${{ inputs.enabled }}

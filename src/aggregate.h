@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -25,7 +25,9 @@ public:
 	virtual void	Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped, bool bMerge ) = 0;
 	virtual void	Setup ( CSphMatch & tDst, const CSphMatch & tSrc, bool bMerge ) {}
 	virtual void	Finalize ( CSphMatch & tDst ) {}
+	virtual void	Discard ( CSphMatch & tDst ) {}
 	virtual void	SetColumnar ( columnar::Columnar_i * pColumnar ) {}
+	virtual bool	NeedsDiscard () const { return false; }
 };
 
 
@@ -34,6 +36,11 @@ AggrFunc_i * CreateAggrAvg ( const CSphColumnInfo & tAttr, const CSphAttrLocator
 AggrFunc_i * CreateAggrMin ( const CSphColumnInfo & tAttr );
 AggrFunc_i * CreateAggrMax ( const CSphColumnInfo & tAttr );
 
+AggrFunc_i * CreateAggrPercentiles ( const CSphColumnInfo & tAttr );
+AggrFunc_i * CreateAggrPercentileRanks ( const CSphColumnInfo & tAttr );
+AggrFunc_i * CreateAggrMad ( const CSphColumnInfo & tAttr );
+
 AggrFunc_i * CreateAggrConcat ( const CSphColumnInfo & tAttr );
+AggrFunc_i * CreateAggrConcat ( const CSphColumnInfo & tAttr, const CSphString & sSeparator );
 
 #endif // _aggregate_

@@ -23,7 +23,26 @@ searchd {
 
 All HTTP endpoints return `application/json` content type. For the most part, endpoints use JSON payloads for requests. However, there are some exceptions that use NDJSON or simple URL-encoded payloads.
 
-Currently, there is no user authentication. Therefore, make sure that the HTTP interface is not accessible to anyone outside your network. As Manticore functions like any other web server, you can use a reverse proxy, such as Nginx, to implement HTTP authentication or caching.
+If [authentication and authorization](../Security/Authentication_and_authorization.md) is enabled, HTTP/HTTPS clients must send either a Basic authentication header or a bearer token:
+
+```bash
+curl -u admin:StrongPass#2026 http://127.0.0.1:9308/sql?mode=raw -d "SELECT 1"
+curl -H "Authorization: Bearer 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" http://127.0.0.1:9308/sql?mode=raw -d "SELECT 1"
+```
+
+Create or rotate a bearer token for the authenticated HTTP user with `POST /token`:
+
+```bash
+curl -u admin:StrongPass#2026 -X POST http://127.0.0.1:9308/token -d "{}"
+```
+
+The endpoint returns the raw token once. Store it securely. `SHOW TOKEN` shows the stored token hash, not the raw bearer token. To replace a bearer token, rotate it with `POST /token` or the SQL `TOKEN` command.
+
+Use HTTPS when sending credentials or bearer tokens over a network.
+
+HTTP header names and the `Basic` and `Bearer` scheme names are accepted case-insensitively. User names are exact-case.
+
+Missing or invalid credentials return `401 Unauthorized`. Valid credentials without the required permission return `403 Forbidden`.
 
 <!-- example HTTPS -->
 The HTTP protocol also supports [SSL encryption](../Security/SSL.md):
@@ -695,9 +714,28 @@ curl 0:9308/cli_json -d 'desc test'
 
 <!-- end -->
 
-### Keep-alive
+### Persistent connections
 
-HTTP keep-alive is supported for the `/sql`, `/sql?mode=raw`, and `/cli_json` endpoints, but not for the `/cli` endpoint. This feature enables stateful interactions via the HTTP JSON interface, provided the client also supports keep-alive. For example, using the [/cli_json](../Connecting_to_the_server/HTTP.md#/cli_json) endpoint, you can run a `SHOW META` command after a `SELECT` query, and it will behave similarly to interactions with Manticore through a MySQL client.
+A persistent connection means the client keeps the TCP connection open and sends multiple queries over it, instead of opening a new connection for each query. This avoids repeated name resolution and connection setup, and it allows the daemon to keep per-connection state, such as meta information and query profiles.
 
-<!-- proofread -->
+With HTTP/1.0, add `Connection: keep-alive` to request a persistent connection.
 
+With HTTP/1.1, connections are persistent by default. Send `Connection: close` on the final request to explicitly end the session.
+
+### HTTP state
+
+On a persistent connection, the daemon keeps some state that later queries can use. This state is preserved for the `/sql`, `/sql?mode=raw`, and `/cli_json` endpoints, but not for `/cli`. This enables stateful interactions over HTTP JSON. For example, when you use [/cli_json](../Connecting_to_the_server/HTTP.md#/cli_json), you can run `SHOW META` after a `SELECT` on the same connection, similar to using a MySQL client.
+
+To run multiple queries using sphinxql via one connection with `curl`, you need to chain your commands with the
+`--next` key:
+
+```
+curl -s localhost:9312/cli_json -d "CALL PQ ('pq', ('{"title":"angry", "gid":3 }'))" --next localhost:9312/cli_json -d 'show meta'
+```
+
+Notice, however, that this will NOT work:
+```
+curl -s localhost:9312/cli_json -d "CALL PQ ('pq', ('{"title":"angry", "gid":3 }')); show meta"
+```
+
+This is because Manticore treats a semicolon-separated SQL batch as a [multi-query](../Searching/Multi-queries.md), which has its own behavior and limitations.

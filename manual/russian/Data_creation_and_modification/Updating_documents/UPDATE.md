@@ -2,19 +2,27 @@
 
 <!-- example update -->
 
-Команда `UPDATE` изменяет поколоночные ([row-wise](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)) значения атрибутов существующих документов в указанной таблице на новые значения. Обратите внимание, что содержимое поля полнотекстового поиска или колоннарного атрибута обновить нельзя. Если это необходимо, используйте [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
+Команда `UPDATE` изменяет значения атрибутов, хранящихся [построчно](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages), у существующих документов в указанной таблице на новые значения. Обратите внимание, что нельзя обновить содержимое полнотекстового поля или колоночного атрибута. Если такая необходимость есть, используйте [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
 
-Обновление атрибутов поддерживается для RT, PQ и обычных таблиц. Все типы атрибутов можно обновлять, если они хранятся в [поколоночном формате](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages).
+Обновление атрибутов поддерживается для RT, PQ и обычных таблиц. Все типы атрибутов могут быть обновлены, при условии что они хранятся в [построчном хранилище](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages).
 
-Обратите внимание, что идентификатор документа обновить нельзя.
+Обратите внимание, что идентификатор документа не может быть обновлен.
 
-Важно знать, что обновление атрибута отключает его [вторичный индекс](../../Server_settings/Searchd.md#secondary_indexes). Если критично сохранить непрерывность вторичного индекса, рассмотрите возможность полного или [частичного замещения](../../Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET) документа.
+Важно знать, что обновление атрибута отключает его [вторичный индекс](../../Server_settings/Searchd.md#secondary_indexes). Если непрерывность вторичного индекса критически важна, рассмотрите возможность полной или [частичной замены](../../Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET) документа.
 
 Подробнее о `UPDATE` и частичном `REPLACE` читайте [здесь](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, price float, enabled int);
+INSERT INTO products(id,title,price,enabled) VALUES (10,'doc ten',19.85,1),(1,'doc one',9.99,1);
+-->
 
 ```sql
 UPDATE products SET enabled=0 WHERE id=10;
@@ -110,7 +118,7 @@ res = await indexApi.update({"table" : "products", "id" : 1, "doc" : {"price":10
 
 <!-- response javascript -->
 ```javascript
-{"table":"products","_id":1,"result":"updated"}
+{"table":"products","id":1,"result":"updated"}
 ```
 <!-- intro -->
 ##### java:
@@ -194,7 +202,7 @@ res = await indexApi.update({ index: "test", id: 1, doc: { cat: 10 } });
 ```typescript
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"result":"updated"
 }
 ```
@@ -214,7 +222,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 ```go
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"result":"updated"
 }
 ```
@@ -223,7 +231,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 
 <!-- example update multiple attributes -->
 
-В одном запросе можно обновить несколько атрибутов. Пример:
+Несколько атрибутов могут быть обновлены в одном операторе. Пример:
 
 <!-- intro -->
 ##### SQL:
@@ -353,7 +361,7 @@ res = await indexApi.update({"table" : "products", "id" : 1, "doc" : {
 
 <!-- response javascript -->
 ```javascript
-{"table":"products","_id":1,"result":"updated"}
+{"table":"products","id":1,"result":"updated"}
 ```
 <!-- intro -->
 ##### java:
@@ -447,7 +455,7 @@ res = await indexApi.update({ index: "test", id: 1, doc: { name: "Doc 21", cat: 
 ```go
 {
   "table":"test",
-  "_id":1,
+  "id":1,
   "result":"updated"
 }
 ```
@@ -467,18 +475,18 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 ```go
 {
   "table":"test",
-  "_id":1,
+  "id":1,
   "result":"updated"
 }
 ```
 
 <!-- end -->
 
-При присвоении значения вне диапазона для 32-битных атрибутов они будут обрезаны до младших 32 бит без предупреждения. Например, если попытаться обновить 32-битное беззнаковое целое значением 4294967297, будет сохранено значение 1, поскольку младшие 32 бита 4294967297 (0x100000001 в шестнадцатеричном формате) равны 1 (0x00000001 в шестнадцатеричном формате).
+При присвоении 32-битным атрибутам значений, выходящих за допустимый диапазон, они будут обрезаны до своих младших 32 бит без предупреждения. Например, если вы попытаетесь обновить 32-битное беззнаковое целое значение 4294967297, фактически будет сохранено значение 1, потому что младшие 32 бита числа 4294967297 (0x100000001 в шестнадцатеричной системе) составляют 1 (0x00000001 в шестнадцатеричной системе).
 
 <!-- example partial JSON update -->
 
-Команда `UPDATE` может использоваться для частичного обновления JSON, если работают с числовыми типами данных или массивами чисел. Просто следите, чтобы целочисленное значение не обновлялось на число с плавающей точкой, так как оно будет округлено.
+`UPDATE` может использоваться для выполнения частичных обновлений JSON для числовых типов данных или массивов числовых типов данных. Просто убедитесь, что вы не обновляете целочисленное значение значением с плавающей запятой, так как оно будет округлено.
 
 <!-- intro -->
 ##### SQL:
@@ -532,7 +540,7 @@ POST /update
 ```JSON
 {
    "table":"products",
-   "_id":100,
+   "id":100,
    "created":true,
    "result":"created",
    "status":201
@@ -615,7 +623,7 @@ res = await indexApi.update({"table" : "products", "id" : 1, "doc" : {
 
 <!-- response javascript -->
 ```javascript
-{"table":"products","_id":1,"result":"updated"}
+{"table":"products","id":1,"result":"updated"}
 ```
 
 <!-- intro -->
@@ -700,7 +708,7 @@ res = await indexApi.update({"table" : "test", "id" : 1, "doc" : { "meta.tags[0]
 
 <!-- response TypeScript -->
 ```typescript
-{"table":"test","_id":1,"result":"updated"}
+{"table":"test","id":1,"result":"updated"}
 ```
 
 <!-- intro -->
@@ -718,7 +726,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 ```go
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"result":"updated"
 }
 ```
@@ -732,6 +740,13 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, data json);
+-->
 
 ```sql
 insert into products values (1,'title','{"tags":[1,2,3]}');
@@ -777,6 +792,14 @@ POST /update
 
 <!-- response JSON -->
 ```JSON
+{
+  "table":"products",
+  "id":1,
+  "created":true,
+  "result":"created",
+  "status":201
+}
+
 {
   "table":"products",
   "updated":1
@@ -868,8 +891,8 @@ res = await indexApi.update({"table" : "products", "id" : 100, "doc" : {"meta" :
 
 <!-- response javascript -->
 ```javascript
-{"table":"products","_id":100,"created":true,"result":"created"}
-{"table":"products","_id":100,"result":"updated"}
+{"table":"products","id":100,"created":true,"result":"created"}
+{"table":"products","id":100,"result":"updated"}
 
 ```
 
@@ -1027,14 +1050,14 @@ res = await indexApi.update({ index: 'test', id: 1, doc: { meta: { tags:['one','
 ```typescript
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"created":true,
 	"result":"created"
 }
 
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"result":"updated"
 }
 ```
@@ -1060,14 +1083,14 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 ```go
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"created":true,
 	"result":"created"
 }
 
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"result":"updated"
 }
 ```
@@ -1076,7 +1099,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 
 <!-- example cluster update -->
 
-При использовании репликации имя таблицы должно предваряться `cluster_name:` (в SQL), чтобы обновления распространялись на все узлы кластера. Для запросов через HTTP следует установить свойство `cluster`. Дополнительную информацию см. в разделе [настройки репликации](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md).
+При использовании репликации имя таблицы должно быть предварено `cluster_name:` (в SQL), чтобы обновления распространялись на все узлы в кластере. Для запросов через HTTP следует установить свойство `cluster`. Подробнее см. [настройка репликации](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md).
 
 ```json
 {
@@ -1223,11 +1246,11 @@ UPDATE table SET col1 = newval1 [, ...] WHERE where_condition [OPTION opt_name =
 ```
 
 
-`where_condition` имеет тот же синтаксис, что и в операторах [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL).
+`where_condition` имеет тот же синтаксис, что и в операторе [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL).
 
 <!-- example MVA empty update -->
 
-Наборы значений атрибутов с множественными значениями должны указываться как списки через запятую в скобках. Чтобы удалить все значения из атрибута с множественными значениями, просто присвойте ему `()`.
+Наборы значений многозначных атрибутов должны быть указаны в виде списков, разделенных запятыми, в круглых скобках. Чтобы удалить все значения из многозначного атрибута, просто присвойте ему `()`.
 
 <!-- intro -->
 ##### SQL:
@@ -1257,7 +1280,7 @@ POST /update
 
 {
 	"table":"products",
-	"_id":1,
+	"id":1,
 	"doc":
 	{
 		"tags1": []
@@ -1328,7 +1351,7 @@ indexApi.update({"table" : "products", "id" : 1, "doc" : {"tags1": []}})
 
 <!-- response javascript -->
 ```javascript
-{"table":"products","_id":1,"result":"updated"}
+{"table":"products","id":1,"result":"updated"}
 ```
 <!-- intro -->
 ##### java:
@@ -1413,7 +1436,7 @@ res = await indexApi.update({ index: 'test', id: 1, doc: { cat: 10 } });
 ```typescript
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"result":"updated"
 }
 ```
@@ -1433,7 +1456,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 ```go
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"result":"updated"
 }
 ```
@@ -1441,32 +1464,40 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- end -->
 
 
-Клауза `OPTION` — это специфичное для Manticore расширение, позволяющее управлять рядом опций обновления. Синтаксис:
+Предложение `OPTION` — это специфичное для Manticore расширение, которое позволяет управлять рядом опций для каждого обновления. Синтаксис:
 
 ```sql
 OPTION <optionname>=<value> [ , ... ]
 ```
 
-Опции такие же, как для оператора [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL). В частности, для оператора `UPDATE` доступны следующие опции:
+Опции те же, что и для оператора [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL). Конкретно для оператора `UPDATE` можно использовать следующие опции:
 
-*   'ignore_nonexistent_columns' — если установлено в **1**, обновление будет игнорировать предупреждения о попытках обновить колонку, которой нет в текущей схеме таблицы. Значение по умолчанию — **0**.
-*   'strict' — используется при частичных обновлениях JSON-атрибутов. По умолчанию (strict=1) `UPDATE` вызывает ошибку, если запрос пытается обновить нечисловые свойства. При strict=0, если обновляется несколько свойств, а некоторые недопустимы, ошибка не возникнет, и обновление применится только к допустимым свойствам (остальные будут игнорироваться). Если ни одно из изменений `SET` не разрешено, команда завершится ошибкой даже при strict=0.
+*   'ignore_nonexistent_columns' - Если установлено значение **1**, это означает, что обновление будет молча игнорировать любые предупреждения о попытке обновить столбец, который не существует в текущей схеме таблицы. Значение по умолчанию — **0**.
+*   'strict' - Эта опция используется при частичных обновлениях JSON-атрибутов. По умолчанию (strict=1) `UPDATE` приведет к ошибке, если запрос `UPDATE` пытается выполнить обновление нечисловых свойств. При strict=0, если обновляются несколько свойств и некоторые из них не разрешены, `UPDATE` не приведет к ошибке и выполнит изменения только для разрешенных свойств (остальные будут проигнорированы). Если ни одно из изменений `SET` в `UPDATE` не разрешено, команда приведет к ошибке даже при strict=0.
 
-### Подсказки оптимизатору запросов
+### Подсказки оптимизатора запросов
 
-В редких случаях встроенный анализатор запросов Manticore может неправильно интерпретировать запрос и определить, следует ли использовать таблицу по ID. Это может привести к плохой производительности для запросов типа `UPDATE ... WHERE id = 123`.
-Информацию о том, как принудительно заставить оптимизатор использовать индекс docid, см. в разделе [Подсказки оптимизатору запросов](../../Searching/Options.md#Query optimizer hints).
+В редких случаях встроенный анализатор запросов Manticore может некорректно понять запрос и определить, следует ли использовать таблицу по ID. Это может привести к плохой производительности для запросов вида `UPDATE ... WHERE id = 123`.
+Информацию о том, как заставить оптимизатор использовать индекс docid, см. в разделе [Подсказки оптимизатора запросов](../../Searching/Options.md#Query optimizer hints).
 
 ## Обновления через HTTP JSON
 
-Обновления через протокол HTTP JSON выполняются через endpoint `/update`. Синтаксис похож на [endpoint для /insert](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), но свойство `doc` теперь обязательно.
+Обновления с использованием протокола HTTP JSON выполняются через конечную точку `/update`. Синтаксис аналогичен конечной точке [/insert](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), но на этот раз свойство `doc` является обязательным.
 
-Сервер ответит JSON-объектом, указывающим, была ли операция успешной.
+Сервер ответит объектом JSON, указывающим, была ли операция успешной.
 
 <!-- example JSON update -->
 
 <!-- intro -->
 ##### JSON:
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(title text, gid int, price float);
+INSERT INTO test(id,title,gid,price) VALUES (1,'green apple',10,10.5),(2,'banana',20,20.5);
+-->
 
 <!-- request JSON -->
 
@@ -1487,7 +1518,7 @@ POST /update
 ``` JSON
 {
   "table": "test",
-  "_id": 1,
+  "id": 1,
   "result": "updated"
 }
 ```
@@ -1496,7 +1527,7 @@ POST /update
 
 <!-- example JSON Example_2 -->
 
-ID документа, который нужно обновить, можно задать напрямую через свойство `id`, как показано в предыдущем примере, или же обновлять документы по запросу, применяя обновление ко всем документам, соответствующим запросу:
+ID документа, который необходимо обновить, может быть установлен напрямую с помощью свойства `id`, как показано в предыдущем примере, или вы можете обновлять документы по запросу и применять обновление ко всем документам, соответствующим запросу:
 
 <!-- intro -->
 ##### JSON:
@@ -1523,14 +1554,14 @@ POST /update
 
 ```json
 {
-  "table":"products",
+  "table":"test",
   "updated":1
 }
 ```
 
 <!-- end -->
 
-Синтаксис запроса такой же, как в [/search endpoint](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON). Обратите внимание, что нельзя одновременно указывать `id` и `query`.
+Синтаксис запроса такой же, как в конечной точке [/search](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON). Обратите внимание, что нельзя указывать одновременно `id` и `query`.
 
 ## Сброс атрибутов
 
@@ -1538,7 +1569,7 @@ POST /update
 FLUSH ATTRIBUTES
 ```
 
-Команда FLUSH ATTRIBUTES гарантирует, что все обновления атрибутов в памяти во всех активных таблицах будут сброшены на диск. Она возвращает тег, который идентифицирует состояние результата на диске, представляющий количество фактических сохранений атрибутов на диск, выполненных с момента запуска сервера.
+Команда FLUSH ATTRIBUTES гарантирует, что все обновления атрибутов в памяти во всех активных таблицах сбрасываются на диск. Она возвращает тег, идентифицирующий результирующее состояние на диске, которое представляет количество фактических сохранений атрибутов на диск с момента запуска сервера.
 
 ```sql
 mysql> UPDATE testindex SET channel_id=1107025 WHERE id=1;
@@ -1552,14 +1583,14 @@ mysql> FLUSH ATTRIBUTES;
 +------+
 1 row in set (0.19 sec)
 ```
-См. также настройку [attr_flush_period](../../Data_creation_and_modification/Updating_documents/UPDATE.md#attr_flush_period).
+Смотрите также настройку [attr_flush_period](../../Data_creation_and_modification/Updating_documents/UPDATE.md#attr_flush_period).
 
 
 ## Массовые обновления
 
 <!-- example bulk update -->
 
-Вы можете выполнить несколько операций обновления в одном запросе, используя endpoint `/bulk`. Этот endpoint работает только с данными, у которых `Content-Type` установлен в `application/x-ndjson`. Данные должны быть отформатированы как JSON с разделением строками (NDJSON). По сути, это означает, что каждая строка должна содержать ровно одно JSON-выражение и заканчиваться символом новой строки `\n` и, возможно, `\r`.
+Вы можете выполнить несколько операций обновления за один вызов, используя конечную точку `/bulk`. Эта конечная точка работает только с данными, у которых `Content-Type` установлен в `application/x-ndjson`. Данные должны быть отформатированы как JSON, разделенный символами новой строки (NDJSON). По сути, это означает, что каждая строка должна содержать ровно одно JSON-выражение и заканчиваться символом новой строки `\n` и, возможно, `\r`.
 
 
 <!-- intro -->
@@ -1584,7 +1615,7 @@ POST /bulk
          "update":
          {
             "table":"products",
-            "_id":1,
+            "id":1,
             "result":"updated"
          }
       },
@@ -1592,7 +1623,7 @@ POST /bulk
          "update":
          {
             "table":"products",
-            "_id":2,
+            "id":2,
             "result":"updated"
          }
       }
@@ -1603,14 +1634,14 @@ POST /bulk
 
 <!-- end -->
 
-Endpoint `/bulk` поддерживает вставки, замены и удаления. Каждое выражение начинается с типа действия (в данном случае `update`). Вот список поддерживаемых действий:
+Конечная точка `/bulk` поддерживает вставки, замены и удаления. Каждое выражение начинается с типа действия (в данном случае `update`). Вот список поддерживаемых действий:
 
-* `insert`: Вставляет документ. Синтаксис такой же, как в [/insert endpoint](../../Quick_start_guide.md#Add-documents).
-* `create`: синоним `insert`
+* `insert`: Вставляет документ. Синтаксис такой же, как в конечной точке [/insert](../../Quick_start_guide.md#Add-documents).
+* `create`: синоним для `insert`
 * `replace`: Заменяет документ. Синтаксис такой же, как в [/replace](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
-* `index`: синоним `replace`
+* `index`: синоним для `replace`
 * `update`: Обновляет документ. Синтаксис такой же, как в [/update](../../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON).
-* `delete`: Удаляет документ. Синтаксис такой же, как в [/delete endpoint](../../Data_creation_and_modification/Deleting_documents.md).
+* `delete`: Удаляет документ. Синтаксис такой же, как в конечной точке [/delete endpoint](../../Data_creation_and_modification/Deleting_documents.md).
 
 Также поддерживаются обновления по запросу и удаления по запросу.
 
@@ -1904,7 +1935,7 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
 
 
 
-Имейте в виду, что массовая операция останавливается при первой ошибке в запросе.
+Имейте в виду, что массовая операция останавливается при первом запросе, который приводит к ошибке.
 
 ## Настройки, связанные с обновлениями
 
@@ -1915,11 +1946,11 @@ attr_update_reserve=size
 ```
 
 <!-- example attr_update_reserve -->
-`attr_update_reserve` — это настройка на уровне таблицы, которая определяет пространство, зарезервированное для обновлений блоб-атрибутов. Эта настройка необязательная, значение по умолчанию — 128k.
+`attr_update_reserve` — это настройка для каждой таблицы, которая определяет пространство, зарезервированное для обновлений атрибутов-больших объектов (blob). Эта настройка является необязательной, значение по умолчанию — 128k.
 
-Когда блоб-атрибуты (MVAs, строки, JSON) обновляются, их длина может измениться. Если обновленная строка (или MVA, или JSON) короче старой, она перезаписывает старую в файле `.spb`. Однако если обновленная строка длиннее, обновления записываются в конец файла `.spb`. Этот файл отображается в память, что означает, что изменение его размера может быть довольно медленным процессом в зависимости от реализации отображения файлов в память в ОС.
+Когда обновляются атрибуты-большие объекты (MVA, строки, JSON), их длина может измениться. Если обновленная строка (или MVA, или JSON) короче старой, она перезаписывает старую в файле `.spb`. Однако, если обновленная строка длиннее, обновления записываются в конец файла `.spb`. Этот файл отображается в память, что означает, что изменение его размера может быть довольно медленным процессом, в зависимости от реализации операционной системой файлов, отображаемых в память.
 
-Чтобы избежать частых изменений размера, вы можете указать дополнительное пространство для резервирования в конце файла `.spb` с помощью этой опции.
+Чтобы избежать частого изменения размера, вы можете указать дополнительное пространство, которое должно быть зарезервировано в конце файла `.spb`, с помощью этой опции.
 
 
 <!-- intro -->
@@ -2042,7 +2073,7 @@ table products {
 attr_flush_period = 900 # persist updates to disk every 15 minutes
 ```
 
-При обновлении атрибутов изменения сначала записываются в копию атрибутов в памяти. Эта настройка позволяет установить интервал между сбросом обновлений на диск. По умолчанию установлено значение 0, что отключает периодический сброс, но сброс все равно происходит при нормальном завершении работы.
+При обновлении атрибутов изменения сначала записываются в копию атрибутов в памяти. Эта настройка позволяет установить интервал между сбросом обновлений на диск. По умолчанию значение равно 0, что отключает периодический сброс, но сброс все равно будет происходить при нормальном завершении работы.
 
 <!-- proofread -->
 

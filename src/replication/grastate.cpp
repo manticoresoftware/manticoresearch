@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -61,7 +61,7 @@ bool CheckClusterNew ( const CSphString& sPath )
 		if ( dKeyVal[0] != sSafePattern )
 			return true;
 
-		assert ( dKeyVal.GetLength() > 2 );
+		assert ( dKeyVal.GetLength() >= 2 );
 		iVal = atoi ( dKeyVal[1].cstr() );
 
 		return false;

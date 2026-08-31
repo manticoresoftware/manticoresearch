@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -56,10 +56,10 @@ bool			HasImplicitGrouping ( const CSphQuery & tQuery );
 bool			sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema ); // check query for expressions
 int				GetAliasedAttrIndex ( const CSphString & sAttr, const CSphQuery & tQuery, const ISphSchema & tSchema );
 bool			IsGroupbyMagic ( const CSphString & s );
+bool			IsGroupbyOnlyMagic ( const CSphString & s );
 ESphAttr		DetermineNullMaskType ( int iNumAttrs );
 const char *	GetInternalAttrPrefix();
 const char *	GetInternalJsonPrefix();
 bool			IsSortStringInternal ( const CSphString & sColumnName );
 bool			IsSortJsonInternal ( const CSphString & sColumnName );
 CSphString		SortJsonInternalSet ( const CSphString & sColumnName );
-

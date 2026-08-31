@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -23,7 +23,7 @@ TEST_F ( QueryParser, huge_tokenizer )
 	CSphDummyIndex tIndex;
 
 	TransformExtendedQueryArgs_t tTranformArgs { true, tQuery.m_bNeedPhraseTransform, &tIndex };
-	sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, tQuery.m_sParseError, tTranformArgs );
+	sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, tQuery.m_sParseError, tTranformArgs, tQuery.m_sParseWarning );
 
 	ASSERT_TRUE ( tQuery.m_pRoot!=nullptr );
 }

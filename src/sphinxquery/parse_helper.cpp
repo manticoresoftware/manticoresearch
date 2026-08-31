@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -12,11 +12,24 @@
 
 #include "parse_helper.h"
 #include "sphinxplugin.h"
+#include "sphinxutils.h"
 
 #include "tokenizer/tokenizer.h"
 #include "dict/dict_base.h"
 
+void SetKeywordWithMarkers ( CSphString & sDst, const char * sPrefix, const CSphString & sWord, const char * sSuffix )
+{
+	StringBuilder_c sBuf;
+	sBuf << sPrefix << sWord << sSuffix;
+	sBuf.MoveTo ( sDst );
+}
+
 namespace { // static
+
+bool IsFieldSpecChar ( char c )
+{
+	return (unsigned char)c>=0x80 || sphIsAlpha ( c ) || c=='.' || c=='-';
+}
 
 void TransformMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec & tMorphDisabledFields )
 {
@@ -42,7 +55,7 @@ void TransformMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec & tMorphDisab
 					dWords.for_each ( [] ( XQKeyword_t & tKw )
 					{
 						if ( !tKw.m_sWord.IsEmpty() && !tKw.m_sWord.Begins( "=" ) && !tKw.m_sWord.Begins("*") && !tKw.m_sWord.Ends("*") )
-							tKw.m_sWord.SetSprintf ( "=%s", tKw.m_sWord.cstr() );
+							SetKeywordWithMarkers ( tKw.m_sWord, "=", tKw.m_sWord );
 					});
 				});
 			}
@@ -142,8 +155,24 @@ bool XQParseHelper_c::AddField ( FieldMask_t & dFields, const char * szField, in
 
 	CSphString sField;
 	sField.SetBinary ( szField, iLen );
-
 	int iField = m_pSchema->GetFieldIndex ( sField.cstr() );
+	if ( iField<0 )
+	{
+		CSphString sIdentifierError;
+		if ( !sphValidateIdentifier ( sField.cstr(), IdentifierValidation_e::ALLOW_LEADING_DIGIT, 0, sIdentifierError ) )
+			return Error ( "invalid field name '%s': %s", sField.cstr(), sIdentifierError.cstr() );
+	}
+	if ( iField < 0 && m_pDiscoverySchema )
+	{
+		if ( m_pDiscoverySchema->GetFieldsCount()>=SPH_MAX_FIELDS )
+			return Error ( " max %d fields allowed", SPH_MAX_FIELDS );
+
+		CSphColumnInfo tField;
+		tField.m_sName.SetBinary ( szField, iLen );
+		m_pDiscoverySchema->AddField ( tField );
+		iField = m_pSchema->GetFieldIndex ( sField.cstr() );
+	}
+
 	if ( iField < 0 )
 	{
 		if ( m_bStopOnInvalid )
@@ -196,20 +225,20 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 		bBlock = HandleFieldBlockStart ( pPtr );
 
 	// handle invalid chars
-	if ( !sphIsAlpha(*pPtr) )
+	if ( !IsFieldSpecChar(*pPtr) )
 	{
 		bIgnore = true;
 		m_pTokenizer->SetBufferPtr ( pPtr ); // ignore and re-parse (FIXME! maybe warn?)
 		return true;
 	}
-	assert ( sphIsAlpha(*pPtr) ); // i think i'm paranoid
+	assert ( IsFieldSpecChar(*pPtr) ); // i think i'm paranoid
 
 	// handle field specification
 	if ( !bBlock )
 	{
 		// handle standalone field specification
 		const char * pFieldStart = pPtr;
-		while ( sphIsAlpha(*pPtr) && pPtr<pLastPtr )
+		while ( pPtr<pLastPtr && IsFieldSpecChar(*pPtr) )
 			++pPtr;
 
 		assert ( pPtr-pFieldStart>0 );
@@ -223,14 +252,14 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 	} else
 	{
 		// handle fields block specification
-		assert ( sphIsAlpha(*pPtr) && bBlock ); // and complicated
+		assert ( IsFieldSpecChar(*pPtr) && bBlock ); // and complicated
 
 		bool bOK = false;
 		const char * pFieldStart = nullptr;
 		while ( pPtr<pLastPtr )
 		{
 			// accumulate field name, while we can
-			if ( sphIsAlpha(*pPtr) || *pPtr=='.' )
+			if ( IsFieldSpecChar(*pPtr) || *pPtr=='.' )
 			{
 				if ( !pFieldStart )
 					pFieldStart = pPtr;
@@ -307,14 +336,28 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 }
 
 
-void XQParseHelper_c::Setup ( const CSphSchema * pSchema, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, XQQuery_t * pXQQuery, const CSphIndexSettings & tSettings )
+void XQParseHelper_c::Setup ( const CSphSchema * pSchema, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, XQQuery_t * pXQQuery, const CSphIndexSettings & tSettings, CSphSchema * pDiscoverySchema )
 {
 	m_pSchema = pSchema;
+	m_pDiscoverySchema = pDiscoverySchema;
 	m_pTokenizer = std::move ( pTokenizer );
 	m_pDict = std::move (pDict);
 	m_pParsed = pXQQuery;
 	m_iAtomPos = 0;
 	m_bEmptyStopword = ( tSettings.m_iStopwordStep==0 );
+	m_dQueryTokenScratch.Reset ( GetKeywordBufSize ( m_pDict->GetSettings().GetDictFormat() ) );
+}
+
+
+BYTE * XQParseHelper_c::CopyQueryTokenToScratch ( const char * sToken )
+{
+	assert ( sToken );
+	assert ( m_dQueryTokenScratch.GetLength()>0 );
+
+	int iLen = Min ( (int)strlen ( sToken ), m_dQueryTokenScratch.GetLength()-1 );
+	memcpy ( m_dQueryTokenScratch.Begin(), sToken, iLen );
+	m_dQueryTokenScratch[iLen] = '\0';
+	return m_dQueryTokenScratch.Begin();
 }
 
 
@@ -389,15 +432,28 @@ bool XQParseHelper_c::CheckQuorumProximity ( const XQNode_t * pNode )
 	return pNode->dChildren().all_of ( [&] ( XQNode_t * pChild ) { return CheckQuorumProximity(pChild); } );
 }
 
+bool XQParseHelper_c::CheckNear ( const XQNode_t * pNode )
+{
+	if ( !pNode )
+		return true;
+
+	if ( pNode->GetOp()==SPH_QUERY_NEAR && pNode->m_iOpArg<1 )
+		return Error ( "NEAR distance too low (%d)", pNode->m_iOpArg );
+
+	return pNode->dChildren().all_of ( [&] ( XQNode_t * pChild ) { return CheckNear ( pChild ); } );
+}
+
 XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec, const CSphBitvec * pMorphFields, bool bOnlyNotAllowed )
 {
 	constexpr bool bDump = false;
 	if constexpr ( bDump ) Dump ( pRoot, "raw FixupTree" );
 	FixupDestForms ();
 	if constexpr ( bDump ) Dump ( pRoot, "FixupDestForms" );
+	FixupBlend ( pRoot );
+	if constexpr ( bDump ) Dump ( pRoot, "FixupBlend" );
 	DeleteNodesWOFields ( pRoot );
 	if constexpr ( bDump ) Dump ( pRoot, "DeleteNodesWOFields" );
-	pRoot = SweepNulls ( pRoot, bOnlyNotAllowed );
+	pRoot = SweepNulls ( pRoot, bOnlyNotAllowed, false );
 	if constexpr ( bDump ) Dump ( pRoot, "SweepNulls" );
 	FixupDegenerates ( pRoot, m_pParsed->m_sParseWarning );
 	if constexpr ( bDump ) Dump ( pRoot, "FixupDegenerates" );
@@ -413,7 +469,7 @@ XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & 
 	}
 	if constexpr ( bDump ) Dump ( pRoot, "FixupNots" );
 
-	if ( !CheckQuorumProximity ( pRoot ) )
+	if ( !CheckQuorumProximity ( pRoot ) || !CheckNear ( pRoot ) )
 	{
 		Cleanup();
 		return nullptr;
@@ -444,7 +500,7 @@ XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & 
 }
 
 
-XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed )
+XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed, bool bSweepHappened )
 {
 	if ( !pNode )
 		return nullptr;
@@ -468,15 +524,14 @@ XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed 
 	}
 
 	// sweep op node
-	pNode->WithChildren ( [this,bOnlyNotAllowed,pNode] ( CSphVector<XQNode_t*>& dChildren ) {
+	pNode->WithChildren ( [this,bOnlyNotAllowed,&bSweepHappened] ( CSphVector<XQNode_t*>& dChildren ) {
 	ARRAY_FOREACH ( i, dChildren )
 	{
-		dChildren[i] = SweepNulls ( dChildren[i], bOnlyNotAllowed );
+		dChildren[i] = SweepNulls ( dChildren[i], bOnlyNotAllowed, false );
 		if ( !dChildren[i] )
 		{
 			dChildren.Remove ( i-- );
-			// use non-null iOpArg as a flag indicating that the sweeping happened.
-			++pNode->m_iOpArg;
+			bSweepHappened = true;
 		}
 	}});
 
@@ -493,7 +548,7 @@ XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed 
 		pNode->ResetChildren();
 		pRet->m_pParent = pNode->m_pParent;
 		// expressions like 'la !word' (having min_word_len>len(la)) became a 'null' node.
-		if ( pNode->m_iOpArg && pRet->GetOp()==SPH_QUERY_NOT && !bOnlyNotAllowed )
+		if ( bSweepHappened && pRet->GetOp()==SPH_QUERY_NOT && !bOnlyNotAllowed )
 		{
 			pRet->SetOp ( SPH_QUERY_NULL );
 			pRet->WithChildren ( [this] ( auto& dChildren ) {
@@ -501,10 +556,8 @@ XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed 
 				dChildren.Reset();
 			});
 		}
-		pRet->m_iOpArg = pNode->m_iOpArg;
-
 		DeleteSpawned ( pNode ); // OPTIMIZE!
-		return SweepNulls ( pRet, bOnlyNotAllowed );
+		return SweepNulls ( pRet, bOnlyNotAllowed, bSweepHappened );
 	}
 
 	// done
@@ -717,7 +770,7 @@ void XQParseHelper_c::FixupDestForms ()
 			const auto& sWord =  m_dDestForms [ tDesc.m_iDestStart + iForm ];
 			// propagate exact word flag to all destination forms
 			if ( bExact )
-				tKeyword.m_sWord.SetSprintf ( "=%s", sWord.cstr() );
+				SetKeywordWithMarkers ( tKeyword.m_sWord, "=", sWord );
 			else
 				tKeyword.m_sWord = sWord;
 
@@ -764,4 +817,180 @@ void XQParseHelper_c::DeleteSpawned ( XQNode_t * pNode ) noexcept
 	});
 	pNode->ResetChildren();
 	SafeDelete ( pNode );
+}
+
+struct BlendedKw_t
+{
+	XQKeyword_t m_tWord;
+	XQNode_t * m_pParent = nullptr;
+	int m_iOrder = 0;
+	uint64_t m_uName = 0; // name hash or duplicate flag if 0
+
+	BlendedKw_t() = default;
+
+	BlendedKw_t ( XQKeyword_t && tWord, XQNode_t * pParent, int iOrder )
+		: m_tWord ( std::move ( tWord ) )
+		, m_pParent ( pParent )
+		, m_iOrder ( iOrder )
+	{
+		m_uName = sphFNV64 ( m_tWord.m_sWord.cstr() );
+	}
+};
+
+using BlendedVec_t = CSphVector<BlendedKw_t>;
+using FieldStartEnd_t = std::pair<bool, bool>;
+
+static void FlushOrGroup ( XQNode_t * pOr, XQNode_t * pParent, CSphVector<XQNode_t *> & dKeywordNodes, const FieldStartEnd_t & tFieldStartEnd )
+{
+	if ( !pOr || dKeywordNodes.IsEmpty() )
+		return;
+
+	assert ( pParent );
+	
+	// field modifiers to first keyword nodes
+	dKeywordNodes[0]->dWord(0).m_bFieldStart = tFieldStartEnd.first;
+	dKeywordNodes[0]->dWord(0).m_bFieldEnd = tFieldStartEnd.second;
+	
+	// OR node children and add to parent
+	pOr->SetOp ( SPH_QUERY_OR, dKeywordNodes );
+	pParent->AddNewChild ( pOr );
+	dKeywordNodes.Resize ( 0 );
+}
+
+static void CollectBlended ( XQNode_t * pNode, BlendedVec_t & dBlended )
+{
+	if ( !pNode )
+		return;
+
+	pNode->WithChildren ( [&dBlended] ( auto & dChildren )
+	{
+		for ( auto & pChild : dChildren )
+			CollectBlended ( pChild, dBlended );
+	});
+
+	if ( !pNode->dWords().IsEmpty() )
+	{
+		pNode->WithWords ( [&dBlended, pNode] ( auto & dWords )
+		{
+			if ( !dWords.any_of ( []( const auto & tWord ){ return tWord.m_iBlendedGroup>=0; } ) )
+				return;
+
+			int iOut = 0;
+			ARRAY_FOREACH ( i, dWords )
+			{
+				auto & tWord = dWords[i];
+				if ( tWord.m_iBlendedGroup>=0 )
+				{
+					dBlended.Add ( BlendedKw_t ( std::move ( tWord ), pNode, dBlended.GetLength() ) );
+				} else
+				{
+					if ( iOut!=i )
+						dWords[iOut] = std::move ( dWords[i] );
+					iOut++;
+				}
+			}
+			dWords.Resize ( iOut );
+		});
+	}
+}
+
+void XQParseHelper_c::FixupBlend ( XQNode_t * pNode )
+{
+	if ( !m_bExpandBlended )
+		return;
+
+	if ( !pNode )
+		return;
+
+	CSphVector<BlendedKw_t> dBlended;
+	CollectBlended ( pNode, dBlended );
+	
+	if ( dBlended.IsEmpty() )
+		return;
+
+	// sort by gen asc then name dups then order asc
+	dBlended.Sort ( Lesser ( [] ( const BlendedKw_t & tA, const BlendedKw_t & tB )
+	{
+		int iGenA = tA.m_tWord.m_iBlendedGroup;
+		int iGenB = tB.m_tWord.m_iBlendedGroup;
+		if ( iGenA!=iGenB )
+			return ( iGenA<iGenB );
+		if ( tA.m_uName!=tB.m_uName )
+			return ( tA.m_uName<tB.m_uName );
+
+		return ( tA.m_iOrder<tB.m_iOrder );
+	}));
+
+	// mark duplicates
+	for ( int i=1; i<dBlended.GetLength(); i++ )
+	{
+		const auto & tPrev = dBlended[i-1];
+		auto & tCur = dBlended[i];
+		if ( tPrev.m_tWord.m_iBlendedGroup==tCur.m_tWord.m_iBlendedGroup && tPrev.m_uName==tCur.m_uName )
+			tCur.m_uName = 0;
+	}
+
+	// sort by gen asc then order asc
+	dBlended.Sort ( Lesser ( [] ( const BlendedKw_t & tA, const BlendedKw_t & tB )
+	{
+		int iGenA = tA.m_tWord.m_iBlendedGroup;
+		int iGenB = tB.m_tWord.m_iBlendedGroup;
+		if ( iGenA!=iGenB )
+			return ( iGenA<iGenB );
+
+		return ( tA.m_iOrder<tB.m_iOrder );
+	}));
+
+	// OR nodes for each gen group
+	XQNode_t * pOr = nullptr;
+	XQNode_t * pParent = nullptr;
+	CSphVector<XQNode_t *> dKeywordNodes; // keyword nodes for current OR group
+	FieldStartEnd_t tFieldStartEnd { false, false }; // track field modifiers: first = field start, second = field end
+	int iCurrentGen = -1;
+	
+	for ( const auto & tBlended : dBlended )
+	{
+		// skip duplicates with 0 in name hash
+		if ( !tBlended.m_uName )
+			continue;
+
+		// new group
+		if ( iCurrentGen!=tBlended.m_tWord.m_iBlendedGroup )
+		{
+			// flush previous group
+			FlushOrGroup ( pOr, pParent, dKeywordNodes, tFieldStartEnd );
+			pOr = nullptr;
+			pParent = nullptr;
+			tFieldStartEnd = { false, false };
+
+			// atart new group
+			pParent = tBlended.m_pParent;
+			const XQLimitSpec_t & tSpec = pParent->m_dSpec;
+			iCurrentGen = tBlended.m_tWord.m_iBlendedGroup;
+
+			// OR node for this blended group
+			pOr = SpawnNode ( tSpec );
+			pOr->SetOp ( SPH_QUERY_OR );
+			
+			// field start from first word in new group
+			tFieldStartEnd.first = tBlended.m_tWord.m_bFieldStart;
+		}
+
+		// create KEYWORD node for this word
+		assert ( pOr && pParent );
+		const XQLimitSpec_t & tSpec = pParent->m_dSpec;
+		
+		// update field end from current word
+		tFieldStartEnd.second = tBlended.m_tWord.m_bFieldEnd;
+		
+		// keyword node with the word (field modifiers will be applied later)
+		XQKeyword_t tWordCopy = tBlended.m_tWord;
+		
+		XQNode_t * pKeywordNode = SpawnNode ( tSpec );
+		pKeywordNode->AddDirtyWord ( std::move ( tWordCopy ) );
+		dKeywordNodes.Add ( pKeywordNode );
+	}
+
+	// flush last group
+	FlushOrGroup ( pOr, pParent, dKeywordNodes, tFieldStartEnd );
 }

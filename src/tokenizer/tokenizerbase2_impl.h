@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -55,6 +55,11 @@ inline bool Special2Simple ( int& iCodepoint )
 /// aka GetCodepoint() decoder and everything that depends on it
 class CSphTokenizerBase2: public CSphTokenizerBase
 {
+public:
+	explicit CSphTokenizerBase2 ( int iTokenBytes = SPH_LEGACY_TOKEN_BYTES )
+		: CSphTokenizerBase ( iTokenBytes )
+	{}
+
 protected:
 	/// get codepoint
 	inline int GetCodepoint()
@@ -74,15 +79,23 @@ protected:
 		assert ( iCode > 0 );
 		assert ( m_iAccum >= 0 );
 
-		// throw away everything which is over the token size
-		bool bFit = ( m_iAccum < SPH_MAX_WORD_LEN );
-		bFit &= ( m_pAccum - m_sAccum + SPH_MAX_UTF8_BYTES <= (int)sizeof ( m_sAccum ) );
-
-		if ( bFit )
+		if ( m_iAccum < m_iTokenCodepoints && AccumBytes()+SPH_MAX_UTF8_BYTES <= AccumBufferCapacity() )
 		{
+			BYTE * pOldAccum = m_pAccum;
 			m_pAccum += sphUTF8Encode ( m_pAccum, iCode );
-			assert ( m_pAccum >= m_sAccum && m_pAccum < m_sAccum + sizeof ( m_sAccum ) );
+			if ( AccumBytes()>m_iTokenBytes )
+			{
+				m_pAccum = pOldAccum;
+				if ( m_bSkipOverLimit )
+					m_bAccumOverLimit = true;
+				return;
+			}
+
+			assert ( m_pAccum >= Accum() && m_pAccum < Accum() + AccumBufferCapacity() );
 			m_iAccum++;
+		} else if ( m_bSkipOverLimit )
+		{
+			m_bAccumOverLimit = true;
 		}
 	}
 
@@ -98,7 +111,10 @@ protected:
 		{
 			BYTE* pVar = GetBlendedVariant();
 			if ( pVar )
+			{
+				m_bBlendedHead = false;
 				return pVar;
+			}
 			m_bBlendedPart = ( m_pBlendEnd != nullptr );
 		}
 
@@ -130,15 +146,17 @@ protected:
 			if ( iCode < 0 )
 			{
 				FlushAccum();
+				if ( ConsumeLastTokenOverLimit() )
+					return nullptr;
 
 				// suddenly, exceptions
 				if ( m_pExc && m_pTokenStart && CheckException ( m_pTokenStart, pCur, IS_QUERY ) )
-					return m_sAccum;
+					return Accum();
 
 				// skip trailing short word
 				if ( m_iLastTokenLen < m_tSettings.m_iMinWordLen )
 				{
-					if ( !m_bShortTokenFilter || !ShortTokenFilter ( m_sAccum, m_iLastTokenLen ) )
+					if ( !m_bShortTokenFilter || !ShortTokenFilter ( Accum(), m_iLastTokenLen ) )
 					{
 						if ( m_iLastTokenLen )
 							++m_iOvershortCount;
@@ -158,7 +176,7 @@ protected:
 					if ( !BlendAdjust ( pCur ) ) return nullptr;
 					if ( m_bBlended ) return GetBlendedVariant();
 				}
-				return m_sAccum;
+				return Accum();
 			}
 
 			// handle all the flags..
@@ -218,15 +236,17 @@ protected:
 			if ( iCode == 0 || m_bBoundary )
 			{
 				FlushAccum();
+				if ( ConsumeLastTokenOverLimit() )
+					continue;
 
 				// suddenly, exceptions
 				if ( m_pExc && CheckException ( m_pTokenStart ? m_pTokenStart : pCur, pCur, IS_QUERY ) )
-					return m_sAccum;
+					return Accum();
 
 				if constexpr ( IS_BLEND ) if ( !BlendAdjust ( pCur ) ) continue;
 
 				if ( m_iLastTokenLen < m_tSettings.m_iMinWordLen
-						&& !( m_bShortTokenFilter && ShortTokenFilter ( m_sAccum, m_iLastTokenLen ) ) )
+						&& !( m_bShortTokenFilter && ShortTokenFilter ( Accum(), m_iLastTokenLen ) ) )
 				{
 					if ( m_iLastTokenLen )
 						++m_iOvershortCount;
@@ -235,7 +255,7 @@ protected:
 				{
 					m_pTokenEnd = pCur;
 					if constexpr ( IS_BLEND ) if ( m_bBlended ) return GetBlendedVariant();
-					return m_sAccum;
+					return Accum();
 				}
 			}
 
@@ -245,9 +265,9 @@ protected:
 				// skip short words preceding specials
 				if ( m_iAccum < m_tSettings.m_iMinWordLen )
 				{
-					m_sAccum[m_iAccum] = '\0';
+					Accum()[m_iAccum] = '\0';
 
-					if ( !m_bShortTokenFilter || !ShortTokenFilter ( m_sAccum, m_iAccum ) )
+					if ( !m_bShortTokenFilter || !ShortTokenFilter ( Accum(), m_iAccum ) )
 					{
 						if ( m_iAccum )
 							m_iOvershortCount++;
@@ -270,10 +290,12 @@ protected:
 				}
 
 				FlushAccum();
+				if ( ConsumeLastTokenOverLimit() )
+					continue;
 
 				// suddenly, exceptions
 				if ( m_pExc && m_pTokenStart && CheckException ( m_pTokenStart, pCur, IS_QUERY ) )
-					return m_sAccum;
+					return Accum();
 
 				if constexpr ( IS_BLEND )
 				{
@@ -282,7 +304,7 @@ protected:
 					if ( m_bBlended )
 						return GetBlendedVariant();
 				}
-				return m_sAccum;
+				return Accum();
 			}
 
 			if ( m_iAccum == 0 )
@@ -298,11 +320,22 @@ protected:
 			// just accumulate
 			// manual inlining of utf8 encoder gives us a few extra percent
 			// which is important here, this is a hotspot
-			if ( m_iAccum < SPH_MAX_WORD_LEN && ( m_pAccum - m_sAccum + SPH_MAX_UTF8_BYTES <= (int)sizeof ( m_sAccum ) ) )
+			if ( m_iAccum < m_iTokenCodepoints && AccumBytes()+SPH_MAX_UTF8_BYTES <= AccumBufferCapacity() )
 			{
 				iCode &= MASK_CODEPOINT;
+				BYTE * pOldAccum = m_pAccum;
 				m_iAccum++;
 				SPH_UTF8_ENCODE ( m_pAccum, iCode );
+				if ( AccumBytes()>m_iTokenBytes )
+				{
+					m_pAccum = pOldAccum;
+					m_iAccum--;
+					if ( m_bSkipOverLimit )
+						m_bAccumOverLimit = true;
+				}
+			} else if ( m_bSkipOverLimit )
+			{
+				m_bAccumOverLimit = true;
 			}
 		}
 	}

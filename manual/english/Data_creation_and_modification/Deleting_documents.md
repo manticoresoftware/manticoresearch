@@ -287,7 +287,7 @@ POST /delete -d '
 ``` json
 {
     "table": "test",
-    "_id": 1,
+    "id": 1,
     "found": true,
     "result": "deleted"
 }
@@ -350,7 +350,7 @@ res = await indexApi.delete({"table" : "test", "id" : 1});
 
 <!-- response javascript -->
 ```javascript
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -430,7 +430,7 @@ res = await indexApi.delete({ index: 'test', id: 1 });
 
 <!-- response TypeScript -->
 ```json
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -445,7 +445,7 @@ deleteRequest.SetId(1)
 
 <!-- response Go -->
 ```json
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- end -->
@@ -453,7 +453,7 @@ deleteRequest.SetId(1)
 <!-- example delete 4 -->
 Here, documents with `id` matching values from the table named `test` are deleted:
 
-Note that the delete forms with `id=N` or `id IN (X,Y)` are the fastest, as they delete documents without performing a search.
+For numeric-ID tables, the delete forms with `id=N` or `id IN (X,Y)` are the fastest, as they delete documents without performing a search.
 Also note that the response contains only the id of the first deleted document in the corresponding `_id` field.
 
 <!-- intro -->
@@ -487,7 +487,7 @@ POST /delete -d '
 ``` json
     {
         "table":"test",
-        "_id":1,
+        "id":1,
         "found":true,
         "result":"deleted"
     }
@@ -547,6 +547,88 @@ Query OK, 4 rows affected (0.00 sec)
 +------+------+-------------+------+
 6 rows in set (0.00 sec)
 ```
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(title text, gid int, mva1 multi, mva2 multi);
+INSERT INTO test (title, gid, mva1, mva2) VALUES
+('test document', 1001, (101), (101)),
+('test document', 1002, (100,102), (101)),
+('test document', 1003, (207), (101)),
+('test document', 1004, (101,103), (101)),
+('test document', 1005, (207,208), (101));
+-->
+
+<!-- request JSON -->
+
+```JSON
+POST /delete
+{
+  "table":"test",
+  "query":
+    {
+      "bool": {
+        "must": [
+          {
+            "match": { "*": "test document" }
+          },
+          {
+            "bool": {
+              "should": [
+                {
+                  "range": {
+                    "mva1": { "gt": 206 }
+                  }
+                },
+                {
+                  "in": {
+                    "mva1": [100, 103]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+}
+
+POST /search 
+{
+  "table": "test"
+}
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "table": "test",
+  "deleted": 4
+}
+
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 0,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "id": 724024784404348900,
+        "_score": 2500,
+        "_source": {
+          "gid": 1001,
+          "mva1": [101,102],
+          "mva2": [101]
+        }
+      }
+    ]
+  }
+}
+```
+
 <!-- end -->
 
 <!-- example delete 6 -->
@@ -632,7 +714,7 @@ indexApi.delete({"cluster":"cluster_1","table" : "test", "id" : 1})
 
 <!-- response javascript -->
 ```javascript
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -713,7 +795,7 @@ res = await indexApi.delete({ cluster: 'cluster_1', index: 'test', id: 1 });
 
 <!-- response TypeScript -->
 ```json
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -729,7 +811,7 @@ deleteRequest.SetId(1)
 
 <!-- response Go -->
 ```json
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- end -->
@@ -764,7 +846,7 @@ POST /bulk
          "bulk":
          {
             "table":"test",
-            "_id":0,
+            "id":0,
             "created":0,
             "deleted":2,
             "updated":0,

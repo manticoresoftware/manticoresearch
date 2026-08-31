@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2024-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2024-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify

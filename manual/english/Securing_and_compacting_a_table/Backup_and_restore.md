@@ -39,7 +39,7 @@ The `manticore-backup` tool, included in the official Manticore Search [packages
 
 ### Installation
 
-**If you followed [the official installation instructions](https://manticoresearch.com/install/), you should already have everything installed and don't need to worry.** Otherwise, [`manticore-backup`](https://github.com/manticoresoftware/manticoresearch-backup) requires PHP 8.1.10 and [specific modules](https://github.com/manticoresoftware/executor/blob/main/build-linux) or [`manticore-executor`](https://github.com/manticoresoftware/executor), which is a part of the `manticore-extra` package, and you need to ensure that one of these is available.
+**If you followed [the official installation instructions](https://manticoresearch.com/install/), you should already have everything installed and don't need to worry.** Otherwise, [`manticore-backup`](https://github.com/manticoresoftware/manticoresearch-backup) requires PHP 8.1.10 and [specific modules](https://github.com/manticoresoftware/executor/blob/main/build-linux) or [`manticore-executor`](https://github.com/manticoresoftware/executor), and you need to ensure that one of these is available.
 
 Note that `manticore-backup` is not available for Windows yet.
 
@@ -133,8 +133,8 @@ Manticore versions:
 
 | Argument | Description |
 |-|-|
-| `--backup-dir=path` | This is the path to the backup directory where the backup will be stored. The directory must already exist. This argument is required and has no default value. On each backup run, manticore-backup will create a subdirectory in the provided directory with a timestamp in the name (`backup-[datetime]`), and will copy all required tables to it. So the `--backup-dir` is a container for all your backups, and it's safe to run the script multiple times.|
-| `--restore[=backup]` | Restore from `--backup-dir`. Just --restore lists available backups. `--restore=backup` will restore from `<--backup-dir>/backup`. |
+| `--backup-dir=path` | Path to the backup directory where the backup will be stored. The directory must already exist. This argument is required and has no default value. On each backup run, `manticore-backup` will create a subdirectory in the provided directory with a timestamp in the name (`backup-[datetime]`), and will copy all required tables to it. So the `--backup-dir` is a container for all your backups, and it's safe to run the script multiple times. Supports S3 URLs in the format `s3://bucket/prefix` — see [S3 storage support](../Securing_and_compacting_a_table/Backup_and_restore.md#S3-storage-support) for details.|
+| `--restore[=backup]` | Restore from `--backup-dir`. Just `--restore` lists available backups. `--restore=backup` will restore from `<--backup-dir>/backup`. Works with both local paths and S3 URLs. |
 | `--force` | Skip versions check on restore and gracefully restore the backup. |
 | `--disable-telemetry` | Pass this flag in case you want to disable sending anonymized metrics  to Manticore. You can also use environment variable TELEMETRY=0 |
 | `--config=/path/to/manticore.conf` | Path to the Manticore configuration. Optional. If not provided, a default configuration for your operating system will be used. Used to determine the host and port for communication with the Manticore daemon. The `manticore-backup` tool supports [dynamic configuration](../Server_settings/Scripted_configuration.md) files. You can specify the `--config` option multiple times if your configuration is spread across multiple files. |
@@ -143,6 +143,65 @@ Manticore versions:
 | `--unlock` | In rare cases when something goes wrong, tables can be left in a locked state. Use this argument to unlock them. |
 | `--version` | Show the current version. |
 | `--help` | Show this help. |
+
+
+## S3 storage support
+
+`manticore-backup` supports storing and restoring backups directly to/from S3-compatible storage, including AWS S3, MinIO, Wasabi, Cloudflare R2, and others. Simply pass an `s3://bucket/prefix` URL as `--backup-dir`.
+
+### Configuration
+
+Set the following environment variables before running `manticore-backup`:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `AWS_ACCESS_KEY_ID` | Yes | AWS access key (or `AWS_ACCESS_KEY`) |
+| `AWS_SECRET_ACCESS_KEY` | Yes | AWS secret key (or `AWS_SECRET_KEY`) |
+| `AWS_REGION` | No | AWS region (default: `us-east-1`) |
+| `AWS_ENDPOINT_URL` | No | Custom S3-compatible endpoint — **server URL only, no bucket name** (e.g., `http://localhost:9000`) |
+| `AWS_S3_ENCRYPTION` | No | Enable SSE-S3 server-side encryption (default: `1` for AWS S3; set to `0` for MinIO, R2, or other custom endpoints) |
+
+> ⚠️ `AWS_ENDPOINT_URL` must not include the bucket name. The bucket is taken from the `s3://bucket/prefix` argument. Including the bucket in the endpoint URL causes it to be doubled in every request and results in errors.
+>
+> ```
+> # Wrong — bucket "mybucket" duplicated in URL path
+> AWS_ENDPOINT_URL=https://account.r2.cloudflarestorage.com/mybucket
+>
+> # Correct — endpoint is the server only
+> AWS_ENDPOINT_URL=https://account.r2.cloudflarestorage.com
+> ```
+
+### Usage examples
+
+```bash
+# Backup to AWS S3 (SSE-S3 encryption enabled by default)
+export AWS_ACCESS_KEY_ID=your_key
+export AWS_SECRET_ACCESS_KEY=your_secret
+manticore-backup --backup-dir=s3://my-bucket/backups
+
+# Restore from S3
+manticore-backup --restore --backup-dir=s3://my-bucket/backups
+manticore-backup --restore=backup-20221004171839 --backup-dir=s3://my-bucket/backups
+
+# Use with MinIO (disable encryption)
+export AWS_ACCESS_KEY_ID=minioadmin
+export AWS_SECRET_ACCESS_KEY=minioadmin
+export AWS_ENDPOINT_URL=http://localhost:9000
+export AWS_S3_ENCRYPTION=0
+manticore-backup --backup-dir=s3://my-bucket/backups
+
+# Use with Cloudflare R2
+export AWS_ACCESS_KEY_ID=your_r2_access_key
+export AWS_SECRET_ACCESS_KEY=your_r2_secret_key
+export AWS_ENDPOINT_URL=https://<account_id>.r2.cloudflarestorage.com
+export AWS_REGION=auto
+export AWS_S3_ENCRYPTION=0
+manticore-backup --backup-dir=s3://my-bucket/backups
+```
+
+### Required S3 permissions
+
+The backup requires `s3:PutObject`, restore requires `s3:GetObject`, and listing available restore points requires `s3:ListBucket`.
 
 ## BACKUP SQL command reference
 
@@ -157,11 +216,11 @@ You can also back up your data through SQL by running the simple command `BACKUP
 ```sql
 BACKUP
   [{TABLE | TABLES} a[, b]]
+  TO path_to_backup
   [{OPTION | OPTIONS}
     async = {on | off | 1 | 0 | true | false | yes | no}
     [, compress = {on | off | 1 | 0 | true | false | yes | no}]
   ]
-  TO path_to_backup
 ```
 
 For instance, to back up tables `a` and `b` to the `/backup` directory, run the following command:
@@ -172,22 +231,52 @@ BACKUP TABLES a, b TO /backup
 
 There are options available to control and adjust the backup process, such as:
 
-* `async`: makes the backup non-blocking, allowing you to receive a response with the query ID immediately and run other queries while the backup is ongoing. The default value is `0`.
+* `async`: makes the backup non-blocking, allowing you to receive a response with the backup path immediately and run other queries while the backup is ongoing. The default value is `0`.
 * `compress`: enables file compression using zstd. The default value is `0`.
+
 For example, to run a backup of all tables in async mode with compression enabled to the `/tmp` directory:
 
 ```sql
-BACKUP OPTION async = yes, compress = yes TO /tmp
+BACKUP TO /tmp OPTION async = yes, compress = yes
 ```
+
+### Async backup behavior
+
+When using `async = 1` (or `yes`, `on`, `true`), the backup operation runs in a background task:
+
+* The command returns immediately with the backup path
+* You can continue running other queries while the backup is in progress
+* The backup task runs in a separate thread managed by Manticore Buddy
+* While running, the backup task will appear in `SHOW QUERIES` output and will be removed automatically when complete
+
+**Example of async backup:**
+
+```sql
+BACKUP TO /tmp/mybackup OPTION async = 1
+```
+
+This will return immediately with output like:
+```
++----------------------------------+
+| Path                             |
++----------------------------------+
+| /tmp/mybackup/backup-20221004... |
++----------------------------------+
+```
+
+You can check if the backup is still running by using `SHOW QUERIES`. Once complete, the task will disappear from the queries list and all backup files will be present in the specified directory.
 
 ### Important considerations
 
-1. The path should not contain special symbols or spaces, as they are not supported.
-2. Ensure that Manticore Buddy is launched (it is by default).
+1. The backup path can contain spaces if enclosed in single quotes, e.g., `BACKUP TO '/path/with spaces'`
+2. Paths without spaces don't require quotes: `BACKUP TO /tmp/backup`
+3. Windows paths are supported: `BACKUP TO 'C:\path'` or `BACKUP TO C:\windows\backup`
+4. Ensure that Manticore Buddy is launched (it is by default)
+5. The backup directory must exist and be writable by the Manticore process
 
 ### How backup maintains consistency of tables
 
-To ensure consistency of tables during backup, Manticore Search's backup tools use the innovative [FREEZE and UNFREEZE](../Securing_and_compacting_a_table/Freezing_a_table.md) commands. Unlike the traditional lock and unlock tables feature of e.g. MySQL, `FREEZE` stops flushing data to disk while still permitting writing (to some extent) and selecting updated data from the table.
+To ensure consistency of tables during backup, Manticore Search's backup tools use the innovative [FREEZE and UNFREEZE](../Securing_and_compacting_a_table/Freezing_and_locking_a_table.md) commands. Unlike the traditional lock and unlock tables feature of e.g. MySQL, `FREEZE` stops flushing data to disk while still permitting writing (to some extent) and selecting updated data from the table.
 
 However, if your RAM chunk size grows beyond the `rt_mem_limit` threshold during lengthy backup operations involving many inserts, data may be flushed to disk, and write operations will be blocked until flushing is complete. Despite this, the tool maintains a balance between table locking, data consistency, and database write availability while the table is frozen.
 
@@ -262,7 +351,7 @@ Manticore config
 
 ## Backup and restore with mysqldump
 
-Manticore supports `mysqldump` utility from MySQL up to 9.4 and `mariadb-dump` utility from MariaDB up to 12.0.
+Manticore supports `mysqldump` utility from MySQL up to 26.7 and `mariadb-dump` utility from MariaDB up to 12.3.
 
 <!-- example mysqldump_backup -->
 
@@ -289,14 +378,18 @@ This will produce a backup file `tbl.sql` with `replace` commands instead of `in
 
 <!-- request Replication mode -->
 ```bash
-mysqldump -etc --replace -h0 -P9306 -ucluster manticore cluster:tbl | mysql -P9306 -h0
-mariadb-dump -etc --replace -h0 -P9306 -ucluster manticore cluster:tbl | mysql -P9306 -h0
+mysqldump -etc --replace -h0 -P9306 -ucluster manticore --skip-lock-tables cluster:tbl | mysql -P9306 -h0
+mariadb-dump -etc --replace -h0 -P9306 -ucluster manticore --skip-lock-tables cluster:tbl | mysql -P9306 -h0
 ```
 
 In this case, `mysqldump` will generate commands like `REPLACE INTO cluster:table ...`, which will be sent directly to the Manticore instance, resulting in the documents being reinserted.
 Use the `cluster` user and the `-t` flag to enable replication mode. See the details in the notes below.
 
 <!-- end -->
+
+To apply changed full-text settings to existing documents, see [Reindexing existing documents after changing FT settings](../Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings).
+
+When piping a dump directly into `mysql` to reindex the same table, `--skip-lock-tables` is required. It is not required when exporting to a file and replaying it after `mysqldump` exits.
 
 <!-- example mysqldump_restore -->
 ### Restore
@@ -320,10 +413,10 @@ This command enables you to restore everything from the `manticore_backup.sql` f
 
 Here are some more settings that can be used with mysqldump to tailor your backup:
 
-- `-t` skips `drop`/`create` table commands. Useful for full-text reindexation of a table after changing tokenization settings.
+- `-t` skips `drop`/`create` table commands. Use it when reindexing a table after changing full-text settings.
 - `--no-data`: This setting omits table data from the backup, resulting in a backup file that consists only of table schemas.
 - `--ignore-table=[database_name].[table_name]`: This option allows you to bypass a particular table during the backup operation. Note that the database name must be `manticore`.
-- `--replace` to perform `replace` instead of `insert`. Useful for full-text reindexation of a table after changing tokenization settings.
+- `--replace` to perform `replace` instead of `insert`. Use it when reindexing a table after changing full-text settings.
 - `--net-buffer-length=16M` to make batches up to 16 megabytes large for faster restoration.
 - `-e` to batch up documents. Useful for faster restoration.
 - `-c` to keep column names. Useful for reindexation of a table after changing its schema (e.g., changing field order).
@@ -333,8 +426,10 @@ For a comprehensive list of settings and their thorough descriptions, kindly ref
 ### Notes
 
 * To create a dump in replication mode (where the dump includes `INSERT/REPLACE INTO <cluster_name>:<table_name>`):
+  - Make sure the table isn't changed while it's being dumped.
   - Use the `cluster` user. For example: `mysqldump -u cluster ...` or `mariadb-dump -u cluster ...`. You can change the username that enables replication mode for `mysqldump` by running `SET GLOBAL cluster_user = new_name`.
   - Use the `-t` flag.
+  - Use the `--skip-lock-tables` flag.
   - When specifying a table in replication mode, you need to follow the `cluster_name:table_name` syntax. For example: `mysqldump -P9306 -h0 -t -ucluster manticore cluster:tbl`.
 * It's recommended to explicitly specify the `manticore` database when you plan to back up all databases, instead of using the `--all-databases` option.
 * Note that `mysqldump` does not support backing up distributed tables and cannot back up tables containing non-stored fields. For such cases, consider using `manticore-backup` or the `BACKUP` SQL command. If you have distributed tables, it is recommended to always specify the tables to be dumped.

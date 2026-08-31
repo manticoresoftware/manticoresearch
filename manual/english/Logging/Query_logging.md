@@ -48,7 +48,8 @@ The features of the Manticore SQL log format compared to the [plain format](../L
 * The query log can be replayed.
 * Additional performance counters (currently, per-agent distributed query times) are logged.
 * Each log entry is a valid Manticore SQL/JSON statement that reconstructs the full request, except if the logged request is too large and needs to be shortened for performance reasons.
-* JSON requests and additional messages, counters, etc., are logged as comments.
+* JSON requests are logged as comments, skipping extra whitespaces between elements. 
+* Additional messages, counters, etc., are logged as comments.
 
 <!-- intro -->
 `sphinxql` log entries example:
@@ -56,18 +57,18 @@ The features of the Manticore SQL log format compared to the [plain format](../L
 ```sql
 /* Sun Apr 28 12:38:02.808 2024 conn 2 (127.0.0.1:53228) real 0.000 wall 0.000 found 0 */ SELECT * FROM test WHERE MATCH('test') OPTION ranker=proximity;
 /* Sun Apr 28 12:38:05.585 2024 conn 2 (127.0.0.1:53228) real 0.001 wall 0.001 found 0 */ SELECT * FROM test WHERE MATCH('test') GROUP BY channel_id OPTION ranker=proximity;
-/* Sun Apr 28 12:40:57.366 2024 conn 4 (127.0.0.1:53256) real 0.000 wall 0.000 found 0 */  /*{
-    "table" : "test",
-    "query":
-    {
-        "match":
-        {
-            "*" : "test"
-        }
-    },
-    "_source": ["f"],
-    "limit": 30
-} */
+/* Sun Apr 28 12:40:57.366 2024 conn 4 (127.0.0.1:53256) real 0.000 wall 0.000 found 0 */  /*{ "index" : "test", "query": { "match": { "*" : "test" } }, "_source": ["f"], "limit": 30 } */
+```
+<!-- end -->
+
+<!-- example sphixql_log3 -->
+It's important to note that Manticore logs not only SELECT queries but also data modification statements such as UPDATE. UPDATE statements are logged in the SQL log format, while INSERT, REPLACE, and DELETE operations are not logged. If you need comprehensive logging of all operations, you may need to implement additional application-level logging.
+
+<!-- intro -->
+`sphinxql` log entries for UPDATE example:
+<!-- request Example -->
+```sql
+/* Sat Mar 15 01:05:28.508 2025 conn 7 (127.0.0.1:63942) real 0.000 */ UPDATE test SET title='Updated Title' WHERE id=1;
 ```
 <!-- end -->
 
@@ -92,8 +93,8 @@ The log format is as follows:
 ```
 
 where:
-* `real-time` is the time from the start to the finish of the query.
-* `wall-time` is similar to real-time, but excludes time spent waiting for agents and merging result sets from them.
+* `real-time` is the end-to-end time from the start to the finish of the query. In SphinxQL logs it corresponds to the `real` field.
+* `wall-time` is Manticore's internal query wall-time metric. In SphinxQL logs it corresponds to the `wall` field, and this same value is used by `query_log_min_msec`. For distributed and multi-source queries, `wall-time` can differ from `real-time`.
 * `perf-stats` includes CPU/IO stats when Manticore is started with `--cpustats` (or it was enabled via `SET GLOBAL cpustats=1`) and/or `--iostats` (or it was enabled via `SET GLOBAL iostats=1`):
   - `ios` is the number of file I/O operations carried out;
   - `kb` is the amount of data in kilobytes read from the table files;
@@ -116,6 +117,8 @@ where:
 
 Note: the `SPH*` modes are specific to the `sphinx` legacy interface. SQL and JSON interfaces will log, in most cases, `ext2` as `match-mode` and `ext` and `rel` as `sort-mode`.
 
+For distributed queries, use `SHOW STATUS` counters `dist_wall`, `dist_local`, and `dist_wait` to analyze where time is spent. These counters are complementary and not direct substitutes for query log `real`/`wall`.
+
 <!-- intro -->
 Query log example:
 <!-- request Example -->
@@ -128,6 +131,9 @@ Query log example:
 ```
 
 <!-- end -->
+
+Unlike the SQL log format, the plain log format only logs search queries (SELECT statements). Data modification statements such as INSERT, REPLACE, DELETE, and UPDATE are not logged in this format. UPDATE statements are logged in the SQL format but not in the plain format.
+
 
 ## Logging only slow queries
 

@@ -58,6 +58,8 @@ set ( dirserver "${MANTICORE_BINARY_DIR}/config/server" )
 set ( dircommon "${MANTICORE_BINARY_DIR}/config/common" )
 set ( dircore "${MANTICORE_BINARY_DIR}/config/core" )
 set ( dirtools "${MANTICORE_BINARY_DIR}/config/tools" )
+# Bundle control files are generated alongside the split-package control files.
+set ( dirbundle "${MANTICORE_BINARY_DIR}/config/bundle" )
 
 set ( CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION ON )
 
@@ -157,6 +159,32 @@ configure_file ( "${dircore}/postrm.in" "${dircore}/postrm" @ONLY )
 configure_file ( "${dirserver}/postinst.in" "${dirserver}/postinst" @ONLY )
 configure_file ( "${dirserver}/prerm.in" "${dirserver}/prerm" @ONLY )
 configure_file ( "${dirserver}/postrm.in" "${dirserver}/postrm" @ONLY )
+if ( PACK_BUNDLE AND NOT WIN32 )
+	file ( MAKE_DIRECTORY "${dirbundle}" )
+	# The bundle package reuses the split package maintainer scripts instead of
+	# carrying a separate implementation with divergent service/setup logic.
+	# Reuse common + core + server scripts: concatenate into bundle postinst
+	file ( READ "${dircommon}/postinst" _BUNDLE_PI_COMMON )
+	file ( READ "${dircore}/postinst" _BUNDLE_PI_CORE )
+	file ( READ "${dirserver}/postinst" _BUNDLE_PI_SERVER )
+	file ( WRITE "${dirbundle}/postinst" "${_BUNDLE_PI_COMMON}\n${_BUNDLE_PI_CORE}\n${_BUNDLE_PI_SERVER}\n" )
+	# Reuse common + core + server postrm
+	file ( READ "${dircommon}/postrm" _BUNDLE_PRM_COMMON )
+	file ( READ "${dircore}/postrm" _BUNDLE_PRM_CORE )
+	file ( READ "${dirserver}/postrm" _BUNDLE_PRM_SERVER )
+	file ( WRITE "${dirbundle}/postrm" "${_BUNDLE_PRM_COMMON}\n${_BUNDLE_PRM_CORE}\n${_BUNDLE_PRM_SERVER}\n" )
+	# Reuse server prerm
+	file ( READ "${dirserver}/prerm" _BUNDLE_PREM )
+	file ( WRITE "${dirbundle}/prerm" "${_BUNDLE_PREM}" )
+	# Reuse common + server + tools conffiles
+	file ( READ "${dircommon}/conffiles" _BUNDLE_CF_COMMON )
+	file ( READ "${dirserver}/conffiles" _BUNDLE_CF_SERVER )
+	file ( READ "${dirtools}/conffiles" _BUNDLE_CF_TOOLS )
+	file ( WRITE "${dirbundle}/conffiles" "${_BUNDLE_CF_COMMON}
+${_BUNDLE_CF_SERVER}
+${_BUNDLE_CF_TOOLS}" )
+	set ( CPACK_DEBIAN_BUNDLE_PACKAGE_CONTROL_EXTRA "${dirbundle}/conffiles;${dirbundle}/postinst;${dirbundle}/prerm;${dirbundle}/postrm" )
+endif ()
 
 # installation
 
@@ -215,7 +243,18 @@ if (NOT NOAPI)
 	install ( DIRECTORY api DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT searchd )
 endif ()
 
+if ( PACK_BUNDLE AND NOT WIN32 )
+	# Install the merged bundle payload in addition to the normal split packages.
+	_manticore_bundle_base_install_rules ()
+	# Bundle: server/tools extras this distro creates (Debian has etc/default/manticore; RPM does not).
+	install ( FILES "${dirserver}/manticore" DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/default COMPONENT bundle )
+	_manticore_bundle_server_tools_install_rules ()
+endif ()
+
 get_cmake_property ( CPACK_COMPONENTS_ALL COMPONENTS )
+if (NOT PACK_BUNDLE)
+	# In bundle mode, the bundle component replaces the old meta package entry.
 list ( APPEND CPACK_COMPONENTS_ALL "meta" )
+endif ()
 
 # set(CPACK_DEBIAN_PACKAGE_DEBUG ON)

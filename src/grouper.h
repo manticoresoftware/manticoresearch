@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -47,6 +47,7 @@ public:
 	virtual CSphGrouper *	Clone() const = 0;
 	virtual bool			IsMultiValue() const { return false; }
 	virtual void			SetColumnar ( const columnar::Columnar_i * ) {}
+	virtual void			FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) = 0;
 
 protected:
 							~CSphGrouper () override {} // =default causes bunch of errors building on wheezy
@@ -71,6 +72,7 @@ CSphGrouper * CreateGrouperYear ( const CSphAttrLocator & tLoc );
 CSphGrouper * CreateGrouperJsonField ( const CSphAttrLocator & tLoc, ISphExpr * pExpr );
 CSphGrouper * CreateGrouperMVA32 ( const CSphAttrLocator & tLoc );
 CSphGrouper * CreateGrouperMVA64 ( const CSphAttrLocator & tLoc );
+CSphGrouper * CreateGrouperFloatVec ( const CSphAttrLocator & tLoc, bool bArray );
 CSphGrouper * CreateGrouperAttr ( const CSphAttrLocator & tLoc );
 CSphGrouper * CreateGrouperString ( const CSphAttrLocator & tLoc, ESphCollation eCollation );
 CSphGrouper * CreateGrouperStringExpr ( ISphExpr * pExpr, ESphCollation eCollation );

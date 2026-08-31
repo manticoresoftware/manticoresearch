@@ -11,5 +11,5 @@ jobs:
     name: ✅ Checklist Completion Check
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/manticoresearch/actions/checklist-validator@master
+      - uses: manticoresoftware/manticoresearch/actions/checklist-validator@main
     

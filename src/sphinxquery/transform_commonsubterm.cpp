@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -57,7 +57,8 @@ bool CSphTransformation::TransformCommonSubTerm () noexcept
 			// Load cost of the first node from the group
 			// of the common nodes. The cost of nodes from
 			// TransformableNodes are the same.
-			SetCosts ( dX[0], m_dRelatedNodes );
+			if ( !SetCosts ( dX[0], m_dRelatedNodes ) )
+				return false;
 			const int iCostCommonSubTermNode = dX[0]->m_iUser;
 			const int iCostRelatedNodes = m_dRelatedNodes.sum_of<int> ( [] ( auto & tNode ) { return tNode->m_iUser; } );
 

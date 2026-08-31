@@ -1,33 +1,39 @@
-# 在 MacOS 上安装 Manticore
+# 在 macOS 上安装 Manticore
 
-## 通过 Homebrew 包管理器
+### 快速安装
+
+```bash
+curl https://manticoresearch.com | sh
+```
+
+## 通过 Homebrew 包管理器手动安装
 
 ```bash
 brew install manticoresoftware/tap/manticoresearch manticoresoftware/tap/manticore-extra
 ```
 
-以 brew 服务的方式启动 Manticore：
+将 Manticore 作为 brew 服务启动：
 
 ```bash
 brew services start manticoresearch
 ```
 
-Manticore 的默认配置文件位于 `/usr/local/etc/manticoresearch/manticore.conf` 或 `/opt/homebrew/etc/manticoresearch/manticore.conf`。
+Manticore 的默认配置文件位于以下路径之一：`/usr/local/etc/manticoresearch/manticore.conf` 或 `/opt/homebrew/etc/manticoresearch/manticore.conf`。
 
-如果你打算使用 [indexer](../Creating_a_table/Local_tables/Plain_table.md) 从 MySQL、PostgreSQL 或通过 ODBC 的其他数据库中获取数据，可能需要额外的库，如 `mysql@5.7`、`libpq` 和 `unixodbc`。
+如果您计划使用 [indexer](../Creating_a_table/Local_tables/Plain_table.md) 从 MySQL、PostgreSQL 或其他数据库等数据源获取数据，使用 ODBC 时可能需要额外的库，例如 `mysql@5.7`、`libpq` 和 `unixodbc`。
 
 #### 开发包
-如果你更喜欢“Nightly”（开发）版本，请执行：
+如果您更喜欢 "Nightly"（开发）版本，请执行：
 ```bash
 brew tap manticoresoftware/tap-dev
-brew install manticoresoftware/tap-dev/manticoresearch-dev manticoresoftware/tap-dev/manticore-extra-dev manticoresoftware/tap-dev/manticore-language-packs
-brew services start manticoresearch-dev
+brew install manticoresoftware/tap-dev/manticore-dev
+brew services start manticore-dev
 ```
 
 <!--
-## 从带有二进制文件的压缩包安装
+## 从包含二进制文件的 tarball 安装
 
-从[官方网站](https://manticoresearch.com/install/)下载并解压到文件夹：
+从[网站](https://manticoresearch.com/install/)下载并解压到文件夹：
 
 ```bash
 mkdir manticore
@@ -49,9 +55,8 @@ FULL_SHARE_DIR=./share/manticore ./bin/searchd -c ./etc/manticoresearch/manticor
 FULL_SHARE_DIR=./share/manticore ./bin/indexer -c ./etc/manticoresearch/manticore.conf
 ```
 
-解压后，Manticore 的配置文件位于 `./etc/manticoresearch/manticore.conf`。
+解压存档后，Manticore 的配置文件是 `./etc/manticoresearch/manticore.conf`。
 
 -->
 
 <!-- proofread -->
-

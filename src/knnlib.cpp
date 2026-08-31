@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2020-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2020-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -68,6 +68,7 @@ std::unique_ptr<knn::Builder_i>	CreateKNNBuilder ( const ISphSchema & tSchema, i
 		(knn::IndexSettings_t &)tKNNAttr = tAttr.m_tKNN;
 		tKNNAttr.m_sName = tAttr.m_sName.cstr();
 		tKNNAttr.m_eType = eAttrType;
+		tKNNAttr.m_bMulti = tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY;
 		tKNNSchema.push_back(tKNNAttr);
 	}
 
@@ -116,7 +117,10 @@ bool InitKNN ( CSphString & sError )
 	assert ( !g_pKNNLib );
 
 	CSphString sLibfile;
-	if ( IsAVX2Supported() )
+	if ( IsAVX512Supported() )
+		sLibfile = TryDifferentPaths ( LIB_MANTICORE_KNN, GetKNNFullpath(), knn::LIB_VERSION, "_avx512" );
+
+	if ( sLibfile.IsEmpty() && IsAVX2Supported() )
 		sLibfile = TryDifferentPaths ( LIB_MANTICORE_KNN, GetKNNFullpath(), knn::LIB_VERSION, "_avx2" );
 
 	if ( sLibfile.IsEmpty() )
@@ -163,6 +167,9 @@ bool InitKNN ( CSphString & sError )
 	{
 		std::string sErrorSTL;
 		g_pEmbeddingsLib = std::unique_ptr<knn::EmbeddingsLib_i> ( g_fnLoadEmbeddingsLib ( sEmbeddingsLibFile, sErrorSTL ) );
+		if ( !sErrorSTL.empty() )
+			sError = sErrorSTL.c_str();
+
 		if ( !g_pEmbeddingsLib )
 			return false;
 	}
@@ -178,6 +185,12 @@ void ShutdownKNN()
 	{
 		g_pEmbeddingsLib.reset();
 		dlclose(g_pKNNLib);
+		g_pKNNLib = nullptr;
+		g_fnCreate = nullptr;
+		g_fnCreateKNNBuilder = nullptr;
+		g_fnCreateDistanceCalc = nullptr;
+		g_fnLoadEmbeddingsLib = nullptr;
+		g_fnVersionStr = nullptr;
 	}
 }
 
@@ -215,4 +228,3 @@ bool IsKNNEmbeddingsLibLoaded()
 {
 	return !!g_pEmbeddingsLib;
 }
-

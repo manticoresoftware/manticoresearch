@@ -1,7 +1,11 @@
 # 删除复制集群
 
 <!-- example deleting a replication cluster  1 -->
-`DELETE CLUSTER` 语句删除指定的具有其 [名称](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#name) 的集群。一旦集群被删除，它会从所有节点中移除，但其表保持完整并变成活动的本地非复制表。
+`DELETE CLUSTER` 语句会删除指定的集群及其 [名称](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#name)。一旦删除集群，它将从所有节点中移除，但其表保持完整并成为活动的本地非复制表。
+
+如果只需分离当前节点并让集群的其余部分继续运行，请改用 `EXIT CLUSTER`。请参阅 [管理复制节点](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md)。
+
+如果已启用[身份验证和授权](../../Security/Authentication_and_authorization.md)，`DELETE CLUSTER` 会使用已存储的集群用户。该用户必须在参与节点上具有匹配的身份验证数据，并且对集群目标拥有 `replication` 权限。
 
 
 
@@ -100,4 +104,3 @@ utils_api.Sql("DELETE CLUSTER click_query", Some(true)).await;
 
 <!-- end -->
 <!-- proofread -->
-

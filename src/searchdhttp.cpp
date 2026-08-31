@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -28,11 +28,14 @@
 #include "daemon/logger.h"
 #include "daemon/search_handler.h"
 #include "sphinxquery/xqparser.h"
+#include "aggrexpr.h"
+#include "auth/auth_proto_http.h"
+#include "netfetch.h"
 
-static bool g_bLogBadHttpReq = val_from_env ( "MANTICORE_LOG_HTTP_BAD_REQ", false ); // log content of bad http requests, ruled by this env variable
-static int g_iLogHttpData = val_from_env ( "MANTICORE_LOG_HTTP_DATA", 0 ); // verbose logging of http data, ruled by this env variable
+static bool g_bLogBadHttpReq = env_exists ( "MANTICORE_LOG_HTTP_BAD_REQ" ); // log content of bad http requests, ruled by this env variable
+static int g_iLogHttpData = env_long ( "MANTICORE_LOG_HTTP_DATA" ).value_or(0); // verbose logging of http data, ruled by this env variable
 
-static bool LOG_LEVEL_HTTP = val_from_env ( "MANTICORE_LOG_HTTP", false ); // verbose logging http processing events, ruled by this env variable
+static bool LOG_LEVEL_HTTP = env_exists ( "MANTICORE_LOG_HTTP" ); // verbose logging http processing events, ruled by this env variable
 #define LOG_COMPONENT_HTTP ""
 #define HTTPINFO LOGMSG ( VERBOSE_DEBUG, HTTP, HTTP )
 
@@ -73,6 +76,7 @@ EHTTP_STATUS HttpGetStatusCodes ( int iStatus ) noexcept
 	case 200: return EHTTP_STATUS::_200;
 	case 206: return EHTTP_STATUS::_206;
 	case 400: return EHTTP_STATUS::_400;
+	case 401: return EHTTP_STATUS::_401;
 	case 403: return EHTTP_STATUS::_403;
 	case 404: return EHTTP_STATUS::_404;
 	case 405: return EHTTP_STATUS::_405;
@@ -96,6 +100,7 @@ inline constexpr const char* HttpGetStatusName ( EHTTP_STATUS eStatus ) noexcept
 	case EHTTP_STATUS::_200: return "200 OK";
 	case EHTTP_STATUS::_206: return "206 Partial Content";
 	case EHTTP_STATUS::_400: return "400 Bad Request";
+	case EHTTP_STATUS::_401: return "401 Unauthorized";
 	case EHTTP_STATUS::_403: return "403 Forbidden";
 	case EHTTP_STATUS::_404: return "404 Not Found";
 	case EHTTP_STATUS::_405: return "405 Method Not Allowed";
@@ -111,43 +116,42 @@ inline constexpr const char* HttpGetStatusName ( EHTTP_STATUS eStatus ) noexcept
 	};
 }
 
-extern CSphString g_sMySQLVersion;
-
-static void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHtml, bool bHeadReply )
+void HttpBuildReply ( const HttpReplyTrait_t & tReply, CSphVector<BYTE> & dData )
 {
-	assert ( sBody && iBodyLen );
+	assert ( tReply.m_sBody.first && tReply.m_sBody.second );
 
-	const char * sContent = ( bHtml ? "text/html" : "application/json" );
+	const char * sContentType = tReply.m_sContentType;
+	if ( !sContentType )
+		sContentType = ( tReply.m_bHtml ? "text/html" : "application/json" );
+
 	CSphString sHttp;
-	sHttp.SetSprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length:%d\r\n\r\n", HttpGetStatusName(eCode), g_sMySQLVersion.cstr(), sContent, iBodyLen );
+	sHttp.SetSprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length: %d\r\n\r\n", HttpGetStatusName ( tReply.m_eCode ), g_sStatusVersion.cstr(), sContentType, tReply.m_sBody.second );
 
 	int iHeaderLen = sHttp.Length();
 	int iBufLen = iHeaderLen;
-	if ( !bHeadReply )
-		iBufLen += iBodyLen;
+	if ( !tReply.m_bHeadReply )
+		iBufLen += tReply.m_sBody.second;
 	dData.Resize ( iBufLen );
 	memcpy ( dData.Begin(), sHttp.cstr(), iHeaderLen );
-	if ( !bHeadReply )
-		memcpy ( dData.Begin() + iHeaderLen, sBody, iBodyLen );
-}
-
-void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHtml )
-{
-	HttpBuildReply ( dData, eCode, sBody, iBodyLen, bHtml, false );
+	if ( !tReply.m_bHeadReply )
+		memcpy ( dData.Begin() + iHeaderLen, tReply.m_sBody.first, tReply.m_sBody.second );
 }
 
 void HttpBuildReplyHead ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHeadReply )
 {
-	HttpBuildReply ( dData, eCode, sBody, iBodyLen, false, bHeadReply );
+	HttpReplyTrait_t tReply { eCode, Str_t ( sBody, iBodyLen ) };
+	tReply.m_bHeadReply = bHeadReply;
+	HttpBuildReply ( tReply, dData );
 }
-
 
 void HttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError )
 {
 	JsonObj_c tErr;
 	tErr.AddStr ( "error", szError );
 	CSphString sJsonError = tErr.AsString();
-	HttpBuildReply ( dData, eCode, sJsonError.cstr(), sJsonError.Length(), false );
+	
+	HttpReplyTrait_t tReply { eCode, FromStr ( sJsonError ) };
+	HttpBuildReply ( tReply, dData );
 }
 
 struct Endpoint_t
@@ -171,7 +175,8 @@ static Endpoint_t g_dEndpoints[(size_t)EHTTP_ENDPOINT::TOTAL] =
 		{ "pq", "json/pq" },
 		{ "cli", nullptr },
 		{ "cli_json", nullptr },
-		{ "_bulk", nullptr }
+		{ "_bulk", nullptr },
+		{ "token", nullptr }
 };
 
 EHTTP_ENDPOINT StrToHttpEndpoint ( const CSphString& sEndpoint ) noexcept
@@ -466,18 +471,21 @@ CSphString HttpEndpointToStr ( EHTTP_ENDPOINT eEndpoint )
 	return g_dEndpoints[(int)eEndpoint].m_szName1;
 }
 
-void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, Str_t sReply, bool bHtml )
+void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, Str_t sReply, const char * sHeaderField )
 {
-	const char * sContent = ( bHtml ? "text/html" : "application/json" );
 	StringBuilder_c sHttp;
-	sHttp.Sprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length: %d\r\n\r\n", HttpGetStatusName ( eCode ), g_sStatusVersion.cstr(), sContent, sReply.second );
+	sHttp.Sprintf ( "HTTP/1.1 %s\r\n", HttpGetStatusName ( eCode ) );
+	sHttp.Sprintf ( "Content-Type: application/json; charset=UTF-8\r\n" );
+	sHttp.Sprintf ( "Content-Length: %d\r\n", sReply.second );
+	if ( sHeaderField && *sHeaderField )
+		sHttp.Sprintf ( "%s\r\n", sHeaderField );
+
+	sHttp.Sprintf ( "\r\n" );
 
 	dData.Reserve ( sHttp.GetLength() + sReply.second );
 	dData.Append ( (Str_t)sHttp );
 	dData.Append ( sReply );
 }
-
-
 HttpRequestParser_c::HttpRequestParser_c()
 {
 	http_parser_settings_init ( &m_tParserSettings );
@@ -800,6 +808,7 @@ inline int HttpRequestParser_c::MessageComplete ()
 	HTTPINFO << "MessageComplete";
 
 	m_bBodyDone = true;
+	m_bKeepAlive = (http_should_keep_alive (&m_tParser)!=0) ;
 	return 0;
 }
 
@@ -812,7 +821,7 @@ inline int HttpRequestParser_c::ParseHeaderCompleted ()
 	m_tParser.upgrade = 0;
 
 	// connection wide http options
-	m_bKeepAlive = ( ( m_tParser.flags & F_CONNECTION_KEEP_ALIVE ) != 0 );
+	m_bKeepAlive = (http_should_keep_alive (&m_tParser)!=0) ;
 	m_eType = (http_method)m_tParser.method;
 
 	FinishParserKeyVal();
@@ -892,18 +901,22 @@ static void HttpHandlerIndexPage ( CSphVector<BYTE> & dData )
 {
 	StringBuilder_c sIndexPage;
 	sIndexPage.Appendf ( g_sIndexPage, g_sStatusVersion.cstr() );
-	HttpBuildReply ( dData, EHTTP_STATUS::_200, (Str_t)sIndexPage, true );
+
+	HttpReplyTrait_t tReply { EHTTP_STATUS::_200, (Str_t)sIndexPage };
+	tReply.m_bHtml = true;
+	HttpBuildReply ( tReply, dData );
 }
 
 //////////////////////////////////////////////////////////////////////////
 class JsonRequestBuilder_c : public RequestBuilder_i
 {
 public:
-	JsonRequestBuilder_c ( const char* szQuery, CSphString sEndpoint, const CSphString & sRawQuery, const CSphString & sFullUrl )
+	JsonRequestBuilder_c ( const char* szQuery, CSphString sEndpoint, const CSphString & sRawQuery, const CSphString & sFullUrl, DWORD uApiFlags )
 		: m_sEndpoint ( std::move ( sEndpoint ) )
 		, m_tQuery ( szQuery )
 		, m_sRawQuery ( sRawQuery )
 		, m_sFullUrl ( sFullUrl )
+		, m_uApiFlags ( uApiFlags )
 	{
 		// fixme: we can implement replacing indexes in a string (without parsing) if it becomes a performance issue
 	}
@@ -921,6 +934,7 @@ public:
 		tOut.SendString ( sRequest.cstr() );
 		tOut.SendString ( m_sRawQuery.cstr() );
 		tOut.SendString ( m_sFullUrl.cstr() );
+		tOut.SendDword ( m_uApiFlags );
 	}
 
 private:
@@ -928,6 +942,7 @@ private:
 	mutable JsonObj_c	m_tQuery;
 	const CSphString & m_sRawQuery;
 	const CSphString & m_sFullUrl;
+	DWORD				m_uApiFlags = 0;
 };
 
 
@@ -953,7 +968,11 @@ public:
 		dResult[uLength] = '\0';
 
 		CSphString sError;
-		bool bOk = sphGetResultStats ( (const char *)dResult.Begin(), m_iAffected, m_iWarnings, eEndpoint==EHTTP_ENDPOINT::JSON_UPDATE, sError );
+		int iAffected = 0;
+		int iWarnings = 0;
+		bool bOk = sphGetResultStats ( (const char *)dResult.Begin(), iAffected, iWarnings, eEndpoint==EHTTP_ENDPOINT::JSON_UPDATE, sError );
+		m_iAffected += iAffected;
+		m_iWarnings += iWarnings;
 		if ( !sError.IsEmpty() )
 			m_tFails.Submit ( tAgent.m_tDesc.m_sIndexes, nullptr, sError.cstr() );
 
@@ -971,24 +990,25 @@ std::unique_ptr<QueryParser_i> CreateQueryParser ( bool bJson ) noexcept
 	return bJson ? sphCreateJsonQueryParser() : sphCreatePlainQueryParser();
 }
 
-std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt )
+std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt, bool bShardPhysicalUpdate )
 {
+	DWORD uApiFlags = ( tStmt.m_bShardPhysicalUpdate || bShardPhysicalUpdate ) ? API_FLAG_SHARD_PHYSICAL_UPDATE : 0;
 	if ( tStmt.m_bJson )
 	{
 		assert ( !tStmt.m_sEndpoint.IsEmpty() );
-		return std::make_unique<JsonRequestBuilder_c> ( sQuery.first, tStmt.m_sEndpoint, tStmt.m_sRawQuery, tStmt.m_sFullUrl );
+		return std::make_unique<JsonRequestBuilder_c> ( sQuery.first, tStmt.m_sEndpoint, tStmt.m_sRawQuery, tStmt.m_sFullUrl, uApiFlags );
 	} else
 	{
-		return std::make_unique<SphinxqlRequestBuilder_c> ( sQuery, tStmt );
+		return std::make_unique<SphinxqlRequestBuilder_c> ( sQuery, tStmt, uApiFlags );
 	}
 }
 
-std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings, SearchFailuresLog_c & tFails )
+std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings, SearchFailuresLog_c & tFails, CSphString * pWarning )
 {
 	if ( bJson )
 		return std::make_unique<JsonReplyParser_c> ( iUpdated, iWarnings, tFails );
 	else
-		return std::make_unique<SphinxqlReplyParser_c> ( &iUpdated, &iWarnings );
+		return std::make_unique<SphinxqlReplyParser_c> ( &iUpdated, &iWarnings, pWarning );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1002,19 +1022,31 @@ public:
 
 	bool			IsError() const { return m_bError; }
 	const char *	GetError() const { return m_sError.cstr(); }
+	EMYSQL_ERR		GetErrorCode() const { return m_eError; }
 	int				GetAffectedRows() const { return m_iAffected; }
 
 private:
 	bool			m_bError {false};
 	CSphString		m_sError;
+	EMYSQL_ERR		m_eError { EMYSQL_ERR::UNKNOWN_COM_ERROR };
 	int				m_iAffected {0};
 };
 
 
-void HttpErrorReporter_c::ErrorEx ( EMYSQL_ERR /*iErr*/, const char * sError )
+void HttpErrorReporter_c::ErrorEx ( EMYSQL_ERR iErr, const char * sError )
 {
 	m_bError = true;
 	m_sError = sError;
+	m_eError = iErr;
+}
+
+
+static EHTTP_STATUS GetHttpStatusForSqlError ( EMYSQL_ERR eErr )
+{
+	if ( eErr==EMYSQL_ERR::ACCESS_DENIED_ERROR )
+		return EHTTP_STATUS::_403;
+
+	return EHTTP_STATUS::_500;
 }
 
 StmtErrorReporter_i * CreateHttpErrorReporter()
@@ -1025,23 +1057,24 @@ StmtErrorReporter_i * CreateHttpErrorReporter()
 //////////////////////////////////////////////////////////////////////////
 // all the handlers for http queries
 
-void ReplyBuf ( Str_t sResult, EHTTP_STATUS eStatus, bool bNeedHttpResponse, CSphVector<BYTE> & dData )
+void ReplyBuf ( const HttpReplyTrait_t & tReply, CSphVector<BYTE> & dData )
 {
-	if ( bNeedHttpResponse )
-		HttpBuildReply ( dData, eStatus, sResult, false );
+	if ( tReply.m_bSendHeaders )
+	{
+		HttpBuildReply ( tReply, dData );
+	}
 	else
 	{
 		dData.Resize ( 0 );
-		dData.Append ( sResult );
+		dData.Append ( tReply.m_sBody );
 	}
 }
-
 
 void HttpHandler_c::SetErrorFormat ( bool bNeedHttpResponse )
 {
 	m_bNeedHttpResponse = bNeedHttpResponse;
 }
-	
+
 CSphVector<BYTE> & HttpHandler_c::GetResult()
 {
 	return m_dData;
@@ -1103,31 +1136,39 @@ void HttpHandler_c::ReportError ( const char * sError, HttpErrorType_e eType, EH
 	const char * sErrorType = GetErrorTypeName ( eType );
 	int iStatus = HttpGetStatusCodes ( eStatus );
 	CSphString sReply = ( sErrorType ? JsonEncodeResultError ( m_sError, sErrorType, iStatus, sIndex ) : JsonEncodeResultError ( m_sError, iStatus ) );
-	HttpBuildReplyHead ( GetResult(), eStatus, sReply.cstr(), sReply.Length(), false );
+	BuildReply ( sReply, eStatus );
 }
 
 void HttpHandler_c::BuildReply ( const CSphString & sResult, EHTTP_STATUS eStatus )
 {
 	m_eHttpCode = eStatus;
-	ReplyBuf ( FromStr ( sResult ), eStatus, m_bNeedHttpResponse, m_dData );
+	HttpReplyTrait_t tReply { eStatus, FromStr ( sResult ) };
+	tReply.m_bSendHeaders = m_bNeedHttpResponse;
+	ReplyBuf ( tReply, m_dData );
 }
 
 void HttpHandler_c::BuildReply ( const char* szResult, EHTTP_STATUS eStatus )
 {
 	m_eHttpCode = eStatus;
-	ReplyBuf ( FromSz( szResult ), eStatus, m_bNeedHttpResponse, m_dData );
+	HttpReplyTrait_t tReply { eStatus, FromSz( szResult ) };
+	tReply.m_bSendHeaders = m_bNeedHttpResponse;
+	ReplyBuf ( tReply, m_dData );
 }
 
 void HttpHandler_c::BuildReply ( const StringBuilder_c & sResult, EHTTP_STATUS eStatus )
 {
 	m_eHttpCode = eStatus;
-	ReplyBuf ( (Str_t)sResult, eStatus, m_bNeedHttpResponse, m_dData );
+	HttpReplyTrait_t tReply { eStatus, (Str_t)sResult };
+	tReply.m_bSendHeaders = m_bNeedHttpResponse;
+	ReplyBuf ( tReply, m_dData );
 }
 
 void HttpHandler_c::BuildReply ( Str_t sResult, EHTTP_STATUS eStatus )
 {
 	m_eHttpCode = eStatus;
-	ReplyBuf ( sResult, eStatus, m_bNeedHttpResponse, m_dData );
+	HttpReplyTrait_t tReply { eStatus, sResult };
+	tReply.m_bSendHeaders = m_bNeedHttpResponse;
+	ReplyBuf ( tReply, m_dData );
 }
 
 // check whether given served index is exist and has requested type
@@ -1170,8 +1211,17 @@ public:
 		if ( IsBuddyQuery ( m_tOptions ) )
 			m_tParsed.m_tQuery.m_uDebugFlags |= QUERY_DEBUG_NO_LOG;
 
-		auto tHandler = CreateMsearchHandler ( std::move ( pQueryParser ), m_eQueryType, m_tParsed );
+		CSphString sError;
+		auto tHandler = CreateMsearchHandler ( std::move ( pQueryParser ), m_eQueryType, m_tParsed, sError );
+		if ( !sError.IsEmpty() )
+		{
+			ReportError ( sError.cstr(), EHTTP_STATUS::_500 );
+			return false;
+		}
 		SetStmt ( tHandler );
+
+		if ( !HttpCheckPerms ( session::GetUser(), AuthAction_e::READ, m_tParsed.m_tQuery.m_sIndexes, m_eHttpCode, m_sError, m_dData ) )
+			return false;
 
 		QueryProfile_c tProfile;
 		tProfile.m_eNeedPlan = (PLAN_FLAVOUR)m_tParsed.m_iPlan;
@@ -1196,6 +1246,15 @@ public:
 		// fixme: handle more than one warning at once?
 		if ( tRes.m_sWarning.IsEmpty() && !m_tParsed.m_sWarning.IsEmpty() )
 			tRes.m_sWarning = m_tParsed.m_sWarning;
+
+		ARRAY_FOREACH ( i, tHandler.m_dQueries )
+		{
+			const auto & tMeta = tHandler.m_dAggrResults[i];
+			auto uMatches = tMeta.m_dResults.IsEmpty() ? 0 : tMeta.m_dResults.First().m_dMatches.GetLength();
+
+			if ( !session::GetBuddy() )
+				gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, tMeta.GetQueryTimeUs() );
+		}
 
 		CSphString sResult = EncodeResult ( tHandler.m_dAggrResults, bNeedProfile ? &tProfile : nullptr );
 		BuildReply ( sResult, EHTTP_STATUS::_200 );
@@ -1259,6 +1318,9 @@ protected:
 			return nullptr;
 		}
 
+		for ( auto & tStmt : m_dStmt )
+			tStmt.m_sStmt = pRawQl->cstr();
+
 		( (CSphQuery &) m_tParsed.m_tQuery ) = m_dStmt[0].m_tQuery;
 		bool bFacet = ( m_dStmt.GetLength()>1 );
 		for ( const auto & tStmt : m_dStmt )
@@ -1294,8 +1356,6 @@ protected:
 	}
 };
 
-typedef std::pair<CSphString,MysqlColumnType_e> ColumnNameType_t;
-
 static const char * GetMysqlTypeName ( MysqlColumnType_e eType )
 {
 	switch ( eType )
@@ -1318,6 +1378,9 @@ static MysqlColumnType_e GetMysqlTypeByName ( const CSphString& sType )
 	if ( sType == "long" )
 		return MYSQL_COL_LONG;
 
+	if ( sType == "bool" )
+		return MYSQL_COL_LONG;
+
 	if ( sType == "float" )
 		return MYSQL_COL_FLOAT;
 
@@ -1327,10 +1390,7 @@ static MysqlColumnType_e GetMysqlTypeByName ( const CSphString& sType )
 	if ( sType == "long long" )
 		return MYSQL_COL_LONGLONG;
 
-	if ( sType == "string" )
-		return MYSQL_COL_STRING;
-
-	assert (false && "Unknown column");
+	assert ( (sType == "string" || sType == "multi" || sType == "json") && "Unknown column");
 	return MYSQL_COL_STRING;
 }
 
@@ -1340,9 +1400,45 @@ JsonEscapedBuilder& operator<< ( JsonEscapedBuilder& tOut, MysqlColumnType_e eTy
 	return tOut;
 }
 
+constexpr const char* AttrType2Json ( ESphAttr eAttrType ) noexcept
+{
+	switch ( eAttrType )
+	{
+	case SPH_ATTR_INTEGER:
+	case SPH_ATTR_TIMESTAMP:  return "long";
+	case SPH_ATTR_BOOL: return "bool";
+	case SPH_ATTR_FLOAT: return "float";
+	case SPH_ATTR_DOUBLE: return "double";
+	case SPH_ATTR_BIGINT:
+	case SPH_ATTR_UINT64: return "long long";
+	case SPH_ATTR_JSON_PTR:
+	case SPH_ATTR_JSON:	return "json";
+	case SPH_ATTR_UINT32SET_PTR:
+	case SPH_ATTR_UINT32SET:
+	case SPH_ATTR_INT64SET_PTR:
+	case SPH_ATTR_INT64SET: return "multi";
+	default: break;
+	}
+	return "string";
+}
+
+// wrapper need, because direct definition of operator<< for ESphAttr affects also another places (unexpectedly)
+struct ESphAttrStr
+{
+	ESphAttr m_tVal;
+	explicit ESphAttrStr ( const ESphAttr eVal ) noexcept
+		: m_tVal ( eVal ) {};
+};
+
+JsonEscapedBuilder& operator<< ( JsonEscapedBuilder& tOut, ESphAttrStr tType )
+{
+	tOut.FixupSpacedAndAppendEscaped ( AttrType2Json ( tType.m_tVal ) );
+	return tOut;
+}
+
 const StrBlock_t dJsonObjCustom { { ",\n", 2 }, { "[", 1 }, { "]", 1 } }; // json object with custom formatting
 
-class JsonRowBuffer_c : public RowBuffer_i
+class JsonRowBuffer_c final : public RowBuffer_i
 {
 public:
 	JsonRowBuffer_c()
@@ -1386,6 +1482,37 @@ public:
 		m_dBuf << uVal;
 	}
 
+	void PutFloat ( float fVal ) final
+	{
+		PutFloatAsString ( fVal, nullptr );
+	}
+
+	void PutDouble ( double fVal ) final
+	{
+		PutDoubleAsString ( fVal, nullptr );
+	}
+
+	void PutInt ( int iVal ) final
+	{
+		PutNumAsString ( iVal );
+	}
+
+	void PutInt64 ( int64_t iVal ) final
+	{
+		PutNumAsString ( iVal );
+	}
+
+	void PutDWORD ( DWORD uVal ) override
+	{
+		PutNumAsString ( uVal );
+	}
+
+	void PutUint64 ( uint64_t uVal ) final
+	{
+		PutNumAsString ( uVal );
+	}
+
+
 	void PutArray ( const ByteBlob_t& dBlob, bool ) override
 	{
 		AddDataColumn();
@@ -1425,12 +1552,13 @@ public:
 		m_dBuf.FinishBlock ( false ); // root object
 	}
 
-	void Error ( const char * szError, EMYSQL_ERR ) override
+	void Error ( const char * szError, EMYSQL_ERR eErr ) override
 	{
 		auto _ = m_dBuf.Object ( false );
 		DataFinish ( 0, szError, nullptr );
 		m_bError = true;
 		m_sError = szError;
+		m_eError = eErr;
 	}
 
 	void Ok ( int iAffectedRows, int iWarns, const char * sMessage, bool bMoreResults, int64_t iLastInsertId ) override
@@ -1460,12 +1588,22 @@ public:
 	{
 		JsonEscapedBuilder sEscapedName;
 		sEscapedName.FixupSpacedAndAppendEscaped ( szName );
-		ColumnNameType_t tCol { (CSphString)sEscapedName, eType };
 		auto _ = m_dBuf.Object(false);
-		m_dBuf.AppendName ( tCol.first.cstr(), false );
+		m_dBuf.AppendName ( sEscapedName.cstr(), false );
 		auto tTypeBlock = m_dBuf.Object(false);
 		m_dBuf.NamedVal ( "type", eType );
-		m_dColumns.Add ( tCol );
+		m_dColumns.Add ( (CSphString)sEscapedName );
+	}
+
+	void HeadColumnRaw ( const char * szName, ESphAttr uType ) final
+	{
+		JsonEscapedBuilder sEscapedName;
+		sEscapedName.FixupSpacedAndAppendEscaped ( szName );
+		auto _ = m_dBuf.Object(false);
+		m_dBuf.AppendName ( sEscapedName.cstr(), false );
+		auto tTypeBlock = m_dBuf.Object(false);
+		m_dBuf.NamedVal ( "type", ESphAttrStr {uType} );
+		m_dColumns.Add ( (CSphString)sEscapedName );
 	}
 
 	void Add ( BYTE ) override {}
@@ -1476,15 +1614,17 @@ public:
 		return m_dBuf;
 	}
 
+	EMYSQL_ERR m_eError = EMYSQL_ERR::UNKNOWN_COM_ERROR;
+
 private:
 	JsonEscapedBuilder m_dBuf;
-	CSphVector<ColumnNameType_t> m_dColumns;
+	StrVec_t m_dColumns;
 	int m_iTotalRows = 0;
 	int m_iCol = 0;
 
 	void AddDataColumn()
 	{
-		m_dBuf.AppendName ( m_dColumns[m_iCol].first.cstr(), false );
+		m_dBuf.AppendName ( m_dColumns[m_iCol].cstr(), false );
 		++m_iCol;
 	}
 
@@ -1510,6 +1650,40 @@ private:
 "warning":""
 }]
  */
+
+inline static void PutAnyValAsString ( RowBuffer_i & tOut, const JsonObj_c& tDataCol ) noexcept
+{
+	if ( tDataCol.IsInt () )
+		tOut.PutNumAsString ( tDataCol.IntVal() );
+	else if ( tDataCol.IsDbl () )
+		tOut.PutDoubleAsString ( tDataCol.DblVal() );
+	else if ( tDataCol.IsBool () )
+		tOut.PutString ( tDataCol.BoolVal() ? "true" : "false" );
+	else if ( tDataCol.IsNull () )
+		tOut.PutString ( "null" );
+	else
+		tOut.PutString ( tDataCol.StrVal() );
+}
+
+inline static int64_t NumberAsInt ( const JsonObj_c& tDataCol ) noexcept
+{
+	if ( tDataCol.IsInt () )
+		return tDataCol.IntVal();
+	if ( tDataCol.IsDbl () )
+		return (int64_t)tDataCol.DblVal();
+	assert (false && "Wrong value");
+	return 0;
+}
+
+inline static double NumberAsDouble ( const JsonObj_c& tDataCol ) noexcept
+{
+	if ( tDataCol.IsInt () )
+		return (double)tDataCol.IntVal();
+	if ( tDataCol.IsDbl () )
+		return tDataCol.DblVal();
+	assert (false && "Wrong value");
+	return 0.0;
+}
 
 
 void ConvertJsonDataset ( const JsonObj_c & tRoot, const char * sStmt, RowBuffer_i & tOut )
@@ -1590,14 +1764,18 @@ void ConvertJsonDataset ( const JsonObj_c & tRoot, const char * sStmt, RowBuffer
 		for ( const auto & tDataRow : tDataNodes )
 		{
 			assert ( tDataRow.IsObj() ); // like {"id":2,"proto":"http","state":"query","host":"127.0.0.1:50787","connid":9,"killed":"0","last cmd":"select"}
+			int iCol = 0;
 			for ( const auto & tDataCol : tDataRow )
 			{
-				if ( tDataCol.IsInt () )
-					tOut.PutNumAsString ( tDataCol.IntVal() );
-				else if ( tDataCol.IsDbl () )
-					tOut.PutDoubleAsString ( tDataCol.DblVal() );
-				else
-					tOut.PutString ( tDataCol.StrVal() );
+				assert ( iCol < dSqlColumns.GetLength() );
+				switch ( dSqlColumns[iCol].second ) {
+					case MYSQL_COL_LONG : tOut.PutDWORD (NumberAsInt(tDataCol)); break;
+					case MYSQL_COL_LONGLONG : tOut.PutInt64 (NumberAsInt(tDataCol)); break;
+					case MYSQL_COL_FLOAT : tOut.PutFloat (NumberAsDouble(tDataCol)); break;
+					case MYSQL_COL_DOUBLE : tOut.PutDouble (NumberAsDouble(tDataCol)); break;
+					default: PutAnyValAsString ( tOut, tDataCol );
+				}
+				++iCol;
 			}
 			if ( !tOut.Commit() )
 				return;
@@ -1634,7 +1812,7 @@ public:
 		session::Execute ( m_sQuery, tOut );
 		if ( tOut.IsError() )
 		{
-			ReportError ( tOut.GetError().scstr(), EHTTP_STATUS::_500 );
+			ReportError ( tOut.GetError().scstr(), GetHttpStatusForSqlError ( tOut.m_eError ) );
 			return false;
 		}
 		BuildReply ( tOut.Finish(), EHTTP_STATUS::_200 );
@@ -1678,14 +1856,22 @@ protected:
 		: m_eFormat ( eFormat )
 	{}
 
-	void ProcessBegin ( const CSphString& sIndex )
+	void ProcessBegin ( const CSphString& sIndex, bool bAllowShardTxn )
 	{
-		// for now - only local mutable indexes are suitable
+		bool bCanBeginTxn = false;
 		{
 			auto pIndex = GetServed ( sIndex );
-			if ( !ServedDesc_t::IsMutable ( pIndex ) )
-				return;
+			bCanBeginTxn = ServedDesc_t::IsMutable ( pIndex );
 		}
+
+		if ( !bCanBeginTxn && bAllowShardTxn )
+		{
+			auto pDist = GetDistr ( sIndex );
+			bCanBeginTxn = AsShard ( pDist.Ptr() )!=nullptr;
+		}
+
+		if ( !bCanBeginTxn )
+			return;
 
 		HttpErrorReporter_c tReporter;
 		sphHandleMysqlBegin ( tReporter, FromStr (sIndex) );
@@ -1708,9 +1894,17 @@ protected:
 			auto dLastIds = session::LastIds();
 			if ( !dLastIds.IsEmpty() )
 				tDocId = dLastIds[0];
-			tResult = sphEncodeTxnResultJson ( sIndex.first, tDocId, m_iInserts, iDeletes, m_iUpdates, m_eFormat );
+			auto dLastIdStrings = session::LastIdStrings();
+			const char * szDocId = dLastIdStrings.IsEmpty() ? nullptr : dLastIdStrings[0].cstr();
+			tResult = sphEncodeTxnResultJson ( sIndex.first, tDocId, szDocId, m_iInserts, iDeletes, m_iUpdates, m_eFormat );
 		}
 		return !tReporter.IsError();
+	}
+
+	void ProcessRollback ( Str_t sIndex ) const
+	{
+		HttpErrorReporter_c tReporter;
+		sphHandleMysqlCommitRollback ( tReporter, sIndex, false );
 	}
 
 	int m_iInserts = 0;
@@ -1720,6 +1914,8 @@ protected:
 
 static bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t & tDocId, JsonObj_c & tResult, CSphString & sError, ResultSetFormat_e eFormat )
 {
+	int iDocidPos = tStmt.m_dInsertSchema.GetFirst ( [] ( const CSphString & sName ) { return sName==sphGetDocidName(); } );
+
 	HttpErrorReporter_c tReporter;
 	sphHandleMysqlInsert ( tReporter, tStmt );
 
@@ -1732,11 +1928,37 @@ static bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t & tDocId, JsonObj_c & tRe
 		auto dLastIds = session::LastIds();
 		if ( !dLastIds.IsEmpty() )
 			tDocId = dLastIds[0];
-		tResult = sphEncodeInsertResultJson ( tStmt.m_sIndex.cstr(), tStmt.m_eStmt == STMT_REPLACE, tDocId, eFormat );
+
+		const char * szDocId = nullptr;
+		auto dLastIdStrings = session::LastIdStrings();
+		if ( !dLastIdStrings.IsEmpty() )
+			szDocId = dLastIdStrings[0].cstr();
+
+		const bool bGeneratedUuidDocid = iDocidPos==-1 && szDocId!=nullptr;
+		const bool bReplyAsReplace = tStmt.m_eStmt==STMT_REPLACE && !bGeneratedUuidDocid;
+		tResult = sphEncodeInsertResultJson ( tStmt.m_sIndex.cstr(), bReplyAsReplace, tDocId, szDocId, eFormat );
 	}
 
 	return !tReporter.IsError();
 }
+
+static const char * GetStringDocidForReply ( const SqlStmt_t & tStmt )
+{
+	for ( const auto & tFilter : tStmt.m_tQuery.m_dFilters )
+	{
+		if ( tFilter.m_sAttrName!=sphGetDocidName() )
+			continue;
+
+		if ( tFilter.m_eType==SPH_FILTER_STRING && tFilter.m_dStrings.GetLength()==1 )
+			return tFilter.m_dStrings[0].cstr();
+
+		if ( tFilter.m_eType==SPH_FILTER_STRING_LIST && tFilter.m_dStrings.GetLength()==1 )
+			return tFilter.m_dStrings[0].cstr();
+	}
+
+	return nullptr;
+}
+
 
 static bool ProcessDelete ( Str_t sRawRequest, const SqlStmt_t& tStmt, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError, ResultSetFormat_e eFormat )
 {
@@ -1749,7 +1971,8 @@ static bool ProcessDelete ( Str_t sRawRequest, const SqlStmt_t& tStmt, DocID_t t
 		tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), sError.cstr(), eFormat );
 	} else
 	{
-		tResult = sphEncodeDeleteResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows(), eFormat );
+		const char * szDocId = GetStringDocidForReply ( tStmt );
+		tResult = sphEncodeDeleteResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows(), eFormat, szDocId );
 	}
 
 	return !tReporter.IsError();
@@ -1776,6 +1999,9 @@ public:
 			ReportError ( nullptr, HttpErrorType_e::Parse, EHTTP_STATUS::_400, tStmt.m_sIndex.cstr() );
 			return false;
 		}
+
+		if ( !HttpCheckPerms ( session::GetUser(), AuthAction_e::WRITE, tStmt.m_tQuery.m_sIndexes, m_eHttpCode, m_sError, m_dData ) )
+			return false;
 
 		tStmt.m_sEndpoint = HttpEndpointToStr ( m_bReplace ? EHTTP_ENDPOINT::JSON_REPLACE : EHTTP_ENDPOINT::JSON_INSERT );
 		JsonObj_c tResult = JsonNull;
@@ -1812,7 +2038,8 @@ protected:
 			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), sError.cstr(), m_eFormat );
 		} else
 		{
-			tResult = sphEncodeUpdateResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows(), m_eFormat );
+			const char * szDocId = GetStringDocidForReply ( tStmt );
+			tResult = sphEncodeUpdateResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows(), m_eFormat, szDocId );
 		}
 
 		m_iLastUpdated = tReporter.GetAffectedRows();
@@ -1838,6 +2065,7 @@ static void SetQueryOptions ( const OptionsHash_t & hOpts, SqlStmt_t & tStmt )
 		const CSphString * pFullUrl = hOpts  ( "full_url" );
 		if ( pFullUrl )
 			tStmt.m_sFullUrl = *pFullUrl;
+		tStmt.m_bShardPhysicalUpdate = session::GetClientSession()->m_bShardPhysicalUpdate;
 	}
 }
 
@@ -1869,6 +2097,9 @@ public:
 		}
 
 		SetQueryOptions ( m_tOptions, tStmt );
+		
+		if ( !HttpCheckPerms ( session::GetUser(), AuthAction_e::WRITE, tStmt.m_tQuery.m_sIndexes, m_eHttpCode, m_sError, m_dData ) )
+			return false;
 
 		JsonObj_c tResult = JsonNull;
 		bool bResult = ProcessQuery ( tStmt, tDocId, tResult );
@@ -2013,6 +2244,25 @@ static Str_t TrimHeadSpace ( Str_t tLine )
 class HttpHandler_JsonBulk_c : public HttpHandler_c, public HttpJsonUpdateTraits_c, public HttpJsonTxnTraits_c
 {
 protected:
+	struct BulkTxnState_t
+	{
+		CSphString	m_sIndex;
+		bool		m_bIsShard = false;
+		SqlStmt_e	m_eShardWriteStmt = STMT_DUMMY;
+
+		void Reset ()
+		{
+			m_sIndex = "";
+			m_bIsShard = false;
+			m_eShardWriteStmt = STMT_DUMMY;
+		}
+
+		bool HasIndex () const
+		{
+			return !m_sIndex.IsEmpty();
+		}
+	};
+
 	NDJsonStream_c m_tSource;
 	const OptionsHash_t& m_tOptions;
 
@@ -2034,33 +2284,13 @@ public:
 		int iCurLine = 0;
 		int iLastTxStartLine = 0;
 
-		auto FinishBulk = [&, this] ( EHTTP_STATUS eStatus = EHTTP_STATUS::_200 ) {
-			JsonObj_c tRoot;
-			tRoot.AddItem ( "items", tResults );
-			tRoot.AddInt ( "current_line", iCurLine );
-			tRoot.AddInt ( "skipped_lines", iCurLine - iLastTxStartLine );
-			tRoot.AddBool ( "errors", !bResult );
-			tRoot.AddStr ( "error", m_sError.IsEmpty() ? "" : m_sError );
-			if ( eStatus == EHTTP_STATUS::_200 && !bResult )
-				eStatus = EHTTP_STATUS::_500;
-			BuildReply ( tRoot.AsString(), eStatus );
-			HTTPINFO << "inserted  " << iCurLine;
-			return bResult;
-		};
-
-		auto AddResult = [&tResults] ( const char* szStmt, JsonObj_c& tResult ) {
-			JsonObj_c tItem;
-			tItem.AddItem ( szStmt, tResult );
-			tResults.AddItem ( tItem );
-		};
-
 		if ( m_tSource.Eof() )
-			return FinishBulk();
+			return FinishBulk ( tResults, bResult, iCurLine, iLastTxStartLine );
 
 		// originally we execute txn for single index
 		// if there is combo, we fall back to query-by-query commits
 
-		CSphString sTxnIdx;
+		BulkTxnState_t tTxnState;
 		CSphString sStmt;
 
 		while ( !m_tSource.Eof() )
@@ -2076,14 +2306,11 @@ public:
 			{
 				if ( session::IsInTrans() )
 				{
-					assert ( !sTxnIdx.IsEmpty() );
+					assert ( tTxnState.HasIndex() );
 					// empty query finishes current txn
-					bResult = ProcessCommitRollback ( FromStr ( sTxnIdx ), tDocId, tResult, m_sError );
-					AddResult ( "bulk", tResult );
+					bResult = CommitBulkTxn ( tTxnState, tDocId, tResult, tResults, iLastTxStartLine, iCurLine );
 					if ( !bResult )
 						break;
-					sTxnIdx = "";
-					iLastTxStartLine = iCurLine;
 				}
 				continue;
 			}
@@ -2094,30 +2321,46 @@ public:
 			const char* szStmt = tQuery.first;
 			SqlStmt_t tStmt;
 			tStmt.m_bJson = true;
+			tStmt.m_tQuery.m_eQueryType = QUERY_JSON;
 
 			CSphString sQuery;
 			if ( !sphParseJsonStatement ( szStmt, tStmt, sStmt, sQuery, tDocId, m_sError ) )
 			{
 				HTTPINFO << "inserted " << iCurLine << ", error: " << m_sError;
-				return FinishBulk ( EHTTP_STATUS::_400 );
+				RollbackBulkTxn ( tTxnState );
+				return FinishBulk ( tResults, bResult, iCurLine, iLastTxStartLine, EHTTP_STATUS::_400 );
 			}
 
-			if ( sTxnIdx.IsEmpty() )
+			const bool bStmtShard = IsShardTxn ( tStmt.m_sIndex );
+			const bool bShardUpdateStmt = bStmtShard && tStmt.m_eStmt==STMT_UPDATE;
+			const bool bNeedShardBreak = NeedShardBreak ( tTxnState, tStmt, bStmtShard );
+
+			// Check permissions for every transaction target, but keep same-index bulk lines together.
+			if ( ( !tTxnState.HasIndex() || tStmt.m_sIndex!=tTxnState.m_sIndex ) && !HttpCheckPerms ( session::GetUser(), AuthAction_e::WRITE, tStmt.m_sIndex, m_eHttpCode, m_sError, m_dData ) )
+				return false;
+
+			if ( session::IsInTrans() && tTxnState.m_sIndex!=tStmt.m_sIndex )
 			{
-				sTxnIdx = tStmt.m_sIndex;
-				ProcessBegin ( sTxnIdx );
-			}
-			else if ( session::IsInTrans() && sTxnIdx!=tStmt.m_sIndex )
-			{
-				assert ( !sTxnIdx.IsEmpty() );
+				assert ( tTxnState.HasIndex() );
 				// we should finish current txn, as we got another index
-				bResult = ProcessCommitRollback ( FromStr ( sTxnIdx ), tDocId, tResult, m_sError );
-				AddResult ( "bulk", tResult );
+				bResult = CommitBulkTxn ( tTxnState, tDocId, tResult, tResults, iLastTxStartLine, iCurLine-1 );
 				if ( !bResult )
 					break;
-				sTxnIdx = tStmt.m_sIndex;
-				ProcessBegin ( sTxnIdx );
-				iLastTxStartLine = iCurLine;
+
+			} else if ( bNeedShardBreak )
+			{
+				assert ( tTxnState.HasIndex() );
+				// shard updates are non-transactional, and INSERT/REPLACE can not share a shard txn
+				bResult = CommitBulkTxn ( tTxnState, tDocId, tResult, tResults, iLastTxStartLine, iCurLine-1 );
+				if ( !bResult )
+					break;
+			}
+
+			if ( !tTxnState.HasIndex() )
+			{
+				tTxnState.m_sIndex = tStmt.m_sIndex;
+				tTxnState.m_bIsShard = bStmtShard;
+				ProcessBegin ( tTxnState.m_sIndex, true );
 			}
 
 			SetQueryOptions ( m_tOptions, tStmt );
@@ -2128,7 +2371,11 @@ public:
 			case STMT_REPLACE:
 				bResult = ProcessInsert ( tStmt, tDocId, tResult, m_sError, ResultSetFormat_e::MntSearch );
 				if ( bResult )
+				{
 					++m_iInserts;
+					if ( tTxnState.m_bIsShard )
+						tTxnState.m_eShardWriteStmt = tStmt.m_eStmt;
+				}
 				break;
 
 			case STMT_UPDATE:
@@ -2145,11 +2392,19 @@ public:
 
 			default:
 				HTTPINFO << "inserted  " << iCurLine << ", got unknown statement:" << (int)tStmt.m_eStmt;
-				return FinishBulk ( EHTTP_STATUS::_400 );
+				RollbackBulkTxn ( tTxnState );
+				return FinishBulk ( tResults, bResult, iCurLine, iLastTxStartLine, EHTTP_STATUS::_400 );
+			}
+
+			if ( bResult && bShardUpdateStmt && session::IsInTrans() )
+			{
+				if ( !CommitBulkTxn ( tTxnState, tDocId, tResult, tResults, iLastTxStartLine, iCurLine ) )
+					break;
+				continue;
 			}
 
 			if ( !bResult || !session::IsInTrans() )
-				AddResult ( sStmt.cstr(), tResult );
+				AddBulkResult ( tResults, sStmt.cstr(), tResult );
 
 			// no further than the first error
 			if ( !bResult )
@@ -2161,22 +2416,89 @@ public:
 
 		if ( bResult && session::IsInTrans() )
 		{
-			assert ( !sTxnIdx.IsEmpty() );
+			assert ( tTxnState.HasIndex() );
 			// We're in txn - that is, nothing committed, and we should do it right now
 			JsonObj_c tResult;
 			DocID_t tDocId = 0;
-			bResult = ProcessCommitRollback ( FromStr ( sTxnIdx ), tDocId, tResult, m_sError );
-			AddResult ( "bulk", tResult );
-			if ( bResult )
-				iLastTxStartLine = iCurLine;
+			bResult = CommitBulkTxn ( tTxnState, tDocId, tResult, tResults, iLastTxStartLine, iCurLine );
 		}
 
-		session::SetInTrans ( false );
+		if ( !bResult )
+			RollbackBulkTxn ( tTxnState );
+		else
+		{
+			session::SetInTrans ( false );
+			tTxnState.Reset ();
+		}
+
 		HTTPINFO << "inserted  " << iCurLine << " result: " << (int)bResult << ", error:" << m_sError;
-		return FinishBulk();
+		return FinishBulk ( tResults, bResult, iCurLine, iLastTxStartLine );
 	}
 
 private:
+	bool FinishBulk ( JsonObj_c & tResults, bool bResult, int iCurLine, int iLastTxStartLine, EHTTP_STATUS eStatus = EHTTP_STATUS::_200 )
+	{
+		JsonObj_c tRoot;
+		tRoot.AddItem ( "items", tResults );
+		tRoot.AddInt ( "current_line", iCurLine );
+		tRoot.AddInt ( "skipped_lines", iCurLine - iLastTxStartLine );
+		tRoot.AddBool ( "errors", !bResult );
+		tRoot.AddStr ( "error", m_sError.IsEmpty() ? "" : m_sError );
+		if ( eStatus == EHTTP_STATUS::_200 && !bResult )
+			eStatus = EHTTP_STATUS::_500;
+		BuildReply ( tRoot.AsString(), eStatus );
+		HTTPINFO << "inserted  " << iCurLine;
+		return bResult;
+	}
+
+	static void AddBulkResult ( JsonObj_c & tResults, const char * szStmt, JsonObj_c & tResult )
+	{
+		JsonObj_c tItem;
+		tItem.AddItem ( szStmt, tResult );
+		tResults.AddItem ( tItem );
+	}
+
+	static bool IsShardTxn ( const CSphString & sIndex )
+	{
+		auto pDist = GetDistr ( sIndex );
+		return AsShard ( pDist.Ptr() )!=nullptr;
+	}
+
+	static bool NeedShardBreak ( const BulkTxnState_t & tTxnState, const SqlStmt_t & tStmt, bool bStmtShard )
+	{
+		const bool bShardUpdateStmt = bStmtShard && tStmt.m_eStmt==STMT_UPDATE;
+		return session::IsInTrans()
+			&& tTxnState.m_bIsShard
+			&& tTxnState.m_sIndex==tStmt.m_sIndex
+			&& ( bShardUpdateStmt
+				|| ( ( tStmt.m_eStmt==STMT_INSERT || tStmt.m_eStmt==STMT_REPLACE )
+					&& tTxnState.m_eShardWriteStmt!=STMT_DUMMY
+					&& tTxnState.m_eShardWriteStmt!=tStmt.m_eStmt ) );
+	}
+
+	bool CommitBulkTxn ( BulkTxnState_t & tTxnState, DocID_t & tDocId, JsonObj_c & tResult, JsonObj_c & tResults, int & iLastTxStartLine, int iCommittedThroughLine )
+	{
+		assert ( tTxnState.HasIndex() );
+		bool bResult = ProcessCommitRollback ( FromStr ( tTxnState.m_sIndex ), tDocId, tResult, m_sError );
+		AddBulkResult ( tResults, "bulk", tResult );
+		if ( bResult )
+		{
+			tTxnState.Reset();
+			iLastTxStartLine = iCommittedThroughLine;
+		}
+
+		return bResult;
+	}
+
+	void RollbackBulkTxn ( BulkTxnState_t & tTxnState ) const
+	{
+		if ( session::IsInTrans() && tTxnState.HasIndex() )
+			ProcessRollback ( FromStr ( tTxnState.m_sIndex ) );
+
+		session::SetInTrans ( false );
+		tTxnState.Reset();
+	}
+
 	bool CheckNDJson()
 	{
 		if ( !m_tOptions.Exists ( "content-type" ) )
@@ -2216,11 +2538,21 @@ private:
 	bool Delete ( const CSphString & sIndex, const JsonObj_c & tRoot );
 };
 
+enum class BulkDocid_e : BYTE
+{
+	NONE,
+	NUMERIC,
+	STRING
+};
+
+
 struct BulkDoc_t
 {
 	CSphString m_sAction;
 	CSphString m_sIndex;
 	DocID_t m_tDocid { 0 };
+	CSphString m_sDocid;
+	BulkDocid_e m_eDocid { BulkDocid_e::NONE };
 	Str_t m_tDocLine;
 };
 
@@ -2246,6 +2578,13 @@ private:
 	bool ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecTraits_T<BulkDoc_t> & dDocs, JsonObj_c & tItems );
 	bool Validate();
 	void ReportLogError ( const char * sError, HttpErrorType_e eType , EHTTP_STATUS eStatus, bool bLogOnly );
+};
+
+class HttpTokenHandler_c final: public HttpHandler_c, public HttpOptionTrait_t
+{
+public:
+	explicit HttpTokenHandler_c ( const OptionsHash_t & tOptions );
+	bool Process () final;
 };
 
 static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoint, CharStream_c & tSource, Str_t & sQuery, OptionsHash_t & tOptions, http_method eRequestType )
@@ -2367,6 +2706,9 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoi
 		else
 			return std::make_unique<HttpHandlerEsBulk_c> ( sQuery, eRequestType, tOptions );
 
+	case EHTTP_ENDPOINT::TOKEN:
+		return std::make_unique<HttpTokenHandler_c> ( tOptions );
+
 	case EHTTP_ENDPOINT::TOTAL:
 		SetQuery ( tSource.ReadAll() );
 		if ( tSource.GetError() )
@@ -2381,7 +2723,7 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoi
 	return nullptr;
 }
 
-HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
+HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType, bool bSkipAuth )
 {
 	TRACE_CONN ( "conn", "ProcessHttpQuery" );
 
@@ -2389,6 +2731,12 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 
 	const CSphString & sEndpoint = hOptions["endpoint"];
 	tRes.m_eEndpoint = StrToHttpEndpoint ( sEndpoint );
+	CSphString sUser;
+	if ( !bSkipAuth && !CheckAuth ( hOptions, tRes, dResult, sUser ) )
+		return tRes;
+
+	// should set client user to pass it further into distributed index
+	session::SetUser ( sUser );
 
 	std::unique_ptr<HttpHandler_c> pHandler = CreateHttpHandler ( tRes.m_eEndpoint, tSource, sSrcQuery, hOptions, eRequestType );
 	if ( !pHandler )
@@ -2421,18 +2769,21 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 	tRes.m_bOk = pHandler->Process();
 	tRes.m_sError = pHandler->GetError();
 	tRes.m_eReplyHttpCode = pHandler->GetStatusCode();
+	tRes.m_bSkipBuddy = ( tRes.m_eReplyHttpCode==EHTTP_STATUS::_403 ); // error with status code 403 Forbidden should not route into buddy
 	dResult = std::move ( pHandler->GetResult() );
 
 	return tRes;
 }
 
+/// json command over API
 void ProcessHttpJsonQuery ( const CSphString & sQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult )
 {
 	http_method eReqType = HTTP_POST;
 
 	BlobStream_c tQuery ( sQuery );
 	Str_t sSrcQuery;
-	HttpProcessResult_t tRes = ProcessHttpQuery ( tQuery, sSrcQuery, hOptions, dResult, false, eReqType );
+	// no need to issue authentification as it checked at the API interface 
+	HttpProcessResult_t tRes = ProcessHttpQuery ( tQuery, sSrcQuery, hOptions, dResult, false, eReqType, true );
 	ProcessHttpQueryBuddy ( tRes, sSrcQuery, hOptions, dResult, false, eReqType );
 }
 
@@ -2487,7 +2838,7 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 
 	} else
 	{
-		tRes = ProcessHttpQuery ( *pSource, sSrcQuery, m_hOptions, dResult, true, m_eType );
+		tRes = ProcessHttpQuery ( *pSource, sSrcQuery, m_hOptions, dResult, true, m_eType, false );
 	}
 
 	return ProcessHttpQueryBuddy ( tRes, sSrcQuery, m_hOptions, dResult, true, m_eType );
@@ -2498,7 +2849,18 @@ void sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const cha
 	JsonObj_c tErr;
 	tErr.AddStr ( "error", szError );
 	CSphString sJsonError = tErr.AsString();
-	HttpBuildReply ( dData, eCode, FromStr (sJsonError), false );
+
+	HttpReplyTrait_t tReply { eCode, FromStr ( sJsonError ) };
+	HttpBuildReply ( tReply, dData );
+}
+
+void sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sError, const char * sHeaderField )
+{
+	JsonObj_c tErr;
+	tErr.AddStr ( "error", sError );
+	CSphString sJsonError = tErr.AsString();
+
+	HttpBuildReply ( dData, eCode, FromStr ( sJsonError ), sHeaderField );
 }
 
 static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, const CSphFixedVector<int64_t> & dDocids,	const CSphString & sIndex, JsonEscapedBuilder & tOut )
@@ -2522,7 +2884,7 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 	for ( const auto& tDesc : tRes.m_dQueryDesc )
 	{
 		ScopedComma_c sQueryComma ( tOut, ",","{"," }");
-		tOut.Sprintf ( R"("table":"%s","_type":"doc","_id":"%U","_score":"1")", sIndex.cstr(), tDesc.m_iQUID );
+		tOut.Sprintf ( R"("table":"%s","_type":"doc","_id":%U,"_score":1)", sIndex.cstr(), tDesc.m_iQUID );
 		{
 			ScopedComma_c sBrackets ( tOut, ",", R"("_source":{)", "}");
 			if ( !tDesc.m_bQL )
@@ -2870,7 +3232,12 @@ bool HttpHandlerPQ_c::Process()
 		eOp = PercolateOp_e::SEARCH;
 
 	if ( IsEmpty ( m_sQuery ) )
+	{
+		if ( !HttpCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, m_eHttpCode, m_sError, m_dData ) )
+			return false;
+
 		return ListQueries ( sIndex );
+	}
 
 	const JsonObj_c tRoot ( m_sQuery );
 	if ( !tRoot )
@@ -2880,7 +3247,12 @@ bool HttpHandlerPQ_c::Process()
 	}
 
 	if ( !tRoot.Size() )
+	{
+		if ( !HttpCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, m_eHttpCode, m_sError, m_dData ) )
+			return false;
+
 		return ListQueries ( sIndex );
+	}
 
 	if ( eOp==PercolateOp_e::UNKNOWN )
 	{
@@ -2903,6 +3275,9 @@ bool HttpHandlerPQ_c::Process()
 		ReportError ( EHTTP_STATUS::_400 );
 		return false;
 	}
+
+	if ( !HttpCheckPerms ( session::GetUser(), ( eOp==PercolateOp_e::SEARCH ? AuthAction_e::READ : AuthAction_e::WRITE ), sIndex, m_eHttpCode, m_sError, m_dData ) )
+		return false;
 
 	bool bVerbose = false;
 	JsonObj_c tVerbose = tRoot.GetItem ( "verbose" );
@@ -2936,6 +3311,16 @@ bool HttpHandlerPQ_c::Process()
 	}
 }
 
+static void SetEsBulkDocidFromString ( BulkDoc_t & tDoc, const char * szDocid );
+
+static void SetEsBulkNumericDocid ( BulkDoc_t & tDoc, DocID_t tDocid )
+{
+	tDoc.m_tDocid = tDocid;
+	tDoc.m_sDocid.SetSprintf ( UINT64_FMT, (uint64_t)tDocid );
+	tDoc.m_eDocid = BulkDocid_e::NUMERIC;
+}
+
+
 static bool ParseMetaLine ( const char * sLine, BulkDoc_t & tDoc, CSphString & sError )
 {
 	JsonObj_c tLineMeta ( sLine );
@@ -2964,11 +3349,11 @@ static bool ParseMetaLine ( const char * sLine, BulkDoc_t & tDoc, CSphString & s
 	if ( tId )
 	{
 		if ( tId.IsNum() )
-			tDoc.m_tDocid = tId.IntVal();
+			SetEsBulkNumericDocid ( tDoc, tId.IntVal() );
 		else if ( tId.IsStr() )
-			tDoc.m_tDocid = GetDocID ( tId.SzVal() );
+			SetEsBulkDocidFromString ( tDoc, tId.SzVal() );
 		else if ( tId.IsNull() )
-			tDoc.m_tDocid = 0;
+			SetEsBulkNumericDocid ( tDoc, 0 );
 		else
 		{
 			sError.SetSprintf ( "_id should be an int or string" );
@@ -2979,82 +3364,175 @@ static bool ParseMetaLine ( const char * sLine, BulkDoc_t & tDoc, CSphString & s
 	return true;
 }
 
-static bool AddDocid ( SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
+static bool TryParseEsBulkNumericDocid ( const char * szDocid, DocID_t & tDocid )
 {
-	int iDocidPos = tStmt.m_dInsertSchema.GetFirst ( [&] ( const CSphString & sName ) { return sName=="id"; } );
+	if ( !szDocid || !sphIsInteger ( *szDocid ) )
+		return false;
+
+	char * pEnd = nullptr;
+	errno = 0;
+	int64_t iDocid = strtoll ( szDocid, &pEnd, 10 );
+	if ( pEnd==szDocid || *pEnd || errno==ERANGE )
+		return false;
+
+	tDocid = (DocID_t)iDocid;
+	return true;
+}
+
+
+static void PrepareEsBulkStringDocid ( const char * szDocid, DocID_t & tDocid, CSphString & sUuidDocid )
+{
+	if ( TryParseEsBulkNumericDocid ( szDocid, tDocid ) )
+		return;
+
+	CSphString sUuidError;
+	if ( sphPrepareUuidDocid ( szDocid, sUuidDocid, sUuidError ) )
+		return;
+
+	tDocid = GetDocID ( szDocid );
+}
+
+
+static void SetEsBulkDocidFromString ( BulkDoc_t & tDoc, const char * szDocid )
+{
+	DocID_t tDocid = 0;
+	CSphString sUuidDocid;
+	PrepareEsBulkStringDocid ( szDocid, tDocid, sUuidDocid );
+
+	if ( !sUuidDocid.IsEmpty() )
+	{
+		tDoc.m_sDocid = sUuidDocid;
+		tDoc.m_eDocid = BulkDocid_e::STRING;
+		tDoc.m_tDocid = 0;
+	} else
+		SetEsBulkNumericDocid ( tDoc, tDocid );
+}
+
+
+static bool AddDocid ( SqlStmt_t & tStmt, BulkDoc_t & tDoc, CSphString & sError )
+{
+	int iDocidPos = tStmt.m_dInsertSchema.GetFirst ( [&] ( const CSphString & sName ) { return sName==sphGetDocidName(); } );
 	if ( iDocidPos!=-1 )
 	{
 		SqlInsert_t & tVal = tStmt.m_dInsertValues[iDocidPos];
-
-		// check and convert to int
-		if ( tVal.m_iType!=SqlInsert_t::CONST_INT )
+		if ( tVal.m_iType==SqlInsert_t::QUOTED_STRING )
 		{
-			tVal.SetValueInt ( GetDocID ( tVal.m_sVal.cstr() ), false );
+			DocID_t tSrcDocid = 0;
+			CSphString sSrcUuidDocid;
+			PrepareEsBulkStringDocid ( tVal.m_sVal.cstr(), tSrcDocid, sSrcUuidDocid );
+
+			if ( !sSrcUuidDocid.IsEmpty() )
+			{
+				if ( tDoc.m_eDocid==BulkDocid_e::NUMERIC || ( tDoc.m_eDocid==BulkDocid_e::STRING && tDoc.m_sDocid!=sSrcUuidDocid ) )
+				{
+					sError = "id has already been specified";
+					return false;
+				}
+
+				tVal.m_sVal = sSrcUuidDocid;
+				if ( tDoc.m_eDocid==BulkDocid_e::NONE )
+				{
+					tDoc.m_eDocid = BulkDocid_e::STRING;
+					tDoc.m_sDocid = sSrcUuidDocid;
+				}
+
+				return true;
+			}
+
+			if ( tDoc.m_eDocid==BulkDocid_e::STRING || ( tDoc.m_eDocid==BulkDocid_e::NUMERIC && tDoc.m_tDocid && tDoc.m_tDocid!=tSrcDocid ) )
+			{
+				sError = "id has already been specified";
+				return false;
+			}
+
 			tVal.m_iType = SqlInsert_t::CONST_INT;
+			tVal.SetValueInt ( tSrcDocid );
+			if ( tDoc.m_eDocid==BulkDocid_e::NONE )
+				SetEsBulkNumericDocid ( tDoc, tSrcDocid );
+			return true;
 		}
 
 		DocID_t tSrcDocid = (int64_t)tVal.GetValueUint();
 		// can not set id at the same time via es meta and via document id property
-		if ( tDocId && tDocId!=tSrcDocid )
+		if ( tDoc.m_eDocid==BulkDocid_e::STRING || ( tDoc.m_eDocid==BulkDocid_e::NUMERIC && tDoc.m_tDocid && tDoc.m_tDocid!=tSrcDocid ) )
 		{
 			sError = "id has already been specified";
 			return false;
 		}
 		
-		tDocId = tSrcDocid;
+		SetEsBulkNumericDocid ( tDoc, tSrcDocid );
 		return true;
 	}
 
-	if ( !tDocId )
+	if ( tDoc.m_eDocid==BulkDocid_e::NONE || ( tDoc.m_eDocid==BulkDocid_e::NUMERIC && !tDoc.m_tDocid ) )
 		return true;
 
 	tStmt.m_dInsertSchema.Add ( sphGetDocidName() );
 	SqlInsert_t & tId = tStmt.m_dInsertValues.Add();
-	tId.m_iType = SqlInsert_t::CONST_INT;
-	tId.SetValueInt(tDocId);
+	if ( tDoc.m_eDocid==BulkDocid_e::STRING )
+	{
+		tId.m_iType = SqlInsert_t::QUOTED_STRING;
+		tId.m_sVal = tDoc.m_sDocid;
+	} else
+	{
+		tId.m_iType = SqlInsert_t::CONST_INT;
+		tId.SetValueInt ( tDoc.m_tDocid );
+	}
 
 	tStmt.m_iSchemaSz = tStmt.m_dInsertSchema.GetLength();
 	return true;
 }
 
-static bool ParseSourceLine ( const char * sLine, const CSphString & sAction, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
+
+static bool ParseSourceLine ( const char * sLine, BulkDoc_t & tDoc, SqlStmt_t & tStmt, CSphString & sError )
 {
 	// FIXME!!! update and delete ES compat endpoints
-	if ( sAction=="index" )
+	if ( tDoc.m_sAction=="index" )
 	{
 		JsonObj_c tRoot ( sLine );
 		if ( !ParseJsonInsertSource ( tRoot, tStmt, true, sError ) )
 			return false;
-		if ( !AddDocid ( tStmt, tDocId, sError ) )
+		if ( !AddDocid ( tStmt, tDoc, sError ) )
 			return false;
 
-	}  else if ( sAction=="create" )
+	}  else if ( tDoc.m_sAction=="create" )
 	{
 		JsonObj_c tRoot ( sLine );
 		if ( !ParseJsonInsertSource ( tRoot, tStmt, false, sError ) )
 			return false;
-		if ( !AddDocid ( tStmt, tDocId, sError ) )
+		if ( !AddDocid ( tStmt, tDoc, sError ) )
 			return false;
 
-	} else if ( sAction=="update" )
+	} else if ( tDoc.m_sAction=="update" )
 	{
 		JsonObj_c tUpd ( FromSz ( sLine ) );
 		tUpd.AddStr ( "table", tStmt.m_sIndex );
-		tUpd.AddInt ( "id", tDocId );
-		if ( !ParseJsonUpdate ( tUpd, tStmt, tDocId, sError ) )
+		if ( tDoc.m_eDocid==BulkDocid_e::STRING )
+			tUpd.AddStr ( "id", tDoc.m_sDocid );
+		else
+			tUpd.AddInt ( "id", tDoc.m_tDocid );
+
+		if ( !ParseJsonUpdate ( tUpd, tStmt, tDoc.m_tDocid, sError ) )
 			return false;
 
-	} else if ( sAction=="delete" )
+	} else if ( tDoc.m_sAction=="delete" )
 	{
 		tStmt.m_eStmt = STMT_DELETE;
 		tStmt.m_tQuery.m_sSelect = "id";
 		CSphFilterSettings & tFilter = tStmt.m_tQuery.m_dFilters.Add();
-		tFilter.m_eType = SPH_FILTER_VALUES;
-		tFilter.m_dValues.Add ( tDocId );
+		if ( tDoc.m_eDocid==BulkDocid_e::STRING )
+		{
+			tFilter.m_eType = SPH_FILTER_STRING;
+			tFilter.m_dStrings.Add ( tDoc.m_sDocid );
+		} else
+		{
+			tFilter.m_eType = SPH_FILTER_VALUES;
+			tFilter.m_dValues.Add ( tDoc.m_tDocid );
+		}
 		tFilter.m_sAttrName = "id";
 	} else
 	{
-		sError.SetSprintf ( "unknown action: %s", sAction.cstr() );
+		sError.SetSprintf ( "unknown action: %s", tDoc.m_sAction.cstr() );
 		return false;
 	}
 
@@ -3181,6 +3659,9 @@ bool HttpHandlerEsBulk_c::Process()
 			{
 				bNextLineMeta = false;
 			}
+
+			if ( !HttpCheckPerms ( session::GetUser(), AuthAction_e::WRITE, tDoc.m_sIndex, m_eHttpCode, m_sError, m_dData ) )
+				return false;
 		}
 	}
 	CSphVector<BulkTnx_t> dTnx;
@@ -3222,8 +3703,6 @@ static void AddEsReply ( const BulkDoc_t & tDoc, JsonObj_c & tRoot )
 {
 	const JsonObj_c tRefShards ( "{ \"total\": 1, \"successful\": 1, \"failed\": 0 }" );
 
-	char sBuf[70];
-	snprintf ( sBuf, sizeof(sBuf), UINT64_FMT, (uint64_t)tDoc.m_tDocid );
 	const char * sActionRes = "created";
 	if ( tDoc.m_sAction=="delete" )
 		sActionRes = "deleted";
@@ -3234,7 +3713,7 @@ static void AddEsReply ( const BulkDoc_t & tDoc, JsonObj_c & tRoot )
 	JsonObj_c tRes;
 	tRes.AddStr ( "_index", tDoc.m_sIndex.cstr() );
 	tRes.AddStr ( "_type", "doc" );
-	tRes.AddStr ( "_id", sBuf );
+	tRes.AddStr ( "_id", tDoc.m_sDocid.scstr() );
 	tRes.AddInt ( "_version", 1 );
 	tRes.AddStr ( "result", sActionRes );
 	tRes.AddItem ( "_shards", tShard );
@@ -3249,9 +3728,6 @@ static void AddEsReply ( const BulkDoc_t & tDoc, JsonObj_c & tRoot )
 
 static void AddEsError ( int iReply, const CSphString & sError, const char * sErrorType, const BulkDoc_t & tDoc, JsonObj_c & tRoot )
 {
-	char sBuf[70];
-	snprintf ( sBuf, sizeof(sBuf), UINT64_FMT, (uint64_t)tDoc.m_tDocid );
-
 	JsonObj_c tErrorObj;
 	tErrorObj.AddStr ( "type", sErrorType );
 	tErrorObj.AddStr ( "reason", sError.cstr() );
@@ -3259,7 +3735,7 @@ static void AddEsError ( int iReply, const CSphString & sError, const char * sEr
 	JsonObj_c tRes;
 	tRes.AddStr ( "_index", tDoc.m_sIndex.cstr() );
 	tRes.AddStr ( "_type", "doc" );
-	tRes.AddStr ( "_id", sBuf );
+	tRes.AddStr ( "_id", tDoc.m_sDocid.scstr() );
 	tRes.AddInt ( "status", 400 );
 	tRes.AddItem ( "error", tErrorObj );
 
@@ -3272,6 +3748,7 @@ static void AddEsError ( int iReply, const CSphString & sError, const char * sEr
 		tRoot.AddItem ( tAction );
 }
 
+
 bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecTraits_T<BulkDoc_t> & dDocs, JsonObj_c & tItems )
 {
 	bool bOk = true;
@@ -3282,7 +3759,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 	{
 		const CSphString & sIdx = dDocs[tTnx.m_iFrom].m_sIndex;
 		assert ( !sIdx.IsEmpty() );
-		ProcessBegin ( sIdx );
+		ProcessBegin ( sIdx, false );
 
 		bool bUpdate = false;
 		bOk &= dErrors.IsEmpty();
@@ -3299,17 +3776,17 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			}
 
 			SqlStmt_t tStmt;
+			tStmt.m_sEndpoint = sphHttpEndpointToStr ( EHTTP_ENDPOINT::ES_BULK );
 			tStmt.m_tQuery.m_sIndexes = tDoc.m_sIndex;
 			tStmt.m_sIndex = tDoc.m_sIndex;
 			tStmt.m_sStmt = tDoc.m_tDocLine.first;
 
-			bool bParsed = ParseSourceLine ( tDoc.m_tDocLine.first, tDoc.m_sAction, tStmt, tDoc.m_tDocid, m_sError );
+			bool bParsed = ParseSourceLine ( tDoc.m_tDocLine.first, tDoc, tStmt, m_sError );
 			if ( !bParsed )
 			{
 				dErrors.Add ( { iDoc, m_sError } );
 				continue;
 			}
-
 			bool bAction = false;
 			JsonObj_c tResult = JsonNull;
 
@@ -3354,6 +3831,15 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 					dErrors.Add ( { iDoc, CSphString() } );
 					dErrors.Last().second.SetSprintf ( "unknown statement \"%s\":%s", tStmt.m_sStmt, tDoc.m_tDocLine.first );
 				}
+			} else if ( tStmt.m_eStmt==STMT_INSERT || tStmt.m_eStmt==STMT_REPLACE )
+			{
+				auto dLastIdStrings = session::LastIdStrings();
+				if ( tDoc.m_eDocid==BulkDocid_e::NONE && !dLastIdStrings.IsEmpty() )
+				{
+					tDoc.m_sDocid = dLastIdStrings[0];
+					tDoc.m_eDocid = BulkDocid_e::STRING;
+				} else if ( tDoc.m_eDocid!=BulkDocid_e::STRING )
+					SetEsBulkNumericDocid ( tDoc, tDoc.m_tDocid );
 			}
 		}
 
@@ -3368,7 +3854,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 				assert ( tTnx.m_iCount==1 );
 				const BulkDoc_t & tUpdDoc = dDocs[tTnx.m_iFrom];
 				CSphString sUpdError;
-				sUpdError.SetSprintf ( "[_doc][" INT64_FMT "]: document missing", tUpdDoc.m_tDocid );
+				sUpdError.SetSprintf ( "[_doc][%s]: document missing", tUpdDoc.m_sDocid.scstr() );
 				AddEsError ( -1, sUpdError, "document_missing_exception", tUpdDoc, tItems );
 			} else
 			{
@@ -3459,4 +3945,27 @@ const char * GetErrorTypeName ( HttpErrorType_e eType )
 	default:
 		return nullptr;;
 	}
+}
+
+HttpTokenHandler_c::HttpTokenHandler_c ( const OptionsHash_t & tOptions )
+	: HttpOptionTrait_t ( tOptions )
+{
+}
+bool HttpTokenHandler_c::Process ()
+{
+	TRACE_CONN ( "conn", "HttpTokenHandler_c::Process" );
+
+	CSphString sToken;
+	if ( !CreateSessionToken ( sToken, m_sError ) )
+	{
+		m_eHttpCode = EHTTP_STATUS::_403;
+		sphHttpErrorReply ( m_dData, m_eHttpCode, m_sError.cstr() );
+		return false;
+	}
+	
+	StringBuilder_c tOut;
+	tOut.Sprintf ( R"( {"token":"%s"} )", sToken.cstr() );
+
+	BuildReply ( tOut.cstr(), EHTTP_STATUS::_200 );
+	return true;
 }

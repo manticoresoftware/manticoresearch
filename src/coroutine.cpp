@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -27,13 +27,12 @@ namespace Threads {
 bool StackMockingAllowed()
 {
 #if __has_include( <valgrind/valgrind.h>)
+	// Keep this silent: the check runs during normal startup, and startup warnings
+	// make valgrind ubertests report a warning-only daemon start as return code 2.
 	if (!!RUNNING_ON_VALGRIND)
-	{
-		sphWarning ( "Running under valgrind, so stack mocking is not allowed");
 		return false;
-	}
 #endif
-	return !val_from_env ( "NO_STACK_CALCULATION", false );
+	return !env_exists ( "NO_STACK_CALCULATION" );
 }
 
 
@@ -640,12 +639,6 @@ int NumOfRestarts() noexcept
 
 } // namespace Coro
 
-Resumer_fn MakeCoroExecutor ( Handler fnHandler )
-{
-	auto* pWorker = Coro::Worker ()->MakeWorker ( std::move ( fnHandler ) );
-	return [pWorker] () -> bool { return pWorker->Resume(); };
-}
-
 void CallPlainCoroutine ( Handler fnHandler, Scheduler_i* pScheduler )
 {
 	if ( !pScheduler )
@@ -654,6 +647,11 @@ void CallPlainCoroutine ( Handler fnHandler, Scheduler_i* pScheduler )
 	auto dWaiter = Waiter_t ( nullptr, [&tEvent] ( void * ) { tEvent.SetEvent (); } );
 	Coro::Worker_c::StartCall ( std::move ( fnHandler ), pScheduler, std::move(dWaiter) );
 	tEvent.WaitEvent ();
+}
+
+void StartCall ( Handler fnHandler, Waiter_t tWait, Scheduler_i* pScheduler )
+{
+	Coro::Worker_c::StartCall ( std::move ( fnHandler ), pScheduler, std::move(tWait) );
 }
 
 ATTRIBUTE_NO_SANITIZE_ADDRESS void MockCallCoroutine ( VecTraits_T<BYTE> dStack, Handler fnHandler )
@@ -909,15 +907,15 @@ Event_c::~Event_c ()
 // else atomically set flag 'signaled'
 void Event_c::SetEvent()
 {
-	BYTE uState = m_uState.load ( std::memory_order_relaxed );
+	BYTE uState = m_uState.load ( std::memory_order_acquire );
 	do
 	{
 		if ( uState & Waited_e )
 		{
-			m_uState.store ( Signaled_e ); // memory_order_sec_cst - to ensure that next call will not resume again
+			m_uState.store ( Signaled_e, std::memory_order_release );
 			return fnResume ( m_pCtx );
 		}
-	} while ( !m_uState.compare_exchange_weak ( uState, uState | Signaled_e, std::memory_order_relaxed ) );
+	} while ( !m_uState.compare_exchange_weak ( uState, uState | Signaled_e, std::memory_order_release, std::memory_order_acquire ) );
 }
 
 // if 'signaled' state detected, clean all flags and return.
@@ -925,22 +923,22 @@ void Event_c::SetEvent()
 // on resume clean all flags.
 void Event_c::WaitEvent()
 {
-	if ( !( m_uState.load ( std::memory_order_relaxed ) & Signaled_e ) )
+	if ( !( m_uState.load ( std::memory_order_acquire ) & Signaled_e ) )
 	{
 		if ( m_pCtx != Worker() )
 			m_pCtx = Worker();
 		YieldWith ( [this] {
-			BYTE uState = m_uState.load ( std::memory_order_relaxed );
+			BYTE uState = m_uState.load ( std::memory_order_acquire );
 			do
 			{
 				if ( uState & Signaled_e )
 					return fnResume ( m_pCtx );
-			} while ( !m_uState.compare_exchange_weak ( uState, uState | Waited_e, std::memory_order_relaxed ) );
+			} while ( !m_uState.compare_exchange_weak ( uState, uState | Waited_e, std::memory_order_acq_rel, std::memory_order_acquire ) );
 		} );
 	}
 
-	m_uState.store ( 0, std::memory_order_relaxed );
-	std::atomic_thread_fence ( std::memory_order_release );
+	std::atomic_thread_fence ( std::memory_order_acquire );
+	m_uState.store ( 0, std::memory_order_release );
 }
 
 
@@ -1132,6 +1130,61 @@ bool RWLock_c::TestNextWlock () const noexcept
 	return !m_tWaitWQueue.Empty ();
 }
 
+void ReadTableLock_c::WaitRead() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+	++m_uReads;
+	while ( m_uWrites )
+		m_tWaitRQueue.SuspendAndWait ( tLock, Worker() );
+}
+
+bool ReadTableLock_c::TryWrite() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+	if ( m_uReads )
+		return false;
+	++m_uWrites;
+	return true;
+}
+
+void ReadTableLock_c::FinishWrite() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+	if ( !--m_uWrites )
+		m_tWaitRQueue.NotifyAll();
+}
+
+bool ReadTableLock_c::UnlockRead() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+
+	if ( !m_uReads )
+		return false;
+
+	--m_uReads;
+	return true;
+}
+
+[[nodiscard]] DWORD ReadTableLock_c::GetReads() const noexcept
+{
+	return m_uReads;
+}
+
+ScopedWriteTable_c::ScopedWriteTable_c ( ReadTableLock_c& tTableLock )
+	: m_tTableLock { tTableLock }
+	, m_bCanWrite { tTableLock.TryWrite() }
+{}
+
+ScopedWriteTable_c::~ScopedWriteTable_c()
+{
+	if (m_bCanWrite)
+		m_tTableLock.FinishWrite();
+}
+
+bool ScopedWriteTable_c::CanWrite() const noexcept
+{
+	return m_bCanWrite;
+}
 
 } // namespace Coro
 } // namespace Threads

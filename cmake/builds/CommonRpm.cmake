@@ -20,6 +20,33 @@ if (only_set_paths)
 	return ()
 endif ()
 
+# Ensure source directory path is long enough for debuginfo packaging
+# When version numbers increase (e.g., 13.15.9 -> 13.15.10), the debuginfo path
+# can become longer than the source dir path, causing CPack RPM to fail.
+# Create a symlink to make the source path longer if needed.
+set ( LONG_SOURCE_PATH "/builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0_0" )
+if (NOT EXISTS "${LONG_SOURCE_PATH}")
+	message ( STATUS "Creating symlink ${LONG_SOURCE_PATH} -> ${CMAKE_SOURCE_DIR} for RPM debuginfo packaging" )
+	execute_process (
+		COMMAND ${CMAKE_COMMAND} -E create_symlink "${CMAKE_SOURCE_DIR}" "${LONG_SOURCE_PATH}"
+		RESULT_VARIABLE SYMLINK_RESULT
+		ERROR_QUIET
+		OUTPUT_QUIET
+	)
+	if (SYMLINK_RESULT EQUAL 0)
+		message ( STATUS "Symlink created successfully" )
+	else ()
+		message ( WARNING "Failed to create symlink ${LONG_SOURCE_PATH}. You may need to create it manually with: ln -s $(pwd) ${LONG_SOURCE_PATH}" )
+	endif ()
+else ()
+	# Check if existing path is a symlink pointing to our source dir
+	get_filename_component ( ACTUAL_SOURCE_DIR "${CMAKE_SOURCE_DIR}" REALPATH )
+	get_filename_component ( SYMLINK_TARGET "${LONG_SOURCE_PATH}" REALPATH )
+	if (NOT ACTUAL_SOURCE_DIR STREQUAL SYMLINK_TARGET)
+		message ( STATUS "Symlink ${LONG_SOURCE_PATH} exists but points elsewhere" )
+	endif ()
+endif ()
+
 # Common rpm-specific build variables
 set ( CPACK_GENERATOR RPM )
 
@@ -115,6 +142,13 @@ set ( CPACK_RPM_COMMON_USER_FILELIST
 set ( CPACK_RPM_SEARCHD_USER_FILELIST
 		"%config(noreplace) %{_sysconfdir}/logrotate.d/manticore"
 		)
+if ( PACK_BUNDLE AND NOT WIN32 )
+	# Bundle config files must keep the same noreplace semantics as the split RPMs.
+	set ( CPACK_RPM_BUNDLE_USER_FILELIST
+			"%config(noreplace) %{_sysconfdir}/manticoresearch/manticore.conf"
+			"%config(noreplace) %{_sysconfdir}/logrotate.d/manticore"
+			)
+endif ()
 
 set ( CPACK_RPM_SPEC_MORE_DEFINE
 		"%define _scripts ${MANTICORE_BINARY_DIR}
@@ -128,10 +162,18 @@ set ( dirserver "${MANTICORE_BINARY_DIR}/config/server" )
 set ( dircommon "${MANTICORE_BINARY_DIR}/config/common" )
 set ( dircore "${MANTICORE_BINARY_DIR}/config/core" )
 set ( dirtools "${MANTICORE_BINARY_DIR}/config/tools" )
+# Bundle script fragments are generated next to the split-package script files.
+set ( dirbundle "${MANTICORE_BINARY_DIR}/config/bundle" )
 
 # server (service)
 set ( CPACK_RPM_SERVER_BUILDREQUIRES "systemd-units" )
 set ( CPACK_RPM_SERVER_POST_INSTALL_SCRIPT_FILE "${dirserver}/manticore.post" )
+
+if ( PACK_BUNDLE AND NOT WIN32 )
+	# Bundle install/uninstall hooks reuse the same behavior as the split RPMs.
+	set ( CPACK_RPM_BUNDLE_POST_INSTALL_SCRIPT_FILE "${dirbundle}/manticore.post" )
+	set ( CPACK_RPM_BUNDLE_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore-tools.preun" )
+endif ()
 
 # server (core)
 set ( CPACK_RPM_SEARCHD_POST_INSTALL_SCRIPT_FILE "${dircore}/manticore.post" )
@@ -154,6 +196,14 @@ configure_file ( ${SCR}/manticore.logrotate.in "${MANTICORE_BINARY_DIR}/manticor
 configure_file ( ${SCR}/manticore-common.post.in "${dircommon}/manticore.post" @ONLY )
 configure_file ( ${SCR}/manticore-core.post.in "${dircore}/manticore.post" @ONLY )
 configure_file ( ${SCR}/manticore-server.post.in "${dirserver}/manticore.post" @ONLY )
+if ( PACK_BUNDLE AND NOT WIN32 )
+	file ( MAKE_DIRECTORY "${dirbundle}" )
+	# Concatenate the split RPM post-install scripts so bundle setup stays in sync.
+	file ( READ "${dircommon}/manticore.post" _BUNDLE_POST_COMMON )
+	file ( READ "${dircore}/manticore.post" _BUNDLE_POST_CORE )
+	file ( READ "${dirserver}/manticore.post" _BUNDLE_POST_SERVER )
+	file ( WRITE "${dirbundle}/manticore.post" "${_BUNDLE_POST_COMMON}\n${_BUNDLE_POST_CORE}\n${_BUNDLE_POST_SERVER}\n" )
+endif ()
 configure_file ( ${SCR}/manticore.tmpfiles.in "${MANTICORE_BINARY_DIR}/manticore.tmpfiles" @ONLY )
 configure_file ( ${SCR}/manticore.service.in "${dirserver}/manticore.service" @ONLY )
 configure_file ( ${SCR}/manticore-indexer.service.in "${dirtools}/manticore-indexer.service" @ONLY )
@@ -222,8 +272,20 @@ if (NOT NOAPI)
 	install ( DIRECTORY api DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT searchd )
 endif ()
 
+if ( PACK_BUNDLE AND NOT WIN32 )
+	# Install the merged bundle payload in addition to the normal split RPMs.
+	set ( CPACK_RPM_BUNDLE_POST_INSTALL_SCRIPT_FILE "${dirbundle}/manticore.post" )
+	set ( CPACK_RPM_BUNDLE_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore-tools.preun" )
+	_manticore_bundle_base_install_rules ()
+	# Bundle: server/tools extras this distro creates (RPM does not create etc/default/manticore).
+	_manticore_bundle_server_tools_install_rules ()
+endif ()
+
 get_cmake_property ( CPACK_COMPONENTS_ALL COMPONENTS )
-list ( APPEND CPACK_COMPONENTS_ALL "meta" )
+if (NOT PACK_BUNDLE)
+	# In bundle mode, the bundle component replaces the old meta package entry.
+	list ( APPEND CPACK_COMPONENTS_ALL "meta" )
+endif ()
 
 # uncomment this line to produce long (really long) verbose output of rpm building
 #set ( CPACK_RPM_PACKAGE_DEBUG ON )

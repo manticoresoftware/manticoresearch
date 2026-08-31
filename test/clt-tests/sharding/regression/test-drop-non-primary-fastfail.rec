@@ -1,0 +1,40 @@
+––– comment –––
+Regression: FAIL_020 (broadened) — DROP a clustered sharded table while the
+local node is in non-Primary view (no quorum) must fail-fast with a clear
+"cluster is not in primary view" error and leave metadata untouched.
+
+3-node cluster, brutally kill nodes 2 and 3 so node 1 loses quorum and
+Galera flips to non-Primary. Then attempt DROP on node 1.
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "create table c:tnp(id bigint, body text) shards='2' rf='2';"; echo $?
+––– output –––
+0
+––– input –––
+kill -9 $(cat /var/log/manticore-2/searchd.pid) $(cat /var/log/manticore-3/searchd.pid)
+––– output –––
+––– input –––
+for _ in $(seq 1 60); do v=$(mysql -h0 -P1306 -e "show status like 'cluster_c_status'" | awk 'NR==4{print $4}'); [ "$v" = "non-primary" ] && break; sleep 1; done; echo "status=$v"
+––– output –––
+status=non-primary
+––– input –––
+mysql -h0 -P1306 -e "drop table c:tnp;"
+––– output –––
+ERROR 1064 (42000) at line 1: cluster 'c' is not in primary view (status='non-primary'): refusing to DROP — retry when the cluster is fully synced

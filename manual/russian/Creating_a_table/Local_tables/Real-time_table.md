@@ -1,13 +1,13 @@
 # Таблица реального времени
 
-**Таблица реального времени** — это основной тип таблицы в Manticore. Она позволяет добавлять, обновлять и удалять документы, и вы сразу же видите эти изменения. Вы можете настроить таблицу реального времени в конфигурационном файле или использовать команды `CREATE`, `UPDATE`, `DELETE` или `ALTER`.
+**Таблица реального времени** — это основной тип таблицы в Manticore. Она позволяет добавлять, обновлять и удалять документы, и вы можете видеть эти изменения сразу. Вы можете настроить таблицу реального времени в конфигурационном файле или использовать команды, такие как `CREATE`, `UPDATE`, `DELETE` или `ALTER`.
 
-Внутри таблица реального времени состоит из одной или нескольких [простых таблиц](../../Creating_a_table/Local_tables/Plain_table.md), называемых **чанками**. Есть два типа чанков:
+Внутренне таблица реального времени состоит из одной или нескольких [обычных таблиц](../../Creating_a_table/Local_tables/Plain_table.md), называемых **чанками**. Существует два вида чанков:
 
-* несколько **чанков на диске** — сохраняются на диске и структурированы как [простая таблица](../../Creating_a_table/Local_tables/Plain_table.md).
-* один **чанк в оперативной памяти** — хранится в памяти и собирает все изменения.
+* несколько **дисковых чанков** — они сохраняются на диске и структурированы как [обычная таблица](../../Creating_a_table/Local_tables/Plain_table.md).
+* один **оперативный чанк** — он хранится в памяти и собирает все изменения.
 
-Размер чанка в оперативной памяти контролируется настройкой [rt_mem_limit](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_mem_limit). Когда этот лимит достигнут, чанк в памяти переносится на диск как дискчанк. Если дискчанков становится слишком много, Manticore [объединяет некоторые из них](../../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks) для улучшения производительности.
+Размер оперативного чанка контролируется настройкой [rt_mem_limit](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_mem_limit). Как только этот лимит достигается, оперативный чанк переносится на диск в качестве дискового чанка. Если дисковых чанков становится слишком много, Manticore [объединяет некоторые из них](../../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks) для повышения производительности.
 
 ### Создание таблицы реального времени:
 
@@ -37,17 +37,19 @@ Query OK, 0 rows affected (0.00 sec)
 <!-- request JSON -->
 
 ```JSON
-POST /cli -d "CREATE TABLE products(title text, price float)  morphology='stem_en'"
+POST /sql?mode=raw -d "CREATE TABLE products(title text, price float)  morphology='stem_en'"
 ```
 
 <!-- response JSON -->
 
 ```json
-{
-"total":0,
-"error":"",
-"warning":""
-}
+[
+  {
+    "total":0,
+    "error":"",
+    "warning":""
+  }
+]
 ```
 
 <!-- intro -->
@@ -140,13 +142,13 @@ table products {
 ```
 <!-- end -->
 
-#### _mapping API:
+#### API _mapping:
 
-> ПРИМЕЧАНИЕ: API `_mapping` требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
+> ПРИМЕЧАНИЕ: API `_mapping` требует наличия [Manticore Buddy](Installation/Manticore_Buddy.md). Если оно не работает, убедитесь, что Buddy установлен.
 
 <!-- example rt-mapping -->
 
-Альтернативно, вы можете создать новую таблицу через endpoint `_mapping`. Этот endpoint позволяет определить структуру таблицы, похожую на Elasticsearch, для последующего преобразования в таблицу Manticore.
+В качестве альтернативы вы можете создать новую таблицу через endpoint `_mapping`. Этот endpoint позволяет определить структуру таблицы, подобную Elasticsearch, для преобразования в таблицу Manticore.
 
 Тело вашего запроса должно иметь следующую структуру:
 
@@ -171,7 +173,7 @@ table products {
 }
 ```
 
-При создании таблицы типы данных Elasticsearch будут преобразованы в типы Manticore по следующим правилам:
+При создании таблицы типы данных Elasticsearch будут сопоставлены с типами Manticore в соответствии со следующими правилами:
 -    aggregate_metric => json
 -    binary => string
 -    boolean => bool
@@ -243,13 +245,13 @@ POST /your_table_name/_mapping -d '
 
 <!-- example create-like -->
 
-Вы можете создать копию таблицы реального времени, с данными или без. Учтите, что если таблица большая, копирование с данными может занять некоторое время. Копирование работает в синхронном режиме, но если соединение прервано, оно продолжится в фоне.
+Вы можете создать копию таблицы реального времени, с данными или без них. Обратите внимание, что если таблица большая, копирование с данными может занять некоторое время. Копирование работает в синхронном режиме, но если соединение прервано, оно продолжится в фоновом режиме.
 
 ```sql
 CREATE TABLE [IF NOT EXISTS] table_name LIKE old_table_name [WITH DATA]
 ```
 
-> ПРИМЕЧАНИЕ: Копирование таблицы требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
+> ПРИМЕЧАНИЕ: Копирование таблицы требует наличия [Manticore Buddy](Installation/Manticore_Buddy.md). Если оно не работает, убедитесь, что Buddy установлен.
 
 <!-- intro -->
 ##### Пример:
@@ -260,39 +262,52 @@ create table products LIKE old_products;
 ```
 
 <!-- intro -->
-##### Пример (С ДАННЫМИ):
+##### Пример (WITH DATA):
 <!-- request Example (WITH DATA) -->
 ```sql
 create table products LIKE old_products WITH DATA;
 ```
 
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "create table products LIKE old_products"
+```
+
+<!-- intro -->
+##### JSON пример (WITH DATA):
+<!-- request JSON example (WITH DATA) -->
+```JSON
+POST /sql?mode=raw -d "create table products LIKE old_products WITH DATA"
+```
+
 <!-- end -->
 
-### 👍 Что вы можете делать с таблицей реального времени:
+### 👍 Что можно делать с таблицей реального времени:
 * [Добавлять документы](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
 * Обновлять атрибуты и полнотекстовые поля с помощью процесса [Update](../../Quick_start_guide.md#Update).
 * [Удалять документы](../../Quick_start_guide.md#Delete).
-* [Опустошать таблицу](../../Emptying_a_table.md).
-* Изменять схему онлайн с помощью команды `ALTER`, как описано в [Обновление схемы онлайн](../../Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode).
+* [Очищать таблицу](../../Emptying_a_table.md).
+* Изменять схему онлайн с помощью команды `ALTER`, как описано в [Изменение схемы онлайн](../../Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode).
 * Определять таблицу в конфигурационном файле, как подробно описано в [Определение таблицы](../../Creating_a_table/Local_tables/Real-time_table.md).
-* Использовать функцию [UUID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) для автоматического назначения ID.
+* Используйте [автоматическую генерацию ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID).
 
-### ⛔ Чего вы не можете делать с таблицей реального времени:
+### ⛔ Что нельзя делать с таблицей реального времени:
 * Загружать данные с помощью функции [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
-* Подключать её к [источникам](../../Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md) для упрощённого индексирования из внешних хранилищ.
-* Обновите [killlist_target](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target), так как он автоматически управляется таблицей реального времени.
+* Подключать её к [источникам](../../Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md) для удобного индексирования из внешнего хранилища.
+* Обновлять [killlist_target](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target), так как он автоматически управляется таблицей реального времени.
 
 #### Структура файлов таблицы реального времени
 
-Ниже приведена таблица, в которой описаны различные расширения файлов и их соответствующие описания в таблице реального времени:
+В следующей таблице приведены различные расширения файлов и их описание в таблице реального времени:
 
-| Extension | Description |
+| Расширение | Описание |
 | - | - |
-| `.lock` | Файл блокировки, который обеспечивает доступ к таблице только одному процессу в одно время. |
+| `.lock` | Файл блокировки, который гарантирует, что только один процесс может получить доступ к таблице одновременно. |
 | `.ram` | RAM-чанк таблицы, хранящийся в памяти и используемый как аккумулятор изменений. |
 | `.meta` | Заголовки таблицы реального времени, определяющие её структуру и настройки. |
-| `.*.sp*` | Дисковые чанки, которые хранятся на диске в том же формате, что и обычные таблицы. Они создаются, когда размер RAM чанка превышает rt_mem_limit.|
+| `.*.sp*` | Дисковые чанки, которые хранятся на диске в том же формате, что и обычные таблицы. Они создаются, когда размер RAM-чанка превышает rt_mem_limit.|
 
- Для получения дополнительной информации о структуре дисковых чанков см. [структуру файлов обычной таблицы](../../Creating_a_table/Local_tables/Plain_table.md#Plain-table-files-structure).
+Для получения дополнительной информации о структуре дисковых чанков смотрите [структуру файлов обычной таблицы](../../Creating_a_table/Local_tables/Plain_table.md#Plain-table-files-structure).
 <!-- proofread -->
 

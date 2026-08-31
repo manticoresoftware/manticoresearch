@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -27,6 +27,9 @@ struct ISphQueryFilter
 
 	void GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, ExpansionContext_t & tCtx );
 	virtual void AddKeywordStats ( BYTE* sWord, const BYTE* sTokenized, int iQpos, CSphVector<CSphKeywordInfo>& dKeywords ) = 0;
+
+private:
+	void CollectKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, ExpansionContext_t & tCtx );
 };
 
 struct CSphTemplateQueryFilter: public ISphQueryFilter
@@ -55,4 +58,10 @@ struct KeywordSorter_fn
 	}
 };
 
-void UniqKeywords ( CSphVector<CSphKeywordInfo> & dSrc );
+enum class KeywordUniq_e
+{
+	BY_NORMALIZED,				///< retain the first entry for each normalized keyword
+	BY_NORMALIZED_AND_QPOS		///< merge stats for the same query position and normalized keyword
+};
+
+void UniqKeywords ( CSphVector<CSphKeywordInfo> & dSrc, KeywordUniq_e eMode );

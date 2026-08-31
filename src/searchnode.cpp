@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -271,7 +271,6 @@ protected:
 	CSphString *		m_pWarning = nullptr;
 	bool				m_bNotWeighted = true;
 	CSphQueryStats *	m_pStats = nullptr;
-	int64_t *			m_pNanoBudget = nullptr;
 	bool				m_bCollectHits = false;
 	RowIdBoundaries_t	m_tBoundaries;
 
@@ -548,7 +547,6 @@ private:
 
 	CSphString *					m_pWarning {nullptr};
 	CSphQueryStats *				m_pStats {nullptr};
-	int64_t *						m_pNanoBudget {nullptr};
 
 	CSphFixedVector<uint64_t>		m_dWordIds;
 	CSphQueue<HitWithQpos_t, HitWithQpos_t > m_tQueue;
@@ -958,18 +956,25 @@ private:
 
 static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordSetup & tSetup, DictRefPtr_c pZonesDict = nullptr )
 {
-	BYTE sTmp [ 3*SPH_MAX_WORD_LEN + 16 ];
-	strncpy ( (char*)sTmp, tWord.m_sWord.cstr(), sizeof(sTmp)-1 );
-	sTmp[sizeof(sTmp)-1] = '\0';
+	if ( !pZonesDict )
+		pZonesDict = tSetup.Dict();
+
+	assert ( tSetup.m_tKeywordBuf.GetLength()>=GetKeywordBufSize ( pZonesDict->GetSettings().GetDictFormat() ) );
+	BYTE * pWordBuf = tSetup.m_tKeywordBuf.Begin();
+	const int iWordBufLen = tSetup.m_tKeywordBuf.GetLength();
 
 	ISphQword * pWord = tSetup.QwordSpawn ( tWord );
 	pWord->m_sWord = tWord.m_sWord;
-	if (!pZonesDict)
-		pZonesDict = tSetup.Dict();
+
+	int iWordBytes = Min ( tWord.m_sWord.Length(), iWordBufLen-1 );
+	memcpy ( pWordBuf, tWord.m_sWord.cstr(), iWordBytes );
+	pWordBuf[iWordBytes] = '\0';
+
 	pWord->m_uWordID = tWord.m_bMorphed
-		? pZonesDict->GetWordIDNonStemmed ( sTmp )
-		: pZonesDict->GetWordID ( sTmp );
-	pWord->m_sDictWord = (char*)sTmp;
+		? pZonesDict->GetWordIDNonStemmed ( pWordBuf )
+		: pZonesDict->GetWordID ( pWordBuf );
+	pWord->m_sDictWord.SetBinary ( (const char*)pWordBuf, (int)strlen ( (const char*)pWordBuf ) );
+
 	pWord->m_bExpanded = tWord.m_bExpanded;
 	tSetup.QwordSetup ( pWord );
 
@@ -2073,7 +2078,6 @@ inline void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::Init ( ISphQword * pQword, c
 	if constexpr(STATS)
 	{
 		m_pStats = tSetup.m_pStats;
-		m_pNanoBudget = m_pStats ? m_pStats->m_pNanoBudget : NULL;
 	}
 }
 
@@ -2090,7 +2094,6 @@ ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::ExtTerm_T ( ISphQword * pQword, const IS
 	if constexpr ( STATS )
 	{
 		m_pStats = tSetup.m_pStats;
-		m_pNanoBudget = m_pStats ? m_pStats->m_pNanoBudget : nullptr;
 	}
 }
 
@@ -2115,17 +2118,6 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 		if ( m_pWarning )
 			*m_pWarning = "query time exceeded max_query_time";
 		return NULL;
-	}
-
-	if constexpr ( STATS )
-	{
-		// max_predicted_time
-		if ( m_pNanoBudget && *m_pNanoBudget<0 )
-		{
-			if ( m_pWarning )
-				*m_pWarning = "predicted query time exceeded max_predicted_time";
-			return nullptr;
-		}
 	}
 
 	if ( sph::TimeExceeded ( m_iCheckTimePoint ) )
@@ -2219,8 +2211,6 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 	{
 		assert(m_pStats);
 		m_pStats->m_iFetchedDocs += iDoc;
-		if ( m_pNanoBudget )
-			*m_pNanoBudget -= g_iPredictorCostDoc*iDoc;
 	}
 
 	return ReturnDocsChunk ( iDoc, "term", m_pQword->m_sDictWord.cstr() );
@@ -2273,9 +2263,6 @@ void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::CollectHits ( const ExtDoc_t * pMat
 		int nHits = m_dHits.GetLength();
 		assert(m_pStats);
 		m_pStats->m_iFetchedHits += nHits;
-
-		if ( m_pNanoBudget )
-			*m_pNanoBudget -= g_iPredictorCostHit*nHits;
 	}
 
 	// we assume that GetHits doesn't get called multiple times for the same docids in pMatched
@@ -2355,9 +2342,6 @@ void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::HintRowID ( RowID_t tRowID )
 	{
 		assert(m_pStats);
 		m_pStats->m_iSkips++;
-
-		if ( m_pNanoBudget )
-			*m_pNanoBudget -= g_iPredictorCostSkip;
 	}
 }
 
@@ -2450,9 +2434,6 @@ void ExtTermHitless_T<USE_BM25,ROWID_LIMITS,STATS>::CollectHits ( const ExtDoc_t
 		int nHits = this->m_dHits.GetLength();
 		assert ( this->m_pStats );
 		this->m_pStats->m_iFetchedHits += nHits;
-
-		if ( this->m_pNanoBudget )
-			*(this->m_pNanoBudget) -= g_iPredictorCostHit*nHits;
 	}
 
 	// same logic as in ExtTerm_T::CollectHits
@@ -3013,9 +2994,15 @@ NodeEstimate_t ExtAnd_c::Estimate ( int64_t iTotalDocs ) const
 	auto tLeftEstimate = m_pLeft->Estimate(iTotalDocs);
 	auto tRightEstimate = m_pRight->Estimate(iTotalDocs);
 
-	float fRatio = float(tLeftEstimate.m_fCost)/iTotalDocs*float(tRightEstimate.m_fCost)/iTotalDocs;
+	if ( !tLeftEstimate.m_iDocs || !tRightEstimate.m_iDocs || iTotalDocs<=0 )
+		return { 0.0f, 0, tLeftEstimate.m_iTerms+tRightEstimate.m_iTerms };
+
+	float fIntersection = float(tLeftEstimate.m_iDocs)/iTotalDocs*float(tRightEstimate.m_iDocs)/iTotalDocs;
+	int64_t iDocs = int64_t(fIntersection*iTotalDocs);
+	iDocs = Min ( iDocs, Min ( tLeftEstimate.m_iDocs, tRightEstimate.m_iDocs ) );
+
 	float fCost = CalcFTIntersectCost ( tLeftEstimate, tRightEstimate, iTotalDocs, MAX_BLOCK_DOCS, MAX_BLOCK_DOCS );
-	return { fCost, int64_t(fRatio*iTotalDocs), tLeftEstimate.m_iTerms+tRightEstimate.m_iTerms };
+	return { fCost, iDocs, tLeftEstimate.m_iTerms+tRightEstimate.m_iTerms };
 }
 
 
@@ -3092,7 +3079,6 @@ ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::ExtMultiAnd_T ( const VecTrait
 
 	m_pWarning = tSetup.m_pWarning;
 	m_pStats = tSetup.m_pStats;
-	m_pNanoBudget = m_pStats ? m_pStats->m_pNanoBudget : NULL;
 }
 
 
@@ -3214,14 +3200,6 @@ const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetDocsChunk(
 		return NULL;
 	}
 
-	// max_predicted_time
-	if ( m_pNanoBudget && *m_pNanoBudget<0 )
-	{
-		if ( m_pWarning )
-			*m_pWarning = "predicted query time exceeded max_predicted_time";
-		return nullptr;
-	}
-
 	if ( sph::TimeExceeded ( m_iCheckTimePoint ) )
 	{
 		// interrupt by sitgerm
@@ -3302,8 +3280,6 @@ const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetDocsChunk(
 
 	if (m_pStats)
 		m_pStats->m_iFetchedDocs += iDoc;
-	if ( m_pNanoBudget )
-		*m_pNanoBudget -= g_iPredictorCostDoc*iDoc;
 
 	return ReturnDocsChunk ( iDoc, "multiand" );
 }
@@ -3522,9 +3498,6 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CollectHits ( const ExtDo
 	int nHits = m_dHits.GetLength();
 	if ( m_pStats )
 		m_pStats->m_iFetchedHits += nHits;
-
-	if ( m_pNanoBudget )
-		*m_pNanoBudget -= g_iPredictorCostHit*nHits;
 
 	// look at ExtTerm_T for more info on this code
 	int nProcessed = int ( pStoredHit-m_dStoredHits.Begin() );
@@ -3947,7 +3920,15 @@ const ExtDoc_t * ExtMaybe_c::GetDocsChunk()
 			break;
 
 		if ( !bRightEmpty )
-			bRightEmpty = !WarmupDocs ( pDocR, m_pRight.get() );
+		{
+			if ( !WarmupDocs ( pDocR, m_pRight.get() ) )
+			{
+				if ( TimeExceeded() )
+					break;
+
+				bRightEmpty = true;
+			}
+		}
 
 		if ( !bRightEmpty )
 		{
@@ -4002,7 +3983,8 @@ const ExtDoc_t * ExtAndNot_c::GetDocsChunk()
 		if ( !WarmupDocs ( pDocL, m_pLeft.get() ) )
 			break;
 
-		WarmupDocs ( pDocR, m_pRight.get() );
+		if ( !WarmupDocs ( pDocR, m_pRight.get() ) && TimeExceeded() )
+			break;
 
 		// if there's nothing to filter against, simply copy leftovers
 		if ( !HasDocs(pDocR) )
@@ -4823,7 +4805,7 @@ uint64_t ExtQuorum_c::GetWordID() const
 	ARRAY_FOREACH ( i, m_dChildren )
 	{
 		uint64_t uCur = m_dChildren[i].m_pTerm->GetWordID();
-		uHash = sphFNV64 ( &uCur, sizeof(uCur), uHash );
+		uHash = sphFNV64 ( uCur, uHash );
 	}
 
 	return uHash;
@@ -5365,7 +5347,7 @@ uint64_t ExtOrder_c::GetWordID () const
 	ARRAY_FOREACH ( i, m_dChildren )
 	{
 		uint64_t uCur = m_dChildren[i]->GetWordID();
-		uHash = sphFNV64 ( &uCur, sizeof(uCur), uHash );
+		uHash = sphFNV64 ( uCur, uHash );
 	}
 
 	return uHash;
@@ -5792,29 +5774,69 @@ void ExtNotNear_c::DebugDump ( int iLevel )
 	DebugDumpT ( "ExtNotNear_c", iLevel );
 }
 
-
 bool ExtNotNear_c::FilterHits ( RowID_t tRowID, const ExtHit_t * & pMust, const ExtHit_t * & pNot )
 {
-	assert ( pMust && pNot && HasHits(pMust) && HasHits(pNot) );
+	assert ( pMust && pNot && HasHits ( pMust ) && HasHits ( pNot ) );
 
 	const int iWasHits = m_dMyHits.GetLength();
-	bool bRightEmpty = false;
-
-	// any hits stream over might have tail hits
+	
 	while ( pMust->m_tRowID==tRowID )
 	{
-		// get NOT next after current MUST
-		while ( pNot->m_tRowID==tRowID && HITMAN::GetPosWithField ( pNot->m_uHitpos ) < HITMAN::GetPosWithField ( pMust->m_uHitpos ) )
-			pNot++;
+		DWORD uMustField = HITMAN::GetField ( pMust->m_uHitpos );
+		DWORD uMustPos = HITMAN::GetPosWithField ( pMust->m_uHitpos ); 
+		
+		// pNot sliding window start pos
+		//( notEnd + dist ) < mustStart means Not very far left and safe to move
+		while ( pNot->m_tRowID==tRowID )
+		{
+			DWORD uNotField = HITMAN::GetField ( pNot->m_uHitpos );
+			if ( uNotField<uMustField ) 
+			{
+				pNot++;
+				continue;
+			}
+			
+			if ( uNotField>uMustField )
+				break;
 
-		if ( !HasHits(pNot) )
+			DWORD uNotPos = HITMAN::GetPosWithField ( pNot->m_uHitpos );
+			
+			// ( notEnd + dist ) < mustStart
+			if ( ( uNotPos + pNot->m_uMatchlen - 1 + m_iDist )<uMustPos )
+			{
+				pNot++;
+				continue;
+			}
+
+			// pNot is inside backward traking
 			break;
+		}
 
-		bRightEmpty = ( pNot->m_tRowID!=tRowID );
-		DWORD uPosMust = HITMAN::GetPosWithField ( pMust->m_uHitpos );
+		bool bWindowHit = false;
+		const ExtHit_t * pScan = pNot;
+		while ( pScan->m_tRowID==tRowID )
+		{
+			DWORD uScanField = HITMAN::GetField ( pScan->m_uHitpos );
+			
+			if ( uScanField>uMustField )
+				break;
 
-		// field is top 8 bytes that is why it safe to add distance straight to GetPosWithField and compare these without checking both fields are eq
-		if ( bRightEmpty || uPosMust + pMust->m_uMatchlen - 1 + m_iDist<HITMAN::GetPosWithField ( pNot->m_uHitpos ) )
+			if ( uScanField<uMustField )
+			{
+				pScan++;
+				continue;
+			}
+
+			DWORD uScanPos = HITMAN::GetPosWithField ( pScan->m_uHitpos );
+			// ( mustEnd + dist ) < scanStart
+			if ( ( uMustPos + pMust->m_uMatchlen - 1 + m_iDist )<uScanPos )
+				break; 
+
+			bWindowHit = true;
+			break;
+		}
+
+		if ( !bWindowHit )
 			m_dMyHits.Add ( *pMust );
 
 		pMust++;
@@ -5822,7 +5844,6 @@ bool ExtNotNear_c::FilterHits ( RowID_t tRowID, const ExtHit_t * & pMust, const 
 
 	return ( iWasHits<m_dMyHits.GetLength() );
 }
-
 
 const ExtDoc_t * ExtNotNear_c::GetDocsChunk()
 {
@@ -5844,7 +5865,13 @@ const ExtDoc_t * ExtNotNear_c::GetDocsChunk()
 			if ( HasDocs(pDocL) )
 				m_pRight->HintRowID ( pDocL->m_tRowID );
 
-			bRightEmpty = !WarmupDocs ( pDocR, pHitR, m_pRight.get() );
+			if ( !WarmupDocs ( pDocR, pHitR, m_pRight.get() ) )
+			{
+				if ( TimeExceeded() )
+					break;
+
+				bRightEmpty = true;
+			}
 		}
 
 		RowID_t tNotRowID = ( bRightEmpty ? INVALID_ROWID : pDocR->m_tRowID );

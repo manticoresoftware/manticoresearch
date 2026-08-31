@@ -2,35 +2,48 @@
 
 <!-- example replace -->
 
-`REPLACE` работает аналогично [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), но перед вставкой нового документа помечает предыдущий документ с тем же ID как удалённый.
+`REPLACE` работает аналогично [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), но предварительно помечает предыдущий документ с таким же ID как удалённый перед вставкой нового.
+
+Если таблица, в которую вы пытаетесь заменить документы, не существует, Manticore попытается создать её автоматически. Подробности см. в разделе [Автосхема](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
 
 Если вам нужны обновления на месте, пожалуйста, смотрите [этот раздел](../../Data_creation_and_modification/Updating_documents/UPDATE.md).
 
 ## SQL REPLACE
 
-Синтаксис SQL-запроса `REPLACE` выглядит следующим образом:
+Синтаксис SQL-запроса `REPLACE` следующий:
 
-**Чтобы заменить весь документ:**
+**Для замены всего документа:**
 ```sql
 REPLACE INTO table [(column1, column2, ...)]
     VALUES (value1, value2, ...)
     [, (...)]
 ```
-Столбцы, не указанные явно в SQL-запросе, устанавливаются в значения по умолчанию, например 0 или пустую строку, в зависимости от их типа данных.
+Столбцы, явно не включённые в SQL-запрос, устанавливаются в значения по умолчанию, такие как 0 или пустая строка, в зависимости от их типа данных.
 
-**Чтобы заменить только выбранные поля:**
+**Для замены только выбранных полей:**
 ```sql
 REPLACE INTO table
     SET field1=value1[, ..., fieldN=valueN]
     WHERE id = <id>
 ```
-Обратите внимание, что в этом режиме вы можете фильтровать только по id.
+Обратите внимание, что в этом режиме фильтровать можно только по id.
 
 > ПРИМЕЧАНИЕ: Частичная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
-Подробнее о `UPDATE` против частичной замены `REPLACE` читайте [здесь](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
+**Для замены из SELECT:**
+```sql
+REPLACE INTO table
+    SELECT ... FROM source
+```
+```sql
+REPLACE INTO table (column1, column2, column3)
+    SELECT ... FROM source
+```
+> ПРИМЕЧАНИЕ: Этот синтаксис требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если он не работает, убедитесь, что Buddy установлен.
 
-Смотрите примеры для получения более подробной информации.
+Подробнее о `UPDATE` и частичной замене `REPLACE` читайте [здесь](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
+
+Смотрите примеры для более подробной информации.
 
 ## JSON REPLACE
 
@@ -48,7 +61,7 @@ REPLACE INTO table
     }
   }
   ```
-  `/index` — это псевдоним, работает так же.
+  `/index` — алиас для этого эндпоинта и работает так же.
 * Elasticsearch-подобный эндпоинт `<table>/_doc/<id>`:
   ```
   PUT/POST /<table name>/_doc/<id>
@@ -68,11 +81,11 @@ REPLACE INTO table
     "<fieldN>": <valueN>
   }
   ```
-  `<table name>` может быть либо просто именем таблицы, либо в формате `cluster:table`. Это позволяет выполнять обновления по конкретному кластеру, если нужно.
+  `<table name>` может быть просто названием таблицы или в формате `cluster:table`. Это позволяет делать обновления в конкретном кластере, если это необходимо.
 
   > ПРИМЕЧАНИЕ: Частичная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
-Смотрите примеры для получения более подробной информации.
+Смотрите примеры для более подробной информации.
 
 <!-- intro -->
 ##### SQL:
@@ -103,6 +116,37 @@ Query OK, 1 row affected (0.00 sec)
 ```
 
 <!-- intro -->
+##### REPLACE ... SELECT:
+<!-- request REPLACE ... SELECT -->
+
+```sql
+CREATE TABLE products_src (id int, title text, price float, category_id int);
+CREATE TABLE products (id int, title text, price float, category_id int);
+
+INSERT INTO products_src VALUES
+    (1, 'Notebook Stand', 45.00, 10),
+    (2, 'USB-C Hub', 79.90, 12),
+    (3, 'Wireless Mouse', 129.00, 10);
+
+REPLACE INTO products_a (id, price)
+    SELECT id, price FROM products_src;
+
+REPLACE INTO products_b
+    SELECT * FROM products_src;
+
+REPLACE INTO products_c (id, title, category_id)
+    SELECT id, title, category_id
+    FROM products_src
+    WHERE price >= 100;
+```
+
+<!-- response REPLACE ... SELECT -->
+
+```sql
+Query OK, 3 rows affected (0.00 sec)
+```
+
+<!-- intro -->
 ##### JSON
 
 <!-- request JSON -->
@@ -127,7 +171,7 @@ POST /replace
 ```json
 {
   "table":"products",
-  "_id":1,
+  "id":1,
   "created":false,
   "result":"updated",
   "status":200
@@ -306,7 +350,7 @@ res = await indexApi.replace({"table" : "products", "id" : 1, "doc" : {"title" :
 
 <!-- response javascript -->
 ```javascript
-{"table":"products","_id":1,"result":"updated"}
+{"table":"products","id":1,"result":"updated"}
 ```
 
 <!-- intro -->
@@ -403,7 +447,7 @@ res = await indexApi.replace({
 ```json
 {
     "table":"test",
-    "_id":1,
+    "id":1,
     "created":false
     "result":"updated"
     "status":200
@@ -426,7 +470,7 @@ res, _, _ := apiClient.IndexAPI.Replace(context.Background()).InsertDocumentRequ
 ```go
 {
     "table":"test",
-    "_id":1,
+    "id":1,
     "created":false
     "result":"updated"
     "status":200
@@ -435,9 +479,9 @@ res, _, _ := apiClient.IndexAPI.Replace(context.Background()).InsertDocumentRequ
 
 <!-- end -->
 
-`REPLACE` доступен для таблиц реального времени и percolate. Вы не можете заменить данные в обычной таблице.
+`REPLACE` доступен для реального времени и перколационных таблиц. В обычных таблицах заменить данные нельзя.
 
-Когда вы выполняете `REPLACE`, предыдущий документ не удаляется, а помечается как удалённый, поэтому размер таблицы растёт до тех пор, пока не произойдёт слияние чанков. Чтобы принудительно выполнить слияние чанков, используйте [оператор OPTIMIZE](../../Securing_and_compacting_a_table/Compacting_a_table.md).
+Когда вы запускаете `REPLACE`, предыдущий документ не удаляется, а помечается как удалённый, поэтому размер таблицы растёт до тех пор, пока не произойдёт слияние чанков. Чтобы форсировать слияние чанков, используйте [оператор OPTIMIZE](../../Securing_and_compacting_a_table/Compacting_a_table.md).
 
 ## Массовая замена
 
@@ -480,7 +524,7 @@ POST /bulk
       "replace":
       {
         "table":"products",
-        "_id":1,
+        "id":1,
         "created":false,
         "result":"updated",
         "status":200
@@ -490,7 +534,7 @@ POST /bulk
       "replace":
       {
         "table":"products",
-        "_id":2,
+        "id":2,
         "created":false,
         "result":"updated",
         "status":200
@@ -606,7 +650,7 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 
 <!-- response javascript -->
 ```javascript
-{"items":[{"replace":{"table":"products","_id":1,"created":false,"result":"updated","status":200}},{"replace":{"table":"products","_id":2,"created":false,"result":"updated","status":200}}],"errors":false}
+{"items":[{"replace":{"table":"products","id":1,"created":false,"result":"updated","status":200}},{"replace":{"table":"products","id":2,"created":false,"result":"updated","status":200}}],"errors":false}
 
 ```
 
@@ -696,7 +740,7 @@ res = await indexApi.bulk(
       "replace":
       {
         "table":"test",
-        "_id":1,
+        "id":1,
         "created":false,
         "result":"updated",
         "status":200
@@ -706,7 +750,7 @@ res = await indexApi.bulk(
       "replace":
       {
         "table":"test",
-        "_id":2,
+        "id":2,
         "created":false,
         "result":"updated",
         "status":200
@@ -734,7 +778,7 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
       "replace":
       {
         "table":"test",
-        "_id":1,
+        "id":1,
         "created":false,
         "result":"updated",
         "status":200
@@ -744,7 +788,7 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
       "replace":
       {
         "table":"test",
-        "_id":2,
+        "id":2,
         "created":false,
         "result":"updated",
         "status":200

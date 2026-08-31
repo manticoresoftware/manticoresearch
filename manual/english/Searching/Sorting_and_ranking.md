@@ -20,6 +20,15 @@ SELECT ... ORDER BY
 {attribute_name | expr_alias | weight() | random() } [ASC | DESC]
 ```
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(a int, b int, f text);
+INSERT INTO test (a, b, f) VALUES
+(2, 3, 'document');
+-->
+
 <!-- example alias -->
 
 In the sort clause, you can use any combination of up to 5 columns, each followed by `asc` or `desc`. Functions and expressions are not allowed as arguments for the sort clause, except for the `weight()` and `random()` functions (the latter can only be used via SQL in the form of `ORDER BY random()`). However, you can use any expression in the SELECT list and sort by its alias.
@@ -36,6 +45,42 @@ select *, a + b alias from test order by alias desc;
 +------+------+------+----------+-------+
 |    1 |    2 |    3 | document |     5 |
 +------+------+------+----------+-------+
+```
+
+<!-- request JSON -->
+```JSON
+POST /search
+{
+  "table": "test",
+  "expressions": {
+    "alias": "a+b"
+  },
+  "sort": {"alias":"desc"}
+}
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1,
+        "_source": {
+          "a": 2,
+          "b": 3,
+          "f": "document",
+          "alias": 5
+        }
+      }
+    ]
+  }
+}
 ```
 
 <!-- end -->
@@ -998,6 +1043,8 @@ There is no single standard one-size-fits-all way to rank any document in any sc
 
 So ranking in Manticore is configurable. It has a notion of a so-called **ranker**. A ranker can formally be defined as a function that takes a document and a query as its input and produces a relevance value as output. In layman's terms, a ranker controls exactly how (using which specific algorithm) Manticore will assign weights to the documents.
 
+A ranker can be chosen per query with [`OPTION ranker=...`](../Searching/Options.md#ranker), or stored as a per-table default in `CREATE TABLE ... ranker='...'` (including via a table [profile](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#profile)). When both are present, the query option wins. When a query searches multiple tables without an explicit query ranker, each table keeps using its own stored default ranker, including local and remote distributed tables. The final merge compares raw returned weights; there is no automatic normalization layer that makes different rankers or custom expressions numerically comparable.
+
 ## Available built-in rankers
 
 Manticore ships with several built-in rankers suited for different purposes. Many of them use two factors: phrase proximity (also known as LCS) and BM25. Phrase proximity works on keyword positions, while BM25 works on keyword frequencies. Essentially, the better the degree of phrase match between the document body and the query, the higher the phrase proximity (it maxes out when the document contains the entire query as a verbatim quote). And BM25 is higher when the document contains more rare words. We'll save the detailed discussion for later.
@@ -1026,7 +1073,7 @@ SELECT ... OPTION ranker=sph04;
 | ----------------------- | --------- | ----- | ------------------------------------------------------------------------------------------------------------------ |
 | max_lcs                 | query     | int   | maximum possible LCS value for the current query                                                                   |
 | bm25                    | document  | int   | quick estimate of BM25(1.2, 0)                                                                                     |
-| bm25a(k1, b)            | document  | int   | precise BM25() value with configurable K1, B constants and syntax support                                         |
+| bm25a(k1, b[, avgdl])   | document  | int   | precise BM25() value with configurable K1, B constants and optional average document length override               |
 | bm25f(k1, b, {field=weight, ...}) | document | int   | precise BM25F() value with extra configurable field weights                                                       |
 | field_mask              | document  | int   | bit mask of matched fields                                                                                         |
 | query_word_count        | document  | int   | number of unique inclusive keywords in a query                                                                     |
@@ -1047,6 +1094,8 @@ SELECT ... OPTION ranker=sph04;
 | lccs                    | field     | int   | Longest Common Contiguous Subsequence between query and document, in words                                         |
 | wlccs                   | field     | float | Weighted Longest Common Contiguous Subsequence, sum(idf) over contiguous keyword spans                            |
 | atc                     | field     | float | Aggregate Term Closeness, log(1+sum(idf1*idf2*pow(distance, -1.75)) over the best pairs of keywords               |
+
+Note: For queries using **Phrase**, **Proximity**, or **NEAR** operators with more than 31 keywords, ranking factors that rely on term frequency (like `tf`, `idf`, `bm25`, `hit_count`, `word_count`) may be under-counted for keywords at position 31 and above. This is due to an internal 32-bit mask used to track term occurrences in these complex operators.
 
 ### Document-level Ranking Factors
 
@@ -1139,4 +1188,3 @@ Second, `idf=tfidf_normalized` causes IDF drift over queries. Historically, we a
 IDF flags can be mixed; `plain` and `normalized` are mutually exclusive;`tfidf_unnormalized` and `tfidf_normalized` are mutually exclusive; and unspecified flags in such a mutually exclusive group take their defaults. That means that `OPTION idf=plain` is equivalent to a complete `OPTION idf='plain,tfidf_normalized'` specification.
 
 <!-- proofread -->
-

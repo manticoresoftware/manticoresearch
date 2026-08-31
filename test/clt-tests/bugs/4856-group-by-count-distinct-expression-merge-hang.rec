@@ -1,0 +1,53 @@
+GROUP BY with more groups than max_matches on a multi-chunk RT table: no duplicate groups, and count(distinct) + ORDER BY the distinct count must not hang (manticoresearch#4856)
+
+Each chunk sorter is finalized (cut to max_matches) before the chunks are merged. A finalized sorter did not rebuild its group hash, so the merge pushed the same group again instead of merging into it: a plain GROUP BY returned duplicate groups with split counts, and with count(distinct) the next cut deleted the same distinct container twice and the lookup of the missing key never terminated (all workers pinned, SIGTERM never completes).
+
+The mysql client output format differs between environments (the test kit runs under a pty), so the checks count rows with grep -cv '^+' (skips table borders) and normalize columns with sed.
+
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE t (title TEXT, vg STRING, vis INT, fm MULTI)"; echo $?
+––– output –––
+0
+––– comment –––
+3 disk chunks + a RAM chunk, ~1200 distinct MVA values (> max_matches), one distinct string per 3 docs
+––– input –––
+RANDOM=4856; for c in 1 2 3 4; do vals=""; for i in $(seq $(( (c-1)*1500+1 )) $(( c*1500 )) ); do n=$(( RANDOM % 8 + 1 )); m=""; for k in $(seq 1 $n); do m="$m,$(( RANDOM % 1200 + 1 ))"; done; vals="$vals($i,'gt 1 product $i','vg$((i/3))',$(( i % 10 ? 1 : 0 )),(${m#,}))," ; done; mysql -h0 -P9306 -e "INSERT INTO t (id,title,vg,vis,fm) VALUES ${vals%,}" || echo "insert failed"; [ $c -lt 4 ] && mysql -h0 -P9306 -e "FLUSH RAMCHUNK t"; done; mysql -h0 -P9306 -N -B -e "SELECT count(*) FROM t" | grep -o '[0-9]\+'
+––– output –––
+6000
+––– comment –––
+Generic (non-DISTINCT) sorter: plain count(*) with an expression column. Every group must appear once, and the top-100 counts must equal the counts of an uncut run (max_matches above the group count; the tail is allowed to be approximate - groups cut from a chunk's k-buffer lose that chunk's matches by design)
+––– input –––
+mysql -h0 -P9306 -N -B -e "SELECT groupby() AS vid, count(*) AS cnt FROM t WHERE MATCH('gt 1') AND vis=1 GROUP BY fm ORDER BY cnt DESC LIMIT 5000 OPTION max_matches=5000" | grep -v '^+' | sed 's/^| *//; s/ *| */\t/g; s/\t$//' > /tmp/uncut.tsv; wc -l < /tmp/uncut.tsv | tr -d ' '; timeout 60 mysql -h0 -P9306 -N -B -e "SELECT groupby() AS vid, min(if(vis>0, vis, 1.0), 2.0) AS x, count(*) AS cnt FROM t WHERE MATCH('gt 1') AND vis=1 GROUP BY fm ORDER BY cnt DESC LIMIT 500" | grep -v '^+' | sed 's/^| *//; s/ *| */\t/g; s/\t$//' > /tmp/cut.tsv; echo "exit=${PIPESTATUS[0]} rows=$(wc -l < /tmp/cut.tsv | tr -d ' ') distinct_groups=$(cut -f1 /tmp/cut.tsv | sort -u | wc -l | tr -d ' ') wrong_top100=$(awk -F'\t' 'NR==FNR{a[$1]=$2; next} FNR<=100 && a[$1]!=$3 {c++} END{print c+0}' /tmp/uncut.tsv /tmp/cut.tsv)"
+––– output –––
+#!/[0-9]{4}/!#
+exit=0 rows=500 distinct_groups=500 wrong_top100=0
+––– comment –––
+Baseline: no expression column - returns quickly
+––– input –––
+timeout 60 mysql -h0 -P9306 -N -B -e "SELECT groupby() AS vid, count(distinct vg) AS cnt FROM t WHERE MATCH('gt 1') AND vis=1 GROUP BY fm ORDER BY cnt DESC LIMIT 500" | grep -cv '^+'; echo "exit=${PIPESTATUS[0]}"
+––– output –––
+500
+exit=0
+––– comment –––
+The hanging shape: expression column + count(distinct) + ORDER BY the distinct count, > max_matches groups
+––– input –––
+timeout 60 mysql -h0 -P9306 -N -B -e "SELECT groupby() AS vid, min(if(vis>0, vis, 1.0), 2.0) AS x, count(distinct vg) AS cnt FROM t WHERE MATCH('gt 1') AND vis=1 GROUP BY fm ORDER BY cnt DESC LIMIT 500" | grep -cv '^+'; echo "exit=${PIPESTATUS[0]}"
+––– output –––
+500
+exit=0
+––– comment –––
+Same with an explicit max_matches below the group count, and ordered by the group key
+––– input –––
+timeout 60 mysql -h0 -P9306 -N -B -e "SELECT groupby() AS vid, min(if(vis>0, vis, 1.0), 2.0) AS x, count(distinct vg) AS cnt FROM t WHERE MATCH('gt 1') AND vis=1 GROUP BY fm ORDER BY cnt DESC LIMIT 300 OPTION max_matches=300" | grep -cv '^+'; echo "exit=${PIPESTATUS[0]}"; timeout 60 mysql -h0 -P9306 -N -B -e "SELECT groupby() AS vid, min(if(vis>0, vis, 1.0), 2.0) AS x, count(distinct vg) AS cnt FROM t WHERE MATCH('gt 1') AND vis=1 GROUP BY fm ORDER BY vid DESC LIMIT 500" | grep -cv '^+'; echo "exit=${PIPESTATUS[0]}"
+––– output –––
+300
+exit=0
+500
+exit=0
+––– comment –––
+The daemon is still responsive
+––– input –––
+mysql -h0 -P9306 -N -B -e "SHOW STATUS LIKE 'uptime'" | grep -c uptime
+––– output –––
+1

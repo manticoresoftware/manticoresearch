@@ -1,42 +1,17 @@
 # 快速入门指南
 
 <!-- example install -->
-## 安装并启动 Manticore
+## 安装和启动 Manticore
 
-您可以轻松地在各种操作系统上安装和启动 Manticore，包括 Ubuntu、Centos、Debian、Windows 和 MacOS。此外，您还可以使用 Manticore 作为 Docker 容器。
-
-<!-- intro -->
-### Ubuntu
-
-<!-- request Ubuntu -->
-```bash
-wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
-sudo apt update
-sudo apt install manticore manticore-columnar-lib
-sudo systemctl start manticore
-```
+您可以在各种操作系统上轻松安装并启动 Manticore，包括 Ubuntu、Centos、Debian、Windows 和 MacOS。此外，您还可以将 Manticore 作为 Docker 容器使用。
 
 <!-- intro -->
-### Debian
+### Linux/MacOS
 
-<!-- request Debian -->
+<!-- request Linux -->
+
 ```bash
-wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
-sudo apt update
-sudo apt install manticore manticore-columnar-lib
-sudo systemctl start manticore
-```
-
-<!-- intro -->
-### Centos
-
-<!-- request Centos -->
-```bash
-sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-sudo yum install manticore manticore-columnar-lib
-sudo systemctl start manticore
+curl https://manticoresearch.com | sh
 ```
 
 <!-- intro -->
@@ -49,16 +24,8 @@ sudo systemctl start manticore
 * ```bash
   C:\Manticore\bin\searchd --install --config C:\Manticore\sphinx.conf.in --servicename Manticore
   ```
-* 从 Microsoft 管理控制台的服务管理单元启动 Manticore。
+* 通过 Microsoft 管理控制台的“服务”管理单元启动 Manticore。
 
-<!-- intro -->
-### MacOS
-
-<!-- request MacOS -->
-```bash
-brew install manticoresearch
-brew services start manticoresearch
-```
 
 <!-- intro -->
 ### Docker
@@ -67,19 +34,19 @@ brew services start manticoresearch
 docker pull manticoresearch/manticore
 docker run --name manticore -p9306:9306 -p9308:9308 -p9312:9312 -d manticoresearch/manticore
 ```
-有关持久化您的数据目录，请阅读 [如何在生产环境中使用 Manticore docker](Starting_the_server/Docker.md#Production-use)
+要持久化您的数据目录，请阅读 [如何在生产环境中使用 Manticore docker](Starting_the_server/Docker.md#Production-use)
 <!-- end -->
 
 <!-- example connect -->
 ## 连接到 Manticore
 
-默认情况下，Manticore 等待您的连接端口为：
+默认情况下，Manticore 在以下端口等待您的连接：
 
-  * MySQL 客户端端口 9306
-  * HTTP/HTTPS 连接端口 9308
-  * 来自其他 Manticore 节点及基于 Manticore 二进制 API 客户端的连接端口 9312
+  * 端口 9306 用于 MySQL 客户端
+  * 端口 9308 用于 HTTP/HTTPS 连接
+  * 端口 9312 用于其他 Manticore 节点和基于 Manticore 二进制 API 的客户端连接
 
-有关 HTTPS 支持的更多详情，请查看我们的学习课程 [这里](https://play.manticoresearch.com/https/)。
+有关 HTTPS 支持的更多详细信息，请参阅我们的学习课程 [此处](https://play.manticoresearch.com/https/)。
 
 <!-- intro -->
 ##### 通过 MySQL 连接：
@@ -90,10 +57,10 @@ mysql -h0 -P9306
 ```
 
 <!-- intro -->
-##### 通过 JSON over HTTP 连接
+##### 通过 HTTP 上的 JSON 连接
 
 <!-- request HTTP -->
-HTTP 是无状态协议，因此无需特别的连接阶段。您只需发送 HTTP 请求到服务器，接收响应即可。要使用 JSON 接口与 Manticore 通信，您可以使用您所选编程语言中的任何 HTTP 客户端库发送 GET 或 POST 请求到服务器，并解析 JSON 响应：
+HTTP 是无状态协议，因此不需要任何特殊的连接阶段。您可以直接向服务器发送 HTTP 请求并接收响应。要通过 JSON 接口与 Manticore 通信，您可以使用您选择的编程语言中的任何 HTTP 客户端库向服务器发送 GET 或 POST 请求，并解析 JSON 响应：
 
 ```bash
 curl -s "http://localhost:9308/search"
@@ -111,7 +78,7 @@ $client = new \Manticoresearch\Client($config);
 ```
 
 <!-- intro -->
-##### 通过 [Python 客户端](https://github.com/manticoresoftware/manticoresearch-php) 连接：
+##### 通过 [Python 客户端](https://github.com/manticoresoftware/manticoresearch-php):
 
 <!-- request Python -->
 ```python
@@ -256,26 +223,33 @@ apiClient := manticoreclient.NewAPIClient(configuration)
 
 <!-- end -->
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, price float) morphology='stem_en';
+-->
+
 <!-- example create -->
 ## 创建表
 
-现在我们创建一个名为 "products" 的表，带有 2 个字段：
-* title - 一个全文字段，将包含我们的产品标题
-* price - 类型为 "float"
+现在让我们创建一个名为 "products" 的表，包含 2 个字段：
+* title - 全文字段，将包含我们的产品标题
+* price - 类型为 "float" 的字段
 
-请注意，可以省略使用显式创建语句创建表的步骤。更多信息请参见 [自动模式](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema)。
+请注意，可以省略使用显式创建语句来创建表。有关更多信息，请参阅 [自动模式](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema)。
 
-有关创建表的不同方式的更多信息，请参阅我们的学习课程：
-* [创建实时表](https://play.manticoresearch.com/rtmode/)
+有关创建表的不同方法的更多信息，请参阅我们的学习课程：
+* [创建 RealTime 表](https://play.manticoresearch.com/rtmode/)
 * [从 MySQL 源创建表](https://play.manticoresearch.com/mysql/)
 * [从 CSV 源创建表](https://play.manticoresearch.com/csv/)
-* [使用自动模式创建表](https://play.manticoresearch.com/autoschema/)
+* [使用自动模式机制创建表](https://play.manticoresearch.com/autoschema/)
 * [使用 Logstash/Beats 创建表](https://play.manticoresearch.com/logstash/)
 * [使用 Fluentbit 创建表](https://play.manticoresearch.com/vectordev/)
 * [使用 Vector.dev 代理创建表](https://play.manticoresearch.com/vectordev/)
 
 <!-- intro -->
-##### SQL：
+##### SQL:
 <!-- request SQL -->
 
 ```sql
@@ -288,7 +262,7 @@ Query OK, 0 rows affected (0.02 sec)
 ```
 
 <!-- intro -->
-##### HTTP：
+##### HTTP:
 
 <!-- request HTTP -->
 
@@ -306,7 +280,7 @@ POST /cli -d "create table products(title text, price float) morphology='stem_en
 ```
 
 <!-- intro -->
-##### PHP：
+##### PHP:
 
 <!-- request PHP -->
 
@@ -319,7 +293,7 @@ $index->create([
 ],['morphology' => 'stem_en']);
 ```
 <!-- intro -->
-##### Python：
+##### Python:
 
 <!-- request Python -->
 
@@ -328,7 +302,7 @@ utilsApi.sql('create table products(title text, price float) morphology=\'stem_e
 ```
 
 <!-- intro -->
-##### Python-asyncio：
+##### Python-asyncio:
 
 <!-- request Python-asyncio -->
 
@@ -337,7 +311,7 @@ await utilsApi.sql('create table products(title text, price float) morphology=\'
 ```
 
 <!-- intro -->
-##### Javascript：
+##### Javascript:
 
 <!-- request Javascript -->
 
@@ -346,7 +320,7 @@ res = await utilsApi.sql('create table products(title text, price float) morphol
 ```
 
 <!-- intro -->
-##### Java：
+##### Java:
 
 <!-- request Java -->
 
@@ -355,7 +329,7 @@ utilsApi.sql("create table products(title text, price float) morphology='stem_en
 ```
 
 <!-- intro -->
-##### C#：
+##### C#:
 
 <!-- request C# -->
 
@@ -364,7 +338,7 @@ utilsApi.Sql("create table products(title text, price float) morphology='stem_en
 ```
 
 <!-- intro -->
-##### Rust：
+##### Rust:
 
 <!-- request Rust -->
 
@@ -373,7 +347,7 @@ utils_api.sql("create table products(title text, price float) morphology='stem_e
 ```
 
 <!-- intro -->
-##### TypeScript：
+##### TypeScript:
 
 <!-- request TypeScript -->
 ```typescript
@@ -381,7 +355,7 @@ res = await utilsApi.sql('create table products(title text, price float) morphol
 ```
 
 <!-- intro -->
-##### Go：
+##### Go:
 
 <!-- request Go -->
 ```go
@@ -393,10 +367,10 @@ res := apiClient.UtilsAPI.Sql(context.Background()).Body("create table products(
 <!-- example insert -->
 ## 添加文档
 
-现在我们向表中添加一些文档：
+现在让我们向表中添加一些文档：
 
 <!-- intro -->
-##### SQL：
+##### SQL:
 
 <!-- request SQL -->
 
@@ -410,10 +384,10 @@ Query OK, 3 rows affected (0.01 sec)
 ```
 
 <!-- intro -->
-##### JSON：
+##### JSON:
 
 <!-- request JSON -->
-`"id":0` 或没有 id 会强制自动生成 ID。
+对于这个实时表，`"id":0` 或省略 `id` 会请求自动生成 ID。
 
 ```json
 POST /insert
@@ -452,7 +426,7 @@ POST /insert
 ```json
 {
   "table": "products",
-  "_id": 0,
+  "id": 0,
   "created": true,
   "result": "created",
   "status": 201
@@ -460,7 +434,7 @@ POST /insert
 
 {
   "table": "products",
-  "_id": 0,
+  "id": 0,
   "created": true,
   "result": "created",
   "status": 201
@@ -468,7 +442,7 @@ POST /insert
 
 {
   "table": "products",
-  "_id": 0,
+  "id": 0,
   "created": true,
   "result": "created",
   "status": 201
@@ -476,7 +450,7 @@ POST /insert
 ```
 
 <!-- intro -->
-##### PHP：
+##### PHP:
 
 <!-- request PHP -->
 
@@ -488,7 +462,7 @@ $index->addDocuments([
 ]);
 ```
 <!-- intro -->
-##### Python：
+##### Python:
 
 <!-- request Python -->
 
@@ -499,7 +473,7 @@ indexApi.insert({"table" : "products", "doc" : {"title" : "Pet Hair Remover Glov
 ```
 
 <!-- intro -->
-##### Python-asyncio：
+##### Python-asyncio:
 
 <!-- request Python-asyncio -->
 
@@ -510,7 +484,7 @@ await indexApi.insert({"table" : "products", "doc" : {"title" : "Pet Hair Remove
 ```
 
 <!-- intro -->
-##### Javascript：
+##### Javascript:
 
 <!-- request Javascript -->
 
@@ -608,17 +582,17 @@ let insert_res3 = index_api.insert(insert_req3).await;
 
 ``` typescript
 res = await indexApi.insert({
-  index: 'test',
+  table: 'test',
   id: 1,
   doc: { content: 'Text 1', name: 'Doc 1', cat: 1 },
 });
 res = await indexApi.insert({
-  index: 'test',
+  table: 'test',
   id: 2,
   doc: { content: 'Text 2', name: 'Doc 2', cat: 2 },
 });
 res = await indexApi.insert({
-  index: 'test',
+  table: 'test',
   id: 3,
   doc: { content: 'Text 3', name: 'Doc 3', cat: 7 },
 });
@@ -648,15 +622,15 @@ apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq)
 
 <!-- end -->
 
-有关该主题的更多详细信息，请参见此处：
-* [向普通表添加数据](https://play.manticoresearch.com/mysql/)
-* [向实时表添加数据](https://play.manticoresearch.com/rtintro/)
+有关此主题的更多详细信息可以在此处找到：
+* [将数据添加到普通表](https://play.manticoresearch.com/mysql/)
+* [将数据添加到实时表](https://play.manticoresearch.com/rtintro/)
 
 
 <!-- example search -->
 ## 搜索
 
-让我们找一份文档。我们将使用的查询是“remove hair”。如您所见，它找到了标题为“宠物毛发去除手套”的文档，并在其中高亮显示了“Hair remover”，即使查询中是“remove”，而不是“remover”。这是因为当我们创建表时，开启了英文词干处理（`morphology "stem_en"`）。
+让我们查找其中一个文档。我们将使用的查询是“remove hair”。如您所见，它找到了一个标题为“Pet Hair Remover Glove”的文档，并在其中突出显示了“Hair remover”，即使查询中使用的是“remove”而不是“remover”。这是因为当我们创建表时，我们启用了英语词干提取（`morphology "stem_en"`）。
 
 <!-- intro -->
 ##### SQL:
@@ -726,7 +700,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$result = $index->search('@title remove hair')->highlight(['title'])->get();
+$result = $table->search('@title remove hair')->highlight(['title'])->get();
 foreach($result as $doc)
 {
     echo "Doc ID: ".$doc->getId()."\n";
@@ -826,7 +800,7 @@ java
 query = new HashMap<String,Object>();
 query.put("query_string","@title remove hair");
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 searchRequest.setQuery(query);
 HashMap<String,Object> highlight = new HashMap<String,Object>(){{
     put("fields",new String[] {"title"});
@@ -921,7 +895,7 @@ TypeScript
 
 ```typescript
 res = await searchApi.search({
-  index: 'test',
+  table: 'test',
   query: { query_string: {'text 1'} },
   highlight: {'fields': ['content'] }
 });
@@ -984,15 +958,15 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 ```
 <!-- end -->
 
-有关 Manticore 中不同搜索选项的更多信息，请参阅我们的学习课程：
-* [分面搜索](https://play.manticoresearch.com/faceting/)
+有关Manticore中可用的不同搜索选项的更多信息，可以在我们的学习课程中找到：
+* [面向搜索](https://play.manticoresearch.com/faceting/)
 * [地理搜索](https://play.manticoresearch.com/geosearch/)
-* [搜索相似文档](https://play.manticoresearch.com/mlt/)
+* [搜索类似文档](https://play.manticoresearch.com/mlt/)
 
 <!-- example update -->
 ## 更新
 
-假设我们现在想更新文档 - 将价格更改为 18.5。可以通过任何字段过滤来执行此操作，但通常您知道文档 id 并基于此进行更新。
+假设我们现在想要更新文档 - 将价格更改为18.5。这可以通过按任何字段进行过滤来完成，但通常您知道文档id并基于此进行更新。
 
 <!-- intro -->
 ##### SQL:
@@ -1030,7 +1004,7 @@ POST /update
 ```json
 {
   "table": "products",
-  "_id": 1513686608316989452,
+  "id": 1513686608316989452,
   "result": "updated"
 }
 ```
@@ -1089,7 +1063,7 @@ UpdateDocumentRequest updateRequest = new UpdateDocumentRequest();
 doc = new HashMap<String,Object >(){{
     put("price",18.5);
 }};
-updateRequest.index("products").id(1513686608316989452L).setDoc(doc);
+updateRequest.table("products").id(1513686608316989452L).setDoc(doc);
 indexApi.update(updateRequest);
 ```
 
@@ -1125,7 +1099,7 @@ let update_res = index_api.update(update_req).await;
 
 <!-- request TypeScript -->
 ``` typescript
-res = await indexApi.update({ index: "test", id: 1, doc: { cat: 10 } });
+res = await indexApi.update({ table: "test", id: 1, doc: { cat: 10 } });
 ```
 
 <!-- intro -->
@@ -1144,7 +1118,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- example delete -->
 ## 删除
 
-现在让我们删除所有价格低于 10 的文档。
+现在让我们删除所有价格低于10的文档。
 
 <!-- intro -->
 ##### SQL:
@@ -1197,7 +1171,7 @@ POST /delete
 <!-- request PHP -->
 
 ```php
-$result = $index->deleteDocuments(new \Manticoresearch\Query\Range('price',['lte'=>10]));
+$result = $table->deleteDocuments(new \Manticoresearch\Query\Range('price',['lte'=>10]));
 
 ```
 <!-- response PHP -->
@@ -1250,7 +1224,7 @@ query.put("range",new HashMap<String,Object>(){{
         put("lte",10);
     }});
 }});
-deleteRequest.index("products").setQuery(query);
+deleteRequest.table("products").setQuery(query);
 indexApi.delete(deleteRequest);
 
 ```
@@ -1265,7 +1239,7 @@ Dictionary<string, Object> price = new Dictionary<string, Object>();
 price.Add("lte", 10);
 Dictionary<string, Object> range = new Dictionary<string, Object>();
 range.Add("price", price);
-DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(index: "products", query: range);
+DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(table: "products", query: range);
 indexApi.Delete(deleteDocumentRequest);
 ```
 
@@ -1294,7 +1268,7 @@ index_api.delete(delete_req).await;
 <!-- request TypeScript -->
 ``` typescript
 res = await indexApi.delete({
-  index: 'test',
+  table: 'test',
   query: { match: { '*': 'Text 1' } },
 });
 ```
@@ -1314,4 +1288,3 @@ res, _, _ := apiClient.IndexAPI.Delete(context.Background()).DeleteDocumentReque
 
 <!-- end -->
 <!-- proofread -->
-

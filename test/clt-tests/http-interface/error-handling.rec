@@ -40,4 +40,4 @@ curl -s "http://localhost:9308/cli_json" -d "SELECT * FROM t LIMIT -5"; echo
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "UPDATE t SET value='new_value' WHERE id=1"; echo
 ––– output –––
-{"error":"table t: attribute 'value' not found"}
+{"error":"table t: attribute 'value' can not be updated (full-text field)"}

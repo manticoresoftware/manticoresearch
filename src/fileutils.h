@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -114,6 +114,10 @@ void			sphDoneIOStats();
 
 CSphIOStats *	GetIOStats();
 
+/// always accounted global written bytes (came from writethrottled/writenonthrottled)
+void			GlobalWrite ( int iWritten ) noexcept;
+uint64_t		GlobalWritten () noexcept;
+
 /// calculate file crc32
 bool			sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 );
 
@@ -152,6 +156,12 @@ bool			RenameWithRollback ( const StrVec_t & dSrc, const StrVec_t & dDst, CSphSt
 
 // check if path exists and also check if daemon can write there
 bool			CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sError, const char * sCheckFileName="tmp" );
+
+// Maps a logical configless table name to a portable ASCII path component.
+// Existing short lowercase ASCII names retain their historical on-disk names.
+CSphString		sphGetTablePhysicalName ( const CSphString & sName );
+CSphString		sphGetConfiglessTablePath ( const CSphString & sDataDir, const CSphString & sName );
+CSphString		sphGetExistingConfiglessTablePath ( const CSphString & sDataDir, const CSphString & sName );
 
 bool			IsPathAbsolute ( const CSphString & sPath );
 CSphString		GetExecutablePath();

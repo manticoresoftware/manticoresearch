@@ -228,6 +228,29 @@ searchd
 	select * from t option cutoff=1 facet a;;
 	show meta;
 	drop table t;
+
+	<!-- profile=relevance expands settings and persists them across restart -->
+	drop table if exists t;
+	create table t (title text) profile='relevance';
+	show warnings;
+	insert into t values
+		(1,'alpha running'),
+		(2,'dog'),
+		(3,'alphabet');
+	show create table t;
+	select count(*) from t where match('alpha dog');
+	select count(*) from t where match('run');
+	select count(*) from t where match('*pha*');
+</sphinxql>
+
+<sphinxql system="restart-daemon-no-warnings"/>
+
+<sphinxql>
+	show create table t;
+	select count(*) from t where match('alpha dog');
+	select count(*) from t where match('run');
+	select count(*) from t where match('*pha*');
+	drop table t;
     
 </sphinxql>
 </queries>

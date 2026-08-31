@@ -4,6 +4,8 @@
 
 `REPLACE` works similarly to [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), but it marks the previous document with the same ID as deleted before inserting a new one.
 
+If the table you're trying to replace documents in doesn't exist, Manticore will try to create it automatically. See  [Auto schema](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) for details.
+
 If you are looking for in-place updates, please see [this section](../../Data_creation_and_modification/Updating_documents/UPDATE.md).
 
 ## SQL REPLACE
@@ -27,6 +29,17 @@ REPLACE INTO table
 Note, you can filter only by id in this mode.
 
 > NOTE: Partial replace requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
+**To replace from a SELECT:**
+```sql
+REPLACE INTO table
+    SELECT ... FROM source
+```
+```sql
+REPLACE INTO table (column1, column2, column3)
+    SELECT ... FROM source
+```
+> NOTE: This syntax requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 Read more about `UPDATE` vs. partial `REPLACE` [here](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
@@ -103,6 +116,37 @@ Query OK, 1 row affected (0.00 sec)
 ```
 
 <!-- intro -->
+##### REPLACE ... SELECT:
+<!-- request REPLACE ... SELECT -->
+
+```sql
+CREATE TABLE products_src (id int, title text, price float, category_id int);
+CREATE TABLE products (id int, title text, price float, category_id int);
+
+INSERT INTO products_src VALUES
+    (1, 'Notebook Stand', 45.00, 10),
+    (2, 'USB-C Hub', 79.90, 12),
+    (3, 'Wireless Mouse', 129.00, 10);
+
+REPLACE INTO products_a (id, price)
+    SELECT id, price FROM products_src;
+
+REPLACE INTO products_b
+    SELECT * FROM products_src;
+
+REPLACE INTO products_c (id, title, category_id)
+    SELECT id, title, category_id
+    FROM products_src
+    WHERE price >= 100;
+```
+
+<!-- response REPLACE ... SELECT -->
+
+```sql
+Query OK, 3 rows affected (0.00 sec)
+```
+
+<!-- intro -->
 ##### JSON
 
 <!-- request JSON -->
@@ -127,7 +171,7 @@ POST /replace
 ```json
 {
   "table":"products",
-  "_id":1,
+  "id":1,
   "created":false,
   "result":"updated",
   "status":200
@@ -306,7 +350,7 @@ res = await indexApi.replace({"table" : "products", "id" : 1, "doc" : {"title" :
 
 <!-- response javascript -->
 ```javascript
-{"table":"products","_id":1,"result":"updated"}
+{"table":"products","id":1,"result":"updated"}
 ```
 
 <!-- intro -->
@@ -403,7 +447,7 @@ res = await indexApi.replace({
 ```json
 {
     "table":"test",
-    "_id":1,
+    "id":1,
     "created":false
     "result":"updated"
     "status":200
@@ -426,7 +470,7 @@ res, _, _ := apiClient.IndexAPI.Replace(context.Background()).InsertDocumentRequ
 ```go
 {
     "table":"test",
-    "_id":1,
+    "id":1,
     "created":false
     "result":"updated"
     "status":200
@@ -480,7 +524,7 @@ POST /bulk
       "replace":
       {
         "table":"products",
-        "_id":1,
+        "id":1,
         "created":false,
         "result":"updated",
         "status":200
@@ -490,7 +534,7 @@ POST /bulk
       "replace":
       {
         "table":"products",
-        "_id":2,
+        "id":2,
         "created":false,
         "result":"updated",
         "status":200
@@ -606,7 +650,7 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 
 <!-- response javascript -->
 ```javascript
-{"items":[{"replace":{"table":"products","_id":1,"created":false,"result":"updated","status":200}},{"replace":{"table":"products","_id":2,"created":false,"result":"updated","status":200}}],"errors":false}
+{"items":[{"replace":{"table":"products","id":1,"created":false,"result":"updated","status":200}},{"replace":{"table":"products","id":2,"created":false,"result":"updated","status":200}}],"errors":false}
 
 ```
 
@@ -696,7 +740,7 @@ res = await indexApi.bulk(
       "replace":
       {
         "table":"test",
-        "_id":1,
+        "id":1,
         "created":false,
         "result":"updated",
         "status":200
@@ -706,7 +750,7 @@ res = await indexApi.bulk(
       "replace":
       {
         "table":"test",
-        "_id":2,
+        "id":2,
         "created":false,
         "result":"updated",
         "status":200
@@ -734,7 +778,7 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
       "replace":
       {
         "table":"test",
-        "_id":1,
+        "id":1,
         "created":false,
         "result":"updated",
         "status":200
@@ -744,7 +788,7 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
       "replace":
       {
         "table":"test",
-        "_id":2,
+        "id":2,
         "created":false,
         "result":"updated",
         "status":200

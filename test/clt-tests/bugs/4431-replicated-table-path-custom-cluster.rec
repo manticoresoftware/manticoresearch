@@ -1,0 +1,51 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}; stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore-${INSTANCE}/searchd.log; fi
+––– output –––
+Buddy started!
+––– input –––
+export INSTANCE=2
+––– output –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}; stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore-${INSTANCE}/searchd.log; fi
+––– output –––
+Buddy started!
+––– input –––
+mkdir -p /var/log/manticore-1/c_node1 /var/log/manticore-2/c_node2
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE CLUSTER c4431 'c_node1' AS path;" && mysql -h0 -P2306 -e "JOIN CLUSTER c4431 AT '127.0.0.1:1312' 'c_node2' AS path;"
+––– output –––
+––– input –––
+bash -c 'end=$((SECONDS+90)); while [ $SECONDS -lt $end ]; do mysql -h0 -P2306 -N -B -e "SHOW STATUS LIKE '\''cluster_c4431_node_state'\''" 2>/dev/null | grep -qw synced && { echo "NODE2_SYNCED=yes"; exit 0; }; sleep 1; done; echo "NODE2_SYNCED=no"; exit 0'
+––– output –––
+NODE2_SYNCED=yes
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE rt_4431_path (id bigint, title text);" && mysql -h0 -P1306 -e "ALTER CLUSTER c4431 ADD rt_4431_path;" && mysql -h0 -P1306 -e "INSERT INTO c4431:rt_4431_path VALUES (1,'before restart');" && sleep 2
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "SELECT COUNT(*) AS cnt FROM rt_4431_path;" | grep -E '^[|][[:space:]]+1[[:space:]]+[|]$' >/dev/null && echo "NODE2_TABLE_BEFORE_RESTART=ok" || echo "NODE2_TABLE_BEFORE_RESTART=failed"
+––– output –––
+NODE2_TABLE_BEFORE_RESTART=ok
+––– input –––
+export INSTANCE=2; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null
+––– output –––
+––– input –––
+bash -c '[ -f /var/log/manticore-2/rt_4431_path/rt_4431_path.lock ] && echo "ROOT_LOCK=yes" || echo "ROOT_LOCK=no"; [ -f /var/log/manticore-2/c_node2/rt_4431_path/rt_4431_path.lock ] && echo "CLUSTER_LOCK=yes" || echo "CLUSTER_LOCK=no"; awk '\''/"indexes":\{/{inidx=1} inidx && /"rt_4431_path"/{hit=1} hit && /"path"/{gsub(/[ \t,]/,""); print; exit}'\'' /var/log/manticore-2/manticore.json'
+––– output –––
+ROOT_LOCK=yes
+CLUSTER_LOCK=no
+"path":"rt_4431_path"
+––– input –––
+export INSTANCE=2; stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf > /tmp/rt_4431_path_restart.out 2>&1; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /tmp/rt_4431_path_restart.out; cat /var/log/manticore-${INSTANCE}/searchd.log; fi
+––– output –––
+Buddy started!
+––– input –––
+if mysql -h0 -P2306 -e "SELECT COUNT(*) AS cnt FROM rt_4431_path;" >/tmp/rt_4431_path_query.out 2>&1; then echo "NODE2_TABLE_AFTER_RESTART=ok"; else echo "NODE2_TABLE_AFTER_RESTART=failed"; grep -E 'ERROR|NOT SERVING|prealloc|failed to open' /tmp/rt_4431_path_query.out /var/log/manticore-2/searchd.log || true; fi
+––– output –––
+NODE2_TABLE_AFTER_RESTART=ok
+––– input –––
+export INSTANCE=2; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null 2>&1 || true; export INSTANCE=1; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null 2>&1 || true
+––– output –––

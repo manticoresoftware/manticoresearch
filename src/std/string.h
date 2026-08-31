@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -185,7 +185,7 @@ public:
 
 	void Unquote();
 
-	static int GetGap() { return SAFETY_GAP; }
+	static constexpr int GetGap() { return SAFETY_GAP; }
 
 	explicit operator ByteBlob_t() const;
 };

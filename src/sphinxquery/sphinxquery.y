@@ -70,7 +70,7 @@ query:
 
 expr:
 	beforelist						{ $$ = $1; }
-	| expr beforelist					{ $$ = pParser->AddOp ( SPH_QUERY_AND, $1, $2 ); }
+	| expr beforelist					{ $$ = pParser->AddDefaultOp ( $1, $2 ); }
 	;
 
 tok_limiter:
@@ -102,6 +102,7 @@ atom:
 	keyword								{ $$ = $1; }
 	| sentence							{ $$ = $1; }
 	| paragraph							{ $$ = $1; }
+	| '(' ')'							{ $$ = NULL; }
 	| '"' '"'							{ $$ = NULL; }
 	| '"' '"' '~' TOK_INT				{ $$ = NULL; }
 	| '"' '"' '/' TOK_INT				{ $$ = NULL; }
@@ -119,7 +120,7 @@ keyword:
 	TOK_KEYWORD							{ $$ = $1; }
 	| TOK_INT							{ $$ = pParser->AddKeyword ( ( $1.iStrIndex>=0 ) ? pParser->m_dIntTokens[$1.iStrIndex].cstr() : NULL ); }
 	| TOK_FLOAT							{ $$ = pParser->AddKeyword ( ( $1.iStrIndex>=0 ) ? pParser->m_dIntTokens[$1.iStrIndex].cstr() : NULL ); }
-	| '=' keyword						{ $$ = $2; assert ( $$->dWords().GetLength()==1 ); $$->WithWord(0,[] (auto& dWord) {if (!dWord.m_sWord.IsEmpty()) dWord.m_sWord.SetSprintf ( "=%s", dWord.m_sWord.cstr() );}); }
+	| '=' keyword						{ $$ = $2; assert ( $$->dWords().GetLength()==1 ); $$->WithWord(0,[] (auto& dWord) {if (!dWord.m_sWord.IsEmpty()) SetKeywordWithMarkers ( dWord.m_sWord, "=", dWord.m_sWord );}); }
 	| TOK_REGEX							{ $$ = $1; }
 	;
 
@@ -135,7 +136,7 @@ paragraph:
 
 sp_item:
 	keyword								{ $$ = $1; }
-	| '"' phrase '"'					{ $$ = $2; if ( $$ ) { assert ( $$->dWords().GetLength() ); $$->SetOp ( SPH_QUERY_PHRASE); } }
+	| '"' phrase '"'					{ $$ = $2; if ( $$ ) pParser->CreateSpPhraseNode ( $$ ); }
 	;
 
 phrase:
@@ -146,6 +147,7 @@ phrase:
 phrasetoken:
 	keyword								{ $$ = $1; }
 	| '(' phrase_group_expr ')'			{ $$ = $2; }
+	| '(' ')'							{ $$ = NULL; }
 	| '-'								{ $$ = NULL; }
 	| '~'								{ $$ = NULL; }
 	| '/'								{ $$ = NULL; }
@@ -164,6 +166,7 @@ phrase_group_sequence:
 phrase_group_atom:
 	keyword								{ $$ = $1; }
 	| '(' phrase_group_expr ')'			{ $$ = $2; }
+	| '(' ')'							{ $$ = NULL; }
 	;
 
 %%

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -608,7 +608,9 @@ private:
 	int							m_iMaxMatches;
 	CSphVector<DocID_t>			m_dUnsortedDocs;
 	MemoryWriter_c				m_tWriter;
-	bool						m_bDocIdDynamic = false;
+	CSphAttrLocator				m_tDocidLoc;
+	bool						m_bUseDocidLoc = false;
+	bool						m_bDocIdDynamic = true;
 
 	inline bool			PushMatch ( const CSphMatch & tEntry );
 	inline void			ProcessPushed();
@@ -637,7 +639,15 @@ bool CollectQueue_c::PushMatch ( const CSphMatch & tEntry )
 	if ( m_dUnsortedDocs.GetLength() >= m_iMaxMatches && m_dUnsortedDocs.GetLength() == m_dUnsortedDocs.GetLimit() )
 		ProcessPushed();
 
-	m_dUnsortedDocs.Add ( sphGetDocID ( m_bDocIdDynamic ? tEntry.m_pDynamic : tEntry.m_pStatic ) );
+	DocID_t tDocId = 0;
+	if ( m_bUseDocidLoc )
+		tDocId = (DocID_t)tEntry.GetAttr ( m_tDocidLoc );
+	else
+	{
+		const CSphRowitem * pRow = ( m_bDocIdDynamic && tEntry.m_pDynamic ) ? tEntry.m_pDynamic : tEntry.m_pStatic;
+		tDocId = sphGetDocID ( pRow );
+	}
+	m_dUnsortedDocs.Add ( tDocId );
 	return true;
 }
 
@@ -654,8 +664,19 @@ void CollectQueue_c::SetSchema ( ISphSchema * pSchema, bool bRemapCmp )
 	BASE::SetSchema ( pSchema, bRemapCmp );
 
 	const CSphColumnInfo * pDocId = pSchema->GetAttr ( sphGetDocidName() );
-	assert(pDocId);
-	m_bDocIdDynamic = pDocId->m_tLocator.m_bDynamic;
+	bool bStringDocid = pDocId && ( pDocId->m_eAttrType==SPH_ATTR_STRING || pDocId->m_eAttrType==SPH_ATTR_STRINGPTR );
+	m_bUseDocidLoc = pDocId && !bStringDocid;
+	if ( m_bUseDocidLoc )
+	{
+		m_tDocidLoc = pDocId->m_tLocator;
+		m_bDocIdDynamic = pDocId->m_tLocator.m_bDynamic;
+	}
+	else
+	{
+		// UUID public result schemas may expose string `id`/`@uuid_id`, while the internal
+		// DocID_t is still stored at the conventional static row start for collection/delete.
+		m_bDocIdDynamic = false;
+	}
 }
 
 
@@ -668,21 +689,25 @@ ISphMatchSorter * CreateCollectQueue ( int iMaxMatches, CSphVector<BYTE> & tColl
 
 void SendSqlSchema ( const ISphSchema& tSchema, RowBuffer_i* pRows, const VecTraits_T<int>& dOrder )
 {
+	const int iFirstFieldLen = tSchema.GetAttrId_FirstFieldLen();
+	const int iLastFieldLen = tSchema.GetAttrId_LastFieldLen();
+
 	pRows->HeadBegin ();
 	ARRAY_CONSTFOREACH ( i, dOrder )
 	{
-		const CSphColumnInfo& tCol = tSchema.GetAttr ( dOrder[i] );
+		const int iAttr = dOrder[i];
+		const CSphColumnInfo& tCol = tSchema.GetAttr ( iAttr );
 		if ( sphIsInternalAttr ( tCol ) )
 			continue;
 		if ( i == 0 )
 		{
 			assert (tCol.m_sName == "id");
-			pRows->HeadColumn ( "id", ESphAttr2MysqlColumnStreamed ( SPH_ATTR_UINT64 ) );
+			pRows->HeadColumn ( "id", pRows->ESphAttr2MysqlColumnStreamed ( SPH_ATTR_UINT64 ) );
 			continue;
 		}
-		if ( tCol.m_eAttrType==SPH_ATTR_TOKENCOUNT )
+		if ( ( iFirstFieldLen>=0 && iAttr>=iFirstFieldLen && iAttr<=iLastFieldLen ) || tCol.m_eAttrType==SPH_ATTR_TOKENCOUNT )
 			continue;
-		pRows->HeadColumn ( tCol.m_sName.cstr(), ESphAttr2MysqlColumnStreamed ( tCol.m_eAttrType ) );
+		pRows->HeadColumn ( tCol.m_sName.cstr(), pRows->ESphAttr2MysqlColumnStreamed ( tCol.m_eAttrType ) );
 	}
 
 	pRows->HeadEnd ( false, 0 );
@@ -692,13 +717,16 @@ using SqlEscapedBuilder_c = EscapedStringBuilder_T<BaseQuotation_T<SqlQuotator_t
 
 void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tMatch, const BYTE* pBlobPool, const VecTraits_T<int>& dOrder, bool bDynamicDocid )
 {
+	const int iFirstFieldLen = tSchema.GetAttrId_FirstFieldLen();
+	const int iLastFieldLen = tSchema.GetAttrId_LastFieldLen();
 	auto& dRows = *pRows;
 	ARRAY_CONSTFOREACH ( i, dOrder )
 	{
-		const CSphColumnInfo& dAttr = tSchema.GetAttr ( dOrder[i] );
+		const int iAttr = dOrder[i];
+		const CSphColumnInfo& dAttr = tSchema.GetAttr ( iAttr );
 		if ( sphIsInternalAttr ( dAttr ) )
 			continue;
-		if ( dAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT )
+		if ( ( iFirstFieldLen>=0 && iAttr>=iFirstFieldLen && iAttr<=iLastFieldLen ) || dAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT )
 			continue;
 
 		CSphAttrLocator tLoc = dAttr.m_tLocator;
@@ -713,6 +741,7 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 			dRows.PutArray ( sphGetBlobAttr ( tMatch, tLoc, pBlobPool ) );
 			break;
 		case SPH_ATTR_STRINGPTR:
+		case SPH_ATTR_TDIGEST_PTR:
 			{
 				const BYTE* pStr = nullptr;
 				if ( dAttr.m_eStage == SPH_EVAL_POSTLIMIT )
@@ -741,25 +770,26 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 		case SPH_ATTR_INTEGER:
 		case SPH_ATTR_TIMESTAMP:
 		case SPH_ATTR_BOOL:
-			dRows.PutNumAsString ( (DWORD)tMatch.GetAttr ( tLoc ) );
+			dRows.PutDWORD ( (DWORD)tMatch.GetAttr ( tLoc ) );
 			break;
 
 		case SPH_ATTR_BIGINT:
-			dRows.PutNumAsString ( tMatch.GetAttr ( tLoc ) );
+			dRows.PutInt64 ( tMatch.GetAttr ( tLoc ) );
 			break;
 
 		case SPH_ATTR_UINT64:
-			dRows.PutNumAsString ( (uint64_t)tMatch.GetAttr ( tLoc ) );
+			dRows.PutUint64 ( (uint64_t)tMatch.GetAttr ( tLoc ) );
 			break;
 
 		case SPH_ATTR_FLOAT:
-			dRows.PutFloatAsString ( tMatch.GetAttrFloat ( tLoc ) );
+			dRows.PutFloat ( tMatch.GetAttrFloat ( tLoc ) );
 			break;
 
 		case SPH_ATTR_DOUBLE:
-			dRows.PutDoubleAsString ( tMatch.GetAttrDouble ( tLoc ) );
+			dRows.PutDouble ( tMatch.GetAttrDouble ( tLoc ) );
 			break;
 
+			// fixme! all multivalues (vectors, mva, etc) are not compatible with binary proto
 		case SPH_ATTR_INT64SET:
 		case SPH_ATTR_UINT32SET:
 			{
@@ -800,6 +830,22 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 				dStr << "(";
 				sphPackedFloatVec2Str ( (const BYTE*)tMatch.GetAttr(tLoc), dStr );
 				dStr << ")";
+				dRows.PutArray ( dStr, false );
+			}
+			break;
+
+		case SPH_ATTR_FLOAT_VECTOR_ARRAY:
+			{
+				StringBuilder_c dStr;
+				sphFloatVecArray2Str ( sphGetBlobAttr ( tMatch, tLoc, pBlobPool ), dStr );
+				dRows.PutArray ( dStr, false );
+			}
+			break;
+
+		case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
+			{
+				StringBuilder_c dStr;
+				sphPackedFloatVecArray2Str ( (const BYTE*)tMatch.GetAttr(tLoc), dStr );
 				dRows.PutArray ( dStr, false );
 			}
 			break;
@@ -1203,7 +1249,7 @@ int ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchS
 	if ( HasImplicitGrouping ( tQuery ) )
 		return -1;
 
-	if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
+	if ( tQuery.HasKnn() )
 		return -1;
 
 	bool bDisableCutoff = dSorters.any_of ( []( auto * pSorter ){ return pSorter->IsCutoffDisabled(); } );

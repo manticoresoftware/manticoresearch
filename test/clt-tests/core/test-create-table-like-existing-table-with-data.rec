@@ -26,7 +26,7 @@ mysql -h0 -P9306 -e "SELECT * FROM table1;"
 mysql -h0 -P9306 -e 'CREATE TABLE IF NOT EXISTS `table2` LIKE `table1` WITH DATA;'
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table2; SHOW CREATE TABLE table2;"
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table2; SHOW CREATE TABLE table2 OPTION output_words = 'file';"
 ––– output –––
 +--------+------+
 | Table  | Type |
@@ -79,7 +79,7 @@ mysql -h0 -P9306 -e "SHOW TABLES;"
 mysql -h0 -P9306 -e 'CREATE TABLE if not exists `table3` LIKE `table2` WITH DATA;'
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table3; SHOW CREATE TABLE table3;"
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table3; SHOW CREATE TABLE table3 OPTION output_words = 'file';"
 ––– output –––
 +--------+------+
 | Table  | Type |
@@ -106,7 +106,7 @@ tag integer
 mysql -h0 -P9306 -e 'CREATE TABLE if NOT exists `table4` LIKE `table1` WITH DATA;'
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table4; SHOW CREATE TABLE table4;"
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table4; SHOW CREATE TABLE table4 OPTION output_words = 'file';"
 ––– output –––
 +--------+------+
 | Table  | Type |
@@ -129,7 +129,7 @@ tag integer
 mysql -h0 -P9306 -e 'CREATE TABLE if not EXISTS `table5` LIKE `table3` WITH DATA;'
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table5; SHOW CREATE TABLE table5;"
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table5; SHOW CREATE TABLE table5 OPTION output_words = 'file';"
 ––– output –––
 +--------+------+
 | Table  | Type |
@@ -158,7 +158,7 @@ tag integer
 mysql -h0 -P9306 -e 'create table iF NoT ExIstS `table7` like `table4` with data;'
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table7; SHOW CREATE TABLE table7;"
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table7; SHOW CREATE TABLE table7 OPTION output_words = 'file';"
 ––– output –––
 +--------+------+
 | Table  | Type |
@@ -183,7 +183,7 @@ tag integer
 mysql -h0 -P9306 -e 'CREATE TABLE IF NOT EXISTS `table_5` LIKE `table3` WITH DATA;'
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table_5; SHOW CREATE TABLE table_5;"
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table_5; SHOW CREATE TABLE table_5 OPTION output_words = 'file';"
 ––– output –––
 +---------+------+
 | Table   | Type |

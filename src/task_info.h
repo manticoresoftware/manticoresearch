@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -56,10 +56,10 @@ struct PublicThreadDesc_t
 	StringBuilder_c		m_sClientName	{" "};
 	StringBuilder_c		m_sDescription	{" "};
 	StringBuilder_c		m_sProto		{","};
+	CSphString			m_sPreParsedQuery;
 
-	int 				m_iDescriptionLimit = -1;	///< cb flag when collecting info with columns=N, avoid copy huge descriptions then
+	std::optional<int> 	m_iDescriptionLimit { std::nullopt };	///< cb flag when collecting info with columns=N, avoid copy huge descriptions then
 	int64_t				m_tmConnect		= -1; ///< when did the client connect?
-	std::unique_ptr<CSphQuery>	m_pQuery; /// currently running query, if not sphinxql
 	const char*			m_szCommand		= nullptr;	/// simple static SYSTEM, SELECT, UPDATE, etc. Used in show threads, crash dumping
 	int					m_iConnID		= -1; ///< current conn-id for this thread. For logging and tracking in mysql
 
@@ -73,7 +73,7 @@ struct PublicThreadDesc_t
 };
 
 // flatten info from thread. iCols make hint for huge descriptions to avoid full copy
-PublicThreadDesc_t GatherPublicThreadInfo ( const Threads::LowThreadDesc_t * pSrc, int iCols );
+PublicThreadDesc_t GatherPublicThreadInfo ( const Threads::LowThreadDesc_t * pSrc, std::optional<int> iCols );
 
 // internal helpers
 // we don't expect all possible taskinfos being located in this file,

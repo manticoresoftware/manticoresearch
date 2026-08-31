@@ -102,11 +102,11 @@ mysql -h0 -P9306 -e "CREATE TABLE test_no_from_specified (title1 TEXT, embedding
 ––– output –––
 ERROR 1064 (42000) at line 1: error adding table 'test_no_from_specified': 'from' setting empty for KNN attribute 'embedding_vector'
 ––– comment –––
-Test error case: FROM specified but empty
+Test case: FROM specified and empty (all text/string fields)
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_from_set_to_empty (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = '') " 2>&1
+mysql -h0 -P9306 -e "CREATE TABLE test_from_set_to_empty (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = '') "; echo $?
 ––– output –––
-ERROR 1064 (42000) at line 1: error adding table 'test_from_set_to_empty': 'from' setting empty for KNN attribute 'embedding_vector'
+0
 ––– comment –––
 Test multiple fields in FROM clause
 ––– input –––
@@ -143,3 +143,47 @@ Without FROM, auto-generation should not happen
 mysql -h0 -P9306 -e "INSERT INTO test_no_from (id, title1) VALUES(1, 'test title')"; echo $?
 ––– output –––
 0
+––– comment –––
+Append case: FROM='' should differ from each single-field FROM on the same multi-field document
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_from_empty_t1 (title1 TEXT, title2 TEXT, title3 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'title1') "; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_from_empty_t2 (title1 TEXT, title2 TEXT, title3 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'title2') "; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_from_empty_t3 (title1 TEXT, title2 TEXT, title3 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'title3') "; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_from_empty_all (title1 TEXT, title2 TEXT, title3 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = '') "; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_from_empty_t1 (id, title1, title2, title3) VALUES(1, 'neural ranking transformers', 'fresh orange citrus', 'race car tire pressure')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_from_empty_t2 (id, title1, title2, title3) VALUES(1, 'neural ranking transformers', 'fresh orange citrus', 'race car tire pressure')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_from_empty_t3 (id, title1, title2, title3) VALUES(1, 'neural ranking transformers', 'fresh orange citrus', 'race car tire pressure')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_from_empty_all (id, title1, title2, title3) VALUES(1, 'neural ranking transformers', 'fresh orange citrus', 'race car tire pressure')"; echo $?
+––– output –––
+0
+––– comment –––
+Compare vector checksums for all FROM variants; all 4 should be different for this mixed-content document
+––– input –––
+MD5_T1=$(mysql -h0 -P9306 -e "SELECT embedding_vector FROM test_from_empty_t1 WHERE id=1" | grep -v embedding_vector | md5sum | awk '{print $1}'); MD5_T2=$(mysql -h0 -P9306 -e "SELECT embedding_vector FROM test_from_empty_t2 WHERE id=1" | grep -v embedding_vector | md5sum | awk '{print $1}'); MD5_T3=$(mysql -h0 -P9306 -e "SELECT embedding_vector FROM test_from_empty_t3 WHERE id=1" | grep -v embedding_vector | md5sum | awk '{print $1}'); MD5_ALL=$(mysql -h0 -P9306 -e "SELECT embedding_vector FROM test_from_empty_all WHERE id=1" | grep -v embedding_vector | md5sum | awk '{print $1}'); echo "md5_t1: $MD5_T1"; echo "md5_t2: $MD5_T2"; echo "md5_t3: $MD5_T3"; echo "md5_all: $MD5_ALL"; UCOUNT=$(printf "%s\n%s\n%s\n%s\n" "$MD5_T1" "$MD5_T2" "$MD5_T3" "$MD5_ALL" | sort -u | wc -l); if [ "$UCOUNT" -eq 4 ]; then echo "SUCCESS: all FROM variants produce different vectors"; else echo "FAIL: expected 4 different vectors, got $UCOUNT"; fi
+––– output –––
+md5_t1: #!/[a-f0-9]{32}/!#
+md5_t2: #!/[a-f0-9]{32}/!#
+md5_t3: #!/[a-f0-9]{32}/!#
+md5_all: #!/[a-f0-9]{32}/!#
+SUCCESS: all FROM variants produce different vectors

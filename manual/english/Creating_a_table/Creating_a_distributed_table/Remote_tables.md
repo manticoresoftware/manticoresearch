@@ -10,7 +10,7 @@ agent = address1 [ | address2 [...] ][:table-list]
 agent = address1[:table-list [ | address2[:table-list [...] ] ] ]
 ```
 
-`agent` directive declares the remote agents that are searched each time the enclosing distributed table is searched. These agents are essentially pointers to networked tables. The value specified includes the address and can also include multiple alternatives (agent mirrors) for either the address only or the address and table list.
+`agent` directive declares the remote agents that are searched each time the enclosing distributed table is searched. These agents are essentially pointers to networked tables. The value specified includes the address and can also include multiple alternatives (agent mirrors) for either the address only or the address and table list. See [Mirroring](../../Creating_a_cluster/Remote_nodes/Mirroring.md) for mirror syntax and [Load balancing](../../Creating_a_cluster/Remote_nodes/Load_balancing.md) for how mirrored agents are selected.
 
 The address specification must be one of the following:
 
@@ -19,7 +19,7 @@ address = hostname[:port] # eg. server2:9312
 address = /absolute/unix/socket/path # eg. /var/run/manticore2.sock
 ```
 
-The `hostname` is the remote host name, `port` is the remote TCP port number, `table-list` is a comma-separated list of table names, and square brackets [] indicate an optional clause.
+The `hostname` is the remote host name, `port` is the remote TCP port number, `table-list` is a comma-separated list of table names, and square brackets [] indicate an optional clause. For TCP connections this port is the remote agent/API port (typically `9312`), not the MySQL port (`9306`).
 
 If the table name is omitted, it is assumed to be the same table as the one where this line is defined. In other words, when defining agents for the 'mycoolindex' distributed table, you can simply point to the address, and it will be assumed that you are querying the mycoolindex table on the agent's endpoints.
 
@@ -27,8 +27,12 @@ If the port number is omitted, it is assumed to be **9312**. If it is defined bu
 
 You can point each agent to one or more remote tables residing on one or more networked servers with no restrictions. This enables several different usage modes:
 * Sharding over multiple agent servers and creating an arbitrary cluster topology
-* Sharding over multiple agent servers mirrored for high availability and load balancing purposes
+* Sharding over multiple agent servers mirrored for high availability and load balancing purposes (see [Mirroring](../../Creating_a_cluster/Remote_nodes/Mirroring.md) and [Load balancing](../../Creating_a_cluster/Remote_nodes/Load_balancing.md))
 * Sharding within localhost to utilize multiple cores (however, it is simpler just to use multiple local tables)
+
+To avoid confusion:
+* One `agent='host1|host2:table'` entry means one remote shard with mirrored backends.
+* Multiple `agent='...'` entries mean multiple remote shards.
 
 All agents are searched in parallel. The index list is passed verbatim to the remote agent. The exact way that list is searched within the agent (i.e. sequentially or in parallel) depends solely on the agent's configuration (see the [threads](../../Server_settings/Searchd.md#threads) setting). The master has no remote control over this.
 
@@ -49,7 +53,7 @@ SELECT * FROM user LIMIT 0,1000
 ```
 
 Additionally, the value can specify options for each individual agent, such as:
-* [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) - `random`, `roundrobin`, `nodeads`, `noerrors` (overrides the global `ha_strategy` setting for the particular agent)
+* [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) - `random`, `roundrobin`, `nodeads`, `noerrors` (overrides the global `ha_strategy` setting for the particular agent; see also [Mirroring](../../Creating_a_cluster/Remote_nodes/Mirroring.md))
 * `conn` - `pconn`, persistent (equivalent to setting `agent_persistent` at the table level)
 * `blackhole` `0`,`1` (identical to the [agent_blackhole](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_blackhole) setting for the agent)
 * `retry_count` an integer value (corresponding to [agent_retry_count](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_retry_count) , but the provided value will not be multiplied by the number of mirrors)
@@ -85,6 +89,98 @@ agent = test:9312|box2:9312|box3:9312:any2[retry_count=2]
 agent = test:9312|box2:9312:any2[retry_count=2,conn=pconn,ha_strategy=noerrors]
 ```
 
+## Defining remote tables
+
+<!-- example remote-table-definition -->
+Remote tables can be defined either in a config file or with SQL on a distributed table.
+
+<!-- intro -->
+##### Config:
+
+<!-- request Config -->
+```ini
+table products_dist {
+  type  = distributed
+  agent = 127.0.0.1:9312|127.0.0.1:9313:products
+}
+```
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+```sql
+CREATE TABLE products_dist type='distributed'
+  agent='127.0.0.1:9312:products|127.0.0.1:9313:products';
+```
+<!-- end -->
+
+<!-- example remote-table-setup -->
+Assume the remote tables already exist, for example:
+
+<!-- intro -->
+##### SQL on remote node 1:
+
+<!-- request SQL -->
+```sql
+CREATE TABLE products(id bigint, title text, node string);
+INSERT INTO products(id,title,node) VALUES(1,'same title','node1');
+```
+
+<!-- intro -->
+##### SQL on remote node 2:
+
+<!-- request SQL -->
+```sql
+CREATE TABLE products(id bigint, title text, node string);
+INSERT INTO products(id,title,node) VALUES(1,'same title','node2');
+```
+
+<!-- intro -->
+##### SQL on the master:
+
+<!-- request SQL -->
+```sql
+CREATE TABLE products_dist type='distributed'
+  agent='127.0.0.1:9312:products|127.0.0.1:9313:products'
+  ha_strategy='roundrobin'
+  agent_connect_timeout='200ms'
+  agent_query_timeout='500ms'
+  mirror_retry_count='2';
+```
+<!-- end -->
+
+<!-- example remote-table-sql-usage-and-verification -->
+Use the distributed table from the master exactly like any other table, then verify how it was stored.
+
+<!-- intro -->
+##### SQL request:
+
+<!-- request SQL -->
+```sql
+SELECT id, title, node FROM products_dist;
+SHOW CREATE TABLE products_dist;
+```
+
+<!-- intro -->
+##### SQL response:
+
+<!-- response SQL -->
+```sql
++------+------------+-------+
+| id   | title      | node  |
++------+------------+-------+
+|    1 | same title | node1 |
++------+------------+-------+
+
++---------------+----------------------------------------------------------------------------------+
+| Table         | Create Table                                                                     |
++---------------+----------------------------------------------------------------------------------+
+| products_dist | CREATE TABLE products_dist type='distributed' agent='127.0.0.1:9312:products|... |
++---------------+----------------------------------------------------------------------------------+
+```
+<!-- end -->
+
 For optimal performance, it's recommended to place remote tables that reside on the same server within the same record. For instance, instead of:
 ```ini
 agent = remote:9312:idx1
@@ -97,9 +193,15 @@ agent = remote:9312:idx1,idx2
 
 ## agent_persistent
 
+<!-- example agent-persistent -->
+<!-- intro -->
+##### Config:
+
+<!-- request Config -->
 ```ini
 agent_persistent = remotebox:9312:index2
 ```
+<!-- end -->
 
 The `agent_persistent` option allows you to persistently connect to an agent, meaning the connection will not be dropped after a query is executed. The syntax for this directive is the same as the `agent` directive. However, instead of opening a new connection to the agent for each query and then closing it, the master will keep a connection open and reuse it for subsequent queries. The maximum number of persistent connections per agent host is defined by the [persistent_connections_limit](../../Server_settings/Searchd.md#persistent_connections_limit) option in the searchd section.
 
@@ -109,69 +211,182 @@ Using persistent master-agent connections reduces TCP port pressure and saves ti
 
 ## agent_blackhole
 
-```ini
-agent_blackhole = testbox:9312:testindex1,testindex2
-````
-
+<!-- example agent-blackhole -->
 The `agent_blackhole` directive allows you to forward queries to remote agents without waiting for or processing their responses. This is useful for debugging or testing production clusters, as you can set up a separate debugging/testing instance and forward requests to it from the production master (aggregator) instance, without interfering with production work. The master searchd will attempt to connect to the blackhole agent and send queries as normal, but will not wait for or process any responses, and all network errors on the blackhole agents will be ignored. The format of the value is identical to that of the regular `agent` directive.
 
-## agent_connect_timeout
+<!-- intro -->
+##### Config:
 
+<!-- request Config -->
 ```ini
-agent_connect_timeout = 300
-````
+agent_blackhole = testbox:9312:testindex1,testindex2
+```
+<!-- end -->
 
-The `agent_connect_timeout` directive defines the timeout for connecting to remote agents. By default, the value is assumed to be in milliseconds, but can have [another suffix](../../Server_settings/Special_suffixes.md)). The default value is 1000 (1 second).
+## Related options and supported scopes
 
-When connecting to remote agents, `searchd` will wait for this amount of time at most to complete the connection successfully. If the timeout is reached but the connection has not been established, and `retries` are enabled, a retry will be initiated.
+The options related to remote agents are not all supported at the same scope. This page focuses on remote-table and per-agent semantics. For mirror-specific behavior, see [Mirroring](../../Creating_a_cluster/Remote_nodes/Mirroring.md) and [Load balancing](../../Creating_a_cluster/Remote_nodes/Load_balancing.md). For full daemon-level behavior, use the linked reference pages in [Searchd settings](../../Server_settings/Searchd.md).
 
-## agent_query_timeout
+| Option | Instance-wide | Per table | Per query | Per agent | Full details |
+|---|---|---|---|---|---|
+| `ha_strategy` | yes | yes | no | yes | [Load balancing](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy), [Remote tables: agent](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) |
+| `agent_connect_timeout` | yes | yes | no | no | [Searchd: agent_connect_timeout](../../Server_settings/Searchd.md#agent_connect_timeout) |
+| `agent_query_timeout` | yes | yes | yes | no | [Searchd: agent_query_timeout](../../Server_settings/Searchd.md#agent_query_timeout) |
+| `agent_retry_count` / `mirror_retry_count` / `retry_count` | yes (`agent_retry_count`) | yes (`agent_retry_count` or `mirror_retry_count`) | yes (`OPTION retry_count=...`) | yes (`agent=...[retry_count=...]`) | [Searchd: agent_retry_count](../../Server_settings/Searchd.md#agent_retry_count), [Remote tables: mirror_retry_count](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#mirror_retry_count), [Remote tables: agent](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) |
+| `agent_retry_delay` | yes | no | yes | no | [Searchd: agent_retry_delay](../../Server_settings/Searchd.md#agent_retry_delay) |
+| per-agent `conn` | no | no | no | yes | [Remote tables: agent](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) |
+| per-agent `blackhole` | no | no | no | yes | [Remote tables: agent_blackhole](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_blackhole) |
 
+### agent_connect_timeout
+
+<!-- example remote-agent-connect-timeout -->
+`agent_connect_timeout` defines how long Manticore waits to establish a connection to a remote agent. It is supported as an instance-wide default and per distributed table. Full daemon-level details are in [Searchd: agent_connect_timeout](../../Server_settings/Searchd.md#agent_connect_timeout).
+
+<!-- intro -->
+##### Config:
+
+<!-- request Config -->
+```ini
+agent_connect_timeout = 300ms
+```
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+```sql
+CREATE TABLE products_dist type='distributed'
+  agent='127.0.0.1:9312:products|127.0.0.1:9313:products'
+  agent_connect_timeout='300ms';
+```
+<!-- end -->
+
+### agent_query_timeout
+
+<!-- example remote-agent-query-timeout -->
+`agent_query_timeout` defines how long Manticore waits for a connected remote agent to finish the query. It is supported as an instance-wide default, per distributed table, and per query as `OPTION agent_query_timeout=...`. Full daemon-level details are in [Searchd: agent_query_timeout](../../Server_settings/Searchd.md#agent_query_timeout).
+
+If `agent_query_timeout` is reached, the query is not retried automatically; a warning is produced instead. Behavior is also affected by [reset_network_timeout_on_packet](../../Server_settings/Searchd.md#reset_network_timeout_on_packet).
+
+<!-- intro -->
+##### Config:
+
+<!-- request Config -->
 ```ini
 agent_query_timeout = 10000 # our query can be long, allow up to 10 sec
 ```
 
-The `agent_query_timeout` sets the amount of time that searchd will wait for a remote agent to complete a query. The default value is 3000 milliseconds (3 seconds), but can be `suffixed` to indicate a different unit of time.
+<!-- intro -->
+##### SQL:
 
-After establishing a connection, `searchd` will wait for a maximum of agent_query_timeout for remote queries to complete. Note that this timeout is separate from the `agent_connection_timeout` and the total possible delay caused by a remote agent will be the sum of both values. If the agent_query_timeout is reached, the query will **not** be retried, instead, a warning will be produced.
+<!-- request SQL -->
+```sql
+CREATE TABLE products_dist type='distributed'
+  agent='127.0.0.1:9312:products|127.0.0.1:9313:products'
+  agent_query_timeout='10000';
+```
 
-Note that behavior is also affected by [reset_network_timeout_on_packet](../../Server_settings/Searchd.md#reset_network_timeout_on_packet)
+<!-- intro -->
+##### SQL query option:
 
-## agent_retry_count
+<!-- request SQL -->
+```sql
+SELECT * FROM products_dist OPTION agent_query_timeout=750;
+```
+<!-- end -->
 
-The `agent_retry_count` is an integer that specifies how many times Manticore will attempt to connect and query remote agents in a distributed table before reporting a fatal query error. It works similarly to `agent_retry_count` defined in the "searchd" section of the configuration file but applies specifically to the table.
+### agent_retry_count
 
-## mirror_retry_count
+`agent_retry_count` specifies how many times Manticore will attempt to connect to and query remote agents in a distributed table before reporting a fatal query error. The name varies by scope: use 
+- `agent_retry_count` as the instance-wide setting, 
+- `agent_retry_count` or its alias `mirror_retry_count` on a distributed table, 
+- `OPTION retry_count=...` per query, 
+- and `[retry_count=...]` inside an individual `agent=...` declaration. 
 
-`mirror_retry_count` serves the same purpose as `agent_retry_count`.  If both values are provided, `mirror_retry_count` will take precedence, and a warning will be raised.
+Full daemon-level details are in [Searchd: agent_retry_count](../../Server_settings/Searchd.md#agent_retry_count).
 
-## Instance-wide options
+If you use **agent mirrors**, the server selects a different mirror before each connection attempt according to [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy), and `agent_retry_count` is aggregated across mirrors.
 
-The following options manage the overall behavior of remote agents and are specified in **the searchd section of the configuration file**. They set default values for the entire Manticore instance.
+### mirror_retry_count
 
-* `agent_connect_timeout` - default value for the `agent_connect_timeout` parameter.
-* `agent_query_timeout` - default value for the `agent_query_timeout` parameter. This can also be overridden on a per-query basis using the same setting name in a distributed (network) table.
-* `agent_retry_count` is an integer that specifies the number of times Manticore will attempt to connect and query remote agents in a distributed table before reporting a fatal query error. The default value is 0 (i.e. no retries). This value can also be specified on a per-query basis using the 'OPTION retry_count=XXX' clause. If a per-query option is provided, it will take precedence over the value specified in the config.
+<!-- example remote-agent-retry-count -->
+`mirror_retry_count` serves the same purpose as `agent_retry_count`, but only as a distributed-table setting. If both values are provided, `mirror_retry_count` takes precedence.
 
-Note, that if you use **agent mirrors** in the definition of your distributed table, the server will select a different mirror before each connection attempt according to the specified [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) specified. In this case the [agent_retry_count](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_retry_count) will be aggregated for all mirrors in the set.
+<!-- intro -->
+##### Config:
 
-For example, if you have 10 mirrors and set `agent_retry_count=5`, he server will attempt up to 50 retries (assuming an average of 5 tries per every 10 mirrors). In case of the option `ha_strategy = roundrobin`, it will actually be exactly 5 tries per mirror.
+<!-- request Config -->
+```ini
+agent_retry_count = 2
+```
 
-At the same time, the value provided as the [retry_count](../../Searching/Options.md#retry_count) option in the `agent` definition serves as an absolute limit. In other words, the `[retry_count=2]` option in the agent definition means there will be a maximum of 2 tries, regardless of whether there is 1 or 10 mirrors in the line.
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+```sql
+CREATE TABLE products_dist type='distributed'
+  agent='127.0.0.1:9312:products|127.0.0.1:9313:products'
+  mirror_retry_count='2';
+```
+
+<!-- intro -->
+##### SQL query option:
+
+<!-- request SQL -->
+```sql
+SELECT * FROM products_dist OPTION retry_count=1;
+```
+
+<!-- intro -->
+##### Config per-agent cap:
+
+<!-- request Config -->
+```ini
+table products_dist {
+  type = distributed
+  agent = 127.0.0.1:9312|127.0.0.1:9313:products[retry_count=2]
+}
+```
+<!-- end -->
 
 ### agent_retry_delay
 
-The `agent_retry_delay` is an integer value that determines the amount of time, in milliseconds, that Manticore Search will wait before retrying to query a remote agent in case of a failure. This value can be specified either globally in the searchd configuration or on a per-query basis using the `OPTION retry_delay=XXX` clause. If both options are provided, the per-query option will take precedence over the global one. The default value is 500 milliseconds (0.5 seconds). This option is only relevant if agent_retry_count or the per-query `OPTION retry_count` are non-zero.
+<!-- example remote-agent-retry-delay -->
+`agent_retry_delay` defines the delay between retry attempts. It is supported as an instance-wide default and per query as `OPTION retry_delay=...`, but not per distributed table. Full daemon-level details are in [Searchd: agent_retry_delay](../../Server_settings/Searchd.md#agent_retry_delay).
+
+This option is only relevant when retries are enabled through `agent_retry_count` or `OPTION retry_count=...`.
+
+<!-- intro -->
+##### Config:
+
+<!-- request Config -->
+```ini
+agent_retry_delay = 500ms
+```
+
+<!-- intro -->
+##### SQL query option:
+
+<!-- request SQL -->
+```sql
+SELECT * FROM products_dist OPTION retry_count=2, retry_delay=300;
+```
+<!-- end -->
 
 ### client_timeout
 
-The `client_timeout` option sets the maximum waiting time between requests when using persistent connections. This value is expressed in seconds or with a time suffix. The default value is 5 minutes.
+<!-- example client-timeout -->
+The `client_timeout` option sets the maximum waiting time between requests when using persistent connections. This is an instance-wide `searchd` setting, not a per-table option. This value is expressed in seconds or with a time suffix. The default value is 5 minutes. Full daemon-level details are in [Searchd: client_timeout](../../Server_settings/Searchd.md#client_timeout).
 
-Example:
+<!-- intro -->
+##### Config:
 
+<!-- request Config -->
 ```ini
 client_timeout = 1h
 ```
+<!-- end -->
 
 ### hostname_lookup
 

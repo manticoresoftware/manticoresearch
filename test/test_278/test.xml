@@ -5,6 +5,7 @@
 <requires>
 <force-rt/>
 <http/>
+<sphinxql_keep_null/>
 </requires>
 
 <skip_indexer/>
@@ -46,6 +47,9 @@ select * from join2 order by id asc;
 
 <!-- plain join -->
 select id, join2.name from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+
+<!-- plain join with left table prefix in SELECT (allowed) -->
+select join1.id, join2.name from join1 inner join join2 on join1.string_id=join2.id order by join1.id asc;
 
 <!-- plain join -->
 select id from join1 inner join join2 on join1.string_id=join2.id order by id asc;
@@ -252,6 +256,8 @@ insert into t values(1, 'abc');
 insert into t2 values(1, 'abc', 1),(2, 'def', 1);
 
 select * from t inner join t2 on t.id = t2.t_id where t2.id = 1 or t2.id = 2;
+select * from t inner join t2 on t.id = t2.t_id where id&lt;2 and ( t2.id = 1 or t2.id = 2 );
+select * from t inner join t2 on t.id = t2.t_id where id&lt;1 and ( t2.id = 1 or t2.id = 2 );
 
 drop table t;
 drop table t2;
@@ -388,6 +394,12 @@ select id from join1 inner join join2 on join1.id = join2.id where join2.j.b is 
 select id from join1 inner join join2 on join1.id = join2.id where join2.j.table='join2' order by id asc;
 select id from join1 inner join join2 on join1.id = join2.id where join2.j.table!='join2' order by id asc;
 
+<!-- uppercase table name -->
+select * from JOIN1 left join join2 on JOIN1.id = join2.id where join2.name = 'name1' order by id asc;
+select * from join1 left join JOIN2 on join1.id = JOIN2.id where join2.name = 'name1' order by id asc;
+select * from join1 left join JOIN2 on join1.id = JOIN2.id where JOIN2.name = 'name1' order by id asc;
+select * from JOIN1 left join JOIN2 on JOIN1.id = JOIN2.id where JOIN2.name = 'name1' order by id asc;
+select * from JoIn1 left join jOiN2 on jOiN1.id = JoiN2.id where jOIn2.name = 'name1' order by id asc;
 </sphinxql>
 
 <query endpoint="json/search">
@@ -411,6 +423,37 @@ select id from join1 inner join join2 on join1.id = join2.id where join2.j.table
           "right":
           {
             "table": "join2",
+            "field": "id"
+          }
+        }
+      ]
+    }
+  ]
+}
+</query>
+
+<!-- mixed-case table names in JSON join -->
+<query endpoint="json/search">
+{
+  "table": "JoIn1",
+  "query": { "query_string": "title1 | title2" },
+  "join":
+  [
+    {
+      "type": "inner",
+      "table": "jOiN2",
+      "on":
+      [
+        {
+          "left":
+          {
+            "table": "JOIN1",
+            "field": "string_id"
+          },
+          "operator": "eq",
+          "right":
+          {
+            "table": "Join2",
             "field": "id"
           }
         }
@@ -910,7 +953,135 @@ select id, title, join2.title, join2.tag as sort from join1 inner join join2 on 
 drop table join1;
 drop table join2;
 
+<!-- arbitrary filters in JOIN ON clause -->
+create table join1 ( id bigint, title text, string_id integer );
+insert into join1 values ( 1, 'doc1', 1 );
+insert into join1 values ( 2, 'doc2', 1 );
+insert into join1 values ( 3, 'doc3', 2 );
+insert into join1 values ( 4, 'doc4', 2 );
+insert into join1 values ( 5, 'doc5', 3 );
+insert into join1 values ( 6, 'doc6', 3 );
+insert into join1 values ( 7, 'doc7', 4 );
+insert into join1 values ( 8, 'doc8', 4 );
+insert into join1 values ( 9, 'doc9', 5 );
+insert into join1 values ( 10, 'doc10', 5 );
+
+create table join2 ( id bigint, title text, tag integer );
+insert into join2 values ( 1, 'str1', 10 );
+insert into join2 values ( 2, 'str2', 1 );
+insert into join2 values ( 3, 'str3', 560 );
+insert into join2 values ( 4, 'str4', 2 );
+
+select * from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+select * from join1 inner join join2 on join1.string_id=join2.id and join2.id in (2,3) order by id asc;
+select * from join1 inner join join2 on join1.string_id=join2.id and join2.id in (2,3) and join2.tag&lt;10 order by id asc;
+
+select * from join1 left join join2 on join1.string_id=join2.id order by id asc;
+select * from join1 left join join2 on join1.string_id=join2.id and join2.id in (2,3) order by id asc;
+select * from join1 left join join2 on join1.string_id=join2.id and join2.id in (2,3) and join2.tag&lt;10 order by id asc;
+
+drop table join1;
+drop table join2;
+
+<!-- join on json string with explicit cast -->
+create table join_json_l ( id bigint, j json );
+create table join_json_r ( id bigint, j json );
+insert into join_json_l values ( 1, '{"s":"string", "i": 1}' );
+insert into join_json_r values ( 1, '{"s":"string", "i": 1}' );
+select * from join_json_l inner join join_json_r on string(join_json_l.j.s)=join_json_r.j.s;
 </sphinxql>
+
+<query endpoint="json/search">
+{
+  "table": "join_json_l",
+  "join": [
+    {
+      "type": "inner",
+      "table": "join_json_r",
+      "on": [
+        {
+          "left": {
+            "table": "join_json_l",
+            "field": "j.s",
+            "type": "string"
+          },
+          "operator": "eq",
+          "right": {
+            "table": "join_json_r",
+            "field": "j.s"
+          }
+        }
+      ]
+    }
+  ]
+}
+</query>
+
+
+<sphinxql>
+drop table join_json_r;
+drop table join_json_l;
+</sphinxql>
+
+<sphinxql>
+create table t1;
+create table t2(i int);
+insert into t1 (id) values(1);
+insert into t2 values(1, 1);
+
+<!-- alias from joined attr -->
+select *, i al, (i * 0.01) pct from t2 where pct > 0.0;
+select t2.i al, (al * 0.1) pct from t1 join t2 on t1.id = t2.id where pct > 0.0;
+select t2.i * 0.1 pct from t1 join t2 on t1.id = t2.id where pct > 0.0;
+
+select *, t2.i * 0.1 pct from t1 join t2 on t1.id = t2.id where pct>0.0;
+select t2.i al, (al * 0.1) pct from t1 join t2 on t1.id = t2.id where pct > 0.0;
+select *, t2.i al, (al * 0.1) pct from t1 join t2 on t1.id = t2.id where pct > 0.0;
+
+<!-- chained aliases from joined attr -->
+select t2.i al, al+1 b, b*2 c from t1 join t2 on t1.id = t2.id where c > 0;
+
+<!-- multiple aliases from joined attr in one expression -->
+select t2.i al, (al + al) doubled from t1 join t2 on t1.id = t2.id where doubled > 0;
+
+drop table if exists t1;
+drop table if exists t2;
+
+<!-- regression for #4633: failed multi-facet JOIN setup must not double-delete sorters -->
+create table issue4633_left ( ref_id uint );
+create table issue4633_right ( id bigint, m multi, price float );
+
+insert into issue4633_left values (1, 101), (2, 102), (3, 101);
+insert into issue4633_right values (101, (1,2), 4700), (102, (2,3), 4900);
+
+select id from issue4633_left
+left join issue4633_right on issue4633_left.ref_id = issue4633_right.id
+where issue4633_right.price >= '4500' and issue4633_right.price &lt;= '5000'
+option max_matches = 1000
+facet issue4633_right.m order by count(*) desc limit 1000
+facet issue4633_right.id order by count(*) desc limit 1000;;
+
+select 1 as searchd_survived;
+
+drop table issue4633_right;
+drop table issue4633_left;
+
+<!-- regression for #4788: LEFT JOIN string sort helper must stay internal -->
+drop table if exists issue4788_b;
+drop table if exists issue4788_a;
+create table issue4788_a ( n text, t string );
+create table issue4788_b ( x int, aid int );
+insert into issue4788_a ( id, n, t ) values ( 1, 'x', 'b' ), ( 2, 'y', 'a' );
+insert into issue4788_b ( id, x, aid ) values ( 1, 1, 1 ), ( 2, 2, 2 );
+
+select n, issue4788_b.x from issue4788_a left join issue4788_b on issue4788_b.aid=issue4788_a.id order by t asc;
+select n, issue4788_b.x from issue4788_a inner join issue4788_b on issue4788_b.aid=issue4788_a.id order by t asc;
+
+drop table issue4788_b;
+drop table issue4788_a;
+</sphinxql>
+
+
 </queries>
 
 </test>

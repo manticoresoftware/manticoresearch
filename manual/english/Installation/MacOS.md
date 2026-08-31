@@ -1,6 +1,12 @@
 # Installing Manticore on MacOS
 
-## Via Homebrew package manager
+### Quick install
+
+```bash
+curl https://manticoresearch.com | sh
+```
+
+## Manually via Homebrew package manager
 
 ```bash
 brew install manticoresoftware/tap/manticoresearch manticoresoftware/tap/manticore-extra
@@ -20,8 +26,8 @@ If you plan to use [indexer](../Creating_a_table/Local_tables/Plain_table.md) to
 If you prefer "Nightly" (development) versions do:
 ```bash
 brew tap manticoresoftware/tap-dev
-brew install manticoresoftware/tap-dev/manticoresearch-dev manticoresoftware/tap-dev/manticore-extra-dev manticoresoftware/tap-dev/manticore-language-packs
-brew services start manticoresearch-dev
+brew install manticoresoftware/tap-dev/manticore-dev
+brew services start manticore-dev
 ```
 
 <!--
@@ -54,4 +60,3 @@ Manticore configuration file is `./etc/manticoresearch/manticore.conf` after you
 -->
 
 <!-- proofread -->
-

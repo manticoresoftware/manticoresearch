@@ -15,7 +15,7 @@ In Manticore Search, there's an optimization that maintains the result set of th
 The facet values can originate from an attribute, a JSON property within a JSON attribute, or an expression. Facet values can also be aliased, but the **alias must be unique** across all result sets (main query result set and other facets result sets). The facet value is derived from the aggregated attribute/expression, but it can also come from another attribute/expression.
 
 ```sql
-FACET {expr_list} [BY {expr_list} ] [DISTINCT {field_name}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
+FACET {expr_list} [BY {expr_list}] [ALL FILTERS | FILTERS {expr_list} | EXCLUDE FILTERS {expr_list}] [ZEROES] [MODE {strict | auto | max}] [DISTINCT {field_name}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
 ```
 
 Multiple facet declarations must be separated by a whitespace.
@@ -44,6 +44,12 @@ where:
 * `field` value must contain the name of the attribute or expression being faceted
 * optional `size` specifies the maximum number of buckets to include in the result. When not specified, it inherits the main query's limit. More details can be found in the [Size of facet result](../Searching/Faceted_search.md#Size-of-facet-result) section.
 * optional `sort` specifies an array of attributes and/or additional properties using the same syntax as the ["sort" parameter in the main query](../Searching/Sorting_and_ranking.md#Sorting-via-JSON).
+* optional top-level `facet_filter_mode` controls how all aggregations inherit filters from the main query. Supported values are `strict`, `auto`, and `max`. This is the query-level setting in SQL (`OPTION facet_filter_mode='...'`) and the top-level setting in JSON.
+* optional per-aggregation `mode` overrides the inherited mode for that aggregation. Supported values are `strict`, `auto`, and `max`. This key is JSON-only and is not an alias for `facet_filter_mode`. In SQL, the equivalent per-facet override is the `MODE` keyword inside a `FACET` clause.
+* optional per-aggregation `filters` explicitly lists which main-query attribute filters should be applied to that aggregation. In SQL the equivalent clause is `FILTERS ...`.
+* optional per-aggregation `exclude_filters` explicitly lists which main-query attribute filters should not be applied to that aggregation. This key is JSON-only; in SQL the equivalent clause is `EXCLUDE FILTERS ...`.
+* optional per-aggregation `zeroes` enables zero-count buckets in `max` mode. In SQL, the equivalent per-facet keyword is `ZEROES`. If you want filtered visible counts in SQL `max` mode and also want broad zero-count buckets, use `OPTION facet_filter_mode='max' ... FACET ... ALL FILTERS ZEROES`.
+* `auto` and `max` facet result sets can include a `status` bucket marker. Returned values are `selected`, `available`, and `unavailable`.
 
 The result set will contain an `aggregations` node with the returned facets, where `key` is the aggregated value and `doc_count` is the aggregation count.
 
@@ -764,6 +770,18 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 Data can be faceted by aggregating another attribute or expression. For example if the documents contain both the brand id and name, we can return in facet the brand names, but aggregate the brand ids. This can be done by using `FACET {expr1} BY {expr2}`
 
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS facetdemo;
+CREATE TABLE facetdemo(price float, brand_id int, title text, brand_name string, property string, j json, categories multi);
+INSERT INTO facetdemo(price, brand_id, title, brand_name, property, j, categories) VALUES
+(306, 1, 'Product Ten Three', 'Brand One', 'Six_Ten', '{"prop1":66,"prop2":91,"prop3":"One"}', (10,11)),
+(400, 10, 'Product Three One', 'Brand Ten', 'Four_Three', '{"prop1":69,"prop2":19,"prop3":"One"}', (13,14)),
+(855, 1, 'Product Seven Two', 'Brand One', 'Eight_Seven', '{"prop1":63,"prop2":78,"prop3":"One"}', (10,11,12)),
+(31, 9, 'Product Four One', 'Brand Nine', 'Ten_Four', '{"prop1":79,"prop2":42,"prop3":"One"}', (12,13,14));
+--> 
+
 <!-- intro -->
 ##### SQL:
 
@@ -801,6 +819,70 @@ SELECT * FROM facetdemo FACET brand_name by brand_id;
 | Brand Seven |      965 |
 +-------------+----------+
 10 rows in set (0.00 sec)
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql -d "SELECT brand_name, brand_id FROM facetdemo FACET brand_name by brand_id"
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 20,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1500,
+        "_source": {
+          "brand_name": "Brand One",
+          "brand_id": 1
+        }
+      },
+      {
+        "_id": 2,
+        "_score": 1500,
+        "_source": {
+          "brand_name": "Brand Ten",
+          "brand_id": 10
+        }
+      },
+      ...
+      {
+        "_id": 20,
+        "_score": 1500,
+        "_source": {
+          "brand_name": "Brand Nine",
+          "brand_id": 9
+        }
+      },
+    ]
+  },
+  "aggregations": {
+    "brand_name": {
+      "buckets": [
+        {
+          "key": "Brand One",
+          "doc_count": 1013
+        },
+        {
+          "key": "Brand Ten",
+          "doc_count": 998
+        },
+        ...
+        {
+          "key": "Brand Seven",
+          "doc_count": 965
+        },
+      ]
+    }
+  }
+}
 ```
 
 <!-- end -->
@@ -1563,6 +1645,88 @@ FACET price_range AS price_range,brand_name ORDER BY brand_name asc;
 |            1 | Brand Four  |      195 |
 ...
 ```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT brand_name,INTERVAL(price,200,400,600,800) AS price_range FROM facetdemo FACET price_range AS price_range,brand_name ORDER BY brand_name asc"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "brand_name": {
+          "type": "string"
+        }
+      },
+      {
+        "price_range": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_name": "Brand One",
+        "price_range": 1
+      },
+      ...
+    ],
+    "total": 20,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "fprice_range": {
+          "type": "long"
+        }
+      },
+      {
+        "brand_name": {
+          "type": "string"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "fprice_range": 1,
+        "brand_name": "Brand Eight",
+        "count(*)": 197
+      },
+      {
+        "fprice_range": 4,
+        "brand_name": "Brand Eight",
+        "count(*)": 235
+      },
+      ...
+      {
+        "fprice_range": 0,
+        "brand_name": "Brand Five",
+        "count(*)": 183
+      },
+      {
+        "fprice_range": 1,
+        "brand_name": "Brand Four",
+        "count(*)": 195
+      }
+    ],
+    "total": 10,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 <!-- example histogram -->
@@ -1719,6 +1883,13 @@ key_of_the_bucket = interval * floor ( value / interval )
 The histogram parameter `calendar_interval` understands months to have different amounts of days.
 Unlike `calendar_interval`, the `fixed_interval` parameter uses a fixed number of units and does not deviate, regardless of where it falls on the calendar. However `fixed_interval` cannot process units such as months because a month is not a fixed quantity. Attempting to specify units like weeks or months for `fixed_interval` will result in an error.
 The accepted intervals are described in the [date_histogram](../Functions/Date_and_time_functions.md#DATE_HISTOGRAM%28%29) expression. By default, the buckets are returned as an array. The histogram argument `keyed` makes the response a dictionary with the bucket keys.
+
+In JSON queries, `date_histogram` also supports `time_zone` and `offset` with `calendar_interval`:
+
+- `time_zone` changes the timezone used to round calendar buckets and to format `key_as_string`. It must be an IANA timezone name supported by the server, for example `Asia/Novosibirsk`. Numeric UTC offsets such as `+03:00` are not supported.
+- `offset` shifts calendar bucket boundaries by a fixed amount before rounding. It can be a fixed-interval string using the same units as `fixed_interval`, for example `3h`, or an integer number of seconds, for example `10800`. The value can be prefixed with `+` or `-`.
+
+`time_zone` and `offset` are not supported with `fixed_interval`.
 
 <!-- request SQL -->
 
@@ -2218,6 +2389,223 @@ POST /search -d '
 
 <!-- end -->
 
+
+<!-- example Facet filter modes -->
+### Facet filter modes
+
+Before counting buckets for a facet, Manticore first decides which filters from the main query should be applied to that facet.
+
+Built-in modes:
+- `strict`
+  - apply all filters from the main query and keep regular facet output
+- `auto`
+  - apply all filters from the main query except filters on this same facet
+  - add a `status` marker; selected buckets are `selected`, sibling buckets are `available`
+- `max`
+  - count buckets from the broad base query and add a `status` marker for each bucket
+
+Manual overrides:
+- SQL `ALL FILTERS`
+  - apply all main-query filters to this facet
+- SQL `FILTERS ...` / JSON `filters`
+  - apply only the listed main-query filters to this facet
+- SQL `EXCLUDE FILTERS ...` / JSON `exclude_filters`
+  - apply all main-query filters except the listed ones to this facet
+
+Short version:
+- `strict` = apply everything
+- `auto` = apply everything except this facet's own filters + `status`
+- `max` = broad base-query counts + `status`
+- SQL `ALL FILTERS` = apply everything
+- SQL `FILTERS` = apply only these filters
+- JSON `exclude_filters` / SQL `EXCLUDE FILTERS` = apply everything except these filters
+
+Performance note:
+- `max` is the most expensive facet mode because it has to collect broad facet counts and strict/current availability metadata
+- on large datasets or queries with many facets, `max` can be much slower than `strict` or `auto`
+- use `auto` when the UI needs selectable buckets from the current filter scope, and `max` when it also needs broad bucket lists with unavailable values
+
+Example
+
+If the main query has:
+- `brand='nike'`
+- `color='red'`
+- `size='small'`
+
+and we calculate `FACET color`, then:
+
+- `strict`
+  - apply `brand + color + size`
+- `auto`
+  - apply `brand + size`
+  - and return selected color buckets with `status=selected` and sibling color buckets with `status=available`
+- `max`
+  - apply the broad base query without `brand`, `color`, or `size`
+  - and return color buckets with `status`
+- `filters=["brand"]`
+  - apply only `brand`
+- `exclude_filters=["size"]`
+  - apply `brand + color`
+
+<!-- intro -->
+##### SQL:
+
+Set the global default for the whole query:
+
+<!-- request SQL -->
+
+```sql
+SELECT id
+FROM products
+WHERE MATCH('sneakers') AND color_id=1 AND size_id=42
+OPTION facet_filter_mode='max'
+FACET color_id
+FACET size_id;
+```
+
+In this example:
+- `FACET color_id` counts buckets from the broad base query, without the `color_id=1` or `size_id=42` filters
+- `FACET size_id` counts buckets from the broad base query, without the `color_id=1` or `size_id=42` filters
+- the returned buckets also include `status` values
+
+You can also override the default rule for each facet:
+
+<!-- request SQL -->
+
+```sql
+SELECT id
+FROM products
+WHERE MATCH('sneakers') AND color_id=1 AND size_id=42 AND brand_id=7
+OPTION facet_filter_mode='max'
+FACET color_id ALL FILTERS
+FACET size_id
+FACET sku FILTERS color_id, size_id
+FACET brand_id EXCLUDE FILTERS color_id;
+```
+
+The per-facet SQL clauses mean:
+- `ALL FILTERS` — apply all main-query filters to this facet
+- `FILTERS color_id, size_id` — apply only `color_id` and `size_id` filters to this facet
+- `EXCLUDE FILTERS color_id` — apply all main-query filters except `color_id` to this facet
+- `MODE max` — override the inherited facet mode for this one SQL facet
+- `ZEROES` — in SQL `max` mode, keep buckets from the broader `max` bucket universe even when the visible facet count is `0`; in JSON the equivalent per-aggregation key is `"zeroes": true`
+
+The naming differs slightly between SQL and JSON:
+- SQL uses the query option `facet_filter_mode`, the per-facet keyword `MODE`, and the clauses `FILTERS` / `EXCLUDE FILTERS`
+- JSON uses the top-level key `facet_filter_mode`, the per-aggregation keys `mode` / `zeroes`, and the keys `filters` / `exclude_filters`
+
+There is no query-level `mode` key. Use `facet_filter_mode` for the inherited query/top-level default, `MODE` for one SQL facet, and `mode` for one JSON aggregation.
+
+`ZEROES` does not replace `MODE max`; it works with `max` mode. So if the query already has `OPTION facet_filter_mode='max'`, the SQL form is simply `FACET color_id ALL FILTERS ZEROES`. If the query default stays `strict` or `auto`, enable `max` on that one facet explicitly with `FACET color_id ALL FILTERS ZEROES MODE max`.
+
+These clauses override the filter scope that would otherwise come from `facet_filter_mode` or SQL `MODE`. For example, with `OPTION facet_filter_mode='max'`, `FACET color_id ALL FILTERS ZEROES` still emits `status`, its visible counts use all main-query filters, and `ZEROES` keeps broad `max` buckets that are missing from the filtered counts as `count(*) = 0` rows.
+
+In `auto` and `max` modes SQL facet results add a `status` column. `selected` means the bucket value is already present in a same-facet value filter. `available` means selecting the bucket can produce results; this includes sibling values that expand an existing same-facet filter. In `max` mode, `unavailable` means the bucket exists in the broad count scope but selecting it would produce no results. `max` is the most expensive mode, so on large datasets or facet-heavy queries you should enable it only when you need broad buckets with unavailable values.
+
+For example, with `size='small'` and `facet_filter_mode='max'`, a `FACET size` result can look like this. The `large` bucket is available because selecting it would expand the same facet filter to `size IN ('small','large')`:
+
+<!-- response SQL -->
+
+```sql
++-------+----------+-------------+
+| size  | count(*) | status      |
++-------+----------+-------------+
+| small |        1 | selected    |
+| large |        1 | available   |
++-------+----------+-------------+
+```
+
+A bucket from another facet can be `unavailable` when it is present in the broad `max` counts but has no rows under the current strict filter set.
+
+<!-- intro -->
+##### JSON:
+
+The same idea is available in the JSON API. Set the global default at the top level:
+
+<!-- request JSON -->
+
+```json
+POST /search -d '
+{
+  "table": "products",
+  "query": {
+    "bool": {
+      "must": [
+        { "equals": { "color_id": 1 } },
+        { "equals": { "size_id": 42 } }
+      ]
+    }
+  },
+  "facet_filter_mode": "max",
+  "aggs": {
+    "colors": {
+      "terms": { "field": "color_id" }
+    },
+    "sizes": {
+      "terms": { "field": "size_id" }
+    }
+  }
+}'
+```
+
+In `auto` and `max` modes, status-capable JSON bucket aggregations include a `status` field. As with SQL, `selected` means the bucket value is already present in a same-facet value filter, `available` means selecting the bucket can produce results, and `unavailable` means a `max` bucket would produce no results if selected. Same-facet sibling buckets are `available` because selecting them expands the filter. `max` is the most expensive facet mode, so use it with care on large datasets or when many facets are requested:
+
+<!-- response JSON -->
+
+```json
+"aggregations": {
+  "sizes": {
+    "buckets": [
+      { "key": "small", "doc_count": 1, "status": "selected" },
+      { "key": "large", "doc_count": 1, "status": "available" }
+    ]
+  }
+}
+```
+
+And override it per aggregation when needed:
+
+<!-- request JSON -->
+
+```json
+POST /search -d '
+{
+  "table": "products",
+  "query": {
+    "bool": {
+      "must": [
+        { "equals": { "color_id": 1 } },
+        { "equals": { "size_id": 42 } },
+        { "equals": { "brand_id": 7 } }
+      ]
+    }
+  },
+  "facet_filter_mode": "auto",
+  "aggs": {
+    "colors": {
+      "terms": { "field": "color_id" },
+      "mode": "strict"
+    },
+    "sku": {
+      "terms": { "field": "sku" },
+      "filters": ["color_id", "size_id"]
+    },
+    "brands": {
+      "terms": { "field": "brand_id" },
+      "exclude_filters": ["color_id"]
+    }
+  }
+}'
+```
+
+Notes:
+- in SQL, `MODE` overrides the query-level `facet_filter_mode` for one facet, and `ZEROES` keeps zero-count `max` buckets visible for that facet
+- in JSON, `mode` overrides the top-level `facet_filter_mode` for one aggregation, and `"zeroes": true` enables the same zero-count `max` buckets behavior for that aggregation
+- selected values are reported as `status=selected` for explicit value filters such as `=` and `IN`.
+- unsupported same-field filters such as ranges do not currently participate in selected-value detection.
+- facet-local filter scope supports conjunction-only attribute filters. Complex boolean filter trees are not rewritten per facet.
+
+<!-- end -->
 
 <!-- example Size -->
 ### Size of facet result
@@ -2823,7 +3211,7 @@ When using SQL, a search with facets returns multiple result sets. The MySQL cli
 <!-- example Performance -->
 ### Performance
 
-Internally, the `FACET` is a shorthand for executing a multi-query where the first query contains the main search query and the rest of the queries in the batch have each a clustering. As in the case of multi-query, the common query optimization can kick in for a faceted search, meaning the search query is executed only once, and the facets operate on the search query result, with each facet adding only a fraction of time to the total query time.
+Internally, the `FACET` is a shorthand for executing a multi-query where the first query contains the main search query and the rest of the queries in the batch have each a clustering. As in the case of multi-query, the common query optimization can kick in for a faceted search, meaning the search query is executed only once, and the facets operate on the search query result, with each facet adding only a fraction of time to the total query time. When all facets use the same filter scope, this optimization can still reuse the common result set. If you assign different filter scopes to different facets, Manticore may need to calculate those facet result sets separately.
 
 
 To check if the faceted search ran in an optimized mode, you can look in the [query log](../Logging/Query_logging.md), where all logged queries will contain an `xN` string, where `N` is the number of queries that ran in the optimized group. Alternatively, you can check the output of the [SHOW META](../Node_info_and_management/SHOW_META.md) statement, which will display a `multiplier` metric:
@@ -2870,6 +3258,131 @@ SHOW META LIKE 'multiplier';
 1 row in set (0.00 sec)
 ```
 
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT brand_name FROM facetdemo FACET brand_id FACET price FACET categories; SHOW META LIKE 'multiplier'"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "brand_name": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_name": "Brand One"
+      },
+      ...
+    ],
+    "total": 20,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "brand_id": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_id": 1,
+        "count(*)": 1013
+      },
+      ...
+    ],
+    "total": 20,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "price": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "price": 306,
+        "count(*)": 7
+      },
+      ...
+    ],
+    "total": 20,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "categories": {
+          "type": "string"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "categories": "10,11",
+        "count(*)": 2436
+      },
+      ...
+    ],
+    "total": 15,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "multiplier",
+        "Value": "4"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 <!-- proofread -->
-

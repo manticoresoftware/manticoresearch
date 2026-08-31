@@ -1,0 +1,306 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_http_bulk_remote; DROP TABLE IF EXISTS shard_http_bulk_remote_s0;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "DROP TABLE IF EXISTS shard_http_bulk_remote_s1; CREATE TABLE shard_http_bulk_remote_s1(id bigint, title text, gid uint);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE shard_http_bulk_remote_s0(id bigint, title text, gid uint); CREATE TABLE shard_http_bulk_remote(id bigint, title text, gid uint) type='shard' local='shard_http_bulk_remote_s0' agent='127.0.0.1:2312:shard_http_bulk_remote_s1'; SHOW TABLES LIKE 'shard_http_bulk_remote';"
+––– output –––
++------------------------+-------+
+| Table                  | Type  |
++------------------------+-------+
+| shard_http_bulk_remote | shard |
++------------------------+-------+
+––– input –––
+BULK_INSERT_CREATE=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '
+{"insert":{"index":"shard_http_bulk_remote","id":1,"doc":{"title":"remote-bulk-insert-1","gid":10}}}
+{"create":{"index":"shard_http_bulk_remote","id":3,"doc":{"title":"remote-bulk-create-3","gid":30}}}
+') ; printf '%s\n' "$BULK_INSERT_CREATE" | tr -d '\n' | sed -n 's/.*"created":\([0-9][0-9]*\).*"deleted":\([0-9][0-9]*\).*"updated":\([0-9][0-9]*\).*"errors":\([^,}]*\).*/created=\1 deleted=\2 updated=\3 errors=\4/p'
+––– output –––
+created=2 deleted=0 updated=0 errors=false
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_http_bulk_remote_s0 ORDER BY id ASC;"
+––– output –––
++------+----------------------+------+
+| id   | title                | gid  |
++------+----------------------+------+
+|    1 | remote-bulk-insert-1 |   10 |
++------+----------------------+------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT id, title, gid FROM shard_http_bulk_remote_s1 ORDER BY id ASC;"
+––– output –––
++------+----------------------+------+
+| id   | title                | gid  |
++------+----------------------+------+
+|    3 | remote-bulk-create-3 |   30 |
++------+----------------------+------+
+––– input –––
+BULK_INDEX_REPLACE=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '
+{"index":{"index":"shard_http_bulk_remote","id":1,"doc":{"title":"remote-bulk-index-1","gid":11}}}
+{"replace":{"index":"shard_http_bulk_remote","id":3,"doc":{"title":"remote-bulk-replace-3","gid":31}}}
+') ; printf '%s\n' "$BULK_INDEX_REPLACE" | tr -d '\n' | sed -n 's/.*"created":\([0-9][0-9]*\).*"deleted":\([0-9][0-9]*\).*"result":"\([^"]*\)".*"errors":\([^,}]*\).*/created=\1 deleted=\2 result=\3 errors=\4/p'
+––– output –––
+created=2 deleted=2 result=updated errors=false
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_http_bulk_remote_s0 ORDER BY id ASC;"
+––– output –––
++------+---------------------+------+
+| id   | title               | gid  |
++------+---------------------+------+
+|    1 | remote-bulk-index-1 |   11 |
++------+---------------------+------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT id, title, gid FROM shard_http_bulk_remote_s1 ORDER BY id ASC;"
+––– output –––
++------+-----------------------+------+
+| id   | title                 | gid  |
++------+-----------------------+------+
+|    3 | remote-bulk-replace-3 |   31 |
++------+-----------------------+------+
+––– input –––
+BULK_DELETE_ID=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '
+{"delete":{"index":"shard_http_bulk_remote","id":3}}
+') ; printf '%s\n' "$BULK_DELETE_ID" | tr -d '\n' | sed -n 's/.*"deleted":\([0-9][0-9]*\).*"errors":\([^,}]*\).*/deleted=\1 errors=\2/p'
+––– output –––
+deleted=1 errors=false
+––– input –––
+mysql -h0 -P2306 -e "SELECT COUNT(*) AS c FROM shard_http_bulk_remote_s1;"
+––– output –––
++------+
+| c    |
++------+
+|    0 |
++------+
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO shard_http_bulk_remote (id, title, gid) VALUES (3, 'remote-delete-3', 30), (6, 'local-delete-6', 60);"
+––– output –––
+––– input –––
+BULK_DELETE_IDS=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '
+{"delete":{"index":"shard_http_bulk_remote","id":[1,3]}}
+') ; printf '%s\n' "$BULK_DELETE_IDS" | tr -d '\n' | sed -n 's/.*"deleted":\([0-9][0-9]*\).*"errors":\([^,}]*\).*/deleted=\1 errors=\2/p'
+––– output –––
+deleted=2 errors=false
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_http_bulk_remote_s0 ORDER BY id ASC;"
+––– output –––
++------+----------------+------+
+| id   | title          | gid  |
++------+----------------+------+
+|    6 | local-delete-6 |   60 |
++------+----------------+------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT COUNT(*) AS c FROM shard_http_bulk_remote_s1;"
+––– output –––
++------+
+| c    |
++------+
+|    0 |
++------+
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO shard_http_bulk_remote (id, title, gid) VALUES (1, 'query-local-1', 80), (4, 'query-remote-4', 90);"
+––– output –––
+––– input –––
+BULK_DELETE_QUERY=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '
+{"delete":{"index":"shard_http_bulk_remote","query":{"range":{"gid":{"gte":80}}}}}
+') ; printf '%s\n' "$BULK_DELETE_QUERY" | tr -d '\n' | sed -n 's/.*"deleted":\([0-9][0-9]*\).*"errors":\([^,}]*\).*/deleted=\1 errors=\2/p'
+––– output –––
+deleted=2 errors=false
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_http_bulk_remote_s0 ORDER BY id ASC;"
+––– output –––
++------+----------------+------+
+| id   | title          | gid  |
++------+----------------+------+
+|    6 | local-delete-6 |   60 |
++------+----------------+------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT COUNT(*) AS c FROM shard_http_bulk_remote_s1;"
+––– output –––
++------+
+| c    |
++------+
+|    0 |
++------+
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO shard_http_bulk_remote (id, title, gid) VALUES (4, 'remote-update-id', 40);"
+––– output –––
+––– input –––
+BULK_UPDATE_ID=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '
+{"update":{"index":"shard_http_bulk_remote","id":4,"doc":{"gid":41}}}
+') ; printf '%s\n' "$BULK_UPDATE_ID" | tr -d '\n' | sed -n 's/.*"updated":\([0-9][0-9]*\).*"errors":\([^,}]*\).*/updated=\1 errors=\2/p'
+––– output –––
+updated=1 errors=false
+––– input –––
+mysql -h0 -P2306 -e "SELECT id, title, gid FROM shard_http_bulk_remote_s1 WHERE id=4;"
+––– output –––
++------+------------------+------+
+| id   | title            | gid  |
++------+------------------+------+
+|    4 | remote-update-id |   41 |
++------+------------------+------+
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO shard_http_bulk_remote (id, title, gid) VALUES (1, 'update-query-local', 10), (3, 'update-query-remote', 30);"
+––– output –––
+––– input –––
+BULK_UPDATE_QUERY=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '
+{"update":{"index":"shard_http_bulk_remote","doc":{"gid":77},"query":{"range":{"gid":{"gte":10,"lte":30}}}}}
+') ; printf '%s\n' "$BULK_UPDATE_QUERY" | tr -d '\n' | sed -n 's/.*"updated":\([0-9][0-9]*\).*"errors":\([^,}]*\).*/updated=\1 errors=\2/p'
+––– output –––
+updated=2 errors=false
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_http_bulk_remote_s0 WHERE id=1;"
+––– output –––
++------+--------------------+------+
+| id   | title              | gid  |
++------+--------------------+------+
+|    1 | update-query-local |   77 |
++------+--------------------+------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT id, title, gid FROM shard_http_bulk_remote_s1 WHERE id=3;"
+––– output –––
++------+---------------------+------+
+| id   | title               | gid  |
++------+---------------------+------+
+|    3 | update-query-remote |   77 |
++------+---------------------+------+
+––– input –––
+BULK_INSERT_DELETE=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '
+{"insert":{"index":"shard_http_bulk_remote","id":7,"doc":{"title":"mixed-remote-delete","gid":70}}}
+{"delete":{"index":"shard_http_bulk_remote","id":7}}
+') ; printf '%s\n' "$BULK_INSERT_DELETE" | tr -d '\n' | sed -n 's/.*"created":\([0-9][0-9]*\).*"deleted":\([0-9][0-9]*\).*"result":"\([^"]*\)".*"errors":\([^,}]*\).*/created=\1 deleted=\2 result=\3 errors=\4/p'
+––– output –––
+created=1 deleted=0 result=created errors=false
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_http_bulk_remote WHERE id=7;"
+––– output –––
++------+
+| c    |
++------+
+|    1 |
++------+
+––– input –––
+bash -c 'out=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '\''{"insert":{"index":"shard_http_bulk_remote","id":8,"doc":{"title":"mixed-remote-update","gid":80}}}
+{"update":{"index":"shard_http_bulk_remote","id":8,"doc":{"gid":81}}}
+'\'' | tr -d '\''\n'\''); items=$(printf "%s" "$out" | grep -o "\"bulk\"" | wc -l | tr -d " "); echo "$out" | grep -F "\"created\":1" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"updated\":1" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"errors\":false" >/dev/null || { echo "$out"; exit 1; }; echo "items=$items created=1 updated=1 errors=false";'
+––– output –––
+items=2 created=1 updated=1 errors=false
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_http_bulk_remote WHERE id=8;"
+––– output –––
++------+---------------------+------+
+| id   | title               | gid  |
++------+---------------------+------+
+|    8 | mixed-remote-update |   81 |
++------+---------------------+------+
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_http_bulk_remote_fail_id; DROP TABLE IF EXISTS shard_http_bulk_remote_fail_id_s0;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "DROP TABLE IF EXISTS shard_http_bulk_remote_fail_id_s1; CREATE TABLE shard_http_bulk_remote_fail_id_s1(id bigint, title text, gid uint);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE shard_http_bulk_remote_fail_id_s0(id bigint, title text, gid uint); CREATE TABLE shard_http_bulk_remote_fail_id(id bigint, title text, gid uint) type='shard' local='shard_http_bulk_remote_fail_id_s0' agent='127.0.0.1:2312:shard_http_bulk_remote_fail_id_s1'; INSERT INTO shard_http_bulk_remote_fail_id (id, title, gid) VALUES (1, 'fail-id-local', 10), (3, 'fail-id-remote', 30);"
+––– output –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/stop-searchd –––
+––– input –––
+bash -c 'out=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '\''{"delete":{"index":"shard_http_bulk_remote_fail_id","id":[1,3]}}'\'' | tr -d '\''\n'\''); echo "$out" | grep -F "\"bulk\":{\"error\"" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"status\":409" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"current_line\":1" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"skipped_lines\":1" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"errors\":true" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "remote table '\''shard_http_bulk_remote_fail_id_s1'\''" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "processed_ids=1" >/dev/null || { echo "$out"; exit 1; }; echo "bulk exact-id delete failure preserved processed_ids";'
+––– output –––
+bulk exact-id delete failure preserved processed_ids
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_http_bulk_remote_fail_id_s0;"
+––– output –––
++------+
+| c    |
++------+
+|    0 |
++------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT id, title, gid FROM shard_http_bulk_remote_fail_id_s1 ORDER BY id ASC;"
+––– output –––
++------+----------------+------+
+| id   | title          | gid  |
++------+----------------+------+
+|    3 | fail-id-remote |   30 |
++------+----------------+------+
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_http_bulk_remote_fail_query; DROP TABLE IF EXISTS shard_http_bulk_remote_fail_query_s0;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "DROP TABLE IF EXISTS shard_http_bulk_remote_fail_query_s1; CREATE TABLE shard_http_bulk_remote_fail_query_s1(id bigint, title text, gid uint);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE shard_http_bulk_remote_fail_query_s0(id bigint, title text, gid uint); CREATE TABLE shard_http_bulk_remote_fail_query(id bigint, title text, gid uint) type='shard' local='shard_http_bulk_remote_fail_query_s0' agent='127.0.0.1:2312:shard_http_bulk_remote_fail_query_s1'; INSERT INTO shard_http_bulk_remote_fail_query (id, title, gid) VALUES (1, 'fail-query-local', 10), (3, 'fail-query-remote', 30);"
+––– output –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/stop-searchd –––
+––– input –––
+bash -c 'out=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '\''{"delete":{"index":"shard_http_bulk_remote_fail_query","query":{"range":{"gid":{"gte":10}}}}}'\'' | tr -d '\''\n'\''); echo "$out" | grep -F "\"bulk\":{\"error\"" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"status\":409" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"current_line\":1" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"skipped_lines\":1" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"errors\":true" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "remote table '\''shard_http_bulk_remote_fail_query_s1'\''" >/dev/null || { echo "$out"; exit 1; }; if echo "$out" | grep -Fq "processed_ids="; then echo "$out"; exit 1; fi; echo "bulk predicate delete failure omitted processed_ids";'
+––– output –––
+bulk predicate delete failure omitted processed_ids
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_http_bulk_remote_fail_query_s0;"
+––– output –––
++------+
+| c    |
++------+
+|    0 |
++------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT id, title, gid FROM shard_http_bulk_remote_fail_query_s1 ORDER BY id ASC;"
+––– output –––
++------+-------------------+------+
+| id   | title             | gid  |
++------+-------------------+------+
+|    3 | fail-query-remote |   30 |
++------+-------------------+------+
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_http_bulk_remote_update_fail;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "DROP TABLE IF EXISTS shard_http_bulk_remote_update_fail_s1; CREATE TABLE shard_http_bulk_remote_update_fail_s1(id bigint, title text, gid uint);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE shard_http_bulk_remote_update_fail(id bigint, title text, gid uint) type='shard' agent='127.0.0.1:2312:shard_http_bulk_remote_update_fail_s1'; INSERT INTO shard_http_bulk_remote_update_fail (id, title, gid) VALUES (3, 'agent-only-update', 30);"
+––– output –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/stop-searchd –––
+––– input –––
+bash -c 'out=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '\''{"update":{"index":"shard_http_bulk_remote_update_fail","id":3,"doc":{"gid":31}}}'\'' | tr -d '\''\n'\''); echo "$out" | grep -F "\"update\":{\"error\"" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"status\":409" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"current_line\":1" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"skipped_lines\":1" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"errors\":true" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "shard_http_bulk_remote_update_fail_s1" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "receiving failure" >/dev/null || { echo "$out"; exit 1; }; echo "bulk update failure surfaced";'
+––– output –––
+bulk update failure surfaced
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P2306 -e "SELECT id, title, gid FROM shard_http_bulk_remote_update_fail_s1 WHERE id=3;"
+––– output –––
++------+-------------------+------+
+| id   | title             | gid  |
++------+-------------------+------+
+|    3 | agent-only-update |   30 |
++------+-------------------+------+

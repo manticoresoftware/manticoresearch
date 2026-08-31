@@ -2,26 +2,37 @@
 
 <!-- example local_dist -->
 
-Распределенная таблица в Manticore Search выступает в роли «главного узла», который перенаправляет запрошенный запрос другим таблицам и предоставляет объединённые результаты из полученных ответов. Сама таблица не хранит никаких данных. Она может подключаться как к локальным таблицам, так и к таблицам, расположенным на других серверах. Вот пример простой распределенной таблицы:
+Распределенная таблица в Manticore Search действует как "главный узел", который проксирует требуемый запрос к другим таблицам и предоставляет объединенные результаты из полученных ответов. Сама таблица не хранит никаких данных. Она может подключаться как к локальным таблицам, так и к таблицам, расположенным на других серверах. Локальная распределенная таблица — это просто распределенная таблица, все дочерние таблицы которой являются локальными. Если вам нужно только совместно искать по нескольким локальным таблицам, вы можете запрашивать их напрямую, без создания распределенной таблицы. Если вы все же создаете локальную распределенную таблицу, в SQL вы можете указать несколько локальных таблиц либо путем повторения `local='...'`, либо передав их в виде списка, разделенного запятыми, в одном предложении `local='index1,index2'`.
+
 
 <!-- intro -->
-##### Конфигурационный файл:
+##### Конфигурация:
 
-<!-- request Configuration file -->
+<!-- request Config -->
 ```ini
-table index_dist {
+table table_dist {
   type  = distributed
-  local = index1
-  local = index2
+  local = tbl1
+  local = tbl2
   ...
  }
 ```
 
-<!-- request RT mode -->
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
 ```sql
-CREATE TABLE local_dist type='distributed' local='index1' local='index2';
+CREATE TABLE local_dist type='distributed' local='tbl1' local='tbl2';
 ```
 
+<!-- request SQL -->
+```sql
+CREATE TABLE local_dist type='distributed' local='index1,index2';
+```
+
+<!-- intro -->
+##### PHP:
 
 <!-- request PHP -->
 
@@ -31,15 +42,15 @@ $params = [
         'settings' => [
             'type' => 'distributed',
             'local' => [
-                'index1',
-                'index2'
+                'tbl1',
+                'tbl2'
             ]
         ]
     ],
     'table' => 'products'
 ];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+$table = new \Manticoresearch\Table($client);
+$table->create($params);
 ```
 <!-- intro -->
 ##### Python:
@@ -47,7 +58,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('CREATE TABLE local_dist type=\'distributed\' local=\'index1\' local=\'index2\'')
+utilsApi.sql('CREATE TABLE local_dist type=\'distributed\' local=\'tbl1\' local=\'tbl2\'')
 ```
 
 <!-- intro -->
@@ -65,21 +76,21 @@ await utilsApi.sql('CREATE TABLE local_dist type=\'distributed\' local=\'index1\
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('CREATE TABLE local_dist type=\'distributed\' local=\'index1\' local=\'index2\'');
+res = await utilsApi.sql('CREATE TABLE local_dist type=\'distributed\' local=\'tbl1\' local=\'tbl2\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE local_dist type='distributed' local='index1' local='index2'");
+utilsApi.sql("CREATE TABLE local_dist type='distributed' local='tbl1' local='tbl2'");
 ```
 
 <!-- intro -->
 ##### C#:
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE local_dist type='distributed' local='index1' local='index2'");
+utilsApi.Sql("CREATE TABLE local_dist type='distributed' local='tbl1' local='tbl2'");
 ```
 
 <!-- intro -->
@@ -92,5 +103,27 @@ utils_api.sql("CREATE TABLE local_dist type='distributed' local='index1' local='
 ```
 
 <!-- end -->
-<!-- proofread -->
 
+<!-- example local_tables_direct_query -->
+Прямой запрос к нескольким локальным таблицам работает как в SQL, так и в JSON.
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+```sql
+SELECT * FROM index1, index2, index3;
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+```json
+POST /search
+{
+  "table": "index1,index2,index3",
+  "query": { "match_all": {} }
+}
+```
+<!-- end -->

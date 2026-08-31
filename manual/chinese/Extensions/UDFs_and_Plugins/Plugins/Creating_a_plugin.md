@@ -5,7 +5,7 @@
 CREATE PLUGIN plugin_name TYPE 'plugin_type' SONAME 'plugin_library'
 ```
 
-加载给定的库（如果尚未加载）并从中加载指定的插件。可用的插件类型包括：
+加载指定的库（如果尚未加载）并从中加载指定的插件。可用的插件类型包括：
 
 - `ranker`
 - `index_token_filter`
@@ -22,7 +22,9 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- example create_buddy_plugin -->
 
-Buddy 插件可以扩展 Manticore Search 的功能，并启用某些原生不支持的查询。要了解有关创建 Buddy 插件的更多信息，建议阅读[这篇文章](https://manticoresearch.com/blog/manticoresearch-buddy-pluggable-design/)。
+> 已弃用：此内容已弃用，并将在未来版本中移除。
+
+Buddy 插件可以扩展 Manticore Search 的功能，启用某些原生不支持的查询。要了解更多关于创建 Buddy 插件的内容，建议阅读[这篇文章](https://manticoresearch.com/blog/manticoresearch-buddy-pluggable-design/)。
 
 要创建 Buddy 插件，请运行以下 SQL 命令：
 
@@ -30,15 +32,15 @@ Buddy 插件可以扩展 Manticore Search 的功能，并启用某些原生不�
 CREATE PLUGIN <username/package name on https://packagist.org/> TYPE 'buddy' VERSION <package version>
 ```
 
-> 注意：`CREATE BUDDY PLUGIN` 需要 [Manticore Buddy](../../../Installation/Manticore_Buddy.md)。如果不起作用，请确保 Buddy 已安装。
+> 注意：`CREATE BUDDY PLUGIN` 需要 [Manticore Buddy](../../../Installation/Manticore_Buddy.md)。如果无效，请确保已安装 Buddy。
 
-您还可以使用专门为 Buddy 插件创建的别名命令，这个命令更容易记住：
+您也可以使用专为 Buddy 插件创建的别名命令，使用起来更容易记忆：
 
 ```sql
 CREATE BUDDY PLUGIN <username/package name on https://packagist.org/> VERSION <package version>
 ```
 
-此命令将把 `show-hostname` 插件安装到 [plugin_dir](../../../Server_settings/Common.md#plugin_dir) 并启用它，无需重启服务器。
+此命令将安装 `show-hostname` 插件到 [plugin_dir](../../../Server_settings/Common.md#plugin_dir) 并启用，无需重启服务器。
 
 <!-- intro -->
 ### 示例

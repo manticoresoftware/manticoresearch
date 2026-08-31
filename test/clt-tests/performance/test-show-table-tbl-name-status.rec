@@ -24,8 +24,10 @@ command_excerpt 0
 command_getfield 0
 command_insert 0
 command_keywords 0
+command_optimize 0
 command_replace 0
 command_search 0
+command_shard_write 0
 command_status %{NUMBER}
 command_suggest 0
 command_update 0
@@ -98,10 +100,10 @@ mysql -h0 -P1306 -e "SELECT * FROM tencent_rt WHERE category = 100 \G"
 category: 100
    views: 1500
 ––– input –––
-mysql -h0 -P1306 -e "SELECT COUNT(*) FROM tencent_rt \G"
+mysql -NE -h0 -P1306 -e "SELECT COUNT(*) FROM tencent_rt"
 ––– output –––
 *************************** 1. row ***************************
-count(*): 2
+2
 ––– comment –––
 Execute UPDATE operations (numeric fields only)
 ––– input –––
@@ -146,8 +148,10 @@ command_excerpt 0
 command_getfield 0
 command_insert 2
 command_keywords 0
+command_optimize 0
 command_replace 1
 command_search 3
+command_shard_write 0
 command_status %{NUMBER}
 command_suggest 0
 command_update 1
@@ -163,8 +167,10 @@ command_excerpt 0
 command_getfield 0
 command_insert 2
 command_keywords 0
+command_optimize 0
 command_replace 1
 command_search 2
+command_shard_write 0
 command_status %{NUMBER}
 command_suggest 0
 command_update 1
@@ -207,8 +213,10 @@ command_excerpt 0
 command_getfield 0
 command_insert 2
 command_keywords 0
+command_optimize 0
 command_replace 1
 command_search 3
+command_shard_write 0
 command_status %{NUMBER}
 command_suggest 0
 command_update 1
@@ -289,8 +297,10 @@ command_excerpt 1
 command_getfield 0
 command_insert 2
 command_keywords 1
+command_optimize 0
 command_replace 1
 command_search 4
+command_shard_write 0
 command_status %{NUMBER}
 command_suggest 0
 command_update 1
@@ -306,8 +316,10 @@ command_excerpt 0
 command_getfield 0
 command_insert 2
 command_keywords 1
+command_optimize 0
 command_replace 1
 command_search 2
+command_shard_write 0
 command_status %{NUMBER}
 command_suggest 0
 command_update 1

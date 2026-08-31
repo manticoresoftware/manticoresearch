@@ -76,6 +76,104 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 ```
 <!-- end -->
 
+### auth
+
+<!-- example conf auth -->
+Enables [authentication and authorization](../Security/Authentication_and_authorization.md). Optional, default is empty, which disables authentication.
+
+In [RT mode](../Read_this_first.md#Real-time-mode-vs-plain-mode), use `auth = 1` to enable authentication. Manticore stores authentication data in `auth.json` under [data_dir](../Server_settings/Searchd.md#data_dir). Use `auth = 0` or omit the setting to disable authentication.
+
+In [plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode), set `auth` to the authentication file path. Do not use `auth = 1` in plain mode.
+
+When authentication is enabled, the daemon creates the authentication file if it is missing. Before the first bootstrap, missing or empty storage is valid, including a zero-byte file, whitespace-only file, empty JSON object, or empty users and permissions arrays. Full authentication JSON is written after bootstrap. On startup, the daemon rejects invalid paths, unreadable files, group- or world-readable files, malformed JSON, duplicate stored secrets, and invalid auth data shape. Keep the file private; files created by the daemon use mode `600`.
+
+<!-- intro -->
+##### RT mode:
+
+<!-- request RT mode -->
+```ini
+searchd {
+    data_dir = /var/lib/manticore
+    auth = 1
+}
+```
+
+<!-- request Disable -->
+```ini
+searchd {
+    data_dir = /var/lib/manticore
+    auth = 0
+}
+```
+
+<!-- intro -->
+##### Plain mode:
+
+<!-- request Plain mode -->
+```ini
+searchd {
+    auth = /path/to/auth.json
+}
+```
+<!-- end -->
+
+### auth_log_level
+
+<!-- example conf auth_log_level -->
+Controls authentication log verbosity. Optional, default is `info`.
+
+Authentication events are written to a separate log file next to the daemon log. If [log](../Server_settings/Searchd.md#log) is `/var/log/manticore/searchd.log`, the authentication log is `/var/log/manticore/searchd.log.auth`.
+
+Supported values:
+
+* `disabled` - do not log authentication events.
+* `error` - log permission denials and critical failures.
+* `warning` - log errors and failed authentication attempts.
+* `info` - log warnings, successful authentication management changes, and cluster join auth-data backups.
+* `all` - log `info` events and successful user-facing authentication events.
+* `trace` - log `all` events plus successful internal transport authentication, such as Manticore Buddy and daemon-to-daemon API authentication.
+
+Successful authorization allow checks are not logged at any level. Permission denials are logged, but allow checks can happen for every query and would make the authentication log noisy even in `trace` mode.
+
+When `JOIN CLUSTER` replaces local authentication data, `info`, `all`, and `trace` logging write a JSON backup of the previous local auth data to `searchd.log.auth`. This backup can contain usernames, salts, password hashes, and bearer hashes. Treat the authentication log as sensitive operational data and redact it before sharing.
+
+<!-- request Example -->
+```ini
+auth_log_level = warning
+```
+<!-- end -->
+
+### auth_password_policy
+
+<!-- example conf auth_password_policy -->
+Controls password validation for authentication users. Optional, default is `LOW`.
+
+Supported values:
+
+* `LOW` - require a non-empty password that satisfies [auth_password_min_length](../Server_settings/Searchd.md#auth_password_min_length).
+* `MEDIUM` - require `LOW` plus at least one lowercase letter, one uppercase letter, one digit, and one non-alphanumeric character.
+
+The policy applies to `searchd --auth`, `CREATE USER`, and `SET PASSWORD`.
+
+<!-- request Example -->
+```ini
+auth_password_policy = MEDIUM
+```
+<!-- end -->
+
+### auth_password_min_length
+
+<!-- example conf auth_password_min_length -->
+Defines the minimum password length for authentication users. Optional, default is `8`.
+
+The minimum length applies to `searchd --auth`, `CREATE USER`, and `SET PASSWORD`.
+
+<!-- request Example -->
+```ini
+auth_password_min_length = 12
+```
+<!-- end -->
+
 ### auto_optimize
 
 <!-- example conf auto_optimize -->
@@ -83,12 +181,14 @@ This setting controls the automatic [OPTIMIZE](../Securing_and_compacting_a_tabl
 
 By default table compaction occurs automatically. You can modify this behavior with the `auto_optimize` setting:
 * 0 to disable automatic table compaction (you can still call `OPTIMIZE` manually)
-* 1 to explicitly enable it
-* to enable it while multiplying the optimization threshold by 2.
+* 1 to enable automatic table compaction with the default threshold
+* any integer greater than 1 to enable automatic table compaction while multiplying the threshold by that value
 
-By default, OPTIMIZE runs until the number of disk chunks is less than or equal to the number of logical CPU cores multiplied by 2.
+By default, the threshold is the number of logical CPU cores multiplied by 2.
 
-However, if the table has attributes with KNN indexes, this threshold is different. In this case, it is set to the number of physical CPU cores divided by 2 to improve KNN search performance.
+However, if the table has attributes with KNN indexes, the default threshold is different. In this case, it is set to the number of physical CPU cores divided by 2, with a minimum value of 1, to improve KNN search performance.
+
+When [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) is not set explicitly (neither server-wide nor per-table), automatic compaction never merges a table below 2 disk chunks, even when the computed default threshold is lower (which can happen on servers with few CPU cores, particularly for KNN tables). To allow automatic compaction down to a single disk chunk, set `optimize_cutoff` explicitly to `1`.
 
 Note that toggling `auto_optimize` on or off doesn't prevent you from running [OPTIMIZE TABLE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) manually.
 
@@ -103,6 +203,116 @@ auto_optimize = 0 # disable automatic OPTIMIZE
 <!-- request Throttle -->
 ```ini
 auto_optimize = 2 # OPTIMIZE starts at 16 chunks (on 4 cpu cores server)
+```
+
+<!-- end -->
+
+### parallel_chunk_merges
+
+<!-- example conf parallel_chunk_merges -->
+This setting controls how many disk chunk merge jobs the server is allowed to run in parallel during [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) for real-time tables.
+
+This affects only disk chunk merging (compaction), not query parallelism.
+
+Set it to `1` to disable parallel chunk merging (merge jobs will run one-by-one). Higher values may speed up compaction on systems with fast storage, but will increase concurrent disk I/O.
+
+By default, Manticore uses the value of the [threads](../Server_settings/Searchd.md#threads) setting for this calculation; if `threads` is not configured, it defaults to the number of logical CPUs. The resulting default for `parallel_chunk_merges` is `1` when `threads` is `1`, `2`, or `3`, and `2` when `threads` is `4` or higher (that is, `max(1, min(2, threads/2))` using integer division).
+
+This value can be changed at runtime using `SET GLOBAL parallel_chunk_merges = N` and inspected via `SHOW VARIABLES`.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Disable -->
+```ini
+parallel_chunk_merges = 1
+```
+
+<!-- request Increase -->
+```ini
+parallel_chunk_merges = 4
+```
+
+<!-- end -->
+
+### merge_chunks_per_job
+
+<!-- example conf merge_chunks_per_job -->
+This setting controls how many RT disk chunks are merged in a single OPTIMIZE job (N-way merge). If fewer than this number are available, the job will merge what it can (minimum 2).
+
+Lower values allow more jobs to be scheduled in parallel; higher values reduce the number of jobs but increase the size of each merge.
+
+Default is `2`.
+
+This value can be changed at runtime using `SET GLOBAL merge_chunks_per_job = N` and inspected via `SHOW VARIABLES`.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Increase -->
+```ini
+merge_chunks_per_job = 4
+```
+
+<!-- end -->
+
+### knn_parallel_build
+
+<!-- example conf knn_parallel_build -->
+This setting controls how many worker threads are used to build the HNSW graph during HNSW-heavy operations on tables that contain a `float_vector` attribute with a KNN index. Several paths use this knob:
+* The **chunk-save store pass**: when a RAM chunk is flushed to disk, workers split the chunk's RAM segments between them and add vectors to the destination HNSW graph in parallel.
+* The **chunk-merge store pass**: `OPTIMIZE TABLE` and auto-optimize merges build the destination chunk's HNSW graph in parallel, splitting the alive-row range from all input chunks across workers.
+* The **ALTER KNN rebuild**: `ALTER TABLE ... ADD COLUMN`/`DROP COLUMN` on a `float_vector` attribute, and `ALTER TABLE ... REBUILD KNN`, rebuild the HNSW graph in parallel for disk chunks.
+
+This affects only HNSW graph construction for tables with KNN attributes.
+
+Set it to `1` to disable parallel KNN build (all store passes run serially). Higher values speed up chunk saves, `OPTIMIZE`, and ALTER rebuilds on tables where HNSW graph construction dominates the operation's wall time.
+
+Parallel HNSW construction can insert vectors in a different order than the serial path, so the resulting `.spknn` graph is not guaranteed to be bit-identical to a graph built with `knn_parallel_build = 1`.
+
+Note that with [`parallel_chunk_merges`](../Server_settings/Searchd.md#parallel_chunk_merges) > 1, multiple merges can run concurrently and each one consumes up to `knn_parallel_build` workers.
+
+By default, Manticore derives the value from the [threads](../Server_settings/Searchd.md#threads) setting: `max(1, min(4, threads/4))`. That is, `1` (serial) when `threads` is below 8, `2` when `threads` <= 11, `3` when `threads` <= 15, and `4` when 16 or higher (capped at 4 by default). Operators with larger hosts who want more parallelism can set the value explicitly.
+
+This value can be changed at runtime using `SET GLOBAL knn_parallel_build = N` and inspected via `SHOW VARIABLES`.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Disable -->
+```ini
+knn_parallel_build = 1
+```
+
+<!-- request Increase -->
+```ini
+knn_parallel_build = 4
+```
+
+<!-- end -->
+
+### embeddings_threads
+
+<!-- example conf embeddings_threads -->
+This setting caps how many CPU threads are used when Manticore converts text into vectors. It applies whenever auto-embeddings run: when inserting rows into a table that uses `model_name`/`from`, when an `ALTER TABLE` rebuilds an auto-embedded `float_vector` column, and when a `knn(<field>, '<text>', ...)` search supplies the query as text.
+
+The actual number of threads used is also limited by how many workers are currently free, so a busy server will use fewer threads even if the cap is high. Use this option to keep one large embedding batch from starving concurrent searches.
+
+Default is `4`. Set to `0` to remove the cap, in which case the embeddings library decides how many threads to use (still bounded by the number of free workers).
+
+This value can be changed at runtime using `SET GLOBAL embeddings_threads = N` and inspected via `SHOW VARIABLES`. For KNN `SELECT` queries it can also be overridden per-query with `OPTION embeddings_threads = N` (see [KNN vector search](../Searching/KNN.md#KNN-vector-search)).
+
+<!-- intro -->
+##### Example:
+
+<!-- request Default -->
+```ini
+embeddings_threads = 4
+```
+
+<!-- request Uncapped -->
+```ini
+embeddings_threads = 0
 ```
 
 <!-- end -->
@@ -344,6 +554,30 @@ data_dir = /var/lib/manticore
 ```
 <!-- end -->
 
+### attr_autoconv_strict
+
+<!-- example conf attr_autoconv_strict -->
+This setting controls strict validation mode for string-to-number type conversions during INSERT and REPLACE operations. Optional, default is 0 (non-strict mode, backward compatible).
+
+When set to 1 (strict mode), invalid string-to-number conversions (e.g., converting an empty string `''` or non-numeric string `'a'` to a bigint attribute) will return errors instead of silently converting to 0. This helps catch data quality issues early during data insertion.
+
+When set to 0 (non-strict mode, default), invalid conversions will silently convert to 0, maintaining backward compatibility with older versions.
+
+Strict mode validates the following cases:
+* Empty strings or strings that cannot be converted
+* Strings with trailing non-numeric characters (e.g., `'123abc'`)
+* Numeric values that exceed type ranges (overflow/underflow)
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+attr_autoconv_strict = 1  # enable strict conversion mode
+```
+<!-- end -->
+
 ### diskchunk_flush_search_timeout
 
 <!-- example conf diskchunk_flush_search_timeout -->
@@ -469,7 +703,12 @@ expansion_merge_threshold_hits = 512
 <!-- example conf expansion_phrase_limit -->
 This setting controls the maximum number of alternative phrase variants generated due to `OR` operators inside `PHRASE`, `PROXIMITY`, and `QUORUM` operators. It is optional, with a default value of 1024.
 
-When using the `|` (OR) operator inside phrase-like operator, the total number of expanded combinations may grow exponentially depending on the number of alternatives specified. This setting helps prevent excessive query expansion by capping the number of permutations considered during query processing. If the number of generated variants exceeds this limit, the query will fail with an error.
+When using the `|` (OR) operator inside phrase-like operator, the total number of expanded combinations may grow exponentially depending on the number of alternatives specified. This setting helps prevent excessive query expansion by capping the number of permutations considered during query processing.
+
+If the number of generated variants exceeds this limit, the query will either:
+
+- fail with an error (default behavior)
+- return partial results with a warning, if `expansion_phrase_warning` is enabled
 
 <!-- intro -->
 ##### Example:
@@ -478,6 +717,23 @@ When using the `|` (OR) operator inside phrase-like operator, the total number o
 
 ```ini
 expansion_phrase_limit = 4096
+```
+<!-- end -->
+
+### expansion_phrase_warning
+
+<!-- example conf expansion_phrase_warning -->
+This setting controls the behavior when the query expansion limit defined by `expansion_phrase_limit` is exceeded.
+
+By default, the query will fail with an error message. When `expansion_phrase_warning` is set to 1, the search continues using a partial transformation of the phrase (up to the configured limit), and the server returns a warning message to the user along with the result set. This allows queries that are too complex for full expansion to still return partial results without complete failure.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+expansion_phrase_warning = 1
 ```
 <!-- end -->
 
@@ -543,7 +799,7 @@ ha_ping_interval = 3s
 
 ### hostname_lookup
 
-The `hostname_lookup` option defines the strategy for renewing hostnames. By default, the IP addresses of agent host names are cached at server start to avoid excessive access to DNS. However, in some cases, the IP can change dynamically (e.g. cloud hosting) and it may be desirable to not cache the IPs. Setting this option to `request` disables the caching and queries the DNS for each query. The IP addresses can also be manually renewed using the `FLUSH HOSTNAMES` command.
+The `hostname_lookup` option defines the strategy for renewing hostnames. By default, the IP addresses of agent host names are cached at server start to avoid excessive access to DNS. However, in some cases, the IP can change dynamically (e.g. cloud hosting) and it may be desirable to not cache the IPs. Setting this option to `request` disables the caching and queries the DNS for each query. The IP addresses can also be manually renewed using the [`FLUSH HOSTNAMES`](../Securing_and_compacting_a_table/Flushing_hostnames.md) command.
 
 ### jobs_queue_size
 
@@ -559,11 +815,11 @@ This option allows you to adjust the batch size. The default value is `1000`, an
 
 A larger batch size may improve performance; however, for some queries, it can lead to excessive memory consumption.
 
+<!-- example conf join_batch_size -->
 <!-- intro -->
-##### Example:
+##### Config:
 
-<!-- request Example -->
-
+<!-- request Config -->
 ```ini
 join_batch_size = 2000
 ```
@@ -579,11 +835,11 @@ This option allows you to configure the size of this cache. The default value is
 
 Note that each thread maintains its own cache, so you should account for the number of threads executing queries when estimating total memory usage.
 
+<!-- example conf join_cache_size -->
 <!-- intro -->
-##### Example:
+##### Config:
 
-<!-- request Example -->
-
+<!-- request Config -->
 ```ini
 join_cache_size = 10M
 ```
@@ -642,6 +898,12 @@ You can specify:
 
 If you specify a port number but not an address, `searchd` will listen on all network interfaces. Unix path is identified by a leading slash. Port range can be set only for the replication protocol.
 
+Security note: bind each listener only to the network that needs it.
+
+For public Internet client access, use a dedicated `https` listener and configure [SSL](../Security/SSL.md) with `ssl_cert` and `ssl_key`. Keep API-capable listeners (`listen` without an explicit protocol, `http`, and `sphinx`) off the public Internet. These listeners can accept the Manticore/Sphinx binary API used by master-agent distributed queries and legacy clients, and binary API traffic is not SSL-secured.
+
+Bind API-capable listeners to loopback, a VPN, or a trusted internal network, or restrict them with firewall rules. `replication` listeners are also internal-only and should be reachable only by replication nodes.
+
 You can also specify a protocol handler (listener) to be used for connections on this socket. The listeners are:
 
 * **Not specified** - Manticore will accept connections at this port from:
@@ -668,15 +930,15 @@ Suffix `_readonly` sets [read-only mode](../Security/Read_only.md) for the liste
 ```ini
 listen = localhost
 listen = localhost:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at localhost
-listen = 192.168.0.1:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at 192.168.0.1
+listen = 192.168.0.1:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at 192.168.0.1; keep this internal
 listen = /var/run/manticore/manticore.s # listen for binary API requests on unix socket
 listen = /var/run/manticore/manticore.s:mysql # listen for mysql requests on unix socket
-listen = 9312 # listen for remote agents (binary API) and http/https requests on port 9312 on any interface
+listen = 9312 # listen for remote agents (binary API) and http/https requests on port 9312 on any interface; internal networks only
 listen = localhost:9306:mysql # listen for mysql requests on port 9306 at localhost
 listen = localhost:9307:mysql_readonly # listen for mysql requests on port 9307 at localhost and accept only read queries
 listen = 127.0.0.1:9308:http # listen for http requests as well as connections from remote agents (and binary API) on port 9308 at localhost
-listen = 192.168.0.1:9320-9328:replication # listen for replication connections on ports 9320-9328 at 192.168.0.1
-listen = 127.0.0.1:9443:https # listen for https requests (not http) on port 9443 at 127.0.0.1
+listen = 192.168.0.1:9320-9328:replication # listen for replication connections on ports 9320-9328 at 192.168.0.1; keep this internal
+listen = 127.0.0.1:9443:https # listen for https requests (not http) on port 9443 at 127.0.0.1; use this listener type for public Internet access with ssl_cert and ssl_key
 listen = 127.0.0.1:9312:sphinx # listen for legacy Sphinx requests (e.g. from SphinxSE) on port 9312 at 127.0.0.1
 ```
 <!-- end -->
@@ -1004,10 +1266,18 @@ persistent_connections_limit = 29 # assume that each host of agents has max_conn
 ### pid_file
 
 <!-- example conf pid_file -->
-pid_file is a mandatory configuration option in Manticore search that specifies the path of the file where the process ID of the `searchd` server is stored.
+`pid_file` is a configuration option that specifies the path to the file storing the `searchd` server's process ID (PID).
 
-The searchd process ID file is re-created and locked on startup, and contains the head server process ID while the server is running. It is unlinked on server shutdown.
-The purpose of this file is to enable Manticore to perform various internal tasks, such as checking whether there is already a running instance of `searchd`, stopping `searchd`, and notifying it that it should rotate the tables. The file can also be used for external automation scripts.
+The PID file is created and locked upon startup and contains the main server process ID while the server is running. The file is removed when the server shuts down. This file allows Manticore to perform internal tasks, such as:
+
+* Verifying if a `searchd` instance is already running.
+* Stopping the `searchd` process.
+* Triggering table rotations.
+
+The PID file can also be used by external automation scripts.
+
+**Requirements:**
+The `pid_file` is optional if `searchd` is run with the `--console`, `--nodetach`, or `--systemd` options, or if systemd management is automatically detected. In all other cases, this setting is mandatory. It is also required if the `--pidfile` command-line option is used.
 
 
 <!-- intro -->
@@ -1019,57 +1289,6 @@ The purpose of this file is to enable Manticore to perform various internal task
 pid_file = /run/manticore/searchd.pid
 ```
 <!-- end -->
-
-
-### predicted_time_costs
-
-<!-- example conf predicted_time_costs -->
-Costs for the query time prediction model, in nanoseconds. Optional, the default is `doc=64, hit=48, skip=2048, match=64`.
-
-<!-- intro -->
-##### Example:
-
-<!-- request Example -->
-
-```ini
-predicted_time_costs = doc=128, hit=96, skip=4096, match=128
-```
-<!-- end -->
-
-<!-- example conf predicted_time_costs 1 -->
-Terminating queries before completion based on their execution time (with the max query time setting) is a nice safety net, but it comes with an inherent drawback: indeterministic (unstable) results. That is, if you repeat the very same (complex) search query with a time limit several times, the time limit will be hit at different stages, and you will get *different* result sets.
-
-<!-- intro -->
-##### SQL:
-
-<!-- request SQL -->
-
-```sql
-SELECT … OPTION max_query_time
-```
-<!-- request API -->
-
-```api
-SetMaxQueryTime()
-```
-<!-- end -->
-
-There is an option, [SELECT … OPTION max_predicted_time](../Searching/Options.md#max_predicted_time), that lets you limit the query time *and* get stable, repeatable results. Instead of regularly checking the actual current time while evaluating the query, which is indeterministic, it predicts the current running time using a simple linear model instead:
-
-```ini
-predicted_time =
-    doc_cost * processed_documents +
-    hit_cost * processed_hits +
-    skip_cost * skiplist_jumps +
-    match_cost * found_matches
-```
-
-The query is then terminated early when the `predicted_time` reaches a given limit.
-
-Of course, this is not a hard limit on the actual time spent (it is, however, a hard limit on the amount of *processing* work done), and a simple linear model is in no way an ideally precise one. So the wall clock time *may* be either below or over the target limit. However, the error margins are quite acceptable: for instance, in our experiments with a 100 msec target limit, the majority of the test queries fell into a 95 to 105 msec range, and *all* the queries were in an 80 to 120 msec range. Also, as a nice side effect, using the modeled query time instead of measuring the actual run time results in somewhat fewer gettimeofday() calls, too.
-
-No two server makes and models are identical, so the `predicted_time_costs` directive lets you configure the costs for the model above. For convenience, they are integers, counted in nanoseconds. (The limit in max_predicted_time is counted in milliseconds, and having to specify cost values as 0.000128 ms instead of 128 ns is somewhat more error-prone.) It is not necessary to specify all four costs at once, as the missed ones will take the default values. However, we strongly suggest specifying all of them for readability.
-
 
 ### preopen_tables
 
@@ -1476,6 +1695,23 @@ shutdown_timeout = 3m # wait for up to 3 minutes
 
 SHA1 hash of the password required to invoke the 'shutdown' command from a VIP Manticore SQL connection. Without it,[debug](../Reporting_bugs.md#DEBUG) 'shutdown' subcommand will never cause the server to stop. Note that such simple hashing should not be considered strong protection, as we don't use a salted hash or any kind of modern hash function. It is intended as a fool-proof measure for housekeeping daemons in a local network.
 
+### skiplist_cache_size
+
+<!-- example conf skiplist_cache_size -->
+This setting specifies the maximum size of the in-memory cache for decompressed skiplists. Optional, the default is 64M.
+
+Skiplists are used to speed up seeking in large doclists. Caching them avoids repeatedly decompressing the same skiplist data across queries. Set this option to `0` to disable caching.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+skiplist_cache_size = 128M
+```
+<!-- end -->
+
 ### snippets_file_prefix
 
 <!-- example conf snippets_file_prefix -->
@@ -1709,7 +1945,7 @@ unlink_old = 0
 <!-- example conf watchdog -->
 Threaded server watchdog. Optional, default is 1 (watchdog enabled).
 
-When a Manticore query crashes, it can take down the entire server. With the watchdog feature enabled, `searchd` also maintains a separate lightweight process that monitors the main server process and automatically restarts it in case of abnormal termination. The watchdog is enabled by default.
+When a Manticore query crashes, it can take down the entire server. With the watchdog feature enabled, `searchd` also maintains a separate lightweight process that monitors the main server process and automatically restarts it in case of abnormal termination.
 
 <!-- request Example -->
 
@@ -1718,4 +1954,3 @@ watchdog = 0 # disable watchdog
 ```
 <!-- end -->
 <!-- proofread -->
-

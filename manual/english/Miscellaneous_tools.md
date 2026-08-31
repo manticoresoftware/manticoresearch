@@ -27,10 +27,11 @@ Here are the available commands:
 * `--dumpheader FILENAME.sph` promptly dumps the given table header file without disturbing any other table files or even the config file. The report offers a detailed view of all the table settings, especially the complete attribute and field list.
 * `--dumpconfig FILENAME.sph` extracts the table definition from the specified table header file in an (almost) manticore.conf file-compliant format.
 * `--dumpheader TABLENAME` dumps table header by table name while searching for the header path in the config file.
-* `--dumpdict TABLENAME` dumps the dictionary. An extra `-stats` switch will add the total document count to the dictionary dump. This is necessary for dictionary files used in IDF file creation.
+* `--dumpdict TABLENAME` dumps the dictionary. An extra `-stats` switch will add the total document count to the dictionary dump. This is necessary for dictionary files used in IDF file creation. This command does not support `dict=keywords_32k` dictionaries yet.
 * `--dumpdocids TABLENAME` dumps document IDs by table name.
 * `--dumphitlist TABLENAME KEYWORD` dumps all instances (occurrences) of a specified keyword in a given table, with the keyword defined as text.
 * `--dumphitlist TABLENAME --wordid ID` dumps all instances (occurrences) of a specific keyword in a given table, with the keyword represented as an internal numeric ID.
+* `--dumpkilllist TABLENAME` dumps the kill list contents of the specified table, including targets and flags. It can also be used as `--dumpkilllist FILENAME.spk`.
 * `--docextract TBL DOCID` executes a standard table check pass of the entire dictionary/docs/hits, and gathers all the words and hits associated with the requested document. Subsequently, all the words are arranged according to their fields and positions, and the result is printed, grouped by field.
 * `--fold TABLENAME OPTFILE` This option helps understand how the tokenizer processes input. You can supply the indextool with text from a file, if specified, or from stdin otherwise. The output will replace separators with spaces (based on your `charset_table` settings) and convert letters in words to lowercase.
 * `--htmlstrip TABLENAME` applies the HTML stripper settings for a specified table to filter stdin, and sends the filtering results to stdout. Be aware that the settings will be fetched from manticore.conf, and not from the table header.

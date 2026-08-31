@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -156,8 +156,8 @@ static void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResultMeta 
 #endif
 
 	// querytime sec
-	int iQueryTime = Max ( tMeta.m_iQueryTime, 0 );
-	int iRealTime = Max ( tMeta.m_iRealQueryTime, 0 );
+	int iQueryTime = tMeta.GetQueryTimeMs();
+	int iRealTime = tMeta.GetRealQueryTimeMs();
 	tBuf.Appendf ( " %d.%03d sec", iRealTime / 1000, iRealTime % 1000 );
 	tBuf.Appendf ( " %d.%03d sec", iQueryTime / 1000, iQueryTime % 1000 );
 
@@ -362,9 +362,6 @@ static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf, con
 	if ( tQuery.m_uMaxQueryMsec != g_tDefaultQuery.m_uMaxQueryMsec )
 		tBuf.Appendf ( "max_query_time=%u", tQuery.m_uMaxQueryMsec );
 
-	if ( tQuery.m_iMaxPredictedMsec != g_tDefaultQuery.m_iMaxPredictedMsec )
-		tBuf.Appendf ( "max_predicted_time=%d", tQuery.m_iMaxPredictedMsec );
-
 	if ( tQuery.m_iRetryCount != DEFAULT_QUERY_RETRY )
 		tBuf.Appendf ( "retry_count=%d", tQuery.m_iRetryCount );
 
@@ -453,13 +450,75 @@ static void FormatIndexHints ( const CSphQuery & tQuery, StringBuilder_c & tBuf 
 	tBuf << " */";
 }
 
+void VacuumSpacesFromJson ( const char* szJson, StringBuilder_c & tBuf ) noexcept
+{
+	if (!szJson)
+		return;
+	enum class eStates { initial, has_space, quoted, backslash };
+	auto eState = eStates::initial;
+	while (*szJson)
+	{
+		const char c = *szJson++;
+		switch (eState)
+		{
+		case eStates::initial:
+			switch (c)
+			{
+				case ' ':
+				case '\t':
+				case '\n':
+				case '\r': eState = eStates::has_space;
+					tBuf << " "; break;
+				case '"': eState = eStates::quoted;
+					tBuf << "\""; break;
+				default:
+					tBuf << c; break;
+			}
+			break;
+
+		case eStates::has_space:
+			switch (c)
+			{
+				case ' ':
+				case '\t':
+				case '\n':
+				case '\r': break;
+				case '"': eState = eStates::quoted;
+					tBuf << "\""; break;
+				default: eState = eStates::initial;
+					tBuf << c; break;
+			}
+			break;
+
+		case eStates::quoted:
+			tBuf << c;
+			switch (c)
+			{
+				case '"': eState = eStates::initial; break;
+				case '\\': eState = eStates::backslash;
+				default: break;
+			}
+			break;
+
+		case eStates::backslash:
+			tBuf << c;
+			eState = eStates::quoted;
+		}
+	}
+}
+
 
 static void LogQueryJson ( const CSphQuery & q, StringBuilder_c & tBuf )
 {
+	tBuf << " /*";
 	if ( q.m_sRawQuery.IsEmpty() )
-		tBuf << " /*" << "{\"index\":\"" << q.m_sIndexes << "\"}*/ /*" << q.m_sQuery << " */";
+	{
+		tBuf << "{\"index\":\"" << q.m_sIndexes << "\"}*/ /*";
+		VacuumSpacesFromJson ( q.m_sQuery.cstr(), tBuf );
+	}
 	else
-		tBuf << " /*" << q.m_sRawQuery << " */";
+		VacuumSpacesFromJson ( q.m_sRawQuery.cstr(), tBuf );
+	tBuf << " */";
 }
 
 
@@ -605,9 +664,10 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptio
 	QuotationEscapedBuilder tBuf;
 	int iCompactIN = (g_bLogCompactIn ? LOG_COMPACT_IN : 0);
 
-	// time, conn id, wall, found
-	int iQueryTime = Max ( tMeta.m_iQueryTime, 0 );
-	int iRealTime = Max ( tMeta.m_iRealQueryTime, 0 );
+	// real = elapsed wall-clock; wall = internal query wall-time metric used by query logging.
+	// In distributed/multi-source queries, wall and real may differ.
+	int iQueryTime = tMeta.GetQueryTimeMs();
+	int iRealTime = tMeta.GetRealQueryTimeMs();
 
 	tBuf << "/* ";
 	FormatTimeConnClient ( tBuf );
@@ -681,7 +741,7 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptio
 
 void LogQuery ( const CSphQuery & q, const CSphQuery & tJoinOptions, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
 {
-	if ( g_iQueryLogMinMs > 0 && tMeta.m_iQueryTime < g_iQueryLogMinMs )
+	if ( g_iQueryLogMinMs > 0 && tMeta.GetQueryTimeMs() < g_iQueryLogMinMs )
 		return;
 	// should not log query from buddy in the info but only in debug and more verbose
 	bool bNoLogQuery = ((q.m_uDebugFlags & QUERY_DEBUG_NO_LOG) == QUERY_DEBUG_NO_LOG);
@@ -697,23 +757,20 @@ void LogQuery ( const CSphQuery & q, const CSphQuery & tJoinOptions, const CSphQ
 	}
 }
 
-void LogSphinxqlError ( const char * sStmt, const Str_t & sError )
+void LogSphinxqlError ( const char * szStmt, const Str_t & sError )
 {
-	if ( g_eLogFormat != LOG_FORMAT::SPHINXQL || g_iQueryLogFile < 0 || !sStmt || IsEmpty ( sError ) )
-		return;
-
-	StringBuilder_c tBuf;
-	tBuf << "/* ";
-	FormatTimeConnClient ( tBuf );
-	tBuf << " */ " << sStmt << " # error=" << sError << '\n';
-
-	WriteQuery ( tBuf );
+	LogSphinxqlError ( FromSz ( szStmt ), sError );
 }
-
 
 void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError )
 {
-	if ( g_eLogFormat != LOG_FORMAT::SPHINXQL || g_iQueryLogFile < 0 || IsEmpty ( sStmt ) || IsEmpty ( sError ) )
+	if ( g_eLogFormat != LOG_FORMAT::SPHINXQL || g_iQueryLogFile < 0 || !IsFilled ( sStmt ) || IsEmpty ( sError ) )
+		return;
+
+	// some mysql cli, like mysql 9.0.1, 9.1.0, 9.3.0, may be others, fire 'select $$' query after connect
+	// that produces some noise in query log, so let's just filter out these queries. #2772
+	constexpr Str_t selectSS = FROMS("select $$");
+	if ( sStmt.second==selectSS.second && !strncmp (sStmt.first, selectSS.first, selectSS.second) )
 		return;
 
 	QuotationEscapedBuilder tBuf;
@@ -737,9 +794,10 @@ void LogBuddyQuery ( Str_t sQuery, BuddyQuery_e tType )
 
 	QuotationEscapedBuilder tBuf;
 
-	// time, conn id, wall, found
-	int iQueryTime = Max ( tMeta.m_iQueryTime, 0 );
-	int iRealTime = Max ( tMeta.m_iRealQueryTime, 0 );
+	// real = elapsed wall-clock; wall = internal query wall-time metric used by query logging.
+	// In distributed/multi-source queries, wall and real may differ.
+	int iQueryTime = tMeta.GetQueryTimeMs();
+	int iRealTime = tMeta.GetRealQueryTimeMs();
 
 	tBuf << "/* ";
 	FormatTimeConnClient ( tBuf );

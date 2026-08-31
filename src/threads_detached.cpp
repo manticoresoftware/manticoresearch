@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -27,6 +27,8 @@ namespace {
 		static CSphVector<LowThreadDesc_t *> dDetachedThreads GUARDED_BY ( g_dDetachedGuard () );
 		return dDetachedThreads;
 	}
+
+	Detached::ShutdownNotifierFn g_fnNotifier = nullptr;
 }
 
 // walk over list of running detached threads and apply fnHandler to each of them
@@ -61,7 +63,13 @@ void Detached::MakeAloneIteratorAvailable ()
 //#endif
 }
 
-static int64_t g_tmShutdownAllAlonesDelta = 3; // max allowed wait in seconds
+static int64_t g_tmShutdownAllAlonesDelta = env_long ("MANTICORE_SHUTDOWN_ALONES_DEADLINE").value_or(30); // max allowed wait in seconds
+static int64_t g_tmShutdownAllAlonesBetweenTries = env_long("MANTICORE_SHUTDOWN_ALONES_POLL").value_or(10);
+
+void Detached::SetNotifier ( ShutdownNotifierFn fnNotifier ) noexcept
+{
+	g_fnNotifier = fnNotifier;
+}
 
 void Detached::ShutdownAllAlones()
 {
@@ -106,7 +114,7 @@ void Detached::ShutdownAllAlones()
 
 			sphSleepMsec ( 50 );
 			iStart += 50;
-			if ( iStart >= 10000 ) // wait 10 seconds between tries
+			if ( iStart >= 1000*g_tmShutdownAllAlonesBetweenTries ) // wait 10 seconds between tries
 			{
 				sphWarning ( "ShutdownAllAlones catch still has %d alone threads", iThreads );
 				break;
@@ -114,6 +122,8 @@ void Detached::ShutdownAllAlones()
 		}
 
 		++iTurn;
+		if ( g_fnNotifier )
+			( *g_fnNotifier )();
 
 		int64_t tmCur = sphMicroTimer(); 
 		if ( tmCur>tmEnd )

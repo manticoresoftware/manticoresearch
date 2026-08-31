@@ -106,7 +106,7 @@ curl -s -X POST -H 'Authorization: Basic ZWxhc3RpYzpwYXNz' -H 'content-type: app
 ––– input –––
 curl -s -X GET -H 'Authorization: Basic ZWxhc3RpYzpwYXNz' -H 'Content-Length: 0' -H 'Connection: keep-alive' 'localhost:9308/.kibana/_doc/space%3Adefault'
 ––– output –––
-{"_id":"space:default","_index":".kibana_1","_type":"_doc","found":false}
+{"_id":"space:default","_index":".kibana","_type":"_doc","found":false}
 ––– input –––
 curl -s -X GET -H 'Authorization: Basic ZWxhc3RpYzpwYXNz' -H 'Content-Length: 0' -H 'Connection: keep-alive' 'localhost:9308/_nodes?filter_path=nodes.*.version%2Cnodes.*.http.publish_address%2Cnodes.*.ip'
 ––– output –––
@@ -114,7 +114,7 @@ curl -s -X GET -H 'Authorization: Basic ZWxhc3RpYzpwYXNz' -H 'Content-Length: 0'
 ––– input –––
 curl -s -X POST -H 'Authorization: Basic ZWxhc3RpYzpwYXNz' -H 'content-type: application/json' -H 'Content-Length: 237' -H 'Connection: keep-alive' -d '{"space":{"name":"Default","description":"This is your default space!","color":"#00bfb3","disabledFeatures":[],"_reserved":true},"type":"space","references":[],"migrationVersion":{"space":"6.6.0"},"updated_at":"2025-04-16T12:06:54.147Z"}' 'localhost:9308/.kibana/_create/space%3Adefault?refresh=wait_for'
 ––– output –––
-{"_id":"space:default","_index":".kibana_1","_primary_term":1,"_seq_no":0,"_shards":{"failed":0,"successful":1,"total":1},"_type":"_doc","_version":1,"result":"created"}
+{"_id":"space:default","_index":".kibana","_primary_term":1,"_seq_no":0,"_shards":{"failed":0,"successful":1,"total":1},"_type":"_doc","_version":1,"result":"created"}
 ––– input –––
 curl -s -X GET -H 'Authorization: Basic ZWxhc3RpYzpwYXNz' -H 'Content-Length: 0' -H 'Connection: keep-alive' 'localhost:9308/_nodes?filter_path=nodes.*.version%2Cnodes.*.http.publish_address%2Cnodes.*.ip'
 ––– output –––
@@ -137,11 +137,11 @@ curl -s -X POST -H 'Authorization: Basic ZWxhc3RpYzpwYXNz' -H 'content-type: app
 ––– input –––
 curl -s -X POST -H 'Authorization: Basic ZWxhc3RpYzpwYXNz' -H 'content-type: application/json' -H 'Content-Length: 330' -H 'Connection: keep-alive' -d '{"task":{"taskType":"vis_telemetry","state":"{\"stats\":{},\"runs\":0}","params":"{}","attempts":0,"scheduledAt":"2025-04-16T12:07:00.161Z","startedAt":null,"retryAt":null,"runAt":"2025-04-16T12:07:00.161Z","status":"idle"},"type":"task","references":[],"migrationVersion":{"task":"7.6.0"},"updated_at":"2025-04-16T12:07:00.161Z"}' 'localhost:9308/.kibana_task_manager/_create/task%3Aoss_telemetry-vis_telemetry?refresh=false'
 ––– output –––
-{"_id":"task:oss_telemetry-vis_telemetry","_index":".kibana_task_manager_1","_primary_term":1,"_seq_no":0,"_shards":{"failed":0,"successful":1,"total":1},"_type":"_doc","_version":1,"result":"created"}
+{"_id":"task:oss_telemetry-vis_telemetry","_index":".kibana_task_manager","_primary_term":1,"_seq_no":0,"_shards":{"failed":0,"successful":1,"total":1},"_type":"_doc","_version":1,"result":"created"}
 ––– input –––
 curl -s -X POST -H 'Authorization: Basic ZWxhc3RpYzpwYXNz' -H 'content-type: application/json' -H 'Content-Length: 370' -H 'Connection: keep-alive' -d '{"task":{"taskType":"lens_telemetry","state":"{\"byDate\":{},\"suggestionsByDate\":{},\"saved\":{},\"runs\":0}","params":"{}","attempts":0,"scheduledAt":"2025-04-16T12:07:00.161Z","startedAt":null,"retryAt":null,"runAt":"2025-04-16T12:07:00.161Z","status":"idle"},"type":"task","references":[],"migrationVersion":{"task":"7.6.0"},"updated_at":"2025-04-16T12:07:00.161Z"}' 'localhost:9308/.kibana_task_manager/_create/task%3ALens-lens_telemetry?refresh=false'
 ––– output –––
-{"_id":"task:Lens-lens_telemetry","_index":".kibana_task_manager_1","_primary_term":1,"_seq_no":0,"_shards":{"failed":0,"successful":1,"total":1},"_type":"_doc","_version":1,"result":"created"}
+{"_id":"task:Lens-lens_telemetry","_index":".kibana_task_manager","_primary_term":1,"_seq_no":0,"_shards":{"failed":0,"successful":1,"total":1},"_type":"_doc","_version":1,"result":"created"}
 ––– input –––
 curl -s -X POST -H 'Authorization: Basic ZWxhc3RpYzpwYXNz' -H 'content-type: application/json' -H 'Content-Length: 1942' -H 'Connection: keep-alive' -d '{"query":{"bool":{"must":[{"term":{"type":"task"}},{"bool":{"must":[{"bool":{"should":[{"bool":{"must":[{"term":{"task.status":"idle"}},{"range":{"task.runAt":{"lte":"now"}}}]}},{"bool":{"must":[{"bool":{"should":[{"term":{"task.status":"running"}},{"term":{"task.status":"claiming"}}]}},{"range":{"task.retryAt":{"lte":"now"}}}]}}]}},{"bool":{"should":[{"exists":{"field":"task.schedule"}},{"bool":{"must":[{"term":{"task.taskType":"actions:.server-log"}},{"range":{"task.attempts":{"lt":1}}}]}},{"bool":{"must":[{"term":{"task.taskType":"actions:.slack"}},{"range":{"task.attempts":{"lt":1}}}]}},{"bool":{"must":[{"term":{"task.taskType":"actions:.email"}},{"range":{"task.attempts":{"lt":1}}}]}},{"bool":{"must":[{"term":{"task.taskType":"actions:.index"}},{"range":{"task.attempts":{"lt":1}}}]}},{"bool":{"must":[{"term":{"task.taskType":"actions:.pagerduty"}},{"range":{"task.attempts":{"lt":1}}}]}},{"bool":{"must":[{"term":{"task.taskType":"actions:.webhook"}},{"range":{"task.attempts":{"lt":1}}}]}},{"bool":{"must":[{"term":{"task.taskType":"alerting:siem.signals"}},{"range":{"task.attempts":{"lt":3}}}]}},{"bool":{"must":[{"term":{"task.taskType":"vis_telemetry"}},{"range":{"task.attempts":{"lt":3}}}]}},{"bool":{"must":[{"term":{"task.taskType":"lens_telemetry"}},{"range":{"task.attempts":{"lt":3}}}]}}]}}]}}]}},"sort":{"_script":{"type":"number","order":"asc","script":{"lang":"painless","source":"\nif (doc['\''task.retryAt'\''].size()!=0) {\n  return doc['\''task.retryAt'\''].value.toInstant().toEpochMilli();\n}\nif (doc['\''task.runAt'\''].size()!=0) {\n  return doc['\''task.runAt'\''].value.toInstant().toEpochMilli();\n}\n    "}}},"seq_no_primary_term":true,"script":{"source":"ctx._source.task.ownerId=params.ownerId; ctx._source.task.status=params.status; ctx._source.task.retryAt=params.retryAt;","lang":"painless","params":{"ownerId":"kibana:ce42b997-a913-4d58-be46-bb1937feedd6","status":"claiming","retryAt":"2025-04-16T12:07:30.419Z"}}}' 'localhost:9308/.kibana_task_manager/_update_by_query?ignore_unavailable=true&refresh=true&max_docs=10&conflicts=proceed'
 ––– output –––

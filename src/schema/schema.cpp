@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -353,10 +353,12 @@ bool CSphSchema::IsReserved ( const char* szToken )
 	static const char * dReserved[] =
 	{
 		"AND", "AS", "BY", "COLUMNARSCAN", "DISTINCT", "DIV", "DOCIDINDEX", "EXPLAIN",
-		"FACET", "FALSE", "FORCE", "FROM", "IGNORE", "IN", "INDEXES", "INNER", "IS", "JOIN", "KNN",
+		"FACET", "FALSE", "FORCE", "FROM", "HYBRID_MATCH", "IGNORE", "IN", "INDEXES", "INNER", "IS", "JOIN", "KNN",
 		"LEFT", "LIMIT", "MOD", "NOT", "NO_COLUMNARSCAN", "NO_DOCIDINDEX", "NO_SECONDARYINDEX", "NULL",
 		"OFFSET", "ON", "OR", "ORDER", "RELOAD", "SECONDARYINDEX", "SELECT", "SYSFILTERS",
-		"TRUE", NULL
+		"TRUE"
+		, "TOKEN"
+		, NULL
 	};
 
 	const char** p = dReserved;
@@ -495,6 +497,10 @@ void CSphSchema::SetupColumnarFlags ( const CSphSourceSettings & tSettings, StrV
 		hNoHashes.Add ( 0, i );
 	}
 
+	const CSphColumnInfo * pDocid = GetAttr ( sphGetDocidName() );
+	bool bUuidLinked = pDocid && pDocid->IsUuidLinkedDocid();
+	const CSphColumnInfo * pUuidDocid = bUuidLinked ? GetAttr ( sphGetUuidDocidName() ) : nullptr;
+	assert ( !bUuidLinked || ( pUuidDocid && pUuidDocid->m_eAttrType==SPH_ATTR_STRING ) );
 	bool bHaveColumnar = false;
 	for ( auto& tAttr : m_dAttrs )
 	{
@@ -508,7 +514,8 @@ void CSphSchema::SetupColumnarFlags ( const CSphSourceSettings & tSettings, StrV
 			}
 		}
 
-		if ( sphIsInternalAttr ( tAttr ) )
+		bool bUuidDocidStorage = &tAttr==pUuidDocid;
+		if ( sphIsInternalAttr ( tAttr ) && !bUuidDocidStorage )
 			tAttr.m_eEngine = AttrEngine_e::ROWWISE;
 		else
 		{
@@ -572,7 +579,10 @@ void CSphSchema::SetupKNNFlags ( const CSphSourceSettings & tSettings )
 		int iId = hKNN[tAttr.m_sName];
 		const auto & tKNN = tSettings.m_dKNN[iId];
 		tAttr.m_tKNN		= tKNN;
-		tAttr.m_tKNNModel	= tKNN;
+		// Explicitly cast to ModelSettings_t base class to correctly extract the ModelSettings_t subobject
+		// from NamedKNNSettings_t (which uses multiple inheritance: IndexSettings_t + ModelSettings_t).
+		// Without the cast, the compiler might copy the wrong memory region or fail to compile due to ambiguity.
+		tAttr.m_tKNNModel	= static_cast<const knn::ModelSettings_t&>(tKNN);
 		tAttr.m_sKNNFrom	= tKNN.m_sFrom;
 	}
 }
@@ -666,6 +676,16 @@ bool CSphSchema::HasStoredFields() const
 bool CSphSchema::HasStoredAttrs() const
 {
 	return m_dAttrs.any_of ( []( const CSphColumnInfo & tAttr ){ return tAttr.IsStored(); } );
+}
+
+int CSphSchema::GetColumnarAttrsCount() const
+{
+	int iNumColumnar = 0;
+	for ( const auto & tAttr : m_dAttrs )
+		if ( tAttr.IsColumnar() )
+			++iNumColumnar;
+
+	return iNumColumnar;
 }
 
 

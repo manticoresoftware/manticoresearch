@@ -1,0 +1,35 @@
+––– comment –––
+Check that searchd --check validates a config without leaving a daemon running.
+––– input –––
+mkdir -p /tmp/searchd-test-data
+cat > /tmp/searchd-test.conf <<'EOF'
+searchd {
+    listen = 127.0.0.1:19312
+    listen = 127.0.0.1:19306:mysql
+    listen = 127.0.0.1:19308:http
+    log = /tmp/searchd-test.log
+    query_log = /tmp/searchd-test-query.log
+    pid_file = /tmp/searchd-test.pid
+    data_dir = /tmp/searchd-test-data
+}
+EOF
+searchd --config /tmp/searchd-test.conf --check
+––– output –––
+OK
+––– comment –––
+Check that invalid configs fail with the same startup error.
+––– input –––
+cat > /tmp/searchd-test-bad.conf <<'EOF'
+searchd {
+    listen = 127.0.0.1:19313
+    pid_file = /tmp/searchd-test-bad.pid
+    data_dir = /tmp/searchd-test-data
+    max_packet_size = 1K
+}
+EOF
+searchd --config /tmp/searchd-test-bad.conf --check > /tmp/searchd-test-bad.out 2>&1
+echo exit=$?
+sed -E 's/^\[[^]]+\] \[[0-9]+\] //' /tmp/searchd-test-bad.out
+––– output –––
+exit=1
+FATAL: max_packet_size out of bounds (128K..128M)

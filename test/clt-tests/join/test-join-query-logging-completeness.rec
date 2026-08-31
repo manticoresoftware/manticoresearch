@@ -60,23 +60,18 @@ mysql -h0 -P1306 -e "SELECT name, orders.quantity FROM customers LEFT JOIN order
 *************************** 1. row ***************************
            name: Alice Johnson
 orders.quantity: 1
-@int_attr_email:
 *************************** 2. row ***************************
            name: Alice Johnson
 orders.quantity: 1
-@int_attr_email:
 *************************** 3. row ***************************
            name: Bob Smith
 orders.quantity: 2
-@int_attr_email:
 *************************** 4. row ***************************
            name: Carol White
 orders.quantity: 1
-@int_attr_email:
 *************************** 5. row ***************************
            name: John Smith
 orders.quantity: NULL
-@int_attr_email:
 ––– comment –––
 Test LEFT JOIN with text search on product names
 ––– input –––

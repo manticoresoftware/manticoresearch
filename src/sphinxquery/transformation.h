@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -113,7 +113,8 @@ private:
 private:
 	void DumpSimilar () const noexcept;
 
-	void SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t *> & dNodes ) noexcept;
+	// returns false when cost-based transformations cannot obtain keyword statistics
+	bool SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t *> & dNodes ) noexcept;
 	void ResetCostsHash() noexcept;
 
 	static int GetWeakestIndex ( const CSphVector<XQNode_t *> & dNodes );

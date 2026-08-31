@@ -1,9 +1,9 @@
-# Добавление и удаление таблицы из кластера репликации
+# Добавление и удаление таблицы из репликационного кластера
 
 <!-- example adding and removing a table from a replication cluster 1 -->
-`ALTER CLUSTER <cluster_name> ADD <table_name>[, <table_name>]` добавляет одну или несколько существующих локальных таблиц в кластер. Узел, который получает запрос ALTER, отправляет таблицу(ы) другим узлам кластера. Все локальные таблицы с таким же именем на других узлах кластера заменяются новыми таблицами.
+`ALTER CLUSTER <cluster_name> ADD <table_name>[, <table_name>]` добавляет одну или несколько существующих локальных таблиц в кластер. Узел, который получает ALTER-запрос, отправляет таблицу (таблицы) на другие узлы кластера. Все локальные таблицы с таким же именем на других узлах кластера заменяются новыми таблицами.
 
-После того как таблицы будут реплицированы, записи на запись могут выполняться на любом узле, но имена таблиц должны быть с префиксом имени кластера, например `INSERT INTO <clusterName>:<table_name>`.
+Как только таблицы реплицированы, операции записи могут выполняться на любом узле, но имена таблиц должны иметь префикс имени кластера, например `INSERT INTO <clusterName>:<table_name>`.
 
 
 <!-- intro -->
@@ -12,14 +12,14 @@
 <!-- request SQL -->
 
 ```sql
-ALTER CLUSTER click_query ADD clicks_daily_index
+ALTER CLUSTER click_query ADD clicks_daily_table
 ```
 
 <!-- request JSON -->
 
 ```json
 POST /cli -d "
-ALTER CLUSTER click_query ADD clicks_daily_index
+ALTER CLUSTER click_query ADD clicks_daily_table
 "
 ```
 
@@ -30,8 +30,7 @@ $params = [
   'cluster' => 'click_query',
   'body' => [
      'operation' => 'add',
-     'table' => 'clicks_daily_index'
-
+     'table' => 'clicks_daily_table'
   ]
 ];
 $response = $client->cluster()->alter($params);
@@ -44,7 +43,7 @@ $response = $client->cluster()->alter($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_index')
+utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_table')
 ```
 
 <!-- response Python -->
@@ -58,7 +57,7 @@ utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_index')
 <!-- request Python-asyncio -->
 
 ```python
-await utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_index')
+await utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_table')
 ```
 
 <!-- response Python -->
@@ -72,7 +71,7 @@ await utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_index')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_index');
+res = await utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_table');
 ```
 
 <!-- response javascript -->
@@ -86,7 +85,7 @@ res = await utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_index');
 <!-- request Java -->
 
 ```java
-utilsApi.sql("ALTER CLUSTER click_query ADD clicks_daily_index");
+utilsApi.sql("ALTER CLUSTER click_query ADD clicks_daily_table");
 ```
 
 <!-- intro -->
@@ -95,7 +94,7 @@ utilsApi.sql("ALTER CLUSTER click_query ADD clicks_daily_index");
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("ALTER CLUSTER click_query ADD clicks_daily_index");
+utilsApi.Sql("ALTER CLUSTER click_query ADD clicks_daily_table");
 ```
 
 <!-- intro -->
@@ -104,13 +103,13 @@ utilsApi.Sql("ALTER CLUSTER click_query ADD clicks_daily_index");
 <!-- request Rust -->
 
 ```rust
-utils_api.sql("ALTER CLUSTER click_query ADD clicks_daily_index", Some(true)).await;
+utils_api.sql("ALTER CLUSTER click_query ADD clicks_daily_table", Some(true)).await;
 ```
 
 <!-- end -->
 
 <!-- example adding and removing a table from a replication cluster 2 -->
-`ALTER CLUSTER <cluster_name> DROP <table_name>[, <table_name>]` прекращает отслеживание одной или нескольких существующих таблиц, что означает, что файлы таблиц на узлах не удаляются, а таблицы просто становятся неактивными, не реплицируемыми.
+`ALTER CLUSTER <cluster_name> DROP <table_name>[, <table_name>]` исключает одну или несколько существующих таблиц, что означает, что файлы таблиц не удаляются с узлов, а просто делают их неактивными, нереплицируемыми таблицами.
 
 После удаления таблицы из кластера она становится `локальной` таблицей, и операции записи должны использовать только имя таблицы, например `INSERT INTO <table_name>`, без префикса кластера.
 
@@ -216,4 +215,3 @@ utils_api.sql("ALTER CLUSTER posts DROP weekly_index", Some(true)).await;
 
 <!-- end -->
 <!-- proofread -->
-

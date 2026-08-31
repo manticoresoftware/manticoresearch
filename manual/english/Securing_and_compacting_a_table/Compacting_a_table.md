@@ -1,17 +1,31 @@
 # Compacting a Table
 
-Over time, RT tables may become fragmented into numerous disk chunks and/or contaminated with deleted, yet unpurged data, affecting search performance. In these cases, optimization is necessary. Essentially, the optimization process combines pairs of disk chunks, removing documents that were previously deleted using DELETE statements.
+Over time, RT tables may become fragmented into numerous disk chunks and/or contaminated with deleted, yet unpurged data, affecting search performance. In these cases, optimization is necessary. Essentially, the optimization process combines disk chunks (N-way merge), removing documents that were previously deleted using DELETE statements.
 
 Beginning with Manticore 4, this process occurs [automatically by default](../Server_settings/Searchd.md#auto_optimize). However, you can also use the following commands to manually initiate table compaction.
 
 ## OPTIMIZE TABLE
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS rt;
+CREATE TABLE rt(title text);
+INSERT INTO rt(title) VALUES
+('doc one'),
+('doc two'),
+('doc three');
+-->
 <!-- example optimize -->
 ```sql
 OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
 ```
 
-`OPTIMIZE` statement adds an RT table to the optimization queue, which will be processed in a background thread.
+`OPTIMIZE TABLE` supports real-time (RT), [distributed](../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md), and [sharded](../Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md) tables.
+
+For an RT table, the statement adds the table to the optimization queue, which is processed by a background thread by default. For a distributed table, `OPTION sync=1` is required: the command optimizes every local RT component and every configured remote mirror except blackhole agents. A sharded table supports the same native synchronous fan-out across its physical RT targets. The `cutoff` value is applied to every physical RT target.
+
+When Manticore Buddy is available, sharded tables created with the `shards` and `rf` options also retain the asynchronous `OPTIMIZE TABLE table_name` form handled by Buddy. Use `OPTION sync=1` to run the native synchronous fan-out directly in Manticore Search.
 
 <!-- intro -->
 ##### SQL:
@@ -21,6 +35,16 @@ OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
 ```sql
 OPTIMIZE TABLE rt;
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt"
+```
+
 <!-- end -->
 
 ### Number of optimized disk chunks
@@ -30,6 +54,8 @@ OPTIMIZE TABLE rt;
 By default, OPTIMIZE merges the RT table's disk chunks down to a number less than or equal to the number of logical CPU cores multiplied by 2.
 
 However, if the table has attributes with KNN indexes, this threshold is different. In this case, it is set to the number of physical CPU cores divided by 2 to improve KNN search performance.
+
+Note that when no `optimize_cutoff` is set explicitly (neither the server-wide [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) setting nor the per-table [optimize_cutoff](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#optimize_cutoff) option), [automatic compaction](../Server_settings/Searchd.md#auto_optimize) never merges a table below 2 disk chunks, even if the computed default threshold is lower (for example, on servers with few CPU cores, especially for KNN tables). Keeping at least 2 disk chunks avoids the cost of repeatedly merging everything into a single chunk. To force automatic compaction down to a single disk chunk, set `optimize_cutoff` explicitly to `1`. A manual `OPTIMIZE ... OPTION cutoff=1` is not affected by this and still compacts down to one chunk.
 
 You can also control the number of optimized disk chunks manually using the `cutoff` option.
 
@@ -45,13 +71,25 @@ Additional options include:
 ```sql
 OPTIMIZE TABLE rt OPTION cutoff=4;
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION cutoff=4"
+```
+
 <!-- end -->
 
 ### Running in foreground
 
 <!-- example optimize_sync -->
 
-When using `OPTION sync=1` (0 by default), the command will wait for the optimization process to complete before returning. If the connection is interrupted, the optimization will continue running on the server.
+For an RT table, `sync=0` is the default. Using `OPTION sync=1` makes the command wait for optimization to complete before returning. If the connection is interrupted, the optimization continues running on the server.
+
+Distributed tables require `OPTION sync=1`. Sharded tables use `OPTION sync=1` for native synchronous fan-out. The command waits for all selected physical targets and reports an error if any target fails; work already completed on other targets is not rolled back.
 
 <!-- intro -->
 ##### SQL:
@@ -61,11 +99,28 @@ When using `OPTION sync=1` (0 by default), the command will wait for the optimiz
 ```sql
 OPTIMIZE TABLE rt OPTION sync=1;
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION sync=1"
+```
+
 <!-- end -->
+
+For distributed and sharded tables, use the synchronous form:
+
+```sql
+OPTIMIZE TABLE distributed_table OPTION sync=1, cutoff=1;
+OPTIMIZE TABLE sharded_table OPTION sync=1, cutoff=1;
+```
 
 ### Throttling the IO impact
 
-Optimization can be a lengthy and I/O-intensive process. To minimize the impact, all actual merge work is executed serially in a special background thread, and the `OPTIMIZE` statement simply adds a job to its queue. The optimization thread can be I/O-throttled, and you can control the maximum number of I/Os per second and the maximum I/O size with the [rt_merge_iops](../Server_settings/Searchd.md#rt_merge_iops) and [rt_merge_maxiosize](../Server_settings/Searchd.md#rt_merge_maxiosize) directives, respectively.
+Optimization can be a lengthy and I/O-intensive process. The `OPTIMIZE` statement adds a job to a background worker pool. You can control how many jobs run in parallel with [parallel_chunk_merges](../Server_settings/Searchd.md#parallel_chunk_merges) and how many chunks each job merges with [merge_chunks_per_job](../Server_settings/Searchd.md#merge_chunks_per_job). The optimization workers can be I/O-throttled, and you can control the maximum number of I/Os per second and the maximum I/O size with the [rt_merge_iops](../Server_settings/Searchd.md#rt_merge_iops) and [rt_merge_maxiosize](../Server_settings/Searchd.md#rt_merge_maxiosize) directives, respectively.
 
 During optimization, the RT table being optimized remains online and available for both searching and updates nearly all the time. It is locked for a very brief period when a pair of disk chunks is successfully merged, allowing for the renaming of old and new files and updating the table header.
 
@@ -76,19 +131,39 @@ As long as [auto_optimize](../Server_settings/Searchd.md#auto_optimize) is not d
 If you are experiencing unexpected SSTs or want tables across all nodes of the cluster to be binary identical, you need to:
 1. Disable [auto_optimize](../Server_settings/Searchd.md#auto_optimize).
 2. Manually optimize tables:
+
 <!-- example cluster_manual_drop -->
 On one of the nodes, drop the table from the cluster:
 <!-- request SQL -->
 ```sql
 ALTER CLUSTER mycluster DROP myindex;
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "ALTER CLUSTER mycluster DROP myindex"
+```
+
 <!-- end -->
 <!-- example cluster_manual_optimize -->
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS myindex;
+CREATE TABLE myindex(title text);
+INSERT INTO myindex(title) VALUES ('cluster doc');
+-->
 Optimize the table:
 <!-- request SQL -->
 ```sql
 OPTIMIZE TABLE myindex;
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE myindex"
+```
+
 <!-- end -->
 <!-- example cluster_manual_add -->
 Add back the table to the cluster:
@@ -96,6 +171,12 @@ Add back the table to the cluster:
 ```sql
 ALTER CLUSTER mycluster ADD myindex;
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "ALTER CLUSTER mycluster ADD myindex"
+```
+
 <!-- end -->
 When the table is added back, the new files created by the optimization process will be replicated to the other nodes in the cluster.
 Any local changes made to the table on other nodes will be lost.
@@ -111,4 +192,3 @@ Once the table is added back to the cluster, you must resume write operations on
 Search operations are available as usual during the process on any of the nodes.
 
 <!-- proofread -->
-

@@ -7,7 +7,7 @@ on:
  #  types: [ completed ]
   workflow_dispatch:
 
-# cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
+# cancels the previous workflow run when a new one appears in the same branch (e.g. main or a PR's branch)
 concurrency:
   group: coverage_${{ github.ref }}
   cancel-in-progress: true

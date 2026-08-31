@@ -1176,7 +1176,7 @@ table products {
 ### bigram_index
 
 ```ini
-bigram_index = {none|all|first_freq|both_freq}
+bigram_index = {none|all|first_freq|both_freq|second_numeric|second_has_digit}
 ```
 
 <!-- example bigram_index -->
@@ -1189,10 +1189,16 @@ Bigram indexing is a feature to accelerate phrase searches. When indexing, it st
 * `all`, index every single word pair
 * `first_freq`, only index word pairs where the *first* word is in a list of frequent words (see [bigram_freq_words](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)). For example, with `bigram_freq_words = the, in, i, a`, indexing "alone in the dark" text will result in "in the" and "the dark" pairs being stored as bigrams, because they begin with a frequent keyword (either "in" or "the" respectively), but "alone in" would **not** be indexed, because "in" is a *second* word in that pair.
 * `both_freq`, only index word pairs where both words are frequent. Continuing with the same example, in this mode indexing "alone in the dark" would only store "in the" (the very worst of them all from searching perspective) as a bigram, but none of the other word pairs.
+* `second_numeric`, only index word pairs where the *second* token is ASCII digits only. For example, `xt 806` matches, but `xt rt9600` and `xt v2` do not.
+* `second_has_digit`, only index word pairs where the *second* token contains at least one ASCII digit. For example, `xt 806`, `xt rt9600`, and `xt v2` match, but `xt abc` does not.
 
 For most use cases, `both_freq` would be the best mode, but your mileage may vary.
 
 It's important to note that `bigram_index` works only at the tokenization level and doesn't account for transformations like `morphology`, `wordforms` or `stopwords`. This means the tokens it creates are very straightforward, which makes searching phrases more exact and strict. While this can improve the accuracy of phrase matching, it also makes the system less able to recognize different forms of words or variations in how words appear.
+
+The digit-aware modes use ASCII digits only (`0-9`). They do not treat `+`, `-`, or Unicode digits as numeric. The checks also use the token text produced by the current tokenizer path, without any extra punctuation normalization.
+
+Use [bigram_delimiter](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_delimiter) to control whether eligible bigrams are stored as the internal delimited token, as a glued token such as `iphone17`, or as both forms.
 
 <!-- request SQL -->
 
@@ -1289,6 +1295,124 @@ table products {
 ```
 <!-- end -->
 
+### bigram_delimiter
+
+```ini
+bigram_delimiter = {true|none|both}
+```
+
+<!-- example bigram_delimiter -->
+Bigram token storage mode. Optional, default is `true`.
+
+`bigram_delimiter` controls which token form is stored for eligible bigrams selected by [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index):
+
+* `true`, store only the internal delimited bigram token. This is the current default behavior.
+* `none`, store only the glued token form, such as `iphone17`.
+* `both`, store both the internal delimited form and the glued form.
+
+Search behavior depends on the selected mode:
+
+* with `true`, phrase optimization rewrites eligible phrase pairs to the internal delimited token
+* with `none`, phrase optimization rewrites eligible phrase pairs to the glued token, for example `"iphone 17"` becomes `iphone17`
+* with `both`, phrase optimization is skipped and phrase queries stay ordinary phrase queries, while glued-token searches can still match because the glued form is stored too
+
+`bigram_delimiter` only changes the stored token shape. It does not decide which pairs are eligible; that is still controlled by [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index).
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'bigram_index' => 'all',
+            'bigram_delimiter' => 'none'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) bigram_index = \'all\' bigram_delimiter = \'none\'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_index = \'all\' bigram_delimiter = \'none\'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_index = \'all\' bigram_delimiter = \'none\'');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  bigram_index = all
+  bigram_delimiter = none
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
 ### bigram_freq_words
 
 ```ini
@@ -1298,9 +1422,18 @@ bigram_freq_words = the, a, you, i
 <!-- example bigram_freq_words -->
 A list of keywords considered "frequent" when indexing bigrams. Optional, default is empty.
 
-Some of the bigram indexing modes (see [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)) require to define a list of frequent keywords. These are **not** to be confused with stop words. Stop words are completely eliminated when both indexing and searching. Frequent keywords are only used by bigrams to determine whether to index a current word pair or not.
+Some of the bigram indexing modes (see [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)) require a list of frequent keywords. These are **not** to be confused with stop words. Stop words are completely eliminated when both indexing and searching. Frequent keywords are only used by bigrams to determine whether to index a current word pair or not.
 
 `bigram_freq_words` lets you define a list of such keywords.
+
+This option is required only for `first_freq` and `both_freq`.
+
+It must stay empty for:
+
+* `none`
+* `all`
+* `second_numeric`
+* `second_has_digit`
 
 <!-- request SQL -->
 
@@ -1400,25 +1533,38 @@ table products {
 ### dict
 
 ```ini
-dict = {keywords|crc}
+dict = {keywords|keywords_32k|crc}
 ```
 
 <!-- example dict -->
-The type of keywords dictionary used is identified by one of two known values, 'crc' or 'keywords'. This is optional, with 'keywords' as the default.
+The dictionary type is identified by one of three known values: `keywords`, `keywords_32k`, or `crc`. This setting is optional; `keywords` is the default.
 
-Using the keywords dictionary mode (dict=keywords) can significantly decrease the indexing burden and enable substring searches on extensive collections. This mode can be utilized for both plain and RT tables.
+`dict=keywords` and `dict=keywords_32k` are word dictionaries. A word dictionary stores the original keyword text in the index and performs search-time wildcard expansion. `dict=crc` stores keyword checksums instead.
+
+`dict=keywords` is the default word dictionary.
+
+`dict=keywords_32k` is an opt-in word dictionary for 32 KiB keyword tokens. It supports normalized tokens up to 32768 bytes in both plain and RT tables. Tokens above this limit are skipped with a warning instead of being indexed as truncated terms. Exact lookup, prefix lookup, and infix lookup are supported when the usual exact, prefix, or infix settings are enabled. For details about the 42-byte regular token limit and the 32768-byte `keywords_32k` limit, see [Token length limit](../../Creating_a_table/NLP_and_tokenization/Data_tokenization.md#Token-length-limit).
+
+`keywords_32k` is intended for long machine-generated values such as hashes, generated IDs, message identifiers, and long email-like tokens.
+
+The following features do not support `dict=keywords_32k` yet:
+
+* `CALL SUGGEST` and `CALL QSUGGEST` do not work on tables that use `dict=keywords_32k`.
+* Percolate tables can not use `dict=keywords_32k`.
+* Snippets and highlighting still use the regular token limit. Tokens up to 42 bytes can be highlighted; longer `keywords_32k` tokens are skipped by snippet/highlight processing.
+* `indextool --dumpdict` can not dump `dict=keywords_32k` dictionaries yet.
 
 CRC dictionaries do not store the original keyword text in the index. Instead, they replace keywords with a control sum value (computed using FNV64) during both searching and indexing processes. This value is used internally within the index. This approach has two disadvantages:
 * Firstly, there's a risk of control sum collisions between different keywords pairs. This risk grows in proportion to the number of unique keywords in the index. Nonetheless, this concern is minor as the probability of a single FNV64 collision in a dictionary of 1 billion entries is roughly 1 in 16, or 6.25 percent. Most dictionaries will have far fewer than a billion keywords given that a typical spoken human language has between 1 and 10 million word forms.
 * Secondly, and more crucially, it's not straightforward to perform substring searches with control sums. Manticore addressed this issue by pre-indexing all possible substrings as separate keywords (see [min_prefix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len), [min_infix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) directives). This method even has an added advantage of matching substrings in the fastest way possible. Yet, pre-indexing all substrings significantly increases the index size (often by factors of 3-10x or more) and subsequently affects the indexing time, making substring searches on large indexes rather impractical.
 
-The keywords dictionary resolves both of these issues. It stores keywords in the index and performs search-time wildcard expansion. For instance, a search for a `test*` prefix could internally expand to a 'test|tests|testing' query based on the dictionary's contents. This expansion process is entirely invisible to the application, with the exception that the separate per-keyword statistics for all the matched keywords are now also reported.
+The word dictionary resolves both of these issues. It stores keywords in the index and performs search-time wildcard expansion. For instance, a search for a `test*` prefix could internally expand to a 'test|tests|testing' query based on the dictionary's contents. This expansion process is entirely invisible to the application, with the exception that the separate per-keyword statistics for all the matched keywords are now also reported.
 
-For substring (infix) searches, extended wildcards can be used. Special characters such as `?` and `%` are compatible with substring (infix) search (e.g., `t?st*`, `run%`, `*abc*`). Note that the [wildcards operators](../../Searching/Full_text_matching/Operators.md#Wildcard-operators) and the [REGEX](../../Searching/Full_text_matching/Operators.md#REGEX-operator) only function with `dict=keywords`.
+For substring (infix) searches, extended wildcards can be used. Special characters such as `?` and `%` are compatible with substring (infix) search (e.g., `t?st*`, `run%`, `*abc*`). Note that the [wildcards operators](../../Searching/Full_text_matching/Operators.md#Wildcard-operators) function with `dict=keywords` and `dict=keywords_32k`, while the [REGEX](../../Searching/Full_text_matching/Operators.md#REGEX-operator) operator only functions with `dict=keywords`.
 
-Indexing with a keywords dictionary is approximately 1.1x to 1.3x slower than regular, non-substring indexing - yet significantly faster than substring indexing (either prefix or infix). The index size should only be slightly larger than that of the standard non-substring table, with a total difference of 1..10% percent. The time it takes for regular keyword searching should be nearly the same or identical across all three index types discussed (CRC non-substring, CRC substring, keywords). Substring searching time can significantly fluctuate based on how many actual keywords match the given substring (i.e., how many keywords the search term expands into). The maximum number of matched keywords is limited by the [expansion_limit](../../Server_settings/Searchd.md#expansion_limit) directive.
+For normal-sized tokens, indexing with a word dictionary is approximately 1.1x to 1.3x slower than regular, non-substring indexing - yet significantly faster than substring indexing (either prefix or infix). The index size should only be slightly larger than that of the standard non-substring table, with a total difference of 1..10% percent. The time it takes for regular keyword searching should be nearly the same or identical across all three index types discussed (CRC non-substring, CRC substring, word dictionary). Substring searching time can significantly fluctuate based on how many actual keywords match the given substring (i.e., how many keywords the search term expands into). The maximum number of matched keywords is limited by the [expansion_limit](../../Server_settings/Searchd.md#expansion_limit) directive.
 
-In summary, keywords and CRC dictionaries offer two different trade-off decisions for substring searching. You can opt to either sacrifice indexing time and index size to achieve the fastest worst-case searches (CRC dictionary), or minimally impact indexing time but sacrifice worst-case searching time when the prefix expands into a high number of keywords (keywords dictionary).
+In summary, word and CRC dictionaries offer two different trade-off decisions for substring searching. You can opt to either sacrifice indexing time and index size to achieve the fastest worst-case searches (CRC dictionary), or minimally impact indexing time but sacrifice worst-case searching time when the prefix expands into a high number of keywords (word dictionary).
 
 <!-- request SQL -->
 
@@ -1761,6 +1907,97 @@ table products {
   rt_attr_uint = price
 }
 ```
+<!-- end -->
+
+### hitless_words_list
+
+```ini
+hitless_words_list = 'word1; word2; ...'
+```
+
+<!-- example hitless_words_list -->
+The `hitless_words_list` setting allows you to specify hitless words directly in the `CREATE TABLE` statement. It is supported in [RT mode](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29) only.
+
+The values must be separated by semicolons (`;`).
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) hitless_words_list = 'hello; world'
+```
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+CREATE TABLE products(title text, price float) hitless_words_list = 'hello; world'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'hitless_words_list' => 'hello; world'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words_list = \'hello; world\'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words_list = \'hello; world\'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words_list = \'hello; world\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) hitless_words_list = 'hello; world'", true);
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) hitless_words_list = 'hello; world'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) hitless_words_list = 'hello; world'", Some(true)).await;
+```
+
 <!-- end -->
 
 ### index_field_lengths
@@ -2409,4 +2646,3 @@ table products {
 ```
 <!-- end -->
 <!-- proofread -->
-

@@ -1,19 +1,21 @@
-# Добавление документов в таблицу в реальном времени
+# Добавление документов в таблицу реального времени
 
-> Если вы ищете информацию о добавлении документов в обычную таблицу, пожалуйста, обратитесь к разделу [добавление данных из внешних хранилищ](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md).
+> Если вы ищете информацию о добавлении документов в обычную таблицу, обратитесь к разделу [добавления данных из внешних хранилищ](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md).
 
 <!-- example insert -->
-Добавление документов в режиме реального времени поддерживается только для таблиц [Real-Time](../../Creating_a_table/Local_tables/Real-time_table.md) и [percolate](../../Creating_a_table/Local_tables/Percolate_table.md). Соответствующая SQL-команда, HTTP-эндпоинт или клиентские функции вставляют новые строки (документы) в таблицу с указанными значениями полей. Не обязательно, чтобы таблица существовала до добавления в неё документов. Если таблица не существует, Manticore попытается создать её автоматически. Для получения дополнительной информации смотрите раздел [Автоматическая схема](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
+Добавление документов в реальном времени поддерживается только для таблиц [Real-Time](../../Creating_a_table/Local_tables/Real-time_table.md) и [Percolate](../../Creating_a_table/Local_tables/Percolate_table.md). Соответствующая SQL-команда, HTTP-эндпоинт или функции клиента вставляют новые строки (документы) в таблицу с предоставленными значениями полей. Не обязательно, чтобы таблица существовала перед добавлением документов в неё. Если таблица не существует, Manticore попытается создать её автоматически. Для получения дополнительной информации см. [Автосхема](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
 
-Вы можете вставить один или [несколько документов](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents) с значениями для всех полей таблицы или только для части из них. В этом случае остальные поля будут заполнены значениями по умолчанию (0 для скалярных типов, пустая строка для текстовых типов).
+Вы можете вставить один или [несколько документов](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents) со значениями для всех полей таблицы или только для их части. В этом случае остальные поля будут заполнены значениями по умолчанию (0 для скалярных типов, пустая строка для текстовых типов).
 
-В выражениях `INSERT` пока не поддерживаются, поэтому значения должны быть указаны явно.
+Выражения в настоящее время не поддерживаются в `INSERT`, поэтому значения должны быть указаны явно.
 
-Поле/значение ID можно опустить, так как таблицы RT и PQ поддерживают функциональность [auto-id](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID). Также можно использовать значение `0` для id, чтобы заставить систему сгенерировать ID автоматически. Строки с дублирующимися ID не будут перезаписаны с помощью `INSERT`. Вместо этого можно использовать [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
+Поле/значение `ID` можно опустить, так как таблицы RT и PQ поддерживают [auto-id](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID). Для таблиц с числовыми ID можно также указать `0` в качестве значения `id`, чтобы принудительно сгенерировать ID автоматически. Строки с дублирующимися ID не будут перезаписаны через `INSERT`. Вместо этого для такой задачи используйте [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
 
-При использовании HTTP JSON протокола вы можете выбрать один из двух форматов запроса: общий формат Manticore и формат похожий на Elasticsearch. Оба формата продемонстрированы в примерах ниже.
+Для таблиц, созданных с [`id uuid`](../../Creating_a_table/Data_types.md#UUID-document-IDs), передавайте явный UUID в виде строки в кавычках или опускайте `id`, чтобы сгенерировать его автоматически. Явные значения должны соответствовать формату `xxxxxxxx-xxxx-Vxxx-Wxxx-xxxxxxxxxxxx`, где каждый `x` — шестнадцатеричная цифра, `V` — версия (`1`–`8`), а `W` — вариант (`8`, `9`, `a` или `b`). Буквы в шестнадцатеричных значениях в верхнем регистре допускаются и приводятся к нижнему регистру. В отличие от числовых ID, `0` не запрашивает автоматическую генерацию UUID.
 
-Кроме того, при использовании формата JSON-запроса Manticore учитывайте, что узел `doc` обязателен, и все значения должны быть указаны внутри него.
+При использовании HTTP JSON протокола у вас есть два различных формата запроса на выбор: общий формат Manticore и Elasticsearch-подобный формат. Оба формата демонстрируются в примерах ниже.
+
+Кроме того, при использовании формата запроса Manticore JSON помните, что узел `doc` обязателен, и все значения должны быть предоставлены внутри него.
 
 
 <!-- intro -->
@@ -84,21 +86,21 @@ POST /insert
 ```json
 {
   "table": "products",
-  "_id": 1,
+  "id": 1,
   "created": true,
   "result": "created",
   "status": 201
 }
 {
   "table": "products",
-  "_id": 2,
+  "id": 2,
   "created": true,
   "result": "created",
   "status": 201
 }
 {
   "table": "products",
-  "_id": 1657860156022587406,
+  "id": 1657860156022587406,
   "created": true,
   "result": "created",
   "status": 201
@@ -106,12 +108,58 @@ POST /insert
 
 ```
 
+Для таблиц, созданных с `id uuid`, передавайте JSON `id` как UUID-строку или опускайте его, чтобы сгенерировать значение автоматически:
+
+<!-- request JSON -->
+
+```json
+POST /insert
+{
+  "table":"products_uuid",
+  "id":"550e8400-e29b-41d4-a716-446655440000",
+  "doc":
+  {
+    "title":"Crossbody Bag with Tassel",
+    "price":19.85
+  }
+}
+
+POST /insert
+{
+  "table":"products_uuid",
+  "doc":
+  {
+    "title":"Generated UUID Bag",
+    "price":29
+  }
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "table": "products_uuid",
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "created": true,
+  "result": "created",
+  "status": 201
+}
+{
+  "table": "products_uuid",
+  "id": "<generated UUID>",
+  "created": true,
+  "result": "created",
+  "status": 201
+}
+```
+
 <!-- intro -->
 ##### Elasticsearch:
 
 <!-- request Elasticsearch -->
 
-> ПРИМЕЧАНИЕ: `_create` требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
+> ПРИМЕЧАНИЕ: `_create` требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если это не работает, убедитесь, что Buddy установлен.
 
 ```json
 POST /products/_create/3
@@ -167,13 +215,23 @@ POST /products/_create/
 
 ```php
 $index->addDocuments([
-        ['id' => 1, 'title' => 'Crossbody Bag with Tassel', 'price' => 19.85]
+        ['id' => 1, 'title' => 'Crossbody Bag with Tassel', 'price' => 19.85],
+        ['id' => 2, 'title' => 'microfiber sheet set', 'price' => 19.99],
+        ['id' => 3, 'title' => 'Pet Hair Remover Glove', 'price' => 7.99]
 ]);
+```
+
+Для реплицируемых таблиц задайте имя кластера перед добавлением документов:
+
+```php
+// Set the cluster name
+$index->setName('weekly_table')->setCluster('posts');
+
+// Then add documents in bulk
 $index->addDocuments([
-        ['id' => 2, 'title' => 'Crossbody Bag with Tassel']
-]);
-$index->addDocuments([
-        ['id' => 0, 'title' => 'Yellow bag']
+        ['id' => 1, 'title' => 'Crossbody Bag with Tassel', 'price' => 19.85],
+        ['id' => 2, 'title' => 'microfiber sheet set', 'price' => 19.99],
+        ['id' => 3, 'title' => 'Pet Hair Remover Glove', 'price' => 7.99]
 ]);
 ```
 
@@ -182,10 +240,24 @@ $index->addDocuments([
 
 <!-- request Python -->
 
-``` python
-indexApi.insert({"table" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
-indexApi.insert({"table" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}})
-indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}})
+```python
+docs = [ \
+    {"insert": {"table" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"table" : "products", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+]
+res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
+
+Для реплицируемых таблиц указывайте свойство `cluster` в каждом документе:
+
+```python
+docs = [ \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+]
+res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
 
 <!-- intro -->
@@ -193,10 +265,24 @@ indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}})
 
 <!-- request Python-asyncio -->
 
-``` python
-await indexApi.insert({"table" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
-await indexApi.insert({"table" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}})
-await indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}})
+```python
+docs = [ \
+    {"insert": {"table" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"table" : "products", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+]
+res = await indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
+
+Для реплицируемых таблиц указывайте свойство `cluster` в каждом документе:
+
+```python
+docs = [ \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+]
+res = await indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
 
 <!-- intro -->
@@ -204,10 +290,24 @@ await indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow b
 
 <!-- request Javascript -->
 
-``` javascript
-res = await indexApi.insert({"table" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}});
-res = await indexApi.insert({"table" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}});
-res = await indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}});
+```javascript
+let docs = [
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}},
+    {"insert": {"table" : "products", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}},
+    {"insert": {"table" : "products", "id" : 5, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+];
+res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
+```
+
+Для реплицируемых таблиц указывайте свойство `cluster` в каждом документе:
+
+```javascript
+let docs = [
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 3, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}},
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}},
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 5, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+];
+res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ```
 
 <!-- intro -->
@@ -216,28 +316,19 @@ res = await indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Ye
 <!-- request Java -->
 
 ``` java
-InsertDocumentRequest newdoc = new InsertDocumentRequest();
-HashMap<String,Object> doc = new HashMap<String,Object>(){{
-    put("title","Crossbody Bag with Tassel");
-    put("price",19.85);
-}};
-newdoc.index("products").id(1L).setDoc(doc);
-sqlresult = indexApi.insert(newdoc);
+String body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+BulkResponse bulkresult = indexApi.bulk(body);
+```
 
-newdoc = new InsertDocumentRequest();
-HashMap<String,Object> doc = new HashMap<String,Object>(){{
-    put("title","Crossbody Bag with Tassel");
-}};
-newdoc.index("products").id(2L).setDoc(doc);
-sqlresult = indexApi.insert(newdoc);
+Для реплицируемых таблиц указывайте свойство `cluster` в каждом документе:
 
-newdoc = new InsertDocumentRequest();
-HashMap<String,Object> doc = new HashMap<String,Object>(){{
-    put("title","Yellow bag");
- }};
-newdoc.index("products").id(0L).setDoc(doc);
-sqlresult = indexApi.insert(newdoc);
-
+``` java
+String body = "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+BulkResponse bulkresult = indexApi.bulk(body);
 ```
 
 <!-- intro -->
@@ -246,22 +337,175 @@ sqlresult = indexApi.insert(newdoc);
 <!-- request C# -->
 
 ``` clike
+string body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+BulkResponse bulkresult = indexApi.Bulk(string.Join("\n", docs));
+```
+
+Для реплицируемых таблиц указывайте свойство `cluster` в каждом документе:
+
+``` clike
+string body = "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+BulkResponse bulkresult = indexApi.Bulk(string.Join("\n", docs));
+```
+
+<!-- end -->
+
+## Добавление документов в реплицируемые таблицы
+<!-- example replicated_insert -->
+При работе с [реплицируемыми таблицами](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) нужно использовать специальный синтаксис, чтобы операции записи корректно распространялись на все узлы кластера.
+
+Для всех операций записи (INSERT, REPLACE, DELETE, TRUNCATE, UPDATE) в реплицируемых таблицах необходимо:
+* В SQL: Используйте формат `cluster_name:table_name` вместо одного только имени таблицы
+* В JSON: Указывайте свойство `cluster` вместе со свойством `table`
+
+Если не использовать правильный синтаксис, операция завершится ошибкой.
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+INSERT INTO posts:weekly_table(title,price) VALUES ('Crossbody Bag with Tassel', 19.85);
+INSERT INTO posts:weekly_table VALUES (0,'Yellow bag', 4.95);
+```
+<!-- response SQL -->
+
+```sql
+Query OK, 1 rows affected (0.00 sec)
+Query OK, 1 rows affected (0.00 sec)
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```json
+POST /insert
+{
+  "cluster":"posts",
+  "table":"weekly_table",
+  "id":1,
+  "doc":
+  {
+    "title" : "Crossbody Bag with Tassel",
+    "price" : 19.85
+  }
+}
+
+POST /insert
+{
+  "cluster":"posts",
+  "table":"weekly_table",
+  "id":0,
+  "doc":
+  {
+    "title" : "Yellow bag",
+    "price" : 4.95
+  }
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "table": "weekly_table",
+  "id": 1,
+  "created": true,
+  "result": "created",
+  "status": 201
+}
+{
+  "table": "weekly_table",
+  "id": 1657860156022587406,
+  "created": true,
+  "result": "created",
+  "status": 201
+}
+```
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+// Set the cluster name
+$index->setName('weekly_table')->setCluster('posts');
+
+// Then add documents
+$index->addDocuments([
+        ['id' => 1, 'title' => 'Crossbody Bag with Tassel', 'price' => 19.85],
+        ['id' => 2, 'title' => 'microfiber sheet set', 'price' => 19.99],
+        ['id' => 3, 'title' => 'Pet Hair Remover Glove', 'price' => 7.99]
+]);
+```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+indexApi.insert({"cluster":"posts", "table":"weekly_table", "id":1, "doc":{"title":"Crossbody Bag with Tassel", "price":19.85}})
+indexApi.insert({"cluster":"posts", "table":"weekly_table", "id":0, "doc":{"title":"Yellow bag", "price":4.95}})
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+```javascript
+res = await indexApi.insert({"cluster":"posts", "table":"weekly_table", "id":1, "doc":{"title":"Crossbody Bag with Tassel", "price":19.85}});
+res = await indexApi.insert({"cluster":"posts", "table":"weekly_table", "id":0, "doc":{"title":"Yellow bag", "price":4.95}});
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+InsertDocumentRequest newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc = new HashMap<String,Object>(){{
+    put("title","Crossbody Bag with Tassel");
+    put("price",19.85);
+}};
+newdoc.table("weekly_table").cluster("posts").id(1L).setDoc(doc);
+sqlresult = indexApi.insert(newdoc);
+
+newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc2 = new HashMap<String,Object>(){{
+    put("title","Yellow bag");
+    put("price",4.95);
+}};
+newdoc.table("weekly_table").cluster("posts").id(0L).setDoc(doc2);
+sqlresult = indexApi.insert(newdoc);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
 Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "Crossbody Bag with Tassel");
 doc.Add("price", 19.85);
-InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 1, doc: doc);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "weekly_table", cluster: "posts", id: 1, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 
 doc = new Dictionary<string, Object>();
-doc.Add("title", "Crossbody Bag with Tassel");
-newdoc = new InsertDocumentRequest(index: "products", id: 2, doc: doc);
-sqlresult = indexApi.Insert(newdoc);
-
-doc = new Dictionary<string, Object>();
 doc.Add("title", "Yellow bag");
-newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
+doc.Add("price", 4.95);
+newdoc = new InsertDocumentRequest(table: "weekly_table", cluster: "posts", id: 0, doc: doc);
 sqlresult = indexApi.Insert(newdoc);
-
 ```
 
 <!-- intro -->
@@ -269,59 +513,50 @@ sqlresult = indexApi.Insert(newdoc);
 
 <!-- request Rust -->
 
-``` rust
+```rust
 let mut doc = HashMap::new();
 doc.insert("title".to_string(), serde_json::json!("Crossbody Bag with Tassel"));
 doc.insert("price".to_string(), serde_json::json!(19.85));
 let mut insert_req = InsertDocumentRequest {
-    table: serde_json::json!("products"),
+    table: serde_json::json!("weekly_table"),
     doc: serde_json::json!(doc),
+    cluster: serde_json::json!("posts"),
     id: serde_json::json!(1),
-    ..Default::default(),
 };
 let mut insert_res = index_api.insert(insert_req).await;
 
 doc = HashMap::new();
-doc.insert("title".to_string(), serde_json::json!("Crossbody Bag with Tassel"));
+doc.insert("title".to_string(), serde_json::json!("Yellow bag"));
+doc.insert("price".to_string(), serde_json::json!(4.95));
 insert_req = InsertDocumentRequest {
-    table: serde_json::json!("products"),
+    table: serde_json::json!("weekly_table"),
     doc: serde_json::json!(doc),
-    id: serde_json::json!(2),
-    ..Default::default(),
-};
-insert_res = index_api.insert(insert_req).await;
-
-doc = HashMap::new();
-doc.insert("title".to_string(), serde_json::json!("Tellow bag"));
-insert_req = InsertDocumentRequest {
-    table: serde_json::json!("products"),
-    doc: serde_json::json!(doc),
+    cluster: serde_json::json!("posts"),
     id: serde_json::json!(0),
-    ..Default::default(),
 };
 insert_res = index_api.insert(insert_req).await;
 ```
 
 <!-- end -->
 
-## Автоматическая схема
+## Автосхема
 
-> ПРИМЕЧАНИЕ: Автоматическая схема требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
+> ПРИМЕЧАНИЕ: Автосхема требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если это не работает, убедитесь, что Buddy установлен.
 
-В Manticore реализован механизм автоматического создания таблиц, который активируется, когда указанная в insert-запросе таблица еще не существует. Этот механизм по умолчанию включен. Чтобы отключить его, установите `auto_schema = 0` в разделе [Searchd](../../Server_settings/Searchd.md#auto_schema) конфигурационного файла Manticore.
+Manticore имеет механизм автоматического создания таблиц, который активируется, когда указанная таблица в запросе insert или replace ещё не существует. Этот механизм включен по умолчанию. Чтобы отключить его, установите `auto_schema = 0` в разделе [Searchd](../../Server_settings/Searchd.md#auto_schema) вашего конфигурационного файла Manticore.
 
 <!-- example auto-schema -->
 
-По умолчанию все текстовые значения в части `VALUES` считаются типом `text`, кроме значений, которые являются валидными адресами электронной почты — они рассматриваются как тип `string`.
+По умолчанию все текстовые значения в предложении `VALUES` считаются имеющими тип `text`, за исключением значений, представляющих действительные адреса электронной почты, которые обрабатываются как тип `string`.
 
-Если вы попытаетесь вставить несколько строк с различными, несовместимыми типами значений для одного и того же поля, автоматическое создание таблицы будет отменено, и будет возвращено сообщение об ошибке. Однако, если типы значений совместимы, итоговый тип поля будет тем, который охватывает все значения. Возможны следующие автоматические преобразования типов данных:
+Если вы попытаетесь вставить/заменить несколько строк с различными, несовместимыми типами значений для одного и того же поля, автоматическое создание таблицы будет отменено, и будет возвращено сообщение об ошибке. Однако, если различные типы значений совместимы, результирующий тип поля будет таким, который вмещает все значения. Некоторые автоматические преобразования типов данных, которые могут произойти, включают:
 * mva -> mva64
 * uint -> bigint -> float (это может привести к некоторой потере точности)
 * string -> text
 
-Механизм автоматической схемы не поддерживает создание таблиц с векторными полями (полями типа `float_vector`), используемыми для поиска сходства [KNN](../../Searching/KNN.md#Configuring-a-table-for-KNN-search) (метод ближайших соседей). Для использования векторных полей в вашей таблице необходимо явно создать таблицу со схемой, которая эти поля определяет. Если вам нужно сохранить векторные данные в обычной таблице без возможностей KNN-поиска, вы можете хранить их как JSON-массив с использованием стандартного JSON-синтаксиса, например: `INSERT INTO table_name (vector_field) VALUES ('[1.0, 2.0, 3.0]')`.
+Механизм автосхемы не поддерживает создание таблиц с векторными полями (полями типа `float_vector`), используемыми для поиска сходства [KNN](../../Searching/KNN.md#Configuring-a-table-for-KNN-search) (K-ближайших соседей). Чтобы использовать векторные поля в вашей таблице, вы должны явно создать таблицу со схемой, определяющей эти поля. Если вам нужно хранить векторные данные в обычной таблице без возможности поиска KNN, вы можете хранить их как JSON-массив, используя стандартный синтаксис JSON, например: `INSERT INTO table_name (vector_field) VALUES ('[1.0, 2.0, 3.0]')`.
 
-Также будут распознаваться и конвертироваться в таймстампы следующие форматы дат, все остальные форматы дат будут рассматриваться как строки:
+Также следующие форматы дат будут распознаны и преобразованы в метки времени, в то время как все остальные форматы дат будут обрабатываться как строки:
 - `%Y-%m-%dT%H:%M:%E*S%Z`
 - `%Y-%m-%d'T'%H:%M:%S%Z`
 - `%Y-%m-%dT%H:%M:%E*S`
@@ -330,7 +565,7 @@ insert_res = index_api.insert(insert_req).await;
 - `%Y-%m-%dT%H`
 
 
-Обратите внимание, что HTTP-эндпоинт `/bulk` не поддерживает автоматическое создание таблиц (автоматическую схему). Эту функциональность поддерживают только HTTP-эндпоинт `/_bulk` (формат похожий на Elasticsearch) и SQL-интерфейс.
+Имейте в виду, что HTTP-эндпоинт `/bulk` не поддерживает автоматическое создание таблиц (auto schema). Эту возможность поддерживают только эндпоинт `/_bulk` (в стиле Elasticsearch) и SQL-интерфейс.
 
 <!-- intro -->
 ##### SQL:
@@ -411,28 +646,32 @@ POST /insert  -d
 <!-- response JSON -->
 
 ```json
-{"table":"t","_id":2,"created":true,"result":"created","status":201}
+{"table":"t","id":2,"created":true,"result":"created","status":201}
 ```
 
 <!-- end -->
 
 ## Автоматический ID
 <!-- example autoid -->
-Manticore предоставляет функционал автоматической генерации ID для столбца ID документов, вставляемых или заменяемых в риалтайм или [Percolate таблице](../../Creating_a_table/Local_tables/Percolate_table.md). Генератор создает уникальный ID с некоторыми гарантиями, но его не следует считать автоинкрементным ID.
+Manticore предоставляет автоматическую генерацию ID для документов, вставляемых или заменяемых в таблицу real-time или [Percolate table](../../Creating_a_table/Local_tables/Percolate_table.md). Генератор создаёт уникальное числовое значение с гарантиями, перечисленными ниже, но его не следует считать автоинкрементной последовательностью.
 
-Генерируемое значение ID гарантированно уникально при соблюдении следующих условий:
-* Значение [server_id](../../Server_settings/Searchd.md#server_id) текущего сервера находится в диапазоне от 0 до 127 и является уникальным среди узлов кластера, или используется значение по умолчанию, сгенерированное из MAC-адреса в качестве зерна
+Сгенерированное значение ID гарантированно уникально при следующих условиях:
+* Значение [server_id](../../Server_settings/Searchd.md#server_id) текущего сервера находится в диапазоне от 0 до 127 и является уникальным среди узлов в кластере, или используется значение по умолчанию, сгенерированное из MAC-адреса в качестве сида
 * Системное время не меняется для узла Manticore между перезапусками сервера
-* Авто-ID генерируется менее 16 миллионов раз в секунду между перезапусками поискового сервера
+* Средняя скорость генерации авто-ID между двумя запусками сервера остается ниже примерно 16 миллионов ID в секунду
 
-Генератор авто-ID создает 64-битное целое число в качестве идентификатора документа и использует следующую схему:
-* Биты с 0 по 23 образуют счетчик, который увеличивается при каждом вызове генератора авто-ID
-* Биты с 24 по 55 представляют собой Unix timestamp запуска сервера
-* Биты с 56 по 63 соответствуют server_id
+Генератор auto ID создаёт 64-битное целое число со следующим распределением:
+* Биты с 0 по 23 — это счетчик, который увеличивается при каждом вызове генератора авто ID
+* Биты с 24 по 55 хранят время запуска сервера в секундах, закодированное как `(unix_timestamp_at_start - 2019-05-01 00:00:00 UTC)`
+* Биты с 56 по 62 хранят `server_id` (значение маскируется в диапазон 0..127)
 
-Эта схема обеспечивает, что сгенерированный ID уникален среди всех узлов в кластере, и данные, вставленные в разные узлы кластера, не создают коллизий между узлами.
+Такая схема гарантирует, что сгенерированные ID уникальны между узлами кластера и что данные, вставляемые в разные узлы кластера, не создают коллизий. Это особенно важно при работе с реплицируемыми таблицами, поскольку так автогенерируемые ID остаются уникальными на всех узлах репликационного кластера.
 
-В результате первый ID, сгенерированный генератором для авто-ID, НЕ равен 1, а является большим числом. Кроме того, поток документов, вставляемых в таблицу, может содержать несеквенциальные значения ID, если вставки в другие таблицы происходят между вызовами, так как генератор ID является единственным на сервере и используется всеми его таблицами.
+Важно: 24-битный счетчик не является жестким ограничением на общее количество документов, которые можно вставить за один запуск сервера. Вы можете вставить более 16 777 216 документов после запуска; ID будут продолжать увеличиваться и оставаться уникальными для этого запущенного процесса. Правило `~16 миллионов ID в секунду` важно для уникальности при перезапусках: после перезапуска временная часть должна продвинуться достаточно далеко, чтобы вновь сгенерированные ID не пересекались с ID, созданными до перезапуска.
+
+В результате, первый ID от генератора, используемый для автоматического ID, НЕ равен 1, а является большим числом. Кроме того, поток документов, вставленных в таблицу, может иметь не последовательные значения ID, если между вызовами происходят вставки в другие таблицы, поскольку генератор ID является единым на сервере и используется всеми его таблицами.
+
+Для таблиц с числовыми ID это целочисленный публичный ID документа. Для таблиц с UUID-ID Manticore кодирует его в каноническую строку UUIDv8; клиентам виден только UUID.
 
 <!-- intro -->
 ##### SQL:
@@ -580,13 +819,13 @@ let insert_res = index_api.insert(insert_req).await;
 <!-- end -->
 
 <!-- example call -->
-### UUID_SHORT генерация нескольких ID
+### Множественная генерация ID с помощью UUID_SHORT
 
 ```sql
 CALL UUID_SHORT(N)
 ```
 
-Оператор `CALL UUID_SHORT(N)` позволяет сгенерировать N уникальных 64-битных ID за один вызов без вставки документов. Это особенно полезно, когда нужно заранее сгенерировать ID в Manticore для использования в других системах или решениях для хранения. Например, можно сгенерировать авто-ID в Manticore и затем использовать их в другой базе данных, приложении или рабочем процессе, обеспечивая согласованные и уникальные идентификаторы в разных средах.
+Оператор `CALL UUID_SHORT(N)` позволяет сгенерировать N уникальных 64-битных ID за один вызов без вставки каких-либо документов. Это особенно полезно, когда вам нужно предварительно сгенерировать ID в Manticore для использования в других системах или решениях хранения данных. Например, вы можете сгенерировать автоматические ID в Manticore, а затем использовать их в другой базе данных, приложении или рабочем процессе, обеспечивая согласованные и уникальные идентификаторы в разных средах.
 
 <!-- intro -->
 ##### Пример:
@@ -608,45 +847,47 @@ CALL UUID_SHORT(3)
 <!-- end -->
 
 <!-- example bulk_insert -->
-## Множественное добавление документов
-Вы можете вставлять не только один документ в таблицу реального времени, но и столько, сколько захотите. Абсолютно нормально вставлять партии из десятков тысяч документов в таблицу реального времени. Однако важно учитывать следующие моменты:
-* Чем больше партия, тем выше задержка каждой операции вставки
-* Чем больше партия, тем выше ожидаемая скорость индексирования
-* Возможно, стоит увеличить значение [max_packet_size](../../Server_settings/Searchd.md#max_packet_size), чтобы позволить передавать более крупные партии
-* Обычно каждая операция пакетной вставки рассматривается как одна [транзакция](../../Data_creation_and_modification/Transactions.md) с гарантией атомарности, поэтому либо все новые документы одновременно окажутся в таблице, либо в случае ошибки ни один из них добавлен не будет. Подробнее о пустой строке или переключении на другую таблицу смотрите в примере "JSON".
+## Массовое добавление документов
+Вы можете вставлять в таблицу реального времени не только один документ, но и сколько угодно. Совершенно нормально вставлять пакеты из десятков тысяч документов в таблицу реального времени. Однако важно учитывать следующие моменты:
+* Чем больше пакет, тем выше задержка каждой операции вставки
+* Чем больше пакет, тем выше скорость индексации, которую вы можете ожидать
+* Возможно, вы захотите увеличить значение [max_packet_size](../../Server_settings/Searchd.md#max_packet_size), чтобы разрешить более крупные пакеты
+* Обычно каждая операция массовой вставки считается одной [транзакцией](../../Data_creation_and_modification/Transactions.md) с гарантией атомарности, поэтому вы либо получите все новые документы в таблице сразу, либо, в случае сбоя, ни один из них не будет добавлен. Подробнее о пустой строке или переключении на другую таблицу см. в примере "JSON".
 
-Обратите внимание, что HTTP-эндпоинт `/bulk` не поддерживает автоматическое создание таблиц (автоматическую схему). Только HTTP-эндпоинт `/_bulk` (Elasticsearch-подобный) и SQL-интерфейс поддерживают эту функцию. `/_bulk` позволяет включать имя кластера в имя таблицы в формате `cluster_name:table_name`.
+Обратите внимание, что HTTP-эндпоинт `/bulk` не поддерживает автоматическое создание таблиц (auto schema). Эту возможность поддерживают только эндпоинт `/_bulk` (в стиле Elasticsearch) и SQL-интерфейс. HTTP-эндпоинт `/_bulk` (в стиле Elasticsearch) позволяет указывать имя таблицы вместе с именем кластера в формате `cluster_name:table_name`.
 
-Эндпоинт `/_bulk` принимает ID документов в том же формате, что и Elasticsearch, и вы также можете включать `id` внутри самого документа:
+Эндпоинт `/_bulk` принимает идентификаторы документов в том же формате, что и Elasticsearch, и вы также можете включить `id` в сам документ:
 ```json
-{ "index": { "table" : "products", "_id" : "1" } }
-{ "title" : "Crossbody Bag with Tassel", "price": 19.85 }
+{ "index": { "table": "products", "_id": "1" } }
+{ "title": "Crossbody Bag with Tassel", "price": 19.85 }
 ```
 
 или
 
 ```json
-{ "index": { "table" : "products" } }
-{ "title" : "Crossbody Bag with Tassel", "price": 19.85, "id": "1" }
+{ "index": { "table": "products" } }
+{ "title": "Crossbody Bag with Tassel", "price": 19.85, "id": "1" }
 ```
 
-#### Передача чанками в /bulk
-Эндпоинт `/bulk` (режим Manticore) поддерживает [Chunked transfer encoding](https://en.wikipedia.org/wiki/Chunked_transfer_encoding). Его можно использовать для передачи больших партий. Это:
-* уменьшает пиковое использование RAM, снижая риск OOM
-* сокращает время ответа
-* позволяет обойти [max_packet_size](../../Server_settings/Searchd.md#max_packet_size) и передавать партии значительно больше максимального разрешённого значения `max_packet_size` (128МБ), например, по 1ГБ за раз.
+Для таблицы RT, объявленной с `id uuid`, `/bulk` читает UUID из `id`. `/_bulk` читает их из метаданных `_id` или из поля документа `id`. Оба endpoint'а могут опустить ID, чтобы UUID был сгенерирован автоматически.
+
+#### Поблочная передача в /bulk
+Эндпоинт `/bulk` (режим Manticore) поддерживает [поблочное кодирование передачи](https://en.wikipedia.org/wiki/Chunked_transfer_encoding). Вы можете использовать его для передачи больших пакетов. Это:
+* снижает пиковое использование оперативной памяти, уменьшая риск OOM
+* уменьшает время отклика
+* позволяет обойти ограничение [max_packet_size](../../Server_settings/Searchd.md#max_packet_size) и передавать пакеты гораздо больше максимально разрешенного значения `max_packet_size` (128 МБ), например, по 1 ГБ за раз.
 
 <!-- intro -->
-### Примеры пакетной вставки
+### Примеры массовой вставки
 ##### SQL:
 <!-- request SQL -->
-Для пакетной вставки просто предоставьте больше документов в скобках после `VALUES()`. Синтаксис:
+Для массовой вставки просто укажите больше документов в скобках после `VALUES()`. Синтаксис:
 
 ```sql
 INSERT INTO <table name>[(column1, column2, ...)] VALUES(value1[, value2 , ...]), (...)
 ```
 
-Необязательный список имён колонок позволяет явно указать значения только для некоторых колонок из таблицы. Все остальные колонки будут заполнены значениями по умолчанию (0 для скалярных типов, пустая строка для строковых).
+Необязательный список имен столбцов позволяет явно указать значения для некоторых столбцов, присутствующих в таблице. Все остальные столбцы будут заполнены значениями по умолчанию (0 для скалярных типов, пустая строка для строковых типов).
 
 Например:
 
@@ -659,22 +900,22 @@ INSERT INTO products(title,price) VALUES ('Crossbody Bag with Tassel', 19.85), (
 Query OK, 3 rows affected (0.01 sec)
 ```
 
-Выражения в `INSERT` пока не поддерживаются, значения должны быть указаны явно.
+Выражения в настоящее время не поддерживаются в `INSERT`, и значения должны быть указаны явно.
 
 <!-- intro -->
 ##### JSON:
 <!-- request JSON -->
-Синтаксис в целом такой же, как для [вставки одного документа](../../Quick_start_guide.md#Add-documents). Просто предоставьте больше строк, по одной на каждый документ, и используйте эндпоинт `/bulk` вместо `/insert`. Оборачивайте каждый документ в узел "insert". Обратите внимание, что также требуются:
+Синтаксис в целом такой же, как и для [вставки одного документа](../../Quick_start_guide.md#Add-documents). Просто предоставьте больше строк, по одной для каждого документа, и используйте эндпоинт `/bulk` вместо `/insert`. Заключите каждый документ в узел "insert". Обратите внимание, что это также требует:
 * `Content-Type: application/x-ndjson`
-* Данные должны быть в формате newline-delimited JSON (NDJSON). По сути, это значит, что каждая строка должна содержать ровно одно JSON-выражение и заканчиваться переносом строки `\n` и, возможно, `\r`.
+* Данные должны быть отформатированы как JSON с разделителями-переводами строк (NDJSON). По сути, это означает, что каждая строка должна содержать ровно один JSON-оператор и заканчиваться символом новой строки `\n` и, возможно, `\r`.
 
-Эндпоинт `/bulk` поддерживает запросы 'insert', 'replace', 'delete' и 'update'. Имейте в виду, что вы можете направлять операции в несколько таблиц, но транзакции возможны только для одной таблицы. Если вы укажете несколько таблиц, Manticore соберёт операции, направленные в одну таблицу, в одну транзакцию. Когда таблица меняется, она выполнит коммит собранных операций и инициирует новую транзакцию для новой таблицы. Пустая строка, разделяющая пакеты, также приводит к коммиту предыдущего пакета и началу новой транзакции.
+Эндпоинт `/bulk` поддерживает запросы 'insert', 'replace', 'delete' и 'update'. Имейте в виду, что вы можете направлять операции в несколько таблиц, но транзакции возможны только для одной таблицы. Если вы укажете больше, Manticore соберет операции, направленные в одну таблицу, в одну транзакцию. При смене таблицы он зафиксирует собранные операции и начнет новую транзакцию для новой таблицы. Пустая строка, разделяющая пакеты, также приводит к фиксации предыдущего пакета и началу новой транзакции.
 
 В ответе на запрос `/bulk` вы можете найти следующие поля:
-* "errors": показывает, произошли ли ошибки (true/false)
+* "errors": показывает, произошли ли какие-либо ошибки (true/false)
 * "error": описывает произошедшую ошибку
-* "current_line": номер строки, на которой выполнение остановилось (или завершилось с ошибкой); пустые строки, включая первую пустую строку, также учитываются
-* "skipped_lines": количество незафиксированных строк, начиная с `current_line` и двигаясь обратно
+* "current_line": номер строки, на которой выполнение остановилось (или завершилось сбоем); пустые строки, включая первую пустую строку, также учитываются
+* "skipped_lines": количество незафиксированных строк, начиная с `current_line` и двигаясь назад
 
 ```json
 POST /bulk
@@ -694,74 +935,20 @@ POST /bulk
 '
 ```
 
-<!-- response JSON -->
-```json
-{
-  "items": [
-    {
-      "bulk": {
-        "table": "products",
-        "_id": 2,
-        "created": 2,
-        "deleted": 0,
-        "updated": 0,
-        "result": "created",
-        "status": 201
-      }
-    }
-  ],
-  "current_line": 4,
-  "skipped_lines": 0,
-  "errors": false,
-  "error": ""
-}
+Для реплицируемых таблиц указывайте свойство `cluster` в каждой операции:
 
-{
-  "items": [
-    {
-      "bulk": {
-        "table": "test1",
-        "_id": 22,
-        "created": 2,
-        "deleted": 0,
-        "updated": 0,
-        "result": "created",
-        "status": 201
-      }
-    },
-    {
-      "bulk": {
-        "table": "test1",
-        "_id": 23,
-        "created": 1,
-        "deleted": 0,
-        "updated": 0,
-        "result": "created",
-        "status": 201
-      }
-    },
-    {
-      "bulk": {
-        "table": "test2",
-        "_id": 25,
-        "created": 2,
-        "deleted": 0,
-        "updated": 0,
-        "result": "created",
-        "status": 201
-      }
-    }
-  ],
-  "current_line": 8,
-  "skipped_lines": 0,
-  "errors": false,
-  "error": ""
-}
+```json
+POST /bulk
+-H "Content-Type: application/x-ndjson" -d '
+{"insert": {"cluster":"posts", "table":"weekly_table", "id":1, "doc":  {"title":"Crossbody Bag with Tassel","price":19.85}}}
+{"insert": {"cluster":"posts", "table":"weekly_table", "id":2, "doc":  {"title":"microfiber sheet set","price":19.99}}}
+{"insert": {"cluster":"posts", "table":"weekly_table", "id":3, "doc":  {"title":"Pet Hair Remover Glove","price":7.99}}}
+'
 ```
 
 <!-- request Elasticsearch -->
 
-> ПРИМЕЧАНИЕ: `_bulk` требует [Manticore Buddy](Installation/Manticore_Buddy.md), если таблица ещё не существует. Если не работает, убедитесь, что Buddy установлен.
+> ПРИМЕЧАНИЕ: `_bulk` требует [Manticore Buddy](Installation/Manticore_Buddy.md), если таблица еще не существует. Если это не работает, убедитесь, что Buddy установлен.
 
 ```json
 POST /_bulk
@@ -816,12 +1003,38 @@ POST /_bulk
 }
 ```
 
+Для реплицируемых таблиц указывайте имя кластера в имени таблицы в формате `cluster_name:table_name`:
+
+```json
+POST /_bulk
+-H "Content-Type: application/x-ndjson" -d '
+{ "index" : { "table" : "posts:weekly_table" } }
+{ "title" : "Yellow Bag", "price": 12 }
+{ "create" : { "table" : "posts:weekly_table" } }
+{ "title" : "Red Bag", "price": 12.5, "id": 3 }
+'
+```
+
 <!-- intro -->
 ##### PHP:
 <!-- request PHP -->
 Используйте метод addDocuments():
 
 ```php
+$index->addDocuments([
+        ['id' => 1, 'title' => 'Crossbody Bag with Tassel', 'price' => 19.85],
+        ['id' => 2, 'title' => 'microfiber sheet set', 'price' => 19.99],
+        ['id' => 3, 'title' => 'Pet Hair Remover Glove', 'price' => 7.99]
+]);
+```
+
+Для реплицируемых таблиц задайте имя кластера перед добавлением документов:
+
+```php
+// Set the cluster name
+$index->setName('weekly_table')->setCluster('posts');
+
+// Then add documents in bulk
 $index->addDocuments([
         ['id' => 1, 'title' => 'Crossbody Bag with Tassel', 'price' => 19.85],
         ['id' => 2, 'title' => 'microfiber sheet set', 'price' => 19.99],
@@ -838,13 +1051,24 @@ $index->addDocuments([
 docs = [ \
     {"insert": {"table" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
     {"insert": {"table" : "products", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
-    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+]
+res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
+
+Для реплицируемых таблиц указывайте свойство `cluster` в каждом документе:
+
+```python
+docs = [ \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
 ]
 res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
 
 <!-- intro -->
-##### Python=asyncio:
+##### Python-asyncio:
 
 <!-- request Python-asyncio -->
 
@@ -852,7 +1076,18 @@ res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 docs = [ \
     {"insert": {"table" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
     {"insert": {"table" : "products", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
-    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+]
+res = await indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
+
+Для реплицируемых таблиц указывайте свойство `cluster` в каждом документе:
+
+```python
+docs = [ \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
 ]
 res = await indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
@@ -866,10 +1101,22 @@ res = await indexApi.bulk('\n'.join(map(json.dumps,docs)))
 let docs = [
     {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}},
     {"insert": {"table" : "products", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}},
-    {"insert": {"table" : "products", "id" : 5, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
+    {"insert": {"table" : "products", "id" : 5, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
 ];
 res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ```
+
+Для реплицируемых таблиц указывайте свойство `cluster` в каждом документе:
+
+```javascript
+let docs = [
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 3, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}},
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}},
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 5, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+];
+res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
+```
+
 <!-- intro -->
 ##### java:
 
@@ -878,7 +1125,16 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ``` java
 String body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
     "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
-    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+BulkResponse bulkresult = indexApi.bulk(body);
+```
+
+Для реплицируемых таблиц указывайте свойство `cluster` в каждом документе:
+
+``` java
+String body = "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
 BulkResponse bulkresult = indexApi.bulk(body);
 ```
 
@@ -890,7 +1146,16 @@ BulkResponse bulkresult = indexApi.bulk(body);
 ``` clike
 string body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
     "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
-    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+BulkResponse bulkresult = indexApi.Bulk(string.Join("\n", docs));
+```
+
+Для реплицируемых таблиц указывайте свойство `cluster` в каждом документе:
+
+``` clike
+string body = "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
 BulkResponse bulkresult = indexApi.Bulk(string.Join("\n", docs));
 ```
 
@@ -908,9 +1173,9 @@ index_api.bulk(bulk_body).await;
 
 <!-- end -->
 <!-- example MVA_insert -->
-## Вставка значений атрибутов с несколькими значениями (MVA)
+## Вставка значений многозначных атрибутов (MVA)
 
-Атрибуты с несколькими значениями (MVA) вставляются как массивы чисел.
+Многозначные атрибуты (MVA) вставляются как массивы чисел.
 <!-- intro -->
 ### Примеры
 ##### SQL
@@ -948,7 +1213,7 @@ POST /products/_create/1
 }
 ```
 
-Или же, альтернативно
+Или, альтернативно
 ```json
 POST /products/_doc/
 {
@@ -1042,7 +1307,7 @@ let insert_res = index_api.insert(insert_req).await;
 
 <!-- example JSON_insert -->
 ## Вставка JSON
-JSON-значение можно вставить как [экранированную](../../Searching/Full_text_matching/Escaping.md) строку (через SQL или JSON) или как JSON-объект (через JSON-интерфейс).
+Значение JSON может быть вставлено как [экранированная](../../Searching/Full_text_matching/Escaping.md) строка (через SQL или JSON) или как объект JSON (через JSON-интерфейс).
 
 <!-- intro -->
 ### Примеры
@@ -1055,7 +1320,7 @@ INSERT INTO products VALUES (1, 'shoes', '{"size": 41, "color": "red"}');
 <!-- intro -->
 ##### JSON
 <!-- request JSON -->
-JSON-значение можно вставить как JSON-объект
+Значение JSON может быть вставлено как объект JSON
 ```json
 POST /insert
 {
@@ -1072,7 +1337,7 @@ POST /insert
 }
 ```
 
-JSON-значение также можно вставить как строку, содержащую экранированный JSON:
+Значение JSON также может быть вставлено как строка, содержащая экранированный JSON:
 ```json
 POST /insert
 {
@@ -1101,7 +1366,7 @@ POST /products/_create/1
 }
 ```
 
-Или же, альтернативно
+Или, альтернативно
 ```json
 POST /products/_doc/
 {
@@ -1207,4 +1472,3 @@ let insert_res = index_api.insert(insert_req).await;
 <!-- end -->
 
 <!-- proofread -->
-

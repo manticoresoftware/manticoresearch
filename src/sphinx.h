@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -42,6 +42,7 @@
 #endif
 
 #include "sphinxdefs.h"
+#include "aggrexpr.h"
 #include "schema/locator.h"
 #include "schema/schema.h"
 #include "indexfilebase.h"
@@ -58,7 +59,7 @@ extern const char * szGIT_BRANCH_ID;
 extern const char * szGDB_SOURCE_DIR;
 
 #define SPHINX_SEARCHD_PROTO	1
-#define SPHINX_CLIENT_VERSION	1
+#define SPHINX_CLIENT_VERSION	2
 
 constexpr int64_t SMALL_INDEX_THRESH = 8192;
 
@@ -86,6 +87,7 @@ bool			sphInterrupted();
 
 struct CSphMultiformContainer;
 class CSphWriter;
+struct UuidDocidKey_t;
 
 
 /// wordforms container
@@ -419,6 +421,8 @@ struct CSphQueryItem
 	CSphString		m_sExpr;		///< expression to compute
 	CSphString		m_sAlias;		///< alias to return
 	ESphAggrFunc	m_eAggrFunc { SPH_AGGR_NONE };
+	float			m_fTdigestCompression = 200.0f; ///< optional tdigest compression for extended aggs
+	AggrSettings_t	m_tAggrSettings; ///< full settings payload for extended aggregate functions
 };
 
 /// search query complex filter tree
@@ -432,6 +436,36 @@ struct FilterTreeItem_t
 	bool operator == ( const FilterTreeItem_t & rhs ) const;
 	bool operator != ( const FilterTreeItem_t & rhs ) const { return !( (*this)==rhs ); }
 	uint64_t GetHash() const;
+};
+
+enum class FacetFilterMode_e : BYTE
+{
+	Strict,
+	Auto,
+	Max
+};
+
+enum class FacetFilterClause_e : BYTE
+{
+	None,
+	All,
+	Include,
+	Exclude
+};
+
+enum class QueryRole_e : BYTE
+{
+	NONE = 0,
+	FACET_HELPER = 1,
+	GROUP_CONCAT_HELPER = 2
+};
+
+struct FacetFilterTrait_t
+{
+	std::optional<FacetFilterMode_e> m_tMode;
+	FacetFilterClause_e m_eClause = FacetFilterClause_e::None;
+	StrVec_t m_dAttrs;
+	bool m_bZeroes = false;
 };
 
 /// table function interface
@@ -512,15 +546,36 @@ struct ScrollSettings_t
 struct KnnSearchSettings_t
 {
 	CSphString		m_sAttr;				///< which attr to use for KNN search (enables KNN if not empty)
-	int				m_iK = 0;				///< KNN K
+	int				m_iK = 0;				///< KNN K (-1 means auto)
 	int				m_iEf = 0;				///< KNN ef
-	bool			m_bRescore = false;		///< KNN rescoring
-	float			m_fOversampling = 1.0f;	///< KNN oversampling
+	bool			m_bPrefilter = true;	///< apply WHERE filters during KNN traversal
+	bool			m_bFullscan = false;	///< force brute-force KNN search instead of HNSW
+	bool			m_bRescore = true;		///< KNN rescoring
+	float			m_fOversampling = 3.0f;	///< KNN oversampling
+	knn::HNSWTerminationPolicy_e m_eTerminationPolicy = knn::HNSWTerminationPolicy_e::QUANTILE;  ///< HNSW termination policy
 	CSphVector<float> m_dVec;				///< KNN anchor vector
 	std::optional<CSphString> m_sEmbStr;	///< string to generate embeddings from
+	CSphString		m_sAlias;				///< user-assigned alias for fusion_weights referencing
+
+	int64_t			GetRequestedDocs() const;
 };
 
-/// search query. Pure struct, no member functions
+
+struct NamedWeight_t
+{
+	CSphString	m_sName;
+	float		m_fWeight = 1.0f;
+};
+
+struct HybridSearchSettings_t
+{
+	int			m_iRankConstant = 60;			///< RRF rank constant (k parameter)
+	int			m_iWindowSize = 0;				///< how many results each sub-query retrieves before fusion (0 = auto)
+	CSphString	m_sMatchAlias;					///< alias for MATCH() in fusion_weights (SQL: MATCH(...) AS alias)
+	CSphVector<NamedWeight_t> m_dNamedWeights;	///< alias to weight from fusion_weights option
+};
+
+/// search query
 struct CSphQuery
 {
 	CSphString		m_sIndexes {"*"};	///< indexes to search
@@ -532,6 +587,8 @@ struct CSphQuery
 	CSphVector<DWORD>	m_dWeights;		///< user-supplied per-field weights. may be NULL. default is NULL
 	ESphMatchMode	m_eMode = SPH_MATCH_EXTENDED;		///< match mode. default is "match all"
 	ESphRankMode	m_eRanker = SPH_RANK_DEFAULT;		///< ranking mode, default is proximity+BM25
+	bool			m_bExplicitRanker = false;	///< whether ranker was explicitly specified by the client
+	bool			m_bExplicitBooleanMode = false;	///< whether boolean_mode was explicitly specified by the client
 	CSphString		m_sRankerExpr;		///< ranking expression for SPH_RANK_EXPR
 	CSphString		m_sUDRanker;		///< user-defined ranker name
 	CSphString		m_sUDRankerOpts;	///< user-defined ranker options
@@ -541,7 +598,9 @@ struct CSphQuery
 	int				m_iMaxMatches = DEFAULT_MAX_MATCHES;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
 	bool			m_bExplicitMaxMatches = false; ///< did we specify the max_matches explicitly?
 
-	KnnSearchSettings_t m_tKnnSettings;
+	CSphVector<KnnSearchSettings_t> m_dKnnSettings;
+	HybridSearchSettings_t m_tHybridSettings;
+	bool			m_bHybridSearch = false;			///< true when fusion_method is set AND both text+KNN are present
 
 	JiebaMode_e		m_eJiebaMode = JiebaMode_e::NONE;	///< separate optional jieba mode for searches
 
@@ -551,6 +610,7 @@ struct CSphQuery
 	bool			m_bZSlist = false;			///< whether the ranker has to fetch the zonespanlist with this query
 	std::optional<bool> m_bSimplify;			///< whether to apply boolean simplification
 	static constexpr bool m_bDefaultSimplify = true;
+	bool			m_bDefaultBoolOr = false;	///< whether implicit full-text whitespace should parse as OR
 	bool			m_bPlainIDF = false;		///< whether to use PlainIDF=log(N/n) or NormalizedIDF=log((N-n+1)/n)
 	bool			m_bGlobalIDF = false;		///< whether to use local indexes or a global idf file
 	bool			m_bNormalizedTFIDF = true;	///< whether to scale IDFs by query word count, so that TF*IDF is normalized
@@ -559,6 +619,7 @@ struct CSphQuery
 	DWORD			m_uDebugFlags = 0;
 	QueryOption_e	m_eExpandKeywords = QUERY_OPT_DEFAULT;	///< control automatic query-time keyword expansion
 	int				m_iExpansionLimit = DEFAULT_QUERY_EXPANSION_LIMIT;	///< whether to limit wildcard expansion, default use index settings
+	CSphString		m_sExpandBlended;			///< control blend_chars expansion during search tokenization
 
 	bool			m_bAccurateAggregation = false;			///< setting via options
 	bool			m_bExplicitAccurateAggregation = false; ///< whether anything was set via options
@@ -578,6 +639,7 @@ struct CSphQuery
 	CSphString		m_sJoinIdx;						///< index to perform join on
 	CSphString		m_sJoinQuery;					///< fulltext query for JOIN
 	CSphVector<OnFilter_t> m_dOnFilters;			///< JOIN ON condition filters
+	CSphVector<CSphFilterSettings> m_dOnValueFilters;	///< JOIN ON value filters
 	int				m_iJoinBatchSize = -1;			///< join batch size (-1==default, 0==disable batching)
 
 	CSphString		m_sGroupBy;			///< group-by attribute name(s)
@@ -602,11 +664,12 @@ struct CSphQuery
 	CSphVector<CSphNamedInt>	m_dFieldWeights;	///< per-field weights
 
 	DWORD			m_uMaxQueryMsec = 0;	///< max local index search time, in milliseconds (default is 0; means no limit)
-	int				m_iMaxPredictedMsec = 0; ///< max predicted (!) search time limit, in milliseconds (0 means no limit)
 	CSphString		m_sComment;				///< comment to pass verbatim in the log file
 
 	CSphString		m_sSelect;				///< select-list (attributes and/or expressions)
 	CSphString		m_sOrderBy;				///< order-by clause
+	bool			m_bExplicitOrderBy = false;	///< SQL ORDER BY was supplied by the client
+	CSphVector<CSphString> m_dOrderByItems;	///< parsed expressions in the explicit SQL ORDER BY
 
 	CSphString		m_sOuterOrderBy;		///< temporary (?) subselect hack
 	int				m_iOuterOffset = 0;		///< keep and apply outer offset at master
@@ -638,6 +701,11 @@ struct CSphQuery
 
 	bool			m_bFacet = false;			///< whether this a facet query
 	bool			m_bFacetHead = false;
+	QueryRole_e		m_eQueryRole = QueryRole_e::NONE;	///< serialized physical-query role
+	FacetFilterTrait_t m_tFacetFilter;
+	int				m_iFacetResultOffset = -1;	///< internal deferred facet paging: restore requested offset after zero-bucket merge/order
+	int				m_iFacetResultLimit = -1;	///< internal deferred facet paging: restore requested limit after zero-bucket merge/order
+	StrVec_t		m_dFacetOwnFilterAttrs;
 
 	QueryType_e		m_eQueryType {QUERY_API};		///< queries from sphinxql require special handling
 	const QueryParser_i * m_pQueryParser = nullptr;	///< queries do not own this parser
@@ -648,10 +716,45 @@ struct CSphQuery
 	const void*		m_pCookie = nullptr;	///< opaque mark, used to manage lifetime of the vec of queries
 
 	int				m_iConcurrency = 0;    ///< limit N of threads to run query with. 0 means 'no limit'
+	int				m_iEmbeddingsThreads = -1; ///< per-query override for embeddings_threads. -1 means 'use global setting'
 	CSphVector<CSphString>	m_dStringSubkeys;
 	CSphVector<int64_t>		m_dIntSubkeys;
 	Dispatcher::Template_t	m_tMainDispatcher;
 	Dispatcher::Template_t	m_tPseudoShardingDispatcher;
+
+	bool						HasKnn() const				{ return !m_dKnnSettings.IsEmpty(); }
+	bool						HasMultipleKnn() const		{ return m_dKnnSettings.GetLength() > 1; }
+	bool						IsInternalQuery() const		{ return m_eQueryRole!=QueryRole_e::NONE; }
+	bool						IsFacetHelper() const		{ return m_eQueryRole==QueryRole_e::FACET_HELPER; }
+	bool						IsGroupConcatHelper() const	{ return m_eQueryRole==QueryRole_e::GROUP_CONCAT_HELPER; }
+	KnnSearchSettings_t &		SingleKnnSettings()			{ return m_dKnnSettings[0]; }
+	const KnnSearchSettings_t &	SingleKnnSettings() const	{ return m_dKnnSettings[0]; }
+};
+
+struct QueryExecutionSettings_t
+{
+	ESphRankMode	m_eRanker = SPH_RANK_DEFAULT;
+	CSphString		m_sRankerExpr;
+	CSphString		m_sUDRanker;
+	CSphString		m_sUDRankerOpts;
+	bool			m_bDefaultBoolOr = false;
+
+	QueryExecutionSettings_t() = default;
+	explicit QueryExecutionSettings_t ( const CSphQuery & tQuery )
+		: m_eRanker ( tQuery.m_eRanker )
+		, m_sRankerExpr ( tQuery.m_sRankerExpr )
+		, m_sUDRanker ( tQuery.m_sUDRanker )
+		, m_sUDRankerOpts ( tQuery.m_sUDRankerOpts )
+		, m_bDefaultBoolOr ( tQuery.m_bDefaultBoolOr )
+	{}
+
+	void SetRanker ( const QueryExecutionSettings_t & tOther )
+	{
+		m_eRanker = tOther.m_eRanker;
+		m_sRankerExpr = tOther.m_sRankerExpr;
+		m_sUDRanker = tOther.m_sUDRanker;
+		m_sUDRankerOpts = tOther.m_sUDRankerOpts;
+	}
 };
 
 void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitless = false );
@@ -660,11 +763,13 @@ void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitl
 bool ParseSelectList ( CSphString & sError, CSphQuery &pResult );
 
 void SetQueryDefaultsExt2 ( CSphQuery & tQuery );
+bool ParseStoredRanker ( const CSphString & sRanker, QueryExecutionSettings_t & tSettings, CSphString & sError );
+bool ValidateStoredRankerExpression ( ESphRankMode eRanker, const CSphString & sRankerExpr, const ISphSchema & tSchema, CSphString & sError );
+QueryExecutionSettings_t BuildQueryExecutionSettings ( const CSphQuery & tQuery, const MutableIndexSettings_c & tSettings );
 
 /// some low-level query stats
 struct CSphQueryStats
 {
-	int64_t *	m_pNanoBudget = nullptr;///< pointer to max_predicted_time budget (counted in nanosec)
 	DWORD		m_iFetchedDocs = 0;		///< processed documents
 	DWORD		m_iFetchedHits = 0;		///< processed hits (aka positions)
 	DWORD		m_iSkips = 0;			///< number of Skip() calls
@@ -699,8 +804,30 @@ struct ExpansionStats_t
 class CSphQueryResultMeta
 {
 public:
-	int						m_iQueryTime = 0;		///< query time, milliseconds
-	int						m_iRealQueryTime = 0;	///< query time, measured just from start to finish of the query. In milliseconds
+	int64_t					GetQueryTimeUs () const noexcept { return ClampTimeUs ( m_tmQueryTimeUs ); }
+	int64_t					GetRealQueryTimeUs () const noexcept { return ClampTimeUs ( m_tmRealQueryTimeUs ); }
+	int						GetQueryTimeMs () const noexcept { return ToMs ( GetQueryTimeUs() ); }
+	int						GetRealQueryTimeMs () const noexcept { return ToMs ( GetRealQueryTimeUs() ); }
+
+	void					SetQueryTimeUs ( int64_t tmUs ) noexcept { m_tmQueryTimeUs = ClampTimeUs ( tmUs ); }
+	void					SetRealQueryTimeUs ( int64_t tmUs ) noexcept { m_tmRealQueryTimeUs = ClampTimeUs ( tmUs ); }
+	void					AddQueryTimeUs ( int64_t tmUs ) noexcept { SetQueryTimeUs ( GetQueryTimeUs() + ClampTimeUs ( tmUs ) ); }
+	void					AddRealQueryTimeUs ( int64_t tmUs ) noexcept { SetRealQueryTimeUs ( GetRealQueryTimeUs() + ClampTimeUs ( tmUs ) ); }
+
+	void					SetQueryTimeMs ( int iMs ) noexcept { SetQueryTimeUs ( ToUs ( iMs ) ); }
+	void					SetRealQueryTimeMs ( int iMs ) noexcept { SetRealQueryTimeUs ( ToUs ( iMs ) ); }
+	void					AddQueryTimeMs ( int iMs ) noexcept { AddQueryTimeUs ( ToUs ( iMs ) ); }
+	void					AddRealQueryTimeMs ( int iMs ) noexcept { AddRealQueryTimeUs ( ToUs ( iMs ) ); }
+
+private:
+	static int64_t			ClampTimeUs ( int64_t tmUs ) noexcept { return tmUs<0 ? 0 : tmUs; }
+	static int64_t			ToUs ( int iMs ) noexcept { return iMs<=0 ? 0 : (int64_t)iMs * 1000; }
+	static int				ToMs ( int64_t tmUs ) noexcept { return tmUs<=0 ? 0 : (int)( tmUs / 1000 ); }
+
+	int64_t					m_tmQueryTimeUs = 0;	///< canonical query wall-time metric, microseconds
+	int64_t					m_tmRealQueryTimeUs = 0; ///< canonical elapsed wall-clock time from start to finish of the query, microseconds
+
+public:
 	int64_t					m_iCpuTime = 0;			///< user time, microseconds
 	int						m_iMultiplier = 1;		///< multi-query multiplier, -1 to indicate error
 
@@ -715,14 +842,11 @@ public:
 	int64_t					m_iAgentCpuTime = 0;	///< agent cpu time (for distributed searches)
 	CSphIOStats				m_tAgentIOStats;		///< agent IO stats (for distributed searches)
 
-	int64_t					m_iPredictedTime = 0;		///< local predicted time
-	int64_t					m_iAgentPredictedTime = 0;	///< distributed predicted time
 	DWORD					m_iAgentFetchedDocs = 0;	///< distributed fetched docs
 	DWORD					m_iAgentFetchedHits = 0;	///< distributed fetched hits
 	DWORD					m_iAgentFetchedSkips = 0;	///< distributed fetched skips
 
 	CSphQueryStats 			m_tStats;					///< query prediction counters
-	bool					m_bHasPrediction = false;	///< is prediction counters set?
 
 	CSphString				m_sError;				///< error message
 	CSphString				m_sWarning;				///< warning message
@@ -768,6 +892,7 @@ struct CSphAttrUpdate
 	bool							m_bIgnoreNonexistent = false;	///< whether to warn about non-existen attrs, or just silently ignore them
 	bool							m_bStrict = false;				///< whether to check for incompatible types first, or just ignore them
 	bool							m_bReusable = true;				///< whether update is standalone and never rewritten, or need deep-copy
+	bool							m_bRebuildEmbeddings = false;	///< internal: allow updating KNN-indexed float_vector during rebuild/backfill
 
 	inline int GetRowOffset (int i) const
 	{
@@ -816,6 +941,25 @@ struct AttrUpdateInc_t // for cascade (incremental) update
 };
 
 void CommitUpdateAttributes ( int64_t * pTID, const char* szName, const CSphAttrUpdate & tUpd );
+
+enum class EmbeddingPopulate_e
+{
+	Empty,
+	AllRows
+};
+
+struct ExtUpdState_t
+{
+	CSphString					m_sAttr;
+	int							m_iAttrIdx = -1;
+	int							m_iDims = 0;
+	EmbeddingPopulate_e			m_eMode = EmbeddingPopulate_e::Empty;
+	CSphFixedVector<std::pair<int, RowID_t>>	m_dDiskChunks { 0 };
+	int							m_iUpdatedRows = 0;
+	int							m_iSkippedRows = 0;
+	int							m_iAlterGenerationAtInit = -1;
+	std::optional<bool>			m_tPreviousOptimizeStopState;
+};
 
 /////////////////////////////////////////////////////////////////////////////
 // FULLTEXT INDICES
@@ -1074,7 +1218,7 @@ public:
 	CSphVector<PostponedUpdate_t>	m_dPostponedUpdates;
 };
 
-bool Update_CheckAttributes ( const CSphAttrUpdate& tUpd, const ISphSchema& tSchema, CSphString& sError );
+bool Update_CheckAttributes ( const CSphAttrUpdate& tUpd, const ISphSchema& tSchema, CSphString& sError, CSphString & sWarning );
 
 // helper - collects killed documents
 struct KillAccum_t final : public IndexSegment_c
@@ -1117,12 +1261,12 @@ struct UpdateContext_t
 	DWORD				m_uUpdateMask {0};
 	bool				m_bBlobUpdate {false};
 	int					m_iJsonWarnings {0};
-
+	StrVec_t			m_dDisabledSI;
 
 	UpdateContext_t ( AttrUpdateInc_t & tUpd, const ISphSchema & tSchema );
 
 	void PrepareListOfUpdatedAttributes ( CSphString& sError );
-	bool HandleJsonWarnings ( int iUpdated, CSphString& sWarning, CSphString& sError ) const;
+	bool HandleWarnings ( int iUpdated, CSphString & sWarning, CSphString & sError );
 	CSphRowitem* GetDocinfo ( RowID_t tRowID ) const;
 };
 
@@ -1135,6 +1279,8 @@ DiskIndexQwordTraits_c * sphCreateDiskIndexQword ( bool bInlineHits );
 
 /// returns ranker name as string
 const char * sphGetRankerName ( ESphRankMode eRanker );
+bool sphParseRankerName ( const CSphString & sRanker, ESphRankMode & eRanker );
+bool sphSplitRankerCall ( const CSphString & sRanker, CSphString & sName, CSphString & sArg );
 
 struct DocstoreDoc_t
 {
@@ -1289,6 +1435,7 @@ public:
 	virtual bool				AlterKillListTarget ( KillListTargets_c & tTargets, CSphString & sError ) { return false; }
 	virtual void				KillExistingDocids ( CSphIndex * pTarget ) const {}
 	virtual bool				IsAlive ( DocID_t tDocID ) const { return false; }
+	virtual DocID_t			FindAliveUuidDocid ( const UuidDocidKey_t & ) const { assert ( 0 && "uuid lookup is not supported by this index" ); return 0; }
 
 	bool						GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const override { return false; }
 	int							GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const override { return -1; }
@@ -1309,6 +1456,9 @@ public:
 	/// internal debugging hook, DO NOT USE
 	virtual int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * ) = 0;
 	virtual void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) {}
+
+	/// rewrite index header on disk using current in-memory settings
+	virtual bool				RewriteHeader ( CSphString & sError ) const { return false; }
 
 	/// getter for name. Notice, const char* returned as it is mostly used for printing name
 	const char *				GetName () const { return m_sIndexName.cstr(); }
@@ -1335,7 +1485,16 @@ public:
 	virtual bool					AlterSI ( CSphString & sError ) { return true; }
 	virtual bool					AlterKNN ( CSphString & sError ) { return true; }
 	virtual bool					AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError ) { return false; }
+	virtual bool					AlterApiUrl ( const CSphString & sAttr, const CSphString & sUrl, CSphString & sError ) { return false; }
+	virtual bool					AlterApiTimeout ( const CSphString & sAttr, int iTimeout, CSphString & sError ) { return false; }
 	const CSphBitvec &				GetMorphFields () const { return m_tMorphFields; }
+
+	virtual bool					ReserveEmbeddingSpace ( int64_t iDocsToFill, int iDims, CSphString & sError ) { return true; }
+	virtual bool					InitUpdateEmbeddingState ( const CSphString & sAttr, EmbeddingPopulate_e eMode, ExtUpdState_t & tState, CSphString & sError ) { return false; }
+	virtual bool					GetUpdateEmbedding ( ExtUpdState_t & tState, AttrUpdateSharedPtr_t & pUpdate, CSphString & sError ) const { return false; }
+	virtual bool					ValidateUpdateEmbedding ( const ExtUpdState_t & tState, AttrUpdateInc_t & tUpd, CSphString & sError ) { return true; }
+	virtual void					FinishUpdateEmbeddingState ( ExtUpdState_t & tState ) {}
+	virtual bool					CollectDocsForEmbedding ( const ExtUpdState_t & tState, const VecTraits_T<std::pair<int,bool>> & dFrom, CSphVector<DocID_t> & dDocids, CSphVector<CSphString> & dFromTexts, CSphString & sError, int iMaxDocs, RowID_t & tStartRowID ) const { return true; }
 
 public:
 	int64_t						m_iTID = 0;				///< last committed transaction id

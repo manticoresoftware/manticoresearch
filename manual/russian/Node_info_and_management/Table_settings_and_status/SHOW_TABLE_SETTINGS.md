@@ -1,8 +1,16 @@
 # SHOW TABLE SETTINGS
 
+
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS forum;
+CREATE TABLE forum(f text) min_prefix_len='3' charset_table='0..9, A..Z->a..z, _, -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F';
+-->
+
 <!-- example SHOW TABLE SETTINGS -->
 
-`SHOW TABLE SETTINGS` — это SQL-запрос, который отображает настройки по каждой таблице в формате, совместимом с конфигурационным файлом.
+`SHOW TABLE SETTINGS` — это SQL-запрос, который отображает настройки для каждой таблицы в формате, совместимом с конфигурационным файлом.
 
 Синтаксис:
 
@@ -10,7 +18,11 @@
 SHOW TABLE table_name[.N | CHUNK N] SETTINGS
 ```
 
-Вывод напоминает опцию [--dumpconfig](../../Miscellaneous_tools.md#indextool) утилиты [indextool](../../Miscellaneous_tools.md#indextool). Отчет предоставляет разбивку всех настроек таблицы, включая параметры токенизатора и словаря.
+Вывод похож на опцию [--dumpconfig](../../Miscellaneous_tools.md#indextool) утилиты [indextool](../../Miscellaneous_tools.md#indextool). Отчет предоставляет расшифровку всех настроек таблицы, включая параметры токенизатора и словаря.
+
+Команда поддерживает real-time, plain и [шардированные](../../Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md) таблицы (шардированная таблица сообщает параметры, общие для всех её шардов). Для распределённых таблиц команда не поддерживается, поскольку у них нет собственных настроек.
+
+Если таблица была создана с помощью SQL-ярлыка `profile=...`, `SHOW TABLE SETTINGS` показывает развернутые сохраненные настройки (например, `ranker` и `boolean_mode`), а не само имя профиля.
 
 <!-- intro -->
 ##### SQL:
@@ -31,11 +43,48 @@ charset_table = 0..9, A..Z->a..z, _, -, a..z, U+410..U+42F->U+430..U+44F, U+430.
 1 row in set (0.00 sec)
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW TABLE forum SETTINGS"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "settings",
+        "Value": "min_prefix_len = 3\ncharset_table = 0..9, A..Z->a..z, _, -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example SHOW TABLE SETTINGS N -->
 
-Вы также можете указать конкретный номер чанка, чтобы просмотреть настройки определенного чанка в RT-таблице. Нумерация начинается с 0.
+Вы также можете указать номер конкретного чанка, чтобы просмотреть настройки определенного чанка в таблице RT. Нумерация начинается с 0.
 
 <!-- intro -->
 ##### SQL:
@@ -54,6 +103,44 @@ SHOW TABLE forum CHUNK 0 SETTINGS;
 charset_table = 0..9, A..Z->a..z, _, -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F |
 +---------------+-----------------------------------------------------------------------------------------------------------+
 1 row in set (0.00 sec)
+```
+
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW TABLE forum CHUNK 0 SETTINGS"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "settings",
+        "Value": "min_prefix_len = 3\ncharset_table = 0..9, A..Z->a..z, _, -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- end -->

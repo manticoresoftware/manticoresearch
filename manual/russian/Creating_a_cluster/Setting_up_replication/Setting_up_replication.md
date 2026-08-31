@@ -1,62 +1,74 @@
 # Настройка репликации
 
-С Manticore транзакции записи (такие как `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, `COMMIT`) могут быть реплицированы на другие узлы кластера до того, как транзакция будет полностью применена на текущем узле. В настоящее время репликация поддерживается для таблиц типов `percolate`, `rt` и `distributed` в Linux и macOS.
+С Manticore транзакции записи (такие как `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, `COMMIT`) могут реплицироваться на другие узлы кластера до полного применения транзакции на текущем узле. В настоящее время репликация поддерживается для таблиц `percolate`, `rt` и `distributed` в Linux и macOS.
 
-[Нативные бинарные файлы для Windows](../../Installation/Windows.md#Installing-Manticore-as-native-Windows-binaries) для Manticore не поддерживают репликацию. Рекомендуется [устанавливать Manticore через WSL](../../Installation/Windows.md#Installing-or-enabling-WSL2) (Windows Subsystem for Linux).
+[Нативные бинарные файлы Windows](../../Installation/Windows.md#Installing-Manticore-as-native-Windows-binaries) для Manticore не поддерживают репликацию. Мы рекомендуем [устанавливать Manticore через WSL](../../Installation/Windows.md#Installing-or-enabling-WSL2) (Подсистема Windows для Linux).
 
 На [macOS](../../Installation/MacOS.md) репликация имеет ограниченную поддержку и рекомендуется только для целей разработки.
 
-Репликация Manticore основана на библиотеке [Galera](https://github.com/codership/galera) и обладает несколькими впечатляющими особенностями:
+Репликация Manticore базируется на библиотеке [Galera](https://github.com/codership/galera) и обладает несколькими впечатляющими возможностями:
 
-* Настоящий multi-master: чтение и запись возможны на любом узле в любое время.
-* [Почти синхронная репликация](https://galeracluster.com/library/documentation/overview.html) — отсутствует задержка реплики и потери данных после сбоя узла.
-* Режим горячего резерва: отсутствие простоев при переключении (failover отсутствует).
-* Плотная синхронизация: все узлы имеют одинаковое состояние и не допускается рассогласование данных между узлами.
-* Автоматическое добавление узлов: не требуется вручную создавать резервные копии базы и восстанавливать их на новом узле.
-* Простота использования и развертывания.
-* Обнаружение и автоматическое исключение ненадежных узлов.
+* Истинный multi-master: чтение и запись на любой узел в любое время.
+* [Почти синхронная репликация](https://galeracluster.com/library/documentation/overview.html) — отсутствие задержек ведомых и потери данных после сбоя узла.
+* Горячий резерв: отсутствие времени простоя при переключении (так как переключения нет).
+* Плотно связанные узлы: все узлы содержат одно и то же состояние, расхождений данных между узлами не допускается.
+* Автоматическое добавление узлов: нет необходимости вручную создавать резервные копии базы и восстанавливать их на новом узле.
+* Простота использования и развёртывания.
+* Обнаружение и автоматическое удаление ненадёжных узлов.
 * Репликация на основе сертификации.
 
-Чтобы настроить репликацию в Manticore Search:
+Для настройки репликации в Manticore Search:
 
-* В секции "searchd" конфигурационного файла должна быть задана опция [data_dir](../../Server_settings/Searchd.md#data_dir). Репликация не поддерживается в plain-режиме.
-* Должна быть указана директива [listen](../../Server_settings/Searchd.md#listen), содержащая IP-адрес, доступный другим узлам, либо [node_address](../../Server_settings/Searchd.md#node_address) с доступным IP-адресом.
-* Опционально можно задать уникальные значения для [server_id](../../Server_settings/Searchd.md#server_id) на каждом узле кластера. Если значение не задано, узел попытается использовать MAC-адрес или случайное число для генерации `server_id`.
+* Опция [data_dir](../../Server_settings/Searchd.md#data_dir) должна быть задана в разделе "searchd" конфигурационного файла. Репликация не поддерживается в plain-режиме.
+* Директива [listen](../../Server_settings/Searchd.md#listen) должна содержать IP-адрес, доступный для других узлов, либо должен быть указан [node_address](../../Server_settings/Searchd.md#node_address) с доступным IP-адресом.
+* По желанию, можно задать уникальные значения для [server_id](../../Server_settings/Searchd.md#server_id) на каждом узле кластера. Если значение не задано, узел попытается использовать MAC-адрес или случайное число для генерации `server_id`.
 
-Если не задана директива `replication` в [listen](../../Server_settings/Searchd.md#listen), Manticore использует первые два свободных порта из диапазона 200 портов после порта стандартного протокола прослушивания для каждого созданного кластера. Для ручной установки портов репликации нужно определить диапазон портов в директиве [listen](../../Server_settings/Searchd.md#listen) (типа `replication`), при этом адреса и диапазоны портов не должны пересекаться между разными узлами на одном сервере. В общем случае диапазон портов должен включать минимум два порта на кластер. При определении слушателя репликации с диапазоном портов (например, `listen = 192.168.0.1:9320-9328:replication`) Manticore не начинает слушать эти порты сразу. Вместо этого он выделяет случайные свободные порты из указанного диапазона только при начале использования репликации.
+Если включены [аутентификация и авторизация](../../Security/Authentication_and_authorization.md), для операций с кластером требуется разрешение `replication`. Выдайте его пользователю, который должен владеть операциями репликации для кластера:
 
-## Кластер репликации
+```sql
+GRANT replication ON 'posts' TO 'repl_user';
+```
 
-Кластер репликации — это группа узлов, в которой транзакция записи реплицируется. Репликация настраивается для каждой таблицы отдельно, т.е. одна таблица может принадлежать только одному кластеру. Нет ограничений на количество таблиц в кластере. Все транзакции, такие как `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE` для любой percolate или реального времени таблицы, принадлежащей кластеру, реплицируются на все остальные узлы в этом кластере. Таблицы типа [Distributed](../../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md#Creating-a-distributed-table) также могут участвовать в процессе репликации. Репликация поддерживает multi-master, поэтому запись на любой узел или несколько узлов одновременно работает без проблем.
+`CREATE CLUSTER` и `JOIN CLUSTER` могут указывать такого пользователя через `'<user>' AS user`. Пользователь должен существовать с совпадающими сохраненными данными аутентификации на узлах, участвующих в операции. Просто создать одно и то же имя пользователя и пароль независимо на каждом узле недостаточно, потому что сохраненные данные аутентификации могут отличаться. Если вы изменили данные аутентификации вне демона, выполните `RELOAD AUTH` на затронутых узлах перед использованием операции с кластером.
 
-Для создания кластера обычно используется команда [create cluster](../../Creating_a_cluster/Setting_up_replication/Creating_a_replication_cluster.md#Creating-a-replication-cluster) с `CREATE CLUSTER <cluster name>`, а для присоединения к кластеру — команда [join cluster](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md#Joining-a-replication-cluster) с `JOIN CLUSTER <cluster name> at 'host:port'`. Однако в редких случаях может понадобиться точная настройка поведения `CREATE/JOIN CLUSTER`. Доступные опции:
+Позднее `ALTER CLUSTER ... ADD`, `ALTER CLUSTER ... DROP`, `ALTER CLUSTER ... UPDATE nodes` и `DELETE CLUSTER` используют сохраненного пользовательского кластера. Когда аутентификация включена, успешный `JOIN CLUSTER` заменяет все локальные данные аутентификации на присоединяющемся узле данными аутентификации кластера-источника.
+
+Если директива `replication` [listen](../../Server_settings/Searchd.md#listen) не задана, Manticore использует первые два свободных порта из диапазона в 200 портов после порта прослушивания протокола по умолчанию для каждого созданного кластера. Для ручного задания портов репликации необходимо определить диапазон портов в директиве [listen](../../Server_settings/Searchd.md#listen) (типа `replication`), при этом пары адрес/диапазон портов не должны пересекаться между разными узлами на одном сервере. Как правило, диапазон портов должен содержать как минимум два порта на кластер. Когда вы определяете слушатель репликации с диапазоном портов (например, `listen = 192.168.0.1:9320-9328:replication`), Manticore не начинает прослушивать эти порты сразу. Вместо этого система будет выбирать случайные свободные порты из указанного диапазона только при начале использования репликации.
+
+## Репликационный кластер
+
+Репликационный кластер — это группа узлов, в которой реплицируются транзакции записи. Репликация настраивается на уровне таблицы, то есть одна таблица может принадлежать только одному кластеру. Нет ограничений на количество таблиц в кластере. Все операции `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE` для любой percolate или real-time таблицы, входящей в кластер, реплицируются на все другие узлы этого кластера. В репликацию также могут быть включены [distributed](../../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md#Creating-a-distributed-table) таблицы. Репликация является multi-master, поэтому записи на любой узел или несколько узлов одновременно работают корректно.
+
+Для создания кластера обычно используется команда [create cluster](../../Creating_a_cluster/Setting_up_replication/Creating_a_replication_cluster.md#Creating-a-replication-cluster) с `CREATE CLUSTER <имя кластера>`, а для присоединения к кластеру — команда [join cluster](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md#Joining-a-replication-cluster) с `JOIN CLUSTER <имя кластера> at 'host:port'`. Однако в некоторых редких случаях может понадобиться тонкая настройка поведения `CREATE/JOIN CLUSTER`. Доступные опции:
 
 ### name
 
-Эта опция задает имя кластера. Оно должно быть уникальным среди всех кластеров в системе.
+Эта опция задаёт имя кластера. Оно должно быть уникальным среди всех кластеров в системе.
 
-> **Примечание:** Максимальная длина имени хоста для команды `JOIN` ограничена **253** символами. При превышении этого лимита searchd выдаст ошибку.
+> **Примечание:** Максимальная длина имени хоста для команды `JOIN` составляет **253** символа. Если предел превышен, searchd выдаст ошибку.
 
 ### path
 
-Опция path указывает директорию данных для [write-set cache replication](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) и входящих таблиц с других узлов. Это значение должно быть уникальным для всех кластеров в системе и задаваться как относительный путь к каталогу [data_dir](../../Server_settings/Searchd.md#data_dir). По умолчанию оно совпадает со значением [data_dir](../../Server_settings/Searchd.md#data_dir).
+Параметр `path` задаёт каталог данных для [репликации кэша write-set](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) и других файлов провайдера кластера. Он не влияет на место хранения реплицируемых таблиц. Входящие реплицируемые таблицы сохраняются в обычном каталоге таблицы внутри [data_dir](../../Server_settings/Searchd.md#data_dir). Это значение должно быть уникальным среди всех кластеров в системе и задаваться как относительный путь к каталогу [data_dir](../../Server_settings/Searchd.md#data_dir). По умолчанию оно равно значению [data_dir](../../Server_settings/Searchd.md#data_dir).
+
+> **Критическое изменение:** В более старых версиях входящие файлы реплицируемых таблиц тоже сохранялись по пути кластера. Если вы использовали собственный `path` кластера, обновляйтесь осторожно, потому что реплицируемые таблицы, полученные старыми версиями, может потребоваться переместить или повторно синхронизировать в обычную структуру `data_dir/<table>`.
 
 ### nodes
 
-Опция `nodes` представляет собой список пар адрес:порт всех узлов кластера, разделенных запятыми. Этот список получается с помощью API узла и может включать адрес текущего узла. Используется для присоединения узла к кластеру и повторного присоединения после перезапуска.
+Опция `nodes` — это список адресов и портов всех узлов в кластере, разделённых запятыми. Этот список должен быть получен через API узла и может включать адрес текущего узла. Он используется для присоединения узла к кластеру и для повторного присоединения после перезапуска.
 
 ### options
 
-Опция `options` позволяет передавать дополнительные параметры непосредственно плагину репликации Galera, как описано в [документации Galera по параметрам](https://galeracluster.com/library/documentation/galera-parameters.html).
+Опция `options` позволяет передавать дополнительные параметры непосредственно плагину репликации Galera, как описано в [Galera Documentation Parameters](https://galeracluster.com/library/documentation/galera-parameters.html)
 
 ## Операторы записи
 
 <!-- example write statements 1 -->
-При работе с кластером репликации все операторы записи, такие как `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, которые модифицируют содержимое таблицы кластера, должны использовать выражение `cluster_name:table_name` вместо имени таблицы. Это гарантирует, что изменения будут распространяться на все реплики в кластере. Если используется неправильное выражение, будет вызвана ошибка.
+При работе с репликационным кластером все операторы записи, такие как `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, которые изменяют содержимое таблицы кластера, должны использовать выражение `cluster_name:table_name` вместо имени таблицы. Это гарантирует, что изменения будут распространены на все реплики в кластере. Если использовать неправильное выражение, будет выдана ошибка.
 
-В JSON-интерфейсе свойство `cluster` должно быть установлено вместе с именем `table` для всех инструкций записи в таблицу кластера. Если свойство `cluster` не установлено, будет выдана ошибка.
+В JSON-интерфейсе свойство `cluster` должно быть установлено вместе с именем `table` для всех операций записи в таблицу кластера. Если свойство `cluster` не установлено, это приведет к ошибке.
 
-[Авто ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) для таблицы в кластере должен быть действительным, если корректно настроен [server_id](../../Server_settings/Searchd.md#server_id).
+[Автоматический ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) для таблицы в кластере будет действителен, если [server_id](../../Server_settings/Searchd.md#server_id) настроен правильно.
 
 <!-- intro -->
 ##### SQL:
@@ -64,8 +76,8 @@
 <!-- request SQL -->
 
 ```sql
-INSERT INTO posts:weekly_index VALUES ( 'iphone case' )
-TRUNCATE RTINDEX click_query:weekly_index
+INSERT INTO posts:weekly_table VALUES ( 'iphone case' )
+TRUNCATE TABLE click_query:weekly_table
 UPDATE INTO posts:rt_tags SET tags=(101, 302, 304) WHERE MATCH ('use') AND id IN (1,101,201)
 DELETE FROM clicks:rt WHERE MATCH ('dumy') AND gid>206
 ```
@@ -76,7 +88,7 @@ DELETE FROM clicks:rt WHERE MATCH ('dumy') AND gid>206
 POST /insert -d '
 {
   "cluster":"posts",
-  "table":"weekly_index",
+  "table":"weekly_table",
   "doc":
   {
     "title" : "iphone case",
@@ -86,7 +98,7 @@ POST /insert -d '
 POST /delete -d '
 {
   "cluster":"posts",
-  "table": "weekly_index",
+  "table": "weekly_table",
   "id":1
 }'
 ```
@@ -94,10 +106,10 @@ POST /delete -d '
 <!-- request PHP -->
 
 ```php
-$index->addDocuments([
+$table->addDocuments([
         1, ['title' => 'iphone case', 'price' => 19.85]
 ]);
-$index->deleteDocument(1);
+$table->deleteDocument(1);
 ```
 
 <!-- intro -->
@@ -106,8 +118,8 @@ $index->deleteDocument(1);
 <!-- request Python -->
 
 ``` python
-indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}})
-indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
+indexApi.insert({"cluster":"posts","table":"weekly_table","doc":{"title":"iphone case","price":19.85}})
+indexApi.delete({"cluster":"posts","table":"weekly_table","id":1})
 ```
 
 <!-- intro -->
@@ -116,8 +128,8 @@ indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
 <!-- request Python-asyncio -->
 
 ``` python
-await indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}})
-await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
+await indexApi.insert({"cluster":"posts","table":"weekly_table","doc":{"title":"iphone case","price":19.85}})
+await indexApi.delete({"cluster":"posts","table":"weekly_table","id":1})
 ```
 
 <!-- intro -->
@@ -126,8 +138,8 @@ await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
 <!-- request Javascript -->
 
 ``` javascript
-res = await indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}});
- res = await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1});
+res = await indexApi.insert({"cluster":"posts","table":"weekly_table","doc":{"title":"iphone case","price":19.85}});
+ res = await indexApi.delete({"cluster":"posts","table":"weekly_table","id":1});
 ```
 
 <!-- intro -->
@@ -141,11 +153,11 @@ HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","Crossbody Bag with Tassel");
     put("price",19.85);
 }};
-newdoc.index("weekly_index").cluster("posts").id(1L).setDoc(doc);
+newdoc.table("weekly_table").cluster("posts").id(1L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 
 DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest();
-deleteRequest.index("weekly_index").cluster("posts").setId(1L);
+deleteRequest.table("weekly_table").cluster("posts").setId(1L);
 indexApi.delete(deleteRequest);
 
 ```
@@ -159,10 +171,10 @@ indexApi.delete(deleteRequest);
 Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "Crossbody Bag with Tassel");
 doc.Add("price", 19.85);
-InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "weekly_index", cluster:posts, id: 1, doc: doc);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "weekly_table", cluster:posts, id: 1, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 
-DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(table: "weekly_index", cluster: "posts", id: 1);
+DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(table: "weekly_table", cluster: "posts", id: 1);
 indexApi.Delete(deleteDocumentRequest);
 ```
 
@@ -176,7 +188,7 @@ let mut doc = HashMap::new();
 doc.insert("title".to_string(), serde_json::json!("Crossbody Bag with Tassel"));
 doc.insert("price".to_string(), serde_json::json!(19.85));
 let insert_req = InsertDocumentRequest {
-    table: serde_json::json!("weekly_index"),
+    table: serde_json::json!("weekly_table"),
     doc: serde_json::json!(doc),
     cluster: serde_json::json!("posts"),
     id: serde_json::json!(1),
@@ -184,7 +196,7 @@ let insert_req = InsertDocumentRequest {
 let insert_res = index_api.insert(insert_req).await;
 
 let delete_req = DeleteDocumentRequest {
-    table: serde_json::json!("weekly_index"),
+    table: serde_json::json!("weekly_table"),
     cluster: serde_json::json!("posts"),
     id: serde_json::json!(1),
 };
@@ -193,12 +205,12 @@ index_api.delete(delete_req).await;
 
 <!-- end -->
 
-## Запросы на чтение
+## Операции чтения
 
 <!-- example write statements 2 -->
-Запросы на чтение, такие как `SELECT`, `CALL PQ`, `DESCRIBE`, могут использовать либо обычные имена таблиц без префикса с именем кластера, либо формат `cluster_name:table_name`. Если используется второй вариант, компонент `cluster_name` игнорируется.
+Операции чтения, такие как `SELECT`, `CALL PQ`, `DESCRIBE`, могут использовать обычные имена таблиц без префикса имени кластера или могут использовать формат `cluster_name:table_name`. Если используется последний, компонент `cluster_name` игнорируется.
 
-При использовании HTTP-эндоинта `json/search` свойство `cluster` можно указать, если требуется, но его также можно опустить.
+При использовании HTTP-эндпоинта `json/search` свойство `cluster` можно указать при желании, но его также можно опустить.
 
 
 <!-- intro -->
@@ -207,8 +219,8 @@ index_api.delete(delete_req).await;
 <!-- request SQL -->
 
 ```sql
-SELECT * FROM weekly_index
-CALL PQ('posts:weekly_index', 'document is here')
+SELECT * FROM weekly_table
+CALL PQ('posts:weekly_table', 'document is here')
 ```
 
 <!-- request JSON -->
@@ -217,12 +229,12 @@ CALL PQ('posts:weekly_index', 'document is here')
 POST /search -d '
 {
   "cluster":"posts",
-  "table":"weekly_index",
+  "table":"weekly_table",
   "query":{"match":{"title":"keyword"}}
 }'
 POST /search -d '
 {
-  "table":"weekly_index",
+  "table":"weekly_table",
   "query":{"match":{"title":"keyword"}}
 }'
 ```
@@ -232,9 +244,9 @@ POST /search -d '
 ## Параметры кластера
 
 <!-- example cluster parameters 1 -->
-Параметры плагина репликации можно настроить с помощью инструкции `SET`.
+Параметры плагина репликации можно настроить с помощью оператора `SET`.
 
-Список доступных параметров можно найти в [Документации Galera Parameters](https://galeracluster.com/library/documentation/galera-parameters.html) .
+Список доступных опций можно найти в [Galera Documentation Parameters](https://galeracluster.com/library/documentation/galera-parameters.html).
 
 
 <!-- intro -->
@@ -257,11 +269,11 @@ SET CLUSTER click_query GLOBAL 'pc.bootstrap' = 1
 ## Кластер с расходящимися узлами
 
 <!-- example cluster with diverged nodes  1 -->
-Возможна ситуация, когда реплицируемые узлы расходятся друг с другом, приводя к состоянию, в котором все узлы отмечены как `non-primary`. Это может произойти вследствие сетевого разрыва между узлами, сбоя кластера или исключения плагина репликации при определении `primary component`. В таком случае необходимо выбрать узел и повысить его до роли `primary component`.
+Возможна ситуация, когда реплицированные узлы расходятся друг от друга, что приводит к состоянию, когда все узлы помечены как `non-primary`. Это может произойти в результате сетевого разделения между узлами, сбоя кластера или если плагин репликации столкнется с исключением при определении `primary component`. В таком сценарии необходимо выбрать узел и повысить его до роли `primary component`.
 
-Для определения узла, который необходимо повысить, следует сравнить значение переменной статуса кластера `last_committed` на всех узлах. Если все серверы сейчас работают, перезапуск кластера не требуется. Можно просто повысить узел с наибольшим значением `last_committed` до `primary component` с помощью инструкции `SET` (как показано в примере).
+Чтобы определить узел, который нужно повысить, следует сравнить значение переменной состояния кластера `last_committed` на всех узлах. Если все серверы в настоящее время работают, нет необходимости перезапускать кластер. Вместо этого можно просто повысить узел с наибольшим значением last_committed до `primary component` с помощью оператора `SET` (как показано в примере).
 
-Другие узлы затем переподключатся к primary component и повторно синхронизируют свои данные на основе этого узла.
+Остальные узлы затем переподключатся к основному компоненту и повторно синхронизируют свои данные на основе этого узла.
 
 
 <!-- intro -->
@@ -284,7 +296,7 @@ SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 ## Репликация и кластер
 
 <!-- example replication and cluster 1 -->
-Для использования репликации необходимо в конфигурационном файле определить один порт [listen](../../Server_settings/Searchd.md#listen) для протокола SphinxAPI и один  [listen](../../Server_settings/Searchd.md#listen) для адреса и порта репликации. Также укажите папку [data_dir](../../Server_settings/Searchd.md#data_dir) для приёма входящих таблиц.
+Чтобы использовать репликацию, в конфигурационном файле нужно определить один порт [listen](../../Server_settings/Searchd.md#listen) для протокола SphinxAPI и один [listen](../../Server_settings/Searchd.md#listen) для адреса репликации и диапазона портов. Также укажите каталог [data_dir](../../Server_settings/Searchd.md#data_dir) для хранения входящих реплицируемых таблиц.
 
 
 <!-- intro -->
@@ -302,7 +314,7 @@ searchd {
 <!-- end -->
 
 <!-- example replication and cluster 2 -->
-Для репликации таблиц необходимо создать кластер на сервере, который имеет локальные таблицы, подлежащие репликации.
+Для репликации таблиц необходимо создать кластер на сервере, который содержит локальные таблицы для репликации.
 
 <!-- intro -->
 ##### SQL:
@@ -497,7 +509,7 @@ utils_api.sql("ALTER CLUSTER posts ADD pq_clicks", Some(true)).await;
 <!-- end -->
 
 <!-- example replication and cluster 4 -->
-Все остальные узлы, желающие получать реплику таблиц кластера, должны присоединиться к кластеру следующим образом:
+Все остальные узлы, которые хотят получить реплику таблиц кластера, должны присоединиться к кластеру следующим образом:
 
 
 <!-- intro -->
@@ -587,7 +599,7 @@ utils_api.sql("JOIN CLUSTER posts AT '192.168.1.101:9312'", Some(true)).await;
 <!-- end -->
 
 <!-- example replication and cluster 5 -->
-При выполнении запросов добавляйте префикс имени таблицы с именем кластера `posts`: или используйте свойство `cluster` в HTTP-запросе.
+При выполнении запросов добавьте к имени таблицы префикс имени кластера `posts`: или используйте свойство `cluster` для объекта HTTP-запроса.
 
 
 <!-- intro -->
@@ -617,7 +629,7 @@ POST /insert -d '
 <!-- request PHP -->
 
 ```php
-$index->addDocuments([
+$table->addDocuments([
         3, ['title' => 'test me']
 ]);
 
@@ -660,7 +672,7 @@ InsertDocumentRequest newdoc = new InsertDocumentRequest();
 HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","test me");
 }};
-newdoc.index("pq_title").cluster("posts").id(3L).setDoc(doc);
+newdoc.table("pq_title").cluster("posts").id(3L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 ```
 
@@ -672,7 +684,7 @@ sqlresult = indexApi.insert(newdoc);
 ``` clike
 Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "test me");
-InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "pq_title", cluster: "posts", id: 3, doc: doc);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "pq_title", cluster: "posts", id: 3, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 ```
 
@@ -694,6 +706,5 @@ let insert_res = index_api.insert(insert_req).await;
 ```
 <!-- end -->
 
-Все запросы, изменяющие таблицы в кластере, теперь реплицируются на все узлы кластера.
+Все запросы, которые изменяют таблицы в кластере, теперь реплицируются на все узлы в кластере.
 <!-- proofread -->
-

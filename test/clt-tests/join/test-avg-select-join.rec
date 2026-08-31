@@ -55,15 +55,9 @@ mysql -P9306 -h0 -e "select id, count(*), avg(reviews.rating) avg_rating from pr
 | 5162 |       20 |
 +------+----------+
 ––– input –––
-mysql -P9306 -h0 -e "SELECT COUNT(*) FROM products; SELECT COUNT(*) FROM reviews;"
+mysql -NE -P9306 -h0 -e "SELECT COUNT(*) FROM products; SELECT COUNT(*) FROM reviews"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|    10000 |
-+----------+
-+----------+
-| count(*) |
-+----------+
-|   100000 |
-+----------+
+*************************** 1. row ***************************
+10000
+*************************** 1. row ***************************
+100000

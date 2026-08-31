@@ -7,7 +7,21 @@
 * CentOS 9, RHEL 9, AlmaLinux 9
 * AlmaLinux 10, other RHEL 10-based distributions
 
-### YUM repository
+### Quick install
+
+```bash
+curl https://manticoresearch.com | sh
+```
+
+###### Development packages
+
+If you prefer "Nightly" (development) versions do:
+
+```bash
+curl https://manticoresearch.com | sh -s dev
+```
+
+### Manual installation
 
 The simplest method to install Manticore on RedHat/CentOS is by using our YUM repository:
 
@@ -18,10 +32,10 @@ sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 
 Then install Manticore Search:
 ```bash
-sudo yum install manticore manticore-extra
+sudo yum install manticore
 ```
 
-If you are upgrading to Manticore 6 from an older version, it is recommended to remove your old packages first to avoid conflicts caused by the updated package structure:
+If you are upgrading to Manticore 6 or newer from an older version, it is recommended to remove your old packages first to avoid conflicts caused by the updated package structure:
 
 ```bash
 sudo yum remove manticore*
@@ -33,8 +47,8 @@ It won't remove your data and configuration file.
 If you prefer "Nightly" (development) versions do:
 
 ```bash
-sudo yum -y install https://repo.manticoresearch.com/manticore-repo.noarch.rpm && \
-sudo yum -y --enablerepo manticore-dev install manticore manticore-extra manticore-common manticore-server manticore-server-core manticore-tools manticore-executor manticore-buddy manticore-backup manticore-columnar-lib manticore-server-core-debuginfo manticore-tools-debuginfo manticore-columnar-lib-debuginfo  manticore-icudata manticore-galera manticore-galera-debuginfo manticore-language-packs manticore-load
+sudo yum -y install https://repo.manticoresearch.com/manticore-dev-repo.noarch.rpm && \
+sudo yum -y install manticore
 ```
 
 ### Standalone RPM packages
@@ -55,35 +69,4 @@ dnf install mariadb-connector-c
 ```
 
 if you get error `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?` trying to build a plain table from MySQL.
-
-#### Ukrainian lemmatizer
-The lemmatizer requires Python 3.9+. **Make sure you have it installed and that it's configured with `--enable-shared`.**
-
-Here's how to install Python 3.9 and the Ukrainian lemmatizer in Centos 8:
-
-```bash
-# install Manticore Search and UK lemmatizer from YUM repository
-yum -y install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-yum -y install manticore manticore-lemmatizer-uk
-
-# install packages needed for building Python
-yum groupinstall "Development Tools" -y
-yum install openssl-devel libffi-devel bzip2-devel wget -y
-
-# download, build and install Python 3.9
-cd ~
-wget https://www.python.org/ftp/python/3.9.2/Python-3.9.2.tgz
-tar xvf Python-3.9.2.tgz
-cd Python-3.9*/
-./configure --enable-optimizations --enable-shared
-make -j8 altinstall
-
-# update linker cache
-ldconfig
-
-# install pymorphy2 and UK dictionary
-pip3.9 install pymorphy2[fast]
-pip3.9 install pymorphy2-dicts-uk
-```
 <!-- proofread -->
-

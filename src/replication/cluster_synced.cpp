@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -21,6 +21,7 @@ void operator<< ( ISphOutputBuffer& tOut, const ClusterSyncedRequest_t& tReq )
 	tOut << (const ClusterRequest_t&)tReq;
 	tOut.SendBytes ( tReq.m_tGtid.m_tUuid.data(), 16 );
 	tOut.SendUint64 ( tReq.m_tGtid.m_iSeqNo );
+	tOut.SendUint64 ( tReq.m_iClusterEpoch );
 	tOut.SendByte ( tReq.m_bSendFilesSuccess );
 	tOut.SendString ( tReq.m_sMsg.cstr() );
 	tOut << tReq.m_dIndexes;
@@ -30,6 +31,7 @@ StringBuilder_c& operator<< ( StringBuilder_c& tOut, const ClusterSyncedRequest_
 {
 	tOut << (const ClusterRequest_t&)tReq;
 	tOut << "gtid:" << Wsrep::Gtid2Str ( tReq.m_tGtid );
+	tOut << "epoch:" << tReq.m_iClusterEpoch;
 	tOut << "filesendsuccess:" << (BYTE)tReq.m_bSendFilesSuccess;
 	tOut << "msg:" << tReq.m_sMsg;
 	tOut << "indexes:" << tReq.m_dIndexes;
@@ -41,6 +43,7 @@ void operator>> ( InputBuffer_c& tIn, ClusterSyncedRequest_t& tReq )
 	tIn >> (ClusterRequest_t&)tReq;
 	tIn.GetBytes ( tReq.m_tGtid.m_tUuid.data(), 16 );
 	tReq.m_tGtid.m_iSeqNo = tIn.GetUint64();
+	tReq.m_iClusterEpoch = (int64_t)tIn.GetUint64();
 	tReq.m_bSendFilesSuccess = !!tIn.GetByte();
 	tReq.m_sMsg = tIn.GetString();
 	tIn >> tReq.m_dIndexes;
@@ -50,10 +53,10 @@ void operator>> ( InputBuffer_c& tIn, ClusterSyncedRequest_t& tReq )
 using ClusterSynced_c = ClusterCommand_T<E_CLUSTER::SYNCED, ClusterSyncedRequest_t>;
 
 // API command to remote node to issue cluster synced callback
-bool SendClusterSynced ( const VecAgentDesc_t& dDesc, const ClusterSyncedRequest_t& tRequest )
+bool SendClusterSynced ( const VecAgentDesc_t & dDesc, const ClusterSyncedRequest_t & tRequest, const CSphString & sUser )
 {
 	ClusterSynced_c tReq;
-	auto dNodes = tReq.MakeAgents ( dDesc, ReplicationTimeoutQuery(), tRequest );
+	auto dNodes = tReq.MakeAgents ( dDesc, sUser, ReplicationTimeoutQuery(), tRequest );
 	return PerformRemoteTasksWrap ( dNodes, tReq, tReq, true );
 }
 

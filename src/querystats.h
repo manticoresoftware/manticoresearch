@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -105,6 +105,8 @@ enum SearchdCommand_e : WORD
 	SEARCHD_COMMAND_CALLPQ 		= 17,
 	SEARCHD_COMMAND_CLUSTER		= 18,
 	SEARCHD_COMMAND_GETFIELD	= 19,
+	SEARCHD_COMMAND_SHARD_WRITE	= 20,
+	SEARCHD_COMMAND_OPTIMIZE	= 21,
 
 	SEARCHD_COMMAND_TOTAL,
 	SEARCHD_COMMAND_WRONG = SEARCHD_COMMAND_TOTAL,

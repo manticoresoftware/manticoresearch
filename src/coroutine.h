@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -59,6 +59,9 @@ bool CallCoroutineRes ( Predicate fnHandler );
 
 // start handler in coroutine, self (if any) or main scheduler, second-priority
 void StartJob ( Handler handler, Scheduler_i * pScheduler = GlobalWorkPool() );
+
+// start handler in coroutine, with provided waiter used to detect when call is done.
+void StartCall ( Handler fnHandler, Waiter_t tWait, Scheduler_i* pScheduler = GlobalWorkPool() );
 
 // perform handler in custom stack
 // note: handler is called as linear routine, without scheduler.
@@ -199,12 +202,6 @@ private:
 	std::enable_if_t<ORD == ECONTEXT::ORDERED> ForAll ( FNPROCESSOR fnProcess, bool bIncludeRoot );
 };
 
-// create context and return resuming functor.
-// calling resumer will run handler until it finishes or yields.
-// returns flag of how coroutine interrupted: finished(true) or yielded(false)
-using Resumer_fn = std::function<bool()>;
-Resumer_fn MakeCoroExecutor ( Handler fnHandler );
-
 bool IsInsideCoroutine();
 
 namespace Coro
@@ -338,6 +335,36 @@ public:
 	void ReadLock() ACQUIRE_SHARED();
 	void Unlock() UNLOCK_FUNCTION();
 	bool TestNextWlock() const noexcept;
+};
+
+class ReadTableLock_c final
+{
+	mutable sph::Spinlock_c m_tInternalMutex {};
+	WaitQueue_c m_tWaitRQueue {};
+	DWORD m_uReads = 0;
+	DWORD m_uWrites = 0;
+
+public:
+	NONCOPYMOVABLE ( ReadTableLock_c );
+	ReadTableLock_c() = default;
+	~ReadTableLock_c() = default;
+	bool TryWrite() noexcept;
+	void WaitRead() noexcept;
+	void FinishWrite() noexcept;
+	[[nodiscard]] bool UnlockRead() noexcept;
+	[[nodiscard]] DWORD GetReads() const noexcept;
+};
+
+class ScopedWriteTable_c final
+{
+	ReadTableLock_c& m_tTableLock;
+	bool m_bCanWrite;
+
+public:
+	NONCOPYMOVABLE ( ScopedWriteTable_c );
+	explicit ScopedWriteTable_c ( ReadTableLock_c& tTableLock );
+	~ScopedWriteTable_c();
+	[[nodiscard]] bool CanWrite() const noexcept;
 };
 
 class CAPABILITY ( "mutex" ) Mutex_c: public ISphNoncopyable

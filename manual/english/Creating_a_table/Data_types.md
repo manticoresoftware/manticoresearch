@@ -4,19 +4,37 @@
 
 Manticore's data types can be split into two categories: full-text fields and attributes.
 
-### Field name syntax
+### Table and field name syntax
 
-Field names in Manticore must follow these rules:
+Table, field, and attribute names can contain ASCII letters (`a-z`, `A-Z`), numbers (`0-9`), underscores (`_`), and safe non-ASCII UTF-8 characters. An unquoted SQL name must start with an ASCII letter, an underscore, or a non-ASCII UTF-8 character. Numbers are allowed after the first character.
 
-* Can contain letters (a-z, A-Z), numbers (0-9), and hyphens (-)
-* Must start with a letter
-* Numbers can only appear after letters
-* Underscore (`_`) is the only allowed special character
-* Field names are case-insensitive
+The same base syntax applies to every table type in each mode where that type is supported: real-time, percolate, and distributed tables in [RT mode](../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29), and real-time, percolate, plain, distributed, and template tables in [Plain mode](../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29). It also applies to every schema that defines fields or attributes, including the expected document schema of a percolate table and schemas inferred from SQL, CSV/TSV, or XML sources.
+
+Other user-defined SQL object names, including function, plugin, and replication cluster names, follow the same safe UTF-8 rules.
+
+Use backticks around SQL names that begin with a number and contain at least one letter, underscore, or non-ASCII UTF-8 character, and around names that match a reserved SQL keyword. For example, use `` `2026_архив` `` or `` `select` ``. Configuration-file names are not quoted and may begin with a number. All-numeric identifiers are rejected in every mode, including while loading existing configuration or metadata; rename any such object before upgrading. Backticks do not make arbitrary ASCII punctuation valid; characters such as `-`, `$`, spaces, and embedded backticks are not supported in user-defined names.
+
+For compatibility with common log-ingestion schemas, `CREATE TABLE` and `ALTER TABLE` also accept the column names `@timestamp` and `@version` case-insensitively, with or without backticks. Other user-defined names beginning with `@` remain invalid. This exception does not make `@` a general identifier character in SQL or configuration-file schemas.
+
+For backward compatibility, Plain-mode configuration loading accepts `.` and `-` after the first character in table, field, and attribute names that earlier releases allowed. Do not use this compatibility syntax in new schemas: SQL cannot address every such name consistently, and SQL DDL continues to reject arbitrary punctuation.
+
+Identifiers must be valid UTF-8. Control characters, Unicode whitespace, bidirectional controls, and invisible default-ignorable characters are rejected. This includes non-breaking spaces, zero-width spaces, and zero-width joiners.
+
+Table names are limited to 200 bytes after being encoded as UTF-8 in both RT and Plain modes. Each ASCII character uses one byte, while a non-ASCII character uses two, three, or four bytes. This means a name can contain up to 200 ASCII characters, but fewer non-ASCII characters depending on the characters used. The component after the `system.` qualifier may use up to 48 additional bytes for shard and other generated suffixes. This qualified namespace is used for internal tables and is also accepted explicitly in SQL; ordinary public logical table names remain limited to 200 bytes. The limit also applies when existing table definitions are loaded, so rename any longer table before upgrading.
+
+In RT mode, the exact logical table name is stored in Manticore's metadata while table files use a bounded portable ASCII basename. This lets byte-distinct names coexist on case- or normalization-insensitive filesystems and avoids Windows reserved filenames. The component mapping does not prevalidate the complete storage path; operating-system path limits still apply, and a later filesystem error reports the failing path and OS error.
+
+For table, field, and attribute names created through SQL, Manticore converts ASCII uppercase letters to lowercase. Non-ASCII characters retain their original spelling. Configuration section names in Plain mode are case-sensitive, including their ASCII letters. Unicode case folding and Unicode normalization are not applied in either mode, so use the exact Unicode spelling consistently.
 
 For example:
-* Valid field names: `title`, `product_id`, `user_name_2`
-* Invalid field names: `2title`, `-price`, `user@name`
+* Valid unquoted names: `title`, `product_id`, `user_name_2`, `товары2026`, `商品表`, `📦метка`
+* Valid quoted names: `` `2026_архив` ``, `` `select` ``
+* Valid SQL compatibility column names: `@timestamp`, `@version`
+* Invalid names: `2title` without backticks, `-price`, `user@name`, `user-name`, `@user_field`, and `bad​name` containing a zero-width space
+
+In Plain mode, table names are section names in the configuration file and are written without backticks there. Backticks can still be used when referring to those tables in SQL. For example, a config section can be named `таблица2026`, while a section named `2026_архив` is referenced as `` `2026_архив` `` in SQL.
+
+[Field-scoped full-text query operators](../Searching/Full_text_matching/Operators.md) also support non-ASCII UTF-8 field names. For example, `MATCH('@название клавиатура')` restricts the search to the `название` field. This also applies to field-scoped queries stored as percolate rules.
 
 ### Full-text fields
 
@@ -62,9 +80,9 @@ POST /cli -d "CREATE TABLE forum(title text, content text, author_id int, forum_
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('forum');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('forum');
+$table->create([
     'title'=>['type'=>'text'],
 	'content'=>['type'=>'text'],
 	'author_id'=>['type'=>'int'],
@@ -264,7 +282,7 @@ Map<String,Object> query = new HashMap<String,Object>();
 query.put("match_all",null);
 query.put("bool",filters);
 SearchRequest searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 searchRequest.setQuery(query);
 searchRequest.setSort(new ArrayList<Object>(){{
     add(new HashMap<String,String>(){{ put("post_date","desc");}});
@@ -358,9 +376,9 @@ Below is the list of data types supported by Manticore Search:
 
 ## Document ID
 
-The document identifier is a mandatory attribute that must be a unique 64-bit unsigned integer. Document IDs can be explicitly specified when creating a table, but they are always enabled even if not specified. Document IDs cannot be updated.
+Every table has a document ID. It must be unique and cannot be updated. By default, document IDs are unsigned 64-bit values. Explicit numeric document IDs must be non-zero; negative document IDs are not allowed. Real-time tables can instead use UUID document IDs, as described in [UUID document IDs](../Creating_a_table/Data_types.md#UUID-document-IDs).
 
-When you create a table, you can specify ID explicitly, but regardless of the data type you use, it will always behave as described above - stored as unsigned 64-bit but exposed as signed 64-bit integer.
+For a numeric document ID, you can declare `id bigint` in the `CREATE TABLE` schema or omit it and let Manticore add it automatically. In the MySQL/SQL interface, a numeric ID is exposed as a signed 64-bit `bigint`, so large unsigned ID values may appear as negative numbers there.
 
 ```sql
 mysql> CREATE TABLE tbl(id bigint, content text);
@@ -387,17 +405,20 @@ DESC tbl;
 2 rows in set (0.00 sec)
 ```
 
-When working with document IDs, it's important to know that they are stored internally as unsigned 64-bit integers but are handled differently depending on the interface:
+Auto-ID generation depends on the table and ID type. RT and PQ tables with numeric IDs can generate an ID when it is omitted from an insert or replace request, or when `0` is used. An RT table with [id uuid](../Creating_a_table/Data_types.md#UUID-document-IDs) generates a UUID only when `id` is omitted. Plain tables built from external sources do not support automatic ID generation; their source data must provide explicit, unique, non-zero unsigned 64-bit document IDs.
+
+When working with numeric document IDs, it's important to know that unsigned 64-bit values are handled differently depending on the interface:
 
 **MySQL/SQL interface:**
 * IDs greater than 2^63-1 will appear as negative numbers.
 * When filtering by such large IDs, you must use their signed representation.
+* This signed representation is only for displaying or filtering existing large IDs; negative IDs are not accepted when inserting or indexing documents.
 * Use the [UINT64()](../Functions/Type_casting_functions.md#UINT64%28%29) function to view the actual unsigned value.
 
 **JSON/HTTP interface:**
 * IDs are always displayed as their original unsigned values, regardless of size.
-* Both signed and unsigned representations can be used for filtering.
-* Insert operations accept the full unsigned 64-bit range.
+* Both signed and unsigned representations can be used for filtering existing large IDs.
+* Insert operations accept the full unsigned 64-bit range, but negative `id` values are rejected.
 
 For example, let's create a table and insert some values around 2^63:
 ```sql
@@ -512,7 +533,7 @@ curl -s 0:9308/search -d '{"table": "t"}'
   }
 }
 
-# Both signed and unsigned values work for filtering
+# Both signed and unsigned values work for filtering the same stored ID
 curl -s 0:9308/search -d '{"table": "t", "query": {"equals": {"id": 17581446260360033510}}}'
 curl -s 0:9308/search -d '{"table": "t", "query": {"equals": {"id": -865297813349518106}}}'
 
@@ -523,6 +544,54 @@ curl -s 0:9308/insert -d '{"table": "t", "id": 18446744073709551615, "doc": {}}'
 This means when working with large document IDs:
 1. **MySQL interface** requires using the signed representation for queries but can display the unsigned value with `UINT64()`
 2. **JSON interface** consistently uses unsigned values for display and accepts both representations for filtering
+
+### UUID document IDs
+
+<!-- example uuid document ids -->
+
+Real-time tables can use UUID document IDs with `id uuid`. Explicit IDs must be strings in the 36-character `8-4-4-4-12` hexadecimal format, for example `550e8400-e29b-41d4-a716-446655440000`. Manticore accepts UUID versions `1` through `8` and RFC variants `8`, `9`, `a`, and `b`. Uppercase letters are accepted and normalized to lowercase.
+
+Omit `id` to generate a UUID automatically. This works with SQL `INSERT` and `REPLACE`, native JSON insert and replace requests, and Elasticsearch-compatible `_bulk` `index` and `create` operations. Generated IDs use a UUIDv8-style layout and have [the same uniqueness guarantees](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) as numeric auto-IDs. They are not random UUIDv4 values and must not be used as cryptographic secrets.
+
+SQL returns UUID IDs as strings. For UUID-ID tables, native JSON write responses use key name `id`, while JSON search and Elasticsearch-compatible responses use `_id`.
+
+UUID IDs can be used in equality and `IN` filters and to identify documents in `REPLACE`, `UPDATE`, and `DELETE`. `INSERT` rejects an ID that already exists; use `REPLACE` to overwrite the document with that ID. After an `INSERT` or `REPLACE` on a UUID-ID table, `LAST_INSERT_ID()` and `@@session.last_insert_id` return the UUID IDs of the affected documents.
+
+Limitations:
+
+* Only the `id` column can use the `uuid` type; regular attributes cannot be declared as `uuid`.
+* UUID document IDs are supported only for real-time tables, including columnar and replicated real-time tables. They are not supported for plain (indexer-created), percolate/PQ, or shard tables.
+* `ALTER TABLE` cannot convert an existing table to or from `id uuid`.
+* Range filters (`<`, `<=`, `>`, `>=`) and numeric or arithmetic expressions on UUID `id` are not supported.
+* Unlike numeric-ID tables, UUID-ID tables do not treat `0` as an auto-ID marker.
+
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products_uuid(id uuid, title text, price int);
+INSERT INTO products_uuid(id, title, price) VALUES('550e8400-e29b-41d4-a716-446655440000', 'Crossbody Bag', 19);
+INSERT INTO products_uuid(title, price) VALUES('Generated UUID Bag', 29);
+SELECT id, price FROM products_uuid WHERE id='550e8400-e29b-41d4-a716-446655440000';
+```
+
+<!-- response SQL -->
+
+```sql
+Query OK, 0 rows affected (0.00 sec)
+Query OK, 1 rows affected (0.00 sec)
+Query OK, 1 rows affected (0.00 sec)
++--------------------------------------+-------+
+| id                                   | price |
++--------------------------------------+-------+
+| 550e8400-e29b-41d4-a716-446655440000 |    19 |
++--------------------------------------+-------+
+1 row in set (0.00 sec)
+```
+
+<!-- end -->
 
 ## Character data types
 
@@ -578,9 +647,9 @@ POST /cli -d "CREATE TABLE products(title text)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text']
 ]);
 ```
@@ -685,9 +754,9 @@ POST /cli -d "CREATE TABLE products(title text indexed)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text','options'=>['indexed']]
 ]);
 ```
@@ -798,7 +867,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('@title')->get();
+$table->setName('products')->search('@title')->get();
 
 ```
 
@@ -887,9 +956,9 @@ POST /cli -d "CREATE TABLE products(title text, keys string)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'keys'=>['type'=>'string']
 ]);
@@ -997,9 +1066,9 @@ POST /cli -d "CREATE TABLE products ( title string attribute indexed )"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'string','options'=>['indexed','attribute']]
 ]);
 ```
@@ -1124,9 +1193,9 @@ POST /cli -d "CREATE TABLE products(title text, price int)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'price'=>['type'=>'int']
 ]);
@@ -1231,9 +1300,9 @@ POST /cli -d "CREATE TABLE products(title text, flags bit(3), tags bit(2))"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'flags'=>['type'=>'bit(3)'],
 	'tags'=>['type'=>'bit(2)']
@@ -1341,9 +1410,9 @@ POST /cli -d "CREATE TABLE products(title text, price bigint)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'price'=>['type'=>'bigint']
 ]);
@@ -1450,9 +1519,9 @@ POST /cli -d "CREATE TABLE products(title text, sold bool)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'sold'=>['type'=>'bool']
 ]);
@@ -1574,9 +1643,9 @@ POST /cli -d "CREATE TABLE products(title text, date timestamp)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'date'=>['type'=>'timestamp']
 ]);
@@ -1682,9 +1751,9 @@ POST /cli -d "CREATE TABLE products(title text, coeff float)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'coeff'=>['type'=>'float']
 ]);
@@ -1794,7 +1863,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->expression('eps','abs(a-b)')->get();
+$table->setName('products')->search('')->expression('eps','abs(a-b)')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -1829,7 +1898,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{}},"expre
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -1906,7 +1975,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->expression('inc','in(ceil(attr*100),200,250,350)')->get();
+$table->setName('products')->search('')->expression('inc','in(ceil(attr*100),200,250,350)')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -1942,7 +2011,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{}}},"expr
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -2047,9 +2116,9 @@ POST /cli -d "CREATE TABLE products(title text, data json)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'data'=>['type'=>'json']
 ]);
@@ -2160,7 +2229,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->expression('idx','indexof(x>2 for x in data.intarray)')->get();
+$table->setName('products')->search('')->expression('idx','indexof(x>2 for x in data.intarray)')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -2196,7 +2265,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{}},"expre
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -2279,7 +2348,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->expression('idx',"regex(data.name, 'est')")->filter('c','gt',0)->get();
+$table->setName('products')->search('')->expression('idx',"regex(data.name, 'est')")->filter('c','gt',0)->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -2315,7 +2384,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{},"range"
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 query.put("range", new HashMap<String,Object>(){{
@@ -2402,7 +2471,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->sort('double(data.myfloat)','desc')->get();
+$table->setName('products')->search('')->sort('double(data.myfloat)','desc')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -2437,7 +2506,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{}}},"sort
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -2483,35 +2552,57 @@ let search_res = search_api.search(search_req).await;
 
 ## Float vector
 
-<!-- example float_vector_auto -->
-
 Float vector attributes allow storing variable-length lists of floats, primarily used for machine learning applications and similarity searches. This type differs from [multi-valued attributes](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) (MVAs) in several important ways:
 - Preserves the exact order of values (unlike MVAs which may reorder)
 - Retains duplicate values (unlike MVAs which deduplicate)
 - No additional processing during insertion (unlike MVAs which sort and deduplicate)
 
-Float vector attributes allow storing variable-length lists of floats, primarily used for machine learning applications and similarity searches. 
+**Important:** The `float_vector` data type is not compatible with the [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) mechanism.
 
-### Usage and Limitations
-- Currently only supported in real-time tables
-- Can only be utilized in KNN (k-nearest neighbor) searches
-- Not supported in plain tables or other functions/expressions
-- When used with KNN settings, you cannot `UPDATE` `float_vector` values. Use `REPLACE` instead
-- When used without KNN settings, you can `UPDATE` `float_vector` values
-- Float vectors cannot be used in regular filters or sorting
-- The only way to filter by `float_vector` values is through vector search operations (KNN)
+### General Limitations
 
-### Common Use Cases
-- Text embeddings for semantic search
-- Recommendation system vectors
-- Image embeddings for similarity search
-- Feature vectors for machine learning
+- Currently only supported in real-time tables (not in plain tables)
+- Not supported in other functions or expressions
+- Cannot be used in regular filters or sorting
 
-** Keep in mind that the `float_vector` data type is not compatible with the [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) mechanism. **
+### Using Float Vectors with KNN (Vector Search)
+
+When you configure a `float_vector` attribute with KNN settings, you enable vector similarity search capabilities. This allows you to perform k-nearest neighbor searches to find similar documents based on vector distance.
+
+#### Capabilities
+
+**What you can do:**
+- Perform KNN (k-nearest neighbor) vector searches to find similar documents
+- Build semantic search, recommendations, and AI-powered features
+- Use auto embeddings to automatically generate vectors from text
+
+**What you cannot do:**
+- `UPDATE` `float_vector` values (you must use `REPLACE` instead)
+- Use float vectors in regular filters or sorting
+- Filter by `float_vector` values except through vector search operations
+
+#### Parameters
+
+When creating a table with `float_vector` attributes for KNN search, you can specify the following parameters:
+
+**Required parameters:**
+- `KNN_TYPE`: Currently only `'hnsw'` is supported
+- `KNN_DIMS`: Number of dimensions in the vectors (required for manual vector insertion, omitted when using `MODEL_NAME`)
+- `HNSW_SIMILARITY`: Distance function - `'l2'`, `'ip'` (inner product), or `'cosine'`
+
+**Optional parameters:**
+- `HNSW_M`: Maximum connections in the graph (default: 16)
+- `HNSW_EF_CONSTRUCTION`: Construction time/accuracy trade-off (default: 200)
+
+**Auto-embeddings parameters** (when using `MODEL_NAME`):
+- `MODEL_NAME`: The embedding model to use (e.g., `'Xenova/all-MiniLM-L6-v2'` for the fast ONNX path, `'sentence-transformers/all-MiniLM-L6-v2'`, or `'openai/text-embedding-ada-002'`)
+- `FROM`: Comma-separated list of field names to use for embedding generation, or empty string `''` to use all text/string fields
+- `API_KEY`: API key for API-based models (OpenAI, Voyage, Jina)
 
 For more details on setting up float vectors and using them in searches, see [KNN search](../Searching/KNN.md).
 
-### Auto Embeddings (Recommended)
+<!-- example auto -->
+#### Method 1: Auto Embeddings (Recommended)
 
 The most convenient way to work with float vectors is using **auto embeddings**. This feature automatically generates embeddings from your text data using machine learning models, eliminating the need to manually compute and insert vectors.
 
@@ -2519,7 +2610,7 @@ The most convenient way to work with float vectors is using **auto embeddings**.
 - **Simplified workflow**: Just insert text, embeddings are generated automatically
 - **No manual vector computation**: No need to run separate embedding models
 - **Consistent embeddings**: Same model ensures consistent vector representations
-- **Multiple model support**: Choose from [sentence-transformers](https://huggingface.co/sentence-transformers/models), OpenAI, Voyage, and Jina models
+- **Multiple model support**: Choose from [ONNX models on Hugging Face](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) (recommended — runs on Manticore's fast ONNX Runtime backend), [sentence-transformers](https://huggingface.co/sentence-transformers/models), [Qwen](https://huggingface.co/Qwen/models) embedding models, OpenAI, Voyage, and Jina models
 - **Flexible field selection**: Control which fields are used for embedding generation
 
 #### Creating tables with auto embeddings
@@ -2527,24 +2618,49 @@ The most convenient way to work with float vectors is using **auto embeddings**.
 When creating a table with auto embeddings, specify these additional parameters:
 - `MODEL_NAME`: The embedding model to use for automatic vector generation
 - `FROM`: Which fields to use for embedding generation (empty string means all text/string fields)
+- `API_KEY`: Required for remote models (OpenAI, Voyage, Jina). The API key is validated during table creation by making a real API request.
+- `API_URL`: Optional. Custom API endpoint URL. If not specified, uses the default provider endpoint (e.g., `https://api.openai.com/v1/embeddings` for OpenAI).
+- `API_TIMEOUT`: Optional. HTTP timeout in seconds for API requests. Default is 10 seconds. Set to `'0'` to use the default timeout. Applies to both validation requests during table creation and embedding generation during INSERT operations.
+
+For remote models, `MODEL_NAME` can use either the legacy `provider/model` form or the explicit `provider:model` form. Use `provider:model` with `API_URL` when you want the part after `:` to be forwarded to a custom provider-compatible endpoint exactly as written.
 
 **Supported embedding models:**
-- **Sentence Transformers**: Any [suitable BERT-based Hugging Face model](https://huggingface.co/sentence-transformers/models) (e.g., `sentence-transformers/all-MiniLM-L6-v2`) — no API key needed. Manticore downloads the model when you create the table.
-- **OpenAI**: OpenAI embedding models like `openai/text-embedding-ada-002` - requires `API_KEY='<OPENAI_API_KEY>'` parameter
-- **Voyage**: Voyage AI embedding models - requires `API_KEY='<VOYAGE_API_KEY>'` parameter
-- **Jina**: Jina AI embedding models - requires `API_KEY='<JINA_API_KEY>'` parameter
+- **ONNX (recommended)**: Any Hugging Face model that ships an `.onnx` file — e.g. `Xenova/all-MiniLM-L6-v2`, `Xenova/all-MiniLM-L12-v2`, `Xenova/bge-small-en-v1.5`, `Xenova/multilingual-e5-small`. No API key needed. Runs on Manticore's fast ONNX Runtime backend (~14× faster than the SentenceTransformers path on the same hardware — see [14× faster embeddings](https://manticoresearch.com/blog/onnx-embeddings-speedup/)). Both [Xenova](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) and [onnx-models](https://huggingface.co/onnx-models/models?pipeline_tag=feature-extraction) publish a lot of ONNX-converted models; for embeddings, look for ones tagged with the **feature-extraction** task.
+- **Sentence Transformers**: Any [suitable BERT-based Hugging Face model](https://huggingface.co/sentence-transformers/models) (e.g., `sentence-transformers/all-MiniLM-L6-v2`) — no API key needed. Still supported; use this if the model you want isn't published as ONNX.
+- **Qwen local embeddings**: Qwen embedding models such as `Qwen/Qwen3-Embedding-0.6B` — no API key needed. Manticore downloads the model when you create the table.
+- **OpenAI, Voyage, Jina**: Remote embedding models (e.g., `openai/text-embedding-ada-002`, `openai:text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v2-base-en`) - require `API_KEY='***'` parameter. Optionally specify `API_URL='<CUSTOM_URL>'` to use a custom API endpoint, and `API_TIMEOUT='<SECONDS>'` to configure HTTP timeout (default is 10 seconds).
 
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
 
-Using [sentence-transformers model](https://huggingface.co/sentence-transformers/models) (no API key needed)
+Using a local [ONNX model](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) — recommended, runs on the fast ONNX path (no API key needed)
 ```sql
 CREATE TABLE products (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+Using a [sentence-transformers model](https://huggingface.co/sentence-transformers/models) (no API key needed; runs on the Candle path — use ONNX above when available)
+```sql
+CREATE TABLE products_st (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+Using Qwen local embeddings (no API key needed)
+```sql
+CREATE TABLE products_qwen (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Qwen/Qwen3-Embedding-0.6B' FROM='title'
 );
 ```
 
@@ -2557,6 +2673,27 @@ CREATE TABLE products_openai (
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='<OPENAI_API_KEY>'
 );
 ```
+Using OpenAI with custom API URL and timeout (optional)
+```sql
+CREATE TABLE products_openai_custom (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='openai:text-embedding-ada-002' FROM='title,content'
+    API_KEY='***' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+);
+```
+
+Using OpenRouter with a provider-qualified model ID
+```sql
+CREATE TABLE products_openrouter (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='openai:openai/text-embedding-ada-002' FROM='title,content'
+    API_KEY='***' API_URL='https://openrouter.ai/api/v1/embeddings' API_TIMEOUT='30'
+);
+```
 
 Using all text fields for embeddings (FROM is empty)
 ```sql
@@ -2565,8 +2702,27 @@ CREATE TABLE products_all_fields (
     description TEXT,
     tags TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM=''
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM=''
 );
+```
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+Using a local [ONNX model](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) — recommended (no API key needed)
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE products (title TEXT, description TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title')"
+```
+
+Using OpenAI model (requires API_KEY parameter)
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE products_openai (title TEXT, content TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='<OPENAI_API_KEY>')"
+```
+
+Using all text fields for embeddings (FROM is empty)
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE products_all_fields (title TEXT, description TEXT, tags TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='')"
 ```
 
 <!-- end -->
@@ -2578,11 +2734,16 @@ The `FROM` parameter controls which fields are used for embedding generation:
 - **Specific fields**: `FROM='title'` - only the title field is used
 - **Multiple fields**: `FROM='title,description'` - both title and description are concatenated and used
 - **All text fields**: `FROM=''` (empty) - all `text` (full-text field) and `string` (string attribute) fields in the table are used
-- **Empty vectors**: You can still insert empty vectors using `()` to exclude documents from vector search
+- **Manual override**: Even when `MODEL_NAME` is configured, you can still provide your own vector in `INSERT`/`REPLACE`
+- **Empty vectors**: You can insert `()` to skip embedding generation for that row; Manticore stores an all-zero vector with the model's dimension
 
 #### Inserting data with auto embeddings
 
-When using auto embeddings, **do not specify the vector field** in your INSERT statements. The embeddings are automatically generated from the specified text fields:
+When using auto embeddings, you have three insert modes:
+
+- Omit the vector column and let Manticore generate the embedding from the fields listed in `FROM`
+- Provide your own vector explicitly to override auto generation for that row
+- Provide `()` to skip generation and store an all-zero vector instead
 
 ```sql
 -- Insert text data - embeddings generated automatically
@@ -2590,15 +2751,100 @@ INSERT INTO products (title, description) VALUES
 ('smartphone', 'latest mobile device with camera'),
 ('laptop computer', 'portable workstation for developers');
 
--- Insert with empty vector (excluded from vector search)
+-- Insert with a user-provided vector - no auto generation for this row
+INSERT INTO products (title, embedding_vector) VALUES
+('machine learning artificial intelligence', (0.653448,0.192478,0.017971,0.339821));
+
+-- Insert with empty vector - no auto generation, stores a zero vector
 INSERT INTO products (title, description, embedding_vector) VALUES
 ('no-vector item', 'this item has no embedding', ());
 ```
 
-### Manual Float Vector Usage
+`()` is useful when you want to keep a row without generating an embedding immediately. Internally, the value is stored as a zero-filled vector, so it should be treated as "no meaningful embedding yet" rather than as a semantic vector. If you later run `ALTER TABLE ... REBUILD EMBEDDINGS`, that row is rebuilt too; `REBUILD EMBEDDINGS` does not skip rows just because their current vector is all zeros.
+<!-- end -->
 
-<!-- example for creating float_vector -->
-Alternatively, you can work with manually computed float vectors. 
+<!-- example manual -->
+#### Method 2: Manual Vector Insertion
+
+Alternatively, you can manually insert pre-computed vector data. This requires you to compute the vectors yourself using external tools or models, then insert them into Manticore.
+
+**Important:** When using `HNSW_SIMILARITY='cosine'`, vectors are automatically normalized upon insertion to unit vectors (vectors with a mathematical length/magnitude of 1.0). This normalization preserves the direction of the vector while standardizing its length, which is required for efficient cosine similarity calculations. This means the stored values will differ from your original input values.
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products (
+    title TEXT,
+    image_vector FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2'
+);
+
+INSERT INTO products VALUES 
+(1, 'yellow bag', (0.653448,0.192478,0.017971,0.339821)),
+(2, 'white bag', (-0.148894,0.748278,0.091892,-0.095406));
+```
+
+<!-- end -->
+
+<!-- example alter_embedding_column -->
+#### Method 3: Add an embedding column after bulk loading
+
+If initial ingestion speed matters more than immediate vector search, you can first load the table without an embedding column and add the model-backed `float_vector` column later.
+
+This approach is useful when you want bulk inserts to finish as quickly as possible and are willing to run embedding generation afterward as a separate, potentially long-running `ALTER` operation.
+
+How it works:
+- Create the table with the source `text` fields and `string` attributes only
+- Insert or import all data
+- Add the embedding column later with `ALTER TABLE ... ADD COLUMN`
+
+When you add a `float_vector` column with `MODEL_NAME` and `FROM`, Manticore generates embeddings for existing rows during the `ALTER`. If you later need to regenerate them, use `ALTER TABLE ... REBUILD EMBEDDINGS column_name`.
+
+Be careful with `REBUILD EMBEDDINGS`: it regenerates the target column for every row. This includes rows where the current vector was inserted manually and rows where `()` was used to store a zero vector. After the data is committed, Manticore does not retain whether a stored vector was generated automatically, provided by the user, or created from `()`, and `REBUILD EMBEDDINGS` does not treat zero vectors as a special "skip this row" marker.
+
+Limitations:
+- This method works only for local RT tables. It is not available for tables that are part of a replication cluster, because clustered tables do not support `ALTER`.
+
+```sql
+CREATE TABLE products (
+    title TEXT,
+    description TEXT
+);
+
+INSERT INTO products (id, title, description) VALUES
+(1, 'smartphone', 'latest mobile device with camera'),
+(2, 'laptop computer', 'portable workstation for developers');
+
+ALTER TABLE products
+ADD COLUMN embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title,description';
+```
+
+For more details, see [Updating table schema](../Updating_table_schema_and_settings.md#Rebuilding-embeddings).
+
+<!-- end -->
+
+<!-- example for creating float_vector --> 
+### Using Float Vectors without KNN (Storage Only)
+
+You can also create `float_vector` attributes without KNN configuration. In this mode, the vectors are stored but cannot be used for vector search operations.
+
+**What you can do:**
+- Store vector data
+- `UPDATE` `float_vector` values (unlike with KNN where you must use `REPLACE`)
+
+**What you cannot do:**
+- Perform KNN searches or vector similarity searches
+- Use vectors for any search operations
+- Filter by `float_vector` values
+
+#### Use Cases
+
+- Temporary storage of vector data before configuring KNN
+- Staging data that will later be used with KNN
+- Storing vectors that don't need search capabilities
+
 
 <!-- intro -->
 ##### SQL:
@@ -2623,9 +2869,9 @@ POST /cli -d "CREATE TABLE products(title text, image_vector float_vector)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'image_vector'=>['type'=>'float_vector']
 ]);
@@ -2704,6 +2950,106 @@ table products
 
 <!-- end -->
 
+## Float vector array
+
+A `float_vector_array` attribute stores several vectors per document rather than a single one. A value is written as an array of vectors, and every document carries its own number of them:
+
+```
+[[0.1, 0.2, 0.3, 0.4], [0.5, 0.6, 0.7, 0.8]]
+```
+
+This suits documents that do not reduce cleanly to one embedding - a long article split into chunks, a product photographed from several angles, a video sampled at keyframes. Instead of storing one row per chunk and deduplicating results afterwards, you keep all of a document's vectors on the document itself.
+
+When the attribute is configured for [KNN](../Searching/KNN.md), all vectors of all documents are indexed together and a document matches if **any** of its vectors is close to the query. See [Multiple vectors per document](../Searching/KNN.md#Multiple-vectors-per-document) for the search semantics.
+
+### Value syntax
+
+- A value is always an array of vectors: `[[1,2],[3,4]]`. A flat list such as `(1,2,3,4)` is rejected, because there would be no way to tell one 4-dimensional vector from two 2-dimensional ones.
+- `[]` means "no vectors". It is a valid stored value, and it is what an omitted attribute defaults to.
+- All vectors within one value must have the same number of entries.
+- An empty inner vector (`[[]]`) cannot be represented and is rejected. Use `[]` for "none".
+- Values are returned in the same nested form they were inserted in.
+
+### General limitations
+
+- Currently only supported in real-time tables (not in plain tables)
+- Not supported in functions or expressions
+- Cannot be used in regular filters or sorting
+- [Auto embeddings](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29) are not available for this type: a model produces one vector per document, so `MODEL_NAME` is rejected. Vectors must be supplied explicitly.
+- Not compatible with the [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) mechanism
+
+### Using float vector arrays with KNN
+
+The parameters are the same ones [`float_vector`](../Creating_a_table/Data_types.md#Float-vector) takes: `KNN_TYPE`, `KNN_DIMS`, `HNSW_SIMILARITY`, plus the optional `HNSW_M`, `HNSW_EF_CONSTRUCTION` and [quantization](../Searching/KNN.md#Vector-quantization), with two differences:
+
+- `KNN_DIMS` is required, and **every** vector in **every** row must have exactly that many entries. A row whose vectors are a different width is rejected on insert.
+- `MODEL_NAME` and `FROM` are not accepted.
+
+**What you can do:**
+- Run KNN searches that match a document on its closest vector
+- Store a different number of vectors per document, including none at all
+
+**What you cannot do:**
+- `UPDATE` the attribute: use `REPLACE`, exactly as with a KNN-indexed `float_vector`
+- Use the values in regular filters or sorting
+
+A document whose value is `[]`, or whose attribute was omitted, is never returned by a KNN search as it is not close to anything.
+
+### Using float vector arrays without KNN
+
+Without KNN configuration the vectors are stored but not searchable, and the column needs no options at all. In this mode each value is fully self-describing, so different rows may hold vectors of different widths:
+
+```sql
+CREATE TABLE products(title text, chunk_vectors float_vector_array);
+INSERT INTO products VALUES (1, 'a', [[1,2]]), (2, 'b', [[1,2,3],[4,5,6]]);
+```
+
+`UPDATE` works in this mode, as it does for a non-KNN `float_vector`, and `[]` clears the value.
+
+<!-- example for creating float_vector_array -->
+
+Creating a KNN-indexed float vector array, filling it, and searching it:
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+
+INSERT INTO articles VALUES
+  (1, 'first',  [[1,0,0,0],[0,1,0,0]]),
+  (2, 'second', [[0,0,1,0]]),
+  (3, 'no vectors yet', []);
+
+SELECT id, knn_dist() FROM articles WHERE knn(chunk_vectors, 5, (1,0,0,0));
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')"
+
+POST /insert
+{
+  "table": "articles",
+  "id": 1,
+  "doc": { "title": "first", "chunk_vectors": [[1,0,0,0],[0,1,0,0]] }
+}
+
+POST /search
+{
+  "table": "articles",
+  "knn": { "field": "chunk_vectors", "query_vector": [1,0,0,0], "k": 5 }
+}
+```
+
+<!-- end -->
+
 ## Multi-value integer (MVA)
 
 <!-- example for creating MVA32 -->
@@ -2716,6 +3062,10 @@ Multi-value attributes allow storing variable-length lists of 32-bit unsigned in
 
 ```sql
 CREATE TABLE products(title text, product_codes multi);
+```
+or
+```sql
+CREATE TABLE products(title text, product_codes mva);
 ```
 
 <!-- intro -->
@@ -2733,9 +3083,9 @@ POST /cli -d "CREATE TABLE products(title text, product_codes multi)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'product_codes'=>['type'=>'multi']
 ]);
@@ -2849,7 +3199,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->filter('any(product_codes)','equals',3)->get();
+$table->setName('products')->search('')->filter('any(product_codes)','equals',3)->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -2884,7 +3234,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{},"equals
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 query.put("equals",new HashMap<String,Integer>(){{
@@ -2957,7 +3307,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->sort('product_codes','asc','min')->get();
+$table->setName('products')->search('')->sort('product_codes','asc','min')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -2993,7 +3343,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{},"sort":
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -3121,7 +3471,7 @@ POST /search
 ```JSON
 {
    "table":"products",
-   "_id":1,
+   "id":1,
    "created":true,
    "result":"created",
    "status":201
@@ -3157,11 +3507,11 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->addDocument([
+$table->addDocument([
     "title"=>"first",
     "product_codes"=>[4,2,1,3]
 ]);
-$index->search('')-get();
+$table->search('')-get();
 ```
 
 <!-- response PHP -->
@@ -3284,12 +3634,12 @@ HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","first");
     put("product_codes",new int[] {4,2,1,3});
 }};
-newdoc.index("products").id(1L).setDoc(doc);
+newdoc.table("products").id(1L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 Map<String,Object> query = new HashMap<String,Object>();
 query.put("match_all",null);
 SearchRequest searchRequest = new SearchRequest();
-searchRequest.setIndex("products");
+searchRequest.setTable("products");
 searchRequest.setQuery(query);
 SearchResponse searchResponse = searchApi.search(searchRequest);
 System.out.println(searchResponse.toString() );
@@ -3319,7 +3669,7 @@ class SearchResponse {
 Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "first");
 doc.Add("product_codes", new List<Object> {4,2,1,3});
-InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 1, doc: doc);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "products", id: 1, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 object query =  new { match_all=null };
 var searchRequest = new SearchRequest("products", query);
@@ -3394,6 +3744,10 @@ A data type that allows storing variable-length lists of 64-bit signed integers.
 ```sql
 CREATE TABLE products(title text, values multi64);
 ```
+or
+```sql
+CREATE TABLE products(title text, values mva64);
+```
 
 <!-- intro -->
 ##### JSON:
@@ -3410,9 +3764,9 @@ POST /cli -d "CREATE TABLE products(title text, values multi64)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'values'=>['type'=>'multi64']
 ]);
@@ -3553,4 +3907,3 @@ table tbl {
 ```
 
 <!-- end -->
-

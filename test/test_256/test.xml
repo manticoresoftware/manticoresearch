@@ -121,6 +121,25 @@ index dist33
 	agent = <my_address/>:rt3
 }
 
+
+index rt_phrase
+{
+	type = rt
+	path			= <data_path/>/rt_phrase
+	rt_mem_limit = 128M
+	rt_field		= body
+	rt_attr_uint	= idd
+	dict = keywords
+    charset_table = a..z, _, A..Z->a..z
+	min_infix_len = 2
+}
+
+index dist_phrase
+{
+	type = distributed
+    agent = <my_address/>:rt_phrase
+}
+
 </config>
 
 <db_create>
@@ -211,6 +230,105 @@ CREATE TABLE test_table
 
     <!-- suggest min word length 2 -->
     CALL SUGGEST ( 'ma', 'rt1');
+    
+    <!-- search_mode cases -->
+    INSERT INTO rt_phrase (id, idd, body) VALUES 
+    (100, 1, 'bag with tassel'),
+    (101, 1, 'bag with tassel'),
+    (102, 1, 'bag with tassel'),
+    (103, 1, 'bag with tassel'),
+    (104, 1, 'bag with tassel'),
+    (105, 1, 'bag with tassel'),
+    (106, 1, 'bag with tassel'),
+    (107, 1, 'bag with tassel'),
+    (108, 1, 'bag with tassel'),
+    (109, 1, 'bag with tassel'),
+    (110, 1, 'tassel decoration'),
+    (111, 1, 'beautiful tassel'),
+    (112, 1, 'tassel on bag'),
+    (113, 1, 'tazer device'),
+    (114, 1, 'tazer device'),
+    (115, 1, 'tazer device'),
+    (116, 1, 'bag with tazer'),
+    (117, 1, 'bag with tazer'),
+    (118, 1, 'bag with tazer'),
+    (119, 1, 'use tazer'),
+    (120, 1, 'buy tazer'),
+    (121, 1, 'tazer for sale'),
+    (122, 1, 'electronic tazer'),
+    (123, 1, 'powerful tazer'),
+    (124, 1, 'professional tazer'),
+    (125, 1, 'compact tazer'),
+    (126, 1, 'advanced tazer'),
+    (127, 1, 'modern tazer'),
+    (128, 1, 'safety tazer'),
+    (129, 1, 'portable tazer'),
+    (130, 1, 'rechargeable tazer'),
+    (131, 1, 'heavy duty tazer'),
+    (132, 1, 'commercial tazer'),
+    (133, 1, 'industrial tazer'),
+    (134, 1, 'military tazer'),
+    (135, 1, 'police tazer'),
+    (136, 1, 'security tazer'),
+    (137, 1, 'defense tazer'),
+    (138, 1, 'stun tazer'),
+    (139, 1, 'electric tazer');
+    
+    CALL QSUGGEST ( 'bag with tasel', 'rt_phrase', 2 as limit, 1 as sentence );
+    CALL QSUGGEST ( 'bag with tasel', 'rt_phrase', 2 as limit, 1 as sentence, 'phrase' as search_mode );
+    
+    INSERT INTO rt_phrase (id, idd, body) VALUES
+    (200, 2, 'red car'),
+    (201, 2, 'red car'),
+    (202, 2, 'red car'),
+    (203, 2, 'red car'),
+    (204, 2, 'red car'),
+    (205, 2, 'red car'),
+    (206, 2, 'red car'),
+    (207, 2, 'red car'),
+    (208, 2, 'red card'),
+    (209, 2, 'red card'),
+    (210, 2, 'red card'),
+    (211, 2, 'playing card'),
+    (212, 2, 'credit card'),
+    (213, 2, 'card game'),
+    (214, 2, 'card holder'),
+    (215, 2, 'business card'),
+    (216, 2, 'greeting card'),
+    (217, 2, 'birthday card'),
+    (218, 2, 'sports car'),
+    (219, 2, 'luxury car'),
+    (220, 2, 'electric car'),
+    (221, 2, 'race car');
+    
+    CALL QSUGGEST ( 'red cad', 'rt_phrase', 2 as limit, 1 as sentence );
+    CALL QSUGGEST ( 'red cad', 'rt_phrase', 2 as limit, 1 as sentence, 'phrase' as search_mode );
+
+    <!-- search_mode phrase vs words  -->
+    INSERT INTO rt_phrase (id, idd, body) VALUES
+    (400, 4, 'test the carpet'),
+    (401, 4, 'test the carpet'),
+    (402, 4, 'test the carpet'),
+    (403, 4, 'test red carpet'),
+    (404, 4, 'test red carpet'),
+    (405, 4, 'test new carpet'),
+    (406, 4, 'test new carpet'),
+    (407, 4, 'test old carpet'),
+    (408, 4, 'test your carpet'),
+    (409, 4, 'test my carpet'),
+    (410, 4, 'test carpet'),  
+    (411, 4, 'test car'),  
+    (412, 4, 'test car'),
+    (413, 4, 'test car'),
+    (414, 4, 'test car'),
+    (415, 4, 'test car');
+    
+    CALL QSUGGEST('test carp', 'rt_phrase', 3 as limit, 1 as sentence, 'phrase' as search_mode);
+    CALL QSUGGEST('test carp', 'rt_phrase', 3 as limit, 1 as sentence, 'words' as search_mode);
+
+    CALL QSUGGEST('test carp', 'dist_phrase', 1 as sentence, 'phrase' as search_mode);
+    CALL QSUGGEST('test carp', 'dist_phrase', 1 as sentence, 'words' as search_mode);
+    
 </sphinxql></queries>
 
 </test>

@@ -4,6 +4,8 @@ Manticore allows for the creation of **distributed tables**, which act like regu
 
 From the client's perspective, it appears as if they are querying a single table.
 
+<!-- example distributed-table-definition -->
+
 Distributed tables can be composed of any combination of tables, including:
 
 * Local storage tables ([plain table](../../Creating_a_table/Local_tables/Plain_table.md) and [Real-Time](../../Creating_a_table/Local_tables/Real-time_table.md))
@@ -14,10 +16,12 @@ Distributed tables can be composed of any combination of tables, including:
 
 Mixing percolate and template tables with plain and real-time tables is not recommended.
 
-A distributed table is defined as type 'distributed' in the configuration file or through the SQL clause `CREATE TABLE`
+A distributed table is defined as type 'distributed' in the configuration file or through the SQL clause `CREATE TABLE`.
 
-#### In a configuration file
+<!-- intro -->
+##### Config:
 
+<!-- request Config -->
 ```ini
 table foo {
     type = distributed
@@ -30,13 +34,18 @@ table foo {
 }
 ```
 
-#### Via SQL
+<!-- intro -->
+##### SQL:
 
+<!-- request SQL -->
 ```sql
-CREATE TABLE distributed_index type='distributed' local='local_index' agent='127.0.0.1:9312:remote_table'
+CREATE TABLE distributed_table type='distributed'
+  local='local_table'
+  agent='127.0.0.1:9312:remote_table';
 ```
+<!-- end -->
 
-#### Children
+## Children
 
 The essence of a distributed table lies in its list of child tables, to which it points. There are two types of child tables in a distributed table:
 
@@ -45,4 +54,3 @@ The essence of a distributed table lies in its list of child tables, to which it
 2. [Remote tables](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent): These are tables that are served anywhere outside the server. To enumerate remote tables, you use the syntax `agent =`. Each line represents one endpoint or agent. Each agent can have multiple external locations and options for how it should work. More details [here](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent). It is important to note that the server does not have any information about the type of table it is working with. This may lead to errors if, for example, you issue a `CALL PQ` to a remote table 'foo' that is not a percolate table.
 
 <!-- proofread -->
-

@@ -44,8 +44,11 @@ Known per-session server variables:
 * `AUTOCOMMIT = {0 | 1}` determines if data modification statements should be implicitly wrapped by `BEGIN` and `COMMIT`.
 * `COLLATION_CONNECTION = collation_name` selects the collation for `ORDER BY` or `GROUP BY` on string values in subsequent queries. Refer to [Collations](../Searching/Collations.md) for a list of known collation names.
 * `MAX_THREADS_PER_QUERY = <POSITIVE_INT_VALUE>` redefines [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query) in the runtime. Per-session variable influences only the queries run in the same session (connection), i.e., up to disconnect. Value 0 means 'no limit'. If both per-session and the global variables are set, the per-session one has a higher priority.
-* `net_write_timeout = <value>`: Tunes the network timeout for write operations, i.e., sending data. The global value can be changed only with VIP privileges.
-* `optimize_by_id = {0 | 1}`: Internal flag used in some `debug` commands.
+* `NET_WRITE_TIMEOUT = <value>`
+* `NET_READ_TIMEOUT = <value>`
+* `INTERACTIVE_TIMEOUT = <value>`: Sets the SQL connection timeout (idle time) for interactive SQL sessions. A common example is connecting to the Manticore server using a command-line client (CLI) like `mysql`. Previously, separate 'read' and 'write' timeouts existed globally, but this proved confusing. Now, `NET_WRITE_TIMEOUT` and `NET_READ_TIMEOUT` are aliases for `INTERACTIVE_TIMEOUT`. They all control the same variable, related only to SQL  endpoints: the maximum idle time allowed over a connection. This is similar to `WAIT_TIMEOUT`, but specifically for interactive sessions.
+* `WAIT_TIMEOUT = <value>`: Sets the SQL connection timeout (idle time) for non-interactive SQL sessions. A common example is a client library connecting to the Manticore server and maintaining a connection pool for reuse. This is similar to `INTERACTIVE_TIMEOUT`, but applies specifically to non-interactive sessions.
+* `OPTIMIZE_BY_ID = {0 | 1}`: Internal flag used in some `debug` commands.
 * `PROFILING = {0 | 1}` enables query profiling in the current session. Defaults to 0. See also [show profile](../Node_info_and_management/Profiling/Query_profile.md).
 * `ro = {1 | 0}` switches session to read-only mode or back. In `show variables` output the variable displayed with name `session_read_only`.
 * `throttling_period = <INT_VALUE>`: Interval (in milliseconds) during which the current running query will reschedule. A value of 0 disables throttling, meaning the query will occupy CPU cores until it finishes. If concurrent queries come from other connections at the same time, they will be allocated to free cores or will be suspended until a core is released. Providing a negative value (-1) resets throttling to the default compiled-in value (100ms), which means the query will be rescheduled every 100ms, allowing concurrent queries a chance to be executed. The global value (set via `set global`) can only be set on a VIP connection.
@@ -77,13 +80,15 @@ Known per-session server variables:
 
 	```bash
 	export MANTICORE_THREADS_EX=8
+ 	# or
 	export MANTICORE_THREADS_EX='16+8/2'
   ```
 
   Or, via the MySQL CLI, as:
   ```sql
   SET threads_ex='16';
-	SET GLOBAL threads_ex='/2';
+  -- or 
+  SET GLOBAL threads_ex='/2';
   ```
 
   Or, as a query parameter, like:
@@ -94,21 +99,24 @@ Known per-session server variables:
   The `threads_ex` configuration follows a hierarchy: environment variables first, then the global variable, and lastly, query options, allowing specific settings to override general ones.
 
   </details>
-* `WAIT_TIMEOUT/net_read_timeout = <value>` sets connection timeout, either per session or global. Global can only be set on a VIP connection.
 
 Known global server variables are:
 
+* `WAIT_TIMEOUT = <value>` sets the SQL connection timeout to the maximum allowed idle time for a non-interactive connection. You can configure this setting either per session (for the current connection) or globally, but global settings are only applicable using VIP connections.
+* `INTERACTIVE_TIMEOUT = <value>` sets the SQL connection timeout to the maximum allowed idle time for an interactive connection.  Like `WAIT_TIMEOUT`, this setting can be configured per session or globally, but global settings are only applicable using VIP connections.
 * `ACCURATE_AGGREGATION`: Sets the default value for the option [accurate_aggregation](../Searching/Options.md#accurate_aggregation) of future queries.
-* `AUTO_OPTIMIZE = {1|0}` Turns on/off [auto_optimize](../Server_settings/Searchd.md#auto_optimize).
+* `AUTO_OPTIMIZE = <non-negative integer>` Configures [auto_optimize](../Server_settings/Searchd.md#auto_optimize): `0` disables it, `1` enables it with the default threshold, and values greater than `1` multiply that threshold.
 * `cluster_user = name` Sets the username used with `mysqldump` / `mariadb-dump` to [enable replication mode](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump).
 * `COREDUMP= {1|0}` Turns on/off saving a core file or a minidump of the server on crash. More details [here](../Starting_the_server/Manually.md#searchd-command-line-options).
 * `CPUSTATS= {1|0}` Turns on/off [CPU time tracking](../Starting_the_server/Manually.md#searchd-command-line-options).
 * `DISTINCT_PRECISION_THRESHOLD`: Sets the default value for the option [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) of future queries.
+* `EMBEDDINGS_THREADS = <non-negative integer>` Changes [embeddings_threads](../Server_settings/Searchd.md#embeddings_threads) at runtime. The value caps how many threads the embeddings library may use when generating vectors for auto-embedding inserts, `ALTER TABLE` KNN rebuilds, and KNN text-query embedding. `0` disables the cap.
 * `ES_COMPAT = {on/off/dashboards}` When set to `on` (default), Elasticsearch-like write requests are supported; `off` disables the support; `dashboards` enables the support and also allows requests from Kibana (this functionality is experimental).
 * `EXPANSION_MERGE_THRESHOLD_DOCS`: Changes the value of the config's [expansion_merge_threshold_docs](../Server_settings/Searchd.md#expansion_merge_threshold_docs) setting on-the-fly.
 * `EXPANSION_MERGE_THRESHOLD_HITS`: Changes the value of the config's [expansion_merge_threshold_hits](../Server_settings/Searchd.md#expansion_merge_threshold_hits) setting on-the-fly.
 * `GROUPING_IN_UTC = {0 | 1}` When set to 1, causes timed grouping functions (day(), month(), year(), yearmonth(), yearmonthday()) to be calculated in UTC. Read the doc for [grouping_in_utc](../Server_settings/Searchd.md) config params for more details.
 * `IOSTATS = {0 | 1}` Enables or disables I/O operations (except for attributes) reporting in the query log.
+* `KNN_PARALLEL_BUILD = <positive integer>` Changes [knn_parallel_build](../Server_settings/Searchd.md#knn_parallel_build) at runtime. The value controls how many worker threads can be used to build HNSW graphs during RT chunk saves and `OPTIMIZE` / auto-optimize chunk merges.
 * `LOG_DEBUG_FILTER = <string value>` Filters out redundant log messages. If the value is set, then all logs with level > INFO (i.e., `DEBUG`, `DEBUGV`, etc.) will be compared with the string and output only in the case they start with the given value.
 * `LOG_LEVEL = {info | debug | replication | debugv | debugvv}` Changes the current log verboseness level.
 * `MAINTENANCE = {0 | 1}` When set to 1, puts the server in maintenance mode. Only clients with VIP connections can execute queries in this mode. All new non-VIP incoming connections are refused. Existing connections are left intact.
@@ -144,4 +152,3 @@ Query OK, 0 rows affected (0.01 sec)
 
 To make user variables persistent, make sure [sphinxql_state](../Server_settings/Searchd.md#sphinxql_state) is enabled.
 <!-- proofread -->
-

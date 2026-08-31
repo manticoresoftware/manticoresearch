@@ -41,7 +41,7 @@ ERROR 1064 (42000) at line 1: table test: parse error: P09: syntax error, unexpe
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test WHERE CONTAINS(text_field, 'NEAR((word1, word2), 3)');"
 ––– output –––
-ERROR 1064 (42000) at line 1: P01: syntax error, unexpected '(' near '(text_field, 'NEAR((word1, word2), 3)')'
+ERROR 1064 (42000) at line 1: P01: syntax error, unexpected identifier, expecting ')' near 'text_field, 'NEAR((word1, word2), 3)')'
 ––– input –––
 mysql -h0 -P9306 -e "SELECT DISTINCT TABLE_SCHEMA from information_schema.TABLES;"
 ––– output –––

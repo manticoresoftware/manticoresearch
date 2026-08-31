@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -9,16 +9,33 @@
 //
 
 #include "attribute.h"
+#include "std/tdigest_runtime.h"
 
 #include "sphinxint.h"
 #include "sphinxjson.h"
 #include "indexcheck.h"
 #include "knnmisc.h"
+#include "indexsettings.h"
 #include "schema/locator.h"
 
 #if __has_include( <charconv>)
 #include <charconv>
 #endif
+
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
+
+static FORCE_INLINE void PrefetchT0 ( const void * p )
+{
+#if defined(__GNUC__) || defined(__clang__)
+	__builtin_prefetch ( p, 0, 3 );	// read, high temporal locality
+#elif defined(_MSC_VER)
+	_mm_prefetch ( (const char *)p, _MM_HINT_T0 );
+#else
+	(void)p;
+#endif
+}
 
 //////////////////////////////////////////////////////////////////////////
 // blob attributes
@@ -61,7 +78,7 @@ class AttributePacker_i
 {
 public:
 	virtual								~AttributePacker_i(){}
-	virtual bool						SetData ( const BYTE * pData, int iDataLen, CSphString & sError ) = 0;
+	virtual bool						SetData ( const BYTE * pData, int iDataLen, BlobAttrInput_e eInput, CSphString & sError ) = 0;
 	virtual const CSphVector<BYTE> &	GetData() const = 0;
 };
 
@@ -69,8 +86,14 @@ public:
 class AttributePacker_c : public AttributePacker_i
 {
 public:
-	bool SetData ( const BYTE * pData, int iDataLen, CSphString & /*sError*/ ) override
+	AttributePacker_c () = default;
+
+	explicit AttributePacker_c ( BlobAttrInput_e eExpectedInput )
+		: m_eExpectedInput ( eExpectedInput ) {}
+
+	bool SetData ( const BYTE * pData, int iDataLen, BlobAttrInput_e eInput, CSphString & sError ) override
 	{
+		assert ( eInput==m_eExpectedInput );
 		m_dData.Resize ( iDataLen );
 		if (iDataLen)
 			memcpy ( m_dData.Begin(), pData, iDataLen );
@@ -83,6 +106,7 @@ public:
 	}
 
 protected:
+	const BlobAttrInput_e m_eExpectedInput = BlobAttrInput_e::RAW_BYTES;
 	CSphVector<BYTE>	m_dData;
 };
 
@@ -92,15 +116,31 @@ class AttributePacker_MVA_T : public AttributePacker_c
 public:
 	AttributePacker_MVA_T ( bool bNeedSorting = false ) : m_bNeedSorting ( bNeedSorting ) {}
 
-	bool SetData ( const BYTE * pData, int iDataLen, CSphString & /*sError*/ ) override
+	bool SetData ( const BYTE * pData, int iDataLen, BlobAttrInput_e eInput, CSphString & sError ) override
 	{
-		int iValueSize = sizeof ( int64_t );
-		int iNumValues = iDataLen/iValueSize;
-		if (!iNumValues)
+		if ( !iDataLen )
 		{
 			m_dData.Resize ( 0 );
 			return true;
 		}
+
+		int iValueSize = 0;
+		switch ( eInput )
+		{
+		case BlobAttrInput_e::MVA_INT64:	iValueSize = sizeof ( int64_t );	break;
+		case BlobAttrInput_e::MVA_DWORD:	iValueSize = sizeof ( DWORD );		break;
+		default:
+			sError = "Invalid blob input layout for MVA/float_vector";
+			return false;
+		}
+
+		if ( iDataLen % iValueSize )
+		{
+			sError.SetSprintf ( "Invalid MVA/float_vector payload size: %d", iDataLen );
+			return false;
+		}
+
+		int iNumValues = iDataLen/iValueSize;
 
 		if ( m_bNeedSorting )
 		{
@@ -108,7 +148,9 @@ public:
 			auto * pUnsorted = (T*)m_dUnsorted.Begin();
 			for ( int i = 0; i<iNumValues; i++ )
 			{
-				auto iVal = sphUnalignedRead ( *(int64_t*)const_cast<BYTE*>(pData) );
+				SphAttr_t iVal = ( iValueSize==(int)sizeof(int64_t) )
+					? sphUnalignedRead ( *(int64_t*)const_cast<BYTE*>(pData) )
+					: sphUnalignedRead ( *(DWORD*)const_cast<BYTE*>(pData) );
 				*pUnsorted++ = ConvertType<IN_T>(iVal);
 				pData += iValueSize;
 			}
@@ -124,7 +166,9 @@ public:
 
 			for ( int i = 0; i<iNumValues; i++ )
 			{
-				auto iVal = sphUnalignedRead ( *(int64_t*)const_cast<BYTE*>(pData) );
+				SphAttr_t iVal = ( iValueSize==(int)sizeof(int64_t) )
+					? sphUnalignedRead ( *(int64_t*)const_cast<BYTE*>(pData) )
+					: sphUnalignedRead ( *(DWORD*)const_cast<BYTE*>(pData) );
 				*pResult++ = ConvertType<IN_T>(iVal);
 				pData += iValueSize;
 			}
@@ -146,8 +190,9 @@ using AttributePacker_Int2FloatVec_c = AttributePacker_MVA_T<float,DWORD>;
 class AttributePacker_Json_c : public AttributePacker_c
 {
 public:
-	bool SetData ( const BYTE * pData, int iDataLen, CSphString & sError ) override
+	bool SetData ( const BYTE * pData, int iDataLen, BlobAttrInput_e eInput, CSphString & sError ) override
 	{
+		assert ( eInput==BlobAttrInput_e::RAW_BYTES );
 		m_dData.Resize(0);
 		if ( !iDataLen )
 			return true;
@@ -168,7 +213,7 @@ public:
 class BlobRowBuilder_Base_c : public BlobRowBuilder_i
 {
 public:
-	bool	SetAttr ( int iAttr, const BYTE * pData, int iDataLen, CSphString & sError ) override		{ return m_dAttrs[iAttr]->SetData ( pData, iDataLen, sError ); }
+	bool	SetAttr ( int iAttr, const BYTE * pData, int iDataLen, BlobAttrInput_e eInput, CSphString & sError ) override		{ return m_dAttrs[iAttr]->SetData ( pData, iDataLen, eInput, sError ); }
 
 protected:
 	CSphVector<std::unique_ptr<AttributePacker_i>> m_dAttrs;
@@ -206,8 +251,11 @@ BlobRowBuilder_File_c::BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOf
 		switch ( tCol.m_eAttrType )
 		{
 		case SPH_ATTR_STRING:
-		case SPH_ATTR_INT64SET:
 			m_dAttrs.Add ( std::make_unique<AttributePacker_c>() );
+			break;
+
+		case SPH_ATTR_INT64SET:
+			m_dAttrs.Add ( std::make_unique<AttributePacker_c>(BlobAttrInput_e::MVA_INT64) );
 			break;
 
 		case SPH_ATTR_UINT32SET:
@@ -215,6 +263,7 @@ BlobRowBuilder_File_c::BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOf
 			break;
 
 		case SPH_ATTR_FLOAT_VECTOR:
+		case SPH_ATTR_FLOAT_VECTOR_ARRAY:
 			m_dAttrs.Add ( std::make_unique<AttributePacker_FloatVec_c>() );
 			break;
 
@@ -348,8 +397,11 @@ BlobRowBuilder_Mem_c::BlobRowBuilder_Mem_c ( const ISphSchema & tSchema, CSphTig
 		{
 		case SPH_ATTR_STRING:
 		case SPH_ATTR_JSON:			// json doesn't go to a separate packer because we work with pre-parsed json in this case
-		case SPH_ATTR_INT64SET:
 			m_dAttrs.Add ( std::make_unique<AttributePacker_c>() );
+			break;
+
+		case SPH_ATTR_INT64SET:
+			m_dAttrs.Add ( std::make_unique<AttributePacker_c>(BlobAttrInput_e::MVA_INT64) );
 			break;
 
 		case SPH_ATTR_UINT32SET:
@@ -357,6 +409,7 @@ BlobRowBuilder_Mem_c::BlobRowBuilder_Mem_c ( const ISphSchema & tSchema, CSphTig
 			break;
 
 		case SPH_ATTR_FLOAT_VECTOR:
+		case SPH_ATTR_FLOAT_VECTOR_ARRAY:
 			m_dAttrs.Add ( std::make_unique<AttributePacker_FloatVec_c>() );
 			break;
 
@@ -433,7 +486,13 @@ BlobRowBuilder_MemUpdate_c::BlobRowBuilder_MemUpdate_c ( const ISphSchema & tSch
 
 		if ( !dAttrsUpdated.BitGet(i) )
 		{
-			m_dAttrs.Add ( std::make_unique<AttributePacker_c>() );
+			BlobAttrInput_e eExpectedInput = BlobAttrInput_e::RAW_BYTES;
+			if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY )
+				eExpectedInput = BlobAttrInput_e::MVA_DWORD;
+			else if ( tCol.m_eAttrType==SPH_ATTR_INT64SET )
+				eExpectedInput = BlobAttrInput_e::MVA_INT64;
+
+			m_dAttrs.Add ( std::make_unique<AttributePacker_c>(eExpectedInput) );
 			continue;
 		}
 
@@ -466,6 +525,10 @@ BlobRowBuilder_MemUpdate_c::BlobRowBuilder_MemUpdate_c ( const ISphSchema & tSch
 				else
 					m_dAttrs.Add ( std::make_unique<AttributePacker_Int2FloatVec_c>() );
 			}
+			break;
+
+		case SPH_ATTR_FLOAT_VECTOR_ARRAY:
+			m_dAttrs.Add ( std::make_unique<AttributePacker_FloatVec_c>() );
 			break;
 
 		case SPH_ATTR_JSON:
@@ -513,19 +576,19 @@ std::unique_ptr<BlobRowBuilder_i> sphCreateBlobRowBuilderUpdate ( const ISphSche
 
 //////////////////////////////////////////////////////////////////////////
 
-static int64_t GetBlobRowOffset ( const CSphRowitem * pDocinfo, int iBlobRowOffset )
+static FORCE_INLINE int64_t GetBlobRowOffset ( const CSphRowitem * pDocinfo, int iBlobRowOffset )
 {
 	return sphUnalignedRead ( *( (const int64_t*)pDocinfo + iBlobRowOffset ) );
 }
 
-static int64_t GetBlobRowOffset ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator )
+static FORCE_INLINE int64_t GetBlobRowOffset ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator )
 {
 	// blob row locator NEEDS to be 1st or 2nd attribute after docid (see tLocator.m_iBlobRowOffset)
 	return GetBlobRowOffset ( tLocator.m_bDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic, tLocator.m_iBlobRowOffset );
 }
 
 template <typename T>
-static const BYTE * GetBlobAttr ( int iBlobAttrId, int nBlobAttrs, const BYTE * pRow, int & iLengthBytes )
+static FORCE_INLINE const BYTE * GetBlobAttr ( int iBlobAttrId, int nBlobAttrs, const BYTE * pRow, int & iLengthBytes )
 {
 	T uLen1 = sphUnalignedRead ( *( (const T*)pRow + iBlobAttrId ) );
 	T uLen0 = iBlobAttrId > 0 ? sphUnalignedRead ( *( (const T*)pRow + iBlobAttrId - 1 ) ) : 0;
@@ -536,7 +599,7 @@ static const BYTE * GetBlobAttr ( int iBlobAttrId, int nBlobAttrs, const BYTE * 
 }
 
 
-static const BYTE * GetBlobAttr ( const BYTE * pRow, int iBlobAttrId, int nBlobAttrs, int & iLengthBytes )
+static FORCE_INLINE const BYTE * GetBlobAttr ( const BYTE * pRow, int iBlobAttrId, int nBlobAttrs, int & iLengthBytes )
 {
 	switch ( *pRow )
 	{
@@ -553,7 +616,7 @@ static const BYTE * GetBlobAttr ( const BYTE * pRow, int iBlobAttrId, int nBlobA
 
 // same as above, but returns pair instead of confusing result-by-ref.
 template <typename T>
-static ByteBlob_t GetBlobAttr ( int iBlobAttrId, int nBlobAttrs, const BYTE * pRow )
+static FORCE_INLINE ByteBlob_t GetBlobAttr ( int iBlobAttrId, int nBlobAttrs, const BYTE * pRow )
 {
 	auto pTRow = (const T*)pRow;
 	T uLen1 = sphUnalignedRead ( pTRow[iBlobAttrId] );
@@ -565,7 +628,7 @@ static ByteBlob_t GetBlobAttr ( int iBlobAttrId, int nBlobAttrs, const BYTE * pR
 }
 
 
-static ByteBlob_t GetBlobAttr ( const BYTE * pRow, int iBlobAttrId, int nBlobAttrs )
+static FORCE_INLINE ByteBlob_t GetBlobAttr ( const BYTE * pRow, int iBlobAttrId, int nBlobAttrs )
 {
 	switch ( *pRow )
 	{
@@ -599,6 +662,20 @@ ByteBlob_t sphGetBlobAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tL
 	assert ( pBlobPool );
 	int64_t iOffset = GetBlobRowOffset ( tMatch, tLocator );
 	return GetBlobAttr ( pBlobPool+iOffset, tLocator.m_iBlobAttrId, tLocator.m_nBlobAttrs );
+}
+
+
+void sphPrefetchBlobRowOffset ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator )
+{
+	assert ( tLocator.IsBlobAttr() && !tLocator.m_bDynamic && tMatch.m_pStatic );
+	PrefetchT0 ( (const int64_t*)tMatch.m_pStatic + tLocator.m_iBlobRowOffset );
+}
+
+
+void sphPrefetchBlobRow ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool )
+{
+	assert ( pBlobPool && tLocator.IsBlobAttr() && !tLocator.m_bDynamic && tMatch.m_pStatic );
+	PrefetchT0 ( pBlobPool + GetBlobRowOffset ( tMatch.m_pStatic, tLocator.m_iBlobRowOffset ) );
 }
 
 const BYTE * sphGetBlobAttr ( const CSphRowitem * pDocinfo, const CSphAttrLocator & tLocator, const BYTE * pBlobPool, int & iLengthBytes )
@@ -1053,7 +1130,8 @@ const CSphString & sphGetDocidStr()
 
 bool sphIsBlobAttr ( ESphAttr eAttr )
 {
-	return eAttr==SPH_ATTR_STRING || eAttr==SPH_ATTR_JSON	|| eAttr==SPH_ATTR_UINT32SET || eAttr==SPH_ATTR_INT64SET || eAttr==SPH_ATTR_FLOAT_VECTOR;
+	return eAttr==SPH_ATTR_STRING || eAttr==SPH_ATTR_JSON	|| eAttr==SPH_ATTR_UINT32SET || eAttr==SPH_ATTR_INT64SET || eAttr==SPH_ATTR_FLOAT_VECTOR
+		|| eAttr==SPH_ATTR_FLOAT_VECTOR_ARRAY;
 }
 
 
@@ -1068,7 +1146,30 @@ bool sphIsBlobAttr ( const CSphColumnInfo & tAttr )
 
 bool IsMvaAttr ( ESphAttr eAttr )
 {
-	return eAttr==SPH_ATTR_UINT32SET || eAttr==SPH_ATTR_INT64SET || eAttr==SPH_ATTR_FLOAT_VECTOR || eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_FLOAT_VECTOR_PTR;
+	return eAttr==SPH_ATTR_UINT32SET || eAttr==SPH_ATTR_INT64SET || eAttr==SPH_ATTR_FLOAT_VECTOR || eAttr==SPH_ATTR_FLOAT_VECTOR_ARRAY
+		|| eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_FLOAT_VECTOR_PTR || eAttr==SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR;
+}
+
+bool IsBlobAttrEmpty ( const ByteBlob_t & tAttr )
+{
+	return tAttr.second==0;
+}
+
+bool IsBlobAttrZero ( const ByteBlob_t & tAttr, int iDims )
+{
+	if ( IsBlobAttrEmpty ( tAttr ) )
+		return true;
+
+	if ( iDims<=0 || tAttr.second!=iDims*(int)sizeof(float) || !tAttr.first )
+		return false;
+
+	const DWORD * pVals = (const DWORD *)tAttr.first;
+	const int iVals = tAttr.second / (int)sizeof(DWORD);
+	for ( int i = 0; i < iVals; i++ )
+		if ( pVals[i]!=0 )
+			return false;
+
+	return true;
 }
 
 
@@ -1139,6 +1240,57 @@ ByteBlob_t sphUnpackPtrAttr ( const BYTE * pData )
 	return { pData, iLen };
 }
 
+BYTE * sphCopyPackedAttr ( const BYTE * pData )
+{
+	return sphPackPtrAttr ( sphUnpackPtrAttr ( pData ) );
+}
+
+
+BYTE * sphCopyPackedTdigestAttr ( const BYTE * pData )
+{
+	ByteBlob_t dBlob = sphUnpackPtrAttr ( pData );
+	if ( sphIsTDigestRuntimeBlob ( dBlob ) )
+		return sphCloneTDigestRuntimeBlob ( dBlob );
+	return sphPackPtrAttr ( dBlob );
+}
+
+
+void sphDeallocatePacked ( const BYTE* pBlob )
+{
+	if ( !pBlob )
+		return;
+
+	const BYTE * pPayload = pBlob;
+	int iLen = (int)UnzipIntBE ( pPayload );
+
+#if WITH_SMALLALLOC
+	sphDeallocateSmall ( pBlob, sphCalcPackedLength ( iLen ) );
+#else
+	(void)iLen;
+	sphDeallocateSmall ( pBlob );
+#endif
+}
+
+
+void sphDeallocatePackedTdigest ( const BYTE * pBlob )
+{
+	if ( !pBlob )
+		return;
+
+	const BYTE * pPayload = pBlob;
+	int iLen = (int)UnzipIntBE ( pPayload );
+	ByteBlob_t dBlob { pPayload, iLen };
+
+	if ( sphIsTDigestRuntimeBlob ( dBlob ) )
+		sphDestroyTDigestRuntimeBlob ( dBlob );
+
+#if WITH_SMALLALLOC
+	sphDeallocateSmall ( pBlob, sphCalcPackedLength ( iLen ) );
+#else
+	sphDeallocateSmall ( pBlob );
+#endif
+}
+
 
 ESphAttr sphPlainAttrToPtrAttr ( ESphAttr eAttrType )
 {
@@ -1149,6 +1301,7 @@ ESphAttr sphPlainAttrToPtrAttr ( ESphAttr eAttrType )
 	case SPH_ATTR_UINT32SET:	return SPH_ATTR_UINT32SET_PTR;
 	case SPH_ATTR_INT64SET:		return SPH_ATTR_INT64SET_PTR;
 	case SPH_ATTR_FLOAT_VECTOR:	return SPH_ATTR_FLOAT_VECTOR_PTR;
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY: return SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR;
 	case SPH_ATTR_JSON_FIELD:	return SPH_ATTR_JSON_FIELD_PTR;
 	default:					return eAttrType;
 	};
@@ -1157,8 +1310,9 @@ ESphAttr sphPlainAttrToPtrAttr ( ESphAttr eAttrType )
 
 bool sphIsDataPtrAttr ( ESphAttr eAttr )
 {
-	return eAttr==SPH_ATTR_STRINGPTR || eAttr==SPH_ATTR_FACTORS || eAttr==SPH_ATTR_FACTORS_JSON
+	return eAttr==SPH_ATTR_STRINGPTR || eAttr==SPH_ATTR_TDIGEST_PTR || eAttr==SPH_ATTR_FACTORS || eAttr==SPH_ATTR_FACTORS_JSON
 	|| eAttr==SPH_ATTR_UINT32SET_PTR ||	eAttr==SPH_ATTR_INT64SET_PTR ||	eAttr==SPH_ATTR_FLOAT_VECTOR_PTR
+	|| eAttr==SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR
 	|| eAttr==SPH_ATTR_JSON_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR;
 }
 
@@ -1200,7 +1354,7 @@ static void FloatVec2Str ( const float * pFloatVec, int iLengthBytes, StringBuil
 
 bool sphIsInternalAttr ( const CSphString & sAttrName )
 {
-	return sAttrName==sphGetBlobLocatorName() || sAttrName==GetNullMaskAttrName() || sAttrName==GetKnnDistRescoreAttrName();
+	return sAttrName==sphGetBlobLocatorName() || sAttrName==GetNullMaskAttrName() || sAttrName==GetKnnDistRescoreAttrName() || sAttrName==sphGetUuidDocidName();
 }
 
 
@@ -1238,6 +1392,111 @@ void sphPackedFloatVec2Str ( const BYTE * pData, StringBuilder_c & dStr )
 	sphFloatVec2Str ( dFloatVec, dStr );
 }
 
+//////////////////////////////////////////////////////////////////////////
+// float_vector_array: stored layout is [uint32 dims][N*dims float32].
+// An empty array (missing, or []) is a ZERO-LENGTH blob - no header at all.
+// dims==0 is reserved exclusively for that empty encoding; any non-empty value has dims>=1.
+FloatVecArray_t ParseFloatVecArray ( ByteBlob_t dBlob )
+{
+	FloatVecArray_t tRes;
+
+	// empty encoding: zero-length blob, no header
+	if ( !dBlob.first || !dBlob.second )
+		return tRes;
+
+	assert ( dBlob.second > (int)sizeof(DWORD) );
+	assert ( !( ( dBlob.second - sizeof(DWORD) ) % sizeof(float) ) );
+
+	const int iDims = (int)sphUnalignedRead ( *(const DWORD*)dBlob.first );
+	const int iNumValues = int ( ( dBlob.second - sizeof(DWORD) ) / sizeof(float) );
+	assert ( iDims>0 );
+	assert ( !( iNumValues % iDims ) );
+
+	tRes.m_iDims = iDims;
+	tRes.m_dValues = { (const float*)( dBlob.first + sizeof(DWORD) ), iNumValues };
+	return tRes;
+}
+
+
+void sphFloatVecArray2Str ( ByteBlob_t dBlob, StringBuilder_c & dStr )
+{
+	FloatVecArray_t tArray = ParseFloatVecArray(dBlob);
+	if ( !tArray.m_iDims )
+	{
+		dStr << "[]";
+		return;
+	}
+
+	const int iDims = tArray.m_iDims;
+	const int iVectors = tArray.m_dValues.GetLength() / iDims;
+	dStr.GrowEnough ( (SPH_MAX_NUMERIC_STR+1)*tArray.m_dValues.GetLength() + 2*iVectors + 2 );
+
+	dStr << "[";
+	Comma_c sVecComma ( "," );
+	for ( int i = 0; i < iVectors; ++i )
+	{
+		dStr << sVecComma;
+		dStr << "[";
+		Comma_c sComma ( "," );
+		const float * pVec = tArray.m_dValues.Begin() + i*iDims;
+		for ( int j = 0; j < iDims; ++j )
+		{
+			dStr << sComma;
+			dStr << pVec[j];
+		}
+		dStr << "]";
+	}
+	dStr << "]";
+	*dStr.end() = '\0';
+}
+
+
+void sphPackedFloatVecArray2Str ( const BYTE * pData, StringBuilder_c & dStr )
+{
+	sphFloatVecArray2Str ( sphUnpackPtrAttr ( pData ), dStr );
+}
+
+
+int ValidateFloatVecArrayGroups ( const VecTraits_T<const int> & dGroupLens, CSphString & sError )
+{
+	if ( dGroupLens.IsEmpty() )
+		return 0;						// the empty array; not an error
+
+	const int iDims = dGroupLens[0];
+	ARRAY_FOREACH ( i, dGroupLens )
+	{
+		if ( !dGroupLens[i] )
+		{
+			sError.SetSprintf ( "vector #%d is empty; vectors must have at least one entry", i+1 );
+			return 0;
+		}
+
+		if ( dGroupLens[i]!=iDims )
+		{
+			sError.SetSprintf ( "vector #%d has %d entries, expected %d", i+1, dGroupLens[i], iDims );
+			return 0;
+		}
+	}
+
+	return iDims;
+}
+
+
+void AppendFloatVecArrayToUpdatePool ( int iDims, const VecTraits_T<const float> & dValues, CSphVector<DWORD> & dPool )
+{
+	if ( iDims<=0 || dValues.IsEmpty() )
+	{
+		dPool.Add(0);	// no values: clears the attribute
+		return;
+	}
+
+	assert ( !( dValues.GetLength() % iDims ) );
+	dPool.Add ( ( 1 + dValues.GetLength() )*2 );	// length is counted in dwords
+	*((int64_t*)dPool.AddN(2)) = iDims;
+	for ( float fValue : dValues )
+		*((int64_t*)dPool.AddN(2)) = sphF2DW(fValue);
+}
+
 
 bool IsNotRealAttribute ( const CSphColumnInfo & tColumn )
 {
@@ -1258,6 +1517,7 @@ const char * AttrType2Str ( ESphAttr eAttrType )
 	case SPH_ATTR_STRING:			return "SPH_ATTR_STRING";
 	case SPH_ATTR_POLY2D:			return "SPH_ATTR_POLY2D";
 	case SPH_ATTR_STRINGPTR:		return "SPH_ATTR_STRINGPTR";
+	case SPH_ATTR_TDIGEST_PTR:		return "SPH_ATTR_TDIGEST_PTR";
 	case SPH_ATTR_TOKENCOUNT:		return "SPH_ATTR_TOKENCOUNT";
 	case SPH_ATTR_JSON:				return "SPH_ATTR_JSON";
 	case SPH_ATTR_UINT32SET:		return "SPH_ATTR_UINT32SET";

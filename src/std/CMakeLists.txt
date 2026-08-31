@@ -91,6 +91,7 @@ add_library ( manticore_std OBJECT
 		stringhash.h
 		sys.h
 		tdigest.h
+		tdigest_runtime.h
 		thread_annotations.h
 		threadrole.h
 		timers.h
@@ -127,6 +128,7 @@ add_library ( manticore_std OBJECT
 		stringhash.cpp
 		sys.cpp
 		tdigest.cpp
+		tdigest_runtime.cpp
 		timers.cpp
 		)
 target_include_directories( manticore_std PRIVATE "${MANTICORE_SOURCE_DIR}/src" )

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -32,6 +32,7 @@ struct XQKeyword_t
 	mutable bool		m_bMorphed = false;		///< morphology processing (wordforms, stemming etc) already done
 	mutable void *		m_pPayload = nullptr;
 	mutable bool		m_bRegex = false;
+	mutable int			m_iBlendedGroup = -1;	///< blended token group (-1 - not blended, >0 - group number)
 
 	XQKeyword_t() = default;
 	XQKeyword_t ( const char * sWord, int iPos )
@@ -39,6 +40,8 @@ struct XQKeyword_t
 		, m_iAtomPos ( iPos )
 	{}
 };
+
+void SetKeywordWithMarkers ( CSphString & sDst, const char * sPrefix, const CSphString & sWord, const char * sSuffix="" );
 
 
 /// extended query operator
@@ -135,6 +138,7 @@ public:
 
 	void SetZoneSpec ( const CSphVector<int> & dZones, bool bZoneSpan );
 	void SetFieldSpec ( const FieldMask_t& uMask, int iMaxPos );
+	uint64_t Hash () const noexcept;
 };
 
 /// extended query node
@@ -384,7 +388,8 @@ public:
 
 	virtual bool	IsFullscan ( const CSphQuery & tQuery ) const { return tQuery.m_sQuery.IsEmpty(); };
 	virtual bool	IsFullscan ( const XQQuery_t & tQuery ) const { return !tQuery.m_bWasFullText; };
-	virtual bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const = 0;
+	bool			ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const;
+	virtual bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const QueryExecutionSettings_t & tExecutionSettings, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const = 0;
 	virtual QueryParser_i * Clone() const = 0;
 };
 
@@ -405,11 +410,12 @@ bool	IsAllowOnlyNot();
 /// global setting for boolean simplification
 void	SetBooleanSimplify ( bool bSimplify );
 bool	GetBooleanSimplify ( const CSphQuery & tQuery );
-CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema = nullptr );
+bool	GetBooleanSimplify ();
+CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema = nullptr, StrVec_t * pZones = nullptr );
 inline int GetExpansionLimit ( int iQueryLimit, int iIndexLimit  )
 {
 	return ( iQueryLimit!=DEFAULT_QUERY_EXPANSION_LIMIT ? iQueryLimit : iIndexLimit );
 }
 
-bool TransformPhraseBased ( XQNode_t ** ppNode, CSphString & sError );
-void SetExpansionPhraseLimit ( int iMaxVariants );
+bool TransformPhraseBased ( XQNode_t ** ppNode, CSphString & sError, CSphString & sWarning );
+void SetExpansionPhraseLimit ( int iMaxVariants, bool bExpansionPhraseWarning );

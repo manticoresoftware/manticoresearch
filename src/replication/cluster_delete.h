@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -15,6 +15,6 @@
 #include "std/string.h"
 
 // ask remote nodes to delete given cluster by name
-void SendClusterDeleteToNodes ( const VecTraits_T<CSphString>& dNodes, const CSphString& sCluster );
+void SendClusterDeleteToNodes ( const VecTraits_T<CSphString>& dNodes, const CSphString & sCluster, const CSphString & sUser );
 
 

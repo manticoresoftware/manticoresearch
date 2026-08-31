@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -81,6 +81,7 @@ class KBufferGroupSorter_T : public CSphMatchQueueTraits, protected BaseGroupSor
 {
 	using MYTYPE = KBufferGroupSorter_T<COMPGROUP,UNIQ,DISTINCT,NOTIFICATIONS>;
 	using BASE = CSphMatchQueueTraits;
+	using BaseGroupSorter_c::AggrDiscard;
 
 public:
 	KBufferGroupSorter_T ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
@@ -181,6 +182,10 @@ public:
 
 protected:
 	ESphGroupBy 				m_eGroupBy;     ///< group-by function
+	void OnMatchFree ( CSphMatch & tMatch ) override
+	{
+		AggrDiscard ( tMatch );
+	}
 	int							m_iLimit;		///< max matches to be retrieved
 	UNIQ						m_tUniq;
 	bool						m_bSortByDistinct = false;
@@ -265,6 +270,7 @@ protected:
 		if ( NOTIFICATIONS && bNotify )
 			m_dJustPopped.Add ( RowTagged_t ( m_dData[iMatch] ) );
 
+		OnMatchFree ( m_dData[iMatch] );
 		m_pSchema->FreeDataPtrs ( m_dData[iMatch] );
 
 		// on final pass we totally wipe match.
@@ -331,6 +337,7 @@ protected:
 	using KBufferGroupSorter::RemoveDistinct;
 	using KBufferGroupSorter::FreeMatchPtrs;
 	using KBufferGroupSorter::m_bAvgFinal;
+	using CSphMatchQueueTraits::OnMatchFree;
 
 	using CSphGroupSorterSettings::m_tLocGroupby;
 	using CSphGroupSorterSettings::m_tLocCount;
@@ -340,6 +347,7 @@ protected:
 	using BaseGroupSorter_c::AggrSetup;
 	using BaseGroupSorter_c::AggrUpdate;
 	using BaseGroupSorter_c::AggrUngroup;
+	using BaseGroupSorter_c::AggrDiscard;
 
 	using CSphMatchQueueTraits::m_iSize;
 	using CSphMatchQueueTraits::m_dData;
@@ -366,6 +374,25 @@ public:
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) override	{ assert ( 0 && "Not supported in grouping"); }
 	bool	PushGrouped ( const CSphMatch & tEntry, bool ) override			{ return PushEx<true> ( tEntry, tEntry.GetAttr ( m_tLocGroupby ), false, false, true, nullptr ); }
 	ISphMatchSorter * Clone() const override								{ return this->template CloneSorterT<MYTYPE>(); }
+	int		PrepareGroupAccess() override									{ FinalizeMatches(); return this->m_dIData.GetLength(); }
+
+	bool VisitGroup ( SphAttr_t uGroupKey, const VisitMatch_fn & fnVisitor ) override
+	{
+		assert ( m_bMatchesFinalized );
+
+		if ( m_hGroup2Match.GetLength()!=this->m_dIData.GetLength() )
+		{
+			m_hGroup2Match.Clear();
+			RebuildHash();
+		}
+
+		CSphMatch ** ppMatch = m_hGroup2Match.Find ( uGroupKey );
+		if ( !ppMatch )
+			return false;
+
+		fnVisitor ( **ppMatch );
+		return true;
+	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
 	int Flatten ( CSphMatch * pTo ) override
@@ -458,6 +485,7 @@ public:
 
 		// once we're done copying, cleanup
 		m_iMaxUsed = ResetDynamicFreeData ( m_iMaxUsed );
+
 	}
 
 	void Finalize ( MatchProcessor_i & tProcessor, bool, bool bFinalizeMatches ) override
@@ -483,6 +511,7 @@ public:
 			{
 				int iId = *(this->m_dIData.Begin()+i);
 				CSphMatch & tMatch = m_dData[iId];
+				this->OnMatchFree ( tMatch );
 				m_pSchema->FreeDataPtrs(tMatch);
 				tMatch.ResetDynamic();
 			}
@@ -491,6 +520,7 @@ public:
 		// just evaluate in heap order
 		for ( auto iMatch : this->m_dIData )
 			tProcessor.Process ( &m_dData[iMatch] );
+
 	}
 
 	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }
@@ -697,12 +727,16 @@ private:
 		if ( bFinalize )
 		{
 			SortGroups();
+
+			// a finalized sorter can still receive matches: MoveTo() of other (chunk) sorters pushes into it
+			// after FinalizeMatches(). PushGrouped() dedups groups through m_hGroup2Match, so it must be
+			// rebuilt here in every case - otherwise the same group gets a second entry, and the next cut
+			// removes its distinct container twice (manticoresearch#4856)
+			RebuildHash();
+
 			if constexpr ( DISTINCT )
 				if ( !m_bSortByDistinct ) // since they haven't counted at the top
-				{
-					RebuildHash(); // distinct uses m_hGroup2Match
-					CountDistinct();
-				}
+					CountDistinct(); // distinct uses m_hGroup2Match
 		} else
 		{
 			// we've called CalcAvg ( Avg_e::FINALIZE ) before partitioning groups
@@ -886,6 +920,24 @@ public:
 	bool	Push ( const CSphMatch & tEntry ) override						{ return PushEx<false> ( tEntry, m_pGrouper->KeyFromMatch(tEntry), false, false, true, nullptr ); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final	{ assert ( 0 && "Not supported in grouping"); }
 	bool	PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) override	{ return PushEx<true> ( tEntry, tEntry.GetAttr ( m_tLocGroupby ), bNewSet, false, true, nullptr ); }
+	int		PrepareGroupAccess() override									{ FinalizeMatches(); return m_hGroup2Index.GetLength(); }
+
+	bool VisitGroup ( SphAttr_t uGroupKey, const VisitMatch_fn & fnVisitor ) override
+	{
+		assert ( m_bFinalized );
+
+		int * pStoredHead = m_hGroup2Index.Find ( uGroupKey );
+		if ( !pStoredHead )
+			return false;
+
+		int iStart = this->m_dIData[*pStoredHead];
+
+		fnVisitor ( m_dData[iStart] );
+		for ( int i = this->m_dIData[iStart]; i!=iStart; i = this->m_dIData[i] )
+			fnVisitor ( m_dData[i] );
+
+		return true;
+	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
 	int Flatten ( CSphMatch * pTo ) override
@@ -893,12 +945,7 @@ public:
 		if ( !GetLength() )
 			return 0;
 
-		if ( !m_bFinalized )
-		{
-			FinalizeChains ();
-			PrepareForExport ();
-			CountDistinct ();
-		}
+		FinalizeMatches();
 
 		auto fnSwap = [&pTo] ( CSphMatch & tSrc ) 	{ // the writer
 			Swap ( *pTo, tSrc );
@@ -943,12 +990,7 @@ public:
 
 		if ( bFinalizeMatches )
 		{
-			if ( !m_bFinalized )
-			{
-				FinalizeChains();
-				PrepareForExport();
-				CountDistinct();
-			}
+			FinalizeMatches();
 
 			ProcessData ( tProcessor, m_dFinalizedHeads );
 		}
@@ -966,6 +1008,7 @@ public:
 				m_tUniq.Compact(dStub);
 			}
 		}
+
 	}
 
 	// TODO! TEST!
@@ -1040,6 +1083,7 @@ public:
 		dRhs.SetMerge(false);
 
 		dRhs.m_iTotal = m_iTotal+iTotal;
+
 	}
 
 	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }
@@ -1363,6 +1407,16 @@ private:
 	}
 
 	// final pass before iface finalize/flatten - cut worst, sort everything
+	void FinalizeMatches()
+	{
+		if ( !GetLength() || m_bFinalized )
+			return;
+
+		FinalizeChains();
+		PrepareForExport();
+		CountDistinct();
+	}
+
 	void FinalizeChains()
 	{
 		if ( m_bFinalized )
@@ -1710,6 +1764,7 @@ class CSphImplicitGroupSorter final : public MatchSorter_c, ISphNoncopyable, pro
 {
 	using MYTYPE = CSphImplicitGroupSorter<COMPGROUP, UNIQ, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>;
 	using BASE = MatchSorter_c;
+	using BaseGroupSorter_c::AggrDiscard;
 
 public:
 	CSphImplicitGroupSorter ( const ISphMatchComparator * DEBUGARG(pComp), const CSphQuery *, const CSphGroupSorterSettings & tSettings )
@@ -1782,6 +1837,7 @@ public:
 			Swap ( *pTo, m_tData );
 		} else
 		{
+			AggrDiscard ( m_tData );
 			m_pSchema->FreeDataPtrs ( m_tData );
 			m_tData.ResetDynamic ();
 		}
@@ -1853,6 +1909,7 @@ public:
 		if constexpr ( DISTINCT )
 			if ( !bCopyMeta  )
 				dRhs.UpdateDistinct ( m_tData );
+
 	}
 
 	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }
@@ -1872,7 +1929,6 @@ private:
 	void	AddCount ( const CSphMatch & tEntry )				{ m_tData.AddCounterAttr ( m_tLocCount, tEntry ); }
 	void	UpdateAggregates ( const CSphMatch & tEntry, bool bGrouped = true, bool bMerge = false ) { AggrUpdate ( m_tData, tEntry, bGrouped, bMerge ); }
 	void	SetupAggregates ( const CSphMatch & tEntry )		{ AggrSetup ( m_tData, tEntry, m_bMerge ); }
-
 	// submit actual distinct value in all cases
 	template <bool GROUPED = true>
 	void UpdateDistinct ( const CSphMatch & tEntry )

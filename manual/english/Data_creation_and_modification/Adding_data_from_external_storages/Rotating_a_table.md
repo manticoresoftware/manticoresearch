@@ -49,6 +49,17 @@ RELOAD TABLES;
 
 This command functions similarly to the HUP system signal, triggering a rotation of tables. Nevertheless, it doesn't exactly mirror the typical HUP signal (which can come from a `kill -HUP` command or `indexer --rotate`). This command actively searches for any tables needing rotation and is capable of re-reading the configuration. Suppose you launch Manticore in plain mode with a config file that points to a nonexistent plain table. If you then attempt to `indexer --rotate` the table, the new table won't be recognized by the server until you execute `RELOAD TABLES` or restart the server.
 
+`RELOAD TABLES` should be treated as an asynchronous request. The statement returns after scheduling the reload/rotation work, while the actual table discovery and rotation complete shortly afterward in the daemon loop. Because of that, a plain table rebuilt with `indexer --rotate` may still be temporarily unavailable immediately after `RELOAD TABLES` returns.
+
+This is most visible in workflows that immediately use the plain table in the next statement, for example:
+
+```sql
+RELOAD TABLES;
+ATTACH TABLE plain_table TO TABLE rt_table WITH TRUNCATE;
+```
+
+In such cases, the `ATTACH` statement can fail with `no such table` if it runs before the plain table becomes visible. As a workaround, poll `SHOW TABLES` until the plain table appears, and only then continue with `ATTACH` or other dependent statements.
+
 Depending on the value of the [seamless_rotate](../../Server_settings/Searchd.md#seamless_rotate) setting, new queries might be shortly stalled, and clients will receive temporary errors.
 
 ```sql

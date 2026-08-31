@@ -29,7 +29,7 @@ SHOW TABLES;
 
 ```sql
 +----------+-------------+
-| Index    | Type        |
+| Table    | Type        |
 +----------+-------------+
 | dist     | distributed |
 | plain    | local       |
@@ -38,6 +38,56 @@ SHOW TABLES;
 | template | template    |
 +----------+-------------+
 5 rows in set (0.00 sec)
+```
+
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SHOW TABLES"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Table": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Table": "dist",
+        "Type": "distributed"
+      },
+      {
+        "Table": "plain",
+        "Type": "local"
+      },
+      {
+        "Table": "pq",
+        "Type": "percolate"
+      },{
+        "Table": "rt",
+        "Type": "rt"
+      },{
+        "Table": "template",
+        "Type": "template"
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+
 ```
 
 <!-- request PHP -->
@@ -68,7 +118,7 @@ utilsApi.sql('SHOW TABLES')
 
 <!-- response Python -->
 ```python
-{u'columns': [{u'Index': {u'type': u'string'}},
+{u'columns': [{u'Table': {u'type': u'string'}},
               {u'Type': {u'type': u'string'}}],
  u'data': [{u'Index': u'dist1', u'Type': u'distributed'},
            {u'Index': u'rt', u'Type': u'rt'},
@@ -157,6 +207,12 @@ utils_api.sql("SHOW TABLES", Some(true)).await
 
 <!-- end -->
 
+<!--
+data for the following examples:
+
+CREATE TABLE products type='distributed' local='products' agent='127.0.0.1:9312:products'
+-->
+
 <!-- example Example_2 -->
 Optional LIKE clause is supported for filtering tables by name.
 
@@ -179,6 +235,41 @@ SHOW TABLES LIKE 'pro%';
 | products | distributed |
 +----------+-------------+
 1 row in set (0.00 sec)
+```
+
+<!-- request JSON -->
+
+```sql
+POST /sql?mode=raw -d "SHOW TABLES LIKE 'pro%';"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Table": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Table": "products",
+        "Type": "distributed"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- request PHP -->
@@ -302,7 +393,7 @@ utils_api.sql("SHOW TABLES LIKE 'pro%'", Some(true)).await
 {DESC | DESCRIBE} table_name [ LIKE pattern ]
 ```
 
-The `DESCRIBE` statement lists the table columns and their associated types. The columns are document ID, full-text fields, and attributes. The order matches the order in which fields and attributes are expected by `INSERT` and `REPLACE` statements. Column types  include `field`, `integer`, `timestamp`, `ordinal`, `bool`, `float`, `bigint`, `string`, and `mva`. ID column will be typed as `bigint`. Example:
+The `DESCRIBE` statement lists the table columns and their associated types. The columns are document ID, full-text fields, and attributes. The order matches the order in which fields and attributes are expected by `INSERT` and `REPLACE` statements. Column types include `field`, `integer`, `timestamp`, `ordinal`, `bool`, `float`, `bigint`, `uuid`, `string`, and `mva`. The ID column is `bigint` by default and `uuid` for a real-time table declared with `id uuid`. Example:
 
 ```sql
 mysql> DESC rt;
@@ -322,6 +413,13 @@ An optional LIKE clause is supported. Refer to
 
 ### SELECT FROM name.@table
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS tbl;
+CREATE TABLE tbl(title text indexed stored) charset_table='non_cont,cont' morphology='icu_chinese';
+--> 
+
 <!-- example name_table -->
 You can also view the table schema by executing the query `select * from <table_name>.@table`. The benefit of this method is that you can use the `WHERE` clause for filtering:
 
@@ -338,6 +436,24 @@ select * from tbl.@table where type='text';
 |    2 | title | text | indexed stored |
 +------+-------+------+----------------+
 1 row in set (0.00 sec)
+```
+
+<!-- request JSON -->
+```sql
+POST /sql?mode=raw -d "select * from tbl.@table where type='text';"
+```
+
+<!-- response JSON -->
+```JSON
+[{
+"columns":[{"id":{"type":"long long"}},{"field":{"type":"string"}},{"type":{"type":"string"}},{"properties":{"type":"string"}}],
+"data":[
+{"id":2,"field":"title","type":"text","properties":"indexed stored"}
+],
+"total":1,
+"error":"",
+"warning":""
+}]
 ```
 
 <!-- end -->
@@ -360,10 +476,17 @@ select * from tbl.@table where properties any ('stored');
 
 <!-- example show_create -->
 ```sql
-SHOW CREATE TABLE table_name
+SHOW CREATE TABLE table_name [ OPTION output_words = 'list' | 'file' ]
 ```
 
 Prints the `CREATE TABLE` statement used to create the specified table.
+
+If the table was created using a SQL `profile=...` shortcut, `SHOW CREATE TABLE` prints the expanded settings instead of the profile name itself.
+
+The `output_words` option allows you to control how external file settings (such as `stopwords`, `exceptions`, `wordforms`, `hitless_words`) are displayed:
+
+* `'list'` (default): Displays the content of the files as inline lists using the `*_list` options (e.g. `stopwords_list='word1; word2'`).
+* `'file'`: Displays the file paths using the original options (e.g. `stopwords='/path/to/file'`).
 
 <!-- intro -->
 ##### SQL:
@@ -381,6 +504,28 @@ f text indexed stored
 ) charset_table='non_cont,cont' morphology='icu_chinese'
 1 row in set (0.00 sec)
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SHOW CREATE TABLE tbl"
+```
+
+<!-- response JSON -->
+```JSON
+[{
+"columns":[{"Table":{"type":"string"}},{"Create Table":{"type":"string"}}],
+"data":[
+{"Table":"tbl","Create Table":"CREATE TABLE tbl (\nf text)"}
+],
+"total":1,
+"error":"",
+"warning":""
+}]
+```
+
 <!-- end -->
 
 ### Percolate table schemas

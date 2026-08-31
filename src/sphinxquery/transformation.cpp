@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -54,12 +54,12 @@ bool CSphTransformation::CollectInfo ( XQNode_t * pNode, Checker_fn pfnChecker )
 	return ( m_hSimilar.GetLength()>0 );
 }
 
-void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t *> & dNodes ) noexcept
+bool CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t *> & dNodes ) noexcept
 {
 	assert ( pNode || dNodes.GetLength() );
 
 	if ( !m_pKeywords )
-		return;
+		return false;
 
 	CSphVector<XQNode_t*> dAllNodes ( dNodes.GetLength() + 1 );
 	ARRAY_FOREACH ( i, dNodes )
@@ -120,6 +120,8 @@ void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t 
 		if ( pNode->m_pParent )
 		   pNode->m_pParent->m_iUser += pNode->m_iUser + ( pNode->m_pParent->m_iUser==-1 ? 1 : 0);
 	}
+
+	return true;
 }
 
 void CSphTransformation::ResetCostsHash () noexcept

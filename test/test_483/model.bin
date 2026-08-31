@@ -1,0 +1,1 @@
+a:1:{i:0;a:1:{i:0;a:3:{s:8:"sphinxql";s:44:"select * from a left join b on a.id = b.a_id";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:4:{s:2:"id";s:1:"1";s:4:"b.id";s:2:"10";s:6:"b.a_id";s:1:"1";s:11:"b.attribute";s:3:"abc";}}}}}

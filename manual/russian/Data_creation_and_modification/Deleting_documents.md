@@ -1,25 +1,25 @@
 # Удаление документов
 
-Удаление документов поддерживается только в [RT-режиме](../Read_this_first.md#Real-time-mode-vs-plain-mode) для следующих типов таблиц:
-* [RT](../Creating_a_table/Local_tables/Real-time_table.md) таблицы
-* [Перколяторные](../Creating_a_table/Local_tables/Percolate_table.md) таблицы
-* Распределённые таблицы, которые содержат только RT таблицы в качестве локальных или удалённых агентов.
+Удаление документов поддерживается только в [режиме реального времени (RT)](../Read_this_first.md#Real-time-mode-vs-plain-mode) для следующих типов таблиц:
+* [Реального времени (Real-time)](../Creating_a_table/Local_tables/Real-time_table.md) таблицы
+* [Перколяционные (Percolate)](../Creating_a_table/Local_tables/Percolate_table.md) таблицы
+* Распределенные таблицы, которые содержат только RT-таблицы в качестве локальных или удаленных агентов.
 
-Вы можете удалять существующие документы из таблицы, основываясь либо на их ID, либо на определённых условиях.
+Вы можете удалять существующие документы из таблицы либо по их ID, либо по определенным условиям.
 
 Также доступно [массовое удаление](../Data_creation_and_modification/Deleting_documents.md#Bulk-deletion) для удаления нескольких документов.
 
-Удаление документов может быть выполнено через интерфейсы SQL и JSON.
+Удаление документов может быть выполнено как через SQL, так и через JSON интерфейсы.
 
-Для SQL ответ о успешной операции будет содержать количество удалённых строк.
+Для SQL успешная операция вернет количество удаленных строк.
 
-Для JSON используется endpoint `json/delete`. Сервер ответит JSON-объектом, указывающим, была ли операция успешной и количество удалённых строк.
+Для JSON используется конечная точка `json/delete`. Сервер ответит JSON-объектом, указывающим, была ли операция успешной, и количество удаленных строк.
 
-Рекомендуется использовать [очистку таблицы](../Emptying_a_table.md) вместо удаления для удаления всех документов из таблицы, так как это гораздо более быстрая операция.
+Рекомендуется использовать [очистку таблицы (truncation)](../Emptying_a_table.md) вместо удаления для удаления всех документов из таблицы, так как это гораздо более быстрая операция.
 
 
 <!-- example delete 2 -->
-В этом примере мы удаляем все документы, которые соответствуют полнотекстовому запросу `test document` из таблицы с именем `test`:
+В этом примере мы удаляем все документы, соответствующие полнотекстовому запросу `test document`, из таблицы с именем `test`:
 
 
 <!-- intro -->
@@ -73,7 +73,7 @@ POST /delete -d '
     }'
 ```
 
-* `query` для JSON содержит условие полнотекстового поиска; синтаксис такой же, как в [JSON/update](../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON).
+* `query` для JSON содержит условие для полнотекстового поиска; он имеет тот же синтаксис, что и в [JSON/update](../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON).
 
 <!-- response JSON -->
 
@@ -257,7 +257,7 @@ deleteRequest.SetQuery(deleteQuery)
 <!-- end -->
 
 <!-- example delete 3 -->
-Здесь — удаление документа с `id`, равным 1 из таблицы с именем `test`:
+Здесь - удаление документа с `id`, равным 1, из таблицы с именем `test`:
 
 
 <!-- intro -->
@@ -280,14 +280,14 @@ POST /delete -d '
     }'
 ```
 
-* `id` для JSON — это `id` строки, которая должна быть удалена.
+* `id` для JSON - это `id` строки, которую следует удалить.
 
 <!-- response JSON -->
 
 ``` json
 {
     "table": "test",
-    "_id": 1,
+    "id": 1,
     "found": true,
     "result": "deleted"
 }
@@ -350,7 +350,7 @@ res = await indexApi.delete({"table" : "test", "id" : 1});
 
 <!-- response javascript -->
 ```javascript
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -430,7 +430,7 @@ res = await indexApi.delete({ index: 'test', id: 1 });
 
 <!-- response TypeScript -->
 ```json
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -445,16 +445,16 @@ deleteRequest.SetId(1)
 
 <!-- response Go -->
 ```json
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- end -->
 
 <!-- example delete 4 -->
-Здесь удаляются документы с `id`, совпадающим со значениями из таблицы с именем `test`:
+Здесь удаляются документы с `id`, соответствующими значениям из таблицы с именем `test`:
 
-Обратите внимание, что формы удаления с `id=N` или `id IN (X,Y)` являются самыми быстрыми, так как они удаляют документы без выполнения поиска.
-Также обратите внимание, что ответ содержит только id первого удалённого документа в соответствующем поле `_id`.
+Для таблиц с числовым `id` самые быстрые формы удаления — с `id=N` или `id IN (X,Y)`, поскольку они удаляют документы без выполнения поиска.
+Также обратите внимание, что ответ содержит только id первого удаленного документа в соответствующем поле `_id`.
 
 <!-- intro -->
 ##### SQL:
@@ -487,7 +487,7 @@ POST /delete -d '
 ``` json
     {
         "table":"test",
-        "_id":1,
+        "id":1,
         "found":true,
         "result":"deleted"
     }
@@ -518,7 +518,7 @@ Array(
 <!-- example delete 5 -->
 Manticore SQL позволяет использовать сложные условия для оператора `DELETE`.
 
-Например, здесь мы удаляем документы, которые соответствуют полнотекстовому запросу `test document` и имеют атрибут `mva1` с значением больше 206 или значения `mva1` равные 100 или 103 из таблицы с именем `test`:
+Например, здесь мы удаляем документы, которые соответствуют полнотекстовому запросу `test document` и имеют атрибут `mva1` со значением больше 206 или значения `mva1` 100 или 103 из таблицы с именем `test`:
 
 
 <!-- intro -->
@@ -547,10 +547,92 @@ Query OK, 4 rows affected (0.00 sec)
 +------+------+-------------+------+
 6 rows in set (0.00 sec)
 ```
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(title text, gid int, mva1 multi, mva2 multi);
+INSERT INTO test (title, gid, mva1, mva2) VALUES
+('test document', 1001, (101), (101)),
+('test document', 1002, (100,102), (101)),
+('test document', 1003, (207), (101)),
+('test document', 1004, (101,103), (101)),
+('test document', 1005, (207,208), (101));
+-->
+
+<!-- request JSON -->
+
+```JSON
+POST /delete
+{
+  "table":"test",
+  "query":
+    {
+      "bool": {
+        "must": [
+          {
+            "match": { "*": "test document" }
+          },
+          {
+            "bool": {
+              "should": [
+                {
+                  "range": {
+                    "mva1": { "gt": 206 }
+                  }
+                },
+                {
+                  "in": {
+                    "mva1": [100, 103]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+}
+
+POST /search
+{
+  "table": "test"
+}
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "table": "test",
+  "deleted": 4
+}
+
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 0,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "id": 724024784404348900,
+        "_score": 2500,
+        "_source": {
+          "gid": 1001,
+          "mva1": [101,102],
+          "mva2": [101]
+        }
+      }
+    ]
+  }
+}
+```
+
 <!-- end -->
 
 <!-- example delete 6 -->
-Вот пример удаления документов из таблицы `test` кластера `cluster`. Обратите внимание, что необходимо указывать свойство кластера вместе со свойством таблицы для удаления строки из таблицы внутри репликационного кластера:
+Вот пример удаления документов в таблице `test` кластера `cluster`. Обратите внимание, что мы должны указать свойство имени кластера вместе со свойством таблицы, чтобы удалить строку из таблицы внутри репликационного кластера:
 
 
 <!-- intro -->
@@ -571,7 +653,7 @@ POST /delete -d '
       "id": 100
     }'
 ```
-* `cluster` для JSON — имя [репликационного кластера](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster), который содержит нужную таблицу
+* `cluster` для JSON - это имя [репликационного кластера](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster). который содержит нужную таблицу
 
 <!-- intro -->
 ##### PHP:
@@ -632,7 +714,7 @@ indexApi.delete({"cluster":"cluster_1","table" : "test", "id" : 1})
 
 <!-- response javascript -->
 ```javascript
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -713,7 +795,7 @@ res = await indexApi.delete({ cluster: 'cluster_1', index: 'test', id: 1 });
 
 <!-- response TypeScript -->
 ```json
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -729,7 +811,7 @@ deleteRequest.SetId(1)
 
 <!-- response Go -->
 ```json
-{"table":"test","_id":1,"result":"deleted"}
+{"table":"test","id":1,"result":"deleted"}
 ```
 
 <!-- end -->
@@ -739,7 +821,7 @@ deleteRequest.SetId(1)
 
 <!-- example bulk delete -->
 
-Вы также можете выполнить несколько операций удаления за один вызов, используя эндпоинт `/bulk`. Этот эндпоинт работает только с данными, у которых установлен `Content-Type` как `application/x-ndjson`. Данные должны быть отформатированы как JSON, разделённый переводами строк (NDJSON). По сути это означает, что каждая строка должна содержать ровно одно JSON-выражение и заканчиваться переводом строки `\n` и, возможно, `\r`.
+Вы также можете выполнить несколько операций удаления за один вызов, используя конечную точку `/bulk`. Эта конечная точка работает только с данными, у которых установлен `Content-Type` в значение `application/x-ndjson`. Данные должны быть отформатированы как JSON, разделенный символами новой строки (NDJSON). По сути, это означает, что каждая строка должна содержать ровно одно JSON-выражение и заканчиваться символом новой строки `\n` и, возможно, `\r`.
 
 
 <!-- intro -->
@@ -764,7 +846,7 @@ POST /bulk
          "bulk":
          {
             "table":"test",
-            "_id":0,
+            "id":0,
             "created":0,
             "deleted":2,
             "updated":0,

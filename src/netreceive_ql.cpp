@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -10,19 +10,23 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "netreceive_ql.h"
 #include "coroutine.h"
 #include "searchdssl.h"
 #include "compressed_zlib_mysql.h"
 #include "compressed_zstd_mysql.h"
 #include "daemon/logger.h"
 #include "searchdbuddy.h"
+#include "auth/auth_proto_mysql.h"
+#include "client_session.h"
+#include "indexsettings.h"
+
+#include "sqlchecks/checks.h"
 
 extern int g_iClientQlTimeoutS;    // sec
+extern int g_iClientQlWaitTimeoutS;    // sec
 extern volatile bool g_bMaintenance;
 extern CSphString g_sMySQLVersion;
 constexpr bool bSendOkInsteadofEOF = true; // _if_ client support - send OK packet instead of EOF (in mysql proto).
-constexpr const char* szManticore = "Manticore";
 
 namespace { // c++ way of 'static'
 
@@ -228,6 +232,38 @@ struct MYSQL_CHARSET
 // MYSQL_TYPE_STRING = 254
 // MYSQL_TYPE_GEOMETRY = 255
 
+enum class MYSQL_TYPE : BYTE
+{
+	eDECIMAL = 0,
+	eTINY = 1,
+	eSHORT = 2,
+	eLONG = 3,
+	eFLOAT = 4,
+	eDOUBLE = 5,
+	eNULL = 6,
+	eTIMESTAMP = 7,
+	eLONGLONG = 8,
+	eINT24 = 9,
+	eDATE = 10,
+	eTIME = 11,
+	eDATETIME = 12,
+	eYEAR = 13,
+	eNEWDATE = 14,
+	eVARCHAR = 15,
+	eBIT = 16,
+	eNEWDECIMAL = 246,
+	eENUM = 247,
+	eSET = 248,
+	eTINY_BLOB = 249,
+	eMEDIUM_BLOB = 250,
+	eLONG_BLOB = 251,
+	eBLOB = 252,
+	eVAR_STRING = 253,
+	eSTRING = 254,
+	eGEOMETRY = 255
+};
+
+
 struct MYSQL_ERROR
 {
 	static constexpr int MAX_LENGTH = 512;
@@ -274,7 +310,12 @@ enum
 	MYSQL_COM_FIELD_LIST = 4,
 	MYSQL_COM_STATISTICS = 9,
 	MYSQL_COM_PING		= 14,
-	MYSQL_COM_SET_OPTION	= 27
+	MYSQL_COM_STMT_PREPARE = 22,
+	MYSQL_COM_STMT_EXECUTE = 23,
+	MYSQL_COM_STMT_SEND_LONG_DATA = 24,
+	MYSQL_COM_STMT_CLOSE = 25,
+	MYSQL_COM_STMT_RESET = 26,
+	MYSQL_COM_SET_OPTION	= 27,
 };
 
 void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, Str_t sError, EMYSQL_ERR eErr )
@@ -285,8 +326,12 @@ void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, Str_t sErro
 	// cut the error message to fix issue with long message for popular clients
 	if ( sError.second>MYSQL_ERROR::MAX_LENGTH )
 	{
-		sError.second = MYSQL_ERROR::MAX_LENGTH;
 		char * sErr = const_cast<char *>( sError.first );
+		int iCut = MYSQL_ERROR::MAX_LENGTH - 3;
+		while ( iCut>0 && ( sErr[iCut] & 0xC0 ) == 0x80 )
+			--iCut;
+
+		sError.second = iCut + 3;
 		sErr[sError.second-3] = '.';
 		sErr[sError.second-2] = '.';
 		sErr[sError.second-1] = '.';
@@ -303,19 +348,19 @@ void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, Str_t sErro
 	// send sqlstate (1 byte marker, 5 byte state)
 	switch ( eErr )
 	{
-		case EMYSQL_ERR::SERVER_SHUTDOWN:
-		case EMYSQL_ERR::UNKNOWN_COM_ERROR:
-			tOut.SendBytes ( FROMS ( "#08S01" ) );
-			break;
-		case EMYSQL_ERR::NO_SUCH_TABLE:
-			tOut.SendBytes ( FROMS ( "#42S02" ) );
-			break;
-		case EMYSQL_ERR::NO_SUCH_THREAD:
-			tOut.SendBytes ( FROMS ( "#HY000" ) );
-			break;
-		default:
-			tOut.SendBytes ( FROMS ( "#42000" ) );
-			break;
+	case EMYSQL_ERR::SERVER_SHUTDOWN:
+	case EMYSQL_ERR::UNKNOWN_COM_ERROR:
+		tOut.SendBytes ( FROMS ( "#08S01" ) );
+		break;
+	case EMYSQL_ERR::NO_SUCH_TABLE:
+		tOut.SendBytes ( FROMS ( "#42S02" ) );
+		break;
+	case EMYSQL_ERR::NO_SUCH_THREAD:
+		tOut.SendBytes ( FROMS ( "#HY000" ) );
+		break;
+	default:
+		tOut.SendBytes ( FROMS ( "#42000" ) );
+		break;
 	}
 
 	// send error message
@@ -326,11 +371,11 @@ WORD MysqlStatus ( bool bMoreResults, bool bAutoCommit, bool bIsInTrans )
 {
 	WORD uStatus = 0;
 	if ( bMoreResults )
-			uStatus |= MYSQL_FLAG::MORE_RESULTS;
+		uStatus |= MYSQL_FLAG::MORE_RESULTS;
 	if ( bAutoCommit )
-			uStatus |= MYSQL_FLAG::STATUS_AUTOCOMMIT;
+		uStatus |= MYSQL_FLAG::STATUS_AUTOCOMMIT;
 	if ( bIsInTrans )
-			uStatus |= MYSQL_FLAG::STATUS_IN_TRANS;
+		uStatus |= MYSQL_FLAG::STATUS_IN_TRANS;
 	return uStatus;
 }
 
@@ -345,7 +390,7 @@ void SendMysqlOkPacketBody ( ISphOutputBuffer& tOut, int iAffectedRows, int iWar
 	tOut.SendLSBWord ( iWarns < 0 ? 0 : ( iWarns > 65536 ? 65535 : iWarns ) );
 
 	if ( !szMessage )
-			return;
+		return;
 
 	auto iLen = (int)strlen ( szMessage );
 	MysqlSendInt ( tOut, iLen );
@@ -364,6 +409,19 @@ void SendMysqlOkPacket ( ISphOutputBuffer& tOut, BYTE uPacketID, bool bAutoCommi
 	SendMysqlOkPacket ( tOut, uPacketID, 0, 0, nullptr, false, bAutoCommit, bIsInTrans, 0 );
 }
 
+// Send prepared statement OK response
+void SendPreparedStmtOK ( ISphOutputBuffer& tOut, BYTE uPacketID, DWORD uStmtID, int iParamCount )
+{
+	SQLPacketHeader_c tHdr { tOut, uPacketID };
+	tOut.SendByte ( 0 ); // OK packet
+
+	tOut.SendLSBDword ( uStmtID );
+	tOut.SendLSBWord ( 0 ); // num_columns
+	tOut.SendLSBWord ( iParamCount );
+	tOut.SendByte ( 0 ); // reserved filler
+	tOut.SendLSBWord ( 0 ); // warning_count
+}
+
 /// https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_basic_eof_packet.html
 void SendMysqlEofPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns, bool bMoreResults, bool bAutoCommit, bool bIsInTrans, const char* szMeta = nullptr )
 {
@@ -378,11 +436,15 @@ void SendMysqlEofPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns, b
 }
 
 
+// from https://dev.mysql.com/doc/dev/mysql-server/latest/group__group__cs__column__definition__flags.html
+#define UNSIGNED_FLAG   32
+
 
 //////////////////////////////////////////////////////////////////////////
 // Mysql row buffer and command handler
 
-class SqlRowBuffer_c final : public RowBuffer_i
+// not intended to be used standalone
+struct SqlRowBufferTraits_t : RowBuffer_i
 {
 	BYTE & m_uPacketID;
 	GenericOutputBuffer_c & m_tOut;
@@ -393,11 +455,32 @@ class SqlRowBuffer_c final : public RowBuffer_i
 	LazyVector_T<BYTE> m_tBuf {0};
 	CSphString m_sTable;
 
-	// how many bytes this string will occupy in proto mysql
-	static int SqlStrlen ( const char * sStr )
+	int m_iStoredPosition = -1;
+	BYTE m_uStoredPacketID = 0;
+
+	bool m_bRowStarted = false;
+	bool m_bHeadFinished = false;
+	int m_iCurrentColumn = 0;
+
+private:
+	virtual void StartNewRow() noexcept {};
+	virtual void CommitStarted() noexcept {};
+
+public:
+	inline void StartRow() noexcept
 	{
-		auto iLen = ( int ) strlen ( sStr );
-		return SqlSizeOf ( iLen ) + iLen;
+		assert ( m_bHeadFinished && "Should not be called before head finished");
+		if (m_bRowStarted)
+			return;
+		m_bRowStarted = true;
+
+		StartNewRow();
+	}
+
+	inline void NewColumn() noexcept
+	{
+		StartRow();
+		++m_iCurrentColumn;
 	}
 
 	void SendSqlInt ( int iVal )
@@ -412,7 +495,7 @@ class SqlRowBuffer_c final : public RowBuffer_i
 		m_tOut.SendBytes ( sStr, iLen );
 	}
 
-	bool SomethingWasSent() override
+	bool SomethingWasSent() final
 	{
 		auto iPrevSent = std::exchange ( m_iTotalSent, m_tOut.GetTotalSent() + m_tOut.GetSentCount() + m_tBuf.GetLength() );
 		return iPrevSent != m_iTotalSent;
@@ -428,16 +511,23 @@ class SqlRowBuffer_c final : public RowBuffer_i
 		switch ( eType )
 		{
 		case MYSQL_COL_LONG: iColLen = 11;
+			uFlags |= UNSIGNED_FLAG;
 			break;
+		case MYSQL_COL_UINT64:
+			uFlags |= UNSIGNED_FLAG;
+			eType = MYSQL_COL_LONGLONG;
+			// no break
 		case MYSQL_COL_DECIMAL:
 		case MYSQL_COL_FLOAT:
 		case MYSQL_COL_DOUBLE:
-		case MYSQL_COL_UINT64:
 		case MYSQL_COL_LONGLONG: iColLen = 20;
 			break;
 		case MYSQL_COL_STRING:
 			iColLen = 255;
 			uCollation = 0x2100; // utf8
+			break;
+		case MYSQL_TYPE_VAR_STRING:
+			iColLen = 65535;
 			break;
 		}
 
@@ -453,7 +543,7 @@ class SqlRowBuffer_c final : public RowBuffer_i
 		m_tOut.SendWord ( uCollation ); // charset_nr, 0x21 is utf8
 		m_tOut.SendLSBDword ( iColLen ); // length
 		m_tOut.SendByte ( BYTE ( eType ) ); // type (0=decimal)
-		m_tOut.SendWord ( uFlags );
+		m_tOut.SendLSBWord ( uFlags );
 		m_tOut.SendByte ( 0 ); // decimals
 		m_tOut.SendWord ( 0 ); // filler
 		if ( bFromFieldList )
@@ -473,6 +563,7 @@ class SqlRowBuffer_c final : public RowBuffer_i
 	template<typename NUM>
 	void PutNumAsStringT ( NUM iVal )
 	{
+		NewColumn();
 		m_tBuf.ReserveGap ( SPH_MAX_NUMERIC_STR );
 		auto pSize = (char*) m_tBuf.End();
 #if __has_include ( <charconv> )
@@ -484,15 +575,9 @@ class SqlRowBuffer_c final : public RowBuffer_i
 		m_tBuf.AddN ( iLen + 1 );
 	}
 
-public:
-	SqlRowBuffer_c ( BYTE * pPacketID, GenericOutputBuffer_c * pOut )
-		: m_uPacketID ( *pPacketID )
-		, m_tOut ( *pOut )
-		, m_pSession ( session::GetClientSession() )
-	{}
-
 	void PutFloatAsString ( float fVal, const char * sFormat ) override
 	{
+		NewColumn();
 		m_tBuf.ReserveGap ( SPH_MAX_NUMERIC_STR );
 		auto pSize = m_tBuf.End();
 		int iLen = sFormat
@@ -504,6 +589,7 @@ public:
 
 	void PutDoubleAsString ( double fVal, const char * szFormat ) override
 	{
+		NewColumn();
 		m_tBuf.ReserveGap ( SPH_MAX_NUMERIC_STR );
 		auto pSize = m_tBuf.End();
 		int iLen = szFormat
@@ -545,6 +631,7 @@ public:
 			return;
 		}
 
+		NewColumn();
 		auto pSpace = m_tBuf.AddN ( dBlob.second + 9 ); // 9 is taken from MysqlPack() implementation (max possible offset)
 		auto iNumLen = MysqlPackInt ( pSpace, dBlob.second );
 		if ( dBlob.second )
@@ -560,6 +647,7 @@ public:
 
 	void PutMicrosec ( int64_t iUsec ) override
 	{
+		NewColumn();
 		iUsec = Max ( iUsec, 0 );
 
 		m_tBuf.ReserveGap ( SPH_MAX_NUMERIC_STR+1 );
@@ -571,14 +659,22 @@ public:
 
 	void PutNULL () override
 	{
+		NewColumn();
 		Add ( 0xfb ); // MySQL NULL is 0xfb at VLB length
 	}
 
-public:
 	/// more high level. Processing the whole tables.
 	// sends collected data, then reset
 	bool Commit() override
 	{
+
+		assert ( !m_bRowStarted || m_dHead.GetLength() == m_iCurrentColumn );
+		if ( m_bRowStarted ) {
+			m_bRowStarted = false;
+			CommitStarted();
+			m_iCurrentColumn = 0;
+		}
+
 		if ( m_bError )
 			return false;
 
@@ -635,8 +731,6 @@ public:
 			szDB = szManticore;
 		for ( const auto & dCol: m_dHead )
 			SendSqlFieldPacket ( szDB, dCol.first.cstr(), dCol.second, bFromFieldList );
-
-		m_dHead.Reset();
 	}
 
 	// Header of the table with defined num of columns
@@ -653,6 +747,7 @@ public:
 
 	bool HeadEnd ( bool bMoreResults, int iWarns ) override
 	{
+		m_bHeadFinished = true;
 		{
 			SQLPacketHeader_c dHead { m_tOut, m_uPacketID++ };
 			SendSqlInt ( m_dHead.GetLength() );
@@ -678,14 +773,16 @@ public:
 
 	[[nodiscard]] bool WasFlushed() const noexcept { return m_bWasFlushed; }
 
-	[[nodiscard]] std::pair<int, BYTE> GetCurrentPositionState() noexcept
+
+	void StoreCurrentPositionState() noexcept override
 	{
 		// we track flushes just for current position (that is - flushing invalidates position)
 		m_bWasFlushed = false;
-		return { m_tOut.GetSentCount(), m_uPacketID };
+		m_iStoredPosition = m_tOut.GetSentCount();
+		m_uStoredPacketID = m_uPacketID;
 	};
 
-	void ResetToPositionState ( std::pair<int, BYTE> tPoint )
+	void RestoreLastPositionState () noexcept override
 	{
 		assert ( !m_bWasFlushed && "Can't rewind already flushed stream!");
 
@@ -699,8 +796,187 @@ public:
 
 		// rewind stream and packetID
 		assert ( !m_bError );
-		m_tOut.Rewind ( tPoint.first );
-		m_uPacketID = tPoint.second;
+		assert ( m_iStoredPosition>=0 && "RestoreLastPosition called without previously StoreCurrentPositionState");
+		m_tOut.Rewind ( m_iStoredPosition );
+		m_uPacketID = m_uStoredPacketID;
+	}
+
+	void SkipNULL() override
+	{
+		PutNULL();
+	}
+
+protected:
+	// not intended to be used standalone
+	SqlRowBufferTraits_t ( BYTE * pPacketID, GenericOutputBuffer_c * pOut )
+		: m_uPacketID ( *pPacketID )
+		, m_tOut ( *pOut )
+		, m_pSession ( session::GetClientSession() )
+	{}
+
+};
+
+
+class SqlRowBuffer_c final : public SqlRowBufferTraits_t
+{
+public:
+	SqlRowBuffer_c ( BYTE * pPacketID, GenericOutputBuffer_c * pOut )
+		: SqlRowBufferTraits_t ( &*pPacketID, pOut )
+	{}
+
+	void PutFloat ( float fVal ) override
+	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_FLOAT );
+		PutFloatAsString ( fVal, nullptr );
+	}
+
+	void PutDouble ( double fVal ) override
+	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_DOUBLE );
+		PutDoubleAsString ( fVal, nullptr );
+	}
+
+	void PutInt ( int iVal ) override
+	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_LONG );
+		PutNumAsStringT ( iVal );
+	}
+
+	void PutInt64 ( int64_t iVal ) override
+	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_LONGLONG );
+		PutNumAsStringT ( iVal );
+	}
+
+	void PutDWORD ( DWORD uVal ) override
+	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_LONG );
+		PutNumAsStringT ( uVal );
+	}
+
+	void PutUint64 ( uint64_t uVal ) override
+	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_UINT64 );
+		PutNumAsStringT ( uVal );
+	}
+
+	using SqlRowBufferTraits_t::HeadBegin;
+};
+
+class SqlBinaryRowBuffer_c final : public SqlRowBufferTraits_t
+{
+
+	BitVec_T<BYTE,64>		m_dNullMap;
+	int m_iNullMapPos = 0;
+
+	inline void StartNewRow() noexcept final
+	{
+		Add(0); // msg 'OK'
+		m_iNullMapPos = m_tBuf.GetLengthBytes();
+		m_tBuf.AddN ( m_dNullMap.GetSizeBytes() );
+		m_dNullMap.Clear();
+	}
+
+	inline void CommitStarted() noexcept final
+	{
+		memcpy ( m_tBuf.Begin() + m_iNullMapPos, m_dNullMap.Begin(), m_dNullMap.GetSizeBytes() );
+	}
+
+public:
+	SqlBinaryRowBuffer_c ( BYTE * pPacketID, GenericOutputBuffer_c * pOut )
+		: SqlRowBufferTraits_t ( &*pPacketID, pOut )
+	{}
+
+	MysqlColumnType_e ESphAttr2MysqlColumnStreamed ( ESphAttr eAttrType ) const noexcept override
+	{
+		switch ( eAttrType )
+		{
+
+		case SPH_ATTR_INTEGER:
+		case SPH_ATTR_TIMESTAMP:
+		case SPH_ATTR_BOOL: return MYSQL_COL_LONG;
+		case SPH_ATTR_FLOAT: return MYSQL_COL_FLOAT;
+		case SPH_ATTR_DOUBLE: return MYSQL_COL_DOUBLE;
+		case SPH_ATTR_BIGINT: return MYSQL_COL_LONGLONG;
+		case SPH_ATTR_UINT64: return MYSQL_COL_UINT64;
+// binary proto doesn't support arrays, only strings.
+//		case SPH_ATTR_UINT32SET:
+//		case SPH_ATTR_UINT32SET_PTR:
+//		case SPH_ATTR_FLOAT_VECTOR:
+//		case SPH_ATTR_FLOAT_VECTOR_PTR:
+//		case SPH_ATTR_INT64SET:
+//		case SPH_ATTR_INT64SET_PTR:
+//		case SPH_ATTR_JSON:
+//		case SPH_ATTR_JSON_PTR:
+		default: return MYSQL_COL_STRING;
+		}
+	}
+
+	bool HeadEnd (bool bMoreResults, int iWarns) override
+	{
+		m_dNullMap.Init ( 2+m_dHead.GetLength()); // 2+ is feature of binary mysql proto
+		return SqlRowBufferTraits_t::HeadEnd ( bMoreResults, iWarns );
+	}
+
+	void PutNULL () override
+	{
+		NewColumn();
+		m_dNullMap.BitSet ( m_iCurrentColumn+1 ); // +1 is (m_iCurrentColumn-1) +2, +2 is feature of binary mysql proto
+	}
+
+	void PutFloat ( float fVal ) final
+	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_FLOAT );
+		NewColumn();
+		auto pSpace = m_tBuf.AddN (sizeof(float));
+		memcpy ( pSpace, &fVal, sizeof(float) );
+	}
+
+	void PutDouble ( double fVal ) final
+	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_DOUBLE );
+		NewColumn();
+		auto pSpace = m_tBuf.AddN (sizeof(double));
+		memcpy ( pSpace, &fVal, sizeof(double) );
+	}
+
+	void PutInt ( int iVal ) final
+	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_LONG );
+		NewColumn();
+		auto pSpace = m_tBuf.AddN (sizeof(DWORD));
+		memcpy ( pSpace, &iVal, sizeof(DWORD) );
+	}
+
+	void PutInt64 ( int64_t iVal ) final
+	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_LONGLONG );
+		NewColumn();
+		auto pSpace = m_tBuf.AddN (sizeof(int64_t));
+		memcpy ( pSpace, &iVal, sizeof(int64_t) );
+	}
+
+	void PutDWORD ( DWORD uVal ) final
+	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_LONG );
+		NewColumn();
+		auto pSpace = m_tBuf.AddN (sizeof(DWORD));
+		memcpy ( pSpace, &uVal, sizeof(DWORD) );
+	}
+
+	void PutUint64 ( uint64_t uVal ) final
+	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_UINT64 );
+		NewColumn();
+		auto pSpace = m_tBuf.AddN (sizeof(uint64_t));
+		memcpy ( pSpace, &uVal, sizeof(uint64_t) );
+	}
+
+	// wrappers for popular packets
+	// skip last param (msg) as it breaks binary proto
+	void Eof ( bool bMoreResults, int iWarns, const char* = nullptr ) final
+	{
+		SendMysqlEofPacket ( m_tOut, m_uPacketID++, iWarns, bMoreResults, IsAutoCommit(), IsInTrans() );
 	}
 };
 
@@ -711,6 +987,7 @@ struct CLIENT
 	static constexpr DWORD CONNECT_WITH_DB = 8;
 	static constexpr DWORD COMPRESS = 32;
 	static constexpr DWORD PROTOCOL_41 = 512;
+	static constexpr DWORD CLIENT_INTERACTIVE = 1024;
 	static constexpr DWORD SSL = 2048;
 //	static constexpr DWORD RESERVED = 16384; // DEPRECATED: Old flag for 4.1 protocol
 	static constexpr DWORD RESERVED2 = 32768; // DEPRECATED: Old flag for 4.1 authentication \ CLIENT_SECURE_CONNECTION.
@@ -726,7 +1003,6 @@ struct CLIENT
 // handshake package we send to client
 class HandshakeV10_c
 {
-	static constexpr BYTE AUTH_DATA_LEN = 21;
 	const BYTE m_uVersion = 0x0A; // protocol version 10
 	const BYTE m_uCharSet = MYSQL_CHARSET::utf8_general_ci;
 	const WORD m_uServerStatusFlag = MYSQL_FLAG::STATUS_AUTOCOMMIT;
@@ -734,7 +1010,7 @@ class HandshakeV10_c
 
 	Str_t m_sVersionString;
 	DWORD m_uConnID;
-	std::array<char, AUTH_DATA_LEN> m_sAuthData {};
+	const MySQLAuth_t & m_tAuth;
 	DWORD m_uCapabilities = CLIENT::CONNECT_WITH_DB
 						| CLIENT::PROTOCOL_41
 						| CLIENT::RESERVED2 // deprecated
@@ -745,29 +1021,19 @@ class HandshakeV10_c
 						| ( bSendOkInsteadofEOF ? CLIENT::DEPRECATE_EOF : 0 );
 
 public:
-	explicit HandshakeV10_c( DWORD uConnID )
+	explicit HandshakeV10_c( DWORD uConnID, const MySQLAuth_t & tAuth )
 		: m_uConnID ( uConnID )
+		, m_tAuth  ( tAuth )
 	{
 		static bool bExtraCapabilitiesSet = false;
 		static WORD uExtraCapabilities = 0;
 		if ( !bExtraCapabilitiesSet )
 		{
-			uExtraCapabilities = dwval_from_env ( "MANTICORE_MYSQL_EXTRA_CAPABILITIES", 0 );
+			uExtraCapabilities = env_ulong ( "MANTICORE_MYSQL_EXTRA_CAPABILITIES" ).value_or(0);
 			bExtraCapabilitiesSet = true;
 		}
 		m_uCapabilities |= uExtraCapabilities;
 
-		// fill scramble auth data (random)
-		DWORD i = 0;
-		DWORD uRand = sphRand() | 0x01010101;
-		for ( ; i < AUTH_DATA_LEN - sizeof ( DWORD ); i += sizeof ( DWORD ) )
-		{
-			memcpy ( m_sAuthData.data() + i, &uRand, sizeof ( DWORD ) );
-			uRand = sphRand() | 0x01010101;
-		}
-		if ( i < AUTH_DATA_LEN )
-			memcpy ( m_sAuthData.data() + i, &uRand, AUTH_DATA_LEN - i );
-		memset ( m_sAuthData.data() + AUTH_DATA_LEN - 1, 0, 1);
 		// version string (plus 0-terminator)
 		m_sVersionString = FromStr ( g_sMySQLVersion );
 		++m_sVersionString.second; // encount also z-terminator
@@ -797,7 +1063,7 @@ public:
 
 		constexpr int iFillerSize = 10;
 		const std::array<BYTE, iFillerSize> dFiller { 0 };
-		sphLogDebugv ( "Sending handshake..." );
+		sphLogDebug ( "Sending handshake..." );
 
 		SQLPacketHeader_c tHeader { tOut };
 
@@ -805,15 +1071,15 @@ public:
 		tOut.SendByte ( m_uVersion );
 		tOut.SendBytes ( m_sVersionString );
 		tOut.SendLSBDword ( m_uConnID );
-		tOut.SendBytes ( m_sAuthData.data(), 8 );
+		tOut.SendBytes ( m_tAuth.m_dScramble.Begin(), 8 );
 		tOut.SendByte ( 0 );
 		tOut.SendLSBWord ( m_uCapabilities & 0xFFFF );
 		tOut.SendByte ( m_uCharSet );
 		tOut.SendLSBWord ( m_uServerStatusFlag );
 		tOut.SendLSBWord ( m_uCapabilities >> 16 );
-		tOut.SendByte ( AUTH_DATA_LEN );
+		tOut.SendByte ( m_tAuth.m_dScramble.GetLength() );
 		tOut.SendBytes ( dFiller.data(), iFillerSize );
-		tOut.SendBytes ( &m_sAuthData[8], AUTH_DATA_LEN - 8 );
+		tOut.SendBytes ( &m_tAuth.m_dScramble[8], m_tAuth.m_dScramble.GetLength() - 8 );
 		tOut.SendBytes ( m_sAuthPluginName );
 	}
 };
@@ -822,7 +1088,7 @@ public:
 class HandshakeResponse41
 {
 	CSphString m_sLoginUserName;
-	CSphString m_sAuthResponse;
+	CSphFixedVector<BYTE> m_dAuthResponse { 0 };
 	std::optional<CSphString> m_sDatabase;
 	std::optional<CSphString> m_sClientPluginName;
 	SmallStringHash_T<CSphString> m_hAttributes;
@@ -833,7 +1099,7 @@ class HandshakeResponse41
 
 public:
 	// see https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_handshake_response.html for ref
-	explicit HandshakeResponse41 ( AsyncNetInputBuffer_c& tRawIn, int iPacketLen )
+	explicit HandshakeResponse41 ( AsyncNetInputBuffer_c & tRawIn, int iPacketLen )
 	{
 		InputBuffer_c tIn { tRawIn.PopTail ( iPacketLen ) };
 		m_uCapabilities = tIn.GetLSBDword();
@@ -842,23 +1108,28 @@ public:
 		m_uCharset = tIn.GetByte();
 		tIn.SetBufferPos ( tIn.GetBufferPos() + 23 );
 
-		sphLogDebugv ( "HandshakeResponse41. PackedLen=%d, hasBytes=%d", iPacketLen, tIn.HasBytes() );
+		sphLogDebug ( "HandshakeResponse41. PackedLen=%d, hasBytes=%d", iPacketLen, tIn.HasBytes() );
 		// ssl auth is finished here
 		if ( tIn.HasBytes() <=0 )
 			return;
 
 		// login name
 		m_sLoginUserName = MysqlReadSzStr ( tIn );
-		sphLogDebugv ( "User: %s", m_sLoginUserName.cstr() );
+		sphLogDebug ( "User: %s", m_sLoginUserName.cstr() );
 
 		// auth
+		int iAuthLen = 0;
 		if ( m_uCapabilities & CLIENT::PLUGIN_AUTH_LENENC_CLIENT_DATA )
-			m_sAuthResponse = MysqlReadVlStr ( tIn );
+		{
+			iAuthLen = MysqlReadPackedInt ( tIn );
+		}
 		else
 		{
-			auto uLen = tIn.GetByte();
-			m_sAuthResponse = tIn.GetRawString ( uLen );
+			iAuthLen = tIn.GetByte();
 		}
+		m_dAuthResponse.Reset ( iAuthLen );
+		if ( iAuthLen )
+			tIn.GetBytes ( m_dAuthResponse.Begin(), iAuthLen );
 
 		// db name
 		if ( m_uCapabilities & CLIENT::CONNECT_WITH_DB )
@@ -869,19 +1140,22 @@ public:
 
 		// db name
 		if ( m_uCapabilities & CLIENT::PLUGIN_AUTH )
+		{
 			m_sClientPluginName.emplace ( MysqlReadSzStr ( tIn ) );
+			sphLogDebug ( "plugin: %s", m_sClientPluginName->cstr() );
+		}
 
 		// attributes
 		if ( m_uCapabilities & CLIENT::CONNECT_ATTRS )
 		{
 			auto iWatermark = MysqlReadPackedInt ( tIn );
-			sphLogDebugv ( "%d bytes of attrs", (int) iWatermark );
+			sphLogDebug ( "%d bytes of attrs", (int) iWatermark );
 			iWatermark = tIn.HasBytes() - iWatermark;
 			while ( iWatermark < tIn.HasBytes() )
 			{
 				auto sKey = MysqlReadVlStr ( tIn );
 				auto sVal = MysqlReadVlStr ( tIn );
-				sphLogDebugv ( "%s: %s", sKey.cstr(), sVal.cstr() );
+				sphLogDebug ( "%s: %s", sKey.cstr(), sVal.cstr() );
 				m_hAttributes.Add ( std::move ( sVal ), sKey );
 			}
 		}
@@ -925,6 +1199,16 @@ public:
 	{
 		return ( m_uCapabilities & CLIENT::DEPRECATE_EOF ) != 0;
 	}
+
+	[[nodiscard]] bool ClientInteractive() const noexcept
+	{
+		return ( m_uCapabilities & CLIENT::CLIENT_INTERACTIVE ) != 0;
+	}
+
+	[[nodiscard]] const VecTraits_T<BYTE> & GetAuthResponce() const noexcept
+	{
+		return m_dAuthResponse;
+	}
 };
 
 
@@ -933,19 +1217,21 @@ void SendTableSchema ( SqlRowBuffer_c & tSqlOut, CSphString sName )
 	auto pServed = GetServed ( sName );
 	if ( !pServed )
 	{
-		tSqlOut.Eof();
 		return;
 	}
-
-	tSqlOut.HeadBegin(std::move(sName));
 
 	// data
 	const CSphSchema * pSchema = &RIdx_c ( pServed )->GetMatchSchema();
 	const CSphSchema & tSchema = *pSchema;
+
+	if ( tSchema.GetAttrsCount()==0 )
+		return;
+
+	tSqlOut.HeadBegin(std::move(sName));
 	assert ( tSchema.GetAttr ( 0 ).m_sName == sphGetDocidName() );
 	const auto & tId = tSchema.GetAttr ( 0 );
 
-	tSqlOut.HeadColumn ( tId.m_sName.cstr(), ESphAttr2MysqlColumn ( tId.m_eAttrType ) );
+	tSqlOut.HeadColumn ( tId.m_sName.cstr(), tId.IsUuidLinkedDocid() ? MYSQL_COL_STRING : ESphAttr2MysqlColumn ( tId.m_eAttrType ) );
 	for ( int i = 0; i < tSchema.GetFieldsCount(); ++i )
 	{
 		const auto & tField = tSchema.GetField ( i );
@@ -980,6 +1266,435 @@ bool ValidateDBName ( const std::optional<CSphString>& tSrcQueryReference )
 {
 	return ValidateDBName ( FromStr ( tSrcQueryReference.value_or ( szManticore ) ) );
 }
+} // anonymous namespace
+
+struct QueryParam_t
+{
+	CSphString m_sValue;
+	CSphVector<BYTE> m_dBytesVec;
+	MYSQL_TYPE m_eType = MYSQL_TYPE::eVAR_STRING ;
+	bool m_bUnsigned = false;
+};
+
+// Structure to hold binary prepared statement information
+struct BinaryPreparedStmt_t
+{
+	DWORD m_uStmtID;				// Statement ID
+	CSphString m_sQuery;			// Original SQL query with ? placeholders
+	CSphVector<tScanParam> dParamsPositions;
+	CSphVector<QueryParam_t> m_dParams;
+//	int m_iColumnCount = 0;			// Number of columns in result set
+};
+
+// Handle COM_STMT_PREPARE
+void HandleComStmtPrepare ( GenericOutputBuffer_c& tOut, BYTE& uPacketID, InputBuffer_c& tIn, int iPacketLen )
+{
+//	sphWarning ("COM_STMT_PREPARE");
+	// Read the SQL query from the packet
+	CSphString sQuery = tIn.GetRawString ( iPacketLen - 1 ); // -1 for command byte
+	SqlRowBuffer_c tRows ( &uPacketID, &tOut );
+
+	// Create new prepared statement
+	BinaryPreparedStmt_t tStmt;
+	tStmt.m_uStmtID = session::GetClientSession()->m_dPreparedStatements.GetNextStmtID();
+	tStmt.m_sQuery = sQuery;
+//	tStmt.m_iColumnCount = 0;//2; // stub! We'll determine this during execute for now
+
+	CSphString sError;
+	auto eRes = ScanParameters ( FromStr ( sQuery ), tStmt.dParamsPositions, sError );
+//	sphWarning("Prepare %d: %s", tStmt.m_uStmtID, sQuery.cstr() );
+	if ( eRes!=ParseResult_e::PARSE_OK )
+	{
+		SendMysqlErrorPacket ( tOut, uPacketID, FromStr(sError), EMYSQL_ERR::UNKNOWN_COM_ERROR );
+		return;
+	}
+
+	// Send OK response
+	SendPreparedStmtOK ( tOut, uPacketID++, tStmt.m_uStmtID, tStmt.dParamsPositions.GetLength() );
+
+	// If there are parameters, send parameter definitions
+	if ( !tStmt.dParamsPositions.IsEmpty() )
+	{
+		tRows.HeadBegin();
+		// for now - stub;
+		for ( int i = 0; i < tStmt.dParamsPositions.GetLength(); ++i )
+		{
+			tRows.HeadColumn ( "?", MYSQL_TYPE_VAR_STRING );
+		}
+
+		tRows.SendColumnDefinitions ();
+
+		// Send EOF packet after parameters (if not using DEPRECATE_EOF)
+		if ( !OmitEof() )
+		{
+			SendMysqlEofPacket ( tOut, uPacketID++, 0, false, session::IsAutoCommit(), session::IsInTrans() );
+		}
+	}
+	tStmt.m_dParams.Resize ( tStmt.dParamsPositions.GetLength() );;
+
+	// Store the prepared statement
+	session::GetClientSession()->m_dPreparedStatements.AddPreparedStatement(tStmt.m_uStmtID,std::move(tStmt));
+
+	/*
+	// If there are result columns, send column definitions
+	// For now, we don't parse the query to determine columns, so we send 0 columns
+	// This is valid for INSERT/UPDATE/DELETE statements
+	if ( tStmt.m_iColumnCount > 0 )
+	{
+		// Would send column definitions here
+		// ...
+		tRows.HeadBegin();
+		// for now - stub;
+		tRows.HeadColumn ( "Table", MYSQL_COL_STRING );
+		tRows.HeadColumn ( "Type", MYSQL_COL_STRING );
+		tRows.SendColumnDefinitions ();
+
+		// Send EOF packet after columns (if not using DEPRECATE_EOF)
+		if ( !OmitEof() )
+		{
+			SendMysqlEofPacket ( tOut, uPacketID++, 0, false, session::IsAutoCommit(), session::IsInTrans() );
+		}
+	}
+	*/
+}
+
+using SqlEscapedBuilder_c = EscapedStringBuilder_T<BaseQuotation_T<SqlQuotator_t>>;
+
+// Parse binary parameter values from COM_STMT_EXECUTE packet
+bool ParseBinaryParameters ( InputBuffer_c& tIn, const BinaryPreparedStmt_t& tStmt, VecTraits_T<QueryParam_t>& dValues, CSphString& sError )
+{
+	tIn.GetByte(); // uFlags, not used
+	[[maybe_unused]] DWORD uIterationCount = tIn.GetLSBDword();
+	assert (uIterationCount==1);
+
+	const DWORD uParams = tStmt.dParamsPositions.GetLength();
+
+	if ( !uParams )
+		return true;
+
+	// Read null bitmap (1 byte per 8 parameters)
+	const int iNullBitmapBytes = ( uParams + 7 ) / 8;
+	if ( tIn.HasBytes() < iNullBitmapBytes )
+		return false;
+
+	CSphFixedVector<BYTE> dNulls { iNullBitmapBytes };
+	tIn.GetBytes ( dNulls.begin(), dNulls.GetLengthBytes() );
+	BitVec_T<const BYTE> dNullBitmap { dNulls.begin(), uParams };
+
+	// Read new_params_bound_flag
+	if ( tIn.HasBytes() < 1 )
+		return false;
+
+	BYTE uSendTypeToServer = tIn.GetByte();
+
+	// Read parameter types
+	if ( uSendTypeToServer )
+	{
+		// Check if we have enough bytes for parameter types (2 bytes per parameter)
+		if ( tIn.HasBytes() < uParams * 2 )
+			return false;
+
+		for ( auto& dValue : dValues )
+		{
+			dValue.m_eType = (MYSQL_TYPE) tIn.GetByte();
+			dValue.m_bUnsigned = (tIn.GetByte()!=0);
+		}
+	}
+
+	// Read parameter values
+	for ( int i = 0; i < uParams; ++i )
+	{
+		auto& dValue = dValues[i];
+		if ( dNullBitmap.BitGet ( i ) )
+		{
+			dValue.m_sValue = "NULL";
+			continue;
+		}
+
+		SqlEscapedBuilder_c dEscaped;
+		switch ( dValues[i].m_eType )
+		{
+		case MYSQL_TYPE::eDECIMAL:
+			{
+				auto iLen = MysqlReadPackedInt ( tIn );
+				if ( iLen > tIn.HasBytes() )
+					return false;
+				CSphString sRawValue = tIn.GetRawString ( iLen );
+				dEscaped.AppendEscapedSkippingComma(sRawValue.cstr());
+				dEscaped.MoveTo ( dValue.m_sValue );
+//				sphWarning ("param %d, eDECIMAL %s", i, dValue.m_sValue.cstr() );
+				break;
+			}
+		case MYSQL_TYPE::eTINY:
+			{
+				BYTE uVal = tIn.GetByte();
+				dEscaped.Sprintf ( dValue.m_bUnsigned?"%u":"%d", uVal);
+				dEscaped.MoveTo ( dValue.m_sValue );
+//				sphWarning ("param %d, eTINY %s", i, dValue.m_sValue.cstr() );
+				break;
+			}
+		case MYSQL_TYPE::eSHORT:
+			{
+				WORD uVal = tIn.GetLSBWord();
+				dEscaped.Sprintf ( dValue.m_bUnsigned?"%u":"%d", uVal);
+				dEscaped.MoveTo ( dValue.m_sValue );
+//				sphWarning ("param %d, eSHORT %s", i, dValue.m_sValue.cstr() );
+				break;
+			}
+		case MYSQL_TYPE::eLONG:
+			{
+				DWORD uVal = tIn.GetLSBDword();
+				dEscaped.Sprintf ( dValue.m_bUnsigned?"%u":"%d", uVal);
+				dEscaped.MoveTo ( dValue.m_sValue );
+//				sphWarning ("param %d, eLONG %s", i, dValue.m_sValue.cstr() );
+				break;
+			}
+		case MYSQL_TYPE::eLONGLONG:
+			{
+				uint64_t uVal = tIn.GetLSBUint64();
+				dEscaped.Sprintf ( dValue.m_bUnsigned?"%U" : "%l" , uVal );
+				dEscaped.MoveTo ( dValue.m_sValue );
+//				sphWarning ("param %d, eLONGLONG %s", i, dValue.m_sValue.cstr() );
+				break;
+			}
+		case MYSQL_TYPE::eFLOAT:
+			{
+				float fVal;
+				tIn.GetBytes ( &fVal, sizeof(fVal) );
+				dEscaped.Appendf ( "%g", fVal);
+				dEscaped.MoveTo ( dValue.m_sValue );
+//				sphWarning ("param %d, eFLOAT %s", i, dValue.m_sValue.cstr() );
+				break;
+			}
+		case MYSQL_TYPE::eDOUBLE:
+			{
+				double fVal;
+				tIn.GetBytes ( &fVal, sizeof(fVal) );
+				dEscaped.Appendf ( "%g", fVal);
+				dEscaped.MoveTo ( dValue.m_sValue );
+//				sphWarning ("param %d, eDOUBLE %s", i, dValue.m_sValue.cstr() );
+				break;
+			}
+
+		case MYSQL_TYPE::eLONG_BLOB:
+			{
+				if ( tStmt.dParamsPositions[i].eType != EPARAM_TYPE::SINGLE )
+				{
+					// we need extra 2 bytes after the end - for flex work
+					const auto uSize = dValue.m_dBytesVec.GetLength();
+					if ( dValue.m_dBytesVec.GetLimit() < uSize+2)
+					{
+						dValue.m_dBytesVec.AddN(2);
+						dValue.m_dBytesVec.Resize(uSize);
+					}
+
+					if (!ValidateVector ( dValue.m_dBytesVec, sError ))
+					{
+//						sphWarning ("%s in param %s", sError.cstr(), dValue.m_dBytesVec.begin());
+						return false;
+					}
+					// validated content - only numbers, comma, spaces. Nothing to escape, no need to enclose in quotes
+					dEscaped.AppendRawChunk ( dValue.m_dBytesVec );
+				} else
+					dEscaped.AppendEscapedSkippingComma ( (const char*)dValue.m_dBytesVec.begin(), dValue.m_dBytesVec.GetLength());
+				dEscaped.MoveTo ( dValue.m_sValue );
+//				sphWarning ("param %d, eLONG_BLOB %s", i, dValue.m_sValue.cstr() );
+				break;
+			}
+		case MYSQL_TYPE::eVAR_STRING:
+		case MYSQL_TYPE::eSTRING:
+		default:
+			{
+				auto iLen = MysqlReadPackedInt ( tIn );
+				if ( iLen > tIn.HasBytes() )
+					return false;
+
+				CSphString sRawValue = tIn.GetRawString ( iLen );
+
+				if ( tStmt.dParamsPositions[i].eType == EPARAM_TYPE::SINGLE )
+				{
+					dEscaped.AppendEscapedSkippingComma(sRawValue.cstr());
+				} else // raw vector
+				{
+					if (!ValidateVector ( FromStr ( sRawValue ), sError ))
+					{
+//						sphWarning ("%s in param %s", sError.cstr(), sRawValue.cstr());
+						return false;
+					}
+					// validated content - only numbers, comma, spaces. Nothing to escape, no need to enclose in quotes
+					dEscaped.AppendRawChunk ( {sRawValue.cstr(),iLen} );
+				}
+				dEscaped.MoveTo ( dValue.m_sValue );
+//				sphWarning ("param %d, %s %s", i, (dValues[i].m_eType==MYSQL_TYPE::eVAR_STRING)?"eVAR_STRING":"eSTRING", dValue.m_sValue.cstr() );
+				break;
+			}
+		}
+	}
+
+	return true;
+}
+
+static bool ExecuteSqlQuery ( SqlRowBufferTraits_t * pRows, BYTE uMysqlCmd, Str_t tSrcQueryReference )
+{
+	auto& tSess = session::Info();
+	myinfo::SetDescription ( CSphString ( tSrcQueryReference ), tSrcQueryReference.second ); // OPTIMIZE? could be huge, but string is hazard.
+	AT_SCOPE_EXIT ( []() { myinfo::SetDescription ( {}, 0 ); } );
+
+	sphLogDebugv ( "ExecuteSqlQuery command %d, '%s'", uMysqlCmd, myinfo::UnsafeDescription().first );
+	tSess.SetTaskState ( TaskState_e::QUERY );
+
+	tSess.m_pSqlRowBuffer = pRows;
+	pRows->StoreCurrentPositionState();
+	bool bKeepProfile = session::Execute ( myinfo::UnsafeDescription(), *pRows );
+	if ( !pRows->IsError() )
+		return bKeepProfile;
+
+	if ( !HasBuddy() || pRows->WasFlushed() || SqlSkipBuddy() )
+	{
+		LogSphinxqlError ( myinfo::UnsafeDescription().first, FromStr ( pRows->GetError() ) );
+		if ( pRows->WasFlushed() )
+			sphLogDebug ( "Can't invoke buddy, because output socket was flushed; unable to rewind/overwrite anything" );
+	} else
+	{
+		ProcessSqlQueryBuddy ( tSrcQueryReference, pRows );
+	}
+	return bKeepProfile;
+}
+
+// Handle COM_STMT_EXECUTE
+bool HandleComStmtExecute ( GenericOutputBuffer_c& tOut, BYTE& uPacketID, InputBuffer_c& tIn, int iPacketLen, BYTE uMysqlCmd )
+{
+//	sphWarning ("COM_STMT_EXECUTE");
+	// Need at least 9 bytes: stmt_id (4) + flags (1) + iteration_count (4)
+	if ( iPacketLen < 10 || tIn.HasBytes() < 9 )
+	{
+		SendMysqlErrorPacket ( tOut, uPacketID, FROMS("Invalid COM_STMT_EXECUTE packet"), EMYSQL_ERR::UNKNOWN_COM_ERROR );
+		return false;
+	}
+
+	DWORD uStmtID = tIn.GetLSBDword();
+
+	// Find the prepared statement
+	BinaryPreparedStmt_t* pStmt = session::GetClientSession()->m_dPreparedStatements.GetStmt(uStmtID);
+
+	if ( !pStmt )
+	{
+		CSphString sError;
+		sError.SetSprintf ( "Unknown prepared statement handler (%u)", uStmtID );
+		SendMysqlErrorPacket ( tOut, uPacketID, FromStr(sError), EMYSQL_ERR::UNKNOWN_COM_ERROR );
+		return false;
+	}
+
+	// Parse parameter values
+	CSphString sError;
+	if ( !ParseBinaryParameters ( tIn, *pStmt, pStmt->m_dParams, sError ) )
+	{
+		SendMysqlErrorPacket ( tOut, uPacketID, FromStr ( sError ), EMYSQL_ERR::UNKNOWN_COM_ERROR );
+		return false;
+	}
+
+	// Build the actual query by substituting parameters
+	const auto uQLen = pStmt->m_sQuery.Length();
+	const char* pQuery = pStmt->m_sQuery.cstr();
+	DWORD uCopied = 0;
+	CSphVector<char> tBuilder;
+	ARRAY_CONSTFOREACH ( i, pStmt->dParamsPositions )
+	{
+		const auto& tPos = pStmt->dParamsPositions[i];
+		if ( uCopied < tPos.iStart )
+		{
+			const auto iRes = tPos.iStart - uCopied;
+			tBuilder.Append ( pQuery, iRes );
+
+			uCopied += iRes + tPos.iLen;
+			pQuery += iRes + tPos.iLen;
+		}
+
+		const auto& strParam = pStmt->m_dParams[i].m_sValue;
+		tBuilder.Append ( strParam.cstr(), strParam.Length() );
+		if ( !pStmt->m_dParams[i].m_dBytesVec.IsEmpty() )
+			pStmt->m_dParams[i].m_dBytesVec.Reset();
+	}
+	if ( uCopied < uQLen )
+		tBuilder.Append ( pQuery, uQLen-uCopied );
+	tBuilder.Add('\0');
+	tBuilder.Add('\0'); // two zero bytes, because bison parser needs it.
+	tBuilder.Resize(tBuilder.GetLength()-2);
+	Str_t tSrcQueryReference ( tBuilder.begin(), tBuilder.GetLength() );
+
+	// Execute the query using the same mechanism as COM_QUERY
+	SqlBinaryRowBuffer_c tRows ( &uPacketID, &tOut );
+	return ExecuteSqlQuery ( &tRows, uMysqlCmd, tSrcQueryReference );
+}
+
+// Handle COM_STMT_CLOSE
+void HandleComStmtClose ( ISphOutputBuffer& tOut, BYTE& uPacketID, InputBuffer_c& tIn )
+{
+//	sphWarning ("COM_STMT_CLOSE");
+
+	if ( tIn.HasBytes() < 4 )
+		return; // COM_STMT_CLOSE doesn't send error responses
+
+	DWORD uStmtID = tIn.GetLSBDword();
+
+	session::GetClientSession()->m_dPreparedStatements.RemoveStatement(uStmtID);
+
+	// COM_STMT_CLOSE doesn't send a response packet
+}
+
+// Handle COM_STMT_SEND_LONG_DATA
+void HandleComStmtSendLongData ( ISphOutputBuffer& tOut, BYTE& uPacketID, InputBuffer_c& tIn, int iPacketLen )
+{
+//	sphWarning ("COM_STMT_SEND_LONG_DATA");
+
+	if ( tIn.HasBytes() < 7 )
+		return;
+
+	DWORD uStmtID = tIn.GetLSBDword();
+
+	// Find the prepared statement
+	BinaryPreparedStmt_t* pStmt = session::GetClientSession()->m_dPreparedStatements.GetStmt(uStmtID);
+
+	auto uParamId = tIn.GetLSBWord();
+	if ( !pStmt || uParamId >= pStmt->dParamsPositions.GetLength() )
+	{
+		SendMysqlErrorPacket ( tOut, uPacketID, FROMS ( "unknown prepared statement or parameter" ), EMYSQL_ERR::UNKNOWN_COM_ERROR );
+		return;
+	}
+
+	auto& dParam = pStmt->m_dParams[uParamId].m_dBytesVec;
+	Str_t tSrcQueryReference ( nullptr, iPacketLen - 7 ); // stmtID(4) + paramid(2)
+	tIn.GetBytesZerocopy ( ( const BYTE ** )( &tSrcQueryReference.first ), tSrcQueryReference.second );
+	dParam.Append ( tSrcQueryReference );
+
+//	sphWarning ("COM_STMT_SEND_LONG_DATA stmt %d param %d, add %d (became %d)", uStmtID, uParamId, tSrcQueryReference.second, dParam.GetLength() );
+}
+
+// Handle COM_STMT_RESET
+void HandleComStmtReset ( ISphOutputBuffer& tOut, BYTE& uPacketID, InputBuffer_c& tIn )
+{
+//	sphWarning ("COM_STMT_RESET");
+
+	if ( tIn.HasBytes() < 4 )
+		return;
+
+	DWORD uStmtID = tIn.GetLSBDword();
+
+	// Find the prepared statement
+	BinaryPreparedStmt_t* pStmt = session::GetClientSession()->m_dPreparedStatements.GetStmt(uStmtID);
+
+	if ( !pStmt )
+	{
+		SendMysqlErrorPacket ( tOut, uPacketID, FROMS ( "unknown prepared statement" ), EMYSQL_ERR::UNKNOWN_COM_ERROR );
+		return;
+	}
+
+	auto uParams = pStmt->m_dParams.GetLength();
+	pStmt->m_dParams.Reset();
+	pStmt->m_dParams.Resize(uParams);
+
+	SendMysqlOkPacket ( tOut, uPacketID, session::IsAutoCommit(), session::IsInTrans() );
+}
 
 
 bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfile, AsyncNetBuffer_c * pBuf )
@@ -994,7 +1709,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 	const BYTE uMysqlCmd = tIn.GetByte ();
 
 	if ( uMysqlCmd!=MYSQL_COM_QUERY )
-		sphLogDebugv ( "LoopClientMySQL command %d", uMysqlCmd );
+		sphLogDebug ( "LoopClientMySQL command %d", uMysqlCmd );
 
 	if ( uMysqlCmd==MYSQL_COM_QUIT )
 		return false;
@@ -1048,30 +1763,11 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 			// handle query packet
 			Str_t tSrcQueryReference ( nullptr, iPacketLen-1 );
 			tIn.GetBytesZerocopy ( ( const BYTE ** )( &tSrcQueryReference.first ), tSrcQueryReference.second );
-
-			// string created from the tSrcQueryReference data got moved into myinfo then could be changed during query parsing
-			myinfo::SetDescription ( CSphString ( tSrcQueryReference ), tSrcQueryReference.second ); // OPTIMIZE? could be huge, but string is hazard.
-			AT_SCOPE_EXIT ( []() { myinfo::SetDescription ( {}, 0 ); } );
 			assert ( !tIn.GetError() );
-			sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, myinfo::UnsafeDescription().first );
-			tSess.SetTaskState ( TaskState_e::QUERY );
-
+			// string created from the tSrcQueryReference data got moved into myinfo then could be changed during query parsing
 			SqlRowBuffer_c tRows ( &uPacketID, &tOut );
-			tSess.m_pSqlRowBuffer = &tRows;
-			auto tStoredPos = tRows.GetCurrentPositionState();
-			bKeepProfile = session::Execute ( myinfo::UnsafeDescription(), tRows );
-			if ( tRows.IsError() )
-			{
-				if ( !HasBuddy() || tRows.WasFlushed() )
-				{
-					LogSphinxqlError ( myinfo::UnsafeDescription().first, FromStr ( tRows.GetError() ) );
-					if ( tRows.WasFlushed() )
-						sphLogDebug ( "Can't invoke buddy, because output socket was flushed; unable to rewind/overwrite anything" );
-				} else
-				{
-					ProcessSqlQueryBuddy ( tSrcQueryReference, FromStr ( tRows.GetError() ), tStoredPos, uPacketID, tOut );
-				}
-			}
+
+			bKeepProfile = ExecuteSqlQuery ( &tRows, uMysqlCmd, tSrcQueryReference );
 			break;
 		}
 		case MYSQL_COM_FIELD_LIST:
@@ -1082,6 +1778,35 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 			tSess.m_pSqlRowBuffer = &tRows;
 			SendTableSchema ( tRows, sTable );
 			SendMysqlEofPacket ( tOut, uPacketID, 0, false, session::IsAutoCommit (), session::IsInTrans() );
+			break;
+		}
+
+		case MYSQL_COM_STMT_PREPARE:
+		{
+			HandleComStmtPrepare ( tOut, uPacketID, tIn, iPacketLen );
+			break;
+		}
+
+		case MYSQL_COM_STMT_EXECUTE:
+		{
+			bKeepProfile = HandleComStmtExecute ( tOut, uPacketID, tIn, iPacketLen, uMysqlCmd );
+			break;
+		}
+
+		case MYSQL_COM_STMT_CLOSE:
+		{
+			HandleComStmtClose ( tOut, uPacketID, tIn );
+			break;
+		}
+
+		case MYSQL_COM_STMT_SEND_LONG_DATA:
+		{
+			HandleComStmtSendLongData ( tOut, uPacketID, tIn, iPacketLen );
+			break;
+		}
+		case MYSQL_COM_STMT_RESET:
+		{
+			HandleComStmtReset ( tOut, uPacketID, tIn );
 			break;
 		}
 
@@ -1098,7 +1823,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 	if ( uBytesConsumed<iPacketLen )
 	{
 		uBytesConsumed = iPacketLen - uBytesConsumed;
-		sphLogDebugv ( "LoopClientMySQL disposing unused %d bytes", uBytesConsumed );
+		sphLogDebug ( "LoopClientMySQL disposing unused %d bytes", uBytesConsumed );
 		const BYTE* pFoo = nullptr;
 		tIn.GetBytesZerocopy (&pFoo, uBytesConsumed);
 	}
@@ -1111,13 +1836,62 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 	// finalize query profile
 	if ( pProfile )
 		pProfile->Stop();
-	if ( uMysqlCmd==MYSQL_COM_QUERY && bKeepProfile )
+	if ( bKeepProfile && ( uMysqlCmd==MYSQL_COM_QUERY || uMysqlCmd==MYSQL_COM_STMT_EXECUTE ) )
 		session::SaveLastProfile();
 	tOut.SetProfiler ( nullptr );
 	return true;
 }
 
-} // static namespace
+class PreparedStatements::Impl_c
+{
+	DWORD m_uStmtID=0;
+	CSphOrderedHash<BinaryPreparedStmt_t, DWORD, IdentityHash_fn, 256> m_hBinaryPreparedStatements;
+
+public:
+	Impl_c() = default;
+	~Impl_c() = default;
+	DWORD GetNextStmtID() { return ++m_uStmtID; }
+	void AddPreparedStatement (DWORD uStmtID, BinaryPreparedStmt_t&& tStmt)
+	{
+		m_hBinaryPreparedStatements.Add (std::move(tStmt), uStmtID);
+	}
+
+	BinaryPreparedStmt_t* GetStmt(DWORD uStmtID)
+	{
+		return m_hBinaryPreparedStatements ( uStmtID );
+	}
+
+	void RemoveStatement (DWORD uStmtID)
+	{
+		m_hBinaryPreparedStatements.Delete ( uStmtID ); // Ignore if statement doesn't exist
+	}
+};
+
+PreparedStatements::PreparedStatements()
+	: m_pImpl { std::make_unique<Impl_c>() }
+{}
+
+PreparedStatements::~PreparedStatements() = default;
+
+DWORD PreparedStatements::GetNextStmtID()
+{
+	return m_pImpl->GetNextStmtID();
+}
+
+void PreparedStatements::AddPreparedStatement (DWORD uStmtID, BinaryPreparedStmt_t&& tStmt)
+{
+	m_pImpl->AddPreparedStatement (uStmtID, std::move(tStmt));
+}
+
+BinaryPreparedStmt_t* PreparedStatements::GetStmt(DWORD uStmtID)
+{
+	return m_pImpl->GetStmt (uStmtID);
+}
+
+void PreparedStatements::RemoveStatement (DWORD uStmtID)
+{
+	m_pImpl->RemoveStatement ( uStmtID );
+}
 
 // that is used from sphinxql command over API
 void RunSingleSphinxqlCommand ( Str_t sCommand, GenericOutputBuffer_c & tOut )
@@ -1143,6 +1917,17 @@ DEFINE_RENDER( QlCompressedInfo_t )
 		dDst.m_sProto << "compressed";
 		dDst.m_sChain << "gzip ";
 	}
+}
+
+static int GetEffectiveTimeout ( bool bInteractive = false )
+{
+	if ( bInteractive )
+	{
+		const int iTimeout = session::Info().GetTimeoutS(); // by default -1, means 'default'
+		return ( iTimeout<0 ? g_iClientQlTimeoutS : iTimeout );
+	}
+	const int iTimeout = session::Info().GetWaitTimeoutS(); // by default -1, means 'default'
+	return ( iTimeout<0 ? g_iClientQlWaitTimeoutS : iTimeout );
 }
 
 // main sphinxql server
@@ -1171,7 +1956,9 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	/// So, no passive probing possible.
 	// send handshake first
 	tSess.SetTaskState ( TaskState_e::HANDSHAKE );
-	HandshakeV10_c tHandshake ( iCID );
+
+	MySQLAuth_t tAuth = GetMySQLAuth();
+	HandshakeV10_c tHandshake ( iCID, tAuth );
 	tHandshake.SetCanSsl ( CheckWeCanUseSSL() ); // fixme! SSL capability must be set only if keys are valid!
 	tHandshake.SetCanZlib( bCanZlibCompression );
 	tHandshake.SetCanZstd( bCanZstdCompression );
@@ -1187,32 +1974,21 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 	CSphString sError;
 	bool bAuthed = false;
+	bool bInteractive = false;
 	BYTE uPacketID = 1;
 	int iPacketLen;
 	int iTimeoutS = -1;
-	int iWTimeoutS = -1;
 	do
 	{
 		tSess.SetKilled ( false );
 		// check for updated timeout
-		auto iCurrentTimeout = tSess.GetTimeoutS(); // by default -1, means 'default'
-		if ( iCurrentTimeout<0 )
-			iCurrentTimeout = g_iClientQlTimeoutS;
 
+		const int iCurrentTimeout = GetEffectiveTimeout ( bInteractive );
 		if ( iCurrentTimeout!=iTimeoutS )
 		{
 			iTimeoutS = iCurrentTimeout;
 			pIn->SetTimeoutUS ( S2US * iTimeoutS );
-		}
-
-		iCurrentTimeout = tSess.GetWTimeoutS(); // by default -1, means 'default'
-		if ( iCurrentTimeout < 0 )
-			iCurrentTimeout = g_iClientQlTimeoutS;
-
-		if ( iCurrentTimeout != iWTimeoutS )
-		{
-			iWTimeoutS = iCurrentTimeout;
-			pOut->SetWTimeoutUS( S2US * iWTimeoutS );
+			pOut->SetWTimeoutUS( S2US * iTimeoutS );
 		}
 
 		pIn->DiscardProcessed ();
@@ -1220,7 +1996,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 		// get next packet
 		// we want interruptible calls here, so that shutdowns could be honored
-		sphLogDebugv ( "Receiving command... %d bytes in buf", pIn->HasBytes() );
+		sphLogDebug ( "Receiving command... %d bytes in buf", pIn->HasBytes() );
 
 		// setup per-query profiling
 		auto pProfile = session::StartProfiling ( SPH_QSTATE_TOTAL );
@@ -1256,7 +2032,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			uPacketID = 1+(BYTE) ( uAddon >> 24 );
 			iChunkLen = ( uAddon & MAX_PACKET_LEN );
 
-			sphLogDebugv ( "AsyncReadMySQLPacketHeader returned %d len...", iChunkLen );
+			sphLogDebug ( "AsyncReadMySQLPacketHeader returned %d len...", iChunkLen );
 			iPacketLen += iChunkLen;
 
 			if ( !bAuthed && ( uAddon == SPHINX_CLIENT_VERSION || uAddon == 0x01000000UL ) )
@@ -1308,7 +2084,16 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 			if ( tResponse.GetUsername() == "FEDERATED" )
 				session::SetFederatedUser();
+			// should set client user to pass it further into distributed index
 			session::SetUser ( tResponse.GetUsername() );
+			
+			if ( !CheckAuth ( tAuth, tResponse.GetUsername(), tResponse.GetAuthResponce(), sError ) )
+			{
+				LogNetError ( sError.cstr() );
+				SendMysqlErrorPacket ( *pOut, uPacketID, FromStr ( sError ), EMYSQL_ERR::ACCESS_DENIED_ERROR );
+				pOut->Flush ();
+				return;
+			}
 
 			if ( !ValidateDBName ( tResponse.GetDB() ) )
 			{
@@ -1324,6 +2109,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			tSess.SetPersistent ( pOut->Flush () );
 			bAuthed = true;
 			session::SetDeprecatedEOF ( tResponse.DeprecateEOF() );
+			bInteractive = tResponse.ClientInteractive();
 
 			if ( bCanZstdCompression && tResponse.WantZstd() )
 			{

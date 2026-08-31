@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -15,6 +15,7 @@
 
 #include "xqparser.h"
 #include "xqdebug.h"
+#include "tokenizer/tokenizer.h"
 
 NodeEstimate_t & NodeEstimate_t::operator+= ( const NodeEstimate_t & tRhs )
 {
@@ -35,6 +36,17 @@ void XQLimitSpec_t::SetFieldSpec ( const FieldMask_t & uMask, int iMaxPos )
 	m_bFieldSpec = true;
 	m_dFieldMask = uMask;
 	m_iFieldMaxPos = iMaxPos;
+}
+
+uint64_t XQLimitSpec_t::Hash () const noexcept
+{
+	uint64_t uHash = sphFNV64 ( &m_dFieldMask, sizeof ( m_dFieldMask ) );
+	uHash = sphFNV64 ( m_iFieldMaxPos, uHash );
+	if ( m_bZoneSpan )
+		++uHash;
+	if ( !m_dZones.IsEmpty() )
+		uHash = sphFNV64 ( m_dZones.begin(), m_dZones.GetLengthBytes(), uHash );
+	return uHash;
 }
 
 XQQuery_t * CloneXQQuery ( const XQQuery_t & tQuery )
@@ -146,7 +158,7 @@ void Dump (const XQNode_t *, const char *, bool)
 #endif
 
 
-CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema )
+CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema, StrVec_t * pZones )
 {
 	StringBuilder_c sRes ( " " );
 
@@ -187,10 +199,20 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 			else if (!pNode->m_dSpec.m_dFieldMask.TestAll(false))
 				sFields.SetSprintf ( "%s,%u", sFields.cstr(), pNode->m_dSpec.m_dFieldMask.GetMask32() );
 
-			if ( sFields.IsEmpty() )
-				sRes.Sprintf ( "( @missed: %s )", sTrim.cstr() );
-			else
-				sRes.Sprintf ( "( @%s: %s )", sFields.cstr() + 1, sTrim.cstr() );
+			const int iFieldLimit = pNode->m_dSpec.m_iFieldMaxPos;
+			if ( iFieldLimit )
+			{
+				if ( sFields.IsEmpty() )
+					sRes.Sprintf ( "( @missed[%d]: %s )", sTrim.cstr(), iFieldLimit );
+				else
+					sRes.Sprintf ( "( @%s[%d]: %s )", sFields.cstr() + 1, iFieldLimit, sTrim.cstr() );
+			} else
+			{
+				if ( sFields.IsEmpty() )
+					sRes.Sprintf ( "( @missed: %s )", sTrim.cstr() );
+				else
+					sRes.Sprintf ( "( @%s: %s )", sFields.cstr() + 1, sTrim.cstr() );
+			}
 		} else
 		{
 			if ( pNode->GetOp()==SPH_QUERY_AND && dWords.GetLength()>1 )
@@ -199,13 +221,24 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 				sRes << sTrim;
 		}
 
+		if ( pZones || !pNode->m_dSpec.m_dZones.IsEmpty () )
+		{
+			sRes.MoveTo ( sTrim );
+			{
+				ScopedComma_c sZone ( sRes, ",", (pNode->m_dSpec.m_bZoneSpan?"ZONESPAN:(":"ZONE:("), ") " );
+				for ( const auto& iZone: pNode->m_dSpec.m_dZones )
+					sRes << (*pZones)[iZone];
+			}
+			sRes << sTrim;
+		}
+
 	} else
 	{
 		ARRAY_FOREACH ( i, pNode->dChildren() )
 		{
 			if ( !i )
 			{
-				auto sFoo = sphReconstructNode ( pNode->dChild(i), pSchema );
+				auto sFoo = sphReconstructNode ( pNode->dChild(i), pSchema, pZones );
 				sRes.Clear();
 				sRes << sFoo;
 			} else
@@ -224,9 +257,9 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 				sRes.Clear();
 
 				if ( pNode->GetOp()==SPH_QUERY_PHRASE )
-					sRes.Sprintf ( "\"%s %s\"", sTrim.cstr(), sphReconstructNode ( pNode->dChild(i), pSchema ).cstr() );
+					sRes.Sprintf ( "\"%s %s\"", sTrim.cstr(), sphReconstructNode ( pNode->dChild(i), pSchema, pZones ).cstr() );
 				else
-					sRes.Sprintf ( "%s %s %s", sTrim.cstr(), sOp, sphReconstructNode ( pNode->dChild(i), pSchema ).cstr() );
+					sRes.Sprintf ( "%s %s %s", sTrim.cstr(), sOp, sphReconstructNode ( pNode->dChild(i), pSchema, pZones ).cstr() );
 			}
 		}
 
@@ -277,3 +310,12 @@ void DotDump (const XQNode_t * pNode)
 	sph::RenderBsonPlan ( sRes, bson::MakeHandle ( dPlan ), true );
 	printf ( "\nhttps://dreampuf.github.io/GraphvizOnline/#%s\n", UrlEncode ( CSphString{sRes} ).cstr() );
 }
+
+bool QueryParser_i::ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const
+{
+	QueryExecutionSettings_t tExecutionSettings;
+	if ( pQuery )
+		tExecutionSettings = QueryExecutionSettings_t ( *pQuery );
+	return ParseQuery ( tParsed, sQuery, pQuery, tExecutionSettings, std::move ( pQueryTokenizer ), std::move ( pQueryTokenizerJson ), pSchema, pDict, tSettings, pMorphFields );
+}
+

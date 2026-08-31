@@ -2,7 +2,7 @@ workflow:
   rules:
     - if: $CI_MERGE_REQUEST_ID
     - if: $CI_COMMIT_TAG
-    - if: $CI_COMMIT_BRANCH == "master"
+    - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
     - if: $CI_COMMIT_BRANCH == "maintenance-release"
 
@@ -20,13 +20,13 @@ stages:
   - publish
   - hooks
 
-# ==================== Mirror repo to github (only 'master' branch) ======================
+# ==================== Mirror repo to github (only 'main' branch) ======================
 
 job_mirror:
   stage: mirroring
   needs: [ ]
   rules:
-    - if: $CI_COMMIT_BRANCH == "master"
+    - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
     - if: $CI_COMMIT_BRANCH == "maintenance-release"
   tags:

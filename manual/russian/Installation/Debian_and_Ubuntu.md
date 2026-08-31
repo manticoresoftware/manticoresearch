@@ -1,11 +1,11 @@
 # Установка Manticore в Debian или Ubuntu
 
-### Поддерживаемые релизы:
+### Поддерживаемые выпуски:
 
 * Debian
-  * 10.0 (Buster)
   * 11.0 (Bullseye)
   * 12.0 (Bookworm)
+  * 13.0 (Trixie)
 
 * Ubuntu
   * 18.04 (Bionic)
@@ -13,29 +13,44 @@
   * 21.04 (Hirsute Hippo)
   * 22.04 (Jammy)
   * 24.04 (Noble)
+  * 26.04 (Resolute)
 
 * Mint
   * 19
   * 20
   * 21
 
-### Репозиторий APT
-Самый простой способ установить Manticore в Ubuntu/Debian/Mint — использовать наш репозиторий APT.
+### Быстрая установка
+
+```bash
+curl https://manticoresearch.com | sh
+```
+
+###### Пакеты для разработки
+
+Если вы предпочитаете версии "Nightly" (для разработки), выполните:
+
+```bash
+curl https://manticoresearch.com | sh -s dev
+```
+
+### Ручная установка
+Самый простой способ установить Manticore в Ubuntu/Debian/Mint — использовать наш APT репозиторий.
 
 Установите репозиторий:
 ```bash
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
+sudo apt install ./manticore-repo.noarch.deb
 sudo apt update
 ```
-(установите `wget`, если он не установлен; установите `gnupg2`, если `apt-key` не работает).
+(установите `wget`, если он не установлен).
 
 Затем установите Manticore Search:
 ```
-sudo apt install manticore manticore-extra
+sudo apt install manticore
 ```
 
-Если вы обновляетесь до Manticore 6 с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов из-за обновлённой структуры пакетов:
+Если вы обновляетесь до Manticore 6 или новее с более ранней версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных измененной структурой пакетов:
 
 ```bash
 sudo apt remove manticore*
@@ -44,20 +59,20 @@ sudo apt remove manticore*
 Это не удалит ваши данные и файл конфигурации.
 
 ###### Пакеты для разработки
-Если вы предпочитаете версии "Nightly" (разработческие), выполните:
+Если вы предпочитаете "Ночные" (разрабатываемые) версии, выполните:
 ```bash
 wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb && \
-sudo dpkg -i manticore-dev-repo.noarch.deb && \
+sudo apt install ./manticore-dev-repo.noarch.deb && \
 sudo apt -y update && \
-sudo apt -y install manticore manticore-extra manticore-common manticore-server manticore-server-core manticore-tools manticore-executor manticore-buddy manticore-backup manticore-columnar-lib manticore-server-core-dbgsym manticore-tools-dbgsym manticore-columnar-lib-dbgsym manticore-icudata-65l manticore-galera manticore-galera-dbgsym manticore-language-packs manticore-load
+sudo apt -y install manticore
 ```
 
-### Автономные DEB-пакеты
-Чтобы скачать автономные DEB-файлы из репозитория Manticore, следуйте инструкциям на https://manticoresearch.com/install/.
+### Автономные DEB пакеты
+Чтобы загрузить автономные DEB файлы из репозитория Manticore, следуйте инструкциям, доступным по адресу https://manticoresearch.com/install/.
 
-### Другие пакеты, которые могут понадобиться
+### Дополнительные пакеты, которые могут вам понадобиться
 #### Для indexer
-Пакет Manticore зависит от библиотек zlib и ssl, других обязательных зависимостей нет. Однако, если вы планируете использовать [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) для создания таблиц из внешних хранилищ, вам нужно установить соответствующие клиентские библиотеки. Чтобы узнать, какие конкретно библиотеки нужны `indexer`, запустите его и посмотрите в начале его вывода:
+Пакет Manticore зависит от библиотек zlib и ssl, больше ничего строго не требуется. Однако, если вы планируете использовать [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) для создания таблиц из внешних хранилищ, вам потребуется установить соответствующие клиентские библиотеки. Чтобы узнать, какие конкретные библиотеки требуются `indexer`, запустите его и посмотрите на начало его вывода:
 
 ```bash
 $ sudo -u manticore indexer
@@ -73,11 +88,11 @@ Built on Linux runner-0277ea0f-project-3858465-concurrent-0 4.19.78-coreos #1 SM
 Configured by CMake with these definitions: -DCMAKE_BUILD_TYPE=RelWithDebInfo -DDISTR_BUILD=xenial -DUSE_SSL=ON -DDL_UNIXODBC=1 -DUNIXODBC_LIB=libodbc.so.2 -DDL_EXPAT=1 -DEXPAT_LIB=libexpat.so.1 -DUSE_LIBICONV=1 -DDL_MYSQL=1 -DMYSQL_LIB=libmysqlclient.so.20 -DDL_PGSQL=1 -DPGSQL_LIB=libpq.so.5 -DLOCALDATADIR=/var/data -DFULL_SHARE_DIR=/usr/share/manticore -DUSE_ICU=1 -DUSE_BISON=ON -DUSE_FLEX=ON -DUSE_SYSLOG=1 -DWITH_EXPAT=1 -DWITH_ICONV=ON -DWITH_MYSQL=1 -DWITH_ODBC=ON -DWITH_POSTGRESQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 -DWITH_ZLIB=ON -DGALERA_SOVERSION=31 -DSYSCONFDIR=/etc/manticoresearch
 ```
 
-Здесь видно упоминания **libodbc.so.2**, **libexpat.so.1**, **libmysqlclient.so.20** и **libpq.so.5**.
+Здесь вы можете увидеть упоминания **libodbc.so.2**, **libexpat.so.1**, **libmysqlclient.so.20** и **libpq.so.5**.
 
-Ниже таблица с перечнем всех клиентских библиотек для разных версий Debian/Ubuntu:
+Ниже приведена справочная таблица со списком всех клиентских библиотек для разных версий Debian/Ubuntu:
 
-| Distr | MySQL | PostgreSQL | XMLpipe | UnixODBC |
+| Дистрибутив | MySQL | PostgreSQL | XMLpipe | UnixODBC |
 | - | - | - | - | - |
 | Ubuntu Trusty | libmysqlclient.so.18 | libpq.so.5 | libexpat.so.1 | libodbc.so.1 |
 | Ubuntu Bionic | libmysqlclient.so.20 | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
@@ -89,7 +104,7 @@ Configured by CMake with these definitions: -DCMAKE_BUILD_TYPE=RelWithDebInfo -D
 | Debian Bullseye | libmariadb.so.3 | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
 | Debian Bookworm | libmariadb.so.3 | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
 
-Чтобы найти пакеты, в которых содержатся эти библиотеки, можно использовать, например, `apt-file`:
+Чтобы найти пакеты, предоставляющие библиотеки, вы можете использовать, например, `apt-file`:
 
 ```bash
 apt-file find libmysqlclient.so.20
@@ -98,49 +113,15 @@ libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20.2.0
 libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20.3.6
 ```
 
-Обратите внимание, что нужны только библиотеки для тех типов хранилищ, которые вы будете использовать. Если вы планируете строить таблицы только из MySQL, то, возможно, достаточно установить только библиотеку MySQL (в примере выше — `libmysqlclient20`).
+Обратите внимание, что вам нужны библиотеки только для типов хранилищ, которые вы собираетесь использовать. Так что если вы планируете строить таблицы только из MySQL, то вам может потребоваться установить только библиотеку MySQL (в приведённом выше случае `libmysqlclient20`).
 
-В конце установите необходимые пакеты:
+Наконец, установите необходимые пакеты:
 
 ```bash
 sudo apt-get install libmysqlclient20 libodbc1 libpq5 libexpat1
 ```
 
-Если вы вообще не собираетесь использовать инструмент `indexer`, искать и устанавливать библиотеки не нужно.
+Если вы вообще не собираетесь использовать инструмент `indexer`, вам не нужно искать и устанавливать никакие библиотеки.
 
-Для поддержки токенизации CJK официальные пакеты содержат бинарные файлы с встроенной библиотекой ICU и включают в себя файл данных ICU. Они не зависят от какой-либо ICU runtime-библиотеки, которая может быть установлена в вашей системе, и не подлежат обновлению.
-
-#### Украинский лемматизатор
-Лемматизатор требует Python 3.9+. **Убедитесь, что он установлен и с опцией `--enable-shared`.**
-
-Вот как установить Python 3.9 и украинский лемматизатор в Debian и Ubuntu:
-
-```bash
-# install Manticore Search and UK lemmatizer from APT repository
-cd ~
-wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
-sudo apt -y update
-sudo apt -y install manticore manticore-lemmatizer-uk
-
-# install packages needed for building Python
-sudo apt -y update
-sudo apt -y install wget build-essential libreadline-dev libncursesw5-dev libssl-dev libsqlite3-dev tk-dev libgdbm-dev libc6-dev libbz2-dev libffi-dev zlib1g-dev
-
-# download, build and install Python 3.9
-cd ~
-wget https://www.python.org/ftp/python/3.9.4/Python-3.9.4.tgz
-tar xzf Python-3.9.4.tgz
-cd Python-3.9.4
-./configure --enable-optimizations --enable-shared
-sudo make -j8 altinstall
-
-# update linker cache
-sudo ldconfig
-
-# install pymorphy2 and UK dictionary
-sudo LD_LIBRARY_PATH=~/Python-3.9.4 pip3.9 install pymorphy2[fast]
-sudo LD_LIBRARY_PATH=~/Python-3.9.4 pip3.9 install pymorphy2-dicts-uk
-```
+Для поддержки токенизации CJK официальные пакеты содержат бинарные файлы со встроенной библиотекой ICU и включают файл данных ICU. Они не зависят от какой-либо библиотеки ICU, которая может быть доступна в вашей системе, и не могут быть обновлены.
 <!-- proofread -->
-

@@ -1,6 +1,6 @@
 //
 //
-// Copyright (c) 2018-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2018-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -18,6 +18,7 @@
 #include "killlist.h"
 #include "attribute.h"
 #include "columnarfilter.h"
+#include "indexsettings.h"
 #include <queue>
 
 #include "util/util.h"
@@ -1248,13 +1249,13 @@ RowIteratorsWithEstimates_t SIIteratorCreator_c::Create ( CSphString & sWarning 
 
 /////////////////////////////////////////////////////////////////////
 
-bool SIContainer_c::Load ( const CSphString & sFile, CSphString & sError )
+bool SIContainer_c::Load ( const CSphString & sFile, bool bMmap, CSphString & sError )
 {
-	SI::Index_i * pIndex = CreateSecondaryIndex ( sFile.cstr(), sError );
+	SI::Index_i * pIndex = CreateSecondaryIndex ( sFile.cstr(), bMmap, sError );
 	if ( !pIndex )
 		return false;
 
-	m_dIndexes.Add ( { std::unique_ptr<SI::Index_i>(pIndex), sFile } );
+	m_dIndexes.Add ( { std::unique_ptr<SI::Index_i>(pIndex) } );
 	return true;
 }
 
@@ -1262,7 +1263,7 @@ bool SIContainer_c::Load ( const CSphString & sFile, CSphString & sError )
 bool SIContainer_c::Drop ( const CSphString & sFile, CSphString & sError )
 {
 	ARRAY_FOREACH ( i, m_dIndexes )
-		if ( m_dIndexes[i].m_sFile==sFile )
+		if ( sFile==m_dIndexes[i].m_pIndex->GetFilename().c_str() )
 		{
 			m_dIndexes.Remove(i);
 			return true;
@@ -1273,11 +1274,27 @@ bool SIContainer_c::Drop ( const CSphString & sFile, CSphString & sError )
 }
 
 
-void SIContainer_c::ColumnUpdated ( const CSphString & sAttr )
+void SIContainer_c::UpdateFilename ( const CSphString & sOldFile, const CSphString & sNewFile )
 {
+	for ( auto & tIndex : m_dIndexes )
+		if ( sOldFile==tIndex.m_pIndex->GetFilename().c_str() )
+			tIndex.m_pIndex->UpdateFilename ( sNewFile.cstr() );
+}
+
+
+bool SIContainer_c::ColumnUpdated ( const CSphString & sAttr )
+{
+	bool bUpdated = false;
 	for ( auto & i : m_dIndexes )
+	{
 		if ( i.m_pIndex->IsEnabled ( sAttr.cstr() ) )
+		{
 			i.m_pIndex->ColumnUpdated ( sAttr.cstr() );
+			bUpdated = true;
+		}
+	}
+
+	return bUpdated;
 }
 
 
@@ -1364,6 +1381,11 @@ void SIContainer_c::GetIndexAttrInfo ( std::vector<SI::IndexAttrInfo_t> & dInfo 
 		i.m_pIndex->GetAttrInfo(dInfo);
 }
 
+void SIContainer_c::ClearCache()
+{
+	for ( auto & i : m_dIndexes )
+		i.m_pIndex->ClearCache();
+}
 
 RowIteratorsWithEstimates_t SIContainer_c::CreateSecondaryIndexIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff, bool bUseSICache, CSphString & sWarning ) const
 {
@@ -1383,13 +1405,17 @@ static void ConvertSchema ( const CSphSchema & tSchema, common::Schema_t & tSISc
 	for ( int iAttr=0; iAttr<tSchema.GetAttrsCount(); iAttr++ )
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr ( iAttr );
-		// skip special / iternal attributes
-		if ( sphIsInternalAttr ( tCol.m_sName ) )
+		// skip special/internal attributes, except for the hidden storage backing
+		// UUID public ids. Public id filters are rewritten to @uuid_id before SI
+		// planning, so this internal string attr needs a real secondary index.
+		if ( sphIsInternalAttr ( tCol.m_sName ) && tCol.m_sName!=sphGetUuidDocidName() )
 			continue;
 
 		if ( tCol.m_eAttrType==SPH_ATTR_JSON )
 			continue;
 		if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tCol.IsIndexedKNN() )
+			continue;
+		if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY ) // float_vector_array never gets a secondary index, KNN-indexed or not
 			continue;
 
 		common::StringHash_fn fnStringCalcHash = nullptr;
@@ -1492,4 +1518,9 @@ void BuildStoreSI ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool
 			break;
 		}
 	}
+}
+
+bool HasForceHints ( const VecTraits_T<IndexHint_t> & dHints )
+{
+	return dHints.any_of ( [] ( const auto & tHint ) { return ( tHint.m_bForce && tHint.m_eType==SecondaryIndexType_e::INDEX ); } );
 }

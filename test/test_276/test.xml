@@ -184,6 +184,29 @@ index test_vec
 }
 </query>
 
+<query endpoint="json/search">
+{
+	"index": "test_vec",
+	"knn":
+	{
+	    "field": "vec",
+	    "query_vector": [0.0452, 0.3906, -0.0110]
+	}
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"index": "test_vec",
+	"knn":
+	{
+	    "field": "vec",
+	    "query_vector": [0.0452, 0.3906, -0.0110]
+	},
+	"limit": 3
+}
+</query>
+
 </httpqueries>
 
 </test>

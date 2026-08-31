@@ -1,121 +1,134 @@
-# 介绍
+# 简介
 
-Manticore Search 是一个高性能、多存储的数据库，专为搜索和分析而设计，提供极速的全文搜索、实时索引以及先进功能，如向量搜索和列式存储，提升数据分析效率。它既能处理小型数据集，也能应对大型数据集，提供无缝的可扩展性和强大的洞察力，满足现代应用的需求。
+Manticore Search 是一款面向搜索和分析场景打造的高性能多存储数据库，提供极速全文检索、实时索引，以及向量搜索和列式存储等高级功能，便于高效进行数据分析。它既能处理小规模数据集，也能应对大规模数据集，为现代应用提供无缝扩展能力和强大的洞察力。
 
-作为一个开源数据库（可在 [GitHub](https://github.com/manticoresoftware/manticoresearch/) 获取），Manticore Search 于 2017 年创建，作为 [Sphinx Search](https://sphinxsearch.com/) 引擎的继承项目。我们的开发团队采纳了 Sphinx 的所有最佳功能，并显著提升了其功能性，同时修复了数百个漏洞（详见我们的[更新日志](https://manual.manticoresearch.com/Changelog)）。Manticore Search 是一个现代化、快速且轻量级的数据库，具备卓越的全文搜索能力，基于对其前身几乎完全重写的代码构建。
+作为一款开源数据库（可在 [GitHub](https://github.com/manticoresoftware/manticoresearch/) 获取），Manticore Search 于 2017 年创建，作为 [Sphinx Search](https://sphinxsearch.com/) 引擎的延续。我们的开发团队继承了 Sphinx 的所有最佳特性，并在此基础上大幅增强了功能，同时修复了数百个 bug（详见我们的 [Changelog](https://manual.manticoresearch.com/Changelog)）。Manticore Search 是一款现代、快速、轻量的数据库，拥有出色的全文检索能力，并且几乎是对其前身的彻底重写。
 
-## Manticore 的主要特点包括：
-#### 强大且快速的全文搜索，适用于小型和大型数据集
+## Manticore 的核心特性包括：
+#### 强大而快速的全文检索，适用于小型和大型数据集
 
-  * [查询自动完成](Searching/Autocomplete.md)
+  * [查询自动补全](Searching/Autocomplete.md)
   * [模糊搜索](Searching/Spell_correction.md#Fuzzy-Search)
-  * 超过 20 种 [全文操作符](https://play.manticoresearch.com/fulltextintro/)<!--{target="_blank"}--> 和 20 多种排序因子
+  * 超过 20 种 [全文运算符](https://play.manticoresearch.com/fulltextintro/)<!--{target="_blank"}-->，以及超过 20 个排序因子
   * [自定义排序](Searching/Sorting_and_ranking.md#Ranking-overview)
   * [词干提取](Creating_a_table/NLP_and_tokenization/Morphology.md)
   * [词形还原](Creating_a_table/NLP_and_tokenization/Morphology.md)
   * [停用词](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md)
   * [同义词](Creating_a_table/NLP_and_tokenization/Exceptions.md)
-  * [词形变化](Creating_a_table/NLP_and_tokenization/Wordforms.md)
-  * [基于字符和词的高级分词](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md)
-  * [精准的中文分词](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md)
+  * [词形映射](Creating_a_table/NLP_and_tokenization/Wordforms.md)
+  * [字符级和词级高级分词](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md)
+  * [完善的中文分词](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md)
   * [文本高亮](Searching/Highlighting.md)
 
 #### 向量搜索能力
-Manticore Search 支持为每条文档添加由机器学习模型生成的嵌入向量，并执行对它们的[最近邻搜索](Searching/KNN.md)。这让您可以构建相似度搜索、推荐、语义搜索和基于 NLP 算法的相关性排序等功能，还支持图像、视频和声音搜索等。
+Manticore Search 支持将由你的机器学习模型生成的嵌入添加到每个文档中，然后对其进行 [nearest-neighbor search](Searching/KNN.md)。这使你可以构建相似度搜索、推荐、语义搜索、[conversational search](Searching/Conversational_search.md) 和基于 NLP 算法的相关性排序等功能，其中还包括图像、视频和声音搜索。
 
-#### 连接查询（JOIN）
-Manticore Search 通过 SQL 和 JSON 支持[连接查询](Searching/Joining.md)，允许您组合来自多张表的数据。
+#### 会话搜索
+Manticore Search 支持在现有的向量化表上进行 [conversational search](Searching/Conversational_search.md)。它会使用 KNN 搜索检索最相关的行，将这些行与对话历史一起作为 LLM 的上下文，并且可以通过 SQL `CALL CHAT` 或 HTTP JSON `/search` 端点进行应答。
+
+#### JOIN
+Manticore Search 支持通过 SQL 和 JSON 执行 [JOIN](Searching/Joining.md) 查询，让你可以把多个表中的数据组合起来。
 
 #### 多线程
-Manticore Search 利用智能查询并行化，降低响应时间，并在需要时充分利用所有 CPU 核心。
+Manticore Search 采用智能查询并行化，以降低响应时间，并在需要时充分利用所有 CPU 核心。
 
-#### 基于成本的查询优化器
-基于成本的查询优化器使用已索引数据的统计信息，评估不同执行计划在运行同一查询时的相对成本。这样优化器可以确定检索目标结果的最高效方案，考虑因素包括索引数据的大小、查询复杂度和可用资源。
+#### 基于代价的查询优化器
+基于代价的查询优化器会使用关于已索引数据的统计信息，评估给定查询的不同执行计划的相对成本。这样优化器就能在综合考虑已索引数据规模、查询复杂度和可用资源等因素后，确定检索目标结果时最有效的执行方案。
 
 #### 存储选项
-Manticore 提供了[行存和列存存储选项](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)，以适应不同规模的数据集。传统且默认的行存选项适用于所有大小的数据集——小型、中型和大型；而通过 Manticore 列存库提供的列式存储选项适合更大的数据集。这两种存储方式的关键区别是，行存为达到最佳性能，所有属性（不包括全文字段）都需保存在内存中，而列存则不需要，占用更少内存，但性能可能略有下降（具体见 https://db-benchmarks.com/ 的统计数据）。
+Manticore 提供 [行式和列式存储选项](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)，以适配不同规模的数据集。传统且默认的行式存储适用于各种规模的数据集 - 小型、中型和大型；而列式存储则通过 Manticore Columnar Library 提供，面向更大的数据集。这些存储方式的关键区别在于，行式存储为了获得最佳性能，需要将所有属性（全文字段除外）保留在 RAM 中，而列式存储则不需要，因此 RAM 占用更低，但性能可能会略慢一些（https://db-benchmarks.com/ 上的统计数据也证明了这一点）。
 
 #### 自动二级索引
-[Manticore 列存库](https://github.com/manticoresoftware/columnar/) 使用了[分段几何模型索引（PGM-index）](https://github.com/gvinciguerra/PGM-index)，该模型利用已学习的映射关系，将索引键映射到内存位置。此映射的简洁性与一种特殊递归构建算法结合，使 PGM 索引在空间上比传统索引节省多个数量级，同时提供最佳的查询和更新性能。所有数值和字符串字段默认启用二级索引，且可对 JSON 属性启用。
+[Manticore Columnar Library](https://github.com/manticoresoftware/columnar/) 使用 [Piecewise Geometric Model index](https://github.com/gvinciguerra/PGM-index)，它利用索引键与其在内存中位置之间的学习映射。这种映射十分紧凑，再加上独特的递归构建算法，使 PGM-index 在空间占用上远超传统索引，同时仍能提供一流的查询和更新性能。所有数值字段和字符串字段默认都开启二级索引，json 属性也可以启用。
 
 #### SQL 优先
-Manticore 原生语法为 SQL，支持通过 HTTP 和 MySQL 协议执行 SQL 查询，允许使用常见 mysql 客户端用任何编程语言连接。
+Manticore 的原生语法是 SQL，并支持通过 HTTP 和 MySQL 协议使用 SQL，因此可以在任何编程语言中通过常见的 mysql 客户端进行连接。
 
-#### 基于 HTTP 的 JSON 接口
-为了更程序化地管理数据和模式，Manticore 提供了类似于 Elasticsearch 的 [HTTP JSON](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) 协议。
+#### 通过 HTTP 传输 JSON
+对于更偏编程化的数据和 schema 管理方式，Manticore 提供 [HTTP JSON](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) 协议，类似 Elasticsearch 的方式。
+
+#### 分片表
+Manticore 支持 [`type='sharding'` 表](Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md)，可以在单节点或复制集群中透明地将读写分发到多个物理分片，从而提升写入扩展性，同时简化路由、故障切换和运维管理。
+
+#### 身份验证与授权
+Manticore 为 MySQL、HTTP/HTTPS、分布式远程代理以及复制相关操作提供内置的 [身份验证和授权](Security/Authentication_and_authorization.md)，支持用户、Bearer token 和细粒度权限控制。
 
 #### 兼容 Elasticsearch 的写入
-您可以执行兼容 Elasticsearch 的 [insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Adding-documents-to-a-real-time-table) 和 [replace](Data_creation_and_modification/Updating_documents/REPLACE.md#REPLACE) JSON 查询，从而将 Manticore 与 Logstash（版本 < 7.13）、Filebeat 及 Beats 家族的其它工具结合使用。
+你可以执行与 Elasticsearch 兼容的 [insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Adding-documents-to-a-real-time-table) 和 [replace](Data_creation_and_modification/Updating_documents/REPLACE.md#REPLACE) JSON 查询，这样就能将 Manticore 与 Logstash（版本 < 7.13）、Filebeat 以及 Beats 家族中的其他工具一起使用。
 
-#### 声明式和命令式的模式管理
-可以轻松在在线或配置文件中创建、更新和删除表。
+#### 声明式与命令式 schema 管理
+可在线或通过配置文件轻松创建、更新和删除表。
 
-#### C++ 的性能优势与 PHP 的便利性
-Manticore Search 守护进程采用 C++ 开发，提供快速启动时间和高效的内存利用率。底层优化进一步提升性能。另一个关键组件称为 [Manticore Buddy](https://github.com/manticoresoftware/manticoresearch-buddy)，采用 PHP 编写，用于提供不需要极快响应时间或极高处理能力的高级功能。尽管参与 C++ 代码贡献可能具有挑战性，但使用 Manticore Buddy 添加新的 SQL/JSON 命令应该是一个简单的过程。
+#### C++ 的优势与 PHP 的便捷性
+Manticore Search 守护进程使用 C++ 开发，启动速度快，内存利用率高。底层优化进一步增强了性能。另一个关键组件 [Manticore Buddy](https://github.com/manticoresoftware/manticoresearch-buddy) 使用 PHP 编写，用于那些不需要闪电般响应速度或极高处理能力的高层功能。尽管为 C++ 代码做贡献可能更具挑战，但使用 Manticore Buddy 添加新的 SQL/JSON 命令应该是一个相对直接的过程。
 
 #### 实时插入
-新增或更新的文档可以立即读取。
+新添加或更新的文档可以立即读取。
 
-#### 互动课程，轻松学习
-我们提供[免费互动课程](https://play.manticoresearch.com/)，使学习变得轻松。
+#### 轻松学习的交互式课程
+我们提供 [免费的交互式课程](https://play.manticoresearch.com/)，让学习变得轻松无负担。
 
 #### 事务
-虽然 Manticore 并非完全支持 ACID，但它支持隔离事务用于原子更改，并支持二进制日志以确保安全写入。
+虽然 Manticore 并不完全符合 ACID，但它支持用于原子性变更的隔离事务，以及用于安全写入的二进制日志。
 
-#### 内置复制和负载均衡
-数据可以分布在服务器和数据中心中，任何 Manticore Search 节点都可以同时作为负载均衡器和数据节点。Manticore 使用 [Galera 库](https://galeracluster.com/) 实现准同步多主 [复制](https://play.manticoresearch.com/replication/)，确保所有节点之间的数据一致性，防止数据丢失，并提供卓越的复制性能。
+#### 内置复制与负载均衡
+数据可以分布到各个服务器和数据中心，任意一个 Manticore Search 节点都可以同时作为负载均衡器和数据节点。Manticore 使用 [Galera library](https://play.manticoresearch.com/replication/) 实现几乎同步的多主 [复制](https://galeracluster.com/)，从而确保所有节点的数据一致性，防止数据丢失，并提供出色的复制性能。
 
-#### 内置备份功能
-Manticore 配备了外部工具 [manticore-backup](Securing_and_compacting_a_table/Backup_and_restore.md) 和 [BACKUP](Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) SQL 命令，简化数据备份和恢复过程。或者，您也可以使用 [mysqldump](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html) 进行[逻辑备份](Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump)。
+#### 内置备份能力
+Manticore 配备了外部工具 [manticore-backup](Securing_and_compacting_a_table/Backup_and_restore.md)，以及 [BACKUP](Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) SQL 命令，以简化数据备份和恢复流程。或者，你也可以使用 [mysqldump](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html) 来 [制作逻辑备份](Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump)。
 
 #### 开箱即用的数据同步
-`indexer` 工具和 Manticore 完整的配置语法使从 MySQL、PostgreSQL、ODBC 兼容数据库、XML 及 CSV 等源同步数据变得轻松。
+Manticore 的 `indexer` 工具和完整的配置语法，可以轻松同步来自 MySQL、PostgreSQL、ODBC 兼容数据库、XML 和 CSV 等来源的数据。
 
 #### 集成选项
-您可以通过 [FEDERATED 引擎](Extensions/FEDERATED.md) 或 [ProxySQL](https://manticoresearch.com/blog/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/) 将 Manticore Search 集成到 MySQL/MariaDB 服务器。
+你可以通过 [FEDERATED engine](Extensions/FEDERATED.md) 或 [ProxySQL](https://manticoresearch.com/blog/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/) 将 Manticore Search 与 MySQL/MariaDB 服务器集成。
 
-您可以使用 [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/) 和 [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) 来可视化存储在 Manticore 中的数据。各种 MySQL 工具可用于交互式开发 Manticore 查询，例如 [HeidiSQL](https://www.heidisql.com/) 和 [DBForge](https://www.devart.com/dbforge/)。
+你可以使用 [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/) 和 [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) 可视化存储在 Manticore 中的数据。还可以使用多种 MySQL 工具交互式开发 Manticore 查询，例如 [HeidiSQL](https://www.heidisql.com/) 和 [DBForge](https://www.devart.com/dbforge/)。
 
-您还可以将 Manticore Search 与 [Kibana](Integration/Kibana.md) 一起使用。
+你也可以将 Manticore Search 与 [Kibana](Integration/Kibana.md) 一起使用。
 
-#### 流过滤轻松实现
-Manticore 提供一种特殊类型的表，“[percolate](Creating_a_table/Local_tables/Percolate_table.md)”表，允许您搜索查询而非数据，使其成为过滤全文数据流的高效工具。只需将查询存储在表中，通过向 Manticore Search 发送每批文档处理数据流，并接收仅匹配存储查询的结果。
+#### 轻松进行流过滤
+Manticore 提供一种特殊的表类型，即“[percolate](Creating_a_table/Local_tables/Percolate_table.md)”表，它允许你搜索查询而不是数据，因此非常适合用于过滤全文数据流。只需把查询存入表中，将每批文档发送给 Manticore Search 处理数据流，就能只接收与已存查询匹配的结果。
 
 #### 可能的应用场景
-Manticore Search 功能多样，可应用于各种场景，包括：
+Manticore Search 用途广泛，可应用于多种场景，包括：
 
-- **全文搜索**：
-  - 适合电商平台，实现快速且精准的产品搜索，支持自动补全和模糊搜索等功能。
-  - 适合内容丰富的网站，允许用户快速找到相关的文章或文档。
+- **全文检索**：
+  - 非常适合电商平台，借助自动补全和模糊搜索等功能，提供快速而准确的商品搜索。
+  - 非常适合内容密集型网站，让用户能够快速找到相关的文章或文档。
 
 - **数据分析**：
-  - 使用 [Beats/Logstash](https://manticoresearch.com/blog/integration-of-manticore-with-logstash-filebeat/)、[Vector.dev](https://manticoresearch.com/blog/integration-of-manticore-with-vectordev/) 和 [Fluentbit](https://manticoresearch.com/blog/integration-of-manticore-with-fluentbit/) 将数据导入 Manticore Search。
-  - 使用 Manticore 的列式存储和 OLAP 能力高效分析大型数据集。
-  - 在海量数据上以极低延迟执行复杂查询。
-  - 使用 Kibana、[Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) 或 [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/) 进行数据可视化。
+  - 使用 [Beats/Logstash](https://manticoresearch.com/blog/integration-of-manticore-with-logstash-filebeat/)、[Vector.dev](https://manticoresearch.com/blog/integration-of-manticore-with-vectordev/)、[Fluentbit](https://manticoresearch.com/blog/integration-of-manticore-with-fluentbit/) 将数据导入 Manticore Search。
+  - 借助 Manticore 的列式存储和 OLAP 能力，高效分析大规模数据集。
+  - 以极低延迟对 TB 级数据执行复杂查询。
+  - 使用 Kibana、[Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) 或 [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/) 可视化数据。
+
+- **会话与 AI 搜索**：
+  - 在现有向量化内容之上构建问答和助手体验。
+  - 使用 KNN 检索和对话历史，通过 [conversational search](Searching/Conversational_search.md) 为答案提供依据。
 
 - **分面搜索**：
-  - 允许用户按类别（如价格、品牌、日期）筛选搜索结果，实现更细化的搜索体验。
+  - 允许用户按价格、品牌或日期等类别筛选搜索结果，获得更精细的搜索体验。
 
 - **地理空间搜索**：
-  - 实现基于位置的搜索，如查找附近的餐厅或商店，利用 Manticore 的地理空间能力。
+  - 利用 Manticore 的地理空间能力实现基于位置的搜索，例如查找附近的餐厅或商店。
 
-- **拼写纠正**：
-  - 自动纠正用户搜索查询中的拼写错误，提高搜索准确性和用户体验。
+- **拼写纠错**：
+  - 自动纠正用户在搜索查询中的拼写错误，以提升搜索准确性和用户体验。
 
 - **自动补全**：
-  - 提供实时建议，增强搜索的易用性和速度。
+  - 在用户输入时实时提供建议，提升搜索可用性和速度。
 
 - **数据流过滤**：
-  - 使用 percolate 表过滤和处理实时数据流，如社交媒体动态或日志数据，高效准确。
+  - 使用 percolate 表高效过滤和处理实时数据流，例如社交媒体流或日志数据。
 
 
 ## 要求
 
 * 架构：arm64 或 x86_64
-* 操作系统：基于 Debian（例如 Debian、Ubuntu、Mint）、基于 RHEL（例如 RHEL、CentOS、Alma、Oracle Linux、Amazon Linux）、Windows 或 MacOS。
-* [Manticore Columnar Library](https://github.com/manticoresoftware/columnar)，提供[列式存储](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)和[二级索引](Introduction.md#Automatic-secondary-indexes)，需要支持 SSE >= 4.2 的 CPU。
-* 无特殊磁盘空间或内存需求。空的 Manticore Search 实例仅使用约 40MB RSS 内存。
+* 操作系统：基于 Debian 的系统（例如 Debian、Ubuntu、Mint）、基于 RHEL 的系统（例如 RHEL、CentOS、Alma、Oracle Linux、Amazon Linux）、Windows 或 MacOS。
+* [Manticore Columnar Library](https://github.com/manticoresoftware/columnar)，它提供 [列式存储](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) 和 [二级索引](Introduction.md#Automatic-secondary-indexes)，要求 CPU 支持 SSE >= 4.2。
+* 不需要特定的磁盘空间或 RAM 要求。一个空的 Manticore Search 实例只会占用大约 40MB 的 RSS 内存。
 
 <!-- proofread -->
 

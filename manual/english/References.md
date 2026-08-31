@@ -23,7 +23,7 @@
 * [SHOW TABLE INDEXES](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_INDEXES.md) - Displays information about the available secondary indexes for the table
 * [SHOW TABLE STATUS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md) - Shows information about current table status
 * [SHOW TABLE SETTINGS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS.md) - Shows table settings
-* [SHOW LOCKS](Securing_and_compacting_a_table/Freezing_a_table.md#SHOW-LOCKS) - Shows information about frozen tables
+* [SHOW LOCKS](Securing_and_compacting_a_table/Freezing_and_locking_a_table.md#SHOW-LOCKS) - Shows information about frozen tables
 
 ##### Data management
 * [INSERT](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Adds new documents
@@ -57,10 +57,23 @@
 * [FLUSH HOSTNAMES](Securing_and_compacting_a_table/Flushing_hostnames.md) - Renews IPs associates to agent host names
 * [FLUSH LOGS](Logging/Rotating_query_and_server_logs.md) - Initiates reopen of searchd log and query log files (similar to USR1)
 
-##### Real-time table optimization
+##### Authentication and authorization
+* [CREATE USER](Security/Authentication_and_authorization.md#Users-and-tokens) - Creates an authentication user
+* [DROP USER](Security/Authentication_and_authorization.md#Users-and-tokens) - Deletes an authentication user
+* [SET PASSWORD](Security/Authentication_and_authorization.md#Users-and-tokens) - Changes the current or specified user's password
+* [TOKEN](Security/Authentication_and_authorization.md#Users-and-tokens) - Creates or rotates a bearer token
+* [GRANT](Security/Authentication_and_authorization.md#Permissions) - Grants an auth permission
+* [REVOKE](Security/Authentication_and_authorization.md#Permissions) - Revokes an auth permission
+* [SHOW USERS](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - Lists authentication users
+* [SHOW PERMISSIONS](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - Lists auth permissions
+* [SHOW USAGE](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - Shows auth usage counters
+* [SHOW TOKEN](Security/Authentication_and_authorization.md#Users-and-tokens) - Shows the stored token hash
+* [RELOAD AUTH](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - Reloads authentication data
+
+##### Table optimization
 * [FLUSH RAMCHUNK](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK) - Force creating a new disk chunk
 * [FLUSH TABLE](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#FLUSH-TABLE) - Flushes real-time table RAM chunk to disk
-* [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) - Enqueues real-time table for optimization
+* [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) - Compacts an RT table or the physical RT targets of a distributed or sharded table
 
 ##### Importing to a real-time table
 * [ATTACH TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) - Moves data from a plain table to a real-time table
@@ -69,6 +82,7 @@
 ##### Replication
 * [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) - Joins a replication cluster
 * [ALTER CLUSTER](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - Adds/deletes a table to a replication cluster
+* [EXIT CLUSTER](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - Detaches the current node from a replication cluster
 * [SET CLUSTER](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Cluster-parameters) - Changes replication cluster settings
 * [DELETE CLUSTER](Creating_a_cluster/Setting_up_replication/Deleting_a_replication_cluster.md) - Deletes a replication cluster
 
@@ -121,7 +135,7 @@
 * [/tbl_name/_mapping](Creating_a_table/Local_tables/Real-time_table.md#_mapping-API:) - Creates a table schema in the Elasticsearch style
 
 ### Common things
-* [field name syntax](Creating_a_table/Data_types.md#Field-name-syntax)
+* [table, field, and attribute name syntax](Creating_a_table/Data_types.md#Table-and-field-name-syntax)
 * [data types](Creating_a_table/Data_types.md)
 * [engine](Creating_a_table/Data_types.md)
 * [plain mode](Read_this_first.md#Real-time-mode-vs-plain-mode)
@@ -134,6 +148,7 @@
 * [access_hitlists](Server_settings/Searchd.md#access_hitlists)
 * [access_dict](Server_settings/Searchd.md#access_dict)
 * [attr_update_reserve](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_update_reserve)
+* [bigram_delimiter](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_delimiter)
 * [bigram_freq_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
 * [bigram_index](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
 * [blend_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)
@@ -145,9 +160,11 @@
 * [docstore_compression_level](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [embedded_limit](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)
 * [exceptions](Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions)
+* [exceptions_list](Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions_list)
 * [expand_keywords](Searching/Options.md#expand_keywords)
 * [global_idf](Searching/Options.md#global_idf)
 * [hitless_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words)
+* [hitless_words_list](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words_list)
 * [html_index_attrs](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_index_attrs)
 * [html_remove_elements](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_remove_elements)
 * [html_strip](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip)
@@ -185,10 +202,12 @@
 * [read_buffer_hits](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [regexp_filter](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)
 * [stopwords](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)
+* [stopwords_list](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_list)
 * [stopword_step](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step)
 * [stopwords_unstemmed](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed)
 * [type](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [wordforms](Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms)
+* [wordforms_list](Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms_list)
 
 ##### Plain table settings
 * [json_secondary_indexes](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#json_secondary_indexes)
@@ -213,6 +232,7 @@
 * [rt_attr_bool](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_float](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_float_vector](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [rt_attr_float_vector_array](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_json](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_multi_64](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_multi](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
@@ -433,6 +453,10 @@ To be put in the `searchd {}` section of the configuration file:
   * [agent_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Specifies the number of times Manticore tries to connect and query remote agents
   * [agent_retry_delay](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Specifies the delay before retrying to query a remote agent in case of failure
   * [attr_flush_period](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_flush_period) - Sets the time period between flushing updated attributes to disk
+  * [auth](Server_settings/Searchd.md#auth) - Enables authentication and authorization
+  * [auth_log_level](Server_settings/Searchd.md#auth_log_level) - Controls authentication log verbosity
+  * [auth_password_policy](Server_settings/Searchd.md#auth_password_policy) - Sets password policy for authentication users
+  * [auth_password_min_length](Server_settings/Searchd.md#auth_password_min_length) - Sets minimum password length for authentication users
   * [binlog_flush](Server_settings/Searchd.md#binlog_flush) - Binary log transaction flush/sync mode
   * [binlog_max_log_size](Server_settings/Searchd.md#binlog_max_log_size) - Maximum binary log file size
   * [binlog_common](Logging/Binary_logging.md#Binary-logging-strategies) - Common binary log file for all tables
@@ -446,6 +470,7 @@ To be put in the `searchd {}` section of the configuration file:
   * [diskchunk_flush_write_timeout](Server_settings/Searchd.md#diskchunk_flush_write_timeout) - Timeout for auto-flushing a RAM chunk if there are no writes to it
   * [diskchunk_flush_search_timeout](Server_settings/Searchd.md#diskchunk_flush_search_timeout) - Timeout for preventing auto-flushing a RAM chunk if there are no searches in the table
   * [docstore_cache_size](Server_settings/Searchd.md#docstore_cache_size) - Maximum size of document blocks from document storage held in memory
+  * [embeddings_threads](Server_settings/Searchd.md#embeddings_threads) - Maximum number of threads the embeddings library may use when generating vectors for auto-embedding inserts, `ALTER TABLE` KNN rebuilds, and KNN text-query embedding
   * [expansion_limit](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) - Maximum number of expanded keywords for a single wildcard
   * [grouping_in_utc](Server_settings/Searchd.md#grouping_in_utc) - Enables using UTC timezone for grouping time fields
   * [ha_period_karma](Server_settings/Searchd.md#ha_period_karma) - Agent mirror statistics window size
@@ -455,12 +480,14 @@ To be put in the `searchd {}` section of the configuration file:
   * [join_batch_size](Searching/Joining.md#Join-batching) - Defines batch size for table joins to balance performance and memory usage
   * [join_cache_size](Searching/Joining.md#Join-caching) - Defines cache size for reusing JOIN query results
   * [kibana_version_string](Server_settings/Searchd.md#kibana_version_string) – The server version string that's sent in response to Kibana requests
+  * [knn_parallel_build](Server_settings/Searchd.md#knn_parallel_build) - Number of worker threads used to build the HNSW graph during RT chunk saves, `OPTIMIZE` / auto-optimize chunk merges, and `ALTER TABLE` KNN rebuilds
   * [listen](Server_settings/Searchd.md#listen) - Specifies IP address and port or Unix-domain socket path for searchd to listen on
   * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - TCP listen backlog
   * [listen_tfo](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Enables TCP_FASTOPEN flag for all listeners
   * [log](Server_settings/Searchd.md#log) - Path to Manticore server log file
   * [max_batch_queries](Server_settings/Searchd.md#max_batch_queries) - Limits the number of queries per batch
   * [max_connections](Server_settings/Searchd.md#max_connections) - Maximum number of active connections
+  * [merge_chunks_per_job](Server_settings/Searchd.md#merge_chunks_per_job) - How many RT disk chunks are merged per OPTIMIZE job
   * [max_filters](Server_settings/Searchd.md#max_filters) - Maximum allowed per-query filter count
   * [max_filter_values](Server_settings/Searchd.md#max_filter_values) - Maximum allowed per-filter values count
   * [max_open_files](Server_settings/Searchd.md#max_open_files) - Maximum number of files allowed to be opened by server
@@ -473,8 +500,8 @@ To be put in the `searchd {}` section of the configuration file:
   * [network_timeout](Server_settings/Searchd.md#network_timeout) - Network timeout for client requests
   * [node_address](Server_settings/Searchd.md#node_address) - Specifies network address of the node
   * [persistent_connections_limit](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Maximum number of simultaneous persistent connections to remote persistent agents
+  * [parallel_chunk_merges](Server_settings/Searchd.md#parallel_chunk_merges) - How many RT disk chunk merges can run in parallel during OPTIMIZE
   * [pid_file](Server_settings/Searchd.md#pid_file) - Path to Manticore server pid file
-  * [predicted_time_costs](Server_settings/Searchd.md#predicted_time_costs) - Costs for the query time prediction model
   * [preopen_tables](Server_settings/Searchd.md#preopen_tables) - Determines whether to forcibly preopen all tables on startup
   * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - Enables pseudo-sharding for search queries to plain and real-time tables
   * [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes) - Maximum RAM allocated for cached result sets
@@ -495,6 +522,7 @@ To be put in the `searchd {}` section of the configuration file:
   * [server_id](Server_settings/Searchd.md#server_id) - Server identifier used as a seed to generate a unique document ID
   * [shutdown_timeout](Server_settings/Searchd.md#shutdown_timeout) - Searchd `--stopwait` timeout
   * [shutdown_token](Server_settings/Searchd.md#shutdown_token) - SHA1 hash of the password required to invoke `shutdown` command from VIP SQL connection
+  * [skiplist_cache_size](Server_settings/Searchd.md#skiplist_cache_size) - Maximum size of the in-memory cache for decompressed skiplists
   * [snippets_file_prefix](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Prefix to prepend to the local file names when generating snippets in `load_files` mode
   * [sphinxql_state](Server_settings/Searchd.md#sphinxql_state) - Path to file where the current SQL state will be serialized
   * [sphinxql_timeout](Server_settings/Searchd.md#sphinxql_timeout) - Maximum time to wait between requests from a MySQL client
@@ -512,13 +540,17 @@ To be put in the `searchd {}` section of the configuration file:
 ```bash
 searchd [OPTIONS]
 ```
+* [--check](Starting_the_server/Manually.md#searchd-command-line-options) - Checks the configuration file and exits
 * [--config, -c](Starting_the_server/Manually.md#searchd-command-line-options) - Specifies the path to the configuration file
 * [--console](Starting_the_server/Manually.md#searchd-command-line-options) - Forces the server to run in console mode
 * [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - Enables core dump saving upon crash
 * [--cpustats](Starting_the_server/Manually.md#searchd-command-line-options) - Enables CPU time reporting
+* [--auth](Starting_the_server/Manually.md#searchd-command-line-options) - Runs interactive authentication bootstrap mode
+* [--auth-non-interactive](Starting_the_server/Manually.md#searchd-command-line-options) - Runs authentication bootstrap mode using stdin
 * [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - Removes the Manticore service from Microsoft Management Console and other locations where services are registered
 * [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - Prevents the server from serving incoming connections until table files are pre-read
 * [--help, -h](Starting_the_server/Manually.md#searchd-command-line-options) - Displays all available parameters
+* [--quiet, -q](Starting_the_server/Manually.md#searchd-command-line-options) - Only print errors on startup
 * [--table (--index)](Starting_the_server/Manually.md#searchd-command-line-options) - Restricts the server to serve only the specified table
 * [--install](Starting_the_server/Manually.md#searchd-command-line-options) - Installs searchd as a service in Microsoft Management Console
 * [--iostats](Starting_the_server/Manually.md#searchd-command-line-options) - Enables input/output reporting
@@ -604,7 +636,7 @@ spelldump [options] <dictionary> <affix> [result] [locale-name]
 A comprehensive alphabetical list of keywords currently reserved in Manticore SQL syntax (thus, they cannot be used as identifiers).
 
 ```
-AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
+AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, HYBRID_MATCH, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TOKEN, TRUE
 ```
 
 ## Documentation for old Manticore versions
@@ -660,5 +692,11 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [13.11.0](https://manual.manticoresearch.com/manticore-13-11-0/). [Installation page](https://manticoresearch.com/install-13.11.0/)
 * [13.11.1](https://manual.manticoresearch.com/manticore-13-11-1/). [Installation page](https://manticoresearch.com/install-13.11.1/)
 * [13.13.0](https://manual.manticoresearch.com/manticore-13-13-0/). [Installation page](https://manticoresearch.com/install-13.13.0/)
+* [14.1.0](https://manual.manticoresearch.com/manticore-14-1-0/). [Installation page](https://manticoresearch.com/install-14.1.0/)
+* [15.1.0](https://manual.manticoresearch.com/manticore-15-1-0/). [Installation page](https://manticoresearch.com/install-15.1.0/)
+* [17.5.1](https://manual.manticoresearch.com/manticore-17-5-1/). [Installation page](https://manticoresearch.com/install-17.5.1/)
+* [25.0.0](https://manual.manticoresearch.com/manticore-25-0-0/). [Installation page](https://manticoresearch.com/install-25.0.0/)
+* [27.1.5](https://manual.manticoresearch.com/manticore-27-1-5/). [Installation page](https://manticoresearch.com/install-27.1.5/)
+* [28.6.6](https://manual.manticoresearch.com/manticore-28-6-6/). [Installation page](https://manticoresearch.com/install-28.6.6/)
+* [29.0.2](https://manual.manticoresearch.com/manticore-29-0-2/). [Installation page](https://manticoresearch.com/install-29.0.2/)
 <!-- proofread -->
-

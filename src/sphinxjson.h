@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2011-2016, Andrew Aksyonoff
 // Copyright (c) 2011-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -388,7 +388,15 @@ public:
 /// parse JSON, convert it into SphinxBSON blob
 bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, bool bCheckSize, CSphString & sError );
 bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, bool bCheckSize, StringBuilder_c & sMsg );
-bool sphJsonParse ( CSphVector<BYTE> & dData, const CSphString& sFileName, CSphString & sError );
+
+enum class JsonFileParse_e
+{
+	OK,
+	FORMAT_ERROR,	///< complete file read, but JSON parsing failed
+	READ_ERROR		///< file size, open, or complete read failed
+};
+
+JsonFileParse_e sphJsonParse ( CSphVector<BYTE> & dData, const CSphString& sFileName, CSphString & sError );
 
 /// convert SphinxBSON blob back to JSON document
 void sphJsonFormat ( JsonEscapedBuilder & dOut, const BYTE * pData );
@@ -413,7 +421,7 @@ ESphJsonType sphJsonFindByKey ( ESphJsonType eType, const BYTE ** ppValue, const
 ESphJsonType sphJsonFindByIndex ( ESphJsonType eType, const BYTE ** ppValue, int iIndex );
 
 /// extract object part from the name; return false if not JSON name. szIndex is the possible name of joined index
-bool sphJsonNameSplit ( const char * szName, const char * szIndex = nullptr, CSphString * pColumn = nullptr );
+bool sphJsonNameSplit ( const char * szName, const char * szIndex = nullptr, CSphString * pColumn = nullptr, bool * pIndexPrefix = nullptr );
 
 /// compute node size, in bytes
 /// returns -1 when data itself is required to compute the size, but pData is NULL
@@ -660,7 +668,8 @@ public:
 	// helpers
 	inline ESphJsonType GetType() const { return m_dData.second; }
 	operator NodeHandle_t () const { return m_dData; }
-	const char * sError () const;
+	const char * Error () const;
+	bool HasError () const;
 };
 
 // iterate over Bson_c
@@ -1020,4 +1029,3 @@ void PushJsonFieldPtr ( const BYTE * pVal, ESphJsonType eJson, PUSH && fnPush )
 }
 
 #endif // _sphinxjson_
-

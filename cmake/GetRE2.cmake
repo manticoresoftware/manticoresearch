@@ -1,5 +1,5 @@
 #=============================================================================
-# Copyright 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+# Copyright 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 #
 # Distributed under the OSI-approved BSD License (the "License");
 # see accompanying file Copyright.txt for details.
@@ -40,8 +40,17 @@ function ( PATCH_GIT RESULT RE2_SRC )
 	if (NOT GIT_EXECUTABLE)
 		return ()
 	endif ()
-	execute_process ( COMMAND "${GIT_EXECUTABLE}" apply libre2.patch WORKING_DIRECTORY "${RE2_SRC}" )
-	set ( ${RESULT} TRUE PARENT_SCOPE )
+	execute_process (
+		COMMAND "${GIT_EXECUTABLE}" apply libre2.patch
+		WORKING_DIRECTORY "${RE2_SRC}"
+		RESULT_VARIABLE PATCH_RESULT
+		ERROR_VARIABLE PATCH_ERROR
+	)
+	if (PATCH_RESULT EQUAL 0)
+		set ( ${RESULT} TRUE PARENT_SCOPE )
+	else ()
+		message ( STATUS "git apply libre2.patch failed: ${PATCH_ERROR}" )
+	endif ()
 endfunction ()
 
 function ( PATCH_PATCH RESULT RE2_SRC )
@@ -49,8 +58,17 @@ function ( PATCH_PATCH RESULT RE2_SRC )
 	if (NOT PATCH_PROG)
 		return ()
 	endif ()
-	execute_process ( COMMAND "${PATCH_PROG}" -p1 --binary -i libre2.patch WORKING_DIRECTORY "${RE2_SRC}" )
-	set ( ${RESULT} TRUE PARENT_SCOPE )
+	execute_process (
+		COMMAND "${PATCH_PROG}" -p1 --binary -i libre2.patch
+		WORKING_DIRECTORY "${RE2_SRC}"
+		RESULT_VARIABLE PATCH_RESULT
+		ERROR_VARIABLE PATCH_ERROR
+	)
+	if (PATCH_RESULT EQUAL 0)
+		set ( ${RESULT} TRUE PARENT_SCOPE )
+	else ()
+		message ( STATUS "patch -p1 --binary -i libre2.patch failed: ${PATCH_ERROR}" )
+	endif ()
 endfunction ()
 
 # cb to finalize RE2 sources (patch, add cmake)

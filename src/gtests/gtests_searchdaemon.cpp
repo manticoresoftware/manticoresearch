@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -15,7 +15,11 @@
 #include "sphinxint.h"
 #include "searchdaemon.h"
 #include "searchdha.h"
+#include "searchdssl.h"
 #include "searchdreplication.h"
+#include "searchdddl.h"
+#include "replication/wsrep_cxx.h"
+#include "replication/cluster_binlog.h"
 
 
 // QueryStatElement_t uses default ctr with inline initializer;
@@ -32,6 +36,196 @@ TEST ( functions, QueryStatElement_t_ctr )
 	ASSERT_EQ ( tElem.m_dData[TYPE_95], 0 );
 	ASSERT_EQ ( tElem.m_dData[TYPE_99], 0 );
 }
+
+TEST ( functions, ServedStatsConcurrentCalculations )
+{
+	// Default TDigest compression is 200, so BufferLimit() is 1600.
+	// Stop one sample before the automatic flush, then make many readers
+	// calculate percentiles at once. CalculateQueryStats() must serialize this
+	// because TDigest_c::Percentile() can flush/mutate buffered centroids.
+	constexpr int QUERY_STATS_BEFORE_FLUSH = 1599;
+	constexpr int CONCURRENT_READERS = 64;
+	constexpr int ROUNDS = 8;
+
+	ServedStats_c tStats;
+
+	for ( int iRound = 0; iRound < ROUNDS; ++iRound )
+	{
+		for ( int i = 0; i < QUERY_STATS_BEFORE_FLUSH; ++i )
+			tStats.AddQueryStat ( ( i + iRound ) % 31, ( i * 7 + iRound ) % 1000 );
+
+		std::atomic<int> iReady { 0 };
+		std::atomic<bool> bStart { false };
+		std::atomic<int> iDone { 0 };
+		std::atomic<bool> bBadStats { false };
+		std::mutex tDoneMutex;
+		std::condition_variable tDoneCv;
+		std::vector<std::thread> dThreads;
+		dThreads.reserve ( CONCURRENT_READERS );
+
+		for ( int i = 0; i < CONCURRENT_READERS; ++i )
+		{
+			dThreads.emplace_back ( [&] {
+				iReady.fetch_add ( 1, std::memory_order_release );
+				while ( !bStart.load ( std::memory_order_acquire ) )
+					std::this_thread::yield();
+
+				QueryStats_t tRowsFoundStats;
+				QueryStats_t tQueryTimeStats;
+				tStats.CalculateQueryStats ( tRowsFoundStats, tQueryTimeStats );
+
+				const uint64_t uExpectedQueries = uint64_t ( iRound + 1 ) * QUERY_STATS_BEFORE_FLUSH;
+				if ( tRowsFoundStats.m_dStats[QueryStats::INTERVAL_ALLTIME].m_uTotalQueries != uExpectedQueries ||
+					tQueryTimeStats.m_dStats[QueryStats::INTERVAL_ALLTIME].m_uTotalQueries != uExpectedQueries )
+					bBadStats.store ( true, std::memory_order_release );
+
+				{
+					std::lock_guard<std::mutex> tGuard ( tDoneMutex );
+					iDone.fetch_add ( 1, std::memory_order_release );
+				}
+				tDoneCv.notify_one();
+			} );
+		}
+
+		while ( iReady.load ( std::memory_order_acquire ) != CONCURRENT_READERS )
+			std::this_thread::yield();
+
+		bStart.store ( true, std::memory_order_release );
+
+		{
+			std::unique_lock<std::mutex> tLock ( tDoneMutex );
+			ASSERT_TRUE ( tDoneCv.wait_for ( tLock, std::chrono::seconds ( 30 ), [&] {
+				return iDone.load ( std::memory_order_acquire ) == CONCURRENT_READERS;
+			} ) );
+		}
+
+		for ( auto & tThread : dThreads )
+			tThread.join();
+
+		ASSERT_FALSE ( bBadStats.load ( std::memory_order_acquire ) );
+	}
+}
+
+TEST ( functions, SecretEqual )
+{
+	BYTE dA[] = { 1, 2, 3, 4 };
+	BYTE dB[] = { 1, 2, 3, 4 };
+	BYTE dDiff[] = { 1, 2, 3, 5 };
+	BYTE dShort[] = { 1, 2, 3 };
+	BYTE dLong[] = { 1, 2, 3, 4, 5 };
+
+	EXPECT_TRUE ( SecretEqual ( VecTraits_T<BYTE> ( dA, sizeof ( dA ) ), VecTraits_T<BYTE> ( dB, sizeof ( dB ) ) ) );
+	EXPECT_FALSE ( SecretEqual ( VecTraits_T<BYTE> ( dA, sizeof ( dA ) ), VecTraits_T<BYTE> ( dDiff, sizeof ( dDiff ) ) ) );
+	EXPECT_FALSE ( SecretEqual ( VecTraits_T<BYTE> ( dA, sizeof ( dA ) ), VecTraits_T<BYTE> ( dShort, sizeof ( dShort ) ) ) );
+	EXPECT_FALSE ( SecretEqual ( VecTraits_T<BYTE> ( dA, sizeof ( dA ) ), VecTraits_T<BYTE> ( dLong, sizeof ( dLong ) ) ) );
+	EXPECT_FALSE ( SecretEqual ( VecTraits_T<BYTE>(), VecTraits_T<BYTE>() ) );
+}
+
+TEST ( functions, ParseUnicodeIndexList )
+{
+	StrVec_t dIndexes;
+	ParseIndexList ( " 搜索表 , 商品表.分片,	ascii_table-1 ", dIndexes );
+
+	ASSERT_EQ ( dIndexes.GetLength(), 3 );
+	EXPECT_STREQ ( dIndexes[0].cstr(), "搜索表" );
+	EXPECT_STREQ ( dIndexes[1].cstr(), "商品表.分片" );
+	EXPECT_STREQ ( dIndexes[2].cstr(), "ascii_table-1" );
+}
+
+
+static bool ParseDdlForTest ( const CSphString & sQuery, CSphString & sError )
+{
+	CSphVector<char> dQuery ( sQuery.Length()+2 );
+	memcpy ( dQuery.Begin(), sQuery.cstr(), sQuery.Length() );
+	dQuery[sQuery.Length()] = '\0';
+	dQuery[sQuery.Length()+1] = '\0';
+	CSphVector<SqlStmt_t> dStmt;
+	return ParseDdl ( { dQuery.Begin(), sQuery.Length() }, dStmt, sError );
+}
+
+
+TEST ( functions, DdlGenericIdentifiersValidateUtf8 )
+{
+	CSphString sError;
+	EXPECT_TRUE ( ParseDdlForTest ( "CREATE FUNCTION функция RETURNS INT SONAME 'missing.so'", sError ) ) << sError.cstr();
+
+	std::string sMaxTable = "CREATE TABLE `" + std::string ( SPH_MAX_TABLE_NAME_BYTES, 'a' ) + "` (body text)";
+	EXPECT_TRUE ( ParseDdlForTest ( sMaxTable.c_str(), sError ) ) << sError.cstr();
+	sMaxTable.insert ( sMaxTable.find ( '`' )+1, 1, 'a' );
+	sError = "";
+	EXPECT_FALSE ( ParseDdlForTest ( sMaxTable.c_str(), sError ) );
+
+	sError = "";
+	EXPECT_FALSE ( ParseDdlForTest ( "CREATE TABLE `123` (body text)", sError ) );
+	sError = "";
+	EXPECT_FALSE ( ParseDdlForTest ( "CREATE TABLE valid (`456` text)", sError ) );
+
+	const char * dCompatibleColumnQueries[] =
+	{
+		"CREATE TABLE logs (@timestamp TIMESTAMP, @version STRING)",
+		"CREATE TABLE logs_quoted (`@timestamp` TIMESTAMP, `@version` STRING)",
+		"CREATE TABLE logs_mixed (@TIMESTAMP TIMESTAMP, `@Version` STRING)",
+		"CREATE TABLE logs_bit (@timestamp BIT(1))",
+		"ALTER TABLE logs ADD COLUMN @timestamp TIMESTAMP",
+		"ALTER TABLE logs ADD COLUMN @timestamp BIT(1)",
+		"ALTER TABLE logs MODIFY COLUMN @timestamp BIGINT",
+		"ALTER TABLE logs MODIFY COLUMN @version API_KEY='secret'",
+		"ALTER TABLE logs MODIFY COLUMN @version API_URL='http://127.0.0.1'",
+		"ALTER TABLE logs MODIFY COLUMN @version API_TIMEOUT='1s'",
+		"ALTER TABLE logs DROP COLUMN @version",
+		"ALTER TABLE logs REBUILD EMBEDDINGS @version"
+	};
+	for ( const char * szQuery : dCompatibleColumnQueries )
+	{
+		sError = "";
+		EXPECT_TRUE ( ParseDdlForTest ( szQuery, sError ) ) << szQuery << ": " << sError.cstr();
+	}
+
+	const char * dRejectedAtQueries[] =
+	{
+		"CREATE TABLE logs (@user_field STRING)",
+		"CREATE TABLE logs (`@uuid_id` STRING)",
+		"CREATE TABLE logs (@timestampx TIMESTAMP)",
+		"CREATE TABLE logs (@version2 STRING)",
+		"CREATE TABLE @timestamp (body TEXT)",
+		"CREATE FUNCTION @timestamp RETURNS INT SONAME 'missing.so'"
+	};
+	for ( const char * szQuery : dRejectedAtQueries )
+	{
+		sError = "";
+		EXPECT_FALSE ( ParseDdlForTest ( szQuery, sError ) ) << szQuery;
+	}
+
+	std::string sMaxSystem = "CREATE TABLE system.`" + std::string ( SPH_MAX_TABLE_NAME_BYTES + SPH_MAX_GENERATED_TABLE_SUFFIX_BYTES, 'a' ) + "` (body text)";
+	sError = "";
+	EXPECT_TRUE ( ParseDdlForTest ( sMaxSystem.c_str(), sError ) ) << sError.cstr();
+	sMaxSystem.insert ( sMaxSystem.find ( '`' )+1, 1, 'a' );
+	sError = "";
+	EXPECT_FALSE ( ParseDdlForTest ( sMaxSystem.c_str(), sError ) );
+
+	// U+200B ZERO WIDTH SPACE is encoded explicitly in every rejected identifier.
+	const char * dUnsafe[] =
+	{
+		"CREATE FUNCTION bad" "\xE2\x80\x8B" "name RETURNS INT SONAME 'missing.so'",
+		"CREATE PLUGIN bad" "\xE2\x80\x8B" "name TYPE 'ranker' SONAME 'missing.so'",
+		"CREATE CLUSTER bad" "\xE2\x80\x8B" "name",
+		"JOIN CLUSTER bad" "\xE2\x80\x8B" "name"
+	};
+	for ( const char * szQuery : dUnsafe )
+	{
+		sError = "";
+		EXPECT_FALSE ( ParseDdlForTest ( szQuery, sError ) ) << szQuery;
+		EXPECT_NE ( strstr ( sError.cstr(), "unsafe Unicode character U+200B" ), nullptr ) << sError.cstr();
+	}
+
+	std::string sMalformed = "CREATE FUNCTION bad";
+	sMalformed.push_back ( (char)0x80 );
+	sMalformed += "name RETURNS INT SONAME 'missing.so'";
+	sError = "";
+	EXPECT_FALSE ( ParseDdlForTest ( sMalformed.c_str(), sError ) );
+	EXPECT_NE ( strstr ( sError.cstr(), "invalid UTF-8 in identifier" ), nullptr ) << sError.cstr();
+}
+
 
 class tstlogger
 {
@@ -115,6 +309,25 @@ protected:
 void SetStderrLogger()
 {
 	tstlogger::SetStderrLogger ();
+}
+
+
+TEST ( replication, cluster_binlog_long_datadir_uses_short_hash_name )
+{
+#if _WIN32
+	GTEST_SKIP() << "SharedMemory_c is unsupported on Windows";
+#else
+	const CSphString sDataDir { "/tmp/123456789012345678901234567" };
+	ReplicationBinlogStart ( sDataDir, false );
+	AT_SCOPE_EXIT ( [] { ReplicationBinlogStop(); } );
+
+	ClusterBinlogData_c tCluster;
+	tCluster.m_sName = "long_path_cluster";
+	tCluster.m_tGtid.m_iSeqNo = 1;
+	memset ( tCluster.m_tGtid.m_tUuid.data(), 0x11, tCluster.m_tGtid.m_tUuid.size() );
+
+	EXPECT_NO_FATAL_FAILURE ( RplBinlog()->OnClusterSynced ( tCluster ) );
+#endif
 }
 
 // check how ParseAddressPort holds different cases
@@ -824,4 +1037,48 @@ TEST_F ( DeathLogger_c, ParseListener_wrong_port )
 		ParseListener ( sCase.sSpec, &sFatal );
 		EXPECT_STREQ ( "port 65536 is out of range", sFatal.cstr() );
 	}
+}
+
+TEST ( PersistentConnectionsPool, functionality )
+{
+	PersistentConnectionsPool_c dPool;
+	dPool.ReInit ( 10 );
+	int iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	dPool.ReturnConnection(13);
+	dPool.ReturnConnection(15);
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, 13 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, 15 );
+	dPool.ReturnConnection(17);
+	dPool.ReturnConnection(16);
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, 17 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, 16 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+
+	// limit (10 buckets) exhaused
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -2 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -2 );
 }

@@ -76,6 +76,48 @@ download_package() {
 	exit 1
 }
 
+
+download_package_by_sha() {
+    package="$1"
+    sha="$2"
+    url=$(bash ../dist/resolve_repo_artifact.sh --repo-type dev --distr jammy --arch amd64 --package "$package" --sha "$sha" --extension .deb)
+    file_name="${url##*/}"
+    mkdir -p ../build
+    wget -q -O "../build/${file_name}" "$url"
+}
+
+
+extract_mcl_artifacts() {
+    local base_dir="$1"
+    [ -d "$base_dir" ] || return 0
+
+    while IFS= read -r artifact; do
+        tar -xf "$artifact" -C "$(dirname "$artifact")"
+    done < <(find "$base_dir" -type f -name 'artifact.tar' | sort)
+}
+
+find_local_mcl_package() {
+    local candidate_dirs=(../mcl-package ../.mcl-package-cache)
+    local dir
+
+    for dir in "${candidate_dirs[@]}"; do
+        [ -d "$dir" ] || continue
+        extract_mcl_artifacts "$dir"
+        pkg=$(find "$dir" -type f -name 'manticore-columnar-lib_*_amd64.deb' | head -n 1)
+        if [ -n "$pkg" ]; then
+            echo "$pkg"
+            return 0
+        fi
+    done
+}
+
+LOCAL_MCL_PACKAGE=$(find_local_mcl_package)
+if [ -n "$LOCAL_MCL_PACKAGE" ]; then
+    echo "Using local MCL package artifact: $LOCAL_MCL_PACKAGE"
+    mkdir -p ../build
+    cp "$LOCAL_MCL_PACKAGE" ../build/
+fi
+
 # Read deps.txt line by line
 while read -r line
 do
@@ -84,6 +126,11 @@ do
 	# Break if the line contains "---"
 	if [[ $line == "---" ]]; then
 		break
+	fi
+
+	if [[ "$line" =~ ^galera[[:space:]] ]]; then
+		echo "Skipping galera: no need to handle it explicitly"
+		continue
 	fi
 
     if [[ "$line" =~ ^([^[:space:]]+)[[:space:]]+([^[:space:]]+)\+([0-9]+)-([a-f0-9]+)(-?[a-zA-Z0-9]+)?$ ]]; then
@@ -139,6 +186,10 @@ do
 			arch="all"
 			;;
 		mcl)
+			if [ -n "$LOCAL_MCL_PACKAGE" ]; then
+				echo "Skipping repo download for mcl because local package artifact is present"
+				continue
+			fi
 			package="manticore-columnar-lib"
 			arch="amd64"
 			;;
@@ -163,6 +214,12 @@ do
 	fi
 done < ../deps.txt
 
+if [ -z "$LOCAL_MCL_PACKAGE" ]; then
+    MCL_COMMIT_SHA=$(git -C ../mcl rev-parse --short=8 HEAD)
+    echo "Downloading MCL package for submodule sha: $MCL_COMMIT_SHA"
+    download_package_by_sha "manticore-columnar-lib" "$MCL_COMMIT_SHA"
+fi
+
 # we want to build the image based on specific packages, copying them from a directory coming from an artifact of a previous job
 deb_dir=$(realpath ../build/)
 
@@ -184,7 +241,7 @@ docker exec manticore-test-kit bash -c \
 
 # Install deps and add manticore-executor-dev to the container
 docker exec manticore-test-kit bash -c \
-	'echo "apt list before update" && apt list --installed|grep manticore && apt-get -y update && echo "apt list after update" && apt list --installed|grep manticore && apt-get -y install manticore-galera && apt-get -y remove manticore-repo manticore && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && dpkg -i --force-confnew /build/*.deb && apt-get install -y libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash && apt-get clean -y'
+	'echo "apt list before update" && apt list --installed|grep manticore && apt-get -y update && echo "apt list after update" && apt list --installed|grep manticore && apt-get -y install manticore-galera && apt-get -y remove manticore-repo && apt-get update -y && rm -f /build/manticore_*.deb && dpkg -i --force-confnew /build/*.deb && apt-get install -y libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash && apt-get clean -y'
 
 docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
 
@@ -211,6 +268,13 @@ docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
 
 docker exec manticore-test-kit bash -c \
     "md5sum /etc/manticoresearch/manticore.conf | awk '{print \$1}' > /manticore.conf.md5"
+
+# Copy the parent directory to /manticore/ inside the container
+parent_dir=$(realpath ..)
+echo "Copying $parent_dir to /manticore/ in the container"
+docker exec manticore-test-kit mkdir -p /manticore
+docker cp "$parent_dir" manticore-test-kit:/tmp/manticore_parent
+docker exec manticore-test-kit bash -c "shopt -s dotglob && cp -r /tmp/manticore_parent/* /manticore/ && rm -rf /tmp/*"
 
 echo "Exporting image to ../manticore_test_kit.img"
 

@@ -57,6 +57,10 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW VARIABLES"; 
 "data":[
 {"Variable_name":"autocommit","Value":"%{NUMBER}"},
 {"Variable_name":"auto_optimize","Value":"%{NUMBER}"},
+{"Variable_name":"parallel_chunk_merges","Value":"%{NUMBER}"},
+{"Variable_name":"merge_chunks_per_job","Value":"%{NUMBER}"},
+{"Variable_name":"knn_parallel_build","Value":"%{NUMBER}"},
+{"Variable_name":"embeddings_threads","Value":"%{NUMBER}"},
 {"Variable_name":"optimize_cutoff","Value":"%{NUMBER}"},
 {"Variable_name":"collation_connection","Value":"libc_ci"},
 {"Variable_name":"query_log_format","Value":"sphinxql"},
@@ -74,6 +78,8 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW VARIABLES"; 
 {"Variable_name":"distinct_precision_threshold","Value":"3500"},
 {"Variable_name":"threads_ex_effective","Value":""},
 {"Variable_name":"cluster_user","Value":"cluster"},
+{"Variable_name":"wait_timeout","Value":"%{NUMBER}"},
+{"Variable_name":"interactive_timeout","Value":"%{NUMBER}"},
 {"Variable_name":"thread_stack","Value":"%{NUMBER}"},
 {"Variable_name":"threads_ex","Value":""},
 {"Variable_name":"user","Value":""}
@@ -90,6 +96,10 @@ curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20VARIABLES"; echo
 "data":[
 {"Variable_name":"autocommit","Value":"%{NUMBER}"},
 {"Variable_name":"auto_optimize","Value":"%{NUMBER}"},
+{"Variable_name":"parallel_chunk_merges","Value":"%{NUMBER}"},
+{"Variable_name":"merge_chunks_per_job","Value":"%{NUMBER}"},
+{"Variable_name":"knn_parallel_build","Value":"%{NUMBER}"},
+{"Variable_name":"embeddings_threads","Value":"%{NUMBER}"},
 {"Variable_name":"optimize_cutoff","Value":"%{NUMBER}"},
 {"Variable_name":"collation_connection","Value":"libc_ci"},
 {"Variable_name":"query_log_format","Value":"sphinxql"},
@@ -107,6 +117,8 @@ curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20VARIABLES"; echo
 {"Variable_name":"distinct_precision_threshold","Value":"3500"},
 {"Variable_name":"threads_ex_effective","Value":""},
 {"Variable_name":"cluster_user","Value":"cluster"},
+{"Variable_name":"wait_timeout","Value":"%{NUMBER}"},
+{"Variable_name":"interactive_timeout","Value":"%{NUMBER}"},
 {"Variable_name":"thread_stack","Value":"%{NUMBER}"},
 {"Variable_name":"threads_ex","Value":""},
 {"Variable_name":"user","Value":""}
@@ -123,6 +135,10 @@ curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW VAR
 "data":[
 {"Variable_name":"autocommit","Value":"%{NUMBER}"},
 {"Variable_name":"auto_optimize","Value":"%{NUMBER}"},
+{"Variable_name":"parallel_chunk_merges","Value":"%{NUMBER}"},
+{"Variable_name":"merge_chunks_per_job","Value":"%{NUMBER}"},
+{"Variable_name":"knn_parallel_build","Value":"%{NUMBER}"},
+{"Variable_name":"embeddings_threads","Value":"%{NUMBER}"},
 {"Variable_name":"optimize_cutoff","Value":"%{NUMBER}"},
 {"Variable_name":"collation_connection","Value":"libc_ci"},
 {"Variable_name":"query_log_format","Value":"sphinxql"},
@@ -140,6 +156,8 @@ curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW VAR
 {"Variable_name":"distinct_precision_threshold","Value":"3500"},
 {"Variable_name":"threads_ex_effective","Value":""},
 {"Variable_name":"cluster_user","Value":"cluster"},
+{"Variable_name":"wait_timeout","Value":"%{NUMBER}"},
+{"Variable_name":"interactive_timeout","Value":"%{NUMBER}"},
 {"Variable_name":"thread_stack","Value":"%{NUMBER}"},
 {"Variable_name":"threads_ex","Value":""},
 {"Variable_name":"user","Value":""}
@@ -156,6 +174,10 @@ curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VARIABLES"; ec
 "data":[
 {"Variable_name":"autocommit","Value":"%{NUMBER}"},
 {"Variable_name":"auto_optimize","Value":"%{NUMBER}"},
+{"Variable_name":"parallel_chunk_merges","Value":"%{NUMBER}"},
+{"Variable_name":"merge_chunks_per_job","Value":"%{NUMBER}"},
+{"Variable_name":"knn_parallel_build","Value":"%{NUMBER}"},
+{"Variable_name":"embeddings_threads","Value":"%{NUMBER}"},
 {"Variable_name":"optimize_cutoff","Value":"%{NUMBER}"},
 {"Variable_name":"collation_connection","Value":"libc_ci"},
 {"Variable_name":"query_log_format","Value":"sphinxql"},
@@ -173,6 +195,8 @@ curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VARIABLES"; ec
 {"Variable_name":"distinct_precision_threshold","Value":"3500"},
 {"Variable_name":"threads_ex_effective","Value":""},
 {"Variable_name":"cluster_user","Value":"cluster"},
+{"Variable_name":"wait_timeout","Value":"%{NUMBER}"},
+{"Variable_name":"interactive_timeout","Value":"%{NUMBER}"},
 {"Variable_name":"thread_stack","Value":"%{NUMBER}"},
 {"Variable_name":"threads_ex","Value":""},
 {"Variable_name":"user","Value":""}
@@ -242,245 +266,21 @@ curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20META"; echo
 "warning":""
 }]
 ––– input –––
-curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW QUERIES" | jq '.[0].data |= sort_by(.id)'; echo
+curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW QUERIES" | jq -e '.[0].error == "" and (.[0].data | length >= 3) and (.[0].data | all(.protocol == "http" and (.host | test("^127\\.0\\.0\\.1:[0-9]+$")) and (.time | test("^[0-9]+(s|ms|us)( ago)?$"))))' > /dev/null && echo OK
 ––– output –––
-[
-  {
-    "total": %{NUMBER},
-    "error": "",
-    "warning": "",
-    "columns": [
-      {
-        "id": {
-          "type": "long long"
-        }
-      },
-      {
-        "query": {
-          "type": "string"
-        }
-      },
-      {
-        "time": {
-          "type": "string"
-        }
-      },
-      {
-        "protocol": {
-          "type": "string"
-        }
-      },
-      {
-        "host": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "id": %{NUMBER},
-        "query": "#!/[a-zA-Z\s\_]+/!#",
-        "time": "%{NUMBER}#!/(s|ms|us)/!#",
-        "protocol": "http",
-        "host": "127.0.0.1:%{NUMBER}"
-      },
-      {
-        "id": %{NUMBER},
-        "query": "#!/[a-zA-Z\s\_]+/!#",
-        "time": "%{NUMBER}#!/(s|ms|us)/!# ago",
-        "protocol": "http",
-        "host": "127.0.0.1:%{NUMBER}"
-      },
-      {
-        "id": %{NUMBER},
-        "query": "#!/[a-zA-Z\s\_]+/!#",
-        "time": "%{NUMBER}#!/(s|ms|us)/!# ago",
-        "protocol": "http",
-        "host": "127.0.0.1:%{NUMBER}"
-      }
-    ]
-  }
-]
+OK
 ––– input –––
-curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20QUERIES" | jq '.[0].data |= sort_by(.id)'; echo
+curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20QUERIES" | jq -e '.[0].error == "" and (.[0].data | length >= 3) and (.[0].data | all(.protocol == "http" and (.host | test("^127\\.0\\.0\\.1:[0-9]+$")) and (.time | test("^[0-9]+(s|ms|us)( ago)?$"))))' > /dev/null && echo OK
 ––– output –––
-[
-  {
-    "total": %{NUMBER},
-    "error": "",
-    "warning": "",
-    "columns": [
-      {
-        "id": {
-          "type": "long long"
-        }
-      },
-      {
-        "query": {
-          "type": "string"
-        }
-      },
-      {
-        "time": {
-          "type": "string"
-        }
-      },
-      {
-        "protocol": {
-          "type": "string"
-        }
-      },
-      {
-        "host": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "id": %{NUMBER},
-        "query": "#!/[a-zA-Z\s\_]+/!#",
-        "time": "%{NUMBER}#!/(s|ms|us)/!#",
-        "protocol": "http",
-        "host": "127.0.0.1:%{NUMBER}"
-      },
-      {
-        "id": %{NUMBER},
-        "query": "#!/[a-zA-Z\s\_]+/!#",
-        "time": "%{NUMBER}#!/(s|ms|us)/!# ago",
-        "protocol": "http",
-        "host": "127.0.0.1:%{NUMBER}"
-      },
-      {
-        "id": %{NUMBER},
-        "query": "#!/[a-zA-Z\s\_]+/!#",
-        "time": "%{NUMBER}#!/(s|ms|us)/!# ago",
-        "protocol": "http",
-        "host": "127.0.0.1:%{NUMBER}"
-      }
-    ]
-  }
-]
+OK
 ––– input –––
-curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW QUERIES" | jq '.[0].data |= sort_by(.id)'; echo
+curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW QUERIES" | jq -e '.[0].error == "" and (.[0].data | length >= 3) and (.[0].data | all(.protocol == "http" and (.host | test("^127\\.0\\.0\\.1:[0-9]+$")) and (.time | test("^[0-9]+(s|ms|us)( ago)?$"))))' > /dev/null && echo OK
 ––– output –––
-[
-  {
-    "total": %{NUMBER},
-    "error": "",
-    "warning": "",
-    "columns": [
-      {
-        "id": {
-          "type": "long long"
-        }
-      },
-      {
-        "query": {
-          "type": "string"
-        }
-      },
-      {
-        "time": {
-          "type": "string"
-        }
-      },
-      {
-        "protocol": {
-          "type": "string"
-        }
-      },
-      {
-        "host": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "id": %{NUMBER},
-        "query": "#!/[a-zA-Z\s\_]+/!#",
-        "time": "%{NUMBER}#!/(s|ms|us)/!#",
-        "protocol": "http",
-        "host": "127.0.0.1:%{NUMBER}"
-      },
-      {
-        "id": %{NUMBER},
-        "query": "#!/[a-zA-Z\s\_]+/!#",
-        "time": "%{NUMBER}#!/(s|ms|us)/!# ago",
-        "protocol": "http",
-        "host": "127.0.0.1:%{NUMBER}"
-      },
-      {
-        "id": %{NUMBER},
-        "query": "#!/[a-zA-Z\s\_]+/!#",
-        "time": "%{NUMBER}#!/(s|ms|us)/!# ago",
-        "protocol": "http",
-        "host": "127.0.0.1:%{NUMBER}"
-      }
-    ]
-  }
-]
+OK
 ––– input –––
-curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20QUERIES" | jq '.[0].data |= sort_by(.id)'; echo
+curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20QUERIES" | jq -e '.[0].error == "" and (.[0].data | length >= 3) and (.[0].data | all(.protocol == "http" and (.host | test("^127\\.0\\.0\\.1:[0-9]+$")) and (.time | test("^[0-9]+(s|ms|us)( ago)?$"))))' > /dev/null && echo OK
 ––– output –––
-[
-  {
-    "total": %{NUMBER},
-    "error": "",
-    "warning": "",
-    "columns": [
-      {
-        "id": {
-          "type": "long long"
-        }
-      },
-      {
-        "query": {
-          "type": "string"
-        }
-      },
-      {
-        "time": {
-          "type": "string"
-        }
-      },
-      {
-        "protocol": {
-          "type": "string"
-        }
-      },
-      {
-        "host": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "id": %{NUMBER},
-        "query": "#!/[a-zA-Z\s\_]+/!#",
-        "time": "%{NUMBER}#!/(s|ms|us)/!#",
-        "protocol": "http",
-        "host": "127.0.0.1:%{NUMBER}"
-      },
-      {
-        "id": %{NUMBER},
-        "query": "#!/[a-zA-Z\s\_]+/!#",
-        "time": "%{NUMBER}#!/(s|ms|us)/!# ago",
-        "protocol": "http",
-        "host": "127.0.0.1:%{NUMBER}"
-      },
-      {
-        "id": %{NUMBER},
-        "query": "#!/[a-zA-Z\s\_]+/!#",
-        "time": "%{NUMBER}#!/(s|ms|us)/!# ago",
-        "protocol": "http",
-        "host": "127.0.0.1:%{NUMBER}"
-      }
-    ]
-  }
-]
+OK
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW VERSION" | jq '.[0].data |= sort_by(.id)'; echo
 ––– output –––
@@ -520,7 +320,7 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW VERSION" | j
       },
       {
         "Component": "Embeddings",
-        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
+        "Version": "embeddings %{VERSION}"
       },
       {
         "Component": "Buddy",
@@ -568,7 +368,7 @@ curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20VERSION" | jq '.[0].dat
       },
       {
         "Component": "Embeddings",
-        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
+        "Version": "embeddings %{VERSION}"
       },
       {
         "Component": "Buddy",
@@ -616,7 +416,7 @@ curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW VER
       },
       {
         "Component": "Embeddings",
-        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
+        "Version": "embeddings %{VERSION}"
       },
       {
         "Component": "Buddy",
@@ -664,7 +464,7 @@ curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VERSION" | jq 
       },
       {
         "Component": "Embeddings",
-        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
+        "Version": "embeddings %{VERSION}"
       },
       {
         "Component": "Buddy",

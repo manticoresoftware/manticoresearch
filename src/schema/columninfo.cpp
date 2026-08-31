@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -29,6 +29,7 @@ bool CSphColumnInfo::operator== ( const CSphColumnInfo & rhs ) const
 {
 	return m_sName == rhs.m_sName
 		&& m_eAttrType == rhs.m_eAttrType
+		&& m_eAggrInputType == rhs.m_eAggrInputType
 		&& m_tLocator.m_iBitCount == rhs.m_tLocator.m_iBitCount
 		&& m_tLocator.m_iBitOffset == rhs.m_tLocator.m_iBitOffset
 		&& m_tLocator.m_bDynamic == rhs.m_tLocator.m_bDynamic;
@@ -86,6 +87,12 @@ bool CSphColumnInfo::IsIndexedSI() const
 bool CSphColumnInfo::IsStored() const
 {
 	return !!(m_uAttrFlags & CSphColumnInfo::ATTR_STORED);
+}
+
+
+bool CSphColumnInfo::IsUuidLinkedDocid() const
+{
+	return !!(m_uAttrFlags & CSphColumnInfo::ATTR_UUID_LINK);
 }
 
 

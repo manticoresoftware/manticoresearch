@@ -1,17 +1,31 @@
-# 紧凑表
+# 压缩表
 
-随着时间的推移，RT 表可能会碎片化成许多磁盘块和/或被已删除但尚未清理的数据污染，影响搜索性能。在这些情况下，需要进行优化。实质上，优化过程是将成对的磁盘块合并，删除以前通过 DELETE 语句删除的文档。
+随着时间的推移，RT 表可能会碎片化为多个磁盘块和/或被删除但未清除的数据污染，从而影响搜索性能。在这些情况下，需要进行优化。本质上，优化过程会合并磁盘块（N 路合并），并移除之前使用 DELETE 语句删除的文档。
 
-从 Manticore 4 开始，这个过程[默认自动发生](../Server_settings/Searchd.md#auto_optimize)。不过，也可以使用以下命令手动启动表压缩。
+从 Manticore 4 开始，此过程[默认自动执行](../Server_settings/Searchd.md#auto_optimize)。但是，您也可以使用以下命令手动启动表压缩。
 
 ## OPTIMIZE TABLE
 
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS rt;
+CREATE TABLE rt(title text);
+INSERT INTO rt(title) VALUES
+('doc one'),
+('doc two'),
+('doc three');
+-->
 <!-- example optimize -->
 ```sql
 OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
 ```
 
-`OPTIMIZE` 语句将 RT 表添加到优化队列，优化将由后台线程处理。
+`OPTIMIZE TABLE` 支持实时（RT）、[分布式](../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md)和[分片](../Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md)表。
+
+对于 RT 表，该语句会把表加入优化队列，默认由后台线程处理。对于分布式表，需要使用 `OPTION sync=1`：该命令会优化每个本地 RT 组件，以及所有已配置的远程镜像，但不包括 blackhole agents。分片表支持同样的原生同步扇出到其物理 RT 目标。`cutoff` 值会应用到每个物理 RT 目标。
+
+当 Manticore Buddy 可用时，使用 `shards` 和 `rf` 选项创建的分片表也会保留由 Buddy 处理的异步 `OPTIMIZE TABLE table_name` 形式。使用 `OPTION sync=1` 可直接在 Manticore Search 中运行原生同步扇出。
 
 <!-- intro -->
 ##### SQL:
@@ -21,17 +35,29 @@ OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
 ```sql
 OPTIMIZE TABLE rt;
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt"
+```
+
 <!-- end -->
 
-### 优化后的磁盘块数量
+### 优化的磁盘块数量
 
 <!-- example optimize_cutoff -->
 
-默认情况下，OPTIMIZE 会将 RT 表的磁盘块合并到不超过逻辑 CPU 核心数乘以 2 的数量。
+默认情况下，OPTIMIZE 会将 RT 表的磁盘块合并到小于或等于逻辑 CPU 核心数乘以 2 的数量。
 
-但是，如果表具有带有 KNN 索引的属性，则该阈值不同。在这种情况下，该阈值设置为物理 CPU 核心数除以 2，以提高 KNN 搜索性能。
+但是，如果表具有带有 KNN 索引的属性，则此阈值不同。在这种情况下，它设置为物理 CPU 核心数除以 2，以提高 KNN 搜索性能。
 
-你还可以使用 `cutoff` 选项手动控制优化后的磁盘块数量。
+请注意，当未显式设置 `optimize_cutoff` 时（既没有设置全局的 [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) 选项，也没有设置按表的 [optimize_cutoff](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#optimize_cutoff) 选项），[自动合并](../Server_settings/Searchd.md#auto_optimize) 即使计算出的默认阈值更低，也绝不会将表合并到少于 2 个磁盘块。比如在 CPU 核心较少的服务器上，尤其是 KNN 表，这种情况更常见。至少保留 2 个磁盘块可以避免反复把所有内容合并成单个块所带来的开销。若要强制自动合并到单个磁盘块，请将 `optimize_cutoff` 明确设置为 `1`。手动执行的 `OPTIMIZE ... OPTION cutoff=1` 不受此限制影响，仍然会合并到一个块。
+
+您还可以使用 `cutoff` 选项手动控制优化的磁盘块数量。
 
 其他选项包括：
 * 服务器设置 [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) 用于覆盖默认阈值
@@ -45,13 +71,25 @@ OPTIMIZE TABLE rt;
 ```sql
 OPTIMIZE TABLE rt OPTION cutoff=4;
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION cutoff=4"
+```
+
 <!-- end -->
 
 ### 前台运行
 
 <!-- example optimize_sync -->
 
-使用 `OPTION sync=1`（默认值为 0）时，命令将在返回之前等待优化过程完成。如果连接中断，优化将继续在服务器上运行。
+对于 RT 表，`sync=0` 是默认值。使用 `OPTION sync=1` 会让命令在返回前等待优化完成。如果连接中断，优化仍会继续在服务器上运行。
+
+分布式表需要 `OPTION sync=1`。分片表使用 `OPTION sync=1` 进行原生同步扇出。该命令会等待所有选定的物理目标，并在任一目标失败时报告错误；其他目标上已完成的工作不会回滚。
 
 <!-- intro -->
 ##### SQL:
@@ -61,54 +99,96 @@ OPTIMIZE TABLE rt OPTION cutoff=4;
 ```sql
 OPTIMIZE TABLE rt OPTION sync=1;
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION sync=1"
+```
+
 <!-- end -->
 
-### 限制 I/O 影响
+对于分布式表和分片表，请使用同步形式：
 
-优化可能是一个耗时且 I/O 密集的过程。为了减少影响，所有实际的合并工作均由一个特殊后台线程串行执行，`OPTIMIZE` 语句仅向其队列添加任务。此优化线程可以进行 I/O 节流，你可以通过 [rt_merge_iops](../Server_settings/Searchd.md#rt_merge_iops) 和 [rt_merge_maxiosize](../Server_settings/Searchd.md#rt_merge_maxiosize) 指令，分别控制最大 I/O 请求次数和最大 I/O 大小。
+```sql
+OPTIMIZE TABLE distributed_table OPTION sync=1, cutoff=1;
+OPTIMIZE TABLE sharded_table OPTION sync=1, cutoff=1;
+```
 
-在优化过程中，被优化的 RT 表几乎始终在线且可供搜索和更新使用。只有在一对磁盘块成功合并时，表会被短暂锁定，进行旧文件和新文件的重命名及表头更新。
+### 限制 IO 影响
+
+优化可能是一个漫长且 I/O 强度高的过程。`OPTIMIZE` 语句会将任务添加到后台工作池中。您可以使用 [parallel_chunk_merges](../Server_settings/Searchd.md#parallel_chunk_merges) 控制并行运行的任务数量，使用 [merge_chunks_per_job](../Server_settings/Searchd.md#merge_chunks_per_job) 控制每个任务合并的块数。优化工作线程可以被 I/O 限流，您可以使用 [rt_merge_iops](../Server_settings/Searchd.md#rt_merge_iops) 和 [rt_merge_maxiosize](../Server_settings/Searchd.md#rt_merge_maxiosize) 指令分别控制每秒最大 I/O 数和最大 I/O 大小。
+
+在优化期间，正在优化的 RT 表几乎始终在线，并且可用于搜索和更新。当一对磁盘块成功合并时，表会被短暂锁定，以允许重命名旧文件和新文件并更新表头。
 
 ### 优化集群表
 
-只要未禁用 [auto_optimize](../Server_settings/Searchd.md#auto_optimize)，表将自动优化。
+只要 [auto_optimize](../Server_settings/Searchd.md#auto_optimize) 未被禁用，表就会自动优化。
 
-如果你遇到了意外的 SST，或者想让集群所有节点上的表具有二进制完全相同的数据，需要：
+如果您遇到意外的 SST 或希望集群中所有节点的表二进制相同，您需要：
 1. 禁用 [auto_optimize](../Server_settings/Searchd.md#auto_optimize)。
 2. 手动优化表：
+
 <!-- example cluster_manual_drop -->
-在集群一个节点上，从集群中删除表：
+在其中一个节点上，从集群中删除表：
 <!-- request SQL -->
 ```sql
 ALTER CLUSTER mycluster DROP myindex;
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "ALTER CLUSTER mycluster DROP myindex"
+```
+
 <!-- end -->
 <!-- example cluster_manual_optimize -->
-优化该表：
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS myindex;
+CREATE TABLE myindex(title text);
+INSERT INTO myindex(title) VALUES ('cluster doc');
+-->
+优化表：
 <!-- request SQL -->
 ```sql
 OPTIMIZE TABLE myindex;
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE myindex"
+```
+
 <!-- end -->
 <!-- example cluster_manual_add -->
-将表重新添加到集群：
+将表重新添加到集群中：
 <!-- request SQL -->
 ```sql
 ALTER CLUSTER mycluster ADD myindex;
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "ALTER CLUSTER mycluster ADD myindex"
+```
+
 <!-- end -->
-表被重新添加后，优化过程中产生的新文件会被复制到集群中的其他节点。
-其他节点上的任何本地更改都将丢失。
+当表重新添加到集群中时，优化过程创建的新文件将被复制到集群中的其他节点。
+其他节点上对表的任何本地更改都将丢失。
 
-表数据的修改（插入、替换、删除、更新）应当：
+表数据修改（插入、替换、删除、更新）应：
 
-1. 推迟执行，或
-2. 定向到正在运行优化过程的节点。
+1. 延迟，或
+2. 指向正在运行优化过程的节点。
 
-请注意，在表不在集群中时，插入/替换/删除/更新命令应在 SQL 语句或 HTTP JSON 请求的 cluster 属性中去掉集群名称前缀，否则会失败。
-表重新加入集群后，必须恢复写操作并重新包含集群名称前缀，否则操作会失败。
+请注意，当表不在集群中时，插入/替换/删除/更新命令应不带集群名称前缀引用它（对于 SQL 语句或 HTTP JSON 请求中的集群属性），否则它们将失败。
+一旦表重新添加到集群中，您必须恢复对表的写入操作并再次包含集群名称前缀，否则它们将失败。
 
-搜索操作在整个过程中在任何节点上均按常规可用。
+在过程中，搜索操作在任何节点上都可以正常使用。
 
 <!-- proofread -->
-

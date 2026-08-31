@@ -32,6 +32,66 @@ mysql> SHOW QUERIES;
 2 rows in set (0.61 sec)
 ```
 
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SHOW QUERIES"
+```
+
+<!-- response JSON -->
+```
+[
+  {
+    "total": 2,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "query": {
+          "type": "string"
+        }
+      },
+      {
+        "time": {
+          "type": "string"
+        }
+      },
+      {
+        "protocol": {
+          "type": "string"
+        }
+      },
+      {
+        "host": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 111,
+        "query": "select",
+        "time": "5ms ago",
+        "protocol": "http",
+        "host": "127.0.0.1:58986"
+      },
+      {
+        "id": 96,
+        "query": "SHOW QUERIES",
+        "time": "255us",
+        "protocol": "mysql",
+        "host": "127.0.0.1:33616"
+      }
+    ]
+  }
+]
+
+```
+
 <!-- end -->
 
 Refer to [SHOW THREADS](../Node_info_and_management/SHOW_THREADS.md) if you'd like to gain insight from the perspective of the threads themselves.

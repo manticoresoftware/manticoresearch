@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -14,6 +14,7 @@
 #include "searchdtask.h"
 #include "searchdaemon.h"
 #include "coroutine.h"
+#include "daemon/notifier.h"
 
 //////////////////////////////////////////////////////////////////////////
 struct FlushState_t
@@ -50,7 +51,7 @@ static Saved_e CheckSaveIndexes ()
 				eSaveState = Saved_e::NOT_ALL;
 			}
 		}
-
+		sd::extend30s();
 	}
 
 	if ( !bDirty )

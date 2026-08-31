@@ -1,0 +1,46 @@
+Test for fuzzy search with preserve=1, distance=2, and index_exact_words=1.
+Verifies that exact matches are preserved and fuzzy candidates are correctly
+filtered when using dict='keywords' with min_infix_len and expand_keywords.
+
+––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Create table with keywords dict, min_infix_len, index_exact_words and expand_keywords
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS fuzz; CREATE TABLE fuzz (id bigint, title text) dict='keywords' min_infix_len='3' index_exact_words='1' expand_keywords='1';"
+––– output –––
+––– comment –––
+Insert one document and search with fuzzy=1, distance=2, preserve=1 - exact match should be returned
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO fuzz (id, title) VALUES (1, 'how to survive');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM fuzz WHERE MATCH('how to survive') OPTION fuzzy=1, distance=2, preserve=1;"
+––– output –––
++------+----------------+
+| id   | title          |
++------+----------------+
+|    1 | how to survive |
++------+----------------+
+––– comment –––
+Insert fuzzy candidates and re-run the same query - exact match should still rank first / be present
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO fuzz (id, title) VALUES (2, 'owto'), (3, 'hosto'), (4, 'howo');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM fuzz WHERE MATCH('how to survive') OPTION fuzzy=1, distance=2, preserve=1;"
+––– output –––
++------+----------------+
+| id   | title          |
++------+----------------+
+|    1 | how to survive |
++------+----------------+
+––– comment –––
+Disable fuzzy - only exact match should be returned
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM fuzz WHERE MATCH('how to survive') OPTION fuzzy=0;"
+––– output –––
++------+----------------+
+| id   | title          |
++------+----------------+
+|    1 | how to survive |
++------+----------------+

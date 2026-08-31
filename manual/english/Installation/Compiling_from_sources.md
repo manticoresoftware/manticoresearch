@@ -3,14 +3,14 @@
 Compiling Manticore Search from sources enables custom build configurations, such as disabling certain features or adding new patches for testing. For example, you may want to compile from sources and disable the embedded ICU in order to use a different version installed on your system that can be upgraded independently of Manticore. This is also useful if you are interested in contributing to the Manticore Search project.
 
 ## Building using CI Docker
-To prepare [official release and development packages](https://repo.manticoresearch.com/), we use Docker and a special building image. This image includes essential tooling and is designed to be used with external sysroots, so one container can build packages for all operating systems. You can build the image using the [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/cross/external_toolchain/Dockerfile) and [README](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/README.md) or use an image from [Docker Hub](https://hub.docker.com/r/manticoresearch/external_toolchain/tags). This is the easiest way to create binaries for any supported operating system and architecture. You'll also need to specify the following environment variables when running the container:
+To prepare [official release and development packages](https://repo.manticoresearch.com/), we use Docker and a special building image. This image includes essential tooling and is designed to be used with external sysroots, so one container can build packages for all operating systems. You can build the image using the [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/main/dist/build_dockers/cross/external_toolchain/Dockerfile) and [README](https://github.com/manticoresoftware/manticoresearch/blob/main/dist/build_dockers/README.md) or use an image from [Docker Hub](https://hub.docker.com/r/manticoresearch/external_toolchain/tags). This is the easiest way to create binaries for any supported operating system and architecture. You'll also need to specify the following environment variables when running the container:
 
-* `DISTR`: the target platform: `bionic`, `focal`, `jammy`, `buster`, `bullseye`, `bookworm`, `rhel7`, `rhel8`, `rhel9`, `rhel10`, `macos`, `windows`, `freebsd13`
+* `DISTR`: the target platform: `bionic`, `focal`, `jammy`, `buster`, `bullseye`, `bookworm`, `rhel8`, `rhel9`, `rhel10`, `macos`, `windows`, `freebsd13`
 * `arch`: the architecture: `x86_64`, `x64` (for Windows), `aarch64`, `arm64` (for Macos)
-* `SYSROOT_URL`: the URL to the system roots archives. You can use https://repo.manticoresearch.com/repository/sysroots unless you are building the sysroots yourself (instructions can be found [here](https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers/cross/sysroots)).
+* `SYSROOT_URL`: the URL to the system roots archives. You can use https://repo.manticoresearch.com/repository/sysroots unless you are building the sysroots yourself (instructions can be found [here](https://github.com/manticoresoftware/manticoresearch/tree/main/dist/build_dockers/cross/sysroots)).
 * Use the CI workflow files as a reference to find the other environment variables you might need to use:
-  - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/pack_publish.yml
-  - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/build_template.yml
+  - https://github.com/manticoresoftware/manticoresearch/blob/main/.github/workflows/pack_publish.yml
+  - https://github.com/manticoresoftware/manticoresearch/blob/main/.github/workflows/build_template.yml
 
 To find possible values for `DISTR` and `arch`, you can use the directory https://repo.manticoresearch.com/repository/sysroots/roots_with_zstd/ as a reference, as it includes sysroots for all supported combinations.
 
@@ -41,13 +41,12 @@ docker run -it --rm \
 -e PACK_GALERA=0 \
 -e UNITY_BUILD=1 \
 -v $(pwd):/manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-manticoresearch/external_toolchain:vcpkg331_20250114 bash
+manticoresearch/external_toolchain:vcpkg331_20260310 bash
 
 # following is to be run inside docker shell
 cd /manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/
 mkdir build && cd build
 cmake -DPACK=1 ..
-export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
 cmake --build .
 # or if you want to build packages:
 # cmake --build . --target package
@@ -78,13 +77,12 @@ docker run -it --rm \
 -e PACK_GALERA=0 \
 -e UNITY_BUILD=1 \
 -v $(pwd):/manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-manticoresearch/external_toolchain:vcpkg331_20250114 bash
+manticoresearch/external_toolchain:vcpkg331_20260310 bash
 
 # following is to be run inside docker shell
 cd /manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/
 mkdir build && cd build
 cmake -DPACK=1 ..
-export CMAKE_TOOLCHAIN_FILE=$(pwd)/../dist/build_dockers/cross/linux.cmake
 # The CPackSourceConfig.cmake file is now generated in the build directory
 cpack -G RPM --config ./CPackSourceConfig.cmake
 ```
@@ -133,22 +131,24 @@ Compiling Manticore without using the building Docker is **not recommended**, bu
 #### From git
 
 Manticore source code is [hosted on GitHub](https://github.com/manticoresoftware/manticoresearch).
-To obtain the source code, clone the repository and then check out the desired branch or tag. The branch `master` represents the main development branch. Upon release, a versioned tag is created, such as `3.6.0` and a new branch for the current release is started, in this case `manticore-3.6.0`. The head of the versioned branch after all changes is used as source to build all binary releases. For example, to take sources of version 3.6.0 you can run:
+To obtain the source code, clone the repository and then check out the desired branch or tag. The branch `main` represents the main development branch. Upon release, a versioned tag is created, such as `3.6.0` and a new branch for the current release is started, in this case `manticore-3.6.0`. The head of the versioned branch after all changes is used as source to build all binary releases. For example, to take sources of version 3.6.0 you can run:
 
 ```bash
-git clone https://github.com/manticoresoftware/manticoresearch.git
+git clone --recurse-submodules https://github.com/manticoresoftware/manticoresearch.git
 cd manticoresearch
 git checkout manticore-3.6.0
+git submodule update --init --recursive
 ```
 
 #### From archive
 
-You can download the desired code from GitHub by using the "Download ZIP" button. Both .zip and .tar.gz formats are suitable.
+Git is the recommended way to get sources because Manticore depends on the `mcl` submodule. GitHub-generated .zip and .tar.gz archives do not include submodule contents, so configuring from such an archive will fail unless you also populate the `mcl` directory with the matching [MCL](https://github.com/manticoresoftware/columnar) revision.
 
 ```bash
 wget -c https://github.com/manticoresoftware/manticoresearch/archive/refs/tags/3.6.0.tar.gz
 tar -zxf 3.6.0.tar.gz
 cd manticoresearch-3.6.0
+# Populate ./mcl with the matching columnar/MCL revision before running cmake.
 ```
 
 ### Configuring
@@ -157,10 +157,20 @@ Manticore uses CMake. Assuming you are inside the root directory of the cloned r
 
 ```bash
 mkdir build && cd build
-cmake ..
+cmake -DMCL_LOCAL_RUNTIME=OFF ..
 ```
 
 CMake will investigate available features and configure the build according to them. By default, all features are considered enabled if they are available. The script also downloads and builds some external libraries, assuming that you want to use them. Implicitly, you get support for the maximal number of features.
+
+The MCL source tree is taken from the `mcl` git submodule. The command above uses MCL API headers from that submodule, but does not build local MCL runtime modules. If the submodule is missing, CMake will stop with an error asking you to run `git submodule update --init --recursive mcl`.
+
+To also build local MCL runtime modules from the submodule, configure with:
+
+```bash
+cmake -DMCL_LOCAL_RUNTIME=ON ..
+```
+
+This builds `columnar_lib`, `secondary_index`, `knn_lib`, and the embeddings library together with Manticore. On Windows, these targets are visible in the generated Visual Studio solution. This mode requires Rust and Cargo for the embeddings library unless you provide an existing embeddings library with `-DMANTICORE_KNN_EMBEDDINGS_LIB=/path/to/lib_manticore_knn_embeddings.so` (or `.dll` on Windows).
 
 You can also configure the build explicitly with flags and options.  To enable feature `FOO` add `-DFOO=1` to the CMake call.
 To disable it, use `-DFOO=0`. If not explicitly noted, enabling a feature that is not available((such as `WITH_GALERA` on an MS Windows build)) will cause the configuration to fail with an error. Disabling a feature, apart from excluding it from the build, also disables its investigation on the system and disables the downloading/building of any related external libraries.
@@ -200,6 +210,10 @@ To disable it, use `-DFOO=0`. If not explicitly noted, enabling a feature that i
 - **FULL_SHARE_DIR** - default path where all assets are stored. It can be overridden by the environment variable `FULL_SHARE_DIR` before starting any tool that utilizes files from that folder. This is an important path as many things are expected to be found there by default. These include predefined charset tables, stopwords, manticore modules, and icu data files, all placed in that folder. The configuration script usually determines this path to be something like `/usr/share/manticore`, or `/usr/local/share/manticore`.
 - **DISTR_BUILD** - a shortcut for the options for releasing packages. This is a string value with the name of the target platform. It can be used instead of manually configuring all the options. On Debian and Redhat Linuxes, the default value might be determined by light introspection and set to a generic 'Debian' or 'RHEL'. Otherwise, the value is not defined.
 - **PACK** - an even more convenient shortcut. It reads the `DISTR` environment variable, assigns it to the **DISTR_BUILD** parameter, and then works as usual. This is very useful when building in prepared build systems, like Docker containers, where the  `DISTR` variable is set at the system level and reflects the target system for which the container is intended.
+- **MCL_LOCAL_RUNTIME** - controls whether a local non-packaging build also builds MCL runtime modules from the `mcl` submodule. Set it to `OFF` for the basic daemon build described above, or to `ON` when you also want to build local MCL runtime modules.
+- **MCL_RUNTIME_ARTIFACT_DIR** - path to a directory containing prebuilt MCL runtime modules. This is mainly used by CI tests that build or restore exact-SHA MCL artifacts and then run daemon tests against them.
+- **BUILD_EMBEDDINGS_LOCALLY** - controls whether the MCL embeddings library is built locally. For local runtime builds it defaults to `ON` unless `MANTICORE_KNN_EMBEDDINGS_LIB` is already provided.
+- **MANTICORE_KNN_EMBEDDINGS_LIB** - path to an existing embeddings library. Use this when you want to reuse a prebuilt `lib_manticore_knn_embeddings` library instead of building it with Cargo.
 - **CMAKE_INSTALL_PREFIX** (path) - where Manticore is expected to be installed. Building does not perform any installations, but it prepares the installation rules that are executed when you run the `cmake --install` command or create a package and then install it. The prefix can be changed at any time, even during installation, by invoking
   `cmake --install . --prefix /path/to/installation`. However, at config time, this variable is used to initialize the default values of  `LOCALDATADIR` and `FULL_SHARE_DIR`. For example, setting it to `/my/custom` at configure
   time will hardcode `LOCALDATADIR` as `/my/custom/var/lib/manticore/data`, and `FULL_SHARE_DIR` as
@@ -295,8 +309,7 @@ cmake .
 cmake --build . --clean-first --config RelWithDebInfo
 ```
 
-If by any reason it doesn't work, you can delete file `CMakeCache.txt` located in the build folder. After this step you
-have to run cmake again, pointing to the source folder and configuring the options.
+If by any reason it doesn't work, you can delete file `CMakeCache.txt` located in the build folder. After this step you have to run cmake again, pointing to the source folder and configuring the options.
 
 If it also doesn't help, just wipe out your build folder and begin from scratch.
 
@@ -379,4 +392,3 @@ Configured with these definitions: -DDISTR_BUILD=rhel8 -DUSE_SYSLOG=1 -DWITH_GAL
 -DFULL_SHARE_DIR=/usr/share/manticore
 ```
 <!-- proofread -->
-

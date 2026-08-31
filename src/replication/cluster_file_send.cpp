@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -12,6 +12,8 @@
 
 #include "nodes.h"
 #include "recv_state.h"
+#include "cluster_sst_progress.h"
+#include "api_reply_stream.h"
 
 class SendBuf_c
 {
@@ -231,7 +233,7 @@ bool FileReader_t::ReadChunk ( int64_t iFileOff, int iSize, StringBuilder_c& sEr
 
 void FileReader_t::LogFileSend () const
 {
-	sphLogDebugRpl ( "sending file %s (%d) to %s:%d, packets %d, timeout %d.%03d sec", m_pSyncSrc->m_dBaseNames[m_tFileSendRequest.m_iFile].cstr(), m_tFileSendRequest.m_iFile, m_pAgentDesc->m_sAddr.cstr(), m_pAgentDesc->m_iPort, m_iPackets, (int)( m_pSyncDst->m_tmTimeoutFile / 1000 ), (int)( m_pSyncDst->m_tmTimeoutFile % 1000 ) );
+	sphLogDebugRpl ( "sending file %s (%d) to %s:%d, packets %d", m_pSyncSrc->m_dBaseNames[m_tFileSendRequest.m_iFile].cstr(), m_tFileSendRequest.m_iFile, m_pAgentDesc->m_sAddr.cstr(), m_pAgentDesc->m_iPort, m_iPackets );
 }
 
 // add chunks copied from at joiner node along with data send from donor node
@@ -406,9 +408,10 @@ void FileReader_t::RetryFile ( int iRemoteFile, bool bNetError, WriteResult_e eR
 }
 
 // send file to multiple nodes by chunks as API command CLUSTER_FILE_SEND
-bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileState_t> & dDesc, const CSphString & sCluster, const CSphString & sIndex )
+bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileState_t> & dDesc, const CSphString & sCluster, const CSphString & sIndex, const CSphString & sUser, SstProgress_i & tProgress )
 {
 	StringBuilder_c tErrors ( ";" );
+	const int64_t iSstQueryTimeoutMs = ReplicationSstQueryTimeout ();
 
 	// setup buffers
 	CSphFixedVector<BYTE> dReadBuf ( tSigSrc.m_iBufferSize * dDesc.GetLength() );
@@ -437,7 +440,7 @@ bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteF
 	VecRefPtrs_t<AgentConn_t*> dNodes;
 	dNodes.Resize ( dReaders.GetLength() );
 	ARRAY_FOREACH ( i, dReaders )
-		dNodes[i] = ClusterFileSend_c::CreateAgent ( *dReaders[i].m_pAgentDesc, dReaders[i].m_pSyncDst->m_tmTimeoutFile, dReaders[i].m_tFileSendRequest );
+		dNodes[i] = ClusterFileSend_c::CreateAgent ( *dReaders[i].m_pAgentDesc, sUser, iSstQueryTimeoutMs, dReaders[i].m_tFileSendRequest );
 
 	// submit initial jobs
 	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter ( GetObserver() );
@@ -474,6 +477,9 @@ bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteF
 			if ( !tReply.m_sWarning.IsEmpty() )
 				ReportErrorSendFile ( tErrors, "'%s:%d' %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, tReply.m_sWarning.cstr() );
 
+			if ( bFileWritten )
+				tProgress.AddComplete ( tReader.m_tFileSendRequest.m_tSendBuf.Consumed() );
+
 			if ( !bFileWritten )
 			{
 				tReader.RetryFile ( tReply.m_iFile, bNetError, tReply.m_eRes, tErrors );
@@ -490,7 +496,7 @@ bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteF
 			// remove agent from main vector
 			pAgent->Release();
 
-			AgentConn_t* pNextJob = ClusterFileSend_c::CreateAgent ( *tReader.m_pAgentDesc, tReader.m_pSyncDst->m_tmTimeoutFile, tReader.m_tFileSendRequest );
+			AgentConn_t* pNextJob = ClusterFileSend_c::CreateAgent ( *tReader.m_pAgentDesc, sUser, iSstQueryTimeoutMs, tReader.m_tFileSendRequest );
 			dNodes[iAgent] = pNextJob;
 
 			VectorAgentConn_t dNewNode;
@@ -512,7 +518,7 @@ bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteF
 }
 
 // command at remote node for CLUSTER_FILE_SEND to store data into file, data size and file offset defined by sender
-void ReceiveClusterFileSend ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf )
+bool ReceiveClusterFileSend ( GenericOutputBuffer_c & tOut, InputBuffer_c & tBuf, WORD uReplyVersion, DWORD uHeartbeatIntervalMs )
 {
 	ClusterFileSendRequest_t tCmd;
 	ClusterFileSend_c::ParseRequest ( tBuf, tCmd );
@@ -522,6 +528,8 @@ void ReceiveClusterFileSend ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf )
 	auto& tState = RecvState::GetState ( tCmd.m_tWriterKey );
 
 	VecTraits_T<BYTE> dBuf ( tCmd.m_tSendBuf.Begin(), tCmd.m_tSendBuf.GetLength() );
+	ApiReplyStream_c tStream ( uHeartbeatIntervalMs, uReplyVersion, tOut );
+	tStream.Start ();
 	tRes.m_eRes = tState.Write ( tCmd.m_iFile, tCmd.m_dOps, dBuf );
 	tRes.m_iFile = tCmd.m_iFile;
 
@@ -531,7 +539,11 @@ void ReceiveClusterFileSend ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf )
 		sphWarning ( "%s", tRes.m_sWarning.cstr() );
 	}
 
-	ClusterFileSend_c::BuildReply ( tOut, tRes );
+	const bool bWireAligned = tStream.StopAndHandoff ();
 	TlsMsg::ResetErr();
-}
+	if ( !bWireAligned )
+		return false;
 
+	ClusterFileSend_c::BuildReply ( tOut, tRes );
+	return true;
+}

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -86,12 +86,12 @@ int DoclistHintUnpack ( DWORD uDocs, BYTE uHint );
 // dictionary header
 struct DictHeader_t
 {
-	int				m_iDictCheckpoints = 0;			///< how many dict checkpoints (keyword blocks) are there
+	int64_t			m_iDictCheckpoints = 0;			///< how many dict checkpoints (keyword blocks) are there
 	SphOffset_t		m_iDictCheckpointsOffset = 0;	///< dict checkpoints file position
 
 	int				m_iInfixCodepointBytes = 0;		///< max bytes per infix codepoint (0 means no infixes)
 	int64_t			m_iInfixBlocksOffset = 0;		///< infix blocks file position (stored as unsigned 32bit int as keywords dictionary is pretty small)
-	int				m_iInfixBlocksWordsSize = 0;	///< infix checkpoints size
+	int64_t			m_iInfixBlocksWordsSize = 0;	///< infix checkpoints size
 };
 
 
@@ -109,7 +109,7 @@ public:
 										~CWordlist () override;
 
 	void								Reset();
-	bool								Preread ( const CSphString & sName, bool bWordDict, int iSkiplistBlockSize, CSphString & sError );
+	bool								Preread ( const CSphString & sName, DictFormat_e eDictFormat, int iSkiplistBlockSize, CSphString & sError );
 
 	const CSphWordlistCheckpoint *		FindCheckpointCrc ( SphWordID_t iWordID ) const;
 	const CSphWordlistCheckpoint *		FindCheckpointWrd ( const char * sWord, int iWordLen, bool bStarMode ) const;
@@ -129,8 +129,9 @@ public:
 
 private:
 	bool								m_bWordDict = false;
+	DictFormat_e						m_eDictFormat = DictFormat_e::CRC;
 	CSphVector<InfixBlock_t>			m_dInfixBlocks {0};
-	CSphFixedVector<BYTE>				m_pWords {0};			///< arena for checkpoint's words
+	CSphFixedVector<BYTE>				m_dWords {0};		///< arena for checkpoint's words
 	BYTE *								m_pInfixBlocksWords = nullptr;	///< arena for infix checkpoint's words
 	int									m_iSkiplistBlockSize {0};
 
@@ -139,25 +140,28 @@ private:
 };
 
 
-/// dict=keywords block reader
-class KeywordsBlockReader_c : public DictEntry_t
+class ISphKeywordsBlockReader : public DictEntry_t
 {
 public:
-					KeywordsBlockReader_c ( const BYTE * pBuf, int iSkiplistBlockSize );
+	virtual			~ISphKeywordsBlockReader() = default;
 
-	void			Reset ( const BYTE * pBuf );
-	bool			UnpackWord();
+	virtual void	Reset ( const BYTE * pBuf ) = 0;
+	virtual bool	UnpackWord() = 0;
 
-	const char *	GetWord() const			{ return (const char*)m_sWord.data(); }
+	const char *	GetWord() const			{ return (const char*)m_szKeyword; }
 	int				GetWordLen() const		{ return m_iLen; }
 
-private:
-	const BYTE *	m_pBuf;
-	std::array<BYTE, MAX_KEYWORD_BYTES>	m_sWord;
-	int				m_iLen;
-	BYTE			m_uHint = 0;
+protected:
+					ISphKeywordsBlockReader ( int iSkiplistBlockSize )
+						: m_iSkiplistBlockSize ( iSkiplistBlockSize )
+					{}
+
+	const BYTE *	m_pBuf = nullptr;
+	int				m_iLen = 0;
 	int				m_iSkiplistBlockSize = 0;
 };
+
+std::unique_ptr<ISphKeywordsBlockReader> CreateKeywordsBlockReader ( const BYTE * pBuf, int iSkiplistBlockSize, DictFormat_e eDictFormat );
 
 // header of a disk index or chunk
 struct BuildHeader_t : public CSphSourceStats, public DictHeader_t

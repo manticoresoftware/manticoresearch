@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -36,6 +36,7 @@
 #endif
 
 #include <iomanip>
+#include <uni_algo/conv.h>
 
 #if _WIN32
 #include <codecvt>
@@ -361,8 +362,95 @@ static bool sphWildcardMatchRec ( const T1 * sString, const T2 * sPattern )
 		|| ( p[0]=='%' && p[1]=='\0' );
 }
 
-template < typename T1, typename T2 >
-static bool sphWildcardMatchDP ( const T1 * sString, const T2 * sPattern )
+WildcardBuf_t::WildcardBuf_t ( WildcardBufMode_e eMode )
+	: m_eMode ( eMode )
+{}
+
+
+static const int * DecodeWildcardUtf8 ( const char * sText, int * pStatic, CSphVector<int> & dDynamic, WildcardBufMode_e eMode, int * pLen=nullptr )
+{
+	if ( pLen )
+		*pLen = 0;
+
+	if ( !sphIsUTF8 ( sText ) )
+		return nullptr;
+
+	int iLen = 0;
+	if ( eMode==WildcardBufMode_e::Legacy )
+	{
+		iLen = sphUTF8ToWideChar ( sText, pStatic, SPH_MAX_WORD_LEN );
+		if ( pLen )
+			*pLen = iLen;
+		return iLen ? pStatic : nullptr;
+	}
+
+	const int iBytes = (int)strlen ( sText );
+	if ( iBytes<=SPH_MAX_WORD_LEN )
+	{
+		iLen = sphUTF8ToWideChar ( sText, pStatic, SPH_MAX_WORD_LEN );
+		if ( pLen )
+			*pLen = iLen;
+		return iLen ? pStatic : nullptr;
+	}
+
+	dDynamic.Resize ( iBytes+1 );
+	iLen = sphUTF8ToWideChar ( sText, dDynamic.Begin(), iBytes );
+	if ( pLen )
+		*pLen = iLen;
+	return iLen ? dDynamic.Begin() : nullptr;
+}
+
+
+const int * WildcardBuf_t::DecodePattern ( const char * sPattern )
+{
+	return DecodeWildcardUtf8 ( sPattern, m_dPattern, m_dPatternExt, m_eMode );
+}
+
+
+struct WildcardDpBufFixed_t
+{
+	int & Get ( int iBuf, int iPos )
+	{
+		return m_dTmp[iBuf][iPos];
+	}
+
+private:
+	int m_dTmp[2][MAX_KEYWORD_BYTES+1];
+};
+
+
+struct WildcardDpBufDynamic_t
+{
+	explicit WildcardDpBufDynamic_t ( CSphVector<int> & dTmp, int iBufCount, int iBufLen )
+		: m_dTmp ( dTmp )
+		, m_iBufLen ( iBufLen )
+	{
+		m_dTmp.Resize ( iBufCount*iBufLen );
+	}
+
+	int & Get ( int iBuf, int iPos )
+	{
+		return m_dTmp[iBuf*m_iBufLen+iPos];
+	}
+
+private:
+	CSphVector<int> & m_dTmp;
+	const int m_iBufLen = 0;
+};
+
+template < typename T >
+static int sphWildcardStrLen ( const T * sString )
+{
+	const T * s = sString;
+	while ( *s )
+		++s;
+
+	return int ( s-sString );
+}
+
+
+template < typename T1, typename T2, typename DPBUF >
+static bool sphWildcardMatchDPImpl ( const T1 * sString, const T2 * sPattern, DPBUF & tTmp, int iBufLenMax )
 {
 	assert ( sString && sPattern && *sString && *sPattern );
 
@@ -372,12 +460,11 @@ static bool sphWildcardMatchDP ( const T1 * sString, const T2 * sPattern )
 	int iEsc = 0;
 
 	const int iBufCount = 2;
-	const int iBufLenMax = SPH_MAX_WORD_LEN*3+4+1;
-	int dTmp [iBufCount][iBufLenMax];
-	dTmp[0][0] = 1;
-	dTmp[1][0] = 0;
+
+	tTmp.Get ( 0, 0 ) = 1;
+	tTmp.Get ( 1, 0 ) = 0;
 	for ( int i=0; i<iBufLenMax; i++ )
-		dTmp[0][i] = 1;
+		tTmp.Get ( 0, i ) = 1;
 
 	while ( *p )
 	{
@@ -398,31 +485,31 @@ static bool sphWildcardMatchDP ( const T1 * sString, const T2 * sPattern )
 		// check the 1st wildcard
 		if ( !bEsc && ( *p=='*' || *p=='%' ) )
 		{
-			dTmp[iCur][0] = dTmp[iPrev][0];
+			tTmp.Get ( iCur, 0 ) = tTmp.Get ( iPrev, 0 );
 
 		} else
 		{
-			dTmp[iCur][0] = 0;
+			tTmp.Get ( iCur, 0 ) = 0;
 		}
 
 		while ( *s )
 		{
 			const int j = int (s - sString) + 1;
-			if ( j >= iBufLenMax )
+			if ( j>=iBufLenMax )
 				return false;
 
 			if ( !bEsc && *p=='*' )
 			{
-				dTmp[iCur][j] = dTmp[iPrev][j-1] || dTmp[iCur][j-1] || dTmp[iPrev][j];
+				tTmp.Get ( iCur, j ) = tTmp.Get ( iPrev, j-1 ) || tTmp.Get ( iCur, j-1 ) || tTmp.Get ( iPrev, j );
 			} else if ( !bEsc && *p=='%' )
 			{
-				dTmp[iCur][j] = dTmp[iPrev][j-1] || dTmp[iPrev][j];
+				tTmp.Get ( iCur, j ) = tTmp.Get ( iPrev, j-1 ) || tTmp.Get ( iPrev, j );
 			} else if ( *p==*s || ( !bEsc && *p=='?' ) )
 			{
-				dTmp[iCur][j] = dTmp[iPrev][j-1];
+				tTmp.Get ( iCur, j ) = tTmp.Get ( iPrev, j-1 );
 			} else
 			{
-				dTmp[iCur][j] = 0;
+				tTmp.Get ( iCur, j ) = 0;
 			}
 			s++;
 		}
@@ -430,12 +517,31 @@ static bool sphWildcardMatchDP ( const T1 * sString, const T2 * sPattern )
 		bEsc = false;
 	}
 
-	return ( dTmp[( p-sPattern-iEsc ) % iBufCount][s-sString]!=0 );
+	return ( tTmp.Get ( ( p-sPattern-iEsc ) % iBufCount, (int)( s-sString ) )!=0 );
 }
 
 
 template < typename T1, typename T2 >
-bool sphWildcardMatchSpec ( const T1 * sString, const T2 * sPattern )
+static bool sphWildcardMatchDPLegacy ( const T1 * sString, const T2 * sPattern )
+{
+	WildcardDpBufFixed_t tTmp;
+	return sphWildcardMatchDPImpl ( sString, sPattern, tTmp, MAX_KEYWORD_BYTES+1 );
+}
+
+
+template < typename T1, typename T2 >
+static bool sphWildcardMatchDPExtended ( const T1 * sString, const T2 * sPattern, WildcardBuf_t & tBuf, int iStringLen )
+{
+	assert ( iStringLen>0 );
+
+	const int iBufCount = 2;
+	WildcardDpBufDynamic_t tTmp ( tBuf.m_dDpExt, iBufCount, iStringLen+1 );
+	return sphWildcardMatchDPImpl ( sString, sPattern, tTmp, iStringLen+1 );
+}
+
+
+template < typename T1, typename T2 >
+bool sphWildcardMatchSpec ( const T1 * sString, const T2 * sPattern, WildcardBuf_t & tBuf, int iStringLen=0 )
 {
 	int iLen = 0;
 	int iStars = 0;
@@ -448,12 +554,18 @@ bool sphWildcardMatchSpec ( const T1 * sString, const T2 * sPattern )
 	}
 
 	if ( iStars>10 || ( iStars>5 && iLen>17 ) )
-		return sphWildcardMatchDP ( sString, sPattern );
+	{
+		if ( tBuf.IsExtended() )
+			return sphWildcardMatchDPExtended ( sString, sPattern, tBuf, iStringLen ? iStringLen : sphWildcardStrLen ( sString ) );
+
+		return sphWildcardMatchDPLegacy ( sString, sPattern );
+	}
+
 	return sphWildcardMatchRec ( sString, sPattern );
 }
 
 
-bool sphWildcardMatch ( const char * sString, const char * sPattern, const int * pPattern )
+bool sphWildcardMatch ( const char * sString, const char * sPattern, const int * pPattern, WildcardBuf_t * pExtBuf )
 {
 	if ( !sString || !sPattern || !*sString || !*sPattern )
 		return false;
@@ -461,20 +573,22 @@ bool sphWildcardMatch ( const char * sString, const char * sPattern, const int *
 	// there are basically 4 codepaths, because both string and pattern may or may not contain utf-8 chars
 	// pPattern and pString are pointers to unpacked utf-8, pPattern can be precalculated (default is NULL)
 
-	int dString [ SPH_MAX_WORD_LEN + 1 ];
-	const int * pString = ( sphIsUTF8 ( sString ) && sphUTF8ToWideChar ( sString, dString, SPH_MAX_WORD_LEN ) ) ? dString : nullptr;
+	WildcardBuf_t tIntBuf;
+	WildcardBuf_t & tBuf = pExtBuf ? *pExtBuf : tIntBuf;
+	int iStringLen = 0;
+	const int * pString = DecodeWildcardUtf8 ( sString, tBuf.m_dString, tBuf.m_dStringExt, tBuf.m_eMode, &iStringLen );
 
 	if ( !pString && !pPattern )
-		return sphWildcardMatchSpec ( sString, sPattern ); // ascii vs ascii
+		return sphWildcardMatchSpec ( sString, sPattern, tBuf ); // ascii vs ascii
 
 	if ( pString && !pPattern )
-		return sphWildcardMatchSpec ( pString, sPattern ); // utf-8 vs ascii
+		return sphWildcardMatchSpec ( pString, sPattern, tBuf, iStringLen ); // utf-8 vs ascii
 
 	if ( !pString && pPattern )
-		return sphWildcardMatchSpec ( sString, pPattern ); // ascii vs utf-8
+		return sphWildcardMatchSpec ( sString, pPattern, tBuf ); // ascii vs utf-8
 
 //	if ( pString && pPattern )
-	return sphWildcardMatchSpec ( pString, pPattern ); // utf-8 vs utf-8
+	return sphWildcardMatchSpec ( pString, pPattern, tBuf, iStringLen ); // utf-8 vs utf-8
 
 //	return false; // dead, but causes warn either by compiler, either by analysis. Leave as is.
 }
@@ -874,6 +988,8 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "stopword_step",			0, NULL },
 	{ "blend_chars",			0, NULL },
 	{ "expand_keywords",		0, NULL },
+	{ "ranker",				0, NULL },
+	{ "boolean_mode",			0, NULL },
 	{ "hitless_words",			0, NULL },
 	{ "hit_format",				KEY_HIDDEN | KEY_DEPRECATED, "default value" },
 	{ "rt_field",				KEY_LIST, NULL },
@@ -881,6 +997,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "rt_attr_bigint",			KEY_LIST, NULL },
 	{ "rt_attr_float",			KEY_LIST, NULL },
 	{ "rt_attr_float_vector",	KEY_LIST, NULL },
+	{ "rt_attr_float_vector_array",	KEY_LIST, NULL },
 	{ "rt_attr_timestamp",		KEY_LIST, NULL },
 	{ "rt_attr_string",			KEY_LIST, NULL },
 	{ "rt_attr_multi",			KEY_LIST, NULL },
@@ -895,6 +1012,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "regexp_filter",			KEY_LIST, NULL },
 	{ "bigram_freq_words",		0, NULL },
 	{ "bigram_index",			0, NULL },
+	{ "bigram_delimiter",		0, NULL },
 	{ "index_field_lengths",	0, NULL },
 	{ "divide_remote_ranges",	KEY_HIDDEN, NULL },
 	{ "stopwords_unstemmed",	0, NULL },
@@ -914,6 +1032,8 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "access_doclists",		0, nullptr },
 	{ "access_hitlists",		0, nullptr },
 	{ "access_dict",			0, nullptr },
+	{ "access_columnar_attrs",	0, nullptr },
+	{ "access_secondary",		0, nullptr },
 	{ "stored_fields",			0, nullptr },
 	{ "stored_only_fields",		0, nullptr },
 	{ "docstore_block_size",	0, nullptr },
@@ -1049,6 +1169,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "access_doclists",		0, nullptr },
 	{ "access_hitlists",		0, nullptr },
 	{ "access_dict",			0, nullptr },
+	{ "access_columnar_attrs",	0, nullptr },
+	{ "access_secondary",		0, nullptr },
 	{ "docstore_cache_size",	0, nullptr },
 	{ "skiplist_cache_size",	0, nullptr },
 	{ "ssl_cert",				0, nullptr },
@@ -1091,6 +1213,16 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "kibana_version_string",		0, NULL },
 	{ "expansion_phrase_limit",	0, NULL },
 	{ "secondary_index_block_cache", 0, nullptr },
+	{ "expansion_phrase_warning",	0, NULL },
+	{ "attr_autoconv_strict",	0, NULL },
+	{ "parallel_chunk_merges",	0, nullptr },
+	{ "merge_chunks_per_job",	0, nullptr },
+	{ "knn_parallel_build",		0, nullptr },
+	{ "auth",					0, NULL },
+	{ "auth_log_level",			0, NULL },
+	{ "auth_password_policy",	0, NULL },
+	{ "auth_password_min_length",	0, NULL },
+	{ "embeddings_threads",		0, nullptr },
 	{ NULL,						0, NULL }
 };
 
@@ -1183,8 +1315,101 @@ static bool IsNamedSection ( const KeySection_t * pSection )
 	return pSection->m_szKey && pSection->m_bNamed;
 }
 
+bool sphValidateIdentifier ( const char * szName, IdentifierValidation_e eValidation, int iMaxBytes, CSphString & sError )
+{
+	bool bAllowLeadingDigit = eValidation==IdentifierValidation_e::ALLOW_LEADING_DIGIT || eValidation==IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION;
+	bool bAllowPathPunctuation = eValidation==IdentifierValidation_e::ALLOW_PATH_PUNCTUATION || eValidation==IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION;
+
+	auto IsUnsafeCodepoint = [] ( DWORD uCode )
+	{
+		return uCode<=0x1F || ( uCode>=0x7F && uCode<=0x9F ) ||
+			uCode==0x00A0 || uCode==0x00AD || uCode==0x034F || uCode==0x061C || uCode==0x1680 ||
+			( uCode>=0x115F && uCode<=0x1160 ) || ( uCode>=0x17B4 && uCode<=0x17B5 ) ||
+			( uCode>=0x180B && uCode<=0x180F ) || ( uCode>=0x2000 && uCode<=0x200F ) ||
+			( uCode>=0x2028 && uCode<=0x202F ) || ( uCode>=0x205F && uCode<=0x206F ) ||
+			uCode==0x3000 || uCode==0x3164 || ( uCode>=0xFE00 && uCode<=0xFE0F ) ||
+			uCode==0xFEFF || ( uCode>=0xFFF0 && uCode<=0xFFFB ) || uCode==0xFFA0 ||
+			( uCode>=0x1BCA0 && uCode<=0x1BCA3 ) ||
+			( uCode>=0x1D173 && uCode<=0x1D17A ) || ( uCode>=0xE0000 && uCode<=0xE0FFF );
+	};
+
+	if ( !szName || !*szName )
+	{
+		sError = "identifier is empty";
+		return false;
+	}
+
+	const BYTE * p = (const BYTE *)szName;
+	const BYTE * pEnd = p + strlen ( szName );
+	if ( iMaxBytes && pEnd-p>iMaxBytes )
+	{
+		sError.SetSprintf ( "identifier is too long (%d bytes, max=%d)", (int)( pEnd-p ), iMaxBytes );
+		return false;
+	}
+	if ( !una::is_valid_utf8 ( std::string_view ( szName, pEnd-p ) ) )
+	{
+		sError = "invalid UTF-8 in identifier";
+		return false;
+	}
+
+	bool bInternalAtName = bAllowPathPunctuation && ( !strcasecmp ( szName, "@timestamp" ) || !strcasecmp ( szName, "@version" ) || !strcasecmp ( szName, "@uuid_id" ) );
+	bool bFirst = true;
+	bool bHasNonDigit = false;
+	while ( p<pEnd )
+	{
+		DWORD uCode = sphUTF8Decode ( p );
+
+		if ( uCode<0x80 )
+		{
+			bool bLetter = ( uCode>='a' && uCode<='z' ) || ( uCode>='A' && uCode<='Z' ) || uCode=='_' || ( bFirst && uCode=='@' && bInternalAtName ) || ( bAllowPathPunctuation && !bFirst && ( uCode=='.' || uCode=='-' ) );
+			bool bDigit = uCode>='0' && uCode<='9';
+			bHasNonDigit |= !bDigit;
+			if ( !bLetter && !( bDigit && ( !bFirst || bAllowLeadingDigit ) ) )
+			{
+				sError.SetSprintf ( "invalid character '%c' in identifier", (BYTE)uCode );
+				return false;
+			}
+		}
+		else if ( IsUnsafeCodepoint ( uCode ) )
+		{
+			sError.SetSprintf ( "unsafe Unicode character U+%04X in identifier", uCode );
+			return false;
+		}
+		else
+			bHasNonDigit = true;
+
+		bFirst = false;
+	}
+
+	if ( !bHasNonDigit )
+	{
+		sError = "identifier must contain a letter, underscore, or non-ASCII character";
+		return false;
+	}
+
+	return true;
+}
+
+
+bool sphValidateTableName ( const char * szName, IdentifierValidation_e eValidation, CSphString & sError )
+{
+	static constexpr int SYSTEM_PREFIX_LEN = 7;
+	bool bSystem = szName && !strncmp ( szName, "system.", SYSTEM_PREFIX_LEN );
+	const char * szIdentifier = bSystem ? szName+SYSTEM_PREFIX_LEN : szName;
+	int iMaxBytes = SPH_MAX_TABLE_NAME_BYTES + ( bSystem ? SPH_MAX_GENERATED_TABLE_SUFFIX_BYTES : 0 );
+	return sphValidateIdentifier ( szIdentifier, eValidation, iMaxBytes, sError );
+}
+
+
 bool CSphConfigParser::AddSection ( const char * szType, const char * szSection )
 {
+	if ( ( !strcasecmp ( szType, "table" ) || !strcasecmp ( szType, "index" ) ) )
+	{
+		CSphString sError;
+		if ( !sphValidateTableName ( szSection, IdentifierValidation_e::ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION, sError ) )
+			return TlsMsg::Err ( "invalid table name '%s': %s", szSection, sError.cstr() );
+	}
+
 	m_sSectionType = szType;
 	m_sSectionName = szSection;
 
@@ -1299,8 +1524,9 @@ static bool TryToExec ( char * pExecLine, const char * szFilename, CSphVector<ch
 
 		execv ( pExecLine, (char**)dArgv.begin() );
 		exit ( 1 );
+	}
 
-	} else if ( iChild==-1 )
+	if ( iChild==-1 )
 		return Err ( "fork failed: [%d] %s", errno, strerrorm(errno) );
 
 	close ( iWrite );
@@ -1440,7 +1666,7 @@ bool CSphConfigParser::Parse ()
 	using namespace TlsMsg;
 	ResetErr();
 
-	constexpr int L_TOKEN		= 64;
+	constexpr int L_TOKEN		= SPH_MAX_TABLE_NAME_BYTES + 1;
 
 	// init parser
 	m_iLine = 0;
@@ -1455,7 +1681,7 @@ bool CSphConfigParser::Parse ()
 	DWORD uToken = 0;
 	int iCh = -1;
 
-	enum class States_e { S_TOP, S_SKIP2NL, S_TOK, S_TYPE, S_SEC, S_CHR, S_VALUE, S_SECNAME, S_SECBASE, S_KEY };
+	enum class States_e { S_TOP, S_SKIP2NL, S_TOK, S_NAMETOK, S_TYPE, S_SEC, S_CHR, S_VALUE, S_SECNAME, S_SECBASE, S_KEY };
 	auto eState = States_e::S_TOP;
 	std::array<States_e,8> eStack;
 	DWORD uStack = 0;
@@ -1467,6 +1693,7 @@ bool CSphConfigParser::Parse ()
 	auto LOC_PUSH = [&uStack, &eStack, &eState] ( States_e eNew ) { assert ( uStack<eStack.size() ); eStack[uStack++] = std::exchange(eState,eNew); };
 	auto LOC_POP = [&uStack, &eStack, &eState] { assert ( uStack > 0 ); eState = eStack[--uStack]; };
 	auto LOC_BACK = [&p] { --p; };
+	auto IsNameChar = [] ( char c ) { return (BYTE)c>=0x80 || sphIsAlpha ( c ); };
 
 	for ( ; p < pDataEnd; ++p )
 	{
@@ -1485,7 +1712,7 @@ bool CSphConfigParser::Parse ()
 		// handle S_TOP state
 		case States_e::S_TOP:
 		{
-			if ( isspace(*p) )				continue;
+			if ( isspace ( (BYTE)*p ) )	continue;
 			if ( *p=='#' )					{ LOC_PUSH ( States_e::S_SKIP2NL ); continue; }
 			if ( !sphIsAlpha(*p) )			LOC_ERROR ( "invalid token" );
 			uToken = 0;
@@ -1513,10 +1740,20 @@ bool CSphConfigParser::Parse ()
 											sToken [ uToken++ ] = *p; continue;
 		}
 
+		// handle section-name token state
+		case States_e::S_NAMETOK:
+		{
+			if ( !uToken && !IsNameChar(*p) )	LOC_ERROR ( "internal error (invalid char in S_NAMETOK pos 0)" );
+			if ( uToken==sToken.size() )		LOC_ERROR ( "token too long" );
+			if ( !IsNameChar(*p) )				{ LOC_POP (); sToken [ uToken ] = '\0'; uToken = 0; LOC_BACK(); continue; }
+			if ( !uToken )						{ sToken[0] = '\0'; }
+												sToken [ uToken++ ] = *p; continue;
+		}
+
 		// handle S_TYPE state
 		case States_e::S_TYPE:
 		{
-			if ( isspace(*p) )				continue;
+			if ( isspace ( (BYTE)*p ) )	continue;
 			if ( *p=='#' )					{ LOC_PUSH ( States_e::S_SKIP2NL ); continue; }
 			if ( !sToken[0] )				{ LOC_ERROR ( "internal error (empty token in S_TYPE)" ); }
 
@@ -1550,7 +1787,7 @@ bool CSphConfigParser::Parse ()
 		// handle S_CHR state
 		case States_e::S_CHR:
 		{
-			if ( isspace(*p) )				continue;
+			if ( isspace ( (BYTE)*p ) )	continue;
 			if ( *p=='#' )					{ LOC_PUSH ( States_e::S_SKIP2NL ); continue; }
 			if ( *p!=iCh )					LOC_ERROR ( "expected '%c', got '%c'", iCh, *p );
 											LOC_POP (); continue;
@@ -1559,7 +1796,7 @@ bool CSphConfigParser::Parse ()
 		// handle S_SEC state
 		case States_e::S_SEC:
 		{
-			if ( isspace(*p) )				continue;
+			if ( isspace ( (BYTE)*p ) )	continue;
 			if ( *p=='#' )					{ LOC_PUSH ( States_e::S_SKIP2NL ); continue; }
 			if ( *p=='}' )					{ LOC_POP (); continue; }
 			if ( sphIsAlpha(*p) )			{ LOC_PUSH ( States_e::S_KEY ); LOC_PUSH ( States_e::S_TOK ); LOC_BACK(); iValue = 0; sValue[0] = '\0'; continue; }
@@ -1601,10 +1838,10 @@ bool CSphConfigParser::Parse ()
 		// handle S_SECNAME state
 		case States_e::S_SECNAME:
 		{
-			if ( isspace(*p) )					{ continue; }
-			if ( !sToken[0]&&!sphIsAlpha(*p))	{ LOC_ERROR ( "named section: expected name, got '%c'", *p ); }
+			if ( isspace ( (BYTE)*p ) )			{ continue; }
+			if ( !sToken[0]&&!IsNameChar(*p))	{ LOC_ERROR ( "named section: expected name, got '%c'", *p ); }
 
-			if ( !sToken[0] )				{ LOC_PUSH ( States_e::S_TOK ); LOC_BACK(); continue; }
+			if ( !sToken[0] )				{ LOC_PUSH ( States_e::S_NAMETOK ); LOC_BACK(); continue; }
 			if ( !AddSection ( m_sSectionType.cstr(), sToken.data() ) ) break;
 			sToken[0] = '\0';
 			if ( *p==':' )					{ eState = States_e::S_SECBASE; continue; }
@@ -1615,9 +1852,9 @@ bool CSphConfigParser::Parse ()
 		// handle S_SECBASE state
 		case States_e::S_SECBASE:
 		{
-			if ( isspace(*p) )					{ continue; }
-			if ( !sToken[0]&&!sphIsAlpha(*p))	{ LOC_ERROR ( "named section: expected parent name, got '%c'", *p ); }
-			if ( !sToken[0] )					{ LOC_PUSH ( States_e::S_TOK ); LOC_BACK(); continue; }
+			if ( isspace ( (BYTE)*p ) )			{ continue; }
+			if ( !sToken[0]&&!IsNameChar(*p))	{ LOC_ERROR ( "named section: expected parent name, got '%c'", *p ); }
+			if ( !sToken[0] )					{ LOC_PUSH ( States_e::S_NAMETOK ); LOC_BACK(); continue; }
 
 			// copy the section
 			assert ( m_tConf.Exists ( m_sSectionType ) );
@@ -2358,9 +2595,10 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 			}
 
 		case 'U': // decimal uint64
+		case 'X': // hex uint64
 			{
 				uint64_t iValue = va_arg ( ap, uint64_t );
-				::NtoA_T ( &pOutput, iValue, 10, (int) iWidth, (int) iPrec, cFill );
+				::NtoA_T ( &pOutput, iValue, ( c=='X' ) ? 16 : 10, (int) iWidth, (int) iPrec, cFill );
 				state = SNORMAL;
 				break;
 			}
@@ -2401,24 +2639,24 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 			{
 				double fValue = va_arg ( ap, double );
 
-				// ensure 32 is enough to take any float value.
-				Grow ( pOutput, Max ( (int) iWidth, 32 ));
-
 				// extract current format from source format line
 				auto *pF = sFmt;
 				while ( *--pF!='%' );
 
 				if ( memcmp ( pF, "%f", 2 )!=0 )
 				{
-
 					// invoke standard sprintf
 					char sFormat[32] = { 0 };
 					memcpy ( sFormat, pF, sFmt - pF );
-					pOutput += snprintf ( Tail ( pOutput ), Max ( (int)iWidth, 32 ) - 1, sFormat, fValue );
+					int iPrinted = snprintf ( nullptr, 0, sFormat, fValue );
+					assert ( iPrinted >= 0 );
+					Grow ( pOutput, Max ( iPrinted + 1, (int)iWidth ) );
+					pOutput += snprintf ( Tail ( pOutput ), iPrinted + 1, sFormat, fValue );
 				} else
 				{
 					// plain %f - output arbitrary 6 or 8 digits
-					pOutput += PrintVarFloat ( Tail ( pOutput ), Max ( (int)iWidth, 32 ) - 1, (float)fValue );
+					Grow ( pOutput, Max ( (int) iWidth, SPH_MAX_NUMERIC_STR ) );
+					pOutput += PrintVarFloat ( Tail ( pOutput ), Max ( (int)iWidth, SPH_MAX_NUMERIC_STR ) - 1, (float)fValue );
 					assert (( sFmt - pF )==2 );
 				}
 
@@ -2761,8 +2999,8 @@ bool sphDumpGdb (int iFD, const char* sName, const char* sPid )
 	if ( iRes==-1 || iRes==0 )
 		return false;
 
-	// master branch is mirrored on github, so could generate more info here.
-	if ( strncmp ( szGIT_BRANCH_ID, "git branch master", 17 ) == 0 ) {
+	// main branch is mirrored on github, so could generate more info here.
+	if ( strncmp ( szGIT_BRANCH_ID, "git branch main", 15 ) == 0 ) {
 		sphSafeInfo ( iFD, "You can obtain the sources of this version from https://github.com/manticoresoftware/manticoresearch/archive/%s.zip\n"
 			"and set up debug env with this shippet (select wget or curl version below):\n\n"
    "  wget https://codeload.github.com/manticoresoftware/manticoresearch/zip/%s -O manticore.zip\n"
@@ -3254,7 +3492,7 @@ void CSphDynamicLibrary::CSphDynamicLibraryAlternative ( const char* szPath, boo
 
 	m_pLibrary = dlopen ( szPath, RTLD_NOW | ( bGlobal ? RTLD_GLOBAL : RTLD_LOCAL ) );
 	if ( !m_pLibrary )
-		sphLogDebug ( "dlopen(%s) failed", szPath );
+		sphLogDebug ( "dlopen(%s) failed: %s", szPath, dlerror() );
 	else
 		sphLogDebug ( "dlopen(%s)=%p", szPath, m_pLibrary );
 }
@@ -3864,28 +4102,40 @@ std::pair<DateUnit_e, int> ParseDateInterval ( const CSphString & sExpr, bool bF
 	return { *pUnit, iMulti };
 }
 
-void RoundDate ( DateUnit_e eUnit, time_t & tDateTime )
+static cctz::civil_second ConvertRoundTime ( time_t tDateTime, const cctz::time_zone * pTZ )
+{
+	return pTZ ? ConvertTime ( tDateTime, *pTZ ) : ConvertTime ( tDateTime );
+}
+
+
+static time_t ConvertRoundTime ( const cctz::civil_second & tSrcTime, const cctz::time_zone * pTZ )
+{
+	return pTZ ? ConvertTime ( tSrcTime, *pTZ ) : ConvertTime ( tSrcTime );
+}
+
+
+static void RoundDate ( DateUnit_e eUnit, time_t & tDateTime, const cctz::time_zone * pTZ )
 {
 	if ( eUnit==DateUnit_e::ms )
 		return;
 
-	cctz::civil_second tSrcTime = ConvertTime ( tDateTime );
+	cctz::civil_second tSrcTime = ConvertRoundTime ( tDateTime, pTZ );
 	switch ( eUnit )
 	{
 	case DateUnit_e::sec:
-		tDateTime = ConvertTime (  cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() ) );
+		tDateTime = ConvertRoundTime (  cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() ), pTZ );
 	break;
 
 	case DateUnit_e::minute:
-		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute() ) );
+		tDateTime = ConvertRoundTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute() ), pTZ );
 	break;
 
 	case DateUnit_e::hour:
-		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour() ) );
+		tDateTime = ConvertRoundTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour() ), pTZ );
 	break;
 
 	case DateUnit_e::day:
-		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day() ) );
+		tDateTime = ConvertRoundTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day() ), pTZ );
 	break;
 
 	case DateUnit_e::week:
@@ -3893,22 +4143,34 @@ void RoundDate ( DateUnit_e eUnit, time_t & tDateTime )
 		cctz::civil_day tWeekStart ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day() );
 		if ( cctz::get_weekday ( tWeekStart )!=cctz::weekday::monday )
 			tWeekStart = cctz::prev_weekday ( tWeekStart, cctz::weekday::monday );
-		tDateTime = ConvertTime ( tWeekStart );
+		tDateTime = ConvertRoundTime ( tWeekStart, pTZ );
 	}
 	break;
 
 	case DateUnit_e::month:
-		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month() ) );
+		tDateTime = ConvertRoundTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month() ), pTZ );
 		break;
 
 	case DateUnit_e::year:
-		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year() ) );
+		tDateTime = ConvertRoundTime ( cctz::civil_second ( tSrcTime.year() ), pTZ );
 		break;
 
 	default:
 		break;
 	}
 }
+
+void RoundDate ( DateUnit_e eUnit, time_t & tDateTime )
+{
+	RoundDate ( eUnit, tDateTime, nullptr );
+}
+
+
+void RoundDate ( DateUnit_e eUnit, time_t & tDateTime, const cctz::time_zone & tTZ )
+{
+	RoundDate ( eUnit, tDateTime, &tTZ );
+}
+
 
 void RoundDate ( DateUnit_e eUnit, int iMulti, time_t & tDateTime )
 {
@@ -3926,34 +4188,32 @@ void RoundDate ( DateUnit_e eUnit, int iMulti, time_t & tDateTime )
 		case DateUnit_e::sec:
 		{
 			// to fixed seconds
-			tDateTime -= ( tDateTime % iMulti );
+			int64_t iInterval = iMulti;
+			tDateTime -= ( tDateTime % iInterval );
 		}
 		break;
 
 		case DateUnit_e::minute:
 		{
 			// to fixed minutes
-			auto tMin = ( ( tDateTime / 60 ) % 60 );
-			tDateTime -= ( ( tMin % iMulti ) * 60 );
+			int64_t iInterval = int64_t ( iMulti ) * 60;
+			tDateTime -= ( tDateTime % iInterval );
 		}
 		break;
 
 		case DateUnit_e::hour:
 		{
 			// to fixed hours
-			const int iHourSeconds = 3600;
-			auto tHours = ( ( tDateTime / iHourSeconds ) % 24 );
-			tDateTime -= ( ( tHours % iMulti ) * iHourSeconds );
+			int64_t iInterval = int64_t ( iMulti ) * 3600;
+			tDateTime -= ( tDateTime % iInterval );
 		}
 		break;
 
 		case DateUnit_e::day:
 		{
 			// to fixed days
-			const int iDaySeconds = 86400;
-			auto tDaysEpoch = ( tDateTime / iDaySeconds );
-			tDaysEpoch -= ( tDaysEpoch % iMulti );
-			tDateTime = ( tDaysEpoch * iDaySeconds );
+			int64_t iInterval = int64_t ( iMulti ) * 86400;
+			tDateTime -= ( tDateTime % iInterval );
 		}
 		break;
 

@@ -8,7 +8,7 @@ To fix a bug, either it needs to be reproduced and fixed or its cause needs to b
 Bugs and feature requests are tracked on [Github](https://github.com/manticoresoftware/manticore/issues). You are welcome to create a new ticket and describe your bug in detail to save time for both you and the developers.
 
 ### Documentation updates
-Updates to the documentation (what you are reading now) are also done on [Github](https://github.com/manticoresoftware/manticoresearch/tree/master/manual).
+Updates to the documentation (what you are reading now) are also done on [Github](https://github.com/manticoresoftware/manticoresearch/tree/main/manual).
 
 ### Crashes
 
@@ -136,7 +136,8 @@ To fix your bug, developers often need to reproduce it locally. To do this, they
 
 Attach your data when you [create a ticket on Github](https://github.com/manticoresoftware/manticoresearch/issues/new). If the data is too large or sensitive, you can upload it to our write-only S3 storage at  `s3://s3.manticoresearch.com/write-only/`.
 
-To to that easily we provide an upload mechanism using a Docker image. This image is built from our open-source repository at [github.com/manticoresoftware/s3-upload](https://github.com/manticoresoftware/s3-upload) and helps you easily upload data to Manticore's write-only S3 storage. Here's how you can do it:
+
+To do that easily we provide an upload mechanism using a Docker image. This image is built from our open-source repository at [github.com/manticoresoftware/s3-upload](https://github.com/manticoresoftware/s3-upload) and helps you easily upload data to Manticore's write-only S3 storage. Here's how you can do it:
 1. Navigate to the directory containing the files you want to upload and run:
    ```bash
    docker run -it --rm -v $(pwd):/upload manticoresearch/upload
@@ -236,7 +237,7 @@ For example on 64-bit Linux:
    chmod +x $HOME/minio-binaries/mc
    export PATH=$PATH:$HOME/minio-binaries/
    ```
-2. Add our s3 host (use full path to executable or change into its directory): `cd $HOME/minio-binaries` and then `./mc config host add manticore http://s3.manticoresearch.com:9000 manticore manticore`
+2. Add our s3 host (use full path to executable or change into its directory): `cd $HOME/minio-binaries` and then `./mc alias set manticore http://s3.manticoresearch.com:9000 manticore manticore`
 3. Copy your files (use full path to executable or change into its directory): `cd $HOME/minio-binaries` and then `./mc cp -r issue-1234/ manticore/write-only/issue-1234` . Make sure the folder name is unique and best if it corresponds to the issue on GitHub where you described the bug.
 
 ### DEBUG
@@ -255,10 +256,8 @@ mysql> debug;
 | command                                                                 | meaning                                                                                |
 +-------------------------------------------------------------------------+----------------------------------------------------------------------------------------+
 | flush logs                                                              | emulate USR1 signal                                                                    |
-| reload indexes                                                          | emulate HUP signal                                                                     |
+| reload tables                                                           | emulate HUP signal                                                                     |
 | debug token <password>                                                  | calculate token for password                                                           |
-| debug malloc_stats                                                      | perform 'malloc_stats', result in searchd.log                                          |
-| debug malloc_trim                                                       | pefrorm 'malloc_trim' call                                                             |
 | debug sleep <N>                                                         | sleep for <N> seconds                                                                  |
 | debug tasks                                                             | display global tasks stat (use select from @@system.tasks instead)                     |
 | debug sched                                                             | display task manager schedule (use select from @@system.sched instead)                 |
@@ -267,14 +266,16 @@ mysql> debug;
 | debug files <TBL> [option format=all|external]                          | list files belonging to <TBL>. 'all' - including external (wordforms, stopwords, etc.) |
 | debug close                                                             | ask server to close connection from it's side                                          |
 | debug compress <TBL> [chunk] <X> [option sync=1]                        | Compress disk chunk X of RT table <TBL> (wipe out deleted documents)                   |
+| debug dedup <TBL> [chunk] <X>                                           | Kill duplicates in disk chunk X of RT table <TBL> (mark duplicates as killed)          |
 | debug split <TBL> [chunk] <X> on @<uservar> [option sync=1]             | Split disk chunk X of RT table <TBL> using set of DocIDs from @uservar                 |
 | debug wait <cluster> [like 'xx'] [option timeout=3]                     | wait <cluster> ready, but no more than 3 secs.                                         |
 | debug wait <cluster> status <N> [like 'xx'] [option timeout=13]         | wait <cluster> commit achieve <N>, but no more than 13 secs                            |
 | debug meta                                                              | Show max_matches/pseudo_shards. Needs set profiling=1                                  |
 | debug trace OFF|'path/to/file' [<N>]                                    | trace flow to file until N bytes written, or 'trace OFF'                               |
 | debug curl <URL>                                                        | request given url via libcurl                                                          |
+| debug pause <ID> on|off                                                 | switch named breakpoint [dev only]                                                     |
 +-------------------------------------------------------------------------+----------------------------------------------------------------------------------------+
-19 rows in set (0.00 sec)
+19 rows in set (0.01 sec)
 ```
 
 Same from VIP connection:
@@ -284,12 +285,10 @@ mysql> debug;
 | command                                                                 | meaning                                                                                |
 +-------------------------------------------------------------------------+----------------------------------------------------------------------------------------+
 | flush logs                                                              | emulate USR1 signal                                                                    |
-| reload indexes                                                          | emulate HUP signal                                                                     |
+| reload tables                                                           | emulate HUP signal                                                                     |
 | debug shutdown <password>                                               | emulate TERM signal                                                                    |
 | debug crash <password>                                                  | crash daemon (make SIGSEGV action)                                                     |
 | debug token <password>                                                  | calculate token for password                                                           |
-| debug malloc_stats                                                      | perform 'malloc_stats', result in searchd.log                                          |
-| debug malloc_trim                                                       | pefrorm 'malloc_trim' call                                                             |
 | debug procdump                                                          | ask watchdog to dump us                                                                |
 | debug setgdb on|off                                                     | enable or disable potentially dangerous crash dumping with gdb                         |
 | debug setgdb status                                                     | show current mode of gdb dumping                                                       |
@@ -301,12 +300,14 @@ mysql> debug;
 | debug files <TBL> [option format=all|external]                          | list files belonging to <TBL>. 'all' - including external (wordforms, stopwords, etc.) |
 | debug close                                                             | ask server to close connection from it's side                                          |
 | debug compress <TBL> [chunk] <X> [option sync=1]                        | Compress disk chunk X of RT table <TBL> (wipe out deleted documents)                   |
+| debug dedup <TBL> [chunk] <X>                                           | Kill duplicates in disk chunk X of RT table <TBL> (mark duplicates as killed)          |
 | debug split <TBL> [chunk] <X> on @<uservar> [option sync=1]             | Split disk chunk X of RT table <TBL> using set of DocIDs from @uservar                 |
 | debug wait <cluster> [like 'xx'] [option timeout=3]                     | wait <cluster> ready, but no more than 3 secs.                                         |
 | debug wait <cluster> status <N> [like 'xx'] [option timeout=13]         | wait <cluster> commit achieve <N>, but no more than 13 secs                            |
 | debug meta                                                              | Show max_matches/pseudo_shards. Needs set profiling=1                                  |
 | debug trace OFF|'path/to/file' [<N>]                                    | trace flow to file until N bytes written, or 'trace OFF'                               |
 | debug curl <URL>                                                        | request given url via libcurl                                                          |
+| debug pause <ID> on|off                                                 | switch named breakpoint [dev only]                                                     |
 +-------------------------------------------------------------------------+----------------------------------------------------------------------------------------+
 24 rows in set (0.00 sec)
 ```

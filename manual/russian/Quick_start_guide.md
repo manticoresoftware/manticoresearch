@@ -1,42 +1,17 @@
-# Руководство по быстрому старту
+# Руководство по быстрому началу работы
 
 <!-- example install -->
 ## Установка и запуск Manticore
 
-Вы можете легко установить и запустить Manticore на различных операционных системах, включая Ubuntu, Centos, Debian, Windows и MacOS. Кроме того, вы также можете использовать Manticore как контейнер Docker.
+Вы можете легко установить и запустить Manticore в различных операционных системах, включая Ubuntu, Centos, Debian, Windows и MacOS. Кроме того, вы также можете использовать Manticore в качестве контейнера Docker.
 
 <!-- intro -->
-### Ubuntu
+### Linux/MacOS
 
-<!-- request Ubuntu -->
+<!-- request Linux -->
+
 ```bash
-wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
-sudo apt update
-sudo apt install manticore manticore-columnar-lib
-sudo systemctl start manticore
-```
-
-<!-- intro -->
-### Debian
-
-<!-- request Debian -->
-```bash
-wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
-sudo apt update
-sudo apt install manticore manticore-columnar-lib
-sudo systemctl start manticore
-```
-
-<!-- intro -->
-### Centos
-
-<!-- request Centos -->
-```bash
-sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-sudo yum install manticore manticore-columnar-lib
-sudo systemctl start manticore
+curl https://manticoresearch.com | sh
 ```
 
 <!-- intro -->
@@ -44,21 +19,13 @@ sudo systemctl start manticore
 
 <!-- request Windows -->
 * Скачайте архив для Windows с https://manticoresearch.com/install/
-* Распакуйте все файлы из архива в `C:\Manticore`
-* Выполните следующую команду для установки Manticore как службы:
+* Извлеките все файлы из архива в `C:\Manticore`
+* Запустите следующую команду, чтобы установить Manticore как службу:
 * ```bash
   C:\Manticore\bin\searchd --install --config C:\Manticore\sphinx.conf.in --servicename Manticore
   ```
-* Запустите Manticore из оснастки служб Microsoft Management Console.
+* Запустите Manticore из оснастки "Службы" консоли управления Microsoft.
 
-<!-- intro -->
-### MacOS
-
-<!-- request MacOS -->
-```bash
-brew install manticoresearch
-brew services start manticoresearch
-```
 
 <!-- intro -->
 ### Docker
@@ -67,19 +34,19 @@ brew services start manticoresearch
 docker pull manticoresearch/manticore
 docker run --name manticore -p9306:9306 -p9308:9308 -p9312:9312 -d manticoresearch/manticore
 ```
-Для сохранения вашего каталога данных прочитайте [как использовать Manticore docker в продакшн](Starting_the_server/Docker.md#Production-use)
+Для сохранения вашего каталога данных прочитайте [как использовать Docker Manticore в production](Starting_the_server/Docker.md#Production-use)
 <!-- end -->
 
 <!-- example connect -->
 ## Подключение к Manticore
 
-По умолчанию Manticore ожидает ваши подключения на следующих портах:
+По умолчанию Manticore ожидает ваших подключений на:
 
-  * порт 9306 для клиентов MySQL
-  * порт 9308 для HTTP/HTTPS подключений
-  * порт 9312 для подключений с других узлов Manticore и клиентов, основанных на бинарном API Manticore
+  * порту 9306 для клиентов MySQL
+  * порту 9308 для HTTP/HTTPS соединений
+  * порту 9312 для подключений от других узлов Manticore и клиентов, использующих бинарный API Manticore
 
-Более подробная информация о поддержке HTTPS доступна в нашем учебном курсе [здесь](https://play.manticoresearch.com/https/).
+Подробнее о поддержке HTTPS можно узнать в нашем обучающем курсе [здесь](https://play.manticoresearch.com/https/).
 
 <!-- intro -->
 ##### Подключение через MySQL:
@@ -90,10 +57,10 @@ mysql -h0 -P9306
 ```
 
 <!-- intro -->
-##### Подключение через JSON по HTTP
+##### Подключение через JSON поверх HTTP
 
 <!-- request HTTP -->
-HTTP — это протокол без состояния, поэтому не требует специальной фазы подключения. Вы можете просто отправить HTTP-запрос серверу и получить ответ. Для общения с Manticore через JSON интерфейс вы можете использовать любую HTTP клиентскую библиотеку на вашем языке программирования, чтобы отправлять GET или POST запросы серверу и парсить JSON ответы:
+HTTP — это протокол без состояния, поэтому он не требует специальной фазы подключения. Вы можете просто отправить HTTP-запрос на сервер и получить ответ. Для взаимодействия с Manticore с использованием JSON-интерфейса вы можете использовать любую HTTP-клиентскую библиотеку на выбранном вами языке программирования для отправки GET или POST запросов на сервер и разбора JSON-ответов:
 
 ```bash
 curl -s "http://localhost:9308/search"
@@ -256,23 +223,30 @@ apiClient := manticoreclient.NewAPIClient(configuration)
 
 <!-- end -->
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, price float) morphology='stem_en';
+-->
+
 <!-- example create -->
 ## Создание таблицы
 
 Давайте теперь создадим таблицу с именем "products" с 2 полями:
-* title - полнотекстовое поле, которое будет содержать название нашего продукта
-* price - типа "float"
+* title — полнотекстовое поле, которое будет содержать название нашего продукта
+* price — типа "float"
 
-Обратите внимание, что можно опустить создание таблицы явным оператором create. Для дополнительной информации смотрите [Auto schema](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
+Обратите внимание, что можно опустить создание таблицы с помощью явного оператора create. Для получения дополнительной информации см. [Автосхема](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
 
-Больше информации о разных способах создания таблиц можно найти в наших учебных курсах:
+Подробнее о различных способах создания таблицы можно узнать в наших обучающих курсах:
 * [Создание RealTime таблицы](https://play.manticoresearch.com/rtmode/)
-* [Создание таблицы из MySQL источника](https://play.manticoresearch.com/mysql/)
-* [Создание таблицы из CSV источника](https://play.manticoresearch.com/csv/)
-* [Создание таблицы с помощью механизма авто схемы](https://play.manticoresearch.com/autoschema/)
+* [Создание таблицы из источника MySQL](https://play.manticoresearch.com/mysql/)
+* [Создание таблицы из источника CSV](https://play.manticoresearch.com/csv/)
+* [Создание таблицы с использованием механизма автосхемы](https://play.manticoresearch.com/autoschema/)
 * [Создание таблицы с Logstash/Beats](https://play.manticoresearch.com/logstash/)
 * [Создание таблицы с Fluentbit](https://play.manticoresearch.com/vectordev/)
-* [Создание таблицы с помощью агента Vector.dev](https://play.manticoresearch.com/vectordev/)
+* [Создание таблицы с использованием агента Vector.dev](https://play.manticoresearch.com/vectordev/)
 
 <!-- intro -->
 ##### SQL:
@@ -413,7 +387,7 @@ Query OK, 3 rows affected (0.01 sec)
 ##### JSON:
 
 <!-- request JSON -->
-`"id":0` или отсутствие id заставляет автоматически генерировать ID.
+Для этой real-time-таблицы `"id":0` или отсутствие `id` запрашивает автоматическую генерацию ID.
 
 ```json
 POST /insert
@@ -452,7 +426,7 @@ POST /insert
 ```json
 {
   "table": "products",
-  "_id": 0,
+  "id": 0,
   "created": true,
   "result": "created",
   "status": 201
@@ -460,7 +434,7 @@ POST /insert
 
 {
   "table": "products",
-  "_id": 0,
+  "id": 0,
   "created": true,
   "result": "created",
   "status": 201
@@ -468,7 +442,7 @@ POST /insert
 
 {
   "table": "products",
-  "_id": 0,
+  "id": 0,
   "created": true,
   "result": "created",
   "status": 201
@@ -608,17 +582,17 @@ let insert_res3 = index_api.insert(insert_req3).await;
 
 ``` typescript
 res = await indexApi.insert({
-  index: 'test',
+  table: 'test',
   id: 1,
   doc: { content: 'Text 1', name: 'Doc 1', cat: 1 },
 });
 res = await indexApi.insert({
-  index: 'test',
+  table: 'test',
   id: 2,
   doc: { content: 'Text 2', name: 'Doc 2', cat: 2 },
 });
 res = await indexApi.insert({
-  index: 'test',
+  table: 'test',
   id: 3,
   doc: { content: 'Text 3', name: 'Doc 3', cat: 7 },
 });
@@ -648,15 +622,15 @@ apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq)
 
 <!-- end -->
 
-Подробнее по теме можно найти здесь:
+Более подробную информацию по теме можно найти здесь:
 * [Добавление данных в обычную таблицу](https://play.manticoresearch.com/mysql/)
-* [Добавление данных в таблицу RealTime](https://play.manticoresearch.com/rtintro/)
+* [Добавление данных в RealTime таблицу](https://play.manticoresearch.com/rtintro/)
 
 
 <!-- example search -->
 ## Поиск
 
-Давайте найдем один из документов. Запрос, который мы используем, — 'remove hair'. Как вы видите, он находит документ с заголовком 'Pet Hair Remover Glove' и подсвечивает 'Hair remover' в нем, даже несмотря на то, что в запросе стоит "remove", а не "remover". Это происходит потому, что при создании таблицы мы включили использование стемминга для английского (`morphology "stem_en"`).
+Давайте найдем один из документов. Запрос, который мы будем использовать, — 'remove hair'. Как видите, он находит документ с заголовком 'Pet Hair Remover Glove' и выделяет в нем 'Hair remover', даже несмотря на то, что в запросе указано "remove", а не "remover". Это произошло потому, что при создании таблицы мы включили использование английской стемматизации (`morphology "stem_en"`).
 
 <!-- intro -->
 ##### SQL:
@@ -726,7 +700,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$result = $index->search('@title remove hair')->highlight(['title'])->get();
+$result = $table->search('@title remove hair')->highlight(['title'])->get();
 foreach($result as $doc)
 {
     echo "Doc ID: ".$doc->getId()."\n";
@@ -826,7 +800,7 @@ java
 query = new HashMap<String,Object>();
 query.put("query_string","@title remove hair");
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 searchRequest.setQuery(query);
 HashMap<String,Object> highlight = new HashMap<String,Object>(){{
     put("fields",new String[] {"title"});
@@ -921,7 +895,7 @@ TypeScript
 
 ```typescript
 res = await searchApi.search({
-  index: 'test',
+  table: 'test',
   query: { query_string: {'text 1'} },
   highlight: {'fields': ['content'] }
 });
@@ -984,15 +958,15 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 ```
 <!-- end -->
 
-Больше информации о различных вариантах поиска в Manticore можно найти в наших обучающих курсах:
+Более подробную информацию о различных вариантах поиска, доступных в Manticore, можно найти в наших обучающих курсах:
 * [Фасетный поиск](https://play.manticoresearch.com/faceting/)
-* [Гео-поиск](https://play.manticoresearch.com/geosearch/)
+* [Геопоиск](https://play.manticoresearch.com/geosearch/)
 * [Поиск похожих документов](https://play.manticoresearch.com/mlt/)
 
 <!-- example update -->
 ## Обновление
 
-Предположим, что теперь мы хотим обновить документ — изменить цену на 18.5. Это можно сделать, отфильтровав по любому полю, но обычно у вас есть id документа, и обновление происходит на его основе.
+Предположим, что теперь мы хотим обновить документ — изменить цену на 18.5. Это можно сделать, отфильтровав по любому полю, но обычно вы знаете идентификатор документа и обновляете что-то на его основе.
 
 <!-- intro -->
 ##### SQL:
@@ -1030,7 +1004,7 @@ POST /update
 ```json
 {
   "table": "products",
-  "_id": 1513686608316989452,
+  "id": 1513686608316989452,
   "result": "updated"
 }
 ```
@@ -1089,7 +1063,7 @@ UpdateDocumentRequest updateRequest = new UpdateDocumentRequest();
 doc = new HashMap<String,Object >(){{
     put("price",18.5);
 }};
-updateRequest.index("products").id(1513686608316989452L).setDoc(doc);
+updateRequest.table("products").id(1513686608316989452L).setDoc(doc);
 indexApi.update(updateRequest);
 ```
 
@@ -1125,7 +1099,7 @@ let update_res = index_api.update(update_req).await;
 
 <!-- request TypeScript -->
 ``` typescript
-res = await indexApi.update({ index: "test", id: 1, doc: { cat: 10 } });
+res = await indexApi.update({ table: "test", id: 1, doc: { cat: 10 } });
 ```
 
 <!-- intro -->
@@ -1144,7 +1118,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- example delete -->
 ## Удаление
 
-Теперь удалим все документы с ценой ниже 10.
+Теперь давайте удалим все документы с ценой ниже 10.
 
 <!-- intro -->
 ##### SQL:
@@ -1197,7 +1171,7 @@ POST /delete
 <!-- request PHP -->
 
 ```php
-$result = $index->deleteDocuments(new \Manticoresearch\Query\Range('price',['lte'=>10]));
+$result = $table->deleteDocuments(new \Manticoresearch\Query\Range('price',['lte'=>10]));
 
 ```
 <!-- response PHP -->
@@ -1250,7 +1224,7 @@ query.put("range",new HashMap<String,Object>(){{
         put("lte",10);
     }});
 }});
-deleteRequest.index("products").setQuery(query);
+deleteRequest.table("products").setQuery(query);
 indexApi.delete(deleteRequest);
 
 ```
@@ -1265,7 +1239,7 @@ Dictionary<string, Object> price = new Dictionary<string, Object>();
 price.Add("lte", 10);
 Dictionary<string, Object> range = new Dictionary<string, Object>();
 range.Add("price", price);
-DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(index: "products", query: range);
+DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(table: "products", query: range);
 indexApi.Delete(deleteDocumentRequest);
 ```
 
@@ -1294,7 +1268,7 @@ index_api.delete(delete_req).await;
 <!-- request TypeScript -->
 ``` typescript
 res = await indexApi.delete({
-  index: 'test',
+  table: 'test',
   query: { match: { '*': 'Text 1' } },
 });
 ```
@@ -1314,4 +1288,3 @@ res, _, _ := apiClient.IndexAPI.Delete(context.Background()).DeleteDocumentReque
 
 <!-- end -->
 <!-- proofread -->
-

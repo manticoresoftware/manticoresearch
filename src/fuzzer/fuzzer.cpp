@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2025-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -59,7 +59,7 @@ protected:
     pTokenizer = sphCloneAndSetupQueryTokenizer ( pBase, true, false, false );
 
     CSphDictSettings tDictSettings;
-    tDictSettings.m_bWordDict = false;
+    tDictSettings.SetDictFormat ( DictFormat_e::CRC );
     pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, "query", false, 32, nullptr, sError );
     constexpr CKeywordHits dPseudoHits[] = { { "aaa", 0 }, { "bbb", 0 }, { "ccc", 35 }, { "ddd", 63 }, { "eee", 2445 } };
 
@@ -106,7 +106,7 @@ void QueryParser::Transform ( const char * szQuery ) const
     return;
 
   TransformExtendedQueryArgs_t tTranformArgs { true, tQuery.m_bNeedPhraseTransform, &tIndex };
-	sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, tQuery.m_sParseError, tTranformArgs );
+	sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, tQuery.m_sParseError, tTranformArgs, tQuery.m_sParseWarning );
 }
 
 /// fuzzing stuff

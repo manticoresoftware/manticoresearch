@@ -969,6 +969,31 @@ TEST ( SplitLocalSqlStatements, quoted_delimiters_and_comments )
 	EXPECT_TRUE ( SplitLocalSqlStatements ( nullptr ).empty() );
 }
 
+#if !_WIN32
+class ScopedLocale_c
+{
+public:
+	explicit ScopedLocale_c ( const char * szLocale )
+		: m_bHadPrevious ( getenv("LC_ALL")!=nullptr )
+		, m_sPrevious ( m_bHadPrevious ? getenv("LC_ALL") : "" )
+	{
+		setenv ( "LC_ALL", szLocale, 1 );
+	}
+
+	~ScopedLocale_c()
+	{
+		if ( m_bHadPrevious )
+			setenv ( "LC_ALL", m_sPrevious.c_str(), 1 );
+		else
+			unsetenv ( "LC_ALL" );
+	}
+
+private:
+	bool m_bHadPrevious;
+	std::string m_sPrevious;
+};
+#endif
+
 TEST ( LocalSqlResponse, case_sensitive_columns )
 {
 	const std::string sResponse = R"([{"columns":[{"Foo":{"type":"long"}},{"foo":{"type":"long"}}],"data":[{"Foo":1,"foo":2}],"error":"","warning":""}])";
@@ -980,6 +1005,9 @@ TEST ( LocalSqlResponse, case_sensitive_columns )
 
 TEST ( LocalSqlResponse, interactive_table_and_outcomes )
 {
+#if !_WIN32
+	ScopedLocale_c tLocale ( "C.UTF-8" );
+#endif
 	CSphString sError;
 	const std::string sRows = R"([{"columns":[{"name":{"type":"string"}},{"id":{"type":"long long"}}],"data":[{"name":"one","id":1},{"name":"twenty","id":20}],"total":2,"error":"","warning":""}])";
 	testing::internal::CaptureStdout();
@@ -1040,6 +1068,9 @@ TEST ( LocalSqlResponse, vertical_rows )
 
 TEST ( LocalSqlResponse, interactive_table_uses_terminal_width_for_utf8 )
 {
+#if !_WIN32
+	ScopedLocale_c tLocale ( "C.UTF-8" );
+#endif
 	CSphString sError;
 	const std::string sResponse = R"([{"columns":[{"字":{"type":"string"}}],"data":[{"字":"猫猫"}],"total":1,"error":"","warning":""}])";
 	testing::internal::CaptureStdout();
@@ -1057,11 +1088,7 @@ TEST ( LocalSqlResponse, interactive_table_uses_terminal_width_for_utf8 )
 #if !_WIN32
 TEST ( LocalSqlResponse, interactive_table_falls_back_to_ascii )
 {
-	const char * szPrevious = getenv ( "LC_ALL" );
-	std::string sPrevious = szPrevious ? szPrevious : "";
-	bool bHadPrevious = szPrevious!=nullptr;
-	setenv ( "LC_ALL", "C", 1 );
-	AT_SCOPE_EXIT ( [&] { if ( bHadPrevious ) setenv ( "LC_ALL", sPrevious.c_str(), 1 ); else unsetenv ( "LC_ALL" ); } );
+	ScopedLocale_c tLocale ( "C" );
 
 	CSphString sError;
 	const std::string sResponse = R"([{"columns":[{"name":{"type":"string"}}],"data":[{"name":"one"}],"total":1,"error":"","warning":""}])";

@@ -79,6 +79,33 @@ searchd
 	select id, groupby() gb, count(*) c from group_types where hybrid_match('nike') group by a_multi within group order by id desc order by gb asc;
 
 	drop table group_types;
+
+	<!-- within-group representatives picked by attribute keyparts, not by knn distance -->
+	create table group_rep ( title text, size_vector float_vector knn_type='hnsw' hnsw_similarity='cosine' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title', grp int, s string, n int );
+
+	insert into group_rep (id, title, grp, s, n) values (1, 'nike running shoes', 1, 'aaa', 10);
+	insert into group_rep (id, title, grp, s, n) values (2, 'nike basketball sneakers', 1, 'zzz', 20);
+	insert into group_rep (id, title, grp, s, n) values (3, 'nike hiking boots', 2, 'mmm', 30);
+	insert into group_rep (id, title, grp, s, n) values (4, 'nike tennis trainers', 2, 'bbb', 40);
+	flush ramchunk group_rep;
+
+	<!-- string keypart: used to read a bogus pointer and crash the daemon -->
+	select id, s, groupby() gb, count(*) c from group_rep group by grp within group order by s desc order by gb asc;
+	select id, s, groupby() gb, count(*) c from group_rep where hybrid_match('nike') group by grp within group order by s desc order by gb asc;
+	select id, s, groupby() gb, count(*) c from group_rep group by grp within group order by s asc order by gb asc;
+	select id, s, groupby() gb, count(*) c from group_rep where hybrid_match('nike') group by grp within group order by s asc order by gb asc;
+
+	<!-- int keypart: representative must follow WITHIN GROUP ORDER BY in both directions -->
+	select id, n, groupby() gb, count(*) c from group_rep group by grp within group order by n desc order by gb asc;
+	select id, n, groupby() gb, count(*) c from group_rep where hybrid_match('nike') group by grp within group order by n desc order by gb asc;
+	select id, n, groupby() gb, count(*) c from group_rep group by grp within group order by n asc order by gb asc;
+	select id, n, groupby() gb, count(*) c from group_rep where hybrid_match('nike') group by grp within group order by n asc order by gb asc;
+
+	<!-- all groups must survive: within-group tails must not eat the max_matches budget -->
+	select groupby() gb, count(*) c from group_rep group by grp within group order by n desc order by gb asc option max_matches=2;
+	select groupby() gb, count(*) c from group_rep where hybrid_match('nike') group by grp within group order by n desc order by gb asc option max_matches=2;
+
+	drop table group_rep;
 </sphinxql>
 </queries>
 

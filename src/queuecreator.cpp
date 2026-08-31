@@ -2406,7 +2406,7 @@ void QueueCreator_c::RemapAttrs ( CSphMatchComparatorState & tState, CSphVector<
 
 void QueueCreator_c::AddKnnDistSort ( CSphString & sSortBy )
 {
-	if ( m_tQuery.m_bHybridSearch )
+	if ( m_tQuery.m_bHybridSearch || m_tSettings.m_bSkipKnnDistSort )
 		return;
 
 	if ( m_pSorterSchema->GetAttr ( GetKnnDistAttrName() ) && !strstr ( sSortBy.cstr(), "knn_dist" ) )

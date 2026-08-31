@@ -17,7 +17,6 @@
 #include "coroutine.h"
 #include "knnmisc.h"
 #include "sorterscroll.h"
-#include "sortcomp.h"
 #include "sphinxquery/xqparser.h"
 
 struct SubQueryResult_t
@@ -66,7 +65,7 @@ static void ClearHybridScoreInternalExpr ( ISphMatchSorter * pSorter )
 // Each result set contributes ranks 1..count. Documents appearing in multiple sets
 // accumulate score = sum( weight_i / (rank_in_set_i + k) ) across all sets they appear in.
 // Weights default to 1.0 when not specified.
-static void FuseRRF ( CSphVector<SubQueryResult_t> & dResults, int iRankConstant, const CSphVector<float> & dWeights, CSphVector<RRFEntry_t> & dFused, bool bGroupBy, const CSphMatchComparatorState * pWithinGroupState )
+static void FuseRRF ( CSphVector<SubQueryResult_t> & dResults, int iRankConstant, const CSphVector<float> & dWeights, CSphVector<RRFEntry_t> & dFused, bool bGroupBy )
 {
 	int iTotalMatches = 0;
 	for ( const auto & tRes : dResults )
@@ -91,14 +90,14 @@ static void FuseRRF ( CSphVector<SubQueryResult_t> & dResults, int iRankConstant
 			if ( pIdx )
 			{
 				auto & tEntry = dFused[*pIdx];
+				// sub-query sorters emit each key once per set (and grouped sorters already keep
+				// the best within-group representative), so only the first hit contributes
 				int & iStoredMatch = iSet==0 ? tEntry.m_iTextMatchIdx : tEntry.m_dKnnMatchIdx[iSet - 1];
 				if ( iStoredMatch < 0 )
 				{
 					tEntry.m_fScore += fContribution;
 					iStoredMatch = i;
 				}
-				else if ( pWithinGroupState && MatchGeneric5_fn::IsLess ( tRes.m_dMatches[iStoredMatch], tRes.m_dMatches[i], *pWithinGroupState ) )
-					iStoredMatch = i;
 			}
 			else
 			{
@@ -532,17 +531,9 @@ void HybridExecutor_c::SetupSubQueryLimits()
 
 	int iWindow = m_tHybridSettings.m_iWindowSize > 0 ? m_tHybridSettings.m_iWindowSize : Max ( iMaxKnnDocs, (int64_t)m_tTextQuery.m_iLimit );
 	for ( auto & tKnnQuery : m_dKnnQueries )
-	{
 		tKnnQuery.m_iLimit = iWindow;
-		bool bCustomWithinGroupSort = !tKnnQuery.m_sGroupBy.IsEmpty() && !tKnnQuery.m_sSortBy.IsEmpty() && strcasecmp ( tKnnQuery.m_sSortBy.cstr(), "@weight desc" );
-		if ( bCustomWithinGroupSort )
-			tKnnQuery.m_iGroupbyLimit = iWindow;
-	}
 
 	m_tTextQuery.m_iLimit = iWindow;
-	bool bTextCustomWithinGroupSort = !m_tTextQuery.m_sGroupBy.IsEmpty() && !m_tTextQuery.m_sSortBy.IsEmpty() && strcasecmp ( m_tTextQuery.m_sSortBy.cstr(), "@weight desc" );
-	if ( bTextCustomWithinGroupSort )
-		m_tTextQuery.m_iGroupbyLimit = iWindow;
 }
 
 
@@ -551,6 +542,10 @@ bool HybridExecutor_c::RunSubQuery ( const CSphQuery & tQuery, const CSphMultiQu
 	SphQueueRes_t tQueueRes;
 	CSphString sError;
 	SphQueueSettings_t tQueueSettings = CreateHybridSubQueryQueueSettings ( m_tQueueSettings );
+
+	// a grouped sub-query must pick its within-group representative by the query's WITHIN GROUP ORDER BY;
+	// the implicit "knn_dist() asc" prefix that non-hybrid knn queries get would override it
+	tQueueSettings.m_bSkipKnnDistSort = !tQuery.m_sGroupBy.IsEmpty();
 	tSubResult.m_pSorter.reset ( sphCreateQueue ( tQueueSettings, tQuery, sError, tQueueRes ) );
 	if ( !tSubResult.m_pSorter )
 	{
@@ -862,7 +857,7 @@ bool HybridExecutor_c::Execute ( CSphQueryResult & tResult, const VecTraits_T<IS
 	}
 
 	CSphVector<RRFEntry_t> dFused;
-	FuseRRF ( m_dSubResults, m_tHybridSettings.m_iRankConstant, m_dWeights, dFused, pOutputSorter->IsGroupby(), pOutputSorter->IsGroupby() ? &pOutputSorter->GetState() : nullptr );
+	FuseRRF ( m_dSubResults, m_tHybridSettings.m_iRankConstant, m_dWeights, dFused, pOutputSorter->IsGroupby() );
 	PushFusedMatches ( pOutputSorter, dFused );
 
 	if ( dSorters.any_of ( [&] ( ISphMatchSorter * p ) { return !p->FinalizeJoin ( tMeta.m_sError, tMeta.m_sWarning ); } ) )

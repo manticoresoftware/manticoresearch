@@ -5983,20 +5983,20 @@ bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVe
 }
 
 
-static bool PrepareEmbeddingModelsForSchema ( CSphSchema & tSchema, std::unique_ptr<TableEmbeddings_c> & pEmbeddings, CSphVector<AttrWithModel_t> & dAttrsWithModels, CSphString & sError )
+static bool SchemaHasEmbeddingModels ( const CSphSchema & tSchema )
 {
-	pEmbeddings.reset();
-	dAttrsWithModels.Reset();
-
-	bool bHaveModels = false;
 	for ( int i = 0 ; i < tSchema.GetAttrsCount(); i++ )
-		bHaveModels |= !tSchema.GetAttr(i).m_tKNNModel.m_sModelName.empty();
+		if ( !tSchema.GetAttr(i).m_tKNNModel.m_sModelName.empty() )
+			return true;
 
-	if ( !bHaveModels )
-		return true;
+	return false;
+}
 
+
+static bool PrepareAttrsWithModels ( CSphSchema & tSchema, TableEmbeddings_c & tEmbeddings, CSphVector<AttrWithModel_t> & dAttrsWithModels, CSphString & sError )
+{
+	dAttrsWithModels.Reset();
 	dAttrsWithModels.Resize ( tSchema.GetAttrsCount() );
-	pEmbeddings = std::make_unique<TableEmbeddings_c>();
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		const auto & tAttr = tSchema.GetAttr(i);
@@ -6008,12 +6008,16 @@ static bool PrepareEmbeddingModelsForSchema ( CSphSchema & tSchema, std::unique_
 		if ( !ParseEmbeddingSources ( dAttrsWithModels[i].m_dFrom, tAttr.m_sKNNFrom, tSchema, sError ) )
 			return false;
 
-		if ( !pEmbeddings->Load ( tAttr.m_sName, tAttr.m_tKNNModel, sError ) )
-			return false;
+		auto pModel = tEmbeddings.GetModel ( tAttr.m_sName );
+		if ( !pModel )
+		{
+			if ( !tEmbeddings.Load ( tAttr.m_sName, tAttr.m_tKNNModel, sError ) )
+				return false;
 
-		auto pModel = pEmbeddings->GetModel ( tAttr.m_sName );
+			pModel = tEmbeddings.GetModel ( tAttr.m_sName );
+		}
+
 		assert(pModel);
-
 		dAttrsWithModels[i].m_pModel = pModel;
 
 		// fixme! modifying the schema
@@ -6021,6 +6025,19 @@ static bool PrepareEmbeddingModelsForSchema ( CSphSchema & tSchema, std::unique_
 	}
 
 	return true;
+}
+
+
+static bool PrepareEmbeddingModelsForSchema ( CSphSchema & tSchema, std::unique_ptr<TableEmbeddings_c> & pEmbeddings, CSphVector<AttrWithModel_t> & dAttrsWithModels, CSphString & sError )
+{
+	pEmbeddings.reset();
+	dAttrsWithModels.Reset();
+
+	if ( !SchemaHasEmbeddingModels ( tSchema ) )
+		return true;
+
+	pEmbeddings = std::make_unique<TableEmbeddings_c>();
+	return PrepareAttrsWithModels ( tSchema, *pEmbeddings, dAttrsWithModels, sError );
 }
 
 bool RtIndex_c::LoadEmbeddingModels ( CSphString & sError )
@@ -9894,6 +9911,10 @@ bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD
 	if ( !Alter_AddRemoveFieldFromSchema ( bAdd, tNewSchema, sFieldName, uFieldFlags, sError ) )
 		return false;
 
+	CSphVector<AttrWithModel_t> dPreparedAttrsWithModels;
+	if ( m_pEmbeddings && !PrepareAttrsWithModels ( tNewSchema, *m_pEmbeddings, dPreparedAttrsWithModels, sError ) )
+		return false;
+
 	m_tSchema = tNewSchema;
 
 	auto tGuard = RtGuard();
@@ -9908,6 +9929,9 @@ bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD
 		AddFieldToRamchunk ( sFieldName, uFieldFlags, tOldSchema, tNewSchema );
 	else
 		RemoveFieldFromRamchunk ( sFieldName, tOldSchema, tNewSchema );
+
+	if ( m_pEmbeddings )
+		m_dAttrsWithModels.SwapData ( dPreparedAttrsWithModels );
 
 	// fixme: we can't rollback at this point
 	RaiseAlterGeneration();
@@ -9977,6 +10001,10 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 	CSphVector<AttrWithModel_t> dPreparedAttrsWithModels;
 
 	const bool bModelBackedEmbedding = ( bAdd && IsModelBackedEmbedding ( tNewCtx ) );
+	if ( !bModelBackedEmbedding && m_pEmbeddings
+		&& !PrepareAttrsWithModels ( tNewSchema, *m_pEmbeddings, dPreparedAttrsWithModels, sError ) )
+		return false;
+
 	if ( bModelBackedEmbedding )
 	{
 		if ( !PrepareEmbeddingModelsForSchema ( tNewSchema, pPreparedEmbeddings, dPreparedAttrsWithModels, sError ) )
@@ -10015,9 +10043,16 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 	AddRemoveFromRamDocstore ( tOldSchema, tNewSchema );
 
 	if ( bModelBackedEmbedding )
-	{
 		m_pEmbeddings = std::move ( pPreparedEmbeddings );
+
+	if ( m_pEmbeddings )
+	{
 		m_dAttrsWithModels.SwapData ( dPreparedAttrsWithModels );
+		if ( !SchemaHasEmbeddingModels ( m_tSchema ) )
+		{
+			m_pEmbeddings.reset();
+			m_dAttrsWithModels.Reset();
+		}
 	}
 
 	// fixme: we can't rollback at this point

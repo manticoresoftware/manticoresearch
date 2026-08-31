@@ -544,8 +544,9 @@ bool HybridExecutor_c::RunSubQuery ( const CSphQuery & tQuery, const CSphMultiQu
 	SphQueueSettings_t tQueueSettings = CreateHybridSubQueryQueueSettings ( m_tQueueSettings );
 
 	// a grouped sub-query must pick its within-group representative by the query's WITHIN GROUP ORDER BY;
-	// the implicit "knn_dist() asc" prefix that non-hybrid knn queries get would override it
-	tQueueSettings.m_bSkipKnnDistSort = !tQuery.m_sGroupBy.IsEmpty();
+	// the implicit "knn_dist() asc" prefix that non-hybrid knn queries get would override it.
+	// group ordering is left alone: knn sub-results are still ranked by distance, which RRF needs
+	tQueueSettings.m_bSkipKnnDistMatchSort = !tQuery.m_sGroupBy.IsEmpty();
 	tSubResult.m_pSorter.reset ( sphCreateQueue ( tQueueSettings, tQuery, sError, tQueueRes ) );
 	if ( !tSubResult.m_pSorter )
 	{

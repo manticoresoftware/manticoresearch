@@ -625,7 +625,6 @@ bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt
 		}
 	}
 
-	m_bMultiQueue = pQueueRes->m_bAlowMulti;
 	return !!iValidSorters;
 }
 
@@ -909,7 +908,7 @@ CSphVector<JoinedIndexes_t> SearchHandler_c::GetRlockedJoinedIndexes ( const CSp
 }
 
 
-bool SearchHandler_c::SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, GlobalSorters_c & tGlobalSorters, LocalSearchRef_t & tCtx, int64_t & iCpuTime, int iQuery, int iLocal, int64_t tmLocalCallUs, const CSphQueryResultMeta & tMqMeta, const CSphQueryResult & tMqRes )
+bool SearchHandler_c::SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, GlobalSorters_c & tGlobalSorters, LocalSearchRef_t & tCtx, int64_t & iCpuTime, int iQuery, int iLocal, int64_t tmLocalCallUs, bool bLocalMultiQueue, const CSphQueryResultMeta & tMqMeta, const CSphQueryResult & tMqRes )
 {
 	auto & dNFailuresSet = tCtx.m_dFailuresSet;
 	auto & dNAggrResults = tCtx.m_dAggrResults;
@@ -923,10 +922,10 @@ bool SearchHandler_c::SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, 
 
 	AggrResult_t & tNRes = dNAggrResults[iQuery];
 	int64_t tmQTimeForStatsUs = tNRes.GetQueryTimeUs();
-	auto pDocstore = m_bMultiQueue ? tMqRes.m_pDocstore : dNResults[iQuery].m_pDocstore;
+	auto pDocstore = bLocalMultiQueue ? tMqRes.m_pDocstore : dNResults[iQuery].m_pDocstore;
 
 	// multi-queue only returned one result set meta, so we need to replicate it
-	if ( m_bMultiQueue )
+	if ( bLocalMultiQueue )
 	{
 		// these times will be overridden below, but let's be clean
 		tmQTimeForStatsUs = tMqMeta.GetQueryTimeUs() / Max ( iNumQueries, 1 );
@@ -953,7 +952,7 @@ bool SearchHandler_c::SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, 
 	// Per-table stats must use the exact shared wall time divided by the logical-query count,
 	// otherwise integer-ms division collapses xN groups to zero, while using the full shared
 	// call time overcounts every logical FACET result.
-	if ( m_bMultiQueue )
+	if ( bLocalMultiQueue )
 		m_dQueryIndexStats[iLocal].m_dStats[iQuery].m_tmQueryTime = Max<int64_t> ( tmLocalCallUs / Max ( iNumQueries, 1 ), 0 );
 	else
 		m_dQueryIndexStats[iLocal].m_dStats[iQuery].m_tmQueryTime = tmQTimeForStatsUs;
@@ -1095,6 +1094,7 @@ void SearchHandler_c::RunLocalSearches()
 			CSphQueryResult tMqRes;
 			tMqRes.m_pMeta = &tMqMeta;
 			int64_t tmLocalCallUs = 0;
+			bool bLocalMultiQueue = false;
 
 			{	// scope for r-locking the index
 				RIdx_c pIndex { pServed };
@@ -1109,6 +1109,7 @@ void SearchHandler_c::RunLocalSearches()
 				SphQueueRes_t tQueueRes;
 				if ( !CreateValidSorters ( dSorters, &tQueueRes, dNFailuresSet, pExtra, pIndex, dJoinedIndexes, sLocal, szParent, &tCtx.m_tHook ) )
 					continue;
+				bLocalMultiQueue = tQueueRes.m_bAlowMulti;
 
 				// do the query
 				CSphMultiQueryArgs tMultiArgs ( iIndexWeight );
@@ -1137,7 +1138,7 @@ void SearchHandler_c::RunLocalSearches()
 					auto tQueueSettings = MakeQueueSettings ( pIndex, pJoinedIndex, dJoinedIndexes[0].m_szParent, m_dNQueries.First().m_iMaxMatches, m_dPSInfo[iLocal].m_bForceSingleThread, &tCtx.m_tHook );
 					bResult = ExecuteHybridSearch ( pIndex, m_dNQueries.First(), tQueueSettings, dNResults[0], dSorters, tMultiArgs );
 				}
-				else if ( m_bMultiQueue )
+				else if ( bLocalMultiQueue )
 					bResult = pIndex->MultiQuery ( tMqRes, m_dNQueries.First(), dSorters, tMultiArgs );
 				else
 					bResult = pIndex->MultiQueryEx ( iQueries, &m_dNQueries[0], &dNResults[0], &dSorters[0], tMultiArgs );
@@ -1159,14 +1160,14 @@ void SearchHandler_c::RunLocalSearches()
 					if ( !pSorter )
 						continue;
 
-					if ( SubmitSuccess ( dSorters, tGlobalSorters, tCtx, iCpuTime, i, iLocal, tmLocalCallUs, tMqMeta, tMqRes ) )
+					if ( SubmitSuccess ( dSorters, tGlobalSorters, tCtx, iCpuTime, i, iLocal, tmLocalCallUs, bLocalMultiQueue, tMqMeta, tMqRes ) )
 						iTotalSuccesses.fetch_add ( 1, std::memory_order_relaxed );
 				}
 			} else
 				// failed, submit local (if not empty) or global error string
 				for ( int i = 0; i<iQueries; ++i )
 					dNFailuresSet[i].Submit ( sLocal, szParent, tMqMeta.m_sError.IsEmpty ()
-							? dNAggrResults[m_bMultiQueue ? 0 : i].m_sError.cstr ()
+							? dNAggrResults[bLocalMultiQueue ? 0 : i].m_sError.cstr ()
 							: tMqMeta.m_sError.cstr () );
 
 			// cleanup sorters

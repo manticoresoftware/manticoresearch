@@ -565,32 +565,6 @@ static void ExtractPostlimit ( const ISphSchema & tSchema, bool bMaster, CSphVec
 	}
 }
 
-// for single chunk of matches return list of tags with docstores
-static CSphVector<int> GetUniqueTagsWithDocstores ( const AggrResult_t & tRes, int iOff, int iLim )
-{
-	assert ( tRes.m_bTagsCompacted );
-	assert ( tRes.m_bSingle );
-
-	CSphVector<bool> dBoolTags;
-	dBoolTags.Resize ( tRes.m_dResults.GetLength() );
-	dBoolTags.ZeroVec();
-
-	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( iOff, iLim );
-	for ( const auto& dMatch : dMatches )
-	{
-		assert ( dMatch.m_iTag < tRes.m_dResults.GetLength() );
-		if ( tRes.m_dResults[dMatch.m_iTag].Docstore() )
-			dBoolTags[dMatch.m_iTag] = true;
-	}
-
-	CSphVector<int> dTags;
-	ARRAY_CONSTFOREACH( i, dBoolTags )
-		if ( dBoolTags[i] )
-			dTags.Add(i);
-
-	return dTags;
-}
-
 static void SetupPostlimitExprs ( const DocstoreReader_i * pDocstore, const CSphColumnInfo * pCol, const char * sQuery, int64_t iDocstoreSessionId )
 {
 	DocstoreSession_c::InfoDocID_t tSessionInfo;
@@ -649,9 +623,6 @@ static void ProcessMultiPostlimit ( AggrResult_t & tRes, VecTraits_T<const CSphC
 	assert ( tRes.m_bTagsCompacted );
 	assert ( tRes.m_bIdxByTag );
 
-	// collect unique tags from matches
-	CSphVector<int> dDocstoreTags = GetUniqueTagsWithDocstores ( tRes, iOff, iLim );
-
 	int iLastTag = -1;
 	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( iOff, iLim );
 	for ( auto & dMatch : dMatches )
@@ -663,9 +634,6 @@ static void ProcessMultiPostlimit ( AggrResult_t & tRes, VecTraits_T<const CSphC
 			continue; // remote match; everything should be precalculated
 
 		auto * pDocstore = tRes.m_dResults[iTag].Docstore ();
-
-		if ( !pDocstore )
-			continue;
 
 		if ( iTag!=iLastTag )
 		{

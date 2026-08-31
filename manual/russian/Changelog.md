@@ -1,5 +1,36 @@
 # Журнал изменений
 
+## Версия Dev
+
+### Новые функции и улучшения
+* 🆕 Добавлено тестирование Grafana версий 13.1 и 13.2.
+* 🆕 Добавлено тестирование Logstash версии 9.5.
+
+## Версия 29.0.2
+**Выпуск**: 14 августа 2026
+
+В этом релизе добавлены просмотр настроек шардированных таблиц, оптимизация распределенных и шардированных таблиц, callbacks Buddy для Unix-сокетов, более надежный conversational search, настраиваемый доступ к файлам и более быстрое пересчетное ранжирование columnar KNN, а также исправления в резервном копировании, совместимости JDBC, подсветке, просмотре запросов, компактации KNN, использовании памяти распределенными запросами, шаблонных таблицах и конкурентной оптимизации RT-таблиц.
+
+### Новые возможности и улучшения
+* 🆕 [v29.0.0](https://github.com/manticoresoftware/manticoresearch/tree/29.0.0) [Issue #4802](https://github.com/manticoresoftware/manticoresearch/issues/4802) Добавлена поддержка синхронного [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) для распределённых и шардированных таблиц через `OPTION sync=1`, с применением заданного порога к каждому локальному RT-компоненту и настроенному удалённому зеркалу.
+* 🆕 [v28.10.0](https://github.com/manticoresoftware/manticoresearch/tree/28.10.0) [PR #4799](https://github.com/manticoresoftware/manticoresearch/pull/4799) Добавлена поддержка [SHOW TABLE SETTINGS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS.md) для нативных шардированных таблиц.
+* 🆕 [v28.8.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.8.0) [Buddy PR #691](https://github.com/manticoresoftware/manticoresearch-buddy/pull/691) Повышена надёжность [разговорного поиска](Searching/Conversational_search.md) за счёт повторных попыток вызовов инструмента выбора LLM-маршрута с ошибкой до трёх раз перед возвратом ошибки.
+* 🆕 [v28.7.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.7.0) [Issue #3837](https://github.com/manticoresoftware/manticoresearch/issues/3837) Добавлены настройки `access_columnar_attrs` и `access_secondary` для выбора буферизованного доступа `file` или `mmap` к файлам columnar- и secondary-индексов, а также повышена производительность columnar [KNN-поиска](Searching/KNN.md#KNN-vector-search) за счёт пакетной обработки вычислений расстояния во время пересчёта ранжирования.
+
+## Ломающие изменения
+* ⚠️ [v29.0.0](https://github.com/manticoresoftware/manticoresearch/tree/29.0.0) [Issue #4739](https://github.com/manticoresoftware/manticoresearch/issues/4739) Добавлены потоковые ответы heartbeat для долгих шардовых записей и репликационного SST, что изменяет API `SHARD_WRITE` и кластерный протокол. **Это важно только при обновлении или откате развертываний со смешанными версиями, которые используют нативные записи в шардированные таблицы или репликацию**; для автономных узлов и развертываний, которые не используют ни то ни другое, никаких специальных действий не требуется. Существующие данные и конфигурация остаются совместимыми, миграция не нужна. При обновлении сначала обновите удалённые shard-агенты, затем их координаторы, а все репликационные peers - до запуска SST. Откат по-прежнему возможен без пересборки данных, но сначала следует откатить координаторы, затем agents, и SST нельзя выполнять, пока peers работают со смешанными версиями.
+
+### Исправления ошибок
+* 🪲 [v29.0.2](https://github.com/manticoresoftware/manticoresearch/tree/29.0.2) [Backup PR #140](https://github.com/manticoresoftware/manticoresearch-backup/pull/140) Обновлен [manticore-backup](https://github.com/manticoresoftware/manticoresearch-backup) до 1.10.3, что исправляет сбойные резервные копии, из-за которых RT-таблицы оставались замороженными, когда после `FREEZE` для отдельной таблицы возникала ошибка.
+* 🪲 [v29.0.2](https://github.com/manticoresoftware/manticoresearch/tree/29.0.2) [Issue #4434](https://github.com/manticoresoftware/manticoresearch/issues/4434) Обновлен Buddy до 4.4.1, что восстанавливает инициализацию MySQL Connector/J за счет поддержки системной переменной `@@query_cache_size` и числовых значений системных переменных.
+* 🪲 [v29.0.1](https://github.com/manticoresoftware/manticoresearch/tree/29.0.1) [Issue #4780](https://github.com/manticoresoftware/manticoresearch/issues/4780) Исправлены падения `searchd` во время оптимизации RT-таблиц при одновременных обновлениях, которые изменяли размер blob-backed атрибутов, включая KNN-таблицы, за счёт того, что merge-воркеры больше не читают устаревшую исходную память.
+* 🪲 [v29.0.0](https://github.com/manticoresoftware/manticoresearch/tree/29.0.0) [Issue #4739](https://github.com/manticoresoftware/manticoresearch/issues/4739) Исправлена ситуация, когда долгие шардовые записи завершались по тайм-ауту, пока физическая таблица сбрасывала данные на диск или выполняла другую ресурсоёмкую работу; ответы heartbeat теперь удерживают соединение живым без необходимости задавать чрезмерно большой `agent_query_timeout`.
+* 🪲 [v28.9.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.9.3) [Issue #4792](https://github.com/manticoresoftware/manticoresearch/issues/4792) Исправлено формирование невалидного вложенного HTML функциями [CALL SNIPPETS и HIGHLIGHT()](Searching/Highlighting.md) при `html_strip_mode=retain`; обёртки подсветки теперь сохраняют существующие границы элементов и создают корректную разметку.
+* 🪲 [v28.9.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.9.2) [Issue #4678](https://github.com/manticoresoftware/manticoresearch/issues/4678) Исправлен use-after-free, который мог приводить к падению `searchd`, когда [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) проверял одновременно выполняющиеся HTTP SQL-запросы.
+* 🪲 [v28.9.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.9.1) [Issue #4738](https://github.com/manticoresoftware/manticoresearch/issues/4738) Исправлено, что явные значения [optimize_cutoff](Server_settings/Searchd.md#optimize_cutoff) не применялись к порогу KNN-компакции, поэтому теперь серверные и табличные настройки ожидаемым образом управляют автоматическим слиянием чанков для векторных таблиц.
+* 🪲 [v28.6.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.6.8) [PR #4777](https://github.com/manticoresoftware/manticoresearch/pull/4777) Исправлена зависание [EXPLAIN QUERY](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) на таблицах-шаблонах, когда полнотекстовый запрос содержит селекторы полей; теперь валидные селекторы обнаруживаются полнотекстовым парсером, а некорректные селекторы возвращают синтаксические ошибки.
+* 🪲 [v28.6.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/28.6.7) [Issue #4771](https://github.com/manticoresoftware/manticoresearch/issues/4771) Исправлено высокое потребление памяти master-демоном после завершённых операций distributed-agent за счёт немедленного освобождения больших буферов запросов и ответов после парсинга вместо удержания их до истечения `agent_query_timeout`.
+
 ## Версия 28.6.6
 **Выпуск**: 31 июля 2026 года
 

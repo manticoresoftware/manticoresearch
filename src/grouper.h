@@ -72,6 +72,7 @@ CSphGrouper * CreateGrouperYear ( const CSphAttrLocator & tLoc );
 CSphGrouper * CreateGrouperJsonField ( const CSphAttrLocator & tLoc, ISphExpr * pExpr );
 CSphGrouper * CreateGrouperMVA32 ( const CSphAttrLocator & tLoc );
 CSphGrouper * CreateGrouperMVA64 ( const CSphAttrLocator & tLoc );
+CSphGrouper * CreateGrouperFloatVec ( const CSphAttrLocator & tLoc, bool bArray );
 CSphGrouper * CreateGrouperAttr ( const CSphAttrLocator & tLoc );
 CSphGrouper * CreateGrouperString ( const CSphAttrLocator & tLoc, ESphCollation eCollation );
 CSphGrouper * CreateGrouperStringExpr ( ISphExpr * pExpr, ESphCollation eCollation );

@@ -45,6 +45,8 @@ table <table name> {
   [rt_attr_float = <another float field name>]
   [rt_attr_float_vector = <float vector field name>]
   [rt_attr_float_vector = <another float vector field name>]
+  [rt_attr_float_vector_array = <float vector array field name>]
+  [rt_attr_float_vector_array = <another float vector array field name>]
   [rt_attr_bool = <boolean field name>]
   [rt_attr_bool = <another boolean field name>]
   [rt_attr_string = <string field name>]
@@ -107,7 +109,7 @@ type = rt
 path = path/to/table
 ```
 
-表将被存储或定位的路径，绝对路径或相对路径均可，不含扩展名。
+表将被存储或定位的路径，绝对路径或相对路径均可，不含扩展名。当 `indexer` 构建 plain 表时，会自动创建该路径中缺失的父目录。运行 `indexer` 的用户必须对最近的现有父目录拥有写权限。
 
 值：表的路径，**必填**
 
@@ -538,6 +540,30 @@ knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2",
 
 有关 KNN 向量搜索和自动嵌入的更多详细信息，请参阅 [KNN 文档](../../Searching/KNN.md)。
 
+#### rt_attr_float_vector_array
+
+```ini
+rt_attr_float_vector_array = chunk_vectors
+```
+
+声明一个属性，用于在每个文档中保存多个浮点向量，适合天然由多个 embedding 表示的文档：文章的分块、商品的照片、视频的关键帧。
+
+值：字段名。允许多个记录。
+
+KNN 的配置方式与 [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) 完全相同，使用同样的 `knn` 块：
+
+```ini
+rt_attr_float_vector_array = chunk_vectors
+knn = {"attrs":[{"name":"chunk_vectors","type":"hnsw","dims":768,"hnsw_similarity":"COSINE","hnsw_m":16,"hnsw_ef_construction":200}]}
+```
+
+适用两个差异：
+
+- `dims` 是**必需**的，且每一行中的每个向量都必须恰好包含这么多项。
+- `model_name` 和 `from` **不**被接受 — 自动 embedding 会为每个文档生成一个向量，因此不适用于这种类型。向量必须显式提供。
+
+所有向量会一起建立索引，KNN 搜索会让每个文档只返回一次，并按其最近向量得分。参见 [Float vector array](../../Creating_a_table/Data_types.md#Float-vector-array) 和 [每个文档多个向量](../../Searching/KNN.md#Multiple-vectors-per-document)。
+
 #### rt_attr_bool
 
 ```ini
@@ -702,6 +728,7 @@ CREATE TABLE [IF NOT EXISTS] name ( <field name> <field data type> [data type op
 | [bigint](../../Creating_a_table/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bigint)	| 大整数	 |   |
 | [float](../../Creating_a_table/Data_types.md#Float) | [rt_attr_float](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float)   | 浮点数  |   |
 | [float_vector](../../Creating_a_table/Data_types.md#Float-vector) | [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) | 浮点值的向量  |   |
+| [float_vector_array](../../Creating_a_table/Data_types.md#Float-vector-array) | [rt_attr_float_vector_array](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector_array) | 每个文档包含多个浮点向量 |   |
 | [multi](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi)   | 多整数 | mva |
 | [multi64](../../Creating_a_table/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi_64) | 多大整数  | mva64 |
 | [bool](../../Creating_a_table/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bool) | 布尔值 |   |

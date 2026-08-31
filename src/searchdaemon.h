@@ -139,7 +139,7 @@ SearchdCommand_e ParseCommand ( const CSphString & sCommand );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 34
+	VER_COMMAND_SEARCH_MASTER = 35
 };
 
 
@@ -147,7 +147,7 @@ enum
 /// (shared here because of REPLICATE)
 enum SearchdCommandV_e : WORD
 {
-	VER_COMMAND_SEARCH		= 0x127, // 1.39
+	VER_COMMAND_SEARCH		= 0x128, // 1.40
 	VER_COMMAND_EXCERPT		= 0x104,
 	VER_COMMAND_UPDATE		= 0x104,
 	VER_COMMAND_KEYWORDS	= 0x102,
@@ -1512,6 +1512,8 @@ inline constexpr MysqlColumnType_e ESphAttr2MysqlColumnStreamed ( ESphAttr eAttr
 	case SPH_ATTR_UINT32SET_PTR:
 	case SPH_ATTR_FLOAT_VECTOR:
 	case SPH_ATTR_FLOAT_VECTOR_PTR:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
 	case SPH_ATTR_INT64SET:
 	case SPH_ATTR_INT64SET_PTR: return MYSQL_COL_LONG; // long is treated as a number without interpretation (just copied from input to output)
 	case SPH_ATTR_JSON:
@@ -1752,6 +1754,20 @@ public:
 		HeadColumn (szTitle, MYSQL_COL_LONG);
 		HeadEnd();
 		PutDWORD ( iValue );
+		Commit();
+		Eof();
+		return true;
+	}
+
+	bool DataTableOneline ( const char * szTitle, const char * szValue )
+	{
+		HeadBegin();
+		HeadColumn ( szTitle, MYSQL_TYPE_VAR_STRING );
+		HeadEnd();
+		if ( szValue )
+			PutString ( szValue );
+		else
+			PutNULL();
 		Commit();
 		Eof();
 		return true;

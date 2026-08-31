@@ -20,6 +20,7 @@
 #include "searchdha.h"
 #include "searchdssl.h"
 #include "searchdreplication.h"
+#include "searchdddl.h"
 #include "replication/wsrep_cxx.h"
 #include "replication/cluster_binlog.h"
 
@@ -122,6 +123,112 @@ TEST ( functions, SecretEqual )
 	EXPECT_FALSE ( SecretEqual ( VecTraits_T<BYTE> ( dA, sizeof ( dA ) ), VecTraits_T<BYTE> ( dLong, sizeof ( dLong ) ) ) );
 	EXPECT_FALSE ( SecretEqual ( VecTraits_T<BYTE>(), VecTraits_T<BYTE>() ) );
 }
+
+TEST ( functions, ParseUnicodeIndexList )
+{
+	StrVec_t dIndexes;
+	ParseIndexList ( " 搜索表 , 商品表.分片,	ascii_table-1 ", dIndexes );
+
+	ASSERT_EQ ( dIndexes.GetLength(), 3 );
+	EXPECT_STREQ ( dIndexes[0].cstr(), "搜索表" );
+	EXPECT_STREQ ( dIndexes[1].cstr(), "商品表.分片" );
+	EXPECT_STREQ ( dIndexes[2].cstr(), "ascii_table-1" );
+}
+
+
+static bool ParseDdlForTest ( const CSphString & sQuery, CSphString & sError )
+{
+	CSphVector<char> dQuery ( sQuery.Length()+2 );
+	memcpy ( dQuery.Begin(), sQuery.cstr(), sQuery.Length() );
+	dQuery[sQuery.Length()] = '\0';
+	dQuery[sQuery.Length()+1] = '\0';
+	CSphVector<SqlStmt_t> dStmt;
+	return ParseDdl ( { dQuery.Begin(), sQuery.Length() }, dStmt, sError );
+}
+
+
+TEST ( functions, DdlGenericIdentifiersValidateUtf8 )
+{
+	CSphString sError;
+	EXPECT_TRUE ( ParseDdlForTest ( "CREATE FUNCTION функция RETURNS INT SONAME 'missing.so'", sError ) ) << sError.cstr();
+
+	std::string sMaxTable = "CREATE TABLE `" + std::string ( SPH_MAX_TABLE_NAME_BYTES, 'a' ) + "` (body text)";
+	EXPECT_TRUE ( ParseDdlForTest ( sMaxTable.c_str(), sError ) ) << sError.cstr();
+	sMaxTable.insert ( sMaxTable.find ( '`' )+1, 1, 'a' );
+	sError = "";
+	EXPECT_FALSE ( ParseDdlForTest ( sMaxTable.c_str(), sError ) );
+
+	sError = "";
+	EXPECT_FALSE ( ParseDdlForTest ( "CREATE TABLE `123` (body text)", sError ) );
+	sError = "";
+	EXPECT_FALSE ( ParseDdlForTest ( "CREATE TABLE valid (`456` text)", sError ) );
+
+	const char * dCompatibleColumnQueries[] =
+	{
+		"CREATE TABLE logs (@timestamp TIMESTAMP, @version STRING)",
+		"CREATE TABLE logs_quoted (`@timestamp` TIMESTAMP, `@version` STRING)",
+		"CREATE TABLE logs_mixed (@TIMESTAMP TIMESTAMP, `@Version` STRING)",
+		"CREATE TABLE logs_bit (@timestamp BIT(1))",
+		"ALTER TABLE logs ADD COLUMN @timestamp TIMESTAMP",
+		"ALTER TABLE logs ADD COLUMN @timestamp BIT(1)",
+		"ALTER TABLE logs MODIFY COLUMN @timestamp BIGINT",
+		"ALTER TABLE logs MODIFY COLUMN @version API_KEY='secret'",
+		"ALTER TABLE logs MODIFY COLUMN @version API_URL='http://127.0.0.1'",
+		"ALTER TABLE logs MODIFY COLUMN @version API_TIMEOUT='1s'",
+		"ALTER TABLE logs DROP COLUMN @version",
+		"ALTER TABLE logs REBUILD EMBEDDINGS @version"
+	};
+	for ( const char * szQuery : dCompatibleColumnQueries )
+	{
+		sError = "";
+		EXPECT_TRUE ( ParseDdlForTest ( szQuery, sError ) ) << szQuery << ": " << sError.cstr();
+	}
+
+	const char * dRejectedAtQueries[] =
+	{
+		"CREATE TABLE logs (@user_field STRING)",
+		"CREATE TABLE logs (`@uuid_id` STRING)",
+		"CREATE TABLE logs (@timestampx TIMESTAMP)",
+		"CREATE TABLE logs (@version2 STRING)",
+		"CREATE TABLE @timestamp (body TEXT)",
+		"CREATE FUNCTION @timestamp RETURNS INT SONAME 'missing.so'"
+	};
+	for ( const char * szQuery : dRejectedAtQueries )
+	{
+		sError = "";
+		EXPECT_FALSE ( ParseDdlForTest ( szQuery, sError ) ) << szQuery;
+	}
+
+	std::string sMaxSystem = "CREATE TABLE system.`" + std::string ( SPH_MAX_TABLE_NAME_BYTES + SPH_MAX_GENERATED_TABLE_SUFFIX_BYTES, 'a' ) + "` (body text)";
+	sError = "";
+	EXPECT_TRUE ( ParseDdlForTest ( sMaxSystem.c_str(), sError ) ) << sError.cstr();
+	sMaxSystem.insert ( sMaxSystem.find ( '`' )+1, 1, 'a' );
+	sError = "";
+	EXPECT_FALSE ( ParseDdlForTest ( sMaxSystem.c_str(), sError ) );
+
+	// U+200B ZERO WIDTH SPACE is encoded explicitly in every rejected identifier.
+	const char * dUnsafe[] =
+	{
+		"CREATE FUNCTION bad" "\xE2\x80\x8B" "name RETURNS INT SONAME 'missing.so'",
+		"CREATE PLUGIN bad" "\xE2\x80\x8B" "name TYPE 'ranker' SONAME 'missing.so'",
+		"CREATE CLUSTER bad" "\xE2\x80\x8B" "name",
+		"JOIN CLUSTER bad" "\xE2\x80\x8B" "name"
+	};
+	for ( const char * szQuery : dUnsafe )
+	{
+		sError = "";
+		EXPECT_FALSE ( ParseDdlForTest ( szQuery, sError ) ) << szQuery;
+		EXPECT_NE ( strstr ( sError.cstr(), "unsafe Unicode character U+200B" ), nullptr ) << sError.cstr();
+	}
+
+	std::string sMalformed = "CREATE FUNCTION bad";
+	sMalformed.push_back ( (char)0x80 );
+	sMalformed += "name RETURNS INT SONAME 'missing.so'";
+	sError = "";
+	EXPECT_FALSE ( ParseDdlForTest ( sMalformed.c_str(), sError ) );
+	EXPECT_NE ( strstr ( sError.cstr(), "invalid UTF-8 in identifier" ), nullptr ) << sError.cstr();
+}
+
 
 class tstlogger
 {

@@ -1415,6 +1415,8 @@ static void ConvertSchema ( const CSphSchema & tSchema, common::Schema_t & tSISc
 			continue;
 		if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tCol.IsIndexedKNN() )
 			continue;
+		if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY ) // float_vector_array never gets a secondary index, KNN-indexed or not
+			continue;
 
 		common::StringHash_fn fnStringCalcHash = nullptr;
 		common::AttrType_e eAttrType = ToColumnarType ( tCol.m_eAttrType, tCol.m_tLocator.m_iBitCount );

@@ -2017,6 +2017,46 @@ insert_val:
 	| TOK_QUOTED_STRING		{ $$.m_iType = TOK_QUOTED_STRING; $$.m_iStart = $1.m_iStart; $$.m_iEnd = $1.m_iEnd; }
 	| '(' const_list ')'	{ $$.m_iType = TOK_CONST_MVA; $$.m_iValues = $2.m_iValues; }
 	| '(' ')'				{ $$.m_iType = TOK_CONST_MVA; }
+	| vec_array				{ $$ = $1; }
+	;
+
+// nested vector literal, e.g. [[1,2],[3,4]] - values are flattened into ONE ordinary mva vec while a parallel vector records each inner vector's length
+vec_array:
+	'[' vec_group_list ']'	{ $$.m_iType = TOK_CONST_MVA; $$.m_iValues = $2.m_iValues; $$.m_iGroupLens = $2.m_iGroupLens; }
+	| '[' ']'				{ $$.m_iType = TOK_CONST_MVA; }
+	;
+
+vec_group_list:
+	'[' const_list ']'
+		{
+			// first group: adopt its values vec, start a fresh group-lengths vec
+			$$.m_iValues = $2.m_iValues;
+			$$.m_iGroupLens = pParser->AddGroupLensVec();
+			pParser->GetGroupLensVec ( $$.m_iGroupLens ).Add ( pParser->GetMvaVec ( $2.m_iValues ).GetLength() );
+		}
+	| '[' ']'
+		{
+			// an empty inner vector; recorded as length 0 so the converter can name it in the error
+			$$.m_iValues = pParser->AddMvaVec();
+			$$.m_iGroupLens = pParser->AddGroupLensVec();
+			pParser->GetGroupLensVec ( $$.m_iGroupLens ).Add ( 0 );
+		}
+	| vec_group_list ',' '[' const_list ']'
+		{
+			$$.m_iValues = $1.m_iValues;
+			$$.m_iGroupLens = $1.m_iGroupLens;
+			auto & dVals = pParser->GetMvaVec ( $$.m_iValues );
+			const auto & dAdd = pParser->GetMvaVec ( $4.m_iValues );
+			pParser->GetGroupLensVec ( $$.m_iGroupLens ).Add ( dAdd.GetLength() );
+			for ( const auto & tVal : dAdd )
+				dVals.Add ( tVal );
+		}
+	| vec_group_list ',' '[' ']'
+		{
+			$$.m_iValues = $1.m_iValues;
+			$$.m_iGroupLens = $1.m_iGroupLens;
+			pParser->GetGroupLensVec ( $$.m_iGroupLens ).Add ( 0 );
+		}
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -2171,6 +2211,10 @@ update_item:
 		{
 			SqlNode_t tNoValues;
 			pParser->UpdateMVAAttr ( $1, tNoValues );
+		}
+	| identcol '=' vec_array // nested vector literal, e.g. v=[[1,2],[3,4]]
+		{
+			if ( !pParser->UpdateVecArrayAttr ( $1, $3 ) ) { yyerror ( pParser, pParser->GetLastError() ); YYERROR; }
 		}
 	| json_expr '=' const_int // duplicate ident code (avoiding s/r conflict)
 		{

@@ -216,7 +216,7 @@ add_subdirectory ( sqlchecks )
 add_library ( listener_parser STATIC listenerparser.cpp )
 target_link_libraries ( listener_parser PUBLIC lmanticore )
 
-target_link_libraries ( lsearchd PUBLIC listener_parser sqlchecks digest_sha1 digest_sha256 lextra nlohmann_json::nlohmann_json )
+target_link_libraries ( lsearchd PUBLIC listener_parser sqlchecks digest_sha1 digest_sha256 lextra nlohmann_json::nlohmann_json uni-algo::uni-algo )
 target_link_libraries ( lsearchd INTERFACE Boost::filesystem )
 
 add_library ( manticore_client STATIC manticoreclient.cpp searchdlocalclient.cpp searchdlocalhistory.cpp )

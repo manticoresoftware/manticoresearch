@@ -1778,18 +1778,54 @@ static bool ParseJsonInsertSource ( const JsonObj_c & tSource, StrVec_t & dInser
 
 			if ( tItem.IsArray() )
 			{
-				tNewValue.m_iType = SqlInsert_t::CONST_MVA;
-				tNewValue.m_pVals = new RefcountedVector_c<AttrValue_t>;
-				for ( const auto & tArrayItem : tItem )
+				// nested array of arrays => float_vector_array literal, e.g. [[1,2],[3,4]].
+				bool bNested = tItem.Size() && tItem.begin().IsArray();
+				if ( bNested )
 				{
-					if ( !tArrayItem.IsInt() && !tArrayItem.IsDbl() )
-						break;
+					tNewValue.m_iType = SqlInsert_t::CONST_MVA;
+					tNewValue.m_pVals = new RefcountedVector_c<AttrValue_t>;
+					tNewValue.m_dGroupLens.Reset();
 
-					tNewValue.m_pVals->Add ( { tArrayItem.IntVal(), tArrayItem.FltVal() } );
 					bMVA = true;
+					for ( const auto & tGroup : tItem )
+					{
+						if ( !tGroup.IsArray() )
+						{
+							sError.SetSprintf ( "field '%s': mixed nested and scalar elements in a vector array", tItem.Name() );
+							return false;
+						}
+
+						int iLen = 0;
+						for ( const auto & tArrayItem : tGroup )
+						{
+							if ( !tArrayItem.IsInt() && !tArrayItem.IsDbl() )
+							{
+								sError.SetSprintf ( "field '%s': vector elements should be numeric", tItem.Name() );
+								return false;
+							}
+
+							tNewValue.m_pVals->Add ( { tArrayItem.IntVal(), (float)tArrayItem.FltVal(), tArrayItem.IsDbl() } );
+							iLen++;
+						}
+
+						tNewValue.m_dGroupLens.Add(iLen);
+					}
 				}
-				if ( !bMVA && !tItem.Size() )
-					bMVA = true;
+				else
+				{
+					tNewValue.m_iType = SqlInsert_t::CONST_MVA;
+					tNewValue.m_pVals = new RefcountedVector_c<AttrValue_t>;
+					for ( const auto & tArrayItem : tItem )
+					{
+						if ( !tArrayItem.IsInt() && !tArrayItem.IsDbl() )
+							break;
+
+						tNewValue.m_pVals->Add ( { tArrayItem.IntVal(), tArrayItem.FltVal() } );
+						bMVA = true;
+					}
+					if ( !bMVA && !tItem.Size() )
+						bMVA = true;
+				}
 			}
 
 			if ( !bMVA )
@@ -1979,6 +2015,41 @@ bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDo
 			}
 
 			tTypedAttr.m_eType = SPH_ATTR_STRING;
+		} else if ( bArray && tItem.Size() && tItem.begin().IsArray() )
+		{
+			// nested array of arrays => float_vector_array
+			CSphVector<float> dFloats;
+			CSphVector<int> dGroupLens;
+			for ( const auto & tGroup : tItem )
+			{
+				if ( !tGroup.IsArray() )
+				{
+					sError = "mixed nested and scalar elements in a vector array";
+					return false;
+				}
+
+				int iLen = 0;
+				for ( const auto & tArrayItem : tGroup )
+				{
+					if ( !tArrayItem.IsInt() && !tArrayItem.IsDbl() )
+					{
+						sError = "vector elements should be numeric";
+						return false;
+					}
+
+					dFloats.Add ( (float)tArrayItem.FltVal() );
+					iLen++;
+				}
+
+				dGroupLens.Add(iLen);
+			}
+
+			const int iDims = ValidateFloatVecArrayGroups ( dGroupLens, sError );
+			if ( !sError.IsEmpty() )
+				return false;
+
+			tTypedAttr.m_eType = SPH_ATTR_FLOAT_VECTOR_ARRAY;
+			AppendFloatVecArrayToUpdatePool ( iDims, dFloats, tUpd.m_dPool );
 		} else if ( bArray )
 		{
 			dMVA.Resize ( 0 );
@@ -2114,6 +2185,24 @@ static void PackedFloatVec2Json ( StringBuilder_c & tOut, const BYTE * pFV )
 }
 
 
+// emits the inner arrays only; the caller has already opened the outer one
+static void PackedFloatVecArray2Json ( JsonEscapedBuilder & tOut, const BYTE * pFV )
+{
+	FloatVecArray_t tArray = ParseFloatVecArray ( sphUnpackPtrAttr(pFV) );
+	if ( !tArray.m_iDims )
+		return;								// empty array: the enclosing [] is the whole value
+
+	const int iVectors = tArray.m_dValues.GetLength() / tArray.m_iDims;
+	for ( int i = 0; i<iVectors; i++ )
+	{
+		auto _ = tOut.Array();
+		const float * pVec = tArray.m_dValues.Begin() + i*tArray.m_iDims;
+		for ( int j = 0; j<tArray.m_iDims; j++ )
+			tOut.FtoA ( pVec[j] );
+	}
+}
+
+
 static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, ESphAttr eAttrType, const CSphMatch & tMatch, const CSphAttrLocator & tLoc, int iMulti=1 )
 {
 	switch ( eAttrType )
@@ -2144,6 +2233,7 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, ESphAttr eAttrType, cons
 	case SPH_ATTR_UINT32SET_PTR:
 	case SPH_ATTR_INT64SET_PTR:
 	case SPH_ATTR_FLOAT_VECTOR_PTR:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
 	{
 		auto _ = tOut.Array ();
 		const auto * pMVA = ( const BYTE * ) tMatch.GetAttr ( tLoc );
@@ -2151,6 +2241,8 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, ESphAttr eAttrType, cons
 			PackedShortMVA2Json ( tOut, pMVA );
 		else if ( eAttrType==SPH_ATTR_INT64SET_PTR )
 			PackedWideMVA2Json ( tOut, pMVA );
+		else if ( eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR )
+			PackedFloatVecArray2Json ( tOut, pMVA );	// nests one level deeper inside this array
 		else
 			PackedFloatVec2Json ( tOut, pMVA );
 	}

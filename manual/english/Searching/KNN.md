@@ -591,6 +591,59 @@ POST /search
 
 <!-- example knn_quantization -->
 
+### Multiple vectors per document
+
+A [`float_vector_array`](../Creating_a_table/Data_types.md#Float-vector-array) attribute holds several vectors per document instead of one: the chunks of an article, the photos of a product, the keyframes of a video. All vectors from all documents are indexed together, and search treats a document's vectors as alternative representations of that one document:
+
+* A document matches if **any** of its vectors is near the query vector.
+* Each matching document is returned **exactly once**, and `knn_dist()` reports the distance to its closest vector. The document's other vectors do not produce additional rows.
+* `k` counts **documents**, not vectors. `knn(v, 10, ...)` asks for the 10 nearest documents, however many vectors they own between them.
+* A document with no vectors (`[]`, or the attribute omitted) is never returned, since it is not near anything.
+
+The query vector is still a single vector of `KNN_DIMS` entries, exactly as for `float_vector`. Every vector stored in a KNN-indexed array must have `KNN_DIMS` entries too.
+
+With `HNSW_SIMILARITY='cosine'`, each stored vector is normalized on its own, so a document's vectors are compared against the query individually rather than as one long concatenated vector.
+
+Everything else on this page applies unchanged: [filtering](../Searching/KNN.md#Filtering-KNN-vector-search-results), [prefilter/postfilter](../Searching/KNN.md#Filtering-strategies:-prefilter-vs.-postfilter), [quantization](../Searching/KNN.md#Vector-quantization), [early termination](../Searching/KNN.md#Early-termination) and rescoring behave the same way. The only capability that is unavailable is [auto embeddings](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29), since a model yields one vector per document.
+
+<!-- example multi_vector -->
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+
+INSERT INTO articles VALUES
+  (1, 'first',  [[1,0,0,0],[0,1,0,0]]),
+  (2, 'second', [[0,0,1,0]]);
+
+-- doc 1 owns a vector identical to the query and another far from it,
+-- so it is returned once, at distance 0
+SELECT id, knn_dist() FROM articles WHERE knn(chunk_vectors, 5, (1,0,0,0));
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /search
+{
+  "table": "articles",
+  "knn": {
+    "field": "chunk_vectors",
+    "query_vector": [1,0,0,0],
+    "k": 5
+  }
+}
+```
+
+<!-- end -->
+
 ### Vector quantization
 
 HNSW indexes need to be fully loaded into memory to perform KNN search, which can lead to significant memory consumption. To reduce memory usage, scalar quantization can be applied - a technique that compresses high-dimensional vectors by representing each component (dimension) with a limited number of discrete values. Manticore supports 8-bit and 1-bit quantization, meaning each vector component is compressed from a 32-bit float to 8 bits or even 1 bit, reducing memory usage by 4x or 32x, respectively. These compressed representations also allow for faster distance calculations, as more vector components can be processed in a single SIMD instruction. Although scalar quantization introduces some approximation error, it is often a worthwhile trade-off between search accuracy and resource efficiency. For even better accuracy, quantization can be combined with rescoring and oversampling: more candidates are retrieved than requested, and distances for these candidates are recalculated using the original 32-bit float vectors.

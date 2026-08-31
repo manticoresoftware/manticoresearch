@@ -218,14 +218,17 @@ private:
 	std::unique_ptr<knn::Distance_i>	m_pDistCalc;
 	knn::Distance_i::DistFunc_fn		m_fnDistFunc = nullptr;
 	void *								m_pDistFuncParam = nullptr;
+	bool								m_bMulti = false; // true when one row holds N vectors instead of one, so every distance is a min over them
 
 	void		RescoreColumnar ( const VecTraits_T<int> & dOrder, VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetColumnarFromMatch_fn & fnColumnar );
 	void		RescoreBlob ( const VecTraits_T<int> & dOrder, VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool );
+	float		MinDistOverSlots ( ByteBlob_t tBlob ) const;
 };
 
 
 KNNVecDistCalc_c::KNNVecDistCalc_c ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr )
 	: m_tAttr ( tAttr )
+	, m_bMulti ( tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY )
 {
 	knn::IndexSettings_t tDistSettings = tAttr.m_tKNN;
 	tDistSettings.m_eQuantization = knn::Quantization_e::NONE; // we operate on non-quantized data
@@ -266,6 +269,26 @@ void KNNVecDistCalc_c::SetColumnar ( columnar::Columnar_i * pColumnar )
 }
 
 
+// a document matches at the distance of its CLOSEST vector
+float KNNVecDistCalc_c::MinDistOverSlots ( ByteBlob_t tBlob ) const
+{
+	FloatVecArray_t tArray = ParseFloatVecArray(tBlob);
+	if ( !tArray.m_iDims || tArray.m_iDims!=m_tAttr.m_tKNN.m_iDims )
+		return FLT_MAX;
+
+	assert ( m_fnDistFunc );
+	const int iVectors = tArray.m_dValues.GetLength() / tArray.m_iDims;
+	float fMin = FLT_MAX;
+	for ( int i = 0; i < iVectors; i++ )
+	{
+		const auto * pVec = (const BYTE*)( tArray.m_dValues.Begin() + i*tArray.m_iDims );
+		fMin = Min ( fMin, m_fnDistFunc ( pVec, m_dAnchor.Begin(), (size_t)-1, (size_t)-1, m_pDistFuncParam ) );
+	}
+
+	return fMin;
+}
+
+
 float KNNVecDistCalc_c::CalcDist ( const CSphMatch & tMatch ) const
 {
 	// this code path is used when no iterator is available, i.e. in ram chunk
@@ -274,6 +297,9 @@ float KNNVecDistCalc_c::CalcDist ( const CSphMatch & tMatch ) const
 		tRes.second = m_pIterator->Get ( tMatch.m_tRowID, tRes.first );
 	else
 		tRes = tMatch.FetchAttrData ( m_tAttr.m_tLocator, m_pBlobPool );
+
+	if ( m_bMulti )
+		return MinDistOverSlots(tRes);
 
 	size_t uDim = tRes.second / sizeof(float);
 	if ( (int)uDim!=m_tAttr.m_tKNN.m_iDims )
@@ -372,6 +398,14 @@ void KNNVecDistCalc_c::RescoreColumnar ( const VecTraits_T<int> & dOrder, VecTra
 
 		const BYTE * pData = nullptr;
 		int iLen = pIterator ? pIterator->Get ( pMatch->m_tRowID, pData ) : 0;
+
+		// FIXME: make float_vector_array batched too
+		if ( m_bMulti )
+		{
+			pMatch->SetAttrFloat ( tOutLoc, MinDistOverSlots ( { pData, iLen } ) );
+			continue;
+		}
+
 		if ( iLen!=iVecBytes || !pData )
 		{
 			pMatch->SetAttrFloat ( tOutLoc, FLT_MAX );
@@ -433,6 +467,14 @@ void KNNVecDistCalc_c::RescoreBlob ( const VecTraits_T<int> & dOrder, VecTraits_
 
 			CSphMatch * pMatch = dMatches[ dOrder[iGlobal] ];
 			ByteBlob_t tRes = pMatch->FetchAttrData ( m_tAttr.m_tLocator, fnBlobPool(pMatch) );
+
+			// FIXME: make float_vector_array batched too
+			if ( m_bMulti )
+			{
+				pMatch->SetAttrFloat ( tOutLoc, MinDistOverSlots(tRes) );
+				continue;
+			}
+
 			if ( tRes.second!=iVecBytes || !tRes.first )
 			{
 				pMatch->SetAttrFloat ( tOutLoc, FLT_MAX );
@@ -987,11 +1029,21 @@ static bool BuildProcessKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BY
 {
 	ARRAY_FOREACH ( i, dAttrs )
 	{
-		assert ( dAttrs[i].m_eType==SPH_ATTR_FLOAT_VECTOR );
+		assert ( dAttrs[i].m_eType==SPH_ATTR_FLOAT_VECTOR || dAttrs[i].m_eType==SPH_ATTR_FLOAT_VECTOR_ARRAY );
 		const BYTE * pSrc = nullptr;
 		int iBytes = dAttrs[i].Get ( tRowID, pRow, pPool, dIterators, pSrc );
-		int iValues = iBytes / sizeof(float);
 
+		if ( dAttrs[i].m_eType==SPH_ATTR_FLOAT_VECTOR_ARRAY )
+		{
+			FloatVecArray_t tArray = ParseFloatVecArray ( { pSrc, iBytes } );
+			int iValues = tArray.m_dValues.GetLength();
+			if ( iValues && !fnAction ( i, { (float*)tArray.m_dValues.Begin(), (size_t)iValues } ) )
+				return false;
+
+			continue;
+		}
+
+		int iValues = iBytes / sizeof(float);
 		if ( iValues && !fnAction ( i, { (float*)pSrc, (size_t)iValues } ) )
 			return false;
 	}

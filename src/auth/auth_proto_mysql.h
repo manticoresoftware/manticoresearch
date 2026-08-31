@@ -1,7 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
-// Copyright (c) 2011-2016, Andrew Aksyonoff
-// Copyright (c) 2011-2016, Sphinx Technologies Inc
+// Copyright (c) 2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify

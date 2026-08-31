@@ -58,10 +58,11 @@ SphAttr_t SetColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * pBu
 	case SPH_ATTR_UINT32SET:
 	case SPH_ATTR_INT64SET:
 	case SPH_ATTR_FLOAT_VECTOR:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY:
 	{
 		const BYTE * pResult = nullptr;
 		int iBytes = pIterator->Get ( tRowID, pResult );
-		bool b32Bits = eType==SPH_ATTR_UINT32SET || eType==SPH_ATTR_FLOAT_VECTOR;
+		bool b32Bits = eType==SPH_ATTR_UINT32SET || eType==SPH_ATTR_FLOAT_VECTOR || eType==SPH_ATTR_FLOAT_VECTOR_ARRAY;
 		int iValues = iBytes / (  b32Bits ? sizeof(DWORD) : sizeof(int64_t) );
 		if ( b32Bits )
 		{
@@ -119,6 +120,10 @@ void SetDefaultColumnarAttr ( int iAttr, const CSphColumnInfo & tAttr, columnar:
 		}
 		else
 			pBuilder->SetAttr ( iAttr, (const uint8_t *)0, 0 );
+		break;
+
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY:
+		pBuilder->SetAttr ( iAttr, (const int64_t *)0, 0 );
 		break;
 
 	default:

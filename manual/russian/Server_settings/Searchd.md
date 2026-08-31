@@ -898,6 +898,12 @@ listen = ( address ":" port | port | path | address ":" port start - port end ) 
 
 Если вы укажете номер порта, но не адрес, `searchd` будет слушать на всех сетевых интерфейсах. Unix-путь определяется по начальному слешу. Диапазон портов можно установить только для протокола репликации.
 
+Примечание по безопасности: привязывайте каждый listener только к той сети, которой он нужен.
+
+Для доступа клиентов из публичного Интернета используйте выделенный listener `https` и настройте [SSL](../Security/SSL.md) с `ssl_cert` и `ssl_key`. Не выводите в публичный Интернет listeners, совместимые с API (`listen` без явного протокола, `http` и `sphinx`). Эти listeners могут принимать двоичный API Manticore/Sphinx, который используется master-agent распределенными запросами и устаревшими клиентами, а трафик двоичного API не защищен SSL.
+
+Привязывайте listeners, совместимые с API, к loopback, VPN или доверенной внутренней сети, либо ограничивайте их правилами firewall. Listeners `replication` тоже предназначены только для внутреннего использования и должны быть доступны только replication-узлам.
+
 Вы также можете указать обработчик протокола (слушатель), который будет использоваться для соединений на этом сокете. Слушатели:
 
 * **Не указан** - Manticore будет принимать соединения на этом порту от:
@@ -924,15 +930,15 @@ listen = ( address ":" port | port | path | address ":" port start - port end ) 
 ```ini
 listen = localhost
 listen = localhost:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at localhost
-listen = 192.168.0.1:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at 192.168.0.1
+listen = 192.168.0.1:5000 # слушать удаленных агентов (binary API) и запросы http/https на порту 5000 на 192.168.0.1; оставьте это внутри сети
 listen = /var/run/manticore/manticore.s # listen for binary API requests on unix socket
 listen = /var/run/manticore/manticore.s:mysql # listen for mysql requests on unix socket
-listen = 9312 # listen for remote agents (binary API) and http/https requests on port 9312 on any interface
+listen = 9312 # слушать удаленных агентов (binary API) и запросы http/https на порту 9312 на любом интерфейсе; только внутренние сети
 listen = localhost:9306:mysql # listen for mysql requests on port 9306 at localhost
 listen = localhost:9307:mysql_readonly # listen for mysql requests on port 9307 at localhost and accept only read queries
 listen = 127.0.0.1:9308:http # listen for http requests as well as connections from remote agents (and binary API) on port 9308 at localhost
-listen = 192.168.0.1:9320-9328:replication # listen for replication connections on ports 9320-9328 at 192.168.0.1
-listen = 127.0.0.1:9443:https # listen for https requests (not http) on port 9443 at 127.0.0.1
+listen = 192.168.0.1:9320-9328:replication # слушать подключения replication на портах 9320-9328 на 192.168.0.1; оставьте это внутри сети
+listen = 127.0.0.1:9443:https # слушать запросы https (не http) на порту 9443 на 127.0.0.1; используйте этот тип listener для доступа из публичного Интернета с ssl_cert и ssl_key
 listen = 127.0.0.1:9312:sphinx # listen for legacy Sphinx requests (e.g. from SphinxSE) on port 9312 at 127.0.0.1
 ```
 <!-- end -->

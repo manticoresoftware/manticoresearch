@@ -391,9 +391,9 @@ jobs:
         export MCL_LOCAL_RUNTIME=OFF
         ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
 
-  test_linux_debug_plain:
+  test_linux_debug:
     if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_linux_debug.result == 'success' && (needs.mcl_runtime_linux_debug_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_linux_debug.result == 'success')
-    name: Linux debug mode tests (plain)
+    name: Linux debug mode tests
     needs: [build_linux_debug, mcl_runtime_linux_debug_cached, mcl_runtime_linux_debug, meta]
     permissions:
       checks: write
@@ -402,28 +402,10 @@ jobs:
     secrets: inherit
     with:
       build_artifact_name: debug_build
-      artifact_name: debug_test_results_plain
-      results_name: "Linux debug plain test results"
+      artifact_name: debug_test_results
+      results_name: "Linux debug test results"
       suite_name: plain
-      CTEST_REGEX: "^test_"
-      timeout: 20
-      MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
-
-  test_linux_debug_rt:
-    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_linux_debug.result == 'success' && (needs.mcl_runtime_linux_debug_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_linux_debug.result == 'success')
-    name: Linux debug mode tests (rt)
-    needs: [build_linux_debug, mcl_runtime_linux_debug_cached, mcl_runtime_linux_debug, meta]
-    permissions:
-      checks: write
-      contents: read
-    uses: ./.github/workflows/test_template.yml
-    secrets: inherit
-    with:
-      build_artifact_name: debug_build
-      artifact_name: debug_test_results_rt
-      results_name: "Linux debug RT test results"
-      suite_name: rt
-      CTEST_REGEX: "^rt_"
+      CTEST_PARAMS: "EXCLUDE_LABEL;(COLUMNAR|SECONDARY)"
       timeout: 20
       MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
 
@@ -446,8 +428,8 @@ jobs:
       MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
 
   build_linux_release:
-    if: needs.meta.outputs.run_builds == 'true'
-    needs: [meta]
+    if: always() && needs.meta.outputs.run_builds == 'true' && (needs.mcl_cached_package_jammy.result == 'success' || needs.mcl_package_jammy.result == 'success')
+    needs: [meta, mcl_cached_package_jammy, mcl_package_jammy]
     name: Linux release build
     uses: ./.github/workflows/build_template.yml
     secrets: inherit
@@ -455,11 +437,14 @@ jobs:
       artifact_name: release_build
       cache_key: build_linux_release_x86_64
       artifact_list: "build/xml build/CMakeFiles/CMake*.log build/api/libsphinxclient/testcli build/src/indexer build/src/indextool build/src/searchd build/src/tests build/src/gtests/gmanticoretest build/config/*.c build/config/*.h build/**/*.cxx build/**/*.gcno build/manticore*deb"
+      MCL_PACKAGE_ARTIFACT_NAME: mcl_package_jammy_x86_64
+      MCL_PACKAGE_SHA: ${{ needs.meta.outputs.mcl_full_sha }}
       cmake_command: |
         export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
         export PACK=1
         export PACK_KEEP_TESTS=1
         ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
+        cmake -S . -B build -DPACK_BUNDLE=1
         cmake --build build --target package
 
   build_linux_release_tests:
@@ -958,14 +943,14 @@ jobs:
       ref: ${{ github.sha }}
 
   test_kit_docker_push:
-    if: always() && needs.meta.outputs.run_image_push == 'true' && (needs.test_kit_docker_build.result == 'success' || needs.test_kit_docker_reuse.result == 'success')
+    if: always() && needs.meta.outputs.run_image_push == 'true' && (needs.test_kit_docker_build.result == 'success' || needs.test_kit_docker_reuse.result == 'success') && needs.test_kit_light_docker_build.result == 'success'
     needs:
       - clt
       - meta
       - test_kit_docker_build
       - test_kit_docker_reuse
-      - test_linux_debug_plain
-      - test_linux_debug_rt
+      - test_kit_light_docker_build
+      - test_linux_debug
       - test_linux_debug_mcl
       - test_linux_release_plain
       - test_linux_release_rt
@@ -996,6 +981,11 @@ jobs:
           if [[ -f artifact.tar ]]; then
             tar -xf artifact.tar
           fi
+      - name: Download light image artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: test_kit_light_docker
+          path: .
       - name: Calculate short commit hash
         id: sha
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
@@ -1003,6 +993,28 @@ jobs:
         id: test-kit-push
         run: |
           TEST_RESULT=${{ needs.clt.result }} BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_push.sh
+
+  test_kit_light_docker_build:
+    if: always() && needs.meta.outputs.run_builds == 'true' && needs.build_linux_release.result == 'success'
+    needs: [meta, build_linux_release]
+    name: Light Test Kit docker image build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Download bundle package
+        uses: manticoresoftware/download_artifact_with_retries@v5
+        with:
+          name: release_build
+          path: ./bundle-package
+      - name: Build official-style image
+        run: ./dist/test_kit_light_docker_build.sh bundle-package
+      - name: Upload light image artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: test_kit_light_docker
+          path: test_kit_light_docker.tar.gz
+          compression-level: 0
 
   build_aarch64:
     if: needs.meta.outputs.run_builds == 'true'
@@ -1117,8 +1129,7 @@ jobs:
       - build_linux_debug
       - mcl_runtime_linux_debug_cached
       - mcl_runtime_linux_debug
-      - test_linux_debug_plain
-      - test_linux_debug_rt
+      - test_linux_debug
       - test_linux_debug_mcl
       - build_linux_release
       - build_linux_release_tests
@@ -1133,6 +1144,7 @@ jobs:
       - test_windows_plain
       - test_windows_rt
       - test_windows_mcl
+      - test_kit_light_docker_build
       - build_freebsd
       - build_aarch64
       - clt
@@ -1148,8 +1160,7 @@ jobs:
             "build_linux_debug:${{ needs.build_linux_debug.result }}"
             "mcl_runtime_linux_debug_cached:${{ needs.mcl_runtime_linux_debug_cached.result }}"
             "mcl_runtime_linux_debug:${{ needs.mcl_runtime_linux_debug.result }}"
-            "test_linux_debug_plain:${{ needs.test_linux_debug_plain.result }}:${{ needs.test_linux_debug_plain.outputs.test_outcome }}"
-            "test_linux_debug_rt:${{ needs.test_linux_debug_rt.result }}:${{ needs.test_linux_debug_rt.outputs.test_outcome }}"
+            "test_linux_debug:${{ needs.test_linux_debug_plain.result }}:${{ needs.test_linux_debug_plain.outputs.test_outcome }}"
             "test_linux_debug_mcl:${{ needs.test_linux_debug_mcl.result }}:${{ needs.test_linux_debug_mcl.outputs.test_outcome }}"
             "build_linux_release:${{ needs.build_linux_release.result }}"
             "build_linux_release_tests:${{ needs.build_linux_release_tests.result }}"
@@ -1164,6 +1175,7 @@ jobs:
             "test_windows_plain:${{ needs.test_windows_plain.result }}:${{ needs.test_windows_plain.outputs.test_outcome }}"
             "test_windows_rt:${{ needs.test_windows_rt.result }}:${{ needs.test_windows_rt.outputs.test_outcome }}"
             "test_windows_mcl:${{ needs.test_windows_mcl.result }}:${{ needs.test_windows_mcl.outputs.test_outcome }}"
+            "test_kit_light_docker_build:${{ needs.test_kit_light_docker_build.result }}"
             "build_freebsd:${{ needs.build_freebsd.result }}"
             "build_aarch64:${{ needs.build_aarch64.result }}"
           )
@@ -1216,6 +1228,10 @@ jobs:
             fi
           fi
           if [[ "${{ needs.meta.outputs.run_builds }}" == "true" ]]; then
+            if [[ "${{ needs.test_kit_light_docker_build.result }}" != "success" ]]; then
+              echo "test_kit_light_docker_build: required but result was ${{ needs.test_kit_light_docker_build.result }}"
+              failed=1
+            fi
             for entry in "${runtime_results[@]}"; do
               name="${entry%%:*}"
               rest="${entry#*:}"

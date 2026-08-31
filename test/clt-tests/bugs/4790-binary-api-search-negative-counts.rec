@@ -1,0 +1,224 @@
+––– comment –––
+GHSA-22xc-6pwx-p5xv / PR 4790: malformed binary API SEARCH element counts
+must return protocol errors without terminating searchd.
+––– comment –––
+––– block: ../base/start-searchd –––
+––– comment –––
+Send malformed binary API SEARCH packets directly to the Sphinx listener.
+––– comment –––
+––– input –––
+python3 - <<'PY'
+import socket
+import struct
+
+
+HOST = "127.0.0.1"
+PORT = 9312
+SEARCHD_ERROR = 1
+
+
+def i32(value):
+    return struct.pack("!i", value)
+
+
+def u32(value):
+    return struct.pack("!I", value)
+
+
+def string(value):
+    data = value.encode()
+    return i32(len(data)) + data
+
+
+def query_prefix(attr_filters_count=0):
+    body = b""
+    body += i32(0)                 # master version
+    body += u32(1)                 # query count
+    body += u32(0)                 # flags
+    body += i32(0)                 # offset
+    body += i32(20)                # limit
+    body += i32(0)                 # match mode
+    body += i32(0)                 # ranker
+    body += i32(0)                 # sort mode
+    body += string("")            # sort by
+    body += string("")            # raw query
+    body += i32(0)                 # legacy field-weight count
+    body += string("")            # indexes
+    body += i32(0)                 # idrange64
+    body += u32(0)                 # min docid
+    body += u32(0)                 # max docid
+    body += i32(attr_filters_count)
+    body += u32(0)                 # group func
+    body += string("")            # group by
+    body += i32(1000)              # max matches
+    body += string("")            # group sort by
+    body += i32(0)                 # cutoff
+    body += i32(0)                 # retry count
+    body += i32(0)                 # retry delay
+    body += string("")            # group distinct
+    body += i32(0)                 # geoanchor
+    return body
+
+
+def query_suffix(filter_tree_count):
+    body = b""
+    body += string("")            # comment
+    body += i32(0)                 # overrides
+    body += string("")            # select
+    body += string("")            # outer order by
+    body += u32(0)                 # outer offset
+    body += u32(0)                 # outer limit
+    body += i32(0)                 # has outer
+    body += i32(0)                 # expansion limit
+    body += string("")            # query token filter lib
+    body += string("")            # query token filter name
+    body += string("")            # query token filter opts
+    body += i32(filter_tree_count)
+    return body
+
+
+def packet(body):
+    return struct.pack("!HHI", 0, 0x127, len(body)) + body
+
+
+def full_query(index_weights, field_weights, filter_tree_count):
+    body = query_prefix()
+    body += i32(len(index_weights))
+    for name, value in index_weights:
+        body += string(name) + i32(value)
+    body += u32(0)                 # max query msec
+    body += i32(len(field_weights))
+    for name, value in field_weights:
+        body += string(name) + i32(value)
+    return packet(body + query_suffix(filter_tree_count))
+
+
+def receive_exact(sock, size):
+    result = b""
+    while len(result) < size:
+        chunk = sock.recv(size - len(result))
+        if not chunk:
+            raise RuntimeError("unexpected EOF")
+        result += chunk
+    return result
+
+
+def send_case(name, payload, expect_error):
+    with socket.create_connection((HOST, PORT), timeout=3) as sock:
+        sock.sendall(u32(1))                       # client handshake for probed sphinx/http listener
+        receive_exact(sock, 4)                     # server handshake
+        sock.sendall(payload)
+        status, _version, length = struct.unpack("!HHI", receive_exact(sock, 8))
+        body = receive_exact(sock, length)
+
+    if expect_error:
+        if status != SEARCHD_ERROR:
+            raise RuntimeError("%s: expected API error status, got %d" % (name, status))
+        print("%s: error" % name)
+    else:
+        if status == SEARCHD_ERROR:
+            raise RuntimeError("%s: unexpected API error" % name)
+        print("%s: reply" % name)
+
+
+cases = (
+    ("control-zero", full_query((), (), 0), False),
+    ("control-positive", full_query((("idx", 1),), (), 0), False),
+    ("negative-attrfilters", packet(query_prefix(-1)), True),
+    ("negative-indexweights", packet(query_prefix() + i32(-1)), True),
+    ("negative-fieldweights", packet(query_prefix() + i32(0) + u32(0) + i32(-1)), True),
+    ("negative-filtertree", packet(query_prefix() + i32(0) + u32(0) + i32(0) + query_suffix(-1)), True),
+    ("positive-impossible-indexweights", packet(query_prefix() + i32(1)), True),
+)
+
+for case in cases:
+    send_case(*case)
+PY
+––– output –––
+control-zero: reply
+control-positive: reply
+negative-attrfilters: error
+negative-indexweights: error
+negative-fieldweights: error
+negative-filtertree: error
+positive-impossible-indexweights: error
+––– comment –––
+The final probe distinguishes a handled packet error from a process crash.
+––– comment –––
+––– input –––
+mysql -h0 -P9306 -e 'SELECT 1' >/dev/null && echo alive
+––– output –––
+alive
+––– comment –––
+max_batch_queries=0 must disable only the upper cap, not positive count validation.
+––– comment –––
+––– input –––
+cat > /tmp/gh4790-max-batch-zero.conf <<'EOF'
+searchd {
+    listen = 127.0.0.1:9312
+    listen = 127.0.0.1:9306:mysql
+    listen = 127.0.0.1:9308:http
+    log = /var/log/manticore/searchd.log
+    query_log = /var/log/manticore/query.log
+    pid_file = /run/manticore/searchd.pid
+    data_dir = /var/lib/manticore
+    max_batch_queries = 0
+}
+EOF
+rm -f /var/log/manticore/searchd.log
+stdbuf -oL searchd --stopwait > /dev/null
+stdbuf -oL searchd -c /tmp/gh4790-max-batch-zero.conf > /dev/null
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Accepting connections!
+––– input –––
+python3 - <<'PY'
+import socket
+import struct
+
+
+HOST = "127.0.0.1"
+PORT = 9312
+SEARCHD_ERROR = 1
+
+
+def i32(value):
+    return struct.pack("!i", value)
+
+
+def u32(value):
+    return struct.pack("!I", value)
+
+
+def packet(body):
+    return struct.pack("!HHI", 0, 0x127, len(body)) + body
+
+
+def receive_exact(sock, size):
+    result = b""
+    while len(result) < size:
+        chunk = sock.recv(size - len(result))
+        if not chunk:
+            raise RuntimeError("unexpected EOF")
+        result += chunk
+    return result
+
+
+with socket.create_connection((HOST, PORT), timeout=3) as sock:
+    sock.sendall(u32(1))
+    receive_exact(sock, 4)
+    sock.sendall(packet(i32(0) + i32(-1)))
+    status, _version, length = struct.unpack("!HHI", receive_exact(sock, 8))
+    receive_exact(sock, length)
+
+if status != SEARCHD_ERROR:
+    raise RuntimeError("expected API error status, got %d" % status)
+
+print("max-batch-zero-negative-query-count: error")
+PY
+––– output –––
+max-batch-zero-negative-query-count: error
+––– input –––
+mysql -h0 -P9306 -e 'SELECT 1' >/dev/null && echo alive
+––– output –––
+alive

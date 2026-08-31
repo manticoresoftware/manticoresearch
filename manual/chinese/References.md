@@ -135,7 +135,7 @@
 * [/tbl_name/_mapping](Creating_a_table/Local_tables/Real-time_table.md#_mapping-API:) - 以Elasticsearch风格创建表模式
 
 ### 常见事项
-* [字段名称语法](Creating_a_table/Data_types.md#Field-name-syntax)
+* [表、字段和属性名语法](Creating_a_table/Data_types.md#Table-and-field-name-syntax)
 * [数据类型](Creating_a_table/Data_types.md)
 * [引擎](Creating_a_table/Data_types.md)
 * [平面模式](Read_this_first.md#Real-time-mode-vs-plain-mode)
@@ -232,6 +232,7 @@
 * [rt_attr_bool](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_float](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_float_vector](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [rt_attr_float_vector_array](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_json](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_multi_64](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_multi](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
@@ -695,5 +696,7 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [15.1.0](https://manual.manticoresearch.com/manticore-15-1-0/). [安装页面](https://manticoresearch.com/install-15.1.0/)
 * [17.5.1](https://manual.manticoresearch.com/manticore-17-5-1/). [安装页面](https://manticoresearch.com/install-17.5.1/)
 * [25.0.0](https://manual.manticoresearch.com/manticore-25-0-0/). [安装页面](https://manticoresearch.com/install-25.0.0/)
-* [27.1.5](https://manual.manticoresearch.com/manticore-25-0-0/). [安装页面](https://manticoresearch.com/install-27.1.5/)
+* [27.1.5](https://manual.manticoresearch.com/manticore-27-1-5/). [安装页面](https://manticoresearch.com/install-27.1.5/)
+* [28.6.6](https://manual.manticoresearch.com/manticore-28-6-6/). [安装页面](https://manticoresearch.com/install-28.6.6/)
+* [29.0.2](https://manual.manticoresearch.com/manticore-29-0-2/). [安装页面](https://manticoresearch.com/install-29.0.2/)
 <!-- proofread -->

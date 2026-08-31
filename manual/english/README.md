@@ -58,6 +58,7 @@
         * [Replication cluster status](Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md)
         * [Restarting a cluster](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)
         * [Cluster recovery](Creating_a_cluster/Setting_up_replication/Cluster_recovery.md)
+	    * [Understanding Replication Statuses](Creating_a_cluster/Setting_up_replication/Understanding_cluster_status_and_node_states.md)
 * [4️⃣ Connecting to the server](Connecting_to_the_server.md)
     * [MySQL protocol](Connecting_to_the_server/MySQL_protocol.md)
     * [HTTP](Connecting_to_the_server/HTTP.md)

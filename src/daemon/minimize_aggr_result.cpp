@@ -424,10 +424,20 @@ static void SortTagsAndDocstores ( AggrResult_t & tRes, const VecTraits_T<int>& 
 	Debug ( tRes.m_bIdxByTag = true; )
 }
 
+
+struct PostlimitExpr_t
+{
+	CSphString			m_sName;
+	ISphExprRefPtr_c	m_pExpr;
+};
+
+using PostlimitExprsByTag_t = CSphVector<CSphVector<PostlimitExpr_t>>;
+
 struct PreparedSorter_t
 {
 	std::unique_ptr<ISphMatchSorter>	m_pSorter;
 	CSphFixedVector<int>				m_dTagOrder { 0 };
+	PostlimitExprsByTag_t				m_dPostlimitExprs;
 };
 
 static int PushAllMatches ( ISphMatchSorter * pSorter, AggrResult_t & tRes, CSphFixedVector<int> & dOrd )
@@ -591,54 +601,94 @@ static CSphVector<int> GetUniqueTagsWithDocstores ( const AggrResult_t & tRes, i
 	return dTags;
 }
 
-static void SetupPostlimitExprs ( const DocstoreReader_i * pDocstore, const CSphColumnInfo * pCol, const char * sQuery, int64_t iDocstoreSessionId )
+static void SetupPostlimitExprs ( const DocstoreReader_i * pDocstore, ISphExpr * pExpr, const char * sQuery, int64_t iDocstoreSessionId )
 {
 	DocstoreSession_c::InfoDocID_t tSessionInfo;
 	tSessionInfo.m_pDocstore = pDocstore;
 	tSessionInfo.m_iSessionId = iDocstoreSessionId;
 
-	assert ( pCol && pCol->m_pExpr );
-	pCol->m_pExpr->Command ( SPH_EXPR_SET_DOCSTORE_DOCID, &tSessionInfo ); // value is copied; no leak of pointer to local here.
-	pCol->m_pExpr->Command ( SPH_EXPR_SET_QUERY, (void *)sQuery);
+	assert ( pExpr );
+	pExpr->Command ( SPH_EXPR_SET_DOCSTORE_DOCID, &tSessionInfo ); // value is copied; no leak of pointer to local here.
+	pExpr->Command ( SPH_EXPR_SET_QUERY, (void *)sQuery);
 }
 
-static void EvalPostlimitExprs ( CSphMatch & tMatch, const CSphColumnInfo * pCol )
+static void EvalPostlimitExprs ( CSphMatch & tMatch, const CSphColumnInfo * pCol, ISphExpr * pExpr )
 {
-	assert ( pCol && pCol->m_pExpr );
+	assert ( pCol && pExpr );
 
 	switch ( pCol->m_eAttrType )
 	{
 	case SPH_ATTR_TIMESTAMP:
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_BOOL:
-		tMatch.SetAttr ( pCol->m_tLocator, pCol->m_pExpr->IntEval ( tMatch ) );
+		tMatch.SetAttr ( pCol->m_tLocator, pExpr->IntEval ( tMatch ) );
 		break;
 
 	case SPH_ATTR_BIGINT:
-		tMatch.SetAttr ( pCol->m_tLocator, pCol->m_pExpr->Int64Eval ( tMatch ) );
+		tMatch.SetAttr ( pCol->m_tLocator, pExpr->Int64Eval ( tMatch ) );
 		break;
 
 	case SPH_ATTR_STRINGPTR:
 		// FIXME! a potential leak of *previous* value?
-		tMatch.SetAttr ( pCol->m_tLocator, (SphAttr_t) pCol->m_pExpr->StringEvalPacked ( tMatch ) );
+		tMatch.SetAttr ( pCol->m_tLocator, (SphAttr_t) pExpr->StringEvalPacked ( tMatch ) );
 		break;
 
 	case SPH_ATTR_UINT32SET_PTR:
 	case SPH_ATTR_INT64SET_PTR:
 	case SPH_ATTR_FLOAT_VECTOR_PTR:
 	case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
-		tMatch.SetAttr ( pCol->m_tLocator, (SphAttr_t)pCol->m_pExpr->Int64Eval(tMatch) );
+		tMatch.SetAttr ( pCol->m_tLocator, (SphAttr_t)pExpr->Int64Eval(tMatch) );
 		break;
 
 	default:
-		tMatch.SetAttrFloat ( pCol->m_tLocator, pCol->m_pExpr->Eval ( tMatch ) );
+		tMatch.SetAttrFloat ( pCol->m_tLocator, pExpr->Eval ( tMatch ) );
 		break;
 	}
 }
 
 
+static void CollectPostlimitExprsByTag ( const AggrResult_t & tRes, bool bMaster, PostlimitExprsByTag_t & dExprsByTag )
+{
+	dExprsByTag.Reset();
+
+	int iMaxTag = -1;
+	for ( const auto & tResult : tRes.m_dResults )
+		if ( !tResult.m_bTag )
+			iMaxTag = Max ( iMaxTag, tResult.m_iTag );
+
+	if ( iMaxTag<0 )
+		return;
+
+	dExprsByTag.Resize ( iMaxTag+1 );
+
+	CSphVector<const CSphColumnInfo *> dPostlimit;
+	for ( const auto & tResult : tRes.m_dResults )
+	{
+		if ( tResult.m_bTag || tResult.m_iTag<0 )
+			continue;
+
+		dPostlimit.Resize(0);
+		ExtractPostlimit ( tResult.m_tSchema, bMaster, dPostlimit );
+		for ( const auto * pCol : dPostlimit )
+			if ( pCol->m_pExpr )
+				dExprsByTag[tResult.m_iTag].Add ( { pCol->m_sName, pCol->m_pExpr } );
+	}
+}
+
+
+static ISphExpr * GetPostlimitExpr ( const CSphColumnInfo * pCol, const VecTraits_T<PostlimitExpr_t> * pTagExprs )
+{
+	if ( pTagExprs )
+		for ( const auto & tExpr : *pTagExprs )
+			if ( tExpr.m_sName==pCol->m_sName )
+				return tExpr.m_pExpr;
+
+	return pCol->m_pExpr;
+}
+
+
 // single resultset chunk, but has many tags
-static void ProcessMultiPostlimit ( AggrResult_t & tRes, VecTraits_T<const CSphColumnInfo *> & dPostlimit, const char * sQuery, int iOff, int iLim )
+static void ProcessMultiPostlimit ( AggrResult_t & tRes, VecTraits_T<const CSphColumnInfo *> & dPostlimit, const VecTraits_T<CSphVector<PostlimitExpr_t>> & dExprsByTag, const char * sQuery, int iOff, int iLim )
 {
 	if ( dPostlimit.IsEmpty() )
 		return;
@@ -653,6 +703,7 @@ static void ProcessMultiPostlimit ( AggrResult_t & tRes, VecTraits_T<const CSphC
 	CSphVector<int> dDocstoreTags = GetUniqueTagsWithDocstores ( tRes, iOff, iLim );
 
 	int iLastTag = -1;
+	CSphVector<ISphExpr *> dExprs;
 	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( iOff, iLim );
 	for ( auto & dMatch : dMatches )
 	{
@@ -665,14 +716,19 @@ static void ProcessMultiPostlimit ( AggrResult_t & tRes, VecTraits_T<const CSphC
 
 		if ( iTag!=iLastTag )
 		{
+			const VecTraits_T<PostlimitExpr_t> * pTagExprs = iTag<dExprsByTag.GetLength() ? &dExprsByTag[iTag] : nullptr;
+			dExprs.Resize(0);
 			for ( const auto & pCol : dPostlimit )
-				SetupPostlimitExprs ( pDocstore, pCol, sQuery, -1 );
+				dExprs.Add ( GetPostlimitExpr ( pCol, pTagExprs ) );
+
+			ARRAY_CONSTFOREACH ( i, dPostlimit )
+				SetupPostlimitExprs ( pDocstore, dExprs[i], sQuery, -1 );
 
 			iLastTag = iTag;
 		}
 
-		for ( const auto & pCol : dPostlimit )
-			EvalPostlimitExprs ( dMatch, pCol );
+		ARRAY_CONSTFOREACH ( i, dPostlimit )
+			EvalPostlimitExprs ( dMatch, dPostlimit[i], dExprs[i] );
 	}
 }
 
@@ -693,11 +749,11 @@ static void ProcessSinglePostlimit ( OneResultset_t & tRes, VecTraits_T<const CS
 		tRes.m_pDocstore->CreateReader ( iSessionUID );
 
 	for ( const auto & pCol : dPostlimit )
-		SetupPostlimitExprs ( tRes.Docstore (), pCol, sQuery, iSessionUID );
+		SetupPostlimitExprs ( tRes.Docstore (), pCol->m_pExpr, sQuery, iSessionUID );
 
 	for ( auto & tMatch : dMatches )
 		for ( const auto & pCol : dPostlimit )
-			EvalPostlimitExprs ( tMatch, pCol );
+			EvalPostlimitExprs ( tMatch, pCol, pCol->m_pExpr );
 }
 
 static void ProcessLocalPostlimit ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bMaster )
@@ -853,6 +909,10 @@ static bool PrepareMergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQue
 
 	// do the sort work!
 	tRes.m_iTotalMatches -= PushAllMatches ( tPrepared.m_pSorter.get(), tRes, tPrepared.m_dTagOrder );
+
+	if ( bAllEqual && bHaveLocals )
+		CollectPostlimitExprsByTag ( tRes, bMaster, tPrepared.m_dPostlimitExprs );
+
 	return true;
 }
 
@@ -878,7 +938,7 @@ static bool ApplyOuterOrder ( AggrResult_t & tRes, const CSphQuery & tQuery )
 	return true;
 }
 
-static void ComputePostlimit ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bMaster )
+static void ComputePostlimit ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bMaster, const PostlimitExprsByTag_t & dExprsByTag )
 {
 	assert ( tRes.m_bSingle );
 	assert ( tRes.m_bOneSchema );
@@ -896,7 +956,7 @@ static void ComputePostlimit ( AggrResult_t & tRes, const CSphQuery & tQuery, bo
 	int iLimit = (tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit);
 
 	if ( tRes.m_bTagsAssigned )
-		ProcessMultiPostlimit ( tRes, dPostlimit, tQuery.m_sQuery.cstr(), iOff, iLimit );
+		ProcessMultiPostlimit ( tRes, dPostlimit, dExprsByTag, tQuery.m_sQuery.cstr(), iOff, iLimit );
 	else
 		ProcessSinglePostlimit ( tRes.m_dResults.First(), dPostlimit, tQuery.m_sQuery.cstr(), iOff, iLimit );
 }
@@ -1038,7 +1098,7 @@ bool PreparedMinimize_t::Finish()
 	if ( m_bAllEqual && m_bHaveLocals )
 	{
 		CSphScopedProfile tProf ( m_pProfiler, SPH_QSTATE_EVAL_POST );
-		ComputePostlimit ( m_tResult, m_tQuery, m_bMaster );
+		ComputePostlimit ( m_tResult, m_tQuery, m_bMaster, m_tSorter.m_dPostlimitExprs );
 	}
 
 	if ( m_bMaster )

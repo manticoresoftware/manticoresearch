@@ -42,7 +42,7 @@ CREATE TABLE test (
 <db_insert>
 	<var name="values" />
 	<repeat count="64" vars="i" init="1" inc="1"><var name="values" delimiter=",">(<i/>, 'test')</var></repeat>
-	INSERT INTO test VALUES <values/>, (9934707768356121230, 'negative id')
+	INSERT INTO test VALUES <values/>, (9934707768356121230, 'negative id'), (9934707768356121240, 'negative id')
 </db_insert>
 
 <queries><sphinxql>
@@ -68,6 +68,11 @@ select id from test where id in @negative_ids order by id asc /*+ DocidIndex(id)
 select id from test where id &lt;&gt; 60 order by id desc limit 5 /*+ DocidIndex(id) */;
 select id from test where match ('test') and id &lt;&gt; 60 order by id desc limit 5 /*+ DocidIndex(id) */;
 
+<!-- couple of different signed; their mutual order as unsigned -->
+select id from test where id between -8512036305353430386 and -8512036305353430376 /*+ DocidIndex(id) */;
+select id from test where id in (-8512036305353430376,-8512036305353430386,1,64) order by id asc /*+ DocidIndex(id) */;
+set global @negative_ids = (-8512036305353430376,-8512036305353430386,1,64);
+select id, uint64(id) uid from test where id in @negative_ids order by id asc /*+ DocidIndex(id) */;
 </sphinxql></queries>
 
 

@@ -17,6 +17,7 @@ extern int g_iClientTimeoutS; // from searchd.cpp
 extern volatile bool g_bMaintenance;
 static auto & g_bGotSighup = sphGetGotSighup ();    // we just received SIGHUP; need to log
 
+
 // mostly repeats HandleClientSphinx
 void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 {
@@ -77,8 +78,6 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	// main loop for one or more commands (if persist)
 	do
 	{
-		int iPacketOff = tOut.GetSentCount();
-
 		if ( !tIn.HasBytes ())
 			tIn.DiscardProcessed ();
 
@@ -137,9 +136,40 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 		auto eCommand = (SearchdCommand_e)tIn.GetWord ();
 		auto uVer = tIn.GetWord ();
-		auto iReplySize = tIn.GetInt ();
-		sphLogDebugv ( "read command %d, version %d, reply size %d", eCommand, uVer, iReplySize );
-		
+		auto iWireSize = tIn.GetInt ();
+		sphLogDebugv ( "read command %d, version %d, reply size %d", eCommand, uVer, iWireSize );
+
+		bool bClusterCommand = ( eCommand==SEARCHD_COMMAND_CLUSTER );
+		bool bBadCommand = ( eCommand>=SEARCHD_COMMAND_WRONG );
+		// Cluster peers can have different max_packet_size values. Never let the
+		// unencrypted header raise the receive limit beyond the product-wide cap.
+		bool bBadWireLength = ( iWireSize<0 || ( bClusterCommand ? iWireSize>SPH_MAX_PACKET_SIZE : iWireSize>g_iMaxPacketSize ) );
+		if ( bBadCommand || bBadWireLength )
+		{
+			// unknown command, default response header
+			if ( bBadWireLength )
+				sphWarning ( "ill-formed client request (length=%d out of bounds)", iWireSize );
+			// if command is insane, low level comm is broken, so we bail out
+			if ( bBadCommand )
+				sphWarning ( "ill-formed client request (command=%d, SEARCHD_COMMAND_TOTAL=%d)", eCommand,
+							 SEARCHD_COMMAND_TOTAL );
+
+			SendErrorReply ( tOut, "invalid %s (code=%d, len=%d)", ( bBadWireLength ? "length" : "command" ), eCommand, iWireSize );
+			tOut.Flush(); // no need to check return code since we anyway break
+			break;
+		}
+
+		if ( bClusterCommand )
+			tIn.SetMaxPacketSize ( tIn.GetBufferPos() + SPH_MAX_PACKET_SIZE );
+
+		if ( iWireSize && !tIn.ReadFrom ( iWireSize, true ))
+		{
+			sphWarning ( "failed to receive API body (client=%s(%d), exp=%d(%d), error='%s')",
+					sClientIP, iCID, iWireSize, tIn.HasBytes(), sphSockError ());
+			break;
+		}
+
+		int iReplySize = iWireSize;
 		CSphString sUser;
 		CSphString sError;
 		if ( !ApiDecrypt ( eCommand, uVer, tIn, iReplySize, sUser, sError ) )
@@ -149,37 +179,18 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			break;
 		}
 
-		// should set client user to pass it further into distributed index
-		session::SetUser ( sUser );
-
-		bool bCheckLen = ( eCommand!= SEARCHD_COMMAND_CLUSTER );
-		bool bBadCommand = ( eCommand>=SEARCHD_COMMAND_WRONG );
-		// should not fail replication commands from other nodes as max_packet_size could be different between nodes
-		bool bBadLength = ( iReplySize<0 || ( bCheckLen && iReplySize>tIn.GetMaxPacketSize() ) );
-		if ( bBadCommand || bBadLength )
+		int iMaxReplySize = bClusterCommand ? SPH_MAX_PACKET_SIZE : g_iMaxPacketSize;
+		bool bBadReplyLength = ( iReplySize<0 || iReplySize>iMaxReplySize );
+		if ( bBadReplyLength )
 		{
-			// unknown command, default response header
-			if ( bBadLength )
-				sphWarning ( "ill-formed client request (length=%d out of bounds)", iReplySize );
-			// if command is insane, low level comm is broken, so we bail out
-			if ( bBadCommand )
-				sphWarning ( "ill-formed client request (command=%d, SEARCHD_COMMAND_TOTAL=%d)", eCommand,
-							 SEARCHD_COMMAND_TOTAL );
-
-			SendErrorReply ( tOut, "invalid %s (code=%d, len=%d)", ( bBadLength ? "length" : "command" ), eCommand, iReplySize );
+			sphWarning ( "ill-formed decrypted API request (length=%d out of bounds)", iReplySize );
+			SendErrorReply ( tOut, "invalid decrypted length (code=%d, len=%d)", eCommand, iReplySize );
 			tOut.Flush(); // no need to check return code since we anyway break
 			break;
 		}
 
-		if ( !bCheckLen )
-			tIn.SetMaxPacketSize ( tIn.GetBufferPos() + iReplySize );
-
-		if ( iReplySize && !tIn.ReadFrom ( iReplySize, true ))
-		{
-			sphWarning ( "failed to receive API body (client=%s(%d), exp=%d(%d), error='%s')",
-					sClientIP, iCID, iReplySize, tIn.HasBytes(), sphSockError ());
-			break;
-		}
+		// should set client user to pass it further into distributed index
+		session::SetUser ( sUser );
 
 		auto& tCrashQuery = GlobalCrashQueryGetRef();
 		tCrashQuery.m_dQuery = { tIn.GetBufferPtr (), iReplySize };
@@ -214,9 +225,15 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			sphLogDebugv ( "conn %s(%d): pconn is now %s", tSess.szClientName (), tSess.GetConnID(), bPersist ? "on" : "off" );
 			tSess.SetPersistent ( bPersist );
 		}
+		const int iPacketOff = tOut.GetSentCount ();
+		const int64_t iTotalSentBeforeCommand = tOut.GetTotalSent ();
 		ExecuteApiCommand ( eCommand, uVer, iReplySize, tIn, tOut );
 
-		if ( !ApiEncryptReply ( sUser, tOut, iPacketOff, sError ) )
+		if ( tOut.GetError () )
+			break;
+
+		const int iReplyPacketOff = tOut.GetTotalSent ()>iTotalSentBeforeCommand ? 0 : iPacketOff;
+		if ( !ApiEncryptReply ( sUser, tOut, iReplyPacketOff, sError ) )
 		{
 			tOut.Rewind ( 0 );
 			SendErrorReply ( tOut, "%s", sError.cstr() );

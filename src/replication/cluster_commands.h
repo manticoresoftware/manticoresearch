@@ -15,9 +15,9 @@
 #include "searchdaemon.h"
 
 void ReceiveClusterDelete ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
-void ReceiveClusterFileReserve ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
+bool ReceiveClusterFileReserve ( GenericOutputBuffer_c& tOut, InputBuffer_c& tBuf, CSphString& sCluster, WORD uReplyVersion, DWORD uHeartbeatIntervalMs );
 void ReceiveClusterGetNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
-void ReceiveClusterIndexAddLocal ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
+bool ReceiveClusterIndexAddLocal ( GenericOutputBuffer_c& tOut, InputBuffer_c& tBuf, CSphString& sCluster, WORD uReplyVersion, DWORD uHeartbeatIntervalMs );
 void ReceiveClusterSynced ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
 void ReceiveClusterUpdateNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
 void ReceiveClusterExitUpdateNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
@@ -26,6 +26,6 @@ void ReceiveClusterGetVer ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf );
 void ReceiveClusterGetAuth ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf );
 
 // sending doesn't include cluster name
-void ReceiveClusterFileSend ( ISphOutputBuffer& tOutb, InputBuffer_c& tBuf );
+bool ReceiveClusterFileSend ( GenericOutputBuffer_c& tOut, InputBuffer_c& tBuf, WORD uReplyVersion, DWORD uHeartbeatIntervalMs );
 
 void ReceiveDistIndex ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSphString & sCluster );

@@ -126,6 +126,7 @@
     * [• Обновление FT-настроек таблицы в режиме RT](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode)
     * [• Переименование таблицы реального времени](Updating_table_schema_and_settings.md#Renaming-a-real-time-table)
     * [• Обновление FT-настроек таблицы в обычном режиме](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-plain-mode)
+    * [• Переиндексация существующих документов после изменения настроек FT](Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings)
     * [• Перестроение вторичного индекса](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)
     * [• Изменение распределенной таблицы](Updating_table_schema_and_settings.md#Changing-a-distributed-table)
 * [≫ Функции]
@@ -179,7 +180,7 @@
     * [• Специальные суффиксы](Server_settings/Special_suffixes.md)
     * [• Скриптовая конфигурация](Server_settings/Scripted_configuration.md)
     * [• Комментарии](Server_settings/Comments.md)
-    * [• Наследование объявлений таблиц и источников](Server_settings/Inheritance_of_index_and_source_declarations.md)
+    * [• Наследование объявлений таблиц и источников](Server_settings/Inheritance_of_table_and_source_declarations.md)
     * [• Установка переменных онлайн](Server_settings/Setting_variables_online.md)
 * [≫ Интеграция]
     * [Logstash](Integration/Logstash.md)

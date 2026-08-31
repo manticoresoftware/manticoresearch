@@ -155,7 +155,7 @@ docker exec manticore bash -lc "MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N 
 ––– output –––
 NO_DIRECT_BUFFER_GRANT_OK
 ––– input –––
-docker exec manticore bash -lc "MYSQL_PWD=queue_writer_pass mysql -uqueue_writer -h0 -P9306 -e \"ALTER MATERIALIZED VIEW view_table_auth suspended=0;\" >/dev/null && echo WRITER_RESUME_MVA_OK"
+docker exec manticore bash -lc "MYSQL_PWD=queue_writer_pass mysql -uqueue_writer -h0 -P9306 -e \"ALTER MATERIALIZED VIEW view_table_auth suspended=1; ALTER MATERIALIZED VIEW view_table_auth suspended=0;\" >/dev/null && echo WRITER_RESUME_MVA_OK"
 ––– output –––
 WRITER_RESUME_MVA_OK
 ––– input –––

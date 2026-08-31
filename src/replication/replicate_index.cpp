@@ -24,8 +24,6 @@
 #include "cluster_sst_progress.h"
 #include "searchdreplication.h"
 
-#include <cmath>
-
 // for send dist indexes
 #include "nodes.h"
 
@@ -53,7 +51,7 @@ private:
 	cServedIndexRefPtr_c m_pServedIndex;
 };
 
-static bool ActivateIndexOnRemotes ( const CSphString& sCluster, const CSphString& sIndex, const CSphString & sUser, IndexType_e eType, bool bSendOk, const VecTraits_T<const AgentDesc_t*>& dActivateIndexes, int64_t tmLongOpTimeout, SstProgress_i & tProgress )
+static bool ActivateIndexOnRemotes ( const CSphString& sCluster, const CSphString& sIndex, const CSphString & sUser, IndexType_e eType, bool bSendOk, const VecTraits_T<const AgentDesc_t*>& dActivateIndexes, SstProgress_i & tProgress )
 {
 	// send a command to activate transferred index
 	ClusterIndexAddLocalRequest_t tAddLocal;
@@ -64,13 +62,14 @@ static bool ActivateIndexOnRemotes ( const CSphString& sCluster, const CSphStrin
 
 	VecRefPtrs_t<AgentConn_t*> dNodes;
 	dNodes.Resize ( dActivateIndexes.GetLength() );
+	const int64_t iSstQueryTimeoutMs = ReplicationSstQueryTimeout ();
 	ARRAY_FOREACH ( i, dActivateIndexes )
 	{
 		const AgentDesc_t& tDesc = *dActivateIndexes[i];
-		dNodes[i] = ClusterIndexAddLocal_c::CreateAgent ( tDesc, sUser, ReplicationTimeoutQuery(), tAddLocal );
+		dNodes[i] = ClusterIndexAddLocal_c::CreateAgent ( tDesc, sUser, iSstQueryTimeoutMs, tAddLocal );
 	}
 
-	sphLogDebugRpl ( "sent table '%s' %s to %d nodes with timeout %d.%03d sec", sIndex.cstr(), ( bSendOk ? "loading" : "rollback" ), dNodes.GetLength(), (int)( tmLongOpTimeout / 1000 ), (int)( tmLongOpTimeout % 1000 ) );
+	sphLogDebugRpl ( "sent table '%s' %s to %d nodes with rolling lease %d.%03d sec", sIndex.cstr(), ( bSendOk ? "loading" : "rollback" ), dNodes.GetLength(), (int)( iSstQueryTimeoutMs / 1000 ), (int)( iSstQueryTimeoutMs % 1000 ) );
 	
 	tProgress.StageBegin ( SstStage_e::ACTIVATE_TABLE );
 	auto fnOnSuccess = [&tProgress]( const AgentConn_t * ) { tProgress.AddComplete ( 1 ); };
@@ -85,7 +84,6 @@ static bool ActivateIndexOnRemotes ( const CSphString& sCluster, const CSphStrin
 
 bool SyncSrc_t::CalculateFilesSignatures ( SstProgress_i & tProgress )
 {
-	int64_t tmStart = sphMicroTimer();
 	TLS_MSG_STRING ( sError );
 	tProgress.StageBegin ( SstStage_e::CALC_SHA1 );
 
@@ -101,8 +99,6 @@ bool SyncSrc_t::CalculateFilesSignatures ( SstProgress_i & tProgress )
 
 	for ( int iFile = 0; iFile < iFiles; ++iFile )
 	{
-		int64_t tmStartFile = sphMicroTimer();
-
 		const CSphString& sFile = m_dIndexFiles[iFile];
 		const FileChunks_t& tChunk = m_dChunks[iFile];
 
@@ -137,12 +133,8 @@ bool SyncSrc_t::CalculateFilesSignatures ( SstProgress_i & tProgress )
 
 		tIndexFile.Close();
 		tHashFile.Final ( GetFileHash ( iFile ) );
-
-		int64_t tmDeltaFile = ( sphMicroTimer() - tmStartFile ) / 1000;
-		m_tmTimeoutFile = Max ( tmDeltaFile, m_tmTimeoutFile );
 	}
 
-	m_tmTimeout = Min ( ( sphMicroTimer() - tmStart ) / 1000, 300000 ); // long operation timeout but at least 5 minutes
 	return true;
 }
 
@@ -171,7 +163,7 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 	sphLogDebugRpl ( "calculated sha1 of table '%s', files %d, hashes %d", sIndex.cstr(), tSigSrc.m_dIndexFiles.GetLength(), tSigSrc.m_dHashes.GetLength() );
 
 	tProgress.StageBegin ( SstStage_e::RESERVE_FILES );
-	int64_t tmLongOpTimeout = ReplicationTimeoutQuery ( tSigSrc.m_tmTimeout * 3 ); // timeout = sha verify (of all index files) + preload (of all index files) +1 (for slow io)
+	const int64_t iSstQueryTimeoutMs = ReplicationSstQueryTimeout ();
 
 	FileReserveRequest_t tRequest;
 	tRequest.m_sCluster = sCluster;
@@ -180,7 +172,7 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 	tRequest.m_sIndexFileName = GetBaseName ( sIndexPath );
 	tProgress.SetDonor4Joiner ( tSigSrc.m_dIndexFiles.GetLength(), tRequest.m_tProgressCtx );
 
-	auto dNodes = ClusterFileReserve_c::MakeAgents ( dDesc, sUser, tmLongOpTimeout, tRequest );
+	auto dNodes = ClusterFileReserve_c::MakeAgents ( dDesc, sUser, iSstQueryTimeoutMs, tRequest );
 	assert ( dDesc.GetLength() == dNodes.GetLength() );
 	auto bOk = SendClusterFileReserve ( dNodes );
 
@@ -211,9 +203,6 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 			continue;
 		}
 
-		tSigSrc.m_tmTimeout = Max ( tSigSrc.m_tmTimeout, tRes.m_tmTimeout );
-		tRes.m_tmTimeoutFile = ReplicationTimeoutQuery ( Max ( tSigSrc.m_tmTimeoutFile, tRes.m_tmTimeoutFile ) * 3 );
-
 		bool bFilesMatched = true;
 		for ( int iFile = 0; bFilesMatched && iFile < tSigSrc.m_dBaseNames.GetLength(); ++iFile )
 			bFilesMatched &= tFilesDstMask.BitGet ( iFile );
@@ -238,9 +227,6 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 		dActivateIndexes.Add ( &dDesc[iNode] );
 	}
 	sErr.FinishBlock ();
-
-	// recalculate timeout after nodes reports
-	tmLongOpTimeout = ReplicationTimeoutQuery ( tSigSrc.m_tmTimeout * 3 );
 
 	if ( dSendStates.IsEmpty() && dActivateIndexes.IsEmpty() )
 		return true;
@@ -275,7 +261,7 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 		return bCleanupOk;
 	}
 
-	bool bActivateOk = ActivateIndexOnRemotes ( sCluster, sIndex, sUser, eType, bSendOk, dActivateIndexes, tmLongOpTimeout, tProgress ) && bSendOk;
+	bool bActivateOk = ActivateIndexOnRemotes ( sCluster, sIndex, sUser, eType, bSendOk, dActivateIndexes, tProgress ) && bSendOk;
 	return bActivateOk && bSendOk;
 }
 

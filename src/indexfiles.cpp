@@ -291,7 +291,6 @@ bool IndexFiles_c::CheckHeader ( const char * sType )
 		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sPath.cstr(), uVersion, INDEX_FORMAT_VERSION );
 		return false;
 	}
-	m_uVersion = uVersion;
 	return true;
 }
 

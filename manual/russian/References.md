@@ -70,10 +70,10 @@
 * [SHOW TOKEN](Security/Authentication_and_authorization.md#Users-and-tokens) - Показывает хэш сохранённого токена
 * [RELOAD AUTH](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - Перезагружает данные аутентификации
 
-##### Оптимизация таблиц реального времени
+##### Оптимизация таблицы
 * [FLUSH RAMCHUNK](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK) - Принудительно создает новый диск
 * [FLUSH TABLE](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#FLUSH-TABLE) - Сбрасывает RAM-чанк таблицы реального времени на диск
-* [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) - Помещает таблицу реального времени в очередь на оптимизацию
+* [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) — уплотняет RT-таблицу или физические RT-цели распределенной или шардинговой таблицы
 
 ##### Импорт в таблицу реального времени
 * [ATTACH TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) - Переносит данные из обычной таблицы в таблицу реального времени
@@ -135,7 +135,7 @@
 * [/tbl_name/_mapping](Creating_a_table/Local_tables/Real-time_table.md#_mapping-API:) - создание схемы таблицы в стиле Elasticsearch
 
 ### Общие понятия
-* [field name syntax](Creating_a_table/Data_types.md#Field-name-syntax)
+* [синтаксис имен таблиц, полей и атрибутов](Creating_a_table/Data_types.md#Table-and-field-name-syntax)
 * [data types](Creating_a_table/Data_types.md)
 * [engine](Creating_a_table/Data_types.md)
 * [plain mode](Read_this_first.md#Real-time-mode-vs-plain-mode)
@@ -232,6 +232,7 @@
 * [rt_attr_bool](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_float](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_float_vector](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [rt_attr_float_vector_array](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_json](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_multi_64](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_multi](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
@@ -469,6 +470,7 @@ index_converter {--config /path/to/config|--path}
   * [diskchunk_flush_write_timeout](Server_settings/Searchd.md#diskchunk_flush_write_timeout) - Таймаут для автоматического сброса RAM-чанка, если в него не было записей
   * [diskchunk_flush_search_timeout](Server_settings/Searchd.md#diskchunk_flush_search_timeout) - Таймаут для предотвращения автоматического сброса RAM-чанка, если в таблице не было поисковых запросов
   * [docstore_cache_size](Server_settings/Searchd.md#docstore_cache_size) - Максимальный размер блоков документов из хранилища документов, хранящихся в памяти
+  * [embeddings_threads](Server_settings/Searchd.md#embeddings_threads) - Максимальное число потоков, которое библиотека embeddings может использовать при генерации векторов для вставок с автоэмбеддингом, перестройке KNN через `ALTER TABLE` и embedding текстовых запросов для KNN
   * [expansion_limit](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) - Максимальное количество расширенных ключевых слов для одного символа подстановки
   * [grouping_in_utc](Server_settings/Searchd.md#grouping_in_utc) - Включает использование часового пояса UTC для группировки временных полей
   * [ha_period_karma](Server_settings/Searchd.md#ha_period_karma) - Размер окна статистики зеркал агентов
@@ -694,5 +696,7 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [15.1.0](https://manual.manticoresearch.com/manticore-15-1-0/). [Страница установки](https://manticoresearch.com/install-15.1.0/)
 * [17.5.1](https://manual.manticoresearch.com/manticore-17-5-1/). [Страница установки](https://manticoresearch.com/install-17.5.1/)
 * [25.0.0](https://manual.manticoresearch.com/manticore-25-0-0/). [Страница установки](https://manticoresearch.com/install-25.0.0/)
-* [27.1.5](https://manual.manticoresearch.com/manticore-25-0-0/). [Страница установки](https://manticoresearch.com/install-27.1.5/)
+* [27.1.5](https://manual.manticoresearch.com/manticore-27-1-5/). [Страница установки](https://manticoresearch.com/install-27.1.5/)
+* [28.6.6](https://manual.manticoresearch.com/manticore-28-6-6/). [Страница установки](https://manticoresearch.com/install-28.6.6/)
+* [29.0.2](https://manual.manticoresearch.com/manticore-29-0-2/). [Страница установки](https://manticoresearch.com/install-29.0.2/)
 <!-- proofread -->

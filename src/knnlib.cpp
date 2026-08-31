@@ -68,6 +68,7 @@ std::unique_ptr<knn::Builder_i>	CreateKNNBuilder ( const ISphSchema & tSchema, i
 		(knn::IndexSettings_t &)tKNNAttr = tAttr.m_tKNN;
 		tKNNAttr.m_sName = tAttr.m_sName.cstr();
 		tKNNAttr.m_eType = eAttrType;
+		tKNNAttr.m_bMulti = tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY;
 		tKNNSchema.push_back(tKNNAttr);
 	}
 
@@ -184,6 +185,12 @@ void ShutdownKNN()
 	{
 		g_pEmbeddingsLib.reset();
 		dlclose(g_pKNNLib);
+		g_pKNNLib = nullptr;
+		g_fnCreate = nullptr;
+		g_fnCreateKNNBuilder = nullptr;
+		g_fnCreateDistanceCalc = nullptr;
+		g_fnLoadEmbeddingsLib = nullptr;
+		g_fnVersionStr = nullptr;
 	}
 }
 

@@ -46,7 +46,10 @@ DEPS_PATH="deps.txt"
 OLD_IFS=$IFS
 IFS=' +-'
 read BUDDY_PACKAGE_NAME BUDDY_VERSION BUDDY_DATE BUDDY_COMMIT_SHA <<< "$(grep buddy $DEPS_PATH)"
-read MCL_PACKAGE_NAME MCL_VERSION MCL_DATE MCL_COMMIT_SHA <<< "$(grep mcl $DEPS_PATH)"
+MCL_PACKAGE_NAME="manticore-columnar-lib"
+MCL_VERSION="submodule"
+MCL_DATE="submodule"
+MCL_COMMIT_SHA=$(git -C mcl rev-parse --short=8 HEAD)
 read EXECUTOR_PACKAGE_NAME EXECUTOR_VERSION EXECUTOR_DATE EXECUTOR_COMMIT_SHA <<< "$(grep executor $DEPS_PATH)"
 read TZDATA_PACKAGE_NAME TZDATA_VERSION TZDATA_DATE TZDATA_COMMIT_SHA <<< "$(grep tzdata $DEPS_PATH)"
 IFS=$OLD_IFS
@@ -56,6 +59,13 @@ $BUDDY_PACKAGE_NAME $BUDDY_VERSION $BUDDY_COMMIT_SHA $BUDDY_DATE
 $MCL_PACKAGE_NAME $MCL_VERSION $MCL_COMMIT_SHA $MCL_DATE
 $EXECUTOR_PACKAGE_NAME $EXECUTOR_VERSION $EXECUTOR_COMMIT_SHA $EXECUTOR_DATE
 $TZDATA_PACKAGE_NAME $TZDATA_VERSION $TZDATA_COMMIT_SHA $TZDATA_DATE"
+
+
+find_local_windows_mcl_package() {
+  if [ -d ./mcl-package ]; then
+    find ./mcl-package -type f -name 'manticore-columnar-lib-*.zip' | grep '\-libs\.zip$' | head -n 1
+  fi
+}
 
 find_package_by_commit() {
   local repo_content=$1
@@ -86,7 +96,12 @@ for DESTINATION in "${DESTINATION_REPOS[@]}"; do
   REPO_CONTENT=$(curl -s "$WIN_REPO")
 
   BUDDY_PACKAGE_NAME=$(find_package_by_commit "$REPO_CONTENT" "$WIN_REPO" "$BUDDY_COMMIT_SHA")
-  MCL_PACKAGE_NAME=$(find_package_by_commit "$REPO_CONTENT" "$WIN_REPO" "$MCL_COMMIT_SHA")
+  LOCAL_MCL_PACKAGE=$(find_local_windows_mcl_package)
+  if [ -n "$LOCAL_MCL_PACKAGE" ]; then
+    MCL_PACKAGE_NAME="$LOCAL_MCL_PACKAGE"
+  else
+    MCL_PACKAGE_NAME=$(find_package_by_commit "$REPO_CONTENT" "$WIN_REPO" "$MCL_COMMIT_SHA")
+  fi
   TZDATA_PACKAGE_NAME=$(find_package_by_commit "$REPO_CONTENT" "$WIN_REPO" "$TZDATA_COMMIT_SHA")
   echo "Found packages: BUDDY_PACKAGE_NAME: $BUDDY_PACKAGE_NAME
   MCL_PACKAGE_NAME: $MCL_PACKAGE_NAME
@@ -97,9 +112,6 @@ for DESTINATION in "${DESTINATION_REPOS[@]}"; do
     break
   else
     echo "Some packages are missing in $DESTINATION repo / deps.txt"
-    BUDDY_PACKAGE_NAME=""
-    MCL_PACKAGE_NAME=""
-    TZDATA_PACKAGE_NAME=""
   fi
 done
 

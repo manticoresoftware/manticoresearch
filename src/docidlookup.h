@@ -12,6 +12,7 @@
 #define _docidlookup_
 
 #include "secondaryindex.h"
+#include "uuid_docid.h"
 
 class CSphWriter;
 
@@ -29,6 +30,11 @@ struct DocidLookupCheckpoint_t
 	SphOffset_t	m_tOffset {0};
 };
 
+struct UuidDocidLookupPair_t
+{
+	UuidDocidKey_t	m_tKey;
+	DocID_t			m_tDocID {0};
+};
 
 class DocidLookupWriter_c
 {
@@ -37,6 +43,8 @@ public:
 
 	void			Start();
 	void			AddPair ( const DocidRowidPair_t & tPair );
+	void			SetUuidLookupOffset ( SphOffset_t tOffset );
+	bool			FinalizeNumeric ( CSphString & sError );
 	bool			Finalize ( CSphString & sError );
 
 private:
@@ -47,9 +55,25 @@ private:
 
 	int64_t			m_iProcessed {0};
 	int				m_iCheckpoint {0};
+	SphOffset_t		m_tMaxDocIDPos {0};
+	SphOffset_t		m_tUuidLookupOffsetPos {0};
 	SphOffset_t		m_tCheckpointStart {0};
 	DocID_t			m_tLastDocID {0};
 	CSphFixedVector<DocidLookupCheckpoint_t> m_dCheckpoints {0};
+};
+
+
+class UuidLookupReader_c
+{
+public:
+	void			SetData ( const BYTE * pData, SphOffset_t tEntriesOffset, DWORD nDocs );
+	DocID_t			Find ( const UuidDocidKey_t & tKey ) const;
+
+private:
+	UuidDocidLookupPair_t Get ( DWORD uEntry ) const;
+
+	const BYTE *	m_pEntries {nullptr};
+	DWORD			m_nDocs {0};
 };
 
 
@@ -57,10 +81,9 @@ class LookupReader_c
 {
 public:
 			LookupReader_c() = default;
-			explicit LookupReader_c ( const BYTE * pData );
+			LookupReader_c ( const BYTE * pData, DWORD uIndexVersion );
 
-
-	void	SetData ( const BYTE * pData );
+	std::pair<SphOffset_t,DWORD> SetData ( const BYTE * pData, DWORD uIndexVersion );
 
 	inline RowID_t Find ( DocID_t tDocID ) const
 	{
@@ -146,9 +169,9 @@ protected:
 class LookupReaderIterator_c : private LookupReader_c
 {
 public:
-			LookupReaderIterator_c ( const BYTE * pData );
+			LookupReaderIterator_c ( const BYTE * pData, DWORD uIndexVersion );
 
-	void	SetData ( const BYTE * pData );
+	void	SetData ( const BYTE * pData, DWORD uIndexVersion );
 
 	inline bool Read ( DocID_t & tDocID, RowID_t & tRowID )
 	{
@@ -242,8 +265,9 @@ private:
 };
 
 
-RowIteratorsWithEstimates_t CreateLookupIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, const BYTE * pDocidLookup, uint32_t uTotalDocs );
+RowIteratorsWithEstimates_t CreateLookupIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, const BYTE * pDocidLookup, DWORD uIndexVersion, uint32_t uTotalDocs );
 bool	WriteDocidLookup ( const CSphString & sFilename, const VecTraits_T<DocidRowidPair_t> & dLookup, CSphString & sError );
+bool	WriteDocidLookup ( const CSphString & sFilename, const VecTraits_T<DocidRowidPair_t> & dLookup, const VecTraits_T<UuidDocidLookupPair_t> & dUuidLookup, CSphString & sError );
 
 struct CmpDocidLookup_fn
 {
@@ -253,6 +277,16 @@ struct CmpDocidLookup_fn
 			return a.m_tRowID < b.m_tRowID;
 
 		return (uint64_t)a.m_tDocID < (uint64_t)b.m_tDocID;
+	}
+};
+
+struct CmpUuidDocidLookup_fn
+{
+	static inline bool IsLess ( const UuidDocidLookupPair_t & a, const UuidDocidLookupPair_t & b )
+	{
+		return a.m_tKey.m_uHi==b.m_tKey.m_uHi
+			? a.m_tKey.m_uLo < b.m_tKey.m_uLo
+			: a.m_tKey.m_uHi < b.m_tKey.m_uHi;
 	}
 };
 

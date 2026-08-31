@@ -21,7 +21,11 @@ INSERT INTO rt(title) VALUES
 OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
 ```
 
-`OPTIMIZE` 语句会将 RT 表添加到优化队列中，该队列将在后台线程中处理。
+`OPTIMIZE TABLE` 支持实时（RT）、[分布式](../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md)和[分片](../Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md)表。
+
+对于 RT 表，该语句会把表加入优化队列，默认由后台线程处理。对于分布式表，需要使用 `OPTION sync=1`：该命令会优化每个本地 RT 组件，以及所有已配置的远程镜像，但不包括 blackhole agents。分片表支持同样的原生同步扇出到其物理 RT 目标。`cutoff` 值会应用到每个物理 RT 目标。
+
+当 Manticore Buddy 可用时，使用 `shards` 和 `rf` 选项创建的分片表也会保留由 Buddy 处理的异步 `OPTIMIZE TABLE table_name` 形式。使用 `OPTION sync=1` 可直接在 Manticore Search 中运行原生同步扇出。
 
 <!-- intro -->
 ##### SQL:
@@ -50,6 +54,8 @@ POST /sql?mode=raw -d "OPTIMIZE TABLE rt"
 默认情况下，OPTIMIZE 会将 RT 表的磁盘块合并到小于或等于逻辑 CPU 核心数乘以 2 的数量。
 
 但是，如果表具有带有 KNN 索引的属性，则此阈值不同。在这种情况下，它设置为物理 CPU 核心数除以 2，以提高 KNN 搜索性能。
+
+请注意，当未显式设置 `optimize_cutoff` 时（既没有设置全局的 [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) 选项，也没有设置按表的 [optimize_cutoff](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#optimize_cutoff) 选项），[自动合并](../Server_settings/Searchd.md#auto_optimize) 即使计算出的默认阈值更低，也绝不会将表合并到少于 2 个磁盘块。比如在 CPU 核心较少的服务器上，尤其是 KNN 表，这种情况更常见。至少保留 2 个磁盘块可以避免反复把所有内容合并成单个块所带来的开销。若要强制自动合并到单个磁盘块，请将 `optimize_cutoff` 明确设置为 `1`。手动执行的 `OPTIMIZE ... OPTION cutoff=1` 不受此限制影响，仍然会合并到一个块。
 
 您还可以使用 `cutoff` 选项手动控制优化的磁盘块数量。
 
@@ -81,7 +87,9 @@ POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION cutoff=4"
 
 <!-- example optimize_sync -->
 
-使用 `OPTION sync=1`（默认为 0）时，命令将在优化过程完成后才返回。如果连接中断，优化将在服务器上继续运行。
+对于 RT 表，`sync=0` 是默认值。使用 `OPTION sync=1` 会让命令在返回前等待优化完成。如果连接中断，优化仍会继续在服务器上运行。
+
+分布式表需要 `OPTION sync=1`。分片表使用 `OPTION sync=1` 进行原生同步扇出。该命令会等待所有选定的物理目标，并在任一目标失败时报告错误；其他目标上已完成的工作不会回滚。
 
 <!-- intro -->
 ##### SQL:
@@ -102,6 +110,13 @@ POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION sync=1"
 ```
 
 <!-- end -->
+
+对于分布式表和分片表，请使用同步形式：
+
+```sql
+OPTIMIZE TABLE distributed_table OPTION sync=1, cutoff=1;
+OPTIMIZE TABLE sharded_table OPTION sync=1, cutoff=1;
+```
 
 ### 限制 IO 影响
 

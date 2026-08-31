@@ -4,19 +4,37 @@
 
 Типы данных Manticore можно разделить на две категории: полнотекстовые поля и атрибуты.
 
-### Синтаксис имен полей
+### Синтаксис имен таблиц и полей
 
-Имена полей в Manticore должны соответствовать следующим правилам:
+Имена таблиц, полей и атрибутов могут содержать буквы ASCII (`a-z`, `A-Z`), цифры (`0-9`), символы подчеркивания (`_`) и безопасные не-ASCII символы UTF-8. Не заключенное в кавычки имя SQL должно начинаться с буквы ASCII, символа подчеркивания или не-ASCII символа UTF-8. Цифры допускаются после первого символа.
 
-* Могут содержать буквы (a-z, A-Z), цифры (0-9) и дефисы (-)
-* Должны начинаться с буквы
-* Цифры могут появляться только после букв
-* Подчеркивание (`_`) — единственный разрешенный специальный символ
-* Имена полей нечувствительны к регистру
+Один и тот же базовый синтаксис применяется ко всем типам таблиц во всех режимах, где этот тип поддерживается: к таблицам real-time, percolate и distributed в [RT mode](../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29), а также к таблицам real-time, percolate, plain, distributed и template в [Plain mode](../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29). Он также применяется ко всем схемам, определяющим поля или атрибуты, включая ожидаемую схему документа для percolate-таблицы и схемы, выводимые из источников SQL, CSV/TSV или XML.
+
+Другие пользовательские имена SQL-объектов, включая имена функций, плагинов и кластеров репликации, подчиняются тем же безопасным правилам UTF-8.
+
+Заключайте имена SQL в обратные кавычки, если они начинаются с цифры и содержат хотя бы одну букву, символ подчеркивания или не-ASCII символ UTF-8, а также имена, совпадающие с зарезервированным ключевым словом SQL. Например, используйте `` `2026_архив` `` или `` `select` ``. Имена в конфигурационных файлах не заключаются в кавычки и могут начинаться с цифры. Идентификаторы, состоящие только из цифр, отклоняются во всех режимах, в том числе при загрузке существующей конфигурации или метаданных; переименуйте такие объекты перед обновлением. Обратные кавычки не делают допустимой произвольную ASCII-пунктуацию; символы вроде `-`, `$`, пробелов и вложенных обратных кавычек не поддерживаются в пользовательских именах.
+
+Для совместимости с распространенными схемами загрузки логов `CREATE TABLE` и `ALTER TABLE` также принимают имена столбцов `@timestamp` и `@version` без учета регистра, с обратными кавычками или без них. Другие пользовательские имена, начинающиеся с `@`, по-прежнему недопустимы. Это исключение не делает `@` общим символом идентификатора в SQL или в схемах конфигурационных файлов.
+
+Для обратной совместимости при загрузке конфигурации Plain mode допускаются `.` и `-` после первого символа в именах таблиц, полей и атрибутов, которые принимались предыдущими версиями. Не используйте этот совместимый синтаксис в новых схемах: SQL не может последовательно обращаться ко всем таким именам, а SQL DDL по-прежнему отклоняет произвольную пунктуацию.
+
+Идентификаторы должны быть корректным UTF-8. Символы управления, пробельные символы Unicode, bidirectional controls и невидимые символы default-ignorable отклоняются. Это включает неразрывные пробелы, пробелы нулевой ширины и соединители нулевой ширины.
+
+Имена таблиц в режимах RT и Plain ограничены 200 байтами после кодирования в UTF-8. Каждый ASCII-символ занимает один байт, а символ не из ASCII — два, три или четыре байта. Поэтому имя может содержать до 200 ASCII-символов, но меньше символов не из ASCII — точное число зависит от используемых символов. Компонент после квалификатора `system.` может использовать до 48 дополнительных байт для суффиксов шардов и других генерируемых суффиксов. Это квалифицированное пространство имен используется для внутренних таблиц и также явно принимается в SQL; обычные публичные логические имена таблиц по-прежнему ограничены 200 байтами. Ограничение также применяется при загрузке существующих определений таблиц, поэтому перед обновлением переименуйте все более длинные таблицы.
+
+В режиме RT точное логическое имя таблицы хранится в метаданных Manticore, а файлы таблицы используют ограниченное переносимое ASCII-имя базового файла. Это позволяет сосуществовать именам, различающимся на уровне байтов, на файловых системах, нечувствительных к регистру или нормализации, и позволяет избежать зарезервированных имен файлов Windows. Сопоставление компонентов не выполняет предварительную проверку полного пути к хранилищу; ограничения операционной системы по длине пути по-прежнему действуют, а последующая ошибка файловой системы сообщает неудавшийся путь и ошибку ОС.
+
+Для имен таблиц, полей и атрибутов, созданных через SQL, Manticore преобразует заглавные буквы ASCII в строчные. Не-ASCII символы сохраняют исходное написание. Имена секций конфигурации в режиме Plain чувствительны к регистру, включая буквы ASCII. Сведение Unicode к нижнему регистру и нормализация Unicode в обоих режимах не выполняются, поэтому используйте точное Unicode-правописание последовательно.
 
 Например:
-* Допустимые имена полей: `title`, `product_id`, `user_name_2`
-* Недопустимые имена полей: `2title`, `-price`, `user@name`
+* Допустимые не заключенные в кавычки имена: `title`, `product_id`, `user_name_2`, `товары2026`, `商品表`, `📦метка`
+* Допустимые заключенные в кавычки имена: `` `2026_архив` ``, `` `select` ``
+* Допустимые имена столбцов для SQL-совместимости: `@timestamp`, `@version`
+* Недопустимые имена: `2title` без обратных кавычек, `-price`, `user@name`, `user-name`, `@user_field` и `bad​name`, содержащий пробел нулевой ширины
+
+В режиме Plain имена таблиц представляют собой имена секций в конфигурационном файле и там записываются без обратных кавычек. Обратные кавычки по-прежнему можно использовать при обращении к этим таблицам в SQL. Например, секция конфигурации может называться `таблица2026`, а к секции `2026_архив` в SQL обращаются как к `` `2026_архив` ``.
+
+[Операторы полнотекстового поиска с областью действия поля](../Searching/Full_text_matching/Operators.md) также поддерживают не-ASCII имена полей UTF-8. Например, `MATCH('@название клавиатура')` ограничивает поиск полем `название`. Это также относится к запросам с областью действия поля, сохраненным как правила percolate.
 
 ### Полнотекстовые поля
 
@@ -62,9 +80,9 @@ POST /cli -d "CREATE TABLE forum(title text, content text, author_id int, forum_
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('forum');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('forum');
+$table->create([
     'title'=>['type'=>'text'],
 	'content'=>['type'=>'text'],
 	'author_id'=>['type'=>'int'],
@@ -264,7 +282,7 @@ Map<String,Object> query = new HashMap<String,Object>();
 query.put("match_all",null);
 query.put("bool",filters);
 SearchRequest searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 searchRequest.setQuery(query);
 searchRequest.setSort(new ArrayList<Object>(){{
     add(new HashMap<String,String>(){{ put("post_date","desc");}});
@@ -358,9 +376,9 @@ create table tbl(title text, type int, price float engine='columnar') engine='ro
 
 ## Идентификатор документа
 
-Идентификатор документа — это обязательный атрибут, который должен быть уникальным 64-битным целым числом без знака. Идентификаторы документов могут быть явно указаны при создании таблицы, но они всегда включены, даже если не указаны. Идентификаторы документов не могут быть обновлены.
+У каждой таблицы есть ID документа. Он должен быть уникальным и не может быть изменён. По умолчанию ID документов — это беззнаковые 64-битные значения. Явные числовые ID документов должны быть ненулевыми; отрицательные ID документов не допускаются. Для таблиц реального времени можно использовать UUID в качестве ID документа, как описано в [UUID document IDs](../Creating_a_table/Data_types.md#UUID-document-IDs).
 
-Когда вы создаете таблицу, вы можете явно указать ID, но независимо от используемого типа данных, он всегда будет вести себя, как описано выше — храниться как беззнаковое 64-битное, но представляться как знаковое 64-битное целое число.
+Для числового ID документа можно указать `id bigint` в схеме `CREATE TABLE` или опустить его и позволить Manticore добавить его автоматически. В интерфейсе MySQL/SQL числовой ID отображается как знаковый 64-битный `bigint`, поэтому большие беззнаковые значения ID там могут выглядеть как отрицательные числа.
 
 ```sql
 mysql> CREATE TABLE tbl(id bigint, content text);
@@ -387,17 +405,20 @@ DESC tbl;
 2 rows in set (0.00 sec)
 ```
 
-При работе с идентификаторами документов важно знать, что они хранятся внутри как 64-битные целые числа без знака, но обрабатываются по-разному в зависимости от интерфейса:
+Автогенерация ID зависит от таблицы и типа ID. Для RT- и PQ-таблиц с числовыми ID можно сгенерировать ID, если он опущен в запросе `insert` или `replace`, либо если используется `0`. RT-таблица с [id uuid](../Creating_a_table/Data_types.md#UUID-document-IDs) генерирует UUID только тогда, когда `id` опущен. Обычные таблицы, построенные из внешних источников, не поддерживают автоматическую генерацию ID; их исходные данные должны содержать явные, уникальные, ненулевые беззнаковые 64-битные ID документов.
+
+При работе с числовыми ID документов важно понимать, что беззнаковые 64-битные значения обрабатываются по-разному в зависимости от интерфейса:
 
 **Интерфейс MySQL/SQL:**
 * ID больше 2^63-1 будут отображаться как отрицательные числа.
 * При фильтрации по таким большим ID вы должны использовать их знаковое представление.
+* Это знаковое представление используется только для отображения или фильтрации уже существующих больших ID; отрицательные ID не принимаются при вставке или индексации документов.
 * Используйте функцию [UINT64()](../Functions/Type_casting_functions.md#UINT64%28%29), чтобы увидеть фактическое беззнаковое значение.
 
 **Интерфейс JSON/HTTP:**
 * ID всегда отображаются как их исходные беззнаковые значения, независимо от размера.
-* Для фильтрации можно использовать как знаковое, так и беззнаковое представление.
-* Операции вставки принимают полный диапазон 64-битных чисел без знака.
+* Для фильтрации уже существующих больших ID можно использовать как знаковое, так и беззнаковое представление.
+* Операции вставки принимают весь диапазон беззнаковых 64-битных значений, но отрицательные значения `id` отклоняются.
 
 Например, создадим таблицу и вставим некоторые значения около 2^63:
 ```sql
@@ -512,7 +533,7 @@ curl -s 0:9308/search -d '{"table": "t"}'
   }
 }
 
-# Both signed and unsigned values work for filtering
+# Both signed and unsigned values work for filtering the same stored ID
 curl -s 0:9308/search -d '{"table": "t", "query": {"equals": {"id": 17581446260360033510}}}'
 curl -s 0:9308/search -d '{"table": "t", "query": {"equals": {"id": -865297813349518106}}}'
 
@@ -523,6 +544,54 @@ curl -s 0:9308/insert -d '{"table": "t", "id": 18446744073709551615, "doc": {}}'
 Это означает, что при работе с большими идентификаторами документов:
 1. **Интерфейс MySQL** требует использования знакового представления для запросов, но может отображать беззнаковое значение с помощью `UINT64()`
 2. **Интерфейс JSON** последовательно использует беззнаковые значения для отображения и принимает оба представления для фильтрации
+
+### UUID ID документов
+
+<!-- example uuid document ids -->
+
+Таблицы real-time могут использовать UUID ID документов с `id uuid`. Явные ID должны быть строками в 36-символьном шестнадцатеричном формате `8-4-4-4-12`, например `550e8400-e29b-41d4-a716-446655440000`. Manticore принимает UUID версий `1`–`8` и варианты RFC `8`, `9`, `a` и `b`. Заглавные буквы допускаются и приводятся к нижнему регистру.
+
+Опустите `id`, чтобы автоматически сгенерировать UUID. Это работает с SQL `INSERT` и `REPLACE`, нативными JSON-запросами `insert` и `replace`, а также с совместимыми с Elasticsearch операциями `_bulk` `index` и `create`. Сгенерированные ID используют схему в стиле UUIDv8 и имеют [те же гарантии уникальности](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID), что и числовые auto-ID. Это не случайные значения UUIDv4, и их нельзя использовать как криптографические секреты.
+
+SQL возвращает UUID-идентификаторы в виде строк. Для таблиц с UUID-ID в нативных JSON-ответах записи используется ключ `id`, а в JSON-ответах поиска и в ответах, совместимых с Elasticsearch, используется `_id`.
+
+UUID ID можно использовать в фильтрах равенства и `IN`, а также для идентификации документов в `REPLACE`, `UPDATE` и `DELETE`. `INSERT` отклоняет уже существующий ID; используйте `REPLACE`, чтобы перезаписать документ с этим ID. После `INSERT` или `REPLACE` в таблице с UUID-ID `LAST_INSERT_ID()` и `@@session.last_insert_id` возвращают UUID ID затронутых документов.
+
+Ограничения:
+
+* Только столбец `id` может иметь тип `uuid`; обычные атрибуты нельзя объявлять как `uuid`.
+* UUID ID документов поддерживаются только для real-time-таблиц, включая колонночные и реплицируемые real-time-таблицы. Они не поддерживаются для обычных (созданных indexer), percolate/PQ или shard-таблиц.
+* `ALTER TABLE` не может преобразовать существующую таблицу в `id uuid` или из него.
+* Диапазонные фильтры (`<`, `<=`, `>`, `>=`) и числовые или арифметические выражения над UUID `id` не поддерживаются.
+* В отличие от таблиц с числовыми ID, таблицы с UUID-ID не трактуют `0` как признак auto-ID.
+
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products_uuid(id uuid, title text, price int);
+INSERT INTO products_uuid(id, title, price) VALUES('550e8400-e29b-41d4-a716-446655440000', 'Crossbody Bag', 19);
+INSERT INTO products_uuid(title, price) VALUES('Generated UUID Bag', 29);
+SELECT id, price FROM products_uuid WHERE id='550e8400-e29b-41d4-a716-446655440000';
+```
+
+<!-- response SQL -->
+
+```sql
+Query OK, 0 rows affected (0.00 sec)
+Query OK, 1 rows affected (0.00 sec)
+Query OK, 1 rows affected (0.00 sec)
++--------------------------------------+-------+
+| id                                   | price |
++--------------------------------------+-------+
+| 550e8400-e29b-41d4-a716-446655440000 |    19 |
++--------------------------------------+-------+
+1 row in set (0.00 sec)
+```
+
+<!-- end -->
 
 ## Символьные типы данных
 
@@ -578,9 +647,9 @@ POST /cli -d "CREATE TABLE products(title text)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text']
 ]);
 ```
@@ -685,9 +754,9 @@ POST /cli -d "CREATE TABLE products(title text indexed)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text','options'=>['indexed']]
 ]);
 ```
@@ -798,7 +867,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('@title')->get();
+$table->setName('products')->search('@title')->get();
 
 ```
 
@@ -887,9 +956,9 @@ POST /cli -d "CREATE TABLE products(title text, keys string)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'keys'=>['type'=>'string']
 ]);
@@ -997,9 +1066,9 @@ POST /cli -d "CREATE TABLE products ( title string attribute indexed )"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'string','options'=>['indexed','attribute']]
 ]);
 ```
@@ -1124,9 +1193,9 @@ POST /cli -d "CREATE TABLE products(title text, price int)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'price'=>['type'=>'int']
 ]);
@@ -1231,9 +1300,9 @@ POST /cli -d "CREATE TABLE products(title text, flags bit(3), tags bit(2))"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'flags'=>['type'=>'bit(3)'],
 	'tags'=>['type'=>'bit(2)']
@@ -1341,9 +1410,9 @@ POST /cli -d "CREATE TABLE products(title text, price bigint)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'price'=>['type'=>'bigint']
 ]);
@@ -1450,9 +1519,9 @@ POST /cli -d "CREATE TABLE products(title text, sold bool)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'sold'=>['type'=>'bool']
 ]);
@@ -1574,9 +1643,9 @@ POST /cli -d "CREATE TABLE products(title text, date timestamp)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'date'=>['type'=>'timestamp']
 ]);
@@ -1682,9 +1751,9 @@ POST /cli -d "CREATE TABLE products(title text, coeff float)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'coeff'=>['type'=>'float']
 ]);
@@ -1794,7 +1863,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->expression('eps','abs(a-b)')->get();
+$table->setName('products')->search('')->expression('eps','abs(a-b)')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -1829,7 +1898,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{}},"expre
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -1906,7 +1975,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->expression('inc','in(ceil(attr*100),200,250,350)')->get();
+$table->setName('products')->search('')->expression('inc','in(ceil(attr*100),200,250,350)')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -1942,7 +2011,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{}}},"expr
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -2047,9 +2116,9 @@ POST /cli -d "CREATE TABLE products(title text, data json)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'data'=>['type'=>'json']
 ]);
@@ -2160,7 +2229,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->expression('idx','indexof(x>2 for x in data.intarray)')->get();
+$table->setName('products')->search('')->expression('idx','indexof(x>2 for x in data.intarray)')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -2196,7 +2265,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{}},"expre
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -2279,7 +2348,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->expression('idx',"regex(data.name, 'est')")->filter('c','gt',0)->get();
+$table->setName('products')->search('')->expression('idx',"regex(data.name, 'est')")->filter('c','gt',0)->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -2315,7 +2384,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{},"range"
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 query.put("range", new HashMap<String,Object>(){{
@@ -2402,7 +2471,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->sort('double(data.myfloat)','desc')->get();
+$table->setName('products')->search('')->sort('double(data.myfloat)','desc')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -2437,7 +2506,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{}}},"sort
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -2800,9 +2869,9 @@ POST /cli -d "CREATE TABLE products(title text, image_vector float_vector)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'image_vector'=>['type'=>'float_vector']
 ]);
@@ -2881,6 +2950,106 @@ table products
 
 <!-- end -->
 
+## Массив float-векторов
+
+Атрибут `float_vector_array` хранит несколько векторов на документ, а не один. Значение записывается как массив векторов, и у каждого документа свое число таких векторов:
+
+```
+[[0.1, 0.2, 0.3, 0.4], [0.5, 0.6, 0.7, 0.8]]
+```
+
+Этот тип подходит для документов, которые нельзя естественно свести к одному embedding: длинная статья, разбитая на фрагменты, товар, снятый с нескольких ракурсов, видео, сэмплированное по keyframe. Вместо того чтобы хранить по одной строке на каждый фрагмент и потом дедуплицировать результаты, вы держите все векторы документа прямо в нем самом.
+
+Когда атрибут настроен для [KNN](../Searching/KNN.md), все векторы всех документов индексируются вместе, и документ считается совпавшим, если **любой** из его векторов близок к запросу. Семантика поиска описана в разделе [Несколько векторов на документ](../Searching/KNN.md#Multiple-vectors-per-document).
+
+### Синтаксис значения
+
+- Значение всегда представляет собой массив векторов: `[[1,2],[3,4]]`. Плоский список вроде `(1,2,3,4)` не принимается, потому что нельзя понять, один это 4-мерный вектор или два 2-мерных.
+- `[]` означает «нет векторов». Это допустимое сохраненное значение, и именно оно используется по умолчанию, если атрибут не задан.
+- Все векторы в одном значении должны иметь одинаковое число элементов.
+- Пустой вложенный вектор (`[[]]`) не поддерживается и отвергается. Для значения «ничего» используйте `[]`.
+- Значения возвращаются в той же вложенной форме, в которой были вставлены.
+
+### Общие ограничения
+
+- Сейчас поддерживается только в таблицах real-time (не в обычных таблицах)
+- Не поддерживается в функциях и выражениях
+- Нельзя использовать в обычных фильтрах или сортировке
+- [Автовекторизация](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29) для этого типа недоступна: модель порождает один вектор на документ, поэтому `MODEL_NAME` отвергается. Векторы нужно передавать явно.
+- Несовместимо с механизмом [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema)
+
+### Использование массивов float-векторов с KNN
+
+Параметры те же, что и у [`float_vector`](../Creating_a_table/Data_types.md#Float-vector): `KNN_TYPE`, `KNN_DIMS`, `HNSW_SIMILARITY`, а также необязательные `HNSW_M`, `HNSW_EF_CONSTRUCTION` и [квантизация](../Searching/KNN.md#Vector-quantization), но есть два отличия:
+
+- `KNN_DIMS` обязателен, и **каждый** вектор в **каждой** строке должен иметь ровно столько элементов. Строка, у которой векторы другой ширины, отклоняется при вставке.
+- `MODEL_NAME` и `FROM` не принимаются.
+
+**Что можно делать:**
+- Выполнять KNN-поиск, который сопоставляет документ по его ближайшему вектору
+- Хранить разное число векторов на документ, включая ноль
+
+**Что нельзя делать:**
+- `UPDATE` атрибута: используйте `REPLACE`, как и для `float_vector`, проиндексированного через KNN
+- Использовать значения в обычных фильтрах или сортировке
+
+Документ со значением `[]` или с опущенным атрибутом никогда не возвращается KNN-поиском, потому что он не близок ни к чему.
+
+### Использование массивов float-векторов без KNN
+
+Без настройки KNN векторы сохраняются, но не доступны для поиска, и для столбца не нужны вообще никакие параметры. В этом режиме каждое значение полностью самодостаточно, поэтому в разных строках могут храниться векторы разной ширины:
+
+```sql
+CREATE TABLE products(title text, chunk_vectors float_vector_array);
+INSERT INTO products VALUES (1, 'a', [[1,2]]), (2, 'b', [[1,2,3],[4,5,6]]);
+```
+
+`UPDATE` в этом режиме работает так же, как для `float_vector` без KNN, а `[]` очищает значение.
+
+<!-- example for creating float_vector_array -->
+
+Создание массива float-векторов с KNN-индексацией, заполнение и поиск по нему:
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+
+INSERT INTO articles VALUES
+  (1, 'first',  [[1,0,0,0],[0,1,0,0]]),
+  (2, 'second', [[0,0,1,0]]),
+  (3, 'no vectors yet', []);
+
+SELECT id, knn_dist() FROM articles WHERE knn(chunk_vectors, 5, (1,0,0,0));
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')"
+
+POST /insert
+{
+  "table": "articles",
+  "id": 1,
+  "doc": { "title": "first", "chunk_vectors": [[1,0,0,0],[0,1,0,0]] }
+}
+
+POST /search
+{
+  "table": "articles",
+  "knn": { "field": "chunk_vectors", "query_vector": [1,0,0,0], "k": 5 }
+}
+```
+
+<!-- end -->
+
 ## Многозначное целое число (MVA)
 
 <!-- example for creating MVA32 -->
@@ -2914,9 +3083,9 @@ POST /cli -d "CREATE TABLE products(title text, product_codes multi)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'product_codes'=>['type'=>'multi']
 ]);
@@ -3030,7 +3199,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->filter('any(product_codes)','equals',3)->get();
+$table->setName('products')->search('')->filter('any(product_codes)','equals',3)->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -3065,7 +3234,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{},"equals
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 query.put("equals",new HashMap<String,Integer>(){{
@@ -3138,7 +3307,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->sort('product_codes','asc','min')->get();
+$table->setName('products')->search('')->sort('product_codes','asc','min')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -3174,7 +3343,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{},"sort":
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -3302,7 +3471,7 @@ POST /search
 ```JSON
 {
    "table":"products",
-   "_id":1,
+   "id":1,
    "created":true,
    "result":"created",
    "status":201
@@ -3338,11 +3507,11 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->addDocument([
+$table->addDocument([
     "title"=>"first",
     "product_codes"=>[4,2,1,3]
 ]);
-$index->search('')-get();
+$table->search('')-get();
 ```
 
 <!-- response PHP -->
@@ -3465,12 +3634,12 @@ HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","first");
     put("product_codes",new int[] {4,2,1,3});
 }};
-newdoc.index("products").id(1L).setDoc(doc);
+newdoc.table("products").id(1L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 Map<String,Object> query = new HashMap<String,Object>();
 query.put("match_all",null);
 SearchRequest searchRequest = new SearchRequest();
-searchRequest.setIndex("products");
+searchRequest.setTable("products");
 searchRequest.setQuery(query);
 SearchResponse searchResponse = searchApi.search(searchRequest);
 System.out.println(searchResponse.toString() );
@@ -3500,7 +3669,7 @@ class SearchResponse {
 Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "first");
 doc.Add("product_codes", new List<Object> {4,2,1,3});
-InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 1, doc: doc);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "products", id: 1, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 object query =  new { match_all=null };
 var searchRequest = new SearchRequest("products", query);
@@ -3595,9 +3764,9 @@ POST /cli -d "CREATE TABLE products(title text, values multi64)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'values'=>['type'=>'multi64']
 ]);

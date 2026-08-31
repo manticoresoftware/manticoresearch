@@ -232,6 +232,8 @@ CSphDictKeywords::CSphDictKeywords()
 CSphDictKeywords::~CSphDictKeywords()
 {
 	HitblockReset();
+	ResetDictChunks();
+	ResetCheckpoints();
 }
 
 void CSphDictKeywords::HitblockReset()

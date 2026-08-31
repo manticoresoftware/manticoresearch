@@ -35,7 +35,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-const DWORD		INDEX_FORMAT_VERSION		= 70;				///< keywords_v2 dictionary layout versioning
+const DWORD		INDEX_FORMAT_VERSION		= 72;				///< float_vector_array attribute type
 
 const char		MAGIC_CODE_SENTENCE			= '\x02';				// emitted from tokenizer on sentence boundary
 const char		MAGIC_CODE_PARAGRAPH		= '\x03';				// emitted from stripper (and passed via tokenizer) on paragraph boundary
@@ -677,6 +677,7 @@ inline const char * sphTypeName ( ESphAttr eType )
 		case SPH_ATTR_UINT32SET:	return "mva";
 		case SPH_ATTR_INT64SET:		return "mva64";
 		case SPH_ATTR_FLOAT_VECTOR:	return "float_vector";
+		case SPH_ATTR_FLOAT_VECTOR_ARRAY:	return "float_vector_array";
 		default:					return "unknown";
 	}
 }
@@ -720,6 +721,7 @@ inline const char * sphRtTypeDirective ( ESphAttr eType )
 		case SPH_ATTR_UINT32SET:	return "rt_attr_multi";
 		case SPH_ATTR_INT64SET:		return "rt_attr_multi64";
 		case SPH_ATTR_FLOAT_VECTOR:	return "rt_attr_float_vector";
+		case SPH_ATTR_FLOAT_VECTOR_ARRAY:	return "rt_attr_float_vector_array";
 		default:					return nullptr;
 	}
 }
@@ -1208,6 +1210,7 @@ struct ExpansionContext_t : public ExpansionTrait_t
 struct GetKeywordsSettings_t
 {
 	bool	m_bStats = true;
+	bool	m_bFoldStatsToUnique = false;	///< collect stats once per normalized keyword, used by internal local_df pre-pass
 	bool	m_bFoldLemmas = false;
 	bool	m_bFoldBlended = false;
 	bool	m_bFoldWildcards = false;
@@ -1396,7 +1399,7 @@ struct RemapXSV_t
 	int m_iTag {-1};
 };
 
-// internals attributes are last no need to send them
+// select attributes that should be sent to the client or an agent
 void sphGetAttrsToSend ( const ISphSchema & tSchema, bool bAgentMode, bool bNeedId, CSphBitvec & tAttrs );
 
 

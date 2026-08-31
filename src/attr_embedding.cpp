@@ -1,7 +1,5 @@
 //
-// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
-// Copyright (c) 2001-2016, Andrew Aksyonoff
-// Copyright (c) 2008-2016, Sphinx Technologies Inc
+// Copyright (c) 2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -16,11 +14,17 @@
 
 #include "embeddingutils.h"
 #include "attr_embedding.h"
+#include "indexsettings.h"
 
 void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphString & sError, bool bModify )
 {
 	CSphString sAttrToAdd = tStmt.m_sAlterAttr;
 	sAttrToAdd.ToLower();
+	if ( strcmp ( sAttrToAdd.cstr(), "@id" )==0 && sphHasUuidDocid ( pIdx->GetMatchSchema() ) )
+	{
+		sError = "attribute '@id' is internal";
+		return;
+	}
 
 	bool bIndexed = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED;
 	bool bStored = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_STORED;

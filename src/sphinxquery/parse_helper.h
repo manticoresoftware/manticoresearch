@@ -32,7 +32,7 @@ public:
 	bool			AddField ( FieldMask_t & dFields, const char * szField, int iLen );
 	bool			ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, bool & bIgnore );
 
-	void			Setup ( const CSphSchema * pSchema, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, XQQuery_t * pXQQuery, const CSphIndexSettings & tSettings );
+	void			Setup ( const CSphSchema * pSchema, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, XQQuery_t * pXQQuery, const CSphIndexSettings & tSettings, CSphSchema * pDiscoverySchema = nullptr );
 	bool			Error ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 	void			Warning ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 	XQNode_t *		FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec, const CSphBitvec * pMorphFields, bool bOnlyNotAllowed );
@@ -57,6 +57,7 @@ protected:
 	};
 
 	const CSphSchema *		m_pSchema {nullptr};
+	CSphSchema *				m_pDiscoverySchema {nullptr};
 	TokenizerRefPtr_c		m_pTokenizer;
 	DictRefPtr_c			m_pDict;
 	CSphFixedVector<BYTE>	m_dQueryTokenScratch { 0 };
@@ -81,7 +82,7 @@ protected:
 	virtual bool	NeedTrailingSeparator() { return true; }
 
 private:
-	XQNode_t *		SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed );
+	XQNode_t *		SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed, bool bSweepHappened );
 	bool			FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode_t ** ppRoot );
 	void			FixupNulls ( XQNode_t * pNode );
 	void			DeleteNodesWOFields ( XQNode_t * pNode );

@@ -1,0 +1,200 @@
+––– comment –––
+Regression for #4808: a daemon stop is upgrade-safe only after RT metadata is
+committed and no recovery binlog remains. Force the metadata write to fail,
+verify that --stopwait reports the failure and retains recovery state, then
+remove the fault and recover the exact rows with the same binary.
+––– input –––
+cat > /tmp/gh4808-shutdown-contract.sh <<'BASH'
+#!/usr/bin/env bash
+set -u
+
+root=/tmp/gh4808-shutdown-contract
+conf=$root/manticore.conf
+port=19486
+
+stop_searchd() {
+  searchd --stopwait --config "$conf" >/dev/null 2>&1 || true
+}
+
+wait_for_sql() {
+  local attempt
+  for attempt in $(seq 1 300); do
+    : "$attempt"
+    if mysql --ssl-mode=DISABLED --protocol=tcp -h127.0.0.1 -P"$port" -Nse 'SELECT 1' >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  return 1
+}
+
+wait_for_searchd_exit() {
+  local attempt
+  for attempt in $(seq 1 300); do
+    : "$attempt"
+    if ! pgrep -r R,S,D,T,t,W -x searchd >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  return 1
+}
+
+query_rows() {
+  mysql --ssl-mode=DISABLED --protocol=tcp -h127.0.0.1 -P"$port" -e \
+    'SELECT COUNT(*),MIN(id),MAX(id),SUM(value) FROM rt' |
+    awk -F'|' '
+      /^\|/ {
+        for (i=2; i<=5; ++i)
+          gsub(/[[:space:]]/, "", $i)
+        if ($2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ && $5 ~ /^[0-9]+$/) {
+          print $2 "," $3 "," $4 "," $5
+          exit
+        }
+      }
+    '
+}
+
+searchd --stopwait >/dev/null 2>&1 || true
+rm -rf "$root"
+mkdir -p "$root/data"
+cat > "$conf" <<CONF
+searchd {
+  listen = 127.0.0.1:${port}:mysql
+  listen = 127.0.0.1:19488:http
+  log = $root/searchd.log
+  query_log = $root/query.log
+  pid_file = $root/searchd.pid
+  data_dir = $root/data
+  binlog_path = $root/data
+  rt_flush_period = 3600
+  # Observation deadline for --stopwait; the injected file state selects the branch.
+  shutdown_timeout = 30
+}
+CONF
+
+trap stop_searchd EXIT
+
+searchd --config "$conf" >"$root/first-start.out" 2>&1
+if ! wait_for_sql; then
+  echo initial_ready=no
+  exit 1
+fi
+
+mysql --ssl-mode=DISABLED --protocol=tcp -h127.0.0.1 -P"$port" -e \
+  "CREATE TABLE rt (body text, value integer) rt_mem_limit='16M'" >/dev/null
+mysql --ssl-mode=DISABLED --protocol=tcp -h127.0.0.1 -P"$port" -e \
+  "INSERT INTO rt (id,body,value) VALUES (1,'one',10),(2,'two',20),(3,'three',30)" >/dev/null
+initial_rows=$(query_rows)
+
+rm -f "$root/data/rt/rt.meta.new"
+ln -s /dev/full "$root/data/rt/rt.meta.new"
+
+searchd --stopwait --config "$conf" >"$root/failed-stop.out" 2>&1
+failed_stop_exit=$?
+if wait_for_searchd_exit; then
+  failed_process_exited=yes
+else
+  failed_process_exited=no
+fi
+cp "$root/searchd.log" "$root/failed-stop.log"
+
+if grep -Fq 'shutdown incomplete: 1 recovery binlog file(s) remain' "$root/failed-stop.log"; then
+  shutdown_incomplete=yes
+else
+  shutdown_incomplete=no
+fi
+if grep -q 'shutdown complete' "$root/failed-stop.log"; then
+  failed_shutdown_complete=yes
+else
+  failed_shutdown_complete=no
+fi
+if grep -Eq 'watchdog: main process [0-9]+ exited with failure \(exit code 1\), shutting down' "$root/failed-stop.log"; then
+  watchdog_failure=yes
+else
+  watchdog_failure=no
+fi
+recovery_logs=$(find "$root/data" -maxdepth 1 -type f -name 'binlog.[0-9]*' -printf . | wc -c)
+if find "$root/data" -maxdepth 1 -type f -name 'binlog.[0-9]*' -size +0c -print -quit | grep -q .; then
+  recovery_log_nonempty=yes
+else
+  recovery_log_nonempty=no
+fi
+
+rm -f "$root/data/rt/rt.meta.new"
+: > "$root/searchd.log"
+searchd --config "$conf" >"$root/restart.out" 2>&1
+if ! wait_for_sql; then
+  echo restart_ready=no
+  exit 1
+fi
+recovered_rows=$(query_rows)
+
+searchd --stopwait --config "$conf" >"$root/clean-stop.out" 2>&1
+clean_stop_exit=$?
+if wait_for_searchd_exit; then
+  clean_process_exited=yes
+else
+  clean_process_exited=no
+fi
+if grep -q 'shutdown complete' "$root/searchd.log"; then
+  clean_shutdown_complete=yes
+else
+  clean_shutdown_complete=no
+fi
+remaining_recovery_logs=$(find "$root/data" -maxdepth 1 -type f -name 'binlog.[0-9]*' -printf . | wc -c)
+final_meta_hex=$(od -An -v -tx1 "$root/data/binlog.meta" | tr -d ' \n')
+if grep -Eq '^53504c49[[:xdigit:]]{8}0400$' <<<"$final_meta_hex"; then
+  zero_file_meta_committed=yes
+else
+  zero_file_meta_committed=no
+fi
+
+echo "initial_rows=$initial_rows"
+echo "failed_stop_exit=$failed_stop_exit"
+echo "failed_process_exited=$failed_process_exited"
+echo "shutdown_incomplete=$shutdown_incomplete"
+echo "failed_shutdown_complete=$failed_shutdown_complete"
+echo "watchdog_failure=$watchdog_failure"
+echo "recovery_logs=$recovery_logs"
+echo "recovery_log_nonempty=$recovery_log_nonempty"
+echo "recovered_rows=$recovered_rows"
+echo "clean_stop_exit=$clean_stop_exit"
+echo "clean_process_exited=$clean_process_exited"
+echo "clean_shutdown_complete=$clean_shutdown_complete"
+echo "remaining_recovery_logs=$remaining_recovery_logs"
+echo "zero_file_meta_committed=$zero_file_meta_committed"
+
+[[ $initial_rows == 3,1,3,60 ]]
+[[ $failed_stop_exit == 2 ]]
+[[ $failed_process_exited == yes ]]
+[[ $shutdown_incomplete == yes ]]
+[[ $failed_shutdown_complete == no ]]
+[[ $watchdog_failure == yes ]]
+[[ $recovery_logs == 1 ]]
+[[ $recovery_log_nonempty == yes ]]
+[[ $recovered_rows == "$initial_rows" ]]
+[[ $clean_stop_exit == 0 ]]
+[[ $clean_process_exited == yes ]]
+[[ $clean_shutdown_complete == yes ]]
+[[ $remaining_recovery_logs == 0 ]]
+[[ $zero_file_meta_committed == yes ]]
+BASH
+––– output –––
+––– input –––
+bash /tmp/gh4808-shutdown-contract.sh
+––– output –––
+initial_rows=3,1,3,60
+failed_stop_exit=2
+failed_process_exited=yes
+shutdown_incomplete=yes
+failed_shutdown_complete=no
+watchdog_failure=yes
+recovery_logs=1
+recovery_log_nonempty=yes
+recovered_rows=3,1,3,60
+clean_stop_exit=0
+clean_process_exited=yes
+clean_shutdown_complete=yes
+remaining_recovery_logs=0
+zero_file_meta_committed=yes

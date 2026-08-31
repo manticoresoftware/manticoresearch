@@ -188,6 +188,8 @@ By default, the threshold is the number of logical CPU cores multiplied by 2.
 
 However, if the table has attributes with KNN indexes, the default threshold is different. In this case, it is set to the number of physical CPU cores divided by 2, with a minimum value of 1, to improve KNN search performance.
 
+When [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) is not set explicitly (neither server-wide nor per-table), automatic compaction never merges a table below 2 disk chunks, even when the computed default threshold is lower (which can happen on servers with few CPU cores, particularly for KNN tables). To allow automatic compaction down to a single disk chunk, set `optimize_cutoff` explicitly to `1`.
+
 Note that toggling `auto_optimize` on or off doesn't prevent you from running [OPTIMIZE TABLE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) manually.
 
 <!-- intro -->
@@ -285,6 +287,32 @@ knn_parallel_build = 1
 <!-- request Increase -->
 ```ini
 knn_parallel_build = 4
+```
+
+<!-- end -->
+
+### embeddings_threads
+
+<!-- example conf embeddings_threads -->
+This setting caps how many CPU threads are used when Manticore converts text into vectors. It applies whenever auto-embeddings run: when inserting rows into a table that uses `model_name`/`from`, when an `ALTER TABLE` rebuilds an auto-embedded `float_vector` column, and when a `knn(<field>, '<text>', ...)` search supplies the query as text.
+
+The actual number of threads used is also limited by how many workers are currently free, so a busy server will use fewer threads even if the cap is high. Use this option to keep one large embedding batch from starving concurrent searches.
+
+Default is `4`. Set to `0` to remove the cap, in which case the embeddings library decides how many threads to use (still bounded by the number of free workers).
+
+This value can be changed at runtime using `SET GLOBAL embeddings_threads = N` and inspected via `SHOW VARIABLES`. For KNN `SELECT` queries it can also be overridden per-query with `OPTION embeddings_threads = N` (see [KNN vector search](../Searching/KNN.md#KNN-vector-search)).
+
+<!-- intro -->
+##### Example:
+
+<!-- request Default -->
+```ini
+embeddings_threads = 4
+```
+
+<!-- request Uncapped -->
+```ini
+embeddings_threads = 0
 ```
 
 <!-- end -->
@@ -870,6 +898,12 @@ You can specify:
 
 If you specify a port number but not an address, `searchd` will listen on all network interfaces. Unix path is identified by a leading slash. Port range can be set only for the replication protocol.
 
+Security note: bind each listener only to the network that needs it.
+
+For public Internet client access, use a dedicated `https` listener and configure [SSL](../Security/SSL.md) with `ssl_cert` and `ssl_key`. Keep API-capable listeners (`listen` without an explicit protocol, `http`, and `sphinx`) off the public Internet. These listeners can accept the Manticore/Sphinx binary API used by master-agent distributed queries and legacy clients, and binary API traffic is not SSL-secured.
+
+Bind API-capable listeners to loopback, a VPN, or a trusted internal network, or restrict them with firewall rules. `replication` listeners are also internal-only and should be reachable only by replication nodes.
+
 You can also specify a protocol handler (listener) to be used for connections on this socket. The listeners are:
 
 * **Not specified** - Manticore will accept connections at this port from:
@@ -896,15 +930,15 @@ Suffix `_readonly` sets [read-only mode](../Security/Read_only.md) for the liste
 ```ini
 listen = localhost
 listen = localhost:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at localhost
-listen = 192.168.0.1:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at 192.168.0.1
+listen = 192.168.0.1:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at 192.168.0.1; keep this internal
 listen = /var/run/manticore/manticore.s # listen for binary API requests on unix socket
 listen = /var/run/manticore/manticore.s:mysql # listen for mysql requests on unix socket
-listen = 9312 # listen for remote agents (binary API) and http/https requests on port 9312 on any interface
+listen = 9312 # listen for remote agents (binary API) and http/https requests on port 9312 on any interface; internal networks only
 listen = localhost:9306:mysql # listen for mysql requests on port 9306 at localhost
 listen = localhost:9307:mysql_readonly # listen for mysql requests on port 9307 at localhost and accept only read queries
 listen = 127.0.0.1:9308:http # listen for http requests as well as connections from remote agents (and binary API) on port 9308 at localhost
-listen = 192.168.0.1:9320-9328:replication # listen for replication connections on ports 9320-9328 at 192.168.0.1
-listen = 127.0.0.1:9443:https # listen for https requests (not http) on port 9443 at 127.0.0.1
+listen = 192.168.0.1:9320-9328:replication # listen for replication connections on ports 9320-9328 at 192.168.0.1; keep this internal
+listen = 127.0.0.1:9443:https # listen for https requests (not http) on port 9443 at 127.0.0.1; use this listener type for public Internet access with ssl_cert and ssl_key
 listen = 127.0.0.1:9312:sphinx # listen for legacy Sphinx requests (e.g. from SphinxSE) on port 9312 at 127.0.0.1
 ```
 <!-- end -->

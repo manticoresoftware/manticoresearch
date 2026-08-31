@@ -306,7 +306,7 @@ INSERT INTO products (title, embedding_vector) VALUES
 POST /sql?mode=raw -d "INSERT INTO products (title) VALUES ('machine learning artificial intelligence'),('banana fruit sweet yellow')"
 ```
 
-插入多个字段 - 如果 FROM='title,description'，两者都会用于生成嵌入
+插入多个字段 - 如果 `FROM='title,description'`，两者都会用于嵌入
 ```JSON
 POST /sql?mode=raw -d "INSERT INTO products_openai (title, description) VALUES ('smartphone', 'latest mobile device with advanced features'), ('laptop', 'portable computer for work and gaming')"
 ```
@@ -453,7 +453,7 @@ POST /insert
 ```json
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"created":true,
 	"result":"created",
 	"status":201
@@ -461,7 +461,7 @@ POST /insert
 
 {
 	"table":"test",
-	"_id":2,
+	"id":2,
 	"created":true,
 	"result":"created",
 	"status":201
@@ -505,6 +505,8 @@ POST /insert
 * `rescore`：启用 KNN 重新评分（默认启用）。在 SQL 中设为 `0` 或在 JSON 中设为 `false` 可禁用重新评分。KNN 搜索在使用量化向量完成后（可能伴随过采样），会使用原始（全精度）向量重新计算距离并重新排序结果，以提高排序准确性。
 * `oversampling`：设置一个因子（浮点值），在执行 KNN 搜索时将 `k` 乘以该因子，从而使用量化向量检索出比所需更多的候选结果。默认应用 `oversampling=3.0`。如果启用了重新评分，这些候选结果之后可以重新评估。过采样也适用于非量化向量。由于它会增大 `k`，进而影响 HNSW 索引的工作方式，因此可能会使结果精度略有变化。
 * `early_termination`：启用或禁用 HNSW 图遍历期间的自适应提前终止。默认启用。设为 SQL 中的 `0` 或 JSON 中的 `false` 可禁用。详情参见[提前终止](../Searching/KNN.md#Early-termination)。
+
+当提供的是文本查询时（因此 Manticore 会在搜索前对字符串进行嵌入），可以在 SQL 中通过 `OPTION embeddings_threads = N` 按查询覆盖嵌入库使用的线程数。该值只会限制此查询的嵌入调用，覆盖全局 [embeddings_threads](../Server_settings/Searchd.md#embeddings_threads) 设置；`0` 表示不设上限。当查询以向量数组形式提供时，此选项不起作用。
 
 文档总是按其与搜索向量的距离排序。你指定的任何附加排序条件都会在这个主排序条件之后应用。若要获取距离，有一个内置函数 [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29)。
 
@@ -588,6 +590,59 @@ POST /search
 <!-- end -->
 
 <!-- example knn_quantization -->
+
+### 每个文档包含多个向量
+
+一个 [`float_vector_array`](../Creating_a_table/Data_types.md#Float-vector-array) 属性为每个文档保存多个向量，而不是只有一个：比如一篇文章的多个分块、一款产品的多张照片，或者一段视频的关键帧。所有文档中的所有向量都会一起建立索引，搜索时会把文档的各个向量视为该文档的不同表示：
+
+* 如果某个文档的**任意**一个向量接近查询向量，就认为该文档匹配。
+* 每个匹配文档只返回**一次**，`knn_dist()` 报告它最近那个向量的距离。该文档的其他向量不会产生额外行。
+* `k` 统计的是**文档**，不是向量。`knn(v, 10, ...)` 要求返回 10 个最近的文档，而不管它们一共包含多少个向量。
+* 没有任何向量的文档（`[]`，或者省略该属性）绝不会返回，因为它不接近任何内容。
+
+查询向量仍然是一个包含 `KNN_DIMS` 个元素的单个向量，与 `float_vector` 完全相同。KNN 索引数组中存储的每个向量也必须包含 `KNN_DIMS` 个元素。
+
+当 `HNSW_SIMILARITY='cosine'` 时，每个存储向量都会单独归一化，因此会将文档中的各个向量分别与查询进行比较，而不是把它们当作一个长串联向量来比较。
+
+本页其余内容保持不变：[过滤](../Searching/KNN.md#Filtering-KNN-vector-search-results)、[预过滤/后过滤](../Searching/KNN.md#Filtering-strategies:-prefilter-vs.-postfilter)、[量化](../Searching/KNN.md#Vector-quantization)、[提前终止](../Searching/KNN.md#Early-termination) 和重评分的行为都一样。唯一不可用的能力是 [自动嵌入](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29)，因为一个模型每个文档只会生成一个向量。
+
+<!-- example multi_vector -->
+
+<!-- intro -->
+##### SQL：
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+
+INSERT INTO articles VALUES
+  (1, 'first',  [[1,0,0,0],[0,1,0,0]]),
+  (2, 'second', [[0,0,1,0]]);
+
+-- doc 1 owns a vector identical to the query and another far from it,
+-- so it is returned once, at distance 0
+SELECT id, knn_dist() FROM articles WHERE knn(chunk_vectors, 5, (1,0,0,0));
+```
+
+<!-- intro -->
+##### JSON：
+
+<!-- request JSON -->
+
+```JSON
+POST /search
+{
+  "table": "articles",
+  "knn": {
+    "field": "chunk_vectors",
+    "query_vector": [1,0,0,0],
+    "k": 5
+  }
+}
+```
+
+<!-- end -->
 
 ### 向量量化
 

@@ -46,6 +46,7 @@
 %token	TOK_FAST_FETCH
 %token	TOK_FLOAT
 %token	TOK_FLOAT_VECTOR
+%token	TOK_FLOAT_VECTOR_ARRAY
 %token	TOK_FROM
 %token	TOK_FUNCTION
 %token	TOK_HASH
@@ -125,8 +126,45 @@ tableident:
 
 ident:
 	tableident
+		{
+			if ( !pParser->ValidateIdentifier ( $1, 0 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+				YYERROR;
+			}
+			$$ = $1;
+		}
 	| TOK_IDENT
+		{
+			if ( !pParser->ValidateIdentifier ( $1, 0 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+				YYERROR;
+			}
+			$$ = $1;
+		}
     ;
+
+columnident:
+	tableident
+		{
+			if ( !pParser->ValidateIdentifier ( $1, 0, true ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+				YYERROR;
+			}
+			$$ = $1;
+		}
+	| TOK_IDENT
+		{
+			if ( !pParser->ValidateIdentifier ( $1, 0, true ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+				YYERROR;
+			}
+			$$ = $1;
+		}
+	;
 
 text_or_string:
 	TOK_TEXT		{ $$.m_iType = ( DdlParser_c::FLAG_INDEXED | DdlParser_c::FLAG_STORED ); }
@@ -147,16 +185,29 @@ attribute_type:
 	| TOK_UINT		{ $$.SetValueInt ( SPH_ATTR_INTEGER ); }
 	| TOK_TIMESTAMP	{ $$.SetValueInt ( SPH_ATTR_TIMESTAMP ); }
 	| TOK_FLOAT_VECTOR { $$.SetValueInt ( SPH_ATTR_FLOAT_VECTOR ); }
+	| TOK_FLOAT_VECTOR_ARRAY { $$.SetValueInt ( SPH_ATTR_FLOAT_VECTOR_ARRAY ); }
 	;
 
 
 tablename:
 	tableident
 		{
+			if ( !pParser->ValidateIdentifier ( $1, SPH_MAX_TABLE_NAME_BYTES ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+				YYERROR;
+			}
+			$$ = $1;
 			pParser->m_pStmt->m_dStringSubkeys.Add( pParser->GetTableName ( $1 ));
 		}
 	| tableident '.' tableident
 		{
+			if ( !pParser->ValidateIdentifier ( $3, SPH_MAX_TABLE_NAME_BYTES + SPH_MAX_GENERATED_TABLE_SUFFIX_BYTES ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+				YYERROR;
+			}
+			$$ = $3;
 			auto sDbName = pParser->GetString ( $1 );
 			if ( sDbName!="system" )
 			{
@@ -189,7 +240,7 @@ alter_cluster_ident:
 	;
 
 alter:
-	alter_table_name TOK_ADD TOK_COLUMN ident alter_col_type item_option_list
+	alter_table_name TOK_ADD TOK_COLUMN columnident alter_col_type item_option_list
 		{
 			if ( !pParser->SetupAlterTable ( $4, $5 ) )
 			{
@@ -197,7 +248,7 @@ alter:
 	            YYERROR;
 			}
 		}
-	| alter_table_name TOK_MODIFY_COLUMN ident alter_col_type item_option_list
+	| alter_table_name TOK_MODIFY_COLUMN columnident alter_col_type item_option_list
 		{
 			if ( !pParser->SetupAlterTable ( $3, $4, true ) )
 			{
@@ -205,28 +256,43 @@ alter:
 				YYERROR;
 			}
 		}
-	| alter_table_name TOK_MODIFY_COLUMN ident TOK_API_KEY '=' TOK_QUOTED_STRING
-   		{
-   			SqlStmt_t & tStmt = *pParser->m_pStmt;
-   			tStmt.m_eStmt = STMT_ALTER_EMBEDDINGS_API_KEY;
+	| alter_table_name TOK_MODIFY_COLUMN columnident TOK_API_KEY '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->ValidateIdentifier ( $3, 0, true ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+				YYERROR;
+			}
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_ALTER_EMBEDDINGS_API_KEY;
 			pParser->ToString ( tStmt.m_sAlterAttr, $3 );
 			pParser->ToString ( tStmt.m_sAlterOption, $6 ).Unquote();
-   		}
-	| alter_table_name TOK_MODIFY_COLUMN ident TOK_API_URL '=' TOK_QUOTED_STRING
-   		{
-   			SqlStmt_t & tStmt = *pParser->m_pStmt;
-   			tStmt.m_eStmt = STMT_ALTER_EMBEDDINGS_API_URL;
+		}
+	| alter_table_name TOK_MODIFY_COLUMN columnident TOK_API_URL '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->ValidateIdentifier ( $3, 0, true ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+				YYERROR;
+			}
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_ALTER_EMBEDDINGS_API_URL;
 			pParser->ToString ( tStmt.m_sAlterAttr, $3 );
 			pParser->ToString ( tStmt.m_sAlterOption, $6 ).Unquote();
-   		}
-	| alter_table_name TOK_MODIFY_COLUMN ident TOK_API_TIMEOUT '=' TOK_QUOTED_STRING
-   		{
-   			SqlStmt_t & tStmt = *pParser->m_pStmt;
-   			tStmt.m_eStmt = STMT_ALTER_EMBEDDINGS_API_TIMEOUT;
+		}
+	| alter_table_name TOK_MODIFY_COLUMN columnident TOK_API_TIMEOUT '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->ValidateIdentifier ( $3, 0, true ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+				YYERROR;
+			}
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_ALTER_EMBEDDINGS_API_TIMEOUT;
 			pParser->ToString ( tStmt.m_sAlterAttr, $3 );
 			pParser->ToString ( tStmt.m_sAlterOption, $6 ).Unquote();
-   		}
-	| alter_table_name TOK_ADD TOK_COLUMN ident TOK_BIT '(' TOK_CONST_INT ')' item_option_list
+		}
+	| alter_table_name TOK_ADD TOK_COLUMN columnident TOK_BIT '(' TOK_CONST_INT ')' item_option_list
 		{
 			if ( !pParser->SetupAlterTable ( $4, SPH_ATTR_INTEGER, 0, $7.GetValueInt() ) )
 			{
@@ -234,8 +300,9 @@ alter:
 	            YYERROR;
 			}
 		}
-	| alter_table_name TOK_DROP TOK_COLUMN ident
+	| alter_table_name TOK_DROP TOK_COLUMN columnident
 		{
+			if ( !pParser->ValidateIdentifier ( $4, 0, true ) ) { yyerror ( pParser, pParser->GetLastError() ); YYERROR; }
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ALTER_DROP;
 			pParser->ToString ( tStmt.m_sAlterAttr, $4 );
@@ -295,8 +362,9 @@ alter:
    			SqlStmt_t & tStmt = *pParser->m_pStmt;
    			tStmt.m_eStmt = STMT_ALTER_REBUILD_KNN;
    		}
-	| alter_table_name TOK_REBUILD TOK_EMBEDDINGS ident
+	| alter_table_name TOK_REBUILD TOK_EMBEDDINGS columnident
 		{
+			if ( !pParser->ValidateIdentifier ( $4, 0, true ) ) { yyerror ( pParser, pParser->GetLastError() ); YYERROR; }
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ALTER_REBUILD_EMBEDDINGS;
 			pParser->ToString ( tStmt.m_sAlterAttr, $4 );
@@ -461,7 +529,7 @@ item_option_list:
 	;
 
 create_table_item:
-	ident alter_col_type item_option_list
+	columnident alter_col_type item_option_list
 	{
 		if ( !pParser->AddCreateTableCol ( $1, $2 ) )
 		 {
@@ -469,7 +537,15 @@ create_table_item:
             YYERROR;
 		 }
 	}
-	| ident item_option_list
+	| columnident TOK_TABLEIDENT item_option_list
+	{
+		if ( !pParser->AddCreateTableUuidId ( $1, $2 ) )
+		{
+			yyerror ( pParser, pParser->GetLastError() );
+			YYERROR;
+		}
+	}
+	| columnident item_option_list
 	{
 		if ( !pParser->AddCreateTableId ( $1 ) )
 		{
@@ -477,7 +553,14 @@ create_table_item:
 			YYERROR;
 		}
 	}
-	| ident TOK_BIT '(' TOK_CONST_INT ')' item_option_list	{ pParser->AddCreateTableBitCol ( $1, $4.GetValueInt() ); }
+	| columnident TOK_BIT '(' TOK_CONST_INT ')' item_option_list
+	{
+		if ( !pParser->AddCreateTableBitCol ( $1, $4.GetValueInt() ) )
+		{
+			yyerror ( pParser, pParser->GetLastError() );
+			YYERROR;
+		}
+	}
 	;
 
 create_table_item_list:
@@ -515,6 +598,7 @@ create_table:
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CREATE_TABLE;
 			tStmt.m_sIndex = tStmt.m_dStringSubkeys.Last();
+			tStmt.m_tCreateTable.m_bNameQuoted = pParser->IsBacktickQuoted ( $4 );
 		}
 	;
 
@@ -525,6 +609,7 @@ create_table_like:
 			tStmt.m_eStmt = STMT_CREATE_TABLE_LIKE;
 			tStmt.m_sIndex = tStmt.m_dStringSubkeys.First();
 			tStmt.m_tCreateTable.m_sLike = tStmt.m_dStringSubkeys.Last();
+			tStmt.m_tCreateTable.m_bNameQuoted = pParser->IsBacktickQuoted ( $4 );
 		}
 	;
 

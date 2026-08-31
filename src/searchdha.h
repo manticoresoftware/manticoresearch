@@ -61,7 +61,8 @@ enum SearchdStatus_e : WORD
 	SEARCHD_OK		= 0,	///< general success, command-specific reply follows
 	SEARCHD_ERROR	= 1,	///< general failure, error message follows
 	SEARCHD_RETRY	= 2,	///< temporary failure, error message follows, client should retry later
-	SEARCHD_WARNING	= 3		///< general success, warning message and command-specific reply follow
+	SEARCHD_WARNING	= 3,	///< general success, warning message and command-specific reply follow
+	SEARCHD_IN_PROGRESS = 4	///< command is still running; empty interim reply follows
 };
 
 /// remote agent state
@@ -516,6 +517,10 @@ public:
 	void AbortCallback();
 	bool CheckOrphaned();
 	void SetNoLimitReplySize();
+	/// Keep the current reply buffer alive after parsing because a parser published a borrowed view into it.
+	void KeepReplyBufferAfterParse() { m_bKeepReplyBufferAfterParse = true; }
+	void EnableRemoteReplyHeartbeats ();
+	bool ExpectsRemoteReplyHeartbeat () const;
 
 #if _WIN32
 	// move recv buffer to dOut, reinit mine.
@@ -527,6 +532,7 @@ public:
 	inline const char * StateName () const 	{ return Agent_e_Name ( m_eConnState ); }
 
 private:
+	friend class AgentConnTestPeer_c;
 
 	// prepare buf, parse result
 	RequestBuilder_i * m_pBuilder = nullptr; ///< fixme! check if it is ok to have as the member, or we don't need it actually
@@ -550,6 +556,7 @@ private:
 	CSphFixedVector<BYTE>	m_dReplyHeader { REPLY_HEADER_SIZE };
 	BYTE *					m_pReplyCur = nullptr;
 	bool					m_bReplyLimitSize = true;
+	bool					m_bRemoteReplyHeartbeats = false;
 
 	// sending buffer stuff
 	SmartOutputBuffer_t m_tOutput;		///< chain of blobs we're sending to a host
@@ -560,6 +567,7 @@ private:
 	bool m_bInNetLoop	= false;		///< if we're inside netloop (1-thread work with schedule)
 	bool m_bNeedKick	= false;		///< if we've installed callback from outside th and need to kick netloop
 	bool m_bManyTries = false;			///< to avoid report 'retries limit esceeded' if we have ONLY one retry
+	bool m_bKeepReplyBufferAfterParse = false;	///< current parser published a borrowed view into m_dReplyBuf
 
 	Agent_e			m_eConnState { Agent_e::HEALTHY };	///< current state
 	SearchdStatus_e m_eReplyStatus { SEARCHD_ERROR };    ///< reply status code
@@ -592,6 +600,7 @@ private:
 	size_t ReplyBufPlace () const;
 	void InitReplyBuf ( int iSize = 0 );
 	inline bool IsReplyHeader() const { return m_iReplySize<0; }
+	void AcceptRemoteReplyHeartbeat ();
 
 	SSIZE_T SendChunk (); // low-level (platform specific) send
 	SSIZE_T RecvChunk (); // low-level (platform specific) recv
@@ -835,7 +844,7 @@ protected:
 	CSphString * m_pWarning;
 };
 
-void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery );
+bool RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery );
 void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
 
 #endif // _searchdha_

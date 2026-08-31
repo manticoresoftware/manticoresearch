@@ -34,6 +34,22 @@ inline int sphIsAlphaOnly ( int c )
 	return ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' );
 }
 
+enum class IdentifierValidation_e : BYTE
+{
+	ALLOW_NONE,
+	ALLOW_LEADING_DIGIT,
+	ALLOW_PATH_PUNCTUATION,
+	ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION
+};
+
+/// Validate a user-defined table or field identifier.
+/// Non-ASCII characters must form valid UTF-8; ASCII is limited to letters,
+/// digits, and underscores. A leading digit is allowed only when quoted in SQL
+/// or when read from quote-less configuration syntax. Dots and dashes can be
+/// enabled only for flattened/internal compatibility-field paths.
+bool sphValidateIdentifier ( const char * szName, IdentifierValidation_e eValidation, int iMaxBytes, CSphString & sError );
+bool sphValidateTableName ( const char * szName, IdentifierValidation_e eValidation, CSphString & sError );
+
 inline bool sphIsInteger ( char c )
 {
 	return ( c>='0' && c<='9' ) || c=='+' || c=='-';
@@ -283,6 +299,14 @@ public:
 	{
 		CSphVariant * pEntry = (*this)( sKey );
 		return pEntry ? pEntry->intval() : iDefault;
+	}
+
+	std::optional<int> OptInt ( const char * sKey ) const
+	{
+		CSphVariant * pEntry = (*this)( sKey );
+		if (!pEntry)
+			return std::nullopt;
+		return pEntry->intval();
 	}
 
 	/// get float option value by key and default value

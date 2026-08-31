@@ -29,6 +29,7 @@ void ForceSsl()
 #include <openssl/err.h>
 #include <openssl/bio.h>
 #include <openssl/x509v3.h>
+#include <openssl/crypto.h>
 
 #include <memory>
 
@@ -330,7 +331,14 @@ static bool SetKeysFromPem ( const CSphString & sSslCert, const CSphString & sSs
 
 	// load private key from PEM string
 	std::unique_ptr<BIO, decltype ( &BIO_free ) > pKeyBio ( BIO_new_mem_buf ( sSslKey.cstr(), sSslKey.Length() ), BIO_free );
-	if ( !pKeyBio || SSL_CTX_use_PrivateKey ( pCtx, PEM_read_bio_PrivateKey ( pKeyBio.get(), nullptr, nullptr, nullptr ) )<=0 )
+	if ( !pKeyBio )
+	{
+		ERR_print_errors_cb( &fnSslError, pError );
+		return false;
+	}
+
+	std::unique_ptr<EVP_PKEY, decltype ( &EVP_PKEY_free ) > pKey ( PEM_read_bio_PrivateKey ( pKeyBio.get(), nullptr, nullptr, nullptr ), EVP_PKEY_free );
+	if ( !pKey || SSL_CTX_use_PrivateKey ( pCtx, pKey.get() )<=0 )
 	{
 		ERR_print_errors_cb( &fnSslError, pError );
 		return false;
@@ -649,16 +657,19 @@ class AsyncSSBufferedSocket_c final : public AsyncNetBuffer_c
 			int iGot = BIO_read ( m_pSslBackend, pBuf, iCanRead );
 			sphLogDebugv ( FRONT "<< BioReadFront (%p) done %d from %d..%d" NORM,
 					(BIO *) m_pSslBackend, iGot, iNeed, iHaveSpace );
+			if ( iGot<=0 )
+			{
+				sphLogDebugv ( FRONT "<< BioReadFront (%p) breaking on %d after %d" NORM,
+						(BIO *) m_pSslBackend, iGot, iGotTotal );
+				if ( iGot<0 && !iGotTotal )
+					return -1;
+				break;
+			}
+
 			pBuf += iGot;
 			iGotTotal += iGot;
 			iNeed -= iGot;
 			iHaveSpace -= iGot;
-			if ( !iGot )
-			{
-				sphLogDebugv ( FRONT "<< BioReadFront (%p) breaking on %d" NORM,
-						(BIO *) m_pSslBackend, iGotTotal );
-				break;
-			}
 		}
 		m_iReceivedTotal += iGotTotal;
 		return iGotTotal;
@@ -699,6 +710,12 @@ public:
 		return m_iReceivedTotal;
 	}
 };
+
+std::unique_ptr<AsyncNetBuffer_c> MakeSslTestBuffer ( BIO * pSslBackend )
+{
+	assert ( pSslBackend );
+	return std::make_unique<AsyncSSBufferedSocket_c> ( BIOPtr_c ( pSslBackend, [] ( BIO * pBio ) { BIO_free_all ( pBio ); } ) );
+}
 
 bool MakeSecureLayer ( std::unique_ptr<AsyncNetBuffer_c>& pSource )
 {
@@ -987,4 +1004,20 @@ const CSphString & GetSslCert()
 const CSphString & GetSslKey()
 {
 	return g_sSslKey;
+}
+
+bool SecretEqual ( const VecTraits_T<BYTE> & dA, const VecTraits_T<BYTE> & dB )
+{
+	if ( dA.IsEmpty() || dB.IsEmpty() || dA.GetLength()!=dB.GetLength() )
+		return false;
+
+#if WITH_SSL
+	return CRYPTO_memcmp ( dA.Begin(), dB.Begin(), dA.GetLength() )==0;
+#else
+	unsigned int uDiff = 0;
+	for ( int i = 0; i<dA.GetLength(); ++i )
+		uDiff |= dA[i] ^ dB[i];
+
+	return uDiff==0;
+#endif
 }

@@ -70,10 +70,10 @@
 * [SHOW TOKEN](Security/Authentication_and_authorization.md#Users-and-tokens) - 显示已存储的 token 哈希
 * [RELOAD AUTH](Security/Authentication_and_authorization.md#Inspecting-authentication-data) - 重新加载身份验证数据
 
-##### 实时表优化
+##### 表优化
 * [FLUSH RAMCHUNK](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK) - 强制创建新磁盘块
 * [FLUSH TABLE](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#FLUSH-TABLE) - 将实时表的 RAM 块刷新到磁盘
-* [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) - 将实时表加入优化队列
+* [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) - 压缩 RT 表或分布式表、分片表的物理 RT 目标
 
 ##### 导入到实时表
 * [ATTACH TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) - 将数据从普通表移动到实时表
@@ -135,7 +135,7 @@
 * [/tbl_name/_mapping](Creating_a_table/Local_tables/Real-time_table.md#_mapping-API:) - 以Elasticsearch风格创建表模式
 
 ### 常见事项
-* [字段名称语法](Creating_a_table/Data_types.md#Field-name-syntax)
+* [表、字段和属性名语法](Creating_a_table/Data_types.md#Table-and-field-name-syntax)
 * [数据类型](Creating_a_table/Data_types.md)
 * [引擎](Creating_a_table/Data_types.md)
 * [平面模式](Read_this_first.md#Real-time-mode-vs-plain-mode)
@@ -232,6 +232,7 @@
 * [rt_attr_bool](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_float](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_float_vector](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [rt_attr_float_vector_array](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_json](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_multi_64](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_multi](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
@@ -469,6 +470,7 @@ index_converter {--config /path/to/config|--path}
   * [diskchunk_flush_write_timeout](Server_settings/Searchd.md#diskchunk_flush_write_timeout) - 如果没有写入操作，自动刷新 RAM 块的超时时间
   * [diskchunk_flush_search_timeout](Server_settings/Searchd.md#diskchunk_flush_search_timeout) - 如果表中没有搜索操作，防止自动刷新 RAM 块的超时时间
   * [docstore_cache_size](Server_settings/Searchd.md#docstore_cache_size) - 内存中保存的文档存储文档块的最大大小
+  * [embeddings_threads](Server_settings/Searchd.md#embeddings_threads) - 嵌入库在为自动嵌入插入、`ALTER TABLE` KNN 重建以及 KNN 文本查询嵌入生成向量时可使用的最大线程数
   * [expansion_limit](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) - 单个通配符的最大扩展关键字数量
   * [grouping_in_utc](Server_settings/Searchd.md#grouping_in_utc) - 启用 UTC 时区用于分组时间字段
   * [ha_period_karma](Server_settings/Searchd.md#ha_period_karma) - 代理镜像统计窗口大小
@@ -694,5 +696,7 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [15.1.0](https://manual.manticoresearch.com/manticore-15-1-0/). [安装页面](https://manticoresearch.com/install-15.1.0/)
 * [17.5.1](https://manual.manticoresearch.com/manticore-17-5-1/). [安装页面](https://manticoresearch.com/install-17.5.1/)
 * [25.0.0](https://manual.manticoresearch.com/manticore-25-0-0/). [安装页面](https://manticoresearch.com/install-25.0.0/)
-* [27.1.5](https://manual.manticoresearch.com/manticore-25-0-0/). [安装页面](https://manticoresearch.com/install-27.1.5/)
+* [27.1.5](https://manual.manticoresearch.com/manticore-27-1-5/). [安装页面](https://manticoresearch.com/install-27.1.5/)
+* [28.6.6](https://manual.manticoresearch.com/manticore-28-6-6/). [安装页面](https://manticoresearch.com/install-28.6.6/)
+* [29.0.2](https://manual.manticoresearch.com/manticore-29-0-2/). [安装页面](https://manticoresearch.com/install-29.0.2/)
 <!-- proofread -->

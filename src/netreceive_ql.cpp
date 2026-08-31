@@ -18,6 +18,7 @@
 #include "searchdbuddy.h"
 #include "auth/auth_proto_mysql.h"
 #include "client_session.h"
+#include "indexsettings.h"
 
 #include "sqlchecks/checks.h"
 
@@ -325,8 +326,12 @@ void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, Str_t sErro
 	// cut the error message to fix issue with long message for popular clients
 	if ( sError.second>MYSQL_ERROR::MAX_LENGTH )
 	{
-		sError.second = MYSQL_ERROR::MAX_LENGTH;
 		char * sErr = const_cast<char *>( sError.first );
+		int iCut = MYSQL_ERROR::MAX_LENGTH - 3;
+		while ( iCut>0 && ( sErr[iCut] & 0xC0 ) == 0x80 )
+			--iCut;
+
+		sError.second = iCut + 3;
 		sErr[sError.second-3] = '.';
 		sErr[sError.second-2] = '.';
 		sErr[sError.second-1] = '.';
@@ -1226,7 +1231,7 @@ void SendTableSchema ( SqlRowBuffer_c & tSqlOut, CSphString sName )
 	assert ( tSchema.GetAttr ( 0 ).m_sName == sphGetDocidName() );
 	const auto & tId = tSchema.GetAttr ( 0 );
 
-	tSqlOut.HeadColumn ( tId.m_sName.cstr(), ESphAttr2MysqlColumn ( tId.m_eAttrType ) );
+	tSqlOut.HeadColumn ( tId.m_sName.cstr(), tId.IsUuidLinkedDocid() ? MYSQL_COL_STRING : ESphAttr2MysqlColumn ( tId.m_eAttrType ) );
 	for ( int i = 0; i < tSchema.GetFieldsCount(); ++i )
 	{
 		const auto & tField = tSchema.GetField ( i );

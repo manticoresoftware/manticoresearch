@@ -1,0 +1,81 @@
+––– comment –––
+This test verifies HTTP access for ConversationalSearch model management and conversation calls.
+––– input –––
+export SEARCHD_FLAGS="--iostats --cpustats"
+––– output –––
+––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Create a chat model via HTTP
+––– input –––
+curl -sX POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d "CREATE CHAT MODEL http_assistant (model='openai:gpt-4o-mini', retrieval_limit=5, max_document_length=3000)" \
+  | grep -o 'http_assistant'
+––– output –––
+http_assistant
+––– comment –––
+Show chat models via HTTP
+––– input –––
+curl -sX POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d 'SHOW CHAT MODELS' \
+  | grep -o 'http_assistant'
+––– output –––
+http_assistant
+––– comment –––
+Accept valid conversation JSON and reach handler validation
+––– input –––
+curl -sX POST http://localhost:9308/search \
+  -H 'Content-Type: application/json' \
+  -d '{"chat":{"query":"What is vector search?","table":"missing_docs","model_name":"http_assistant"}}' \
+  | grep -o "Table 'missing_docs' not found"
+––– output –––
+Table 'missing_docs' not found
+––– comment –––
+Reject ambiguous vector field aliases before table/model lookup
+––– input –––
+curl -sX POST http://localhost:9308/search \
+  -H 'Content-Type: application/json' \
+  -d '{"chat":{"query":"What is vector search?","table":"missing_docs","model_name":"http_assistant","fields":"legacy_embedding","vector_field":"embedding"}}' \
+  | grep -o 'Use either vector_field or fields, not both'
+––– output –––
+Use either vector_field or fields, not both
+––– comment –––
+Reject missing required conversation field
+––– input –––
+curl -sX POST http://localhost:9308/search \
+  -H 'Content-Type: application/json' \
+  -d '{"chat":{"table":"missing_docs","model_name":"http_assistant"}}' \
+  | grep -o 'query must be a non-empty string'
+––– output –––
+query must be a non-empty string
+––– comment –––
+Reject unknown conversation field
+––– input –––
+curl -sX POST http://localhost:9308/search \
+  -H 'Content-Type: application/json' \
+  -d '{"chat":{"query":"What is vector search?","table":"missing_docs","model_name":"http_assistant","unknown":"value"}}' \
+  | grep -o 'Unknown chat JSON field: unknown'
+––– output –––
+Unknown chat JSON field: unknown
+––– comment –––
+Reject non-string conversation field
+––– input –––
+curl -sX POST http://localhost:9308/search \
+  -H 'Content-Type: application/json' \
+  -d '{"chat":{"query":"What is vector search?","table":"missing_docs","model_name":"http_assistant","conversation_uuid":123}}' \
+  | grep -o 'conversation_uuid must be a string'
+––– output –––
+conversation_uuid must be a string
+––– comment –––
+Drop chat model via HTTP
+––– input –––
+curl -sX POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d 'DROP CHAT MODEL IF EXISTS http_assistant' > /dev/null
+curl -sX POST 'http://localhost:9308/sql?mode=raw' \
+  -H 'Content-Type: text/plain' \
+  -d 'SHOW CHAT MODELS' \
+  | grep -c 'http_assistant' || true
+––– output –––
+0

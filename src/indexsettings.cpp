@@ -313,7 +313,8 @@ static RtTypedAttr_t g_dRtTypedAttrs[]=
 	{ SPH_ATTR_JSON,		"rt_attr_json" },
 	{ SPH_ATTR_UINT32SET,	"rt_attr_multi" },
 	{ SPH_ATTR_INT64SET,	"rt_attr_multi_64" },
-	{ SPH_ATTR_FLOAT_VECTOR,"rt_attr_float_vector" }
+	{ SPH_ATTR_FLOAT_VECTOR,"rt_attr_float_vector" },
+	{ SPH_ATTR_FLOAT_VECTOR_ARRAY,"rt_attr_float_vector_array" }
 };
 
 
@@ -326,6 +327,107 @@ int	GetNumRtTypes()
 const RtTypedAttr_t & GetRtType ( int iType )
 {
 	return g_dRtTypedAttrs[iType];
+}
+
+
+const char * sphGetUuidDocidName()
+{
+	static const char * UUID_DOCID_ATTR = "@uuid_id";
+	return UUID_DOCID_ATTR;
+}
+
+bool sphHasUuidDocid ( const ISphSchema & tSchema )
+{
+	const CSphColumnInfo * pDocid = tSchema.GetAttr ( sphGetDocidName() );
+	if ( !pDocid || !pDocid->IsUuidLinkedDocid() )
+		return false;
+
+#ifndef NDEBUG
+	const CSphColumnInfo * pUuidId = tSchema.GetAttr ( sphGetUuidDocidName() );
+	assert ( pUuidId && pUuidId->m_eAttrType==SPH_ATTR_STRING );
+#endif
+	return true;
+}
+
+
+static constexpr int UUID_DOCID_LENGTH = 36;
+static constexpr int UUID_DOCID_VERSION_POS = 14;
+static constexpr int UUID_DOCID_VARIANT_POS = 19;
+static constexpr int UUID_DOCID_GROUP_LENGTHS[] = { 8, 4, 4, 4, 12 };
+
+
+static bool IsUuidHex ( char c )
+{
+	return ( c>='0' && c<='9' ) || ( c>='a' && c<='f' ) || ( c>='A' && c<='F' );
+}
+
+
+static bool IsUuidVersion ( char c )
+{
+	return c>='1' && c<='8';
+}
+
+
+static bool IsUuidVariant ( char c )
+{
+	return c=='8' || c=='9' || c=='a' || c=='A' || c=='b' || c=='B';
+}
+
+
+static bool IsUuidDocid ( Str_t tUuid )
+{
+	if ( !tUuid.first || tUuid.second!=UUID_DOCID_LENGTH )
+		return false;
+
+	const char * pCur = tUuid.first;
+	const char * pEnd = pCur + UUID_DOCID_LENGTH;
+	for ( int iGroupLength : UUID_DOCID_GROUP_LENGTHS )
+	{
+		const char * pGroupEnd = pCur + iGroupLength;
+		while ( pCur<pGroupEnd )
+			if ( !IsUuidHex ( *pCur++ ) )
+				return false;
+
+		if ( pCur<pEnd && *pCur++!='-' )
+			return false;
+	}
+
+	assert ( pCur==pEnd );
+	return IsUuidVersion ( tUuid.first[UUID_DOCID_VERSION_POS] ) && IsUuidVariant ( tUuid.first[UUID_DOCID_VARIANT_POS] );
+}
+
+
+bool sphPrepareUuidDocid ( const char * szUuid, CSphString & sNormalizedUuid, CSphString & sError )
+{
+	if ( !szUuid || !*szUuid )
+	{
+		sError = "uuid id must be a non-empty string";
+		return false;
+	}
+
+	if ( !IsUuidDocid ( { szUuid, (int)strlen(szUuid) } ) )
+	{
+		sError.SetSprintf ( "invalid uuid id '%s'", szUuid );
+		return false;
+	}
+
+	CSphString sNormalized = szUuid;
+	sNormalized.ToLower();
+	sNormalizedUuid.Swap ( sNormalized );
+	return true;
+}
+
+
+bool sphIsNormalizedUuidDocid ( Str_t tUuid )
+{
+	if ( !IsUuidDocid ( tUuid ) )
+		return false;
+
+	for ( int i=0; i<tUuid.second; ++i )
+		if ( tUuid.first[i]>='A' && tUuid.first[i]<='F' )
+			return false;
+
+	return true;
 }
 
 
@@ -1357,6 +1459,8 @@ void FileAccessSettings_t::Format ( SettingsFormatter_c & tOut, FilenameBuilder_
 	tOut.Add ( "access_plain_attrs",	FileAccessName(m_eAttr) ,		m_eAttr!=tDefault.m_eAttr );
 	tOut.Add ( "access_blob_attrs",		FileAccessName(m_eBlob) ,		m_eBlob!=tDefault.m_eBlob );
 	tOut.Add ( "access_dict",			FileAccessName(m_eDict) ,		m_eDict!=tDefault.m_eDict );
+	tOut.Add ( "access_columnar_attrs",	FileAccessName(m_eColumnar),	m_eColumnar!=tDefault.m_eColumnar );
+	tOut.Add ( "access_secondary",		FileAccessName(m_eSecondary),	m_eSecondary!=tDefault.m_eSecondary );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -2397,6 +2501,14 @@ void DumpSettings ( StringBuilder_c & tBuf, const CSphIndex & tIndex, FilenameBu
 }
 
 
+void DumpSettings ( StringBuilder_c & tBuf, const CSphIndexSettings & tSettings, const CSphFieldFilterSettings & tFieldFilterSettings, const CSphTokenizerSettings & tTokenizerSettings, const CSphDictSettings & tDictSettings, const MutableIndexSettings_c & tMutableSettings, FilenameBuilder_i * pFilenameBuilder )
+{
+	SettingsFormatterState_t tState(tBuf);
+	SettingsFormatter_c tFormatter ( tState, "", " = ", "", "\n" );
+	FormatAllSettings ( tSettings, tFieldFilterSettings, tTokenizerSettings, tDictSettings, tMutableSettings, tFormatter, pFilenameBuilder );
+}
+
+
 void DumpSettingsCfg ( FILE * fp, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder )
 {
 	SettingsFormatterState_t tState(fp);
@@ -2548,7 +2660,8 @@ static RtTypedAttr_t g_dTypeNames[] =
 	{ SPH_ATTR_STRINGPTR,	"string" },
 	{ SPH_ATTR_TDIGEST_PTR,	"tdigest" },
 	{ SPH_ATTR_TIMESTAMP,	"timestamp" },
-	{ SPH_ATTR_FLOAT_VECTOR, "float_vector" }
+	{ SPH_ATTR_FLOAT_VECTOR, "float_vector" },
+	{ SPH_ATTR_FLOAT_VECTOR_ARRAY, "float_vector_array" }
 };
 
 
@@ -2678,18 +2791,28 @@ static bool IsDDLToken ( const CSphString & sTok )
 }
 
 
-static CSphString FormatCreateTableAttr ( const CSphColumnInfo & tAttr, const CSphIndexSettings & tSettings, int iNumColumnar, bool bQuote )
+CSphString FormatCreateTableIdentifier ( const CSphString & sName, bool bQuoteAll )
+{
+	bool bSystem = sName.Begins ( "system." );
+	const char * szIdentifier = bSystem ? sName.cstr()+7 : sName.cstr();
+	CSphString sIdentifier = szIdentifier;
+	CSphString sError;
+	bool bQuote = bQuoteAll || IsDDLToken ( sIdentifier ) || CSphSchema::IsReserved ( szIdentifier ) || !sphValidateIdentifier ( szIdentifier, IdentifierValidation_e::ALLOW_NONE, 0, sError );
+	if ( !bQuote )
+		return sName;
+
+	CSphString sQuoted;
+	sQuoted.SetSprintf ( bSystem ? "system.`%s`" : "`%s`", szIdentifier );
+	return sQuoted;
+}
+
+
+static CSphString FormatCreateTableAttr ( const CSphColumnInfo & tAttr, const CSphIndexSettings & tSettings, int iNumColumnar, bool bQuote, const char * szTypeOverride=nullptr )
 {
 	StringBuilder_c sRes;
 
-	CSphString sQuotedName;
-	bQuote |= IsDDLToken ( tAttr.m_sName );
-	if ( bQuote )
-		sQuotedName.SetSprintf ( "`%s`", tAttr.m_sName.cstr() );
-	else
-		sQuotedName = tAttr.m_sName;
-
-	sRes << sQuotedName << " " << GetAttrTypeName(tAttr);
+	CSphString sQuotedName = FormatCreateTableIdentifier ( tAttr.m_sName, bQuote );
+	sRes << sQuotedName << " " << ( szTypeOverride ? szTypeOverride : GetAttrTypeName(tAttr).cstr() );
 
 	AddStorageSettings ( sRes, tAttr, tSettings, false, iNumColumnar );
 	AddEngineSettings ( sRes, tAttr );
@@ -2704,13 +2827,7 @@ static CSphString FormatCreateTableField ( const CSphColumnInfo & tField, const 
 {
 	StringBuilder_c sRes;
 
-	CSphString sQuotedName;
-	bQuote |= IsDDLToken ( tField.m_sName );
-	if ( bQuote )
-		sQuotedName.SetSprintf ( "`%s`", tField.m_sName.cstr() );
-	else
-		sQuotedName = tField.m_sName;
-
+	CSphString sQuotedName = FormatCreateTableIdentifier ( tField.m_sName, bQuote );
 	const CSphColumnInfo * pAttr = tSchema.GetAttr ( tField.m_sName.cstr() );
 	bool bAttr = pAttr && pAttr->m_eAttrType==SPH_ATTR_STRING;
 
@@ -2738,7 +2855,7 @@ static CSphString BuildCreateTableImpl ( const CSphString & sName, const CSphSch
 	int iNumColumnar = tSchema.GetColumnarAttrsCount();
 
 	StringBuilder_c sRes;
-	sRes << "CREATE TABLE " << ( bQuote ? SphSprintf ( "`%s`", sName.cstr() ) : sName) << " (\n";
+	sRes << "CREATE TABLE " << FormatCreateTableIdentifier ( sName, bQuote ) << " (\n";
 
 	CSphVector<const CSphColumnInfo *> dExcludeAttrs;
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
@@ -2754,7 +2871,7 @@ static CSphString BuildCreateTableImpl ( const CSphString & sName, const CSphSch
 	const CSphColumnInfo * pId = tSchema.GetAttr("id");
 	assert(pId);
 
-	sRes << FormatCreateTableAttr ( *pId, tSettings, iNumColumnar, bQuote );
+	sRes << FormatCreateTableAttr ( *pId, tSettings, iNumColumnar, bQuote, pId->IsUuidLinkedDocid() ? "uuid" : nullptr );
 
 	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
 	{
@@ -2884,6 +3001,8 @@ const char * GetMutableName ( MutableName_e eName )
 		case MutableName_e::ACCESS_DOCLISTS: return "access_doclists";
 		case MutableName_e::ACCESS_HITLISTS: return "access_hitlists";
 		case MutableName_e::ACCESS_DICT: return "access_dict";
+		case MutableName_e::ACCESS_COLUMNAR_ATTRS: return "access_columnar_attrs";
+		case MutableName_e::ACCESS_SECONDARY: return "access_secondary";
 		case MutableName_e::READ_BUFFER_DOCS: return "read_buffer_docs";
 		case MutableName_e::READ_BUFFER_HITS: return "read_buffer_hits";
 		case MutableName_e::OPTIMIZE_CUTOFF: return "optimize_cutoff";
@@ -2955,6 +3074,64 @@ static void GetFileAccess (  const CSphConfigSection & hIndex, MutableName_e eNa
 
 	dLoaded.BitSet ( (int)eName );
 }
+
+// columnar (.spc) and secondary (.spidx) support only file (buffered) / mmap
+static bool GetFileMmapAccess ( const CSphString & sVal, const char * sKey, FileAccess_e & eRes )
+{
+	if ( sVal.IsEmpty() )
+		return false;
+
+	FileAccess_e eParsed = ParseFileAccess ( sVal.cstr() );
+	if ( eParsed!=FileAccess_e::FILE && eParsed!=FileAccess_e::MMAP )
+	{
+		sphWarning ( "%s: only 'file' or 'mmap' is supported, use default %s", sKey, FileAccessName(eRes) );
+		return false;
+	}
+
+	eRes = eParsed;
+	return true;
+}
+
+
+FileAccess_e GetFileMmapAccess ( const CSphConfigSection & hIndex, const char * sKey, FileAccess_e eDefault )
+{
+	FileAccess_e eRes = eDefault;
+	if ( !GetFileMmapAccess ( hIndex.GetStr(sKey), sKey, eRes ) )
+		return eDefault;
+
+	return eRes;
+}
+
+
+static void GetFileMmapAccess ( const JsonObj_c & tSetting, MutableName_e eName, FileAccess_e & eRes, CSphBitvec & dLoaded )
+{
+	const char * sName = GetMutableName(eName);
+
+	CSphString sError;
+	JsonObj_c tVal = tSetting.GetStrItem ( sName, sError, true );
+	if ( !tVal )
+	{
+		if ( !sError.IsEmpty() )
+			sphWarning ( "%s", sError.cstr() );
+		return;
+	}
+
+	if ( !GetFileMmapAccess ( tVal.StrVal(), sName, eRes ) )
+		return;
+
+	dLoaded.BitSet ( (int)eName );
+}
+
+
+static void GetFileMmapAccess ( const CSphConfigSection & hIndex, MutableName_e eName, FileAccess_e & eRes, CSphBitvec & dLoaded )
+{
+	const char * sName = GetMutableName(eName);
+	if ( !GetFileMmapAccess ( hIndex.GetStr(sName), sName, eRes ) )
+		return;
+
+	dLoaded.BitSet ( (int)eName );
+}
+
 
 static const int g_iOptimizeCutoff = 1;
 
@@ -3075,6 +3252,8 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 	GetFileAccess( tParser, MutableName_e::ACCESS_DOCLISTS, true, m_tFileAccess.m_eDoclist, m_dLoaded );
 	GetFileAccess( tParser, MutableName_e::ACCESS_HITLISTS, true, m_tFileAccess.m_eHitlist, m_dLoaded );
 	GetFileAccess( tParser, MutableName_e::ACCESS_DICT, false, m_tFileAccess.m_eDict, m_dLoaded );
+	GetFileMmapAccess( tParser, MutableName_e::ACCESS_COLUMNAR_ATTRS, m_tFileAccess.m_eColumnar, m_dLoaded );
+	GetFileMmapAccess( tParser, MutableName_e::ACCESS_SECONDARY, m_tFileAccess.m_eSecondary, m_dLoaded );
 
 	JsonObj_c tReadBuffer = tParser.GetIntItem ( GetMutableName ( MutableName_e::READ_BUFFER_DOCS ), sError, true );
 	if ( tReadBuffer )
@@ -3095,6 +3274,7 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 	{
 		m_iOptimizeCutoff = tOptimizeCutoff.IntVal();
 		m_iOptimizeCutoff = Max ( m_iOptimizeCutoff, 1 );
+		m_iOptimizeCutoffKNN = m_iOptimizeCutoff;
 		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
 	}
 
@@ -3203,6 +3383,8 @@ bool MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeed
 	GetFileAccess( hIndex, MutableName_e::ACCESS_DOCLISTS, true, m_tFileAccess.m_eDoclist, m_dLoaded );
 	GetFileAccess( hIndex, MutableName_e::ACCESS_HITLISTS, true, m_tFileAccess.m_eHitlist, m_dLoaded );
 	GetFileAccess( hIndex, MutableName_e::ACCESS_DICT, false, m_tFileAccess.m_eDict, m_dLoaded );
+	GetFileMmapAccess( hIndex, MutableName_e::ACCESS_COLUMNAR_ATTRS, m_tFileAccess.m_eColumnar, m_dLoaded );
+	GetFileMmapAccess( hIndex, MutableName_e::ACCESS_SECONDARY, m_tFileAccess.m_eSecondary, m_dLoaded );
 
 	if ( hIndex.Exists ( GetMutableName ( MutableName_e::READ_BUFFER_DOCS ) ) )
 	{
@@ -3220,6 +3402,7 @@ bool MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeed
 	{
 		m_iOptimizeCutoff = hIndex.GetInt ( GetMutableName ( MutableName_e::OPTIMIZE_CUTOFF ), g_iOptimizeCutoff );
 		m_iOptimizeCutoff = Max ( m_iOptimizeCutoff, 1 );
+		m_iOptimizeCutoffKNN = m_iOptimizeCutoff;
 		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
 	}
 
@@ -3294,6 +3477,8 @@ bool MutableIndexSettings_c::Save ( CSphString & sBuf ) const
 	AddStr ( m_dLoaded, MutableName_e::ACCESS_DOCLISTS, tRoot, FileAccessName ( m_tFileAccess.m_eDoclist ) );
 	AddStr ( m_dLoaded, MutableName_e::ACCESS_HITLISTS, tRoot, FileAccessName ( m_tFileAccess.m_eHitlist ) );
 	AddStr ( m_dLoaded, MutableName_e::ACCESS_DICT, tRoot, FileAccessName ( m_tFileAccess.m_eDict ) );
+	AddStr ( m_dLoaded, MutableName_e::ACCESS_COLUMNAR_ATTRS, tRoot, FileAccessName ( m_tFileAccess.m_eColumnar ) );
+	AddStr ( m_dLoaded, MutableName_e::ACCESS_SECONDARY, tRoot, FileAccessName ( m_tFileAccess.m_eSecondary ) );
 
 	AddInt ( m_dLoaded, MutableName_e::READ_BUFFER_DOCS, tRoot, m_tFileAccess.m_iReadBufferDocList );
 	AddInt ( m_dLoaded, MutableName_e::READ_BUFFER_HITS, tRoot, m_tFileAccess.m_iReadBufferHitList );
@@ -3379,6 +3564,16 @@ void MutableIndexSettings_c::Combine ( const MutableIndexSettings_c & tOther )
 		m_tFileAccess.m_eDict = tOther.m_tFileAccess.m_eDict;
 		m_dLoaded.BitSet ( (int)MutableName_e::ACCESS_DICT );
 	}
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::ACCESS_COLUMNAR_ATTRS ) )
+	{
+		m_tFileAccess.m_eColumnar = tOther.m_tFileAccess.m_eColumnar;
+		m_dLoaded.BitSet ( (int)MutableName_e::ACCESS_COLUMNAR_ATTRS );
+	}
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::ACCESS_SECONDARY ) )
+	{
+		m_tFileAccess.m_eSecondary = tOther.m_tFileAccess.m_eSecondary;
+		m_dLoaded.BitSet ( (int)MutableName_e::ACCESS_SECONDARY );
+	}
 
 	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::READ_BUFFER_DOCS ) )
 	{
@@ -3393,6 +3588,7 @@ void MutableIndexSettings_c::Combine ( const MutableIndexSettings_c & tOther )
 	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::OPTIMIZE_CUTOFF ) )
 	{
 		m_iOptimizeCutoff = tOther.m_iOptimizeCutoff;
+		m_iOptimizeCutoffKNN = tOther.m_iOptimizeCutoffKNN;
 		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
 	}
 
@@ -3448,6 +3644,8 @@ void MutableIndexSettings_c::Format ( SettingsFormatter_c & tOut, FilenameBuilde
 	FormatSetting ( this, tOut, MutableName_e::ACCESS_DOCLISTS, FileAccessName ( m_tFileAccess.m_eDoclist ), m_tFileAccess.m_eDoclist!=tDefaults.m_tFileAccess.m_eDoclist );
 	FormatSetting ( this, tOut, MutableName_e::ACCESS_HITLISTS, FileAccessName ( m_tFileAccess.m_eHitlist ), m_tFileAccess.m_eHitlist!=tDefaults.m_tFileAccess.m_eHitlist );
 	FormatSetting ( this, tOut, MutableName_e::ACCESS_DICT, FileAccessName ( m_tFileAccess.m_eDict ), m_tFileAccess.m_eDict!=tDefaults.m_tFileAccess.m_eDict );
+	FormatSetting ( this, tOut, MutableName_e::ACCESS_COLUMNAR_ATTRS, FileAccessName ( m_tFileAccess.m_eColumnar ), m_tFileAccess.m_eColumnar!=tDefaults.m_tFileAccess.m_eColumnar );
+	FormatSetting ( this, tOut, MutableName_e::ACCESS_SECONDARY, FileAccessName ( m_tFileAccess.m_eSecondary ), m_tFileAccess.m_eSecondary!=tDefaults.m_tFileAccess.m_eSecondary );
 
 	FormatSetting ( this, tOut, MutableName_e::READ_BUFFER_DOCS, m_tFileAccess.m_iReadBufferDocList, m_tFileAccess.m_iReadBufferDocList!=tDefaults.m_tFileAccess.m_iReadBufferDocList );
 	FormatSetting ( this, tOut, MutableName_e::READ_BUFFER_HITS, m_tFileAccess.m_iReadBufferHitList, m_tFileAccess.m_iReadBufferHitList!=tDefaults.m_tFileAccess.m_iReadBufferHitList );

@@ -453,7 +453,7 @@ POST /insert
 ```json
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"created":true,
 	"result":"created",
 	"status":201
@@ -461,7 +461,7 @@ POST /insert
 
 {
 	"table":"test",
-	"_id":2,
+	"id":2,
 	"created":true,
 	"result":"created",
 	"status":201
@@ -505,6 +505,8 @@ The parameters are:
 * `rescore`: Enables KNN rescoring (enabled by default). Set to `0` in SQL or `false` in JSON to disable rescoring. After the KNN search is completed using quantized vectors (with possible oversampling), distances are recalculated with the original (full-precision) vectors and results are re-sorted to improve ranking accuracy.
 * `oversampling`: Sets a factor (float value) by which `k` is multiplied when executing the KNN search, causing more candidates to be retrieved than needed using quantized vectors. `oversampling=3.0` is applied by default. These candidates can be re-evaluated later if rescoring is enabled. Oversampling also works with non-quantized vectors. Since it increases `k`, which affects how the HNSW index works, it may cause a small change in result accuracy.
 * `early_termination`: Enables or disables adaptive early termination during HNSW graph traversal. Enabled by default. Set to `0` in SQL or `false` in JSON to disable. See [Early termination](../Searching/KNN.md#Early-termination) for details.
+
+When a text query is supplied (so Manticore embeds the string before the search), the number of threads used by the embeddings library can be overridden per-query in SQL with `OPTION embeddings_threads = N`. The value caps the embeddings call for this query only, overriding the global [embeddings_threads](../Server_settings/Searchd.md#embeddings_threads) setting; `0` means uncapped. The option has no effect when the query is supplied as a vector array.
 
 Documents are always sorted by their distance to the search vector. Any additional sorting criteria you specify will be applied after this primary sort condition. For retrieving the distance, there is a built-in function called [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29).
 
@@ -588,6 +590,59 @@ POST /search
 <!-- end -->
 
 <!-- example knn_quantization -->
+
+### Multiple vectors per document
+
+A [`float_vector_array`](../Creating_a_table/Data_types.md#Float-vector-array) attribute holds several vectors per document instead of one: the chunks of an article, the photos of a product, the keyframes of a video. All vectors from all documents are indexed together, and search treats a document's vectors as alternative representations of that one document:
+
+* A document matches if **any** of its vectors is near the query vector.
+* Each matching document is returned **exactly once**, and `knn_dist()` reports the distance to its closest vector. The document's other vectors do not produce additional rows.
+* `k` counts **documents**, not vectors. `knn(v, 10, ...)` asks for the 10 nearest documents, however many vectors they own between them.
+* A document with no vectors (`[]`, or the attribute omitted) is never returned, since it is not near anything.
+
+The query vector is still a single vector of `KNN_DIMS` entries, exactly as for `float_vector`. Every vector stored in a KNN-indexed array must have `KNN_DIMS` entries too.
+
+With `HNSW_SIMILARITY='cosine'`, each stored vector is normalized on its own, so a document's vectors are compared against the query individually rather than as one long concatenated vector.
+
+Everything else on this page applies unchanged: [filtering](../Searching/KNN.md#Filtering-KNN-vector-search-results), [prefilter/postfilter](../Searching/KNN.md#Filtering-strategies:-prefilter-vs.-postfilter), [quantization](../Searching/KNN.md#Vector-quantization), [early termination](../Searching/KNN.md#Early-termination) and rescoring behave the same way. The only capability that is unavailable is [auto embeddings](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29), since a model yields one vector per document.
+
+<!-- example multi_vector -->
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+
+INSERT INTO articles VALUES
+  (1, 'first',  [[1,0,0,0],[0,1,0,0]]),
+  (2, 'second', [[0,0,1,0]]);
+
+-- doc 1 owns a vector identical to the query and another far from it,
+-- so it is returned once, at distance 0
+SELECT id, knn_dist() FROM articles WHERE knn(chunk_vectors, 5, (1,0,0,0));
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /search
+{
+  "table": "articles",
+  "knn": {
+    "field": "chunk_vectors",
+    "query_vector": [1,0,0,0],
+    "k": 5
+  }
+}
+```
+
+<!-- end -->
 
 ### Vector quantization
 

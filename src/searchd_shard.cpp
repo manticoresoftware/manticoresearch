@@ -1,10 +1,22 @@
+//
+// Copyright (c) 2026, Manticore Software LTD (https://manticoresearch.com)
+// All rights reserved
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License. You should have
+// received a copy of the GPL license along with this program; if you
+// did not, you can find it at http://www.gnu.org/
+//
+
 #include "searchd_shard.h"
 
+#include "api_reply_stream.h"
 #include "client_session.h"
 #include "docs_collector.h"
 #include "searchdreplication.h"
 
 #include <limits>
+#include <optional>
 #include <utility>
 
 void ShardDocStorage_t::Cleanup()
@@ -1145,15 +1157,23 @@ static bool CommitBufferedShardBatch ( const CSphSchema & tSchema, const cServed
 	return true;
 }
 
+void SendShardWriteRequestPreamble ( ISphOutputBuffer & tOut, DWORD uHeartbeatIntervalMs, const CSphString & sTargetName )
+{
+	tOut.SendDword ( uHeartbeatIntervalMs );
+	tOut.SendString ( sTargetName.cstr() );
+}
+
+
 class ShardWriteRequestBuilder_c : public RequestBuilder_i
 {
 public:
-	ShardWriteRequestBuilder_c ( CSphString sTargetName, ShardDocStorage_t tStorage, CSphVector<int64_t> dDeleteDocids, CSphVector<ShardDeletePredicate_t> dDeletePredicates, CSphVector<ShardBatchOp_t> dOps )
+	ShardWriteRequestBuilder_c ( CSphString sTargetName, ShardDocStorage_t tStorage, CSphVector<int64_t> dDeleteDocids, CSphVector<ShardDeletePredicate_t> dDeletePredicates, CSphVector<ShardBatchOp_t> dOps, DWORD uHeartbeatIntervalMs )
 		: m_sTargetName ( std::move ( sTargetName ) )
 		, m_tStorage ( std::move ( tStorage ) )
 		, m_dDeleteDocids ( std::move ( dDeleteDocids ) )
 		, m_dDeletePredicates ( std::move ( dDeletePredicates ) )
 		, m_dOps ( std::move ( dOps ) )
+		, m_uHeartbeatIntervalMs ( uHeartbeatIntervalMs )
 	{
 		assert ( m_tStorage.m_dRows.GetLength() || m_dDeleteDocids.GetLength() || m_dDeletePredicates.GetLength() || m_dOps.IsEmpty() );
 	}
@@ -1161,7 +1181,7 @@ public:
 	void BuildRequest ( const AgentConn_t &, ISphOutputBuffer & tOut ) const final
 	{
 		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_SHARD_WRITE, VER_COMMAND_SHARD_WRITE );
-		tOut.SendString ( m_sTargetName.cstr() );
+		SendShardWriteRequestPreamble ( tOut, m_uHeartbeatIntervalMs, m_sTargetName );
 		SendShardWriteStorage ( m_tStorage, tOut );
 		SendShardArray ( m_dDeleteDocids, tOut );
 		SendShardDeletePredicates ( m_dDeletePredicates, tOut );
@@ -1174,6 +1194,7 @@ private:
 	CSphVector<int64_t>					m_dDeleteDocids;
 	CSphVector<ShardDeletePredicate_t>	m_dDeletePredicates;
 	CSphVector<ShardBatchOp_t>			m_dOps;
+	DWORD								m_uHeartbeatIntervalMs = 0;
 };
 
 class ShardWriteReplyParser_c : public ReplyParser_i
@@ -1254,6 +1275,9 @@ static bool ApplyRemoteShardBatch ( const ShardIndex_c & tShard, const CSphStrin
 		return false;
 	}
 
+	const int iQueryTimeoutMs = tShard.GetAgentQueryTimeoutMs();
+	const DWORD uHeartbeatIntervalMs = CalcRemoteHeartbeatIntervalMs ( iQueryTimeoutMs );
+
 	if ( !tTarget.m_bHasPinnedAgent )
 	{
 		tTarget.m_tPinnedAgent.CloneFrom ( tTarget.m_pAgent->ChooseAgent() );
@@ -1270,10 +1294,11 @@ static bool ApplyRemoteShardBatch ( const ShardIndex_c & tShard, const CSphStrin
 	auto * pConn = new AgentConn_t;
 	pConn->m_tDesc.CloneFrom ( tTarget.m_tPinnedAgent );
 	pConn->m_iMyConnectTimeoutMs = tShard.GetAgentConnectTimeoutMs();
-	pConn->m_iMyQueryTimeoutMs = tShard.GetAgentQueryTimeoutMs();
+	pConn->m_iMyQueryTimeoutMs = iQueryTimeoutMs;
+	pConn->EnableRemoteReplyHeartbeats ();
 	dAgents.Add ( pConn );
 
-	ShardWriteRequestBuilder_c tReqBuilder ( tTarget.m_sIndex, std::move ( tBatchStorage ), std::move ( dDeleteDocids ), std::move ( dBatchDeletePredicates ), std::move ( dOps ) );
+	ShardWriteRequestBuilder_c tReqBuilder ( tTarget.m_sIndex, std::move ( tBatchStorage ), std::move ( dDeleteDocids ), std::move ( dBatchDeletePredicates ), std::move ( dOps ), uHeartbeatIntervalMs );
 	ShardWriteReplyParser_c tReplyParser ( &iDeleted, &sWarning );
 	int iSuccesses = PerformRemoteTasks ( dAgents, &tReqBuilder, &tReplyParser, 0 );
 	if ( iSuccesses!=1 || !dAgents[0]->m_bSuccess )
@@ -1373,10 +1398,22 @@ bool CommitShardTxn ( ClientSession_c & tSession, CSphString & sError, CSphVecto
 	return bOk;
 }
 
-void HandleCommandShardWrite ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )
+void HandleCommandShardWrite ( GenericOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq )
 {
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_SHARD_WRITE, tOut ) )
 		return;
+
+	DWORD uHeartbeatIntervalMs = 0;
+	const bool bHeartbeat = uVer>=VER_COMMAND_SHARD_WRITE_HEARTBEAT;
+	if ( bHeartbeat )
+	{
+		uHeartbeatIntervalMs = tReq.GetDword ();
+		if ( tReq.GetError () || !uHeartbeatIntervalMs )
+		{
+			SendErrorReply ( tOut, "invalid or missing shard write heartbeat interval" );
+			return;
+		}
+	}
 
 	CSphString sTargetName = tReq.GetString();
 
@@ -1438,7 +1475,22 @@ void HandleCommandShardWrite ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c
 
 	CSphString sWarning;
 	int iDeleted = 0;
-	if ( !CommitBufferedShardBatch ( pIndex->GetInternalSchema(), pServed, pIndex, sTargetName, pServed->m_sCluster, dOps, dDeleteDocids, dDeletePredicates, tStorage, iDeleted, sWarning, sError ) )
+	std::optional<ApiReplyStream_c> tStream;
+	if ( bHeartbeat )
+	{
+		tStream.emplace ( uHeartbeatIntervalMs, uVer, tOut );
+		tStream->Start ();
+	}
+
+	const bool bCommitted = CommitBufferedShardBatch ( pIndex->GetInternalSchema(), pServed, pIndex, sTargetName, pServed->m_sCluster, dOps, dDeleteDocids, dDeletePredicates, tStorage, iDeleted, sWarning, sError );
+
+	if ( tStream )
+	{
+		if ( !tStream->StopAndHandoff () )
+			return;
+	}
+
+	if ( !bCommitted )
 	{
 		SendErrorReply ( tOut, "%s", sError.cstr() );
 		return;
@@ -1666,6 +1718,7 @@ bool AddDocumentShard ( const SqlStmt_t & tStmt, const ShardIndex_c & tShard, St
 	} else
 		dLastIds.SwapData ( dStmtDocIDs );
 
+	pSession->m_dLastIdStrings.Resize ( 0 );
 	int64_t iLastInsertID = dLastIds.GetLength() ? dLastIds.Last() : 0;
 	tOut.Ok ( iAffectedRows, sWarning, iLastInsertID );
 	return true;
@@ -1848,6 +1901,12 @@ static bool ConfigureShardMetadataFromConfig ( ShardIndex_c & tShard, const char
 
 	if ( !ConfigureRTPercolate ( tShard.m_tSchema, tShard.m_tSettings, szIndexName, hIndex, bWordDict, false, pWarnings, sError ) )
 		return false;
+
+	if ( sphHasUuidDocid ( tShard.m_tSchema ) )
+	{
+		sError.SetSprintf ( "table '%s': uuid id is supported for real-time tables only", szIndexName );
+		return false;
+	}
 
 	tShard.m_sIndexPath = hIndex["path"].strval();
 

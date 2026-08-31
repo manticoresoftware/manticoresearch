@@ -21,6 +21,7 @@
 #include "docstore.h"
 #include "columnarrt.h"
 #include "coroutine.h"
+#include "uuid_docid.h"
 #include "tokenizer/tokenizer.h"
 #include "indexing_sources/source_document.h"
 
@@ -28,6 +29,13 @@ class RtAccum_t;
 
 using VisitChunk_fn = std::function<void ( const CSphIndex* pIndex )>;
 using VisitChunkEx_fn = std::function<void ( const CSphIndex* pIndex, bool bOptimizing )>;
+
+enum class InsertDocidMode_e
+{
+	NUMERIC,
+	UUID_AUTO,
+	UUID_EXPLICIT
+};
 
 class InsertDocData_c
 {
@@ -41,11 +49,16 @@ public:
 	CSphVector<SphAttr_t>				m_dColumnarAttrs;
 	int									m_iColumnarID = -1;
 	int64_t								m_iTotalBytes = 0;
+	InsertDocidMode_e					m_eDocidMode = InsertDocidMode_e::NUMERIC;
+	int									m_iUuidString = -1;
 
 										explicit InsertDocData_c ( const ISphSchema & tSchema );
 
 	void								SetID ( SphAttr_t tDocID );
 	SphAttr_t							GetID() const;
+	void								ResetPrimaryIdState();
+	void								SetUuidDocidString ( CSphString && sUuid );
+	const char *						GetUuidDocidString() const;
 
 	void								AddMVALength ( int iLength, bool bDefault=false );
 	void								AddMVAValue ( int64_t iValue )						{ m_dMvas.Add(iValue); }
@@ -56,11 +69,24 @@ public:
 	static std::pair<int, bool>			ReadMVALength ( const int64_t * & pMVA );
 	void								SwapMVAs ( InsertDocData_c & tSrc )					{ Swap ( m_dMvas, tSrc.m_dMvas ); }
 
+	// append [dims][N*dims float bits] as one mva entry
+	void								AddFloatVecArray ( int iDims, const VecTraits_T<const float> & dValues );
+
 private:
 	static const uint64_t DEFAULT_FLAG = 1ULL << 63;
 
 	CSphVector<int64_t>					m_dMvas;
+	CSphString							m_sOwnedUuidDocid;
 };
+
+struct FloatVecArrayMVA_t
+{
+	int					m_iDims = 0;		// 0 == empty array
+	const int64_t *		m_pValues = nullptr;
+	int					m_iNumValues = 0;	// N*m_iDims
+};
+
+FloatVecArrayMVA_t ParseFloatVecArrayMVA ( const int64_t * pMva, int iNumValues );
 
 struct OptimizeTask_t
 {
@@ -119,6 +145,14 @@ struct AttachArgs_t
 	AttachArgs_t ( RtIndex_i * pSrcIndex ) : m_pSrcIndex ( pSrcIndex ) {}
 };
 
+enum class RtActionResult_e
+{
+	OK,
+	TABLE_UNUSABLE,
+	// operation failed after publishing valid table state; report the error without dropping the table
+	TABLE_USABLE
+};
+
 class RtIndex_i : public CSphIndexStub
 {
 public:
@@ -158,6 +192,10 @@ public:
 
 	/// forcibly save RAM chunk as a new disk chunk
 	virtual bool ForceDiskChunk () = 0;
+	virtual RtActionResult_e ForceDiskChunkResult ()
+	{
+		return ForceDiskChunk() ? RtActionResult_e::OK : RtActionResult_e::TABLE_UNUSABLE;
+	}
 
 	/// attach a disk chunk to current index
 	virtual bool AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) { return true; }
@@ -182,6 +220,10 @@ public:
 	/// reconfigure index by using new tokenizer, dictionary and index settings
 	/// current data got saved with current settings
 	virtual bool Reconfigure ( CSphReconfigureSetup & tSetup ) = 0;
+	virtual RtActionResult_e ReconfigureResult ( CSphReconfigureSetup & tSetup )
+	{
+		return Reconfigure ( tSetup ) ? RtActionResult_e::OK : RtActionResult_e::TABLE_UNUSABLE;
+	}
 
 	// generation typically changes on Reconfigure
 	virtual int GetAlterGeneration() const { return 0; }
@@ -298,6 +340,7 @@ public:
 	CSphVector<BYTE>				m_dKeywordCheckpoints;
 	std::atomic<int64_t> *			m_pRAMCounter = nullptr;///< external RAM counter
 	OpenHashTable_T<DocID_t, RowID_t>	m_tDocIDtoRowID;		///< speeds up docid-rowid lookups
+	OpenHashTable_T<UuidDocidKey_t, DocID_t, UuidDocidKeyHash_fn> m_tUuidDocID { 0 }; ///< speeds up UUID public-id lookups
 	DeadRowMap_Ram_c				m_tDeadRowMap;
 	std::unique_ptr<DocstoreRT_i>	m_pDocstore;
 	std::unique_ptr<ColumnarRT_i>	m_pColumnar;
@@ -490,11 +533,14 @@ volatile bool &RTChangesAllowed () noexcept;
 
 // Get global flag of autooptimize
 volatile int & AutoOptimizeCutoffMultiplier() noexcept;
+volatile bool & OptimizeCutoffExplicit() noexcept;
 volatile int & ParallelChunkMergesLimit() noexcept;
 volatile int & MergeChunksPerJob() noexcept;
 volatile int AutoOptimizeCutoff() noexcept;
 volatile int AutoOptimizeCutoffKNN() noexcept;
 volatile int & KNNParallelBuild() noexcept;
+volatile int & EmbeddingsThreads() noexcept;
+int GetEmbeddingsThreadsToUse ( int iMaxOverride = -1 );
 
 void SetRtFlushDiskPeriod ( int iFlushWrite, int iFlushSearch );
 

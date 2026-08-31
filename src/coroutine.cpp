@@ -27,11 +27,10 @@ namespace Threads {
 bool StackMockingAllowed()
 {
 #if __has_include( <valgrind/valgrind.h>)
+	// Keep this silent: the check runs during normal startup, and startup warnings
+	// make valgrind ubertests report a warning-only daemon start as return code 2.
 	if (!!RUNNING_ON_VALGRIND)
-	{
-		sphWarning ( "Running under valgrind, so stack mocking is not allowed");
 		return false;
-	}
 #endif
 	return !env_exists ( "NO_STACK_CALCULATION" );
 }

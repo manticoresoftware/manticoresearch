@@ -306,7 +306,7 @@ INSERT INTO products (title, embedding_vector) VALUES
 POST /sql?mode=raw -d "INSERT INTO products (title) VALUES ('machine learning artificial intelligence'),('banana fruit sweet yellow')"
 ```
 
-Вставка нескольких полей - оба используются для эмбеддинга, если `FROM='title,description'`
+Вставьте несколько полей — они оба используются для встраивания, если FROM='title,description'
 ```JSON
 POST /sql?mode=raw -d "INSERT INTO products_openai (title, description) VALUES ('smartphone', 'latest mobile device with advanced features'), ('laptop', 'portable computer for work and gaming')"
 ```
@@ -453,7 +453,7 @@ POST /insert
 ```json
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"created":true,
 	"result":"created",
 	"status":201
@@ -461,7 +461,7 @@ POST /insert
 
 {
 	"table":"test",
-	"_id":2,
+	"id":2,
 	"created":true,
 	"result":"created",
 	"status":201
@@ -505,6 +505,8 @@ POST /insert
 * `rescore`: Включает повторное оценивание KNN (по умолчанию включено). Установите `0` в SQL или `false` в JSON, чтобы отключить повторное оценивание. После завершения поиска KNN с использованием квантизованных векторов (с возможным oversampling) расстояния пересчитываются по исходным (full-precision) векторам, и результаты пересортировываются для повышения точности ранжирования.
 * `oversampling`: Задает коэффициент (значение float), на который умножается `k` при выполнении поиска KNN, из-за чего с использованием квантизованных векторов извлекается больше кандидатов, чем требуется. По умолчанию применяется `oversampling=3.0`. Эти кандидаты можно затем переоценить, если повторное оценивание включено. Oversampling также работает и с неквантизованными векторами. Поскольку он увеличивает `k`, а это влияет на работу индекса HNSW, он может вызвать небольшое изменение точности результатов.
 * `early_termination`: Включает или отключает адаптивное раннее завершение при обходе графа HNSW. По умолчанию включено. Установите `0` в SQL или `false` в JSON, чтобы отключить. Подробности см. в разделе [Раннее завершение](../Searching/KNN.md#Early-termination).
+
+Когда задан текстовый запрос (то есть Manticore сначала встраивает строку перед поиском), число потоков, используемых библиотекой embeddings, можно переопределить для каждого запроса в SQL с помощью `OPTION embeddings_threads = N`. Это значение ограничивает вызов embeddings только для этого запроса, переопределяя глобальную настройку [embeddings_threads](../Server_settings/Searchd.md#embeddings_threads); `0` означает отсутствие ограничения. Эта опция не влияет на запрос, если он передан в виде массива векторов.
 
 Документы всегда сортируются по расстоянию до вектора поиска. Любые дополнительные критерии сортировки, которые вы укажете, будут применяться после этого основного условия сортировки. Чтобы получить расстояние, есть встроенная функция [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29).
 
@@ -588,6 +590,59 @@ POST /search
 <!-- end -->
 
 <!-- example knn_quantization -->
+
+### Несколько векторов на документ
+
+Атрибут [`float_vector_array`](../Creating_a_table/Data_types.md#Float-vector-array) хранит по несколько векторов на документ вместо одного: фрагменты статьи, фотографии товара, ключевые кадры видео. Все векторы из всех документов индексируются вместе, а поиск рассматривает векторы документа как альтернативные представления одного и того же документа:
+
+* Документ считается совпадением, если **любой** из его векторов близок к вектору запроса.
+* Каждый совпавший документ возвращается **ровно один раз**, а `knn_dist()` сообщает расстояние до его ближайшего вектора. Остальные векторы документа не создают дополнительных строк.
+* `k` считает **документы**, а не векторы. `knn(v, 10, ...)` запрашивает 10 ближайших документов, сколько бы векторов они ни содержали вместе.
+* Документ без векторов (`[]` или если атрибут опущен) никогда не возвращается, поскольку он не близок ни к чему.
+
+Вектор запроса по-прежнему представляет собой один вектор из `KNN_DIMS` элементов, точно как для `float_vector`. Каждый вектор, хранящийся в массиве, индексируемом по KNN, тоже должен иметь `KNN_DIMS` элементов.
+
+При `HNSW_SIMILARITY='cosine'` каждый сохраненный вектор нормализуется отдельно, поэтому векторы документа сравниваются с запросом по одному, а не как один длинный склеенный вектор.
+
+Все остальное на этой странице применяется без изменений: [фильтрация](../Searching/KNN.md#Filtering-KNN-vector-search-results), [prefilter/postfilter](../Searching/KNN.md#Filtering-strategies:-prefilter-vs.-postfilter), [квантование](../Searching/KNN.md#Vector-quantization), [раннее завершение](../Searching/KNN.md#Early-termination) и повторное ранжирование работают так же. Недоступна только [автогенерация эмбеддингов](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29), поскольку модель возвращает один вектор на документ.
+
+<!-- example multi_vector -->
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+
+INSERT INTO articles VALUES
+  (1, 'first',  [[1,0,0,0],[0,1,0,0]]),
+  (2, 'second', [[0,0,1,0]]);
+
+-- doc 1 owns a vector identical to the query and another far from it,
+-- so it is returned once, at distance 0
+SELECT id, knn_dist() FROM articles WHERE knn(chunk_vectors, 5, (1,0,0,0));
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /search
+{
+  "table": "articles",
+  "knn": {
+    "field": "chunk_vectors",
+    "query_vector": [1,0,0,0],
+    "k": 5
+  }
+}
+```
+
+<!-- end -->
 
 ### Квантование векторов
 

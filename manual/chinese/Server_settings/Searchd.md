@@ -188,6 +188,8 @@ auth_password_min_length = 12
 
 不过，如果表中包含带 KNN 索引的属性，默认阈值会不同。在这种情况下，它被设为物理 CPU 核心数除以 2，最小值为 1，以提升 KNN 搜索性能。
 
+当 [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) 没有显式设置时（无论是全局还是按表），自动压缩都不会把表合并到少于 2 个磁盘块，即使计算出的默认阈值更低也是如此（这在 CPU 核心较少的服务器上可能发生，尤其是 KNN 表）。如果要让自动压缩继续合并到单个磁盘块，请将 `optimize_cutoff` 显式设置为 `1`。
+
 请注意，切换 `auto_optimize` 的开关状态并不会阻止你手动运行 [OPTIMIZE TABLE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE)。
 
 <!-- intro -->
@@ -285,6 +287,32 @@ knn_parallel_build = 1
 <!-- request Increase -->
 ```ini
 knn_parallel_build = 4
+```
+
+<!-- end -->
+
+### embeddings_threads
+
+<!-- example conf embeddings_threads -->
+此设置限制 Manticore 将文本转换为向量时可使用的 CPU 线程数。它适用于自动 embedding 运行的所有场景：向使用 `model_name`/`from` 的表插入行时，`ALTER TABLE` 重建自动嵌入的 `float_vector` 列时，以及 `knn(<field>, '<text>', ...)` 搜索将查询以文本形式提供时。
+
+实际使用的线程数还会受到当前空闲 worker 数量的限制，因此即使上限很高，繁忙的服务器也会使用更少的线程。使用此选项可以避免某个大型 embedding 批次饿死并发搜索。
+
+默认值为 `4`。设为 `0` 可取消上限，此时 embeddings 库会自行决定使用多少线程（仍受空闲 worker 数量限制）。
+
+此值可在运行时通过 `SET GLOBAL embeddings_threads = N` 修改，并可通过 `SHOW VARIABLES` 查看。对于 KNN `SELECT` 查询，还可以使用 `OPTION embeddings_threads = N` 按查询覆盖（见 [KNN 向量搜索](../Searching/KNN.md#KNN-vector-search)）。
+
+<!-- intro -->
+##### 示例：
+
+<!-- request Default -->
+```ini
+embeddings_threads = 4
+```
+
+<!-- request Uncapped -->
+```ini
+embeddings_threads = 0
 ```
 
 <!-- end -->
@@ -870,6 +898,12 @@ listen = ( address ":" port | port | path | address ":" port start - port end ) 
 
 如果你指定了端口号但没有指定地址，`searchd` 会监听所有网络接口。Unix 路径通过前导斜杠识别。端口范围只能用于复制协议。
 
+安全提示：每个监听器只绑定到它所需的网络。
+
+面向公网客户端访问时，请使用专用的 `https` 监听器，并通过 `ssl_cert` 和 `ssl_key` 配置 [SSL](../Security/SSL.md)。将支持 API 的监听器（不显式指定协议的 `listen`、`http` 和 `sphinx`）置于公网之外。这些监听器可以接受 master-agent 分布式查询和旧客户端使用的 Manticore/Sphinx 二进制 API，而二进制 API 流量不受 SSL 保护。
+
+将支持 API 的监听器绑定到回环地址、VPN 或受信任的内网，或通过防火墙规则加以限制。`replication` 监听器也仅限内部使用，只应允许复制节点访问。
+
 你还可以指定一个用于该套接字连接的协议处理器（监听器）。可用的监听器有：
 
 * **未指定** - Manticore 将接受来自以下来源的连接：
@@ -896,15 +930,15 @@ listen = ( address ":" port | port | path | address ":" port start - port end ) 
 ```ini
 listen = localhost
 listen = localhost:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at localhost
-listen = 192.168.0.1:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at 192.168.0.1
+listen = 192.168.0.1:5000 # 在 192.168.0.1 的 5000 端口监听远程代理（二进制 API）以及 http/https 请求；仅限内部使用
 listen = /var/run/manticore/manticore.s # listen for binary API requests on unix socket
 listen = /var/run/manticore/manticore.s:mysql # listen for mysql requests on unix socket
-listen = 9312 # listen for remote agents (binary API) and http/https requests on port 9312 on any interface
+listen = 9312 # 在任意接口的 9312 端口监听远程代理（二进制 API）以及 http/https 请求；仅限内部网络
 listen = localhost:9306:mysql # listen for mysql requests on port 9306 at localhost
 listen = localhost:9307:mysql_readonly # listen for mysql requests on port 9307 at localhost and accept only read queries
 listen = 127.0.0.1:9308:http # listen for http requests as well as connections from remote agents (and binary API) on port 9308 at localhost
-listen = 192.168.0.1:9320-9328:replication # listen for replication connections on ports 9320-9328 at 192.168.0.1
-listen = 127.0.0.1:9443:https # listen for https requests (not http) on port 9443 at 127.0.0.1
+listen = 192.168.0.1:9320-9328:replication # 在 192.168.0.1 的 9320-9328 端口监听复制连接；仅限内部使用
+listen = 127.0.0.1:9443:https # 在 127.0.0.1 的 9443 端口监听 https 请求（不监听 http）；对公网访问时应使用此类监听器，并配合 `ssl_cert` 和 `ssl_key`
 listen = 127.0.0.1:9312:sphinx # listen for legacy Sphinx requests (e.g. from SphinxSE) on port 9312 at 127.0.0.1
 ```
 <!-- end -->

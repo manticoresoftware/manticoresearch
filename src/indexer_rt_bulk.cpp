@@ -1022,6 +1022,16 @@ bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, E
 		return false;
 	}
 	const int iColumns = tStmt.m_iSchemaSz;
+	for ( int iRow=0; iRow<tStmt.m_iRowsAffected; ++iRow )
+	{
+		const SqlInsert_t & tId = tStmt.m_dInsertValues[iRow*iColumns+iIdColumn];
+		if ( tId.m_iType==SqlInsert_t::CONST_INT && !tId.IsNegativeInt() && !tId.GetValueUint() )
+		{
+			sError.SetSprintf ( "row %d: bulk_import requires an explicit non-zero id", iRow+1 );
+			return false;
+		}
+	}
+
 	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
 	{
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);

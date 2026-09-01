@@ -964,6 +964,7 @@ PURGE BULK_IMPORT FROM TABLE products;
 * SQL supports only `INSERT`. Manticore `/bulk` accepts `insert` and `create`; `index`, `replace`, `update`, and `delete` are rejected.
 * Every row must provide an explicit numeric, non-zero document ID. Auto-generated and UUID document IDs are not supported.
 * Static builds and macOS are not currently supported.
+* The platform-specific executable (`indexer` on Linux, `indexer.exe` on Windows) must be in the same directory as the running `searchd` executable. Manticore Search resolves only that sibling path and does not search `PATH`. Use the executable from the same installation as `searchd` to ensure compatibility. If it is absent, unreadable, or cannot be started, only bulk import fails; normal startup and regular insertion remain available.
 
 <!-- example bulk_insert -->
 <!-- intro -->

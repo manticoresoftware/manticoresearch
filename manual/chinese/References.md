@@ -27,6 +27,7 @@
 
 ##### 数据管理
 * [INSERT](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - 添加新文档
+* [批量导入](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import) - 将大批量数据加载到现有的本地实时表中
 * [REPLACE](Data_creation_and_modification/Updating_documents/REPLACE.md) - 用新文档替换已有文档
 * [REPLACE .. SET](Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET) - 替换表中一个或多个字段
 * [UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md) - 对文档进行原地更新
@@ -115,6 +116,7 @@
 
 ##### 节点管理
 * [PURGE](Node_info_and_management/PURGE.md) - 删除与表相关联的所选数据
+* [PURGE BULK_IMPORT](Node_info_and_management/PURGE.md#PURGE-BULK_IMPORT) - 删除批量导入遗留的暂存文件
 
 ##### 服务器状态
 * [显示状态](Node_info_and_management/Node_status.md#SHOW-STATUS) - 显示一些有用的性能计数器

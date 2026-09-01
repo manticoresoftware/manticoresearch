@@ -27,6 +27,7 @@
 
 ##### Data management
 * [INSERT](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Adds new documents
+* [Bulk import](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import) - Loads a large batch into an existing local real-time table
 * [REPLACE](Data_creation_and_modification/Updating_documents/REPLACE.md) - Replaces existing documents with new ones
 * [REPLACE .. SET](Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET) - Replaces one or multiple fields in a table
 * [UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md) - Does in-place update in documents
@@ -115,6 +116,7 @@
 
 ##### Node management
 * [PURGE](Node_info_and_management/PURGE.md) - Removes selected data associated with a table
+* [PURGE BULK_IMPORT](Node_info_and_management/PURGE.md#PURGE-BULK_IMPORT) - Removes staging files left by bulk import
 
 ##### Server status
 * [SHOW STATUS](Node_info_and_management/Node_status.md#SHOW-STATUS) - Displays a number of useful performance counters

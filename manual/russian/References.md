@@ -27,6 +27,7 @@
 
 ##### Управление данными
 * [INSERT](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Добавляет новые документы
+* [Bulk import](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import) - Загружает большой пакет в существующую локальную real-time таблицу
 * [REPLACE](Data_creation_and_modification/Updating_documents/REPLACE.md) - Заменяет существующие документы новыми
 * [REPLACE .. SET](Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET) - Заменяет одно или несколько полей в таблице
 * [UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md) - Выполняет обновление на месте в документах
@@ -115,6 +116,7 @@
 
 ##### Управление узлом
 * [PURGE](Node_info_and_management/PURGE.md) - Удаляет выбранные данные, связанные с таблицей
+* [PURGE BULK_IMPORT](Node_info_and_management/PURGE.md#PURGE-BULK_IMPORT) - Удаляет промежуточные файлы, оставшиеся после bulk import
 
 ##### Статус сервера
 * [SHOW STATUS](Node_info_and_management/Node_status.md#SHOW-STATUS) - вывод ряда полезных счетчиков производительности

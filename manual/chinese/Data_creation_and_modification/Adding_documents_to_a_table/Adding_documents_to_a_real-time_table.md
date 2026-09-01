@@ -964,6 +964,7 @@ PURGE BULK_IMPORT FROM TABLE products;
 * SQL 只支持 `INSERT`。Manticore `/bulk` 接受 `insert` 和 `create`；`index`、`replace`、`update` 和 `delete` 会被拒绝。
 * 每一行都必须提供显式的数值型、非零文档 ID。不支持自动生成的和 UUID 文档 ID。
 * 当前不支持静态构建和 macOS。
+* 当前平台对应的可执行文件（Linux 上为 `indexer`，Windows 上为 `indexer.exe`）必须与正在运行的 `searchd` 位于同一目录。Manticore Search 只检查这个同级路径，不会搜索 `PATH`。为确保兼容性，请使用与 `searchd` 来自同一安装的可执行文件。如果该文件缺失、不可读或无法启动，只有批量导入会失败；正常启动和常规插入仍然可用。
 
 <!-- example bulk_insert -->
 <!-- intro -->

@@ -57,3 +57,44 @@ rt
 2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9
 2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9
 2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>
+––– input –––
+pkill -f 'filebeat -c /filebeat.yml' 2>/dev/null || true; mysql -h0 -P9306 -e "DROP TABLE IF EXISTS filebeat_bulk; CREATE TABLE filebeat_bulk (message TEXT);"
+––– output –––
+––– input –––
+printf '%s\n' '{"id":"201","message":"first Filebeat bulk row"}' '{"id":"202","message":"second Filebeat bulk row"}' > /var/log/filebeat-bulk.ndjson; cat > /filebeat-bulk.yml <<'EOF'
+filebeat.inputs:
+  - type: filestream
+    id: bulk-import
+    paths: ["/var/log/filebeat-bulk.ndjson"]
+    prospector.scanner.fingerprint.length: 64
+    prospector.scanner.check_interval: 1s
+    parsers:
+      - ndjson:
+          target: ""
+          document_id: id
+
+processors:
+  - add_fields:
+      target: "@metadata"
+      fields:
+        op_type: index
+        pipeline: bulk_import
+  - include_fields:
+      fields: ["message"]
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "filebeat_bulk"
+  pipeline: "bulk_import"
+  allow_older_versions: true
+  compression_level: 0
+
+path.data: /tmp/filebeat-bulk-data
+setup.ilm.enabled: false
+setup.template.enabled: false
+EOF
+––– output –––
+––– input –––
+rm -rf /tmp/filebeat-bulk-data; filebeat -c /filebeat-bulk.yml --strict.perms=false -e > /var/log/filebeat-bulk.log 2>&1 & pid=$!; i=0; count=0; until [ "$count" = 2 ] || [ "$i" -ge 60 ]; do sleep 1; count=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT COUNT(*) FROM filebeat_bulk" 2>/dev/null || echo 0); i=$((i+1)); done; kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; rows=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,message FROM filebeat_bulk" | sort -n); chunks=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SHOW TABLE filebeat_bulk STATUS LIKE 'disk_chunks'" | awk '{print $2}'); if [ "$rows" = "$(printf '201\tfirst Filebeat bulk row\n202\tsecond Filebeat bulk row')" ] && [ "$chunks" = 1 ]; then echo FILEBEAT_BULK_IMPORT_OK; else printf 'FAIL_FILEBEAT_BULK_IMPORT rows=%s chunks=%s\n' "$rows" "$chunks"; cat /var/log/filebeat-bulk.log; fi
+––– output –––
+FILEBEAT_BULK_IMPORT_OK

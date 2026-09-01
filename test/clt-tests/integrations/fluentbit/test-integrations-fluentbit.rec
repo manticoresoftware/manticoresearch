@@ -69,3 +69,43 @@ rt
 2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9
 2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9
 2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>
+––– input –––
+pkill fluent-bit 2>/dev/null || true; mysql -h0 -P9306 -e "DROP TABLE IF EXISTS fluentbit_bulk; CREATE TABLE fluentbit_bulk (log TEXT);"
+––– output –––
+––– input –––
+printf '%s\n' '{"id":"301","log":"first Fluent Bit bulk row"}' '{"id":"302","log":"second Fluent Bit bulk row"}' > /var/log/fluentbit-bulk.ndjson; cat > /usr/share/fluentbit/fluentbit/parsers.conf <<'EOF'
+[PARSER]
+    Name json
+    Format json
+EOF
+cat > /usr/share/fluentbit/fluentbit/fluentbit-bulk.conf <<'EOF'
+[SERVICE]
+    flush 1
+    daemon On
+    log_level info
+    parsers_file /usr/share/fluentbit/fluentbit/parsers.conf
+
+[INPUT]
+    name tail
+    path /var/log/fluentbit-bulk.ndjson
+    parser json
+    read_from_head true
+    inotify_watcher false
+    db /tmp/fluentbit-bulk.db
+
+[OUTPUT]
+    name es
+    match *
+    host 127.0.0.1
+    port 9308
+    index fluentbit_bulk
+    pipeline bulk_import
+    write_operation index
+    id_key id
+    suppress_type_name on
+EOF
+––– output –––
+––– input –––
+rm -f /tmp/fluentbit-bulk.db; fluent-bit -c /usr/share/fluentbit/fluentbit/fluentbit-bulk.conf > /var/log/fluentbit-bulk.log 2>&1; i=0; count=0; until [ "$count" = 2 ] || [ "$i" -ge 30 ]; do sleep 1; count=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT COUNT(*) FROM fluentbit_bulk" 2>/dev/null || echo 0); i=$((i+1)); done; rows=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,log FROM fluentbit_bulk" | sort -n); chunks=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SHOW TABLE fluentbit_bulk STATUS LIKE 'disk_chunks'" | awk '{print $2}'); if [ "$rows" = "$(printf '301\tfirst Fluent Bit bulk row\n302\tsecond Fluent Bit bulk row')" ] && [ "$chunks" = 1 ]; then echo FLUENTBIT_BULK_IMPORT_OK; else printf 'FAIL_FLUENTBIT_BULK_IMPORT rows=%s chunks=%s\n' "$rows" "$chunks"; cat /var/log/fluentbit-bulk.log; fi
+––– output –––
+FLUENTBIT_BULK_IMPORT_OK

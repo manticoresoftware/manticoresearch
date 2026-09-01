@@ -1,0 +1,61 @@
+––– input –––
+set -b
+––– output –––
+––– input –––
+export PATH=/usr/bin:/usr/local/bin:/usr/sbin:/sbin:/bin
+––– output –––
+––– input –––
+apt-get update > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+apt-get install -y ruby-full ruby-dev build-essential > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+gem install fluentd -v 1.18.0 --no-document > /dev/null 2>&1 && gem install fluent-plugin-elasticsearch -v 6.0.0 --no-document > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+fluentd --version
+––– output –––
+fluentd 1.18.0
+––– block: ../../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS fluentd_bulk; CREATE TABLE fluentd_bulk (title TEXT, gid INTEGER);"
+––– output –––
+––– input –––
+cat > /tmp/fluentd-bulk.conf <<'EOF'
+<source>
+  @type forward
+  bind 127.0.0.1
+  port 24224
+</source>
+
+<match manticore.**>
+  @type elasticsearch
+  host 127.0.0.1
+  port 9308
+  scheme http
+  index_name fluentd_bulk
+  pipeline bulk_import
+  write_operation index
+  id_key id
+  suppress_type_name true
+  include_timestamp false
+  manage_template false
+  <buffer>
+    flush_interval 1s
+    flush_at_shutdown true
+  </buffer>
+</match>
+EOF
+––– output –––
+––– input –––
+fluentd -c /tmp/fluentd-bulk.conf > /var/log/fluentd-bulk.log 2>&1 & pid=$!; i=0; until grep -q 'worker is now running' /var/log/fluentd-bulk.log || [ "$i" -ge 30 ]; do sleep 1; i=$((i+1)); done; if kill -0 "$pid" 2>/dev/null && grep -q 'worker is now running' /var/log/fluentd-bulk.log; then echo FLUENTD_READY; else cat /var/log/fluentd-bulk.log; fi
+––– output –––
+FLUENTD_READY
+––– input –––
+printf '%s\n' '{"id":"401","title":"first Fluentd bulk row","gid":41}' '{"id":"402","title":"second Fluentd bulk row","gid":42}' | fluent-cat manticore.test; i=0; count=0; until [ "$count" = 2 ] || [ "$i" -ge 30 ]; do sleep 1; count=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT COUNT(*) FROM fluentd_bulk" 2>/dev/null || echo 0); i=$((i+1)); done; kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; rows=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,title,gid FROM fluentd_bulk" | sort -n); chunks=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SHOW TABLE fluentd_bulk STATUS LIKE 'disk_chunks'" | awk '{print $2}'); if [ "$rows" = "$(printf '401\tfirst Fluentd bulk row\t41\n402\tsecond Fluentd bulk row\t42')" ] && [ "$chunks" = 1 ]; then echo FLUENTD_BULK_IMPORT_OK; else printf 'FAIL_FLUENTD_BULK_IMPORT rows=%s chunks=%s\n' "$rows" "$chunks"; cat /var/log/fluentd-bulk.log; fi
+––– output –––
+FLUENTD_BULK_IMPORT_OK

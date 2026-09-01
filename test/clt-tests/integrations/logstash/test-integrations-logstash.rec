@@ -59,3 +59,36 @@ dpkg_log
 2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1
 2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9
 2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS logstash_bulk; CREATE TABLE logstash_bulk (message TEXT);"
+––– output –––
+––– input –––
+cat > logstash-bulk.conf <<'EOF'
+input { stdin { codec => json_lines } }
+filter {
+  mutate {
+    add_field => { "[@metadata][bulk_id]" => "%{id}" }
+    remove_field => ["id", "@timestamp", "@version", "host", "event", "tags"]
+  }
+}
+output {
+  elasticsearch {
+    hosts => ["http://localhost:9308"]
+    index => "logstash_bulk"
+    pipeline => "bulk_import"
+    action => "index"
+    document_id => "%{[@metadata][bulk_id]}"
+    ilm_enabled => false
+    manage_template => false
+  }
+}
+EOF
+––– output –––
+––– input –––
+printf '%s\n' '{"id":"101","message":"first Logstash bulk row"}' '{"id":"102","message":"second Logstash bulk row"}' | logstash -f logstash-bulk.conf > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+rows=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,message FROM logstash_bulk" | sort -n); chunks=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SHOW TABLE logstash_bulk STATUS LIKE 'disk_chunks'" | awk '{print $2}'); if [ "$rows" = "$(printf '101\tfirst Logstash bulk row\n102\tsecond Logstash bulk row')" ] && [ "$chunks" = 1 ]; then echo LOGSTASH_BULK_IMPORT_OK; else printf 'FAIL_LOGSTASH_BULK_IMPORT rows=%s chunks=%s\n' "$rows" "$chunks"; fi
+––– output –––
+LOGSTASH_BULK_IMPORT_OK

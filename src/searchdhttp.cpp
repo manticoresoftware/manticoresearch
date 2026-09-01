@@ -33,6 +33,8 @@
 #include "netfetch.h"
 #include "indexer_rt_bulk.h"
 
+#include <unordered_set>
+
 static bool g_bLogBadHttpReq = env_exists ( "MANTICORE_LOG_HTTP_BAD_REQ" ); // log content of bad http requests, ruled by this env variable
 static int g_iLogHttpData = env_long ( "MANTICORE_LOG_HTTP_DATA" ).value_or(0); // verbose logging of http data, ruled by this env variable
 
@@ -2617,6 +2619,7 @@ private:
 	bool ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecTraits_T<BulkDoc_t> & dDocs, JsonObj_c & tItems );
 	bool Validate();
 	void ReportLogError ( const char * sError, HttpErrorType_e eType , EHTTP_STATUS eStatus, bool bLogOnly );
+	bool m_bBulkImport { false };
 };
 
 class HttpTokenHandler_c final: public HttpHandler_c, public HttpOptionTrait_t
@@ -3670,13 +3673,13 @@ bool HttpHandlerEsBulk_c::Validate()
 
 bool HttpHandlerEsBulk_c::Process()
 {
-	if ( m_hOpts.Exists ( "bulk_import" )
-		|| ( m_hOpts.Exists ( "pipeline" ) && m_hOpts["pipeline"]=="bulk_import" ) )
+	if ( m_hOpts.Exists ( "bulk_import" ) )
 	{
 		ReportLogError ( "direct-to-disk bulk loading is unsupported on Elasticsearch /_bulk; use SQL or Manticore /bulk", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
 		return false;
 	}
 
+	m_bBulkImport = m_hOpts.Exists ( "pipeline" ) && m_hOpts["pipeline"]=="bulk_import";
 	if ( !Validate() )
 		return false;
 
@@ -3722,6 +3725,52 @@ bool HttpHandlerEsBulk_c::Process()
 				return false;
 		}
 	}
+
+	auto pSession = session::Info().GetClientSession();
+	if ( m_bBulkImport )
+	{
+		if ( dDocs.IsEmpty() )
+		{
+			ReportLogError ( "bulk_import requires at least one document", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+			return false;
+		}
+
+		const CSphString & sIndex = dDocs[0].m_sIndex;
+		std::unordered_set<DocID_t> hDocids;
+		for ( const BulkDoc_t & tDoc : dDocs )
+		{
+			if ( tDoc.m_sAction!="index" )
+			{
+				ReportLogError ( "bulk_import supports Elasticsearch bulk index actions only", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+				return false;
+			}
+			if ( tDoc.m_sIndex!=sIndex )
+			{
+				ReportLogError ( "bulk_import requires one target table per request", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+				return false;
+			}
+			if ( tDoc.m_eDocid!=BulkDocid_e::NUMERIC || !tDoc.m_tDocid )
+			{
+				ReportLogError ( "bulk_import requires an explicit non-zero numeric _id", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+				return false;
+			}
+			if ( !hDocids.insert ( tDoc.m_tDocid ).second )
+			{
+				ReportLogError ( "bulk_import requires unique document ids within one request", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+				return false;
+			}
+		}
+
+		if ( !ActivateIndexerRtBulk ( *pSession, sIndex, m_sError ) )
+		{
+			ReportLogError ( m_sError.cstr(), HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+			return false;
+		}
+	}
+	AT_SCOPE_EXIT ( [pSession, bBulkImport=m_bBulkImport] {
+		if ( bBulkImport )
+			CleanupIndexerRtBulk ( *pSession );
+	});
 
 	CSphVector<BulkTnx_t> dTnx;
 	const BulkDoc_t * pLastDoc = dDocs.Begin();
@@ -3846,6 +3895,9 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 				dErrors.Add ( { iDoc, m_sError } );
 				continue;
 			}
+			// The ES index action has replace semantics; direct-to-disk publishing handles existing IDs when the chunk is attached.
+			if ( m_bBulkImport && tStmt.m_eStmt==STMT_REPLACE )
+				tStmt.m_eStmt = STMT_INSERT;
 			bool bAction = false;
 			JsonObj_c tResult = JsonNull;
 
@@ -3902,6 +3954,16 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			}
 		}
 
+		if ( m_bBulkImport && !dErrors.IsEmpty() )
+		{
+			ProcessRollback ( FromStr ( sIdx ) );
+			session::SetInTrans ( false );
+			bOk = false;
+			for ( const auto & tErr : dErrors )
+				AddEsError ( tErr.first, tErr.second, "mapper_parsing_exception", dDocs[tErr.first], tItems );
+			continue;
+		}
+
 		// FIXME!!! check commit of empty accum
 		JsonObj_c tResult;
 		DocID_t tDocId = 0;
@@ -3915,7 +3977,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 				CSphString sUpdError;
 				sUpdError.SetSprintf ( "[_doc][%s]: document missing", tUpdDoc.m_sDocid.scstr() );
 				AddEsError ( -1, sUpdError, "document_missing_exception", tUpdDoc, tItems );
-			} else
+			} else if ( !m_bBulkImport )
 			{
 				for ( int i=0; i<tTnx.m_iCount; i++ )
 					AddEsReply ( dDocs[tTnx.m_iFrom+i], tItems );

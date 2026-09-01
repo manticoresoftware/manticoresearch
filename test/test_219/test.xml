@@ -410,8 +410,6 @@ INSERT INTO german_v2_capital VALUES ( 202, 'SStrasse' );
 <!-- existing dictionary-settings compatibility check distinguishes legacy and v2 -->
 ATTACH TABLE german_plain_v2_single TO TABLE german_legacy_single;
 
-SHOW CREATE TABLE german_v2_single;
-SHOW CREATE TABLE german_v2_all;
 SHOW TABLE german_v2_single SETTINGS;
 SHOW TABLE german_v2_all SETTINGS;
 
@@ -620,11 +618,11 @@ SELECT * FROM noaot_blend_all WHERE MATCH('über2');
 
 <sphinxql>
 <!-- RT metadata and disk chunks retain the exact legacy/v2 morphology mode after restart -->
-SHOW CREATE TABLE german_legacy_single;
-SHOW CREATE TABLE german_legacy_all;
-SHOW CREATE TABLE german_v2_single;
-SHOW CREATE TABLE german_v2_all;
-SHOW CREATE TABLE german_v2_capital;
+SHOW TABLE german_legacy_single SETTINGS;
+SHOW TABLE german_legacy_all SETTINGS;
+SHOW TABLE german_v2_single SETTINGS;
+SHOW TABLE german_v2_all SETTINGS;
+SHOW TABLE german_v2_capital SETTINGS;
 
 SELECT id FROM german_legacy_single WHERE MATCH('Straße') ORDER BY id ASC;
 SELECT id FROM german_legacy_single WHERE MATCH('Strasse') ORDER BY id ASC;

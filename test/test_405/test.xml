@@ -4,7 +4,7 @@
 <name>alter table settings</name>
 <requires>
 	<force-rt/>
-    <lemmatizer_base/>    
+	<lemmatizer_base/>
 </requires>
 <skip_indexer/>
 

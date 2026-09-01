@@ -185,8 +185,7 @@ title text
 ) rt_mem_limit='2147483648'";}}}i:285;a:2:{s:8:"sphinxql";s:35:"ALTER TABLE test1 rt_mem_limit='1G'";s:14:"total_affected";i:0;}i:286;a:3:{s:8:"sphinxql";s:23:"SHOW CREATE TABLE test1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test1";s:12:"Create Table";s:70:"CREATE TABLE test1 (
 id bigint,
 title text
-) rt_mem_limit='1073741824'";}}}i:287;a:2:{s:8:"sphinxql";s:16:"drop table test1";s:14:"total_affected";i:0;}i:288;a:2:{s:8:"sphinxql";s:16:"drop table test2";s:14:"total_affected";i:0;}i:289;a:3:{s:8:"sphinxql";s:29:"ALTER TABLE test1 RECONFIGURE";s:5:"errno";i:1064;s:5:"error";s:45:"ALTER RECONFIGURE is not supported in RT mode";}i:290;a:1:{s:8:"sphinxql";s:171:"/* restart-daemon => stop=ok, return code=0; start=ok, return code=2, error=WARNING: Error initializing knn index: daemon requires knn library v17 (trying to load v16)
- */";}i:291;a:3:{s:8:"sphinxql";s:31:"SHOW CREATE TABLE test20_direct";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:13:"test20_direct";s:12:"Create Table";s:136:"CREATE TABLE test20_direct (
+) rt_mem_limit='1073741824'";}}}i:287;a:2:{s:8:"sphinxql";s:16:"drop table test1";s:14:"total_affected";i:0;}i:288;a:2:{s:8:"sphinxql";s:16:"drop table test2";s:14:"total_affected";i:0;}i:289;a:3:{s:8:"sphinxql";s:29:"ALTER TABLE test1 RECONFIGURE";s:5:"errno";i:1064;s:5:"error";s:45:"ALTER RECONFIGURE is not supported in RT mode";}i:290;a:1:{s:8:"sphinxql";s:71:"/* restart-daemon => stop=ok, return code=0; start=ok, return code=0 */";}i:291;a:3:{s:8:"sphinxql";s:31:"SHOW CREATE TABLE test20_direct";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:13:"test20_direct";s:12:"Create Table";s:136:"CREATE TABLE test20_direct (
 id bigint,
 title text,
 score integer

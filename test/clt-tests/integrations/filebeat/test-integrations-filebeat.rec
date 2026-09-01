@@ -58,7 +58,7 @@ rt
 2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9
 2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>
 ––– input –––
-pkill -f 'filebeat -c /filebeat.yml' 2>/dev/null || true; mysql -h0 -P9306 -e "DROP TABLE IF EXISTS filebeat_bulk; CREATE TABLE filebeat_bulk (message TEXT);"
+pkill -f 'filebeat -c /filebeat.yml' 2>/dev/null || true; mysql -h0 -P9306 -e "DROP TABLE IF EXISTS filebeat_bulk; CREATE TABLE filebeat_bulk (message TEXT, \`@timestamp\` TIMESTAMP);"
 ––– output –––
 ––– input –––
 printf '%s\n' '{"id":"201","message":"first Filebeat bulk row"}' '{"id":"202","message":"second Filebeat bulk row"}' > /var/log/filebeat-bulk.ndjson; cat > /filebeat-bulk.yml <<'EOF'

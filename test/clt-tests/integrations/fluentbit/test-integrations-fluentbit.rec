@@ -70,7 +70,7 @@ rt
 2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9
 2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>
 ––– input –––
-pkill fluent-bit 2>/dev/null || true; mysql -h0 -P9306 -e "DROP TABLE IF EXISTS fluentbit_bulk; CREATE TABLE fluentbit_bulk (log TEXT);"
+pkill fluent-bit 2>/dev/null || true; mysql -h0 -P9306 -e "DROP TABLE IF EXISTS fluentbit_bulk; CREATE TABLE fluentbit_bulk (log TEXT, \`@timestamp\` TIMESTAMP);"
 ––– output –––
 ––– input –––
 printf '%s\n' '{"id":"301","log":"first Fluent Bit bulk row"}' '{"id":"302","log":"second Fluent Bit bulk row"}' > /var/log/fluentbit-bulk.ndjson; cat > /usr/share/fluentbit/fluentbit/parsers.conf <<'EOF'

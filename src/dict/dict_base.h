@@ -145,7 +145,7 @@ public:
 	virtual void DictBegin ( CSphAutofile& tTempDict, CSphAutofile& tDict, int iDictLimit );
 
 	/// begin creating dictionary file, assuming sorted entries came (when processing ready dicts like merge, add/delete field, etc.)
-	virtual void SortedDictBegin ( CSphAutofile& tDict, int iDictLimit, int iInfixCodepointBytes );
+	virtual void SortedDictBegin ( CSphAutofile& tDict, int iDictLimit, int iInfixCodepointBytes, int iMinInfixLen );
 
 	/// add next keyword entry to final dict
 	virtual void DictEntry ( const DictEntry_t& tEntry );
@@ -154,7 +154,7 @@ public:
 	virtual void DictEndEntries ( SphOffset_t iDoclistOffset );
 
 	/// end indexing, store dictionary and checkpoints
-	virtual bool DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphString& sError );
+	virtual bool DictEnd ( DictHeader_t* pHeader, int iMemLimit, int iMinInfixLen, CSphString& sError );
 
 	/// check whether there were any errors during indexing
 	virtual bool DictIsError() const;

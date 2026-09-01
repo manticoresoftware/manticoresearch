@@ -25,10 +25,10 @@
 struct DiskDictTraits_c: TemplateDictTraits_c
 {
 	void DictBegin ( CSphAutofile& tTempDict, CSphAutofile& tDict, int iDictLimit ) override;
-	void SortedDictBegin ( CSphAutofile& tDict, int iDictLimit, int iInfixCodepointBytes ) override;
+	void SortedDictBegin ( CSphAutofile& tDict, int iDictLimit, int iInfixCodepointBytes, int iMinInfixLen ) override;
 	void DictEntry ( const DictEntry_t& tEntry ) override;
 	void DictEndEntries ( SphOffset_t iDoclistOffset ) override;
-	bool DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphString& sError ) override;
+	bool DictEnd ( DictHeader_t* pHeader, int iMemLimit, int iMinInfixLen, CSphString& sError ) override;
 	bool DictIsError() const final { return m_wrDict.IsError(); }
 	void SetSkiplistBlockSize ( int iSize ) final { m_iSkiplistBlockSize = iSize; }
 

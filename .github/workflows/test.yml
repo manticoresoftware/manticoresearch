@@ -1012,8 +1012,11 @@ jobs:
   cleanup_clt_candidate_image:
     name: Remove temporary CLT candidate image
     needs: [clt, test_kit_docker_build, test_kit_docker_reuse, test_kit_docker_push]
+    # Preserve an unpromoted candidate for "Re-run failed jobs". The scheduled cleanup
+    # reaps it if the run is never retried; a promoted image is kept by the cleanup script.
     if: >-
       always() &&
+      needs.test_kit_docker_push.result == 'success' &&
       (needs.test_kit_docker_build.outputs.candidate_image != '' || needs.test_kit_docker_reuse.outputs.candidate_image != '')
     runs-on: ubuntu-22.04
     steps:

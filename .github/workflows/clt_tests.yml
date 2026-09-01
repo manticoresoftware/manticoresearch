@@ -162,6 +162,18 @@ jobs:
           find "${{ runner.temp }}/clt-model-cache" -mindepth 1 \( -type f -o -type l \) -printf '%P\t%y\t%s\t%T@\t%l\n' |
             LC_ALL=C sort > "${{ runner.temp }}/clt-model-cache-before.tsv"
 
+      # A candidate published by another job is not present on this fresh runner. Forks
+      # use artifact_name and let the CLT action import the local image instead.
+      - name: Pull candidate Docker image
+        if: ${{ inputs.artifact_name == '' }}
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker pull "${{ inputs.docker_image }}"
+
       - id: run-clt
         uses: manticoresoftware/clt@main
         with:

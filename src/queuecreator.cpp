@@ -1396,8 +1396,11 @@ bool QueueCreator_c::MaybeAddGeodistColumn ()
 		return true;
 
 	// replace columnar lat/lon with expressions before adding geodist
-	if ( !ReplaceWithColumnarItem ( m_tQuery.m_sGeoLatAttr, SPH_EVAL_PREFILTER ) ) return false;
-	if ( !ReplaceWithColumnarItem ( m_tQuery.m_sGeoLongAttr, SPH_EVAL_PREFILTER ) ) return false;
+	// only when the attr exists, a missing anchor attr is reported by CreateExprGeodist()
+	if ( m_pSorterSchema->GetAttrIndex ( m_tQuery.m_sGeoLatAttr.cstr() )>=0
+		&& !ReplaceWithColumnarItem ( m_tQuery.m_sGeoLatAttr, SPH_EVAL_PREFILTER ) ) return false;
+	if ( m_pSorterSchema->GetAttrIndex ( m_tQuery.m_sGeoLongAttr.cstr() )>=0
+		&& !ReplaceWithColumnarItem ( m_tQuery.m_sGeoLongAttr, SPH_EVAL_PREFILTER ) ) return false;
 
 	auto pExpr = CreateExprGeodist ( m_tQuery, *m_pSorterSchema, m_sError );
 	if ( !pExpr )

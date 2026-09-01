@@ -962,7 +962,8 @@ jobs:
       VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
       JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
     with:
-      docker_image: ${{ needs.test_kit_docker_build.outputs.candidate_image || needs.test_kit_docker_reuse.outputs.candidate_image || format('ghcr.io/{0}/manticoresearch:test-kit-{1}', github.repository_owner, needs.meta.outputs.branch_tag) }}
+      # Fork PRs import the artifact under this local tag; they never pull from GHCR.
+      docker_image: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && 'test-kit:img' || needs.test_kit_docker_build.outputs.candidate_image || needs.test_kit_docker_reuse.outputs.candidate_image || format('ghcr.io/{0}/manticoresearch:test-kit-{1}', github.repository_owner, needs.meta.outputs.branch_tag) }}
       artifact_name: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && 'manticore_test_kit.img' || '' }}
       repository: ${{ github.repository }}
       ref: ${{ github.sha }}

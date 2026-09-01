@@ -2282,7 +2282,7 @@ public:
 
 		auto pSession = session::Info().GetClientSession();
 		auto & tIndexerState = pSession->m_tIndexerRtBulk;
-		const CSphString * pIndexerRtBulk = m_tOptions ( "indexer_rt_bulk" );
+		const CSphString * pIndexerRtBulk = m_tOptions ( "bulk_import" );
 		CSphString sActivateIndexerRtBulk = pIndexerRtBulk ? *pIndexerRtBulk : CSphString();
 		const bool bExitIndexerRtBulk = tIndexerState.IsEnabled() && sActivateIndexerRtBulk=="0";
 		const bool bHadPendingIndexerRtBulk = tIndexerState.HasPendingData();
@@ -2350,7 +2350,7 @@ public:
 
 			if ( bHadPendingIndexerRtBulk )
 			{
-				m_sError = "indexer_rt_bulk already has pending data in this session";
+				m_sError = "bulk_import already has pending data in this session";
 				return FinishBulk ( tResults, false, iCurLine, iLastTxStartLine, EHTTP_STATUS::_400 );
 			}
 
@@ -2358,7 +2358,7 @@ public:
 			{
 				if ( tStmt.m_sIndex!=sActivateIndexerRtBulk )
 				{
-					m_sError.SetSprintf ( "indexer_rt_bulk target '%s' does not match operation table '%s'", sActivateIndexerRtBulk.cstr(), tStmt.m_sIndex.cstr() );
+					m_sError.SetSprintf ( "bulk_import target '%s' does not match operation table '%s'", sActivateIndexerRtBulk.cstr(), tStmt.m_sIndex.cstr() );
 					return FinishBulk ( tResults, false, iCurLine, iLastTxStartLine, EHTTP_STATUS::_400 );
 				}
 				if ( !ActivateIndexerRtBulk ( *pSession, sActivateIndexerRtBulk, m_sError ) )
@@ -2779,7 +2779,7 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 	if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::ES_BULK && session::Info().GetClientSession()->m_tIndexerRtBulk.IsEnabled() )
 	{
 		tRes.m_eReplyHttpCode = EHTTP_STATUS::_400;
-		tRes.m_sError = "Elasticsearch /_bulk is unavailable while indexer_rt_bulk is active; use SQL or Manticore /bulk";
+		tRes.m_sError = "Elasticsearch /_bulk is unavailable while bulk_import is active; use SQL or Manticore /bulk";
 		tRes.m_bSkipBuddy = true;
 		sphHttpErrorReply ( dResult, tRes.m_eReplyHttpCode, tRes.m_sError.cstr() );
 		return tRes;
@@ -3670,10 +3670,10 @@ bool HttpHandlerEsBulk_c::Validate()
 
 bool HttpHandlerEsBulk_c::Process()
 {
-	if ( ( m_hOpts.Exists ( "indexer_rt_bulk" ) && m_hOpts["indexer_rt_bulk"]=="1" )
-		|| ( m_hOpts.Exists ( "pipeline" ) && m_hOpts["pipeline"]=="indexer_rt_bulk" ) )
+	if ( ( m_hOpts.Exists ( "bulk_import" ) && m_hOpts["bulk_import"]=="1" )
+		|| ( m_hOpts.Exists ( "pipeline" ) && m_hOpts["pipeline"]=="bulk_import" ) )
 	{
-		ReportLogError ( "indexer_rt_bulk assisted writes are unsupported on Elasticsearch /_bulk; use SQL or Manticore /bulk", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+		ReportLogError ( "direct-to-disk bulk loading is unsupported on Elasticsearch /_bulk; use SQL or Manticore /bulk", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
 		return false;
 	}
 

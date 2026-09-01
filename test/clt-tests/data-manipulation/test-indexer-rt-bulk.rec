@@ -7,11 +7,11 @@ mysql -h0 -P9306 <<'SQL'
 DROP TABLE IF EXISTS rt_bulk_sql;
 CREATE TABLE rt_bulk_sql (title TEXT, gid INTEGER);
 INSERT INTO rt_bulk_sql(id,title,gid) VALUES (1,'regular row',1);
-SET indexer_rt_bulk=rt_bulk_sql;
+SET bulk_import=rt_bulk_sql;
 BEGIN;
 INSERT INTO rt_bulk_sql(id,title,gid) VALUES (1,'assisted replacement',11),(2,'assisted row',12);
 COMMIT;
-SET indexer_rt_bulk=0;
+SET bulk_import=0;
 SQL
 ––– output –––
 ––– input –––
@@ -21,21 +21,21 @@ mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,ti
 2	assisted row	12
 ––– input –––
 mysql -h0 -P9306 <<'SQL'
-SET indexer_rt_bulk=rt_bulk_sql;
+SET bulk_import=rt_bulk_sql;
 INSERT INTO rt_bulk_sql(id,title,gid) VALUES (3,'rolled back row',13);
 ROLLBACK;
-SET indexer_rt_bulk=0;
+SET bulk_import=0;
 SQL
 mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT COUNT(*) FROM rt_bulk_sql"
 ––– output –––
 2
 ––– input –––
 out=$(mysql --force -h0 -P9306 2>&1 <<'SQL'
-SET indexer_rt_bulk=rt_bulk_sql;
+SET bulk_import=rt_bulk_sql;
 INSERT INTO rt_bulk_sql(unknown_column) VALUES ('rejected before staging');
 INSERT INTO rt_bulk_sql(id,title) VALUES (4,'valid after error');
 COMMIT;
-SET indexer_rt_bulk=0;
+SET bulk_import=0;
 SQL
 ); rows=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,title,gid FROM rt_bulk_sql WHERE id=4"); expected=$(printf '4\tvalid after error\t0'); if printf '%s\n' "$out" | grep -qi 'unknown column' && [ "$rows" = "$expected" ]; then echo ASSISTED_COLUMN_VALIDATION_OK; else printf 'FAIL_ASSISTED_COLUMN_VALIDATION output=%s rows=%s\n' "$out" "$rows"; fi
 ––– output –––

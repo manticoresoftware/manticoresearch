@@ -3,7 +3,7 @@
 mysql -h0 -P9306 -e "DROP TABLE IF EXISTS rt_bulk_http; CREATE TABLE rt_bulk_http (title TEXT, gid INTEGER);"
 ––– output –––
 ––– input –––
-reply=$(printf '%s\n' '{"insert":{"index":"rt_bulk_http","id":1,"doc":{"title":"first HTTP row","gid":11}}}' | curl -sS -X POST 'http://localhost:9308/bulk?indexer_rt_bulk=rt_bulk_http' -H 'Content-Type: application/x-ndjson' --data-binary @-); if printf '%s' "$reply" | grep -q '"errors":false'; then echo ASSISTED_HTTP_OK; else echo "FAIL_ASSISTED_HTTP reply=$reply"; fi
+reply=$(printf '%s\n' '{"insert":{"index":"rt_bulk_http","id":1,"doc":{"title":"first HTTP row","gid":11}}}' | curl -sS -X POST 'http://localhost:9308/bulk?bulk_import=rt_bulk_http' -H 'Content-Type: application/x-ndjson' --data-binary @-); if printf '%s' "$reply" | grep -q '"errors":false'; then echo ASSISTED_HTTP_OK; else echo "FAIL_ASSISTED_HTTP reply=$reply"; fi
 ––– output –––
 ASSISTED_HTTP_OK
 ––– input –––

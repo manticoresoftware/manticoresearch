@@ -744,19 +744,19 @@ static bool CheckIndexerRtBulkTarget ( const CSphString & sTable, IndexerRtBulkT
 	tTarget.m_pServed = GetServed ( sTable );
 	if ( !tTarget.m_pServed )
 	{
-		sError.SetSprintf ( "indexer_rt_bulk requires an existing local RT table; table '%s' is absent or distributed", sTable.cstr() );
+		sError.SetSprintf ( "bulk_import requires an existing local RT table; table '%s' is absent or distributed", sTable.cstr() );
 		return false;
 	}
 
 	if ( tTarget.m_pServed->m_eType!=IndexType_e::RT )
 	{
-		sError.SetSprintf ( "indexer_rt_bulk requires an RT table; table '%s' has type %s", sTable.cstr(), szIndexType ( tTarget.m_pServed->m_eType ) );
+		sError.SetSprintf ( "bulk_import requires an RT table; table '%s' has type %s", sTable.cstr(), szIndexType ( tTarget.m_pServed->m_eType ) );
 		return false;
 	}
 
 	if ( ServedDesc_t::IsCluster ( tTarget.m_pServed ) )
 	{
-		sError.SetSprintf ( "indexer_rt_bulk does not support cluster table '%s'", sTable.cstr() );
+		sError.SetSprintf ( "bulk_import does not support cluster table '%s'", sTable.cstr() );
 		return false;
 	}
 
@@ -781,7 +781,7 @@ static bool CheckReservation ( const IndexerRtBulkState_t & tState, const cServe
 	if ( tState.m_tReservation.Matches ( pServed ) )
 		return true;
 
-	sError.SetSprintf ( "table '%s' was replaced while indexer_rt_bulk was active", tState.m_sTable.cstr() );
+	sError.SetSprintf ( "table '%s' was replaced while bulk_import was active", tState.m_sTable.cstr() );
 	return false;
 }
 
@@ -791,7 +791,7 @@ static bool CheckGeneration ( const IndexerRtBulkState_t & tState, const RtIndex
 	if ( tRt.GetIndexId()==tState.m_iIndexId && tRt.GetAlterGeneration()==tState.m_iAlterGeneration )
 		return true;
 
-	sError.SetSprintf ( "table '%s' was altered while indexer_rt_bulk was active", tState.m_sTable.cstr() );
+	sError.SetSprintf ( "table '%s' was altered while bulk_import was active", tState.m_sTable.cstr() );
 	return false;
 }
 
@@ -824,7 +824,7 @@ bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTab
 	auto & tState = tSession.m_tIndexerRtBulk;
 	if ( sTable.IsEmpty() )
 	{
-		sError = "indexer_rt_bulk requires a target table; use SET indexer_rt_bulk=<table>";
+		sError = "bulk_import requires a target table; use SET bulk_import=<table>";
 		return false;
 	}
 
@@ -832,7 +832,7 @@ bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTab
 	{
 		if ( tState.m_sTable!=sTable )
 		{
-			sError.SetSprintf ( "indexer_rt_bulk is already active for table '%s'", tState.m_sTable.cstr() );
+			sError.SetSprintf ( "bulk_import is already active for table '%s'", tState.m_sTable.cstr() );
 			return false;
 		}
 
@@ -841,7 +841,7 @@ bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTab
 
 	if ( tSession.m_bInTransaction || tSession.m_tAcc.GetIndex() || tSession.m_tShardTxn.HasPendingData() )
 	{
-		sError = "indexer_rt_bulk requires a clean session with no active transaction or pending writes";
+		sError = "bulk_import requires a clean session with no active transaction or pending writes";
 		return false;
 	}
 
@@ -864,7 +864,7 @@ bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTab
 		return false;
 	if ( !tReservation.Matches ( tCurrent.m_pServed ) || tCurrent.m_iIndexId!=tTarget.m_iIndexId || tCurrent.m_iAlterGeneration!=tTarget.m_iAlterGeneration )
 	{
-		sError.SetSprintf ( "table '%s' changed while enabling indexer_rt_bulk", sTable.cstr() );
+		sError.SetSprintf ( "table '%s' changed while enabling bulk_import", sTable.cstr() );
 		return false;
 	}
 
@@ -986,12 +986,12 @@ bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, E
 	assert ( tState.IsEnabled() );
 	if ( tStmt.m_eStmt!=STMT_INSERT )
 	{
-		sError = "indexer_rt_bulk supports INSERT only";
+		sError = "bulk_import supports INSERT only";
 		return false;
 	}
 	if ( tStmt.m_sIndex!=tState.m_sTable )
 	{
-		sError.SetSprintf ( "indexer_rt_bulk is active for table '%s', not '%s'", tState.m_sTable.cstr(), tStmt.m_sIndex.cstr() );
+		sError.SetSprintf ( "bulk_import is active for table '%s', not '%s'", tState.m_sTable.cstr(), tStmt.m_sIndex.cstr() );
 		return false;
 	}
 

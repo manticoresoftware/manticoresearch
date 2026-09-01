@@ -4465,7 +4465,7 @@ class SphinxConfig
 			if ( $rt_indexer && count ( $data['values'] ) )
 			{
 				$escaped_name = str_replace ( "`", "``", $name );
-				if ( mysqli_wr ( "SET indexer_rt_bulk=`$escaped_name`", $cn ) === false )
+				if ( mysqli_wr ( "SET bulk_import=`$escaped_name`", $cn ) === false )
 				{
 					$error = $cn->error;
 					$cn->close();
@@ -4536,7 +4536,7 @@ class SphinxConfig
 				$cn->close();
 				return false;
 			}
-			if ( $in_transaction && mysqli_wr ( "SET indexer_rt_bulk=0", $cn ) === false )
+			if ( $in_transaction && mysqli_wr ( "SET bulk_import=0", $cn ) === false )
 			{
 				$error = $cn->error;
 				$cn->close();

@@ -4,28 +4,28 @@ mysql -h0 -P9306 <<'SQL'
 DROP TABLE IF EXISTS rt_bulk_rename;
 CREATE TABLE rt_bulk_rename (title TEXT, gid INTEGER);
 INSERT INTO rt_bulk_rename(id,title,gid) VALUES (1,'original row',1),(2,'unchanged row',2);
-SET indexer_rt_bulk=rt_bulk_rename;
+SET bulk_import=rt_bulk_rename;
 INSERT INTO rt_bulk_rename(id,title,gid) VALUES (1,'first assisted row',11);
 COMMIT;
-SET indexer_rt_bulk=0;
+SET bulk_import=0;
 SQL
 ––– output –––
 ––– input –––
 max=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT MAX(chunk_id) FROM rt_bulk_rename.@status"); next=$((max+1)); blocker="/var/lib/manticore/rt_bulk_rename/rt_bulk_rename.$next.sph"; mkdir -p "$blocker"; before_chunks=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SHOW TABLE rt_bulk_rename STATUS LIKE 'disk_chunks'" | awk '{print $2}'); out=$(mysql --force -h0 -P9306 2>&1 <<'SQL'
-SET indexer_rt_bulk=rt_bulk_rename;
+SET bulk_import=rt_bulk_rename;
 INSERT INTO rt_bulk_rename(id,title,gid) VALUES (1,'must not replace first row',12);
 COMMIT;
-SET indexer_rt_bulk=0;
+SET bulk_import=0;
 SQL
 ); rows=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,title,gid FROM rt_bulk_rename" | sort -n); expected=$(printf '1\tfirst assisted row\t11\n2\tunchanged row\t2'); after_chunks=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SHOW TABLE rt_bulk_rename STATUS LIKE 'disk_chunks'" | awk '{print $2}'); staging=/var/lib/manticore/rt_bulk_rename/rt_bulk_rename.indexer-rt-bulk; if printf '%s\n' "$out" | grep -q 'ATTACH failed' && [ "$rows" = "$expected" ] && [ "$before_chunks" = "$after_chunks" ] && [ ! -e "$staging" ]; then echo RENAME_FAILURE_PRESERVES_ROWS; else printf 'FAIL_RENAME_FAILURE output=%s rows=%s before=%s after=%s staging=%s\n' "$out" "$rows" "$before_chunks" "$after_chunks" "$staging"; fi
 ––– output –––
 RENAME_FAILURE_PRESERVES_ROWS
 ––– input –––
 max=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT MAX(chunk_id) FROM rt_bulk_rename.@status"); next=$((max+1)); blocker="/var/lib/manticore/rt_bulk_rename/rt_bulk_rename.$next.sph"; rmdir "$blocker"; mysql -h0 -P9306 <<'SQL'
-SET indexer_rt_bulk=rt_bulk_rename;
+SET bulk_import=rt_bulk_rename;
 INSERT INTO rt_bulk_rename(id,title,gid) VALUES (1,'second assisted row',12);
 COMMIT;
-SET indexer_rt_bulk=0;
+SET bulk_import=0;
 SQL
 mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,title,gid FROM rt_bulk_rename" | sort -n
 ––– output –––

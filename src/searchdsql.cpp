@@ -2191,7 +2191,7 @@ void SqlParser_c::SetLocalStatement ( const YYSTYPE & tName, const YYSTYPE & tVa
 
 	CSphString sSetName = m_pStmt->m_sSetName;
 	sSetName.ToLower();
-	if ( sSetName=="indexer_rt_bulk" )
+	if ( sSetName=="bulk_import" )
 	{
 		ToString ( m_pStmt->m_sIndex, tValue ).Unquote();
 		m_pStmt->m_sIndex.ToLower();

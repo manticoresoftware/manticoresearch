@@ -71,7 +71,7 @@ bool SqlSecondParser_c::SetPurge ( const SqlNode_t & tTarget, const SqlNode_t & 
 	ToString ( sTarget, tTarget );
 	CSphString sNormalized = sTarget;
 	sNormalized.ToLower();
-	if ( sNormalized!="indexer_rt_bulk" )
+	if ( sNormalized!="bulk_import" )
 	{
 		sError.SetSprintf ( "unsupported PURGE target '%s'", sTarget.cstr() );
 		return false;

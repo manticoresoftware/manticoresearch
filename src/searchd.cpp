@@ -7933,7 +7933,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	pSession->FreezeLastMeta();
 	if ( pSession->m_tIndexerRtBulk.IsEnabled() )
 	{
-		tOut.Error ( "indexer_rt_bulk supports INSERT only" );
+		tOut.Error ( "bulk_import supports INSERT only" );
 		return;
 	}
 	auto& sWarning = pSession->m_tLastMeta.m_sWarning;
@@ -9002,7 +9002,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	pSession->FreezeLastMeta();
 	if ( pSession->m_tIndexerRtBulk.IsEnabled() )
 	{
-		tOut.Error ( "indexer_rt_bulk supports INSERT only" );
+		tOut.Error ( "bulk_import supports INSERT only" );
 		return;
 	}
 	bool bCommit = pSession->m_bAutoCommit && !pSession->m_bInTransaction;
@@ -9554,7 +9554,7 @@ static bool HandleSetLocal ( CSphString& sError, const CSphString& sName, int64_
 		auto pSession = session::Info().GetClientSession();
 		if ( pSession->m_tIndexerRtBulk.IsEnabled() )
 		{
-			sError = "autocommit cannot be changed while indexer_rt_bulk is active";
+			sError = "autocommit cannot be changed while bulk_import is active";
 			return true;
 		}
 
@@ -9968,7 +9968,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 	switch ( tStmt.m_eSet )
 	{
 	case SET_LOCAL: // SET foo = value|'svalue'|null
-		if ( tStmt.m_sSetName=="indexer_rt_bulk" )
+		if ( tStmt.m_sSetName=="bulk_import" )
 		{
 			auto pSession = session::Info().GetClientSession();
 			bool bOk = false;
@@ -9979,7 +9979,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 				CleanupIndexerRtBulk ( *pSession );
 				bOk = true;
 			} else
-				sError = "indexer_rt_bulk requires a target table; use SET indexer_rt_bulk=<table>";
+				sError = "bulk_import requires a target table; use SET bulk_import=<table>";
 
 			if ( bOk )
 				tOut.Ok();
@@ -10323,7 +10323,7 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const CSphString & sIndex, const CS
 		return;
 	}
 
-	if ( !sFilesFormat.IsEmpty() && sFilesFormat!="default" && sFilesFormat!="all" && sFilesFormat!="external" && sFilesFormat!="indexer_rt_bulk" )
+	if ( !sFilesFormat.IsEmpty() && sFilesFormat!="default" && sFilesFormat!="all" && sFilesFormat!="external" && sFilesFormat!="bulk_import" )
 	{
 		CSphString sError;
 		sError.SetSprintf ( "unknown FILES format '%s'", sFilesFormat.cstr() );
@@ -10331,17 +10331,17 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const CSphString & sIndex, const CS
 		return;
 	}
 
-	if ( sFilesFormat=="indexer_rt_bulk" )
+	if ( sFilesFormat=="bulk_import" )
 	{
 		if ( pServed->m_eType!=IndexType_e::RT )
 		{
-			tOut.Error ( "FILES format 'indexer_rt_bulk' requires an RT table" );
+			tOut.Error ( "FILES format 'bulk_import' requires an RT table" );
 			return;
 		}
 
 		if ( ServedDesc_t::IsCluster ( pServed ) )
 		{
-			tOut.Error ( "FILES format 'indexer_rt_bulk' does not support cluster tables" );
+			tOut.Error ( "FILES format 'bulk_import' does not support cluster tables" );
 			return;
 		}
 
@@ -10417,7 +10417,7 @@ static void HandleMysqlPurge ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !pServed || pServed->m_eType!=IndexType_e::RT || ServedDesc_t::IsCluster ( pServed ) )
 	{
-		tOut.ErrorEx ( "PURGE INDEXER_RT_BULK requires an existing local RT table; table '%s' is absent or unsupported", tStmt.m_sIndex.cstr() );
+		tOut.ErrorEx ( "PURGE BULK_IMPORT requires an existing local RT table; table '%s' is absent or unsupported", tStmt.m_sIndex.cstr() );
 		return;
 	}
 

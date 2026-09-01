@@ -35,10 +35,10 @@ if [ "$ready" != 1 ]; then echo FAIL_STAGING_START; fi
 mysql -h0 -P19326 -e 'CREATE TABLE rt_bulk_staging (title TEXT);'
 echo first > "$root/load.tag"
 cat > "$root/first.sql" <<EOF
-SET indexer_rt_bulk=rt_bulk_staging;
+SET bulk_import=rt_bulk_staging;
 INSERT INTO rt_bulk_staging(id,title) VALUES(1,'crash left');
 COMMIT;
-SET indexer_rt_bulk=0;
+SET bulk_import=0;
 EOF
 mysql -h0 -P19326 < "$root/first.sql" >"$root/first.out" 2>"$root/first.err" & echo $! > "$root/first.writer"
 ready=0; for i in $(seq 1 100); do [ -e "$root/first.ready" ] && { ready=1; break; }; sleep 0.1; done
@@ -61,10 +61,10 @@ MANTICORE_NO_BUDDY=1 "$root/bin/searchd" --config "$root/manticore.conf" --nodet
 ready=0; for i in $(seq 1 100); do mysql -h0 -P19326 -e 'SELECT 1' >/dev/null 2>&1 && { ready=1; break; }; sleep 0.1; done
 if [ "$ready" != 1 ]; then echo FAIL_STAGING_RESTART; fi
 cat > "$root/second.sql" <<EOF
-SET indexer_rt_bulk=rt_bulk_staging;
+SET bulk_import=rt_bulk_staging;
 INSERT INTO rt_bulk_staging(id,title) VALUES(2,'published after restart');
 COMMIT;
-SET indexer_rt_bulk=0;
+SET bulk_import=0;
 EOF
 mysql -h0 -P19326 < "$root/second.sql" >"$root/second.out" 2>"$root/second.err" & echo $! > "$root/second.writer"
 ready=0; for i in $(seq 1 100); do [ -e "$root/second.ready" ] && { ready=1; break; }; sleep 0.1; done
@@ -73,11 +73,11 @@ second_load=$(find "$load_root" -mindepth 1 -maxdepth 1 -type d ! -path "$first_
 if [ "$ready" != 1 ] || [ -z "$second_load" ] || [ "$second_load" = "$first_load" ]; then echo FAIL_STAGING_REUSED; fi
 touch "$root/second.release"
 if ! wait "$(cat "$root/second.writer")"; then cat "$root/second.err"; fi
-files=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P19326 -e "SELECT file FROM rt_bulk_staging.@files OPTION format='indexer_rt_bulk'")
+files=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P19326 -e "SELECT file FROM rt_bulk_staging.@files OPTION format='bulk_import'")
 count=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P19326 -e 'SELECT COUNT(*) FROM rt_bulk_staging')
 remaining=$(find "$load_root" -mindepth 1 -maxdepth 1 -type d | sort)
 if [ "$remaining" = "$first_load" ] && printf '%s\n' "$files" | grep -Fq "$first_load" && [ "$count" = 1 ]; then echo STAGING_RESTART_UNIQUE; else echo "FAIL_STAGING_RESTART remaining=$remaining files=$files count=$count"; fi
-mysql -h0 -P19326 -e 'PURGE INDEXER_RT_BULK FROM TABLE rt_bulk_staging;'
+mysql -h0 -P19326 -e 'PURGE BULK_IMPORT FROM TABLE rt_bulk_staging;'
 if [ -e "$load_root" ]; then echo FAIL_STAGING_PURGE; fi
 mkdir -p "$load_root/drop-load"
 mysql -h0 -P19326 -e 'DROP TABLE rt_bulk_staging;'

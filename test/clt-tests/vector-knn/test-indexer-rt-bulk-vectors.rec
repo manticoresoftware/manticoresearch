@@ -3,13 +3,13 @@
 mysql -h0 -P9306 <<'SQL'
 DROP TABLE IF EXISTS rt_bulk_vectors;
 CREATE TABLE rt_bulk_vectors (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2', raw_vector FLOAT_VECTOR);
-SET indexer_rt_bulk=rt_bulk_vectors;
+SET bulk_import=rt_bulk_vectors;
 INSERT INTO rt_bulk_vectors(id,title,embedding,raw_vector) VALUES
  (1,'first vector',(1,0,0,0),(1,2)),
  (2,'second vector',(0,1,0,0),(3,4)),
  (3,'third vector',(0,0,1,0),(5,6));
 COMMIT;
-SET indexer_rt_bulk=0;
+SET bulk_import=0;
 SQL
 ––– output –––
 ––– input –––

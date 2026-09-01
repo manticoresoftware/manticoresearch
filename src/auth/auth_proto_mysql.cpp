@@ -253,7 +253,7 @@ static bool SqlCheckStmtPerms ( const CSphString & sUser, const SqlStmt_t & tStm
 		{
 			CSphString sSetName = tStmt.m_sSetName;
 			sSetName.ToLower();
-			if ( sSetName!="indexer_rt_bulk" || tStmt.m_sIndex.IsEmpty() )
+			if ( sSetName!="bulk_import" || tStmt.m_sIndex.IsEmpty() )
 				return true;
 
 			if ( DenyInternalAuthStorageTarget ( sUser, tStmt.m_sIndex, sError ) )

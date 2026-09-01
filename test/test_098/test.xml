@@ -117,6 +117,18 @@ index dup2
 	charset_table = non_cjk, U+00E4, U+00C4->U+00E4, U+00F6, U+00D6->U+00F6, U+00DC->U+00FC, U+00DF
 }
 
+index german_explicit
+{
+	type		= template
+	charset_table = non_cont, U+00E4, U+00C4->U+00E4, U+00F6, U+00D6->U+00F6, U+00FC, U+00DC->U+00FC, U+00DF, U+1E9E->U+00DF
+}
+
+index german_alias
+{
+	type		= template
+	charset_table = non_cont, german
+}
+
 index rt_crc
 {
 	type = rt
@@ -184,6 +196,8 @@ index rt_wild
 <!-- regression duplicated charset mapping sorted wrong on charset_table parsing -->
 CALL KEYWORDS('Öö', 'dup1', 1 as stats, 'hits' as sort_mode);
 CALL KEYWORDS('Öö', 'dup2', 1 as stats, 'hits' as sort_mode);
+CALL KEYWORDS('Ää Öö Üü ßẞ', 'german_explicit');
+CALL KEYWORDS('Ää Öö Üü ßẞ', 'german_alias');
 
 <!-- regression wrong wildcard matching path at the new default of the local_df -->
 INSERT INTO rt_crc (id, title) VALUES ( 1, 'the google box' );

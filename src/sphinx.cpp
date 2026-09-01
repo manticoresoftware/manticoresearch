@@ -10683,19 +10683,15 @@ DWORD sphParseMorphAot ( const char * sMorphology )
 	sphSplit ( dMorphs, sMorphology );
 
 	DWORD uAotFilterMask = 0;
-	for ( int j=0; j<AOT_LENGTH; ++j )
+	for ( const auto & sMorphologyOption : dMorphs )
 	{
-		char buf_all[20];
-		snprintf ( buf_all, 19, "lemmatize_%s_all", AOT_LANGUAGES[j] ); // NOLINT
-		buf_all[19] = '\0';
-		ARRAY_FOREACH ( i, dMorphs )
-		{
-			if ( dMorphs[i]==buf_all )
-			{
-				uAotFilterMask |= (1UL) << j;
-				break;
-			}
-		}
+		AotMorphology_t tMorphology;
+		if ( !sphParseAotMorphology ( sMorphologyOption.cstr(), sMorphologyOption.Length(), tMorphology ) || !tMorphology.IsAll() )
+			continue;
+
+		uAotFilterMask |= (1UL) << tMorphology.GetLang();
+		if ( tMorphology.IsGermanV2() )
+			uAotFilterMask |= AOT_FILTER_DE_V2;
 	}
 
 	return uAotFilterMask;

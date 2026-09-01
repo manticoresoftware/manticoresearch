@@ -1354,22 +1354,11 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 	}
 
 	// aot
-	StrVec_t dMorphs;
-	sphSplit ( dMorphs, hIndex.GetStr ( "morphology" ).cstr() );
+	CSphString sMorphology = hIndex.GetStr ( "morphology" );
+	m_uAotFilterMask = sphParseMorphAot ( sMorphology.cstr() );
 
-	m_uAotFilterMask = 0;
-	for ( int j=0; j<AOT_LENGTH; ++j )
-	{
-		char buf_all[20];
-		snprintf ( buf_all, 19, "lemmatize_%s_all", AOT_LANGUAGES[j] ); //NOLINT
-		buf_all[19] = '\0';
-		ARRAY_FOREACH ( i, dMorphs )
-			if ( dMorphs[i]==buf_all )
-			{
-				m_uAotFilterMask |= (1UL) << j;
-				break;
-			}
-	}
+	StrVec_t dMorphs;
+	sphSplit ( dMorphs, sMorphology.cstr() );
 
 	if ( !ParseCJKSegmentation ( hIndex, dMorphs, sWarning, sError ) )
 		return false;

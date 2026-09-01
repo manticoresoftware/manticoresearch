@@ -846,6 +846,7 @@ CALL UUID_SHORT(3)
 ```
 <!-- end -->
 
+<!-- example bulk_insert -->
 ## 批量添加文档
 你不仅可以向实时表插入单个文档，还可以插入任意数量的文档。向实时表一次插入数万个文档是完全可以的。然而，需要注意以下几点：
 * 批量越大，每次插入操作的延迟越高
@@ -882,7 +883,7 @@ CALL UUID_SHORT(3)
 
 当你要加载一个大批次，并且直接生成磁盘块比先构建 RAM 块更合适时，使用此模式。它同时支持行式表和列式表，包括全文字段、数值属性、字符串、JSON、MVA/MVA64，以及带 KNN 索引的浮点向量。
 
-此模式下的表名使用规范的小写形式。SQL 设置和 Manticore `/bulk` 查询参数在授权和激活前都会把目标规范化为小写。
+此处的表名不区分大小写。例如，`SET bulk_import=Products` 和 `bulk_import=products` 都会选择存储为 `products` 的表；仅字母大小写不同的表名无法区分。
 
 #### SQL
 
@@ -899,42 +900,126 @@ COMMIT;
 SET bulk_import=0;
 ```
 
-`SET bulk_import=<table>` 要求会话是干净的，并为该表获取写入保留。搜索仍可用，但其他会话不能在该受保留的表上运行 `INSERT`、`REPLACE`、`UPDATE` 或 `DELETE`。`BEGIN` 和 `START TRANSACTION` 在直接写入磁盘模式下是可选的兼容性空操作。`COMMIT` 会构建当前磁盘块并将其原子性地附加；`ROLLBACK` 会丢弃当前批次。两者都会让模式和保留状态继续保持，以便处理下一批。此模式激活期间不能更改自动提交。`SET bulk_import=0` 或关闭连接会丢弃任何待处理批次并释放保留。
+请在 `BEGIN` 之前，并在该连接执行任何未提交的写入之前运行 `SET bulk_import=<table>`。该命令为本次导入保留所选表：搜索仍然可用，但在导入结束前，其他连接不能修改该表。可以使用 `BEGIN` 或 `START TRANSACTION`，但它们不是必需的，也不会改变此模式的行为。
+
+`COMMIT` 会把自上一次 `COMMIT` 或 `ROLLBACK` 以来收集的行发布为一个磁盘块。`ROLLBACK` 会丢弃这些行。两种操作之后批量导入仍保持启用，因此可以开始下一个批次。运行 `SET bulk_import=0` 会丢弃尚未提交的行、禁用批量导入，并重新允许其他连接写入该表。关闭连接具有相同效果。批量导入启用期间不能更改自动提交设置。
 
 #### HTTP `/bulk`
 
 在 Manticore `/bulk` 或 `/json/bulk` 请求中添加 `bulk_import=<table>`。请求体仍然使用标准的换行分隔 JSON（NDJSON），且每个操作都必须是绑定表的 `insert` 或 `create`：
 
 ```bash
-curl --http1.1 \
+printf '%s\n' \
+  '{"insert":{"table":"products","id":101,"doc":{"title":"Crossbody Bag with Tassel","price":19.85}}}' \
+  '{"insert":{"table":"products","id":102,"doc":{"title":"Microfiber Sheet Set","price":19.99}}}' |
+curl -sS -X POST \
   -H 'Content-Type: application/x-ndjson' \
-  --data-binary $'{"insert":{"table":"products","id":101,"doc":{"title":"Crossbody Bag with Tassel","price":19.85}}}\n{"insert":{"table":"products","id":102,"doc":{"title":"Microfiber Sheet Set","price":19.99}}}\n' \
-  'http://localhost:9308/bulk?bulk_import=products' \
-  --next --http1.1 \
-  -H 'Content-Type: application/x-ndjson' \
-  --data-binary $'{"create":{"table":"products","id":103,"doc":{"title":"Pet Hair Remover Glove","price":7.99}}}\n' \
-  'http://localhost:9308/bulk' \
-  --next --http1.1 \
-  -H 'Content-Type: application/x-ndjson' \
-  --data-binary '' \
-  'http://localhost:9308/bulk?bulk_import=0'
+  --data-binary @- \
+  'http://localhost:9308/bulk?bulk_import=products'
 ```
 
-激活请求不需要保持连接打开。一次性请求会在回复前发布其已完成的分组，并在连接关闭时释放该模式和保留。只有后续请求需要继承当前目标，或者需要显式发送 `bulk_import=0` 时，才保持连接持久。HTTP/1.1 默认是持久连接，而 HTTP/1.0 需要 `Connection: keep-alive`。
+在请求体中，空行会结束并发布当前批次；请求结束时会发布最后一个批次。Manticore 处理完该请求中的所有批次后才发送 HTTP 响应。如果后续批次失败，同一请求中之前已发布的批次仍可搜索。若要将整个请求作为一个磁盘块原子发布，请不要加入空行。响应会为每个已发布批次返回一个汇总的 `bulk` 结果，而不是为每个文档返回一个结果。
 
-成功的数据请求会在回复前发布其所有已完成的分组。空行会发布前一个分组，而请求 EOF 会发布最后一个分组。未发布的批次不会跨越响应边界；在持久连接上，只有目标及其保留可以保持激活。后续在该连接上的无参数 `/bulk` 或 `/json/bulk` 请求会继承该目标。一旦激活，会话目标就是权威的；其他带目标值的查询参数不会切换它，而普通 bulk/DML 路径仍会拒绝针对另一张表的操作。激活状态下的 `bulk_import=0` 请求会沿用同样的直接写入磁盘处理，然后禁用该模式并释放其保留。它可以携带最后的数据分组；空内容或仅包含空白字符的正文是成功的空操作，只会禁用该模式。
+大多数客户端只需像上面的示例一样发送一个请求。如果应用有意通过同一个[持久 HTTP 连接](../../Connecting_to_the_server/HTTP.md#Persistent-connections)发送多个请求，第一个请求会选择目标表。该连接后续的 `/bulk` 或 `/json/bulk` 请求可以省略 `bulk_import`，但必须继续写入同一张表。完成后关闭连接，或者发送一个空的 `/bulk?bulk_import=0` 请求，以禁用批量导入并允许其他连接再次修改该表。
 
-示例使用一个带 `--next` 的 `curl` 进程，因此这三次传输可以复用同一个连接。不同的 `curl` 进程会创建不同会话，彼此不能继承或关闭对方的直接写入磁盘模式。关于通用连接规则，请参见 [Persistent connections and HTTP state](../../Connecting_to_the_server/HTTP.md#Persistent-connections)。关闭连接也会释放保留。已经处于激活状态的最后一个数据请求可以使用 `Connection: close`；Manticore 会在拆除前先发布该请求。
+该端点支持分块传输编码，因此可以处理大于 `max_packet_size` 的正文，而无需缓存整个请求。
 
-此模式的响应使用普通的 Manticore bulk 信封，并为每个已发布分组包含一个汇总的 `bulk` 项。该端点支持分块传输编码，因此可以处理大于 `max_packet_size` 的正文，而无需缓存整个请求。失败的请求不会发布当前分组，并会关闭该 HTTP 会话；在更早的普通 bulk 边界已经发布的分组，例如空行或表切换，仍然保持可见。
+#### Elasticsearch 兼容的数据发送器
 
-与 Elasticsearch 兼容的 `/_bulk` 不支持直接写入磁盘模式。干净的 `/_bulk` 会话中的 `bulk_import` 查询值不会激活该功能，而且当该连接上已经处于此模式时，`/_bulk` 会被拒绝。Fluent Bit 的 Elasticsearch 输出使用的是 `/_bulk`，因此它仍然会使用常规实时插入。
+对于兼容 Elasticsearch 的数据发送器，请将保留的 pipeline 名称设为 `bulk_import`，使用 Elasticsearch bulk 的 `index` 操作，并将记录中的一个字段映射为 `_id`。以下示例都使用 `id` 作为稳定的文档 ID。
+
+##### Fluent Bit
+
+```ini
+[OUTPUT]
+    name               es
+    match              site_access_logs
+    host               manticore
+    port               9308
+    index              site_access_logs
+    pipeline           bulk_import
+    write_operation    index
+    id_key             id
+    suppress_type_name on
+    time_key           event_time
+```
+
+不要启用 `generate_id On`：它会生成批量导入不支持的 UUID。
+
+##### Fluentd
+
+```aconf
+<match site_access_logs>
+  @type elasticsearch
+  host manticore
+  port 9308
+  index_name site_access_logs
+  pipeline bulk_import
+  write_operation index
+  id_key id
+  suppress_type_name true
+</match>
+```
+
+##### Logstash
+
+```ruby
+output {
+  elasticsearch {
+    hosts       => ["http://manticore:9308"]
+    index       => "site_access_logs"
+    pipeline    => "bulk_import"
+    action      => "index"
+    document_id => "%{id}"
+
+    data_stream     => "false"
+    ilm_enabled     => "false"
+    manage_template => false
+  }
+}
+```
+
+##### Filebeat
+
+对于 NDJSON 输入，请将源数据中的 `id` 映射为 Elasticsearch `_id`，并在事件元数据中设置操作和 pipeline：
+
+```yaml
+filebeat.inputs:
+  - type: filestream
+    paths: ["/var/log/site_access_logs.ndjson"]
+    parsers:
+      - ndjson:
+          target: ""
+          document_id: id
+
+processors:
+  - add_fields:
+      target: "@metadata"
+      fields:
+        op_type: index
+        pipeline: bulk_import
+  - include_fields:
+      fields: ["title", "gid"]
+
+setup.template.enabled: false
+setup.ilm.enabled: false
+
+output.elasticsearch:
+  hosts: ["http://manticore:9308"]
+  index: "site_access_logs"
+  pipeline: "bulk_import"
+  allow_older_versions: true
+```
+
+请根据目标表结构调整 Filebeat 的 `include_fields` 列表。目标表必须已存在，并包含数据发送器提交的所有字段，例如 Fluent Bit 中配置的 `event_time` 字段。每个 `_id` 都必须是显式、稳定的非零十进制字符串，例如 `"123"`；同一个请求中的 ID 必须唯一。请求必须选择 `pipeline=bulk_import`：可以作为整个请求的参数，也可以在每个操作中设置。所有操作必须指向同一张表，并且只接受 `index` 操作。
+
+每次 flush 请求都会作为一个磁盘块原子发布。发布时会替换已有相同 ID 的文档。成功响应会为每个文档返回一条 Elasticsearch bulk 结果。如果其他导入任务暂时占用了目标表，Manticore 会返回 HTTP `503`，使带缓冲的数据发送器能够重试该请求。
 
 #### 重复文档 ID
 
 对于一个直接写入磁盘的批次，数值型文档 ID 的第一行会保持可见，而后续具有相同 ID 的行会被逻辑移除。对于 SQL，一个批次由 `COMMIT` 或 `ROLLBACK` 之前暂存的行组成。对于 Manticore `/bulk`，在空行、表切换或请求 EOF 时发布的每个分组都是一个单独的批次。
 
-如果目标表中已经可见的 ID 在后续的直接写入磁盘块中再次出现，那么在该块附加时会用它替换原有内容。这同样适用于先前 HTTP 分组已经发布的 ID。因此，重试一个先前已发布的批次会替换其中的行，而重试批次内部的重复项仍然会保留第一行。`create` 操作的行为与 `insert` 相同；仅仅因为目标表中已经存在该 ID，它不会失败。
+当 Manticore 将磁盘块发布到目标表时，块中的行会替换具有相同 ID 的已有行。这同样适用于先前 HTTP 批次已经发布的 ID。因此，重试一个先前已发布的批次会替换其中的行，而重试批次内部的重复项仍然会保留第一行。在 Manticore `/bulk` 请求中，`create` 操作（例如 `{"create":{"table":"products",...}}`）与 `insert` 行为相同；它不会仅因为该 ID 已存在而失败。
 
 #### 暂存文件与清理
 
@@ -963,10 +1048,9 @@ PURGE BULK_IMPORT FROM TABLE products;
 * 目标必须是一个已存在、未冻结的本地实时表，并且不能是复制集群成员。分布式表、分片表、复制表、percolate 表和普通表都不受支持。
 * SQL 只支持 `INSERT`。Manticore `/bulk` 接受 `insert` 和 `create`；`index`、`replace`、`update` 和 `delete` 会被拒绝。
 * 每一行都必须提供显式的数值型、非零文档 ID。不支持自动生成的和 UUID 文档 ID。
-* 当前不支持静态构建和 macOS。
+* 不支持静态构建。
 * 当前平台对应的可执行文件（Linux 上为 `indexer`，Windows 上为 `indexer.exe`）必须与正在运行的 `searchd` 位于同一目录。Manticore Search 只检查这个同级路径，不会搜索 `PATH`。为确保兼容性，请使用与 `searchd` 来自同一安装的可执行文件。如果该文件缺失、不可读或无法启动，只有批量导入会失败；正常启动和常规插入仍然可用。
 
-<!-- example bulk_insert -->
 <!-- intro -->
 ### 批量插入示例
 ##### SQL:

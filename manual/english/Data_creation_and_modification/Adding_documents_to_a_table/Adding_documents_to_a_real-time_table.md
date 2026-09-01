@@ -846,6 +846,7 @@ CALL UUID_SHORT(3)
 ```
 <!-- end -->
 
+<!-- example bulk_insert -->
 ## Bulk adding documents
 You can insert not just a single document into a real-time table, but as many as you'd like. It's perfectly fine to insert batches of tens of thousands of documents into a real-time table. However, it's important to keep the following points in mind:
 * The larger the batch, the higher the latency of each insert operation
@@ -882,7 +883,7 @@ For large batch loads into a local real-time table, Manticore Search can write `
 
 Use this mode when loading a large batch for which producing a disk chunk directly is preferable to building a RAM chunk first. It supports both row-wise and columnar tables, including full-text fields, numeric attributes, strings, JSON, MVA/MVA64, and float vectors with KNN indexes.
 
-Table names in this mode are canonical lowercase. Both the SQL setting and the Manticore `/bulk` query parameter normalize their target to lowercase before authorization and activation.
+Table names are case-insensitive here. For example, `SET bulk_import=Products` and `bulk_import=products` both select the table stored as `products`; tables whose names differ only by letter case cannot be distinguished.
 
 #### SQL
 
@@ -899,42 +900,126 @@ COMMIT;
 SET bulk_import=0;
 ```
 
-`SET bulk_import=<table>` requires a clean session and acquires a write reservation for that table. Searches remain available, but other sessions cannot run `INSERT`, `REPLACE`, `UPDATE`, or `DELETE` against the reserved table. `BEGIN` and `START TRANSACTION` are optional compatibility no-ops in direct-to-disk mode. `COMMIT` builds and atomically attaches the current disk chunk; `ROLLBACK` discards the current batch. Both keep the mode and reservation active for another batch. Autocommit cannot be changed while direct-to-disk mode is active. `SET bulk_import=0` or closing the connection discards any pending batch and releases the reservation.
+Run `SET bulk_import=<table>` before `BEGIN` and before any uncommitted write on that connection. It reserves the selected table for this import: searches remain available, but other connections cannot modify the table until the import ends. `BEGIN` and `START TRANSACTION` are allowed but not required and have no effect in this mode.
+
+`COMMIT` publishes the rows collected since the previous `COMMIT` or `ROLLBACK` as one disk chunk. `ROLLBACK` discards those rows. In both cases, bulk import remains enabled so you can start another batch. Run `SET bulk_import=0` to discard any uncommitted rows, disable bulk import, and allow other connections to write to the table again. Closing the connection does the same. Autocommit cannot be changed while bulk import is enabled.
 
 #### HTTP `/bulk`
 
 Add `bulk_import=<table>` to a Manticore `/bulk` or `/json/bulk` request. The request body remains standard newline-delimited JSON (NDJSON), and each operation must be `insert` or `create` for the bound table:
 
 ```bash
-curl --http1.1 \
+printf '%s\n' \
+  '{"insert":{"table":"products","id":101,"doc":{"title":"Crossbody Bag with Tassel","price":19.85}}}' \
+  '{"insert":{"table":"products","id":102,"doc":{"title":"Microfiber Sheet Set","price":19.99}}}' |
+curl -sS -X POST \
   -H 'Content-Type: application/x-ndjson' \
-  --data-binary $'{"insert":{"table":"products","id":101,"doc":{"title":"Crossbody Bag with Tassel","price":19.85}}}\n{"insert":{"table":"products","id":102,"doc":{"title":"Microfiber Sheet Set","price":19.99}}}\n' \
-  'http://localhost:9308/bulk?bulk_import=products' \
-  --next --http1.1 \
-  -H 'Content-Type: application/x-ndjson' \
-  --data-binary $'{"create":{"table":"products","id":103,"doc":{"title":"Pet Hair Remover Glove","price":7.99}}}\n' \
-  'http://localhost:9308/bulk' \
-  --next --http1.1 \
-  -H 'Content-Type: application/x-ndjson' \
-  --data-binary '' \
-  'http://localhost:9308/bulk?bulk_import=0'
+  --data-binary @- \
+  'http://localhost:9308/bulk?bulk_import=products'
 ```
 
-The activating request does not have to keep the connection open. A one-shot request publishes its completed groups before replying and releases the mode and reservation when the connection closes. Keep the connection persistent only when later requests need to inherit the active target or send `bulk_import=0` explicitly. HTTP/1.1 is persistent by default, while HTTP/1.0 requires `Connection: keep-alive`.
+In a request body, an empty line ends and publishes the current batch; the end of the request publishes the final batch. Manticore sends the HTTP response after processing all batches in that request. If a later batch fails, batches published earlier in the same request remain searchable. To publish the entire request atomically as one disk chunk, do not include empty lines. The response contains one aggregate `bulk` result for each published batch rather than one result per document.
 
-A successful data request publishes all of its completed groups before replying. An empty line publishes the preceding group, and request EOF publishes the final group. No unpublished batch crosses a response boundary; only the target and its reservation can remain active on a persistent connection. A later optionless `/bulk` or `/json/bulk` request on that connection inherits the target. Once active, the session target is authoritative; another target-valued query option does not switch it, and the ordinary bulk/DML path still rejects operations for another table. An active `bulk_import=0` request follows the same direct-to-disk processing and then disables the mode and releases its reservation. It may carry the final data group; an empty or whitespace-only body is a successful no-op that only disables the mode.
+Most clients should send a single request like the example above. If an application deliberately sends several requests over the same [persistent HTTP connection](../../Connecting_to_the_server/HTTP.md#Persistent-connections), the first request selects the table. Later `/bulk` or `/json/bulk` requests on that connection may omit `bulk_import`, but they must continue writing to the same table. Close the connection when finished, or send an empty `/bulk?bulk_import=0` request to disable bulk import and allow other connections to modify the table.
 
-The example uses one `curl` process with `--next` so all three transfers can reuse one connection. Separate `curl` processes create separate sessions and cannot inherit or disable each other's direct-to-disk mode. See [Persistent connections and HTTP state](../../Connecting_to_the_server/HTTP.md#Persistent-connections) for the general connection rules. Closing the connection also releases the reservation. An already-active final data request may use `Connection: close`; Manticore publishes that request before teardown.
+The endpoint supports chunked transfer encoding, so it can process bodies larger than `max_packet_size` without buffering the whole request.
 
-Responses in this mode use the ordinary Manticore bulk envelope and contain one aggregate `bulk` item per published group. The endpoint supports chunked transfer encoding, so it can process bodies larger than `max_packet_size` without buffering the whole request. A failed request does not publish its current group and closes that HTTP session; groups already published at earlier ordinary bulk boundaries, such as an empty line or table change, remain visible.
+#### Elasticsearch-compatible shippers
 
-Elasticsearch-compatible `/_bulk` does not support direct-to-disk mode. A `bulk_import` query value on a clean `/_bulk` session does not activate the feature, and `/_bulk` is rejected while direct-to-disk mode is already active on that connection. Fluent Bit's Elasticsearch output uses `/_bulk`, so it continues to use regular real-time insertion.
+For Elasticsearch-compatible shippers, set the reserved pipeline name to `bulk_import`, use the Elasticsearch bulk `index` action, and map a record field to `_id`. The following examples use `id` as a stable document ID.
+
+##### Fluent Bit
+
+```ini
+[OUTPUT]
+    name               es
+    match              site_access_logs
+    host               manticore
+    port               9308
+    index              site_access_logs
+    pipeline           bulk_import
+    write_operation    index
+    id_key             id
+    suppress_type_name on
+    time_key           event_time
+```
+
+Do not use `generate_id On`: it produces UUIDs, which bulk import does not support.
+
+##### Fluentd
+
+```aconf
+<match site_access_logs>
+  @type elasticsearch
+  host manticore
+  port 9308
+  index_name site_access_logs
+  pipeline bulk_import
+  write_operation index
+  id_key id
+  suppress_type_name true
+</match>
+```
+
+##### Logstash
+
+```ruby
+output {
+  elasticsearch {
+    hosts       => ["http://manticore:9308"]
+    index       => "site_access_logs"
+    pipeline    => "bulk_import"
+    action      => "index"
+    document_id => "%{id}"
+
+    data_stream     => "false"
+    ilm_enabled     => "false"
+    manage_template => false
+  }
+}
+```
+
+##### Filebeat
+
+For NDJSON input, map the source `id` to Elasticsearch `_id`, and set the action and pipeline in event metadata:
+
+```yaml
+filebeat.inputs:
+  - type: filestream
+    paths: ["/var/log/site_access_logs.ndjson"]
+    parsers:
+      - ndjson:
+          target: ""
+          document_id: id
+
+processors:
+  - add_fields:
+      target: "@metadata"
+      fields:
+        op_type: index
+        pipeline: bulk_import
+  - include_fields:
+      fields: ["title", "gid"]
+
+setup.template.enabled: false
+setup.ilm.enabled: false
+
+output.elasticsearch:
+  hosts: ["http://manticore:9308"]
+  index: "site_access_logs"
+  pipeline: "bulk_import"
+  allow_older_versions: true
+```
+
+Adjust Filebeat's `include_fields` list to the target schema. The target table must already exist and include every field the shipper sends, such as Fluent Bit's configured `event_time` field. Each `_id` must be an explicit, stable, non-zero decimal string such as `"123"`, and IDs must be unique within one request. The request must select `pipeline=bulk_import`, either as a request option or on every action. All actions must target the same table, and only the `index` action is accepted.
+
+Each flush request is published atomically as one disk chunk. Publishing replaces documents whose IDs already exist. A successful response contains one Elasticsearch bulk result per document. If another import temporarily holds the table, Manticore returns HTTP `503`, allowing buffered shippers to retry the request.
 
 #### Duplicate document IDs
 
 Within one direct-to-disk batch, the first row for a numeric document ID remains visible and later rows with the same ID are logically removed. For SQL, a batch consists of the rows staged before `COMMIT` or `ROLLBACK`. For Manticore `/bulk`, each group published at an empty line, table change, or request EOF is a separate batch.
 
-An ID that is already visible in the target table is replaced when a later direct-to-disk chunk containing that ID is attached. This also applies to an ID published by an earlier HTTP group. As a result, retrying a previously published batch replaces its rows, while duplicates inside the retried batch still keep the first row. The `create` action follows the same behavior as `insert`; it does not fail merely because the ID already exists in the target table.
+When Manticore publishes a disk chunk to the target table, a row in that chunk replaces any existing row with the same ID. This also applies to IDs published by an earlier HTTP batch. As a result, retrying a previously published batch replaces its rows, while duplicates within the retried batch still keep the first row. In a Manticore `/bulk` request, the `create` operation (for example, `{"create":{"table":"products",...}}`) behaves like `insert`; it does not fail merely because the ID already exists.
 
 #### Staging files and cleanup
 
@@ -963,10 +1048,9 @@ PURGE BULK_IMPORT FROM TABLE products;
 * The target must be one existing, unfrozen local real-time table that is not a replication-cluster member. Distributed, sharded, replicated, percolate, and plain tables are not supported.
 * SQL supports only `INSERT`. Manticore `/bulk` accepts `insert` and `create`; `index`, `replace`, `update`, and `delete` are rejected.
 * Every row must provide an explicit numeric, non-zero document ID. Auto-generated and UUID document IDs are not supported.
-* Static builds and macOS are not currently supported.
+* Static builds are not supported.
 * The platform-specific executable (`indexer` on Linux, `indexer.exe` on Windows) must be in the same directory as the running `searchd` executable. Manticore Search resolves only that sibling path and does not search `PATH`. Use the executable from the same installation as `searchd` to ensure compatibility. If it is absent, unreadable, or cannot be started, only bulk import fails; normal startup and regular insertion remain available.
 
-<!-- example bulk_insert -->
 <!-- intro -->
 ### Bulk insert examples
 ##### SQL:

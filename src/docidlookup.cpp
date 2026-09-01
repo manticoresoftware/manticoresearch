@@ -177,6 +177,38 @@ bool CachedIterator_T<false>::ReturnRowIdChunk ( RowIdBlock_t & dRowIdBlock )
 	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 }
 
+// filter values are signed-sorted; unsigned order is the non-negative suffix followed by the negative prefix
+class DocidListReaderUnsigned_c
+{
+public:
+	explicit DocidListReaderUnsigned_c ( const VecTraits_T<DocID_t> & dValues )
+		: m_dValues ( dValues )
+		, m_iLeft ( dValues.GetLength() )
+	{
+		if ( !dValues.IsEmpty() && dValues.Last()>=0 )
+			m_iIndex = int ( std::lower_bound ( dValues.Begin(), dValues.End(), DocID_t(0) ) - dValues.Begin() );
+	}
+
+	bool ReadDocID ( DocID_t & tDocID )
+	{
+		if ( !m_iLeft )
+			return false;
+
+		tDocID = m_dValues[m_iIndex++];
+		if ( m_iIndex==m_dValues.GetLength() )
+			m_iIndex = 0;
+
+		--m_iLeft;
+		return true;
+	}
+
+private:
+	VecTraits_T<DocID_t> m_dValues;
+	int m_iIndex {0};
+	int m_iLeft {0};
+};
+
+
 template <bool ROWID_LIMITS, bool BITMAP>
 class RowidIterator_LookupValues_T : public CachedIterator_T<BITMAP>
 {
@@ -194,7 +226,7 @@ private:
 	RowIdBoundaries_t	m_tBoundaries;
 	int64_t				m_iProcessed {0};
 	LookupReaderIterator_c m_tLookupReader;
-	DocidListReader_c	m_tFilterReader;
+	DocidListReaderUnsigned_c m_tFilterReader;
 
 	bool				Fill();
 	FORCE_INLINE bool	FillIfFirstTime();
@@ -241,12 +273,11 @@ bool RowidIterator_LookupValues_T<ROWID_LIMITS,BITMAP>::Fill()
 
 	while ( bHaveFilterDocs && bHaveLookupDocs )
 	{
-		if ( tFilterDocID < tLookupDocID )
+		if ( uint64_t(tFilterDocID) < uint64_t(tLookupDocID) )
 		{
-			m_tFilterReader.HintDocID(tLookupDocID);
 			bHaveFilterDocs = m_tFilterReader.ReadDocID ( tFilterDocID );
 		}
-		else if ( tFilterDocID > tLookupDocID )
+		else if ( uint64_t(tFilterDocID) > uint64_t(tLookupDocID) )
 		{
 			m_tLookupReader.HintDocID(tFilterDocID);
 			bHaveLookupDocs = m_tLookupReader.Read ( tLookupDocID, tLookupRowID );
@@ -383,7 +414,6 @@ public:
 		{
 			m_pReader->HintDocID(m_uValue);
 			m_bRewound = true;
-			return { false, false };
 		}
 
 		if constexpr ( EQ )

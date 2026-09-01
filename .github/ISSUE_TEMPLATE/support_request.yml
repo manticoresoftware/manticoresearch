@@ -1,27 +1,119 @@
 name: ❓ Support Request
-description: Need help with Manticore Search? Submit your questions here!
+description: Ask for help with Manticore Search
 body:
-  - type: checkboxes
-    id: dev
+  - type: markdown
     attributes:
-      label: "Confirmation Checklist:"
+      value: |
+        Need help with Manticore Search? Please describe what you are trying to achieve and provide enough context for us to understand your setup.
+
+        Before submitting, you may also want to check:
+        - [The Manticore Search manual](https://manual.manticoresearch.com/)
+        - [The forum](https://forum.manticoresearch.com/) for general discussions
+        - Our community channels: [Slack](https://slack.manticoresearch.com/), [Telegram EN](https://t.me/manticoresearch_en), and [Telegram RU](https://t.me/manticore_chat)
+        - [Professional services](https://manticoresearch.com/services/) if you need dedicated or time-sensitive support
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: "What are you trying to achieve?"
       description: >
-        Before submitting your request, we ask that you confirm the following items to ensure that you receive the most effective support:
-      options:
-        - label: "You have searched for an answer in [the manual](https://manual.manticoresearch.com/)."
-        - label: "You have considered using [the forum](https://forum.manticoresearch.com/) for general discussions, which can be more suitable for non-urgent or broad queries."
-        - label: "You are aware of our community support channels on [Slack](https://slack.manticoresearch.com/), [Telegram EN](https://t.me/manticoresearch_en), and [Telegram RU](https://t.me/manticore_chat), where you can interact with other users and our developers."
-        - label: "You know about Manticore Team's [professional services](https://manticoresearch.com/services). Engaging with our experts through a support subscription can significantly accelerate resolution times and provide tailored solutions to your specific needs."
+        Describe the result you want to get. Understanding the goal often helps us suggest
+        a better solution than answering only the immediate technical question.
+      placeholder: "Example: We want to keep a product catalog in PostgreSQL and use Manticore for full-text and vector search without rebuilding the whole index after every update."
     validations:
       required: true
+
   - type: textarea
     id: question
     attributes:
-      label: "Your question:"
+      label: "What do you need help with?"
       description: >
-        Please provide detailed information about your question to ensure prompt and accurate help!
+        Describe your question or problem in detail. Include queries, configuration,
+        errors, logs, or examples when relevant. Put code and logs inside triple backticks.
     validations:
       required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: "What have you tried?"
+      description: >
+        Optional. Tell us what you have already tried, what happened, and any workaround
+        you are currently using.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: usage_stage
+    attributes:
+      label: "Where do you use Manticore?"
+      options:
+        - Production
+        - Staging / development
+        - Evaluating Manticore
+        - Not using it yet
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: "How do you use Manticore Search?"
+      description: >
+        Optional. A sentence or two is enough. What are you building or searching,
+        and what role does Manticore play? This helps us understand your use case
+        and make better product decisions.
+      placeholder: "Example: We use Manticore for product search in a B2B e-commerce site with about 20M products. It replaced Sphinx and serves around 100 searches/sec."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: use_case_category
+    attributes:
+      label: "What do you use Manticore for?"
+      description: "Optional. Select all that apply."
+      multiple: true
+      options:
+        - Website / application search
+        - E-commerce / product search
+        - Internal / enterprise search
+        - Logs / analytics
+        - AI / RAG / semantic search
+        - Other
+    validations:
+      required: false
+
+  - type: textarea
+    id: setup
+    attributes:
+      label: "What does your setup look like?"
+      description: >
+        Optional. Share anything relevant about your architecture, data source,
+        Manticore version, deployment, and scale.
+      placeholder: "Example: PostgreSQL → Logstash → Manticore 15.x → PHP storefront; 12M products; 2 Manticore nodes in Docker."
+    validations:
+      required: false
+
+  - type: input
+    id: project
+    attributes:
+      label: "Company or project"
+      description: >
+        Optional. If you are comfortable sharing it publicly, tell us the company,
+        product, website, or open-source project where you use Manticore.
+      placeholder: "Example: example.com or github.com/org/project"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: follow_up
+    attributes:
+      label: "Can we learn more about your use case?"
+      description: "Optional."
+      options:
+        - label: "Yes — feel free to @mention me in this issue if you'd like to ask more about how we use Manticore."
+          required: false
+
   - type: markdown
     attributes:
-      value: "## Thank you for completing the form! If you need immediate, dedicated support or a long-term support subscription, consider using our [professional services](https://manticoresearch.com/services)."
+      value: "## Thank you for completing the form! If you need immediate, dedicated support or a long-term support subscription, consider using our [professional services](https://manticoresearch.com/services/)."

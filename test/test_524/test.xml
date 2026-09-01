@@ -239,6 +239,24 @@ searchd
 	drop table d;
 	drop table t;
 
+	<!-- ============ LENGTH() counts vectors, not floats ============ -->
+	create table t (v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+	insert into t values (1, [[1,2,3,4]]), (2, [[1,2,3,4],[5,6,7,8]]), (3, []), (4, [[1,2,3,4],[5,6,7,8],[9,10,11,12]]);
+	select id, length(v) from t order by id asc;
+	<!-- disk chunk -->
+	flush ramchunk t;
+	select id, length(v) from t order by id asc;
+	<!-- as a grouping key and behind a filter, so the expression gets cloned and hashed too -->
+	select length(v) l, count(*) from t group by l order by l asc;
+	select id, length(v) l from t where l>1 order by id asc;
+	drop table t;
+
+	<!-- a scalar vector still counts floats: its blob carries no dims header. mva/string unaffected -->
+	create table t (fv float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2', m multi, s string);
+	insert into t (id,fv,m,s) values (1, (1,2,3,4), (10,20,30), 'hello');
+	select id, length(fv), length(m), length(s) from t;
+	drop table t;
+
 	<!-- ============ two knn attrs, one scalar and one array, in one .spknn ============ -->
 	<!-- the array's vector->rowid map must not bleed into the next index's parse, in either order -->
 	create table t (a float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2', b float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');

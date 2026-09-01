@@ -1,19 +1,122 @@
 name: 🌟 Feature Request
-description: Submit a proposal for a new Manticore Search feature or enhancement
+description: Suggest a new Manticore Search feature or enhancement
 body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: "What problem are you trying to solve?"
+      description: >
+        Please describe what you are trying to achieve and why it matters to you.
+        Focusing on the problem helps us understand whether there may be other ways to solve it.
+      placeholder: "Example: We need to rerank search results using several vectors per document, but today this requires a separate service."
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: "How do you use Manticore Search?"
+      description: >
+        A sentence or two is enough. What are you building or searching, and what role does Manticore play?
+        This helps us understand the impact of the request and make better product decisions.
+      placeholder: "Example: We use Manticore for product search in a B2B e-commerce site with about 20M products. It serves around 100 searches/sec."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: use_case_category
+    attributes:
+      label: "What do you use Manticore for?"
+      description: "Select all that apply."
+      multiple: true
+      options:
+        - Website / application search
+        - E-commerce / product search
+        - Internal / enterprise search
+        - Logs / analytics
+        - AI / RAG / semantic search
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: usage_stage
+    attributes:
+      label: "Where do you use Manticore?"
+      options:
+        - Production
+        - Staging / development
+        - Evaluating Manticore
+        - Not using it yet
+    validations:
+      required: true
+
   - type: textarea
     id: proposal
     attributes:
-      label: "Proposal:"
+      label: "What would you like Manticore to do?"
       description: >
-        Please describe your proposal in detail.
-        Include why you believe this feature should be added to Manticore Search and what use cases it supports.
-        If applicable, add any examples or code snippets inside triple backticks to clarify your proposal.
+        Describe the feature or behavior you would like to see.
+        If useful, include examples, expected syntax, or code snippets inside triple backticks.
     validations:
       required: true
+
+  - type: textarea
+    id: current_solution
+    attributes:
+      label: "How do you solve this today?"
+      description: >
+        Optional. Tell us about your current workaround, another product you use,
+        or why there is no practical workaround.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: importance
+    attributes:
+      label: "How important is this to you?"
+      options:
+        - Blocking our use or adoption of Manticore
+        - Important
+        - Nice to have
+    validations:
+      required: true
+
+  - type: input
+    id: project
+    attributes:
+      label: "Company or project"
+      description: >
+        Optional. If you are comfortable sharing it publicly, tell us the company,
+        product, website, or open-source project where you use Manticore.
+      placeholder: "Example: example.com or github.com/org/project"
+    validations:
+      required: false
+
+  - type: input
+    id: scale
+    attributes:
+      label: "Approximate scale"
+      description: >
+        Optional. Share anything relevant, such as number of documents, index size,
+        searches per second, or requests per day.
+      placeholder: "Example: 50M documents, 120 GB index, ~200 searches/sec"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: follow_up
+    attributes:
+      label: "Can we learn more about your use case?"
+      description: "Optional."
+      options:
+        - label: "Yes — feel free to @mention me in this issue if you'd like to ask more about how we use Manticore."
+          required: false
+
   - type: markdown
     attributes:
-      value: "## Thank you for completing the form! If you are interested in sponsoring the development of this feature, consider our [professional services](https://manticoresearch.com/services/)."
+      value: "## Thank you for completing the form! If you are interested in sponsoring the development of this feature, consider our [professional services](https://manticoresearch.com/services/). This way, we can implement it ASAP."
+
   - type: textarea
     id: checklist
     attributes:
@@ -23,7 +126,6 @@ body:
       value: |
         <sup>To be completed by the assignee. Check off tasks that have been completed or are not applicable.</sup>
         <details>
-
         - [ ] Implementation completed
         - [ ] Tests developed
         - [ ] Documentation updated

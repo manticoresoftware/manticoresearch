@@ -8,61 +8,150 @@ body:
         Thank you for submitting a bug report. We appreciate your effort to provide detailed information.
 
         ## Before you submit
-
         - **Existing Manticore Search clients: please create the bug report in your private repository instead of the public issue tracker. Reports there are prioritized so we can start working on them right away.**
         - **Need this bug fixed soon?** Manticore Search provides support subscriptions. If timely resolution is important, please subscribe via [Manticore Search services](https://manticoresearch.com/services/).
         - Public GitHub issues are welcome, but they are triaged according to our public backlog and may not receive immediate attention.
 
         Please answer the following questions to help us identify and fix the bug.
+
   - type: textarea
-    id: proposal
+    id: bug_description
     attributes:
-      label: "Bug Description:"
+      label: "Bug description"
       description: >
-        Describe the bug in detail. Include a [Minimal Reproducible Example](https://en.wikipedia.org/wiki/Minimal_reproducible_example) (MRE) if possible. Place any code blocks within triple backticks:
+        Describe what happened, what you expected to happen, and how we can reproduce it.
+        Include a [Minimal Reproducible Example](https://en.wikipedia.org/wiki/Minimal_reproducible_example) (MRE) if possible.
+        Place code and logs inside triple backticks.
       value: |
+        **What happened:**
+
+        **What you expected to happen:**
+
+        **Steps to reproduce:**
+
         ```bash
-        # Example code block; replace with your code if applicable
+        # Minimal example, if applicable
         ```
     validations:
       required: true
+
   - type: input
     id: version
     attributes:
-      label: "Manticore Search Version:"
+      label: "Manticore Search version"
       description: >
         Provide the version of Manticore Search you are using. Execute `searchd -v` in the command line to find this information.
     validations:
       required: true
+
   - type: input
     id: os
     attributes:
-      label: "Operating System Version:"
-      description: >
-        Specify the version of your operating system.
+      label: "Operating system version"
+      description: "Specify the operating system and version where the problem occurs."
+      placeholder: "Example: Ubuntu 24.04, Debian 13, Docker on macOS"
     validations:
       required: true
+
   - type: dropdown
     id: dev
     attributes:
       label: "Have you tried the latest development version?"
+      description: "If practical, please check whether the issue also occurs on the latest development version."
       multiple: false
       options:
-        - "Yes"
+        - "Yes — the issue still occurs"
+        - "Yes — the issue is fixed there"
         - "No"
+        - "Not practical / not applicable"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: impact
+    attributes:
+      label: "How does this bug affect you?"
+      description: "This helps us understand the real-world impact of the issue."
+      multiple: false
+      options:
+        - "Production is down or this is a major incident"
+        - "Production is affected, but we have a workaround"
+        - "Development or testing is affected"
+        - "Minor issue / no significant operational impact"
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: "How do you use Manticore Search?"
+      description: >
+        Optional. A sentence or two is enough. What are you building or searching, and what role does Manticore play?
+        This helps us understand the impact of the bug and make better product decisions.
+      placeholder: "Example: We use Manticore for product search in a B2B e-commerce site with about 20M products. It replaced Sphinx and serves around 100 searches/sec."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: use_case_category
+    attributes:
+      label: "What do you use Manticore for?"
+      description: "Optional. Select all that apply."
+      multiple: true
+      options:
+        - Website / application search
+        - E-commerce / product search
+        - Internal / enterprise search
+        - Logs / analytics
+        - AI / RAG / semantic search
+        - Other
+    validations:
+      required: false
+
+  - type: input
+    id: project
+    attributes:
+      label: "Company or project"
+      description: >
+        Optional. If you are comfortable sharing it publicly, tell us the company,
+        product, website, or open-source project where you use Manticore.
+      placeholder: "Example: example.com or github.com/org/project"
+    validations:
+      required: false
+
+  - type: input
+    id: scale
+    attributes:
+      label: "Approximate scale"
+      description: >
+        Optional. Share anything relevant, such as number of documents, index size,
+        searches per second, or requests per day.
+      placeholder: "Example: 50M documents, 120 GB index, ~200 searches/sec"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: follow_up
+    attributes:
+      label: "Can we learn more about your use case?"
+      description: "Optional."
+      options:
+        - label: "Yes — feel free to @mention me in this issue if you'd like to ask more about how we use Manticore."
+          required: false
+
   - type: markdown
     attributes:
-      value: "## Thank you for completing the form! If timely resolution is important, please use a support subscription: [Manticore Search services](http://manticoresearch.com/services/)."
+      value: "## Thank you for completing the form! If timely resolution is important, please use a support subscription: [Manticore Search services](https://manticoresearch.com/services/)."
+
   - type: textarea
     id: checklist
     attributes:
-      label: "Internal Checklist:"
+      label: "Internal Checklist"
       description: >
         **For Manticore Team Use Only** — Please do not edit this section. This checklist will be completed by the Manticore team as they manage the issue.
       value: |
         <sup>To be completed by the assignee. Check off tasks that have been completed or are not applicable.</sup>
         <details>
-
         - [ ] Implementation completed
         - [ ] Tests developed
         - [ ] Documentation updated

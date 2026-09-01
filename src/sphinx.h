@@ -1616,6 +1616,7 @@ struct SphQueueSettings_t
 	int							m_iMaxMatches = DEFAULT_MAX_MATCHES;
 	bool						m_bNeedDocids = false;
 	bool						m_bGrouped = false;	// are we going to push already grouped matches to it?
+	bool						m_bSkipKnnDistMatchSort = false;	// don't prepend the implicit "knn_dist() asc" to the match sort clause (group ordering keeps it)
 	std::function<int64_t (const CSphString &, CSphString &)>			m_fnGetCountDistinct;
 	std::function<int64_t (const CSphFilterSettings &, CSphString &)>	m_fnGetCountFilter;
 	std::function<int64_t ()>	m_fnGetCount;

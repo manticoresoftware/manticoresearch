@@ -50,7 +50,7 @@ SELECT
 }
 ```
 
-注意：通过SQL进行模糊搜索时，MATCH子句不应包含任何全文本运算符，除了[短语搜索运算符](../Searching/Full_text_matching/Operators.md#Phrase-search-operator)，并且应仅包含您打算匹配的单词。
+注意：通过 SQL 执行模糊搜索时，`MATCH` 子句不应包含除 [短语搜索运算符](../Searching/Full_text_matching/Operators.md#Phrase-search-operator) 之外的任何全文运算符，并且只应包含你想要匹配的词。通常会被当作运算符并需要 [转义](../Searching/Full_text_matching/Escaping.md) 的字符不需要手动转义，因为模糊搜索会自动为你转义。
 
 <!-- intro -->
 ##### SQL:
@@ -167,7 +167,7 @@ POST /search
 }
 ```
 
-注意：如果您使用[query_string](../Searching/Full_text_matching/Basic_usage.md#query_string)，请注意它不支持除[短语搜索运算符](../Searching/Full_text_matching/Operators.md#Phrase-search-operator)以外的全文本运算符。查询字符串应仅包含您希望匹配的单词。
+注意：如果你使用 [query_string](../Searching/Full_text_matching/Basic_usage.md#query_string)，请注意它不支持除 [短语搜索运算符](../Searching/Full_text_matching/Operators.md#Phrase-search-operator) 之外的全文运算符。查询字符串应只包含你希望匹配的词。通常会被当作 [全文运算符](../Searching/Full_text_matching/Escaping.md) 的字符不需要转义，因为模糊搜索会自动为你转义。
 
 ### 选项
 

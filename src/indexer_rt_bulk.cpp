@@ -819,8 +819,11 @@ static bool RecheckTarget ( ClientSession_c & tSession, CSphString & sError, con
 }
 
 
-bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTable, CSphString & sError )
+bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTable, CSphString & sError, bool * pRetryable )
 {
+	if ( pRetryable )
+		*pRetryable = false;
+
 	auto & tState = tSession.m_tIndexerRtBulk;
 	if ( sTable.IsEmpty() )
 	{
@@ -855,6 +858,8 @@ bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTab
 	ServedIndexWriteReservation_c tReservation;
 	if ( !tReservation.TryAcquire ( tTarget.m_pServed ) )
 	{
+		if ( pRetryable )
+			*pRetryable = true;
 		sError.SetSprintf ( "table '%s' is locked", sTable.cstr() );
 		return false;
 	}

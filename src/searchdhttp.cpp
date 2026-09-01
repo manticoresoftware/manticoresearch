@@ -140,6 +140,26 @@ void HttpBuildReply ( const HttpReplyTrait_t & tReply, CSphVector<BYTE> & dData 
 		memcpy ( dData.Begin() + iHeaderLen, tReply.m_sBody.first, tReply.m_sBody.second );
 }
 
+static void AddElasticProductHeader ( CSphVector<BYTE> & dData )
+{
+	static constexpr const char * szHeader = "X-Elastic-Product: Elasticsearch\r\n";
+	const int iLen = dData.GetLength();
+	for ( int i=0; i+3<iLen; i++ )
+	{
+		if ( dData[i]!='\r' || dData[i+1]!='\n' || dData[i+2]!='\r' || dData[i+3]!='\n' )
+			continue;
+
+		const int iInsert = i+2;
+		CSphVector<BYTE> dResult;
+		dResult.Reserve ( iLen + strlen ( szHeader ) );
+		dResult.Append ( Str_t ( (const char *)dData.Begin(), iInsert ) );
+		dResult.Append ( FromSz ( szHeader ) );
+		dResult.Append ( Str_t ( (const char *)dData.Begin()+iInsert, iLen-iInsert ) );
+		dData.SwapData ( dResult );
+		return;
+	}
+}
+
 void HttpBuildReplyHead ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHeadReply )
 {
 	HttpReplyTrait_t tReply { eCode, Str_t ( sBody, iBodyLen ) };
@@ -2591,6 +2611,7 @@ struct BulkDoc_t
 {
 	CSphString m_sAction;
 	CSphString m_sIndex;
+	CSphString m_sPipeline;
 	DocID_t m_tDocid { 0 };
 	CSphString m_sDocid;
 	BulkDocid_e m_eDocid { BulkDocid_e::NONE };
@@ -2773,6 +2794,7 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 
 	const CSphString & sEndpoint = hOptions["endpoint"];
 	tRes.m_eEndpoint = StrToHttpEndpoint ( sEndpoint );
+	tRes.m_bSkipBuddy = tRes.m_eEndpoint==EHTTP_ENDPOINT::ES_BULK;
 	CSphString sUser;
 	if ( !bSkipAuth && !CheckAuth ( hOptions, tRes, dResult, sUser ) )
 		return tRes;
@@ -2819,7 +2841,7 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 	tRes.m_bOk = pHandler->Process();
 	tRes.m_sError = pHandler->GetError();
 	tRes.m_eReplyHttpCode = pHandler->GetStatusCode();
-	tRes.m_bSkipBuddy = ( tRes.m_eReplyHttpCode==EHTTP_STATUS::_403 || tRes.m_eEndpoint==EHTTP_ENDPOINT::JSON_BULK );
+	tRes.m_bSkipBuddy = ( tRes.m_eReplyHttpCode==EHTTP_STATUS::_403 || tRes.m_eEndpoint==EHTTP_ENDPOINT::JSON_BULK || tRes.m_eEndpoint==EHTTP_ENDPOINT::ES_BULK );
 	dResult = std::move ( pHandler->GetResult() );
 
 	return tRes;
@@ -2894,7 +2916,10 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 
 	if ( eEndpoint==EHTTP_ENDPOINT::JSON_BULK )
 		tRes.m_bSkipBuddy = true;
-	return ProcessHttpQueryBuddy ( tRes, sSrcQuery, m_hOptions, dResult, true, m_eType );
+	bool bResult = ProcessHttpQueryBuddy ( tRes, sSrcQuery, m_hOptions, dResult, true, m_eType );
+	if ( eEndpoint==EHTTP_ENDPOINT::ES_BULK || m_sEndpoint.IsEmpty() )
+		AddElasticProductHeader ( dResult );
+	return bResult;
 }
 
 void sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError )
@@ -3397,7 +3422,18 @@ static bool ParseMetaLine ( const char * sLine, BulkDoc_t & tDoc, CSphString & s
 		return false;
 
 	tDoc.m_sIndex = tIndex.StrVal();
-	
+
+	JsonObj_c tPipeline = tAction.GetItem ( "pipeline" );
+	if ( tPipeline )
+	{
+		if ( !tPipeline.IsStr() )
+		{
+			sError = "pipeline should be a string";
+			return false;
+		}
+		tDoc.m_sPipeline = tPipeline.StrVal();
+	}
+
 	JsonObj_c tId = tAction.GetItem ( "_id" );
 	if ( tId )
 	{
@@ -3649,7 +3685,10 @@ bool HttpHandlerEsBulk_c::Validate()
 
 	// HTTP field could have multiple values
 	StrVec_t dOptContentType = sphSplit ( pOptContentType->cstr(), ",; " );
-	if ( !dOptContentType.Contains ( "application/x-ndjson" ) && !dOptContentType.Contains ( "application/json" ) )
+	if ( !dOptContentType.Contains ( "application/x-ndjson" )
+		&& !dOptContentType.Contains ( "application/json" )
+		&& !dOptContentType.Contains ( "application/vnd.elasticsearch+x-ndjson" )
+		&& !dOptContentType.Contains ( "application/vnd.elasticsearch+json" ) )
 	{
 		sError.SetSprintf ( "Content-Type header [%s] is not supported", pOptContentType->cstr() );
 		ReportLogError ( sError.cstr(), HttpErrorType_e::IllegalArgument, EHTTP_STATUS::_400, false );
@@ -3679,7 +3718,6 @@ bool HttpHandlerEsBulk_c::Process()
 		return false;
 	}
 
-	m_bBulkImport = m_hOpts.Exists ( "pipeline" ) && m_hOpts["pipeline"]=="bulk_import";
 	if ( !Validate() )
 		return false;
 
@@ -3726,6 +3764,30 @@ bool HttpHandlerEsBulk_c::Process()
 		}
 	}
 
+	const bool bRequestBulkImport = m_hOpts.Exists ( "pipeline" ) && m_hOpts["pipeline"]=="bulk_import";
+	const bool bRequestPipelineOther = m_hOpts.Exists ( "pipeline" ) && m_hOpts["pipeline"]!="bulk_import";
+	bool bActionBulkImport = false;
+	bool bActionPipelineMissing = false;
+	bool bActionPipelineOther = false;
+	for ( const BulkDoc_t & tDoc : dDocs )
+	{
+		bActionBulkImport |= tDoc.m_sPipeline=="bulk_import";
+		bActionPipelineMissing |= tDoc.m_sPipeline.IsEmpty();
+		bActionPipelineOther |= !tDoc.m_sPipeline.IsEmpty() && tDoc.m_sPipeline!="bulk_import";
+	}
+
+	if ( ( ( bRequestBulkImport || bActionBulkImport ) && bActionPipelineOther ) || ( bRequestPipelineOther && bActionBulkImport ) )
+	{
+		ReportLogError ( "bulk_import does not allow mixed pipeline values", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+		return false;
+	}
+	if ( !bRequestBulkImport && bActionBulkImport && bActionPipelineMissing )
+	{
+		ReportLogError ( "bulk_import requires pipeline=bulk_import on every action", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+		return false;
+	}
+	m_bBulkImport = bRequestBulkImport || bActionBulkImport;
+
 	auto pSession = session::Info().GetClientSession();
 	if ( m_bBulkImport )
 	{
@@ -3761,9 +3823,10 @@ bool HttpHandlerEsBulk_c::Process()
 			}
 		}
 
-		if ( !ActivateIndexerRtBulk ( *pSession, sIndex, m_sError ) )
+		bool bRetryable = false;
+		if ( !ActivateIndexerRtBulk ( *pSession, sIndex, m_sError, &bRetryable ) )
 		{
-			ReportLogError ( m_sError.cstr(), HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+			ReportLogError ( m_sError.cstr(), HttpErrorType_e::ActionRequestValidation, bRetryable ? EHTTP_STATUS::_503 : EHTTP_STATUS::_400, false );
 			return false;
 		}
 	}
@@ -3799,12 +3862,12 @@ bool HttpHandlerEsBulk_c::Process()
 	tRoot.AddItem ( "items", tItems );
 	tRoot.AddBool ( "errors", !bOk );
 	tRoot.AddInt ( "took", 1 ); // FIXME!!! add delta
-	BuildReply ( tRoot.AsString(), ( bOk ? EHTTP_STATUS::_200 : EHTTP_STATUS::_409 ) );
+	BuildReply ( tRoot.AsString(), ( bOk || m_bBulkImport ? EHTTP_STATUS::_200 : EHTTP_STATUS::_409 ) );
 
 	if ( !bOk )
 		ReportLogError ( "failed to commit", HttpErrorType_e::Unknown, EHTTP_STATUS::_400, true );
 
-	return bOk;
+	return bOk || m_bBulkImport;
 }
 
 static void AddEsReply ( const BulkDoc_t & tDoc, JsonObj_c & tRoot )
@@ -3834,7 +3897,7 @@ static void AddEsReply ( const BulkDoc_t & tDoc, JsonObj_c & tRoot )
 	tRoot.AddItem ( tAction );
 }
 
-static void AddEsError ( int iReply, const CSphString & sError, const char * sErrorType, const BulkDoc_t & tDoc, JsonObj_c & tRoot )
+static void AddEsError ( int iReply, const CSphString & sError, const char * sErrorType, const BulkDoc_t & tDoc, JsonObj_c & tRoot, int iStatus = 400 )
 {
 	JsonObj_c tErrorObj;
 	tErrorObj.AddStr ( "type", sErrorType );
@@ -3844,7 +3907,7 @@ static void AddEsError ( int iReply, const CSphString & sError, const char * sEr
 	tRes.AddStr ( "_index", tDoc.m_sIndex.cstr() );
 	tRes.AddStr ( "_type", "doc" );
 	tRes.AddStr ( "_id", tDoc.m_sDocid.scstr() );
-	tRes.AddInt ( "status", 400 );
+	tRes.AddInt ( "status", iStatus );
 	tRes.AddItem ( "error", tErrorObj );
 
 	JsonObj_c tAction;
@@ -3959,8 +4022,22 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			ProcessRollback ( FromStr ( sIdx ) );
 			session::SetInTrans ( false );
 			bOk = false;
-			for ( const auto & tErr : dErrors )
-				AddEsError ( tErr.first, tErr.second, "mapper_parsing_exception", dDocs[tErr.first], tItems );
+			for ( int i=0; i<tTnx.m_iCount; i++ )
+			{
+				const int iDoc = tTnx.m_iFrom+i;
+				const CSphString * pError = nullptr;
+				for ( const auto & tError : dErrors )
+					if ( tError.first==iDoc )
+					{
+						pError = &tError.second;
+						break;
+					}
+
+				if ( pError )
+					AddEsError ( -1, *pError, "mapper_parsing_exception", dDocs[iDoc], tItems );
+				else
+					AddEsError ( -1, "request rolled back because another document was invalid", "bulk_import_request_aborted", dDocs[iDoc], tItems, 429 );
+			}
 			continue;
 		}
 
@@ -3977,7 +4054,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 				CSphString sUpdError;
 				sUpdError.SetSprintf ( "[_doc][%s]: document missing", tUpdDoc.m_sDocid.scstr() );
 				AddEsError ( -1, sUpdError, "document_missing_exception", tUpdDoc, tItems );
-			} else if ( !m_bBulkImport )
+			} else
 			{
 				for ( int i=0; i<tTnx.m_iCount; i++ )
 					AddEsReply ( dDocs[tTnx.m_iFrom+i], tItems );
@@ -3989,12 +4066,14 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			{
 				const BulkDoc_t & tErrDoc = dDocs[tTnx.m_iFrom+i];
 				JsonObj_c tErr = tResult.GetItem ( "error" );
+				const char * sErrorType = m_bBulkImport ? "bulk_import_publish_failed" : "mapper_parsing_exception";
+				const int iStatus = m_bBulkImport ? 503 : 400;
 				if ( tErr && tErr.IsStr() )
-					AddEsError ( -1, tErr.StrVal(), "mapper_parsing_exception", tErrDoc, tItems );
+					AddEsError ( -1, tErr.StrVal(), sErrorType, tErrDoc, tItems, iStatus );
 				else if ( tErr && tErr.IsObj() && tErr.HasItem ( "type" ) && tErr.GetItem ( "type" ).IsStr() )
-					AddEsError ( -1, tErr.GetItem ( "type" ).StrVal(), "mapper_parsing_exception", tErrDoc, tItems );
+					AddEsError ( -1, tErr.GetItem ( "type" ).StrVal(), sErrorType, tErrDoc, tItems, iStatus );
 				else
-					AddEsError ( -1, m_sError.cstr(), "mapper_parsing_exception", tErrDoc, tItems );
+					AddEsError ( -1, m_sError.cstr(), sErrorType, tErrDoc, tItems, iStatus );
 			}
 		}
 

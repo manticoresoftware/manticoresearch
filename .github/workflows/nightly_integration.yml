@@ -46,8 +46,7 @@ jobs:
           fi
 
           branch_tag=$(echo "$HEAD_REF" | tr '/' '_' | sed 's/[^a-zA-Z0-9_.-]//g')
-          source_hash=$(find . -type f ! -path "./test/clt-tests/*" ! -path "*/.git/*" ! -name .git -print0 | sort -z | xargs -0 md5sum | md5sum | awk '{print $1}')
-          image="ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-${branch_tag}-${source_hash}"
+          image="ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-${branch_tag}"
           for attempt in $(seq 1 100); do
             if docker manifest inspect "$image" > /dev/null 2>&1; then
               echo "image=$image" >> "$GITHUB_OUTPUT"

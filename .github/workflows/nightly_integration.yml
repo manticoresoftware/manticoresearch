@@ -27,7 +27,7 @@ jobs:
   resolve_bulk_import_image:
     name: Resolve bulk import test-kit image
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 120
     outputs:
       image: ${{ steps.resolve.outputs.image }}
     steps:
@@ -47,15 +47,16 @@ jobs:
 
           branch_tag=$(echo "$HEAD_REF" | tr '/' '_' | sed 's/[^a-zA-Z0-9_.-]//g')
           image="ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-${branch_tag}"
-          for attempt in $(seq 1 100); do
-            if docker manifest inspect "$image" > /dev/null 2>&1; then
+          for attempt in $(seq 1 480); do
+            image_commit=$(docker buildx imagetools inspect "$image" --format '{{ index .Image.Config.Labels "org.manticore.testkit.commit" }}' 2>/dev/null || true)
+            if [[ "$image_commit" == "${{ github.sha }}" ]]; then
               echo "image=$image" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            echo "Waiting for $image (attempt $attempt/100)"
+            echo "Waiting for $image at ${{ github.sha }} (currently ${image_commit:-missing}, attempt $attempt/480)"
             sleep 15
           done
-          echo "Timed out waiting for $image" >&2
+          echo "Timed out waiting for $image at ${{ github.sha }}" >&2
           exit 1
 
   # ==========================================

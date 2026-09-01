@@ -3670,7 +3670,7 @@ bool HttpHandlerEsBulk_c::Validate()
 
 bool HttpHandlerEsBulk_c::Process()
 {
-	if ( ( m_hOpts.Exists ( "bulk_import" ) && m_hOpts["bulk_import"]=="1" )
+	if ( m_hOpts.Exists ( "bulk_import" )
 		|| ( m_hOpts.Exists ( "pipeline" ) && m_hOpts["pipeline"]=="bulk_import" ) )
 	{
 		ReportLogError ( "direct-to-disk bulk loading is unsupported on Elasticsearch /_bulk; use SQL or Manticore /bulk", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );

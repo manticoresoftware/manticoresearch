@@ -127,7 +127,6 @@ jobs:
     timeout-minutes: 30
     continue-on-error: ${{ inputs.continue_on_error }}
     env:
-      CLT_TIMINGS_PERSIST: 'false'
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
       JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
@@ -140,8 +139,7 @@ jobs:
       # all legs and saves the next immutable cache generation after this matrix completes.
       # NOTE: this makes .cache a mountpoint, so tests must never `rm -rf /var/lib/manticore`
       # itself — wipe its contents instead (`rm -rf /var/lib/manticore/*` leaves .cache alone).
-      - id: model_cache
-        name: Restore model cache
+      - name: Restore model cache
         uses: actions/cache/restore@v5
         with:
           path: ${{ runner.temp }}/clt-model-cache
@@ -153,17 +151,12 @@ jobs:
         shell: bash
         run: mkdir -p "${{ runner.temp }}/clt-model-cache" && chmod 777 "${{ runner.temp }}/clt-model-cache"
 
-      - uses: actions/checkout@v5
-        with:
-          repository: ${{ inputs.repository }}
-          ref: ${{ inputs.ref }}
-
       - name: Snapshot model cache before CLT
         shell: bash
         run: |
-          python3 .github/scripts/stage-clt-model-cache-delta.py snapshot \
-            --cache-dir "${{ runner.temp }}/clt-model-cache" \
-            --manifest "${{ runner.temp }}/clt-model-cache-before.tsv"
+          set -euo pipefail
+          find "${{ runner.temp }}/clt-model-cache" -mindepth 1 \( -type f -o -type l \) -printf '%P\t%y\t%s\t%T@\t%l\n' |
+            LC_ALL=C sort > "${{ runner.temp }}/clt-model-cache-before.tsv"
 
       - id: run-clt
         uses: manticoresoftware/clt@main
@@ -189,10 +182,34 @@ jobs:
         if: ${{ always() }}
         shell: bash
         run: |
-          python3 .github/scripts/stage-clt-model-cache-delta.py stage \
-            --cache-dir "${{ runner.temp }}/clt-model-cache" \
-            --manifest "${{ runner.temp }}/clt-model-cache-before.tsv" \
-            --destination "${{ runner.temp }}/clt-model-cache-delta"
+          set -euo pipefail
+          cache="${{ runner.temp }}/clt-model-cache"
+          manifest="${{ runner.temp }}/clt-model-cache-before.tsv"
+          destination="${{ runner.temp }}/clt-model-cache-delta"
+          after="$manifest.after"
+
+          find "$cache" -mindepth 1 \( -type f -o -type l \) -printf '%P\t%y\t%s\t%T@\t%l\n' |
+            LC_ALL=C sort > "$after"
+          rm -rf "$destination"
+          mkdir -p "$destination"
+          touch "$destination/clt-artifact-empty-marker"
+
+          changed=false
+          while IFS= read -r root; do
+            [[ -n "$root" ]] || continue
+            source="$cache/$root"
+            [[ -e "$source" || -L "$source" ]] || continue
+            cp -a "$source" "$destination/"
+            changed=true
+          done < <(
+            LC_ALL=C comm -3 "$manifest" "$after" |
+              sed $'s/^\t//' |
+              cut -f1 |
+              cut -d/ -f1 |
+              LC_ALL=C sort -u
+          )
+          rm -f "$after"
+          printf 'changed=%s\n' "$changed" >> "$GITHUB_OUTPUT"
 
       # Every leg uploads an artifact, including an empty marker. This lets the fan-in job
       # run without special handling for a matrix where no model cache changed.
@@ -209,7 +226,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p "${{ runner.temp }}/clt-timing-artifact"
-          if [[ -f "${{ runner.temp }}/clt-model-cache/.clt-model-cache-ready" ]] && [[ "${{ steps.model_cache_delta.outputs.changed }}" != "true" ]] && [[ -f "${{ steps.run-clt.outputs.timing-results }}" ]]; then
+          if [[ -f "${{ runner.temp }}/clt-model-cache/.clt-model-cache-ready" ]] && [[ "${{ steps.model_cache_delta.outputs.changed }}" == "false" ]] && [[ -f "${{ steps.run-clt.outputs.timing-results }}" ]]; then
             cp "${{ steps.run-clt.outputs.timing-results }}" "${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv"
           else
             : > "${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv"
@@ -229,13 +246,7 @@ jobs:
     if: ${{ always() }}
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
-        with:
-          repository: ${{ inputs.repository }}
-          ref: ${{ inputs.ref }}
-
-      - id: model_cache
-        name: Restore shared model cache
+      - name: Restore shared model cache
         uses: actions/cache/restore@v5
         with:
           path: ${{ runner.temp }}/clt-model-cache
@@ -258,7 +269,6 @@ jobs:
         with:
           pattern: clt-model-cache-*
           path: ${{ runner.temp }}/clt-model-cache-artifacts
-          merge-multiple: true
 
       - id: merge
         name: Merge model-cache folders
@@ -268,12 +278,16 @@ jobs:
           baseline="${{ runner.temp }}/clt-model-cache"
           artifacts="${{ runner.temp }}/clt-model-cache-artifacts"
 
-          find "$artifacts" -maxdepth 1 -name .clt-artifact-empty-marker -type f -delete
+          mkdir -p "$baseline" "$artifacts"
           changed=false
-          if find "$artifacts" -mindepth 1 -print -quit | grep -q .; then
-            rsync -a --ignore-existing "$artifacts/" "$baseline/"
-            changed=true
-          fi
+          for artifact in "$artifacts"/clt-model-cache-*; do
+            [[ -d "$artifact" ]] || continue
+            rm -f "$artifact/clt-artifact-empty-marker"
+            if find "$artifact" -mindepth 1 -print -quit | grep -q .; then
+              rsync -a --ignore-existing "$artifact/" "$baseline/"
+              changed=true
+            fi
+          done
 
           touch "$baseline/.clt-model-cache-ready"
           printf 'Merged %s model-cache files\n' "$(find "$baseline" -type f | wc -l | tr -d ' ')"

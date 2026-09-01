@@ -115,7 +115,7 @@ jobs:
 
       - id: balance
         name: Balance CLT tests
-        uses: manticoresoftware/clt/balance/plan@master
+        uses: manticoresoftware/clt/balance/plan@main
         with:
           tests: ${{ steps.build.outputs.tests }}
           workers: 20
@@ -166,7 +166,7 @@ jobs:
             --manifest "${{ runner.temp }}/clt-model-cache-before.tsv"
 
       - id: run-clt
-        uses: manticoresoftware/clt@master
+        uses: manticoresoftware/clt@main
         with:
           artifact: ${{ inputs.artifact_name }}
           image: ${{ inputs.docker_image }}
@@ -223,8 +223,8 @@ jobs:
           path: ${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv
           retention-days: 1
 
-  merge-model-cache:
-    name: Merge CLT model cache
+  persist-clt-caches:
+    name: Persist CLT caches
     needs: [clt]
     if: ${{ always() }}
     runs-on: ubuntu-22.04
@@ -286,10 +286,5 @@ jobs:
           path: ${{ runner.temp }}/clt-model-cache
           key: clt-models-v2-linux-amd64-${{ github.run_id }}-${{ github.run_attempt }}
 
-  persist-timing-cache:
-    name: Persist CLT timing cache
-    needs: [clt, merge-model-cache]
-    if: ${{ always() }}
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/clt/balance/merge-results@master
+      - name: Persist CLT timing cache
+        uses: manticoresoftware/clt/balance/merge-results@main

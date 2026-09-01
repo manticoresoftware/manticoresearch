@@ -7785,6 +7785,49 @@ private:
 };
 
 
+// LENGTH() for float_vector_array: number of vectors, not the raw dword count.
+class Expr_FloatVecArrayLength_c : public Expr_WithLocator_c
+{
+	using Expr_WithLocator_c::Expr_WithLocator_c;
+
+public:
+	int IntEval ( const CSphMatch & tMatch ) const final
+	{
+		FloatVecArray_t tArray = ParseFloatVecArray ( tMatch.FetchAttrData ( m_tLocator, m_pBlobPool ) );
+		return tArray.m_iDims ? tArray.m_dValues.GetLength()/tArray.m_iDims : 0;
+	}
+
+	void Command ( ESphExprCommand eCmd, void * pArg ) final
+	{
+		Expr_WithLocator_c::Command ( eCmd, pArg );
+
+		if ( eCmd==SPH_EXPR_SET_BLOB_POOL )
+			m_pBlobPool = (const BYTE*)pArg;
+	}
+
+	float Eval ( const CSphMatch & tMatch ) const final { return (float)IntEval ( tMatch ); }
+
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
+	{
+		EXPR_CLASS_NAME("Expr_FloatVecArrayLength_c");
+		return CALC_DEP_HASHES();
+	}
+
+	ISphExpr * Clone () const final
+	{
+		return new Expr_FloatVecArrayLength_c ( *this );
+	}
+
+protected:
+	const BYTE *		m_pBlobPool { nullptr };
+
+private:
+	Expr_FloatVecArrayLength_c ( const Expr_FloatVecArrayLength_c& rhs )
+		: Expr_WithLocator_c ( rhs )
+	{}
+};
+
+
 /// aggregate functions evaluator for MVA attribute
 template < typename T >
 class Expr_MVAAggr_c : public Expr_WithLocator_c
@@ -9070,7 +9113,15 @@ ISphExpr * ExprParser_t::CreateLengthNode ( const ExprNode_t & tNode, ISphExpr *
 		case TOK_FUNC:					
 		case TOK_ATTR_STRING:			return new Expr_StrLength_c(pLeft);
 		case TOK_ATTR_MVA32:
-		case TOK_ATTR_MVA64:			return new Expr_MVALength_c ( tLeft.m_tLocator, m_pSchema->GetAttr(tLeft.m_iLocator).m_sName, tLeft.m_iToken==TOK_ATTR_MVA64 );
+		case TOK_ATTR_MVA64:
+		{
+			// float_vector_array shares the MVA32 token; it needs its own length (number of vectors)
+			ESphAttr eAttr = m_pSchema->GetAttr(tLeft.m_iLocator).m_eAttrType;
+			if ( eAttr==SPH_ATTR_FLOAT_VECTOR_ARRAY || eAttr==SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR )
+				return new Expr_FloatVecArrayLength_c ( tLeft.m_tLocator, m_pSchema->GetAttr(tLeft.m_iLocator).m_sName );
+
+			return new Expr_MVALength_c ( tLeft.m_tLocator, m_pSchema->GetAttr(tLeft.m_iLocator).m_sName, tLeft.m_iToken==TOK_ATTR_MVA64 );
+		}
 		case TOK_COLUMNAR_UINT32SET:	return CreateExpr_ColumnarMva32Length ( m_pSchema->GetAttr(tLeft.m_iLocator).m_sName );
 		case TOK_COLUMNAR_INT64SET:		return CreateExpr_ColumnarMva64Length ( m_pSchema->GetAttr(tLeft.m_iLocator).m_sName );
 		case TOK_COLUMNAR_STRING:		return CreateExpr_ColumnarStringLength ( m_pSchema->GetAttr(tLeft.m_iLocator).m_sName );

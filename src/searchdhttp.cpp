@@ -2635,6 +2635,7 @@ public:
 	{}
 
 	bool Process () override;
+	bool IsBulkImport() const { return m_bBulkImport; }
 
 private:
 	bool ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecTraits_T<BulkDoc_t> & dDocs, JsonObj_c & tItems );
@@ -2794,7 +2795,6 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 
 	const CSphString & sEndpoint = hOptions["endpoint"];
 	tRes.m_eEndpoint = StrToHttpEndpoint ( sEndpoint );
-	tRes.m_bSkipBuddy = tRes.m_eEndpoint==EHTTP_ENDPOINT::ES_BULK;
 	CSphString sUser;
 	if ( !bSkipAuth && !CheckAuth ( hOptions, tRes, dResult, sUser ) )
 		return tRes;
@@ -2841,7 +2841,8 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 	tRes.m_bOk = pHandler->Process();
 	tRes.m_sError = pHandler->GetError();
 	tRes.m_eReplyHttpCode = pHandler->GetStatusCode();
-	tRes.m_bSkipBuddy = ( tRes.m_eReplyHttpCode==EHTTP_STATUS::_403 || tRes.m_eEndpoint==EHTTP_ENDPOINT::JSON_BULK || tRes.m_eEndpoint==EHTTP_ENDPOINT::ES_BULK );
+	const bool bEsBulkImport = tRes.m_eEndpoint==EHTTP_ENDPOINT::ES_BULK && static_cast<HttpHandlerEsBulk_c *>( pHandler.get() )->IsBulkImport();
+	tRes.m_bSkipBuddy = ( tRes.m_eReplyHttpCode==EHTTP_STATUS::_403 || tRes.m_eEndpoint==EHTTP_ENDPOINT::JSON_BULK || bEsBulkImport );
 	dResult = std::move ( pHandler->GetResult() );
 
 	return tRes;
@@ -3712,8 +3713,10 @@ bool HttpHandlerEsBulk_c::Validate()
 
 bool HttpHandlerEsBulk_c::Process()
 {
+	m_bBulkImport = m_hOpts.Exists ( "pipeline" ) && m_hOpts["pipeline"]=="bulk_import";
 	if ( m_hOpts.Exists ( "bulk_import" ) )
 	{
+		m_bBulkImport = true;
 		ReportLogError ( "direct-to-disk bulk loading is unsupported on Elasticsearch /_bulk; use SQL or Manticore /bulk", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
 		return false;
 	}
@@ -3775,6 +3778,7 @@ bool HttpHandlerEsBulk_c::Process()
 		bActionPipelineMissing |= tDoc.m_sPipeline.IsEmpty();
 		bActionPipelineOther |= !tDoc.m_sPipeline.IsEmpty() && tDoc.m_sPipeline!="bulk_import";
 	}
+	m_bBulkImport |= bActionBulkImport;
 
 	if ( ( ( bRequestBulkImport || bActionBulkImport ) && bActionPipelineOther ) || ( bRequestPipelineOther && bActionBulkImport ) )
 	{
@@ -3786,8 +3790,6 @@ bool HttpHandlerEsBulk_c::Process()
 		ReportLogError ( "bulk_import requires pipeline=bulk_import on every action", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
 		return false;
 	}
-	m_bBulkImport = bRequestBulkImport || bActionBulkImport;
-
 	auto pSession = session::Info().GetClientSession();
 	if ( m_bBulkImport )
 	{

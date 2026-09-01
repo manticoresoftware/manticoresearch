@@ -115,7 +115,7 @@ jobs:
 
       - id: balance
         name: Balance CLT tests
-        uses: manticoresoftware/clt/balance/plan@feat/timing-cache-action
+        uses: manticoresoftware/clt/balance/plan@master
         with:
           tests: ${{ steps.build.outputs.tests }}
           workers: 20
@@ -136,9 +136,8 @@ jobs:
       matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
 
     steps:
-      # Reuse the embedding-model cache from a previous run if one exists. It is bind-mounted
-      # at /var/lib/manticore/.cache, where Manticore caches downloaded  HuggingFace models.
-      # After the tests, whatever the chunk downloaded is saved for the next run.
+      # Restore an opaque shared cache snapshot. The fan-in job merges subtrees changed by
+      # all legs and saves the next immutable cache generation after this matrix completes.
       # NOTE: this makes .cache a mountpoint, so tests must never `rm -rf /var/lib/manticore`
       # itself — wipe its contents instead (`rm -rf /var/lib/manticore/*` leaves .cache alone).
       - id: model_cache
@@ -146,14 +145,28 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: ${{ runner.temp }}/clt-model-cache
-          key: clt-models-v1-chunk-${{ matrix.chunk.id }}
+          key: clt-models-v2-linux-amd64-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            clt-models-v2-linux-amd64-
 
       - name: Ensure model cache dir
         shell: bash
         run: mkdir -p "${{ runner.temp }}/clt-model-cache" && chmod 777 "${{ runner.temp }}/clt-model-cache"
 
+      - uses: actions/checkout@v5
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
+
+      - name: Snapshot model cache before CLT
+        shell: bash
+        run: |
+          python3 .github/scripts/stage-clt-model-cache-delta.py snapshot \
+            --cache-dir "${{ runner.temp }}/clt-model-cache" \
+            --manifest "${{ runner.temp }}/clt-model-cache-before.tsv"
+
       - id: run-clt
-        uses: manticoresoftware/clt@feat/timing-cache-action
+        uses: manticoresoftware/clt@master
         with:
           artifact: ${{ inputs.artifact_name }}
           image: ${{ inputs.docker_image }}
@@ -164,12 +177,39 @@ jobs:
           run_args: "-e OPENAI_API_KEY -e VOYAGE_API_KEY -e JINA_API_KEY -v ${{ runner.temp }}/clt-model-cache:/var/lib/manticore/.cache"
           ui_host: "https://clt.manticoresearch.com"
 
+      # Containers write model blobs as root with mode 600; make them readable so the
+      # runner user can upload changed cache subtrees.
+      - name: Fix model cache permissions
+        if: ${{ always() }}
+        shell: bash
+        run: sudo chmod -R a+rX "${{ runner.temp }}/clt-model-cache" || true
+
+      - id: model_cache_delta
+        name: Stage changed model-cache folders
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          python3 .github/scripts/stage-clt-model-cache-delta.py stage \
+            --cache-dir "${{ runner.temp }}/clt-model-cache" \
+            --manifest "${{ runner.temp }}/clt-model-cache-before.tsv" \
+            --destination "${{ runner.temp }}/clt-model-cache-delta"
+
+      # Every leg uploads an artifact, including an empty marker. This lets the fan-in job
+      # run without special handling for a matrix where no model cache changed.
+      - name: Upload changed model-cache folders
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: clt-model-cache-${{ matrix.chunk.id }}
+          path: ${{ runner.temp }}/clt-model-cache-delta
+          retention-days: 1
+
       - name: Stage timing measurements
         if: ${{ always() }}
         shell: bash
         run: |
           mkdir -p "${{ runner.temp }}/clt-timing-artifact"
-          if [[ -f "${{ steps.run-clt.outputs.timing-results }}" ]]; then
+          if [[ -f "${{ runner.temp }}/clt-model-cache/.clt-model-cache-ready" ]] && [[ "${{ steps.model_cache_delta.outputs.changed }}" != "true" ]] && [[ -f "${{ steps.run-clt.outputs.timing-results }}" ]]; then
             cp "${{ steps.run-clt.outputs.timing-results }}" "${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv"
           else
             : > "${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv"
@@ -177,31 +217,79 @@ jobs:
 
       - name: Upload timing measurements
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: clt-timings-${{ matrix.chunk.id }}
           path: ${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv
           retention-days: 1
 
-      # Containers write model blobs as root with mode 600; make them readable so the
-      # runner user can pack them into the cache.
-      - name: Fix model cache permissions
-        if: ${{ always() && steps.model_cache.outputs.cache-hit != 'true' }}
-        shell: bash
-        run: sudo chmod -R a+rX "${{ runner.temp }}/clt-model-cache" || true
-
-      - name: Save model cache
-        if: ${{ always() && steps.model_cache.outputs.cache-hit != 'true' }}
-        continue-on-error: true
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ runner.temp }}/clt-model-cache
-          key: clt-models-v1-chunk-${{ matrix.chunk.id }}
-
-  persist-timing-cache:
-    name: Persist CLT timing cache
+  merge-model-cache:
+    name: Merge CLT model cache
     needs: [clt]
     if: ${{ always() }}
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt/balance/merge-results@feat/timing-cache-action
+      - uses: actions/checkout@v5
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
+
+      - id: model_cache
+        name: Restore shared model cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/clt-model-cache
+          key: clt-models-v2-linux-amd64-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            clt-models-v2-linux-amd64-
+
+      - id: baseline
+        name: Check shared model cache state
+        shell: bash
+        run: |
+          if [[ -f "${{ runner.temp }}/clt-model-cache/.clt-model-cache-ready" ]]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download changed model-cache folders
+        uses: actions/download-artifact@v7
+        with:
+          pattern: clt-model-cache-*
+          path: ${{ runner.temp }}/clt-model-cache-artifacts
+          merge-multiple: true
+
+      - id: merge
+        name: Merge model-cache folders
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="${{ runner.temp }}/clt-model-cache"
+          artifacts="${{ runner.temp }}/clt-model-cache-artifacts"
+
+          find "$artifacts" -maxdepth 1 -name .clt-artifact-empty-marker -type f -delete
+          changed=false
+          if find "$artifacts" -mindepth 1 -print -quit | grep -q .; then
+            rsync -a --ignore-existing "$artifacts/" "$baseline/"
+            changed=true
+          fi
+
+          touch "$baseline/.clt-model-cache-ready"
+          printf 'Merged %s model-cache files\n' "$(find "$baseline" -type f | wc -l | tr -d ' ')"
+          printf 'changed=%s\n' "$changed" >> "$GITHUB_OUTPUT"
+
+      - name: Save shared model cache
+        if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) && (steps.merge.outputs.changed == 'true' || steps.baseline.outputs.ready != 'true') }}
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/clt-model-cache
+          key: clt-models-v2-linux-amd64-${{ github.run_id }}-${{ github.run_attempt }}
+
+  persist-timing-cache:
+    name: Persist CLT timing cache
+    needs: [clt, merge-model-cache]
+    if: ${{ always() }}
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt/balance/merge-results@master

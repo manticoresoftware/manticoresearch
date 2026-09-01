@@ -879,9 +879,9 @@ CALL UUID_SHORT(3)
 
 ### 批量导入
 
-对于向本地实时表进行的大批量加载，Manticore Search 可以将 `INSERT` 行直接写入磁盘块，并在事务提交时发布该块。这样无需先在 RAM 块中构建批次。行在块发布之前保持不可见，失败的操作或 `ROLLBACK` 会让表保持不变。
+对于向本地实时表进行更快的大批量加载，Manticore Search 可以将 `INSERT` 行直接写入磁盘分片，并在事务提交时发布该分片。这样就无需先把批次构建到 RAM 分片中。行在分片发布之前始终不可见，而失败的操作或 `ROLLBACK` 会使表保持不变。
 
-当你要加载一个大批次，并且直接生成磁盘块比先构建 RAM 块更合适时，使用此模式。它同时支持行式表和列式表，包括全文字段、数值属性、字符串、JSON、MVA/MVA64，以及带 KNN 索引的浮点向量。
+它同时支持行式表和列式表，包括全文字段、数值属性、字符串、JSON、MVA/MVA64，以及带有 KNN 索引的浮点向量。
 
 此处的表名不区分大小写。例如，`SET bulk_import=Products` 和 `bulk_import=products` 都会选择存储为 `products` 的表；仅字母大小写不同的表名无法区分。
 
@@ -906,7 +906,7 @@ SET bulk_import=0;
 
 #### HTTP `/bulk`
 
-在 Manticore `/bulk` 或 `/json/bulk` 请求中添加 `bulk_import=<table>`。请求体仍然使用标准的换行分隔 JSON（NDJSON），且每个操作都必须是绑定表的 `insert` 或 `create`：
+在 Manticore `/bulk` 请求中添加 `bulk_import=<table>`。请求体仍然是标准的按行分隔 JSON（NDJSON），并且每个操作都必须是绑定表的 `insert` 或 `create`：
 
 ```bash
 printf '%s\n' \
@@ -1019,7 +1019,13 @@ output.elasticsearch:
 
 对于一个直接写入磁盘的批次，数值型文档 ID 的第一行会保持可见，而后续具有相同 ID 的行会被逻辑移除。对于 SQL，一个批次由 `COMMIT` 或 `ROLLBACK` 之前暂存的行组成。对于 Manticore `/bulk`，在空行、表切换或请求 EOF 时发布的每个分组都是一个单独的批次。
 
-当 Manticore 将磁盘块发布到目标表时，块中的行会替换具有相同 ID 的已有行。这同样适用于先前 HTTP 批次已经发布的 ID。因此，重试一个先前已发布的批次会替换其中的行，而重试批次内部的重复项仍然会保留第一行。在 Manticore `/bulk` 请求中，`create` 操作（例如 `{"create":{"table":"products",...}}`）与 `insert` 行为相同；它不会仅因为该 ID 已存在而失败。
+当 Manticore 将磁盘分片发布到目标表时，该分片中的一行会替换任何具有相同 ID 的现有行。这同样适用于此前某个 HTTP 批次发布的 ID。因此，重试一个已发布的批次会替换其中的行，而被重试批次中的重复项仍然只保留第一行。在 Manticore `/bulk` 请求中，`create` 操作例如：
+
+```json
+{"create":{"table":"products",...}}
+```
+
+其行为与 `insert` 相同；它不会仅仅因为 ID 已经存在而失败。
 
 #### 暂存文件与清理
 

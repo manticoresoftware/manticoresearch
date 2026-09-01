@@ -879,9 +879,9 @@ The `/bulk` (Manticore mode) endpoint supports [Chunked transfer encoding](https
 
 ### Bulk import
 
-For large batch loads into a local real-time table, Manticore Search can write `INSERT` rows directly to a disk chunk and publish that chunk when the transaction commits. This avoids building the batch in a RAM chunk first. Rows remain invisible until the chunk is published, and a failed operation or `ROLLBACK` leaves the table unchanged.
+For faster large batch loads into a local real-time table, Manticore Search can write `INSERT` rows directly to a disk chunk and publish that chunk when the transaction commits. This avoids building the batch in a RAM chunk first. Rows remain invisible until the chunk is published, and a failed operation or `ROLLBACK` leaves the table unchanged.
 
-Use this mode when loading a large batch for which producing a disk chunk directly is preferable to building a RAM chunk first. It supports both row-wise and columnar tables, including full-text fields, numeric attributes, strings, JSON, MVA/MVA64, and float vectors with KNN indexes.
+It supports both row-wise and columnar tables, including full-text fields, numeric attributes, strings, JSON, MVA/MVA64, and float vectors with KNN indexes.
 
 Table names are case-insensitive here. For example, `SET bulk_import=Products` and `bulk_import=products` both select the table stored as `products`; tables whose names differ only by letter case cannot be distinguished.
 
@@ -906,7 +906,7 @@ Run `SET bulk_import=<table>` before `BEGIN` and before any uncommitted write on
 
 #### HTTP `/bulk`
 
-Add `bulk_import=<table>` to a Manticore `/bulk` or `/json/bulk` request. The request body remains standard newline-delimited JSON (NDJSON), and each operation must be `insert` or `create` for the bound table:
+Add `bulk_import=<table>` to a Manticore `/bulk` request. The request body remains standard newline-delimited JSON (NDJSON), and each operation must be `insert` or `create` for the bound table:
 
 ```bash
 printf '%s\n' \
@@ -1019,7 +1019,13 @@ Each flush request is published atomically as one disk chunk. Publishing replace
 
 Within one direct-to-disk batch, the first row for a numeric document ID remains visible and later rows with the same ID are logically removed. For SQL, a batch consists of the rows staged before `COMMIT` or `ROLLBACK`. For Manticore `/bulk`, each group published at an empty line, table change, or request EOF is a separate batch.
 
-When Manticore publishes a disk chunk to the target table, a row in that chunk replaces any existing row with the same ID. This also applies to IDs published by an earlier HTTP batch. As a result, retrying a previously published batch replaces its rows, while duplicates within the retried batch still keep the first row. In a Manticore `/bulk` request, the `create` operation (for example, `{"create":{"table":"products",...}}`) behaves like `insert`; it does not fail merely because the ID already exists.
+When Manticore publishes a disk chunk to the target table, a row in that chunk replaces any existing row with the same ID. This also applies to IDs published by an earlier HTTP batch. As a result, retrying a previously published batch replaces its rows, while duplicates within the retried batch still keep the first row. In a Manticore `/bulk` request, the `create` operation, for example:
+
+```json
+{"create":{"table":"products",...}}
+```
+
+behaves like `insert`; it does not fail merely because the ID already exists.
 
 #### Staging files and cleanup
 

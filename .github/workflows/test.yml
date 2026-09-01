@@ -863,8 +863,19 @@ jobs:
           docker create --name manticore-test-kit-src --entrypoint /bin/sh test-kit:img -c "true"
           docker export manticore-test-kit-src > manticore_test_kit.img
           docker rm manticore-test-kit-src
+      - name: Pack docker image artifact for fork PRs
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
+        run: tar -cf artifact.tar manticore_test_kit.img
+      - name: Upload docker image artifact for fork PRs
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: manticore_test_kit.img
+          path: artifact.tar
+          retention-days: 1
       - id: candidate
         name: Publish temporary CLT candidate image
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
         env:
           GHCR_USER: ${{ vars.GHCR_USER || github.actor }}
           GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD || github.token }}
@@ -922,8 +933,19 @@ jobs:
         run: |
           BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_build.sh
           echo "build_image=ghcr.io/$REPO_OWNER/manticoresearch:test-kit-${{ steps.sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
+      - name: Pack docker image artifact for fork PRs
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
+        run: tar -cf artifact.tar manticore_test_kit.img
+      - name: Upload docker image artifact for fork PRs
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: manticore_test_kit.img
+          path: artifact.tar
+          retention-days: 1
       - id: candidate
         name: Publish temporary CLT candidate image
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
         env:
           GHCR_USER: ${{ vars.GHCR_USER || github.actor }}
           GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD || github.token }}
@@ -940,13 +962,13 @@ jobs:
       VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
       JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
     with:
-      docker_image: ${{ needs.test_kit_docker_build.outputs.candidate_image || needs.test_kit_docker_reuse.outputs.candidate_image }}
-      artifact_name: ''
+      docker_image: ${{ needs.test_kit_docker_build.outputs.candidate_image || needs.test_kit_docker_reuse.outputs.candidate_image || format('ghcr.io/{0}/manticoresearch:test-kit-{1}', github.repository_owner, needs.meta.outputs.branch_tag) }}
+      artifact_name: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && 'manticore_test_kit.img' || '' }}
       repository: ${{ github.repository }}
       ref: ${{ github.sha }}
 
   test_kit_docker_push:
-    if: always() && needs.meta.outputs.run_image_push == 'true' && (needs.test_kit_docker_build.result == 'success' || needs.test_kit_docker_reuse.result == 'success') && needs.test_kit_light_docker_build.result == 'success'
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) && needs.meta.outputs.run_image_push == 'true' && needs.clt.result == 'success' && (needs.test_kit_docker_build.result == 'success' || needs.test_kit_docker_reuse.result == 'success') && needs.test_kit_light_docker_build.result == 'success' && needs.test_linux_debug.result != 'failure' && needs.test_linux_debug.outputs.test_outcome != 'failure' && needs.test_linux_debug_mcl.result != 'failure' && needs.test_linux_debug_mcl.outputs.test_outcome != 'failure' && needs.test_linux_release_plain.result != 'failure' && needs.test_linux_release_plain.outputs.test_outcome != 'failure' && needs.test_linux_release_rt.result != 'failure' && needs.test_linux_release_rt.outputs.test_outcome != 'failure' && needs.test_linux_release_mcl.result != 'failure' && needs.test_linux_release_mcl.outputs.test_outcome != 'failure' && needs.test_windows_plain.result != 'failure' && needs.test_windows_plain.outputs.test_outcome != 'failure' && needs.test_windows_rt.result != 'failure' && needs.test_windows_rt.outputs.test_outcome != 'failure' && needs.test_windows_mcl.result != 'failure' && needs.test_windows_mcl.outputs.test_outcome != 'failure'
     needs:
       - clt
       - meta

@@ -34,6 +34,10 @@ on:
         required: true
         description: "Jina API key for CLT tests"
 
+concurrency:
+  group: clt-cache-${{ inputs.repository }}
+  cancel-in-progress: false
+
 jobs:
   discover:
     name: Discover CLT tests
@@ -219,6 +223,7 @@ jobs:
         with:
           name: clt-model-cache-${{ matrix.chunk.id }}
           path: ${{ runner.temp }}/clt-model-cache-delta
+          overwrite: true
           retention-days: 1
 
       - name: Stage timing measurements
@@ -238,6 +243,7 @@ jobs:
         with:
           name: clt-timings-${{ matrix.chunk.id }}
           path: ${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv
+          overwrite: true
           retention-days: 1
 
   persist-clt-caches:

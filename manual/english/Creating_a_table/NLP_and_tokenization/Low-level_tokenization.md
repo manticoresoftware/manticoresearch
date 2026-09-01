@@ -37,7 +37,8 @@ U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451
 # english charset defined with alias
 charset_table = 0..9, english, _
 
-# you can override character mappings by redefining them, e.g. for case insensitive search with German umlauts you can use:
+# override the default transliteration to preserve German umlauts and sharp s;
+# uppercase variants are mapped to lowercase
 charset_table = non_cont, german
 ```
 
@@ -177,6 +178,8 @@ Besides definitions of characters and mappings, there are several built-in alias
 * `non_cont` (`non_cjk`)
 * `russian`
 * `thai`
+
+The `german` alias preserves `ä`, `ö`, `ü`, and `ß` instead of mapping them to ASCII characters, and maps their uppercase variants to lowercase, including `ẞ` to `ß`. Append it after `non_cont` as shown above to retain the rest of the default character mappings.
 
 <!-- request SQL -->
 

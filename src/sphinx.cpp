@@ -9739,8 +9739,9 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderLegacy ( const CSphString& sHeade
 		return LOAD_E::GeneralError_e;
 
 	if ( tDictSettings.m_sMorphFingerprint!=pDict->GetMorphDataFingerprint() )
-		sWarning.SetSprintf ( "morphology data fingerprint changed (stored='%s', current='%s'); rebuild or reindex the table",
-			tDictSettings.m_sMorphFingerprint.cstr(), pDict->GetMorphDataFingerprint().cstr() );
+		sWarning.SetSprintf ( "different lemmatizer dictionaries (table='%s', current='%s')",
+			tDictSettings.m_sMorphFingerprint.cstr(),
+			pDict->GetMorphDataFingerprint().cstr() );
 
 	SetDictionary ( pDict );
 
@@ -9878,8 +9879,9 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 		return LOAD_E::GeneralError_e;
 
 	if ( tDictSettings.m_sMorphFingerprint!=pDict->GetMorphDataFingerprint() )
-		sWarning.SetSprintf ( "morphology data fingerprint changed (stored='%s', current='%s'); rebuild or reindex the table",
-			tDictSettings.m_sMorphFingerprint.cstr(), pDict->GetMorphDataFingerprint().cstr() );
+		sWarning.SetSprintf ( "different lemmatizer dictionaries (table='%s', current='%s')",
+			tDictSettings.m_sMorphFingerprint.cstr(),
+			pDict->GetMorphDataFingerprint().cstr() );
 
 	SetDictionary ( pDict );
 
@@ -10626,19 +10628,15 @@ DWORD sphParseMorphAot ( const char * sMorphology )
 	sphSplit ( dMorphs, sMorphology );
 
 	DWORD uAotFilterMask = 0;
-	for ( int j=0; j<AOT_LENGTH; ++j )
+	for ( const auto & sMorphologyOption : dMorphs )
 	{
-		char buf_all[20];
-		snprintf ( buf_all, 19, "lemmatize_%s_all", AOT_LANGUAGES[j] ); // NOLINT
-		buf_all[19] = '\0';
-		ARRAY_FOREACH ( i, dMorphs )
-		{
-			if ( dMorphs[i]==buf_all )
-			{
-				uAotFilterMask |= (1UL) << j;
-				break;
-			}
-		}
+		AotMorphology_t tMorphology;
+		if ( !sphParseAotMorphology ( sMorphologyOption.cstr(), sMorphologyOption.Length(), tMorphology ) || !tMorphology.IsAll() )
+			continue;
+
+		uAotFilterMask |= (1UL) << tMorphology.GetLang();
+		if ( tMorphology.IsGermanV2() )
+			uAotFilterMask |= AOT_FILTER_DE_V2;
 	}
 
 	return uAotFilterMask;

@@ -38,7 +38,7 @@ The table below lists all supported languages and indicates how to enable:
 | French | charset_table=non_cont | fr | morphology=libstemmer_fr | |
 | Galician | charset_table=non_cont | gl | - | |
 | Garo | specify charset_table manually | - | - | |
-| German | charset_table=non_cont,german | de | morphology=lemmatize_de (single root form); morphology=lemmatize_de_all (all root forms); morphology=libstemmer_de | Preserve German letters before applying morphology |
+| German | charset_table=non_cont | de | morphology=lemmatize_de (single root form); morphology=lemmatize_de_all (all root forms); morphology=lemmatize_de_v2 (single root form with sharp-s normalization); morphology=lemmatize_de_v2_all (all root forms with sharp-s normalization); morphology=libstemmer_de | Use charset_table=non_cont,german with the AOT v2 variants |
 | Greek | charset_table=non_cont | el | morphology=libstemmer_el | |
 | Hebrew | charset_table=non_cont | he | - | |
 | Hindi | charset_table=non_cont | hi | morphology=libstemmer_hi | |
@@ -89,18 +89,36 @@ The table below lists all supported languages and indicates how to enable:
 | Yoruba | charset_table=non_cont | yo | - | |
 | Zulu | charset_table=non_cont | zu | - |  |
 
-### German sharp s
+### German AOT morphology and sharp s
 
-When using German morphology, add the built-in `german` charset alias after `non_cont` so the tokenizer preserves German umlauts and both forms of sharp s before morphology runs:
+The default `non_cont` charset maps German umlauts to their ASCII base letters and maps `ß` to `s` before morphology runs. To let German AOT morphology receive these characters, add the built-in `german` alias after `non_cont`:
 
 ```ini
 charset_table = non_cont, german
 ```
 
-With `lemmatize_de` and `lemmatize_de_all`, Manticore Search applies Unicode full case folding for sharp s (`ß` and `ẞ` → `ss`) before AOT lemmatization. This makes spellings such as `Straße`/`Strasse`, `Maße`/`Masse`, and `Fußball`/`Fussball` search equivalents. `libstemmer_de` also folds these spellings when used with the charset above.
+The alias preserves `ä`, `ö`, `ü`, and `ß`, and maps their uppercase variants to lowercase, including `ẞ` to `ß`. It changes only the tokenizer's character mappings; it does not select a morphology mode automatically.
 
-The fold intentionally removes distinctions such as `Maße` versus `Masse` for normal full-text matching. To retain that distinction, enable `index_exact_words=1` and use exact-word queries such as `MATCH('=straße')`.
+| Morphology value | Behavior |
+| - | - |
+| `lemmatize_de` | Existing single-root German AOT behavior |
+| `lemmatize_de_all` | Existing all-roots German AOT behavior |
+| `lemmatize_de_v2` | Single-root behavior with sharp-s normalization |
+| `lemmatize_de_v2_all` | All-roots behavior with sharp-s normalization |
 
-After upgrading an existing table that uses `lemmatize_de` or `lemmatize_de_all`, rebuild or reindex it. The German AOT normalization version is included in the morphology fingerprint, so Manticore Search warns when an older disk index needs rebuilding.
+A v2 configuration therefore includes both the morphology value and a charset that retains German characters, for example:
+
+```ini
+morphology = lemmatize_de_v2
+charset_table = non_cont, german
+```
+
+The v2 variants normalize `ß` and `ẞ` to `ss` before dictionary lookup and also normalize `ß` contained in generated dictionary lemmas to `ss`. With v2, forms such as `Straße`/`Strasse`/`STRAẞE` and `GUSSE`/`GÜSSE`/`GUß`/`GUSS` are equivalent in ordinary whole-word searches. This intentionally also removes distinctions such as `Maße` versus `Masse` for ordinary full-text matching.
+
+With `index_exact_words=1`, Manticore also stores the tokenized form from before morphology. Exact-word queries such as `MATCH('=straße')` and `MATCH('=strasse')` can therefore distinguish the `ß` and `ss` forms. Exact words still follow `charset_table` mappings: with the `german` alias, for example, `Straße` and `STRAẞE` both have the exact form `straße` because case is folded before morphology.
+
+Existing tables that keep `lemmatize_de` or `lemmatize_de_all` require no action after a daemon upgrade. Migrating an existing table to either v2 value changes its generated terms, so rebuild a plain table or replay all documents into a new RT table before serving it. Changing the morphology of a populated RT table, or using merge, attach, or optimize, does not convert already indexed terms. Existing dictionary-settings checks can reject an attach between tables with different morphology values where those checks apply, but they are not a migration mechanism.
+
+Both v2 values use the same `de.pak` as the existing values; no language-pack update is required. Daemons that predate the v2 option names cannot load a v2 table, so rolling back a v2 table requires restoring or rebuilding a table with an existing morphology value. Tables that keep `lemmatize_de` or `lemmatize_de_all` are unaffected by this limitation.
 
 <!-- proofread -->

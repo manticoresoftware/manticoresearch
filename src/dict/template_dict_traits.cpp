@@ -49,7 +49,9 @@ enum class EMORPH : int {
 	AOTLEMMER_DE_ALL,
 	AOTLEMMER_UK_ALL,
 	LIBSTEMMER_FIRST,
-	LIBSTEMMER_LAST = LIBSTEMMER_FIRST + 64
+	LIBSTEMMER_LAST = LIBSTEMMER_FIRST + 64,
+	AOTLEMMER_DE_UTF8_V2 = LIBSTEMMER_LAST,
+	AOTLEMMER_DE_V2_ALL
 };
 
 void ConcatReportStrings ( const CSphTightVector<CSphString> & dStrings, CSphString & sReport )
@@ -140,6 +142,25 @@ int TemplateDictTraits_c::ParseMorphology ( const char* sMorph, CSphString& sMes
 }
 
 
+static void AddAotFingerprint ( CSphString & sFingerprint, int iLang )
+{
+	auto [sDict, uCRC] = sphAotDictinfo ( iLang );
+	if ( sFingerprint.IsEmpty() )
+		sFingerprint.SetSprintf ( "%s:%08x", sDict.cstr(), uCRC );
+	else
+		sFingerprint.SetSprintf ( "%s;%s:%08x", sFingerprint.cstr(), sDict.cstr(), uCRC );
+}
+
+
+static int GetAotMorphId ( const AotMorphology_t & tMorphology )
+{
+	if ( tMorphology.IsGermanV2() )
+		return (int)( tMorphology.IsAll() ? EMORPH::AOTLEMMER_DE_V2_ALL : EMORPH::AOTLEMMER_DE_UTF8_V2 );
+
+	return (int)( tMorphology.IsAll() ? EMORPH::AOTLEMMER_BASE_ALL : EMORPH::AOTLEMMER_BASE ) + tMorphology.GetLang();
+}
+
+
 int TemplateDictTraits_c::InitMorph ( const char* szMorph, int iLength, CSphString& sMessage )
 {
 	if ( iLength == 0 )
@@ -184,99 +205,68 @@ int TemplateDictTraits_c::InitMorph ( const char* szMorph, int iLength, CSphStri
 		return AddMorph ( (int)EMORPH::STEM_RU_UTF8 );
 	}
 
-	auto AddAotFingerprint = [this] ( int iLang )
+	AotMorphology_t tAotMorphology;
+	if ( sphParseAotMorphology ( szMorph, iLength, tAotMorphology ) )
 	{
-		auto [sDict, uCRC] = sphAotDictinfo ( iLang );
-		if ( m_sMorphFingerprint.IsEmpty() )
-			m_sMorphFingerprint.SetSprintf ( "%s:%08x", sDict.cstr(), uCRC );
-		else
-			m_sMorphFingerprint.SetSprintf ( "%s;%s:%08x", m_sMorphFingerprint.cstr(), sDict.cstr(), uCRC );
-		if ( iLang == AOT_DE )
-			m_sMorphFingerprint.SetSprintf ( "%s;de-sharp-s:1", m_sMorphFingerprint.cstr() );
-	};
+		CSphString sMorphology;
+		sMorphology.SetBinary ( szMorph, iLength );
 
-	for ( int j = 0; j < AOT_LENGTH; ++j )
-	{
-		char buf[20];
-		char buf_all[20];
-		snprintf ( buf, 19, "lemmatize_%s", AOT_LANGUAGES[j] );		   // NOLINT
-		snprintf ( buf_all, 19, "lemmatize_%s_all", AOT_LANGUAGES[j] ); // NOLINT
-		buf[19] = '\0';
-		buf_all[19] = '\0';
-
-		if ( iLength == 12 && !strncmp ( szMorph, buf, iLength ) )
-		{
-			if ( j == AOT_RU && m_dMorph.Contains ( (int)EMORPH::STEM_RU_UTF8 ) )
-			{
-				sMessage.SetSprintf ( "stem_ru and lemmatize_ru clash" );
-				return ST_ERROR;
-			}
-
-			if ( j == AOT_EN && m_dMorph.Contains ( (int)EMORPH::STEM_EN ) )
-			{
-				sMessage.SetSprintf ( "stem_en and lemmatize_en clash" );
-				return ST_ERROR;
-			}
-
-			// no test for SPH_MORPH_STEM_DE since we doesn't have it.
-
-			if ( m_dMorph.Contains ( static_cast<int> ( EMORPH::AOTLEMMER_BASE_ALL ) + j ) )
-			{
-				sMessage.SetSprintf ( "%s and %s clash", buf, buf_all );
-				return ST_ERROR;
-			}
-
-			auto sDictFile = SphSprintf ( "%s/%s.pak", g_sLemmatizerBase.cstr(), AOT_LANGUAGES[j] );
-			if ( !sphAotInit ( sDictFile, sMessage, j ) )
-				return ST_ERROR;
-
-			if ( j == AOT_UK && !m_tLemmatizer )
-				m_tLemmatizer = CreateLemmatizer ( j );
-
-			// add manually instead of AddMorph(), because we need to update that fingerprint
-			int iMorph;
-			switch ( j )
-			{
-			case AOT_RU: iMorph = (int)EMORPH::AOTLEMMER_RU_UTF8; break;
-			case AOT_DE: iMorph = (int)EMORPH::AOTLEMMER_DE_UTF8; break;
-			case AOT_UK: iMorph = (int)EMORPH::AOTLEMMER_UK; break;
-			default: iMorph = j + (int)EMORPH::AOTLEMMER_BASE;
-			}
-
-			if ( !m_dMorph.Contains ( iMorph ) )
-			{
-				AddAotFingerprint ( j );
-				m_dMorph.Add ( iMorph );
-			}
+		int iMorph = GetAotMorphId ( tAotMorphology );
+		if ( m_dMorph.Contains ( iMorph ) )
 			return ST_OK;
-		}
 
-		if ( iLength == 16 && !strncmp ( szMorph, buf_all, iLength ) )
+		const AOT_LANGS eLang = tAotMorphology.GetLang();
+		if ( eLang==AOT_RU && m_dMorph.Contains ( (int)EMORPH::STEM_RU_UTF8 ) )
 		{
-			if ( j == AOT_RU && ( m_dMorph.Contains ( (int)EMORPH::STEM_RU_UTF8 ) ) )
-			{
-				sMessage.SetSprintf ( "stem_ru and lemmatize_ru_all clash" );
-				return ST_ERROR;
-			}
-
-			if ( m_dMorph.Contains ( (int)EMORPH::AOTLEMMER_BASE + j ) )
-			{
-				sMessage.SetSprintf ( "%s and %s clash", buf, buf_all );
-				return ST_ERROR;
-			}
-
-			auto sDictFile = SphSprintf ( "%s/%s.pak", g_sLemmatizerBase.cstr(), AOT_LANGUAGES[j] );
-			if ( !sphAotInit ( sDictFile, sMessage, j ) )
-				return ST_ERROR;
-
-			if ( j == AOT_UK && !m_tLemmatizer )
-				m_tLemmatizer = CreateLemmatizer ( j );
-
-			int iMorph = (int)EMORPH::AOTLEMMER_BASE_ALL + j;
-			if ( j == AOT_DE && !m_dMorph.Contains ( iMorph ) )
-				AddAotFingerprint ( j );
-			return AddMorph ( iMorph );
+			sMessage.SetSprintf ( "stem_ru and %s clash", sMorphology.cstr() );
+			return ST_ERROR;
 		}
+
+		if ( eLang==AOT_EN && !tAotMorphology.IsAll() && m_dMorph.Contains ( (int)EMORPH::STEM_EN ) )
+		{
+			sMessage.SetSprintf ( "stem_en and %s clash", sMorphology.cstr() );
+			return ST_ERROR;
+		}
+
+		if ( eLang==AOT_DE )
+		{
+			static constexpr std::pair<EMORPH,const char *> dGermanMorphologies[] =
+			{
+				{ EMORPH::AOTLEMMER_DE_UTF8, "lemmatize_de" },
+				{ EMORPH::AOTLEMMER_DE_ALL, "lemmatize_de_all" },
+				{ EMORPH::AOTLEMMER_DE_UTF8_V2, "lemmatize_de_v2" },
+				{ EMORPH::AOTLEMMER_DE_V2_ALL, "lemmatize_de_v2_all" }
+			};
+
+			for ( const auto & [eMorph,sName] : dGermanMorphologies )
+				if ( m_dMorph.Contains ( (int)eMorph ) )
+				{
+					sMessage.SetSprintf ( "%s and %s clash", sName, sMorphology.cstr() );
+					return ST_ERROR;
+				}
+		} else
+		{
+			int iOtherMorph = (int)( tAotMorphology.IsAll() ? EMORPH::AOTLEMMER_BASE : EMORPH::AOTLEMMER_BASE_ALL ) + eLang;
+			if ( m_dMorph.Contains ( iOtherMorph ) )
+			{
+				auto sSingle = SphSprintf ( "lemmatize_%s", AOT_LANGUAGES[eLang] );
+				auto sAll = SphSprintf ( "lemmatize_%s_all", AOT_LANGUAGES[eLang] );
+				sMessage.SetSprintf ( "%s and %s clash", sSingle.cstr(), sAll.cstr() );
+				return ST_ERROR;
+			}
+		}
+
+		auto sDictFile = SphSprintf ( "%s/%s.pak", g_sLemmatizerBase.cstr(), AOT_LANGUAGES[eLang] );
+		if ( !sphAotInit ( sDictFile, sMessage, eLang ) )
+			return ST_ERROR;
+
+		if ( eLang==AOT_UK && !m_tLemmatizer )
+			m_tLemmatizer = CreateLemmatizer ( eLang );
+
+		if ( !tAotMorphology.IsAll() )
+			AddAotFingerprint ( m_sMorphFingerprint, eLang );
+
+		return AddMorph ( iMorph );
 	}
 
 	if ( iLength == 7 && !strncmp ( szMorph, "stem_cz", iLength ) )
@@ -1253,7 +1243,11 @@ bool TemplateDictTraits_c::StemById ( BYTE* pWord, int iStemmer ) const
 		break;
 
 	case EMORPH::AOTLEMMER_DE_UTF8:
-		sphAotLemmatizeDeUTF8 ( pWord );
+		sphAotLemmatizeDeUTF8 ( pWord, AotGermanMode_e::LEGACY );
+		break;
+
+	case EMORPH::AOTLEMMER_DE_UTF8_V2:
+		sphAotLemmatizeDeUTF8 ( pWord, AotGermanMode_e::V2 );
 		break;
 
 	case EMORPH::AOTLEMMER_UK:
@@ -1264,6 +1258,7 @@ bool TemplateDictTraits_c::StemById ( BYTE* pWord, int iStemmer ) const
 	case EMORPH::AOTLEMMER_EN_ALL:
 	case EMORPH::AOTLEMMER_DE_ALL:
 	case EMORPH::AOTLEMMER_UK_ALL:
+	case EMORPH::AOTLEMMER_DE_V2_ALL:
 		// do the real work somewhere else
 		// this is mostly for warning suppressing and making some features like
 		// index_exact_words=1 vs expand_keywords=1 work

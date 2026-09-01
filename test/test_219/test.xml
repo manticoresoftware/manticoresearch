@@ -197,37 +197,74 @@ source german_source
 	sql_query		= select id, title from german_table
 }
 
-index german_plain_single
+index german_plain_legacy_single
 {
 	source			= german_source
-	path			= <data_path/>/german_plain_single
+	path			= <data_path/>/german_plain_legacy_single
 	morphology		= lemmatize_de
 	index_exact_words = 1
 	charset_table	= non_cont, german
 }
 
-index german_plain_all : german_plain_single
+index german_plain_legacy_all : german_plain_legacy_single
 {
-	path			= <data_path/>/german_plain_all
+	path			= <data_path/>/german_plain_legacy_all
 	morphology		= lemmatize_de_all
 }
 
-index german_single
+index german_plain_v2_single : german_plain_legacy_single
+{
+	path			= <data_path/>/german_plain_v2_single
+	morphology		= lemmatize_de_v2
+}
+
+index german_plain_v2_all : german_plain_legacy_single
+{
+	path			= <data_path/>/german_plain_v2_all
+	morphology		= lemmatize_de_v2_all
+}
+
+index german_legacy_single
 {
 	type			= rt
-	path			= <data_path/>/german_single
+	path			= <data_path/>/german_legacy_single
 	rt_field		= title
 	morphology		= lemmatize_de
 	index_exact_words = 1
 	charset_table	= non_cont, german
 }
 
-index german_all : german_single
+index german_legacy_all : german_legacy_single
 {
-	path			= <data_path/>/german_all
+	path			= <data_path/>/german_legacy_all
 	morphology		= lemmatize_de_all
 }
 
+index german_v2_single : german_legacy_single
+{
+	path			= <data_path/>/german_v2_single
+	morphology		= lemmatize_de_v2
+}
+
+index german_v2_all : german_legacy_single
+{
+	path			= <data_path/>/german_v2_all
+	morphology		= lemmatize_de_v2_all
+}
+
+index german_v2_ascii : german_legacy_single
+{
+	path			= <data_path/>/german_v2_ascii
+	morphology		= lemmatize_de_v2
+	charset_table	= 0..9, A..Z->a..z, a..z
+}
+
+index german_v2_capital : german_legacy_single
+{
+	path			= <data_path/>/german_v2_capital
+	morphology		= lemmatize_de_v2
+	charset_table	= non_cont, U+00DF, U+1E9E
+}
 </config>
 
 <metaindex name='META:rt'>
@@ -247,14 +284,14 @@ index german_all : german_single
 	<index>testrt2red</index>
 </metaindex>
 
-<metaindex name='META:german_plain'>
-	<index>german_plain_single</index>
-	<index>german_plain_all</index>
+<metaindex name='META:german_legacy'>
+	<index>german_legacy_single</index>
+	<index>german_legacy_all</index>
 </metaindex>
 
-<metaindex name='META:german'>
-	<index>german_single</index>
-	<index>german_all</index>
+<metaindex name='META:german_v2'>
+	<index>german_v2_single</index>
+	<index>german_v2_all</index>
 </metaindex>
 
 <metaindex name='META:aot'>
@@ -318,7 +355,11 @@ CREATE TABLE german_table
 	( 106, 'Maße' ),
 	( 107, 'Masse' ),
 	( 108, 'Fußball' ),
-	( 109, 'Fussball' )
+	( 109, 'Fussball' ),
+	( 110, 'GUSSE' ),
+	( 111, 'GÜSSE' ),
+	( 112, 'GUß' ),
+	( 113, 'GUSS' )
 </db_insert>
 
 <db_create>
@@ -333,50 +374,129 @@ CREATE TABLE lem_stops
 <db_insert>INSERT INTO lem_stops VALUES ( 1, 11, 'apple and b' )</db_insert>
 
 <queries><sphinxql>
-<!-- issue #4827: German sharp-s and ss are search equivalents, while exact forms stay distinct -->
-INSERT INTO META:german VALUES ( 101, 'Straße' );
-INSERT INTO META:german VALUES ( 102, 'Strasse' );
-INSERT INTO META:german VALUES ( 103, 'STRAẞE' );
-INSERT INTO META:german VALUES ( 104, 'GROß' );
-INSERT INTO META:german VALUES ( 105, 'GROSS' );
-INSERT INTO META:german VALUES ( 106, 'Maße' );
-INSERT INTO META:german VALUES ( 107, 'Masse' );
-INSERT INTO META:german VALUES ( 108, 'Fußball' );
-INSERT INTO META:german VALUES ( 109, 'Fussball' );
+<!-- issue #4827: legacy German AOT stays unchanged; sharp-s equivalence is opt-in through v2 -->
+INSERT INTO META:german_legacy VALUES ( 101, 'Straße' );
+INSERT INTO META:german_legacy VALUES ( 102, 'Strasse' );
+INSERT INTO META:german_legacy VALUES ( 103, 'STRAẞE' );
+INSERT INTO META:german_legacy VALUES ( 104, 'GROß' );
+INSERT INTO META:german_legacy VALUES ( 105, 'GROSS' );
+INSERT INTO META:german_legacy VALUES ( 106, 'Maße' );
+INSERT INTO META:german_legacy VALUES ( 107, 'Masse' );
+INSERT INTO META:german_legacy VALUES ( 108, 'Fußball' );
+INSERT INTO META:german_legacy VALUES ( 109, 'Fussball' );
 
-CALL KEYWORDS ( 'Straße', 'german_single', 0 );
-CALL KEYWORDS ( 'Strasse', 'german_single', 0 );
-CALL KEYWORDS ( 'STRAẞE', 'german_single', 0 );
-CALL KEYWORDS ( 'Straße', 'german_all', 0 );
-CALL KEYWORDS ( 'Strasse', 'german_all', 0 );
-CALL KEYWORDS ( 'STRAẞE', 'german_all', 0 );
+INSERT INTO META:german_v2 VALUES ( 101, 'Straße' );
+INSERT INTO META:german_v2 VALUES ( 102, 'Strasse' );
+INSERT INTO META:german_v2 VALUES ( 103, 'STRAẞE' );
+INSERT INTO META:german_v2 VALUES ( 104, 'GROß' );
+INSERT INTO META:german_v2 VALUES ( 105, 'GROSS' );
+INSERT INTO META:german_v2 VALUES ( 106, 'Maße' );
+INSERT INTO META:german_v2 VALUES ( 107, 'Masse' );
+INSERT INTO META:german_v2 VALUES ( 108, 'Fußball' );
+INSERT INTO META:german_v2 VALUES ( 109, 'Fussball' );
+INSERT INTO META:german_v2 VALUES ( 110, 'GUSSE' );
+INSERT INTO META:german_v2 VALUES ( 111, 'GÜSSE' );
+INSERT INTO META:german_v2 VALUES ( 112, 'GUß' );
+INSERT INTO META:german_v2 VALUES ( 113, 'GUSS' );
 
-SELECT id FROM german_single WHERE MATCH('Straße');
-SELECT id FROM german_single WHERE MATCH('Strasse');
-SELECT id FROM german_single WHERE MATCH('GROß');
-SELECT id FROM german_single WHERE MATCH('GROSS');
-SELECT id FROM german_single WHERE MATCH('Maße');
-SELECT id FROM german_single WHERE MATCH('Masse');
-SELECT id FROM german_single WHERE MATCH('Fußball');
-SELECT id FROM german_single WHERE MATCH('Fussball');
-SELECT id FROM german_single WHERE MATCH('=straße');
-SELECT id FROM german_single WHERE MATCH('=strasse');
+INSERT INTO german_v2_ascii VALUES ( 101, 'Straße' );
+INSERT INTO german_v2_ascii VALUES ( 102, 'Strasse' );
+INSERT INTO german_v2_ascii VALUES ( 103, 'STRAẞE' );
 
-SELECT id FROM german_all WHERE MATCH('Straße');
-SELECT id FROM german_all WHERE MATCH('Strasse');
-SELECT id FROM german_all WHERE MATCH('GROß');
-SELECT id FROM german_all WHERE MATCH('GROSS');
-SELECT id FROM german_all WHERE MATCH('Maße');
-SELECT id FROM german_all WHERE MATCH('Masse');
-SELECT id FROM german_all WHERE MATCH('Fußball');
-SELECT id FROM german_all WHERE MATCH('Fussball');
-SELECT id FROM german_all WHERE MATCH('=straße');
-SELECT id FROM german_all WHERE MATCH('=strasse');
+<!-- preserve capital sharp s literally to exercise v2 recognition, not the alias mapping -->
+INSERT INTO german_v2_capital VALUES ( 201, 'ẞtraße' );
+INSERT INTO german_v2_capital VALUES ( 202, 'SStrasse' );
 
-FLUSH RAMCHUNK german_single;
-FLUSH RAMCHUNK german_all;
-SELECT id FROM german_single WHERE MATCH('STRAẞE');
-SELECT id FROM german_all WHERE MATCH('STRAẞE');
+<!-- existing dictionary-settings compatibility check distinguishes legacy and v2 -->
+ATTACH TABLE german_plain_v2_single TO TABLE german_legacy_single;
+
+SHOW CREATE TABLE german_v2_single;
+SHOW CREATE TABLE german_v2_all;
+SHOW TABLE german_v2_single SETTINGS;
+SHOW TABLE german_v2_all SETTINGS;
+
+CALL KEYWORDS ( 'Straße', 'german_legacy_single', 0 );
+CALL KEYWORDS ( 'Strasse', 'german_legacy_single', 0 );
+CALL KEYWORDS ( 'STRAẞE', 'german_legacy_single', 0 );
+CALL KEYWORDS ( 'Straße', 'german_legacy_all', 0 );
+CALL KEYWORDS ( 'Strasse', 'german_legacy_all', 0 );
+CALL KEYWORDS ( 'STRAẞE', 'german_legacy_all', 0 );
+CALL KEYWORDS ( 'Straße', 'german_v2_single', 0 );
+CALL KEYWORDS ( 'Strasse', 'german_v2_single', 0 );
+CALL KEYWORDS ( 'STRAẞE', 'german_v2_single', 0 );
+CALL KEYWORDS ( 'Straße', 'german_v2_all', 0 );
+CALL KEYWORDS ( 'Strasse', 'german_v2_all', 0 );
+CALL KEYWORDS ( 'STRAẞE', 'german_v2_all', 0 );
+CALL KEYWORDS ( 'GUSSE', 'german_v2_single', 0 );
+CALL KEYWORDS ( 'GÜSSE', 'german_v2_single', 0 );
+CALL KEYWORDS ( 'GUß', 'german_v2_single', 0 );
+CALL KEYWORDS ( 'GUSS', 'german_v2_single', 0 );
+CALL KEYWORDS ( 'GUSSE', 'german_v2_all', 0 );
+CALL KEYWORDS ( 'GÜSSE', 'german_v2_all', 0 );
+CALL KEYWORDS ( 'GUß', 'german_v2_all', 0 );
+CALL KEYWORDS ( 'GUSS', 'german_v2_all', 0 );
+
+SELECT id FROM german_legacy_single WHERE MATCH('Straße') ORDER BY id ASC;
+SELECT id FROM german_legacy_single WHERE MATCH('Strasse') ORDER BY id ASC;
+SELECT id FROM german_legacy_single WHERE MATCH('STRAẞE') ORDER BY id ASC;
+SELECT id FROM german_legacy_single WHERE MATCH('=straße') ORDER BY id ASC;
+SELECT id FROM german_legacy_single WHERE MATCH('=strasse') ORDER BY id ASC;
+
+SELECT id FROM german_legacy_all WHERE MATCH('Straße') ORDER BY id ASC;
+SELECT id FROM german_legacy_all WHERE MATCH('Strasse') ORDER BY id ASC;
+SELECT id FROM german_legacy_all WHERE MATCH('STRAẞE') ORDER BY id ASC;
+SELECT id FROM german_legacy_all WHERE MATCH('=straße') ORDER BY id ASC;
+SELECT id FROM german_legacy_all WHERE MATCH('=strasse') ORDER BY id ASC;
+
+SELECT id FROM german_v2_single WHERE MATCH('Straße') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('Strasse') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('STRAẞE') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('GROß') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('GROSS') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('Maße') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('Masse') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('GUSSE') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('GÜSSE') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('GUß') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('GUSS') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('=straße') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('=strasse') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('=gusse') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('=güsse') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('=guß') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('=guss') ORDER BY id ASC;
+
+SELECT id FROM german_v2_all WHERE MATCH('Straße') ORDER BY id ASC;
+SELECT id FROM german_v2_all WHERE MATCH('Strasse') ORDER BY id ASC;
+SELECT id FROM german_v2_all WHERE MATCH('STRAẞE') ORDER BY id ASC;
+SELECT id FROM german_v2_all WHERE MATCH('GROß') ORDER BY id ASC;
+SELECT id FROM german_v2_all WHERE MATCH('GROSS') ORDER BY id ASC;
+SELECT id FROM german_v2_all WHERE MATCH('Maße') ORDER BY id ASC;
+SELECT id FROM german_v2_all WHERE MATCH('Masse') ORDER BY id ASC;
+SELECT id FROM german_v2_all WHERE MATCH('GUSSE') ORDER BY id ASC;
+SELECT id FROM german_v2_all WHERE MATCH('GÜSSE') ORDER BY id ASC;
+SELECT id FROM german_v2_all WHERE MATCH('GUß') ORDER BY id ASC;
+SELECT id FROM german_v2_all WHERE MATCH('GUSS') ORDER BY id ASC;
+SELECT id FROM german_v2_all WHERE MATCH('=straße') ORDER BY id ASC;
+SELECT id FROM german_v2_all WHERE MATCH('=strasse') ORDER BY id ASC;
+
+SELECT id FROM german_v2_ascii WHERE MATCH('Straße') ORDER BY id ASC;
+SELECT id FROM german_v2_ascii WHERE MATCH('Strasse') ORDER BY id ASC;
+SELECT id FROM german_v2_ascii WHERE MATCH('STRAẞE') ORDER BY id ASC;
+
+CALL KEYWORDS ( 'ẞtraße', 'german_v2_capital', 0 );
+CALL KEYWORDS ( 'SStrasse', 'german_v2_capital', 0 );
+SELECT id FROM german_v2_capital WHERE MATCH('ẞtraße') ORDER BY id ASC;
+SELECT id FROM german_v2_capital WHERE MATCH('SStrasse') ORDER BY id ASC;
+SELECT id FROM german_v2_capital WHERE MATCH('=ẞtraße') ORDER BY id ASC;
+SELECT id FROM german_v2_capital WHERE MATCH('=sstrasse') ORDER BY id ASC;
+
+FLUSH RAMCHUNK german_legacy_single;
+FLUSH RAMCHUNK german_legacy_all;
+FLUSH RAMCHUNK german_v2_single;
+FLUSH RAMCHUNK german_v2_all;
+FLUSH RAMCHUNK german_v2_ascii;
+FLUSH RAMCHUNK german_v2_capital;
 
 INSERT INTO META:rt VALUES ( 1, 'wives and men', 11 );
 INSERT INTO META:rt VALUES ( 2, 'wife and man', 11 );
@@ -401,28 +521,43 @@ SELECT * FROM META:all WHERE MATCH('путин стал knows'); SHOW META;
 SELECT * FROM META:all WHERE MATCH('путина markierte'); SHOW META;
 SELECT * FROM META:all WHERE MATCH('knew markierte'); SHOW META;
 
-<!-- the same issue #4827 matrix through plain-table indexing -->
-SELECT id FROM german_plain_single WHERE MATCH('Straße');
-SELECT id FROM german_plain_single WHERE MATCH('Strasse');
-SELECT id FROM german_plain_single WHERE MATCH('GROß');
-SELECT id FROM german_plain_single WHERE MATCH('GROSS');
-SELECT id FROM german_plain_single WHERE MATCH('Maße');
-SELECT id FROM german_plain_single WHERE MATCH('Masse');
-SELECT id FROM german_plain_single WHERE MATCH('Fußball');
-SELECT id FROM german_plain_single WHERE MATCH('Fussball');
-SELECT id FROM german_plain_single WHERE MATCH('=straße');
-SELECT id FROM german_plain_single WHERE MATCH('=strasse');
+<!-- the same legacy/v2 polarity through plain-table indexing -->
 
-SELECT id FROM german_plain_all WHERE MATCH('Straße');
-SELECT id FROM german_plain_all WHERE MATCH('Strasse');
-SELECT id FROM german_plain_all WHERE MATCH('GROß');
-SELECT id FROM german_plain_all WHERE MATCH('GROSS');
-SELECT id FROM german_plain_all WHERE MATCH('Maße');
-SELECT id FROM german_plain_all WHERE MATCH('Masse');
-SELECT id FROM german_plain_all WHERE MATCH('Fußball');
-SELECT id FROM german_plain_all WHERE MATCH('Fussball');
-SELECT id FROM german_plain_all WHERE MATCH('=straße');
-SELECT id FROM german_plain_all WHERE MATCH('=strasse');
+SELECT id FROM german_plain_legacy_single WHERE MATCH('Straße') ORDER BY id ASC;
+SELECT id FROM german_plain_legacy_single WHERE MATCH('Strasse') ORDER BY id ASC;
+SELECT id FROM german_plain_legacy_single WHERE MATCH('STRAẞE') ORDER BY id ASC;
+SELECT id FROM german_plain_legacy_single WHERE MATCH('=straße') ORDER BY id ASC;
+SELECT id FROM german_plain_legacy_single WHERE MATCH('=strasse') ORDER BY id ASC;
+
+SELECT id FROM german_plain_legacy_all WHERE MATCH('Straße') ORDER BY id ASC;
+SELECT id FROM german_plain_legacy_all WHERE MATCH('Strasse') ORDER BY id ASC;
+SELECT id FROM german_plain_legacy_all WHERE MATCH('STRAẞE') ORDER BY id ASC;
+SELECT id FROM german_plain_legacy_all WHERE MATCH('=straße') ORDER BY id ASC;
+SELECT id FROM german_plain_legacy_all WHERE MATCH('=strasse') ORDER BY id ASC;
+
+SELECT id FROM german_plain_v2_single WHERE MATCH('Straße') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_single WHERE MATCH('Strasse') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_single WHERE MATCH('STRAẞE') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_single WHERE MATCH('GROß') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_single WHERE MATCH('GROSS') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_single WHERE MATCH('Maße') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_single WHERE MATCH('Masse') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_single WHERE MATCH('GUSSE') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_single WHERE MATCH('GUß') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_single WHERE MATCH('=straße') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_single WHERE MATCH('=strasse') ORDER BY id ASC;
+
+SELECT id FROM german_plain_v2_all WHERE MATCH('Straße') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_all WHERE MATCH('Strasse') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_all WHERE MATCH('STRAẞE') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_all WHERE MATCH('GROß') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_all WHERE MATCH('GROSS') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_all WHERE MATCH('Maße') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_all WHERE MATCH('Masse') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_all WHERE MATCH('GUSSE') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_all WHERE MATCH('GUß') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_all WHERE MATCH('=straße') ORDER BY id ASC;
+SELECT id FROM german_plain_v2_all WHERE MATCH('=strasse') ORDER BY id ASC;
 
 <!-- regressoin aot lemmas at excerpt -->
 CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'META:aot', 'молоком', 1 as query_mode);
@@ -478,6 +613,42 @@ SELECT * FROM noaot_blend WHERE MATCH('über2');
 SELECT * FROM aot_blend_all WHERE MATCH('über2');
 SELECT * FROM noaot_blend_all WHERE MATCH('über2');
 
-</sphinxql></queries>
+</sphinxql>
+
+<sphinxql system="kill-daemon"/>
+<sphinxql system="start-agent-no-warnings"/>
+
+<sphinxql>
+<!-- RT metadata and disk chunks retain the exact legacy/v2 morphology mode after restart -->
+SHOW CREATE TABLE german_legacy_single;
+SHOW CREATE TABLE german_legacy_all;
+SHOW CREATE TABLE german_v2_single;
+SHOW CREATE TABLE german_v2_all;
+SHOW CREATE TABLE german_v2_capital;
+
+SELECT id FROM german_legacy_single WHERE MATCH('Straße') ORDER BY id ASC;
+SELECT id FROM german_legacy_single WHERE MATCH('Strasse') ORDER BY id ASC;
+SELECT id FROM german_legacy_all WHERE MATCH('Straße') ORDER BY id ASC;
+SELECT id FROM german_legacy_all WHERE MATCH('Strasse') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('Straße') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('Strasse') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('STRAẞE') ORDER BY id ASC;
+SELECT id FROM german_v2_all WHERE MATCH('Straße') ORDER BY id ASC;
+SELECT id FROM german_v2_all WHERE MATCH('Strasse') ORDER BY id ASC;
+SELECT id FROM german_v2_all WHERE MATCH('STRAẞE') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('GUSSE') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('GUß') ORDER BY id ASC;
+SELECT id FROM german_v2_all WHERE MATCH('GUSSE') ORDER BY id ASC;
+SELECT id FROM german_v2_all WHERE MATCH('GUß') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('=straße') ORDER BY id ASC;
+SELECT id FROM german_v2_single WHERE MATCH('=strasse') ORDER BY id ASC;
+SELECT id FROM german_v2_all WHERE MATCH('=straße') ORDER BY id ASC;
+SELECT id FROM german_v2_all WHERE MATCH('=strasse') ORDER BY id ASC;
+SELECT id FROM german_v2_capital WHERE MATCH('ẞtraße') ORDER BY id ASC;
+SELECT id FROM german_v2_capital WHERE MATCH('SStrasse') ORDER BY id ASC;
+SELECT id FROM german_v2_capital WHERE MATCH('=ẞtraße') ORDER BY id ASC;
+SELECT id FROM german_v2_capital WHERE MATCH('=sstrasse') ORDER BY id ASC;
+</sphinxql>
+</queries>
 
 </test>

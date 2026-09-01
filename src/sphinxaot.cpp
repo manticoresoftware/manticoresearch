@@ -756,6 +756,86 @@ bool CLemmatizer::LoadPak ( CSphReader & rd )
 
 const char* AOT_LANGUAGES[AOT_LENGTH] = {"ru", "en", "de", "uk" };
 
+AOT_LANGS AotMorphology_t::GetLang() const
+{
+	switch ( m_eId )
+	{
+	case AotMorphologyId_e::RU:
+	case AotMorphologyId_e::RU_ALL:
+		return AOT_RU;
+	case AotMorphologyId_e::EN:
+	case AotMorphologyId_e::EN_ALL:
+		return AOT_EN;
+	case AotMorphologyId_e::DE:
+	case AotMorphologyId_e::DE_ALL:
+	case AotMorphologyId_e::DE_V2:
+	case AotMorphologyId_e::DE_V2_ALL:
+		return AOT_DE;
+	case AotMorphologyId_e::UK:
+	case AotMorphologyId_e::UK_ALL:
+		return AOT_UK;
+	}
+
+	assert ( false );
+	return AOT_RU;
+}
+
+
+bool AotMorphology_t::IsAll() const
+{
+	switch ( m_eId )
+	{
+	case AotMorphologyId_e::RU_ALL:
+	case AotMorphologyId_e::EN_ALL:
+	case AotMorphologyId_e::DE_ALL:
+	case AotMorphologyId_e::UK_ALL:
+	case AotMorphologyId_e::DE_V2_ALL:
+		return true;
+	default:
+		return false;
+	}
+}
+
+
+bool AotMorphology_t::IsGermanV2() const
+{
+	return m_eId==AotMorphologyId_e::DE_V2 || m_eId==AotMorphologyId_e::DE_V2_ALL;
+}
+
+
+struct AotMorphologyDesc_t
+{
+	CSphString		m_sName;
+	AotMorphology_t	m_tMorphology;
+};
+
+static const AotMorphologyDesc_t g_dAotMorphologies[] =
+{
+	{ "lemmatize_ru", { AotMorphologyId_e::RU } },
+	{ "lemmatize_en", { AotMorphologyId_e::EN } },
+	{ "lemmatize_de", { AotMorphologyId_e::DE } },
+	{ "lemmatize_uk", { AotMorphologyId_e::UK } },
+	{ "lemmatize_ru_all", { AotMorphologyId_e::RU_ALL } },
+	{ "lemmatize_en_all", { AotMorphologyId_e::EN_ALL } },
+	{ "lemmatize_de_all", { AotMorphologyId_e::DE_ALL } },
+	{ "lemmatize_uk_all", { AotMorphologyId_e::UK_ALL } },
+	{ "lemmatize_de_v2", { AotMorphologyId_e::DE_V2 } },
+	{ "lemmatize_de_v2_all", { AotMorphologyId_e::DE_V2_ALL } }
+};
+
+
+bool sphParseAotMorphology ( const char * sMorphology, int iLength, AotMorphology_t & tMorphology )
+{
+	for ( const auto & tDesc : g_dAotMorphologies )
+		if ( iLength==tDesc.m_sName.Length() && !strncmp ( sMorphology, tDesc.m_sName.cstr(), iLength ) )
+		{
+			tMorphology = tDesc.m_tMorphology;
+			return true;
+		}
+
+	return false;
+}
+
 static CLemmatizer *	g_pLemmatizers[AOT_LENGTH] = {0};
 static CSphNamedInt		g_tDictinfos[AOT_LENGTH];
 static std::unique_ptr<NativeUkLemmatizer_c> g_pUkLemmatizer;
@@ -857,14 +937,13 @@ static inline bool IsAlphaAscii ( BYTE c )
 	return ( lc>0x60 && lc<0x7b );
 }
 
-enum EMMITERS {EMIT_1BYTE, EMIT_UTF8RU, EMIT_UTF8};
+enum EMMITERS {EMIT_1BYTE, EMIT_UTF8RU, EMIT_UTF8, EMIT_1BYTE_DE_V2, EMIT_UTF8_DE_V2};
 template < EMMITERS >
 inline BYTE * Emit ( BYTE * sOut, BYTE uChar )
 {
 	if ( uChar=='-' )
 		return sOut;
-	// German sharp s has no one-byte uppercase equivalent; applying the ASCII bit trick turns 0xDF into 0xFF.
-	*sOut++ = uChar == 0xDF ? uChar : ( uChar | 0x20 );
+	*sOut++ = uChar | 0x20;
 	return sOut;
 }
 
@@ -905,6 +984,32 @@ inline BYTE * Emit<EMIT_UTF8> ( BYTE * sOut, BYTE uChar )
 	} else
 		*sOut++ = uChar;
 	return sOut;
+}
+
+template<>
+inline BYTE * Emit<EMIT_1BYTE_DE_V2> ( BYTE * sOut, BYTE uChar )
+{
+	if ( uChar==0xDF )
+	{
+		*sOut++ = 's';
+		*sOut++ = 's';
+		return sOut;
+	}
+
+	return Emit<EMIT_1BYTE> ( sOut, uChar );
+}
+
+template<>
+inline BYTE * Emit<EMIT_UTF8_DE_V2> ( BYTE * sOut, BYTE uChar )
+{
+	if ( uChar==0xDF )
+	{
+		*sOut++ = 's';
+		*sOut++ = 's';
+		return sOut;
+	}
+
+	return Emit<EMIT_UTF8> ( sOut, uChar );
 }
 
 template < EMMITERS IS_UTF8 >
@@ -960,6 +1065,14 @@ inline void CreateLemma ( BYTE * sOut, const BYTE * sBase, int iBaseLen, bool bF
 			sOut = Emit<IS_UTF8> ( sOut, *sBase++ );
 	}
 	*sOut = '\0';
+}
+
+static inline void CreateUtf8Lemma ( BYTE * sOut, const BYTE * sBase, int iBaseLen, bool bFound, const CFlexiaModel & M, const CMorphForm & F, AotGermanMode_e eGermanMode )
+{
+	if ( eGermanMode==AotGermanMode_e::V2 )
+		CreateLemma<EMIT_UTF8_DE_V2> ( sOut, sBase, iBaseLen, bFound, M, F );
+	else
+		CreateLemma<EMIT_UTF8> ( sOut, sBase, iBaseLen, bFound, M, F );
 }
 
 static inline bool IsRuFreq2 ( BYTE * pWord )
@@ -1160,7 +1273,8 @@ static inline bool IsRussianAlphaUtf8 ( const BYTE * pWord )
 	return false;
 }
 
-void sphAotLemmatizeDe1252 ( BYTE * pWord, int iLen )
+template < EMMITERS EMITTER >
+static void sphAotLemmatizeDe1252 ( BYTE * pWord, int iLen )
 {
 	// i must be initialized
 	assert ( g_pLemmatizers[AOT_DE] );
@@ -1203,12 +1317,12 @@ void sphAotLemmatizeDe1252 ( BYTE * pWord, int iLen )
 		bool bNewNoun = ( F.m_POS==0 );
 		if ( i==0 || ( !bNoun && bNewNoun ) )
 		{
-			CreateLemma<EMIT_1BYTE> ( pWord, sForm, iFormLen, bFound, M, F );
+			CreateLemma<EMITTER> ( pWord, sForm, iFormLen, bFound, M, F );
 			bNoun = bNewNoun;
 		} else if ( bNoun==bNewNoun )
 		{
 			BYTE sBuf[256];
-			CreateLemma<EMIT_1BYTE> ( sBuf, sForm, iFormLen, bFound, M, F );
+			CreateLemma<EMITTER> ( sBuf, sForm, iFormLen, bFound, M, F );
 			if ( strcmp ( (char*)sBuf, (char*)pWord )<0 )
 				strcpy ( (char*)pWord, (char*)sBuf ); // NOLINT
 		}
@@ -1267,17 +1381,38 @@ static inline int Utf8ToWin1251 ( BYTE * pOut, const BYTE * pWord )
 }
 
 /// returns length in bytes (aka chars) if all letters were converted
-/// returns 0 and aborts early if non-western letters are encountered or the output buffer is too small
+/// returns 0 and aborts early if non-western letters are encountered
+static inline int Utf8ToWin1252 ( BYTE * pOut, const BYTE * pWord )
+{
+	BYTE * pStart = pOut;
+	while ( *pWord )
+	{
+		if ( (*pWord)&0x80 )
+		{
+			if ( ((*pWord)&0xFC)==0xC0 )
+			{
+				*pOut++ = ( pWord[1] & 0x7F ) + ( ( pWord[0] & 3 )<<6 );
+				pWord += 2;
+			} else
+				return 0;
+		} else
+			*pOut++ = *pWord++;
+	}
+
+	*pOut = '\0';
+	return (int)( pOut-pStart );
+}
+
+
+/// v2 conversion folds sharp s to ss before passing a word to German AOT
 template<size_t SIZE>
-static inline int Utf8ToWin1252 ( BYTE ( &dOut )[SIZE], const BYTE * pWord )
+static inline int Utf8ToWin1252V2 ( BYTE ( &dOut )[SIZE], const BYTE * pWord )
 {
 	BYTE * pOut = dOut;
 	BYTE * pStart = dOut;
 	BYTE * pEnd = dOut + SIZE - 1;
 	while ( *pWord )
 	{
-		// Unicode full case folding maps both forms of German sharp s to "ss".
-		// Normalize before AOT so Straße and Strasse follow the same lemmatization path.
 		if ( ( pWord[0]==0xC3 && pWord[1]==0x9F ) ||
 			( pWord[0]==0xE1 && pWord[1]==0xBA && pWord[2]==0x9E ) )
 		{
@@ -1322,10 +1457,6 @@ static inline bool IsGermanAlphaUtf8 ( const BYTE * pWord )
 	if ( pWord[0]==0xC2 && pWord[1]==0xB5 )
 		return true;
 
-	// capital sharp s U+1E9E
-	if ( pWord[0]==0xE1 && pWord[1]==0xBA && pWord[2]==0x9E )
-		return true;
-
 	// some upper
 	if ( pWord[0]==0xC3 )
 	{
@@ -1348,6 +1479,22 @@ static inline bool IsGermanAlphaUtf8 ( const BYTE * pWord )
 		}
 	}
 	return false;
+}
+
+
+static inline bool IsGermanAlphaUtf8 ( const BYTE * pWord, AotGermanMode_e eMode )
+{
+	if ( eMode==AotGermanMode_e::V2 && pWord[0]==0xE1 && pWord[1]==0xBA && pWord[2]==0x9E )
+		return true;
+
+	return IsGermanAlphaUtf8 ( pWord );
+}
+
+
+template<size_t SIZE>
+static inline int Utf8ToWin1252 ( BYTE ( &dOut )[SIZE], const BYTE * pWord, AotGermanMode_e eMode )
+{
+	return eMode==AotGermanMode_e::V2 ? Utf8ToWin1252V2 ( dOut, pWord ) : Utf8ToWin1252 ( dOut, pWord );
 }
 
 static inline void Win1251ToLowercaseUtf8 ( BYTE * pOut, const BYTE * pWord )
@@ -1411,24 +1558,27 @@ void sphAotLemmatizeRuUTF8 ( BYTE * pWord )
 	Win1251ToLowercaseUtf8 ( pWord, sBuf );
 }
 
-void sphAotLemmatizeDeUTF8 ( BYTE * pWord )
+void sphAotLemmatizeDeUTF8 ( BYTE * pWord, AotGermanMode_e eMode )
 {
 	// i must be initialized
 	assert ( g_pLemmatizers[AOT_DE] );
 
 	// only if the word is german
-	if ( !IsGermanAlphaUtf8(pWord) )
+	if ( !IsGermanAlphaUtf8 ( pWord, eMode ) )
 		return;
 
 	// convert to Windows-1252
 	// failure means we should not lemmatize this
-	BYTE sBuf [ SPH_MAX_WORD_LEN+4 ];
-	auto iFormLen = Utf8ToWin1252 ( sBuf, pWord );
+	BYTE sBuf [ MAX_KEYWORD_BYTES ];
+	auto iFormLen = Utf8ToWin1252 ( sBuf, pWord, eMode );
 	if ( !iFormLen )
 		return;
 
 	// lemmatize, convert back, done!
-	sphAotLemmatizeDe1252 ( sBuf, iFormLen );
+	if ( eMode==AotGermanMode_e::V2 )
+		sphAotLemmatizeDe1252<EMIT_1BYTE_DE_V2> ( sBuf, iFormLen );
+	else
+		sphAotLemmatizeDe1252<EMIT_1BYTE> ( sBuf, iFormLen );
 	Win1252ToLowercaseUtf8 ( pWord, sBuf );
 }
 
@@ -1467,15 +1617,15 @@ void sphAotLemmatizeRu ( StrVec_t & dLemmas, const BYTE * pWord )
 	dLemmas.Uniq();
 }
 
-void sphAotLemmatizeDe ( StrVec_t & dLemmas, const BYTE * pWord )
+void sphAotLemmatizeDe ( StrVec_t & dLemmas, const BYTE * pWord, AotGermanMode_e eMode )
 {
 	assert ( g_pLemmatizers[AOT_DE] );
-	if ( !IsGermanAlphaUtf8(pWord) )
+	if ( !IsGermanAlphaUtf8 ( pWord, eMode ) )
 		return;
 
 	BYTE sForm [ SPH_MAX_WORD_LEN+4 ];
 	int iFormLen = 0;
-	iFormLen = Utf8ToWin1252 ( sForm, pWord );
+	iFormLen = Utf8ToWin1252 ( sForm, pWord, eMode );
 
 	if ( iFormLen<=1 )
 		return;
@@ -1495,7 +1645,7 @@ void sphAotLemmatizeDe ( StrVec_t & dLemmas, const BYTE * pWord )
 
 		BYTE sRes [ 3*SPH_MAX_WORD_LEN+4 ];
 
-		CreateLemma<EMIT_UTF8> ( sRes, sForm, iFormLen, bFound, M, F );
+		CreateUtf8Lemma ( sRes, sForm, iFormLen, bFound, M, F, eMode );
 		dLemmas.Add ( (const char*)sRes );
 	}
 
@@ -1743,20 +1893,24 @@ public:
 
 class CSphAotTokenizer : public CSphAotTokenizerTmpl
 {
-	AOT_LANGS		m_iLang;
+	AOT_LANGS			m_iLang;
+	AotGermanMode_e	m_eGermanMode;
 
 public:
-	CSphAotTokenizer ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict, bool bIndexExact, int iLang )
+	CSphAotTokenizer ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict, bool bIndexExact, int iLang, AotGermanMode_e eGermanMode )
 		: CSphAotTokenizerTmpl ( std::move (pTok), pDict, bIndexExact, iLang )
 		, m_iLang ( AOT_LANGS(iLang) )
-	{}
+		, m_eGermanMode ( eGermanMode )
+	{
+		assert ( m_eGermanMode==AotGermanMode_e::LEGACY || m_iLang==AOT_DE );
+	}
 
 	TokenizerRefPtr_c Clone ( ESphTokenizerClone eMode, int iTokenBytes=0 ) const noexcept final
 	{
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
 		assert ( eMode==SPH_CLONE_INDEX );
-		auto * pClone = new CSphAotTokenizer ( m_pTokenizer->Clone ( eMode, iTokenBytes ), nullptr, m_bIndexExact, m_iLang );
+		auto * pClone = new CSphAotTokenizer ( m_pTokenizer->Clone ( eMode, iTokenBytes ), nullptr, m_bIndexExact, m_iLang, m_eGermanMode );
 		if ( m_pWordforms )
 			pClone->m_pWordforms = m_pWordforms;
 		return TokenizerRefPtr_c { pClone };
@@ -1786,7 +1940,7 @@ public:
 			// generate that lemma
 			const CFlexiaModel & M = g_pLemmatizers[m_iLang]->m_FlexiaModels [ AOT_MODEL_NO ( m_FindResults [ m_iCurrent ] ) ];
 			const CMorphForm & F = M [ AOT_ITEM_NO ( m_FindResults [ m_iCurrent ] ) ];
-			CreateLemma<EMIT_UTF8> ( m_sToken, m_sForm, m_iFormLen, m_bFound, M, F );
+			CreateUtf8Lemma ( m_sToken, m_sForm, m_iFormLen, m_bFound, M, F, m_eGermanMode );
 
 			// is this the last one? gotta tag it non-blended
 			if ( m_FindResults [ m_iCurrent+1 ]==AOT_NOFORM )
@@ -1824,7 +1978,7 @@ public:
 		// pass-through non-Russian words
 		if ( m_iLang==AOT_DE )
 		{
-			if ( !IsGermanAlphaUtf8 ( pToken ) )
+			if ( !IsGermanAlphaUtf8 ( pToken, m_eGermanMode ) )
 				return pToken;
 		} else
 		{
@@ -1834,7 +1988,7 @@ public:
 
 		// convert or copy regular tokens
 		if ( m_iLang==AOT_DE )
-			m_iFormLen = Utf8ToWin1252 ( m_sForm, pToken );
+			m_iFormLen = Utf8ToWin1252 ( m_sForm, pToken, m_eGermanMode );
 		else
 		{
 			// manual strlen and memcpy; faster this way
@@ -1878,7 +2032,7 @@ public:
 		// in any event, prepare the first lemma for return
 		const CFlexiaModel & M = g_pLemmatizers[m_iLang]->m_FlexiaModels [ AOT_MODEL_NO ( m_FindResults[0] ) ];
 		const CMorphForm & F = M [ AOT_ITEM_NO ( m_FindResults[0] ) ];
-		CreateLemma<EMIT_UTF8> ( pToken, m_sForm, m_iFormLen, m_bFound, M, F );
+		CreateUtf8Lemma ( pToken, m_sForm, m_iFormLen, m_bFound, M, F, m_eGermanMode );
 
 		// schedule lemmas 2+ for return
 		if ( m_FindResults[1]!=AOT_NOFORM )
@@ -1917,6 +2071,19 @@ public:
 	BYTE * GetToken() final;
 };
 
+
+static AotGermanMode_e GetAotGermanMode ( int iLang, DWORD uLangMask )
+{
+	if ( iLang!=AOT_DE )
+		return AotGermanMode_e::LEGACY;
+
+	if ( !( uLangMask & AOT_FILTER_DE_V2 ) )
+		return AotGermanMode_e::LEGACY;
+
+	return AotGermanMode_e::V2;
+}
+
+
 void sphAotTransformFilter ( TokenizerRefPtr_c& pTokenizer, const DictRefPtr_c& pDict, bool bIndexExact, DWORD uLangMask )
 {
 	assert ( uLangMask!=0 );
@@ -1933,7 +2100,10 @@ void sphAotTransformFilter ( TokenizerRefPtr_c& pTokenizer, const DictRefPtr_c& 
 				pTokenizer = new TokenizerUk_c ( pTokenizer, pDict, bIndexExact );
 				break;
 			default:
-				pTokenizer = new CSphAotTokenizer ( pTokenizer, pDict, bIndexExact, i );
+			{
+				pTokenizer = new CSphAotTokenizer ( pTokenizer, pDict, bIndexExact, i, GetAotGermanMode ( i, uLangMask ) );
+				break;
+			}
 			}
 		}
 	}
@@ -2801,7 +2971,7 @@ void TransformAotFilterKeyword ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatiz
 			if ( i==AOT_RU )
 				sphAotLemmatizeRu ( dLemmas, (const BYTE*)tKeyword.m_sWord.cstr() );
 			else if ( i==AOT_DE )
-				sphAotLemmatizeDe ( dLemmas, (const BYTE*)tKeyword.m_sWord.cstr() );
+				sphAotLemmatizeDe ( dLemmas, (const BYTE*)tKeyword.m_sWord.cstr(), GetAotGermanMode ( i, uLangMask ) );
 			else if ( i==AOT_UK )
 				sphAotLemmatizeUk ( dLemmas, (const BYTE*)tKeyword.m_sWord.cstr(), pLemmatizer );
 			else

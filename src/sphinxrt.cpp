@@ -5611,18 +5611,6 @@ std::unique_ptr<CSphIndex> RtIndex_c::PreallocDiskChunk ( const CSphString& sChu
 	return pDiskChunk;
 }
 
-static void CheckMorphFingerprint ( const CSphDictSettings & tStored, const DictRefPtr_c & pCurrent, StrVec_t & dWarnings )
-{
-	if ( tStored.m_sMorphFingerprint==pCurrent->GetMorphDataFingerprint() )
-		return;
-
-	CSphString sWarning;
-	sWarning.SetSprintf ( "morphology data fingerprint changed (stored='%s', current='%s'); rebuild or reindex the table",
-		tStored.m_sMorphFingerprint.cstr(), pCurrent->GetMorphDataFingerprint().cstr() );
-	dWarnings.Add ( sWarning );
-}
-
-
 RtIndex_c::LOAD_E RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
 {
 	CSphString sMeta = GetFilename ( "meta" );
@@ -5718,7 +5706,6 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuild
 	if ( !m_sLastError.IsEmpty() )
 		dWarnings.Add(m_sLastError);
 
-	CheckMorphFingerprint ( tDictSettings, m_pDict, dWarnings );
 	Tokenizer::AddToMultiformFilterTo ( m_pTokenizer, m_pDict->GetMultiWordforms () );
 
 	m_iWordsCheckpoint = rdMeta.GetDword();
@@ -5860,7 +5847,6 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder
 	if ( !m_sLastError.IsEmpty() )
 		dWarnings.Add(m_sLastError);
 
-	CheckMorphFingerprint ( tDictSettings, m_pDict, dWarnings );
 	Tokenizer::AddToMultiformFilterTo ( m_pTokenizer, m_pDict->GetMultiWordforms () );
 
 	m_iWordsCheckpoint = (int)Int ( tBson.ChildByName ( "words_checkpoint" ) );

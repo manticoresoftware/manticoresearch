@@ -106,6 +106,44 @@ TEST ( functions, ServedStatsConcurrentCalculations )
 	}
 }
 
+
+TEST ( functions, ConcurrentWriteAllowReadersReservations )
+{
+	Threads::Coro::ReadTableLock_c tLock;
+
+	ASSERT_TRUE ( tLock.WaitRead() );
+	EXPECT_FALSE ( tLock.TryWriteAllowReaders() );
+	ASSERT_TRUE ( tLock.UnlockRead() );
+
+	ASSERT_TRUE ( tLock.TryDmlWrite() );
+	EXPECT_FALSE ( tLock.TryWriteAllowReaders() );
+	tLock.FinishWrite();
+
+	ASSERT_TRUE ( tLock.TryWrite() );
+	EXPECT_FALSE ( tLock.TryWriteAllowReaders() );
+	tLock.FinishWrite();
+
+	ASSERT_TRUE ( tLock.TryFreezeTransition() );
+	EXPECT_FALSE ( tLock.TryWriteAllowReaders() );
+	tLock.FinishFreezeTransition();
+
+	ASSERT_TRUE ( tLock.TryWriteAllowReaders() );
+	ASSERT_TRUE ( tLock.TryWriteAllowReaders() );
+	EXPECT_EQ ( tLock.GetLocks().m_uWriteAllowReaders, 2 );
+	EXPECT_FALSE ( tLock.TryDmlWrite() );
+	EXPECT_FALSE ( tLock.WaitRead() );
+	EXPECT_FALSE ( tLock.TryFreezeTransition() );
+
+	tLock.FinishWriteAllowReaders();
+	EXPECT_EQ ( tLock.GetLocks().m_uWriteAllowReaders, 1 );
+	EXPECT_FALSE ( tLock.TryDmlWrite() );
+
+	tLock.FinishWriteAllowReaders();
+	EXPECT_EQ ( tLock.GetLocks().m_uWriteAllowReaders, 0 );
+	ASSERT_TRUE ( tLock.TryDmlWrite() );
+	tLock.FinishWrite();
+}
+
 TEST ( functions, SecretEqual )
 {
 	BYTE dA[] = { 1, 2, 3, 4 };

@@ -340,7 +340,7 @@ public:
 struct TableLocks_t
 {
 	DWORD m_uReads = 0;
-	bool m_bWriteAllowReaders = false;
+	DWORD m_uWriteAllowReaders = 0;
 };
 
 class ReadTableLock_c final
@@ -349,7 +349,7 @@ class ReadTableLock_c final
 	WaitQueue_c m_tWaitRQueue {};
 	DWORD m_uReads = 0;
 	DWORD m_uWrites = 0;
-	bool m_bWriteAllowReaders = false;
+	DWORD m_uWriteAllowReaders = 0;
 	bool m_bFreezeTransition = false;
 
 public:

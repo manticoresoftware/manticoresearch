@@ -24,41 +24,6 @@ jobs:
           echo "# Nightly integration tests" >> $GITHUB_STEP_SUMMARY
           echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
 
-  resolve_bulk_import_image:
-    name: Resolve bulk import test-kit image
-    runs-on: ubuntu-22.04
-    timeout-minutes: 120
-    outputs:
-      image: ${{ steps.resolve.outputs.image }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-      - name: Resolve image
-        id: resolve
-        env:
-          REPO_OWNER: ${{ github.repository_owner }}
-          HEAD_REF: ${{ github.head_ref }}
-        run: |
-          set -euo pipefail
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
-            echo "image=ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-latest" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          branch_tag=$(echo "$HEAD_REF" | tr '/' '_' | sed 's/[^a-zA-Z0-9_.-]//g')
-          image="ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-${branch_tag}"
-          for attempt in $(seq 1 480); do
-            image_commit=$(docker buildx imagetools inspect "$image" --format '{{ index .Image.Config.Labels "org.manticore.testkit.commit" }}' 2>/dev/null || true)
-            if [[ "$image_commit" == "${{ github.sha }}" ]]; then
-              echo "image=$image" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            echo "Waiting for $image at ${{ github.sha }} (currently ${image_commit:-missing}, attempt $attempt/480)"
-            sleep 15
-          done
-          echo "Timed out waiting for $image at ${{ github.sha }}" >&2
-          exit 1
-
   # ==========================================
   # Version Check Jobs
   # ==========================================
@@ -127,7 +92,6 @@ jobs:
 
   test_filebeat:
     name: Test Filebeat integration
-    needs: resolve_bulk_import_image
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
@@ -136,14 +100,13 @@ jobs:
       - uses: manticoresoftware/clt@0.7.9
         with:
           test_prefix: test/clt-tests/integrations/filebeat/test-integrations-filebeat
-          image: ${{ needs.resolve_bulk_import_image.outputs.image }}
+          image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
           comment_mode: failures
           run_args: --privileged
           ui_host: "https://clt.manticoresearch.com"
 
   test_fluentbit:
     name: Test Fluentbit integration
-    needs: resolve_bulk_import_image
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
@@ -152,13 +115,12 @@ jobs:
       - uses: manticoresoftware/clt@0.7.9
         with:
           test_prefix: test/clt-tests/integrations/fluentbit/test-integrations-fluentbit
-          image: ${{ needs.resolve_bulk_import_image.outputs.image }}
+          image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
           comment_mode: failures
           run_args: --privileged
 
   test_fluentd:
     name: Test Fluentd integration
-    needs: resolve_bulk_import_image
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
@@ -167,7 +129,7 @@ jobs:
       - uses: manticoresoftware/clt@0.7.9
         with:
           test_prefix: test/clt-tests/integrations/fluentd/test-integrations-fluentd
-          image: ${{ needs.resolve_bulk_import_image.outputs.image }}
+          image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
           comment_mode: failures
           run_args: --privileged
           ui_host: "https://clt.manticoresearch.com"
@@ -204,7 +166,6 @@ jobs:
 
   test_logstash:
     name: Test Logstash integration
-    needs: resolve_bulk_import_image
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
@@ -213,7 +174,7 @@ jobs:
       - uses: manticoresoftware/clt@0.7.9
         with:
           test_prefix: test/clt-tests/integrations/logstash/test-integrations-logstash
-          image: ${{ needs.resolve_bulk_import_image.outputs.image }}
+          image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
           comment_mode: failures
           run_args: --privileged
           ui_host: "https://clt.manticoresearch.com"

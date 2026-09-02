@@ -114,10 +114,11 @@ When you use the `provider:model` form together with `API_URL`, the part before 
 | **Jina** | `jina/jina-embeddings-v4` or `jina:jina-embeddings-v4` | Yes | `API_KEY='***'` |
 
 **Local model format requirements:**
-- Must be saved in `safetensors` format (single-file only)
-- Supported families: Qwen, Llama, Mistral, Gemma
+- Supported weight formats: `safetensors` (single-file or sharded via `model.safetensors.index.json`), quantized `GGUF`, and `ONNX`
+- Supported families: BERT/Sentence Transformers, Qwen, Llama, Mistral, Gemma, T5
 - Tested models: `TinyLlama/TinyLlama-1.1B-Chat-v1.0`, `Locutusque/TinyMistral-248M-v2`, `Qwen/Qwen3-Embedding-0.6B`, `h2oai/embeddinggemma-300m`
-- Other `safetensors` models may also work, but are not guaranteed
+- Other models of these families may also work, but are not guaranteed
+- For gated Hugging Face repos, pass your Hugging Face access token as `API_KEY`
 
 More information about setting up a `float_vector` attribute can be found [here](../Creating_a_table/Data_types.md#Float-vector).
 
@@ -658,7 +659,7 @@ A **chunking strategy** decides how a document becomes vectors. Set it with `CHU
 | `recursive` | N | Splits on a separator hierarchy: paragraph, then line, then sentence, then space; keeping each piece within `MAX_TOKENS`. |
 | `sentence` | N | Sentence boundaries, packed up to `MAX_TOKENS`. |
 
-`truncate` and `mean` produce one vector per document and work on a [`float_vector`](../Creating_a_table/Data_types.md#Float-vector) column. `fixed`, `recursive` and `sentence` produce several, so they require a [`float_vector_array`](../Creating_a_table/Data_types.md#Float-vector-array) column; using one on a plain `float_vector` is rejected.
+`truncate` and `mean` produce one vector per document and work on a [`float_vector`](../Creating_a_table/Data_types.md#Float-vector) column (on a `float_vector_array` they store a 1-element array). `fixed`, `recursive` and `sentence` produce several, so they require a [`float_vector_array`](../Creating_a_table/Data_types.md#Float-vector-array) column; using one on a plain `float_vector` is rejected.
 
 The difference is what a match means. With one vector per document, search asks "is this document, as a whole, similar to the query?", and a single relevant paragraph is diluted by everything around it. With one vector per chunk, it asks "does this document *contain* something similar?": each chunk competes on its own, and the document is returned once, scored by its closest chunk (see [Multiple vectors per document](../Searching/KNN.md#Multiple-vectors-per-document)).
 
@@ -666,12 +667,12 @@ The difference is what a match means. With one vector per document, search asks 
 
 * `CHUNK_STRATEGY`: one of the five above. Default `truncate`.
 * `MAX_TOKENS`: chunk size in tokens. `0` (default) means the model's own limit; a larger value is clamped down to it.
-* `OVERLAP_TOKENS`: how many tokens consecutive chunks share, so an idea split across a boundary still appears whole in one of them. Requires an explicit non-zero `MAX_TOKENS`. A large overlap is reduced so that chunks still advance through the document — currently anything above half of `MAX_TOKENS` is capped at half.
+* `OVERLAP_TOKENS`: how many tokens consecutive chunks share, so an idea split across a boundary still appears whole in one of them. Requires an explicit non-zero `MAX_TOKENS`. A large overlap is reduced so that chunks still advance through the document: `fixed` and `recursive` cap it at half of `MAX_TOKENS`, while `sentence` re-seeds the next chunk with at most `OVERLAP_TOKENS` worth of trailing whole sentences and always advances by at least one sentence.
 * `MAX_CHUNKS`: ceiling on vectors per document. `0` (default) means unlimited.
 
 Important points:
 
-* **`MAX_CHUNKS` discards text.** On overflow the remainder is merged into the last kept chunk, which then exceeds `MAX_TOKENS` and is truncated when embedded. Nothing is left as a visible gap, but the tail is gone.
+* **`MAX_CHUNKS` discards text.** On overflow the remainder is merged into the last kept chunk, which then exceeds `MAX_TOKENS` and is truncated to the model's input window when embedded. Nothing is left as a visible gap, but the tail is gone.
 * **Local and remote models chunk differently.** Local models split on the model's real tokens. Remote API models (OpenAI, Voyage, Jina) have no local tokenizer and use a conservative byte estimate instead, so the same text and settings will produce a different number of chunks than a local model would.
 
 `ALTER TABLE ... ADD COLUMN` with a model-backed `float_vector_array`, and `ALTER TABLE ... REBUILD EMBEDDINGS` on one, are not supported yet; existing rows can not be backfilled, so the column would stay empty. Declare such a column when creating the table. Both work normally for a `float_vector` column, including with `mean`.

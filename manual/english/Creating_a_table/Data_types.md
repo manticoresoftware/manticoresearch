@@ -2981,7 +2981,7 @@ When the attribute is configured for [KNN](../Searching/KNN.md), all vectors of 
 - Currently only supported in real-time tables (not in plain tables)
 - Not supported in functions or expressions
 - Cannot be used in regular filters or sorting
-- [Auto embeddings](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29) work, but only with a chunking strategy that produces several vectors per document - see [Chunking strategies](../Searching/KNN.md#Chunking-strategies). Adding a model-backed `float_vector_array` with `ALTER TABLE ... ADD COLUMN`, and `ALTER TABLE ... REBUILD EMBEDDINGS` on one, are not supported yet; declare the column when creating the table.
+- [Auto embeddings](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29) work: a multi-vector chunking strategy (`fixed`, `recursive`, `sentence`) fills the array with one vector per chunk, while a single-vector strategy (`truncate`, `mean`) stores a 1-element array - see [Chunking strategies](../Searching/KNN.md#Chunking-strategies). Adding a model-backed `float_vector_array` with `ALTER TABLE ... ADD COLUMN`, and `ALTER TABLE ... REBUILD EMBEDDINGS` on one, are not supported yet; declare the column when creating the table.
 - Not compatible with the [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) mechanism
 
 ### Using float vector arrays with KNN

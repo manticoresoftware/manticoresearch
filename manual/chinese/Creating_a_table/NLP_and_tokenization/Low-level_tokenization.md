@@ -403,7 +403,7 @@ table products {
 如果你不需要支持连续脚本语言，可以直接去掉 [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) 和 [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)。
 选项。有关这些选项的更多信息，请参阅对应文档章节。
 
-要实现一个字符与多个字符之间的双向映射，`regexp_filter` 会很有帮助。
+如果要将一个字符映射为多个字符，或将多个字符映射为一个字符，`regexp_filter` [可能会有帮助](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)。
 
 ### blend_chars
 

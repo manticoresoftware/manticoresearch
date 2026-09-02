@@ -4257,7 +4257,7 @@ static void ReadSchemaColumnJson ( bson::Bson_c tNode, CSphColumnInfo & tCol )
 
 	NodeHandle_t tKNN = tNode.ChildByName ("knn");
 	if ( tKNN!=nullnode )
-		ReadKNNJson ( tKNN, tCol.m_tKNN, tCol.m_tKNNModel, tCol.m_sKNNFrom );
+		ReadKNNJson ( tKNN, tCol.m_tKNN, tCol.m_tKNNModel, tCol.m_sKNNFrom, tCol.m_tKNNChunk );
 }
 
 
@@ -4354,7 +4354,7 @@ void DumpAttrToJson ( JsonEscapedBuilder& tOut, const CSphColumnInfo& tCol )
 	if ( tCol.IsIndexedKNN() )
 	{
 		tOut.Named ( "knn" );
-		FormatKNNSettings ( tOut, tCol.m_tKNN, tCol.m_tKNNModel, tCol.m_sKNNFrom );
+		FormatKNNSettings ( tOut, tCol.m_tKNN, tCol.m_tKNNModel, tCol.m_sKNNFrom, tCol.m_tKNNChunk );
 	}
 }
 } // namespace

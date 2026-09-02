@@ -13,6 +13,7 @@
 #include "searchdddl.h"
 
 #include "knnmisc.h"
+#include "conversion.h"
 
 
 class DdlParser_c : public SqlParserTraits_c
@@ -53,10 +54,22 @@ public:
 		bool			m_bKNNFromSet = false;
 		bool			m_bUseGPU = false;
 
+		knn::ChunkStrategy_e m_eChunkStrategy = knn::ChunkStrategy_e::TRUNCATE;
+		uint32_t		m_uMaxTokens = 0;
+		uint32_t		m_uOverlapTokens = 0;
+		uint32_t		m_uMaxChunks = 0;
+		bool			m_bChunkStrategySpecified = false;
+		bool			m_bMaxTokensSpecified = false;
+		bool			m_bOverlapTokensSpecified = false;
+		bool			m_bMaxChunksSpecified = false;
+
+		bool			HasAnyChunkOption() const { return m_bChunkStrategySpecified || m_bMaxTokensSpecified || m_bOverlapTokensSpecified || m_bMaxChunksSpecified; }
+
 		void			Reset()	{ *this = ItemOptions_t(); }
 		DWORD			ToFlags() const;
 		knn::IndexSettings_t ToKNN() const;
 		knn::ModelSettings_t ToKNNModel() const;
+		knn::ChunkSettings_t ToKNNChunk() const;
 		void			CopyOptionsTo ( CreateTableAttr_t & tAttr ) const;
 	};
 
@@ -81,6 +94,10 @@ public:
 	bool	AddItemOptionHNSWEfConstruction ( const SqlNode_t & tOption );
 	bool	AddItemOptionModelName ( const SqlNode_t & tOption );
 	bool	AddItemOptionFrom ( const SqlNode_t & tOption );
+	bool	AddItemOptionChunkStrategy ( const SqlNode_t & tOption );
+	bool	AddItemOptionMaxTokens ( const SqlNode_t & tOption );
+	bool	AddItemOptionOverlapTokens ( const SqlNode_t & tOption );
+	bool	AddItemOptionMaxChunks ( const SqlNode_t & tOption );
 	bool	AddItemOptionCachePath ( const SqlNode_t & tOption );
 	bool	AddItemOptionAPIKey ( const SqlNode_t & tOption );
 	bool	AddItemOptionAPIUrl ( const SqlNode_t & tOption );
@@ -107,6 +124,7 @@ private:
 	void	AddField ( const CSphString & sName, DWORD uFlags );
 	bool	ConvertToAttrEngine ( const SqlNode_t & tEngine, AttrEngine_e & eEngine );
 	static bool CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphString & sName, const ItemOptions_t & tOpts, CSphString & sError );
+	static bool CheckChunkOptions ( ESphAttr eAttrType, const ItemOptions_t & tOpts, CSphString & sError );
 };
 
 using YYSTYPE = SqlNode_t;
@@ -202,6 +220,19 @@ knn::ModelSettings_t DdlParser_c::ItemOptions_t::ToKNNModel() const
 }
 
 
+knn::ChunkSettings_t DdlParser_c::ItemOptions_t::ToKNNChunk() const
+{
+	knn::ChunkSettings_t tChunk;
+
+	tChunk.m_eStrategy		= m_eChunkStrategy;
+	tChunk.m_uMaxTokens		= m_uMaxTokens;
+	tChunk.m_uOverlapTokens	= m_uOverlapTokens;
+	tChunk.m_uMaxChunks		= m_uMaxChunks;
+
+	return tChunk;
+}
+
+
 void DdlParser_c::ItemOptions_t::CopyOptionsTo ( CreateTableAttr_t & tAttr ) const
 {
 	tAttr.m_tAttr.m_eEngine	= m_eEngine;
@@ -278,11 +309,60 @@ static DWORD ConvertFlags ( int iFlags )
 }
 
 
+bool DdlParser_c::CheckChunkOptions ( ESphAttr eAttrType, const ItemOptions_t & tOpts, CSphString & sError )
+{
+	if ( tOpts.m_sKNNType.IsEmpty() )
+	{
+		sError = "chunk_strategy, max_tokens, overlap_tokens and max_chunks require knn_type='hnsw'";
+		return false;
+	}
+
+	if ( tOpts.m_sModelName.IsEmpty() )
+	{
+		sError = "chunk_strategy, max_tokens, overlap_tokens and max_chunks require model_name; explicitly supplied vectors are never chunked";
+		return false;
+	}
+
+	if ( !tOpts.m_bChunkStrategySpecified )
+	{
+		sError = "max_tokens, overlap_tokens and max_chunks require chunk_strategy";
+		return false;
+	}
+
+	const bool bOtherOptions = tOpts.m_bMaxTokensSpecified || tOpts.m_bOverlapTokensSpecified || tOpts.m_bMaxChunksSpecified;
+	if ( tOpts.m_eChunkStrategy==knn::ChunkStrategy_e::TRUNCATE && bOtherOptions )
+	{
+		sError = "chunk_strategy='truncate' ignores max_tokens, overlap_tokens and max_chunks";
+		return false;
+	}
+
+	if ( knn::IsMultiVectorStrategy ( tOpts.m_eChunkStrategy ) && eAttrType!=SPH_ATTR_FLOAT_VECTOR_ARRAY )
+	{
+		sError.SetSprintf ( "chunk_strategy='%s' produces several vectors per document and requires a float_vector_array attribute", ChunkStrategy2Str ( tOpts.m_eChunkStrategy ) );
+		return false;
+	}
+
+	if ( tOpts.m_bOverlapTokensSpecified && ( !tOpts.m_bMaxTokensSpecified || !tOpts.m_uMaxTokens ) )
+	{
+		sError = "overlap_tokens requires an explicit non-zero max_tokens";
+		return false;
+	}
+
+	return true;
+}
+
+
 bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphString & sName, const ItemOptions_t & tOpts, CSphString & sError )
 {
 	if ( eAttrType!=SPH_ATTR_FLOAT_VECTOR && eAttrType!=SPH_ATTR_FLOAT_VECTOR_ARRAY && !tOpts.m_sKNNType.IsEmpty() )
 	{
 		sError = "knn_type='hnsw' can only be used with float_vector and float_vector_array attributes";
+		return false;
+	}
+
+	if ( eAttrType!=SPH_ATTR_FLOAT_VECTOR && eAttrType!=SPH_ATTR_FLOAT_VECTOR_ARRAY && tOpts.HasAnyChunkOption() )
+	{
+		sError = "chunk_strategy, max_tokens, overlap_tokens and max_chunks can only be used with float_vector and float_vector_array attributes";
 		return false;
 	}
 
@@ -296,12 +376,8 @@ bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphSt
 	}
 	else if ( eAttrType==SPH_ATTR_FLOAT_VECTOR || eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY )
 	{
-		// auto-embeddings produce exactly one vector per document, so they are meaningless for an array column
-		if ( eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY && !tOpts.m_sModelName.IsEmpty() )
-		{
-			sError = "model_name can't be used with float_vector_array attributes";
+		if ( tOpts.HasAnyChunkOption() && !CheckChunkOptions ( eAttrType, tOpts, sError ) )
 			return false;
-		}
 
 		if ( !tOpts.m_sKNNType.IsEmpty() )
 		{
@@ -365,6 +441,7 @@ bool DdlParser_c::SetupAlterTable ( const SqlNode_t & tAttr, ESphAttr eAttr, int
 	m_pStmt->m_tAlterKNN = m_tItemOptions.ToKNN();
 	m_pStmt->m_tAlterKNNModel = m_tItemOptions.ToKNNModel();
 	m_pStmt->m_sAlterKnnFrom = m_tItemOptions.m_sFrom;
+	m_pStmt->m_tAlterKNNChunk = m_tItemOptions.ToKNNChunk();
 	m_pStmt->m_bAlterKnnFromSet = m_tItemOptions.m_bKNNFromSet;
 
 	bool bOk = CheckFieldFlags ( m_pStmt->m_eAlterColType, iFieldFlags, m_pStmt->m_sAlterAttr, m_tItemOptions, m_sError );
@@ -416,6 +493,7 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 		tAttr.m_bKNN				= !tOpts.m_sKNNType.IsEmpty();
 		tAttr.m_tKNN				= tOpts.ToKNN();
 		tAttr.m_tKNNModel			= tOpts.ToKNNModel();
+		tAttr.m_tKNNChunk			= tOpts.ToKNNChunk();
 		tAttr.m_sKNNFrom			= tOpts.m_sFrom;
 		tAttr.m_bKNNFromSet			= tOpts.m_bKNNFromSet;
 
@@ -623,6 +701,63 @@ bool DdlParser_c::AddItemOptionFrom ( const SqlNode_t & tOption )
 {
 	m_tItemOptions.m_sFrom = ToStringUnescape(tOption);
 	m_tItemOptions.m_bKNNFromSet = true;
+	return true;
+}
+
+
+static bool ParseChunkUint ( const CSphString & sValue, const char * szOption, uint32_t & uRes, CSphString & sError )
+{
+	int64_t iVal = sphToInt64 ( sValue.cstr(), &sError );
+	if ( !sError.IsEmpty() )
+		return false;
+
+	if ( iVal<0 || iVal>INT_MAX )
+	{
+		sError.SetSprintf ( "%s: '%s' is out of range (0..%d)", szOption, sValue.cstr(), INT_MAX );
+		return false;
+	}
+
+	uRes = (uint32_t)iVal;
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionChunkStrategy ( const SqlNode_t & tOption )
+{
+	if ( !Str2ChunkStrategy ( ToStringUnescape(tOption), m_tItemOptions.m_eChunkStrategy, &m_sError ) )
+		return false;
+
+	m_tItemOptions.m_bChunkStrategySpecified = true;
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionMaxTokens ( const SqlNode_t & tOption )
+{
+	if ( !ParseChunkUint ( ToStringUnescape(tOption), "max_tokens", m_tItemOptions.m_uMaxTokens, m_sError ) )
+		return false;
+
+	m_tItemOptions.m_bMaxTokensSpecified = true;
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionOverlapTokens ( const SqlNode_t & tOption )
+{
+	if ( !ParseChunkUint ( ToStringUnescape(tOption), "overlap_tokens", m_tItemOptions.m_uOverlapTokens, m_sError ) )
+		return false;
+
+	m_tItemOptions.m_bOverlapTokensSpecified = true;
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionMaxChunks ( const SqlNode_t & tOption )
+{
+	if ( !ParseChunkUint ( ToStringUnescape(tOption), "max_chunks", m_tItemOptions.m_uMaxChunks, m_sError ) )
+		return false;
+
+	m_tItemOptions.m_bMaxChunksSpecified = true;
 	return true;
 }
 

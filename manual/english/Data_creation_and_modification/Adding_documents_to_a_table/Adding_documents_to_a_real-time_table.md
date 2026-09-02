@@ -1013,7 +1013,7 @@ output.elasticsearch:
 
 Adjust Filebeat's `include_fields` list to the target schema. The target table must already exist and include every field the shipper sends, such as Fluent Bit's configured `event_time` field. Each `_id` must be an explicit, stable, non-zero decimal string such as `"123"`, and IDs must be unique within one request. The request must select `pipeline=bulk_import`, either as a request option or on every action. All actions must target the same table, and only the `index` action is accepted.
 
-Each flush request is published atomically as one disk chunk. Publishing replaces documents whose IDs already exist. A successful response contains one Elasticsearch bulk result per document. If another import temporarily holds the table, Manticore returns HTTP `503`, allowing buffered shippers to retry the request.
+Each flush request is published atomically as one disk chunk. Shippers split a continuous input stream into flush requests according to their own batching and buffering settings, so an entire load can produce multiple disk chunks: one per successful flush, not one for the whole shipper run. For large initial loads, use large but practical flush batches: larger batches reduce the number of disk chunks and subsequent merge work, while also increasing per-request latency and the amount of data retried if a request fails. Publishing replaces documents whose IDs already exist. A successful response contains one Elasticsearch bulk result per document. If another import temporarily holds the table, Manticore returns HTTP `503`, allowing buffered shippers to retry the request.
 
 #### Duplicate document IDs
 

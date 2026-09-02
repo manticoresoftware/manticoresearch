@@ -184,6 +184,36 @@ static bool IsSessionOnlySetExtra ( const SqlStmt_t & tStmt )
 }
 
 
+static bool CheckBackupPerms ( const CSphString & sUser, const CSphString & sTarget, bool bAllowEmpty, CSphString & sError )
+{
+	if ( !CheckPerms ( sUser, AuthAction_e::BACKUP, "*", false, sError ) )
+		return false;
+
+	if ( sTarget=="*" )
+		return CheckUnrestrictedPerms ( sUser, AuthAction_e::READ, sError );
+
+	return CheckPerms ( sUser, AuthAction_e::READ, sTarget, bAllowEmpty, sError );
+}
+
+
+static bool CheckBackupStmtPerms ( const CSphString & sUser, const SqlStmt_t & tStmt, CSphString & sError )
+{
+	if ( !tStmt.m_dCallStrings.GetLength() )
+		return CheckBackupPerms ( sUser, "*", false, sError );
+
+	for ( const CSphString & sTable : tStmt.m_dCallStrings )
+	{
+		if ( DenyInternalAuthStorageTarget ( sUser, sTable, sError ) )
+			return false;
+
+		if ( !CheckBackupPerms ( sUser, sTable, false, sError ) )
+			return false;
+	}
+
+	return true;
+}
+
+
 static bool SqlCheckStmtPerms ( const CSphString & sUser, const SqlStmt_t & tStmt, CSphString & sError )
 {
 	// handle SQL query
@@ -219,11 +249,13 @@ static bool SqlCheckStmtPerms ( const CSphString & sUser, const SqlStmt_t & tStm
 	// special read actions without index
 	case STMT_SHOW_WARNINGS:
 	case STMT_SHOW_META:
-	case STMT_SHOW_TABLES:
 	case STMT_SHOW_PROFILE:
 	case STMT_SHOW_PLAN:
 	case STMT_SHOW_SCROLL:
 		return CheckPerms ( sUser, AuthAction_e::READ, tStmt.m_sIndex, true, sError );
+
+	case STMT_SHOW_TABLES:
+		return CheckPermsOrBackup ( sUser, AuthAction_e::READ, tStmt.m_sIndex, true, sError );
 
 	case STMT_SELECT_COLUMNS:
 		if ( IsMysqlCompatSelect ( tStmt ) )
@@ -239,14 +271,24 @@ static bool SqlCheckStmtPerms ( const CSphString & sUser, const SqlStmt_t & tStm
 	case STMT_FLUSH_RAMCHUNK:
 	case STMT_TRUNCATE_RTINDEX:
 	case STMT_OPTIMIZE_INDEX:
-	case STMT_FLUSH_INDEX:
 	case STMT_ALTER_KLIST_TARGET:
+		if ( DenyInternalAuthStorageTarget ( sUser, tStmt.m_sIndex, sError ) )
+			return false;
+
+		return CheckPerms ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, false, sError );
+
+	case STMT_FLUSH_INDEX:
+		return CheckPermsOrBackup ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, true, sError );
+
 	case STMT_FREEZE:
 	case STMT_UNFREEZE:
 		if ( DenyInternalAuthStorageTarget ( sUser, tStmt.m_sIndex, sError ) )
 			return false;
 
-		return CheckPerms ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, false, sError );
+		return CheckPermsOrBackup ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, false, sError, AuthAction_e::READ );
+
+	case STMT_BACKUP:
+		return CheckBackupStmtPerms ( sUser, tStmt, sError );
 
 	case STMT_SET:
 		if ( tStmt.m_eSet==SET_LOCAL || IsSessionOnlySetExtra ( tStmt ) )
@@ -302,10 +344,12 @@ static bool SqlCheckStmtPerms ( const CSphString & sUser, const SqlStmt_t & tStm
 		return true;
 
 	case STMT_SHOW_STATUS:
+	case STMT_SHOW_SETTINGS:
+		return CheckPermsOrBackup ( sUser, AuthAction_e::SCHEMA, tStmt.m_sIndex, true, sError );
+
 	case STMT_SHOW_DATABASES:
 	case STMT_SHOW_PLUGINS:
 	case STMT_SHOW_THREADS:
-	case STMT_SHOW_SETTINGS:
 	case STMT_SHOW_LOCKS:
 		return CheckPerms ( sUser, AuthAction_e::SCHEMA, tStmt.m_sIndex, true, sError );
 

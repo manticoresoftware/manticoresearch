@@ -289,6 +289,9 @@ static bool CheckAuthFile ( const CSphString & sFile, CSphString & sError )
 		return false;
 	}
 
+	if ( !CheckAuthFileVersion ( tBsonSrc, sFile, sError ) )
+		return false;
+
 	// users and permissions empty arrays - valid state
 	bson::Bson_c tUsers ( tBsonSrc.ChildByName ( "users" ) );
 	bson::Bson_c tPerms ( tBsonSrc.ChildByName ( "permissions" ) );

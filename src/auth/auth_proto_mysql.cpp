@@ -184,119 +184,33 @@ static bool IsSessionOnlySetExtra ( const SqlStmt_t & tStmt )
 }
 
 
-static bool IsBackupIdentChar ( char c )
-{
-	return sphIsAlpha ( c ) || sphIsDigital ( c ) || c=='_';
-}
-
-
-static const char * SkipBackupSpaces ( const char * p, const char * pEnd )
-{
-	while ( p<pEnd && sphIsSpace ( *p ) )
-		++p;
-	return p;
-}
-
-
-static bool MatchBackupKeyword ( const char * & p, const char * pEnd, const char * sKeyword )
-{
-	const int iLen = (int)strlen ( sKeyword );
-	if ( p+iLen>pEnd || strncasecmp ( p, sKeyword, iLen )!=0 )
-		return false;
-
-	if ( p+iLen<pEnd && IsBackupIdentChar ( p[iLen] ) )
-		return false;
-
-	p += iLen;
-	return true;
-}
-
-
-static bool ParseBackupTables ( Str_t sQuery, CSphVector<CSphString> & dTables )
-{
-	const char * p = sQuery.first;
-	const char * pEnd = p + sQuery.second;
-
-	p = SkipBackupSpaces ( p, pEnd );
-	if ( !MatchBackupKeyword ( p, pEnd, "BACKUP" ) )
-		return false;
-
-	p = SkipBackupSpaces ( p, pEnd );
-	const char * pAfterBackup = p;
-	if ( !MatchBackupKeyword ( p, pEnd, "TABLE" ) )
-	{
-		p = pAfterBackup;
-		if ( !MatchBackupKeyword ( p, pEnd, "TABLES" ) )
-			return true;
-	}
-
-	while ( p<pEnd )
-	{
-		p = SkipBackupSpaces ( p, pEnd );
-		if ( p<pEnd && *p==',' )
-		{
-			++p;
-			continue;
-		}
-
-		const char * pBeforeTo = p;
-		if ( MatchBackupKeyword ( p, pEnd, "TO" ) )
-			return true;
-		p = pBeforeTo;
-
-		if ( p>=pEnd || !IsBackupIdentChar ( *p ) )
-			return true;
-
-		const char * pStart = p;
-		while ( p<pEnd && IsBackupIdentChar ( *p ) )
-			++p;
-
-		CSphString & sTable = dTables.Add();
-		sTable.SetBinary ( pStart, (int)( p-pStart ) );
-	}
-
-	return true;
-}
-
-
 static bool CheckBackupPerms ( const CSphString & sUser, const CSphString & sTarget, bool bAllowEmpty, CSphString & sError )
 {
-	if ( !HasPerms ( sUser, AuthAction_e::BACKUP, "*", false ) )
-		return CheckPerms ( sUser, AuthAction_e::BACKUP, "*", false, sError );
+	if ( !CheckPerms ( sUser, AuthAction_e::BACKUP, "*", false, sError ) )
+		return false;
 
 	if ( sTarget=="*" )
-		return CheckPermsForAllTargets ( sUser, AuthAction_e::READ, sError );
+		return CheckUnrestrictedPerms ( sUser, AuthAction_e::READ, sError );
 
 	return CheckPerms ( sUser, AuthAction_e::READ, sTarget, bAllowEmpty, sError );
 }
 
 
-bool SqlCheckBuddyQueryPerms ( const CSphString & sUser, Str_t sQuery, CSphString & sError )
+static bool CheckBackupStmtPerms ( const CSphString & sUser, const SqlStmt_t & tStmt, CSphString & sError )
 {
-	if ( !IsAuthEnabled() )
-		return true;
-
-	CSphVector<CSphString> dBackupTables;
-	if ( !ParseBackupTables ( sQuery, dBackupTables ) )
-		return true;
-
-	if ( !dBackupTables.GetLength() )
+	if ( !tStmt.m_dCallStrings.GetLength() )
 		return CheckBackupPerms ( sUser, "*", false, sError );
 
-	for ( const CSphString & sTable : dBackupTables )
-		if ( !CheckBackupPerms ( sUser, sTable, false, sError ) )
+	for ( const CSphString & sTable : tStmt.m_dCallStrings )
+	{
+		if ( DenyInternalAuthStorageTarget ( sUser, sTable, sError ) )
 			return false;
 
+		if ( !CheckBackupPerms ( sUser, sTable, false, sError ) )
+			return false;
+	}
+
 	return true;
-}
-
-
-static bool CheckPermsOrBackup ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, bool bAllowEmpty, CSphString & sError )
-{
-	if ( HasPerms ( sUser, eAction, sTarget, bAllowEmpty ) || HasPerms ( sUser, AuthAction_e::BACKUP, "*", false ) )
-		return true;
-
-	return CheckPerms ( sUser, eAction, sTarget, bAllowEmpty, sError );
 }
 
 
@@ -364,14 +278,17 @@ static bool SqlCheckStmtPerms ( const CSphString & sUser, const SqlStmt_t & tStm
 		return CheckPerms ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, false, sError );
 
 	case STMT_FLUSH_INDEX:
-		return CheckPermsOrBackup ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, false, sError );
+		return CheckPermsOrBackup ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, true, sError );
 
 	case STMT_FREEZE:
 	case STMT_UNFREEZE:
 		if ( DenyInternalAuthStorageTarget ( sUser, tStmt.m_sIndex, sError ) )
 			return false;
 
-		return CheckBackupPerms ( sUser, tStmt.m_sIndex, false, sError );
+		return CheckPermsOrBackup ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, false, sError, AuthAction_e::READ );
+
+	case STMT_BACKUP:
+		return CheckBackupStmtPerms ( sUser, tStmt, sError );
 
 	case STMT_SET:
 		if ( tStmt.m_eSet==SET_LOCAL || IsSessionOnlySetExtra ( tStmt ) )

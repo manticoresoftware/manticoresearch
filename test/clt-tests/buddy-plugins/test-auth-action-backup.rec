@@ -1,27 +1,36 @@
 ––– comment –––
 Test BACKUP permission enforcement and delegated authorization.
 Issues: https://github.com/manticoresoftware/manticoresearch/issues/4844 and https://github.com/manticoresoftware/manticoresearch/issues/2983
-Admin credentials are test-only and are bootstrapped by start-searchd-with-auth.
+Admin credentials are test-only and are bootstrapped through searchd --auth-non-interactive.
 
 Security contract:
 - read, schema, or admin alone cannot run BACKUP
 - backup alone cannot read table data
 - selected backup requires backup ON * plus read on every selected table
 - full backup requires unrestricted read ON * and cannot bypass an explicit read deny
+- manticore-backup requires credentials under auth = 1 and accepts user/password, env credentials, or bearer token
 - Buddy's internal HTTP requests remain authorized as the original SQL user
 ––– comment –––
-––– block: ../base/start-searchd-with-auth –––
 ––– input –––
-rm -rf /tmp/auth-backup-selected /tmp/auth-backup-full && mkdir -p /tmp/auth-backup-selected /tmp/auth-backup-full
+grep -q '^[[:space:]]*auth[[:space:]]*=' /etc/manticoresearch/manticore.conf || sed -i '/^searchd/a\    auth = 1' /etc/manticoresearch/manticore.conf; rm -f /var/lib/manticore/auth.json; echo "Bootstrap preconditions ready"
+––– output –––
+Bootstrap preconditions ready
+––– block: ../base/start-searchd –––
+––– input –––
+printf 'admin\nadminpass\nadminpass\n' | searchd --auth-non-interactive 2>&1 | grep -q "authentication settings successfully created and reloaded" && echo "bootstrap: OK"
+––– output –––
+bootstrap: OK
+––– input –––
+rm -rf /tmp/auth-backup-selected /tmp/auth-backup-full /tmp/auth-cli-noauth /tmp/auth-cli-basic /tmp/auth-cli-env /tmp/auth-cli-token && mkdir -p /tmp/auth-backup-selected /tmp/auth-backup-full /tmp/auth-cli-noauth /tmp/auth-cli-basic /tmp/auth-cli-env /tmp/auth-cli-token && chmod 777 /tmp/auth-backup-selected /tmp/auth-backup-full /tmp/auth-cli-noauth /tmp/auth-cli-basic /tmp/auth-cli-env /tmp/auth-cli-token
 ––– output –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE TABLE backup_allowed(content text); CREATE TABLE backup_private(content text); INSERT INTO backup_allowed(id,content) VALUES(1,'allowed'); INSERT INTO backup_private(id,content) VALUES(2,'private');"
 ––– output –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE USER 'backup_only' IDENTIFIED BY 'backup_only1'; CREATE USER 'read_only' IDENTIFIED BY 'read_only123'; CREATE USER 'admin_only' IDENTIFIED BY 'admin_only123'; CREATE USER 'backup_selected' IDENTIFIED BY 'backup_selected1';" >/dev/null
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE USER 'backup_only' IDENTIFIED BY 'backup_only1'; CREATE USER 'read_only' IDENTIFIED BY 'read_only123'; CREATE USER 'admin_only' IDENTIFIED BY 'admin_only123'; CREATE USER 'backup_selected' IDENTIFIED BY 'backup_selected1'; CREATE USER 'write_only' IDENTIFIED BY 'write_only123';" >/dev/null
 ––– output –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT backup ON * TO 'backup_only'; GRANT read ON 'backup_allowed' TO 'read_only'; GRANT admin ON * TO 'admin_only'; GRANT backup ON * TO 'backup_selected'; GRANT read ON 'backup_allowed' TO 'backup_selected';"
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT backup ON * TO 'backup_only'; GRANT read ON 'backup_allowed' TO 'read_only'; GRANT admin ON * TO 'admin_only'; GRANT backup ON * TO 'backup_selected'; GRANT read ON 'backup_allowed' TO 'backup_selected'; GRANT write ON 'backup_allowed' TO 'write_only';"
 ––– output –––
 ––– comment –––
 READ alone must not authorize BACKUP.
@@ -37,6 +46,17 @@ BACKUP alone must not authorize access to table data.
 MYSQL_PWD=backup_only1 mysql -ubackup_only -h0 -P9306 -e "BACKUP TABLE backup_allowed TO /tmp/auth-backup-selected;" 2>&1
 ––– output –––
 ERROR 1045 (42000) at line 1: Permission denied for user 'backup_only'
+––– input –––
+MYSQL_PWD=backup_only1 mysql -ubackup_only -h0 -P9306 -e "FREEZE backup_allowed;" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'backup_only'
+––– comment –––
+Existing public FREEZE/UNFREEZE authorization must remain write on the target table.
+––– comment –––
+––– input –––
+MYSQL_PWD=write_only123 mysql -uwrite_only -h0 -P9306 -e "FREEZE backup_allowed;" >/dev/null && MYSQL_PWD=write_only123 mysql -uwrite_only -h0 -P9306 -e "UNFREEZE backup_allowed;" >/dev/null && echo "write_freeze: OK"
+––– output –––
+write_freeze: OK
 ––– comment –––
 ADMIN alone must not imply BACKUP.
 ––– comment –––
@@ -55,6 +75,25 @@ selected_backup: OK
 if find /tmp/auth-backup-selected -path '*/data/backup_private/*' -type f | grep -q .; then echo "private_table_leaked"; else echo "selected_scope: OK"; fi
 ––– output –––
 selected_scope: OK
+––– comment –––
+The command-line backup tool must authenticate under auth = 1.
+––– comment –––
+––– input –––
+manticore-backup --config=/etc/manticoresearch/manticore.conf --backup-dir=/tmp/auth-cli-noauth --tables=backup_allowed 2>&1 | awk '/Authorization header field missed/ {print "no_credentials_denied: OK"}'
+––– output –––
+no_credentials_denied: OK
+––– input –––
+manticore-backup --config=/etc/manticoresearch/manticore.conf --backup-dir=/tmp/auth-cli-basic --tables=backup_allowed --user=backup_selected --password=backup_selected1 >/tmp/auth-cli-basic.out 2>&1 && test -n "$(find /tmp/auth-cli-basic -path '*/data/backup_allowed/*' -type f -print -quit)" && echo "cli_basic_backup: OK"
+––– output –––
+cli_basic_backup: OK
+––– input –––
+MANTICORE_BACKUP_USER=backup_selected MANTICORE_BACKUP_PASSWORD=backup_selected1 manticore-backup --config=/etc/manticoresearch/manticore.conf --backup-dir=/tmp/auth-cli-env --tables=backup_allowed >/tmp/auth-cli-env.out 2>&1 && test -n "$(find /tmp/auth-cli-env -path '*/data/backup_allowed/*' -type f -print -quit)" && echo "cli_env_backup: OK"
+––– output –––
+cli_env_backup: OK
+––– input –––
+TOK=$(curl -s -u backup_selected:backup_selected1 -X POST http://127.0.0.1:9308/token -d "{}" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])"); manticore-backup --config=/etc/manticoresearch/manticore.conf --backup-dir=/tmp/auth-cli-token --tables=backup_allowed --token="$TOK" >/tmp/auth-cli-token.out 2>&1 && test -n "$(find /tmp/auth-cli-token -path '*/data/backup_allowed/*' -type f -print -quit)" && echo "cli_token_backup: OK"
+––– output –––
+cli_token_backup: OK
 ––– comment –––
 The same operator cannot name another table and cannot request an unrestricted full backup.
 ––– comment –––

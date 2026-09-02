@@ -46,7 +46,7 @@ static bool ProcessPerms ( const UserPerms_t * pPerms, AuthAction_e eAction, con
 	return ( bAllowEmpty && bHasAllow );
 }
 
-bool HasPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, bool bAllowEmpty )
+static bool HasPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, bool bAllowEmpty )
 {
 	assert ( IsAuthEnabled() );
 
@@ -70,7 +70,22 @@ bool CheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphStri
 }
 
 
-bool CheckPermsForAllTargets ( const CSphString & sUser, AuthAction_e eAction, CSphString & sError )
+bool CheckPermsOrBackup ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, bool bAllowEmpty, CSphString & sError, AuthAction_e eBackupAlsoRequires )
+{
+	if ( HasPerms ( sUser, eAction, sTarget, bAllowEmpty ) )
+		return true;
+
+	if ( !HasPerms ( sUser, AuthAction_e::BACKUP, "*", false ) )
+		return CheckPerms ( sUser, eAction, sTarget, bAllowEmpty, sError );
+
+	if ( eBackupAlsoRequires==AuthAction_e::UNKNOWN )
+		return true;
+
+	return CheckPerms ( sUser, eBackupAlsoRequires, sTarget, bAllowEmpty, sError );
+}
+
+
+bool CheckUnrestrictedPerms ( const CSphString & sUser, AuthAction_e eAction, CSphString & sError )
 {
 	assert ( IsAuthEnabled() );
 

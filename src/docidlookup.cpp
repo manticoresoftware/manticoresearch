@@ -876,10 +876,13 @@ bool DocidLookupWriter_c::Finalize ( CSphString & sError )
 	return true;
 }
 
-static int64_t GetDocidLookupHeaderSize ( DWORD uIndexVersion )
+// the .spt header layouts this file knows how to validate:
+static constexpr int64_t DOCID_LOOKUP_HEADER_SIZE_V65 = sizeof(DWORD)*2 + sizeof(DocID_t);						// v.65..70: docs, docs per checkpoint, max docid
+static constexpr int64_t DOCID_LOOKUP_HEADER_SIZE_V71 = DOCID_LOOKUP_HEADER_SIZE_V65 + sizeof(SphOffset_t);		// v.71+: + uuid entries offset
+
+static int64_t DocidLookupHeaderSize ( DWORD uIndexVersion )
 {
-	// docs, docs per checkpoint, max docid [, uuid entries offset]
-	return sizeof(DWORD)*2 + sizeof(DocID_t) + ( uIndexVersion>=DOCID_LOOKUP_UUID_VERSION ? sizeof(SphOffset_t) : 0 );
+	return uIndexVersion>=DOCID_LOOKUP_UUID_VERSION ? DOCID_LOOKUP_HEADER_SIZE_V71 : DOCID_LOOKUP_HEADER_SIZE_V65;
 }
 
 
@@ -889,7 +892,7 @@ bool CheckDocidLookupFormat ( const BYTE * pData, int64_t iDataLen, DWORD uIndex
 	if ( uIndexVersion<DOCID_LOOKUP_SPLIT_VERSION )
 		return true;
 
-	int64_t iHeader = GetDocidLookupHeaderSize ( uIndexVersion );
+	int64_t iHeader = DocidLookupHeaderSize ( uIndexVersion );
 	if ( !pData || iDataLen<iHeader )
 	{
 		sError.SetSprintf ( "docid lookup is too short (" UINT64_FMT " bytes)", (uint64_t)iDataLen );
@@ -923,7 +926,7 @@ bool CheckDocidLookupFormat ( const BYTE * pData, int64_t iDataLen, DWORD uIndex
 	// name the layout we actually see, if it is the other one
 	const char * szHint = "";
 	DWORD uOther = uIndexVersion>=DOCID_LOOKUP_UUID_VERSION ? DOCID_LOOKUP_UUID_VERSION-1 : DOCID_LOOKUP_UUID_VERSION;
-	int64_t iOtherHeader = GetDocidLookupHeaderSize ( uOther );
+	int64_t iOtherHeader = DocidLookupHeaderSize ( uOther );
 	int64_t iOtherExpected = iOtherHeader + nCheckpoints*(int64_t)sizeof(DocidLookupCheckpoint_t);
 	if ( iDataLen>=iOtherExpected && sphUnalignedRead ( ((const DocidLookupCheckpoint_t *)( pData+iOtherHeader ))->m_tOffset )==iOtherExpected )
 		szHint = uOther<uIndexVersion ? " (the lookup is in the pre-v.71 layout; the header was rewritten with a newer format version without converting it)" : " (the lookup is in the v.71+ layout)";
@@ -961,8 +964,8 @@ bool UpgradeDocidLookupFile ( const CSphString & sFilename, DWORD uIndexVersion,
 	if ( !CheckDocidLookupFormat ( pData, iLen, uIndexVersion, sError ) )
 		return false;
 
-	int64_t iOldHeader = GetDocidLookupHeaderSize ( uIndexVersion );
-	int64_t iShift = GetDocidLookupHeaderSize ( DOCID_LOOKUP_UUID_VERSION ) - iOldHeader;
+	int64_t iOldHeader = DocidLookupHeaderSize ( uIndexVersion );
+	int64_t iShift = DocidLookupHeaderSize ( DOCID_LOOKUP_UUID_VERSION ) - iOldHeader;
 	DWORD nDocs = sphUnalignedRead ( *(const DWORD*)pData );
 	DWORD nDocsPerCheckpoint = sphUnalignedRead ( *(const DWORD*)( pData+sizeof(DWORD) ) );
 	DocID_t tMaxDocID = sphUnalignedRead ( *(const DocID_t*)( pData+sizeof(DWORD)*2 ) );

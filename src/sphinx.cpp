@@ -1367,7 +1367,7 @@ public:
 	bool				PreallocWordlist();
 	bool				PreallocAttributes();
 	bool				PreallocDocidLookup();
-	bool				UpgradeDocidLookup ( CSphString & sError );
+	bool				UpgradeDocidLookup ( CSphString & sError ) final;
 	bool				PreallocKilllist();
 	bool				PreallocHistograms ( StrVec_t & dWarnings );
 	bool				PreallocDocstore();
@@ -3263,9 +3263,6 @@ void CSphIndex_VLN::PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t
 
 bool CSphIndex_VLN::SaveHeader ( CSphString & sError )
 {
-	if ( !UpgradeDocidLookup ( sError ) )
-		return false;
-
 	BuildHeader_t tBuildHeader;
 	WriteHeader_t tWriteHeader;
 	PrepareHeaders ( tBuildHeader, tWriteHeader );
@@ -10338,27 +10335,11 @@ bool CSphIndex_VLN::PreallocDocidLookup()
 	CSphString sFormatError;
 	if ( !CheckDocidLookupFormat ( m_tDocidLookup.GetReadPtr(), m_tDocidLookup.GetLengthBytes(), m_uVersion, sFormatError ) )
 	{
-		CSphString sFile = GetFilename ( SPH_EXT_SPT );
-
-		// a header rewritten with v.71+ over a pre-v.71 lookup (older daemons did that on ALTER, see manticoresearch#4852)
-		// is unambiguous: the pre-v.71 layout is recognizable and the conversion is exact, so repair it in place
-		DWORD uActual = DetectDocidLookupVersion ( m_tDocidLookup.GetReadPtr(), m_tDocidLookup.GetLengthBytes() );
-		if ( m_uVersion<DOCID_LOOKUP_UUID_VERSION || uActual!=DOCID_LOOKUP_UUID_VERSION-1 )
-		{
-			m_sLastError.SetSprintf ( "%s: %s; the table must be rebuilt (the lookup is damaged, or it predates the v.%u layout and the header was rewritten by ALTER)", sFile.cstr(), sFormatError.cstr(), DOCID_LOOKUP_SPLIT_VERSION );
-			return false;
-		}
-
-		sphWarning ( "%s: docid lookup is in the pre-v.%u layout while the header is v.%u; upgrading the lookup in place", sFile.cstr(), DOCID_LOOKUP_UUID_VERSION, m_uVersion );
-		m_tDocidLookup.Reset();
-		if ( !UpgradeDocidLookupFile ( sFile, uActual, m_sLastError ) || !m_tDocidLookup.Setup ( sFile, m_sLastError, false ) )
-			return false;
-
-		if ( !CheckDocidLookupFormat ( m_tDocidLookup.GetReadPtr(), m_tDocidLookup.GetLengthBytes(), m_uVersion, sFormatError ) )
-		{
-			m_sLastError.SetSprintf ( "%s: %s (after upgrade)", sFile.cstr(), sFormatError.cstr() );
-			return false;
-		}
+		// a header rewritten with a newer format version over an unconverted lookup (an ALTER by an affected
+		// daemon, manticoresearch#4852) - or plain damage. an inconsistent table is not repaired on the fly:
+		// refuse it with a clear message; indextool is the place to inspect it
+		m_sLastError.SetSprintf ( "%s: %s; check the table with indextool, then rebuild or restore it (manticoresearch#4852)", GetFilename ( SPH_EXT_SPT ).cstr(), sFormatError.cstr() );
+		return false;
 	}
 
 	auto [ tUuidEntriesOffset, nDocs ] = m_tLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), m_uVersion );
@@ -10370,6 +10351,10 @@ bool CSphIndex_VLN::PreallocDocidLookup()
 	return true;
 }
 
+
+// a format version bump must confirm that the .spt layout knowledge in docidlookup.cpp
+// (DocidLookupHeaderSize and the DOCID_LOOKUP_* constants) still holds, then move this tripwire
+static_assert ( INDEX_FORMAT_VERSION==72, "INDEX_FORMAT_VERSION changed: verify the .spt header layout table in docidlookup.cpp, then update this assert" );
 
 // in-place operations (ALTER TABLE ADD/DROP COLUMN or field, header rewrites) save the header with the
 // current INDEX_FORMAT_VERSION, so every version-gated data file must be brought to the current format
@@ -14273,10 +14258,6 @@ bool CSphIndex_VLN::RewriteHeader ( CSphString & sError ) const
 {
 	CSphString sHeader = GetFilename ( SPH_EXT_SPH );
 	if ( !sphIsReadable ( sHeader.cstr(), &sError ) )
-		return false;
-
-	// the new header carries the current format version; the data files must match it
-	if ( !const_cast<CSphIndex_VLN*>(this)->UpgradeDocidLookup ( sError ) )
 		return false;
 
 	CSphString sHeaderNew;

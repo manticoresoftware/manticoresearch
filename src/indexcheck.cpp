@@ -1611,7 +1611,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 
 		if ( !CheckDocidLookupFormat ( tLookupData.GetReadPtr(), tLookupData.GetLengthBytes(), m_uVersion, sError ) )
 		{
-			m_tReporter.Fail ( "%s (a daemon with this check repairs a pre-v.71 lookup under a newer header on load; otherwise rebuild the table)", sError.cstr() );
+			m_tReporter.Fail ( "%s (the header was rewritten without converting the lookup, manticoresearch#4852; rebuild or restore the table)", sError.cstr() );
 			return;
 		}
 	}

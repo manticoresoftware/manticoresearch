@@ -10102,6 +10102,8 @@ DiskAttachRes_e RtIndex_c::AttachDiskIndexImpl ( CSphIndex * pIndex, bool bTrunc
 	// all done, reset cache
 	QcacheClearByIndexId ( GetIndexId() );
 	QcacheClearByIndexId ( pIndex->GetIndexId() );
+	if ( bMetaSaved )
+		CheckStartAutoOptimize();
 	return bMetaSaved ? DiskAttachRes_e::OK : DiskAttachRes_e::META_FAILED;
 }
 

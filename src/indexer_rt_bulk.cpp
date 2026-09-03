@@ -5,12 +5,14 @@
 //
 
 #include "client_session.h"
-#include "boost_process_launch.h"
 
 #include <filesystem>
 #include <type_traits>
 
 #include "indexer_rt_bulk.h"
+#if _WIN32
+#include "coroutine.h"
+#endif
 
 #include <boost/version.hpp>
 #if BOOST_VERSION >= 108800
@@ -35,6 +37,11 @@
 namespace fs = std::filesystem;
 
 DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const ServedIndexWriteReservation_c & tReservation, int64_t iIndexId, int iAlterGeneration, const CSphString & sPath, bool & bTargetStale, CSphString & sError );
+
+
+#if _WIN32
+static Threads::Coro::Mutex_c g_tIndexerRtBulkLaunchMutex;
+#endif
 
 
 static bool ValidateFloatVectorValue ( const CSphColumnInfo & tAttr, const SqlInsert_t & tValue, int iRow, CSphString & sError )
@@ -92,13 +99,13 @@ static void AppendCsvQuoted ( std::ostream & tOut, const char * szValue )
 static bool GetIndexerPath ( CSphString & sIndexer, CSphString & sError )
 {
 #if STATIC_BINARY
-	sError = "indexer RT bulk is unavailable in static builds";
+	sError = "bulk_import is unavailable in static builds";
 	return false;
 #else
 	CSphString sExecutable = GetExecutablePath();
 	if ( sExecutable.IsEmpty() )
 	{
-		sError = "failed to locate the running searchd executable for indexer RT bulk";
+		sError = "failed to locate the running searchd executable for bulk_import";
 		return false;
 	}
 
@@ -311,45 +318,32 @@ public:
 		// Do not share Boost's global instance across concurrent requests.
 		std::decay_t<decltype(boost::process::limit_handles)> tLimitHandles;
 		std::error_code tError;
-		try
-		{
-			#if _WIN32
-			// Windows limit_handles temporarily changes process-wide inheritance flags.
-			std::lock_guard<std::mutex> tLaunchLock ( GetBoostProcessLaunchMutex() );
+		#if _WIN32
+		// Windows limit_handles temporarily changes process-wide inheritance flags.
+		// This path runs from a request coroutine; use a coroutine mutex so
+		// contenders yield instead of blocking scheduler worker threads.
+		Threads::Coro::ScopedMutex_t tLaunchLock ( g_tIndexerRtBulkLaunchMutex );
+		#endif
+		m_tChild = boost::process::child
+		(
+			sIndexer.cstr(),
+			boost::process::args ( dArgs ),
+			boost::process::std_in < m_tInput,
+			( boost::process::std_out & boost::process::std_err ) > sOutput.cstr(),
+			tLimitHandles,
+			#if !_WIN32
+			ResetSignalMask_t {},
 			#endif
-			m_tChild = boost::process::child
-			(
-				sIndexer.cstr(),
-				boost::process::args ( dArgs ),
-				boost::process::std_in < m_tInput,
-				( boost::process::std_out & boost::process::std_err ) > sOutput.cstr(),
-				tLimitHandles,
-				#if !_WIN32
-				ResetSignalMask_t {},
-				#endif
-				boost::process::error ( tError ),
-				tEnvironment
-			);
-		}
-		catch ( const std::exception & tException )
-		{
-			sError.SetSprintf ( "failed to start indexer RT bulk process '%s': %s", sIndexer.cstr(), tException.what() );
-			Abort();
-			return false;
-		}
-		catch ( ... )
-		{
-			sError.SetSprintf ( "failed to start indexer RT bulk process '%s'", sIndexer.cstr() );
-			Abort();
-			return false;
-		}
+			boost::process::error ( tError ),
+			tEnvironment
+		);
 
 		if ( tError || !m_tChild.valid() )
 		{
 			if ( tError )
-				sError.SetSprintf ( "failed to start indexer RT bulk process '%s': %s", sIndexer.cstr(), tError.message().c_str() );
+				sError.SetSprintf ( "failed to start bulk_import process '%s': %s", sIndexer.cstr(), tError.message().c_str() );
 			else
-				sError.SetSprintf ( "failed to start indexer RT bulk process '%s'", sIndexer.cstr() );
+				sError.SetSprintf ( "failed to start bulk_import process '%s'", sIndexer.cstr() );
 			Abort();
 			return false;
 		}
@@ -375,7 +369,7 @@ public:
 
 		CSphString sChildError;
 		if ( !m_tChild.valid() )
-			sChildError = "indexer RT bulk process is unavailable";
+			sChildError = "bulk_import process is unavailable";
 		else
 		{
 			while ( true )
@@ -392,7 +386,7 @@ public:
 				if ( !m_tChild.running ( tRunningError ) )
 				{
 					if ( tRunningError )
-						sChildError.SetSprintf ( "failed checking indexer RT bulk process: %s", tRunningError.message().c_str() );
+						sChildError.SetSprintf ( "failed checking bulk_import process: %s", tRunningError.message().c_str() );
 					break;
 				}
 
@@ -404,9 +398,9 @@ public:
 				std::error_code tWaitError;
 				m_tChild.wait ( tWaitError );
 				if ( tWaitError )
-					sChildError.SetSprintf ( "failed waiting for indexer RT bulk process: %s", tWaitError.message().c_str() );
+					sChildError.SetSprintf ( "failed waiting for bulk_import process: %s", tWaitError.message().c_str() );
 				else if ( m_tChild.exit_code()!=0 )
-					sChildError.SetSprintf ( "indexer RT bulk build process '%s' failed with status %d", m_sExecutable.cstr(), m_tChild.exit_code() );
+					sChildError.SetSprintf ( "bulk_import build process '%s' failed with status %d", m_sExecutable.cstr(), m_tChild.exit_code() );
 			}
 		}
 
@@ -445,18 +439,18 @@ private:
 			m_tInput.flush();
 			if ( !m_tInput )
 			{
-				sError = "failed flushing indexer RT bulk stream";
+				sError = "failed flushing bulk_import stream";
 				bOk = false;
 			}
 		}
 		catch ( const std::exception & tException )
 		{
-			sError.SetSprintf ( "failed flushing indexer RT bulk stream: %s", tException.what() );
+			sError.SetSprintf ( "failed flushing bulk_import stream: %s", tException.what() );
 			bOk = false;
 		}
 		catch ( ... )
 		{
-			sError = "failed flushing indexer RT bulk stream";
+			sError = "failed flushing bulk_import stream";
 			bOk = false;
 		}
 
@@ -470,13 +464,13 @@ private:
 		catch ( const std::exception & tException )
 		{
 			CSphString sCloseError;
-			sCloseError.SetSprintf ( "failed closing indexer RT bulk stream: %s", tException.what() );
+			sCloseError.SetSprintf ( "failed closing bulk_import stream: %s", tException.what() );
 			AppendIndexerRtBulkError ( sError, sCloseError );
 			bOk = false;
 		}
 		catch ( ... )
 		{
-			AppendIndexerRtBulkError ( sError, CSphString ( "failed closing indexer RT bulk stream" ) );
+			AppendIndexerRtBulkError ( sError, CSphString ( "failed closing bulk_import stream" ) );
 			bOk = false;
 		}
 
@@ -675,13 +669,13 @@ void AbortIndexerRtBulkBatch ( ClientSession_c & tSession )
 		std::error_code tError;
 		fs::remove_all ( tDir, tError );
 		if ( tError )
-			sphWarning ( "indexer RT bulk cleanup failed for '%s': %s", tState.m_sDir.cstr(), tError.message().c_str() );
+			sphWarning ( "bulk_import cleanup failed for '%s': %s", tState.m_sDir.cstr(), tError.message().c_str() );
 		else
 		{
 			tError.clear();
 			fs::remove ( tDir.parent_path(), tError );
 			if ( tError && tError!=std::errc::directory_not_empty )
-				sphWarning ( "indexer RT bulk cleanup failed for '%s': %s", tDir.parent_path().string().c_str(), tError.message().c_str() );
+				sphWarning ( "bulk_import cleanup failed for '%s': %s", tDir.parent_path().string().c_str(), tError.message().c_str() );
 		}
 	}
 
@@ -705,7 +699,7 @@ static bool CheckSchemaSupported ( const CSphSchema & tSchema, CSphString & sErr
 	const CSphColumnInfo * pDocid = tSchema.GetAttr ( sphGetDocidName() );
 	if ( !pDocid || pDocid->IsUuidLinkedDocid() )
 	{
-		sError = "indexer RT bulk supports numeric document ids only";
+		sError = "bulk_import supports numeric document ids only";
 		return false;
 	}
 
@@ -717,7 +711,7 @@ static bool CheckSchemaSupported ( const CSphSchema & tSchema, CSphString & sErr
 		ESphAttr eType = tAttr.m_eAttrType;
 		if ( eType!=SPH_ATTR_TOKENCOUNT && !CsvAttrDirective ( eType ) )
 		{
-			sError.SetSprintf ( "indexer RT bulk does not support attribute '%s'", tAttr.m_sName.cstr() );
+			sError.SetSprintf ( "bulk_import does not support attribute '%s'", tAttr.m_sName.cstr() );
 			return false;
 		}
 	}
@@ -735,7 +729,7 @@ static bool CheckIndexerRtBulkExecutable ( CSphString & sError )
 	if ( sphIsReadable ( sIndexer, &sFileError ) )
 		return true;
 
-	sError.SetSprintf ( "indexer RT bulk executable '%s' is unavailable: %s", sIndexer.cstr(), sFileError.cstr() );
+	sError.SetSprintf ( "bulk_import executable '%s' is unavailable: %s", sIndexer.cstr(), sFileError.cstr() );
 	return false;
 }
 
@@ -1032,7 +1026,7 @@ bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, E
 	const int iIdColumn = FindInsertColumn ( tStmt, sphGetDocidName() );
 	if ( iIdColumn<0 )
 	{
-		sError = "indexer RT bulk requires an explicit id";
+		sError = "bulk_import requires an explicit id";
 		return false;
 	}
 	const int iColumns = tStmt.m_iSchemaSz;
@@ -1125,7 +1119,7 @@ bool FinalizeIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError )
 		else
 		{
 			CSphString sTargetError;
-			if ( RecheckTarget ( tSession, sTargetError, "finalizing indexer RT bulk" ) )
+			if ( RecheckTarget ( tSession, sTargetError, "finalizing bulk_import" ) )
 				AbortIndexerRtBulkBatch ( tSession );
 			else
 				sError = sTargetError;

@@ -10187,7 +10187,7 @@ DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const Serv
 	if ( !tReservation.Matches ( pServed ) )
 	{
 		bTargetStale = true;
-		sError.SetSprintf ( "table '%s' was replaced while finalizing indexer RT bulk", sTable.cstr() );
+		sError.SetSprintf ( "table '%s' was replaced while finalizing bulk_import", sTable.cstr() );
 		return DiskAttachRes_e::NOT_ATTACHED;
 	}
 	{
@@ -10195,7 +10195,7 @@ DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const Serv
 		if ( pRt->GetIndexId()!=iIndexId || pRt->GetAlterGeneration()!=iAlterGeneration )
 		{
 			bTargetStale = true;
-			sError.SetSprintf ( "table '%s' was altered while finalizing indexer RT bulk", sTable.cstr() );
+			sError.SetSprintf ( "table '%s' was altered while finalizing bulk_import", sTable.cstr() );
 			return DiskAttachRes_e::NOT_ATTACHED;
 		}
 	}
@@ -10204,13 +10204,13 @@ DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const Serv
 	StrVec_t dWarnings;
 	if ( !pPlain->Prealloc ( false, nullptr, dWarnings ) )
 	{
-		sError.SetSprintf ( "failed loading indexer RT bulk chunk: %s", pPlain->GetLastError().cstr() );
+		sError.SetSprintf ( "failed loading bulk_import chunk: %s", pPlain->GetLastError().cstr() );
 		return DiskAttachRes_e::NOT_ATTACHED;
 	}
 
 	if ( pPlain->GetMatchSchema().HasKNNAttrs() && !pPlain->AlterKNN ( sError ) )
 	{
-		sError.SetSprintf ( "failed building KNN index for indexer RT bulk chunk: %s", sError.cstr() );
+		sError.SetSprintf ( "failed building KNN index for bulk_import chunk: %s", sError.cstr() );
 		return DiskAttachRes_e::NOT_ATTACHED;
 	}
 
@@ -10221,7 +10221,7 @@ DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const Serv
 		if ( !tReservation.Matches ( pCurrent ) )
 		{
 			bTargetStale = true;
-			sError.SetSprintf ( "table '%s' was replaced while finalizing indexer RT bulk", sTable.cstr() );
+			sError.SetSprintf ( "table '%s' was replaced while finalizing bulk_import", sTable.cstr() );
 			return DiskAttachRes_e::NOT_ATTACHED;
 		}
 
@@ -10230,7 +10230,7 @@ DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const Serv
 		if ( !tReservation.Matches ( pRegistered ) || pRt->GetIndexId()!=iIndexId || pRt->GetAlterGeneration()!=iAlterGeneration )
 		{
 			bTargetStale = true;
-			sError.SetSprintf ( "table '%s' changed while finalizing indexer RT bulk", sTable.cstr() );
+			sError.SetSprintf ( "table '%s' changed while finalizing bulk_import", sTable.cstr() );
 			return DiskAttachRes_e::NOT_ATTACHED;
 		}
 		if ( !pRt->CanAttachDiskIndex ( pPlain.get(), sError ) )

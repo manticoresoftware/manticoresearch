@@ -5,8 +5,10 @@
 //
 
 #include "client_session.h"
+#include "boost_process_launch.h"
 
 #include <filesystem>
+#include <type_traits>
 
 #include "indexer_rt_bulk.h"
 
@@ -305,16 +307,23 @@ public:
 
 		std::vector<std::string> dArgs { "--config", sConfig.cstr(), "--remove_dups", "indexer_rt_bulk_chunk" };
 		boost::process::environment tEnvironment = boost::this_process::environment();
+		// limit_handles keeps per-launch handles in mutable state.
+		// Do not share Boost's global instance across concurrent requests.
+		std::decay_t<decltype(boost::process::limit_handles)> tLimitHandles;
 		std::error_code tError;
 		try
 		{
+			#if _WIN32
+			// Windows limit_handles temporarily changes process-wide inheritance flags.
+			std::lock_guard<std::mutex> tLaunchLock ( GetBoostProcessLaunchMutex() );
+			#endif
 			m_tChild = boost::process::child
 			(
 				sIndexer.cstr(),
 				boost::process::args ( dArgs ),
 				boost::process::std_in < m_tInput,
 				( boost::process::std_out & boost::process::std_err ) > sOutput.cstr(),
-				boost::process::limit_handles,
+				tLimitHandles,
 				#if !_WIN32
 				ResetSignalMask_t {},
 				#endif

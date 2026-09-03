@@ -13,6 +13,7 @@
 #include "searchdtask.h"
 #include "netreceive_ql.h"
 #include "client_session.h"
+#include "boost_process_launch.h"
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/read_until.hpp>
@@ -405,7 +406,10 @@ BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 
 #if _WIN32
 	BuddyWindow_t tWnd;
-	pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_pPipe, tWnd, boost::process::limit_handles, boost::process::error ( tErrorCode ), tEnv ) );
+	{
+		std::lock_guard<std::mutex> tLaunchLock ( GetBoostProcessLaunchMutex() );
+		pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_pPipe, tWnd, boost::process::limit_handles, boost::process::error ( tErrorCode ), tEnv ) );
+	}
 #else
 	PreservedStd_t tPreserveStd;
 	pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_pPipe, boost::process::limit_handles, boost::process::error ( tErrorCode ) , tPreserveStd, tEnv ) );
@@ -454,8 +458,12 @@ static void BuddyStopContainer()
 	CSphString sCmd;
 	sCmd.SetSprintf ( "docker kill %s", g_sContainerName.cstr() );
 	std::error_code tErrorCode;
-	boost::process::child tStop ( sCmd.cstr(), boost::process::limit_handles, boost::process::error ( tErrorCode ) );
-	tStop.wait();
+	std::unique_ptr<boost::process::child> pStop;
+	{
+		std::lock_guard<std::mutex> tLaunchLock ( GetBoostProcessLaunchMutex() );
+		pStop = std::make_unique<boost::process::child> ( sCmd.cstr(), boost::process::limit_handles, boost::process::error ( tErrorCode ) );
+	}
+	pStop->wait();
 #endif
 }
 

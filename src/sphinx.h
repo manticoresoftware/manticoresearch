@@ -1357,7 +1357,7 @@ public:
 
 public:
 	/// build index by indexing given sources
-	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress & ) = 0; // fixme! build only
+	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress &, bool bRemoveDupes ) = 0; // fixme! build only
 
 	/// build index by mering current index with given index
 	virtual bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids, CSphIndexProgress & tProgress ) = 0; // fixme! build only
@@ -1550,7 +1550,7 @@ class CSphIndexStub : public CSphIndex
 {
 public:
 						FWD_CTOR ( CSphIndexStub, CSphIndex )
-	int					Build ( const CSphVector<CSphSource *> &, int, int, CSphIndexProgress& ) override { return 0; }
+	int					Build ( const CSphVector<CSphSource *> &, int, int, CSphIndexProgress&, bool ) override { return 0; }
 	bool				Merge ( CSphIndex *, const VecTraits_T<CSphFilterSettings> &, bool, CSphIndexProgress & ) override { return false; }
 	bool				Prealloc ( bool, FilenameBuilder_i *, StrVec_t & ) override { return false; }
 	void				Dealloc () override {}

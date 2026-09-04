@@ -1,0 +1,25 @@
+––– input –––
+root=/tmp/indexer-remove-dups
+rm -rf "$root"
+mkdir -p "$root"
+printf '%s\n' 'source default_source {' '  type = csvpipe' '  csvpipe_command = -' '  csvpipe_field_string = title' '  csvpipe_attr_uint = gid' '}' '' 'source removed_source {' '  type = csvpipe' '  csvpipe_command = -' '  csvpipe_field_string = title' '  csvpipe_attr_uint = gid' '}' '' 'index default_dups {' '  type = plain' '  source = default_source' "  path = $root/default_dups" '}' '' 'index removed_dups {' '  type = plain' '  source = removed_source' "  path = $root/removed_dups" '}' '' 'searchd {' '  listen = 127.0.0.1:19316:mysql41' "  log = $root/searchd.log" "  query_log = $root/query.log" "  pid_file = $root/searchd.pid" '  workers = threads' '  watchdog = 0' '}' > "$root/manticore.conf"
+rows='7,firstseventoken,70
+8,firsteighttoken,80
+7,deadtwotoken,71
+9,uniqueninetoken,90
+7,deadthreetoken,72
+8,deadeighttoken,81'
+printf '%b\n' "$rows" | indexer --config "$root/manticore.conf" default_dups >/dev/null
+printf '%b\n' "$rows" | indexer --config "$root/manticore.conf" --remove_dups removed_dups >/dev/null
+MANTICORE_NO_BUDDY=1 searchd --config "$root/manticore.conf" --nodetach >"$root/console.log" 2>&1 & echo $! > "$root/searchd.pid"
+ready=0; for i in $(seq 1 100); do if mysql --skip-table --batch --raw --skip-column-names -h0 -P19316 -e 'SELECT 1' >/dev/null 2>&1; then ready=1; break; fi; sleep 0.1; done; if [ "$ready" = 1 ]; then echo REMOVE_DUPS_READY; else echo FAIL_REMOVE_DUPS_START; fi
+––– output –––
+REMOVE_DUPS_READY
+––– input –––
+default=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P19316 -e 'SELECT id,title,gid FROM default_dups' | sort -n -k1,1 -k3,3); removed=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P19316 -e 'SELECT id,title,gid FROM removed_dups' | sort -n -k1,1); expected_default=$(printf '7\tfirstseventoken\t70\n7\tdeadtwotoken\t71\n7\tdeadthreetoken\t72\n8\tfirsteighttoken\t80\n8\tdeadeighttoken\t81\n9\tuniqueninetoken\t90'); expected_removed=$(printf '7\tfirstseventoken\t70\n8\tfirsteighttoken\t80\n9\tuniqueninetoken\t90'); if [ "$default" = "$expected_default" ] && [ "$removed" = "$expected_removed" ]; then echo REMOVE_DUPS_ROWS_OK; else printf 'FAIL_REMOVE_DUPS default=%s removed=%s\n' "$default" "$removed"; fi
+––– output –––
+REMOVE_DUPS_ROWS_OK
+––– input –––
+kill "$(cat "$root/searchd.pid")"; wait "$(cat "$root/searchd.pid")" 2>/dev/null || true; MANTICORE_NO_BUDDY=1 searchd --config "$root/manticore.conf" --nodetach >"$root/console.log" 2>&1 & echo $! > "$root/searchd.pid"; ready=0; for i in $(seq 1 100); do if mysql --skip-table --batch --raw --skip-column-names -h0 -P19316 -e 'SELECT COUNT(*) FROM removed_dups' >/dev/null 2>&1; then ready=1; break; fi; sleep 0.1; done; count=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P19316 -e 'SELECT COUNT(*) FROM removed_dups'); kill "$(cat "$root/searchd.pid")"; wait "$(cat "$root/searchd.pid")" 2>/dev/null || true; rm -rf "$root"; if [ "$ready" = 1 ] && [ "$count" = 3 ]; then echo REMOVE_DUPS_RESTART_OK; else echo "FAIL_REMOVE_DUPS_RESTART ready=$ready count=$count"; fi
+––– output –––
+REMOVE_DUPS_RESTART_OK

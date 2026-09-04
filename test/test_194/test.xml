@@ -5,6 +5,7 @@
 
 <requires>
 <re2/>
+<non-rt-indexer/>
 </requires>
 
 <config>

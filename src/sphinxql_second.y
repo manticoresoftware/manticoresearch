@@ -70,6 +70,7 @@
 %token	TOK_WITH
 %token  TOK_FROM
 %token  TOK_PLUGINS
+%token  TOK_PURGE
 %token  TOK_RELOAD
 %token  TOK_SONAME
 %token  TOK_TRUNCATE
@@ -111,6 +112,7 @@ statement:
     | unfreeze_indexes
   	| kill_connid
 	| reload_auth
+	| purge
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -121,7 +123,7 @@ ident_no_option:
 	| TOK_ON | TOK_QUERY | TOK_RAMCHUNK | TOK_READ | TOK_RECONFIGURE | TOK_REPEATABLE | TOK_DELETE | TOK_EXIT
 	| TOK_RTINDEX | TOK_SERIALIZABLE | TOK_SESSION | TOK_SET | TOK_TABLE | TOK_TABLES | TOK_TO
 	| TOK_UNCOMMITTED | TOK_UNFREEZE | TOK_WAIT | TOK_WITH | TOK_FROM | TOK_PLUGINS | TOK_RELOAD | TOK_SONAME
-	| TOK_TRUNCATE | TOK_IDENT
+	| TOK_TRUNCATE | TOK_PURGE | TOK_IDENT
 	;
 
 ident:
@@ -326,6 +328,20 @@ truncate:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_TRUNCATE_RTINDEX;
+		}
+	;
+
+//////////////////////////////////////////////////////////////////////////
+
+purge:
+	TOK_PURGE ident_all TOK_FROM TOK_TABLE index_id
+		{
+			CSphString sError;
+			if ( !pParser->SetPurge ( $2, $5, sError ) )
+			{
+				yyerror ( pParser, sError.cstr() );
+				YYERROR;
+			}
 		}
 	;
 

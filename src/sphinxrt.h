@@ -153,6 +153,13 @@ enum class RtActionResult_e
 	TABLE_USABLE
 };
 
+enum class DiskAttachRes_e
+{
+	NOT_ATTACHED,
+	OK,
+	META_FAILED
+};
+
 class RtIndex_i : public CSphIndexStub
 {
 public:
@@ -198,7 +205,14 @@ public:
 	}
 
 	/// attach a disk chunk to current index
+	virtual bool CanAttachDiskIndex ( const CSphIndex * pIndex, CSphString & sError ) const { return true; }
 	virtual bool AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) { return true; }
+	virtual DiskAttachRes_e AttachDiskIndexWithMeta ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError )
+	{
+		return AttachDiskIndex ( pIndex, bTruncate, bFatal, sError )
+			? DiskAttachRes_e::OK
+			: DiskAttachRes_e::NOT_ATTACHED;
+	}
 
 	/// attach all the content of the RT index (flush ramchunk then disk chunks) to the current index
 	virtual bool AttachRtIndex ( AttachArgs_t & tArgs, CSphString & sError ) { return true; }
@@ -249,6 +263,7 @@ public:
 
 	virtual void ProhibitSave() = 0;
 	virtual void EnableSave() = 0;
+	virtual bool IsSaveEnabled() const { return true; }
 	virtual void LockFileState ( CSphVector<CSphString> & dFiles ) = 0;
 
 	virtual void WaitLockEnabledState() noexcept {};

@@ -3,6 +3,8 @@
 
 <name>KEYWORDS for bigram</name>
 
+<requires><non-rt-indexer/></requires>
+
 <config>
 indexer
 {

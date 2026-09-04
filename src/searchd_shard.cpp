@@ -1234,7 +1234,7 @@ static bool ApplyLocalShardBatch ( const ShardIndex_c & tShard, const CSphString
 		return false;
 	}
 
-	Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+	Threads::Coro::ScopedDmlWriteTable_c tWriting { pServed->Locker() };
 	if ( !tWriting.CanWrite() )
 	{
 		sError.SetSprintf ( "table '%s' is locked", tTarget.m_sIndex.cstr() );
@@ -1434,7 +1434,7 @@ void HandleCommandShardWrite ( GenericOutputBuffer_c & tOut, WORD uVer, InputBuf
 		return;
 	}
 
-	Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+	Threads::Coro::ScopedDmlWriteTable_c tWriting { pServed->Locker() };
 	if ( !tWriting.CanWrite() )
 	{
 		SendErrorReply ( tOut, "table '%s' is locked", sTargetName.cstr() );

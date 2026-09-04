@@ -1,0 +1,60 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL auto_optimize=0;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 <<'SQL'
+DROP TABLE IF EXISTS rt_bulk_sql;
+CREATE TABLE rt_bulk_sql (title TEXT, gid INTEGER);
+INSERT INTO rt_bulk_sql(id,title,gid) VALUES (1,'regular row',1);
+SET bulk_import=rt_bulk_sql;
+BEGIN;
+INSERT INTO rt_bulk_sql(id,title,gid) VALUES (1,'assisted replacement',11),(2,'assisted row',12);
+COMMIT;
+SET bulk_import=0;
+SQL
+––– output –––
+––– input –––
+mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,title,gid FROM rt_bulk_sql" | sort -n
+––– output –––
+1	assisted replacement	11
+2	assisted row	12
+––– input –––
+mysql -h0 -P9306 <<'SQL'
+SET bulk_import=rt_bulk_sql;
+INSERT INTO rt_bulk_sql(id,title,gid) VALUES (3,'rolled back row',13);
+ROLLBACK;
+SET bulk_import=0;
+SQL
+mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT COUNT(*) FROM rt_bulk_sql"
+––– output –––
+2
+––– input –––
+out=$(mysql --force -h0 -P9306 2>&1 <<'SQL'
+SET bulk_import=rt_bulk_sql;
+INSERT INTO rt_bulk_sql(unknown_column) VALUES ('rejected before staging');
+INSERT INTO rt_bulk_sql(id,title) VALUES (4,'valid after error');
+COMMIT;
+SET bulk_import=0;
+SQL
+); rows=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,title,gid FROM rt_bulk_sql WHERE id=4"); expected=$(printf '4\tvalid after error\t0'); if printf '%s\n' "$out" | grep -qi 'unknown column' && [ "$rows" = "$expected" ]; then echo ASSISTED_COLUMN_VALIDATION_OK; else printf 'FAIL_ASSISTED_COLUMN_VALIDATION output=%s rows=%s\n' "$out" "$rows"; fi
+––– output –––
+ASSISTED_COLUMN_VALIDATION_OK
+––– input –––
+chunks=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SHOW TABLE rt_bulk_sql STATUS LIKE 'disk_chunks'" | awk '{print $2}'); if [ "$chunks" = 3 ]; then echo ASSISTED_SQL_PUBLISHED; else echo "FAIL_ASSISTED_SQL chunks=$chunks"; fi
+––– output –––
+ASSISTED_SQL_PUBLISHED
+––– input –––
+mysql -h0 -P9306 <<'SQL'
+DROP TABLE IF EXISTS bulk_import_case;
+CREATE TABLE BuLk_ImPoRt_CaSe (title TEXT, gid INTEGER);
+SET bulk_import=BULK_IMPORT_CASE;
+INSERT INTO bulk_import_case(id,title,gid) VALUES (1,'SQL mixed case',11);
+COMMIT;
+SET bulk_import=0;
+SQL
+––– output –––
+––– input –––
+reply=$(printf '%s\n' '{"insert":{"table":"BULK_IMPORT_CASE","id":2,"doc":{"title":"HTTP mixed case","gid":12}}}' | curl -sS -X POST 'http://localhost:9308/bulk?bulk_import=BuLk_ImPoRt_CaSe' -H 'Content-Type: application/x-ndjson' --data-binary @-); rows=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,title,gid FROM bulk_import_case" | sort -n); expected=$(printf '1\tSQL mixed case\t11\n2\tHTTP mixed case\t12'); if printf '%s' "$reply" | grep -q '"errors":false' && [ "$rows" = "$expected" ]; then echo BULK_IMPORT_CASE_INSENSITIVE_OK; else printf 'FAIL_BULK_IMPORT_CASE reply=%s rows=%s\n' "$reply" "$rows"; fi
+––– output –––
+BULK_IMPORT_CASE_INSENSITIVE_OK

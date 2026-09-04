@@ -21,6 +21,7 @@
 #include "accumulator.h"
 #include "sphinxudf.h"
 #include "sphinxquery/xqparser.h"
+#include "indexfiles.h"
 
 #include <gmock/gmock.h>
 
@@ -39,6 +40,24 @@ static void DeleteIndexFiles ( const char * sIndex )
 	{
 		sName.SetSprintf ( "%s.%s", sIndex, sExt );
 		unlink ( sName.cstr () );
+	}
+}
+
+static void DeleteAttachTestFiles ( const char * szBase )
+{
+	CSphString sName;
+	for ( const auto & tExt : sphGetExts() )
+	{
+		sName.SetSprintf ( "%s%s", szBase, tExt.m_szExt );
+		unlink ( sName.cstr() );
+		sName.SetSprintf ( "%s.0%s", szBase, tExt.m_szExt );
+		unlink ( sName.cstr() );
+	}
+
+	for ( const char * szExt : { "lock", "meta", "meta.new", "ram", "kill" } )
+	{
+		sName.SetSprintf ( "%s.%s", szBase, szExt );
+		unlink ( sName.cstr() );
 	}
 }
 
@@ -240,6 +259,79 @@ protected:
 
 	CSphDictSettings tDictSettings;
 };
+
+TEST_F ( RT, AttachReportsMetadataFailure )
+{
+	static constexpr const char * SOURCE_PATH = "test_attach_source";
+	static constexpr const char * TARGET_PATH = "test_attach_target";
+	DeleteAttachTestFiles ( SOURCE_PATH );
+	DeleteAttachTestFiles ( TARGET_PATH );
+
+	Threads::CallCoroutine ( [&] {
+		tCol.m_sName = "id";
+		tCol.m_eAttrType = SPH_ATTR_BIGINT;
+		tSrcSchema.AddAttr ( tCol, true );
+
+		CSphSchema tSchema;
+		for ( int i=0; i<tSrcSchema.GetFieldsCount(); ++i )
+			tSchema.AddField ( tSrcSchema.GetField(i) );
+		for ( int i=0; i<tSrcSchema.GetAttrsCount(); ++i )
+			tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
+
+		auto pDict = sphCreateDictionaryCRC ( tDictSettings, nullptr, pTok, "attach", false, 32, nullptr, sError );
+		ASSERT_TRUE ( pDict );
+
+		auto fnCreateRt = [&] ( const char * szName, const char * szPath ) {
+			auto pIndex = sphCreateIndexRT ( szName, szPath, tSchema, 128 * 1024 );
+			pIndex->SetTokenizer ( pTok->Clone ( SPH_CLONE_INDEX ) );
+			pIndex->SetDictionary ( pDict->Clone() );
+			pIndex->PostSetup();
+			return pIndex;
+		};
+
+		auto pSource = fnCreateRt ( "attach_source", SOURCE_PATH );
+		StrVec_t dWarnings;
+		ASSERT_TRUE ( pSource->Prealloc ( false, nullptr, dWarnings ) );
+
+		InsertDocData_c tDoc ( pSource->GetMatchSchema() );
+		tDoc.SetID ( 101 );
+		const char * szTitle = "attached row";
+		const char * szContent = "metadata failure";
+		tDoc.m_dFields.Add ( { szTitle, (int64_t)strlen ( szTitle ) } );
+		tDoc.m_dFields.Add ( { szContent, (int64_t)strlen ( szContent ) } );
+
+		RtAccum_t tAcc;
+		CSphString sFilter;
+		ASSERT_TRUE ( pSource->AddDocument ( tDoc, false, sFilter, sError, sWarning, &tAcc ) );
+		ASSERT_TRUE ( pSource->Commit ( nullptr, &tAcc, &sError ) );
+		ASSERT_TRUE ( pSource->ForceDiskChunk() );
+		pSource.reset();
+
+		auto pPlain = sphCreateIndexPhrase ( "attach_plain", SphSprintf ( "%s.0", SOURCE_PATH ) );
+		dWarnings.Reset();
+		ASSERT_TRUE ( pPlain->Prealloc ( false, nullptr, dWarnings ) );
+
+		auto pTarget = fnCreateRt ( "attach_target", TARGET_PATH );
+		dWarnings.Reset();
+		ASSERT_TRUE ( pTarget->Prealloc ( false, nullptr, dWarnings ) );
+		pTarget->ProhibitSave();
+
+		bool bFatal = false;
+		sError = "";
+		auto eResult = pTarget->AttachDiskIndexWithMeta ( pPlain.get(), false, bFatal, sError );
+		if ( eResult!=DiskAttachRes_e::NOT_ATTACHED )
+			pPlain.release();
+
+		EXPECT_EQ ( eResult, DiskAttachRes_e::META_FAILED );
+		EXPECT_FALSE ( bFatal );
+		EXPECT_THAT ( sError.cstr(), testing::HasSubstr ( "failed to save metadata" ) );
+		EXPECT_EQ ( pTarget->GetStats().m_iTotalDocuments, 1 );
+		pTarget->EnableSave();
+	} );
+
+	DeleteAttachTestFiles ( SOURCE_PATH );
+	DeleteAttachTestFiles ( TARGET_PATH );
+}
 
 /*
  * It was instantiated several times, but that wasn't work, since on every instantiation couple of attributes was inserted into schema, having idex's schema the same.

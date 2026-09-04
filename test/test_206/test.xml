@@ -5,6 +5,7 @@
 
 <requires>
 <sphinxql_keep_null/>
+<non-rt-indexer/>
 </requires>
 
 <config>

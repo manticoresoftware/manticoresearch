@@ -31,6 +31,7 @@
 #include "aggrexpr.h"
 #include "auth/auth_proto_http.h"
 #include "netfetch.h"
+#include "indexer_rt_bulk.h"
 
 static bool g_bLogBadHttpReq = env_exists ( "MANTICORE_LOG_HTTP_BAD_REQ" ); // log content of bad http requests, ruled by this env variable
 static int g_iLogHttpData = env_long ( "MANTICORE_LOG_HTTP_DATA" ).value_or(0); // verbose logging of http data, ruled by this env variable
@@ -175,7 +176,7 @@ static Endpoint_t g_dEndpoints[(size_t)EHTTP_ENDPOINT::TOTAL] =
 		{ "pq", "json/pq" },
 		{ "cli", nullptr },
 		{ "cli_json", nullptr },
-		{ "_bulk", nullptr },
+		{ "_bulk", "_bulk/" },
 		{ "token", nullptr }
 };
 
@@ -2279,13 +2280,21 @@ public:
 		if ( !CheckNDJson() )
 			return false;
 
+		auto pSession = session::Info().GetClientSession();
+		auto & tIndexerState = pSession->m_tIndexerRtBulk;
+		const CSphString * pIndexerRtBulk = m_tOptions ( "bulk_import" );
+		CSphString sActivateIndexerRtBulk = pIndexerRtBulk ? *pIndexerRtBulk : CSphString();
+		const bool bExitIndexerRtBulk = tIndexerState.IsEnabled() && sActivateIndexerRtBulk=="0";
+		const bool bHadPendingIndexerRtBulk = tIndexerState.HasPendingData();
+		if ( tIndexerState.IsEnabled() || sActivateIndexerRtBulk=="0" )
+			sActivateIndexerRtBulk = "";
+		else
+			sActivateIndexerRtBulk.ToLower();
+
 		JsonObj_c tResults ( true );
-		bool bResult = false;
+		bool bResult = true;
 		int iCurLine = 0;
 		int iLastTxStartLine = 0;
-
-		if ( m_tSource.Eof() )
-			return FinishBulk ( tResults, bResult, iCurLine, iLastTxStartLine );
 
 		// originally we execute txn for single index
 		// if there is combo, we fall back to query-by-query commits
@@ -2304,7 +2313,7 @@ public:
 
 			if ( IsEmpty ( tQuery ) )
 			{
-				if ( session::IsInTrans() )
+				if ( IsGroupOpen ( tTxnState ) )
 				{
 					assert ( tTxnState.HasIndex() );
 					// empty query finishes current txn
@@ -2339,7 +2348,29 @@ public:
 			if ( ( !tTxnState.HasIndex() || tStmt.m_sIndex!=tTxnState.m_sIndex ) && !HttpCheckPerms ( session::GetUser(), AuthAction_e::WRITE, tStmt.m_sIndex, m_eHttpCode, m_sError, m_dData ) )
 				return false;
 
-			if ( session::IsInTrans() && tTxnState.m_sIndex!=tStmt.m_sIndex )
+			if ( bHadPendingIndexerRtBulk )
+			{
+				m_sError = "bulk_import already has pending data in this session";
+				return FinishBulk ( tResults, false, iCurLine, iLastTxStartLine, EHTTP_STATUS::_400 );
+			}
+
+			if ( !sActivateIndexerRtBulk.IsEmpty() )
+			{
+				if ( tStmt.m_sIndex!=sActivateIndexerRtBulk )
+				{
+					m_sError.SetSprintf ( "bulk_import target '%s' does not match operation table '%s'", sActivateIndexerRtBulk.cstr(), tStmt.m_sIndex.cstr() );
+					return FinishBulk ( tResults, false, iCurLine, iLastTxStartLine, EHTTP_STATUS::_400 );
+				}
+				if ( !ActivateIndexerRtBulk ( *pSession, sActivateIndexerRtBulk, m_sError ) )
+				{
+					tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), m_sError.cstr(), ResultSetFormat_e::MntSearch );
+					AddBulkResult ( tResults, sStmt.cstr(), tResult );
+					return FinishBulk ( tResults, false, iCurLine, iLastTxStartLine );
+				}
+				sActivateIndexerRtBulk = "";
+			}
+
+			if ( IsGroupOpen ( tTxnState ) && tTxnState.m_sIndex!=tStmt.m_sIndex )
 			{
 				assert ( tTxnState.HasIndex() );
 				// we should finish current txn, as we got another index
@@ -2364,7 +2395,6 @@ public:
 			}
 
 			SetQueryOptions ( m_tOptions, tStmt );
-
 			switch ( tStmt.m_eStmt )
 			{
 			case STMT_INSERT:
@@ -2403,18 +2433,18 @@ public:
 				continue;
 			}
 
-			if ( !bResult || !session::IsInTrans() )
+			if ( !bResult || !IsGroupOpen ( tTxnState ) )
 				AddBulkResult ( tResults, sStmt.cstr(), tResult );
 
 			// no further than the first error
 			if ( !bResult )
 				break;
 
-			if ( !session::IsInTrans() )
+			if ( !IsGroupOpen ( tTxnState ) )
 				iLastTxStartLine = iCurLine;
 		}
 
-		if ( bResult && session::IsInTrans() )
+		if ( bResult && IsGroupOpen ( tTxnState ) )
 		{
 			assert ( tTxnState.HasIndex() );
 			// We're in txn - that is, nothing committed, and we should do it right now
@@ -2425,17 +2455,26 @@ public:
 
 		if ( !bResult )
 			RollbackBulkTxn ( tTxnState );
-		else
+		else if ( tTxnState.HasIndex() )
 		{
 			session::SetInTrans ( false );
 			tTxnState.Reset ();
 		}
+
+		if ( bExitIndexerRtBulk )
+			CleanupIndexerRtBulk ( *pSession );
 
 		HTTPINFO << "inserted  " << iCurLine << " result: " << (int)bResult << ", error:" << m_sError;
 		return FinishBulk ( tResults, bResult, iCurLine, iLastTxStartLine );
 	}
 
 private:
+	static bool IsGroupOpen ( const BulkTxnState_t & tTxnState )
+	{
+		return tTxnState.HasIndex()
+			&& ( session::IsInTrans() || session::Info().GetClientSession()->m_tIndexerRtBulk.IsEnabled() );
+	}
+
 	bool FinishBulk ( JsonObj_c & tResults, bool bResult, int iCurLine, int iLastTxStartLine, EHTTP_STATUS eStatus = EHTTP_STATUS::_200 )
 	{
 		JsonObj_c tRoot;
@@ -2492,7 +2531,7 @@ private:
 
 	void RollbackBulkTxn ( BulkTxnState_t & tTxnState ) const
 	{
-		if ( session::IsInTrans() && tTxnState.HasIndex() )
+		if ( IsGroupOpen ( tTxnState ) )
 			ProcessRollback ( FromStr ( tTxnState.m_sIndex ) );
 
 		session::SetInTrans ( false );
@@ -2737,6 +2776,14 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 
 	// should set client user to pass it further into distributed index
 	session::SetUser ( sUser );
+	if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::ES_BULK && session::Info().GetClientSession()->m_tIndexerRtBulk.IsEnabled() )
+	{
+		tRes.m_eReplyHttpCode = EHTTP_STATUS::_400;
+		tRes.m_sError = "Elasticsearch /_bulk is unavailable while bulk_import is active; use SQL or Manticore /bulk";
+		tRes.m_bSkipBuddy = true;
+		sphHttpErrorReply ( dResult, tRes.m_eReplyHttpCode, tRes.m_sError.cstr() );
+		return tRes;
+	}
 
 	std::unique_ptr<HttpHandler_c> pHandler = CreateHttpHandler ( tRes.m_eEndpoint, tSource, sSrcQuery, hOptions, eRequestType );
 	if ( !pHandler )
@@ -2769,7 +2816,7 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 	tRes.m_bOk = pHandler->Process();
 	tRes.m_sError = pHandler->GetError();
 	tRes.m_eReplyHttpCode = pHandler->GetStatusCode();
-	tRes.m_bSkipBuddy = ( tRes.m_eReplyHttpCode==EHTTP_STATUS::_403 ); // error with status code 403 Forbidden should not route into buddy
+	tRes.m_bSkipBuddy = ( tRes.m_eReplyHttpCode==EHTTP_STATUS::_403 || tRes.m_eEndpoint==EHTTP_ENDPOINT::JSON_BULK );
 	dResult = std::move ( pHandler->GetResult() );
 
 	return tRes;
@@ -2818,6 +2865,7 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 		eEndpoint = EHTTP_ENDPOINT::ES_BULK;
 
 	HttpProcessResult_t tRes;
+	tRes.m_eEndpoint = eEndpoint;
 	Str_t sSrcQuery;
 
 	if ( bCompressed && !HasGzip() )
@@ -2841,6 +2889,8 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 		tRes = ProcessHttpQuery ( *pSource, sSrcQuery, m_hOptions, dResult, true, m_eType, false );
 	}
 
+	if ( eEndpoint==EHTTP_ENDPOINT::JSON_BULK )
+		tRes.m_bSkipBuddy = true;
 	return ProcessHttpQueryBuddy ( tRes, sSrcQuery, m_hOptions, dResult, true, m_eType );
 }
 
@@ -3344,7 +3394,7 @@ static bool ParseMetaLine ( const char * sLine, BulkDoc_t & tDoc, CSphString & s
 		return false;
 
 	tDoc.m_sIndex = tIndex.StrVal();
-	
+
 	JsonObj_c tId = tAction.GetItem ( "_id" );
 	if ( tId )
 	{
@@ -3617,8 +3667,16 @@ bool HttpHandlerEsBulk_c::Validate()
 	return true;
 }
 
+
 bool HttpHandlerEsBulk_c::Process()
 {
+	if ( ( m_hOpts.Exists ( "bulk_import" ) && m_hOpts["bulk_import"]=="1" )
+		|| ( m_hOpts.Exists ( "pipeline" ) && m_hOpts["pipeline"]=="bulk_import" ) )
+	{
+		ReportLogError ( "direct-to-disk bulk loading is unsupported on Elasticsearch /_bulk; use SQL or Manticore /bulk", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+		return false;
+	}
+
 	if ( !Validate() )
 		return false;
 
@@ -3664,6 +3722,7 @@ bool HttpHandlerEsBulk_c::Process()
 				return false;
 		}
 	}
+
 	CSphVector<BulkTnx_t> dTnx;
 	const BulkDoc_t * pLastDoc = dDocs.Begin();
 	for ( const BulkDoc_t * pCurDoc = pLastDoc + 1; pCurDoc<dDocs.End(); pCurDoc++ )

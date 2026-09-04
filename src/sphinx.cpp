@@ -1290,7 +1290,7 @@ public:
 						CSphIndex_VLN ( CSphString sIndexName, CSphString sFilename );
 						~CSphIndex_VLN() override;
 
-	int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress & tProgress ) final; // fixme! build only
+	int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress & tProgress, bool bRemoveDupes ) final; // fixme! build only
 
 	enum class LOAD_E { ParseError_e, GeneralError_e, Ok_e };
 	LOAD_E				LoadHeaderLegacy ( const CSphString& sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
@@ -1472,7 +1472,9 @@ private:
 
 	bool						RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSize, SphOffset_t * pFileSize, CSphBin & dMinBin, SphOffset_t * pSharedOffset ); // build only
 
-	bool						SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, int nLookupsInBlock, int nLookupsInLastBlock, CSphIndexProgress& tProgress ); // build only
+	bool						SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, int nLookupsInBlock, int nLookupsInLastBlock, CSphIndexProgress& tProgress, bool bRemoveDupes ); // build only
+	template<bool REMOVE_DUPES>
+	bool						SortDocidLookup_T ( int iFD, int nBlocks, int iMemoryLimit, int nLookupsInBlock, int nLookupsInLastBlock, CSphIndexProgress& tProgress ); // build only
 
 private:
 	bool						JuggleFile ( ESphExt eExt, CSphString & sError, bool bNeedSrc=true, bool bNeedDst=true ) const;
@@ -5026,7 +5028,18 @@ static const CSphVector<int64_t> * FetchMVA ( DocID_t tDocId, int iAttr, const C
 		pMva = tMvaContainer.m_tContainer[iAttr]->Find(tDocId);
 	}
 
-	if ( pMva )
+	if ( pMva && tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tAttr.IsIndexedKNN() && tAttr.m_tKNN.m_eHNSWSimilarity==knn::HNSWSimilarity_e::COSINE )
+	{
+		CSphVector<float> dVector;
+		dVector.Resize ( pMva->GetLength() );
+		ARRAY_FOREACH ( i, dVector )
+			dVector[i] = sphDW2F ( (DWORD)(*pMva)[i] );
+		NormalizeVec ( dVector );
+		ARRAY_FOREACH ( i, dVector )
+			(*pMva)[i] = sphF2DW ( dVector[i] );
+	}
+
+	if ( pMva && tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR )
 		SortMva ( *pMva, ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET ) );
 
 	return pMva;
@@ -5052,6 +5065,7 @@ bool CSphIndex_VLN::Build_StoreBlobAttrs ( DocID_t tDocId, std::pair<SphOffset_t
 		{
 		case SPH_ATTR_UINT32SET:
 		case SPH_ATTR_INT64SET:
+		case SPH_ATTR_FLOAT_VECTOR:
 			{
 				const CSphVector<int64_t> * pMva = FetchMVA ( tDocId, i, tAttr, tMvaContainer, tSource, bForceSource );
 				bOk = tBlobRowBuilder.SetAttr ( iBlobAttr++, pMva ? (const BYTE*)(pMva->Begin()) : nullptr, pMva ? pMva->GetLength()*sizeof(int64_t) : 0, BlobAttrInput_e::MVA_INT64, sError );
@@ -5110,6 +5124,7 @@ static void Builder_StoreAttrs ( const CSphSchema & tSchema, DocID_t tDocId, CSp
 
 		case SPH_ATTR_UINT32SET:
 		case SPH_ATTR_INT64SET:
+		case SPH_ATTR_FLOAT_VECTOR:
 			{
 				const CSphVector<int64_t> * pMva = FetchMVA ( tDocId, i, tAttr, tMvaContainer, tSource, false );
 				pBuilder->SetAttr ( iAttrId, pMva ? pMva->Begin() : nullptr, pMva ? pMva->GetLength() : 0 );
@@ -5451,7 +5466,65 @@ void WarnAboutKillList ( const CSphVector<DocID_t> & dKillList, const KillListTa
 }
 
 
-bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, int nLookupsInBlock, int nLookupsInLastBlock, CSphIndexProgress & tProgress ) // build only
+template<bool REMOVE_DUPES>
+class LookupDupes_T
+{};
+
+
+template<>
+class LookupDupes_T<true>
+{
+public:
+	void Setup ( DWORD uRows, CSphString sFilename, CSphString & sError )
+	{
+		m_uRows = uRows;
+		m_sFilename = std::move ( sFilename );
+		m_pError = &sError;
+	}
+
+	bool Add ( const DocidRowidPair_t & tPair )
+	{
+		uint64_t uDocID = (uint64_t)tPair.m_tDocID;
+		if ( m_bHavePrevious && uDocID==m_uPrevious )
+		{
+			if ( !m_bMapped )
+			{
+				if ( !m_tDeadRowMap.Prealloc ( m_uRows, m_sFilename, *m_pError ) )
+					return false;
+
+				m_bMapped = true;
+			}
+
+			if ( !m_tDeadRowMap.Set ( tPair.m_tRowID ) )
+			{
+				m_pError->SetSprintf ( "sort_lookup: duplicate row %u is already marked dead", tPair.m_tRowID );
+				return false;
+			}
+		}
+
+		m_uPrevious = uDocID;
+		m_bHavePrevious = true;
+		return true;
+	}
+
+	bool Flush()
+	{
+		return !m_bMapped || m_tDeadRowMap.Flush ( true, *m_pError );
+	}
+
+private:
+	DeadRowMap_Disk_c m_tDeadRowMap;
+	CSphString			m_sFilename;
+	CSphString *		m_pError { nullptr };
+	uint64_t			m_uPrevious { 0 };
+	DWORD				m_uRows { 0 };
+	bool				m_bHavePrevious { false };
+	bool				m_bMapped { false };
+};
+
+
+template<bool REMOVE_DUPES>
+bool CSphIndex_VLN::SortDocidLookup_T ( int iFD, int nBlocks, int iMemoryLimit, int nLookupsInBlock, int nLookupsInLastBlock, CSphIndexProgress & tProgress ) // build only
 {
 	tProgress.PhaseBegin ( CSphIndexProgress::PHASE_LOOKUP );
 	assert (!tProgress.m_iDocids);
@@ -5466,6 +5539,10 @@ bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, in
 
 	DocidLookupWriter_c tWriter ( tfWriter, (DWORD)m_tStats.m_iTotalDocuments );
 	tWriter.Start();
+
+	LookupDupes_T<REMOVE_DUPES> tDupes;
+	if constexpr ( REMOVE_DUPES )
+		tDupes.Setup ( (DWORD)m_tStats.m_iTotalDocuments, GetFilename ( SPH_EXT_SPM ), m_sLastError );
 
 	RawVector_T<CSphBin> dBins;
 	SphOffset_t iSharedOffset = -1;
@@ -5503,8 +5580,13 @@ bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, in
 	while ( tLookupQueue.GetLength() )
 	{
 		int iBin = tLookupQueue.Root();
+		const DocidRowidPair_t & tPair = dTopDocIDs[iBin];
 
-		tWriter.AddPair ( dTopDocIDs[iBin] );
+		if constexpr ( REMOVE_DUPES )
+			if ( !tDupes.Add ( tPair ) )
+				return false;
+
+		tWriter.AddPair ( tPair );
 
 		tLookupQueue.Pop();
 		ESphBinRead eRes = dBins[iBin].ReadBytes ( &dTopDocIDs[iBin], sizeof(DocidRowidPair_t) );
@@ -5528,12 +5610,25 @@ bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, in
 	if ( !tWriter.Finalize ( m_sLastError ) )
 		return false;
 
+	if constexpr ( REMOVE_DUPES )
+		if ( !tDupes.Flush() )
+			return false;
+
 	// clean up readers
 	dBins.Reset();
 
 	tProgress.m_iDocids = tProgress.m_iDocidsTotal;
 	tProgress.PhaseEnd();
 	return true;
+}
+
+
+bool CSphIndex_VLN::SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, int nLookupsInBlock, int nLookupsInLastBlock, CSphIndexProgress & tProgress, bool bRemoveDupes ) // build only
+{
+	if ( bRemoveDupes )
+		return SortDocidLookup_T<true> ( iFD, nBlocks, iMemoryLimit, nLookupsInBlock, nLookupsInLastBlock, tProgress );
+
+	return SortDocidLookup_T<false> ( iFD, nBlocks, iMemoryLimit, nLookupsInBlock, nLookupsInLastBlock, tProgress );
 }
 
 
@@ -5817,7 +5912,7 @@ void CSphIndex_VLN::Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, 
 }
 
 
-int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress& tProgress )
+int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress& tProgress, bool bRemoveDupes )
 {
 	assert ( dSources.GetLength() );
 
@@ -6389,7 +6484,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	WarnAboutKillList ( dKillList, m_tSettings.m_tKlistTargets );
 
 	m_iMinMaxIndex = m_tStats.m_iTotalDocuments*m_tSchema.GetRowSize();
-	if ( !SortDocidLookup ( fdTmpLookup.GetFD(), nDocidLookupBlocks, iMemoryLimit, nDocidLookupsPerBlock, nDocidLookup, tProgress ) )
+	if ( !SortDocidLookup ( fdTmpLookup.GetFD(), nDocidLookupBlocks, iMemoryLimit, nDocidLookupsPerBlock, nDocidLookup, tProgress, bRemoveDupes ) )
 		return 0;
 
 	///////////////////////////////////
@@ -8995,7 +9090,7 @@ static bool AddLateKNNDistFilter ( const CSphQuery & tQuery, bool bKNNIteratorCr
 	if ( !CanAddKNNDistFilter ( *tFlx.m_pMatchSchema ) )
 		return true;
 
-	// copy whatever is live now 
+	// copy whatever is live now
 	dLateFilters.Resize(0);
 	for ( const auto & tFilter : *tFlx.m_pFilters )
 		dLateFilters.Add ( tFilter );

@@ -1300,24 +1300,77 @@ void ServedIndex_c::SetUnlink ( CSphString sUnlink ) const
 		m_pIndex->m_sUnlink = std::move ( sUnlink );
 }
 
-void ServedIndex_c::LockRead() const noexcept
+bool ServedIndex_c::LockRead() const noexcept
 {
-	m_tTableLock.WaitRead();
+	return m_pTableLock->WaitRead();
 }
 
 [[nodiscard]] bool ServedIndex_c::UnlockRead() const noexcept
 {
-	return m_tTableLock.UnlockRead();
+	return m_pTableLock->UnlockRead();
 }
 
-[[nodiscard]] DWORD ServedIndex_c::GetReadLocks() const noexcept
+[[nodiscard]] Threads::Coro::TableLocks_t ServedIndex_c::GetLocks() const noexcept
 {
-	return m_tTableLock.GetReads();
+	return m_pTableLock->GetLocks();
 }
 
 [[nodiscard]] Threads::Coro::ReadTableLock_c& ServedIndex_c::Locker() const noexcept
 {
-	return m_tTableLock;
+	return *m_pTableLock;
+}
+
+ServedIndexWriteReservation_c::ServedIndexWriteReservation_c ( ServedIndexWriteReservation_c&& rhs ) noexcept
+	: m_pTableLock { std::move ( rhs.m_pTableLock ) }
+{}
+
+ServedIndexWriteReservation_c& ServedIndexWriteReservation_c::operator= ( ServedIndexWriteReservation_c&& rhs ) noexcept
+{
+	if ( this==&rhs )
+		return *this;
+
+	Reset();
+	m_pTableLock = std::move ( rhs.m_pTableLock );
+	return *this;
+}
+
+ServedIndexWriteReservation_c::~ServedIndexWriteReservation_c()
+{
+	Reset();
+}
+
+bool ServedIndexWriteReservation_c::TryAcquire ( const cServedIndexRefPtr_c& pServed )
+{
+	assert ( !m_pTableLock );
+	if ( !pServed || !pServed->m_pTableLock->TryWriteAllowReaders() )
+		return false;
+
+	m_pTableLock = pServed->m_pTableLock;
+	return true;
+}
+
+void ServedIndexWriteReservation_c::Reset() noexcept
+{
+	if ( !m_pTableLock )
+		return;
+
+	m_pTableLock->FinishWriteAllowReaders();
+	m_pTableLock = nullptr;
+}
+
+bool ServedIndexWriteReservation_c::IsActive() const noexcept
+{
+	return !!m_pTableLock;
+}
+
+bool ServedIndexWriteReservation_c::Matches ( const cServedIndexRefPtr_c& pServed ) const noexcept
+{
+	if ( !m_pTableLock || !pServed )
+		return false;
+
+	Threads::Coro::ReadTableLock_c * pReservedLock = m_pTableLock;
+	Threads::Coro::ReadTableLock_c * pCurrentLock = pServed->m_pTableLock;
+	return pReservedLock==pCurrentLock;
 }
 
 void LightClone ( ServedIndexRefPtr_c& pTarget, const cServedIndexRefPtr_c& pSource )

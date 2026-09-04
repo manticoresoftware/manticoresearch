@@ -115,7 +115,7 @@ struct HttpProcessResult_t
 	EHTTP_STATUS m_eReplyHttpCode = EHTTP_STATUS::_200;
 	
 	bool m_bOk { false };
-	bool m_bSkipBuddy { false }; // auth error should not pass into buddy but only to client
+	bool m_bSkipBuddy { false }; // keep daemon-owned results out of Buddy fallback
 
 	CSphString m_sError;
 };

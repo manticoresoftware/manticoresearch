@@ -27,6 +27,7 @@
 
 ##### Data management
 * [INSERT](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Adds new documents
+* [Bulk import](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import) - Loads a large batch into an existing local real-time table
 * [REPLACE](Data_creation_and_modification/Updating_documents/REPLACE.md) - Replaces existing documents with new ones
 * [REPLACE .. SET](Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET) - Replaces one or multiple fields in a table
 * [UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md) - Does in-place update in documents
@@ -112,6 +113,10 @@
 * [RELOAD PLUGINS](Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md) - Reloads all plugins from a given library
 * [ENABLE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#ENABLE-BUDDY-PLUGIN) - Reactivates a previously disabled Buddy plugin
 * [DISABLE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#DISABLE-BUDDY-PLUGIN) - Deactivates an active Buddy plugin
+
+##### Node management
+* [PURGE](Node_info_and_management/PURGE.md) - Removes selected data associated with a table
+* [PURGE BULK_IMPORT](Node_info_and_management/PURGE.md#PURGE-BULK_IMPORT) - Removes staging files left by bulk import
 
 ##### Server status
 * [SHOW STATUS](Node_info_and_management/Node_status.md#SHOW-STATUS) - Displays a number of useful performance counters
@@ -416,6 +421,7 @@ indexer [OPTIONS] [indexname1 [indexname2 [...]]]
 * [--merge](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Combines two plain tables into one
 * [--nohup](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Prevents indexer from sending SIGHUP when this option is enabled
 * [--noprogress](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Hides progress details
+* [--remove_dups](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Logically removes repeated numeric document IDs, keeping the first row
 * [--print-queries](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Outputs SQL queries sent by the indexer to the database
 * [--print-rt](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Displays data fetched from SQL source(s) as INSERTs into a real-time table
 * [--quiet](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Suppresses all output

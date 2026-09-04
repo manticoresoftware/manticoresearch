@@ -405,8 +405,26 @@ jobs:
       artifact_name: debug_test_results
       results_name: "Linux debug test results"
       suite_name: plain
-      CTEST_PARAMS: "EXCLUDE_LABEL;(COLUMNAR|SECONDARY)"
+      CTEST_PARAMS: "EXCLUDE_LABEL;(COLUMNAR|SECONDARY|RT_INDEXER)"
       timeout: 20
+      MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
+
+  test_linux_debug_rt_indexer:
+    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_linux_debug.result == 'success' && (needs.mcl_runtime_linux_debug_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_linux_debug.result == 'success')
+    name: Linux debug mode tests (rt-indexer)
+    needs: [build_linux_debug, mcl_runtime_linux_debug_cached, mcl_runtime_linux_debug, meta]
+    permissions:
+      checks: write
+      contents: read
+    uses: ./.github/workflows/test_template.yml
+    secrets: inherit
+    with:
+      build_artifact_name: debug_build
+      artifact_name: debug_test_results_rt_indexer
+      results_name: "Linux debug RT indexer test results"
+      suite_name: rt-indexer
+      CTEST_REGEX: "^rtidx_"
+      timeout: 35
       MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
 
   test_linux_debug_mcl:
@@ -951,6 +969,7 @@ jobs:
       - test_kit_docker_reuse
       - test_kit_light_docker_build
       - test_linux_debug
+      - test_linux_debug_rt_indexer
       - test_linux_debug_mcl
       - test_linux_release_plain
       - test_linux_release_rt
@@ -1130,6 +1149,7 @@ jobs:
       - mcl_runtime_linux_debug_cached
       - mcl_runtime_linux_debug
       - test_linux_debug
+      - test_linux_debug_rt_indexer
       - test_linux_debug_mcl
       - build_linux_release
       - build_linux_release_tests
@@ -1160,7 +1180,8 @@ jobs:
             "build_linux_debug:${{ needs.build_linux_debug.result }}"
             "mcl_runtime_linux_debug_cached:${{ needs.mcl_runtime_linux_debug_cached.result }}"
             "mcl_runtime_linux_debug:${{ needs.mcl_runtime_linux_debug.result }}"
-            "test_linux_debug:${{ needs.test_linux_debug_plain.result }}:${{ needs.test_linux_debug_plain.outputs.test_outcome }}"
+            "test_linux_debug:${{ needs.test_linux_debug.result }}:${{ needs.test_linux_debug.outputs.test_outcome }}"
+            "test_linux_debug_rt_indexer:${{ needs.test_linux_debug_rt_indexer.result }}:${{ needs.test_linux_debug_rt_indexer.outputs.test_outcome }}"
             "test_linux_debug_mcl:${{ needs.test_linux_debug_mcl.result }}:${{ needs.test_linux_debug_mcl.outputs.test_outcome }}"
             "build_linux_release:${{ needs.build_linux_release.result }}"
             "build_linux_release_tests:${{ needs.build_linux_release_tests.result }}"

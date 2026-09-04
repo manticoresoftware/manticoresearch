@@ -5,6 +5,7 @@
 
 <requires>
 <http/>
+<non-rt-indexer/>
 </requires>
 
 <config>

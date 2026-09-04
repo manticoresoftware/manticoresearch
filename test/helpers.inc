@@ -1652,6 +1652,12 @@ function IsRt()
 	return $g_locals['rt_mode'];
 }
 
+function IsRtIndexer()
+{
+	global $g_locals;
+	return !empty ( $g_locals['rt_indexer_mode'] );
+}
+
 function IsColumnar()
 {
 	global $g_locals;
@@ -4422,7 +4428,8 @@ class SphinxConfig
 
 	function InsertIntoIndexer ( &$error )
 	{
-		global $sd_address, $sd_sphinxql_port, $action_retries, $action_wait_timeout;
+		global $sd_address;
+		$rt_indexer = IsRtIndexer();
 		$address = $sd_address;
 		if ($address == "localhost")
 			$address = "127.0.0.1";
@@ -4438,9 +4445,12 @@ class SphinxConfig
 				if ( $cn !== false )
 					$cn->close();
 				$cn = new mysqli( $address, "", "", "Manticore", $port );
+				if ( $cn->connect_errno )
+				{
+					$error = "failed to connect to $connect_string: ".$cn->connect_error;
+					return false;
+				}
 			}
-			if ( $cn === false )
-				return false;
 
 			$corrected_cols = array();
 			foreach ( array_keys($data["orders"]) as $key )
@@ -4450,6 +4460,25 @@ class SphinxConfig
 			$prefix = "INSERT INTO $name ($cols) VALUES ";
 
 			$accum = "";
+			$in_transaction = false;
+
+			if ( $rt_indexer && count ( $data['values'] ) )
+			{
+				$escaped_name = str_replace ( "`", "``", $name );
+				if ( mysqli_wr ( "SET bulk_import=`$escaped_name`", $cn ) === false )
+				{
+					$error = $cn->error;
+					$cn->close();
+					return false;
+				}
+				if ( mysqli_wr ( "BEGIN", $cn ) === false )
+				{
+					$error = $cn->error;
+					$cn->close();
+					return false;
+				}
+				$in_transaction = true;
+			}
 
 			// mva shouldn't be quoted, e.g. "insert into rt (id,gid,mva) values ('1','2',(1,2))"
 			$is_mva = array();
@@ -4469,12 +4498,16 @@ class SphinxConfig
 					$i++;
 				}
 
-				if ( ( strlen ($accum) + strlen ($query) ) > 8192000 ) ///<checkit!
+				if ( $accum!="" && ( strlen ($accum) + strlen ($query) ) > 8192000 ) ///<checkit!
 				{
-					$result = mysqli_wr ( $prefix.$accum, $cn );
-					if ( $result === false )
+					if ( mysqli_wr ( $prefix.$accum, $cn ) === false )
 					{
 						$error = $cn->error;
+						if ( $in_transaction )
+						{
+							mysqli_wr ( "ROLLBACK", $cn );
+							$cn->close();
+						}
 						return false;
 					}
 					$accum="";
@@ -4485,14 +4518,29 @@ class SphinxConfig
 				$accum .= "($query)";
 			}
 			// final chunk;
-			if ( $accum !="" )
+			if ( $accum !="" && mysqli_wr ( $prefix.$accum, $cn ) === false )
 			{
-				$result = mysqli_wr ( $prefix.$accum, $cn );
-				if ( $result === false )
+				$error = $cn->error;
+				if ( $in_transaction )
 				{
-					$error = $cn->error;
-					return false;
+					mysqli_wr ( "ROLLBACK", $cn );
+					$cn->close();
 				}
+				return false;
+			}
+
+			if ( $in_transaction && mysqli_wr ( "COMMIT", $cn ) === false )
+			{
+				$error = $cn->error;
+				mysqli_wr ( "ROLLBACK", $cn );
+				$cn->close();
+				return false;
+			}
+			if ( $in_transaction && mysqli_wr ( "SET bulk_import=0", $cn ) === false )
+			{
+				$error = $cn->error;
+				$cn->close();
+				return false;
 			}
 		}
 		if ( $cn )
@@ -5147,8 +5195,12 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 			continue;
 
 		// in case of RT index - run "insert into" instead of indexer
-		if ( IsRt () )
-			$config->InsertIntoIndexer ( $error );
+		if ( IsRt () && !$config->InsertIntoIndexer ( $error ) && IsRtIndexer() )
+		{
+			if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
+				$log .= "\tsubtest $subtest: error loading RT fixture data; see $report_file\n";
+			continue;
+		}
 
         $config->ResetResults();
 

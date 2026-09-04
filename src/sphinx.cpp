@@ -1367,6 +1367,7 @@ public:
 	bool				PreallocWordlist();
 	bool				PreallocAttributes();
 	bool				PreallocDocidLookup();
+	bool				UpgradeDocidLookup ( CSphString & sError ) final;
 	bool				PreallocKilllist();
 	bool				PreallocHistograms ( StrVec_t & dWarnings );
 	bool				PreallocDocstore();
@@ -3035,6 +3036,10 @@ bool CSphIndex_VLN::AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sA
 
 bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t & tCtx, CSphString & sError )
 {
+	// the header gets rewritten with the current format version below
+	if ( !UpgradeDocidLookup ( sError ) )
+		return false;
+
 	AttrEngine_e eAttrEngine = CombineEngines ( m_tSettings.m_eEngine, tCtx.m_eEngine );
 	AttrAddRemoveCtx_t tNewCtx = tCtx;
 	if ( eAttrEngine==AttrEngine_e::COLUMNAR )
@@ -8020,6 +8025,10 @@ bool CSphIndex_VLN::AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSph
 
 bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError )
 {
+	// the header gets rewritten with the current format version below
+	if ( !UpgradeDocidLookup ( sError ) )
+		return false;
+
 	CSphSchema tOldSchema = m_tSchema;
 	CSphSchema tNewSchema = m_tSchema;
 	if ( !Alter_AddRemoveFieldFromSchema ( bAddField, tNewSchema, sFieldName, uFieldFlags, sError ) )
@@ -10321,12 +10330,66 @@ bool CSphIndex_VLN::PreallocDocidLookup()
 	if ( !m_tDocidLookup.Setup ( GetFilename ( SPH_EXT_SPT ), m_sLastError, false ) )
 		return false;
 
+	// the lookup layout depends on the index format version (v.71 added a header field); a mismatch would
+	// yield garbage rowids and crash every docid lookup (UPDATE, DELETE, REPLACE kill-lists, id filters)
+	CSphString sFormatError;
+	if ( !CheckDocidLookupFormat ( m_tDocidLookup.GetReadPtr(), m_tDocidLookup.GetLengthBytes(), m_uVersion, sFormatError ) )
+	{
+		// a header rewritten with a newer format version over an unconverted lookup (an ALTER by an affected
+		// daemon, manticoresearch#4852) - or plain damage. an inconsistent table is not repaired on the fly:
+		// refuse it with a clear message; indextool is the place to inspect it
+		m_sLastError.SetSprintf ( "%s: %s; check the table with indextool, then rebuild or restore it (manticoresearch#4852)", GetFilename ( SPH_EXT_SPT ).cstr(), sFormatError.cstr() );
+		return false;
+	}
+
 	auto [ tUuidEntriesOffset, nDocs ] = m_tLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 	const bool bUuidLinked = m_tSchema.GetAttr(0).IsUuidLinkedDocid();
 	assert ( !!tUuidEntriesOffset==bUuidLinked );
 	if ( bUuidLinked )
 		m_tUuidLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), tUuidEntriesOffset, nDocs );
 
+	return true;
+}
+
+
+// a format version bump must confirm that the .spt layout knowledge in docidlookup.cpp
+// (DocidLookupHeaderSize and the DOCID_LOOKUP_* constants) still holds, then move this tripwire
+static_assert ( INDEX_FORMAT_VERSION==72, "INDEX_FORMAT_VERSION changed: verify the .spt header layout table in docidlookup.cpp, then update this assert" );
+
+// in-place operations (ALTER TABLE ADD/DROP COLUMN or field, header rewrites) save the header with the
+// current INDEX_FORMAT_VERSION, so every version-gated data file must be brought to the current format
+// as well - the readers are gated on the header version. since v.68 only the docid lookup changed (v.71)
+bool CSphIndex_VLN::UpgradeDocidLookup ( CSphString & sError )
+{
+	if ( m_uVersion>=DOCID_LOOKUP_UUID_VERSION )
+		return true;
+
+	CSphString sFile = GetFilename ( SPH_EXT_SPT );
+	bool bMapped = !!m_tDocidLookup.GetReadPtr();
+	m_tDocidLookup.Reset();
+
+	CSphString sUpgradeError;
+	if ( sphIsReadable ( sFile.cstr() ) && !UpgradeDocidLookupFile ( sFile, m_uVersion, sUpgradeError ) )
+	{
+		sError.SetSprintf ( "%s: %s", sFile.cstr(), sUpgradeError.cstr() );
+		if ( bMapped )
+		{
+			CSphString sRemapError;
+			if ( m_tDocidLookup.Setup ( sFile, sRemapError, false ) )
+				m_tLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), m_uVersion );
+		}
+		return false;
+	}
+
+	if ( bMapped )
+	{
+		if ( !m_tDocidLookup.Setup ( sFile, sError, false ) )
+			return false;
+
+		m_tLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), INDEX_FORMAT_VERSION );
+	}
+
+	m_uVersion = INDEX_FORMAT_VERSION;
 	return true;
 }
 

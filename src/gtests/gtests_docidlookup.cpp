@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 
 #include "docidlookup.h"
+#include "fileio.h"
 #include "fileutils.h"
 #include "threadutils.h"
 
@@ -82,6 +83,40 @@ protected:
 	}
 
 	CSphString m_sFile;
+
+	// turns a current-format lookup file into the pre-v.71 layout: no UUID entries offset in the
+	// header, checkpoint data offsets 8 bytes lower
+	void DowngradeToV70()
+	{
+		CSphVector<BYTE> dOld;
+		{
+			CSphMappedBuffer<BYTE> tData;
+			Map ( tData );
+			dOld.Resize ( tData.GetLengthBytes() );
+			memcpy ( dOld.Begin(), tData.GetReadPtr(), tData.GetLengthBytes() );
+		}
+
+		const int64_t iOldHeader = sizeof(DWORD)*2 + sizeof(DocID_t) + sizeof(SphOffset_t);
+		const int64_t iNewHeader = sizeof(DWORD)*2 + sizeof(DocID_t);
+		DWORD nDocs = *(const DWORD*)dOld.Begin();
+		DWORD nPerCheckpoint = *(const DWORD*)( dOld.Begin()+sizeof(DWORD) );
+		int64_t nCheckpoints = ( nDocs + nPerCheckpoint - 1 ) / nPerCheckpoint;
+		int64_t iDataStart = iOldHeader + nCheckpoints*(int64_t)sizeof(DocidLookupCheckpoint_t);
+
+		CSphString sError;
+		CSphWriter tWriter;
+		ASSERT_TRUE ( tWriter.OpenFile ( m_sFile, sError ) ) << sError.cstr();
+		tWriter.PutBytes ( dOld.Begin(), iNewHeader );
+		const auto * pCheckpoints = (const DocidLookupCheckpoint_t *)( dOld.Begin()+iOldHeader );
+		for ( int64_t i = 0; i<nCheckpoints; ++i )
+		{
+			tWriter.PutOffset ( pCheckpoints[i].m_tBaseDocID );
+			tWriter.PutOffset ( pCheckpoints[i].m_tOffset - ( iOldHeader-iNewHeader ) );
+		}
+		tWriter.PutBytes ( dOld.Begin()+iDataStart, dOld.GetLength()-iDataStart );
+		tWriter.CloseFile();
+		ASSERT_FALSE ( tWriter.IsError() );
+	}
 };
 
 TEST_F ( UuidDocidLookupTest, NumericPrefixCompatibility )
@@ -124,6 +159,65 @@ TEST_F ( UuidDocidLookupTest, WriterReaderRoundTripAndSearch )
 	EXPECT_EQ ( tReader.Find ( UuidKey ( "ffffffff-ffff-8fff-bfff-ffffffffffff" ) ), 33U );
 	EXPECT_EQ ( tReader.Find ( UuidKey ( "00000000-0000-1000-8000-000000000000" ) ), 0U );
 	EXPECT_EQ ( tReader.Find ( UuidKey ( "00000000-0000-1000-8000-000000000002" ) ), 0U );
+}
+
+// manticoresearch#4852: an in-place header rewrite stamped v.71 on chunks whose .spt was still v.70,
+// so every docid lookup on them returned garbage rowids; the layout check must catch it, the upgrade must fix it
+TEST_F ( UuidDocidLookupTest, FormatCheckAndUpgrade )
+{
+	WriteNumericLookup();
+	{
+		CSphMappedBuffer<BYTE> tData;
+		Map ( tData );
+		CSphString sError;
+		EXPECT_TRUE ( CheckDocidLookupFormat ( tData.GetReadPtr(), tData.GetLengthBytes(), UUID_INDEX_VERSION, sError ) ) << sError.cstr();
+		EXPECT_FALSE ( CheckDocidLookupFormat ( tData.GetReadPtr(), tData.GetLengthBytes(), UUID_INDEX_VERSION-1, sError ) );
+	}
+
+	DowngradeToV70();
+	{
+		CSphMappedBuffer<BYTE> tData;
+		Map ( tData );
+		CSphString sError;
+		EXPECT_TRUE ( CheckDocidLookupFormat ( tData.GetReadPtr(), tData.GetLengthBytes(), UUID_INDEX_VERSION-1, sError ) ) << sError.cstr();
+		EXPECT_FALSE ( CheckDocidLookupFormat ( tData.GetReadPtr(), tData.GetLengthBytes(), UUID_INDEX_VERSION, sError ) );
+		EXPECT_TRUE ( strstr ( sError.cstr(), "pre-v.71" ) ) << sError.cstr();
+		EXPECT_EQ ( DetectDocidLookupVersion ( tData.GetReadPtr(), tData.GetLengthBytes() ), UUID_INDEX_VERSION-1 );
+
+		// lookups of tables older than the split-lookup layout are never validated (a v.54 lookup is 10 bytes)
+		const BYTE dLegacy[10] = { 3, 0, 0, 0, 0, 1, 1, 0, 0, 0 };
+		EXPECT_TRUE ( CheckDocidLookupFormat ( dLegacy, sizeof(dLegacy), DOCID_LOOKUP_SPLIT_VERSION-1, sError ) ) << sError.cstr();
+		EXPECT_FALSE ( CheckDocidLookupFormat ( dLegacy, sizeof(dLegacy), DOCID_LOOKUP_SPLIT_VERSION, sError ) );
+		EXPECT_TRUE ( UpgradeDocidLookupFile ( m_sFile, DOCID_LOOKUP_SPLIT_VERSION-1, sError ) ) << sError.cstr(); // no-op below the gate
+		EXPECT_EQ ( DetectDocidLookupVersion ( tData.GetReadPtr(), tData.GetLengthBytes() ), UUID_INDEX_VERSION-1 ); // the file is untouched
+
+		LookupReader_c tOld;
+		tOld.SetData ( tData.GetReadPtr(), UUID_INDEX_VERSION-1 );
+		EXPECT_EQ ( tOld.Find(11), 0U );
+		EXPECT_EQ ( tOld.Find(22), 1U );
+		EXPECT_EQ ( tOld.Find(33), 2U );
+	}
+
+	CSphString sError;
+	ASSERT_TRUE ( UpgradeDocidLookupFile ( m_sFile, UUID_INDEX_VERSION-1, sError ) ) << sError.cstr();
+	{
+		CSphMappedBuffer<BYTE> tData;
+		Map ( tData );
+		EXPECT_TRUE ( CheckDocidLookupFormat ( tData.GetReadPtr(), tData.GetLengthBytes(), UUID_INDEX_VERSION, sError ) ) << sError.cstr();
+		EXPECT_EQ ( DetectDocidLookupVersion ( tData.GetReadPtr(), tData.GetLengthBytes() ), UUID_INDEX_VERSION );
+
+		LookupReader_c tNew;
+		auto [ tUuidOffset, nDocs ] = tNew.SetData ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+		EXPECT_EQ ( tUuidOffset, 0 );
+		EXPECT_EQ ( nDocs, 3U );
+		EXPECT_EQ ( tNew.Find(11), 0U );
+		EXPECT_EQ ( tNew.Find(22), 1U );
+		EXPECT_EQ ( tNew.Find(33), 2U );
+		EXPECT_EQ ( tNew.Find(44), INVALID_ROWID );
+	}
+
+	// upgrading a current-format file is a no-op
+	ASSERT_TRUE ( UpgradeDocidLookupFile ( m_sFile, UUID_INDEX_VERSION, sError ) ) << sError.cstr();
 }
 
 } // namespace

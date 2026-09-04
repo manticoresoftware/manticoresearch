@@ -13058,6 +13058,11 @@ bool RtIndex_c::AttachRtChunksExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, 
 		if ( !AttachRtChunkExtCopy ( *pChunkIndex, *pChunkIndex, iChunk, pSrcFileBuilder.get(), pDstFileBuilder.get(), hExtCache, sDstPath, sError ) )
 			return false;
 
+		// the rewritten header carries the current format version; bring the version-gated
+		// data files (docid lookup) in sync first, in the same operation (#4852)
+		if ( !pChunkIndex->UpgradeDocidLookup ( sError ) )
+			return false;
+
 		if ( !tChunk->Cidx().RewriteHeader ( sError ) )
 			return false;
 

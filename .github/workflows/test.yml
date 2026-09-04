@@ -843,6 +843,8 @@ jobs:
     needs: [meta]
     if: needs.meta.outputs.run_image_build == 'true' && needs.meta.outputs.image_exists == 'true'
     runs-on: ubuntu-22.04
+    outputs:
+      candidate_image: ${{ steps.candidate.outputs.candidate_image }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v5
@@ -861,13 +863,24 @@ jobs:
           docker create --name manticore-test-kit-src --entrypoint /bin/sh test-kit:img -c "true"
           docker export manticore-test-kit-src > manticore_test_kit.img
           docker rm manticore-test-kit-src
-      - name: Pack docker image artifact
+      - name: Pack docker image artifact for fork PRs
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
         run: tar -cf artifact.tar manticore_test_kit.img
-      - name: Upload docker image artifact
+      - name: Upload docker image artifact for fork PRs
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
         uses: actions/upload-artifact@v6
         with:
           name: manticore_test_kit.img
           path: artifact.tar
+          retention-days: 1
+      - id: candidate
+        name: Publish temporary CLT candidate image
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
+        env:
+          GHCR_USER: ${{ vars.GHCR_USER || github.actor }}
+          GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD || github.token }}
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: ./dist/test_kit_candidate_publish.sh
 
   test_kit_docker_build:
     name: Test Kit docker image
@@ -881,6 +894,7 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       out-build: ${{ steps.build.outputs.build_image }}
+      candidate_image: ${{ steps.candidate.outputs.candidate_image }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v5
@@ -919,13 +933,24 @@ jobs:
         run: |
           BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_build.sh
           echo "build_image=ghcr.io/$REPO_OWNER/manticoresearch:test-kit-${{ steps.sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
-      - name: Pack docker image artifact
+      - name: Pack docker image artifact for fork PRs
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
         run: tar -cf artifact.tar manticore_test_kit.img
-      - name: Upload docker image artifact
+      - name: Upload docker image artifact for fork PRs
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
         uses: actions/upload-artifact@v6
         with:
           name: manticore_test_kit.img
           path: artifact.tar
+          retention-days: 1
+      - id: candidate
+        name: Publish temporary CLT candidate image
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
+        env:
+          GHCR_USER: ${{ vars.GHCR_USER || github.actor }}
+          GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD || github.token }}
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: ./dist/test_kit_candidate_publish.sh
 
   clt:
     if: always() && needs.meta.outputs.run_clt == 'true' && (needs.test_kit_docker_build.result == 'success' || needs.test_kit_docker_reuse.result == 'success')
@@ -937,13 +962,14 @@ jobs:
       VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
       JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
     with:
-      docker_image: ghcr.io/${{ github.repository_owner }}/manticoresearch:test-kit-${{ needs.meta.outputs.branch_tag }}
-      artifact_name: manticore_test_kit.img
+      # Fork PRs import the artifact under this local tag; they never pull from GHCR.
+      docker_image: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && 'test-kit:img' || needs.test_kit_docker_build.outputs.candidate_image || needs.test_kit_docker_reuse.outputs.candidate_image || format('ghcr.io/{0}/manticoresearch:test-kit-{1}', github.repository_owner, needs.meta.outputs.branch_tag) }}
+      artifact_name: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && 'manticore_test_kit.img' || '' }}
       repository: ${{ github.repository }}
       ref: ${{ github.sha }}
 
   test_kit_docker_push:
-    if: always() && needs.meta.outputs.run_image_push == 'true' && (needs.test_kit_docker_build.result == 'success' || needs.test_kit_docker_reuse.result == 'success') && needs.test_kit_light_docker_build.result == 'success'
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) && needs.meta.outputs.run_image_push == 'true' && needs.clt.result == 'success' && (needs.test_kit_docker_build.result == 'success' || needs.test_kit_docker_reuse.result == 'success') && needs.test_kit_light_docker_build.result == 'success' && needs.test_linux_debug.result != 'failure' && needs.test_linux_debug.outputs.test_outcome != 'failure' && needs.test_linux_debug_mcl.result != 'failure' && needs.test_linux_debug_mcl.outputs.test_outcome != 'failure' && needs.test_linux_release_plain.result != 'failure' && needs.test_linux_release_plain.outputs.test_outcome != 'failure' && needs.test_linux_release_rt.result != 'failure' && needs.test_linux_release_rt.outputs.test_outcome != 'failure' && needs.test_linux_release_mcl.result != 'failure' && needs.test_linux_release_mcl.outputs.test_outcome != 'failure' && needs.test_windows_plain.result != 'failure' && needs.test_windows_plain.outputs.test_outcome != 'failure' && needs.test_windows_rt.result != 'failure' && needs.test_windows_rt.outputs.test_outcome != 'failure' && needs.test_windows_mcl.result != 'failure' && needs.test_windows_mcl.outputs.test_outcome != 'failure'
     needs:
       - clt
       - meta
@@ -967,20 +993,10 @@ jobs:
       SOURCE_HASH: ${{ needs.meta.outputs.source_hash }}
       BRANCH_TAG: ${{ needs.meta.outputs.branch_tag }}
       HASH_TAG_OK: ${{ needs.meta.outputs.source_hash != '' }}
-      IMAGE_BUILD_COMMIT: ${{ github.sha }}
+      CANDIDATE_IMAGE: ${{ needs.test_kit_docker_build.outputs.candidate_image || needs.test_kit_docker_reuse.outputs.candidate_image }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v5
-      - name: Download artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: manticore_test_kit.img
-          path: .
-      - name: Unpack docker image artifact
-        run: |
-          if [[ -f artifact.tar ]]; then
-            tar -xf artifact.tar
-          fi
       - name: Download light image artifact
         uses: actions/download-artifact@v7
         with:
@@ -993,6 +1009,25 @@ jobs:
         id: test-kit-push
         run: |
           TEST_RESULT=${{ needs.clt.result }} BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_push.sh
+
+  cleanup_clt_candidate_image:
+    name: Remove temporary CLT candidate image
+    needs: [clt, test_kit_docker_build, test_kit_docker_reuse, test_kit_docker_push]
+    # Preserve an unpromoted candidate for "Re-run failed jobs". The scheduled cleanup
+    # reaps it if the run is never retried; a promoted image is kept by the cleanup script.
+    if: >-
+      always() &&
+      needs.test_kit_docker_push.result == 'success' &&
+      (needs.test_kit_docker_build.outputs.candidate_image != '' || needs.test_kit_docker_reuse.outputs.candidate_image != '')
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Delete candidate image
+        env:
+          GH_TOKEN: ${{ secrets.GHCR_PASSWORD || github.token }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          CANDIDATE_IMAGE: ${{ needs.test_kit_docker_build.outputs.candidate_image || needs.test_kit_docker_reuse.outputs.candidate_image }}
+        run: ./dist/test_kit_candidate_cleanup.sh "$CANDIDATE_IMAGE"
 
   test_kit_light_docker_build:
     if: always() && needs.meta.outputs.run_builds == 'true' && needs.build_linux_release.result == 'success'

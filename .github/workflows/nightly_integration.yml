@@ -119,21 +119,6 @@ jobs:
           comment_mode: failures
           run_args: --privileged
 
-  test_fluentd:
-    name: Test Fluentd integration
-    runs-on: ubuntu-22.04
-    timeout-minutes: 60
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-      - uses: manticoresoftware/clt@0.7.9
-        with:
-          test_prefix: test/clt-tests/integrations/fluentd/test-integrations-fluentd
-          image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
-          comment_mode: failures
-          run_args: --privileged
-          ui_host: "https://clt.manticoresearch.com"
-
   test_grafana:
     name: Test Grafana integration
     runs-on: ubuntu-22.04

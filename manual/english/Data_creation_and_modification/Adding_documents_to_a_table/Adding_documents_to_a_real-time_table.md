@@ -900,9 +900,9 @@ COMMIT;
 SET bulk_import=0;
 ```
 
-Run `SET bulk_import=<table>` before `BEGIN` and before any uncommitted write on that connection. It reserves the selected table against ordinary writes: searches and other bulk imports remain available, while ordinary writes stay blocked until all active imports end. `BEGIN` and `START TRANSACTION` are allowed but not required and have no effect in this mode.
+Run `SET bulk_import=<table>` before `BEGIN` and before any uncommitted write on that connection. It reserves the selected table for that session: searches remain available, while another bulk import or an ordinary write to the same table is rejected until the reservation is released. `BEGIN` and `START TRANSACTION` are allowed but not required and have no effect in this mode.
 
-`COMMIT` publishes the rows collected since the previous `COMMIT` or `ROLLBACK` as one disk chunk. `ROLLBACK` discards those rows. In both cases, bulk import remains enabled so you can start another batch. Run `SET bulk_import=0` to discard any uncommitted rows, disable bulk import, and release this connection's reservation. Ordinary writes resume after the last concurrent import releases its reservation. Closing the connection does the same. Autocommit cannot be changed while bulk import is enabled.
+`COMMIT` publishes the rows collected since the previous `COMMIT` or `ROLLBACK` as one disk chunk. `ROLLBACK` discards those rows. In both cases, bulk import remains enabled so you can start another batch. Run `SET bulk_import=0` to discard any uncommitted rows, disable bulk import, and release this connection's reservation. Writes to the table resume after the reservation is released. Closing the connection does the same. Autocommit cannot be changed while bulk import is enabled.
 
 #### HTTP `/bulk`
 
@@ -920,100 +920,13 @@ curl -sS -X POST \
 
 In a request body, an empty line ends and publishes the current batch; the end of the request publishes the final batch. Manticore sends the HTTP response after processing all batches in that request. If a later batch fails, batches published earlier in the same request remain searchable. To publish the entire request atomically as one disk chunk, do not include empty lines. The response contains one aggregate `bulk` result for each published batch rather than one result per document.
 
-Most clients should send a single request like the example above. If an application deliberately sends several requests over the same [persistent HTTP connection](../../Connecting_to_the_server/HTTP.md#Persistent-connections), the first request selects the table. Later `/bulk` or `/json/bulk` requests on that connection may omit `bulk_import`, but they must continue writing to the same table. Close the connection when finished, or send an empty `/bulk?bulk_import=0` request to disable bulk import and release that connection's reservation. Ordinary writes resume after all concurrent imports finish.
+Most clients should send a single request like the example above. If an application deliberately sends several requests over the same [persistent HTTP connection](../../Connecting_to_the_server/HTTP.md#Persistent-connections), the first request selects the table. Later `/bulk` or `/json/bulk` requests on that connection may omit `bulk_import`, but they must continue writing to the same table. Close the connection when finished, or send an empty `/bulk?bulk_import=0` request to disable bulk import and release that connection's reservation. Writes to the table resume after the reservation is released.
 
 The endpoint supports chunked transfer encoding, so it can process bodies larger than `max_packet_size` without buffering the whole request.
 
-#### Elasticsearch-compatible shippers
+#### Elasticsearch `/_bulk`
 
-For Elasticsearch-compatible shippers, set the reserved pipeline name to `bulk_import`, use the Elasticsearch bulk `index` action, and map a record field to `_id`. The following examples use `id` as a stable document ID.
-
-##### Fluent Bit
-
-```ini
-[OUTPUT]
-    name               es
-    match              site_access_logs
-    host               manticore
-    port               9308
-    index              site_access_logs
-    pipeline           bulk_import
-    write_operation    index
-    id_key             id
-    suppress_type_name on
-    time_key           event_time
-```
-
-Do not use `generate_id On`: it produces UUIDs, which bulk import does not support.
-
-##### Fluentd
-
-```aconf
-<match site_access_logs>
-  @type elasticsearch
-  host manticore
-  port 9308
-  index_name site_access_logs
-  pipeline bulk_import
-  write_operation index
-  id_key id
-  suppress_type_name true
-</match>
-```
-
-##### Logstash
-
-```ruby
-output {
-  elasticsearch {
-    hosts       => ["http://manticore:9308"]
-    index       => "site_access_logs"
-    pipeline    => "bulk_import"
-    action      => "index"
-    document_id => "%{id}"
-
-    data_stream     => "false"
-    ilm_enabled     => "false"
-    manage_template => false
-  }
-}
-```
-
-##### Filebeat
-
-For NDJSON input, map the source `id` to Elasticsearch `_id`, and set the action and pipeline in event metadata:
-
-```yaml
-filebeat.inputs:
-  - type: filestream
-    paths: ["/var/log/site_access_logs.ndjson"]
-    parsers:
-      - ndjson:
-          target: ""
-          document_id: id
-
-processors:
-  - add_fields:
-      target: "@metadata"
-      fields:
-        op_type: index
-        pipeline: bulk_import
-  - include_fields:
-      fields: ["title", "gid"]
-
-setup.template.enabled: false
-setup.ilm.enabled: false
-
-output.elasticsearch:
-  hosts: ["http://manticore:9308"]
-  index: "site_access_logs"
-  pipeline: "bulk_import"
-  allow_older_versions: true
-```
-
-Adjust Filebeat's `include_fields` list to the target schema. The target table must already exist and include every field the shipper sends, such as Fluent Bit's configured `event_time` field. Each `_id` must be an explicit, stable, non-zero decimal string such as `"123"`, and IDs must be unique within one request. The request must select `pipeline=bulk_import`, either as a request option or on every action. All actions must target the same table, and only the `index` action is accepted.
-
-Each flush request is published atomically as one disk chunk. Shippers split a continuous input stream into flush requests according to their own batching and buffering settings, so an entire load can produce multiple disk chunks: one per successful flush, not one for the whole shipper run. For large initial loads, use large but practical flush batches: larger batches reduce the number of disk chunks and subsequent merge work, while also increasing per-request latency and the amount of data retried if a request fails. Publishing replaces documents whose IDs already exist. A successful response contains one Elasticsearch bulk result per document. Multiple bulk import requests can build separate disk chunks for the same table concurrently and publish them one at a time. While at least one bulk import is active, ordinary writes to that table remain blocked.
+The Elasticsearch-compatible `/_bulk` endpoint does not support direct-to-disk `bulk_import`; use SQL or Manticore `/bulk`. On a clean session, `?pipeline=bulk_import` and the legacy `?bulk_import=1` are rejected. Other unknown `bulk_import` values are ignored and ordinary Elasticsearch bulk processing continues. A connection with an active bulk import cannot switch to `/_bulk`.
 
 #### Duplicate document IDs
 

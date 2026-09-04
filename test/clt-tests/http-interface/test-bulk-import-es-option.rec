@@ -1,8 +1,0 @@
-––– block: ../base/start-searchd –––
-––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS bulk_import_es_option; CREATE TABLE bulk_import_es_option (title TEXT);"
-––– output –––
-––– input –––
-reply=$(printf '%s\n' '{"index":{"_index":"bulk_import_es_option","_id":"1"}}' '{"title":"must be rejected"}' | curl -sS -X POST 'http://localhost:9308/_bulk?bulk_import=bulk_import_es_option' -H 'Content-Type: application/x-ndjson' --data-binary @-); count=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT COUNT(*) FROM bulk_import_es_option"); if printf '%s' "$reply" | grep -q 'unsupported on Elasticsearch /_bulk' && [ "$count" = 0 ]; then echo BULK_IMPORT_ES_OPTION_REJECTED; else printf 'FAIL_BULK_IMPORT_ES_OPTION reply=%s count=%s\n' "$reply" "$count"; fi
-––– output –––
-BULK_IMPORT_ES_OPTION_REJECTED

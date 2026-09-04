@@ -12750,7 +12750,7 @@ void HandleMysqlShowLocks ( RowBuffer_i & tOut )
 			if ( iRLocks>0 && !fnLine ( dPair, iRLocks, "read" ) )
 				return;
 
-			if ( tLocks.m_uWriteAllowReaders && !fnLine ( dPair, tLocks.m_uWriteAllowReaders, "write_allow_readers" ) )
+			if ( tLocks.m_bWriteAllowReaders && !fnLine ( dPair, 1, "write_allow_readers" ) )
 				return;
 		}
 	}

@@ -1133,7 +1133,7 @@ bool RWLock_c::TestNextWlock () const noexcept
 bool ReadTableLock_c::WaitRead() noexcept
 {
 	sph::Spinlock_lock tLock { m_tInternalMutex };
-	if ( m_uWriteAllowReaders )
+	if ( m_bWriteAllowReaders )
 		return false;
 
 	++m_uReads;
@@ -1155,7 +1155,7 @@ bool ReadTableLock_c::TryWrite() noexcept
 bool ReadTableLock_c::TryDmlWrite() noexcept
 {
 	sph::Spinlock_lock tLock { m_tInternalMutex };
-	if ( m_uReads || m_uWriteAllowReaders )
+	if ( m_uReads || m_bWriteAllowReaders )
 		return false;
 	++m_uWrites;
 	return true;
@@ -1164,16 +1164,16 @@ bool ReadTableLock_c::TryDmlWrite() noexcept
 bool ReadTableLock_c::TryWriteAllowReaders() noexcept
 {
 	sph::Spinlock_lock tLock { m_tInternalMutex };
-	if ( m_uReads || m_uWrites || m_bFreezeTransition )
+	if ( m_uReads || m_uWrites || m_bWriteAllowReaders || m_bFreezeTransition )
 		return false;
-	++m_uWriteAllowReaders;
+	m_bWriteAllowReaders = true;
 	return true;
 }
 
 bool ReadTableLock_c::TryFreezeTransition() noexcept
 {
 	sph::Spinlock_lock tLock { m_tInternalMutex };
-	if ( m_uWriteAllowReaders || m_bFreezeTransition )
+	if ( m_bWriteAllowReaders || m_bFreezeTransition )
 		return false;
 	m_bFreezeTransition = true;
 	return true;
@@ -1190,8 +1190,8 @@ void ReadTableLock_c::FinishWrite() noexcept
 void ReadTableLock_c::FinishWriteAllowReaders() noexcept
 {
 	sph::Spinlock_lock tLock { m_tInternalMutex };
-	assert ( m_uWriteAllowReaders );
-	--m_uWriteAllowReaders;
+	assert ( m_bWriteAllowReaders );
+	m_bWriteAllowReaders = false;
 }
 
 void ReadTableLock_c::FinishFreezeTransition() noexcept
@@ -1215,7 +1215,7 @@ bool ReadTableLock_c::UnlockRead() noexcept
 [[nodiscard]] TableLocks_t ReadTableLock_c::GetLocks() const noexcept
 {
 	sph::Spinlock_lock tLock { m_tInternalMutex };
-	return { m_uReads, m_uWriteAllowReaders };
+	return { m_uReads, m_bWriteAllowReaders };
 }
 
 ScopedWriteTable_c::ScopedWriteTable_c ( ReadTableLock_c& tTableLock )

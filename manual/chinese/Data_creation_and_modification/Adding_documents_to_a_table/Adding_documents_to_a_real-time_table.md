@@ -900,9 +900,9 @@ COMMIT;
 SET bulk_import=0;
 ```
 
-请在 `BEGIN` 之前，并在该连接执行任何未提交的写入之前运行 `SET bulk_import=<table>`。该命令会保留所选表并阻止普通写入：搜索和其他 bulk import 仍然可用，而普通写入会一直被阻止，直到所有活动导入结束。可以使用 `BEGIN` 或 `START TRANSACTION`，但它们不是必需的，也不会改变此模式的行为。
+请在 `BEGIN` 之前，并在该连接执行任何未提交的写入之前运行 `SET bulk_import=<table>`。该命令为当前会话保留所选表：搜索仍然可用，但在释放保留之前，同一表上的其他 bulk import 或普通写入会被拒绝。可以使用 `BEGIN` 或 `START TRANSACTION`，但它们不是必需的，也不会改变此模式的行为。
 
-`COMMIT` 会把自上一次 `COMMIT` 或 `ROLLBACK` 以来收集的行发布为一个磁盘块。`ROLLBACK` 会丢弃这些行。两种操作之后批量导入仍保持启用，因此可以开始下一个批次。运行 `SET bulk_import=0` 会丢弃尚未提交的行、禁用批量导入，并释放该连接的保留。普通写入会在最后一个并发导入释放其保留后恢复。关闭连接具有相同效果。批量导入启用期间不能更改自动提交设置。
+`COMMIT` 会把自上一次 `COMMIT` 或 `ROLLBACK` 以来收集的行发布为一个磁盘块。`ROLLBACK` 会丢弃这些行。两种操作之后批量导入仍保持启用，因此可以开始下一个批次。运行 `SET bulk_import=0` 会丢弃尚未提交的行、禁用批量导入，并释放该连接的保留。释放保留后，对该表的写入会恢复。关闭连接具有相同效果。批量导入启用期间不能更改自动提交设置。
 
 #### HTTP `/bulk`
 
@@ -920,100 +920,13 @@ curl -sS -X POST \
 
 在请求体中，空行会结束并发布当前批次；请求结束时会发布最后一个批次。Manticore 处理完该请求中的所有批次后才发送 HTTP 响应。如果后续批次失败，同一请求中之前已发布的批次仍可搜索。若要将整个请求作为一个磁盘块原子发布，请不要加入空行。响应会为每个已发布批次返回一个汇总的 `bulk` 结果，而不是为每个文档返回一个结果。
 
-大多数客户端只需像上面的示例一样发送一个请求。如果应用有意通过同一个[持久 HTTP 连接](../../Connecting_to_the_server/HTTP.md#Persistent-connections)发送多个请求，第一个请求会选择目标表。该连接后续的 `/bulk` 或 `/json/bulk` 请求可以省略 `bulk_import`，但必须继续写入同一张表。完成后关闭连接，或者发送一个空的 `/bulk?bulk_import=0` 请求，以禁用批量导入并释放该连接的保留。所有并发导入结束后，普通写入将恢复。
+大多数客户端只需像上面的示例一样发送一个请求。如果应用有意通过同一个[持久 HTTP 连接](../../Connecting_to_the_server/HTTP.md#Persistent-connections)发送多个请求，第一个请求会选择目标表。该连接后续的 `/bulk` 或 `/json/bulk` 请求可以省略 `bulk_import`，但必须继续写入同一张表。完成后关闭连接，或者发送一个空的 `/bulk?bulk_import=0` 请求，以禁用批量导入并释放该连接的保留。释放保留后，对该表的写入会恢复。
 
 该端点支持分块传输编码，因此可以处理大于 `max_packet_size` 的正文，而无需缓存整个请求。
 
-#### Elasticsearch 兼容的数据发送器
+#### Elasticsearch `/_bulk`
 
-对于兼容 Elasticsearch 的数据发送器，请将保留的 pipeline 名称设为 `bulk_import`，使用 Elasticsearch bulk 的 `index` 操作，并将记录中的一个字段映射为 `_id`。以下示例都使用 `id` 作为稳定的文档 ID。
-
-##### Fluent Bit
-
-```ini
-[OUTPUT]
-    name               es
-    match              site_access_logs
-    host               manticore
-    port               9308
-    index              site_access_logs
-    pipeline           bulk_import
-    write_operation    index
-    id_key             id
-    suppress_type_name on
-    time_key           event_time
-```
-
-不要启用 `generate_id On`：它会生成批量导入不支持的 UUID。
-
-##### Fluentd
-
-```aconf
-<match site_access_logs>
-  @type elasticsearch
-  host manticore
-  port 9308
-  index_name site_access_logs
-  pipeline bulk_import
-  write_operation index
-  id_key id
-  suppress_type_name true
-</match>
-```
-
-##### Logstash
-
-```ruby
-output {
-  elasticsearch {
-    hosts       => ["http://manticore:9308"]
-    index       => "site_access_logs"
-    pipeline    => "bulk_import"
-    action      => "index"
-    document_id => "%{id}"
-
-    data_stream     => "false"
-    ilm_enabled     => "false"
-    manage_template => false
-  }
-}
-```
-
-##### Filebeat
-
-对于 NDJSON 输入，请将源数据中的 `id` 映射为 Elasticsearch `_id`，并在事件元数据中设置操作和 pipeline：
-
-```yaml
-filebeat.inputs:
-  - type: filestream
-    paths: ["/var/log/site_access_logs.ndjson"]
-    parsers:
-      - ndjson:
-          target: ""
-          document_id: id
-
-processors:
-  - add_fields:
-      target: "@metadata"
-      fields:
-        op_type: index
-        pipeline: bulk_import
-  - include_fields:
-      fields: ["title", "gid"]
-
-setup.template.enabled: false
-setup.ilm.enabled: false
-
-output.elasticsearch:
-  hosts: ["http://manticore:9308"]
-  index: "site_access_logs"
-  pipeline: "bulk_import"
-  allow_older_versions: true
-```
-
-请根据目标表结构调整 Filebeat 的 `include_fields` 列表。目标表必须已存在，并包含数据发送器提交的所有字段，例如 Fluent Bit 中配置的 `event_time` 字段。每个 `_id` 都必须是显式、稳定的非零十进制字符串，例如 `"123"`；同一个请求中的 ID 必须唯一。请求必须选择 `pipeline=bulk_import`：可以作为整个请求的参数，也可以在每个操作中设置。所有操作必须指向同一张表，并且只接受 `index` 操作。
-
-每次 flush 请求都会作为一个磁盘块原子发布。数据发送器会根据自身的批处理和缓冲设置，将连续的输入流拆分为多个 flush 请求，因此一次完整的加载可能会生成多个磁盘块：每个成功的 flush 请求对应一个，而不是整个数据发送器运行只生成一个。对于大规模初始加载，建议使用较大但合理的 flush 批次：较大的批次可以减少磁盘块数量和后续合并工作，但也会增加单个请求的延迟，以及请求失败时需要重试的数据量。发布时会替换已有相同 ID 的文档。成功响应会为每个文档返回一条 Elasticsearch bulk 结果。多个 bulk import 请求可以并发地为同一张表构建各自独立的磁盘块，并依次发布这些磁盘块。只要至少有一个 bulk import 处于活动状态，对该表的普通写入操作仍会被阻止。
+Elasticsearch 兼容的 `/_bulk` 端点不支持直接写入磁盘的 `bulk_import`；请使用 SQL 或 Manticore `/bulk`。在干净会话中，`?pipeline=bulk_import` 和旧版 `?bulk_import=1` 会被拒绝。其他未知的 `bulk_import` 值会被忽略，并继续进行普通的 Elasticsearch bulk 处理。已启用 bulk import 的连接不能切换到 `/_bulk`。
 
 #### 重复文档 ID
 

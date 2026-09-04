@@ -19,7 +19,7 @@ struct IndexerRtBulkFile_t
 CSphString GetIndexerRtBulkRoot ( const RtIndex_i & tRt );
 bool ListIndexerRtBulkFiles ( const CSphString & sRoot, CSphVector<IndexerRtBulkFile_t> & dFiles, CSphString & sError );
 bool RemoveIndexerRtBulkRoot ( const CSphString & sRoot, CSphString & sError );
-bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTable, CSphString & sError, bool * pRetryable=nullptr );
+bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTable, CSphString & sError );
 bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, EMYSQL_ERR & eError, CSphString & sError );
 bool FinalizeIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError );
 void AbortIndexerRtBulkBatch ( ClientSession_c & tSession );

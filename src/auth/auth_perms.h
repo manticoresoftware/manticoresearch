@@ -19,6 +19,7 @@ enum class AuthAction_e
 	SCHEMA,
 	REPLICATION,
 	ADMIN,
+	BACKUP,
 
 	UNKNOWN
 };
@@ -40,5 +41,7 @@ struct UserPerm_t
 using UserPerms_t = CSphVector<UserPerm_t>;
 
 bool CheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, bool bAllowEmpty, CSphString & sError );
+bool CheckPermsOrBackup ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, bool bAllowEmpty, CSphString & sError, AuthAction_e eBackupAlsoRequires=AuthAction_e::UNKNOWN );
+bool CheckUnrestrictedPerms ( const CSphString & sUser, AuthAction_e eAction, CSphString & sError );
 AuthAction_e ReadAction ( Str_t sAction );
 const char * GetActionName (  AuthAction_e eAction );

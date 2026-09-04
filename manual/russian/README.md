@@ -58,6 +58,7 @@
         * [Статус кластера репликации](Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md)
         * [Перезапуск кластера](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)
         * [Восстановление кластера](Creating_a_cluster/Setting_up_replication/Cluster_recovery.md)
+        * [Понимание статусов репликации](Creating_a_cluster/Setting_up_replication/Understanding_cluster_status_and_node_states.md)
 * [4️⃣ Подключение к серверу](Connecting_to_the_server.md)
     * [Протокол MySQL](Connecting_to_the_server/MySQL_protocol.md)
     * [HTTP](Connecting_to_the_server/HTTP.md)

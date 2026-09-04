@@ -559,8 +559,15 @@ knn = {"attrs":[{"name":"chunk_vectors","type":"hnsw","dims":768,"hnsw_similarit
 
 适用两个差异：
 
-- `dims` 是**必需**的，且每一行中的每个向量都必须恰好包含这么多项。
-- `model_name` 和 `from` **不**被接受 — 自动 embedding 会为每个文档生成一个向量，因此不适用于这种类型。向量必须显式提供。
+- 当显式提供向量时，`dims` 是**必需**的，并且每一行中的每个向量都必须恰好包含这么多元素。使用 `model_name` 时必须**省略**它。
+- `model_name`/`from` 可与多向量 `chunk_strategy`（`fixed`、`recursive` 或 `sentence`）一起使用，它会为每个 chunk 填充一个向量：
+
+```ini
+rt_attr_float_vector_array = chunk_vectors
+knn = {"attrs":[{"name":"chunk_vectors","type":"hnsw","hnsw_similarity":"COSINE","model_name":"Xenova/all-MiniLM-L6-v2","from":"title,content","chunk_strategy":"sentence","max_tokens":256,"overlap_tokens":32}]}
+```
+
+  完整选项列表和 `ALTER` 限制请参见 [Chunking strategies](../../Searching/KNN.md#Chunking-strategies)。
 
 所有向量会一起建立索引，KNN 搜索会让每个文档只返回一次，并按其最近向量得分。参见 [Float vector array](../../Creating_a_table/Data_types.md#Float-vector-array) 和 [每个文档多个向量](../../Searching/KNN.md#Multiple-vectors-per-document)。
 

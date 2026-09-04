@@ -585,6 +585,7 @@ void CSphSchema::SetupKNNFlags ( const CSphSourceSettings & tSettings )
 		// Without the cast, the compiler might copy the wrong memory region or fail to compile due to ambiguity.
 		tAttr.m_tKNNModel	= static_cast<const knn::ModelSettings_t&>(tKNN);
 		tAttr.m_sKNNFrom	= tKNN.m_sFrom;
+		tAttr.m_tKNNChunk	= tKNN.m_tChunk;
 	}
 }
 

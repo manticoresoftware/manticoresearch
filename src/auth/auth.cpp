@@ -652,9 +652,11 @@ static int DeleteAuthDocuments ( const CSphString & sName, const SqlStmt_t & tSt
 			return 0;
 		}
 
-		if ( eAction==AuthAction_e::ADMIN && sActionTarget!="*" )
+		if ( ( eAction==AuthAction_e::ADMIN || eAction==AuthAction_e::BACKUP ) && sActionTarget!="*" )
 		{
-			sError = "REVOKE ADMIN requires ON '*'";
+			CSphString sActionName = GetActionName ( eAction );
+			sActionName.ToUpper();
+			sError.SetSprintf ( "REVOKE %s requires ON '*'", sActionName.cstr() );
 			AuthLog().ActionFailed ( AuthLogGetSessionCtx(), sLogAction, sUser, sError );
 			return 0;
 		}
@@ -1090,9 +1092,11 @@ static bool ApplyPerm ( const SqlStmt_t & tStmt, bool bReplace, MemoryWriter_c &
 	if ( !bOk )
 		return false;
 
-	if ( tPerm.m_eAction==AuthAction_e::ADMIN && !tPerm.m_bTargetWildcardAll )
+	if ( ( tPerm.m_eAction==AuthAction_e::ADMIN || tPerm.m_eAction==AuthAction_e::BACKUP ) && !tPerm.m_bTargetWildcardAll )
 	{
-		sError.SetSprintf ( "ADMIN permission for user '%s' is only allowed with target '*'", sUser.cstr() );
+		CSphString sActionName = GetActionName ( tPerm.m_eAction );
+		sActionName.ToUpper();
+		sError.SetSprintf ( "%s permission for user '%s' is only allowed with target '*'", sActionName.cstr(), sUser.cstr() );
 		return false;
 	}
 

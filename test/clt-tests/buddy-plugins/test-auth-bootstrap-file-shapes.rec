@@ -14,7 +14,7 @@ EXPECTED: missing, zero-byte, {}, and whitespace-only auth.json all behave as em
 ––– input –––
 set -e
 AUTH_JSON=/var/lib/manticore/auth.json
-VALID_AUTH='{"users":[{"username":"admin","salt":"aabbccddeeff00112233aabbccddeeff00112233","hashes":{"password_sha1_no_salt":"74913f5cd5f61ec0bcfdb775414c2fb3d161b620","password_sha256":"bc723b5179630195129574a9cf534e1fa7397f9bd166dd10b1babbe37ea52589","bearer_sha256":"4b72aa7367f065146c7a028bc739c69c8e4bdebf7fe2d1133255c51bf36d8056"}}],"permissions":[{"username":"admin","action":"read","target":"*","allow":true},{"username":"admin","action":"write","target":"*","allow":true},{"username":"admin","action":"schema","target":"*","allow":true},{"username":"admin","action":"admin","target":"*","allow":true}]}'
+VALID_AUTH='{"version":2,"users":[{"username":"admin","salt":"aabbccddeeff00112233aabbccddeeff00112233","hashes":{"password_sha1_no_salt":"74913f5cd5f61ec0bcfdb775414c2fb3d161b620","password_sha256":"bc723b5179630195129574a9cf534e1fa7397f9bd166dd10b1babbe37ea52589","bearer_sha256":"4b72aa7367f065146c7a028bc739c69c8e4bdebf7fe2d1133255c51bf36d8056"}}],"permissions":[{"username":"admin","action":"read","target":"*","allow":true},{"username":"admin","action":"write","target":"*","allow":true},{"username":"admin","action":"schema","target":"*","allow":true},{"username":"admin","action":"admin","target":"*","allow":true}]}'
 
 stop_daemon() {
     searchd --stopwait >/dev/null 2>&1 || true
@@ -47,6 +47,10 @@ check_admin() {
     python3 -c "import json; d=json.load(open('/var/lib/manticore/auth.json')); print(any(u.get('username')=='admin' for u in d.get('users', [])))" | grep -q True
 }
 
+check_version() {
+    python3 -c "import json; d=json.load(open('/var/lib/manticore/auth.json')); print(d.get('version'))" | grep -q 2
+}
+
 run_empty_case() {
     name="$1"
     shape="$2"
@@ -63,6 +67,8 @@ run_empty_case() {
     echo "$name bootstrap ok"
     check_admin
     echo "$name admin present"
+    check_version
+    echo "$name version 2"
     stop_daemon
 }
 
@@ -92,6 +98,18 @@ run_rejected_start_case() {
             fi
         fi
     fi
+}
+
+run_legacy_version_case() {
+    reset_auth_file
+    printf '%s' "$VALID_AUTH" | sed 's/^{"version":2,/{/' > "$AUTH_JSON"
+    chmod 600 "$AUTH_JSON"
+    start_daemon
+    echo "legacy-version start ok"
+    MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT 1 AS test;" >/tmp/auth_shape_mysql.out 2>&1
+    grep -q "test: 1" /tmp/auth_shape_mysql.out
+    echo "legacy-version auth ok"
+    stop_daemon
 }
 
 run_created_file_mode_case() {
@@ -126,7 +144,9 @@ run_empty_case missing missing
 run_empty_case zero-byte zero
 run_empty_case object object
 run_empty_case whitespace spaces
+run_legacy_version_case
 run_rejected_start_case malformed '['
+run_rejected_start_case future-version '{"version":3,"users":[],"permissions":[]}' 600 "auth file version 3 is not supported"
 run_rejected_start_case group-readable '{}' 640 "file '$AUTH_JSON' has permissions to all"
 run_rejected_bootstrap_case
 ––– output –––
@@ -134,16 +154,24 @@ missing created mode 600
 missing start ok
 missing bootstrap ok
 missing admin present
+missing version 2
 zero-byte start ok
 zero-byte bootstrap ok
 zero-byte admin present
+zero-byte version 2
 object start ok
 object bootstrap ok
 object admin present
+object version 2
 whitespace start ok
 whitespace bootstrap ok
 whitespace admin present
+whitespace version 2
+legacy-version start ok
+legacy-version auth ok
 malformed startup rejected
+future-version startup rejected
+future-version error matched
 group-readable startup rejected
 group-readable error matched
 nonempty start ok

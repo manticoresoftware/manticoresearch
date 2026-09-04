@@ -93,8 +93,8 @@ The log format is as follows:
 ```
 
 where:
-* `real-time` is the end-to-end time from the start to the finish of the query. In SphinxQL logs it corresponds to the `real` field.
-* `wall-time` is Manticore's internal query wall-time metric. In SphinxQL logs it corresponds to the `wall` field, and this same value is used by `query_log_min_msec`. For distributed and multi-source queries, `wall-time` can differ from `real-time`.
+* `real-time` is the end-to-end time from the start to the finish of the query. In query logs it corresponds to the `real` field.
+* `wall-time` is Manticore's internal query wall-time metric. In query logs it corresponds to the `wall` field, and this same value is used by `query_log_min_msec`. For distributed and multi-source queries, `wall-time` can differ from `real-time`.
 * `perf-stats` includes CPU/IO stats when Manticore is started with `--cpustats` (or it was enabled via `SET GLOBAL cpustats=1`) and/or `--iostats` (or it was enabled via `SET GLOBAL iostats=1`):
   - `ios` is the number of file I/O operations carried out;
   - `kb` is the amount of data in kilobytes read from the table files;

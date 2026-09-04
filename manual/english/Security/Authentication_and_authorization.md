@@ -132,12 +132,15 @@ The supported actions are:
 * `read` - read data from tables and run read-only table operations.
 * `write` - write or delete table data.
 * `schema` - create, alter, drop, import, reload, or otherwise manage table schemas and server-level metadata.
+* `backup` - run server-side `BACKUP` operations.
 * `replication` - run replication cluster operations.
 * `admin` - manage users, tokens, permissions, and authentication data.
 
 Commands that only inspect table schemas or table lists, such as `DESCRIBE`, `SHOW TABLES`, `SHOW CREATE TABLE`, `SHOW TABLE STATUS`, and `SHOW TABLE SETTINGS`, require `read`, not `schema`.
 
-No permission means default deny. The `admin` action must target `*` and does not imply `read`, `write`, `schema`, or `replication`; grant those actions explicitly when needed.
+No permission means default deny. The `admin` and `backup` actions must target `*`. The `admin` action does not imply `read`, `write`, `schema`, `backup`, or `replication`; grant those actions explicitly when needed.
+
+`BACKUP` is a server-side operational action. `BACKUP TABLE <tables>` requires `backup` on `*` and `read` on every requested table. `BACKUP` without an explicit table list requires `backup` on `*` and unrestricted `read` on `*`; any `read` deny rule prevents the full backup. Backup-tool support commands `FREEZE` and `UNFREEZE` require `backup` on `*` and `read` on the requested table; `FLUSH ATTRIBUTES`, `SHOW TABLES`, `SHOW STATUS`, and `SHOW SETTINGS` are authorized by either their regular permission or `backup` on `*`. `admin`, `schema`, or `read` alone do not authorize `BACKUP`.
 
 Targets are plain names or wildcards. Common examples are `products`, `logs_*`, `posts`, and `*`.
 
@@ -146,6 +149,7 @@ GRANT read ON 'products' TO 'app_read';
 GRANT read ON 'logs_*' TO 'analytics';
 GRANT write ON 'products' TO 'ingest';
 GRANT schema ON * TO 'maintainer';
+GRANT backup ON * TO 'backup_operator';
 GRANT admin ON * TO 'security_admin';
 
 REVOKE read ON 'products' FROM 'app_read';
@@ -155,7 +159,7 @@ REVOKE read ON 'products' FROM 'app_read';
 
 When several permission rules can match the same request, Manticore resolves them by action, target, and allow or deny value.
 
-Rules are matched for the requested action only. A grant for `admin`, for example, does not satisfy `read`, `write`, `schema`, or `replication`.
+Rules are matched for the requested action only. A grant for `admin`, for example, does not satisfy `read`, `write`, `schema`, `backup`, or `replication`.
 
 For targets, exact names and wildcards are both matching rules. If no rule matches the requested user, action, and target, access is denied.
 

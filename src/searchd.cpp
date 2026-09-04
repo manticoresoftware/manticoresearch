@@ -1223,6 +1223,22 @@ void CanonicalizeIndexName ( CSphString & sName ) noexcept
 	sName.ToLower();
 }
 
+static void FixupBackupTables ( SqlStmt_t * pStmt ) noexcept
+{
+	if ( pStmt->m_eStmt!=STMT_BACKUP || pStmt->m_sIndex.IsEmpty() )
+		return;
+
+	StrVec_t dTables;
+	sphSplit ( dTables, pStmt->m_sIndex.cstr(), "," );
+	for ( CSphString & sTable : dTables )
+	{
+		sTable.Trim();
+		sTable.Unquote();
+		CanonicalizeIndexName ( sTable );
+		pStmt->m_dCallStrings.Add() = std::move ( sTable );
+	}
+}
+
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut )
 {
 	if ( ( uVer>>8)!=( uDaemonVersion>>8) )
@@ -12941,7 +12957,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	for ( auto& tStmt : dStmt ) {
 		FixupSystemTableName ( &tStmt );
-		CanonicalizeIndexName ( tStmt.m_sIndex );
+		if ( tStmt.m_eStmt==STMT_BACKUP )
+			FixupBackupTables ( &tStmt );
+		else
+			CanonicalizeIndexName ( tStmt.m_sIndex );
 		tStmt.m_bShardPhysicalUpdate = m_bShardPhysicalUpdate;
 	}
 	SqlStmt_t * pStmt = dStmt.Begin();
@@ -13559,6 +13578,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_REVOKE:
 		HandleMysqlRevoke ( tOut, *pStmt, m_sError );
+		return true;
+
+	case STMT_BACKUP:
+		tOut.Error ( "BACKUP requires Manticore Buddy" );
 		return true;
 
 	default:

@@ -114,10 +114,11 @@ table test_vec {
 | **Jina** | `jina/jina-embeddings-v4` or `jina:jina-embeddings-v4` | Да | `API_KEY='***'` |
 
 **Требования к формату локальной модели:**
-- Должна быть сохранена в формате `safetensors` (только один файл)
-- Поддерживаемые семейства: Qwen, Llama, Mistral, Gemma
+- Поддерживаемые форматы весов: `safetensors` (один файл или шардированный через `model.safetensors.index.json`), квантованный `GGUF` и `ONNX`
+- Поддерживаемые семейства: BERT/Sentence Transformers, Qwen, Llama, Mistral, Gemma, T5
 - Проверенные модели: `TinyLlama/TinyLlama-1.1B-Chat-v1.0`, `Locutusque/TinyMistral-248M-v2`, `Qwen/Qwen3-Embedding-0.6B`, `h2oai/embeddinggemma-300m`
-- Другие модели `safetensors` тоже могут работать, но это не гарантируется
+- Другие модели из этих семейств тоже могут работать, но это не гарантируется
+- Для закрытых репозиториев Hugging Face передайте свой токен доступа Hugging Face как `API_KEY`
 
 Дополнительную информацию о настройке атрибута `float_vector` можно найти [здесь](../Creating_a_table/Data_types.md#Float-vector).
 
@@ -604,7 +605,7 @@ POST /search
 
 При `HNSW_SIMILARITY='cosine'` каждый сохраненный вектор нормализуется отдельно, поэтому векторы документа сравниваются с запросом по одному, а не как один длинный склеенный вектор.
 
-Все остальное на этой странице применяется без изменений: [фильтрация](../Searching/KNN.md#Filtering-KNN-vector-search-results), [prefilter/postfilter](../Searching/KNN.md#Filtering-strategies:-prefilter-vs.-postfilter), [квантование](../Searching/KNN.md#Vector-quantization), [раннее завершение](../Searching/KNN.md#Early-termination) и повторное ранжирование работают так же. Недоступна только [автогенерация эмбеддингов](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29), поскольку модель возвращает один вектор на документ.
+Все остальное на этой странице применяется без изменений: [фильтрация](../Searching/KNN.md#Filtering-KNN-vector-search-results), [предфильтр/постфильтр](../Searching/KNN.md#Filtering-strategies:-prefilter-vs.-postfilter), [квантование](../Searching/KNN.md#Vector-quantization), [раннее завершение](../Searching/KNN.md#Early-termination) и повторное ранжирование работают так же. [Автоэмбеддинги](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29) могут заполнить массив за вас, по одному вектору на фрагмент - см. ниже [Стратегии разбиения на фрагменты](../Searching/KNN.md#Chunking-strategies).
 
 <!-- example multi_vector -->
 
@@ -639,6 +640,77 @@ POST /search
     "query_vector": [1,0,0,0],
     "k": 5
   }
+}
+```
+
+<!-- end -->
+
+### Стратегии разбиения на фрагменты
+
+По умолчанию модель эмбеддингов читает только столько документа, сколько помещается в ее окно ввода (обычно несколько сотен токенов), а остальное молча отбрасывается. Для заголовка или короткого описания этого достаточно. Для длинной статьи - нет: все, что написано после точки отсечения, уже не удастся извлечь, и об этом не сообщается никакой ошибкой.
+
+**Стратегия разбиения** определяет, как документ превращается в векторы. Задайте ее с помощью `CHUNK_STRATEGY` в столбце, привязанном к модели:
+
+| Стратегия | Векторов на документ | Что делает |
+|---|---|---|
+| `truncate` | 1 | Кодирует столько, сколько помещается в окно модели, а остальное отбрасывает. Значение по умолчанию и историческое поведение. |
+| `mean` | 1 | Делит весь документ на части, кодирует каждую и усредняет их в один вектор. Хвост не теряется, но документ на несколько тем сводится к их среднему. |
+| `fixed` | N | Фиксированные окна по `MAX_TOKENS` токенов. |
+| `recursive` | N | Делит по иерархии разделителей: абзац, затем строка, затем предложение, затем пробел; при этом каждая часть укладывается в `MAX_TOKENS`. |
+| `sentence` | N | Границы предложений, упакованные до `MAX_TOKENS`. |
+
+`truncate` и `mean` создают по одному вектору на документ и работают со столбцом [`float_vector`](../Creating_a_table/Data_types.md#Float-vector) (в `float_vector_array` они хранят массив из одного элемента). `fixed`, `recursive` и `sentence` создают несколько векторов, поэтому требуют столбца [`float_vector_array`](../Creating_a_table/Data_types.md#Float-vector-array); использование их в обычном `float_vector` отклоняется.
+
+Разница в том, что именно считается совпадением. Когда на документ приходится один вектор, поиск спрашивает: «похож ли этот документ целиком на запрос?», и один релевантный абзац размывается всем окружающим текстом. Когда на фрагмент приходится один вектор, вопрос другой: «содержит ли этот документ что-то похожее?» Каждый фрагмент соревнуется отдельно, а документ возвращается один раз с оценкой по своему ближайшему фрагменту (см. [Несколько векторов на документ](../Searching/KNN.md#Multiple-vectors-per-document)).
+
+**Параметры**, все действительны только вместе с `MODEL_NAME` и `KNN_TYPE='hnsw'`:
+
+* `CHUNK_STRATEGY`: один из пяти вариантов выше. По умолчанию `truncate`.
+* `MAX_TOKENS`: размер фрагмента в токенах. `0` по умолчанию означает собственный предел модели; большее значение будет снижено до него.
+* `OVERLAP_TOKENS`: сколько токенов общих у соседних фрагментов, чтобы идея, разрезанная границей, все равно полностью попадала хотя бы в один из них. Требует явного ненулевого `MAX_TOKENS`. Большое перекрытие уменьшается так, чтобы фрагменты по-прежнему продвигались по документу: `fixed` и `recursive` ограничивают его половиной `MAX_TOKENS`, а `sentence` подготавливает следующий фрагмент максимум из `OVERLAP_TOKENS` завершающих полных предложений и всегда сдвигается хотя бы на одно предложение.
+* `MAX_CHUNKS`: верхняя граница числа векторов на документ. `0` по умолчанию означает без ограничения.
+
+Важные моменты:
+
+* **`MAX_CHUNKS` отбрасывает текст.** При переполнении остаток объединяется с последним сохраненным фрагментом, после чего тот превышает `MAX_TOKENS` и при кодировании обрезается до окна ввода модели. Видимого разрыва не остается, но хвост теряется.
+* **Локальные и удаленные модели режут текст по-разному.** Локальные модели разбивают его по реальным токенам модели. У удаленных API-моделей (OpenAI, Voyage, Jina) нет локального токенизатора, поэтому вместо него используется консервативная оценка по байтам, и тот же текст с теми же настройками даст другое число фрагментов, чем локальная модель.
+
+`ALTER TABLE ... ADD COLUMN` с привязанным к модели `float_vector_array`, а также `ALTER TABLE ... REBUILD EMBEDDINGS` для него пока не поддерживаются; существующие строки нельзя заполнить задним числом, поэтому столбец останется пустым. Объявляйте такой столбец при создании таблицы. Для столбца `float_vector` оба варианта работают нормально, в том числе с `mean`.
+
+<!-- example chunking -->
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+-- one vector per sentence group, filled automatically from the text
+CREATE TABLE articles (
+  title text,
+  content text,
+  chunks float_vector_array knn_type='hnsw' hnsw_similarity='cosine'
+     model_name='Xenova/all-MiniLM-L6-v2' from='title,content'
+     chunk_strategy='sentence' max_tokens='256' overlap_tokens='32'
+);
+
+INSERT INTO articles (id, title, content) VALUES (1, 'Rotating certificates', 'A long guide with many sections ...');
+
+SELECT id, knn_dist() FROM articles WHERE knn(chunks, 5, 'how do I rotate a certificate');
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "CREATE TABLE articles (title text, content text, chunks float_vector_array knn_type='hnsw' hnsw_similarity='cosine' model_name='Xenova/all-MiniLM-L6-v2' from='title,content' chunk_strategy='sentence' max_tokens='256')"
+
+POST /search
+{
+  "table": "articles",
+  "knn": { "field": "chunks", "query": "how do I rotate a certificate", "k": 5 }
 }
 ```
 

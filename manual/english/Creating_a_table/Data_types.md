@@ -2594,6 +2594,12 @@ When creating a table with `float_vector` attributes for KNN search, you can spe
 - `HNSW_M`: Maximum connections in the graph (default: 16)
 - `HNSW_EF_CONSTRUCTION`: Construction time/accuracy trade-off (default: 200)
 
+**Chunking parameters** (when using `MODEL_NAME`, see [Chunking strategies](../Searching/KNN.md#Chunking-strategies)):
+- `CHUNK_STRATEGY`: how a document becomes vectors: `'truncate'` (default), `'mean'`, `'fixed'`, `'recursive'` or `'sentence'`. The last three produce several vectors per document and require a [`float_vector_array`](../Creating_a_table/Data_types.md#Float-vector-array) column.
+- `MAX_TOKENS`: chunk size in tokens; `0` (default) uses the model's own limit
+- `OVERLAP_TOKENS`: tokens shared between consecutive chunks; requires an explicit non-zero `MAX_TOKENS`; a large overlap is reduced so chunks still advance
+- `MAX_CHUNKS`: ceiling on vectors per document; `0` (default) means unlimited
+
 **Auto-embeddings parameters** (when using `MODEL_NAME`):
 - `MODEL_NAME`: The embedding model to use (e.g., `'Xenova/all-MiniLM-L6-v2'` for the fast ONNX path, `'sentence-transformers/all-MiniLM-L6-v2'`, or `'openai/text-embedding-ada-002'`)
 - `FROM`: Comma-separated list of field names to use for embedding generation, or empty string `''` to use all text/string fields
@@ -2975,7 +2981,7 @@ When the attribute is configured for [KNN](../Searching/KNN.md), all vectors of 
 - Currently only supported in real-time tables (not in plain tables)
 - Not supported in functions or expressions
 - Cannot be used in regular filters or sorting
-- [Auto embeddings](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29) are not available for this type: a model produces one vector per document, so `MODEL_NAME` is rejected. Vectors must be supplied explicitly.
+- [Auto embeddings](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29) work: a multi-vector chunking strategy (`fixed`, `recursive`, `sentence`) fills the array with one vector per chunk, while a single-vector strategy (`truncate`, `mean`) stores a 1-element array - see [Chunking strategies](../Searching/KNN.md#Chunking-strategies). Adding a model-backed `float_vector_array` with `ALTER TABLE ... ADD COLUMN`, and `ALTER TABLE ... REBUILD EMBEDDINGS` on one, are not supported yet; declare the column when creating the table.
 - Not compatible with the [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) mechanism
 
 ### Using float vector arrays with KNN
@@ -2983,7 +2989,7 @@ When the attribute is configured for [KNN](../Searching/KNN.md), all vectors of 
 The parameters are the same ones [`float_vector`](../Creating_a_table/Data_types.md#Float-vector) takes: `KNN_TYPE`, `KNN_DIMS`, `HNSW_SIMILARITY`, plus the optional `HNSW_M`, `HNSW_EF_CONSTRUCTION` and [quantization](../Searching/KNN.md#Vector-quantization), with two differences:
 
 - `KNN_DIMS` is required, and **every** vector in **every** row must have exactly that many entries. A row whose vectors are a different width is rejected on insert.
-- `MODEL_NAME` and `FROM` are not accepted.
+- `MODEL_NAME` and `FROM` are accepted, together with a multi-vector `CHUNK_STRATEGY` that fills the array automatically. See [Chunking strategies](../Searching/KNN.md#Chunking-strategies).
 
 **What you can do:**
 - Run KNN searches that match a document on its closest vector

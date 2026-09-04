@@ -2027,7 +2027,7 @@ GROUP_CONCAT(expression ORDER BY sort_expression [ASC|DESC] [, ...]
 
 对于每个有序表达式，内存开销与保留的分组数乘以 `N` 成正比。
 
-该形式目前仅支持显式使用 `GROUP BY` 的 SphinxQL 查询。它不支持 `DISTINCT`、多个值表达式、`OFFSET`、隐式分组、JSON 聚合语法、`FACET`、`JOIN`、外层查询或表函数、KNN/混合查询以及 scroll。有序 `GROUP_CONCAT()` 的别名不能用于 `HAVING` 或结果排序。结果排序可以使用分组键和普通聚合，但不能使用代表行中的值。
+此表单当前仅支持带显式 `GROUP BY` 的 SQL 查询。它不支持 `DISTINCT`、多个值表达式、`OFFSET`、隐式分组、JSON 聚合语法、`FACET`、`JOIN`、外层 `SELECT` 或表函数、KNN/混合查询，或 `scroll`。带排序的 `GROUP_CONCAT()` 别名不能用于 `HAVING` 或结果排序。结果排序可以使用分组键和普通聚合，但不能使用代表行的值。
 
 例如，下面的查询为每个专业最多返回两个年龄，并将较大的年龄排在前面：
 

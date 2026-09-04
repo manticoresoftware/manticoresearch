@@ -344,7 +344,7 @@ private:
 	bool	SetupMatchesSortingFunc();
 	bool	SetupGroupSortingFunc ( bool bGotDistinct );
 	bool	AddGroupbyStuff();
-	void	AddKnnDistSort ( CSphString & sSortBy );
+	void	AddKnnDistSort ( CSphString & sSortBy, bool bMatchSort );
 	void	AddHybridScoreSort ( CSphString & sSortBy );
 	bool	CheckNoInternalUuidSortRefs ( const CSphString & sSortBy ) const;
 	bool	SetGroupSorting();
@@ -1806,7 +1806,8 @@ bool QueueCreator_c::AddKNNDistColumn()
 // calc here yields a null calc and crashes, so rescore must be skipped.
 bool QueueCreator_c::CanRescoreKNN() const
 {
-	if ( m_tQuery.m_bHybridSearch || !m_tQuery.HasKnn() )
+	// Merge queues receive already-computed shard values and must not evaluate sorter expressions again.
+	if ( !m_tSettings.m_bComputeItems || m_tQuery.m_bHybridSearch || !m_tQuery.HasKnn() )
 		return false;
 
 	const auto & tKNN = m_tQuery.SingleKnnSettings();
@@ -2404,9 +2405,9 @@ void QueueCreator_c::RemapAttrs ( CSphMatchComparatorState & tState, CSphVector<
 }
 
 
-void QueueCreator_c::AddKnnDistSort ( CSphString & sSortBy )
+void QueueCreator_c::AddKnnDistSort ( CSphString & sSortBy, bool bMatchSort )
 {
-	if ( m_tQuery.m_bHybridSearch )
+	if ( m_tQuery.m_bHybridSearch || ( bMatchSort && m_tSettings.m_bSkipKnnDistMatchSort ) )
 		return;
 
 	if ( m_pSorterSchema->GetAttr ( GetKnnDistAttrName() ) && !strstr ( sSortBy.cstr(), "knn_dist" ) )
@@ -2443,7 +2444,7 @@ bool QueueCreator_c::SetupMatchesSortingFunc()
 	if ( m_tQuery.m_eSort==SPH_SORT_EXTENDED )
 	{
 		CSphString sSortBy = m_tQuery.m_sSortBy;
-		AddKnnDistSort ( sSortBy );
+		AddKnnDistSort ( sSortBy, true );
 		AddHybridScoreSort ( sSortBy );
 
 		ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, sSortBy.cstr(), *m_pSorterSchema, m_eMatchFunc, m_tStateMatch, m_dMatchJsonExprs, m_tSettings.m_pJoinArgs.get(), m_sError );
@@ -2507,7 +2508,7 @@ bool QueueCreator_c::SetupGroupSortingFunc ( bool bGotDistinct )
 	CSphString sGroupOrderBy = m_tQuery.m_sGroupSortBy;
 	if ( sGroupOrderBy=="@weight desc" )
 	{
-		AddKnnDistSort ( sGroupOrderBy );
+		AddKnnDistSort ( sGroupOrderBy, false );
 		AddHybridScoreSort ( sGroupOrderBy );
 	}
 	if ( !CheckNoInternalUuidSortRefs ( sGroupOrderBy ) )

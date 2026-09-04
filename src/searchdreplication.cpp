@@ -1507,12 +1507,27 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 
 static bool PrepareAccForSave ( RtAccum_t & tAcc )
 {
-	RtIndex_i * pIndex = tAcc.GetIndex();
-	if ( !pIndex || !tAcc.IsRtTrxCommand() || !tAcc.m_uAccumDocs )
+	if ( !tAcc.GetIndex() || !tAcc.IsRtTrxCommand() || !tAcc.m_uAccumDocs )
 		return true;
 
+	cServedIndexRefPtr_c pServed = GetServed ( tAcc.GetIndexName() );
+	if ( !ServedDesc_t::IsMutable ( pServed ) )
+	{
+		TlsMsg::Err ( "can not finish transaction, table changed '%s'", tAcc.GetIndexName().cstr() );
+		tAcc.Cleanup();
+		return false;
+	}
+
+	RIdx_T<RtIndex_i*> pLockedIndex ( pServed );
+	if ( !pLockedIndex || pLockedIndex->GetIndexId()!=tAcc.GetIndexId() )
+	{
+		TlsMsg::Err ( "can not finish transaction, table changed '%s'", tAcc.GetIndexName().cstr() );
+		tAcc.Cleanup();
+		return false;
+	}
+
 	CSphString sError;
-	return ( pIndex->PreCommit ( &tAcc, sError ) || TlsMsg::Err ( "%s", sError.cstr() ) );
+	return ( pLockedIndex->PreCommit ( &tAcc, sError ) || TlsMsg::Err ( "%s", sError.cstr() ) );
 }
 
 

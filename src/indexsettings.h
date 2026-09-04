@@ -513,6 +513,7 @@ struct CreateTableAttr_t
 	knn::IndexSettings_t	m_tKNN;
 	knn::ModelSettings_t	m_tKNNModel;
 	CSphString				m_sKNNFrom;
+	knn::ChunkSettings_t	m_tKNNChunk;
 };
 
 struct NameValueStr_t

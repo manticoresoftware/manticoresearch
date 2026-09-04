@@ -58,6 +58,7 @@
         * [复制集群状态](Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md)
         * [重启集群](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)
         * [集群恢复](Creating_a_cluster/Setting_up_replication/Cluster_recovery.md)
+        * [了解复制状态](Creating_a_cluster/Setting_up_replication/Understanding_cluster_status_and_node_states.md)
 * [4️⃣ 连接到服务器](Connecting_to_the_server.md)
     * [MySQL 协议](Connecting_to_the_server/MySQL_protocol.md)
     * [HTTP](Connecting_to_the_server/HTTP.md)

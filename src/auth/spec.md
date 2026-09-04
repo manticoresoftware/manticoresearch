@@ -419,7 +419,6 @@ The actions `read`, `write`, `schema`, `replication` and `admin` map to specific
     - RELOAD PLUGINS
     - ENABLE BUDDY PLUGIN
     - DISABLE BUDDY PLUGIN
-    - BACKUP
     - SHOW STATUS
     - SHOW QUERIES
     - SHOW THREADS
@@ -434,6 +433,15 @@ The actions `read`, `write`, `schema`, `replication` and `admin` map to specific
   - HTTP endpoints that modify schema:
     - /tbl_name/_mapping
     - /sql, /cli, /cli_json endpoint with any "schema" queries
+
+- **backup**:
+  - SQL `BACKUP` commands handled through Buddy.
+  - Backup-tool support commands: `FREEZE`, `UNFREEZE`, `FLUSH ATTRIBUTES`, `SHOW TABLES`, `SHOW STATUS`, and `SHOW SETTINGS` when used by a backup operator.
+  - `BACKUP` requires `backup` on `*` because it is a server-side operational action that can write local or remote backup artifacts.
+  - `BACKUP TABLE <tables>`, `FREEZE <tables>`, and `UNFREEZE <tables>` also require `read` on every explicitly requested table.
+  - `BACKUP` without an explicit table list requires `read` on `*` and is denied if any `read` deny rule exists, so a full backup cannot bypass an excluded table.
+  - `FLUSH ATTRIBUTES`, `SHOW TABLES`, `SHOW STATUS`, and `SHOW SETTINGS` are authorized by either their regular permission or `backup` on `*`.
+  - `admin`, `schema`, or `read` alone do not authorize `BACKUP`.
 
 - **replication**:
   - all replication-related internal commands that replication nodes use to communicate with each other
@@ -470,7 +478,7 @@ The actions `read`, `write`, `schema`, `replication` and `admin` map to specific
 **Notes**
 
 - Commands not explicitly listed under any permission are denied by default.
-- Users with the `admin` action are restricted to managing users and permissions. For other actions, such as `read`, `write`, or `schema`, explicit grants are required.
+- Users with the `admin` action are restricted to managing users and permissions. For other actions, such as `read`, `write`, `schema`, `backup`, or `replication`, explicit grants are required.
 - This list should be reviewed and updated regularly to ensure all possible SQL commands and endpoints are included.
 - Direct reads and writes to `system.auth_users` and `system.auth_permissions` are restricted to daemon-internal auth handlers. Users should inspect and manage authentication data through `SHOW USERS`, `SHOW PERMISSIONS`, `SHOW TOKEN`, `CREATE USER`, `DROP USER`, `GRANT`, `REVOKE`, `SET PASSWORD`, `TOKEN`, and `RELOAD AUTH`. Even users with the `admin` privilege should not be able to access these tables directly to prevent credential exposure or storage corruption.
 
@@ -710,9 +718,9 @@ Please refer to the section **"SQL Commands for Authentication and Authorization
      ```sql
      GRANT <action> ON <target> TO '<username>' [WITH ALLOW <0|1> [BUDGET '<json_budget>'] | WITH BUDGET '<json_budget>'];
      ```
-   - `<action>`: `READ`, `WRITE`, `SCHEMA`, `REPLICATION`, or `ADMIN`. Users with the `ADMIN` action can manage users and permissions but require explicit grants for other actions.
+   - `<action>`: `READ`, `WRITE`, `SCHEMA`, `BACKUP`, `REPLICATION`, or `ADMIN`. Users with the `ADMIN` action can manage users and permissions but require explicit grants for other actions.
    - `<target>`: The object to which the permission applies. Use either `*` or `'*'` for all targets, or specify a table name preceded by the `table/` prefix.
-   - **Constraint:** If `<action>` is `ADMIN`, `<target>` must be `*` (or `'*'`).
+   - **Constraint:** If `<action>` is `ADMIN` or `BACKUP`, `<target>` must be `*` (or `'*'`).
    - If `<username>` does not exist, the command fails with `user '<username>' not found`.
    - If `<action>` is unknown, the command fails with `unknown action '<action>'`.
    - If user already has permission for the same `<action>` and `<target>`, the command fails (budgets do not create a distinct permission key).
@@ -725,6 +733,7 @@ Please refer to the section **"SQL Commands for Authentication and Authorization
      GRANT READ ON * TO 'readonly' WITH BUDGET '{"queries_per_day": 10000}';
      GRANT READ ON 'restricted_tbl' TO 'readonly' WITH ALLOW 0 BUDGET '{"queries_per_minute": 10}';
      GRANT WRITE ON 'mytable' TO 'custom_user';
+     GRANT BACKUP ON * TO 'backup_operator';
      GRANT ADMIN ON * TO 'security_admin';
      ```
 
@@ -735,7 +744,7 @@ Please refer to the section **"SQL Commands for Authentication and Authorization
      ```sql
      REVOKE <action> ON <target> FROM '<username>';
      ```
-   - **Constraint:** If `<action>` is `ADMIN`, `<target>` must be `*` (or `'*'`).
+   - **Constraint:** If `<action>` is `ADMIN` or `BACKUP`, `<target>` must be `*` (or `'*'`).
    - If `<username>` does not exist, the command fails with `user '<username>' not found`.
    - If `<action>` is unknown, the command fails with `unknown action '<action>'`.
    - If user does not have the specified permission, the command fails with `user '<username>' does not have '<action>' permission on '<target>'`.

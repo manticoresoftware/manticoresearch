@@ -5993,9 +5993,7 @@ static bool SchemaHasEmbeddingModels ( const CSphSchema & tSchema )
 }
 
 
-// fills the per-attribute model table for tSchema (the accumulator walks it in parallel with the schema attributes,
-// so it must be rebuilt whenever the attributes change); models that tEmbeddings already holds are reused, the
-// others are loaded into it
+// models that tEmbeddings already holds are reused; the others are loaded into it
 static bool PrepareAttrsWithModels ( CSphSchema & tSchema, TableEmbeddings_c & tEmbeddings, CSphVector<AttrWithModel_t> & dAttrsWithModels, CSphString & sError )
 {
 	dAttrsWithModels.Reset();
@@ -6031,7 +6029,6 @@ static bool PrepareAttrsWithModels ( CSphSchema & tSchema, TableEmbeddings_c & t
 }
 
 
-// loads the models of tSchema from scratch and fills the per-attribute model table
 static bool PrepareEmbeddingModelsForSchema ( CSphSchema & tSchema, std::unique_ptr<TableEmbeddings_c> & pEmbeddings, CSphVector<AttrWithModel_t> & dAttrsWithModels, CSphString & sError )
 {
 	pEmbeddings.reset();
@@ -9915,11 +9912,14 @@ bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD
 	if ( !Alter_AddRemoveFieldFromSchema ( bAdd, tNewSchema, sFieldName, uFieldFlags, sError ) )
 		return false;
 
-	// the embedding sources (FROM=...) are resolved to field ids, so they must follow the new schema;
-	// dropping a field an embedding is built from is refused here
+	// the embedding sources (FROM=...) are field ids - rebuild them for the new schema (fix #4872)
 	CSphVector<AttrWithModel_t> dPreparedAttrsWithModels;
 	if ( m_pEmbeddings && !PrepareAttrsWithModels ( tNewSchema, *m_pEmbeddings, dPreparedAttrsWithModels, sError ) )
+	{
+		if ( !bAdd )
+			sError.SetSprintf ( "%s; a field used as an embedding source can be dropped after the embedding column itself is dropped", sError.cstr() );
 		return false;
+	}
 
 	m_tSchema = tNewSchema;
 
@@ -10006,11 +10006,7 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 	std::unique_ptr<TableEmbeddings_c> pPreparedEmbeddings;
 	CSphVector<AttrWithModel_t> dPreparedAttrsWithModels;
 
-	// the per-attribute model table is parallel to the schema attributes, so it must be rebuilt on EVERY attribute
-	// change, not only when the added column is model-backed: the accumulator repacks the blob storage of each
-	// inserted document along that table, and a blob attribute added past its end was never copied - an MVA added
-	// with ALTER to a table with an auto-embedding column silently lost every value (manticoresearch#4872).
-	// a model-backed column loads its models from scratch (its settings are new); any other change keeps the loaded ones
+	// m_dAttrsWithModels is parallel to the schema attributes - rebuild it on every attribute change (fix #4872)
 	const bool bModelBackedEmbedding = ( bAdd && IsModelBackedEmbedding ( tNewCtx ) );
 	if ( !bModelBackedEmbedding && m_pEmbeddings )
 	{

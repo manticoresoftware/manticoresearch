@@ -98,10 +98,6 @@ static void AppendCsvQuoted ( std::ostream & tOut, const char * szValue )
 
 static bool GetIndexerPath ( CSphString & sIndexer, CSphString & sError )
 {
-#if STATIC_BINARY
-	sError = "bulk_import is unavailable in static builds";
-	return false;
-#else
 	CSphString sExecutable = GetExecutablePath();
 	if ( sExecutable.IsEmpty() )
 	{
@@ -116,7 +112,6 @@ static bool GetIndexerPath ( CSphString & sIndexer, CSphString & sError )
 	#endif
 	sIndexer.SetSprintf ( "%s%s", GetPathOnly ( sExecutable ).cstr(), szIndexer );
 	return true;
-#endif
 }
 
 

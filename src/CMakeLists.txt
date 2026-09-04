@@ -208,7 +208,7 @@ add_library ( lsearchd OBJECT searchdha.cpp api_reply_stream.cpp http/http_parse
 		auth/auth.cpp auth/auth_common.cpp auth/auth_proto_http.cpp auth/auth_proto_mysql.cpp auth/auth_proto_api.cpp auth/auth_perms.cpp auth/gcm_nonce.cpp auth/auth_log.cpp auth/auth_bootstrap.cpp)
 		
 # Keep indexer-assisted bulk writes streaming without Boost.Process' 1 KiB write bottleneck.
-target_compile_definitions ( lsearchd PRIVATE STATIC_BINARY=$<BOOL:${STATIC_BINARY}> BOOST_PROCESS_PIPE_SIZE=4194304 )
+target_compile_definitions ( lsearchd PRIVATE BOOST_PROCESS_PIPE_SIZE=4194304 )
 target_sources ( lsearchd PUBLIC ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
 add_library ( digest_sha1 digest_sha1.cpp )
 add_library ( digest_sha256 digest_sha256.cpp )

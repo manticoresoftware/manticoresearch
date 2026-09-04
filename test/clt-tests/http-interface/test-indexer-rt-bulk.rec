@@ -15,6 +15,13 @@ chunks=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SHO
 ––– output –––
 ASSISTED_HTTP_PUBLISHED
 ––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS bulk_import_zero_id; CREATE TABLE bulk_import_zero_id (title TEXT);"
+––– output –––
+––– input –––
+reply=$(printf '%s\n' '{"insert":{"table":"bulk_import_zero_id","id":0,"doc":{"title":"must be rejected"}}}' | curl -sS -X POST 'http://localhost:9308/bulk?bulk_import=bulk_import_zero_id' -H 'Content-Type: application/x-ndjson' --data-binary @-); count=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT COUNT(*) FROM bulk_import_zero_id"); if printf '%s' "$reply" | grep -q 'requires an explicit non-zero id' && [ "$count" = 0 ]; then echo BULK_IMPORT_ZERO_ID_REJECTED; else printf 'FAIL_BULK_IMPORT_ZERO_ID reply=%s count=%s\n' "$reply" "$count"; fi
+––– output –––
+BULK_IMPORT_ZERO_ID_REJECTED
+––– input –––
 mysql -h0 -P9306 -e "SET GLOBAL auto_optimize=1; DROP TABLE IF EXISTS bulk_import_auto_optimize; CREATE TABLE bulk_import_auto_optimize (title TEXT) optimize_cutoff='2';"; failed=0; for i in $(seq 1 6); do response=$(printf '{"insert":{"index":"bulk_import_auto_optimize","id":%s,"doc":{"title":"row %s"}}}\n' "$i" "$i" | curl -sS --max-time 60 -X POST 'http://localhost:9308/bulk?bulk_import=bulk_import_auto_optimize' -H 'Content-Type: application/x-ndjson' --data-binary @-) || failed=1; printf '%s' "$response" | grep -q '"errors":false' || failed=1; done; i=0; chunks=999; optimizing=1; while [ "$i" -lt 100 ]; do chunks=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SHOW TABLE bulk_import_auto_optimize STATUS LIKE 'disk_chunks'" | awk '{print $2}'); optimizing=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SHOW TABLE bulk_import_auto_optimize STATUS LIKE 'optimizing'" | awk '{print $2}'); [ "$optimizing" = 0 ] && [ "$chunks" -le 2 ] && break; sleep 0.1; i=$((i+1)); done; stats=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT COUNT(*),MIN(id),MAX(id),SUM(id) FROM bulk_import_auto_optimize"); if [ "$failed" = 0 ] && [ "$optimizing" = 0 ] && [ "$chunks" -le 2 ] && [ "$stats" = "$(printf '6\t1\t6\t21')" ]; then echo BULK_IMPORT_AUTO_OPTIMIZE_OK; else printf 'FAIL_BULK_IMPORT_AUTO_OPTIMIZE failed=%s chunks=%s optimizing=%s stats=%s\n' "$failed" "$chunks" "$optimizing" "$stats"; fi
 ––– output –––
 BULK_IMPORT_AUTO_OPTIMIZE_OK

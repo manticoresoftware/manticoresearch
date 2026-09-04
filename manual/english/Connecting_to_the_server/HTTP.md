@@ -726,7 +726,7 @@ With HTTP/1.1, connections are persistent by default. Send `Connection: close` o
 
 On a persistent connection, the daemon keeps some state that later queries can use. This state is preserved for the `/sql`, `/sql?mode=raw`, and `/cli_json` endpoints, but not for `/cli`. This enables stateful interactions over HTTP JSON. For example, when you use [/cli_json](../Connecting_to_the_server/HTTP.md#/cli_json), you can run `SHOW META` after a `SELECT` on the same connection, similar to using a MySQL client.
 
-To run multiple queries using sphinxql via one connection with `curl`, you need to chain your commands with the
+To run multiple queries using SQL via one connection with `curl`, you need to chain your commands with the
 `--next` key:
 
 ```

@@ -114,10 +114,11 @@ table test_vec {
 | **Jina** | `jina/jina-embeddings-v4` 或 `jina:jina-embeddings-v4` | 是 | `API_KEY='***'` |
 
 **本地模型格式要求：**
-- 必须以 `safetensors` 格式保存（仅单文件）
-- 支持的系列：Qwen、Llama、Mistral、Gemma
+- 支持的权重格式：`safetensors`（单文件或通过 `model.safetensors.index.json` 分片）、量化 `GGUF` 和 `ONNX`
+- 支持的模型家族：BERT/Sentence Transformers、Qwen、Llama、Mistral、Gemma、T5
 - 已测试模型：`TinyLlama/TinyLlama-1.1B-Chat-v1.0`、`Locutusque/TinyMistral-248M-v2`、`Qwen/Qwen3-Embedding-0.6B`、`h2oai/embeddinggemma-300m`
-- 其他 `safetensors` 模型也可能可用，但不作保证
+- 这些家族中的其他模型也可能可用，但不保证
+- 对于受限制的 Hugging Face 仓库，请将你的 Hugging Face 访问令牌作为 `API_KEY` 传入
 
 关于配置 `float_vector` 属性的更多信息，请参见[这里](../Creating_a_table/Data_types.md#Float-vector)。
 
@@ -604,7 +605,7 @@ POST /search
 
 当 `HNSW_SIMILARITY='cosine'` 时，每个存储向量都会单独归一化，因此会将文档中的各个向量分别与查询进行比较，而不是把它们当作一个长串联向量来比较。
 
-本页其余内容保持不变：[过滤](../Searching/KNN.md#Filtering-KNN-vector-search-results)、[预过滤/后过滤](../Searching/KNN.md#Filtering-strategies:-prefilter-vs.-postfilter)、[量化](../Searching/KNN.md#Vector-quantization)、[提前终止](../Searching/KNN.md#Early-termination) 和重评分的行为都一样。唯一不可用的能力是 [自动嵌入](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29)，因为一个模型每个文档只会生成一个向量。
+本页其余内容都同样适用：[过滤](../Searching/KNN.md#Filtering-KNN-vector-search-results)、[预过滤/后过滤](../Searching/KNN.md#Filtering-strategies:-prefilter-vs.-postfilter)、[量化](../Searching/KNN.md#Vector-quantization)、[提前终止](../Searching/KNN.md#Early-termination) 和重评分的行为都一样。[自动嵌入](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29)可以帮你填充数组，每个 chunk 一个向量 - 见下方的[分块策略](../Searching/KNN.md#Chunking-strategies)。
 
 <!-- example multi_vector -->
 
@@ -639,6 +640,77 @@ POST /search
     "query_vector": [1,0,0,0],
     "k": 5
   }
+}
+```
+
+<!-- end -->
+
+### 分块策略
+
+默认情况下，embedding 模型只会读取文档中能装进其输入窗口的那部分内容（通常只有几百个 token），其余内容会被静默丢弃。对于标题或简短描述，这已经足够完整；但对于长文章就不行了：切断点之后写的内容永远无法被检索到，而且也不会报错。
+
+**分块策略**决定文档如何转换为向量。可在基于模型的列上通过 `CHUNK_STRATEGY` 设置：
+
+| 策略 | 每个文档的向量数 | 作用 |
+|---|---|---|
+| `truncate` | 1 | 只嵌入模型窗口能容纳的内容，剩余部分丢弃。默认值，也是历史行为。 |
+| `mean` | 1 | 将整个文档切分，嵌入每一段，再把它们平均成一个向量。不会丢掉尾部内容，但如果文档涵盖多个主题，会被压缩成它们的平均表示。 |
+| `fixed` | N | 按 `MAX_TOKENS` token 的固定大小窗口切分。 |
+| `recursive` | N | 按分隔层级切分：先段落，再行，再句子，最后空格；确保每个片段都不超过 `MAX_TOKENS`。 |
+| `sentence` | N | 按句子边界切分，并按 `MAX_TOKENS` 打包。 |
+
+`truncate` 和 `mean` 会为每个文档生成一个向量，并且适用于 [`float_vector`](../Creating_a_table/Data_types.md#Float-vector) 列（如果用在 `float_vector_array` 上，则存储为一个 1 元素数组）。`fixed`、`recursive` 和 `sentence` 会生成多个向量，因此需要 [`float_vector_array`](../Creating_a_table/Data_types.md#Float-vector-array) 列；把它们用在普通 `float_vector` 上会被拒绝。
+
+区别在于“匹配”意味着什么。每个文档只有一个向量时，搜索问的是“这个文档整体上和查询是否相似？”，而其中单个相关段落会被周围内容稀释。每个 chunk 一个向量时，问的是“这个文档是否*包含*与查询相似的内容？”，每个 chunk 都独立竞争，文档只返回一次，并由最相近的 chunk 评分（见[每个文档多个向量](../Searching/KNN.md#Multiple-vectors-per-document)）。
+
+**选项**，仅在与 `MODEL_NAME` 和 `KNN_TYPE='hnsw'` 同时使用时有效：
+
+* `CHUNK_STRATEGY`：上面五种之一。默认 `truncate`。
+* `MAX_TOKENS`：每个 chunk 的 token 数。`0`（默认）表示使用模型自身的上限；更大的值会被截断到该上限。
+* `OVERLAP_TOKENS`：相邻 chunk 共享多少 token，这样被边界切开的概念仍能在其中一个 chunk 中保持完整。需要显式设置非零的 `MAX_TOKENS`。较大的重叠会被缩小，以保证 chunk 仍能继续推进文档：`fixed` 和 `recursive` 将其上限设为 `MAX_TOKENS` 的一半，而 `sentence` 会用最多 `OVERLAP_TOKENS` 对应的尾部完整句子为下一个 chunk 重新播种，并且每次至少前进一个句子。
+* `MAX_CHUNKS`：每个文档的向量上限。`0`（默认）表示不限。
+
+重要说明：
+
+* **`MAX_CHUNKS` 会丢弃文本。** 超出上限时，剩余部分会合并到最后一个保留的 chunk 中，而该 chunk 随后会超过 `MAX_TOKENS`，在嵌入时被截断到模型的输入窗口。表面上不会留下可见空缺，但尾部内容已经丢失。
+* **本地模型和远程模型的分块方式不同。** 本地模型按模型真实的 token 切分。远程 API 模型（OpenAI、Voyage、Jina）没有本地分词器，因此改用保守的字节估算，所以相同的文本和设置会生成与本地模型不同数量的 chunk。
+
+目前还不支持对基于模型的 `float_vector_array` 使用 `ALTER TABLE ... ADD COLUMN`，也不支持对其执行 `ALTER TABLE ... REBUILD EMBEDDINGS`；现有行无法回填，因此该列会一直为空。请在建表时直接声明这类列。对于 `float_vector` 列则都能正常工作，包括 `mean`。
+
+<!-- example chunking -->
+
+<!-- intro -->
+##### SQL：
+
+<!-- request SQL -->
+
+```sql
+-- one vector per sentence group, filled automatically from the text
+CREATE TABLE articles (
+  title text,
+  content text,
+  chunks float_vector_array knn_type='hnsw' hnsw_similarity='cosine'
+     model_name='Xenova/all-MiniLM-L6-v2' from='title,content'
+     chunk_strategy='sentence' max_tokens='256' overlap_tokens='32'
+);
+
+INSERT INTO articles (id, title, content) VALUES (1, 'Rotating certificates', 'A long guide with many sections ...');
+
+SELECT id, knn_dist() FROM articles WHERE knn(chunks, 5, 'how do I rotate a certificate');
+```
+
+<!-- intro -->
+##### JSON：
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "CREATE TABLE articles (title text, content text, chunks float_vector_array knn_type='hnsw' hnsw_similarity='cosine' model_name='Xenova/all-MiniLM-L6-v2' from='title,content' chunk_strategy='sentence' max_tokens='256')"
+
+POST /search
+{
+  "table": "articles",
+  "knn": { "field": "chunks", "query": "how do I rotate a certificate", "k": 5 }
 }
 ```
 

@@ -559,8 +559,15 @@ knn = {"attrs":[{"name":"chunk_vectors","type":"hnsw","dims":768,"hnsw_similarit
 
 Применяются два отличия:
 
-- `dims` **обязателен**, и каждый вектор в каждой строке должен содержать ровно столько элементов.
-- `model_name` и `from` **не** поддерживаются — auto embeddings создают по одному вектору на документ, поэтому для этого типа они не подходят. Векторы нужно задавать явно.
+- `dims` **обязателен**, когда векторы передаются явно, и каждый вектор в каждой строке должен содержать ровно столько элементов. Его нужно **опускать**, когда используется `model_name`.
+- `model_name`/`from` можно указывать вместе с `chunk_strategy` для мультивекторного режима (`fixed`, `recursive` или `sentence`), который заполняет массив по одному вектору на каждый фрагмент:
+
+```ini
+rt_attr_float_vector_array = chunk_vectors
+knn = {"attrs":[{"name":"chunk_vectors","type":"hnsw","hnsw_similarity":"COSINE","model_name":"Xenova/all-MiniLM-L6-v2","from":"title,content","chunk_strategy":"sentence","max_tokens":256,"overlap_tokens":32}]}
+```
+
+  См. [Стратегии разбиения на фрагменты](../../Searching/KNN.md#Chunking-strategies) для полного списка параметров и ограничений `ALTER`.
 
 Все векторы индексируются вместе, а KNN-поиск возвращает каждый документ один раз, с оценкой по ближайшему вектору. См. [Массив float-векторов](../../Creating_a_table/Data_types.md#Float-vector-array) и [Несколько векторов на документ](../../Searching/KNN.md#Multiple-vectors-per-document).
 

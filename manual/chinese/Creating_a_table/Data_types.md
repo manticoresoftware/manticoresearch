@@ -2594,6 +2594,12 @@ let search_res = search_api.search(search_req).await;
 - `HNSW_M`：图中的最大连接数（默认：16）
 - `HNSW_EF_CONSTRUCTION`：构建时间/准确性权衡（默认：200）
 
+**分块参数**（使用 `MODEL_NAME` 时，参见[分块策略](../Searching/KNN.md#Chunking-strategies)）：
+- `CHUNK_STRATEGY`：文档如何转换为向量：`'truncate'`（默认）、`'mean'`、`'fixed'`、`'recursive'` 或 `'sentence'`。后三种会为每个文档生成多个向量，并且需要一个 [`float_vector_array`](../Creating_a_table/Data_types.md#Float-vector-array) 列。
+- `MAX_TOKENS`：每个分块的 token 数；`0`（默认）表示使用模型自身的上限
+- `OVERLAP_TOKENS`：相邻分块之间共享的 token；需要显式设置一个非零的 `MAX_TOKENS`；如果重叠过大，会自动缩减，确保分块仍能继续前进
+- `MAX_CHUNKS`：每个文档向量数的上限；`0`（默认）表示不限制
+
 **自动嵌入参数**（当使用 `MODEL_NAME` 时）：
 - `MODEL_NAME`：要使用的嵌入模型（例如，快速 ONNX 路径可用 `'Xenova/all-MiniLM-L6-v2'`，也可以是 `'sentence-transformers/all-MiniLM-L6-v2'` 或 `'openai/text-embedding-ada-002'`）
 - `FROM`：用于生成嵌入的字段名列表（逗号分隔），或空字符串 `''` 表示使用所有文本/字符串字段
@@ -2975,7 +2981,7 @@ table products
 - 目前仅支持实时表（不支持普通表）
 - 不支持在函数或表达式中使用
 - 不能用于常规过滤或排序
-- [自动 embedding](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29) 不适用于此类型：模型会为每个文档生成一个向量，因此 `MODEL_NAME` 会被拒绝。必须显式提供向量。
+- [自动嵌入](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29)可用：多向量分块策略（`fixed`、`recursive`、`sentence`）会为每个分块填入一个向量，而单向量策略（`truncate`、`mean`）会存储一个 1 元素数组 - 参见[分块策略](../Searching/KNN.md#Chunking-strategies)。目前还不支持通过 `ALTER TABLE ... ADD COLUMN` 添加一个由模型驱动的 `float_vector_array`，也不支持对其执行 `ALTER TABLE ... REBUILD EMBEDDINGS`；请在建表时直接声明该列。
 - 与 [自动模式](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) 机制不兼容
 
 ### 将浮点向量数组用于 KNN
@@ -2983,7 +2989,7 @@ table products
 参数与 [`float_vector`](../Creating_a_table/Data_types.md#Float-vector) 所使用的相同：`KNN_TYPE`、`KNN_DIMS`、`HNSW_SIMILARITY`，以及可选的 `HNSW_M`、`HNSW_EF_CONSTRUCTION` 和 [量化](../Searching/KNN.md#Vector-quantization)，但有两个区别：
 
 - `KNN_DIMS` 是必需的，并且 **每一行** 中的 **每个** 向量都必须恰好包含这么多维。插入时，如果某一行的向量宽度不同，该行会被拒绝。
-- 不接受 `MODEL_NAME` 和 `FROM`。
+- `MODEL_NAME` 和 `FROM` 都可接受，并且支持自动填充数组的多向量 `CHUNK_STRATEGY`。参见[分块策略](../Searching/KNN.md#Chunking-strategies)。
 
 **你可以做的：**
 - 运行 KNN 搜索，让文档按其最近的向量进行匹配

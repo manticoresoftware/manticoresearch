@@ -16,7 +16,11 @@
 #include "std/crc32.h"
 #include "fileio.h"
 
+#include <algorithm>
 #include <array>
+#include <cstdint>
+#include <queue>
+#include <vector>
 
 //////////////////////////////////////////////////////////////////////////
 // KEYWORDS STORING DICTIONARY, INFIX HASH BUILDER
@@ -47,112 +51,176 @@ struct Infix_t
 
 class InfixIntvec_c
 {
-private:
-	// do not change the order of fields in this union - it matters a lot
-	union {
-		std::array<DWORD, 4> m_dData;
-		struct
-		{
-			int m_iDynLen;
-			int m_iDynLimit;
-			DWORD* m_pDynData;
-		};
-	};
+	static constexpr uintptr_t INLINE_FLAG = 1;
+	static constexpr int INLINE_LEN_SHIFT = 1;
+	static constexpr int INLINE_VALUE_SHIFT = 3;
+	static constexpr int INLINE_VALUE_BITS = 24;
+	static constexpr int DYNAMIC_INITIAL_LIMIT = 16;
 
-	bool IsDynamic() const noexcept
+	uintptr_t m_uData = 0;
+
+	bool IsDynamic() const noexcept { return m_uData && !( m_uData & INLINE_FLAG ); }
+	int GetInlineLength() const noexcept { return (int)( ( m_uData >> INLINE_LEN_SHIFT ) & 3 ); }
+	DWORD GetInline ( int iIndex ) const noexcept
 	{
-		return ( m_dData[0] & 0x80000000UL ) != 0;
+		return (DWORD)( ( m_uData >> ( INLINE_VALUE_SHIFT + INLINE_VALUE_BITS * iIndex ) ) & INFIX_CHECKPOINT_ID_MAX );
+	}
+	DWORD* GetDynamic() noexcept { return reinterpret_cast<DWORD*>(m_uData); }
+	const DWORD* GetDynamic() const noexcept { return reinterpret_cast<const DWORD*>(m_uData); }
+
+	void Reset()
+	{
+		if ( IsDynamic() )
+			delete[] GetDynamic();
+		m_uData = 0;
 	}
 
 public:
-	InfixIntvec_c()
+	InfixIntvec_c() = default;
+	InfixIntvec_c ( const InfixIntvec_c& ) = delete;
+	InfixIntvec_c& operator= ( const InfixIntvec_c& ) = delete;
+	InfixIntvec_c ( InfixIntvec_c&& rhs ) noexcept
+		: m_uData ( std::exchange ( rhs.m_uData, 0 ) )
+	{}
+
+	InfixIntvec_c& operator= ( InfixIntvec_c&& rhs ) noexcept
 	{
-		m_dData.fill(0);
+		if ( this!=&rhs )
+		{
+			Reset();
+			m_uData = std::exchange ( rhs.m_uData, 0 );
+		}
+		return *this;
 	}
 
-	~InfixIntvec_c()
-	{
-		if ( IsDynamic() )
-			SafeDeleteArray ( m_pDynData );
-	}
+	~InfixIntvec_c() { Reset(); }
 
 	void Add ( DWORD uVal )
 	{
-		if ( !m_dData[0] )
+		if ( !m_uData )
 		{
-			// empty
-			m_dData[0] = uVal | 0x01000000UL;
+			m_uData = INLINE_FLAG | ( uintptr_t(1) << INLINE_LEN_SHIFT ) | ( uintptr_t(uVal & INFIX_CHECKPOINT_ID_MAX) << INLINE_VALUE_SHIFT );
 			return;
 		}
 
 		if ( !IsDynamic() )
 		{
-			// 1..4 static entries
-			int iLen = m_dData[0] >> 24;
-			DWORD uLast = m_dData[iLen - 1] & 0x00ffffffUL;
-
-			// redundant
-			if ( uVal == uLast )
+			int iLen = GetInlineLength();
+			if ( uVal == GetInline ( iLen - 1 ) )
 				return;
 
-			// grow static part
-			if ( iLen < 4 )
+			if ( iLen==1 )
 			{
-				m_dData[iLen] = uVal;
-				m_dData[0] = ( m_dData[0] & 0x00ffffffUL ) | ( ++iLen << 24 );
+				m_uData = ( m_uData & ~( uintptr_t(3) << INLINE_LEN_SHIFT ) )
+					| ( uintptr_t(2) << INLINE_LEN_SHIFT )
+					| ( uintptr_t(uVal & INFIX_CHECKPOINT_ID_MAX) << ( INLINE_VALUE_SHIFT + INLINE_VALUE_BITS ) );
 				return;
 			}
 
-			// dynamize
-			DWORD* pDyn = new DWORD[16];
-			memcpy ( pDyn, m_dData.data(), 4 * sizeof ( DWORD ) );
-			pDyn[0] &= 0x00ffffffUL;
+			auto* pDyn = new DWORD[DYNAMIC_INITIAL_LIMIT + 2];
+			pDyn[0] = 3;
+			pDyn[1] = DYNAMIC_INITIAL_LIMIT;
+			pDyn[2] = GetInline(0);
+			pDyn[3] = GetInline(1);
 			pDyn[4] = uVal;
-			m_iDynLen = 0x80000005UL; // dynamic flag, len=5
-			m_iDynLimit = 16;		  // limit=16
-			m_pDynData = pDyn;
+			m_uData = reinterpret_cast<uintptr_t>(pDyn);
+			assert ( !( m_uData & INLINE_FLAG ) );
 			return;
 		}
 
-		// N dynamic entries
-		int iLen = m_iDynLen & 0x00ffffffUL;
-		if ( uVal == m_pDynData[iLen - 1] )
+		DWORD* pDyn = GetDynamic();
+		int iLen = (int)pDyn[0];
+		if ( uVal == pDyn[iLen + 1] )
 			return;
-		if ( iLen >= m_iDynLimit )
+		if ( iLen >= (int)pDyn[1] )
 		{
-			m_iDynLimit *= 2;
-			auto* pNew = new DWORD[m_iDynLimit];
-			memcpy ( pNew, m_pDynData, iLen * sizeof ( DWORD ) );
-			delete[] ( std::exchange ( m_pDynData, pNew ) );
+			int iLimit = (int)pDyn[1] * 2;
+			auto* pNew = new DWORD[iLimit + 2];
+			memcpy ( pNew, pDyn, ( iLen + 2 ) * sizeof ( DWORD ) );
+			pNew[1] = iLimit;
+			delete[] pDyn;
+			pDyn = pNew;
+			m_uData = reinterpret_cast<uintptr_t>(pDyn);
 		}
 
-		m_pDynData[iLen] = uVal;
-		++m_iDynLen;
-
+		pDyn[iLen + 2] = uVal;
+		++pDyn[0];
 	}
 
 	int GetLength() const noexcept
 	{
-		if ( !IsDynamic() )
-			return m_dData[0] >> 24;
-		return m_iDynLen & 0x00ffffffUL;
+		return IsDynamic() ? (int)GetDynamic()[0] : GetInlineLength();
 	}
+
 
 	DWORD operator[] ( int iIndex ) const noexcept
 	{
-		if ( !IsDynamic() )
-			return m_dData[iIndex] & 0x00ffffffUL;
-		return m_pDynData[iIndex];
+		return IsDynamic() ? GetDynamic()[iIndex + 2] : GetInline(iIndex);
 	}
 };
 
+static_assert ( sizeof(InfixIntvec_c)==sizeof(uintptr_t) );
+static_assert ( sizeof(uintptr_t)>=8, "infix checkpoint packing requires a 64-bit build" );
 
-template<int SIZE>
+
 struct InfixHashEntry_t
 {
-	Infix_t<SIZE> m_tKey;	///< key, owned by the hash
+	uint64_t m_uKey = 0;	///< packed key, owned by the hash
 	InfixIntvec_c m_tValue; ///< data, owned by the hash
 	int m_iNext;			///< next entry in hash arena
+};
+
+
+template<typename T>
+class InfixArena_c
+{
+	static constexpr int BLOCK_LENGTH = 1 << 20;
+	std::vector<std::unique_ptr<CSphSwapVector<T>>> m_dBlocks;
+	int m_iLength = 0;
+
+public:
+	T& Add()
+	{
+		if ( !( m_iLength % BLOCK_LENGTH ) )
+		{
+			auto pBlock = std::make_unique<CSphSwapVector<T>>();
+			pBlock->Reserve ( BLOCK_LENGTH );
+			m_dBlocks.push_back ( std::move ( pBlock ) );
+		}
+
+		++m_iLength;
+		return m_dBlocks.back()->Add();
+	}
+
+	int GetLength() const noexcept { return m_iLength; }
+	int GetBlocksCount() const noexcept { return (int)m_dBlocks.size(); }
+	int GetBlockLength ( int iBlock ) const noexcept { return m_dBlocks[iBlock]->GetLength(); }
+
+	T& operator[] ( int iIndex ) noexcept
+	{
+		return (*m_dBlocks[iIndex / BLOCK_LENGTH])[iIndex % BLOCK_LENGTH];
+	}
+
+	const T& operator[] ( int iIndex ) const noexcept
+	{
+		return (*m_dBlocks[iIndex / BLOCK_LENGTH])[iIndex % BLOCK_LENGTH];
+	}
+
+	T& GetBlockEntry ( int iBlock, int iIndex ) noexcept { return (*m_dBlocks[iBlock])[iIndex]; }
+	const T& GetBlockEntry ( int iBlock, int iIndex ) const noexcept { return (*m_dBlocks[iBlock])[iIndex]; }
+
+	template<typename COMP>
+	void SortBlocks ( COMP&& fnComp )
+	{
+		for ( int i = 0; i < GetBlocksCount(); ++i )
+			std::sort ( m_dBlocks[i]->Begin() + ( i ? 0 : 1 ), m_dBlocks[i]->Begin() + m_dBlocks[i]->GetLength(), fnComp );
+	}
+
+	void Reset()
+	{
+		m_dBlocks.clear();
+		m_iLength = 0;
+	}
 };
 
 
@@ -160,26 +228,101 @@ template<int SIZE>
 class InfixBuilder_c final: public ISphInfixBuilder
 {
 	std::array<int, INFIX_ARENA_LENGTH> m_dHash; ///< all the hash entries
-	CSphSwapVector<InfixHashEntry_t<SIZE>> m_dArena;
+	InfixArena_c<InfixHashEntry_t> m_dArena;
+	static constexpr int LONG_KEY_BLOCK_SHIFT = 20;
+	static constexpr int LONG_KEY_BLOCK_LENGTH = 1 << LONG_KEY_BLOCK_SHIFT;
+	std::vector<std::unique_ptr<CSphTightVector<BYTE>>> m_dLongKeyBlocks;
 	CSphVector<InfixBlock_t> m_dBlocks;
 	CSphTightVector<BYTE> m_dBlocksWords;
 	CSphVector<int> m_dCodepointBytes;
 	DictFormat_e m_eDictFormat = DictFormat_e::KEYWORDS;
+	int m_iMinInfixLen = 2;
 
 private:
-	void AddEntry ( const Infix_t<SIZE>& tKey, DWORD uHash, int iCheckpoint )
+	static constexpr uint64_t LONG_KEY_FLAG = 0x80;
+
+	int GetKeyLength ( uint64_t uKey ) const noexcept { return (int)( uKey & 0x7f ); }
+	bool IsLongKey ( uint64_t uKey ) const noexcept { return ( uKey & LONG_KEY_FLAG )!=0; }
+	uint64_t GetLongKeyOffset ( uint64_t uKey ) const noexcept { return uKey >> 8; }
+
+	uint64_t StoreKey ( const Infix_t<SIZE>& tKey, uint64_t uInlineKey, int iLength )
+	{
+		if ( iLength<=7 )
+			return uInlineKey | iLength;
+
+		if ( m_dLongKeyBlocks.empty() || m_dLongKeyBlocks.back()->GetLength() + iLength > LONG_KEY_BLOCK_LENGTH )
+		{
+			auto pBlock = std::make_unique<CSphTightVector<BYTE>>();
+			pBlock->Reserve ( LONG_KEY_BLOCK_LENGTH );
+			m_dLongKeyBlocks.push_back ( std::move(pBlock) );
+		}
+
+		uint64_t uOffset = ( uint64_t(m_dLongKeyBlocks.size()-1) << LONG_KEY_BLOCK_SHIFT ) | m_dLongKeyBlocks.back()->GetLength();
+		assert ( uOffset < ( uint64_t(1) << 56 ) );
+		m_dLongKeyBlocks.back()->Append ( tKey.m_Data.data(), iLength );
+		return ( uOffset << 8 ) | LONG_KEY_FLAG | iLength;
+	}
+
+	const BYTE* GetLongKey ( uint64_t uKey ) const noexcept
+	{
+		uint64_t uOffset = GetLongKeyOffset(uKey);
+		return m_dLongKeyBlocks[uOffset >> LONG_KEY_BLOCK_SHIFT]->Begin() + ( uOffset & ( LONG_KEY_BLOCK_LENGTH - 1 ) );
+	}
+
+	BYTE GetKeyByte ( uint64_t uKey, int iIndex ) const noexcept
+	{
+		return IsLongKey(uKey)
+			? GetLongKey(uKey)[iIndex]
+			: BYTE ( uKey >> ( 56 - iIndex*8 ) );
+	}
+
+	bool KeyEquals ( uint64_t uStored, const Infix_t<SIZE>& tKey, uint64_t uInlineKey, int iLength ) const noexcept
+	{
+		if ( iLength!=GetKeyLength(uStored) )
+			return false;
+		if ( !IsLongKey(uStored) )
+			return uStored==( uInlineKey | iLength );
+		return !memcmp ( GetLongKey(uStored), tKey.m_Data.data(), iLength );
+	}
+
+	bool KeyLess ( uint64_t a, uint64_t b ) const noexcept
+	{
+		if ( !IsLongKey(a) && !IsLongKey(b) )
+			return a<b;
+
+		int iLenA = GetKeyLength(a);
+		int iLenB = GetKeyLength(b);
+		int iCommon = Min ( iLenA, iLenB );
+		for ( int i = 0; i < iCommon; ++i )
+		{
+			BYTE uA = GetKeyByte ( a, i );
+			BYTE uB = GetKeyByte ( b, i );
+			if ( uA!=uB )
+				return uA<uB;
+		}
+		return iLenA<iLenB;
+	}
+
+	void UnpackKey ( uint64_t uKey, Infix_t<SIZE>& tKey ) const noexcept
+	{
+		tKey.Reset();
+		for ( int i = 0; i < GetKeyLength(uKey); ++i )
+			tKey.m_Data[i] = GetKeyByte ( uKey, i );
+	}
+
+	void AddEntry ( const Infix_t<SIZE>& tKey, uint64_t uInlineKey, int iKeyLength, DWORD uHash, int iCheckpoint )
 	{
 		uHash &= ( INFIX_ARENA_LENGTH - 1 );
 
 		int iEntry = m_dArena.GetLength();
-		InfixHashEntry_t<SIZE>& tNew = m_dArena.Add();
-		tNew.m_tKey = tKey;
+		InfixHashEntry_t& tNew = m_dArena.Add();
+		tNew.m_uKey = StoreKey ( tKey, uInlineKey, iKeyLength );
 		tNew.m_tValue.Add ( iCheckpoint ); // len=1, data=iCheckpoint
 		tNew.m_iNext = std::exchange ( m_dHash[uHash], iEntry );
 	}
 
 	/// get value pointer by key
-	InfixIntvec_c* LookupEntry ( const Infix_t<SIZE>& tKey, DWORD uHash )
+	InfixIntvec_c* LookupEntry ( const Infix_t<SIZE>& tKey, uint64_t uInlineKey, int iKeyLength, DWORD uHash )
 	{
 		uHash &= ( INFIX_ARENA_LENGTH - 1 );
 		int iEntry = m_dHash[uHash];
@@ -187,7 +330,7 @@ private:
 
 		while ( iEntry )
 		{
-			if ( m_dArena[iEntry].m_tKey == tKey )
+			if ( KeyEquals ( m_dArena[iEntry].m_uKey, tKey, uInlineKey, iKeyLength ) )
 			{
 				// mtf it, if needed
 				if ( iiEntry )
@@ -201,20 +344,22 @@ private:
 	}
 
 public:
-	explicit InfixBuilder_c ( DictFormat_e eDictFormat )
+	InfixBuilder_c ( int iMinInfixLen, DictFormat_e eDictFormat )
 		: m_eDictFormat ( eDictFormat )
+		, m_iMinInfixLen ( Max ( 2, Min ( iMinInfixLen, 6 ) ) )
 	{
+		assert ( m_iMinInfixLen>=2 );
 		// init the hash
 		for ( auto& uHash : m_dHash )
 			uHash = 0;
-		m_dArena.Reserve ( INFIX_ARENA_LENGTH );
-		m_dArena.Resize ( 1 ); // 0 is a reserved index
+		m_dArena.Add(); // 0 is a reserved index
 	}
 
 	void AddWord ( const BYTE* pWord, int iWordLength, int iCheckpoint, bool bHasMorphology ) override;
 	void SaveEntries ( CSphWriter& wrDict ) override;
 	int64_t SaveEntryBlocks ( CSphWriter& wrDict ) override;
 	int64_t GetBlocksWordsSize() const override { return m_dBlocksWords.GetLength64(); }
+	int GetEntriesCount() const override { return Max ( 0, m_dArena.GetLength() - 1 ); }
 };
 
 
@@ -233,7 +378,7 @@ void InfixBuilder_c<2>::AddWord ( const BYTE* pWord, int iWordLength, int iCheck
 	}
 
 	Infix_t<2> sKey;
-	for ( int p = 0; p <= iWordLength - 2; ++p )
+	for ( int p = 0; p <= iWordLength - m_iMinInfixLen; ++p )
 	{
 		sKey.Reset();
 
@@ -241,19 +386,29 @@ void InfixBuilder_c<2>::AddWord ( const BYTE* pWord, int iWordLength, int iCheck
 		const BYTE* s = pWord + p;
 		const BYTE* sMax = s + Min ( 6, iWordLength - p );
 
-		DWORD uHash = CRC32_start ( *s );
-		*pKey++ = *s++; // copy first infix byte
+		BYTE uByte = *s++;
+		DWORD uHash = CRC32_start ( uByte );
+		*pKey++ = uByte; // copy first infix byte
+		uint64_t uInlineKey = uint64_t(uByte) << 56;
+		int iKeyLength = 1;
+		int iChars = 1;
 
 		while ( s < sMax )
 		{
-			CRC32_step ( uHash, *s );
-			*pKey++ = *s++; // copy another infix byte
+			uByte = *s++;
+			CRC32_step ( uHash, uByte );
+			*pKey++ = uByte; // copy another infix byte
+			if ( iKeyLength<7 )
+				uInlineKey |= uint64_t(uByte) << ( 56 - iKeyLength*8 );
+			++iKeyLength;
+			if ( ++iChars < m_iMinInfixLen )
+				continue;
 
-			InfixIntvec_c * pVal = LookupEntry ( sKey, uHash );
+			InfixIntvec_c * pVal = LookupEntry ( sKey, uInlineKey, iKeyLength, uHash );
 			if ( pVal )
 				pVal->Add ( iCheckpoint );
 			else
-				AddEntry ( sKey, uHash, iCheckpoint );
+				AddEntry ( sKey, uInlineKey, iKeyLength, uHash, iCheckpoint );
 		}
 	}
 }
@@ -308,7 +463,7 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE* pWord, int iWordLength, int iCh
 
 	// generate infixes
 	Infix_t<SIZE> sKey;
-	for ( int p = 0; p <= iCodes - 2; ++p )
+	for ( int p = 0; p <= iCodes - m_iMinInfixLen; ++p )
 	{
 		sKey.Reset();
 		BYTE* pKey = sKey.m_Data.data();
@@ -319,30 +474,43 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE* pWord, int iWordLength, int iCh
 
 		// copy first infix codepoint
 		DWORD uHash = 0xffffffffUL;
+		uint64_t uInlineKey = 0;
+		int iKeyLength = 0;
 		do
 		{
-			CRC32_step ( uHash, *s );
-			*pKey++ = *s++;
+			BYTE uByte = *s++;
+			CRC32_step ( uHash, uByte );
+			*pKey++ = uByte;
+			if ( iKeyLength<7 )
+				uInlineKey |= uint64_t(uByte) << ( 56 - iKeyLength*8 );
+			++iKeyLength;
 		} while ( ( *s & 0xC0 ) == 0x80 );
 
 		assert ( s - ( pWord + m_dCodepointBytes[p] ) == ( m_dCodepointBytes[p + 1] - m_dCodepointBytes[p] ) );
+		int iChars = 1;
 
 		while ( s < sMax && pKey < pKeyMax && pKey + sphUtf8CharBytes ( *s ) <= pKeyMax )
 		{
 			// copy next infix codepoint
 			do
 			{
-				CRC32_step ( uHash, *s );
-				*pKey++ = *s++;
+				BYTE uByte = *s++;
+				CRC32_step ( uHash, uByte );
+				*pKey++ = uByte;
+				if ( iKeyLength<7 )
+					uInlineKey |= uint64_t(uByte) << ( 56 - iKeyLength*8 );
+				++iKeyLength;
 			} while ( ( *s & 0xC0 ) == 0x80 && pKey < pKeyMax );
 
 			assert ( sphUTF8Len ( (const char*)sKey.m_Data.data(), sizeof ( sKey.m_Data ) ) >= 2 );
+			if ( ++iChars < m_iMinInfixLen )
+				continue;
 
-			InfixIntvec_c* pVal = LookupEntry ( sKey, uHash );
+			InfixIntvec_c* pVal = LookupEntry ( sKey, uInlineKey, iKeyLength, uHash );
 			if ( pVal )
 				pVal->Add ( iCheckpoint );
 			else
-				AddEntry ( sKey, uHash, iCheckpoint );
+				AddEntry ( sKey, uInlineKey, iKeyLength, uHash, iCheckpoint );
 		}
 
 		assert ( (size_t)( pKey - (BYTE*)sKey.m_Data.data() ) <= int ( sizeof ( sKey.m_Data ) ) );
@@ -371,19 +539,37 @@ void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter& wrDict )
 
 	wrDict.PutBlob ( g_sTagInfixEntries );
 
-	CSphVector<int> dIndex;
-	dIndex.Resize ( m_dArena.GetLength() - 1 );
-	dIndex.FillSeq(1);
-	dIndex.Sort ( Lesser ( [this] ( int a, int b ) noexcept { return m_dArena[a].m_tKey.m_Data < m_dArena[b].m_tKey.m_Data; } ) );
+	auto fnEntryLess = [this] ( const InfixHashEntry_t& a, const InfixHashEntry_t& b ) noexcept
+	{
+		return KeyLess ( a.m_uKey, b.m_uKey );
+	};
+	m_dArena.SortBlocks ( fnEntryLess );
+
+	struct Cursor_t { int m_iBlock; int m_iEntry; };
+	auto fnCursorGreater = [this] ( const Cursor_t& a, const Cursor_t& b ) noexcept
+	{
+		return KeyLess ( m_dArena.GetBlockEntry ( b.m_iBlock, b.m_iEntry ).m_uKey,
+			m_dArena.GetBlockEntry ( a.m_iBlock, a.m_iEntry ).m_uKey );
+	};
+	std::priority_queue<Cursor_t, std::vector<Cursor_t>, decltype(fnCursorGreater)> qEntries ( fnCursorGreater );
+	for ( int i = 0; i < m_dArena.GetBlocksCount(); ++i )
+		if ( m_dArena.GetBlockLength(i) > ( i ? 0 : 1 ) )
+			qEntries.push ( { i, i ? 0 : 1 } );
 
 	m_dBlocksWords.Reserve ( m_dArena.GetLength() / INFIX_BLOCK_SIZE * sizeof ( DWORD ) * SIZE );
 	int iBlock = 0;
-	int iPrevKey = -1;
+	Infix_t<SIZE> tPrevKey;
+	bool bHavePrevKey = false;
 	constexpr size_t DWSIZE = sizeof ( DWORD ) * SIZE;
-	ARRAY_FOREACH ( iIndex, dIndex )
+	while ( !qEntries.empty() )
 	{
-		InfixIntvec_c& dData = m_dArena[dIndex[iIndex]].m_tValue;
-		const char* sKey = (const char*)m_dArena[dIndex[iIndex]].m_tKey.m_Data.data();
+		Cursor_t tCursor = qEntries.top();
+		qEntries.pop();
+		InfixHashEntry_t& tEntry = m_dArena.GetBlockEntry ( tCursor.m_iBlock, tCursor.m_iEntry );
+		InfixIntvec_c& dData = tEntry.m_tValue;
+		Infix_t<SIZE> tKey;
+		UnpackKey ( tEntry.m_uKey, tKey );
+		const char* sKey = (const char*)tKey.m_Data.data();
 		int iChars = ( SIZE == 2 )
 					   ? (int)strnlen ( sKey, DWSIZE )
 					   : sphUTF8Len ( sKey, (int)DWSIZE );
@@ -407,9 +593,9 @@ void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter& wrDict )
 		// compute max common prefix
 		// edit_code = ( num_keep_chars<<4 ) + num_append_chars
 		int iEditCode = iChars;
-		if ( iPrevKey >= 0 )
+		if ( bHavePrevKey )
 		{
-			const char* sPrev = (const char*)m_dArena[dIndex[iPrevKey]].m_tKey.m_Data.data();
+			const char* sPrev = (const char*)tPrevKey.m_Data.data();
 			const char* sCur = sKey;
 			const char* sMax = sCur + iAppendBytes;
 
@@ -479,13 +665,17 @@ void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter& wrDict )
 			wrDict.ZipInt ( dData[j] - dData[j - 1] );
 
 		// mark block end, restart deltas
-		iPrevKey = iIndex;
+		tPrevKey = tKey;
+		bHavePrevKey = true;
 		if ( ++iBlock == INFIX_BLOCK_SIZE )
 		{
 			iBlock = 0;
-			iPrevKey = -1;
+			bHavePrevKey = false;
 			wrDict.PutByte ( 0 );
 		}
+
+		if ( ++tCursor.m_iEntry < m_dArena.GetBlockLength ( tCursor.m_iBlock ) )
+			qEntries.push ( tCursor );
 	}
 
 	// put end marker
@@ -498,6 +688,9 @@ void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter& wrDict )
 
 	if ( m_eDictFormat!=DictFormat_e::KEYWORDS_V2 && wrDict.GetPos() > UINT_MAX )
 		sphDie ( "INTERNAL ERROR: dictionary size " INT64_FMT " overflow at infix save", wrDict.GetPos() );
+
+	m_dArena.Reset();
+	m_dLongKeyBlocks.clear();
 }
 
 
@@ -529,15 +722,15 @@ int64_t InfixBuilder_c<SIZE>::SaveEntryBlocks ( CSphWriter& wrDict )
 }
 
 
-std::unique_ptr<ISphInfixBuilder> sphCreateInfixBuilder ( int iCodepointBytes, CSphString* pError, DictFormat_e eDictFormat )
+std::unique_ptr<ISphInfixBuilder> sphCreateInfixBuilder ( int iCodepointBytes, int iMinInfixLen, CSphString* pError, DictFormat_e eDictFormat )
 {
 	assert ( pError );
 	switch ( iCodepointBytes )
 	{
 	case 0: return nullptr;
-	case 1: return std::make_unique<InfixBuilder_c<2>>( eDictFormat ); // upto 6x1 bytes, 2 dwords, sbcs
-	case 2: return std::make_unique<InfixBuilder_c<3>>( eDictFormat ); // upto 6x2 bytes, 3 dwords, utf-8
-	case 3: return std::make_unique<InfixBuilder_c<5>>( eDictFormat ); // upto 6x3 bytes, 5 dwords, utf-8
+	case 1: return std::make_unique<InfixBuilder_c<2>>( iMinInfixLen, eDictFormat ); // upto 6x1 bytes, 2 dwords, sbcs
+	case 2: return std::make_unique<InfixBuilder_c<3>>( iMinInfixLen, eDictFormat ); // upto 6x2 bytes, 3 dwords, utf-8
+	case 3: return std::make_unique<InfixBuilder_c<5>>( iMinInfixLen, eDictFormat ); // upto 6x3 bytes, 5 dwords, utf-8
 	default: pError->SetSprintf ( "unhandled max infix codepoint size %d", iCodepointBytes ); return nullptr;
 	}
 }

@@ -1598,7 +1598,7 @@ bool ConverterPlain_t::Init ( Index_t & tIndex, CSphString & sError )
 	CopyAndUpdateSchema ( tIndex, m_tSchema );
 
 	if ( tIndex.m_tSettings.m_iMinInfixLen && tIndex.m_pDict->GetSettings().IsWordDict() )
-		m_pInfixer = sphCreateInfixBuilder ( tIndex.m_pTokenizer->GetMaxCodepointLength(), &sError );
+		m_pInfixer = sphCreateInfixBuilder ( tIndex.m_pTokenizer->GetMaxCodepointLength(), tIndex.m_tSettings.m_iMinInfixLen, &sError );
 
 	return ( sError.IsEmpty() );
 }

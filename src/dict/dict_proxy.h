@@ -57,10 +57,10 @@ public:
 
 public:
 	void DictBegin ( CSphAutofile& tTempDict, CSphAutofile& tDict, int iDictLimit ) final { m_pDict->DictBegin ( tTempDict, tDict, iDictLimit ); };
-	void SortedDictBegin ( CSphAutofile& tDict, int iDictLimit, int iInfixCodepointBytes ) final { m_pDict->SortedDictBegin ( tDict, iDictLimit, iInfixCodepointBytes ); };
+	void SortedDictBegin ( CSphAutofile& tDict, int iDictLimit, int iInfixCodepointBytes, int iMinInfixLen ) final { m_pDict->SortedDictBegin ( tDict, iDictLimit, iInfixCodepointBytes, iMinInfixLen ); };
 	void DictEntry ( const DictEntry_t& tEntry ) final { m_pDict->DictEntry ( tEntry ); };
 	void DictEndEntries ( SphOffset_t iDoclistOffset ) final { m_pDict->DictEndEntries ( iDoclistOffset ); };
-	bool DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphString& sError ) final { return m_pDict->DictEnd ( pHeader, iMemLimit, sError ); };
+	bool DictEnd ( DictHeader_t* pHeader, int iMemLimit, int iMinInfixLen, CSphString& sError ) final { return m_pDict->DictEnd ( pHeader, iMemLimit, iMinInfixLen, sError ); };
 	bool DictIsError() const final { return m_pDict->DictIsError(); };
 
 public:

@@ -4426,7 +4426,7 @@ bool CSphHitBuilder::cidxDone ( int iMemLimit, int & iMinInfixLen, int iMaxCodep
 		}
 	}
 
-	if ( !m_pDict->DictEnd ( pDictHeader, iMemLimit, *m_pLastError ) )
+	if ( !m_pDict->DictEnd ( pDictHeader, iMemLimit, iMinInfixLen, *m_pLastError ) )
 		return false;
 
 	// close all data files
@@ -7459,7 +7459,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		iInfixCodepointBytes = pSettings->m_pTokenizer->GetMaxCodepointLength();
 
 	// FIXME? is this magic dict block constant any good?..
-	pDict->SortedDictBegin ( tDict, g_tMergeSettings.m_iBufferDict, iInfixCodepointBytes );
+	pDict->SortedDictBegin ( tDict, g_tMergeSettings.m_iBufferDict, iInfixCodepointBytes, pSettings->m_tSettings.m_iMinInfixLen );
 
 	BEGIN_CORO ( "sph", "merge dicts, doclists and hitlists" );
 	// merge dictionaries, doclists and hitlists
@@ -7633,7 +7633,7 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 	if ( pSettings->m_tSettings.m_iMinInfixLen > 0 && pDict->GetSettings().IsWordDict() )
 		iInfixCodepointBytes = pSettings->m_pTokenizer->GetMaxCodepointLength();
 
-	pDict->SortedDictBegin ( tDict, g_tMergeSettings.m_iBufferDict, iInfixCodepointBytes );
+	pDict->SortedDictBegin ( tDict, g_tMergeSettings.m_iBufferDict, iInfixCodepointBytes, pSettings->m_tSettings.m_iMinInfixLen );
 
 	BEGIN_CORO ( "sph", "merge dicts, doclists and hitlists (N-way)" );
 	int64_t tmWordsStart = sphMicroTimer();
@@ -7825,7 +7825,7 @@ bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHe
 	if ( m_tSettings.m_iMinInfixLen > 0 && pDict->GetSettings().IsWordDict() )
 		iInfixCodepointBytes = m_pTokenizer->GetMaxCodepointLength();
 
-	pDict->SortedDictBegin ( tNewDict, iHitBufferSize, iInfixCodepointBytes );
+	pDict->SortedDictBegin ( tNewDict, iHitBufferSize, iInfixCodepointBytes, m_tSettings.m_iMinInfixLen );
 
 	// merge dictionaries, doclists and hitlists
 	if ( pDict->GetSettings().IsWordDict() )

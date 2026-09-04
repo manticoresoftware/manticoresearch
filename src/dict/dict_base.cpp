@@ -17,11 +17,11 @@
 #include "tokenizer/tokenizer.h"
 
 void CSphDict::DictBegin ( CSphAutofile&, CSphAutofile&, int ) {}
-void CSphDict::SortedDictBegin ( CSphAutofile&, int, int ) {}
+void CSphDict::SortedDictBegin ( CSphAutofile&, int, int, int ) {}
 void CSphDict::DictEntry ( const DictEntry_t& ) {}
 void CSphDict::DictEndEntries ( SphOffset_t ) {}
 
-bool CSphDict::DictEnd ( DictHeader_t*, int, CSphString& )
+bool CSphDict::DictEnd ( DictHeader_t*, int, int, CSphString& )
 {
 	return true;
 }

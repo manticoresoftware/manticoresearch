@@ -134,10 +134,10 @@ public:
 	void HitblockReset() final;
 
 	void DictBegin ( CSphAutofile& tTempDict, CSphAutofile& tDict, int iDictLimit ) final;
-	void SortedDictBegin ( CSphAutofile& tDict, int iDictLimit, int iInfixCodepointBytes ) final;
+	void SortedDictBegin ( CSphAutofile& tDict, int iDictLimit, int iInfixCodepointBytes, int iMinInfixLen ) final;
 	void DictEntry ( const DictEntry_t& tEntry ) final;
 	void DictEndEntries ( SphOffset_t ) final {};
-	bool DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphString& sError ) final;
+	bool DictEnd ( DictHeader_t* pHeader, int iMemLimit, int iMinInfixLen, CSphString& sError ) final;
 
 	SphWordID_t GetWordID ( BYTE* pWord ) final;
 	SphWordID_t GetWordIDWithMarkers ( BYTE* pWord ) final;
@@ -572,7 +572,7 @@ void CSphDictKeywords::DictBegin ( CSphAutofile& tTempDict, CSphAutofile& tDict,
 	m_wrDict.PutByte ( 1 );
 }
 
-void CSphDictKeywords::SortedDictBegin ( CSphAutofile& tDict, int iDictLimit, int iInfixCodepointBytes )
+void CSphDictKeywords::SortedDictBegin ( CSphAutofile& tDict, int iDictLimit, int iInfixCodepointBytes, int iMinInfixLen )
 {
 	m_sError = CSphString();
 	m_iTmpFD = -1;
@@ -585,7 +585,7 @@ void CSphDictKeywords::SortedDictBegin ( CSphAutofile& tDict, int iDictLimit, in
 
 	m_pFinalizer = std::make_unique<KeywordDictFinalization_t>();
 	CSphString sError;
-	m_pFinalizer->m_pInfixer = sphCreateInfixBuilder ( iInfixCodepointBytes, &sError, GetSettings().GetDictFormat() );
+	m_pFinalizer->m_pInfixer = sphCreateInfixBuilder ( iInfixCodepointBytes, iMinInfixLen, &sError, GetSettings().GetDictFormat() );
 	assert ( sError.IsEmpty() );
 }
 
@@ -611,7 +611,7 @@ void CSphDictKeywords::PutCheckpoint ( const CSphWordlistCheckpoint& tCheckpoint
 	m_wrDict.PutOffset ( tCheckpoint.m_iWordlistOffset );
 }
 
-bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphString& sError )
+bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, int iMinInfixLen, CSphString& sError )
 {
 	if ( IsSorted() )
 		return SortedDictEnd ( pHeader, sError );
@@ -645,7 +645,7 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 	m_pFinalizer = std::make_unique<KeywordDictFinalization_t>();
 
 	// infix builder, if needed
-	m_pFinalizer->m_pInfixer = sphCreateInfixBuilder ( pHeader->m_iInfixCodepointBytes, &sError, GetSettings().GetDictFormat() );
+	m_pFinalizer->m_pInfixer = sphCreateInfixBuilder ( pHeader->m_iInfixCodepointBytes, iMinInfixLen, &sError, GetSettings().GetDictFormat() );
 	if ( !sError.IsEmpty() )
 		return false;
 

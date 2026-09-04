@@ -45,7 +45,8 @@ public:
 	virtual void SaveEntries ( CSphWriter& wrDict ) = 0;
 	virtual int64_t SaveEntryBlocks ( CSphWriter& wrDict ) = 0;
 	virtual int64_t GetBlocksWordsSize() const = 0;
+	virtual int GetEntriesCount() const = 0;
 };
 
-std::unique_ptr<ISphInfixBuilder> sphCreateInfixBuilder ( int iCodepointBytes, CSphString* pError, DictFormat_e eDictFormat = DictFormat_e::KEYWORDS );
+std::unique_ptr<ISphInfixBuilder> sphCreateInfixBuilder ( int iCodepointBytes, int iMinInfixLen, CSphString* pError, DictFormat_e eDictFormat = DictFormat_e::KEYWORDS );
 bool sphLookupInfixCheckpoints ( const char* sInfix, int iBytes, const BYTE* pInfixes, const CSphVector<InfixBlock_t>& dInfixBlocks, int iInfixCodepointBytes, CSphVector<DWORD>& dCheckpoints, DictFormat_e eDictFormat = DictFormat_e::KEYWORDS );

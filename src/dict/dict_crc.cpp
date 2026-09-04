@@ -16,17 +16,17 @@
 
 void DiskDictTraits_c::DictBegin ( CSphAutofile&, CSphAutofile& tDict, int iLimit )
 {
-	DiskDictTraits_c::SortedDictBegin ( tDict, iLimit, 0 );
+	DiskDictTraits_c::SortedDictBegin ( tDict, iLimit, 0, 0 );
 }
 
-void DiskDictTraits_c::SortedDictBegin ( CSphAutofile& tDict, int, int )
+void DiskDictTraits_c::SortedDictBegin ( CSphAutofile& tDict, int, int, int )
 {
 	m_wrDict.CloseFile();
 	m_wrDict.SetFile ( tDict, nullptr, m_sWriterError );
 	m_wrDict.PutByte ( 1 );
 }
 
-bool DiskDictTraits_c::DictEnd ( DictHeader_t* pHeader, int, CSphString& sError )
+bool DiskDictTraits_c::DictEnd ( DictHeader_t* pHeader, int, int, CSphString& sError )
 {
 	// flush wordlist checkpoints
 	pHeader->m_iDictCheckpointsOffset = m_wrDict.GetPos();

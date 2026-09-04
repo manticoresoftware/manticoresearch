@@ -27,7 +27,6 @@
 
 ##### 数据管理
 * [INSERT](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - 添加新文档
-* [批量导入](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import) - 将大批量数据加载到现有的本地实时表中
 * [REPLACE](Data_creation_and_modification/Updating_documents/REPLACE.md) - 用新文档替换已有文档
 * [REPLACE .. SET](Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET) - 替换表中一个或多个字段
 * [UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md) - 对文档进行原地更新
@@ -113,10 +112,6 @@
 * [重新加载插件](Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md) - 从给定库重新加载所有插件
 * [启用Buddy插件](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#ENABLE-BUDDY-PLUGIN) - 重新激活之前禁用的Buddy插件
 * [禁用Buddy插件](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#DISABLE-BUDDY-PLUGIN) - 禁用活动的Buddy插件
-
-##### 节点管理
-* [PURGE](Node_info_and_management/PURGE.md) - 删除与表相关联的所选数据
-* [PURGE BULK_IMPORT](Node_info_and_management/PURGE.md#PURGE-BULK_IMPORT) - 删除批量导入遗留的暂存文件
 
 ##### 服务器状态
 * [显示状态](Node_info_and_management/Node_status.md#SHOW-STATUS) - 显示一些有用的性能计数器
@@ -421,7 +416,6 @@ indexer [OPTIONS] [indexname1 [indexname2 [...]]]
 * [--merge](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 将两个纯表合并为一个
 * [--nohup](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 启用该选项时，防止索引器发送 SIGHUP
 * [--noprogress](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 隐藏进度详情
-* [--remove_dups](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 逻辑删除重复的数值型文档 ID，保留第一行
 * [--print-queries](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 输出索引器发送到数据库的 SQL 查询
 * [--print-rt](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 以插入语句形式显示从 SQL 源获取到的实时表数据
 * [--quiet](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 抑制所有输出

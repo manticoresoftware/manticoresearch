@@ -877,99 +877,6 @@ CALL UUID_SHORT(3)
 * 缩短响应时间
 * 允许绕过 [max_packet_size](../../Server_settings/Searchd.md#max_packet_size) 限制，传输远大于最大允许值（128MB）的批量，例如一次 1GB。
 
-### 批量导入
-
-对于向本地实时表进行更快的大批量加载，Manticore Search 可以将 `INSERT` 行直接写入磁盘分片，并在事务提交时发布该分片。这样就无需先把批次构建到 RAM 分片中。行在分片发布之前始终不可见，而失败的操作或 `ROLLBACK` 会使表保持不变。
-
-它同时支持行式表和列式表，包括全文字段、数值属性、字符串、JSON、MVA/MVA64，以及带有 KNN 索引的浮点向量。
-
-此处的表名不区分大小写。例如，`SET bulk_import=Products` 和 `bulk_import=products` 都会选择存储为 `products` 的表；仅字母大小写不同的表名无法区分。
-
-#### SQL
-
-为当前 SQL 会话启用该模式，针对绑定的表执行一个或多个 `INSERT` 语句，然后提交：
-
-```sql
-SET bulk_import=products;
-INSERT INTO products(id,title,price) VALUES
-  (101,'Crossbody Bag with Tassel',19.85),
-  (102,'Microfiber Sheet Set',19.99);
-INSERT INTO products(id,title,price) VALUES
-  (103,'Pet Hair Remover Glove',7.99);
-COMMIT;
-SET bulk_import=0;
-```
-
-请在 `BEGIN` 之前，并在该连接执行任何未提交的写入之前运行 `SET bulk_import=<table>`。该命令为当前会话保留所选表：搜索仍然可用，但在释放保留之前，同一表上的其他 bulk import 或普通写入会被拒绝。可以使用 `BEGIN` 或 `START TRANSACTION`，但它们不是必需的，也不会改变此模式的行为。
-
-`COMMIT` 会把自上一次 `COMMIT` 或 `ROLLBACK` 以来收集的行发布为一个磁盘块。`ROLLBACK` 会丢弃这些行。两种操作之后批量导入仍保持启用，因此可以开始下一个批次。运行 `SET bulk_import=0` 会丢弃尚未提交的行、禁用批量导入，并释放该连接的保留。释放保留后，对该表的写入会恢复。关闭连接具有相同效果。批量导入启用期间不能更改自动提交设置。
-
-#### HTTP `/bulk`
-
-在 Manticore `/bulk` 请求中添加 `bulk_import=<table>`。请求体仍然是标准的按行分隔 JSON（NDJSON），并且每个操作都必须是绑定表的 `insert` 或 `create`：
-
-```bash
-printf '%s\n' \
-  '{"insert":{"table":"products","id":101,"doc":{"title":"Crossbody Bag with Tassel","price":19.85}}}' \
-  '{"insert":{"table":"products","id":102,"doc":{"title":"Microfiber Sheet Set","price":19.99}}}' |
-curl -sS -X POST \
-  -H 'Content-Type: application/x-ndjson' \
-  --data-binary @- \
-  'http://localhost:9308/bulk?bulk_import=products'
-```
-
-在请求体中，空行会结束并发布当前批次；请求结束时会发布最后一个批次。Manticore 处理完该请求中的所有批次后才发送 HTTP 响应。如果后续批次失败，同一请求中之前已发布的批次仍可搜索。若要将整个请求作为一个磁盘块原子发布，请不要加入空行。响应会为每个已发布批次返回一个汇总的 `bulk` 结果，而不是为每个文档返回一个结果。
-
-大多数客户端只需像上面的示例一样发送一个请求。如果应用有意通过同一个[持久 HTTP 连接](../../Connecting_to_the_server/HTTP.md#Persistent-connections)发送多个请求，第一个请求会选择目标表。该连接后续的 `/bulk` 或 `/json/bulk` 请求可以省略 `bulk_import`，但必须继续写入同一张表。完成后关闭连接，或者发送一个空的 `/bulk?bulk_import=0` 请求，以禁用批量导入并释放该连接的保留。释放保留后，对该表的写入会恢复。
-
-该端点支持分块传输编码，因此可以处理大于 `max_packet_size` 的正文，而无需缓存整个请求。
-
-#### Elasticsearch `/_bulk`
-
-Elasticsearch 兼容的 `/_bulk` 端点不支持直接写入磁盘的 `bulk_import`；请使用 SQL 或 Manticore `/bulk`。在干净会话中，`?pipeline=bulk_import` 和旧版 `?bulk_import=1` 会被拒绝。其他未知的 `bulk_import` 值会被忽略，并继续进行普通的 Elasticsearch bulk 处理。已启用 bulk import 的连接不能切换到 `/_bulk`。
-
-#### 重复文档 ID
-
-对于一个直接写入磁盘的批次，数值型文档 ID 的第一行会保持可见，而后续具有相同 ID 的行会被逻辑移除。对于 SQL，一个批次由 `COMMIT` 或 `ROLLBACK` 之前暂存的行组成。对于 Manticore `/bulk`，在空行、表切换或请求 EOF 时发布的每个分组都是一个单独的批次。
-
-当 Manticore 将磁盘分片发布到目标表时，该分片中的一行会替换任何具有相同 ID 的现有行。这同样适用于此前某个 HTTP 批次发布的 ID。因此，重试一个已发布的批次会替换其中的行，而被重试批次中的重复项仍然只保留第一行。在 Manticore `/bulk` 请求中，`create` 操作例如：
-
-```json
-{"create":{"table":"products",...}}
-```
-
-其行为与 `insert` 相同；它不会仅仅因为 ID 已经存在而失败。
-
-#### 暂存文件与清理
-
-在正常的 `COMMIT`、`ROLLBACK`、禁用模式或会话关闭后，Manticore 会移除当前的暂存目录。守护进程或主机崩溃可能会留下一个被遗弃的暂存目录。之后的直接写入磁盘加载会创建一个新的唯一命名目录，不会重用或附加崩溃加载遗留的文件。
-
-使用以下查询查看某个表的所有直接写入磁盘暂存条目：
-
-```sql
-SELECT file, normalized, size
-FROM products.@files
-OPTION format='bulk_import';
-```
-
-结果会递归列出该表直接写入磁盘暂存根目录下的文件和目录。目录及其他非普通条目的报告大小为 `0`。
-
-在确认该表没有活动中的直接写入磁盘加载后，使用 [`PURGE BULK_IMPORT`](../../Node_info_and_management/PURGE.md#PURGE-BULK_IMPORT) 删除其整个暂存根目录：
-
-```sql
-PURGE BULK_IMPORT FROM TABLE products;
-```
-
-`PURGE` 要求目标是一个已存在的本地实时表，且它不属于复制集群。它只会移除直接写入磁盘的暂存状态，不会改变表结构或已索引的行。如果暂存根目录不存在，它会作为空操作成功返回。在无配置模式下，`DROP TABLE` 也会移除该表的直接写入磁盘暂存根目录。
-
-#### 当前限制
-
-* 目标必须是一个已存在、未冻结的本地实时表，并且不能是复制集群成员。分布式表、分片表、复制表、percolate 表和普通表都不受支持。
-* SQL 只支持 `INSERT`。Manticore `/bulk` 接受 `insert` 和 `create`；`index`、`replace`、`update` 和 `delete` 会被拒绝。
-* 每一行都必须提供显式的数值型、非零文档 ID。不支持自动生成的和 UUID 文档 ID。
-* 不支持静态构建。
-* 当前平台对应的可执行文件（Linux 上为 `indexer`，Windows 上为 `indexer.exe`）必须与正在运行的 `searchd` 位于同一目录。Manticore Search 只检查这个同级路径，不会搜索 `PATH`。为确保兼容性，请使用与 `searchd` 来自同一安装的可执行文件。如果该文件缺失、不可读或无法启动，只有批量导入会失败；正常启动和常规插入仍然可用。
-
 <!-- intro -->
 ### 批量插入示例
 ##### SQL:
@@ -1002,7 +909,7 @@ Query OK, 3 rows affected (0.01 sec)
 * `Content-Type: application/x-ndjson`
 * 数据格式应为换行分隔 JSON（NDJSON）。本质上，这意味着每行应仅包含一条 JSON 声明，并以换行符 `\n`（可能还有 `\r`）结尾。
 
-`/bulk` 端点支持 `'insert'`、`'replace'`、`'delete'` 和 `'update'` 查询。请注意，你可以把操作定向到多张表，但事务只能针对单张表。如果你指定了多张，Manticore 会把指向同一张表的操作收集到一个事务中。当表发生变化时，它会提交已收集的操作并启动新的事务。分隔批次的空行也会导致提交前一个批次并启动新的事务。没有任何操作的请求，无论正文是空的还是只包含空行或仅空白字符行，都会作为成功的空操作返回一个空的 `items` 数组。
+`/bulk` 端点支持 'insert'、'replace'、'delete' 和 'update' 查询。请注意，您可以将操作定向到多个表，但事务仅适用于单个表。如果指定了多个表，Manticore 会将针对一个表的操作收集到单个事务中。当表发生变化时，它将提交已收集的操作，并在新表上启动新的事务。分隔批次的空行也会导致提交前一批次并开始新事务。
 
 在 `/bulk` 请求的响应中，您可以找到以下字段：
 * "errors"：显示是否发生了任何错误（true/false）

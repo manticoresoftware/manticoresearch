@@ -109,11 +109,6 @@ systemctl restart manticore-indexer
   ```shell
   sudo -u manticore indexer --rotate --all --noprogress
   ```
-* `--remove_dups` логически удаляет повторяющиеся числовые ID документов при построении обычной таблицы. Первая проиндексированная строка для каждого ID остаётся видимой; последующие строки с тем же ID помечаются как удалённые. Без этой опции `indexer` сохраняет дубликаты ID. Пример использования:
-
-  ```shell
-  sudo -u manticore indexer --config /home/myuser/manticore.conf --remove_dups mytable
-  ```
 * `--buildstops <outputfile.text> <N>` просматривает исходную таблицу так, как если бы она индексировала данные, и создаёт список терминов, которые индексируются. Другими словами, он формирует список всех поисковых терминов, которые становятся частью таблицы. Обратите внимание, что таблица не обновляется, данные просто обрабатываются так, как будто происходит индексирование, включая выполнение запросов, определённых с помощью [sql_query_pre](../../Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md#sql_query_pre) или [sql_query_post](../../Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md#sql_query_post). В `outputfile.txt` будет содержаться список слов, по одному в строке, отсортированный по частоте, начиная с самых частых, а `N` задаёт максимальное количество слов в списке. Если это число достаточно велико, чтобы охватить все слова в таблице, будет возвращено именно столько слов. Такой словарь может использоваться в клиентских приложениях для функций вроде "Вы имели в виду…", обычно в сочетании с `--buildfreqs`, указанным ниже. Пример:
 
   ```shell
@@ -310,3 +305,4 @@ ignore_non_plain = 1
    systemctl start manticore-indexer@idx1.timer
    ```
 5. Повторите шаги 2–4 для любых дополнительных таймеров.
+

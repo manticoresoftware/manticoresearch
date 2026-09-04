@@ -14,7 +14,10 @@
 #include "sphinxint.h"
 #include "std/hash.h"
 #include "std/crc32.h"
+#include <climits>
+#include <string>
 #include <sys/stat.h>
+#include <vector>
 
 #if _WIN32
 	#define getcwd		_getcwd
@@ -170,6 +173,135 @@ void SafeClose ( int& iFD )
 		::close ( iFD );
 	iFD = -1;
 }
+
+#if !_WIN32
+bool OpenPidFile ( const CSphString & sPath, int & iFD, int & iPid, CSphString & sError )
+{
+	iFD = -1;
+	iPid = 0;
+	int iFlags = O_RDONLY | O_NONBLOCK;
+#ifdef O_CLOEXEC
+	iFlags |= O_CLOEXEC;
+#endif
+#ifdef O_NOFOLLOW
+	iFlags |= O_NOFOLLOW;
+#endif
+	iFD = open ( sPath.cstr(), iFlags );
+	if ( iFD<0 )
+	{
+		sError.SetSprintf ( "cannot open PID file '%s': %s", sPath.cstr(), strerrorm(errno) );
+		return false;
+	}
+
+	struct stat tStat {};
+	if ( fstat(iFD,&tStat)<0 )
+	{
+		sError.SetSprintf ( "cannot inspect PID file '%s': %s", sPath.cstr(), strerrorm(errno) );
+		SafeClose ( iFD );
+		return false;
+	}
+	if ( !S_ISREG(tStat.st_mode) )
+	{
+		sError.SetSprintf ( "PID file '%s' is not a regular file", sPath.cstr() );
+		SafeClose ( iFD );
+		return false;
+	}
+
+	char sPid[65] {};
+	ssize_t iLength = read ( iFD, sPid, sizeof(sPid) );
+	if ( iLength<=0 || iLength>=(ssize_t)sizeof(sPid) )
+	{
+		sError.SetSprintf ( "invalid PID file '%s'", sPath.cstr() );
+		SafeClose ( iFD );
+		return false;
+	}
+
+	size_t iDigits = 0;
+	int64_t iValue = 0;
+	while ( iDigits<(size_t)iLength && sPid[iDigits]>='0' && sPid[iDigits]<='9' )
+	{
+		iValue = iValue*10 + sPid[iDigits]-'0';
+		if ( iValue>INT_MAX )
+			break;
+		++iDigits;
+	}
+	size_t iTail = iDigits;
+	if ( iTail<(size_t)iLength && sPid[iTail]=='\r' ) ++iTail;
+	if ( iTail<(size_t)iLength && sPid[iTail]=='\n' ) ++iTail;
+	if ( !iDigits || iValue<=0 || iValue>INT_MAX || iTail!=(size_t)iLength )
+	{
+		sError.SetSprintf ( "invalid PID file '%s'", sPath.cstr() );
+		SafeClose ( iFD );
+		return false;
+	}
+	iPid = (int)iValue;
+	return true;
+}
+
+bool ValidatePidFileOwner ( int iFD, int iPid, CSphString & sError )
+{
+	struct flock tLock {};
+	tLock.l_type = F_RDLCK;
+	tLock.l_whence = SEEK_SET;
+	if ( fcntl(iFD,F_GETLK,&tLock)<0 )
+	{
+		sError.SetSprintf ( "cannot inspect PID-file lock: %s", strerrorm(errno) );
+		return false;
+	}
+	if ( tLock.l_type==F_UNLCK || tLock.l_pid!=iPid )
+	{
+		sError.SetSprintf ( "PID file is not owned by recorded PID %d", iPid );
+		return false;
+	}
+	return true;
+}
+
+bool UnlinkFileIfSameDescriptor ( int iFD, const CSphString & sPath, CSphString & sError )
+{
+	struct stat tOwned {};
+	if ( fstat(iFD,&tOwned)<0 )
+	{
+		sError.SetSprintf ( "cannot inspect owned file '%s': %s", sPath.cstr(), strerrorm(errno) );
+		return false;
+	}
+	std::string sTemplate = std::string(sPath.cstr()) + ".unlink.XXXXXX";
+	std::vector<char> dTemplate ( sTemplate.begin(), sTemplate.end() );
+	dTemplate.push_back ( '\0' );
+	int iPlaceholderFD = mkstemp ( dTemplate.data() );
+	if ( iPlaceholderFD<0 )
+	{
+		sError.SetSprintf ( "cannot reserve PID cleanup path for '%s': %s", sPath.cstr(), strerrorm(errno) );
+		return false;
+	}
+	CSphString sQuarantine = dTemplate.data();
+	close ( iPlaceholderFD );
+	if ( rename(sPath.cstr(),sQuarantine.cstr())<0 )
+	{
+		int iError = errno;
+		unlink ( sQuarantine.cstr() );
+		sError.SetSprintf ( "cannot quarantine PID metadata '%s': %s", sPath.cstr(), strerrorm(iError) );
+		return false;
+	}
+
+	struct stat tQuarantine {};
+	if ( lstat(sQuarantine.cstr(),&tQuarantine)<0 || !S_ISREG(tQuarantine.st_mode) ||
+		tOwned.st_dev!=tQuarantine.st_dev || tOwned.st_ino!=tQuarantine.st_ino )
+	{
+		// A replacement occupied the public pathname. Restore regular metadata
+		// only if no newer replacement has appeared since the atomic rename.
+		if ( S_ISREG(tQuarantine.st_mode) && link(sQuarantine.cstr(),sPath.cstr())==0 )
+			unlink ( sQuarantine.cstr() );
+		sError.SetSprintf ( "file path '%s' no longer identifies the owned file", sPath.cstr() );
+		return false;
+	}
+	if ( unlink(sQuarantine.cstr())<0 )
+	{
+		sError.SetSprintf ( "cannot unlink quarantined PID metadata for '%s': %s", sPath.cstr(), strerrorm(errno) );
+		return false;
+	}
+	return true;
+}
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 

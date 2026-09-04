@@ -15,6 +15,9 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/poll.h>
+#if defined(__linux__)
+#include <sys/syscall.h>
+#endif
 #include <errno.h>
 #include <cstdio>
 #else
@@ -22,6 +25,7 @@
 #endif
 
 #include "searchdaemon.h"
+#include "fileutils.h"
 #include "auth/auth.h"
 
 #include "daemon_ipc.h"
@@ -39,7 +43,14 @@ struct PipeTrait_t : public ISphNonCopyMovable
 static void CreatePipe ( const CSphString & sName, int iOpenFlags, PipeTrait_t & tPipe, CSphString & sError );
 static int WaitPipe ( const PipeTrait_t & tPipe, int iWaitTimeout );
 
-int StopDaemonAndWait ( bool bWait, int iPid, int iWaitTimeout )
+#if defined(__linux__)
+bool IsPidfdUnsupportedError ( int iError )
+{
+	return iError==ENOSYS || iError==EINVAL;
+}
+#endif
+
+int StopDaemonAndWait ( bool bWait, int iPid, int iWaitTimeout, int iPidFileFD )
 {
 	CSphString sError;
 	int iExitCode = 0;
@@ -51,8 +62,34 @@ int StopDaemonAndWait ( bool bWait, int iPid, int iWaitTimeout )
 		sphWarning ( "%s", sError.cstr() );
 
 #if !_WIN32
-	if ( kill ( iPid, SIGTERM ) )
-		sphWarning ( "stop: kill() on pid %d failed: %s", iPid, strerrorm(errno) );
+#if defined(__linux__) && defined(SYS_pidfd_open) && defined(SYS_pidfd_send_signal)
+	int iPidFD = (int)syscall ( SYS_pidfd_open, iPid, 0 );
+	if ( iPidFD<0 && !IsPidfdUnsupportedError(errno) )
+	{
+		sphWarning ( "stop: pidfd_open for pid %d failed: %s", iPid, strerrorm(errno) );
+		return 1;
+	}
+#else
+	int iPidFD = -1;
+#endif
+	CSphString sOwnerError;
+	if ( iPidFileFD>=0 && !ValidatePidFileOwner(iPidFileFD,iPid,sOwnerError) )
+	{
+		if ( iPidFD>=0 ) close ( iPidFD );
+		sphWarning ( "stop: refusing to signal pid %d: %s", iPid, sOwnerError.cstr() );
+		return 1;
+	}
+#if defined(__linux__) && defined(SYS_pidfd_open) && defined(SYS_pidfd_send_signal)
+	int iSignalResult = iPidFD>=0 ? (int)syscall ( SYS_pidfd_send_signal, iPidFD, SIGTERM, nullptr, 0 ) : kill ( iPid, SIGTERM );
+#else
+	int iSignalResult = kill ( iPid, SIGTERM );
+#endif
+	if ( iPidFD>=0 ) close ( iPidFD );
+	if ( iSignalResult )
+	{
+		sphWarning ( "stop: signal on pid %d failed: %s", iPid, strerrorm(errno) );
+		return 1;
+	}
 	sphInfo ( "stop: successfully sent SIGTERM to pid %d", iPid );
 #endif
 

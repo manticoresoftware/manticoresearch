@@ -11605,7 +11605,8 @@ enum class Alter_e
 	RebuildEmbeddings,
 	ApiKey,
 	ApiUrl,
-	ApiTimeout
+	ApiTimeout,
+	MaxInputTokens
 };
 
 static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alter_e eAction, CSphString & sWarning )
@@ -11743,6 +11744,14 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 				int iTimeout = 0;
 				if ( ValidateEmbeddingsAPITimeout ( tStmt.m_sAlterOption, iTimeout, sAlterError ) )
 					WIdx_c(pServed)->AlterApiTimeout ( tStmt.m_sAlterAttr, iTimeout, sAlterError );
+			}
+			break;
+
+		case Alter_e::MaxInputTokens:
+			{
+				int iMaxInputTokens = 0;
+				if ( ValidateEmbeddingsMaxInputTokens ( tStmt.m_sAlterOption, iMaxInputTokens, sAlterError ) )
+					WIdx_c(pServed)->AlterMaxInputTokens ( tStmt.m_sAlterAttr, iMaxInputTokens, sAlterError );
 			}
 			break;
 		}
@@ -13075,6 +13084,11 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	case STMT_ALTER_EMBEDDINGS_API_TIMEOUT:
 		m_tLastMeta.m_sWarning = "";
 		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiTimeout, m_tLastMeta.m_sWarning );
+		return true;
+
+	case STMT_ALTER_EMBEDDINGS_MAX_INPUT_TOKENS:
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::MaxInputTokens, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_SHOW_PLAN:

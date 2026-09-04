@@ -95,3 +95,5 @@ ISphMatchSorter *				CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const K
 
 const char *					GetAPITimeoutErrorMsg();
 bool							ValidateEmbeddingsAPITimeout ( const CSphString & sValue, int & iTimeout, CSphString & sError );
+const char *					GetMaxInputTokensErrorMsg();
+bool							ValidateEmbeddingsMaxInputTokens ( const CSphString & sValue, int & iMaxInputTokens, CSphString & sError );

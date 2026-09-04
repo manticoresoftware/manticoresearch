@@ -36,6 +36,13 @@ const char * GetAPITimeoutErrorMsg()
 }
 
 
+const char * GetMaxInputTokensErrorMsg()
+{
+	static const char * MAX_INPUT_TOKENS_ERROR = "MAX_INPUT_TOKENS must be a non-negative integer (0 means the model's own limit, positive value is the maximum number of tokens taken from each input text)";
+	return MAX_INPUT_TOKENS_ERROR;
+}
+
+
 bool TableEmbeddings_c::Load ( const CSphString & sAttr, const knn::ModelSettings_t & tSettings, CSphString & sError )
 {
 	if ( m_hModels.Exists(sAttr) )
@@ -767,6 +774,9 @@ void AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 
 		if ( tKNNModel.m_iAPITimeout > 0 )
 			sRes << " api_timeout='" << tKNNModel.m_iAPITimeout << "'";
+
+		if ( tKNNModel.m_iMaxInputTokens > 0 )
+			sRes << " max_input_tokens='" << tKNNModel.m_iMaxInputTokens << "'";
 	}
 
 	if ( !tKNNModel.m_sCachePath.empty() )
@@ -816,6 +826,7 @@ void ReadKNNJson ( bson::Bson_c tRoot, knn::IndexSettings_t & tIS, knn::ModelSet
 	tMS.m_iAPITimeout	= (int) bson::Int ( tRoot.ChildByName ( "api_timeout" ), tMS.m_iAPITimeout );
 	tMS.m_sCachePath	= bson::String ( tRoot.ChildByName ( "cache_path" ) ).cstr();
 	tMS.m_bUseGPU		= bson::Bool ( tRoot.ChildByName ( "use_gpu" ), tMS.m_bUseGPU );
+	tMS.m_iMaxInputTokens = (int) bson::Int ( tRoot.ChildByName ( "max_input_tokens" ), tMS.m_iMaxInputTokens );
 	sKNNFrom = bson::String ( tRoot.ChildByName ( "from" ) );
 }
 
@@ -845,6 +856,8 @@ void FormatKNNSettings ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t &
 		if ( tMS.m_iAPITimeout > 0 )
 			tOut.NamedVal ( "api_timeout", tMS.m_iAPITimeout );
 		tOut.NamedVal ( "use_gpu", tMS.m_bUseGPU );
+		if ( tMS.m_iMaxInputTokens > 0 )
+			tOut.NamedVal ( "max_input_tokens", tMS.m_iMaxInputTokens );
 	}
 
 	tOut.NamedString ( "chunk_strategy", ChunkStrategy2Str ( tChunk.m_eStrategy ) );
@@ -882,6 +895,8 @@ CSphString FormatKNNConfigStr ( const CSphVector<NamedKNNSettings_t> & dAttrs )
 			if ( i.m_iAPITimeout > 0 )
 				tObj.AddInt ( "api_timeout", i.m_iAPITimeout );
 			tObj.AddBool ( "use_gpu", i.m_bUseGPU );
+			if ( i.m_iMaxInputTokens > 0 )
+				tObj.AddInt ( "max_input_tokens", i.m_iMaxInputTokens );
 		}
 
 		tObj.AddStr ( "chunk_strategy", ChunkStrategy2Str ( i.m_tChunk.m_eStrategy ) );
@@ -984,6 +999,7 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 			if ( !i.FetchStrItem ( tParsed.m_sAPIUrl, "api_url", sError, true ) ) return false;
 			if ( !i.FetchIntItem ( tParsed.m_iAPITimeout, "api_timeout", sError, true ) ) return false;
 			if ( !i.FetchBoolItem ( tParsed.m_bUseGPU, "use_gpu", sError, true ) ) return false;
+			if ( !i.FetchIntItem ( tParsed.m_iMaxInputTokens, "max_input_tokens", sError, true ) ) return false;
 		}
 	}
 
@@ -1527,6 +1543,38 @@ bool ValidateEmbeddingsAPITimeout ( const CSphString & sValue, int & iTimeout, C
 	}
 
 	iTimeout = (int)ulTimeout;
+	return true;
+}
+
+
+bool ValidateEmbeddingsMaxInputTokens ( const CSphString & sValue, int & iMaxInputTokens, CSphString & sError )
+{
+	if ( sValue.IsEmpty() )
+	{
+		sError = GetMaxInputTokensErrorMsg();
+		return false;
+	}
+
+	// non-negative integer only
+	const char * p = sValue.cstr();
+	while ( *p >= '0' && *p <= '9' )
+		p++;
+
+	if ( *p != '\0' )
+	{
+		sError = GetMaxInputTokensErrorMsg();
+		return false;
+	}
+
+	char * pEnd = nullptr;
+	unsigned long ulTokens = strtoul ( sValue.cstr(), &pEnd, 10 );
+	if ( ulTokens > INT_MAX )
+	{
+		sError = GetMaxInputTokensErrorMsg();
+		return false;
+	}
+
+	iMaxInputTokens = (int)ulTokens;
 	return true;
 }
 

@@ -1938,6 +1938,7 @@ private:
 	bool						AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError ) override;
 	bool						AlterApiUrl ( const CSphString & sAttr, const CSphString & sUrl, CSphString & sError ) override;
 	bool						AlterApiTimeout ( const CSphString & sAttr, int iTimeout, CSphString & sError ) override;
+	bool						AlterMaxInputTokens ( const CSphString & sAttr, int iMaxInputTokens, CSphString & sError ) override;
 	bool						AlterRebuild ( AlterOp_fn && operation, CSphString & sError, const char * sTrace );
 
 	bool						CanAttach ( const CSphIndex * pIndex, bool bCheckFT, CSphString & sError ) const;
@@ -12710,6 +12711,51 @@ bool RtIndex_c::AlterApiTimeout ( const CSphString & sAttr, int iTimeout, CSphSt
 	if ( !LoadEmbeddingModels(sError) )
 	{
 		const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_iAPITimeout = iOldTimeout;
+		m_pEmbeddings.reset();
+		CSphString sRevertError;
+		LoadEmbeddingModels(sRevertError);
+		return false;
+	}
+
+	RaiseAlterGeneration();
+	AlterSave(false);
+
+	return true;
+}
+
+
+bool RtIndex_c::AlterMaxInputTokens ( const CSphString & sAttr, int iMaxInputTokens, CSphString & sError )
+{
+	// strength single-fiber access (don't rely upon to upstream w-lock)
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+
+	auto pAttr = m_tSchema.GetAttr ( sAttr.cstr() );
+	if ( !pAttr )
+	{
+		sError.SetSprintf ( "attribute '%s' not found", sAttr.cstr() );
+		return false;
+	}
+
+	if ( pAttr->m_tKNNModel.m_sModelName.empty() )
+	{
+		sError.SetSprintf ( "no embeddings model specified for attribute '%s'", sAttr.cstr() );
+		return false;
+	}
+
+	if ( iMaxInputTokens < 0 )
+	{
+		sError = GetMaxInputTokensErrorMsg();
+		return false;
+	}
+
+	// 0 means the model's own limit, positive value caps the tokens taken from each input text
+	int iOldMaxInputTokens = pAttr->m_tKNNModel.m_iMaxInputTokens;
+	const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_iMaxInputTokens = iMaxInputTokens;
+
+	m_pEmbeddings.reset();
+	if ( !LoadEmbeddingModels(sError) )
+	{
+		const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_iMaxInputTokens = iOldMaxInputTokens;
 		m_pEmbeddings.reset();
 		CSphString sRevertError;
 		LoadEmbeddingModels(sRevertError);

@@ -2627,6 +2627,7 @@ When creating a table with auto embeddings, specify these additional parameters:
 - `API_KEY`: Required for remote models (OpenAI, Voyage, Jina). The API key is validated during table creation by making a real API request.
 - `API_URL`: Optional. Custom API endpoint URL. If not specified, uses the default provider endpoint (e.g., `https://api.openai.com/v1/embeddings` for OpenAI).
 - `API_TIMEOUT`: Optional. HTTP timeout in seconds for API requests. Default is 10 seconds. Set to `'0'` to use the default timeout. Applies to both validation requests during table creation and embedding generation during INSERT operations.
+- `MAX_INPUT_TOKENS`: Optional. Caps the number of tokens taken from each input text before it is embedded; longer texts are truncated. `'0'` (default) means the model's own context limit. Long-context models such as `Qwen/Qwen3-Embedding-0.6B` accept up to 32,768 tokens, and embedding time on CPU grows superlinearly with input length (a 5 KB document can take minutes), so set a cap (for example `'512'`) when the text fields may contain long or unbounded content. Applies to local models; the setting can be changed later with `ALTER TABLE ... MODIFY COLUMN ... MAX_INPUT_TOKENS='...'` without re-embedding existing rows.
 
 For remote models, `MODEL_NAME` can use either the legacy `provider/model` form or the explicit `provider:model` form. Use `provider:model` with `API_URL` when you want the part after `:` to be forwarded to a custom provider-compatible endpoint exactly as written.
 

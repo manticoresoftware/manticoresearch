@@ -32,6 +32,8 @@
 #include "auth/auth_proto_http.h"
 #include "netfetch.h"
 
+#include <unordered_set>
+
 static bool g_bLogBadHttpReq = env_exists ( "MANTICORE_LOG_HTTP_BAD_REQ" ); // log content of bad http requests, ruled by this env variable
 static int g_iLogHttpData = env_long ( "MANTICORE_LOG_HTTP_DATA" ).value_or(0); // verbose logging of http data, ruled by this env variable
 
@@ -3324,6 +3326,12 @@ static void SetEsBulkNumericDocid ( BulkDoc_t & tDoc, DocID_t tDocid )
 static bool ParseMetaLine ( const char * sLine, BulkDoc_t & tDoc, CSphString & sError )
 {
 	JsonObj_c tLineMeta ( sLine );
+	if ( !tLineMeta.IsObj() || tLineMeta.Size()!=1 )
+	{
+		sError = "action metadata line should contain exactly one action";
+		return false;
+	}
+
 	JsonObj_c tAction = tLineMeta[0];
 	if ( !tAction )
 	{
@@ -3332,6 +3340,11 @@ static bool ParseMetaLine ( const char * sLine, BulkDoc_t & tDoc, CSphString & s
 	}
 
 	tDoc.m_sAction = tAction.Name();
+	if ( tDoc.m_sAction!="create" && tDoc.m_sAction!="delete" && tDoc.m_sAction!="index" && tDoc.m_sAction!="update" )
+	{
+		sError.SetSprintf ( "unknown action: %s", tDoc.m_sAction.cstr() );
+		return false;
+	}
 
 	if ( !tAction.IsObj() )
 	{
@@ -3664,6 +3677,23 @@ bool HttpHandlerEsBulk_c::Process()
 				return false;
 		}
 	}
+
+	if ( dDocs.IsEmpty() )
+	{
+		ReportLogError ( "no requests added", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+		return false;
+	}
+
+	for ( const BulkDoc_t & tDoc : dDocs )
+	{
+		if ( tDoc.m_sAction!="delete" && IsEmpty ( tDoc.m_tDocLine ) )
+		{
+			sError.SetSprintf ( "source is missing for action %s", tDoc.m_sAction.cstr() );
+			ReportLogError ( sError.cstr(), HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+			return false;
+		}
+	}
+
 	CSphVector<BulkTnx_t> dTnx;
 	const BulkDoc_t * pLastDoc = dDocs.Begin();
 	for ( const BulkDoc_t * pCurDoc = pLastDoc + 1; pCurDoc<dDocs.End(); pCurDoc++ )
@@ -3691,12 +3721,9 @@ bool HttpHandlerEsBulk_c::Process()
 	tRoot.AddItem ( "items", tItems );
 	tRoot.AddBool ( "errors", !bOk );
 	tRoot.AddInt ( "took", 1 ); // FIXME!!! add delta
-	BuildReply ( tRoot.AsString(), ( bOk ? EHTTP_STATUS::_200 : EHTTP_STATUS::_409 ) );
+	BuildReply ( tRoot.AsString(), EHTTP_STATUS::_200 );
 
-	if ( !bOk )
-		ReportLogError ( "failed to commit", HttpErrorType_e::Unknown, EHTTP_STATUS::_400, true );
-
-	return bOk;
+	return true;
 }
 
 static void AddEsReply ( const BulkDoc_t & tDoc, JsonObj_c & tRoot )
@@ -3728,15 +3755,18 @@ static void AddEsReply ( const BulkDoc_t & tDoc, JsonObj_c & tRoot )
 
 static void AddEsError ( int iReply, const CSphString & sError, const char * sErrorType, const BulkDoc_t & tDoc, JsonObj_c & tRoot )
 {
+	const bool bVersionConflict = tDoc.m_sAction=="create"
+		&& ( sError.Begins ( "duplicate id '" ) || sError.Begins ( "duplicate uuid id '" ) );
+
 	JsonObj_c tErrorObj;
-	tErrorObj.AddStr ( "type", sErrorType );
+	tErrorObj.AddStr ( "type", bVersionConflict ? "version_conflict_engine_exception" : sErrorType );
 	tErrorObj.AddStr ( "reason", sError.cstr() );
 
 	JsonObj_c tRes;
 	tRes.AddStr ( "_index", tDoc.m_sIndex.cstr() );
 	tRes.AddStr ( "_type", "doc" );
 	tRes.AddStr ( "_id", tDoc.m_sDocid.scstr() );
-	tRes.AddInt ( "status", 400 );
+	tRes.AddInt ( "status", bVersionConflict ? 409 : 400 );
 	tRes.AddItem ( "error", tErrorObj );
 
 	JsonObj_c tAction;
@@ -3762,6 +3792,8 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 		ProcessBegin ( sIdx, false );
 
 		bool bUpdate = false;
+		std::unordered_set<std::string> hCreated;
+		hCreated.reserve ( tTnx.m_iCount );
 		bOk &= dErrors.IsEmpty();
 		dErrors.Resize ( 0 );
 		for ( int i = 0; i<tTnx.m_iCount; i++ )
@@ -3787,6 +3819,15 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 				dErrors.Add ( { iDoc, m_sError } );
 				continue;
 			}
+
+			if ( tDoc.m_sAction=="create" && !tDoc.m_sDocid.IsEmpty() && hCreated.count ( tDoc.m_sDocid.cstr() ) )
+			{
+				CSphString sDuplicate;
+				sDuplicate.SetSprintf ( "duplicate id '%s'", tDoc.m_sDocid.cstr() );
+				dErrors.Add ( { iDoc, sDuplicate } );
+				continue;
+			}
+
 			bool bAction = false;
 			JsonObj_c tResult = JsonNull;
 
@@ -3833,6 +3874,9 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 				}
 			} else if ( tStmt.m_eStmt==STMT_INSERT || tStmt.m_eStmt==STMT_REPLACE )
 			{
+				if ( tDoc.m_sAction=="create" && !tDoc.m_sDocid.IsEmpty() )
+					hCreated.emplace ( tDoc.m_sDocid.cstr() );
+
 				auto dLastIdStrings = session::LastIdStrings();
 				if ( tDoc.m_eDocid==BulkDocid_e::NONE && !dLastIdStrings.IsEmpty() )
 				{
@@ -3851,6 +3895,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 		{
 			if ( bUpdate && !GetLastUpdated() )
 			{
+				bOk = false;
 				assert ( tTnx.m_iCount==1 );
 				const BulkDoc_t & tUpdDoc = dDocs[tTnx.m_iFrom];
 				CSphString sUpdError;

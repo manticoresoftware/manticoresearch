@@ -1781,6 +1781,15 @@ public:
 		m_pDistinctFetcher = tSettings.m_pDistinctFetcher;
 	}
 
+	~CSphImplicitGroupSorter() final
+	{
+		if ( m_bDataInitialized && m_pSchema )
+		{
+			AggrDiscard ( m_tData );
+			m_pSchema->FreeDataPtrs ( m_tData );
+		}
+	}
+
 	/// schema setup
 	void SetSchema ( ISphSchema * pSchema, bool bRemapCmp ) final
 	{

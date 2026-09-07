@@ -155,7 +155,7 @@ price integer
 { "title" : "es bulk explicit", "tag" : "bulk", "price" : 43 }
 { "index" : { "_index" : "uuid_ids", "_id" : "not-a-uuid" } }
 { "title" : "es bulk bad", "tag" : "bulk-bad", "price" : 45 }
-";s:4:"rows";s:433:"{"items":[{"index":{"_index":"uuid_ids","_type":"doc","_id":"550e8400-e29b-41d4-a716-446655440004","_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}},{"index":{"_index":"uuid_ids","_type":"doc","_id":"7099867689679777984","status":400,"error":{"type":"mapper_parsing_exception","reason":"row 1, column 4: uuid id must be a non-empty string"}}}],"errors":true}";s:9:"http_code";i:409;s:4:"http";i:1;}i:286;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:71:"{
+";s:4:"rows";s:433:"{"items":[{"index":{"_index":"uuid_ids","_type":"doc","_id":"550e8400-e29b-41d4-a716-446655440004","_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}},{"index":{"_index":"uuid_ids","_type":"doc","_id":"7099867689679777984","status":400,"error":{"type":"mapper_parsing_exception","reason":"row 1, column 4: uuid id must be a non-empty string"}}}],"errors":true}";s:9:"http_code";i:200;s:4:"http";i:1;}i:286;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:71:"{
 	"table": "uuid_ids",
 	"query": { "equals": { "tag": "bulk-bad" } }
 }";s:4:"rows";s:70:"{"timed_out":false,"hits":{"total":0,"total_relation":"eq","hits":[]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:287;a:6:{s:13:"http_endpoint";s:5:"_bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:116:"
@@ -170,7 +170,7 @@ price integer
 { "title" : "es bulk numeric id", "tag" : "bulk-numeric-id", "price" : 52 }
 { "create" : { "_index" : "uuid_ids", "_id" : 124 } }
 { "title" : "es bulk numeric create", "tag" : "bulk-numeric-create", "price" : 53 }
-";s:4:"rows";s:382:"{"items":[{"index":{"_index":"uuid_ids","_type":"doc","_id":"123","status":400,"error":{"type":"mapper_parsing_exception","reason":"row 1, column 4: uuid id must be a non-empty string"}}},{"create":{"_index":"uuid_ids","_type":"doc","_id":"124","status":400,"error":{"type":"mapper_parsing_exception","reason":"row 1, column 4: uuid id must be a non-empty string"}}}],"errors":true}";s:9:"http_code";i:409;s:4:"http";i:1;}i:290;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:147:"{
+";s:4:"rows";s:382:"{"items":[{"index":{"_index":"uuid_ids","_type":"doc","_id":"123","status":400,"error":{"type":"mapper_parsing_exception","reason":"row 1, column 4: uuid id must be a non-empty string"}}},{"create":{"_index":"uuid_ids","_type":"doc","_id":"124","status":400,"error":{"type":"mapper_parsing_exception","reason":"row 1, column 4: uuid id must be a non-empty string"}}}],"errors":true}";s:9:"http_code";i:200;s:4:"http";i:1;}i:290;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:147:"{
 	"table": "uuid_ids",
 	"query": { "equals": { "tag": "bulk-numeric-id" } },
 	"_source": [ "id", "tag", "price" ],
@@ -233,10 +233,10 @@ price integer
 { "doc" : { "tag" : "bulk-update-before-invalid", "price" : 84 } }
 { "update" : { "_index" : "uuid_ids", "_id" : "not-a-uuid" } }
 { "doc" : { "tag" : "bulk-update-invalid", "price" : 85 } }
-";s:4:"rows";s:432:"{"items":[{"update":{"_index":"uuid_ids","_type":"doc","_id":"550e8400-e29b-41d4-a716-446655440041","_version":1,"result":"updated","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}},{"update":{"_index":"uuid_ids","_type":"doc","_id":"7099867689679777984","status":400,"error":{"type":"document_missing_exception","reason":"[_doc][7099867689679777984]: document missing"}}}],"errors":false}";s:9:"http_code";i:200;s:4:"http";i:1;}i:308;a:6:{s:13:"http_endpoint";s:5:"_bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:124:"
+";s:4:"rows";s:431:"{"items":[{"update":{"_index":"uuid_ids","_type":"doc","_id":"550e8400-e29b-41d4-a716-446655440041","_version":1,"result":"updated","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}},{"update":{"_index":"uuid_ids","_type":"doc","_id":"7099867689679777984","status":400,"error":{"type":"document_missing_exception","reason":"[_doc][7099867689679777984]: document missing"}}}],"errors":true}";s:9:"http_code";i:200;s:4:"http";i:1;}i:308;a:6:{s:13:"http_endpoint";s:5:"_bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:124:"
 { "update" : { "_index" : "uuid_ids", "_id" : 126 } }
 { "doc" : { "tag" : "bulk-update-numeric-internal", "price" : 86 } }
-";s:4:"rows";s:185:"{"items":[{"update":{"_index":"uuid_ids","_type":"doc","_id":"126","status":400,"error":{"type":"document_missing_exception","reason":"[_doc][126]: document missing"}}}],"errors":false}";s:9:"http_code";i:200;s:4:"http";i:1;}i:309;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:136:"{
+";s:4:"rows";s:184:"{"items":[{"update":{"_index":"uuid_ids","_type":"doc","_id":"126","status":400,"error":{"type":"document_missing_exception","reason":"[_doc][126]: document missing"}}}],"errors":true}";s:9:"http_code";i:200;s:4:"http";i:1;}i:309;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:136:"{
 	"table": "uuid_ids",
 	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440041" } },
 	"_source": [ "id", "tag", "price" ]
@@ -258,17 +258,17 @@ price integer
 }";s:4:"rows";s:213:"{"timed_out":false,"hits":{"total":1,"total_relation":"eq","hits":[{"_id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","_score":1,"_source":{"id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","tag":"upper-bulk","price":82}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:314;a:6:{s:13:"http_endpoint";s:5:"_bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:184:"
 { "create" : { "_index" : "uuid_ids", "_id" : "550e8400-e29b-41d4-a716-446655440000" } }
 { "title" : "es bulk committed duplicate", "tag" : "bulk-committed-duplicate", "price" : 44 }
-";s:4:"rows";s:237:"{"items":[{"create":{"_index":"uuid_ids","_type":"doc","_id":"550e8400-e29b-41d4-a716-446655440000","status":400,"error":{"type":"mapper_parsing_exception","reason":"duplicate id '550e8400-e29b-41d4-a716-446655440000'"}}}],"errors":true}";s:9:"http_code";i:409;s:4:"http";i:1;}i:315;a:6:{s:13:"http_endpoint";s:5:"_bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:331:"
+";s:4:"rows";s:246:"{"items":[{"create":{"_index":"uuid_ids","_type":"doc","_id":"550e8400-e29b-41d4-a716-446655440000","status":409,"error":{"type":"version_conflict_engine_exception","reason":"duplicate id '550e8400-e29b-41d4-a716-446655440000'"}}}],"errors":true}";s:9:"http_code";i:200;s:4:"http";i:1;}i:315;a:6:{s:13:"http_endpoint";s:5:"_bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:331:"
 { "create" : { "_index" : "uuid_ids", "_id" : "550e8400-e29b-41d4-a716-446655440005" } }
 { "title" : "es bulk duplicate one", "tag" : "bulk-dup-one", "price" : 46 }
 { "create" : { "_index" : "uuid_ids", "_id" : "550e8400-e29b-41d4-a716-446655440005" } }
 { "title" : "es bulk duplicate two", "tag" : "bulk-dup-two", "price" : 47 }
-";s:4:"rows";s:456:"{"items":[{"create":{"_index":"uuid_ids","_type":"doc","_id":"550e8400-e29b-41d4-a716-446655440005","_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}},{"create":{"_index":"uuid_ids","_type":"doc","_id":"550e8400-e29b-41d4-a716-446655440005","_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}}],"errors":false}";s:9:"http_code";i:200;s:4:"http";i:1;}i:316;a:6:{s:13:"http_endpoint";s:5:"_bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:331:"
+";s:4:"rows";s:461:"{"items":[{"create":{"_index":"uuid_ids","_type":"doc","_id":"550e8400-e29b-41d4-a716-446655440005","_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}},{"create":{"_index":"uuid_ids","_type":"doc","_id":"550e8400-e29b-41d4-a716-446655440005","status":409,"error":{"type":"version_conflict_engine_exception","reason":"duplicate id '550e8400-e29b-41d4-a716-446655440005'"}}}],"errors":true}";s:9:"http_code";i:200;s:4:"http";i:1;}i:316;a:6:{s:13:"http_endpoint";s:5:"_bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:331:"
 { "create" : { "_index" : "uuid_ids", "_id" : "550e8400-e29b-41d4-a716-446655440006" } }
 { "title" : "es bulk lower", "tag" : "bulk-case-lower", "price" : 48 }
 { "create" : { "_index" : "uuid_ids", "_id" : "550E8400-E29B-41D4-A716-446655440006" } }
 { "title" : "es bulk upper duplicate", "tag" : "bulk-case-upper", "price" : 49 }
-";s:4:"rows";s:456:"{"items":[{"create":{"_index":"uuid_ids","_type":"doc","_id":"550e8400-e29b-41d4-a716-446655440006","_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}},{"create":{"_index":"uuid_ids","_type":"doc","_id":"550e8400-e29b-41d4-a716-446655440006","_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}}],"errors":false}";s:9:"http_code";i:200;s:4:"http";i:1;}i:317;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:129:"{
+";s:4:"rows";s:461:"{"items":[{"create":{"_index":"uuid_ids","_type":"doc","_id":"550e8400-e29b-41d4-a716-446655440006","_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}},{"create":{"_index":"uuid_ids","_type":"doc","_id":"550e8400-e29b-41d4-a716-446655440006","status":409,"error":{"type":"version_conflict_engine_exception","reason":"duplicate id '550e8400-e29b-41d4-a716-446655440006'"}}}],"errors":true}";s:9:"http_code";i:200;s:4:"http";i:1;}i:317;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:129:"{
 	"table": "uuid_ids",
 	"query": { "equals": { "id": "550e8400-e29b-41d4-a716-446655440006" } },
 	"sort": [ { "tag": "asc" } ]
@@ -329,7 +329,7 @@ price integer
 { "title" : "numeric bulk duplicate one", "tag" : "numeric-bulk-one" }
 { "create" : { "_index" : "numeric_ids", "_id" : 10 } }
 { "title" : "numeric bulk duplicate two", "tag" : "numeric-bulk-two" }
-";s:4:"rows";s:394:"{"items":[{"create":{"_index":"numeric_ids","_type":"doc","_id":"10","_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}},{"create":{"_index":"numeric_ids","_type":"doc","_id":"10","_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}}],"errors":false}";s:9:"http_code";i:200;s:4:"http";i:1;}i:329;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:96:"{
+";s:4:"rows";s:365:"{"items":[{"create":{"_index":"numeric_ids","_type":"doc","_id":"10","_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}},{"create":{"_index":"numeric_ids","_type":"doc","_id":"10","status":409,"error":{"type":"version_conflict_engine_exception","reason":"duplicate id '10'"}}}],"errors":true}";s:9:"http_code";i:200;s:4:"http";i:1;}i:329;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:96:"{
 	"table": "numeric_ids",
 	"query": { "equals": { "id": 10 } },
 	"sort": [ { "tag": "asc" } ]

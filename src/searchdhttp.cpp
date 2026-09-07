@@ -32,8 +32,6 @@
 #include "auth/auth_proto_http.h"
 #include "netfetch.h"
 
-#include <unordered_set>
-
 static bool g_bLogBadHttpReq = env_exists ( "MANTICORE_LOG_HTTP_BAD_REQ" ); // log content of bad http requests, ruled by this env variable
 static int g_iLogHttpData = env_long ( "MANTICORE_LOG_HTTP_DATA" ).value_or(0); // verbose logging of http data, ruled by this env variable
 
@@ -3792,8 +3790,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 		ProcessBegin ( sIdx, false );
 
 		bool bUpdate = false;
-		std::unordered_set<std::string> hCreated;
-		hCreated.reserve ( tTnx.m_iCount );
+		sph::StringSet hCreated;
 		bOk &= dErrors.IsEmpty();
 		dErrors.Resize ( 0 );
 		for ( int i = 0; i<tTnx.m_iCount; i++ )
@@ -3820,7 +3817,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 				continue;
 			}
 
-			if ( tDoc.m_sAction=="create" && !tDoc.m_sDocid.IsEmpty() && hCreated.count ( tDoc.m_sDocid.cstr() ) )
+			if ( tDoc.m_sAction=="create" && !tDoc.m_sDocid.IsEmpty() && hCreated[tDoc.m_sDocid] )
 			{
 				CSphString sDuplicate;
 				sDuplicate.SetSprintf ( "duplicate id '%s'", tDoc.m_sDocid.cstr() );
@@ -3875,7 +3872,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			} else if ( tStmt.m_eStmt==STMT_INSERT || tStmt.m_eStmt==STMT_REPLACE )
 			{
 				if ( tDoc.m_sAction=="create" && !tDoc.m_sDocid.IsEmpty() )
-					hCreated.emplace ( tDoc.m_sDocid.cstr() );
+					hCreated.Add ( tDoc.m_sDocid );
 
 				auto dLastIdStrings = session::LastIdStrings();
 				if ( tDoc.m_eDocid==BulkDocid_e::NONE && !dLastIdStrings.IsEmpty() )

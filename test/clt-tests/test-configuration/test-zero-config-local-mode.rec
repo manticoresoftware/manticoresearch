@@ -354,6 +354,12 @@ printf '%s' "$multi" | grep -q $'first_query\n201' || fail 'manticore omitted th
 printf '%s' "$multi" | grep -q $'second_query\n202' || fail 'manticore omitted the second query result row'
 pass 'manticore executes SELECT and semicolon-separated queries'
 
+meta=$(cd "$local_dir" && "$MANTICORE" -e "SELECT * FROM local_route_probe WHERE value=717171; SHOW META;") \
+  || fail 'manticore SELECT followed by SHOW META failed'
+printf '%s' "$meta" | grep -q $'value\n717171' || fail 'SELECT before SHOW META lost its result'
+printf '%s' "$meta" | grep -q $'total_found\t1' || fail 'SHOW META did not preserve the preceding SELECT session state'
+pass 'manticore preserves SELECT and SHOW META session semantics'
+
 vertical=$(cd "$local_dir" && "$MANTICORE" -e 'SELECT 301 AS short, 302 AS longer\G SELECT 303 AS regular;') || fail 'manticore vertical query failed'
 printf '%s' "$vertical" | grep -q '^\*\{27\} 1\. row \*\{27\}$' || fail '\G omitted the vertical row header'
 printf '%s' "$vertical" | grep -q $' short: 301\nlonger: 302' || fail '\G did not align vertical fields'
@@ -1087,6 +1093,7 @@ ok - client execution belongs to manticore and stopwait is not a command
 ok - manticore start local creates manticore_data and status reports readiness
 ok - manticore --local and --global override automatic target selection
 ok - manticore executes SELECT and semicolon-separated queries
+ok - manticore preserves SELECT and SHOW META session semantics
 ok - manticore supports vertical output with \\G
 ok - manticore frames terminal output with timing and preserves redirected TSV
 ok - Buddy callbacks use the local Unix socket

@@ -10,13 +10,16 @@
 #include <cstring>
 
 #if !_WIN32
+#include <fcntl.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 namespace
 {
 constexpr const char * LOCAL_DATA_DIR = "manticore_data";
 constexpr const char * LOCAL_PID = "searchd.pid";
+constexpr const char * LOCAL_MARKER = ".manticore-local";
 CSphString g_sLocalDataDir;
 
 CSphString LocalPath ( const char * szName )
@@ -27,7 +30,7 @@ CSphString LocalPath ( const char * szName )
 }
 }
 
-bool BuildLocalSearchdConfig ( CSphConfig & hConf, CSphString & sDataDir, CSphString & sError )
+bool BuildLocalSearchdConfig ( CSphConfig & hConf, CSphString & sDataDir, CSphString & sError, bool bCreateMarker )
 {
 #if _WIN32
 	sError = "zero-configuration local mode is not supported on Windows";
@@ -62,6 +65,33 @@ bool BuildLocalSearchdConfig ( CSphConfig & hConf, CSphString & sDataDir, CSphSt
 	{
 		sError.SetSprintf ( "failed to secure local data directory '%s': %s", g_sLocalDataDir.cstr(), strerror(errno) );
 		return false;
+	}
+
+	if ( bCreateMarker )
+	{
+		CSphString sMarker = LocalPath ( LOCAL_MARKER );
+		int iMarker = open ( sMarker.cstr(), O_WRONLY|O_CREAT|O_NOFOLLOW|O_NONBLOCK, S_IRUSR|S_IWUSR );
+		if ( iMarker<0 )
+		{
+			sError.SetSprintf ( "failed to create local instance marker '%s': %s", sMarker.cstr(), strerror(errno) );
+			return false;
+		}
+		struct stat tMarkerStat {};
+		const char sMarkerContent[] = "1\n";
+		bool bMarkerOk = fstat(iMarker,&tMarkerStat)==0 && S_ISREG(tMarkerStat.st_mode) && tMarkerStat.st_nlink==1
+			&& fchmod(iMarker,S_IRUSR|S_IWUSR)==0 && ftruncate(iMarker,0)==0
+			&& write(iMarker,sMarkerContent,sizeof(sMarkerContent)-1)==(ssize_t)sizeof(sMarkerContent)-1 && fsync(iMarker)==0;
+		int iMarkerError = errno;
+		if ( close(iMarker)<0 && bMarkerOk )
+		{
+			bMarkerOk = false;
+			iMarkerError = errno;
+		}
+		if ( !bMarkerOk )
+		{
+			sError.SetSprintf ( "failed to write local instance marker '%s': %s", sMarker.cstr(), strerrorm(iMarkerError) );
+			return false;
+		}
 	}
 
 	hConf.Add ( CSphConfigType(), "searchd" );

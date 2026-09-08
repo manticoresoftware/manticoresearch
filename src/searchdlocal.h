@@ -10,7 +10,7 @@
 #include <vector>
 
 /// Create/validate ./manticore_data and build the in-memory local searchd configuration.
-bool BuildLocalSearchdConfig ( CSphConfig & hConf, CSphString & sDataDir, CSphString & sError );
+bool BuildLocalSearchdConfig ( CSphConfig & hConf, CSphString & sDataDir, CSphString & sError, bool bCreateMarker=true );
 
 /// Split a local -e SQL batch without treating delimiters in quoted values,
 /// quoted identifiers, escapes, or comments as statement boundaries.

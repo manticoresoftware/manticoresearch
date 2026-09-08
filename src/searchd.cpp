@@ -16438,7 +16438,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( bLocalMode )
 	{
 		CSphString sLocalDataDir;
-		if ( !BuildLocalSearchdConfig ( g_hCfg, sLocalDataDir, sError ) )
+		if ( !BuildLocalSearchdConfig ( g_hCfg, sLocalDataDir, sError, !bOptStop && !bConfigTest ) )
 			sphFatal ( "%s", sError.cstr() );
 		sphInfo ( "using local data directory '%s'", sLocalDataDir.cstr() );
 	}

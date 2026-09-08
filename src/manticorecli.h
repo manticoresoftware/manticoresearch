@@ -27,6 +27,7 @@ enum class Target_e
 enum class Marker_e
 {
 	ABSENT,
+	UNMARKED,
 	DIRECTORY,
 	INVALID,
 	ERROR_

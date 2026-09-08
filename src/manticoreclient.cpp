@@ -31,6 +31,8 @@
 namespace
 {
 constexpr const char * LOCAL_DATA_DIR = "manticore_data";
+constexpr const char * LOCAL_MARKER = ".manticore-local";
+constexpr const char * LOCAL_MARKER_CONTENT = "1\n";
 constexpr const char * LOCAL_PID = "searchd.pid";
 constexpr const char * LOCAL_SOCKET = "searchd.sock";
 CSphString g_sLocalDataDir;
@@ -341,11 +343,43 @@ int ExecuteManticoreSql ( const char * szSql, ManticoreClientTarget_e eTarget, c
 		}
 		else if ( !S_ISDIR(tStat.st_mode) )
 		{
-			fprintf ( stderr, "manticore: local data path '%s' is not a directory\n", g_sLocalDataDir.cstr() );
-			return 1;
+			if ( eTarget==ManticoreClientTarget_e::AUTO )
+				bLocal = false;
+			else
+			{
+				fprintf ( stderr, "manticore: local data path '%s' is not a directory\n", g_sLocalDataDir.cstr() );
+				return 1;
+			}
 		}
 		else
-			bLocal = true;
+		{
+			CSphString sMarker;
+			sMarker.SetSprintf ( "%s/%s", g_sLocalDataDir.cstr(), LOCAL_MARKER );
+			int iMarkerStat = lstat ( sMarker.cstr(), &tStat );
+			if ( iMarkerStat<0 && errno==ENOENT && eTarget==ManticoreClientTarget_e::AUTO )
+				bLocal = false;
+			else if ( iMarkerStat<0 || !S_ISREG(tStat.st_mode) )
+			{
+				fprintf ( stderr, "manticore: local instance marker '%s' is missing or invalid; run 'manticore start local' to create it\n", sMarker.cstr() );
+				return 1;
+			}
+			else
+			{
+				int iMarker = open ( sMarker.cstr(), O_RDONLY|O_NOFOLLOW|O_NONBLOCK );
+				char sContent[8] {};
+				struct stat tOpenedStat {};
+				bool bSameRegularFile = iMarker>=0 && fstat(iMarker,&tOpenedStat)==0 && S_ISREG(tOpenedStat.st_mode)
+					&& tOpenedStat.st_dev==tStat.st_dev && tOpenedStat.st_ino==tStat.st_ino;
+				ssize_t iRead = bSameRegularFile ? read(iMarker,sContent,sizeof(sContent)) : -1;
+				if ( iMarker>=0 ) close(iMarker);
+				if ( iRead!=(ssize_t)strlen(LOCAL_MARKER_CONTENT) || memcmp(sContent,LOCAL_MARKER_CONTENT,strlen(LOCAL_MARKER_CONTENT))!=0 )
+				{
+					fprintf ( stderr, "manticore: local instance marker '%s' is invalid\n", sMarker.cstr() );
+					return 1;
+				}
+				bLocal = true;
+			}
+		}
 	}
 
 	localmode::SqlEndpoint_t tEndpoint;

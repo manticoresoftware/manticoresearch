@@ -22,6 +22,7 @@ def fixture(searchd_body):
     bindir.mkdir()
     work.mkdir()
     (work / 'manticore_data').mkdir()
+    (work / 'manticore_data/.manticore-local').write_text('1\n')
     shutil.copy2(source, bindir / 'manticore')
     fake = bindir / 'searchd'
     fake.write_text('#!/bin/sh\nset -eu\n' + searchd_body)

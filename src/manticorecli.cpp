@@ -37,6 +37,8 @@ constexpr const char * LOCAL_DATA_DIR = "manticore_data";
 constexpr const char * LOCAL_LOG = "searchd.log";
 constexpr const char * LOCAL_PID = "searchd.pid";
 constexpr const char * LOCAL_SOCKET = "searchd.sock";
+constexpr const char * LOCAL_MARKER = ".manticore-local";
+constexpr const char * LOCAL_MARKER_CONTENT = "1\n";
 constexpr const char * SERVICE_NAME = "manticore.service";
 constexpr int DEFAULT_START_TIMEOUT_SEC = 300;
 
@@ -743,7 +745,7 @@ bool ValidateLocalMarker ( Marker_e eMarker, Command_e eCommand, Target_e eReque
 {
 	if ( eMarker==Marker_e::DIRECTORY )
 		return true;
-	if ( eMarker==Marker_e::ABSENT && eCommand==Command_e::START && eRequested==Target_e::LOCAL )
+	if ( ( eMarker==Marker_e::ABSENT || eMarker==Marker_e::UNMARKED ) && eCommand==Command_e::START && eRequested==Target_e::LOCAL )
 		return true;
 	if ( eMarker==Marker_e::ABSENT )
 		fprintf ( stderr, "manticore: local data directory './%s' does not exist\n", LOCAL_DATA_DIR );
@@ -952,7 +954,7 @@ Target_e ResolveTarget ( Target_e eRequested, Marker_e eMarker )
 {
 	if ( eRequested!=Target_e::AUTO )
 		return eRequested;
-	return eMarker==Marker_e::ABSENT ? Target_e::GLOBAL : Target_e::LOCAL;
+	return eMarker==Marker_e::ABSENT || eMarker==Marker_e::UNMARKED ? Target_e::GLOBAL : Target_e::LOCAL;
 }
 
 Marker_e InspectLocalMarker ( const char * szDirectory, std::string & sError )
@@ -974,8 +976,46 @@ Marker_e InspectLocalMarker ( const char * szDirectory, std::string & sError )
 	}
 	if ( !S_ISDIR(tStat.st_mode) )
 	{
-		sError = "local data path '" + sPath + "' is not a directory";
+		sError = "local data path '" + sPath + "' is not a directory and has no local instance marker";
+		return Marker_e::UNMARKED;
+	}
+	std::string sMarker = sPath + '/' + LOCAL_MARKER;
+	if ( lstat ( sMarker.c_str(), &tStat )<0 )
+	{
+		if ( errno==ENOENT )
+		{
+			sError = "local data directory '" + sPath + "' has no " + LOCAL_MARKER + " marker";
+			return Marker_e::UNMARKED;
+		}
+		sError = "cannot inspect local instance marker '" + sMarker + "': " + strerror(errno);
+		return Marker_e::ERROR_;
+	}
+	if ( !S_ISREG(tStat.st_mode) )
+	{
+		sError = "local instance marker '" + sMarker + "' is not a regular file";
 		return Marker_e::INVALID;
+	}
+	int iMarker = open ( sMarker.c_str(), O_RDONLY|O_NOFOLLOW|O_NONBLOCK );
+	if ( iMarker<0 )
+	{
+		sError = "cannot open local instance marker '" + sMarker + "': " + strerror(errno);
+		return Marker_e::ERROR_;
+	}
+	struct stat tOpenedStat {};
+	if ( fstat(iMarker,&tOpenedStat)<0 || !S_ISREG(tOpenedStat.st_mode) || tOpenedStat.st_dev!=tStat.st_dev || tOpenedStat.st_ino!=tStat.st_ino )
+	{
+		close ( iMarker );
+		sError = "local instance marker '" + sMarker + "' changed or is not a regular file";
+		return Marker_e::INVALID;
+	}
+	char sContent[8] {};
+	ssize_t iRead = read ( iMarker, sContent, sizeof(sContent) );
+	int iReadError = errno;
+	close ( iMarker );
+	if ( iRead!=(ssize_t)strlen(LOCAL_MARKER_CONTENT) || memcmp(sContent,LOCAL_MARKER_CONTENT,strlen(LOCAL_MARKER_CONTENT))!=0 )
+	{
+		sError = iRead<0 ? "cannot read local instance marker '" + sMarker + "': " + strerror(iReadError) : "unsupported local instance marker in '" + sMarker + "'";
+		return iRead<0 ? Marker_e::ERROR_ : Marker_e::INVALID;
 	}
 	return Marker_e::DIRECTORY;
 #endif
@@ -998,8 +1038,9 @@ void ShowHelp()
 		"      --global       ignore ./manticore_data and use normal config discovery\n"
 		"  -?, --help         show this help\n"
 		"  -v, --version      show the Manticore Search version\n\n"
-		"Without an explicit target, manticore uses ./manticore_data when present\n"
-		"and the globally configured instance otherwise. 'manticore stop' always waits.\n",
+		"Without an explicit target, manticore uses ./manticore_data only when\n"
+		".manticore-local is present and valid; otherwise it uses normal config discovery.\n"
+		"'manticore stop' always waits.\n",
 		stdout );
 }
 

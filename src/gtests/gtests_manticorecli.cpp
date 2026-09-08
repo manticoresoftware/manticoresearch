@@ -170,6 +170,7 @@ TEST ( manticore_cli, rejects_removed_or_ambiguous_commands )
 TEST ( manticore_cli, resolves_automatic_target_without_falling_through_invalid_marker )
 {
 	EXPECT_EQ ( manticorecli::ResolveTarget ( manticorecli::Target_e::AUTO, manticorecli::Marker_e::ABSENT ), manticorecli::Target_e::GLOBAL );
+	EXPECT_EQ ( manticorecli::ResolveTarget ( manticorecli::Target_e::AUTO, manticorecli::Marker_e::UNMARKED ), manticorecli::Target_e::GLOBAL );
 	EXPECT_EQ ( manticorecli::ResolveTarget ( manticorecli::Target_e::AUTO, manticorecli::Marker_e::DIRECTORY ), manticorecli::Target_e::LOCAL );
 	EXPECT_EQ ( manticorecli::ResolveTarget ( manticorecli::Target_e::AUTO, manticorecli::Marker_e::INVALID ), manticorecli::Target_e::LOCAL );
 	EXPECT_EQ ( manticorecli::ResolveTarget ( manticorecli::Target_e::GLOBAL, manticorecli::Marker_e::DIRECTORY ), manticorecli::Target_e::GLOBAL );
@@ -177,6 +178,41 @@ TEST ( manticore_cli, resolves_automatic_target_without_falling_through_invalid_
 }
 
 #if !_WIN32
+TEST ( manticore_cli, only_explicit_marker_selects_local_instance )
+{
+	char szDirectory[] = "/tmp/manticore-local-marker-XXXXXX";
+	ASSERT_NE ( nullptr, mkdtemp(szDirectory) );
+	std::string sDataDir = std::string(szDirectory) + "/manticore_data";
+	std::string sMarker = sDataDir + "/.manticore-local";
+	std::string sError;
+
+	EXPECT_EQ ( manticorecli::InspectLocalMarker(szDirectory,sError), manticorecli::Marker_e::ABSENT );
+	ASSERT_EQ ( 0, mkdir(sDataDir.c_str(),0700) );
+	EXPECT_EQ ( manticorecli::InspectLocalMarker(szDirectory,sError), manticorecli::Marker_e::UNMARKED );
+
+	int iMarker = open ( sMarker.c_str(), O_CREAT|O_WRONLY|O_TRUNC, 0600 );
+	ASSERT_GE ( iMarker, 0 );
+	ASSERT_EQ ( 2, write(iMarker,"1\n",2) );
+	close ( iMarker );
+	EXPECT_EQ ( manticorecli::InspectLocalMarker(szDirectory,sError), manticorecli::Marker_e::DIRECTORY ) << sError;
+
+	iMarker = open ( sMarker.c_str(), O_WRONLY|O_TRUNC );
+	ASSERT_GE ( iMarker, 0 );
+	ASSERT_EQ ( 4, write(iMarker,"bad\n",4) );
+	close ( iMarker );
+	EXPECT_EQ ( manticorecli::InspectLocalMarker(szDirectory,sError), manticorecli::Marker_e::INVALID );
+
+	ASSERT_EQ ( 0, unlink(sMarker.c_str()) );
+	ASSERT_EQ ( 0, mkfifo(sMarker.c_str(),0600) );
+	EXPECT_EQ ( manticorecli::InspectLocalMarker(szDirectory,sError), manticorecli::Marker_e::INVALID );
+	ASSERT_EQ ( 0, unlink(sMarker.c_str()) );
+	ASSERT_EQ ( 0, symlink("missing-marker",sMarker.c_str()) );
+	EXPECT_EQ ( manticorecli::InspectLocalMarker(szDirectory,sError), manticorecli::Marker_e::INVALID );
+	ASSERT_EQ ( 0, unlink(sMarker.c_str()) );
+	ASSERT_EQ ( 0, rmdir(sDataDir.c_str()) );
+	ASSERT_EQ ( 0, rmdir(szDirectory) );
+}
+
 TEST ( manticore_cli, listener_resolution_prefers_non_loopback_when_first_address_is_loopback )
 {
 	DWORD dAddresses[] = { htonl(0x7f000001), htonl(0x0a000007), htonl(0xc0000201) };

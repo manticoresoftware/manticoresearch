@@ -1,4 +1,4 @@
-// Copyright (c) 2001-2026, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 //
 // Interactive editing and durable history for configless local mode.
 

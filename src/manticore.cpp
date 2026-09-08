@@ -1,4 +1,4 @@
-// Copyright (c) 2001-2026, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 
 #include "manticorecli.h"
 

@@ -636,10 +636,10 @@ bool ReadPid ( const std::string & sPath, int & iPid, std::string & sError )
 		return false;
 	}
 	int iFile = -1;
-	CSphString sPidError;
-	if ( !OpenPidFile(CSphString(sPath.c_str()),iFile,iPid,sPidError) )
+	std::string sPidError;
+	if ( !OpenManticorePidFile(sPath,iFile,iPid,sPidError) )
 	{
-		sError = sPidError.cstr();
+		sError = sPidError;
 		return false;
 	}
 	SafeClose ( iFile );
@@ -650,10 +650,10 @@ bool PidFileOwnedBy ( const std::string & sPath, int iPid, std::string & sError 
 {
 	int iFile = -1;
 	int iRecordedPid = 0;
-	CSphString sPidError;
-	if ( !OpenPidFile(CSphString(sPath.c_str()),iFile,iRecordedPid,sPidError) )
+	std::string sPidError;
+	if ( !OpenManticorePidFile(sPath,iFile,iRecordedPid,sPidError) )
 	{
-		sError = sPidError.cstr();
+		sError = sPidError;
 		return false;
 	}
 	AT_SCOPE_EXIT ( [&] { SafeClose(iFile); } );
@@ -662,9 +662,9 @@ bool PidFileOwnedBy ( const std::string & sPath, int iPid, std::string & sError 
 		sError = "PID file '" + sPath + "' changed while it was being validated";
 		return false;
 	}
-	if ( !ValidatePidFileOwner(iFile,iPid,sPidError) )
+	if ( !ValidateManticorePidFileOwner(iFile,iPid,sPidError) )
 	{
-		sError = sPidError.cstr();
+		sError = sPidError;
 		return false;
 	}
 	return true;

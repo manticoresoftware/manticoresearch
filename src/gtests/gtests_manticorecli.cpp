@@ -1,10 +1,8 @@
-// Copyright (c) 2001-2026, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 
 #include <gtest/gtest.h>
 
 #include "manticorecli.h"
-#include "daemon/daemon_ipc.h"
-#include "fileutils.h"
 #include "searchdaemon.h"
 #include "searchdlocal.h"
 #include "searchdlocalinternal.h"
@@ -15,6 +13,8 @@
 
 #if !_WIN32
 #include <arpa/inet.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
@@ -27,57 +27,6 @@ manticorecli::ParseResult_t Parse ( std::initializer_list<const char *> dArgs )
 	return manticorecli::ParseArgs ( (int)dArgv.size(), dArgv.data() );
 }
 }
-
-#if defined(__linux__)
-TEST ( manticore_cli, pidfd_fallback_is_only_for_unsupported_kernels )
-{
-	EXPECT_TRUE ( IsPidfdUnsupportedError(ENOSYS) );
-	EXPECT_TRUE ( IsPidfdUnsupportedError(EINVAL) );
-	EXPECT_FALSE ( IsPidfdUnsupportedError(EMFILE) );
-	EXPECT_FALSE ( IsPidfdUnsupportedError(ENFILE) );
-	EXPECT_FALSE ( IsPidfdUnsupportedError(ENOMEM) );
-}
-#endif
-
-#if !_WIN32
-TEST ( manticore_cli, pid_path_replacement_is_not_unlinked_by_old_owner )
-{
-	char szDirectory[] = "/tmp/manticore-pid-path-XXXXXX";
-	ASSERT_NE ( nullptr, mkdtemp(szDirectory) );
-	std::string sPath = std::string(szDirectory) + "/searchd.pid";
-	std::string sOwnedPath = sPath + ".owned";
-	int iOwnedFD = open ( sPath.c_str(), O_CREAT|O_RDWR|O_TRUNC, 0600 );
-	ASSERT_GE ( iOwnedFD, 0 );
-	ASSERT_EQ ( 0, rename(sPath.c_str(),sOwnedPath.c_str()) );
-	int iReplacementFD = open ( sPath.c_str(), O_CREAT|O_RDWR|O_TRUNC, 0600 );
-	ASSERT_GE ( iReplacementFD, 0 );
-	ASSERT_EQ ( 6, write(iReplacementFD,"424242",6) );
-	close ( iReplacementFD );
-
-	CSphString sError;
-	EXPECT_FALSE ( UnlinkFileIfSameDescriptor(iOwnedFD,sPath.c_str(),sError) );
-	EXPECT_TRUE ( sphFileExists(sPath.c_str()) );
-
-	close ( iOwnedFD );
-	unlink ( sPath.c_str() );
-	unlink ( sOwnedPath.c_str() );
-	EXPECT_EQ ( 0, rmdir(szDirectory) );
-}
-
-TEST ( manticore_cli, owned_pid_path_is_removed_through_quarantine )
-{
-	char szDirectory[] = "/tmp/manticore-pid-unlink-XXXXXX";
-	ASSERT_NE ( nullptr, mkdtemp(szDirectory) );
-	std::string sPath = std::string(szDirectory) + "/searchd.pid";
-	int iOwnedFD = open ( sPath.c_str(), O_CREAT|O_RDWR|O_TRUNC, 0600 );
-	ASSERT_GE ( iOwnedFD, 0 );
-	CSphString sError;
-	EXPECT_TRUE ( UnlinkFileIfSameDescriptor(iOwnedFD,sPath.c_str(),sError) ) << sError.cstr();
-	EXPECT_FALSE ( sphFileExists(sPath.c_str()) );
-	close ( iOwnedFD );
-	EXPECT_EQ ( 0, rmdir(szDirectory) );
-}
-#endif
 
 TEST ( manticore_cli, bare_command_selects_automatic_client )
 {

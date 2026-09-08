@@ -43,6 +43,79 @@ CSphString LocalPath ( const char * szName )
 }
 
 #if !_WIN32
+bool OpenManticorePidFileInt ( const std::string & sPath, int & iFD, int & iPid, std::string & sError )
+{
+	iFD = -1;
+	iPid = 0;
+	int iFlags = O_RDONLY | O_NONBLOCK;
+#ifdef O_CLOEXEC
+	iFlags |= O_CLOEXEC;
+#endif
+#ifdef O_NOFOLLOW
+	iFlags |= O_NOFOLLOW;
+#endif
+	iFD = open ( sPath.c_str(), iFlags );
+	if ( iFD<0 )
+	{
+		sError = "cannot open PID file '" + sPath + "': " + strerror(errno);
+		return false;
+	}
+
+	struct stat tStat {};
+	int iStatResult = fstat ( iFD, &tStat );
+	if ( iStatResult<0 || !S_ISREG(tStat.st_mode) )
+	{
+		sError = iStatResult<0 ? "cannot inspect PID file '" + sPath + "': " + strerror(errno) : "PID file '" + sPath + "' is not a regular file";
+		close ( iFD );
+		iFD = -1;
+		return false;
+	}
+
+	char sPid[65] {};
+	ssize_t iLength = read ( iFD, sPid, sizeof(sPid) );
+	size_t iDigits = 0;
+	int64_t iValue = 0;
+	while ( iLength>0 && iDigits<(size_t)iLength && sPid[iDigits]>='0' && sPid[iDigits]<='9' )
+	{
+		iValue = iValue*10 + sPid[iDigits]-'0';
+		if ( iValue>INT_MAX )
+			break;
+		++iDigits;
+	}
+	size_t iTail = iDigits;
+	if ( iLength>0 && iTail<(size_t)iLength && sPid[iTail]=='\r' ) ++iTail;
+	if ( iLength>0 && iTail<(size_t)iLength && sPid[iTail]=='\n' ) ++iTail;
+	if ( iLength<=0 || iLength>=(ssize_t)sizeof(sPid) || !iDigits || iValue<=0 || iValue>INT_MAX || iTail!=(size_t)iLength )
+	{
+		sError = "invalid PID file '" + sPath + "'";
+		close ( iFD );
+		iFD = -1;
+		return false;
+	}
+	iPid = (int)iValue;
+	return true;
+}
+
+bool ValidateManticorePidFileOwnerInt ( int iFD, int iPid, std::string & sError )
+{
+	struct flock tLock {};
+	tLock.l_type = F_RDLCK;
+	tLock.l_whence = SEEK_SET;
+	if ( fcntl(iFD,F_GETLK,&tLock)<0 )
+	{
+		sError = "cannot inspect PID-file lock: " + std::string(strerror(errno));
+		return false;
+	}
+	if ( tLock.l_type==F_UNLCK || tLock.l_pid!=iPid )
+	{
+		sError = "PID file is not owned by recorded PID " + std::to_string(iPid);
+		return false;
+	}
+	return true;
+}
+#endif
+
+#if !_WIN32
 void SetTcpEndpoint ( localmode::SqlEndpoint_t & tEndpoint, DWORD uIP, int iPort )
 {
 	tEndpoint.m_uIP = uIP==htonl(INADDR_ANY) ? htonl(INADDR_LOOPBACK) : uIP;
@@ -159,17 +232,19 @@ bool ValidateLocalDaemonOwnership ( int & iPid, CSphString & sError )
 {
 	CSphString sPidPath = LocalPath ( LOCAL_PID );
 	int iFile = -1;
-	if ( !OpenPidFile(sPidPath,iFile,iPid,sError) )
+	std::string sPidError;
+	if ( !OpenManticorePidFileInt(sPidPath.cstr(),iFile,iPid,sPidError) )
 	{
-		CSphString sDetail = sError;
-		sError.SetSprintf ( "local PID file '%s' is missing or invalid: %s", sPidPath.cstr(), sDetail.cstr() );
+		sError.SetSprintf ( "local PID file '%s' is missing or invalid: %s", sPidPath.cstr(), sPidError.c_str() );
 		return false;
 	}
 	AT_SCOPE_EXIT ( [&] { SafeClose(iFile); } );
-	if ( !ValidatePidFileOwner(iFile,iPid,sError) || ( kill(iPid,0)<0 && errno==ESRCH ) )
+	if ( !ValidateManticorePidFileOwnerInt(iFile,iPid,sPidError) || ( kill(iPid,0)<0 && errno==ESRCH ) )
 	{
-		if ( sError.IsEmpty() )
+		if ( sPidError.empty() )
 			sError.SetSprintf ( "local PID file '%s' is not owned by its recorded live daemon", sPidPath.cstr() );
+		else
+			sError = sPidError.c_str();
 		return false;
 	}
 	return true;
@@ -214,6 +289,18 @@ public:
 };
 #endif
 }
+
+#if !_WIN32
+bool OpenManticorePidFile ( const std::string & sPath, int & iFD, int & iPid, std::string & sError )
+{
+	return OpenManticorePidFileInt ( sPath, iFD, iPid, sError );
+}
+
+bool ValidateManticorePidFileOwner ( int iFD, int iPid, std::string & sError )
+{
+	return ValidateManticorePidFileOwnerInt ( iFD, iPid, sError );
+}
+#endif
 
 int ExecuteManticoreSql ( const char * szSql, ManticoreClientTarget_e eTarget, const char * szConfigFile, const char * szHost, int iPort )
 {

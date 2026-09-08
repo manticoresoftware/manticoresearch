@@ -1,8 +1,13 @@
-// Copyright (c) 2001-2026, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 
 #pragma once
 
 #include <string>
+
+#if !_WIN32
+bool OpenManticorePidFile ( const std::string & sPath, int & iFD, int & iPid, std::string & sError );
+bool ValidateManticorePidFileOwner ( int iFD, int iPid, std::string & sError );
+#endif
 
 enum class ManticoreClientTarget_e
 {

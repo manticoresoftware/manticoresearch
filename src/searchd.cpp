@@ -516,27 +516,15 @@ bool Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	SHUTINFO << "Close auth log ...";
 	AuthDone();
 
-	// Remove owned metadata while the ownership lock is still held. Closing
-	// first lets a concurrent replacement daemon acquire the path and then
-	// have its newly published PID file removed by this exiting process.
-	SHUTINFO << "Remove and release pid file ...";
-#if !_WIN32
-	if ( g_bPidIsMine && !g_sPidFile.IsEmpty() && g_iPidFD!=-1 )
-	{
-		CSphString sUnlinkError;
-		if ( !UnlinkFileIfSameDescriptor(g_iPidFD,g_sPidFile,sUnlinkError) )
-			sphWarning ( "refusing to unlink PID metadata: %s", sUnlinkError.cstr() );
-	}
+	// close pid
+	SHUTINFO << "Release (close) pid file ...";
 	if ( g_iPidFD!=-1 )
 		::close ( g_iPidFD );
 	g_iPidFD = -1;
-#else
-	if ( g_iPidFD!=-1 )
-		::close ( g_iPidFD );
-	g_iPidFD = -1;
+
+	// remove pid file, if we owned it
 	if ( g_bPidIsMine && !g_sPidFile.IsEmpty() )
 		::unlink ( g_sPidFile.cstr() );
-#endif
 
 	SHUTINFO << "Shutdown hazard pointers ...";
 	hazard::Shutdown ();
@@ -16105,41 +16093,28 @@ int StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread 
 
 	CSphString sPidFile = v->cstr();
 	FixPathAbsolute ( sPidFile );
-	int iPid = 0;
-#if _WIN32
 	FILE * fp = fopen ( sPidFile.cstr(), "r" );
 	if ( !fp )
 		sphFatal ( "stop: pid file '%s' does not exist or is not readable", sPidFile.cstr() );
-	char sBuf[32] {};
+
+	char sBuf[16];
 	int iLen = (int) fread ( sBuf, 1, sizeof(sBuf)-1, fp );
-	bool bComplete = feof(fp) && !ferror(fp);
+	sBuf[iLen] = '\0';
 	fclose ( fp );
-	errno = 0;
-	char * pEnd = nullptr;
-	long iValue = strtol ( sBuf, &pEnd, 10 );
-	const char * pLimit = sBuf+iLen;
-	if ( pEnd<pLimit && *pEnd=='\r' ) ++pEnd;
-	if ( pEnd<pLimit && *pEnd=='\n' ) ++pEnd;
-	if ( !bComplete || errno==ERANGE || iValue<=0 || iValue>INT_MAX || !pEnd || pEnd!=pLimit )
+
+	int iPid = atoi(sBuf);
+	if ( iPid<=0 )
 		sphFatal ( "stop: failed to read valid pid from '%s'", sPidFile.cstr() );
-	iPid = (int)iValue;
-#else
-	int iPidFD = -1;
-	CSphString sPidError;
-	if ( !OpenPidFile(sPidFile,iPidFD,iPid,sPidError) )
-		sphFatal ( "stop: %s", sPidError.cstr() );
-	AT_SCOPE_EXIT ( [&] { SafeClose(iPidFD); } );
-	if ( !ValidatePidFileOwner(iPidFD,iPid,sPidError) )
-		sphFatal ( "stop: pid file '%s' is not owned by recorded pid %d: %s", sPidFile.cstr(), iPid, sPidError.cstr() );
-#endif
 
 	int iWaitTimeout = g_iShutdownTimeoutUs + 100000;
+
+	int iExitCode = 0;
 #if _WIN32
-	return WinStopOrWaitAnother ( iPid, iWaitTimeout );
+	iExitCode = WinStopOrWaitAnother ( iPid, iWaitTimeout );
 #else
-	return StopDaemonAndWait ( bWait, iPid, iWaitTimeout, iPidFD );
+	iExitCode = StopDaemonAndWait ( bWait, iPid, iWaitTimeout );
 #endif
-}
+	return iExitCode;}
 } // static namespace
 
 

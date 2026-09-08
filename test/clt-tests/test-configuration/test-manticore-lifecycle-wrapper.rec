@@ -1,7 +1,7 @@
 ––– comment –––
 The manticore lifecycle wrapper fails closed on fake-success launchers and stale local metadata, verifies stop postconditions, and returns 130 without killing a backend after Ctrl-C.
 ––– input –––
-MANTICORE_BIN="${MANTICORE_BIN:-manticore}" SEARCHD_BIN="${SEARCHD_BIN:-searchd}" python3 <<'PY'
+MANTICORE_BIN="${MANTICORE_BIN:-manticore}" python3 <<'PY'
 import os
 import fcntl
 import pathlib
@@ -14,7 +14,6 @@ import threading
 import time
 
 source = pathlib.Path(shutil.which(os.environ['MANTICORE_BIN']) or os.environ['MANTICORE_BIN']).resolve()
-searchd_source = pathlib.Path(shutil.which(os.environ['SEARCHD_BIN']) or os.environ['SEARCHD_BIN']).resolve()
 
 def fixture(searchd_body):
     root = pathlib.Path(tempfile.mkdtemp(prefix='mc-life-', dir='/tmp'))
@@ -141,21 +140,6 @@ finally:
     sleeper.wait()
     shutil.rmtree(root)
 
-root = pathlib.Path(tempfile.mkdtemp(prefix='mc-searchd-stop-', dir='/tmp'))
-work = root / 'work'
-(work / 'manticore_data').mkdir(parents=True)
-sleeper = subprocess.Popen(['sleep', '30'])
-try:
-    (work / 'manticore_data/searchd.pid').write_text(f'{sleeper.pid}\n')
-    bind_socket(work)
-    result = subprocess.run([searchd_source, '--local', '--stopwait'], cwd=work, text=True, capture_output=True, timeout=5)
-    assert result.returncode != 0 and 'is not owned by recorded pid' in result.stdout + result.stderr
-    assert sleeper.poll() is None
-finally:
-    sleeper.terminate()
-    sleeper.wait()
-    shutil.rmtree(root)
-
 root, bindir, work = fixture('touch stop-invoked\nexit 99\n')
 pid_fd = os.open(work / 'manticore_data/searchd.pid', os.O_CREAT | os.O_RDWR, 0o600)
 fcntl.lockf(pid_fd, fcntl.LOCK_EX)
@@ -174,23 +158,7 @@ os.mkfifo(fifo)
 try:
     result = subprocess.run([bindir / 'manticore', '--local', '-e', 'SELECT 1'], cwd=work, text=True, capture_output=True, timeout=2)
     assert result.returncode != 0 and 'regular file' in result.stderr
-    result = subprocess.run([searchd_source, '--local', '--stopwait'], cwd=work, text=True, capture_output=True, timeout=2)
-    assert result.returncode != 0 and 'regular file' in result.stdout + result.stderr
 finally:
-    shutil.rmtree(root)
-
-root = pathlib.Path(tempfile.mkdtemp(prefix='mc-searchd-symlink-', dir='/tmp'))
-work = root / 'work'
-(work / 'manticore_data').mkdir(parents=True)
-owned = locked_pid_process(root / 'owned.pid')
-try:
-    (work / 'manticore_data/searchd.pid').symlink_to(root / 'owned.pid')
-    result = subprocess.run([searchd_source, '--local', '--stopwait'], cwd=work, text=True, capture_output=True, timeout=5)
-    assert result.returncode != 0 and owned.poll() is None
-finally:
-    if owned.poll() is None:
-        owned.terminate()
-    owned.wait()
     shutil.rmtree(root)
 
 root, bindir, work = fixture('touch direct-invoked\nexit 7\n')

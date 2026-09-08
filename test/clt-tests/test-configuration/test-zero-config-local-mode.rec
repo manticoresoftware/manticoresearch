@@ -1060,8 +1060,15 @@ for i in {1..100}; do
     && [ -S "$local_dir/manticore_data/extra-mysql.sock" ] && break
   sleep 0.1
 done
-timeout 2 bash -c "exec 3<>/dev/tcp/127.0.0.1/$local_binary_port" \
-  || fail 'additive --port binary listener did not accept a connection'
+# Socket paths can exist before searchd calls listen(); wait for a real connection.
+if ! timeout 10 bash -c '
+  until (exec 3<>/dev/tcp/127.0.0.1/"$1") 2>/dev/null; do
+    sleep 0.1
+  done
+' bash "$local_binary_port"; then
+  tail -n 100 "$local_dir/manticore_data/searchd.log" >&2
+  fail 'additive --port binary listener did not accept a connection within 10 seconds'
+fi
 extra_http=$(cd "$local_dir/manticore_data" && curl -fsS --max-time 2 --unix-socket extra-http.sock \
   -X POST 'http://localhost/sql?mode=raw' -d 'SELECT 921 AS extra_http') \
   || fail 'additive HTTP listener did not answer'

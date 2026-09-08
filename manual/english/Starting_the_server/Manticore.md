@@ -122,7 +122,7 @@ cd my-search-project
 manticore start local
 ```
 
-For a local instance, `manticore` invokes the matching `searchd --local`. For a configured instance, it uses `manticore.service` when systemd is available and the service is installed; otherwise it invokes the matching `searchd` directly. If systemd is selected and the service operation fails, `manticore` reports the failure and does not start a second daemon directly.
+For a local instance, `manticore` invokes the matching `searchd --local`. For the normally configured global instance, it uses `manticore.service` when systemd is available and the service is installed; otherwise it invokes the matching `searchd` directly. If systemd is selected and the service operation fails, `manticore` reports the failure and does not start a second daemon directly. To manage another configured instance, invoke `searchd --config FILE` directly.
 
 ## Stopping an instance
 
@@ -157,7 +157,7 @@ PID: 18472
 Socket: manticore_data/searchd.sock (present)
 ```
 
-For a configured instance, `manticore status global` runs the matching `searchd --status` and preserves its output and exit status.
+For the normally configured global instance, `manticore status global` runs the matching `searchd --status` and preserves its output and exit status. To query another configured instance, run `searchd --config FILE --status` directly.
 
 ## Local instance files
 

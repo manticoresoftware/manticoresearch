@@ -73,7 +73,8 @@ separate \fBstopwait\fR command.
 .TP
 \fBstatus\fR [\fBlocal\fR|\fBglobal\fR]
 Report local PID, socket, process, and SQL readiness, or wrap \fBsearchd
---status\fR for the configured instance.
+--status\fR for the normally configured global instance. Use \fBsearchd
+--config FILE\fR directly for another configured instance.
 .PP
 Without an explicit target, lifecycle commands select local mode when
 \fB./manticore_data\fR exists and global mode otherwise. For global lifecycle
@@ -91,7 +92,7 @@ $ manticore stop
 .fi
 .RE
 .PP
-Query the configured instance while inside a local project directory:
+Query the normally configured global instance while inside a local project directory:
 .PP
 .RS
 .nf

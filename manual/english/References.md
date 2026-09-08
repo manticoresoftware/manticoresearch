@@ -459,7 +459,7 @@ manticore status [local|global]
 ##### Lifecycle commands
 * [`start [local|global]`](Starting_the_server/Manticore.md#Starting-an-instance) - Starts the selected instance and waits until SQL is ready
 * [`stop [local|global]`](Starting_the_server/Manticore.md#Stopping-an-instance) - Stops the selected instance and waits for shutdown
-* [`status [local|global]`](Starting_the_server/Manticore.md#Checking-status) - Checks local readiness or reports configured-instance status
+* [`status [local|global]`](Starting_the_server/Manticore.md#Checking-status) - Checks local readiness or reports normally configured global-instance status
 
 ## [Searchd](Starting_the_server/Manually.md)
 `searchd` is the Manticore server.

@@ -888,8 +888,10 @@ static int64_t DocidLookupHeaderSize ( DWORD uIndexVersion )
 
 bool CheckDocidLookupFormat ( const BYTE * pData, int64_t iDataLen, DWORD uIndexVersion, CSphString & sError )
 {
-	// older layouts (a 2019 lookup is 10 bytes) were never validated; keep reading them as before
-	if ( uIndexVersion<DOCID_LOOKUP_SPLIT_VERSION )
+	// only v.71/v.72 headers are suspect (manticoresearch#4852: their daemons could rewrite a header on
+	// ALTER without converting the lookup); older headers always pair with their own layout, and v.73+
+	// is written with the lookup in sync
+	if ( uIndexVersion<DOCID_LOOKUP_SUSPECT_MIN || uIndexVersion>DOCID_LOOKUP_SUSPECT_MAX )
 		return true;
 
 	int64_t iHeader = DocidLookupHeaderSize ( uIndexVersion );

@@ -274,6 +274,13 @@ bool	WriteDocidLookup ( const CSphString & sFilename, const VecTraits_T<DocidRow
 /// exist in both layouts). Lookups of older tables (down to the supported v.54) are read as-is and never validated
 constexpr DWORD DOCID_LOOKUP_SPLIT_VERSION = 65;
 
+/// v.71/v.72 headers must have their lookup verified; v.73/v.74 are their fixed twins (see sphinxint.h)
+constexpr DWORD DOCID_LOOKUP_SUSPECT_MIN = 71;
+constexpr DWORD DOCID_LOOKUP_SUSPECT_MAX = 72;
+
+/// the version a header gets when it is (re)written with the lookup known to be in sync
+inline DWORD FixedIndexFormatVersion ( DWORD uVersion ) { return ( uVersion==72 || uVersion==74 ) ? 74 : 73; }
+
 /// index format version that added the UUID entries offset to the .spt header
 /// the lookup readers are gated on the index header version, so the header and the .spt must agree
 constexpr DWORD DOCID_LOOKUP_UUID_VERSION = 71;

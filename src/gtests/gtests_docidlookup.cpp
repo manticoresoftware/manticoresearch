@@ -171,7 +171,8 @@ TEST_F ( UuidDocidLookupTest, FormatCheckAndUpgrade )
 		Map ( tData );
 		CSphString sError;
 		EXPECT_TRUE ( CheckDocidLookupFormat ( tData.GetReadPtr(), tData.GetLengthBytes(), UUID_INDEX_VERSION, sError ) ) << sError.cstr();
-		EXPECT_FALSE ( CheckDocidLookupFormat ( tData.GetReadPtr(), tData.GetLengthBytes(), UUID_INDEX_VERSION-1, sError ) );
+		EXPECT_TRUE ( CheckDocidLookupFormat ( tData.GetReadPtr(), tData.GetLengthBytes(), UUID_INDEX_VERSION+1, sError ) ) << sError.cstr(); // v.72: same layout
+		EXPECT_TRUE ( CheckDocidLookupFormat ( tData.GetReadPtr(), tData.GetLengthBytes(), UUID_INDEX_VERSION-1, sError ) ); // v.70 is not suspect - never checked
 	}
 
 	DowngradeToV70();
@@ -181,13 +182,17 @@ TEST_F ( UuidDocidLookupTest, FormatCheckAndUpgrade )
 		CSphString sError;
 		EXPECT_TRUE ( CheckDocidLookupFormat ( tData.GetReadPtr(), tData.GetLengthBytes(), UUID_INDEX_VERSION-1, sError ) ) << sError.cstr();
 		EXPECT_FALSE ( CheckDocidLookupFormat ( tData.GetReadPtr(), tData.GetLengthBytes(), UUID_INDEX_VERSION, sError ) );
+		EXPECT_FALSE ( CheckDocidLookupFormat ( tData.GetReadPtr(), tData.GetLengthBytes(), DOCID_LOOKUP_SUSPECT_MAX, sError ) ); // v.72 is suspect too
+		EXPECT_TRUE ( CheckDocidLookupFormat ( tData.GetReadPtr(), tData.GetLengthBytes(), DOCID_LOOKUP_SUSPECT_MAX+1, sError ) ) << sError.cstr(); // v.73+: fixed, never checked
 		EXPECT_TRUE ( strstr ( sError.cstr(), "pre-v.71" ) ) << sError.cstr();
 		EXPECT_EQ ( DetectDocidLookupVersion ( tData.GetReadPtr(), tData.GetLengthBytes() ), UUID_INDEX_VERSION-1 );
 
-		// lookups of tables older than the split-lookup layout are never validated (a v.54 lookup is 10 bytes)
+		// only suspect headers are validated: a legacy lookup (a v.54 file is 10 bytes) passes under any
+		// non-suspect version and fails under a suspect one
 		const BYTE dLegacy[10] = { 3, 0, 0, 0, 0, 1, 1, 0, 0, 0 };
 		EXPECT_TRUE ( CheckDocidLookupFormat ( dLegacy, sizeof(dLegacy), DOCID_LOOKUP_SPLIT_VERSION-1, sError ) ) << sError.cstr();
-		EXPECT_FALSE ( CheckDocidLookupFormat ( dLegacy, sizeof(dLegacy), DOCID_LOOKUP_SPLIT_VERSION, sError ) );
+		EXPECT_TRUE ( CheckDocidLookupFormat ( dLegacy, sizeof(dLegacy), DOCID_LOOKUP_SPLIT_VERSION, sError ) ) << sError.cstr();
+		EXPECT_FALSE ( CheckDocidLookupFormat ( dLegacy, sizeof(dLegacy), DOCID_LOOKUP_SUSPECT_MIN, sError ) );
 		EXPECT_TRUE ( UpgradeDocidLookupFile ( m_sFile, DOCID_LOOKUP_SPLIT_VERSION-1, sError ) ) << sError.cstr(); // no-op below the gate
 		EXPECT_EQ ( DetectDocidLookupVersion ( tData.GetReadPtr(), tData.GetLengthBytes() ), UUID_INDEX_VERSION-1 ); // the file is untouched
 
@@ -218,6 +223,13 @@ TEST_F ( UuidDocidLookupTest, FormatCheckAndUpgrade )
 
 	// upgrading a current-format file is a no-op
 	ASSERT_TRUE ( UpgradeDocidLookupFile ( m_sFile, UUID_INDEX_VERSION, sError ) ) << sError.cstr();
+
+	// the fixed twins: 71->73, 72->74; already-fixed versions keep their number
+	EXPECT_EQ ( FixedIndexFormatVersion(70), 73U );
+	EXPECT_EQ ( FixedIndexFormatVersion(71), 73U );
+	EXPECT_EQ ( FixedIndexFormatVersion(72), 74U );
+	EXPECT_EQ ( FixedIndexFormatVersion(73), 73U );
+	EXPECT_EQ ( FixedIndexFormatVersion(74), 74U );
 }
 
 } // namespace

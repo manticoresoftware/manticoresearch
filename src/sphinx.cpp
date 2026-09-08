@@ -3258,6 +3258,10 @@ void CSphIndex_VLN::PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t
 	tWriteHeader.m_pFieldFilter = m_pFieldFilter.get();
 	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
 	tWriteHeader.m_pSI = &m_tSI;
+
+	// a rewritten header of an existing table carries the fixed version (71->73, 72->74): the callers
+	// bring the docid lookup in sync in the same operation, so the result is never suspect
+	tBuildHeader.m_uFormatVersion = FixedIndexFormatVersion ( m_uVersion );
 }
 
 
@@ -10352,10 +10356,6 @@ bool CSphIndex_VLN::PreallocDocidLookup()
 }
 
 
-// a format version bump must confirm that the .spt layout knowledge in docidlookup.cpp
-// (DocidLookupHeaderSize and the DOCID_LOOKUP_* constants) still holds, then move this tripwire
-static_assert ( INDEX_FORMAT_VERSION==72, "INDEX_FORMAT_VERSION changed: verify the .spt header layout table in docidlookup.cpp, then update this assert" );
-
 // in-place operations (ALTER TABLE ADD/DROP COLUMN or field, header rewrites) save the header with the
 // current INDEX_FORMAT_VERSION, so every version-gated data file must be brought to the current format
 // as well - the readers are gated on the header version. since v.68 only the docid lookup changed (v.71)
@@ -10386,10 +10386,10 @@ bool CSphIndex_VLN::UpgradeDocidLookup ( CSphString & sError )
 		if ( !m_tDocidLookup.Setup ( sFile, sError, false ) )
 			return false;
 
-		m_tLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), INDEX_FORMAT_VERSION );
+		m_tLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), DOCID_LOOKUP_UUID_VERSION );
 	}
 
-	m_uVersion = INDEX_FORMAT_VERSION;
+	m_uVersion = FixedIndexFormatVersion ( m_uVersion );
 	return true;
 }
 

@@ -214,8 +214,12 @@ class BlobStream_c final: public CharStream_c
 
 public:
 	BlobStream_c ( const CSphString & sData )
+		: BlobStream_c ( FromStr ( sData ) )
+	{}
+
+	explicit BlobStream_c ( Str_t sData )
 		: CharStream_c ( nullptr )
-		, m_sData { FromStr ( sData ) }
+		, m_sData { sData }
 	{}
 
 	Str_t Read() final
@@ -320,7 +324,7 @@ public:
 			m_bDone = true;
 			return dEmptyStr;
 		}
-		return Str_t ( m_dUnpacked );
+		return { (const char*)m_dUnpacked.Begin(), m_dUnpacked.GetLength()-1 };
 	}
 };
 
@@ -2284,6 +2288,12 @@ public:
 		int iCurLine = 0;
 		int iLastTxStartLine = 0;
 
+		if ( m_tSource.GetError() )
+		{
+			m_sError = m_tSource.GetErrorMessage();
+			return FinishBulk ( tResults, bResult, iCurLine, iLastTxStartLine, EHTTP_STATUS::_400 );
+		}
+
 		if ( m_tSource.Eof() )
 			return FinishBulk ( tResults, bResult, iCurLine, iLastTxStartLine );
 
@@ -2296,8 +2306,16 @@ public:
 		while ( !m_tSource.Eof() )
 		{
 			auto tQuery = m_tSource.ReadLine();
-			tQuery = TrimHeadSpace ( tQuery ); // could be a line with only whitespace chars
 			++iCurLine;
+
+			if ( m_tSource.GetError() )
+			{
+				m_sError = m_tSource.GetErrorMessage();
+				RollbackBulkTxn ( tTxnState );
+				return FinishBulk ( tResults, bResult, iCurLine, iLastTxStartLine, EHTTP_STATUS::_400 );
+			}
+
+			tQuery = TrimHeadSpace ( tQuery ); // could be a line with only whitespace chars
 
 			DocID_t tDocId = 0;
 			JsonObj_c tResult = JsonNull;
@@ -2587,7 +2605,8 @@ public:
 	bool Process () final;
 };
 
-static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoint, CharStream_c & tSource, Str_t & sQuery, OptionsHash_t & tOptions, http_method eRequestType )
+static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoint, CharStream_c & tSource, Str_t & sQuery, OptionsHash_t & tOptions,
+	http_method eRequestType, bool bCompressed, std::unique_ptr<CharStream_c> & pDecodedSource )
 {
 	const CSphString * pOption = nullptr;
 	sQuery = dEmptyStr;
@@ -2690,7 +2709,18 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoi
 			return std::make_unique<HttpHandler_JsonDelete_c> ( sQuery, tOptions ); // json
 
 	case EHTTP_ENDPOINT::JSON_BULK:
-		return std::make_unique<HttpHandler_JsonBulk_c> ( tSource, tOptions ); // json
+		if ( bCompressed )
+		{
+			// Decode and validate the complete gzip entity before streaming decoded NDJSON lines into /bulk.
+			SetQuery ( tSource.ReadAll() );
+			if ( tSource.GetError() )
+				return std::make_unique<HttpHandler_JsonBulk_c> ( tSource, tOptions ); // json
+
+			pDecodedSource = std::make_unique<BlobStream_c> ( sQuery );
+			return std::make_unique<HttpHandler_JsonBulk_c> ( *pDecodedSource, tOptions ); // json
+		}
+		else
+			return std::make_unique<HttpHandler_JsonBulk_c> ( tSource, tOptions ); // json
 
 	case EHTTP_ENDPOINT::PQ:
 		SetQuery ( tSource.ReadAll() );
@@ -2723,7 +2753,7 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoi
 	return nullptr;
 }
 
-HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType, bool bSkipAuth )
+HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType, bool bSkipAuth, bool bCompressed )
 {
 	TRACE_CONN ( "conn", "ProcessHttpQuery" );
 
@@ -2738,7 +2768,9 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 	// should set client user to pass it further into distributed index
 	session::SetUser ( sUser );
 
-	std::unique_ptr<HttpHandler_c> pHandler = CreateHttpHandler ( tRes.m_eEndpoint, tSource, sSrcQuery, hOptions, eRequestType );
+	// Keeps the decoded /bulk blob stream alive while the handler reads it.
+	std::unique_ptr<CharStream_c> pDecodedSource;
+	std::unique_ptr<HttpHandler_c> pHandler = CreateHttpHandler ( tRes.m_eEndpoint, tSource, sSrcQuery, hOptions, eRequestType, bCompressed, pDecodedSource );
 	if ( !pHandler )
 	{
 		if ( tRes.m_eEndpoint == EHTTP_ENDPOINT::INDEX )
@@ -2783,7 +2815,7 @@ void ProcessHttpJsonQuery ( const CSphString & sQuery, OptionsHash_t & hOptions,
 	BlobStream_c tQuery ( sQuery );
 	Str_t sSrcQuery;
 	// no need to issue authentification as it checked at the API interface 
-	HttpProcessResult_t tRes = ProcessHttpQuery ( tQuery, sSrcQuery, hOptions, dResult, false, eReqType, true );
+	HttpProcessResult_t tRes = ProcessHttpQuery ( tQuery, sSrcQuery, hOptions, dResult, false, eReqType, true, false );
 	ProcessHttpQueryBuddy ( tRes, sSrcQuery, hOptions, dResult, false, eReqType );
 }
 
@@ -2838,7 +2870,7 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 
 	} else
 	{
-		tRes = ProcessHttpQuery ( *pSource, sSrcQuery, m_hOptions, dResult, true, m_eType, false );
+		tRes = ProcessHttpQuery ( *pSource, sSrcQuery, m_hOptions, dResult, true, m_eType, false, bCompressed );
 	}
 
 	return ProcessHttpQueryBuddy ( tRes, sSrcQuery, m_hOptions, dResult, true, m_eType );

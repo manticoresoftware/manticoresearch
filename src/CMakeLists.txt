@@ -214,13 +214,13 @@ target_link_libraries ( digest_sha1 PRIVATE lextra )
 target_link_libraries ( digest_sha256 PRIVATE lextra )
 add_subdirectory ( sqlchecks )
 add_library ( listener_parser STATIC listenerparser.cpp )
-target_link_libraries ( listener_parser PUBLIC lmanticore )
+target_link_libraries ( listener_parser PRIVATE lmanticore )
 
 target_link_libraries ( lsearchd PUBLIC listener_parser sqlchecks digest_sha1 digest_sha256 lextra nlohmann_json::nlohmann_json uni-algo::uni-algo )
 target_link_libraries ( lsearchd INTERFACE Boost::filesystem )
 
 add_library ( manticore_client STATIC manticoreclient.cpp searchdlocalclient.cpp searchdlocalhistory.cpp )
-target_link_libraries ( manticore_client PUBLIC lmanticore listener_parser )
+target_link_libraries ( manticore_client PRIVATE lmanticore listener_parser )
 
 # Interactive client mode loads LibEdit at runtime so package builds do not
 # need its headers. Prefer the SONAME found by the build system, while the
@@ -236,7 +236,7 @@ if (NOT WIN32 AND NOT APPLE AND HAVE_DLOPEN)
 endif ()
 
 add_library ( manticore_cli STATIC manticorecli.cpp )
-target_link_libraries ( manticore_cli PUBLIC manticore_client lmanticore )
+target_link_libraries ( manticore_cli PRIVATE manticore_client lmanticore )
 if (WIN32)
 target_link_libraries ( lsearchd PRIVATE iphlpapi WS2_32 wsock32 )
 endif()
@@ -310,7 +310,7 @@ add_subdirectory ( daemon )
 add_executable ( searchd searchd.cpp )
 target_link_libraries ( searchd daemon searchd_ssl lmanticore lsearchd )
 add_executable ( manticore manticore.cpp )
-target_link_libraries ( manticore manticore_cli lmanticore )
+target_link_libraries ( manticore PRIVATE manticore_cli )
 target_compile_definitions ( manticore_cli PRIVATE MANTICORE_INSTALL_BINDIR="${CMAKE_INSTALL_FULL_BINDIR}" )
 
 if (NOT STATIC_BINARY)

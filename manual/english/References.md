@@ -453,7 +453,7 @@ manticore status [local|global]
 * [`--execute, -e`](Starting_the_server/Manticore.md#Connecting-to-Manticore-Search) - Executes SQL once and exits
 * [`--global`](Starting_the_server/Manticore.md#Automatic-target-selection) - Ignores `./manticore_data` and uses normal configuration discovery
 * [`--local`](Starting_the_server/Manticore.md#Automatic-target-selection) - Requires the current-directory local instance
-* [`--help, -h`](Starting_the_server/Manticore.md#Client-options) - Displays command help
+* [`--help, -?`](Starting_the_server/Manticore.md#Client-options) - Displays command help
 * [`--version, -v`](Starting_the_server/Manticore.md#Client-options) - Displays the matching Manticore Search version
 
 ##### Lifecycle commands

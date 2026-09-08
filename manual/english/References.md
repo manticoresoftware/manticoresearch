@@ -577,7 +577,7 @@ searchd [OPTIONS]
 * [--table (--index)](Starting_the_server/Manually.md#searchd-command-line-options) - Restricts the server to serve only the specified table
 * [--install](Starting_the_server/Manually.md#searchd-command-line-options) - Installs searchd as a service in Microsoft Management Console
 * [--iostats](Starting_the_server/Manually.md#searchd-command-line-options) - Enables input/output reporting
-* [--listen](Starting_the_server/Manually.md#searchd-command-line-options) - Overrides [listen](Server_settings/Searchd.md#listen) from the configuration file
+* [--listen](Starting_the_server/Manually.md#searchd-command-line-options) - Overrides configured listeners, or adds repeatable listeners in local mode
 * [--local, -l](Starting_the_server/Manually.md#Local-configless-mode) - Starts an isolated zero-configuration instance in `./manticore_data`
 * [--logdebug, --logdebugv, --logdebugvv](Starting_the_server/Manually.md#searchd-command-line-options) - Enables additional debug output in the server log
 * [--logreplication](Starting_the_server/Manually.md#searchd-command-line-options) - Enables extra replication debug output in the server log
@@ -586,7 +586,7 @@ searchd [OPTIONS]
 * [--nodetach](Starting_the_server/Manually.md#searchd-command-line-options) - Keeps searchd running in the foreground
 * [--ntservice](Starting_the_server/Manually.md#searchd-command-line-options) - Used by Microsoft Management Console to launch searchd as a service on Windows platforms
 * [--pidfile](Starting_the_server/Manually.md#searchd-command-line-options) - Overrides [pid_file](Server_settings/Searchd.md#pid_file) in the configuration file
-* [--port, p](Starting_the_server/Manually.md#searchd-command-line-options) - Specifies the port searchd should listen on, ignoring the port specified in the configuration file
+* [--port, -p](Starting_the_server/Manually.md#searchd-command-line-options) - Overrides configured listeners, or adds a binary TCP listener in local mode
 * [--replay-flags](Starting_the_server/Manually.md#searchd-command-line-options) - Sets additional binary log replay options
 * [--servicename](Starting_the_server/Manually.md#searchd-command-line-options) - Assigns the given name to searchd when installing or deleting the service, as displayed in Microsoft Management Console
 * [--status](Starting_the_server/Manually.md#searchd-command-line-options) - Queries the running search service to return its status

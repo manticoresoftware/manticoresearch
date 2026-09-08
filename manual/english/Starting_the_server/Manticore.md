@@ -165,6 +165,7 @@ A [local configless instance](Starting_the_server/Manually.md#Local-configless-m
 
 - `.manticore-local` — versioned marker that identifies the directory as a local instance;
 - `searchd.sock` — local HTTP Unix socket used by `manticore`;
+- `mysql.sock` — local MySQL-protocol Unix socket for `mysql` and compatible connectors;
 - `searchd.pid` — daemon PID file;
 - `searchd.log` — daemon log;
 - `.history` — interactive client history;

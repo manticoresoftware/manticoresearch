@@ -91,10 +91,10 @@ Direct connections currently support the standard anonymous Manticore Search MyS
 
 Without an explicit target, `manticore` selects the instance from the current directory:
 
-1. If `./manticore_data` exists, `manticore` uses the local instance and connects through `./manticore_data/searchd.sock`.
-2. If `./manticore_data` does not exist, `manticore` uses normal configuration discovery and connects to the first usable HTTP or binary listener. MySQL-protocol listeners are skipped.
+1. If `./manticore_data/.manticore-local` is a valid local instance marker, `manticore` uses the local instance and connects through `./manticore_data/searchd.sock`.
+2. If the marker is absent, `manticore` uses normal configuration discovery and connects to the first usable HTTP or binary listener. MySQL-protocol listeners are skipped.
 
-An existing `manticore_data` path is authoritative. If it is invalid, inaccessible, stale, or its local daemon is not running, `manticore` reports an error instead of silently connecting to a configured instance. Use `--global` when you intentionally want the configured instance from a directory that contains `manticore_data`:
+A valid local marker is authoritative. If the marked instance is invalid, inaccessible, stale, or its daemon is not running, `manticore` reports an error instead of silently connecting to a configured instance. An unrelated file or unmarked directory named `manticore_data` does not select local mode. Use `--global` when you intentionally want the configured instance from a marked local directory:
 
 ```bash
 manticore --global -e 'SHOW TABLES'
@@ -114,7 +114,7 @@ manticore start [local|global]
 
 The command waits until Manticore Search is ready to execute SQL before returning success.
 
-Without an explicit target, it starts the local instance when `./manticore_data` exists and the configured instance otherwise. `manticore start local` is the exception that can create a new `./manticore_data` directory:
+Without an explicit target, it starts the local instance when a valid marker exists and the normally configured global instance when the marker is absent. An invalid marker is reported as an error. `manticore start local` creates or adopts `./manticore_data` and writes the marker:
 
 ```bash
 mkdir my-search-project
@@ -132,7 +132,7 @@ manticore stop [local|global]
 
 `manticore stop` always waits for shutdown to finish. There is no separate `manticore stopwait` command.
 
-Without an explicit target, it stops the local instance when `./manticore_data` exists and the configured instance otherwise:
+Without an explicit target, it stops the local instance when `./manticore_data/.manticore-local` is valid and the normally configured global instance when the marker is absent. An invalid marker is reported as an error:
 
 ```bash
 manticore stop          # automatic target selection
@@ -163,7 +163,8 @@ For the normally configured global instance, `manticore status global` runs the 
 
 A [local configless instance](Starting_the_server/Manually.md#Local-configless-mode) stores its state under `./manticore_data`:
 
-- `searchd.sock` — local HTTP Unix socket;
+- `.manticore-local` — versioned marker that identifies the directory as a local instance;
+- `searchd.sock` — local HTTP Unix socket used by `manticore`;
 - `searchd.pid` — daemon PID file;
 - `searchd.log` — daemon log;
 - `.history` — interactive client history;

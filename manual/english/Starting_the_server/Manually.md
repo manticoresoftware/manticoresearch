@@ -28,12 +28,13 @@ manticore start local
 
 Local mode creates or reuses `./manticore_data`, secures the directory to the current user, and uses:
 
+- `manticore_data/.manticore-local` as an explicit local-instance marker;
 - `manticore_data/searchd.sock` as an HTTP Unix socket;
 - `manticore_data/searchd.pid` as the PID file;
 - `manticore_data/searchd.log` as the server log;
 - `manticore_data` as the data directory for tables and binary logs.
 
-It does not open a TCP listener and does not use the globally configured instance. Connect with [`manticore`](Starting_the_server/Manticore.md), which automatically selects the local socket when `./manticore_data` exists:
+It does not open a TCP listener by default and does not use the globally configured instance. Connect with [`manticore`](Starting_the_server/Manticore.md), which automatically selects a directory containing a valid `.manticore-local` marker:
 
 ```bash
 manticore -e 'SHOW TABLES'

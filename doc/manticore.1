@@ -17,14 +17,17 @@ manticore \- Manticore Search SQL client and lifecycle manager
 .HP \w'\fBmanticore\fR\ 'u
 \fBmanticore\fR \fBstatus\fR [\fBlocal\fR|\fBglobal\fR]
 .SH "DESCRIPTION"
-\fBmanticore\fR is the primary user-facing command for querying and managing
-Manticore Search. With no lifecycle command it starts the SQL client. When
-\fB./manticore_data\fR exists, the command selects that current-directory
-local instance; otherwise it selects the normally configured instance.
+\fBmanticore\fR is a bundled CLI for local development, basic SQL, scripts,
+and lifecycle operations. With no lifecycle command it starts the SQL client.
+When \fB./manticore_data/.manticore-local\fR is valid, the command selects that
+current-directory local instance. When the marker is absent, it selects the normally
+configured global instance. Use standard MySQL clients and connectors for advanced MySQL
+tooling, TLS, authentication, and compression, or the HTTP API for JSON and
+multi-result workflows.
 .PP
-An existing local marker is authoritative. A malformed, inaccessible, stale,
+An existing valid local marker is authoritative. A malformed, inaccessible, stale,
 or unavailable local instance causes an error rather than an implicit fallback
-to the configured instance.
+to the global instance.
 .SH "CLIENT OPTIONS"
 .TP
 \fB\-c\fR, \fB\-\-config\fR \fIFILE\fR
@@ -77,7 +80,8 @@ Report local PID, socket, process, and SQL readiness, or wrap \fBsearchd
 --config FILE\fR directly for another configured instance.
 .PP
 Without an explicit target, lifecycle commands select local mode when
-\fB./manticore_data\fR exists and global mode otherwise. For global lifecycle
+\fB./manticore_data/.manticore-local\fR is valid and global mode when the marker is absent.
+An invalid marker is an error. For global lifecycle
 operations, an installed and usable \fBmanticore.service\fR is authoritative;
 otherwise the matching \fBsearchd\fR executable is invoked directly.
 .SH "EXAMPLES"
@@ -118,6 +122,9 @@ $ printf 'SHOW TABLES;\n' | manticore
 .fi
 .RE
 .SH "FILES"
+.TP
+\fB./manticore_data/.manticore-local\fR
+Versioned marker identifying a project-local instance.
 .TP
 \fB./manticore_data/searchd.sock\fR
 Local HTTP Unix socket.

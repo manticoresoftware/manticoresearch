@@ -152,6 +152,7 @@ body:
       value: |
         <sup>To be completed by the assignee. Check off tasks that have been completed or are not applicable.</sup>
         <details>
+
         - [ ] Implementation completed
         - [ ] Tests developed
         - [ ] Documentation updated

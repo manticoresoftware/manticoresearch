@@ -1,0 +1,115 @@
+––– comment –––
+Regression for fixed-length gzip /bulk delivery across socket reads. The PHP program
+builds valid native-bulk NDJSON with two 1 MiB documents, gzip-encodes it once, and
+uses that exact compressed buffer for both gzip cases. It sends the normal case as
+one logical write and the regression case in two parts, with a 150 ms gap after the
+first 1,000 compressed bytes. write_all() retries genuine short writes, so every
+request sends exactly its declared Content-Length. No Transfer-Encoding is used.
+The uncompressed split case is a control: a receive boundary alone must not lose
+ordinary /bulk data.
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS gzip_bulk_socket_delivery; CREATE TABLE gzip_bulk_socket_delivery (title TEXT);"
+––– output –––
+––– input –––
+php <<'PHP'
+<?php
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+
+const SPLIT_AT = 1000;
+const SPLIT_DELAY_US = 150000;
+
+function write_all($socket, string $bytes): void
+{
+    for ($offset = 0, $length = strlen($bytes); $offset < $length; ) {
+        $written = fwrite($socket, substr($bytes, $offset));
+        if ($written === false || $written === 0) {
+            throw new RuntimeException('socket write failed');
+        }
+        $offset += $written;
+    }
+}
+
+function send_bulk(string $body, bool $isGzip, bool $split): array
+{
+    $socket = stream_socket_client('tcp://127.0.0.1:9308', $errno, $error, 5, STREAM_CLIENT_CONNECT);
+    if ($socket === false) {
+        throw new RuntimeException("socket connect failed: $error ($errno)");
+    }
+
+    stream_set_timeout($socket, 10);
+    $headers = "POST /bulk HTTP/1.1\r\n"
+        . "Host: 127.0.0.1\r\n"
+        . "Content-Type: application/x-ndjson\r\n"
+        . ($isGzip ? "Content-Encoding: gzip\r\n" : '')
+        . 'Content-Length: ' . strlen($body) . "\r\n"
+        . "Connection: close\r\n\r\n";
+
+    if ($split) {
+        write_all($socket, $headers . substr($body, 0, SPLIT_AT));
+        if (!fflush($socket)) {
+            throw new RuntimeException('socket flush failed');
+        }
+        usleep(SPLIT_DELAY_US);
+        write_all($socket, substr($body, SPLIT_AT));
+    } else {
+        // One logical application write; write_all() only retries short writes.
+        write_all($socket, $headers . $body);
+    }
+
+    if (!stream_socket_shutdown($socket, STREAM_SHUT_WR)) {
+        throw new RuntimeException('socket shutdown failed');
+    }
+    $response = stream_get_contents($socket);
+    $metadata = stream_get_meta_data($socket);
+    fclose($socket);
+
+    if ($response === false || $metadata['timed_out']) {
+        throw new RuntimeException('timed out reading HTTP response');
+    }
+    if (!preg_match('/^HTTP\/[^ ]+ ([0-9]{3})/', $response, $match)) {
+        throw new RuntimeException('missing HTTP status line');
+    }
+
+    $errors = strpos($response, '"errors":false') !== false ? 'false'
+        : (strpos($response, '"errors":true') !== false ? 'true' : 'missing');
+    return [$match[1], $errors];
+}
+
+function row_stats(mysqli $db, string $table): array
+{
+    $row = $db->query("SELECT COUNT(*) AS rows_count, SUM(id) AS ids_sum FROM $table")->fetch_assoc();
+    return [$row['rows_count'], $row['ids_sum'] ?? 'none'];
+}
+
+function print_case(string $name, array $response, mysqli $db, string $table): void
+{
+    [$rows, $ids] = row_stats($db, $table);
+    printf("%s status=%s errors=%s rows=%s ids=%s\n", $name, $response[0], $response[1], $rows, $ids);
+}
+
+$table = 'gzip_bulk_socket_delivery';
+$title = str_repeat('x', 1024 * 1024);
+$line1 = json_encode(['insert' => ['index' => $table, 'id' => 1, 'doc' => ['title' => $title]]], JSON_THROW_ON_ERROR);
+$line2 = json_encode(['insert' => ['index' => $table, 'id' => 2, 'doc' => ['title' => $title]]], JSON_THROW_ON_ERROR);
+$ndjson = $line1 . "\n" . $line2; // Match ordinary callback delivery: no final newline is needed.
+$gzip = gzencode($ndjson, 6, ZLIB_ENCODING_GZIP);
+if ($gzip === false || strlen($gzip) <= SPLIT_AT || gzdecode($gzip) !== $ndjson) {
+    throw new RuntimeException('invalid gzip fixture');
+}
+foreach (explode("\n", $ndjson) as $line) {
+    json_decode($line, true, 512, JSON_THROW_ON_ERROR);
+}
+
+$db = new mysqli('127.0.0.1', '', '', '', 9306);
+print_case('gzip-normal', send_bulk($gzip, true, false), $db, $table);
+$db->query("TRUNCATE TABLE $table");
+print_case('gzip-split', send_bulk($gzip, true, true), $db, $table);
+$db->query("TRUNCATE TABLE $table");
+print_case('plain-split', send_bulk($ndjson, false, true), $db, $table);
+$db->close();
+PHP
+––– output –––
+gzip-normal status=200 errors=false rows=2 ids=3
+gzip-split status=200 errors=false rows=2 ids=3
+plain-split status=200 errors=false rows=2 ids=3

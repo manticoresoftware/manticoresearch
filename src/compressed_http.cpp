@@ -45,14 +45,32 @@ bool GzipDecompress ( const ByteBlob_t sIn, CSphVector<BYTE> & dRes, CSphString 
 		tInflate.avail_out = iBufSize;
 		
 		int iRes = inflate ( &tInflate, Z_FINISH );
-		if ( iRes!=Z_STREAM_END && iRes!=Z_OK && iRes!=Z_BUF_ERROR )
+		int iProduced = iBufSize - tInflate.avail_out;
+		iDecompressed += iProduced;
+
+		if ( iRes==Z_STREAM_END )
+			break;
+
+		if ( iRes!=Z_OK && iRes!=Z_BUF_ERROR )
 		{
-			sError.SetSprintf ( "gzip error: %s", tInflate.msg );
+			sError.SetSprintf ( "gzip error: %s", tInflate.msg ? tInflate.msg : "decompression failed" );
 			inflateEnd ( &tInflate );
 			return false;
 		}
 
-		iDecompressed += ( iBufSize - tInflate.avail_out );
+		if ( tInflate.avail_out!=0 )
+		{
+			sError = "gzip error: unexpected end of stream";
+			inflateEnd ( &tInflate );
+			return false;
+		}
+
+		if ( !iProduced )
+		{
+			sError = "gzip error: decompressor made no progress";
+			inflateEnd ( &tInflate );
+			return false;
+		}
 	}
 
 	inflateEnd ( &tInflate );

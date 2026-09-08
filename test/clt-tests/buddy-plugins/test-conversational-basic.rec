@@ -72,34 +72,12 @@ EOF
 | test_assistant |
 +----------------+
 ––– comment –––
-Start a local OpenAI endpoint probe. It records the request URI and always
-returns an error, so this test proves transport selection without an external
-LLM credential.
-––– input –––
-rm -f /tmp/chat-model-requests.log /tmp/mock-chat-model-server.php
-cat > /tmp/mock-chat-model-server.php <<'PHP'
-<?php
-$logFile = getenv('CHAT_MODEL_REQUEST_LOG') ?: '';
-if ($logFile !== '') {
-    file_put_contents($logFile, ($_SERVER['REQUEST_URI'] ?? '') . PHP_EOL, FILE_APPEND | LOCK_EX);
-}
-http_response_code(502);
-header('Content-Type: application/json');
-echo '{"error":{"message":"CLT endpoint probe"}}';
-PHP
-CHAT_MODEL_REQUEST_LOG=/tmp/chat-model-requests.log php -S 127.0.0.1:18087 /tmp/mock-chat-model-server.php > /tmp/mock-chat-model-server.log 2>&1 &
-MOCK_CHAT_PID=$!
-sleep 1
-––– output –––
-––– comment –––
 Test CREATE CHAT MODEL - advanced configuration with custom settings
 ––– input –––
 mysql -h0 -P9306 << 'EOF'
 CREATE CHAT MODEL advanced_assistant (
     description='Chat GPT v4 reasoning model',
     model='openai:gpt-4o',
-    api_key='chat-model-key',
-    base_url='http://127.0.0.1:18087/configured/v1/responses',
     timeout=60,
     retrieval_limit=5,
     max_document_length=3000
@@ -164,33 +142,20 @@ property: model
 property: name
    value: advanced_assistant
 *************************** 5. row ***************************
-property: settings.api_key
-   value: HIDDEN
-*************************** 6. row ***************************
-property: settings.base_url
-   value: http://127.0.0.1:18087/configured/v1/responses
-*************************** 7. row ***************************
 property: settings.timeout
    value: 60
-*************************** 8. row ***************************
+*************************** 6. row ***************************
 property: settings.retrieval_limit
    value: 5
-*************************** 9. row ***************************
+*************************** 7. row ***************************
 property: settings.max_document_length
    value: 3000
-*************************** 10. row ***************************
+*************************** 8. row ***************************
 property: created_at
    value: %{NUMBER}
-*************************** 11. row ***************************
+*************************** 9. row ***************************
 property: updated_at
    value: %{NUMBER}
-––– comment –––
-Test CALL CHAT uses the model-specific base_url rather than the environment default
-––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('What is vector search?', 'docs', 'advanced_assistant')" > /dev/null 2>&1 || true
-sort -u /tmp/chat-model-requests.log
-––– output –––
-/configured/v1/responses
 ––– comment –––
 Test CALL CHAT - basic query without conversation UUID
 This should succeed with OPENAI_API_KEY set
@@ -226,9 +191,53 @@ mysql -h0 -P9306 -e "CALL CHAT('Can you explain more?', 'docs', 'test_assistant'
 #!/.*response: .+/!#
 #!/.*sources: \[\]/!#
 ––– comment –––
+Create a dedicated chat model for the endpoint probe. It is intentionally
+allowed to receive HTTP 502 responses and is never used by normal chat cases.
+––– input –––
+rm -f /tmp/chat-model-requests.log /tmp/mock-chat-model-server.php
+cat > /tmp/mock-chat-model-server.php <<'PHP'
+<?php
+$logFile = getenv('CHAT_MODEL_REQUEST_LOG') ?: '';
+if ($logFile !== '') {
+    file_put_contents($logFile, ($_SERVER['REQUEST_URI'] ?? '') . PHP_EOL, FILE_APPEND | LOCK_EX);
+}
+http_response_code(502);
+header('Content-Type: application/json');
+echo '{"error":{"message":"CLT endpoint probe"}}';
+PHP
+CHAT_MODEL_REQUEST_LOG=/tmp/chat-model-requests.log php -S 127.0.0.1:18087 /tmp/mock-chat-model-server.php > /tmp/mock-chat-model-server.log 2>&1 &
+MOCK_CHAT_PID=$!
+sleep 1
+mysql -h0 -P9306 << 'EOF'
+CREATE CHAT MODEL endpoint_probe_assistant (
+    model='openai:gpt-4o-mini',
+    api_key='chat-model-key',
+    base_url='http://127.0.0.1:18087/configured/v1/responses',
+    timeout=60
+);
+EOF
+––– output –––
++--------------------------+
+| name                     |
++--------------------------+
+| endpoint_probe_assistant |
++--------------------------+
+––– comment –––
+Test CALL CHAT uses the dedicated model-specific base_url rather than the environment default
+––– input –––
+mysql -h0 -P9306 -e "CALL CHAT('What is vector search?', 'docs', 'endpoint_probe_assistant')" > /dev/null 2>&1 || true
+sort -u /tmp/chat-model-requests.log
+––– output –––
+/configured/v1/responses
+––– comment –––
 Stop the local endpoint probe
 ––– input –––
 kill "$MOCK_CHAT_PID" 2>/dev/null || true
+––– output –––
+––– comment –––
+Remove the dedicated endpoint-probe model
+––– input –––
+mysql -h0 -P9306 -e "DROP CHAT MODEL endpoint_probe_assistant;"
 ––– output –––
 ––– comment –––
 Test DROP CHAT MODEL - cleanup

@@ -257,27 +257,43 @@ printf '%s' "$systemd_stop" | grep -q 'Manticore Search stopped' || fail 'succes
 alive "$configured_pid" || fail 'fake systemd lifecycle disturbed the direct configured daemon'
 pass 'systemd start/stop verifies final state and follows only its journal cursor'
 
-printf 'marker\n' > "$local_dir/manticore_data"
-if malformed_file=$(cd "$local_dir" && "$MANTICORE" -e 'SELECT 607 AS unsafe_global_fallback' 2>&1); then
-  fail 'manticore routed a non-directory local marker to the global daemon'
-fi
-printf '%s' "$malformed_file" | grep -q 'local data path .* is not a directory' || fail 'manticore did not explain the non-directory local marker'
-[ "$(cat "$local_dir/manticore_data")" = marker ] || fail 'manticore modified the non-directory local marker'
+printf 'unrelated\n' > "$local_dir/manticore_data"
+malformed_file=$(cd "$local_dir" && "$MANTICORE" -e 'SELECT 607 AS unmarked_global_fallback' 2>&1) \
+  || fail 'an unmarked non-directory manticore_data path blocked global discovery'
+printf '%s' "$malformed_file" | grep -q $'unmarked_global_fallback\n607' || fail 'an unmarked non-directory path selected local mode'
+[ "$(cat "$local_dir/manticore_data")" = unrelated ] || fail 'manticore modified the unrelated non-directory path'
 rm "$local_dir/manticore_data"
 
 ln -s missing-local-data "$local_dir/manticore_data"
-if malformed_symlink=$(cd "$local_dir" && "$MANTICORE" -e 'SELECT 608 AS unsafe_global_fallback' 2>&1); then
-  fail 'manticore routed a dangling local marker to the global daemon'
-fi
-printf '%s' "$malformed_symlink" | grep -q 'local data path .* is not a directory' || fail 'manticore did not explain the dangling local marker'
+malformed_symlink=$(cd "$local_dir" && "$MANTICORE" -e 'SELECT 608 AS unmarked_symlink_fallback' 2>&1) \
+  || fail 'an unmarked dangling manticore_data symlink blocked global discovery'
+printf '%s' "$malformed_symlink" | grep -q $'unmarked_symlink_fallback\n608' || fail 'an unmarked symlink selected local mode'
 rm "$local_dir/manticore_data"
 
 mkdir "$local_dir/manticore_data"
-if (cd "$local_dir" && "$MANTICORE" -e 'SELECT 609 AS unsafe_global_fallback' >/dev/null 2>&1); then
-  fail 'manticore routed an empty local data directory to the global daemon'
-fi
+empty_directory=$(cd "$local_dir" && "$MANTICORE" -e 'SELECT 609 AS unmarked_directory_fallback' 2>&1) \
+  || fail 'an unmarked manticore_data directory blocked global discovery'
+printf '%s' "$empty_directory" | grep -q $'unmarked_directory_fallback\n609' || fail 'an unmarked directory selected local mode'
 rmdir "$local_dir/manticore_data"
-pass 'manticore never falls back past an existing local data marker'
+pass 'only an explicit local instance marker overrides global discovery'
+
+mkdir "$local_dir/manticore_data"
+printf 'unsupported\n' > "$local_dir/manticore_data/.manticore-local"
+set +e
+invalid_marker_query=$(cd "$local_dir" && "$MANTICORE" -e 'SELECT 610 AS must_not_reach_global' 2>&1)
+invalid_marker_query_rc=$?
+invalid_marker_start=$(cd "$local_dir" && "$MANTICORE" start 2>&1)
+invalid_marker_start_rc=$?
+set -e
+[ "$invalid_marker_query_rc" -ne 0 ] || fail 'invalid local marker allowed automatic client fallback'
+[ "$invalid_marker_start_rc" -ne 0 ] || fail 'invalid local marker allowed automatic lifecycle fallback'
+printf '%s' "$invalid_marker_query" | grep -q 'invalid' || fail 'invalid local marker client error was unclear'
+printf '%s' "$invalid_marker_start" | grep -q 'unsupported local instance marker' || fail 'invalid local marker lifecycle error was unclear'
+printf '%s' "$invalid_marker_query" | grep -q 'must_not_reach_global' && fail 'invalid local marker reached the configured daemon'
+alive "$configured_pid" || fail 'invalid local marker handling disturbed the configured daemon'
+rm "$local_dir/manticore_data/.manticore-local"
+rmdir "$local_dir/manticore_data"
+pass 'invalid local markers fail closed for client and lifecycle commands'
 
 (cd "$local_dir" && "$SEARCHD" --check >/dev/null 2>&1) || fail 'bare searchd did not use a valid default configuration'
 [ ! -e "$local_dir/manticore_data" ] || fail 'bare searchd unexpectedly entered local mode'
@@ -308,6 +324,7 @@ done
 [ -d "$local_dir/manticore_data" ] || fail 'searchd -l did not create manticore_data'
 [ -S "$local_socket" ] || fail 'searchd -l did not create manticore_data/searchd.sock'
 printf '%s' "$socket_response" | grep -q '"socket_http":707' || fail 'local Unix socket is not an HTTP listener'
+[ "$(cat "$local_dir/manticore_data/.manticore-local")" = 1 ] || fail 'local instance marker is missing or has an unsupported version'
 [ "$(mode "$local_dir/manticore_data")" = 700 ] || fail 'manticore_data permissions are not 0700'
 [ "$(mode "$local_socket")" = 600 ] || fail 'local Unix socket permissions are not 0600'
 [ -s "$local_dir/manticore_data/searchd.pid" ] || fail 'searchd -l did not create its PID file under manticore_data'
@@ -1087,7 +1104,8 @@ ok - manticore uses the normally discovered config when no local instance exists
 ok - systemd selection is authoritative and never falls back after failure
 ok - systemd capability checks reject unreachable managers and absent units
 ok - systemd start/stop verifies final state and follows only its journal cursor
-ok - manticore never falls back past an existing local data marker
+ok - only an explicit local instance marker overrides global discovery
+ok - invalid local markers fail closed for client and lifecycle commands
 ok - bare searchd preserves default configuration lookup
 ok - client execution belongs to manticore and stopwait is not a command
 ok - manticore start local creates manticore_data and status reports readiness

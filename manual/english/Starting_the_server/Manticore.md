@@ -1,12 +1,18 @@
 # `manticore` command-line tool
 
-`manticore` is the primary command-line tool for connecting to and managing Manticore Search. It provides:
+`manticore` is a bundled CLI for local development, basic SQL, scripts, and lifecycle operations. It provides:
 
 - an interactive SQL client;
 - one-shot SQL execution;
-- start, stop, and status commands for a local or configured instance.
+- start, stop, and status commands for a local or normally configured global instance.
 
 `searchd` remains the server binary and provides advanced daemon options. Use [`searchd`](Starting_the_server/Manually.md) directly when you need low-level options such as `--console`, `--listen`, or replication bootstrap flags.
+
+Use the client that matches the task:
+
+- use `manticore` for zero-dependency onboarding, project-local development, basic interactive SQL, and scripts;
+- use the standard `mysql` client or MySQL-compatible connectors when you need existing database tooling, TLS, authentication, compression, or other advanced MySQL-client features;
+- use the HTTP API when you need JSON requests and responses or HTTP-specific multi-result workflows.
 
 > `manticore` client and lifecycle commands are currently supported on Unix-like systems. On Windows, only `manticore --help` and `manticore --version` are supported.
 

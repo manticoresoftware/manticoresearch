@@ -439,7 +439,7 @@ index_converter {--config /path/to/config|--path}
 * [--killlist-target](Installation/Migration_from_Sphinx.md#index_converter) - Sets target tables for applying kill-lists
 
 ## [`manticore` command-line tool](Starting_the_server/Manticore.md)
-`manticore` is the primary SQL client and lifecycle manager for Manticore Search.
+`manticore` is the bundled CLI for local development, basic SQL, scripts, and lifecycle operations.
 
 ```bash
 manticore [CLIENT_OPTIONS]

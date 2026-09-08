@@ -1,6 +1,6 @@
 # Starting Manticore manually
 
-The [`manticore` command-line tool](Starting_the_server/Manticore.md) is the recommended interface for ordinary client and lifecycle operations. You can also start Manticore Search by calling `searchd` (the Manticore Search server binary) directly when you need advanced daemon options:
+The bundled [`manticore` command-line tool](Starting_the_server/Manticore.md) provides local development, basic SQL, scripts, and lifecycle operations. You can also start Manticore Search by calling `searchd` (the Manticore Search server binary) directly when you need advanced daemon options:
 
 ```shell
 searchd [OPTIONS]
@@ -20,7 +20,7 @@ cd my-search-project
 searchd --local
 ```
 
-The preferred equivalent is:
+The bundled lifecycle equivalent is:
 
 ```bash
 manticore start local

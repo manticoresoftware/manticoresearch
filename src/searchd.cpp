@@ -15053,9 +15053,9 @@ void ShowHelp ()
 		"\n"
 		"Debugging options are:\n"
 		"--console\t\trun in console mode (do not fork, do not log to files)\n"
-		"-p, --port <port>\tlisten on given port (overrides config setting)\n"
-		"-l, --listen <spec>\tlisten on given address, port or path (overrides\n"
-		"\t\t\tconfig settings)\n"
+		"-p, --port <port>\tlisten on given port (extends local mode; otherwise overrides config)\n"
+		"--listen <spec>\tlisten on an address, port, or path; repeat as needed\n"
+		"\t\t\t(extends local mode; otherwise overrides config settings)\n"
 		"-i, --index <index>\tonly serve given table(s)\n"
 		"-t, --table <table>\tonly serve given table(s)\n"
 #if !_WIN32
@@ -16234,7 +16234,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	StrVec_t		dOptIndexes; // indexes explicitly pointed in cmdline options
 
 	std::optional<int>				iOptPort;
-	std::optional<CSphString>		sOptListen;
+	StrVec_t					dOptListeners;
 	bool			bTestMode = false;
 	bool			bConfigTest = false;
 	std::optional<bool>			bWithBuddy;
@@ -16324,7 +16324,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		else if ( (i+1)>=argc )		break;
 		OPT ( "-c", "--config" )	szCmdConfigFile = argv[++i];
 		OPT ( "-p", "--port" )		{ iOptPort = atoi ( argv[++i] ); }
-		OPT1 ( "--listen" )			{ sOptListen = argv[++i]; }
+		OPT1 ( "--listen" )			{ dOptListeners.Add ( argv[++i] ); }
 		OPT ( "-i", "--index" )		dOptIndexes.Add ( argv[++i] ); // FIXME!!! remove depricated cli option
 		OPT ( "-t", "--table" )		dOptIndexes.Add ( argv[++i] );
 #if _WIN32
@@ -16340,8 +16340,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	if ( bLocalMode && szCmdConfigFile )
 		sphFatal ( "--local cannot be combined with --config" );
-	if ( bLocalMode && ( iOptPort || sOptListen ) )
-		sphFatal ( "--local cannot be combined with --port or --listen" );
 	if ( bLocalMode && bOptStatus )
 		sphFatal ( "--status is not supported in local mode" );
 
@@ -16411,11 +16409,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		bOptPIDFile = !g_bOptNoLock;
 
 	// check port and listen arguments early
-	if ( !g_bOptNoDetach && ( iOptPort || sOptListen ) )
+	if ( !g_bOptNoDetach && !bLocalMode && ( iOptPort || !dOptListeners.IsEmpty() ) )
 	{
 		sphWarning ( "--listen and --port are only allowed in --nodetach or --console debug mode; switch ignored" );
 		iOptPort = std::nullopt;
-		sOptListen = std::nullopt;
+		dOptListeners.Reset();
 	}
 
 	if ( g_bOptNoDetach && g_tWatchdog.value_or ( false ) )
@@ -16423,7 +16421,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	if ( iOptPort )
 	{
-		if ( sOptListen )
+		if ( !bLocalMode && !dOptListeners.IsEmpty() )
 			sphFatal ( "please specify either --port or --listen, not both" );
 
 		CheckPort ( iOptPort.value() );
@@ -16527,6 +16525,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	auto InitCheckListeners = [&] ( CSphConfigSection & hDaemonConfig, auto fnAddGlobal, bool bUpdateConfig ) REQUIRES ( MainThread )
 	{
 		dListenerDescs.Reset();
+		sph::StringSet hUnixListenerPaths;
 		auto AddCheck = [&] (const ListenerDesc_t& tDesc) REQUIRES ( MainThread )
 		{
 			fnAddGlobal ( tDesc );
@@ -16542,32 +16541,45 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		};
 
 
-		// command line arguments override config (but only in --console)
-		if ( sOptListen )
+		auto AddListener = [&] ( const ListenerDesc_t & tDesc ) REQUIRES ( MainThread )
 		{
-			auto tDesc = ParseListener ( sOptListen->cstr() );
+			if ( !tDesc.m_sUnix.IsEmpty() )
+			{
+				CSphString sPath = tDesc.m_sUnix;
+				if ( !IsPathAbsolute(sPath) )
+				{
+					CSphString sAbsolutePath;
+					sAbsolutePath.SetSprintf ( "%s/%s", sphGetCwd().cstr(), sPath.cstr() );
+					sPath = std::move(sAbsolutePath);
+				}
+				sPath = sphNormalizePath(sPath);
+				if ( hUnixListenerPaths[sPath] )
+					sphFatal ( "duplicate UNIX listener path '%s'", sPath.cstr() );
+				hUnixListenerPaths.Add(sPath);
+			}
 			dListenerDescs.Add ( tDesc );
 			AddCheck ( tDesc );
-		} else if ( iOptPort )
-			AddCheck (  MakeAnyListener ( iOptPort.value() ) );
-		else
-		{
-			// listen directives in configuration file
-			for ( CSphVariant * v = hDaemonConfig("listen"); v; v = v->m_pNext )
-			{
-				auto tDesc = ParseListener ( v->cstr () );
-				dListenerDescs.Add ( tDesc );
-				AddCheck ( tDesc );
-			}
+		};
 
-			// default is to listen on our two ports
-			if ( dListenerDescs.IsEmpty() )
-			{
-				auto tDesc = MakeLocalhostListener ( SPHINXAPI_PORT, Proto_e::SPHINX );
-				dListenerDescs.Add ( tDesc );
-				AddCheck ( tDesc );
-				AddCheck ( MakeLocalhostListener ( SPHINXQL_PORT, Proto_e::MYSQL41 ) );
-			}
+		// Local-mode listeners extend the private defaults. In configured debug
+		// mode, command-line listeners retain their historical override behavior.
+		if ( bLocalMode || ( dOptListeners.IsEmpty() && !iOptPort ) )
+		{
+			for ( CSphVariant * v = hDaemonConfig("listen"); v; v = v->m_pNext )
+				AddListener ( ParseListener(v->cstr()) );
+		}
+
+		if ( iOptPort )
+			AddListener ( MakeAnyListener(iOptPort.value()) );
+		if ( bLocalMode || !iOptPort )
+			for ( const auto & sListener : dOptListeners )
+				AddListener ( ParseListener(sListener.cstr()) );
+
+		// default is to listen on our two ports
+		if ( dListenerDescs.IsEmpty() )
+		{
+			AddListener ( MakeLocalhostListener(SPHINXAPI_PORT,Proto_e::SPHINX) );
+			AddListener ( MakeLocalhostListener(SPHINXQL_PORT,Proto_e::MYSQL41) );
 		}
 
 		if ( !ValidateListenerRanges ( dListenerDescs, sError ) )

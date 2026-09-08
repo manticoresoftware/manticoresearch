@@ -99,6 +99,7 @@ bool BuildLocalSearchdConfig ( CSphConfig & hConf, CSphString & sDataDir, CSphSt
 	CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
 	hSearchd.AddEntry ( "data_dir", g_sLocalDataDir.cstr() );
 	hSearchd.AddEntry ( "listen", "unix:searchd.sock:http" );
+	hSearchd.AddEntry ( "listen", "unix:mysql.sock:mysql41" );
 	hSearchd.AddEntry ( "pid_file", LocalPath(LOCAL_PID).cstr() );
 	hSearchd.AddEntry ( "log", LocalPath("searchd.log").cstr() );
 	hSearchd.AddEntry ( "watchdog", "0" );

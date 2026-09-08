@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>hybrid weight filters and text weight preservation (regression #4889)</name>
+<skip_indexer/>
+<requires><columnar/><knn/><knn_float_tolerance/><force-rt/></requires>
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+<queries>
+<sphinxql>
+	create table t4889 (title text, category int, vec float_vector knn_type='hnsw' knn_dims='2' hnsw_similarity='l2');
+	insert into t4889 values (1, 'physics', 1, (0.1,0)), (2, 'cooking', 2, (0.2,0)), (3, 'physics', 1, (1,0));
+	<!-- Constant text weight makes the expected result independent of corpus statistics. -->
+	select id, weight() from t4889 where match('physics') option ranker=expr('100');
+	select id, weight(), knn_dist(), hybrid_score() from t4889 where match('physics') and knn(vec,3,(0,0)) order by id asc option fusion_method='rrf', ranker=expr('100');
+	select id, weight(), knn_dist() from t4889 where match('physics') and knn(vec,3,(0,0)) and knn_dist()&lt;0.15 and weight()>10 option fusion_method='rrf', ranker=expr('100');
+	select id, weight() w from t4889 where match('physics') and knn(vec,3,(0,0)) and w>10 order by id asc option fusion_method='rrf', ranker=expr('100');
+	select id from t4889 where match('physics') and knn(vec,3,(0,0)) and weight()>100 option fusion_method='rrf', ranker=expr('100');
+	select id, weight() from t4889 where match('physics') and knn(vec,3,(0,0)) and weight()=1 order by id asc option fusion_method='rrf', ranker=expr('100');
+	select id, weight() from t4889 where match('physics') and knn(vec,3,(0,0)) and weight() in (100) order by id asc option fusion_method='rrf', ranker=expr('100');
+	select id, weight() from t4889 where match('missing') and knn(vec,3,(0,0)) and weight()>10 option fusion_method='rrf', ranker=expr('100');
+	select id, weight() w, w*2 doubled from t4889 where match('physics') and knn(vec,3,(0,0)) order by w desc, id asc option fusion_method='rrf', ranker=expr('100');
+	select id, weight()*2 doubled from t4889 where match('physics') and knn(vec,3,(0,0)) and doubled>10 order by id asc option fusion_method='rrf', ranker=expr('100');
+	select id, weight() from t4889 where match('physics') and knn(vec,3,(0,0)) and category=2 and weight()>10 option fusion_method='rrf', ranker=expr('100');
+	select id, weight() from t4889 where match('physics') and knn(vec,3,(0,0)) and knn(vec,3,(0.3,0)) and weight()>10 order by id asc option fusion_method='rrf', ranker=expr('100');
+	select id, weight() w from t4889 where match('physics') and knn(vec,3,(0,0)) and (w>10 or category=2) option fusion_method='rrf', ranker=expr('100');
+	<!-- Ordinary attribute filter trees remain supported. -->
+	select id from t4889 where match('physics') and knn(vec,3,(0,0)) and (category=1 or category=2) order by id asc option fusion_method='rrf';
+	select id, weight() w, w*2 doubled from t4889 where match('physics') and knn(vec,3,(0,0)) and doubled>10 order by id asc option fusion_method='rrf', ranker=expr('100');
+	<!-- Preserve the chosen branch's aggregate population; do not mix text sums with KNN counts. -->
+	select 1 g, count(*) c, sum(weight()) sw, avg(weight()) aw from t4889 where match('physics') and knn(vec,3,(0,0)) group by g option fusion_method='rrf', ranker=expr('100');
+	flush ramchunk t4889;
+	select id, weight(), knn_dist() from t4889 where match('physics') and knn(vec,3,(0,0)) and knn_dist()&lt;0.15 and weight()>10 option fusion_method='rrf', ranker=expr('100');
+	select id, weight() w from t4889 where match('physics') and knn(vec,3,(0,0)) and w>10 order by id asc option fusion_method='rrf', ranker=expr('100');
+	select id, weight() from t4889 where match('physics') and knn(vec,3,(0,0)) and weight()=1 order by id asc option fusion_method='rrf', ranker=expr('100');
+	drop table t4889;
+	create table c4889 (title text, category int, vec float_vector knn_type='hnsw' knn_dims='2' hnsw_similarity='l2') engine='columnar';
+	insert into c4889 values (1, 'physics', 1, (0.1,0)), (2, 'cooking', 2, (0.2,0)), (3, 'physics', 1, (1,0));
+	select id, weight()*category w from c4889 where match('physics') and knn(vec,3,(0,0)) and w>10 order by id asc option fusion_method='rrf', ranker=expr('100');
+	flush ramchunk c4889;
+	select id, weight()*category w from c4889 where match('physics') and knn(vec,3,(0,0)) and w>10 order by id asc option fusion_method='rrf', ranker=expr('100');
+	drop table c4889;
+</sphinxql>
+</queries>
+</test>

@@ -126,7 +126,9 @@ POST /search
 
 ## Attribute filters
 
-Standard WHERE filters work alongside hybrid search. Filters are applied to both the text and KNN sub-queries:
+Standard attribute filters work alongside hybrid search and are applied to both the text and KNN sub-queries. Filters on `weight()` and expressions that depend on it are applied after fusion, using the final text weight. Current Manticore limitation: these weight filters cannot be used in `OR` filter trees.
+
+For example, to filter by a standard attribute:
 
 <!-- example hybrid_filters -->
 

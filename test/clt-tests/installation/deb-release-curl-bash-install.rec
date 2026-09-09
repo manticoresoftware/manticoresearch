@@ -2,6 +2,14 @@
 export PATH=/usr/bin:/usr/local/bin:/usr/sbin:/sbin:/bin
 ––– output –––
 ––– input –––
+if grep -q '^VERSION_CODENAME=bullseye$' /etc/os-release; then cat >/etc/apt/sources.list <<'EOF'
+deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260901T000000Z/ bullseye main
+deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260901T000000Z/ bullseye-updates main
+deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20260901T000000Z/ bullseye-security main
+EOF
+fi
+––– output –––
+––– input –––
 apt-get update -y > /dev/null; echo $?
 ––– output –––
 0

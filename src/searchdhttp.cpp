@@ -3753,7 +3753,11 @@ bool HttpHandlerEsBulk_c::Process()
 	tRoot.AddInt ( "took", 1 ); // FIXME!!! add delta
 	BuildReply ( tRoot.AsString(), EHTTP_STATUS::_200 );
 
-	return true;
+	// Restore NDJSON separators for Buddy after the in-place parsing, without replacing the HTTP 200 reply.
+	if ( !bOk )
+		ReportLogError ( "failed to commit", HttpErrorType_e::Unknown, EHTTP_STATUS::_400, true );
+
+	return bOk;
 }
 
 static void AddEsReply ( const BulkDoc_t & tDoc, JsonObj_c & tRoot )

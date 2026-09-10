@@ -1,0 +1,22 @@
+name: Clean expired CLT candidate images
+
+on:
+  schedule:
+    - cron: '00 03 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  cleanup:
+    name: Remove candidate images older than seven days
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Delete expired temporary CLT candidate images
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: ./dist/cleanup_old_test_kit_candidates.sh

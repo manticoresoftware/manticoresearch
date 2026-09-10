@@ -211,6 +211,9 @@ index agg_pct_crash_uint
 
 	<query endpoint="json/search">{"table":"agg_pct_crash_mva","limit":1,"query":{"match_all":{}},"aggs":{"tags":{"terms":{"field":"tags","size":1}},"price_pct":{"percentiles":{"field":"price","values":[25,50,75]}}}}</query>
 	<query endpoint="json/search">{"table":"agg_pct_crash_uint","limit":1,"query":{"match_all":{}},"aggs":{"tags":{"terms":{"field":"tag","size":50,"order":{"tag":"asc"}}},"price_pct":{"percentiles":{"field":"price","values":[25,50,75]}}}}</query>
+
+	<!-- GH-4787: implicit-sorter percentile aggregate over multiple RT disk chunks searched in parallel; guards child-sorter t-digest cleanup under the memcheck workflow -->
+	<query endpoint="json/search">{"table":"agg_pct_crash_uint","limit":0,"aggs":{"price_pct":{"percentiles":{"field":"price","values":[25,50,75]}}},"options":{"threads":4}}</query>
 </httpqueries>
 
 </test>

@@ -809,7 +809,7 @@ In seek+read mode, the server uses the `pread` system call to read document list
 
 In mmap access mode, the search server maps the table's file into memory using the `mmap` system call, and the OS caches the file contents. The options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits) have no effect for corresponding files in this mode. The mmap reader can also lock the table's data in memory using the`mlock` privileged call, which prevents the OS from swapping the cached data out to disk.
 
-To control which access mode to use, the options **access_plain_attrs**, **access_blob_attrs**, **access_doclists**, **access_hitlists** and **access_dict**  are available, with the following values:
+To control which access mode to use, the options **access_plain_attrs**, **access_blob_attrs**, **access_doclists**, **access_hitlists**, **access_dict**, **access_columnar_attrs**, and **access_secondary** are available, with the following values:
 
 | Value | Description |
 | - | - |
@@ -826,6 +826,8 @@ To control which access mode to use, the options **access_plain_attrs**, **acces
 | access_doclists   | **file** (default), mmap, mlock  | controls how `*.spd` (doc lists) data will be read |
 | access_hitlists   | **file** (default), mmap, mlock  | controls how `*.spp` (hit lists) data will be read |
 | access_dict   | mmap, **mmap_preread** (default), mlock  | controls how `*.spi` (dictionary) will be read |
+| access_columnar_attrs | file, **mmap** (default) | controls how `*.spc` (columnar attributes) will be read |
+| access_secondary | **file** (default), mmap | controls how `*.spidx` and `*.spjidx` (secondary indexes) will be read |
 
 Here is a table which can help you select your desired mode:
 
@@ -833,10 +835,11 @@ Here is a table which can help you select your desired mode:
 | - | - | - | - | - |
 | plain attributes in [row-wise](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) (non-columnar) storage, skip lists, word lists, lookups, killed docs | 	mmap | mmap |	**mmap_preread** (default) | mlock |
 | row-wise string, multi-value attributes (MVA) and json attributes | mmap | mmap | **mmap_preread** (default) | mlock |
-| [columnar](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) numeric, string and multi-value attributes | always  | only by means of OS  | no  | not supported |
+| [columnar](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) numeric, string and multi-value attributes | file | **mmap** (default) | no | not supported |
 | doc lists | **file** (default) | mmap | no	| mlock |
 | hit lists | **file** (default) | mmap | no	| mlock |
 | dictionary | mmap | mmap | **mmap_preread** (default) | mlock |
+| secondary indexes | **file** (default) | mmap | no | not supported |
 
 ##### The recommendations are:
 
@@ -849,8 +852,8 @@ Here is a table which can help you select your desired mode:
 The default mode offers a balance of:
 * mmap,
 * Prereading non-columnar attributes,
-* Seeking and reading columnar attributes with no preread,
-* Seeking and reading doclists/hitlists with no preread.
+* Memory-mapping columnar attributes with no preread,
+* Seeking and reading doclists, hitlists, and secondary indexes with no preread.
 
 This provides a decent search performance, optimal memory utilization, and faster searchd restart in most scenarios.
 

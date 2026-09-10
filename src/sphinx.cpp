@@ -1475,7 +1475,7 @@ private:
 	bool						SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, int nLookupsInBlock, int nLookupsInLastBlock, CSphIndexProgress& tProgress ); // build only
 
 private:
-	bool						JuggleFile ( ESphExt eExt, CSphString & sError, bool bNeedSrc=true, bool bNeedDst=true ) const;
+	bool						JuggleFile ( ESphExt eExt, CSphString & sError, bool bNeedSrc=true, bool bNeedDst=true, std::function<void ()> fnBeforeUnlink=nullptr ) const;
 	XQNode_t *					ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta & tMeta, CSphScopedPayload * pPayloads, DWORD uQueryDebugFlags, int iQueryExpansionLimit ) const;
 
 	static std::pair<DWORD,DWORD>		CreateRowMapsAndCountTotalDocs ( const CSphIndex_VLN* pSrcIndex, const CSphIndex_VLN* pDstIndex, CSphFixedVector<RowID_t>& dSrcRowMap, CSphFixedVector<RowID_t>& dDstRowMap, const ISphFilter* pFilter, bool bSupressDstDocids, MergeCb_c& tMonitor );
@@ -2892,7 +2892,7 @@ void CSphIndex_VLN::UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & d
 }
 
 // safely rename an index file
-bool CSphIndex_VLN::JuggleFile ( ESphExt eExt, CSphString & sError, bool bNeedSrc, bool bNeedDst ) const
+bool CSphIndex_VLN::JuggleFile ( ESphExt eExt, CSphString & sError, bool bNeedSrc, bool bNeedDst, std::function<void ()> fnBeforeUnlink ) const
 {
 	CSphString sExt = GetFilename ( eExt );
 	CSphString sExtNew = GetTmpFilename ( eExt );
@@ -2923,6 +2923,9 @@ bool CSphIndex_VLN::JuggleFile ( ESphExt eExt, CSphString & sError, bool bNeedSr
 			return false;
 		}
 	}
+
+	if ( fnBeforeUnlink )
+		fnBeforeUnlink();
 
 	// all done
 	::unlink ( sExtOld.cstr() );
@@ -3166,17 +3169,19 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 
 	if ( bColumnar )
 	{
-		if ( !JuggleFile ( SPH_EXT_SPC, sError, bHadColumnar, bHaveColumnar ) )
+		if ( !JuggleFile ( SPH_EXT_SPC, sError, bHadColumnar, bHaveColumnar, [this] { m_pColumnar.reset(); } ) )
 			return false;
 
-		if ( tNewSchema.HasColumnarAttrs() )
+		if ( bHaveColumnar )
 		{
-			m_pColumnar = CreateColumnarStorageReader ( GetFilename ( SPH_EXT_SPC ), (DWORD)m_iDocinfo, false, sError );
-			if ( !m_pColumnar )
-				return false;
+			bool bMmap = m_tMutableSettings.m_tFileAccess.m_eColumnar==FileAccess_e::MMAP;
+			m_pColumnar = CreateColumnarStorageReader ( GetFilename ( SPH_EXT_SPC ), (DWORD)m_iDocinfo, bMmap, sError );
 		}
 		else
 			m_pColumnar.reset();
+
+		if ( bHaveColumnar && !m_pColumnar )
+			return false;
 	}
 	else
 	{

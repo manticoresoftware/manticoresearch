@@ -15,8 +15,9 @@
 #include "sphinxstd.h"
 #include "searchdhttp.h"
 
-void BuddyStart ( const std::optional<CSphString> & sConfigPath, const CSphString & sPluginDi, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads, const CSphString & sConfigFilePath, const CSphString & sDataDir );
+void BuddyStart ( const std::optional<CSphString> & sConfigPath, const CSphString & sPluginDi, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads, const CSphString & sConfigFilePath, const CSphString & sDataDir, bool bLocalMode );
 void BuddyShutdown ();
+CSphString BuddyGetListenerUrl ( const ListenerDesc_t & tDesc );
 
 bool HasBuddy();
 bool HasBuddyConfigured ( const std::optional<CSphString> & sConfigPath );

@@ -437,7 +437,6 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 	const int iVecBytes = m_tAttr.m_tKNN.m_iDims*(int)sizeof(float);
 
 	static const int CHUNK = 256;
-	const int iCapacity = Min ( CHUNK, iCount );
 
 	// read the blob-row offset from the match row (docinfo), then read the blob-row header from the
 	// pool at that offset. Software-pipeline both: prefetch the offset location furthest ahead, then
@@ -445,60 +444,69 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 	static const int PF_OFFSET = 16;
 	static const int PF_HEADER = 8;
 
-	CSphVector<const void*>	dPtrs;
-	CSphVector<CSphMatch*> dValid;
-	CSphVector<float> dOut;
-	dPtrs.Reserve(iCapacity);
-	dValid.Reserve(iCapacity);
-	dOut.Reserve(iCapacity);
+	const void * dPtrs[CHUNK];
+	float dOut[CHUNK];
+	int iBatchStart = 0;
+	int iBatchCount = 0;
 
-	for ( int iPos = 0; iPos < iCount; iPos += CHUNK )
+	auto fnCompute = [&]()
 	{
-		const int iChunk = Min ( CHUNK, iCount-iPos );
-		dPtrs.Resize(0);
-		dValid.Resize(0);
+		if ( !iBatchCount )
+			return;
 
-		for ( int j = 0; j < iChunk; j++ )
+		m_pDistCalc->CalcDistBatch ( m_dAnchor.Begin(), { dPtrs, (size_t)iBatchCount }, { dOut, (size_t)iBatchCount } );
+		for ( int i = 0; i < iBatchCount; i++ )
+			dMatches[iBatchStart+i]->SetAttrFloat ( tOutLoc, dOut[i] );
+
+		iBatchCount = 0;
+	};
+
+	int iCurTag = 0;
+	bool bPoolInitialized = false;
+	const BYTE * pBlobPool = nullptr;
+	for ( int i = 0; i < iCount; i++ )
+	{
+		CSphMatch * pMatch = dMatches[i];
+		if ( !bPoolInitialized || pMatch->m_iTag!=iCurTag )
 		{
-			const int iGlobal = iPos+j;
-			if ( iGlobal+PF_OFFSET < iCount )
-				sphPrefetchBlobRowOffset ( *dMatches[iGlobal+PF_OFFSET], m_tAttr.m_tLocator );
-
-			if ( iGlobal+PF_HEADER < iCount )
-			{
-				CSphMatch * pAhead = dMatches[iGlobal+PF_HEADER];
-				sphPrefetchBlobRow ( *pAhead, m_tAttr.m_tLocator, fnBlobPool(pAhead) );
-			}
-
-			CSphMatch * pMatch = dMatches[iGlobal];
-			ByteBlob_t tRes = pMatch->FetchAttrData ( m_tAttr.m_tLocator, fnBlobPool(pMatch) );
-
-			// FIXME: make float_vector_array batched too
-			if ( m_bMulti )
-			{
-				pMatch->SetAttrFloat ( tOutLoc, MinDistOverSlots(tRes) );
-				continue;
-			}
-
-			if ( tRes.second!=iVecBytes || !tRes.first )
-			{
-				pMatch->SetAttrFloat ( tOutLoc, FLT_MAX );
-				continue;
-			}
-
-			dPtrs.Add ( tRes.first );
-			dValid.Add ( pMatch );
+			iCurTag = pMatch->m_iTag;
+			pBlobPool = fnBlobPool(pMatch);
+			bPoolInitialized = true;
 		}
 
-		if ( !dPtrs.GetLength() )
+		const int iOffsetPrefetch = i+PF_OFFSET;
+		if ( iOffsetPrefetch < iCount && dMatches[iOffsetPrefetch]->m_iTag==iCurTag )
+			sphPrefetchBlobRowOffset ( *dMatches[iOffsetPrefetch], m_tAttr.m_tLocator );
+
+		const int iHeaderPrefetch = i+PF_HEADER;
+		if ( iHeaderPrefetch < iCount && dMatches[iHeaderPrefetch]->m_iTag==iCurTag )
+			sphPrefetchBlobRow ( *dMatches[iHeaderPrefetch], m_tAttr.m_tLocator, pBlobPool );
+
+		ByteBlob_t tRes = pMatch->FetchAttrData ( m_tAttr.m_tLocator, pBlobPool );
+
+		// FIXME: make float_vector_array batched too
+		if ( m_bMulti )
+		{
+			fnCompute();
+			pMatch->SetAttrFloat ( tOutLoc, MinDistOverSlots(tRes) );
 			continue;
+		}
 
-		dOut.Resize ( dPtrs.GetLength() );
-		m_pDistCalc->CalcDistBatch ( m_dAnchor.Begin(), { dPtrs.Begin(), (size_t)dPtrs.GetLength() }, { dOut.Begin(), (size_t)dOut.GetLength() } );
+		if ( tRes.second!=iVecBytes || !tRes.first )
+		{
+			fnCompute();
+			pMatch->SetAttrFloat ( tOutLoc, FLT_MAX );
+			continue;
+		}
 
-		ARRAY_FOREACH ( k, dValid )
-			dValid[k]->SetAttrFloat ( tOutLoc, dOut[k] );
+		if ( !iBatchCount )
+			iBatchStart = i;
+		dPtrs[iBatchCount++] = tRes.first;
+		if ( iBatchCount==CHUNK )
+			fnCompute();
 	}
+
+	fnCompute();
 }
 
 

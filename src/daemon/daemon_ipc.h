@@ -14,8 +14,11 @@
 
 #include "sphinxstd.h"
 
-int StopDaemonAndWait ( bool bWait, int iPid, int iWaitTimeout );
+int StopDaemonAndWait ( bool bWait, int iPid, int iWaitTimeout, int iPidFileFD=-1 );
 CSphString GetNamedPipeName ( int iPid );
+#if defined(__linux__)
+bool IsPidfdUnsupportedError ( int iError );
+#endif
 
 // result of the reload auth command \ unifying exit codes.
 enum class ReloadAuthResult_e : int

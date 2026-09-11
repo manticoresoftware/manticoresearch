@@ -227,8 +227,8 @@ private:
 	void *								m_pDistFuncParam = nullptr;
 	bool								m_bMulti = false; // true when one row holds N vectors instead of one, so every distance is a min over them
 
-	void		RescoreColumnar ( const VecTraits_T<int> & dOrder, VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetColumnarFromMatch_fn & fnColumnar );
-	void		RescoreBlob ( const VecTraits_T<int> & dOrder, VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool );
+	void		RescoreColumnar ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetColumnarFromMatch_fn & fnColumnar );
+	void		RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool );
 	float		MinDistOverSlots ( ByteBlob_t tBlob ) const;
 };
 
@@ -327,30 +327,27 @@ void KNNVecDistCalc_c::RescoreBatch ( VecTraits_T<CSphMatch*> & dMatches, const 
 	// anchor must be set (SetKNNVec) before rescore; for auto-embeddings it is resolved post-creation
 	assert ( m_dAnchor.GetLength()==m_tAttr.m_tKNN.m_iDims );
 
-	CSphVector<int> dOrder ( iCount );
-	ARRAY_FOREACH ( i, dOrder )
-		dOrder[i] = i;
-
-	dOrder.Sort ( Lesser ( [&dMatches] ( int a, int b )
+	dMatches.Sort ( Lesser ( [] ( const CSphMatch * a, const CSphMatch * b )
 	{
-		if ( dMatches[a]->m_iTag!=dMatches[b]->m_iTag )
-			return dMatches[a]->m_iTag < dMatches[b]->m_iTag;
-		return dMatches[a]->m_tRowID < dMatches[b]->m_tRowID;
+		if ( a->m_iTag!=b->m_iTag )
+			return a->m_iTag < b->m_iTag;
+		return a->m_tRowID < b->m_tRowID;
 	} ) );
 
 	if ( m_tAttr.IsColumnar() )
-		RescoreColumnar ( dOrder, dMatches, tOutLoc, fnColumnar );
+		RescoreColumnar ( dMatches, tOutLoc, fnColumnar );
 	else
-		RescoreBlob ( dOrder, dMatches, tOutLoc, fnBlobPool );
+		RescoreBlob ( dMatches, tOutLoc, fnBlobPool );
 }
 
 
-void KNNVecDistCalc_c::RescoreColumnar ( const VecTraits_T<int> & dOrder, VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetColumnarFromMatch_fn & fnColumnar )
+void KNNVecDistCalc_c::RescoreColumnar ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetColumnarFromMatch_fn & fnColumnar )
 {
-	const int iCount = dOrder.GetLength();
+	const int iCount = dMatches.GetLength();
 	const int iVecBytes = m_tAttr.m_tKNN.m_iDims*(int)sizeof(float);
 
 	static const int CHUNK = 256;
+	const int iCapacity = Min ( CHUNK, iCount );
 
 	std::unique_ptr<columnar::Iterator_i> pIterator;
 	columnar::Columnar_i * pCurColumnar = nullptr;
@@ -360,9 +357,9 @@ void KNNVecDistCalc_c::RescoreColumnar ( const VecTraits_T<int> & dOrder, VecTra
 	CSphVector<const void*> dPtrs;
 	CSphVector<CSphMatch*> dValid;
 	CSphVector<float> dOut;
-	dPtrs.Reserve(CHUNK);
-	dValid.Reserve(CHUNK);
-	dOut.Reserve(CHUNK);
+	dPtrs.Reserve(iCapacity);
+	dValid.Reserve(iCapacity);
+	dOut.Reserve(iCapacity);
 
 	auto fnCompute = [&]()
 	{
@@ -381,7 +378,7 @@ void KNNVecDistCalc_c::RescoreColumnar ( const VecTraits_T<int> & dOrder, VecTra
 
 	for ( int i = 0; i < iCount; i++ )
 	{
-		CSphMatch * pMatch = dMatches[ dOrder[i] ];
+		CSphMatch * pMatch = dMatches[i];
 		columnar::Columnar_i * pColumnar = fnColumnar(pMatch);
 
 		if ( !bInitialized || pColumnar!=pCurColumnar )
@@ -434,12 +431,13 @@ void KNNVecDistCalc_c::RescoreColumnar ( const VecTraits_T<int> & dOrder, VecTra
 }
 
 
-void KNNVecDistCalc_c::RescoreBlob ( const VecTraits_T<int> & dOrder, VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool )
+void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool )
 {
-	const int iCount = dOrder.GetLength();
+	const int iCount = dMatches.GetLength();
 	const int iVecBytes = m_tAttr.m_tKNN.m_iDims*(int)sizeof(float);
 
 	static const int CHUNK = 256;
+	const int iCapacity = Min ( CHUNK, iCount );
 
 	// read the blob-row offset from the match row (docinfo), then read the blob-row header from the
 	// pool at that offset. Software-pipeline both: prefetch the offset location furthest ahead, then
@@ -450,9 +448,9 @@ void KNNVecDistCalc_c::RescoreBlob ( const VecTraits_T<int> & dOrder, VecTraits_
 	CSphVector<const void*>	dPtrs;
 	CSphVector<CSphMatch*> dValid;
 	CSphVector<float> dOut;
-	dPtrs.Reserve(CHUNK);
-	dValid.Reserve(CHUNK);
-	dOut.Reserve(CHUNK);
+	dPtrs.Reserve(iCapacity);
+	dValid.Reserve(iCapacity);
+	dOut.Reserve(iCapacity);
 
 	for ( int iPos = 0; iPos < iCount; iPos += CHUNK )
 	{
@@ -464,15 +462,15 @@ void KNNVecDistCalc_c::RescoreBlob ( const VecTraits_T<int> & dOrder, VecTraits_
 		{
 			const int iGlobal = iPos+j;
 			if ( iGlobal+PF_OFFSET < iCount )
-				sphPrefetchBlobRowOffset ( *dMatches[ dOrder[iGlobal+PF_OFFSET] ], m_tAttr.m_tLocator );
+				sphPrefetchBlobRowOffset ( *dMatches[iGlobal+PF_OFFSET], m_tAttr.m_tLocator );
 
 			if ( iGlobal+PF_HEADER < iCount )
 			{
-				CSphMatch * pAhead = dMatches[ dOrder[iGlobal+PF_HEADER] ];
+				CSphMatch * pAhead = dMatches[iGlobal+PF_HEADER];
 				sphPrefetchBlobRow ( *pAhead, m_tAttr.m_tLocator, fnBlobPool(pAhead) );
 			}
 
-			CSphMatch * pMatch = dMatches[ dOrder[iGlobal] ];
+			CSphMatch * pMatch = dMatches[iGlobal];
 			ByteBlob_t tRes = pMatch->FetchAttrData ( m_tAttr.m_tLocator, fnBlobPool(pMatch) );
 
 			// FIXME: make float_vector_array batched too
@@ -1474,6 +1472,7 @@ void RescoreSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn f
 		if ( pRescoreLoc && pCalc )
 		{
 			MatchPtrCollector_c tCollector;
+			tCollector.m_dMatches.Reserve ( m_pSorter->GetLength() );
 			m_pSorter->Finalize ( tCollector, false, false );
 			pCalc->RescoreBatch ( tCollector.m_dMatches, *pRescoreLoc, fnBlobPoolFromMatch, fnGetColumnarFromMatch );
 		}

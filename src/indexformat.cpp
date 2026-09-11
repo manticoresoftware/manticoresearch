@@ -966,7 +966,7 @@ void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t 
 	sJson.NamedString ( "meta_created_time_utc", sphCurrentUtcTime() );
 
 	// version
-	sJson.NamedVal ( "index_format_version", INDEX_FORMAT_VERSION );
+	sJson.NamedVal ( "index_format_version", tBuildHeader.m_uFormatVersion ? tBuildHeader.m_uFormatVersion : INDEX_FORMAT_VERSION );
 
 	// index stats - json (put here to be similar with .meta)
 	sJson.NamedValNonDefault ( "total_documents", tBuildHeader.m_iTotalDocuments );

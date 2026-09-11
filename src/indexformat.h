@@ -167,6 +167,8 @@ std::unique_ptr<ISphKeywordsBlockReader> CreateKeywordsBlockReader ( const BYTE 
 struct BuildHeader_t : public CSphSourceStats, public DictHeader_t
 {
 	BuildHeader_t() = default;
+
+	DWORD			m_uFormatVersion = 0;	// version to stamp into the header; 0 = current INDEX_FORMAT_VERSION
 	explicit BuildHeader_t ( const CSphSourceStats & tStat )
 	{
 		m_iTotalDocuments = tStat.m_iTotalDocuments;

@@ -443,7 +443,6 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 	// (once it's warm) prefetch the header, then resolve. CalcDistBatch prefetches the vector itself.
 	static const int PF_OFFSET = 16;
 	static const int PF_HEADER = 8;
-	const bool bPrefetch = iCount>=CHUNK;
 
 	const void * dPtrs[CHUNK];
 	float dOut[CHUNK];
@@ -475,16 +474,13 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 			bPoolInitialized = true;
 		}
 
-		if ( bPrefetch )
-		{
-			const int iOffsetPrefetch = i+PF_OFFSET;
-			if ( iOffsetPrefetch < iCount && dMatches[iOffsetPrefetch]->m_iTag==iCurTag )
-				sphPrefetchBlobRowOffset ( *dMatches[iOffsetPrefetch], m_tAttr.m_tLocator );
+		const int iOffsetPrefetch = i+PF_OFFSET;
+		if ( iOffsetPrefetch < iCount && dMatches[iOffsetPrefetch]->m_iTag==iCurTag )
+			sphPrefetchBlobRowOffset ( *dMatches[iOffsetPrefetch], m_tAttr.m_tLocator );
 
-			const int iHeaderPrefetch = i+PF_HEADER;
-			if ( iHeaderPrefetch < iCount && dMatches[iHeaderPrefetch]->m_iTag==iCurTag )
-				sphPrefetchBlobRow ( *dMatches[iHeaderPrefetch], m_tAttr.m_tLocator, pBlobPool );
-		}
+		const int iHeaderPrefetch = i+PF_HEADER;
+		if ( iHeaderPrefetch < iCount && dMatches[iHeaderPrefetch]->m_iTag==iCurTag )
+			sphPrefetchBlobRow ( *dMatches[iHeaderPrefetch], m_tAttr.m_tLocator, pBlobPool );
 
 		ByteBlob_t tRes = pMatch->FetchAttrData ( m_tAttr.m_tLocator, pBlobPool );
 

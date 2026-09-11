@@ -327,23 +327,12 @@ void KNNVecDistCalc_c::RescoreBatch ( VecTraits_T<CSphMatch*> & dMatches, const 
 	// anchor must be set (SetKNNVec) before rescore; for auto-embeddings it is resolved post-creation
 	assert ( m_dAnchor.GetLength()==m_tAttr.m_tKNN.m_iDims );
 
-	auto fnLess = [] ( const CSphMatch * a, const CSphMatch * b )
+	dMatches.Sort ( Lesser ( [] ( const CSphMatch * a, const CSphMatch * b )
 	{
 		if ( a->m_iTag!=b->m_iTag )
 			return a->m_iTag < b->m_iTag;
 		return a->m_tRowID < b->m_tRowID;
-	};
-
-	bool bSorted = true;
-	for ( int i = 1; i < iCount; i++ )
-		if ( fnLess ( dMatches[i], dMatches[i-1] ) )
-		{
-			bSorted = false;
-			break;
-		}
-
-	if ( !bSorted )
-		dMatches.Sort ( Lesser ( std::move(fnLess) ) );
+	} ) );
 
 	if ( m_tAttr.IsColumnar() )
 		RescoreColumnar ( dMatches, tOutLoc, fnColumnar );
@@ -472,21 +461,42 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 		iBatchCount = 0;
 	};
 
-	auto fnAdd = [&] ( int i, CSphMatch * pMatch, ByteBlob_t tRes )
+	int iCurTag = 0;
+	bool bPoolInitialized = false;
+	const BYTE * pBlobPool = nullptr;
+	for ( int i = 0; i < iCount; i++ )
 	{
+		CSphMatch * pMatch = dMatches[i];
+		if ( !bPoolInitialized || pMatch->m_iTag!=iCurTag )
+		{
+			iCurTag = pMatch->m_iTag;
+			pBlobPool = fnBlobPool(pMatch);
+			bPoolInitialized = true;
+		}
+
+		const int iOffsetPrefetch = i+PF_OFFSET;
+		if ( iOffsetPrefetch < iCount && dMatches[iOffsetPrefetch]->m_iTag==iCurTag )
+			sphPrefetchBlobRowOffset ( *dMatches[iOffsetPrefetch], m_tAttr.m_tLocator );
+
+		const int iHeaderPrefetch = i+PF_HEADER;
+		if ( iHeaderPrefetch < iCount && dMatches[iHeaderPrefetch]->m_iTag==iCurTag )
+			sphPrefetchBlobRow ( *dMatches[iHeaderPrefetch], m_tAttr.m_tLocator, pBlobPool );
+
+		ByteBlob_t tRes = pMatch->FetchAttrData ( m_tAttr.m_tLocator, pBlobPool );
+
 		// FIXME: make float_vector_array batched too
 		if ( m_bMulti )
 		{
 			fnCompute();
 			pMatch->SetAttrFloat ( tOutLoc, MinDistOverSlots(tRes) );
-			return;
+			continue;
 		}
 
 		if ( tRes.second!=iVecBytes || !tRes.first )
 		{
 			fnCompute();
 			pMatch->SetAttrFloat ( tOutLoc, FLT_MAX );
-			return;
+			continue;
 		}
 
 		if ( !iBatchCount )
@@ -494,41 +504,6 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 		dPtrs[iBatchCount++] = tRes.first;
 		if ( iBatchCount==CHUNK )
 			fnCompute();
-	};
-
-	if ( m_tAttr.m_tLocator.IsBlobAttr() )
-	{
-		int iCurTag = 0;
-		bool bPoolInitialized = false;
-		const BYTE * pBlobPool = nullptr;
-		for ( int i = 0; i < iCount; i++ )
-		{
-			CSphMatch * pMatch = dMatches[i];
-			if ( !bPoolInitialized || pMatch->m_iTag!=iCurTag )
-			{
-				iCurTag = pMatch->m_iTag;
-				pBlobPool = fnBlobPool(pMatch);
-				bPoolInitialized = true;
-			}
-
-			const int iOffsetPrefetch = i+PF_OFFSET;
-			if ( iOffsetPrefetch < iCount && dMatches[iOffsetPrefetch]->m_iTag==iCurTag )
-				sphPrefetchBlobRowOffset ( *dMatches[iOffsetPrefetch], m_tAttr.m_tLocator );
-
-			const int iHeaderPrefetch = i+PF_HEADER;
-			if ( iHeaderPrefetch < iCount && dMatches[iHeaderPrefetch]->m_iTag==iCurTag )
-				sphPrefetchBlobRow ( *dMatches[iHeaderPrefetch], m_tAttr.m_tLocator, pBlobPool );
-
-			fnAdd ( i, pMatch, sphGetBlobAttr ( *pMatch, m_tAttr.m_tLocator, pBlobPool ) );
-		}
-	}
-	else
-	{
-		for ( int i = 0; i < iCount; i++ )
-		{
-			CSphMatch * pMatch = dMatches[i];
-			fnAdd ( i, pMatch, sphUnpackPtrAttr ( (const BYTE*)pMatch->GetAttr ( m_tAttr.m_tLocator ) ) );
-		}
 	}
 
 	fnCompute();

@@ -199,6 +199,9 @@ std::unique_ptr<knn::KNNFilter_i> CreateKNNPrefilter ( const CSphQueryContext & 
 
 ///////////////////////////////////////////////////////////////////////////////
 
+static const int KNN_RESCORE_BATCH_SIZE = 256;
+
+
 class KNNVecDistCalc_c
 {
 public:
@@ -227,6 +230,9 @@ private:
 	void *								m_pDistFuncParam = nullptr;
 	bool								m_bMulti = false; // true when one row holds N vectors instead of one, so every distance is a min over them
 
+	float		CalcDistData ( ByteBlob_t tData ) const;
+	void		RescoreScalarBlob ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool );
+	void		RescoreScalarColumnar ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetColumnarFromMatch_fn & fnColumnar );
 	void		RescoreColumnar ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetColumnarFromMatch_fn & fnColumnar );
 	void		RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool );
 	float		MinDistOverSlots ( ByteBlob_t tBlob ) const;
@@ -305,15 +311,21 @@ float KNNVecDistCalc_c::CalcDist ( const CSphMatch & tMatch ) const
 	else
 		tRes = tMatch.FetchAttrData ( m_tAttr.m_tLocator, m_pBlobPool );
 
-	if ( m_bMulti )
-		return MinDistOverSlots(tRes);
+	return CalcDistData(tRes);
+}
 
-	size_t uDim = tRes.second / sizeof(float);
-	if ( (int)uDim!=m_tAttr.m_tKNN.m_iDims )
+
+float KNNVecDistCalc_c::CalcDistData ( ByteBlob_t tData ) const
+{
+	if ( m_bMulti )
+		return MinDistOverSlots(tData);
+
+	size_t uDim = tData.second / sizeof(float);
+	if ( (int)uDim!=m_tAttr.m_tKNN.m_iDims || !tData.first )
 		return FLT_MAX;
 
 	assert ( m_fnDistFunc );
-	return m_fnDistFunc ( tRes.first, m_dAnchor.Begin(), (size_t)-1, (size_t)-1, m_pDistFuncParam );
+	return m_fnDistFunc ( tData.first, m_dAnchor.Begin(), (size_t)-1, (size_t)-1, m_pDistFuncParam );
 }
 
 
@@ -326,6 +338,15 @@ void KNNVecDistCalc_c::RescoreBatch ( VecTraits_T<CSphMatch*> & dMatches, const 
 	assert ( m_tAttr.m_tKNN.m_iDims>0 );
 	// anchor must be set (SetKNNVec) before rescore; for auto-embeddings it is resolved post-creation
 	assert ( m_dAnchor.GetLength()==m_tAttr.m_tKNN.m_iDims );
+
+	if ( iCount<KNN_RESCORE_BATCH_SIZE )
+	{
+		if ( m_tAttr.IsColumnar() )
+			RescoreScalarColumnar ( dMatches, tOutLoc, fnColumnar );
+		else
+			RescoreScalarBlob ( dMatches, tOutLoc, fnBlobPool );
+		return;
+	}
 
 	dMatches.Sort ( Lesser ( [] ( const CSphMatch * a, const CSphMatch * b )
 	{
@@ -341,50 +362,110 @@ void KNNVecDistCalc_c::RescoreBatch ( VecTraits_T<CSphMatch*> & dMatches, const 
 }
 
 
+void KNNVecDistCalc_c::RescoreScalarBlob ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool )
+{
+	int iCurTag = 0;
+	bool bPoolInitialized = false;
+	const BYTE * pBlobPool = nullptr;
+	for ( CSphMatch * pMatch : dMatches )
+	{
+		if ( !bPoolInitialized || pMatch->m_iTag!=iCurTag )
+		{
+			iCurTag = pMatch->m_iTag;
+			pBlobPool = fnBlobPool(pMatch);
+			bPoolInitialized = true;
+		}
+
+		pMatch->SetAttrFloat ( tOutLoc, CalcDistData ( pMatch->FetchAttrData ( m_tAttr.m_tLocator, pBlobPool ) ) );
+	}
+}
+
+
+void KNNVecDistCalc_c::RescoreScalarColumnar ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetColumnarFromMatch_fn & fnColumnar )
+{
+	std::unique_ptr<columnar::Iterator_i> pIterator;
+	columnar::Columnar_i * pCurColumnar = nullptr;
+	columnar::Columnar_i * pColumnar = nullptr;
+	int iCurTag = 0;
+	bool bTagInitialized = false;
+	bool bIteratorInitialized = false;
+
+	for ( CSphMatch * pMatch : dMatches )
+	{
+		if ( !bTagInitialized || pMatch->m_iTag!=iCurTag )
+		{
+			iCurTag = pMatch->m_iTag;
+			pColumnar = fnColumnar(pMatch);
+			bTagInitialized = true;
+		}
+
+		if ( !bIteratorInitialized || pColumnar!=pCurColumnar )
+		{
+			pCurColumnar = pColumnar;
+			bIteratorInitialized = true;
+			pIterator.reset();
+
+			if ( pColumnar )
+			{
+				std::string sError; // FIXME! report errors
+				columnar::IteratorHints_t tHints { .m_bNeedStringHashes = false, .m_bBuffered = false };
+				pIterator = CreateColumnarIterator ( pColumnar, m_tAttr.m_sName.cstr(), sError, tHints );
+			}
+		}
+
+		const BYTE * pData = nullptr;
+		int iLen = pIterator ? pIterator->Get ( pMatch->m_tRowID, pData ) : 0;
+		pMatch->SetAttrFloat ( tOutLoc, CalcDistData ( { pData, iLen } ) );
+	}
+}
+
+
 void KNNVecDistCalc_c::RescoreColumnar ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetColumnarFromMatch_fn & fnColumnar )
 {
 	const int iCount = dMatches.GetLength();
 	const int iVecBytes = m_tAttr.m_tKNN.m_iDims*(int)sizeof(float);
 
-	static const int CHUNK = 256;
-	const int iCapacity = Min ( CHUNK, iCount );
+	static const int CHUNK = KNN_RESCORE_BATCH_SIZE;
 
 	std::unique_ptr<columnar::Iterator_i> pIterator;
 	columnar::Columnar_i * pCurColumnar = nullptr;
-	bool bInitialized = false;
+	columnar::Columnar_i * pColumnar = nullptr;
+	int iCurTag = 0;
+	bool bTagInitialized = false;
+	bool bIteratorInitialized = false;
 	bool bCurStable = false;	// does the current store's Get() return pointers stable across later Get() calls?
 
-	CSphVector<const void*> dPtrs;
-	CSphVector<CSphMatch*> dValid;
-	CSphVector<float> dOut;
-	dPtrs.Reserve(iCapacity);
-	dValid.Reserve(iCapacity);
-	dOut.Reserve(iCapacity);
+	const void * dPtrs[CHUNK];
+	float dOut[CHUNK];
+	int iBatchStart = 0;
+	int iBatchCount = 0;
 
 	auto fnCompute = [&]()
 	{
-		if ( !dPtrs.GetLength() )
+		if ( !iBatchCount )
 			return;
 
-		dOut.Resize ( dPtrs.GetLength() );
-		m_pDistCalc->CalcDistBatch ( m_dAnchor.Begin(), { dPtrs.Begin(), (size_t)dPtrs.GetLength() }, { dOut.Begin(), (size_t)dOut.GetLength() } );
+		m_pDistCalc->CalcDistBatch ( m_dAnchor.Begin(), { dPtrs, (size_t)iBatchCount }, { dOut, (size_t)iBatchCount } );
+		for ( int i = 0; i < iBatchCount; i++ )
+			dMatches[iBatchStart+i]->SetAttrFloat ( tOutLoc, dOut[i] );
 
-		ARRAY_FOREACH ( k, dValid )
-			dValid[k]->SetAttrFloat ( tOutLoc, dOut[k] );
-
-		dPtrs.Resize(0);
-		dValid.Resize(0);
+		iBatchCount = 0;
 	};
 
 	for ( int i = 0; i < iCount; i++ )
 	{
 		CSphMatch * pMatch = dMatches[i];
-		columnar::Columnar_i * pColumnar = fnColumnar(pMatch);
+		if ( !bTagInitialized || pMatch->m_iTag!=iCurTag )
+		{
+			iCurTag = pMatch->m_iTag;
+			pColumnar = fnColumnar(pMatch);
+			bTagInitialized = true;
+		}
 
-		if ( !bInitialized || pColumnar!=pCurColumnar )
+		if ( !bIteratorInitialized || pColumnar!=pCurColumnar )
 		{
 			pCurColumnar = pColumnar;
-			bInitialized = true;
+			bIteratorInitialized = true;
 			pIterator.reset();
 			bCurStable = false;
 
@@ -406,25 +487,31 @@ void KNNVecDistCalc_c::RescoreColumnar ( VecTraits_T<CSphMatch*> & dMatches, con
 		// FIXME: make float_vector_array batched too
 		if ( m_bMulti )
 		{
+			fnCompute();
 			pMatch->SetAttrFloat ( tOutLoc, MinDistOverSlots ( { pData, iLen } ) );
 			continue;
 		}
 
 		if ( iLen!=iVecBytes || !pData )
 		{
+			fnCompute();
 			pMatch->SetAttrFloat ( tOutLoc, FLT_MAX );
 			continue;
 		}
 
 		if ( bCurStable )
 		{
-			dPtrs.Add(pData);
-			dValid.Add(pMatch);
-			if ( dPtrs.GetLength()>=CHUNK )
+			if ( !iBatchCount )
+				iBatchStart = i;
+			dPtrs[iBatchCount++] = pData;
+			if ( iBatchCount==CHUNK )
 				fnCompute();
 		}
 		else
+		{
+			fnCompute();
 			pMatch->SetAttrFloat ( tOutLoc, m_fnDistFunc ( pData, m_dAnchor.Begin(), (size_t)-1, (size_t)-1, m_pDistFuncParam ) );
+		}
 	}
 
 	fnCompute();
@@ -436,7 +523,7 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 	const int iCount = dMatches.GetLength();
 	const int iVecBytes = m_tAttr.m_tKNN.m_iDims*(int)sizeof(float);
 
-	static const int CHUNK = 256;
+	static const int CHUNK = KNN_RESCORE_BATCH_SIZE;
 
 	// read the blob-row offset from the match row (docinfo), then read the blob-row header from the
 	// pool at that offset. Software-pipeline both: prefetch the offset location furthest ahead, then

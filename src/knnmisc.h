@@ -61,6 +61,8 @@ const char *					GetKnnDistRescoreAttrName();
 void							SetupKNNLimit ( CSphQuery & tQuery );
 
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
+ISphExpr *						CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
+bool							UseBatchedKNNRescore ( const KnnSearchSettings_t & tSettings );
 void							NormalizeVec ( VecTraits_T<float> & dData );
 
 void							AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr );

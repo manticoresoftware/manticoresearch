@@ -1826,8 +1826,18 @@ bool QueueCreator_c::AddKNNRescoreColumn()
 	if ( !CanRescoreKNN() )
 		return true;
 
+	const auto & tKNN = m_tQuery.SingleKnnSettings();
 	CSphColumnInfo tKNNDistRescored ( GetKnnDistRescoreAttrName(), SPH_ATTR_FLOAT );
-	tKNNDistRescored.m_eStage = SPH_EVAL_SORTER;
+	// Small requests use the original final-stage expression and therefore need no collector pass.
+	if ( UseBatchedKNNRescore(tKNN) )
+		tKNNDistRescored.m_eStage = SPH_EVAL_SORTER;
+	else
+	{
+		const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
+		assert(pAttr);
+		tKNNDistRescored.m_eStage = SPH_EVAL_FINAL;
+		tKNNDistRescored.m_pExpr = CreateExpr_KNNDistRescore ( tKNN.m_dVec, *pAttr );
+	}
 
 	m_pSorterSchema->AddAttr ( tKNNDistRescored, true );
 	m_hQueryColumns.Add ( tKNNDistRescored.m_sName );

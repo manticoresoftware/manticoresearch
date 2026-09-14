@@ -2741,14 +2741,17 @@ int QueueCreator_c::ReduceOrIncreaseMaxMatches() const
 		if ( m_tQuery.m_bExplicitMaxMatches )
 			return Max ( m_tSettings.m_iMaxMatches, 1 );
 
+		int64_t iWindow = m_tQuery.m_iLimit<0
+			? m_tSettings.m_iMaxMatches
+			: int64_t(m_tQuery.m_iLimit) + m_tQuery.m_iOffset;
 		int64_t iMaxRequested = 0;
 		for ( const auto & tKNN : m_tQuery.m_dKnnSettings )
-			if ( tKNN.m_fOversampling > 1.0f )
-			{
-				int64_t iRequested = tKNN.GetRequestedDocs();
-				if ( iRequested > tKNN.m_iK )
-					iMaxRequested = Max ( iMaxRequested, iRequested );
-			}
+		{
+			int64_t iRequested = tKNN.GetRequestedDocs();
+			int64_t iNeeded = tKNN.m_bRescore ? iRequested : Min ( iRequested, iWindow );
+			if ( iNeeded > iWindow || iNeeded > m_tSettings.m_iMaxMatches )
+				iMaxRequested = Max ( iMaxRequested, iNeeded );
+		}
 
 		if ( iMaxRequested > 0 )
 			return Max ( Max ( m_tSettings.m_iMaxMatches, iMaxRequested ), 1 );

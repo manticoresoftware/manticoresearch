@@ -396,6 +396,7 @@ Query OK, 0 rows affected (0.00 sec)
 ALTER TABLE table_name MODIFY COLUMN column_name API_KEY='key';
 ALTER TABLE table_name MODIFY COLUMN column_name API_URL='url';
 ALTER TABLE table_name MODIFY COLUMN column_name API_TIMEOUT='seconds';
+ALTER TABLE table_name MODIFY COLUMN column_name MAX_INPUT_TOKENS='tokens';
 ```
 
 <!-- request Example -->
@@ -403,12 +404,14 @@ ALTER TABLE table_name MODIFY COLUMN column_name API_TIMEOUT='seconds';
 ALTER TABLE rt MODIFY COLUMN vector API_KEY='new-key';
 ALTER TABLE rt MODIFY COLUMN vector API_URL='https://custom-api.example.com/v1/embeddings';
 ALTER TABLE rt MODIFY COLUMN vector API_TIMEOUT='30';
+ALTER TABLE rt MODIFY COLUMN vector MAX_INPUT_TOKENS='512';
 ```
 
 **注意事项：**
 - `API_KEY`：在 ALTER 操作期间通过实际 API 请求验证新 API 密钥。
 - `API_URL`：设置为空字符串 (`''`) 以恢复到默认提供方端点。
 - `API_TIMEOUT`：设置为 `'0'` 以使用默认超时时间（10 秒）。必须是非负整数。
+- `MAX_INPUT_TOKENS`：限制生成嵌入时从每段输入文本中取用的 token 数量。设为 `'0'` 时使用模型自身的限制。必须是非负整数。现有行会保留其向量；该限制适用于变更后生成的嵌入。
 
 <!-- end -->
 

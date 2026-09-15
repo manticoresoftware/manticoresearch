@@ -809,7 +809,7 @@ Manticore支持两种访问模式来读取表数据：seek+read和mmap。
 
 在mmap访问模式下，搜索服务器使用`mmap`系统调用将表文件映射到内存中，操作系统会缓存文件内容。在该模式下，[read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs)和[read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits)选项对相应文件无效。mmap读取器还可以使用`mlock`特权调用将表数据锁定在内存中，防止操作系统将缓存数据交换到磁盘。
 
-要控制使用哪种访问模式，可以使用以下选项：**access_plain_attrs**、**access_blob_attrs**、**access_doclists**、**access_hitlists**和**access_dict**，其值如下：
+要控制使用哪种访问模式，可以使用 **access_plain_attrs**、**access_blob_attrs**、**access_doclists**、**access_hitlists**、**access_dict**、**access_columnar_attrs** 和 **access_secondary** 选项，它们支持以下取值：
 
 | 值 | 描述 |
 | - | - |
@@ -826,6 +826,8 @@ Manticore支持两种访问模式来读取表数据：seek+read和mmap。
 | access_doclists   | **file** (默认), mmap, mlock  | 控制`*.spd`（文档列表）数据的读取方式 |
 | access_hitlists   | **file** (默认), mmap, mlock  | 控制`*.spp`（命中列表）数据的读取方式 |
 | access_dict   | mmap, **mmap_preread** (默认), mlock  | 控制`*.spi`（字典）的读取方式 |
+| access_columnar_attrs | file, **mmap**（默认） | 控制如何读取 `*.spc`（列式属性） |
+| access_secondary | **file**（默认）, mmap | 控制如何读取 `*.spidx` 和 `*.spjidx`（二级索引） |
 
 以下表格可以帮助您选择所需的模式：
 
@@ -833,10 +835,11 @@ Manticore支持两种访问模式来读取表数据：seek+read和mmap。
 | - | - | - | - | - |
 | [行式](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)（非列式）存储的普通属性、跳过列表、词列表、查找、已删除文档 |  mmap | mmap | **mmap_preread** (默认) | mlock |
 | 行式字符串、多值属性（MVA）和json属性 | mmap | mmap | **mmap_preread** (默认) | mlock |
-| [列式](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)数字、字符串和多值属性 | 总是 | 仅通过操作系统 | 否 | 不支持 |
+| [列式](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)数值、字符串和多值属性 | file | **mmap**（默认） | 否 | 不支持 |
 | 文档列表 | **file** (默认) | mmap | 否 | mlock |
 | 命中列表 | **file** (默认) | mmap | 否 | mlock |
 | 字典 | mmap | mmap | **mmap_preread** (默认) | mlock |
+| 二级索引 | **file**（默认） | mmap | 否 | 不支持 |
 
 ##### 建议如下：
 
@@ -849,8 +852,8 @@ Manticore支持两种访问模式来读取表数据：seek+read和mmap。
 默认模式提供了以下平衡：
 * mmap，
 * 预读非列式属性，
-* 无预读地查找和读取列式属性，
-* 无预读地查找和读取文档列表/命中列表。
+* 对列式属性进行内存映射，不预读，
+* 不预读，直接查找并读取文档列表、命中列表和二级索引。
 
 这在大多数情况下提供了良好的搜索性能、最佳的内存利用率和更快的searchd重启。
 

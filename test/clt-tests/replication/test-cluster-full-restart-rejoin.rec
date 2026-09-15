@@ -1,0 +1,32 @@
+––– input –––
+bash -c 'for INSTANCE in 1 2 3; do export INSTANCE; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null 2>&1 || true; done; rm -rf /var/run/manticore-{1,2,3} /var/lib/manticore-{1,2,3} /var/log/manticore-{1,2,3}'
+––– output –––
+––– input –––
+bash -c 'wait_up() { end=$((SECONDS+30)); until mysql -h0 -P${1}306 -e "SHOW STATUS LIKE '\''uptime'\''" >/dev/null 2>&1; do [ $SECONDS -lt $end ] || return 1; sleep 0.5; done; }; for i in 1 2 3; do export INSTANCE=$i; mkdir -p /var/{run,lib,log}/manticore-$i; stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null; wait_up $i && echo "NODE${i}_STARTED=yes" || echo "NODE${i}_STARTED=no"; done'
+––– output –––
+NODE1_STARTED=yes
+NODE2_STARTED=yes
+NODE3_STARTED=yes
+––– input –––
+bash -c 'st() { v=$(mysql -E -h0 -P${1}306 -e "SHOW STATUS LIKE '\''cluster_c_restart_$2'\''" 2>/dev/null | awk "/Value:/{print \$2; exit}"); echo "${v:-n/a}"; }; mysql -h0 -P1306 -e "CREATE CLUSTER c_restart" && mysql -h0 -P2306 -e "JOIN CLUSTER c_restart AT '\''127.0.0.1:1312'\''" && mysql -h0 -P3306 -e "JOIN CLUSTER c_restart AT '\''127.0.0.1:1312'\''"; end=$((SECONDS+60)); while [ $SECONDS -lt $end ]; do [ "$(st 1 size)$(st 2 size)$(st 3 size)" = "333" ] && break; sleep 1; done; for i in 1 2 3; do echo "BEFORE node$i status=$(st $i status) node_state=$(st $i node_state) size=$(st $i size)"; done'
+––– output –––
+BEFORE node1 status=primary node_state=synced size=3
+BEFORE node2 status=primary node_state=synced size=3
+BEFORE node3 status=primary node_state=synced size=3
+––– input –––
+bash -c 'for i in 1 2 3; do ( export INSTANCE=$i; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null 2>&1 ) & done; wait; echo "STOPPED_ALL=yes"'
+––– output –––
+STOPPED_ALL=yes
+––– input –––
+bash -c 'st() { v=$(mysql -E -h0 -P${1}306 -e "SHOW STATUS LIKE '\''cluster_c_restart_$2'\''" 2>/dev/null | awk "/Value:/{print \$2; exit}"); echo "${v:-n/a}"; }; wait_up() { end=$((SECONDS+30)); until mysql -h0 -P${1}306 -e "SHOW STATUS LIKE '\''uptime'\''" >/dev/null 2>&1; do [ $SECONDS -lt $end ] || return 1; sleep 0.5; done; }; export INSTANCE=1; stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null; wait_up 1 && echo "NODE1_ALONE status=$(st 1 status)"'
+––– output –––
+NODE1_ALONE status=recovery-required
+––– input –––
+bash -c 'st() { v=$(mysql -E -h0 -P${1}306 -e "SHOW STATUS LIKE '\''cluster_c_restart_$2'\''" 2>/dev/null | awk "/Value:/{print \$2; exit}"); echo "${v:-n/a}"; }; wait_up() { end=$((SECONDS+30)); until mysql -h0 -P${1}306 -e "SHOW STATUS LIKE '\''uptime'\''" >/dev/null 2>&1; do [ $SECONDS -lt $end ] || return 1; sleep 0.5; done; }; for i in 2 3; do ( export INSTANCE=$i; stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null ) & done; wait; wait_up 2; wait_up 3; sleep 60; for i in 1 2 3; do echo "AFTER_PEERS_BACK node$i status=$(st $i status) node_state=$(st $i node_state) size=$(st $i size)"; done'
+––– output –––
+AFTER_PEERS_BACK node1 status=recovery-required node_state=closed size=n/a
+AFTER_PEERS_BACK node2 status=primary node_state=synced size=2
+AFTER_PEERS_BACK node3 status=primary node_state=synced size=2
+––– input –––
+bash -c 'for INSTANCE in 1 2 3; do export INSTANCE; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null 2>&1 || true; done'
+––– output –––

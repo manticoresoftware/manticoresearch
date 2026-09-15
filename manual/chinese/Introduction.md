@@ -20,8 +20,10 @@ Manticore Search 是一款面向搜索和分析场景打造的高性能多存储
   * [完善的中文分词](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md)
   * [文本高亮](Searching/Highlighting.md)
 
-#### 向量搜索能力
-Manticore Search 支持将由你的机器学习模型生成的嵌入添加到每个文档中，然后对其进行 [nearest-neighbor search](Searching/KNN.md)。这使你可以构建相似度搜索、推荐、语义搜索、[conversational search](Searching/Conversational_search.md) 和基于 NLP 算法的相关性排序等功能，其中还包括图像、视频和声音搜索。
+#### 向量搜索与自动嵌入
+Manticore Search 可以存储由你的机器学习模型提供的向量，也可以使用本地或远程嵌入模型，从文本字段中[自动生成嵌入](Searching/KNN.md#Auto-Embeddings-%28Recommended%29)。随后，你可以运行[最近邻搜索](Searching/KNN.md)，基于文本、图像、视频或声音构建相似性搜索、推荐、语义搜索、[对话式搜索](Searching/Conversational_search.md)和检索。
+
+对于长文本，[自动分块](Searching/KNN.md#Chunking-strategies)可以将每个文档拆分为固定大小、递归或基于句子的块，并将其嵌入存储在 `float_vector_array` 中。每个块会被独立搜索，而文档在结果中只出现一次，并根据最接近的块进行评分。`mean` 策略则会将各块的嵌入平均为一个向量；默认的 `truncate` 策略会保留此前的单向量行为。
 
 #### 会话搜索
 Manticore Search 支持在现有的向量化表上进行 [conversational search](Searching/Conversational_search.md)。它会使用 KNN 搜索检索最相关的行，将这些行与对话历史一起作为 LLM 的上下文，并且可以通过 SQL `CALL CHAT` 或 HTTP JSON `/search` 端点进行应答。

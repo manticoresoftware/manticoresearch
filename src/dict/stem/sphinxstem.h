@@ -57,8 +57,42 @@ void	sphAotSetCacheSize ( int iCacheSize );
 // simple order aot languages
 enum AOT_LANGS {AOT_BEGIN=0, AOT_RU=AOT_BEGIN, AOT_EN, AOT_DE, AOT_UK, AOT_LENGTH};
 
+enum class AotGermanMode_e
+{
+	LEGACY,
+	V2
+};
+
+enum class AotMorphologyId_e
+{
+	RU,
+	EN,
+	DE,
+	UK,
+	RU_ALL,
+	EN_ALL,
+	DE_ALL,
+	UK_ALL,
+	DE_V2,
+	DE_V2_ALL
+};
+
+struct AotMorphology_t
+{
+	AotMorphologyId_e	m_eId = AotMorphologyId_e::RU;
+
+	AOT_LANGS	GetLang() const;
+	bool		IsAll() const;
+	bool		IsGermanV2() const;
+};
+
+static constexpr DWORD AOT_FILTER_DE_V2 = 1UL << AOT_LENGTH;
+
 // aot lemmatize names
 extern const char* AOT_LANGUAGES [AOT_LENGTH];
+
+/// parse one AOT morphology option
+bool	sphParseAotMorphology ( const char * sMorphology, int iLength, AotMorphology_t & tMorphology );
 
 /// init AOT lemmatizer
 bool	sphAotInit ( const CSphString & sDictFile, CSphString & sError, int iLang );
@@ -74,7 +108,7 @@ void	sphAotLemmatizeRuUTF8 ( BYTE * pWord );
 void	sphAotLemmatizeDe1252 ( BYTE * pWord, int iLen );
 
 /// lemmatize (or guess a normal form) a German word in UTF-8 encoding, return a single "best" lemma
-void	sphAotLemmatizeDeUTF8 ( BYTE * pWord );
+void	sphAotLemmatizeDeUTF8 ( BYTE * pWord, AotGermanMode_e eMode );
 
 /// lemmatize (or guess a normal form) a word in single-byte ASCII encoding, return a single "best" lemma
 void	sphAotLemmatize ( BYTE * pWord, int iLang );
@@ -82,7 +116,7 @@ void	sphAotLemmatize ( BYTE * pWord, int iLang );
 // functions below by design used in search time
 /// lemmatize (or guess a normal form) a Russian word, return all lemmas
 void	sphAotLemmatizeRu ( StrVec_t & dLemmas, const BYTE * pWord );
-void	sphAotLemmatizeDe ( StrVec_t & dLemmas, const BYTE * pWord );
+void	sphAotLemmatizeDe ( StrVec_t & dLemmas, const BYTE * pWord, AotGermanMode_e eMode );
 void	sphAotLemmatize ( StrVec_t & dLemmas, const BYTE * pWord, int iLang );
 
 /// get lemmatizer dictionary info (file name, crc)

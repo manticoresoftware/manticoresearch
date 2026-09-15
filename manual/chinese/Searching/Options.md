@@ -426,7 +426,7 @@ OPTION fusion_method='rrf', rank_constant=10;
 OPTION boolean_mode='or'
 ```
 
-控制 SphinxQL 全文查询中**没有显式布尔运算符**的多关键词 `MATCH()` 表达式如何被解释。
+控制 SQL 全文查询中多关键字 `MATCH()` 表达式在**没有显式布尔运算符**时的解释方式。
 
 可从以下值中选择：
 * `and` - 所有关键词都必须匹配

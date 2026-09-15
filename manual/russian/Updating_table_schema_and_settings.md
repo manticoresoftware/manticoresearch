@@ -396,6 +396,7 @@ Query OK, 0 rows affected (0.00 sec)
 ALTER TABLE table_name MODIFY COLUMN column_name API_KEY='key';
 ALTER TABLE table_name MODIFY COLUMN column_name API_URL='url';
 ALTER TABLE table_name MODIFY COLUMN column_name API_TIMEOUT='seconds';
+ALTER TABLE table_name MODIFY COLUMN column_name MAX_INPUT_TOKENS='tokens';
 ```
 
 <!-- request Example -->
@@ -403,12 +404,14 @@ ALTER TABLE table_name MODIFY COLUMN column_name API_TIMEOUT='seconds';
 ALTER TABLE rt MODIFY COLUMN vector API_KEY='new-key';
 ALTER TABLE rt MODIFY COLUMN vector API_URL='https://custom-api.example.com/v1/embeddings';
 ALTER TABLE rt MODIFY COLUMN vector API_TIMEOUT='30';
+ALTER TABLE rt MODIFY COLUMN vector MAX_INPUT_TOKENS='512';
 ```
 
 **Примечания:**
 - `API_KEY`: Новый API-ключ проверяется во время операции ALTER путём выполнения реального API-запроса.
 - `API_URL`: Установите в пустую строку (`''`), чтобы вернуться к конечной точке провайдера по умолчанию.
 - `API_TIMEOUT`: Установите в `'0'`, чтобы использовать таймаут по умолчанию (10 секунд). Должно быть неотрицательным целым числом.
+- `MAX_INPUT_TOKENS`: Ограничивает число токенов, берущихся из каждого входного текста при генерации эмбеддингов. Укажите `'0'`, чтобы использовать собственное ограничение модели. Значение должно быть неотрицательным целым числом. Существующие строки сохраняют свои векторы; ограничение применяется к эмбеддингам, сгенерированным после изменения.
 
 <!-- end -->
 

@@ -61,15 +61,19 @@ const char *					GetKnnDistRescoreAttrName();
 void							SetupKNNLimit ( CSphQuery & tQuery );
 
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
+ISphExpr *						CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
+bool							UseBatchedKNNRescore ( const KnnSearchSettings_t & tSettings );
 void							NormalizeVec ( VecTraits_T<float> & dData );
 
 void							AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr );
-void							ReadKNNJson ( bson::Bson_c tRoot, knn::IndexSettings_t & tIS, knn::ModelSettings_t & tMS, CSphString & sKNNFrom );
+void							ReadKNNJson ( bson::Bson_c tRoot, knn::IndexSettings_t & tIS, knn::ModelSettings_t & tMS, CSphString & sKNNFrom, knn::ChunkSettings_t & tChunk );
 CSphString						FormatKNNConfigStr ( const CSphVector<NamedKNNSettings_t> & dAttrs );
 bool							ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t> & dParsed, CSphString & sError );
-void							FormatKNNSettings ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t & tIndexSettings, const knn::ModelSettings_t & tModelSettings, const CSphString & sKNNFrom );
+void							FormatKNNSettings ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t & tIndexSettings, const knn::ModelSettings_t & tModelSettings, const CSphString & sKNNFrom, const knn::ChunkSettings_t & tChunk );
 
 bool							Str2HNSWSimilarity ( const CSphString & sSimilarity, knn::HNSWSimilarity_e & eSimilarity, CSphString * pError = nullptr );
+bool							Str2ChunkStrategy ( const CSphString & sStrategy, knn::ChunkStrategy_e & eStrategy, CSphString * pError = nullptr );
+const char *					ChunkStrategy2Str ( knn::ChunkStrategy_e eStrategy );
 bool							Str2Quantization ( const CSphString & sQuantization, knn::Quantization_e & eQuantization, CSphString * pError = nullptr );
 
 int								GetDefaultKNNParallelBuild ( int iThreads );
@@ -93,3 +97,5 @@ ISphMatchSorter *				CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const K
 
 const char *					GetAPITimeoutErrorMsg();
 bool							ValidateEmbeddingsAPITimeout ( const CSphString & sValue, int & iTimeout, CSphString & sError );
+const char *					GetMaxInputTokensErrorMsg();
+bool							ValidateEmbeddingsMaxInputTokens ( const CSphString & sValue, int & iMaxInputTokens, CSphString & sError );

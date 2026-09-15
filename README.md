@@ -52,6 +52,7 @@ What distinguishes Manticore from other solutions is:
 * ⚡ **Multi-threaded query execution** and efficient query parallelization use all CPU cores for low response times.
 * 🔎 **Full-text search** works seamlessly with both small and large datasets.
 * 🧩 **Hybrid search** combines full-text and vector retrieval in a single query for better relevance.
+* 🧠 **Auto-embeddings with automatic chunking** generate vectors from text and can [split long documents](https://manual.manticoresearch.com/Searching/KNN#Chunking-strategies) into fixed-size, recursive, or sentence-based chunks stored in a `float_vector_array`, making relevant sections searchable without application-side chunking.
 * 💬 **Conversational search** lets existing vectorized tables answer questions with KNN retrieval, conversation history, and LLM-backed responses through SQL `CALL CHAT` or the HTTP JSON `/search` endpoint.
 * 🏎️ **Row-wise storage** provides fast performance for small, medium, and large datasets.
 * 🗄️ **Columnar storage**, powered by the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/), handles datasets too large to fit in RAM.
@@ -83,6 +84,7 @@ What distinguishes Manticore from other solutions is:
   - [Geo-spatial search](https://play.manticoresearch.com/geosearch/)
   - [Hybrid search](https://manual.manticoresearch.com/Searching/Hybrid_search)
   - [Vector search](https://manual.manticoresearch.com/Searching/KNN)
+  - [Auto-embeddings with automatic chunking](https://manual.manticoresearch.com/Searching/KNN#Chunking-strategies)
   - [Conversational search](https://manual.manticoresearch.com/Searching/Conversational_search)
   - [Joining tables](https://manual.manticoresearch.com/Searching/Joining)
   - [Spelling correction](https://play.manticoresearch.com/didyoumean/)

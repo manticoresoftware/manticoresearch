@@ -1938,6 +1938,7 @@ private:
 	bool						AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError ) override;
 	bool						AlterApiUrl ( const CSphString & sAttr, const CSphString & sUrl, CSphString & sError ) override;
 	bool						AlterApiTimeout ( const CSphString & sAttr, int iTimeout, CSphString & sError ) override;
+	bool						AlterMaxInputTokens ( const CSphString & sAttr, int iMaxInputTokens, CSphString & sError ) override;
 	bool						AlterRebuild ( AlterOp_fn && operation, CSphString & sError, const char * sTrace );
 
 	bool						CanAttach ( const CSphIndex * pIndex, bool bCheckFT, CSphString & sError ) const;
@@ -5983,20 +5984,21 @@ bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVe
 }
 
 
-static bool PrepareEmbeddingModelsForSchema ( CSphSchema & tSchema, std::unique_ptr<TableEmbeddings_c> & pEmbeddings, CSphVector<AttrWithModel_t> & dAttrsWithModels, CSphString & sError )
+static bool SchemaHasEmbeddingModels ( const CSphSchema & tSchema )
 {
-	pEmbeddings.reset();
-	dAttrsWithModels.Reset();
-
-	bool bHaveModels = false;
 	for ( int i = 0 ; i < tSchema.GetAttrsCount(); i++ )
-		bHaveModels |= !tSchema.GetAttr(i).m_tKNNModel.m_sModelName.empty();
+		if ( !tSchema.GetAttr(i).m_tKNNModel.m_sModelName.empty() )
+			return true;
 
-	if ( !bHaveModels )
-		return true;
+	return false;
+}
 
+
+// models that tEmbeddings already holds are reused; the others are loaded into it
+static bool PrepareAttrsWithModels ( CSphSchema & tSchema, TableEmbeddings_c & tEmbeddings, CSphVector<AttrWithModel_t> & dAttrsWithModels, CSphString & sError )
+{
+	dAttrsWithModels.Reset();
 	dAttrsWithModels.Resize ( tSchema.GetAttrsCount() );
-	pEmbeddings = std::make_unique<TableEmbeddings_c>();
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		const auto & tAttr = tSchema.GetAttr(i);
@@ -6008,12 +6010,16 @@ static bool PrepareEmbeddingModelsForSchema ( CSphSchema & tSchema, std::unique_
 		if ( !ParseEmbeddingSources ( dAttrsWithModels[i].m_dFrom, tAttr.m_sKNNFrom, tSchema, sError ) )
 			return false;
 
-		if ( !pEmbeddings->Load ( tAttr.m_sName, tAttr.m_tKNNModel, sError ) )
-			return false;
+		auto pModel = tEmbeddings.GetModel ( tAttr.m_sName );
+		if ( !pModel )
+		{
+			if ( !tEmbeddings.Load ( tAttr.m_sName, tAttr.m_tKNNModel, sError ) )
+				return false;
 
-		auto pModel = pEmbeddings->GetModel ( tAttr.m_sName );
+			pModel = tEmbeddings.GetModel ( tAttr.m_sName );
+		}
+
 		assert(pModel);
-
 		dAttrsWithModels[i].m_pModel = pModel;
 
 		// fixme! modifying the schema
@@ -6021,6 +6027,19 @@ static bool PrepareEmbeddingModelsForSchema ( CSphSchema & tSchema, std::unique_
 	}
 
 	return true;
+}
+
+
+static bool PrepareEmbeddingModelsForSchema ( CSphSchema & tSchema, std::unique_ptr<TableEmbeddings_c> & pEmbeddings, CSphVector<AttrWithModel_t> & dAttrsWithModels, CSphString & sError )
+{
+	pEmbeddings.reset();
+	dAttrsWithModels.Reset();
+
+	if ( !SchemaHasEmbeddingModels ( tSchema ) )
+		return true;
+
+	pEmbeddings = std::make_unique<TableEmbeddings_c>();
+	return PrepareAttrsWithModels ( tSchema, *pEmbeddings, dAttrsWithModels, sError );
 }
 
 bool RtIndex_c::LoadEmbeddingModels ( CSphString & sError )
@@ -9894,6 +9913,15 @@ bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD
 	if ( !Alter_AddRemoveFieldFromSchema ( bAdd, tNewSchema, sFieldName, uFieldFlags, sError ) )
 		return false;
 
+	// the embedding sources (FROM=...) are field ids - rebuild them for the new schema (fix #4872)
+	CSphVector<AttrWithModel_t> dPreparedAttrsWithModels;
+	if ( m_pEmbeddings && !PrepareAttrsWithModels ( tNewSchema, *m_pEmbeddings, dPreparedAttrsWithModels, sError ) )
+	{
+		if ( !bAdd )
+			sError.SetSprintf ( "%s; a field used as an embedding source can be dropped after the embedding column itself is dropped", sError.cstr() );
+		return false;
+	}
+
 	m_tSchema = tNewSchema;
 
 	auto tGuard = RtGuard();
@@ -9908,6 +9936,9 @@ bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD
 		AddFieldToRamchunk ( sFieldName, uFieldFlags, tOldSchema, tNewSchema );
 	else
 		RemoveFieldFromRamchunk ( sFieldName, tOldSchema, tNewSchema );
+
+	if ( m_pEmbeddings )
+		m_dAttrsWithModels.SwapData ( dPreparedAttrsWithModels );
 
 	// fixme: we can't rollback at this point
 	RaiseAlterGeneration();
@@ -9976,7 +10007,14 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 	std::unique_ptr<TableEmbeddings_c> pPreparedEmbeddings;
 	CSphVector<AttrWithModel_t> dPreparedAttrsWithModels;
 
+	// m_dAttrsWithModels is parallel to the schema attributes - rebuild it on every attribute change (fix #4872)
 	const bool bModelBackedEmbedding = ( bAdd && IsModelBackedEmbedding ( tNewCtx ) );
+	if ( !bModelBackedEmbedding && m_pEmbeddings )
+	{
+		if ( !PrepareAttrsWithModels ( tNewSchema, *m_pEmbeddings, dPreparedAttrsWithModels, sError ) )
+			return false;
+	}
+
 	if ( bModelBackedEmbedding )
 	{
 		if ( !PrepareEmbeddingModelsForSchema ( tNewSchema, pPreparedEmbeddings, dPreparedAttrsWithModels, sError ) )
@@ -9993,6 +10031,7 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 		tNewCtx.m_tKNN = pAttr->m_tKNN;
 		tNewCtx.m_tKNNModel = pAttr->m_tKNNModel;
 		tNewCtx.m_sKNNFrom = pAttr->m_sKNNFrom;
+		tNewCtx.m_tKNNChunk = pAttr->m_tKNNChunk;
 	}
 
 	m_tSchema = tNewSchema;
@@ -10018,6 +10057,15 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 	{
 		m_pEmbeddings = std::move ( pPreparedEmbeddings );
 		m_dAttrsWithModels.SwapData ( dPreparedAttrsWithModels );
+	}
+	else if ( m_pEmbeddings )
+	{
+		m_dAttrsWithModels.SwapData ( dPreparedAttrsWithModels );
+		if ( !SchemaHasEmbeddingModels ( m_tSchema ) ) // the last model-backed column was dropped
+		{
+			m_pEmbeddings.reset();
+			m_dAttrsWithModels.Reset();
+		}
 	}
 
 	// fixme: we can't rollback at this point
@@ -12721,6 +12769,51 @@ bool RtIndex_c::AlterApiTimeout ( const CSphString & sAttr, int iTimeout, CSphSt
 	return true;
 }
 
+
+bool RtIndex_c::AlterMaxInputTokens ( const CSphString & sAttr, int iMaxInputTokens, CSphString & sError )
+{
+	// strength single-fiber access (don't rely upon to upstream w-lock)
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+
+	auto pAttr = m_tSchema.GetAttr ( sAttr.cstr() );
+	if ( !pAttr )
+	{
+		sError.SetSprintf ( "attribute '%s' not found", sAttr.cstr() );
+		return false;
+	}
+
+	if ( pAttr->m_tKNNModel.m_sModelName.empty() )
+	{
+		sError.SetSprintf ( "no embeddings model specified for attribute '%s'", sAttr.cstr() );
+		return false;
+	}
+
+	if ( iMaxInputTokens < 0 )
+	{
+		sError = GetMaxInputTokensErrorMsg();
+		return false;
+	}
+
+	// 0 means the model's own limit, positive value caps the tokens taken from each input text
+	int iOldMaxInputTokens = pAttr->m_tKNNModel.m_iMaxInputTokens;
+	const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_iMaxInputTokens = iMaxInputTokens;
+
+	m_pEmbeddings.reset();
+	if ( !LoadEmbeddingModels(sError) )
+	{
+		const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_iMaxInputTokens = iOldMaxInputTokens;
+		m_pEmbeddings.reset();
+		CSphString sRevertError;
+		LoadEmbeddingModels(sRevertError);
+		return false;
+	}
+
+	RaiseAlterGeneration();
+	AlterSave(false);
+
+	return true;
+}
+
 void RtIndex_c::SetGlobalIDFPath ( const CSphString & sPath )
 {
 	m_sGlobalIDFPath = sPath;
@@ -13183,6 +13276,12 @@ bool RtIndex_c::InitUpdateEmbeddingState ( const CSphString & sAttr, EmbeddingPo
 	}
 
 	const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( iAttrIdx );
+	if ( tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY )
+	{
+		sError.SetSprintf ( "attribute '%s' is a float_vector_array; rebuilding embeddings is not supported for it yet, use REPLACE", sAttr.cstr() );
+		return false;
+	}
+
 	if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR || !tAttr.IsIndexedKNN() )
 	{
 		sError.SetSprintf ( "attribute '%s' is not indexed float_vector", sAttr.cstr() );
@@ -13319,8 +13418,10 @@ bool RtIndex_c::GetUpdateEmbedding ( ExtUpdState_t & tState, AttrUpdateSharedPtr
 	if ( dDocids.IsEmpty() )
 		return true;
 
+	const CSphColumnInfo & tEmbAttr = m_tSchema.GetAttr ( tState.m_iAttrIdx ); 	// use the column's persisted chunking settings 
+
 	std::vector<std::vector<float>> dEmbeddings;
-	if ( !ConvertEmbeddings ( tAttrWithModel.m_pModel, tState.m_sAttr, dFromTexts, dEmbeddings, sError ) )
+	if ( !ConvertEmbeddings ( tAttrWithModel.m_pModel, tState.m_sAttr, dFromTexts, dEmbeddings, &tEmbAttr.m_tKNNChunk, sError ) )
 		return false;
 
 	pUpdate = CreateFloatVectorAttrUpdate ( tState.m_sAttr, dDocids, dEmbeddings, tState.m_iDims );

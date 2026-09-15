@@ -1826,8 +1826,18 @@ bool QueueCreator_c::AddKNNRescoreColumn()
 	if ( !CanRescoreKNN() )
 		return true;
 
+	const auto & tKNN = m_tQuery.SingleKnnSettings();
 	CSphColumnInfo tKNNDistRescored ( GetKnnDistRescoreAttrName(), SPH_ATTR_FLOAT );
-	tKNNDistRescored.m_eStage = SPH_EVAL_SORTER;
+	// Small requests use the original final-stage expression and therefore need no collector pass.
+	if ( UseBatchedKNNRescore(tKNN) )
+		tKNNDistRescored.m_eStage = SPH_EVAL_SORTER;
+	else
+	{
+		const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
+		assert(pAttr);
+		tKNNDistRescored.m_eStage = SPH_EVAL_FINAL;
+		tKNNDistRescored.m_pExpr = CreateExpr_KNNDistRescore ( tKNN.m_dVec, *pAttr );
+	}
 
 	m_pSorterSchema->AddAttr ( tKNNDistRescored, true );
 	m_hQueryColumns.Add ( tKNNDistRescored.m_sName );
@@ -2731,14 +2741,17 @@ int QueueCreator_c::ReduceOrIncreaseMaxMatches() const
 		if ( m_tQuery.m_bExplicitMaxMatches )
 			return Max ( m_tSettings.m_iMaxMatches, 1 );
 
+		int64_t iWindow = m_tQuery.m_iLimit<0
+			? m_tSettings.m_iMaxMatches
+			: int64_t(m_tQuery.m_iLimit) + m_tQuery.m_iOffset;
 		int64_t iMaxRequested = 0;
 		for ( const auto & tKNN : m_tQuery.m_dKnnSettings )
-			if ( tKNN.m_fOversampling > 1.0f )
-			{
-				int64_t iRequested = tKNN.GetRequestedDocs();
-				if ( iRequested > tKNN.m_iK )
-					iMaxRequested = Max ( iMaxRequested, iRequested );
-			}
+		{
+			int64_t iRequested = tKNN.GetRequestedDocs();
+			int64_t iNeeded = tKNN.m_bRescore ? iRequested : Min ( iRequested, iWindow );
+			if ( iNeeded > iWindow || iNeeded > m_tSettings.m_iMaxMatches )
+				iMaxRequested = Max ( iMaxRequested, iNeeded );
+		}
 
 		if ( iMaxRequested > 0 )
 			return Max ( Max ( m_tSettings.m_iMaxMatches, iMaxRequested ), 1 );

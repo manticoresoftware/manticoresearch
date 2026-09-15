@@ -46,6 +46,7 @@ struct AttrAddRemoveCtx_t
 	knn::IndexSettings_t m_tKNN;
 	knn::ModelSettings_t m_tKNNModel;
 	CSphString		m_sKNNFrom;
+	knn::ChunkSettings_t m_tKNNChunk;
 };
 
 // common add/remove attribute/field code for both RT and plain indexes

@@ -434,7 +434,7 @@ struct FileAccessSettings_t : public SettingsWriter_c
 	FileAccess_e	m_eDoclist = FileAccess_e::FILE;
 	FileAccess_e	m_eHitlist = FileAccess_e::FILE;
 	FileAccess_e	m_eDict = FileAccess_e::MMAP_PREREAD;
-	FileAccess_e	m_eColumnar = FileAccess_e::FILE;
+	FileAccess_e	m_eColumnar = FileAccess_e::MMAP;
 	FileAccess_e	m_eSecondary = FileAccess_e::FILE;
 	int				m_iReadBufferDocList = DEFAULT_READ_BUFFER;
 	int				m_iReadBufferHitList = DEFAULT_READ_BUFFER;
@@ -513,6 +513,7 @@ struct CreateTableAttr_t
 	knn::IndexSettings_t	m_tKNN;
 	knn::ModelSettings_t	m_tKNNModel;
 	CSphString				m_sKNNFrom;
+	knn::ChunkSettings_t	m_tKNNChunk;
 };
 
 struct NameValueStr_t

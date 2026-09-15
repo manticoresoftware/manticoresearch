@@ -24,6 +24,8 @@ static CSphString g_sPrefixAuth ( "system.auth_" );
 static CSphString g_sIndexNameAuthUsers ( "system.auth_users" );
 static CSphString g_sIndexNameAuthPerms ( "system.auth_permissions" );
 constexpr int g_iDefaultAuthPasswordMinLength = 8;
+constexpr int g_iDefaultAuthFileVersion = 1;
+constexpr int g_iAuthFileVersion = 2;
 
 const CSphString & GetPrefixAuth()
 {
@@ -194,6 +196,28 @@ AuthUsersMutablePtr_t ReadAuthFile ( const CSphString & sFile, CSphString & sErr
 	return ReadAuth ( dRawJson.Begin(), sFile, sError );
 }
 
+bool CheckAuthFileVersion ( const bson::Bson_c & tBson, const CSphString & sSrcName, CSphString & sError )
+{
+	if ( !tBson.HasAnyOf ( { "version" } ) )
+		return true;
+
+	const bson::NodeHandle_t tVersion = tBson.ChildByName ( "version" );
+	if ( !bson::IsInt ( tVersion ) )
+	{
+		sError.SetSprintf ( "can not read the '%s', error: auth file version must be an integer", sSrcName.cstr() );
+		return false;
+	}
+
+	int64_t iVersion = bson::Int ( tVersion, g_iDefaultAuthFileVersion );
+	if ( iVersion<g_iDefaultAuthFileVersion || iVersion>g_iAuthFileVersion )
+	{
+		sError.SetSprintf ( "can not read the '%s', error: auth file version " INT64_FMT " is not supported by this daemon; supported versions are %d to %d. Upgrade this daemon or restore authentication data in a supported format.", sSrcName.cstr(), iVersion, g_iDefaultAuthFileVersion, g_iAuthFileVersion );
+		return false;
+	}
+
+	return true;
+}
+
 AuthUsersMutablePtr_t ReadAuth ( char * sSrc, const CSphString & sSrcName, CSphString & sError )
 {
 	assert ( sSrc );
@@ -220,6 +244,9 @@ AuthUsersMutablePtr_t ReadAuth ( char * sSrc, const CSphString & sSrcName, CSphS
 		sError.SetSprintf ( "can not read the '%s', error: wrong json", sSrcName.cstr() );
 		return nullptr;
 	}
+
+	if ( !CheckAuthFileVersion ( tBsonSrc, sSrcName, sError ) )
+		return nullptr;
 
 	if ( !ReadUsers ( sSrcName, tBsonSrc, tAuth, sError ) )
 		return nullptr;
@@ -298,6 +325,8 @@ AuthAction_e ReadAction ( Str_t sAction )
 		return AuthAction_e::WRITE;
 	else if ( StrEqN ( sAction, "schema" ) )
 		return AuthAction_e::SCHEMA;
+	else if ( StrEqN ( sAction, "backup" ) )
+		return AuthAction_e::BACKUP;
 	else if ( StrEqN ( sAction, "replication" ) )
 		return AuthAction_e::REPLICATION;
 	else if ( StrEqN ( sAction, "admin" ) )
@@ -313,6 +342,7 @@ const char * GetActionName (  AuthAction_e eAction )
 	case AuthAction_e::READ: return "read";
 	case AuthAction_e::WRITE: return "write";
 	case AuthAction_e::SCHEMA: return "schema";
+	case AuthAction_e::BACKUP: return "backup";
 	case AuthAction_e::REPLICATION: return "replication";
 	case AuthAction_e::ADMIN: return "admin";
 	default:
@@ -404,7 +434,9 @@ CSphString WriteJson ( const AuthUsers_t & tAuth )
 	JsonEscapedBuilder tWriter;
 	tWriter.StartBlock ( nullptr, "{", "\n}" );
 	{
-		tWriter.StartBlock ( ",\n", "\"users\":[\n", "\n]" );
+		tWriter.NamedVal ( "version", g_iAuthFileVersion );
+
+		tWriter.StartBlock ( ",\n", ",\"users\":[\n", "\n]" );
 		for ( const auto & tItUser : tAuth.m_hUserToken )
 		{
 			const AuthUserCred_t & tUser = tItUser.second;

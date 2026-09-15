@@ -27,6 +27,7 @@
 %token	TOK_API_KEY
 %token	TOK_API_URL
 %token	TOK_API_TIMEOUT
+%token	TOK_MAX_INPUT_TOKENS
 %token	TOK_AS
 %token	TOK_AT
 %token	TOK_ATTRIBUTE
@@ -34,6 +35,7 @@
 %token	TOK_BIT
 %token	TOK_BOOL
 %token	TOK_CACHE_PATH
+%token	TOK_CHUNK_STRATEGY
 %token	TOK_CLUSTER
 %token	TOK_COLUMN
 %token	TOK_COLUMNAR
@@ -65,6 +67,8 @@
 %token	TOK_KNN_DIMS
 %token	TOK_KNN_TYPE
 %token	TOK_LIKE
+%token	TOK_MAX_CHUNKS
+%token	TOK_MAX_TOKENS
 %token	TOK_MODEL_NAME
 %token	TOK_MODIFY
 %token	TOK_MODIFY_COLUMN
@@ -74,6 +78,7 @@
 %token	TOK_MVA64 "mva64"
 %token	TOK_NOT
 %token	TOK_OPTION
+%token	TOK_OVERLAP_TOKENS
 %token	TOK_PLUGIN
 %token	TOK_QUANTIZATION
 %token	TOK_REBUILD
@@ -292,6 +297,18 @@ alter:
 			pParser->ToString ( tStmt.m_sAlterAttr, $3 );
 			pParser->ToString ( tStmt.m_sAlterOption, $6 ).Unquote();
 		}
+	| alter_table_name TOK_MODIFY_COLUMN columnident TOK_MAX_INPUT_TOKENS '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->ValidateIdentifier ( $3, 0, true ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+				YYERROR;
+			}
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_ALTER_EMBEDDINGS_MAX_INPUT_TOKENS;
+			pParser->ToString ( tStmt.m_sAlterAttr, $3 );
+			pParser->ToString ( tStmt.m_sAlterOption, $6 ).Unquote();
+		}
 	| alter_table_name TOK_ADD TOK_COLUMN columnident TOK_BIT '(' TOK_CONST_INT ')' item_option_list
 		{
 			if ( !pParser->SetupAlterTable ( $4, SPH_ATTR_INTEGER, 0, $7.GetValueInt() ) )
@@ -465,6 +482,38 @@ item_option:
     	    	YYERROR;
 			}
 		}
+	| TOK_CHUNK_STRATEGY '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionChunkStrategy ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_MAX_TOKENS '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionMaxTokens ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_OVERLAP_TOKENS '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionOverlapTokens ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_MAX_CHUNKS '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionMaxChunks ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
 	| TOK_API_KEY '=' TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddItemOptionAPIKey ( $3 ) )
@@ -484,6 +533,14 @@ item_option:
 	| TOK_API_TIMEOUT '=' TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddItemOptionAPITimeout ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_MAX_INPUT_TOKENS '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionMaxInputTokens ( $3 ) )
 			{
 				yyerror ( pParser, pParser->GetLastError() );
     	    	YYERROR;

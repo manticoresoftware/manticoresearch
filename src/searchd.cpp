@@ -1222,6 +1222,22 @@ void CanonicalizeIndexName ( CSphString & sName ) noexcept
 	sName.ToLower();
 }
 
+static void FixupBackupTables ( SqlStmt_t * pStmt ) noexcept
+{
+	if ( pStmt->m_eStmt!=STMT_BACKUP || pStmt->m_sIndex.IsEmpty() )
+		return;
+
+	StrVec_t dTables;
+	sphSplit ( dTables, pStmt->m_sIndex.cstr(), "," );
+	for ( CSphString & sTable : dTables )
+	{
+		sTable.Trim();
+		sTable.Unquote();
+		CanonicalizeIndexName ( sTable );
+		pStmt->m_dCallStrings.Add() = std::move ( sTable );
+	}
+}
+
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut )
 {
 	if ( ( uVer>>8)!=( uDaemonVersion>>8) )
@@ -11589,7 +11605,8 @@ enum class Alter_e
 	RebuildEmbeddings,
 	ApiKey,
 	ApiUrl,
-	ApiTimeout
+	ApiTimeout,
+	MaxInputTokens
 };
 
 static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alter_e eAction, CSphString & sWarning )
@@ -11727,6 +11744,14 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 				int iTimeout = 0;
 				if ( ValidateEmbeddingsAPITimeout ( tStmt.m_sAlterOption, iTimeout, sAlterError ) )
 					WIdx_c(pServed)->AlterApiTimeout ( tStmt.m_sAlterAttr, iTimeout, sAlterError );
+			}
+			break;
+
+		case Alter_e::MaxInputTokens:
+			{
+				int iMaxInputTokens = 0;
+				if ( ValidateEmbeddingsMaxInputTokens ( tStmt.m_sAlterOption, iMaxInputTokens, sAlterError ) )
+					WIdx_c(pServed)->AlterMaxInputTokens ( tStmt.m_sAlterAttr, iMaxInputTokens, sAlterError );
 			}
 			break;
 		}
@@ -12677,7 +12702,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	for ( auto& tStmt : dStmt ) {
 		FixupSystemTableName ( &tStmt );
-		CanonicalizeIndexName ( tStmt.m_sIndex );
+		if ( tStmt.m_eStmt==STMT_BACKUP )
+			FixupBackupTables ( &tStmt );
+		else
+			CanonicalizeIndexName ( tStmt.m_sIndex );
 		tStmt.m_bShardPhysicalUpdate = m_bShardPhysicalUpdate;
 	}
 	SqlStmt_t * pStmt = dStmt.Begin();
@@ -13058,6 +13086,11 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiTimeout, m_tLastMeta.m_sWarning );
 		return true;
 
+	case STMT_ALTER_EMBEDDINGS_MAX_INPUT_TOKENS:
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::MaxInputTokens, m_tLastMeta.m_sWarning );
+		return true;
+
 	case STMT_SHOW_PLAN:
 		HandleMysqlShowPlan ( tOut, m_tLastProfile, false, ::IsDot ( *pStmt ) );
 		return false; // do not profile this call, keep last query profile
@@ -13291,6 +13324,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_REVOKE:
 		HandleMysqlRevoke ( tOut, *pStmt, m_sError );
+		return true;
+
+	case STMT_BACKUP:
+		tOut.Error ( "BACKUP requires Manticore Buddy" );
 		return true;
 
 	default:

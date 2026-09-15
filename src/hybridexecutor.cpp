@@ -145,6 +145,26 @@ static void CollectDependentExprs ( const ISphSchema * pSchema, const char * szA
 }
 
 
+static bool IsWeightDependentAttr ( const CSphColumnInfo & tAttr, const ISphSchema & tSchema, bool bPerHitOnly = false )
+{
+	StrVec_t dDeps;
+	dDeps.Add ( tAttr.m_sName );
+	FetchAttrDependencies ( dDeps, tSchema );
+	bool bWeight = false;
+	for ( const auto & sName : dDeps )
+	{
+		const auto * pAttr = tSchema.GetAttr ( sName.cstr() );
+		if ( !pAttr )
+			continue;
+		// Group aggregates must keep the population of the chosen source branch.
+		if ( bPerHitOnly && pAttr->m_eAggrFunc!=SPH_AGGR_NONE )
+			return false;
+		bWeight |= pAttr->m_bWeight;
+	}
+	return bWeight;
+}
+
+
 static void CopyAttrs ( CSphMatch & tDstMatch, CSphMatch & tSrcMatch, const ISphSchema * pSrcSchema, const ISphSchema * pDstSchema, const CSphVector<int> & dRemap )
 {
 	for ( int i = 0; i < pSrcSchema->GetAttrsCount(); i++ )
@@ -229,11 +249,11 @@ static void RemoveQueryItems ( CSphVector<CSphQueryItem> & dItems, std::initiali
 }
 
 
-static void BuildAttrRemap ( const ISphSchema * pSrcSchema, const ISphSchema * pDstSchema, CSphVector<int> & dRemap )
+static void BuildAttrRemap ( const ISphSchema * pSrcSchema, const ISphSchema * pDstSchema, CSphVector<int> & dRemap, bool bWeightOnly = false )
 {
 	dRemap.Resize ( pSrcSchema->GetAttrsCount() );
 	for ( int i = 0; i < pSrcSchema->GetAttrsCount(); i++ )
-		dRemap[i] = pDstSchema->GetAttrIndex ( pSrcSchema->GetAttr(i).m_sName.cstr() );
+		dRemap[i] = bWeightOnly && !IsWeightDependentAttr ( pSrcSchema->GetAttr(i), *pSrcSchema, true ) ? -1 : pDstSchema->GetAttrIndex ( pSrcSchema->GetAttr(i).m_sName.cstr() );
 }
 
 
@@ -266,6 +286,7 @@ class QueryFilterNameSet_c
 public:
 			QueryFilterNameSet_c ( const CSphVector<CSphQueryItem> & dItems, std::initializer_list<const char *> dExprs );
 
+	void	Add ( const CSphString & sName ) { m_hNames.Add(sName); }
 	bool	HasFilterTreeReferences ( const CSphQuery & tQuery ) const;
 	bool	MatchFilter ( const CSphFilterSettings & tFilter ) const { return m_hNames[tFilter.m_sAttrName]; }
 	void	RemoveFilters ( CSphVector<CSphFilterSettings> & dFilters ) const;
@@ -338,6 +359,7 @@ public:
 
 private:
 	void	SetupPostFilters ( const CSphQuery & tQuery );
+	bool	SetupWeightFilters ( const ISphSchema & tSchema );
 	void	SetupKnnQueries ( const CSphQuery & tQuery );
 	void	SetupTextQuery ( const CSphQuery & tQuery );
 	void	SetupSubQueryLimits();
@@ -362,6 +384,7 @@ private:
 	const SphQueueSettings_t &		m_tQueueSettings;
 	CSphString						m_sError;
 	std::unique_ptr<QueryParser_i>	m_pTextQueryParser;	///< plain parser for text sub-query (used when original is JSON)
+	CSphVector<int>				m_dTextWeightRemap;
 	CSphVector<CSphFilterSettings>	m_dPostFilters;
 	std::unique_ptr<ISphFilter>		m_pPostFilter;
 };
@@ -427,6 +450,29 @@ void HybridExecutor_c::SetupPostFilters ( const CSphQuery & tQuery )
 			m_dPostFilters.Add(tFilter);
 
 	AddHybridScrollPostFilter ( tQuery, m_dPostFilters );
+}
+
+
+bool HybridExecutor_c::SetupWeightFilters ( const ISphSchema & tSchema )
+{
+	QueryFilterNameSet_c tWeightNames ( m_tTextQuery.m_dItems, { "@weight", "weight()" } );
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+		if ( IsWeightDependentAttr ( tSchema.GetAttr(i), tSchema ) )
+			tWeightNames.Add ( tSchema.GetAttr(i).m_sName );
+
+	if ( tWeightNames.HasFilterTreeReferences(m_tTextQuery) )
+	{
+		m_sError = "hybrid search does not support weight() filters in filter trees";
+		return false;
+	}
+
+	// Filter the final weight, not either branch: removing a text hit before
+	// fusion could reintroduce it as a KNN-only hit with a different weight.
+	tWeightNames.ExtractFilters ( m_tTextQuery.m_dFilters, m_dPostFilters );
+	for ( auto & tKnnQuery : m_dKnnQueries )
+		tWeightNames.RemoveFilters ( tKnnQuery.m_dFilters );
+
+	return true;
 }
 
 
@@ -639,9 +685,15 @@ void HybridExecutor_c::PushSingleFusedMatch ( const RRFEntry_t & tEntry, ISphMat
 		CopyAttrs ( tNewMatch, tSrcMatch, tSrcResult.m_pSorter->GetSchema(), pDstSchema, dRemaps[iBestSet] );
 	}
 
-	// copy weight from text rset
+	// Preserve both the match weight and materialized weight expressions from text.
 	if ( tEntry.m_iTextMatchIdx>=0 )
-		tNewMatch.m_iWeight = m_dSubResults[0].m_dMatches[tEntry.m_iTextMatchIdx].m_iWeight;
+	{
+		auto & tTextResult = m_dSubResults[0];
+		auto & tTextMatch = tTextResult.m_dMatches[tEntry.m_iTextMatchIdx];
+		tNewMatch.m_iWeight = tTextMatch.m_iWeight;
+		if ( iBestSet!=0 )
+			CopyAttrs ( tNewMatch, tTextMatch, tTextResult.m_pSorter->GetSchema(), pDstSchema, m_dTextWeightRemap );
+	}
 
 	// set the hybrid score
 	tNewMatch.SetAttrFloat ( tScoreLoc, tEntry.m_fScore );
@@ -678,6 +730,9 @@ void HybridExecutor_c::PushFusedMatches ( ISphMatchSorter * pSorter, const CSphV
 		if ( m_dSubResults[i].m_pSorter )
 			BuildAttrRemap ( m_dSubResults[i].m_pSorter->GetSchema(), pDstSchema, dRemaps[i] );
 	}
+
+	if ( m_dSubResults[0].m_pSorter )
+		BuildAttrRemap ( m_dSubResults[0].m_pSorter->GetSchema(), pDstSchema, m_dTextWeightRemap, true );
 
 	const CSphColumnInfo * pScoreAttr = pDstSchema->GetAttr ( GetHybridScoreAttrName() );
 	CSphAttrLocator tScoreLoc = pScoreAttr->m_tLocator;
@@ -812,6 +867,12 @@ bool HybridExecutor_c::Execute ( CSphQueryResult & tResult, const VecTraits_T<IS
 	}
 
 	ISphMatchSorter * pOutputSorter = dSorters[0];
+	if ( !SetupWeightFilters ( *pOutputSorter->GetSchema() ) )
+	{
+		tMeta.m_sError = m_sError;
+		return false;
+	}
+
 	int iTotalSubQueries = m_dKnnQueries.GetLength() + 1;
 	m_dSubResults.Resize ( iTotalSubQueries ); // [0] = text, [1..N] = KNN sub-queries
 

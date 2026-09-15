@@ -1,0 +1,74 @@
+Issue #4872: a multi (MVA) column added with ALTER TABLE to a table that has an auto-embedding float_vector must keep the values written by INSERT / REPLACE
+
+The per-attribute model table of an RT table was built when the table was loaded and only rebuilt when the added column was itself model-backed. The accumulator repacks the blob storage of every inserted document along that table, so a blob attribute added later was never copied: the MVA came back empty, with no error, while an int added by the same ALTER survived (rowwise attributes are not repacked). Dropping an attribute in front of the vector column misaligned the table the same way. The table is now rebuilt on every ALTER.
+
+––– block: ../base/start-searchd –––
+––– block: ./base –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE t (title text, m multi, u int, vec float_vector KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title')" 2>&1; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO t (id, title, m, u) VALUES (1,'one',(11,12),5),(2,'two',(21,22),6); FLUSH RAMCHUNK t" 2>&1; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE t ADD COLUMN m2 multi; ALTER TABLE t ADD COLUMN u2 int" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+REPLACE of a doc that lives in the disk chunk and INSERT of a new one (RAM chunk): the added MVA must arrive like the added int
+––– input –––
+mysql -h0 -P9306 -e "REPLACE INTO t (id, title, m, u, m2, u2) VALUES (1,'one replaced',(11,12),5,(41,42),8); INSERT INTO t (id, title, m, u, m2, u2) VALUES (3,'three',(31,32),7,(61,62),10)" 2>&1; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, m, u, m2, u2 FROM t ORDER BY id ASC"
+––– output –––
++------+-------+------+-------+------+
+| id   | m     | u    | m2    | u2   |
++------+-------+------+-------+------+
+|    1 | 11,12 |    5 | 41,42 |    8 |
+|    2 | 21,22 |    6 |       |    0 |
+|    3 | 31,32 |    7 | 61,62 |   10 |
++------+-------+------+-------+------+
+––– comment –––
+The embeddings of the rewritten docs are still generated from the title
+––– input –––
+mysql -h0 -P9306 -N -B -e "SELECT id FROM t WHERE knn(vec, 1, 'three') LIMIT 1" | grep -v '^+' | tr -d '| '
+––– output –––
+3
+––– comment –––
+Dropping an attribute in front of the vector column shifts the attribute ids: inserts must still carry the MVAs and get an embedding
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE t DROP COLUMN u; INSERT INTO t (id, title, m, m2, u2) VALUES (4,'four',(81,82),(91,92),12)" 2>&1; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, m, m2, u2 FROM t WHERE id=4"
+––– output –––
++------+-------+-------+------+
+| id   | m     | m2    | u2   |
++------+-------+-------+------+
+|    4 | 81,82 | 91,92 |   12 |
++------+-------+-------+------+
+––– input –––
+mysql -h0 -P9306 -N -B -e "SELECT id FROM t WHERE knn(vec, 1, 'four') LIMIT 1" | grep -v '^+' | tr -d '| '
+––– output –––
+4
+––– comment –––
+A field the embedding is built from can not be dropped while a model still uses it; the error names the way out
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE t DROP COLUMN title" 2>&1 | head -1
+––– output –––
+ERROR 1064 (42000) at line 1: table t: embedding source 'title' not found; a field used as an embedding source can be dropped after the embedding column itself is dropped
+––– comment –––
+The supported order: drop the model-backed column first, then its former source; the table stays functional
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE t DROP COLUMN vec; ALTER TABLE t DROP COLUMN title; INSERT INTO t (id, m, m2, u2) VALUES (5,(83,84),(93,94),13)" 2>&1; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -N -B -e "SELECT id, m, m2, u2 FROM t WHERE id=5" | grep -v '^+' | sed 's/^| *//; s/ *| */,/g; s/,$//' | tr '\t' ','
+––– output –––
+5,83,84,93,94,13

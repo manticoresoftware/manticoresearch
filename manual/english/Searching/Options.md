@@ -426,7 +426,7 @@ OPTION fusion_method='rrf', rank_constant=10;
 OPTION boolean_mode='or'
 ```
 
-Controls how multi-keyword `MATCH()` expressions **without explicit boolean operators** are interpreted in SphinxQL full-text queries.
+Controls how multi-keyword `MATCH()` expressions **without explicit boolean operators** are interpreted in SQL full-text queries.
 
 Choose from the following values:
 * `and` - all keywords must match

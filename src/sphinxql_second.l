@@ -71,6 +71,7 @@ FLOAT_CONSTANT      ({INT}\.{INT}?|{INT}?\.{INT}){EXPONENT}?
 
 '	                { Q_START; BEGIN (QSTR); }
 <QSTR>[^'\n\\]+
+<QSTR>\\[^\n]
 <QSTR>'             {  Q_END; BEGIN(INITIAL); return TOK_QUOTED_STRING; }
 
 \.{SPACE}*`	           	{ Q_START; BEGIN (BACKTICK); }
@@ -91,6 +92,7 @@ FLOAT_CONSTANT      ({INT}\.{INT}?|{INT}?\.{INT}){EXPONENT}?
 "ATTACH"    		{ STORE_BOUNDS; return TOK_ATTACH; }
 "ATTRIBUTES"   		{ STORE_BOUNDS; return TOK_ATTRIBUTES; }
 "AUTH"    			{ STORE_BOUNDS; return TOK_AUTH; }
+"BACKUP"			{ STORE_BOUNDS; return TOK_BACKUP; }
 "CACHE"				{ STORE_BOUNDS; return TOK_CACHE; }
 "CLUSTER"			{ STORE_BOUNDS; return TOK_CLUSTER; }
 "COMMITTED"         { STORE_BOUNDS; return TOK_COMMITTED; }

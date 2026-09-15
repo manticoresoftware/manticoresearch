@@ -27,6 +27,7 @@ struct NamedKNNSettings_t : public knn::IndexSettings_t, public knn::ModelSettin
 {
 	CSphString	m_sName;
 	CSphString	m_sFrom;
+	knn::ChunkSettings_t m_tChunk;
 };
 
 /// source column info
@@ -79,6 +80,7 @@ struct CSphColumnInfo
 	knn::IndexSettings_t m_tKNN;						///< knn index settings
 	knn::ModelSettings_t m_tKNNModel;					///< knn model settings
 	CSphString		m_sKNNFrom;							///< fields/attrs used by the model
+	knn::ChunkSettings_t m_tKNNChunk;					///< how the model splits a document into vectors
 
 	float			m_fTdigestCompression = 200.0f;		///< tdigest compression for extended aggs
 	AggrSettings_t	m_tAggrSettings;					///< full settings payload for extended aggs

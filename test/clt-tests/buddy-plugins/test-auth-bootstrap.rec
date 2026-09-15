@@ -28,6 +28,10 @@ file exists
 python3 -c "import json; d=json.load(open('/var/lib/manticore/auth.json')); print(any(u.get('username')=='admin' for u in d.get('users', [])))"
 ––– output –––
 True
+––– input –––
+python3 -c "import json; d=json.load(open('/var/lib/manticore/auth.json')); print(d.get('version'))"
+––– output –––
+2
 ––– comment –––
 ––– 8.1.3 New admin can authenticate over MySQL –––
 EXPECTED: Admin credentials work after bootstrap and reload

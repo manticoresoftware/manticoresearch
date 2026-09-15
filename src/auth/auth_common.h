@@ -77,6 +77,7 @@ void SortUserPerms ( UserPerms_t & dPerms );
 CSphString WriteJson ( const AuthUsers_t & tAuth );
 AuthUsersMutablePtr_t ReadAuth ( char * sSrc, const CSphString & sSrcName, CSphString & sError );
 bool CreateAuthFile ( const CSphString & sFile, CSphString & sError );
+bool CheckAuthFileVersion ( const bson::Bson_c & tBson, const CSphString & sSrcName, CSphString & sError );
 void CopyVec ( const BYTE * pSrc, int ilen, CSphFixedVector<BYTE> & dDst );
 bool Validate ( const AuthUsersMutablePtr_t & tAuth, CSphString & sError );
 CSphString AuthGetPath ( const CSphConfigSection & hSearchd );

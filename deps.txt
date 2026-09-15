@@ -1,8 +1,8 @@
-backup 1.10.4+26083111-f330f780-dev
-buddy 4.4.3+26083121-976df147-dev
+backup 1.11.0+26090711-f5c09c1e-dev
+buddy 4.4.4+26091417-75fb5df4-dev
 executor 1.4.3+26071315-4cac4d66-dev
 tzdata 1.0.1 250714 7eebffa
-load 1.26.0+26081813-fac2ff17-dev
+load 1.28.0+26090322-7b728206-dev
 galera 3.37
 ---
 ! Do not change the separator that splits this desc from the data

@@ -699,4 +699,5 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [27.1.5](https://manual.manticoresearch.com/manticore-27-1-5/). [Страница установки](https://manticoresearch.com/install-27.1.5/)
 * [28.6.6](https://manual.manticoresearch.com/manticore-28-6-6/). [Страница установки](https://manticoresearch.com/install-28.6.6/)
 * [29.0.2](https://manual.manticoresearch.com/manticore-29-0-2/). [Страница установки](https://manticoresearch.com/install-29.0.2/)
+* [29.9.0](https://manual.manticoresearch.com/manticore-29-9-0/). [Страница установки](https://manticoresearch.com/install-29.9.0/)
 <!-- proofread -->

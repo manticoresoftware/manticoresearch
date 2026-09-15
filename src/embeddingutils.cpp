@@ -89,7 +89,16 @@ bool ParseEmbeddingSources ( CSphVector<std::pair<int,bool>> & dFrom, const CSph
 
 bool CheckAlterAddEmbedding ( bool bModify, const CSphString & sAttrToAdd, const SqlStmt_t & tStmt, const CSphSchema & tBaseSchema, CSphString & sError )
 {
-	if ( bModify || tStmt.m_eAlterColType!=SPH_ATTR_FLOAT_VECTOR || !( tStmt.m_uAttrFlags & CSphColumnInfo::ATTR_INDEXED_KNN ) )
+	if ( bModify || !( tStmt.m_uAttrFlags & CSphColumnInfo::ATTR_INDEXED_KNN ) )
+		return true;
+
+	if ( tStmt.m_eAlterColType==SPH_ATTR_FLOAT_VECTOR_ARRAY && !tStmt.m_tAlterKNNModel.m_sModelName.empty() )
+	{
+		sError.SetSprintf ( "attribute '%s': adding a model-backed float_vector_array is not supported yet, since existing rows can not be embedded; create the column with the table instead", sAttrToAdd.cstr() );
+		return false;
+	}
+
+	if ( tStmt.m_eAlterColType!=SPH_ATTR_FLOAT_VECTOR )
 		return true;
 
 	CreateTableAttr_t tCreateAttr;
@@ -117,15 +126,18 @@ bool CheckAlterAddEmbedding ( bool bModify, const CSphString & sAttrToAdd, const
 	return ParseEmbeddingSources ( dFrom, tStmt.m_sAlterKnnFrom, tProjectedSchema, sError );
 }
 
-bool ConvertEmbeddings ( knn::TextToEmbeddings_i * pModel, const CSphString & sAttrName, const CSphVector<CSphString> & dFromTexts, std::vector<std::vector<float>> & dEmbeddings, CSphString & sError )
+
+bool ConvertEmbeddings ( knn::TextToEmbeddings_i * pModel, const CSphString & sAttrName, const CSphVector<CSphString> & dFromTexts, std::vector<std::vector<float>> & dEmbeddings, const knn::ChunkSettings_t * pChunk, CSphString & sError )
 {
 	std::vector<std::string_view> dTexts;
 	dTexts.reserve ( dFromTexts.GetLength() );
 	for ( const auto & sText : dFromTexts )
 		dTexts.push_back ( { sText.cstr(), (size_t)sText.Length() } );
 
+	assert ( !pChunk || !knn::IsMultiVectorStrategy ( pChunk->m_eStrategy ) );
+
 	std::string sErrStl;
-	if ( !pModel->Convert ( dTexts, dEmbeddings, sErrStl, GetEmbeddingsThreadsToUse() ) )
+	if ( !pModel->Convert ( dTexts, dEmbeddings, sErrStl, GetEmbeddingsThreadsToUse(), pChunk ) )
 	{
 		sError = sErrStl.c_str();
 		return false;

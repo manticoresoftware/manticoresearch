@@ -31,7 +31,8 @@ searchd
 	show create table t;
 	drop table t;
 
-	<!-- auto-embeddings produce one vector per doc, so they are meaningless here and are rejected -->
+	<!-- auto-embeddings are allowed on an array now, so this reaches the ordinary model validation
+	     rather than a type rejection; chunked embeddings are covered by test_533 -->
 	create table t (title text, v float_vector_array knn_type='hnsw' model_name='sentence-transformers/all-MiniLM-L6-v2');
 	<!-- knn_type on a non-vector column stays rejected, now naming both vector types -->
 	create table t (title text, v int knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');

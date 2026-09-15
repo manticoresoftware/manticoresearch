@@ -28,10 +28,20 @@ insert into test_auto_embed (id, f) values (1, 'test document');
 select * from test_auto_embed;
 show create table test_auto_embed;
 
+<!-- MAX_INPUT_TOKENS can be changed without rebuilding existing embeddings -->
+alter table test_auto_embed modify column v max_input_tokens='64';
+show create table test_auto_embed;
+insert into test_auto_embed (id, f) values (2, 'embedding generated with a capped input');
+select id from test_auto_embed order by id asc;
+
+<!-- zero restores the model limit and removes the option from SHOW CREATE -->
+alter table test_auto_embed modify column v max_input_tokens='0';
+show create table test_auto_embed;
+
 <!-- Test ALTER TABLE with various full-text settings -->
 alter table test_auto_embed html_strip='1';
 show create table test_auto_embed;
-insert into test_auto_embed (id, f) values (2, 'another test');
+insert into test_auto_embed (id, f) values (3, 'another test');
 select * from test_auto_embed;
 
 alter table test_auto_embed index_sp='1';
@@ -41,6 +51,18 @@ alter table test_auto_embed index_zones='h*';
 show create table test_auto_embed;
 
 drop table test_auto_embed;
+
+<!-- regression: model cache keys must distinguish API_TIMEOUT/MAX_INPUT_TOKENS boundaries -->
+create table test_model_cache_key (
+	f text,
+	v_capped float_vector knn_type='hnsw' hnsw_similarity='l2'
+		model_name='sentence-transformers/all-MiniLM-L6-v2' from='f' api_timeout='1' max_input_tokens='100',
+	v_uncapped float_vector knn_type='hnsw' hnsw_similarity='l2'
+		model_name='sentence-transformers/all-MiniLM-L6-v2' from='f' api_timeout='101' max_input_tokens='0'
+);
+insert into test_model_cache_key (id, f) values (1, 'token001 token002 token003 token004 token005 token006 token007 token008 token009 token010 token011 token012 token013 token014 token015 token016 token017 token018 token019 token020 token021 token022 token023 token024 token025 token026 token027 token028 token029 token030 token031 token032 token033 token034 token035 token036 token037 token038 token039 token040 token041 token042 token043 token044 token045 token046 token047 token048 token049 token050 token051 token052 token053 token054 token055 token056 token057 token058 token059 token060 token061 token062 token063 token064 token065 token066 token067 token068 token069 token070 token071 token072 token073 token074 token075 token076 token077 token078 token079 token080 token081 token082 token083 token084 token085 token086 token087 token088 token089 token090 token091 token092 token093 token094 token095 token096 token097 token098 token099 token100 different101 different102 different103 different104 different105 different106 different107 different108 different109 different110 different111 different112 different113 different114 different115 different116 different117 different118 different119 different120');
+select to_string(v_capped)=to_string(v_uncapped) as vectors_equal from test_model_cache_key;
+drop table test_model_cache_key;
 </sphinxql>
 
 </queries>

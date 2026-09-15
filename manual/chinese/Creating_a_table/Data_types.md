@@ -2627,6 +2627,7 @@ let search_res = search_api.search(search_req).await;
 - `API_KEY`：远程模型（OpenAI、Voyage、Jina）必需。在创建表时通过实际 API 请求验证 API 密钥。
 - `API_URL`：可选。自定义 API 端点 URL。如果未指定，使用默认提供者端点（例如，OpenAI 的 `https://api.openai.com/v1/embeddings`）。
 - `API_TIMEOUT`：可选。API 请求的 HTTP 超时时间（以秒为单位）。默认为 10 秒。设置为 `'0'` 以使用默认超时。适用于表创建时的验证请求和插入操作时的嵌入生成。
+- `MAX_INPUT_TOKENS`：可选。限制每段输入文本在生成嵌入前使用的 token 数；更长的文本会被截断。`'0'`（默认值）表示使用模型自身的上下文限制。`Qwen/Qwen3-Embedding-0.6B` 等长上下文模型最多可接受 32,768 个 token，并且在 CPU 上生成嵌入的时间会随着输入长度超线性增长（一个 5 KB 的文档可能需要数分钟），因此当文本字段可能包含很长或无边界的内容时，应设置上限（例如 `'512'`）。适用于本地模型；之后可通过 `ALTER TABLE ... MODIFY COLUMN ... MAX_INPUT_TOKENS='...'` 修改该设置，且无需重新为已有行生成嵌入。
 
 对于远程模型，`MODEL_NAME` 可以使用传统的 `provider/model` 格式或显式的 `provider:model` 格式。当使用 `API_URL` 并希望将 `:` 后的部分原样转发到自定义提供方兼容端点时，请使用 `provider:model`。
 

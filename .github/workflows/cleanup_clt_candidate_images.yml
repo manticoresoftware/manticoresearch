@@ -19,4 +19,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO_OWNER: ${{ github.repository_owner }}
-        run: ./dist/cleanup_old_test_kit_candidates.sh
+        run: bash ./dist/cleanup_old_test_kit_candidates.sh

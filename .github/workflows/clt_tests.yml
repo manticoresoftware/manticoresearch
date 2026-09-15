@@ -34,10 +34,6 @@ on:
         required: true
         description: "Jina API key for CLT tests"
 
-concurrency:
-  group: clt-cache-${{ inputs.repository }}
-  cancel-in-progress: false
-
 jobs:
   discover:
     name: Discover CLT tests
@@ -147,7 +143,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: ${{ runner.temp }}/clt-model-cache
-          key: clt-models-v2-linux-amd64-${{ github.run_id }}-${{ github.run_attempt }}
+          key: clt-models-v2-linux-amd64-current
           restore-keys: |
             clt-models-v2-linux-amd64-
 
@@ -156,6 +152,7 @@ jobs:
         run: mkdir -p "${{ runner.temp }}/clt-model-cache" && chmod 777 "${{ runner.temp }}/clt-model-cache"
 
       - name: Snapshot model cache before CLT
+        if: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         shell: bash
         run: |
           set -euo pipefail
@@ -177,13 +174,13 @@ jobs:
       # Containers write model blobs as root with mode 600; make them readable so the
       # runner user can upload changed cache subtrees.
       - name: Fix model cache permissions
-        if: ${{ always() }}
+        if: ${{ always() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         shell: bash
         run: sudo chmod -R a+rX "${{ runner.temp }}/clt-model-cache" || true
 
       - id: model_cache_delta
         name: Stage changed model-cache folders
-        if: ${{ always() }}
+        if: ${{ success() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         shell: bash
         run: |
           set -euo pipefail
@@ -215,10 +212,10 @@ jobs:
           rm -f "$after"
           printf 'changed=%s\n' "$changed" >> "$GITHUB_OUTPUT"
 
-      # Every leg uploads an artifact, including an empty marker. This lets the fan-in job
-      # run without special handling for a matrix where no model cache changed.
+      # Default-branch legs upload an artifact, including an empty marker. This lets the
+      # fan-in job run without special handling for a matrix where no model cache changed.
       - name: Upload changed model-cache folders
-        if: ${{ always() }}
+        if: ${{ success() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         uses: actions/upload-artifact@v6
         with:
           name: clt-model-cache-${{ matrix.chunk.id }}
@@ -227,7 +224,7 @@ jobs:
           retention-days: 1
 
       - name: Stage timing measurements
-        if: ${{ always() }}
+        if: ${{ success() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         shell: bash
         run: |
           mkdir -p "${{ runner.temp }}/clt-timing-artifact"
@@ -238,7 +235,7 @@ jobs:
           fi
 
       - name: Upload timing measurements
-        if: ${{ always() }}
+        if: ${{ success() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         uses: actions/upload-artifact@v6
         with:
           name: clt-timings-${{ matrix.chunk.id }}
@@ -249,14 +246,15 @@ jobs:
   persist-clt-caches:
     name: Persist CLT caches
     needs: [clt]
-    if: ${{ always() }}
+    # Publish shared model and timing baselines only after the merged change passes CLT.
+    if: ${{ needs.clt.result == 'success' && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     runs-on: ubuntu-22.04
     steps:
       - name: Restore shared model cache
         uses: actions/cache/restore@v5
         with:
           path: ${{ runner.temp }}/clt-model-cache
-          key: clt-models-v2-linux-amd64-${{ github.run_id }}-${{ github.run_attempt }}
+          key: clt-models-v2-linux-amd64-current
           restore-keys: |
             clt-models-v2-linux-amd64-
 
@@ -290,7 +288,7 @@ jobs:
             [[ -d "$artifact" ]] || continue
             rm -f "$artifact/clt-artifact-empty-marker"
             if find "$artifact" -mindepth 1 -print -quit | grep -q .; then
-              rsync -a --ignore-existing "$artifact/" "$baseline/"
+              rsync -a "$artifact/" "$baseline/"
               changed=true
             fi
           done
@@ -299,12 +297,51 @@ jobs:
           printf 'Merged %s model-cache files\n' "$(find "$baseline" -type f | wc -l | tr -d ' ')"
           printf 'changed=%s\n' "$changed" >> "$GITHUB_OUTPUT"
 
+      - id: cache_key
+        name: Fingerprint merged model cache
+        if: ${{ steps.merge.outputs.changed == 'true' || steps.baseline.outputs.ready != 'true' }}
+        shell: bash
+        run: |
+          python3 - "${{ runner.temp }}/clt-model-cache" >> "$GITHUB_OUTPUT" <<'PY'
+          import hashlib
+          import os
+          import stat
+          import sys
+
+          root = os.fsencode(sys.argv[1])
+          digest = hashlib.sha256()
+
+          for directory, directories, filenames in os.walk(root, followlinks=False):
+              entries = sorted(directories + filenames)
+              for name in entries:
+                  path = os.path.join(directory, name)
+                  relative = os.path.relpath(path, root)
+                  mode = os.lstat(path).st_mode
+                  digest.update(relative)
+                  digest.update(b'\0')
+                  if stat.S_ISLNK(mode):
+                      digest.update(b'L\0')
+                      digest.update(os.readlink(path))
+                  elif stat.S_ISREG(mode):
+                      digest.update(b'F\0')
+                      with open(path, 'rb') as file:
+                          for block in iter(lambda: file.read(1024 * 1024), b''):
+                              digest.update(block)
+                  elif stat.S_ISDIR(mode):
+                      digest.update(b'D\0')
+                  else:
+                      raise RuntimeError(f'Unsupported model-cache entry: {os.fsdecode(relative)}')
+                  digest.update(b'\0')
+
+          print(f'hash={digest.hexdigest()}')
+          PY
+
       - name: Save shared model cache
-        if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) && (steps.merge.outputs.changed == 'true' || steps.baseline.outputs.ready != 'true') }}
+        if: ${{ steps.merge.outputs.changed == 'true' || steps.baseline.outputs.ready != 'true' }}
         uses: actions/cache/save@v5
         with:
           path: ${{ runner.temp }}/clt-model-cache
-          key: clt-models-v2-linux-amd64-${{ github.run_id }}-${{ github.run_attempt }}
+          key: clt-models-v2-linux-amd64-${{ steps.cache_key.outputs.hash }}
 
       - name: Persist CLT timing cache
         uses: manticoresoftware/clt/balance/merge-results@main

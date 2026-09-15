@@ -82,11 +82,16 @@ docker load -i test_kit_light_docker.tar.gz
 light_images=( "${hub_repo}:test-kit-light-${BUILD_COMMIT}" "${hub_repo}:test-kit-light-${BRANCH_TAG}" )
 for img in "${light_images[@]}"; do docker tag test-kit-light:img "$img"; done
 
-# pusing to ghcr.io
-[ -n "$GHCR_USER" ] && for img in "$img_url" "$img_url_latest" "$img_url_tag" "$img_url_branch" "$img_url_hash" "${light_images[@]}"; do
+# Pushing a permanent tag is the promotion itself. If credentials were supplied, every
+# requested push must succeed; otherwise the candidate must stay available for a retry.
+if [ -z "$GHCR_USER" ]; then
+	echo "Skipped pushing to repo, because GHCR_USER is not set"
+	exit 0
+fi
+
+for img in "$img_url" "$img_url_latest" "$img_url_tag" "$img_url_branch" "$img_url_hash" "${light_images[@]}"; do
 	[ -n "$img" ] || continue
-	docker push "$img" \
-	  && echo "❗ Pushed the image to $img" \
-      && echo "Pushed test-kit to $img" >> "$GITHUB_STEP_SUMMARY" \
-	  || echo "❗ Couldn't push the image to $img"
-done || echo "Skipped pushing to repo, because GHCR_USER is not set"
+	docker push "$img"
+	echo "❗ Pushed the image to $img"
+	echo "Pushed test-kit to $img" >> "$GITHUB_STEP_SUMMARY"
+done

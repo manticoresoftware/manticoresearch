@@ -105,7 +105,7 @@ When you use the `provider:model` form together with `API_URL`, the part before 
 | Model Type | Example | API Key Required | Notes |
 |------------|---------|-----------------|-------|
 | **ONNX (recommended)** | `Xenova/all-MiniLM-L6-v2` | No | Local models from any Hugging Face repo that ships an `.onnx` file. Runs on Manticore's fast ONNX Runtime backend. Browse the list: [feature-extraction ONNX models](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm). |
-| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | No | Local BERT-based models, auto-downloaded. Same weights as the ONNX row above, but ~20× slower to embed on CPU — use ONNX when the repo ships it. See [Choosing a local embedding model](../Searching/KNN.md#Choosing-a-local-embedding-model). |
+| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | No | Local BERT-based models, auto-downloaded. Same weights as the ONNX row above, but 10–20× slower to embed on CPU — use ONNX when the repo ships it. See [Choosing a local embedding model](../Searching/KNN.md#Choosing-a-local-embedding-model). |
 | **Qwen** | `Qwen/Qwen3-Embedding-0.6B` | No | Local Qwen family models |
 | **Llama** | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | No | Local Llama family models |
 | **Mistral** | `Locutusque/TinyMistral-248M-v2` | No | Local Mistral family models |
@@ -123,7 +123,7 @@ When you use the `provider:model` form together with `API_URL`, the part before 
 
 ##### Choosing a local embedding model
 
-`MODEL_NAME` decides not only quality but **how fast each document is embedded on CPU — by an order of magnitude**. A repo that ships an `.onnx` file runs on the ONNX Runtime backend; a `safetensors` repo of the very same model runs on the much slower Candle path. Approximate figures, measured on a small 4-vCPU instance with short (~300 character) documents:
+`MODEL_NAME` decides not only quality but **how fast each document is embedded on CPU — by an order of magnitude** (see [14× faster embeddings with ONNX](https://manticoresearch.com/blog/onnx-embeddings-speedup/)). A repo that ships an `.onnx` file runs on the ONNX Runtime backend; a `safetensors` repo of the very same model runs on the much slower Candle path. Approximate figures, measured on a small 4-vCPU instance with short (~300 character) documents:
 
 | Model | Format | Dims | Download | CPU speed |
 |---|---|---|---|---|

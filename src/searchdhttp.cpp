@@ -215,8 +215,12 @@ class BlobStream_c final: public CharStream_c
 
 public:
 	BlobStream_c ( const CSphString & sData )
+		: BlobStream_c ( FromStr ( sData ) )
+	{}
+
+	explicit BlobStream_c ( Str_t sData )
 		: CharStream_c ( nullptr )
-		, m_sData { FromStr ( sData ) }
+		, m_sData { sData }
 	{}
 
 	Str_t Read() final
@@ -321,7 +325,7 @@ public:
 			m_bDone = true;
 			return dEmptyStr;
 		}
-		return Str_t ( m_dUnpacked );
+		return { (const char*)m_dUnpacked.Begin(), m_dUnpacked.GetLength()-1 };
 	}
 };
 
@@ -2296,6 +2300,15 @@ public:
 		int iCurLine = 0;
 		int iLastTxStartLine = 0;
 
+		if ( m_tSource.GetError() )
+		{
+			m_sError = m_tSource.GetErrorMessage();
+			return FinishBulk ( tResults, bResult, iCurLine, iLastTxStartLine, EHTTP_STATUS::_400 );
+		}
+
+		if ( m_tSource.Eof() )
+			return FinishBulk ( tResults, bResult, iCurLine, iLastTxStartLine );
+
 		// originally we execute txn for single index
 		// if there is combo, we fall back to query-by-query commits
 
@@ -2305,8 +2318,16 @@ public:
 		while ( !m_tSource.Eof() )
 		{
 			auto tQuery = m_tSource.ReadLine();
-			tQuery = TrimHeadSpace ( tQuery ); // could be a line with only whitespace chars
 			++iCurLine;
+
+			if ( m_tSource.GetError() )
+			{
+				m_sError = m_tSource.GetErrorMessage();
+				RollbackBulkTxn ( tTxnState );
+				return FinishBulk ( tResults, bResult, iCurLine, iLastTxStartLine, EHTTP_STATUS::_400 );
+			}
+
+			tQuery = TrimHeadSpace ( tQuery ); // could be a line with only whitespace chars
 
 			DocID_t tDocId = 0;
 			JsonObj_c tResult = JsonNull;
@@ -2626,7 +2647,8 @@ public:
 	bool Process () final;
 };
 
-static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoint, CharStream_c & tSource, Str_t & sQuery, OptionsHash_t & tOptions, http_method eRequestType )
+static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoint, CharStream_c & tSource, Str_t & sQuery, OptionsHash_t & tOptions,
+	http_method eRequestType, bool bCompressed, std::unique_ptr<CharStream_c> & pDecodedSource )
 {
 	const CSphString * pOption = nullptr;
 	sQuery = dEmptyStr;
@@ -2729,7 +2751,18 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoi
 			return std::make_unique<HttpHandler_JsonDelete_c> ( sQuery, tOptions ); // json
 
 	case EHTTP_ENDPOINT::JSON_BULK:
-		return std::make_unique<HttpHandler_JsonBulk_c> ( tSource, tOptions ); // json
+		if ( bCompressed )
+		{
+			// Decode and validate the complete gzip entity before streaming decoded NDJSON lines into /bulk.
+			SetQuery ( tSource.ReadAll() );
+			if ( tSource.GetError() )
+				return std::make_unique<HttpHandler_JsonBulk_c> ( tSource, tOptions ); // json
+
+			pDecodedSource = std::make_unique<BlobStream_c> ( sQuery );
+			return std::make_unique<HttpHandler_JsonBulk_c> ( *pDecodedSource, tOptions ); // json
+		}
+		else
+			return std::make_unique<HttpHandler_JsonBulk_c> ( tSource, tOptions ); // json
 
 	case EHTTP_ENDPOINT::PQ:
 		SetQuery ( tSource.ReadAll() );
@@ -2762,7 +2795,7 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoi
 	return nullptr;
 }
 
-HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType, bool bSkipAuth )
+HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType, bool bSkipAuth, bool bCompressed )
 {
 	TRACE_CONN ( "conn", "ProcessHttpQuery" );
 
@@ -2785,7 +2818,9 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 		return tRes;
 	}
 
-	std::unique_ptr<HttpHandler_c> pHandler = CreateHttpHandler ( tRes.m_eEndpoint, tSource, sSrcQuery, hOptions, eRequestType );
+	// Keeps the decoded /bulk blob stream alive while the handler reads it.
+	std::unique_ptr<CharStream_c> pDecodedSource;
+	std::unique_ptr<HttpHandler_c> pHandler = CreateHttpHandler ( tRes.m_eEndpoint, tSource, sSrcQuery, hOptions, eRequestType, bCompressed, pDecodedSource );
 	if ( !pHandler )
 	{
 		if ( tRes.m_eEndpoint == EHTTP_ENDPOINT::INDEX )
@@ -2830,7 +2865,7 @@ void ProcessHttpJsonQuery ( const CSphString & sQuery, OptionsHash_t & hOptions,
 	BlobStream_c tQuery ( sQuery );
 	Str_t sSrcQuery;
 	// no need to issue authentification as it checked at the API interface 
-	HttpProcessResult_t tRes = ProcessHttpQuery ( tQuery, sSrcQuery, hOptions, dResult, false, eReqType, true );
+	HttpProcessResult_t tRes = ProcessHttpQuery ( tQuery, sSrcQuery, hOptions, dResult, false, eReqType, true, false );
 	ProcessHttpQueryBuddy ( tRes, sSrcQuery, hOptions, dResult, false, eReqType );
 }
 
@@ -2886,7 +2921,7 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 
 	} else
 	{
-		tRes = ProcessHttpQuery ( *pSource, sSrcQuery, m_hOptions, dResult, true, m_eType, false );
+		tRes = ProcessHttpQuery ( *pSource, sSrcQuery, m_hOptions, dResult, true, m_eType, false, bCompressed );
 	}
 
 	if ( eEndpoint==EHTTP_ENDPOINT::JSON_BULK )
@@ -3374,6 +3409,12 @@ static void SetEsBulkNumericDocid ( BulkDoc_t & tDoc, DocID_t tDocid )
 static bool ParseMetaLine ( const char * sLine, BulkDoc_t & tDoc, CSphString & sError )
 {
 	JsonObj_c tLineMeta ( sLine );
+	if ( !tLineMeta.IsObj() || tLineMeta.Size()!=1 )
+	{
+		sError = "action metadata line should contain exactly one action";
+		return false;
+	}
+
 	JsonObj_c tAction = tLineMeta[0];
 	if ( !tAction )
 	{
@@ -3382,6 +3423,11 @@ static bool ParseMetaLine ( const char * sLine, BulkDoc_t & tDoc, CSphString & s
 	}
 
 	tDoc.m_sAction = tAction.Name();
+	if ( tDoc.m_sAction!="create" && tDoc.m_sAction!="delete" && tDoc.m_sAction!="index" && tDoc.m_sAction!="update" )
+	{
+		sError.SetSprintf ( "unknown action: %s", tDoc.m_sAction.cstr() );
+		return false;
+	}
 
 	if ( !tAction.IsObj() )
 	{
@@ -3723,6 +3769,22 @@ bool HttpHandlerEsBulk_c::Process()
 		}
 	}
 
+	if ( dDocs.IsEmpty() )
+	{
+		ReportLogError ( "no requests added", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+		return false;
+	}
+
+	for ( const BulkDoc_t & tDoc : dDocs )
+	{
+		if ( tDoc.m_sAction!="delete" && IsEmpty ( tDoc.m_tDocLine ) )
+		{
+			sError.SetSprintf ( "source is missing for action %s", tDoc.m_sAction.cstr() );
+			ReportLogError ( sError.cstr(), HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
+			return false;
+		}
+	}
+
 	CSphVector<BulkTnx_t> dTnx;
 	const BulkDoc_t * pLastDoc = dDocs.Begin();
 	for ( const BulkDoc_t * pCurDoc = pLastDoc + 1; pCurDoc<dDocs.End(); pCurDoc++ )
@@ -3750,8 +3812,9 @@ bool HttpHandlerEsBulk_c::Process()
 	tRoot.AddItem ( "items", tItems );
 	tRoot.AddBool ( "errors", !bOk );
 	tRoot.AddInt ( "took", 1 ); // FIXME!!! add delta
-	BuildReply ( tRoot.AsString(), ( bOk ? EHTTP_STATUS::_200 : EHTTP_STATUS::_409 ) );
+	BuildReply ( tRoot.AsString(), EHTTP_STATUS::_200 );
 
+	// Restore NDJSON separators for Buddy after the in-place parsing, without replacing the HTTP 200 reply.
 	if ( !bOk )
 		ReportLogError ( "failed to commit", HttpErrorType_e::Unknown, EHTTP_STATUS::_400, true );
 
@@ -3787,15 +3850,18 @@ static void AddEsReply ( const BulkDoc_t & tDoc, JsonObj_c & tRoot )
 
 static void AddEsError ( int iReply, const CSphString & sError, const char * sErrorType, const BulkDoc_t & tDoc, JsonObj_c & tRoot )
 {
+	const bool bVersionConflict = tDoc.m_sAction=="create"
+		&& ( sError.Begins ( "duplicate id '" ) || sError.Begins ( "duplicate uuid id '" ) );
+
 	JsonObj_c tErrorObj;
-	tErrorObj.AddStr ( "type", sErrorType );
+	tErrorObj.AddStr ( "type", bVersionConflict ? "version_conflict_engine_exception" : sErrorType );
 	tErrorObj.AddStr ( "reason", sError.cstr() );
 
 	JsonObj_c tRes;
 	tRes.AddStr ( "_index", tDoc.m_sIndex.cstr() );
 	tRes.AddStr ( "_type", "doc" );
 	tRes.AddStr ( "_id", tDoc.m_sDocid.scstr() );
-	tRes.AddInt ( "status", 400 );
+	tRes.AddInt ( "status", bVersionConflict ? 409 : 400 );
 	tRes.AddItem ( "error", tErrorObj );
 
 	JsonObj_c tAction;
@@ -3821,6 +3887,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 		ProcessBegin ( sIdx, false );
 
 		bool bUpdate = false;
+		sph::StringSet hCreated;
 		bOk &= dErrors.IsEmpty();
 		dErrors.Resize ( 0 );
 		for ( int i = 0; i<tTnx.m_iCount; i++ )
@@ -3846,6 +3913,15 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 				dErrors.Add ( { iDoc, m_sError } );
 				continue;
 			}
+
+			if ( tDoc.m_sAction=="create" && !tDoc.m_sDocid.IsEmpty() && hCreated[tDoc.m_sDocid] )
+			{
+				CSphString sDuplicate;
+				sDuplicate.SetSprintf ( "duplicate id '%s'", tDoc.m_sDocid.cstr() );
+				dErrors.Add ( { iDoc, sDuplicate } );
+				continue;
+			}
+
 			bool bAction = false;
 			JsonObj_c tResult = JsonNull;
 
@@ -3892,6 +3968,9 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 				}
 			} else if ( tStmt.m_eStmt==STMT_INSERT || tStmt.m_eStmt==STMT_REPLACE )
 			{
+				if ( tDoc.m_sAction=="create" && !tDoc.m_sDocid.IsEmpty() )
+					hCreated.Add ( tDoc.m_sDocid );
+
 				auto dLastIdStrings = session::LastIdStrings();
 				if ( tDoc.m_eDocid==BulkDocid_e::NONE && !dLastIdStrings.IsEmpty() )
 				{
@@ -3910,6 +3989,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 		{
 			if ( bUpdate && !GetLastUpdated() )
 			{
+				bOk = false;
 				assert ( tTnx.m_iCount==1 );
 				const BulkDoc_t & tUpdDoc = dDocs[tTnx.m_iFrom];
 				CSphString sUpdError;

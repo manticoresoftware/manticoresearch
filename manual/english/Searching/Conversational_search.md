@@ -108,8 +108,8 @@ You can also set provider options and retrieval limits:
 ```sql
 CREATE CHAT MODEL support_assistant (
     model='openai:gpt-4o-mini',
-    api_key='your-provider-api-key',
-    base_url='http://host.docker.internal:8787/v1',
+    api_key='your-azure-entra-token',
+    base_url='https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1/responses',
     timeout=60,
     retrieval_limit=5,
     max_document_length=3000
@@ -125,7 +125,7 @@ CREATE CHAT MODEL support_assistant (
 ```bash
 curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
   -H 'Content-Type: text/plain' \
-  -d "CREATE CHAT MODEL support_assistant (model='openai:gpt-4o-mini', api_key='your-provider-api-key', base_url='http://host.docker.internal:8787/v1', timeout=60, retrieval_limit=5, max_document_length=3000)"
+  -d "CREATE CHAT MODEL support_assistant (model='openai:gpt-4o-mini', api_key='your-azure-entra-token', base_url='https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1/responses', timeout=60, retrieval_limit=5, max_document_length=3000)"
 ```
 
 <!-- end -->
@@ -160,6 +160,31 @@ environment:
 ```
 
 If `api_key` is not set in `CREATE CHAT MODEL`, the `llm` extension can use the matching provider environment variable. Set `api_key` in the chat model only when you need this model to use a different key.
+
+## Local OpenAI-compatible models
+
+LM Studio can run local models with Conversational Search. For a local model identifier that is not in the `openai:*` catalog, use the `openrouter:*` transport with LM Studio's Chat Completions endpoint. When Buddy runs in Docker, use `host.docker.internal` to reach the server on the host.
+
+<!-- example conversational_search_create_local_model -->
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE CHAT MODEL local_assistant (
+    model='openrouter:google_gemma-4-e4b-it',
+    api_key='lm-studio',
+    base_url='http://host.docker.internal:1234/v1/chat/completions',
+    timeout=60,
+    retrieval_limit=5
+);
+```
+
+<!-- end -->
+
+`api_key` is a non-secret placeholder accepted by LM Studio; do not use a real provider key for a local server. The `llm` extension validates the model portion of `openai:*` against its supported OpenAI model names, so `openai:google_gemma-4-e4b-it` is rejected even when LM Studio has that model loaded. The `openrouter:*` transport accepts the local identifier and can target an OpenAI-compatible Chat Completions server through `base_url`. Conversational Search requires the local model to reliably return an OpenAI function call for Buddy's routing schema. Test it with `CALL CHAT`; basic text completion or a simple tool-call test alone is not sufficient.
 
 ## CALL CHAT syntax
 

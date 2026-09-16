@@ -1,0 +1,48 @@
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+cat > /tmp/es-bulk-autoschema.ndjson <<'EOF'
+{"index":{"_index":"bulk_autoschema_regression"}}
+{"title":"Yellow Bag","price":12}
+{"create":{"_index":"bulk_autoschema_regression"}}
+{"title":"Red Bag","price":12.5,"id":3}
+EOF
+––– output –––
+––– input –––
+curl -sS --max-time 30 -w '\nHTTP %{http_code}\n' http://127.0.0.1:9308/_bulk -H 'Content-Type: application/x-ndjson' --data-binary @/tmp/es-bulk-autoschema.ndjson -H 'User-Agent: Manticore Buddy' | sed -E 's/"_id":"[0-9]{10,}"/"_id":"GENERATED_ID"/g; s/"took":[0-9]+/"took":0/g'
+––– output –––
+{"items":[{"index":{"_index":"bulk_autoschema_regression","_type":"doc","_id":"","status":400,"error":{"type":"mapper_parsing_exception","reason":"table 'bulk_autoschema_regression' absent"}}},{"create":{"_index":"bulk_autoschema_regression","_type":"doc","_id":"3","status":400,"error":{"type":"mapper_parsing_exception","reason":"table 'bulk_autoschema_regression' absent"}}}],"errors":true,"took":0}
+HTTP 200
+––– input –––
+curl -sS --max-time 30 -w '\nHTTP %{http_code}\n' http://127.0.0.1:9308/_bulk -H 'Content-Type: application/x-ndjson' --data-binary @/tmp/es-bulk-autoschema.ndjson | sed -E 's/"_id":"[0-9]{10,}"/"_id":"GENERATED_ID"/g; s/"took":[0-9]+/"took":0/g'
+––– output –––
+{"items":[{"index":{"_index":"bulk_autoschema_regression","_type":"doc","_id":"GENERATED_ID","_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}},{"create":{"_index":"bulk_autoschema_regression","_type":"doc","_id":"3","_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}}],"errors":false,"took":0}
+HTTP 200
+––– input –––
+curl -sS --max-time 30 -w '\nHTTP %{http_code}\n' http://127.0.0.1:9308/search -H 'Content-Type: application/json' -d '{"table":"bulk_autoschema_regression","_source":["title","price"]}' | sed -E 's/"_id":"[0-9]{10,}"/"_id":"GENERATED_ID"/g; s/"_id":[0-9]{10,}/"_id":"GENERATED_ID"/g; s/"took":[0-9]+/"took":0/g'
+––– output –––
+{"took":0,"timed_out":false,"hits":{"total":2,"total_relation":"eq","hits":[{"_id":3,"_score":1,"_source":{"title":"Red Bag","price":12.500000}},{"_id":"GENERATED_ID","_score":1,"_source":{"title":"Yellow Bag","price":12.000000}}]}}
+HTTP 200
+––– input –––
+cat > /tmp/es-bulk-autoschema.ndjson <<'EOF'
+{"create":{"_index":"bulk_autoschema_regression","_id":3}}
+{"title":"Duplicate","price":99}
+EOF
+––– output –––
+––– input –––
+curl -sS --max-time 30 -w '\nHTTP %{http_code}\n' http://127.0.0.1:9308/_bulk -H 'Content-Type: application/x-ndjson' --data-binary @/tmp/es-bulk-autoschema.ndjson | sed -E 's/"_id":"[0-9]{10,}"/"_id":"GENERATED_ID"/g; s/"took":[0-9]+/"took":0/g'
+––– output –––
+{"items":[{"create":{"_index":"bulk_autoschema_regression","_type":"doc","_id":3,"status":409,"error":{"type":"version_conflict_engine_exception","reason":"duplicate id '3'"}}}],"errors":true,"took":0}
+HTTP 200
+––– input –––
+curl -sS --max-time 30 -w '\nHTTP %{http_code}\n' http://127.0.0.1:9308/_bulk -H 'Content-Type: application/x-ndjson' --data-binary @/tmp/es-bulk-autoschema.ndjson -H 'User-Agent: Manticore Buddy' | sed -E 's/"_id":"[0-9]{10,}"/"_id":"GENERATED_ID"/g; s/"took":[0-9]+/"took":0/g'
+––– output –––
+{"items":[{"create":{"_index":"bulk_autoschema_regression","_type":"doc","_id":"3","status":409,"error":{"type":"version_conflict_engine_exception","reason":"duplicate id '3'"}}}],"errors":true,"took":0}
+HTTP 200
+––– input –––
+curl -sS --max-time 30 -w '\nHTTP %{http_code}\n' http://127.0.0.1:9308/search -H 'Content-Type: application/json' -d '{"table":"bulk_autoschema_regression","_source":["title","price"]}' | sed -E 's/"_id":"[0-9]{10,}"/"_id":"GENERATED_ID"/g; s/"_id":[0-9]{10,}/"_id":"GENERATED_ID"/g; s/"took":[0-9]+/"took":0/g'
+––– output –––
+{"took":0,"timed_out":false,"hits":{"total":2,"total_relation":"eq","hits":[{"_id":3,"_score":1,"_source":{"title":"Red Bag","price":12.500000}},{"_id":"GENERATED_ID","_score":1,"_source":{"title":"Yellow Bag","price":12.000000}}]}}
+HTTP 200
+––– input –––
+rm /tmp/es-bulk-autoschema.ndjson
+––– output –––

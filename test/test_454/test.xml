@@ -157,6 +157,43 @@ index test1_all
 </bulk>
 <query endpoint="search">{ "table": "test1_all", "query": { "match_all": {} } } }</query>
 
+<!-- duplicate create is an item-level conflict, not a request-level failure -->
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "create" : { "_index" : "test1", "_id" : "301" } }
+{ "int_col" : 301 }
+
+</bulk>
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "create" : { "_index" : "test1", "_id" : "301" } }
+{ "int_col" : 301 }
+
+</bulk>
+
+<!-- a mixed batch preserves successful items and reports conflicts per item -->
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "create" : { "_index" : "test1", "_id" : "302" } }
+{ "int_col" : 302 }
+{ "create" : { "_index" : "test1", "_id" : "301" } }
+{ "int_col" : 301 }
+
+</bulk>
+
+<!-- duplicate creates within one batch are reported separately -->
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "create" : { "_index" : "test1", "_id" : "303" } }
+{ "int_col" : 303 }
+{ "create" : { "_index" : "test1", "_id" : "303" } }
+{ "int_col" : 304 }
+
+</bulk>
+
+<!-- action metadata must contain exactly one action -->
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "test1", "_id" : "304" }, "delete" : { "_index" : "test1", "_id" : "301" } }
+{ "int_col" : 304 }
+
+</bulk>
+
 <!-- crash on wrong action name -->
 <bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
 { "table" : { "_index" : "test1", "_id" : "201" } }

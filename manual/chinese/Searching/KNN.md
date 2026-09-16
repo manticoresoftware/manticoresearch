@@ -92,6 +92,7 @@ table test_vec {
 - `API_KEY`：远程模型（OpenAI、Voyage、Jina）必需。API 密钥会在建表期间通过发起真实 API 请求进行验证。
 - `API_URL`：可选。自定义 API 端点 URL。如果未指定，则使用默认提供方端点（例如 OpenAI 使用 `https://api.openai.com/v1/embeddings`）。
 - `API_TIMEOUT`：可选。API 请求的 HTTP 超时时间，单位为秒。默认值为 10 秒。设为 `'0'` 可使用默认超时。此设置同时适用于建表期间的验证请求和 INSERT 操作期间的嵌入生成。
+- `MAX_INPUT_TOKENS`: 可选。限制每段输入文本在生成嵌入前使用的 token 数；更长的文本会被截断。`'0'`（默认）表示使用模型自身的上下文限制。`Qwen/Qwen3-Embedding-0.6B` 等长上下文模型最多可接受 32,768 个 token，而在 CPU 上生成嵌入的时间会随输入长度超线性增长（一个 5 KB 文档可能需要数分钟），因此当文本字段可能包含很长或不受限制的内容时，请设置上限（例如 `'512'`）。适用于本地模型；之后可通过 `ALTER TABLE ... MODIFY COLUMN ... MAX_INPUT_TOKENS='...'` 修改该设置，且无需重新嵌入已有行。
 
 对于远程模型，`MODEL_NAME` 可以写成两种形式：
 - 传统的带提供方前缀形式：`openai/text-embedding-ada-002`、`voyage/voyage-3.5-lite`、`jina/jina-embeddings-v4`

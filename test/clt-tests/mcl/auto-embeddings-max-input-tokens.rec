@@ -1,0 +1,169 @@
+MAX_INPUT_TOKENS parameter testing for auto embeddings
+
+This test validates the MAX_INPUT_TOKENS parameter of auto-embedding columns (manticoresearch#4816). It covers CREATE TABLE with and without the option, SHOW CREATE TABLE round-trip, validation errors, that the cap really truncates the embedding input (two documents that differ only after the cap get identical vectors), ALTER TABLE ... MODIFY COLUMN ... MAX_INPUT_TOKENS on an existing table, and that the cap never raises the model's own limit. Uses the local sentence-transformers/all-MiniLM-L6-v2 model (max_position_embeddings = 512).
+
+––– comment –––
+Start Manticore Search
+––– block: ../base/start-searchd –––
+––– comment –––
+MAX_INPUT_TOKENS not specified: SHOW CREATE TABLE does NOT display it (model's own limit)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_mit_default (title TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_mit_default" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_mit_default
+Create Table: CREATE TABLE test_mit_default (
+id bigint,
+title text,
+vec float_vector knn_type='hnsw' hnsw_similarity='COSINE' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' api_timeout='10'
+)
+––– comment –––
+MAX_INPUT_TOKENS='0' is treated as not specified
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_mit_zero (title TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title' MAX_INPUT_TOKENS='0')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_mit_zero" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_mit_zero
+Create Table: CREATE TABLE test_mit_zero (
+id bigint,
+title text,
+vec float_vector knn_type='hnsw' hnsw_similarity='COSINE' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' api_timeout='10'
+)
+––– comment –––
+Validation: negative, non-integer, float and empty values are rejected
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_mit_bad (title TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title' MAX_INPUT_TOKENS='-1')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: P03: MAX_INPUT_TOKENS must be a non-negative integer (0 means the model's own limit, positive value is the maximum number of tokens taken from each input text) near ''-1')'
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_mit_bad (title TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title' MAX_INPUT_TOKENS='abc')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: P03: MAX_INPUT_TOKENS must be a non-negative integer (0 means the model's own limit, positive value is the maximum number of tokens taken from each input text) near ''abc')'
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_mit_bad (title TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title' MAX_INPUT_TOKENS='12.5')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: P03: MAX_INPUT_TOKENS must be a non-negative integer (0 means the model's own limit, positive value is the maximum number of tokens taken from each input text) near ''12.5')'
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_mit_bad (title TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title' MAX_INPUT_TOKENS='')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: P03: MAX_INPUT_TOKENS must be a non-negative integer (0 means the model's own limit, positive value is the maximum number of tokens taken from each input text) near ''')'
+––– comment –––
+MAX_INPUT_TOKENS='6': shown by SHOW CREATE TABLE and survives a restart
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_mit_6 (title TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title' MAX_INPUT_TOKENS='6')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_mit_6" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_mit_6
+Create Table: CREATE TABLE test_mit_6 (
+id bigint,
+title text,
+vec float_vector knn_type='hnsw' hnsw_similarity='COSINE' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' api_timeout='10' max_input_tokens='6'
+)
+––– comment –––
+The cap truncates the input: doc 2 = doc 1 + a long tail of extra words. With the cap (6 tokens = [CLS] a red apple on the) both embed identically; doc 3 has a different head and must differ from doc 1.
+––– input –––
+TAIL=$(for i in $(seq 1 300); do printf 'extra word number %d ' $i; done); mysql -h0 -P9306 -e "INSERT INTO test_mit_6 (id, title) VALUES (1, 'a red apple on the table'), (2, 'a red apple on the table $TAIL'), (3, 'a blue bicycle in the garage $TAIL')"; echo $?
+––– output –––
+0
+––– input –––
+V1=$(mysql -h0 -P9306 -N -e "SELECT vec FROM test_mit_6 WHERE id=1"); V2=$(mysql -h0 -P9306 -N -e "SELECT vec FROM test_mit_6 WHERE id=2"); V3=$(mysql -h0 -P9306 -N -e "SELECT vec FROM test_mit_6 WHERE id=3"); [ -n "$V1" ] && [ "$V1" = "$V2" ] && echo "1 and 2 identical" || echo "1 and 2 differ"; [ "$V1" != "$V3" ] && echo "1 and 3 differ" || echo "1 and 3 identical"
+––– output –––
+1 and 2 identical
+1 and 3 differ
+––– comment –––
+Without a cap the long tail changes the vector (control for the check above)
+––– input –––
+TAIL=$(for i in $(seq 1 300); do printf 'extra word number %d ' $i; done); mysql -h0 -P9306 -e "INSERT INTO test_mit_default (id, title) VALUES (1, 'a red apple on the table'), (2, 'a red apple on the table $TAIL')"; V1=$(mysql -h0 -P9306 -N -e "SELECT vec FROM test_mit_default WHERE id=1"); V2=$(mysql -h0 -P9306 -N -e "SELECT vec FROM test_mit_default WHERE id=2"); [ -n "$V1" ] && [ "$V1" != "$V2" ] && echo "uncapped 1 and 2 differ" || echo "uncapped 1 and 2 identical"
+––– output –––
+uncapped 1 and 2 differ
+––– comment –––
+KNN search still works on the capped table
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM test_mit_6 WHERE knn(vec, 3, 'blue bicycle') LIMIT 1"
+––– output –––
++------+
+| id   |
++------+
+|    3 |
++------+
+––– comment –––
+ALTER TABLE ... MODIFY COLUMN ... MAX_INPUT_TOKENS on an existing table: applies to new rows, is shown by SHOW CREATE TABLE
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE test_mit_default MODIFY COLUMN vec MAX_INPUT_TOKENS='6'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_mit_default" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_mit_default
+Create Table: CREATE TABLE test_mit_default (
+id bigint,
+title text,
+vec float_vector knn_type='hnsw' hnsw_similarity='COSINE' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' api_timeout='10' max_input_tokens='6'
+)
+––– input –––
+TAIL=$(for i in $(seq 1 300); do printf 'extra word number %d ' $i; done); mysql -h0 -P9306 -e "INSERT INTO test_mit_default (id, title) VALUES (3, 'a red apple on the table'), (4, 'a red apple on the table $TAIL')"; V3=$(mysql -h0 -P9306 -N -e "SELECT vec FROM test_mit_default WHERE id=3"); V4=$(mysql -h0 -P9306 -N -e "SELECT vec FROM test_mit_default WHERE id=4"); [ -n "$V3" ] && [ "$V3" = "$V4" ] && echo "after ALTER 3 and 4 identical" || echo "after ALTER 3 and 4 differ"
+––– output –––
+after ALTER 3 and 4 identical
+––– comment –––
+ALTER back to '0' removes the cap from SHOW CREATE TABLE
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE test_mit_default MODIFY COLUMN vec MAX_INPUT_TOKENS='0'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_mit_default" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_mit_default
+Create Table: CREATE TABLE test_mit_default (
+id bigint,
+title text,
+vec float_vector knn_type='hnsw' hnsw_similarity='COSINE' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' api_timeout='10'
+)
+––– comment –––
+ALTER validation: bad value, and a column without an embedding model
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE test_mit_default MODIFY COLUMN vec MAX_INPUT_TOKENS='abc'" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: table test_mit_default: MAX_INPUT_TOKENS must be a non-negative integer (0 means the model's own limit, positive value is the maximum number of tokens taken from each input text)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_mit_plain (title TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2')"; mysql -h0 -P9306 -e "ALTER TABLE test_mit_plain MODIFY COLUMN vec MAX_INPUT_TOKENS='6'" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: table test_mit_plain: no embeddings model specified for attribute 'vec'
+––– comment –––
+A cap above the model's limit never raises it: 100000 is accepted, stored, and embedding still works
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_mit_big (title TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title' MAX_INPUT_TOKENS='100000')"; mysql -h0 -P9306 -e "INSERT INTO test_mit_big (id, title) VALUES (1, 'hello world')"; mysql -h0 -P9306 -e "SELECT id FROM test_mit_big WHERE knn(vec, 1, 'hello') LIMIT 1"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
++------+
+––– comment –––
+The setting survives a daemon restart
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_mit_6" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_mit_6
+Create Table: CREATE TABLE test_mit_6 (
+id bigint,
+title text,
+vec float_vector knn_type='hnsw' hnsw_similarity='COSINE' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' api_timeout='10' max_input_tokens='6'
+)

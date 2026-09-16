@@ -15,6 +15,13 @@ chunks=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SHO
 ––– output –––
 ASSISTED_HTTP_PUBLISHED
 ––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS rt_bulk_json_array; CREATE TABLE rt_bulk_json_array (title TEXT, m MULTI, j JSON);"
+––– output –––
+––– input –––
+reply=$(printf '%s\n' '{"insert":{"index":"rt_bulk_json_array","id":1,"doc":{"title":"arrays","m":[11,12,13],"j":[21,22,23]}}}' '{"insert":{"index":"rt_bulk_json_array","id":2,"doc":{"title":"empty arrays","m":[],"j":[]}}}' | curl -sS -X POST 'http://localhost:9308/bulk?bulk_import=rt_bulk_json_array' -H 'Content-Type: application/x-ndjson' --data-binary @-); rows=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,m,j FROM rt_bulk_json_array" | sort -n); expected=$(printf '1\t11,12,13\t[21,22,23]\n2\t\t[]'); if printf '%s' "$reply" | grep -q '"errors":false' && [ "$rows" = "$expected" ]; then echo BULK_IMPORT_JSON_ARRAYS_OK; else printf 'FAIL_BULK_IMPORT_JSON_ARRAYS reply=%s rows=%s expected=%s\n' "$reply" "$rows" "$expected"; fi
+––– output –––
+BULK_IMPORT_JSON_ARRAYS_OK
+––– input –––
 mysql -h0 -P9306 -e "DROP TABLE IF EXISTS bulk_import_zero_id; CREATE TABLE bulk_import_zero_id (title TEXT);"
 ––– output –––
 ––– input –––

@@ -1228,6 +1228,8 @@ jobs:
             fi
           fi
           if [[ "${{ needs.meta.outputs.run_builds }}" == "true" ]]; then
+            # Runtime artifacts are required only when build/ubertest jobs run.
+            # CLT-only cached-image runs intentionally skip both runtime cache probes and runtime builds.
             if [[ "${{ needs.test_kit_light_docker_build.result }}" != "success" ]]; then
               echo "test_kit_light_docker_build: required but result was ${{ needs.test_kit_light_docker_build.result }}"
               failed=1

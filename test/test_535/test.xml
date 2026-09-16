@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>EXIST preserves float type in GEOPOLY2D CONTAINS</name>
+
+<requires>
+	<force-rt/>
+</requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>
+DROP TABLE IF EXISTS geo_test_4891;
+CREATE TABLE geo_test_4891 ( latitude float, longitude float );
+INSERT INTO geo_test_4891 (id, latitude, longitude) VALUES (1, 53.481319, -2.251460);
+SELECT latitude, longitude,
+	CONTAINS(GEOPOLY2D(53.3,-2.5,53.7,-2.5,53.7,-2.0,53.3,-2.0), latitude, longitude) AS direct_match,
+	CONTAINS(GEOPOLY2D(53.3,-2.5,53.7,-2.5,53.7,-2.0,53.3,-2.0), EXIST('latitude',0), EXIST('longitude',0)) AS exist_match,
+	EXIST('latitude',0) AS exist_latitude,
+	EXIST('longitude',0) AS exist_longitude
+FROM geo_test_4891;
+DROP TABLE geo_test_4891;
+</sphinxql>
+</queries>
+</test>

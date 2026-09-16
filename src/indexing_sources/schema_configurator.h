@@ -49,7 +49,7 @@ struct CSphSchemaConfigurator
 
 			tCol.m_iIndex = tSchema.GetAttrsCount ();
 
-			if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET )
+			if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET || eAttrType==SPH_ATTR_FLOAT_VECTOR )
 			{
 				tCol.m_eAttrType = eAttrType;
 				tCol.m_eSrc = SPH_ATTRSRC_FIELD;

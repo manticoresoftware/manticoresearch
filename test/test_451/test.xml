@@ -3,6 +3,8 @@
 
 <name>stored fields vs field_string attribute</name>
 
+<requires><non-rt-indexer/></requires>
+
 <config>
 indexer
 {

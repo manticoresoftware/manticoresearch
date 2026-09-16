@@ -41,7 +41,7 @@ public:
 	bool	IterateKillListNext ( DocID_t & ) override				{ return false; }
 
 	void	Setup ( const CSphSourceSettings & tSettings, StrVec_t * pWarnings ) override;
-	bool	SetupPipe ( const CSphConfigSection & hSource, FILE * pPipe, CSphString & sError );
+	bool	SetupPipe ( const CSphConfigSection & hSource, FILE * pPipe, bool bOwnPipe, CSphString & sError );
 
 protected:
 	enum ESphParseResult
@@ -61,6 +61,7 @@ protected:
 	CSphFixedVector<int>		m_dFieldLengths {0};
 
 	FILE *						m_pFP = nullptr;
+	bool						m_bOwnPipe = false;
 	int							m_iDataStart = 0;	///< where the next line to parse starts in m_dBuf
 	int							m_iDocStart = 0;	///< where the last parsed document stats in m_dBuf
 	int							m_iBufUsed = 0;		///< bytes [0,m_iBufUsed) are actually currently used; the rest of m_dBuf is free
@@ -69,8 +70,9 @@ protected:
 	BYTE **					ReportDocumentError();
 	virtual bool			SetupSchema ( const CSphConfigSection & hSource, bool bWordDict, CSphString & sError ) = 0;
 	virtual ESphParseResult	SplitColumns ( CSphString & ) = 0;
+	bool				SetupSVpipeSchema ( const CSphConfigSection & hSource, bool bWordDict, CSphSchema & tSchema, CSphString & sError ) const;
 
-private:
+protected:
 	bool	StoreAttribute ( int iAttr, int iOff );
 };
 
@@ -99,11 +101,719 @@ private:
 };
 
 
+bool CSphSource_BaseSV::SetupSVpipeSchema ( const CSphConfigSection & hSource, bool bWordDict, CSphSchema & tSchema, CSphString & sError ) const
+{
+	bool bOk = true;
+
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_uint"), SPH_ATTR_INTEGER, tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_timestamp"), SPH_ATTR_TIMESTAMP, tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_bool"), SPH_ATTR_BOOL, tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_float"), SPH_ATTR_FLOAT, tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_bigint"), SPH_ATTR_BIGINT, tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_multi"), SPH_ATTR_UINT32SET, tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_multi_64"), SPH_ATTR_INT64SET, tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_float_vector"), SPH_ATTR_FLOAT_VECTOR, tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_string"), SPH_ATTR_STRING, tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_json"), SPH_ATTR_JSON, tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("csvpipe_field_string"), SPH_ATTR_STRING, tSchema, sError );
+
+	if ( !bOk )
+		return false;
+
+	CSphString sAttrOrder = hSource.GetStr ( "csvpipe_attr_order" );
+	if ( !sAttrOrder.IsEmpty() )
+	{
+		StrVec_t dNames;
+		sphSplit ( dNames, sAttrOrder.cstr(), "," );
+		CSphVector<bool> dUsed ( tSchema.GetAttrsCount() );
+		dUsed.ZeroVec();
+		CSphSchema tOrdered ( tSchema.GetName() );
+		for ( const CSphString & sName : dNames )
+		{
+			int iAttr = tSchema.GetAttrIndex ( sName.cstr() );
+			if ( iAttr<0 || dUsed[iAttr] )
+			{
+				sError.SetSprintf ( "csvpipe_attr_order contains %s attribute '%s'", iAttr<0 ? "unknown" : "duplicate", sName.cstr() );
+				return false;
+			}
+			tOrdered.AddAttr ( tSchema.GetAttr(iAttr), true );
+			dUsed[iAttr] = true;
+		}
+		for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
+			if ( !dUsed[i] )
+				tOrdered.AddAttr ( tSchema.GetAttr(i), true );
+		tSchema = std::move ( tOrdered );
+	}
+
+	bOk &= ConfigureFields ( hSource("csvpipe_field"), bWordDict, tSchema, sError );
+	bOk &= ConfigureFields ( hSource("csvpipe_field_string"), bWordDict, tSchema, sError );
+	return bOk;
+}
+
+constexpr int SOURCE_BINARY_BUFFER_SIZE = 64 * 1024;
+
+class SourceBinaryReader_c final : ISphNoncopyable
+{
+public:
+	SourceBinaryReader_c ()
+	{
+		m_dBuffer.Resize ( SOURCE_BINARY_BUFFER_SIZE );
+	}
+
+	void SetFile ( FILE * pFile )
+	{
+		m_pFile = pFile;
+		m_iPos = 0;
+		m_iUsed = 0;
+		m_bError = false;
+		m_bCleanEOF = false;
+		m_sError = "";
+		if ( m_pFile )
+			clearerr ( m_pFile );
+	}
+
+	bool ReadBatch ( uint32_t & uRows, bool & bEOF )
+	{
+		bEOF = false;
+		BYTE uFirst;
+		if ( !ReadOptionalByte ( uFirst, bEOF ) )
+			return false;
+		if ( bEOF )
+			return true;
+		BYTE dValue[4] = { uFirst, 0, 0, 0 };
+		if ( !ReadBytes ( dValue+1, 3 ) )
+			return false;
+		uRows = (uint32_t)dValue[0] | ((uint32_t)dValue[1]<<8) | ((uint32_t)dValue[2]<<16) | ((uint32_t)dValue[3]<<24);
+		return true;
+	}
+
+	template <typename HANDLER>
+	bool ReadValue ( HANDLER & tHandler )
+	{
+		uint32_t uKind;
+		if ( !ReadU32 ( uKind ) )
+			return false;
+		switch ( (ESphAttr)uKind )
+		{
+		case SPH_ATTR_BIGINT:
+			{
+				BYTE uNegative;
+				uint64_t uValue;
+				return ReadByte ( uNegative ) && ReadU64 ( uValue ) && tHandler.OnInteger ( uValue, !!uNegative );
+			}
+		case SPH_ATTR_FLOAT:
+			{
+				uint32_t uFloat;
+				return ReadU32 ( uFloat ) && tHandler.OnFloat ( sphDW2F ( (DWORD)uFloat ) );
+			}
+		case SPH_ATTR_STRING:
+			{
+				uint32_t uLength;
+				if ( !ReadU32 ( uLength ) || !Ensure ( (int)uLength ) )
+					return false;
+				const char * pValue = (const char *)m_dBuffer.Begin()+m_iPos;
+				const bool bOk = tHandler.OnString ( pValue, (int)uLength );
+				m_iPos += (int)uLength;
+				return bOk;
+			}
+		case SPH_ATTR_UINT32SET:
+		case SPH_ATTR_INT64SET:
+		case SPH_ATTR_FLOAT_VECTOR:
+			{
+				uint32_t uCount;
+				if ( !ReadU32 ( uCount ) )
+					return false;
+				if ( !tHandler.OnMvaBegin() )
+					return false;
+				const bool bFloat = (ESphAttr)uKind==SPH_ATTR_FLOAT_VECTOR;
+				for ( uint32_t i=0; i<uCount; ++i )
+				{
+					if ( bFloat )
+					{
+						uint32_t uFloat;
+						if ( !ReadU32 ( uFloat ) )
+							return false;
+						if ( !tHandler.OnMvaFloat ( sphDW2F ( (DWORD)uFloat ) ) )
+							return false;
+					} else
+					{
+						uint64_t uInteger;
+						if ( !ReadU64 ( uInteger ) )
+							return false;
+						if ( !tHandler.OnMvaInteger ( (int64_t)uInteger ) )
+							return false;
+					}
+				}
+				return tHandler.OnMvaEnd();
+			}
+		}
+		return false;
+	}
+
+	const CSphString & GetError () const { return m_sError; }
+
+private:
+	bool ReadOptionalByte ( BYTE & uValue, bool & bEOF )
+	{
+		bEOF = false;
+		if ( Ensure ( 1, true ) )
+		{
+			uValue = m_dBuffer[m_iPos++];
+			return true;
+		}
+		if ( !m_bError && m_bCleanEOF )
+		{
+			bEOF = true;
+			return true;
+		}
+		return false;
+	}
+
+	bool ReadByte ( BYTE & uValue )
+	{
+		if ( !Ensure ( 1 ) )
+			return false;
+		uValue = m_dBuffer[m_iPos++];
+		return true;
+	}
+
+	bool ReadU16 ( uint16_t & uValue )
+	{
+		BYTE dValue[2];
+		if ( !ReadBytes ( dValue, sizeof ( dValue ) ) )
+			return false;
+		uValue = (uint16_t)dValue[0] | ((uint16_t)dValue[1]<<8);
+		return true;
+	}
+
+	bool ReadU32 ( uint32_t & uValue )
+	{
+		BYTE dValue[4];
+		if ( !ReadBytes ( dValue, sizeof ( dValue ) ) )
+			return false;
+		uValue = (uint32_t)dValue[0] | ((uint32_t)dValue[1]<<8) | ((uint32_t)dValue[2]<<16) | ((uint32_t)dValue[3]<<24);
+		return true;
+	}
+
+	bool ReadU64 ( uint64_t & uValue )
+	{
+		BYTE dValue[8];
+		if ( !ReadBytes ( dValue, sizeof ( dValue ) ) )
+			return false;
+		uValue = 0;
+		for ( int i=0; i<8; ++i )
+			uValue |= (uint64_t)dValue[i] << (i*8);
+		return true;
+	}
+
+	bool ReadBytes ( void * pData, int iLength )
+	{
+		if ( !Ensure ( iLength ) )
+			return false;
+		memcpy ( pData, m_dBuffer.Begin()+m_iPos, iLength );
+		m_iPos += iLength;
+		return true;
+	}
+
+	bool Ensure ( int iNeed, bool bOptional=false )
+	{
+		if ( m_iUsed-m_iPos>=iNeed )
+		{
+			m_bCleanEOF = false;
+			return true;
+		}
+
+		if ( m_iPos )
+		{
+			const int iAvailable = m_iUsed-m_iPos;
+			if ( iAvailable )
+				memmove ( m_dBuffer.Begin(), m_dBuffer.Begin()+m_iPos, iAvailable );
+			m_iUsed = iAvailable;
+			m_iPos = 0;
+		}
+
+		if ( m_dBuffer.GetLength()<iNeed )
+			m_dBuffer.Resize ( iNeed );
+
+		while ( m_iUsed<iNeed )
+		{
+			if ( !m_pFile )
+				return SetError ( "binary bulk source has no input" );
+			// Do not let a previously enlarged buffer increase normal read-ahead.
+			const int iRead = Max ( iNeed, SOURCE_BINARY_BUFFER_SIZE ) - m_iUsed;
+			const int iGot = (int)fread ( m_dBuffer.Begin()+m_iUsed, 1, iRead, m_pFile );
+			m_iUsed += iGot;
+			if ( iGot )
+				continue;
+			if ( feof ( m_pFile ) )
+			{
+				m_bCleanEOF = true;
+				if ( bOptional && !m_iUsed )
+					return false;
+				return SetError ( "truncated binary bulk source frame" );
+			}
+			return SetError ( "binary bulk source read error: %s", strerrorm ( errno ) );
+		}
+		m_bCleanEOF = false;
+		return true;
+	}
+
+	bool SetError ( const char * sFormat, ... )
+	{
+		va_list ap;
+		va_start ( ap, sFormat );
+		m_sError.SetSprintfVa ( sFormat, ap );
+		va_end ( ap );
+		m_bError = true;
+		return false;
+	}
+
+	FILE * m_pFile = nullptr;
+	CSphVector<BYTE> m_dBuffer;
+	int m_iPos = 0;
+	int m_iUsed = 0;
+	bool m_bError = false;
+	bool m_bCleanEOF = false;
+	CSphString m_sError;
+};
+
+class CSphSource_Binary : public CSphSource_BaseSV
+{
+	static int64_t GetSignedValue ( uint64_t uValue, bool bNegative )
+	{
+		if ( bNegative )
+		{
+			if ( uValue>uint64_t ( LLONG_MAX ) )
+				return LLONG_MIN;
+			return -int64_t ( uValue );
+		}
+		return uValue>uint64_t ( LLONG_MAX ) ? LLONG_MAX : int64_t ( uValue );
+	}
+
+	class BinaryValueSink_c
+	{
+	public:
+		BinaryValueSink_c ( CSphSource_Binary & tSource, int iRemap, CSphString & sError )
+			: m_tSource ( tSource )
+			, m_iRemap ( iRemap )
+			, m_sError ( sError )
+		{}
+
+		bool OnInteger ( uint64_t uValue, bool bNegative )
+		{
+			return m_tSource.StoreBinaryInteger ( m_iRemap, uValue, bNegative, m_sError );
+		}
+
+		bool OnFloat ( float fValue )
+		{
+			return m_tSource.StoreBinaryFloat ( m_iRemap, fValue, m_sError );
+		}
+
+		bool OnString ( const char * pData, int iLength )
+		{
+			return m_tSource.StoreBinaryString ( m_iRemap, pData, iLength, m_sError );
+		}
+
+		bool OnMvaBegin ()
+		{
+			const RemapXSV_t & tRemap = m_tSource.m_dRemap[m_iRemap];
+			m_bTextMva = tRemap.m_iField!=-1;
+			if ( tRemap.m_iAttr!=-1 )
+			{
+				const ESphAttr eType = m_tSource.m_tSchema.GetAttr ( tRemap.m_iAttr ).m_eAttrType;
+				m_bTextMva |= eType!=SPH_ATTR_UINT32SET && eType!=SPH_ATTR_INT64SET && eType!=SPH_ATTR_FLOAT_VECTOR;
+			}
+			m_bFirstMva = true;
+			m_iTextStart = m_bTextMva ? m_tSource.m_iBufUsed : -1;
+			return true;
+		}
+
+		bool OnMvaInteger ( int64_t iValue )
+		{
+			if ( m_bTextMva )
+			{
+				if ( !AppendSeparator() )
+					return false;
+				CSphString sValue;
+				sValue.SetSprintf ( INT64_FMT, iValue );
+				return m_tSource.AppendBinary ( sValue.cstr(), sValue.Length(), false, m_sError );
+			}
+			return m_tSource.StoreBinaryMvaInteger ( m_iRemap, iValue, m_sError );
+		}
+
+		bool OnMvaFloat ( float fValue )
+		{
+			if ( m_bTextMva )
+			{
+				if ( !AppendSeparator() )
+					return false;
+				CSphString sValue;
+				sValue.SetSprintf ( "%.9g", fValue );
+				return m_tSource.AppendBinary ( sValue.cstr(), sValue.Length(), false, m_sError );
+			}
+			return m_tSource.StoreBinaryMvaFloat ( m_iRemap, fValue, m_sError );
+		}
+
+		bool OnMvaEnd ()
+		{
+			return !m_bTextMva || m_tSource.FinishBinaryTextValue ( m_iRemap, m_iTextStart, m_sError );
+		}
+
+	private:
+		bool AppendSeparator ()
+		{
+			if ( m_bFirstMva )
+			{
+				m_bFirstMva = false;
+				return true;
+			}
+			return m_tSource.AppendBinary ( " ", 1, false, m_sError );
+		}
+
+		CSphSource_Binary & m_tSource;
+		int m_iRemap;
+		CSphString & m_sError;
+		int m_iTextStart = -1;
+		bool m_bTextMva = false;
+		bool m_bFirstMva = true;
+	};
+
+public:
+	explicit CSphSource_Binary ( const char * sName )
+		: CSphSource_BaseSV ( sName )
+	{}
+
+	ESphParseResult SplitColumns ( CSphString & ) final
+	{
+		return PARSING_FAILED;
+	}
+
+	bool IterateStart ( CSphString & ) override
+	{
+		m_tReader.SetFile ( m_pFP );
+		m_iPlainFieldsLength = m_tSchema.GetFieldsCount();
+		m_iBufUsed = 0;
+		m_iLine = 0;
+		m_iRowsRemaining = 0;
+		return true;
+	}
+
+	BYTE ** NextDocument ( bool & bEOF, CSphString & sError ) override
+	{
+		bEOF = false;
+		if ( !m_iRowsRemaining )
+		{
+			bool bInputEOF;
+			if ( !m_tReader.ReadBatch ( m_iRowsRemaining, bInputEOF ) )
+			{
+				sError = m_tReader.GetError();
+				return ReportDocumentError();
+			}
+			if ( bInputEOF )
+			{
+				bEOF = true;
+				m_tDocInfo.m_tRowID = INVALID_ROWID;
+				return nullptr;
+			}
+		}
+
+		for ( auto & tField : m_dFields )
+			tField = nullptr;
+		for ( auto & iLength : m_dFieldLengths )
+			iLength = 0;
+		m_dMvas.Resize ( m_tSchema.GetAttrsCount() );
+		for ( auto & dMva : m_dMvas )
+			dMva.Resize ( 0 );
+
+		m_iBufUsed = 0;
+		ARRAY_FOREACH ( i, m_dRemap )
+		{
+			BinaryValueSink_c tSink ( *this, i, sError );
+			if ( !m_tReader.ReadValue ( tSink ) )
+			{
+				if ( sError.IsEmpty() )
+					sError = m_tReader.GetError();
+				if ( sError.IsEmpty() )
+					sError.SetSprintf ( "source '%s': invalid binary value at column %d, row %d", m_tSchema.GetName(), i+1, m_iLine+1 );
+				return ReportDocumentError();
+			}
+		}
+
+		--m_iRowsRemaining;
+		++m_iLine;
+		return m_dFields.Begin();
+	}
+
+	bool SetupSchema ( const CSphConfigSection & hSource, bool bWordDict, CSphString & sError ) final
+	{
+		return SetupSVpipeSchema ( hSource, bWordDict, m_tSchema, sError );
+	}
+
+private:
+	bool EnsureBinaryBuffer ( int iAdditional, CSphString & sError )
+	{
+		if ( iAdditional<0 || m_iBufUsed>INT_MAX-iAdditional )
+		{
+			sError.SetSprintf ( "source '%s': binary field buffer is too large", m_tSchema.GetName() );
+			return false;
+		}
+
+		const int iRequired = m_iBufUsed + iAdditional;
+		if ( iRequired<=m_dBuf.GetLength() )
+			return true;
+
+		const BYTE * pOld = m_dBuf.Begin();
+		CSphVector<int> dFieldOffsets ( m_dFields.GetLength() );
+		ARRAY_FOREACH ( i, m_dFields )
+			dFieldOffsets[i] = m_dFields[i] ? (int)( m_dFields[i]-pOld ) : -1;
+
+		int iNewLength = m_dBuf.GetLength();
+		if ( !iNewLength )
+			iNewLength = DEFAULT_READ_BUFFER;
+		while ( iNewLength<iRequired )
+		{
+			if ( iNewLength>INT_MAX/2 )
+			{
+				iNewLength = iRequired;
+				break;
+			}
+			iNewLength *= 2;
+		}
+		m_dBuf.Resize ( iNewLength );
+		BYTE * pNew = m_dBuf.Begin();
+		ARRAY_FOREACH ( i, m_dFields )
+			if ( dFieldOffsets[i]>=0 )
+				m_dFields[i] = pNew + dFieldOffsets[i];
+		return true;
+	}
+
+
+	bool AppendBinary ( const void * pData, int iLength, bool bTerminate, CSphString & sError )
+	{
+		if ( iLength<0 || ( iLength && !pData ) || ( bTerminate && iLength==INT_MAX ) )
+		{
+			sError.SetSprintf ( "source '%s': invalid binary field value length", m_tSchema.GetName() );
+			return false;
+		}
+		const int iExtra = bTerminate ? 1 : 0;
+		if ( !EnsureBinaryBuffer ( iLength+iExtra, sError ) )
+			return false;
+		if ( iLength )
+			memcpy ( m_dBuf.Begin()+m_iBufUsed, pData, iLength );
+		m_iBufUsed += iLength;
+		if ( bTerminate )
+			m_dBuf[m_iBufUsed++] = '\0';
+		return true;
+	}
+
+
+	bool StoreBinaryField ( int iRemap, const char * pData, int iLength, CSphString & sError )
+	{
+		const RemapXSV_t & tRemap = m_dRemap[iRemap];
+		if ( tRemap.m_iField==-1 )
+			return true;
+		const int iStart = m_iBufUsed;
+		if ( !AppendBinary ( pData, iLength, true, sError ) )
+			return false;
+		m_dFields[tRemap.m_iField] = m_dBuf.Begin()+iStart;
+		m_dFieldLengths[tRemap.m_iField] = iLength;
+		return true;
+	}
+
+
+	bool StoreBinaryTextValue ( int iRemap, const char * pData, int iLength, CSphString & sError )
+	{
+		const int iStart = m_iBufUsed;
+		if ( !AppendBinary ( pData, iLength, true, sError ) )
+			return false;
+		if ( !StoreAttribute ( iRemap, iStart ) )
+		{
+			if ( sError.IsEmpty() && m_dError.Begin()[0] )
+				sError = m_dError.Begin();
+			return false;
+		}
+		return true;
+	}
+
+
+	bool FinishBinaryTextValue ( int iRemap, int iStart, CSphString & sError )
+	{
+		if ( !AppendBinary ( nullptr, 0, true, sError ) )
+			return false;
+		if ( !StoreAttribute ( iRemap, iStart ) )
+		{
+			if ( sError.IsEmpty() && m_dError.Begin()[0] )
+				sError = m_dError.Begin();
+			return false;
+		}
+		return true;
+	}
+
+
+	bool StoreBinaryString ( int iRemap, const char * pData, int iLength, CSphString & sError )
+	{
+		const RemapXSV_t & tRemap = m_dRemap[iRemap];
+		if ( tRemap.m_iAttr==-1 )
+			return StoreBinaryField ( iRemap, pData, iLength, sError );
+
+		const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( tRemap.m_iAttr );
+		if ( tAttr.m_eAttrType==SPH_ATTR_STRING || tAttr.m_eAttrType==SPH_ATTR_JSON )
+		{
+			if ( !StoreBinaryField ( iRemap, pData, iLength, sError ) )
+				return false;
+			m_dStrAttrs[tRemap.m_iAttr].SetBinary ( pData, iLength );
+			return true;
+		}
+
+		return StoreBinaryTextValue ( iRemap, pData, iLength, sError );
+	}
+
+
+	bool StoreBinaryInteger ( int iRemap, uint64_t uValue, bool bNegative, CSphString & sError )
+	{
+		const RemapXSV_t & tRemap = m_dRemap[iRemap];
+		const int64_t iSignedValue = GetSignedValue ( uValue, bNegative );
+		const bool bDocid = tRemap.m_iAttr==0;
+		const CSphColumnInfo * pAttr = tRemap.m_iAttr==-1 ? nullptr : &m_tSchema.GetAttr ( tRemap.m_iAttr );
+		if ( tRemap.m_iField!=-1 || ( pAttr && ( pAttr->m_eAttrType==SPH_ATTR_STRING || pAttr->m_eAttrType==SPH_ATTR_JSON ) ) )
+		{
+			CSphString sValue;
+			sValue.SetSprintf ( INT64_FMT, bDocid ? (int64_t)uValue : iSignedValue );
+			if ( !StoreBinaryField ( iRemap, sValue.cstr(), sValue.Length(), sError ) )
+				return false;
+			if ( pAttr )
+			{
+				m_dStrAttrs[tRemap.m_iAttr].SetBinary ( sValue.cstr(), sValue.Length() );
+				return true;
+			}
+		}
+
+		if ( !pAttr )
+			return true;
+
+		SphAttr_t & tCurIntAttr = m_dAttrs[tRemap.m_iAttr];
+		switch ( pAttr->m_eAttrType )
+		{
+		case SPH_ATTR_FLOAT:
+			tCurIntAttr = sphF2DW ( (float)iSignedValue );
+			if ( !pAttr->IsColumnar() )
+				m_tDocInfo.SetAttrFloat ( pAttr->m_tLocator, (float)iSignedValue );
+			break;
+		case SPH_ATTR_BIGINT:
+			tCurIntAttr = bDocid ? (int64_t)uValue : iSignedValue;
+			if ( !pAttr->IsColumnar() )
+				m_tDocInfo.SetAttr ( pAttr->m_tLocator, tCurIntAttr );
+			break;
+		case SPH_ATTR_UINT32SET:
+		case SPH_ATTR_INT64SET:
+			m_dMvas[tRemap.m_iAttr].Add ( iSignedValue );
+			break;
+		case SPH_ATTR_FLOAT_VECTOR:
+			m_dMvas[tRemap.m_iAttr].Add ( sphF2DW ( (float)iSignedValue ) );
+			break;
+		case SPH_ATTR_TOKENCOUNT:
+			m_tDocInfo.SetAttr ( pAttr->m_tLocator, 0 );
+			break;
+		case SPH_ATTR_BOOL:
+			tCurIntAttr = (DWORD)iSignedValue ? 1 : 0;
+			if ( !pAttr->IsColumnar() )
+				m_tDocInfo.SetAttr ( pAttr->m_tLocator, tCurIntAttr );
+			break;
+		default:
+			tCurIntAttr = (DWORD)iSignedValue;
+			if ( !pAttr->IsColumnar() )
+				m_tDocInfo.SetAttr ( pAttr->m_tLocator, tCurIntAttr );
+			break;
+		}
+		return true;
+	}
+
+
+	bool StoreBinaryFloat ( int iRemap, float fValue, CSphString & sError )
+	{
+		const RemapXSV_t & tRemap = m_dRemap[iRemap];
+		const CSphColumnInfo * pAttr = tRemap.m_iAttr==-1 ? nullptr : &m_tSchema.GetAttr ( tRemap.m_iAttr );
+		int iTextStart = -1;
+		if ( tRemap.m_iField!=-1 || ( pAttr && ( pAttr->m_eAttrType==SPH_ATTR_STRING || pAttr->m_eAttrType==SPH_ATTR_JSON ) ) )
+		{
+			CSphString sValue;
+			sValue.SetSprintf ( "%.9g", fValue );
+			iTextStart = m_iBufUsed;
+			if ( !StoreBinaryField ( iRemap, sValue.cstr(), sValue.Length(), sError ) )
+				return false;
+			if ( pAttr && ( pAttr->m_eAttrType==SPH_ATTR_STRING || pAttr->m_eAttrType==SPH_ATTR_JSON ) )
+			{
+				m_dStrAttrs[tRemap.m_iAttr].SetBinary ( sValue.cstr(), sValue.Length() );
+				return true;
+			}
+		}
+
+		if ( !pAttr )
+			return true;
+		SphAttr_t & tCurIntAttr = m_dAttrs[tRemap.m_iAttr];
+		switch ( pAttr->m_eAttrType )
+		{
+		case SPH_ATTR_FLOAT:
+			tCurIntAttr = sphF2DW ( fValue );
+			if ( !pAttr->IsColumnar() )
+				m_tDocInfo.SetAttrFloat ( pAttr->m_tLocator, fValue );
+			break;
+		case SPH_ATTR_FLOAT_VECTOR:
+			m_dMvas[tRemap.m_iAttr].Add ( sphF2DW ( fValue ) );
+			break;
+		case SPH_ATTR_TOKENCOUNT:
+			m_tDocInfo.SetAttr ( pAttr->m_tLocator, 0 );
+			break;
+		default:
+			if ( iTextStart>=0 )
+				return StoreAttribute ( iRemap, iTextStart );
+			CSphString sValue;
+			sValue.SetSprintf ( "%.9g", fValue );
+			return StoreBinaryTextValue ( iRemap, sValue.cstr(), sValue.Length(), sError );
+		}
+		return true;
+	}
+
+
+	bool StoreBinaryMvaInteger ( int iRemap, int64_t iValue, CSphString & )
+	{
+		const RemapXSV_t & tRemap = m_dRemap[iRemap];
+		if ( tRemap.m_iAttr==-1 )
+			return true;
+		const ESphAttr eType = m_tSchema.GetAttr ( tRemap.m_iAttr ).m_eAttrType;
+		if ( eType==SPH_ATTR_UINT32SET || eType==SPH_ATTR_INT64SET )
+			m_dMvas[tRemap.m_iAttr].Add ( iValue );
+		else if ( eType==SPH_ATTR_FLOAT_VECTOR )
+			m_dMvas[tRemap.m_iAttr].Add ( sphF2DW ( (float)iValue ) );
+		return true;
+	}
+
+
+	bool StoreBinaryMvaFloat ( int iRemap, float fValue, CSphString & sError )
+	{
+		const RemapXSV_t & tRemap = m_dRemap[iRemap];
+		if ( tRemap.m_iAttr==-1 )
+			return true;
+		const ESphAttr eType = m_tSchema.GetAttr ( tRemap.m_iAttr ).m_eAttrType;
+		if ( eType==SPH_ATTR_UINT32SET || eType==SPH_ATTR_INT64SET )
+			m_dMvas[tRemap.m_iAttr].Add ( (int64_t)fValue );
+		else if ( eType==SPH_ATTR_FLOAT_VECTOR )
+		{
+			m_dMvas[tRemap.m_iAttr].Add ( sphF2DW ( fValue ) );
+		}
+		return true;
+	}
+
+	SourceBinaryReader_c m_tReader;
+	uint32_t m_iRowsRemaining = 0;
+};
+
+
 CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName )
 {
 	CSphString sError;
 	auto * pTSV = new CSphSource_TSV(sSourceName);
-	if ( !pTSV->SetupPipe ( *pSource, pPipe, sError ) )
+	if ( !pTSV->SetupPipe ( *pSource, pPipe, true, sError ) )
 	{
 		SafeDelete ( pTSV );
 		fprintf ( stdout, "ERROR: tsvpipe: %s", sError.cstr() );
@@ -113,19 +823,33 @@ CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * 
 }
 
 
-CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName )
+CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool bOwnPipe )
 {
 	CSphString sError;
 	auto sDelimiter = pSource->GetStr ( "csvpipe_delimiter" );
 	auto * pCSV = new CSphSource_CSV(sSourceName);
 	pCSV->SetDelimiter ( sDelimiter.cstr() );
-	if ( !pCSV->SetupPipe ( *pSource, pPipe, sError ) )
+	if ( !pCSV->SetupPipe ( *pSource, pPipe, bOwnPipe, sError ) )
 	{
 		SafeDelete ( pCSV );
 		fprintf ( stdout, "ERROR: csvpipe: %s", sError.cstr() );
 	}
 
 	return pCSV;
+}
+
+
+CSphSource * sphCreateSourceBinarypipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool bOwnPipe )
+{
+	CSphString sError;
+	auto * pBinary = new CSphSource_Binary ( sSourceName );
+	if ( !pBinary->SetupPipe ( *pSource, pPipe, bOwnPipe, sError ) )
+	{
+		SafeDelete ( pBinary );
+		fprintf ( stdout, "ERROR: binarypipe: %s", sError.cstr() );
+	}
+
+	return pBinary;
 }
 
 
@@ -141,9 +865,10 @@ CSphSource_BaseSV::~CSphSource_BaseSV ()
 }
 
 
-bool CSphSource_BaseSV::SetupPipe ( const CSphConfigSection & hSource, FILE * pPipe, CSphString & sError )
+bool CSphSource_BaseSV::SetupPipe ( const CSphConfigSection & hSource, FILE * pPipe, bool bOwnPipe, CSphString & sError )
 {
 	m_pFP = pPipe;
+	m_bOwnPipe = bOwnPipe;
 	m_tSchema.Reset ();
 	bool bWordDict = ( m_pDict && m_pDict->GetSettings().IsWordDict() );
 
@@ -188,6 +913,9 @@ bool CSphSource_BaseSV::SetupPipe ( const CSphConfigSection & hSource, FILE * pP
 	CSphString sColumn;
 	for ( const auto& tVal : hSource )
 	{
+		if ( tVal.first=="csvpipe_attr_order" )
+			continue;
+
 		const CSphVariant * pVal = &tVal.second;
 		while ( pVal )
 		{
@@ -273,8 +1001,10 @@ void CSphSource_BaseSV::Disconnect()
 {
 	if ( m_pFP )
 	{
-		pclose ( m_pFP );
+		if ( m_bOwnPipe )
+			pclose ( m_pFP );
 		m_pFP = nullptr;
+		m_bOwnPipe = false;
 	}
 
 	m_tHits.Reset();
@@ -388,6 +1118,14 @@ bool CSphSource_BaseSV::StoreAttribute ( int iAttr, int iOff )
 	case SPH_ATTR_UINT32SET:
 	case SPH_ATTR_INT64SET:
 		ParseFieldMVA ( tRemap.m_iAttr, sVal );
+		break;
+
+	case SPH_ATTR_FLOAT_VECTOR:
+		if ( !ParseFieldFloatVector ( tRemap.m_iAttr, sVal ) )
+		{
+			DecorateMessage ( "invalid float vector value '%s'", sVal );
+			return false;
+		}
 		break;
 
 	case SPH_ATTR_TOKENCOUNT:
@@ -572,6 +1310,7 @@ bool CSphSource_TSV::SetupSchema ( const CSphConfigSection & hSource, bool bWord
 	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_bigint"),		SPH_ATTR_BIGINT,	m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_multi"),		SPH_ATTR_UINT32SET,	m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_multi_64"),	SPH_ATTR_INT64SET,	m_tSchema, sError );
+	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_float_vector"), SPH_ATTR_FLOAT_VECTOR, m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_string"),		SPH_ATTR_STRING,	m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("tsvpipe_attr_json"),		SPH_ATTR_JSON,		m_tSchema, sError );
 	bOk &= ConfigureAttrs ( hSource("tsvpipe_field_string"),	SPH_ATTR_STRING,	m_tSchema, sError );
@@ -791,26 +1530,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 
 bool CSphSource_CSV::SetupSchema ( const CSphConfigSection & hSource, bool bWordDict, CSphString & sError )
 {
-	bool bOk = true;
-
-	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_uint"),		SPH_ATTR_INTEGER,	m_tSchema, sError );
-	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_timestamp"),	SPH_ATTR_TIMESTAMP,	m_tSchema, sError );
-	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_bool"),		SPH_ATTR_BOOL,		m_tSchema, sError );
-	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_float"),		SPH_ATTR_FLOAT,		m_tSchema, sError );
-	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_bigint"),		SPH_ATTR_BIGINT,	m_tSchema, sError );
-	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_multi"),		SPH_ATTR_UINT32SET,	m_tSchema, sError );
-	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_multi_64"),	SPH_ATTR_INT64SET,	m_tSchema, sError );
-	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_string"),		SPH_ATTR_STRING,	m_tSchema, sError );
-	bOk &= ConfigureAttrs ( hSource("csvpipe_attr_json"),		SPH_ATTR_JSON,		m_tSchema, sError );
-	bOk &= ConfigureAttrs ( hSource("csvpipe_field_string"),	SPH_ATTR_STRING,	m_tSchema, sError );
-
-	if ( !bOk )
-		return false;
-
-	bOk &= ConfigureFields ( hSource("csvpipe_field"), bWordDict, m_tSchema, sError );
-	bOk &= ConfigureFields ( hSource("csvpipe_field_string"), bWordDict, m_tSchema, sError );
-
-	return bOk;
+	return SetupSVpipeSchema ( hSource, bWordDict, m_tSchema, sError );
 }
 
 
@@ -819,4 +1539,3 @@ void CSphSource_CSV::SetDelimiter ( const char * sDelimiter )
 	if ( sDelimiter && *sDelimiter )
 		m_iDelimiter = *sDelimiter;
 }
-

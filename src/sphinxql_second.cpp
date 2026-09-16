@@ -42,6 +42,7 @@ public:
 
 	void SetStatement ( const SqlNode_t & tName, SqlSet_e eSet );
 	void SetStatement ( const SqlNode_t & tName, SqlSet_e eSet, int iValuesIdx );
+	bool SetPurge ( const SqlNode_t & tTarget, const SqlNode_t & tTable, CSphString & sError );
 };
 
 void SqlSecondParser_c::SetStatement ( const SqlNode_t& tName, SqlSet_e eSet )
@@ -61,6 +62,25 @@ void SqlSecondParser_c::SetStatement ( const SqlNode_t & tName, SqlSet_e eSet, i
 	dSV.Resize ( dValues.GetLength() );
 	ARRAY_FOREACH ( i, dValues )
 		dSV[i] = dValues[i].m_iValue;
+}
+
+
+bool SqlSecondParser_c::SetPurge ( const SqlNode_t & tTarget, const SqlNode_t & tTable, CSphString & sError )
+{
+	CSphString sTarget;
+	ToString ( sTarget, tTarget );
+	CSphString sNormalized = sTarget;
+	sNormalized.ToLower();
+	if ( sNormalized!="bulk_import" )
+	{
+		sError.SetSprintf ( "unsupported PURGE target '%s'", sTarget.cstr() );
+		return false;
+	}
+
+	m_pStmt->m_eStmt = STMT_PURGE;
+	m_pStmt->m_ePurgeTarget = PurgeTarget_e::INDEXER_RT_BULK;
+	SetIndex ( tTable );
+	return true;
 }
 
 using YYSTYPE = SqlNode_t;

@@ -1,0 +1,36 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 <<'SQL'
+DROP TABLE IF EXISTS rt_bulk_types;
+CREATE TABLE rt_bulk_types (
+    title TEXT,
+    label STRING,
+    i INT,
+    ts TIMESTAMP,
+    b BOOL,
+    f FLOAT,
+    big BIGINT,
+    m MULTI,
+    m64 MULTI64,
+    vec FLOAT_VECTOR,
+    j JSON
+);
+SET bulk_import=rt_bulk_types;
+BEGIN;
+INSERT INTO rt_bulk_types(id,title,label,i,ts,b,f,big,m,m64,vec,j) VALUES
+    (1,'alpha, "quoted" \\ path','label, "quoted" \\ path',-42,1700000000,1,-3.125,-9223372036854775807,(1,4294967295),(10000000001,-10000000002),(1.25,-2.5,3.75),'{"k":"v","n":7,"arr":[1,2]}');
+INSERT INTO rt_bulk_types(id,title,label,i,ts,b,f,big,m,m64,vec) VALUES
+    (2,'second','',0,0,0,2.5,9223372036854775807,(7,8),(9,10),(0,1,2));
+INSERT INTO rt_bulk_types(id,title,label) VALUES (3,'missing attrs','missing label');
+COMMIT;
+SET bulk_import=0;
+SQL
+––– output –––
+––– input –––
+rows=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,title,label,i,ts,b,f,big,m,m64,vec,j FROM rt_bulk_types" | sort -n); expected=$(printf '%b\n' '1\talpha, "quoted" \\ path\tlabel, "quoted" \\ path\t4294967254\t1700000000\t1\t-3.125000\t-9223372036854775807\t1,4294967295\t-10000000002,10000000001\t1.250000,-2.500000,3.750000\t{"k":"v","n":7,"arr":[1,2]}' '2\tsecond\t\t0\t0\t0\t2.500000\t9223372036854775807\t7,8\t9,10\t0.000000,1.000000,2.000000\tNULL' '3\tmissing attrs\tmissing label\t0\t0\t0\t0.000000\t0\t\t\t\tNULL'); if [ "$rows" = "$expected" ]; then echo ASSISTED_TYPE_MATRIX_OK; else printf 'FAIL_ASSISTED_TYPE_MATRIX rows=%s expected=%s\n' "$rows" "$expected"; fi
+––– output –––
+ASSISTED_TYPE_MATRIX_OK
+––– input –––
+mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT COUNT(*) FROM rt_bulk_types"
+––– output –––
+3

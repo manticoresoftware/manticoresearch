@@ -24,7 +24,7 @@ void HandleShowInformationTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 void HandleShowSessions ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleCmdDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt );
 void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
-void HandleSelectFiles ( RowBuffer_i & tOut, const CSphString & sIndex, const CSphString & sThreadFormat );
+void HandleSelectFiles ( RowBuffer_i & tOut, const CSphString & sIndex, const CSphString & sFilesFormat );
 
 // process @@system.something
 static bool ParseSystem ( TableFeeder_fn & fnFeed, const CSphString & sName, SqlStmt_t * pStmt )
@@ -66,8 +66,8 @@ static bool ParseSubkeys ( TableFeeder_fn & fnFeed, const CSphString & sName, Sq
 	else if ( StrEqN ( FROMS (".@files"), sName.cstr() ) ) // select .. from idx.files
 	{
 		CSphString sIndex = pStmt->m_sIndex;
-		CSphString sThreadFormat = pStmt->m_sThreadFormat;
-		fnFeed = [sIndex = std::move ( sIndex ), sThreadFormat = std::move ( sThreadFormat )] ( RowBuffer_i * pBuf ) { HandleSelectFiles ( *pBuf, sIndex, sThreadFormat ); };
+		CSphString sFilesFormat = pStmt->m_sThreadFormat;
+		fnFeed = [sIndex = std::move ( sIndex ), sFilesFormat = std::move ( sFilesFormat )] ( RowBuffer_i * pBuf ) { HandleSelectFiles ( *pBuf, sIndex, sFilesFormat ); };
 	}
 	else
 		return false;

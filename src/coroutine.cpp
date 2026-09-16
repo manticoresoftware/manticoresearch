@@ -1130,12 +1130,17 @@ bool RWLock_c::TestNextWlock () const noexcept
 	return !m_tWaitWQueue.Empty ();
 }
 
-void ReadTableLock_c::WaitRead() noexcept
+bool ReadTableLock_c::WaitRead() noexcept
 {
 	sph::Spinlock_lock tLock { m_tInternalMutex };
+	if ( m_bWriteAllowReaders )
+		return false;
+
 	++m_uReads;
 	while ( m_uWrites )
 		m_tWaitRQueue.SuspendAndWait ( tLock, Worker() );
+
+	return true;
 }
 
 bool ReadTableLock_c::TryWrite() noexcept
@@ -1147,11 +1152,53 @@ bool ReadTableLock_c::TryWrite() noexcept
 	return true;
 }
 
+bool ReadTableLock_c::TryDmlWrite() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+	if ( m_uReads || m_bWriteAllowReaders )
+		return false;
+	++m_uWrites;
+	return true;
+}
+
+bool ReadTableLock_c::TryWriteAllowReaders() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+	if ( m_uReads || m_uWrites || m_bWriteAllowReaders || m_bFreezeTransition )
+		return false;
+	m_bWriteAllowReaders = true;
+	return true;
+}
+
+bool ReadTableLock_c::TryFreezeTransition() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+	if ( m_bWriteAllowReaders || m_bFreezeTransition )
+		return false;
+	m_bFreezeTransition = true;
+	return true;
+}
+
 void ReadTableLock_c::FinishWrite() noexcept
 {
 	sph::Spinlock_lock tLock { m_tInternalMutex };
+	assert ( m_uWrites );
 	if ( !--m_uWrites )
 		m_tWaitRQueue.NotifyAll();
+}
+
+void ReadTableLock_c::FinishWriteAllowReaders() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+	assert ( m_bWriteAllowReaders );
+	m_bWriteAllowReaders = false;
+}
+
+void ReadTableLock_c::FinishFreezeTransition() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+	assert ( m_bFreezeTransition );
+	m_bFreezeTransition = false;
 }
 
 bool ReadTableLock_c::UnlockRead() noexcept
@@ -1165,9 +1212,10 @@ bool ReadTableLock_c::UnlockRead() noexcept
 	return true;
 }
 
-[[nodiscard]] DWORD ReadTableLock_c::GetReads() const noexcept
+[[nodiscard]] TableLocks_t ReadTableLock_c::GetLocks() const noexcept
 {
-	return m_uReads;
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+	return { m_uReads, m_bWriteAllowReaders };
 }
 
 ScopedWriteTable_c::ScopedWriteTable_c ( ReadTableLock_c& tTableLock )
@@ -1184,6 +1232,38 @@ ScopedWriteTable_c::~ScopedWriteTable_c()
 bool ScopedWriteTable_c::CanWrite() const noexcept
 {
 	return m_bCanWrite;
+}
+
+ScopedDmlWriteTable_c::ScopedDmlWriteTable_c ( ReadTableLock_c& tTableLock )
+	: m_tTableLock { tTableLock }
+	, m_bCanWrite { tTableLock.TryDmlWrite() }
+{}
+
+ScopedDmlWriteTable_c::~ScopedDmlWriteTable_c()
+{
+	if ( m_bCanWrite )
+		m_tTableLock.FinishWrite();
+}
+
+bool ScopedDmlWriteTable_c::CanWrite() const noexcept
+{
+	return m_bCanWrite;
+}
+
+ScopedFreezeTransition_c::ScopedFreezeTransition_c ( ReadTableLock_c& tTableLock )
+	: m_tTableLock { tTableLock }
+	, m_bCanFreeze { tTableLock.TryFreezeTransition() }
+{}
+
+ScopedFreezeTransition_c::~ScopedFreezeTransition_c()
+{
+	if ( m_bCanFreeze )
+		m_tTableLock.FinishFreezeTransition();
+}
+
+bool ScopedFreezeTransition_c::CanFreeze() const noexcept
+{
+	return m_bCanFreeze;
 }
 
 } // namespace Coro

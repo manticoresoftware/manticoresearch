@@ -877,6 +877,99 @@ The `/bulk` (Manticore mode) endpoint supports [Chunked transfer encoding](https
 * decreases response time
 * allows you to bypass [max_packet_size](../../Server_settings/Searchd.md#max_packet_size) and transfer batches much larger than the maximum allowed value of `max_packet_size` (128MB), for example, 1GB at a time.
 
+### Bulk import
+
+For faster large batch loads into a local real-time table, Manticore Search can write `INSERT` rows directly to a disk chunk and publish that chunk when the transaction commits. This avoids building the batch in a RAM chunk first. Rows remain invisible until the chunk is published, and a failed operation or `ROLLBACK` leaves the table unchanged.
+
+It supports both row-wise and columnar tables, including full-text fields, numeric attributes, strings, JSON, MVA/MVA64, and float vectors with KNN indexes.
+
+Table names are case-insensitive here. For example, `SET bulk_import=Products` and `bulk_import=products` both select the table stored as `products`; tables whose names differ only by letter case cannot be distinguished.
+
+#### SQL
+
+Enable the mode for the current SQL session, run one or more `INSERT` statements against the bound table, and commit:
+
+```sql
+SET bulk_import=products;
+INSERT INTO products(id,title,price) VALUES
+  (101,'Crossbody Bag with Tassel',19.85),
+  (102,'Microfiber Sheet Set',19.99);
+INSERT INTO products(id,title,price) VALUES
+  (103,'Pet Hair Remover Glove',7.99);
+COMMIT;
+SET bulk_import=0;
+```
+
+Run `SET bulk_import=<table>` before `BEGIN` and before any uncommitted write on that connection. It reserves the selected table for that session: searches remain available, while another bulk import or an ordinary write to the same table is rejected until the reservation is released. `BEGIN` and `START TRANSACTION` are allowed but not required and have no effect in this mode.
+
+`COMMIT` publishes the rows collected since the previous `COMMIT` or `ROLLBACK` as one disk chunk. `ROLLBACK` discards those rows. In both cases, bulk import remains enabled so you can start another batch. Run `SET bulk_import=0` to discard any uncommitted rows, disable bulk import, and release this connection's reservation. Writes to the table resume after the reservation is released. Closing the connection does the same. Autocommit cannot be changed while bulk import is enabled.
+
+#### HTTP `/bulk`
+
+Add `bulk_import=<table>` to a Manticore `/bulk` request. The request body remains standard newline-delimited JSON (NDJSON), and each operation must be `insert` or `create` for the bound table:
+
+```bash
+printf '%s\n' \
+  '{"insert":{"table":"products","id":101,"doc":{"title":"Crossbody Bag with Tassel","price":19.85}}}' \
+  '{"insert":{"table":"products","id":102,"doc":{"title":"Microfiber Sheet Set","price":19.99}}}' |
+curl -sS -X POST \
+  -H 'Content-Type: application/x-ndjson' \
+  --data-binary @- \
+  'http://localhost:9308/bulk?bulk_import=products'
+```
+
+In a request body, an empty line ends and publishes the current batch; the end of the request publishes the final batch. Manticore sends the HTTP response after processing all batches in that request. If a later batch fails, batches published earlier in the same request remain searchable. To publish the entire request atomically as one disk chunk, do not include empty lines. The response contains one aggregate `bulk` result for each published batch rather than one result per document.
+
+Most clients should send a single request like the example above. If an application deliberately sends several requests over the same [persistent HTTP connection](../../Connecting_to_the_server/HTTP.md#Persistent-connections), the first request selects the table. Later `/bulk` or `/json/bulk` requests on that connection may omit `bulk_import`, but they must continue writing to the same table. Close the connection when finished, or send an empty `/bulk?bulk_import=0` request to disable bulk import and release that connection's reservation. Writes to the table resume after the reservation is released.
+
+The endpoint supports chunked transfer encoding, so it can process bodies larger than `max_packet_size` without buffering the whole request.
+
+#### Elasticsearch `/_bulk`
+
+The Elasticsearch-compatible `/_bulk` endpoint does not support direct-to-disk `bulk_import`; use SQL or Manticore `/bulk`. On a clean session, `?pipeline=bulk_import` and the legacy `?bulk_import=1` are rejected. Other unknown `bulk_import` values are ignored and ordinary Elasticsearch bulk processing continues. A connection with an active bulk import cannot switch to `/_bulk`.
+
+#### Duplicate document IDs
+
+Within one direct-to-disk batch, the first row for a numeric document ID remains visible and later rows with the same ID are logically removed. For SQL, a batch consists of the rows staged before `COMMIT` or `ROLLBACK`. For Manticore `/bulk`, each group published at an empty line, table change, or request EOF is a separate batch.
+
+When Manticore publishes a disk chunk to the target table, a row in that chunk replaces any existing row with the same ID. This also applies to IDs published by an earlier HTTP batch. As a result, retrying a previously published batch replaces its rows, while duplicates within the retried batch still keep the first row. In a Manticore `/bulk` request, the `create` operation, for example:
+
+```json
+{"create":{"table":"products",...}}
+```
+
+behaves like `insert`; it does not fail merely because the ID already exists.
+
+#### Staging files and cleanup
+
+Manticore removes the current staging directory after a normal `COMMIT`, `ROLLBACK`, mode disable, or session close. A daemon or host crash can leave an abandoned staging directory behind. A later direct-to-disk load creates a new uniquely named directory and does not reuse or attach files left by the crashed load.
+
+Use the following query to inspect all direct-to-disk staging entries for a table:
+
+```sql
+SELECT file, normalized, size
+FROM products.@files
+OPTION format='bulk_import';
+```
+
+The result recursively lists files and directories below the table's direct-to-disk staging root. Directories and other non-regular entries have a reported size of `0`.
+
+After confirming that no direct-to-disk load is active for the table, remove its entire staging root with [`PURGE BULK_IMPORT`](../../Node_info_and_management/PURGE.md#PURGE-BULK_IMPORT):
+
+```sql
+PURGE BULK_IMPORT FROM TABLE products;
+```
+
+`PURGE` requires an existing local real-time table that is not in a replication cluster. It removes only direct-to-disk staging state and does not change the table schema or indexed rows. It succeeds as a no-op when the staging root is absent. In configless mode, `DROP TABLE` also removes the table's direct-to-disk staging root.
+
+#### Current limitations
+
+* The target must be one existing, unfrozen local real-time table that is not a replication-cluster member. Distributed, sharded, replicated, percolate, and plain tables are not supported.
+* SQL supports only `INSERT`. Manticore `/bulk` accepts `insert` and `create`; `index`, `replace`, `update`, and `delete` are rejected.
+* Every row must provide an explicit numeric, non-zero document ID. Auto-generated and UUID document IDs are not supported.
+* Static builds are not supported.
+* The platform-specific executable (`indexer` on Linux, `indexer.exe` on Windows) must be in the same directory as the running `searchd` executable. Manticore Search resolves only that sibling path and does not search `PATH`. Use the executable from the same installation as `searchd` to ensure compatibility. If it is absent, unreadable, or cannot be started, only bulk import fails; normal startup and regular insertion remain available.
+
 <!-- intro -->
 ### Bulk insert examples
 ##### SQL:
@@ -909,7 +1002,7 @@ The syntax is generally the same as for [inserting a single document](../../Quic
 * `Content-Type: application/x-ndjson`
 * The data should be formatted as newline-delimited JSON (NDJSON). Essentially, this means that each line should contain exactly one JSON statement and end with a newline `\n` and possibly `\r`.
 
-The `/bulk` endpoint supports 'insert', 'replace', 'delete', and 'update' queries. Keep in mind that you can direct operations to multiple tables, but transactions are only possible for a single table. If you specify more, Manticore will gather operations directed to one table into a single transaction. When the table changes, it will commit the collected operations and initiate a new transaction on the new table. An empty line separating batches also leads to committing the previous batch and starting a new transaction.
+The `/bulk` endpoint supports 'insert', 'replace', 'delete', and 'update' queries. Keep in mind that you can direct operations to multiple tables, but transactions are only possible for a single table. If you specify more, Manticore will gather operations directed to one table into a single transaction. When the table changes, it will commit the collected operations and initiate a new transaction. An empty line separating batches also leads to committing the previous batch and starting a new transaction. A request containing no operations, whether its body is empty or contains only empty or whitespace-only lines, is a successful no-op and returns an empty `items` array.
 
 In the response for a `/bulk` request, you can find the following fields:
 * "errors": shows whether any errors occurred (true/false)

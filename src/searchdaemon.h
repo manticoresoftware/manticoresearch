@@ -746,11 +746,12 @@ using RunningIndexRefPtr_t = CSphRefcountedPtr<RunningIndex_c>;
 class ServedIndex_c : public ServedDesc_t
 {
 	mutable int64_t			m_iMass = 0;	// relative weight (by access speed) of the index
-	mutable Threads::Coro::ReadTableLock_c  m_tTableLock;
+	mutable SharedPtr_t<Threads::Coro::ReadTableLock_c> m_pTableLock { new Threads::Coro::ReadTableLock_c };
 
 	ServedIndex_c() = default;
 	friend CSphRefcountedPtr<ServedIndex_c> MakeServedIndex();
 	friend CSphIndex* UnlockedHazardIdxFromServed ( const ServedIndex_c& tServed );
+	friend class ServedIndexWriteReservation_c;
 
 	// no manual deletion; lifetime managed by AddRef/Release()
 	~ServedIndex_c () override = default;
@@ -780,15 +781,31 @@ public:
 	void SetStatsFrom ( const ServedIndex_c& tIndex );
 	void SetUnlink ( CSphString sUnlink ) const;
 
-	void LockRead() const noexcept;
+	[[nodiscard]] bool LockRead() const noexcept;
 	[[nodiscard]] bool UnlockRead() const noexcept;
-	[[nodiscard]] DWORD GetReadLocks() const noexcept;
+	[[nodiscard]] Threads::Coro::TableLocks_t GetLocks() const noexcept;
 	[[nodiscard]] Threads::Coro::ReadTableLock_c& Locker() const noexcept;
 };
 
 using cServedIndexRefPtr_c = CSphRefcountedPtr<const ServedIndex_c>;
 using ServedIndexRefPtr_c = CSphRefcountedPtr<ServedIndex_c>;
 ServedIndexRefPtr_c MakeServedIndex();
+
+class ServedIndexWriteReservation_c : ISphNoncopyable
+{
+	SharedPtr_t<Threads::Coro::ReadTableLock_c> m_pTableLock;
+
+public:
+	ServedIndexWriteReservation_c() = default;
+	ServedIndexWriteReservation_c ( ServedIndexWriteReservation_c&& rhs ) noexcept;
+	ServedIndexWriteReservation_c& operator= ( ServedIndexWriteReservation_c&& rhs ) noexcept;
+	~ServedIndexWriteReservation_c();
+
+	[[nodiscard]] bool TryAcquire ( const cServedIndexRefPtr_c& pServed );
+	void Reset() noexcept;
+	[[nodiscard]] bool IsActive() const noexcept;
+	[[nodiscard]] bool Matches ( const cServedIndexRefPtr_c& pServed ) const noexcept;
+};
 
 /// RAII shared reader for CSphIndex* hidden in ServedIndexRefPtr_c
 template<typename PIDX>

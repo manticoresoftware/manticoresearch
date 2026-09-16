@@ -34,6 +34,12 @@ on:
         required: true
         description: "Jina API key for CLT tests"
 
+concurrency:
+  # GitHub caches are ref-scoped; serialize planning through persistence for this ref
+  # without blocking CLT runs that maintain a separate timing ledger on another ref.
+  group: clt-timing-ledger-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   discover:
     name: Discover CLT tests
@@ -224,18 +230,18 @@ jobs:
           retention-days: 1
 
       - name: Stage timing measurements
-        if: ${{ success() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+        if: ${{ success() && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)) }}
         shell: bash
         run: |
           mkdir -p "${{ runner.temp }}/clt-timing-artifact"
-          if [[ -f "${{ runner.temp }}/clt-model-cache/.clt-model-cache-ready" ]] && [[ "${{ steps.model_cache_delta.outputs.changed }}" == "false" ]] && [[ -f "${{ steps.run-clt.outputs.timing-results }}" ]]; then
+          if [[ -f "${{ steps.run-clt.outputs.timing-results }}" ]]; then
             cp "${{ steps.run-clt.outputs.timing-results }}" "${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv"
           else
             : > "${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv"
           fi
 
       - name: Upload timing measurements
-        if: ${{ success() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+        if: ${{ success() && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)) }}
         uses: actions/upload-artifact@v6
         with:
           name: clt-timings-${{ matrix.chunk.id }}
@@ -343,5 +349,11 @@ jobs:
           path: ${{ runner.temp }}/clt-model-cache
           key: clt-models-v2-linux-amd64-${{ steps.cache_key.outputs.hash }}
 
-      - name: Persist CLT timing cache
-        uses: manticoresoftware/clt/balance/merge-results@main
+  persist-clt-timings:
+    name: Persist CLT timing cache
+    needs: [clt]
+    # Keep branch/PR timings in their ref-scoped cache. Fork PRs remain read-only.
+    if: ${{ needs.clt.result == 'success' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)) }}
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt/balance/merge-results@main

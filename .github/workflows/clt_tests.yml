@@ -34,12 +34,6 @@ on:
         required: true
         description: "Jina API key for CLT tests"
 
-concurrency:
-  # GitHub caches are ref-scoped; serialize restore through persistence for this ref
-  # without blocking CLT runs that maintain a separate cache generation on another ref.
-  group: clt-cache-generation-${{ github.repository }}-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
   discover:
     name: Discover CLT tests
@@ -158,7 +152,7 @@ jobs:
         run: mkdir -p "${{ runner.temp }}/clt-model-cache" && chmod 777 "${{ runner.temp }}/clt-model-cache"
 
       - name: Snapshot model cache before CLT
-        if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) }}
+        if: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         shell: bash
         run: |
           set -euo pipefail
@@ -180,13 +174,13 @@ jobs:
       # Containers write model blobs as root with mode 600; make them readable so the
       # runner user can upload changed cache subtrees.
       - name: Fix model cache permissions
-        if: ${{ always() && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)) }}
+        if: ${{ always() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         shell: bash
         run: sudo chmod -R a+rX "${{ runner.temp }}/clt-model-cache" || true
 
       - id: model_cache_delta
         name: Stage changed model-cache folders
-        if: ${{ success() && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)) }}
+        if: ${{ success() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         shell: bash
         run: |
           set -euo pipefail
@@ -218,10 +212,10 @@ jobs:
           rm -f "$after"
           printf 'changed=%s\n' "$changed" >> "$GITHUB_OUTPUT"
 
-      # Trusted legs upload an artifact, including an empty marker. This lets the
+      # Default-branch legs upload an artifact, including an empty marker. This lets the
       # fan-in job run without special handling for a matrix where no model cache changed.
       - name: Upload changed model-cache folders
-        if: ${{ success() && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)) }}
+        if: ${{ success() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         uses: actions/upload-artifact@v6
         with:
           name: clt-model-cache-${{ matrix.chunk.id }}
@@ -252,8 +246,8 @@ jobs:
   persist-clt-caches:
     name: Persist CLT caches
     needs: [clt]
-    # Persist a ref-scoped model-cache generation only after a trusted CLT run passes.
-    if: ${{ needs.clt.result == 'success' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)) }}
+    # Publish shared model and timing baselines only after the merged change passes CLT.
+    if: ${{ needs.clt.result == 'success' && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     runs-on: ubuntu-22.04
     steps:
       - name: Restore shared model cache
@@ -350,5 +344,4 @@ jobs:
           key: clt-models-v2-linux-amd64-${{ steps.cache_key.outputs.hash }}
 
       - name: Persist CLT timing cache
-        if: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         uses: manticoresoftware/clt/balance/merge-results@main

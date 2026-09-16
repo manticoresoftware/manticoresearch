@@ -10039,6 +10039,27 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 	case FUNC_EXIST:
 		{
 			ESphAttr eType = m_dNodes[m_dNodes[iArg].m_iRight].m_eRetType;
+			const ExprNode_t & tAttrName = m_dNodes[m_dNodes[iArg].m_iLeft];
+			int iNameStart = GetConstStrOffset ( tAttrName );
+			int iNameLen = GetConstStrLength ( tAttrName );
+			const char * sExpr = m_sExpr.first;
+			while ( iNameLen && sExpr[iNameStart]!='\0' && ( sExpr[iNameStart]=='\'' || sExpr[iNameStart]==' ' ) )
+			{
+				iNameStart++;
+				--iNameLen;
+			}
+			while ( iNameLen && sExpr[iNameStart+iNameLen-1]!='\0' && ( sExpr[iNameStart+iNameLen-1]=='\'' || sExpr[iNameStart+iNameLen-1]==' ' ) )
+				--iNameLen;
+
+			if ( iNameLen>0 )
+			{
+				CSphString sAttr ( sExpr+iNameStart, iNameLen );
+				sphColumnToLowercase ( const_cast<char *>( sAttr.cstr() ) );
+				int iLoc = m_pSchema->GetAttrIndex ( sAttr.cstr() );
+				if ( iLoc>=0 && m_pSchema->GetAttr(iLoc).m_eAttrType==SPH_ATTR_FLOAT )
+					eType = SPH_ATTR_FLOAT;
+			}
+
 			tNode.m_eArgType = eType;
 			tNode.m_eRetType = eType;
 			break;

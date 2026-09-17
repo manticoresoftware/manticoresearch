@@ -26,6 +26,7 @@
 #include "datetime.h"
 #include "std/tdigest.h"
 #include "std/tdigest_runtime.h"
+#include "std/escaped_builder.h"
 #include "facetutils.h"
 #include "indexsettings.h"
 
@@ -3731,7 +3732,12 @@ static void FormatSnippetOpts ( const CSphString & sQuery, const SnippetQuerySet
 		sItem << "''";
 
 	if ( !sQuery.IsEmpty() )
-		sItem.Appendf ( ",'%s'", sQuery.cstr() );
+	{
+		using SqlEscapedBuilder_c = EscapedStringBuilder_T<BaseQuotation_T<SqlQuotator_t>>;
+		SqlEscapedBuilder_c tEscapedQuery;
+		tEscapedQuery.AppendEscapedSkippingComma ( sQuery.cstr() );
+		sItem << "," << tEscapedQuery.cstr();
+	}
 
 	sItem << ")";
 

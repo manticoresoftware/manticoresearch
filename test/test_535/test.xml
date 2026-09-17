@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>JSON highlight query_string escaping (issue #4905)</name>
+<skip_indexer/>
+<requires><http/><force-rt/></requires>
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+<queries>
+<sphinxql>
+	create table t4905 (content text);
+	insert into t4905 values (1, 'a hello world example');
+</sphinxql>
+
+<!-- The same quoted phrase works as the search query. -->
+<query endpoint="json/search">
+{"table":"t4905","query":{"query_string":"\"hello world\""},"limit":1,"_source":[""]}
+</query>
+
+<!-- Regression: preserve JSON escapes while embedding highlight_query.query_string into HIGHLIGHT(). -->
+<query endpoint="json/search">
+{"table":"t4905","query":{"query_string":"hello"},"limit":1,"_source":[""],"highlight":{"fields":["content"],"highlight_query":{"query_string":"\"hello world\""},"allow_empty":true}}
+</query>
+
+<!-- Adjacent JSON spelling remains a working control. -->
+<query endpoint="json/search">
+{"table":"t4905","query":{"query_string":"hello"},"limit":1,"_source":[""],"highlight":{"fields":["content"],"highlight_query":{"match_phrase":{"content":"hello world"}},"allow_empty":true}}
+</query>
+</queries>
+</test>

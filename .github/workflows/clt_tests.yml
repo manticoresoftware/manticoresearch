@@ -115,7 +115,7 @@ jobs:
 
       - id: balance
         name: Balance CLT tests
-        uses: manticoresoftware/clt/balance/plan@feat/debug-cancelled-tests
+        uses: manticoresoftware/clt/balance/plan@main
         with:
           tests: ${{ steps.build.outputs.tests }}
           workers: 20
@@ -160,7 +160,7 @@ jobs:
             LC_ALL=C sort > "${{ runner.temp }}/clt-model-cache-before.tsv"
 
       - id: run-clt
-        uses: manticoresoftware/clt@feat/debug-cancelled-tests
+        uses: manticoresoftware/clt@main
         with:
           artifact: ${{ inputs.artifact_name }}
           image: ${{ inputs.docker_image }}
@@ -344,4 +344,4 @@ jobs:
           key: clt-models-v2-linux-amd64-${{ steps.cache_key.outputs.hash }}
 
       - name: Persist CLT timing cache
-        uses: manticoresoftware/clt/balance/merge-results@feat/debug-cancelled-tests
+        uses: manticoresoftware/clt/balance/merge-results@main

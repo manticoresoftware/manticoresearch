@@ -365,7 +365,7 @@ Manticore config
 
 ## Backup and restore with mysqldump
 
-Manticore supports `mysqldump` utility from MySQL up to 26.7 and `mariadb-dump` utility from MariaDB up to 12.3.
+Manticore supports `mysqldump` utility from MySQL up to 26.7 and `mariadb-dump` utility from MariaDB up to 13.0.
 
 <!-- example mysqldump_backup -->
 

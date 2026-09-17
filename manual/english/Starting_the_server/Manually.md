@@ -1,12 +1,59 @@
 # Starting Manticore manually
 
-You can also start Manticore Search by calling `searchd` (Manticore Search server binary) directly:
+The bundled [`manticore` command-line tool](Starting_the_server/Manticore.md) provides local development, basic SQL, scripts, and lifecycle operations. You can also start Manticore Search by calling `searchd` (the Manticore Search server binary) directly when you need advanced daemon options:
 
 ```shell
 searchd [OPTIONS]
 ```
 
 Note that without specifying a path to the configuration file, `searchd` will try to find it in several locations depending on the operating system.
+
+SQL client execution is provided by `manticore`: use `manticore` for an interactive session or `manticore -e 'SELECT ...'` for one-shot SQL. `searchd -e` and `searchd --execute` are no longer supported.
+
+## Local configless mode
+
+On Unix-like systems, `searchd --local` (or `searchd -l`) starts an isolated Manticore Search instance in the current directory without reading or creating a configuration file:
+
+```bash
+mkdir my-search-project
+cd my-search-project
+searchd --local
+```
+
+The bundled lifecycle equivalent is:
+
+```bash
+manticore start local
+```
+
+Local mode creates or reuses `./manticore_data`, secures the directory to the current user, and uses:
+
+- `manticore_data/.manticore-local` as an explicit local-instance marker;
+- `manticore_data/searchd.sock` as an HTTP Unix socket;
+- `manticore_data/mysql.sock` as a MySQL-protocol Unix socket;
+- `manticore_data/searchd.pid` as the PID file;
+- `manticore_data/searchd.log` as the server log;
+- `manticore_data` as the data directory for tables and binary logs.
+
+It does not open a TCP listener by default and does not use the globally configured instance. Connect with [`manticore`](Starting_the_server/Manticore.md), which automatically selects a directory containing a valid `.manticore-local` marker:
+
+```bash
+manticore -e 'SHOW TABLES'
+```
+
+Standard MySQL-compatible tools can use the second socket:
+
+```bash
+mysql --socket="$PWD/manticore_data/mysql.sock"
+```
+
+Use `manticore stop local` and `manticore status local` for local lifecycle management. `searchd --local --stopwait` is also available as the low-level synchronous stop command, but `searchd --local --status` is not supported.
+
+`--local` cannot be combined with `--config`, and local mode is not supported on Windows. One or more `--listen` options can extend the two private Unix listeners. In local mode these options are additive rather than replacements, for example:
+
+```bash
+searchd --local --listen 127.0.0.1:19306:mysql41 --listen 127.0.0.1:19308:http
+```
 
 
 ## searchd command line options
@@ -18,6 +65,7 @@ The options available to `searchd` in all operating systems are:
 * `--version` (`-v` for short) shows Manticore Search version information.
 * `--quiet` (`-q` for short) suppresses startup output except errors (banner and precache messages).
 * `--config <file>` (`-c <file>` for short) tells `searchd` to use the specified file as its configuration.
+* `--local` (`-l` for short) starts [local configless mode](Starting_the_server/Manually.md#Local-configless-mode) in the current directory. It creates or reuses `./manticore_data`, adds private HTTP and MySQL Unix sockets, and writes `.manticore-local`. Repeated `--listen` options add listeners without replacing those defaults. It cannot be combined with `--config`, and `--status` is not supported in this mode.
 * `--auth` runs interactive [authentication bootstrap](../Security/Authentication_and_authorization.md#Creating-the-first-administrator) mode. Use it after starting `searchd` with authentication enabled to create the first administrator. The running daemon must use the same configuration file, `pid_file` must be configured and readable, and the authentication storage must be missing or empty. Bootstrap rejects a non-empty authentication store, grants all actions to the first administrator, and does not return a bearer token. Use `TOKEN` or HTTP `POST /token` after bootstrap if the administrator needs bearer access.
 * `--auth-non-interactive` runs authentication bootstrap mode with the administrator name, password, and password confirmation read from stdin. It has the same daemon, `pid_file`, empty-storage, and no-token behavior as `--auth`.
 * `--check` checks the configuration file, verifies that the server can start with it, then exits. It prints `OK` and exits with code 0 if the check succeeds. If the check fails, it exits with code 1 and prints the same error that `searchd` would print during a regular startup.
@@ -71,7 +119,7 @@ The options available to `searchd` in all operating systems are:
     $ searchd --config /etc/manticoresearch/manticore.conf --cpustats
     ```
 
-*  `--port portnumber` (`-p` for short) is used to specify the port that Manticore should listen on to accept binary protocol requests, usually for debugging purposes. This will usually default to 9312, but sometimes you need to run it on a different port. Specifying it on the command line will override anything specified in the configuration file. The valid range is 0 to 65535, but ports numbered 1024 and below usually require a privileged account in order to run.
+*  `--port portnumber` (`-p` for short) is used to specify the port that Manticore should listen on to accept binary protocol requests, usually for debugging purposes. This will usually default to 9312, but sometimes you need to run it on a different port. Outside local mode, specifying it on the command line overrides listeners from the configuration file. In local mode, it explicitly adds a binary TCP listener while preserving the two default Unix sockets. The valid range is 0 to 65535, but ports numbered 1024 and below usually require a privileged account in order to run.
 
     An example of usage:
 
@@ -79,7 +127,7 @@ The options available to `searchd` in all operating systems are:
     $ searchd --port 9313
     ```
 
-* `--listen ( address ":" port | port | path ) [ ":" protocol ]` (or `-l` for short) Works as `--port`, but allows you to specify not only the port, but the full path, IP address and port, or Unix-domain socket path that `searchd` will listen on. In other words, you can specify either an IP address (or hostname) and port number, just a port number, or a Unix socket path. If you specify a port number but not the address, searchd will listen on all network interfaces. A Unix path is identified by a leading slash. As the last parameter, you can also specify a protocol handler (listener) to be used for connections on this socket. Supported protocol values are 'sphinx' and 'mysql' (MySQL protocol used since 4.1).
+* `--listen ( address ":" port | port | path ) [ ":" protocol ]` works as `--port`, but allows you to specify not only the port, but the full path, IP address and port, or Unix-domain socket path that `searchd` will listen on. In other words, you can specify either an IP address (or hostname) and port number, just a port number, or a Unix socket path. If you specify a port number but not the address, searchd will listen on all network interfaces. A Unix path is identified by a leading slash. As the last parameter, you can also specify a protocol handler (listener) to be used for connections on this socket. Supported protocol values are `sphinx`, `mysql`, `http`, `https`, and `replication`. The `-l` short option now means `--local`; use the full, repeatable `--listen` option. It overrides configured listeners outside local mode and adds listeners in local mode.
 
 * `--force-preread` forbids the server from serving any incoming connection until prereading of table files completes. By default, at startup, the server accepts connections while table files are lazy-loaded into memory. This extends the behavior and makes it wait until the files are loaded.
 

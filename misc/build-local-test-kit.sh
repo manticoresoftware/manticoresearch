@@ -111,7 +111,7 @@ echo ""
 echo "==> Step 2/2: Creating Docker image"
 
 # Verify binaries exist
-if [ ! -f "$BUILD_DIR/src/searchd" ] || [ ! -f "$BUILD_DIR/src/indexer" ] || [ ! -f "$BUILD_DIR/src/indextool" ]; then
+if [ ! -f "$BUILD_DIR/src/searchd" ] || [ ! -f "$BUILD_DIR/src/manticore" ] || [ ! -f "$BUILD_DIR/src/indexer" ] || [ ! -f "$BUILD_DIR/src/indextool" ]; then
     echo "ERROR: Compiled binaries not found. Build may have failed."
     echo "Try running with --clean for a fresh build."
     exit 1
@@ -121,9 +121,10 @@ fi
 cat > "$BUILD_DIR/Dockerfile" <<EOF
 FROM $BASE_IMAGE
 COPY src/searchd /usr/bin/searchd
+COPY src/manticore /usr/bin/manticore
 COPY src/indexer /usr/bin/indexer
 COPY src/indextool /usr/bin/indextool
-RUN chmod +x /usr/bin/searchd /usr/bin/indexer /usr/bin/indextool
+RUN chmod +x /usr/bin/searchd /usr/bin/manticore /usr/bin/indexer /usr/bin/indextool
 EOF
 
 # Build Docker image

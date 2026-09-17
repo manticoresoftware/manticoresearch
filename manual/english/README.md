@@ -11,6 +11,7 @@
     * [• Migration from Sphinx](Installation/Migration_from_Sphinx.md)
 * [🔰 Quick start guide](Quick_start_guide.md)
 * [2️⃣ Starting the server](Starting_the_server.md)
+    * [• Using the `manticore` command-line tool](Starting_the_server/Manticore.md)
     * [• In Linux](Starting_the_server/Linux.md)
     * [• Manually](Starting_the_server/Manually.md)
     * [• In Docker](Starting_the_server/Docker.md)

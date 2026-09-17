@@ -10056,8 +10056,8 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 				CSphString sAttr ( sExpr+iNameStart, iNameLen );
 				sphColumnToLowercase ( const_cast<char *>( sAttr.cstr() ) );
 				int iLoc = m_pSchema->GetAttrIndex ( sAttr.cstr() );
-				if ( iLoc>=0 )
-					eType = m_pSchema->GetAttr(iLoc).m_eAttrType;
+				if ( iLoc>=0 && m_pSchema->GetAttr(iLoc).m_eAttrType==SPH_ATTR_FLOAT )
+					eType = SPH_ATTR_FLOAT;
 			}
 
 			tNode.m_eArgType = eType;

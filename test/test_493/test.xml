@@ -177,6 +177,7 @@ index agg_pct_crash_uint
 	<sphinxql>select percentiles(data) as p from agg_td_invalid</sphinxql>
 	<sphinxql>select percentile_ranks(j.some_string, {values='10'}) as r from agg_td_invalid</sphinxql>
 	<sphinxql>select median_absolute_deviation(to_string(latency)) as m from agg_td_invalid</sphinxql>
+	<sphinxql>set global threads_ex='4'</sphinxql>
 </queries>
 
 <httpqueries>

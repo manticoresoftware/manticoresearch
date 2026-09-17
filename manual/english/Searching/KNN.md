@@ -105,7 +105,7 @@ When you use the `provider:model` form together with `API_URL`, the part before 
 | Model Type | Example | API Key Required | Notes |
 |------------|---------|-----------------|-------|
 | **ONNX (recommended)** | `Xenova/all-MiniLM-L6-v2` | No | Local models from any Hugging Face repo that ships an `.onnx` file. Runs on Manticore's fast ONNX Runtime backend. Browse the list: [feature-extraction ONNX models](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm). |
-| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | No | Local BERT-based models, auto-downloaded. Still supported — use ONNX above when available. |
+| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | No | Local BERT-based models, auto-downloaded. Same weights as the ONNX row above, but 10–20× slower to embed on CPU — use ONNX when the repo ships it. See [Choosing a local embedding model](../Searching/KNN.md#Choosing-a-local-embedding-model). |
 | **Qwen** | `Qwen/Qwen3-Embedding-0.6B` | No | Local Qwen family models |
 | **Llama** | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | No | Local Llama family models |
 | **Mistral** | `Locutusque/TinyMistral-248M-v2` | No | Local Mistral family models |
@@ -120,6 +120,21 @@ When you use the `provider:model` form together with `API_URL`, the part before 
 - Tested models: `TinyLlama/TinyLlama-1.1B-Chat-v1.0`, `Locutusque/TinyMistral-248M-v2`, `Qwen/Qwen3-Embedding-0.6B`, `h2oai/embeddinggemma-300m`
 - Other models of these families may also work, but are not guaranteed
 - For gated Hugging Face repos, pass your Hugging Face access token as `API_KEY`
+
+##### Choosing a local embedding model
+
+`MODEL_NAME` decides not only quality but **how fast each document is embedded on CPU — by an order of magnitude** (see [14× faster embeddings with ONNX](https://manticoresearch.com/blog/onnx-embeddings-speedup/)). A repo that ships an `.onnx` file runs on the ONNX Runtime backend; a `safetensors` repo of the very same model runs on the much slower Candle path. Approximate figures, measured on a small 4-vCPU instance with short (~300 character) documents:
+
+| Model | Format | Dims | Download | CPU speed |
+|---|---|---|---|---|
+| `Xenova/all-MiniLM-L6-v2` | ONNX | 384 | ~90 MB | ~30–40 docs/sec |
+| `sentence-transformers/all-MiniLM-L6-v2` | safetensors | 384 | ~90 MB | ~2–3 docs/sec |
+| `BAAI/bge-base-en-v1.5` | safetensors | 768 | ~420 MB | ~2–3 docs/sec |
+
+* **Start with `Xenova/all-MiniLM-L6-v2`** — the model used in the examples above. It handles interactive queries and bulk ingests equally well, and its quality is sufficient for most search applications.
+* **A higher leaderboard rank is rarely worth the ingestion cost on CPU.** Moving from a small ONNX model to a larger `safetensors` model typically makes every document 10–20× more expensive to embed while changing end relevance only marginally. Before switching to a "better" model, compare it against the default on a few dozen of your own queries and texts.
+* **Estimate before a large ingest.** Embedding cost is linear: milliseconds per document times the row count. At ~300 ms/doc, 15,000 documents take roughly 75 minutes; at ~30 ms/doc, under 10. Insert a few hundred real rows into a throwaway table and extrapolate before committing the production table to a model.
+* **Slow-ingest symptoms point at the model, not the settings.** If inserts crawl, or bulk loads show embedding timeouts and retries, the usual cause is a non-ONNX or oversized model. Switching to an ONNX repo fixes it; raising [`embeddings_threads`](../Server_settings/Searchd.md#embeddings_threads) does not make a slow model fast and can starve concurrent work of workers.
 
 More information about setting up a `float_vector` attribute can be found [here](../Creating_a_table/Data_types.md#Float-vector).
 

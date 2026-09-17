@@ -300,6 +300,8 @@ The actual number of threads used is also limited by how many workers are curren
 
 Default is `4`. Set to `0` to remove the cap, in which case the embeddings library decides how many threads to use (still bounded by the number of free workers).
 
+If auto-embedding inserts are slow — each row taking hundreds of milliseconds, bulk loads showing embedding timeouts and retries — the cause is almost always the model, not the thread count: local models that do not ship an `.onnx` file run on a much slower CPU path. See [Choosing a local embedding model](../Searching/KNN.md#Choosing-a-local-embedding-model). Raising this setting does not make a slow model fast and can starve concurrent searches of workers.
+
 This value can be changed at runtime using `SET GLOBAL embeddings_threads = N` and inspected via `SHOW VARIABLES`. For KNN `SELECT` queries it can also be overridden per-query with `OPTION embeddings_threads = N` (see [KNN vector search](../Searching/KNN.md#KNN-vector-search)).
 
 <!-- intro -->

@@ -35,10 +35,13 @@
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-// v.71 (uuid entries in the docid lookup) and v.72 (float_vector_array) headers are "suspect": daemons
-// writing them could rewrite a header on ALTER without converting the .spt lookup (manticoresearch#4852),
-// so a v.71/v.72 header must have its lookup layout verified on load. v.73 and v.74 are their fixed twins
-// (73 = the v.71 feature set, 74 = v.72's), written only with the lookup in sync and never checked.
+
+// Beware: if you raise the version because of incompatible changes, avoid situation, when ALTER command writes new version of header,
+// but keep old state untouched.
+//
+// That is, if new v007 imply, index should contain file .spX, and should not contain .spY, and also .spZ is critically changed,
+// on apply ALTER command (change columns, settings, whatever) if you rewrite chunk header to your new vXXX, ensure you keep all the rest
+// changes also coherent (i.e. add .spX, remove .spY, regenerate .spZ, whatever).
 const DWORD		INDEX_FORMAT_VERSION		= 74;				///< v.72 (float_vector_array) with the docid lookup written in sync
 
 const char		MAGIC_CODE_SENTENCE			= '\x02';				// emitted from tokenizer on sentence boundary

@@ -1222,6 +1222,22 @@ void CanonicalizeIndexName ( CSphString & sName ) noexcept
 	sName.ToLower();
 }
 
+static void FixupBackupTables ( SqlStmt_t * pStmt ) noexcept
+{
+	if ( pStmt->m_eStmt!=STMT_BACKUP || pStmt->m_sIndex.IsEmpty() )
+		return;
+
+	StrVec_t dTables;
+	sphSplit ( dTables, pStmt->m_sIndex.cstr(), "," );
+	for ( CSphString & sTable : dTables )
+	{
+		sTable.Trim();
+		sTable.Unquote();
+		CanonicalizeIndexName ( sTable );
+		pStmt->m_dCallStrings.Add() = std::move ( sTable );
+	}
+}
+
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut )
 {
 	if ( ( uVer>>8)!=( uDaemonVersion>>8) )
@@ -6886,20 +6902,25 @@ static bool CheckAttrs ( const VecTraits_T<T> & dAttrs, GETNAME && fnGetName, CS
 }
 
 
-static bool CheckExistingTables ( const CSphString & sIndex, bool bIfNotExists, CSphString & sError )
+static bool CheckExistingTables ( const CSphString & sIndex, bool bIfNotExists, bool bNameQuoted, CSphString & sError )
 {
+	if ( !sphValidateTableName ( sIndex.cstr(), bNameQuoted ? IdentifierValidation_e::ALLOW_LEADING_DIGIT : IdentifierValidation_e::ALLOW_NONE, sError ) )
+		return false;
+
+	const char * szIdentifier = sIndex.Begins ( "system." ) ? sIndex.cstr()+7 : sIndex.cstr();
+
+	if ( !bNameQuoted && CSphSchema::IsReserved ( szIdentifier ) )
+	{
+		sError.SetSprintf ( "'%s' is a reserved keyword", sIndex.cstr() );
+		return false;
+	}
+
 	if ( g_pLocalIndexes->Contains ( sIndex ) || g_pDistIndexes->Contains ( sIndex ) )
 	{
 		if ( bIfNotExists )
 			return true;
 
 		sError.SetSprintf ( "table '%s' already exists", sIndex.cstr() );
-		return false;
-	}
-
-	if ( CSphSchema::IsReserved ( sIndex.cstr() ) )
-	{
-		sError.SetSprintf ( "'%s' is a reserved keyword", sIndex.cstr() );
 		return false;
 	}
 
@@ -6921,7 +6942,7 @@ static int CheckShardIntOpt ( const char * sName, const CSphString & sIndex, con
 
 static bool CheckCreateTable ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, CSphString & sError )
 {
-	if ( !CheckExistingTables ( sIndex, tCreateTable.m_bIfNotExists, sError ) )
+	if ( !CheckExistingTables ( sIndex, tCreateTable.m_bIfNotExists, tCreateTable.m_bNameQuoted, sError ) )
 		return false;
 
 	bool bUuidDocid = false;
@@ -7055,6 +7076,22 @@ static CSphString BuildCreateTableRt ( const CSphString & sName, const CSphIndex
 }
 
 
+static void CopyHiddenKNNCreateLikeSettings ( CreateTableSettings_t & tCreateTable, const CSphSchema & tSourceSchema )
+{
+	for ( auto & tAttr : tCreateTable.m_dAttrs )
+	{
+		if ( !tAttr.m_bKNN || tAttr.m_tKNNModel.m_sModelName.empty() || !tAttr.m_tKNNModel.m_sAPIKey.empty() )
+			continue;
+
+		const CSphColumnInfo * pSourceAttr = tSourceSchema.GetAttr ( tAttr.m_tAttr.m_sName.cstr() );
+		if ( !pSourceAttr || pSourceAttr->m_tKNNModel.m_sModelName!=tAttr.m_tKNNModel.m_sModelName )
+			continue;
+
+		tAttr.m_tKNNModel.m_sAPIKey = pSourceAttr->m_tKNNModel.m_sAPIKey;
+	}
+}
+
+
 static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	SearchFailuresLog_c dErrors;
@@ -7067,7 +7104,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 		return;
 	}
 
-	if ( !CheckExistingTables ( tStmt.m_sIndex, tStmt.m_tCreateTable.m_bIfNotExists, sError ) )
+	if ( !CheckExistingTables ( tStmt.m_sIndex, tStmt.m_tCreateTable.m_bIfNotExists, tStmt.m_tCreateTable.m_bNameQuoted, sError ) )
 	{
 		sError.SetSprintf ( "table '%s': CREATE TABLE failed: %s", tStmt.m_sIndex.cstr(), sError.cstr() );
 		tOut.Error ( sError.cstr() );
@@ -7076,6 +7113,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 
 	const CSphString & sLike = tStmt.m_tCreateTable.m_sLike;
 	CSphString sCreateTable;
+	const CSphSchema * pSourceSchema = nullptr;
 	switch ( IndexIsServed ( sLike ) )
 	{
 	case RunIdx_e::NOTSERVED:
@@ -7092,7 +7130,8 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 			return;
 		}
 		RIdx_c pIdx { pServed };
-		sCreateTable = BuildCreateTableRt ( tStmt.m_sIndex, pIdx, GetSchemaForCreateTable ( pIdx ), ExtFilesFormat_e::FILE );
+		pSourceSchema = &GetSchemaForCreateTable ( pIdx );
+		sCreateTable = BuildCreateTableRt ( tStmt.m_sIndex, pIdx, *pSourceSchema, ExtFilesFormat_e::FILE );
 		break;
 	}
 	case RunIdx_e::DISTR:
@@ -7120,6 +7159,9 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 
 	SqlStmt_t & tNewCreateTable = dCreateTableStmts[0];
 	tNewCreateTable.m_tCreateTable.m_bIfNotExists = tStmt.m_tCreateTable.m_bIfNotExists;
+	tNewCreateTable.m_tCreateTable.m_bNameQuoted = tStmt.m_tCreateTable.m_bNameQuoted;
+	if ( pSourceSchema )
+		CopyHiddenKNNCreateLikeSettings ( tNewCreateTable.m_tCreateTable, *pSourceSchema );
 
 	HandleMysqlCreateTable ( tOut, tNewCreateTable, sWarning );
 }
@@ -11563,7 +11605,8 @@ enum class Alter_e
 	RebuildEmbeddings,
 	ApiKey,
 	ApiUrl,
-	ApiTimeout
+	ApiTimeout,
+	MaxInputTokens
 };
 
 static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alter_e eAction, CSphString & sWarning )
@@ -11701,6 +11744,14 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 				int iTimeout = 0;
 				if ( ValidateEmbeddingsAPITimeout ( tStmt.m_sAlterOption, iTimeout, sAlterError ) )
 					WIdx_c(pServed)->AlterApiTimeout ( tStmt.m_sAlterAttr, iTimeout, sAlterError );
+			}
+			break;
+
+		case Alter_e::MaxInputTokens:
+			{
+				int iMaxInputTokens = 0;
+				if ( ValidateEmbeddingsMaxInputTokens ( tStmt.m_sAlterOption, iMaxInputTokens, sAlterError ) )
+					WIdx_c(pServed)->AlterMaxInputTokens ( tStmt.m_sAlterAttr, iMaxInputTokens, sAlterError );
 			}
 			break;
 		}
@@ -12617,6 +12668,16 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	if ( StrEq ( mysqldump_8_0_39_30_hack, sQuery) )
 		return tOut.DataTableOneline ( "count(*)" );
 
+	// Sequel Ace 5.3.1+ checks the current database before running a query
+	constexpr Str_t sSequelAceDatabase { FROMS("SELECT CAST(DATABASE() AS BINARY)") };
+	if ( session::GetProto()==Proto_e::MYSQL41 && StrEq ( sSequelAceDatabase, sQuery ) )
+		return tOut.DataTableOneline ( "CAST(DATABASE() AS BINARY)", nullptr );
+
+	// Sequel Ace 5.3.1+ checks the current character set before running a query
+	constexpr Str_t sSequelAceCharset { FROMS("SELECT CAST(@@character_set_client AS BINARY)") };
+	if ( session::GetProto()==Proto_e::MYSQL41 && StrEq ( sSequelAceCharset, sQuery ) )
+		return tOut.DataTableOneline ( "CAST(@@character_set_client AS BINARY)", "utf8" );
+
 	// parse SQL query
 	if ( tSess.IsProfile() )
 		m_tProfile.Switch ( SPH_QSTATE_SQL_PARSE );
@@ -12641,7 +12702,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	for ( auto& tStmt : dStmt ) {
 		FixupSystemTableName ( &tStmt );
-		CanonicalizeIndexName ( tStmt.m_sIndex );
+		if ( tStmt.m_eStmt==STMT_BACKUP )
+			FixupBackupTables ( &tStmt );
+		else
+			CanonicalizeIndexName ( tStmt.m_sIndex );
 		tStmt.m_bShardPhysicalUpdate = m_bShardPhysicalUpdate;
 	}
 	SqlStmt_t * pStmt = dStmt.Begin();
@@ -13022,6 +13086,11 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiTimeout, m_tLastMeta.m_sWarning );
 		return true;
 
+	case STMT_ALTER_EMBEDDINGS_MAX_INPUT_TOKENS:
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::MaxInputTokens, m_tLastMeta.m_sWarning );
+		return true;
+
 	case STMT_SHOW_PLAN:
 		HandleMysqlShowPlan ( tOut, m_tLastProfile, false, ::IsDot ( *pStmt ) );
 		return false; // do not profile this call, keep last query profile
@@ -13255,6 +13324,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_REVOKE:
 		HandleMysqlRevoke ( tOut, *pStmt, m_sError );
+		return true;
+
+	case STMT_BACKUP:
+		tOut.Error ( "BACKUP requires Manticore Buddy" );
 		return true;
 
 	default:

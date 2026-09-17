@@ -1227,9 +1227,17 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 		// index!
 		//////////
 
+		CSphString sIndexBase = hIndex["path"];
+		CSphString sIndexDir = GetPathOnly ( sIndexBase );
+		if ( sIndexDir!=sIndexBase && !MkDir ( sIndexDir.cstr() ) )
+		{
+			fprintf ( stdout, "FATAL: failed to create index directory '%s': %d '%s', will not index.\n", sIndexDir.cstr(), errno, strerrorm ( errno ) );
+			exit ( 1 );
+		}
+
 		// if searchd is running, we want to reindex to .tmp files
 		CSphString sIndexPath;
-		sIndexPath.SetSprintf ( g_bRotate ? "%s.tmp" : "%s", hIndex["path"].cstr() );
+		sIndexPath.SetSprintf ( g_bRotate ? "%s.tmp" : "%s", sIndexBase.cstr() );
 
 		// do index
 		auto pIndex = sphCreateIndexPhrase ( szIndexName, sIndexPath );

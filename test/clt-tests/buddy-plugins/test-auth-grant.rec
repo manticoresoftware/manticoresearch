@@ -5,10 +5,10 @@ Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
 Admin credentials: admin / adminpass (bootstrap via auth.json)
 
 Per spec: GRANT action ON target TO 'username' [WITH ALLOW 0|1 [BUDGET 'json'] | WITH BUDGET 'json']
-Actions: read, write, schema, admin, replication
+Actions: read, write, schema, backup, admin, replication
 Target: '*' (all) or 'tablename'
 
-IMPORTANT: Actions must be lowercase (read, write, schema, admin, replication)
+IMPORTANT: Actions must be lowercase (read, write, schema, backup, admin, replication)
 BUG: UPPERCASE actions like READ, WRITE return (null) — should be case-insensitive
 ––– comment –––
 ––– block: ../base/start-searchd-with-auth –––
@@ -44,14 +44,21 @@ EXPECTED: Success (empty output)
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT schema ON * TO 'grantuser';"
 ––– output –––
 ––– comment –––
-––– 2.5.4 GRANT admin ON * –––
+––– 2.5.4 GRANT backup ON * –––
+EXPECTED: Success (empty output)
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT backup ON * TO 'grantuser';"
+––– output –––
+––– comment –––
+––– 2.5.5 GRANT admin ON * –––
 EXPECTED: Success (empty output)
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT admin ON * TO 'grantuser';"
 ––– output –––
 ––– comment –––
-––– 2.5.5 GRANT replication ON * –––
+––– 2.5.6 GRANT replication ON * –––
 EXPECTED: Success (empty output)
 ––– comment –––
 ––– input –––
@@ -72,7 +79,7 @@ generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON 'reports' TO 'budgetuser' WITH BUDGET '{\"queries_per_minute\":100}';"
 ––– output –––
 ––– comment –––
-––– 2.5.6.1 GRANT WITH ALLOW 0 and BUDGET –––
+––– 2.5.7.1 GRANT WITH ALLOW 0 and BUDGET –––
 EXPECTED: Success with explicit deny rule and budget saved
 ––– comment –––
 ––– input –––
@@ -85,7 +92,7 @@ target: denied_tbl
 allow: 0
 budget: {"queries_per_minute":7}
 ––– comment –––
-––– 2.5.6.2 GRANT WITH ALLOW 1 –––
+––– 2.5.7.2 GRANT WITH ALLOW 1 –––
 EXPECTED: Success with explicit allow rule
 ––– comment –––
 ––– input –––
@@ -168,4 +175,4 @@ ERROR 1064 (42000) at line 1: P01: syntax error, unexpected '=', expecting integ
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW PERMISSIONS FOR 'grantuser';" | grep -Ec "username: grantuser"
 ––– output –––
-5
+6

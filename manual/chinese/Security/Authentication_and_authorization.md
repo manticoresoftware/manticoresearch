@@ -132,12 +132,15 @@ SHOW TOKEN FOR 'api_user';
 * `read` - 从表中读取数据并执行只读表操作。
 * `write` - 写入或删除表数据。
 * `schema` - 创建、修改、删除、导入、重新加载或以其他方式管理表结构和服务器级元数据。
+* `backup` - 运行服务器端 `BACKUP` 操作。
 * `replication` - 执行复制集群操作。
 * `admin` - 管理用户、token、权限和身份验证数据。
 
 只检查表结构或表列表的命令，例如 `DESCRIBE`、`SHOW TABLES`、`SHOW CREATE TABLE`、`SHOW TABLE STATUS` 和 `SHOW TABLE SETTINGS`，需要 `read`，而不是 `schema`。
 
-没有权限就表示默认拒绝。`admin` 操作的目标必须是 `*`，而且它并不隐含 `read`、`write`、`schema` 或 `replication`；需要时请显式授予这些操作。
+没有权限就表示默认拒绝。`admin` 和 `backup` 动作必须面向 `*`。`admin` 动作并不隐含 `read`、`write`、`schema`、`backup` 或 `replication`；需要时必须显式授予这些动作。
+
+`BACKUP` 是一种服务器端运维动作。`BACKUP TABLE <tables>` 需要对 `*` 具备 `backup`，并对每个请求的表具备 `read`。不带显式表列表的 `BACKUP` 需要对 `*` 具备 `backup`，并对 `*` 具备不受限制的 `read`；任何 `read` 拒绝规则都会阻止完整备份。备份工具支持的命令 `FREEZE` 和 `UNFREEZE` 需要对 `*` 具备 `backup`，并对请求的表具备 `read`；`FLUSH ATTRIBUTES`、`SHOW TABLES`、`SHOW STATUS` 和 `SHOW SETTINGS` 则可由其常规权限或 `*` 上的 `backup` 授权。仅有 `admin`、`schema` 或 `read` 都不足以授权 `BACKUP`。
 
 目标可以是普通名称或通配符。常见示例有 `products`、`logs_*`、`posts` 和 `*`。
 
@@ -146,6 +149,7 @@ GRANT read ON 'products' TO 'app_read';
 GRANT read ON 'logs_*' TO 'analytics';
 GRANT write ON 'products' TO 'ingest';
 GRANT schema ON * TO 'maintainer';
+GRANT backup ON * TO 'backup_operator';
 GRANT admin ON * TO 'security_admin';
 
 REVOKE read ON 'products' FROM 'app_read';
@@ -155,7 +159,7 @@ REVOKE read ON 'products' FROM 'app_read';
 
 当多条权限规则都可能匹配同一个请求时，Manticore 会按操作、目标以及允许或拒绝值来解析。
 
-规则只会针对请求的操作进行匹配。例如，对 `admin` 的授权并不能满足 `read`、`write`、`schema` 或 `replication`。
+规则只会匹配请求的动作本身。比如，对 `admin` 的授予并不满足 `read`、`write`、`schema`、`backup` 或 `replication`。
 
 对于目标，精确名称和通配符都是匹配规则。如果没有任何规则匹配请求中的用户、操作和目标，则访问被拒绝。
 

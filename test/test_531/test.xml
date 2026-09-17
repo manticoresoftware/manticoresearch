@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>distributed KNN rescore with a local shard</name>
+
+<skip_indexer/>
+<num_agents>2</num_agents>
+
+<requires>
+	<knn/>
+	<knn_float_tolerance/>
+	<http/>
+	<force-rt/>
+</requires>
+
+<config>
+<agent0>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</agent0>
+<agent1>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data1"/>
+}
+</agent1>
+</config>
+
+<queries>
+<sphinxql d="0">
+	create table knn_local (
+		embedding float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='cosine' quantization='1bit'
+	);
+	insert into knn_local (id, embedding) values (1, (0.1, 0.2, 0.3, 0.4));
+</sphinxql>
+
+<sphinxql d="1">
+	create table knn_remote (
+		embedding float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='cosine' quantization='1bit'
+	);
+	insert into knn_remote (id, embedding) values (2, (0.4, 0.3, 0.2, 0.1));
+</sphinxql>
+
+<sphinxql d="0">
+	create table knn_dist type='distributed'
+		local='knn_local'
+		agent='<agent1_address/>:knn_remote';
+</sphinxql>
+
+<!-- regression for issue #4791: the coordinator must not rescore an already-rescored merged local+remote result set -->
+<query endpoint="json/search">
+{
+	"table": "knn_dist",
+	"_source": { "excludes": ["*"] },
+	"knn": {
+		"field": "embedding",
+		"query": [0.15, 0.25, 0.35, 0.45],
+		"k": 1,
+		"ef": 100
+	},
+	"limit": 1
+}
+</query>
+
+<sphinxql d="0">
+	show tables like 'knn_dist';
+	drop table knn_dist;
+	drop table knn_local;
+</sphinxql>
+<sphinxql d="1">
+	drop table knn_remote;
+</sphinxql>
+</queries>
+
+</test>

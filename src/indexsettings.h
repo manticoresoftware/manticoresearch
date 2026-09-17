@@ -434,7 +434,7 @@ struct FileAccessSettings_t : public SettingsWriter_c
 	FileAccess_e	m_eDoclist = FileAccess_e::FILE;
 	FileAccess_e	m_eHitlist = FileAccess_e::FILE;
 	FileAccess_e	m_eDict = FileAccess_e::MMAP_PREREAD;
-	FileAccess_e	m_eColumnar = FileAccess_e::FILE;
+	FileAccess_e	m_eColumnar = FileAccess_e::MMAP;
 	FileAccess_e	m_eSecondary = FileAccess_e::FILE;
 	int				m_iReadBufferDocList = DEFAULT_READ_BUFFER;
 	int				m_iReadBufferHitList = DEFAULT_READ_BUFFER;
@@ -513,6 +513,7 @@ struct CreateTableAttr_t
 	knn::IndexSettings_t	m_tKNN;
 	knn::ModelSettings_t	m_tKNNModel;
 	CSphString				m_sKNNFrom;
+	knn::ChunkSettings_t	m_tKNNChunk;
 };
 
 struct NameValueStr_t
@@ -525,6 +526,7 @@ struct CreateTableSettings_t
 {
 	CSphString						m_sLike;
 	bool							m_bIfNotExists = false;
+	bool							m_bNameQuoted = false;
 	CSphVector<CreateTableAttr_t>	m_dAttrs;
 	CSphVector<CSphColumnInfo>		m_dFields;
 	CSphVector<NameValueStr_t>		m_dOpts;
@@ -576,6 +578,7 @@ void		DumpReadable ( FILE * fp, const CSphIndex & tIndex, const CSphEmbeddedFile
 
 /// try to set dictionary, tokenizer and misc settings for an index (if not already set)
 bool		sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, bool bStripFile, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError );
+CSphString	FormatCreateTableIdentifier ( const CSphString & sName, bool bQuoteAll = false );
 CSphString	BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema, ExtFilesFormat_e eExt );
 CSphString	BuildCreateTable ( const CSphString & sName, const CSphSchema & tSchema, const CSphIndexSettings & tSettings, const CSphFieldFilterSettings & tFieldFilterSettings, const CSphTokenizerSettings & tTokenizerSettings, const CSphDictSettings & tDictSettings, const MutableIndexSettings_c & tMutableSettings, ExtFilesFormat_e eExt, FilenameBuilder_i * pFilenameBuilder );
 

@@ -1,7 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
-// Copyright (c) 2011-2016, Andrew Aksyonoff
-// Copyright (c) 2011-2016, Sphinx Technologies Inc
+// Copyright (c) 2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -290,6 +288,9 @@ static bool CheckAuthFile ( const CSphString & sFile, CSphString & sError )
 		sError.SetSprintf ( "auth file '%s' has wrong JSON structure; expected an object", sFile.cstr() );
 		return false;
 	}
+
+	if ( !CheckAuthFileVersion ( tBsonSrc, sFile, sError ) )
+		return false;
 
 	// users and permissions empty arrays - valid state
 	bson::Bson_c tUsers ( tBsonSrc.ChildByName ( "users" ) );

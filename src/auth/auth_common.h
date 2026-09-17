@@ -1,7 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
-// Copyright (c) 2011-2016, Andrew Aksyonoff
-// Copyright (c) 2011-2016, Sphinx Technologies Inc
+// Copyright (c) 2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -79,6 +77,7 @@ void SortUserPerms ( UserPerms_t & dPerms );
 CSphString WriteJson ( const AuthUsers_t & tAuth );
 AuthUsersMutablePtr_t ReadAuth ( char * sSrc, const CSphString & sSrcName, CSphString & sError );
 bool CreateAuthFile ( const CSphString & sFile, CSphString & sError );
+bool CheckAuthFileVersion ( const bson::Bson_c & tBson, const CSphString & sSrcName, CSphString & sError );
 void CopyVec ( const BYTE * pSrc, int ilen, CSphFixedVector<BYTE> & dDst );
 bool Validate ( const AuthUsersMutablePtr_t & tAuth, CSphString & sError );
 CSphString AuthGetPath ( const CSphConfigSection & hSearchd );

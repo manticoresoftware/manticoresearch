@@ -25,7 +25,7 @@ CREATE SOURCE <source name> [(column type, ...)] [source_options]
 
 所有模式键都是大小写不敏感的，这意味着 `Products`、`products` 和 `PrOdUcTs` 被视为相同的。它们都会转换为小写。
 
-如果您的字段名不符合 Manticore Search 允许的 [字段名语法](../Creating_a_table/Data_types.md#Field-name-syntax)（例如，包含特殊字符或以数字开头），则必须定义模式映射。例如，`$keyName` 或 `123field` 是 JSON 中的有效键，但在 Manticore Search 中不是有效的字段名。如果您尝试使用无效的字段名而没有适当的映射，Manticore 将返回错误并导致源创建失败。
+如果你的字段名不符合 Manticore Search 允许的[表、字段和属性名称语法](../Creating_a_table/Data_types.md#Table-and-field-name-syntax)（例如包含特殊字符），就必须定义 schema 映射。例如，`$keyName` 在 JSON 中是合法 key，但在 Manticore Search 中不是合法的未加引号字段名。如果你在没有正确映射的情况下尝试使用无效字段名，Manticore 会返回错误，并且 source 创建会失败。
 
 要处理此类情况，请使用以下模式语法将无效字段名映射到有效字段名：
 

@@ -2027,7 +2027,7 @@ Each ordered `GROUP_CONCAT()` has its own per-group top-N queue. A query can con
 
 The memory cost is proportional to the number of retained groups multiplied by `N`, for each ordered expression.
 
-This form currently supports SphinxQL queries with an explicit `GROUP BY`. It does not support `DISTINCT`, multiple value expressions, `OFFSET`, implicit grouping, JSON aggregation syntax, `FACET`, `JOIN`, outer selects or table functions, KNN/hybrid queries, or scroll. An ordered `GROUP_CONCAT()` alias cannot be used in `HAVING` or result ordering. Result ordering can use group keys and ordinary aggregates, but not representative-row values.
+This form currently supports SQL queries with an explicit `GROUP BY`. It does not support `DISTINCT`, multiple value expressions, `OFFSET`, implicit grouping, JSON aggregation syntax, `FACET`, `JOIN`, outer selects or table functions, KNN/hybrid queries, or scroll. An ordered `GROUP_CONCAT()` alias cannot be used in `HAVING` or result ordering. Result ordering can use group keys and ordinary aggregates, but not representative-row values.
 
 For example, the following query returns at most two ages per major, with the highest age first:
 

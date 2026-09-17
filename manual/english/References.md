@@ -135,7 +135,7 @@
 * [/tbl_name/_mapping](Creating_a_table/Local_tables/Real-time_table.md#_mapping-API:) - Creates a table schema in the Elasticsearch style
 
 ### Common things
-* [field name syntax](Creating_a_table/Data_types.md#Field-name-syntax)
+* [table, field, and attribute name syntax](Creating_a_table/Data_types.md#Table-and-field-name-syntax)
 * [data types](Creating_a_table/Data_types.md)
 * [engine](Creating_a_table/Data_types.md)
 * [plain mode](Read_this_first.md#Real-time-mode-vs-plain-mode)
@@ -699,4 +699,5 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [27.1.5](https://manual.manticoresearch.com/manticore-27-1-5/). [Installation page](https://manticoresearch.com/install-27.1.5/)
 * [28.6.6](https://manual.manticoresearch.com/manticore-28-6-6/). [Installation page](https://manticoresearch.com/install-28.6.6/)
 * [29.0.2](https://manual.manticoresearch.com/manticore-29-0-2/). [Installation page](https://manticoresearch.com/install-29.0.2/)
+* [29.9.0](https://manual.manticoresearch.com/manticore-29-9-0/). [Installation page](https://manticoresearch.com/install-29.9.0/)
 <!-- proofread -->

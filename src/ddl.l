@@ -28,6 +28,10 @@
 
 %}
 
+TABLE_IDENT			[a-zA-Z_\200-\377][a-zA-Z0-9_\200-\377]*
+QUOTED_TABLE_IDENT	[0-9]*[a-zA-Z_\200-\377][a-zA-Z0-9_\200-\377]*
+IDENT				[@a-zA-Z_\200-\377][a-zA-Z0-9_\200-\377]*
+QUOTED_IDENT		[0-9]*[@a-zA-Z_\200-\377][a-zA-Z0-9_\200-\377]*
 
 
 
@@ -59,6 +63,7 @@
 "BIT"				{ YYSTOREBOUNDS; return TOK_BIT; }
 "BOOL"				{ YYSTOREBOUNDS; return TOK_BOOL; }
 "CACHE_PATH"		{ YYSTOREBOUNDS; return TOK_CACHE_PATH; }
+"CHUNK_STRATEGY"	{ YYSTOREBOUNDS; return TOK_CHUNK_STRATEGY; }
 "CLUSTER"			{ YYSTOREBOUNDS; return TOK_CLUSTER; }
 "COLUMN"			{ YYSTOREBOUNDS; return TOK_COLUMN; }
 "COLUMNAR"			{ YYSTOREBOUNDS; return TOK_COLUMNAR; }
@@ -90,7 +95,10 @@
 "KNN_DIMS"			{ YYSTOREBOUNDS; return TOK_KNN_DIMS; }
 "KNN_TYPE"			{ YYSTOREBOUNDS; return TOK_KNN_TYPE; }
 "LIKE"				{ YYSTOREBOUNDS; return TOK_LIKE; }
+"MAX_CHUNKS"		{ YYSTOREBOUNDS; return TOK_MAX_CHUNKS; }
+"MAX_TOKENS"		{ YYSTOREBOUNDS; return TOK_MAX_TOKENS; }
 "MODEL_NAME"		{ YYSTOREBOUNDS; return TOK_MODEL_NAME; }
+"MAX_INPUT_TOKENS"	{ YYSTOREBOUNDS; return TOK_MAX_INPUT_TOKENS; }
 "MODIFY"			{ YYSTOREBOUNDS; return TOK_MODIFY; }
 "MODIFY"[ \t\n\r]+"COLUMN" { return TOK_MODIFY_COLUMN; }
 "MULTI"				{ YYSTOREBOUNDS; return TOK_MULTI; }
@@ -99,6 +107,7 @@
 "MVA64" 			{ YYSTOREBOUNDS; return TOK_MVA64; }
 "NOT"				{ YYSTOREBOUNDS; return TOK_NOT; }
 "OPTION"			{ YYSTOREBOUNDS; return TOK_OPTION; }
+"OVERLAP_TOKENS"	{ YYSTOREBOUNDS; return TOK_OVERLAP_TOKENS; }
 "PLUGIN"			{ YYSTOREBOUNDS; return TOK_PLUGIN; }
 "QUANTIZATION"		{ YYSTOREBOUNDS; return TOK_QUANTIZATION; }
 "REBUILD"			{ YYSTOREBOUNDS; return TOK_REBUILD; }
@@ -124,11 +133,11 @@
 \-?[0-9]+			{ YYSTOREBOUNDS; lvalp->SetValueInt ( strtoull ( yytext, NULL, 10 ), false ); return TOK_CONST_INT; }
 [-+]?([0-9]*\.?[0-9]+|[0-9]+\.)([Ee][-+]?[0-9]+)?	{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
 
-[a-zA-Z_][a-zA-Z0-9_]*          { YYSTOREBOUNDS; return TOK_TABLEIDENT; }
-`[a-zA-Z0-9_]+`	                { YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLEIDENT; } // allow `123xyz` table names
+{TABLE_IDENT}                     { YYSTOREBOUNDS; return TOK_TABLEIDENT; }
+`{QUOTED_TABLE_IDENT}`            { YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLEIDENT; } // allow `123xyz` table names
 
-[@a-zA-Z_][a-zA-Z0-9_]* 		{ YYSTOREBOUNDS; return TOK_IDENT; }
-`[@a-zA-Z0-9_][a-zA-Z0-9_]*`	{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; } // allow `123xyz` column names
+{IDENT}                           { YYSTOREBOUNDS; return TOK_IDENT; }
+`{QUOTED_IDENT}`                  { YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; } // allow `123xyz` column names
 
 [ \t\n\r]+			{ ; }
 .					{ YYSTOREBOUNDS; return yytext[0]; }

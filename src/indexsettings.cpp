@@ -1354,22 +1354,11 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 	}
 
 	// aot
-	StrVec_t dMorphs;
-	sphSplit ( dMorphs, hIndex.GetStr ( "morphology" ).cstr() );
+	CSphString sMorphology = hIndex.GetStr ( "morphology" );
+	m_uAotFilterMask = sphParseMorphAot ( sMorphology.cstr() );
 
-	m_uAotFilterMask = 0;
-	for ( int j=0; j<AOT_LENGTH; ++j )
-	{
-		char buf_all[20];
-		snprintf ( buf_all, 19, "lemmatize_%s_all", AOT_LANGUAGES[j] ); //NOLINT
-		buf_all[19] = '\0';
-		ARRAY_FOREACH ( i, dMorphs )
-			if ( dMorphs[i]==buf_all )
-			{
-				m_uAotFilterMask |= (1UL) << j;
-				break;
-			}
-	}
+	StrVec_t dMorphs;
+	sphSplit ( dMorphs, sMorphology.cstr() );
 
 	if ( !ParseCJKSegmentation ( hIndex, dMorphs, sWarning, sError ) )
 		return false;
@@ -1902,6 +1891,7 @@ bool IndexSettingsContainer_c::SetupKNNAttrs ( const CreateTableSettings_t & tCr
 			(knn::ModelSettings_t&)tNamedKNN = i.m_tKNNModel;
 			tNamedKNN.m_sName = i.m_tAttr.m_sName;
 			tNamedKNN.m_sFrom = i.m_sKNNFrom;
+			tNamedKNN.m_tChunk = i.m_tKNNChunk;
 
 			if ( !ValidateSettingModel ( i, m_sError ) )
 				return false;
@@ -2791,17 +2781,27 @@ static bool IsDDLToken ( const CSphString & sTok )
 }
 
 
+CSphString FormatCreateTableIdentifier ( const CSphString & sName, bool bQuoteAll )
+{
+	bool bSystem = sName.Begins ( "system." );
+	const char * szIdentifier = bSystem ? sName.cstr()+7 : sName.cstr();
+	CSphString sIdentifier = szIdentifier;
+	CSphString sError;
+	bool bQuote = bQuoteAll || IsDDLToken ( sIdentifier ) || CSphSchema::IsReserved ( szIdentifier ) || !sphValidateIdentifier ( szIdentifier, IdentifierValidation_e::ALLOW_NONE, 0, sError );
+	if ( !bQuote )
+		return sName;
+
+	CSphString sQuoted;
+	sQuoted.SetSprintf ( bSystem ? "system.`%s`" : "`%s`", szIdentifier );
+	return sQuoted;
+}
+
+
 static CSphString FormatCreateTableAttr ( const CSphColumnInfo & tAttr, const CSphIndexSettings & tSettings, int iNumColumnar, bool bQuote, const char * szTypeOverride=nullptr )
 {
 	StringBuilder_c sRes;
 
-	CSphString sQuotedName;
-	bQuote |= IsDDLToken ( tAttr.m_sName );
-	if ( bQuote )
-		sQuotedName.SetSprintf ( "`%s`", tAttr.m_sName.cstr() );
-	else
-		sQuotedName = tAttr.m_sName;
-
+	CSphString sQuotedName = FormatCreateTableIdentifier ( tAttr.m_sName, bQuote );
 	sRes << sQuotedName << " " << ( szTypeOverride ? szTypeOverride : GetAttrTypeName(tAttr).cstr() );
 
 	AddStorageSettings ( sRes, tAttr, tSettings, false, iNumColumnar );
@@ -2817,13 +2817,7 @@ static CSphString FormatCreateTableField ( const CSphColumnInfo & tField, const 
 {
 	StringBuilder_c sRes;
 
-	CSphString sQuotedName;
-	bQuote |= IsDDLToken ( tField.m_sName );
-	if ( bQuote )
-		sQuotedName.SetSprintf ( "`%s`", tField.m_sName.cstr() );
-	else
-		sQuotedName = tField.m_sName;
-
+	CSphString sQuotedName = FormatCreateTableIdentifier ( tField.m_sName, bQuote );
 	const CSphColumnInfo * pAttr = tSchema.GetAttr ( tField.m_sName.cstr() );
 	bool bAttr = pAttr && pAttr->m_eAttrType==SPH_ATTR_STRING;
 
@@ -2851,7 +2845,7 @@ static CSphString BuildCreateTableImpl ( const CSphString & sName, const CSphSch
 	int iNumColumnar = tSchema.GetColumnarAttrsCount();
 
 	StringBuilder_c sRes;
-	sRes << "CREATE TABLE " << ( bQuote ? SphSprintf ( "`%s`", sName.cstr() ) : sName) << " (\n";
+	sRes << "CREATE TABLE " << FormatCreateTableIdentifier ( sName, bQuote ) << " (\n";
 
 	CSphVector<const CSphColumnInfo *> dExcludeAttrs;
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )

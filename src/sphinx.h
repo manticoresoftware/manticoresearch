@@ -1460,6 +1460,10 @@ public:
 	/// rewrite index header on disk using current in-memory settings
 	virtual bool				RewriteHeader ( CSphString & sError ) const { return false; }
 
+	/// bring the version-gated data files (the .spt docid lookup) to the current format BEFORE a header
+	/// rewrite stamps the current version on them - the readers are gated on the header version (#4852)
+	virtual bool				UpgradeDocidLookup ( CSphString & sError ) { return true; }
+
 	/// getter for name. Notice, const char* returned as it is mostly used for printing name
 	const char *				GetName () const { return m_sIndexName.cstr(); }
 
@@ -1487,6 +1491,7 @@ public:
 	virtual bool					AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError ) { return false; }
 	virtual bool					AlterApiUrl ( const CSphString & sAttr, const CSphString & sUrl, CSphString & sError ) { return false; }
 	virtual bool					AlterApiTimeout ( const CSphString & sAttr, int iTimeout, CSphString & sError ) { return false; }
+	virtual bool					AlterMaxInputTokens ( const CSphString & sAttr, int iMaxInputTokens, CSphString & sError ) { return false; }
 	const CSphBitvec &				GetMorphFields () const { return m_tMorphFields; }
 
 	virtual bool					ReserveEmbeddingSpace ( int64_t iDocsToFill, int iDims, CSphString & sError ) { return true; }
@@ -1616,6 +1621,7 @@ struct SphQueueSettings_t
 	int							m_iMaxMatches = DEFAULT_MAX_MATCHES;
 	bool						m_bNeedDocids = false;
 	bool						m_bGrouped = false;	// are we going to push already grouped matches to it?
+	bool						m_bSkipKnnDistMatchSort = false;	// don't prepend the implicit "knn_dist() asc" to the match sort clause (group ordering keeps it)
 	std::function<int64_t (const CSphString &, CSphString &)>			m_fnGetCountDistinct;
 	std::function<int64_t (const CSphFilterSettings &, CSphString &)>	m_fnGetCountFilter;
 	std::function<int64_t ()>	m_fnGetCount;

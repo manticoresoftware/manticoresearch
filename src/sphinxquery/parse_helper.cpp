@@ -12,6 +12,7 @@
 
 #include "parse_helper.h"
 #include "sphinxplugin.h"
+#include "sphinxutils.h"
 
 #include "tokenizer/tokenizer.h"
 #include "dict/dict_base.h"
@@ -24,6 +25,11 @@ void SetKeywordWithMarkers ( CSphString & sDst, const char * sPrefix, const CSph
 }
 
 namespace { // static
+
+bool IsFieldSpecChar ( char c )
+{
+	return (unsigned char)c>=0x80 || sphIsAlpha ( c ) || c=='.' || c=='-';
+}
 
 void TransformMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec & tMorphDisabledFields )
 {
@@ -149,8 +155,13 @@ bool XQParseHelper_c::AddField ( FieldMask_t & dFields, const char * szField, in
 
 	CSphString sField;
 	sField.SetBinary ( szField, iLen );
-
 	int iField = m_pSchema->GetFieldIndex ( sField.cstr() );
+	if ( iField<0 )
+	{
+		CSphString sIdentifierError;
+		if ( !sphValidateIdentifier ( sField.cstr(), IdentifierValidation_e::ALLOW_LEADING_DIGIT, 0, sIdentifierError ) )
+			return Error ( "invalid field name '%s': %s", sField.cstr(), sIdentifierError.cstr() );
+	}
 	if ( iField < 0 && m_pDiscoverySchema )
 	{
 		if ( m_pDiscoverySchema->GetFieldsCount()>=SPH_MAX_FIELDS )
@@ -214,20 +225,20 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 		bBlock = HandleFieldBlockStart ( pPtr );
 
 	// handle invalid chars
-	if ( !sphIsAlpha(*pPtr) )
+	if ( !IsFieldSpecChar(*pPtr) )
 	{
 		bIgnore = true;
 		m_pTokenizer->SetBufferPtr ( pPtr ); // ignore and re-parse (FIXME! maybe warn?)
 		return true;
 	}
-	assert ( sphIsAlpha(*pPtr) ); // i think i'm paranoid
+	assert ( IsFieldSpecChar(*pPtr) ); // i think i'm paranoid
 
 	// handle field specification
 	if ( !bBlock )
 	{
 		// handle standalone field specification
 		const char * pFieldStart = pPtr;
-		while ( sphIsAlpha(*pPtr) && pPtr<pLastPtr )
+		while ( pPtr<pLastPtr && IsFieldSpecChar(*pPtr) )
 			++pPtr;
 
 		assert ( pPtr-pFieldStart>0 );
@@ -241,14 +252,14 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 	} else
 	{
 		// handle fields block specification
-		assert ( sphIsAlpha(*pPtr) && bBlock ); // and complicated
+		assert ( IsFieldSpecChar(*pPtr) && bBlock ); // and complicated
 
 		bool bOK = false;
 		const char * pFieldStart = nullptr;
 		while ( pPtr<pLastPtr )
 		{
 			// accumulate field name, while we can
-			if ( sphIsAlpha(*pPtr) || *pPtr=='.' )
+			if ( IsFieldSpecChar(*pPtr) || *pPtr=='.' )
 			{
 				if ( !pFieldStart )
 					pFieldStart = pPtr;

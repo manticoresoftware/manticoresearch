@@ -4,19 +4,37 @@
 
 Manticore's data types can be split into two categories: full-text fields and attributes.
 
-### Field name syntax
+### Table and field name syntax
 
-Field names in Manticore must follow these rules:
+Table, field, and attribute names can contain ASCII letters (`a-z`, `A-Z`), numbers (`0-9`), underscores (`_`), and safe non-ASCII UTF-8 characters. An unquoted SQL name must start with an ASCII letter, an underscore, or a non-ASCII UTF-8 character. Numbers are allowed after the first character.
 
-* Can contain letters (a-z, A-Z), numbers (0-9), and hyphens (-)
-* Must start with a letter
-* Numbers can only appear after letters
-* Underscore (`_`) is the only allowed special character
-* Field names are case-insensitive
+The same base syntax applies to every table type in each mode where that type is supported: real-time, percolate, and distributed tables in [RT mode](../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29), and real-time, percolate, plain, distributed, and template tables in [Plain mode](../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29). It also applies to every schema that defines fields or attributes, including the expected document schema of a percolate table and schemas inferred from SQL, CSV/TSV, or XML sources.
+
+Other user-defined SQL object names, including function, plugin, and replication cluster names, follow the same safe UTF-8 rules.
+
+Use backticks around SQL names that begin with a number and contain at least one letter, underscore, or non-ASCII UTF-8 character, and around names that match a reserved SQL keyword. For example, use `` `2026_архив` `` or `` `select` ``. Configuration-file names are not quoted and may begin with a number. All-numeric identifiers are rejected in every mode, including while loading existing configuration or metadata; rename any such object before upgrading. Backticks do not make arbitrary ASCII punctuation valid; characters such as `-`, `$`, spaces, and embedded backticks are not supported in user-defined names.
+
+For compatibility with common log-ingestion schemas, `CREATE TABLE` and `ALTER TABLE` also accept the column names `@timestamp` and `@version` case-insensitively, with or without backticks. Other user-defined names beginning with `@` remain invalid. This exception does not make `@` a general identifier character in SQL or configuration-file schemas.
+
+For backward compatibility, Plain-mode configuration loading accepts `.` and `-` after the first character in table, field, and attribute names that earlier releases allowed. Do not use this compatibility syntax in new schemas: SQL cannot address every such name consistently, and SQL DDL continues to reject arbitrary punctuation.
+
+Identifiers must be valid UTF-8. Control characters, Unicode whitespace, bidirectional controls, and invisible default-ignorable characters are rejected. This includes non-breaking spaces, zero-width spaces, and zero-width joiners.
+
+Table names are limited to 200 bytes after being encoded as UTF-8 in both RT and Plain modes. Each ASCII character uses one byte, while a non-ASCII character uses two, three, or four bytes. This means a name can contain up to 200 ASCII characters, but fewer non-ASCII characters depending on the characters used. The component after the `system.` qualifier may use up to 48 additional bytes for shard and other generated suffixes. This qualified namespace is used for internal tables and is also accepted explicitly in SQL; ordinary public logical table names remain limited to 200 bytes. The limit also applies when existing table definitions are loaded, so rename any longer table before upgrading.
+
+In RT mode, the exact logical table name is stored in Manticore's metadata while table files use a bounded portable ASCII basename. This lets byte-distinct names coexist on case- or normalization-insensitive filesystems and avoids Windows reserved filenames. The component mapping does not prevalidate the complete storage path; operating-system path limits still apply, and a later filesystem error reports the failing path and OS error.
+
+For table, field, and attribute names created through SQL, Manticore converts ASCII uppercase letters to lowercase. Non-ASCII characters retain their original spelling. Configuration section names in Plain mode are case-sensitive, including their ASCII letters. Unicode case folding and Unicode normalization are not applied in either mode, so use the exact Unicode spelling consistently.
 
 For example:
-* Valid field names: `title`, `product_id`, `user_name_2`
-* Invalid field names: `2title`, `-price`, `user@name`
+* Valid unquoted names: `title`, `product_id`, `user_name_2`, `товары2026`, `商品表`, `📦метка`
+* Valid quoted names: `` `2026_архив` ``, `` `select` ``
+* Valid SQL compatibility column names: `@timestamp`, `@version`
+* Invalid names: `2title` without backticks, `-price`, `user@name`, `user-name`, `@user_field`, and `bad​name` containing a zero-width space
+
+In Plain mode, table names are section names in the configuration file and are written without backticks there. Backticks can still be used when referring to those tables in SQL. For example, a config section can be named `таблица2026`, while a section named `2026_архив` is referenced as `` `2026_архив` `` in SQL.
+
+[Field-scoped full-text query operators](../Searching/Full_text_matching/Operators.md) also support non-ASCII UTF-8 field names. For example, `MATCH('@название клавиатура')` restricts the search to the `название` field. This also applies to field-scoped queries stored as percolate rules.
 
 ### Full-text fields
 
@@ -2576,6 +2594,12 @@ When creating a table with `float_vector` attributes for KNN search, you can spe
 - `HNSW_M`: Maximum connections in the graph (default: 16)
 - `HNSW_EF_CONSTRUCTION`: Construction time/accuracy trade-off (default: 200)
 
+**Chunking parameters** (when using `MODEL_NAME`, see [Chunking strategies](../Searching/KNN.md#Chunking-strategies)):
+- `CHUNK_STRATEGY`: how a document becomes vectors: `'truncate'` (default), `'mean'`, `'fixed'`, `'recursive'` or `'sentence'`. The last three produce several vectors per document and require a [`float_vector_array`](../Creating_a_table/Data_types.md#Float-vector-array) column.
+- `MAX_TOKENS`: chunk size in tokens; `0` (default) uses the model's own limit
+- `OVERLAP_TOKENS`: tokens shared between consecutive chunks; requires an explicit non-zero `MAX_TOKENS`; a large overlap is reduced so chunks still advance
+- `MAX_CHUNKS`: ceiling on vectors per document; `0` (default) means unlimited
+
 **Auto-embeddings parameters** (when using `MODEL_NAME`):
 - `MODEL_NAME`: The embedding model to use (e.g., `'Xenova/all-MiniLM-L6-v2'` for the fast ONNX path, `'sentence-transformers/all-MiniLM-L6-v2'`, or `'openai/text-embedding-ada-002'`)
 - `FROM`: Comma-separated list of field names to use for embedding generation, or empty string `''` to use all text/string fields
@@ -2603,6 +2627,7 @@ When creating a table with auto embeddings, specify these additional parameters:
 - `API_KEY`: Required for remote models (OpenAI, Voyage, Jina). The API key is validated during table creation by making a real API request.
 - `API_URL`: Optional. Custom API endpoint URL. If not specified, uses the default provider endpoint (e.g., `https://api.openai.com/v1/embeddings` for OpenAI).
 - `API_TIMEOUT`: Optional. HTTP timeout in seconds for API requests. Default is 10 seconds. Set to `'0'` to use the default timeout. Applies to both validation requests during table creation and embedding generation during INSERT operations.
+- `MAX_INPUT_TOKENS`: Optional. Caps the number of tokens taken from each input text before it is embedded; longer texts are truncated. `'0'` (default) means the model's own context limit. Long-context models such as `Qwen/Qwen3-Embedding-0.6B` accept up to 32,768 tokens, and embedding time on CPU grows superlinearly with input length (a 5 KB document can take minutes), so set a cap (for example `'512'`) when the text fields may contain long or unbounded content. Applies to local models; the setting can be changed later with `ALTER TABLE ... MODIFY COLUMN ... MAX_INPUT_TOKENS='...'` without re-embedding existing rows.
 
 For remote models, `MODEL_NAME` can use either the legacy `provider/model` form or the explicit `provider:model` form. Use `provider:model` with `API_URL` when you want the part after `:` to be forwarded to a custom provider-compatible endpoint exactly as written.
 
@@ -2957,7 +2982,7 @@ When the attribute is configured for [KNN](../Searching/KNN.md), all vectors of 
 - Currently only supported in real-time tables (not in plain tables)
 - Not supported in functions or expressions
 - Cannot be used in regular filters or sorting
-- [Auto embeddings](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29) are not available for this type: a model produces one vector per document, so `MODEL_NAME` is rejected. Vectors must be supplied explicitly.
+- [Auto embeddings](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29) work: a multi-vector chunking strategy (`fixed`, `recursive`, `sentence`) fills the array with one vector per chunk, while a single-vector strategy (`truncate`, `mean`) stores a 1-element array - see [Chunking strategies](../Searching/KNN.md#Chunking-strategies). Adding a model-backed `float_vector_array` with `ALTER TABLE ... ADD COLUMN`, and `ALTER TABLE ... REBUILD EMBEDDINGS` on one, are not supported yet; declare the column when creating the table.
 - Not compatible with the [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) mechanism
 
 ### Using float vector arrays with KNN
@@ -2965,7 +2990,7 @@ When the attribute is configured for [KNN](../Searching/KNN.md), all vectors of 
 The parameters are the same ones [`float_vector`](../Creating_a_table/Data_types.md#Float-vector) takes: `KNN_TYPE`, `KNN_DIMS`, `HNSW_SIMILARITY`, plus the optional `HNSW_M`, `HNSW_EF_CONSTRUCTION` and [quantization](../Searching/KNN.md#Vector-quantization), with two differences:
 
 - `KNN_DIMS` is required, and **every** vector in **every** row must have exactly that many entries. A row whose vectors are a different width is rejected on insert.
-- `MODEL_NAME` and `FROM` are not accepted.
+- `MODEL_NAME` and `FROM` are accepted, together with a multi-vector `CHUNK_STRATEGY` that fills the array automatically. See [Chunking strategies](../Searching/KNN.md#Chunking-strategies).
 
 **What you can do:**
 - Run KNN searches that match a document on its closest vector

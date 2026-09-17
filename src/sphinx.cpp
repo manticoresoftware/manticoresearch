@@ -614,8 +614,7 @@ const char* CheckFmtMagic ( DWORD uHeader )
 #else
 			return "This instance is working on big-endian platform, but %s seems built on little-endian host.";
 #endif
-		else
-			return "%s is invalid header file (too old table version?)";
+		return "%s is invalid header file (too old table version?)";
 	}
 	return nullptr;
 }
@@ -1368,6 +1367,7 @@ public:
 	bool				PreallocWordlist();
 	bool				PreallocAttributes();
 	bool				PreallocDocidLookup();
+	bool				UpgradeDocidLookup ( CSphString & sError ) final;
 	bool				PreallocKilllist();
 	bool				PreallocHistograms ( StrVec_t & dWarnings );
 	bool				PreallocDocstore();
@@ -1476,7 +1476,7 @@ private:
 	bool						SortDocidLookup ( int iFD, int nBlocks, int iMemoryLimit, int nLookupsInBlock, int nLookupsInLastBlock, CSphIndexProgress& tProgress ); // build only
 
 private:
-	bool						JuggleFile ( ESphExt eExt, CSphString & sError, bool bNeedSrc=true, bool bNeedDst=true ) const;
+	bool						JuggleFile ( ESphExt eExt, CSphString & sError, bool bNeedSrc=true, bool bNeedDst=true, std::function<void ()> fnBeforeUnlink=nullptr ) const;
 	XQNode_t *					ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta & tMeta, CSphScopedPayload * pPayloads, DWORD uQueryDebugFlags, int iQueryExpansionLimit ) const;
 
 	static std::pair<DWORD,DWORD>		CreateRowMapsAndCountTotalDocs ( const CSphIndex_VLN* pSrcIndex, const CSphIndex_VLN* pDstIndex, CSphFixedVector<RowID_t>& dSrcRowMap, CSphFixedVector<RowID_t>& dDstRowMap, const ISphFilter* pFilter, bool bSupressDstDocids, MergeCb_c& tMonitor );
@@ -1512,7 +1512,7 @@ private:
 	template<typename RUN>
 	bool						SplitQuery ( RUN && tRun, CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
 	bool						ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const;
-	std::pair<RowidIterator_i *, bool> SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, const CSphVector<const ISphSchema *> & dSorterSchemas, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker ) const;
+	std::pair<RowidIterator_i *, bool> SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, const CSphVector<const ISphSchema *> & dSorterSchemas, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker, bool & bKNNIteratorCreated ) const;
 	bool						SelectIteratorsFT ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tSorterSchema, ISphRanker * pRanker, CSphVector<SecondaryIndexInfo_t> & dSIInfo, int iCutoff, int iThreads, StrVec_t & dWarnings ) const;
 
 	bool						IsQueryFast ( const CSphQuery & tQuery, const CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, float fCost ) const;
@@ -2893,7 +2893,7 @@ void CSphIndex_VLN::UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & d
 }
 
 // safely rename an index file
-bool CSphIndex_VLN::JuggleFile ( ESphExt eExt, CSphString & sError, bool bNeedSrc, bool bNeedDst ) const
+bool CSphIndex_VLN::JuggleFile ( ESphExt eExt, CSphString & sError, bool bNeedSrc, bool bNeedDst, std::function<void ()> fnBeforeUnlink ) const
 {
 	CSphString sExt = GetFilename ( eExt );
 	CSphString sExtNew = GetTmpFilename ( eExt );
@@ -2924,6 +2924,9 @@ bool CSphIndex_VLN::JuggleFile ( ESphExt eExt, CSphString & sError, bool bNeedSr
 			return false;
 		}
 	}
+
+	if ( fnBeforeUnlink )
+		fnBeforeUnlink();
 
 	// all done
 	::unlink ( sExtOld.cstr() );
@@ -3036,6 +3039,10 @@ bool CSphIndex_VLN::AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sA
 
 bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t & tCtx, CSphString & sError )
 {
+	// the header gets rewritten with the current format version below
+	if ( !UpgradeDocidLookup ( sError ) )
+		return false;
+
 	AttrEngine_e eAttrEngine = CombineEngines ( m_tSettings.m_eEngine, tCtx.m_eEngine );
 	AttrAddRemoveCtx_t tNewCtx = tCtx;
 	if ( eAttrEngine==AttrEngine_e::COLUMNAR )
@@ -3167,17 +3174,19 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 
 	if ( bColumnar )
 	{
-		if ( !JuggleFile ( SPH_EXT_SPC, sError, bHadColumnar, bHaveColumnar ) )
+		if ( !JuggleFile ( SPH_EXT_SPC, sError, bHadColumnar, bHaveColumnar, [this] { m_pColumnar.reset(); } ) )
 			return false;
 
-		if ( tNewSchema.HasColumnarAttrs() )
+		if ( bHaveColumnar )
 		{
-			m_pColumnar = CreateColumnarStorageReader ( GetFilename ( SPH_EXT_SPC ), (DWORD)m_iDocinfo, false, sError );
-			if ( !m_pColumnar )
-				return false;
+			bool bMmap = m_tMutableSettings.m_tFileAccess.m_eColumnar==FileAccess_e::MMAP;
+			m_pColumnar = CreateColumnarStorageReader ( GetFilename ( SPH_EXT_SPC ), (DWORD)m_iDocinfo, bMmap, sError );
 		}
 		else
 			m_pColumnar.reset();
+
+		if ( bHaveColumnar && !m_pColumnar )
+			return false;
 	}
 	else
 	{
@@ -3254,6 +3263,10 @@ void CSphIndex_VLN::PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t
 	tWriteHeader.m_pFieldFilter = m_pFieldFilter.get();
 	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
 	tWriteHeader.m_pSI = &m_tSI;
+
+	// a rewritten header of an existing table carries the fixed version (71->73, 72->74): the callers
+	// bring the docid lookup in sync in the same operation, so the result is never suspect
+	tBuildHeader.m_uFormatVersion = FixedIndexFormatVersion ( m_uVersion );
 }
 
 
@@ -4258,7 +4271,7 @@ static void ReadSchemaColumnJson ( bson::Bson_c tNode, CSphColumnInfo & tCol )
 
 	NodeHandle_t tKNN = tNode.ChildByName ("knn");
 	if ( tKNN!=nullnode )
-		ReadKNNJson ( tKNN, tCol.m_tKNN, tCol.m_tKNNModel, tCol.m_sKNNFrom );
+		ReadKNNJson ( tKNN, tCol.m_tKNN, tCol.m_tKNNModel, tCol.m_sKNNFrom, tCol.m_tKNNChunk );
 }
 
 
@@ -4355,7 +4368,7 @@ void DumpAttrToJson ( JsonEscapedBuilder& tOut, const CSphColumnInfo& tCol )
 	if ( tCol.IsIndexedKNN() )
 	{
 		tOut.Named ( "knn" );
-		FormatKNNSettings ( tOut, tCol.m_tKNN, tCol.m_tKNNModel, tCol.m_sKNNFrom );
+		FormatKNNSettings ( tOut, tCol.m_tKNN, tCol.m_tKNNModel, tCol.m_sKNNFrom, tCol.m_tKNNChunk );
 	}
 }
 } // namespace
@@ -8021,6 +8034,10 @@ bool CSphIndex_VLN::AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSph
 
 bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError )
 {
+	// the header gets rewritten with the current format version below
+	if ( !UpgradeDocidLookup ( sError ) )
+		return false;
+
 	CSphSchema tOldSchema = m_tSchema;
 	CSphSchema tNewSchema = m_tSchema;
 	if ( !Alter_AddRemoveFieldFromSchema ( bAddField, tNewSchema, sFieldName, uFieldFlags, sError ) )
@@ -8980,7 +8997,50 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 }
 
 
-std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, const CSphVector<const ISphSchema *> & dSorterSchemas, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker ) const
+// A knn query must not match documents that hold no vector: their distance is FLT_MAX, so they are near nothing.
+// When an hnsw iterator runs it never offers them in the first place, but a brute-force scan sees every row, so the guard has to be added explicitly.
+// Whether an iterator ran is only known after SpawnIterators, hence the late injection
+static bool AddLateKNNDistFilter ( const CSphQuery & tQuery, bool bKNNIteratorCreated, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta, const CSphVector<const ISphSchema *> & dSorterSchemas, const ISphSchema & tIndexSchema, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphVector<CSphFilterSettings> & dLateFilters, CSphVector<FilterTreeItem_t> & dLateFilterTree )
+{
+	if ( !tQuery.HasKnn() || bKNNIteratorCreated )
+		return true;
+
+	// already added eagerly (user-written knn_dist predicate, or explicit fullscan)
+	if ( tFlx.m_bAddKNNDistFilter )
+		return true;
+
+	assert ( tFlx.m_pMatchSchema );
+	if ( !CanAddKNNDistFilter ( *tFlx.m_pMatchSchema ) )
+		return true;
+
+	// copy whatever is live now 
+	dLateFilters.Resize(0);
+	for ( const auto & tFilter : *tFlx.m_pFilters )
+		dLateFilters.Add ( tFilter );
+
+	dLateFilterTree.Resize(0);
+	if ( tFlx.m_pFilterTree )
+		for ( const auto & tItem : *tFlx.m_pFilterTree )
+			dLateFilterTree.Add ( tItem );
+
+	// clone first, swap after: tFlx.m_pMatchSchema may point into pModifiedMatchSchema
+	std::unique_ptr<ISphSchema> pNewSchema = BuildKNNDistFilter ( *tFlx.m_pMatchSchema, dLateFilters, dLateFilterTree );
+
+	pModifiedMatchSchema = std::move(pNewSchema);
+	tFlx.m_pMatchSchema	= pModifiedMatchSchema.get();
+	tFlx.m_pFilters		= &dLateFilters;
+	tFlx.m_pFilterTree	= dLateFilterTree.GetLength() ? &dLateFilterTree : nullptr;
+
+	// the stage only dropped to prefilter just now, so the calc lists have to be rebuilt from it.
+	tCtx.ResetFilters();
+	if ( !tCtx.SetupCalc ( tMeta, *tFlx.m_pMatchSchema, tIndexSchema, tFlx.m_pBlobPool, tFlx.m_pColumnar, dSorterSchemas ) )
+		return false;
+
+	return tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
+}
+
+
+std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, const CSphVector<const ISphSchema *> & dSorterSchemas, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker, bool & bKNNIteratorCreated ) const
 {
 	std::unique_ptr<knn::KNNFilter_i> pKNNFilterWrapper;
 	if ( tQuery.HasKnn() && tQuery.SingleKnnSettings().m_bPrefilter && tCtx.m_pFilter )
@@ -8989,7 +9049,11 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	if ( !dFilters.GetLength() )
 	{
 		if ( tQuery.HasKnn() )
-			return CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.SingleKnnSettings().m_eTerminationPolicy, tMeta.m_pProfile, tMeta.m_sError );
+		{
+			auto tKNN = CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.SingleKnnSettings().m_eTerminationPolicy, tMeta.m_pProfile, tMeta.m_sError );
+			bKNNIteratorCreated = !!tKNN.first;
+			return tKNN;
+		}
 
 		return { nullptr, false };
 	}
@@ -9019,6 +9083,9 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	dKNNIterators = CreateKNNIterators ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.HasKnn() ? tQuery.SingleKnnSettings().m_eTerminationPolicy : knn::HNSWTerminationPolicy_e::QUANTILE, tMeta.m_pProfile, bError, tMeta.m_sError );
 	if ( bError )
 		return { nullptr, true };
+
+	// an empty result here means the planner chose brute force over the graph
+	bKNNIteratorCreated = !dKNNIterators.IsEmpty();
 
 	// secondary index iterators
 	dSIIterators = m_tSI.CreateSecondaryIndexIterator ( dSIInfo, dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), iCutoff, bUseSICache, tMeta.m_sWarning );
@@ -9129,9 +9196,9 @@ bool CSphIndex_VLN::SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilt
 	tFlx.m_iTotalDocs	= m_iDocinfo;
 	tFlx.m_sJoinIdx		= tQuery.m_sJoinIdx;
 	tFlx.m_eJoinType	= tQuery.m_eJoinType;
-	// the knn iterator is what normally keeps vector-less docs out of the result. it is skipped when the planner brute-forces instead,
-	// and a scan cannot tell an empty vector from a far one, so guard those cases with the knn_dist filter too
-	tFlx.m_bAddKNNDistFilter = tQuery.HasKnn() && ( HasKNNDistFilter(tQuery) || tQuery.m_dFilters.GetLength() || tQuery.SingleKnnSettings().m_bFullscan );
+	// the knn iterator is what normally keeps vector-less docs out of the result
+	// when there's no iterator, inject knn_dist filter to filter them out
+	tFlx.m_bAddKNNDistFilter = tQuery.HasKnn() && ( HasKNNDistFilter(tQuery) || tQuery.SingleKnnSettings().m_bFullscan );
 
 	// may modify eval stages in schema; needs to be before SetupCalc
 	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, pModifiedMatchSchema, tQuery.m_dItems, tMeta.m_sError, &dJsonSITransforms ) )
@@ -9247,14 +9314,20 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 	// try to spawn an iterator from a secondary index
 	CSphVector<CSphFilterSettings> dFiltersAfterIterator; // holds filter settings if they were modified. filters hold pointers to those settings
+	CSphVector<CSphFilterSettings> dLateFilters;	// same, for the late knn_dist guard
+	CSphVector<FilterTreeItem_t> dLateFilterTree;
 	std::unique_ptr<RowidIterator_i> pIterator;
+	bool bKNNIteratorCreated = false;
 	if ( bAllPrecalc )
 		tCtx.m_pFilter.reset();
 	else
 	{
-		auto tSpawned = SpawnIterators ( tQuery, dTransformedFilters, dJsonSITransforms, tCtx, tFlx, tMaxSorterSchema, dSorterSchemas, pModifiedMatchSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, nullptr );
+		auto tSpawned = SpawnIterators ( tQuery, dTransformedFilters, dJsonSITransforms, tCtx, tFlx, tMaxSorterSchema, dSorterSchemas, pModifiedMatchSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, nullptr, bKNNIteratorCreated );
 		pIterator = std::unique_ptr<RowidIterator_i> ( tSpawned.first );
 		if ( tSpawned.second )
+			return false;
+
+		if ( !AddLateKNNDistFilter ( tQuery, bKNNIteratorCreated, tCtx, tFlx, tMeta, dSorterSchemas, m_tSchema, pModifiedMatchSchema, dLateFilters, dLateFilterTree ) )
 			return false;
 	}
 
@@ -10266,12 +10339,62 @@ bool CSphIndex_VLN::PreallocDocidLookup()
 	if ( !m_tDocidLookup.Setup ( GetFilename ( SPH_EXT_SPT ), m_sLastError, false ) )
 		return false;
 
+	// the lookup layout depends on the index format version (v.71 added a header field); a mismatch would
+	// yield garbage rowids and crash every docid lookup (UPDATE, DELETE, REPLACE kill-lists, id filters)
+	CSphString sFormatError;
+	if ( !CheckDocidLookupFormat ( m_tDocidLookup.GetReadPtr(), m_tDocidLookup.GetLengthBytes(), m_uVersion, sFormatError ) )
+	{
+		// a header rewritten with a newer format version over an unconverted lookup (an ALTER by an affected
+		// daemon, manticoresearch#4852) - or plain damage. an inconsistent table is not repaired on the fly:
+		// refuse it with a clear message; indextool is the place to inspect it
+		m_sLastError.SetSprintf ( "%s: %s; check the table with indextool, then rebuild or restore it (manticoresearch#4852)", GetFilename ( SPH_EXT_SPT ).cstr(), sFormatError.cstr() );
+		return false;
+	}
+
 	auto [ tUuidEntriesOffset, nDocs ] = m_tLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 	const bool bUuidLinked = m_tSchema.GetAttr(0).IsUuidLinkedDocid();
 	assert ( !!tUuidEntriesOffset==bUuidLinked );
 	if ( bUuidLinked )
 		m_tUuidLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), tUuidEntriesOffset, nDocs );
 
+	return true;
+}
+
+
+// in-place operations (ALTER TABLE ADD/DROP COLUMN or field, header rewrites) save the header with the
+// current INDEX_FORMAT_VERSION, so every version-gated data file must be brought to the current format
+// as well - the readers are gated on the header version. since v.68 only the docid lookup changed (v.71)
+bool CSphIndex_VLN::UpgradeDocidLookup ( CSphString & sError )
+{
+	if ( m_uVersion>=DOCID_LOOKUP_UUID_VERSION )
+		return true;
+
+	CSphString sFile = GetFilename ( SPH_EXT_SPT );
+	bool bMapped = !!m_tDocidLookup.GetReadPtr();
+	m_tDocidLookup.Reset();
+
+	CSphString sUpgradeError;
+	if ( sphIsReadable ( sFile.cstr() ) && !UpgradeDocidLookupFile ( sFile, m_uVersion, sUpgradeError ) )
+	{
+		sError.SetSprintf ( "%s: %s", sFile.cstr(), sUpgradeError.cstr() );
+		if ( bMapped )
+		{
+			CSphString sRemapError;
+			if ( m_tDocidLookup.Setup ( sFile, sRemapError, false ) )
+				m_tLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), m_uVersion );
+		}
+		return false;
+	}
+
+	if ( bMapped )
+	{
+		if ( !m_tDocidLookup.Setup ( sFile, sError, false ) )
+			return false;
+
+		m_tLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), DOCID_LOOKUP_UUID_VERSION );
+	}
+
+	m_uVersion = FixedIndexFormatVersion ( m_uVersion );
 	return true;
 }
 
@@ -10628,19 +10751,15 @@ DWORD sphParseMorphAot ( const char * sMorphology )
 	sphSplit ( dMorphs, sMorphology );
 
 	DWORD uAotFilterMask = 0;
-	for ( int j=0; j<AOT_LENGTH; ++j )
+	for ( const auto & sMorphologyOption : dMorphs )
 	{
-		char buf_all[20];
-		snprintf ( buf_all, 19, "lemmatize_%s_all", AOT_LANGUAGES[j] ); // NOLINT
-		buf_all[19] = '\0';
-		ARRAY_FOREACH ( i, dMorphs )
-		{
-			if ( dMorphs[i]==buf_all )
-			{
-				uAotFilterMask |= (1UL) << j;
-				break;
-			}
-		}
+		AotMorphology_t tMorphology;
+		if ( !sphParseAotMorphology ( sMorphologyOption.cstr(), sMorphologyOption.Length(), tMorphology ) || !tMorphology.IsAll() )
+			continue;
+
+		uAotFilterMask |= (1UL) << tMorphology.GetLang();
+		if ( tMorphology.IsGermanV2() )
+			uAotFilterMask |= AOT_FILTER_DE_V2;
 	}
 
 	return uAotFilterMask;
@@ -12338,16 +12457,19 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 		tMeta.m_tIteratorStats.m_iTotal = 1;
 
 	CSphVector<CSphFilterSettings> dFiltersAfterIterator; // holds filter settings if they were modified. filters hold pointers to those settings
-	
+	CSphVector<CSphFilterSettings> dLateFilters;	// same, for the late knn_dist guard
+	CSphVector<FilterTreeItem_t> dLateFilterTree;
+
 	// skip SI create if cache ranker used
 	bool bIsCacheRanker = pRanker->IsCache();
 	std::pair<RowidIterator_i *, bool>  tSpawned = {nullptr, false};
 	std::unique_ptr<RowidIterator_i> pIterator;
-	
+	bool bKNNIteratorCreated = false;
+
 	if ( !bIsCacheRanker )
 	{
 		// Not using cache - spawn SI iterators if needed
-		tSpawned = SpawnIterators ( tQuery, dTransformedFilters, dJsonSITransforms, tCtx, tFlx, tMaxSorterSchema, dSorterSchemas, pModifiedMatchSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, pRanker.get() );
+		tSpawned = SpawnIterators ( tQuery, dTransformedFilters, dJsonSITransforms, tCtx, tFlx, tMaxSorterSchema, dSorterSchemas, pModifiedMatchSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, pRanker.get(), bKNNIteratorCreated );
 		pIterator = std::unique_ptr<RowidIterator_i> ( tSpawned.first );
 		if ( tSpawned.second )
 			return false;
@@ -12358,6 +12480,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 			pRanker->ExtraData ( EXTRA_SET_ITERATOR, (void**)&pIter );
 		}
 	}
+
+	if ( !AddLateKNNDistFilter ( tQuery, bKNNIteratorCreated, tCtx, tFlx, tMeta, dSorterSchemas, m_tSchema, pModifiedMatchSchema, dLateFilters, dLateFilterTree ) )
+		return false;
 
 	//////////////////////////////////////
 	// find and weight matching documents
@@ -12576,7 +12701,7 @@ size_t strnlen ( const char * s, size_t iMaxLen )
 
 int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i * pFilenameBuilder )
 {
-	DiskIndexChecker_c tIndexChecker { *this, tReporter };
+	DiskIndexChecker_c tIndexChecker { this, tReporter };
 
 	tIndexChecker.Setup ( m_iDocinfo, m_iDocinfoIndex, m_iMinMaxIndex, m_bCheckIdDups );
 

@@ -49,6 +49,15 @@ Manticore Search 提供了用于物理备份的命令行工具 [manticore-backup
 
 其次，建议以 `root` 用户运行此工具，以便工具能转移您备份文件的所有权。否则，将生成备份但不进行所有权转移。无论哪种情况，都应确保 `manticore-backup` 有权访问该 Manticore 实例的数据目录。
 
+如果启用了[身份验证](../Security/Authentication_and_authorization.md)，请使用 `--user` 和 `--password` 或 `--token` 之一对工具进行认证。对应的环境变量分别是 `MANTICORE_BACKUP_USER`、`MANTICORE_BACKUP_PASSWORD` 和 `MANTICORE_BACKUP_TOKEN`。Bearer token 的优先级高于用户名和密码。优先使用环境变量而不是命令行密钥，因为命令行参数可能会通过进程列表工具被其他本地用户看到。
+
+已认证用户必须在 `*` 上拥有 `backup` 权限。备份选定表还要求对每个被选中的表拥有 `read` 权限；备份所有表则要求在 `*` 上拥有不受限制的 `read` 权限（没有 `read` 拒绝规则）。例如：
+
+```sql
+GRANT backup ON * TO 'backup_operator';
+GRANT read ON 'products' TO 'backup_operator';
+```
+
 <!-- example backup1 -->
 
 `manticore-backup` 唯一必需的参数是 `--backup-dir`，用于指定备份的目标位置。如果不提供其他参数，`manticore-backup` 将：
@@ -138,8 +147,11 @@ Manticore versions:
 | `--force` | 在恢复时跳过版本检查，并优雅地恢复备份。|
 | `--disable-telemetry` | 如果您想禁用向 Manticore 发送匿名指标，请使用此标志。您也可以使用环境变量 TELEMETRY=0 |
 | `--config=/path/to/manticore.conf` | Manticore 配置文件路径。可选。如果未提供，则使用操作系统的默认配置。用于确定与 Manticore 守护进程通信的主机和端口。`manticore-backup` 工具支持[动态配置](../Server_settings/Scripted_configuration.md)文件。如果配置分散在多个文件中，可多次指定`--config`选项。|
-| `--tables=tbl1,tbl2, ...` | 你想备份的表的分号分隔列表。要备份所有表，可省略此参数。所有提供的表必须存在于你要备份的 Manticore 实例中，否则备份会失败。|
-| `--compress` | 是否压缩备份文件。默认未启用。| 可选 |
+| `--tables=tbl1,tbl2, ...` | 以逗号分隔的表列表，指定你要备份的表。要备份所有表，请省略此参数。提供的所有表都必须存在于你正在备份的 Manticore 实例中，否则备份会失败。 |
+| `--user=name` | 用于已认证 HTTP 请求的 Manticore 用户。也可以设置 `MANTICORE_BACKUP_USER`。 |
+| `--password=password` | `--user` 的密码。也可以设置 `MANTICORE_BACKUP_PASSWORD`。建议使用环境变量，这样密码不会暴露在进程列表中。 |
+| `--token=token` | 用于已认证 HTTP 请求的 Bearer token。也可以设置 `MANTICORE_BACKUP_TOKEN`。token 的优先级高于 `--user` 和 `--password`。 |
+| `--compress` | 是否应压缩备份文件。默认不启用。 |
 | `--unlock` | 在极少数情况下，当出现异常时，表可能被锁定。使用此参数解锁它们。|
 | `--version` | 显示当前版本。|
 | `--help` | 显示此帮助信息。|
@@ -210,6 +222,8 @@ manticore-backup --backup-dir=s3://my-bucket/backups
 > 注意： Windows 不支持 `BACKUP`。建议改用 [mysqldump](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump)。
 
 > 注意： `BACKUP` 需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果不起作用，请确认 Buddy 已安装。
+
+启用身份验证时，`BACKUP` 需要全局 `backup` 权限，以及对正在备份的数据的访问权限。`BACKUP TABLE <tables>` 需要在 `*` 上拥有 `backup` 权限，并对每个命名表拥有 `read` 权限。未显式指定表列表的 `BACKUP` 需要在 `*` 上拥有 `backup` 权限，并且在 `*` 上拥有不受限制的 `read` 权限；任何 `read` 拒绝规则都会阻止完整备份。仅有 `admin`、`schema` 或 `read` 权限不足以授权 `BACKUP`。有关授权和拒绝语义，请参阅[权限](../Security/Authentication_and_authorization.md#Permissions)。
 
 ### BACKUP 的通用语法
 

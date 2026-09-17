@@ -177,6 +177,38 @@ bool CachedIterator_T<false>::ReturnRowIdChunk ( RowIdBlock_t & dRowIdBlock )
 	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
 }
 
+// filter values are signed-sorted; unsigned order is the non-negative suffix followed by the negative prefix
+class DocidListReaderUnsigned_c
+{
+public:
+	explicit DocidListReaderUnsigned_c ( const VecTraits_T<DocID_t> & dValues )
+		: m_dValues ( dValues )
+		, m_iLeft ( dValues.GetLength() )
+	{
+		if ( !dValues.IsEmpty() && dValues.Last()>=0 )
+			m_iIndex = int ( std::lower_bound ( dValues.Begin(), dValues.End(), DocID_t(0) ) - dValues.Begin() );
+	}
+
+	bool ReadDocID ( DocID_t & tDocID )
+	{
+		if ( !m_iLeft )
+			return false;
+
+		tDocID = m_dValues[m_iIndex++];
+		if ( m_iIndex==m_dValues.GetLength() )
+			m_iIndex = 0;
+
+		--m_iLeft;
+		return true;
+	}
+
+private:
+	VecTraits_T<DocID_t> m_dValues;
+	int m_iIndex {0};
+	int m_iLeft {0};
+};
+
+
 template <bool ROWID_LIMITS, bool BITMAP>
 class RowidIterator_LookupValues_T : public CachedIterator_T<BITMAP>
 {
@@ -194,7 +226,7 @@ private:
 	RowIdBoundaries_t	m_tBoundaries;
 	int64_t				m_iProcessed {0};
 	LookupReaderIterator_c m_tLookupReader;
-	DocidListReader_c	m_tFilterReader;
+	DocidListReaderUnsigned_c m_tFilterReader;
 
 	bool				Fill();
 	FORCE_INLINE bool	FillIfFirstTime();
@@ -241,12 +273,11 @@ bool RowidIterator_LookupValues_T<ROWID_LIMITS,BITMAP>::Fill()
 
 	while ( bHaveFilterDocs && bHaveLookupDocs )
 	{
-		if ( tFilterDocID < tLookupDocID )
+		if ( uint64_t(tFilterDocID) < uint64_t(tLookupDocID) )
 		{
-			m_tFilterReader.HintDocID(tLookupDocID);
 			bHaveFilterDocs = m_tFilterReader.ReadDocID ( tFilterDocID );
 		}
-		else if ( tFilterDocID > tLookupDocID )
+		else if ( uint64_t(tFilterDocID) > uint64_t(tLookupDocID) )
 		{
 			m_tLookupReader.HintDocID(tFilterDocID);
 			bHaveLookupDocs = m_tLookupReader.Read ( tLookupDocID, tLookupRowID );
@@ -383,7 +414,6 @@ public:
 		{
 			m_pReader->HintDocID(m_uValue);
 			m_bRewound = true;
-			return { false, false };
 		}
 
 		if constexpr ( EQ )
@@ -845,6 +875,143 @@ bool DocidLookupWriter_c::Finalize ( CSphString & sError )
 
 	return true;
 }
+
+// the .spt header layouts this file knows how to validate:
+static constexpr int64_t DOCID_LOOKUP_HEADER_SIZE_V65 = sizeof(DWORD)*2 + sizeof(DocID_t);						// v.65..70: docs, docs per checkpoint, max docid
+static constexpr int64_t DOCID_LOOKUP_HEADER_SIZE_V71 = DOCID_LOOKUP_HEADER_SIZE_V65 + sizeof(SphOffset_t);		// v.71+: + uuid entries offset
+
+static int64_t DocidLookupHeaderSize ( DWORD uIndexVersion )
+{
+	return uIndexVersion>=DOCID_LOOKUP_UUID_VERSION ? DOCID_LOOKUP_HEADER_SIZE_V71 : DOCID_LOOKUP_HEADER_SIZE_V65;
+}
+
+
+bool CheckDocidLookupFormat ( const BYTE * pData, int64_t iDataLen, DWORD uIndexVersion, CSphString & sError )
+{
+	// only v.71/v.72 headers are suspect (manticoresearch#4852: their daemons could rewrite a header on
+	// ALTER without converting the lookup); older headers always pair with their own layout, and v.73+
+	// is written with the lookup in sync
+	if ( uIndexVersion<DOCID_LOOKUP_SUSPECT_MIN || uIndexVersion>DOCID_LOOKUP_SUSPECT_MAX )
+		return true;
+
+	int64_t iHeader = DocidLookupHeaderSize ( uIndexVersion );
+	if ( !pData || iDataLen<iHeader )
+	{
+		sError.SetSprintf ( "docid lookup is too short (" UINT64_FMT " bytes)", (uint64_t)iDataLen );
+		return false;
+	}
+
+	DWORD nDocs = sphUnalignedRead ( *(const DWORD*)pData );
+	DWORD nDocsPerCheckpoint = sphUnalignedRead ( *(const DWORD*)( pData+sizeof(DWORD) ) );
+	if ( !nDocs )
+		return true;
+
+	if ( !nDocsPerCheckpoint )
+	{
+		sError = "docid lookup has zero docs per checkpoint";
+		return false;
+	}
+
+	int64_t nCheckpoints = ( (int64_t)nDocs + nDocsPerCheckpoint - 1 ) / nDocsPerCheckpoint;
+	int64_t iExpected = iHeader + nCheckpoints*(int64_t)sizeof(DocidLookupCheckpoint_t);
+	if ( iDataLen<iExpected )
+	{
+		sError.SetSprintf ( "docid lookup is too short (" UINT64_FMT " bytes, " UINT64_FMT " checkpoints)", (uint64_t)iDataLen, (uint64_t)nCheckpoints );
+		return false;
+	}
+
+	// the data of the first checkpoint starts right after the checkpoint table
+	SphOffset_t tFirst = sphUnalignedRead ( ((const DocidLookupCheckpoint_t *)( pData+iHeader ))->m_tOffset );
+	if ( tFirst==iExpected )
+		return true;
+
+	// name the layout we actually see, if it is the other one
+	const char * szHint = "";
+	DWORD uOther = uIndexVersion>=DOCID_LOOKUP_UUID_VERSION ? DOCID_LOOKUP_UUID_VERSION-1 : DOCID_LOOKUP_UUID_VERSION;
+	int64_t iOtherHeader = DocidLookupHeaderSize ( uOther );
+	int64_t iOtherExpected = iOtherHeader + nCheckpoints*(int64_t)sizeof(DocidLookupCheckpoint_t);
+	if ( iDataLen>=iOtherExpected && sphUnalignedRead ( ((const DocidLookupCheckpoint_t *)( pData+iOtherHeader ))->m_tOffset )==iOtherExpected )
+		szHint = uOther<uIndexVersion ? " (the lookup is in the pre-v.71 layout; the header was rewritten with a newer format version without converting it)" : " (the lookup is in the v.71+ layout)";
+
+	sError.SetSprintf ( "docid lookup layout does not match index format v.%u: first checkpoint at " UINT64_FMT ", expected " UINT64_FMT "%s", uIndexVersion, (uint64_t)tFirst, (uint64_t)iExpected, szHint );
+	return false;
+}
+
+
+DWORD DetectDocidLookupVersion ( const BYTE * pData, int64_t iDataLen )
+{
+	CSphString sError;
+	if ( CheckDocidLookupFormat ( pData, iDataLen, DOCID_LOOKUP_UUID_VERSION, sError ) )
+		return DOCID_LOOKUP_UUID_VERSION;
+
+	if ( CheckDocidLookupFormat ( pData, iDataLen, DOCID_LOOKUP_UUID_VERSION-1, sError ) )
+		return DOCID_LOOKUP_UUID_VERSION-1;
+
+	return 0;
+}
+
+
+bool UpgradeDocidLookupFile ( const CSphString & sFilename, DWORD uIndexVersion, CSphString & sError )
+{
+	// current layout already, or a legacy layout we do not convert (it is read as-is, see CheckDocidLookupFormat)
+	if ( uIndexVersion>=DOCID_LOOKUP_UUID_VERSION || uIndexVersion<DOCID_LOOKUP_SPLIT_VERSION )
+		return true;
+
+	CSphMappedBuffer<BYTE> tOld;
+	if ( !tOld.Setup ( sFilename, sError, false ) )
+		return false;
+
+	const BYTE * pData = tOld.GetReadPtr();
+	int64_t iLen = tOld.GetLengthBytes();
+	if ( !CheckDocidLookupFormat ( pData, iLen, uIndexVersion, sError ) )
+		return false;
+
+	int64_t iOldHeader = DocidLookupHeaderSize ( uIndexVersion );
+	int64_t iShift = DocidLookupHeaderSize ( DOCID_LOOKUP_UUID_VERSION ) - iOldHeader;
+	DWORD nDocs = sphUnalignedRead ( *(const DWORD*)pData );
+	DWORD nDocsPerCheckpoint = sphUnalignedRead ( *(const DWORD*)( pData+sizeof(DWORD) ) );
+	DocID_t tMaxDocID = sphUnalignedRead ( *(const DocID_t*)( pData+sizeof(DWORD)*2 ) );
+	int64_t nCheckpoints = nDocs ? ( (int64_t)nDocs + nDocsPerCheckpoint - 1 ) / nDocsPerCheckpoint : 0;
+	const auto * pCheckpoints = (const DocidLookupCheckpoint_t *)( pData+iOldHeader );
+	int64_t iDataStart = iOldHeader + nCheckpoints*(int64_t)sizeof(DocidLookupCheckpoint_t);
+
+	CSphString sTmp;
+	sTmp.SetSprintf ( "%s.upgrade.tmp", sFilename.cstr() );
+
+	CSphWriter tWriter;
+	if ( !tWriter.OpenFile ( sTmp, sError ) )
+		return false;
+
+	tWriter.PutDword ( nDocs );
+	tWriter.PutDword ( nDocsPerCheckpoint );
+	tWriter.PutOffset ( tMaxDocID );
+	tWriter.PutOffset ( 0 ); // no UUID entries in a pre-v.71 lookup
+	for ( int64_t i = 0; i<nCheckpoints; ++i )
+	{
+		tWriter.PutOffset ( sphUnalignedRead ( pCheckpoints[i].m_tBaseDocID ) );
+		tWriter.PutOffset ( sphUnalignedRead ( pCheckpoints[i].m_tOffset ) + iShift );
+	}
+	tWriter.PutBytes ( pData+iDataStart, iLen-iDataStart );
+	tWriter.CloseFile();
+	tOld.Reset();
+
+	if ( tWriter.IsError() )
+	{
+		sError.SetSprintf ( "error writing %s", sTmp.cstr() );
+		::unlink ( sTmp.cstr() );
+		return false;
+	}
+
+	if ( ::rename ( sTmp.cstr(), sFilename.cstr() ) )
+	{
+		sError.SetSprintf ( "rename %s to %s failed: %s", sTmp.cstr(), sFilename.cstr(), strerrorm(errno) );
+		::unlink ( sTmp.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
 
 bool WriteDocidLookup ( const CSphString & sFilename, const VecTraits_T<DocidRowidPair_t> & dLookup, CSphString & sError )
 {

@@ -1758,6 +1758,20 @@ public:
 		return true;
 	}
 
+	bool DataTableOneline ( const char * szTitle, const char * szValue )
+	{
+		HeadBegin();
+		HeadColumn ( szTitle, MYSQL_TYPE_VAR_STRING );
+		HeadEnd();
+		if ( szValue )
+			PutString ( szValue );
+		else
+			PutNULL();
+		Commit();
+		Eof();
+		return true;
+	}
+
 	virtual const CSphString & GetError() const { return m_sError; }
 	virtual bool IsError() const { return m_bError; }
 

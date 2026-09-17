@@ -18,6 +18,31 @@
 #include "searchd.cpp"
 #include "daemon/api_commands.h"
 
+TEST ( searchd_stuff, knn_auto_limit_and_max_matches )
+{
+	CSphQuery tQuery;
+	tQuery.m_iLimit = 1200;
+	tQuery.m_iMaxMatches = DEFAULT_MAX_MATCHES;
+	auto & tKNN = tQuery.m_dKnnSettings.Add();
+	tKNN.m_iK = -1;
+	tKNN.m_bRescore = false;
+
+	SetupKNNLimit(tQuery);
+	EXPECT_EQ ( tKNN.m_iK, 1200 );
+
+	CSphQuery tCappedQuery;
+	tCappedQuery.m_iLimit = 1200;
+	tCappedQuery.m_iMaxMatches = 900;
+	tCappedQuery.m_bExplicitMaxMatches = true;
+	auto & tCappedKNN = tCappedQuery.m_dKnnSettings.Add();
+	tCappedKNN.m_iK = -1;
+	tCappedKNN.m_bRescore = false;
+
+	SetupKNNLimit(tCappedQuery);
+	EXPECT_EQ ( tCappedKNN.m_iK, 900 );
+}
+
+
 #if POLLING_EPOLL
 // different aspects of epoll internals
 TEST ( searchd_stuff, epoll_behaviour )

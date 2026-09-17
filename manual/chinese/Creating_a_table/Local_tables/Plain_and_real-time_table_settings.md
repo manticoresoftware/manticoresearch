@@ -45,6 +45,8 @@ table <table name> {
   [rt_attr_float = <another float field name>]
   [rt_attr_float_vector = <float vector field name>]
   [rt_attr_float_vector = <another float vector field name>]
+  [rt_attr_float_vector_array = <float vector array field name>]
+  [rt_attr_float_vector_array = <another float vector array field name>]
   [rt_attr_bool = <boolean field name>]
   [rt_attr_bool = <another boolean field name>]
   [rt_attr_string = <string field name>]
@@ -107,7 +109,7 @@ type = rt
 path = path/to/table
 ```
 
-表将被存储或定位的路径，绝对路径或相对路径均可，不含扩展名。
+表将被存储或定位的路径，绝对路径或相对路径均可，不含扩展名。当 `indexer` 构建 plain 表时，会自动创建该路径中缺失的父目录。运行 `indexer` 的用户必须对最近的现有父目录拥有写权限。
 
 值：表的路径，**必填**
 
@@ -538,6 +540,37 @@ knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2",
 
 有关 KNN 向量搜索和自动嵌入的更多详细信息，请参阅 [KNN 文档](../../Searching/KNN.md)。
 
+#### rt_attr_float_vector_array
+
+```ini
+rt_attr_float_vector_array = chunk_vectors
+```
+
+声明一个属性，用于在每个文档中保存多个浮点向量，适合天然由多个 embedding 表示的文档：文章的分块、商品的照片、视频的关键帧。
+
+值：字段名。允许多个记录。
+
+KNN 的配置方式与 [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) 完全相同，使用同样的 `knn` 块：
+
+```ini
+rt_attr_float_vector_array = chunk_vectors
+knn = {"attrs":[{"name":"chunk_vectors","type":"hnsw","dims":768,"hnsw_similarity":"COSINE","hnsw_m":16,"hnsw_ef_construction":200}]}
+```
+
+适用两个差异：
+
+- 当显式提供向量时，`dims` 是**必需**的，并且每一行中的每个向量都必须恰好包含这么多元素。使用 `model_name` 时必须**省略**它。
+- `model_name`/`from` 可与多向量 `chunk_strategy`（`fixed`、`recursive` 或 `sentence`）一起使用，它会为每个 chunk 填充一个向量：
+
+```ini
+rt_attr_float_vector_array = chunk_vectors
+knn = {"attrs":[{"name":"chunk_vectors","type":"hnsw","hnsw_similarity":"COSINE","model_name":"Xenova/all-MiniLM-L6-v2","from":"title,content","chunk_strategy":"sentence","max_tokens":256,"overlap_tokens":32}]}
+```
+
+  完整选项列表和 `ALTER` 限制请参见 [Chunking strategies](../../Searching/KNN.md#Chunking-strategies)。
+
+所有向量会一起建立索引，KNN 搜索会让每个文档只返回一次，并按其最近向量得分。参见 [Float vector array](../../Creating_a_table/Data_types.md#Float-vector-array) 和 [每个文档多个向量](../../Searching/KNN.md#Multiple-vectors-per-document)。
+
 #### rt_attr_bool
 
 ```ini
@@ -702,6 +735,7 @@ CREATE TABLE [IF NOT EXISTS] name ( <field name> <field data type> [data type op
 | [bigint](../../Creating_a_table/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bigint)	| 大整数	 |   |
 | [float](../../Creating_a_table/Data_types.md#Float) | [rt_attr_float](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float)   | 浮点数  |   |
 | [float_vector](../../Creating_a_table/Data_types.md#Float-vector) | [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) | 浮点值的向量  |   |
+| [float_vector_array](../../Creating_a_table/Data_types.md#Float-vector-array) | [rt_attr_float_vector_array](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector_array) | 每个文档包含多个浮点向量 |   |
 | [multi](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi)   | 多整数 | mva |
 | [multi64](../../Creating_a_table/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi_64) | 多大整数  | mva64 |
 | [bool](../../Creating_a_table/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bool) | 布尔值 |   |
@@ -775,7 +809,7 @@ Manticore支持两种访问模式来读取表数据：seek+read和mmap。
 
 在mmap访问模式下，搜索服务器使用`mmap`系统调用将表文件映射到内存中，操作系统会缓存文件内容。在该模式下，[read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs)和[read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits)选项对相应文件无效。mmap读取器还可以使用`mlock`特权调用将表数据锁定在内存中，防止操作系统将缓存数据交换到磁盘。
 
-要控制使用哪种访问模式，可以使用以下选项：**access_plain_attrs**、**access_blob_attrs**、**access_doclists**、**access_hitlists**和**access_dict**，其值如下：
+要控制使用哪种访问模式，可以使用 **access_plain_attrs**、**access_blob_attrs**、**access_doclists**、**access_hitlists**、**access_dict**、**access_columnar_attrs** 和 **access_secondary** 选项，它们支持以下取值：
 
 | 值 | 描述 |
 | - | - |
@@ -792,6 +826,8 @@ Manticore支持两种访问模式来读取表数据：seek+read和mmap。
 | access_doclists   | **file** (默认), mmap, mlock  | 控制`*.spd`（文档列表）数据的读取方式 |
 | access_hitlists   | **file** (默认), mmap, mlock  | 控制`*.spp`（命中列表）数据的读取方式 |
 | access_dict   | mmap, **mmap_preread** (默认), mlock  | 控制`*.spi`（字典）的读取方式 |
+| access_columnar_attrs | file, **mmap**（默认） | 控制如何读取 `*.spc`（列式属性） |
+| access_secondary | **file**（默认）, mmap | 控制如何读取 `*.spidx` 和 `*.spjidx`（二级索引） |
 
 以下表格可以帮助您选择所需的模式：
 
@@ -799,10 +835,11 @@ Manticore支持两种访问模式来读取表数据：seek+read和mmap。
 | - | - | - | - | - |
 | [行式](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)（非列式）存储的普通属性、跳过列表、词列表、查找、已删除文档 |  mmap | mmap | **mmap_preread** (默认) | mlock |
 | 行式字符串、多值属性（MVA）和json属性 | mmap | mmap | **mmap_preread** (默认) | mlock |
-| [列式](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)数字、字符串和多值属性 | 总是 | 仅通过操作系统 | 否 | 不支持 |
+| [列式](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)数值、字符串和多值属性 | file | **mmap**（默认） | 否 | 不支持 |
 | 文档列表 | **file** (默认) | mmap | 否 | mlock |
 | 命中列表 | **file** (默认) | mmap | 否 | mlock |
 | 字典 | mmap | mmap | **mmap_preread** (默认) | mlock |
+| 二级索引 | **file**（默认） | mmap | 否 | 不支持 |
 
 ##### 建议如下：
 
@@ -815,8 +852,8 @@ Manticore支持两种访问模式来读取表数据：seek+read和mmap。
 默认模式提供了以下平衡：
 * mmap，
 * 预读非列式属性，
-* 无预读地查找和读取列式属性，
-* 无预读地查找和读取文档列表/命中列表。
+* 对列式属性进行内存映射，不预读，
+* 不预读，直接查找并读取文档列表、命中列表和二级索引。
 
 这在大多数情况下提供了良好的搜索性能、最佳的内存利用率和更快的searchd重启。
 

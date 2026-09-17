@@ -3,6 +3,11 @@ apt-get update -y> /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
+export DEBIAN_FRONTEND="noninteractive"
+apt-get install -y apt-utils > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
 apt-get install -y iproute2 procps > /dev/null; echo $?
 ––– output –––
 0

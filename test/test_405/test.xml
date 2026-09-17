@@ -4,10 +4,16 @@
 <name>alter table settings</name>
 <requires>
 	<force-rt/>
+	<lemmatizer_base/>
 </requires>
 <skip_indexer/>
 
 <config>
+common
+{
+	lemmatizer_base	= <local>lemmatizer_base</local>
+}
+
 searchd
 {
 	<searchd_Settings/>
@@ -83,6 +89,11 @@ SELECT id FROM test15e WHERE MATCH('walk') ORDER BY id ASC;
 <!-- invalid normalization/case-sensitive values should fail -->
 CREATE TABLE test15f (title TEXT) profile='Relevance';
 CREATE TABLE test15g (title TEXT) boolean_mode='OR';
+
+<!-- German AOT generations and single/all modes are mutually exclusive -->
+CREATE TABLE test15_de_generation (title TEXT) morphology='lemmatize_de, lemmatize_de_v2';
+CREATE TABLE test15_de_mode (title TEXT) morphology='lemmatize_de_v2, lemmatize_de_v2_all';
+
 CREATE TABLE test15h (title TEXT) profile='relevance' min_infix_len='4';
 SHOW CREATE TABLE test15h;
 SHOW TABLE test15h SETTINGS;

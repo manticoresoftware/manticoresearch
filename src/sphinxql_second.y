@@ -27,6 +27,7 @@
 %token	TOK_ATTACH
 %token	TOK_ATTRIBUTES
 %token  TOK_AUTH
+%token	TOK_BACKUP
 %token	TOK_BACKTICKED_SUBKEY
 %token	TOK_BAD_NUMERIC
 %token	TOK_CACHE
@@ -100,6 +101,7 @@ statement:
 	| flush_hostnames
 	| flush_logs
 	| drop_cache
+	| backup
 	| reload_plugins
 	| reload_index
     | reload_indexes
@@ -114,7 +116,7 @@ statement:
 //////////////////////////////////////////////////////////////////////////
 
 ident_no_option:
-	TOK_ATTACH | TOK_ATTRIBUTES | TOK_CLUSTER | TOK_COMMITTED | TOK_COMPRESS | TOK_FLUSH | TOK_FREEZE | TOK_GLOBAL
+	TOK_ATTACH | TOK_ATTRIBUTES | TOK_BACKUP | TOK_CLUSTER | TOK_COMMITTED | TOK_COMPRESS | TOK_FLUSH | TOK_FREEZE | TOK_GLOBAL
 	| TOK_HOSTNAMES | TOK_INDEX | TOK_INDEXES | TOK_ISOLATION | TOK_KILL | TOK_LEVEL | TOK_LIKE | TOK_LOGS | TOK_OFF
 	| TOK_ON | TOK_QUERY | TOK_RAMCHUNK | TOK_READ | TOK_RECONFIGURE | TOK_REPEATABLE | TOK_DELETE | TOK_EXIT
 	| TOK_RTINDEX | TOK_SERIALIZABLE | TOK_SESSION | TOK_SET | TOK_TABLE | TOK_TABLES | TOK_TO
@@ -409,6 +411,59 @@ drop_cache:
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_DROP_CACHE;
 		}
+	;
+
+backup:
+	TOK_BACKUP
+		{
+			pParser->m_pStmt->m_eStmt = STMT_BACKUP;
+		}
+	| TOK_BACKUP TOK_TO backup_tail_opt
+		{
+			pParser->m_pStmt->m_eStmt = STMT_BACKUP;
+		}
+	| TOK_BACKUP index_or_table one_or_more_indexes TOK_TO backup_tail_opt
+		{
+			pParser->m_pStmt->m_eStmt = STMT_BACKUP;
+		}
+	| TOK_BACKUP indexes_or_tables one_or_more_indexes TOK_TO backup_tail_opt
+		{
+			pParser->m_pStmt->m_eStmt = STMT_BACKUP;
+		}
+	;
+
+backup_tail_opt:
+	// empty
+	| backup_tail
+	;
+
+backup_tail:
+	backup_tail_token
+	| backup_tail backup_tail_token
+	;
+
+backup_tail_token:
+	ident_all
+	| TOK_AUTH
+	| TOK_CACHE
+	| TOK_QUOTED_STRING
+	| TOK_CONST_INT
+	| TOK_CONST_FLOAT
+	| TOK_DOT_NUMBER
+	| TOK_SYSVAR
+	| TOK_USERVAR
+	| TOK_BACKTICKED_SUBKEY
+	| TOK_BAD_NUMERIC
+	| TOK_SYSTEM_DOT
+	| '='
+	| ','
+	| '/'
+	| '\\'
+	| ':'
+	| '.'
+	| '-'
+	| '+'
+	| '*'
 	;
 
 //////////////////////////////////////////////////////////////////////////

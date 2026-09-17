@@ -93,8 +93,8 @@ query_log_format = plain
 ```
 
 其中：
-* `real-time` 是从查询开始到结束的端到端时间。在 SphinxQL 日志中，它对应 `real` 字段。
-* `wall-time` 是 Manticore 的内部查询墙时间指标。在 SphinxQL 日志中，它对应 `wall` 字段，且此值也用于 `query_log_min_msec`。对于分布式和多源查询，`wall-time` 可能与 `real-time` 不同。
+* `real-time` 是从查询开始到结束的端到端耗时。在查询日志中，它对应 `real` 字段。
+* `wall-time` 是 Manticore 的内部查询墙钟时间指标。在查询日志中，它对应 `wall` 字段，并且 `query_log_min_msec` 使用的也是这个值。对于分布式和多源查询，`wall-time` 可能与 `real-time` 不同。
 * `perf-stats`包括当Manticore以`--cpustats`（或通过`SET GLOBAL cpustats=1`启用）和/或`--iostats`（或通过`SET GLOBAL iostats=1`启用）启动时的CPU/IO统计信息：
   - `ios`是执行的文件I/O操作数；
   - `kb`是从表文件读取的数据量（以千字节为单位）；

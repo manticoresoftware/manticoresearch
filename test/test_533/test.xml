@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>chunked auto-embeddings</name>
+
+<requires>
+	<knn/>
+	<knn_float_tolerance/>
+	<embeddings/>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	<!-- option validation -->
+	create table t (title text, n int chunk_strategy='sentence');
+	create table t (title text, v float_vector_array chunk_strategy='sentence');
+	create table t (title text, v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' chunk_strategy='sentence');
+	create table t (title text, v float_vector_array knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' max_tokens='128');
+	create table t (title text, v float_vector_array knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' chunk_strategy='truncate' max_tokens='128');
+	create table t (title text, v float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' chunk_strategy='sentence' max_tokens='128');
+	create table t (title text, v float_vector_array knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' chunk_strategy='fixed' overlap_tokens='16');
+	create table t (title text, v float_vector_array knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' chunk_strategy='fixed' max_tokens='0' overlap_tokens='16');
+	create table t (title text, v float_vector_array knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' chunk_strategy='paragraph');
+	create table t (title text, v float_vector_array knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' chunk_strategy='fixed' max_tokens='abc');
+	create table t (title text, v float_vector_array knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' chunk_strategy='fixed' max_tokens='-1');
+
+	<!-- accepted shapes -->
+	create table t (title text, v float_vector_array knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' chunk_strategy='fixed' max_tokens='100' overlap_tokens='50');
+	show create table t;
+	drop table t;
+
+	<!-- a single-vector strategy is valid on either column type; on an array it stores a 1-element array -->
+	create table t (title text, v float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' chunk_strategy='mean');
+	show create table t;
+	drop table t;
+
+	<!-- SHOW CREATE -->
+	create table t (title text, v float_vector_array knn_type='hnsw' hnsw_similarity='cosine' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' chunk_strategy='sentence' max_tokens='64' overlap_tokens='8' max_chunks='16');
+	show create table t;
+	insert into t (id, title) values (1, 'The cat sat on the mat. Dogs bark loudly at night. Ships cross the ocean slowly.');
+	insert into t (id, title) values (2, 'One short sentence.');
+	insert into t (id, title, v) values (3, 'Explicitly empty vector', ());
+	select id from t where knn(v, 5, 'a dog barking') order by id asc;
+	flush ramchunk t;
+	select id from t where knn(v, 5, 'a dog barking') order by id asc;
+</sphinxql>
+
+<!-- meta must survive a reload -->
+<sphinxql system="restart-daemon-no-warnings"/>
+
+<sphinxql>
+	show create table t;
+	select id from t where knn(v, 5, 'a dog barking') order by id asc;
+	drop table t;
+
+	<!-- ALTER: model-backed arrays can not be added, since existing rows can not be embedded -->
+	create table t (title text, n int);
+	insert into t values (1, 'some text', 7);
+	alter table t add column v float_vector_array knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title';
+	<!-- the same column on a scalar vector is fine and backfills -->
+	alter table t add column s float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' chunk_strategy='mean';
+	show create table t;
+	select id from t where knn(s, 5, 'some text');
+	<!-- rebuild re-embeds with the persisted strategy -->
+	alter table t rebuild embeddings s;
+	select id from t where knn(s, 5, 'some text');
+	drop table t;
+
+	<!-- rebuilding a model-backed array is rejected too -->
+	create table t (title text, v float_vector_array knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' chunk_strategy='mean');
+	insert into t values (1, 'some text', ());
+	alter table t rebuild embeddings v;
+	drop table t;
+</sphinxql>
+</queries>
+
+</test>

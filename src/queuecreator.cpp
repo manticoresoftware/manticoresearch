@@ -344,7 +344,7 @@ private:
 	bool	SetupMatchesSortingFunc();
 	bool	SetupGroupSortingFunc ( bool bGotDistinct );
 	bool	AddGroupbyStuff();
-	void	AddKnnDistSort ( CSphString & sSortBy );
+	void	AddKnnDistSort ( CSphString & sSortBy, bool bMatchSort );
 	void	AddHybridScoreSort ( CSphString & sSortBy );
 	bool	CheckNoInternalUuidSortRefs ( const CSphString & sSortBy ) const;
 	bool	SetGroupSorting();
@@ -1130,7 +1130,14 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	{
 		CSphQueryItem tUuidItem = tItem;
 		tUuidItem.m_sExpr = sphGetUuidDocidName();
-		if ( tUuidItem.m_sAlias.IsEmpty() || tUuidItem.m_sAlias==sphGetDocidName() )
+		bool bNeedsDocid = m_tQuery.m_eQueryType==QUERY_SQL && m_tQuery.m_dItems.any_of ( [&] ( const CSphQueryItem & tQueryItem )
+		{
+			const CSphColumnInfo * pField = m_tSettings.m_tSchema.GetField ( tQueryItem.m_sExpr.cstr() );
+			return tQueryItem.m_sExpr=="*" || ( pField && ( pField->m_uFieldFlags & CSphColumnInfo::FIELD_STORED ) );
+		} );
+		if ( bNeedsDocid )
+			tUuidItem.m_sAlias = sphGetUuidDocidName();
+		else if ( tUuidItem.m_sAlias.IsEmpty() )
 			tUuidItem.m_sAlias = sphGetDocidName();
 		return ParseResolvedQueryItem ( tUuidItem );
 	}
@@ -1799,7 +1806,8 @@ bool QueueCreator_c::AddKNNDistColumn()
 // calc here yields a null calc and crashes, so rescore must be skipped.
 bool QueueCreator_c::CanRescoreKNN() const
 {
-	if ( m_tQuery.m_bHybridSearch || !m_tQuery.HasKnn() )
+	// Merge queues receive already-computed shard values and must not evaluate sorter expressions again.
+	if ( !m_tSettings.m_bComputeItems || m_tQuery.m_bHybridSearch || !m_tQuery.HasKnn() )
 		return false;
 
 	const auto & tKNN = m_tQuery.SingleKnnSettings();
@@ -1818,8 +1826,18 @@ bool QueueCreator_c::AddKNNRescoreColumn()
 	if ( !CanRescoreKNN() )
 		return true;
 
+	const auto & tKNN = m_tQuery.SingleKnnSettings();
 	CSphColumnInfo tKNNDistRescored ( GetKnnDistRescoreAttrName(), SPH_ATTR_FLOAT );
-	tKNNDistRescored.m_eStage = SPH_EVAL_SORTER;
+	// Small requests use the original final-stage expression and therefore need no collector pass.
+	if ( UseBatchedKNNRescore(tKNN) )
+		tKNNDistRescored.m_eStage = SPH_EVAL_SORTER;
+	else
+	{
+		const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
+		assert(pAttr);
+		tKNNDistRescored.m_eStage = SPH_EVAL_FINAL;
+		tKNNDistRescored.m_pExpr = CreateExpr_KNNDistRescore ( tKNN.m_dVec, *pAttr );
+	}
 
 	m_pSorterSchema->AddAttr ( tKNNDistRescored, true );
 	m_hQueryColumns.Add ( tKNNDistRescored.m_sName );
@@ -2397,9 +2415,9 @@ void QueueCreator_c::RemapAttrs ( CSphMatchComparatorState & tState, CSphVector<
 }
 
 
-void QueueCreator_c::AddKnnDistSort ( CSphString & sSortBy )
+void QueueCreator_c::AddKnnDistSort ( CSphString & sSortBy, bool bMatchSort )
 {
-	if ( m_tQuery.m_bHybridSearch )
+	if ( m_tQuery.m_bHybridSearch || ( bMatchSort && m_tSettings.m_bSkipKnnDistMatchSort ) )
 		return;
 
 	if ( m_pSorterSchema->GetAttr ( GetKnnDistAttrName() ) && !strstr ( sSortBy.cstr(), "knn_dist" ) )
@@ -2436,7 +2454,7 @@ bool QueueCreator_c::SetupMatchesSortingFunc()
 	if ( m_tQuery.m_eSort==SPH_SORT_EXTENDED )
 	{
 		CSphString sSortBy = m_tQuery.m_sSortBy;
-		AddKnnDistSort ( sSortBy );
+		AddKnnDistSort ( sSortBy, true );
 		AddHybridScoreSort ( sSortBy );
 
 		ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, sSortBy.cstr(), *m_pSorterSchema, m_eMatchFunc, m_tStateMatch, m_dMatchJsonExprs, m_tSettings.m_pJoinArgs.get(), m_sError );
@@ -2500,7 +2518,7 @@ bool QueueCreator_c::SetupGroupSortingFunc ( bool bGotDistinct )
 	CSphString sGroupOrderBy = m_tQuery.m_sGroupSortBy;
 	if ( sGroupOrderBy=="@weight desc" )
 	{
-		AddKnnDistSort ( sGroupOrderBy );
+		AddKnnDistSort ( sGroupOrderBy, false );
 		AddHybridScoreSort ( sGroupOrderBy );
 	}
 	if ( !CheckNoInternalUuidSortRefs ( sGroupOrderBy ) )
@@ -2723,14 +2741,17 @@ int QueueCreator_c::ReduceOrIncreaseMaxMatches() const
 		if ( m_tQuery.m_bExplicitMaxMatches )
 			return Max ( m_tSettings.m_iMaxMatches, 1 );
 
+		int64_t iWindow = m_tQuery.m_iLimit<0
+			? m_tSettings.m_iMaxMatches
+			: int64_t(m_tQuery.m_iLimit) + m_tQuery.m_iOffset;
 		int64_t iMaxRequested = 0;
 		for ( const auto & tKNN : m_tQuery.m_dKnnSettings )
-			if ( tKNN.m_fOversampling > 1.0f )
-			{
-				int64_t iRequested = tKNN.GetRequestedDocs();
-				if ( iRequested > tKNN.m_iK )
-					iMaxRequested = Max ( iMaxRequested, iRequested );
-			}
+		{
+			int64_t iRequested = tKNN.GetRequestedDocs();
+			int64_t iNeeded = tKNN.m_bRescore ? iRequested : Min ( iRequested, iWindow );
+			if ( iNeeded > iWindow || iNeeded > m_tSettings.m_iMaxMatches )
+				iMaxRequested = Max ( iMaxRequested, iNeeded );
+		}
 
 		if ( iMaxRequested > 0 )
 			return Max ( Max ( m_tSettings.m_iMaxMatches, iMaxRequested ), 1 );

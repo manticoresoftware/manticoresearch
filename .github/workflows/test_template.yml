@@ -23,6 +23,10 @@ on:
         required: false
         type: string
         default: ""
+      CTEST_PARAMS:
+        required: false
+        type: string
+        default: ""
       suite_name:
         required: false
         type: string
@@ -97,6 +101,7 @@ jobs:
         CTEST_START: ${{ inputs.CTEST_START }}
         CTEST_END: ${{ inputs.CTEST_END }}
         CTEST_REGEX: ${{ inputs.CTEST_REGEX }}
+        CTEST_PARAMS: ${{ inputs.CTEST_PARAMS }}
         CTEST_EXCLUDE_REGEX: ${{ inputs.CTEST_EXCLUDE_REGEX }}
         # The following is useful to test a specific test, just uncomment it, no need to disable CTEST_START/END
         # CTEST_REGEX: test_234

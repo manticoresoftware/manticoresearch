@@ -1205,6 +1205,13 @@ CSphString HAStrategyToStr ( HAStrategies_e eStrategy )
 	return "";
 }
 
+static bool IsIndexListChar ( char cChar )
+{
+	const BYTE uChar = (BYTE)cChar;
+	return uChar>=0x80 || sphIsAlpha ( cChar ) || cChar=='.';
+}
+
+
 void ParseIndexList ( const CSphString &sIndexes, StrVec_t &dOut )
 {
 	CSphString sSplit = sIndexes;
@@ -1214,8 +1221,8 @@ void ParseIndexList ( const CSphString &sIndexes, StrVec_t &dOut )
 	auto * p = const_cast<char *> ( sSplit.cstr() );
 	while ( *p )
 	{
-		// skip non-alphas
-		while ( *p && !isalpha ( *p ) && !isdigit ( *p ) && *p!='_' && *p!='.' && *p!='-' )
+		// skip non-name characters
+		while ( *p && !IsIndexListChar ( *p ) )
 			p++;
 		if ( !( *p ) )
 			break;
@@ -1227,7 +1234,7 @@ void ParseIndexList ( const CSphString &sIndexes, StrVec_t &dOut )
 
 		// this is my next index name
 		const char * sNext = p;
-		while ( isalpha ( *p ) || isdigit ( *p ) || *p=='_' || *p=='.' || *p=='-' )
+		while ( IsIndexListChar ( *p ) )
 			p++;
 
 		assert ( sNext!=p );
@@ -3714,8 +3721,8 @@ private:
 			m_dInternalTasks.Add ( pTask );
 		} else
 		{
-			sphLogDebugL ( "- AddToQueue, ext=%d", m_pEnqueuedTasks ? m_pEnqueuedTasks->GetLength () + 1 : 1 );
 			ScopedMutex_t tLock ( m_dActiveLock );
+			sphLogDebugL ( "- AddToQueue, ext=%d", m_pEnqueuedTasks ? m_pEnqueuedTasks->GetLength () + 1 : 1 );
 			if ( !m_pEnqueuedTasks )
 				m_pEnqueuedTasks = new VectorTask_c;
 			m_pEnqueuedTasks->Add ( pTask );
@@ -3799,8 +3806,8 @@ public:
 
 		if ( bRemoveClosingFromEpoll )
 			events_change_io (pTask);
-		else
-			AddToQueue ( pTask, pConnection->InNetLoop () );
+
+		AddToQueue ( pTask, pConnection->InNetLoop () );
 	}
 
 	void DisableWrite ( AgentConn_t * pConnection )

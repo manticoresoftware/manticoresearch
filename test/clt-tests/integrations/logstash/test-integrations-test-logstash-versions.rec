@@ -107,13 +107,13 @@ input {
   }
 }
 filter {
+  mutate { remove_field => ["host", "event", "log"] }
   mutate {
     replace => {
       "@version" => "1"
       "path" => "$TEST_LOG"
+      "host" => "logstash-test"
     }
-    add_field => { "host" => "logstash-test" }
-    remove_field => ["event", "log"]
   }
 }
 output {
@@ -137,13 +137,13 @@ input {
   }
 }
 filter {
+  mutate { remove_field => ["host", "event", "log"] }
   mutate {
     replace => {
       "@version" => "1"
       "path" => "$TEST_LOG"
+      "host" => "logstash-test"
     }
-    add_field => { "host" => "%{[host][name]}" }
-    remove_field => ["event", "log", "[host][name]"]
   }
 }
 output {

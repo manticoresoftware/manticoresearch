@@ -1484,7 +1484,8 @@ function RunCurl ( $curl_desc, &$rows, &$response_headers=array(), $capture_head
 
 	$rows = preg_replace('/"time":\d+(\.\d+)*,/', '"time":0.000,', $rows);
 	$rows = preg_replace('/thread_stack=\d+K or higher required/', 'thread_stack=<N>K or higher required', $rows);
-	curl_close($con);
+	if ( PHP_VERSION_ID < 80500 )
+		curl_close($con);
 
 	return $http_code;
 }

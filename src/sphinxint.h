@@ -35,7 +35,14 @@
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-const DWORD		INDEX_FORMAT_VERSION		= 72;				///< float_vector_array attribute type
+
+// Beware: if you raise the version because of incompatible changes, avoid situation, when ALTER command writes new version of header,
+// but keep old state untouched.
+//
+// That is, if new v007 imply, index should contain file .spX, and should not contain .spY, and also .spZ is critically changed,
+// on apply ALTER command (change columns, settings, whatever) if you rewrite chunk header to your new vXXX, ensure you keep all the rest
+// changes also coherent (i.e. add .spX, remove .spY, regenerate .spZ, whatever).
+const DWORD		INDEX_FORMAT_VERSION		= 74;				///< v.72 (float_vector_array) with the docid lookup written in sync
 
 const char		MAGIC_CODE_SENTENCE			= '\x02';				// emitted from tokenizer on sentence boundary
 const char		MAGIC_CODE_PARAGRAPH		= '\x03';				// emitted from stripper (and passed via tokenizer) on paragraph boundary

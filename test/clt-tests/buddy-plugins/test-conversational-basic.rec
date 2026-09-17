@@ -191,6 +191,55 @@ mysql -h0 -P9306 -e "CALL CHAT('Can you explain more?', 'docs', 'test_assistant'
 #!/.*response: .+/!#
 #!/.*sources: \[\]/!#
 ––– comment –––
+Create a dedicated chat model for the endpoint probe. It is intentionally
+allowed to receive HTTP 502 responses and is never used by normal chat cases.
+––– input –––
+rm -f /tmp/chat-model-requests.log /tmp/mock-chat-model-server.php
+cat > /tmp/mock-chat-model-server.php <<'PHP'
+<?php
+$logFile = getenv('CHAT_MODEL_REQUEST_LOG') ?: '';
+if ($logFile !== '') {
+    file_put_contents($logFile, ($_SERVER['REQUEST_URI'] ?? '') . PHP_EOL, FILE_APPEND | LOCK_EX);
+}
+http_response_code(502);
+header('Content-Type: application/json');
+echo '{"error":{"message":"CLT endpoint probe"}}';
+PHP
+CHAT_MODEL_REQUEST_LOG=/tmp/chat-model-requests.log php -S 127.0.0.1:18087 /tmp/mock-chat-model-server.php > /tmp/mock-chat-model-server.log 2>&1 &
+MOCK_CHAT_PID=$!
+sleep 1
+mysql -h0 -P9306 << 'EOF'
+CREATE CHAT MODEL endpoint_probe_assistant (
+    model='openai:gpt-4o-mini',
+    api_key='chat-model-key',
+    base_url='http://127.0.0.1:18087/configured/v1/responses',
+    timeout=60
+);
+EOF
+––– output –––
++--------------------------+
+| name                     |
++--------------------------+
+| endpoint_probe_assistant |
++--------------------------+
+––– comment –––
+Test CALL CHAT uses the dedicated model-specific base_url rather than the environment default
+––– input –––
+mysql -h0 -P9306 -e "CALL CHAT('What is vector search?', 'docs', 'endpoint_probe_assistant')" > /dev/null 2>&1 || true
+sort -u /tmp/chat-model-requests.log
+––– output –––
+/configured/v1/responses
+––– comment –––
+Stop the local endpoint probe
+––– input –––
+kill "$MOCK_CHAT_PID" 2>/dev/null || true
+––– output –––
+––– comment –––
+Remove the dedicated endpoint-probe model
+––– input –––
+mysql -h0 -P9306 -e "DROP CHAT MODEL endpoint_probe_assistant;"
+––– output –––
+––– comment –––
 Test DROP CHAT MODEL - cleanup
 ––– input –––
 mysql -h0 -P9306 -e "DROP CHAT MODEL test_assistant;"

@@ -51,14 +51,18 @@ class DiskIndexChecker_c
 	std::unique_ptr<Impl_c> m_pImpl;
 
 public:
-			DiskIndexChecker_c ( CSphIndex& tIndex, DebugCheckError_i& tReporter );
+			DiskIndexChecker_c ( CSphIndex* pIndex, DebugCheckError_i& tReporter );
 			~DiskIndexChecker_c();
 
 	bool	OpenFiles ();
+	bool	ReadHeader(const CSphString& sVersion);
+	DWORD	GetVersion();
 	void	Setup ( int64_t iNumRows, int64_t iDocinfoIndex, int64_t iMinMaxIndex, bool bCheckIdDups );
 	CSphVector<SphWordID_t> & GetHitlessWords();
 	void	Check();
 };
+
+std::optional<DWORD> ValidateHeaderAndReadVersion ( const CSphString& sHeader );
 
 // common code for debug checks in RT and disk indexes
 void DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, DebugCheckReader_i & tBlobs, int64_t nRows, int64_t iMinMaxBytes, const CSphSchema & tSchema, DebugCheckError_i & tReporter );

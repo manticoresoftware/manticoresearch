@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>plain table path creates missing parent directories</name>
+
+<requires>
+	<non-rt/>
+	<non-windows/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source src
+{
+	type = csvpipe
+	csvpipe_command = echo "1,hello world"
+	csvpipe_field = title
+}
+
+index idx
+{
+	source = src
+	path = <data_path path="issue4793"/>/tenant1234/project1/idx
+}
+</config>
+
+<queries>
+	<query index="idx">hello</query>
+</queries>
+
+</test>

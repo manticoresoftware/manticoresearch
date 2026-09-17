@@ -50,7 +50,7 @@ SELECT
 }
 ```
 
-Note: When conducting a fuzzy search via SQL, the MATCH clause should not contain any full-text operators except the [phrase search operator](../Searching/Full_text_matching/Operators.md#Phrase-search-operator) and should only include the words you intend to match.
+Note: When conducting a fuzzy search via SQL, the MATCH clause should not contain any full-text operators except the [phrase search operator](../Searching/Full_text_matching/Operators.md#Phrase-search-operator) and should only include the words you intend to match. Characters that normally act as operators and require [escaping](../Searching/Full_text_matching/Escaping.md) don't need to be escaped, as fuzzy search escapes them for you.
 
 <!-- intro -->
 ##### SQL:
@@ -167,7 +167,7 @@ POST /search
 }
 ```
 
-Note: If you use the [query_string](../Searching/Full_text_matching/Basic_usage.md#query_string), be aware that it does not support full-text operators except the [phrase search operator](../Searching/Full_text_matching/Operators.md#Phrase-search-operator). The query string should consist solely of the words you wish to match.
+Note: If you use the [query_string](../Searching/Full_text_matching/Basic_usage.md#query_string), be aware that it does not support full-text operators except the [phrase search operator](../Searching/Full_text_matching/Operators.md#Phrase-search-operator). The query string should consist solely of the words you wish to match. You do not need to escape characters that normally act as [full-text operators](../Searching/Full_text_matching/Escaping.md), as fuzzy search escapes them for you.
 
 ### Options
 

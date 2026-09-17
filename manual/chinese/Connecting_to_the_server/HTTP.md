@@ -726,7 +726,7 @@ curl 0:9308/cli_json -d 'desc test'
 
 在持久连接上，守护进程会保留一些状态，后续查询可以使用这些状态。此状态对于 /sql、/sql?mode=raw 和 /cli_json 端点是保留的，但不适用于 /cli。这使得可以通过 HTTP JSON 进行有状态的交互。例如，当您使用 [/cli_json](../Connecting_to_the_server/HTTP.md#/cli_json) 时，可以在同一连接上 `SELECT` 之后运行 `SHOW META`，类似于使用 MySQL 客户端。
 
-要通过一个连接使用 sphinxql 运行多个查询，您需要使用 curl 的 `--next` 键将命令链接起来：
+要通过同一个连接使用 `curl` 运行多个 SQL 查询，你需要用以下方式把命令串联起来
 curl -s localhost:9312/cli_json -d "CALL PQ ('pq', ('{"title":"angry", "gid":3 }'))" --next localhost:9312/cli_json -d 'show meta'
 
 ```

@@ -1,0 +1,50 @@
+––– comment –––
+Regression for issue 4860. A delayed remote auto-embedding bulk insert must not leave an RT accumulator with a dangling table pointer if DROP TABLE removes the table while PreCommit waits for embeddings.
+The test issues DROP TABLE only after the mock has observed the embeddings request, so the fixed daemon should keep searchd alive, finish the bulk insert, and then let DROP complete.
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --host 127.0.0.1 --port 8086 --provider openai --delay 4.0 > /tmp/mock-server-4860.log 2>&1 &
+echo "Mock server started"
+for i in $(seq 1 50); do
+  if grep -q 'listening on http://127.0.0.1:8086/v1/embeddings' /tmp/mock-server-4860.log 2>/dev/null; then break; fi
+  sleep 0.1
+done
+––– output –––
+Mock server started
+––– input –––
+mysql -E -h0 -P9306 -e "CREATE TABLE issue4860 (title TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://127.0.0.1:8086/v1/embeddings' API_TIMEOUT='15')"; echo $?
+––– output –––
+0
+––– input –––
+: > /tmp/mock-server-4860.log
+rm -f /tmp/issue4860_bulk.out /tmp/issue4860_bulk.rc /tmp/issue4860_drop.out
+(
+  curl -sS -X POST http://127.0.0.1:9308/bulk -H "Content-Type: application/x-ndjson" --data-binary @- > /tmp/issue4860_bulk.out 2>&1 <<'NDJSON'
+{"insert":{"index":"issue4860","id":1,"doc":{"title":"alpha"}}}
+{"insert":{"index":"issue4860","id":2,"doc":{"title":"beta"}}}
+NDJSON
+  echo $? > /tmp/issue4860_bulk.rc
+) &
+bulk_pid=$!
+request_seen=0
+for i in $(seq 1 100); do
+  if grep -q 'Mock embeddings request: POST /v1/embeddings' /tmp/mock-server-4860.log 2>/dev/null; then request_seen=1; break; fi
+  sleep 0.1
+done
+if [ "$request_seen" -eq 1 ]; then echo "embedding request observed"; else echo "embedding request missing"; fi
+mysql -E -h0 -P9306 -e "DROP TABLE issue4860" > /tmp/issue4860_drop.out 2>&1
+drop_rc=$?
+wait "$bulk_pid" || true
+bulk_rc=$(cat /tmp/issue4860_bulk.rc 2>/dev/null || echo missing)
+echo "drop rc: $drop_rc"
+echo "bulk curl rc: $bulk_rc"
+if mysql -E -h0 -P9306 -e "SELECT 1" >/dev/null 2>&1; then echo "searchd alive"; else echo "searchd down"; fi
+if grep -qE 'FATAL: CRASH DUMP|Handling signal' /var/log/manticore/searchd.log; then echo "log crashed"; else echo "no crash"; fi
+if grep -qE 'RtAccum_t::RebuildStoragesForEmbeddings|PrepareAccForSave|PreCommit' /var/log/manticore/searchd.log; then echo "issue4860 stack"; else echo "no issue4860 stack"; fi
+––– output –––
+embedding request observed
+drop rc: 0
+bulk curl rc: 0
+searchd alive
+no crash
+no issue4860 stack

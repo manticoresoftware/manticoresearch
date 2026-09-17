@@ -8,6 +8,7 @@ set ( LIBS_BUNDLE "$ENV{LIBS_BUNDLE}" )
 set ( DISABLE_GTESTS "$ENV{DISABLE_GTESTS}" )
 set ( CTEST_REGEX "$ENV{CTEST_REGEX}" )
 set ( CTEST_EXCLUDE_REGEX "$ENV{CTEST_EXCLUDE_REGEX}" )
+set ( CTEST_PARAMS "$ENV{CTEST_PARAMS}" )
 set ( CTEST_START "$ENV{CTEST_START}" )
 set ( CTEST_END "$ENV{CTEST_END}" )
 set ( SEARCHD_CLI_EXTRA "$ENV{SEARCHD_CLI_EXTRA}" )
@@ -176,6 +177,10 @@ set ( ctest_test_args ${ctest_test_args} RETURN_VALUE retcode REPEAT UNTIL_PASS:
 if ( CTEST_REGEX )
 	set ( ctest_test_args ${ctest_test_args} INCLUDE "${CTEST_REGEX}" )
 endif()
+
+if (CTEST_PARAMS)
+	set ( ctest_test_args ${ctest_test_args} ${CTEST_PARAMS} )
+endif ()
 
 if (CTEST_EXCLUDE_REGEX)
 	set ( ctest_test_args ${ctest_test_args} EXCLUDE "${CTEST_EXCLUDE_REGEX}" )

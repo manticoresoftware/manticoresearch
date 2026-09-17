@@ -1841,17 +1841,10 @@ static void TryToAddPoly2dFilters ( const CreateFilterContext_t & tCtx, const CS
 }
 
 
-static void AddKNNDistFilter ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, std::unique_ptr<ISphSchema> & pModifiedMatchSchema )
+std::unique_ptr<ISphSchema> BuildKNNDistFilter ( const ISphSchema & tSrcSchema, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree )
 {
-	if ( !tCtx.m_bAddKNNDistFilter )
-		return;
-
-	assert ( tCtx.m_pMatchSchema );
-	if ( !tCtx.m_pMatchSchema->GetAttr ( GetKnnDistAttrName() ) )
-		return;
-
-	pModifiedMatchSchema = std::unique_ptr<ISphSchema> ( pModifiedMatchSchema ? pModifiedMatchSchema->CloneMe() : tCtx.m_pMatchSchema->CloneMe() );
-	const auto * pKNNDistAttr = pModifiedMatchSchema->GetAttr ( GetKnnDistAttrName() );
+	std::unique_ptr<ISphSchema> pNewSchema { tSrcSchema.CloneMe() };
+	const auto * pKNNDistAttr = pNewSchema->GetAttr ( GetKnnDistAttrName() );
 	assert(pKNNDistAttr);
 
 	(const_cast<CSphColumnInfo*>(pKNNDistAttr))->m_eStage = Min ( pKNNDistAttr->m_eStage, SPH_EVAL_PREFILTER );
@@ -1880,6 +1873,32 @@ static void AddKNNDistFilter ( const CreateFilterContext_t & tCtx, CSphVector<CS
 		tAnd.m_iRight = iLeaf;
 		tAnd.m_bOr = false;
 	}
+
+	return pNewSchema;
+}
+
+
+bool CanAddKNNDistFilter ( const ISphSchema & tSchema )
+{
+	const CSphColumnInfo * pAttr = tSchema.GetAttr ( GetKnnDistAttrName() );
+
+	// no expression means the hybrid-search placeholder column
+	return pAttr && pAttr->m_pExpr;
+}
+
+
+static void AddKNNDistFilter ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, std::unique_ptr<ISphSchema> & pModifiedMatchSchema )
+{
+	if ( !tCtx.m_bAddKNNDistFilter )
+		return;
+
+	assert ( tCtx.m_pMatchSchema );
+	if ( !tCtx.m_pMatchSchema->GetAttr ( GetKnnDistAttrName() ) )
+		return;
+
+	// safe to assign over pModifiedMatchSchema here: this runs inside TransformFilters, before the
+	// caller repoints tFlx.m_pMatchSchema at it
+	pModifiedMatchSchema = BuildKNNDistFilter ( pModifiedMatchSchema ? *pModifiedMatchSchema : *tCtx.m_pMatchSchema, dModified, dModifiedTree );
 }
 
 

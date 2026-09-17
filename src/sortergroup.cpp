@@ -727,12 +727,16 @@ private:
 		if ( bFinalize )
 		{
 			SortGroups();
+
+			// a finalized sorter can still receive matches: MoveTo() of other (chunk) sorters pushes into it
+			// after FinalizeMatches(). PushGrouped() dedups groups through m_hGroup2Match, so it must be
+			// rebuilt here in every case - otherwise the same group gets a second entry, and the next cut
+			// removes its distinct container twice (manticoresearch#4856)
+			RebuildHash();
+
 			if constexpr ( DISTINCT )
 				if ( !m_bSortByDistinct ) // since they haven't counted at the top
-				{
-					RebuildHash(); // distinct uses m_hGroup2Match
-					CountDistinct();
-				}
+					CountDistinct(); // distinct uses m_hGroup2Match
 		} else
 		{
 			// we've called CalcAvg ( Avg_e::FINALIZE ) before partitioning groups

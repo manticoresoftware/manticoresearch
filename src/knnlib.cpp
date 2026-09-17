@@ -104,8 +104,14 @@ std::unique_ptr<knn::TextToEmbeddings_i> CreateTextToEmbeddings ( const knn::Mod
 		return nullptr;
 	}
 
+	// user-facing semantic is "API_TIMEOUT=0 means use the default"; the lib treats a raw 0 as "no timeout",
+	// so never let a 0 through (it can arrive from DDL/ALTER before the meta round-trip normalizes it)
+	knn::ModelSettings_t tFixedSettings = tSettings;
+	if ( tFixedSettings.m_iAPITimeout<=0 )
+		tFixedSettings.m_iAPITimeout = knn::ModelSettings_t().m_iAPITimeout;
+
 	std::string sErrorSTL;
-	auto pRes = std::unique_ptr<knn::TextToEmbeddings_i> ( g_pEmbeddingsLib->CreateTextToEmbeddings ( tSettings, sErrorSTL ) );
+	auto pRes = std::unique_ptr<knn::TextToEmbeddings_i> ( g_pEmbeddingsLib->CreateTextToEmbeddings ( tFixedSettings, sErrorSTL ) );
 	sError = sErrorSTL.c_str();
 	return pRes;
 }

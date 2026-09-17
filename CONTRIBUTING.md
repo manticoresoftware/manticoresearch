@@ -47,5 +47,10 @@ If you are fixing a regression, add/update a functional test.
 The commit message should contain a short summary of changes. If there is an open issue about the changes you are making, please include in the commit message the issue number.
 
 When everything is ready, submit a pull request.  The pull request title should sum up the changes made and in the body provide more details about what your changes do.
+
+Manticore uses a Contributor License Agreement so we can maintain licensing compatibility across Manticore Search and components built from its code, including integrations with other open-source projects. You retain ownership of your contribution.
+
+Before we can accept your contribution, all committers in the pull request must sign the Manticore Software Contributor License Agreement. CLA Assistant will post a comment with the signing link and update the pull request status after everyone has signed.
+
 Be patient, it my take a while until your pull request gets accepted. 
 

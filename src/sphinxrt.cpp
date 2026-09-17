@@ -13150,7 +13150,12 @@ bool RtIndex_c::AttachRtChunksExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, 
 		if ( !AttachRtChunkExtCopy ( *pChunkIndex, *pChunkIndex, iChunk, pSrcFileBuilder.get(), pDstFileBuilder.get(), hExtCache, sDstPath, sError ) )
 			return false;
 
-		if ( !tChunk->Cidx().RewriteHeader ( sError ) )
+		// the rewritten header carries the fixed format version; bring the docid lookup
+		// in sync first, in the same operation (#4852)
+		if ( !pChunkIndex->UpgradeDocidLookup ( sError ) )
+			return false;
+
+		if ( !pChunkIndex->RewriteHeader ( sError ) )
 			return false;
 
 		dOthers.Add ( tChunk );

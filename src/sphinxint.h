@@ -35,7 +35,11 @@
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-const DWORD		INDEX_FORMAT_VERSION		= 72;				///< float_vector_array attribute type
+// v.71 (uuid entries in the docid lookup) and v.72 (float_vector_array) headers are "suspect": daemons
+// writing them could rewrite a header on ALTER without converting the .spt lookup (manticoresearch#4852),
+// so a v.71/v.72 header must have its lookup layout verified on load. v.73 and v.74 are their fixed twins
+// (73 = the v.71 feature set, 74 = v.72's), written only with the lookup in sync and never checked.
+const DWORD		INDEX_FORMAT_VERSION		= 74;				///< v.72 (float_vector_array) with the docid lookup written in sync
 
 const char		MAGIC_CODE_SENTENCE			= '\x02';				// emitted from tokenizer on sentence boundary
 const char		MAGIC_CODE_PARAGRAPH		= '\x03';				// emitted from stripper (and passed via tokenizer) on paragraph boundary

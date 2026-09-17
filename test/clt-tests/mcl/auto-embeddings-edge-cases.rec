@@ -302,7 +302,7 @@ mysql -h0 -P9306 -e "SELECT id FROM test_compare_col WHERE KNN(vec, 1, 'machine 
 ––– comment –––
 Load 5000 documents into columnar table with complex schema
 ––– input –––
-timeout 120 manticore-load --init="CREATE TABLE test_scale_columnar (
+timeout 120 manticore-load --quiet --json --init="CREATE TABLE test_scale_columnar (
     id BIGINT,
     title TEXT,
     description TEXT,

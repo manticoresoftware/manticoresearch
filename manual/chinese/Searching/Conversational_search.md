@@ -108,8 +108,8 @@ curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
 ```sql
 CREATE CHAT MODEL support_assistant (
     model='openai:gpt-4o-mini',
-    api_key='your-provider-api-key',
-    base_url='http://host.docker.internal:8787/v1',
+    api_key='your-azure-entra-token',
+    base_url='https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1/responses',
     timeout=60,
     retrieval_limit=5,
     max_document_length=3000
@@ -125,7 +125,7 @@ CREATE CHAT MODEL support_assistant (
 ```bash
 curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
   -H 'Content-Type: text/plain' \
-  -d "CREATE CHAT MODEL support_assistant (model='openai:gpt-4o-mini', api_key='your-provider-api-key', base_url='http://host.docker.internal:8787/v1', timeout=60, retrieval_limit=5, max_document_length=3000)"
+  -d "CREATE CHAT MODEL support_assistant (model='openai:gpt-4o-mini', api_key='your-azure-entra-token', base_url='https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1/responses', timeout=60, retrieval_limit=5, max_document_length=3000)"
 ```
 
 <!-- end -->
@@ -160,6 +160,31 @@ environment:
 ```
 
 如果没有在 `CREATE CHAT MODEL` 中设置 `api_key`，`llm` 扩展可以使用匹配的提供方环境变量。只有当你需要让这个模型使用不同的 key 时，才在聊天模型中设置 `api_key`。
+
+## 本地 OpenAI 兼容模型
+
+LM Studio 可以将本地模型用于 Conversational Search。对于不在 `openai:*` 目录中的本地模型标识符，请将 `openrouter:*` 传输方式与 LM Studio 的 Chat Completions 端点配合使用。当 Buddy 在 Docker 中运行时，请使用 `host.docker.internal` 访问主机上的服务器。
+
+<!-- example conversational_search_create_local_model -->
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE CHAT MODEL local_assistant (
+    model='openrouter:google_gemma-4-e4b-it',
+    api_key='lm-studio',
+    base_url='http://host.docker.internal:1234/v1/chat/completions',
+    timeout=60,
+    retrieval_limit=5
+);
+```
+
+<!-- end -->
+
+`api_key` 是 LM Studio 接受的非机密占位符；不要为本地服务器使用真实的提供商密钥。`llm` 扩展会根据其支持的 OpenAI 模型名称校验 `openai:*` 的模型部分，因此即使 LM Studio 已加载该模型，`openai:google_gemma-4-e4b-it` 也会被拒绝。`openrouter:*` 传输方式接受本地标识符，并可通过 `base_url` 指向 OpenAI 兼容的 Chat Completions 服务器。Conversational Search 要求本地模型能够可靠地为 Buddy 的路由模式返回 OpenAI 函数调用。请使用 `CALL CHAT` 进行测试；仅测试基本文本补全或简单的工具调用是不够的。
 
 ## `CALL CHAT` 语法
 

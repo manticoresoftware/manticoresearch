@@ -528,7 +528,7 @@ knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2",
 - `hnsw_ef_construction`：构建时间/准确性权衡（默认：200）
 
 **自动嵌入参数**（当使用 `model_name` 时）：
-- `model_name`：要使用的嵌入模型（例如，`"Xenova/all-MiniLM-L6-v2"` 适用于快速的 ONNX 路径 - 浏览 [Hugging Face 上的 ONNX 模型](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm)；也支持 `"sentence-transformers/all-MiniLM-L6-v2"`；OpenAI 可使用 `"openai/text-embedding-ada-002"`）。指定后必须省略 `dims`，因为模型会自动决定维度。
+- `model_name`: 要使用的嵌入模型（例如，快速 ONNX 路径可用 `"Xenova/all-MiniLM-L6-v2"` — 浏览 [Hugging Face 上的 ONNX 模型](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm)；也支持 `"sentence-transformers/all-MiniLM-L6-v2"`；OpenAI 可用 `"openai/text-embedding-ada-002"`）。指定后必须省略 `dims`，因为模型会自动决定维度。速度对比表和实用建议请参阅[选择本地嵌入模型](../../Searching/KNN.md#Choosing-a-local-embedding-model)。
 - `from`：用于生成嵌入的字段名称列表（逗号分隔），或空字符串 `""` 表示使用所有文本/字符串字段。当指定 `model_name` 时，此参数是必需的。
 - `api_key`：基于 API 的模型（OpenAI、Voyage、Jina）的 API 密钥。仅在使用基于 API 的嵌入服务时需要。
 - `cache_path`：下载模型的缓存路径（用于 sentence-transformers 模型）。

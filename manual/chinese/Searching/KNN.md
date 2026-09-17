@@ -105,7 +105,7 @@ table test_vec {
 | 模型类型 | 示例 | 需要 API 密钥 | 说明 |
 |------------|---------|-----------------|-------|
 | **ONNX（推荐）** | `Xenova/all-MiniLM-L6-v2` | 否 | 来自任何提供 `.onnx` 文件的 Hugging Face 仓库的本地模型。运行在 Manticore 高速的 ONNX Runtime 后端上。浏览列表：[feature-extraction ONNX 模型](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm)。 |
-| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | 否 | 基于 BERT 的本地模型，会自动下载。仍然支持 - 在可用时优先使用上面的 ONNX。 |
+| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | 否 | 本地 BERT 模型，会自动下载。权重与上方 ONNX 行相同，但在 CPU 上生成嵌入要慢 10–20 倍；如果仓库提供 ONNX，请优先使用 ONNX。参见[选择本地嵌入模型](../Searching/KNN.md#Choosing-a-local-embedding-model)。 |
 | **Qwen** | `Qwen/Qwen3-Embedding-0.6B` | 否 | 本地 Qwen 系列模型 |
 | **Llama** | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | 否 | 本地 Llama 系列模型 |
 | **Mistral** | `Locutusque/TinyMistral-248M-v2` | 否 | 本地 Mistral 系列模型 |
@@ -120,6 +120,21 @@ table test_vec {
 - 已测试模型：`TinyLlama/TinyLlama-1.1B-Chat-v1.0`、`Locutusque/TinyMistral-248M-v2`、`Qwen/Qwen3-Embedding-0.6B`、`h2oai/embeddinggemma-300m`
 - 这些家族中的其他模型也可能可用，但不保证
 - 对于受限制的 Hugging Face 仓库，请将你的 Hugging Face 访问令牌作为 `API_KEY` 传入
+
+##### 选择本地嵌入模型
+
+`MODEL_NAME` 不仅决定质量，还决定**每个文档在 CPU 上生成嵌入的速度，差距可达一个数量级**（参见[使用 ONNX 让嵌入速度提升 14 倍](https://manticoresearch.com/blog/onnx-embeddings-speedup/)）。提供 `.onnx` 文件的仓库会在 ONNX Runtime 后端运行；同一个模型的 `safetensors` 仓库则会走慢得多的 Candle 路径。以下为近似数据，基于一台小型 4-vCPU 实例和较短（约 300 字符）文档测得：
+
+| 模型 | 格式 | 维度 | 下载大小 | CPU 速度 |
+|---|---|---|---|---|
+| `Xenova/all-MiniLM-L6-v2` | ONNX | 384 | ~90 MB | ~30–40 文档/秒 |
+| `sentence-transformers/all-MiniLM-L6-v2` | safetensors | 384 | ~90 MB | ~2–3 文档/秒 |
+| `BAAI/bge-base-en-v1.5` | safetensors | 768 | ~420 MB | ~2–3 文档/秒 |
+
+* **建议从 `Xenova/all-MiniLM-L6-v2` 开始** — 上面示例使用的就是这个模型。它既适合交互式查询，也适合批量写入，质量足以满足大多数搜索应用。
+* **更高的排行榜名次通常不值得在 CPU 上付出写入成本。** 从小型 ONNX 模型换成更大的 `safetensors` 模型，通常会让每个文档的嵌入成本提高 10–20 倍，而最终相关性只会有很小变化。在切换到“更好”的模型之前，请先用你自己的几十条查询和文本，与默认模型做对比。
+* **大规模写入前先做估算。** 嵌入成本是线性的：每个文档的毫秒数乘以行数。按约 300 ms/文档计算，15,000 个文档大约需要 75 分钟；按约 30 ms/文档计算，则不到 10 分钟。先向临时表插入几百条真实数据并据此外推，再决定是否将生产表绑定到某个模型。
+* **写入慢的症状通常指向模型，而不是设置。** 如果插入很慢，或批量加载出现嵌入超时和重试，常见原因是模型不是 ONNX，或者模型过大。切换到 ONNX 仓库即可解决；提高 [`embeddings_threads`](../Server_settings/Searchd.md#embeddings_threads) 不会让慢模型变快，还可能让并发任务拿不到工作线程。
 
 关于配置 `float_vector` 属性的更多信息，请参见[这里](../Creating_a_table/Data_types.md#Float-vector)。
 

@@ -1,0 +1,55 @@
+––– comment –––
+Issue #4678 regression: concurrent HTTP /sql queries and SHOW THREADS must not
+crash searchd by copying a live CSphQuery from QueryInfo_t owned by another task.
+The dataset is generated with manticore-load. A heavy JSON /search workload
+keeps non-SQL query state active while HTTP raw SQL issues SHOW THREADS; the
+reported crash was in HttpRawSqlHandler while rendering SHOW THREADS.
+––– block: ../base/start-searchd –––
+––– input –––
+rm -f /tmp/issue4678_curl_*.cfg /tmp/issue4678_curl_*.rc /tmp/issue4678_curl_*.err
+manticore-load --quiet --host=127.0.0.1 --port=9306 --drop --batch-size=250 --threads=4 --total=5000 --init="CREATE TABLE issue4678(title text, tag string, gid uint)" --load="INSERT INTO issue4678(id,title,tag,gid) VALUES(<increment>,'alpha beta gamma delta omega vector thread query manticore search <increment>','tag<int/0/17>',<int/0/97>)" > /dev/null
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK issue4678;" > /dev/null
+add_http_query() {
+  cfg="$1"
+  data="$2"
+  {
+    echo 'url = "http://127.0.0.1:9308/sql?mode=raw"'
+    echo 'request = "POST"'
+    echo 'header = "Content-Type: application/x-www-form-urlencoded"'
+    printf 'data = "%s"\n' "$data"
+    echo 'output = "/dev/null"'
+    echo 'next'
+  } >> "$cfg"
+}
+for batch in $(seq 1 3); do
+  cfg="/tmp/issue4678_curl_${batch}.cfg"
+  for n in $(seq 1 3000); do
+    add_http_query "$cfg" 'query=SHOW+THREADS+OPTION+format%3Dsphinxql'
+    add_http_query "$cfg" 'query=SHOW+THREADS'
+    add_http_query "$cfg" 'query=SELECT+id%2C+weight%28%29+FROM+issue4678+WHERE+MATCH%28%27alpha+beta+gamma%27%29+ORDER+BY+weight%28%29+DESC+LIMIT+20+OPTION+max_matches%3D1000'
+    add_http_query "$cfg" 'query=SELECT+gid%2C+count%28%2A%29+c+FROM+issue4678+WHERE+MATCH%28%27thread+query+search%27%29+GROUP+BY+gid+ORDER+BY+c+DESC+LIMIT+20+OPTION+max_matches%3D2000'
+  done
+  sed -i '$d' "$cfg"
+done
+for batch in $(seq 1 3); do
+  cfg="/tmp/issue4678_curl_${batch}.cfg"
+  (
+    curl -sS -Z --parallel-immediate --parallel-max 24 --connect-timeout 5 --max-time 30 -K "$cfg" > /dev/null 2> "/tmp/issue4678_curl_${batch}.err"
+    echo $? > "/tmp/issue4678_curl_${batch}.rc"
+  ) &
+done
+wait
+failed=0
+for rc in /tmp/issue4678_curl_*.rc; do [ "$(cat "$rc")" = 0 ] || failed=1; done
+echo enough_requests
+[ "$failed" = 0 ] && echo clients_ok || echo client_errors
+if [ "$failed" != 0 ]; then head -c 200 /tmp/issue4678_curl_*.err | tr '\n' ' ' | sed 's/^/first_error /'; echo; fi
+mysql -h0 -P9306 -e "SELECT 1" > /dev/null; echo $?
+if grep -qE 'FATAL: CRASH DUMP|Handling signal' /var/log/manticore/searchd.log; then echo log_crashed; else echo no_crash; fi
+if grep -qE 'QueryInfo_t::Render|CSphQuery::CSphQuery|_ZN11QueryInfo_t6Render|_ZN9CSphQuery|HttpRawSqlHandler' /var/log/manticore/searchd.log; then echo queryinfo_stack; else echo no_queryinfo_stack; fi
+––– output –––
+enough_requests
+clients_ok
+0
+no_crash
+no_queryinfo_stack

@@ -1,0 +1,50 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tbl_fz(username text) min_infix_len='2' expand_keywords='1' shards='2' rf='1'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO tbl_fz (id, username) VALUES (1,'RICHARD'),(2,'RICARDO'),(3,'MARIA'),(4,'MARINA'),(5,'JOHN')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM tbl_fz ORDER BY id ASC"
+––– output –––
++------+----------+
+| id   | username |
++------+----------+
+|    1 | RICHARD  |
+|    2 | RICARDO  |
+|    3 | MARIA    |
+|    4 | MARINA   |
+|    5 | JOHN     |
++------+----------+
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM tbl_fz WHERE MATCH('RICHERD') ORDER BY id ASC OPTION fuzzy=1"
+––– output –––
++------+----------+
+| id   | username |
++------+----------+
+|    1 | RICHARD  |
++------+----------+
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM tbl_fz WHERE MATCH('MARIA') ORDER BY id ASC OPTION fuzzy=1"
+––– output –––
++------+----------+
+| id   | username |
++------+----------+
+|    3 | MARIA    |
+|    4 | MARINA   |
++------+----------+
+––– input –––
+mysql -h0 -P1306 -e "CALL AUTOCOMPLETE('RICH', 'tbl_fz', 1 AS fuzziness)"
+––– output –––
++---------+
+| query   |
++---------+
+| richard |
+| ricardo |
++---------+

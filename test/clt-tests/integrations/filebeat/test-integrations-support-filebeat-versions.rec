@@ -10,7 +10,7 @@ apt-get update > /dev/null 2>&1 && apt-get install -y curl jq > /dev/null 2>&1; 
 ––– output –––
 0
 ––– input –––
-timeout 420 bash -c 'echo "[]" > /tmp/filebeat_tags.json; page=1; attempts=0; max_attempts=3; while [ $attempts -lt $max_attempts ]; do attempts=$((attempts+1)); if curl -s --fail --max-time 10 "https://hub.docker.com/v2/repositories/elastic/filebeat/tags/?page_size=1000&page=$page" | tee /tmp/page.json | jq -e ".next" > /dev/null; then jq -r ".results[].name" /tmp/page.json >> /tmp/filebeat_tags.json; page=$((page+1)); attempts=0; else break; fi; done; jq -r ".results[].name" /tmp/page.json >> /tmp/filebeat_tags.json; VERSIONS=$(cat /tmp/filebeat_tags.json | grep -E "^([7-9]|[1-9][0-9]+).[0-9]+.[0-9]+$" | grep -E "^(7.(1[7-9]|[2-9][0-9])|[8-9].[0-9]+|9.[0-9]+|[1-9][0-9]+.[0-9]+).[0-9]+$" | sed -E "s/^([0-9]+.[0-9]+).[0-9]+$/\1/" | grep -v "rc|beta|alpha" | sort -V | uniq); echo "$VERSIONS"; mkdir -p /tmp/filebeat_cache; echo "Preparation done"; for version in $VERSIONS; do archive="/tmp/filebeat_cache/filebeat-${version}.0-linux-x86_64.tar.gz"; echo ">>> Checking Filebeat $version ..."; if [ -f "$archive" ] && gzip -t "$archive" >/dev/null 2>&1; then echo "✓ Archive for $version is OK"; else echo ">>> Downloading Filebeat $version ..."; wget -q --timeout=30 "https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-${version}.0-linux-x86_64.tar.gz" -O "$archive" && { if gzip -t "$archive" >/dev/null 2>&1; then echo "✓ Archive for $version is OK"; else echo "✗ Archive for $version is corrupted"; rm -f "$archive"; fi; }; fi; done'
+timeout 420 bash -c 'TOKEN=$(curl -fsSL --retry 3 --retry-all-errors --max-time 30 "https://auth.docker.io/token?service=registry.docker.io&scope=repository:elastic/filebeat:pull" | jq -er ".token"); curl -fsSL --retry 3 --retry-all-errors --max-time 30 -H "Authorization: Bearer $TOKEN" "https://registry-1.docker.io/v2/elastic/filebeat/tags/list?n=10000" | jq -er ".tags[]" > /tmp/filebeat_tags.json; VERSIONS=$(grep -E "^([7-9]|[1-9][0-9]+).[0-9]+.[0-9]+$" /tmp/filebeat_tags.json | grep -E "^(7.(1[7-9]|[2-9][0-9])|[8-9].[0-9]+|9.[0-9]+|[1-9][0-9]+.[0-9]+).[0-9]+$" | sed -E "s/^([0-9]+.[0-9]+).[0-9]+$/\\1/" | grep -v "rc|beta|alpha" | sort -V | uniq); echo "$VERSIONS"; mkdir -p /tmp/filebeat_cache; echo "Preparation done"; for version in $VERSIONS; do archive="/tmp/filebeat_cache/filebeat-${version}.0-linux-x86_64.tar.gz"; echo ">>> Checking Filebeat $version ..."; if [ -f "$archive" ] && gzip -t "$archive" >/dev/null 2>&1; then echo "✓ Archive for $version is OK"; else echo ">>> Downloading Filebeat $version ..."; wget -q --timeout=30 "https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-${version}.0-linux-x86_64.tar.gz" -O "$archive" && { if gzip -t "$archive" >/dev/null 2>&1; then echo "✓ Archive for $version is OK"; else echo "✗ Archive for $version is corrupted"; rm -f "$archive"; fi; }; fi; done'
 ––– output –––
 7.17
 8.0
@@ -38,6 +38,7 @@ timeout 420 bash -c 'echo "[]" > /tmp/filebeat_tags.json; page=1; attempts=0; ma
 9.2
 9.3
 9.4
+9.5
 Preparation done
 >>> Checking Filebeat 7.17 ...
 >>> Downloading Filebeat 7.17 ...
@@ -117,6 +118,9 @@ Preparation done
 >>> Checking Filebeat 9.4 ...
 >>> Downloading Filebeat 9.4 ...
 ✓ Archive for 9.4 is OK
+>>> Checking Filebeat 9.5 ...
+>>> Downloading Filebeat 9.5 ...
+✓ Archive for 9.5 is OK
 ––– input –––
 set +H && mkdir -p /tmp/filebeat_cache && echo "Preparation done"
 ––– output –––
@@ -688,6 +692,19 @@ timeout 60 bash /tmp/filebeat-single-test.sh 9.4
 ✓ Row count check for 9.4: 5 rows
 ✓ Structure check for 9.4: passed
 ✓ Filebeat version 9.4 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 9.5
+––– output –––
+>>> Testing Filebeat version: 9.5
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Testing Filebeat 9.5 with filestream input and fingerprint disabled...
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 9.5 processed logs
+✓ Row count check for 9.5: 5 rows
+✓ Structure check for 9.5: passed
+✓ Filebeat version 9.5 tested successfully
 ––– input –––
 rm -rf /tmp/fb-data-* /tmp/fb-log-*.txt /tmp/page.json /tmp/filebeat_tags.json
 ––– output –––

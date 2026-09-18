@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>long exact phrase query stack accounting</name>
+
+<skip_indexer/>
+
+<requires>
+<http/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+	thread_stack = 1M
+}
+
+index t_4730
+{
+	type = rt
+	path = <data_path/>/t_4730
+	rt_field = title
+}
+</config>
+
+<httpqueries>
+<!--
+	310 terms was the production crash threshold on Linux with matching documents.
+	Keep it accepted here to prove the fix does not reject merely-long phrases.
+-->
+<repeat count="310" vars="term" init="0" inc="1" skip="1"><var name="phrase310" delimiter=" ">word<term format="%04d"/></var></repeat>
+<query endpoint="search" content="application/json">{"table":"t_4730","limit":0,"query":{"query_string":"@title \"<phrase310/>\""}}</query>
+
+<!--
+	A much wider phrase deterministically exercises the stack estimate itself.
+	Before the fix, phrase-like leaf nodes are counted as height 1, so this returns
+	HTTP 200. After the fix, the stack guard charges one ExtNode per phrase term
+	and rejects it before execution.
+-->
+<repeat count="8000" vars="term" init="0" inc="1" skip="1"><var name="phrase8000" delimiter=" ">word<term format="%04d"/></var></repeat>
+<query endpoint="search" content="application/json">{"table":"t_4730","limit":0,"query":{"query_string":"@title \"<phrase8000/>\""}}</query>
+</httpqueries>
+
+</test>

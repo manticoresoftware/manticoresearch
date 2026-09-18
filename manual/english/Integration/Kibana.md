@@ -17,11 +17,13 @@
 > Note: Manticore does not require authentication setup when working with Kibana. Also note that Manticore must work in [real-time mode](../Read_this_first.md#Real-time-mode-vs-plain-mode) to be integrated with Kibana.
 
 ### Manticore configuration example
+
 ```searchd {
     listen = 127.0.0.1:9308:http
     pid_file = /var/run/manticore/searchd.pid
     data_dir = /var/lib/manticore
  }
+```
 
 ## Supported Features
 ### Discover

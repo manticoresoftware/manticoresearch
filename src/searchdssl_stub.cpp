@@ -12,6 +12,18 @@
 
 #include "searchdssl.h"
 
+bool SecretEqual ( const VecTraits_T<BYTE> & dA, const VecTraits_T<BYTE> & dB )
+{
+	if ( dA.IsEmpty() || dB.IsEmpty() || dA.GetLength()!=dB.GetLength() )
+		return false;
+
+	unsigned int uDiff = 0;
+	for ( int i = 0; i<dA.GetLength(); ++i )
+		uDiff |= dA[i] ^ dB[i];
+
+	return uDiff==0;
+}
+
 #if WITH_SSL
 
 // these stubs for non-daemon (i.e. for tests)

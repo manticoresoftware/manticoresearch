@@ -16,6 +16,7 @@
 #ifndef _sphinxutils_
 #define _sphinxutils_
 
+#include "sphinxdefs.h"
 #include "std/stringhash.h"
 #include "std/stringbuilder.h"
 
@@ -32,6 +33,22 @@ inline int sphIsAlphaOnly ( int c )
 {
 	return ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' );
 }
+
+enum class IdentifierValidation_e : BYTE
+{
+	ALLOW_NONE,
+	ALLOW_LEADING_DIGIT,
+	ALLOW_PATH_PUNCTUATION,
+	ALLOW_LEADING_DIGIT_AND_PATH_PUNCTUATION
+};
+
+/// Validate a user-defined table or field identifier.
+/// Non-ASCII characters must form valid UTF-8; ASCII is limited to letters,
+/// digits, and underscores. A leading digit is allowed only when quoted in SQL
+/// or when read from quote-less configuration syntax. Dots and dashes can be
+/// enabled only for flattened/internal compatibility-field paths.
+bool sphValidateIdentifier ( const char * szName, IdentifierValidation_e eValidation, int iMaxBytes, CSphString & sError );
+bool sphValidateTableName ( const char * szName, IdentifierValidation_e eValidation, CSphString & sError );
 
 inline bool sphIsInteger ( char c )
 {
@@ -157,8 +174,29 @@ using StrFunctor = std::function<void ( const char*, int )>;
 void sphSplitApply ( const char * sIn, int iSize, StrFunctor &&dFunc );
 void sphSplitApply ( const char * sIn, int iSize, const char * sBounds, StrFunctor && dFunc );
 
+enum class WildcardBufMode_e
+{
+	Legacy,
+	Extended
+};
+
+struct WildcardBuf_t : ISphNoncopyable
+{
+	explicit WildcardBuf_t ( WildcardBufMode_e eMode = WildcardBufMode_e::Legacy );
+
+	const int * DecodePattern ( const char * sPattern );
+	bool IsExtended() const { return m_eMode==WildcardBufMode_e::Extended; }
+
+	int					m_dString[SPH_MAX_WORD_LEN+1];
+	int					m_dPattern[SPH_MAX_WORD_LEN+1];
+	CSphVector<int>		m_dStringExt;
+	CSphVector<int>		m_dPatternExt;
+	CSphVector<int>		m_dDpExt;
+	WildcardBufMode_e	m_eMode = WildcardBufMode_e::Legacy;
+};
+
 /// string wildcard matching (case-sensitive, supports * and ? patterns)
-bool sphWildcardMatch ( const char * sSstring, const char * sPattern, const int * pPattern = NULL );
+bool sphWildcardMatch ( const char * sSstring, const char * sPattern, const int * pPattern = NULL, WildcardBuf_t * pExtBuf = nullptr );
 
 bool HasWildcard ( const char * sVal );
 
@@ -261,6 +299,14 @@ public:
 	{
 		CSphVariant * pEntry = (*this)( sKey );
 		return pEntry ? pEntry->intval() : iDefault;
+	}
+
+	std::optional<int> OptInt ( const char * sKey ) const
+	{
+		CSphVariant * pEntry = (*this)( sKey );
+		if (!pEntry)
+			return std::nullopt;
+		return pEntry->intval();
 	}
 
 	/// get float option value by key and default value

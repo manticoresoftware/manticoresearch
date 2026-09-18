@@ -1,6 +1,6 @@
 # 从 Sphinx Search 迁移
 
-## Sphinx 2.x -> Manticore 2.x  
+## Sphinx 2.x -> Manticore 2.x
 Manticore Search 2.x 与 Sphinxsearch 2.x 保持兼容，可以加载由 Sphinxsearch 创建的现有表。在大多数情况下，升级仅仅是替换二进制文件的问题。
 
 Manticore 默认使用 `/etc/manticoresearch/manticore.conf`，而不是 sphinx.conf（在 Linux中通常位于 `/etc/sphinxsearch/sphinx.conf`）。它还以不同的用户身份运行，并使用不同的文件夹。
@@ -11,7 +11,7 @@ Systemd 服务名称已从 `sphinx/sphinxsearch` 改为 `manticore`，服务以 
 
 如果您想使用 Manticore 文件夹，则需将表文件移动到新的数据文件夹（`/var/lib/manticore`），并将权限更改为用户 `manticore`。
 
-## Sphinx 2.x / Manticore 2.x -> Manticore 3.x  
+## Sphinx 2.x / Manticore 2.x -> Manticore 3.x
 从 Sphinx / Manticore 2.x 升级到 3.x 并不简单，因为表存储引擎进行了重大升级，新的 searchd 无法加载旧表并即时升级它们到新格式。
 
 Manticore Search 3 重新设计了表存储。由 Manticore/Sphinx 2.x 创建的表无法被 Manticore Search 3 加载，除非进行[转换](../Installation/Migration_from_Sphinx.md#index_converter)。由于 4GB 的限制，2.x 中的实时表在优化后仍可能有多个磁盘块。升级到 3.x 后，这些表现在可以通过常规的 [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 命令优化为单个磁盘块。索引文件也发生了变化。唯一没有结构变化的组件是 `.spp` 文件（命中列表）。`.sps`（字符串/JSON）和 `.spm`（MVA）现在被包含在 `.spb`（变长属性）中。新格式仍有 `.spm` 文件，但用作行映射（之前专用于 MVA 属性）。新增的扩展名有 `.spt`（docid 查找）、`.sphi`（二级索引直方图）、`.spds`（文档存储）。如果您使用脚本操作表文件，需调整以适应新文件扩展名。
@@ -20,7 +20,7 @@ Manticore Search 3 重新设计了表存储。由 Manticore/Sphinx 2.x 创建的
 
 有两个特殊要求需要注意：
 
-* 需要使用 [FLUSH RAMCHUNK](../Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK) 将实时表刷新  
+* 需要使用 [FLUSH RAMCHUNK](../Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK) 将实时表刷新
 * 带有 kill-list 的纯表需在表配置中添加新的指令（参见 [killlist_target](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)）
 
 Manticore Search 3 包含了一个新工具 - [index_converter](../Installation/Migration_from_Sphinx.md#index_converter) - 能够将 Sphinx 2.x / Manticore 2.x 表转换为 3.x 格式。`index_converter` 是一个独立的包，需要先安装。使用该转换工具创建 3.x 版本的表。`index_converter` 可以将新文件写入现有数据文件夹并备份旧文件，也可以写入指定文件夹。
@@ -29,8 +29,8 @@ Manticore Search 3 包含了一个新工具 - [index_converter](../Installation/
 
 如果您只有单台服务器：
 
-* 安装 manticore-converter 包  
-* 使用 index_converter 在与现有数据文件夹不同的文件夹中创建新版本的表（使用 `--output-dir` 选项）  
+* 安装 manticore-converter 包
+* 使用 index_converter 在与现有数据文件夹不同的文件夹中创建新版本的表（使用 `--output-dir` 选项）
 * 停止现有的 Manticore/Sphinx，升级至 3.0，将新表移入数据文件夹，启动 Manticore
 
 为了减少停机时间，您可以复制 2.x 的表、配置（需要修改表路径、日志路径及端口号）、二进制文件到一个单独位置，并在不同端口启动。指向应用程序到该地址。升级到 3.0 并启动新服务器后，再将应用程序指向正常端口。一切正常后，停止并删除 2.x 副本文件以释放空间。
@@ -39,7 +39,7 @@ Manticore Search 3 包含了一个新工具 - [index_converter](../Installation/
 
 客户端连接引擎的方式、查询模式或查询行为均未发生变化。
 
-## Sphinx / Manticore 2.x 与 Manticore 3.x 中的 kill-list 差异  
+## Sphinx / Manticore 2.x 与 Manticore 3.x 中的 kill-list 差异
 [Kill-list](../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md) 在 Manticore Search 3 中进行了重新设计。以前版本中，kill-list 是在查询时应用于每个已搜索表的结果集。
 
 因此，在 2.x 中，查询时表的顺序很重要。例如，如果一个增量表有 kill-list，为了对主表应用 kill-list，查询顺序必须是主表先，然后是增量表（无论是在分布式表中还是在 FROM 子句中）。
@@ -60,8 +60,8 @@ Manticore Search 3 包含了一个新工具 - [index_converter](../Installation/
 
 在 2.x 中，字符串属性需要使用 `REPLACE`，JSON 只能更新标量属性（因为它们是定长的），MVA 可以通过 MVA 池来更新。现在更新直接在 blob 组件上执行。可能需要调整的一个设置是 [attr_update_reserve](../Data_creation_and_modification/Updating_documents/UPDATE.md#attr_update_reserve)，该设置允许更改在 blob 末尾为避免频繁调整大小而分配的额外空间大小，当新值比现有 blob 中的值更大时。
 
-## Manticore 3.x 中的文档 ID
-文档 ID 过去是无符号 64 位整数。现在它们是正有符号 64 位整数。
+## Manticore 3.x 及更高版本中的文档 ID
+在 Manticore 3.x 的表文件中，文档 ID 已不再沿用旧版 Sphinx 2.x 仅支持无符号值的表示方式，而是通过有符号 64 位 `bigint` 接口暴露。当前 Manticore 版本支持无符号 64 位文档 ID 值，并会在索引或插入时拒绝负数文档 ID。在 MySQL/SQL 接口中，大于 `2^63-1` 的 ID 仍然可以按其有符号表示形式显示和过滤；使用 `UINT64(id)` 可以查看真实的无符号值。
 
 ## Manticore 3.x 中的 RT 模式
 请阅读有关 [RT 模式](../Read_this_first.md#Real-time-mode-vs-plain-mode) 的内容。
@@ -121,7 +121,7 @@ $ index_converter --config /home/myuser/manticore.conf --all --output-dir /new/p
 * `--index` 指定要转换的表
 * `--path` - 不使用配置文件，改为使用包含表的路径
 * `--strip-path` - 从表引用的文件名中去除路径：stopwords、exceptions 和 wordforms
-* `--large-docid` - 允许转换 ID 大于 2^63 的文档并显示警告，否则遇到过大的 ID 会直接报错退出。此选项是因为 Manticore 3.x 中文档 ID 是有符号 bigint，而之前是无符号的
+* `--large-docid` - 允许转换 `id` 大于 2^63 的文档并显示警告；否则，在遇到较大的 `id` 时转换会以错误退出。添加这个选项是为了兼容 Manticore 3.x 格式，因为 Sphinx/Manticore 2.x 使用的是无符号 doc id 值，其范围可能超过有符号 64 位的显示范围。
 * `--output-dir <dir>` - 将新文件写入指定文件夹，而不是放到现有表文件所在位置。设置此选项时，现有表文件将保持其原位置不变。
 * `--all` - 转换配置中的所有表
 * `--killlist-target <targets>` 设置要应用 kill-list 的目标表。此选项应仅与 `--index` 选项配合使用

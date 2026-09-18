@@ -198,11 +198,17 @@ public:
 		return Protect ( (const std::atomic<PTR>&) pMtVal );
 	}
 
+	template <typename PTR>
+	void SetGuard ( PTR pPointer )
+	{
+		assert ( m_pGuard );
+		m_pGuard->Set ( pPointer );
+	}
+
 	// simple unset current guard - to reuse the slot without reallocating.
 	void Release ()
 	{
-		assert ( m_pGuard );
-		m_pGuard->Set ( nullptr );
+		SetGuard ( nullptr );
 	}
 };
 

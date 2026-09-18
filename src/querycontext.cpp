@@ -36,6 +36,14 @@ static ESphEvalStage GetEarliestStage ( ESphEvalStage eStage, const CSphColumnIn
 
 CSphQueryContext::CSphQueryContext ( const CSphQuery & tQuery )
 	: m_tQuery ( tQuery )
+	, m_tQuerySettings ( tQuery )
+{
+}
+
+
+CSphQueryContext::CSphQueryContext ( const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings )
+	: m_tQuery ( tQuery )
+	, m_tQuerySettings ( tQuerySettings )
 {
 }
 

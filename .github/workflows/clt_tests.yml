@@ -43,9 +43,9 @@ jobs:
       VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
       JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
     outputs:
-      matrix: ${{ steps.build.outputs.matrix }}
+      matrix: ${{ steps.balance.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.ref }}
@@ -54,15 +54,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY2'
+          python3 - <<'PY'
           import json
           import os
           import pathlib
 
-          has_api_keys = any(
-              os.environ.get(name)
-              for name in ("OPENAI_API_KEY", "VOYAGE_API_KEY", "JINA_API_KEY")
-          )
+          openai_key = os.environ.get("OPENAI_API_KEY", "")
+          voyage_key = os.environ.get("VOYAGE_API_KEY", "")
+          jina_key = os.environ.get("JINA_API_KEY", "")
+          have_remote_embedding_keys = all([openai_key, voyage_key, jina_key])
 
           roots = [
               "test/clt-tests/buddy",
@@ -72,6 +72,7 @@ jobs:
               "test/clt-tests/data-manipulation",
               "test/clt-tests/expected-errors",
               "test/clt-tests/fulltext-search",
+              "test/clt-tests/mcl",
               "test/clt-tests/http-interface",
               "test/clt-tests/indexer",
               "test/clt-tests/join",
@@ -92,42 +93,32 @@ jobs:
               "test/clt-tests/vector-knn",
           ]
 
-          if has_api_keys:
-              roots.insert(7, "test/clt-tests/mcl")
-          else:
-              print("Skipping auto-embeddings tests - no API keys available")
-
           tests = []
           for root in roots:
               root_path = pathlib.Path(root)
               if not root_path.exists():
                   continue
               for path in sorted(root_path.glob("*.rec")):
+                  content = path.read_text(encoding="utf-8")
+                  if not have_remote_embedding_keys and "api_key='" in content.lower():
+                      continue
                   # clt appends "*.rec" to the prefix; strip the suffix to avoid ".rec*.rec"
                   tests.append(str(path.with_suffix("")))
 
-          total_jobs = 20
-          if not tests:
-              matrix = {"chunk": []}
-          else:
-              size = (len(tests) + total_jobs - 1) // total_jobs
-              chunks = []
-              for i in range(0, len(tests), size):
-                  group = tests[i : i + size]
-                  chunks.append(
-                      {
-                          "id": len(chunks),
-                          "tests": group,
-                          "test_prefix": "\n".join(group),
-                      }
-                  )
-              matrix = {"chunk": chunks}
-
-          print(f"Found {len(tests)} .rec tests across {len(matrix['chunk'])} jobs")
+          print(f"Found {len(tests)} .rec tests")
           output_path = os.environ["GITHUB_OUTPUT"]
           with open(output_path, "a", encoding="utf-8") as fh:
-              fh.write(f"matrix={json.dumps(matrix)}\n")
-          PY2
+              fh.write("tests<<EOF\n")
+              fh.write("\n".join(tests))
+              fh.write("\nEOF\n")
+          PY
+
+      - id: balance
+        name: Balance CLT tests
+        uses: manticoresoftware/clt/balance/plan@main
+        with:
+          tests: ${{ steps.build.outputs.tests }}
+          workers: 20
 
   clt:
     name: CLT
@@ -142,45 +133,215 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
+
     steps:
-      # Reuse the embedding-model cache from a previous run if one exists. It is bind-mounted
-      # at /var/lib/manticore/.cache, where Manticore caches downloaded HuggingFace models.
-      # After the tests, whatever the chunk downloaded is saved for the next run.
+      # Restore an opaque shared cache snapshot. The fan-in job merges subtrees changed by
+      # all legs and saves the next immutable cache generation after this matrix completes.
       # NOTE: this makes .cache a mountpoint, so tests must never `rm -rf /var/lib/manticore`
       # itself — wipe its contents instead (`rm -rf /var/lib/manticore/*` leaves .cache alone).
-      - id: model_cache
-        name: Restore model cache
-        uses: actions/cache/restore@v4
+      - name: Restore model cache
+        uses: actions/cache/restore@v5
         with:
           path: ${{ runner.temp }}/clt-model-cache
-          key: clt-models-v1-chunk-${{ matrix.chunk.id }}
+          key: clt-models-v2-linux-amd64-current
+          restore-keys: |
+            clt-models-v2-linux-amd64-
 
       - name: Ensure model cache dir
         shell: bash
         run: mkdir -p "${{ runner.temp }}/clt-model-cache" && chmod 777 "${{ runner.temp }}/clt-model-cache"
 
-      - uses: manticoresoftware/clt@0.7.8
+      - name: Snapshot model cache before CLT
+        if: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          find "${{ runner.temp }}/clt-model-cache" -mindepth 1 \( -type f -o -type l \) -printf '%P\t%y\t%s\t%T@\t%l\n' |
+            LC_ALL=C sort > "${{ runner.temp }}/clt-model-cache-before.tsv"
+
+      - id: run-clt
+        uses: manticoresoftware/clt@main
         with:
           artifact: ${{ inputs.artifact_name }}
           image: ${{ inputs.docker_image }}
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.ref }}
-          test_prefix: ${{ matrix.chunk.test_prefix }}
+          tests: ${{ toJSON(matrix.chunk.tests) }}
           comment_mode: failures
           run_args: "-e OPENAI_API_KEY -e VOYAGE_API_KEY -e JINA_API_KEY -v ${{ runner.temp }}/clt-model-cache:/var/lib/manticore/.cache"
           ui_host: "https://clt.manticoresearch.com"
 
       # Containers write model blobs as root with mode 600; make them readable so the
-      # runner user can pack them into the cache.
+      # runner user can upload changed cache subtrees.
       - name: Fix model cache permissions
-        if: ${{ always() && steps.model_cache.outputs.cache-hit != 'true' }}
+        if: ${{ always() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         shell: bash
         run: sudo chmod -R a+rX "${{ runner.temp }}/clt-model-cache" || true
 
-      - name: Save model cache
-        if: ${{ always() && steps.model_cache.outputs.cache-hit != 'true' }}
-        continue-on-error: true
-        uses: actions/cache/save@v4
+      - id: model_cache_delta
+        name: Stage changed model-cache folders
+        if: ${{ success() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cache="${{ runner.temp }}/clt-model-cache"
+          manifest="${{ runner.temp }}/clt-model-cache-before.tsv"
+          destination="${{ runner.temp }}/clt-model-cache-delta"
+          after="$manifest.after"
+
+          find "$cache" -mindepth 1 \( -type f -o -type l \) -printf '%P\t%y\t%s\t%T@\t%l\n' |
+            LC_ALL=C sort > "$after"
+          rm -rf "$destination"
+          mkdir -p "$destination"
+          touch "$destination/clt-artifact-empty-marker"
+
+          changed=false
+          while IFS= read -r root; do
+            [[ -n "$root" ]] || continue
+            source="$cache/$root"
+            [[ -e "$source" || -L "$source" ]] || continue
+            cp -a "$source" "$destination/"
+            changed=true
+          done < <(
+            LC_ALL=C comm -3 "$manifest" "$after" |
+              sed $'s/^\t//' |
+              cut -f1 |
+              cut -d/ -f1 |
+              LC_ALL=C sort -u
+          )
+          rm -f "$after"
+          printf 'changed=%s\n' "$changed" >> "$GITHUB_OUTPUT"
+
+      # Default-branch legs upload an artifact, including an empty marker. This lets the
+      # fan-in job run without special handling for a matrix where no model cache changed.
+      - name: Upload changed model-cache folders
+        if: ${{ success() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: clt-model-cache-${{ matrix.chunk.id }}
+          path: ${{ runner.temp }}/clt-model-cache-delta
+          overwrite: true
+          retention-days: 1
+
+      - name: Stage timing measurements
+        if: ${{ success() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+        shell: bash
+        run: |
+          mkdir -p "${{ runner.temp }}/clt-timing-artifact"
+          if [[ -f "${{ runner.temp }}/clt-model-cache/.clt-model-cache-ready" ]] && [[ "${{ steps.model_cache_delta.outputs.changed }}" == "false" ]] && [[ -f "${{ steps.run-clt.outputs.timing-results }}" ]]; then
+            cp "${{ steps.run-clt.outputs.timing-results }}" "${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv"
+          else
+            : > "${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv"
+          fi
+
+      - name: Upload timing measurements
+        if: ${{ success() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: clt-timings-${{ matrix.chunk.id }}
+          path: ${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv
+          overwrite: true
+          retention-days: 1
+
+  persist-clt-caches:
+    name: Persist CLT caches
+    needs: [clt]
+    # Publish shared model and timing baselines only after the merged change passes CLT.
+    if: ${{ needs.clt.result == 'success' && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Restore shared model cache
+        uses: actions/cache/restore@v5
         with:
           path: ${{ runner.temp }}/clt-model-cache
-          key: clt-models-v1-chunk-${{ matrix.chunk.id }}
+          key: clt-models-v2-linux-amd64-current
+          restore-keys: |
+            clt-models-v2-linux-amd64-
+
+      - id: baseline
+        name: Check shared model cache state
+        shell: bash
+        run: |
+          if [[ -f "${{ runner.temp }}/clt-model-cache/.clt-model-cache-ready" ]]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download changed model-cache folders
+        uses: actions/download-artifact@v7
+        with:
+          pattern: clt-model-cache-*
+          path: ${{ runner.temp }}/clt-model-cache-artifacts
+
+      - id: merge
+        name: Merge model-cache folders
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="${{ runner.temp }}/clt-model-cache"
+          artifacts="${{ runner.temp }}/clt-model-cache-artifacts"
+
+          mkdir -p "$baseline" "$artifacts"
+          changed=false
+          for artifact in "$artifacts"/clt-model-cache-*; do
+            [[ -d "$artifact" ]] || continue
+            rm -f "$artifact/clt-artifact-empty-marker"
+            if find "$artifact" -mindepth 1 -print -quit | grep -q .; then
+              rsync -a "$artifact/" "$baseline/"
+              changed=true
+            fi
+          done
+
+          touch "$baseline/.clt-model-cache-ready"
+          printf 'Merged %s model-cache files\n' "$(find "$baseline" -type f | wc -l | tr -d ' ')"
+          printf 'changed=%s\n' "$changed" >> "$GITHUB_OUTPUT"
+
+      - id: cache_key
+        name: Fingerprint merged model cache
+        if: ${{ steps.merge.outputs.changed == 'true' || steps.baseline.outputs.ready != 'true' }}
+        shell: bash
+        run: |
+          python3 - "${{ runner.temp }}/clt-model-cache" >> "$GITHUB_OUTPUT" <<'PY'
+          import hashlib
+          import os
+          import stat
+          import sys
+
+          root = os.fsencode(sys.argv[1])
+          digest = hashlib.sha256()
+
+          for directory, directories, filenames in os.walk(root, followlinks=False):
+              entries = sorted(directories + filenames)
+              for name in entries:
+                  path = os.path.join(directory, name)
+                  relative = os.path.relpath(path, root)
+                  mode = os.lstat(path).st_mode
+                  digest.update(relative)
+                  digest.update(b'\0')
+                  if stat.S_ISLNK(mode):
+                      digest.update(b'L\0')
+                      digest.update(os.readlink(path))
+                  elif stat.S_ISREG(mode):
+                      digest.update(b'F\0')
+                      with open(path, 'rb') as file:
+                          for block in iter(lambda: file.read(1024 * 1024), b''):
+                              digest.update(block)
+                  elif stat.S_ISDIR(mode):
+                      digest.update(b'D\0')
+                  else:
+                      raise RuntimeError(f'Unsupported model-cache entry: {os.fsdecode(relative)}')
+                  digest.update(b'\0')
+
+          print(f'hash={digest.hexdigest()}')
+          PY
+
+      - name: Save shared model cache
+        if: ${{ steps.merge.outputs.changed == 'true' || steps.baseline.outputs.ready != 'true' }}
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/clt-model-cache
+          key: clt-models-v2-linux-amd64-${{ steps.cache_key.outputs.hash }}
+
+      - name: Persist CLT timing cache
+        uses: manticoresoftware/clt/balance/merge-results@main

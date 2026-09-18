@@ -18,6 +18,7 @@
 #include "sphinxjson.h"
 #include "querycontext.h"
 #include "docstore.h"
+#include "indexsettings.h"
 
 static int64_t g_iJoinCacheSize = 20971520;
 static int g_iJoinBatchSize = 1000;
@@ -1826,7 +1827,15 @@ bool JoinSorter_c::SetupOnFilters ( CSphString & sError )
 		}
 
 		// FIXME! handle compound names for left table (e.g. 'table1.id')
-		const CSphColumnInfo * pAttr1 = m_pSorter->GetSchema()->GetAttr ( sAttrIdx1.cstr() );
+		const ISphSchema & tLeftSchema = *m_pSorter->GetSchema();
+		const CSphColumnInfo * pAttr1 = tLeftSchema.GetAttr ( sAttrIdx1.cstr() );
+		if ( sAttrIdx1==sphGetDocidName() )
+		{
+			const CSphColumnInfo * pUuid = tLeftSchema.GetAttr ( sphGetUuidDocidName() );
+			assert ( !pUuid || pUuid->m_eAttrType==SPH_ATTR_STRING || pUuid->m_eAttrType==SPH_ATTR_STRINGPTR );
+			if ( pUuid )
+				pAttr1 = pUuid;
+		}
 		assert(pAttr1);
 
 		// maybe it is a stored field?
@@ -1836,7 +1845,13 @@ bool JoinSorter_c::SetupOnFilters ( CSphString & sError )
 			return false;
 		}
 
-		const CSphColumnInfo * pAttr2 = m_pJoinedIndex->GetMatchSchema().GetAttr ( sAttrIdx2.cstr() );
+		const CSphSchema & tRightSchema = m_pJoinedIndex->GetMatchSchema();
+		const CSphColumnInfo * pAttr2 = tRightSchema.GetAttr ( sAttrIdx2.cstr() );
+		if ( pAttr2 && pAttr2->IsUuidLinkedDocid() )
+		{
+			pAttr2 = tRightSchema.GetAttr ( sphGetUuidDocidName() );
+			assert ( pAttr2 && ( pAttr2->m_eAttrType==SPH_ATTR_STRING || pAttr2->m_eAttrType==SPH_ATTR_STRINGPTR ) );
+		}
 		if ( pAttr2 && pAttr2->m_eAttrType==SPH_ATTR_STRINGPTR && pAttr2->m_eStage==SPH_EVAL_POSTLIMIT )
 		{
 			sError.SetSprintf ( "Unable to perform join on a stored field '%s.%s'", sIdx2.cstr(), pAttr2->m_sName.cstr() );
@@ -2074,14 +2089,24 @@ void JoinSorter_c::AddStarItemsToJoinSelectList()
 	if ( !bHaveStar )
 		return;
 
+	const CSphColumnInfo * pUuidDocid = tJoinedSchema.GetAttr ( sphGetUuidDocidName() );
+	assert ( !pUuidDocid || pUuidDocid->m_eAttrType==SPH_ATTR_STRING || pUuidDocid->m_eAttrType==SPH_ATTR_STRINGPTR );
 	for ( int i = 0; i < tJoinedSchema.GetAttrsCount(); i++ )
 	{
 		auto & tAttr = tJoinedSchema.GetAttr(i);
-		if ( sphIsInternalAttr(tAttr) )
+		if ( tAttr.IsUuidLinkedDocid() )
+		{
+			assert ( tAttr.m_sName==sphGetDocidName() );
+			continue;
+		}
+
+		bool bUuidDocid = pUuidDocid==&tAttr;
+		if ( sphIsInternalAttr(tAttr) && !bUuidDocid )
 			continue;
 
+		const char * szAttrName = bUuidDocid ? sphGetDocidName() : tAttr.m_sName.cstr();
 		CSphString sAttrName;
-		sAttrName.SetSprintf ( "%s.%s", GetJoinedIndexName().cstr(), tAttr.m_sName.cstr() );
+		sAttrName.SetSprintf ( "%s.%s", GetJoinedIndexName().cstr(), szAttrName );
 		AddToJoinSelectList ( sAttrName, sAttrName );
 	}
 }
@@ -2830,8 +2855,9 @@ bool CreateJoinMultiSorter ( const CSphIndex * pIndex, const VecTraits_T<const C
 	// the idea is that 1st sorter does the join AND it also pushes joined matches to all other sorters
 	// to avoid double push to 1..N sorters they are wrapped in a class that prevents pushing matches
 	CSphVector<std::shared_ptr<ISphMatchSorter>> dSharedSorters;
-	for ( auto i : dSorters )
-		dSharedSorters.Add ( std::shared_ptr<ISphMatchSorter>(i) );
+	// Transfer ownership to dSharedSorters and clear raw aliases used by failure cleanup below.
+	for ( auto & pSorter : dSorters )
+		dSharedSorters.Add ( std::shared_ptr<ISphMatchSorter>( std::exchange ( pSorter, nullptr ) ) );
 
 	if ( dJoinedIndexes.GetLength()==1 )
 	{
@@ -2860,10 +2886,10 @@ bool CreateJoinMultiSorter ( const CSphIndex * pIndex, const VecTraits_T<const C
 	
 	for ( int i = 1; i < dSorters.GetLength(); i++ )
 	{
-		if ( !dSorters[i] )
+		if ( !dSharedSorters[i] )
 			continue;
 
-		dSorters[i] = new SorterWrapperNoPush_c ( dSorters[i] );
+		dSorters[i] = new SorterWrapperNoPush_c ( dSharedSorters[i].get() );
 	}
 
 	return true;

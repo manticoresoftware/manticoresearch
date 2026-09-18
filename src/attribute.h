@@ -78,6 +78,12 @@ ByteBlob_t			sphGetBlobAttr ( const CSphRowitem * pDocinfo, const CSphAttrLocato
 // returns blob attribute length
 int					sphGetBlobAttrLen ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool );
 
+// software-prefetch the match-row location that holds the blob-row offset, so a subsequent sphPrefetchBlobRow/sphGetBlobAttr doesn't stall reading that offset
+void				sphPrefetchBlobRowOffset ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator );
+
+// software-prefetch a match's blob row (row header + start of its blob data) so a subsequent sphGetBlobAttr on it doesn't stall on a cold pool miss
+void				sphPrefetchBlobRow ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool );
+
 // return the total length (in bytes) of a given blob row
 DWORD				sphGetBlobTotalLen ( const BYTE * pBlobRow, int nBlobAttrs );
 
@@ -155,6 +161,18 @@ void	sphMVA2Str ( ByteBlob_t dMVA, bool b64bit, StringBuilder_c & dStr );
 void	sphPackedMVA2Str ( const BYTE * pMVA, bool b64bit, StringBuilder_c & dStr );
 void	sphFloatVec2Str ( ByteBlob_t dFloatVec, StringBuilder_c & dStr );
 void	sphPackedFloatVec2Str ( const BYTE * pData, StringBuilder_c & dStr );
+
+struct FloatVecArray_t
+{
+	int							m_iDims = 0;	// 0 == empty array
+	VecTraits_T<const float>	m_dValues;		// flat payload, GetLength() == N*m_iDims
+};
+
+FloatVecArray_t	ParseFloatVecArray ( ByteBlob_t dBlob );
+void	sphFloatVecArray2Str ( ByteBlob_t dBlob, StringBuilder_c & dStr );
+void	sphPackedFloatVecArray2Str ( const BYTE * pData, StringBuilder_c & dStr );
+int		ValidateFloatVecArrayGroups ( const VecTraits_T<const int> & dGroupLens, CSphString & sError );
+void	AppendFloatVecArrayToUpdatePool ( int iDims, const VecTraits_T<const float> & dValues, CSphVector<DWORD> & dPool );
 
 /// check if tColumn is actually stored field (so, can't be used in filters/expressions)
 bool	IsNotRealAttribute ( const CSphColumnInfo & tColumn );

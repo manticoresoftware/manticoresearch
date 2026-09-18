@@ -1,0 +1,114 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL auto_optimize=0;"
+––– output –––
+––– comment –––
+ALTERed external settings from retired chunks should be removed after merge.
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE gh4758_merge(f TEXT) exceptions_list='exold=>exoldnorm' stopwords_list='stopold' wordforms_list='formold=>formnormold' hitless_words_list='hitold'; INSERT INTO gh4758_merge VALUES(1,'alpha'); FLUSH RAMCHUNK gh4758_merge; ALTER TABLE gh4758_merge exceptions_list='exnew=>exnewnorm' stopwords_list='stopnew' wordforms_list='formnew=>formnormnew' hitless_words_list='hitnew'; INSERT INTO gh4758_merge VALUES(2,'beta'); FLUSH RAMCHUNK gh4758_merge;"
+––– output –––
+––– input –––
+old_count=$(find /var/lib/manticore/gh4758_merge -maxdepth 1 -type f -name '*_chunk0_0.txt' 2>/dev/null | wc -l); new_count=$(find /var/lib/manticore/gh4758_merge -maxdepth 1 -type f -name '*_chunk0_1.txt' 2>/dev/null | wc -l); if [ "$old_count" -eq 4 ] && [ "$new_count" -eq 4 ]; then echo OK_MERGE_SETUP; else echo "FAIL_MERGE_SETUP old=$old_count new=$new_count"; fi
+––– output –––
+OK_MERGE_SETUP
+––– input –––
+mysql -h0 -P9306 -e "OPTIMIZE TABLE gh4758_merge OPTION cutoff=1, sync=1;"
+––– output –––
+––– input –––
+old_count=$(find /var/lib/manticore/gh4758_merge -maxdepth 1 -type f -name '*_chunk0_0.txt' 2>/dev/null | wc -l); new_count=$(find /var/lib/manticore/gh4758_merge -maxdepth 1 -type f -name '*_chunk0_1.txt' 2>/dev/null | wc -l); if [ "$old_count" -eq 0 ] && [ "$new_count" -eq 4 ]; then echo OK_MERGE_CLEANUP; else echo "FAIL_MERGE_CLEANUP old=$old_count new=$new_count"; fi
+––– output –––
+OK_MERGE_CLEANUP
+––– input –––
+drop_out=$(mysql -h0 -P9306 -e "DROP TABLE gh4758_merge; SHOW WARNINGS;" 2>&1); ext_count=$(find /var/lib/manticore/gh4758_merge -maxdepth 1 -type f -name '*_chunk*.txt' 2>/dev/null | wc -l); if [ "$ext_count" -eq 0 ] && ! printf '%s' "$drop_out" | grep -q 'clean up files manually'; then echo OK_MERGE_DROP; else echo "FAIL_MERGE_DROP files=$ext_count output=$drop_out"; fi
+––– output –––
+OK_MERGE_DROP
+––– comment –––
+External files shared by all merged chunks must remain live.
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE gh4758_shared(f TEXT) exceptions_list='exshared=>exnorm' stopwords_list='stopshared' wordforms_list='formshared=>formnorm' hitless_words_list='hitshared'; INSERT INTO gh4758_shared VALUES(1,'alpha'); FLUSH RAMCHUNK gh4758_shared; INSERT INTO gh4758_shared VALUES(2,'beta'); FLUSH RAMCHUNK gh4758_shared; OPTIMIZE TABLE gh4758_shared OPTION cutoff=1, sync=1;"
+––– output –––
+––– input –––
+ext_count=$(find /var/lib/manticore/gh4758_shared -maxdepth 1 -type f -name '*_chunk0_0.txt' 2>/dev/null | wc -l); if [ "$ext_count" -eq 4 ]; then echo OK_SHARED_PRESERVED; else echo "FAIL_SHARED_PRESERVED files=$ext_count"; fi
+––– output –––
+OK_SHARED_PRESERVED
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE gh4758_shared;" >/dev/null; ext_count=$(find /var/lib/manticore/gh4758_shared -maxdepth 1 -type f -name '*_chunk*.txt' 2>/dev/null | wc -l); if [ "$ext_count" -eq 0 ]; then echo OK_SHARED_DROP; else echo "FAIL_SHARED_DROP files=$ext_count"; fi
+––– output –––
+OK_SHARED_DROP
+––– comment –––
+Explicitly dropping the old chunk removes only its obsolete external file.
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE gh4758_drop(f TEXT) exceptions_list='dropold=>dropoldnorm'; INSERT INTO gh4758_drop VALUES(1,'alpha'); FLUSH RAMCHUNK gh4758_drop; ALTER TABLE gh4758_drop exceptions_list='dropnew=>dropnewnorm'; INSERT INTO gh4758_drop VALUES(2,'beta'); FLUSH RAMCHUNK gh4758_drop; DEBUG DROP CHUNK 0 FROM gh4758_drop OPTION sync=1, byid=0;"
+––– output –––
+––– input –––
+old_count=$(find /var/lib/manticore/gh4758_drop -maxdepth 1 -type f -name 'exceptions_chunk0_0.txt' 2>/dev/null | wc -l); new_count=$(find /var/lib/manticore/gh4758_drop -maxdepth 1 -type f -name 'exceptions_chunk0_1.txt' 2>/dev/null | wc -l); rows=$(mysql -N -B -h0 -P9306 -e "SELECT COUNT(*) FROM gh4758_drop;" | grep -Eo '[0-9]+' | tail -n1); if [ "$old_count" -eq 0 ] && [ "$new_count" -eq 1 ] && [ "$rows" -eq 1 ]; then echo OK_EXPLICIT_DROP; else echo "FAIL_EXPLICIT_DROP old=$old_count new=$new_count rows=$rows"; fi
+––– output –––
+OK_EXPLICIT_DROP
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE gh4758_drop;" >/dev/null
+––– output –––
+––– comment –––
+TRUNCATE removes obsolete chunk externals but preserves current table settings.
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE gh4758_truncate(f TEXT) exceptions_list='truncateold=>truncateoldnorm'; INSERT INTO gh4758_truncate VALUES(1,'alpha'); FLUSH RAMCHUNK gh4758_truncate; ALTER TABLE gh4758_truncate exceptions_list='truncatenew=>truncatenewnorm'; INSERT INTO gh4758_truncate VALUES(2,'beta'); FLUSH RAMCHUNK gh4758_truncate; TRUNCATE TABLE gh4758_truncate; INSERT INTO gh4758_truncate VALUES(3,'gamma'); FLUSH RAMCHUNK gh4758_truncate;"
+––– output –––
+––– input –––
+old_count=$(find /var/lib/manticore/gh4758_truncate -maxdepth 1 -type f -name 'exceptions_chunk0_0.txt' 2>/dev/null | wc -l); new_count=$(find /var/lib/manticore/gh4758_truncate -maxdepth 1 -type f -name 'exceptions_chunk0_1.txt' 2>/dev/null | wc -l); rows=$(mysql -N -B -h0 -P9306 -e "SELECT COUNT(*) FROM gh4758_truncate;" | grep -Eo '[0-9]+' | tail -n1); if [ "$old_count" -eq 0 ] && [ "$new_count" -eq 1 ] && [ "$rows" -eq 1 ]; then echo OK_TRUNCATE; else echo "FAIL_TRUNCATE old=$old_count new=$new_count rows=$rows"; fi
+––– output –––
+OK_TRUNCATE
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE gh4758_truncate;" >/dev/null
+––– output –––
+––– comment –––
+Compress and split replacements keep their shared external files.
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE gh4758_compress(f TEXT) exceptions_list='compress=>compressed'; INSERT INTO gh4758_compress VALUES(1,'alpha'),(2,'beta'); FLUSH RAMCHUNK gh4758_compress; DELETE FROM gh4758_compress WHERE id=1; DEBUG COMPRESS gh4758_compress CHUNK 0 OPTION sync=1, byid=0;"
+––– output –––
+––– input –––
+ext_count=$(find /var/lib/manticore/gh4758_compress -maxdepth 1 -type f -name 'exceptions_chunk0_0.txt' 2>/dev/null | wc -l); rows=$(mysql -N -B -h0 -P9306 -e "SELECT COUNT(*) FROM gh4758_compress;" | grep -Eo '[0-9]+' | tail -n1); if [ "$ext_count" -eq 1 ] && [ "$rows" -eq 1 ]; then echo OK_COMPRESS_PRESERVED; else echo "FAIL_COMPRESS_PRESERVED files=$ext_count rows=$rows"; fi
+––– output –––
+OK_COMPRESS_PRESERVED
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE gh4758_compress;" >/dev/null
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE gh4758_split(f TEXT) exceptions_list='split=>splitted'; INSERT INTO gh4758_split VALUES(1,'alpha'),(2,'beta'); FLUSH RAMCHUNK gh4758_split; SET GLOBAL @gh4758_ids=(1); DEBUG SPLIT gh4758_split CHUNK 0 ON @gh4758_ids OPTION sync=1, byid=0;"
+––– output –––
+––– input –––
+ext_count=$(find /var/lib/manticore/gh4758_split -maxdepth 1 -type f -name 'exceptions_chunk0_0.txt' 2>/dev/null | wc -l); chunks=$(mysql -N -B -h0 -P9306 -e "SHOW TABLE gh4758_split STATUS LIKE 'disk_chunks';" | grep -Eo '[0-9]+' | tail -n1); rows=$(mysql -N -B -h0 -P9306 -e "SELECT COUNT(*) FROM gh4758_split;" | grep -Eo '[0-9]+' | tail -n1); if [ "$ext_count" -eq 1 ] && [ "$chunks" -eq 2 ] && [ "$rows" -eq 2 ]; then echo OK_SPLIT_PRESERVED; else echo "FAIL_SPLIT_PRESERVED files=$ext_count chunks=$chunks rows=$rows"; fi
+––– output –––
+OK_SPLIT_PRESERVED
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE gh4758_split;" >/dev/null
+––– output –––
+––– comment –––
+An invalid retirement command must leave the original state untouched.
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE gh4758_failed(f TEXT) exceptions_list='failed=>unchanged'; INSERT INTO gh4758_failed VALUES(1,'alpha'); FLUSH RAMCHUNK gh4758_failed; DEBUG MERGE gh4758_failed CHUNK 0 INTO CHUNK 99 OPTION sync=1, byid=0;"
+––– output –––
+––– input –––
+ext_count=$(find /var/lib/manticore/gh4758_failed -maxdepth 1 -type f -name 'exceptions_chunk0_0.txt' 2>/dev/null | wc -l); chunks=$(mysql -N -B -h0 -P9306 -e "SHOW TABLE gh4758_failed STATUS LIKE 'disk_chunks';" | grep -Eo '[0-9]+' | tail -n1); rows=$(mysql -N -B -h0 -P9306 -e "SELECT COUNT(*) FROM gh4758_failed;" | grep -Eo '[0-9]+' | tail -n1); if [ "$ext_count" -eq 1 ] && [ "$chunks" -eq 1 ] && [ "$rows" -eq 1 ]; then echo OK_FAILED_UNCHANGED; else echo "FAIL_FAILED_UNCHANGED files=$ext_count chunks=$chunks rows=$rows"; fi
+––– output –––
+OK_FAILED_UNCHANGED
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE gh4758_failed;" >/dev/null
+––– output –––
+––– comment –––
+Plain-mode tables reference shared external files and must never unlink them.
+––– input –––
+searchd --stopwait >/dev/null; rm -rf /tmp/gh4758_plain; mkdir -p /tmp/gh4758_plain/binlog; printf 'oldterm => oldnorm\n' > /tmp/gh4758_plain/old-exceptions.txt; printf 'newterm => newnorm\n' > /tmp/gh4758_plain/new-exceptions.txt; printf "searchd {\n  listen = 127.0.0.1:9306:mysql\n  log = /tmp/gh4758_plain/searchd.log\n  query_log = /tmp/gh4758_plain/query.log\n  pid_file = /tmp/gh4758_plain/searchd.pid\n  binlog_path = /tmp/gh4758_plain/binlog\n}\nindex gh4758_plain_owner {\n  type = rt\n  path = /tmp/gh4758_plain/owner\n  rt_field = f\n  exceptions = /tmp/gh4758_plain/old-exceptions.txt\n}\nindex gh4758_plain_peer {\n  type = rt\n  path = /tmp/gh4758_plain/peer\n  rt_field = f\n  exceptions = /tmp/gh4758_plain/old-exceptions.txt\n}\n" > /tmp/gh4758_plain/manticore.conf; stdbuf -oL searchd --config /tmp/gh4758_plain/manticore.conf > /dev/null
+––– output –––
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /tmp/gh4758_plain/searchd.log); then echo PLAIN_STARTED; else echo PLAIN_START_FAILED; fi
+––– output –––
+PLAIN_STARTED
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL auto_optimize=0; INSERT INTO gh4758_plain_owner VALUES(1,'oldterm'); INSERT INTO gh4758_plain_peer VALUES(1,'oldterm'); FLUSH RAMCHUNK gh4758_plain_peer;"; sed -i '0,/old-exceptions.txt/s//new-exceptions.txt/' /tmp/gh4758_plain/manticore.conf; mysql -h0 -P9306 -e "ALTER TABLE gh4758_plain_owner RECONFIGURE; INSERT INTO gh4758_plain_owner VALUES(2,'newterm'); FLUSH RAMCHUNK gh4758_plain_owner; OPTIMIZE TABLE gh4758_plain_owner OPTION cutoff=1, sync=1;"
+––– output –––
+––– input –––
+old_exists=0; new_exists=0; [ -f /tmp/gh4758_plain/old-exceptions.txt ] && old_exists=1; [ -f /tmp/gh4758_plain/new-exceptions.txt ] && new_exists=1; owner_chunks=$(mysql -N -B -h0 -P9306 -e "SHOW TABLE gh4758_plain_owner STATUS LIKE 'disk_chunks';" | grep -Eo '[0-9]+' | tail -n1); peer_rows=$(mysql -N -B -h0 -P9306 -e "SELECT COUNT(*) FROM gh4758_plain_peer;" | grep -Eo '[0-9]+' | tail -n1); if [ "$old_exists" -eq 1 ] && [ "$new_exists" -eq 1 ] && [ "$owner_chunks" -eq 1 ] && [ "$peer_rows" -eq 1 ]; then echo OK_PLAIN_SHARED_EXTERNALS; else echo "FAIL_PLAIN_SHARED_EXTERNALS old=$old_exists new=$new_exists chunks=$owner_chunks peer_rows=$peer_rows"; fi
+––– output –––
+OK_PLAIN_SHARED_EXTERNALS
+––– input –––
+searchd --config /tmp/gh4758_plain/manticore.conf --stopwait >/dev/null
+––– output –––

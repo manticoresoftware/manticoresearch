@@ -63,7 +63,8 @@ void Detached::MakeAloneIteratorAvailable ()
 //#endif
 }
 
-static int64_t g_tmShutdownAllAlonesDelta = 3; // max allowed wait in seconds
+static int64_t g_tmShutdownAllAlonesDelta = env_long ("MANTICORE_SHUTDOWN_ALONES_DEADLINE").value_or(30); // max allowed wait in seconds
+static int64_t g_tmShutdownAllAlonesBetweenTries = env_long("MANTICORE_SHUTDOWN_ALONES_POLL").value_or(10);
 
 void Detached::SetNotifier ( ShutdownNotifierFn fnNotifier ) noexcept
 {
@@ -113,7 +114,7 @@ void Detached::ShutdownAllAlones()
 
 			sphSleepMsec ( 50 );
 			iStart += 50;
-			if ( iStart >= 10000 ) // wait 10 seconds between tries
+			if ( iStart >= 1000*g_tmShutdownAllAlonesBetweenTries ) // wait 10 seconds between tries
 			{
 				sphWarning ( "ShutdownAllAlones catch still has %d alone threads", iThreads );
 				break;

@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>create table profile relevance</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	drop table if exists rel_create;
+	create table rel_create ( title text ) profile='relevance';
+	show create table rel_create;
+	show table rel_create settings;
+	drop table rel_create;
+
+	drop table if exists rel_query;
+	create table rel_query ( title text ) profile='relevance';
+	insert into rel_query values ( 1, 'running' );
+	insert into rel_query values ( 2, 'brown' );
+	insert into rel_query values ( 3, 'running brown running brown' );
+
+	select id from rel_query where match('running brown') order by id asc;
+	show meta;
+	select id from rel_query where match('running brown') order by id asc option boolean_mode='and';
+	show meta;
+	select id from rel_query where match('*own*') order by id asc;
+	show meta;
+	select id, weight() from rel_query where match('running') order by id asc;
+	select id, weight() from rel_query where match('running') order by id asc option ranker=bm25;
+	show create table rel_query;
+	show table rel_query settings;
+
+	drop table if exists rel_dist_remote;
+	drop table if exists rel_dist_local;
+	drop table if exists rel_dist_a;
+	drop table if exists rel_dist_b;
+	create table rel_dist_a ( title text ) profile='relevance';
+	create table rel_dist_b ( title text ) profile='relevance';
+	insert into rel_dist_a values ( 1, 'running brown' );
+	insert into rel_dist_a values ( 2, 'running' );
+	insert into rel_dist_b values ( 11, 'running brown' );
+	insert into rel_dist_b values ( 12, 'brown' );
+	create table rel_dist_local type='distributed' local='rel_dist_a' local='rel_dist_b';
+	create table rel_dist_remote type='distributed' agent='<agent0_address/>:rel_dist_a' agent='<agent0_address/>:rel_dist_b';
+	select id from rel_dist_local where match('running brown') order by id asc;
+	select id from rel_dist_local where match('running brown') order by id asc option boolean_mode='and';
+	select id from rel_dist_remote where match('running brown') order by id asc;
+	select id from rel_dist_remote where match('running brown') order by id asc option boolean_mode='and';
+	select id, weight() from rel_dist_remote where match('running') order by id asc;
+	select id, weight() from rel_dist_remote where match('running') order by id asc option ranker=bm25;
+</sphinxql>
+
+<sphinxql system="restart-daemon-no-warnings"/>
+
+<sphinxql>
+	show create table rel_query;
+	show table rel_query settings;
+	select id from rel_query where match('running brown') order by id asc;
+	show meta;
+	select id from rel_query where match('running brown') order by id asc option boolean_mode='and';
+	show meta;
+	select id from rel_query where match('*own*') order by id asc;
+	show meta;
+	select id, weight() from rel_query where match('running') order by id asc;
+	select id, weight() from rel_query where match('running') order by id asc option ranker=bm25;
+
+	select id from rel_dist_local where match('running brown') order by id asc;
+	select id from rel_dist_local where match('running brown') order by id asc option boolean_mode='and';
+	select id from rel_dist_remote where match('running brown') order by id asc;
+	select id from rel_dist_remote where match('running brown') order by id asc option boolean_mode='and';
+	select id, weight() from rel_dist_remote where match('running') order by id asc;
+	select id, weight() from rel_dist_remote where match('running') order by id asc option ranker=bm25;
+	drop table rel_dist_remote;
+	drop table rel_dist_local;
+	drop table rel_dist_a;
+	drop table rel_dist_b;
+	drop table rel_query;
+</sphinxql>
+</queries>
+
+</test>

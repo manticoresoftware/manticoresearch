@@ -9,7 +9,7 @@ curl -s "http://localhost:9308/cli_json?show%20version"
 ––– input –––
 curl -s "http://localhost:9308/cli_json?show%20buddy%20plugins" | grep -o Package | wc -l
 ––– output –––
-31
+32
 ––– input –––
 curl -s "http://localhost:9308/cli_json?select%20*%20from%20t%20where%20match('exmaple')%20option%20fuzzy=1"
 ––– output –––

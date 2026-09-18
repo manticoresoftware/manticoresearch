@@ -1,0 +1,151 @@
+––– comment –––
+Test Sharding plugin auth: user-facing permission gating for sharded tables.
+Issue: https://github.com/manticoresoftware/dev/issues/2735
+Admin credentials: admin / adminpass (bootstrap via auth.json)
+
+Daemon gates every parseable statement itself (unprefixed sharded CREATE/DROP,
+SELECT, etc). Cluster-prefixed sharded CREATE/DROP fail to parse daemon-side,
+so Buddy gates them via a daemon-evaluated probe (bare ALTER TABLE) on the
+user-delegated client. SHOW SHARDING STATUS/MASTER are filtered through the
+daemon's permission-filtered SHOW TABLES: a user only sees sharded tables
+they have grants on.
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– comment –––
+––– Setup: create user alice with no grants –––
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'alice' IDENTIFIED BY 'alicepass123';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: alice
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
+––– comment –––
+––– 1. admin creates a local sharded table –––
+EXPECTED: Success
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE TABLE shop(id bigint) shards='2' rf='1';"; echo $?
+––– output –––
+0
+––– input –––
+sleep 2; echo done
+––– output –––
+done
+––– comment –––
+––– 2. alice without grants: daemon denies unprefixed sharded CREATE –––
+EXPECTED: Permission denied (daemon-side gate, never reaches Buddy)
+––– comment –––
+––– input –––
+MYSQL_PWD=alicepass123 mysql -ualice -h0 -P9306 -e "CREATE TABLE x1(id bigint) shards='2' rf='1';"
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'alice'
+––– comment –––
+––– 3. alice without grants: SHOW SHARDING STATUS/MASTER are empty –––
+EXPECTED: Empty result, no topology leak
+––– comment –––
+––– input –––
+MYSQL_PWD=alicepass123 mysql -ualice -h0 -P9306 -e "SHOW SHARDING STATUS;"; echo $?
+––– output –––
+0
+––– input –––
+MYSQL_PWD=alicepass123 mysql -ualice -h0 -P9306 -e "SHOW SHARDING MASTER;"; echo $?
+––– output –––
+0
+––– comment –––
+––– 4. admin sees the full sharding topology –––
+EXPECTED: 2 shard rows for shop, active master
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "SHOW SHARDING STATUS;" | grep -c shop
+––– output –––
+2
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "SHOW SHARDING MASTER;" | grep -c active
+––– output –––
+1
+––– comment –––
+––– 5. cluster-prefixed path: Buddy gates what the daemon cannot parse –––
+EXPECTED: alice denied by Buddy probe gate; admin passes the gate and
+fails later on single-node cluster validation
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT replication ON * TO 'admin';"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE CLUSTER c;"; echo $?
+––– output –––
+0
+––– input –––
+sleep 2; echo done
+––– output –––
+done
+––– input –––
+MYSQL_PWD=alicepass123 mysql -ualice -h0 -P9306 -e "CREATE TABLE c:atbl(id bigint) shards='2' rf='1';"
+––– output –––
+ERROR 1064 (42000) at line 1: Permission denied for user 'alice': requires schema permission on table 'atbl'
+––– input –––
+MYSQL_PWD=alicepass123 mysql -ualice -h0 -P9306 -e "DROP TABLE c:ghost;"
+––– output –––
+ERROR 1064 (42000) at line 1: Permission denied for user 'alice': requires schema permission on table 'ghost'
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE TABLE c:rtbl(id bigint) shards='2' rf='1';"
+––– output –––
+ERROR 1064 (42000) at line 1: The node count for cluster c is too low: 1. You can create local sharded table.
+––– comment –––
+––– 6. granted flow: schema on 'mall' lets alice create it –––
+EXPECTED: create succeeds, but schema alone gives no visibility:
+SHOW SHARDING STATUS/MASTER follow the daemon-filtered SHOW TABLES,
+which requires read permission
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT schema ON 'mall' TO 'alice';"
+––– output –––
+––– input –––
+MYSQL_PWD=alicepass123 mysql -ualice -h0 -P9306 -e "CREATE TABLE mall(id bigint) shards='2' rf='1';"; echo $?
+––– output –––
+0
+––– input –––
+sleep 2; echo done
+––– output –––
+done
+––– input –––
+MYSQL_PWD=alicepass123 mysql -ualice -h0 -P9306 -e "SHOW SHARDING STATUS;" | grep -c mall
+––– output –––
+0
+––– comment –––
+––– 6a. read grant adds visibility: alice sees her table, not the foreign one –––
+EXPECTED: 2 shard rows for mall, none for shop, active master
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON 'mall' TO 'alice';"
+––– output –––
+––– input –––
+MYSQL_PWD=alicepass123 mysql -ualice -h0 -P9306 -e "SHOW SHARDING STATUS;" | grep -c mall
+––– output –––
+2
+––– input –––
+MYSQL_PWD=alicepass123 mysql -ualice -h0 -P9306 -e "SHOW SHARDING STATUS;" | grep -c shop
+––– output –––
+0
+––– input –––
+MYSQL_PWD=alicepass123 mysql -ualice -h0 -P9306 -e "SHOW SHARDING MASTER;" | grep -c active
+––– output –––
+1
+––– comment –––
+––– 7. alice drops her own table but not the foreign one –––
+EXPECTED: mall dropped; shop denied by the daemon
+––– comment –––
+––– input –––
+MYSQL_PWD=alicepass123 mysql -ualice -h0 -P9306 -e "DROP TABLE mall;"; echo $?
+––– output –––
+0
+––– input –––
+MYSQL_PWD=alicepass123 mysql -ualice -h0 -P9306 -e "DROP TABLE shop;"
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'alice'
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "SHOW SHARDING STATUS;" | grep -c mall
+––– output –––
+0

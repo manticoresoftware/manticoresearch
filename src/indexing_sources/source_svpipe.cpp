@@ -145,7 +145,7 @@ bool CSphSource_BaseSV::SetupPipe ( const CSphConfigSection & hSource, FILE * pP
 {
 	m_pFP = pPipe;
 	m_tSchema.Reset ();
-	bool bWordDict = ( m_pDict && m_pDict->GetSettings().m_bWordDict );
+	bool bWordDict = ( m_pDict && m_pDict->GetSettings().IsWordDict() );
 
 	if ( !SetupSchema ( hSource, bWordDict, sError ) )
 		return false;
@@ -253,7 +253,7 @@ bool CSphSource_BaseSV::Connect ( CSphString & sError )
 	// source settings have been updated after ::Setup
 	for ( int i = 0; i < m_tSchema.GetFieldsCount(); i++ )
 	{
-		ESphWordpart eWordpart = GetWordpart ( m_tSchema.GetFieldName(i), m_pDict && m_pDict->GetSettings().m_bWordDict );
+		ESphWordpart eWordpart = GetWordpart ( m_tSchema.GetFieldName(i), m_pDict && m_pDict->GetSettings().IsWordDict() );
 		m_tSchema.SetFieldWordpart ( i, eWordpart );
 	}
 
@@ -579,10 +579,10 @@ bool CSphSource_TSV::SetupSchema ( const CSphConfigSection & hSource, bool bWord
 	if ( !bOk )
 		return false;
 
-	ConfigureFields ( hSource("tsvpipe_field"), bWordDict, m_tSchema );
-	ConfigureFields ( hSource("tsvpipe_field_string"), bWordDict, m_tSchema );
+	bOk &= ConfigureFields ( hSource("tsvpipe_field"), bWordDict, m_tSchema, sError );
+	bOk &= ConfigureFields ( hSource("tsvpipe_field_string"), bWordDict, m_tSchema, sError );
 
-	return true;
+	return bOk;
 }
 
 
@@ -807,10 +807,10 @@ bool CSphSource_CSV::SetupSchema ( const CSphConfigSection & hSource, bool bWord
 	if ( !bOk )
 		return false;
 
-	ConfigureFields ( hSource("csvpipe_field"), bWordDict, m_tSchema );
-	ConfigureFields ( hSource("csvpipe_field_string"), bWordDict, m_tSchema );
+	bOk &= ConfigureFields ( hSource("csvpipe_field"), bWordDict, m_tSchema, sError );
+	bOk &= ConfigureFields ( hSource("csvpipe_field_string"), bWordDict, m_tSchema, sError );
 
-	return true;
+	return bOk;
 }
 
 

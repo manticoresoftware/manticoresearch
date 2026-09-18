@@ -23,6 +23,8 @@ add_library ( daemon OBJECT
 		api_commands.h
 		notifier.h
 		notifier.cpp
+		daemon_ipc.cpp
+		daemon_ipc.h
 )
 target_include_directories ( daemon PRIVATE "${MANTICORE_SOURCE_DIR}/src" )
 target_link_libraries ( daemon PRIVATE lextra )

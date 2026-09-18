@@ -16,6 +16,7 @@ Response Type Override: Use "response-type=TYPE" in input text to test invalid r
 ––– comment –––
 Start Manticore Search
 ––– block: ../base/start-searchd –––
+––– block: ./base –––
 ––– comment –––
 MOCK SERVER STARTUP
 ––– comment –––
@@ -34,7 +35,7 @@ Test: Create table without API_URL parameter
 Expected: Uses default provider endpoint (e.g., https://api.openai.com/v1/embeddings for OpenAI)
 Verify: Table creation succeeds, embeddings generated successfully, SHOW CREATE TABLE does NOT display api_url
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_api_url_not_specified (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}')" 2>&1; echo $?
+retry_remote_embedding_create_table "CREATE TABLE test_api_url_not_specified (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}')"; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -56,7 +57,7 @@ Test: CREATE TABLE ... API_URL=''
 Expected: Treated as not specified, uses default endpoint
 Verify: Same as API_URL Not Specified test
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_api_url_empty (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}' API_URL='')" 2>&1; echo $?
+retry_remote_embedding_create_table "CREATE TABLE test_api_url_empty (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}' API_URL='')"; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -161,7 +162,7 @@ Test: API_URL='https://api.openai.com/v1/embeddings' with valid OpenAI key
 Expected: Table creation succeeds, embeddings generated successfully, SHOW CREATE TABLE displays api_url
 Note: This requires a valid OpenAI API key
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_api_url_default_endpoint (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}' API_URL='https://api.openai.com/v1/embeddings')" 2>&1; echo $?
+retry_remote_embedding_create_table "CREATE TABLE test_api_url_default_endpoint (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}' API_URL='https://api.openai.com/v1/embeddings')"; echo $?
 ––– output –––
 0
 ––– comment –––

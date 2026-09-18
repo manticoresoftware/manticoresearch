@@ -29,54 +29,54 @@ mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM name"
 *************************** 1. row ***************************
 1000000
 ––– input –––
-mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1;"
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK name; OPTIMIZE TABLE name OPTION sync=1, cutoff=1;"
 ––– output –––
 ––– input –––
 curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"EBGRNA"}}]}},"options":{"fuzzy":true}}' | jq -r '.hits.hits[]._source.username'
 ––– output –––
-BERNA PFEIFFER
-BERNA SAGE
-BERNA PANG
-BERNA STOLTZFUS
-BERNA HALVERSON
-BERNA PLASCENCIA
-BERNA CALLAWAY
-BERNA STONER
-BERNA MARSH
-BERNA LEI
-BERNA SOUSA
-BERNA LIAO
-BERNA TROTTER
-BERNA VALDOVINOS
-BERNA VALLE
-BERNA ELKINS
-BERNA HURD
-BERNA DUARTE
-BERNA HAUGEN
-BERNA LISTER
+BERNA TALBOTT
+BERNA WEBER
+BERNA PULLEY
+BERNA JAQUEZ
+BERNA CHEEK
+BERNA WARREN
+BERNA KATZ
+BERNA CHRISTY
+BERNA FERRELL
+BERNA HYLTON
+BERNA CARLOS
+BERNA YOUNGER
+BERNA SERRANO
+BERNA TORRES
+BERNA HARPER
+BERNA WADSWORTH
+BERNA KYLE
+BERNA KOHLER
+BERNA TRAHAN
+BERNA DONOHUE
 ––– input –––
 curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"ANT"}}]}},"options":{"fuzzy":true}}' | jq -r '.hits.hits[]._source.username'
 ––– output –––
+AN GANT
+KEENAN GANT
+FRANK GANT
+SANTOS GANT
+SANTOS GANT
 SHANE GANT
-DANILLE GANT
-BLANCH GANT
 TRISTAN GANT
-NATHANAEL GANT
-JANESSA GANT
 ANDREW GANT
-KORTNEY GANT
-SABINE GANT
-IRA GANT
-SHAWNTA GANT
-TRACEY GANT
-JIM GANT
-GERRY GANT
-ELROY GANT
-ERIN GANT
-LEONARDA GANT
-JARED GANT
-RODNEY GANT
-ROCKY GANT
+ANDREA SANTANA
+OTELIA GANT
+ORLANDO HANNA
+ANGEL LANE
+STANTON REAGAN
+ANTONIA CARMAN
+TRAN SHANE
+CHRISTIAN JORDAN
+DANNIE HAN
+NORMAN CHAN
+AMEE GANT
+JAN CHAN
 ––– input –––
 curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"tony"}}]}},"options":{"fuzzy":true}}' | jq -M
 ––– output –––
@@ -84,166 +84,166 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
   "took": %{NUMBER},
   "timed_out": false,
   "hits": {
-    "total": 1813,
+    "total": 1862,
     "total_relation": "eq",
     "hits": [
       {
-        "_id": 800363,
-        "_score": 1547,
+        "_id": 688,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY BEAULIEU",
+          "username": "SHERIE STORY",
           "s": "a"
         }
       },
       {
-        "_id": 807095,
-        "_score": 1547,
+        "_id": 1627,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY HOFER",
+          "username": "RUPERT STORY",
           "s": "a"
         }
       },
       {
-        "_id": 807096,
-        "_score": 1547,
+        "_id": 9293,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY DEMPSEY",
+          "username": "ZENA STORY",
           "s": "a"
         }
       },
       {
-        "_id": 808820,
-        "_score": 1547,
+        "_id": 10167,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY RAYMOND",
+          "username": "LANA STORY",
           "s": "a"
         }
       },
       {
-        "_id": 808863,
-        "_score": 1547,
+        "_id": 13672,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY BATEMAN",
+          "username": "LEZLIE STORY",
           "s": "a"
         }
       },
       {
-        "_id": 813761,
-        "_score": 1547,
+        "_id": 14690,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY VANWINKLE",
+          "username": "ZACHERY STORY",
           "s": "a"
         }
       },
       {
-        "_id": 818229,
-        "_score": 1547,
+        "_id": 18896,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY BROCK",
+          "username": "HAN STORY",
           "s": "a"
         }
       },
       {
-        "_id": 825472,
-        "_score": 1547,
+        "_id": 21612,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY LINDQUIST",
+          "username": "DORIAN STORY",
           "s": "a"
         }
       },
       {
-        "_id": 826251,
-        "_score": 1547,
+        "_id": 25257,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY KAUFFMAN",
+          "username": "DARLINE STORY",
           "s": "a"
         }
       },
       {
-        "_id": 827886,
-        "_score": 1547,
+        "_id": 32213,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY PITMAN",
+          "username": "KAYLEE STORY",
           "s": "a"
         }
       },
       {
-        "_id": 832558,
-        "_score": 1547,
+        "_id": 32291,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY KELLEY",
+          "username": "CLAUDINE STORY",
           "s": "a"
         }
       },
       {
-        "_id": 833689,
-        "_score": 1547,
+        "_id": 34844,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY HANDY",
+          "username": "KATHIE STORY",
           "s": "a"
         }
       },
       {
-        "_id": 834136,
-        "_score": 1547,
+        "_id": 35953,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY HOPPE",
+          "username": "MIRTHA STORY",
           "s": "a"
         }
       },
       {
-        "_id": 836413,
-        "_score": 1547,
+        "_id": 49790,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY STOVALL",
+          "username": "LITA STORY",
           "s": "a"
         }
       },
       {
-        "_id": 839075,
-        "_score": 1547,
+        "_id": 63161,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY JEROME",
+          "username": "LINA STORY",
           "s": "a"
         }
       },
       {
-        "_id": 839512,
-        "_score": 1547,
+        "_id": 64160,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY LEONARD",
+          "username": "STEFANI STORY",
           "s": "a"
         }
       },
       {
-        "_id": 841923,
-        "_score": 1547,
+        "_id": 65409,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY PARNELL",
+          "username": "CHERISH STORY",
           "s": "a"
         }
       },
       {
-        "_id": 842450,
-        "_score": 1547,
+        "_id": 68797,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY LOWE",
+          "username": "KELLEE STORY",
           "s": "a"
         }
       },
       {
-        "_id": 843217,
-        "_score": 1547,
+        "_id": 72998,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY ROBISON",
+          "username": "ANTONIETTA STORY",
           "s": "a"
         }
       },
       {
-        "_id": 846291,
-        "_score": 1547,
+        "_id": 73109,
+        "_score": 1528,
         "_source": {
-          "username": "TOBY BITTNER",
+          "username": "VENICE STORY",
           "s": "a"
         }
       }
@@ -430,9 +430,17 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
   "took": %{NUMBER},
   "timed_out": false,
   "hits": {
-    "total": 773,
+    "total": 1402,
     "total_relation": "eq",
     "hits": [
+      {
+        "_id": 999921,
+        "_score": 1,
+        "_source": {
+          "username": "VICKI SOUTHARD",
+          "s": "a"
+        }
+      },
       {
         "_id": 998829,
         "_score": 1,
@@ -442,18 +450,18 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
         }
       },
       {
-        "_id": 998500,
+        "_id": 995690,
         "_score": 1,
         "_source": {
-          "username": "SETH PHUNG",
+          "username": "ROBERTO SOUTHARD",
           "s": "a"
         }
       },
       {
-        "_id": 996507,
+        "_id": 995663,
         "_score": 1,
         "_source": {
-          "username": "SETH LYMAN",
+          "username": "CHUNG SOUTH",
           "s": "a"
         }
       },
@@ -474,6 +482,14 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
         }
       },
       {
+        "_id": 993278,
+        "_score": 1,
+        "_source": {
+          "username": "LAKITA SOUTHARD",
+          "s": "a"
+        }
+      },
+      {
         "_id": 992097,
         "_score": 1,
         "_source": {
@@ -490,10 +506,18 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
         }
       },
       {
-        "_id": 988823,
+        "_id": 988936,
         "_score": 1,
         "_source": {
-          "username": "SETH WHITTAKER",
+          "username": "LARISA SOUTHERLAND",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 988759,
+        "_score": 1,
+        "_source": {
+          "username": "LIEN SOUTHARD",
           "s": "a"
         }
       },
@@ -514,6 +538,38 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
         }
       },
       {
+        "_id": 987165,
+        "_score": 1,
+        "_source": {
+          "username": "TULA SOUTHARD",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 987136,
+        "_score": 1,
+        "_source": {
+          "username": "LUANN SOUTHARD",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 986847,
+        "_score": 1,
+        "_source": {
+          "username": "JORDAN SOUTHERN",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 986711,
+        "_score": 1,
+        "_source": {
+          "username": "MARLIN SOUTHERN",
+          "s": "a"
+        }
+      },
+      {
         "_id": 986580,
         "_score": 1,
         "_source": {
@@ -530,66 +586,10 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
         }
       },
       {
-        "_id": 985595,
+        "_id": 985784,
         "_score": 1,
         "_source": {
-          "username": "SETH BACON",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 982423,
-        "_score": 1,
-        "_source": {
-          "username": "SETH CHATMAN",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 981115,
-        "_score": 1,
-        "_source": {
-          "username": "KATIE SMYTH",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 979541,
-        "_score": 1,
-        "_source": {
-          "username": "EDYTHE CLAYTON",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 979093,
-        "_score": 1,
-        "_source": {
-          "username": "SETH BURROUGHS",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 978812,
-        "_score": 1,
-        "_source": {
-          "username": "EDYTH GULLEY",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 975994,
-        "_score": 1,
-        "_source": {
-          "username": "SETH PARHAM",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 975841,
-        "_score": 1,
-        "_source": {
-          "username": "ALEIDA SMYTH",
+          "username": "OPAL SOUTHERN",
           "s": "a"
         }
       }
@@ -637,7 +637,7 @@ curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo
         "query": "joey"
       },
       {
-        "query": "jon"
+        "query": "johnny"
       },
       {
         "query": "major"
@@ -686,7 +686,7 @@ curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo
         "query": "joey"
       },
       {
-        "query": "jon"
+        "query": "johnny"
       },
       {
         "query": "major"
@@ -784,7 +784,7 @@ curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo
         "query": "joey"
       },
       {
-        "query": "jon"
+        "query": "johnny"
       },
       {
         "query": "major"
@@ -833,7 +833,7 @@ curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo
         "query": "joey"
       },
       {
-        "query": "jon"
+        "query": "johnny"
       },
       {
         "query": "major"
@@ -846,7 +846,7 @@ curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo
 ––– output –––
 [
   {
-    "total": 6,
+    "total": 5,
     "error": "",
     "warning": "",
     "columns": [
@@ -871,9 +871,6 @@ curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo
       },
       {
         "query": "joey"
-      },
-      {
-        "query": "jon"
       }
     ]
   }

@@ -43,7 +43,7 @@ class SIContainer_c
 	friend void operator << ( JsonEscapedBuilder & tOut, const SIContainer_c & tSI );
 
 public:
-	bool		Load ( const CSphString & sFile, CSphString & sError );
+	bool		Load ( const CSphString & sFile, bool bMmap, CSphString & sError );
 	bool		Drop ( const CSphString & sFile, CSphString & sError );
 	void		UpdateFilename ( const CSphString & sOldFile, const CSphString & sNewFile );
 	bool		IsEmpty() const { return m_dIndexes.IsEmpty(); }

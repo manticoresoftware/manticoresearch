@@ -47,7 +47,7 @@
 %option prefix="yy6"
 %option align
 
-ID					[a-zA-Z_][a-zA-Z_0-9]*
+ID					[a-zA-Z_\200-\377][a-zA-Z_0-9\200-\377]*
 ALPHA				[a-zA-Z_]+
 SPACE				[ \t\n\r]
 DIGIT				[0-9]

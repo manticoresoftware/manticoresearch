@@ -1255,6 +1255,10 @@ private:
 	int		m_iLastPos = 0;
 	int		m_iMatches = 0;
 
+	// a folded hit remains logically open while its emitted marker is suspended around retained markup
+	int		m_iTrailingOverlapStart = -1;
+	bool	m_bReopenMatch = false;
+
 	void	CheckClose ( int iPos );
 };
 
@@ -1275,6 +1279,11 @@ bool QueryHighlighter_c::OnToken ( const TokenInfo_t & tTok, const CSphVector<Sp
 
 	RewindHits ( tTok.m_uPosition, m_iField );
 	CheckClose ( tTok.m_uPosition );
+	if ( m_bReopenMatch )
+	{
+		ResultEmit ( m_dResult, m_tQuery.m_sBeforeMatch.cstr(), m_iBeforeLen, m_tQuery.m_bHasBeforePassageMacro, m_iPassageId, m_tQuery.m_sBeforeMatchPassage.cstr(), m_iBeforePostLen );
+		m_bReopenMatch = false;
+	}
 
 	// marker folding, emit "before" marker at span start only
 	// tmg note: stopwords with step 0 resets m_iOpenUntilTokenPos and breaks highligh of spans of tokens
@@ -1287,6 +1296,7 @@ bool QueryHighlighter_c::OnToken ( const TokenInfo_t & tTok, const CSphVector<Sp
 
 	// emit token itself
 	ResultEmit ( m_dResult, m_pDoc+tTok.m_iStart, tTok.m_iLen );
+	m_iTrailingOverlapStart = -1;
 	m_iLastPos = tTok.m_uPosition + Max ( tTok.m_iMultiPosLen-1, 0 );
 	return true;
 }
@@ -1309,7 +1319,7 @@ void QueryHighlighter_c::OnFinish()
 		return;
 	}
 
-	if ( !m_iOpenUntilTokenPos )
+	if ( !m_iOpenUntilTokenPos || m_bReopenMatch )
 		return;
 
 	ResultEmit ( m_dResult, m_tQuery.m_sAfterMatch.cstr(), m_iAfterLen, m_tQuery.m_bHasAfterPassageMacro, m_iPassageId++, m_tQuery.m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
@@ -1321,6 +1331,8 @@ bool QueryHighlighter_c::OnOverlap ( int iStart, int iLen, int )
 	assert ( m_pDoc );
 	assert ( iStart>=0 && m_pDoc+iStart+iLen<=m_pDocMax );
 	CheckClose ( m_iLastPos+1 );
+	if ( m_iOpenUntilTokenPos && !m_bReopenMatch && m_iTrailingOverlapStart<0 )
+		m_iTrailingOverlapStart = m_dResult.GetLength();
 	ResultEmit ( m_dResult, m_pDoc+iStart, iLen );
 	return true;
 }
@@ -1331,6 +1343,20 @@ void QueryHighlighter_c::OnSkipHtml ( int iStart, int iLen )
 	assert ( m_pDoc );
 	assert ( iStart>=0 && m_pDoc+iStart+iLen<=m_pDocMax );
 	CheckClose ( m_iLastPos+1 );
+	if ( m_iOpenUntilTokenPos && !m_bReopenMatch )
+	{
+		CSphVector<BYTE> dTrailing;
+		if ( m_iTrailingOverlapStart>=0 )
+		{
+			dTrailing.Append ( m_dResult.Begin()+m_iTrailingOverlapStart, m_dResult.GetLength()-m_iTrailingOverlapStart );
+			m_dResult.Resize ( m_iTrailingOverlapStart );
+		}
+
+		ResultEmit ( m_dResult, m_tQuery.m_sAfterMatch.cstr(), m_iAfterLen, m_tQuery.m_bHasAfterPassageMacro, m_iPassageId++, m_tQuery.m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
+		m_dResult.Append ( dTrailing );
+		m_iTrailingOverlapStart = -1;
+		m_bReopenMatch = true;
+	}
 	ResultEmit ( m_dResult, m_pDoc+iStart, iLen );
 }
 
@@ -1341,8 +1367,11 @@ void QueryHighlighter_c::CheckClose ( int iPos )
 	if ( !m_iOpenUntilTokenPos || iPos<m_iOpenUntilTokenPos )
 		return;
 
-	ResultEmit ( m_dResult, m_tQuery.m_sAfterMatch.cstr(), m_iAfterLen, m_tQuery.m_bHasAfterPassageMacro, m_iPassageId++, m_tQuery.m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
+	if ( !m_bReopenMatch )
+		ResultEmit ( m_dResult, m_tQuery.m_sAfterMatch.cstr(), m_iAfterLen, m_tQuery.m_bHasAfterPassageMacro, m_iPassageId++, m_tQuery.m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
 	m_iOpenUntilTokenPos = 0;
+	m_iTrailingOverlapStart = -1;
+	m_bReopenMatch = false;
 }
 
 //////////////////////////////////////////////////////////////////////////

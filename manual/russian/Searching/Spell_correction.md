@@ -50,7 +50,7 @@ SELECT
 }
 ```
 
-Примечание: При проведении нечёткого поиска через SQL, в выражении MATCH не должно быть никаких полнотекстовых операторов, кроме [оператора поиска по фразе](../Searching/Full_text_matching/Operators.md#Phrase-search-operator), и оно должно содержать только слова, которые вы намерены сопоставить.
+Примечание: при выполнении нечеткого поиска через SQL предложение MATCH не должно содержать никаких операторов полнотекстового поиска, кроме [оператора поиска фраз](../Searching/Full_text_matching/Operators.md#Phrase-search-operator), и должно включать только слова, которые вы хотите найти. Символы, которые обычно выступают как операторы и требуют [экранирования](../Searching/Full_text_matching/Escaping.md), экранировать не нужно, поскольку нечеткий поиск делает это за вас.
 
 <!-- intro -->
 ##### SQL:
@@ -167,7 +167,7 @@ POST /search
 }
 ```
 
-Примечание: Если вы используете [query_string](../Searching/Full_text_matching/Basic_usage.md#query_string), имейте в виду, что он не поддерживает полнотекстовые операторы, кроме [оператора поиска по фразе](../Searching/Full_text_matching/Operators.md#Phrase-search-operator). Строка запроса должна состоять исключительно из слов, которые вы хотите сопоставить.
+Примечание: если вы используете [query_string](../Searching/Full_text_matching/Basic_usage.md#query_string), имейте в виду, что он не поддерживает операторы полнотекстового поиска, кроме [оператора поиска фраз](../Searching/Full_text_matching/Operators.md#Phrase-search-operator). Строка запроса должна состоять только из слов, которые вы хотите найти. Экранировать символы, которые обычно выступают как [операторы полнотекстового поиска](../Searching/Full_text_matching/Escaping.md), не нужно, поскольку нечеткий поиск экранирует их за вас.
 
 ### Опции
 
@@ -210,7 +210,7 @@ CALL SUGGEST(<word or words>, <table name> [,options])
 options: N as option_name[, M as another_option, ...]
 ```
 
-Эти команды предоставляют все предложения из словаря для заданного слова. Они работают только с таблицами, у которых включено [инфиксирование](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) и используется [dict=keywords](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict). Они возвращают предлагаемые ключевые слова, расстояние Левенштейна между предложенным и исходным ключевым словом, а также статистику документов по предложенному ключевому слову.
+Эти команды возвращают все предложения из словаря для заданного слова. Они работают только для таблиц, где включен [infixing](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) и задан [dict=keywords](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict). Они не работают с таблицами, использующими `dict=keywords_32k`. Они возвращают предложенные ключевые слова, расстояние Левенштейна между предложенным и исходным ключевыми словами, а также статистику документов для предложенного ключевого слова.
 
 Если первый параметр содержит несколько слов, то:
 * `CALL QSUGGEST` вернёт предложения только для **последнего** слова, игнорируя остальные.
@@ -459,4 +459,3 @@ CALL QSUGGEST('test carp', 'products', 1 as sentence, 'words' as search_mode);
 
 
 <!-- proofread -->
-

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>MySQL client compatibility queries</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<queries>
+<sphinxql>
+select DATABASE(), USER() limit 1;
+<!-- select @@version_comment limit 1; - very noisy for testing, depends on git branch. -->
+select @@character_set_client, @@character_set_connection, @@character_set_server, @@character_set_database limit 1;
+SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE table_schema = 'performance_schema' AND table_name = 'session_variables';
+SELECT CAST(DATABASE() AS BINARY);
+SELECT CAST(@@character_set_client AS BINARY);
+</sphinxql>
+</queries>
+
+</test>

@@ -1,0 +1,62 @@
+––– comment –––
+Regression for issue #4770: before portable physical table names were added,
+configless tables used their logical name as the directory and manticore.json
+path. Stage that stopped-daemon layout for the Windows-reserved logical name
+`con`, then verify upgrade load, query, restart, drop, and cleanup of all legacy data
+files. The established lock-file residue is allowed.
+
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS \`con\`; CREATE TABLE \`con\`(body text); INSERT INTO \`con\`(id,body) VALUES(1,'legacy'); FLUSH RAMCHUNK \`con\`;"; echo $?
+––– output –––
+0
+––– input –––
+test -d /var/lib/manticore/@manticore_u_636f6e; echo $?
+––– output –––
+0
+––– input –––
+stdbuf -oL searchd --stopwait > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+mv /var/lib/manticore/@manticore_u_636f6e /var/lib/manticore/con; echo $?
+––– output –––
+0
+––– input –––
+for f in /var/lib/manticore/con/@manticore_u_636f6e*; do base="${f##*/}"; suffix="${base#@manticore_u_636f6e}"; mv "$f" "/var/lib/manticore/con/con${suffix}" || exit 1; done; echo $?
+––– output –––
+0
+––– input –––
+python3 -c 'import json; p="/var/lib/manticore/manticore.json"; d=json.load(open(p)); d["indexes"]["con"]["path"]="con"; open(p,"w").write(json.dumps(d,separators=(",",":")))'; echo $?
+––– output –––
+0
+––– input –––
+test -f /var/lib/manticore/con/con.meta; echo $?
+––– output –––
+0
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id,body FROM \`con\`" | grep -c 'legacy'
+––– output –––
+1
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -N -B -e "SELECT COUNT(*) FROM \`con\`" | tr -cd '0-9\n' | grep '^1$'
+––– output –––
+1
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE \`con\`"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -N -B -e "SHOW TABLES LIKE 'con'" | grep -c '^con'; true
+––– output –––
+0
+––– input –––
+python3 -c 'import json; print(int("con" not in json.load(open("/var/lib/manticore/manticore.json"))["indexes"]))'
+––– output –––
+1
+––– input –––
+find /var/lib/manticore/con -mindepth 1 -maxdepth 1 ! -name 'con.lock' 2>/dev/null | wc -l | tr -d ' '
+––– output –––
+0

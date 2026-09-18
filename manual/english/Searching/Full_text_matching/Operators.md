@@ -2,6 +2,8 @@
 
 The query string can include specific operators that define the conditions for how the words from the query string should be matched.
 
+For the default behavior of multi-keyword queries **without** explicit operators, see [`boolean_mode`](../../Searching/Options.md#boolean_mode).
+
 ### Boolean operators
 
 #### AND operator
@@ -203,7 +205,7 @@ In addition, the following inline wildcard operators are supported:
 * `?` can match any single character: `t?st` will match `test`, but not `teast`
 * `%` can match zero or one character: `tes%` will match `tes` or `test`, but not `testing`
 
-The inline operators require `dict=keywords` (enabled by default) and prefixing/infixing enabled.
+The inline operators require `dict=keywords` (enabled by default) or `dict=keywords_32k`, with prefixing/infixing enabled.
 
 ### REGEX operator
 

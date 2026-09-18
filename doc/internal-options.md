@@ -35,3 +35,5 @@
 * `MANTICORE_LOG_ES_COMPAT` - verbose logging compat events, ruled by this env variable
 * `MANTICORE_TRACK_RT_ERRORS` - check newborn disk chunks, and if it is damaged, report up to this N of errors.
 * `MANTICORE_BUDDY_TIMEOUT` - (default 3 seconds) daemon's wait duration for a buddy message at startup
+* `MANTICORE_SHUTDOWN_ALONES_DEADLINE` - (default 30 seconds) daemon's deadline to wait until all alone (i.e. not in thread-pool) threads are finished.
+* `MANTICORE_SHUTDOWN_ALONES_POLL` - (default 10 seconds) - how long daemon wait alone threads to finish. On shutdown, daemon sends to all alone threads 'TERM' signal, then wait up to 10 seconds, polling these threads to be finished. Then, if 'ALONES_DELTA' is achieved, and some stalled threads are still detected, it reports about them and continue shutdown. Otherwise, it starts the loop - again, from sending signal to the rest of the threads.

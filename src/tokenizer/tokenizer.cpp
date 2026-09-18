@@ -255,15 +255,15 @@ bool ISphTokenizer::SetBlendMode ( const char* sMode, CSphString& sError )
 	return true;
 }
 
-TokenizerRefPtr_c Tokenizer::Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError )
+TokenizerRefPtr_c Tokenizer::Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, int iTokenBytes )
 {
 	TokenizerRefPtr_c pResult;
 	TokenizerRefPtr_c pTokenizer;
 
 	switch ( tSettings.m_iType )
 	{
-	case TOKENIZER_UTF8:	pTokenizer = Tokenizer::Detail::CreateUTF8Tokenizer ( tSettings.m_sCaseFolding.IsEmpty() ); break;
-	case TOKENIZER_NGRAM:	pTokenizer = Tokenizer::Detail::CreateUTF8NgramTokenizer ( tSettings.m_sCaseFolding.IsEmpty() ); break;
+	case TOKENIZER_UTF8:	pTokenizer = Tokenizer::Detail::CreateUTF8Tokenizer ( tSettings.m_sCaseFolding.IsEmpty(), iTokenBytes ); break;
+	case TOKENIZER_NGRAM:	pTokenizer = Tokenizer::Detail::CreateUTF8NgramTokenizer ( tSettings.m_sCaseFolding.IsEmpty(), iTokenBytes ); break;
 	default:
 		sError.SetSprintf ( "failed to create tokenizer (unknown charset type '%d')", tSettings.m_iType );
 		return pResult;
@@ -326,7 +326,7 @@ TokenizerRefPtr_c Tokenizer::Create ( const CSphTokenizerSettings & tSettings, c
 	return pResult;
 }
 
-TokenizerRefPtr_c sphCloneAndSetupQueryTokenizer ( const TokenizerRefPtr_c& pTokenizer, bool bWildcards, bool bExact, bool bJson )
+TokenizerRefPtr_c sphCloneAndSetupQueryTokenizer ( const TokenizerRefPtr_c& pTokenizer, bool bWildcards, bool bExact, bool bJson, int iTokenBytes )
 {
 	assert ( pTokenizer );
 	if ( bWildcards )
@@ -334,21 +334,21 @@ TokenizerRefPtr_c sphCloneAndSetupQueryTokenizer ( const TokenizerRefPtr_c& pTok
 		if ( bExact )
 		{
 			if ( bJson )
-				return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD_EXACT_JSON);
-			return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD_EXACT );
+				return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD_EXACT_JSON, iTokenBytes );
+			return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD_EXACT, iTokenBytes );
 		}
 		if ( bJson )
-			return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD_JSON );
-		return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD );
+			return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD_JSON, iTokenBytes );
+		return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD, iTokenBytes );
 	}
 
 	if ( bExact )
 	{
 		if ( bJson )
-			return pTokenizer->Clone ( SPH_CLONE_QUERY_EXACT_JSON );
-		return pTokenizer->Clone ( SPH_CLONE_QUERY_EXACT );
+			return pTokenizer->Clone ( SPH_CLONE_QUERY_EXACT_JSON, iTokenBytes );
+		return pTokenizer->Clone ( SPH_CLONE_QUERY_EXACT, iTokenBytes );
 	}
 	if ( bJson )
-		return pTokenizer->Clone ( SPH_CLONE_QUERY );
-	return pTokenizer->Clone ( SPH_CLONE_QUERY_ );
+		return pTokenizer->Clone ( SPH_CLONE_QUERY, iTokenBytes );
+	return pTokenizer->Clone ( SPH_CLONE_QUERY_, iTokenBytes );
 }

@@ -1,0 +1,40 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tbl_sharded(f text) min_infix_len='2' shards='2' rf='1'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLE tbl_sharded SETTINGS"
+––– output –––
++---------------+-------------------+
+| Variable_name | Value             |
++---------------+-------------------+
+| settings      | min_infix_len = 2 |
++---------------+-------------------+
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tbl_rt(f text) min_infix_len='3'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLE tbl_rt SETTINGS"
+––– output –––
++---------------+-------------------+
+| Variable_name | Value             |
++---------------+-------------------+
+| settings      | min_infix_len = 3 |
++---------------+-------------------+
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tbl_dist type='distributed' local='tbl_rt'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLE tbl_dist SETTINGS"
+––– output –––
+ERROR 1064 (42000) at line 1: SHOW TABLE SETTINGS requires an existing table
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLE tbl_missing SETTINGS"
+––– output –––
+ERROR 1064 (42000) at line 1: SHOW TABLE SETTINGS requires an existing table

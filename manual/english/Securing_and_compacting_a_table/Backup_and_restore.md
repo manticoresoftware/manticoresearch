@@ -49,6 +49,15 @@ First, make sure you're running `manticore-backup` on the same server where the 
 
 Second, we recommend running the tool under the `root` user so the tool can transfer ownership of the files you are backing up. Otherwise, a backup will be also made but with no ownership transfer. In either case, you should make sure that `manticore-backup` has access to the data dir of the Manticore instance.
 
+If [authentication](../Security/Authentication_and_authorization.md) is enabled, authenticate the tool with either `--user` and `--password`, or `--token`. The corresponding environment variables are `MANTICORE_BACKUP_USER`, `MANTICORE_BACKUP_PASSWORD`, and `MANTICORE_BACKUP_TOKEN`. A bearer token takes precedence over a username and password. Prefer environment variables over command-line secrets because command-line arguments can be visible to other local users through process-listing tools.
+
+The authenticated user must have `backup` on `*`. A backup of selected tables also requires `read` on every selected table; a backup of all tables requires unrestricted `read` on `*` (no `read` deny rules). For example:
+
+```sql
+GRANT backup ON * TO 'backup_operator';
+GRANT read ON 'products' TO 'backup_operator';
+```
+
 <!-- example backup1 -->
 
 The only required argument for `manticore-backup` is `--backup-dir`, which specifies the destination for the backup. If you don't provide any additional arguments, `manticore-backup` will:
@@ -138,8 +147,11 @@ Manticore versions:
 | `--force` | Skip versions check on restore and gracefully restore the backup. |
 | `--disable-telemetry` | Pass this flag in case you want to disable sending anonymized metrics  to Manticore. You can also use environment variable TELEMETRY=0 |
 | `--config=/path/to/manticore.conf` | Path to the Manticore configuration. Optional. If not provided, a default configuration for your operating system will be used. Used to determine the host and port for communication with the Manticore daemon. The `manticore-backup` tool supports [dynamic configuration](../Server_settings/Scripted_configuration.md) files. You can specify the `--config` option multiple times if your configuration is spread across multiple files. |
-| `--tables=tbl1,tbl2, ...` | Semicolon-separated list of tables that you want to back up. To back up all tables, omit this argument. All the provided tables must exist in the Manticore instance you are backing up from, or the backup will fail. |
-| `--compress` | Whether the backed up files should be compressed. Not enabled by default. | optional |
+| `--tables=tbl1,tbl2, ...` | Comma-separated list of tables that you want to back up. To back up all tables, omit this argument. All the provided tables must exist in the Manticore instance you are backing up from, or the backup will fail. |
+| `--user=name` | Manticore user for authenticated HTTP requests. Alternatively, set `MANTICORE_BACKUP_USER`. |
+| `--password=password` | Password for `--user`. Alternatively, set `MANTICORE_BACKUP_PASSWORD`. Prefer the environment variable so the password is not exposed in the process list. |
+| `--token=token` | Bearer token for authenticated HTTP requests. Alternatively, set `MANTICORE_BACKUP_TOKEN`. A token takes precedence over `--user` and `--password`. |
+| `--compress` | Whether the backed up files should be compressed. Not enabled by default. |
 | `--unlock` | In rare cases when something goes wrong, tables can be left in a locked state. Use this argument to unlock them. |
 | `--version` | Show the current version. |
 | `--help` | Show this help. |
@@ -210,6 +222,8 @@ You can also back up your data through SQL by running the simple command `BACKUP
 > NOTE: `BACKUP` is not supported in Windows. Consider using [mysqldump](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump) instead.
 
 > NOTE: `BACKUP` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
+When authentication is enabled, `BACKUP` requires the global `backup` permission plus access to the data being backed up. `BACKUP TABLE <tables>` requires `backup` on `*` and `read` on every named table. `BACKUP` without an explicit table list requires `backup` on `*` and unrestricted `read` on `*`; any `read` deny rule prevents the full backup. The `admin`, `schema`, or `read` permission alone does not authorize `BACKUP`. See [Permissions](../Security/Authentication_and_authorization.md#Permissions) for grant and deny semantics.
 
 ### General syntax of BACKUP
 
@@ -351,7 +365,7 @@ Manticore config
 
 ## Backup and restore with mysqldump
 
-Manticore supports `mysqldump` utility from MySQL up to 9.7 and `mariadb-dump` utility from MariaDB up to 12.3.
+Manticore supports `mysqldump` utility from MySQL up to 26.7 and `mariadb-dump` utility from MariaDB up to 12.3.
 
 <!-- example mysqldump_backup -->
 
@@ -387,6 +401,10 @@ Use the `cluster` user and the `-t` flag to enable replication mode. See the det
 
 <!-- end -->
 
+To apply changed full-text settings to existing documents, see [Reindexing existing documents after changing FT settings](../Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings).
+
+When piping a dump directly into `mysql` to reindex the same table, `--skip-lock-tables` is required. It is not required when exporting to a file and replaying it after `mysqldump` exits.
+
 <!-- example mysqldump_restore -->
 ### Restore
 
@@ -409,10 +427,10 @@ This command enables you to restore everything from the `manticore_backup.sql` f
 
 Here are some more settings that can be used with mysqldump to tailor your backup:
 
-- `-t` skips `drop`/`create` table commands. Useful for full-text reindexation of a table after changing tokenization settings.
+- `-t` skips `drop`/`create` table commands. Use it when reindexing a table after changing full-text settings.
 - `--no-data`: This setting omits table data from the backup, resulting in a backup file that consists only of table schemas.
 - `--ignore-table=[database_name].[table_name]`: This option allows you to bypass a particular table during the backup operation. Note that the database name must be `manticore`.
-- `--replace` to perform `replace` instead of `insert`. Useful for full-text reindexation of a table after changing tokenization settings.
+- `--replace` to perform `replace` instead of `insert`. Use it when reindexing a table after changing full-text settings.
 - `--net-buffer-length=16M` to make batches up to 16 megabytes large for faster restoration.
 - `-e` to batch up documents. Useful for faster restoration.
 - `-c` to keep column names. Useful for reindexation of a table after changing its schema (e.g., changing field order).

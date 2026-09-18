@@ -61,6 +61,17 @@ query_log_format = sphinxql # default
 ```
 <!-- end -->
 
+<!-- example sphixql_log3 -->
+需要注意的是，Manticore 不仅记录 SELECT 查询，还记录诸如 UPDATE 之类的数据修改语句。UPDATE 语句会以 SQL 日志格式记录，而 INSERT、REPLACE 和 DELETE 操作不会被记录。如果你需要对所有操作进行完整日志记录，可能还需要在应用层额外实现日志。
+
+<!-- intro -->
+UPDATE 的 `sphinxql` 日志条目示例：
+<!-- request Example -->
+```sql
+/* Sat Mar 15 01:05:28.508 2025 conn 7 (127.0.0.1:63942) real 0.000 */ UPDATE test SET title='Updated Title' WHERE id=1;
+```
+<!-- end -->
+
 ### Plain日志格式
 
 <!-- example plain_log -->
@@ -82,8 +93,8 @@ query_log_format = plain
 ```
 
 其中：
-* `real-time` 是从查询开始到结束的端到端时间。在 SphinxQL 日志中，它对应 `real` 字段。
-* `wall-time` 是 Manticore 的内部查询墙时间指标。在 SphinxQL 日志中，它对应 `wall` 字段，且此值也用于 `query_log_min_msec`。对于分布式和多源查询，`wall-time` 可能与 `real-time` 不同。
+* `real-time` 是从查询开始到结束的端到端耗时。在查询日志中，它对应 `real` 字段。
+* `wall-time` 是 Manticore 的内部查询墙钟时间指标。在查询日志中，它对应 `wall` 字段，并且 `query_log_min_msec` 使用的也是这个值。对于分布式和多源查询，`wall-time` 可能与 `real-time` 不同。
 * `perf-stats`包括当Manticore以`--cpustats`（或通过`SET GLOBAL cpustats=1`启用）和/或`--iostats`（或通过`SET GLOBAL iostats=1`启用）启动时的CPU/IO统计信息：
   - `ios`是执行的文件I/O操作数；
   - `kb`是从表文件读取的数据量（以千字节为单位）；
@@ -120,6 +131,9 @@ query_log_format = plain
 ```
 
 <!-- end -->
+
+与 SQL 日志格式不同，纯文本日志格式只记录搜索查询（SELECT 语句）。INSERT、REPLACE、DELETE 和 UPDATE 之类的数据修改语句不会以这种格式记录。UPDATE 语句会以 SQL 格式记录，但不会以纯文本格式记录。
+
 
 ## 仅记录慢查询
 

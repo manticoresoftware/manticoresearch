@@ -231,9 +231,9 @@ build_manual_image() {
 
   if docker buildx version >/dev/null 2>&1; then
     # Ensure the image is loaded into the local Docker image store.
-    run_docker buildx build --load "${extra_args[@]}" -t "$IMAGE_NAME" --build-arg DEPLOY_TARGET=local "$DOC_APP_DIR"
+    run_docker buildx build --load ${extra_args+"${extra_args[@]}"} -t "$IMAGE_NAME" --build-arg DEPLOY_TARGET=local "$DOC_APP_DIR"
   else
-    run_docker build "${extra_args[@]}" -t "$IMAGE_NAME" --build-arg DEPLOY_TARGET=local "$DOC_APP_DIR"
+    run_docker build ${extra_args+"${extra_args[@]}"} -t "$IMAGE_NAME" --build-arg DEPLOY_TARGET=local "$DOC_APP_DIR"
   fi
 }
 

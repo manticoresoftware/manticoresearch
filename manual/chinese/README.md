@@ -58,6 +58,7 @@
         * [复制集群状态](Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md)
         * [重启集群](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)
         * [集群恢复](Creating_a_cluster/Setting_up_replication/Cluster_recovery.md)
+        * [了解复制状态](Creating_a_cluster/Setting_up_replication/Understanding_cluster_status_and_node_states.md)
 * [4️⃣ 连接到服务器](Connecting_to_the_server.md)
     * [MySQL 协议](Connecting_to_the_server/MySQL_protocol.md)
     * [HTTP](Connecting_to_the_server/HTTP.md)
@@ -120,11 +121,13 @@
     * [• 基于成本的优化器](Searching/Cost_based_optimizer.md)
     * [• K 最近邻向量搜索](Searching/KNN.md)
     * [• 混合搜索](Searching/Hybrid_search.md)
+    * [• 对话式搜索](Searching/Conversational_search.md)
 * [• 更新表结构和设置](Updating_table_schema_and_settings.md)
     * [• 在 RT 模式下更新表结构](Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode)
     * [• 在 RT 模式下更新表 FT 设置](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode)
     * [• 重命名实时表](Updating_table_schema_and_settings.md#Renaming-a-real-time-table)
     * [• 在普通模式下更新表 FT 设置](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-plain-mode)
+    * [• 修改 FT 设置后重新索引现有文档](Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings)
     * [• 重建二级索引](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)
     * [• 更改分布式表](Updating_table_schema_and_settings.md#Changing-a-distributed-table)
 * [≫ 函数]
@@ -148,6 +151,7 @@
     * [• 刷新主机名](Securing_and_compacting_a_table/Flushing_hostnames.md)
 * [≫ 安全]
     * [• SSL](Security/SSL.md)
+    * [• 身份验证与授权](Security/Authentication_and_authorization.md)
     * [• 只读](Security/Read_only.md)
 * [≫ 日志]
     * [• 查询日志](Logging/Query_logging.md)
@@ -177,7 +181,7 @@
     * [• 特殊后缀](Server_settings/Special_suffixes.md)
     * [• 脚本配置](Server_settings/Scripted_configuration.md)
     * [• 注释](Server_settings/Comments.md)
-    * [• 表和源声明的继承](Server_settings/Inheritance_of_index_and_source_declarations.md)
+    * [• 表和数据源声明的继承](Server_settings/Inheritance_of_table_and_source_declarations.md)
     * [• 在线设置变量](Server_settings/Setting_variables_online.md)
 * [≫ 集成]
     * [Logstash](Integration/Logstash.md)
@@ -186,6 +190,7 @@
     * [Vector.dev](Integration/Vectordev.md)
     * [Grafana](Integration/Grafana.md)
     * [Kibana](Integration/Kibana.md)
+    * [Opensearch Dashboards](Integration/Opensearch_Dashboards.md)
     * [Kafka](Integration/Kafka.md)
     * [DBeaver](Integration/DBeaver.md)
     * [Apache Superset](Integration/Apache_Superset.md)
@@ -213,4 +218,3 @@
 * [📖 参考资料](References.md)
     * [• 旧版本](References.md#Documentation-for-old-Manticore-versions)
 <!-- proofread -->
-

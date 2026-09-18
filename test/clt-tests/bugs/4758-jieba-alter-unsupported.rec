@@ -1,0 +1,41 @@
+––– block: ../base/start-searchd –––
+––– input –––
+printf '甲乙丙丁戊己 100 nz\n' > /tmp/gh4758-jieba-old.txt; printf '甲乙 100 nz\n' > /tmp/gh4758-jieba-new.txt
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE gh4758_jieba_reject(f TEXT) morphology='jieba_chinese' charset_table='cont,non_cont' jieba_user_dict_path='/tmp/gh4758-jieba-old.txt';"
+––– output –––
+––– comment –––
+Jieba is active before ALTER.
+––– input –––
+tokens=$(mysql -N -B -h0 -P9306 -e "CALL KEYWORDS ('文山區長青學苑則有個十分特別的英文歌唱班', 'gh4758_jieba_reject');" | wc -l); if [ "$tokens" -gt 1 ]; then echo OK_JIEBA_ACTIVE; else echo "FAIL_JIEBA_ACTIVE tokens=$tokens"; fi
+––– output –––
+OK_JIEBA_ACTIVE
+––– comment –––
+Unrelated dictionary and tokenizer settings remain alterable, and both the cloned and rebuilt filter paths preserve Jieba segmentation.
+––– input –––
+before_tokens=$(mysql -N -B -h0 -P9306 -e "CALL KEYWORDS ('文山區長青學苑則有個十分特別的英文歌唱班', 'gh4758_jieba_reject');" | wc -l); mysql -h0 -P9306 -e "ALTER TABLE gh4758_jieba_reject stopwords_list='ignoredword';"; stop_rc=$?; after_stop_tokens=$(mysql -N -B -h0 -P9306 -e "CALL KEYWORDS ('文山區長青學苑則有個十分特別的英文歌唱班', 'gh4758_jieba_reject');" | wc -l); mysql -h0 -P9306 -e "ALTER TABLE gh4758_jieba_reject ignore_chars='.';"; ignore_rc=$?; after_ignore_tokens=$(mysql -N -B -h0 -P9306 -e "CALL KEYWORDS ('文山區長青學苑則有個十分特別的英文歌唱班', 'gh4758_jieba_reject');" | wc -l); create_sql=$(mysql -N -B -h0 -P9306 -e "SHOW CREATE TABLE gh4758_jieba_reject;"); if [ "$stop_rc" -eq 0 ] && [ "$ignore_rc" -eq 0 ] && [ "$before_tokens" -gt 1 ] && [ "$after_stop_tokens" -eq "$before_tokens" ] && [ "$after_ignore_tokens" -eq "$before_tokens" ] && printf '%s' "$create_sql" | grep -Fq "stopwords_list='ignoredword'" && printf '%s' "$create_sql" | grep -Fq "ignore_chars='.'"; then echo OK_UNRELATED_ALTERS_PRESERVE_JIEBA; else echo "FAIL_UNRELATED_ALTERS_PRESERVE_JIEBA stop_rc=$stop_rc ignore_rc=$ignore_rc before=$before_tokens after_stop=$after_stop_tokens after_ignore=$after_ignore_tokens create=$create_sql"; fi
+––– output –––
+OK_UNRELATED_ALTERS_PRESERVE_JIEBA
+––– comment –––
+Explicit no-op Jieba options are accepted because their effective values do not change.
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE gh4758_jieba_reject jieba_mode='accurate';"; mode_same_rc=$?; mysql -h0 -P9306 -e "ALTER TABLE gh4758_jieba_reject jieba_hmm='1';"; hmm_same_rc=$?; after_tokens=$(mysql -N -B -h0 -P9306 -e "CALL KEYWORDS ('文山區長青學苑則有個十分特別的英文歌唱班', 'gh4758_jieba_reject');" | wc -l); if [ "$mode_same_rc" -eq 0 ] && [ "$hmm_same_rc" -eq 0 ] && [ "$after_tokens" -eq "$before_tokens" ]; then echo OK_UNCHANGED_JIEBA_OPTIONS; else echo "FAIL_UNCHANGED_JIEBA_OPTIONS mode_rc=$mode_same_rc hmm_rc=$hmm_same_rc before=$before_tokens after=$after_tokens"; fi
+––– output –––
+OK_UNCHANGED_JIEBA_OPTIONS
+––– comment –––
+Actual Jieba path, mode, and HMM changes fail after effective settings are prepared. A staged replacement dictionary is rolled back.
+––– input –––
+path_out=$(mysql -h0 -P9306 -e "ALTER TABLE gh4758_jieba_reject jieba_user_dict_path='/tmp/gh4758-jieba-new.txt';" 2>&1); path_rc=$?; mode_out=$(mysql -h0 -P9306 -e "ALTER TABLE gh4758_jieba_reject jieba_mode='full';" 2>&1); mode_rc=$?; hmm_out=$(mysql -h0 -P9306 -e "ALTER TABLE gh4758_jieba_reject jieba_hmm='0';" 2>&1); hmm_rc=$?; ext_count=$(find /var/lib/manticore/gh4758_jieba_reject -maxdepth 1 -type f -name 'jieba_user_dict_path_chunk*.txt' 2>/dev/null | wc -l); new_count=$(find /var/lib/manticore/gh4758_jieba_reject -maxdepth 1 -type f -name 'jieba_user_dict_path_chunk0_1.txt' 2>/dev/null | wc -l); after_tokens=$(mysql -N -B -h0 -P9306 -e "CALL KEYWORDS ('文山區長青學苑則有個十分特別的英文歌唱班', 'gh4758_jieba_reject');" | wc -l); create_sql=$(mysql -N -B -h0 -P9306 -e "SHOW CREATE TABLE gh4758_jieba_reject;"); if [ "$path_rc" -ne 0 ] && [ "$mode_rc" -ne 0 ] && [ "$hmm_rc" -ne 0 ] && printf '%s' "$path_out" | grep -Fq 'changing Jieba settings with ALTER TABLE is not supported' && printf '%s' "$mode_out" | grep -Fq 'changing Jieba settings with ALTER TABLE is not supported' && printf '%s' "$hmm_out" | grep -Fq 'changing Jieba settings with ALTER TABLE is not supported' && [ "$ext_count" -eq 1 ] && [ "$new_count" -eq 0 ] && [ "$after_tokens" -eq "$before_tokens" ] && printf '%s' "$create_sql" | grep -Fq 'jieba_user_dict_path_chunk0_0.txt' && ! printf '%s' "$create_sql" | grep -Fq "jieba_mode='full'" && ! printf '%s' "$create_sql" | grep -Fq "jieba_hmm='0'"; then echo OK_CHANGED_JIEBA_OPTIONS_REJECTED; else echo "FAIL_CHANGED_JIEBA_OPTIONS_REJECTED path_rc=$path_rc mode_rc=$mode_rc hmm_rc=$hmm_rc files=$ext_count new=$new_count before=$before_tokens after=$after_tokens create=$create_sql path=$path_out mode=$mode_out hmm=$hmm_out"; fi
+––– output –––
+OK_CHANGED_JIEBA_OPTIONS_REJECTED
+––– comment –––
+Enabling and disabling Jieba are effective Jieba changes and remain unsupported.
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE gh4758_nonjieba(f TEXT); CREATE TABLE gh4758_jieba_nodict(f TEXT) morphology='jieba_chinese' charset_table='cont,non_cont';"; enable_out=$(mysql -h0 -P9306 -e "ALTER TABLE gh4758_nonjieba morphology='jieba_chinese';" 2>&1); enable_rc=$?; disable_out=$(mysql -h0 -P9306 -e "ALTER TABLE gh4758_jieba_nodict morphology='';" 2>&1); disable_rc=$?; mysql -h0 -P9306 -e "ALTER TABLE gh4758_nonjieba stopwords_list='supported';"; supported_rc=$?; create_sql=$(mysql -N -B -h0 -P9306 -e "SHOW CREATE TABLE gh4758_nonjieba;"); if [ "$enable_rc" -ne 0 ] && [ "$disable_rc" -ne 0 ] && printf '%s' "$enable_out" | grep -Fq 'changing Jieba settings with ALTER TABLE is not supported' && printf '%s' "$disable_out" | grep -Fq 'changing Jieba settings with ALTER TABLE is not supported' && [ "$supported_rc" -eq 0 ] && printf '%s' "$create_sql" | grep -Fq "stopwords_list='supported'" && ! printf '%s' "$create_sql" | grep -Fq "morphology='jieba_chinese'"; then echo OK_ENABLE_DISABLE_REJECTED; else echo "FAIL_ENABLE_DISABLE_REJECTED enable_rc=$enable_rc disable_rc=$disable_rc supported_rc=$supported_rc create=$create_sql enable=$enable_out disable=$disable_out"; fi
+––– output –––
+OK_ENABLE_DISABLE_REJECTED
+––– input –––
+drop_out=$(mysql -h0 -P9306 -e "DROP TABLE gh4758_jieba_reject; DROP TABLE gh4758_jieba_nodict; DROP TABLE gh4758_nonjieba; SHOW WARNINGS;" 2>&1); ext_count=$(find /var/lib/manticore/gh4758_jieba_reject -maxdepth 1 -type f -name 'jieba_user_dict_path_chunk*.txt' 2>/dev/null | wc -l); if [ "$ext_count" -eq 0 ] && ! printf '%s' "$drop_out" | grep -q 'clean up files manually'; then echo OK_JIEBA_DROP; else echo "FAIL_JIEBA_DROP files=$ext_count output=$drop_out"; fi
+––– output –––
+OK_JIEBA_DROP

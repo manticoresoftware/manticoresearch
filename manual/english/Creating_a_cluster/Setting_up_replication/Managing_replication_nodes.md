@@ -104,6 +104,13 @@ utils_api.sql("ALTER CLUSTER posts UPDATE nodes", Some(true)).await;
 
 <!-- end -->
 
+If [authentication and authorization](../../Security/Authentication_and_authorization.md) is enabled, `ALTER CLUSTER ... UPDATE nodes`, `ALTER CLUSTER ... ADD`, and `ALTER CLUSTER ... DROP` use the stored cluster user. To change the stored cluster user, grant `replication` permission to the new user and run:
+
+```sql
+ALTER CLUSTER posts UPDATE user 'repl_user'
+```
+
+The new stored user must be provisioned with matching authentication data on the nodes that will participate in later cluster operations. Those operations fail if the stored user is missing, has different auth data, or loses `replication` permission.
 
 For instance, when the cluster was initially established, the list of nodes used to rejoin the cluster was `10.10.0.1:9312,10.10.1.1:9312`. Since then, other nodes joined the cluster and now the active nodes are `10.10.0.1:9312,10.10.1.1:9312,10.15.0.1:9312,10.15.0.3:9312`.However, the list of nodes used to rejoin the cluster has not been updated.
 
@@ -131,4 +138,6 @@ EXIT CLUSTER posts
 Use `EXIT CLUSTER` when you want to detach only the current node. Use `DELETE CLUSTER` when you want to remove the cluster from every node.
 
 `EXIT CLUSTER` is only allowed for a healthy local node in a primary cluster. If the command returns a warning, the local detach already succeeded, but some follow-up may still be required. In that case run `ALTER CLUSTER <cluster_name> UPDATE nodes` on any surviving node to finish refreshing the remaining cluster metadata.
+
+If the surviving side becomes a clean one-node cluster after `EXIT CLUSTER`, it remains a replication cluster. After a clean shutdown, that surviving node can be started normally and should return as `primary` / `synced`; you do not need `--new-cluster` for this self-only case.
 <!-- proofread -->

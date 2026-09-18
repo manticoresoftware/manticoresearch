@@ -223,6 +223,14 @@ CSphString CalcSHA1 ( const void * pData, int iLen )
 	return BinToHex ( dHashValue );
 }
 
+HASH20_t CalcBinarySHA1 ( const void* pData, int iLen )
+{
+	SHA1_c dHasher;
+	dHasher.Init();
+	dHasher.Update ( (const BYTE*)pData, iLen );
+	return dHasher.FinalHash();
+}
+
 bool CalcSHA1 ( const CSphString & sFileName, CSphString & sRes, CSphString & sError )
 {
 	CSphAutofile tFile ( sFileName, SPH_O_READ, sError, false );
@@ -321,8 +329,7 @@ CSphString TaggedHash20_t::ToFIPS () const
 	return sResult.cstr();
 }
 
-namespace {
-inline BYTE hex_char ( unsigned char c ) noexcept
+BYTE HexChar ( unsigned char c ) noexcept
 {
 	if ( c>=0x30 && c<=0x39 )
 		return c - '0';
@@ -330,7 +337,6 @@ inline BYTE hex_char ( unsigned char c ) noexcept
 		return c - 'a' + 10;
 	assert ( false && "broken hex num - expected digits and a..f letters in the num" );
 	return 0;
-}
 }
 
 // de-serialize from FIPS, returns len of parsed chunk of sFIPS or -1 on error
@@ -346,8 +352,8 @@ int TaggedHash20_t::FromFIPS ( const char * sFIPS )
 	for ( auto i = 0; i<HASH20_SIZE; ++i )
 	{
 		BYTE & uCode = m_dHashValue[i];
-		uCode = hex_char ( sFIPS[i * 2] );
-		uCode = BYTE ( ( uCode << 4 ) + hex_char ( sFIPS[i * 2 + 1] ) );
+		uCode = HexChar ( sFIPS[i * 2] );
+		uCode = BYTE ( ( uCode << 4 ) + HexChar ( sFIPS[i * 2 + 1] ) );
 	}
 
 	sFIPS += 2 + HASH20_SIZE * 2;

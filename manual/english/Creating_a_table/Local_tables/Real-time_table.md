@@ -290,7 +290,7 @@ POST /sql?mode=raw -d "create table products LIKE old_products WITH DATA"
 * [Empty the table](../../Emptying_a_table.md).
 * Change the schema online with the `ALTER` command, as explained in [Change schema online](../../Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode).
 * Define the table in a configuration file, as detailed in [Define table](../../Creating_a_table/Local_tables/Real-time_table.md).
-* Use the [UUID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) feature for automatic ID provisioning.
+* Use [automatic ID generation](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID).
 
 ### ⛔ What you cannot do with a real-time table:
 * Ingest data using the [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) feature.

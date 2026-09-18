@@ -102,6 +102,11 @@ public:
 	/// save tokenizer settings to a stream
 	virtual const CSphTokenizerSettings &	GetSettings () const { return m_tSettings; }
 
+	/// get normalized token byte cap selected for this tokenizer instance
+	virtual int						GetMaxTokenBytes () const noexcept { return SPH_LEGACY_TOKEN_BYTES; }
+	virtual int						GetOversizedTokenCount () const noexcept { return 0; }
+	virtual int						ResetOversizedTokenCount () noexcept { return 0; }
+
 	/// get synonym file info
 	virtual const CSphSavedFile &	GetSynFileInfo () const { return m_tSynFileInfo; }
 
@@ -173,7 +178,7 @@ public:
 
 public:
 	/// spawn a clone of my own
-	virtual TokenizerRefPtr_c		Clone ( ESphTokenizerClone eMode ) const noexcept = 0;
+	virtual TokenizerRefPtr_c		Clone ( ESphTokenizerClone eMode, int iTokenBytes=0 ) const noexcept = 0;
 
 	/// start buffer point of last token
 	virtual const char *			GetTokenStart () const noexcept = 0;
@@ -250,12 +255,14 @@ protected:
 	bool							m_bPhrase = false;
 };
 
+void WarnAppendSkipped ( CSphString & sWarning, int iSkipped );
+
 using TokenizerRefPtr_c = CSphRefcountedPtr<ISphTokenizer>;
 
 namespace Tokenizer {
 
 /// create a tokenizer using the given settings
-TokenizerRefPtr_c		Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError );
+TokenizerRefPtr_c		Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, int iTokenBytes = SPH_LEGACY_TOKEN_BYTES );
 
 /// add multiform filter upon given tokenizer
 void AddToMultiformFilterTo ( TokenizerRefPtr_c& pTokenizer, const CSphMultiformContainer* pContainer );
@@ -270,13 +277,13 @@ void AddPluginFilterTo ( TokenizerRefPtr_c& pTokenizer, const CSphString & sSpec
 namespace Detail {
 
 	/// create UTF-8 tokenizer
-	TokenizerRefPtr_c CreateUTF8Tokenizer ( bool bDefaultCharset = true );
+	TokenizerRefPtr_c CreateUTF8Tokenizer ( bool bDefaultCharset = true, int iTokenBytes = SPH_LEGACY_TOKEN_BYTES );
 
 	/// create UTF-8 tokenizer with n-grams support (for CJK n-gram indexing)
-	TokenizerRefPtr_c CreateUTF8NgramTokenizer ( bool bDefaultCharset = true );
+	TokenizerRefPtr_c CreateUTF8NgramTokenizer ( bool bDefaultCharset = true, int iTokenBytes = SPH_LEGACY_TOKEN_BYTES );
 
 } // namespace Detail
 } // namespace Tokenizer
 
 /// setup tokenizer for query parsing (ie. add all specials and whatnot)
-TokenizerRefPtr_c sphCloneAndSetupQueryTokenizer ( const TokenizerRefPtr_c& pTokenizer, bool bWildcards, bool bExact, bool bJson );
+TokenizerRefPtr_c sphCloneAndSetupQueryTokenizer ( const TokenizerRefPtr_c& pTokenizer, bool bWildcards, bool bExact, bool bJson, int iTokenBytes = 0 );

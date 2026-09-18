@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>GH-4822 distributed JSON agg postlimit crash</name>
+
+<requires>
+<force-rt/>
+<http/>
+</requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>DROP TABLE IF EXISTS dist_530_json_agg</sphinxql>
+<sphinxql>DROP TABLE IF EXISTS rt_530_json_agg_a</sphinxql>
+<sphinxql>DROP TABLE IF EXISTS rt_530_json_agg_b</sphinxql>
+<sphinxql>CREATE TABLE rt_530_json_agg_a( x text, l string, k json )</sphinxql>
+<sphinxql>CREATE TABLE rt_530_json_agg_b( x text, l string, k json )</sphinxql>
+<sphinxql>CREATE TABLE dist_530_json_agg TYPE='distributed' LOCAL='rt_530_json_agg_a' LOCAL='rt_530_json_agg_b'</sphinxql>
+<sphinxql>INSERT INTO rt_530_json_agg_b (id,x,l,k) VALUES (1,'a','b','["k"]')</sphinxql>
+<sphinxql>FLUSH RAMCHUNK rt_530_json_agg_b</sphinxql>
+<!-- GH-4822: before the fix this query can crash in Expr_GetStored_T::Command via PreparedMinimize_t::Finish; repeat makes the intermittent failure reliably reproducible. -->
+<repeat count="64">
+<query endpoint="search">{"index":"dist_530_json_agg","_source":["l","k"],"sort":[{"l":{"order":"asc"}}],"aggs":{"e":{"terms":{"field":"k"}}}}</query>
+</repeat>
+<sphinxql>DROP TABLE IF EXISTS dist_530_json_agg</sphinxql>
+<sphinxql>DROP TABLE IF EXISTS rt_530_json_agg_a</sphinxql>
+<sphinxql>DROP TABLE IF EXISTS rt_530_json_agg_b</sphinxql>
+</queries>
+
+</test>

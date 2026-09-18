@@ -1,0 +1,102 @@
+––– comment –––
+Regression for #4808: a non-empty foreign-version binlog is an invalid upgrade
+precondition. Reject it before the daemon banner, table preload, or accepting
+connections, explain that the previous binary is required, and do not mutate
+the recovery files.
+––– input –––
+cat > /tmp/gh4808-foreign-binlog.sh <<'BASH'
+#!/usr/bin/env bash
+set -u
+
+root=/tmp/gh4808-foreign-binlog
+conf=$root/manticore.conf
+
+searchd --stopwait >/dev/null 2>&1 || true
+rm -rf "$root"
+mkdir -p "$root/data"
+cat > "$conf" <<CONF
+searchd {
+  listen = 127.0.0.1:19586:mysql
+  listen = 127.0.0.1:19588:http
+  log = $root/searchd.log
+  query_log = $root/query.log
+  pid_file = $root/searchd.pid
+  data_dir = $root/data
+  binlog_path = $root/data
+  watchdog = 0
+}
+CONF
+
+# SPLI/v15, four filename digits, one active file, extension 0.
+printf '\x53\x50\x4c\x49\x0f\x00\x00\x00\x04\x01\x00' > "$root/data/binlog.meta"
+# SPBL/v15 followed by TXN!/ADD_TXN. The non-cache opcode is enough to prove
+# that recovery work exists; this fixture is not used as v15 replay evidence.
+printf '\x53\x50\x42\x4c\x0f\x00\x00\x00\x54\x58\x4e\x21\x02' > "$root/data/binlog.0000"
+
+meta_before=$(sha256sum "$root/data/binlog.meta" | awk '{print $1}')
+log_before=$(sha256sum "$root/data/binlog.0000" | awk '{print $1}')
+
+searchd --config "$conf" --nodetach >"$root/start.out" 2>&1
+start_exit=$?
+meta_after=$(sha256sum "$root/data/binlog.meta" | awk '{print $1}')
+log_after=$(sha256sum "$root/data/binlog.0000" | awk '{print $1}')
+cat "$root/start.out" "$root/searchd.log" 2>/dev/null > "$root/combined.log"
+
+if grep -Fq 'is v.15, binary is v.16; recovery requires previous binary version' "$root/combined.log"; then
+  foreign_version_diagnostic=yes
+else
+  foreign_version_diagnostic=no
+fi
+if grep -q 'starting daemon version' "$root/combined.log"; then
+  daemon_started=yes
+else
+  daemon_started=no
+fi
+if grep -Eq 'prereading|precached' "$root/combined.log"; then
+  table_preload_started=yes
+else
+  table_preload_started=no
+fi
+if grep -q 'accepting connections' "$root/combined.log"; then
+  accepting_connections=yes
+else
+  accepting_connections=no
+fi
+if [[ $meta_before == "$meta_after" ]]; then
+  meta_unchanged=yes
+else
+  meta_unchanged=no
+fi
+if [[ $log_before == "$log_after" ]]; then
+  log_unchanged=yes
+else
+  log_unchanged=no
+fi
+
+echo "start_exit=$start_exit"
+echo "foreign_version_diagnostic=$foreign_version_diagnostic"
+echo "daemon_started=$daemon_started"
+echo "table_preload_started=$table_preload_started"
+echo "accepting_connections=$accepting_connections"
+echo "meta_unchanged=$meta_unchanged"
+echo "log_unchanged=$log_unchanged"
+
+[[ $start_exit == 1 ]]
+[[ $foreign_version_diagnostic == yes ]]
+[[ $daemon_started == no ]]
+[[ $table_preload_started == no ]]
+[[ $accepting_connections == no ]]
+[[ $meta_unchanged == yes ]]
+[[ $log_unchanged == yes ]]
+BASH
+––– output –––
+––– input –––
+bash /tmp/gh4808-foreign-binlog.sh
+––– output –––
+start_exit=1
+foreign_version_diagnostic=yes
+daemon_started=no
+table_preload_started=no
+accepting_connections=no
+meta_unchanged=yes
+log_unchanged=yes

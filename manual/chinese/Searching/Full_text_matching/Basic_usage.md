@@ -1,6 +1,6 @@
 # 匹配
 
-`MATCH` 子句允许对文本字段进行全文检索。输入的查询字符串会使用与索引时应用于文本相同的设置进行 [分词](../../Creating_a_table/NLP_and_tokenization/Data_tokenization.md)。除了对输入文本进行分词之外，查询字符串还支持多种 [全文运算符](../../Searching/Full_text_matching/Operators.md)，用于强制规定关键字应如何形成有效匹配。
+`MATCH` 子句允许对文本字段进行全文搜索。输入的查询字符串会使用与索引时应用于文本的相同设置进行 [分词](../../Creating_a_table/NLP_and_tokenization/Data_tokenization.md)。除了对输入文本进行分词外，查询字符串还支持多种 [全文运算符](../../Searching/Full_text_matching/Operators.md)，用于约束关键词应如何构成有效匹配。对于没有显式布尔运算符的多关键词查询，SQL 和 HTTP JSON 的默认行为不同：SQL 遵循 [`boolean_mode`](../../Searching/Options.md#boolean_mode)，其默认值为 `and`，除非按表或按查询覆盖；而 JSON `match` 查询的默认值为 `or`，除非你显式设置 `"operator"`。
 
 全文匹配子句可以与属性 [过滤器](../../Searching/Filters.md) 结合使用，作为 AND 布尔运算。**全文匹配和属性过滤器之间的 OR 关系不被支持**。
 
@@ -31,6 +31,7 @@ MATCH('search query' [, table_name])
 
 [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) 语句使用 [MATCH](../../Searching/Full_text_matching/Basic_usage.md) 子句进行全文搜索，该子句必须位于 WHERE 之后。`MATCH()` 接受一个输入字符串，在该字符串中可用所有 [全文操作符](../../Searching/Full_text_matching/Operators.md)。
 
+关于 SQL 特定的默认关键词组合行为，请参见 [`boolean_mode`](../../Searching/Options.md#boolean_mode)。
 
 <!-- intro -->
 ##### SQL：

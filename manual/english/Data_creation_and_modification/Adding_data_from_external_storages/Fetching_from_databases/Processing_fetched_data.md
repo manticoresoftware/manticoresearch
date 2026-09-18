@@ -2,7 +2,7 @@
 
 By default, the first column from the result set of `sql_query` is indexed as the document id.
 
-Document ID *MUST* be the very first field, and it **MUST BE** UNIQUE SIGNED (NON-ZERO) INTEGER NUMBER from -9223372036854775808 to 9223372036854775807.
+Document ID *MUST* be the very first field, and it **MUST BE** an explicit, unique, non-zero unsigned 64-bit integer. Negative document IDs are not allowed. Unlike in RT tables, `0` cannot be used to request an auto-generated ID for plain tables.
 
 You can specify up to 256 full-text fields and an arbitrary amount of attributes. All the columns that are neither document ID (the first one) nor attributes will be indexed as full-text fields.
 

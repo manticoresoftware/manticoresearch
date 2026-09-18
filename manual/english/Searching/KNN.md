@@ -92,6 +92,7 @@ When creating a table for auto embeddings, specify:
 - `API_KEY`: Required for remote models (OpenAI, Voyage, Jina). The API key is validated during table creation by making a real API request.
 - `API_URL`: Optional. Custom API endpoint URL. If not specified, uses the default provider endpoint (e.g., `https://api.openai.com/v1/embeddings` for OpenAI).
 - `API_TIMEOUT`: Optional. HTTP timeout in seconds for API requests. Default is 10 seconds. Set to `'0'` to use the default timeout. Applies to both validation requests during table creation and embedding generation during INSERT operations.
+- `MAX_INPUT_TOKENS`: Optional. Caps the number of tokens taken from each input text before it is embedded; longer texts are truncated. `'0'` (default) means the model's own context limit. Long-context models such as `Qwen/Qwen3-Embedding-0.6B` accept up to 32,768 tokens, and embedding time on CPU grows superlinearly with input length (a 5 KB document can take minutes), so set a cap (for example `'512'`) when the text fields may contain long or unbounded content. Applies to local models; the setting can be changed later with `ALTER TABLE ... MODIFY COLUMN ... MAX_INPUT_TOKENS='...'` without re-embedding existing rows.
 
 For remote models, `MODEL_NAME` can be written in two forms:
 - Legacy provider-prefixed form: `openai/text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v4`
@@ -103,7 +104,8 @@ When you use the `provider:model` form together with `API_URL`, the part before 
 
 | Model Type | Example | API Key Required | Notes |
 |------------|---------|-----------------|-------|
-| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | No | Local BERT-based models, auto-downloaded |
+| **ONNX (recommended)** | `Xenova/all-MiniLM-L6-v2` | No | Local models from any Hugging Face repo that ships an `.onnx` file. Runs on Manticore's fast ONNX Runtime backend. Browse the list: [feature-extraction ONNX models](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm). |
+| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | No | Local BERT-based models, auto-downloaded. Still supported — use ONNX above when available. |
 | **Qwen** | `Qwen/Qwen3-Embedding-0.6B` | No | Local Qwen family models |
 | **Llama** | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | No | Local Llama family models |
 | **Mistral** | `Locutusque/TinyMistral-248M-v2` | No | Local Mistral family models |
@@ -113,10 +115,11 @@ When you use the `provider:model` form together with `API_URL`, the part before 
 | **Jina** | `jina/jina-embeddings-v4` or `jina:jina-embeddings-v4` | Yes | `API_KEY='***'` |
 
 **Local model format requirements:**
-- Must be saved in `safetensors` format (single-file only)
-- Supported families: Qwen, Llama, Mistral, Gemma
+- Supported weight formats: `safetensors` (single-file or sharded via `model.safetensors.index.json`), quantized `GGUF`, and `ONNX`
+- Supported families: BERT/Sentence Transformers, Qwen, Llama, Mistral, Gemma, T5
 - Tested models: `TinyLlama/TinyLlama-1.1B-Chat-v1.0`, `Locutusque/TinyMistral-248M-v2`, `Qwen/Qwen3-Embedding-0.6B`, `h2oai/embeddinggemma-300m`
-- Other `safetensors` models may also work, but are not guaranteed
+- Other models of these families may also work, but are not guaranteed
+- For gated Hugging Face repos, pass your Hugging Face access token as `API_KEY`
 
 More information about setting up a `float_vector` attribute can be found [here](../Creating_a_table/Data_types.md#Float-vector).
 
@@ -125,9 +128,19 @@ More information about setting up a `float_vector` attribute can be found [here]
 
 <!-- request SQL -->
 
-Using sentence-transformers (no API key needed)
+Using a local [ONNX model](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) — recommended (no API key needed)
 ```sql
 CREATE TABLE products (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+Using sentence-transformers (no API key needed; runs on the Candle path — use ONNX above when available)
+```sql
+CREATE TABLE products_st (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
@@ -182,7 +195,7 @@ CREATE TABLE products_all (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM=''
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM=''
 );
 ```
 
@@ -197,7 +210,7 @@ table products {
     rt_field = title
     rt_field = description
     rt_attr_float_vector = embedding_vector
-    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":"title"}]}
 }
 ```
 
@@ -221,7 +234,7 @@ table products_all {
     rt_field = title
     rt_field = description
     rt_attr_float_vector = embedding_vector
-    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":""}]}
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":""}]}
 }
 ```
 
@@ -239,9 +252,9 @@ table products_all {
 data for the following example:
 
 DROP TABLE IF EXISTS products;
-CREATE TABLE products(title text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title');
+CREATE TABLE products(title text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='Xenova/all-MiniLM-L6-v2' from='title');
 DROP TABLE IF EXISTS products_openai;
-CREATE TABLE products_openai(title text, description text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title,description');
+CREATE TABLE products_openai(title text, description text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='Xenova/all-MiniLM-L6-v2' from='title,description');
 -->
 
 <!-- example inserting_embeddings -->
@@ -442,7 +455,7 @@ POST /insert
 ```json
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"created":true,
 	"result":"created",
 	"status":201
@@ -450,7 +463,7 @@ POST /insert
 
 {
 	"table":"test",
-	"_id":2,
+	"id":2,
 	"created":true,
 	"result":"created",
 	"status":201
@@ -494,6 +507,8 @@ The parameters are:
 * `rescore`: Enables KNN rescoring (enabled by default). Set to `0` in SQL or `false` in JSON to disable rescoring. After the KNN search is completed using quantized vectors (with possible oversampling), distances are recalculated with the original (full-precision) vectors and results are re-sorted to improve ranking accuracy.
 * `oversampling`: Sets a factor (float value) by which `k` is multiplied when executing the KNN search, causing more candidates to be retrieved than needed using quantized vectors. `oversampling=3.0` is applied by default. These candidates can be re-evaluated later if rescoring is enabled. Oversampling also works with non-quantized vectors. Since it increases `k`, which affects how the HNSW index works, it may cause a small change in result accuracy.
 * `early_termination`: Enables or disables adaptive early termination during HNSW graph traversal. Enabled by default. Set to `0` in SQL or `false` in JSON to disable. See [Early termination](../Searching/KNN.md#Early-termination) for details.
+
+When a text query is supplied (so Manticore embeds the string before the search), the number of threads used by the embeddings library can be overridden per-query in SQL with `OPTION embeddings_threads = N`. The value caps the embeddings call for this query only, overriding the global [embeddings_threads](../Server_settings/Searchd.md#embeddings_threads) setting; `0` means uncapped. The option has no effect when the query is supplied as a vector array.
 
 Documents are always sorted by their distance to the search vector. Any additional sorting criteria you specify will be applied after this primary sort condition. For retrieving the distance, there is a built-in function called [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29).
 
@@ -577,6 +592,130 @@ POST /search
 <!-- end -->
 
 <!-- example knn_quantization -->
+
+### Multiple vectors per document
+
+A [`float_vector_array`](../Creating_a_table/Data_types.md#Float-vector-array) attribute holds several vectors per document instead of one: the chunks of an article, the photos of a product, the keyframes of a video. All vectors from all documents are indexed together, and search treats a document's vectors as alternative representations of that one document:
+
+* A document matches if **any** of its vectors is near the query vector.
+* Each matching document is returned **exactly once**, and `knn_dist()` reports the distance to its closest vector. The document's other vectors do not produce additional rows.
+* `k` counts **documents**, not vectors. `knn(v, 10, ...)` asks for the 10 nearest documents, however many vectors they own between them.
+* A document with no vectors (`[]`, or the attribute omitted) is never returned, since it is not near anything.
+
+The query vector is still a single vector of `KNN_DIMS` entries, exactly as for `float_vector`. Every vector stored in a KNN-indexed array must have `KNN_DIMS` entries too.
+
+With `HNSW_SIMILARITY='cosine'`, each stored vector is normalized on its own, so a document's vectors are compared against the query individually rather than as one long concatenated vector.
+
+Everything else on this page applies unchanged: [filtering](../Searching/KNN.md#Filtering-KNN-vector-search-results), [prefilter/postfilter](../Searching/KNN.md#Filtering-strategies:-prefilter-vs.-postfilter), [quantization](../Searching/KNN.md#Vector-quantization), [early termination](../Searching/KNN.md#Early-termination) and rescoring behave the same way. [Auto embeddings](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29) can fill the array for you, one vector per chunk - see [Chunking strategies](../Searching/KNN.md#Chunking-strategies) below.
+
+<!-- example multi_vector -->
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+
+INSERT INTO articles VALUES
+  (1, 'first',  [[1,0,0,0],[0,1,0,0]]),
+  (2, 'second', [[0,0,1,0]]);
+
+-- doc 1 owns a vector identical to the query and another far from it,
+-- so it is returned once, at distance 0
+SELECT id, knn_dist() FROM articles WHERE knn(chunk_vectors, 5, (1,0,0,0));
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /search
+{
+  "table": "articles",
+  "knn": {
+    "field": "chunk_vectors",
+    "query_vector": [1,0,0,0],
+    "k": 5
+  }
+}
+```
+
+<!-- end -->
+
+### Chunking strategies
+
+By default an embedding model reads only as much of a document as fits its input window (typically a few hundred tokens) and the rest is silently dropped. For a title or a short description that is complete. For a long article it is not: nothing written past the cut-off can ever be retrieved, and no error reports it.
+
+A **chunking strategy** decides how a document becomes vectors. Set it with `CHUNK_STRATEGY` on a model-backed column:
+
+| Strategy | Vectors per document | What it does |
+|---|---|---|
+| `truncate` | 1 | Embeds as much as fits the model's window and drops the rest. The default, and the historical behavior. |
+| `mean` | 1 | Splits the whole document, embeds every piece, and averages them into one vector. No tail loss, but a document covering several topics collapses to their average. |
+| `fixed` | N | Fixed-size windows of `MAX_TOKENS` tokens. |
+| `recursive` | N | Splits on a separator hierarchy: paragraph, then line, then sentence, then space; keeping each piece within `MAX_TOKENS`. |
+| `sentence` | N | Sentence boundaries, packed up to `MAX_TOKENS`. |
+
+`truncate` and `mean` produce one vector per document and work on a [`float_vector`](../Creating_a_table/Data_types.md#Float-vector) column (on a `float_vector_array` they store a 1-element array). `fixed`, `recursive` and `sentence` produce several, so they require a [`float_vector_array`](../Creating_a_table/Data_types.md#Float-vector-array) column; using one on a plain `float_vector` is rejected.
+
+The difference is what a match means. With one vector per document, search asks "is this document, as a whole, similar to the query?", and a single relevant paragraph is diluted by everything around it. With one vector per chunk, it asks "does this document *contain* something similar?": each chunk competes on its own, and the document is returned once, scored by its closest chunk (see [Multiple vectors per document](../Searching/KNN.md#Multiple-vectors-per-document)).
+
+**Options**, all valid only alongside `MODEL_NAME` and `KNN_TYPE='hnsw'`:
+
+* `CHUNK_STRATEGY`: one of the five above. Default `truncate`.
+* `MAX_TOKENS`: chunk size in tokens. `0` (default) means the model's own limit; a larger value is clamped down to it.
+* `OVERLAP_TOKENS`: how many tokens consecutive chunks share, so an idea split across a boundary still appears whole in one of them. Requires an explicit non-zero `MAX_TOKENS`. A large overlap is reduced so that chunks still advance through the document: `fixed` and `recursive` cap it at half of `MAX_TOKENS`, while `sentence` re-seeds the next chunk with at most `OVERLAP_TOKENS` worth of trailing whole sentences and always advances by at least one sentence.
+* `MAX_CHUNKS`: ceiling on vectors per document. `0` (default) means unlimited.
+
+Important points:
+
+* **`MAX_CHUNKS` discards text.** On overflow the remainder is merged into the last kept chunk, which then exceeds `MAX_TOKENS` and is truncated to the model's input window when embedded. Nothing is left as a visible gap, but the tail is gone.
+* **Local and remote models chunk differently.** Local models split on the model's real tokens. Remote API models (OpenAI, Voyage, Jina) have no local tokenizer and use a conservative byte estimate instead, so the same text and settings will produce a different number of chunks than a local model would.
+
+`ALTER TABLE ... ADD COLUMN` with a model-backed `float_vector_array`, and `ALTER TABLE ... REBUILD EMBEDDINGS` on one, are not supported yet; existing rows can not be backfilled, so the column would stay empty. Declare such a column when creating the table. Both work normally for a `float_vector` column, including with `mean`.
+
+<!-- example chunking -->
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+-- one vector per sentence group, filled automatically from the text
+CREATE TABLE articles (
+  title text,
+  content text,
+  chunks float_vector_array knn_type='hnsw' hnsw_similarity='cosine'
+     model_name='Xenova/all-MiniLM-L6-v2' from='title,content'
+     chunk_strategy='sentence' max_tokens='256' overlap_tokens='32'
+);
+
+INSERT INTO articles (id, title, content) VALUES (1, 'Rotating certificates', 'A long guide with many sections ...');
+
+SELECT id, knn_dist() FROM articles WHERE knn(chunks, 5, 'how do I rotate a certificate');
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "CREATE TABLE articles (title text, content text, chunks float_vector_array knn_type='hnsw' hnsw_similarity='cosine' model_name='Xenova/all-MiniLM-L6-v2' from='title,content' chunk_strategy='sentence' max_tokens='256')"
+
+POST /search
+{
+  "table": "articles",
+  "knn": { "field": "chunks", "query": "how do I rotate a certificate", "k": 5 }
+}
+```
+
+<!-- end -->
 
 ### Vector quantization
 

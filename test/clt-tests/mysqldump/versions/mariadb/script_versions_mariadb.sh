@@ -1,6 +1,32 @@
 #!/bin/bash
 set -e
 
+docker_pull_with_retries() {
+    local image="$1"
+    local err_file
+    local attempt
+    local max_attempts=3
+    local delay=5
+
+    err_file=$(mktemp)
+
+    for attempt in $(seq 1 "$max_attempts"); do
+        if docker pull --platform linux/amd64 -q "$image" > /dev/null 2>"$err_file"; then
+            rm -f "$err_file"
+            return 0
+        fi
+
+        if [ "$attempt" -lt "$max_attempts" ]; then
+            sleep "$delay"
+            delay=$((delay * 2))
+        fi
+    done
+
+    cat "$err_file" >&2
+    rm -f "$err_file"
+    return 1
+}
+
 # Check for new major.minor versions
 echo "🔍 Checking for new MariaDB major.minor versions..."
 
@@ -53,7 +79,7 @@ for version in "${versions[@]}"; do
     echo "Testing version: $version"
 
     # Start the container
-    docker pull --platform linux/amd64 -q $version > /dev/null
+    docker_pull_with_retries "$version"
     docker run --rm -d --network=test_network --platform linux/amd64 --name db-test -e MYSQL_ROOT_PASSWORD=my-secret-pw $version bash -c "tail -f /dev/null" > /dev/null
     sleep 5
 

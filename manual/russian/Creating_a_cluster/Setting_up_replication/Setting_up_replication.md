@@ -23,6 +23,16 @@
 * Директива [listen](../../Server_settings/Searchd.md#listen) должна содержать IP-адрес, доступный для других узлов, либо должен быть указан [node_address](../../Server_settings/Searchd.md#node_address) с доступным IP-адресом.
 * По желанию, можно задать уникальные значения для [server_id](../../Server_settings/Searchd.md#server_id) на каждом узле кластера. Если значение не задано, узел попытается использовать MAC-адрес или случайное число для генерации `server_id`.
 
+Если включены [аутентификация и авторизация](../../Security/Authentication_and_authorization.md), для операций с кластером требуется разрешение `replication`. Выдайте его пользователю, который должен владеть операциями репликации для кластера:
+
+```sql
+GRANT replication ON 'posts' TO 'repl_user';
+```
+
+`CREATE CLUSTER` и `JOIN CLUSTER` могут указывать такого пользователя через `'<user>' AS user`. Пользователь должен существовать с совпадающими сохраненными данными аутентификации на узлах, участвующих в операции. Просто создать одно и то же имя пользователя и пароль независимо на каждом узле недостаточно, потому что сохраненные данные аутентификации могут отличаться. Если вы изменили данные аутентификации вне демона, выполните `RELOAD AUTH` на затронутых узлах перед использованием операции с кластером.
+
+Позднее `ALTER CLUSTER ... ADD`, `ALTER CLUSTER ... DROP`, `ALTER CLUSTER ... UPDATE nodes` и `DELETE CLUSTER` используют сохраненного пользовательского кластера. Когда аутентификация включена, успешный `JOIN CLUSTER` заменяет все локальные данные аутентификации на присоединяющемся узле данными аутентификации кластера-источника.
+
 Если директива `replication` [listen](../../Server_settings/Searchd.md#listen) не задана, Manticore использует первые два свободных порта из диапазона в 200 портов после порта прослушивания протокола по умолчанию для каждого созданного кластера. Для ручного задания портов репликации необходимо определить диапазон портов в директиве [listen](../../Server_settings/Searchd.md#listen) (типа `replication`), при этом пары адрес/диапазон портов не должны пересекаться между разными узлами на одном сервере. Как правило, диапазон портов должен содержать как минимум два порта на кластер. Когда вы определяете слушатель репликации с диапазоном портов (например, `listen = 192.168.0.1:9320-9328:replication`), Manticore не начинает прослушивать эти порты сразу. Вместо этого система будет выбирать случайные свободные порты из указанного диапазона только при начале использования репликации.
 
 ## Репликационный кластер
@@ -66,8 +76,8 @@
 <!-- request SQL -->
 
 ```sql
-INSERT INTO posts:weekly_index VALUES ( 'iphone case' )
-TRUNCATE RTINDEX click_query:weekly_index
+INSERT INTO posts:weekly_table VALUES ( 'iphone case' )
+TRUNCATE TABLE click_query:weekly_table
 UPDATE INTO posts:rt_tags SET tags=(101, 302, 304) WHERE MATCH ('use') AND id IN (1,101,201)
 DELETE FROM clicks:rt WHERE MATCH ('dumy') AND gid>206
 ```
@@ -78,7 +88,7 @@ DELETE FROM clicks:rt WHERE MATCH ('dumy') AND gid>206
 POST /insert -d '
 {
   "cluster":"posts",
-  "table":"weekly_index",
+  "table":"weekly_table",
   "doc":
   {
     "title" : "iphone case",
@@ -88,7 +98,7 @@ POST /insert -d '
 POST /delete -d '
 {
   "cluster":"posts",
-  "table": "weekly_index",
+  "table": "weekly_table",
   "id":1
 }'
 ```
@@ -96,10 +106,10 @@ POST /delete -d '
 <!-- request PHP -->
 
 ```php
-$index->addDocuments([
+$table->addDocuments([
         1, ['title' => 'iphone case', 'price' => 19.85]
 ]);
-$index->deleteDocument(1);
+$table->deleteDocument(1);
 ```
 
 <!-- intro -->
@@ -108,8 +118,8 @@ $index->deleteDocument(1);
 <!-- request Python -->
 
 ``` python
-indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}})
-indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
+indexApi.insert({"cluster":"posts","table":"weekly_table","doc":{"title":"iphone case","price":19.85}})
+indexApi.delete({"cluster":"posts","table":"weekly_table","id":1})
 ```
 
 <!-- intro -->
@@ -118,8 +128,8 @@ indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
 <!-- request Python-asyncio -->
 
 ``` python
-await indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}})
-await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
+await indexApi.insert({"cluster":"posts","table":"weekly_table","doc":{"title":"iphone case","price":19.85}})
+await indexApi.delete({"cluster":"posts","table":"weekly_table","id":1})
 ```
 
 <!-- intro -->
@@ -128,8 +138,8 @@ await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
 <!-- request Javascript -->
 
 ``` javascript
-res = await indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}});
- res = await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1});
+res = await indexApi.insert({"cluster":"posts","table":"weekly_table","doc":{"title":"iphone case","price":19.85}});
+ res = await indexApi.delete({"cluster":"posts","table":"weekly_table","id":1});
 ```
 
 <!-- intro -->
@@ -143,11 +153,11 @@ HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","Crossbody Bag with Tassel");
     put("price",19.85);
 }};
-newdoc.index("weekly_index").cluster("posts").id(1L).setDoc(doc);
+newdoc.table("weekly_table").cluster("posts").id(1L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 
 DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest();
-deleteRequest.index("weekly_index").cluster("posts").setId(1L);
+deleteRequest.table("weekly_table").cluster("posts").setId(1L);
 indexApi.delete(deleteRequest);
 
 ```
@@ -161,10 +171,10 @@ indexApi.delete(deleteRequest);
 Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "Crossbody Bag with Tassel");
 doc.Add("price", 19.85);
-InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "weekly_index", cluster:posts, id: 1, doc: doc);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "weekly_table", cluster:posts, id: 1, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 
-DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(table: "weekly_index", cluster: "posts", id: 1);
+DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(table: "weekly_table", cluster: "posts", id: 1);
 indexApi.Delete(deleteDocumentRequest);
 ```
 
@@ -178,7 +188,7 @@ let mut doc = HashMap::new();
 doc.insert("title".to_string(), serde_json::json!("Crossbody Bag with Tassel"));
 doc.insert("price".to_string(), serde_json::json!(19.85));
 let insert_req = InsertDocumentRequest {
-    table: serde_json::json!("weekly_index"),
+    table: serde_json::json!("weekly_table"),
     doc: serde_json::json!(doc),
     cluster: serde_json::json!("posts"),
     id: serde_json::json!(1),
@@ -186,7 +196,7 @@ let insert_req = InsertDocumentRequest {
 let insert_res = index_api.insert(insert_req).await;
 
 let delete_req = DeleteDocumentRequest {
-    table: serde_json::json!("weekly_index"),
+    table: serde_json::json!("weekly_table"),
     cluster: serde_json::json!("posts"),
     id: serde_json::json!(1),
 };
@@ -209,8 +219,8 @@ index_api.delete(delete_req).await;
 <!-- request SQL -->
 
 ```sql
-SELECT * FROM weekly_index
-CALL PQ('posts:weekly_index', 'document is here')
+SELECT * FROM weekly_table
+CALL PQ('posts:weekly_table', 'document is here')
 ```
 
 <!-- request JSON -->
@@ -219,12 +229,12 @@ CALL PQ('posts:weekly_index', 'document is here')
 POST /search -d '
 {
   "cluster":"posts",
-  "table":"weekly_index",
+  "table":"weekly_table",
   "query":{"match":{"title":"keyword"}}
 }'
 POST /search -d '
 {
-  "table":"weekly_index",
+  "table":"weekly_table",
   "query":{"match":{"title":"keyword"}}
 }'
 ```
@@ -619,7 +629,7 @@ POST /insert -d '
 <!-- request PHP -->
 
 ```php
-$index->addDocuments([
+$table->addDocuments([
         3, ['title' => 'test me']
 ]);
 
@@ -662,7 +672,7 @@ InsertDocumentRequest newdoc = new InsertDocumentRequest();
 HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","test me");
 }};
-newdoc.index("pq_title").cluster("posts").id(3L).setDoc(doc);
+newdoc.table("pq_title").cluster("posts").id(3L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 ```
 
@@ -674,7 +684,7 @@ sqlresult = indexApi.insert(newdoc);
 ``` clike
 Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "test me");
-InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "pq_title", cluster: "posts", id: 3, doc: doc);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "pq_title", cluster: "posts", id: 3, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 ```
 

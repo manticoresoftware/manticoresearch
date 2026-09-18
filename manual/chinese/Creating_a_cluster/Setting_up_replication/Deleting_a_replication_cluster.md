@@ -5,6 +5,8 @@
 
 如果只需分离当前节点并让集群的其余部分继续运行，请改用 `EXIT CLUSTER`。请参阅 [管理复制节点](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md)。
 
+如果已启用[身份验证和授权](../../Security/Authentication_and_authorization.md)，`DELETE CLUSTER` 会使用已存储的集群用户。该用户必须在参与节点上具有匹配的身份验证数据，并且对集群目标拥有 `replication` 权限。
+
 
 
 <!-- intro -->

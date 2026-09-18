@@ -60,7 +60,8 @@ bool CSphTransformation::TransformCommonCompoundNot () noexcept
 			// Load cost of the first node from the group
 			// of the common nodes. The cost of nodes from
 			// TransformableNodes are the same.
-			SetCosts ( dSimilarNodes[0], m_dRelatedNodes );
+			if ( !SetCosts ( dSimilarNodes[0], m_dRelatedNodes ) )
+				return false;
 			const int iCommon = dSimilarNodes[0]->m_iUser;
 			const int iRelated = m_dRelatedNodes.sum_of<int> ([]( auto & tNode ) { return tNode->m_iUser; } );
 

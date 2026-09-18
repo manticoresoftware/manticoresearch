@@ -68,10 +68,13 @@ public:
 		return m_pDict->HasState();
 	}
 	DictRefPtr_c Clone() const final {
+		ValidateClone();
 		return DictRefPtr_c { new DictProxy_c ( m_pDict->Clone() ) };
 	}
 	uint64_t GetSettingsFNV() const final { return m_pDict->GetSettingsFNV(); }
 
 protected:
+	virtual void ValidateClone() const {}
+
 	DictRefPtr_c m_pDict;
 };

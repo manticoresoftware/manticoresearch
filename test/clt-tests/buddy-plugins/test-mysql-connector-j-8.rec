@@ -1,0 +1,42 @@
+––– comment –––
+MySQL Connector/J 8.0.30 must complete its connection initialization when Buddy
+handles the driver's system-variable query, then execute a basic query.
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+apt-get update -qq && apt-get install -y -qq openjdk-17-jdk-headless > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– input –––
+curl --fail --silent --show-error --location --output /tmp/mysql-connector-java-8.0.30.jar https://repo.maven.apache.org/maven2/mysql/mysql-connector-java/8.0.30/mysql-connector-java-8.0.30.jar && echo $?
+––– output –––
+0
+––– input –––
+cat > /tmp/ConnectorJSmokeTest.java <<'EOF'
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
+
+public class ConnectorJSmokeTest {
+    public static void main(String[] args) throws Exception {
+        String url = "jdbc:mysql://127.0.0.1:9306"
+            + "?characterEncoding=utf8"
+            + "&maxAllowedPacket=134217728"
+            + "&connectTimeout=30000";
+
+        try (Connection connection = DriverManager.getConnection(url, "", "");
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("SELECT 1 AS result")) {
+            if (!result.next() || result.getInt("result") != 1) {
+                throw new AssertionError("SELECT 1 returned an unexpected result");
+            }
+        }
+
+        System.out.println("CONNECTOR_J_8_SMOKE_OK");
+    }
+}
+EOF
+javac -cp /tmp/mysql-connector-java-8.0.30.jar /tmp/ConnectorJSmokeTest.java && java -cp /tmp:/tmp/mysql-connector-java-8.0.30.jar ConnectorJSmokeTest
+––– output –––
+CONNECTOR_J_8_SMOKE_OK

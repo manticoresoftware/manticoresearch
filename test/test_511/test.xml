@@ -124,6 +124,39 @@ searchd
   }
 }</query>
 
+<!-- zeroes=true should keep broad max buckets that are missing from the filtered counts. -->
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 0,
+  "facet_filter_mode": "strict",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
+  "aggs": {
+    "size_filters_zeroes": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } }, "filters": [ "brand_id", "color_id" ], "mode": "max", "zeroes": true }
+  }
+}</query>
+
+<!-- zeroes=true must participate in final ordering/paging; size=1 with desc order should return only the broad zero bucket. -->
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 0,
+  "facet_filter_mode": "strict",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } }, { "equals": { "size_id": 10 } } ] } },
+  "aggs": {
+    "size_filters_zeroes_desc_top1": { "terms": { "field": "size_id", "size": 1, "order": { "size_id": "desc" } }, "filters": [ "brand_id", "color_id" ], "mode": "max", "zeroes": true }
+  }
+}</query>
+
+<!-- zeroes=true must sort merged string buckets with the query collation; size=1 ascending should return the broad zero string bucket. -->
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 0,
+  "facet_filter_mode": "strict",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_name": "red" } }, { "equals": { "size_id": 10 } } ] } },
+  "aggs": {
+    "color_name_zeroes_asc_top1": { "terms": { "field": "color_name", "size": 1, "order": { "color_name": "asc" } }, "filters": [ "brand_id", "color_name", "size_id" ], "mode": "max", "zeroes": true }
+  }
+}</query>
+
 <!-- filters and exclude_filters in one aggregation should be rejected, regardless of JSON key order. -->
 <query endpoint="search">{
   "table": "facet_json_review",

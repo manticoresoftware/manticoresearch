@@ -58,6 +58,7 @@
         * [Статус кластера репликации](Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md)
         * [Перезапуск кластера](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)
         * [Восстановление кластера](Creating_a_cluster/Setting_up_replication/Cluster_recovery.md)
+        * [Понимание статусов репликации](Creating_a_cluster/Setting_up_replication/Understanding_cluster_status_and_node_states.md)
 * [4️⃣ Подключение к серверу](Connecting_to_the_server.md)
     * [Протокол MySQL](Connecting_to_the_server/MySQL_protocol.md)
     * [HTTP](Connecting_to_the_server/HTTP.md)
@@ -120,11 +121,13 @@
     * [• Оптимизатор на основе стоимости](Searching/Cost_based_optimizer.md)
     * [• Векторный поиск K-ближайших соседей](Searching/KNN.md)
     * [• Гибридный поиск](Searching/Hybrid_search.md)
+    * [• Разговорный поиск](Searching/Conversational_search.md)
 * [• Обновление схемы и настроек таблицы](Updating_table_schema_and_settings.md)
     * [• Обновление схемы таблицы в режиме RT](Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode)
     * [• Обновление FT-настроек таблицы в режиме RT](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode)
     * [• Переименование таблицы реального времени](Updating_table_schema_and_settings.md#Renaming-a-real-time-table)
     * [• Обновление FT-настроек таблицы в обычном режиме](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-plain-mode)
+    * [• Переиндексация существующих документов после изменения настроек FT](Updating_table_schema_and_settings.md#Reindexing-existing-documents-after-changing-FT-settings)
     * [• Перестроение вторичного индекса](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)
     * [• Изменение распределенной таблицы](Updating_table_schema_and_settings.md#Changing-a-distributed-table)
 * [≫ Функции]
@@ -148,6 +151,7 @@
     * [• Сброс имен хостов](Securing_and_compacting_a_table/Flushing_hostnames.md)
 * [≫ Безопасность]
     * [• SSL](Security/SSL.md)
+    * [• Аутентификация и авторизация](Security/Authentication_and_authorization.md)
     * [• Только для чтения](Security/Read_only.md)
 * [≫ Логирование]
     * [• Логирование запросов](Logging/Query_logging.md)
@@ -177,7 +181,7 @@
     * [• Специальные суффиксы](Server_settings/Special_suffixes.md)
     * [• Скриптовая конфигурация](Server_settings/Scripted_configuration.md)
     * [• Комментарии](Server_settings/Comments.md)
-    * [• Наследование объявлений таблиц и источников](Server_settings/Inheritance_of_index_and_source_declarations.md)
+    * [• Наследование объявлений таблиц и источников](Server_settings/Inheritance_of_table_and_source_declarations.md)
     * [• Установка переменных онлайн](Server_settings/Setting_variables_online.md)
 * [≫ Интеграция]
     * [Logstash](Integration/Logstash.md)
@@ -186,6 +190,7 @@
     * [Vector.dev](Integration/Vectordev.md)
     * [Grafana](Integration/Grafana.md)
     * [Kibana](Integration/Kibana.md)
+    * [Opensearch Dashboards](Integration/Opensearch_Dashboards.md)
     * [Kafka](Integration/Kafka.md)
     * [DBeaver](Integration/DBeaver.md)
     * [Apache Superset](Integration/Apache_Superset.md)
@@ -213,4 +218,3 @@
 * [📖 Ссылки](References.md)
     * [• Предыдущие версии](References.md#Documentation-for-old-Manticore-versions)
 <!-- proofread -->
-

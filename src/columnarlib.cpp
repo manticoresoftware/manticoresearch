@@ -16,7 +16,7 @@
 #include "schema/schema.h"
 
 namespace col {
-using CreateStorageReader_fn =	columnar::Columnar_i * (*) ( const std::string & sFilename, uint32_t uTotalDocs, std::string & sError );
+using CreateStorageReader_fn =	columnar::Columnar_i * (*) ( const std::string & sFilename, uint32_t uTotalDocs, bool bMmap, std::string & sError );
 using CreateBuilder_fn =		columnar::Builder_i * (*) ( const common::Schema_t & tSchema, const std::string & sFile, size_t tBufferSize, std::string & sError );
 using CheckStorage_fn =			void (*) ( const std::string & sFilename, uint32_t uNumRows, std::function<void (const char*)> & fnError, std::function<void (const char*)> & fnProgress );
 using VersionStr_fn =			const char * (*)();
@@ -47,6 +47,7 @@ common::AttrType_e ToColumnarType ( ESphAttr eAttrType, int iBitCount )
 	case SPH_ATTR_UINT32SET:	return common::AttrType_e::UINT32SET;
 	case SPH_ATTR_INT64SET:		return common::AttrType_e::INT64SET;
 	case SPH_ATTR_FLOAT_VECTOR:	return common::AttrType_e::FLOATVEC;
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY:	return common::AttrType_e::FLOATVEC;
 	default:
 		assert ( 0 && "Unknown columnar type");
 		return common::AttrType_e::NONE;
@@ -54,7 +55,7 @@ common::AttrType_e ToColumnarType ( ESphAttr eAttrType, int iBitCount )
 }
 
 
-std::unique_ptr<columnar::Columnar_i> CreateColumnarStorageReader ( const CSphString & sFile, DWORD uNumDocs, CSphString & sError )
+std::unique_ptr<columnar::Columnar_i> CreateColumnarStorageReader ( const CSphString & sFile, DWORD uNumDocs, bool bMmap, CSphString & sError )
 {
 	if ( !IsColumnarLibLoaded() )
 	{
@@ -64,7 +65,7 @@ std::unique_ptr<columnar::Columnar_i> CreateColumnarStorageReader ( const CSphSt
 
 	std::string sErrorSTL;
 	assert ( g_fnCreateColumnarStorage );
-	std::unique_ptr<columnar::Columnar_i> pColumnar { g_fnCreateColumnarStorage ( sFile.cstr(), uNumDocs, sErrorSTL ) };
+	std::unique_ptr<columnar::Columnar_i> pColumnar { g_fnCreateColumnarStorage ( sFile.cstr(), uNumDocs, bMmap, sErrorSTL ) };
 	if ( !pColumnar )
 		sError = sErrorSTL.c_str();
 
@@ -97,8 +98,10 @@ std::unique_ptr<columnar::Builder_i> CreateColumnarBuilder ( const ISphSchema & 
 		if ( eAttrType==common::AttrType_e::STRING && tAttr.HasStringHashes() )
 			fnStringCalcHash = LibcCIHash_fn::Hash;
 
+		// m_bKNN means "use the constant-length optimized packer". It must stay off for float_vector_array
 		const int MIN_KNN_PACK_DIMS = 128;
-		tColumnarSchema.push_back ( { tAttr.m_sName.cstr(), eAttrType, fnStringCalcHash, tAttr.m_tKNN.m_iDims>=MIN_KNN_PACK_DIMS } );
+		bool bPackedKNN = tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tAttr.m_tKNN.m_iDims>=MIN_KNN_PACK_DIMS;
+		tColumnarSchema.push_back ( { tAttr.m_sName.cstr(), eAttrType, fnStringCalcHash, bPackedKNN } );
 	}
 
 	if ( tColumnarSchema.empty() )
@@ -184,7 +187,10 @@ bool InitColumnar ( CSphString & sError )
 void ShutdownColumnar()
 {
 	if ( g_pColumnarLib )
+	{
 		dlclose(g_pColumnarLib);
+		g_pColumnarLib = nullptr;
+	}
 }
 
 #else

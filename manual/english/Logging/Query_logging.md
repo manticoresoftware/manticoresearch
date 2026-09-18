@@ -61,6 +61,17 @@ The features of the Manticore SQL log format compared to the [plain format](../L
 ```
 <!-- end -->
 
+<!-- example sphixql_log3 -->
+It's important to note that Manticore logs not only SELECT queries but also data modification statements such as UPDATE. UPDATE statements are logged in the SQL log format, while INSERT, REPLACE, and DELETE operations are not logged. If you need comprehensive logging of all operations, you may need to implement additional application-level logging.
+
+<!-- intro -->
+`sphinxql` log entries for UPDATE example:
+<!-- request Example -->
+```sql
+/* Sat Mar 15 01:05:28.508 2025 conn 7 (127.0.0.1:63942) real 0.000 */ UPDATE test SET title='Updated Title' WHERE id=1;
+```
+<!-- end -->
+
 ### Plain log format
 
 <!-- example plain_log -->
@@ -82,8 +93,8 @@ The log format is as follows:
 ```
 
 where:
-* `real-time` is the end-to-end time from the start to the finish of the query. In SphinxQL logs it corresponds to the `real` field.
-* `wall-time` is Manticore's internal query wall-time metric. In SphinxQL logs it corresponds to the `wall` field, and this same value is used by `query_log_min_msec`. For distributed and multi-source queries, `wall-time` can differ from `real-time`.
+* `real-time` is the end-to-end time from the start to the finish of the query. In query logs it corresponds to the `real` field.
+* `wall-time` is Manticore's internal query wall-time metric. In query logs it corresponds to the `wall` field, and this same value is used by `query_log_min_msec`. For distributed and multi-source queries, `wall-time` can differ from `real-time`.
 * `perf-stats` includes CPU/IO stats when Manticore is started with `--cpustats` (or it was enabled via `SET GLOBAL cpustats=1`) and/or `--iostats` (or it was enabled via `SET GLOBAL iostats=1`):
   - `ios` is the number of file I/O operations carried out;
   - `kb` is the amount of data in kilobytes read from the table files;
@@ -120,6 +131,9 @@ Query log example:
 ```
 
 <!-- end -->
+
+Unlike the SQL log format, the plain log format only logs search queries (SELECT statements). Data modification statements such as INSERT, REPLACE, DELETE, and UPDATE are not logged in this format. UPDATE statements are logged in the SQL format but not in the plain format.
+
 
 ## Logging only slow queries
 

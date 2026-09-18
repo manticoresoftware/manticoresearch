@@ -43,6 +43,8 @@ struct PlainOrColumnar_t
 	int				Get ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const uint8_t * & pData ) const;
 };
 
+PlainOrColumnar_t CreatePlainOrColumnar ( const ISphSchema & tSchema, const CSphColumnInfo & tAttr );
+
 namespace SI
 {
 	class Builder_i;

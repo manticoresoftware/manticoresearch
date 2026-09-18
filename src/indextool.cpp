@@ -37,13 +37,13 @@ static bool IsConfigless()
 
 static CSphString GetPathForNewIndex ( const CSphString & sIndexName )
 {
-	CSphString sRes;
-	if ( g_sDataDir.Length() && !g_sDataDir.Ends("/") && !g_sDataDir.Ends("\\") )
-		sRes.SetSprintf ( "%s/%s", g_sDataDir.cstr(), sIndexName.cstr() );
-	else
-		sRes.SetSprintf ( "%s%s", g_sDataDir.cstr(), sIndexName.cstr() );
+	CSphString sPath = sphGetConfiglessTablePath ( g_sDataDir, sIndexName );
+	CSphString sLegacyPath;
+	sLegacyPath.SetSprintf ( "%s/%s", g_sDataDir.cstr(), sIndexName.cstr() );
+	if ( sPath!=sLegacyPath && !sphDirExists ( sPath.cstr() ) && sphDirExists ( sLegacyPath.cstr() ) )
+		return sLegacyPath;
 
-	return sRes;
+	return sPath;
 }
 
 static void MakeRelativePath ( CSphString & sPath )
@@ -825,6 +825,7 @@ struct IndexInfo_t
 {
 	bool							m_bEnabled {false};
 	DWORD							m_nDocs {0};
+	DWORD							m_uVersion {0};
 	CSphString						m_sName;
 	CSphString						m_sPath;
 	CSphFixedVector<DocID_t>		m_dKilllist;
@@ -843,21 +844,140 @@ static void ApplyKilllist ( IndexInfo_t & tTarget, const IndexInfo_t & tKiller, 
 {
 	if ( tSettings.m_uFlags & KillListTarget_t::USE_DOCIDS )
 	{
-		LookupReaderIterator_c tTargetReader ( tTarget.m_tLookup.GetReadPtr() );
-		LookupReaderIterator_c tKillerReader ( tKiller.m_tLookup.GetReadPtr() );
+		LookupReaderIterator_c tTargetReader ( tTarget.m_tLookup.GetReadPtr(), tTarget.m_uVersion );
+		LookupReaderIterator_c tKillerReader ( tKiller.m_tLookup.GetReadPtr(), tKiller.m_uVersion );
 
 		KillByLookup ( tTargetReader, tKillerReader, tTarget.m_tDeadRowMap );
 	}
 
 	if ( tSettings.m_uFlags & KillListTarget_t::USE_KLIST )
 	{
-		LookupReaderIterator_c tTargetReader ( tTarget.m_tLookup.GetReadPtr() );
+		LookupReaderIterator_c tTargetReader ( tTarget.m_tLookup.GetReadPtr(), tTarget.m_uVersion );
 		DocidListReader_c tKillerReader ( tKiller.m_dKilllist );
 
 		KillByLookup ( tTargetReader, tKillerReader, tTarget.m_tDeadRowMap );
 	}
 }
 
+
+
+//////////////////////////////////////////////////////////////////////////
+
+// manticoresearch#4852: offline fix for a suspect (v.71/v.72) header over an unconverted .spt lookup.
+// works on the files only (the daemon refuses to load such a table): converts a pre-v.71 lookup to the
+// current layout when needed and stamps the header with the fixed version (71->73, 72->74), so the
+// table is never checked again.
+static bool FixDocidLookupBase ( const CSphString & sBase )
+{
+	CSphString sHeaderFile, sLookupFile;
+	sHeaderFile.SetSprintf ( "%s.sph", sBase.cstr() );
+	sLookupFile.SetSprintf ( "%s.spt", sBase.cstr() );
+
+	CSphString sError;
+	CSphVector<BYTE> dHeader;
+	{
+		CSphAutofile tFile;
+		if ( tFile.Open ( sHeaderFile, SPH_O_READ, sError )<0 )
+			sphDie ( "%s: %s", sHeaderFile.cstr(), sError.cstr() );
+		dHeader.Resize ( (int64_t)tFile.GetSize() );
+		if ( !tFile.Read ( dHeader.Begin(), dHeader.GetLength(), sError ) )
+			sphDie ( "%s: %s", sHeaderFile.cstr(), sError.cstr() );
+	}
+
+	// the version lives in the json header as a plain number
+	CSphString sHeaderText ( (const char*)dHeader.Begin(), dHeader.GetLength() );
+	const char * szTag = "\"index_format_version\":";
+	const char * szVer = strstr ( sHeaderText.cstr(), szTag );
+	if ( !szVer )
+		sphDie ( "%s: no index_format_version in the header", sHeaderFile.cstr() );
+
+	DWORD uVersion = strtoul ( szVer+strlen(szTag), nullptr, 10 );
+	if ( uVersion<DOCID_LOOKUP_SUSPECT_MIN || uVersion>DOCID_LOOKUP_SUSPECT_MAX )
+	{
+		fprintf ( stdout, "%s: v.%u - not suspect, nothing to fix\n", sBase.cstr(), uVersion );
+		return false;
+	}
+
+	CSphMappedBuffer<BYTE> tLookup;
+	if ( !tLookup.Setup ( sLookupFile, sError, false ) )
+		sphDie ( "%s: %s", sLookupFile.cstr(), sError.cstr() );
+
+	CSphString sFormatError;
+	if ( !CheckDocidLookupFormat ( tLookup.GetReadPtr(), tLookup.GetLengthBytes(), uVersion, sFormatError ) )
+	{
+		DWORD uActual = DetectDocidLookupVersion ( tLookup.GetReadPtr(), tLookup.GetLengthBytes() );
+		if ( uActual!=DOCID_LOOKUP_UUID_VERSION-1 )
+			sphDie ( "%s: %s; the lookup is damaged beyond this fix - rebuild or restore the table", sLookupFile.cstr(), sFormatError.cstr() );
+
+		tLookup.Reset();
+		if ( !UpgradeDocidLookupFile ( sLookupFile, uActual, sError ) )
+			sphDie ( "%s: %s", sLookupFile.cstr(), sError.cstr() );
+
+		fprintf ( stdout, "%s: lookup converted from the pre-v.%u layout\n", sBase.cstr(), DOCID_LOOKUP_UUID_VERSION );
+	} else
+		fprintf ( stdout, "%s: lookup already consistent\n", sBase.cstr() );
+
+	// stamp the fixed version: replace the number in place (same digit count: 71->73, 72->74)
+	DWORD uFixed = FixedIndexFormatVersion ( uVersion );
+	char sOld[32], sNew[32];
+	snprintf ( sOld, sizeof(sOld), "%s%u", szTag, uVersion );
+	snprintf ( sNew, sizeof(sNew), "%s%u", szTag, uFixed );
+	assert ( strlen(sOld)==strlen(sNew) );
+	memcpy ( dHeader.Begin() + ( szVer - sHeaderText.cstr() ), sNew, strlen(sNew) );
+
+	CSphString sTmp;
+	sTmp.SetSprintf ( "%s.fix.tmp", sHeaderFile.cstr() );
+	CSphWriter tWriter;
+	if ( !tWriter.OpenFile ( sTmp, sError ) )
+		sphDie ( "%s: %s", sTmp.cstr(), sError.cstr() );
+	tWriter.PutBytes ( dHeader.Begin(), dHeader.GetLength() );
+	tWriter.CloseFile();
+	if ( tWriter.IsError() || sph::rename ( sTmp.cstr(), sHeaderFile.cstr() )!=0 )
+		sphDie ( "%s: failed to write the fixed header", sHeaderFile.cstr() );
+
+	fprintf ( stdout, "%s: header v.%u -> v.%u\n", sBase.cstr(), uVersion, uFixed );
+	return true;
+}
+
+
+static void FixDocidLookup ( CSphConfig & hConf, const CSphString & sIndex )
+{
+	if ( !hConf["index"].Exists ( sIndex ) )
+		sphDie ( "table '%s': no such table in config", sIndex.cstr() );
+
+	const CSphConfigSection & hIndex = hConf["index"][sIndex];
+	if ( !hIndex("path") )
+		sphDie ( "table '%s': missing 'path'", sIndex.cstr() );
+
+	CSphString sPath = RedirectToRealPath ( hIndex["path"].strval() );
+	int iFixed = 0;
+
+	CSphString sMeta;
+	sMeta.SetSprintf ( "%s.meta", sPath.cstr() );
+	if ( sphFileExists ( sMeta.cstr() ) )
+	{
+		// an RT table: fix every disk chunk listed in the meta
+		CSphString sError;
+		CSphVector<BYTE> dMeta;
+		if ( sphJsonParse ( dMeta, sMeta, sError )!=JsonFileParse_e::OK || dMeta.IsEmpty() )
+			sphDie ( "%s: %s", sMeta.cstr(), sError.cstr() );
+
+		bson::Bson_c tBson ( dMeta );
+		bson::Bson_c tChunks { tBson.ChildByName ( "chunk_names" ) };
+		if ( tBson.IsEmpty() || tChunks.IsEmpty() )
+			sphDie ( "%s: no chunk_names in the meta", sMeta.cstr() );
+
+		tChunks.ForEach ( [&] ( const bson::NodeHandle_t & tNode )
+		{
+			CSphString sChunk;
+			sChunk.SetSprintf ( "%s.%d", sPath.cstr(), (int)bson::Int ( tNode ) );
+			iFixed += FixDocidLookupBase ( sChunk ) ? 1 : 0;
+		});
+	} else
+		iFixed += FixDocidLookupBase ( sPath ) ? 1 : 0;
+
+	fprintf ( stdout, "table '%s': %d header(s) fixed\n", sIndex.cstr(), iFixed );
+}
 
 static void ApplyKilllists ( CSphConfig & hConf )
 {
@@ -879,18 +999,18 @@ static void ApplyKilllists ( CSphConfig & hConf )
 		tIndex.m_sName = tIndex_.first.cstr();
 		tIndex.m_sPath = RedirectToRealPath ( hIndex["path"].strval() );
 
-		IndexFiles_c tIndexFiles ( tIndex.m_sPath, tIndex.m_sName.cstr () );
-
-		if ( !tIndexFiles.CheckHeader() )
+		auto uVersion =	ValidateHeaderAndReadVersion ( SphSprintf ( "%s%s", tIndex.m_sPath.cstr(), sphGetExt(SPH_EXT_SPH) ) );
+		if ( !uVersion.has_value() )
 		{
 			fprintf ( stdout, "WARNING: unable to index header for table %s\n", tIndex.m_sName.cstr() );
 			continue;
 		}
+		tIndex.m_uVersion = uVersion.value();
 
 		// no lookups prior to v.54
-		if ( tIndexFiles.GetVersion() < 54 )
+		if ( uVersion.value() < 54 )
 		{
-			fprintf ( stdout, "WARNING: table '%s' version: %u, min supported is 54\n", tIndex.m_sName.cstr(), tIndexFiles.GetVersion() );
+			fprintf ( stdout, "WARNING: table '%s' version: %u, min supported is 54\n", tIndex.m_sName.cstr(), uVersion.value() );
 			continue;
 		}
 
@@ -1028,6 +1148,7 @@ Commands are:
 -h, --help			display this help message
 -v				display version information
 --check <TABLE>			perform table consistency check
+--fix-docid-lookup <TABLE>	fix a v.71/v.72 table whose header was rewritten by ALTER without converting the docid lookup (manticoresearch#4852): converts the .spt and stamps the fixed header version, offline
 --check-disk-chunk <CHUNK_ID>	perform single disk chunk consistency check (to be used together with --check)
 --check-id-dups <CHUNK_ID>	check if there are duplicate ids (to be used together with --check)
 --rotate			rotate table after --check in case it's valid
@@ -1085,11 +1206,12 @@ enum class IndextoolCmd_e
 	MERGEIDF,
 	CHECKCONFIG,
 	FOLD,
-	APPLYKLISTS
+	APPLYKLISTS,
+	FIXDOCIDLOOKUP
 };
 
 static IndextoolCmd_e g_eCommand = IndextoolCmd_e::NOTHING;
-static const char * g_sCommands[] = {"", "dumpheader", "dumpconfig", "dumpdocids", "dumphitlist", "dumpdict", "dumpkilllist", "check", "htmlstrip", "morph", "buildidf", "mergeidf", "checkconfig", "fold", "apply-killlists" };
+static const char * g_sCommands[] = {"", "dumpheader", "dumpconfig", "dumpdocids", "dumphitlist", "dumpdict", "dumpkilllist", "check", "htmlstrip", "morph", "buildidf", "mergeidf", "checkconfig", "fold", "apply-killlists", "fix-docid-lookup" };
 
 
 static void SetCmd ( IndextoolCmd_e eCmd )
@@ -1202,7 +1324,7 @@ static bool LoadJsonConfig ( CSphConfig & hConf, const CSphString & sConfigFile 
 	return true;
 }
 
-static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, CSphString sIndex, bool bDictKeywords, bool bRotate, StrVec_t * pWarnings, CSphString & sError )
+static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, CSphString sIndex, bool bRotate, StrVec_t * pWarnings, CSphString & sError )
 {
 	// don't expect complete index declarations from indexes created with CREATE TABLE
 	const auto& hIndex = hConf["index"][sIndex];
@@ -1213,7 +1335,7 @@ static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, CSphString s
 		CSphSchema tSchema;
 		CSphIndexSettings tSettings;
 		if ( bFromJson || sphRTSchemaConfigure ( hIndex, tSchema, tSettings, pWarnings, sError, false, false ) )
-			return sphCreateIndexRT ( std::move ( sIndex ), hIndex["path"].strval(), std::move ( tSchema ), 32*1024*1024, bDictKeywords );
+			return sphCreateIndexRT ( std::move ( sIndex ), hIndex["path"].strval(), std::move ( tSchema ), 32*1024*1024 );
 	} else
 	{
 		StringBuilder_c tPath;
@@ -1310,6 +1432,7 @@ int main ( int argc, char ** argv )
 		OPT1 ( "-v" )				{ ShowVersion(); exit(0); }
 		OPT ( "-h", "--help" )		{ ShowVersion(); ShowHelp(); exit(0); }
 		OPT1 ( "--apply-killlists" ){ SetCmd ( IndextoolCmd_e::APPLYKLISTS ); continue; }
+		OPT1 ( "--fix-docid-lookup" ){ SetCmd ( IndextoolCmd_e::FIXDOCIDLOOKUP ); sIndex = argv[++i]; continue; }
 		OPT1 ( "--check-id-dups" )	{ bCheckIdDups = true; continue; }
 		if ( !strcmp ( argv[i], "--buildidf" ) || !strcmp ( argv[i], "--mergeidf" ) )
 		{
@@ -1532,6 +1655,12 @@ int main ( int argc, char ** argv )
 		exit (0);
 	}
 
+	if ( g_eCommand==IndextoolCmd_e::FIXDOCIDLOOKUP )
+	{
+		FixDocidLookup ( hConf, sIndex );
+		exit (0);
+	}
+
 	// configure common settings (as of time of this writing, AOT and ICU setup)
 	sphConfigureCommon ( hConf );
 
@@ -1554,13 +1683,8 @@ int main ( int argc, char ** argv )
 		if ( !hConf["index"][sIndex]("path") )
 			sphDie ( "table '%s': missing 'path' in config'\n", sIndex.cstr() );
 
-		// preload that index
-		bool bDictKeywords = true;
-		if ( hConf["index"][sIndex].Exists ( "dict" ) )
-			bDictKeywords = ( hConf["index"][sIndex]["dict"]!="crc" );
-
 		StrVec_t dWarnings;
-		pIndex = CreateIndex ( hConf, sIndex, bDictKeywords, bRotate, &dWarnings, sError );
+		pIndex = CreateIndex ( hConf, sIndex, bRotate, &dWarnings, sError );
 
 		for ( const auto & i : dWarnings )
 			fprintf ( stdout, "WARNING: table '%s': %s\n", sIndex.cstr(), i.cstr() );

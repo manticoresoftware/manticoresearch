@@ -39,8 +39,8 @@ table foo {
 
 <!-- request SQL -->
 ```sql
-CREATE TABLE distributed_index type='distributed'
-  local='local_index'
+CREATE TABLE distributed_table type='distributed'
+  local='local_table'
   agent='127.0.0.1:9312:remote_table';
 ```
 <!-- end -->
@@ -54,4 +54,3 @@ CREATE TABLE distributed_index type='distributed'
 2. [Удалённые таблицы](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent): Это таблицы, обслуживаемые вне сервера. Для перечисления удалённых таблиц используется синтаксис `agent =`. Каждая строка представляет один endpoint или агент. Каждый агент может иметь несколько внешних локаций и опций того, как он должен работать. Подробнее [здесь](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent). Важно отметить, что сервер не имеет информации о типе таблицы, с которой он работает. Это может привести к ошибкам, если, например, вы выполните `CALL PQ` для удалённой таблицы 'foo', которая не является percolate таблицей.
 
 <!-- proofread -->
-

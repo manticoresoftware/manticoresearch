@@ -7,7 +7,21 @@
 * CentOS 9, RHEL 9, AlmaLinux 9
 * AlmaLinux 10, 其他基于 RHEL 10 的发行版
 
-### YUM 仓库
+### 快速安装
+
+```bash
+curl https://manticoresearch.com | sh
+```
+
+###### 开发包
+
+如果你更喜欢“Nightly”（开发）版本，请执行：
+
+```bash
+curl https://manticoresearch.com | sh -s dev
+```
+
+### 手动安装
 
 在 RedHat/CentOS 上安装 Manticore 的最简单方法是使用我们的 YUM 仓库：
 
@@ -21,7 +35,7 @@ sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 sudo yum install manticore
 ```
 
-如果您是从旧版本升级到 Manticore 6，建议先删除旧软件包以避免由于更新的软件包结构导致的冲突：
+如果你是从旧版本升级到 Manticore 6 或更高版本，建议先移除旧的软件包，以避免因更新后的包结构而导致冲突：
 
 ```bash
 sudo yum remove manticore*
@@ -33,8 +47,8 @@ sudo yum remove manticore*
 如果您更喜欢使用 "Nightly"（开发）版本，请执行以下操作：
 
 ```bash
-sudo yum -y install https://repo.manticoresearch.com/manticore-repo.noarch.rpm && \
-sudo yum -y --disablerepo=manticore --enablerepo manticore-dev install manticore
+sudo yum -y install https://repo.manticoresearch.com/manticore-dev-repo.noarch.rpm && \
+sudo yum -y install manticore
 ```
 
 ### 独立 RPM 软件包

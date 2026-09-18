@@ -45,6 +45,8 @@ table <table name> {
   [rt_attr_float = <another float field name>]
   [rt_attr_float_vector = <float vector field name>]
   [rt_attr_float_vector = <another float vector field name>]
+  [rt_attr_float_vector_array = <float vector array field name>]
+  [rt_attr_float_vector_array = <another float vector array field name>]
   [rt_attr_bool = <boolean field name>]
   [rt_attr_bool = <another boolean field name>]
   [rt_attr_string = <string field name>]
@@ -65,6 +67,30 @@ table <table name> {
 
 ### Общие настройки для обычных таблиц и таблиц реального времени
 
+#### профиль
+
+`profile` — это SQL-only ярлык для применения заранее определённого набора настроек таблицы только в `CREATE TABLE`. В `ALTER TABLE` он не поддерживается. Само имя профиля **не** хранится в метаданных таблицы; Manticore сохраняет только развёрнутые настройки, поэтому `SHOW CREATE TABLE` выводит итоговые параметры, а не `profile=...`.
+
+Поддерживаются следующие значения:
+
+* `relevance` - разворачивается в:
+  * [`min_infix_len='2'`](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)
+  * [`index_field_lengths='1'`](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths)
+  * [`index_exact_words='1'`](../../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words)
+  * [`ranker=expr('1000*bm25a(1.2,0.75,256)')`](../../Searching/Options.md#ranker)
+  * [`morphology='stem_en'`](../../Creating_a_table/NLP_and_tokenization/Morphology.md#morphology)
+  * [`boolean_mode='or'`](../../Searching/Options.md#boolean_mode)
+
+Профиль `relevance` может улучшить ранжирование и полноту выдачи во многих англоязычных full-text нагрузках, но он также увеличивает объём работы при индексации и выполнении запроса, поэтому по сравнению с настройками по умолчанию может потребовать больше CPU, места на диске и памяти.
+
+Если вы также явно задаёте один из этих параметров, `profile` следует той же семантике дублирующихся настроек, что и обычные настройки `CREATE TABLE`: выигрывает первое вхождение. Поскольку профиль разворачивается в обычные настройки в момент создания, `profile='relevance' ranker='bm25'` сохраняет ranker из профиля, и полностью развёрнутая явная форма ведёт себя так же. Аналогично, `ranker='bm25' profile='relevance'` сохраняет `ranker='bm25'`.
+
+Развёрнутые настройки сохраняются в метаданных таблицы. `OPTION ranker=...` на уровне запроса по-прежнему переопределяет любой сохранённый ranker таблицы. Если запрос ищет по нескольким таблицам и не задаёт ranker, каждая таблица продолжает использовать свой собственный сохранённый ranker по умолчанию, включая локальные и удалённые распределённые таблицы. В этом случае Manticore объединяет результаты, используя исходные возвращённые веса; он **не** нормализует веса между разными ranker или выражениями, поэтому смешивание разных per-table ranker может привести к несопоставимому глобальному порядку.
+
+```sql
+CREATE TABLE products(title text) profile='relevance';
+```
+
 #### type
 
 ```ini
@@ -83,7 +109,7 @@ type = rt
 path = path/to/table
 ```
 
-Путь к месту хранения или расположения таблицы, абсолютный или относительный, без расширения.
+Путь, по которому таблица будет храниться или располагаться, абсолютный или относительный, без расширения. При построении plain-таблицы `indexer` создаёт все отсутствующие родительские каталоги в этом пути. Пользователь, от имени которого запущен `indexer`, должен иметь права на запись в ближайший существующий родительский каталог.
 
 Значение: Путь к таблице, **обязательный параметр**
 
@@ -488,7 +514,7 @@ knn = {"attrs":[{"name":"image_vector","type":"hnsw","dims":768,"hnsw_similarity
 rt_attr_float_vector = embedding_vector
 rt_field = title
 rt_field = description
-knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}
+knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":"title"}]}
 ```
 
 **Обязательные параметры KNN:**
@@ -502,7 +528,7 @@ knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2",
 - `hnsw_ef_construction`: Компромисс между временем построения и точностью (по умолчанию: 200)
 
 **Параметры автоматических эмбеддингов** (при использовании `model_name`):
-- `model_name`: Модель вложений для использования (например, `"sentence-transformers/all-MiniLM-L6-v2"`, `"openai/text-embedding-ada-002"`, `"openai:text-embedding-ada-002"`). Когда указано, `dims` должно быть пропущено, так как модель определяет размерности автоматически.
+- `model_name`: Используемая модель эмбеддингов (например, `"Xenova/all-MiniLM-L6-v2"` для быстрого пути ONNX — см. [модели ONNX на Hugging Face](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm); также поддерживается `"sentence-transformers/all-MiniLM-L6-v2"`; для OpenAI — `"openai/text-embedding-ada-002"`). Если параметр указан, `dims` нужно опустить, поскольку модель автоматически определяет размерность.
 - `from`: Список имен полей, разделенных запятыми, для использования при генерации эмбеддингов, или пустая строка `""` для использования всех текстовых/строковых полей. Этот параметр обязателен при указании `model_name`.
 - `api_key`: API-ключ для моделей на основе API (OpenAI, Voyage, Jina). Требуется только для сервисов эмбеддингов на основе API.
 - `cache_path`: Необязательный путь для кэширования загруженных моделей (для моделей sentence-transformers).
@@ -513,6 +539,37 @@ knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2",
 **Важно:** Нельзя указывать одновременно `dims` и `model_name` в одной конфигурации — они взаимоисключающие. Используйте `dims` для ручной вставки векторов или `model_name` для автоматических эмбеддингов. Используйте `dims` для ручной вставки векторов или `model_name` для автоматических эмбеддингов.
 
 Для получения более подробной информации о векторном поиске KNN и автоматических эмбеддингах см. [документацию KNN](../../Searching/KNN.md).
+
+#### rt_attr_float_vector_array
+
+```ini
+rt_attr_float_vector_array = chunk_vectors
+```
+
+Объявляет атрибут, который хранит несколько векторов float на документ, для документов, которые естественным образом представлены более чем одним embedding: фрагментами статьи, фотографиями товара, ключевыми кадрами видео.
+
+Значение: имя поля. Допускается несколько записей.
+
+KNN настраивается точно так же, как для [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector), с тем же блоком `knn`:
+
+```ini
+rt_attr_float_vector_array = chunk_vectors
+knn = {"attrs":[{"name":"chunk_vectors","type":"hnsw","dims":768,"hnsw_similarity":"COSINE","hnsw_m":16,"hnsw_ef_construction":200}]}
+```
+
+Применяются два отличия:
+
+- `dims` **обязателен**, когда векторы передаются явно, и каждый вектор в каждой строке должен содержать ровно столько элементов. Его нужно **опускать**, когда используется `model_name`.
+- `model_name`/`from` можно указывать вместе с `chunk_strategy` для мультивекторного режима (`fixed`, `recursive` или `sentence`), который заполняет массив по одному вектору на каждый фрагмент:
+
+```ini
+rt_attr_float_vector_array = chunk_vectors
+knn = {"attrs":[{"name":"chunk_vectors","type":"hnsw","hnsw_similarity":"COSINE","model_name":"Xenova/all-MiniLM-L6-v2","from":"title,content","chunk_strategy":"sentence","max_tokens":256,"overlap_tokens":32}]}
+```
+
+  См. [Стратегии разбиения на фрагменты](../../Searching/KNN.md#Chunking-strategies) для полного списка параметров и ограничений `ALTER`.
+
+Все векторы индексируются вместе, а KNN-поиск возвращает каждый документ один раз, с оценкой по ближайшему вектору. См. [Массив float-векторов](../../Creating_a_table/Data_types.md#Float-vector-array) и [Несколько векторов на документ](../../Searching/KNN.md#Multiple-vectors-per-document).
 
 #### rt_attr_bool
 
@@ -678,6 +735,7 @@ CREATE TABLE [IF NOT EXISTS] name ( <field name> <field data type> [data type op
 | [bigint](../../Creating_a_table/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bigint)	| большое целое число	 |   |
 | [float](../../Creating_a_table/Data_types.md#Float) | [rt_attr_float](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float)   | число с плавающей запятой  |   |
 | [float_vector](../../Creating_a_table/Data_types.md#Float-vector) | [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) | вектор значений с плавающей запятой  |   |
+| [float_vector_array](../../Creating_a_table/Data_types.md#Float-vector-array) | [rt_attr_float_vector_array](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector_array) | несколько векторов float на документ  |   |
 | [multi](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi)   | мульти-целое число | mva |
 | [multi64](../../Creating_a_table/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi_64) | мульти-большое целое число  | mva64 |
 | [bool](../../Creating_a_table/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bool) | логический |   |
@@ -751,7 +809,7 @@ Manticore поддерживает два режима доступа для ч�
 
 В режиме доступа mmap поисковый сервер отображает файл таблицы в память с помощью системного вызова `mmap`, а ОС кэширует содержимое файла. Опции [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) и [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits) не оказывают влияния на соответствующие файлы в этом режиме. Читатель mmap также может заблокировать данные таблицы в памяти с помощью привилегированного вызова `mlock`, что предотвращает вытеснение кэшированных данных на диск ОС.
 
-Для управления выбором режима доступа доступны опции **access_plain_attrs**, **access_blob_attrs**, **access_doclists**, **access_hitlists** и **access_dict** со следующими значениями:
+Чтобы управлять режимом доступа, доступны параметры **access_plain_attrs**, **access_blob_attrs**, **access_doclists**, **access_hitlists**, **access_dict**, **access_columnar_attrs** и **access_secondary** со следующими значениями:
 
 | Значение | Описание |
 | - | - |
@@ -768,6 +826,8 @@ Manticore поддерживает два режима доступа для ч�
 | access_doclists   | **file** (по умолчанию), mmap, mlock  | управляет тем, как будут читаться данные `*.spd` (списки документов) |
 | access_hitlists   | **file** (по умолчанию), mmap, mlock  | управляет тем, как будут читаться данные `*.spp` (списки вхождений) |
 | access_dict   | mmap, **mmap_preread** (по умолчанию), mlock  | управляет тем, как будет читаться `*.spi` (словарь) |
+| access_columnar_attrs | file, **mmap** (по умолчанию) | управляет тем, как будут читаться `*.spc` (колоночные атрибуты) |
+| access_secondary | **file** (по умолчанию), mmap | управляет тем, как будут читаться `*.spidx` и `*.spjidx` (вторичные индексы) |
 
 Вот таблица, которая поможет вам выбрать желаемый режим:
 
@@ -775,10 +835,11 @@ Manticore поддерживает два режима доступа для ч�
 | - | - | - | - | - |
 | обычные атрибуты в [построчном](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) (не колоночном) хранении, списки пропуска, списки слов, поисковые таблицы, удалённые документы | 	mmap | mmap |	**mmap_preread** (по умолчанию) | mlock |
 | построчные строковые, многозначные атрибуты (MVA) и json атрибуты | mmap | mmap | **mmap_preread** (по умолчанию) | mlock |
-| [колоночные](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) числовые, строковые и многозначные атрибуты | всегда  | только средствами ОС  | нет  | не поддерживается |
+| [колоночные](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) числовые, строковые и многозначные атрибуты | file | **mmap** (по умолчанию) | нет | не поддерживается |
 | списки документов | **file** (по умолчанию) | mmap | нет	| mlock |
 | списки вхождений | **file** (по умолчанию) | mmap | нет	| mlock |
 | словарь | mmap | mmap | **mmap_preread** (по умолчанию) | mlock |
+| вторичные индексы | **file** (по умолчанию) | mmap | нет | не поддерживается |
 
 ##### Рекомендации:
 
@@ -791,8 +852,8 @@ Manticore поддерживает два режима доступа для ч�
 Режим по умолчанию предлагает баланс:
 * mmap,
 * Предварительное чтение неколоночных атрибутов,
-* Поиск и чтение колоночных атрибутов без предварительного чтения,
-* Поиск и чтение списков документов/вхождений без предварительного чтения.
+* Отображение колоночных атрибутов в память без предварительного чтения,
+* Поиск и чтение doclists, hitlists и вторичных индексов без предварительного чтения.
 
 Это обеспечивает достойную производительность поиска, оптимальное использование памяти и более быстрый перезапуск searchd в большинстве сценариев.
 
@@ -994,6 +1055,7 @@ table products {
 * [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
 * [blend_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)
 * [blend_mode](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
+* [boolean_mode](../../Searching/Options.md#boolean_mode)
 * [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)
 * [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)
 * [embedded_limit](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)

@@ -13,29 +13,44 @@
   * 21.04 (Hirsute Hippo)
   * 22.04 (Jammy)
   * 24.04 (Noble)
+  * 26.04 (Resolute)
 
 * Mint
   * 19
   * 20
   * 21
 
-### APT репозиторий
+### Быстрая установка
+
+```bash
+curl https://manticoresearch.com | sh
+```
+
+###### Пакеты для разработки
+
+Если вы предпочитаете версии "Nightly" (для разработки), выполните:
+
+```bash
+curl https://manticoresearch.com | sh -s dev
+```
+
+### Ручная установка
 Самый простой способ установить Manticore в Ubuntu/Debian/Mint — использовать наш APT репозиторий.
 
 Установите репозиторий:
 ```bash
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
+sudo apt install ./manticore-repo.noarch.deb
 sudo apt update
 ```
-(установите `wget`, если он не установлен; установите `gnupg2`, если `apt-key` завершится ошибкой).
+(установите `wget`, если он не установлен).
 
 Затем установите Manticore Search:
 ```
 sudo apt install manticore
 ```
 
-Если вы обновляетесь до Manticore 6 с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов из-за обновлённой структуры пакетов:
+Если вы обновляетесь до Manticore 6 или новее с более ранней версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных измененной структурой пакетов:
 
 ```bash
 sudo apt remove manticore*
@@ -47,7 +62,7 @@ sudo apt remove manticore*
 Если вы предпочитаете "Ночные" (разрабатываемые) версии, выполните:
 ```bash
 wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb && \
-sudo dpkg -i manticore-dev-repo.noarch.deb && \
+sudo apt install ./manticore-dev-repo.noarch.deb && \
 sudo apt -y update && \
 sudo apt -y install manticore
 ```

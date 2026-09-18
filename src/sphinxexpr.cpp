@@ -27,6 +27,7 @@
 #include "geodist.h"
 #include "knnmisc.h"
 #include "hybridexecutor.h"
+#include "indexsettings.h"
 #include <time.h>
 #include <math.h>
 
@@ -1383,6 +1384,11 @@ public:
 			case SPH_ATTR_FLOAT_VECTOR:
 			case SPH_ATTR_FLOAT_VECTOR_PTR:
 				sphFloatVec2Str ( m_pFirst->MvaEval(tMatch), m_sBuilder );
+				break;
+
+			case SPH_ATTR_FLOAT_VECTOR_ARRAY:
+			case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
+				sphFloatVecArray2Str ( m_pFirst->MvaEval(tMatch), m_sBuilder );
 				break;
 
 			case SPH_ATTR_STRING:
@@ -4498,7 +4504,8 @@ static int ConvertToColumnarType ( ESphAttr eAttr )
 	case SPH_ATTR_STRING:		return TOK_COLUMNAR_STRING;
 	case SPH_ATTR_UINT32SET:	return TOK_COLUMNAR_UINT32SET;
 	case SPH_ATTR_INT64SET:		return TOK_COLUMNAR_INT64SET;
-	case SPH_ATTR_FLOAT_VECTOR:	return TOK_COLUMNAR_FLOATVEC;
+	case SPH_ATTR_FLOAT_VECTOR:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY:	return TOK_COLUMNAR_FLOATVEC;
 	default:
 		assert ( 0 && "Unknown columnar type" );
 		return -1;
@@ -4510,6 +4517,13 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp ) noe
 {
 	// check attribute type and width
 	const CSphColumnInfo & tCol = m_pSchema->GetAttr ( iAttr );
+	if ( tCol.IsUuidLinkedDocid() )
+	{
+		int iUuid = m_pSchema->GetAttrIndex ( sphGetUuidDocidName() );
+		assert ( iUuid>=0 );
+		assert ( m_pSchema->GetAttr(iUuid).m_eAttrType==SPH_ATTR_STRING || m_pSchema->GetAttr(iUuid).m_eAttrType==SPH_ATTR_STRINGPTR );
+		return ParseAttr ( iUuid, sphGetUuidDocidName(), lvalp );
+	}
 
 	// check for a duplicate attribute created for showing a stored field in the result set
 	if ( tCol.m_uFieldFlags & CSphColumnInfo::FIELD_STORED )
@@ -4539,6 +4553,11 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp ) noe
 
 	case SPH_ATTR_INT64SET:
 	case SPH_ATTR_INT64SET_PTR:		iRes = TOK_ATTR_MVA64; break;
+
+	case SPH_ATTR_FLOAT_VECTOR:
+	case SPH_ATTR_FLOAT_VECTOR_PTR:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:	iRes = TOK_ATTR_MVA32; break; // packed blob fetch; actual type comes from the schema
 
 	case SPH_ATTR_STRING:
 	case SPH_ATTR_STRINGPTR:		iRes = TOK_ATTR_STRING; break;
@@ -7766,6 +7785,49 @@ private:
 };
 
 
+// LENGTH() for float_vector_array: number of vectors, not the raw dword count.
+class Expr_FloatVecArrayLength_c : public Expr_WithLocator_c
+{
+	using Expr_WithLocator_c::Expr_WithLocator_c;
+
+public:
+	int IntEval ( const CSphMatch & tMatch ) const final
+	{
+		FloatVecArray_t tArray = ParseFloatVecArray ( tMatch.FetchAttrData ( m_tLocator, m_pBlobPool ) );
+		return tArray.m_iDims ? tArray.m_dValues.GetLength()/tArray.m_iDims : 0;
+	}
+
+	void Command ( ESphExprCommand eCmd, void * pArg ) final
+	{
+		Expr_WithLocator_c::Command ( eCmd, pArg );
+
+		if ( eCmd==SPH_EXPR_SET_BLOB_POOL )
+			m_pBlobPool = (const BYTE*)pArg;
+	}
+
+	float Eval ( const CSphMatch & tMatch ) const final { return (float)IntEval ( tMatch ); }
+
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
+	{
+		EXPR_CLASS_NAME("Expr_FloatVecArrayLength_c");
+		return CALC_DEP_HASHES();
+	}
+
+	ISphExpr * Clone () const final
+	{
+		return new Expr_FloatVecArrayLength_c ( *this );
+	}
+
+protected:
+	const BYTE *		m_pBlobPool { nullptr };
+
+private:
+	Expr_FloatVecArrayLength_c ( const Expr_FloatVecArrayLength_c& rhs )
+		: Expr_WithLocator_c ( rhs )
+	{}
+};
+
+
 /// aggregate functions evaluator for MVA attribute
 template < typename T >
 class Expr_MVAAggr_c : public Expr_WithLocator_c
@@ -9051,7 +9113,15 @@ ISphExpr * ExprParser_t::CreateLengthNode ( const ExprNode_t & tNode, ISphExpr *
 		case TOK_FUNC:					
 		case TOK_ATTR_STRING:			return new Expr_StrLength_c(pLeft);
 		case TOK_ATTR_MVA32:
-		case TOK_ATTR_MVA64:			return new Expr_MVALength_c ( tLeft.m_tLocator, m_pSchema->GetAttr(tLeft.m_iLocator).m_sName, tLeft.m_iToken==TOK_ATTR_MVA64 );
+		case TOK_ATTR_MVA64:
+		{
+			// float_vector_array shares the MVA32 token; it needs its own length (number of vectors)
+			ESphAttr eAttr = m_pSchema->GetAttr(tLeft.m_iLocator).m_eAttrType;
+			if ( eAttr==SPH_ATTR_FLOAT_VECTOR_ARRAY || eAttr==SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR )
+				return new Expr_FloatVecArrayLength_c ( tLeft.m_tLocator, m_pSchema->GetAttr(tLeft.m_iLocator).m_sName );
+
+			return new Expr_MVALength_c ( tLeft.m_tLocator, m_pSchema->GetAttr(tLeft.m_iLocator).m_sName, tLeft.m_iToken==TOK_ATTR_MVA64 );
+		}
 		case TOK_COLUMNAR_UINT32SET:	return CreateExpr_ColumnarMva32Length ( m_pSchema->GetAttr(tLeft.m_iLocator).m_sName );
 		case TOK_COLUMNAR_INT64SET:		return CreateExpr_ColumnarMva64Length ( m_pSchema->GetAttr(tLeft.m_iLocator).m_sName );
 		case TOK_COLUMNAR_STRING:		return CreateExpr_ColumnarStringLength ( m_pSchema->GetAttr(tLeft.m_iLocator).m_sName );
@@ -9443,7 +9513,15 @@ int ExprParser_t::AddNodeAttr ( int iTokenType, uint64_t uAttrLocator )
 	switch ( iTokenType )
 	{
 	case TOK_ATTR_FLOAT:	tNode.m_eRetType = SPH_ATTR_FLOAT;			break;
-	case TOK_ATTR_MVA32:	tNode.m_eRetType = bPtrAttr ? SPH_ATTR_UINT32SET_PTR : SPH_ATTR_UINT32SET;	break;
+	case TOK_ATTR_MVA32:
+	{
+		ESphAttr eAttr = m_pSchema->GetAttr(tNode.m_iLocator).m_eAttrType;
+		tNode.m_eRetType = ( eAttr==SPH_ATTR_FLOAT_VECTOR || eAttr==SPH_ATTR_FLOAT_VECTOR_PTR
+			|| eAttr==SPH_ATTR_FLOAT_VECTOR_ARRAY || eAttr==SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR )
+			? eAttr
+			: ( bPtrAttr ? SPH_ATTR_UINT32SET_PTR : SPH_ATTR_UINT32SET );
+		break;
+	}
 	case TOK_ATTR_MVA64:	tNode.m_eRetType = bPtrAttr ? SPH_ATTR_INT64SET_PTR : SPH_ATTR_INT64SET;	break;
 	case TOK_ATTR_STRING:	tNode.m_eRetType = SPH_ATTR_STRING;			break;
 	case TOK_ATTR_FACTORS:	tNode.m_eRetType = SPH_ATTR_FACTORS;		break;
@@ -9471,7 +9549,11 @@ int ExprParser_t::AddNodeColumnar ( int iTokenType, uint64_t uAttrLocator )
 	case TOK_COLUMNAR_STRING:		tNode.m_eRetType = SPH_ATTR_STRINGPTR; break;
 	case TOK_COLUMNAR_UINT32SET:	tNode.m_eRetType = SPH_ATTR_UINT32SET_PTR; break;
 	case TOK_COLUMNAR_INT64SET:		tNode.m_eRetType = SPH_ATTR_INT64SET_PTR; break;
-	case TOK_COLUMNAR_FLOATVEC:		tNode.m_eRetType = SPH_ATTR_FLOAT_VECTOR_PTR; break;
+	case TOK_COLUMNAR_FLOATVEC: // both float_vector and float_vector_array map to the same columnar type (FLOATVEC) and thus to the same token, so recover the exact attr type from the schema
+		tNode.m_eRetType = m_pSchema->GetAttr(tNode.m_iLocator).m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY
+			? SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR
+			: SPH_ATTR_FLOAT_VECTOR_PTR;
+		break;
 	default:
 		assert ( 0 && "Unsupported columnar type" );
 		break;
@@ -10584,11 +10666,21 @@ int ExprParser_t::ParseJoinAttr ( const char * szTable, uint64_t uOffset )
 	// Left table columns are stored in schema without prefix; right table with "right.attr"
 	CSphString sAttrWithTable;
 	if ( m_pJoinIdxLeft && *m_pJoinIdxLeft==szTable )
+	{
 		sAttrWithTable = sAttrName;
+	}
 	else
 		sAttrWithTable.SetSprintf ( "%s.%s", szTable, sAttrName.cstr() );
 
 	int iAttr = m_pSchema->GetAttrIndex ( sAttrWithTable.cstr() );
+	if ( iAttr>=0 && m_pSchema->GetAttr(iAttr).IsUuidLinkedDocid() )
+	{
+		int iUuid = m_pSchema->GetAttrIndex ( sphGetUuidDocidName() );
+		assert ( iUuid>=0 );
+		assert ( m_pSchema->GetAttr(iUuid).m_eAttrType==SPH_ATTR_STRING || m_pSchema->GetAttr(iUuid).m_eAttrType==SPH_ATTR_STRINGPTR );
+		iAttr = iUuid;
+	}
+
 	if ( iAttr==-1 )
 		m_sParserError.SetSprintf ( "unknown attribute '%s'", sAttrWithTable.cstr() );
 
@@ -10750,8 +10842,10 @@ static int EXPR_STACK_PARSE = 150;
 
 void SetExprNodeParseStackItemSize ( std::pair<int, int> tSize )
 {
-	EXPR_STACK_PARSE_CREATE = tSize.first;
-	EXPR_STACK_PARSE = tSize.second;
+	if ( tSize.first )
+		EXPR_STACK_PARSE_CREATE = tSize.first;
+	if ( tSize.second )
+		EXPR_STACK_PARSE = tSize.second;
 }
 
 
@@ -10761,8 +10855,10 @@ static int EXPR_STACK_EVAL = 8;
 
 void SetExprNodeEvalStackItemSize ( std::pair<int, int> tSize )
 {
-	EXPR_STACK_EVAL_CREATE = tSize.first;
-	EXPR_STACK_EVAL = tSize.second;
+	if ( tSize.first )
+		EXPR_STACK_EVAL_CREATE = tSize.first;
+	if ( tSize.second )
+		EXPR_STACK_EVAL = tSize.second;
 }
 
 
@@ -10827,7 +10923,8 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	ESphAttr eAttrType = m_dNodes[m_iParsed].m_eRetType;
 
 	// pooled MVA/string attributes are ok to use in expressions, but storing them into schema requires their _PTR counterparts
-	if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET || eAttrType==SPH_ATTR_STRING )
+	if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET || eAttrType==SPH_ATTR_FLOAT_VECTOR
+		|| eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY || eAttrType==SPH_ATTR_STRING )
 		eAttrType = sphPlainAttrToPtrAttr(eAttrType);
 
 	// Check expression stack to fit for mutual recursive function calls.

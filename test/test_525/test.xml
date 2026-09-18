@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>float_vector_array json syntax</name>
+
+<requires>
+	<http/>
+	<knn/>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	create table t (title text, v float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2', p float_vector_array, s float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2', tag int);
+</sphinxql>
+</queries>
+
+<httpqueries>
+
+<!-- ============ insert: nested array, one vector, empty, omitted ============ -->
+<query endpoint="json/insert">
+{ "table":"t", "id":1, "doc": { "title":"multi", "v":[[1,0,0,0],[0,1,0,0]], "p":[[1,2],[3,4]], "tag":1 } }
+</query>
+
+<query endpoint="json/insert">
+{ "table":"t", "id":2, "doc": { "title":"single", "v":[[0,0,1,0]], "p":[[5,6]], "tag":2 } }
+</query>
+
+<!-- [] is the empty array, and must stay distinguishable from a missing value -->
+<query endpoint="json/insert">
+{ "table":"t", "id":3, "doc": { "title":"empty", "v":[], "p":[], "tag":3 } }
+</query>
+
+<query endpoint="json/insert">
+{ "table":"t", "id":4, "doc": { "title":"omitted", "tag":4 } }
+</query>
+
+<!-- ============ insert: rejected shapes ============ -->
+<!-- flat is rejected -->
+<query endpoint="json/insert">
+{ "table":"t", "id":5, "doc": { "title":"flat", "v":[1,0,0,0] } }
+</query>
+
+<!-- dims==0 is reserved for the empty array, so an empty INNER vector is not representable -->
+<query endpoint="json/insert">
+{ "table":"t", "id":5, "doc": { "title":"inner empty", "v":[[]] } }
+</query>
+
+<query endpoint="json/insert">
+{ "table":"t", "id":5, "doc": { "title":"ragged", "v":[[1,2,3,4],[5,6,7]] } }
+</query>
+
+<!-- width must match knn_dims on a KNN-indexed column -->
+<query endpoint="json/insert">
+{ "table":"t", "id":5, "doc": { "title":"wrong dims", "v":[[1,2],[3,4]] } }
+</query>
+
+<!-- mixing nested and scalar elements is not a vector array -->
+<query endpoint="json/insert">
+{ "table":"t", "id":5, "doc": { "title":"mixed", "v":[[1,2,3,4],5] } }
+</query>
+
+<!-- non-numeric elements -->
+<query endpoint="json/insert">
+{ "table":"t", "id":5, "doc": { "title":"strings", "v":[["a","b","c","d"]] } }
+</query>
+
+<!-- a nested literal aimed at a non-array column is a type error -->
+<query endpoint="json/insert">
+{ "table":"t", "id":5, "doc": { "title":"nested into int", "tag":[[1,2]] } }
+</query>
+
+<!-- ...whereas aimed at a float_vector it reaches the array-specific message -->
+<query endpoint="json/insert">
+{ "table":"t", "id":5, "doc": { "title":"nested into float_vector", "s":[[1,2,3,4]] } }
+</query>
+
+<!-- ============ real coordinates: fractional and negative ============ -->
+<query endpoint="json/insert">
+{ "table":"t", "id":20, "doc": { "title":"real", "v":[[0.1,-0.2,0.3,-0.4],[0.9,0.8,-0.7,0.6]], "p":[[-1.5,2.25]], "tag":5 } }
+</query>
+
+<!-- integer and fractional mixed inside one vector -->
+<query endpoint="json/insert">
+{ "table":"t", "id":21, "doc": { "title":"mixed nums", "v":[[1,-0.5,0,0.25]], "p":[[0,-0.75]], "tag":5 } }
+</query>
+
+<query endpoint="json/search">
+{ "table":"t", "query":{"range":{"tag":{"gte":5,"lte":5}}}, "sort":[{"id":"asc"}], "_source":["title","v","p"] }
+</query>
+
+<!-- doc 20 slot 1 equals the anchor exactly, slot 2 is far: the min must win -->
+<query endpoint="json/search">
+{ "table":"t", "knn":{ "field":"v", "query_vector":[0.1,-0.2,0.3,-0.4], "k":10 }, "sort":[{"id":"asc"}], "_source":["title"] }
+</query>
+
+<!-- ============ output: values come back nested, chunked by their own dims ============ -->
+<query endpoint="json/search">
+{ "table":"t", "query":{"match_all":{}}, "sort":[{"id":"asc"}], "_source":["title","v","p"] }
+</query>
+
+<!-- ============ knn search over the array: one hit per doc, at its closest vector ============ -->
+<!-- doc 1 owns a vector equal to the anchor and one far from it: it appears ONCE, at the min -->
+<query endpoint="json/search">
+{ "table":"t", "knn":{ "field":"v", "query_vector":[1,0,0,0], "k":10 }, "sort":[{"id":"asc"}], "_source":["title","v"] }
+</query>
+
+<!-- the anchor is a single vector, not an array of them -->
+<query endpoint="json/search">
+{ "table":"t", "knn":{ "field":"v", "query_vector":[[1,0,0,0]], "k":10 } }
+</query>
+
+<!-- and it must match knn_dims -->
+<query endpoint="json/search">
+{ "table":"t", "knn":{ "field":"v", "query_vector":[1,0,0], "k":10 } }
+</query>
+
+<!-- ============ update: allowed on the non-KNN column only ============ -->
+<query endpoint="json/update">
+{ "table":"t", "id":1, "doc": { "p":[[7,8],[9,10]] } }
+</query>
+
+<!-- [] clears it -->
+<query endpoint="json/update">
+{ "table":"t", "id":2, "doc": { "p":[] } }
+</query>
+
+<!-- flat input is rejected on update too -->
+<query endpoint="json/update">
+{ "table":"t", "id":1, "doc": { "p":[1,2,3,4] } }
+</query>
+
+<!-- ragged is rejected on update, naming the offending vector -->
+<query endpoint="json/update">
+{ "table":"t", "id":1, "doc": { "p":[[1,2],[3]] } }
+</query>
+
+<!-- a KNN-indexed array can not be updated at all; REPLACE is the way -->
+<query endpoint="json/update">
+{ "table":"t", "id":1, "doc": { "v":[[0,1,0,0]] } }
+</query>
+
+<query endpoint="json/search">
+{ "table":"t", "query":{"match_all":{}}, "sort":[{"id":"asc"}], "_source":["title","p"] }
+</query>
+
+<!-- ============ replace: the supported way to change a KNN-indexed array ============ -->
+<query endpoint="json/replace">
+{ "table":"t", "id":1, "doc": { "title":"replaced", "v":[[0,1,0,0],[0,0,1,0]], "p":[[1,1]], "tag":1 } }
+</query>
+
+<query endpoint="json/search">
+{ "table":"t", "knn":{ "field":"v", "query_vector":[0,1,0,0], "k":10 }, "sort":[{"id":"asc"}], "_source":["title","v"] }
+</query>
+
+<!-- ============ bulk, since it takes a different parse path ============ -->
+<!-- all good: nested, empty, and a replace, all of which must land -->
+<query endpoint="json/bulk" content="application/x-ndjson">
+{"insert": {"table":"t", "id":10, "doc": {"title":"bulk1","v":[[1,0,0,0],[0,0,0,1]],"p":[[2,2]],"tag":9}}}
+{"insert": {"table":"t", "id":11, "doc": {"title":"bulk2","v":[],"p":[],"tag":9}}}
+{"replace": {"table":"t", "id":11, "doc": {"title":"bulk2 replaced","v":[[0,1,0,0]],"p":[[3,3]],"tag":9}}}
+</query>
+
+<query endpoint="json/search">
+{ "table":"t", "query":{"range":{"tag":{"gte":9}}}, "sort":[{"id":"asc"}], "_source":["title","v","p"] }
+</query>
+
+<!-- a bad row rolls the whole batch back -->
+<query endpoint="json/bulk" content="application/x-ndjson">
+{"insert": {"table":"t", "id":13, "doc": {"title":"bulk good","v":[[1,1,1,1]],"tag":8}}}
+{"insert": {"table":"t", "id":14, "doc": {"title":"bulk ragged","v":[[1,2,3,4],[5,6]],"tag":8}}}
+</query>
+
+<query endpoint="json/search">
+{ "table":"t", "query":{"range":{"tag":{"gte":8}}}, "sort":[{"id":"asc"}], "_source":["title","tag"] }
+</query>
+
+<query endpoint="json/search">
+{ "table":"t", "query":{"match_all":{}}, "sort":[{"id":"asc"}], "_source":["title","v","p"], "limit":30 }
+</query>
+
+<!-- ============ the same after a flush, i.e. read back from a disk chunk ============ -->
+<query endpoint="sql" method="post">mode=raw&amp;query=flush ramchunk t</query>
+
+<query endpoint="json/search">
+{ "table":"t", "query":{"match_all":{}}, "sort":[{"id":"asc"}], "_source":["title","v","p"], "limit":30 }
+</query>
+
+<query endpoint="json/search">
+{ "table":"t", "knn":{ "field":"v", "query_vector":[1,0,0,0], "k":10 }, "sort":[{"id":"asc"}], "_source":["title","v"] }
+</query>
+
+<!-- Filtered knn over JSON -->
+<query endpoint="json/search">
+{ "table":"t", "knn":{ "field":"v", "query_vector":[1,0,0,0], "k":10, "filter":{"range":{"tag":{"gte":2}}} }, "sort":[{"id":"asc"}], "_source":["title","tag"] }
+</query>
+
+<query endpoint="sql" method="post">mode=raw&amp;query=drop table t</query>
+</httpqueries>
+
+</test>

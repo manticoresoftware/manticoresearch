@@ -1,0 +1,107 @@
+––– comment –––
+Synchronous OPTIMIZE TABLE on a distributed table fans out to every local
+component and every non-blackhole remote mirror. Internal optimize requests
+carry mandatory same-socket heartbeats so work can outlive the original agent
+query lease. The 200 ms timeout below is a deterministic transport oracle.
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "SET GLOBAL auto_optimize=0;"; mysql -h0 -P2306 -e "SET GLOBAL auto_optimize=0;"; mysql -h0 -P3306 -e "SET GLOBAL auto_optimize=0;"
+––– output –––
+––– comment –––
+The regular SQL statement requires sync=1 before any target can be mutated.
+The successful request must run longer than its original 200 ms lease, compact
+the remote table, and complete through the streamed heartbeat transport.
+––– input –––
+mysql -h0 -P2306 -e "DROP TABLE IF EXISTS remote_reply_rt; CREATE TABLE remote_reply_rt(title text) optimize_cutoff='1'; INSERT INTO remote_reply_rt VALUES(1,'one'),(2,'two'); FLUSH RAMCHUNK remote_reply_rt; INSERT INTO remote_reply_rt VALUES(3,'three'),(4,'four'); FLUSH RAMCHUNK remote_reply_rt;"; mysql -h0 -P1306 -e "DROP TABLE IF EXISTS remote_reply_dist; CREATE TABLE remote_reply_dist TYPE='distributed' AGENT='127.0.0.1:2312:remote_reply_rt' agent_query_timeout='200ms';"
+––– output –––
+––– input –––
+out=$(mysql --force -h0 -P1306 -e "OPTIMIZE TABLE remote_reply_dist OPTION cutoff=1" 2>&1 || true); chunks=$(mysql -h0 -P2306 -e "SHOW TABLE remote_reply_rt STATUS LIKE 'disk_chunks'" | awk -F'|' '$2 ~ /disk_chunks/ {gsub(/ /,"",$3); print $3}'); if printf '%s\n' "$out" | grep -q "requires OPTION sync=1" && [ "$chunks" = 2 ]; then echo SYNC_REQUIRED_BEFORE_MUTATION; else printf 'FAIL_SYNC_REQUIRED chunks=%s error=%s\n' "$chunks" "$out"; fi
+––– output –––
+SYNC_REQUIRED_BEFORE_MUTATION
+––– input –––
+started_ms=$(date +%s%3N); if mysql -h0 -P1306 -e "OPTIMIZE TABLE remote_reply_dist OPTION sync=1,cutoff=1"; then optimize_ok=1; else optimize_ok=0; fi; elapsed_ms=$(( $(date +%s%3N)-started_ms )); chunks=$(mysql -h0 -P2306 -e "SHOW TABLE remote_reply_rt STATUS LIKE 'disk_chunks'" | awk -F'|' '$2 ~ /disk_chunks/ {gsub(/ /,"",$3); print $3}'); if [ "$optimize_ok" = 1 ] && [ "$elapsed_ms" -gt 200 ] && [ "$chunks" = 1 ]; then printf 'DISTRIBUTED_HEARTBEAT_OK elapsed_ms=%s\n' "$elapsed_ms"; else printf 'FAIL_DISTRIBUTED_HEARTBEAT ok=%s elapsed_ms=%s chunks=%s\n' "$optimize_ok" "$elapsed_ms" "$chunks"; fi
+––– output –––
+DISTRIBUTED_HEARTBEAT_OK elapsed_ms=%{NUMBER}
+––– comment –––
+A mixed distributed table must optimize its local component and every physical
+table named by an agent. The cutoff is shared across the whole request.
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS optimize_local; CREATE TABLE optimize_local(title text) optimize_cutoff='1'; INSERT INTO optimize_local VALUES(1,'one'); FLUSH RAMCHUNK optimize_local; INSERT INTO optimize_local VALUES(2,'two'); FLUSH RAMCHUNK optimize_local;"; mysql -h0 -P2306 -e "DROP TABLE IF EXISTS optimize_remote_a; DROP TABLE IF EXISTS optimize_remote_b; CREATE TABLE optimize_remote_a(title text) optimize_cutoff='1'; CREATE TABLE optimize_remote_b(title text) optimize_cutoff='1'; INSERT INTO optimize_remote_a VALUES(1,'one'); FLUSH RAMCHUNK optimize_remote_a; INSERT INTO optimize_remote_a VALUES(2,'two'); FLUSH RAMCHUNK optimize_remote_a; INSERT INTO optimize_remote_b VALUES(1,'one'); FLUSH RAMCHUNK optimize_remote_b; INSERT INTO optimize_remote_b VALUES(2,'two'); FLUSH RAMCHUNK optimize_remote_b;"; mysql -h0 -P1306 -e "DROP TABLE IF EXISTS optimize_mixed; CREATE TABLE optimize_mixed TYPE='distributed' LOCAL='optimize_local' AGENT='127.0.0.1:2312:optimize_remote_a,optimize_remote_b' agent_query_timeout='2s'; OPTIMIZE TABLE optimize_mixed OPTION sync=1,cutoff=1;"
+––– output –––
+––– input –––
+local_chunks=$(mysql -h0 -P1306 -e "SHOW TABLE optimize_local STATUS LIKE 'disk_chunks'" | awk -F'|' '$2 ~ /disk_chunks/ {gsub(/ /,"",$3); print $3}'); a_chunks=$(mysql -h0 -P2306 -e "SHOW TABLE optimize_remote_a STATUS LIKE 'disk_chunks'" | awk -F'|' '$2 ~ /disk_chunks/ {gsub(/ /,"",$3); print $3}'); b_chunks=$(mysql -h0 -P2306 -e "SHOW TABLE optimize_remote_b STATUS LIKE 'disk_chunks'" | awk -F'|' '$2 ~ /disk_chunks/ {gsub(/ /,"",$3); print $3}'); if [ "$local_chunks" = 1 ] && [ "$a_chunks" = 1 ] && [ "$b_chunks" = 1 ]; then echo MIXED_MULTI_TARGET_OK; else echo "FAIL_MIXED_MULTI_TARGET local=$local_chunks a=$a_chunks b=$b_chunks"; fi
+––– output –––
+MIXED_MULTI_TARGET_OK
+––– comment –––
+Every physical target is resolved as an RT table before the agent starts the
+sequence. A later percolate target therefore rejects the request while the
+earlier valid RT target still has both disk chunks.
+––– input –––
+mysql -h0 -P2306 -e "DROP TABLE IF EXISTS optimize_validate_rt; DROP TABLE IF EXISTS optimize_validate_pq; CREATE TABLE optimize_validate_rt(title text) optimize_cutoff='1'; CREATE TABLE optimize_validate_pq(title text, meta json) type='pq'; INSERT INTO optimize_validate_rt VALUES(1,'one'); FLUSH RAMCHUNK optimize_validate_rt; INSERT INTO optimize_validate_rt VALUES(2,'two'); FLUSH RAMCHUNK optimize_validate_rt;"; mysql -h0 -P1306 -e "DROP TABLE IF EXISTS optimize_validate; CREATE TABLE optimize_validate TYPE='distributed' AGENT='127.0.0.1:2312:optimize_validate_rt,optimize_validate_pq' agent_query_timeout='2s';"
+––– output –––
+––– input –––
+out=$(mysql --force -h0 -P1306 -e "OPTIMIZE TABLE optimize_validate OPTION sync=1,cutoff=1" 2>&1 || true); chunks=$(mysql -h0 -P2306 -e "SHOW TABLE optimize_validate_rt STATUS LIKE 'disk_chunks'" | awk -F'|' '$2 ~ /disk_chunks/ {gsub(/ /,"",$3); print $3}'); if printf '%s\n' "$out" | grep -q "remote table 'optimize_validate_pq' must be an existing RT table" && [ "$chunks" = 2 ]; then echo ALL_REMOTE_TARGETS_VALIDATED_BEFORE_MUTATION; else printf 'FAIL_REMOTE_TARGET_VALIDATION chunks=%s error=%s\n' "$chunks" "$out"; fi
+––– output –––
+ALL_REMOTE_TARGETS_VALIDATED_BEFORE_MUTATION
+––– comment –––
+GetAllHosts() intentionally schedules every mirror for distributed optimize,
+instead of choosing one mirror as a normal search would.
+––– input –––
+mysql -h0 -P2306 -e "DROP TABLE IF EXISTS optimize_mirror; CREATE TABLE optimize_mirror(title text) optimize_cutoff='1'; INSERT INTO optimize_mirror VALUES(1,'one'); FLUSH RAMCHUNK optimize_mirror; INSERT INTO optimize_mirror VALUES(2,'two'); FLUSH RAMCHUNK optimize_mirror;"; mysql -h0 -P3306 -e "DROP TABLE IF EXISTS optimize_mirror; CREATE TABLE optimize_mirror(title text) optimize_cutoff='1'; INSERT INTO optimize_mirror VALUES(1,'one'); FLUSH RAMCHUNK optimize_mirror; INSERT INTO optimize_mirror VALUES(2,'two'); FLUSH RAMCHUNK optimize_mirror;"; mysql -h0 -P1306 -e "DROP TABLE IF EXISTS optimize_all_mirrors; CREATE TABLE optimize_all_mirrors TYPE='distributed' AGENT='127.0.0.1:2312:optimize_mirror|127.0.0.1:3312:optimize_mirror' agent_query_timeout='2s'; OPTIMIZE TABLE optimize_all_mirrors OPTION sync=1,cutoff=1;"
+––– output –––
+––– input –––
+mirror_a=$(mysql -h0 -P2306 -e "SHOW TABLE optimize_mirror STATUS LIKE 'disk_chunks'" | awk -F'|' '$2 ~ /disk_chunks/ {gsub(/ /,"",$3); print $3}'); mirror_b=$(mysql -h0 -P3306 -e "SHOW TABLE optimize_mirror STATUS LIKE 'disk_chunks'" | awk -F'|' '$2 ~ /disk_chunks/ {gsub(/ /,"",$3); print $3}'); if [ "$mirror_a" = 1 ] && [ "$mirror_b" = 1 ]; then echo ALL_MIRRORS_OK; else echo "FAIL_ALL_MIRRORS first=$mirror_a second=$mirror_b"; fi
+––– output –––
+ALL_MIRRORS_OK
+––– comment –––
+Runtime failures are strict but do not roll back completed work. Both remote
+hosts are scheduled together, both errors are reported, and the local member
+that completed before those failures remains compacted.
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS optimize_partial_local; CREATE TABLE optimize_partial_local(title text) optimize_cutoff='1'; INSERT INTO optimize_partial_local VALUES(1,'one'); FLUSH RAMCHUNK optimize_partial_local; INSERT INTO optimize_partial_local VALUES(2,'two'); FLUSH RAMCHUNK optimize_partial_local; DROP TABLE IF EXISTS optimize_partial; CREATE TABLE optimize_partial TYPE='distributed' LOCAL='optimize_partial_local' AGENT='127.0.0.1:2312:optimize_missing_a' AGENT='127.0.0.1:3312:optimize_missing_b' agent_query_timeout='2s';"
+––– output –––
+––– input –––
+out=$(mysql --force -h0 -P1306 -e "OPTIMIZE TABLE optimize_partial OPTION sync=1,cutoff=1" 2>&1 || true); local_chunks=$(mysql -h0 -P1306 -e "SHOW TABLE optimize_partial_local STATUS LIKE 'disk_chunks'" | awk -F'|' '$2 ~ /disk_chunks/ {gsub(/ /,"",$3); print $3}'); if printf '%s\n' "$out" | grep -q 'optimize_missing_a' && printf '%s\n' "$out" | grep -q 'optimize_missing_b' && [ "$local_chunks" = 1 ]; then echo STRICT_PARTIAL_FAILURE_OK; else printf 'FAIL_STRICT_PARTIAL_FAILURE chunks=%s error=%s\n' "$local_chunks" "$out"; fi
+––– output –––
+STRICT_PARTIAL_FAILURE_OK
+––– comment –––
+The public shard-write path remains unchanged and continues to accept a short
+request with the streamed SHARD_WRITE transport.
+––– input –––
+mysql -h0 -P2306 -e "DROP TABLE IF EXISTS remote_reply_shard_rt; CREATE TABLE remote_reply_shard_rt(id bigint, title text, gid uint);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS remote_reply_shard; CREATE TABLE remote_reply_shard(id bigint, title text, gid uint) TYPE='shard' AGENT='127.0.0.1:2312:remote_reply_shard_rt';"
+––– output –––
+––– input –––
+if mysql -h0 -P1306 -e "INSERT INTO remote_reply_shard(id,title,gid) VALUES(101,'short-a',11),(102,'short-b',22)"; then echo SHORT_SHARD_TERMINAL_OK; else echo FAIL_SHORT_SHARD_TERMINAL; fi
+––– output –––
+SHORT_SHARD_TERMINAL_OK
+––– input –––
+mysql -h0 -P2306 -e "SELECT id,title,gid FROM remote_reply_shard_rt WHERE id=101; SELECT id,title,gid FROM remote_reply_shard_rt WHERE id=102" | awk -F'|' 'BEGIN{OFS="\t"} /^[|]/{for(i=2;i<=4;i++) gsub(/^ +| +$/,"",$i); if ($2!="" && $2!="id") print $2,$3,$4}'
+––– output –––
+101	short-a	11
+102	short-b	22
+––– comment –––
+Synchronous OPTIMIZE on type='shard' enters the same routed fan-out path as a
+distributed table. The remote physical target is the oracle for native routing.
+––– input –––
+mysql -h0 -P2306 -e "TRUNCATE TABLE remote_reply_shard_rt; INSERT INTO remote_reply_shard_rt(id,title,gid) VALUES(201,'chunk-a',31); FLUSH RAMCHUNK remote_reply_shard_rt; INSERT INTO remote_reply_shard_rt(id,title,gid) VALUES(202,'chunk-b',32); FLUSH RAMCHUNK remote_reply_shard_rt;"; chunks=$(mysql -h0 -P2306 -e "SHOW TABLE remote_reply_shard_rt STATUS LIKE 'disk_chunks'" | awk -F'|' '$2 ~ /disk_chunks/ {gsub(/ /,"",$3); print $3}'); if [ "$chunks" = 2 ]; then echo SHARD_OPTIMIZE_PREPARED; else echo "FAIL_SHARD_OPTIMIZE_PREPARED chunks=$chunks"; fi
+––– output –––
+SHARD_OPTIMIZE_PREPARED
+––– input –––
+if mysql -h0 -P1306 -e "OPTIMIZE TABLE remote_reply_shard OPTION sync=1,cutoff=1"; then optimize_ok=1; else optimize_ok=0; fi; chunks=$(mysql -h0 -P2306 -e "SHOW TABLE remote_reply_shard_rt STATUS LIKE 'disk_chunks'" | awk -F'|' '$2 ~ /disk_chunks/ {gsub(/ /,"",$3); print $3}'); if [ "$optimize_ok" = 1 ] && [ "$chunks" = 1 ]; then echo SHARD_SYNC_OPTIMIZE_OK; else echo "FAIL_SHARD_SYNC_OPTIMIZE ok=$optimize_ok chunks=$chunks"; fi
+––– output –––
+SHARD_SYNC_OPTIMIZE_OK

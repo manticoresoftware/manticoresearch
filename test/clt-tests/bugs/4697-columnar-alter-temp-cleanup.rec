@@ -1,0 +1,47 @@
+––– comment –––
+Disk-columnar ALTER should clean columnar builder sidecars when the final .tmp.spc write fails.
+––– block: ../base/start-searchd –––
+––– input –––
+cat > /tmp/issue-4697-columnar-alter-temp-cleanup.sh <<'BASH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+mysqlq() { mysql -h0 -P9306 --batch --raw --skip-column-names -e "$1"; }
+
+mysqlq "SET GLOBAL auto_optimize=0"
+mysqlq "DROP TABLE IF EXISTS t" >/dev/null 2>&1 || true
+rm -rf /var/lib/manticore/t
+
+mysqlq "CREATE TABLE t (a int) engine='columnar'"
+mysqlq "INSERT INTO t VALUES (1,10), (2,20), (3,30)"
+mysqlq "FLUSH RAMCHUNK t"
+
+spc_file=$(find /var/lib/manticore/t -maxdepth 1 -name '*.spc' -print | sort | head -n1)
+if [ -z "$spc_file" ]; then
+  echo "ERROR: no disk columnar file"
+  exit 1
+fi
+
+tmp_prefix="${spc_file%.spc}.tmp.spc"
+rm -rf "$tmp_prefix" "$tmp_prefix".*
+mkdir "$tmp_prefix"
+
+set +e
+mysql -h0 -P9306 --batch --raw --skip-column-names -e "ALTER TABLE t ADD COLUMN b int" >/tmp/issue-4697-alter.out 2>&1
+set -e
+
+leftovers=$(find /var/lib/manticore/t -maxdepth 1 -name "$(basename "$tmp_prefix").*" -print | sort || true)
+rm -rf "$tmp_prefix"
+mysqlq "DROP TABLE IF EXISTS t" >/dev/null 2>&1 || true
+
+if [ -n "$leftovers" ]; then
+  echo "ERROR: temp columnar alter sidecars left"
+  printf '%s\n' "$leftovers" | sed 's#.*/##'
+  exit 1
+fi
+
+echo "alter temp sidecars cleaned"
+BASH
+bash /tmp/issue-4697-columnar-alter-temp-cleanup.sh
+––– output –––
+alter temp sidecars cleaned

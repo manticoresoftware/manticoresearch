@@ -25,6 +25,21 @@ select * from t where id=-9223372036854775809;
 select * from t where id=9223372036854775807;
 select * from t where id=9223372036854775808;
 drop table t;
+
+create table t1;
+insert into t1 values (9223372036854775808),(9223372036854775809);
+select * from t1 where id=-9223372036854775808;
+select * from t1 where id in (-9223372036854775808,-9223372036854775807) order by id asc;
+select * from t1 where id=9223372036854775808;
+select * from t1 where id in (9223372036854775808,9223372036854775809) order by id asc;
+
+flush ramchunk t1;
+
+select * from t1 where id=-9223372036854775808;
+select * from t1 where id in (-9223372036854775808,-9223372036854775807) order by id asc;
+select * from t1 where id=9223372036854775808;
+select * from t1 where id in (9223372036854775808,9223372036854775809) order by id asc;
+drop table t1;
 </sphinxql>
 </queries>
 

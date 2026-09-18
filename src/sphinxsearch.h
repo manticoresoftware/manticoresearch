@@ -126,6 +126,7 @@ public:
 	CSphQueryStats *		m_pStats		{nullptr};
 	mutable bool			m_bSetQposMask	{false};
 	DictRefPtr_c			m_pDict;
+	mutable KeywordBuf_t	m_tKeywordBuf;
 	bool					m_bHasWideFields { false };
 
 	virtual ~ISphQwordSetup () {}
@@ -135,6 +136,8 @@ public:
 	inline void SetDict ( DictRefPtr_c pDict )
 	{
 		m_pDict = std::move ( pDict );
+		assert ( m_pDict );
+		m_tKeywordBuf.Reset ( m_pDict->GetSettings().GetDictFormat() );
 	}
 	inline DictRefPtr_c Dict() const { return m_pDict; }
 
@@ -155,7 +158,7 @@ public:
 };
 
 /// factory
-std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery & tQuery, CSphQueryResultMeta & tMeta, const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx, const ISphSchema & tSorterSchema );
+std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResultMeta & tMeta, const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx, const ISphSchema & tSorterSchema );
 
 class QwordScan_c : public ISphQword
 {

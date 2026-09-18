@@ -31,13 +31,13 @@ void ReceiveClusterDelete ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSphS
 		ClusterDelete_c::BuildReply ( tOut );
 }
 
-void SendClusterDeleteToNodes ( const VecTraits_T<CSphString>& dNodes, const CSphString& sCluster )
+void SendClusterDeleteToNodes ( const VecTraits_T<CSphString>& dNodes, const CSphString & sCluster, const CSphString & sUser )
 {
 	if ( dNodes.IsEmpty() )
 		return;
 
 	ClusterRequest_t tData { sCluster };
 	ClusterDelete_c tReq;
-	auto dAgents = tReq.MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::SLOW ), ReplicationTimeoutQuery(), tData );
+	auto dAgents = tReq.MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::SLOW ), sUser, ReplicationTimeoutQuery(), tData );
 	PerformRemoteTasksWrap ( dAgents, tReq, tReq, true );
 }

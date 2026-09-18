@@ -45,7 +45,6 @@ if (TARGET galera::galera)
 	get_target_property (GALERA_MODULE galera::galera LOCATION)
 endif ()
 
-set (MANTICORE_MODULES "${MANTICORE_BINARY_DIR}/usr/share/manticore/modules")
 set (FULL_SHARE_DIR "${MANTICORE_SOURCE_DIR}/misc")
 
 find_package (PythonInterp QUIET)
@@ -245,4 +244,3 @@ foreach ( test ${tests} )
 endforeach ()
 
 add_subdirectory(indextool)
-

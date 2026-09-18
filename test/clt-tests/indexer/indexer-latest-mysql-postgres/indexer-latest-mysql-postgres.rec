@@ -40,7 +40,7 @@ sorted 0.0 Mhits, 100.0% done
 total 1 docs, 3 bytes
 total #!/[0-9]{1}\.[0-9]{3}/!# sec, %{NUMBER} bytes/sec, #!/[0-9]{1}\.[0-9]{2}/!# docs/sec
 total 3 reads, 0.000 sec, 0.0 kb/call avg, 0.0 msec/call avg
-total 15 writes, 0.000 sec, 0.0 kb/call avg, 0.0 msec/call avg
+total 16 writes, 0.000 sec, 0.0 kb/call avg, 0.0 msec/call avg
 ––– input –––
 docker run -d --network=t_network -p 5432:5432 --platform linux/amd64 --name postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres  postgres:latest > /dev/null; echo $?
 ––– output –––
@@ -66,4 +66,4 @@ sorted 0.0 Mhits, 100.0% done
 total 1 docs, 3 bytes
 total #!/[0-9]{1}\.[0-9]{3}/!# sec, %{NUMBER} bytes/sec, #!/[0-9]{1}\.[0-9]{2}/!# docs/sec
 total 3 reads, 0.000 sec, 0.0 kb/call avg, 0.0 msec/call avg
-total 15 writes, 0.000 sec, 0.0 kb/call avg, 0.0 msec/call avg
+total 16 writes, 0.000 sec, 0.0 kb/call avg, 0.0 msec/call avg

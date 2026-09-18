@@ -65,13 +65,13 @@ static void ClearHybridScoreInternalExpr ( ISphMatchSorter * pSorter )
 // Each result set contributes ranks 1..count. Documents appearing in multiple sets
 // accumulate score = sum( weight_i / (rank_in_set_i + k) ) across all sets they appear in.
 // Weights default to 1.0 when not specified.
-static void FuseRRF ( CSphVector<SubQueryResult_t> & dResults, int iRankConstant, const CSphVector<float> & dWeights, CSphVector<RRFEntry_t> & dFused )
+static void FuseRRF ( CSphVector<SubQueryResult_t> & dResults, int iRankConstant, const CSphVector<float> & dWeights, CSphVector<RRFEntry_t> & dFused, bool bGroupBy )
 {
 	int iTotalMatches = 0;
 	for ( const auto & tRes : dResults )
 		iTotalMatches += tRes.m_iCount;
 
-	OpenHashTable_T<DocID_t, int> hDoc2Idx ( Max ( iTotalMatches, 16 ) );
+	OpenHashTable_T<SphGroupKey_t, int> hKey2Idx ( Max ( iTotalMatches, 16 ) );
 
 	int iKnnCount = dResults.GetLength() - 1; // sets 1..N are KNN
 
@@ -79,21 +79,25 @@ static void FuseRRF ( CSphVector<SubQueryResult_t> & dResults, int iRankConstant
 	{
 		float fWeight = iSet < dWeights.GetLength() ? dWeights[iSet] : 1.0f;
 		auto & tRes = dResults[iSet];
+		const CSphColumnInfo * pGroupBy = ( bGroupBy && tRes.m_pSorter ) ? tRes.m_pSorter->GetSchema()->GetAttr ( "@groupby" ) : nullptr;
 		for ( int i = 0; i < tRes.m_iCount; i++ )
 		{
 			DocID_t tDocID = sphGetDocID ( tRes.m_dMatches[i].m_pDynamic );
+			SphGroupKey_t tFusionKey = pGroupBy ? tRes.m_dMatches[i].GetAttr ( pGroupBy->m_tLocator ) : (SphGroupKey_t)tDocID;
 			float fContribution = fWeight / ( (i + 1) + iRankConstant );
 
-			int * pIdx = hDoc2Idx.Find ( tDocID );
+			int * pIdx = hKey2Idx.Find ( tFusionKey );
 			if ( pIdx )
 			{
 				auto & tEntry = dFused[*pIdx];
-				tEntry.m_fScore += fContribution;
-
-				if ( iSet==0 )
-					tEntry.m_iTextMatchIdx = i;
-				else
-					tEntry.m_dKnnMatchIdx[iSet - 1] = i;
+				// sub-query sorters emit each key once per set (and grouped sorters already keep
+				// the best within-group representative), so only the first hit contributes
+				int & iStoredMatch = iSet==0 ? tEntry.m_iTextMatchIdx : tEntry.m_dKnnMatchIdx[iSet - 1];
+				if ( iStoredMatch < 0 )
+				{
+					tEntry.m_fScore += fContribution;
+					iStoredMatch = i;
+				}
 			}
 			else
 			{
@@ -109,7 +113,7 @@ static void FuseRRF ( CSphVector<SubQueryResult_t> & dResults, int iRankConstant
 				else
 					tEntry.m_dKnnMatchIdx[iSet - 1] = i;
 
-				hDoc2Idx.Add ( tDocID, iFusedIdx );
+				hKey2Idx.Add ( tFusionKey, iFusedIdx );
 			}
 		}
 	}
@@ -138,6 +142,26 @@ static void CollectDependentExprs ( const ISphSchema * pSchema, const char * szA
 		if ( dDeps.any_of ( [szAttrName] ( const CSphString & s ) { return s==szAttrName; } ) )
 			dExprs.Add ( { tAttr.m_tLocator, tAttr.m_eAttrType, tAttr.m_pExpr } );
 	}
+}
+
+
+static bool IsWeightDependentAttr ( const CSphColumnInfo & tAttr, const ISphSchema & tSchema, bool bPerHitOnly = false )
+{
+	StrVec_t dDeps;
+	dDeps.Add ( tAttr.m_sName );
+	FetchAttrDependencies ( dDeps, tSchema );
+	bool bWeight = false;
+	for ( const auto & sName : dDeps )
+	{
+		const auto * pAttr = tSchema.GetAttr ( sName.cstr() );
+		if ( !pAttr )
+			continue;
+		// Group aggregates must keep the population of the chosen source branch.
+		if ( bPerHitOnly && pAttr->m_eAggrFunc!=SPH_AGGR_NONE )
+			return false;
+		bWeight |= pAttr->m_bWeight;
+	}
+	return bWeight;
 }
 
 
@@ -225,11 +249,11 @@ static void RemoveQueryItems ( CSphVector<CSphQueryItem> & dItems, std::initiali
 }
 
 
-static void BuildAttrRemap ( const ISphSchema * pSrcSchema, const ISphSchema * pDstSchema, CSphVector<int> & dRemap )
+static void BuildAttrRemap ( const ISphSchema * pSrcSchema, const ISphSchema * pDstSchema, CSphVector<int> & dRemap, bool bWeightOnly = false )
 {
 	dRemap.Resize ( pSrcSchema->GetAttrsCount() );
 	for ( int i = 0; i < pSrcSchema->GetAttrsCount(); i++ )
-		dRemap[i] = pDstSchema->GetAttrIndex ( pSrcSchema->GetAttr(i).m_sName.cstr() );
+		dRemap[i] = bWeightOnly && !IsWeightDependentAttr ( pSrcSchema->GetAttr(i), *pSrcSchema, true ) ? -1 : pDstSchema->GetAttrIndex ( pSrcSchema->GetAttr(i).m_sName.cstr() );
 }
 
 
@@ -262,6 +286,7 @@ class QueryFilterNameSet_c
 public:
 			QueryFilterNameSet_c ( const CSphVector<CSphQueryItem> & dItems, std::initializer_list<const char *> dExprs );
 
+	void	Add ( const CSphString & sName ) { m_hNames.Add(sName); }
 	bool	HasFilterTreeReferences ( const CSphQuery & tQuery ) const;
 	bool	MatchFilter ( const CSphFilterSettings & tFilter ) const { return m_hNames[tFilter.m_sAttrName]; }
 	void	RemoveFilters ( CSphVector<CSphFilterSettings> & dFilters ) const;
@@ -334,6 +359,7 @@ public:
 
 private:
 	void	SetupPostFilters ( const CSphQuery & tQuery );
+	bool	SetupWeightFilters ( const ISphSchema & tSchema );
 	void	SetupKnnQueries ( const CSphQuery & tQuery );
 	void	SetupTextQuery ( const CSphQuery & tQuery );
 	void	SetupSubQueryLimits();
@@ -358,6 +384,7 @@ private:
 	const SphQueueSettings_t &		m_tQueueSettings;
 	CSphString						m_sError;
 	std::unique_ptr<QueryParser_i>	m_pTextQueryParser;	///< plain parser for text sub-query (used when original is JSON)
+	CSphVector<int>				m_dTextWeightRemap;
 	CSphVector<CSphFilterSettings>	m_dPostFilters;
 	std::unique_ptr<ISphFilter>		m_pPostFilter;
 };
@@ -391,7 +418,8 @@ void HybridExecutor_c::SetupKnnQueries ( const CSphQuery & tQuery )
 		tKnnQuery.m_sRawQuery = "";
 		tKnnQuery.m_bHybridSearch = false;
 		tKnnQuery.m_eSort = SPH_SORT_EXTENDED;
-		tKnnQuery.m_sSortBy = "@weight desc";
+		if ( tKnnQuery.m_sGroupBy.IsEmpty() )
+			tKnnQuery.m_sSortBy = "@weight desc";
 		RemoveQueryItems ( tKnnQuery.m_dItems, { "hybrid_score()", GetHybridScoreAttrName() } );
 		m_tHybridScoreNames.RemoveFilters ( tKnnQuery.m_dFilters );
 
@@ -425,12 +453,36 @@ void HybridExecutor_c::SetupPostFilters ( const CSphQuery & tQuery )
 }
 
 
+bool HybridExecutor_c::SetupWeightFilters ( const ISphSchema & tSchema )
+{
+	QueryFilterNameSet_c tWeightNames ( m_tTextQuery.m_dItems, { "@weight", "weight()" } );
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+		if ( IsWeightDependentAttr ( tSchema.GetAttr(i), tSchema ) )
+			tWeightNames.Add ( tSchema.GetAttr(i).m_sName );
+
+	if ( tWeightNames.HasFilterTreeReferences(m_tTextQuery) )
+	{
+		m_sError = "hybrid search does not support weight() filters in filter trees";
+		return false;
+	}
+
+	// Filter the final weight, not either branch: removing a text hit before
+	// fusion could reintroduce it as a KNN-only hit with a different weight.
+	tWeightNames.ExtractFilters ( m_tTextQuery.m_dFilters, m_dPostFilters );
+	for ( auto & tKnnQuery : m_dKnnQueries )
+		tWeightNames.RemoveFilters ( tKnnQuery.m_dFilters );
+
+	return true;
+}
+
+
 void HybridExecutor_c::SetupTextQuery ( const CSphQuery & tQuery )
 {
 	m_tTextQuery.m_dKnnSettings.Reset();
 	m_tTextQuery.m_bHybridSearch = false;
 	m_tTextQuery.m_eSort = SPH_SORT_EXTENDED;
-	m_tTextQuery.m_sSortBy = "@weight desc";
+	if ( m_tTextQuery.m_sGroupBy.IsEmpty() )
+		m_tTextQuery.m_sSortBy = "@weight desc";
 	RemoveQueryItems ( m_tTextQuery.m_dItems, { "hybrid_score()", GetHybridScoreAttrName(), GetKnnDistAttrName(), "knn_dist()" } );
 	m_tKnnDistNames.RemoveFilters ( m_tTextQuery.m_dFilters );
 
@@ -536,6 +588,11 @@ bool HybridExecutor_c::RunSubQuery ( const CSphQuery & tQuery, const CSphMultiQu
 	SphQueueRes_t tQueueRes;
 	CSphString sError;
 	SphQueueSettings_t tQueueSettings = CreateHybridSubQueryQueueSettings ( m_tQueueSettings );
+
+	// a grouped sub-query must pick its within-group representative by the query's WITHIN GROUP ORDER BY;
+	// the implicit "knn_dist() asc" prefix that non-hybrid knn queries get would override it.
+	// group ordering is left alone: knn sub-results are still ranked by distance, which RRF needs
+	tQueueSettings.m_bSkipKnnDistMatchSort = !tQuery.m_sGroupBy.IsEmpty();
 	tSubResult.m_pSorter.reset ( sphCreateQueue ( tQueueSettings, tQuery, sError, tQueueRes ) );
 	if ( !tSubResult.m_pSorter )
 	{
@@ -628,9 +685,15 @@ void HybridExecutor_c::PushSingleFusedMatch ( const RRFEntry_t & tEntry, ISphMat
 		CopyAttrs ( tNewMatch, tSrcMatch, tSrcResult.m_pSorter->GetSchema(), pDstSchema, dRemaps[iBestSet] );
 	}
 
-	// copy weight from text rset
+	// Preserve both the match weight and materialized weight expressions from text.
 	if ( tEntry.m_iTextMatchIdx>=0 )
-		tNewMatch.m_iWeight = m_dSubResults[0].m_dMatches[tEntry.m_iTextMatchIdx].m_iWeight;
+	{
+		auto & tTextResult = m_dSubResults[0];
+		auto & tTextMatch = tTextResult.m_dMatches[tEntry.m_iTextMatchIdx];
+		tNewMatch.m_iWeight = tTextMatch.m_iWeight;
+		if ( iBestSet!=0 )
+			CopyAttrs ( tNewMatch, tTextMatch, tTextResult.m_pSorter->GetSchema(), pDstSchema, m_dTextWeightRemap );
+	}
 
 	// set the hybrid score
 	tNewMatch.SetAttrFloat ( tScoreLoc, tEntry.m_fScore );
@@ -667,6 +730,9 @@ void HybridExecutor_c::PushFusedMatches ( ISphMatchSorter * pSorter, const CSphV
 		if ( m_dSubResults[i].m_pSorter )
 			BuildAttrRemap ( m_dSubResults[i].m_pSorter->GetSchema(), pDstSchema, dRemaps[i] );
 	}
+
+	if ( m_dSubResults[0].m_pSorter )
+		BuildAttrRemap ( m_dSubResults[0].m_pSorter->GetSchema(), pDstSchema, m_dTextWeightRemap, true );
 
 	const CSphColumnInfo * pScoreAttr = pDstSchema->GetAttr ( GetHybridScoreAttrName() );
 	CSphAttrLocator tScoreLoc = pScoreAttr->m_tLocator;
@@ -801,6 +867,12 @@ bool HybridExecutor_c::Execute ( CSphQueryResult & tResult, const VecTraits_T<IS
 	}
 
 	ISphMatchSorter * pOutputSorter = dSorters[0];
+	if ( !SetupWeightFilters ( *pOutputSorter->GetSchema() ) )
+	{
+		tMeta.m_sError = m_sError;
+		return false;
+	}
+
 	int iTotalSubQueries = m_dKnnQueries.GetLength() + 1;
 	m_dSubResults.Resize ( iTotalSubQueries ); // [0] = text, [1..N] = KNN sub-queries
 
@@ -847,7 +919,7 @@ bool HybridExecutor_c::Execute ( CSphQueryResult & tResult, const VecTraits_T<IS
 	}
 
 	CSphVector<RRFEntry_t> dFused;
-	FuseRRF ( m_dSubResults, m_tHybridSettings.m_iRankConstant, m_dWeights, dFused );
+	FuseRRF ( m_dSubResults, m_tHybridSettings.m_iRankConstant, m_dWeights, dFused, pOutputSorter->IsGroupby() );
 	PushFusedMatches ( pOutputSorter, dFused );
 
 	if ( dSorters.any_of ( [&] ( ISphMatchSorter * p ) { return !p->FinalizeJoin ( tMeta.m_sError, tMeta.m_sWarning ); } ) )

@@ -104,7 +104,7 @@ bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tRe
 
 
 // handler of all remote commands via API parsed at daemon as SEARCHD_COMMAND_CLUSTER
-void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * szClient )
+void HandleAPICommandCluster ( GenericOutputBuffer_c & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * szClient )
 {
 	auto eClusterCmd = (E_CLUSTER)tBuf.GetWord();
 
@@ -114,26 +114,47 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 	if ( !bNodeVer && !CheckCommandVersion ( uCommandVer, VER_COMMAND_CLUSTER, tOut ) )
 		return;
 
-	if ( eClusterCmd!=E_CLUSTER::FILE_SEND )
+	if ( !ApiCheckClusterPerms ( session::GetUser(), tOut ) )
+		return;
+
+	DWORD uHeartbeatIntervalMs = 0;
+	if ( IsClusterHeartbeatCommand ( eClusterCmd ) )
+	{
+		if ( uCommandVer<VER_COMMAND_CLUSTER_HEARTBEAT )
+		{
+			SendErrorReply ( tOut, "cluster command %s requires a heartbeat-capable command version", szClusterCmd ( eClusterCmd ) );
+			return;
+		}
+
+		uHeartbeatIntervalMs = tBuf.GetDword ();
+		if ( tBuf.GetError () || !uHeartbeatIntervalMs )
+		{
+			SendErrorReply ( tOut, "cluster command %s requires a positive heartbeat interval", szClusterCmd ( eClusterCmd ) );
+			return;
+		}
+
+		sphLogDebugRpl ( "remote cluster command %d(%s), client %s, heartbeat interval %u ms", (int)eClusterCmd, szClusterCmd ( eClusterCmd ), szClient, uHeartbeatIntervalMs );
+	} else if ( eClusterCmd!=E_CLUSTER::FILE_SEND )
 		sphLogDebugRpl ( "remote cluster command %d(%s), client %s", (int) eClusterCmd, szClusterCmd (eClusterCmd), szClient );
 
 	CSphString sCluster;
 	TlsMsg::ResetErr();
+	bool bWireAligned = true;
 	switch (eClusterCmd) {
 	case E_CLUSTER::DELETE_:
 		ReceiveClusterDelete ( tOut, tBuf, sCluster );
 		break;
 
 	case E_CLUSTER::FILE_RESERVE:
-		ReceiveClusterFileReserve ( tOut, tBuf, sCluster );
+		bWireAligned = ReceiveClusterFileReserve ( tOut, tBuf, sCluster, uCommandVer, uHeartbeatIntervalMs );
 		break;
 
 	case E_CLUSTER::FILE_SEND:
-		ReceiveClusterFileSend ( tOut, tBuf );
+		bWireAligned = ReceiveClusterFileSend ( tOut, tBuf, uCommandVer, uHeartbeatIntervalMs );
 		break;
 
 	case E_CLUSTER::INDEX_ADD_LOCAL:
-		ReceiveClusterIndexAddLocal ( tOut, tBuf, sCluster );
+		bWireAligned = ReceiveClusterIndexAddLocal ( tOut, tBuf, sCluster, uCommandVer, uHeartbeatIntervalMs );
 		break;
 
 	case E_CLUSTER::SYNCED:
@@ -167,6 +188,10 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 	case E_CLUSTER::UPDATE_SST_PROGRESS:
 		ReceiveSstProgress ( tOut, tBuf, sCluster );
 		break;
+		
+	case E_CLUSTER::GET_NODE_AUTH:
+		ReceiveClusterGetAuth ( tOut, tBuf );
+		break;
 
 	case E_CLUSTER::RECV_STATE_CLEANUP:
 		ReceiveClusterRecvStateCleanup ( tOut, tBuf, sCluster );
@@ -175,6 +200,12 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 	default:
 		TlsMsg::Err ( "INTERNAL ERROR: unhandled command %d", (int) eClusterCmd );
 		break;
+	}
+	if ( !bWireAligned )
+	{
+		const CSphString & sWireError = tOut.GetErrorMessage ();
+		sphWarning ( "remote cluster command %s(%d), client %s: heartbeat reply failed; terminal reply suppressed: %s",
+			szClusterCmd ( eClusterCmd ), (int)eClusterCmd, szClient, sWireError.IsEmpty () ? "unknown output error" : sWireError.cstr() );
 	}
 
 	if ( !TlsMsg::HasErr() )
@@ -185,8 +216,11 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 	auto szError = TlsMsg::szError();
 	sphLogDebugRpl ( "remote cluster '%s' command %s(%d), client %s - %s", sCluster.scstr(), szClusterCmd ( eClusterCmd ), (int)eClusterCmd, szClient, szError );
 
-	auto tReply = APIHeader ( tOut, SEARCHD_ERROR );
-	tOut.SendString ( SphSprintf ( "[%s] %s", szIncomingIP(), szError ).cstr() );
+	if ( bWireAligned )
+	{
+		auto tReply = APIAnswer ( tOut, 0, SEARCHD_ERROR );
+		tOut.SendString ( SphSprintf ( "[%s] %s", szIncomingIP(), szError ).cstr() );
+	}
 
 	ReportClusterError ( sCluster, szError, szClient, eClusterCmd );
 }
@@ -202,6 +236,7 @@ static int g_iReplRetryDelayMs = 0;
 
 void ReplicationSetTimeouts ( int iConnectTimeoutMs, int iQueryTimeoutMs, int iRetryCount, int iRetryDelayMs )
 {
+	assert ( iQueryTimeoutMs>=1000 );
 	g_iReplConnectTimeoutMs = iConnectTimeoutMs;
 	g_iReplQueryTimeoutMs = iQueryTimeoutMs;
 	g_iReplRetryCount = iRetryCount;
@@ -214,6 +249,12 @@ int64_t ReplicationTimeoutQuery ( int64_t iTimeout )
 	int64_t iTmAtLeast2Min = Max ( g_iReplQueryTimeoutMs, 120 * 1000 );
 	// should be 2 minutes or timeout if it is longer
 	return Max ( iTmAtLeast2Min, Min ( iTimeout, INT_MAX ) );
+}
+
+int64_t ReplicationSstQueryTimeout ()
+{
+	assert ( g_iReplQueryTimeoutMs>=1000 );
+	return g_iReplQueryTimeoutMs;
 }
 
 int ReplicationTimeoutConnect ()

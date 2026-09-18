@@ -33,8 +33,6 @@ struct SyncDst_t
 {
 	CSphBitvec m_dNodeChunksMask;
 	StrVec_t m_dRemotePaths;
-	int64_t m_tmTimeout = 0;
-	int64_t m_tmTimeoutFile = 0;
 };
 
 struct FileReserveReply_t: SyncDst_t
@@ -50,6 +48,5 @@ StringBuilder_c& operator<< ( StringBuilder_c& tOut, const FileReserveReply_t& t
 using ClusterFileReserve_c = ClusterCommand_T<E_CLUSTER::FILE_RESERVE, FileReserveRequest_t, FileReserveReply_t>;
 
 bool SendClusterFileReserve ( VecRefPtrs_t<AgentConn_t*>& dAgents );
-
 
 

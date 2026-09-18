@@ -11,6 +11,7 @@
 //
 
 #include "grouper.h"
+#include "attribute.h"
 #include "datetime.h"
 #include "exprdatetime.h"
 #include "sphinxjson.h"
@@ -233,6 +234,73 @@ static void FetchMVAKeys ( CSphVector<SphGroupKey_t> & dKeys, const CSphMatch & 
 	for ( int i = 0; i<iNumValues; i++ )
 		dKeys[i] = (SphGroupKey_t)pValues[i];
 }
+
+template<bool PTR, bool SKIP_DIMS>
+static void FetchFloatVecKeys ( CSphVector<SphGroupKey_t> & dKeys, const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool )
+{
+	dKeys.Resize(0);
+
+	int iLengthBytes = 0;
+	const BYTE * pData = nullptr;
+
+	if constexpr ( PTR )
+	{
+		ByteBlob_t dUnpacked = sphUnpackPtrAttr ( (const BYTE *)tMatch.GetAttr(tLocator) );
+		pData = dUnpacked.first;
+		iLengthBytes = dUnpacked.second;
+	}
+	else
+	{
+		if ( !pBlobPool )
+			return;
+
+		pData = sphGetBlobAttr ( tMatch, tLocator, pBlobPool, iLengthBytes );
+	}
+
+	if ( !pData || iLengthBytes<=0 )
+		return;
+
+	if constexpr ( SKIP_DIMS )
+	{
+		FloatVecArray_t tArray = ParseFloatVecArray ( { pData, iLengthBytes } );
+		dKeys.Resize ( tArray.m_dValues.GetLength() );
+		ARRAY_FOREACH ( i, dKeys )
+			dKeys[i] = (SphGroupKey_t)sphF2DW ( tArray.m_dValues[i] );
+	}
+	else
+	{
+		const int iNumValues = iLengthBytes / (int)sizeof(DWORD);
+		const auto * pValues = (const DWORD *)pData;
+		dKeys.Resize(iNumValues);
+		for ( int i = 0; i<iNumValues; i++ )
+			dKeys[i] = (SphGroupKey_t)pValues[i];
+	}
+
+	// a repeated coordinate is one document in one group, not two. Ordinary mvas never need this
+	// because insert uniques them, but a vector must keep its duplicates and its ordering, so the
+	// dedupe has to happen here on the keys instead of in storage.
+	dKeys.Uniq();
+}
+
+template<bool PTR, bool SKIP_DIMS>
+class GrouperFloatVec_T : public CSphGrouper
+{
+public:
+	explicit		GrouperFloatVec_T ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
+
+	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const override					{ assert(0); return SphGroupKey_t(); }
+	SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const override	{ assert(0); return SphGroupKey_t(); }
+	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const override { FetchFloatVecKeys<PTR,SKIP_DIMS> ( dKeys, tMatch, m_tLocator, GetBlobPool() ); }
+	void			GetLocator ( CSphAttrLocator & tOut ) const override		{ tOut = m_tLocator; }
+	ESphAttr		GetResultType() const override								{ return SPH_ATTR_FLOAT; }
+	CSphGrouper *	Clone() const override										{ return new GrouperFloatVec_T ( m_tLocator ); }
+	bool			IsMultiValue() const override								{ return true; }
+	void			FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override { sphFixupLocator ( m_tLocator, pOldSchema, pNewSchema ); }
+
+private:
+	CSphAttrLocator	m_tLocator;
+};
+
 
 template <class PRED, bool HAVE_COLUMNAR>
 class CSphGrouperMulti final: public CSphGrouper, public PRED
@@ -567,6 +635,19 @@ CSphGrouper * CreateGrouperMVA32 ( const CSphAttrLocator & tLoc )
 }
 
 
+CSphGrouper * CreateGrouperFloatVec ( const CSphAttrLocator & tLoc, bool bArray )
+{
+	if ( bArray )
+		return tLoc.m_bDynamic
+			? (CSphGrouper *)new GrouperFloatVec_T<true,true>(tLoc)
+			: (CSphGrouper *)new GrouperFloatVec_T<false,true>(tLoc);
+
+	return tLoc.m_bDynamic
+		? (CSphGrouper *)new GrouperFloatVec_T<true,false>(tLoc)
+		: (CSphGrouper *)new GrouperFloatVec_T<false,false>(tLoc);
+}
+
+
 CSphGrouper * CreateGrouperMVA64 ( const CSphAttrLocator & tLoc )
 {
 	if ( tLoc.m_bDynamic )
@@ -773,6 +854,39 @@ void DistinctFetcherMva_T<T>::GetKeys ( const CSphMatch & tMatch, CSphVector<Sph
 	AddGroupedMVA<T> ( [&dKeys]( SphAttr_t tAttr ){ dKeys.Add(tAttr); }, tMatch.FetchAttrData ( m_tLocator, m_pBlobPool ) );
 }
 
+template<bool ARRAY>
+class DistinctFetcherFloatVec_T : public DistinctFetcherMulti_c
+{
+	using DistinctFetcherMulti_c::DistinctFetcherMulti_c;
+
+public:
+	void GetKeys ( const CSphMatch & tMatch, CSphVector<SphAttr_t> & dKeys ) const override
+	{
+		dKeys.Resize(0);
+		ByteBlob_t tBlob = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+		if ( !tBlob.first || tBlob.second<=0 )
+			return;
+
+		if constexpr ( ARRAY )
+		{
+			FloatVecArray_t tArray = ParseFloatVecArray(tBlob);
+			dKeys.Resize ( tArray.m_dValues.GetLength() );
+			ARRAY_FOREACH ( i, dKeys )
+				dKeys[i] = (SphAttr_t)sphF2DW ( tArray.m_dValues[i] );
+		}
+		else
+		{
+			const int iNumValues = tBlob.second / (int)sizeof(DWORD);
+			const auto * pValues = (const DWORD *)tBlob.first;
+			dKeys.Resize(iNumValues);
+			for ( int i = 0; i<iNumValues; i++ )
+				dKeys[i] = (SphAttr_t)pValues[i];
+		}
+	}
+
+	DistinctFetcher_i *	Clone() const override { return new DistinctFetcherFloatVec_T(m_tLocator); }
+};
+
 
 DistinctFetcher_i * CreateDistinctFetcher ( const CSphString & sName, const CSphAttrLocator & tLocator, ESphAttr eType )
 {
@@ -787,6 +901,10 @@ case SPH_ATTR_TDIGEST_PTR:		return new DistinctFetcherString_c(tLocator);
 	case SPH_ATTR_UINT32SET_PTR:	return new DistinctFetcherMva_T<DWORD>(tLocator);
 	case SPH_ATTR_INT64SET:
 	case SPH_ATTR_INT64SET_PTR:		return new DistinctFetcherMva_T<int64_t>(tLocator);
+	case SPH_ATTR_FLOAT_VECTOR:
+	case SPH_ATTR_FLOAT_VECTOR_PTR:	return new DistinctFetcherFloatVec_T<false>(tLocator);
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY:
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:	return new DistinctFetcherFloatVec_T<true>(tLocator);
 	default:						return new DistinctFetcherInt_c(tLocator);
 	}
 }

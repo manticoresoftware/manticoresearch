@@ -18,6 +18,31 @@
 #include "searchd.cpp"
 #include "daemon/api_commands.h"
 
+TEST ( searchd_stuff, knn_auto_limit_and_max_matches )
+{
+	CSphQuery tQuery;
+	tQuery.m_iLimit = 1200;
+	tQuery.m_iMaxMatches = DEFAULT_MAX_MATCHES;
+	auto & tKNN = tQuery.m_dKnnSettings.Add();
+	tKNN.m_iK = -1;
+	tKNN.m_bRescore = false;
+
+	SetupKNNLimit(tQuery);
+	EXPECT_EQ ( tKNN.m_iK, 1200 );
+
+	CSphQuery tCappedQuery;
+	tCappedQuery.m_iLimit = 1200;
+	tCappedQuery.m_iMaxMatches = 900;
+	tCappedQuery.m_bExplicitMaxMatches = true;
+	auto & tCappedKNN = tCappedQuery.m_dKnnSettings.Add();
+	tCappedKNN.m_iK = -1;
+	tCappedKNN.m_bRescore = false;
+
+	SetupKNNLimit(tCappedQuery);
+	EXPECT_EQ ( tCappedKNN.m_iK, 900 );
+}
+
+
 #if POLLING_EPOLL
 // different aspects of epoll internals
 TEST ( searchd_stuff, epoll_behaviour )
@@ -174,9 +199,30 @@ TEST ( searchd_stuff, prepare_emulation )
 {
 	CSphQuery tQuery;
 	tQuery.m_eMode = SPH_MATCH_ALL;
-	PrepareQueryEmulation ( &tQuery );
+	tQuery.m_sRawQuery = "alpha beta";
+	PrepareQueryEmulation ( &tQuery, SearchQueryOrigin_e::ApiClient );
 
 	ASSERT_EQ ( tQuery.m_eRanker, SPH_RANK_PROXIMITY );
+	ASSERT_TRUE ( tQuery.m_bExplicitRanker );
+	ASSERT_TRUE ( tQuery.m_bExplicitBooleanMode );
+	ASSERT_FALSE ( tQuery.m_bDefaultBoolOr );
+	ASSERT_STREQ ( tQuery.m_sQuery.cstr(), "alpha beta" );
+
+	CSphQuery tPhrase;
+	tPhrase.m_eMode = SPH_MATCH_PHRASE;
+	PrepareQueryEmulation ( &tPhrase, SearchQueryOrigin_e::ApiClient );
+
+	ASSERT_EQ ( tPhrase.m_eRanker, SPH_RANK_PROXIMITY );
+	ASSERT_TRUE ( tPhrase.m_bExplicitRanker );
+	ASSERT_TRUE ( tPhrase.m_bExplicitBooleanMode );
+	ASSERT_FALSE ( tPhrase.m_bDefaultBoolOr );
+
+	CSphQuery tBoolean;
+	tBoolean.m_eMode = SPH_MATCH_BOOLEAN;
+	PrepareQueryEmulation ( &tBoolean, SearchQueryOrigin_e::ApiClient );
+
+	ASSERT_EQ ( tBoolean.m_eRanker, SPH_RANK_NONE );
+	ASSERT_TRUE ( tBoolean.m_bExplicitRanker );
 }
 
 class CustomNetloop_c :  public ::testing::Test

@@ -92,6 +92,7 @@ table test_vec {
 - `API_KEY`: Обязателен для удаленных моделей (OpenAI, Voyage, Jina). API-ключ проверяется при создании таблицы путем выполнения реального запроса к API.
 - `API_URL`: Необязателен. Пользовательский URL конечной точки API. Если не указан, используется конечная точка провайдера по умолчанию (например, `https://api.openai.com/v1/embeddings` для OpenAI).
 - `API_TIMEOUT`: Необязателен. Таймаут HTTP-запросов к API в секундах. Значение по умолчанию - 10 секунд. Установите `'0'`, чтобы использовать таймаут по умолчанию. Применяется и к проверочным запросам при создании таблицы, и к генерации эмбеддингов во время операций INSERT.
+- `MAX_INPUT_TOKENS`: необязательно. Ограничивает число токенов, берущихся из каждого входного текста перед построением эмбеддинга; более длинные тексты обрезаются. `'0'` (по умолчанию) означает собственный лимит контекста модели. Модели с длинным контекстом, такие как `Qwen/Qwen3-Embedding-0.6B`, принимают до 32 768 токенов, а время построения эмбеддинга на CPU растет сверхлинейно с длиной входа (документ на 5 КБ может обрабатываться несколько минут), поэтому задайте ограничение (например, `'512'`), если текстовые поля могут содержать длинный или неограниченный по размеру контент. Применяется к локальным моделям; позже настройку можно изменить с помощью `ALTER TABLE ... MODIFY COLUMN ... MAX_INPUT_TOKENS='...'` без повторного построения эмбеддингов для существующих строк.
 
 Для удаленных моделей `MODEL_NAME` можно записывать в двух формах:
 - Устаревшая форма с префиксом провайдера: `openai/text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v4`
@@ -103,7 +104,8 @@ table test_vec {
 
 | Тип модели | Пример | Требуется API-ключ | Примечания |
 |------------|---------|-----------------|-------|
-| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | Нет | Локальные модели на базе BERT, загружаются автоматически |
+| **ONNX (рекомендуется)** | `Xenova/all-MiniLM-L6-v2` | Нет | Локальные модели из любого репозитория Hugging Face, который содержит файл `.onnx`. Работают на быстром бэкенде Manticore ONNX Runtime. Список: [модели feature-extraction ONNX](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm). |
+| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | Нет | Локальные модели на основе BERT, загружаются автоматически. По-прежнему поддерживаются — если доступно, используйте ONNX выше. |
 | **Qwen** | `Qwen/Qwen3-Embedding-0.6B` | Нет | Локальные модели семейства Qwen |
 | **Llama** | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | Нет | Локальные модели семейства Llama |
 | **Mistral** | `Locutusque/TinyMistral-248M-v2` | Нет | Локальные модели семейства Mistral |
@@ -113,10 +115,11 @@ table test_vec {
 | **Jina** | `jina/jina-embeddings-v4` or `jina:jina-embeddings-v4` | Да | `API_KEY='***'` |
 
 **Требования к формату локальной модели:**
-- Должна быть сохранена в формате `safetensors` (только один файл)
-- Поддерживаемые семейства: Qwen, Llama, Mistral, Gemma
+- Поддерживаемые форматы весов: `safetensors` (один файл или шардированный через `model.safetensors.index.json`), квантованный `GGUF` и `ONNX`
+- Поддерживаемые семейства: BERT/Sentence Transformers, Qwen, Llama, Mistral, Gemma, T5
 - Проверенные модели: `TinyLlama/TinyLlama-1.1B-Chat-v1.0`, `Locutusque/TinyMistral-248M-v2`, `Qwen/Qwen3-Embedding-0.6B`, `h2oai/embeddinggemma-300m`
-- Другие модели `safetensors` тоже могут работать, но это не гарантируется
+- Другие модели из этих семейств тоже могут работать, но это не гарантируется
+- Для закрытых репозиториев Hugging Face передайте свой токен доступа Hugging Face как `API_KEY`
 
 Дополнительную информацию о настройке атрибута `float_vector` можно найти [здесь](../Creating_a_table/Data_types.md#Float-vector).
 
@@ -125,9 +128,19 @@ table test_vec {
 
 <!-- request SQL -->
 
-Использование sentence-transformers (API-ключ не нужен)
+Использование локальной [ONNX-модели](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) — рекомендуется (ключ API не нужен)
 ```sql
 CREATE TABLE products (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+Использование sentence-transformers (ключ API не нужен; работает через путь Candle — если доступно, используйте ONNX выше)
+```sql
+CREATE TABLE products_st (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
@@ -182,7 +195,7 @@ CREATE TABLE products_all (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM=''
+    MODEL_NAME='Xenova/all-MiniLM-L6-v2' FROM=''
 );
 ```
 
@@ -197,7 +210,7 @@ table products {
     rt_field = title
     rt_field = description
     rt_attr_float_vector = embedding_vector
-    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":"title"}]}
 }
 ```
 
@@ -221,7 +234,7 @@ table products_all {
     rt_field = title
     rt_field = description
     rt_attr_float_vector = embedding_vector
-    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":""}]}
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"Xenova/all-MiniLM-L6-v2","from":""}]}
 }
 ```
 
@@ -239,9 +252,9 @@ table products_all {
 данные для следующего примера:
 
 DROP TABLE IF EXISTS products;
-CREATE TABLE products(title text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title');
+CREATE TABLE products(title text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='Xenova/all-MiniLM-L6-v2' from='title');
 DROP TABLE IF EXISTS products_openai;
-CREATE TABLE products_openai(title text, description text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title,description');
+CREATE TABLE products_openai(title text, description text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='Xenova/all-MiniLM-L6-v2' from='title,description');
 -->
 
 <!-- example inserting_embeddings -->
@@ -295,7 +308,7 @@ INSERT INTO products (title, embedding_vector) VALUES
 POST /sql?mode=raw -d "INSERT INTO products (title) VALUES ('machine learning artificial intelligence'),('banana fruit sweet yellow')"
 ```
 
-Вставка нескольких полей - оба используются для эмбеддинга, если `FROM='title,description'`
+Вставьте несколько полей — они оба используются для встраивания, если FROM='title,description'
 ```JSON
 POST /sql?mode=raw -d "INSERT INTO products_openai (title, description) VALUES ('smartphone', 'latest mobile device with advanced features'), ('laptop', 'portable computer for work and gaming')"
 ```
@@ -442,7 +455,7 @@ POST /insert
 ```json
 {
 	"table":"test",
-	"_id":1,
+	"id":1,
 	"created":true,
 	"result":"created",
 	"status":201
@@ -450,7 +463,7 @@ POST /insert
 
 {
 	"table":"test",
-	"_id":2,
+	"id":2,
 	"created":true,
 	"result":"created",
 	"status":201
@@ -494,6 +507,8 @@ POST /insert
 * `rescore`: Включает повторное оценивание KNN (по умолчанию включено). Установите `0` в SQL или `false` в JSON, чтобы отключить повторное оценивание. После завершения поиска KNN с использованием квантизованных векторов (с возможным oversampling) расстояния пересчитываются по исходным (full-precision) векторам, и результаты пересортировываются для повышения точности ранжирования.
 * `oversampling`: Задает коэффициент (значение float), на который умножается `k` при выполнении поиска KNN, из-за чего с использованием квантизованных векторов извлекается больше кандидатов, чем требуется. По умолчанию применяется `oversampling=3.0`. Эти кандидаты можно затем переоценить, если повторное оценивание включено. Oversampling также работает и с неквантизованными векторами. Поскольку он увеличивает `k`, а это влияет на работу индекса HNSW, он может вызвать небольшое изменение точности результатов.
 * `early_termination`: Включает или отключает адаптивное раннее завершение при обходе графа HNSW. По умолчанию включено. Установите `0` в SQL или `false` в JSON, чтобы отключить. Подробности см. в разделе [Раннее завершение](../Searching/KNN.md#Early-termination).
+
+Когда задан текстовый запрос (то есть Manticore сначала встраивает строку перед поиском), число потоков, используемых библиотекой embeddings, можно переопределить для каждого запроса в SQL с помощью `OPTION embeddings_threads = N`. Это значение ограничивает вызов embeddings только для этого запроса, переопределяя глобальную настройку [embeddings_threads](../Server_settings/Searchd.md#embeddings_threads); `0` означает отсутствие ограничения. Эта опция не влияет на запрос, если он передан в виде массива векторов.
 
 Документы всегда сортируются по расстоянию до вектора поиска. Любые дополнительные критерии сортировки, которые вы укажете, будут применяться после этого основного условия сортировки. Чтобы получить расстояние, есть встроенная функция [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29).
 
@@ -577,6 +592,130 @@ POST /search
 <!-- end -->
 
 <!-- example knn_quantization -->
+
+### Несколько векторов на документ
+
+Атрибут [`float_vector_array`](../Creating_a_table/Data_types.md#Float-vector-array) хранит по несколько векторов на документ вместо одного: фрагменты статьи, фотографии товара, ключевые кадры видео. Все векторы из всех документов индексируются вместе, а поиск рассматривает векторы документа как альтернативные представления одного и того же документа:
+
+* Документ считается совпадением, если **любой** из его векторов близок к вектору запроса.
+* Каждый совпавший документ возвращается **ровно один раз**, а `knn_dist()` сообщает расстояние до его ближайшего вектора. Остальные векторы документа не создают дополнительных строк.
+* `k` считает **документы**, а не векторы. `knn(v, 10, ...)` запрашивает 10 ближайших документов, сколько бы векторов они ни содержали вместе.
+* Документ без векторов (`[]` или если атрибут опущен) никогда не возвращается, поскольку он не близок ни к чему.
+
+Вектор запроса по-прежнему представляет собой один вектор из `KNN_DIMS` элементов, точно как для `float_vector`. Каждый вектор, хранящийся в массиве, индексируемом по KNN, тоже должен иметь `KNN_DIMS` элементов.
+
+При `HNSW_SIMILARITY='cosine'` каждый сохраненный вектор нормализуется отдельно, поэтому векторы документа сравниваются с запросом по одному, а не как один длинный склеенный вектор.
+
+Все остальное на этой странице применяется без изменений: [фильтрация](../Searching/KNN.md#Filtering-KNN-vector-search-results), [предфильтр/постфильтр](../Searching/KNN.md#Filtering-strategies:-prefilter-vs.-postfilter), [квантование](../Searching/KNN.md#Vector-quantization), [раннее завершение](../Searching/KNN.md#Early-termination) и повторное ранжирование работают так же. [Автоэмбеддинги](../Searching/KNN.md#Auto-Embeddings-%28Recommended%29) могут заполнить массив за вас, по одному вектору на фрагмент - см. ниже [Стратегии разбиения на фрагменты](../Searching/KNN.md#Chunking-strategies).
+
+<!-- example multi_vector -->
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE articles(title text, chunk_vectors float_vector_array knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+
+INSERT INTO articles VALUES
+  (1, 'first',  [[1,0,0,0],[0,1,0,0]]),
+  (2, 'second', [[0,0,1,0]]);
+
+-- doc 1 owns a vector identical to the query and another far from it,
+-- so it is returned once, at distance 0
+SELECT id, knn_dist() FROM articles WHERE knn(chunk_vectors, 5, (1,0,0,0));
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /search
+{
+  "table": "articles",
+  "knn": {
+    "field": "chunk_vectors",
+    "query_vector": [1,0,0,0],
+    "k": 5
+  }
+}
+```
+
+<!-- end -->
+
+### Стратегии разбиения на фрагменты
+
+По умолчанию модель эмбеддингов читает только столько документа, сколько помещается в ее окно ввода (обычно несколько сотен токенов), а остальное молча отбрасывается. Для заголовка или короткого описания этого достаточно. Для длинной статьи - нет: все, что написано после точки отсечения, уже не удастся извлечь, и об этом не сообщается никакой ошибкой.
+
+**Стратегия разбиения** определяет, как документ превращается в векторы. Задайте ее с помощью `CHUNK_STRATEGY` в столбце, привязанном к модели:
+
+| Стратегия | Векторов на документ | Что делает |
+|---|---|---|
+| `truncate` | 1 | Кодирует столько, сколько помещается в окно модели, а остальное отбрасывает. Значение по умолчанию и историческое поведение. |
+| `mean` | 1 | Делит весь документ на части, кодирует каждую и усредняет их в один вектор. Хвост не теряется, но документ на несколько тем сводится к их среднему. |
+| `fixed` | N | Фиксированные окна по `MAX_TOKENS` токенов. |
+| `recursive` | N | Делит по иерархии разделителей: абзац, затем строка, затем предложение, затем пробел; при этом каждая часть укладывается в `MAX_TOKENS`. |
+| `sentence` | N | Границы предложений, упакованные до `MAX_TOKENS`. |
+
+`truncate` и `mean` создают по одному вектору на документ и работают со столбцом [`float_vector`](../Creating_a_table/Data_types.md#Float-vector) (в `float_vector_array` они хранят массив из одного элемента). `fixed`, `recursive` и `sentence` создают несколько векторов, поэтому требуют столбца [`float_vector_array`](../Creating_a_table/Data_types.md#Float-vector-array); использование их в обычном `float_vector` отклоняется.
+
+Разница в том, что именно считается совпадением. Когда на документ приходится один вектор, поиск спрашивает: «похож ли этот документ целиком на запрос?», и один релевантный абзац размывается всем окружающим текстом. Когда на фрагмент приходится один вектор, вопрос другой: «содержит ли этот документ что-то похожее?» Каждый фрагмент соревнуется отдельно, а документ возвращается один раз с оценкой по своему ближайшему фрагменту (см. [Несколько векторов на документ](../Searching/KNN.md#Multiple-vectors-per-document)).
+
+**Параметры**, все действительны только вместе с `MODEL_NAME` и `KNN_TYPE='hnsw'`:
+
+* `CHUNK_STRATEGY`: один из пяти вариантов выше. По умолчанию `truncate`.
+* `MAX_TOKENS`: размер фрагмента в токенах. `0` по умолчанию означает собственный предел модели; большее значение будет снижено до него.
+* `OVERLAP_TOKENS`: сколько токенов общих у соседних фрагментов, чтобы идея, разрезанная границей, все равно полностью попадала хотя бы в один из них. Требует явного ненулевого `MAX_TOKENS`. Большое перекрытие уменьшается так, чтобы фрагменты по-прежнему продвигались по документу: `fixed` и `recursive` ограничивают его половиной `MAX_TOKENS`, а `sentence` подготавливает следующий фрагмент максимум из `OVERLAP_TOKENS` завершающих полных предложений и всегда сдвигается хотя бы на одно предложение.
+* `MAX_CHUNKS`: верхняя граница числа векторов на документ. `0` по умолчанию означает без ограничения.
+
+Важные моменты:
+
+* **`MAX_CHUNKS` отбрасывает текст.** При переполнении остаток объединяется с последним сохраненным фрагментом, после чего тот превышает `MAX_TOKENS` и при кодировании обрезается до окна ввода модели. Видимого разрыва не остается, но хвост теряется.
+* **Локальные и удаленные модели режут текст по-разному.** Локальные модели разбивают его по реальным токенам модели. У удаленных API-моделей (OpenAI, Voyage, Jina) нет локального токенизатора, поэтому вместо него используется консервативная оценка по байтам, и тот же текст с теми же настройками даст другое число фрагментов, чем локальная модель.
+
+`ALTER TABLE ... ADD COLUMN` с привязанным к модели `float_vector_array`, а также `ALTER TABLE ... REBUILD EMBEDDINGS` для него пока не поддерживаются; существующие строки нельзя заполнить задним числом, поэтому столбец останется пустым. Объявляйте такой столбец при создании таблицы. Для столбца `float_vector` оба варианта работают нормально, в том числе с `mean`.
+
+<!-- example chunking -->
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+-- one vector per sentence group, filled automatically from the text
+CREATE TABLE articles (
+  title text,
+  content text,
+  chunks float_vector_array knn_type='hnsw' hnsw_similarity='cosine'
+     model_name='Xenova/all-MiniLM-L6-v2' from='title,content'
+     chunk_strategy='sentence' max_tokens='256' overlap_tokens='32'
+);
+
+INSERT INTO articles (id, title, content) VALUES (1, 'Rotating certificates', 'A long guide with many sections ...');
+
+SELECT id, knn_dist() FROM articles WHERE knn(chunks, 5, 'how do I rotate a certificate');
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "CREATE TABLE articles (title text, content text, chunks float_vector_array knn_type='hnsw' hnsw_similarity='cosine' model_name='Xenova/all-MiniLM-L6-v2' from='title,content' chunk_strategy='sentence' max_tokens='256')"
+
+POST /search
+{
+  "table": "articles",
+  "knn": { "field": "chunks", "query": "how do I rotate a certificate", "k": 5 }
+}
+```
+
+<!-- end -->
 
 ### Квантование векторов
 

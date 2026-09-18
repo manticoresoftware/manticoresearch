@@ -190,6 +190,8 @@ public:
 
 	/// get total N of bytes received via this buffer
 	virtual int64_t GetTotalReceived() const = 0;
+
+	void SetBuffer ( CSphVector<BYTE> && dBuf );
 };
 
 

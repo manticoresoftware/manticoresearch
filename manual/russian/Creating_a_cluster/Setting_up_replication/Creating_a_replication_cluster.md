@@ -127,7 +127,17 @@ utils_api.sql("CREATE CLUSTER click_query '/var/data/click_query/' as path, 'cli
 
 <!-- end -->
 
+Если [аутентификация и авторизация](../../Security/Authentication_and_authorization.md) включены, фактический пользователь репликации должен иметь право `replication` для целевого кластера. Этого пользователя можно указать в операторе `CREATE CLUSTER`:
+
+```sql
+GRANT replication ON 'posts' TO 'repl_user';
+CREATE CLUSTER posts 'repl_user' AS user;
+```
+
+Если пользователь не указан, для оператора используется текущий пользователь сеанса, а после успешного создания он сохраняется как пользователь кластера.
+
+Перед тем как другие узлы с включенной авторизацией присоединятся к кластеру или начнут им управлять, настройте сохраненного пользователя кластера с соответствующими учетными данными и правом `replication` на этих узлах.
+
 Если опция [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) не указана при создании кластера, первый узел, присоединившийся к кластеру, будет сохранен как опция [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes).
 
 <!-- proofread -->
-

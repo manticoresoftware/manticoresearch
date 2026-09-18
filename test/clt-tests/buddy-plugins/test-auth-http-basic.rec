@@ -1,0 +1,71 @@
+––– comment –––
+Test HTTP Basic Auth authentication.
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+Admin credentials: admin / adminpass (bootstrap via auth.json)
+
+Per spec: Base64 encoded credentials, validation via sha256(salt + password)
+Regression coverage: valid Basic auth succeeds, Basic scheme casing is accepted case-insensitively, malformed Basic auth returns a 401 response, and unknown users with supplied passwords report `using password: YES`.
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– comment –––
+––– 1.2.1 Successful request with correct Basic Auth –––
+EXPECTED: 200 OK with JSON result
+––– comment –––
+––– input –––
+curl -s -u admin:adminpass -X POST http://127.0.0.1:9308/token -d "{}"
+––– output –––
+#!/\s*\{"token":"[0-9a-f]{64}"\}/!#
+––– comment –––
+––– 1.2.1a Successful request with lowercase Basic scheme –––
+EXPECTED: 200 OK with JSON result
+––– comment –––
+––– input –––
+curl -s -H "Authorization: basic YWRtaW46YWRtaW5wYXNz" -X POST http://127.0.0.1:9308/token -d "{}"
+––– output –––
+#!/\s*\{"token":"[0-9a-f]{64}"\}/!#
+––– comment –––
+––– 1.2.1b Successful request with uppercase Basic scheme –––
+EXPECTED: 200 OK with JSON result
+––– comment –––
+––– input –––
+curl -s -H "Authorization: BASIC YWRtaW46YWRtaW5wYXNz" -X POST http://127.0.0.1:9308/token -d "{}"
+––– output –––
+#!/\s*\{"token":"[0-9a-f]{64}"\}/!#
+––– comment –––
+––– 1.2.2 Reject with wrong password –––
+EXPECTED: 401 Unauthorized with Access denied error
+––– comment –––
+––– input –––
+curl -s -i -u admin:wrongpassword http://127.0.0.1:9308/sql -d "query=SELECT 1" | tr -d '\r' | awk '/^HTTP\/1.1|^\{"error":/ {print}'
+––– output –––
+HTTP/1.1 401 Unauthorized
+{"error":"Access denied for user 'admin' (using password: YES)"}
+––– comment –––
+––– 1.2.3 Reject unknown user with supplied password –––
+EXPECTED: 401 Unauthorized and using password: YES
+––– comment –––
+––– input –––
+curl -s -i -u missing_user:sentpassword http://127.0.0.1:9308/sql -d "query=SELECT 1" | tr -d '\r' | awk '/^HTTP\/1.1|^\{"error":/ {print}'
+––– output –––
+HTTP/1.1 401 Unauthorized
+{"error":"Access denied for user 'missing_user' (using password: YES)"}
+––– comment –––
+––– 1.2.4 Reject without Authorization header –––
+EXPECTED: 401 Unauthorized with Basic auth challenge
+––– comment –––
+––– input –––
+curl -s -i http://127.0.0.1:9308/sql -d "query=SELECT 1" | tr -d '\r' | awk '/^HTTP\/1.1|^WWW-Authenticate:|^\{"error":/ {print}'
+––– output –––
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Basic realm="Manticore daemon", charset="UTF-8"
+{"error":"Authorization header field missed"}
+––– comment –––
+––– 1.2.5 Reject with invalid Base64 –––
+EXPECTED: 401 Unauthorized with decode error response
+––– comment –––
+––– input –––
+curl -s -i -H "Authorization: Basic not-valid-base64!!!" http://127.0.0.1:9308/sql -d "query=SELECT 1" | tr -d '\r' | awk '/^HTTP\/1.1|^\{"error":/ {print}'
+––– output –––
+HTTP/1.1 401 Unauthorized
+{"error":"Failed to decode base64 user:password"}

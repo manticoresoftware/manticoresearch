@@ -334,6 +334,20 @@ CSphString GetAggrName ( int iItem, const CSphString & sCol )
 	return sName;
 }
 
+static const char g_sGroupConcatValuePrefix[] = "@group_concat_value_";
+
+bool IsGroupConcatValueAttr ( const CSphString & sAttr )
+{
+	return sAttr.Begins ( g_sGroupConcatValuePrefix );
+}
+
+CSphString GetGroupConcatValueAttrName ( int iOrdinal )
+{
+	CSphString sName;
+	sName.SetSprintf ( "%s%d", g_sGroupConcatValuePrefix, iOrdinal );
+	return sName;
+}
+
 static void FormatKeyFloat ( const RangeSetting_t & tRange, bool bHasFrom, bool bHasTo, RangeKeyDesc_t & tDesc )
 {
 	assert ( bHasFrom || bHasTo );

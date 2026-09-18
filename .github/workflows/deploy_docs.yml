@@ -78,7 +78,7 @@ jobs:
           apt-get install -y git
     
       - name: Checkout
-        uses: actions/checkout@v3.5.3
+        uses: actions/checkout@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           set-safe-directory: true
@@ -94,7 +94,7 @@ jobs:
 
       - name: Upload artifact
         if: always()
-        uses: manticoresoftware/upload_artifact_with_retries@v4
+        uses: manticoresoftware/upload_artifact_with_retries@v5
         with:
           name: Docs deploy error artifact
           path: $DOCS_ERRORS_DIR

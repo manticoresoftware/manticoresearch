@@ -27,6 +27,7 @@ struct NamedKNNSettings_t : public knn::IndexSettings_t, public knn::ModelSettin
 {
 	CSphString	m_sName;
 	CSphString	m_sFrom;
+	knn::ChunkSettings_t m_tChunk;
 };
 
 /// source column info
@@ -48,7 +49,8 @@ struct CSphColumnInfo
 		ATTR_STORED				= 1 << 2,
 		ATTR_INDEXED_KNN		= 1 << 3,
 		ATTR_JOINED				= 1 << 4,
-		ATTR_INDEXED_SI			= 1 << 5
+		ATTR_INDEXED_SI			= 1 << 5,
+		ATTR_UUID_LINK			= 1 << 6
 	};
 
 	CSphString		m_sName;							///< column name
@@ -78,6 +80,7 @@ struct CSphColumnInfo
 	knn::IndexSettings_t m_tKNN;						///< knn index settings
 	knn::ModelSettings_t m_tKNNModel;					///< knn model settings
 	CSphString		m_sKNNFrom;							///< fields/attrs used by the model
+	knn::ChunkSettings_t m_tKNNChunk;					///< how the model splits a document into vectors
 
 	float			m_fTdigestCompression = 200.0f;		///< tdigest compression for extended aggs
 	AggrSettings_t	m_tAggrSettings;					///< full settings payload for extended aggs
@@ -101,6 +104,7 @@ struct CSphColumnInfo
 	bool IsJoined() const;
 	bool IsIndexedSI() const;
 	bool IsStored() const;
+	bool IsUuidLinkedDocid() const;
 };
 
 

@@ -12,6 +12,7 @@
 #define _docidlookup_
 
 #include "secondaryindex.h"
+#include "uuid_docid.h"
 
 class CSphWriter;
 
@@ -29,6 +30,11 @@ struct DocidLookupCheckpoint_t
 	SphOffset_t	m_tOffset {0};
 };
 
+struct UuidDocidLookupPair_t
+{
+	UuidDocidKey_t	m_tKey;
+	DocID_t			m_tDocID {0};
+};
 
 class DocidLookupWriter_c
 {
@@ -37,6 +43,8 @@ public:
 
 	void			Start();
 	void			AddPair ( const DocidRowidPair_t & tPair );
+	void			SetUuidLookupOffset ( SphOffset_t tOffset );
+	bool			FinalizeNumeric ( CSphString & sError );
 	bool			Finalize ( CSphString & sError );
 
 private:
@@ -47,9 +55,25 @@ private:
 
 	int64_t			m_iProcessed {0};
 	int				m_iCheckpoint {0};
+	SphOffset_t		m_tMaxDocIDPos {0};
+	SphOffset_t		m_tUuidLookupOffsetPos {0};
 	SphOffset_t		m_tCheckpointStart {0};
 	DocID_t			m_tLastDocID {0};
 	CSphFixedVector<DocidLookupCheckpoint_t> m_dCheckpoints {0};
+};
+
+
+class UuidLookupReader_c
+{
+public:
+	void			SetData ( const BYTE * pData, SphOffset_t tEntriesOffset, DWORD nDocs );
+	DocID_t			Find ( const UuidDocidKey_t & tKey ) const;
+
+private:
+	UuidDocidLookupPair_t Get ( DWORD uEntry ) const;
+
+	const BYTE *	m_pEntries {nullptr};
+	DWORD			m_nDocs {0};
 };
 
 
@@ -57,10 +81,9 @@ class LookupReader_c
 {
 public:
 			LookupReader_c() = default;
-			explicit LookupReader_c ( const BYTE * pData );
+			LookupReader_c ( const BYTE * pData, DWORD uIndexVersion );
 
-
-	void	SetData ( const BYTE * pData );
+	std::pair<SphOffset_t,DWORD> SetData ( const BYTE * pData, DWORD uIndexVersion );
 
 	inline RowID_t Find ( DocID_t tDocID ) const
 	{
@@ -146,9 +169,9 @@ protected:
 class LookupReaderIterator_c : private LookupReader_c
 {
 public:
-			LookupReaderIterator_c ( const BYTE * pData );
+			LookupReaderIterator_c ( const BYTE * pData, DWORD uIndexVersion );
 
-	void	SetData ( const BYTE * pData );
+	void	SetData ( const BYTE * pData, DWORD uIndexVersion );
 
 	inline bool Read ( DocID_t & tDocID, RowID_t & tRowID )
 	{
@@ -242,8 +265,37 @@ private:
 };
 
 
-RowIteratorsWithEstimates_t CreateLookupIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, const BYTE * pDocidLookup, uint32_t uTotalDocs );
+RowIteratorsWithEstimates_t CreateLookupIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, const BYTE * pDocidLookup, DWORD uIndexVersion, uint32_t uTotalDocs );
 bool	WriteDocidLookup ( const CSphString & sFilename, const VecTraits_T<DocidRowidPair_t> & dLookup, CSphString & sError );
+bool	WriteDocidLookup ( const CSphString & sFilename, const VecTraits_T<DocidRowidPair_t> & dLookup, const VecTraits_T<UuidDocidLookupPair_t> & dUuidLookup, CSphString & sError );
+
+/// first index format version guaranteed to carry the current .spt header layout (docs, docs per checkpoint,
+/// max docid; the 2022 "split docid lookup" rewrite landed inside v.64 without a version bump, so v.64 files
+/// exist in both layouts). Lookups of older tables (down to the supported v.54) are read as-is and never validated
+constexpr DWORD DOCID_LOOKUP_SPLIT_VERSION = 65;
+
+/// v.71/v.72 headers must have their lookup verified; v.73/v.74 are their fixed twins (see sphinxint.h)
+constexpr DWORD DOCID_LOOKUP_SUSPECT_MIN = 71;
+constexpr DWORD DOCID_LOOKUP_SUSPECT_MAX = 72;
+
+/// the version a header gets when it is (re)written with the lookup known to be in sync
+inline DWORD FixedIndexFormatVersion ( DWORD uVersion ) { return ( uVersion==72 || uVersion==74 ) ? 74 : 73; }
+
+/// index format version that added the UUID entries offset to the .spt header
+/// the lookup readers are gated on the index header version, so the header and the .spt must agree
+constexpr DWORD DOCID_LOOKUP_UUID_VERSION = 71;
+
+/// checks that the lookup data is laid out the way the given index format version implies
+/// (the first checkpoint must start right after the header and the checkpoint table)
+/// catches a header rewritten with a newer format version over an older .spt (manticoresearch#4852)
+bool	CheckDocidLookupFormat ( const BYTE * pData, int64_t iDataLen, DWORD uIndexVersion, CSphString & sError );
+
+/// returns the index format version whose .spt layout the data actually follows
+/// (DOCID_LOOKUP_UUID_VERSION-1 or DOCID_LOOKUP_UUID_VERSION), or 0 if neither fits
+DWORD	DetectDocidLookupVersion ( const BYTE * pData, int64_t iDataLen );
+
+/// rewrites a pre-v.71 .spt into the current layout (via a temporary file); no-op for current files
+bool	UpgradeDocidLookupFile ( const CSphString & sFilename, DWORD uIndexVersion, CSphString & sError );
 
 struct CmpDocidLookup_fn
 {
@@ -253,6 +305,16 @@ struct CmpDocidLookup_fn
 			return a.m_tRowID < b.m_tRowID;
 
 		return (uint64_t)a.m_tDocID < (uint64_t)b.m_tDocID;
+	}
+};
+
+struct CmpUuidDocidLookup_fn
+{
+	static inline bool IsLess ( const UuidDocidLookupPair_t & a, const UuidDocidLookupPair_t & b )
+	{
+		return a.m_tKey.m_uHi==b.m_tKey.m_uHi
+			? a.m_tKey.m_uLo < b.m_tKey.m_uLo
+			: a.m_tKey.m_uHi < b.m_tKey.m_uHi;
 	}
 };
 

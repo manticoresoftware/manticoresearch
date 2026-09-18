@@ -57,13 +57,13 @@ void operator>> ( InputBuffer_c& tIn, ExitUpdateNodesRequest_t& tReq )
 	tReq.m_iWaitTimeoutMs = (int64_t)tIn.GetUint64();
 }
 
-bool SendClusterUpdateNodes ( const CSphString& sCluster, NODES_E eNodes, const VecTraits_T<CSphString>& dNodes )
+bool SendClusterUpdateNodes ( const CSphString & sCluster, const CSphString & sUser, NODES_E eNodes, const VecTraits_T<CSphString>& dNodes )
 {
 	ClusterUpdateNodes_c::REQUEST_T tRequest;
 	tRequest.m_sCluster = sCluster;
 	tRequest.m_eKindNodes = eNodes;
 
-	auto dAgents = ClusterUpdateNodes_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::SLOW ), ReplicationTimeoutQuery(), tRequest );
+	auto dAgents = ClusterUpdateNodes_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::SLOW ), sUser, ReplicationTimeoutQuery(), tRequest );
 	// no nodes left seems a valid case
 	if ( dAgents.IsEmpty() )
 		return true;
@@ -72,14 +72,14 @@ bool SendClusterUpdateNodes ( const CSphString& sCluster, NODES_E eNodes, const 
 	return PerformRemoteTasksWrap ( dAgents, tReq, tReq, true );
 }
 
-bool SendClusterExitUpdateNodes ( const CSphString& sCluster, const CSphString& sLeavingNode, int64_t iWaitTimeoutMs, const VecTraits_T<CSphString>& dNodes )
+bool SendClusterExitUpdateNodes ( const CSphString & sCluster, const CSphString & sUser, const CSphString & sLeavingNode, int64_t iWaitTimeoutMs, const VecTraits_T<CSphString>& dNodes )
 {
 	ClusterExitUpdateNodes_c::REQUEST_T tRequest;
 	tRequest.m_sCluster = sCluster;
 	tRequest.m_sLeavingNode = sLeavingNode;
 	tRequest.m_iWaitTimeoutMs = iWaitTimeoutMs;
 
-	auto dAgents = ClusterExitUpdateNodes_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::SLOW ), ReplicationTimeoutQuery ( iWaitTimeoutMs + 5000 ), tRequest );
+	auto dAgents = ClusterExitUpdateNodes_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::SLOW ), sUser, ReplicationTimeoutQuery ( iWaitTimeoutMs + 5000 ), tRequest );
 	if ( dAgents.IsEmpty() )
 		return true;
 

@@ -13,10 +13,9 @@
 #include "cluster_commands.h"
 #include "searchdreplication.h"
 
+#include "api_reply_stream.h"
 #include "digest_sha1.h"
 #include "recv_state.h"
-
-#include <cmath>
 
 
 void operator<< ( ISphOutputBuffer& tOut, const ClusterIndexAddLocalRequest_t& tReq )
@@ -303,11 +302,19 @@ static bool AddReceivedIndex ( const ClusterIndexAddLocalRequest_t& tAddCmd )
 }
 
 // command at remote node for CLUSTER_INDEX_ADD_LOCAL to check sha1 of index file matched and load index into daemon
-void ReceiveClusterIndexAddLocal ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster )
+bool ReceiveClusterIndexAddLocal ( GenericOutputBuffer_c& tOut, InputBuffer_c& tBuf, CSphString& sCluster, WORD uReplyVersion, DWORD uHeartbeatIntervalMs )
 {
 	ClusterIndexAddLocalRequest_t tAddCmd;
 	ClusterIndexAddLocal_c::ParseRequest ( tBuf, tAddCmd );
 	sCluster = tAddCmd.m_sCluster;
-	if ( AddReceivedIndex ( tAddCmd ) )
+
+	ApiReplyStream_c tStream ( uHeartbeatIntervalMs, uReplyVersion, tOut );
+	tStream.Start ();
+	const bool bAdded = AddReceivedIndex ( tAddCmd );
+	if ( !tStream.StopAndHandoff () )
+		return false;
+
+	if ( bAdded )
 		ClusterIndexAddLocal_c::BuildReply ( tOut );
+	return true;
 }

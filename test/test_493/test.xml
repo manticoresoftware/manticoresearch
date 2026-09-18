@@ -93,6 +93,24 @@ index agg_td_invalid
 	rt_attr_float	= latency
 	rt_attr_json	= j
 }
+
+index agg_pct_crash_mva
+{
+	type			= rt
+	path			= <data_path/>/agg_pct_crash_mva
+	rt_field		= data
+	rt_attr_multi	= tags
+	rt_attr_float	= price
+}
+
+index agg_pct_crash_uint
+{
+	type			= rt
+	path			= <data_path/>/agg_pct_crash_uint
+	rt_field		= data
+	rt_attr_uint	= tag
+	rt_attr_float	= price
+}
 </config>
 
 <queries>
@@ -113,6 +131,35 @@ index agg_td_invalid
 	<sphinxql>insert into agg_mad (id,data,latency) values (52,'v',51),(53,'v',52),(54,'v',53),(55,'v',54),(56,'v',55),(57,'v',56),(58,'v',57),(59,'v',58),(60,'v',59),(61,'v',60),(62,'v',61),(63,'v',62),(64,'v',63),(65,'v',64),(66,'v',65),(67,'v',66),(68,'v',67),(69,'v',68),(70,'v',69),(71,'v',70),(72,'v',71),(73,'v',72),(74,'v',73),(75,'v',74),(76,'v',75),(77,'v',76),(78,'v',77),(79,'v',78),(80,'v',79),(81,'v',80),(82,'v',81),(83,'v',82),(84,'v',83),(85,'v',84),(86,'v',85),(87,'v',86),(88,'v',87),(89,'v',88),(90,'v',89),(91,'v',90),(92,'v',91),(93,'v',92),(94,'v',93),(95,'v',94),(96,'v',95),(97,'v',96),(98,'v',97),(99,'v',98),(100,'v',99),(101,'v',100)</sphinxql>
 	<sphinxql>truncate rtindex agg_td_invalid</sphinxql>
 	<sphinxql>insert into agg_td_invalid (id,data,latency,j) values (1,'alpha',1.5,'{"some_string":"gamma","num":42}')</sphinxql>
+
+	<!-- GH-4672: terms + discardable aggregate cleanup over multiple RT disk chunks -->
+	<sphinxql skip="1">truncate rtindex agg_pct_crash_mva</sphinxql>
+	<var name="rows"/>
+	<repeat count="600" vars="id tag1 tag2" init="1 10001 20001" inc="1 1 1">
+		<var name="rows" delimiter=",">(<id/>,'v',(1,<id/>,<tag1/>,<tag2/>),1)</var>
+	</repeat>
+	<sphinxql skip="1">insert into agg_pct_crash_mva (id,data,tags,price) values <rows/></sphinxql>
+	<sphinxql skip="1">flush ramchunk agg_pct_crash_mva</sphinxql>
+	<var name="rows"/>
+	<repeat count="600" vars="id tag1 tag2" init="601 10601 20601" inc="1 1 1">
+		<var name="rows" delimiter=",">(<id/>,'v',(1,<id/>,<tag1/>,<tag2/>),1)</var>
+	</repeat>
+	<sphinxql skip="1">insert into agg_pct_crash_mva (id,data,tags,price) values <rows/></sphinxql>
+	<sphinxql skip="1">flush ramchunk agg_pct_crash_mva</sphinxql>
+
+	<sphinxql skip="1">truncate rtindex agg_pct_crash_uint</sphinxql>
+	<var name="rows"/>
+	<repeat count="600" vars="id" init="1" inc="1">
+		<var name="rows" delimiter=",">(<id/>,'v',<id/>,1)</var>
+	</repeat>
+	<sphinxql skip="1">insert into agg_pct_crash_uint (id,data,tag,price) values <rows/></sphinxql>
+	<sphinxql skip="1">flush ramchunk agg_pct_crash_uint</sphinxql>
+	<var name="rows"/>
+	<repeat count="600" vars="id" init="601" inc="1">
+		<var name="rows" delimiter=",">(<id/>,'v',<id/>,1)</var>
+	</repeat>
+	<sphinxql skip="1">insert into agg_pct_crash_uint (id,data,tag,price) values <rows/></sphinxql>
+	<sphinxql skip="1">flush ramchunk agg_pct_crash_uint</sphinxql>
 
 	<!-- SphinxQL support for tdigest-based aggs -->
 	<sphinxql>select percentiles(latency) as p from agg_td</sphinxql>
@@ -161,6 +208,9 @@ index agg_td_invalid
 	<!-- expected output with current digest MAD logic and tdigest.compression=2: {"value":25.5,"value_as_string":"25.5"} -->
 	<!-- exact MAD for 0..100 (python/sql exact) is 25; shows approximation drift even when non-zero -->
 	<query endpoint="json/search">{"table":"agg_mad","size":0,"aggs":{"latency_mad_c2":{"median_absolute_deviation":{"field":"latency","tdigest":{"compression":2}}}}}</query>
+
+	<query endpoint="json/search">{"table":"agg_pct_crash_mva","limit":1,"query":{"match_all":{}},"aggs":{"tags":{"terms":{"field":"tags","size":1}},"price_pct":{"percentiles":{"field":"price","values":[25,50,75]}}}}</query>
+	<query endpoint="json/search">{"table":"agg_pct_crash_uint","limit":1,"query":{"match_all":{}},"aggs":{"tags":{"terms":{"field":"tag","size":50,"order":{"tag":"asc"}}},"price_pct":{"percentiles":{"field":"price","values":[25,50,75]}}}}</query>
 </httpqueries>
 
 </test>

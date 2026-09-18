@@ -1,0 +1,91 @@
+––– comment –––
+Test SHOW TOKEN command.
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+Admin credentials: admin / adminpass (bootstrap via auth.json)
+
+Per spec:
+- SHOW TOKEN displays current user's bearer_sha256 hash
+- SHOW TOKEN FOR 'user' requires ADMIN permission
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– comment –––
+––– Setup: create test user –––
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'tokenuser' IDENTIFIED BY 'tokenuser123';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: tokenuser
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'tokenuser';"
+––– output –––
+––– comment –––
+––– 2.11.1 SHOW TOKEN: User sees own token hash –––
+EXPECTED: Returns bearer_sha256 hash for current user
+––– comment –––
+––– input –––
+MYSQL_PWD=tokenuser123 mysql -utokenuser -h0 -P9306 -e "SHOW TOKEN;" 2>&1
+––– output –––
+#!/\+[-+]+\+/!#
+#!/\s*\| username +\| token +\|/!#
+#!/\+[-+]+\+/!#
+#!/\s*\| tokenuser +\| [0-9a-f]{64} \|/!#
+#!/\+[-+]+\+/!#
+––– comment –––
+––– 2.11.2 SHOW TOKEN FOR: Admin sees other user's token –––
+EXPECTED: Admin can see any user's token hash
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "SHOW TOKEN FOR 'tokenuser';" 2>&1
+––– output –––
+#!/\+[-+]+\+/!#
+#!/\s*\| username +\| token +\|/!#
+#!/\+[-+]+\+/!#
+#!/\s*\| tokenuser +\| [0-9a-f]{64} \|/!#
+#!/\+[-+]+\+/!#
+––– comment –––
+––– 2.11.3 SHOW TOKEN FOR: Non-admin denied –––
+EXPECTED: Permission denied without ADMIN
+––– comment –––
+––– input –––
+MYSQL_PWD=tokenuser123 mysql -utokenuser -h0 -P9306 -e "SHOW TOKEN FOR 'admin';" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'tokenuser'
+––– comment –––
+––– Daemon-first additional coverage –––
+Per spec update:
+- SHOW TOKEN FOR 'user' is implemented
+- SHOW TOKEN 'user' is accepted as legacy syntax
+––– comment –––
+––– 2.11.4 SHOW TOKEN: User sees own token hash (implemented path) –––
+––– input –––
+MYSQL_PWD=tokenuser123 mysql -E -utokenuser -h0 -P9306 -e "SHOW TOKEN;"
+––– output –––
+*************************** 1. row ***************************
+username: tokenuser
+#!/\s*token:\s*[0-9a-f]{64}/!#
+––– comment –––
+––– 2.11.5 SHOW TOKEN FOR: Admin sees other user's token (implemented path) –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW TOKEN FOR 'tokenuser';"
+––– output –––
+*************************** 1. row ***************************
+username: tokenuser
+#!/\s*token:\s*[0-9a-f]{64}/!#
+––– comment –––
+––– 2.11.6 SHOW TOKEN legacy quoted syntax (implemented path) –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW TOKEN 'tokenuser';"
+––– output –––
+*************************** 1. row ***************************
+username: tokenuser
+#!/\s*token:\s*[0-9a-f]{64}/!#
+––– comment –––
+––– 2.11.7 SHOW TOKEN FOR: Non-admin denied (implemented path) –––
+––– input –––
+MYSQL_PWD=tokenuser123 mysql -utokenuser -h0 -P9306 -e "SHOW TOKEN FOR 'admin';" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'tokenuser'

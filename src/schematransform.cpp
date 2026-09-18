@@ -326,7 +326,8 @@ void MatchesToNewSchema_c::SetupAction ( const CSphColumnInfo & tOld, const CSph
 		case SPH_ATTR_BIGINT:			tAction.m_eAction = MapAction_t::EVALEXPR_BIGINT;	break;
 		case SPH_ATTR_UINT32SET_PTR:
 		case SPH_ATTR_INT64SET_PTR:
-		case SPH_ATTR_FLOAT_VECTOR_PTR:	tAction.m_eAction = MapAction_t::EVALEXPR_MVA;		break;
+		case SPH_ATTR_FLOAT_VECTOR_PTR:
+		case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:	tAction.m_eAction = MapAction_t::EVALEXPR_MVA;		break;
 		default:						tAction.m_eAction = MapAction_t::EVALEXPR_INT;		break;
 		}
 

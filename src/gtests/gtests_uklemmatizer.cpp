@@ -97,6 +97,7 @@ void WriteUkAsset ()
 	const std::vector<ExactEntry_t> dExactEntries {
 		{ "коти", { "коти", "кіт", "котити" } },
 		{ "мрії", { "мрія" } },
+		{ "здоров'ям", { "здоров'я" } },
 		{ "червона", { "червоний" } },
 		{ "йшли", { "йти" } },
 		{ "ґніт", { "ґніт" } },
@@ -302,6 +303,7 @@ TEST_F ( UkrainianLemmatizerTest_c, NativeMatchesProxyBaselineProbeCases )
 	};
 
 	tCheckSingle ( "мрії", "мрія" );
+	tCheckSingle ( "здоров'ям", "здоров'я" );
 	tCheckSingle ( "червона", "червоний" );
 	tCheckSingle ( "йшли", "йти" );
 	tCheckSingle ( "ґніт", "ґніт" );

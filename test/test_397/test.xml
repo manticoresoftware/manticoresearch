@@ -173,6 +173,14 @@ EXPLAIN QUERY rt1 'her @!title box @(title,content) with me';
 EXPLAIN QUERY pq1 'her @!title box @(title,content) with me';
 EXPLAIN QUERY tmpl1 'her @!title box @(title,content) with me';
 
+<!-- template schema discovery must use the extended-query parser -->
+EXPLAIN QUERY rt1 '@*("b")';
+EXPLAIN QUERY tmpl1 '@*("b")';
+EXPLAIN QUERY tmpl1 '@@relaxed @(title,content) b';
+<!-- malformed selectors must fail in the parser, not spin schema discovery -->
+EXPLAIN QUERY tmpl1 '@("b")';
+EXPLAIN QUERY tmpl1 '@!("b")';
+
 <!-- OR inside phrase related operators -->
 explain query exp1 ' " ( ( a b c ) | d ) e" ';
 explain query exp1 ' " ( ( a b c ) | d ) e"~5 ';

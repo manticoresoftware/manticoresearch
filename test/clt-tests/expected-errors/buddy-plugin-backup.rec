@@ -2,12 +2,12 @@
 ––– input –––
 mysql -h0 -P9306 -e 'BACKUP TABLES users, posts TO '/backup/location';'
 ––– output –––
-ERROR 1064 (42000) at line 1: P02: syntax error, unexpected identifier near 'BACKUP TABLES users, posts TO /backup/location'
+ERROR 1064 (42000) at line 1: BACKUP requires Manticore Buddy
 ––– input –––
 mysql -h0 -P9306 -e 'BACKUP TABLES users, posts TO '/backup/location' OPTIONS compress=true, async=false;'
 ––– output –––
-ERROR 1064 (42000) at line 1: P02: syntax error, unexpected identifier near 'BACKUP TABLES users, posts TO /backup/location OPTIONS compress=true, async=false'
+ERROR 1064 (42000) at line 1: BACKUP requires Manticore Buddy
 ––– input –––
 mysql -h0 -P9306 -e 'BACKUP TABLES TO '/backup/location' OPTIONS compress=true, async=false;'
 ––– output –––
-ERROR 1064 (42000) at line 1: P02: syntax error, unexpected identifier near 'BACKUP TABLES TO /backup/location OPTIONS compress=true, async=false'
+ERROR 1064 (42000) at line 1: P02: syntax error, #!/.*/!#

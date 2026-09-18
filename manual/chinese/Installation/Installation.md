@@ -2,49 +2,25 @@
 
 <!-- example installation expanded -->
 
-<!-- request RHEL, Centos, Alma, Amazon, Oracle -->
+<!-- request RHEL, Centos, Alma, Amazon, Oracle, Debian, Ubuntu, Mint, MacOS -->
 
 ``` bash
-sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-sudo yum install manticore
+curl https://manticoresearch.com | sh
 ```
-
-如果您是从旧版本升级，建议先移除旧包，以避免因包结构更新导致的冲突：
-```bash
-sudo yum --setopt=tsflags=noscripts remove manticore*
-```
-这不会删除您的数据。如果您更改了配置文件，它会被保存到 `/etc/manticoresearch/manticore.conf.rpmsave`。
 
 如果您需要单独的安装包，请在[这里](https://manticoresearch.com/install/#separate-packages)查找。
 
-有关安装的更多详情，请参见[下文](../Installation/RHEL_and_Centos.md)。
+有关在基于 RPM 的 Linux 上安装的更多细节，请参见[这里](../Installation/RHEL_and_Centos.md)。
 
-<!-- request Debian, Ubuntu, Mint -->
+有关在基于 DEBIAN 的 Linux 上安装的更多细节，请参见[这里](../Installation/Debian_and_Ubuntu.md)。
 
-``` bash
-wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
-sudo apt update
-sudo apt install manticore
-```
+有关在 macOS 上安装的更多细节，请参见[下方](../Installation/MacOS.md)。
 
-如果您是从旧版本升级到 Manticore 6，建议先移除旧包，以避免因包结构更新导致的冲突：
-```bash
-sudo apt remove manticore*
-```
-这不会删除您的数据或配置文件。
-
-如果您需要单独的安装包，请在[这里](https://manticoresearch.com/install/#separate-packages)查找。
-
-有关安装的更多详情，请参见[下文](../Installation/Debian_and_Ubuntu.md)。
-
-<!-- request MacOS -->
+有关快速安装器的更多细节，请运行
 
 ``` bash
-brew install manticoresoftware/tap/manticoresearch manticoresoftware/tap/manticore-extra
+curl https://manticoresearch.com | sh -s help
 ```
-
-有关安装的更多详情，请参见[下文](../Installation/MacOS.md)。
 
 <!-- request Windows -->
 

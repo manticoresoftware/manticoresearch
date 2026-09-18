@@ -33,11 +33,12 @@ TESTED_VERSIONS="7.17
 9.1
 9.2
 9.3
-9.4"
+9.4
+9.5"
 
 # Check for NEW versions (after latest tested)
 # WARNING: Also update FILEBEAT_LATEST below when changing this!
-LATEST_TESTED_VERSION="9.4"
+LATEST_TESTED_VERSION="9.5"
 NEW_VERSIONS=$(curl -s "https://hub.docker.com/v2/repositories/elastic/filebeat/tags/?page_size=100" \
 | jq -r ".results[].name" \
 | grep "^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" \
@@ -72,7 +73,7 @@ echo "Using tested versions:"
 echo "$TESTED_VERSIONS"
 SCRIPT
 ––– output –––
-✅ No new versions found after 9.4
+✅ No new versions found after 9.5
 Using tested versions:
 7.17
 8.0
@@ -100,6 +101,7 @@ Using tested versions:
 9.2
 9.3
 9.4
+9.5
 ––– input –––
 bash << 'SCRIPT'
 # Check documentation for Filebeat version
@@ -107,7 +109,7 @@ echo "Checking Filebeat version in documentation..."
 echo ""
 
 # Must match LATEST_TESTED_VERSION above
-FILEBEAT_LATEST="9.4"
+FILEBEAT_LATEST="9.5"
 
 # 1. Check manual documentation (local file mounted via workflow)
 echo "=== Checking manual documentation ==="
@@ -152,7 +154,9 @@ SCRIPT
 Checking Filebeat version in documentation...
 === Checking manual documentation ===
 ✓ Checking /manual/english/Integration/Filebeat.md
-✅ Manual: versions 7.17-9.4 are supported
+✅ Manual: versions 7.17-9.5 are supported
 === Checking website blog post ===
 ✓ Fetching https://manticoresearch.com/blog/integration-of-manticore-with-logstash-filebeat/
-✅ Blog: Filebeat versions 7.17-9.4
+⚠️  WARNING: Blog does NOT contain 9.5
+   Found: Filebeat versions 7.17-9.4
+   Expected: Filebeat versions 7.17-9.5

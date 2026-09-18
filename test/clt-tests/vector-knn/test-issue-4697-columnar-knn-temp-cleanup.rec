@@ -1,0 +1,71 @@
+––– input –––
+searchd --stopwait >/dev/null 2>&1 || true; rm -rf /var/lib/manticore/*; mkdir -p /var/lib/manticore /var/log/manticore /run/manticore; : > /var/log/manticore/searchd.log; stdbuf -oL searchd ${SEARCHD_ARGS:-} >/tmp/issue-4697-searchd-start.out 2>&1; for i in $(seq 1 60); do mysql -h0 -P9306 -e "SELECT 1" >/dev/null 2>&1 && { echo "Accepting connections!"; break; }; sleep 0.5; if [ "$i" -eq 60 ]; then echo "Timeout or failed!"; cat /tmp/issue-4697-searchd-start.out /var/log/manticore/searchd.log 2>/dev/null | tail -100; fi; done
+––– output –––
+Accepting connections!
+––– input –––
+cat > /tmp/issue-4697-columnar-knn-temp-cleanup.sh <<'BASH'
+#!/usr/bin/env bash
+set -euo pipefail
+ROWS_PER_FLUSH=${ROWS_PER_FLUSH:-4000}
+FLUSHES=${FLUSHES:-10}
+DIMS=${DIMS:-128}
+SCHEMA="id bigint, c text, e float_vector knn_type='hnsw' knn_dims='$DIMS' hnsw_similarity='cosine' quantization='8bit'"
+VEC="("
+sep=""
+for _ in $(seq 1 "$DIMS"); do
+  VEC="${VEC}${sep}0.1"
+  sep=","
+done
+VEC="${VEC})"
+mysqlq() { mysql -h0 -P9306 --batch --raw --skip-column-names -e "$1"; }
+mysqlq "DROP TABLE IF EXISTS t__old"
+mysqlq "DROP TABLE IF EXISTS t"
+mysqlq "CREATE TABLE t ($SCHEMA) engine='columnar'"
+for f in $(seq 1 "$FLUSHES"); do
+  sql="/tmp/issue-4697-insert-$f.sql"
+  : > "$sql"
+  for i in $(seq 1 "$ROWS_PER_FLUSH"); do
+    id=$((f*ROWS_PER_FLUSH+i))
+    printf "INSERT INTO t (id,c,e) VALUES (%d,'x',%s);\n" "$id" "$VEC" >> "$sql"
+  done
+  mysql -h0 -P9306 --batch --raw --skip-column-names < "$sql" >/dev/null
+  mysqlq "FLUSH RAMCHUNK t" >/dev/null
+done
+
+end=$((SECONDS+30))
+while [ $SECONDS -lt $end ]; do
+  if find /var/lib/manticore/t -maxdepth 1 -name '*.tmp.spc.*' | grep -q .; then
+    echo "merge window observed"
+    break
+  fi
+  sleep 0.1
+done
+if ! find /var/lib/manticore/t -maxdepth 1 -name '*.tmp.spc.*' | grep -q .; then
+  echo "ERROR: merge temp-file window was not observed"
+  exit 1
+fi
+
+mysqlq "CREATE TABLE t__old LIKE t" >/dev/null
+mysqlq "ATTACH TABLE t TO TABLE t__old" >/dev/null
+mysqlq "DROP TABLE t" >/dev/null
+
+leftovers=$(find /var/lib/manticore/t -maxdepth 1 -name '*.tmp*' -print 2>/dev/null | sort || true)
+if [ -n "$leftovers" ]; then
+  echo "ERROR: temp files left after DROP TABLE t"
+  printf '%s\n' "$leftovers" | sed 's#.*/##'
+  exit 1
+fi
+if ! out=$(mysql -h0 -P9306 --batch --raw --skip-column-names -e "CREATE TABLE t ($SCHEMA) engine='columnar'" 2>&1); then
+  echo "ERROR: recreate failed"
+  printf '%s\n' "$out" | sed -E 's#/var/lib/manticore/t#TABLEDIR#g'
+  exit 1
+fi
+
+echo "cleanup ok"
+echo "recreate ok"
+BASH
+bash /tmp/issue-4697-columnar-knn-temp-cleanup.sh
+––– output –––
+merge window observed
+cleanup ok
+recreate ok

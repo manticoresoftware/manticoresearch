@@ -153,12 +153,13 @@ int LoadUpdate ( const BYTE * pBuf, int iLen, CSphQuery & tQuery )
 // ver 0x108 gtid is sent and parsed as blob (was string)
 // ver 0x109 indexes support for ALTER ADD \ DROP table
 // ver 0x10A changed replicated RT transaction layout for auto-embeddings handling
-static constexpr WORD VER_COMMAND_REPLICATE = 0x10A;
+// ver 0x10B support for auth replication and ALTER CLUSTER UPDATE user replication command
+static constexpr WORD VER_COMMAND_REPLICATE = 0x10B;
 bool LoadCmdHeader( MemoryReader_c& tReader, ReplicationCommand_t* pCmd )
 {
 	TlsMsg::ResetErr();
 	auto eCommand = (ReplCmd_e) tReader.GetVal<WORD> ();
-	if ( eCommand<ReplCmd_e::PQUERY_ADD || eCommand>ReplCmd_e::TOTAL )
+	if ( eCommand<ReplCmd_e::PQUERY_ADD || eCommand>=ReplCmd_e::TOTAL )
 		return TlsMsg::Err ( "bad replication command %d", (int) eCommand );
 
 	pCmd->m_uVersion = tReader.GetVal<WORD> ();

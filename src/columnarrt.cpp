@@ -389,6 +389,7 @@ static std::unique_ptr<ColumnarAttrRT_i> CreateColumnarAttrRT ( ESphAttr eType, 
 	case SPH_ATTR_UINT32SET:	return std::make_unique<ColumnarAttr_MVA_T<DWORD>>(eType);
 	case SPH_ATTR_INT64SET:		return std::make_unique<ColumnarAttr_MVA_T<int64_t>>(eType);
 	case SPH_ATTR_FLOAT_VECTOR:	return std::make_unique<ColumnarAttr_MVA_T<uint32_t>>(eType);
+	case SPH_ATTR_FLOAT_VECTOR_ARRAY:	return std::make_unique<ColumnarAttr_MVA_T<uint32_t>>(eType);
 
 	default:
 		assert ( 0 && "Unsupported type" );

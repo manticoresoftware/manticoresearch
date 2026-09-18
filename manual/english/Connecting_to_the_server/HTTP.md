@@ -23,7 +23,26 @@ searchd {
 
 All HTTP endpoints return `application/json` content type. For the most part, endpoints use JSON payloads for requests. However, there are some exceptions that use NDJSON or simple URL-encoded payloads.
 
-Currently, there is no user authentication. Therefore, make sure that the HTTP interface is not accessible to anyone outside your network. As Manticore functions like any other web server, you can use a reverse proxy, such as Nginx, to implement HTTP authentication or caching.
+If [authentication and authorization](../Security/Authentication_and_authorization.md) is enabled, HTTP/HTTPS clients must send either a Basic authentication header or a bearer token:
+
+```bash
+curl -u admin:StrongPass#2026 http://127.0.0.1:9308/sql?mode=raw -d "SELECT 1"
+curl -H "Authorization: Bearer 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" http://127.0.0.1:9308/sql?mode=raw -d "SELECT 1"
+```
+
+Create or rotate a bearer token for the authenticated HTTP user with `POST /token`:
+
+```bash
+curl -u admin:StrongPass#2026 -X POST http://127.0.0.1:9308/token -d "{}"
+```
+
+The endpoint returns the raw token once. Store it securely. `SHOW TOKEN` shows the stored token hash, not the raw bearer token. To replace a bearer token, rotate it with `POST /token` or the SQL `TOKEN` command.
+
+Use HTTPS when sending credentials or bearer tokens over a network.
+
+HTTP header names and the `Basic` and `Bearer` scheme names are accepted case-insensitively. User names are exact-case.
+
+Missing or invalid credentials return `401 Unauthorized`. Valid credentials without the required permission return `403 Forbidden`.
 
 <!-- example HTTPS -->
 The HTTP protocol also supports [SSL encryption](../Security/SSL.md):
@@ -707,7 +726,7 @@ With HTTP/1.1, connections are persistent by default. Send `Connection: close` o
 
 On a persistent connection, the daemon keeps some state that later queries can use. This state is preserved for the `/sql`, `/sql?mode=raw`, and `/cli_json` endpoints, but not for `/cli`. This enables stateful interactions over HTTP JSON. For example, when you use [/cli_json](../Connecting_to_the_server/HTTP.md#/cli_json), you can run `SHOW META` after a `SELECT` on the same connection, similar to using a MySQL client.
 
-To run multiple queries using sphinxql via one connection with `curl`, you need to chain your commands with the
+To run multiple queries using SQL via one connection with `curl`, you need to chain your commands with the
 `--next` key:
 
 ```

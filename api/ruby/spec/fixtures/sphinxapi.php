@@ -345,7 +345,7 @@ class SphinxClient
 			while ( $left>0 && !feof($fp) )
 			{
 				$chunk = fread ( $fp, $left );
-				if ( $chunk )
+				if ( $chunk !== false )
 				{
 					$response .= $chunk;
 					$left -= strlen($chunk);

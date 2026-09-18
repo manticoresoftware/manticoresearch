@@ -50,8 +50,8 @@
 %option perf-report
 
 DIGIT				[0-9]
-ALPHA				[a-zA-Z_@]
-ALNUM				[a-zA-Z_0-9]
+ALPHA				[a-zA-Z_@\200-\377]
+ALNUM				[a-zA-Z_0-9\200-\377]
 ID					{ALPHA}{ALNUM}*
 SPACE				[ \t\n\r]
 SIGN                [+-]?

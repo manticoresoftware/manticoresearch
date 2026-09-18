@@ -63,7 +63,6 @@ POST /search
 ```
 <!-- end -->
 
-<!-- example must_not -->
 ### must
 Queries and filters specified in the `must` section are required to match the documents. If multiple fulltext queries or filters are specified, all of them must match. This is the equivalent of `AND` queries in SQL. Note that if you want to match against an array ([multi-value attribute](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)), you can specify the attribute multiple times. The result will be positive only if all the queried values are found in the array, e.g.:
 
@@ -81,7 +80,7 @@ Note also, it may be better in terms of performance to use:
 (see details below).
 
 ### should
-Queries and filters specified in the `should` section should match the documents. If some queries are specified in `must` or `must_not`, `should` queries are ignored. On the other hand, if there are no queries other than `should`, then at least one of these queries must match a document for it to match the bool query. This is the equivalent of `OR` queries. Note, if you want to match against an array ([multi-value attribute](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)) you can specify the attribute multiple times, e.g.:
+Queries and filters specified in the `should` section should match the documents. If some queries are specified in `must` or `must_not`, `should` queries are optional by default. On the other hand, if there are no queries other than `should`, then at least one of these queries must match a document for it to match the bool query. This is the equivalent of `OR` queries. To require a specific number of `should` clauses to match, use [`minimum_should_match`](../Searching/Filters.md#minimum_should_match). Note, if you want to match against an array ([multi-value attribute](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)) you can specify the attribute multiple times, e.g.:
 
 ```json
 "should": [
@@ -96,7 +95,45 @@ Note also, it may be better in terms of performance to use:
 ```
 (see details below).
 
+### minimum_should_match
+
+<!-- example minimum_should_match -->
+`minimum_should_match` controls how many clauses from `should` must match. It can be used with full-text queries, attribute filters, or a mix of both in a JSON `bool` query.
+
+The value can be:
+
+* an integer, for example `2`
+* a negative integer, for example `"-1"`, meaning all but one `should` clause must match
+* a percentage, for example `"67%"`
+* a negative percentage, for example `"-25%"`, meaning all but 25% of the `should` clauses must match
+* a conditional expression such as `"2<-25% 9<-3"`, which applies the rule after `<` only when the number of `should` clauses is greater than the number before `<`
+
+For example, the following query returns documents that match any two of the three `should` clauses: the exact phrase `yellow dog`, the exact phrase `hello world`, or the word `tropical`.
+
+<!-- request JSON -->
+```json
+POST /search
+{
+  "table": "test1",
+  "query": {
+    "bool": {
+      "should": [
+        { "match_phrase": { "_all": "yellow dog" } },
+        { "match_phrase": { "_all": "hello world" } },
+        { "match": { "_all": "tropical" } }
+      ],
+      "minimum_should_match": 2
+    }
+  }
+}
+```
+<!-- end -->
+
+If `must` or `must_not` is present, `should` remains optional by default. Setting a positive `minimum_should_match` makes that many `should` clauses required in addition to the required `must` clauses and the excluded `must_not` clauses. Setting `minimum_should_match` to `0` makes all `should` clauses optional.
+
 ### must_not
+<!-- example must_not -->
+
 Queries and filters specified in the `must_not` section must not match the documents. If several queries are specified under `must_not`, the document matches if none of them match.
 
 <!-- request JSON -->

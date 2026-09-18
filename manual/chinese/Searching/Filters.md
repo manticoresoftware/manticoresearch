@@ -81,7 +81,7 @@ POST /search
 （请参阅下方的详细信息）可能更好。
 
 ### should
-`should` 部分中指定的查询和过滤器应该匹配文档。如果在 `must` 或 `must_not` 中指定了某些查询，则 `should` 查询将被忽略。另一方面，如果除了 `should` 之外没有其他查询，则至少有一个这些查询必须匹配一个文档，该文档才能匹配 `bool` 查询。这相当于 `OR` 查询。请注意，如果您要匹配数组（[多值属性](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)），可以多次指定该属性，例如：
+在 `should` 部分指定的查询和过滤条件应当匹配文档。如果在 `must` 或 `must_not` 中还指定了其他查询，那么默认情况下 `should` 是可选的。另一方面，如果除了 `should` 之外没有其他查询，那么这些查询中至少有一个必须与文档匹配，bool 查询才算匹配。这相当于 `OR` 查询。若要要求匹配特定数量的 `should` 子句，请使用 [`minimum_should_match`](../Searching/Filters.md#minimum_should_match)。注意，如果你想对数组 ([multi-value attribute](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)) 进行匹配，可以把该属性指定多次，例如：
 
 ```json
 "should": [
@@ -95,6 +95,42 @@ POST /search
   {"in" : { "any(product_codes)": [7,8] }}
 ```
 （请参阅下方的详细信息）可能更好。
+
+### minimum_should_match
+
+<!-- example minimum_should_match -->
+`minimum_should_match` 控制 `should` 中需要匹配的子句数量。它可用于全文查询、属性过滤，或者 JSON `bool` 查询中的两者组合。
+
+其值可以是：
+
+* 一个整数，例如 `2`
+* 一个负整数，例如 `"-1"`，表示除一个之外，所有 `should` 子句都必须匹配
+* 一个百分比，例如 `"67%"`
+* 一个负百分比，例如 `"-25%"`，表示除 25% 的 `should` 子句外，其余都必须匹配
+* 一个条件表达式，例如 `"2<-25% 9<-3"`，它只会在 `should` 子句数量大于 `<` 前面的数字时，才应用 `<` 右侧的规则
+
+例如，下面的查询会返回匹配三个 `should` 子句中任意两个的文档：精确短语 `yellow dog`、精确短语 `hello world`，或单词 `tropical`。
+
+<!-- request JSON -->
+```json
+POST /search
+{
+  "table": "test1",
+  "query": {
+    "bool": {
+      "should": [
+        { "match_phrase": { "_all": "yellow dog" } },
+        { "match_phrase": { "_all": "hello world" } },
+        { "match": { "_all": "tropical" } }
+      ],
+      "minimum_should_match": 2
+    }
+  }
+}
+```
+<!-- end -->
+
+如果存在 `must` 或 `must_not`，`should` 默认仍然是可选的。将正数的 `minimum_should_match` 设为某个值后，除了必需的 `must` 子句和排除的 `must_not` 子句之外，还必须满足这么多个 `should` 子句。将 `minimum_should_match` 设为 `0` 会让所有 `should` 子句都变为可选。
 
 ### must_not
 `must_not` 部分中指定的查询和过滤器必须不匹配文档。如果在 `must_not` 下指定了多个查询，则文档匹配如果它们中的任何一个都不匹配。

@@ -1,0 +1,20 @@
+––– comment –––
+Issue https://github.com/manticoresoftware/manticoresearch/issues/4915:
+two concurrent large BERT auto-embedding batches loaded from a persistent model
+cache must complete instead of deadlocking inside the shared Rayon pool.
+––– block: ../base/start-searchd –––
+––– comment –––
+Download and persist the MiniLM model, then restart searchd so the regression
+runs with a disk-cached model and a fresh in-memory model cache.
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE issue4915_seed (title TEXT, description TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title, description' CACHE_PATH='/var/lib/manticore/.cache') ENGINE='columnar'; INSERT INTO issue4915_seed (id, title, description) VALUES (1, 'cache seed', 'load the MiniLM model before restart'); DROP TABLE issue4915_seed"; echo $?
+––– output –––
+0
+––– block: ../base/start-searchd –––
+––– comment –––
+Run the reported concurrent workload: two clients, 500-document batches and
+5000 columnar rows. Before the fix this stalls with active INSERT statements.
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE issue4915 (id BIGINT, title TEXT, description TEXT, category STRING ATTRIBUTE, age INT, salary FLOAT, discount FLOAT, is_active BOOL, last_login TIMESTAMP, product_codes MULTI, large_values MULTI64, additional_info JSON, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title, description' CACHE_PATH='/var/lib/manticore/.cache') ENGINE='columnar'"; rc=0; timeout 180s manticore-load --quiet --json --host=127.0.0.1 --port=9306 --batch-size=500 --threads=2 --total=5000 --load="INSERT INTO issue4915 (id, title, description, category, age, salary, discount, is_active, last_login, product_codes, large_values, additional_info) VALUES (<increment>, 'Document title <increment>', 'Document description <increment>', 'cat_<increment>', <int/18/65>, <float/1000.0/100000.0>, <float/0.0/50.0>, <int/0/1>, <int/1609459200/1704067200>, (<array/1/5/100/999>), (<array/1/3/1000000/9999999>), '{\"rating\":<int/1/5>,\"verified\":<int/0/1>}')" >/tmp/issue4915-load.log 2>&1 || rc=$?; rows=$(timeout 10s mysql -h0 -P9306 -N -B -e "SELECT COUNT(*) FROM issue4915" 2>/dev/null | grep -oE '[0-9]+' | awk 'END { print }'); alive=$(timeout 10s mysql -h0 -P9306 -N -B -e "SELECT 1" 2>/dev/null | grep -oE '[0-9]+' | awk 'END { print }'); printf 'loader_rc=%s rows=%s daemon_alive=%s\n' "$rc" "$rows" "$alive"
+––– output –––
+loader_rc=0 rows=5000 daemon_alive=1

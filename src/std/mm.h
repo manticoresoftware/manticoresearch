@@ -30,6 +30,7 @@ enum class Share_e {
 enum class Advise_e {
 	NOFORK,
 	NODUMP,
+	WILLNEED,
 };
 
 void* mmalloc ( size_t uSize, Mode_e = Mode_e::RW, Share_e = Share_e::ANON_PRIVATE );

@@ -49,6 +49,7 @@ bool mmunlock ( void* pMem, size_t uSize )
 #else
 
 #include <sys/mman.h>
+#include <unistd.h>
 
 // couple of helpers
 int hwShare ( Share_e eAccess )
@@ -94,6 +95,14 @@ void mmadvise ( void* pMem, size_t uSize, Advise_e eAdvise )
 {
 	switch ( eAdvise )
 	{
+	case Advise_e::WILLNEED:
+		{
+			// unlike the other advices this one targets arbitrary (not page-aligned) ranges
+			static const size_t uPageMask = ~( (size_t)sysconf ( _SC_PAGESIZE ) - 1 );
+			size_t uStart = (size_t)pMem & uPageMask;
+			madvise ( (void*)uStart, (size_t)pMem + uSize - uStart, MADV_WILLNEED );
+		}
+		break;
 	case Advise_e::NODUMP:
 #ifdef MADV_DONTDUMP
 		madvise ( pMem, uSize, MADV_DONTDUMP );

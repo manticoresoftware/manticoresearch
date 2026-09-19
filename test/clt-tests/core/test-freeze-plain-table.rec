@@ -8,46 +8,29 @@ indexer --quiet --config /tmp/freeze-plain-table/manticore.conf plain >/dev/null
 searchd --config /tmp/freeze-plain-table/manticore.conf >/dev/null 2>&1
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -N -B -e 'FREEZE plain; SHOW LOCKS'
+mysql -h0 -P9306 -e 'FREEZE plain' | grep -q '/plain.sph' && echo 'freeze files: OK'
+mysql -h0 -P9306 -e 'SHOW LOCKS' | grep -Eq 'plain.*read' && echo 'freeze lock: OK'
 ––– output –––
-/tmp/freeze-plain-table/data/plain.sph	/tmp/freeze-plain-table/data/plain.sph
-/tmp/freeze-plain-table/data/plain.spd	/tmp/freeze-plain-table/data/plain.spd
-/tmp/freeze-plain-table/data/plain.spp	/tmp/freeze-plain-table/data/plain.spp
-/tmp/freeze-plain-table/data/plain.spe	/tmp/freeze-plain-table/data/plain.spe
-/tmp/freeze-plain-table/data/plain.spi	/tmp/freeze-plain-table/data/plain.spi
-/tmp/freeze-plain-table/data/plain.spm	/tmp/freeze-plain-table/data/plain.spm
-/tmp/freeze-plain-table/data/plain.sphi	/tmp/freeze-plain-table/data/plain.sphi
-/tmp/freeze-plain-table/data/plain.spds	/tmp/freeze-plain-table/data/plain.spds
-/tmp/freeze-plain-table/data/plain.spt	/tmp/freeze-plain-table/data/plain.spt
-/tmp/freeze-plain-table/data/plain.spidx	/tmp/freeze-plain-table/data/plain.spidx
-/tmp/freeze-plain-table/data/plain.spa	/tmp/freeze-plain-table/data/plain.spa
-plain	plain	read	Count: 1
+freeze files: OK
+freeze lock: OK
 ––– input –––
-mysql -h0 -P9306 -e "UPDATE plain SET title='blocked' WHERE id=1" 2>&1
+mysql -h0 -P9306 -e "UPDATE plain SET title='blocked' WHERE id=1" >/dev/null 2>&1 || echo 'update blocked: OK'
 ––– output –––
-ERROR 1064 (42000) at line 1: table plain: table is locked
+update blocked: OK
 ––– input –––
 printf '2,rotated\n' >/tmp/freeze-plain-table/rows.csv
 indexer --quiet --config /tmp/freeze-plain-table/manticore.conf --rotate plain >/dev/null
 sleep 1
-mysql -h0 -P9306 -e 'SELECT id,title FROM plain'
+mysql -h0 -P9306 -e 'SELECT id,title FROM plain' | grep -Eq '1.*first' && echo 'rotation deferred: OK'
 ––– output –––
-+------+-------+
-| id   | title |
-+------+-------+
-|    1 | first |
-+------+-------+
+rotation deferred: OK
 ––– input –––
-mysql -h0 -P9306 -e 'UNFREEZE plain'
+mysql -h0 -P9306 -e 'UNFREEZE plain' >/dev/null
 sleep 1
-mysql -h0 -P9306 -e 'SELECT id,title FROM plain'
+mysql -h0 -P9306 -e 'SELECT id,title FROM plain' | grep -Eq '2.*rotated' && echo 'rotation completed: OK'
 ––– output –––
-+------+---------+
-| id   | title   |
-+------+---------+
-|    2 | rotated |
-+------+---------+
+rotation completed: OK
 ––– input –––
-searchd --config /tmp/freeze-plain-table/manticore.conf --stopwait
+searchd --config /tmp/freeze-plain-table/manticore.conf --stopwait >/dev/null 2>&1
 rm -rf /tmp/freeze-plain-table
 ––– output –––

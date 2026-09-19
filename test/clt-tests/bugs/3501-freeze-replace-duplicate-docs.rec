@@ -1,0 +1,9 @@
+––– comment –––
+A REPLACE paused by FREEZE must also kill its documents in the disk chunk that a save already in flight publishes during the pause (manticoresearch#3501)
+
+FREEZE disables saving first and then waits for the disk chunk saves in flight. A commit arriving in between paused with the list of disk chunks it took before the pause, the save published its chunk meanwhile, and the commit never killed its documents there: the old version stayed alive next to the new one. The script makes FREEZE land while the first regular save of a 256M RAM chunk is writing and sends small REPLACEs through the whole FREEZE call.
+––– block: ../base/start-searchd –––
+––– input –––
+./test/clt-tests/scripts/issue-3501-freeze-replace-race.sh
+––– output –––
+replaced ids alive more than once: 0

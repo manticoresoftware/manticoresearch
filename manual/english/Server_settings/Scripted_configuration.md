@@ -6,6 +6,8 @@ The configuration file is parsed by the declared interpreter, and the output is 
 
 Note: This feature is not available on the Windows platform.
 
+The scripted configuration file must have execute permission. `searchd` refuses to load it if the file is not executable.
+
 In the following example, PHP is used to create multiple tables with different names and to scan a specific folder for files containing extra table declarations:
 
 ```php

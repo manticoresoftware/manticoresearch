@@ -1481,6 +1481,12 @@ constexpr bool HasSheBang()
 	return true;
 }
 
+// execv() below honors the effective uid, while access() would check the real one
+static bool IsExecutableFile ( const char * szFilename )
+{
+	return faccessat ( AT_FDCWD, szFilename, X_OK, AT_EACCESS )==0;
+}
+
 static bool TryToExec ( char * pExecLine, const char * szFilename, CSphVector<char> & dResult )
 {
 	using namespace TlsMsg;
@@ -1586,6 +1592,11 @@ static bool TryToExec ( ITER, const char *, CSphVector<char> & )
 	return true;
 }
 
+static bool IsExecutableFile ( const char * )
+{
+	return true;
+}
+
 constexpr bool HasSheBang()
 {
 	return false;
@@ -1597,6 +1608,8 @@ std::pair<bool, CSphVector<char>> FetchAndCheckIfChanged ( const CSphString& sFi
 {
 	static DWORD uStoredCRC32 = 0;
 	static struct_stat tStoredStat;
+
+	TlsMsg::ResetErr();
 
 	CSphVector<char> dContent;
 
@@ -1623,6 +1636,12 @@ std::pair<bool, CSphVector<char>> FetchAndCheckIfChanged ( const CSphString& sFi
 		if ( pSheBang + 2 < sBuf.end() && pSheBang[0] == '#' && pSheBang[1] == '!' )
 		{
 			sBuf.back() = '\0'; // just safety
+			if ( !IsExecutableFile ( sFilename.cstr() ) )
+			{
+				TlsMsg::Err ( "the file is a script (shebang) but has no execute permission" );
+				dContent.Reset();
+				return { true, dContent };
+			}
 			if ( !TryToExec ( pSheBang + 2, sFilename.cstr(), dContent ) )
 			{
 				dContent.Reset();
@@ -1985,7 +2004,7 @@ inline static CSphConfig LoadConfig ( const CSphString & sPath, bool bTraceToStd
 	// load config
 	auto [bChanged, dConfig] = FetchAndCheckIfChanged ( sActualPath );
 	CSphConfig hConf;
-	if ( !ParseConfig ( &hConf, sActualPath, dConfig ) )
+	if ( TlsMsg::HasErr() || !ParseConfig ( &hConf, sActualPath, dConfig ) )
 		sphDie ( "failed to parse config file '%s': %s", sActualPath.cstr(), TlsMsg::szError() );
 
 	if constexpr ( eNeed==Indexes_e::eNeed )

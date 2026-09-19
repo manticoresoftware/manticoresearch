@@ -4,39 +4,31 @@ rm -rf /tmp/freeze-plain-table
 mkdir -p /tmp/freeze-plain-table/data /tmp/freeze-plain-table/binlog
 printf '1,first\n' >/tmp/freeze-plain-table/rows.csv
 printf '%s\n' 'source src {' '  type = csvpipe' '  csvpipe_command = cat /tmp/freeze-plain-table/rows.csv' '  csvpipe_field = title' '}' 'index plain {' '  source = src' '  path = /tmp/freeze-plain-table/data/plain' '}' 'searchd {' '  listen = 127.0.0.1:9306:mysql' '  log = /tmp/freeze-plain-table/searchd.log' '  pid_file = /tmp/freeze-plain-table/searchd.pid' '  binlog_path = /tmp/freeze-plain-table/binlog' '  watchdog = 0' '}' >/tmp/freeze-plain-table/manticore.conf
-indexer --config /tmp/freeze-plain-table/manticore.conf plain
-searchd --config /tmp/freeze-plain-table/manticore.conf
+indexer --quiet --config /tmp/freeze-plain-table/manticore.conf plain >/dev/null
+searchd --config /tmp/freeze-plain-table/manticore.conf >/dev/null 2>&1
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e 'FREEZE plain; SHOW LOCKS'
+mysql -h0 -P9306 -N -B -e 'FREEZE plain; SHOW LOCKS'
 ––– output –––
-+-----------------------------------------------+-----------------------------------------------+
-| file                                          | normalized                                    |
-+-----------------------------------------------+-----------------------------------------------+
-| /tmp/freeze-plain-table/data/plain.sph        | /tmp/freeze-plain-table/data/plain.sph        |
-| /tmp/freeze-plain-table/data/plain.spd        | /tmp/freeze-plain-table/data/plain.spd        |
-| /tmp/freeze-plain-table/data/plain.spp        | /tmp/freeze-plain-table/data/plain.spp        |
-| /tmp/freeze-plain-table/data/plain.spe        | /tmp/freeze-plain-table/data/plain.spe        |
-| /tmp/freeze-plain-table/data/plain.spi        | /tmp/freeze-plain-table/data/plain.spi        |
-| /tmp/freeze-plain-table/data/plain.spm        | /tmp/freeze-plain-table/data/plain.spm        |
-| /tmp/freeze-plain-table/data/plain.sphi       | /tmp/freeze-plain-table/data/plain.sphi       |
-| /tmp/freeze-plain-table/data/plain.spds       | /tmp/freeze-plain-table/data/plain.spds       |
-| /tmp/freeze-plain-table/data/plain.spt        | /tmp/freeze-plain-table/data/plain.spt        |
-| /tmp/freeze-plain-table/data/plain.spidx      | /tmp/freeze-plain-table/data/plain.spidx      |
-| /tmp/freeze-plain-table/data/plain.spa        | /tmp/freeze-plain-table/data/plain.spa        |
-+-----------------------------------------------+-----------------------------------------------+
-+--------------------------------------------+-------+-----------+-----------------+
-| Type                                       | Name  | Lock Type | Additional Info |
-+--------------------------------------------+-------+-----------+-----------------+
-| plain                                      | plain | read      | Count: 1        |
-+--------------------------------------------+-------+-----------+-----------------+
+/tmp/freeze-plain-table/data/plain.sph	/tmp/freeze-plain-table/data/plain.sph
+/tmp/freeze-plain-table/data/plain.spd	/tmp/freeze-plain-table/data/plain.spd
+/tmp/freeze-plain-table/data/plain.spp	/tmp/freeze-plain-table/data/plain.spp
+/tmp/freeze-plain-table/data/plain.spe	/tmp/freeze-plain-table/data/plain.spe
+/tmp/freeze-plain-table/data/plain.spi	/tmp/freeze-plain-table/data/plain.spi
+/tmp/freeze-plain-table/data/plain.spm	/tmp/freeze-plain-table/data/plain.spm
+/tmp/freeze-plain-table/data/plain.sphi	/tmp/freeze-plain-table/data/plain.sphi
+/tmp/freeze-plain-table/data/plain.spds	/tmp/freeze-plain-table/data/plain.spds
+/tmp/freeze-plain-table/data/plain.spt	/tmp/freeze-plain-table/data/plain.spt
+/tmp/freeze-plain-table/data/plain.spidx	/tmp/freeze-plain-table/data/plain.spidx
+/tmp/freeze-plain-table/data/plain.spa	/tmp/freeze-plain-table/data/plain.spa
+plain	plain	read	Count: 1
 ––– input –––
 mysql -h0 -P9306 -e "UPDATE plain SET title='blocked' WHERE id=1" 2>&1
 ––– output –––
 ERROR 1064 (42000) at line 1: table plain: table is locked
 ––– input –––
 printf '2,rotated\n' >/tmp/freeze-plain-table/rows.csv
-indexer --config /tmp/freeze-plain-table/manticore.conf --rotate plain
+indexer --quiet --config /tmp/freeze-plain-table/manticore.conf --rotate plain >/dev/null
 sleep 1
 mysql -h0 -P9306 -e 'SELECT id,title FROM plain'
 ––– output –––

@@ -4,6 +4,7 @@
 
 <requires>
 	<force-rt/>
+	<secondary/>
 </requires>
 <skip_indexer/>
 <skip_db/>

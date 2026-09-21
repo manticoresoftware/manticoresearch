@@ -2603,12 +2603,10 @@ bool QueueCreator_c::SetupGroupSortingFunc ( bool bGotDistinct )
 		for ( const auto & tGroupColumn : m_dGroupColumns )
 		{
 			const CSphColumnInfo & tColumn = m_pSorterSchema->GetAttr ( tGroupColumn.first );
-			if ( !m_szParent && !m_tQuery.m_bAgent
-				&& m_tGroupSorterSettings.m_pGrouper->IsMultiValue()
-				&& IsMvaAttr ( tColumn.m_eAttrType ) )
-				continue;
-
-			m_hExtra.Add ( tColumn.m_sName );
+			if ( m_szParent || m_tQuery.m_bAgent
+				|| !m_tGroupSorterSettings.m_pGrouper->IsMultiValue()
+				|| !IsMvaAttr ( tColumn.m_eAttrType ) )
+				m_hExtra.Add ( tColumn.m_sName );
 		}
 	}
 

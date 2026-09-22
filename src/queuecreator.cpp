@@ -2601,7 +2601,13 @@ bool QueueCreator_c::SetupGroupSortingFunc ( bool bGotDistinct )
 	if ( !m_tGroupSorterSettings.m_bImplicit )
 	{
 		for ( const auto & tGroupColumn : m_dGroupColumns )
-			m_hExtra.Add ( m_pSorterSchema->GetAttr ( tGroupColumn.first ).m_sName );
+		{
+			const CSphColumnInfo & tColumn = m_pSorterSchema->GetAttr ( tGroupColumn.first );
+			if ( m_szParent || m_tQuery.m_bAgent
+				|| !m_tGroupSorterSettings.m_pGrouper->IsMultiValue()
+				|| !IsMvaAttr ( tColumn.m_eAttrType ) )
+				m_hExtra.Add ( tColumn.m_sName );
+		}
 	}
 
 	if ( bGotDistinct )

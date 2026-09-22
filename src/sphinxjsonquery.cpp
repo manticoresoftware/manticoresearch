@@ -3713,33 +3713,20 @@ bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings
 
 static void FormatSnippetOpts ( const CSphString & sQuery, const SnippetQuerySettings_t & tSnippetQuery, CSphQuery & tQuery )
 {
-	StringBuilder_c sItem;
-	sItem << "HIGHLIGHT(";
+	using SqlEscapedBuilder_c = EscapedStringBuilder_T<BaseQuotation_T<SqlQuotator_t>>;
+	SqlEscapedBuilder_c sItem;
+	sItem.StartBlock ( { FROMS(","), FROMS("HIGHLIGHT("), FROMS(")") } );
 	sItem << tSnippetQuery.AsString();
-	sItem << ",";
 
-	auto & hFieldHash = tSnippetQuery.m_hPerFieldLimits;
-	if ( tSnippetQuery.m_hPerFieldLimits.GetLength() )
 	{
-		sItem.StartBlock ( ",", "'", "'" );
-
-		for ( const auto& tField : hFieldHash )
-			sItem << tField.first;
-
-		sItem.FinishBlock(false);
+		ScopedComma_c tFieldComma { sItem, { FROMS(","), FROMS("'"), FROMS("'") }, false };
+		for_each ( tSnippetQuery.m_hPerFieldLimits, [&sItem] ( const auto& tField ) { sItem << tField.first; } );
 	}
-	else
-		sItem << "''";
 
 	if ( !sQuery.IsEmpty() )
-	{
-		using SqlEscapedBuilder_c = EscapedStringBuilder_T<BaseQuotation_T<SqlQuotator_t>>;
-		SqlEscapedBuilder_c tEscapedQuery;
-		tEscapedQuery.AppendEscapedSkippingComma ( sQuery.cstr() );
-		sItem << "," << tEscapedQuery.cstr();
-	}
+		sItem.AppendEscapedWithComma ( sQuery.cstr() );
 
-	sItem << ")";
+	sItem.FinishBlock(false);
 
 	CSphQueryItem & tItem = tQuery.m_dItems.Add();
 	tItem.m_sExpr = sItem.cstr ();

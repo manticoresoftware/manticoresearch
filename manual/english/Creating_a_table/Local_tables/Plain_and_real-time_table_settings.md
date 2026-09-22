@@ -528,7 +528,7 @@ knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2",
 - `hnsw_ef_construction`: Construction time/accuracy trade-off (default: 200)
 
 **Auto-embeddings parameters** (when using `model_name`):
-- `model_name`: The embedding model to use (e.g., `"Xenova/all-MiniLM-L6-v2"` for the fast ONNX path — browse [ONNX models on Hugging Face](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm); `"sentence-transformers/all-MiniLM-L6-v2"` is also supported; `"openai/text-embedding-ada-002"` for OpenAI). When specified, `dims` must be omitted as the model determines the dimensions automatically.
+- `model_name`: The embedding model to use (e.g., `"Xenova/all-MiniLM-L6-v2"` for the fast ONNX path — browse [ONNX models on Hugging Face](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm); `"sentence-transformers/all-MiniLM-L6-v2"` is also supported; `"openai/text-embedding-ada-002"` for OpenAI). When specified, `dims` must be omitted as the model determines the dimensions automatically. See [Choosing a local embedding model](../../Searching/KNN.md#Choosing-a-local-embedding-model) for a speed comparison table and practical guidance.
 - `from`: Comma-separated list of field names to use for embedding generation, or empty string `""` to use all text/string fields. This parameter is required when `model_name` is specified.
 - `api_key`: API key for API-based models (OpenAI, Voyage, Jina). Only required for API-based embedding services.
 - `cache_path`: Optional path for caching downloaded models (for sentence-transformers models).

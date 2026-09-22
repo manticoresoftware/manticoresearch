@@ -1460,6 +1460,10 @@ public:
 	/// rewrite index header on disk using current in-memory settings
 	virtual bool				RewriteHeader ( CSphString & sError ) const { return false; }
 
+	/// bring the version-gated data files (the .spt docid lookup) to the current format BEFORE a header
+	/// rewrite stamps the current version on them - the readers are gated on the header version (#4852)
+	virtual bool				UpgradeDocidLookup ( CSphString & sError ) { return true; }
+
 	/// getter for name. Notice, const char* returned as it is mostly used for printing name
 	const char *				GetName () const { return m_sIndexName.cstr(); }
 

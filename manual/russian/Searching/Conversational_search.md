@@ -108,8 +108,8 @@ curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
 ```sql
 CREATE CHAT MODEL support_assistant (
     model='openai:gpt-4o-mini',
-    api_key='your-provider-api-key',
-    base_url='http://host.docker.internal:8787/v1',
+    api_key='your-azure-entra-token',
+    base_url='https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1/responses',
     timeout=60,
     retrieval_limit=5,
     max_document_length=3000
@@ -125,7 +125,7 @@ CREATE CHAT MODEL support_assistant (
 ```bash
 curl -s -X POST 'http://localhost:9308/sql?mode=raw' \
   -H 'Content-Type: text/plain' \
-  -d "CREATE CHAT MODEL support_assistant (model='openai:gpt-4o-mini', api_key='your-provider-api-key', base_url='http://host.docker.internal:8787/v1', timeout=60, retrieval_limit=5, max_document_length=3000)"
+  -d "CREATE CHAT MODEL support_assistant (model='openai:gpt-4o-mini', api_key='your-azure-entra-token', base_url='https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1/responses', timeout=60, retrieval_limit=5, max_document_length=3000)"
 ```
 
 <!-- end -->
@@ -160,6 +160,31 @@ environment:
 ```
 
 Если `api_key` не задан в `CREATE CHAT MODEL`, расширение `llm` может использовать соответствующую переменную окружения провайдера. Задавайте `api_key` в чат-модели только если этой модели нужен другой ключ.
+
+## Локальные модели, совместимые с OpenAI
+
+LM Studio может запускать локальные модели с Conversational Search. Для идентификатора локальной модели, которого нет в каталоге `openai:*`, используйте транспорт `openrouter:*` с endpoint Chat Completions в LM Studio. Когда Buddy работает в Docker, используйте `host.docker.internal`, чтобы обратиться к серверу на хосте.
+
+<!-- example conversational_search_create_local_model -->
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE CHAT MODEL local_assistant (
+    model='openrouter:google_gemma-4-e4b-it',
+    api_key='lm-studio',
+    base_url='http://host.docker.internal:1234/v1/chat/completions',
+    timeout=60,
+    retrieval_limit=5
+);
+```
+
+<!-- end -->
+
+`api_key` — это несекретный заполнитель, который принимает LM Studio; не используйте настоящий ключ провайдера для локального сервера. Расширение `llm` проверяет часть модели в `openai:*` по поддерживаемым именам моделей OpenAI, поэтому `openai:google_gemma-4-e4b-it` будет отклонен, даже если эта модель загружена в LM Studio. Транспорт `openrouter:*` принимает локальный идентификатор и может обращаться к OpenAI-совместимому серверу Chat Completions через `base_url`. Для Conversational Search локальная модель должна надежно возвращать вызов функции OpenAI для схемы маршрутизации Buddy. Проверьте это с помощью `CALL CHAT`; одного базового текстового завершения или простого теста вызова инструмента недостаточно.
 
 ## Синтаксис `CALL CHAT`
 

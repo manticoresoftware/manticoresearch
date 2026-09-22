@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
-<name>JSON highlight query_string escaping (issue #4905)</name>
+<name>JSON highlight query_string escaping (issues #4905, #4906)</name>
 <skip_indexer/>
 <requires><http/><force-rt/></requires>
 <config>
@@ -13,7 +13,7 @@ searchd
 <queries>
 <sphinxql>
 	create table t4905 (content text);
-	insert into t4905 values (1, 'a hello world example');
+	insert into t4905 values (1, 'a hello world example'), (2, 'a lion\'s mane mushroom');
 </sphinxql>
 
 <!-- The same quoted phrase works as the search query. -->
@@ -24,6 +24,16 @@ searchd
 <!-- Regression: preserve JSON escapes while embedding highlight_query.query_string into HIGHLIGHT(). -->
 <query endpoint="json/search">
 {"table":"t4905","query":{"query_string":"hello"},"limit":1,"_source":[""],"highlight":{"fields":["content"],"highlight_query":{"query_string":"\"hello world\""},"allow_empty":true}}
+</query>
+
+<!-- An apostrophe must not terminate the generated SQL string. -->
+<query endpoint="json/search">
+{"table":"t4905","query":{"query_string":"mane"},"limit":1,"_source":[""],"highlight":{"fields":["content"],"highlight_query":{"query_string":"lion's"},"allow_empty":true}}
+</query>
+
+<!-- The match spelling must use the same safe path. -->
+<query endpoint="json/search">
+{"table":"t4905","query":{"query_string":"mane"},"limit":1,"_source":[""],"highlight":{"fields":["content"],"highlight_query":{"match":{"content":"lion's"}},"allow_empty":true}}
 </query>
 
 <!-- Adjacent JSON spelling remains a working control. -->

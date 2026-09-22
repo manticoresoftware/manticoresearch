@@ -31,6 +31,8 @@ SELECT
 
 ```
 
+The clauses must appear in this order. For example, `LIMIT` placed after `OPTION` fails with `P01: syntax error, unexpected LIMIT, expecting $end`, and `OPTION` placed after `FACET` fails with `P01: syntax error, unexpected OPTION, expecting $end`.
+
 **JSON**:
 ```json
 POST /search

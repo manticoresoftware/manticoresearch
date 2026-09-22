@@ -411,6 +411,8 @@ Binary logs are used for crash recovery of RT table data and for attribute updat
 
 The `binlog_path` directive specifies the location of binary log files. It should only contain the path; `searchd` will create and unlink multiple `binlog.*` files in the directory as necessary (including binlog data, metadata, and lock files, etc).
 
+The directory must already exist. `searchd` creates the default binlog directory itself (in RT mode, `binlog/` inside [data_dir](../Server_settings/Searchd.md#data_dir)), but not a directory you set with `binlog_path`. If that directory is missing, `searchd` doesn't start and logs `FATAL: failed to open '<binlog_path>/binlog.lock': 2 'No such file or directory'`. Create the directory first, or leave `binlog_path` unset to use the default.
+
 An empty value disables binary logging, which improves performance but puts the RT table data at risk.
 
 

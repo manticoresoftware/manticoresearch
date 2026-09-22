@@ -201,9 +201,39 @@ SELECT id, knn_dist() FROM t
 WHERE match('machine learning') AND knn(vec, (0.1, 0.1, 0.1, 0.1))
 ORDER BY knn_dist() ASC
 OPTION fusion_method='rrf';
+
+-- Sort the fused results by an attribute
+SELECT id, price FROM t
+WHERE match('machine learning') AND knn(vec, (0.1, 0.1, 0.1, 0.1))
+ORDER BY price ASC
+OPTION fusion_method='rrf';
 ```
 
 <!-- end -->
+
+Note that the clause order is `WHERE ... ORDER BY ... LIMIT ... OPTION ...`: `OPTION fusion_method='rrf'` goes after `LIMIT`.
+
+## Facets
+
+`FACET` can't be used in a hybrid query (`OPTION fusion_method='rrf'`). Depending on the select list, the query fails with one of these errors:
+
+* `hybrid search does not support multiple sorters`
+* `HYBRID_SCORE() is only allowed for hybrid search queries`, when `hybrid_score()` is selected. The query is hybrid; it is the `FACET` that isn't supported.
+
+Compute facet counts with a second query instead. For example, facet over the documents the hybrid query returned:
+
+```sql
+-- The page of fused results
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, (0.1, 0.1, 0.1, 0.1)) AND category = 1
+LIMIT 20
+OPTION fusion_method='rrf';
+
+-- Facet counts for the same documents
+SELECT id FROM t WHERE id IN (1, 5, 7) FACET category;
+```
+
+Or run the facet query with the same attribute filters and no `MATCH()` or `KNN()`, to count all documents that pass the filters. A KNN query without `fusion_method` does support `FACET`, and its counts cover all KNN candidates; see [How many documents a KNN search returns](../Searching/KNN.md#KNN-vector-search).
 
 ## Non-matching text
 

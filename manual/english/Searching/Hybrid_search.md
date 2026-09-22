@@ -233,7 +233,7 @@ OPTION fusion_method='rrf';
 SELECT id FROM t WHERE id IN (1, 5, 7) FACET category;
 ```
 
-Or run the facet query with the same attribute filters and no `MATCH()` or `KNN()`, to count all documents that pass the filters. A KNN query without `fusion_method` does support `FACET`, and its counts cover all KNN candidates; see [How many documents a KNN search returns](../Searching/KNN.md#KNN-vector-search).
+Or run the facet query with the same attribute filters and no `MATCH()` or `KNN()`, to count all documents that pass the filters. A KNN query without `fusion_method` does support `FACET`, and its counts cover all KNN candidates; see [KNN candidate set](../Searching/KNN.md#KNN-candidate-set).
 
 ## Non-matching text
 

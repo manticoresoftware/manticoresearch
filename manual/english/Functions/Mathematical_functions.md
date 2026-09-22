@@ -1,6 +1,6 @@
 # Mathematical functions
 
-Only the functions listed on this page are available. There is no `ASIN()`, `ACOS()`, `ATAN()`, `TAN()`, `RADIANS()`, `DEGREES()` or `PI()`; calling one fails with a parse error such as `P09: syntax error, unexpected '('`. Use these equivalents instead:
+Some common functions, such as `ASIN()`, `ACOS()`, `ATAN()`, `TAN()`, `RADIANS()`, `DEGREES()` and `PI()`, are not implemented in Manticore, but they can easily be replaced with these equivalents:
 
 | Function | Equivalent |
 |---|---|
@@ -10,6 +10,9 @@ Only the functions listed on this page are available. There is no `ASIN()`, `ACO
 | `TAN(x)` | `SIN(x) / COS(x)` |
 | `RADIANS(d)` | `d * 0.017453292519943295` |
 | `DEGREES(r)` | `r * 57.29577951308232` |
+| `PI()` | `3.141592653589793` |
+
+Calling a function that is not implemented returns a parse error such as `P09: syntax error, unexpected '('`.
 
 Floating-point math is done in single precision (32-bit); see [Float](../Creating_a_table/Data_types.md#Float).
 

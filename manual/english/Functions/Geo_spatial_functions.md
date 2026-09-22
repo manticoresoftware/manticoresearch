@@ -21,12 +21,7 @@ The known options and their values are:
 
 The default method is "adaptive". It is a well-optimized implementation that is both more precise *and* much faster at all times than "haversine".
 
-The two methods use different Earth models:
-
-* `haversine` computes the great-circle distance on a sphere with a radius of **6,384 km**.
-* `adaptive` approximates the distance on the WGS84 ellipsoid for points less than 13° of longitude apart, and uses a haversine formula on a 6,371 km sphere for points farther apart.
-
-Neither matches the 6,371.0088 km mean-radius sphere that many specifications and libraries use; over short distances the results differ from it by up to about 0.3%, depending on latitude and direction. For example, one degree of longitude on the equator is 111.4218 km with `haversine` and 111.3207 km with `adaptive`, against 111.1951 km on a 6,371.0088 km sphere. To match a 6,371.0088 km sphere, use `method=haversine` and multiply the result by `0.99796504` (6,371.0088 / 6,384).
+`haversine` uses a sphere with a radius of 6,384 km, and `adaptive` uses the WGS84 ellipsoid (a 6,371 km sphere for points more than 13° of longitude apart), so both can differ by up to about 0.3% from tools that use the 6,371.0088 km mean Earth radius. To match those, use `method=haversine` and multiply the result by `0.99796504` (6,371.0088 / 6,384).
 
 `GEODIST()` returns a 32-bit float, so a distance is precise to about 7 significant digits.
 

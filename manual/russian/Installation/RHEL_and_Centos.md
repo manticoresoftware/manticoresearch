@@ -35,6 +35,8 @@ sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 sudo yum install manticore
 ```
 
+Начиная с версии 25.0.0, `manticore` — это единый пакет. Он уже включает Manticore Buddy, Manticore Columnar Library (колоночное хранение, вторичные индексы, KNN-поиск и автоматические эмбеддинги), backup, load и Galera, поэтому не устанавливайте рядом с ним другие пакеты `manticore-*`.
+
 Если вы обновляетесь до Manticore 6 или новее с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновлённой структурой пакетов:
 
 ```bash

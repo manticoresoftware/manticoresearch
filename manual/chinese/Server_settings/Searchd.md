@@ -411,6 +411,8 @@ binlog_max_log_size = 16M
 
 `binlog_path` 指令指定二进制日志文件所在位置。它只应包含路径；`searchd` 会按需在该目录中创建并删除多个 `binlog.*` 文件（包括 binlog 数据、元数据和锁文件等）。
 
+该目录必须已存在。`searchd` 会自行创建默认的 binlog 目录（在 RT 模式下，即 [data_dir](../Server_settings/Searchd.md#data_dir) 内的 `binlog/`），但不会创建你通过 `binlog_path` 设置的目录。如果该目录不存在，`searchd` 将无法启动，并记录 `FATAL: failed to open '<binlog_path>/binlog.lock': 2 'No such file or directory'`。请先创建该目录，或不要设置 `binlog_path`，以使用默认目录。
+
 空值会禁用二进制日志，这会提升性能，但会让 RT 表数据面临风险。
 
 

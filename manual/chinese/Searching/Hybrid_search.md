@@ -201,9 +201,39 @@ SELECT id, knn_dist() FROM t
 WHERE match('machine learning') AND knn(vec, (0.1, 0.1, 0.1, 0.1))
 ORDER BY knn_dist() ASC
 OPTION fusion_method='rrf';
+
+-- Sort the fused results by an attribute
+SELECT id, price FROM t
+WHERE match('machine learning') AND knn(vec, (0.1, 0.1, 0.1, 0.1))
+ORDER BY price ASC
+OPTION fusion_method='rrf';
 ```
 
 <!-- end -->
+
+请注意，子句顺序是 `WHERE ... ORDER BY ... LIMIT ... OPTION ...`：`OPTION fusion_method='rrf'` 应放在 `LIMIT` 之后。
+
+## 分面
+
+`FACET` 不能用于混合查询 (`OPTION fusion_method='rrf'`)。根据选择列表的不同，查询会报以下错误之一：
+
+* `hybrid search does not support multiple sorters`
+* `HYBRID_SCORE() is only allowed for hybrid search queries`，当选择了 `hybrid_score()` 时会出现此错误。该查询是混合查询；不受支持的是 `FACET`。
+
+请改用第二个查询来计算分面计数。例如，对混合查询返回的文档进行分面：
+
+```sql
+-- The page of fused results
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, (0.1, 0.1, 0.1, 0.1)) AND category = 1
+LIMIT 20
+OPTION fusion_method='rrf';
+
+-- Facet counts for the same documents
+SELECT id FROM t WHERE id IN (1, 5, 7) FACET category;
+```
+
+或者使用相同的属性过滤条件运行分面查询，但不使用 `MATCH()` 或 `KNN()`，以统计所有通过过滤条件的文档。不带 `fusion_method` 的 KNN 查询支持 `FACET`，其计数覆盖所有 KNN 候选项；请参阅 [KNN 搜索返回多少文档](../Searching/KNN.md#KNN-vector-search)。
 
 ## 无匹配文本
 

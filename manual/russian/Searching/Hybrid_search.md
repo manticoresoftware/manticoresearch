@@ -201,9 +201,39 @@ SELECT id, knn_dist() FROM t
 WHERE match('machine learning') AND knn(vec, (0.1, 0.1, 0.1, 0.1))
 ORDER BY knn_dist() ASC
 OPTION fusion_method='rrf';
+
+-- Sort the fused results by an attribute
+SELECT id, price FROM t
+WHERE match('machine learning') AND knn(vec, (0.1, 0.1, 0.1, 0.1))
+ORDER BY price ASC
+OPTION fusion_method='rrf';
 ```
 
 <!-- end -->
+
+Обратите внимание на порядок частей запроса: `WHERE ... ORDER BY ... LIMIT ... OPTION ...`; `OPTION fusion_method='rrf'` указывается после `LIMIT`.
+
+## Фасеты
+
+`FACET` нельзя использовать в гибридном запросе (`OPTION fusion_method='rrf'`). В зависимости от списка выбора запрос завершится одной из этих ошибок:
+
+* `hybrid search does not support multiple sorters`
+* `HYBRID_SCORE() is only allowed for hybrid search queries`, если выбран `hybrid_score()`. Запрос является гибридным; не поддерживается именно `FACET`.
+
+Вместо этого посчитайте фасеты вторым запросом. Например, по документам, которые вернул гибридный запрос:
+
+```sql
+-- The page of fused results
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, (0.1, 0.1, 0.1, 0.1)) AND category = 1
+LIMIT 20
+OPTION fusion_method='rrf';
+
+-- Facet counts for the same documents
+SELECT id FROM t WHERE id IN (1, 5, 7) FACET category;
+```
+
+Либо выполните фасетный запрос с теми же фильтрами по атрибутам, но без `MATCH()` и `KNN()`, чтобы посчитать все документы, прошедшие фильтры. KNN-запрос без `fusion_method` поддерживает `FACET`, а его счетчики охватывают всех KNN-кандидатов; см. [Сколько документов возвращает KNN-поиск](../Searching/KNN.md#KNN-vector-search).
 
 ## Несоответствующий текст
 

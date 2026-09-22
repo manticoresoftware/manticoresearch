@@ -50,6 +50,8 @@ sudo apt update
 sudo apt install manticore
 ```
 
+Начиная с версии 25.0.0, `manticore` — это единый пакет-бандл. Он уже включает Manticore Buddy, Manticore Columnar Library (колоночное хранилище, вторичные индексы, KNN-поиск и автоэмбеддинги), backup, load и Galera, поэтому не устанавливайте рядом с ним другие пакеты `manticore-*`. Старые инструкции, где сказано `sudo apt install manticore manticore-extra`, теперь завершаются ошибкой `manticore : Breaks: manticore-extra`.
+
 Если вы обновляетесь до Manticore 6 или новее с более ранней версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных измененной структурой пакетов:
 
 ```bash

@@ -1,5 +1,18 @@
 # 数学函数
 
+只有本页列出的函数可用。没有 `ASIN()`、`ACOS()`、`ATAN()`、`TAN()`、`RADIANS()`、`DEGREES()` 或 `PI()`；调用这些函数会失败，并出现类似 `P09: syntax error, unexpected '('` 的解析错误。请改用以下等价写法：
+
+| 函数 | 等价写法 |
+|---|---|
+| `ASIN(x)` | `ATAN2(x, SQRT(1 - x*x))` |
+| `ACOS(x)` | `ATAN2(SQRT(1 - x*x), x)` |
+| `ATAN(x)` | `ATAN2(x, 1)` |
+| `TAN(x)` | `SIN(x) / COS(x)` |
+| `RADIANS(d)` | `d * 0.017453292519943295` |
+| `DEGREES(r)` | `r * 57.29577951308232` |
+
+浮点数学运算使用单精度（32 位）；请参阅 [Float](../Creating_a_table/Data_types.md#Float)。
+
 ### ABS()
 返回参数的绝对值。
 

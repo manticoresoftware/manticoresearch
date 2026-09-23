@@ -40,6 +40,8 @@ Or to limit the results to a radial area around the point:
 SELECT *,GEODIST(40.7643929, -73.9997683, lat,lon, {in=degrees, out=miles}) AS distance FROM myindex WHERE MATCH('...') AND distance <1000 ORDER BY WEIGHT(), DISTANCE ASC;
 ```
 
+The distance has to be computed in the select list and filtered by its alias, as above; `WHERE GEODIST(...) < 1000` is a syntax error. The two calculation methods use different Earth radii, so their distances can differ from each other and from other tools by up to about 0.3%; see [GEODIST()](../Functions/Geo_spatial_functions.md#GEODIST%28%29) for the exact models.
+
 ## Searching in polygons
 
 Another geo search feature is the ability to determine if a location is within a specified area. A special function constructs a polygon object, which is then used by another function to test whether a set of coordinates is contained within that polygon or not.

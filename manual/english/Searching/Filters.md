@@ -11,6 +11,14 @@
 
 The `{col_name | expr_alias} [NOT] IN @uservar` condition syntax is supported. Refer to the [SET](../Server_settings/Setting_variables_online.md#SET) syntax for a description of global user variables.
 
+A condition compares an attribute, or the alias of an expression, with a value. An arithmetic expression or a function such as `GEODIST()` can't be written in `WHERE` directly: `WHERE price*2 > 100` fails with `P01: syntax error`. Compute the expression in the select list with an alias and filter on the alias:
+
+```sql
+SELECT id, price*2 AS double_price FROM products WHERE double_price > 100;
+```
+
+String comparisons follow the [collation](../Searching/Collations.md), which is `libc_ci` (case-insensitive) by default, so `WHERE city = 'london'` also matches `London`.
+
 ## HTTP JSON
 
 If you prefer the HTTP JSON interface, you can also apply filtering. It might seem more complex than SQL, but it is recommended for cases when you need to prepare a query programmatically, such as when a user fills out a form in your application.

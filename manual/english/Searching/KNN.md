@@ -93,6 +93,7 @@ When creating a table for auto embeddings, specify:
 - `API_URL`: Optional. Custom API endpoint URL. If not specified, uses the default provider endpoint (e.g., `https://api.openai.com/v1/embeddings` for OpenAI).
 - `API_TIMEOUT`: Optional. HTTP timeout in seconds for API requests. Default is 10 seconds. Set to `'0'` to use the default timeout. Applies to both validation requests during table creation and embedding generation during INSERT operations.
 - `MAX_INPUT_TOKENS`: Optional. Caps the number of tokens taken from each input text before it is embedded; longer texts are truncated. `'0'` (default) means the model's own context limit. Long-context models such as `Qwen/Qwen3-Embedding-0.6B` accept up to 32,768 tokens, and embedding time on CPU grows superlinearly with input length (a 5 KB document can take minutes), so set a cap (for example `'512'`) when the text fields may contain long or unbounded content. Applies to local models; the setting can be changed later with `ALTER TABLE ... MODIFY COLUMN ... MAX_INPUT_TOKENS='...'` without re-embedding existing rows.
+- `CACHE_PATH`: Optional. Directory where local models are downloaded and cached. By default it is `.cache/manticore` inside the [data_dir](../Server_settings/Searchd.md#data_dir), for example `<data_dir>/.cache/manticore/models--Xenova--all-MiniLM-L6-v2`, so a downloaded model survives restarts.
 
 For remote models, `MODEL_NAME` can be written in two forms:
 - Legacy provider-prefixed form: `openai/text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v4`
@@ -145,6 +146,8 @@ More information about setting up a `float_vector` attribute can be found [here]
 
 Using a local [ONNX model](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) — recommended (no API key needed)
 ```sql
+-- Xenova/all-MiniLM-L6-v2 is the ONNX build: about 30-40 docs/sec on CPU.
+-- sentence-transformers/all-MiniLM-L6-v2 is the same model 10-20x slower; prefer the Xenova/ repo.
 CREATE TABLE products (
     title TEXT,
     description TEXT,
@@ -525,7 +528,7 @@ The parameters are:
 
 When a text query is supplied (so Manticore embeds the string before the search), the number of threads used by the embeddings library can be overridden per-query in SQL with `OPTION embeddings_threads = N`. The value caps the embeddings call for this query only, overriding the global [embeddings_threads](../Server_settings/Searchd.md#embeddings_threads) setting; `0` means uncapped. The option has no effect when the query is supplied as a vector array.
 
-Documents are always sorted by their distance to the search vector. Any additional sorting criteria you specify will be applied after this primary sort condition. For retrieving the distance, there is a built-in function called [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29).
+Documents are always sorted by their distance to the search vector. Any additional sorting criteria you specify will be applied after this primary sort condition; see [Sorting KNN results](../Searching/KNN.md#Sorting-KNN-results). For retrieving the distance, there is a built-in function called [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29). For how many documents a KNN search returns, see [KNN candidate set](../Searching/KNN.md#KNN-candidate-set).
 
 <!-- intro -->
 ##### SQL:
@@ -605,6 +608,20 @@ POST /search
 ```
 
 <!-- end -->
+
+### KNN candidate set
+
+A KNN search returns a candidate set, not an exact number of rows. Each disk chunk of a real-time table contributes up to `LIMIT` × `oversampling` nearest documents (`k` × `oversampling` if the deprecated `k` is given), and `oversampling` is 3 by default. `LIMIT` still controls how many rows you receive, but `total_found` in [SHOW META](../Node_info_and_management/SHOW_META.md) and all [FACET](../Searching/Faceted_search.md) counts cover the whole candidate set. For example, on a table with 4 disk chunks, `SELECT id FROM t WHERE knn(vec, 'quiet flat') LIMIT 5` returns 5 rows with `total_found` 60 (5 × 3 × 4); after [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md) merges the table into one chunk, the same query reports 15. So `total_found` of a KNN query is not the number of relevant documents. To make the search consider every document, for example to rank all documents that pass your attribute filters by similarity, set `LIMIT` (and `max_matches`, if needed) to at least the number of documents in the table.
+
+### Sorting KNN results
+
+KNN results are always ordered by distance to the query first. `ORDER BY` on another attribute does not reorder them: it only breaks ties between equal distances, and no warning is returned. To sort KNN matches by an attribute, run the KNN search in a [subselect](../Searching/Sub-selects.md) and sort the outer query:
+
+```sql
+SELECT * FROM (SELECT id, price, knn_dist() AS dist FROM products WHERE knn(embedding_vector, 'quiet flat') LIMIT 100) ORDER BY price ASC LIMIT 10;
+```
+
+[Hybrid queries](../Searching/Hybrid_search.md#Sorting) (`OPTION fusion_method='rrf'`) do apply `ORDER BY` on attributes.
 
 <!-- example knn_quantization -->
 

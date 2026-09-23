@@ -1729,6 +1729,8 @@ table products
 <!-- example for float -->
 Real numbers are stored as 32-bit IEEE 754 single precision floats.
 
+A float keeps about 7 significant digits: `155.83` is stored as `155.830002`, and `51.50390089466783` as `51.503902`. There is no double-precision type: `CREATE TABLE t (x double)` fails with `P03: expected 'id', got 'x'`. Floating-point expressions are also evaluated in single precision, including expressions that use `DOUBLE()` or `bigint` operands. When you need exact decimal values, such as prices or high-precision coordinates, store them as scaled integers in a [bigint](../Creating_a_table/Data_types.md#Big-Integer) (for example, a price in cents) and convert them in your application.
+
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->

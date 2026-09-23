@@ -4407,6 +4407,7 @@ private:
 	ISphExpr *				CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & dArgs );
 	CSphString				GetNameByLocator ( int iNode ) const;
 	CSphString				GetNameByLocator ( const ExprNode_t & tNode ) const;
+	CSphString				GetExistAttrName ( int iArgsNode ) const;
 
 	bool					GetError () const { return !( m_sLexerError.IsEmpty() && m_sParserError.IsEmpty() && m_sCreateError.IsEmpty() ); }
 	bool					GetCreateError () const { return !m_sCreateError.IsEmpty(); }
@@ -5987,40 +5988,44 @@ CSphString ExprParser_t::GetNameByLocator ( const ExprNode_t & tNode ) const
 }
 
 
-ISphExpr * ExprParser_t::CreateExistNode ( const ExprNode_t & tNode )
+CSphString ExprParser_t::GetExistAttrName ( int iArgsNode ) const
 {
-	assert ( m_dNodes[tNode.m_iLeft].m_iToken==',' );
-	int iAttrName = m_dNodes[tNode.m_iLeft].m_iLeft;
-	int iAttrDefault = m_dNodes[tNode.m_iLeft].m_iRight;
-	assert ( iAttrName>=0 && iAttrName<m_dNodes.GetLength()
-		&& iAttrDefault>=0 && iAttrDefault<m_dNodes.GetLength() );
-
-	auto iNameStart = GetConstStrOffset ( m_dNodes[iAttrName] );
-	auto iNameLen = GetConstStrLength ( m_dNodes[iAttrName] );
-	// skip head and tail non attribute name symbols
-	const char* sExpr = m_sExpr.first;
-	while ( sExpr[iNameStart]!='\0' && ( sExpr[iNameStart]=='\'' || sExpr[iNameStart]==' ' ) && iNameLen )
+	assert ( m_dNodes[iArgsNode].m_iToken==',' );
+	int iAttrName = m_dNodes[iArgsNode].m_iLeft;
+	int iNameStart = GetConstStrOffset ( m_dNodes[iAttrName] );
+	int iNameLen = GetConstStrLength ( m_dNodes[iAttrName] );
+	const char * sExpr = m_sExpr.first;
+	while ( iNameLen && sExpr[iNameStart]!='\0' && ( sExpr[iNameStart]=='\'' || sExpr[iNameStart]==' ' ) )
 	{
 		iNameStart++;
 		--iNameLen;
 	}
-	while ( sExpr[iNameStart+iNameLen-1]!='\0'
-		&& ( sExpr[iNameStart+iNameLen-1]=='\'' || sExpr[iNameStart+iNameLen-1]==' ' )
-		&& iNameLen )
-	{
+	while ( iNameLen && sExpr[iNameStart+iNameLen-1]!='\0' && ( sExpr[iNameStart+iNameLen-1]=='\'' || sExpr[iNameStart+iNameLen-1]==' ' ) )
 		--iNameLen;
-	}
 
-	if ( iNameLen<=0 )
+	if ( !iNameLen )
+		return "";
+
+	assert ( iNameStart>=0 && iNameStart+iNameLen<=m_sExpr.second );
+	CSphString sAttr ( sExpr+iNameStart, iNameLen );
+	sphColumnToLowercase ( const_cast<char *>( sAttr.cstr() ) );
+	return sAttr;
+}
+
+
+ISphExpr * ExprParser_t::CreateExistNode ( const ExprNode_t & tNode )
+{
+	assert ( m_dNodes[tNode.m_iLeft].m_iToken==',' );
+	int iAttrDefault = m_dNodes[tNode.m_iLeft].m_iRight;
+	assert ( iAttrDefault>=0 && iAttrDefault<m_dNodes.GetLength() );
+
+	CSphString sAttr = GetExistAttrName ( tNode.m_iLeft );
+	if ( sAttr.IsEmpty() )
 	{
 		m_sCreateError.SetSprintf ( "first EXIST() argument must be valid string" );
 		return nullptr;
 	}
 
-	assert ( iNameStart>=0 && iNameLen>0 && iNameStart+iNameLen<=m_sExpr.second );
-
-	CSphString sAttr ( sExpr+iNameStart, iNameLen );
-	sphColumnToLowercase ( const_cast<char *>( sAttr.cstr() ) );
 	int iLoc = m_pSchema->GetAttrIndex ( sAttr.cstr() );
 
 	if ( iLoc>=0 )
@@ -10039,6 +10044,11 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 	case FUNC_EXIST:
 		{
 			ESphAttr eType = m_dNodes[m_dNodes[iArg].m_iRight].m_eRetType;
+			CSphString sAttr = GetExistAttrName ( iArg );
+			int iLoc = m_pSchema->GetAttrIndex ( sAttr.cstr() );
+			if ( iLoc>=0 && m_pSchema->GetAttr(iLoc).m_eAttrType==SPH_ATTR_FLOAT )
+				eType = SPH_ATTR_FLOAT;
+
 			tNode.m_eArgType = eType;
 			tNode.m_eRetType = eType;
 			break;

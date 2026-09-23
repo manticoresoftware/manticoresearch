@@ -40,6 +40,8 @@ SELECT *, GEODIST(40.7643929, -73.9997683, lat, lon, {in=degrees, out=miles}) AS
 SELECT *,GEODIST(40.7643929, -73.9997683, lat,lon, {in=degrees, out=miles}) AS distance FROM myindex WHERE MATCH('...') AND distance <1000 ORDER BY WEIGHT(), DISTANCE ASC;
 ```
 
+距离必须像上面那样在 select 列表中计算，并通过其别名进行过滤；`WHERE GEODIST(...) < 1000` 是语法错误。这两种计算方法使用不同的地球半径，因此它们得到的距离彼此之间以及与其他工具相比，最多可能相差约 0.3%；确切模型请参见 [GEODIST()](../Functions/Geo_spatial_functions.md#GEODIST%28%29)。
+
 ## 在多边形中搜索
 
 另一个地理搜索功能是确定某个位置是否在指定区域内。有一个特殊函数构建一个多边形对象，然后使用另一个函数测试一组坐标是否包含在该多边形内。

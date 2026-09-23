@@ -1,0 +1,28 @@
+BAAI/bge-m3 ONNX auto-embeddings download their external weights and run inference.
+––– comment –––
+Start Manticore Search with the embeddings module.
+––– block: ../base/start-searchd –––
+––– comment –––
+Creating the table must download both onnx/model.onnx and its model.onnx_data sidecar.
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE bge_m3 (body TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='BAAI/bge-m3' FROM='body')"; echo $?
+––– output –––
+0
+––– comment –––
+Insert several Russian documents so auto-embedding exercises ONNX inference without token_type_ids.
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO bge_m3 (id,body) VALUES (1,'хлеб'),(2,'собака'),(3,'кошка')"; echo $?
+––– output –––
+0
+––– comment –––
+All documents must be indexed with generated embeddings.
+––– input –––
+mysql -h0 -P9306 -N -B -e "SELECT COUNT(*) FROM bge_m3" | grep -oE '[0-9]+'
+––– output –––
+3
+––– comment –––
+Text KNN queries must use the same ONNX model and return all indexed documents.
+––– input –––
+mysql -h0 -P9306 -N -B -e "SELECT COUNT(*) FROM bge_m3 WHERE knn(embedding,3,'булка')" | grep -oE '[0-9]+'
+––– output –––
+3

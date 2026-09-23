@@ -11,6 +11,14 @@
 
 `{col_name | expr_alias} [NOT] IN @uservar` 条件语法受支持。请参阅 [SET](../Server_settings/Setting_variables_online.md#SET) 语法以了解全局用户变量的描述。
 
+条件用于将属性或表达式别名与某个值进行比较。不能在 `WHERE` 中直接写算术表达式或 `GEODIST()` 之类的函数：`WHERE price*2 > 100` 会因 `P01: syntax error` 而失败。请在选择列表中计算表达式并指定别名，然后按该别名进行过滤：
+
+```sql
+SELECT id, price*2 AS double_price FROM products WHERE double_price > 100;
+```
+
+字符串比较遵循 [排序规则](../Searching/Collations.md)，默认使用 `libc_ci`（不区分大小写），因此 `WHERE city = 'london'` 也会匹配 `London`。
+
 ## HTTP JSON
 
 如果您更喜欢 HTTP JSON 接口，也可以应用过滤。它可能看起来比 SQL 更复杂，但在需要程序化准备查询的情况下（例如，当用户在您的应用程序中填写表单时），它被推荐使用。

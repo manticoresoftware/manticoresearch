@@ -31,6 +31,8 @@ SELECT
 
 ```
 
+这些子句必须按此顺序出现。例如，将 `LIMIT` 放在 `OPTION` 之后会报错 `P01: syntax error, unexpected LIMIT, expecting $end`；将 `OPTION` 放在 `FACET` 之后会报错 `P01: syntax error, unexpected OPTION, expecting $end`。
+
 **JSON**：
 ```json
 POST /search

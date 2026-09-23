@@ -31,6 +31,8 @@ SELECT
 
 ```
 
+Блоки должны идти именно в таком порядке. Например, `LIMIT`, указанный после `OPTION`, приведет к ошибке `P01: syntax error, unexpected LIMIT, expecting $end`, а `OPTION`, указанный после `FACET`, приведет к ошибке `P01: syntax error, unexpected OPTION, expecting $end`.
+
 **JSON**:
 ```json
 POST /search

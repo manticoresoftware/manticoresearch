@@ -1729,6 +1729,8 @@ table products
 <!-- example for float -->
 实数存储为32位IEEE 754单精度浮点数。
 
+float 会保留约 7 位有效数字：`155.83` 会存储为 `155.830002`，`51.50390089466783` 会存储为 `51.503902`。没有双精度类型：`CREATE TABLE t (x double)` 会失败并返回 `P03: expected 'id', got 'x'`。浮点表达式也会以单精度计算，包括使用 `DOUBLE()` 或 `bigint` 操作数的表达式。需要精确小数值时，例如价格或高精度坐标，请将它们按比例放大后作为整数存入 [bigint](../Creating_a_table/Data_types.md#Big-Integer)（例如，以分为单位存储价格），并在应用程序中转换。
+
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->

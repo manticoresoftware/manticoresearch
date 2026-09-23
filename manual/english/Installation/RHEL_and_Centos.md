@@ -35,6 +35,8 @@ Then install Manticore Search:
 sudo yum install manticore
 ```
 
+Since version 25.0.0, `manticore` is a single bundle package. It already includes Manticore Buddy, the Manticore Columnar Library (columnar storage, secondary indexes, KNN search and auto embeddings), backup, load and Galera, so there is no need to install other `manticore-*` packages.
+
 If you are upgrading to Manticore 6 or newer from an older version, it is recommended to remove your old packages first to avoid conflicts caused by the updated package structure:
 
 ```bash

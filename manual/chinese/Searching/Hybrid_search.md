@@ -233,7 +233,7 @@ OPTION fusion_method='rrf';
 SELECT id FROM t WHERE id IN (1, 5, 7) FACET category;
 ```
 
-或者使用相同的属性过滤条件运行分面查询，但不使用 `MATCH()` 或 `KNN()`，以统计所有通过过滤条件的文档。不带 `fusion_method` 的 KNN 查询支持 `FACET`，其计数覆盖所有 KNN 候选项；请参阅 [KNN 搜索返回多少文档](../Searching/KNN.md#KNN-vector-search)。
+或者使用相同的属性过滤条件运行分面查询，但不带 `MATCH()` 或 `KNN()`，以统计所有通过过滤条件的文档。不带 `fusion_method` 的 KNN 查询支持 `FACET`，其计数覆盖所有 KNN 候选项；参见 [KNN 候选集](../Searching/KNN.md#KNN-candidate-set)。
 
 ## 无匹配文本
 

@@ -528,15 +528,7 @@ POST /insert
 
 当提供的是文本查询时（因此 Manticore 会在搜索前对字符串进行嵌入），可以在 SQL 中通过 `OPTION embeddings_threads = N` 按查询覆盖嵌入库使用的线程数。该值只会限制此查询的嵌入调用，覆盖全局 [embeddings_threads](../Server_settings/Searchd.md#embeddings_threads) 设置；`0` 表示不设上限。当查询以向量数组形式提供时，此选项不起作用。
 
-**KNN 搜索会返回多少文档。** KNN 搜索返回的是候选集，而不是精确的行数。实时表的每个磁盘块最多会贡献 `LIMIT` × `oversampling` 个最近文档（如果使用已弃用的 `k`，则为 `k` × `oversampling`），并且 `oversampling` 默认值为 3。`LIMIT` 仍然控制你实际收到的行数，但 [SHOW META](../Node_info_and_management/SHOW_META.md) 中的 `total_found` 以及所有 [FACET](../Searching/Faceted_search.md) 计数都会覆盖整个候选集。例如，在一个包含 4 个磁盘块的表上，`SELECT id FROM t WHERE knn(vec, 'quiet flat') LIMIT 5` 会返回 5 行，`total_found` 为 60（5 × 3 × 4）；在 [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md) 将表合并为一个块后，同一查询会报告 15。因此，KNN 查询的 `total_found` 不是相关文档的数量。如果要让搜索考虑每个文档，例如按相似度对所有通过属性过滤器的文档进行排序，请将 `LIMIT`（以及必要时的 `max_matches`）设置为至少等于表中的文档数量。
-
-**排序。** KNN 结果始终首先按与查询的距离排序。对其他属性使用 `ORDER BY` 不会重新排序结果：它只会在距离相同的结果之间打破平局，并且不会返回警告。要按某个属性对 KNN 匹配结果排序，请在 [subselect](../Searching/Sub-selects.md) 中运行 KNN 搜索，并对外层查询排序：
-
-```sql
-SELECT * FROM (SELECT id, price, knn_dist() AS dist FROM products WHERE knn(embedding_vector, 'quiet flat') LIMIT 100) ORDER BY price ASC LIMIT 10;
-```
-
-[混合查询](../Searching/Hybrid_search.md#Sorting)（`OPTION fusion_method='rrf'`）确实会将 `ORDER BY` 应用于属性。若要获取距离，可以使用名为 [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29) 的内置函数。
+文档始终按其与搜索向量的距离排序。你指定的任何额外排序条件都会在这个主要排序条件之后应用；请参阅[排序 KNN 结果](../Searching/KNN.md#Sorting-KNN-results)。如需获取距离，可以使用内置函数 [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29)。关于 KNN 搜索会返回多少文档，请参阅 [KNN 候选集](../Searching/KNN.md#KNN-candidate-set)。
 
 <!-- intro -->
 ##### SQL：
@@ -616,6 +608,20 @@ POST /search
 ```
 
 <!-- end -->
+
+### KNN 候选集
+
+KNN 搜索返回的是候选集，而不是精确的行数。实时表的每个磁盘块最多会贡献 `LIMIT` × `oversampling` 个最近文档（如果使用已弃用的 `k`，则为 `k` × `oversampling`），并且 `oversampling` 默认为 3。`LIMIT` 仍然控制你收到的行数，但 [SHOW META](../Node_info_and_management/SHOW_META.md) 中的 `total_found` 以及所有 [FACET](../Searching/Faceted_search.md) 计数都会覆盖整个候选集。例如，在一个包含 4 个磁盘块的表上，`SELECT id FROM t WHERE knn(vec, 'quiet flat') LIMIT 5` 会返回 5 行，`total_found` 为 60（5 × 3 × 4）；在 [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md) 将该表合并为一个块后，同一查询会报告 15。因此，KNN 查询的 `total_found` 并不是相关文档的数量。若要让搜索考虑每个文档，例如按相似度对所有通过属性过滤器的文档进行排序，请将 `LIMIT`（以及需要时的 `max_matches`）设置为至少等于表中的文档数量。
+
+### 排序 KNN 结果
+
+KNN 结果始终先按与查询的距离排序。对另一个属性使用 `ORDER BY` 不会重新排序这些结果：它只会在距离相等时用于打破平局，并且不会返回警告。若要按属性对 KNN 匹配结果排序，请在[子查询](../Searching/Sub-selects.md)中运行 KNN 搜索，并对外层查询排序：
+
+```sql
+SELECT * FROM (SELECT id, price, knn_dist() AS dist FROM products WHERE knn(embedding_vector, 'quiet flat') LIMIT 100) ORDER BY price ASC LIMIT 10;
+```
+
+[混合查询](../Searching/Hybrid_search.md#Sorting)（`OPTION fusion_method='rrf'`）会对属性应用 `ORDER BY`。
 
 <!-- example knn_quantization -->
 

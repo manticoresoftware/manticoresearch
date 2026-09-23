@@ -1931,31 +1931,47 @@ CSphString sphGetConfigFile ( const char * szHint )
 		return RealPath(szHint);
 
 	// fallback to defaults if there was no explicit config specified
+	StrVec_t dConfigFiles;
+	auto AddConfigFile = [&dConfigFiles] ( const char * szPath )
+	{
+		for ( const CSphString & sPath : dConfigFiles )
+			if ( sPath==szPath )
+				return;
+		dConfigFiles.Add ( szPath );
+	};
+
 #ifdef SYSCONFDIR
-	static const char* sConfigFile = SYSCONFDIR "/manticore.conf";
-	if ( sphIsReadable ( sConfigFile ) )
-		return RealPath(sConfigFile);
+	AddConfigFile ( SYSCONFDIR "/manticore.conf" );
 #endif
 
-	static const char* sWorkingConfiFile = "./manticore.conf";
-	if ( sphIsReadable ( sWorkingConfiFile ) )
-		return RealPath(sWorkingConfiFile);
+#if !_WIN32
+#if __APPLE__
+	AddConfigFile ( "/opt/homebrew/etc/manticoresearch/manticore.conf" );
+#endif
+	AddConfigFile ( "/usr/local/etc/manticoresearch/manticore.conf" );
+	AddConfigFile ( "/etc/manticoresearch/manticore.conf" );
+#endif
 
 #if _WIN32
 	if ( !GetWinInstallDir().IsEmpty() )
 	{
-		static CSphString sConf;
+		CSphString sConf;
 		sConf.SetSprintf ( "%s/etc/manticoresearch/manticore.conf", GetWinInstallDir().cstr() );
-		if ( sphIsReadable ( sConf.cstr() ) )
-			return RealPath(sConf);
+		AddConfigFile ( sConf.cstr() );
 	}
 #endif
 
-	sphFatal ( "no readable config file (looked in "
-#ifdef SYSCONFDIR
-		SYSCONFDIR "/manticore.conf, "
-#endif
-		"./manticore.conf)." );
+	AddConfigFile ( "./manticore.conf" );
+
+	StringBuilder_c sLookedIn ( ", " );
+	for ( const CSphString & sConfigFile : dConfigFiles )
+	{
+		if ( sphIsReadable ( sConfigFile.cstr() ) )
+			return RealPath ( sConfigFile );
+		sLookedIn << sConfigFile;
+	}
+
+	sphFatal ( "no readable config file (looked in %s).", sLookedIn.cstr() );
 	return nullptr;
 }
 

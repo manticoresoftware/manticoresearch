@@ -43,7 +43,7 @@ rm -rf $BUILD_DIR
 ctest -VV -S misc/ctest/gltest.cmake
 cd $BUILD_DIR
 chmod -R a+rw $CACHEB
-tar -cf build.tar api/libsphinxclient/testcli src/indexer src/indextool src/searchd src/gtests/gmanticoretest
+tar -cf build.tar api/libsphinxclient/testcli src/indexer src/indextool src/searchd src/manticore src/gtests/gmanticoretest
 find . -name *.h -o -name *.c -o -name *.cxx -o -name *.gcno | tar -rf build.tar -T-
 mv build.tar /tmp
 rm -rf *

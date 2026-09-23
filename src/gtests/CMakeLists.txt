@@ -16,6 +16,7 @@ set ( GTESTS_SRC
 		gtests_searchd.cpp
 		gtests_filter.cpp
 		gtests_searchdaemon.cpp
+		gtests_manticorecli.cpp
 		gtests_api_reply_stream.cpp
 		gtests_ssl.cpp
 		gtests_stringbuilder.cpp
@@ -32,6 +33,7 @@ target_link_libraries ( gmanticoretest PRIVATE
 		GTest::gmock_main
 		lmanticore
 		lsearchd
+		manticore_cli
 		searchd_ssl
 		source_svpipe
 		daemon

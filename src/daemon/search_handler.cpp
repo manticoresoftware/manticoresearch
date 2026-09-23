@@ -809,7 +809,11 @@ public:
 			return false;
 
 		// take ownership of the sorter
-		m_dSorters[iQuery][iIndex] = { pSorter, pDocstore, iTag };
+		auto & tStored = m_dSorters[iQuery][iIndex];
+		tStored.m_pSorter = pSorter;
+		tStored.m_pDocstore = pDocstore;
+		tStored.m_iTag = iTag;
+		tStored.m_tSchema = *pSorter->GetSchema();
 		pSorter = nullptr;
 
 		return true;
@@ -827,13 +831,13 @@ public:
 
 		ARRAY_FOREACH ( iQuery, m_dSorters )
 		{
-			CSphVector<ISphMatchSorter *> dValidSorters;
-			for ( auto i : m_dSorters[iQuery] )
+			CSphVector<SorterData_t *> dValidSorters;
+			for ( auto & i : m_dSorters[iQuery] )
 			{
 				if ( !i.m_pSorter )
 					continue;
 
-				dValidSorters.Add ( i.m_pSorter );
+				dValidSorters.Add ( &i );
 
 				// assign order tag here so we can link to docstore later
 				AssignTag_c tAssign ( i.m_iTag );
@@ -844,22 +848,23 @@ public:
 			if ( !iNumIndexes )
 				continue;
 
-			ISphMatchSorter * pLastSorter = dValidSorters[iNumIndexes-1];
+			SorterData_t & tLastSorter = *dValidSorters[iNumIndexes-1];
 
 			// merge all results to the last sorter. this is done to try to keep some compatibility with no-global-sorters code branch
 			for ( int iIndex = iNumIndexes-2; iIndex>=0; iIndex-- )
-				dValidSorters[iIndex]->MoveTo ( pLastSorter, true );
+				dValidSorters[iIndex]->m_pSorter->MoveTo ( tLastSorter.m_pSorter, true );
 
-			dResults[iQuery].m_iTotalMatches = pLastSorter->GetTotalCount();
-			dResults[iQuery].AddResultset ( pLastSorter, m_dSorters[iQuery][0].m_pDocstore, m_dSorters[iQuery][0].m_iTag, m_dQueries[iQuery].m_iCutoff );
+			dResults[iQuery].m_iTotalMatches = tLastSorter.m_pSorter->GetTotalCount();
+			dResults[iQuery].AddResultset ( tLastSorter.m_pSorter, tLastSorter.m_pDocstore, tLastSorter.m_iTag, m_dQueries[iQuery].m_iCutoff );
 
 			// we already assigned index/docstore tags to all matches; no need to do it again
 			if ( dResults[iQuery].m_dResults.GetLength() )
 				dResults[iQuery].m_dResults[0].m_bTagsAssigned = true;
 
-			// add fake empty result sets (for tag->docstore lookup)
-			for ( int i = 1; i < m_dSorters[iQuery].GetLength(); i++ )
-				dResults[iQuery].AddEmptyResultset ( m_dSorters[iQuery][i].m_pDocstore, m_dSorters[iQuery][i].m_iTag );
+			// add fake empty result sets (for tag->docstore and expression lookup)
+			for ( const auto & tSorter : m_dSorters[iQuery] )
+				if ( tSorter.m_pSorter && &tSorter!=&tLastSorter )
+					dResults[iQuery].AddEmptyResultset ( tSorter.m_pDocstore, tSorter.m_iTag, tSorter.m_tSchema );
 		}
 	}
 
@@ -869,6 +874,7 @@ private:
 		ISphMatchSorter *			m_pSorter = nullptr;
 		const DocstoreReader_i *	m_pDocstore = nullptr;
 		int							m_iTag = 0;
+		CSphSchema						m_tSchema;
 	};
 
 	const VecTraits_T<CSphQuery> &			m_dQueries;

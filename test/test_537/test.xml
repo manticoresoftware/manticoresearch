@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>distributed highlight with different local morphology</name>
+
+<skip_indexer/>
+
+<requires>
+	<force-rt/>
+	<http/>
+	<lemmatizer_base/>
+</requires>
+
+<config>
+common
+{
+	lemmatizer_base = <local>lemmatizer_base</local>
+}
+
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	drop table if exists highlight_dist;
+	drop table if exists highlight_mixed;
+	drop table if exists highlight_unequal;
+	drop table if exists highlight_all_1;
+	drop table if exists highlight_all_2;
+	drop table if exists highlight_remote;
+	drop table if exists highlight_remote_only;
+	drop table if exists highlight_ru;
+	drop table if exists highlight_en;
+	drop table if exists highlight_zh;
+
+	create table highlight_ru (title text, body text, g integer) morphology='lemmatize_ru_all';
+	create table highlight_en (title text, body text, g integer) morphology='lemmatize_en_all';
+	create table highlight_zh (title text, body text, g integer) charset_table='chinese' morphology='icu_chinese';
+	create table highlight_remote (title text, body text, g bigint, extra integer) morphology='lemmatize_en_all';
+	create table highlight_remote_only type='distributed' agent='<agent0_address/>:highlight_remote';
+	create table highlight_dist type='distributed' local='highlight_ru' local='highlight_en' local='highlight_zh';
+	create table highlight_mixed type='distributed' local='highlight_ru' agent='<agent0_address/>:highlight_en' agent='<agent0_address/>:highlight_zh';
+	create table highlight_unequal type='distributed' local='highlight_ru' local='highlight_en' agent='<agent0_address/>:highlight_remote';
+	create table highlight_all_1 type='distributed' local='highlight_ru' local='highlight_en' local='highlight_zh';
+	create table highlight_all_2 type='distributed' local='highlight_ru' local='highlight_en' local='highlight_zh';
+
+	insert into highlight_ru (id, title, body, g) values (1, 'Сосуды и нервы туловища и конечностей собаки.DOC', 'Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»', 1), (3, 'Другие собаки.DOC', 'Собаки бегут по полю', 3);
+	insert into highlight_en (id, title, body, g) values (2, 'Dogs.DOC', 'Several dogs are running through the field', 2), (4, 'More dogs.DOC', 'Dogs run across the field', 4);
+	insert into highlight_zh (id, title, body, g) values (5, '奔跑的狗.DOC', '狗在公园里奔跑', 5);
+	insert into highlight_remote (id, title, body, g, extra) values (6, 'Remote dogs.DOC', 'Remote dogs run through the field', 6, 42);
+</sphinxql>
+
+<!-- Stress the original three-morphology request; deterministic checks follow below. -->
+<repeat count="20" vars="i" init="1" inc="1">
+<query endpoint="json/search">
+{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "&lt;em&gt;",
+		"post_tags": "&lt;/em&gt;"
+	}
+}
+</query>
+</repeat>
+
+<!-- One response must switch expressions between two local source tags. -->
+<query endpoint="json/search">
+{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака | dog" },
+	"limit": 2,
+	"sort": [ { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "&lt;em&gt;",
+		"post_tags": "&lt;/em&gt;"
+	}
+}
+</query>
+
+<!-- Remote highlights are precomputed while the local result still uses its tag-specific expression. -->
+<query endpoint="json/search">
+{
+	"table": "highlight_mixed",
+	"query": { "query_string": "собака | dog" },
+	"limit": 2,
+	"sort": [ { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "&lt;em&gt;",
+		"post_tags": "&lt;/em&gt;"
+	}
+}
+</query>
+
+<!-- Global distinct grouping merges all locals before post-limit evaluation. -->
+<sphinxql>
+	select id, g, count(distinct g), highlight({allow_empty=1}, 'body', 'собака | dog | 狗') from highlight_dist group by g order by id asc limit 0,5;
+	select id, g, count(distinct g), highlight({allow_empty=1}, 'body', 'собака | dog | 狗') from highlight_dist group by g order by id asc limit 2,3;
+
+	/* SNIPPET() must use the same source morphology as a direct source query. */
+	select id, snippet(body, 'собака | dog | 狗', 'allow_empty=1') from highlight_ru order by id asc;
+	select id, snippet(body, 'собака | dog | 狗', 'allow_empty=1') from highlight_en order by id asc;
+	select id, snippet(body, 'собака | dog | 狗', 'allow_empty=1') from highlight_zh order by id asc;
+	select id, snippet(body, 'собака | dog | 狗', 'allow_empty=1') from highlight_dist order by id asc;
+
+	/* A remote bigint changes the merged schema after two locals were globally sorted. */
+	select id, g, count(distinct g), highlight({allow_empty=1}, 'body', 'собака | dog') from highlight_unequal group by g order by id asc limit 0,6;
+	select id, g, count(distinct g), highlight({allow_empty=1}, 'body', 'собака | dog') from highlight_unequal group by g order by id asc limit 2,3;
+
+	/* Direct locals are tagged first, so the remote-only distributed source has the highest tag. */
+	select id, g, count(distinct g), highlight({allow_empty=1}, 'body', 'собака | dog') from highlight_ru,highlight_en,highlight_remote_only group by g order by id asc limit 0,6;
+
+	/* Duplicate local elimination leaves sparse source tags that must be compacted on matches too. */
+	select id, g, count(distinct g), highlight({allow_empty=1}, 'body', 'собака | dog | 狗') from highlight_all_1,highlight_all_2 group by g order by id asc limit 0,5;
+</sphinxql>
+
+<!-- A direct query is the control: the RU table always uses its own expression. -->
+<query endpoint="json/search">
+{
+	"table": "highlight_ru",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "&lt;em&gt;",
+		"post_tags": "&lt;/em&gt;"
+	}
+}
+</query>
+
+<sphinxql>
+	drop table highlight_dist;
+	drop table highlight_mixed;
+	drop table highlight_unequal;
+	drop table highlight_all_1;
+	drop table highlight_all_2;
+	drop table highlight_remote;
+	drop table highlight_remote_only;
+	drop table highlight_ru;
+	drop table highlight_en;
+	drop table highlight_zh;
+</sphinxql>
+</queries>
+
+</test>

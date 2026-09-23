@@ -1107,12 +1107,12 @@ bool AggrResult_t::AddResultset ( ISphMatchSorter * pQueue, const DocstoreReader
 	return true;
 }
 
-void AggrResult_t::AddEmptyResultset ( const DocstoreReader_i * pDocstore, int iTag )
+void AggrResult_t::AddEmptyResultset ( const DocstoreReader_i * pDocstore, int iTag, const CSphSchema & tSchema )
 {
 	auto & tOneRes = m_dResults.Add();
 	tOneRes.m_pDocstore = pDocstore;
 	tOneRes.m_iTag = iTag;
-	tOneRes.m_tSchema = m_tSchema;
+	tOneRes.m_tSchema = tSchema;
 }
 
 

@@ -215,25 +215,104 @@ OPTION fusion_method='rrf';
 
 ## Фасеты
 
-`FACET` нельзя использовать в гибридном запросе (`OPTION fusion_method='rrf'`). В зависимости от списка выбора запрос завершится одной из этих ошибок:
+[FACET](../Searching/Faceted_search.md) в SQL и `aggs` в JSON работают в гибридных запросах. Счетчики фасетов охватывают все документы после слияния, а не только строки, возвращенные с учетом `LIMIT`. Это те же документы, которые считает `total_found` в [SHOW META](../Node_info_and_management/SHOW_META.md): объединение полнотекстовых совпадений и кандидатов KNN. Как и результаты, счетчики учитывают все фильтры, включая фильтры по `hybrid_score()`, `knn_dist()` и `weight()`, которые применяются после слияния.
 
-* `hybrid search does not support multiple sorters`
-* `HYBRID_SCORE() is only allowed for hybrid search queries`, если выбран `hybrid_score()`. Запрос является гибридным; не поддерживается именно `FACET`.
+<!-- example hybrid_facets -->
 
-Вместо этого посчитайте фасеты вторым запросом. Например, по документам, которые вернул гибридный запрос:
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
 
 ```sql
--- The page of fused results
-SELECT id, hybrid_score() FROM t
-WHERE match('machine learning') AND knn(vec, (0.1, 0.1, 0.1, 0.1)) AND category = 1
-LIMIT 20
-OPTION fusion_method='rrf';
-
--- Facet counts for the same documents
-SELECT id FROM t WHERE id IN (1, 5, 7) FACET category;
+SELECT id, hybrid_score()
+FROM t
+WHERE match('learning')
+  AND knn(vec, (0.1, 0.1, 0.1, 0.1))
+LIMIT 3
+OPTION fusion_method='rrf'
+FACET category ORDER BY category ASC;
 ```
 
-Или выполните фасетный запрос с теми же фильтрами по атрибутам, но без `MATCH()` или `KNN()`, чтобы подсчитать все документы, прошедшие фильтры. KNN-запрос без `fusion_method` поддерживает `FACET`, а его счетчики охватывают всех кандидатов KNN; см. [набор кандидатов KNN](../Searching/KNN.md#KNN-candidate-set).
+<!-- response SQL -->
+
+```sql
++------+----------------+
+| id   | hybrid_score() |
++------+----------------+
+|    1 |     0.03278688 |
+|    2 |     0.03200205 |
+|    6 |     0.03125763 |
++------+----------------+
+3 rows in set (0.00 sec)
+
++----------+----------+
+| category | count(*) |
++----------+----------+
+|        1 |        2 |
+|        2 |        2 |
+|        3 |        2 |
++----------+----------+
+3 rows in set (0.00 sec)
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```json
+POST /search
+{
+  "table": "t",
+  "knn": { "field": "vec", "query": [0.1, 0.1, 0.1, 0.1] },
+  "query": { "match": { "*": "learning" } },
+  "options": { "fusion_method": "rrf" },
+  "_source": ["id"],
+  "limit": 3,
+  "aggs": {
+    "categories": {
+      "terms": { "field": "category", "size": 10 },
+      "sort": [ { "category": { "order": "asc" } } ]
+    }
+  }
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 6,
+    "total_relation": "eq",
+    "hits": [
+      { "_id": 1, "_score": 1533, "_knn_dist": 0.0, "_hybrid_score": 0.03278688, "_source": {} },
+      { "_id": 2, "_score": 1533, "_knn_dist": 0.01, "_hybrid_score": 0.03200205, "_source": {} },
+      { "_id": 6, "_score": 1533, "_knn_dist": 1.95999992, "_hybrid_score": 0.03125763, "_source": {} }
+    ]
+  },
+  "aggregations": {
+    "categories": {
+      "buckets": [
+        { "key": 1, "doc_count": 2 },
+        { "key": 2, "doc_count": 2 },
+        { "key": 3, "doc_count": 2 }
+      ]
+    }
+  }
+}
+```
+
+<!-- end -->
+
+Чтобы посчитать только документы с высокой оценкой слияния, отфильтруйте по `hybrid_score()`. Если добавить в запрос выше `AND hs > 0.02` (и `hybrid_score() hs` в список выбора), останутся только документы 1, 2 и 6, а `FACET category` вернет `1` → 2 и `3` → 1.
+
+[facet_filter_mode](../Searching/Faceted_search.md), `FILTERS` и `EXCLUDE FILTERS` работают так же, как в обычных запросах. Фасет, который сохраняет меньше фильтров основного запроса, например `FACET category` в режиме `auto`, когда запрос фильтрует по `category`, считает документы после слияния гибридного запроса, выполненного с фильтрами, которые сохраняет этот фасет. При `GROUP BY` в гибридном запросе фасеты считают документы, а не группы.
+
+Фасет с теми же фильтрами, что и у основного запроса, повторно использует его документы после слияния, поэтому обходится примерно так же, как фасет в обычном запросе. Фасет, сохраняющий меньше фильтров, а также любой фасет запроса с `GROUP BY` заново выполняет полнотекстовый и KNN подзапросы.
 
 ## Несоответствующий текст
 
@@ -470,5 +549,7 @@ POST /search
 3. Сортирует по объединенной оценке RRF по убыванию
 4. Устанавливает [`knn_dist()`](../Functions/Other_functions.md#KNN_DIST%28%29) равной минимальному расстоянию по всем KNN подзапросам для каждого документа
 5. Сохраняет [`weight()`](../Functions/Searching_and_ranking_functions.md#WEIGHT%28%29) из текстового подзапроса
+
+Если в запросе есть [фасеты](../Searching/Hybrid_search.md#Facets), каждый фасет затем выполняется как обычный фасетный запрос по документам после слияния.
 
 <!-- proofread -->

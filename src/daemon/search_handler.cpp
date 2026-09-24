@@ -400,15 +400,23 @@ int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, CSphVector<
 		CSphQuery & tQuery = m_dNQueries[iQuery];
 		const CSphIndex * pJoinedIndex = dJoinedIndexes[iQuery].m_dIndexes.GetLength() ? dJoinedIndexes[iQuery].m_dIndexes[0] : nullptr;
 
+		// facets of a hybrid query are regular facet passes over the fused candidates
+		CSphQuery tHybridFacetQuery;
+		bool bHybridFacet = iQuery>0 && m_dNQueries[0].m_bHybridSearch;
+		if ( bHybridFacet )
+			tHybridFacetQuery = MakeHybridFacetScanQuery ( m_dNQueries[0], tQuery );
+
+		const CSphQuery & tSorterQuery = bHybridFacet ? tHybridFacetQuery : tQuery;
+
 		// create queue
 		auto tQueueSettings = MakeQueueSettings ( pIndex, pJoinedIndex, dJoinedIndexes[0].m_szParent, tQuery.m_iMaxMatches, m_dPSInfo.First().m_bForceSingleThread, pHook );
-		ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, dErrors[iQuery], tQueueRes, pExtra, m_pProfile, szParent );
+		ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tSorterQuery, dErrors[iQuery], tQueueRes, pExtra, m_pProfile, szParent );
 		if ( !pSorter )
 			continue;
 
 		// possibly create a wrapper (if we have JOIN)
 		int iBatchSize = tQuery.m_iJoinBatchSize==-1 ? GetJoinBatchSize() : tQuery.m_iJoinBatchSize;
-		pSorter = CreateJoinSorter ( pIndex, dJoinedIndexes[iQuery].m_dIndexes, tQueueSettings, tQuery, pSorter, m_dNJoinQueryOptions[iQuery], tQueueRes.m_bJoinedGroupSort, iBatchSize, szParent, dJoinedIndexes[iQuery].m_szParent, dErrors[iQuery] );
+		pSorter = CreateJoinSorter ( pIndex, dJoinedIndexes[iQuery].m_dIndexes, tQueueSettings, tSorterQuery, pSorter, m_dNJoinQueryOptions[iQuery], tQueueRes.m_bJoinedGroupSort, iBatchSize, szParent, dJoinedIndexes[iQuery].m_szParent, dErrors[iQuery] );
 		if ( !pSorter )
 			continue;
 
@@ -1141,7 +1149,7 @@ void SearchHandler_c::RunLocalSearches()
 				{
 					const CSphIndex * pJoinedIndex = dJoinedIndexes[0].m_dIndexes.GetLength() ? dJoinedIndexes[0].m_dIndexes[0] : nullptr;
 					auto tQueueSettings = MakeQueueSettings ( pIndex, pJoinedIndex, dJoinedIndexes[0].m_szParent, m_dNQueries.First().m_iMaxMatches, m_dPSInfo[iLocal].m_bForceSingleThread, &tCtx.m_tHook );
-					bResult = ExecuteHybridSearch ( pIndex, m_dNQueries.First(), tQueueSettings, dNResults[0], dSorters, tMultiArgs );
+					bResult = ExecuteHybridSearch ( pIndex, m_dNQueries, tQueueSettings, dNResults, dSorters, tMultiArgs );
 				}
 				else if ( bLocalMultiQueue )
 					bResult = pIndex->MultiQuery ( tMqRes, m_dNQueries.First(), dSorters, tMultiArgs );
@@ -2143,6 +2151,10 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// select lists must have no expressions
 	if ( m_bMultiQueue )
 		m_bMultiQueue = AllowsMulti ();
+
+	// hybrid search runs its facets one by one over the fused candidates, each with its own sorter
+	if ( tFirst.m_bHybridSearch )
+		m_bMultiQueue = false;
 
 	assert ( !m_bFacetQueue || AllowsMulti () );
 	if ( !m_bMultiQueue )

@@ -215,25 +215,104 @@ Note that the clause order is `WHERE ... ORDER BY ... LIMIT ... OPTION ...`: `OP
 
 ## Facets
 
-`FACET` can't be used in a hybrid query (`OPTION fusion_method='rrf'`). Depending on the select list, the query fails with one of these errors:
+[FACET](../Searching/Faceted_search.md) in SQL and `aggs` in JSON work in hybrid queries. Facet counts cover all fused documents, not just the rows returned by `LIMIT`. These are the same documents that `total_found` in [SHOW META](../Node_info_and_management/SHOW_META.md) counts: the union of the full-text matches and the KNN candidates. Like the results, the counts respect all filters, including filters on `hybrid_score()`, `knn_dist()`, and `weight()`, which are applied after fusion.
 
-* `hybrid search does not support multiple sorters`
-* `HYBRID_SCORE() is only allowed for hybrid search queries`, when `hybrid_score()` is selected. The query is hybrid; it is the `FACET` that isn't supported.
+<!-- example hybrid_facets -->
 
-Compute facet counts with a second query instead. For example, facet over the documents the hybrid query returned:
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
 
 ```sql
--- The page of fused results
-SELECT id, hybrid_score() FROM t
-WHERE match('machine learning') AND knn(vec, (0.1, 0.1, 0.1, 0.1)) AND category = 1
-LIMIT 20
-OPTION fusion_method='rrf';
-
--- Facet counts for the same documents
-SELECT id FROM t WHERE id IN (1, 5, 7) FACET category;
+SELECT id, hybrid_score()
+FROM t
+WHERE match('learning')
+  AND knn(vec, (0.1, 0.1, 0.1, 0.1))
+LIMIT 3
+OPTION fusion_method='rrf'
+FACET category ORDER BY category ASC;
 ```
 
-Or run the facet query with the same attribute filters and no `MATCH()` or `KNN()`, to count all documents that pass the filters. A KNN query without `fusion_method` does support `FACET`, and its counts cover all KNN candidates; see [KNN candidate set](../Searching/KNN.md#KNN-candidate-set).
+<!-- response SQL -->
+
+```sql
++------+----------------+
+| id   | hybrid_score() |
++------+----------------+
+|    1 |     0.03278688 |
+|    2 |     0.03200205 |
+|    6 |     0.03125763 |
++------+----------------+
+3 rows in set (0.00 sec)
+
++----------+----------+
+| category | count(*) |
++----------+----------+
+|        1 |        2 |
+|        2 |        2 |
+|        3 |        2 |
++----------+----------+
+3 rows in set (0.00 sec)
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```json
+POST /search
+{
+  "table": "t",
+  "knn": { "field": "vec", "query": [0.1, 0.1, 0.1, 0.1] },
+  "query": { "match": { "*": "learning" } },
+  "options": { "fusion_method": "rrf" },
+  "_source": ["id"],
+  "limit": 3,
+  "aggs": {
+    "categories": {
+      "terms": { "field": "category", "size": 10 },
+      "sort": [ { "category": { "order": "asc" } } ]
+    }
+  }
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 6,
+    "total_relation": "eq",
+    "hits": [
+      { "_id": 1, "_score": 1533, "_knn_dist": 0.0, "_hybrid_score": 0.03278688, "_source": {} },
+      { "_id": 2, "_score": 1533, "_knn_dist": 0.01, "_hybrid_score": 0.03200205, "_source": {} },
+      { "_id": 6, "_score": 1533, "_knn_dist": 1.95999992, "_hybrid_score": 0.03125763, "_source": {} }
+    ]
+  },
+  "aggregations": {
+    "categories": {
+      "buckets": [
+        { "key": 1, "doc_count": 2 },
+        { "key": 2, "doc_count": 2 },
+        { "key": 3, "doc_count": 2 }
+      ]
+    }
+  }
+}
+```
+
+<!-- end -->
+
+To count only the documents with a high fused score, filter on `hybrid_score()`. With `AND hs > 0.02` added to the query above (and `hybrid_score() hs` in the select list), only documents 1, 2 and 6 remain, and `FACET category` returns `1` → 2 and `3` → 1.
+
+[facet_filter_mode](../Searching/Faceted_search.md), `FILTERS`, and `EXCLUDE FILTERS` work as in regular queries. A facet that keeps fewer of the main query's filters, for example `FACET category` in `auto` mode when the query filters by `category`, counts the fused documents of the hybrid query run with the filters that facet keeps. With `GROUP BY` in the hybrid query, facets count documents, not groups.
+
+A facet that uses the main query's filters reuses its fused documents, so it costs roughly as much as a facet on a regular query. A facet that keeps fewer filters, or any facet of a `GROUP BY` query, runs the full-text and KNN sub-queries again.
 
 ## Non-matching text
 
@@ -470,5 +549,7 @@ All sub-queries run concurrently. After all complete, the RRF fusion:
 3. Sorts by fused RRF score descending
 4. Sets [`knn_dist()`](../Functions/Other_functions.md#KNN_DIST%28%29) to the minimum distance across all KNN sub-queries for each document
 5. Preserves [`weight()`](../Functions/Searching_and_ranking_functions.md#WEIGHT%28%29) from the text sub-query
+
+If the query has [facets](../Searching/Hybrid_search.md#Facets), each facet then runs as a regular facet query over the fused documents.
 
 <!-- proofread -->

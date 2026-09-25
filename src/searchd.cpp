@@ -11861,7 +11861,7 @@ static bool PrepareReconfigure ( const char * szIndex, CSphReconfigureSettings &
 {
 	CSphConfig hCfg;
 	auto [bChanged, dConfig] = FetchAndCheckIfChanged ( g_sConfigFile );
-	if ( !ParseConfig ( &hCfg, g_sConfigFile, dConfig ) )
+	if ( TlsMsg::HasErr() || !ParseConfig ( &hCfg, g_sConfigFile, dConfig ) )
 	{
 		sError.SetSprintf ( "failed to parse config file '%s': %s; using previous settings", g_sConfigFile.cstr (), TlsMsg::szError() );
 		return false;
@@ -15011,7 +15011,9 @@ static void CheckRotate () REQUIRES ( MainThread )
 	HashOfServed_c hDeferredIndexes;
 	{
 		auto [bChanged, dConfig] = FetchAndCheckIfChanged ( g_sConfigFile );
-		if ( bChanged || g_bReloadForced )
+		if ( TlsMsg::HasErr() )
+			sphWarning ( "failed to parse config file '%s': %s; using previous settings", g_sConfigFile.cstr(), TlsMsg::szError() );
+		else if ( bChanged || g_bReloadForced )
 		{
 			sphInfo( "Config changed (read %d chars)", dConfig.GetLength());
 			if ( !dConfig.IsEmpty() )
@@ -16471,6 +16473,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	/////////////////////
 
 	auto dConfig = FetchAndCheckIfChanged ( g_sConfigFile ).second;
+	if ( TlsMsg::HasErr() )
+		sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
 	sphInfo( "using config file '%s' (%d chars)...", g_sConfigFile.cstr(), dConfig.GetLength());
 	// do parse
 	// don't aqcuire wlock, since we're in single main thread here.
@@ -16707,6 +16711,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 			sphFatal ( "%s", sError.cstr() );
 
 		auto [bChanged, dNewConfig] = FetchAndCheckIfChanged ( g_sConfigFile );
+		if ( TlsMsg::HasErr() )
+			sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
 		if ( bChanged )
 		{
 			// reparse the config file

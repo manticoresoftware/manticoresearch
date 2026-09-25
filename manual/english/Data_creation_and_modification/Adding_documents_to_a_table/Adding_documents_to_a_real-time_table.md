@@ -920,13 +920,13 @@ curl -sS -X POST \
 
 In a request body, an empty line ends and publishes the current batch; the end of the request publishes the final batch. Manticore sends the HTTP response after processing all batches in that request. If a later batch fails, batches published earlier in the same request remain searchable. To publish the entire request atomically as one disk chunk, do not include empty lines. The response contains one aggregate `bulk` result for each published batch rather than one result per document.
 
-Most clients should send a single request like the example above. If an application deliberately sends several requests over the same [persistent HTTP connection](../../Connecting_to_the_server/HTTP.md#Persistent-connections), the first request selects the table. Later `/bulk` or `/json/bulk` requests on that connection may omit `bulk_import`, but they must continue writing to the same table. Close the connection when finished, or send an empty `/bulk?bulk_import=0` request to disable bulk import and release that connection's reservation. Writes to the table resume after the reservation is released.
+For a typical import, send the complete NDJSON body in one request as shown above. Close the HTTP connection when the import is complete to release the table for other writes.
 
 The endpoint supports chunked transfer encoding, so it can process bodies larger than `max_packet_size` without buffering the whole request.
 
 #### Elasticsearch `/_bulk`
 
-The Elasticsearch-compatible `/_bulk` endpoint does not support direct-to-disk `bulk_import`; use SQL or Manticore `/bulk`. On a clean session, `?pipeline=bulk_import` and the legacy `?bulk_import=1` are rejected. Other unknown `bulk_import` values are ignored and ordinary Elasticsearch bulk processing continues. A connection with an active bulk import cannot switch to `/_bulk`.
+The Elasticsearch-compatible `/_bulk` endpoint does not support direct-to-disk `bulk_import`; use SQL or Manticore `/bulk`.
 
 #### Duplicate document IDs
 

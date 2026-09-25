@@ -15,8 +15,6 @@ Normally, an RT table automatically flushes and converts the contents of the RAM
 <!-- intro -->
 ##### SQL:
 
-<!-- request SQL -->
-
 <!--
 data for the following example:
 
@@ -24,6 +22,9 @@ DROP TABLE IF EXISTS rt;
 CREATE TABLE rt(title text);
 INSERT INTO rt(id,title) VALUES (1,'doc');
 -->
+
+
+<!-- request SQL -->
 
 ```sql
 FLUSH RAMCHUNK rt;

@@ -50,6 +50,8 @@ sudo apt update
 sudo apt install manticore
 ```
 
+自 25.0.0 版本起，`manticore` 是单一捆绑包。它已经包含 Manticore Buddy、Manticore Columnar Library（列式存储、二级索引、KNN 搜索和自动嵌入）、backup、load 和 Galera，因此无需安装其他 `manticore-*` 包。旧版说明中写的 `sudo apt install manticore manticore-extra` 现在会因 `manticore : Breaks: manticore-extra` 而失败；只安装 `manticore` 就足够了。
+
 如果你是从旧版本升级到 Manticore 6 或更高版本，建议先移除旧软件包，以避免因更新后的软件包结构引起冲突：
 
 ```bash

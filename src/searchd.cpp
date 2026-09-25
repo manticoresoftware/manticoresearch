@@ -12641,9 +12641,16 @@ void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const SqlStmt_t& tStmt, CSphS
 	for ( const auto& sIndex : dIndexes )
 	{
 		auto pIndex = GetServed ( sIndex );
-		if ( !ServedDesc_t::IsMutable ( pIndex ) )
+		if ( ServedDesc_t::IsMutable ( pIndex ) )
 		{
-			dNonlockedIndexes.Add ( sIndex );
+			// here we get non-locked instance to avoid deadlock with update.
+			// Deadlock happens by this sequence:
+			// 1. Update protects index from bein frozen.
+			// 2. We lock index here.
+			// 3. We wait until protection released.
+			// 4. Update tries to w-lock the index, locked by us.
+			auto * pRt = static_cast<RtIndex_i *> ( UnlockedHazardIdxFromServed ( *pIndex ) );
+			pRt->LockFileState ( dIndexFiles );
 			continue;
 		}
 		Threads::Coro::ScopedFreezeTransition_c tFreezing { pIndex->Locker() };
@@ -12653,14 +12660,18 @@ void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const SqlStmt_t& tStmt, CSphS
 			continue;
 		}
 
-		// here we get non-locked instance to avoid deadlock with update.
-		// Deadlock happens by this sequence:
-		// 1. Update protects index from bein frozen.
-		// 2. We lock index here.
-		// 3. We wait until protection released.
-		// 4. Update tries to w-lock the index, locked by us.
-		auto * pRt = static_cast<RtIndex_i *> ( UnlockedHazardIdxFromServed ( *pIndex ) );
-		pRt->LockFileState ( dIndexFiles );
+		if ( pIndex && pIndex->m_eType==IndexType_e::PLAIN )
+		{
+			if ( !pIndex->LockRead() )
+			{
+				dNonlockedIndexes.Add ( sIndex );
+				continue;
+			}
+			RIdx_c ( pIndex )->GetIndexFiles ( dIndexFiles, dIndexFiles );
+			continue;
+		}
+
+		dNonlockedIndexes.Add ( sIndex );
 	}
 
 	int iWarnings=0;
@@ -12705,12 +12716,16 @@ void HandleMysqlUnfreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes 
 	for ( const auto& sIndex : dIndexes )
 	{
 		auto pIndex = GetServed ( sIndex );
-		if ( !ServedDesc_t::IsMutable ( pIndex ) )
-			continue;
-
-		RIdx_T<RtIndex_i*> pRt { pIndex };
-		pRt->EnableSave ();
-		++iUnlocked;
+		if ( ServedDesc_t::IsMutable ( pIndex ) )
+		{
+			RIdx_T<RtIndex_i *> pRt { pIndex };
+			pRt->EnableSave();
+			++iUnlocked;
+		} else if ( pIndex && pIndex->m_eType==IndexType_e::PLAIN && pIndex->UnlockRead() )
+		{
+			g_bNeedRotate = true;
+			++iUnlocked;
+		}
 	}
 
 	tOut.Ok ( iUnlocked );
@@ -14026,6 +14041,12 @@ bool RotateIndexGreedy ( const ServedIndex_c& tServed, const char* szIndex, CSph
 	if ( tCheck.NothingToRotate() )
 		return false;
 
+	if ( tServed.GetLocks().m_uReads )
+	{
+		sError.SetSprintf ( "table '%s' is frozen", szIndex );
+		return false;
+	}
+
 	IndexFiles_c dServedFiles ( sIndexPath, szIndex );
 	IndexFiles_c dFreshFiles ( dServedFiles.MakePath ( tCheck.RotateFromNew() ? ".new" : "" ), szIndex );
 
@@ -14443,7 +14464,13 @@ bool RotateIndexMT ( ServedIndexRefPtr_c& pNewServed, const CSphString & sIndex,
 		return false;
 	}
 
-	//////////////////
+	if ( auto pServed = GetServed ( sIndex ); pServed && pServed->GetLocks().m_uReads )
+	{
+		sError.SetSprintf ( "table '%s' is frozen", sIndex.cstr() );
+		return false;
+	}
+
+	////////////////////
 	/// load new index
 	//////////////////
 	CSphIndex* pNewIndex = UnlockedHazardIdxFromServed ( *pNewServed );
@@ -15199,6 +15226,11 @@ static void DoGreedyRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( Mai
 		{
 			sphLogDebug ( "greedy rotate local %s", sDeferredIndex.cstr() );
 			auto pRotating = GetServed ( sDeferredIndex );
+			if ( pRotating && pRotating->GetLocks().m_uReads )
+			{
+				sphWarning ( "table '%s': table is frozen", sDeferredIndex.cstr() );
+				continue;
+			}
 			bool bSame = pRotating && pRotating.Ptr() == pDeferredIndex.Ptr();
 			WIdx_c WIdx { pDeferredIndex };
 			bool bOk = RotateIndexGreedy ( *pDeferredIndex, sDeferredIndex.cstr(), sError );

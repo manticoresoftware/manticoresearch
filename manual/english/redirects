@@ -1,4 +1,5 @@
 ^Deleting_an_index(.*?)$ Deleting_a_table$1
+^Searching/Auto_embeddings(.*?)$ Searching/KNN$1
 ^Node_info_and_management/Index_settings_and_status/SHOW_INDEX_STATUS(.*?)$ Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS$1
 ^Node_info_and_management/Index_settings_and_status/SHOW_INDEX_SETTINGS(.*?)$ Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS$1 
 ^Emptying_an_index(.*?)$ Emptying_a_table$1

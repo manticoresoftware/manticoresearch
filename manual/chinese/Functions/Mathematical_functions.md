@@ -1,5 +1,21 @@
 # 数学函数
 
+一些常用函数，例如 `ASIN()`、`ACOS()`、`ATAN()`、`TAN()`、`RADIANS()`、`DEGREES()` 和 `PI()`，在 Manticore 中尚未实现，但可以很容易地用以下等价写法替代：
+
+| 函数 | 等价写法 |
+|---|---|
+| `ASIN(x)` | `ATAN2(x, SQRT(1 - x*x))` |
+| `ACOS(x)` | `ATAN2(SQRT(1 - x*x), x)` |
+| `ATAN(x)` | `ATAN2(x, 1)` |
+| `TAN(x)` | `SIN(x) / COS(x)` |
+| `RADIANS(d)` | `d * 0.017453292519943295` |
+| `DEGREES(r)` | `r * 57.29577951308232` |
+| `PI()` | `3.141592653589793` |
+
+调用尚未实现的函数会返回解析错误，例如 `P09: syntax error, unexpected '('`。
+
+浮点数学运算使用单精度（32 位）；请参阅 [Float](../Creating_a_table/Data_types.md#Float)。
+
 ### ABS()
 返回参数的绝对值。
 

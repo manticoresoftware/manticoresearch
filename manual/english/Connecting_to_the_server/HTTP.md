@@ -86,6 +86,8 @@ Manticore provides `/sql`, `/cli`, and `/cli_json` endpoints for running SQL que
 * `/cli`: Intended **only for manual use** (e.g., via curl or browser). **Not recommended for scripts.**
 * `/cli_json`: Similar to `/cli`, but returns results in JSON format. **Not recommended for scripts.**
 
+A failed query, including one with a syntax error, is returned with HTTP status `500` and the reason in the `error` field of the response body, so read the body rather than treating every `500` as a server failure. To check that the HTTP interface is up, for example in a start-up script, send `GET /`, which returns `200`. `GET /sql` without a query returns `400`, so it isn't a readiness check.
+
 ### /sql
 
 <!-- example SQL_over_HTTP -->

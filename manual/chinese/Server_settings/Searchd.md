@@ -300,6 +300,8 @@ knn_parallel_build = 4
 
 默认值为 `4`。设为 `0` 可取消上限，此时 embeddings 库会自行决定使用多少线程（仍受空闲 worker 数量限制）。
 
+如果自动嵌入插入很慢，例如每行需要数百毫秒，批量加载时出现嵌入超时和重试，原因几乎总是模型，而不是线程数：未随附 `.onnx` 文件的本地模型会走慢得多的 CPU 路径。参见[选择本地嵌入模型](../Searching/KNN.md#Choosing-a-local-embedding-model)。调高此设置并不能让慢模型变快，还可能让并发搜索缺少可用工作线程。
+
 此值可在运行时通过 `SET GLOBAL embeddings_threads = N` 修改，并可通过 `SHOW VARIABLES` 查看。对于 KNN `SELECT` 查询，还可以使用 `OPTION embeddings_threads = N` 按查询覆盖（见 [KNN 向量搜索](../Searching/KNN.md#KNN-vector-search)）。
 
 <!-- intro -->
@@ -408,6 +410,8 @@ binlog_max_log_size = 16M
 二进制日志用于 RT 表数据的崩溃恢复，以及普通磁盘索引的属性更新，否则这些更新在刷盘前只会保存在 RAM 中。启用日志后，每个提交到 RT 表的事务都会写入日志文件。非正常关闭后，启动时会自动回放日志，恢复已记录的变更。
 
 `binlog_path` 指令指定二进制日志文件所在位置。它只应包含路径；`searchd` 会按需在该目录中创建并删除多个 `binlog.*` 文件（包括 binlog 数据、元数据和锁文件等）。
+
+该目录必须已存在。`searchd` 会自行创建默认的 binlog 目录（在 RT 模式下，即 [data_dir](../Server_settings/Searchd.md#data_dir) 内的 `binlog/`），但不会创建你通过 `binlog_path` 设置的目录。如果该目录不存在，`searchd` 将无法启动，并记录 `FATAL: failed to open '<binlog_path>/binlog.lock': 2 'No such file or directory'`。请先创建该目录，或不要设置 `binlog_path`，以使用默认目录。
 
 空值会禁用二进制日志，这会提升性能，但会让 RT 表数据面临风险。
 

@@ -300,6 +300,8 @@ The actual number of threads used is also limited by how many workers are curren
 
 Default is `4`. Set to `0` to remove the cap, in which case the embeddings library decides how many threads to use (still bounded by the number of free workers).
 
+If auto-embedding inserts are slow — each row taking hundreds of milliseconds, bulk loads showing embedding timeouts and retries — the cause is almost always the model, not the thread count: local models that do not ship an `.onnx` file run on a much slower CPU path. See [Choosing a local embedding model](../Searching/KNN.md#Choosing-a-local-embedding-model). Raising this setting does not make a slow model fast and can starve concurrent searches of workers.
+
 This value can be changed at runtime using `SET GLOBAL embeddings_threads = N` and inspected via `SHOW VARIABLES`. For KNN `SELECT` queries it can also be overridden per-query with `OPTION embeddings_threads = N` (see [KNN vector search](../Searching/KNN.md#KNN-vector-search)).
 
 <!-- intro -->
@@ -408,6 +410,8 @@ This setting determines the path for binary log (also known as transaction log) 
 Binary logs are used for crash recovery of RT table data and for attribute updates of plain disk indices that would otherwise only be stored in RAM until flush. When logging is enabled, every transaction COMMIT-ted into an RT table is written into a log file. Logs are then automatically replayed on startup after an unclean shutdown, recovering the logged changes.
 
 The `binlog_path` directive specifies the location of binary log files. It should only contain the path; `searchd` will create and unlink multiple `binlog.*` files in the directory as necessary (including binlog data, metadata, and lock files, etc).
+
+The directory must already exist. `searchd` creates the default binlog directory itself (in RT mode, `binlog/` inside [data_dir](../Server_settings/Searchd.md#data_dir)), but not a directory you set with `binlog_path`. If that directory is missing, `searchd` doesn't start and logs `FATAL: failed to open '<binlog_path>/binlog.lock': 2 'No such file or directory'`. Create the directory first, or leave `binlog_path` unset to use the default.
 
 An empty value disables binary logging, which improves performance but puts the RT table data at risk.
 

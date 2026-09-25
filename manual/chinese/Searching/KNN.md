@@ -93,6 +93,7 @@ table test_vec {
 - `API_URL`：可选。自定义 API 端点 URL。如果未指定，则使用默认提供方端点（例如 OpenAI 使用 `https://api.openai.com/v1/embeddings`）。
 - `API_TIMEOUT`：可选。API 请求的 HTTP 超时时间，单位为秒。默认值为 10 秒。设为 `'0'` 可使用默认超时。此设置同时适用于建表期间的验证请求和 INSERT 操作期间的嵌入生成。
 - `MAX_INPUT_TOKENS`: 可选。限制每段输入文本在生成嵌入前使用的 token 数；更长的文本会被截断。`'0'`（默认）表示使用模型自身的上下文限制。`Qwen/Qwen3-Embedding-0.6B` 等长上下文模型最多可接受 32,768 个 token，而在 CPU 上生成嵌入的时间会随输入长度超线性增长（一个 5 KB 文档可能需要数分钟），因此当文本字段可能包含很长或不受限制的内容时，请设置上限（例如 `'512'`）。适用于本地模型；之后可通过 `ALTER TABLE ... MODIFY COLUMN ... MAX_INPUT_TOKENS='...'` 修改该设置，且无需重新嵌入已有行。
+- `CACHE_PATH`: 可选。本地模型下载和缓存所在的目录。默认位于 [data_dir](../Server_settings/Searchd.md#data_dir) 下的 `.cache/manticore`，例如 `<data_dir>/.cache/manticore/models--Xenova--all-MiniLM-L6-v2`，因此下载的模型在重启后仍会保留。
 
 对于远程模型，`MODEL_NAME` 可以写成两种形式：
 - 传统的带提供方前缀形式：`openai/text-embedding-ada-002`、`voyage/voyage-3.5-lite`、`jina/jina-embeddings-v4`
@@ -105,7 +106,7 @@ table test_vec {
 | 模型类型 | 示例 | 需要 API 密钥 | 说明 |
 |------------|---------|-----------------|-------|
 | **ONNX（推荐）** | `Xenova/all-MiniLM-L6-v2` | 否 | 来自任何提供 `.onnx` 文件的 Hugging Face 仓库的本地模型。运行在 Manticore 高速的 ONNX Runtime 后端上。浏览列表：[feature-extraction ONNX 模型](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm)。 |
-| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | 否 | 基于 BERT 的本地模型，会自动下载。仍然支持 - 在可用时优先使用上面的 ONNX。 |
+| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | 否 | 本地 BERT 模型，会自动下载。权重与上方 ONNX 行相同，但在 CPU 上生成嵌入要慢 10–20 倍；如果仓库提供 ONNX，请优先使用 ONNX。参见[选择本地嵌入模型](../Searching/KNN.md#Choosing-a-local-embedding-model)。 |
 | **Qwen** | `Qwen/Qwen3-Embedding-0.6B` | 否 | 本地 Qwen 系列模型 |
 | **Llama** | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | 否 | 本地 Llama 系列模型 |
 | **Mistral** | `Locutusque/TinyMistral-248M-v2` | 否 | 本地 Mistral 系列模型 |
@@ -121,6 +122,21 @@ table test_vec {
 - 这些家族中的其他模型也可能可用，但不保证
 - 对于受限制的 Hugging Face 仓库，请将你的 Hugging Face 访问令牌作为 `API_KEY` 传入
 
+##### 选择本地嵌入模型
+
+`MODEL_NAME` 不仅决定质量，还决定**每个文档在 CPU 上生成嵌入的速度，差距可达一个数量级**（参见[使用 ONNX 让嵌入速度提升 14 倍](https://manticoresearch.com/blog/onnx-embeddings-speedup/)）。提供 `.onnx` 文件的仓库会在 ONNX Runtime 后端运行；同一个模型的 `safetensors` 仓库则会走慢得多的 Candle 路径。以下为近似数据，基于一台小型 4-vCPU 实例和较短（约 300 字符）文档测得：
+
+| 模型 | 格式 | 维度 | 下载大小 | CPU 速度 |
+|---|---|---|---|---|
+| `Xenova/all-MiniLM-L6-v2` | ONNX | 384 | ~90 MB | ~30–40 文档/秒 |
+| `sentence-transformers/all-MiniLM-L6-v2` | safetensors | 384 | ~90 MB | ~2–3 文档/秒 |
+| `BAAI/bge-base-en-v1.5` | safetensors | 768 | ~420 MB | ~2–3 文档/秒 |
+
+* **建议从 `Xenova/all-MiniLM-L6-v2` 开始** — 上面示例使用的就是这个模型。它既适合交互式查询，也适合批量写入，质量足以满足大多数搜索应用。
+* **更高的排行榜名次通常不值得在 CPU 上付出写入成本。** 从小型 ONNX 模型换成更大的 `safetensors` 模型，通常会让每个文档的嵌入成本提高 10–20 倍，而最终相关性只会有很小变化。在切换到“更好”的模型之前，请先用你自己的几十条查询和文本，与默认模型做对比。
+* **大规模写入前先做估算。** 嵌入成本是线性的：每个文档的毫秒数乘以行数。按约 300 ms/文档计算，15,000 个文档大约需要 75 分钟；按约 30 ms/文档计算，则不到 10 分钟。先向临时表插入几百条真实数据并据此外推，再决定是否将生产表绑定到某个模型。
+* **写入慢的症状通常指向模型，而不是设置。** 如果插入很慢，或批量加载出现嵌入超时和重试，常见原因是模型不是 ONNX，或者模型过大。切换到 ONNX 仓库即可解决；提高 [`embeddings_threads`](../Server_settings/Searchd.md#embeddings_threads) 不会让慢模型变快，还可能让并发任务拿不到工作线程。
+
 关于配置 `float_vector` 属性的更多信息，请参见[这里](../Creating_a_table/Data_types.md#Float-vector)。
 
 <!-- intro -->
@@ -130,6 +146,8 @@ table test_vec {
 
 使用本地 [ONNX 模型](https://huggingface.co/Xenova/models?pipeline_tag=feature-extraction&search=minilm) - 推荐（无需 API key）
 ```sql
+-- Xenova/all-MiniLM-L6-v2 is the ONNX build: about 30-40 docs/sec on CPU.
+-- sentence-transformers/all-MiniLM-L6-v2 is the same model 10-20x slower; prefer the Xenova/ repo.
 CREATE TABLE products (
     title TEXT,
     description TEXT,
@@ -510,7 +528,7 @@ POST /insert
 
 当提供的是文本查询时（因此 Manticore 会在搜索前对字符串进行嵌入），可以在 SQL 中通过 `OPTION embeddings_threads = N` 按查询覆盖嵌入库使用的线程数。该值只会限制此查询的嵌入调用，覆盖全局 [embeddings_threads](../Server_settings/Searchd.md#embeddings_threads) 设置；`0` 表示不设上限。当查询以向量数组形式提供时，此选项不起作用。
 
-文档总是按其与搜索向量的距离排序。你指定的任何附加排序条件都会在这个主排序条件之后应用。若要获取距离，有一个内置函数 [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29)。
+文档始终按其与搜索向量的距离排序。你指定的任何额外排序条件都会在这个主要排序条件之后应用；请参阅[排序 KNN 结果](../Searching/KNN.md#Sorting-KNN-results)。如需获取距离，可以使用内置函数 [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29)。关于 KNN 搜索会返回多少文档，请参阅 [KNN 候选集](../Searching/KNN.md#KNN-candidate-set)。
 
 <!-- intro -->
 ##### SQL：
@@ -590,6 +608,20 @@ POST /search
 ```
 
 <!-- end -->
+
+### KNN 候选集
+
+KNN 搜索返回的是候选集，而不是精确的行数。实时表的每个磁盘块最多会贡献 `LIMIT` × `oversampling` 个最近文档（如果使用已弃用的 `k`，则为 `k` × `oversampling`），并且 `oversampling` 默认为 3。`LIMIT` 仍然控制你收到的行数，但 [SHOW META](../Node_info_and_management/SHOW_META.md) 中的 `total_found` 以及所有 [FACET](../Searching/Faceted_search.md) 计数都会覆盖整个候选集。例如，在一个包含 4 个磁盘块的表上，`SELECT id FROM t WHERE knn(vec, 'quiet flat') LIMIT 5` 会返回 5 行，`total_found` 为 60（5 × 3 × 4）；在 [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md) 将该表合并为一个块后，同一查询会报告 15。因此，KNN 查询的 `total_found` 并不是相关文档的数量。若要让搜索考虑每个文档，例如按相似度对所有通过属性过滤器的文档进行排序，请将 `LIMIT`（以及需要时的 `max_matches`）设置为至少等于表中的文档数量。
+
+### 排序 KNN 结果
+
+KNN 结果始终先按与查询的距离排序。对另一个属性使用 `ORDER BY` 不会重新排序这些结果：它只会在距离相等时用于打破平局，并且不会返回警告。若要按属性对 KNN 匹配结果排序，请在[子查询](../Searching/Sub-selects.md)中运行 KNN 搜索，并对外层查询排序：
+
+```sql
+SELECT * FROM (SELECT id, price, knn_dist() AS dist FROM products WHERE knn(embedding_vector, 'quiet flat') LIMIT 100) ORDER BY price ASC LIMIT 10;
+```
+
+[混合查询](../Searching/Hybrid_search.md#Sorting)（`OPTION fusion_method='rrf'`）会对属性应用 `ORDER BY`。
 
 <!-- example knn_quantization -->
 

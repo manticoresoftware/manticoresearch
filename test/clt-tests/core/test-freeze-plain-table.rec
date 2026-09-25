@@ -1,0 +1,36 @@
+––– input –––
+searchd --stopwait >/dev/null 2>&1 || true
+rm -rf /tmp/freeze-plain-table
+mkdir -p /tmp/freeze-plain-table/data /tmp/freeze-plain-table/binlog
+printf '1,first\n' >/tmp/freeze-plain-table/rows.csv
+printf '%s\n' 'source src {' '  type = csvpipe' '  csvpipe_command = cat /tmp/freeze-plain-table/rows.csv' '  csvpipe_field = title' '}' 'index plain {' '  source = src' '  path = /tmp/freeze-plain-table/data/plain' '}' 'searchd {' '  listen = 127.0.0.1:9306:mysql' '  log = /tmp/freeze-plain-table/searchd.log' '  pid_file = /tmp/freeze-plain-table/searchd.pid' '  binlog_path = /tmp/freeze-plain-table/binlog' '  watchdog = 0' '}' >/tmp/freeze-plain-table/manticore.conf
+indexer --quiet --config /tmp/freeze-plain-table/manticore.conf plain >/dev/null
+searchd --config /tmp/freeze-plain-table/manticore.conf >/dev/null 2>&1
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e 'FREEZE plain' | grep -q '/plain.sph' && echo 'freeze files: OK'
+mysql -h0 -P9306 -e 'SHOW LOCKS' | grep -Eq 'plain.*read' && echo 'freeze lock: OK'
+––– output –––
+freeze files: OK
+freeze lock: OK
+––– input –––
+mysql -h0 -P9306 -e "UPDATE plain SET title='blocked' WHERE id=1" >/dev/null 2>&1 || echo 'update blocked: OK'
+––– output –––
+update blocked: OK
+––– input –––
+printf '2,rotated\n' >/tmp/freeze-plain-table/rows.csv
+indexer --quiet --config /tmp/freeze-plain-table/manticore.conf --rotate plain >/dev/null
+sleep 1
+mysql -h0 -P9306 -e 'SELECT id,title FROM plain' | grep -Eq '1.*first' && echo 'rotation deferred: OK'
+––– output –––
+rotation deferred: OK
+––– input –––
+mysql -h0 -P9306 -e 'UNFREEZE plain' >/dev/null
+sleep 1
+mysql -h0 -P9306 -e 'SELECT id,title FROM plain' | grep -Eq '2.*rotated' && echo 'rotation completed: OK'
+––– output –––
+rotation completed: OK
+––– input –––
+searchd --config /tmp/freeze-plain-table/manticore.conf --stopwait >/dev/null 2>&1
+rm -rf /tmp/freeze-plain-table
+––– output –––

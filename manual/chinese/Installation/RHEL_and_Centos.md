@@ -35,6 +35,8 @@ sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 sudo yum install manticore
 ```
 
+自 25.0.0 版本起，`manticore` 是一个单一的捆绑包。它已包含 Manticore Buddy、Manticore Columnar Library（列式存储、二级索引、KNN 搜索和自动嵌入）、backup、load 和 Galera，因此无需安装其他 `manticore-*` 包。
+
 如果你是从旧版本升级到 Manticore 6 或更高版本，建议先移除旧的软件包，以避免因更新后的包结构而导致冲突：
 
 ```bash

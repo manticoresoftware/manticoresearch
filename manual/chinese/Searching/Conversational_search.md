@@ -163,7 +163,7 @@ environment:
 
 ## 本地 OpenAI 兼容模型
 
-LM Studio 可以将本地模型用于会话式搜索。对于不在 `openai:*` 目录中的本地模型标识符，请通过 LM Studio 的 Chat Completions 端点使用 `openrouter:*` 传输方式。当 Buddy 在 Docker 中运行时，请使用 `host.docker.internal` 访问主机上的服务器。
+LM Studio 可以将本地模型用于 Conversational Search。对于不在 `openai:*` 目录中的本地模型标识符，请将 `openrouter:*` 传输方式与 LM Studio 的 Chat Completions 端点配合使用。当 Buddy 在 Docker 中运行时，请使用 `host.docker.internal` 访问主机上的服务器。
 
 <!-- example conversational_search_create_local_model -->
 
@@ -184,7 +184,7 @@ CREATE CHAT MODEL local_assistant (
 
 <!-- end -->
 
-`api_key` 是 LM Studio 接受的非敏感占位符；不要为本地服务器使用真实服务商密钥。`llm` 扩展会根据其支持的 OpenAI 模型名称验证 `openai:*` 的模型部分，因此即使 LM Studio 已加载该模型，`openai:google_gemma-4-e4b-it` 也会被拒绝。`openrouter:*` 传输方式接受本地标识符，并可通过 `base_url` 指向 OpenAI 兼容的 Chat Completions 服务器。会话式搜索要求本地模型能够可靠地为 Buddy 的路由模式返回 OpenAI 函数调用。请使用 `CALL CHAT` 进行测试；仅测试基础文本补全或简单的工具调用是不够的。
+`api_key` 是 LM Studio 接受的非机密占位符；不要为本地服务器使用真实的提供商密钥。`llm` 扩展会根据其支持的 OpenAI 模型名称校验 `openai:*` 的模型部分，因此即使 LM Studio 已加载该模型，`openai:google_gemma-4-e4b-it` 也会被拒绝。`openrouter:*` 传输方式接受本地标识符，并可通过 `base_url` 指向 OpenAI 兼容的 Chat Completions 服务器。Conversational Search 要求本地模型能够可靠地为 Buddy 的路由模式返回 OpenAI 函数调用。请使用 `CALL CHAT` 进行测试；仅测试基本文本补全或简单的工具调用是不够的。
 
 ## `CALL CHAT` 语法
 

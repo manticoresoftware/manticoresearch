@@ -400,13 +400,10 @@ int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, CSphVector<
 		CSphQuery & tQuery = m_dNQueries[iQuery];
 		const CSphIndex * pJoinedIndex = dJoinedIndexes[iQuery].m_dIndexes.GetLength() ? dJoinedIndexes[iQuery].m_dIndexes[0] : nullptr;
 
-		// facets of a hybrid query are regular facet passes over the fused candidates
-		CSphQuery tHybridFacetQuery;
+		// facets of a hybrid query are regular facet passes over the fused candidates; their sorters come from the scan queries prepared in RunSubset()
 		bool bHybridFacet = iQuery>0 && m_dNQueries[0].m_bHybridSearch;
-		if ( bHybridFacet )
-			tHybridFacetQuery = MakeHybridFacetScanQuery ( m_dNQueries[0], tQuery );
-
-		const CSphQuery & tSorterQuery = bHybridFacet ? tHybridFacetQuery : tQuery;
+		assert ( !bHybridFacet || m_dNHybridFacetQueries.GetLength()==iQueries );
+		const CSphQuery & tSorterQuery = bHybridFacet ? m_dNHybridFacetQueries[iQuery] : tQuery;
 
 		// create queue
 		auto tQueueSettings = MakeQueueSettings ( pIndex, pJoinedIndex, dJoinedIndexes[0].m_szParent, tQuery.m_iMaxMatches, m_dPSInfo.First().m_bForceSingleThread, pHook );
@@ -424,6 +421,18 @@ int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, CSphVector<
 		dSorters[iQuery] = pSorter;
 		++iValidSorters;
 	}
+
+	// a hybrid head runs its facets itself; a facet without a sorter would leave a failed result next to a successful head
+	if ( iQueries>1 && m_dNQueries[0].m_bHybridSearch && iValidSorters<iQueries )
+	{
+		for ( int iQuery = 1; iQuery<iQueries && dErrors[0].IsEmpty(); ++iQuery )
+			if ( !dErrors[iQuery].IsEmpty() )
+				dErrors[0].SetSprintf ( "facet: %s", dErrors[iQuery].cstr() );
+
+		dSorters.Apply ( [] ( ISphMatchSorter *& pSorter ) { SafeDelete (pSorter); } );
+		return 0;
+	}
+
 	return iValidSorters;
 }
 
@@ -1149,7 +1158,7 @@ void SearchHandler_c::RunLocalSearches()
 				{
 					const CSphIndex * pJoinedIndex = dJoinedIndexes[0].m_dIndexes.GetLength() ? dJoinedIndexes[0].m_dIndexes[0] : nullptr;
 					auto tQueueSettings = MakeQueueSettings ( pIndex, pJoinedIndex, dJoinedIndexes[0].m_szParent, m_dNQueries.First().m_iMaxMatches, m_dPSInfo[iLocal].m_bForceSingleThread, &tCtx.m_tHook );
-					bResult = ExecuteHybridSearch ( pIndex, m_dNQueries, tQueueSettings, dNResults, dSorters, tMultiArgs );
+					bResult = ExecuteHybridSearch ( pIndex, m_dNQueries, m_dNHybridFacetQueries, tQueueSettings, dNResults, dSorters, tMultiArgs );
 				}
 				else if ( bLocalMultiQueue )
 					bResult = pIndex->MultiQuery ( tMqRes, m_dNQueries.First(), dSorters, tMultiArgs );
@@ -2013,8 +2022,10 @@ static int FindFacetZeroesHelper ( const VecTraits_T<CSphQuery> & dQueries, int 
 	return -1;
 }
 
-static void FinalizeFacetZeroes ( const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<AggrResult_t> & dResults, bool bHaveLocals, const StrVec_t & dExtraSchema, QueryProfile_c * pProfile, bool bForceRefItems, bool bMaster )
+// dMinimizeQueries are the queries whose sorters produced the results (the facet scan queries of a hybrid head); dQueries otherwise
+static void FinalizeFacetZeroes ( const VecTraits_T<CSphQuery> & dQueries, const VecTraits_T<CSphQuery> & dMinimizeQueries, VecTraits_T<AggrResult_t> & dResults, bool bHaveLocals, const StrVec_t & dExtraSchema, QueryProfile_c * pProfile, bool bForceRefItems, bool bMaster )
 {
+	assert ( dMinimizeQueries.GetLength()==dQueries.GetLength() );
 	for ( int i=0; i<dQueries.GetLength(); ++i )
 	{
 		const CSphQuery & tFacetQuery = dQueries[i];
@@ -2038,7 +2049,7 @@ static void FinalizeFacetZeroes ( const VecTraits_T<CSphQuery> & dQueries, VecTr
 		if ( bCanFinalize && bAppended )
 		{
 			sph::StringSet hExtra = BuildExtraSchemaSet ( dExtraSchema );
-			if ( !MinimizeAggrResult ( tRes, tFacetQuery, bHaveLocals, hExtra, pProfile, nullptr, bForceRefItems, bMaster, true ) )
+			if ( !MinimizeAggrResult ( tRes, dMinimizeQueries[i], bHaveLocals, hExtra, pProfile, nullptr, bForceRefItems, bMaster, true ) )
 			{
 				tRes.m_iSuccesses = 0;
 				continue;
@@ -2152,9 +2163,16 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	if ( m_bMultiQueue )
 		m_bMultiQueue = AllowsMulti ();
 
-	// hybrid search runs its facets one by one over the fused candidates, each with its own sorter
+	// hybrid search runs its facets one by one over the fused candidates, each with its own sorter created from the facet's scan query
+	m_dNHybridFacetQueries.Resize(0);
 	if ( tFirst.m_bHybridSearch )
+	{
 		m_bMultiQueue = false;
+		m_dNHybridFacetQueries.Resize ( iQueries );
+		m_dNHybridFacetQueries[0] = tFirst;	// the head runs as is; keeps the vector index-aligned with m_dNQueries
+		for ( int i = 1; i<iQueries; i++ )
+			m_dNHybridFacetQueries[i] = MakeHybridFacetScanQuery ( tFirst, m_dNQueries[i] );
+	}
 
 	assert ( !m_bFacetQueue || AllowsMulti () );
 	if ( !m_bMultiQueue )
@@ -2346,7 +2364,11 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		sph::StringSet hExtra = BuildExtraSchemaSet ( m_dExtraSchema );
 
 		AggrResult_t & tRes = m_dNAggrResults[iRes];
-		const CSphQuery & tQuery = m_dNQueries[iRes];
+
+		// a hybrid facet's matches come from its scan sorter; post-processing (merge sorters, schema) must use that query, not the hybrid one
+		const bool bHybridFacet = iRes>0 && tFirst.m_bHybridSearch;
+		assert ( !bHybridFacet || m_dNHybridFacetQueries.GetLength()==iQueries );
+		const CSphQuery & tQuery = bHybridFacet ? m_dNHybridFacetQueries[iRes] : m_dNQueries[iRes];
 		const bool bGroupConcatHead = bGroupConcatBundle && iRes==0;
 
 		// minimize sorters needs these pointers
@@ -2432,7 +2454,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			tRes.m_dIndexNames.Add ( tLocal.m_sName );
 	}
 
-	FinalizeFacetZeroes ( m_dNQueries, m_dNAggrResults, !m_dLocal.IsEmpty(), m_dExtraSchema, m_pProfile, m_bFederatedUser, m_bMaster );
+	FinalizeFacetZeroes ( m_dNQueries, tFirst.m_bHybridSearch ? VecTraits_T<CSphQuery> ( m_dNHybridFacetQueries ) : m_dNQueries, m_dNAggrResults, !m_dLocal.IsEmpty(), m_dExtraSchema, m_pProfile, m_bFederatedUser, m_bMaster );
 
 	// pop up facet error from one of the query to the front
 	FillupFacetError ( iQueries, m_dQueries, m_dNAggrResults );

@@ -1647,6 +1647,10 @@ bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 	if ( m_sAttrName!=rhs.m_sAttrName || m_bExclude!=rhs.m_bExclude || m_eType!=rhs.m_eType )
 		return false;
 
+	if ( m_bHasEqualMin!=rhs.m_bHasEqualMin || m_bHasEqualMax!=rhs.m_bHasEqualMax || m_bOpenLeft!=rhs.m_bOpenLeft || m_bOpenRight!=rhs.m_bOpenRight
+		|| m_bIsNull!=rhs.m_bIsNull || m_bOptional!=rhs.m_bOptional || m_eMvaFunc!=rhs.m_eMvaFunc || m_eStrCmpDir!=rhs.m_eStrCmpDir )
+		return false;
+
 	switch ( m_eType )
 	{
 		case SPH_FILTER_RANGE:
@@ -1673,7 +1677,11 @@ bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 			ARRAY_FOREACH ( i, m_dStrings )
 				if ( m_dStrings[i]!=rhs.m_dStrings[i] )
 					return false;
-			return ( m_eMvaFunc==rhs.m_eMvaFunc );
+			return true;
+
+		case SPH_FILTER_NULL:		// the attribute name and the IS NULL / IS NOT NULL flag are compared above
+		case SPH_FILTER_EXPRESSION:	// the attribute name holds the expression
+			return true;
 
 		default:
 			assert ( 0 && "internal error: unhandled filter type in comparison" );

@@ -604,6 +604,10 @@ bool HybridExecutor_c::RunSubQuery ( const CSphQuery & tQuery, const CSphMultiQu
 		return false;
 	}
 
+	// RT searches leave standalone matches holding only the selected columns; the join sorter reads the ON attrs from the fused match,
+	// so the sub-query matches must keep them too (as the output sorter does), or an INNER JOIN finds no right rows
+	PreserveJoinOnAttrsForTransform ( tSubResult.m_pSorter.get() );
+
 	CSphQueryResult tResult;
 	tResult.m_pMeta = &tSubResult.m_tMeta;
 
@@ -957,26 +961,129 @@ static bool SameFilters ( const CSphQuery & tA, const CSphQuery & tB )
 }
 
 
-// hybrid query that produces the facet's candidates: the head query (same text, KNN and fusion window)
-// restricted by the facet's own filters (facet modes may drop some head filters); fuses documents, not groups
+static bool IsIdentChar ( char c )
+{
+	return ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || ( c>='0' && c<='9' ) || c=='_' || c=='@' || c=='.';
+}
+
+
+// whether the expression text mentions the name as a whole identifier (e.g. "w*2" mentions "w", "weight()*10" does not)
+static bool ExprReferencesName ( const CSphString & sExpr, const CSphString & sName )
+{
+	int iExprLen = sExpr.Length();
+	int iNameLen = sName.Length();
+	if ( !iExprLen || !iNameLen )
+		return false;
+
+	const char * szExpr = sExpr.cstr();
+	for ( int i = 0; i + iNameLen <= iExprLen; i++ )
+	{
+		if ( strncasecmp ( szExpr+i, sName.cstr(), iNameLen ) )
+			continue;
+
+		if ( i>0 && IsIdentChar ( szExpr[i-1] ) )
+			continue;
+
+		if ( i+iNameLen<iExprLen && IsIdentChar ( szExpr[i+iNameLen] ) )
+			continue;
+
+		return true;
+	}
+
+	return false;
+}
+
+
+// extend dNames with the select-list aliases that depend on any of the names, directly or through other aliases
+// (SELECT weight()*10 w, w+1 w1 ... makes both w and w1 depend on weight())
+static void CollectDependentAliases ( const CSphVector<CSphQueryItem> & dItems, StrVec_t & dNames )
+{
+	for ( bool bAdded = true; bAdded; )
+	{
+		bAdded = false;
+		for ( const auto & tItem : dItems )
+		{
+			if ( tItem.m_sAlias.IsEmpty() || dNames.Contains ( tItem.m_sAlias ) )
+				continue;
+
+			if ( !dNames.any_of ( [&tItem] ( const CSphString & sName ) { return tItem.m_sExpr==sName || ExprReferencesName ( tItem.m_sExpr, sName ); } ) )
+				continue;
+
+			dNames.Add ( tItem.m_sAlias );
+			bAdded = true;
+		}
+	}
+}
+
+
+static void RemoveFiltersByName ( CSphVector<CSphFilterSettings> & dFilters, const StrVec_t & dNames )
+{
+	ARRAY_FOREACH ( i, dFilters )
+		if ( dNames.Contains ( dFilters[i].m_sAttrName ) )
+			dFilters.Remove ( i-- );
+}
+
+
+// everything the hybrid executor filters after fusion: the fusion attrs, optionally the text weight, and the select-list aliases depending on them
+// (mirrors SetupPostFilters and SetupWeightFilters, which work on the sorter schema; here only the query text is available)
+static StrVec_t CollectPostFusionNames ( const CSphQuery & tHead, bool bWithWeight )
+{
+	StrVec_t dNames;
+	for ( const char * szName : { GetHybridScoreAttrName(), "hybrid_score()", GetKnnDistAttrName(), "knn_dist()" } )
+		dNames.Add ( szName );
+
+	if ( bWithWeight )
+		for ( const char * szName : { "@weight", "weight()" } )
+			dNames.Add ( szName );
+
+	CollectDependentAliases ( tHead.m_dItems, dNames );
+	return dNames;
+}
+
+
+// hybrid query that produces the facet's candidates: the head query (same text, KNN, fusion window, sort order and scroll cursor,
+// so the post-fusion filters match the head's) restricted by the facet's own filters (facet modes may drop some head filters).
+// Fuses documents, not groups
 static CSphQuery MakeFacetCandidateQuery ( const CSphQuery & tHead, const CSphQuery & tFacet )
 {
+	// m_bFacetHead stays set: the head's select list carries the facets' items (count(*) among them) and the flag is what
+	// keeps them from turning the sub-query sorters into single-group (implicit grouping) sorters
 	CSphQuery tQuery = tHead;
 	tQuery.m_dFilters = tFacet.m_dFilters;
 	tQuery.m_dFilterTree = tFacet.m_dFilterTree;
-	tQuery.m_eSort = SPH_SORT_EXTENDED;
-	tQuery.m_sSortBy = "@weight desc";
-	tQuery.m_tScrollSettings = ScrollSettings_t();
 
 	if ( tQuery.m_sGroupBy.IsEmpty() )
 		return tQuery;
 
+	// a grouped head sorts and scrolls over groups; the candidates are documents
+	tQuery.m_eSort = SPH_SORT_EXTENDED;
+	tQuery.m_sSortBy = "@weight desc";
+	tQuery.m_tScrollSettings = ScrollSettings_t();
 	tQuery.m_sGroupBy = "";
 	tQuery.m_eGroupFunc = SPH_GROUPBY_ATTR;
 	tQuery.m_sGroupDistinct = "";
 	tQuery.m_tHaving = CSphFilterSettings();
+
+	// drop the aggregates and the group-by magic along with the expressions built on them (count(*)*2 AS c2)
+	StrVec_t dRemoved;
+	for ( const char * szName : { "@count", "count(*)", "@groupby", "groupby()", "@distinct" } )
+		dRemoved.Add ( szName );
+
 	ARRAY_FOREACH ( i, tQuery.m_dItems )
-		if ( tQuery.m_dItems[i].m_eAggrFunc!=SPH_AGGR_NONE || IsGroupbyMagic ( tQuery.m_dItems[i].m_sExpr ) )
+	{
+		const CSphQueryItem & tItem = tQuery.m_dItems[i];
+		if ( tItem.m_eAggrFunc==SPH_AGGR_NONE && !IsGroupbyMagic ( tItem.m_sExpr ) )
+			continue;
+
+		if ( !tItem.m_sAlias.IsEmpty() )
+			dRemoved.Add ( tItem.m_sAlias );
+
+		tQuery.m_dItems.Remove ( i-- );
+	}
+
+	CollectDependentAliases ( tQuery.m_dItems, dRemoved );
+	ARRAY_FOREACH ( i, tQuery.m_dItems )
+		if ( dRemoved.Contains ( tQuery.m_dItems[i].m_sAlias ) )
 			tQuery.m_dItems.Remove ( i-- );
 
 	return tQuery;
@@ -992,6 +1099,18 @@ CSphQuery MakeHybridFacetScanQuery ( const CSphQuery & tHead, const CSphQuery & 
 	tQuery.m_sRawQuery = "";
 	RemoveQueryItems ( tQuery.m_dItems, { "hybrid_score()", GetHybridScoreAttrName(), "knn_dist()", GetKnnDistAttrName() } );
 
+	// JSON facets copy the head's scroll cursor; the candidates already honor it and the facet sorter must not scroll
+	tQuery.m_tScrollSettings = ScrollSettings_t();
+
+	// JSON facets also copy the head's sort as their within-group sort; hybrid_score() and knn_dist() don't exist here
+	// and the within-group order doesn't affect the counts
+	StrVec_t dFusionNames = CollectPostFusionNames ( tHead, false );
+	if ( dFusionNames.any_of ( [&tQuery] ( const CSphString & sName ) { return ExprReferencesName ( tQuery.m_sSortBy, sName ); } ) )
+	{
+		tQuery.m_eSort = SPH_SORT_EXTENDED;
+		tQuery.m_sSortBy = "@weight desc";
+	}
+
 	// the candidates already passed the facet's filters (including post-fusion ones, which can't be evaluated here);
 	// keep only what the join sorter applies after the join. Filter trees can't reference post-fusion attrs (hybrid executor rejects that)
 	if ( tQuery.m_dFilterTree.IsEmpty() )
@@ -999,10 +1118,7 @@ CSphQuery MakeHybridFacetScanQuery ( const CSphQuery & tHead, const CSphQuery & 
 		if ( tQuery.m_sJoinIdx.IsEmpty() )
 			tQuery.m_dFilters.Reset();
 		else
-		{
-			QueryFilterNameSet_c tPostFusionNames ( tHead.m_dItems, { GetHybridScoreAttrName(), "hybrid_score()", GetKnnDistAttrName(), "knn_dist()", "@weight", "weight()" } );
-			tPostFusionNames.RemoveFilters ( tQuery.m_dFilters );
-		}
+			RemoveFiltersByName ( tQuery.m_dFilters, CollectPostFusionNames ( tHead, true ) );
 	}
 
 	return tQuery;
@@ -1019,61 +1135,49 @@ static void AddDocidFilter ( CSphQuery & tQuery, const CSphVector<DocID_t> & dDo
 		tDocs.m_dValues[i] = dDocs[i];
 	tDocs.m_dValues.Uniq();
 
-	if ( !tQuery.m_dFilterTree.IsEmpty() )
-	{
-		int iRootNode = tQuery.m_dFilterTree.GetLength()-1;
-		FilterTreeItem_t & tFilterNode = tQuery.m_dFilterTree.Add();
-		tFilterNode.m_iFilterItem = tQuery.m_dFilters.GetLength();
-
-		FilterTreeItem_t & tAnd = tQuery.m_dFilterTree.Add();
-		tAnd.m_iLeft = iRootNode;
-		tAnd.m_iRight = tQuery.m_dFilterTree.GetLength()-2;
-	}
-
-	tQuery.m_dFilters.Add ( tDocs );
+	AddQueryFilter ( tQuery, std::move(tDocs) );
 }
 
 
-static bool ExecuteHybridFacet ( const CSphIndex * pIndex, const CSphQuery & tHead, const CSphQuery & tFacet, const HybridExecutor_c & tHeadExecutor, const SphQueueSettings_t & tQueueSettings, CSphQueryResult & tResult, ISphMatchSorter * pSorter, const CSphMultiQueryArgs & tArgs )
+static bool ExecuteHybridFacet ( const CSphIndex * pIndex, const CSphQuery & tHead, const CSphQuery & tFacet, const CSphQuery & tScanQuery, const HybridExecutor_c & tHeadExecutor, const SphQueueSettings_t & tQueueSettings, CSphQueryResult & tResult, ISphMatchSorter * pSorter, const CSphMultiQueryArgs & tArgs )
 {
 	auto & tMeta = *tResult.m_pMeta;
 
-	// fused head matches are documents (not groups) and passed the same filters; reuse them
-	CSphVector<DocID_t> dCandidates;
-	if ( tHead.m_sGroupBy.IsEmpty() && SameFilters ( tHead, tFacet ) )
-		dCandidates = tHeadExecutor.GetFusedDocs();
-	else
+	// fused head matches are documents (not groups) that passed the same filters; reuse them.
+	// otherwise run the hybrid query again with the facet's filters (the executor keeps a reference to the queue settings)
+	CSphQuery tCandidateQuery;
+	SphQueueSettings_t tCandidateSettings = CreateHybridSubQueryQueueSettings ( tQueueSettings );
+	std::unique_ptr<HybridExecutor_c> pCandidateExecutor;
+	if ( !tHead.m_sGroupBy.IsEmpty() || !SameFilters ( tHead, tFacet ) )
 	{
-		CSphQuery tCandidateQuery = MakeFacetCandidateQuery ( tHead, tFacet );
+		tCandidateQuery = MakeFacetCandidateQuery ( tHead, tFacet );
 
 		SphQueueRes_t tQueueRes;
-		SphQueueSettings_t tCandidateSettings = CreateHybridSubQueryQueueSettings ( tQueueSettings );
 		std::unique_ptr<ISphMatchSorter> pCandidateSorter ( sphCreateQueue ( tCandidateSettings, tCandidateQuery, tMeta.m_sError, tQueueRes ) );
 		if ( !pCandidateSorter )
 			return false;
 
-		HybridExecutor_c tCandidates ( pIndex, tCandidateQuery, tCandidateSettings );
-		tCandidates.CollectFusedDocs();
-		if ( !tCandidates.Execute ( tResult, pCandidateSorter.get(), tArgs ) )
+		pCandidateExecutor = std::make_unique<HybridExecutor_c> ( pIndex, tCandidateQuery, tCandidateSettings );
+		pCandidateExecutor->CollectFusedDocs();
+		if ( !pCandidateExecutor->Execute ( tResult, pCandidateSorter.get(), tArgs ) )
 			return false;
-
-		dCandidates = tCandidates.GetFusedDocs();
 	}
 
+	const CSphVector<DocID_t> & dCandidates = pCandidateExecutor ? pCandidateExecutor->GetFusedDocs() : tHeadExecutor.GetFusedDocs();
 	if ( dCandidates.IsEmpty() )
 		return true;
 
-	// facet counts come from a regular (non-hybrid) facet pass over the fused candidates
+	// facet counts come from a regular (non-hybrid) facet pass over the candidates; the sorter was created from the same scan query
 	std::unique_ptr<QueryParser_i> pParser = sphCreatePlainQueryParser();
-	CSphQuery tScanQuery = MakeHybridFacetScanQuery ( tHead, tFacet );
-	tScanQuery.m_pQueryParser = pParser.get();
-	AddDocidFilter ( tScanQuery, dCandidates );
+	CSphQuery tQuery = tScanQuery;
+	tQuery.m_pQueryParser = pParser.get();
+	AddDocidFilter ( tQuery, dCandidates );
 	ISphMatchSorter * pSorterRaw = pSorter;
-	return pIndex->MultiQuery ( tResult, tScanQuery, { &pSorterRaw, 1 }, tArgs );
+	return pIndex->MultiQuery ( tResult, tQuery, { &pSorterRaw, 1 }, tArgs );
 }
 
 
-bool ExecuteHybridSearch ( const CSphIndex * pIndex, const VecTraits_T<CSphQuery> & dQueries, const SphQueueSettings_t & tQueueSettings, const VecTraits_T<CSphQueryResult> & dResults, const VecTraits_T<ISphMatchSorter*> & dSorters, const CSphMultiQueryArgs & tArgs )
+bool ExecuteHybridSearch ( const CSphIndex * pIndex, const VecTraits_T<CSphQuery> & dQueries, const VecTraits_T<CSphQuery> & dFacetScanQueries, const SphQueueSettings_t & tQueueSettings, const VecTraits_T<CSphQueryResult> & dResults, const VecTraits_T<ISphMatchSorter*> & dSorters, const CSphMultiQueryArgs & tArgs )
 {
 	assert ( dQueries.GetLength()==dResults.GetLength() && dQueries.GetLength()==dSorters.GetLength() );
 
@@ -1089,6 +1193,9 @@ bool ExecuteHybridSearch ( const CSphIndex * pIndex, const VecTraits_T<CSphQuery
 	if ( !dSorters[0] )
 		return fnFail ( "hybrid search: failed to create sorter" );
 
+	if ( dQueries.GetLength()>1 && dFacetScanQueries.GetLength()!=dQueries.GetLength() )
+		return fnFail ( "hybrid search: internal error, facet queries were not prepared" );
+
 	const CSphQuery & tHead = dQueries[0];
 	HybridExecutor_c tHybrid ( pIndex, tHead, tQueueSettings );
 	if ( dQueries.GetLength()>1 )
@@ -1102,7 +1209,7 @@ bool ExecuteHybridSearch ( const CSphIndex * pIndex, const VecTraits_T<CSphQuery
 		if ( !dSorters[i] )
 			continue;
 
-		if ( !ExecuteHybridFacet ( pIndex, tHead, dQueries[i], tHybrid, tQueueSettings, dResults[i], dSorters[i], tArgs ) )
+		if ( !ExecuteHybridFacet ( pIndex, tHead, dQueries[i], dFacetScanQueries[i], tHybrid, tQueueSettings, dResults[i], dSorters[i], tArgs ) )
 			return fnFail ( dResults[i].m_pMeta->m_sError );
 	}
 

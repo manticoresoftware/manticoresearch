@@ -16,10 +16,8 @@ class CSphIndex;
 class ISphMatchSorter;
 
 const char * GetHybridScoreAttrName();
-bool IsHybridScoreAttr ( const CSphString & sAttr );
-bool IsKnnDistAttr ( const CSphString & sAttr );
-bool IsHybridPostFusionAttr ( const CSphString & sAttr );
-// facet query of a hybrid head as it runs over the fused candidates (the facet sorter must be created from it)
+bool	IsHybridScoreAttr ( const CSphString & sAttr );
+bool	IsKnnDistAttr ( const CSphString & sAttr );
+bool	IsHybridPostFusionAttr ( const CSphString & sAttr );
 CSphQuery MakeHybridFacetScanQuery ( const CSphQuery & tHead, const CSphQuery & tFacet );
-// dQueries is the hybrid query optionally followed by its facet queries (one sorter and result per query)
-bool ExecuteHybridSearch ( const CSphIndex * pIndex, const VecTraits_T<CSphQuery> & dQueries, const SphQueueSettings_t & tQueueSettings, const VecTraits_T<CSphQueryResult> & dResults, const VecTraits_T<ISphMatchSorter*> & dSorters, const CSphMultiQueryArgs & tArgs );
+bool	ExecuteHybridSearch ( const CSphIndex * pIndex, const VecTraits_T<CSphQuery> & dQueries, const VecTraits_T<CSphQuery> & dFacetScanQueries, const SphQueueSettings_t & tQueueSettings, const VecTraits_T<CSphQueryResult> & dResults, const VecTraits_T<ISphMatchSorter*> & dSorters, const CSphMultiQueryArgs & tArgs );

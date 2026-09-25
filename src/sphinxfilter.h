@@ -103,6 +103,9 @@ void FixupFilterSettings ( const CSphFilterSettings & tSettings, ESphAttr eAttrT
 
 void OptimizeFilters ( CSphVector<CSphFilterSettings> & dFilters );
 
+// append a filter to the query, ANDing it with the existing filters (also when they form a filter tree)
+void AddQueryFilter ( CSphQuery & tQuery, CSphFilterSettings tFilter );
+
 CSphString FilterType2Str ( ESphFilter eFilterType );
 bool HasKNNDistFilter ( const CSphQuery & tQuery );
 

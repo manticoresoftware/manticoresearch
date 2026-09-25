@@ -1384,15 +1384,20 @@ public:
 
 class ChunkID_c
 {
-	int m_iCh = -1;
+	std::atomic<int> m_iCh { -1 };
 
 public:
+	// called from the serial fiber (save, attach) and from merge workers outside of it (parallel_chunk_merges)
 	int MakeChunkId ( const RtData_c& tData )
 	{
-		if ( m_iCh < 0 )
-			tData.DiskChunks()->for_each ( [this] ( auto& pIdx ) { m_iCh = Max ( m_iCh, pIdx->Cidx().m_iChunk ); } );
-		++m_iCh;
-		return m_iCh;
+		int iCur = m_iCh.load ( std::memory_order_relaxed );
+		if ( iCur < 0 )
+		{
+			int iMax = -1;
+			tData.DiskChunks()->for_each ( [&iMax] ( auto& pIdx ) { iMax = Max ( iMax, pIdx->Cidx().m_iChunk ); } );
+			m_iCh.compare_exchange_strong ( iCur, iMax );
+		}
+		return m_iCh.fetch_add ( 1 ) + 1;
 	}
 
 	int GetChunkId ( const RtData_c & tData ) const

@@ -970,6 +970,8 @@ PURGE BULK_IMPORT FROM TABLE products;
 * Static builds are not supported.
 * The platform-specific executable (`indexer` on Linux, `indexer.exe` on Windows) must be in the same directory as the running `searchd` executable. Manticore Search resolves only that sibling path and does not search `PATH`. Use the executable from the same installation as `searchd` to ensure compatibility. If it is absent, unreadable, or cannot be started, only bulk import fails; normal startup and regular insertion remain available.
 
+The assisted loader uses the `csvpipe` source. Its command defaults to `/bin/cat` on Linux and `-` on Windows, where `-` reads from the indexer's standard input. Set `INDEXER_RT_BULK_CSV_PIPE_COMMAND` in the `searchd` environment to override only this command. The override does not select another source or feed; the command must work with the platform's input feed and pass CSV rows to the indexer. An unsupported command causes the assisted load to fail.
+
 <!-- intro -->
 ### Bulk insert examples
 ##### SQL:

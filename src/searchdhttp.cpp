@@ -2809,14 +2809,6 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 
 	// should set client user to pass it further into distributed index
 	session::SetUser ( sUser );
-	if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::ES_BULK && session::Info().GetClientSession()->m_tIndexerRtBulk.IsEnabled() )
-	{
-		tRes.m_eReplyHttpCode = EHTTP_STATUS::_400;
-		tRes.m_sError = "Elasticsearch /_bulk is unavailable while bulk_import is active; use SQL or Manticore /bulk";
-		tRes.m_bSkipBuddy = true;
-		sphHttpErrorReply ( dResult, tRes.m_eReplyHttpCode, tRes.m_sError.cstr() );
-		return tRes;
-	}
 
 	// Keeps the decoded /bulk blob stream alive while the handler reads it.
 	std::unique_ptr<CharStream_c> pDecodedSource;
@@ -2851,6 +2843,8 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 	tRes.m_bOk = pHandler->Process();
 	tRes.m_sError = pHandler->GetError();
 	tRes.m_eReplyHttpCode = pHandler->GetStatusCode();
+	// error with status code 403 Forbidden should not route into buddy
+	// bulk can not be procesed by buddy due to buddy unsupported Transfer-Encoding: chunked
 	tRes.m_bSkipBuddy = ( tRes.m_eReplyHttpCode==EHTTP_STATUS::_403 || tRes.m_eEndpoint==EHTTP_ENDPOINT::JSON_BULK );
 	dResult = std::move ( pHandler->GetResult() );
 
@@ -2924,8 +2918,6 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 		tRes = ProcessHttpQuery ( *pSource, sSrcQuery, m_hOptions, dResult, true, m_eType, false, bCompressed );
 	}
 
-	if ( eEndpoint==EHTTP_ENDPOINT::JSON_BULK )
-		tRes.m_bSkipBuddy = true;
 	return ProcessHttpQueryBuddy ( tRes, sSrcQuery, m_hOptions, dResult, true, m_eType );
 }
 
@@ -3709,20 +3701,17 @@ bool HttpHandlerEsBulk_c::Validate()
 		ReportLogError ( "The bulk request must be terminated by a newline [\n]", HttpErrorType_e::IllegalArgument, EHTTP_STATUS::_400, false );
 		return false;
 	}
-
-	return true;
-}
-
-
-bool HttpHandlerEsBulk_c::Process()
-{
-	if ( ( m_hOpts.Exists ( "bulk_import" ) && m_hOpts["bulk_import"]=="1" )
-		|| ( m_hOpts.Exists ( "pipeline" ) && m_hOpts["pipeline"]=="bulk_import" ) )
+	if ( GetOptions().Exists ( "bulk_import" ) )
 	{
 		ReportLogError ( "direct-to-disk bulk loading is unsupported on Elasticsearch /_bulk; use SQL or Manticore /bulk", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400, false );
 		return false;
 	}
 
+	return true;
+}
+
+bool HttpHandlerEsBulk_c::Process()
+{
 	if ( !Validate() )
 		return false;
 

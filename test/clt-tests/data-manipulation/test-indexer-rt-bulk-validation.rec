@@ -1,0 +1,64 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 <<'SQL'
+DROP TABLE IF EXISTS rt_bulk_validation_direct;
+DROP TABLE IF EXISTS rt_bulk_validation_assisted;
+CREATE TABLE rt_bulk_validation_direct (title TEXT, gid INTEGER);
+CREATE TABLE rt_bulk_validation_assisted (title TEXT, gid INTEGER);
+SQL
+
+direct_errors=$(mysql --force -h0 -P9306 2>&1 <<'SQL'
+INSERT INTO rt_bulk_validation_direct(id,title,gid) VALUES (901,'valid before errors',11);
+INSERT INTO rt_bulk_validation_direct(ghost) VALUES (900);
+INSERT INTO rt_bulk_validation_direct(id,title,ghost) VALUES (902,'unknown extra',2);
+INSERT INTO rt_bulk_validation_direct(id,title,title) VALUES (903,'first title','second title');
+INSERT INTO rt_bulk_validation_direct(id,title,title,ghost) VALUES (907,'first title','second title',2);
+INSERT INTO rt_bulk_validation_direct(id,title,title,gid,gid) VALUES (908,'first title','second title',3,4);
+INSERT INTO rt_bulk_validation_direct(id,title,`@uuid_id`) VALUES (904,'hidden attribute','hidden');
+INSERT INTO rt_bulk_validation_direct(id,title) VALUES (906);
+INSERT INTO rt_bulk_validation_direct(id,title,gid) VALUES (905,'valid after errors',55);
+INSERT INTO rt_bulk_validation_direct(gid,title,id) VALUES (77,'reordered columns',909);
+SQL
+)
+
+assisted_errors=$(mysql --force -h0 -P9306 2>&1 <<'SQL'
+SET bulk_import=rt_bulk_validation_assisted;
+INSERT INTO rt_bulk_validation_assisted(ghost) VALUES (900);
+INSERT INTO rt_bulk_validation_assisted(id,title,gid) VALUES (901,'valid before errors',11);
+INSERT INTO rt_bulk_validation_assisted(id,title,ghost) VALUES (902,'unknown extra',2);
+INSERT INTO rt_bulk_validation_assisted(id,title,title) VALUES (903,'first title','second title');
+INSERT INTO rt_bulk_validation_assisted(id,title,title,ghost) VALUES (907,'first title','second title',2);
+INSERT INTO rt_bulk_validation_assisted(id,title,title,gid,gid) VALUES (908,'first title','second title',3,4);
+INSERT INTO rt_bulk_validation_assisted(id,title,`@uuid_id`) VALUES (904,'hidden attribute','hidden');
+INSERT INTO rt_bulk_validation_assisted(id,title) VALUES (906);
+INSERT INTO rt_bulk_validation_assisted(id,title,gid) VALUES (905,'valid after errors',55);
+INSERT INTO rt_bulk_validation_assisted(gid,title,id) VALUES (77,'reordered columns',909);
+COMMIT;
+SET bulk_import=0;
+SQL
+)
+
+count_matches() { printf '%s\n' "$1" | grep -F -c "$2" || true; }
+check_errors() {
+  [ "$(count_matches "$1" 'ERROR 1064')" = "$2" ] &&
+    [ "$(count_matches "$1" 'ERROR 1110')" = "$3" ] &&
+    [ "$(count_matches "$1" "unknown column: 'ghost'")" = 3 ] &&
+    [ "$(count_matches "$1" 'column '\''title'\'' specified twice')" = 1 ] &&
+    [ "$(count_matches "$1" 'column '\''gid'\'' specified twice')" = 1 ] &&
+    [ "$(count_matches "$1" "unknown column: '@uuid_id'")" = 1 ] &&
+    [ "$(count_matches "$1" 'wrong number of values here')" = 1 ]
+}
+
+direct_rows=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,title,gid FROM rt_bulk_validation_direct" | sort -n)
+assisted_rows=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,title,gid FROM rt_bulk_validation_assisted" | sort -n)
+disk_chunks=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SHOW TABLE rt_bulk_validation_assisted STATUS LIKE 'disk_chunks'" | awk '{print $2}')
+staging=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT file FROM rt_bulk_validation_assisted.@files OPTION format='bulk_import'")
+leaked_child=$(ps -eo args= | awk '$NF == "indexer_rt_bulk_chunk" { print }')
+expected=$(printf '901\tvalid before errors\t11\n905\tvalid after errors\t55\n909\treordered columns\t77')
+if check_errors "$direct_errors" 7 0 && check_errors "$assisted_errors" 5 2 && [ "$direct_rows" = "$expected" ] && [ "$assisted_rows" = "$expected" ] && [ "$disk_chunks" = 1 ] && [ -z "$staging" ] && [ -z "$leaked_child" ]; then
+  echo ASSISTED_CSV_VALIDATION_OK
+else
+  printf 'FAIL_ASSISTED_CSV_VALIDATION direct_errors=%s assisted_errors=%s direct_rows=%s assisted_rows=%s disk_chunks=%s staging=%s child=%s\n' "$direct_errors" "$assisted_errors" "$direct_rows" "$assisted_rows" "$disk_chunks" "$staging" "$leaked_child"
+fi
+––– output –––
+ASSISTED_CSV_VALIDATION_OK

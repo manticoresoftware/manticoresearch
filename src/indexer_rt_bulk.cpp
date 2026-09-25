@@ -10,9 +10,12 @@
 
 #include <filesystem>
 #include <ostream>
+#include <stdlib.h>
 #include <type_traits>
 
 #include "indexer_rt_bulk.h"
+#include "std/bitvec.h"
+#include "std/env.h"
 #if _WIN32
 #include "coroutine.h"
 #endif
@@ -34,104 +37,24 @@
 #endif
 
 #if !_WIN32
+#include <fcntl.h>
 #include <signal.h>
+#include <sys/socket.h>
+#include <unistd.h>
 #endif
 
 namespace fs = std::filesystem;
 
-class SourceBinaryWriter_c final : ISphNoncopyable
+static const char * GetIndexerRtBulkCsvpipeCommand ()
 {
-public:
-	explicit SourceBinaryWriter_c ( std::ostream & tOut )
-		: m_tOut ( tOut )
-	{}
-
-	~SourceBinaryWriter_c () = default;
-
-	bool WriteBatch ( uint32_t uRows )
-	{
-		return WriteU32 ( uRows );
-	}
-
-	bool WriteInteger ( uint64_t uValue, bool bNegative )
-	{
-		return WriteU32 ( (uint32_t)SPH_ATTR_BIGINT ) && WriteByte ( bNegative ? 1 : 0 ) && WriteU64 ( uValue );
-	}
-
-	bool WriteFloat ( float fValue )
-	{
-		return WriteU32 ( (uint32_t)SPH_ATTR_FLOAT ) && WriteU32 ( sphF2DW ( fValue ) );
-	}
-
-	bool WriteString ( const char * sValue, int iLength )
-	{
-		return WriteU32 ( (uint32_t)SPH_ATTR_STRING ) && WriteU32 ( (uint32_t)iLength ) && WriteBytes ( sValue, iLength );
-	}
-
-	bool WriteEmptyMva ( ESphAttr eType )
-	{
-		return WriteU32 ( (uint32_t)eType ) && WriteU32 ( 0 );
-	}
-
-	template <typename VALUES>
-	bool WriteMva ( const VALUES & dValues, ESphAttr eType )
-	{
-		if ( !WriteU32 ( (uint32_t)eType ) || !WriteU32 ( (uint32_t)dValues.GetLength() ) )
-			return false;
-		for ( const auto & tValue : dValues )
-		{
-			if ( eType==SPH_ATTR_FLOAT_VECTOR )
-			{
-				if ( !WriteU32 ( sphF2DW ( tValue.m_fValue ) ) )
-					return false;
-			} else if ( !WriteU64 ( (uint64_t)tValue.m_iValue ) )
-				return false;
-		}
-
-		return true;
-	}
-
-	bool IsOk () const { return !m_bError && !!m_tOut; }
-
-private:
-	bool SetError ()
-	{
-		m_bError = true;
-		return false;
-	}
-
-	bool WriteBytes ( const void * pData, int iLength )
-	{
-		if ( iLength )
-			m_tOut.write ( (const char *)pData, iLength );
-		return !!m_tOut || SetError();
-	}
-
-	bool WriteByte ( BYTE uValue ) { return WriteBytes ( &uValue, 1 ); }
-
-	bool WriteU16 ( uint16_t uValue )
-	{
-		BYTE dValue[2] = { (BYTE)uValue, (BYTE)(uValue>>8) };
-		return WriteBytes ( dValue, sizeof ( dValue ) );
-	}
-
-	bool WriteU32 ( uint32_t uValue )
-	{
-		BYTE dValue[4] = { (BYTE)uValue, (BYTE)(uValue>>8), (BYTE)(uValue>>16), (BYTE)(uValue>>24) };
-		return WriteBytes ( dValue, sizeof ( dValue ) );
-	}
-
-	bool WriteU64 ( uint64_t uValue )
-	{
-		BYTE dValue[8];
-		for ( int i=0; i<8; ++i )
-			dValue[i] = (BYTE)(uValue>>(i*8));
-		return WriteBytes ( dValue, sizeof ( dValue ) );
-	}
-
-	std::ostream & m_tOut;
-	bool m_bError = false;
-};
+	if ( env_exists ( "INDEXER_RT_BULK_CSV_PIPE_COMMAND" ) )
+		return getenv ( "INDEXER_RT_BULK_CSV_PIPE_COMMAND" );
+#if !_WIN32
+	return "/bin/cat";
+#else
+	return "-";
+#endif
+}
 
 DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const ServedIndexWriteReservation_c & tReservation, int64_t iIndexId, int iAlterGeneration, const CSphString & sPath, bool & bTargetStale, CSphString & sError );
 
@@ -382,10 +305,96 @@ public:
 
 		std::vector<std::string> dArgs { "--config", sConfig.cstr(), "--remove_dups", "indexer_rt_bulk_chunk" };
 		boost::process::environment tEnvironment = boost::this_process::environment();
+		tEnvironment.erase ( "INDEXER_RT_BULK_CSV_PIPE_COMMAND" );
 		// limit_handles keeps per-launch handles in mutable state.
 		// Do not share Boost's global instance across concurrent requests.
 		std::decay_t<decltype(boost::process::limit_handles)> tLimitHandles;
 		std::error_code tError;
+		#if !_WIN32
+		{
+			try
+			{
+				if ( m_tInput.pipe().is_open() )
+					m_tInput.pipe().close();
+			}
+			catch ( const std::exception & tException )
+			{
+				sError.SetSprintf ( "failed closing unused bulk_import opstream: %s", tException.what() );
+				return false;
+			}
+			catch ( ... )
+			{
+				sError = "failed closing unused bulk_import opstream";
+				return false;
+			}
+
+			int dSockets[2] = { -1, -1 };
+			int iSocketType = SOCK_STREAM;
+			#ifdef SOCK_CLOEXEC
+			iSocketType |= SOCK_CLOEXEC;
+			#endif
+			if ( socketpair ( AF_UNIX, iSocketType, 0, dSockets )<0 )
+			{
+				sError.SetSprintf ( "failed to create bulk_import socketpair: %s", strerrorm ( errno ) );
+				return false;
+			}
+			#ifndef SOCK_CLOEXEC
+			if ( fcntl ( dSockets[0], F_SETFD, FD_CLOEXEC )<0 || fcntl ( dSockets[1], F_SETFD, FD_CLOEXEC )<0 )
+			{
+				const int iError = errno;
+				close ( dSockets[0] );
+				close ( dSockets[1] );
+				sError.SetSprintf ( "failed protecting bulk_import socketpair descriptors: %s", strerrorm ( iError ) );
+				return false;
+			}
+			#endif
+
+			boost::process::pipe tSocketInput ( dSockets[0], dSockets[1] );
+			m_tChild = boost::process::child
+			(
+				sIndexer.cstr(),
+				boost::process::args ( dArgs ),
+				boost::process::std_in < tSocketInput,
+				( boost::process::std_out & boost::process::std_err ) > sOutput.cstr(),
+				tLimitHandles,
+				ResetSignalMask_t {},
+				boost::process::error ( tError ),
+				tEnvironment
+			);
+
+			if ( tError || !m_tChild.valid() )
+			{
+				if ( tError )
+					sError.SetSprintf ( "failed to start bulk_import process '%s': %s", sIndexer.cstr(), tError.message().c_str() );
+				else
+					sError.SetSprintf ( "failed to start bulk_import process '%s'", sIndexer.cstr() );
+				Abort();
+				return false;
+			}
+
+			const int iInput = tSocketInput.native_sink();
+			tSocketInput.assign_sink ( -1 );
+			m_pCsvSocketInput = fdopen ( iInput, "wb" );
+			if ( !m_pCsvSocketInput )
+			{
+				const int iError = errno;
+				close ( iInput );
+				Abort();
+				sError.SetSprintf ( "failed opening bulk_import socket stream: %s", strerrorm ( iError ) );
+				return false;
+			}
+
+			constexpr size_t iBufferSize = 256*1024;
+			m_dCsvSocketBuffer.Reset ( iBufferSize );
+			if ( setvbuf ( m_pCsvSocketInput, m_dCsvSocketBuffer.Begin(), _IOFBF, iBufferSize ) )
+			{
+				Abort();
+				sError = "failed configuring bulk_import socket buffering";
+				return false;
+			}
+			return true;
+		}
+		#endif
 		#if _WIN32
 		// Windows limit_handles temporarily changes process-wide inheritance flags.
 		// This path runs from a request coroutine; use a coroutine mutex so
@@ -419,11 +428,14 @@ public:
 		return true;
 	}
 
-	SourceBinaryWriter_c & BinaryInput()
+	bool WriteCsvBatch ( const CSphString & sCsv )
 	{
-		if ( !m_pBinaryWriter )
-			m_pBinaryWriter = std::make_unique<SourceBinaryWriter_c> ( m_tInput );
-		return *m_pBinaryWriter;
+		#if !_WIN32
+		return fwrite ( sCsv.cstr(), 1, sCsv.Length(), m_pCsvSocketInput )==size_t ( sCsv.Length() );
+		#else
+		m_tInput.write ( sCsv.cstr(), sCsv.Length() );
+		return bool ( m_tInput );
+		#endif
 	}
 
 	IndexerRtBulkWait_e CloseInputAndWait ( CSphString & sError )
@@ -484,7 +496,6 @@ public:
 
 	void Abort() noexcept
 	{
-		m_pBinaryWriter.reset();
 		DiscardInput();
 
 		if ( m_tChild.valid() )
@@ -505,6 +516,19 @@ private:
 	bool CloseInput ( CSphString & sError )
 	{
 		bool bOk = true;
+		#if !_WIN32
+		if ( m_pCsvSocketInput )
+		{
+			FILE * pInput = m_pCsvSocketInput;
+			m_pCsvSocketInput = nullptr;
+			bOk = fclose ( pInput )==0;
+			const int iError = errno;
+			m_dCsvSocketBuffer.Reset ( 0 );
+			if ( !bOk )
+				sError.SetSprintf ( "failed closing bulk_import socket stream: %s", strerrorm ( iError ) );
+			return bOk;
+		}
+		#endif
 		try
 		{
 			m_tInput.flush();
@@ -550,6 +574,29 @@ private:
 
 	void DiscardInput() noexcept
 	{
+		#if !_WIN32
+		if ( m_pCsvSocketInput )
+		{
+			FILE * pInput = m_pCsvSocketInput;
+			m_pCsvSocketInput = nullptr;
+			const int iInput = fileno ( pInput );
+			const int iNull = open ( "/dev/null", O_WRONLY );
+			if ( iNull>=0 )
+			{
+				if ( iInput>=0 && dup2 ( iNull, iInput )>=0 )
+				{
+					close ( iNull );
+					fclose ( pInput );
+					m_dCsvSocketBuffer.Reset ( 0 );
+					return;
+				}
+				close ( iNull );
+			}
+			fclose ( pInput );
+			m_dCsvSocketBuffer.Reset ( 0 );
+			return;
+		}
+		#endif
 		try
 		{
 			// Do not flush a partially staged statement on abort.
@@ -561,9 +608,12 @@ private:
 	}
 
 	boost::process::opstream m_tInput;
-	std::unique_ptr<SourceBinaryWriter_c> m_pBinaryWriter;
 	boost::process::child m_tChild;
 	CSphString m_sExecutable;
+#if !_WIN32
+	FILE * m_pCsvSocketInput = nullptr;
+	CSphFixedVector<char> m_dCsvSocketBuffer { 0 };
+#endif
 };
 
 
@@ -621,9 +671,80 @@ IndexerRtBulkState_t::IndexerRtBulkState_t() = default;
 IndexerRtBulkState_t::~IndexerRtBulkState_t() = default;
 
 
-static int FindInsertColumn ( const SqlStmt_t & tStmt, const CSphString & sName )
+static void AppendCsvEscaped ( StringBuilder_c & sOut, const char * szValue )
 {
-	return tStmt.m_dInsertSchema.GetFirst ( [&sName] ( const CSphString & sColumn ) { return sColumn==sName; } );
+	const char * pStart = szValue ? szValue : "";
+	for ( const char * p = pStart; ; ++p )
+	{
+		if ( *p!='"' && *p!='\0' )
+			continue;
+		sOut.AppendRawChunk ( Str_t { pStart, int ( p-pStart ) } );
+		if ( !*p )
+			break;
+		sOut.AppendRawChunk ( Str_t { "\"\"", 2 } );
+		pStart = p+1;
+	}
+}
+
+
+static void AppendCsvQuoted ( StringBuilder_c & sOut, const char * szValue )
+{
+	sOut << '"';
+	AppendCsvEscaped ( sOut, szValue );
+	sOut << '"';
+}
+
+
+static void AppendInsertValueToCsv ( StringBuilder_c & sOut, const SqlInsert_t & tValue, ESphAttr eType, bool bDocid )
+{
+	sOut << '"';
+	switch ( tValue.m_iType )
+	{
+	case SqlInsert_t::QUOTED_STRING:
+		AppendCsvEscaped ( sOut, tValue.m_sVal.cstr() );
+		break;
+
+	case SqlInsert_t::CONST_FLOAT:
+		sOut.Appendf ( "%.9g", tValue.m_fVal );
+		break;
+
+	case SqlInsert_t::CONST_INT:
+		if ( bDocid )
+			sOut << tValue.GetValueUint();
+		else
+			sOut << tValue.GetValueInt();
+		break;
+
+	case SqlInsert_t::CONST_MVA:
+		if ( eType==SPH_ATTR_JSON )
+		{
+			AppendCsvEscaped ( sOut, tValue.m_sVal.cstr() );
+			break;
+		}
+		if ( tValue.m_pVals )
+		{
+			bool bFirst = true;
+			for ( const auto & tItem : *tValue.m_pVals )
+			{
+				if ( !bFirst )
+					sOut.RawC ( ' ' );
+				bFirst = false;
+				if ( eType==SPH_ATTR_FLOAT_VECTOR )
+					sOut.Appendf ( "%.9g", tItem.m_fValue );
+				else
+					sOut << tItem.m_iValue;
+			}
+		}
+		break;
+
+	case SqlInsert_t::TOK_NULL:
+		break;
+
+	default:
+		AppendCsvEscaped ( sOut, tValue.m_sVal.cstr() );
+		break;
+	}
+	sOut << '"';
 }
 
 
@@ -649,73 +770,17 @@ static const char * SVpipeAttrDirective ( ESphAttr eType )
 struct IndexerRtBulkColumn_t
 {
 	int m_iColumn;
-	int m_iSchema;
 	ESphAttr m_eType;
 	bool m_bDocid;
-	bool m_bField;
 };
 
 
-static bool AppendInsertValueToBinary ( SourceBinaryWriter_c & tWriter, const SqlInsert_t & tValue, ESphAttr eType, bool bDocid )
+struct IndexerRtBulkInputMap_t
 {
-	switch ( tValue.m_iType )
-	{
-	case SqlInsert_t::QUOTED_STRING:
-		return tWriter.WriteString ( tValue.m_sVal.cstr(), tValue.m_sVal.Length() );
-
-	case SqlInsert_t::CONST_FLOAT:
-		return tWriter.WriteFloat ( tValue.m_fVal );
-
-	case SqlInsert_t::CONST_INT:
-		if ( bDocid )
-		{
-			if ( tValue.IsNegativeInt() )
-			{
-				return false;
-			}
-			else
-			{
-				return tWriter.WriteInteger ( tValue.GetValueUint(), false );
-			}
-		}
-		else
-		{
-			const int64_t iValue = tValue.GetValueInt();
-			const bool bNegative = iValue<0;
-			const uint64_t uMagnitude = bNegative ? uint64_t ( -( iValue+1 ) ) + 1 : uint64_t ( iValue );
-			return tWriter.WriteInteger ( uMagnitude, bNegative );
-		}
-
-	case SqlInsert_t::CONST_MVA:
-		if ( eType==SPH_ATTR_JSON )
-		{
-			return tWriter.WriteString ( tValue.m_sVal.cstr(), tValue.m_sVal.Length() );
-		}
-		else if ( tValue.m_pVals )
-		{
-			return tWriter.WriteMva ( *tValue.m_pVals, eType );
-		}
-		else
-		{
-			return tWriter.WriteEmptyMva ( eType );
-		}
-
-	default:
-		return tWriter.WriteString ( tValue.m_sVal.cstr(), tValue.m_sVal.Length() );
-	}
-}
-
-
-static bool AppendEmptyValueToBinary ( SourceBinaryWriter_c & tWriter, const IndexerRtBulkColumn_t & tColumn )
-{
-	if ( tColumn.m_bField || tColumn.m_eType==SPH_ATTR_STRING || tColumn.m_eType==SPH_ATTR_JSON )
-		return tWriter.WriteString ( "", 0 );
-
-	if ( tColumn.m_eType==SPH_ATTR_UINT32SET || tColumn.m_eType==SPH_ATTR_INT64SET || tColumn.m_eType==SPH_ATTR_FLOAT_VECTOR )
-		return tWriter.WriteEmptyMva ( tColumn.m_eType );
-
-	return tWriter.WriteInteger ( 0, false );
-}
+	CSphFixedVector<int> m_dAttrs { 0 };
+	CSphFixedVector<int> m_dFields { 0 };
+	int m_iId = -1;
+};
 
 
 static constexpr ESphAttr g_dSVpipeAttrOrder[] =
@@ -749,6 +814,7 @@ void AbortIndexerRtBulkBatch ( ClientSession_c & tSession )
 	}
 
 	tState.m_sDir = "";
+	tState.m_dCsvAttrOrder.Reset();
 }
 
 
@@ -958,6 +1024,19 @@ static bool InitIndexerRtBulk ( ClientSession_c & tSession, const RtIndex_i & tR
 	if ( !CheckSchemaSupported ( tSchema, sError ) )
 		return false;
 
+	// Use the same type-grouped order for csvpipe directives and streamed values.
+	CSphVector<int> dCsvAttrOrder;
+	for ( ESphAttr eType : g_dSVpipeAttrOrder )
+		for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
+		{
+			const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+			if ( tAttr.m_eAttrType!=eType || tAttr.m_sName==sphGetDocidName() || sphIsInternalAttr ( tAttr ) )
+				continue;
+			if ( tSchema.GetField ( tAttr.m_sName.cstr() ) && tAttr.m_eAttrType==SPH_ATTR_STRING )
+				continue;
+			dCsvAttrOrder.Add(i);
+		}
+
 	CSphString sRoot = GetIndexerRtBulkRoot ( tRt );
 	if ( !PrepareStagingRoot ( sRoot, sError ) )
 		return false;
@@ -979,32 +1058,26 @@ static bool InitIndexerRtBulk ( ClientSession_c & tSession, const RtIndex_i & tR
 
 	CSphString sConfigLemmatizerBase = EscapeIndexerRtBulkConfigPath ( g_sLemmatizerBase );
 	fprintf ( fpConfig, "common {\n  lemmatizer_base = %s\n}\n\n", sConfigLemmatizerBase.cstr() );
-	// binarypipe reuses the existing csvpipe_* directives to declare its schema.
 	const char * szPipeField = "csvpipe_field";
 	const char * szPipeFieldString = "csvpipe_field_string";
 	const char * szPipeAttrOrder = "csvpipe_attr_order";
-	fprintf ( fpConfig, "source indexer_rt_bulk_source {\n  type = binarypipe\n" );
+	fprintf ( fpConfig, "source indexer_rt_bulk_source {\n  type = csvpipe\n" );
+	fprintf ( fpConfig, "  csvpipe_command = %s\n", GetIndexerRtBulkCsvpipeCommand() );
 	for ( int i=0; i<tSchema.GetFieldsCount(); ++i )
 	{
 		const CSphColumnInfo & tField = tSchema.GetField(i);
 		const CSphColumnInfo * pSameAttr = tSchema.GetAttr ( tField.m_sName.cstr() );
 		fprintf ( fpConfig, "  %s = %s\n", pSameAttr && pSameAttr->m_eAttrType==SPH_ATTR_STRING ? szPipeFieldString : szPipeField, tField.m_sName.cstr() );
 	}
-	for ( ESphAttr eType : g_dSVpipeAttrOrder )
-		for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
-		{
-			const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
-			if ( tAttr.m_eAttrType!=eType || tAttr.m_sName==sphGetDocidName() || sphIsInternalAttr ( tAttr ) )
-				continue;
-			const CSphColumnInfo * pSameField = tSchema.GetField ( tAttr.m_sName.cstr() );
-			if ( pSameField && tAttr.m_eAttrType==SPH_ATTR_STRING )
-				continue;
-			const char * szDirective = SVpipeAttrDirective ( tAttr.m_eAttrType );
-			fprintf ( fpConfig, "  %s = %s", szDirective, tAttr.m_sName.cstr() );
-			if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER && tAttr.m_tLocator.IsBitfield() )
-				fprintf ( fpConfig, ":%d", tAttr.m_tLocator.m_iBitCount );
-			fprintf ( fpConfig, "\n" );
-		}
+	for ( int iAttr : dCsvAttrOrder )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr ( iAttr );
+		const char * szDirective = SVpipeAttrDirective ( tAttr.m_eAttrType );
+		fprintf ( fpConfig, "  %s = %s", szDirective, tAttr.m_sName.cstr() );
+		if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER && tAttr.m_tLocator.IsBitfield() )
+			fprintf ( fpConfig, ":%d", tAttr.m_tLocator.m_iBitCount );
+		fprintf ( fpConfig, "\n" );
+	}
 	fprintf ( fpConfig, "  %s = ", szPipeAttrOrder );
 	bool bFirstAttr = true;
 	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
@@ -1029,31 +1102,118 @@ static bool InitIndexerRtBulk ( ClientSession_c & tSession, const RtIndex_i & tR
 		AbortIndexerRtBulkBatch ( tSession );
 		return false;
 	}
+	tState.m_dCsvAttrOrder = std::move ( dCsvAttrOrder );
 	return true;
 }
 
 
-class MapError_c final : public StmtErrorReporter_i
+static bool PrepareIndexerRtBulkInputMap ( const CSphSchema & tSchema, const SqlStmt_t & tStmt, IndexerRtBulkInputMap_t & tMap, EMYSQL_ERR & eError, CSphString & sError )
 {
-public:
-	MapError_c ( EMYSQL_ERR & eError, CSphString & sError )
-		: m_eError ( eError )
-		, m_sError ( sError )
-	{}
-
-	void Ok ( int, const CSphString &, int64_t ) final { assert ( 0 ); }
-	void Ok ( int, int ) final { assert ( 0 ); }
-	void ErrorEx ( EMYSQL_ERR eError, const char * sError ) final
+	const int iColumns = tStmt.m_iSchemaSz;
+	const int iValues = tStmt.m_dInsertValues.GetLength();
+	if ( iColumns<=0 || iValues%iColumns )
 	{
-		m_eError = eError;
-		m_sError = sError;
+		sError = "wrong number of values here";
+		return false;
 	}
-	RowBuffer_i * GetBuffer() final { return nullptr; }
 
-private:
-	EMYSQL_ERR &	m_eError;
-	CSphString &	m_sError;
-};
+	const int iDocidAttr = tSchema.GetAttrIndex ( sphGetDocidName() );
+	const CSphColumnInfo * pDocid = iDocidAttr>=0 ? &tSchema.GetAttr ( iDocidAttr ) : nullptr;
+	const bool bUuidDocid = pDocid && pDocid->IsUuidLinkedDocid();
+	const int iAttrs = tSchema.GetAttrsCount();
+	CSphBitvec dSeenColumns ( iAttrs + tSchema.GetFieldsCount() );
+	tMap.m_dAttrs.Reset ( iAttrs );
+	tMap.m_dFields.Reset ( tSchema.GetFieldsCount() );
+	tMap.m_dAttrs.Fill ( -1 );
+	tMap.m_dFields.Fill ( -1 );
+	const CSphString * pDuplicate = nullptr;
+	for ( int i=0; i<tStmt.m_dInsertSchema.GetLength(); ++i )
+	{
+		const CSphString & sColumn = tStmt.m_dInsertSchema[i];
+		if ( bUuidDocid && sColumn=="@id" )
+		{
+			sError = "attribute '@id' is internal";
+			return false;
+		}
+
+		const int iAttr = tSchema.GetAttrIndex ( sColumn.cstr() );
+		const int iField = tSchema.GetFieldIndex ( sColumn.cstr() );
+		if ( sColumn==sphGetUuidDocidName() || ( iAttr<0 && iField<0 ) )
+		{
+			sError.SetSprintf ( "unknown column: '%s'", sColumn.cstr() );
+			return false;
+		}
+
+		bool bDuplicate = false;
+		if ( iAttr>=0 )
+		{
+			bDuplicate = dSeenColumns.BitGet ( iAttr );
+			dSeenColumns.BitSet ( iAttr );
+			tMap.m_dAttrs[iAttr] = i;
+		}
+		if ( iField>=0 )
+		{
+			const int iFieldBit = iAttrs + iField;
+			bDuplicate |= dSeenColumns.BitGet ( iFieldBit );
+			dSeenColumns.BitSet ( iFieldBit );
+			if ( sColumn==tSchema.GetField ( iField ).m_sName )
+				tMap.m_dFields[iField] = i;
+		}
+		if ( bDuplicate && ( !pDuplicate || sColumn<*pDuplicate ) )
+			pDuplicate = &sColumn;
+	}
+
+	if ( pDuplicate )
+	{
+		eError = EMYSQL_ERR::FIELD_SPECIFIED_TWICE;
+		sError.SetSprintf ( "column '%s' specified twice", pDuplicate->cstr() );
+		return false;
+	}
+
+	tMap.m_iId = iDocidAttr>=0 ? tMap.m_dAttrs[iDocidAttr] : -1;
+	const int iIdColumn = tMap.m_iId;
+	if ( iIdColumn<0 )
+	{
+		sError = "bulk_import requires an explicit id";
+		return false;
+	}
+	for ( int iRow=0; iRow<tStmt.m_iRowsAffected; ++iRow )
+	{
+		const SqlInsert_t & tId = tStmt.m_dInsertValues[iRow*iColumns+iIdColumn];
+		if ( tId.m_iType==SqlInsert_t::CONST_INT && ( tId.IsNegativeInt() || !tId.GetValueUint() ) )
+		{
+			sError.SetSprintf ( "row %d: bulk_import requires an explicit non-zero id", iRow+1 );
+			return false;
+		}
+	}
+
+	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+		if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR )
+			continue;
+
+		const int iColumn = tMap.m_dAttrs[i];
+		if ( iColumn<0 )
+			continue;
+
+		for ( int iRow=0; iRow<tStmt.m_iRowsAffected; ++iRow )
+			if ( !ValidateFloatVectorValue ( tAttr, tStmt.m_dInsertValues[iRow*iColumns+iColumn], iRow, sError ) )
+				return false;
+	}
+
+	return true;
+}
+
+
+static void BuildIndexerRtBulkColumns ( const CSphSchema & tSchema, const IndexerRtBulkInputMap_t & tMap, const CSphVector<int> & dCsvAttrOrder, CSphVector<IndexerRtBulkColumn_t> & dColumns )
+{
+	dColumns.Add ( { tMap.m_iId, SPH_ATTR_BIGINT, true } );
+	for ( int iColumn : tMap.m_dFields )
+		dColumns.Add ( { iColumn, SPH_ATTR_STRING, false } );
+	for ( int iAttr : dCsvAttrOrder )
+		dColumns.Add ( { tMap.m_dAttrs[iAttr], tSchema.GetAttr ( iAttr ).m_eAttrType, false } );
+}
 
 
 bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, EMYSQL_ERR & eError, CSphString & sError )
@@ -1085,78 +1245,44 @@ bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, E
 		return false;
 	}
 	const CSphSchema & tSchema = pRt->GetMatchSchema();
-	CSphVector<int> dAttrSchema ( tSchema.GetAttrsCount() );
-	CSphVector<int> dFieldSchema ( tSchema.GetFieldsCount() );
-	CSphVector<bool> dFieldAttrs ( tSchema.GetFieldsCount() );
-	MapError_c tError { eError, sError };
-	if ( !CreateAttrMaps ( dAttrSchema, dFieldSchema, dFieldAttrs, tSchema, tStmt.m_dInsertSchema, tError ) )
+	IndexerRtBulkInputMap_t tMap;
+	if ( !PrepareIndexerRtBulkInputMap ( tSchema, tStmt, tMap, eError, sError ) )
 		return false;
-
-	const int iIdColumn = FindInsertColumn ( tStmt, sphGetDocidName() );
-	if ( iIdColumn<0 )
-	{
-		sError = "bulk_import requires an explicit id";
-		return false;
-	}
-	const int iColumns = tStmt.m_iSchemaSz;
-	for ( int iRow=0; iRow<tStmt.m_iRowsAffected; ++iRow )
-	{
-		const SqlInsert_t & tId = tStmt.m_dInsertValues[iRow*iColumns+iIdColumn];
-		if ( tId.m_iType==SqlInsert_t::CONST_INT && ( tId.IsNegativeInt() || !tId.GetValueUint() ) )
-		{
-			sError.SetSprintf ( "row %d: bulk_import requires an explicit non-zero id", iRow+1 );
-			return false;
-		}
-	}
-
-	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
-	{
-		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
-		if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR )
-			continue;
-
-		const int iColumn = dAttrSchema[i];
-		if ( iColumn<0 )
-			continue;
-
-		for ( int iRow=0; iRow<tStmt.m_iRowsAffected; ++iRow )
-			if ( !ValidateFloatVectorValue ( tAttr, tStmt.m_dInsertValues[iRow*iColumns+iColumn], iRow, sError ) )
-				return false;
-	}
+	CSphVector<IndexerRtBulkColumn_t> dColumns;
+	dColumns.Reserve ( 1 + tSchema.GetFieldsCount() + tSchema.GetAttrsCount() );
 	if ( !InitIndexerRtBulk ( tSession, *pRt.Ptr(), sError ) )
 		return false;
+	BuildIndexerRtBulkColumns ( tSchema, tMap, tState.m_dCsvAttrOrder, dColumns );
 
-	CSphVector<IndexerRtBulkColumn_t> dColumns;
-	dColumns.Add ( { iIdColumn, 0, SPH_ATTR_BIGINT, true, false } );
-	for ( int i=0; i<tSchema.GetFieldsCount(); ++i )
-		dColumns.Add ( { dFieldSchema[i], i, SPH_ATTR_STRING, false, true } );
-	for ( ESphAttr eType : g_dSVpipeAttrOrder )
-		for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
-		{
-			const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
-			if ( tAttr.m_eAttrType!=eType || tAttr.m_sName==sphGetDocidName() || sphIsInternalAttr ( tAttr ) )
-				continue;
-			if ( tSchema.GetField ( tAttr.m_sName.cstr() ) && tAttr.m_eAttrType==SPH_ATTR_STRING )
-				continue;
-			dColumns.Add ( { dAttrSchema[i], i, tAttr.m_eAttrType, false, false } );
-		}
+	const int iColumns = tStmt.m_iSchemaSz;
 
 	assert ( tState.m_pImpl );
-	auto & tWriter = tState.m_pImpl->BinaryInput();
-	bool bOk = true;
-	if ( tStmt.m_iRowsAffected )
-		bOk = tWriter.WriteBatch ( (uint32_t)tStmt.m_iRowsAffected );
-	for ( int iRow=0; bOk && iRow<tStmt.m_iRowsAffected; ++iRow )
+	StringBuilder_c sBatch;
+	for ( int iRow=0; iRow<tStmt.m_iRowsAffected; ++iRow )
+	{
+		bool bFirst = true;
 		for ( const auto & tColumn : dColumns )
 		{
-			const SqlInsert_t * pValue = tColumn.m_iColumn<0 ? nullptr : &tStmt.m_dInsertValues[iRow*iColumns+tColumn.m_iColumn];
-			bOk = pValue ? AppendInsertValueToBinary ( tWriter, *pValue, tColumn.m_eType, tColumn.m_bDocid ) : AppendEmptyValueToBinary ( tWriter, tColumn );
-			if ( !bOk )
-				break;
+			if ( !bFirst )
+				sBatch << ',';
+			bFirst = false;
+			if ( tColumn.m_iColumn<0 )
+				AppendCsvQuoted ( sBatch, "" );
+			else
+				AppendInsertValueToCsv ( sBatch, tStmt.m_dInsertValues[iRow*iColumns+tColumn.m_iColumn], tColumn.m_eType, tColumn.m_bDocid );
 		}
-	if ( !bOk || !tWriter.IsOk() )
+		sBatch << '\n';
+	}
+
+	CSphString sCsv;
+	sBatch.MoveTo ( sCsv );
+	errno = 0;
+	if ( !tState.m_pImpl->WriteCsvBatch ( sCsv ) )
 	{
-		sError = "failed streaming bulk binary to indexer";
+		if ( errno )
+			sError.SetSprintf ( "failed streaming bulk CSV to indexer: %s", strerrorm ( errno ) );
+		else
+			sError = "failed streaming bulk CSV to indexer";
 		AbortIndexerRtBulkBatch ( tSession );
 		return false;
 	}

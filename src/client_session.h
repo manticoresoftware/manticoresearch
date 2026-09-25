@@ -45,6 +45,7 @@ struct IndexerRtBulkState_t
 	int m_iAlterGeneration = -1;
 	CSphString m_sTable;
 	CSphString m_sDir;
+	CSphVector<int> m_dCsvAttrOrder;
 	ServedIndexWriteReservation_c m_tReservation;
 	std::unique_ptr<Impl_c> m_pImpl;
 

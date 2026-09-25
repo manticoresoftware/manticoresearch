@@ -871,21 +871,6 @@ CSphSource * SpawnSourceCSVPipe ( const CSphConfigSection & hSource, const char 
 }
 
 
-CSphSource * SpawnSourceBinaryPipe ( const CSphConfigSection & hSource, const char * sSourceName )
-{
-	assert ( hSource["type"]=="binarypipe" );
-
-	#if _WIN32
-	if ( setmode ( fileno(stdin), O_BINARY )==-1 )
-	{
-		fprintf ( stdout, "ERROR: binarypipe: failed to set stdin to binary mode: %s", strerrorm(errno) );
-		return NULL;
-	}
-	#endif
-	return sphCreateSourceBinarypipe ( &hSource, stdin, sSourceName, false );
-}
-
-
 CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSourceName )
 {
 	if ( !hSource.Exists ( "type" ) )
@@ -922,9 +907,6 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 
 	if ( hSource["type"]=="csvpipe" )
 		return SpawnSourceCSVPipe ( hSource, sSourceName );
-
-	if ( hSource["type"]=="binarypipe" )
-		return SpawnSourceBinaryPipe ( hSource, sSourceName );
 
 	fprintf ( stdout, "ERROR: source '%s': unknown type '%s'; skipping.\n", sSourceName,
 		hSource["type"].cstr() );

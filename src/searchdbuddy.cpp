@@ -950,6 +950,14 @@ static bool ConvertErrorMessage ( const Str_t & sStmt, RowBuffer_i* pRows, const
 
 void ProcessSqlQueryBuddy ( Str_t sSrcQuery, RowBuffer_i* pRows )
 {
+	// Keep bulk_import validation errors local so Buddy cannot replace their MySQL error codes.
+	auto pSession = session::Info().GetClientSession();
+	if ( pSession && pSession->m_tIndexerRtBulk.IsEnabled() )
+	{
+		LogSphinxqlError ( sSrcQuery.first, FromStr ( pRows->GetError() ) );
+		return;
+	}
+
 	Str_t tError = FromStr ( pRows->GetError() );
 	auto tReplyRaw = BuddyQuery ( false, tError, Str_t(), sSrcQuery, HTTP_GET, VecTraits_T<BYTE>() );
 	if ( !tReplyRaw.first )

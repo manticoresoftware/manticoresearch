@@ -18,4 +18,3 @@
 /// CSV/TSV pipe source fabric
 CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName );
 CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool bOwnPipe = true );
-CSphSource * sphCreateSourceBinarypipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool bOwnPipe = true );

@@ -310,7 +310,7 @@ POST /search
 
 To count only the documents with a high fused score, filter on `hybrid_score()`. With `AND hs > 0.02` added to the query above (and `hybrid_score() hs` in the select list), only documents 1, 2 and 6 remain, and `FACET category` returns `1` → 2 and `3` → 1.
 
-[facet_filter_mode](../Searching/Faceted_search.md), `FILTERS`, and `EXCLUDE FILTERS` work as in regular queries. A facet that keeps fewer of the main query's filters, for example `FACET category` in `auto` mode when the query filters by `category`, counts the fused documents of the hybrid query run with the filters that facet keeps. With `GROUP BY` in the hybrid query, facets count documents, not groups.
+[facet_filter_mode](../Searching/Faceted_search.md), `FILTERS`, and `EXCLUDE FILTERS` work as in regular queries. A facet that keeps fewer of the main query's filters, for example `FACET category` in `auto` mode when the query filters by `category`, counts the fused documents of the hybrid query run with the filters that facet keeps. With `GROUP BY` (or aggregates without `GROUP BY`) in the hybrid query, facets count documents, not groups.
 
 A facet that uses the main query's filters reuses its fused documents, so it costs roughly as much as a facet on a regular query. A facet that keeps fewer filters, or any facet of a `GROUP BY` query, runs the full-text and KNN sub-queries again.
 

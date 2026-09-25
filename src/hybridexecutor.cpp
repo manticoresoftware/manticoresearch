@@ -1041,6 +1041,18 @@ static StrVec_t CollectPostFusionNames ( const CSphQuery & tHead, bool bWithWeig
 }
 
 
+// whether the head fuses groups rather than documents: GROUP BY, or aggregates in the head's own select list (implicit grouping).
+// A facet head's m_dItems also carries the facets' items, so look at the original list when there is one
+static bool HeadFusesGroups ( const CSphQuery & tHead )
+{
+	if ( !tHead.m_sGroupBy.IsEmpty() )
+		return true;
+
+	const CSphVector<CSphQueryItem> & dItems = tHead.m_dRefItems.GetLength() ? tHead.m_dRefItems : tHead.m_dItems;
+	return dItems.any_of ( [] ( const CSphQueryItem & tItem ) { return tItem.m_eAggrFunc!=SPH_AGGR_NONE || tItem.m_sExpr=="count(*)" || tItem.m_sExpr=="@distinct"; } );
+}
+
+
 // hybrid query that produces the facet's candidates: the head query (same text, KNN, fusion window, sort order and scroll cursor,
 // so the post-fusion filters match the head's) restricted by the facet's own filters (facet modes may drop some head filters).
 // Fuses documents, not groups
@@ -1052,10 +1064,10 @@ static CSphQuery MakeFacetCandidateQuery ( const CSphQuery & tHead, const CSphQu
 	tQuery.m_dFilters = tFacet.m_dFilters;
 	tQuery.m_dFilterTree = tFacet.m_dFilterTree;
 
-	if ( tQuery.m_sGroupBy.IsEmpty() )
+	if ( !HeadFusesGroups ( tQuery ) )
 		return tQuery;
 
-	// a grouped head sorts and scrolls over groups; the candidates are documents
+	// a grouped (explicitly or implicitly) head sorts and scrolls over groups; the candidates are documents
 	tQuery.m_eSort = SPH_SORT_EXTENDED;
 	tQuery.m_sSortBy = "@weight desc";
 	tQuery.m_tScrollSettings = ScrollSettings_t();
@@ -1148,7 +1160,7 @@ static bool ExecuteHybridFacet ( const CSphIndex * pIndex, const CSphQuery & tHe
 	CSphQuery tCandidateQuery;
 	SphQueueSettings_t tCandidateSettings = CreateHybridSubQueryQueueSettings ( tQueueSettings );
 	std::unique_ptr<HybridExecutor_c> pCandidateExecutor;
-	if ( !tHead.m_sGroupBy.IsEmpty() || !SameFilters ( tHead, tFacet ) )
+	if ( HeadFusesGroups ( tHead ) || !SameFilters ( tHead, tFacet ) )
 	{
 		tCandidateQuery = MakeFacetCandidateQuery ( tHead, tFacet );
 

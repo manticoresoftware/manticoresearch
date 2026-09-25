@@ -43,6 +43,8 @@ searchd
 
 	<!-- GROUP BY head: facets count documents; aggregates and expressions over them are dropped from the candidate query -->
 	select cat, count(*) c, max(brand) mb from t where match('red') and knn(vec,5,(0,0)) group by cat order by cat asc option fusion_method='rrf', ranker=expr('100') facet brand order by facet() asc;;
+	<!-- an implicitly grouped head (aggregates without GROUP BY) fuses one group; its facets still count documents -->
+	select count(*) c, max(brand) mb from t where match('red') and knn(vec,5,(0,0)) option fusion_method='rrf', ranker=expr('100') facet cat order by facet() asc;;
 
 	<!-- JOIN: post-fusion filters (also through weight-dependent aliases) stay on the candidates, right-table filters apply to the joined rows -->
 	select id, t2.name from t inner join t2 on t.brand=t2.id where match('red') and knn(vec,5,(0,0)) order by id asc option fusion_method='rrf', ranker=expr('100') facet cat order by facet() asc;;

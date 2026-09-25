@@ -9,14 +9,12 @@
 #include "sphinxexpr.h"
 
 #include <boost/filesystem.hpp>
-#include <boost/system/errc.hpp>
+#include <boost/system/error_code.hpp>
 #include <ostream>
 #include <stdlib.h>
 #include <type_traits>
 
 #include "indexer_rt_bulk.h"
-#include "std/bitvec.h"
-#include "std/env.h"
 #if _WIN32
 #include "coroutine.h"
 #endif

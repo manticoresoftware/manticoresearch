@@ -851,14 +851,23 @@ CSphSource * SpawnSourceCSVPipe ( const CSphConfigSection & hSource, const char 
 		return NULL;
 	}
 
-	FILE * pPipe = popen ( hSource [ "csvpipe_command" ].cstr(), RMODE );
+	const CSphString sCommand = hSource [ "csvpipe_command" ].strval();
+	const bool bStdin = sCommand=="-";
+	#if _WIN32
+	if ( bStdin && setmode ( fileno(stdin), O_BINARY )==-1 )
+	{
+		fprintf ( stdout, "ERROR: csvpipe: failed to set stdin to binary mode: %s", strerrorm(errno) );
+		return NULL;
+	}
+	#endif
+	FILE * pPipe = bStdin ? stdin : popen ( sCommand.cstr(), RMODE );
 	if ( !pPipe )
 	{
-		fprintf ( stdout, "ERROR: csvpipe: failed to popen '%s'", hSource [ "csvpipe_command" ].cstr() );
+		fprintf ( stdout, "ERROR: csvpipe: failed to popen '%s'", sCommand.cstr() );
 		return NULL;
 	}
 
-	return sphCreateSourceCSVpipe ( &hSource, pPipe, sSourceName );
+	return sphCreateSourceCSVpipe ( &hSource, pPipe, sSourceName, !bStdin );
 }
 
 
@@ -914,7 +923,7 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 // INDEXING
 //////////////////////////////////////////////////////////////////////////
 
-bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const CSphConfigType & hSources, FILE * fpDumpRows )
+bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const CSphConfigType & hSources, FILE * fpDumpRows, bool bRemoveDupes )
 {
 	// check index type
 	bool bPlain = true;
@@ -1272,7 +1281,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 		pIndex->SetMutableSettings ( tMutableSettings );
 
 		ConsoleIndexProgress_t tProgress;
-		bOK = pIndex->Build ( dSources, g_iMemLimit, g_iWriteBuffer, tProgress )!=0;
+		bOK = pIndex->Build ( dSources, g_iMemLimit, g_iWriteBuffer, tProgress, bRemoveDupes )!=0;
 		if ( bOK && g_bRotate && g_bSendHUP )
 		{
 			sIndexPath.SetSprintf ( "%s.new", hIndex["path"].cstr() );
@@ -1757,6 +1766,7 @@ static void ShowHelp ()
 		"--print-queries\t\tprint SQL queries (for debugging)\n"
 		"--print-rt\t\tprint processed rows as SQL insert commands and field mapping info for populating an RT table\n"
 		"--keep-attrs\t\tretain attributes from the old table\n"
+		"--remove_dups\t\tlogically remove repeated numeric document IDs, keeping the first row\n"
 		"\n"
 		"Examples:\n"
 		"indexer --quiet myidx1\tbuild 'myidx1' defined in 'manticore.conf'\n"
@@ -1774,6 +1784,7 @@ int main ( int argc, char ** argv )
 	CSphVector<const char *> dWildIndexes;
 	bool bIndexAll = false;
 	bool bDropSrc = false;
+	bool bRemoveDupes = false;
 	CSphString sDumpRows;
 
 #if _WIN32
@@ -1857,6 +1868,9 @@ int main ( int argc, char ** argv )
 		} else if ( strcasecmp ( argv[i], "--all" )==0 )
 		{
 			bIndexAll = true;
+		} else if ( strcasecmp ( argv[i], "--remove_dups" )==0 )
+		{
+			bRemoveDupes = true;
 		} else if ( strcasecmp ( argv[i], "--verbose" )==0 ) // just to prevent warning about unknow option
 		{
 		} else if ( isalnum ( argv[i][0] ) || argv[i][0]=='_' || sphIsWild ( argv[i][0] ) )
@@ -2093,7 +2107,7 @@ int main ( int argc, char ** argv )
 		uint64_t tmRotated = sphMicroTimer();
 		for ( const auto& tIndex : hConf["index"] )
 		{
-			bool bLastOk = DoIndex ( tIndex.second, tIndex.first.cstr(), hConf["source"], fpDumpRows );
+			bool bLastOk = DoIndex ( tIndex.second, tIndex.first.cstr(), hConf["source"], fpDumpRows, bRemoveDupes );
 			if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && g_bSendHUP && SendRotate ( hConf, false ) )
 				tmRotated = sphMicroTimer();
 			if ( bLastOk )
@@ -2108,7 +2122,7 @@ int main ( int argc, char ** argv )
 				fprintf ( stdout, "WARNING: no such table '%s', skipping.\n", dIndexes[j] );
 			else
 			{
-				bool bLastOk = DoIndex ( hConf["index"][dIndexes[j]], dIndexes[j], hConf["source"], fpDumpRows);
+				bool bLastOk = DoIndex ( hConf["index"][dIndexes[j]], dIndexes[j], hConf["source"], fpDumpRows, bRemoveDupes );
 				if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && g_bSendHUP && SendRotate ( hConf, false ) )
 					tmRotated = sphMicroTimer();
 				if ( bLastOk )

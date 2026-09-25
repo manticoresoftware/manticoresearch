@@ -337,22 +337,35 @@ public:
 	bool TestNextWlock() const noexcept;
 };
 
+struct TableLocks_t
+{
+	DWORD m_uReads = 0;
+	bool m_bWriteAllowReaders = false;
+};
+
 class ReadTableLock_c final
 {
 	mutable sph::Spinlock_c m_tInternalMutex {};
 	WaitQueue_c m_tWaitRQueue {};
 	DWORD m_uReads = 0;
 	DWORD m_uWrites = 0;
+	bool m_bWriteAllowReaders = false;
+	bool m_bFreezeTransition = false;
 
 public:
 	NONCOPYMOVABLE ( ReadTableLock_c );
 	ReadTableLock_c() = default;
 	~ReadTableLock_c() = default;
 	bool TryWrite() noexcept;
-	void WaitRead() noexcept;
+	bool TryDmlWrite() noexcept;
+	bool TryWriteAllowReaders() noexcept;
+	bool TryFreezeTransition() noexcept;
+	[[nodiscard]] bool WaitRead() noexcept;
 	void FinishWrite() noexcept;
+	void FinishWriteAllowReaders() noexcept;
+	void FinishFreezeTransition() noexcept;
 	[[nodiscard]] bool UnlockRead() noexcept;
-	[[nodiscard]] DWORD GetReads() const noexcept;
+	[[nodiscard]] TableLocks_t GetLocks() const noexcept;
 };
 
 class ScopedWriteTable_c final
@@ -365,6 +378,30 @@ public:
 	explicit ScopedWriteTable_c ( ReadTableLock_c& tTableLock );
 	~ScopedWriteTable_c();
 	[[nodiscard]] bool CanWrite() const noexcept;
+};
+
+class ScopedDmlWriteTable_c final
+{
+	ReadTableLock_c& m_tTableLock;
+	bool m_bCanWrite;
+
+public:
+	NONCOPYMOVABLE ( ScopedDmlWriteTable_c );
+	explicit ScopedDmlWriteTable_c ( ReadTableLock_c& tTableLock );
+	~ScopedDmlWriteTable_c();
+	[[nodiscard]] bool CanWrite() const noexcept;
+};
+
+class ScopedFreezeTransition_c final
+{
+	ReadTableLock_c& m_tTableLock;
+	bool m_bCanFreeze;
+
+public:
+	NONCOPYMOVABLE ( ScopedFreezeTransition_c );
+	explicit ScopedFreezeTransition_c ( ReadTableLock_c& tTableLock );
+	~ScopedFreezeTransition_c();
+	[[nodiscard]] bool CanFreeze() const noexcept;
 };
 
 class CAPABILITY ( "mutex" ) Mutex_c: public ISphNoncopyable

@@ -5,6 +5,7 @@
 
 <requires>
 <columnar/>
+<non-rt-indexer/>
 </requires>
 
 <config>

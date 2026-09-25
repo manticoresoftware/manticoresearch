@@ -1,0 +1,15 @@
+––– input –––
+root=/tmp/indexer-rt-bulk-stdin
+rm -rf "$root"
+mkdir -p "$root"
+printf '%s\n' 'source stdin_exact {' '  type = csvpipe' '  csvpipe_command = -' '  csvpipe_field = title' '}' '' 'index stdin_exact {' '  type = plain' '  source = stdin_exact' "  path = $root/stdin_exact" '}' > "$root/indexer.conf"
+printf '1,from-stdin\n' | indexer --config "$root/indexer.conf" stdin_exact >/dev/null
+if [ -f "$root/stdin_exact.sph" ]; then echo CSVPIPE_STDIN_OK; else echo FAIL_CSVPIPE_STDIN; fi
+––– output –––
+CSVPIPE_STDIN_OK
+––– input –––
+printf '%s\n' 'source hyphen_command {' '  type = csvpipe' "  csvpipe_command = printf -- '1,from-command\\n'" '  csvpipe_field = title' '}' '' 'index hyphen_command {' '  type = plain' '  source = hyphen_command' "  path = $root/hyphen_command" '}' > "$root/hyphen.conf"
+indexer --config "$root/hyphen.conf" hyphen_command >/dev/null
+if [ -f "$root/hyphen_command.sph" ]; then echo CSVPIPE_COMMAND_OK; else echo FAIL_CSVPIPE_COMMAND; fi
+––– output –––
+CSVPIPE_COMMAND_OK

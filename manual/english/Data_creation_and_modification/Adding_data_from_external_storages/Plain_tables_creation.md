@@ -109,6 +109,11 @@ systemctl restart manticore-indexer
   ```shell
   sudo -u manticore indexer --rotate --all --noprogress
   ```
+* `--remove_dups` logically removes repeated numeric document IDs while building a plain table. The first row indexed for each ID remains visible; later rows with the same ID are marked as dead. Without this option, `indexer` keeps duplicate IDs. Example usage:
+
+  ```shell
+  sudo -u manticore indexer --config /home/myuser/manticore.conf --remove_dups mytable
+  ```
 * `--buildstops <outputfile.text> <N>` reviews the table source, as if it were indexing the data, and produces a list of the terms that are being indexed. In other words, it produces a list of all the searchable terms that are becoming part of the table. Note, it does not update the table in question, it simply processes the data as if it were indexing, including running queries defined with [sql_query_pre](../../Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md#sql_query_pre) or [sql_query_post](../../Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md#sql_query_post). `outputfile.txt` will contain the list of words, one per line, sorted by frequency with most frequent first, and `N` specifies the maximum number of words that will be listed. If it's sufficiently large to encompass every word in the table, only that many words will be returned. Such a dictionary list could be used for client application features around "Did you mean…" functionality, usually in conjunction with `--buildfreqs`, below. Example:
 
   ```shell
@@ -305,4 +310,3 @@ There are two approaches to scheduling indexer runs. The first way is the classi
    systemctl start manticore-indexer@idx1.timer
    ```
 5. Repeat steps 2-4 for any additional timers.
-

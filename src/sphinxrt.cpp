@@ -3899,6 +3899,14 @@ int RtIndex_c::ApplyKillList ( const VecTraits_T<DocID_t> & dAccKlist )
 				}
 				return bEnabled;
 			});
+
+		// the wait left the serial fiber: a save that was in flight when the table got locked has published its chunk since
+		if ( !bNeedWait && bEnabled )
+		{
+			pChunks = m_tRtChunks.DiskChunks();
+			for ( auto& pChunk : *pChunks )
+				iKilled += pChunk->CastIdx().KillMulti ( dAccKlist );
+		}
 	}
 
 	auto pSegs = m_tRtChunks.RamSegs();

@@ -17,8 +17,6 @@ FLUSH TABLE rt_table
 <!-- intro -->
 ##### SQL:
 
-<!-- request SQL -->
-
 <!--
 data for the following example:
 
@@ -26,6 +24,8 @@ DROP TABLE IF EXISTS rt;
 CREATE TABLE rt(title text);
 INSERT INTO rt(id,title) VALUES (1,'doc');
 -->
+
+<!-- request SQL -->
 
 ```sql
 FLUSH TABLE rt;

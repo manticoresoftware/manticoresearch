@@ -920,13 +920,13 @@ curl -sS -X POST \
 
 在请求体中，空行会结束并发布当前批次；请求结束会发布最终批次。Manticore 会在处理完该请求中的所有批次后发送 HTTP 响应。如果后续批次失败，同一请求中较早发布的批次仍然可搜索。若要将整个请求作为一个磁盘块原子发布，请不要包含空行。响应中每个已发布批次包含一个聚合的 `bulk` 结果，而不是每个文档一个结果。
 
-大多数客户端应发送一个如上例所示的单个请求。如果应用有意通过同一个[持久 HTTP 连接](../../Connecting_to_the_server/HTTP.md#Persistent-connections)发送多个请求，第一个请求会选择表。之后该连接上的 `/bulk` 或 `/json/bulk` 请求可以省略 `bulk_import`，但必须继续写入同一张表。完成后关闭连接，或发送一个空的 `/bulk?bulk_import=0` 请求来禁用批量导入并释放该连接的保留。释放保留后，对该表的写入会恢复。
+对于典型导入，请按上面所示在一个请求中发送完整的 NDJSON 正文。导入完成后关闭 HTTP 连接，以便释放表供其他写入使用。
 
 该端点支持分块传输编码，因此无需缓冲整个请求即可处理大于 `max_packet_size` 的请求体。
 
 #### Elasticsearch `/_bulk`
 
-兼容 Elasticsearch 的 `/_bulk` 端点不支持直接写盘的 `bulk_import`；请使用 SQL 或 Manticore `/bulk`。在干净会话中，`?pipeline=bulk_import` 和旧版 `?bulk_import=1` 会被拒绝。其他未知的 `bulk_import` 值会被忽略，并继续执行普通的 Elasticsearch 批量处理。具有活动批量导入的连接不能切换到 `/_bulk`。
+兼容 Elasticsearch 的 `/_bulk` 端点不支持直接写入磁盘的 `bulk_import`；请使用 SQL 或 Manticore `/bulk`。
 
 #### 重复的文档 ID
 
@@ -969,6 +969,8 @@ PURGE BULK_IMPORT FROM TABLE products;
 * 每一行都必须提供显式的数值型非零文档 ID。不支持自动生成和 UUID 文档 ID。
 * 不支持静态构建。
 * 平台特定的可执行文件（Linux 上为 `indexer`，Windows 上为 `indexer.exe`）必须与正在运行的 `searchd` 可执行文件位于同一目录。Manticore Search 只解析这个同级路径，不会搜索 `PATH`。请使用与 `searchd` 来自同一安装的可执行文件以确保兼容性。如果该文件不存在、不可读或无法启动，则只有批量导入会失败；正常启动和常规插入仍然可用。
+
+辅助加载器使用 `csvpipe` 源。其命令在 Linux 上默认为 `/bin/cat`，在 Windows 上默认为 `-`，其中 `-` 表示从 indexer 的标准输入读取。可在 `searchd` 环境中设置 `INDEXER_RT_BULK_CSV_PIPE_COMMAND`，仅覆盖此命令。该覆盖不会选择其他源或数据流；该命令必须能配合平台的输入数据流，并将 CSV 行传递给 indexer。不受支持的命令会导致辅助加载失败。
 
 <!-- intro -->
 ### 批量插入示例

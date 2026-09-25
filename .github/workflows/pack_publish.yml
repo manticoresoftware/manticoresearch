@@ -406,7 +406,7 @@ jobs:
       MCL_REPO_TYPE: ${{ needs.pack.outputs.target == 'release' && 'release_candidate' || 'dev' }}
       DISTR: windows
       arch: x64
-      sysroot_url_key: roots_mysql83_jan17
+      sysroot_url_key: roots_mysql83_jan17_vc1429
       boost_url_key: boost_80
       cmake_command: |
         mkdir build

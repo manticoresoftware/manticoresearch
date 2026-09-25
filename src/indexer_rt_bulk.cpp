@@ -8,7 +8,8 @@
 #include "conversion.h"
 #include "sphinxexpr.h"
 
-#include <filesystem>
+#include <boost/filesystem.hpp>
+#include <boost/system/errc.hpp>
 #include <ostream>
 #include <stdlib.h>
 #include <type_traits>
@@ -43,7 +44,7 @@
 #include <unistd.h>
 #endif
 
-namespace fs = std::filesystem;
+namespace fs = boost::filesystem;
 
 static const char * GetIndexerRtBulkCsvpipeCommand ()
 {
@@ -141,15 +142,16 @@ static CSphString EscapeIndexerRtBulkConfigPath ( const CSphString & sPath )
 
 static bool ListStagingDir ( const CSphString & sDir, CSphVector<IndexerRtBulkFile_t> & dFiles, CSphString & sError )
 {
-	std::error_code tError;
+	boost::system::error_code tError;
 	fs::recursive_directory_iterator tIt ( sDir.cstr(), tError );
 	for ( const fs::recursive_directory_iterator tEnd; !tError && tIt!=tEnd; tIt.increment ( tError ) )
 	{
 		auto & tFile = dFiles.Add();
-		tFile.m_sPath = tIt->path().string().c_str();
-		if ( tIt->is_regular_file ( tError ) )
+		const auto & tPath = tIt->path();
+		tFile.m_sPath = tPath.string().c_str();
+		if ( fs::is_regular_file ( tPath, tError ) )
 		{
-			auto iSize = tIt->file_size ( tError );
+			auto iSize = fs::file_size ( tPath, tError );
 			if ( !tError )
 				tFile.m_iSize = (int64_t)iSize;
 		}
@@ -165,7 +167,7 @@ static bool ListStagingDir ( const CSphString & sDir, CSphVector<IndexerRtBulkFi
 
 static bool PrepareStagingRoot ( const CSphString & sRoot, CSphString & sError )
 {
-	std::error_code tError;
+	boost::system::error_code tError;
 	if ( fs::create_directory ( sRoot.cstr(), tError ) || !tError )
 		return true;
 
@@ -182,7 +184,7 @@ static bool CreateStagingDir ( const CSphString & sRoot, CSphString & sDir, CSph
 	for ( ;; )
 	{
 		sDir.SetSprintf ( "%s/" INT64_FMT "-" INT64_FMT, sRoot.cstr(), iDaemonId, iBulkId.fetch_add ( 1, std::memory_order_relaxed ) + 1 );
-		std::error_code tError;
+		boost::system::error_code tError;
 		if ( fs::create_directory ( sDir.cstr(), tError ) )
 			return true;
 		if ( !tError )
@@ -258,9 +260,9 @@ static void AppendIndexerRtBulkError ( CSphString & sError, const CSphString & s
 bool ListIndexerRtBulkFiles ( const CSphString & sRoot, CSphVector<IndexerRtBulkFile_t> & dFiles, CSphString & sError )
 {
 	dFiles.Reset();
-	std::error_code tError;
+	boost::system::error_code tError;
 	auto tStatus = fs::status ( sRoot.cstr(), tError );
-	if ( tError==std::errc::no_such_file_or_directory )
+	if ( tError==boost::system::errc::no_such_file_or_directory )
 		return true;
 	if ( tError )
 	{
@@ -280,7 +282,7 @@ bool ListIndexerRtBulkFiles ( const CSphString & sRoot, CSphVector<IndexerRtBulk
 bool RemoveIndexerRtBulkRoot ( const CSphString & sRoot, CSphString & sError )
 {
 	sError = "";
-	std::error_code tError;
+	boost::system::error_code tError;
 	fs::remove_all ( sRoot.cstr(), tError );
 	if ( !tError )
 		return true;
@@ -800,7 +802,7 @@ void AbortIndexerRtBulkBatch ( ClientSession_c & tSession )
 	if ( !tState.m_sDir.IsEmpty() )
 	{
 		fs::path tDir ( tState.m_sDir.cstr() );
-		std::error_code tError;
+		boost::system::error_code tError;
 		fs::remove_all ( tDir, tError );
 		if ( tError )
 			sphWarning ( "bulk_import cleanup failed for '%s': %s", tState.m_sDir.cstr(), tError.message().c_str() );
@@ -808,7 +810,7 @@ void AbortIndexerRtBulkBatch ( ClientSession_c & tSession )
 		{
 			tError.clear();
 			fs::remove ( tDir.parent_path(), tError );
-			if ( tError && tError!=std::errc::directory_not_empty )
+			if ( tError && tError!=boost::system::errc::directory_not_empty )
 				sphWarning ( "bulk_import cleanup failed for '%s': %s", tDir.parent_path().string().c_str(), tError.message().c_str() );
 		}
 	}

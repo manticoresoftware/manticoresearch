@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>reject altering column type of not int-to-bigint</name>
+<name>DDL column type validation and rejected type changes</name>
 
 <requires>
 	<force-rt/>
@@ -35,6 +35,64 @@ searchd
 	flush ramchunk demo;
 	alter table demo modify column info text;
 	drop table demo;
+</sphinxql>
+
+<!-- Unsupported SQL types must identify the type and suggest a supported one.
+     The same diagnostics apply to CREATE, ADD COLUMN and MODIFY COLUMN. -->
+<sphinxql>
+	drop table if exists ddl_types;
+	drop table if exists ddl_invalid;
+	create table ddl_types (id, f int);
+	insert into ddl_types values (1, 42);
+</sphinxql>
+<repeat var="unsupported" variants="double real decimal numeric varchar char tinyint smallint mediumint boolean datetime date FoO">
+	<sphinxql>
+		create table ddl_invalid (f <unsupported/>);
+		alter table ddl_types add column extra <unsupported/>;
+		alter table ddl_types modify column f <unsupported/>;
+	</sphinxql>
+</repeat>
+<sphinxql>
+	<!-- Normalize mixed case; report the type even with SQL type parameters. -->
+	create table ddl_invalid (f DoUbLe);
+	create table ddl_invalid (f VARCHAR(255));
+	create table ddl_invalid (f DECIMAL(10,2));
+	alter table ddl_types add column extra VaRcHaR(255);
+	alter table ddl_types modify column f DeCiMaL(10,2);
+
+	<!-- A bare id is legal; another bare column must not be mistaken for id. -->
+	create table ddl_invalid (f);
+	create table ddl_invalid (id, f);
+	create table ddl_invalid (id bigint, id double);
+	create table ddl_invalid (id bigint, id bigint);
+
+	<!-- UUID remains a valid id type, but is not a general attribute type. -->
+	create table ddl_invalid (f uuid);
+	alter table ddl_types add column extra uuid;
+	alter table ddl_types modify column f uuid;
+
+	<!-- Failed ALTER statements leave the schema and data intact. -->
+	desc ddl_types;
+	select * from ddl_types;
+	alter table ddl_types add column extra float;
+	alter table ddl_types modify column f bigint;
+	desc ddl_types;
+	select * from ddl_types;
+	drop table ddl_types;
+
+	<!-- Supported alternatives and the now-unreserved DOUBLE identifier. -->
+	create table ddl_types (id, double float, s string, i int, b bool, ts timestamp);
+	insert into ddl_types (id, double, s, i, b, ts) values (1, 1.5, 'ok', 7, 1, 1234567890);
+	desc ddl_types;
+	select id, double, s, i, b, ts from ddl_types;
+	alter table ddl_types drop column double;
+	alter table ddl_types add column double int;
+	update ddl_types set double=9 where id=1;
+	alter table ddl_types modify column double bigint;
+	select id, double from ddl_types;
+	drop table ddl_types;
+
+	show tables;
 </sphinxql>
 </queries>
 

@@ -1268,7 +1268,7 @@ struct AggrResult_t final: CSphQueryResultMeta
 	int				GetLength() const;
 	bool			IsEmpty() const { return GetLength()==0; }
 	bool			AddResultset ( ISphMatchSorter * pQueue, const DocstoreReader_i * pDocstore, int iTag, int iCutoff );
-	void			AddEmptyResultset ( const DocstoreReader_i * pDocstore, int iTag );
+	void					AddEmptyResultset ( const DocstoreReader_i * pDocstore, int iTag, const CSphSchema & tSchema );
 	void			ClampMatches ( int iLimit );
 	void			ClampAllMatches();
 };

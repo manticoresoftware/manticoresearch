@@ -1,0 +1,257 @@
+a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist";s:14:"total_affected";i:0;}i:1;a:2:{s:8:"sphinxql";s:36:"drop table if exists highlight_mixed";s:14:"total_affected";i:0;}i:2;a:2:{s:8:"sphinxql";s:38:"drop table if exists highlight_unequal";s:14:"total_affected";i:0;}i:3;a:2:{s:8:"sphinxql";s:36:"drop table if exists highlight_all_1";s:14:"total_affected";i:0;}i:4;a:2:{s:8:"sphinxql";s:36:"drop table if exists highlight_all_2";s:14:"total_affected";i:0;}i:5;a:2:{s:8:"sphinxql";s:37:"drop table if exists highlight_remote";s:14:"total_affected";i:0;}i:6;a:2:{s:8:"sphinxql";s:42:"drop table if exists highlight_remote_only";s:14:"total_affected";i:0;}i:7;a:2:{s:8:"sphinxql";s:33:"drop table if exists highlight_ru";s:14:"total_affected";i:0;}i:8;a:2:{s:8:"sphinxql";s:33:"drop table if exists highlight_en";s:14:"total_affected";i:0;}i:9;a:2:{s:8:"sphinxql";s:33:"drop table if exists highlight_zh";s:14:"total_affected";i:0;}i:10;a:2:{s:8:"sphinxql";s:90:"create table highlight_ru (title text, body text, g integer) morphology='lemmatize_ru_all'";s:14:"total_affected";i:0;}i:11;a:2:{s:8:"sphinxql";s:90:"create table highlight_en (title text, body text, g integer) morphology='lemmatize_en_all'";s:14:"total_affected";i:0;}i:12;a:2:{s:8:"sphinxql";s:109:"create table highlight_zh (title text, body text, g integer) charset_table='chinese' morphology='icu_chinese'";s:14:"total_affected";i:0;}i:13;a:2:{s:8:"sphinxql";s:108:"create table highlight_remote (title text, body text, g bigint, extra integer) morphology='lemmatize_en_all'";s:14:"total_affected";i:0;}i:14;a:2:{s:8:"sphinxql";s:96:"create table highlight_remote_only type='distributed' agent='<AGENT0_ADDRESS/>:highlight_remote'";s:14:"total_affected";i:0;}i:15;a:2:{s:8:"sphinxql";s:109:"create table highlight_dist type='distributed' local='highlight_ru' local='highlight_en' local='highlight_zh'";s:14:"total_affected";i:0;}i:16;a:2:{s:8:"sphinxql";s:146:"create table highlight_mixed type='distributed' local='highlight_ru' agent='<AGENT0_ADDRESS/>:highlight_en' agent='<AGENT0_ADDRESS/>:highlight_zh'";s:14:"total_affected";i:0;}i:17;a:2:{s:8:"sphinxql";s:134:"create table highlight_unequal type='distributed' local='highlight_ru' local='highlight_en' agent='<AGENT0_ADDRESS/>:highlight_remote'";s:14:"total_affected";i:0;}i:18;a:2:{s:8:"sphinxql";s:110:"create table highlight_all_1 type='distributed' local='highlight_ru' local='highlight_en' local='highlight_zh'";s:14:"total_affected";i:0;}i:19;a:2:{s:8:"sphinxql";s:110:"create table highlight_all_2 type='distributed' local='highlight_ru' local='highlight_en' local='highlight_zh'";s:14:"total_affected";i:0;}i:20;a:2:{s:8:"sphinxql";s:388:"insert into highlight_ru (id, title, body, g) values (1, 'Сосуды и нервы туловища и конечностей собаки.DOC', 'Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»', 1), (3, 'Другие собаки.DOC', 'Собаки бегут по полю', 3)";s:14:"total_affected";i:2;}i:21;a:2:{s:8:"sphinxql";s:171:"insert into highlight_en (id, title, body, g) values (2, 'Dogs.DOC', 'Several dogs are running through the field', 2), (4, 'More dogs.DOC', 'Dogs run across the field', 4)";s:14:"total_affected";i:2;}i:22;a:2:{s:8:"sphinxql";s:104:"insert into highlight_zh (id, title, body, g) values (5, '奔跑的狗.DOC', '狗在公园里奔跑', 5)";s:14:"total_affected";i:1;}i:23;a:2:{s:8:"sphinxql";s:130:"insert into highlight_remote (id, title, body, g, extra) values (6, 'Remote dogs.DOC', 'Remote dogs run through the field', 6, 42)";s:14:"total_affected";i:1;}i:24;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:25;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:26;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:27;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:28;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:29;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:30;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:31;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:32;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:33;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:34;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:35;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:36;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:37;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:38;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:39;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:40;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:41;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:42;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:43;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"sort": [ { "_score": "desc" }, { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:44;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:246:"{
+	"table": "highlight_dist",
+	"query": { "query_string": "собака | dog" },
+	"limit": 2,
+	"sort": [ { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:881:"{"timed_out":false,"hits":{"total":5,"total_relation":"eq","hits":[{"_id":1,"_score":1,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}},{"_id":2,"_score":1,"_source":{"title":"Dogs.DOC","body":"Several dogs are running through the field","g":2},"highlight":{"body":["Several <em>dogs</em> are running through the field"],"title":["<em>Dogs</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:45;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:247:"{
+	"table": "highlight_mixed",
+	"query": { "query_string": "собака | dog" },
+	"limit": 2,
+	"sort": [ { "id": "asc" } ],
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:881:"{"timed_out":false,"hits":{"total":5,"total_relation":"eq","hits":[{"_id":1,"_score":1,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}},{"_id":2,"_score":1,"_source":{"title":"Dogs.DOC","body":"Several dogs are running through the field","g":2},"highlight":{"body":["Several <em>dogs</em> are running through the field"],"title":["<em>Dogs</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:46;a:3:{s:8:"sphinxql";s:152:"select id, g, count(distinct g), highlight({allow_empty=1}, 'body', 'собака | dog | 狗') from highlight_dist group by g order by id asc limit 0,5";s:10:"total_rows";i:5;s:4:"rows";a:5:{i:0;a:4:{s:2:"id";s:1:"1";s:1:"g";s:1:"1";s:17:"count(distinct g)";s:1:"1";s:62:"highlight({allow_empty=1}, 'body', 'собака | dog | 狗')";s:160:"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <b>собаки</b>»";}i:1;a:4:{s:2:"id";s:1:"2";s:1:"g";s:1:"2";s:17:"count(distinct g)";s:1:"1";s:62:"highlight({allow_empty=1}, 'body', 'собака | dog | 狗')";s:49:"Several <b>dogs</b> are running through the field";}i:2;a:4:{s:2:"id";s:1:"3";s:1:"g";s:1:"3";s:17:"count(distinct g)";s:1:"1";s:62:"highlight({allow_empty=1}, 'body', 'собака | dog | 狗')";s:44:"<b>Собаки</b> бегут по полю";}i:3;a:4:{s:2:"id";s:1:"4";s:1:"g";s:1:"4";s:17:"count(distinct g)";s:1:"1";s:62:"highlight({allow_empty=1}, 'body', 'собака | dog | 狗')";s:32:"<b>Dogs</b> run across the field";}i:4;a:4:{s:2:"id";s:1:"5";s:1:"g";s:1:"5";s:17:"count(distinct g)";s:1:"1";s:62:"highlight({allow_empty=1}, 'body', 'собака | dog | 狗')";s:28:"<b>狗</b>在公园里奔跑";}}}i:47;a:3:{s:8:"sphinxql";s:152:"select id, g, count(distinct g), highlight({allow_empty=1}, 'body', 'собака | dog | 狗') from highlight_dist group by g order by id asc limit 2,3";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:4:{s:2:"id";s:1:"3";s:1:"g";s:1:"3";s:17:"count(distinct g)";s:1:"1";s:62:"highlight({allow_empty=1}, 'body', 'собака | dog | 狗')";s:44:"<b>Собаки</b> бегут по полю";}i:1;a:4:{s:2:"id";s:1:"4";s:1:"g";s:1:"4";s:17:"count(distinct g)";s:1:"1";s:62:"highlight({allow_empty=1}, 'body', 'собака | dog | 狗')";s:32:"<b>Dogs</b> run across the field";}i:2;a:4:{s:2:"id";s:1:"5";s:1:"g";s:1:"5";s:17:"count(distinct g)";s:1:"1";s:62:"highlight({allow_empty=1}, 'body', 'собака | dog | 狗')";s:28:"<b>狗</b>在公园里奔跑";}}}i:48;a:3:{s:8:"sphinxql";s:182:"/* SNIPPET() must use the same source morphology as a direct source query. */
+	select id, snippet(body, 'собака | dog | 狗', 'allow_empty=1') from highlight_ru order by id asc";s:10:"total_rows";i:2;s:4:"rows";a:2:{i:0;a:2:{s:2:"id";s:1:"1";s:58:"snippet(body, 'собака | dog | 狗', 'allow_empty=1')";s:160:"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <b>собаки</b>»";}i:1;a:2:{s:2:"id";s:1:"3";s:58:"snippet(body, 'собака | dog | 狗', 'allow_empty=1')";s:44:"<b>Собаки</b> бегут по полю";}}}i:49;a:3:{s:8:"sphinxql";s:103:"select id, snippet(body, 'собака | dog | 狗', 'allow_empty=1') from highlight_en order by id asc";s:10:"total_rows";i:2;s:4:"rows";a:2:{i:0;a:2:{s:2:"id";s:1:"2";s:58:"snippet(body, 'собака | dog | 狗', 'allow_empty=1')";s:49:"Several <b>dogs</b> are running through the field";}i:1;a:2:{s:2:"id";s:1:"4";s:58:"snippet(body, 'собака | dog | 狗', 'allow_empty=1')";s:32:"<b>Dogs</b> run across the field";}}}i:50;a:3:{s:8:"sphinxql";s:103:"select id, snippet(body, 'собака | dog | 狗', 'allow_empty=1') from highlight_zh order by id asc";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:2:"id";s:1:"5";s:58:"snippet(body, 'собака | dog | 狗', 'allow_empty=1')";s:28:"<b>狗</b>在公园里奔跑";}}}i:51;a:3:{s:8:"sphinxql";s:105:"select id, snippet(body, 'собака | dog | 狗', 'allow_empty=1') from highlight_dist order by id asc";s:10:"total_rows";i:5;s:4:"rows";a:5:{i:0;a:2:{s:2:"id";s:1:"1";s:58:"snippet(body, 'собака | dog | 狗', 'allow_empty=1')";s:160:"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <b>собаки</b>»";}i:1;a:2:{s:2:"id";s:1:"2";s:58:"snippet(body, 'собака | dog | 狗', 'allow_empty=1')";s:49:"Several <b>dogs</b> are running through the field";}i:2;a:2:{s:2:"id";s:1:"3";s:58:"snippet(body, 'собака | dog | 狗', 'allow_empty=1')";s:44:"<b>Собаки</b> бегут по полю";}i:3;a:2:{s:2:"id";s:1:"4";s:58:"snippet(body, 'собака | dog | 狗', 'allow_empty=1')";s:32:"<b>Dogs</b> run across the field";}i:4;a:2:{s:2:"id";s:1:"5";s:58:"snippet(body, 'собака | dog | 狗', 'allow_empty=1')";s:28:"<b>狗</b>在公园里奔跑";}}}i:52;a:3:{s:8:"sphinxql";s:237:"/* A remote bigint changes the merged schema after two locals were globally sorted. */
+	select id, g, count(distinct g), highlight({allow_empty=1}, 'body', 'собака | dog') from highlight_unequal group by g order by id asc limit 0,6";s:10:"total_rows";i:5;s:4:"rows";a:5:{i:0;a:4:{s:2:"id";s:1:"1";s:1:"g";s:1:"1";s:17:"count(distinct g)";s:1:"1";s:56:"highlight({allow_empty=1}, 'body', 'собака | dog')";s:160:"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <b>собаки</b>»";}i:1;a:4:{s:2:"id";s:1:"2";s:1:"g";s:1:"2";s:17:"count(distinct g)";s:1:"1";s:56:"highlight({allow_empty=1}, 'body', 'собака | dog')";s:49:"Several <b>dogs</b> are running through the field";}i:2;a:4:{s:2:"id";s:1:"3";s:1:"g";s:1:"3";s:17:"count(distinct g)";s:1:"1";s:56:"highlight({allow_empty=1}, 'body', 'собака | dog')";s:44:"<b>Собаки</b> бегут по полю";}i:3;a:4:{s:2:"id";s:1:"4";s:1:"g";s:1:"4";s:17:"count(distinct g)";s:1:"1";s:56:"highlight({allow_empty=1}, 'body', 'собака | dog')";s:32:"<b>Dogs</b> run across the field";}i:4;a:4:{s:2:"id";s:1:"6";s:1:"g";s:1:"6";s:17:"count(distinct g)";s:1:"1";s:56:"highlight({allow_empty=1}, 'body', 'собака | dog')";s:40:"Remote <b>dogs</b> run through the field";}}}i:53;a:3:{s:8:"sphinxql";s:149:"select id, g, count(distinct g), highlight({allow_empty=1}, 'body', 'собака | dog') from highlight_unequal group by g order by id asc limit 2,3";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:4:{s:2:"id";s:1:"3";s:1:"g";s:1:"3";s:17:"count(distinct g)";s:1:"1";s:56:"highlight({allow_empty=1}, 'body', 'собака | dog')";s:44:"<b>Собаки</b> бегут по полю";}i:1;a:4:{s:2:"id";s:1:"4";s:1:"g";s:1:"4";s:17:"count(distinct g)";s:1:"1";s:56:"highlight({allow_empty=1}, 'body', 'собака | dog')";s:32:"<b>Dogs</b> run across the field";}i:2;a:4:{s:2:"id";s:1:"6";s:1:"g";s:1:"6";s:17:"count(distinct g)";s:1:"1";s:56:"highlight({allow_empty=1}, 'body', 'собака | dog')";s:40:"Remote <b>dogs</b> run through the field";}}}i:54;a:3:{s:8:"sphinxql";s:277:"/* Direct locals are tagged first, so the remote-only distributed source has the highest tag. */
+	select id, g, count(distinct g), highlight({allow_empty=1}, 'body', 'собака | dog') from highlight_ru,highlight_en,highlight_remote_only group by g order by id asc limit 0,6";s:10:"total_rows";i:5;s:4:"rows";a:5:{i:0;a:4:{s:2:"id";s:1:"1";s:1:"g";s:1:"1";s:17:"count(distinct g)";s:1:"1";s:56:"highlight({allow_empty=1}, 'body', 'собака | dog')";s:160:"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <b>собаки</b>»";}i:1;a:4:{s:2:"id";s:1:"2";s:1:"g";s:1:"2";s:17:"count(distinct g)";s:1:"1";s:56:"highlight({allow_empty=1}, 'body', 'собака | dog')";s:49:"Several <b>dogs</b> are running through the field";}i:2;a:4:{s:2:"id";s:1:"3";s:1:"g";s:1:"3";s:17:"count(distinct g)";s:1:"1";s:56:"highlight({allow_empty=1}, 'body', 'собака | dog')";s:44:"<b>Собаки</b> бегут по полю";}i:3;a:4:{s:2:"id";s:1:"4";s:1:"g";s:1:"4";s:17:"count(distinct g)";s:1:"1";s:56:"highlight({allow_empty=1}, 'body', 'собака | dog')";s:32:"<b>Dogs</b> run across the field";}i:4;a:4:{s:2:"id";s:1:"6";s:1:"g";s:1:"6";s:17:"count(distinct g)";s:1:"1";s:56:"highlight({allow_empty=1}, 'body', 'собака | dog')";s:40:"Remote <b>dogs</b> run through the field";}}}i:55;a:3:{s:8:"sphinxql";s:269:"/* Duplicate local elimination leaves sparse source tags that must be compacted on matches too. */
+	select id, g, count(distinct g), highlight({allow_empty=1}, 'body', 'собака | dog | 狗') from highlight_all_1,highlight_all_2 group by g order by id asc limit 0,5";s:10:"total_rows";i:5;s:4:"rows";a:5:{i:0;a:4:{s:2:"id";s:1:"1";s:1:"g";s:1:"1";s:17:"count(distinct g)";s:1:"1";s:62:"highlight({allow_empty=1}, 'body', 'собака | dog | 狗')";s:160:"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <b>собаки</b>»";}i:1;a:4:{s:2:"id";s:1:"2";s:1:"g";s:1:"2";s:17:"count(distinct g)";s:1:"1";s:62:"highlight({allow_empty=1}, 'body', 'собака | dog | 狗')";s:49:"Several <b>dogs</b> are running through the field";}i:2;a:4:{s:2:"id";s:1:"3";s:1:"g";s:1:"3";s:17:"count(distinct g)";s:1:"1";s:62:"highlight({allow_empty=1}, 'body', 'собака | dog | 狗')";s:44:"<b>Собаки</b> бегут по полю";}i:3;a:4:{s:2:"id";s:1:"4";s:1:"g";s:1:"4";s:17:"count(distinct g)";s:1:"1";s:62:"highlight({allow_empty=1}, 'body', 'собака | dog | 狗')";s:32:"<b>Dogs</b> run across the field";}i:4;a:4:{s:2:"id";s:1:"5";s:1:"g";s:1:"5";s:17:"count(distinct g)";s:1:"1";s:62:"highlight({allow_empty=1}, 'body', 'собака | dog | 狗')";s:28:"<b>狗</b>在公园里奔跑";}}}i:56;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:208:"{
+	"table": "highlight_ru",
+	"query": { "query_string": "собака" },
+	"limit": 1,
+	"highlight": {
+		"allow_empty": true,
+		"fields": [ "body", "title" ],
+		"pre_tags": "<em>",
+		"post_tags": "</em>"
+	}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":2,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:57;a:2:{s:8:"sphinxql";s:25:"drop table highlight_dist";s:14:"total_affected";i:0;}i:58;a:2:{s:8:"sphinxql";s:26:"drop table highlight_mixed";s:14:"total_affected";i:0;}i:59;a:2:{s:8:"sphinxql";s:28:"drop table highlight_unequal";s:14:"total_affected";i:0;}i:60;a:2:{s:8:"sphinxql";s:26:"drop table highlight_all_1";s:14:"total_affected";i:0;}i:61;a:2:{s:8:"sphinxql";s:26:"drop table highlight_all_2";s:14:"total_affected";i:0;}i:62;a:2:{s:8:"sphinxql";s:27:"drop table highlight_remote";s:14:"total_affected";i:0;}i:63;a:2:{s:8:"sphinxql";s:32:"drop table highlight_remote_only";s:14:"total_affected";i:0;}i:64;a:2:{s:8:"sphinxql";s:23:"drop table highlight_ru";s:14:"total_affected";i:0;}i:65;a:2:{s:8:"sphinxql";s:23:"drop table highlight_en";s:14:"total_affected";i:0;}i:66;a:2:{s:8:"sphinxql";s:23:"drop table highlight_zh";s:14:"total_affected";i:0;}}}

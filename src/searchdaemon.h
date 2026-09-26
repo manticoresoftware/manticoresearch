@@ -139,7 +139,7 @@ SearchdCommand_e ParseCommand ( const CSphString & sCommand );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 35
+	VER_COMMAND_SEARCH_MASTER = 36
 };
 
 

@@ -9,6 +9,7 @@
 //
 
 #include "attribute.h"
+#include "std/mm.h"
 #include "std/tdigest_runtime.h"
 
 #include "sphinxint.h"
@@ -683,6 +684,12 @@ const BYTE * sphGetBlobAttr ( const CSphRowitem * pDocinfo, const CSphAttrLocato
 	assert ( pBlobPool );
 	int64_t iOffset = GetBlobRowOffset ( pDocinfo, tLocator.m_iBlobRowOffset );
 	return GetBlobAttr ( pBlobPool+iOffset, tLocator.m_iBlobAttrId, tLocator.m_nBlobAttrs, iLengthBytes );
+}
+
+void sphAdviseBlobRow ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool, int iBytes )
+{
+	assert ( pBlobPool && tLocator.IsBlobAttr() && !tLocator.m_bDynamic && tMatch.m_pStatic );
+	mmadvise ( (void*)( pBlobPool + GetBlobRowOffset ( tMatch.m_pStatic, tLocator.m_iBlobRowOffset ) ), iBytes, Advise_e::WILLNEED );
 }
 
 ByteBlob_t sphGetBlobAttr ( const CSphRowitem * pDocinfo, const CSphAttrLocator & tLocator, const BYTE * pBlobPool )

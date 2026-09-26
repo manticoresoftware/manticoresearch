@@ -40,7 +40,6 @@
 %token	TOK_COLUMN
 %token	TOK_COLUMNAR
 %token	TOK_CREATE
-%token	TOK_DOUBLE
 %token	TOK_DROP
 %token	TOK_EMBEDDINGS
 %token	TOK_ENGINE
@@ -308,6 +307,18 @@ alter:
 			tStmt.m_eStmt = STMT_ALTER_EMBEDDINGS_MAX_INPUT_TOKENS;
 			pParser->ToString ( tStmt.m_sAlterAttr, $3 );
 			pParser->ToString ( tStmt.m_sAlterOption, $6 ).Unquote();
+		}
+	| alter_table_name TOK_ADD TOK_COLUMN columnident TOK_TABLEIDENT
+		{
+			pParser->SetUnknownColumnTypeError ( $5 );
+			yyerror ( pParser, pParser->GetLastError() );
+			YYERROR;
+		}
+	| alter_table_name TOK_MODIFY_COLUMN columnident TOK_TABLEIDENT
+		{
+			pParser->SetUnknownColumnTypeError ( $4 );
+			yyerror ( pParser, pParser->GetLastError() );
+			YYERROR;
 		}
 	| alter_table_name TOK_ADD TOK_COLUMN columnident TOK_BIT '(' TOK_CONST_INT ')' item_option_list
 		{

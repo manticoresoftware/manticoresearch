@@ -827,13 +827,13 @@ public:
 
 		ARRAY_FOREACH ( iQuery, m_dSorters )
 		{
-			CSphVector<ISphMatchSorter *> dValidSorters;
-			for ( auto i : m_dSorters[iQuery] )
+			CSphVector<const SorterData_t *> dValidSorters;
+			for ( auto & i : m_dSorters[iQuery] )
 			{
 				if ( !i.m_pSorter )
 					continue;
 
-				dValidSorters.Add ( i.m_pSorter );
+				dValidSorters.Add ( &i );
 
 				// assign order tag here so we can link to docstore later
 				AssignTag_c tAssign ( i.m_iTag );
@@ -844,22 +844,25 @@ public:
 			if ( !iNumIndexes )
 				continue;
 
-			ISphMatchSorter * pLastSorter = dValidSorters[iNumIndexes-1];
+			const SorterData_t & tLastSorter = *dValidSorters[iNumIndexes-1];
 
 			// merge all results to the last sorter. this is done to try to keep some compatibility with no-global-sorters code branch
 			for ( int iIndex = iNumIndexes-2; iIndex>=0; iIndex-- )
-				dValidSorters[iIndex]->MoveTo ( pLastSorter, true );
+				dValidSorters[iIndex]->m_pSorter->MoveTo ( tLastSorter.m_pSorter, true );
 
-			dResults[iQuery].m_iTotalMatches = pLastSorter->GetTotalCount();
-			dResults[iQuery].AddResultset ( pLastSorter, m_dSorters[iQuery][0].m_pDocstore, m_dSorters[iQuery][0].m_iTag, m_dQueries[iQuery].m_iCutoff );
+			dResults[iQuery].m_iTotalMatches = tLastSorter.m_pSorter->GetTotalCount();
 
 			// we already assigned index/docstore tags to all matches; no need to do it again
-			if ( dResults[iQuery].m_dResults.GetLength() )
-				dResults[iQuery].m_dResults[0].m_bTagsAssigned = true;
+			if ( dResults[iQuery].AddResultset ( tLastSorter.m_pSorter, tLastSorter.m_pDocstore, tLastSorter.m_iTag, m_dQueries[iQuery].m_iCutoff ) )
+				dResults[iQuery].m_dResults.Last().m_bTagsAssigned = true;
 
-			// add fake empty result sets (for tag->docstore lookup)
-			for ( int i = 1; i < m_dSorters[iQuery].GetLength(); i++ )
-				dResults[iQuery].AddEmptyResultset ( m_dSorters[iQuery][i].m_pDocstore, m_dSorters[iQuery][i].m_iTag );
+			// add fake empty result sets for the other sources (for tag->docstore and tag->post-limit expressions lookup).
+			// the sorters live until this object is destroyed, so their schemas are still valid here
+			for ( int iIndex = 0; iIndex<iNumIndexes-1; iIndex++ )
+			{
+				const SorterData_t & tSorter = *dValidSorters[iIndex];
+				dResults[iQuery].AddEmptyResultset ( tSorter.m_pDocstore, tSorter.m_iTag, *tSorter.m_pSorter->GetSchema() );
+			}
 		}
 	}
 

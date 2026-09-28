@@ -2396,6 +2396,24 @@ static bool MergeFilters ( CSphFilterSettings & tLeft, const CSphFilterSettings 
 }
 
 
+void AddQueryFilter ( CSphQuery & tQuery, CSphFilterSettings tFilter )
+{
+	if ( tQuery.m_dFilterTree.GetLength() )
+	{
+		int iRootNodeId = tQuery.m_dFilterTree.GetLength()-1;
+		FilterTreeItem_t & tFilterNode = tQuery.m_dFilterTree.Add();
+		tFilterNode.m_iFilterItem = tQuery.m_dFilters.GetLength();
+
+		int iFilterNodeId = tQuery.m_dFilterTree.GetLength()-1;
+		FilterTreeItem_t & tAnd = tQuery.m_dFilterTree.Add();
+		tAnd.m_iLeft = iRootNodeId;
+		tAnd.m_iRight = iFilterNodeId;
+	}
+
+	tQuery.m_dFilters.Add ( std::move(tFilter) );
+}
+
+
 void OptimizeFilters ( CSphVector<CSphFilterSettings> & dFilters )
 {
 	bool bRejectIndex = false;

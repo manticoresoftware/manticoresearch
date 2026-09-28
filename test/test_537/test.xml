@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>hybrid search facets</name>
+<skip_indexer/>
+<requires><columnar/><knn/><knn_float_tolerance/><force-rt/><http/></requires>
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+<queries>
+<sphinxql>
+	create table t (title text, cat int, brand int, j json, vec float_vector knn_type='hnsw' knn_dims='2' hnsw_similarity='l2');
+	insert into t values (1, 'red apple', 1, 10, '{"x":1}', (0.1,0)), (2, 'red pear', 1, 20, '{"x":2}', (0.2,0)), (3, 'green apple', 2, 10, '{"y":1}', (0.3,0)), (4, 'green pear', 2, 20, '{"x":4}', (1,0)), (5, 'blue plum', 3, 30, '{"y":2}', (2,0));
+	create table t2 (name string);
+	insert into t2 values (10, 'acme'), (20, 'bolt'), (30, 'cog');
+
+	<!-- text matches 1,2; KNN returns all five docs, so the fused set is all five. Constant text weight keeps the expected results independent of corpus statistics. -->
+	select id from t where match('red') and knn(vec,5,(0,0)) order by id asc option fusion_method='rrf', ranker=expr('100') facet cat order by facet() asc facet brand order by facet() asc;;
+	select id from t where match('red') and knn(vec,5,(0,0)) order by id asc limit 1 option fusion_method='rrf', ranker=expr('100') facet cat order by facet() asc;;
+
+	<!-- facets honor the post-fusion filters (weight, knn_dist, hybrid_score) the head applies after fusion -->
+	select id, weight() from t where match('red') and knn(vec,5,(0,0)) and weight()>10 order by id asc option fusion_method='rrf', ranker=expr('100') facet cat order by facet() asc;;
+	select id from t where match('red') and knn(vec,5,(0,0)) and knn_dist()&lt;0.5 order by id asc option fusion_method='rrf', ranker=expr('100') facet cat order by facet() asc;;
+	select id, weight()*10 w from t where match('red') and knn(vec,5,(0,0)) and w>100 order by id asc option fusion_method='rrf', ranker=expr('100') facet cat order by facet() asc;;
+	select id, weight()*10 w, w+1 w1 from t where match('red') and knn(vec,5,(0,0)) and w1>100 order by id asc option fusion_method='rrf', ranker=expr('100') facet cat order by facet() asc;;
+
+	<!-- regression: IS NULL filters must not break the head/facet filter comparison -->
+	select id from t where match('red') and knn(vec,5,(0,0)) and j.x is null order by id asc option fusion_method='rrf', ranker=expr('100') facet cat order by facet() asc;;
+	select id from t where match('red') and knn(vec,5,(0,0)) and j.x is not null order by id asc option fusion_method='rrf', ranker=expr('100') facet cat order by facet() asc;;
+
+	<!-- attribute filter trees: the candidate docid filter is ANDed onto the tree -->
+	select id from t where match('red') and knn(vec,5,(0,0)) and (cat=1 or brand=30) order by id asc option fusion_method='rrf', ranker=expr('100') facet brand order by facet() asc;;
+	select id from t where match('red') and knn(vec,5,(0,0)) and (cat=1 or brand=30) and (brand=10 or brand=30) order by id asc option fusion_method='rrf', ranker=expr('100') facet brand order by facet() asc;;
+
+	<!-- facets keeping fewer filters than the head re-run the hybrid query with their own filters -->
+	select id from t where match('red') and knn(vec,5,(0,0)) and cat=1 order by id asc option fusion_method='rrf', ranker=expr('100'), facet_filter_mode='max' facet cat order by facet() asc facet brand order by facet() asc;;
+	select id from t where match('red') and knn(vec,5,(0,0)) and cat=1 order by id asc option fusion_method='rrf', ranker=expr('100'), facet_filter_mode='auto' facet cat order by facet() asc facet brand order by facet() asc;;
+	select id from t where match('red') and knn(vec,5,(0,0)) and cat=1 and brand=10 order by id asc option fusion_method='rrf', ranker=expr('100') facet cat order by facet() asc facet brand exclude filters cat order by facet() asc facet brand all filters zeroes mode max order by facet() asc;;
+	select id from t where match('red') and knn(vec,5,(0,0)) and cat=1 and weight()>10 order by id asc option fusion_method='rrf', ranker=expr('100'), facet_filter_mode='max' facet cat order by facet() asc;;
+
+	<!-- GROUP BY head: facets count documents; aggregates and expressions over them are dropped from the candidate query -->
+	select cat, count(*) c, max(brand) mb from t where match('red') and knn(vec,5,(0,0)) group by cat order by cat asc option fusion_method='rrf', ranker=expr('100') facet brand order by facet() asc;;
+	<!-- an implicitly grouped head (aggregates without GROUP BY) fuses one group; its facets still count documents -->
+	select count(*) c, max(brand) mb from t where match('red') and knn(vec,5,(0,0)) option fusion_method='rrf', ranker=expr('100') facet cat order by facet() asc;;
+
+	<!-- JOIN: post-fusion filters (also through weight-dependent aliases) stay on the candidates, right-table filters apply to the joined rows -->
+	select id, t2.name from t inner join t2 on t.brand=t2.id where match('red') and knn(vec,5,(0,0)) order by id asc option fusion_method='rrf', ranker=expr('100') facet cat order by facet() asc;;
+	select id, weight()*10 w, t2.name from t inner join t2 on t.brand=t2.id where match('red') and knn(vec,5,(0,0)) and w>100 order by id asc option fusion_method='rrf', ranker=expr('100') facet cat order by facet() asc;;
+	select id, t2.name from t inner join t2 on t.brand=t2.id where match('red') and knn(vec,5,(0,0)) and t2.name='acme' order by id asc option fusion_method='rrf', ranker=expr('100') facet cat order by facet() asc;;
+
+	<!-- scroll: a cursor on hybrid_score() is a post-fusion filter; facets count the fused documents after it, like the head -->
+	select id, hybrid_score() from t where match('red') and knn(vec,5,(0,0)) order by hybrid_score() desc, id asc limit 2 option fusion_method='rrf', ranker=expr('100') facet cat order by facet() asc;;
+	select id, hybrid_score() from t where match('red') and knn(vec,5,(0,0)) order by hybrid_score() desc, id asc limit 2 option fusion_method='rrf', ranker=expr('100'), scroll='eyJvcmRlcl9ieV9zdHIiOiJoeWJyaWRfc2NvcmUoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6Imh5YnJpZF9zY29yZSgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjAuMDIsInR5cGUiOiJmbG9hdCJ9LHsiYXR0ciI6ImlkIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjowLCJ0eXBlIjoiaW50In1dfQ==' facet cat order by facet() asc;;
+	select id, hybrid_score() from t where match('red') and knn(vec,5,(0,0)) and cat>1 order by hybrid_score() desc, id asc limit 2 option fusion_method='rrf', ranker=expr('100'), facet_filter_mode='max', scroll='eyJvcmRlcl9ieV9zdHIiOiJoeWJyaWRfc2NvcmUoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6Imh5YnJpZF9zY29yZSgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjAuMDIsInR5cGUiOiJmbG9hdCJ9LHsiYXR0ciI6ImlkIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjowLCJ0eXBlIjoiaW50In1dfQ==' facet cat order by facet() asc;;
+
+	<!-- same on a disk chunk -->
+	flush ramchunk t;
+	select id from t where match('red') and knn(vec,5,(0,0)) and j.x is null order by id asc option fusion_method='rrf', ranker=expr('100') facet cat order by facet() asc;;
+	select id from t where match('red') and knn(vec,5,(0,0)) and cat=1 order by id asc option fusion_method='rrf', ranker=expr('100'), facet_filter_mode='max' facet cat order by facet() asc facet brand order by facet() asc;;
+</sphinxql>
+
+<!-- JSON aggregations over a hybrid query -->
+<query endpoint="json/search">
+{"table":"t","query":{"match":{"title":"red"}},"knn":{"field":"vec","query_vector":[0,0],"k":5},"options":{"fusion_method":"rrf","ranker":"expr('100')"},"_source":["cat"],"limit":5,"aggs":{"cats":{"terms":{"field":"cat","size":10},"sort":[{"cat":{"order":"asc"}}]},"brands":{"terms":{"field":"brand","size":10},"sort":[{"brand":{"order":"asc"}}]}}}
+</query>
+
+<!-- an aggregation on the filtered attribute in max mode re-runs the hybrid query without that filter -->
+<query endpoint="json/search">
+{"table":"t","query":{"bool":{"must":[{"match":{"title":"red"}},{"equals":{"cat":1}}]}},"knn":{"field":"vec","query_vector":[0,0],"k":5},"options":{"fusion_method":"rrf","ranker":"expr('100')"},"facet_filter_mode":"max","_source":["cat"],"limit":5,"aggs":{"cats":{"terms":{"field":"cat","size":10},"sort":[{"cat":{"order":"asc"}}]},"brands":{"terms":{"field":"brand","size":10},"sort":[{"brand":{"order":"asc"}}]}}}
+</query>
+
+<!-- JSON aggregations copy the head's scroll cursor; the facet sorters must not scroll and the counts cover the fused documents after the cursor -->
+<query endpoint="json/search">
+{"table":"t","query":{"match":{"title":"red"}},"knn":{"field":"vec","query_vector":[0,0],"k":5},"options":{"fusion_method":"rrf","ranker":"expr('100')","scroll":true},"sort":[{"hybrid_score()":{"order":"desc"}},{"id":{"order":"asc"}}],"_source":["cat"],"limit":2,"aggs":{"cats":{"terms":{"field":"cat","size":10},"sort":[{"cat":{"order":"asc"}}]}}}
+</query>
+<query endpoint="json/search">
+{"table":"t","query":{"match":{"title":"red"}},"knn":{"field":"vec","query_vector":[0,0],"k":5},"options":{"fusion_method":"rrf","ranker":"expr('100')","scroll":"eyJvcmRlcl9ieV9zdHIiOiJoeWJyaWRfc2NvcmUoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6Imh5YnJpZF9zY29yZSgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjAuMDIsInR5cGUiOiJmbG9hdCJ9LHsiYXR0ciI6ImlkIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjowLCJ0eXBlIjoiaW50In1dfQ=="},"sort":[{"hybrid_score()":{"order":"desc"}},{"id":{"order":"asc"}}],"_source":["cat"],"limit":2,"aggs":{"cats":{"terms":{"field":"cat","size":10},"sort":[{"cat":{"order":"asc"}}]}}}
+</query>
+<query endpoint="json/search">
+{"table":"t","query":{"bool":{"must":[{"match":{"title":"red"}},{"range":{"cat":{"gt":1}}}]}},"knn":{"field":"vec","query_vector":[0,0],"k":5},"options":{"fusion_method":"rrf","ranker":"expr('100')","scroll":"eyJvcmRlcl9ieV9zdHIiOiJoeWJyaWRfc2NvcmUoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6Imh5YnJpZF9zY29yZSgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjAuMDIsInR5cGUiOiJmbG9hdCJ9LHsiYXR0ciI6ImlkIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjowLCJ0eXBlIjoiaW50In1dfQ=="},"sort":[{"hybrid_score()":{"order":"desc"}},{"id":{"order":"asc"}}],"facet_filter_mode":"max","_source":["cat"],"limit":2,"aggs":{"cats":{"terms":{"field":"cat","size":10},"sort":[{"cat":{"order":"asc"}}]}}}
+</query>
+
+<sphinxql>
+	drop table t;
+	drop table t2;
+</sphinxql>
+</queries>
+</test>

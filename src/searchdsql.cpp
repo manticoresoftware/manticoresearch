@@ -2916,6 +2916,8 @@ static bool SetupFacets ( CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
 			tStmt.m_tQuery.m_sQuery		= tHeadQuery.m_sQuery;
 			tStmt.m_tQuery.m_iMaxMatches = tHeadQuery.m_iMaxMatches;
 			tStmt.m_tQuery.m_dKnnSettings= tHeadQuery.m_dKnnSettings;
+			tStmt.m_tQuery.m_bHybridSearch = tHeadQuery.m_bHybridSearch;
+			tStmt.m_tQuery.m_tHybridSettings = tHeadQuery.m_tHybridSettings;
 			tStmt.m_tQuery.m_sJoinIdx	= tHeadQuery.m_sJoinIdx;
 			tStmt.m_tQuery.m_eJoinType	= tHeadQuery.m_eJoinType;
 			tStmt.m_tQuery.m_dOnFilters = tHeadQuery.m_dOnFilters;

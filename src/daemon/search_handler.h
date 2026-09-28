@@ -138,6 +138,7 @@ private:
 
 	CSphFixedVector<CSphQueryResult>	m_dResults;
 	VecTraits_T<CSphQuery>				m_dNQueries;		///< working subset of queries
+	CSphVector<CSphQuery>				m_dNHybridFacetQueries;	///< facets of a hybrid head as they run over the fused candidates (same indexes as m_dNQueries; empty otherwise)
 	VecTraits_T<CSphQuery>				m_dNJoinQueryOptions;///< working subset of join query options
 	VecTraits_T<AggrResult_t>			m_dNAggrResults;	///< working subset of results
 	VecTraits_T<CSphQueryResult>		m_dNResults;		///< working subset of result pointers

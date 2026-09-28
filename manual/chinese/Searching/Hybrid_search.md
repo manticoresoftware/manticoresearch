@@ -215,25 +215,104 @@ OPTION fusion_method='rrf';
 
 ## 分面
 
-`FACET` 不能用于混合查询 (`OPTION fusion_method='rrf'`)。根据选择列表的不同，查询会报以下错误之一：
+SQL 中的 [FACET](../Searching/Faceted_search.md) 和 JSON 中的 `aggs` 可以用于混合查询。分面计数覆盖所有融合后的文档，而不仅仅是 `LIMIT` 返回的行。这些文档与 [SHOW META](../Node_info_and_management/SHOW_META.md) 中 `total_found` 统计的文档相同：全文匹配结果与 KNN 候选项的并集。与结果一样，计数会遵循所有过滤条件，包括在融合之后应用的 `hybrid_score()`、`knn_dist()` 和 `weight()` 过滤条件。
 
-* `hybrid search does not support multiple sorters`
-* `HYBRID_SCORE() is only allowed for hybrid search queries`，当选择了 `hybrid_score()` 时会出现此错误。该查询是混合查询；不受支持的是 `FACET`。
+<!-- example hybrid_facets -->
 
-请改用第二个查询来计算分面计数。例如，对混合查询返回的文档进行分面：
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
 
 ```sql
--- The page of fused results
-SELECT id, hybrid_score() FROM t
-WHERE match('machine learning') AND knn(vec, (0.1, 0.1, 0.1, 0.1)) AND category = 1
-LIMIT 20
-OPTION fusion_method='rrf';
-
--- Facet counts for the same documents
-SELECT id FROM t WHERE id IN (1, 5, 7) FACET category;
+SELECT id, hybrid_score()
+FROM t
+WHERE match('learning')
+  AND knn(vec, (0.1, 0.1, 0.1, 0.1))
+LIMIT 3
+OPTION fusion_method='rrf'
+FACET category ORDER BY category ASC;
 ```
 
-或者使用相同的属性过滤条件运行分面查询，但不带 `MATCH()` 或 `KNN()`，以统计所有通过过滤条件的文档。不带 `fusion_method` 的 KNN 查询支持 `FACET`，其计数覆盖所有 KNN 候选项；参见 [KNN 候选集](../Searching/KNN.md#KNN-candidate-set)。
+<!-- response SQL -->
+
+```sql
++------+----------------+
+| id   | hybrid_score() |
++------+----------------+
+|    1 |     0.03278688 |
+|    2 |     0.03200205 |
+|    6 |     0.03125763 |
++------+----------------+
+3 rows in set (0.00 sec)
+
++----------+----------+
+| category | count(*) |
++----------+----------+
+|        1 |        2 |
+|        2 |        2 |
+|        3 |        2 |
++----------+----------+
+3 rows in set (0.00 sec)
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```json
+POST /search
+{
+  "table": "t",
+  "knn": { "field": "vec", "query": [0.1, 0.1, 0.1, 0.1] },
+  "query": { "match": { "*": "learning" } },
+  "options": { "fusion_method": "rrf" },
+  "_source": ["id"],
+  "limit": 3,
+  "aggs": {
+    "categories": {
+      "terms": { "field": "category", "size": 10 },
+      "sort": [ { "category": { "order": "asc" } } ]
+    }
+  }
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 6,
+    "total_relation": "eq",
+    "hits": [
+      { "_id": 1, "_score": 1533, "_knn_dist": 0.0, "_hybrid_score": 0.03278688, "_source": {} },
+      { "_id": 2, "_score": 1533, "_knn_dist": 0.01, "_hybrid_score": 0.03200205, "_source": {} },
+      { "_id": 6, "_score": 1533, "_knn_dist": 1.95999992, "_hybrid_score": 0.03125763, "_source": {} }
+    ]
+  },
+  "aggregations": {
+    "categories": {
+      "buckets": [
+        { "key": 1, "doc_count": 2 },
+        { "key": 2, "doc_count": 2 },
+        { "key": 3, "doc_count": 2 }
+      ]
+    }
+  }
+}
+```
+
+<!-- end -->
+
+如果只想统计融合得分较高的文档，可以按 `hybrid_score()` 过滤。在上面的查询中添加 `AND hs > 0.02`（并在选择列表中添加 `hybrid_score() hs`）后，只剩下文档 1、2 和 6，`FACET category` 返回 `1` → 2 和 `3` → 1。
+
+[facet_filter_mode](../Searching/Faceted_search.md)、`FILTERS` 和 `EXCLUDE FILTERS` 的工作方式与普通查询相同。保留主查询过滤条件较少的分面，例如查询按 `category` 过滤时 `auto` 模式下的 `FACET category`，会统计使用该分面所保留的过滤条件运行混合查询后融合得到的文档。当混合查询带有 `GROUP BY` 时，分面统计的是文档，而不是分组。
+
+使用与主查询相同过滤条件的分面会复用其融合后的文档，因此开销与普通查询中的分面大致相同。保留过滤条件较少的分面，以及带 `GROUP BY` 的查询中的任何分面，都会重新运行全文和 KNN 子查询。
 
 ## 无匹配文本
 
@@ -470,5 +549,7 @@ POST /search
 3. 按融合后的RRF得分降序排序
 4. 将[`knn_dist()`](../Functions/Other_functions.md#KNN_DIST%28%29)设置为每个文档在所有KNN子查询中的最小距离
 5. 保留来自文本子查询的[`weight()`](../Functions/Searching_and_ranking_functions.md#WEIGHT%28%29)
+
+如果查询包含[分面](../Searching/Hybrid_search.md#Facets)，之后每个分面都会作为普通分面查询在融合后的文档上运行。
 
 <!-- proofread -->

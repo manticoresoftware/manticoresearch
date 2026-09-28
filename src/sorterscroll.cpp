@@ -14,6 +14,7 @@
 #include "sortcomp.h"
 #include "sphinxjson.h"
 #include "hybridexecutor.h"
+#include "sphinxfilter.h"
 
 template <typename COMP>
 class ScrollSorter_T : public ISphMatchSorter 
@@ -373,7 +374,6 @@ bool ParseScroll ( CSphQuery & tQuery, const CSphString & sVal, CSphString & sEr
 static void AddScrollFilter ( CSphQuery & tQuery )
 {
 	const ScrollAttr_t & tFirst = tQuery.m_tScrollSettings.m_dAttrs[0];
-	int iFilterId = tQuery.m_dFilters.GetLength();
 
 	// we don't have string range filters
 	if ( tFirst.m_eType==SPH_ATTR_STRINGPTR )
@@ -384,21 +384,7 @@ static void AddScrollFilter ( CSphQuery & tQuery )
 
 	bool bOnlyId = tQuery.m_tScrollSettings.m_dAttrs.GetLength()==1;
 	CSphString sAttrName = tFirst.m_sSortAttr=="weight()" ? "@weight" : tFirst.m_sSortAttr;
-	CSphFilterSettings tFilter = CreateScrollRangeFilter ( tFirst, bOnlyId, sAttrName );
-
-	if ( tQuery.m_dFilterTree.GetLength() )
-	{
-		int iRootNodeId = tQuery.m_dFilterTree.GetLength()-1;
-		FilterTreeItem_t & tFilter = tQuery.m_dFilterTree.Add();
-		tFilter.m_iFilterItem = iFilterId;
-
-		int iFilterNodeId = tQuery.m_dFilterTree.GetLength()-1;
-		FilterTreeItem_t & tAnd = tQuery.m_dFilterTree.Add();
-		tAnd.m_iLeft = iRootNodeId;
-		tAnd.m_iRight = iFilterNodeId;
-	}
-
-	tQuery.m_dFilters.Add(tFilter);
+	AddQueryFilter ( tQuery, CreateScrollRangeFilter ( tFirst, bOnlyId, sAttrName ) );
 }
 
 

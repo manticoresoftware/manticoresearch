@@ -16,7 +16,8 @@ class CSphIndex;
 class ISphMatchSorter;
 
 const char * GetHybridScoreAttrName();
-bool IsHybridScoreAttr ( const CSphString & sAttr );
-bool IsKnnDistAttr ( const CSphString & sAttr );
-bool IsHybridPostFusionAttr ( const CSphString & sAttr );
-bool ExecuteHybridSearch ( const CSphIndex * pIndex, const CSphQuery & tQuery, const SphQueueSettings_t & tQueueSettings, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter*> & dSorters, const CSphMultiQueryArgs & tArgs );
+bool	IsHybridScoreAttr ( const CSphString & sAttr );
+bool	IsKnnDistAttr ( const CSphString & sAttr );
+bool	IsHybridPostFusionAttr ( const CSphString & sAttr );
+CSphQuery MakeHybridFacetScanQuery ( const CSphQuery & tHead, const CSphQuery & tFacet );
+bool	ExecuteHybridSearch ( const CSphIndex * pIndex, const VecTraits_T<CSphQuery> & dQueries, const VecTraits_T<CSphQuery> & dFacetScanQueries, const SphQueueSettings_t & tQueueSettings, const VecTraits_T<CSphQueryResult> & dResults, const VecTraits_T<ISphMatchSorter*> & dSorters, const CSphMultiQueryArgs & tArgs );

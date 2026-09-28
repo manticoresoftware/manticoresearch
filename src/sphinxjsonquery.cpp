@@ -2917,6 +2917,10 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 	if ( tAggr.m_eAggrFunc==Aggr_e::COUNT )
 		return;
 
+	// the aggregation's query failed (its error is in the result); there is nothing to encode
+	if ( tRes.m_dResults.IsEmpty() )
+		return;
+
 	const CSphColumnInfo * pCount = tRes.m_tSchema.GetAttr ( "count(*)" );
 	const CSphSchema & tRawSchema = tRes.m_dResults.First().m_tSchema;
 	AggrKeyTrait_t tKey;

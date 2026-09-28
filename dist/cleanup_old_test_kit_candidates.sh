@@ -5,7 +5,20 @@ set -euo pipefail
 : "${GH_TOKEN:?GH_TOKEN is required}"
 
 cutoff="$(date -u -d '7 days ago' +%s)"
-versions="$(gh api --paginate --method GET "/orgs/${REPO_OWNER}/packages/container/manticoresearch/versions?per_page=100" | jq -cs 'add')"
+error_file="$(mktemp)"
+trap 'rm -f "$error_file"' EXIT
+
+if ! versions="$(gh api --paginate --method GET "/orgs/${REPO_OWNER}/packages/container/manticoresearch/versions?per_page=100" 2>"$error_file")"; then
+	if [[ "$(<"$error_file")" == *"Package not found."* ]]; then
+		echo "No test-kit package is available for candidate cleanup"
+		exit 0
+	fi
+
+	cat "$error_file" >&2
+	exit 1
+fi
+
+versions="$(jq -cs 'add' <<< "$versions")"
 
 candidates="$(jq -c --argjson cutoff "$cutoff" '
   .[]

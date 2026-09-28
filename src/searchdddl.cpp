@@ -82,6 +82,7 @@ public:
 	bool	AddCreateTableId ( const SqlNode_t & tName );
 	bool	AddCreateTableUuidId ( const SqlNode_t & tName, const SqlNode_t & tType );
 	bool	AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits );
+	void	SetUnknownColumnTypeError ( const SqlNode_t & tType );
 
 	bool	AddItemOptionEngine ( const SqlNode_t & tOption );
 	bool	AddItemOptionHash ( const SqlNode_t & tOption );
@@ -547,7 +548,7 @@ bool DdlParser_c::AddCreateTableId ( const SqlNode_t & tName )
 
 	if ( sName!="id" )
 	{
-		m_sError.SetSprintf ( "expected 'id', got '%s'", sName.cstr() );
+		m_sError.SetSprintf ( "missing or unsupported type for column '%s'", sName.cstr() );
 		return false;
 	}
 
@@ -565,6 +566,31 @@ bool DdlParser_c::AddCreateTableId ( const SqlNode_t & tName )
 }
 
 
+void DdlParser_c::SetUnknownColumnTypeError ( const SqlNode_t & tType )
+{
+	CSphString sType;
+	ToString ( sType, tType );
+	sType.ToLower();
+
+	// common types from other databases that map to a supported type
+	static const std::pair<const char *, const char *> dHints[] = {
+		{ "double", "float" }, { "real", "float" }, { "decimal", "float" }, { "numeric", "float" },
+		{ "varchar", "string" }, { "char", "string" },
+		{ "tinyint", "int" }, { "smallint", "int" }, { "mediumint", "int" },
+		{ "boolean", "bool" }, { "datetime", "timestamp" }, { "date", "timestamp" },
+	};
+
+	for ( const auto & tHint : dHints )
+		if ( sType==tHint.first )
+		{
+			m_sError.SetSprintf ( "unknown column type '%s', use '%s' instead", sType.cstr(), tHint.second );
+			return;
+		}
+
+	m_sError.SetSprintf ( "unknown column type '%s'", sType.cstr() );
+}
+
+
 bool DdlParser_c::AddCreateTableUuidId ( const SqlNode_t & tName, const SqlNode_t & tType )
 {
 	assert( m_pStmt );
@@ -574,7 +600,7 @@ bool DdlParser_c::AddCreateTableUuidId ( const SqlNode_t & tName, const SqlNode_
 	sType.ToLower();
 	if ( sType!="uuid" )
 	{
-		m_sError.SetSprintf ( "unknown column type '%s'", sType.cstr() );
+		SetUnknownColumnTypeError ( tType );
 		m_tItemOptions.Reset();
 		return false;
 	}

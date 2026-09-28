@@ -84,6 +84,9 @@ void				sphPrefetchBlobRowOffset ( const CSphMatch & tMatch, const CSphAttrLocat
 // software-prefetch a match's blob row (row header + start of its blob data) so a subsequent sphGetBlobAttr on it doesn't stall on a cold pool miss
 void				sphPrefetchBlobRow ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool );
 
+// ask the OS to start reading iBytes of a match's blob row now; many calls submit their disk reads in parallel
+void				sphAdviseBlobRow ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool, int iBytes );
+
 // return the total length (in bytes) of a given blob row
 DWORD				sphGetBlobTotalLen ( const BYTE * pBlobRow, int nBlobAttrs );
 

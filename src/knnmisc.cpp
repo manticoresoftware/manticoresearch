@@ -204,6 +204,10 @@ std::unique_ptr<knn::KNNFilter_i> CreateKNNPrefilter ( const CSphQueryContext & 
 
 static const int KNN_RESCORE_BATCH_SIZE = 256;
 
+// above this many requested candidates the sorter collects them and rescores once, so a row is read from disk
+// once per query instead of once per chunk; below it the per-chunk final-stage expression is cheap enough
+static const int KNN_RESCORE_BATCH_THRESH = 64;
+
 
 class KNNVecDistCalc_c
 {
@@ -482,9 +486,28 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 		iBatchCount = 0;
 	};
 
+	// vectors of an on-disk chunk are mostly cold: submit all their reads up front so the disk serves them
+	// in parallel, instead of one page fault at a time in the loop below. The range covers the blob row header
+	// plus one vector, which is exact when the vector is the row's first blob attribute and a lower bound otherwise.
+	const int iRowBytes = 1 + m_tAttr.m_tLocator.m_nBlobAttrs*(int)sizeof(DWORD) + iVecBytes;
 	int iCurTag = 0;
 	bool bPoolInitialized = false;
 	const BYTE * pBlobPool = nullptr;
+	for ( int i = 0; i < iCount; i++ )
+	{
+		CSphMatch * pMatch = dMatches[i];
+		if ( !bPoolInitialized || pMatch->m_iTag!=iCurTag )
+		{
+			iCurTag = pMatch->m_iTag;
+			pBlobPool = fnBlobPool(pMatch);
+			bPoolInitialized = true;
+		}
+
+		if ( pBlobPool && !m_tAttr.m_tLocator.m_bDynamic && pMatch->m_pStatic )
+			sphAdviseBlobRow ( *pMatch, m_tAttr.m_tLocator, pBlobPool, iRowBytes );
+	}
+
+	bPoolInitialized = false;
 	for ( int i = 0; i < iCount; i++ )
 	{
 		CSphMatch * pMatch = dMatches[i];
@@ -671,7 +694,7 @@ ISphExpr * CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const 
 
 bool UseBatchedKNNRescore ( const KnnSearchSettings_t & tSettings )
 {
-	return tSettings.GetRequestedDocs()>=KNN_RESCORE_BATCH_SIZE;
+	return tSettings.GetRequestedDocs()>=KNN_RESCORE_BATCH_THRESH;
 }
 
 
@@ -693,6 +716,7 @@ static const char * Quantization2Str ( knn::Quantization_e eQuant )
 	{
 	case knn::Quantization_e::BIT1: return "1BIT";
 	case knn::Quantization_e::BIT1SIMPLE: return "1BITSIMPLE";
+	case knn::Quantization_e::BIT2: return "2BIT";
 	case knn::Quantization_e::BIT4: return "4BIT";
 	case knn::Quantization_e::BIT8: return "8BIT";
 	default: return nullptr;
@@ -782,6 +806,12 @@ bool Str2Quantization ( const CSphString & sQuantization, knn::Quantization_e & 
 	if ( sQuant=="1BITSIMPLE" )
 	{
 		eQuantization = knn::Quantization_e::BIT1SIMPLE;
+		return true;
+	}
+
+	if ( sQuant=="2BIT" )
+	{
+		eQuantization = knn::Quantization_e::BIT2;
 		return true;
 	}
 
@@ -1031,12 +1061,6 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 			CSphString sQuantization = tQuantization.StrVal();
 			if ( !Str2Quantization ( sQuantization.cstr(), tParsed.m_eQuantization, &sError ) )
 				return false;
-		}
-
-		if ( tParsed.m_eQuantization==knn::Quantization_e::BIT4 )
-		{
-			sError = "4-bit quantization is no longer supported";
-			return false;
 		}
 
 		JsonObj_c tChunkStrategy = i.GetStrItem ( "chunk_strategy", sError, true );
@@ -1414,7 +1438,7 @@ static KNNVecDistCalc_c * GetKnnDistCalc ( const ISphSchema * pSchema )
 class RescoreSorter_c : public ISphMatchSorter
 {
 public:
-			RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, bool bBatchRescore );
+			RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, bool bBatchRescore, int64_t iRescoreLimit );
 
 	bool	Push ( const CSphMatch & tEntry ) final							{ return m_pSorter->Push(tEntry); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) override	{ for ( auto & i : dMatches ) m_pSorter->Push(i); }
@@ -1456,16 +1480,35 @@ private:
 	CSphRefcountedPtr<ISphMatchComparator> m_pComp;
 	bool							m_bBatchRescore = false;
 	bool							m_bRescored = false;
+	int64_t							m_iRescoreLimit = 0;
 
 	const CSphAttrLocator *			GetRescoreLocator() const;
 };
 
 
-RescoreSorter_c::RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, bool bBatchRescore )
+RescoreSorter_c::RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, bool bBatchRescore, int64_t iRescoreLimit )
 	: m_pSorter ( pSorter )
 	, m_pComp ( std::move ( pComp ) )
 	, m_bBatchRescore ( bBatchRescore )
+	, m_iRescoreLimit ( iRescoreLimit )
 {}
+
+
+// the sorter holds at least max_matches rows, but only the requested candidates (closest by the quantized
+// distance) are worth reading the original vectors for; the rest are pushed behind every rescored row
+static void KeepClosestForRescore ( CSphVector<CSphMatch*> & dMatches, const ISphSchema & tSchema, const CSphAttrLocator & tRescoreLoc, int64_t iLimit )
+{
+	const CSphColumnInfo * pDist = tSchema.GetAttr ( GetKnnDistAttrName() );
+	if ( !pDist || dMatches.GetLength()<=iLimit )
+		return;
+
+	const CSphAttrLocator & tDistLoc = pDist->m_tLocator;
+	std::nth_element ( dMatches.Begin(), dMatches.Begin()+iLimit, dMatches.End(), [&tDistLoc]( const CSphMatch * pA, const CSphMatch * pB ) { return pA->GetAttrFloat(tDistLoc) < pB->GetAttrFloat(tDistLoc); } );
+	for ( int64_t i = iLimit; i < dMatches.GetLength(); i++ )
+		dMatches[i]->SetAttrFloat ( tRescoreLoc, FLT_MAX );
+
+	dMatches.Resize ( (int)iLimit );
+}
 
 
 int RescoreSorter_c::Flatten ( CSphMatch * pTo )
@@ -1501,6 +1544,7 @@ int RescoreSorter_c::Flatten ( CSphMatch * pTo )
 			ARRAY_FOREACH ( i, dMatches )
 				dPtrs[i] = &dMatches[i];
 
+			KeepClosestForRescore ( dPtrs, *m_pSorter->GetSchema(), pKNNDistRescore->m_tLocator, m_iRescoreLimit );
 			pCalc->RescoreBatchLocal ( dPtrs, pKNNDistRescore->m_tLocator );
 		}
 		m_bRescored = true;
@@ -1548,6 +1592,7 @@ void RescoreSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn f
 			MatchPtrCollector_c tCollector;
 			tCollector.m_dMatches.Reserve ( m_pSorter->GetLength() );
 			m_pSorter->Finalize ( tCollector, false, false );
+			KeepClosestForRescore ( tCollector.m_dMatches, *m_pSorter->GetSchema(), *pRescoreLoc, m_iRescoreLimit );
 			pCalc->RescoreBatch ( tCollector.m_dMatches, *pRescoreLoc, fnBlobPoolFromMatch, fnGetColumnarFromMatch );
 		}
 		m_bRescored = true;
@@ -1559,7 +1604,7 @@ void RescoreSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn f
 
 ISphMatchSorter * RescoreSorter_c::Clone() const
 {
-	auto pClone = new RescoreSorter_c ( m_pSorter->Clone(), m_pComp, m_bBatchRescore );
+	auto pClone = new RescoreSorter_c ( m_pSorter->Clone(), m_pComp, m_bBatchRescore, m_iRescoreLimit );
 	CloneTo(pClone);
 	return pClone;
 }
@@ -1573,7 +1618,7 @@ void RescoreSorter_c::CloneTo ( ISphMatchSorter * pTrg ) const
 }
 
 
-ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings, ESphSortFunc eMatchFunc )
+ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings, ESphSortFunc eMatchFunc, int64_t iWindow )
 {
 	if ( tSettings.m_sAttr.IsEmpty() || !tSettings.m_bRescore )
 		return pSorter;
@@ -1582,7 +1627,8 @@ ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnS
 	if ( !pComp )
 		return nullptr;
 
-	return new RescoreSorter_c ( pSorter, std::move ( pComp ), UseBatchedKNNRescore(tSettings) );
+	// rows the client can actually see must have a rescored distance, even past the requested candidates
+	return new RescoreSorter_c ( pSorter, std::move ( pComp ), UseBatchedKNNRescore(tSettings), Max ( tSettings.GetRequestedDocs(), iWindow ) );
 }
 
 

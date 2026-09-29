@@ -722,7 +722,7 @@ public:
 	int IntEval ( const CSphMatch & tMatch ) const final { return (int)Int64Eval(tMatch); }
 	int64_t Int64Eval ( const CSphMatch & tMatch ) const final
 	{
-		uint32_t uSlot = m_pStart ? FindData(tMatch)->m_uSlot : m_tCalc.CalcSlot(tMatch);
+		uint32_t uSlot = m_pStart ? FindData(tMatch)->m_uVectorSlot : m_tCalc.CalcSlot(tMatch);
 		if ( uSlot==UINT32_MAX ) return -1;
 		ByteBlob_t tBlob = tMatch.FetchAttrData ( m_tSpansLoc, m_pBlobPool );
 		if ( !tBlob.first || tBlob.second<12 || memcmp(tBlob.first,"CSP1",4) || sphUnalignedRead(*(const DWORD*)(tBlob.first+4))!=1 ) return -1;

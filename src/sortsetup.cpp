@@ -14,6 +14,7 @@
 
 #include "sphinxjson.h"
 #include "sphinxsort.h"
+#include "knnmisc.h"
 
 
 CSphMatchComparatorState::CSphMatchComparatorState()

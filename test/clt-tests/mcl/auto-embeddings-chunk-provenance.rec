@@ -14,7 +14,7 @@ sql("CREATE TABLE chunk_provenance (body TEXT, chunks FLOAT_VECTOR_ARRAY KNN_TYP
 text = 'Привет мир. alpha beta gamma delta epsilon zeta eta theta. 你好世界。 omega target phrase.'
 escaped = text.replace("'", "''")
 sql(f"INSERT INTO chunk_provenance(id,body) VALUES(1,'{escaped}')")
-query = "SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM chunk_provenance WHERE KNN(chunks,1,'target phrase')"
+query = "SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM chunk_provenance WHERE KNN(chunks,1,'target phrase') LIMIT 1"
 
 def check(label):
     vals = tuple(map(int, sql(query).split('\t')))

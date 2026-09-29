@@ -124,7 +124,7 @@ bool IsKnnDist ( const CSphString & sExpr )
 }
 
 
-static const char * g_szKnnChunkSpansPrefix = "@knn_chunk_spans_v1_";
+static const char * g_szKnnChunkSpansPrefix = "knn_chunk_spans_v1_";
 
 CSphString GetKnnChunkSpansAttrName ( const CSphString & sVectorAttr )
 {

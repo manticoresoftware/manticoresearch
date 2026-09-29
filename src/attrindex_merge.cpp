@@ -298,17 +298,20 @@ bool AttrMerger_c::Impl_c::AnalyzeMixedAttributes ( const CSphIndex & tIndex, co
 
 	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
 	AT_SCOPE_EXIT ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
-	RowID_t tResultRowID = 0;
 	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID, pRow += iStride )
 	{
-		if ( dRowMap[tRowID]==INVALID_ROWID )
+		RowID_t tResultRowID = dRowMap[tRowID];
+		if ( tResultRowID==INVALID_ROWID )
 			continue;
 
 		m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_PULSE, iChunk );
 		if ( m_tMonitor.NeedStop() )
 			return false;
 
-		BuildTrainKNN ( tRowID, tResultRowID++, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder );
+		// Training and storage must address the same destination row. Each input
+		// chunk has its own row map; a per-input compact counter aliases rows from
+		// later chunks and makes multi-vector counts disagree during OPTIMIZE.
+		BuildTrainKNN ( tRowID, tResultRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder );
 	}
 
 	return true;

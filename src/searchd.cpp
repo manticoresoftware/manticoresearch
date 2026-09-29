@@ -7121,14 +7121,16 @@ static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 		tOut.Error ( sError.cstr() );
 		return;
 	}
-	AddKNNChunkSpanAttrs(tExpandedSettings);
-
 	if ( !CheckCreateTable ( tStmt.m_sIndex, tExpandedSettings, sError ) )
 	{
 		sError.SetSprintf ( "table '%s': CREATE TABLE failed: %s", tStmt.m_sIndex.cstr(), sError.cstr() );
 		tOut.Error ( sError.cstr() );
 		return;
 	}
+
+	// Add engine-owned internal attributes only after validating the user schema;
+	// CheckAttrs deliberately rejects all such names in user input.
+	AddKNNChunkSpanAttrs(tExpandedSettings);
 
 	StrVec_t dWarnings;
 	bool bCreatedOk = CreateNewIndexConfigless ( tStmt.m_sIndex, tExpandedSettings, dWarnings, sError );

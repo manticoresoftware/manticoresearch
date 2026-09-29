@@ -487,7 +487,7 @@ void HybridExecutor_c::SetupTextQuery ( const CSphQuery & tQuery )
 	m_tTextQuery.m_eSort = SPH_SORT_EXTENDED;
 	if ( m_tTextQuery.m_sGroupBy.IsEmpty() )
 		m_tTextQuery.m_sSortBy = "@weight desc";
-	RemoveQueryItems ( m_tTextQuery.m_dItems, { "hybrid_score()", GetHybridScoreAttrName(), GetKnnDistAttrName(), "knn_dist()" } );
+	RemoveQueryItems ( m_tTextQuery.m_dItems, { "hybrid_score()", GetHybridScoreAttrName(), GetKnnDistAttrName(), "knn_dist()", "knn_chunk_index()", GetKnnChunkIndexAttrName(), "knn_chunk_start()", GetKnnChunkStartAttrName(), "knn_chunk_end()", GetKnnChunkEndAttrName() } );
 	m_tKnnDistNames.RemoveFilters ( m_tTextQuery.m_dFilters );
 
 	// when the original query uses a JSON parser but m_sQuery contains plain text

@@ -21,7 +21,8 @@ def check(label):
     slot,start,end = vals
     raw = text.encode('utf-8')
     assert slot >= 0 and 0 <= start < end <= len(raw), (label, vals, len(raw))
-    raw[start:end].decode('utf-8')
+    chunk = raw[start:end].decode('utf-8')
+    assert 'target phrase' in chunk, (label, vals, chunk)
     return vals
 
 ram = check('ram')
@@ -37,6 +38,15 @@ sql("CREATE TABLE manual_provenance (v FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' KNN_DI
 sql("INSERT INTO manual_provenance(id,v) VALUES(1,[[1,0],[0,1]])")
 unavailable = tuple(map(int, sql("SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM manual_provenance WHERE KNN(v,1,(1,0))").split('\t')))
 assert unavailable == (-1,-1,-1), unavailable
+
+# Scalar truncate/mean deliberately have no per-chunk spans, but their
+# pre-existing auto-embedding insert/search behavior must remain intact.
+sql("CREATE TABLE scalar_truncate_provenance (body TEXT, v FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body')")
+sql("INSERT INTO scalar_truncate_provenance(id,body) VALUES(1,'alpha target phrase omega')")
+assert sql("SELECT id FROM scalar_truncate_provenance WHERE KNN(v,1,'target phrase') LIMIT 1") == '1'
+sql("CREATE TABLE scalar_mean_provenance (body TEXT, v FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body' CHUNK_STRATEGY='mean' MAX_TOKENS='8')")
+sql("INSERT INTO scalar_mean_provenance(id,body) VALUES(1,'alpha beta gamma delta epsilon zeta eta theta target phrase omega')")
+assert sql("SELECT id FROM scalar_mean_provenance WHERE KNN(v,1,'target phrase') LIMIT 1") == '1'
 print('CHUNK_PROVENANCE_OK')
 PY
 ––– output –––

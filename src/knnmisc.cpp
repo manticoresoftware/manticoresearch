@@ -326,8 +326,10 @@ KNNDistanceSlot_t KNNVecDistCalc_c::MinDistOverSlots ( ByteBlob_t tBlob ) const
 	{
 		const auto * pVec = (const BYTE*)( tArray.m_dValues.Begin() + i*tArray.m_iDims );
 		float fDist = m_fnDistFunc ( pVec, m_dAnchor.Begin(), (size_t)-1, (size_t)-1, m_pDistFuncParam );
-		// Strict comparison deliberately keeps the lowest slot on exact ties.
-		if ( fDist<tBest.m_fDist )
+		if ( std::isnan(fDist) )
+			fDist = FLT_MAX;
+		// Accept the first candidate even at FLT_MAX, then keep the lowest slot on ties.
+		if ( tBest.m_uSlot==UINT32_MAX || fDist<tBest.m_fDist )
 			tBest = { fDist, (uint32_t)i };
 	}
 

@@ -714,6 +714,17 @@ const char * GetKnnChunkStartAttrName() { return "@knn_chunk_start"; }
 const char * GetKnnChunkEndAttrName() { return "@knn_chunk_end"; }
 
 
+static bool ParseKNNChunkSpansHeader ( ByteBlob_t tBlob, DWORD & uCount )
+{
+	if ( !tBlob.first || tBlob.second<12 || memcmp ( tBlob.first, "CSP1", 4 ) || sphUnalignedRead ( *(const DWORD*)( tBlob.first+4 ) )!=1 )
+		return false;
+
+	uCount = sphUnalignedRead ( *(const DWORD*)( tBlob.first+8 ) );
+	const size_t uPayload = (size_t)tBlob.second-12;
+	return !( uPayload%8 ) && (size_t)uCount==uPayload/8;
+}
+
+
 class Expr_KNNChunkIndex_c final : public Expr_KNNDist_c
 {
 public:
@@ -725,9 +736,8 @@ public:
 		uint32_t uSlot = m_pStart ? FindData(tMatch)->m_uVectorSlot : m_tCalc.CalcSlot(tMatch);
 		if ( uSlot==UINT32_MAX ) return -1;
 		ByteBlob_t tBlob = tMatch.FetchAttrData ( m_tSpansLoc, m_pBlobPool );
-		if ( !tBlob.first || tBlob.second<12 || memcmp(tBlob.first,"CSP1",4) || sphUnalignedRead(*(const DWORD*)(tBlob.first+4))!=1 ) return -1;
-		DWORD uCount = sphUnalignedRead(*(const DWORD*)(tBlob.first+8));
-		return uSlot<uCount && tBlob.second==(int)(12+uCount*8) ? (int64_t)uSlot : -1;
+		DWORD uCount = 0;
+		return ParseKNNChunkSpansHeader ( tBlob, uCount ) && uSlot<uCount ? (int64_t)uSlot : -1;
 	}
 	void Command ( ESphExprCommand eCmd, void * pArg ) final { Expr_KNNDist_c::Command(eCmd,pArg); if ( eCmd==SPH_EXPR_SET_BLOB_POOL ) m_pBlobPool=(const BYTE*)pArg; }
 	void FixupLocator ( const ISphSchema * pOld, const ISphSchema * pNew ) final { Expr_KNNDist_c::FixupLocator(pOld,pNew); sphFixupLocator(m_tSpansLoc,pOld,pNew); }
@@ -750,10 +760,9 @@ public:
 		int64_t iSlot = (int64_t)tMatch.GetAttr(m_tSlotLoc);
 		if ( iSlot<0 ) return -1;
 		ByteBlob_t tBlob = tMatch.FetchAttrData ( m_tSpansLoc, m_pBlobPool );
-		if ( !tBlob.first || tBlob.second<12 || memcmp(tBlob.first,"CSP1",4) || sphUnalignedRead(*(const DWORD*)(tBlob.first+4))!=1 ) return -1;
-		DWORD uCount = sphUnalignedRead(*(const DWORD*)(tBlob.first+8));
-		if ( (uint64_t)iSlot>=uCount || tBlob.second!=(int)(12+uCount*8) ) return -1;
-		const BYTE * pSpan = tBlob.first+12+iSlot*8;
+		DWORD uCount = 0;
+		if ( !ParseKNNChunkSpansHeader ( tBlob, uCount ) || (uint64_t)iSlot>=uCount ) return -1;
+		const BYTE * pSpan = tBlob.first+12+(size_t)iSlot*8;
 		return sphUnalignedRead(*(const DWORD*)(pSpan+(m_bEnd ? 4 : 0)));
 	}
 	void Command ( ESphExprCommand eCmd, void * pArg ) final { if ( eCmd==SPH_EXPR_SET_BLOB_POOL ) m_pBlobPool=(const BYTE*)pArg; }

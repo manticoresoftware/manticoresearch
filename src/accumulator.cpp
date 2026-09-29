@@ -227,15 +227,29 @@ static bool StoreChunkSpans ( int iBlobAttr, std::unique_ptr<BlobRowBuilder_i> &
 	if ( iTo<=iFrom )
 		return pBlobBuilder->SetAttr ( iBlobAttr, nullptr, 0, BlobAttrInput_e::RAW_BYTES, sError );
 
-	CSphVector<BYTE> dPacked ( 12 + (int)(iTo-iFrom)*8 );
+	const size_t uCount = iTo-iFrom;
+	if ( uCount>UINT32_MAX || uCount>(size_t)( INT_MAX-12 )/8 )
+	{
+		sError = "too many embedding chunk spans to persist";
+		return false;
+	}
+
+	for ( size_t i=iFrom; i<iTo; ++i )
+		if ( dSpans[i].m_uStart>UINT32_MAX || dSpans[i].m_uEnd>UINT32_MAX )
+		{
+			sError = "embedding chunk span offset exceeds the 32-bit CSP1 storage limit";
+			return false;
+		}
+
+	CSphVector<BYTE> dPacked ( 12 + (int)uCount*8 );
 	memcpy ( dPacked.Begin(), "CSP1", 4 );
 	sphUnalignedWrite ( dPacked.Begin()+4, (DWORD)1 );
-	sphUnalignedWrite ( dPacked.Begin()+8, (DWORD)(iTo-iFrom) );
+	sphUnalignedWrite ( dPacked.Begin()+8, (DWORD)uCount );
 	BYTE * pOut = dPacked.Begin()+12;
 	for ( size_t i=iFrom; i<iTo; ++i, pOut+=8 )
 	{
-		sphUnalignedWrite ( pOut, dSpans[i].m_uStart );
-		sphUnalignedWrite ( pOut+4, dSpans[i].m_uEnd );
+		sphUnalignedWrite ( pOut, (DWORD)dSpans[i].m_uStart );
+		sphUnalignedWrite ( pOut+4, (DWORD)dSpans[i].m_uEnd );
 	}
 	return pBlobBuilder->SetAttr ( iBlobAttr, dPacked.Begin(), dPacked.GetLength(), BlobAttrInput_e::RAW_BYTES, sError );
 }
@@ -365,6 +379,7 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 	std::vector<std::vector<float>> dTmpEmbeddings;
 	std::vector<size_t> dTmpOffsets;
 	std::vector<knn::TextEmbeddingSpan_t> dTmpSpans;
+	const bool bExpectSpans = knn::IsMultiVectorStrategy ( tAttr.m_tKNNChunk.m_eStrategy );
 	bool bConverted = true;
 	if ( uNumSkipped!=m_uAccumDocs )
 	{
@@ -389,10 +404,10 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 
 	if ( !dTexts.empty() )
 	{
-		bool bOk = dTmpOffsets.size()==dTexts.size()+1 && dTmpOffsets.front()==0 && dTmpOffsets.back()==dTmpEmbeddings.size() && dTmpSpans.size()==dTmpEmbeddings.size();
+		bool bOk = dTmpOffsets.size()==dTexts.size()+1 && dTmpOffsets.front()==0 && dTmpOffsets.back()==dTmpEmbeddings.size() && ( bExpectSpans ? dTmpSpans.size()==dTmpEmbeddings.size() : dTmpSpans.empty() );
 		for ( size_t i = 1; bOk && i < dTmpOffsets.size(); i++ )
 			bOk = dTmpOffsets[i]>=dTmpOffsets[i-1];
-		for ( size_t i=0; bOk && i<dTexts.size(); ++i )
+		for ( size_t i=0; bOk && bExpectSpans && i<dTexts.size(); ++i )
 			for ( size_t v=dTmpOffsets[i]; bOk && v<dTmpOffsets[i+1]; ++v )
 				bOk = dTmpSpans[v].m_uStart<=dTmpSpans[v].m_uEnd && dTmpSpans[v].m_uEnd<=dTexts[i].size();
 
@@ -417,7 +432,8 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 			for ( size_t v = dTmpOffsets[iResultId]; v < dTmpOffsets[iResultId+1]; v++ )
 			{
 				dEmbeddingsForAttr.push_back ( std::move ( dTmpEmbeddings[v] ) );
-				dSpansForAttr.push_back ( dTmpSpans[v] );
+				if ( bExpectSpans )
+					dSpansForAttr.push_back ( dTmpSpans[v] );
 			}
 
 		dOffsetsForAttr[i+1] = dEmbeddingsForAttr.size();

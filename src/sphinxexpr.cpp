@@ -11071,13 +11071,34 @@ ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, CSphS
 	auto fnReplaceNoCase = [&sNormalized] ( const char * szAlias, const char * szAttr )
 	{
 		const size_t iAliasLen = strlen(szAlias);
-		for ( size_t i=0; i+iAliasLen<=sNormalized.size(); )
-			if ( !strncasecmp ( sNormalized.c_str()+i, szAlias, iAliasLen ) )
+		char cQuote = 0;
+		for ( size_t i=0; i<sNormalized.size(); )
+		{
+			const char c = sNormalized[i];
+			if ( cQuote )
+			{
+				if ( c=='\\' && i+1<sNormalized.size() ) { i += 2; continue; }
+				if ( c==cQuote )
+				{
+					if ( i+1<sNormalized.size() && sNormalized[i+1]==cQuote ) { i += 2; continue; }
+					cQuote = 0;
+				}
+				i++;
+				continue;
+			}
+
+			if ( c=='\'' || c=='"' || c=='`' ) { cQuote = c; i++; continue; }
+			const bool bLeftBoundary = !i || !( sphIsAlpha ( sNormalized[i-1] ) || sphIsDigital ( sNormalized[i-1] ) || sNormalized[i-1]=='_' || sNormalized[i-1]=='@' );
+			const size_t iAfter = i+iAliasLen;
+			const bool bRightBoundary = iAfter>=sNormalized.size() || !( sphIsAlpha ( sNormalized[iAfter] ) || sphIsDigital ( sNormalized[iAfter] ) || sNormalized[iAfter]=='_' );
+			if ( bLeftBoundary && bRightBoundary && iAfter<=sNormalized.size() && !strncasecmp ( sNormalized.c_str()+i, szAlias, iAliasLen ) )
 			{
 				sNormalized.replace ( i, iAliasLen, szAttr );
 				i += strlen(szAttr);
 			}
-			else ++i;
+			else
+				i++;
+		}
 	};
 	fnReplaceNoCase ( "knn_chunk_index()", GetKnnChunkIndexAttrName() );
 	fnReplaceNoCase ( "knn_chunk_start()", GetKnnChunkStartAttrName() );

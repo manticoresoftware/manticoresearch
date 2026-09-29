@@ -586,7 +586,7 @@ struct CSphQuery
 	int				m_iLimit=20;		///< limit into result set (as Y in MySQL LIMIT X,Y clause)
 	CSphVector<DWORD>	m_dWeights;		///< user-supplied per-field weights. may be NULL. default is NULL
 	ESphMatchMode	m_eMode = SPH_MATCH_EXTENDED;		///< match mode. default is "match all"
-	ESphRankMode	m_eRanker = SPH_RANK_DEFAULT;		///< ranking mode, default is proximity+BM25
+	ESphRankMode	m_eRanker = SPH_RANK_DEFAULT;		///< ranking mode, default is fixed BM25A
 	bool			m_bExplicitRanker = false;	///< whether ranker was explicitly specified by the client
 	bool			m_bExplicitBooleanMode = false;	///< whether boolean_mode was explicitly specified by the client
 	CSphString		m_sRankerExpr;		///< ranking expression for SPH_RANK_EXPR
@@ -765,6 +765,7 @@ bool ParseSelectList ( CSphString & sError, CSphQuery &pResult );
 void SetQueryDefaultsExt2 ( CSphQuery & tQuery );
 bool ParseStoredRanker ( const CSphString & sRanker, QueryExecutionSettings_t & tSettings, CSphString & sError );
 bool ValidateStoredRankerExpression ( ESphRankMode eRanker, const CSphString & sRankerExpr, const ISphSchema & tSchema, CSphString & sError );
+bool IsImplicitRankerNeeded ( const CSphQuery & tQuery );
 QueryExecutionSettings_t BuildQueryExecutionSettings ( const CSphQuery & tQuery, const MutableIndexSettings_c & tSettings );
 
 /// some low-level query stats
@@ -1341,6 +1342,7 @@ public:
 	virtual void				Setup ( const CSphIndexSettings & tSettings );
 	const CSphIndexSettings &	GetSettings () const { return m_tSettings; }
 	virtual bool				IsRT() const { return false; }
+	virtual bool                IsExperimentalPostings() const { return false; }
 	virtual bool				IsPQ() const { return false; }
 	void						SetBinlog ( bool bBinlog ) { m_bBinlog = bBinlog; }
 	virtual int64_t *			GetFieldLens() const { return nullptr; }
@@ -1651,6 +1653,9 @@ struct SphQueueRes_t : public ISphNoncopyable
 };
 
 /////////////////////////////////////////////////////////////////////////////
+
+/// Experimental immutable snapshot maintenance gate (configured base, not .tmp).
+bool sphIsE1Snapshot ( const CSphString & sBase );
 
 /// create phrase fulltext index implementation
 std::unique_ptr<CSphIndex>		sphCreateIndexPhrase ( CSphString sIndexName, CSphString sFilename );

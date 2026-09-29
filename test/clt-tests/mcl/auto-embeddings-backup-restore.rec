@@ -84,7 +84,7 @@ ls -d /tmp/backup/backup-* | wc -l
 ––– output –––
 1
 ––– comment –––
-FREEZE returns list of table files (14 files for this table structure including .spknn)
+FREEZE returns list of table files (13 files for this table structure including .spknn)
 ––– input –––
 mysql -h0 -P9306 -e "FREEZE test_backup"
 ––– output –––
@@ -94,7 +94,6 @@ mysql -h0 -P9306 -e "FREEZE test_backup"
 | /var/lib/manticore/test_backup/test_backup.0.spc    | /var/lib/manticore/test_backup/test_backup.0.spc    |
 | /var/lib/manticore/test_backup/test_backup.0.spd    | /var/lib/manticore/test_backup/test_backup.0.spd    |
 | /var/lib/manticore/test_backup/test_backup.0.spds   | /var/lib/manticore/test_backup/test_backup.0.spds   |
-| /var/lib/manticore/test_backup/test_backup.0.spe    | /var/lib/manticore/test_backup/test_backup.0.spe    |
 | /var/lib/manticore/test_backup/test_backup.0.sph    | /var/lib/manticore/test_backup/test_backup.0.sph    |
 | /var/lib/manticore/test_backup/test_backup.0.sphi   | /var/lib/manticore/test_backup/test_backup.0.sphi   |
 | /var/lib/manticore/test_backup/test_backup.0.spi    | /var/lib/manticore/test_backup/test_backup.0.spi    |

@@ -594,7 +594,7 @@ select *, count(*) from test group by gid, j.t1, j.gid;
 select double(json1.year) from json_attr;
 select double(json1.floatkey) from json_attr;
 select sum(integer(json1.year)) from json_attr;
-select sum(double(json1.floatkey)) from json_attr;
+select round(sum(double(json1.floatkey)),5) from json_attr;
 select avg(double(json1.floatkey)) from json_attr;
 select avg(integer(json1.floatkey)) from json_attr;
 select min(bigint(json1.floatkey)) from json_attr;

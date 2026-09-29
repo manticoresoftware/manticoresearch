@@ -10,12 +10,14 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
+#include "fastcount.h"
 #include "sphinx.h"
 #include "dict/stem/sphinxstem.h"
 #include "sphinxquery/sphinxquery.h"
 #include "sphinxquery/xqparser.h"
 #include "sphinxutils.h"
 #include "sphinxsort.h"
+#include "sortsetup.h"
 #include "fileutils.h"
 #include "sphinxexpr.h"
 #include "sphinxfilter.h"
@@ -41,6 +43,7 @@
 #include "columnarmisc.h"
 #include "columnarfilter.h"
 #include "mini_timer.h"
+#include "exact_bm25a_utils.h"
 #include "sphinx_alter.h"
 #include "conversion.h"
 #include "binlog.h"
@@ -61,6 +64,7 @@
 #include "skip_cache.h"
 #include "jsonsi.h"
 #include "tracer.h"
+#include "postings_container_writer.h"
 
 #include <errno.h>
 #include <ctype.h>
@@ -203,7 +207,8 @@ static const char * g_dRankerNames[] =
 	"sph04",
 	"expr",
 	"export",
-	NULL
+	NULL,
+	"bm25a"
 };
 
 
@@ -315,6 +320,7 @@ public:
 		if ( m_rdHitlist )
 			m_rdHitlist->Reset ();
 		ResetDecoderState();
+		m_tE1.Reset();
 	}
 
 	void GetHitlistEntry ()
@@ -352,6 +358,7 @@ public:
 
 	bool HintRowID ( RowID_t tRowID ) final
 	{
+		if ( m_tE1.Active() ) { m_tE1.Hint(tRowID); return true; }
 		// tricky bit
 		// FindSpan() will match a block where tBaseRowIDPlus1[i] <= tRowID < tBaseRowIDPlus1[i+1]
 		// meaning that the subsequent ids decoded will be strictly > RefValue
@@ -407,6 +414,108 @@ public:
 	{
 		ReadNext();
 		return m_tDoc;
+	}
+
+	int GetCountDocs ( RowID_t * pRows, int iMax ) override
+	{
+		if ( m_tE1.Active() )
+		{
+			if ( iMax<=0 )
+				return 0;
+
+			int iRows = 0;
+			uint32_t dRows[256];
+			uint32_t uLast = uint32_t ( m_tDoc.m_tRowID );
+			while ( iRows<iMax )
+			{
+				int iBatch = Min ( iMax-iRows, int ( sizeof(dRows)/sizeof(dRows[0]) ) );
+				int iGot = m_tE1.NextRows ( dRows, iBatch, uLast );
+				for ( int i=0; i<iGot; ++i )
+					pRows[iRows+i] = RowID_t ( dRows[i] );
+				iRows += iGot;
+				if ( iGot<iBatch )
+					break;
+			}
+			m_tDoc.m_tRowID = RowID_t ( uLast );
+			return iRows;
+		}
+		int iRows = 0;
+		while ( iRows<iMax )
+		{
+			RowID_t uDelta = m_rdDoclist->UnzipRowid();
+			if ( !uDelta ) { m_tDoc.m_tRowID = INVALID_ROWID; break; }
+			m_tDoc.m_tRowID += uDelta;
+			// The doclist is interleaved, even when only row IDs are needed.
+			// Keep decoder offsets synchronized for HintRowID, not hit metadata.
+			if_const ( INLINE_HITS )
+			{
+				DWORD uHits = m_rdDoclist->UnzipInt();
+				m_rdDoclist->UnzipInt();
+				if ( uHits==1 && m_bHasHitlist )
+					m_rdDoclist->UnzipInt();
+				else
+					m_uHitPosition += m_rdDoclist->UnzipOffset();
+			} else
+			{
+				m_iHitlistPos += m_rdDoclist->UnzipOffset();
+				m_rdDoclist->UnzipInt();
+				m_rdDoclist->UnzipInt();
+			}
+			pRows[iRows++] = m_tDoc.m_tRowID;
+		}
+		return iRows;
+	}
+
+	bool HasE1RankedBounds () const override { return m_tE1.HasRankedBounds(); }
+	uint64_t TakeE1MetadataGroupsDecoded () override { return m_tE1.TakeMetadataGroupsDecoded(); }
+	bool E1DirectOrSupported () const override { return m_tE1.DirectOrSupported(); }
+	bool GetE1DirectLastWindow ( uint32_t & uWindow ) const override { return m_tE1.DirectLastWindow(uWindow); }
+	bool GetE1DirectWindow ( uint32_t uWindow, uint64_t * pMask, uint8_t * pBounds, uint32_t & uCardinality, uint32_t & uMaxTF, uint64_t & uBoundReads ) override
+	{
+		return m_tE1.DirectWindow ( uWindow, pMask, pBounds, uCardinality, uMaxTF, uBoundReads );
+	}
+	bool GetE1DirectBoundWord ( uint32_t uWindow, uint32_t uWord, uint64_t * pMasks, uint8_t * pBounds, uint32_t & uClasses ) override
+	{
+		return m_tE1.DirectBoundWord ( uWindow, uWord, pMasks, pBounds, uClasses );
+	}
+	bool GetE1DirectWindowClasses ( uint32_t uWindow, uint64_t * pMask, E1DirectBoundWord_t * pWords, uint32_t & uCardinality, uint64_t & uBoundReads ) override
+	{
+		return m_tE1.DirectWindowClasses ( uWindow, pMask, pWords, uCardinality, uBoundReads );
+	}
+	bool ExtractE1DirectTFBatch ( uint32_t uWindow, const uint64_t * pSelected, uint32_t * pTF, uint64_t & uRequested, uint64_t & uWritten, uint64_t & uDecoded, uint32_t uStage=0 ) override
+	{
+		return m_tE1.ExtractWindowTFBatch ( uWindow, pSelected, pTF, uRequested, uWritten, uDecoded, uStage );
+	}
+	bool ExtractE1DirectMetaBatch ( uint32_t uWindow, const uint64_t * pSelected, uint32_t * pTF, uint32_t * pMask, uint64_t * pRef, uint64_t & uRequested, uint64_t & uWritten, uint64_t & uDecoded ) override
+	{
+		return m_tE1.ExtractWindowMetaBatch ( uWindow, pSelected, pTF, pMask, pRef, uRequested, uWritten, uDecoded );
+	}
+	bool BeginE1SelectedMeta ( uint32_t uWindow, const uint64_t * pSelected, uint64_t & uRequested ) override { return m_tE1.BeginSelectedMeta(uWindow,pSelected,uRequested); }
+	bool NextE1SelectedMeta ( E1SelectedMeta_t & tMeta, uint64_t & uDecoded, uint32_t uScopedField=UINT32_MAX ) override { return m_tE1.NextSelectedMeta(tMeta,uDecoded,uScopedField); }
+	bool ExactE1FieldTF ( uint32_t uOrdinal, uint32_t uField, uint32_t uMask, uint32_t uAggregateTF, uint32_t & uTF ) const override { return m_tE1.ExactFieldTF(uOrdinal,uField,uMask,uAggregateTF,uTF); }
+	bool ProbeE1DirectTF ( RowID_t tRowID, uint32_t & uTF ) override { return m_tE1.ProbeTF ( uint32_t(tRowID), uTF ); }
+	bool GetE1RankedDoc ( uint32_t uMinTF, RowID_t & tRowID, uint32_t & uTF, uint64_t & uBoundEntries, uint64_t & uBuckets, uint64_t & uSelectedBlocks, uint64_t & uSkippedBlocks, uint64_t & uSkippedDocs, uint64_t & uDecodedGroups, const uint64_t * pEligibility=nullptr, uint32_t uEligibilityWords=0, uint64_t * pIneligibleBeforeTF=nullptr, uint32_t uEqualBoundTF=0, RowID_t tWorstRow=INVALID_ROWID, uint32_t uKnownMask=0 ) override
+	{
+		if ( !m_tE1.Active() )
+			return false;
+		uint32_t uRowID = uint32_t ( tRowID );
+		uint32_t uMask = 0;
+		uint64_t uRef = 0;
+		if ( !m_tE1.NextRanked ( uRowID, uTF, uMask, uRef, uMinTF, uBoundEntries, uBuckets, uSelectedBlocks, uSkippedBlocks, uSkippedDocs, uDecodedGroups, pEligibility, uEligibilityWords, pIneligibleBeforeTF, uEqualBoundTF, uint32_t(tWorstRow), uKnownMask ) )
+			return false;
+		tRowID = RowID_t ( uRowID );
+		m_tDoc.m_tRowID = tRowID;
+		m_uMatchHits = uTF;
+		m_iHitlistPos = uRef;
+		m_dQwordFields.Assign32 ( uMask );
+		m_bAllFieldsKnown = false;
+		if ( uRef>>63 )
+		{
+			m_dQwordFields.UnsetAll();
+			m_dQwordFields.Set ( HITMAN::GetField ( uint32_t(uRef) ) );
+			m_bAllFieldsKnown = true;
+		}
+		return true;
 	}
 
 	void SeekHitlist ( SphOffset_t uOff ) final
@@ -465,6 +574,26 @@ private:
 
 	inline void ReadNext()
 	{
+		if ( m_tE1.Active() )
+		{
+			uint32_t uRowID = uint32_t ( m_tDoc.m_tRowID );
+			uint32_t mask, uMatchHits; uint64_t ref;
+			bool bGotRow = m_tE1.Next ( uRowID, &uMatchHits, &mask, &ref );
+			m_tDoc.m_tRowID = RowID_t ( uRowID );
+			if ( !bGotRow )
+				return;
+			m_uMatchHits = uMatchHits;
+			m_iHitlistPos = ref;
+			m_dQwordFields.Assign32(mask);
+			m_bAllFieldsKnown = false;
+			if ( ref>>63 )
+			{
+				m_dQwordFields.UnsetAll();
+				m_dQwordFields.Set ( HITMAN::GetField(uint32_t(ref)) );
+				m_bAllFieldsKnown = true;
+			}
+			return;
+		}
 		RowID_t uDelta = m_rdDoclist->UnzipRowid();
 		if ( uDelta )
 		{
@@ -550,9 +679,10 @@ class DiskPayloadQword_c : public DiskIndexQword_c<INLINE_HITS, false>
 	typedef DiskIndexQword_c<INLINE_HITS, false> BASE;
 
 public:
-	DiskPayloadQword_c ( const DiskSubstringPayload_t * pPayload, bool bExcluded, DataReaderFactory_c * pDoclist, DataReaderFactory_c * pHitlist, int64_t iIndexId )
+	DiskPayloadQword_c ( const DiskSubstringPayload_t * pPayload, bool bExcluded, DataReaderFactory_c * pDoclist, DataReaderFactory_c * pHitlist, int64_t iIndexId, const e1::Store * pE1 = nullptr )
 		: BASE ( true, bExcluded, iIndexId )
 	{
+		m_pE1 = pE1;
 		m_pPayload = pPayload;
 		this->m_iDocs = m_pPayload->m_iTotalDocs;
 		this->m_iHits = m_pPayload->m_iTotalHits;
@@ -561,6 +691,9 @@ public:
 		this->SetDocReader ( pDoclist );
 		this->SetHitReader ( pHitlist );
 	}
+
+	// Payloads concatenate doclists; keep their existing GetNextDoc contract.
+	int GetCountDocs ( RowID_t *, int ) final { return -1; }
 
 	const CSphMatch & GetNextDoc() final
 	{
@@ -593,10 +726,16 @@ private:
 		int iHint = m_pPayload->m_dDoclist[m_iDoclist].m_iLen;
 		m_iDoclist++;
 
-		this->m_rdDoclist->SeekTo ( uDocOff, iHint );
+		if ( m_pE1 )
+		{
+			this->m_tE1.Bind(*m_pE1,uDocOff);
+			this->m_bHasHitlist=e1::U32(m_pE1->Find(uDocOff)+20)!=0;
+		}
+		else this->m_rdDoclist->SeekTo ( uDocOff, iHint );
 	}
 
 	const DiskSubstringPayload_t *	m_pPayload;
+	const e1::Store * m_pE1 = nullptr;
 	int								m_iDoclist;
 };
 
@@ -1306,6 +1445,7 @@ public:
 	bool				RewriteHeader ( CSphString & sError ) const final;
 
 	bool				Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) final;
+	bool                IsExperimentalPostings() const final { return m_bE1; }
 	void				Dealloc () final;
 	void				Preread () final;
 
@@ -1427,6 +1567,7 @@ private:
 	CSphMappedBuffer<BYTE>		m_tDocidLookup;		///< speeds up docid-rowid lookups + used for applying killlist on startup
 	LookupReader_c				m_tLookupReader;	///< used by getrowidbydocid
 	UuidLookupReader_c			m_tUuidLookupReader;
+	bool						m_bE1RowidDocidOrder { false };
 
 	std::unique_ptr<Docstore_i>	m_pDocstore;
 	std::unique_ptr<columnar::Columnar_i> m_pColumnar;
@@ -1434,6 +1575,10 @@ private:
 	SIContainer_c				m_tSI;
 
 	DWORD						m_uVersion;				///< data files version
+	bool                        m_bE1 = false;
+	DWORD                       m_uE1Version = 0;
+	CSphMappedBuffer<BYTE>       m_tE1Data;
+	e1::Store                   m_tE1Store;
 	volatile bool				m_bPassedRead;
 	volatile bool				m_bPassedAlloc;
 	bool						m_bIsEmpty;				///< do we have actually indexed documents (m_iTotalDocuments is just fetched documents, not indexed!)
@@ -2035,7 +2180,7 @@ void SetQueryDefaultsExt2 ( CSphQuery & tQuery )
 {
 	tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
 	tQuery.m_eSort = SPH_SORT_EXTENDED;
-	tQuery.m_sSortBy = "@weight desc"; // default order
+	tQuery.m_sSortBy = "@weight desc";
 	tQuery.m_sOrderBy = "@weight desc";
 	tQuery.m_iAgentQueryTimeoutMs = DEFAULT_QUERY_TIMEOUT;
 	tQuery.m_iRetryCount = DEFAULT_QUERY_RETRY;
@@ -2120,6 +2265,99 @@ bool ParseStoredRanker ( const CSphString & sRanker, QueryExecutionSettings_t & 
 	return false;
 }
 
+static bool HasFunctionReference ( const CSphString & sExpr, const char * sFunction )
+{
+	if ( sExpr.IsEmpty() )
+		return false;
+
+	CSphString sLower = sExpr;
+	sLower.ToLower();
+	const int iLength = strlen ( sFunction );
+	const char * sCur = sLower.cstr();
+	while ( ( sCur = strstr ( sCur, sFunction ) )!=nullptr )
+	{
+		const bool bWordStart = sCur==sLower.cstr() || ( !sphIsAlpha ( sCur[-1] ) && !sphIsDigital ( sCur[-1] ) && sCur[-1]!='_' );
+		const char * sNext = sCur + iLength;
+		while ( sphIsSpace ( *sNext ) )
+			++sNext;
+		if ( bWordStart && *sNext=='(' )
+			return true;
+		sCur += iLength;
+	}
+	return false;
+}
+
+
+static bool HasWeightReference ( const CSphString & sExpr )
+{
+	if ( HasFunctionReference ( sExpr, "weight" ) )
+		return true;
+
+	CSphString sLower = sExpr;
+	sLower.ToLower();
+	const char * sCur = sLower.cstr();
+	while ( ( sCur = strstr ( sCur, "@weight" ) )!=nullptr )
+	{
+		const char * sNext = sCur + 7;
+		if ( !sphIsAlpha ( *sNext ) && !sphIsDigital ( *sNext ) && *sNext!='_' )
+			return true;
+		sCur += 7;
+	}
+	return false;
+}
+
+
+static bool HasRankerDataReference ( const CSphString & sExpr )
+{
+	return HasFunctionReference ( sExpr, "zonespanlist" )
+		|| HasFunctionReference ( sExpr, "rankfactors" )
+		|| HasFunctionReference ( sExpr, "packedfactors" )
+		|| HasFunctionReference ( sExpr, "factors" )
+		|| HasFunctionReference ( sExpr, "bm25f" );
+}
+
+
+static bool HasImplicitRankerDataReference ( const CSphQuery & tQuery )
+{
+	for ( const CSphQueryItem & tItem : tQuery.m_dItems )
+		if ( HasRankerDataReference ( tItem.m_sExpr ) )
+			return true;
+
+	for ( const CSphFilterSettings & tFilter : tQuery.m_dFilters )
+		if ( HasRankerDataReference ( tFilter.m_sAttrName ) )
+			return true;
+
+	return false;
+}
+
+
+bool IsImplicitRankerNeeded ( const CSphQuery & tQuery )
+{
+	const bool bAggregateResult = !tQuery.m_sGroupBy.IsEmpty() || !tQuery.m_sFacetBy.IsEmpty()
+		|| tQuery.m_dItems.any_of ( [] ( const CSphQueryItem & tItem )
+			{ return tItem.m_eAggrFunc!=SPH_AGGR_NONE || tItem.m_sExpr=="count(*)"; } );
+
+	if ( ( !tQuery.m_bExplicitOrderBy && !bAggregateResult ) || tQuery.m_eJoinType!=JoinType_e::NONE || tQuery.HasKnn() )
+		return true;
+
+	// Ignore the inherited relevance sort for aggregate/grouped result sets.
+	// Explicit weight sorting and weight-based HAVING still require a ranker.
+	if ( ( tQuery.m_bExplicitOrderBy && ( HasWeightReference ( tQuery.m_sSortBy ) || HasWeightReference ( tQuery.m_sGroupSortBy ) ) )
+		|| HasWeightReference ( tQuery.m_tHaving.m_sAttrName ) )
+		return true;
+
+	for ( const CSphQueryItem & tItem : tQuery.m_dItems )
+		if ( HasWeightReference ( tItem.m_sExpr ) || HasRankerDataReference ( tItem.m_sExpr ) )
+			return true;
+
+	for ( const CSphFilterSettings & tFilter : tQuery.m_dFilters )
+		if ( HasWeightReference ( tFilter.m_sAttrName ) || HasRankerDataReference ( tFilter.m_sAttrName ) )
+			return true;
+
+	return false;
+}
+
+
 QueryExecutionSettings_t BuildQueryExecutionSettings ( const CSphQuery & tQuery, const MutableIndexSettings_c & tSettings )
 {
 	QueryExecutionSettings_t tEffectiveSettings ( tQuery );
@@ -2133,6 +2371,24 @@ QueryExecutionSettings_t BuildQueryExecutionSettings ( const CSphQuery & tQuery,
 		tEffectiveSettings.m_sRankerExpr = tSettings.m_tQueryExecutionSettings.m_sRankerExpr;
 		tEffectiveSettings.m_sUDRanker = tSettings.m_tQueryExecutionSettings.m_sUDRanker;
 		tEffectiveSettings.m_sUDRankerOpts = tSettings.m_tQueryExecutionSettings.m_sUDRankerOpts;
+	}
+
+	if ( !tQuery.m_bExplicitRanker && HasImplicitRankerDataReference ( tQuery ) )
+	{
+		// Ranker-data functions rely on state populated by the traditional
+		// proximity ranker. Keep that established implicit contract even though
+		// ordinary queries now default to BM25A.
+		tEffectiveSettings.m_eRanker = SPH_RANK_PROXIMITY_BM25;
+		tEffectiveSettings.m_sRankerExpr = "";
+		tEffectiveSettings.m_sUDRanker = "";
+		tEffectiveSettings.m_sUDRankerOpts = "";
+	}
+	else if ( !tQuery.m_bExplicitRanker && !IsImplicitRankerNeeded ( tQuery ) )
+	{
+		tEffectiveSettings.m_eRanker = SPH_RANK_NONE;
+		tEffectiveSettings.m_sRankerExpr = "";
+		tEffectiveSettings.m_sUDRanker = "";
+		tEffectiveSettings.m_sUDRankerOpts = "";
 	}
 
 	return tEffectiveSettings;
@@ -3276,7 +3532,7 @@ void CSphIndex_VLN::PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t
 
 	// a rewritten header of an existing table carries the fixed version (71->73, 72->74): the callers
 	// bring the docid lookup in sync in the same operation, so the result is never suspect
-	tBuildHeader.m_uFormatVersion = FixedIndexFormatVersion ( m_uVersion );
+	tBuildHeader.m_uFormatVersion = m_bE1 ? ( m_uE1Version ? m_uE1Version : e1::VERSION ) : FixedIndexFormatVersion ( m_uVersion );
 }
 
 
@@ -3693,7 +3949,8 @@ void CSphIndex_VLN::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const File
 	};
 
 	for ( auto eExt : { SPH_EXT_SPH, SPH_EXT_SPD, SPH_EXT_SPP, SPH_EXT_SPE, SPH_EXT_SPI, SPH_EXT_SPM, SPH_EXT_SPK } )
-		fnAddFile ( eExt );
+		if ( !m_bE1 || eExt!=SPH_EXT_SPE )
+			fnAddFile ( eExt );
 
 	if ( m_uVersion >= 55 )
 		fnAddFile ( SPH_EXT_SPHI );
@@ -3759,18 +4016,19 @@ public:
 
 	SphOffset_t		GetHitfilePos () const { return m_wrHitlist.GetPos (); }
 	void			CloseHitlist () { m_wrHitlist.CloseFile (); }
-	bool			IsError () const { return ( m_bError || m_pDict->DictIsError() || m_wrDoclist.IsError() || m_wrHitlist.IsError() ); }
+	bool			IsError () const { return ( m_bError || m_pDict->DictIsError() || m_wrHitlist.IsError() ); }
 	void			HitblockBegin () { m_pDict->HitblockBegin(); }
 	bool			IsWordDict () const { return m_pDict->GetSettings().IsWordDict(); }
 
 private:
-	void	DoclistBeginEntry ( RowID_t tDocid );
 	void	DoclistEndEntry ( Hitpos_t uLastPos );
-	void	DoclistEndList ();
 
-	CSphWriter					m_wrDoclist;			///< wordlist writer
 	CSphWriter					m_wrHitlist;			///< hitlist writer
-	CSphWriter					m_wrSkiplist;			///< skiplist writer
+	e1::Writer					m_tE1Writer;
+	std::vector<e1::Posting>		m_dE1Postings;			///< one completed term only
+	uint64_t					m_uNextTermKey = 1;		///< stable logical key, independent of SPD offsets
+	std::string					m_sE1DictFilename;
+	std::string					m_sE1HitsFilename;
 	CSphFixedVector<BYTE>		m_dWriteBuffer;			///< my write buffer (for temp files)
 
 	AggregateHit_t				m_tLastHit;				///< hitlist entry
@@ -3788,13 +4046,14 @@ private:
 	SphOffset_t					m_iLastHitlistDelta = 0;	///< doclist entry
 	FieldMask_t					m_dLastDocFields;		///< doclist entry
 	DWORD						m_uLastDocHits = 0;			///< doclist entry
+	int							m_iE1FirstDocField = -1;
+	DWORD						m_uE1FirstDocFieldTF = 0;
 
 	DictEntry_t					m_tWord;				///< dictionary entry
 
 	ESphHitFormat				m_eHitFormat;
 	ESphHitless					m_eHitless;
 
-	CSphVector<SkiplistEntry_t>	m_dSkiplist;
 	StrVec_t *					m_pCreatedFiles { nullptr };
 #ifndef NDEBUG
 	bool m_bMerging;
@@ -3828,18 +4087,18 @@ CSphHitBuilder::CSphHitBuilder ( const CSphIndexSettings & tSettings, const CSph
 
 bool CSphHitBuilder::CreateIndexFiles ( const CSphString& sDocName, const CSphString& sHitName, const CSphString& sSkipName, bool bInplace, int iWriteBuffer, CSphAutofile & tHit, SphOffset_t * pSharedOffset )
 {
-	// doclist and hitlist files
-	m_wrDoclist.CloseFile();
+	// E1 primary postings and the unchanged positional hitlist.
 	m_wrHitlist.CloseFile();
-	m_wrSkiplist.CloseFile();
-
-	m_wrDoclist.SetBufferSize ( m_dWriteBuffer.GetLength() );
 	m_wrHitlist.SetBufferSize ( bInplace ? iWriteBuffer : m_dWriteBuffer.GetLength() );
 
-	if ( !m_wrDoclist.OpenFile ( sDocName, *m_pLastError ) )
+	std::string sWriterError;
+	if ( !m_tE1Writer.Open ( sDocName.cstr(), sWriterError ) )
+	{
+		*m_pLastError = sWriterError.c_str();
 		return false;
+	}
 	if ( m_pCreatedFiles )
-		m_pCreatedFiles->Add ( m_wrDoclist.GetFilename() );
+		m_pCreatedFiles->Add ( sDocName );
 
 	if ( bInplace )
 	{
@@ -3853,17 +4112,17 @@ bool CSphHitBuilder::CreateIndexFiles ( const CSphString& sDocName, const CSphSt
 			m_pCreatedFiles->Add ( m_wrHitlist.GetFilename() );
 	}
 
-	if ( !m_wrSkiplist.OpenFile ( sSkipName, *m_pLastError ) )
-		return false;
-	if ( m_pCreatedFiles )
-		m_pCreatedFiles->Add ( m_wrSkiplist.GetFilename() );
+	(void)sSkipName; // new chunks deliberately have no .spe
+	m_sE1DictFilename = sDocName.cstr();
+	if ( m_sE1DictFilename.size()>=3 )
+		m_sE1DictFilename.replace ( m_sE1DictFilename.size()-3, 3, "spi" );
+	m_sE1HitsFilename = sHitName.cstr();
+	m_uNextTermKey = 1;
+	m_dE1Postings.clear();
 
-	// put dummy byte (otherwise offset would start from 0, first delta would be 0
-	// and VLB encoding of offsets would fuckup)
+	// .spp keeps its non-zero offset convention.
 	BYTE bDummy = 1;
-	m_wrDoclist.PutBytes ( &bDummy, 1 );
 	m_wrHitlist.PutBytes ( &bDummy, 1 );
-	m_wrSkiplist.PutBytes ( &bDummy, 1 );
 	return true;
 }
 
@@ -3895,27 +4154,10 @@ void CSphHitBuilder::HitReset()
 // avg 4-6 bytes/doc according to our tests
 
 
-void CSphHitBuilder::DoclistBeginEntry ( RowID_t tRowid )
-{
-	assert ( m_iSkiplistBlockSize>0 );
-
-	// build skiplist
-	// that is, save decoder state and doclist position per every 128 documents
-	if ( ( m_tWord.m_iDocs & ( m_iSkiplistBlockSize-1 ) )==0 )
-	{
-		SkiplistEntry_t & tBlock = m_dSkiplist.Add();
-		tBlock.m_tBaseRowIDPlus1 = m_tLastHit.m_tRowID+1;
-		tBlock.m_iOffset = m_wrDoclist.GetPos();
-		tBlock.m_iBaseHitlistPos = m_iLastHitlistPos;
-	}
-
-	// begin doclist entry
-	m_wrDoclist.ZipInt ( tRowid - m_tLastHit.m_tRowID );
-}
-
-
 void CSphHitBuilder::DoclistEndEntry ( Hitpos_t uLastPos )
 {
+	uint64_t uRef = m_iLastHitlistPos;
+	uint32_t uMask = m_dLastDocFields.GetMask32();
 	// end doclist entry
 	if ( m_eHitFormat==SPH_HIT_FORMAT_INLINE )
 	{
@@ -3925,78 +4167,28 @@ void CSphHitBuilder::DoclistEndEntry ( Hitpos_t uLastPos )
 
 		// inline the only hit into doclist (unless it is completely discarded)
 		// and finish doclist entry
-		m_wrDoclist.ZipInt ( m_uLastDocHits );
 		if ( m_uLastDocHits==1 && !bIgnoreHits )
 		{
 			m_wrHitlist.SeekTo ( m_iLastHitlistPos );
-			m_wrDoclist.ZipInt ( uLastPos & 0x7FFFFF );
-			m_wrDoclist.ZipInt ( uLastPos >> 23 );
+			uRef = ( uint64_t(1)<<63 ) | uint64_t(uLastPos);
 			m_iLastHitlistPos -= m_iLastHitlistDelta;
 			assert ( m_iLastHitlistPos>=0 );
-
-		} else
-		{
-			m_wrDoclist.ZipInt ( m_dLastDocFields.GetMask32() );
-			m_wrDoclist.ZipOffset ( m_iLastHitlistDelta );
 		}
 	} else // plain format - finish doclist entry
 	{
 		assert ( m_eHitFormat==SPH_HIT_FORMAT_PLAIN );
-		m_wrDoclist.ZipOffset ( m_iLastHitlistDelta );
-		m_wrDoclist.ZipInt ( m_dLastDocFields.GetMask32() );
-		m_wrDoclist.ZipInt ( m_uLastDocHits );
 	}
+	const uint32_t uFirstFieldTF = __builtin_popcount(uMask)==2 && m_uE1FirstDocFieldTF<m_uLastDocHits ? m_uE1FirstDocFieldTF : 0;
+	m_dE1Postings.push_back ( { m_tLastHit.m_tRowID, m_uLastDocHits, uMask, uRef, uFirstFieldTF } );
 	m_dLastDocFields.UnsetAll();
 	m_uLastDocHits = 0;
+	m_iE1FirstDocField = -1;
+	m_uE1FirstDocFieldTF = 0;
 
 	// update keyword stats
 	m_tWord.m_iDocs++;
 }
 
-
-void CSphHitBuilder::DoclistEndList ()
-{
-	assert ( m_iSkiplistBlockSize>0 );
-
-	// emit eof marker
-	m_wrDoclist.ZipInt ( 0 );
-
-	// emit skiplist
-	// OPTIMIZE? placing it after doclist means an extra seek on searching
-	// however placing it before means some (longer) doclist data moves while indexing
-	if ( ( m_tWord.m_iDocs & HITLESS_DOC_MASK )>m_iSkiplistBlockSize )
-	{
-		assert ( m_dSkiplist.GetLength() );
-		assert ( m_dSkiplist[0].m_iOffset==m_tWord.m_iDoclistOffset );
-		assert ( m_dSkiplist[0].m_tBaseRowIDPlus1==0 );
-		assert ( m_dSkiplist[0].m_iBaseHitlistPos==0 );
-
-		m_tWord.m_iSkiplistOffset = m_wrSkiplist.GetPos();
-
-		// delta coding, but with a couple of skiplist specific tricks
-		// 1) first entry is omitted, it gets reconstructed from dict itself
-		// both base values are zero, and offset equals doclist offset
-		// 2) docids are at least SKIPLIST_BLOCK apart
-		// doclist entries are at least 4*SKIPLIST_BLOCK bytes apart
-		// so we additionally subtract that to improve delta coding
-		// 3) zero deltas are allowed and *not* used as any markers,
-		// as we know the exact skiplist entry count anyway
-		SkiplistEntry_t tLast = m_dSkiplist[0];
-		for ( int i=1; i<m_dSkiplist.GetLength(); i++ )
-		{
-			const SkiplistEntry_t & t = m_dSkiplist[i];
-			assert ( t.m_tBaseRowIDPlus1 - tLast.m_tBaseRowIDPlus1>=(DWORD)m_iSkiplistBlockSize );
-			assert ( t.m_iOffset - tLast.m_iOffset>=4*m_iSkiplistBlockSize );
-			m_wrSkiplist.ZipInt ( t.m_tBaseRowIDPlus1 - tLast.m_tBaseRowIDPlus1 - m_iSkiplistBlockSize );
-			m_wrSkiplist.ZipOffset ( t.m_iOffset - tLast.m_iOffset - 4*m_iSkiplistBlockSize );
-			m_wrSkiplist.ZipOffset ( t.m_iBaseHitlistPos - tLast.m_iBaseHitlistPos );
-			tLast = t;
-		}
-	}
-
-	// in any event, reset skiplist
-	m_dSkiplist.Resize ( 0 );
-}
 
 static int strcmpp (const char* l, const char* r)
 {
@@ -4068,15 +4260,25 @@ void CSphHitBuilder::cidxHit ( AggregateHit_t * pHit )
 		// finish doclist, if any
 		if ( m_tLastHit.m_tRowID!=INVALID_ROWID )
 		{
-			// emit end-of-doclist marker
-			DoclistEndList ();
-
-			// emit dict entry
+			// Stream the completed logical term before publishing its dictionary binding.
 			m_tWord.m_uWordID = m_tLastHit.m_uWordID;
 			m_tWord.m_szKeyword = m_tLastHit.m_szKeyword;
-			m_tWord.m_iDoclistLength = m_wrDoclist.GetPos() - m_tWord.m_iDoclistOffset;
+			// Keyword dictionaries always carry a one-byte hint for frequent
+			// terms.  Use a harmless synthetic legacy length that packs to a
+			// nonzero hint; E1 reads postings from its primary store instead.
+			m_tWord.m_iDoclistLength = SphOffset_t ( m_tWord.m_iDocs & HITLESS_DOC_MASK ) * 5;
+			m_tWord.m_iSkiplistOffset = m_tWord.m_iDoclistOffset;
+			const bool bHasHitlist = m_eHitless==SPH_HITLESS_NONE || ( m_eHitless==SPH_HITLESS_SOME && !(m_tWord.m_iDocs&HITLESS_DOC_FLAG) );
+			std::string sWriterError;
+			if ( m_tWord.m_iDocs && !m_tE1Writer.FinishTerm ( m_tWord.m_iDoclistOffset, m_dE1Postings, m_tWord.m_iHits, bHasHitlist, sWriterError ) )
+			{
+				m_bError = true;
+				*m_pLastError = sWriterError.c_str();
+				return;
+			}
 			if ( m_tWord.m_iDocs )
 				m_pDict->DictEntry ( m_tWord );
+			m_dE1Postings.clear();
 
 			// reset trackers
 			m_tWord.m_iDocs = 0;
@@ -4089,7 +4291,7 @@ void CSphHitBuilder::cidxHit ( AggregateHit_t * pHit )
 		// flush wordlist, if this is the end
 		if ( pHit->m_iWordPos==EMPTY_HIT )
 		{
-			m_pDict->DictEndEntries ( m_wrDoclist.GetPos() );
+			m_pDict->DictEndEntries ( m_uNextTermKey );
 			return;
 		}
 #ifndef NDEBUG
@@ -4098,7 +4300,7 @@ void CSphHitBuilder::cidxHit ( AggregateHit_t * pHit )
 				pHit->m_uWordID==m_tLastHit.m_uWordID && strcmp ( (const char*)pHit->m_szKeyword, (const char*)m_tLastHit.m_szKeyword )>0 )
 			|| m_bMerging );
 #endif // usually assert excluded in release, but this is 'paranoid' clause
-		m_tWord.m_iDoclistOffset = m_wrDoclist.GetPos();
+		m_tWord.m_iDoclistOffset = m_uNextTermKey++;
 		m_tLastHit.m_uWordID = pHit->m_uWordID;
 		if ( m_pDict->GetSettings().IsWordDict() )
 		{
@@ -4120,7 +4322,6 @@ void CSphHitBuilder::cidxHit ( AggregateHit_t * pHit )
 		assert ( m_tLastHit.m_tRowID==INVALID_ROWID || pHit->m_tRowID>m_tLastHit.m_tRowID );
 		assert ( m_wrHitlist.GetPos()>=m_iLastHitlistPos );
 
-		DoclistBeginEntry ( pHit->m_tRowID );
 		m_iLastHitlistDelta = m_wrHitlist.GetPos() - m_iLastHitlistPos;
 
 		m_tLastHit.m_tRowID = pHit->m_tRowID;
@@ -4192,7 +4393,12 @@ void CSphHitBuilder::cidxHit ( AggregateHit_t * pHit )
 		}
 
 		// update matched fields mask
-		m_dLastDocFields.Set ( HITMAN::GetField ( pHit->m_iWordPos ) );
+		const int iField = HITMAN::GetField ( pHit->m_iWordPos );
+		m_dLastDocFields.Set ( iField );
+		if ( m_iE1FirstDocField<0 )
+			m_iE1FirstDocField = iField;
+		if ( iField==m_iE1FirstDocField )
+			++m_uE1FirstDocFieldTF;
 
 		m_uLastDocHits++;
 		m_tWord.m_iHits++;
@@ -4413,6 +4619,24 @@ bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & 
 	{
 		wrHeaderJson.PutString ( (Str_t)sJson );
 		wrHeaderJson.CloseFile();
+		if ( tBuildHeader.m_uFormatVersion==e1::VERSION || tBuildHeader.m_uFormatVersion==e1::VERSION5 || tBuildHeader.m_uFormatVersion==e1::VERSION4 )
+		{
+#if defined(_WIN32)
+			// The writer is already closed above. Windows durability is handled by
+			// the platform file layer, which has no POSIX fsync entry point.
+#else
+			int iFD = ::open ( sFileName.cstr(), O_RDONLY );
+			if ( iFD<0 || ::fsync(iFD)!=0 )
+			{
+				const int iErrno = errno;
+				if ( iFD>=0 )
+					::close(iFD);
+				sError.SetSprintf ( "failed to fsync E1 generation header '%s': %s", sFileName.cstr(), strerrorm(iErrno) );
+				return false;
+			}
+			::close(iFD);
+#endif
+		}
 		assert ( bson::ValidateJson ( sJson.cstr(), &sError ) );
 		return true;
 	}
@@ -4453,10 +4677,14 @@ bool CSphHitBuilder::cidxDone ( int iMemLimit, int & iMinInfixLen, int iMaxCodep
 	if ( !m_pDict->DictEnd ( pDictHeader, iMemLimit, *m_pLastError ) )
 		return false;
 
-	// close all data files
-	m_wrDoclist.CloseFile ();
+	// Close dictionary/hitlist first; their exact bytes are checksummed by E1.
 	m_wrHitlist.CloseFile ( true );
-	m_wrSkiplist.CloseFile ();
+	std::string sWriterError;
+	if ( !m_tE1Writer.Finalize ( m_sE1DictFilename, m_sE1HitsFilename, sWriterError ) )
+	{
+		*m_pLastError = sWriterError.c_str();
+		m_bError = true;
+	}
 	return !IsError();
 }
 
@@ -5934,6 +6162,20 @@ void CSphIndex_VLN::Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, 
 }
 
 
+bool sphIsE1Snapshot ( const CSphString & sBase )
+{
+	CSphString sHeader;
+	sHeader.SetSprintf ( "%s.sph", sBase.cstr() );
+	CSphVector<BYTE> dHeader;
+	CSphString sError;
+	if ( sphJsonParse(dHeader,sHeader,sError)!=JsonFileParse_e::OK )
+		return false;
+	bson::Bson_c tJson(dHeader);
+	auto uVersion = bson::Int(tJson.ChildByName("index_format_version"));
+	return uVersion==e1::VERSION || uVersion==e1::VERSION5 || uVersion==e1::VERSION4
+		|| tJson.ChildByName("e1_postings").second!=JSON_EOF || tJson.ChildByName("e1_base_version").second!=JSON_EOF;
+}
+
 int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress& tProgress, bool bRemoveDupes )
 {
 	assert ( dSources.GetLength() );
@@ -6679,6 +6921,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	BuildHeader_t tBuildHeader;
 	WriteHeader_t tWriteHeader;
 	PrepareHeaders ( tBuildHeader, tWriteHeader, false );
+	tBuildHeader.m_uFormatVersion = e1::VERSION;
 	tBuildHeader.m_iDocinfo = m_tStats.m_iTotalDocuments;
 
 	if ( !tHitBuilder.cidxDone ( iMemoryLimit, m_tSettings.m_iMinInfixLen, m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
@@ -6905,7 +7148,7 @@ bool CheckDocsCount ( int64_t iDocs, CSphString & sError )
 namespace QwordIteration
 {
 	template<typename QWORD>
-	inline void PrepareQword ( QWORD & tQword, const CSphDictReader<QWORD::is_worddict::value> & tReader ) //NOLINT
+	inline void PrepareQword ( QWORD & tQword, const CSphDictReader<QWORD::is_worddict::value> & tReader, const e1::Store * pE1 = nullptr ) //NOLINT
 	{
 		tQword.m_tDoc.m_tRowID = INVALID_ROWID;
 
@@ -6916,7 +7159,9 @@ namespace QwordIteration
 		tQword.m_uHitPosition = 0;
 		tQword.m_iHitlistPos = 0;
 
-		if_const ( QWORD::is_worddict::value )
+		if ( pE1 )
+			tQword.m_tE1.Bind ( *pE1, tReader.m_iDoclistOffset );
+		else if_const ( QWORD::is_worddict::value )
 			tQword.m_rdDoclist->SeekTo ( tReader.m_iDoclistOffset, tReader.m_iHint );
 	}
 
@@ -7115,7 +7360,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 		if ( !bSrcWord )
 		{
 			// transfer documents and hits from destination
-			QwordIteration::PrepareQword<QWORDDST> ( tDstQword, tDstReader );
+			QwordIteration::PrepareQword<QWORDDST> ( tDstQword, tDstReader, pDstIndex->m_bE1 ? &pDstIndex->m_tE1Store : nullptr );
 			tMerger.TransferData<QWORDDST> ( tDstQword, tDstReader.m_uWordID, tDstReader.GetWord(), pDstIndex, dDstRows, tMonitor );
 			bDstWord = tDstReader.Read();
 			continue;
@@ -7124,7 +7369,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 		if ( !bDstWord )
 		{
 			// transfer documents and hits from source
-			QwordIteration::PrepareQword<QWORDSRC> ( tSrcQword, tSrcReader );
+			QwordIteration::PrepareQword<QWORDSRC> ( tSrcQword, tSrcReader, pSrcIndex->m_bE1 ? &pSrcIndex->m_tE1Store : nullptr );
 			tMerger.TransferData<QWORDSRC> ( tSrcQword, tSrcReader.m_uWordID, tSrcReader.GetWord(), pSrcIndex, dSrcRows, tMonitor );
 			bSrcWord = tSrcReader.Read();
 			continue;
@@ -7134,14 +7379,14 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 		if ( iCmp<0 )
 		{
 			// transfer documents and hits from destination
-			QwordIteration::PrepareQword<QWORDDST> ( tDstQword, tDstReader );
+			QwordIteration::PrepareQword<QWORDDST> ( tDstQword, tDstReader, pDstIndex->m_bE1 ? &pDstIndex->m_tE1Store : nullptr );
 			tMerger.TransferData<QWORDDST> ( tDstQword, tDstReader.m_uWordID, tDstReader.GetWord(), pDstIndex, dDstRows, tMonitor );
 			bDstWord = tDstReader.Read();
 
 		} else if ( iCmp>0 )
 		{
 			// transfer documents and hits from source
-			QwordIteration::PrepareQword<QWORDSRC> ( tSrcQword, tSrcReader );
+			QwordIteration::PrepareQword<QWORDSRC> ( tSrcQword, tSrcReader, pSrcIndex->m_bE1 ? &pSrcIndex->m_tE1Store : nullptr );
 			tMerger.TransferData<QWORDSRC> ( tSrcQword, tSrcReader.m_uWordID, tSrcReader.GetWord(), pSrcIndex, dSrcRows, tMonitor );
 			bSrcWord = tSrcReader.Read();
 
@@ -7154,8 +7399,8 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 				bHitless = true;
 			}
 
-			QwordIteration::PrepareQword<QWORDDST> ( tDstQword, tDstReader );
-			QwordIteration::PrepareQword<QWORDSRC> ( tSrcQword, tSrcReader );
+			QwordIteration::PrepareQword<QWORDDST> ( tDstQword, tDstReader, pDstIndex->m_bE1 ? &pDstIndex->m_tE1Store : nullptr );
+			QwordIteration::PrepareQword<QWORDSRC> ( tSrcQword, tSrcReader, pSrcIndex->m_bE1 ? &pSrcIndex->m_tE1Store : nullptr );
 
 			AggregateHit_t tHit;
 			tHit.m_uWordID = tDstReader.m_uWordID; // !COMMIT m_sKeyword anyone?
@@ -7326,7 +7571,7 @@ bool CSphIndex_VLN::MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, c
 		{
 			const int iSrc = dSame[0];
 			auto * pSrc = dSources[iSrc].get();
-			QwordIteration::PrepareQword<QWORD> ( pSrc->m_tQword, pSrc->m_tReader );
+			QwordIteration::PrepareQword<QWORD> ( pSrc->m_tQword, pSrc->m_tReader, pSrc->m_pIndex->m_bE1 ? &pSrc->m_pIndex->m_tE1Store : nullptr );
 			tMerger.TransferData<QWORD> ( pSrc->m_tQword, pSrc->m_tReader.m_uWordID, pSrc->m_tReader.GetWord(), pSrc->m_pIndex, dRowMaps[iSrc], tMonitor );
 		} else
 		{
@@ -7347,7 +7592,7 @@ bool CSphIndex_VLN::MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, c
 			for ( int i = 0; i < dSame.GetLength(); ++i )
 			{
 				auto * pSrc = dSources[dSame[i]].get();
-				QwordIteration::PrepareQword<QWORD> ( pSrc->m_tQword, pSrc->m_tReader );
+				QwordIteration::PrepareQword<QWORD> ( pSrc->m_tQword, pSrc->m_tReader, pSrc->m_pIndex->m_bE1 ? &pSrc->m_pIndex->m_tE1Store : nullptr );
 			}
 
 			AggregateHit_t tHit;
@@ -7878,7 +8123,7 @@ bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder *
 			return false;
 
 		bool bHitless = !tWordsReader.m_bHasHitlist;
-		QwordIteration::PrepareQword ( tQword, tWordsReader );
+		QwordIteration::PrepareQword ( tQword, tWordsReader, pIndex->m_bE1 ? &pIndex->m_tE1Store : nullptr );
 
 		AggregateHit_t tHit;
 		tHit.m_uWordID = tWordsReader.m_uWordID; // !COMMIT m_sKeyword anyone?
@@ -7989,13 +8234,31 @@ bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHe
 	if ( !PreallocWordlist() )					return false;
 
 	m_tSkiplists.Reset ();
-	if ( !JuggleFile ( SPH_EXT_SPE, sError ) )	return false;
-	if ( !PreallocSkiplist() )					return false;
+	if ( !m_bE1 && !JuggleFile ( SPH_EXT_SPE, sError ) )	return false;
+	if ( !m_bE1 && !PreallocSkiplist() )					return false;
 
 	m_pDoclistFile = nullptr;
 	m_pHitlistFile = nullptr;
 	if ( !JuggleFile ( SPH_EXT_SPD, sError ) )	return false;
 	if ( !JuggleFile ( SPH_EXT_SPP, sError ) )	return false;
+	if ( m_bE1 )
+	{
+		m_tE1Store = e1::Store();
+		m_tE1Data.Reset();
+		CSphMappedBuffer<BYTE> tDict, tHits;
+		if ( !m_tE1Data.Setup ( GetFilename ( SPH_EXT_SPD ), sError, false )
+			|| !tDict.Setup ( GetFilename ( SPH_EXT_SPI ), sError, false )
+			|| !tHits.Setup ( GetFilename ( SPH_EXT_SPP ), sError, false ) )
+			return false;
+
+		std::string sStoreError;
+		if ( !m_tE1Store.Open ( m_tE1Data.GetReadPtr(), m_tE1Data.GetLengthBytes(), m_iDocinfo,
+			tDict.GetReadPtr(), tDict.GetLengthBytes(), tHits.GetReadPtr(), tHits.GetLengthBytes(), sStoreError ) )
+		{
+			sError = sStoreError.c_str();
+			return false;
+		}
+	}
 	if ( !SpawnReaders() )						return false;
 
 	return true;
@@ -8433,12 +8696,29 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQ
 			}
 		}
 
+		uint64_t uRankSkipped = pRanker->TakeRankSkippedDocs();
+		if ( uRankSkipped )
+			for ( ISphMatchSorter * pSorter: dSorters )
+				pSorter->AddToTotalCount ( uRankSkipped );
+
+		if ( dSorters.GetLength()==1 && dSorters[0]->GetLength()>=tQuery.m_iLimit )
+		{
+			const CSphMatch * pWorst = dSorters[0]->GetWorst();
+			if ( pWorst && iIndexWeight>0 )
+				pRanker->SetRankThreshold ( ( pWorst->m_iWeight+iIndexWeight-1 ) / iIndexWeight );
+		}
+
 		if constexpr ( HAS_CUTOFF )
 		{
 			if ( !iCutoff )
 				break;
 		}
 	}
+
+	uint64_t uRankSkipped = pRanker->TakeRankSkippedDocs();
+	if ( uRankSkipped )
+		for ( ISphMatchSorter * pSorter: dSorters )
+			pSorter->AddToTotalCount ( uRankSkipped );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -9537,9 +9817,9 @@ ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) cons
 	} else
 	{
 		if ( m_pIndex->GetSettings().m_eHitFormat==SPH_HIT_FORMAT_INLINE )
-			return new DiskPayloadQword_c<true> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, m_pIndex->GetIndexId() );
+			return new DiskPayloadQword_c<true> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, m_pIndex->GetIndexId(), ((const CSphIndex_VLN*)m_pIndex)->m_bE1 ? &((const CSphIndex_VLN*)m_pIndex)->m_tE1Store : nullptr );
 		else
-			return new DiskPayloadQword_c<false> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, m_pIndex->GetIndexId() );
+			return new DiskPayloadQword_c<false> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, m_pIndex->GetIndexId(), ((const CSphIndex_VLN*)m_pIndex)->m_bE1 ? &((const CSphIndex_VLN*)m_pIndex)->m_tE1Store : nullptr );
 	}
 	return NULL;
 }
@@ -9670,6 +9950,12 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 
 	if ( m_bSetupReaders )
 	{
+		if ( pIndex->m_bE1 )
+		{
+			tWord.m_tE1.Bind ( pIndex->m_tE1Store, tRes.m_iDoclistOffset );
+			tWord.SetHitReader ( m_pHitlist );
+			return true;
+		}
 		tWord.SetDocReader ( m_pDoclist );
 
 		// read in skiplist
@@ -9789,6 +10075,10 @@ void CSphIndex_VLN::Unlock()
 
 void CSphIndex_VLN::Dealloc ()
 {
+	m_tE1Store = e1::Store();
+	m_tE1Data.Reset();
+	m_bE1 = false;
+	m_uE1Version = 0;
 	if ( !m_bPassedAlloc )
 		return;
 
@@ -9982,7 +10272,32 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 	}
 
 	// version
-	m_uVersion = (DWORD)Int ( tBson.ChildByName ( "index_format_version" ) );
+	auto tVersion = tBson.ChildByName ( "index_format_version" );
+	if ( !IsInt(tVersion) || Int(tVersion)<0 || uint64_t(Int(tVersion))>UINT32_MAX )
+	{
+		m_sLastError = "invalid index_format_version: expected uint32 JSON integer";
+		return LOAD_E::GeneralError_e;
+	}
+	m_uVersion = DWORD(Int(tVersion));
+	m_bE1 = m_uVersion==e1::VERSION || m_uVersion==e1::VERSION5 || m_uVersion==e1::VERSION4;
+	if ( m_bE1 )
+	{
+		m_uE1Version = m_uVersion;
+		auto tCapability = tBson.ChildByName("e1_postings");
+		auto tBase = tBson.ChildByName("e1_base_version");
+		int iExpected = m_uVersion==e1::VERSION ? 6 : m_uVersion==e1::VERSION5 ? 5 : 4;
+		if ( !IsInt(tCapability) || !IsInt(tBase) || Int(tCapability)!=iExpected || Int(tBase)!=74 )
+		{
+			m_sLastError = "E1: unknown required capability/base version";
+			return LOAD_E::GeneralError_e;
+		}
+		m_uVersion = 74;
+	}
+	else if ( tBson.ChildByName("e1_postings").second!=JSON_EOF || tBson.ChildByName("e1_base_version").second!=JSON_EOF )
+	{
+		m_sLastError = "E1: capability requires experimental outer version";
+		return LOAD_E::GeneralError_e;
+	}
 	if ( m_uVersion<=1 || m_uVersion>INDEX_FORMAT_VERSION )
 	{
 		m_sLastError.SetSprintf ( "%s is v.%u, binary is v.%u", sHeaderName.cstr(), m_uVersion, INDEX_FORMAT_VERSION );
@@ -10422,6 +10737,28 @@ bool CSphIndex_VLN::PreallocAttributes()
 	if ( !CheckDocsCount ( m_iDocinfo, m_sLastError ) )
 		return false;
 
+	// Equality pruning may use rowid only when it is a proved proxy for the
+	// user-visible id tie key. Check this once at E1 chunk open time.
+	m_bE1RowidDocidOrder = false;
+	const CSphColumnInfo * pDocid = m_tSchema.GetAttr ( sphGetDocidName() );
+	if ( m_bE1 && pDocid && !pDocid->IsColumnar() && !pDocid->m_tLocator.m_bDynamic )
+	{
+		m_bE1RowidDocidOrder = true;
+		const DWORD * pAttrs = m_tAttr.GetReadPtr();
+		const int iStride = m_tSchema.GetRowSize();
+		DocID_t tPrevious = 0;
+		for ( RowID_t tRow=0; tRow<RowID_t(m_iDocinfo); ++tRow )
+		{
+			const DocID_t tCurrent = sphGetRowAttr ( pAttrs+int64_t(tRow)*iStride, pDocid->m_tLocator );
+			if ( tRow && tCurrent<=tPrevious )
+			{
+				m_bE1RowidDocidOrder = false;
+				break;
+			}
+			tPrevious = tCurrent;
+		}
+	}
+
 	m_pDocinfoIndex = m_tAttr.GetWritePtr() + m_iMinMaxIndex;
 
 	if ( m_tSchema.GetAttr ( sphGetBlobLocatorName() ) )
@@ -10708,7 +11045,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 
 	// verify that data files are readable
 	for ( auto& eExt : { SPH_EXT_SPD, SPH_EXT_SPP, SPH_EXT_SPE } )
-		if ( !sphIsReadable ( GetFilename ( eExt ), &m_sLastError ) )
+		if ( !(m_bE1 && eExt==SPH_EXT_SPE) && !sphIsReadable ( GetFilename ( eExt ), &m_sLastError ) )
 			return false;
 
 	if ( !SpawnReaders() )
@@ -10722,8 +11059,48 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 	if ( !PreallocDocstore() )		return false;
 	if ( !PreallocColumnar() )		return false;
 	if ( !PreallocKNN() )			return false;
-	if ( !PreallocSkiplist() )		return false;
+	if ( !m_bE1 && !PreallocSkiplist() )		return false;
 	if ( !PreallocSecondaryIndex() ) return false;
+	if ( m_bE1 )
+	{
+		CSphMappedBuffer<BYTE> dict, hits;
+		if ( !m_tE1Data.Setup(GetFilename(SPH_EXT_SPD),m_sLastError,false)
+			|| !dict.Setup(GetFilename(SPH_EXT_SPI),m_sLastError,false)
+			|| !hits.Setup(GetFilename(SPH_EXT_SPP),m_sLastError,false) ) return false;
+		std::string error;
+		const BYTE * pE1Header = m_tE1Data.GetReadPtr();
+		const bool bTrustedGeneration = m_tE1Data.GetLengthBytes()>=44 && e1::ConsumeTrustedGeneration ( GetFilename(SPH_EXT_SPD).cstr(), GetFilename(SPH_EXT_SPI).cstr(), GetFilename(SPH_EXT_SPP).cstr(), e1::U64(pE1Header+16), e1::U32(pE1Header+32), e1::U32(pE1Header+36), e1::U32(pE1Header+40) );
+		if ( !m_tE1Store.Open(m_tE1Data.GetReadPtr(),m_tE1Data.GetLengthBytes(),m_iDocinfo,
+			dict.GetReadPtr(),dict.GetLengthBytes(),hits.GetReadPtr(),hits.GetLengthBytes(),error,bTrustedGeneration) )
+		{ m_sLastError = error.c_str(); return false; }
+		auto fnValidateDictionary = [this] ( auto & tReader )
+		{
+			uint64_t uTerms = 0;
+			while ( tReader.Read() )
+			{
+				auto pEntry = m_tE1Store.Find ( tReader.m_iDoclistOffset );
+				if ( !pEntry || e1::U32(pEntry+16)!=uint32_t(tReader.m_iDocs) || e1::U32(pEntry+20)!=uint32_t(tReader.m_bHasHitlist) || e1::U64(pEntry+24)!=uint64_t(tReader.m_iHits) )
+					return false;
+				++uTerms;
+			}
+			return uTerms==e1::U64(m_tE1Data.GetReadPtr()+24);
+		};
+		bool bDictionaryValid = false;
+		if ( m_pDict->GetSettings().IsWordDict() )
+		{
+			CSphDictReader<true> tReader ( m_tSettings.m_iSkiplistBlockSize, m_pDict->GetSettings().GetDictFormat() );
+			bDictionaryValid = tReader.Setup ( GetFilename(SPH_EXT_SPI), m_tWordlist.m_iDictCheckpointsOffset, m_tSettings.m_eHitless, m_sLastError ) && fnValidateDictionary(tReader);
+		} else
+		{
+			CSphDictReader<false> tReader ( m_tSettings.m_iSkiplistBlockSize, m_pDict->GetSettings().GetDictFormat() );
+			bDictionaryValid = tReader.Setup ( GetFilename(SPH_EXT_SPI), m_tWordlist.m_iDictCheckpointsOffset, m_tSettings.m_eHitless, m_sLastError ) && fnValidateDictionary(tReader);
+		}
+		if ( !bDictionaryValid )
+		{
+			if ( m_sLastError.IsEmpty() ) m_sLastError="E1: dictionary/primary term binding mismatch";
+			return false;
+		}
+	}
 
 	// almost done
 	m_bPassedAlloc = true;
@@ -12142,6 +12519,11 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	if ( !tParsed.m_sParseWarning.IsEmpty() )
 		tMeta.m_sWarning = tParsed.m_sParseWarning;
 
+	tParsed.m_bFastCountEligible = CanUseFastFullTextCount ( tQuery, tParsed.m_pRoot, dSorters );
+	const bool bMetadataTerm = tParsed.m_bFastCountEligible && tQuery.m_dFilters.IsEmpty()
+		&& !tArgs.m_uPackedFactorFlags && !m_tDeadRowMap.HasDead()
+		&& IsFullTextCountMetadataTerm ( tParsed.m_pRoot, m_tSchema );
+
 	// transform query if needed (quorum transform, etc.)
 	SwitchProfile ( pProfile, SPH_QSTATE_TRANSFORMS );
 	TransformExtendedQueryArgs_t tTranformArgs { GetBooleanSimplify ( tQuery ), tParsed.m_bNeedPhraseTransform, this };
@@ -12172,7 +12554,11 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	if ( !iStackNeed  )
 		return false;
 
-	if ( tArgs.m_iThreads>1 )
+	// Splitting introduces @rowid filters, which turn an O(1) dictionary count
+	// into posting-list scans. Keep RT chunk fan-out, but do not subdivide a
+	// chunk whose original AND transformed tree prove a metadata-exact TERM.
+	const bool bSkipSplit = bMetadataTerm && IsFullTextCountMetadataTerm ( tParsed.m_pRoot, m_tSchema );
+	if ( tArgs.m_iThreads>1 && !bSkipSplit )
 		return SplitQuery (
 			[this, iStackNeed, &pDict, &tParsed, &tQuerySettings, &tmMaxTimer]
 			( CSphQueryResult & tChunkResult, const CSphQuery & tQuery, VecTraits_T<ISphMatchSorter *> dLocalSorters, const CSphMultiQueryArgs & tMultiArgs )
@@ -12244,6 +12630,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 
 		if ( pQueryParser->ParseQuery ( dXQ[i], tCurQuery.m_sQuery.cstr(), &tCurQuery, tCurQuerySettings, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
 		{
+			dXQ[i].m_bFastCountEligible = CanUseFastFullTextCount ( tCurQuery, dXQ[i].m_pRoot, { ppSorters+i, 1 } );
 			// transform query if needed (quorum transform, keyword expansion, etc.)
 			TransformExtendedQueryArgs_t tTranformArgs { GetBooleanSimplify ( tCurQuery ), dXQ[i].m_bNeedPhraseTransform, this };
 			if ( !sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings, tMeta.m_sError, tTranformArgs, tMeta.m_sWarning ) )
@@ -12500,11 +12887,107 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 	// bind weights
 	tCtx.BindWeights ( tQuery, m_tSchema, tMeta.m_sWarning );
 
+	if ( tXQ.m_bFastCountEligible && CanUseFastFullTextCount ( tQuery, tXQ.m_pRoot, dSorters ) && !tArgs.m_uPackedFactorFlags )
+	{
+		FullTextCountContext_t tCountCtx;
+		tCountCtx.m_tMaxRowID = m_iDocinfo ? RowID_t(m_iDocinfo)-1 : 0;
+		tCountCtx.m_bStatsExact = !m_tDeadRowMap.HasDead() && tQuery.m_dFilters.IsEmpty();
+		tCountCtx.m_fnAlive = [this] ( RowID_t tRow ) { return !m_tDeadRowMap.IsSet(tRow); };
+		bool bPrimaryUsed=false;
+		if ( m_bE1 && tCountCtx.m_bStatsExact ) {
+			tCountCtx.m_fnPrimaryView = [] ( ISphQword &w ) { return static_cast<DiskIndexQwordTraits_c&>(w).m_tE1.View(); };
+			tCountCtx.m_pPrimaryUsed=&bPrimaryUsed;
+		}
+		for ( const auto & tFilter : tQuery.m_dFilters )
+		{
+			auto tBounds = GetFilterRowIdBoundaries ( tFilter, RowID_t(m_iDocinfo) );
+			tCountCtx.m_tMinRowID = Max ( tCountCtx.m_tMinRowID, tBounds.m_tMinRowID );
+			tCountCtx.m_tMaxRowID = Min ( tCountCtx.m_tMaxRowID, tBounds.m_tMaxRowID );
+		}
+		Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
+		uint64_t uCount = 0;
+		if ( CountFullTextDocs ( tXQ.m_pRoot, tTermSetup, tCountCtx, uCount ) )
+		{
+			RecordFullTextCount ( tMeta );
+			if ( bPrimaryUsed ) { IteratorStats_t stats; stats.m_dIterators.Add({GetFilebase(), "PrimaryContainers"}); stats.m_iTotal=1; tMeta.m_tIteratorStats.Merge(stats); }
+			PushFullTextCount ( uCount, dSorters, GetRawAttrs(), tArgs.m_iTag );
+			tMeta.m_bTotalMatchesApprox |= tMeta.m_sWarning=="query timed out or was interrupted";
+			PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), tArgs.m_bFinalizeSorters, pProfile, tArgs.m_bModifySorterSchemas );
+			tMeta.AddQueryTimeUs ( sphMicroTimer()-tmQueryStart );
+			tMeta.m_iCpuTime += sphTaskCpuTimer()-tmCpuQueryStart;
+			SwitchProfile ( pProfile, eOldState );
+			return true;
+		}
+	}
+
+	// Decide from the parsed sorter state, not SQL spelling. The dedicated
+	// flat-OR node is never installed for a query that might need generic hits.
+	CSphMatchComparatorState tExactSortState;
+	CSphVector<ExtraSortExpr_t> dExactSortExprs;
+	ESphSortFunc eExactSortFunc = FUNC_GENERIC1;
+	CSphString sExactSortError;
+	const bool bParsedExactSort = tQuery.m_eSort==SPH_SORT_EXTENDED && !tQuery.m_sSortBy.IsEmpty()
+		&& sphParseSortClause ( tQuery, tQuery.m_sSortBy.cstr(), tMaxSorterSchema, eExactSortFunc, tExactSortState, dExactSortExprs, nullptr, sExactSortError )==SORT_CLAUSE_OK;
+	bool bWeightKey = bParsedExactSort && tExactSortState.m_eKeypart[0]==SPH_KEYPART_WEIGHT;
+	if ( bParsedExactSort && !bWeightKey && tExactSortState.m_dAttrs[0]>=0 )
+	{
+		const CSphString & sFirstAttr = tMaxSorterSchema.GetAttr ( tExactSortState.m_dAttrs[0] ).m_sName;
+		for ( const CSphQueryItem & tItem : tQuery.m_dItems )
+			if ( !tItem.m_sAlias.IsEmpty() && !strcasecmp ( tItem.m_sAlias.cstr(), sFirstAttr.cstr() ) && !strcasecmp ( tItem.m_sExpr.cstr(), "weight()" ) )
+			{
+				bWeightKey = true;
+				break;
+			}
+	}
+	const bool bIdKey = bParsedExactSort && tExactSortState.m_dAttrs[1]>=0 && tMaxSorterSchema.GetAttr ( tExactSortState.m_dAttrs[1] ).m_sName=="id";
+	bool bExactSort = eExactSortFunc==FUNC_GENERIC2 && tExactSortState.m_uAttrDesc==1 && bWeightKey && bIdKey;
+	bool bE1FilterSupported = tQuery.m_dFilters.IsEmpty();
+	if ( !bE1FilterSupported && tQuery.m_dFilters.GetLength()==1 && tQuery.m_dFilterTree.IsEmpty() && m_iDocinfo<=UINT32_MAX )
+	{
+		const CSphFilterSettings & tFilter = tQuery.m_dFilters[0];
+		const CSphColumnInfo * pAttr = m_tSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
+		const bool bPlainInteger = pAttr && !pAttr->IsColumnar() && !pAttr->m_tLocator.m_bDynamic
+			&& ( pAttr->m_eAttrType==SPH_ATTR_INTEGER || pAttr->m_eAttrType==SPH_ATTR_BIGINT || pAttr->m_eAttrType==SPH_ATTR_TOKENCOUNT );
+		const bool bEquality = tFilter.m_eType==SPH_FILTER_VALUES && tFilter.GetNumValues()==1;
+		const bool bRange = tFilter.m_eType==SPH_FILTER_RANGE;
+		if ( bPlainInteger && ( bEquality || bRange ) && !tFilter.m_bExclude && tFilter.m_eMvaFunc==SPH_MVAFUNC_NONE && GetRawAttrs() )
+		{
+			bE1FilterSupported = true;
+			tTermSetup.m_tE1RankFilter.m_bEnabled = true;
+			tTermSetup.m_tE1RankFilter.m_pAttrs = GetRawAttrs();
+			tTermSetup.m_tE1RankFilter.m_iStride = m_tSchema.GetRowSize();
+			tTermSetup.m_tE1RankFilter.m_uRows = uint32_t(m_iDocinfo);
+			tTermSetup.m_tE1RankFilter.m_tLocator = pAttr->m_tLocator;
+			tTermSetup.m_tE1RankFilter.m_eType = tFilter.m_eType;
+			tTermSetup.m_tE1RankFilter.m_iValue = bEquality ? tFilter.GetValues()[0] : 0;
+			tTermSetup.m_tE1RankFilter.m_iMinValue = tFilter.m_iMinValue;
+			tTermSetup.m_tE1RankFilter.m_iMaxValue = tFilter.m_iMaxValue;
+			tTermSetup.m_tE1RankFilter.m_bHasEqualMin = tFilter.m_bHasEqualMin;
+			tTermSetup.m_tE1RankFilter.m_bHasEqualMax = tFilter.m_bHasEqualMax;
+			tTermSetup.m_tE1RankFilter.m_bOpenLeft = tFilter.m_bOpenLeft;
+			tTermSetup.m_tE1RankFilter.m_bOpenRight = tFilter.m_bOpenRight;
+		}
+	}
+	tTermSetup.m_bE1RankedRequested = m_bE1
+		&& !m_tDeadRowMap.HasDead() && bE1FilterSupported
+		&& dSorters.GetLength()==1 && !dSorters[0]->IsGroupby()
+		&& E1RankedTopKFromPage ( tQuery.m_iOffset, tQuery.m_iLimit )
+		&& E1ExactRankerAdmission ( tQuerySettings.m_eRanker==SPH_RANK_BM25A,
+			tQuerySettings.m_eRanker==SPH_RANK_EXPR, tQuerySettings.m_sRankerExpr.cstr() )
+		&& bExactSort;
+	tTermSetup.m_bE1RowidDocidOrder = m_bE1RowidDocidOrder;
+
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
 	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tXQ, tQuery, tQuerySettings, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
 	if ( !pRanker )
 		return false;
+
+	// Deliberately narrow exact path.  The node itself accepts only a plain
+	// single term; every other query shape keeps the normal executor.
+	bool bExactE1Ranked = tTermSetup.m_bE1RankedRequested;
+	if ( bExactE1Ranked )
+		bExactE1Ranked = pRanker->EnableE1Ranked();
 
 	if ( ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE ) && tQuerySettings.m_eRanker!=SPH_RANK_EXPR )
 		tMeta.m_sWarning.SetSprintf ( "packedfactors() and bm25f() requires using an expression ranker" );

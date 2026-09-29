@@ -99,11 +99,23 @@ CSphString IndexFiles_c::MakePath ( const char * szSuffix )
 	return MakePath ( szSuffix, GetFilebase() );
 }
 
+bool IndexFiles_c::IsE1Primary ( const CSphString & sSuffix, const CSphString & sBase )
+{
+	CSphString sError;
+	CSphAutoreader tReader;
+	if ( !tReader.Open ( FullPath ( sphGetExt(SPH_EXT_SPD), sSuffix, sBase ), sError ) )
+		return false;
+	char dMagic[8] = {};
+	tReader.GetBytes ( dMagic, sizeof(dMagic) );
+	return !tReader.GetErrorFlag() && ( !memcmp ( dMagic, "E1POST04", sizeof(dMagic) ) || !memcmp ( dMagic, "E1POST05", sizeof(dMagic) ) || !memcmp ( dMagic, "E1POST06", sizeof(dMagic) ) );
+}
+
 bool IndexFiles_c::HasAllFiles ( const char * sType )
 {
+	const bool bE1 = IsE1Primary ( sType );
 	for ( const auto & dExt : g_dIndexFilesExts )
 	{
-		if ( m_uVersion<dExt.m_uMinVer || dExt.m_bOptional )
+		if ( m_uVersion<dExt.m_uMinVer || dExt.m_bOptional || ( bE1 && dExt.m_eExt==SPH_EXT_SPE ) )
 			continue;
 
 		if ( !sphIsReadable ( FullPath ( dExt.m_szExt, sType ) ) )
@@ -114,8 +126,11 @@ bool IndexFiles_c::HasAllFiles ( const char * sType )
 
 void IndexFiles_c::Unlink ( const char * szType )
 {
+	const bool bE1 = IsE1Primary ( szType );
 	for ( const auto &dExt : g_dIndexFilesExts )
 	{
+		if ( bE1 && dExt.m_eExt==SPH_EXT_SPE )
+			continue;
 		auto sFile = FullPath ( dExt.m_szExt, szType );
 		if ( ::unlink ( sFile.cstr() ) && !dExt.m_bOptional )
 			sphWarning ( "unlink failed (file '%s', error '%s'", sFile.cstr (), strerrorm ( errno ) );
@@ -137,10 +152,11 @@ bool IndexFiles_c::TryRename ( const CSphString& sFrom, const CSphString& sTo ) 
 	m_bFatal = false;
 	bool bRenamed[SPH_EXT_TOTAL] = { false };
 	bool bAllOk = true;
+	const bool bE1 = IsE1Primary ( "", sFrom );
 	for ( int i = 0; i<SPH_EXT_TOTAL; i++ )
 	{
 		const auto & dExt = g_dIndexFilesExts[i];
-		if ( m_uVersion<dExt.m_uMinVer || !dExt.m_bCopy )
+		if ( m_uVersion<dExt.m_uMinVer || !dExt.m_bCopy || ( bE1 && dExt.m_eExt==SPH_EXT_SPE ) )
 			continue;
 
 		auto sFullFrom = FullPath ( dExt.m_szExt, "", sFrom );

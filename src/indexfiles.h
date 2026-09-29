@@ -64,6 +64,7 @@ class IndexFiles_c : public IndexFileBase_c
 	CSphString	m_sLastError;
 	bool		m_bFatal = false; // if fatal fail happened (unable to rename during rollback)
 	CSphString FullPath ( const char * szExt, const CSphString& sSuffix = "", const CSphString& sBase = "" );
+	bool IsE1Primary ( const CSphString & sSuffix = "", const CSphString & sBase = "" );
 	inline void SetName ( CSphString sIndex ) { m_sIndexName = std::move(sIndex); }
 
 public:

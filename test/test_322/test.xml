@@ -72,7 +72,7 @@ insert into test_table values
 <!-- unsigned int at result set -->
 select id, gid from test1 where gid > 1000;
 
-select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=1);
+select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=1), ranker=proximity_bm25;
 select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=10), ranker=proximity_bm25;
 select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=10), ranker=wordcount;
 
@@ -81,7 +81,7 @@ select id, weight() w, spam, title, body from test1 where match('program flow') 
 select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=0), ranker=wordcount;
 
 <!-- weights negative -->
-select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=-2);
+select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=-2), ranker=proximity_bm25;
 select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=-10), ranker=proximity_bm25;
 select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=-10), ranker=wordcount;
 

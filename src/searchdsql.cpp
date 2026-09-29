@@ -587,10 +587,27 @@ void SqlParser_c::PushQuery ()
 	// post set proper result-set order
 	if ( m_dStmt.GetLength() && m_pQuery )
 	{
+		// Keep the historical default for scans, aggregates, and other
+		// non-document result sets. Only an ordinary full-text result needs the
+		// deterministic id tie-breaker.
+		const bool bOrdinaryFullText = !m_pQuery->m_sQuery.IsEmpty()
+			&& m_pQuery->m_sGroupBy.IsEmpty() && m_pQuery->m_sFacetBy.IsEmpty()
+			&& m_pQuery->m_eJoinType==JoinType_e::NONE
+			&& m_pQuery->m_dItems.none_of ( [] ( const CSphQueryItem & tItem )
+				{ return tItem.m_eAggrFunc!=SPH_AGGR_NONE || tItem.m_sExpr=="count(*)"; } );
 		if ( m_pQuery->m_sGroupBy.IsEmpty() )
 			m_pQuery->m_sSortBy = m_pQuery->m_sOrderBy;
 		else
 			m_pQuery->m_sGroupSortBy = m_pQuery->m_sOrderBy;
+
+		if ( !m_pQuery->m_bExplicitOrderBy && bOrdinaryFullText )
+		{
+			// The id key is an execution detail of the implicit relevance order.
+			// Keep explicit-order state and the SQL scroll response unchanged.
+			m_pQuery->m_sSortBy = "@weight desc, id asc";
+			if ( m_pQuery->m_tScrollSettings.m_dAttrs.IsEmpty() )
+				m_pQuery->m_tScrollSettings.m_bRequested = false;
+		}
 
 		m_dFiltersPerStmt.Add ( m_dFilterTree.GetLength() );
 	}

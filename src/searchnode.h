@@ -92,6 +92,10 @@ public:
 	virtual void				DebugDump ( int iLevel ) = 0;
 	virtual bool				TimeExceeded() const = 0;
 	virtual int64_t				GetMaxTimeout() const = 0;
+	virtual bool					EnableE1Ranked() { return false; }
+	virtual bool					EnableE1BestFirst() { return false; }
+	virtual void					SetRankThreshold ( int, RowID_t ) {}
+	virtual uint64_t				TakeRankSkippedDocs() { return 0; }
 };
 
 class RowidIterator_i;

@@ -21,8 +21,10 @@
 #include "columnarlib.h"
 #include "dict/dict_entry.h"
 #include "client_task_info.h"
+#include "exact_bm25a_utils.h"
 
 #include <math.h>
+#include <memory>
 bool operator < ( const SkiplistEntry_t & a, RowID_t b )	{ return a.m_tBaseRowIDPlus1<b; }
 bool operator == ( const SkiplistEntry_t & a, RowID_t b )	{ return a.m_tBaseRowIDPlus1==b; }
 bool operator < ( RowID_t a, const SkiplistEntry_t & b )	{ return a<b.m_tBaseRowIDPlus1; }
@@ -153,6 +155,10 @@ public:
 	void						DisableCaching() { SafeReleaseAndZero ( m_pQcacheEntry ); }
 
 	NodeEstimate_t				Estimate ( int64_t iTotalDocs ) const override;
+	bool						EnableE1Ranked() override { bool b=m_pRoot && m_pRoot->EnableE1Ranked(); m_bE1FilterPushed=b && m_tE1RankFilter.m_bEnabled; if ( b ) DisableCaching(); return b; }
+	virtual void				ConfigureE1TopK ( int iTopK ) { m_iConfiguredE1TopK = iTopK; }
+	void						SetRankThreshold ( int iWeight ) override { if ( m_pRoot ) m_pRoot->SetRankThreshold ( iWeight, INVALID_ROWID ); }
+	uint64_t					TakeRankSkippedDocs() override { return m_pRoot ? m_pRoot->TakeRankSkippedDocs() : 0; }
 
 public:
 	// FIXME? hide and friend?
@@ -176,6 +182,9 @@ protected:
 	CSphMatch					m_tTestMatch;
 	const CSphIndex *			m_pIndex = nullptr;					///< this is he who'll do my filtering!
 	CSphQueryContext *			m_pCtx = nullptr;
+	int							m_iConfiguredE1TopK = 0;
+	E1RankFilter_t			m_tE1RankFilter;
+	bool						m_bE1FilterPushed = false;
 
 	QcacheEntry_c *				m_pQcacheEntry = nullptr;			///< data to cache if we decide that the current query is worth caching
 
@@ -669,6 +678,7 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup,
 
 	m_pIndex = tSetup.m_pIndex;
 	m_pCtx = tSetup.m_pCtx;
+	m_tE1RankFilter = tSetup.m_tE1RankFilter;
 
 	m_dZones = tXQ.m_dZones;
 	m_dZoneStart.Resize ( m_dZones.GetLength() );
@@ -1180,7 +1190,9 @@ const ExtDoc_t * ExtRanker_T<USE_BM25>::GetFilteredDocs ()
 			m_tTestMatch.m_tRowID = pCand->m_tRowID;
 			m_tTestMatch.m_pStatic = nullptr;
 
-			if ( m_pIndex->EarlyReject ( m_pCtx, m_tTestMatch ) )
+			if ( m_bE1FilterPushed )
+				m_tTestMatch.m_pStatic = m_tE1RankFilter.m_pAttrs + int64_t(m_tTestMatch.m_tRowID)*m_tE1RankFilter.m_iStride;
+			else if ( m_pIndex->EarlyReject ( m_pCtx, m_tTestMatch ) )
 			{
 				pCand++;
 				continue;
@@ -1355,7 +1367,7 @@ int ExtRanker_State_T<STATE,USE_BM25>::GetMatches ()
 	for ( RowID_t tCurRowID=INVALID_ROWID; iMatches < MAX_BLOCK_DOCS; )
 	{
 		// keep ranking
-		while ( pHlist->m_tRowID==tCurRowID )
+		while ( pHlist->m_tRowID!=INVALID_ROWID && pHlist->m_tRowID==tCurRowID )
 		{
 			m_tState.Update ( pHlist );
 			if ( this->m_bZSlist )
@@ -2184,7 +2196,8 @@ public:
 	DWORD				m_uLcsTailQposMask;
 	DWORD				m_uCurQposMask;
 	int					m_iExpDelta;
-	int					m_iLastHitPos;
+	DWORD				m_uLastHitPos = 0;
+	bool				m_bHaveLastHit = false;
 	int					m_iFields = 0;
 	const int *			m_pWeights = nullptr;
 	DWORD				m_uDocBM25 = 0;
@@ -2295,6 +2308,7 @@ public:
 	bool				Init ( int iFields, const int * pWeights, ExtRanker_T<true> * pRanker, CSphString & sError, DWORD uFactorFlags );
 	void				Update ( const ExtHit_t * pHlist );
 	int					Finalize ( const CSphMatch & tMatch );
+	int					FinalizeE1FixedBM25A ( const CSphMatch & tMatch, const ExtDoc_t & tDoc );
 	bool				IsTermSkipped ( int iTerm );
 
 public:
@@ -2447,11 +2461,9 @@ public:
 		m_uDocBM25 = tMatch.m_iWeight;
 		for ( int i=0; i<m_iFields; i++ )
 		{
-			m_uWordCount[i] = sphBitCount ( m_uWordCount[i] );
 			if ( m_dMinIDF[i] > m_dMaxIDF[i] )
 				m_dMinIDF[i] = m_dMaxIDF[i] = 0; // must be FLT_MAX vs -FLT_MAX, aka no hits
 		}
-		m_uDocWordCount = sphBitCount ( m_uDocWordCount );
 
 		// compute real BM25
 		// with blackjack, and hookers, and field lengths, and parameters
@@ -2491,16 +2503,17 @@ public:
 	{
 		// OPTIMIZE? quick full wipe? (using dwords/sse/whatever)
 		m_uCurLCS = 0;
+		m_uLastSpanStart = 0;
 		if_const ( HANDLE_DUPES )
 		{
 			m_uCurPos = 0;
 			m_uLcsTailPos = 0;
 			m_uLcsTailQposMask = 0;
 			m_uCurQposMask = 0;
-			m_uLastSpanStart = 0;
 		}
 		m_iExpDelta = -1;
-		m_iLastHitPos = -1;
+		m_uLastHitPos = 0;
+		m_bHaveLastHit = false;
 		for ( int i=0; i<m_iFields; i++ )
 		{
 			m_uLCS[i] = 0;
@@ -3649,16 +3662,19 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 	{
 		// update LCS
 		int iDelta = uPosWithField - pHlist->m_uQuerypos;
-		if ( iDelta==m_iExpDelta )
+		if ( m_bHaveLastHit && iDelta==m_iExpDelta )
 		{
-			if ( (int)uPosWithField>m_iLastHitPos )
+			if ( uPosWithField>m_uLastHitPos )
 				m_uCurLCS = (BYTE)( m_uCurLCS + pHlist->m_uWeight );
 			if ( HITMAN::IsEnd ( pHlist->m_uHitpos ) && (int)pHlist->m_uQuerypos==m_iMaxQpos && iPos==m_iMaxQpos )
 				m_tExactHit.BitSet ( uField );
 		} else
 		{
-			if ( (int)uPosWithField>m_iLastHitPos )
+			if ( !m_bHaveLastHit || uPosWithField>m_uLastHitPos )
+			{
 				m_uCurLCS = BYTE(pHlist->m_uWeight);
+				m_uLastSpanStart = iPos;
+			}
 			if ( iPos==1 && HITMAN::IsEnd ( pHlist->m_uHitpos ) && m_iMaxQpos==1 )
 				m_tExactHit.BitSet ( uField );
 		}
@@ -3671,10 +3687,11 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 			if ( !m_iMinBestSpanPos [ uField ] )
 				m_iMinBestSpanPos [ uField ] = iPos;
 			else
-				m_iMinBestSpanPos [ uField ] = iPos - m_uCurLCS + 1;
+				m_iMinBestSpanPos [ uField ] = Max ( m_iMinHitPos [ uField ], iPos - m_uCurLCS + 1 );
 		}
 		m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
-		m_iLastHitPos = uPosWithField;
+		m_uLastHitPos = uPosWithField;
+		m_bHaveLastHit = true;
 	} else
 	{
 		// reset accumulated data from previous field
@@ -3813,14 +3830,15 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 	if ( pHlist->m_uSpanlen>1 )
 	{
 		WORD uQposSpanned = pHlist->m_uQuerypos+1;
-		DWORD uQposMask = ( pHlist->m_uQposMask>>uQposSpanned );
+		constexpr WORD U_QPOS_MASK_BITS = sizeof(pHlist->m_uQposMask)*8;
+		DWORD uQposMask = uQposSpanned<U_QPOS_MASK_BITS ? ( pHlist->m_uQposMask>>uQposSpanned ) : 0;
 		while ( uQposMask!=0 )
 		{
 			WORD uQposFixed = uQposSpanned;
 			if ( ( uQposMask & 1 )==1 )
 			{
-				bool bUniqSpanned = true;
-				if_const ( HANDLE_DUPES )
+				bool bUniqSpanned = uQposFixed<m_tKeywords.GetSize() && m_tKeywords.BitGet ( uQposFixed );
+				if_const ( HANDLE_DUPES && bUniqSpanned )
 				{
 					uQposFixed = m_dTermDupes[uQposFixed];
 					bUniqSpanned = ( m_dTermsHit[uQposFixed]!=pHlist->m_uHitpos );
@@ -3971,9 +3989,11 @@ template < bool PF, bool HANDLE_DUPES >
 void RankerState_Expr_fn<PF, HANDLE_DUPES>::UpdateFreq ( WORD uQpos, DWORD uField )
 {
 	float fIDF = m_dIDF [ uQpos ];
-	DWORD uHitPosMask = 1u<<uQpos;
+	int iFieldTF = uField*(1+m_iMaxQpos) + uQpos;
+	bool bFirstInField = m_dFieldTF[iFieldTF]==0;
+	bool bFirstInDoc = m_dTF[uQpos]==0;
 
-	if ( !( m_uWordCount[uField] & uHitPosMask ) )
+	if ( bFirstInField )
 		m_dSumIDF[uField] += fIDF;
 
 	if ( fIDF < m_dMinIDF[uField] )
@@ -3983,14 +4003,14 @@ void RankerState_Expr_fn<PF, HANDLE_DUPES>::UpdateFreq ( WORD uQpos, DWORD uFiel
 		m_dMaxIDF[uField] = fIDF;
 
 	m_uHitCount[uField]++;
-	m_uWordCount[uField] |= uHitPosMask;
-	m_uDocWordCount |= uHitPosMask;
+	m_uWordCount[uField] += bFirstInField;
+	m_uDocWordCount += bFirstInDoc;
 	m_dTFIDF[uField] += fIDF;
 
 	// avoid duplicate check for BM25A, BM25F though
 	// (that sort of automatically accounts for qtf factor)
 	m_dTF [ uQpos ]++;
-	m_dFieldTF [ uField*(1+m_iMaxQpos) + uQpos ]++;
+	m_dFieldTF [ iFieldTF ]++;
 }
 
 
@@ -4277,6 +4297,37 @@ int RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Finalize ( const CSph
 }
 
 
+// Exact specialized evaluation for the canonical single-term expression.
+// E1/5 metadata already supplied exact TF, so hit positions and generic
+// per-hit factors are unnecessary. Keep the generic path's float order and
+// final C++ float-to-int truncation.
+template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
+int RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::FinalizeE1FixedBM25A ( const CSphMatch & tMatch, const ExtDoc_t & tDoc )
+{
+	float dl = 0.0f;
+	ForEachFieldLength ( tMatch, [&dl] ( int, int64_t iFieldLen ) { dl += iFieldLen; } );
+	const float fAvgDocLen = m_fParamAvgDocLen>0.0f ? m_fParamAvgDocLen : m_fAvgDocLen;
+	const int iTerms = tDoc.m_uExactTerms ? tDoc.m_uExactTerms : 1;
+	float fSum = 0.0f;
+#if defined( __aarch64__ )
+	const float paramK1 = m_fParamK1 * ( 1 - m_fParamB + m_fParamB * dl / fAvgDocLen );
+	for ( int i=0; i<iTerms; ++i )
+	{
+		const float tf = float ( tDoc.m_uExactTerms ? tDoc.m_dExactTF[i] : tDoc.m_uExactTF );
+		fSum += tf / ( tf + paramK1 ) * m_dIDF[i+1];
+	}
+#else
+	const float paramK1 = m_fParamK1*(1 - m_fParamB + m_fParamB*dl/fAvgDocLen);
+	for ( int i=0; i<iTerms; ++i )
+	{
+		const float tf = float ( tDoc.m_uExactTerms ? tDoc.m_dExactTF[i] : tDoc.m_uExactTF );
+		fSum += tf / (tf + paramK1) * m_dIDF[i+1];
+	}
+#endif
+	return (int)( 1000.0f * ( fSum + 0.5f ) );
+}
+
+
 template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
 bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::IsTermSkipped ( int iTerm )
 {
@@ -4398,6 +4449,54 @@ public:
 		// somewhat later during InitState() call, when IDFs etc are computed
 		this->m_tState.m_sExpr = sExpr;
 		this->m_tState.m_pSchema = &tSchema;
+		m_iE1DynamicRowitems = tSetup.m_iDynamicRowitems;
+		const CSphColumnInfo * pDocid = tSchema.GetAttr ( sphGetDocidName() );
+		assert ( pDocid );
+		m_tE1DocidLocator = pDocid->m_tLocator;
+		m_bE1HeapHasRowwiseDocid = !pDocid->IsColumnar();
+	}
+
+	~ExtRanker_Expr_T () override
+	{
+		if ( m_bE1FixedBM25A && getenv("MANTICORE_E1_RANK_TRACE") )
+			fprintf ( stderr, "%s own_heap=%d configured_k=%d heap_capacity=%d heap_final_count=%d candidates_scored=%llu doc_length_fetches=%llu exact_divisions=%llu heap_inserts=%llu heap_replacements=%llu heap_rejections=%llu threshold_updates=%llu heap_final_threshold=%d heap_final_worst_rowid=%u hitlist_seeks=0 decoded_positions=0 general_factor_finalizations=0 general_factor_finalizations_bypassed=%llu\n",
+				m_bE1MultiOr ? "E1_MULTI_OR_BM25A" : ( m_bE1MultiAnd ? "E1_MULTI_AND_BM25A" : "E1_DIRECT_BM25A" ),
+				int(m_bE1OwnHeap), this->m_iConfiguredE1TopK, m_iE1HeapCapacity, m_iE1TopKHeapCount,
+				(unsigned long long)m_uDirectScores, (unsigned long long)m_uDirectDLFetches,
+				(unsigned long long)m_uDirectDivisions, (unsigned long long)m_uE1HeapInserts,
+				(unsigned long long)m_uE1HeapReplacements, (unsigned long long)m_uE1HeapRejections,
+				(unsigned long long)m_uE1HeapThresholdUpdates, m_iE1HeapFinalThreshold, unsigned(m_tE1HeapFinalWorstRow),
+				(unsigned long long)m_uDirectScores );
+	}
+
+	bool EnableE1Ranked () final
+	{
+		m_bE1FixedBM25A = BASE::EnableE1Ranked();
+		const int iTopK = E1RankedTopKCapacity ( this->m_iConfiguredE1TopK );
+		// The private heap compares equal weights by docid directly in the match
+		// row. Columnar docids are fetched later by the sorter and have no valid
+		// rowwise locator here, so leave top-K selection to the generic sorter.
+		m_bE1OwnHeap = m_bE1FixedBM25A && m_bE1HeapHasRowwiseDocid && iTopK && this->m_pRoot->EnableE1BestFirst();
+		if ( m_bE1OwnHeap )
+		{
+			m_dE1TopKMatches = std::make_unique<CSphMatch[]>(iTopK);
+			m_dE1TopKHeap = std::make_unique<int[]>(iTopK);
+			m_iE1HeapCapacity = iTopK;
+			for ( int i=0; i<iTopK; ++i )
+				m_dE1TopKMatches[i].Reset ( m_iE1DynamicRowitems );
+		}
+		return m_bE1FixedBM25A;
+	}
+
+	uint64_t TakeRankSkippedDocs () final
+	{
+		uint64_t uSkipped = this->m_pRoot ? this->m_pRoot->TakeRankSkippedDocs() : 0;
+		if ( m_uE1HeapDiscardedPending )
+		{
+			uSkipped += m_uE1HeapDiscardedPending;
+			m_uE1HeapDiscardedPending = 0;
+		}
+		return uSkipped;
 	}
 
 	void SetQwordsIDF ( const ExtQwordsHash_t & hQwords ) final
@@ -4409,6 +4508,9 @@ public:
 
 	int GetMatches () final
 	{
+		if ( m_bE1FixedBM25A )
+			return GetE1FixedBM25AMatches();
+
 		if_const ( NEED_PACKEDFACTORS )
 			this->m_tState.FlushMatches ();
 
@@ -4419,6 +4521,150 @@ public:
 	{
 		this->m_tState.SetTermDupes ( hQwords, iMaxQpos, this->m_pRoot.get() );
 	}
+
+private:
+	int GetE1FixedBM25AMatches ()
+	{
+		if ( !this->m_pRoot )
+			return 0;
+		if ( m_bE1OwnHeap )
+			return GetE1HeapMatches();
+
+		SwitchProfile ( this->m_pCtx->m_pProfile, SPH_QSTATE_RANK );
+		const ExtDoc_t * pDoc = this->m_pDoclist;
+		int iMatches = 0;
+		while ( iMatches<MAX_BLOCK_DOCS )
+		{
+			if ( !pDoc || pDoc->m_tRowID==INVALID_ROWID )
+				pDoc = this->GetFilteredDocs();
+			if ( !pDoc )
+				break;
+
+			Swap ( this->m_dMatches[iMatches], this->m_dMyMatches[pDoc-this->m_dMyDocs] );
+			this->m_dMatches[iMatches].m_iWeight = this->m_tState.FinalizeE1FixedBM25A ( this->m_dMatches[iMatches], *pDoc );
+			m_bE1MultiOr |= pDoc->m_bExactOr;
+			m_bE1MultiAnd |= pDoc->m_uExactTerms>1 && !pDoc->m_bExactOr;
+			++m_uDirectScores;
+			++m_uDirectDLFetches;
+			++m_uDirectDivisions;
+			++iMatches;
+			++pDoc;
+		}
+
+		this->m_pDoclist = pDoc;
+		this->UpdateQcache ( iMatches );
+		return iMatches;
+	}
+
+	int GetE1HeapMatches ()
+	{
+		if ( m_bE1HeapReturned )
+			return 0;
+		if ( !m_bE1HeapBuilt )
+			BuildE1Heap();
+		const int iMatches = Min ( MAX_BLOCK_DOCS, m_iE1TopKHeapCount-m_iE1HeapEmitPos );
+		for ( int i=0; i<iMatches; ++i )
+			Swap ( this->m_dMatches[i], m_dE1TopKMatches[m_dE1TopKHeap[m_iE1HeapEmitPos+i]] );
+		m_iE1HeapEmitPos += iMatches;
+		m_bE1HeapReturned = m_iE1HeapEmitPos==m_iE1TopKHeapCount;
+		this->UpdateQcache ( iMatches );
+		return iMatches;
+	}
+
+	void BuildE1Heap ()
+	{
+		SwitchProfile ( this->m_pCtx->m_pProfile, SPH_QSTATE_RANK );
+		auto fnBetter = [this] ( int a, int b ) {
+			const CSphMatch & x = m_dE1TopKMatches[a];
+			const CSphMatch & y = m_dE1TopKMatches[b];
+			return x.m_iWeight>y.m_iWeight || ( x.m_iWeight==y.m_iWeight && x.GetAttr(m_tE1DocidLocator)<y.GetAttr(m_tE1DocidLocator) );
+		};
+		const ExtDoc_t * pDoc = this->m_pDoclist;
+		while ( true )
+		{
+			if ( !pDoc || pDoc->m_tRowID==INVALID_ROWID )
+				pDoc = this->GetFilteredDocs();
+			if ( !pDoc )
+				break;
+			CSphMatch & tCandidate = this->m_dMyMatches[pDoc-this->m_dMyDocs];
+			tCandidate.m_iWeight = this->m_tState.FinalizeE1FixedBM25A ( tCandidate, *pDoc );
+			m_bE1MultiOr |= pDoc->m_bExactOr;
+			m_bE1MultiAnd |= pDoc->m_uExactTerms>1 && !pDoc->m_bExactOr;
+			++m_uDirectScores;
+			++m_uDirectDLFetches;
+			++m_uDirectDivisions;
+			if ( m_iE1TopKHeapCount<this->m_iConfiguredE1TopK )
+			{
+				const int iSlot = m_iE1TopKHeapCount++;
+				m_dE1TopKMatches[iSlot].Combine ( tCandidate, m_iE1DynamicRowitems );
+				m_dE1TopKHeap[iSlot] = iSlot;
+				std::push_heap ( m_dE1TopKHeap.get(), m_dE1TopKHeap.get()+m_iE1TopKHeapCount, fnBetter );
+				++m_uE1HeapInserts;
+				if ( m_iE1TopKHeapCount==this->m_iConfiguredE1TopK )
+				{
+					m_iE1HeapFinalThreshold = m_dE1TopKMatches[m_dE1TopKHeap[0]].m_iWeight;
+					m_tE1HeapFinalWorstRow = m_dE1TopKMatches[m_dE1TopKHeap[0]].m_tRowID;
+					this->m_pRoot->SetRankThreshold ( m_iE1HeapFinalThreshold, m_tE1HeapFinalWorstRow );
+					++m_uE1HeapThresholdUpdates;
+				}
+			}
+			else if ( tCandidate.m_iWeight>m_dE1TopKMatches[m_dE1TopKHeap[0]].m_iWeight || ( tCandidate.m_iWeight==m_dE1TopKMatches[m_dE1TopKHeap[0]].m_iWeight && tCandidate.GetAttr(m_tE1DocidLocator)<m_dE1TopKMatches[m_dE1TopKHeap[0]].GetAttr(m_tE1DocidLocator) ) )
+			{
+				const int iSlot = m_dE1TopKHeap[0];
+				m_dE1TopKMatches[iSlot].Combine ( tCandidate, m_iE1DynamicRowitems );
+				int iParent = 0;
+				while ( true )
+				{
+					const int iLeft = iParent*2+1;
+					if ( iLeft>=m_iE1TopKHeapCount )
+						break;
+					const int iRight = iLeft+1;
+					const int iWorseChild = iRight<m_iE1TopKHeapCount && fnBetter(m_dE1TopKHeap[iLeft],m_dE1TopKHeap[iRight]) ? iRight : iLeft;
+					if ( !fnBetter(m_dE1TopKHeap[iParent],m_dE1TopKHeap[iWorseChild]) )
+						break;
+					Swap ( m_dE1TopKHeap[iParent], m_dE1TopKHeap[iWorseChild] );
+					iParent = iWorseChild;
+				}
+				++m_uE1HeapReplacements;
+				m_iE1HeapFinalThreshold = m_dE1TopKMatches[m_dE1TopKHeap[0]].m_iWeight;
+				m_tE1HeapFinalWorstRow = m_dE1TopKMatches[m_dE1TopKHeap[0]].m_tRowID;
+				this->m_pRoot->SetRankThreshold ( m_iE1HeapFinalThreshold, m_tE1HeapFinalWorstRow );
+				++m_uE1HeapThresholdUpdates;
+			}
+			else
+				++m_uE1HeapRejections;
+			++pDoc;
+		}
+		this->m_pDoclist = pDoc;
+		m_uE1HeapDiscardedPending = m_uDirectScores-m_iE1TopKHeapCount;
+		std::sort ( m_dE1TopKHeap.get(), m_dE1TopKHeap.get()+m_iE1TopKHeapCount, [this] ( int a, int b ) { return m_dE1TopKMatches[a].m_tRowID<m_dE1TopKMatches[b].m_tRowID; } );
+		m_bE1HeapBuilt = true;
+	}
+
+	bool m_bE1FixedBM25A = false;
+	bool m_bE1MultiAnd = false;
+	bool m_bE1MultiOr = false;
+	bool m_bE1OwnHeap = false;
+	bool m_bE1HeapHasRowwiseDocid = false;
+	bool m_bE1HeapBuilt = false;
+	bool m_bE1HeapReturned = false;
+	std::unique_ptr<CSphMatch[]> m_dE1TopKMatches;
+	std::unique_ptr<int[]> m_dE1TopKHeap;
+	int m_iE1HeapCapacity = 0;
+	int m_iE1TopKHeapCount = 0;
+	int m_iE1HeapEmitPos = 0;
+	int m_iE1DynamicRowitems = 0;
+	CSphAttrLocator m_tE1DocidLocator;
+	uint64_t m_uE1HeapInserts = 0;
+	uint64_t m_uE1HeapReplacements = 0;
+	uint64_t m_uE1HeapRejections = 0;
+	uint64_t m_uE1HeapThresholdUpdates = 0;
+	uint64_t m_uE1HeapDiscardedPending = 0;
+	int m_iE1HeapFinalThreshold = 0;
+	RowID_t m_tE1HeapFinalWorstRow = INVALID_ROWID;
+	uint64_t m_uDirectScores = 0;
+	uint64_t m_uDirectDLFetches = 0;
+	uint64_t m_uDirectDivisions = 0;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -4653,6 +4899,7 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 				pRanker = std::make_unique < ExtRanker_State_T < RankerState_ProximityBM25Exact_T<false>, true>> ( tXQ, tTermSetup, tRankerSettings );
 			break;
 
+		case SPH_RANK_BM25A:
 		case SPH_RANK_EXPR:
 			{
 				// we need that mask in case these factors usage:
@@ -4661,14 +4908,17 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 				// FIXME!!! move QposMask initialization past Init
 				tTermSetup.m_bSetQposMask = true;
 				bool bNeedFactors = !!( tCtx.GetPackedFactor() & SPH_FACTOR_ENABLE );
+				const char * szRankerExpr = tQuerySettings.m_eRanker==SPH_RANK_BM25A
+					? "1000*bm25a(1.2,0.75,256)"
+					: tQuerySettings.m_sRankerExpr.cstr();
 				if ( bNeedFactors && bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <true, true>> ( tXQ, tTermSetup, tQuerySettings.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
+					pRanker = std::make_unique < ExtRanker_Expr_T <true, true>> ( tXQ, tTermSetup, szRankerExpr, pIndex->GetMatchSchema(), tRankerSettings );
 				else if ( bNeedFactors && !bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <true, false>> ( tXQ, tTermSetup, tQuerySettings.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
+					pRanker = std::make_unique < ExtRanker_Expr_T <true, false>> ( tXQ, tTermSetup, szRankerExpr, pIndex->GetMatchSchema(), tRankerSettings );
 				else if ( !bNeedFactors && bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <false, true>> ( tXQ, tTermSetup, tQuerySettings.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
+					pRanker = std::make_unique < ExtRanker_Expr_T <false, true>> ( tXQ, tTermSetup, szRankerExpr, pIndex->GetMatchSchema(), tRankerSettings );
 				else if ( !bNeedFactors && !bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <false, false>> ( tXQ, tTermSetup, tQuerySettings.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), tRankerSettings );
+					pRanker = std::make_unique < ExtRanker_Expr_T <false, false>> ( tXQ, tTermSetup, szRankerExpr, pIndex->GetMatchSchema(), tRankerSettings );
 			}
 			break;
 
@@ -4804,6 +5054,7 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 	}
 
 	pRanker->m_iMaxQpos = iMaxQpos;
+	pRanker->ConfigureE1TopK ( E1RankedTopKFromPage ( tQuery.m_iOffset, tQuery.m_iLimit ) );
 	pRanker->SetQwordsIDF ( hQwords );
 	if ( bGotDupes )
 		pRanker->SetTermDupes ( hQwords, iMaxQpos );

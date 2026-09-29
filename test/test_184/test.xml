@@ -145,8 +145,8 @@ INSERT INTO test_table VALUES
 </db_insert>
 
 <queries><sphinxql>
-<!-- check that expr yields same result as bultin proximity_bm25 -->
-select id, gid, weight(), title from test where match('seven') and gid=1;
+<!-- check that expr yields same result as builtin proximity_bm25 -->
+select id, gid, weight(), title from test where match('seven') and gid=1 option ranker=proximity_bm25;
 select id, gid, weight(), title from test where match('seven') and gid=1 option ranker=expr('sum(lcs)*1000+bm25');
 select id, gid, weight(), title from test where match('seven') and gid=1 option ranker=expr('sum(300*lcs+700*lcs)+bm25');
 
@@ -176,7 +176,7 @@ select id, gid, weight(), title from test where match('mary') option ranker=expr
 select id, weight() as w1, FLOOR ( bm25f(1.2, 0.8, {content=10}) * 100000 ) as w2 from test where match('Mary lamb') option ranker=expr('bm25f(1.2, 0.8, {content=10}) * 1000');
 select id, weight() as w1, FLOOR ( bm25f(1.2, 0.8, {content=1000}) * 100000 ) as w2 from test where match('Mary lamb') option ranker=expr('bm25f(1.2, 0.8, {content=10}) * 1000');
 select id, weight() as w1, FLOOR ( bm25f(2.2, 0.5) * 100000 ) as w2, FLOOR ( bm25f(1.2, 0.8, {content=10}) * 100000 ) as w3 from test where match('Mary lamb') option ranker=expr('bm25f(10.2, 0.5) * 1000');
-select id, weight() as w1, bm25f(2.2, 0.5) * 1000 as w2 from test where match('Mary lamb');
+select id, weight() as w1, bm25f(2.2, 0.5) * 1000 as w2 from test where match('Mary lamb') option ranker=proximity_bm25;
 show warnings;
 
 <!-- regression hash vs attr-name -->

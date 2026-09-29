@@ -8,6 +8,8 @@ endif ()
 
 set ( GTESTS_SRC
 		gtests_docidlookup.cpp
+		gtests_exact_bm25a.cpp
+		gtests_postings_container.cpp
 		gtests_rtstuff.cpp
 		gtests_text.cpp
 		gtests_functions.cpp

@@ -11,7 +11,9 @@
 //
 
 #include "sphinxint.h"
+#include "fastcount.h"
 #include "sphinxrt.h"
+#include "postings_container_writer.h"
 #include "sphinxpq.h"
 #include "sphinxsearch.h"
 #include "sphinxsort.h"
@@ -1857,7 +1859,7 @@ private:
 	bool						SaveRamChunk ();
 
 	bool						WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sError ) const;
-	bool						WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, CSphString & sError ) const;
+	bool						WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, e1::Writer & tPrimary, CSphString & sError ) const;
 	void						WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, SaveDiskDataTimings_t * pTimings = nullptr ) const;
 	static bool					WriteDeadRowMap ( SaveDiskDataContext_t & tCtx, CSphString & sError );
 	bool						StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i & tBuilder, const VecTraits_T<PlainOrColumnar_t> & dAttrsForKNN, int iStride, CSphString & sError ) const;
@@ -3171,10 +3173,19 @@ static void CopyWordWithoutField ( CSphTightVector<BYTE> * pOutHits, RtDocWriter
 		if ( tInDocs->m_uHits!=1 )
 		{
 			RtHitReader_c tInHits ( tSrc, *tInDocs );
-			RtHitWriter_c tOutHits ( *pOutHits );
-			tOutDoc.m_uHit = tOutHits.WriterPos();
+			CSphVector<Hitpos_t> dOutHits;
 			while ( tInHits.UnzipHit() )
-				ProcessField ( tOutDoc, *tInHits, iKillField, [&tOutHits] ( Hitpos_t x ) { tOutHits << x; } );
+				ProcessField ( tOutDoc, *tInHits, iKillField, [&dOutHits] ( Hitpos_t x ) { dOutHits.Add ( x ); } );
+
+			if ( dOutHits.GetLength()==1 )
+				tOutDoc.m_uHit = dOutHits[0];
+			else if ( dOutHits.GetLength()>1 )
+			{
+				RtHitWriter_c tOutHits ( *pOutHits );
+				tOutDoc.m_uHit = tOutHits.WriterPos();
+				for ( Hitpos_t uHit : dOutHits )
+					tOutHits << uHit;
+			}
 		} else
 			ProcessField ( tOutDoc, tOutDoc.m_uHit, iKillField, [&tOutDoc] ( Hitpos_t x ) { tOutDoc.m_uHit = x; } );
 
@@ -4785,22 +4796,21 @@ bool RtIndex_c::StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i 
 }
 
 
-bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, CSphString & sError ) const
+bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, e1::Writer & tPrimary, CSphString & sError ) const
 {
-	CSphWriterNonThrottled tWriterHits, tWriterDocs, tWriterSkips;
+	CSphWriterNonThrottled tWriterHits;
 
 	if ( !tWriterHits.OpenFile ( tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPP ), sError ) )
 		return false;
 
-	if ( !tWriterDocs.OpenFile ( tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPD ), sError ) )
+	std::string sWriterError;
+	if ( !tPrimary.Open ( tCtx.m_tFilebase.GetFilename(SPH_EXT_SPD).cstr(), sWriterError ) )
+	{
+		sError = sWriterError.c_str();
 		return false;
-
-	if ( !tWriterSkips.OpenFile ( tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPE ), sError ) )
-		return false;
+	}
 
 	tWriterHits.PutByte(1);
-	tWriterDocs.PutByte(1);
-	tWriterSkips.PutByte(1);
 
 	int iSegments = tCtx.m_tRamSegments.GetLength();
 
@@ -4818,7 +4828,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 	CSphKeywordDeltaWriter tLastWord;
 	CSphKeywordDeltaWriterV2 tLastWordV2;
 	SphWordID_t uLastWordID = 0;
-	CSphVector<SkiplistEntry_t> dSkiplist;
+
 	const DictFormat_e eDictFormat = GetDictFormat();
 	const bool bKeywordsV2 = m_pDict->GetSettings().IsKeywordsV2();
 	const bool bWordDict = IsWordDict();
@@ -4830,6 +4840,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 	int iSkiplistBlockSize = m_tSettings.m_iSkiplistBlockSize;
 	assert ( iSkiplistBlockSize>0 );
 
+	std::vector<e1::Posting> dPostings;
 	while (true)
 	{
 		// find keyword with min id
@@ -4841,13 +4852,10 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 		if ( !pWord )
 			break;
 
-		SphOffset_t uDocpos = tWriterDocs.GetPos();
-		SphOffset_t uLastHitpos = 0;
-		RowID_t tLastRowID = INVALID_ROWID;
-		RowID_t tSkiplistRowID = INVALID_ROWID;
+		const SphOffset_t uDocpos = iWords+1;
 		int iDocs = 0;
 		int iHits = 0;
-		dSkiplist.Resize(0);
+		dPostings.clear();
 
 		// loop all segments that have this keyword
 		CSphBitvec tSegsWithWord ( iSegments );
@@ -4867,30 +4875,14 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 				if ( tRowID==INVALID_ROWID )
 					continue;
 
-				// build skiplist, aka save decoder state as needed
-				if ( ( iDocs & ( iSkiplistBlockSize-1 ) )==0 )
-				{
-					SkiplistEntry_t & t = dSkiplist.Add();
-					t.m_tBaseRowIDPlus1 = tSkiplistRowID+1;
-					t.m_iOffset = tWriterDocs.GetPos();
-					t.m_iBaseHitlistPos = uLastHitpos;
-				}
-
 				++iDocs;
 				iHits += pDoc->m_uHits;
-				tSkiplistRowID = tRowID;
-
-				tWriterDocs.ZipOffset ( tRowID - std::exchange ( tLastRowID, tRowID ) );
-				tWriterDocs.ZipInt ( pDoc->m_uHits );
+				uint64_t uRef = tWriterHits.GetPos();
+				uint32_t uFirstFieldTF = 0;
+				const bool bNeedFirstFieldTF = __builtin_popcount(pDoc->m_uDocFields)==2;
+				const int iFirstField = bNeedFirstFieldTF ? __builtin_ctz(pDoc->m_uDocFields) : -1;
 				if ( pDoc->m_uHits==1 && pWord->m_bHasHitlist )
-				{
-					tWriterDocs.ZipInt ( pDoc->m_uHit & 0x7FFFFFUL );
-					tWriterDocs.ZipInt ( pDoc->m_uHit >> 23 );
-				} else
-				{
-					tWriterDocs.ZipInt ( pDoc->m_uDocFields );
-					tWriterDocs.ZipOffset ( tWriterHits.GetPos() - std::exchange ( uLastHitpos, tWriterHits.GetPos() ) );
-				}
+					uRef = (uint64_t(1)<<63) | pDoc->m_uHit;
 
 				// loop hits from current segment
 				if ( pDoc->m_uHits>1 )
@@ -4898,29 +4890,27 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 					DWORD uLastHit = 0;
 					RtHitReader_c tInHits ( *tCtx.m_tRamSegments[iSegment], *pDoc );
 					while ( DWORD uValue = tInHits.UnzipHit() )
+					{
+						if ( bNeedFirstFieldTF && HITMAN::GetField(uValue)==iFirstField )
+							++uFirstFieldTF;
 						tWriterHits.ZipInt ( uValue - std::exchange ( uLastHit, uValue ) );
+					}
 					tWriterHits.ZipInt(0);
 				}
+				if ( !bNeedFirstFieldTF || !uFirstFieldTF || uFirstFieldTF>=pDoc->m_uHits )
+					uFirstFieldTF = 0;
+				dPostings.push_back ( { tRowID, pDoc->m_uHits, pDoc->m_uDocFields, uRef, uFirstFieldTF } );
 			}
 		}
 
-		// write skiplist
-		int64_t iSkiplistOff = tWriterSkips.GetPos();
-		for ( int i=1; i<dSkiplist.GetLength(); ++i )
-		{
-			const SkiplistEntry_t & tPrev = dSkiplist[i-1];
-			const SkiplistEntry_t & tCur = dSkiplist[i];
-			assert ( tCur.m_tBaseRowIDPlus1 - tPrev.m_tBaseRowIDPlus1>=(DWORD)iSkiplistBlockSize );
-			assert ( tCur.m_iOffset - tPrev.m_iOffset>=4*iSkiplistBlockSize );
-			tWriterSkips.ZipInt ( tCur.m_tBaseRowIDPlus1 - tPrev.m_tBaseRowIDPlus1 - iSkiplistBlockSize );
-			tWriterSkips.ZipOffset ( tCur.m_iOffset - tPrev.m_iOffset - 4*iSkiplistBlockSize );
-			tWriterSkips.ZipOffset ( tCur.m_iBaseHitlistPos - tPrev.m_iBaseHitlistPos );
-		}
-
 		// write dict entry if necessary
-		if ( tWriterDocs.GetPos()!=uDocpos )
+		if ( !dPostings.empty() )
 		{
-			tWriterDocs.ZipInt ( 0 ); // docs over
+			if ( !tPrimary.FinishTerm ( uDocpos, dPostings, iHits, pWord->m_bHasHitlist, sWriterError ) )
+			{
+				sError = sWriterError.c_str();
+				return false;
+			}
 
 			if ( ( iWords%SPH_WORDLIST_CHECKPOINT )==0 )
 			{
@@ -4975,7 +4965,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 
 			if ( bWordDict )
 			{
-				BYTE uHint = sphDoclistHintPack ( iDocs, tWriterDocs.GetPos()-tCtx.m_tLastDocPos );
+				BYTE uHint = sphDoclistHintPack ( iDocs, SphOffset_t(iDocs)*5 );
 				if ( uHint )
 					tWriterDict.PutByte ( uHint );
 
@@ -4995,7 +4985,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 
 			// emit skiplist pointer
 			if ( iDocs>iSkiplistBlockSize )
-				tWriterDict.ZipOffset ( iSkiplistOff );
+				tWriterDict.ZipOffset ( uDocpos );
 
 			tCtx.m_tLastDocPos = uDocpos;
 		}
@@ -5006,10 +4996,8 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 				dWords[i] = dWordReaders[i].UnzipWord();
 	}
 
-	tCtx.m_tDocsOffset = tWriterDocs.GetPos();
+	tCtx.m_tDocsOffset = iWords+1;
 	tWriterHits.CloseFile();
-	tWriterDocs.CloseFile();
-	tWriterSkips.CloseFile();
 	return true;
 }
 
@@ -5172,7 +5160,8 @@ bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 	tWriterDict.PutByte ( 1 );
 
 	tmStart = sphMicroTimer();
-	if ( !WriteDocs ( tCtx, tWriterDict, sError ) )
+	e1::Writer tPrimary;
+	if ( !WriteDocs ( tCtx, tWriterDict, tPrimary, sError ) )
 		return false;
 	if ( pTimings )
 		pTimings->m_tmDocs = sphMicroTimer() - tmStart;
@@ -5188,6 +5177,12 @@ bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 	tWriterDict.CloseFile();
 	if ( tWriterDict.IsError() )
 		return false;
+	std::string sWriterError;
+	if ( !tPrimary.Finalize ( sSPI.cstr(), IndexFileBase_c{szFilename}.GetFilename(SPH_EXT_SPP).cstr(), sWriterError ) )
+	{
+		sError = sWriterError.c_str();
+		return false;
+	}
 
 	tmStart = sphMicroTimer();
 	if ( !SaveDiskHeader ( tCtx, tStats, sError ) )
@@ -5625,6 +5620,7 @@ std::unique_ptr<CSphIndex> RtIndex_c::PreallocDiskChunk ( const CSphString& sChu
 		sError.SetSprintf ( "disk chunk %s: prealloc failed: %s", sChunk.cstr(), pDiskChunk->GetLastError().cstr() );
 		pDiskChunk = nullptr;
 	}
+
 
 	return pDiskChunk;
 }
@@ -7540,6 +7536,7 @@ public:
 	ISphQword *	QwordSpawn ( const XQKeyword_t & ) const final;
 	bool		QwordSetup ( ISphQword * pQword ) const final;
 	void				SetSegment ( int iSegment ) { m_iSeg = iSegment; }
+	const RtGuard_t & GetGuard() const { return m_tGuard; }
 	ISphQword *			ScanSpawn ( int iAtomPos ) const final;
 
 private:
@@ -8920,6 +8917,75 @@ static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema &
 
 	return Threads::Coro::ContinueBool ( iStackNeed, [&] {
 
+	if ( tParsed.m_bFastCountEligible && tQuery.m_dFilters.IsEmpty() && CanUseFastFullTextCount ( tQuery, tParsed.m_pRoot, dSorters ) && !tCtx.GetPackedFactor() )
+	{
+		const int iSegments = dRamChunks.GetLength();
+		std::vector<uint64_t> dCounts ( iSegments );
+		CSphVector<QueryProfile_c> dProfiles ( iSegments );
+		CSphVector<CSphString> dWarnings ( iSegments );
+		std::atomic<bool> bInterrupted { false };
+		std::atomic<bool> bUnsupported { false };
+		auto tDispatch = GetEffectiveBaseDispatcherTemplate();
+		Dispatcher::Unify ( tDispatch, tQuery.m_tMainDispatcher );
+		auto pDispatcher = Dispatcher::Make ( iSegments, tArgs.m_iThreads, tDispatch, false );
+		Coro::ExecuteN ( pDispatcher->GetConcurrency(), [&]
+		{
+			auto pSource = pDispatcher->MakeSource();
+			RtQwordSetup_t tLocalSetup ( tTermSetup.GetGuard() );
+			tLocalSetup.SetDict ( GetStatelessDict ( tTermSetup.Dict() ) );
+			tLocalSetup.m_pIndex = tTermSetup.m_pIndex;
+			tLocalSetup.m_iMaxTimer = tTermSetup.m_iMaxTimer;
+			tLocalSetup.m_bHasWideFields = tTermSetup.m_bHasWideFields;
+			CSphQueryContext tLocalCtx ( tQuery, tQuerySettings );
+			tLocalSetup.m_pCtx = &tLocalCtx;
+			Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
+			int iSeg = -1;
+			while ( !bInterrupted.load(std::memory_order_relaxed) && !bUnsupported.load(std::memory_order_relaxed) && pSource->FetchTask ( iSeg ) )
+			{
+				const RtSegment_t * pSeg = dRamChunks[iSeg];
+				SccRL_t rLock ( pSeg->m_tLock );
+				tLocalSetup.SetSegment ( iSeg );
+				tLocalSetup.m_pWarning = &dWarnings[iSeg];
+				tLocalCtx.m_pProfile = pProfiler ? &dProfiles[iSeg] : nullptr;
+				FullTextCountContext_t tCountCtx;
+				tCountCtx.m_bStatsExact = pSeg->m_tAliveRows.load(std::memory_order_relaxed)==pSeg->m_uRows;
+				tCountCtx.m_fnAlive = [pSeg] ( RowID_t tRow ) { return !pSeg->m_tDeadRowMap.IsSet(tRow); };
+				if ( !CountFullTextDocs ( tParsed.m_pRoot, tLocalSetup, tCountCtx, dCounts[iSeg] ) )
+					bUnsupported.store ( true, std::memory_order_relaxed );
+				if ( !dWarnings[iSeg].IsEmpty() ) bInterrupted.store ( true, std::memory_order_relaxed );
+				iSeg = -1;
+			}
+		});
+		// Commit RAM counts only if every executor accepted the query. Workers
+		// used private setups/qwords and the same pinned guard; the original
+		// tTermSetup is untouched for legacy fallback. Disk work is not repeated.
+		if ( !bUnsupported.load(std::memory_order_relaxed) )
+		{
+			uint64_t uTotal = 0;
+			for ( int iSeg=0; iSeg<iSegments; ++iSeg )
+			{
+				uTotal += dCounts[iSeg];
+				if ( pProfiler ) pProfiler->AddMetric ( dProfiles[iSeg] );
+				if ( !dWarnings[iSeg].IsEmpty() )
+				{
+					tMeta.m_sWarning = dWarnings[iSeg];
+					tMeta.m_bTotalMatchesApprox = true;
+				}
+			}
+			RecordFullTextCount ( tMeta );
+			if ( uTotal ) PushFullTextCount ( uTotal, dSorters, dRamChunks[0]->GetDocinfoByRowID(0), 1 );
+			return true;
+		}
+		// An interruption racing a decline must not restart a legacy scan or
+		// publish tentative RAM counts as exact (existing disk counts survive).
+		if ( bInterrupted.load(std::memory_order_relaxed) )
+		{
+			tMeta.m_sWarning = "query timed out or was interrupted";
+			tMeta.m_bTotalMatchesApprox = true;
+			return true;
+		}
+	}
+
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
 	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tParsed, tQuery, tQuerySettings, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
@@ -9276,6 +9342,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 			iStackNeed = 0;
 		} else
 		{
+			tParsed.m_bFastCountEligible = CanUseFastFullTextCount ( tQueryToRun, tParsed.m_pRoot, dSorters );
 			const bool bCanExpandRamWildcards = IsStarDict ( bWordDict );
 			iStackNeed = PrepareFTSearch ( this, bCanExpandRamWildcards, bWordDict, m_tMutableSettings.m_iExpandKeywords, m_iExpansionLimit, m_tSettings, tQueryToRun,(cRefCountedRefPtrGeneric_t) tGuard.m_tSegmentsAndChunks.m_pSegs, pDict, tMeta, pProfiler, &tPayloads, tParsed );
 		}
@@ -9313,6 +9380,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	{
 		CSphMultiQueryArgs tFTArgs ( tArgs.m_iIndexWeight );
 		tFTArgs.m_bFinalizeSorters = tArgs.m_bFinalizeSorters;
+		tFTArgs.m_iThreads = tArgs.m_iThreads;
 		tMeta.m_bBigram = ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE );
 
 		bResult = DoFullTextSearch ( tGuard.m_dRamSegs, tMaxSorterSchema, tQueryToRun, tQuerySettings, tFTArgs, iMatchPoolSize, iStackNeed, tTermSetup, pProfiler, tCtx, dSorters, tParsed, tMeta, dSorters.GetLength()==1 ? dSorters[0] : nullptr );

@@ -13,8 +13,8 @@ OK";i:10;s:10:"query test";i:11;s:63:"
 11 | test | 11
 12 | test | 12
 4 rows";i:12;s:10:"query tes*";i:13;s:37:"
-12 | test | 12
 11 | test | 11
+12 | test | 12
 2 rows";i:14;s:3:"
 OK";i:15;s:3:"
 OK";i:16;s:10:"query test";i:17;s:63:"

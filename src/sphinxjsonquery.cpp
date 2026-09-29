@@ -1706,6 +1706,12 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery )
 	if ( tAggs && !ParseAggregates ( tAggs, tQuery, sError ) )
 		return false;
 
+	// Match the SphinxQL default for ordinary full-text result sets. Keep
+	// scans, aggregates, joins, and explicit sorts on their existing paths.
+	if ( !tSort && !QueryParserJson_c().IsFullscan ( tQuery )
+		&& tQuery.m_dAggs.IsEmpty() && tQuery.m_eJoinType==JoinType_e::NONE )
+		tQuery.m_sSortBy = "@weight desc, id asc";
+
 	if ( !SetupScroll ( tQuery, sError ) )
 		return false;
 

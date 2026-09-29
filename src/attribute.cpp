@@ -1354,7 +1354,7 @@ static void FloatVec2Str ( const float * pFloatVec, int iLengthBytes, StringBuil
 
 bool sphIsInternalAttr ( const CSphString & sAttrName )
 {
-	return sAttrName==sphGetBlobLocatorName() || sAttrName==GetNullMaskAttrName() || sAttrName==GetKnnDistRescoreAttrName() || sAttrName==sphGetUuidDocidName();
+	return sAttrName==sphGetBlobLocatorName() || sAttrName==GetNullMaskAttrName() || sAttrName==GetKnnDistRescoreAttrName() || sAttrName==sphGetUuidDocidName() || IsKnnChunkSpansAttr(sAttrName);
 }
 
 

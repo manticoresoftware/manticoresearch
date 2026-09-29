@@ -369,7 +369,7 @@ private:
 	bool	CreatePostFilter ( const ISphSchema * pSchema );
 	bool	RunSubQuery ( const CSphQuery & tQuery, const CSphMultiQueryArgs & tArgs, const char * szPhase, SubQueryResult_t & tResult );
 	void	PushFusedMatches ( ISphMatchSorter * pSorter, const CSphVector<RRFEntry_t> & dFused );
-	void	SetMinKnnDist ( CSphMatch & tMatch, const RRFEntry_t & tEntry, const CSphColumnInfo * pDstKnnDist, const CSphVector<const CSphColumnInfo *> & dKnnDistAttrs );
+	void	SetMinKnnDist ( CSphMatch & tMatch, const ISphSchema * pDstSchema, const RRFEntry_t & tEntry, const CSphColumnInfo * pDstKnnDist, const CSphVector<const CSphColumnInfo *> & dKnnDistAttrs );
 	void	PushSingleFusedMatch ( const RRFEntry_t & tEntry, ISphMatchSorter * pSorter, int iDynSize, const CSphVector<CSphVector<int>> & dRemaps, const CSphAttrLocator & tScoreLoc, const CSphColumnInfo * pDstKnnDist, const CSphVector<const CSphColumnInfo *> & dKnnDistAttrs, const CSphVector<ExprEval_t> & dExprs );
 	void	ResolveWeights ( const CSphQuery & tQuery );
 	int		ResolveSubQueryIdx ( const CSphQuery & tQuery, const CSphString & sName ) const;
@@ -634,9 +634,10 @@ bool HybridExecutor_c::RunSubQuery ( const CSphQuery & tQuery, const CSphMultiQu
 }
 
 
-void HybridExecutor_c::SetMinKnnDist ( CSphMatch & tMatch, const RRFEntry_t & tEntry, const CSphColumnInfo * pDstKnnDist, const CSphVector<const CSphColumnInfo *> & dKnnDistAttrs )
+void HybridExecutor_c::SetMinKnnDist ( CSphMatch & tMatch, const ISphSchema * pDstSchema, const RRFEntry_t & tEntry, const CSphColumnInfo * pDstKnnDist, const CSphVector<const CSphColumnInfo *> & dKnnDistAttrs )
 {
 	float fMinDist = FLT_MAX;
+	int iMinSet = -1;
 	for ( int i = 0; i < tEntry.m_dKnnMatchIdx.GetLength(); i++ )
 	{
 		if ( tEntry.m_dKnnMatchIdx[i] < 0 )
@@ -646,11 +647,28 @@ void HybridExecutor_c::SetMinKnnDist ( CSphMatch & tMatch, const RRFEntry_t & tE
 		if ( pSrcKnnDist )
 		{
 			float fDist = m_dSubResults[i + 1].m_dMatches[tEntry.m_dKnnMatchIdx[i]].GetAttrFloat ( pSrcKnnDist->m_tLocator );
-			fMinDist = Min ( fMinDist, fDist );
+			if ( fDist<fMinDist )
+			{
+				fMinDist = fDist;
+				iMinSet = i;
+			}
 		}
 	}
 
 	tMatch.SetAttrFloat ( pDstKnnDist->m_tLocator, fMinDist );
+	for ( const char * szName : { GetKnnChunkIndexAttrName(), GetKnnChunkStartAttrName(), GetKnnChunkEndAttrName() } )
+	{
+		const CSphColumnInfo * pDst = pDstSchema->GetAttr(szName);
+		if ( !pDst ) continue;
+		int64_t iValue = -1;
+		if ( iMinSet>=0 )
+		{
+			const auto & tSrcResult = m_dSubResults[iMinSet+1];
+			const CSphColumnInfo * pSrc = tSrcResult.m_pSorter->GetSchema()->GetAttr(szName);
+			if ( pSrc ) iValue = (int64_t)tSrcResult.m_dMatches[tEntry.m_dKnnMatchIdx[iMinSet]].GetAttr(pSrc->m_tLocator);
+		}
+		tMatch.SetAttr ( pDst->m_tLocator, iValue );
+	}
 }
 
 
@@ -707,7 +725,7 @@ void HybridExecutor_c::PushSingleFusedMatch ( const RRFEntry_t & tEntry, ISphMat
 	tNewMatch.SetAttrFloat ( tScoreLoc, tEntry.m_fScore );
 
 	if ( pDstKnnDist )
-		SetMinKnnDist ( tNewMatch, tEntry, pDstKnnDist, dKnnDistAttrs );
+		SetMinKnnDist ( tNewMatch, pDstSchema, tEntry, pDstKnnDist, dKnnDistAttrs );
 
 	EvalDependentExprs ( dExprs, tNewMatch );
 	if ( m_pPostFilter && !m_pPostFilter->Eval(tNewMatch) )

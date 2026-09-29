@@ -2371,6 +2371,7 @@ static bool NeedToSkipAttr ( const CSphString & sName, const CSphQuery & tQuery 
 	if ( sName.Begins ( GetFilterAttrPrefix() ) ) return true;
 	if ( sName.Begins ( g_szOrder ) ) return true;
 	if ( sName.Begins ( GetKnnDistAttrName() ) ) return true;
+	if ( sName==GetKnnChunkIndexAttrName() || sName==GetKnnChunkStartAttrName() || sName==GetKnnChunkEndAttrName() || IsKnnChunkSpansAttr(sName) ) return true;
 	if ( sName.Begins ( GetHybridScoreAttrName() ) ) return true;
 	if ( IsJoinedWeight ( sName, tQuery ) ) return true;
 
@@ -3337,6 +3338,9 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 	{
 		const CSphColumnInfo * pId = tSchema.GetAttr ( sphGetDocidName() );
 		const CSphColumnInfo * pKNNDist = tSchema.GetAttr ( GetKnnDistAttrName() );
+		const CSphColumnInfo * pKNNChunkIndex = tSchema.GetAttr ( GetKnnChunkIndexAttrName() );
+		const CSphColumnInfo * pKNNChunkStart = tSchema.GetAttr ( GetKnnChunkStartAttrName() );
+		const CSphColumnInfo * pKNNChunkEnd = tSchema.GetAttr ( GetKnnChunkEndAttrName() );
 		const CSphColumnInfo * pHybridScore = tSchema.GetAttr ( GetHybridScoreAttrName() );
 
 		bool bCompatId = false;
@@ -3405,6 +3409,10 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 
 			if ( pKNNDist )
 				tOut.Sprintf( R"("_knn_dist":%f)", tMatch.GetAttrFloat ( pKNNDist->m_tLocator ) );
+
+			if ( pKNNChunkIndex && pKNNChunkStart && pKNNChunkEnd )
+				tOut.Sprintf ( R"("_knn_chunk":{"index":%l,"start":%l,"end":%l})",
+					(int64_t)tMatch.GetAttr(pKNNChunkIndex->m_tLocator), (int64_t)tMatch.GetAttr(pKNNChunkStart->m_tLocator), (int64_t)tMatch.GetAttr(pKNNChunkEnd->m_tLocator) );
 
 			if ( pHybridScore )
 				tOut.Sprintf( R"("_hybrid_score":%f)", tMatch.GetAttrFloat ( pHybridScore->m_tLocator ) );

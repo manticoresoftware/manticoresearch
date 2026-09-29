@@ -11064,6 +11064,26 @@ JoinArgs_t::JoinArgs_t ( const ISphSchema & tJoinedSchema, const CSphString & sI
 /// parser entry point
 ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, CSphString & sError, ExprParseArgs_t & tArgs )
 {
+	// Provenance values are materialized dynamic scalar attributes. Normalize the
+	// public zero-argument aliases before the generic expression lexer, just like
+	// sortsetup normalizes knn_dist(). This also permits arithmetic around them.
+	std::string sNormalized = szExpr;
+	auto fnReplaceNoCase = [&sNormalized] ( const char * szAlias, const char * szAttr )
+	{
+		const size_t iAliasLen = strlen(szAlias);
+		for ( size_t i=0; i+iAliasLen<=sNormalized.size(); )
+			if ( !strncasecmp ( sNormalized.c_str()+i, szAlias, iAliasLen ) )
+			{
+				sNormalized.replace ( i, iAliasLen, szAttr );
+				i += strlen(szAttr);
+			}
+			else ++i;
+	};
+	fnReplaceNoCase ( "knn_chunk_index()", GetKnnChunkIndexAttrName() );
+	fnReplaceNoCase ( "knn_chunk_start()", GetKnnChunkStartAttrName() );
+	fnReplaceNoCase ( "knn_chunk_end()", GetKnnChunkEndAttrName() );
+	szExpr = sNormalized.c_str();
+
 	// parse into opcodes
 	ExprParser_t tParser ( tArgs.m_pHook, tArgs.m_pProfiler, tArgs.m_eCollation );
 	ISphExpr * pRes = tParser.Parse ( szExpr, tSchema, tArgs.m_pJoinIdx, tArgs.m_pJoinIdxLeft, tArgs.m_pAttrType, tArgs.m_pUsesWeight, sError );

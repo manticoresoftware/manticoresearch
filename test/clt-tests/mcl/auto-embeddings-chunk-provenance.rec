@@ -1,0 +1,43 @@
+––– comment –––
+Chunk provenance is aligned with UTF-8 source bytes and survives RAM/disk/optimize.
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+python3 - <<'PY'
+import subprocess
+
+mysql = ['mysql','-N','-B','-h0','-P9306']
+def sql(q):
+    return subprocess.check_output(mysql+['-e',q], text=True).strip()
+
+sql("DROP TABLE IF EXISTS chunk_provenance")
+sql("CREATE TABLE chunk_provenance (body TEXT, chunks FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body' CHUNK_STRATEGY='fixed' MAX_TOKENS='8' OVERLAP_TOKENS='2')")
+text = 'Привет мир. alpha beta gamma delta epsilon zeta eta theta. 你好世界。 omega target phrase.'
+escaped = text.replace("'", "''")
+sql(f"INSERT INTO chunk_provenance(id,body) VALUES(1,'{escaped}')")
+query = "SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM chunk_provenance WHERE KNN(chunks,1,'target phrase')"
+
+def check(label):
+    vals = tuple(map(int, sql(query).split('\t')))
+    slot,start,end = vals
+    raw = text.encode('utf-8')
+    assert slot >= 0 and 0 <= start < end <= len(raw), (label, vals, len(raw))
+    raw[start:end].decode('utf-8')
+    return vals
+
+ram = check('ram')
+sql('FLUSH RAMCHUNK chunk_provenance')
+disk = check('disk')
+sql("INSERT INTO chunk_provenance(id,body) VALUES(2,'unrelated text for a second disk chunk')")
+sql('FLUSH RAMCHUNK chunk_provenance')
+sql('OPTIMIZE TABLE chunk_provenance OPTION sync=1,cutoff=1')
+optimized = check('optimized')
+assert ram == disk == optimized, (ram,disk,optimized)
+
+sql("CREATE TABLE manual_provenance (v FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' KNN_DIMS='2' HNSW_SIMILARITY='l2')")
+sql("INSERT INTO manual_provenance(id,v) VALUES(1,[[1,0],[0,1]])")
+unavailable = tuple(map(int, sql("SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM manual_provenance WHERE KNN(v,1,(1,0))").split('\t')))
+assert unavailable == (-1,-1,-1), unavailable
+print('CHUNK_PROVENANCE_OK')
+PY
+––– output –––
+CHUNK_PROVENANCE_OK

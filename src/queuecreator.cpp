@@ -317,6 +317,7 @@ private:
 	bool	AddExpressionsForUpdates();
 	bool	MaybeAddGroupbyMagic ( bool bGotDistinct );
 	bool	AddKNNDistColumn();
+	bool	AddKNNChunkColumns();
 	bool	AddKNNRescoreColumn();
 	bool	CanRescoreKNN() const;
 	bool	AddHybridScoreColumn();
@@ -1796,6 +1797,53 @@ bool QueueCreator_c::AddKNNDistColumn()
 }
 
 
+bool QueueCreator_c::AddKNNChunkColumns()
+{
+	if ( !m_tQuery.HasKnn() )
+		return true;
+
+	if ( m_tQuery.m_bHybridSearch )
+	{
+		for ( const char * szName : { GetKnnChunkIndexAttrName(), GetKnnChunkStartAttrName(), GetKnnChunkEndAttrName() } )
+			if ( m_pSorterSchema->GetAttrIndex(szName)<0 )
+			{
+				CSphColumnInfo tCol ( szName, SPH_ATTR_BIGINT );
+				tCol.m_eStage = SPH_EVAL_SORTER;
+				m_pSorterSchema->AddAttr ( tCol, true );
+				m_hQueryColumns.Add(szName);
+			}
+		return true;
+	}
+
+	const auto & tKNN = m_tQuery.SingleKnnSettings();
+	const CSphColumnInfo * pVector = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
+	if ( !pVector || pVector->m_eAttrType!=SPH_ATTR_FLOAT_VECTOR_ARRAY )
+		return true;
+
+	const CSphColumnInfo * pSpans = m_pSorterSchema->GetAttr ( GetKnnChunkSpansAttrName(tKNN.m_sAttr).cstr() );
+	auto fnUnavailable = [&] () -> ISphExpr * { ExprParseArgs_t tArgs; return sphExprParse ( "-1", *m_pSorterSchema, m_sError, tArgs ); };
+	CSphColumnInfo tSlot ( GetKnnChunkIndexAttrName(), SPH_ATTR_BIGINT );
+	tSlot.m_eStage = SPH_EVAL_PRESORT;
+	tSlot.m_pExpr = pSpans ? CreateExpr_KNNChunkIndex ( tKNN.m_dVec, *pVector, *pSpans ) : fnUnavailable();
+	if ( !tSlot.m_pExpr ) return false;
+	m_pSorterSchema->AddAttr ( tSlot, true );
+	m_hQueryColumns.Add(tSlot.m_sName);
+	const CSphColumnInfo * pSlot = m_pSorterSchema->GetAttr ( GetKnnChunkIndexAttrName() );
+	assert(pSlot);
+
+	for ( bool bEnd : { false, true } )
+	{
+		CSphColumnInfo tBoundary ( bEnd ? GetKnnChunkEndAttrName() : GetKnnChunkStartAttrName(), SPH_ATTR_BIGINT );
+		tBoundary.m_eStage = SPH_EVAL_PRESORT;
+		tBoundary.m_pExpr = pSpans ? CreateExpr_KNNChunkBoundary ( *pSpans, pSlot->m_tLocator, bEnd ) : fnUnavailable();
+		if ( !tBoundary.m_pExpr ) return false;
+		m_pSorterSchema->AddAttr ( tBoundary, true );
+		m_hQueryColumns.Add(tBoundary.m_sName);
+	}
+	return true;
+}
+
+
 // Whether an exact KNN rescore can run against this sorter schema.
 // Rescore recomputes exact distances from the stored vectors, which needs the
 // attribute's own KNN index settings (m_tKNN). On a distributed/sharded head the
@@ -2899,6 +2947,7 @@ bool QueueCreator_c::SetupComputeQueue ()
 		&& AddJoinFilterAttrs()
 		&& MaybeAddGeodistColumn ()
 		&& AddKNNDistColumn()
+		&& AddKNNChunkColumns()
 		&& AddHybridScoreColumn()
 		&& MaybeAddExprColumn ()
 		&& MaybeAddExpressionsFromSelectList ()

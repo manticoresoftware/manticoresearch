@@ -237,6 +237,12 @@ void SortStateSetup_c::UnifyInternalAttrNames()
 		m_szTok = "@count";
 	else if ( !strcasecmp ( m_szTok, "knn_dist()" ) )
 		m_szTok = "@knn_dist";
+	else if ( !strcasecmp ( m_szTok, "knn_chunk_index()" ) )
+		m_szTok = GetKnnChunkIndexAttrName();
+	else if ( !strcasecmp ( m_szTok, "knn_chunk_start()" ) )
+		m_szTok = GetKnnChunkStartAttrName();
+	else if ( !strcasecmp ( m_szTok, "knn_chunk_end()" ) )
+		m_szTok = GetKnnChunkEndAttrName();
 }
 
 

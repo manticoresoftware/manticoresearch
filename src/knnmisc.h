@@ -60,6 +60,11 @@ const char *					GetKnnDistAttrName();
 const char *					GetKnnDistRescoreAttrName();
 void							SetupKNNLimit ( CSphQuery & tQuery );
 
+// searchd config 'knn_rescore_random_access' (undocumented): read rescored vectors of columnar tables through a
+// mapping advised for random access, so a cold page fault reads one page instead of the kernel's read-around window
+void							SetKNNRescoreRandomAccess ( bool bEnable );
+bool							KNNRescoreRandomAccess();
+
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
 void							NormalizeVec ( VecTraits_T<float> & dData );
 

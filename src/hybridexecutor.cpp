@@ -647,7 +647,10 @@ void HybridExecutor_c::SetMinKnnDist ( CSphMatch & tMatch, const ISphSchema * pD
 		if ( pSrcKnnDist )
 		{
 			float fDist = m_dSubResults[i + 1].m_dMatches[tEntry.m_dKnnMatchIdx[i]].GetAttrFloat ( pSrcKnnDist->m_tLocator );
-			if ( fDist<fMinDist )
+			if ( std::isnan(fDist) )
+				fDist = FLT_MAX;
+			// Accept the first candidate even at FLT_MAX, then retain the first source on ties.
+			if ( iMinSet<0 || fDist<fMinDist )
 			{
 				fMinDist = fDist;
 				iMinSet = i;

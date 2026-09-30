@@ -652,6 +652,7 @@ public:
 	bool		IsCutoffDisabled() const override									{ return m_pSorter->IsCutoffDisabled(); }
 	void		SetMerge ( bool bMerge ) override									{ m_pSorter->SetMerge(bMerge); }
 	bool		IsPrecalc() const override											{ return false; }
+	void		SetKNNExactTagMax ( int iMaxTag ) override								{ m_pSorter->SetKNNExactTagMax(iMaxTag); }
 	bool		IsJoin() const override												{ return true; }
 	bool		FinalizeJoin ( CSphString & sError, CSphString & sWarning ) override;
 
@@ -2332,6 +2333,7 @@ public:
 	VecTraits_T<RowTagged_t> GetJustPopped() const override							{ return m_dJoinSorters[0]->GetJustPopped(); }
 	bool		IsCutoffDisabled() const override									{ return m_dJoinSorters[0]->IsCutoffDisabled(); }
 	void		SetMerge ( bool bMerge ) override;
+	void		SetKNNExactTagMax ( int iMaxTag ) override								{ for ( auto & i : m_dJoinSorters ) i->SetKNNExactTagMax(iMaxTag); }
 	bool		IsPrecalc() const override											{ return m_dJoinSorters[0]->IsPrecalc(); }
 	bool		IsJoin() const override												{ return true; }
 	bool		FinalizeJoin ( CSphString & sError, CSphString & sWarning ) override;
@@ -2744,6 +2746,7 @@ public:
 	bool		IsCutoffDisabled() const override									{ return m_pSorter->IsCutoffDisabled(); }
 	void		SetMerge ( bool bMerge ) override									{ m_pSorter->SetMerge(bMerge); }
 	bool		IsPrecalc() const override											{ return m_pSorter->IsPrecalc(); }
+	void		SetKNNExactTagMax ( int iMaxTag ) override								{ m_pSorter->SetKNNExactTagMax(iMaxTag); }
 
 private:
 	ISphMatchSorter *	m_pSorter = nullptr;		// we don't own the underlying sorter; join multi sorter does

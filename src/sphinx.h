@@ -1354,6 +1354,7 @@ public:
 	virtual int64_t				GetCountDistinct ( const CSphString & sAttr, CSphString & sModifiedAttr ) const { return -1; }	// returns values if index has some meta on its attributes
 	virtual int64_t				GetCountFilter ( const CSphFilterSettings & tFilter, CSphString & sModifiedAttr ) const { return -1; }	// returns values if index has some meta on its attributes
 	virtual int64_t				GetCount() const { return -1; }
+	virtual int					GetDiskChunksCount() const { return 1; }	///< chunks searched independently (each runs its own KNN search); plain tables have one
 
 public:
 	/// build index by indexing given sources
@@ -1625,6 +1626,7 @@ struct SphQueueSettings_t
 	std::function<int64_t (const CSphString &, CSphString &)>			m_fnGetCountDistinct;
 	std::function<int64_t (const CSphFilterSettings &, CSphString &)>	m_fnGetCountFilter;
 	std::function<int64_t ()>	m_fnGetCount;
+	int							m_iDiskChunks = 1;	// see CSphIndex::GetDiskChunksCount(); selects the KNN rescore path
 	bool						m_bEnableFastDistinct = false;
 	bool						m_bForceSingleThread = false;
 	StrVec_t 					m_dCreateSchema;

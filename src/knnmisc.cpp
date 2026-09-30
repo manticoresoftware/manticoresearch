@@ -705,6 +705,78 @@ ISphExpr * CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphCol
 }
 
 
+// Exact (full-precision) distance for the rescore column, evaluated per chunk at the final stage.
+// Rows tagged 1..m_iExactTagMax come from RT RAM segments: they never went through HNSW and their knn_dist is exact
+// already, so it is copied instead of recomputed.
+class Expr_KNNDistRescore_c : public Expr_KNNDist_c
+{
+public:
+	Expr_KNNDistRescore_c ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr, const CSphAttrLocator & tKnnDistLoc, int iExactTagMax )
+		: Expr_KNNDist_c ( dAnchor, tAttr )
+		, m_tKnnDistLoc ( tKnnDistLoc )
+		, m_iExactTagMax ( iExactTagMax )
+	{}
+
+	float Eval ( const CSphMatch & tMatch ) const final
+	{
+		if ( tMatch.m_iTag>0 && tMatch.m_iTag<=m_iExactTagMax )
+			return tMatch.GetAttrFloat ( m_tKnnDistLoc );
+
+		return m_tCalc.CalcDist(tMatch);
+	}
+
+	bool		IsColumnar ( bool * ) const final					{ return m_tCalc.GetAttr().IsColumnar(); }
+	bool		PrefersRowIdOrder() const final						{ return true; }
+
+	void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) final
+	{
+		Expr_KNNDist_c::FixupLocator ( pOldSchema, pNewSchema );
+		sphFixupLocator ( m_tKnnDistLoc, pOldSchema, pNewSchema );
+	}
+
+	void Command ( ESphExprCommand eCmd, void * pArg ) final
+	{
+		if ( eCmd==SPH_EXPR_SET_KNN_EXACT_TAG_MAX )
+			m_iExactTagMax = *(const int*)pArg;
+		else
+			Expr_KNNDist_c::Command ( eCmd, pArg );
+	}
+
+protected:
+	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final;
+	ISphExpr *	Clone() const final								{ return new Expr_KNNDistRescore_c ( m_tCalc.GetAnchor(), m_tCalc.GetAttr(), m_tKnnDistLoc, m_iExactTagMax ); }
+
+private:
+	CSphAttrLocator	m_tKnnDistLoc;
+	int				m_iExactTagMax = 0;
+};
+
+
+uint64_t Expr_KNNDistRescore_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+{
+	EXPR_CLASS_NAME("Expr_KNNDistRescore_c");
+	const CSphColumnInfo & tAttr = m_tCalc.GetAttr();
+	CALC_STR_HASH ( tAttr.m_sName, tAttr.m_sName.Length() );
+	return CALC_DEP_HASHES();
+}
+
+
+ISphExpr * CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr, const CSphAttrLocator & tKnnDistLoc )
+{
+	return new Expr_KNNDistRescore_c ( dAnchor, tAttr, tKnnDistLoc, 0 );
+}
+
+
+// The final-stage expression rescores every HNSW candidate of every disk chunk, in the chunk's own thread, with no extra
+// pass. The collector rescores once after the chunks merge: that lets the k*oversampling budget apply per table instead
+// of per chunk and lets the batched distance kernel run. Its gather pass only pays off on large candidate sets, or when
+// there is more than one disk chunk (then it also cuts the vector reads by the chunk count).
+bool UseKNNRescoreCollector ( const KnnSearchSettings_t & tSettings, int iDiskChunks )
+{
+	return tSettings.GetRequestedDocs()>=KNN_RESCORE_BATCH_SIZE || iDiskChunks>1;
+}
+
+
 static const char * HNSWSimilarity2Str ( knn::HNSWSimilarity_e eSim )
 {
 	switch ( eSim )
@@ -1444,7 +1516,7 @@ static KNNVecDistCalc_c * GetKnnDistCalc ( const ISphSchema * pSchema )
 class RescoreSorter_c : public ISphMatchSorter
 {
 public:
-			RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, int64_t iRescoreLimit );
+			RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, bool bCollector, int64_t iRescoreLimit );
 
 	bool	Push ( const CSphMatch & tEntry ) final							{ return m_pSorter->Push(tEntry); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) override	{ for ( auto & i : dMatches ) m_pSorter->Push(i); }
@@ -1480,22 +1552,64 @@ public:
 	VecTraits_T<RowTagged_t>	GetJustPopped() const override				{ return m_pSorter->GetJustPopped(); }
 
 	void	SetMerge ( bool bMerge ) override								{ m_pSorter->SetMerge(bMerge); }
+	void	SetKNNExactTagMax ( int iMaxTag ) override;
 
 private:
 	std::unique_ptr<ISphMatchSorter> m_pSorter;
 	CSphRefcountedPtr<ISphMatchComparator> m_pComp;
+	bool							m_bCollector = false;	// rescore once on the merged candidates; otherwise the per-chunk final-stage expression does it
 	int64_t							m_iRescoreLimit = 0;	// max ( k*oversampling, limit+offset )
+	int								m_iExactTagMax = 0;		// matches tagged 1..N carry an exact knn_dist already (RT RAM segments)
 	bool							m_bRescored = false;
 
 	const CSphAttrLocator *			GetRescoreLocator() const;
 };
 
 
-RescoreSorter_c::RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, int64_t iRescoreLimit )
+RescoreSorter_c::RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, bool bCollector, int64_t iRescoreLimit )
 	: m_pSorter ( pSorter )
 	, m_pComp ( std::move ( pComp ) )
+	, m_bCollector ( bCollector )
 	, m_iRescoreLimit ( iRescoreLimit )
 {}
+
+
+void RescoreSorter_c::SetKNNExactTagMax ( int iMaxTag )
+{
+	m_iExactTagMax = iMaxTag;
+	m_pSorter->SetKNNExactTagMax(iMaxTag);
+
+	// the per-chunk final-stage expression (non-collector mode) is the one evaluated for RAM segments; it needs the range too
+	const auto * pSchema = m_pSorter->GetSchema();
+	const CSphColumnInfo * pAttr = pSchema ? pSchema->GetAttr ( GetKnnDistRescoreAttrName() ) : nullptr;
+	if ( pAttr && pAttr->m_pExpr )
+		pAttr->m_pExpr.Ptr()->Command ( SPH_EXPR_SET_KNN_EXACT_TAG_MAX, &iMaxTag );
+}
+
+
+// rows of RT RAM segments (tags 1..iExactTagMax) never went through HNSW, so their knn_dist is exact already:
+// copy it into the rescore column and take them out of the set to rescore (they don't consume the budget either)
+static void TakeExactRows ( CSphVector<CSphMatch*> & dMatches, const ISphSchema & tSchema, const CSphAttrLocator & tRescoreLoc, int iExactTagMax )
+{
+	if ( iExactTagMax<=0 )
+		return;
+
+	const CSphColumnInfo * pDist = tSchema.GetAttr ( GetKnnDistAttrName() );
+	if ( !pDist )
+		return;
+
+	const CSphAttrLocator & tDistLoc = pDist->m_tLocator;
+	int iKept = 0;
+	for ( CSphMatch * pMatch : dMatches )
+	{
+		if ( pMatch->m_iTag>0 && pMatch->m_iTag<=iExactTagMax )
+			pMatch->SetAttrFloat ( tRescoreLoc, pMatch->GetAttrFloat(tDistLoc) );
+		else
+			dMatches[iKept++] = pMatch;
+	}
+
+	dMatches.Resize(iKept);
+}
 
 
 // Every chunk of a table adds its own k*oversampling HNSW candidates to the sorter, so after the merge it holds up to
@@ -1541,10 +1655,10 @@ int RescoreSorter_c::Flatten ( CSphMatch * pTo )
 	auto * pKNNDistRescore = m_pSorter->GetSchema()->GetAttr ( GetKnnDistRescoreAttrName() );
 	assert(pKNNDistRescore);
 
-	// The exact rescore normally happens in TransformPooled2StandalonePtrs (while per-match blob pools
-	// are still valid). If that transform was skipped for this query, matches are still pooled under
+	// In collector mode the exact rescore normally happens in TransformPooled2StandalonePtrs (while per-match blob
+	// pools are still valid). If that transform was skipped for this query, matches are still pooled under
 	// the original schema here, so rescore now with the single pool.
-	if ( !m_bRescored )
+	if ( m_bCollector && !m_bRescored )
 	{
 		KNNVecDistCalc_c * pCalc = GetKnnDistCalc ( m_pSorter->GetSchema() );
 		if ( pCalc )
@@ -1553,6 +1667,7 @@ int RescoreSorter_c::Flatten ( CSphMatch * pTo )
 			ARRAY_FOREACH ( i, dMatches )
 				dPtrs[i] = &dMatches[i];
 
+			TakeExactRows ( dPtrs, *m_pSorter->GetSchema(), pKNNDistRescore->m_tLocator, m_iExactTagMax );
 			KeepClosestForRescore ( dPtrs, *m_pSorter->GetSchema(), pKNNDistRescore->m_tLocator, m_iRescoreLimit );
 			pCalc->RescoreBatchLocal ( dPtrs, pKNNDistRescore->m_tLocator );
 		}
@@ -1585,6 +1700,13 @@ const CSphAttrLocator * RescoreSorter_c::GetRescoreLocator() const
 
 void RescoreSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch, bool bFinalizeSorters )
 {
+	// non-collector mode: the per-chunk final-stage expression has already filled the rescore column
+	if ( !m_bCollector )
+	{
+		m_pSorter->TransformPooled2StandalonePtrs ( std::move ( fnBlobPoolFromMatch ), std::move ( fnGetColumnarFromMatch ), bFinalizeSorters );
+		return;
+	}
+
 	// Rescore BEFORE the inner sorter rewrites pooled attrs to standalone. For a table with several chunks this
 	// runs once, on the sorter holding the merged candidates of all chunks (the callbacks resolve a store per match).
 	if ( !m_bRescored )
@@ -1596,6 +1718,7 @@ void RescoreSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn f
 			MatchPtrCollector_c tCollector;
 			tCollector.m_dMatches.Reserve ( m_pSorter->GetLength() );
 			m_pSorter->Finalize ( tCollector, false, false );
+			TakeExactRows ( tCollector.m_dMatches, *m_pSorter->GetSchema(), *pRescoreLoc, m_iExactTagMax );
 			KeepClosestForRescore ( tCollector.m_dMatches, *m_pSorter->GetSchema(), *pRescoreLoc, m_iRescoreLimit );
 			pCalc->RescoreBatch ( tCollector.m_dMatches, *pRescoreLoc, fnBlobPoolFromMatch, fnGetColumnarFromMatch );
 		}
@@ -1608,8 +1731,9 @@ void RescoreSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn f
 
 ISphMatchSorter * RescoreSorter_c::Clone() const
 {
-	auto pClone = new RescoreSorter_c ( m_pSorter->Clone(), m_pComp, m_iRescoreLimit );
+	auto pClone = new RescoreSorter_c ( m_pSorter->Clone(), m_pComp, m_bCollector, m_iRescoreLimit );
 	CloneTo(pClone);
+	pClone->m_iExactTagMax = m_iExactTagMax;
 	return pClone;
 }
 
@@ -1622,7 +1746,7 @@ void RescoreSorter_c::CloneTo ( ISphMatchSorter * pTrg ) const
 }
 
 
-ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings, ESphSortFunc eMatchFunc, int64_t iResultWindow )
+ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings, ESphSortFunc eMatchFunc, bool bCollector, int64_t iResultWindow )
 {
 	if ( tSettings.m_sAttr.IsEmpty() || !tSettings.m_bRescore )
 		return pSorter;
@@ -1631,7 +1755,7 @@ ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnS
 	if ( !pComp )
 		return nullptr;
 
-	return new RescoreSorter_c ( pSorter, std::move ( pComp ), Max ( tSettings.GetRequestedDocs(), iResultWindow ) );
+	return new RescoreSorter_c ( pSorter, std::move ( pComp ), bCollector, Max ( tSettings.GetRequestedDocs(), iResultWindow ) );
 }
 
 

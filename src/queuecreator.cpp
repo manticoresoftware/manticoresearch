@@ -1875,14 +1875,16 @@ bool QueueCreator_c::AddKNNRescoreColumn()
 		return true;
 
 	const auto & tKNN = m_tQuery.SingleKnnSettings();
+	const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
+	assert(pAttr);
+	const bool bNeedChunkSlot = m_pSorterSchema->GetAttr ( GetKnnChunkSpansAttrName(tKNN.m_sAttr).cstr() );
 	CSphColumnInfo tKNNDistRescored ( GetKnnDistRescoreAttrName(), SPH_ATTR_FLOAT );
-	// Small requests use the original final-stage expression and therefore need no collector pass.
-	if ( UseBatchedKNNRescore(tKNN) )
+	// Small requests use the original final-stage expression unless exact rescore
+	// must also update auto-chunk provenance.
+	if ( UseBatchedKNNRescore ( tKNN, bNeedChunkSlot ) )
 		tKNNDistRescored.m_eStage = SPH_EVAL_SORTER;
 	else
 	{
-		const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
-		assert(pAttr);
 		tKNNDistRescored.m_eStage = SPH_EVAL_FINAL;
 		tKNNDistRescored.m_pExpr = CreateExpr_KNNDistRescore ( tKNN.m_dVec, *pAttr );
 	}

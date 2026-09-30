@@ -264,7 +264,8 @@ private:
 	float		CalcDistData ( ByteBlob_t tData ) const;
 	void		RescoreColumnar ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const CSphAttrLocator * pSlotLoc, const GetColumnarFromMatch_fn & fnColumnar );
 	void		RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const CSphAttrLocator * pSlotLoc, const GetBlobPoolFromMatch_fn & fnBlobPool );
-	KNNDistanceSlot_t MinDistOverSlots ( ByteBlob_t tBlob ) const;
+	float		MinDistOverSlots ( ByteBlob_t tBlob ) const;
+	KNNDistanceSlot_t MinDistAndSlotOverSlots ( ByteBlob_t tBlob ) const;
 	ByteBlob_t	FetchData ( const CSphMatch & tMatch ) const;
 };
 
@@ -313,7 +314,28 @@ void KNNVecDistCalc_c::SetColumnar ( columnar::Columnar_i * pColumnar )
 
 
 // a document matches at the distance of its CLOSEST vector
-KNNDistanceSlot_t KNNVecDistCalc_c::MinDistOverSlots ( ByteBlob_t tBlob ) const
+float KNNVecDistCalc_c::MinDistOverSlots ( ByteBlob_t tBlob ) const
+{
+	FloatVecArray_t tArray = ParseFloatVecArray(tBlob);
+	if ( !tArray.m_iDims || tArray.m_iDims!=m_tAttr.m_tKNN.m_iDims )
+		return FLT_MAX;
+
+	assert ( m_fnDistFunc );
+	const int iVectors = tArray.m_dValues.GetLength() / tArray.m_iDims;
+	float fMin = FLT_MAX;
+	for ( int i = 0; i < iVectors; i++ )
+	{
+		const auto * pVec = (const BYTE*)( tArray.m_dValues.Begin() + i*tArray.m_iDims );
+		const float fDist = m_fnDistFunc ( pVec, m_dAnchor.Begin(), (size_t)-1, (size_t)-1, m_pDistFuncParam );
+		if ( fDist<fMin )
+			fMin = fDist;
+	}
+
+	return fMin;
+}
+
+
+KNNDistanceSlot_t KNNVecDistCalc_c::MinDistAndSlotOverSlots ( ByteBlob_t tBlob ) const
 {
 	FloatVecArray_t tArray = ParseFloatVecArray(tBlob);
 	if ( !tArray.m_iDims || tArray.m_iDims!=m_tAttr.m_tKNN.m_iDims )
@@ -358,14 +380,14 @@ float KNNVecDistCalc_c::CalcDist ( const CSphMatch & tMatch ) const
 
 uint32_t KNNVecDistCalc_c::CalcSlot ( const CSphMatch & tMatch ) const
 {
-	return m_bMulti ? MinDistOverSlots(FetchData(tMatch)).m_uSlot : UINT32_MAX;
+	return m_bMulti ? MinDistAndSlotOverSlots ( FetchData(tMatch) ).m_uSlot : UINT32_MAX;
 }
 
 
 float KNNVecDistCalc_c::CalcDistData ( ByteBlob_t tData ) const
 {
 	if ( m_bMulti )
-		return MinDistOverSlots(tData).m_fDist;
+		return MinDistOverSlots(tData);
 
 	size_t uDim = tData.second / sizeof(float);
 	if ( (int)uDim!=m_tAttr.m_tKNN.m_iDims || !tData.first )
@@ -468,9 +490,14 @@ void KNNVecDistCalc_c::RescoreColumnar ( VecTraits_T<CSphMatch*> & dMatches, con
 		if ( m_bMulti )
 		{
 			fnCompute();
-			auto tBest = MinDistOverSlots ( { pData, iLen } );
-			pMatch->SetAttrFloat ( tOutLoc, tBest.m_fDist );
-			if ( pSlotLoc ) pMatch->SetAttr ( *pSlotLoc, tBest.m_uSlot==UINT32_MAX ? -1 : tBest.m_uSlot );
+			if ( pSlotLoc )
+			{
+				auto tBest = MinDistAndSlotOverSlots ( { pData, iLen } );
+				pMatch->SetAttrFloat ( tOutLoc, tBest.m_fDist );
+				pMatch->SetAttr ( *pSlotLoc, tBest.m_uSlot==UINT32_MAX ? -1 : tBest.m_uSlot );
+			}
+			else
+				pMatch->SetAttrFloat ( tOutLoc, MinDistOverSlots ( { pData, iLen } ) );
 			continue;
 		}
 
@@ -557,9 +584,14 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 		if ( m_bMulti )
 		{
 			fnCompute();
-			auto tBest = MinDistOverSlots(tRes);
-			pMatch->SetAttrFloat ( tOutLoc, tBest.m_fDist );
-			if ( pSlotLoc ) pMatch->SetAttr ( *pSlotLoc, tBest.m_uSlot==UINT32_MAX ? -1 : tBest.m_uSlot );
+			if ( pSlotLoc )
+			{
+				auto tBest = MinDistAndSlotOverSlots(tRes);
+				pMatch->SetAttrFloat ( tOutLoc, tBest.m_fDist );
+				pMatch->SetAttr ( *pSlotLoc, tBest.m_uSlot==UINT32_MAX ? -1 : tBest.m_uSlot );
+			}
+			else
+				pMatch->SetAttrFloat ( tOutLoc, MinDistOverSlots(tRes) );
 			continue;
 		}
 
@@ -801,12 +833,12 @@ ISphExpr * CreateExpr_KNNChunkBoundary ( const CSphColumnInfo & tSpansAttr, cons
 }
 
 
-bool UseBatchedKNNRescore ( const KnnSearchSettings_t & )
+bool UseBatchedKNNRescore ( const KnnSearchSettings_t & tSettings, bool bNeedChunkSlot )
 {
-	// One rescore pass must update distance and winning slot atomically. The old
-	// per-match final expression had no channel for the slot, so always use the
-	// collector pass (small result sets remain small batches).
-	return true;
+	// Preserve the cheap final-stage expression for small scalar/manual-vector
+	// requests. Auto-chunked arrays need the collector pass even when small so
+	// exact distance and the winning source-chunk slot are updated atomically.
+	return bNeedChunkSlot || tSettings.GetRequestedDocs()>=KNN_RESCORE_BATCH_SIZE;
 }
 
 
@@ -1659,10 +1691,16 @@ int RescoreSorter_c::Flatten ( CSphMatch * pTo )
 			ARRAY_FOREACH ( i, dMatches )
 				dPtrs[i] = &dMatches[i];
 
-			const CSphColumnInfo * pSlot = m_pSorter->GetSchema()->GetAttr ( GetKnnChunkIndexAttrName() );
+			const CSphString sSpans = GetKnnChunkSpansAttrName ( pCalc->GetAttr().m_sName );
+			const CSphColumnInfo * pSlot = m_pSorter->GetSchema()->GetAttr(sSpans.cstr())
+				? m_pSorter->GetSchema()->GetAttr ( GetKnnChunkIndexAttrName() )
+				: nullptr;
 			pCalc->RescoreBatchLocal ( dPtrs, pKNNDistRescore->m_tLocator, pSlot ? &pSlot->m_tLocator : nullptr );
-			const BYTE * pPool = pCalc->GetBlobPool();
-			UpdateChunkBoundaries ( m_pSorter->GetSchema(), dPtrs, [pPool] ( const CSphMatch * ) { return pPool; } );
+			if ( pSlot )
+			{
+				const BYTE * pPool = pCalc->GetBlobPool();
+				UpdateChunkBoundaries ( m_pSorter->GetSchema(), dPtrs, [pPool] ( const CSphMatch * ) { return pPool; } );
+			}
 		}
 		m_bRescored = true;
 	}
@@ -1709,9 +1747,13 @@ void RescoreSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn f
 			MatchPtrCollector_c tCollector;
 			tCollector.m_dMatches.Reserve ( m_pSorter->GetLength() );
 			m_pSorter->Finalize ( tCollector, false, false );
-			const CSphColumnInfo * pSlot = m_pSorter->GetSchema()->GetAttr ( GetKnnChunkIndexAttrName() );
+			const CSphString sSpans = GetKnnChunkSpansAttrName ( pCalc->GetAttr().m_sName );
+			const CSphColumnInfo * pSlot = m_pSorter->GetSchema()->GetAttr(sSpans.cstr())
+				? m_pSorter->GetSchema()->GetAttr ( GetKnnChunkIndexAttrName() )
+				: nullptr;
 			pCalc->RescoreBatch ( tCollector.m_dMatches, *pRescoreLoc, pSlot ? &pSlot->m_tLocator : nullptr, fnBlobPoolFromMatch, fnGetColumnarFromMatch );
-			UpdateChunkBoundaries ( m_pSorter->GetSchema(), tCollector.m_dMatches, fnBlobPoolFromMatch );
+			if ( pSlot )
+				UpdateChunkBoundaries ( m_pSorter->GetSchema(), tCollector.m_dMatches, fnBlobPoolFromMatch );
 		}
 		m_bRescored = true;
 	}
@@ -1745,7 +1787,9 @@ ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnS
 	if ( !pComp )
 		return nullptr;
 
-	return new RescoreSorter_c ( pSorter, std::move ( pComp ), UseBatchedKNNRescore(tSettings) );
+	const ISphSchema * pSchema = pSorter->GetSchema();
+	const bool bNeedChunkSlot = pSchema && pSchema->GetAttr ( GetKnnChunkSpansAttrName(tSettings.m_sAttr).cstr() );
+	return new RescoreSorter_c ( pSorter, std::move ( pComp ), UseBatchedKNNRescore ( tSettings, bNeedChunkSlot ) );
 }
 
 

@@ -70,7 +70,7 @@ ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CS
 ISphExpr *						CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
 ISphExpr *						CreateExpr_KNNChunkIndex ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr, const CSphColumnInfo & tSpansAttr );
 ISphExpr *						CreateExpr_KNNChunkBoundary ( const CSphColumnInfo & tSpansAttr, const CSphAttrLocator & tSlotLoc, bool bEnd );
-bool							UseBatchedKNNRescore ( const KnnSearchSettings_t & tSettings );
+bool							UseBatchedKNNRescore ( const KnnSearchSettings_t & tSettings, bool bNeedChunkSlot );
 void							NormalizeVec ( VecTraits_T<float> & dData );
 
 void							AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr );

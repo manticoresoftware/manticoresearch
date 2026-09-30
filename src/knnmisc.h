@@ -61,6 +61,7 @@ const char *					GetKnnDistRescoreAttrName();
 const char *					GetKnnChunkIndexAttrName();
 const char *					GetKnnChunkStartAttrName();
 const char *					GetKnnChunkEndAttrName();
+bool							IsKnnChunkResultAttr ( const CSphString & sAttr );
 CSphString						GetKnnChunkSpansAttrName ( const CSphString & sVectorAttr );
 bool							IsKnnChunkSpansAttr ( const CSphString & sAttr );
 CSphString						GetKnnAttrFromChunkSpansAttr ( const CSphString & sAttr );

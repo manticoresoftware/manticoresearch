@@ -4,10 +4,14 @@ Chunk provenance is aligned with UTF-8 source bytes and survives RAM/disk/optimi
 ––– input –––
 python3 - <<'PY'
 import subprocess
+import re
 
 mysql = ['mysql','-N','-B','-h0','-P9306']
 def sql(q):
     return subprocess.check_output(mysql+['-e',q], text=True).strip()
+
+def ints(q):
+    return tuple(map(int, re.findall(r'-?\d+', sql(q))))
 
 sql("DROP TABLE IF EXISTS chunk_provenance")
 sql("CREATE TABLE chunk_provenance (body TEXT, chunks FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body' CHUNK_STRATEGY='fixed' MAX_TOKENS='8' OVERLAP_TOKENS='2')")
@@ -17,7 +21,7 @@ sql(f"INSERT INTO chunk_provenance(id,body) VALUES(1,'{escaped}')")
 query = "SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM chunk_provenance WHERE KNN(chunks,1,'target phrase') LIMIT 1"
 
 def check(label):
-    vals = tuple(map(int, sql(query).split('\t')))
+    vals = ints(query)
     slot,start,end = vals
     raw = text.encode('utf-8')
     assert slot >= 0 and 0 <= start < end <= len(raw), (label, vals, len(raw))
@@ -36,17 +40,17 @@ assert ram == disk == optimized, (ram,disk,optimized)
 
 sql("CREATE TABLE manual_provenance (v FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' KNN_DIMS='2' HNSW_SIMILARITY='l2')")
 sql("INSERT INTO manual_provenance(id,v) VALUES(1,[[1,0],[0,1]])")
-unavailable = tuple(map(int, sql("SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM manual_provenance WHERE KNN(v,1,(1,0))").split('\t')))
+unavailable = ints("SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM manual_provenance WHERE KNN(v,1,(1,0))")
 assert unavailable == (-1,-1,-1), unavailable
 
 # Scalar truncate/mean deliberately have no per-chunk spans, but their
 # pre-existing auto-embedding insert/search behavior must remain intact.
 sql("CREATE TABLE scalar_truncate_provenance (body TEXT, v FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body')")
 sql("INSERT INTO scalar_truncate_provenance(id,body) VALUES(1,'alpha target phrase omega')")
-assert sql("SELECT id FROM scalar_truncate_provenance WHERE KNN(v,1,'target phrase') LIMIT 1") == '1'
+assert ints("SELECT id FROM scalar_truncate_provenance WHERE KNN(v,1,'target phrase') LIMIT 1") == (1,)
 sql("CREATE TABLE scalar_mean_provenance (body TEXT, v FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body' CHUNK_STRATEGY='mean' MAX_TOKENS='8')")
 sql("INSERT INTO scalar_mean_provenance(id,body) VALUES(1,'alpha beta gamma delta epsilon zeta eta theta target phrase omega')")
-assert sql("SELECT id FROM scalar_mean_provenance WHERE KNN(v,1,'target phrase') LIMIT 1") == '1'
+assert ints("SELECT id FROM scalar_mean_provenance WHERE KNN(v,1,'target phrase') LIMIT 1") == (1,)
 print('CHUNK_PROVENANCE_OK')
 PY
 ––– output –––

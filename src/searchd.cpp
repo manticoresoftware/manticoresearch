@@ -1040,7 +1040,7 @@ void sphGetAttrsToSend ( const ISphSchema & tSchema, bool bAgentMode, bool bNeed
 	tAttrs.Init ( iCount );
 
 	for ( int i = 0; i < iCount; ++i )
-		if ( !sphIsInternalAttr ( tSchema.GetAttr(i) )
+		if ( ( !sphIsInternalAttr ( tSchema.GetAttr(i) ) || ( bAgentMode && IsKnnChunkResultAttr ( tSchema.GetAttr(i).m_sName ) ) )
 			&& ( bAgentMode || !IsSortStringInternal ( tSchema.GetAttr(i).m_sName ) ) )
 			tAttrs.BitSet(i);
 

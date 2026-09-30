@@ -748,6 +748,12 @@ const char * GetKnnChunkStartAttrName() { return "@knn_chunk_start"; }
 const char * GetKnnChunkEndAttrName() { return "@knn_chunk_end"; }
 
 
+bool IsKnnChunkResultAttr ( const CSphString & sAttr )
+{
+	return sAttr==GetKnnChunkIndexAttrName() || sAttr==GetKnnChunkStartAttrName() || sAttr==GetKnnChunkEndAttrName();
+}
+
+
 static bool ParseKNNChunkSpansHeader ( ByteBlob_t tBlob, DWORD & uCount )
 {
 	if ( !tBlob.first || tBlob.second<12 || memcmp ( tBlob.first, "CSP1", 4 ) || sphUnalignedRead ( *(const DWORD*)( tBlob.first+4 ) )!=1 )

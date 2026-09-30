@@ -243,6 +243,7 @@ public:
 
 	float		CalcDist ( const CSphMatch & tMatch ) const;
 	uint32_t	CalcSlot ( const CSphMatch & tMatch ) const;
+	KNNDistanceSlot_t CalcDistAndSlot ( const CSphMatch & tMatch ) const;
 	void		RescoreBatch ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const CSphAttrLocator * pSlotLoc, const GetBlobPoolFromMatch_fn & fnBlobPool, const GetColumnarFromMatch_fn & fnColumnar );
 	void		RescoreBatchLocal ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const CSphAttrLocator * pSlotLoc );
 
@@ -356,6 +357,37 @@ KNNDistanceSlot_t KNNVecDistCalc_c::MinDistAndSlotOverSlots ( ByteBlob_t tBlob )
 	}
 
 	return tBest;
+}
+
+
+KNNDistanceSlot_t KNNVecDistCalc_c::CalcDistAndSlot ( const CSphMatch & tMatch ) const
+{
+	FloatVecArray_t tArray = ParseFloatVecArray ( FetchData(tMatch) );
+	if ( !tArray.m_iDims || tArray.m_iDims!=m_tAttr.m_tKNN.m_iDims )
+		return {};
+
+	assert(m_fnDistFunc);
+	const int iVectors = tArray.m_dValues.GetLength() / tArray.m_iDims;
+	KNNDistanceSlot_t tResult;
+	float fSlotDist = FLT_MAX;
+	for ( int i=0; i<iVectors; ++i )
+	{
+		const auto * pVec = (const BYTE*)( tArray.m_dValues.Begin() + i*tArray.m_iDims );
+		const float fRawDist = m_fnDistFunc ( pVec, m_dAnchor.Begin(), (size_t)-1, (size_t)-1, m_pDistFuncParam );
+		// Preserve the historical fullscan distance semantics: NaN, +inf and
+		// FLT_MAX do not replace the FLT_MAX initial value.
+		if ( fRawDist<tResult.m_fDist )
+			tResult.m_fDist = fRawDist;
+
+		const float fSlotCandidate = std::isnan(fRawDist) ? FLT_MAX : fRawDist;
+		if ( tResult.m_uSlot==UINT32_MAX || fSlotCandidate<fSlotDist )
+		{
+			fSlotDist = fSlotCandidate;
+			tResult.m_uSlot = (uint32_t)i;
+		}
+	}
+
+	return tResult;
 }
 
 
@@ -632,28 +664,58 @@ public:
 	float		Eval ( const CSphMatch & tMatch ) const override;
 	int			IntEval ( const CSphMatch & tMatch ) const override		{ return (int)Eval(tMatch); }
 	int64_t		Int64Eval ( const CSphMatch & tMatch ) const override	{ return (int64_t)Eval(tMatch); }
-	void		FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override { m_tCalc.FixupLocator ( pOldSchema, pNewSchema ); }
+	void		FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override { m_tCalc.FixupLocator ( pOldSchema, pNewSchema ); if ( m_bWriteChunkSlot ) sphFixupLocator ( m_tChunkSlotLoc, pOldSchema, pNewSchema ); }
 	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;
-	ISphExpr *	Clone() const override									{ return new Expr_KNNDist_c ( m_tCalc.GetAnchor(), m_tCalc.GetAttr() ); }
+	ISphExpr *	Clone() const override;
 	void		Command ( ESphExprCommand eCmd, void * pArg ) override;
 
 	void		SetData ( const util::Span_T<const knn::DocDist_t> & dData );
+	void		BindChunkSlot ( const CSphAttrLocator & tSlotLoc ) { m_tChunkSlotLoc=tSlotLoc; m_bWriteChunkSlot=true; }
 	KNNVecDistCalc_c *	GetVecDistCalc()	{ return &m_tCalc; }
 
 protected:
 	KNNVecDistCalc_c					m_tCalc;
 	util::Span_T<const  knn::DocDist_t>	m_dData;
 	mutable const knn::DocDist_t *		m_pStart = nullptr;
+	CSphAttrLocator					m_tChunkSlotLoc;
+	bool							m_bWriteChunkSlot = false;
 	const knn::DocDist_t * FindData ( const CSphMatch & tMatch ) const;
+};
+
+static constexpr uint64_t KNN_CHUNK_SLOT_READY = uint64_t{1} << 32;
+
+struct KNNChunkSlotBinding_t
+{
+	CSphAttrLocator	m_tLocator;
+	bool			m_bAccepted = false;
 };
 
 
 float Expr_KNNDist_c::Eval ( const CSphMatch & tMatch ) const
 {
 	if ( !m_pStart )
-		return m_tCalc.CalcDist(tMatch);
+	{
+		if ( !m_bWriteChunkSlot )
+			return m_tCalc.CalcDist(tMatch);
+
+		const KNNDistanceSlot_t tResult = m_tCalc.CalcDistAndSlot(tMatch);
+		// Presort expressions operate on a worker-local match. Store the slot in
+		// that match so the following provenance expression does not rescan the
+		// row's vectors. The marker makes an ordering regression fail closed.
+		const_cast<CSphMatch&>(tMatch).SetAttr ( m_tChunkSlotLoc, KNN_CHUNK_SLOT_READY | tResult.m_uSlot );
+		return tResult.m_fDist;
+	}
 
 	return FindData(tMatch)->m_fDist;
+}
+
+
+ISphExpr * Expr_KNNDist_c::Clone() const
+{
+	auto * pClone = new Expr_KNNDist_c ( m_tCalc.GetAnchor(), m_tCalc.GetAttr() );
+	if ( m_bWriteChunkSlot )
+		pClone->BindChunkSlot(m_tChunkSlotLoc);
+	return pClone;
 }
 
 
@@ -686,6 +748,14 @@ void Expr_KNNDist_c::Command ( ESphExprCommand eCmd, void * pArg )
 		m_tCalc.SetAnchor ( *(const CSphVector<float>*)pArg );
 		break;
 
+	case SPH_EXPR_BIND_KNN_CHUNK_SLOT:
+		{
+			auto & tBinding = *(KNNChunkSlotBinding_t*)pArg;
+			BindChunkSlot(tBinding.m_tLocator);
+			tBinding.m_bAccepted = true;
+		}
+		break;
+
 	default:
 		break;
 	}
@@ -702,6 +772,9 @@ void Expr_KNNDist_c::SetData ( const util::Span_T<const knn::DocDist_t> & dData 
 uint64_t Expr_KNNDist_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
 {
 	EXPR_CLASS_NAME("Expr_KNNDist_c");
+	CALC_POD_HASH(m_bWriteChunkSlot);
+	if ( m_bWriteChunkSlot )
+		uHash = sphCalcLocatorHash ( m_tChunkSlotLoc, uHash );
 	return CALC_DEP_HASHES();
 }
 
@@ -773,16 +846,24 @@ public:
 	int IntEval ( const CSphMatch & tMatch ) const final { return (int)Int64Eval(tMatch); }
 	int64_t Int64Eval ( const CSphMatch & tMatch ) const final
 	{
-		uint32_t uSlot = m_pStart ? FindData(tMatch)->m_uVectorSlot : m_tCalc.CalcSlot(tMatch);
+		uint32_t uSlot = UINT32_MAX;
+		if ( m_pStart )
+			uSlot = FindData(tMatch)->m_uVectorSlot;
+		else if ( m_bWriteChunkSlot )
+		{
+			const uint64_t uEncoded = tMatch.GetAttr(m_tChunkSlotLoc);
+			if ( uEncoded & KNN_CHUNK_SLOT_READY )
+				uSlot = (uint32_t)uEncoded;
+		}
 		if ( uSlot==UINT32_MAX ) return -1;
 		ByteBlob_t tBlob = tMatch.FetchAttrData ( m_tSpansLoc, m_pBlobPool );
 		DWORD uCount = 0;
 		return ParseKNNChunkSpansHeader ( tBlob, uCount ) && uSlot<uCount ? (int64_t)uSlot : -1;
 	}
-	void Command ( ESphExprCommand eCmd, void * pArg ) final { Expr_KNNDist_c::Command(eCmd,pArg); if ( eCmd==SPH_EXPR_SET_BLOB_POOL ) m_pBlobPool=(const BYTE*)pArg; }
+	void Command ( ESphExprCommand eCmd, void * pArg ) final { if ( eCmd==SPH_EXPR_BIND_KNN_CHUNK_SLOT ) { auto & tBinding=*(KNNChunkSlotBinding_t*)pArg; BindChunkSlot(tBinding.m_tLocator); tBinding.m_bAccepted=true; return; } Expr_KNNDist_c::Command(eCmd,pArg); if ( eCmd==SPH_EXPR_SET_BLOB_POOL ) m_pBlobPool=(const BYTE*)pArg; }
 	void FixupLocator ( const ISphSchema * pOld, const ISphSchema * pNew ) final { Expr_KNNDist_c::FixupLocator(pOld,pNew); sphFixupLocator(m_tSpansLoc,pOld,pNew); }
 	uint64_t GetHash ( const ISphSchema & tSchema, uint64_t uPrevHash, bool & bDisable ) final { return Expr_KNNDist_c::GetHash(tSchema,uPrevHash,bDisable) ^ 0x71c4451dULL; }
-	ISphExpr * Clone() const final { return new Expr_KNNChunkIndex_c ( m_tCalc.GetAnchor(), m_tCalc.GetAttr(), m_tSpansLoc ); }
+	ISphExpr * Clone() const final { auto * pClone = new Expr_KNNChunkIndex_c ( m_tCalc.GetAnchor(), m_tCalc.GetAttr(), m_tSpansLoc ); if ( m_bWriteChunkSlot ) pClone->BindChunkSlot(m_tChunkSlotLoc); return pClone; }
 private:
 	CSphAttrLocator m_tSpansLoc;
 	const BYTE * m_pBlobPool = nullptr;
@@ -836,6 +917,19 @@ ISphExpr * CreateExpr_KNNChunkIndex ( const CSphVector<float> & dAnchor, const C
 ISphExpr * CreateExpr_KNNChunkBoundary ( const CSphColumnInfo & tSpansAttr, const CSphAttrLocator & tSlotLoc, bool bEnd )
 {
 	return new Expr_KNNChunkBoundary_c ( tSpansAttr.m_tLocator, tSlotLoc, bEnd );
+}
+
+
+bool BindKNNChunkSlotExpressions ( ISphExpr * pDist, ISphExpr * pChunkIndex, const CSphAttrLocator & tSlotLoc )
+{
+	if ( !pDist || !pChunkIndex )
+		return false;
+
+	KNNChunkSlotBinding_t tDistBinding { tSlotLoc };
+	KNNChunkSlotBinding_t tSlotBinding { tSlotLoc };
+	pDist->Command ( SPH_EXPR_BIND_KNN_CHUNK_SLOT, &tDistBinding );
+	pChunkIndex->Command ( SPH_EXPR_BIND_KNN_CHUNK_SLOT, &tSlotBinding );
+	return tDistBinding.m_bAccepted && tSlotBinding.m_bAccepted;
 }
 
 

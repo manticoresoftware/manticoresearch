@@ -1802,6 +1802,23 @@ bool QueueCreator_c::AddKNNChunkColumns()
 	if ( !m_tQuery.HasKnn() )
 		return true;
 
+	// Merge queues receive provenance values computed by the agents. Do not
+	// shadow them with coordinator-side expressions that cannot access shard
+	// blob storage.
+	if ( !m_tSettings.m_bComputeItems )
+		return true;
+
+	const bool bHaveSlot = m_pSorterSchema->GetAttrIndex ( GetKnnChunkIndexAttrName() )>=0;
+	const bool bHaveStart = m_pSorterSchema->GetAttrIndex ( GetKnnChunkStartAttrName() )>=0;
+	const bool bHaveEnd = m_pSorterSchema->GetAttrIndex ( GetKnnChunkEndAttrName() )>=0;
+	if ( bHaveSlot || bHaveStart || bHaveEnd )
+	{
+		if ( bHaveSlot && bHaveStart && bHaveEnd )
+			return true;
+		m_sError = "incomplete KNN chunk provenance result schema";
+		return false;
+	}
+
 	if ( m_tQuery.m_bHybridSearch )
 	{
 		for ( const char * szName : { GetKnnChunkIndexAttrName(), GetKnnChunkStartAttrName(), GetKnnChunkEndAttrName() } )
@@ -1817,10 +1834,8 @@ bool QueueCreator_c::AddKNNChunkColumns()
 
 	const auto & tKNN = m_tQuery.SingleKnnSettings();
 	const CSphColumnInfo * pVector = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
-	if ( !pVector || pVector->m_eAttrType!=SPH_ATTR_FLOAT_VECTOR_ARRAY )
-		return true;
-
-	const CSphColumnInfo * pSpans = m_pSorterSchema->GetAttr ( GetKnnChunkSpansAttrName(tKNN.m_sAttr).cstr() );
+	const bool bCanHaveProvenance = pVector && pVector->m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY;
+	const CSphColumnInfo * pSpans = bCanHaveProvenance ? m_pSorterSchema->GetAttr ( GetKnnChunkSpansAttrName(tKNN.m_sAttr).cstr() ) : nullptr;
 	auto fnUnavailable = [&] () -> ISphExpr * { ExprParseArgs_t tArgs; return sphExprParse ( "-1", *m_pSorterSchema, m_sError, tArgs ); };
 	CSphColumnInfo tSlot ( GetKnnChunkIndexAttrName(), SPH_ATTR_BIGINT );
 	tSlot.m_eStage = SPH_EVAL_PRESORT;
@@ -1830,6 +1845,15 @@ bool QueueCreator_c::AddKNNChunkColumns()
 	m_hQueryColumns.Add(tSlot.m_sName);
 	const CSphColumnInfo * pSlot = m_pSorterSchema->GetAttr ( GetKnnChunkIndexAttrName() );
 	assert(pSlot);
+	if ( pSpans )
+	{
+		const CSphColumnInfo * pDist = m_pSorterSchema->GetAttr ( GetKnnDistAttrName() );
+		if ( !pDist || !pDist->m_pExpr || !BindKNNChunkSlotExpressions ( pDist->m_pExpr, pSlot->m_pExpr, pSlot->m_tLocator ) )
+		{
+			m_sError = "unable to bind KNN chunk provenance expressions";
+			return false;
+		}
+	}
 
 	for ( bool bEnd : { false, true } )
 	{

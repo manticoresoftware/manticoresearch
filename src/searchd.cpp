@@ -11861,9 +11861,20 @@ static void RemoveAttrFromIndex ( const SqlStmt_t& tStmt, CSphIndex* pIdx, CSphS
 
 	if ( pAttr )
 	{
+		const ESphAttr eAttrType = pAttr->m_eAttrType;
+		CSphString sChunkSpans = GetKnnChunkSpansAttrName(sAttrToRemove);
+		if ( const CSphColumnInfo * pChunkSpans = pIdx->GetMatchSchema().GetAttr ( sChunkSpans.cstr() ) )
+		{
+			AttrAddRemoveCtx_t tSpansCtx;
+			tSpansCtx.m_sName = sChunkSpans;
+			tSpansCtx.m_eType = pChunkSpans->m_eAttrType;
+			if ( !pIdx->AddRemoveAttribute ( false, tSpansCtx, sError ) )
+				return;
+		}
+
 		AttrAddRemoveCtx_t tCtx;
 		tCtx.m_sName = sAttrToRemove;
-		tCtx.m_eType = pAttr->m_eAttrType;
+		tCtx.m_eType = eAttrType;
 		pIdx->AddRemoveAttribute ( false, tCtx, sError );
 	}
 

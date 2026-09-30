@@ -5,6 +5,8 @@ Chunk provenance is aligned with UTF-8 source bytes and survives RAM/disk/optimi
 python3 - <<'PY'
 import subprocess
 import re
+import json
+import urllib.request
 
 mysql = ['mysql','-N','-B','-h0','-P9306']
 def sql(q):
@@ -18,7 +20,7 @@ sql("CREATE TABLE chunk_provenance (body TEXT, chunks FLOAT_VECTOR_ARRAY KNN_TYP
 text = 'Привет мир. alpha beta gamma delta epsilon zeta eta theta. 你好世界。 omega target phrase.'
 escaped = text.replace("'", "''")
 sql(f"INSERT INTO chunk_provenance(id,body) VALUES(1,'{escaped}')")
-query = "SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM chunk_provenance WHERE KNN(chunks,1,'target phrase') LIMIT 1"
+query = "SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM chunk_provenance WHERE KNN(chunks,1,'target phrase',{rescore=1}) LIMIT 1"
 
 def check(label):
     vals = ints(query)
@@ -38,6 +40,28 @@ sql('OPTIMIZE TABLE chunk_provenance OPTION sync=1,cutoff=1')
 optimized = check('optimized')
 assert ram == disk == optimized, (ram,disk,optimized)
 
+fullscan = ints("SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM chunk_provenance WHERE KNN(chunks,1,'target phrase',{fullscan=1,rescore=0}) LIMIT 1")
+assert fullscan == optimized, (fullscan, optimized)
+
+request = urllib.request.Request('http://127.0.0.1:9308/search', data=json.dumps({
+    'index': 'chunk_provenance',
+    'knn': {'field': 'chunks', 'query': 'target phrase', 'k': 1},
+    'limit': 1,
+}).encode(), headers={'Content-Type': 'application/json'})
+hit = json.load(urllib.request.urlopen(request))['hits']['hits'][0]
+assert tuple(hit['_knn_chunk'][key] for key in ('index','start','end')) == optimized, hit
+
+hybrid_request = urllib.request.Request('http://127.0.0.1:9308/search', data=json.dumps({
+    'index': 'chunk_provenance',
+    'knn': {'field': 'chunks', 'query': 'target phrase', 'k': 1},
+    'query': {'match': {'body': 'target phrase'}},
+    'options': {'fusion_method': 'rrf'},
+    'limit': 1,
+}).encode(), headers={'Content-Type': 'application/json'})
+hybrid_hit = json.load(urllib.request.urlopen(hybrid_request))['hits']['hits'][0]
+hybrid_chunk = tuple(hybrid_hit['_knn_chunk'][key] for key in ('index','start','end'))
+assert hybrid_chunk[0] >= 0 and 0 <= hybrid_chunk[1] < hybrid_chunk[2] <= len(text.encode()), hybrid_hit
+
 sql("CREATE TABLE manual_provenance (v FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' KNN_DIMS='2' HNSW_SIMILARITY='l2')")
 sql("INSERT INTO manual_provenance(id,v) VALUES(1,[[1,0],[0,1]])")
 unavailable = ints("SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM manual_provenance WHERE KNN(v,1,(1,0))")
@@ -48,10 +72,39 @@ assert unavailable == (-1,-1,-1), unavailable
 sql("CREATE TABLE scalar_truncate_provenance (body TEXT, v FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body')")
 sql("INSERT INTO scalar_truncate_provenance(id,body) VALUES(1,'alpha target phrase omega')")
 assert ints("SELECT id FROM scalar_truncate_provenance WHERE KNN(v,1,'target phrase') LIMIT 1") == (1,)
+assert ints("SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM scalar_truncate_provenance WHERE KNN(v,1,'target phrase') LIMIT 1") == (-1,-1,-1)
 sql("CREATE TABLE scalar_mean_provenance (body TEXT, v FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body' CHUNK_STRATEGY='mean' MAX_TOKENS='8')")
 sql("INSERT INTO scalar_mean_provenance(id,body) VALUES(1,'alpha beta gamma delta epsilon zeta eta theta target phrase omega')")
 assert ints("SELECT id FROM scalar_mean_provenance WHERE KNN(v,1,'target phrase') LIMIT 1") == (1,)
+assert ints("SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM scalar_mean_provenance WHERE KNN(v,1,'target phrase') LIMIT 1") == (-1,-1,-1)
+
+# Dropping an auto-chunked vector must also remove its internal span sidecar.
+sql("CREATE TABLE drop_provenance (body1 TEXT, body2 TEXT, v1 FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body1' CHUNK_STRATEGY='fixed' MAX_TOKENS='8', v2 FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body2' CHUNK_STRATEGY='fixed' MAX_TOKENS='8')")
+sql("INSERT INTO drop_provenance(id,body1,body2) VALUES(1,'first source text','second source target phrase')")
+sql("ALTER TABLE drop_provenance DROP COLUMN v1")
+sql("INSERT INTO drop_provenance(id,body1,body2) VALUES(2,'unused','another target phrase')")
+drop_vals = ints("SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM drop_provenance WHERE KNN(v2,1,'target phrase') LIMIT 1")
+assert drop_vals[0] >= 0 and 0 <= drop_vals[1] < drop_vals[2], drop_vals
+probe = subprocess.run(mysql+['-e','ALTER TABLE drop_provenance DROP COLUMN knn_chunk_spans_v1_v1'], text=True, capture_output=True)
+assert probe.returncode != 0 and 'does not exist' in probe.stderr, probe.stderr
 print('CHUNK_PROVENANCE_OK')
 PY
 ––– output –––
 CHUNK_PROVENANCE_OK
+––– input –––
+searchd --stopwait > /dev/null; rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd $SEARCHD_FLAGS > /dev/null; for i in $(seq 1 150); do mysql -h0 -P9306 -e 'select 1' >/dev/null 2>&1 && { echo 'Manticore restarted!'; break; }; sleep .2; done
+––– output –––
+Manticore restarted!
+––– input –––
+python3 - <<'PY'
+import re
+import subprocess
+
+mysql = ['mysql','-N','-B','-h0','-P9306']
+out = subprocess.check_output(mysql+['-e',"SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM chunk_provenance WHERE KNN(chunks,1,'target phrase',{rescore=1}) LIMIT 1"], text=True)
+vals = tuple(map(int, re.findall(r'-?\d+', out)))
+assert vals[0] >= 0 and 0 <= vals[1] < vals[2], vals
+print('CHUNK_PROVENANCE_RESTART_OK')
+PY
+––– output –––
+CHUNK_PROVENANCE_RESTART_OK

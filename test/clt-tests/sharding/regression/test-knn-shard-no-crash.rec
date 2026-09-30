@@ -31,3 +31,49 @@ mysql -h0 -P1306 -N -B -e "select id from t8 where knn(vector, 2, (0.1,0.2,0.3,0
 sleep 1; mysql -h0 -P1306 -e "show status like 'uptime';" | grep uptime | awk '{print ($2 > 0) ? "uptime_positive" : "uptime_zero"}'
 ––– output –––
 uptime_positive
+––– comment –––
+Chunk provenance computed by agents must survive the distributed head merge.
+––– input –––
+python3 - <<'PY'
+import re
+import subprocess
+import time
+
+mysql = ['mysql','-N','-B','-h0','-P1306']
+def sql(q):
+    return subprocess.check_output(mysql+['-e',q], text=True).strip()
+
+sql("CREATE TABLE t9(body TEXT, chunks FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body' CHUNK_STRATEGY='fixed' MAX_TOKENS='8') SHARDS='2' RF='1'")
+for _ in range(30):
+    state = sql('SHOW SHARDING STATUS t9')
+    lowered = state.lower()
+    if lowered.count('active') == 2 and not any(word in lowered for word in ('pending','error','initializing')):
+        break
+    time.sleep(1)
+else:
+    raise AssertionError(state)
+
+values = [
+    (1,'short target phrase end'),
+    (2,'alpha beta gamma delta epsilon zeta eta theta target phrase end'),
+    (3,'alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu target phrase end'),
+    (4,'prefix words before target phrase and tail'),
+    (5,'one two three four five six seven eight nine ten target phrase end'),
+    (6,'target phrase starts this document'),
+    (7,'long prefix alpha beta gamma delta epsilon zeta eta theta iota target phrase end'),
+    (8,'different prefix target phrase different tail'),
+]
+sql('INSERT INTO t9(id,body) VALUES '+','.join(f"({docid},'{body}')" for docid,body in values))
+rows = sql("SELECT id,knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM t9 WHERE KNN(chunks,8,'target phrase') ORDER BY id").splitlines()
+rows = [row for row in rows if len(re.findall(r'-?\d+',row)) == 4]
+assert len(rows) == 8, rows
+sources = dict(values)
+for row in rows:
+    docid,slot,start,end = map(int,re.findall(r'-?\d+',row))
+    raw = sources[docid].encode('utf-8')
+    assert slot >= 0 and 0 <= start < end <= len(raw), row
+    assert b'target phrase' in raw[start:end], (row,raw[start:end])
+print('DISTRIBUTED_CHUNK_PROVENANCE_OK')
+PY
+––– output –––
+DISTRIBUTED_CHUNK_PROVENANCE_OK

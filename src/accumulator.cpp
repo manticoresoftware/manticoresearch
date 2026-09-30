@@ -278,9 +278,21 @@ bool RtAccum_t::RebuildStoragesForEmbeddings ( RowID_t tRowID, CSphRowitem * pRo
 		if ( IsKnnChunkSpansAttr(tAttr.m_sName) )
 		{
 			int iVectorAttr = tSchema.GetAttrIndex ( GetKnnAttrFromChunkSpansAttr(tAttr.m_sName).cstr() );
-			assert ( iVectorAttr>=0 && pNewBlobBuilder );
+			if ( iVectorAttr<0 || (size_t)iVectorAttr>=dAllOffsets.size() || (size_t)iVectorAttr>=dAllSpans.size() || !pNewBlobBuilder || (size_t)tRowID+1>=dAllOffsets[iVectorAttr].size() )
+			{
+				sError.SetSprintf ( "invalid chunk provenance storage for attribute '%s'", tAttr.m_sName.cstr() );
+				return false;
+			}
 			const auto & dOffsets = dAllOffsets[iVectorAttr];
-			if ( !StoreChunkSpans ( iBlobAttr, pNewBlobBuilder, dAllSpans[iVectorAttr], dOffsets[tRowID], dOffsets[tRowID+1], sError ) )
+			const auto & dSpans = dAllSpans[iVectorAttr];
+			size_t iFrom = dOffsets[tRowID];
+			size_t iTo = dOffsets[tRowID+1];
+			if ( iFrom>iTo || iTo>dSpans.size() )
+			{
+				sError.SetSprintf ( "invalid chunk provenance offsets for attribute '%s'", tAttr.m_sName.cstr() );
+				return false;
+			}
+			if ( !StoreChunkSpans ( iBlobAttr, pNewBlobBuilder, dSpans, iFrom, iTo, sError ) )
 				return false;
 			iBlobAttr++;
 			continue;

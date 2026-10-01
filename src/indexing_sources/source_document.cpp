@@ -484,6 +484,19 @@ void CSphSource::AllocDocinfo()
 
 		m_pFieldLengthAttrs = m_tDocInfo.m_pDynamic + ( m_tSchema.GetAttr ( iFirst ).m_tLocator.m_iBitOffset / 32 );
 	}
+	else if ( m_bCollectExactFieldLengths && m_tSchema.GetFieldsCount() )
+	{
+		m_dExactFieldLengths.Resize ( m_tSchema.GetFieldsCount() );
+		m_dExactFieldLengths.ZeroVec();
+		m_pFieldLengthAttrs = m_dExactFieldLengths.Begin();
+	}
+}
+
+
+void CSphSource::ResetExactFieldLength ( int iField )
+{
+	if ( m_pFieldLengthAttrs && iField>=0 && iField<m_tSchema.GetFieldsCount() )
+		m_pFieldLengthAttrs[iField] = 0;
 }
 
 //////////////////////////////////////////////////////////////////////////

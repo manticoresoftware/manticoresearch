@@ -702,8 +702,10 @@ bool DiskIndexChecker_c::Impl_c::ReadHeader ( const CSphString& sHeader )
 	{
 		auto tCapability = tBson.ChildByName ( "e1_postings" );
 		auto tBase = tBson.ChildByName ( "e1_base_version" );
+		auto tNormCapability = tBson.ChildByName ( "e1_norms" );
 		int iExpected = m_uVersion==e1::VERSION ? 6 : m_uVersion==e1::VERSION5 ? 5 : 4;
-		if ( !IsInt(tCapability) || !IsInt(tBase) || Int(tCapability)!=iExpected || Int(tBase)!=INDEX_FORMAT_VERSION )
+		const bool bNormCapabilityValid = m_uVersion!=e1::VERSION || ( IsInt(tNormCapability) && Int(tNormCapability)==1 );
+		if ( !IsInt(tCapability) || !IsInt(tBase) || Int(tCapability)!=iExpected || Int(tBase)!=INDEX_FORMAT_VERSION || !bNormCapabilityValid )
 		{
 			m_sError = "postings container capability/base version mismatch";
 			return false;

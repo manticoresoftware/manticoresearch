@@ -972,6 +972,8 @@ void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t 
 	{
 		sJson.NamedVal ( "e1_postings", uFormatVersion==e1::VERSION ? 6 : uFormatVersion==e1::VERSION5 ? 5 : 4 );
 		sJson.NamedVal ( "e1_base_version", 74 );
+		if ( uFormatVersion==e1::VERSION )
+			sJson.NamedVal ( "e1_norms", 1 );
 	}
 
 	// index stats - json (put here to be similar with .meta)

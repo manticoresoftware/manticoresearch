@@ -530,6 +530,48 @@ TEST ( NormStore, RejectsCorruptionAndTruncation )
 	dCorrupt.back() ^= 1;
 	EXPECT_FALSE ( tStore.Open(dCorrupt.data(),dCorrupt.size(),sError) );
 	EXPECT_FALSE ( tStore.Open(dData.data(),dData.size()-1,sError) );
+
+	dCorrupt = dData;
+	dCorrupt.back() ^= 1;
+	PutValue ( dCorrupt, 56, e1::CRC(dCorrupt.data()+e1::norms::HEADER_SIZE,dCorrupt.size()-e1::norms::HEADER_SIZE), 4 );
+	EXPECT_FALSE ( tStore.Open(dCorrupt.data(),dCorrupt.size(),sError) );
+	EXPECT_EQ ( sError, "norms: group metadata mismatch" );
+}
+
+TEST ( NormStore, StagedBuilderMatchesInMemoryBuilderAndSupportsUpdates )
+{
+	std::string sError;
+	e1::norms::Builder tMemory ( 3, 4 );
+	e1::norms::StagedBuilder tStaged ( 3, 4 );
+	for ( uint32_t i=0; i<11; ++i )
+	{
+		const std::array<uint32_t,3> dRow { i, i==3 ? 256u : i+20, i==7 ? 65536u : i+200 };
+		ASSERT_TRUE ( tMemory.AddRow(dRow.data(),dRow.size(),sError) ) << sError;
+		ASSERT_TRUE ( tStaged.AddRow(dRow.data(),dRow.size(),sError) ) << sError;
+	}
+	ASSERT_TRUE ( tMemory.Set(2,1,70000,sError) ) << sError;
+	ASSERT_TRUE ( tStaged.Set(2,1,70000,sError) ) << sError;
+
+	std::vector<uint8_t> dExpected;
+	ASSERT_TRUE ( tMemory.Build(dExpected,sError) ) << sError;
+	const std::string sPath = "__norm_store_"+std::to_string(GetOsProcessId())+".tmp";
+	ASSERT_TRUE ( tStaged.Finish(sPath.c_str(),sError) ) << sError;
+	std::ifstream tIn ( sPath, std::ios::binary );
+	std::vector<uint8_t> dActual ( (std::istreambuf_iterator<char>(tIn)), std::istreambuf_iterator<char>() );
+	std::remove ( sPath.c_str() );
+	EXPECT_EQ ( dActual, dExpected );
+}
+
+TEST ( NormStore, StagedBuilderReportsOutputPathAndSystemError )
+{
+	std::string sError;
+	e1::norms::StagedBuilder tStaged ( 1, 4 );
+	const uint32_t uValue = 7;
+	ASSERT_TRUE ( tStaged.AddRow(&uValue,1,sError) ) << sError;
+	const char * szPath = "__missing_norm_store_dir__/products.spn";
+	EXPECT_FALSE ( tStaged.Finish(szPath,sError) );
+	EXPECT_NE ( sError.find(szPath), std::string::npos ) << sError;
+	EXPECT_NE ( sError.find(": "), std::string::npos ) << sError;
 }
 
 } // namespace

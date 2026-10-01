@@ -65,6 +65,7 @@
 #include "jsonsi.h"
 #include "tracer.h"
 #include "postings_container_writer.h"
+#include "norm_store.h"
 
 #include <errno.h>
 #include <ctype.h>
@@ -1579,6 +1580,8 @@ private:
 	DWORD                       m_uE1Version = 0;
 	CSphMappedBuffer<BYTE>       m_tE1Data;
 	e1::Store                   m_tE1Store;
+	CSphMappedBuffer<BYTE>       m_tNormData;
+	e1::norms::Store            m_tNormStore;
 	volatile bool				m_bPassedRead;
 	volatile bool				m_bPassedAlloc;
 	bool						m_bIsEmpty;				///< do we have actually indexed documents (m_iTotalDocuments is just fetched documents, not indexed!)
@@ -3948,7 +3951,7 @@ void CSphIndex_VLN::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const File
 			dFiles.Add ( std::move ( sFile ) );
 	};
 
-	for ( auto eExt : { SPH_EXT_SPH, SPH_EXT_SPD, SPH_EXT_SPP, SPH_EXT_SPE, SPH_EXT_SPI, SPH_EXT_SPM, SPH_EXT_SPK } )
+	for ( auto eExt : { SPH_EXT_SPH, SPH_EXT_SPD, SPH_EXT_SPP, SPH_EXT_SPE, SPH_EXT_SPI, SPH_EXT_SPM, SPH_EXT_SPK, SPH_EXT_SPN } )
 		if ( !m_bE1 || eExt!=SPH_EXT_SPE )
 			fnAddFile ( eExt );
 
@@ -6173,7 +6176,7 @@ bool sphIsE1Snapshot ( const CSphString & sBase )
 	bson::Bson_c tJson(dHeader);
 	auto uVersion = bson::Int(tJson.ChildByName("index_format_version"));
 	return uVersion==e1::VERSION || uVersion==e1::VERSION5 || uVersion==e1::VERSION4
-		|| tJson.ChildByName("e1_postings").second!=JSON_EOF || tJson.ChildByName("e1_base_version").second!=JSON_EOF;
+		|| tJson.ChildByName("e1_postings").second!=JSON_EOF || tJson.ChildByName("e1_base_version").second!=JSON_EOF || tJson.ChildByName("e1_norms").second!=JSON_EOF;
 }
 
 int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress& tProgress, bool bRemoveDupes )
@@ -6199,6 +6202,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 		pSource->SetDict ( m_pDict );
 		pSource->Setup ( m_tSettings, nullptr );
+		pSource->EnableExactFieldLengths();
 	}
 
 	// connect 1st source and fetch its schema
@@ -6258,6 +6262,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	}
 
 	int iFieldLens = m_tSchema.GetAttrId_FirstFieldLen();
+	e1::norms::StagedBuilder tNormBuilder ( m_tSchema.GetFieldsCount() );
+	std::string sNormError;
 
 	const CSphColumnInfo * pBlobLocatorAttr = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
 
@@ -6502,6 +6508,13 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			if ( !pSource->GetLastWarning().IsEmpty() )
 				m_sLastWarning = pSource->GetLastWarning();
 
+			static_assert ( sizeof(DWORD)==sizeof(uint32_t) );
+			if ( !tNormBuilder.AddRow ( reinterpret_cast<const uint32_t *>(pSource->GetExactFieldLengths()), m_tSchema.GetFieldsCount(), sNormError ) )
+			{
+				m_sLastError = sNormError.c_str();
+				return 0;
+			}
+
 			// update total field lengths
 			if ( iFieldLens>=0 )
 			{
@@ -6578,6 +6591,17 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				// check for eof
 				if ( pSource->m_tDocInfo.m_tRowID==INVALID_ROWID )
 					break;
+
+				if ( pJoinedHits->GetLength() )
+				{
+					const int iField = HITMAN::GetField ( pJoinedHits->Begin()[0].m_uWordPos );
+					const DWORD * pLengths = pSource->GetExactFieldLengths();
+					if ( !pLengths || !tNormBuilder.Set ( pSource->m_tDocInfo.m_tRowID, iField, pLengths[iField], sNormError ) )
+					{
+						m_sLastError = sNormError.c_str();
+						return 0;
+					}
+				}
 
 				int iJoinedHits = pJoinedHits->GetLength();
 				memcpy ( pHits, pJoinedHits->Begin(), iJoinedHits*sizeof(CSphWordHit) );
@@ -6916,6 +6940,12 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			if ( !sphTruncate ( fdHits.GetFD () ) )
 				sphWarn ( "failed to truncate %s", fdHits.GetFilename() );
 		}
+	}
+
+	if ( !tNormBuilder.Finish(GetFilename(SPH_EXT_SPN).cstr(),sNormError) )
+	{
+		m_sLastError = sNormError.c_str();
+		return 0;
 	}
 
 	BuildHeader_t tBuildHeader;
@@ -10075,6 +10105,8 @@ void CSphIndex_VLN::Unlock()
 
 void CSphIndex_VLN::Dealloc ()
 {
+	m_tNormStore = e1::norms::Store();
+	m_tNormData.Reset();
 	m_tE1Store = e1::Store();
 	m_tE1Data.Reset();
 	m_bE1 = false;
@@ -10286,7 +10318,9 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 		auto tCapability = tBson.ChildByName("e1_postings");
 		auto tBase = tBson.ChildByName("e1_base_version");
 		int iExpected = m_uVersion==e1::VERSION ? 6 : m_uVersion==e1::VERSION5 ? 5 : 4;
-		if ( !IsInt(tCapability) || !IsInt(tBase) || Int(tCapability)!=iExpected || Int(tBase)!=74 )
+		auto tNormCapability = tBson.ChildByName("e1_norms");
+		const bool bNormCapabilityValid = m_uVersion!=e1::VERSION || ( IsInt(tNormCapability) && Int(tNormCapability)==1 );
+		if ( !IsInt(tCapability) || !IsInt(tBase) || Int(tCapability)!=iExpected || Int(tBase)!=74 || !bNormCapabilityValid )
 		{
 			m_sLastError = "E1: unknown required capability/base version";
 			return LOAD_E::GeneralError_e;
@@ -11063,6 +11097,20 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 	if ( !PreallocSecondaryIndex() ) return false;
 	if ( m_bE1 )
 	{
+		const bool bNormsRequired = m_uE1Version==e1::VERSION;
+		if ( bNormsRequired && !sphIsReadable(GetFilename(SPH_EXT_SPN),&m_sLastError) )
+			return false;
+		if ( bNormsRequired || sphIsReadable(GetFilename(SPH_EXT_SPN)) )
+		{
+			if ( !m_tNormData.Setup(GetFilename(SPH_EXT_SPN),m_sLastError,false) )
+				return false;
+			std::string sNormError;
+			if ( !m_tNormStore.Open(m_tNormData.GetReadPtr(),m_tNormData.GetLengthBytes(),sNormError) || m_tNormStore.Rows()!=uint32_t(m_iDocinfo) || m_tNormStore.Fields()!=uint32_t(m_tSchema.GetFieldsCount()) )
+			{
+				m_sLastError = sNormError.empty() ? "norms: schema mismatch" : sNormError.c_str();
+				return false;
+			}
+		}
 		CSphMappedBuffer<BYTE> dict, hits;
 		if ( !m_tE1Data.Setup(GetFilename(SPH_EXT_SPD),m_sLastError,false)
 			|| !dict.Setup(GetFilename(SPH_EXT_SPI),m_sLastError,false)

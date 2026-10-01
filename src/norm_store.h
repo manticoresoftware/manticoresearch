@@ -4,6 +4,8 @@
 #include "postings_container_codecs.h"
 
 #include <algorithm>
+#include <cerrno>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -55,6 +57,17 @@ public:
 		for ( uint32_t i=0; i<m_uFields; ++i )
 			m_dFields[i].push_back ( pValues[i] );
 		++m_uRows;
+		return true;
+	}
+
+	bool Set ( uint32_t uRow, uint32_t uField, uint32_t uValue, std::string & sError )
+	{
+		if ( uField>=m_uFields || uRow>=m_uRows )
+		{
+			sError = "norms: invalid row update";
+			return false;
+		}
+		m_dFields[uField][uRow] = uValue;
 		return true;
 	}
 
@@ -141,6 +154,212 @@ private:
 	std::vector<std::vector<uint32_t>> m_dFields;
 };
 
+// Bounded-memory writer used by production indexing. Values are staged in one
+// anonymous file per field, then transcoded group-by-group into the final store.
+class StagedBuilder
+{
+public:
+	explicit StagedBuilder ( uint32_t uFields, uint32_t uGroupRows=DEFAULT_GROUP_ROWS )
+		: m_uFields ( uFields )
+		, m_uGroupRows ( uGroupRows )
+	{
+		if ( !m_uFields || !m_uGroupRows )
+			return;
+		m_dFields.resize ( m_uFields, nullptr );
+		for ( FILE * & pFile : m_dFields )
+			if ( !( pFile=tmpfile() ) )
+				return;
+		m_bValid = true;
+	}
+
+	~StagedBuilder()
+	{
+		for ( FILE * pFile : m_dFields )
+			if ( pFile )
+				fclose ( pFile );
+	}
+
+	StagedBuilder ( const StagedBuilder & ) = delete;
+	StagedBuilder & operator = ( const StagedBuilder & ) = delete;
+
+	bool AddRow ( const uint32_t * pValues, uint32_t uFields, std::string & sError )
+	{
+		if ( !m_bValid || !pValues || uFields!=m_uFields || m_uRows==std::numeric_limits<uint32_t>::max() )
+			return Fail ( sError, "invalid staged row" );
+		for ( uint32_t i=0; i<m_uFields; ++i )
+			if ( fwrite ( pValues+i, sizeof(uint32_t), 1, m_dFields[i] )!=1 )
+				return Fail ( sError, "staging write failed" );
+		++m_uRows;
+		return true;
+	}
+
+	bool Set ( uint32_t uRow, uint32_t uField, uint32_t uValue, std::string & sError )
+	{
+		if ( !m_bValid || uField>=m_uFields || uRow>=m_uRows )
+			return Fail ( sError, "invalid staged row update" );
+		FILE * pFile = m_dFields[uField];
+		if ( !Seek(pFile,uint64_t(uRow)*sizeof(uint32_t)) || fwrite(&uValue,sizeof(uValue),1,pFile)!=1 || !Seek(pFile,uint64_t(m_uRows)*sizeof(uint32_t)) )
+			return Fail ( sError, "staging update failed" );
+		return true;
+	}
+
+	bool Finish ( const char * szOutput, std::string & sError )
+	{
+		if ( !m_bValid || !szOutput || !*szOutput )
+			return Fail ( sError, "invalid staged builder" );
+		for ( FILE * pFile : m_dFields )
+			if ( fflush(pFile) )
+				return Fail ( sError, "staging flush failed" );
+
+		FILE * pMetadata = tmpfile();
+		if ( !pMetadata )
+			return Fail ( sError, "metadata staging failed" );
+		const uint32_t uGroups = m_uRows ? ( m_uRows+m_uGroupRows-1 )/m_uGroupRows : 0;
+		const uint64_t uDirectory = HEADER_SIZE+uint64_t(m_uFields)*FIELD_ENTRY_SIZE;
+		uint64_t uOffset = uDirectory+uint64_t(m_uFields)*uGroups*GROUP_ENTRY_SIZE;
+		std::vector<uint8_t> dFieldEntries ( size_t(m_uFields)*FIELD_ENTRY_SIZE, 0 );
+		std::vector<uint32_t> dValues ( m_uGroupRows );
+
+		for ( uint32_t iField=0; iField<m_uFields; ++iField )
+		{
+			FILE * pField = m_dFields[iField];
+			if ( !Seek(pField,0) )
+				return CloseMetadata ( pMetadata, sError, "staging seek failed" );
+			uint64_t uFieldSum = 0;
+			uint32_t uFieldNonzero = 0;
+			for ( uint32_t iGroup=0; iGroup<uGroups; ++iGroup )
+			{
+				const uint32_t uCount = std::min ( m_uGroupRows, m_uRows-iGroup*m_uGroupRows );
+				if ( fread(dValues.data(),sizeof(uint32_t),uCount,pField)!=uCount )
+					return CloseMetadata ( pMetadata, sError, "staging read failed" );
+				uint64_t uSum = 0;
+				uint32_t uMax = 0;
+				uint32_t uNonzero = 0;
+				for ( uint32_t i=0; i<uCount; ++i )
+				{
+					uSum += dValues[i];
+					uMax = std::max ( uMax, dValues[i] );
+					uNonzero += dValues[i]!=0;
+				}
+				const unsigned uWidth = WidthFor(uMax);
+				std::vector<uint8_t> dEntry ( GROUP_ENTRY_SIZE, 0 );
+				Put64 ( dEntry, 0, uOffset );
+				Put64 ( dEntry, 8, uSum );
+				Put32 ( dEntry, 16, uCount );
+				Put32 ( dEntry, 20, uMax );
+				Put32 ( dEntry, 24, uNonzero );
+				dEntry[28] = uint8_t(uWidth);
+				if ( fwrite(dEntry.data(),1,dEntry.size(),pMetadata)!=dEntry.size() )
+					return CloseMetadata ( pMetadata, sError, "metadata write failed" );
+				uOffset += uint64_t(uCount)*uWidth;
+				uFieldSum += uSum;
+				uFieldNonzero += uNonzero;
+			}
+			const size_t uFieldEntry = size_t(iField)*FIELD_ENTRY_SIZE;
+			Put64 ( dFieldEntries, uFieldEntry, uFieldSum );
+			Put32 ( dFieldEntries, uFieldEntry+8, uFieldNonzero );
+		}
+
+		FILE * pOutput = fopen ( szOutput, "wb" );
+		if ( !pOutput )
+		{
+			const int iError = errno;
+			fclose ( pMetadata );
+			return FailSystem ( sError, "unable to open output", szOutput, iError );
+		}
+		std::vector<uint8_t> dHeader ( HEADER_SIZE, 0 );
+		memcpy ( dHeader.data(), "E1NORM01", 8 );
+		Put32 ( dHeader, 8, VERSION );
+		Put32 ( dHeader, 12, HEADER_SIZE );
+		Put32 ( dHeader, 16, m_uRows );
+		Put32 ( dHeader, 20, m_uFields );
+		Put32 ( dHeader, 24, m_uGroupRows );
+		Put32 ( dHeader, 28, uGroups );
+		Put64 ( dHeader, 32, uDirectory );
+		Put64 ( dHeader, 40, uDirectory+uint64_t(m_uFields)*uGroups*GROUP_ENTRY_SIZE );
+		Put64 ( dHeader, 48, uOffset );
+
+		uint32_t uCRC = ~0u;
+		bool bOK = Write ( pOutput, dHeader.data(), dHeader.size(), nullptr )
+			&& Write ( pOutput, dFieldEntries.data(), dFieldEntries.size(), &uCRC )
+			&& Seek ( pMetadata, 0 );
+		std::vector<uint8_t> dCopy ( 64*1024 );
+		while ( bOK )
+		{
+			const size_t uRead = fread ( dCopy.data(), 1, dCopy.size(), pMetadata );
+			if ( uRead )
+				bOK = Write ( pOutput, dCopy.data(), uRead, &uCRC );
+			if ( uRead<dCopy.size() )
+			{
+				bOK = bOK && feof(pMetadata);
+				break;
+			}
+		}
+
+		std::vector<uint8_t> dPacked ( size_t(m_uGroupRows)*sizeof(uint32_t) );
+		for ( uint32_t iField=0; bOK && iField<m_uFields; ++iField )
+		{
+			FILE * pField = m_dFields[iField];
+			bOK = Seek ( pField, 0 );
+			for ( uint32_t iGroup=0; bOK && iGroup<uGroups; ++iGroup )
+			{
+				const uint32_t uCount = std::min ( m_uGroupRows, m_uRows-iGroup*m_uGroupRows );
+				bOK = fread(dValues.data(),sizeof(uint32_t),uCount,pField)==uCount;
+				uint32_t uMax = 0;
+				for ( uint32_t i=0; i<uCount; ++i )
+					uMax = std::max ( uMax, dValues[i] );
+				const unsigned uWidth = WidthFor(uMax);
+				for ( uint32_t i=0; i<uCount; ++i )
+					for ( unsigned j=0; j<uWidth; ++j )
+						dPacked[size_t(i)*uWidth+j] = uint8_t ( dValues[i] >> ( 8*j ) );
+				bOK = bOK && Write ( pOutput, dPacked.data(), size_t(uCount)*uWidth, &uCRC );
+			}
+		}
+
+		Put32 ( dHeader, 56, ~uCRC );
+		bOK = bOK && fflush(pOutput)==0 && Seek(pOutput,0) && Write(pOutput,dHeader.data(),dHeader.size(),nullptr) && fflush(pOutput)==0;
+		bOK = fclose(pOutput)==0 && bOK;
+		fclose ( pMetadata );
+		if ( !bOK )
+		{
+			std::remove ( szOutput );
+			return Fail ( sError, "output write failed" );
+		}
+		return true;
+	}
+
+private:
+	static bool Fail ( std::string & sError, const char * szError ) { sError = std::string("norms: ")+szError; return false; }
+	static bool FailSystem ( std::string & sError, const char * szAction, const char * szPath, int iError )
+	{
+		sError = std::string("norms: ")+szAction+" '"+szPath+"': "+std::strerror(iError);
+		return false;
+	}
+	static bool CloseMetadata ( FILE * pFile, std::string & sError, const char * szError ) { fclose(pFile); return Fail(sError,szError); }
+	static bool Seek ( FILE * pFile, uint64_t uOffset )
+	{
+#if defined(_WIN32)
+		return _fseeki64 ( pFile, static_cast<__int64>(uOffset), SEEK_SET )==0;
+#else
+		return fseeko ( pFile, static_cast<off_t>(uOffset), SEEK_SET )==0;
+#endif
+	}
+	static bool Write ( FILE * pFile, const void * pData, size_t uSize, uint32_t * pCRC )
+	{
+		if ( uSize && fwrite(pData,1,uSize,pFile)!=uSize )
+			return false;
+		if ( pCRC )
+			*pCRC = e1::CRCUpdate ( *pCRC, static_cast<const uint8_t *>(pData), uSize );
+		return true;
+	}
+
+	uint32_t m_uFields = 0;
+	uint32_t m_uGroupRows = 0;
+	uint32_t m_uRows = 0;
+	bool m_bValid = false;
+	std::vector<FILE *> m_dFields;
+};
+
 class Store
 {
 public:
@@ -182,6 +401,19 @@ public:
 					return fnFail ( "invalid group" );
 				if ( uint64_t(uCount)*uWidth>uSize-uExpectedOffset )
 					return fnFail ( "truncated payload" );
+				uint64_t uDecodedSum = 0;
+				uint32_t uDecodedMax = 0;
+				uint32_t uDecodedNonzero = 0;
+				for ( uint32_t i=0; i<uCount; ++i )
+				{
+					const uint8_t * pValue = pData+uOffset+uint64_t(i)*uWidth;
+					const uint32_t uValue = uWidth==1 ? pValue[0] : uWidth==2 ? uint32_t(pValue[0])|(uint32_t(pValue[1])<<8) : e1::U32(pValue);
+					uDecodedSum += uValue;
+					uDecodedMax = std::max ( uDecodedMax, uValue );
+					uDecodedNonzero += uValue!=0;
+				}
+				if ( uDecodedSum!=uSum || uDecodedMax!=uMax || uDecodedNonzero!=uNonzero )
+					return fnFail ( "group metadata mismatch" );
 				uExpectedOffset += uint64_t(uCount)*uWidth;
 				uFieldSum += uSum;
 				uFieldNonzero += uNonzero;

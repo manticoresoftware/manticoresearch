@@ -8510,6 +8510,12 @@ bool CSphIndex_VLN::AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSph
 
 bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError )
 {
+	if ( m_bE1 )
+	{
+		sError.SetSprintf ( "ALTER TABLE %s FULL-TEXT FIELD is not supported for compact norms indexes; rebuild the table instead", bAddField ? "ADD" : "DROP" );
+		return false;
+	}
+
 	// the header gets rewritten with the current format version below
 	if ( !UpgradeDocidLookup ( sError ) )
 		return false;

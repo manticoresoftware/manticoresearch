@@ -9967,6 +9967,19 @@ void RtIndex_c::AddRemoveRowwiseAttr ( RtGuard_t & tGuard, bool bAdd, const CSph
 // fixme! Need fine-grain locking, not const_cast!
 void RtIndex_c::AddFieldToRamchunk ( const CSphString & sFieldName, DWORD uFieldFlags, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema )
 {
+	auto pSegs = m_tRtChunks.RamSegs();
+	for ( auto & pConstSeg : *pSegs )
+	{
+		auto * pSeg = const_cast<RtSegment_t*> ( pConstSeg.Ptr() );
+		CSphTightVector<DWORD> dNewNorms;
+		dNewNorms.Resize ( int64_t(pSeg->m_uRows)*tNewSchema.GetFieldsCount() );
+		dNewNorms.ZeroVec();
+		for ( RowID_t tRowID=0; tRowID<pSeg->m_uRows; ++tRowID )
+			memcpy ( &dNewNorms[int64_t(tRowID)*tNewSchema.GetFieldsCount()], &pSeg->m_dNorms[int64_t(tRowID)*tOldSchema.GetFieldsCount()], tOldSchema.GetFieldsCount()*sizeof(DWORD) );
+		pSeg->m_dNorms.SwapData ( dNewNorms );
+		pSeg->UpdateUsedRam();
+	}
+
 	if ( !(uFieldFlags & CSphColumnInfo::FIELD_STORED) )
 		return;
 
@@ -10035,6 +10048,17 @@ void RtIndex_c::RemoveFieldFromRamchunk ( const CSphString & sFieldName, const C
 		auto* pSeg = const_cast<RtSegment_t*> ( pConstSeg.Ptr() );
 		assert ( pSeg );
 		DeleteFieldFromDict ( pSeg, iFieldId );
+		CSphTightVector<DWORD> dNewNorms;
+		dNewNorms.Resize ( int64_t(pSeg->m_uRows)*tNewSchema.GetFieldsCount() );
+		for ( RowID_t tRowID=0; tRowID<pSeg->m_uRows; ++tRowID )
+		{
+			int iDstField = 0;
+			for ( int iSrcField=0; iSrcField<tOldSchema.GetFieldsCount(); ++iSrcField )
+				if ( iSrcField!=iFieldId )
+					dNewNorms[int64_t(tRowID)*tNewSchema.GetFieldsCount()+iDstField++] = pSeg->m_dNorms[int64_t(tRowID)*tOldSchema.GetFieldsCount()+iSrcField];
+		}
+		pSeg->m_dNorms.SwapData ( dNewNorms );
+		pSeg->UpdateUsedRam();
 	}
 
 	AddRemoveFromRamDocstore ( tOldSchema, tNewSchema );
@@ -10054,6 +10078,13 @@ bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD
 
 	if ( !Alter_AddRemoveFieldFromSchema ( bAdd, tNewSchema, sFieldName, uFieldFlags, sError ) )
 		return false;
+
+	for ( const auto & pChunk : *m_tRtChunks.DiskChunks() )
+		if ( sphIsE1Snapshot ( pChunk->Cidx().GetFilebase() ) )
+		{
+			sError.SetSprintf ( "ALTER TABLE %s FULL-TEXT FIELD is not supported while compact norms disk chunks exist; rebuild the table instead", bAdd ? "ADD" : "DROP" );
+			return false;
+		}
 
 	// the embedding sources (FROM=...) are field ids - rebuild them for the new schema (fix #4872)
 	CSphVector<AttrWithModel_t> dPreparedAttrsWithModels;

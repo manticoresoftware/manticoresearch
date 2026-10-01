@@ -140,6 +140,7 @@ REPLACE INTO e1_rt (id,title,body,gid) VALUES (2,'beta','alpha alpha alpha',4);
 UPDATE e1_rt SET gid=5 WHERE id=4;
 FLUSH RAMCHUNK e1_rt;
 OPTIMIZE TABLE e1_rt OPTION sync=1,cutoff=1;
+ALTER TABLE e1_rt ADD COLUMN extra TEXT;
 SELECT id,gid,weight() AS w FROM e1_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
 </sphinxql>
 

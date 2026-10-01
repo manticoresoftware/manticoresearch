@@ -38,9 +38,9 @@ mysql -h0 -P1306 -e "CREATE TABLE t9(body TEXT, chunks FLOAT_VECTOR_ARRAY KNN_TY
 ––– output –––
 0
 ––– input –––
-for i in $(seq 1 30); do s=$(mysql -h0 -P1306 -N -B -e "SHOW SHARDING STATUS t9" 2>/dev/null); [ "$(printf '%s\n' "$s" | grep -ci active)" -eq 2 ] && ! printf '%s\n' "$s" | grep -Eqi 'pending|error|initializing' && break; sleep 1; done; printf '%s\n' "$s" | grep -ci active
+ready=0; for i in $(seq 1 30); do s=$(mysql -h0 -P1306 -N -B -e "SHOW SHARDING STATUS t9" 2>/dev/null); if [ "$(printf '%s\n' "$s" | grep -ci active)" -eq 2 ] && ! printf '%s\n' "$s" | grep -Eqi 'pending|error|initializing'; then ready=1; break; fi; sleep 1; done; echo "ready=$ready"
 ––– output –––
-2
+ready=1
 ––– input –––
 mysql -h0 -P1306 -e "INSERT INTO t9(id,body) VALUES (1,'short target phrase end'),(2,'alpha beta gamma delta epsilon zeta eta theta target phrase end'),(3,'alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu target phrase end'),(4,'prefix words before target phrase and tail'),(5,'one two three four five six seven eight nine ten target phrase end'),(6,'target phrase starts this document'),(7,'long prefix alpha beta gamma delta epsilon zeta eta theta iota target phrase end'),(8,'different prefix target phrase different tail');"; echo $?
 ––– output –––

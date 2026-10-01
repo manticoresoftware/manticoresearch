@@ -34,5 +34,20 @@ elif mode in ("http", "hybrid"):
     else:
         validate_range(sys.argv[2], values, False)
         print("CHUNK_HYBRID_OK")
+elif mode == "distributed":
+    sources = {
+        int(sys.argv[i]): sys.argv[i + 1]
+        for i in range(2, len(sys.argv), 2)
+    }
+    rows = [line for line in sys.stdin.read().splitlines() if line.strip()]
+    assert len(rows) == len(sources), (rows, sources)
+    seen = set()
+    for row in rows:
+        docid, slot, start, end = map(int, row.split())
+        assert docid in sources and docid not in seen, row
+        validate_range(sources[docid], (slot, start, end), True)
+        seen.add(docid)
+    assert seen == set(sources), (seen, sources)
+    print("DISTRIBUTED_CHUNK_PROVENANCE_OK")
 else:
     raise SystemExit(f"unknown mode: {mode}")

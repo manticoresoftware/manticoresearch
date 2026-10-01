@@ -478,12 +478,30 @@ public:
 	{
 		if ( !pRows || !pOut || !m_uTotalWidth )
 			return false;
-		for ( uint32_t i=0; i<uCount; ++i )
+		if ( m_uTotalWidth==1 )
 		{
-			const uint32_t uRow = pRows[i];
-			if ( uRow>=m_uRows )
-				return false;
-			pOut[i] = m_uTotalWidth==1 ? m_dTotal8[uRow] : m_uTotalWidth==2 ? m_dTotal16[uRow] : m_dTotal32[uRow];
+			for ( uint32_t i=0; i<uCount; ++i )
+			{
+				if ( pRows[i]>=m_uRows )
+					return false;
+				pOut[i] = m_dTotal8[pRows[i]];
+			}
+		} else if ( m_uTotalWidth==2 )
+		{
+			for ( uint32_t i=0; i<uCount; ++i )
+			{
+				if ( pRows[i]>=m_uRows )
+					return false;
+				pOut[i] = m_dTotal16[pRows[i]];
+			}
+		} else
+		{
+			for ( uint32_t i=0; i<uCount; ++i )
+			{
+				if ( pRows[i]>=m_uRows )
+					return false;
+				pOut[i] = m_dTotal32[pRows[i]];
+			}
 		}
 		return true;
 	}

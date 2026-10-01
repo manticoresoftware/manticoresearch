@@ -49,9 +49,9 @@ mysql -h0 -P9306 -e "INSERT INTO legacy_provenance(id,body) VALUES(2,'new row ta
 1 -1 -1 -1
 2 -1 -1 -1
 ––– comment –––
-HTTP exposes the same unavailable provenance sentinel for both rows.
+HTTP omits `_knn_chunk` because the sidecar-less schema has no source provenance.
 ––– input –––
-COUNT=$(curl -s -X POST http://127.0.0.1:9308/search -H 'Content-Type: application/json' -d '{"index":"legacy_provenance","knn":{"field":"chunks","query":"target phrase","k":2},"limit":2}' | grep -o '"_knn_chunk":{"index":-1,"start":-1,"end":-1}' | wc -l); test "$COUNT" -eq 2; echo LEGACY_HTTP_OK
+COUNT=$(curl -s -X POST http://127.0.0.1:9308/search -H 'Content-Type: application/json' -d '{"index":"legacy_provenance","knn":{"field":"chunks","query":"target phrase","k":2},"limit":2}' | grep -o '"_knn_chunk"' | wc -l); test "$COUNT" -eq 0; echo LEGACY_HTTP_OK
 ––– output –––
 LEGACY_HTTP_OK
 ––– input –––

@@ -3411,8 +3411,13 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 				tOut.Sprintf( R"("_knn_dist":%f)", tMatch.GetAttrFloat ( pKNNDist->m_tLocator ) );
 
 			if ( pKNNChunkIndex && pKNNChunkStart && pKNNChunkEnd )
-				tOut.Sprintf ( R"("_knn_chunk":{"index":%l,"start":%l,"end":%l})",
-					(int64_t)tMatch.GetAttr(pKNNChunkIndex->m_tLocator), (int64_t)tMatch.GetAttr(pKNNChunkStart->m_tLocator), (int64_t)tMatch.GetAttr(pKNNChunkEnd->m_tLocator) );
+			{
+				int64_t iChunkIndex = (int64_t)tMatch.GetAttr ( pKNNChunkIndex->m_tLocator );
+				int64_t iChunkStart = (int64_t)tMatch.GetAttr ( pKNNChunkStart->m_tLocator );
+				int64_t iChunkEnd = (int64_t)tMatch.GetAttr ( pKNNChunkEnd->m_tLocator );
+				if ( iChunkIndex>=0 && iChunkStart>=0 && iChunkEnd>=0 )
+					tOut.Sprintf ( R"("_knn_chunk":{"index":%l,"start":%l,"end":%l})", iChunkIndex, iChunkStart, iChunkEnd );
+			}
 
 			if ( pHybridScore )
 				tOut.Sprintf( R"("_hybrid_score":%f)", tMatch.GetAttrFloat ( pHybridScore->m_tLocator ) );

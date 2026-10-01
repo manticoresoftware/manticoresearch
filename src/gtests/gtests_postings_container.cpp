@@ -12,6 +12,7 @@
 
 #include "postings_container_reader.h"
 #include "postings_container_writer.h"
+#include "norm_store.h"
 #include "threadutils.h"
 
 #include <algorithm>
@@ -474,6 +475,61 @@ TEST_F ( PostingsContainerTest, RankedBoundsAndPersistedVersions )
 		EXPECT_EQ ( uTF, dPostings[i].m_uTF );
 	}
 	EXPECT_FALSE ( tCursor.Next(uRow) );
+}
+
+TEST ( NormStore, ExactWidthsRangesGatherAndTotals )
+{
+	e1::norms::Builder tBuilder ( 3, 4 );
+	std::string sError;
+	std::array<std::array<uint32_t,3>,128> dRows {};
+	for ( uint32_t i=0; i<dRows.size(); ++i )
+	{
+		dRows[i] = { i, i+1, i+7 };
+		if ( i==0 ) dRows[i][1] = 255;
+		if ( i==1 ) dRows[i][1] = 256;
+		if ( i==0 ) dRows[i][2] = 65535;
+		if ( i==1 ) dRows[i][2] = 65536;
+		ASSERT_TRUE ( tBuilder.AddRow(dRows[i].data(),dRows[i].size(),sError) ) << sError;
+	}
+	std::vector<uint8_t> dData;
+	ASSERT_TRUE ( tBuilder.Build(dData,sError) ) << sError;
+
+	e1::norms::Store tStore;
+	ASSERT_TRUE ( tStore.Open(dData.data(),dData.size(),sError) ) << sError;
+	EXPECT_EQ ( tStore.Rows(), 128u );
+	EXPECT_EQ ( tStore.Fields(), 3u );
+	EXPECT_EQ ( tStore.Nonzero(0), 127u );
+	EXPECT_EQ ( tStore.Sum(0), 8128u );
+
+	uint32_t uValue = 0;
+	ASSERT_TRUE ( tStore.Get(1,1,uValue) );
+	EXPECT_EQ ( uValue, 256u );
+	ASSERT_TRUE ( tStore.Get(2,1,uValue) );
+	EXPECT_EQ ( uValue, 65536u );
+
+	std::array<uint32_t,128> dIDs {};
+	std::array<uint32_t,128> dValues {};
+	for ( uint32_t i=0; i<128; ++i ) dIDs[i] = i;
+	ASSERT_TRUE ( tStore.Gather128(0,dIDs.data(),dValues.data()) );
+	for ( uint32_t i=0; i<128; ++i ) EXPECT_EQ ( dValues[i], i );
+	ASSERT_TRUE ( tStore.ReadRange(2,1,7,dValues.data()) );
+	for ( uint32_t i=0; i<7; ++i ) EXPECT_EQ ( dValues[i], dRows[i+1][2] );
+}
+
+TEST ( NormStore, RejectsCorruptionAndTruncation )
+{
+	e1::norms::Builder tBuilder ( 1, 4 );
+	std::string sError;
+	for ( uint32_t uValue : { 1u, 255u, 256u, 65536u, 7u } )
+		ASSERT_TRUE ( tBuilder.AddRow(&uValue,1,sError) ) << sError;
+	std::vector<uint8_t> dData;
+	ASSERT_TRUE ( tBuilder.Build(dData,sError) ) << sError;
+
+	e1::norms::Store tStore;
+	auto dCorrupt = dData;
+	dCorrupt.back() ^= 1;
+	EXPECT_FALSE ( tStore.Open(dCorrupt.data(),dCorrupt.size(),sError) );
+	EXPECT_FALSE ( tStore.Open(dData.data(),dData.size()-1,sError) );
 }
 
 } // namespace

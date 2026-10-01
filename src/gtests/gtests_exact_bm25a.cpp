@@ -65,57 +65,6 @@ TEST ( ExactBM25A, DefaultContractPreservesProximityBM25AndImplicitRelevanceSort
 	EXPECT_STREQ ( tQuery.m_sOrderBy.cstr(), "@weight desc" );
 }
 
-TEST ( ExactBM25A, ImplicitRankerOnlyWhenWeightIsObservable )
-{
-	CSphQuery tQuery;
-	SetQueryDefaultsExt2 ( tQuery );
-	EXPECT_TRUE ( IsImplicitRankerNeeded ( tQuery ) );
-
-	tQuery.m_bExplicitOrderBy = true;
-	tQuery.m_sSortBy = "lightweight asc";
-	tQuery.m_sOrderBy = "lightweight asc";
-	CSphQueryItem & tID = tQuery.m_dItems.Add();
-	tID.m_sExpr = "id";
-	EXPECT_FALSE ( IsImplicitRankerNeeded ( tQuery ) );
-
-	tQuery.m_sSortBy = "id asc";
-	tQuery.m_sOrderBy = "id asc";
-	CSphQueryItem & tWeight = tQuery.m_dItems.Add();
-	tWeight.m_sExpr = "weight()";
-	EXPECT_TRUE ( IsImplicitRankerNeeded ( tQuery ) );
-	tQuery.m_dItems.Pop();
-
-	for ( const char * sExpr : { "zonespanlist()", "rankfactors()", "packedfactors()", "factors()", "bm25f(1.2,0.75)" } )
-	{
-		CSphQueryItem & tRankerData = tQuery.m_dItems.Add();
-		tRankerData.m_sExpr = sExpr;
-		EXPECT_TRUE ( IsImplicitRankerNeeded ( tQuery ) ) << sExpr;
-		tQuery.m_dItems.Pop();
-	}
-
-	CSphQueryItem & tNotRankerData = tQuery.m_dItems.Add();
-	tNotRankerData.m_sExpr = "my_packedfactors()";
-	EXPECT_FALSE ( IsImplicitRankerNeeded ( tQuery ) );
-	tQuery.m_dItems.Pop();
-
-	CSphFilterSettings & tFilter = tQuery.m_dFilters.Add();
-	tFilter.m_sAttrName = "@weight";
-	EXPECT_TRUE ( IsImplicitRankerNeeded ( tQuery ) );
-	tQuery.m_dFilters.Pop();
-
-	tQuery.m_sGroupBy = "type";
-	EXPECT_FALSE ( IsImplicitRankerNeeded ( tQuery ) );
-
-	tQuery.m_sGroupBy = "";
-	tQuery.m_bExplicitOrderBy = false;
-	CSphQueryItem & tSum = tQuery.m_dItems.Add();
-	tSum.m_sExpr = "sum(type)";
-	tSum.m_eAggrFunc = SPH_AGGR_SUM;
-	EXPECT_FALSE ( IsImplicitRankerNeeded ( tQuery ) );
-	tSum.m_sExpr = "weight()";
-	EXPECT_TRUE ( IsImplicitRankerNeeded ( tQuery ) );
-}
-
 TEST ( ExactBM25A, RankerDataFunctionsKeepCompatibleImplicitRanker )
 {
 	const MutableIndexSettings_c tSettings;
@@ -151,7 +100,7 @@ TEST ( ExactBM25A, SimilarFunctionNamesDoNotChangeImplicitRanker )
 	tQuery.m_sOrderBy = "id asc";
 	tQuery.m_dItems.Add().m_sExpr = "my_packedfactors()";
 	const QueryExecutionSettings_t tEffective = BuildQueryExecutionSettings ( tQuery, tSettings );
-	EXPECT_EQ ( tEffective.m_eRanker, SPH_RANK_NONE );
+	EXPECT_EQ ( tEffective.m_eRanker, SPH_RANK_PROXIMITY_BM25 );
 }
 
 TEST ( ExactBM25A, DynamicTopKCoversDeepPage )

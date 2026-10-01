@@ -10141,13 +10141,6 @@ bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD
 	if ( !Alter_AddRemoveFieldFromSchema ( bAdd, tNewSchema, sFieldName, uFieldFlags, sError ) )
 		return false;
 
-	for ( const auto & pChunk : *m_tRtChunks.DiskChunks() )
-		if ( sphIsE1Snapshot ( pChunk->Cidx().GetFilebase() ) )
-		{
-			sError.SetSprintf ( "ALTER TABLE %s FULL-TEXT FIELD is not supported while compact norms disk chunks exist; rebuild the table instead", bAdd ? "ADD" : "DROP" );
-			return false;
-		}
-
 	// the embedding sources (FROM=...) are field ids - rebuild them for the new schema (fix #4872)
 	CSphVector<AttrWithModel_t> dPreparedAttrsWithModels;
 	if ( m_pEmbeddings && !PrepareAttrsWithModels ( tNewSchema, *m_pEmbeddings, dPreparedAttrsWithModels, sError ) )

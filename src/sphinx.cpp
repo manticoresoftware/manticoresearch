@@ -2291,25 +2291,6 @@ static bool HasFunctionReference ( const CSphString & sExpr, const char * sFunct
 }
 
 
-static bool HasWeightReference ( const CSphString & sExpr )
-{
-	if ( HasFunctionReference ( sExpr, "weight" ) )
-		return true;
-
-	CSphString sLower = sExpr;
-	sLower.ToLower();
-	const char * sCur = sLower.cstr();
-	while ( ( sCur = strstr ( sCur, "@weight" ) )!=nullptr )
-	{
-		const char * sNext = sCur + 7;
-		if ( !sphIsAlpha ( *sNext ) && !sphIsDigital ( *sNext ) && *sNext!='_' )
-			return true;
-		sCur += 7;
-	}
-	return false;
-}
-
-
 static bool HasRankerDataReference ( const CSphString & sExpr )
 {
 	return HasFunctionReference ( sExpr, "zonespanlist" )
@@ -2328,33 +2309,6 @@ static bool HasImplicitRankerDataReference ( const CSphQuery & tQuery )
 
 	for ( const CSphFilterSettings & tFilter : tQuery.m_dFilters )
 		if ( HasRankerDataReference ( tFilter.m_sAttrName ) )
-			return true;
-
-	return false;
-}
-
-
-bool IsImplicitRankerNeeded ( const CSphQuery & tQuery )
-{
-	const bool bAggregateResult = !tQuery.m_sGroupBy.IsEmpty() || !tQuery.m_sFacetBy.IsEmpty()
-		|| tQuery.m_dItems.any_of ( [] ( const CSphQueryItem & tItem )
-			{ return tItem.m_eAggrFunc!=SPH_AGGR_NONE || tItem.m_sExpr=="count(*)"; } );
-
-	if ( ( !tQuery.m_bExplicitOrderBy && !bAggregateResult ) || tQuery.m_eJoinType!=JoinType_e::NONE || tQuery.HasKnn() )
-		return true;
-
-	// Ignore the inherited relevance sort for aggregate/grouped result sets.
-	// Explicit weight sorting and weight-based HAVING still require a ranker.
-	if ( ( tQuery.m_bExplicitOrderBy && ( HasWeightReference ( tQuery.m_sSortBy ) || HasWeightReference ( tQuery.m_sGroupSortBy ) ) )
-		|| HasWeightReference ( tQuery.m_tHaving.m_sAttrName ) )
-		return true;
-
-	for ( const CSphQueryItem & tItem : tQuery.m_dItems )
-		if ( HasWeightReference ( tItem.m_sExpr ) || HasRankerDataReference ( tItem.m_sExpr ) )
-			return true;
-
-	for ( const CSphFilterSettings & tFilter : tQuery.m_dFilters )
-		if ( HasWeightReference ( tFilter.m_sAttrName ) || HasRankerDataReference ( tFilter.m_sAttrName ) )
 			return true;
 
 	return false;
@@ -2382,13 +2336,6 @@ QueryExecutionSettings_t BuildQueryExecutionSettings ( const CSphQuery & tQuery,
 		// proximity ranker. Keep that established implicit contract even when a
 		// table-level default selects another ranker.
 		tEffectiveSettings.m_eRanker = SPH_RANK_PROXIMITY_BM25;
-		tEffectiveSettings.m_sRankerExpr = "";
-		tEffectiveSettings.m_sUDRanker = "";
-		tEffectiveSettings.m_sUDRankerOpts = "";
-	}
-	else if ( !tQuery.m_bExplicitRanker && !IsImplicitRankerNeeded ( tQuery ) )
-	{
-		tEffectiveSettings.m_eRanker = SPH_RANK_NONE;
 		tEffectiveSettings.m_sRankerExpr = "";
 		tEffectiveSettings.m_sUDRanker = "";
 		tEffectiveSettings.m_sUDRankerOpts = "";
@@ -8509,12 +8456,6 @@ bool CSphIndex_VLN::AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSph
 
 bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError )
 {
-	if ( m_bE1 )
-	{
-		sError.SetSprintf ( "ALTER TABLE %s FULL-TEXT FIELD is not supported for compact norms indexes; rebuild the table instead", bAddField ? "ADD" : "DROP" );
-		return false;
-	}
-
 	// the header gets rewritten with the current format version below
 	if ( !UpgradeDocidLookup ( sError ) )
 		return false;
@@ -8525,6 +8466,36 @@ bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldNa
 		return false;
 
 	auto iRemoveIdx = m_tSchema.GetFieldIndex ( sFieldName.cstr () );
+	if ( m_bE1 )
+	{
+		const int iNewFields = tNewSchema.GetFieldsCount();
+		e1::norms::StagedBuilder tNormBuilder ( iNewFields );
+		std::vector<uint32_t> dNorms ( iNewFields );
+		std::string sNormError;
+		for ( RowID_t tRowID=0; tRowID<RowID_t(m_iDocinfo); ++tRowID )
+		{
+			for ( int iNewField=0; iNewField<iNewFields; ++iNewField )
+			{
+				const int iOldField = tOldSchema.GetFieldIndex ( tNewSchema.GetField(iNewField).m_sName.cstr() );
+				dNorms[iNewField] = 0;
+				if ( iOldField>=0 && !m_tNormStore.Get ( iOldField, tRowID, dNorms[iNewField] ) )
+				{
+					sError = "norms: ALTER read failed";
+					return false;
+				}
+			}
+			if ( !tNormBuilder.AddRow ( dNorms.data(), iNewFields, sNormError ) )
+			{
+				sError = sNormError.c_str();
+				return false;
+			}
+		}
+		if ( !tNormBuilder.Finish ( GetTmpFilename(SPH_EXT_SPN).cstr(), sNormError ) )
+		{
+			sError = sNormError.c_str();
+			return false;
+		}
+	}
 	m_tSchema = tNewSchema;
 
 	BuildHeader_t tBuildHeader;
@@ -8543,7 +8514,26 @@ bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldNa
 	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, GetTmpFilename ( SPH_EXT_SPH ), sError ) )
 		return false;
 
-	return JuggleFile ( SPH_EXT_SPH, sError );
+	if ( !JuggleFile ( SPH_EXT_SPH, sError ) )
+		return false;
+
+	if ( m_bE1 )
+	{
+		m_tNormStore = e1::norms::Store();
+		m_tNormData.Reset();
+		if ( !JuggleFile ( SPH_EXT_SPN, sError ) )
+			return false;
+		if ( !m_tNormData.Setup ( GetFilename(SPH_EXT_SPN), sError, false ) )
+			return false;
+		std::string sNormError;
+		if ( !m_tNormStore.Open ( m_tNormData.GetReadPtr(), m_tNormData.GetLengthBytes(), sNormError ) )
+		{
+			sError = sNormError.c_str();
+			return false;
+		}
+	}
+
+	return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////

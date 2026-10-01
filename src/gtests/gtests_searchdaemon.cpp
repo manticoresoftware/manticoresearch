@@ -169,10 +169,10 @@ TEST ( functions, ImplicitRelevanceOrderOnlyAppliesToOrdinaryFullTextResults )
 	EXPECT_STREQ ( tScan.m_sSortBy.cstr(), "@weight desc" );
 
 	auto tMatch = ParseSelectForTest ( "SELECT * FROM t WHERE MATCH('word')" );
-	EXPECT_STREQ ( tMatch.m_sSortBy.cstr(), "@weight desc, id asc" );
+	EXPECT_STREQ ( tMatch.m_sSortBy.cstr(), "@weight desc" );
 	EXPECT_STREQ ( tMatch.m_sOrderBy.cstr(), "@weight desc" );
 	EXPECT_FALSE ( tMatch.m_bExplicitOrderBy );
-	EXPECT_FALSE ( tMatch.m_tScrollSettings.m_bRequested );
+	EXPECT_TRUE ( tMatch.m_tScrollSettings.m_bRequested );
 
 	auto tCount = ParseSelectForTest ( "SELECT COUNT(*) FROM t WHERE MATCH('word')" );
 	EXPECT_STREQ ( tCount.m_sSortBy.cstr(), "@weight desc" );
@@ -188,12 +188,12 @@ TEST ( functions, JsonImplicitRelevanceOrderOnlyAppliesToOrdinaryFullTextResults
 	const char * szMatch = R"({"index":"t","query":{"match":{"body":"word"}}})";
 	ParsedJsonQuery_t tMatch;
 	EXPECT_TRUE ( sphParseJsonQuery ( { szMatch, (int)strlen(szMatch) }, tMatch ) );
-	EXPECT_STREQ ( tMatch.m_tQuery.m_sSortBy.cstr(), "@weight desc, id asc" );
+	EXPECT_STREQ ( tMatch.m_tQuery.m_sSortBy.cstr(), "@weight desc" );
 
 	const char * szExplicit = R"({"index":"t","query":{"match":{"body":"word"}},"sort":[{"id":"desc"}]})";
 	ParsedJsonQuery_t tExplicit;
 	EXPECT_TRUE ( sphParseJsonQuery ( { szExplicit, (int)strlen(szExplicit) }, tExplicit ) );
-	EXPECT_STRNE ( tExplicit.m_tQuery.m_sSortBy.cstr(), "@weight desc, id asc" );
+	EXPECT_STRNE ( tExplicit.m_tQuery.m_sSortBy.cstr(), "@weight desc" );
 
 	const char * szAggregate = R"({"index":"t","query":{"match":{"body":"word"}},"aggs":{"by_gid":{"terms":{"field":"gid"}}}})";
 	ParsedJsonQuery_t tAggregate;

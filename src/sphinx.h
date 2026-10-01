@@ -765,7 +765,6 @@ bool ParseSelectList ( CSphString & sError, CSphQuery &pResult );
 void SetQueryDefaultsExt2 ( CSphQuery & tQuery );
 bool ParseStoredRanker ( const CSphString & sRanker, QueryExecutionSettings_t & tSettings, CSphString & sError );
 bool ValidateStoredRankerExpression ( ESphRankMode eRanker, const CSphString & sRankerExpr, const ISphSchema & tSchema, CSphString & sError );
-bool IsImplicitRankerNeeded ( const CSphQuery & tQuery );
 QueryExecutionSettings_t BuildQueryExecutionSettings ( const CSphQuery & tQuery, const MutableIndexSettings_c & tSettings );
 
 /// some low-level query stats

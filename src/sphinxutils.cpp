@@ -1223,6 +1223,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "merge_chunks_per_job",	0, nullptr },
 	{ "knn_parallel_build",		0, nullptr },
 	{ "knn_rescore_random_access",	0, nullptr },
+	{ "knn_rescore_prefetch",	0, nullptr },
 	{ "auth",					0, NULL },
 	{ "auth_log_level",			0, NULL },
 	{ "auth_password_policy",	0, NULL },

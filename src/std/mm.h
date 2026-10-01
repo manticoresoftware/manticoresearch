@@ -38,3 +38,27 @@ int mmfree ( void* pMem, size_t uSize );
 void mmadvise ( void* pMem, size_t uSize, Advise_e = Advise_e::NODUMP );
 bool mmlock ( void* pMem, size_t uSize );
 bool mmunlock ( void* pMem, size_t uSize );
+
+/// a memory range to prefetch, see mmprefetch()
+struct MemRange_t
+{
+	const void *	m_pData = nullptr;
+	size_t			m_uLen = 0;
+};
+
+enum class PrefetchResult_e
+{
+	NONE,			///< nothing was requested: unsupported here, or the single call is unavailable and no fallback was allowed
+	SINGLE_CALL,	///< all ranges went to the OS in one call (one per 1024 ranges)
+	PER_RANGE		///< one call per range
+};
+
+/// Ask the OS to start reading these ranges of mapped files now, without waiting for the reads to finish.
+/// Only the pages the ranges cover are requested (no read-around), and all the reads are submitted before any is
+/// awaited, so they overlap instead of being served one page fault at a time.
+/// On Linux this is a single process_madvise() call. Where the kernel does not offer it to this process, the result
+/// is NONE unless bAllowPerRange is set, in which case every range gets its own madvise() call.
+PrefetchResult_e mmprefetch ( const MemRange_t * pRanges, int iRanges, bool bAllowPerRange );
+
+/// errno that made the single call unavailable to this process; 0 while it works or was never tried
+int mmprefetch_single_call_errno();

@@ -1827,15 +1827,16 @@ bool QueueCreator_c::AddKNNRescoreColumn()
 		return true;
 
 	const auto & tKNN = m_tQuery.SingleKnnSettings();
+	const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
+	assert(pAttr);
 	CSphColumnInfo tKNNDistRescored ( GetKnnDistRescoreAttrName(), SPH_ATTR_FLOAT );
-	if ( UseKNNRescoreCollector ( tKNN, m_tSettings.m_iDiskChunks ) )
+	if ( UseKNNRescoreCollector ( tKNN, m_tSettings.m_iDiskChunks, pAttr->IsColumnar() ) )
 		tKNNDistRescored.m_eStage = SPH_EVAL_SORTER;	// filled by the rescore sorter once the candidates of all chunks are merged
 	else
 	{
 		// single disk chunk and a small candidate set: the final-stage expression rescores in place, no extra pass
-		const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
 		const auto * pDist = m_pSorterSchema->GetAttr ( GetKnnDistAttrName() );
-		assert ( pAttr && pDist );
+		assert(pDist);
 		tKNNDistRescored.m_eStage = SPH_EVAL_FINAL;
 		tKNNDistRescored.m_pExpr = CreateExpr_KNNDistRescore ( tKNN.m_dVec, *pAttr, pDist->m_tLocator );
 	}
@@ -2888,7 +2889,9 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 		// rows the client can see must carry the exact distance even when the window is wider than k*oversampling
 		int64_t iWindow = m_tQuery.m_iLimit<0 ? iMaxMatches : int64_t ( m_tQuery.m_iLimit ) + m_tQuery.m_iOffset;
 		const auto & tKNN = m_tQuery.SingleKnnSettings();
-		pSorter = CreateKNNRescoreSorter ( pSorter, tKNN, m_eMatchFunc, UseKNNRescoreCollector ( tKNN, m_tSettings.m_iDiskChunks ), iWindow );
+		const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
+		bool bCollector = UseKNNRescoreCollector ( tKNN, m_tSettings.m_iDiskChunks, pAttr && pAttr->IsColumnar() );
+		pSorter = CreateKNNRescoreSorter ( pSorter, tKNN, m_eMatchFunc, bCollector, iWindow );
 		if ( !pSorter )
 			return nullptr;
 	}

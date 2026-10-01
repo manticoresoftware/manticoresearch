@@ -26,6 +26,7 @@
 #include "conversion.h"
 #include "sphinxrt.h"
 #include "coroutine.h"
+#include "std/mm.h"
 #include "client_task_info.h"
 
 
@@ -218,6 +219,44 @@ bool KNNRescoreRandomAccess()
 }
 
 
+static int g_iKNNRescorePrefetch = 0;	// 0: off, 1: single call only, 2: single call, else one call per vector
+
+void SetKNNRescorePrefetch ( int iMode )
+{
+	g_iKNNRescorePrefetch = Max ( 0, Min ( iMode, 2 ) );
+}
+
+
+int KNNRescorePrefetch()
+{
+	return g_iKNNRescorePrefetch;
+}
+
+
+// say once which mechanism the prefetch ended up with; it decides how a benchmark should be read
+static void ReportKNNRescorePrefetch ( PrefetchResult_e eRes )
+{
+	static std::atomic<int> iReported { -1 };
+	if ( iReported.exchange ( (int)eRes, std::memory_order_relaxed )==(int)eRes )
+		return;
+
+	switch ( eRes )
+	{
+	case PrefetchResult_e::SINGLE_CALL:
+		sphInfo ( "knn_rescore_prefetch: vectors are prefetched with one process_madvise call per rescore" );
+		break;
+
+	case PrefetchResult_e::PER_RANGE:
+		sphWarning ( "knn_rescore_prefetch: process_madvise is unavailable (errno %d); using one madvise call per vector", mmprefetch_single_call_errno() );
+		break;
+
+	default:
+		sphWarning ( "knn_rescore_prefetch: process_madvise is unavailable (errno %d), vectors are NOT prefetched; set knn_rescore_prefetch=2 to allow one madvise call per vector", mmprefetch_single_call_errno() );
+		break;
+	}
+}
+
+
 class KNNVecDistCalc_c
 {
 public:
@@ -247,6 +286,7 @@ private:
 	bool								m_bMulti = false; // true when one row holds N vectors instead of one, so every distance is a min over them
 
 	float		CalcDistData ( ByteBlob_t tData ) const;
+	void		PrefetchColumnar ( const VecTraits_T<CSphMatch*> & dMatches, const GetColumnarFromMatch_fn & fnColumnar ) const;
 	void		RescoreScalar ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool, const GetColumnarFromMatch_fn & fnColumnar );
 	void		RescoreColumnar ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetColumnarFromMatch_fn & fnColumnar );
 	void		RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool );
@@ -361,6 +401,9 @@ void KNNVecDistCalc_c::RescoreBatch ( VecTraits_T<CSphMatch*> & dMatches, const 
 		return a->m_tRowID < b->m_tRowID;
 	} ) );
 
+	if ( m_tAttr.IsColumnar() && KNNRescorePrefetch()>0 )
+		PrefetchColumnar ( dMatches, fnColumnar );
+
 	// small candidate sets don't repay the pointer batching setup; calculate their distances one by one
 	if ( iCount<KNN_RESCORE_BATCH_SIZE )
 	{
@@ -372,6 +415,59 @@ void KNNVecDistCalc_c::RescoreBatch ( VecTraits_T<CSphMatch*> & dMatches, const 
 		RescoreColumnar ( dMatches, tOutLoc, fnColumnar );
 	else
 		RescoreBlob ( dMatches, tOutLoc, fnBlobPool );
+}
+
+
+// Hand the OS the vectors of all candidates at once, before the distance loop touches any of them. The reads are all
+// submitted up front, so they overlap instead of being served one page fault at a time, only the pages the vectors
+// occupy are read, and a vector that straddles a page boundary is fetched by one request.
+// Resolving a row to its address is pointer arithmetic over block headers; it does not touch the vector itself.
+void KNNVecDistCalc_c::PrefetchColumnar ( const VecTraits_T<CSphMatch*> & dMatches, const GetColumnarFromMatch_fn & fnColumnar ) const
+{
+	CSphVector<MemRange_t> dRanges;
+	dRanges.Reserve ( dMatches.GetLength() );
+
+	std::unique_ptr<columnar::Iterator_i> pIterator;
+	int iCurTag = 0;
+	bool bTagInitialized = false;
+
+	for ( const CSphMatch * pMatch : dMatches )
+	{
+		// matches are sorted by tag, so a store is resolved once per chunk
+		if ( !bTagInitialized || pMatch->m_iTag!=iCurTag )
+		{
+			iCurTag = pMatch->m_iTag;
+			bTagInitialized = true;
+			pIterator.reset();
+
+			// only a store that hands out pointers into a file mapping has addresses worth prefetching
+			columnar::Columnar_i * pColumnar = fnColumnar(pMatch);
+			columnar::AttrInfo_t tInfo;
+			if ( pColumnar && pColumnar->GetAttrInfo ( m_tAttr.m_sName.cstr(), tInfo ) && tInfo.m_bStablePtr )
+			{
+				std::string sError; // FIXME! report errors
+				columnar::IteratorHints_t tHints { .m_bNeedStringHashes = false, .m_bBuffered = true, .m_bRandomAccess = KNNRescoreRandomAccess() };
+				pIterator = CreateColumnarIterator ( pColumnar, m_tAttr.m_sName.cstr(), sError, tHints );
+			}
+		}
+
+		if ( !pIterator )
+			continue;
+
+		const BYTE * pData = nullptr;
+		int iLen = pIterator->Get ( pMatch->m_tRowID, pData );
+		if ( pData && iLen>0 )
+		{
+			MemRange_t & tRange = dRanges.Add();
+			tRange.m_pData = pData;
+			tRange.m_uLen = (size_t)iLen;
+		}
+	}
+
+	if ( dRanges.IsEmpty() )
+		return;
+
+	ReportKNNRescorePrefetch ( mmprefetch ( dRanges.Begin(), dRanges.GetLength(), KNNRescorePrefetch()>=2 ) );
 }
 
 
@@ -771,9 +867,10 @@ ISphExpr * CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const 
 // pass. The collector rescores once after the chunks merge: that lets the k*oversampling budget apply per table instead
 // of per chunk and lets the batched distance kernel run. Its gather pass only pays off on large candidate sets, or when
 // there is more than one disk chunk (then it also cuts the vector reads by the chunk count).
-bool UseKNNRescoreCollector ( const KnnSearchSettings_t & tSettings, int iDiskChunks )
+// The prefetch (knn_rescore_prefetch) needs all candidates in hand before any is read, which only the collector has.
+bool UseKNNRescoreCollector ( const KnnSearchSettings_t & tSettings, int iDiskChunks, bool bColumnarAttr )
 {
-	return tSettings.GetRequestedDocs()>=KNN_RESCORE_BATCH_SIZE || iDiskChunks>1;
+	return tSettings.GetRequestedDocs()>=KNN_RESCORE_BATCH_SIZE || iDiskChunks>1 || ( bColumnarAttr && KNNRescorePrefetch()>0 );
 }
 
 

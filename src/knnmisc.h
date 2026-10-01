@@ -65,11 +65,17 @@ void							SetupKNNLimit ( CSphQuery & tQuery );
 void							SetKNNRescoreRandomAccess ( bool bEnable );
 bool							KNNRescoreRandomAccess();
 
+// searchd config 'knn_rescore_prefetch' (undocumented): before rescoring candidates of a columnar table, ask the OS to
+// read all their vectors at once. 0 = off; 1 = with a single process_madvise call, nothing if the kernel refuses it;
+// 2 = same, but fall back to one madvise call per vector when the single call is unavailable
+void							SetKNNRescorePrefetch ( int iMode );
+int								KNNRescorePrefetch();
+
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
 // exact-distance rescore evaluated per chunk at the final stage; tKnnDistLoc is copied for rows that are exact already
 ISphExpr *						CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr, const CSphAttrLocator & tKnnDistLoc );
 // whether the rescore should run once on the merged candidates (collector) instead of per chunk at the final stage
-bool							UseKNNRescoreCollector ( const KnnSearchSettings_t & tSettings, int iDiskChunks );
+bool							UseKNNRescoreCollector ( const KnnSearchSettings_t & tSettings, int iDiskChunks, bool bColumnarAttr );
 void							NormalizeVec ( VecTraits_T<float> & dData );
 
 void							AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr );

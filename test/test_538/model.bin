@@ -9,7 +9,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:25;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:25;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака" },
 	"limit": 1,
@@ -20,7 +20,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:26;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:26;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака" },
 	"limit": 1,
@@ -31,7 +31,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:27;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:27;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака" },
 	"limit": 1,
@@ -42,7 +42,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:28;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:28;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака" },
 	"limit": 1,
@@ -53,7 +53,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:29;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:29;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака" },
 	"limit": 1,
@@ -64,7 +64,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:30;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:30;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака" },
 	"limit": 1,
@@ -75,7 +75,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:31;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:31;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака" },
 	"limit": 1,
@@ -86,7 +86,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:32;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:32;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака" },
 	"limit": 1,
@@ -97,7 +97,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:33;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:33;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака" },
 	"limit": 1,
@@ -108,7 +108,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:34;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:34;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака" },
 	"limit": 1,
@@ -119,7 +119,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:35;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:35;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака" },
 	"limit": 1,
@@ -130,7 +130,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:36;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:36;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака" },
 	"limit": 1,
@@ -141,7 +141,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:37;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:37;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака" },
 	"limit": 1,
@@ -152,7 +152,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:38;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:38;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака" },
 	"limit": 1,
@@ -163,7 +163,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:39;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:39;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака" },
 	"limit": 1,
@@ -174,7 +174,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:40;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:40;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака" },
 	"limit": 1,
@@ -185,7 +185,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:41;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:41;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака" },
 	"limit": 1,
@@ -196,7 +196,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:42;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:42;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака" },
 	"limit": 1,
@@ -207,7 +207,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:43;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:43;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:262:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака" },
 	"limit": 1,
@@ -218,7 +218,7 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:44;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:246:"{
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:44;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:246:"{
 	"table": "highlight_dist",
 	"query": { "query_string": "собака | dog" },
 	"limit": 2,
@@ -254,4 +254,4 @@ a:1:{i:0;a:67:{i:0;a:2:{s:8:"sphinxql";s:35:"drop table if exists highlight_dist
 		"pre_tags": "<em>",
 		"post_tags": "</em>"
 	}
-}";s:4:"rows";s:666:"{"timed_out":false,"hits":{"total":2,"total_relation":"eq","hits":[{"_id":1,"_score":234,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:57;a:2:{s:8:"sphinxql";s:25:"drop table highlight_dist";s:14:"total_affected";i:0;}i:58;a:2:{s:8:"sphinxql";s:26:"drop table highlight_mixed";s:14:"total_affected";i:0;}i:59;a:2:{s:8:"sphinxql";s:28:"drop table highlight_unequal";s:14:"total_affected";i:0;}i:60;a:2:{s:8:"sphinxql";s:26:"drop table highlight_all_1";s:14:"total_affected";i:0;}i:61;a:2:{s:8:"sphinxql";s:26:"drop table highlight_all_2";s:14:"total_affected";i:0;}i:62;a:2:{s:8:"sphinxql";s:27:"drop table highlight_remote";s:14:"total_affected";i:0;}i:63;a:2:{s:8:"sphinxql";s:32:"drop table highlight_remote_only";s:14:"total_affected";i:0;}i:64;a:2:{s:8:"sphinxql";s:23:"drop table highlight_ru";s:14:"total_affected";i:0;}i:65;a:2:{s:8:"sphinxql";s:23:"drop table highlight_en";s:14:"total_affected";i:0;}i:66;a:2:{s:8:"sphinxql";s:23:"drop table highlight_zh";s:14:"total_affected";i:0;}}}
+}";s:4:"rows";s:667:"{"timed_out":false,"hits":{"total":2,"total_relation":"eq","hits":[{"_id":1,"_score":2302,"_source":{"title":"Сосуды и нервы туловища и конечностей собаки.DOC","body":"Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей собаки»","g":1},"highlight":{"body":["Курсовая работа по анатомии на тему: «Сосуды и нервы туловища и конечностей <em>собаки</em>»"],"title":["Сосуды и нервы туловища и конечностей <em>собаки</em>.DOC"]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:57;a:2:{s:8:"sphinxql";s:25:"drop table highlight_dist";s:14:"total_affected";i:0;}i:58;a:2:{s:8:"sphinxql";s:26:"drop table highlight_mixed";s:14:"total_affected";i:0;}i:59;a:2:{s:8:"sphinxql";s:28:"drop table highlight_unequal";s:14:"total_affected";i:0;}i:60;a:2:{s:8:"sphinxql";s:26:"drop table highlight_all_1";s:14:"total_affected";i:0;}i:61;a:2:{s:8:"sphinxql";s:26:"drop table highlight_all_2";s:14:"total_affected";i:0;}i:62;a:2:{s:8:"sphinxql";s:27:"drop table highlight_remote";s:14:"total_affected";i:0;}i:63;a:2:{s:8:"sphinxql";s:32:"drop table highlight_remote_only";s:14:"total_affected";i:0;}i:64;a:2:{s:8:"sphinxql";s:23:"drop table highlight_ru";s:14:"total_affected";i:0;}i:65;a:2:{s:8:"sphinxql";s:23:"drop table highlight_en";s:14:"total_affected";i:0;}i:66;a:2:{s:8:"sphinxql";s:23:"drop table highlight_zh";s:14:"total_affected";i:0;}}}

@@ -54,12 +54,12 @@ TEST ( ExactBM25A, RankerAdmissionIsStrict )
 	EXPECT_FALSE ( E1ExactRankerAdmission(false,false,"1000*bm25a(1.2,0.75,256)") );
 }
 
-TEST ( ExactBM25A, DefaultContractUsesBM25AAndImplicitRelevanceSort )
+TEST ( ExactBM25A, DefaultContractPreservesProximityBM25AndImplicitRelevanceSort )
 {
-	EXPECT_EQ ( SPH_RANK_DEFAULT, SPH_RANK_BM25A );
+	EXPECT_EQ ( SPH_RANK_DEFAULT, SPH_RANK_PROXIMITY_BM25 );
 	CSphQuery tQuery;
 	SetQueryDefaultsExt2(tQuery);
-	EXPECT_EQ ( tQuery.m_eRanker, SPH_RANK_BM25A );
+	EXPECT_EQ ( tQuery.m_eRanker, SPH_RANK_PROXIMITY_BM25 );
 	EXPECT_EQ ( tQuery.m_eSort, SPH_SORT_EXTENDED );
 	EXPECT_STREQ ( tQuery.m_sSortBy.cstr(), "@weight desc" );
 	EXPECT_STREQ ( tQuery.m_sOrderBy.cstr(), "@weight desc" );

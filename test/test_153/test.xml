@@ -366,7 +366,7 @@ index dist_large6
 	select tag,gr from dist4 group by tag order by gr asc;
 
 
-	select gr, sum(tag) as t from dist4 group by gr order by gr asc;
+	select gr, sum(tag) as t from dist4 group by gr;
 	select gr, sum(tag) as t from dist5 group by gr;
 
 	<!-- Group by (gr) is not in the schema - check if it work or not -->

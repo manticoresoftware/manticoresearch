@@ -43,7 +43,7 @@ a:1:{i:0;a:34:{i:0;a:2:{s:8:"sphinxql";s:87:"create table rt1 (title text indexe
 	},
 	"query": { "match": { "*": "221" } }	
 }";s:4:"rows";s:27:"{"table":"rt1","updated":1}";s:9:"http_code";i:200;s:4:"http";i:1;s:5:"agent";s:1:"1";}i:20;a:1:{s:8:"sphinxql";s:37:"/* wait-commit => state | 5
-1 rows */";}i:21;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:56:"{ "table": "rt1", "query": { "match": { "*": "221" } } }";s:4:"rows";s:161:"{"timed_out":false,"hits":{"total":1,"total_relation":"eq","hits":[{"_id":221,"_score":857,"_source":{"mva1":[],"gid":1021,"j1":{"data":"test 221","fd":221}}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:22;a:6:{s:13:"http_endpoint";s:11:"json/delete";s:11:"http_method";s:4:"POST";s:12:"http_request";s:48:"{
+1 rows */";}i:21;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:56:"{ "table": "rt1", "query": { "match": { "*": "221" } } }";s:4:"rows";s:162:"{"timed_out":false,"hits":{"total":1,"total_relation":"eq","hits":[{"_id":221,"_score":1712,"_source":{"mva1":[],"gid":1021,"j1":{"data":"test 221","fd":221}}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:22;a:6:{s:13:"http_endpoint";s:11:"json/delete";s:11:"http_method";s:4:"POST";s:12:"http_request";s:48:"{
 	"cluster":"test",
 	"table":"rt1",
 	"id":221

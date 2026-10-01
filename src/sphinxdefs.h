@@ -175,7 +175,7 @@ enum ESphRankMode
 	SPH_RANK_BM25A				= 11,	///< fixed 1000*bm25a(1.2,0.75,256) ranker
 
 	SPH_RANK_TOTAL,
-	SPH_RANK_DEFAULT			= SPH_RANK_BM25A
+	SPH_RANK_DEFAULT			= SPH_RANK_PROXIMITY_BM25
 };
 
 /// known multi-valued attr sources

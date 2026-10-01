@@ -2379,8 +2379,8 @@ QueryExecutionSettings_t BuildQueryExecutionSettings ( const CSphQuery & tQuery,
 	if ( !tQuery.m_bExplicitRanker && HasImplicitRankerDataReference ( tQuery ) )
 	{
 		// Ranker-data functions rely on state populated by the traditional
-		// proximity ranker. Keep that established implicit contract even though
-		// ordinary queries now default to BM25A.
+		// proximity ranker. Keep that established implicit contract even when a
+		// table-level default selects another ranker.
 		tEffectiveSettings.m_eRanker = SPH_RANK_PROXIMITY_BM25;
 		tEffectiveSettings.m_sRankerExpr = "";
 		tEffectiveSettings.m_sUDRanker = "";

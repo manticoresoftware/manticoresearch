@@ -164,7 +164,7 @@ public:
 		: m_uFields ( uFields )
 		, m_uGroupRows ( uGroupRows )
 	{
-		if ( !m_uFields || !m_uGroupRows )
+		if ( !m_uGroupRows )
 			return;
 		m_dFields.resize ( m_uFields, nullptr );
 		for ( FILE * & pFile : m_dFields )
@@ -187,7 +187,7 @@ public:
 	bool AddRow ( const VALUE * pValues, uint32_t uFields, std::string & sError )
 	{
 		static_assert ( sizeof(VALUE)==sizeof(uint32_t), "norm values must be 32-bit" );
-		if ( !m_bValid || !pValues || uFields!=m_uFields || m_uRows==std::numeric_limits<uint32_t>::max() )
+		if ( !m_bValid || ( m_uFields && !pValues ) || uFields!=m_uFields || m_uRows==std::numeric_limits<uint32_t>::max() )
 			return Fail ( sError, "invalid staged row" );
 		for ( uint32_t i=0; i<m_uFields; ++i )
 		{
@@ -381,7 +381,7 @@ public:
 		const uint32_t uGroups = e1::U32(pData+28);
 		const uint64_t uDirectory = e1::U64(pData+32);
 		const uint64_t uPayload = e1::U64(pData+40);
-		if ( !uFields || !uGroupRows || e1::U64(pData+48)!=uSize || uGroups!=( uRows ? (uRows+uGroupRows-1)/uGroupRows : 0 ) )
+		if ( !uGroupRows || e1::U64(pData+48)!=uSize || uGroups!=( uRows ? (uRows+uGroupRows-1)/uGroupRows : 0 ) )
 			return fnFail ( "invalid dimensions" );
 		if ( uDirectory!=HEADER_SIZE+uint64_t(uFields)*FIELD_ENTRY_SIZE || uPayload!=uDirectory+uint64_t(uFields)*uGroups*GROUP_ENTRY_SIZE || uPayload>uSize )
 			return fnFail ( "invalid directory" );

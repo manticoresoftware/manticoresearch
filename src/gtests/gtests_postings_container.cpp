@@ -577,4 +577,25 @@ TEST ( NormStore, StagedBuilderReportsOutputPathAndSystemError )
 	EXPECT_NE ( sError.find(": "), std::string::npos ) << sError;
 }
 
+TEST ( NormStore, StagedBuilderSupportsAttributeOnlyIndexes )
+{
+	std::string sError;
+	e1::norms::StagedBuilder tStaged ( 0, 4 );
+	const uint32_t * pNoFields = nullptr;
+	ASSERT_TRUE ( tStaged.AddRow(pNoFields,0,sError) ) << sError;
+	ASSERT_TRUE ( tStaged.AddRow(pNoFields,0,sError) ) << sError;
+
+	const std::string sPath = "__empty_norm_store_"+std::to_string(GetOsProcessId())+".tmp";
+	ASSERT_TRUE ( tStaged.Finish(sPath.c_str(),sError) ) << sError;
+	std::ifstream tIn ( sPath, std::ios::binary );
+	std::vector<uint8_t> dData ( (std::istreambuf_iterator<char>(tIn)), std::istreambuf_iterator<char>() );
+	std::remove ( sPath.c_str() );
+
+	e1::norms::Store tStore;
+	ASSERT_TRUE ( tStore.Open(dData.data(),dData.size(),sError) ) << sError;
+	EXPECT_EQ ( tStore.Rows(), 2u );
+	EXPECT_EQ ( tStore.Fields(), 0u );
+	EXPECT_EQ ( tStore.TotalCacheBytes(), 2u );
+}
+
 } // namespace

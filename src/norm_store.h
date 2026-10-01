@@ -2,6 +2,7 @@
 #pragma once
 
 #include "postings_container_codecs.h"
+#include "field_norms.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -360,7 +361,7 @@ private:
 	std::vector<FILE *> m_dFields;
 };
 
-class Store
+class Store final : public FieldNormReader_i
 {
 public:
 	bool Open ( const uint8_t * pData, uint64_t uSize, std::string & sError )
@@ -433,12 +434,12 @@ public:
 		return true;
 	}
 
-	uint32_t Rows() const { return m_uRows; }
-	uint32_t Fields() const { return m_uFields; }
-	uint64_t Sum ( uint32_t uField ) const { return uField<m_uFields ? e1::U64(m_pData+HEADER_SIZE+uint64_t(uField)*FIELD_ENTRY_SIZE) : 0; }
+	uint32_t Rows() const override { return m_uRows; }
+	uint32_t Fields() const override { return m_uFields; }
+	uint64_t Sum ( uint32_t uField ) const override { return uField<m_uFields ? e1::U64(m_pData+HEADER_SIZE+uint64_t(uField)*FIELD_ENTRY_SIZE) : 0; }
 	uint32_t Nonzero ( uint32_t uField ) const { return uField<m_uFields ? e1::U32(m_pData+HEADER_SIZE+uint64_t(uField)*FIELD_ENTRY_SIZE+8) : 0; }
 
-	bool Get ( uint32_t uField, uint32_t uRow, uint32_t & uValue ) const
+	bool Get ( uint32_t uField, uint32_t uRow, uint32_t & uValue ) const override
 	{
 		if ( !m_pData || uField>=m_uFields || uRow>=m_uRows )
 			return false;
@@ -450,7 +451,7 @@ public:
 		return true;
 	}
 
-	bool ReadRange ( uint32_t uField, uint32_t uFirst, uint32_t uCount, uint32_t * pOut ) const
+	bool ReadRange ( uint32_t uField, uint32_t uFirst, uint32_t uCount, uint32_t * pOut ) const override
 	{
 		if ( !pOut || uFirst>m_uRows || uCount>m_uRows-uFirst )
 			return false;
@@ -460,7 +461,7 @@ public:
 		return true;
 	}
 
-	bool Gather128 ( uint32_t uField, const uint32_t * pRows, uint32_t * pOut ) const
+	bool Gather128 ( uint32_t uField, const uint32_t * pRows, uint32_t * pOut ) const override
 	{
 		if ( !pRows || !pOut )
 			return false;

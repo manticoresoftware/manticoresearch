@@ -29,6 +29,12 @@ index e1_plain
 	index_field_lengths = 1
 }
 
+index norms_plain
+{
+	source = e1_source
+	path = <data_path/>/norms_plain
+}
+
 index e1_rt
 {
 	type = rt
@@ -36,7 +42,6 @@ index e1_rt
 	rt_field = title
 	rt_field = body
 	rt_attr_uint = gid
-	index_field_lengths = 1
 }
 
 index e1_ties
@@ -44,7 +49,6 @@ index e1_ties
 	type = rt
 	path = <data_path/>/e1_ties
 	rt_field = body
-	index_field_lengths = 1
 }
 </config>
 
@@ -76,6 +80,8 @@ INSERT INTO e1_rt (id,title,body,gid) VALUES
 (1,'alpha alpha beta','gamma',1),
 (2,'alpha','alpha alpha gamma',1),
 (3,'beta gamma','alpha',2);
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)+0');
 FLUSH RAMCHUNK e1_rt;
 INSERT INTO e1_rt (id,title,body,gid) VALUES
 (4,'alpha beta','beta alpha',2),
@@ -106,6 +112,14 @@ SELECT id,weight() AS w FROM e1_plain WHERE MATCH('"alpha beta"') ORDER BY w DES
 SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha') AND gid=2 ORDER BY w DESC,id ASC OPTION ranker=bm25a;
 SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha') AND gid=2 LIMIT 1; SHOW META LIKE 'total_found';
 SELECT COUNT(*) FROM e1_plain WHERE MATCH('alpha') AND gid=2;
+
+<!-- internal norms must match explicit field-length attributes -->
+SELECT id,weight() AS w FROM norms_plain WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM norms_plain WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)');
+SELECT id,weight() AS w FROM norms_plain WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)+0');
+SELECT id,weight() AS w FROM norms_plain WHERE MATCH('alpha | beta') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM norms_plain WHERE MATCH('@title alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM norms_plain WHERE MATCH('@body alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
 
 <!-- RT flush output uses the same exact paths -->
 SELECT id FROM e1_rt WHERE MATCH('alpha');

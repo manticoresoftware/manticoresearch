@@ -13007,6 +13007,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 
 	tTermSetup.SetDict ( std::move ( pDict ) );
 	tTermSetup.m_pIndex = this;
+	tTermSetup.m_pFieldNorms = m_bE1 ? &m_tNormStore : nullptr;
 	tTermSetup.m_iDynamicRowitems = tMaxSorterSchema.GetDynamicSize();
 	tTermSetup.m_iMaxTimer = tmMaxTimer;
 	tTermSetup.m_pWarning = &tMeta.m_sWarning;
@@ -13109,6 +13110,10 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 		&& E1ExactRankerAdmission ( tQuerySettings.m_eRanker==SPH_RANK_BM25A,
 			tQuerySettings.m_eRanker==SPH_RANK_EXPR, tQuerySettings.m_sRankerExpr.cstr() )
 		&& bExactSort;
+	if ( getenv("MANTICORE_E1_RANK_TRACE") )
+		fprintf ( stderr, "E1_RANK_ADMISSION format=%d dead=%d filter=%d sorters=%d grouped=%d topk=%d ranker=%d sort=%d requested=%d\n",
+			int(m_bE1), int(m_tDeadRowMap.HasDead()), int(bE1FilterSupported), dSorters.GetLength(), int(dSorters.GetLength()==1 && dSorters[0]->IsGroupby()),
+			int(E1RankedTopKFromPage(tQuery.m_iOffset,tQuery.m_iLimit)), int(E1ExactRankerAdmission(tQuerySettings.m_eRanker==SPH_RANK_BM25A,tQuerySettings.m_eRanker==SPH_RANK_EXPR,tQuerySettings.m_sRankerExpr.cstr())), int(bExactSort), int(tTermSetup.m_bE1RankedRequested) );
 	tTermSetup.m_bE1RowidDocidOrder = m_bE1RowidDocidOrder;
 
 	// setup query

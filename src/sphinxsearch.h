@@ -16,6 +16,7 @@
 #include "sphinxquery/sphinxquery.h"
 #include "sphinxint.h"
 #include "exact_bm25a_utils.h"
+#include "field_norms.h"
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -159,6 +160,7 @@ class ISphQwordSetup : ISphNoncopyable
 {
 public:
 	const CSphIndex *		m_pIndex		{nullptr};
+	const FieldNormReader_i *	m_pFieldNorms	{nullptr};
 	int						m_iDynamicRowitems {0};
 	int64_t					m_iMaxTimer		{0};
 	CSphString *			m_pWarning		{nullptr};

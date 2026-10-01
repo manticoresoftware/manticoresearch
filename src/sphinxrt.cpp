@@ -7586,19 +7586,49 @@ private:
 
 //////////////////////////////////////////////////////////////////////////
 
+class RtFieldNormReader_c final : public FieldNormReader_i
+{
+public:
+	void Set ( const RtSegment_t * pSegment, uint32_t uFields ) { m_pSegment = pSegment; m_uFields = uFields; }
+	uint32_t Rows() const override { return m_pSegment ? m_pSegment->m_uRows : 0; }
+	uint32_t Fields() const override { return m_uFields; }
+	uint64_t Sum ( uint32_t uField ) const override
+	{
+		if ( !m_pSegment || uField>=m_uFields )
+			return 0;
+		uint64_t uSum = 0;
+		for ( RowID_t tRowID=0; tRowID<m_pSegment->m_uRows; ++tRowID )
+			uSum += m_pSegment->m_dNorms[int64_t(tRowID)*m_uFields+uField];
+		return uSum;
+	}
+	bool Get ( uint32_t uField, uint32_t uRow, uint32_t & uValue ) const override
+	{
+		if ( !m_pSegment || uField>=m_uFields || uRow>=m_pSegment->m_uRows )
+			return false;
+		uValue = m_pSegment->m_dNorms[int64_t(uRow)*m_uFields+uField];
+		return true;
+	}
+
+private:
+	const RtSegment_t * m_pSegment = nullptr;
+	uint32_t m_uFields = 0;
+};
+
+
 class RtQwordSetup_t final : public ISphQwordSetup
 {
 public:
 	explicit RtQwordSetup_t ( const RtGuard_t& tGuard );
 	ISphQword *	QwordSpawn ( const XQKeyword_t & ) const final;
 	bool		QwordSetup ( ISphQword * pQword ) const final;
-	void				SetSegment ( int iSegment ) { m_iSeg = iSegment; }
+	void				SetSegment ( int iSegment );
 	const RtGuard_t & GetGuard() const { return m_tGuard; }
 	ISphQword *			ScanSpawn ( int iAtomPos ) const final;
 
 private:
 	const RtGuard_t&	m_tGuard;
 	int					m_iSeg;
+	RtFieldNormReader_c m_tNormReader;
 };
 
 
@@ -7606,6 +7636,22 @@ RtQwordSetup_t::RtQwordSetup_t ( const RtGuard_t& tGuard )
 	: m_tGuard ( tGuard )
 	, m_iSeg ( -1 )
 { }
+
+
+void RtQwordSetup_t::SetSegment ( int iSegment )
+{
+	m_iSeg = iSegment;
+	m_pFieldNorms = nullptr;
+	if ( iSegment<0 )
+		return;
+
+	const auto & dRamSegs = m_tGuard.m_dRamSegs;
+	if ( iSegment>=dRamSegs.GetLength() || !m_pIndex )
+		return;
+
+	m_tNormReader.Set ( dRamSegs[iSegment], m_pIndex->GetMatchSchema().GetFieldsCount() );
+	m_pFieldNorms = &m_tNormReader;
+}
 
 
 ISphQword * RtQwordSetup_t::QwordSpawn ( const XQKeyword_t & tWord ) const

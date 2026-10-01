@@ -2236,6 +2236,7 @@ public:
 	float				m_fAvgDocLen = 0.0f;
 	float				m_fParamAvgDocLen = 0.0f;
 	const int64_t *		m_pFieldLens = nullptr;
+	const FieldNormReader_i * m_pFieldNorms = nullptr;
 	int64_t				m_iTotalDocuments = 0;
 	float				m_fParamK1 = 1.2f;
 	float				m_fParamB = 0.75f;
@@ -2308,7 +2309,8 @@ public:
 	bool				Init ( int iFields, const int * pWeights, ExtRanker_T<true> * pRanker, CSphString & sError, DWORD uFactorFlags );
 	void				Update ( const ExtHit_t * pHlist );
 	int					Finalize ( const CSphMatch & tMatch );
-	int					FinalizeE1FixedBM25A ( const CSphMatch & tMatch, const ExtDoc_t & tDoc );
+	int					FinalizeE1FixedBM25A ( const CSphMatch & tMatch, const ExtDoc_t & tDoc, const uint32_t * pFieldNorms=nullptr );
+	bool				GatherFieldNorms ( const ExtDoc_t * pDocs, int iDocs, uint32_t * pRowMajor, uint32_t * pFieldScratch, uint32_t * pRowIDs ) const;
 	bool				IsTermSkipped ( int iTerm );
 
 public:
@@ -2431,7 +2433,17 @@ public:
 	template < typename FIELD_LENGTH_FN >
 	void ForEachFieldLength ( const CSphMatch & tMatch, FIELD_LENGTH_FN && fn ) const
 	{
-		if ( m_iColumnarFieldLens==m_iFields )
+		if ( m_pFieldNorms )
+		{
+			for ( int i=0; i<m_iFields; ++i )
+			{
+				uint32_t uLength = 0;
+				const bool bOk = m_pFieldNorms->Get ( uint32_t(i), uint32_t(tMatch.m_tRowID), uLength );
+				assert ( bOk );
+				if ( bOk )
+					fn ( i, int64_t(uLength) );
+			}
+		} else if ( m_iColumnarFieldLens==m_iFields )
 		{
 			for ( int i=0; i<m_iFields; ++i )
 			{
@@ -4302,10 +4314,36 @@ int RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Finalize ( const CSph
 // per-hit factors are unnecessary. Keep the generic path's float order and
 // final C++ float-to-int truncation.
 template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
-int RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::FinalizeE1FixedBM25A ( const CSphMatch & tMatch, const ExtDoc_t & tDoc )
+bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::GatherFieldNorms ( const ExtDoc_t * pDocs, int iDocs, uint32_t * pRowMajor, uint32_t * pFieldScratch, uint32_t * pRowIDs ) const
+{
+	if ( !m_pFieldNorms || iDocs<=0 )
+		return false;
+	for ( int i=0; i<iDocs; ++i )
+		pRowIDs[i] = uint32_t(pDocs[i].m_tRowID);
+	for ( int iField=0; iField<m_iFields; ++iField )
+	{
+		const bool bOk = iDocs==128
+			? m_pFieldNorms->Gather128 ( uint32_t(iField), pRowIDs, pFieldScratch )
+			: m_pFieldNorms->Gather ( uint32_t(iField), pRowIDs, uint32_t(iDocs), pFieldScratch );
+		if ( !bOk )
+			return false;
+		for ( int i=0; i<iDocs; ++i )
+			pRowMajor[int64_t(i)*m_iFields+iField] = pFieldScratch[i];
+	}
+	return true;
+}
+
+
+template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
+int RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::FinalizeE1FixedBM25A ( const CSphMatch & tMatch, const ExtDoc_t & tDoc, const uint32_t * pFieldNorms )
 {
 	float dl = 0.0f;
-	ForEachFieldLength ( tMatch, [&dl] ( int, int64_t iFieldLen ) { dl += iFieldLen; } );
+	if ( pFieldNorms )
+	{
+		for ( int i=0; i<m_iFields; ++i )
+			dl += pFieldNorms[i];
+	} else
+		ForEachFieldLength ( tMatch, [&dl] ( int, int64_t iFieldLen ) { dl += iFieldLen; } );
 	const float fAvgDocLen = m_fParamAvgDocLen>0.0f ? m_fParamAvgDocLen : m_fAvgDocLen;
 	const int iTerms = tDoc.m_uExactTerms ? tDoc.m_uExactTerms : 1;
 	float fSum = 0.0f;
@@ -4449,6 +4487,7 @@ public:
 		// somewhat later during InitState() call, when IDFs etc are computed
 		this->m_tState.m_sExpr = sExpr;
 		this->m_tState.m_pSchema = &tSchema;
+		this->m_tState.m_pFieldNorms = tSetup.m_pFieldNorms;
 		m_iE1DynamicRowitems = tSetup.m_iDynamicRowitems;
 		const CSphColumnInfo * pDocid = tSchema.GetAttr ( sphGetDocidName() );
 		assert ( pDocid );
@@ -4456,13 +4495,20 @@ public:
 		m_bE1HeapHasRowwiseDocid = !pDocid->IsColumnar();
 	}
 
+	void Reset ( const ISphQwordSetup & tSetup ) final
+	{
+		BASE::Reset ( tSetup );
+		this->m_tState.m_pFieldNorms = tSetup.m_pFieldNorms;
+	}
+
 	~ExtRanker_Expr_T () override
 	{
 		if ( m_bE1FixedBM25A && getenv("MANTICORE_E1_RANK_TRACE") )
-			fprintf ( stderr, "%s own_heap=%d configured_k=%d heap_capacity=%d heap_final_count=%d candidates_scored=%llu doc_length_fetches=%llu exact_divisions=%llu heap_inserts=%llu heap_replacements=%llu heap_rejections=%llu threshold_updates=%llu heap_final_threshold=%d heap_final_worst_rowid=%u hitlist_seeks=0 decoded_positions=0 general_factor_finalizations=0 general_factor_finalizations_bypassed=%llu\n",
+			fprintf ( stderr, "%s own_heap=%d configured_k=%d heap_capacity=%d heap_final_count=%d candidates_scored=%llu doc_length_fetches=%llu norm_gather_batches=%llu norm_gather_values=%llu exact_divisions=%llu heap_inserts=%llu heap_replacements=%llu heap_rejections=%llu threshold_updates=%llu heap_final_threshold=%d heap_final_worst_rowid=%u hitlist_seeks=0 decoded_positions=0 general_factor_finalizations=0 general_factor_finalizations_bypassed=%llu\n",
 				m_bE1MultiOr ? "E1_MULTI_OR_BM25A" : ( m_bE1MultiAnd ? "E1_MULTI_AND_BM25A" : "E1_DIRECT_BM25A" ),
 				int(m_bE1OwnHeap), this->m_iConfiguredE1TopK, m_iE1HeapCapacity, m_iE1TopKHeapCount,
 				(unsigned long long)m_uDirectScores, (unsigned long long)m_uDirectDLFetches,
+				(unsigned long long)m_uE1NormGatherBatches, (unsigned long long)m_uE1NormGatherValues,
 				(unsigned long long)m_uDirectDivisions, (unsigned long long)m_uE1HeapInserts,
 				(unsigned long long)m_uE1HeapReplacements, (unsigned long long)m_uE1HeapRejections,
 				(unsigned long long)m_uE1HeapThresholdUpdates, m_iE1HeapFinalThreshold, unsigned(m_tE1HeapFinalWorstRow),
@@ -4523,6 +4569,21 @@ public:
 	}
 
 private:
+	const uint32_t * GatherE1Norms ( const ExtDoc_t * pDocs, int iDocs )
+	{
+		const int iFields = this->m_tState.m_iFields;
+		if ( iDocs<=0 || iFields<=0 )
+			return nullptr;
+		m_dE1Norms.Resize ( int64_t(iDocs)*iFields );
+		m_dE1NormFieldScratch.Resize ( iDocs );
+		m_dE1NormRowIDs.Resize ( iDocs );
+		if ( !this->m_tState.GatherFieldNorms ( pDocs, iDocs, m_dE1Norms.Begin(), m_dE1NormFieldScratch.Begin(), m_dE1NormRowIDs.Begin() ) )
+			return nullptr;
+		++m_uE1NormGatherBatches;
+		m_uE1NormGatherValues += uint64_t(iDocs)*iFields;
+		return m_dE1Norms.Begin();
+	}
+
 	int GetE1FixedBM25AMatches ()
 	{
 		if ( !this->m_pRoot )
@@ -4540,15 +4601,22 @@ private:
 			if ( !pDoc )
 				break;
 
-			Swap ( this->m_dMatches[iMatches], this->m_dMyMatches[pDoc-this->m_dMyDocs] );
-			this->m_dMatches[iMatches].m_iWeight = this->m_tState.FinalizeE1FixedBM25A ( this->m_dMatches[iMatches], *pDoc );
-			m_bE1MultiOr |= pDoc->m_bExactOr;
-			m_bE1MultiAnd |= pDoc->m_uExactTerms>1 && !pDoc->m_bExactOr;
-			++m_uDirectScores;
-			++m_uDirectDLFetches;
-			++m_uDirectDivisions;
-			++iMatches;
-			++pDoc;
+			int iDocs = 0;
+			while ( iMatches+iDocs<MAX_BLOCK_DOCS && pDoc[iDocs].m_tRowID!=INVALID_ROWID )
+				++iDocs;
+			const uint32_t * pNorms = GatherE1Norms ( pDoc, iDocs );
+			for ( int i=0; i<iDocs; ++i )
+			{
+				Swap ( this->m_dMatches[iMatches], this->m_dMyMatches[pDoc+i-this->m_dMyDocs] );
+				this->m_dMatches[iMatches].m_iWeight = this->m_tState.FinalizeE1FixedBM25A ( this->m_dMatches[iMatches], pDoc[i], pNorms ? pNorms+int64_t(i)*this->m_tState.m_iFields : nullptr );
+				m_bE1MultiOr |= pDoc[i].m_bExactOr;
+				m_bE1MultiAnd |= pDoc[i].m_uExactTerms>1 && !pDoc[i].m_bExactOr;
+				++m_uDirectScores;
+				++m_uDirectDLFetches;
+				++m_uDirectDivisions;
+				++iMatches;
+			}
+			pDoc += iDocs;
 		}
 
 		this->m_pDoclist = pDoc;
@@ -4586,10 +4654,17 @@ private:
 				pDoc = this->GetFilteredDocs();
 			if ( !pDoc )
 				break;
-			CSphMatch & tCandidate = this->m_dMyMatches[pDoc-this->m_dMyDocs];
-			tCandidate.m_iWeight = this->m_tState.FinalizeE1FixedBM25A ( tCandidate, *pDoc );
-			m_bE1MultiOr |= pDoc->m_bExactOr;
-			m_bE1MultiAnd |= pDoc->m_uExactTerms>1 && !pDoc->m_bExactOr;
+
+			int iDocs = 0;
+			while ( pDoc[iDocs].m_tRowID!=INVALID_ROWID )
+				++iDocs;
+			const uint32_t * pNorms = GatherE1Norms ( pDoc, iDocs );
+			for ( int i=0; i<iDocs; ++i )
+			{
+			CSphMatch & tCandidate = this->m_dMyMatches[pDoc+i-this->m_dMyDocs];
+			tCandidate.m_iWeight = this->m_tState.FinalizeE1FixedBM25A ( tCandidate, pDoc[i], pNorms ? pNorms+int64_t(i)*this->m_tState.m_iFields : nullptr );
+			m_bE1MultiOr |= pDoc[i].m_bExactOr;
+			m_bE1MultiAnd |= pDoc[i].m_uExactTerms>1 && !pDoc[i].m_bExactOr;
 			++m_uDirectScores;
 			++m_uDirectDLFetches;
 			++m_uDirectDivisions;
@@ -4633,7 +4708,8 @@ private:
 			}
 			else
 				++m_uE1HeapRejections;
-			++pDoc;
+			}
+			pDoc += iDocs;
 		}
 		this->m_pDoclist = pDoc;
 		m_uE1HeapDiscardedPending = m_uDirectScores-m_iE1TopKHeapCount;
@@ -4665,6 +4741,11 @@ private:
 	uint64_t m_uDirectScores = 0;
 	uint64_t m_uDirectDLFetches = 0;
 	uint64_t m_uDirectDivisions = 0;
+	CSphVector<uint32_t> m_dE1Norms;
+	CSphVector<uint32_t> m_dE1NormFieldScratch;
+	CSphVector<uint32_t> m_dE1NormRowIDs;
+	uint64_t m_uE1NormGatherBatches = 0;
+	uint64_t m_uE1NormGatherValues = 0;
 };
 
 //////////////////////////////////////////////////////////////////////////

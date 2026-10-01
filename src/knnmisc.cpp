@@ -219,11 +219,14 @@ bool KNNRescoreRandomAccess()
 }
 
 
-static int g_iKNNRescorePrefetch = 0;	// 0: off, 1: single call only, 2: single call, else one call per vector, 3: as 2, but only when the vectors are not in memory
+// 0: off, 1: single call only, 2: single call, else one call per vector,
+// 3: as 2, but each rescore probes a few vectors and skips the prefetch when they are in memory,
+// 4: as 3, with a sticky gate (see ShouldPrefetchSticky)
+static int g_iKNNRescorePrefetch = 0;
 
 void SetKNNRescorePrefetch ( int iMode )
 {
-	g_iKNNRescorePrefetch = Max ( 0, Min ( iMode, 3 ) );
+	g_iKNNRescorePrefetch = Max ( 0, Min ( iMode, 4 ) );
 }
 
 
@@ -503,6 +506,49 @@ static bool AreVectorsResident ( const VecTraits_T<CSphMatch*> & dMatches, const
 }
 
 
+static const int KNN_PREFETCH_COLD_STREAK = 64;	// rescores that prefetch without probing after a probe found a vector missing
+static const int KNN_PREFETCH_CLEAN_PROBES = 3;	// clean probes in a row it takes before the prefetch starts being skipped
+
+// The two mistakes of a residency probe are not equal: an unneeded prefetch costs a fraction of a millisecond, while
+// a wrongly skipped one costs a serial disk read per missing vector. A per-query probe also wastes its own work on
+// every query that ends up prefetching. So the gate keeps state:
+//  - cold: a probe found a vector missing. The next KNN_PREFETCH_COLD_STREAK rescores prefetch with no probing at all.
+//  - re-check: when the streak ends, rescores probe again, and still prefetch. A miss starts another streak.
+//  - hot: only after KNN_PREFETCH_CLEAN_PROBES clean probes in a row is the prefetch skipped, and from then on every
+//    rescore probes; a single miss drops back to cold.
+// The state is one for the whole daemon (not per table), which is good enough for the experiment: a cold table keeps
+// a hot one prefetching. Races on it are benign, it is a heuristic; at worst a streak runs a little long or short.
+static std::atomic<int> g_iKNNPrefetchColdLeft { 0 };
+static std::atomic<int> g_iKNNPrefetchCleanProbes { 0 };
+
+static bool ShouldPrefetchSticky ( const VecTraits_T<CSphMatch*> & dMatches, const CSphString & sAttr, const GetColumnarFromMatch_fn & fnColumnar )
+{
+	int iColdLeft = g_iKNNPrefetchColdLeft.load ( std::memory_order_relaxed );
+	if ( iColdLeft>0 )
+	{
+		g_iKNNPrefetchColdLeft.store ( iColdLeft-1, std::memory_order_relaxed );
+		return true;
+	}
+
+	if ( !AreVectorsResident ( dMatches, sAttr, fnColumnar ) )
+	{
+		g_iKNNPrefetchCleanProbes.store ( 0, std::memory_order_relaxed );
+		g_iKNNPrefetchColdLeft.store ( KNN_PREFETCH_COLD_STREAK, std::memory_order_relaxed );
+		return true;
+	}
+
+	int iClean = g_iKNNPrefetchCleanProbes.load ( std::memory_order_relaxed );
+	if ( iClean<KNN_PREFETCH_CLEAN_PROBES )
+	{
+		// not convinced yet: one clean sample right after a cold streak says little
+		g_iKNNPrefetchCleanProbes.store ( iClean+1, std::memory_order_relaxed );
+		return true;
+	}
+
+	return false;
+}
+
+
 // Hand the OS the vectors of all candidates at once, before the distance loop touches any of them. The reads are all
 // submitted up front, so they overlap instead of being served one page fault at a time, only the pages the vectors
 // occupy are read, and a vector that straddles a page boundary is fetched by one request.
@@ -511,7 +557,10 @@ void KNNVecDistCalc_c::PrefetchColumnar ( const VecTraits_T<CSphMatch*> & dMatch
 	const int iMode = KNNRescorePrefetch();
 
 	// residency gate: the prefetch pays off only while the vectors are not in memory, and costs time once they are
-	if ( iMode>=3 && AreVectorsResident ( dMatches, m_tAttr.m_sName, fnColumnar ) )
+	if ( iMode==3 && AreVectorsResident ( dMatches, m_tAttr.m_sName, fnColumnar ) )
+		return;
+
+	if ( iMode>=4 && !ShouldPrefetchSticky ( dMatches, m_tAttr.m_sName, fnColumnar ) )
 		return;
 
 	CSphVector<MemRange_t> dRanges;

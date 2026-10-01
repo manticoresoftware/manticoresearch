@@ -56,6 +56,11 @@ int mmprefetch_single_call_errno()
 	return 0;
 }
 
+bool mmresident ( const void *, size_t )
+{
+	return false;
+}
+
 #else
 
 #include <sys/mman.h>
@@ -280,6 +285,42 @@ int mmprefetch_single_call_errno()
 #else
 	return ENOSYS;
 #endif
+}
+
+
+bool mmresident ( const void * pData, size_t uLen )
+{
+	if ( !pData || !uLen )
+		return false;
+
+	static const size_t uPage = (size_t)sysconf ( _SC_PAGESIZE );
+	const size_t uMask = ~( uPage-1 );
+	size_t uStart = (size_t)pData & uMask;
+	const size_t uEnd = ( (size_t)pData + uLen + uPage - 1 ) & uMask;
+
+#ifdef __linux__
+	using PageStatus_t = unsigned char;
+#else
+	using PageStatus_t = char;
+#endif
+
+	// one status byte per page; long ranges are walked in pieces so that the buffer can live on the stack
+	const size_t MAX_PAGES = 64;
+	PageStatus_t dStatus[MAX_PAGES];
+	while ( uStart<uEnd )
+	{
+		size_t uPages = std::min ( MAX_PAGES, ( uEnd-uStart )/uPage );
+		if ( mincore ( (void*)uStart, uPages*uPage, dStatus )!=0 )
+			return false;
+
+		for ( size_t i = 0; i < uPages; i++ )
+			if ( !( dStatus[i] & 1 ) )
+				return false;
+
+		uStart += uPages*uPage;
+	}
+
+	return true;
 }
 
 #endif // _WIN32

@@ -62,3 +62,9 @@ PrefetchResult_e mmprefetch ( const MemRange_t * pRanges, int iRanges, bool bAll
 
 /// errno that made the single call unavailable to this process; 0 while it works or was never tried
 int mmprefetch_single_call_errno();
+
+/// Whether every page of this range of a mapped file is in memory right now. Reads nothing, has no side effects.
+/// False also when it can't be told (unsupported platform, bad range), so that callers err towards prefetching.
+/// NB: since Linux 5.0 the kernel answers truthfully only for files the caller owns or may write to; for any other
+/// file it reports every page as present.
+bool mmresident ( const void * pData, size_t uLen );

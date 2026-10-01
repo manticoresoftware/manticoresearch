@@ -67,7 +67,8 @@ bool							KNNRescoreRandomAccess();
 
 // searchd config 'knn_rescore_prefetch' (undocumented): before rescoring candidates of a columnar table, ask the OS to
 // read all their vectors at once. 0 = off; 1 = with a single process_madvise call, nothing if the kernel refuses it;
-// 2 = same, but fall back to one madvise call per vector when the single call is unavailable
+// 2 = same, but fall back to one madvise call per vector when the single call is unavailable;
+// 3 = as 2, behind a residency gate: a few candidates are probed first and the prefetch is skipped when they are in memory
 void							SetKNNRescorePrefetch ( int iMode );
 int								KNNRescorePrefetch();
 

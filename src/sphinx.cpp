@@ -13354,13 +13354,15 @@ void CSphIndex_VLN::GetStatus ( CSphIndexStatus* pRes ) const
 			+m_tBlobAttrs.GetLengthBytes ()
 			+m_tWordlist.m_tBuf.GetLengthBytes ()
 			+m_tDeadRowMap.GetLengthBytes ()
-			+m_tSkiplists.GetLengthBytes ();
+			+m_tSkiplists.GetLengthBytes ()
+			+m_tNormData.GetLengthBytes ();
 
 	pRes->m_iMappedResident = m_tAttr.GetCoreSize ()
 			+m_tBlobAttrs.GetCoreSize ()
 			+m_tWordlist.m_tBuf.GetCoreSize ()
 			+m_tDeadRowMap.GetCoreSize ()
-			+m_tSkiplists.GetCoreSize ();
+			+m_tSkiplists.GetCoreSize ()
+			+m_tNormData.GetCoreSize ();
 
 	pRes->m_iDead = m_tDeadRowMap.GetNumDeads();
 
@@ -13380,7 +13382,7 @@ void CSphIndex_VLN::GetStatus ( CSphIndexStatus* pRes ) const
 		pRes->m_iMappedResident += pRes->m_iMappedResidentHits;
 	}
 
-	pRes->m_iRamUse = sizeof(CSphIndex_VLN) + m_dFieldLens.GetLengthBytes() + pRes->m_iMappedResident;
+	pRes->m_iRamUse = sizeof(CSphIndex_VLN) + m_dFieldLens.GetLengthBytes() + m_tNormStore.TotalCacheBytes() + pRes->m_iMappedResident;
 	pRes->m_iDiskUse = 0;
 
 	CSphVector<IndexFileExt_t> dExts = sphGetExts();

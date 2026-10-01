@@ -498,6 +498,7 @@ TEST ( NormStore, ExactWidthsRangesGatherAndTotals )
 	ASSERT_TRUE ( tStore.Open(dData.data(),dData.size(),sError) ) << sError;
 	EXPECT_EQ ( tStore.Rows(), 128u );
 	EXPECT_EQ ( tStore.Fields(), 3u );
+	EXPECT_EQ ( tStore.TotalCacheBytes(), 512u );
 	EXPECT_EQ ( tStore.Nonzero(0), 127u );
 	EXPECT_EQ ( tStore.Sum(0), 8128u );
 
@@ -512,6 +513,8 @@ TEST ( NormStore, ExactWidthsRangesGatherAndTotals )
 	for ( uint32_t i=0; i<128; ++i ) dIDs[i] = i;
 	ASSERT_TRUE ( tStore.Gather128(0,dIDs.data(),dValues.data()) );
 	for ( uint32_t i=0; i<128; ++i ) EXPECT_EQ ( dValues[i], i );
+	ASSERT_TRUE ( tStore.GatherTotal(dIDs.data(),dIDs.size(),dValues.data()) );
+	for ( uint32_t i=0; i<128; ++i ) EXPECT_EQ ( dValues[i], dRows[i][0]+dRows[i][1]+dRows[i][2] );
 	ASSERT_TRUE ( tStore.ReadRange(2,1,7,dValues.data()) );
 	for ( uint32_t i=0; i<7; ++i ) EXPECT_EQ ( dValues[i], dRows[i+1][2] );
 }

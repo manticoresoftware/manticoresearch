@@ -40,4 +40,22 @@ public:
 	{
 		return Gather ( uField, pRows, 128, pOut );
 	}
+	virtual bool GatherTotal ( const uint32_t * pRows, uint32_t uCount, uint32_t * pOut ) const
+	{
+		if ( !pRows || !pOut )
+			return false;
+		for ( uint32_t i=0; i<uCount; ++i )
+		{
+			uint32_t uTotal = 0;
+			for ( uint32_t iField=0; iField<Fields(); ++iField )
+			{
+				uint32_t uValue = 0;
+				if ( !Get(iField,pRows[i],uValue) )
+					return false;
+				uTotal += uValue;
+			}
+			pOut[i] = uTotal;
+		}
+		return true;
+	}
 };

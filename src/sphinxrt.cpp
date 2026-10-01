@@ -7608,6 +7608,22 @@ public:
 		uValue = m_pSegment->m_dNorms[int64_t(uRow)*m_uFields+uField];
 		return true;
 	}
+	bool GatherTotal ( const uint32_t * pRows, uint32_t uCount, uint32_t * pOut ) const override
+	{
+		if ( !m_pSegment || !pRows || !pOut )
+			return false;
+		for ( uint32_t i=0; i<uCount; ++i )
+		{
+			if ( pRows[i]>=m_pSegment->m_uRows )
+				return false;
+			uint32_t uTotal = 0;
+			const DWORD * pNorms = &m_pSegment->m_dNorms[int64_t(pRows[i])*m_uFields];
+			for ( uint32_t iField=0; iField<m_uFields; ++iField )
+				uTotal += pNorms[iField];
+			pOut[i] = uTotal;
+		}
+		return true;
+	}
 
 private:
 	const RtSegment_t * m_pSegment = nullptr;

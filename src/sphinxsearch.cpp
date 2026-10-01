@@ -2309,8 +2309,8 @@ public:
 	bool				Init ( int iFields, const int * pWeights, ExtRanker_T<true> * pRanker, CSphString & sError, DWORD uFactorFlags );
 	void				Update ( const ExtHit_t * pHlist );
 	int					Finalize ( const CSphMatch & tMatch );
-	int					FinalizeE1FixedBM25A ( const CSphMatch & tMatch, const ExtDoc_t & tDoc, const uint32_t * pFieldNorms=nullptr );
-	bool				GatherFieldNorms ( const ExtDoc_t * pDocs, int iDocs, uint32_t * pRowMajor, uint32_t * pFieldScratch, uint32_t * pRowIDs ) const;
+	int					FinalizeE1FixedBM25A ( const CSphMatch & tMatch, const ExtDoc_t & tDoc, const uint32_t * pDocLength=nullptr );
+	bool				GatherDocLengths ( const ExtDoc_t * pDocs, int iDocs, uint32_t * pDocLengths, uint32_t * pRowIDs ) const;
 	bool				IsTermSkipped ( int iTerm );
 
 public:
@@ -4314,35 +4314,23 @@ int RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Finalize ( const CSph
 // per-hit factors are unnecessary. Keep the generic path's float order and
 // final C++ float-to-int truncation.
 template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
-bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::GatherFieldNorms ( const ExtDoc_t * pDocs, int iDocs, uint32_t * pRowMajor, uint32_t * pFieldScratch, uint32_t * pRowIDs ) const
+bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::GatherDocLengths ( const ExtDoc_t * pDocs, int iDocs, uint32_t * pDocLengths, uint32_t * pRowIDs ) const
 {
 	if ( !m_pFieldNorms || iDocs<=0 )
 		return false;
 	for ( int i=0; i<iDocs; ++i )
 		pRowIDs[i] = uint32_t(pDocs[i].m_tRowID);
-	for ( int iField=0; iField<m_iFields; ++iField )
-	{
-		const bool bOk = iDocs==128
-			? m_pFieldNorms->Gather128 ( uint32_t(iField), pRowIDs, pFieldScratch )
-			: m_pFieldNorms->Gather ( uint32_t(iField), pRowIDs, uint32_t(iDocs), pFieldScratch );
-		if ( !bOk )
-			return false;
-		for ( int i=0; i<iDocs; ++i )
-			pRowMajor[int64_t(i)*m_iFields+iField] = pFieldScratch[i];
-	}
-	return true;
+	return m_pFieldNorms->GatherTotal ( pRowIDs, uint32_t(iDocs), pDocLengths );
 }
 
 
 template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
-int RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::FinalizeE1FixedBM25A ( const CSphMatch & tMatch, const ExtDoc_t & tDoc, const uint32_t * pFieldNorms )
+int RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::FinalizeE1FixedBM25A ( const CSphMatch & tMatch, const ExtDoc_t & tDoc, const uint32_t * pDocLength )
 {
 	float dl = 0.0f;
-	if ( pFieldNorms )
-	{
-		for ( int i=0; i<m_iFields; ++i )
-			dl += pFieldNorms[i];
-	} else
+	if ( pDocLength )
+		dl = *pDocLength;
+	else
 		ForEachFieldLength ( tMatch, [&dl] ( int, int64_t iFieldLen ) { dl += iFieldLen; } );
 	const float fAvgDocLen = m_fParamAvgDocLen>0.0f ? m_fParamAvgDocLen : m_fAvgDocLen;
 	const int iTerms = tDoc.m_uExactTerms ? tDoc.m_uExactTerms : 1;
@@ -4574,10 +4562,9 @@ private:
 		const int iFields = this->m_tState.m_iFields;
 		if ( iDocs<=0 || iFields<=0 )
 			return nullptr;
-		m_dE1Norms.Resize ( int64_t(iDocs)*iFields );
-		m_dE1NormFieldScratch.Resize ( iDocs );
+		m_dE1Norms.Resize ( iDocs );
 		m_dE1NormRowIDs.Resize ( iDocs );
-		if ( !this->m_tState.GatherFieldNorms ( pDocs, iDocs, m_dE1Norms.Begin(), m_dE1NormFieldScratch.Begin(), m_dE1NormRowIDs.Begin() ) )
+		if ( !this->m_tState.GatherDocLengths ( pDocs, iDocs, m_dE1Norms.Begin(), m_dE1NormRowIDs.Begin() ) )
 			return nullptr;
 		++m_uE1NormGatherBatches;
 		m_uE1NormGatherValues += uint64_t(iDocs)*iFields;
@@ -4608,7 +4595,7 @@ private:
 			for ( int i=0; i<iDocs; ++i )
 			{
 				Swap ( this->m_dMatches[iMatches], this->m_dMyMatches[pDoc+i-this->m_dMyDocs] );
-				this->m_dMatches[iMatches].m_iWeight = this->m_tState.FinalizeE1FixedBM25A ( this->m_dMatches[iMatches], pDoc[i], pNorms ? pNorms+int64_t(i)*this->m_tState.m_iFields : nullptr );
+				this->m_dMatches[iMatches].m_iWeight = this->m_tState.FinalizeE1FixedBM25A ( this->m_dMatches[iMatches], pDoc[i], pNorms ? pNorms+i : nullptr );
 				m_bE1MultiOr |= pDoc[i].m_bExactOr;
 				m_bE1MultiAnd |= pDoc[i].m_uExactTerms>1 && !pDoc[i].m_bExactOr;
 				++m_uDirectScores;
@@ -4662,7 +4649,7 @@ private:
 			for ( int i=0; i<iDocs; ++i )
 			{
 			CSphMatch & tCandidate = this->m_dMyMatches[pDoc+i-this->m_dMyDocs];
-			tCandidate.m_iWeight = this->m_tState.FinalizeE1FixedBM25A ( tCandidate, pDoc[i], pNorms ? pNorms+int64_t(i)*this->m_tState.m_iFields : nullptr );
+			tCandidate.m_iWeight = this->m_tState.FinalizeE1FixedBM25A ( tCandidate, pDoc[i], pNorms ? pNorms+i : nullptr );
 			m_bE1MultiOr |= pDoc[i].m_bExactOr;
 			m_bE1MultiAnd |= pDoc[i].m_uExactTerms>1 && !pDoc[i].m_bExactOr;
 			++m_uDirectScores;
@@ -4742,7 +4729,6 @@ private:
 	uint64_t m_uDirectDLFetches = 0;
 	uint64_t m_uDirectDivisions = 0;
 	CSphVector<uint32_t> m_dE1Norms;
-	CSphVector<uint32_t> m_dE1NormFieldScratch;
 	CSphVector<uint32_t> m_dE1NormRowIDs;
 	uint64_t m_uE1NormGatherBatches = 0;
 	uint64_t m_uE1NormGatherValues = 0;

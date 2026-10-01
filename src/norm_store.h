@@ -431,6 +431,7 @@ public:
 		m_uGroupRows = uGroupRows;
 		m_uGroups = uGroups;
 		m_uDirectory = uDirectory;
+		BuildTotalCache();
 		return true;
 	}
 
@@ -473,16 +474,69 @@ public:
 		return true;
 	}
 
+	bool GatherTotal ( const uint32_t * pRows, uint32_t uCount, uint32_t * pOut ) const override
+	{
+		if ( !pRows || !pOut || !m_uTotalWidth )
+			return false;
+		for ( uint32_t i=0; i<uCount; ++i )
+		{
+			const uint32_t uRow = pRows[i];
+			if ( uRow>=m_uRows )
+				return false;
+			pOut[i] = m_uTotalWidth==1 ? m_dTotal8[uRow] : m_uTotalWidth==2 ? m_dTotal16[uRow] : m_dTotal32[uRow];
+		}
+		return true;
+	}
+	uint64_t TotalCacheBytes() const { return uint64_t(m_uRows)*m_uTotalWidth; }
+
 private:
+	void BuildTotalCache()
+	{
+		uint32_t uMax = 0;
+		for ( uint32_t uRow=0; uRow<m_uRows; ++uRow )
+		{
+			uint64_t uTotal = 0;
+			for ( uint32_t iField=0; iField<m_uFields; ++iField )
+			{
+				uint32_t uValue = 0;
+				Get ( iField, uRow, uValue );
+				uTotal += uValue;
+			}
+			if ( uTotal>UINT32_MAX )
+				return;
+			uMax = std::max ( uMax, uint32_t(uTotal) );
+		}
+		m_uTotalWidth = WidthFor ( uMax );
+		if ( m_uTotalWidth==1 ) m_dTotal8.resize ( m_uRows );
+		else if ( m_uTotalWidth==2 ) m_dTotal16.resize ( m_uRows );
+		else m_dTotal32.resize ( m_uRows );
+		for ( uint32_t uRow=0; uRow<m_uRows; ++uRow )
+		{
+			uint32_t uTotal = 0;
+			for ( uint32_t iField=0; iField<m_uFields; ++iField )
+			{
+				uint32_t uValue = 0;
+				Get ( iField, uRow, uValue );
+				uTotal += uValue;
+			}
+			if ( m_uTotalWidth==1 ) m_dTotal8[uRow] = uint8_t(uTotal);
+			else if ( m_uTotalWidth==2 ) m_dTotal16[uRow] = uint16_t(uTotal);
+			else m_dTotal32[uRow] = uTotal;
+		}
+	}
 	const uint8_t * Entry ( uint32_t uField, uint32_t uGroup ) const { return m_pData+m_uDirectory+( uint64_t(uField)*m_uGroups+uGroup )*GROUP_ENTRY_SIZE; }
-	void Reset() { m_pData=nullptr; m_uRows=m_uFields=m_uGroupRows=m_uGroups=0; m_uDirectory=0; }
+	void Reset() { m_pData=nullptr; m_uRows=m_uFields=m_uGroupRows=m_uGroups=m_uTotalWidth=0; m_uDirectory=0; m_dTotal8.clear(); m_dTotal16.clear(); m_dTotal32.clear(); }
 
 	const uint8_t * m_pData = nullptr;
 	uint32_t m_uRows = 0;
 	uint32_t m_uFields = 0;
 	uint32_t m_uGroupRows = 0;
 	uint32_t m_uGroups = 0;
+	uint32_t m_uTotalWidth = 0;
 	uint64_t m_uDirectory = 0;
+	std::vector<uint8_t> m_dTotal8;
+	std::vector<uint16_t> m_dTotal16;
+	std::vector<uint32_t> m_dTotal32;
 };
 
 } // namespace e1::norms

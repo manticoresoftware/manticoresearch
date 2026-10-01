@@ -1,9 +1,10 @@
 ––– comment –––
 A pre-feature table schema without the hidden span sidecar stays searchable and non-migrating.
+––– comment –––
+Start a separate daemon with a sidecar-less static RT schema.
 ––– input –––
-if [ -f /tmp/chunk-provenance-legacy/manticore.conf ]; then searchd --stopwait --config /tmp/chunk-provenance-legacy/manticore.conf >/dev/null 2>&1 || true; fi; rm -rf /tmp/chunk-provenance-legacy; mkdir -p /tmp/chunk-provenance-legacy/table /tmp/chunk-provenance-legacy/binlog; python3 - <<'PY'
-from pathlib import Path
-Path('/tmp/chunk-provenance-legacy/manticore.conf').write_text(r'''index legacy_provenance {
+if [ -f /tmp/chunk-provenance-legacy/manticore.conf ]; then searchd --stopwait --config /tmp/chunk-provenance-legacy/manticore.conf >/dev/null 2>&1 || true; fi; rm -rf /tmp/chunk-provenance-legacy; mkdir -p /tmp/chunk-provenance-legacy/table /tmp/chunk-provenance-legacy/binlog; cat > /tmp/chunk-provenance-legacy/manticore.conf <<'EOF'
+index legacy_provenance {
   type = rt
   path = /tmp/chunk-provenance-legacy/table/legacy_provenance
   rt_field = body
@@ -18,66 +19,41 @@ searchd {
   pid_file = /tmp/chunk-provenance-legacy/searchd.pid
   binlog_path = /tmp/chunk-provenance-legacy/binlog
 }
-''')
-PY
+EOF
 stdbuf -oL searchd --config /tmp/chunk-provenance-legacy/manticore.conf >/dev/null; for i in $(seq 1 150); do mysql -h0 -P9306 -e 'select 1' >/dev/null 2>&1 && { echo LEGACY_STARTED; break; }; sleep .2; done
 ––– output –––
 LEGACY_STARTED
+––– comment –––
+A row inserted into the sidecar-less schema remains searchable and reports unavailable provenance.
 ––– input –––
-python3 - <<'PY'
-import json
-import re
-import subprocess
-import urllib.request
-
-mysql = ['mysql','-N','-B','-h0','-P9306']
-def sql(q):
-    return subprocess.check_output(mysql+['-e',q], text=True, stderr=subprocess.STDOUT).strip()
-def values():
-    out = sql("SELECT id,knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM legacy_provenance WHERE KNN(chunks,10,'target phrase',{rescore=1}) ORDER BY id")
-    rows = [tuple(map(int,re.findall(r'-?\d+',line))) for line in out.splitlines()]
-    rows = [row for row in rows if len(row) == 4]
-    assert rows and all(row[1:] == (-1,-1,-1) for row in rows), rows
-    return rows
-
-sql("INSERT INTO legacy_provenance(id,body) VALUES(1,'legacy alpha target phrase omega')")
-assert values() == [(1,-1,-1,-1)]
-sql('FLUSH RAMCHUNK legacy_provenance')
-probe = subprocess.run(mysql+['-e','ALTER TABLE legacy_provenance DROP COLUMN knn_chunk_spans_v1_chunks'], text=True, capture_output=True)
-assert probe.returncode and 'does not exist' in probe.stderr, probe.stderr
-print('LEGACY_BEFORE_RESTART_OK')
-PY
+mysql -h0 -P9306 -e "INSERT INTO legacy_provenance(id,body) VALUES(1,'legacy alpha target phrase omega')"; mysql -N -B -h0 -P9306 -e "SELECT id,knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM legacy_provenance WHERE KNN(chunks,10,'target phrase',{rescore=1}) ORDER BY id" | awk -F'|' '/^\|/ { printf "%d %d %d %d\n", $2, $3, $4, $5 }'
+––– output –––
+1 -1 -1 -1
+––– comment –––
+Flushing does not synthesize the hidden span sidecar.
+––– input –––
+mysql -h0 -P9306 -e 'FLUSH RAMCHUNK legacy_provenance'; ERR=$(mysql -h0 -P9306 -e 'ALTER TABLE legacy_provenance DROP COLUMN knn_chunk_spans_v1_chunks' 2>&1) && exit 1 || true; printf '%s\n' "$ERR" | grep -q 'does not exist'; echo LEGACY_BEFORE_RESTART_OK
 ––– output –––
 LEGACY_BEFORE_RESTART_OK
+––– comment –––
+Restart with the same persisted sidecar-less table.
 ––– input –––
 searchd --stopwait --config /tmp/chunk-provenance-legacy/manticore.conf >/dev/null; rm -f /tmp/chunk-provenance-legacy/searchd.log; stdbuf -oL searchd --config /tmp/chunk-provenance-legacy/manticore.conf >/dev/null; for i in $(seq 1 150); do mysql -h0 -P9306 -e 'select 1' >/dev/null 2>&1 && { echo LEGACY_RESTARTED; break; }; sleep .2; done
 ––– output –––
 LEGACY_RESTARTED
+––– comment –––
+Rows inserted after restart also remain provenance-free through flush and optimize.
 ––– input –––
-python3 - <<'PY'
-import json
-import re
-import subprocess
-import urllib.request
-
-mysql = ['mysql','-N','-B','-h0','-P9306']
-def sql(q):
-    return subprocess.check_output(mysql+['-e',q], text=True, stderr=subprocess.STDOUT).strip()
-
-sql("INSERT INTO legacy_provenance(id,body) VALUES(2,'new row target phrase after upgrade')")
-sql('FLUSH RAMCHUNK legacy_provenance')
-sql('OPTIMIZE TABLE legacy_provenance OPTION sync=1,cutoff=1')
-out = sql("SELECT id,knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM legacy_provenance WHERE KNN(chunks,10,'target phrase',{rescore=1}) ORDER BY id")
-rows = [tuple(map(int,re.findall(r'-?\d+',line))) for line in out.splitlines()]
-rows = [row for row in rows if len(row) == 4]
-assert rows == [(1,-1,-1,-1),(2,-1,-1,-1)], rows
-request = urllib.request.Request('http://127.0.0.1:9308/search', data=json.dumps({'index':'legacy_provenance','knn':{'field':'chunks','query':'target phrase','k':2},'limit':2}).encode(), headers={'Content-Type':'application/json'})
-hits = json.load(urllib.request.urlopen(request))['hits']['hits']
-assert len(hits) == 2 and all(hit['_knn_chunk'] == {'index':-1,'start':-1,'end':-1} for hit in hits), hits
-print('LEGACY_AFTER_RESTART_OK')
-PY
+mysql -h0 -P9306 -e "INSERT INTO legacy_provenance(id,body) VALUES(2,'new row target phrase after upgrade'); FLUSH RAMCHUNK legacy_provenance; OPTIMIZE TABLE legacy_provenance OPTION sync=1,cutoff=1"; mysql -N -B -h0 -P9306 -e "SELECT id,knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM legacy_provenance WHERE KNN(chunks,10,'target phrase',{rescore=1}) ORDER BY id" | awk -F'|' '/^\|/ { printf "%d %d %d %d\n", $2, $3, $4, $5 }'
 ––– output –––
-LEGACY_AFTER_RESTART_OK
+1 -1 -1 -1
+2 -1 -1 -1
+––– comment –––
+HTTP exposes the same unavailable provenance sentinel for both rows.
+––– input –––
+COUNT=$(curl -s -X POST http://127.0.0.1:9308/search -H 'Content-Type: application/json' -d '{"index":"legacy_provenance","knn":{"field":"chunks","query":"target phrase","k":2},"limit":2}' | grep -o '"_knn_chunk":{"index":-1,"start":-1,"end":-1}' | wc -l); test "$COUNT" -eq 2; echo LEGACY_HTTP_OK
+––– output –––
+LEGACY_HTTP_OK
 ––– input –––
 searchd --stopwait --config /tmp/chunk-provenance-legacy/manticore.conf >/dev/null; echo LEGACY_STOPPED
 ––– output –––

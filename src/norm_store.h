@@ -183,13 +183,18 @@ public:
 	StagedBuilder ( const StagedBuilder & ) = delete;
 	StagedBuilder & operator = ( const StagedBuilder & ) = delete;
 
-	bool AddRow ( const uint32_t * pValues, uint32_t uFields, std::string & sError )
+	template<typename VALUE>
+	bool AddRow ( const VALUE * pValues, uint32_t uFields, std::string & sError )
 	{
+		static_assert ( sizeof(VALUE)==sizeof(uint32_t), "norm values must be 32-bit" );
 		if ( !m_bValid || !pValues || uFields!=m_uFields || m_uRows==std::numeric_limits<uint32_t>::max() )
 			return Fail ( sError, "invalid staged row" );
 		for ( uint32_t i=0; i<m_uFields; ++i )
-			if ( fwrite ( pValues+i, sizeof(uint32_t), 1, m_dFields[i] )!=1 )
+		{
+			const uint32_t uValue = uint32_t ( pValues[i] );
+			if ( fwrite ( &uValue, sizeof(uValue), 1, m_dFields[i] )!=1 )
 				return Fail ( sError, "staging write failed" );
+		}
 		++m_uRows;
 		return true;
 	}

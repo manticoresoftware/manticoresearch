@@ -6508,8 +6508,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			if ( !pSource->GetLastWarning().IsEmpty() )
 				m_sLastWarning = pSource->GetLastWarning();
 
-			static_assert ( sizeof(DWORD)==sizeof(uint32_t) );
-			if ( !tNormBuilder.AddRow ( reinterpret_cast<const uint32_t *>(pSource->GetExactFieldLengths()), m_tSchema.GetFieldsCount(), sNormError ) )
+			if ( !tNormBuilder.AddRow ( pSource->GetExactFieldLengths(), m_tSchema.GetFieldsCount(), sNormError ) )
 			{
 				m_sLastError = sNormError.c_str();
 				return 0;

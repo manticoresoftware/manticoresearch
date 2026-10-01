@@ -1034,7 +1034,8 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 
 				m_dPerDocHitsCount[iDstRow] = m_dPerDocHitsCount[i];
 				const int iFields = tSchema.GetFieldsCount();
-				memmove ( &m_dNorms[iDstRow*iFields], &m_dNorms[i*iFields], iFields*sizeof(DWORD) );
+				if ( iFields )
+					memmove ( &m_dNorms[iDstRow*iFields], &m_dNorms[i*iFields], iFields*sizeof(DWORD) );
 
 				// remove duplicate docstore
 				if ( m_pDocstore )

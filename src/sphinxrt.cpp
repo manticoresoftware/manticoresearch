@@ -3607,6 +3607,8 @@ RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegmen
 	auto fnCopyNorms = [iFields,pSeg] ( const RtSegment_t * pSrc, const CSphFixedVector<RowID_t> & dRowMap )
 	{
 		assert ( pSrc->m_dNorms.GetLength64()==int64_t(pSrc->m_uRows)*iFields );
+		if ( !iFields )
+			return;
 		for ( RowID_t tOldRow=0; tOldRow<pSrc->m_uRows; ++tOldRow )
 		{
 			const RowID_t tNewRow = dRowMap[tOldRow];
@@ -4615,7 +4617,8 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 		for ( auto tRowID : RtLiveRows_c(tSeg) )
 		{
 			assert ( tSeg.m_dNorms.GetLength64()==int64_t(tSeg.m_uRows)*iFields );
-			if ( !tNormBuilder.AddRow ( &tSeg.m_dNorms[int64_t(tRowID)*iFields], iFields, sNormError ) )
+			const DWORD * pNorms = iFields ? &tSeg.m_dNorms[int64_t(tRowID)*iFields] : nullptr;
+			if ( !tNormBuilder.AddRow ( pNorms, iFields, sNormError ) )
 			{
 				sError = sNormError.c_str();
 				return false;
@@ -7617,7 +7620,7 @@ public:
 			if ( pRows[i]>=m_pSegment->m_uRows )
 				return false;
 			uint32_t uTotal = 0;
-			const DWORD * pNorms = &m_pSegment->m_dNorms[int64_t(pRows[i])*m_uFields];
+			const DWORD * pNorms = m_uFields ? &m_pSegment->m_dNorms[int64_t(pRows[i])*m_uFields] : nullptr;
 			for ( uint32_t iField=0; iField<m_uFields; ++iField )
 				uTotal += pNorms[iField];
 			pOut[i] = uTotal;
@@ -10036,8 +10039,10 @@ void RtIndex_c::AddFieldToRamchunk ( const CSphString & sFieldName, DWORD uField
 		CSphTightVector<DWORD> dNewNorms;
 		dNewNorms.Resize ( int64_t(pSeg->m_uRows)*tNewSchema.GetFieldsCount() );
 		dNewNorms.ZeroVec();
-		for ( RowID_t tRowID=0; tRowID<pSeg->m_uRows; ++tRowID )
-			memcpy ( &dNewNorms[int64_t(tRowID)*tNewSchema.GetFieldsCount()], &pSeg->m_dNorms[int64_t(tRowID)*tOldSchema.GetFieldsCount()], tOldSchema.GetFieldsCount()*sizeof(DWORD) );
+		const int iOldFields = tOldSchema.GetFieldsCount();
+		if ( iOldFields )
+			for ( RowID_t tRowID=0; tRowID<pSeg->m_uRows; ++tRowID )
+				memcpy ( &dNewNorms[int64_t(tRowID)*tNewSchema.GetFieldsCount()], &pSeg->m_dNorms[int64_t(tRowID)*iOldFields], iOldFields*sizeof(DWORD) );
 		pSeg->m_dNorms.SwapData ( dNewNorms );
 		pSeg->UpdateUsedRam();
 	}

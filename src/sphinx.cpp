@@ -7813,6 +7813,47 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		DeleteTmpFilesWithPrefix ( dDeleteOnInterrupt );
 	});
 
+	{
+		const int iFields = tDstSchema.GetFieldsCount();
+		e1::norms::StagedBuilder tNormBuilder ( iFields );
+		std::vector<uint32_t> dNorms ( iFields );
+		std::string sNormError;
+		auto fnAppend = [&] ( const CSphIndex_VLN * pIndex, const CSphFixedVector<RowID_t> & dRowMap )
+		{
+			const bool bHasNorms = pIndex->m_tNormStore.Rows()==uint32_t(pIndex->m_iDocinfo) && pIndex->m_tNormStore.Fields()==uint32_t(iFields);
+			for ( RowID_t tRowID=0; tRowID<dRowMap.GetULength(); ++tRowID )
+			{
+				if ( dRowMap[tRowID]==INVALID_ROWID )
+					continue;
+				for ( int iField=0; iField<iFields; ++iField )
+				{
+					dNorms[iField] = 0;
+					if ( bHasNorms && !pIndex->m_tNormStore.Get ( iField, tRowID, dNorms[iField] ) )
+					{
+						sNormError = "norms: merge read failed";
+						return false;
+					}
+				}
+				if ( !tNormBuilder.AddRow ( dNorms.data(), iFields, sNormError ) )
+					return false;
+			}
+			return true;
+		};
+
+		if ( !fnAppend ( pDstIndex, dDstRows ) || ( !bCompress && !fnAppend ( pSrcIndex, dSrcRows ) ) )
+		{
+			sError = sNormError.c_str();
+			return false;
+		}
+		CSphString sNormFile = pDstIndex->GetTmpFilename ( SPH_EXT_SPN );
+		dDeleteOnInterrupt.Add ( sNormFile );
+		if ( !tNormBuilder.Finish ( sNormFile.cstr(), sNormError ) )
+		{
+			sError = sNormError.c_str();
+			return false;
+		}
+	}
+
 	// merging attributes
 	{
 		AttrMerger_c tAttrMerger { tMonitor, sError, iTotalDocs, g_tMergeSettings, dDeleteOnInterrupt };
@@ -7989,6 +8030,45 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 	{
 		DeleteTmpFilesWithPrefix ( dDeleteOnInterrupt );
 	} );
+
+	{
+		const int iFields = tBaseSchema.GetFieldsCount();
+		e1::norms::StagedBuilder tNormBuilder ( iFields );
+		std::vector<uint32_t> dNorms ( iFields );
+		std::string sNormError;
+		for ( int i=0; i<iIndexes; ++i )
+		{
+			const CSphIndex_VLN * pIndex = dIndexes[i];
+			const bool bHasNorms = pIndex->m_tNormStore.Rows()==uint32_t(pIndex->m_iDocinfo) && pIndex->m_tNormStore.Fields()==uint32_t(iFields);
+			for ( RowID_t tRowID=0; tRowID<dRowMaps[i].GetULength(); ++tRowID )
+			{
+				if ( dRowMaps[i][tRowID]==INVALID_ROWID )
+					continue;
+				for ( int iField=0; iField<iFields; ++iField )
+				{
+					dNorms[iField] = 0;
+					if ( bHasNorms && !pIndex->m_tNormStore.Get ( iField, tRowID, dNorms[iField] ) )
+					{
+						sError = "norms: merge read failed";
+						return false;
+					}
+				}
+				if ( !tNormBuilder.AddRow ( dNorms.data(), iFields, sNormError ) )
+				{
+					sError = sNormError.c_str();
+					return false;
+				}
+			}
+		}
+
+		CSphString sNormFile = pDstIndex->GetTmpFilename ( SPH_EXT_SPN );
+		dDeleteOnInterrupt.Add ( sNormFile );
+		if ( !tNormBuilder.Finish ( sNormFile.cstr(), sNormError ) )
+		{
+			sError = sNormError.c_str();
+			return false;
+		}
+	}
 
 	{
 		int64_t tmAttrsStart = sphMicroTimer();

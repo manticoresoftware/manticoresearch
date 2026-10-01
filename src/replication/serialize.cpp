@@ -154,7 +154,8 @@ int LoadUpdate ( const BYTE * pBuf, int iLen, CSphQuery & tQuery )
 // ver 0x109 indexes support for ALTER ADD \ DROP table
 // ver 0x10A changed replicated RT transaction layout for auto-embeddings handling
 // ver 0x10B support for auth replication and ALTER CLUSTER UPDATE user replication command
-static constexpr WORD VER_COMMAND_REPLICATE = 0x10B;
+// ver 0x10C added exact full-text field norms to RT transaction payloads
+static constexpr WORD VER_COMMAND_REPLICATE = 0x10C;
 bool LoadCmdHeader( MemoryReader_c& tReader, ReplicationCommand_t* pCmd )
 {
 	TlsMsg::ResetErr();

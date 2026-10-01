@@ -351,6 +351,7 @@ public:
 	DWORD							m_uRows = 0;			///< number of actually allocated rows
 	std::atomic<int64_t>			m_tAliveRows { 0 };		///< number of alive (non-killed) rows
 	CSphTightVector<CSphRowitem>	m_dRows GUARDED_BY ( m_tLock );				///< row data storage
+	CSphTightVector<DWORD>			m_dNorms GUARDED_BY ( m_tLock );			///< exact row-major field lengths
 	CSphTightVector<BYTE>			m_dBlobs GUARDED_BY ( m_tLock );            ///< storage for blob attrs
 	CSphVector<BYTE>				m_dKeywordCheckpoints;
 	std::atomic<int64_t> *			m_pRAMCounter = nullptr;///< external RAM counter

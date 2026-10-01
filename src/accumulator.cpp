@@ -485,6 +485,7 @@ void RtAccum_t::CleanupPart()
 {
 	ResetPreparedForCommit();
 	m_dAccumRows.Resize ( 0 );
+	m_dNorms.Resize ( 0 );
 	m_dBlobs.Resize ( 0 );
 	m_pColumnarBuilder.reset();
 	m_dPerDocHitsCount.Resize ( 0 );
@@ -668,12 +669,9 @@ void RtAccum_t::FetchEmbeddingsSrc ( InsertDocData_c & tDoc, const CSphVector<At
 }
 
 
-static DWORD * SetupFieldLengths ( const RtIndex_i * pIndex, const CSphSchema & tSchema, CSphVector<DWORD> & dFieldLengths )
+static DWORD * SetupFieldLengths ( const CSphSchema & tSchema, CSphVector<DWORD> & dFieldLengths )
 {
-	if ( !pIndex->GetSettings().m_bIndexFieldLens )
-		return nullptr;
-
-	dFieldLengths.Resize ( tSchema.GetAttrId_LastFieldLen() - tSchema.GetAttrId_FirstFieldLen() + 1 );
+	dFieldLengths.Resize ( tSchema.GetFieldsCount() );
 	dFieldLengths.ZeroVec();
 	return dFieldLengths.Begin();
 }
@@ -731,7 +729,7 @@ static const DocstoreBuilder_i::Doc_t * StoreFieldLengths ( CSphRowitem * pRow, 
 }
 
 
-void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t* pStoredDoc )
+void RtAccum_t::AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t * pStoredDoc, const DWORD * pExactFieldLengths )
 {
 	MEMORY ( MEM_RT_ACCUM );
 	ResetPreparedForCommit();
@@ -835,7 +833,7 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 	}
 
 	CSphVector<DWORD> dFieldLengths;
-	DWORD * pFieldLengths = SetupFieldLengths ( m_pIndex, tSchema, dFieldLengths );
+	DWORD * pFieldLengths = SetupFieldLengths ( tSchema, dFieldLengths );
 
 	// accumulate hits
 	int iHits = 0;
@@ -889,9 +887,13 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 		if ( pFieldLengths && uFieldLastCount )
 			pFieldLengths [ HITMAN::GetField(uFieldLastHit) ] += uFieldLastCount;
 	}
+	if ( pExactFieldLengths )
+		memcpy ( dFieldLengths.Begin(), pExactFieldLengths, dFieldLengths.GetLengthBytes() );
 
 	DocstoreBuilder_i::Doc_t dUpdatedStoredDoc;
-	pStoredDoc = StoreFieldLengths ( pRow, m_pColumnarBuilder, dFieldLengths, tSchema, dUpdatedStoredDoc, pStoredDoc );
+	if ( m_pIndex->GetSettings().m_bIndexFieldLens )
+		pStoredDoc = StoreFieldLengths ( pRow, m_pColumnarBuilder, dFieldLengths, tSchema, dUpdatedStoredDoc, pStoredDoc );
+	m_dNorms.Append ( dFieldLengths );
 
 	// make sure to get real count without duplicated hits
 	m_dPerDocHitsCount.Add ( iHits );
@@ -1031,6 +1033,8 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 					memcpy ( &m_dAccumRows[iDstRow * iRowSize], &m_dAccumRows[i * iRowSize], iRowSize * sizeof ( CSphRowitem ) );
 
 				m_dPerDocHitsCount[iDstRow] = m_dPerDocHitsCount[i];
+				const int iFields = tSchema.GetFieldsCount();
+				memmove ( &m_dNorms[iDstRow*iFields], &m_dNorms[i*iFields], iFields*sizeof(DWORD) );
 
 				// remove duplicate docstore
 				if ( m_pDocstore )
@@ -1045,6 +1049,7 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 
 	m_dAccumRows.Resize ( iDstRow * iRowSize );
 	m_dPerDocHitsCount.Resize ( iDstRow );
+	m_dNorms.Resize ( iDstRow*tSchema.GetFieldsCount() );
 	m_uAccumDocs = iDstRow;
 	if ( m_pDocstore )
 		m_pDocstore->DropTail ( iDstRow );
@@ -1201,6 +1206,8 @@ void RtAccum_t::LoadRtTrx ( ByteBlob_t tTrx, DWORD uVer )
 		tReader.GetVal ( tHit.m_uWordPos );
 	}
 	GetArray ( m_dAccumRows, tReader );
+	if ( uVer>=0x10C )
+		GetArray ( m_dNorms, tReader );
 	GetArray ( m_dBlobs, tReader );
 	GetArray ( m_dPerDocHitsCount, tReader );
 
@@ -1220,6 +1227,11 @@ void RtAccum_t::LoadRtTrx ( ByteBlob_t tTrx, DWORD uVer )
 
 	// delete
 	GetArray ( m_dAccumKlist, tReader );
+	if ( uVer<0x10C )
+	{
+		m_dNorms.Resize ( int64_t(m_uAccumDocs)*m_pIndex->GetMatchSchema().GetFieldsCount() );
+		m_dNorms.ZeroVec(); // legacy replication payloads did not carry exact lengths
+	}
 }
 
 void RtAccum_t::SaveRtTrx ( MemoryWriter_c& tWriter ) const
@@ -1237,6 +1249,7 @@ void RtAccum_t::SaveRtTrx ( MemoryWriter_c& tWriter ) const
 		tWriter.PutVal ( tHit.m_uWordPos );
 	}
 	SaveArray ( m_dAccumRows, tWriter );
+	SaveArray ( m_dNorms, tWriter );
 	SaveArray ( m_dBlobs, tWriter );
 	SaveArray ( m_dPerDocHitsCount, tWriter );
 

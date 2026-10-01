@@ -27,8 +27,9 @@ static constexpr DWORD		BINLOG_META_MAGIC_SPLI = 0x494c5053;	/// magic 'SPLI' he
 // 14 : ??
 // 15 : big refactor: remove external ops; ops is 1 byte (unzipped); + internal ops, + size for ADD_TXN, - index ID
 // 16 : keywords_v2 RT dictionary payload versioning
+// 17 : exact full-text field norms in RT commit payloads
 
-constexpr unsigned int BINLOG_VERSION = 16;
+constexpr unsigned int BINLOG_VERSION = 17;
 
 /// Bin Log Operation
 enum Blop_e : BYTE

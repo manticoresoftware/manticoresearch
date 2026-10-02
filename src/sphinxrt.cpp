@@ -5480,6 +5480,9 @@ RtActionResult_e RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUI
 
 	std::unique_ptr<CSphIndex> pNewChunk;
 	SaveDiskDataTimings_t tTimings;
+	uint64_t tmWriteTotal = 0;
+	uint64_t tmReopenTotal = 0;
+	const bool bE1FlushTrace = getenv("MANTICORE_E1_FLUSH_TRACE");
 	while ( true )
 	{
 		// as separate subtask we 1-st flush segments to disk, and then load just flushed segment
@@ -5488,7 +5491,11 @@ RtActionResult_e RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUI
 		TRACE_SCHED_VARID ( "rt", "SaveDiskChunk-routine", iSaveOp );
 
 		tmSave = -sphMicroTimer();
-		if ( !SaveDiskData ( sChunk.cstr(), dSegments, tStats, m_sLastError, &tTimings ) )
+		tmWriteTotal = bE1FlushTrace ? MonoMicroTimer() : 0;
+		const bool bSaved = SaveDiskData ( sChunk.cstr(), dSegments, tStats, m_sLastError, &tTimings );
+		if ( bE1FlushTrace )
+			tmWriteTotal = MonoMicroTimer()-tmWriteTotal;
+		if ( !bSaved )
 		{
 			sphWarning ( "rt: table %s failed to save disk chunk %s: %s", GetName(), sChunk.cstr(), m_sLastError.cstr() );
 			tmSave += sphMicroTimer();
@@ -5501,7 +5508,10 @@ RtActionResult_e RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUI
 		std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
 		if ( fnFnameBuilder )
 			pFilenameBuilder = fnFnameBuilder ( GetName () );
+		tmReopenTotal = bE1FlushTrace ? MonoMicroTimer() : 0;
 		pNewChunk = PreallocDiskChunk ( sChunk, iChunkID, pFilenameBuilder.get (), dWarnings, m_sLastError );
+		if ( bE1FlushTrace )
+			tmReopenTotal = MonoMicroTimer()-tmReopenTotal;
 
 		if ( !dWarnings.IsEmpty() )
 		{
@@ -5515,6 +5525,9 @@ RtActionResult_e RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUI
 		tmSave += sphMicroTimer();
 		break;
 	}
+	if ( bE1FlushTrace )
+		fprintf ( stderr, "E1_FLUSH_TRACE event=rt_flush table=%s chunk=%d write_total_us=%llu reopen_total_us=%llu success=%d forced=%d segments=%d rows=%lld\n",
+			GetName(), iChunkID, (unsigned long long)tmWriteTotal, (unsigned long long)tmReopenTotal, int(bool(pNewChunk)), int(bForced), dSegments.GetLength(), (long long)tStats.m_Stats.m_iTotalDocuments );
 
 	// here is pickpoint: if we save some chunks in parallel, here we *NEED* to be sure, that later is not published before older
 	// That is about binlog consistency: if we save trx 1-1000 and at the same time 1000-1010, last might finish faster, but it can't be committed immediately,

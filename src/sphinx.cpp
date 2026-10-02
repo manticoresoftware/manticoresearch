@@ -11182,39 +11182,55 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 	if ( m_bE1 )
 	{
 		const bool bE1StartupTrace = getenv("MANTICORE_E1_STARTUP_TRACE");
+		const bool bE1FlushTrace = getenv("MANTICORE_E1_FLUSH_TRACE");
 		int64_t tmE1Startup = bE1StartupTrace ? sphMicroTimer() : 0;
 		const bool bNormsRequired = m_uE1Version==e1::VERSION;
 		if ( bNormsRequired && !sphIsReadable(GetFilename(SPH_EXT_SPN),&m_sLastError) )
 			return false;
 		if ( bNormsRequired || sphIsReadable(GetFilename(SPH_EXT_SPN)) )
 		{
+			const uint64_t tmNormTotal = bE1FlushTrace ? MonoMicroTimer() : 0;
+			uint64_t tmNormMap = bE1FlushTrace ? MonoMicroTimer() : 0;
 			if ( !m_tNormData.Setup(GetFilename(SPH_EXT_SPN),m_sLastError,false) )
 				return false;
+			if ( bE1FlushTrace )
+				tmNormMap = MonoMicroTimer()-tmNormMap;
 			std::string sNormError;
-			if ( !m_tNormStore.Open(m_tNormData.GetReadPtr(),m_tNormData.GetLengthBytes(),sNormError) || m_tNormStore.Rows()!=uint32_t(m_iDocinfo) || m_tNormStore.Fields()!=uint32_t(m_tSchema.GetFieldsCount()) )
+			e1::norms::OpenTimings_t tNormTimings;
+			if ( !m_tNormStore.Open(m_tNormData.GetReadPtr(),m_tNormData.GetLengthBytes(),sNormError,false,bE1FlushTrace ? &tNormTimings : nullptr) || m_tNormStore.Rows()!=uint32_t(m_iDocinfo) || m_tNormStore.Fields()!=uint32_t(m_tSchema.GetFieldsCount()) )
 			{
 				m_sLastError = sNormError.empty() ? "norms: schema mismatch" : sNormError.c_str();
 				return false;
 			}
+			if ( bE1FlushTrace )
+				fprintf ( stderr, "E1_FLUSH_TRACE event=norms_open name=%s map_us=%llu header_us=%llu crc_us=%llu payload_validation_us=%llu total_cache_us=%llu total_us=%llu fast_validation=0 deep_validation=1 rows=%lld fields=%d\n",
+					GetName(), (unsigned long long)tmNormMap, (unsigned long long)tNormTimings.m_tmHeader, (unsigned long long)tNormTimings.m_tmCRC,
+					(unsigned long long)tNormTimings.m_tmPayloadValidation, (unsigned long long)tNormTimings.m_tmTotalCache,
+					(unsigned long long)(MonoMicroTimer()-tmNormTotal), (long long)m_iDocinfo, m_tSchema.GetFieldsCount() );
 			if ( bE1StartupTrace )
 			{
-				fprintf ( stderr, "E1_STARTUP norms_us=%lld rows=%d fields=%d\n", (long long)(sphMicroTimer()-tmE1Startup), m_iDocinfo, m_tSchema.GetFieldsCount() );
+				fprintf ( stderr, "E1_STARTUP norms_us=%lld rows=%lld fields=%d\n", (long long)(sphMicroTimer()-tmE1Startup), (long long)m_iDocinfo, m_tSchema.GetFieldsCount() );
 				tmE1Startup = sphMicroTimer();
 			}
 			// Open has validated every page and built the compact total-length
 			// cache. Keep field norms demand-paged until a query needs them.
 			m_tNormData.DiscardPages();
 		}
+		const uint64_t tmPostingsTotal = bE1FlushTrace ? MonoMicroTimer() : 0;
+		uint64_t tmPostingsMap = bE1FlushTrace ? MonoMicroTimer() : 0;
 		CSphMappedBuffer<BYTE> dict, hits;
 		if ( !m_tE1Data.Setup(GetFilename(SPH_EXT_SPD),m_sLastError,false)
 			|| !dict.Setup(GetFilename(SPH_EXT_SPI),m_sLastError,false)
 			|| !hits.Setup(GetFilename(SPH_EXT_SPP),m_sLastError,false) ) return false;
+		if ( bE1FlushTrace )
+			tmPostingsMap = MonoMicroTimer()-tmPostingsMap;
 		std::string error;
 		const BYTE * pE1Header = m_tE1Data.GetReadPtr();
 		const bool bTrustedGeneration = m_tE1Data.GetLengthBytes()>=44 && e1::ConsumeTrustedGeneration ( GetFilename(SPH_EXT_SPD).cstr(), GetFilename(SPH_EXT_SPI).cstr(), GetFilename(SPH_EXT_SPP).cstr(), e1::U64(pE1Header+16), e1::U32(pE1Header+32), e1::U32(pE1Header+36), e1::U32(pE1Header+40) );
 		const bool bFastValidation = bTrustedGeneration;
+		e1::OpenTimings_t tPostingsTimings;
 		if ( !m_tE1Store.Open(m_tE1Data.GetReadPtr(),m_tE1Data.GetLengthBytes(),m_iDocinfo,
-			dict.GetReadPtr(),dict.GetLengthBytes(),hits.GetReadPtr(),hits.GetLengthBytes(),error,bFastValidation) )
+			dict.GetReadPtr(),dict.GetLengthBytes(),hits.GetReadPtr(),hits.GetLengthBytes(),error,bFastValidation,bE1FlushTrace ? &tPostingsTimings : nullptr) )
 		{ m_sLastError = error.c_str(); return false; }
 		if ( bE1StartupTrace )
 		{
@@ -11236,6 +11252,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 			}
 			return uTerms==e1::U64(m_tE1Data.GetReadPtr()+24);
 		};
+		uint64_t tmDictionary = bE1FlushTrace ? MonoMicroTimer() : 0;
 		bool bDictionaryValid = bFastValidation;
 		if ( !bFastValidation && m_pDict->GetSettings().IsWordDict() )
 		{
@@ -11250,6 +11267,14 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 		{
 			if ( m_sLastError.IsEmpty() ) m_sLastError="E1: dictionary/primary term binding mismatch";
 			return false;
+		}
+		if ( bE1FlushTrace )
+		{
+			tmDictionary = MonoMicroTimer()-tmDictionary;
+			fprintf ( stderr, "E1_FLUSH_TRACE event=postings_open name=%s map_us=%llu header_us=%llu crc_us=%llu structural_validation_us=%llu dictionary_binding_us=%llu total_us=%llu trusted_generation=%d fast_validation=%d deep_validation=%d bytes=%lld\n",
+				GetName(), (unsigned long long)tmPostingsMap, (unsigned long long)tPostingsTimings.header, (unsigned long long)tPostingsTimings.crc,
+				(unsigned long long)tPostingsTimings.structural, (unsigned long long)tmDictionary, (unsigned long long)(MonoMicroTimer()-tmPostingsTotal),
+				int(bTrustedGeneration), int(bFastValidation), int(!bFastValidation), (long long)m_tE1Data.GetLengthBytes() );
 		}
 		if ( bE1StartupTrace )
 			fprintf ( stderr, "E1_STARTUP dictionary_us=%lld\n", (long long)(sphMicroTimer()-tmE1Startup) );

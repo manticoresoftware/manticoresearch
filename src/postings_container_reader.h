@@ -3,9 +3,11 @@
 #pragma once
 #include "postings_container_codecs.h"
 #include "exact_bm25a_utils.h"
+#include "std/timers.h"
 #include <array>
 #include <vector>
 namespace e1 {
+struct OpenTimings_t { uint64_t header=0,crc=0,structural=0; };
 inline uint16_t U16(const uint8_t*p){return p[0]|uint16_t(p[1])<<8;}
 // Frequent descriptor: window, ordinal base, card:u16, type:u16, bytes, offset.
 struct Block {
@@ -44,8 +46,8 @@ public:
   else{docs=U32(d+16);hasHits=U32(d+20)!=0;hits=U64(d+24);}
   return true;
  }
- bool Open(const uint8_t*p,uint64_t size,uint32_t rows,const uint8_t*dict,uint64_t dictSize,const uint8_t*hits,uint64_t hitSize,std::string&error,bool trusted=false){
-  m_p=nullptr;m_dir=nullptr;m_n=0;m_version=0;m_entrySize=0;auto fail=[&](const char*s){error=std::string("E1: ")+s;return false;};
+ bool Open(const uint8_t*p,uint64_t size,uint32_t rows,const uint8_t*dict,uint64_t dictSize,const uint8_t*hits,uint64_t hitSize,std::string&error,bool trusted=false,OpenTimings_t*timings=nullptr){
+  m_p=nullptr;m_dir=nullptr;m_n=0;m_version=0;m_entrySize=0;uint64_t stage=timings?MonoMicroTimer():0;auto fail=[&](const char*s){error=std::string("E1: ")+s;return false;};
   bool v4=size>=48&&!memcmp(p,"E1POST04",8)&&U32(p+8)==4;
   bool v5=size>=48&&!memcmp(p,"E1POST05",8)&&U32(p+8)==5;
   bool v6=size>=48&&!memcmp(p,"E1POST06",8)&&U32(p+8)==6;
@@ -55,12 +57,13 @@ public:
   if(header==48&&flags==0){m_entrySize=32;directory=48;if(nt>(size-48)/32)return fail("directory overflow");end=48+nt*32;}
   else if(header==56&&flags==1){m_entrySize=16;if(size<56)return fail("streamed header");directory=U64(p+48);if(directory<56||directory>size||nt>(size-directory)/16||directory+nt*16!=size)return fail("streamed directory");end=56;payloadEnd=directory;}
   else return fail("layout/version");
-  if(!trusted&&(CRC(p+header,size-header)!=U32(p+32)||CRC(dict,dictSize)!=U32(p+36)||CRC(hits,hitSize)!=U32(p+40)))return fail("checksums");
+  if(timings){timings->header=MonoMicroTimer()-stage;stage=MonoMicroTimer();}
+  if(!trusted){bool valid=CRC(p+header,size-header)==U32(p+32)&&CRC(dict,dictSize)==U32(p+36)&&CRC(hits,hitSize)==U32(p+40);if(timings){timings->crc=MonoMicroTimer()-stage;stage=MonoMicroTimer();}if(!valid)return fail("checksums");}
   auto dir=p+directory;uint64_t prevKey=0;
   if(trusted){
    uint64_t prevOff=header;
    for(uint64_t t=0;t<nt;++t){auto d=dir+t*m_entrySize;uint64_t key=m_entrySize==16?t+1:U64(d),off=U64(d+(m_entrySize==16?0:8));auto h=p+off;uint32_t df=off<=payloadEnd&&payloadEnd-off>=24?U32(h):0,has=off<=payloadEnd&&payloadEnd-off>=24?((U32(h+12)>>1)&1):2;if(!key||key<=prevKey||off<prevOff||off>=payloadEnd||payloadEnd-off<24||!df||df>rows||has>1)return fail("trusted term catalog");prevKey=key;prevOff=off;}
-   m_p=p;m_dir=dir;m_n=nt;m_version=version;return true;
+   m_p=p;m_dir=dir;m_n=nt;m_version=version;if(timings)timings->structural=MonoMicroTimer()-stage;return true;
   }
   for(uint64_t t=0;t<nt;++t){
    auto d=dir+t*m_entrySize;auto key=m_entrySize==16?t+1:U64(d),off=U64(d+(m_entrySize==16?0:8));
@@ -115,7 +118,7 @@ public:
     end+=fieldBytes;
    }
   }
-  if(end!=payloadEnd)return fail("trailing bytes");m_p=p;m_dir=dir;m_n=nt;m_version=version;return true;
+  if(end!=payloadEnd)return fail("trailing bytes");m_p=p;m_dir=dir;m_n=nt;m_version=version;if(timings)timings->structural=MonoMicroTimer()-stage;return true;
  }
 };
 class Cursor {

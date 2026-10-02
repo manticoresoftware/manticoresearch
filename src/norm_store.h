@@ -3,6 +3,7 @@
 
 #include "postings_container_codecs.h"
 #include "field_norms.h"
+#include "std/timers.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -15,6 +16,14 @@
 
 namespace e1::norms
 {
+
+struct OpenTimings_t
+{
+	uint64_t m_tmHeader = 0;
+	uint64_t m_tmCRC = 0;
+	uint64_t m_tmPayloadValidation = 0;
+	uint64_t m_tmTotalCache = 0;
+};
 
 constexpr uint32_t VERSION = 1;
 constexpr uint32_t HEADER_SIZE = 64;
@@ -667,9 +676,10 @@ class Store final : public FieldNormReader_i
 {
 struct TotalGroup_t { uint64_t m_uOffset = 0; uint8_t m_uWidth = 0; };
 public:
-	bool Open ( const uint8_t * pData, uint64_t uSize, std::string & sError, bool bFastValidation=false )
+	bool Open ( const uint8_t * pData, uint64_t uSize, std::string & sError, bool bFastValidation=false, OpenTimings_t * pTimings=nullptr )
 	{
 		Reset();
+		uint64_t tmStage = pTimings ? MonoMicroTimer() : 0;
 		auto fnFail = [&] ( const char * szError ) { sError = std::string("norms: ")+szError; return false; };
 		if ( !pData || uSize<HEADER_SIZE || memcmp(pData,"E1NORM01",8) || e1::U32(pData+8)!=VERSION || e1::U32(pData+12)!=HEADER_SIZE )
 			return fnFail ( "invalid header" );
@@ -683,8 +693,22 @@ public:
 			return fnFail ( "invalid dimensions" );
 		if ( uDirectory!=HEADER_SIZE+uint64_t(uFields)*FIELD_ENTRY_SIZE || uPayload!=uDirectory+uint64_t(uFields)*uGroups*GROUP_ENTRY_SIZE || uPayload>uSize )
 			return fnFail ( "invalid directory" );
-		if ( !bFastValidation && e1::CRC(pData+HEADER_SIZE,uSize-HEADER_SIZE)!=e1::U32(pData+56) )
-			return fnFail ( "checksum mismatch" );
+		if ( pTimings )
+		{
+			pTimings->m_tmHeader = MonoMicroTimer()-tmStage;
+			tmStage = MonoMicroTimer();
+		}
+		if ( !bFastValidation )
+		{
+			const bool bCRCValid = e1::CRC(pData+HEADER_SIZE,uSize-HEADER_SIZE)==e1::U32(pData+56);
+			if ( pTimings )
+			{
+				pTimings->m_tmCRC = MonoMicroTimer()-tmStage;
+				tmStage = MonoMicroTimer();
+			}
+			if ( !bCRCValid )
+				return fnFail ( "checksum mismatch" );
+		}
 		uint64_t uExpectedOffset = uPayload;
 		for ( uint32_t iField=0; iField<uFields; ++iField )
 		{
@@ -731,6 +755,11 @@ public:
 		}
 		if ( uExpectedOffset!=uSize )
 			return fnFail ( "trailing bytes" );
+		if ( pTimings )
+		{
+			pTimings->m_tmPayloadValidation = MonoMicroTimer()-tmStage;
+			tmStage = MonoMicroTimer();
+		}
 		m_pData = pData;
 		m_uRows = uRows;
 		m_uFields = uFields;
@@ -738,6 +767,8 @@ public:
 		m_uGroups = uGroups;
 		m_uDirectory = uDirectory;
 		BuildTotalCache();
+		if ( pTimings )
+			pTimings->m_tmTotalCache = MonoMicroTimer()-tmStage;
 		return true;
 	}
 

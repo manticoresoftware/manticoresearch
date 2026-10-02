@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <vector>
 #include "knnmisc.h"
 #include "sortsetup.h"
 #include "sortcomp.h"
@@ -289,7 +290,7 @@ private:
 	bool								m_bMulti = false; // true when one row holds N vectors instead of one, so every distance is a min over them
 
 	float		CalcDistData ( ByteBlob_t tData ) const;
-	void		PrefetchColumnar ( const VecTraits_T<CSphMatch*> & dMatches, const GetColumnarFromMatch_fn & fnColumnar ) const;
+	void		RescoreColumnarPrefetch ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetColumnarFromMatch_fn & fnColumnar );
 	void		RescoreScalar ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool, const GetColumnarFromMatch_fn & fnColumnar );
 	void		RescoreColumnar ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetColumnarFromMatch_fn & fnColumnar );
 	void		RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool );
@@ -404,8 +405,12 @@ void KNNVecDistCalc_c::RescoreBatch ( VecTraits_T<CSphMatch*> & dMatches, const 
 		return a->m_tRowID < b->m_tRowID;
 	} ) );
 
+	// with the prefetch on, a columnar rescore resolves all addresses first, prefetches, then computes; both kernels live there
 	if ( m_tAttr.IsColumnar() && KNNRescorePrefetch()>0 )
-		PrefetchColumnar ( dMatches, fnColumnar );
+	{
+		RescoreColumnarPrefetch ( dMatches, tOutLoc, fnColumnar );
+		return;
+	}
 
 	// small candidate sets don't repay the pointer batching setup; calculate their distances one by one
 	if ( iCount<KNN_RESCORE_BATCH_SIZE )
@@ -421,88 +426,25 @@ void KNNVecDistCalc_c::RescoreBatch ( VecTraits_T<CSphMatch*> & dMatches, const 
 }
 
 
-// Resolves matches to the address ranges of their vectors in file-mapped columnar stores.
-// Resolving a row is pointer arithmetic over block headers; it does not touch the vector itself.
-// Feed it matches in tag order: it keeps one iterator for each run of matches from the same chunk.
-class ColumnarVecLocator_c
-{
-public:
-			ColumnarVecLocator_c ( const CSphString & sAttr, const GetColumnarFromMatch_fn & fnColumnar )
-				: m_sAttr ( sAttr )
-				, m_fnColumnar ( fnColumnar )
-			{}
-
-	bool	Locate ( const CSphMatch * pMatch, MemRange_t & tRange );
-
-private:
-	const CSphString &						m_sAttr;
-	const GetColumnarFromMatch_fn &			m_fnColumnar;
-	std::unique_ptr<columnar::Iterator_i>	m_pIterator;
-	int										m_iCurTag = 0;
-	bool									m_bTagInitialized = false;
-};
-
-
-bool ColumnarVecLocator_c::Locate ( const CSphMatch * pMatch, MemRange_t & tRange )
-{
-	if ( !m_bTagInitialized || pMatch->m_iTag!=m_iCurTag )
-	{
-		m_iCurTag = pMatch->m_iTag;
-		m_bTagInitialized = true;
-		m_pIterator.reset();
-
-		// only a store that hands out pointers into a file mapping has addresses worth asking the OS about
-		columnar::Columnar_i * pColumnar = m_fnColumnar(pMatch);
-		columnar::AttrInfo_t tInfo;
-		if ( pColumnar && pColumnar->GetAttrInfo ( m_sAttr.cstr(), tInfo ) && tInfo.m_bStablePtr )
-		{
-			std::string sError; // FIXME! report errors
-			columnar::IteratorHints_t tHints { .m_bNeedStringHashes = false, .m_bBuffered = true, .m_bRandomAccess = KNNRescoreRandomAccess() };
-			m_pIterator = CreateColumnarIterator ( pColumnar, m_sAttr.cstr(), sError, tHints );
-		}
-	}
-
-	if ( !m_pIterator )
-		return false;
-
-	const BYTE * pData = nullptr;
-	int iLen = m_pIterator->Get ( pMatch->m_tRowID, pData );
-	if ( !pData || iLen<=0 )
-		return false;
-
-	tRange.m_pData = pData;
-	tRange.m_uLen = (size_t)iLen;
-	return true;
-}
-
-
 static const int KNN_PREFETCH_PROBES = 4;
 
-// Ask the OS about a few candidates, spread evenly over the whole (chunk, row)-sorted set: are their vectors in memory?
+// Ask the OS about a few of the vectors, spread evenly over the whole (chunk, row)-sorted set: are they in memory?
 // All present: the set is most likely cached and prefetching it would only cost time. Any missing: prefetch them all.
 // With a fraction p of the vectors cached the answer is "present" with probability p^4, so a cold table practically
 // always prefetches, a fully cached one never does, and a mistake either way only costs that one query some time.
-static bool AreVectorsResident ( const VecTraits_T<CSphMatch*> & dMatches, const CSphString & sAttr, const GetColumnarFromMatch_fn & fnColumnar )
+// The ranges are the addresses the rescore has already resolved, so a probe costs one mincore() call and nothing else.
+static bool AreVectorsResident ( const VecTraits_T<MemRange_t> & dRanges )
 {
-	const int iCount = dMatches.GetLength();
+	const int iCount = dRanges.GetLength();
 	const int iProbes = Min ( iCount, KNN_PREFETCH_PROBES );
-
-	ColumnarVecLocator_c tLocator ( sAttr, fnColumnar );
-	bool bProbed = false;
 	for ( int i = 0; i < iProbes; i++ )
 	{
 		int iIdx = iProbes>1 ? int ( (int64_t)i*( iCount-1 ) / ( iProbes-1 ) ) : 0;
-
-		MemRange_t tRange;
-		if ( !tLocator.Locate ( dMatches[iIdx], tRange ) )
-			continue;	// not a file-mapped store; there is nothing to prefetch for it either way
-
-		bProbed = true;
-		if ( !mmresident ( tRange.m_pData, tRange.m_uLen ) )
+		if ( !mmresident ( dRanges[iIdx].m_pData, dRanges[iIdx].m_uLen ) )
 			return false;
 	}
 
-	return bProbed;
+	return iProbes>0;
 }
 
 
@@ -521,7 +463,7 @@ static const int KNN_PREFETCH_CLEAN_PROBES = 3;	// clean probes in a row it take
 static std::atomic<int> g_iKNNPrefetchColdLeft { 0 };
 static std::atomic<int> g_iKNNPrefetchCleanProbes { 0 };
 
-static bool ShouldPrefetchSticky ( const VecTraits_T<CSphMatch*> & dMatches, const CSphString & sAttr, const GetColumnarFromMatch_fn & fnColumnar )
+static bool ShouldPrefetchSticky ( const VecTraits_T<MemRange_t> & dRanges )
 {
 	int iColdLeft = g_iKNNPrefetchColdLeft.load ( std::memory_order_relaxed );
 	if ( iColdLeft>0 )
@@ -530,7 +472,7 @@ static bool ShouldPrefetchSticky ( const VecTraits_T<CSphMatch*> & dMatches, con
 		return true;
 	}
 
-	if ( !AreVectorsResident ( dMatches, sAttr, fnColumnar ) )
+	if ( !AreVectorsResident(dRanges) )
 	{
 		g_iKNNPrefetchCleanProbes.store ( 0, std::memory_order_relaxed );
 		g_iKNNPrefetchColdLeft.store ( KNN_PREFETCH_COLD_STREAK, std::memory_order_relaxed );
@@ -549,35 +491,159 @@ static bool ShouldPrefetchSticky ( const VecTraits_T<CSphMatch*> & dMatches, con
 }
 
 
-// Hand the OS the vectors of all candidates at once, before the distance loop touches any of them. The reads are all
-// submitted up front, so they overlap instead of being served one page fault at a time, only the pages the vectors
-// occupy are read, and a vector that straddles a page boundary is fetched by one request.
-void KNNVecDistCalc_c::PrefetchColumnar ( const VecTraits_T<CSphMatch*> & dMatches, const GetColumnarFromMatch_fn & fnColumnar ) const
+// Hand the OS all these vectors at once, before the distance loop touches any of them. The reads are all submitted
+// up front, so they overlap instead of being served one page fault at a time, only the pages the vectors occupy are
+// read, and a vector that straddles a page boundary is fetched by one request.
+static void PrefetchVectors ( const VecTraits_T<MemRange_t> & dRanges )
 {
-	const int iMode = KNNRescorePrefetch();
-
-	// residency gate: the prefetch pays off only while the vectors are not in memory, and costs time once they are
-	if ( iMode==3 && AreVectorsResident ( dMatches, m_tAttr.m_sName, fnColumnar ) )
-		return;
-
-	if ( iMode>=4 && !ShouldPrefetchSticky ( dMatches, m_tAttr.m_sName, fnColumnar ) )
-		return;
-
-	CSphVector<MemRange_t> dRanges;
-	dRanges.Reserve ( dMatches.GetLength() );
-
-	ColumnarVecLocator_c tLocator ( m_tAttr.m_sName, fnColumnar );
-	for ( const CSphMatch * pMatch : dMatches )
-	{
-		MemRange_t tRange;
-		if ( tLocator.Locate ( pMatch, tRange ) )
-			dRanges.Add(tRange);
-	}
-
 	if ( dRanges.IsEmpty() )
 		return;
 
+	const int iMode = KNNRescorePrefetch();
+
+	// residency gate: the prefetch pays off only while the vectors are not in memory, and costs time once they are
+	if ( iMode==3 && AreVectorsResident(dRanges) )
+		return;
+
+	if ( iMode>=4 && !ShouldPrefetchSticky(dRanges) )
+		return;
+
 	ReportKNNRescorePrefetch ( mmprefetch ( dRanges.Begin(), dRanges.GetLength(), iMode>=2 ) );
+}
+
+
+// Columnar rescore with the prefetch folded in. Three passes over the candidates:
+//  1. resolve: every vector's address is taken from its store. For a file-mapped store that is pointer arithmetic over
+//     block headers and touches no vector data.
+//  2. prefetch: the resolved addresses go to the residency gate and, unless it finds them in memory, to the OS.
+//  3. distances: computed from the addresses of pass 1, one by one for a small set, in batches for a large one.
+// The iterators made in pass 1 are the only ones, so no row is resolved twice and a probe costs just its system call.
+void KNNVecDistCalc_c::RescoreColumnarPrefetch ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetColumnarFromMatch_fn & fnColumnar )
+{
+	const int iCount = dMatches.GetLength();
+	const int iVecBytes = m_tAttr.m_tKNN.m_iDims*(int)sizeof(float);
+	const bool bLargeSet = iCount>=KNN_RESCORE_BATCH_SIZE;	// same split as between RescoreScalar and RescoreColumnar
+	const bool bBatched = bLargeSet && !m_bMulti;			// FIXME: make float_vector_array batched too
+
+	struct Vec_t
+	{
+		const BYTE *	m_pData = nullptr;
+		int				m_iLen = 0;
+		int				m_iIterator = -1;		// the iterator serving this row; -1 if its store gave none
+		bool			m_bResolved = false;	// address is final (file-mapped store); otherwise it is fetched in pass 3
+	};
+
+	std::vector<Vec_t> dVecs ( iCount );
+	std::vector<std::unique_ptr<columnar::Iterator_i>> dIterators;	// alive to the end: pass 3 fetches rows of non-mapped stores
+	CSphVector<MemRange_t> dRanges;
+	dRanges.Reserve(iCount);
+
+	// pass 1: resolve
+	columnar::Columnar_i * pCurColumnar = nullptr;
+	columnar::Columnar_i * pColumnar = nullptr;
+	int iCurTag = 0;
+	bool bTagInitialized = false;
+	bool bIteratorInitialized = false;
+	int iCurIterator = -1;
+	bool bCurStable = false;	// does the current store's Get() return pointers stable across later Get() calls?
+
+	for ( int i = 0; i < iCount; i++ )
+	{
+		const CSphMatch * pMatch = dMatches[i];
+		if ( !bTagInitialized || pMatch->m_iTag!=iCurTag )
+		{
+			iCurTag = pMatch->m_iTag;
+			pColumnar = fnColumnar(pMatch);
+			bTagInitialized = true;
+		}
+
+		if ( !bIteratorInitialized || pColumnar!=pCurColumnar )
+		{
+			pCurColumnar = pColumnar;
+			bIteratorInitialized = true;
+			iCurIterator = -1;
+			bCurStable = false;
+
+			if ( pColumnar )
+			{
+				std::string sError; // FIXME! report errors
+				columnar::IteratorHints_t tHints { .m_bNeedStringHashes = false, .m_bBuffered = bLargeSet, .m_bRandomAccess = KNNRescoreRandomAccess() };
+				auto pIterator = CreateColumnarIterator ( pColumnar, m_tAttr.m_sName.cstr(), sError, tHints );
+				if ( pIterator )
+				{
+					dIterators.push_back ( std::move(pIterator) );
+					iCurIterator = (int)dIterators.size()-1;
+
+					columnar::AttrInfo_t tInfo;
+					if ( pColumnar->GetAttrInfo ( m_tAttr.m_sName.cstr(), tInfo ) )
+						bCurStable = tInfo.m_bStablePtr;
+				}
+			}
+		}
+
+		Vec_t & tVec = dVecs[i];
+		tVec.m_iIterator = iCurIterator;
+		if ( iCurIterator<0 || !bCurStable )
+			continue;
+
+		tVec.m_iLen = dIterators[iCurIterator]->Get ( pMatch->m_tRowID, tVec.m_pData );
+		tVec.m_bResolved = true;
+		if ( tVec.m_pData && tVec.m_iLen>0 )
+		{
+			MemRange_t & tRange = dRanges.Add();
+			tRange.m_pData = tVec.m_pData;
+			tRange.m_uLen = (size_t)tVec.m_iLen;
+		}
+	}
+
+	// pass 2: prefetch
+	PrefetchVectors(dRanges);
+
+	// pass 3: distances
+	static const int CHUNK = KNN_RESCORE_BATCH_SIZE;
+	const void * dPtrs[CHUNK];
+	float dOut[CHUNK];
+	int iBatchStart = 0;
+	int iBatchCount = 0;
+
+	auto fnCompute = [&]()
+	{
+		if ( !iBatchCount )
+			return;
+
+		m_pDistCalc->CalcDistBatch ( m_dAnchor.Begin(), { dPtrs, (size_t)iBatchCount }, { dOut, (size_t)iBatchCount } );
+		for ( int i = 0; i < iBatchCount; i++ )
+			dMatches[iBatchStart+i]->SetAttrFloat ( tOutLoc, dOut[i] );
+
+		iBatchCount = 0;
+	};
+
+	for ( int i = 0; i < iCount; i++ )
+	{
+		CSphMatch * pMatch = dMatches[i];
+		Vec_t & tVec = dVecs[i];
+
+		// a store without stable pointers: fetch now, the pointer lives until that iterator's next Get()
+		if ( !tVec.m_bResolved && tVec.m_iIterator>=0 )
+			tVec.m_iLen = dIterators[tVec.m_iIterator]->Get ( pMatch->m_tRowID, tVec.m_pData );
+
+		if ( bBatched && tVec.m_bResolved && tVec.m_pData && tVec.m_iLen==iVecBytes )
+		{
+			if ( !iBatchCount )
+				iBatchStart = i;
+			dPtrs[iBatchCount++] = tVec.m_pData;
+			if ( iBatchCount==CHUNK )
+				fnCompute();
+
+			continue;
+		}
+
+		// one by one: small sets, multi-vector rows, rows of non-mapped stores, missing or wrong-sized values (FLT_MAX)
+		fnCompute();
+		pMatch->SetAttrFloat ( tOutLoc, CalcDistData ( { tVec.m_pData, tVec.m_iLen } ) );
+	}
+
+	fnCompute();
 }
 
 

@@ -1207,6 +1207,8 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc ) NO_THREAD_SAFETY_ANALYSIS
 	RPL_TNX << "commit, table '" << tCmd.m_sIndex.cstr() << "', uid " << ( tCmd.m_pStored ? tCmd.m_pStored->m_iQUID : int64_t(0) ) << ", queries " << tCmd.m_dDeleteQueries.GetLength() << ", tags " << tCmd.m_sDeleteTags.scstr();
 
 	RIdx_T<RtIndex_i*> pIndex { pServed };
+	if ( !tAcc.CheckReplicationValidation ( *pIndex, sError ) )
+		return TlsMsg::Err ( "%s", sError.cstr() );
 	if ( !tAcc.SetupDocstore ( *pIndex, sError ) )
 	{
 		sphWarning ( "%s, table '%s', command %d", sError.cstr(), tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
@@ -1284,9 +1286,10 @@ static void StoreCommandPqDelete ( const ReplicationCommand_t & tCmd, MemoryWrit
 	}
 }
 
-static void StoreCommandRtTnx ( const ReplicationCommand_t & tCmd, MemoryWriter_c & tWriter, const RtAccum_t & tAcc, const uint64_t uIndex, ReplicateKeys_t & tKeys )
+static bool StoreCommandRtTnx ( const ReplicationCommand_t & tCmd, MemoryWriter_c & tWriter, const RtAccum_t & tAcc, const uint64_t uIndex, ReplicateKeys_t & tKeys )
 {
-	tAcc.SaveRtTrx ( tWriter );
+	if ( !tAcc.SaveRtTrx ( tWriter ) )
+		return false;
 
 	// table is the shared key and table with ID is the exclusive key
 	if ( tAcc.m_dAccumKlist.GetLength() )
@@ -1295,13 +1298,13 @@ static void StoreCommandRtTnx ( const ReplicationCommand_t & tCmd, MemoryWriter_
 		tKeys.AddKey ( uIndex, true );
 
 	if ( tCmd.m_eCommand!=ReplCmd_e::RT_TRX )
-		return;
+		return true;
 
 	assert ( !tAcc.m_uAccumDocs || tAcc.GetIndex() );
 	const bool bAccumUuid = tAcc.m_uAccumDocs && sphHasUuidDocid ( tAcc.GetIndex()->GetInternalSchema() );
 
 	if ( !bAccumUuid && tCmd.m_dUuidKeys.IsEmpty() )
-		return;
+		return true;
 
 	const uint64_t uUuidDomain = GetUuidDocidKeyDomain ( uIndex );
 	if ( bAccumUuid )
@@ -1315,6 +1318,7 @@ static void StoreCommandRtTnx ( const ReplicationCommand_t & tCmd, MemoryWriter_
 
 	for ( const CSphString & sUuid : tCmd.m_dUuidKeys )
 		AddUuidDocidKey ( uUuidDomain, sUuid, tKeys );
+	return true;
 }
 
 static void StoreCommandUpdateApi ( const ReplicationCommand_t & tCmd, MemoryWriter_c & tWriter, const uint64_t uIndex, ReplicateKeys_t & tKeys )
@@ -1462,7 +1466,8 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 		case ReplCmd_e::RT_TRX:
 		case ReplCmd_e::AUTH_ADD:
 		case ReplCmd_e::AUTH_DELETE:
-			StoreCommandRtTnx ( tCmd, tWriter, tAcc, uIndex, tKeys );
+			if ( !StoreCommandRtTnx ( tCmd, tWriter, tAcc, uIndex, tKeys ) )
+				return false;
 			break;
 
 		case ReplCmd_e::UPDATE_API:

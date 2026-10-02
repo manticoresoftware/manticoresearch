@@ -23,11 +23,643 @@
 #include "sphinxudf.h"
 #include "sphinxquery/xqparser.h"
 #include "indexfiles.h"
+#include "memio.h"
 
 #include <gmock/gmock.h>
 
+#include <limits>
+
 
 //////////////////////////////////////////////////////////////////////////
+
+namespace
+{
+
+struct RtTrxPayload_t
+{
+	CSphVector<BYTE> m_dData;
+	int m_iNormCountOffset = -1;
+};
+
+RtTrxPayload_t MakeRtTrxPayload ( DWORD uDocs, DWORD uNorms, int iNormValues=0, DWORD uVersion=0x10C )
+{
+	RtTrxPayload_t tPayload;
+	MemoryWriter_c tWriter ( tPayload.m_dData );
+	tWriter.PutByte ( 0 );
+	tWriter.PutDword ( uDocs );
+	if ( uVersion>=0x106 )
+		tWriter.PutVal<int64_t> ( 0 );
+	tWriter.PutDword ( 0 ); // hits
+	tWriter.PutDword ( 0 ); // rows
+	if ( uVersion>=0x10C )
+	{
+		tPayload.m_iNormCountOffset = tWriter.GetPos();
+		tWriter.PutDword ( uNorms );
+		for ( int i=0; i<iNormValues; ++i )
+			tWriter.PutDword ( i+1 );
+	}
+	tWriter.PutDword ( 0 ); // blobs
+	tWriter.PutDword ( 0 ); // per-document hit counts
+	tWriter.PutDword ( 0 ); // packed keywords
+	tWriter.PutByte ( 0 ); // docstore
+	tWriter.PutByte ( 0 ); // columnar storage
+	tWriter.PutDword ( 0 ); // kill list
+	return tPayload;
+}
+
+ByteBlob_t AsBlob ( const CSphVector<BYTE> & dData )
+{
+	return { dData.Begin(), dData.GetLength() };
+}
+
+CSphSchema MakeRtTrxSchema ( int iFields )
+{
+	CSphSchema tSchema;
+	for ( int i=0; i<iFields; ++i )
+	{
+		CSphColumnInfo tField;
+		tField.m_sName.SetSprintf ( "field%d", i );
+		tField.m_uFieldFlags = CSphColumnInfo::FIELD_INDEXED;
+		tSchema.AddField ( tField );
+	}
+	return tSchema;
+}
+
+struct CompleteRtTrxPayload_t
+{
+	CSphVector<BYTE> m_dData;
+	CSphSchema m_tSchema;
+	int m_iHitsCount = 0;
+	int m_iHitsData = 0;
+	int m_iRowsCount = 0;
+	int m_iRowsData = 0;
+	int m_iNormsCount = 0;
+	int m_iBlobsCount = 0;
+	int m_iBlobsData = 0;
+	int m_iPerDocCount = 0;
+	int m_iPerDocData = 0;
+	int m_iPackedCount = 0;
+	int m_iPackedData = 0;
+	int m_iDocstoreFlag = 0;
+	int m_iDocstoreFields = 0;
+	int m_iDocstoreDocs = 0;
+	int m_iDocstoreDocLength = 0;
+	int m_iDocstoreFieldLength = 0;
+	int m_iDocstoreData = 0;
+	int m_iColumnarFlag = 0;
+	int m_iColumnarCount = 0;
+	CSphVector<int> m_dColumnarTypes;
+	CSphVector<int> m_dColumnarValueCounts;
+	CSphVector<int> m_dColumnarValueData;
+	int m_iStringOffsetsData = -1;
+	int m_iMvaOffsetsData = -1;
+	int m_iKillCount = 0;
+	int m_iKillData = 0;
+};
+
+CompleteRtTrxPayload_t MakeCompleteRtTrxPayload()
+{
+	CompleteRtTrxPayload_t tPayload;
+	CSphSchema tSchema;
+	CSphColumnInfo tField ( "body" );
+	tField.m_uFieldFlags = CSphColumnInfo::FIELD_INDEXED | CSphColumnInfo::FIELD_STORED;
+	tSchema.AddField ( tField );
+	CSphColumnInfo tStoredOnly ( "stored_only" );
+	tStoredOnly.m_uFieldFlags = CSphColumnInfo::FIELD_STORED;
+	tSchema.AddField ( tStoredOnly );
+	auto fnAddAttr = [&] ( const char * szName, ESphAttr eType, bool bColumnar )
+	{
+		CSphColumnInfo tAttr ( szName, eType );
+		if ( bColumnar )
+			tAttr.m_uAttrFlags |= CSphColumnInfo::ATTR_COLUMNAR;
+		tSchema.AddAttr ( tAttr, true );
+	};
+	fnAddAttr ( sphGetDocidName(), SPH_ATTR_BIGINT, true );
+	fnAddAttr ( sphGetBlobLocatorName(), SPH_ATTR_BIGINT, false );
+	fnAddAttr ( "row_value", SPH_ATTR_INTEGER, false );
+	fnAddAttr ( "payload", SPH_ATTR_STRING, false );
+	fnAddAttr ( "flag", SPH_ATTR_BOOL, true );
+	fnAddAttr ( "tag", SPH_ATTR_STRING, true );
+	fnAddAttr ( "numbers", SPH_ATTR_UINT32SET, true );
+
+	auto pIndex = sphCreateIndexRT ( "rt_trx_fixture", "rt_trx_fixture", tSchema, 1024*1024 );
+	EXPECT_TRUE ( pIndex );
+	tPayload.m_tSchema = pIndex->GetMatchSchema();
+
+	RtAccum_t tSaved;
+	tSaved.SetIndex ( pIndex.get() );
+	InsertDocData_c tDoc ( tPayload.m_tSchema );
+	tDoc.SetID ( 47 );
+	const CSphColumnInfo * pRowAttr = tPayload.m_tSchema.GetAttr ( "row_value" );
+	EXPECT_NE ( pRowAttr, nullptr );
+	tDoc.m_tDoc.SetAttr ( pRowAttr->m_tLocator, 11 );
+	EXPECT_GE ( tDoc.m_dColumnarAttrs.GetLength(), 2 );
+	tDoc.m_dColumnarAttrs[1] = 1;
+	tDoc.m_dStrings.Add ( "row-blob" );
+	tDoc.m_dStrings.Add ( "abc" );
+	tDoc.AddMVALength ( 2 );
+	tDoc.AddMVAValue ( 7 );
+	tDoc.AddMVAValue ( 9 );
+	BYTE dStored[] = { 'd', 'o', 'c' };
+	DocstoreBuilder_i::Doc_t tStored;
+	tStored.m_dFields.Add ( { dStored, 3 } );
+	tStored.m_dFields.Add ( { nullptr, 0 } );
+	const DWORD dFieldLengths[] = { 13, 0 };
+	tSaved.AddDocument ( nullptr, tDoc, true, tPayload.m_tSchema.GetRowSize(), &tStored, dFieldLengths );
+	tSaved.m_iAccumBytes = 17;
+	auto & tHit = tSaved.m_dAccum.Add();
+	tHit.m_tRowID = 0;
+	tHit.m_uWordID = 5;
+	tHit.m_uWordPos = 7;
+	tSaved.m_dPerDocHitsCount[0] = 1;
+
+	MemoryWriter_c tWriter ( tPayload.m_dData );
+	EXPECT_TRUE ( tSaved.SaveRtTrx ( tWriter ) ) << TlsMsg::szError();
+
+	MemoryReader_c tReader ( AsBlob(tPayload.m_dData) );
+	(void)tReader.GetVal<BYTE>();
+	(void)tReader.GetDword();
+	(void)tReader.GetVal<int64_t>();
+	tPayload.m_iHitsCount = tReader.GetPos();
+	DWORD uCount = tReader.GetDword();
+	tPayload.m_iHitsData = tReader.GetPos();
+	tReader.SetPos ( tReader.GetPos()+uCount*( sizeof(RowID_t)+sizeof(SphWordID_t)+sizeof(DWORD) ) );
+	tPayload.m_iRowsCount = tReader.GetPos();
+	uCount = tReader.GetDword();
+	tPayload.m_iRowsData = tReader.GetPos();
+	tReader.SetPos ( tReader.GetPos()+uCount*sizeof(CSphRowitem) );
+	tPayload.m_iNormsCount = tReader.GetPos();
+	uCount = tReader.GetDword();
+	tReader.SetPos ( tReader.GetPos()+uCount*sizeof(DWORD) );
+	tPayload.m_iBlobsCount = tReader.GetPos();
+	uCount = tReader.GetDword();
+	tPayload.m_iBlobsData = tReader.GetPos();
+	tReader.SetPos ( tReader.GetPos()+uCount );
+	tPayload.m_iPerDocCount = tReader.GetPos();
+	uCount = tReader.GetDword();
+	tPayload.m_iPerDocData = tReader.GetPos();
+	tReader.SetPos ( tReader.GetPos()+uCount*sizeof(DWORD) );
+	tPayload.m_iPackedCount = tReader.GetPos();
+	uCount = tReader.GetDword();
+	tPayload.m_iPackedData = tReader.GetPos();
+	tReader.SetPos ( tReader.GetPos()+uCount );
+	tPayload.m_iDocstoreFlag = tReader.GetPos();
+	EXPECT_EQ ( tReader.GetVal<BYTE>(), 1 );
+	tPayload.m_iDocstoreFields = tReader.GetPos();
+	DWORD uFields = tReader.GetDword();
+	tPayload.m_iDocstoreDocs = tReader.GetPos();
+	EXPECT_EQ ( tReader.UnzipInt(), 1u );
+	tPayload.m_iDocstoreDocLength = tReader.GetPos();
+	DWORD uDocLength = tReader.UnzipInt();
+	tPayload.m_iDocstoreFieldLength = tReader.GetPos();
+	const BYTE * pPacked = tPayload.m_dData.Begin()+tReader.GetPos();
+	for ( DWORD i=0; i<uFields; ++i )
+	{
+		DWORD uLength = UnzipIntBE ( pPacked );
+		pPacked += uLength;
+	}
+	tPayload.m_iDocstoreData = tReader.GetPos();
+	tReader.SetPos ( tReader.GetPos()+uDocLength );
+	tPayload.m_iColumnarFlag = tReader.GetPos();
+	EXPECT_EQ ( tReader.GetVal<BYTE>(), 1 );
+	tPayload.m_iColumnarCount = tReader.GetPos();
+	uCount = tReader.GetDword();
+	for ( DWORD i=0; i<uCount; ++i )
+	{
+		tPayload.m_dColumnarTypes.Add ( tReader.GetPos() );
+		ESphAttr eType = ESphAttr(tReader.GetDword());
+		if ( eType==SPH_ATTR_INTEGER || eType==SPH_ATTR_TIMESTAMP || eType==SPH_ATTR_FLOAT || eType==SPH_ATTR_TOKENCOUNT || eType==SPH_ATTR_BOOL || eType==SPH_ATTR_BIGINT )
+			tReader.SetPos ( tReader.GetPos()+sizeof(SphOffset_t) );
+		tPayload.m_dColumnarValueCounts.Add ( tReader.GetPos() );
+		DWORD uValues = tReader.GetDword();
+		tPayload.m_dColumnarValueData.Add ( tReader.GetPos() );
+		switch ( eType )
+		{
+		case SPH_ATTR_BOOL: tReader.SetPos ( tReader.GetPos()+uValues ); break;
+		case SPH_ATTR_BIGINT: tReader.SetPos ( tReader.GetPos()+uValues*sizeof(int64_t) ); break;
+		case SPH_ATTR_STRING:
+			tPayload.m_iStringOffsetsData = tReader.GetPos();
+			tReader.SetPos ( tReader.GetPos()+uValues*sizeof(int64_t) );
+			tPayload.m_dColumnarValueCounts.Last() = tReader.GetPos();
+			uValues = tReader.GetDword();
+			tReader.SetPos ( tReader.GetPos()+uValues );
+			break;
+		case SPH_ATTR_UINT32SET:
+		case SPH_ATTR_FLOAT_VECTOR:
+		case SPH_ATTR_FLOAT_VECTOR_ARRAY:
+		case SPH_ATTR_INT64SET:
+			tPayload.m_iMvaOffsetsData = tReader.GetPos();
+			tReader.SetPos ( tReader.GetPos()+uValues*sizeof(int) );
+			tPayload.m_dColumnarValueCounts.Last() = tReader.GetPos();
+			uValues = tReader.GetDword();
+			tReader.SetPos ( tReader.GetPos()+uValues*( eType==SPH_ATTR_INT64SET ? sizeof(int64_t) : sizeof(DWORD) ) );
+			break;
+		default: tReader.SetPos ( tReader.GetPos()+uValues*sizeof(DWORD) ); break;
+		}
+	}
+	tPayload.m_iKillCount = tReader.GetPos();
+	uCount = tReader.GetDword();
+	tPayload.m_iKillData = tReader.GetPos();
+	tReader.SetPos ( tReader.GetPos()+uCount*sizeof(DocID_t) );
+	EXPECT_EQ ( tReader.GetPos(), tPayload.m_dData.GetLength() );
+	return tPayload;
+}
+
+void SetPayloadDword ( CSphVector<BYTE> & dData, int iOffset, DWORD uValue )
+{
+	ASSERT_GE ( iOffset, 0 );
+	ASSERT_LE ( iOffset+(int)sizeof(uValue), dData.GetLength() );
+	memcpy ( dData.Begin()+iOffset, &uValue, sizeof(uValue) );
+}
+
+template<typename T>
+void SetPayloadValue ( CSphVector<BYTE> & dData, int iOffset, T tValue )
+{
+	ASSERT_GE ( iOffset, 0 );
+	ASSERT_LE ( iOffset+(int)sizeof(tValue), dData.GetLength() );
+	memcpy ( dData.Begin()+iOffset, &tValue, sizeof(tValue) );
+}
+
+CSphVector<BYTE> WithPackedKeywords ( const CompleteRtTrxPayload_t & tPayload, const BYTE * pPacked, int iPacked, SphWordID_t uOffset )
+{
+	CSphVector<BYTE> dResult;
+	dResult.Append ( tPayload.m_dData.Begin(), tPayload.m_iPackedData );
+	dResult.Append ( pPacked, iPacked );
+	dResult.Append ( tPayload.m_dData.Begin()+tPayload.m_iPackedData, tPayload.m_dData.GetLength()-tPayload.m_iPackedData );
+	SetPayloadDword ( dResult, tPayload.m_iPackedCount, iPacked );
+	SetPayloadValue ( dResult, tPayload.m_iHitsData+sizeof(RowID_t), uOffset );
+	return dResult;
+}
+
+} // namespace
+
+TEST ( RtTrx, SchemaLessSaveRoundTripsEmptyNorms )
+{
+	RtAccum_t tSaved;
+	tSaved.m_dBlobs.Add ( 17 );
+	tSaved.m_dAccumKlist.Add ( 29 );
+	CSphVector<BYTE> dPayload;
+	MemoryWriter_c tWriter ( dPayload );
+	ASSERT_TRUE ( tSaved.SaveRtTrx ( tWriter ) ) << TlsMsg::szError();
+
+	MemoryReader_c tReader ( AsBlob(dPayload) );
+	(void)tReader.GetVal<BYTE>();
+	(void)tReader.GetDword();
+	(void)tReader.GetVal<int64_t>();
+	EXPECT_EQ ( tReader.GetDword(), 0u ); // hits
+	EXPECT_EQ ( tReader.GetDword(), 0u ); // rows
+	EXPECT_EQ ( tReader.GetDword(), 0u ); // norms
+
+	RtAccum_t tLoaded;
+	ASSERT_TRUE ( tLoaded.LoadRtTrx ( AsBlob(dPayload), 0x10C ) ) << TlsMsg::szError();
+	ASSERT_EQ ( tLoaded.m_dBlobs.GetLength(), 1 );
+	EXPECT_EQ ( tLoaded.m_dBlobs[0], 17 );
+	ASSERT_EQ ( tLoaded.m_dAccumKlist.GetLength(), 1 );
+	EXPECT_EQ ( tLoaded.m_dAccumKlist[0], 29 );
+	EXPECT_TRUE ( tLoaded.m_dNorms.IsEmpty() );
+}
+
+TEST ( RtTrx, RejectsUnexpectedStoragesWithoutSchema )
+{
+	RtTrxPayload_t tPayload = MakeRtTrxPayload ( 0, 0 );
+	MemoryReader_c tReader ( AsBlob(tPayload.m_dData) );
+	(void)tReader.GetVal<BYTE>();
+	(void)tReader.GetDword();
+	(void)tReader.GetVal<int64_t>();
+	const int dElemSizes[] = {
+		int(sizeof(RowID_t)+sizeof(SphWordID_t)+sizeof(DWORD)), int(sizeof(CSphRowitem)),
+		int(sizeof(DWORD)), 1, int(sizeof(DWORD)), 1 };
+	for ( int i=0; i<6; ++i )
+	{
+		DWORD uCount = tReader.GetDword();
+		tReader.SetPos ( tReader.GetPos()+uCount*dElemSizes[i] );
+	}
+	const int iDocstoreFlag = tReader.GetPos();
+	const int iColumnarFlag = iDocstoreFlag+1;
+
+	for ( int iFlag : { iDocstoreFlag, iColumnarFlag } )
+	{
+		CSphVector<BYTE> dForged = tPayload.m_dData;
+		dForged[iFlag] = 1;
+		RtAccum_t tLoaded;
+		TlsMsg::ResetErr();
+		EXPECT_FALSE ( tLoaded.LoadRtTrx ( AsBlob(dForged), 0x10C ) );
+		EXPECT_NE ( strstr ( TlsMsg::szError(), "unexpected" ), nullptr ) << TlsMsg::szError();
+	}
+}
+
+TEST ( RtTrx, RejectsSchemaLessSaveWithDocumentsOrNorms )
+{
+	RtAccum_t tSaved;
+	tSaved.m_uAccumDocs = 1;
+	tSaved.m_dNorms.Add ( 3 );
+	CSphVector<BYTE> dPayload;
+	MemoryWriter_c tWriter ( dPayload );
+	TlsMsg::ResetErr();
+	EXPECT_FALSE ( tSaved.SaveRtTrx ( tWriter ) );
+	EXPECT_TRUE ( dPayload.IsEmpty() );
+	EXPECT_NE ( strstr ( TlsMsg::szError(), "schema-less" ), nullptr ) << TlsMsg::szError();
+}
+
+TEST ( RtTrx, RejectsMalformedSchemaNormCounts )
+{
+	const CSphSchema tSchema = MakeRtTrxSchema ( 2 );
+	auto fnFails = [&] ( DWORD uCount, const char * szError )
+	{
+		TlsMsg::ResetErr();
+		RtTrxPayload_t tPayload = MakeRtTrxPayload ( 1, uCount );
+		RtAccum_t tLoaded;
+		EXPECT_FALSE ( tLoaded.LoadRtTrx ( AsBlob(tPayload.m_dData), 0x10C, &tSchema ) );
+		EXPECT_NE ( strstr ( TlsMsg::szError(), szError ), nullptr ) << TlsMsg::szError();
+	};
+	fnFails ( 0, "count mismatch" );
+	fnFails ( 1, "count mismatch" );
+	fnFails ( 3, "count mismatch" );
+
+	TlsMsg::ResetErr();
+	RtTrxPayload_t tTruncated = MakeRtTrxPayload ( 1, 2, 1 );
+	tTruncated.m_dData.Resize ( tTruncated.m_iNormCountOffset+2*sizeof(DWORD) );
+	RtAccum_t tLoaded;
+	EXPECT_FALSE ( tLoaded.LoadRtTrx ( AsBlob(tTruncated.m_dData), 0x10C, &tSchema ) );
+	EXPECT_NE ( strstr ( TlsMsg::szError(), "truncated" ), nullptr ) << TlsMsg::szError();
+}
+
+TEST ( RtTrx, RejectsSchemaLessRowsAndNormCountLimits )
+{
+	{
+		TlsMsg::ResetErr();
+		RtTrxPayload_t tPayload = MakeRtTrxPayload ( 1, 0 );
+		RtAccum_t tLoaded;
+		EXPECT_FALSE ( tLoaded.LoadRtTrx ( AsBlob(tPayload.m_dData), 0x10C ) );
+		EXPECT_NE ( strstr ( TlsMsg::szError(), "schema-less" ), nullptr ) << TlsMsg::szError();
+	}
+	{
+		TlsMsg::ResetErr();
+		RtTrxPayload_t tPayload = MakeRtTrxPayload ( 1, 0, 0, 0x10B );
+		RtAccum_t tLoaded;
+		EXPECT_FALSE ( tLoaded.LoadRtTrx ( AsBlob(tPayload.m_dData), 0x10B ) );
+		EXPECT_NE ( strstr ( TlsMsg::szError(), "schema-less" ), nullptr ) << TlsMsg::szError();
+	}
+	{
+		TlsMsg::ResetErr();
+		const CSphSchema tSchema = MakeRtTrxSchema ( 2 );
+		RtTrxPayload_t tPayload = MakeRtTrxPayload ( std::numeric_limits<DWORD>::max(), 0 );
+		RtAccum_t tLoaded;
+		EXPECT_FALSE ( tLoaded.LoadRtTrx ( AsBlob(tPayload.m_dData), 0x10C, &tSchema ) );
+		EXPECT_NE ( strstr ( TlsMsg::szError(), "count overflow" ), nullptr ) << TlsMsg::szError();
+	}
+	{
+		TlsMsg::ResetErr();
+		const CSphSchema tSchema = MakeRtTrxSchema ( 1 );
+		constexpr DWORD LARGE_COUNT = DWORD(1)<<30;
+		RtTrxPayload_t tPayload = MakeRtTrxPayload ( LARGE_COUNT, LARGE_COUNT );
+		RtAccum_t tLoaded;
+		EXPECT_FALSE ( tLoaded.LoadRtTrx ( AsBlob(tPayload.m_dData), 0x10C, &tSchema ) );
+		EXPECT_NE ( strstr ( TlsMsg::szError(), "reader limit" ), nullptr ) << TlsMsg::szError();
+	}
+	{
+		TlsMsg::ResetErr();
+		const CSphSchema tSchema = MakeRtTrxSchema ( 1 );
+		RtTrxPayload_t tPayload = MakeRtTrxPayload ( std::numeric_limits<DWORD>::max(), 0, 0, 0x10B );
+		RtAccum_t tLoaded;
+		EXPECT_FALSE ( tLoaded.LoadRtTrx ( AsBlob(tPayload.m_dData), 0x10B, &tSchema ) );
+		EXPECT_NE ( strstr ( TlsMsg::szError(), "reader limit" ), nullptr ) << TlsMsg::szError();
+	}
+}
+
+TEST ( RtTrx, SchemaBackedSaveRejectsShortLongAndOverflowNormsBeforeWriting )
+{
+	CSphSchema tSchema = MakeRtTrxSchema ( 2 );
+	auto pIndex = sphCreateIndexRT ( "rt_trx_save_validation", "rt_trx_save_validation", tSchema, 1024*1024 );
+	ASSERT_TRUE ( pIndex );
+
+	RtAccum_t tSaved;
+	tSaved.SetIndex ( pIndex.get() );
+	auto fnFailsWithoutWriting = [&] ( DWORD uRows, int iNorms, const char * szError )
+	{
+		tSaved.m_uAccumDocs = uRows;
+		tSaved.m_dNorms.Resize ( iNorms );
+		CSphVector<BYTE> dPayload;
+		dPayload.Add ( 0xa5 );
+		MemoryWriter_c tWriter ( dPayload );
+		TlsMsg::ResetErr();
+		EXPECT_FALSE ( tSaved.SaveRtTrx ( tWriter ) );
+		ASSERT_EQ ( dPayload.GetLength(), 1 );
+		EXPECT_EQ ( dPayload[0], 0xa5 );
+		EXPECT_NE ( strstr ( TlsMsg::szError(), szError ), nullptr ) << TlsMsg::szError();
+	};
+
+	fnFailsWithoutWriting ( 1, 1, "count mismatch" );
+	fnFailsWithoutWriting ( 1, 3, "count mismatch" );
+	fnFailsWithoutWriting ( std::numeric_limits<DWORD>::max(), 0, "count overflow" );
+}
+
+TEST ( RtTrx, ValidatesKeywordDictionaryRecordsByCapturedFormat )
+{
+	const CompleteRtTrxPayload_t tPayload = MakeCompleteRtTrxPayload();
+	auto fnLoad = [&] ( const BYTE * pPacked, int iPacked, SphWordID_t uOffset, DictFormat_e eFormat )
+	{
+		RtAccum_t tLoaded;
+		CSphVector<BYTE> dData = WithPackedKeywords ( tPayload, pPacked, iPacked, uOffset );
+		TlsMsg::ResetErr();
+		return tLoaded.LoadRtTrx ( AsBlob(dData), 0x10C, &tPayload.m_tSchema, eFormat );
+	};
+
+	const BYTE dLegacy[] = { 0, 3, 'o', 'n', 'e' };
+	EXPECT_TRUE ( fnLoad ( dLegacy, sizeof(dLegacy), 1, DictFormat_e::KEYWORDS ) ) << TlsMsg::szError();
+	EXPECT_FALSE ( fnLoad ( dLegacy, sizeof(dLegacy), sizeof(dLegacy), DictFormat_e::KEYWORDS ) );
+	const BYTE dLegacyBadPrefix[] = { 0, 0 };
+	EXPECT_FALSE ( fnLoad ( dLegacyBadPrefix, sizeof(dLegacyBadPrefix), 1, DictFormat_e::KEYWORDS ) );
+	const BYTE dLegacyTruncated[] = { 0, 4, 'x' };
+	EXPECT_FALSE ( fnLoad ( dLegacyTruncated, sizeof(dLegacyTruncated), 1, DictFormat_e::KEYWORDS ) );
+
+	CSphVector<BYTE> dV2;
+	dV2.Add ( 0 );
+	dV2.Add ( 0x82 ); // 130, encoded by ZipToPtrLE as 0x82 0x01
+	dV2.Add ( 0x01 );
+	for ( int i=0; i<130; ++i )
+		dV2.Add ( BYTE('a'+i%26) );
+	EXPECT_TRUE ( fnLoad ( dV2.Begin(), dV2.GetLength(), 1, DictFormat_e::KEYWORDS_V2 ) ) << TlsMsg::szError();
+	const BYTE dV2BadPrefix[] = { 0, 0x80 };
+	EXPECT_FALSE ( fnLoad ( dV2BadPrefix, sizeof(dV2BadPrefix), 1, DictFormat_e::KEYWORDS_V2 ) );
+	const BYTE dV2Truncated[] = { 0, 5, 'x' };
+	EXPECT_FALSE ( fnLoad ( dV2Truncated, sizeof(dV2Truncated), 1, DictFormat_e::KEYWORDS_V2 ) );
+
+	// CRC word IDs are hashes, not offsets, and never index the packed payload.
+	EXPECT_TRUE ( fnLoad ( nullptr, 0, SphWordID_t(-1), DictFormat_e::CRC ) ) << TlsMsg::szError();
+}
+
+TEST ( RtTrx, RejectsBlobLocatorsNestedEndsAndInvalidHitFields )
+{
+	const CompleteRtTrxPayload_t tPayload = MakeCompleteRtTrxPayload();
+	auto fnRejects = [&] ( CSphVector<BYTE> dData )
+	{
+		RtAccum_t tLoaded;
+		TlsMsg::ResetErr();
+		EXPECT_FALSE ( tLoaded.LoadRtTrx ( AsBlob(dData), 0x10C, &tPayload.m_tSchema ) );
+		EXPECT_NE ( TlsMsg::szError()[0], '\0' );
+	};
+
+	CSphVector<BYTE> dBadLocator = tPayload.m_dData;
+	CSphFixedVector<CSphRowitem> dRow ( tPayload.m_tSchema.GetRowSize() );
+	memcpy ( dRow.Begin(), dBadLocator.Begin()+tPayload.m_iRowsData, dRow.GetLengthBytes() );
+	const CSphColumnInfo * pBlobLocator = tPayload.m_tSchema.GetAttr ( sphGetBlobLocatorName() );
+	ASSERT_NE ( pBlobLocator, nullptr );
+	sphSetRowAttr ( dRow.Begin(), pBlobLocator->m_tLocator, 1 );
+	memcpy ( dBadLocator.Begin()+tPayload.m_iRowsData, dRow.Begin(), dRow.GetLengthBytes() );
+	fnRejects ( std::move(dBadLocator) );
+
+	CSphVector<BYTE> dBadBlobEnd = tPayload.m_dData;
+	dBadBlobEnd[tPayload.m_iBlobsData+1] = 0xff;
+	fnRejects ( std::move(dBadBlobEnd) );
+
+	CSphVector<BYTE> dMissingField = tPayload.m_dData;
+	SetPayloadValue<Hitpos_t> ( dMissingField, tPayload.m_iHitsData+sizeof(RowID_t)+sizeof(SphWordID_t), HITMAN::Create(tPayload.m_tSchema.GetFieldsCount(),1,true) );
+	fnRejects ( std::move(dMissingField) );
+
+	CSphVector<BYTE> dStoredOnlyField = tPayload.m_dData;
+	SetPayloadValue<Hitpos_t> ( dStoredOnlyField, tPayload.m_iHitsData+sizeof(RowID_t)+sizeof(SphWordID_t), HITMAN::Create(1,1,true) );
+	fnRejects ( std::move(dStoredOnlyField) );
+}
+
+TEST ( RtTrx, ReplicationValidationIdentityRejectsReplacementSchemaAndAlterChanges )
+{
+	RtAccum_t tAccum;
+	tAccum.CaptureReplicationValidation ( CSphString("rt_binding"), 101, 202, 3, DictFormat_e::KEYWORDS_V2 );
+	CSphString sError;
+	EXPECT_TRUE ( tAccum.CheckReplicationValidation ( 101, 202, 3, DictFormat_e::KEYWORDS_V2, sError ) );
+	EXPECT_FALSE ( tAccum.CheckReplicationValidation ( 102, 202, 3, DictFormat_e::KEYWORDS_V2, sError ) );
+	EXPECT_FALSE ( tAccum.CheckReplicationValidation ( 101, 203, 3, DictFormat_e::KEYWORDS_V2, sError ) );
+	EXPECT_FALSE ( tAccum.CheckReplicationValidation ( 101, 202, 4, DictFormat_e::KEYWORDS_V2, sError ) );
+	EXPECT_FALSE ( tAccum.CheckReplicationValidation ( 101, 202, 3, DictFormat_e::KEYWORDS, sError ) );
+}
+
+TEST ( RtTrx, RejectsMalformedCompletePayloadWithoutPublishingPartialState )
+{
+	const CompleteRtTrxPayload_t tGood = MakeCompleteRtTrxPayload();
+	const CSphSchema & tSchema = tGood.m_tSchema;
+	int iCase = 0;
+	auto fnRejects = [&] ( CSphVector<BYTE> dPayload )
+	{
+		++iCase;
+		RtAccum_t tLoaded;
+		tLoaded.m_uAccumDocs = 77;
+		tLoaded.m_iAccumBytes = 79;
+		tLoaded.m_dAccumRows.Add ( 83 );
+		tLoaded.m_dNorms.Add ( 89 );
+		tLoaded.m_dBlobs.Add ( 97 );
+		tLoaded.m_dPerDocHitsCount.Add ( 101 );
+		tLoaded.m_dAccumKlist.Add ( 103 );
+		tLoaded.MarkPreparedForCommit();
+		TlsMsg::ResetErr();
+		EXPECT_FALSE ( tLoaded.LoadRtTrx ( AsBlob(dPayload), 0x10C, &tSchema ) ) << "case=" << iCase << ", payload bytes=" << dPayload.GetLength();
+		EXPECT_NE ( TlsMsg::szError()[0], '\0' );
+		EXPECT_EQ ( tLoaded.m_uAccumDocs, 77u );
+		EXPECT_EQ ( tLoaded.m_iAccumBytes, 79 );
+		ASSERT_EQ ( tLoaded.m_dAccumRows.GetLength(), 1 );
+		EXPECT_EQ ( tLoaded.m_dAccumRows[0], 83u );
+		ASSERT_EQ ( tLoaded.m_dNorms.GetLength(), 1 );
+		EXPECT_EQ ( tLoaded.m_dNorms[0], 89u );
+		ASSERT_EQ ( tLoaded.m_dBlobs.GetLength(), 1 );
+		EXPECT_EQ ( tLoaded.m_dBlobs[0], 97u );
+		ASSERT_EQ ( tLoaded.m_dPerDocHitsCount.GetLength(), 1 );
+		EXPECT_EQ ( tLoaded.m_dPerDocHitsCount[0], 101u );
+		ASSERT_EQ ( tLoaded.m_dAccumKlist.GetLength(), 1 );
+		EXPECT_EQ ( tLoaded.m_dAccumKlist[0], 103u );
+		EXPECT_TRUE ( tLoaded.IsPreparedForCommit() );
+	};
+
+	for ( int iLength : { 0, 1+(int)sizeof(DWORD), tGood.m_iHitsData+1, tGood.m_iRowsData+1,
+		tGood.m_iBlobsData+1, tGood.m_iPerDocData+1, tGood.m_iPackedData+1,
+		tGood.m_iDocstoreData+1, tGood.m_dColumnarValueData[0]+1, tGood.m_iKillData+1 } )
+	{
+		SCOPED_TRACE ( iLength );
+		CSphVector<BYTE> dTruncated = tGood.m_dData;
+		dTruncated.Resize ( iLength );
+		fnRejects ( std::move(dTruncated) );
+	}
+
+	for ( int iCountOffset : { tGood.m_iHitsCount, tGood.m_iRowsCount, tGood.m_iBlobsCount,
+		tGood.m_iPerDocCount, tGood.m_iPackedCount, tGood.m_iColumnarCount, tGood.m_iKillCount } )
+	{
+		CSphVector<BYTE> dForged = tGood.m_dData;
+		SetPayloadDword ( dForged, iCountOffset, std::numeric_limits<DWORD>::max() );
+		fnRejects ( std::move(dForged) );
+	}
+
+	CSphVector<BYTE> dForgedDocstore = tGood.m_dData;
+	dForgedDocstore[tGood.m_iDocstoreDocs] = 0x7f;
+	fnRejects ( std::move(dForgedDocstore) );
+
+	auto fnRejectDword = [&] ( int iOffset, DWORD uValue )
+	{
+		CSphVector<BYTE> dForged = tGood.m_dData;
+		SetPayloadDword ( dForged, iOffset, uValue );
+		fnRejects ( std::move(dForged) );
+	};
+	fnRejectDword ( tGood.m_iRowsCount, tSchema.GetRowSize()+1 );
+	fnRejectDword ( tGood.m_iPerDocCount, 0 );
+	fnRejectDword ( tGood.m_iPerDocData, 0 );
+	fnRejectDword ( tGood.m_iDocstoreFields, 3 );
+	fnRejectDword ( tGood.m_iColumnarCount, tSchema.GetColumnarAttrsCount()-1 );
+	fnRejectDword ( tGood.m_dColumnarTypes[1], SPH_ATTR_INTEGER );
+	fnRejectDword ( tGood.m_dColumnarValueCounts[1], 0 );
+	fnRejectDword ( tGood.m_dColumnarValueCounts[2], 0 );
+
+	CSphVector<BYTE> dBadHit = tGood.m_dData;
+	SetPayloadValue<RowID_t> ( dBadHit, tGood.m_iHitsData, 1 );
+	fnRejects ( std::move(dBadHit) );
+	CSphVector<BYTE> dBadDocLength = tGood.m_dData;
+	dBadDocLength[tGood.m_iDocstoreFieldLength] = 0x7f;
+	fnRejects ( std::move(dBadDocLength) );
+	CSphVector<BYTE> dUnterminatedDocFieldLength = tGood.m_dData;
+	dUnterminatedDocFieldLength.Insert ( tGood.m_iDocstoreFieldLength, 4 );
+	for ( int i=0; i<5; ++i )
+		dUnterminatedDocFieldLength[tGood.m_iDocstoreFieldLength+i] = 0x80;
+	dUnterminatedDocFieldLength[tGood.m_iDocstoreDocLength] = 6;
+	fnRejects ( std::move(dUnterminatedDocFieldLength) );
+	CSphVector<BYTE> dBadStringOffset = tGood.m_dData;
+	SetPayloadValue<int64_t> ( dBadStringOffset, tGood.m_iStringOffsetsData, 100 );
+	fnRejects ( std::move(dBadStringOffset) );
+	CSphVector<BYTE> dBadMvaOffset = tGood.m_dData;
+	SetPayloadValue<int> ( dBadMvaOffset, tGood.m_iMvaOffsetsData, -1 );
+	fnRejects ( std::move(dBadMvaOffset) );
+	CSphVector<BYTE> dBadBool = tGood.m_dData;
+	dBadBool[tGood.m_dColumnarValueData[1]] = 2;
+	fnRejects ( std::move(dBadBool) );
+	CSphVector<BYTE> dMissingDocstore = tGood.m_dData;
+	dMissingDocstore[tGood.m_iDocstoreFlag] = 0;
+	fnRejects ( std::move(dMissingDocstore) );
+	CSphVector<BYTE> dMissingColumnar = tGood.m_dData;
+	dMissingColumnar[tGood.m_iColumnarFlag] = 0;
+	fnRejects ( std::move(dMissingColumnar) );
+
+	CSphVector<BYTE> dTrailing = tGood.m_dData;
+	dTrailing.Add ( 0xff );
+	fnRejects ( std::move(dTrailing) );
+}
+
+TEST ( RtTrx, LoadsFullyValidatedCompletePayload )
+{
+	CompleteRtTrxPayload_t tPayload = MakeCompleteRtTrxPayload();
+	RtAccum_t tLoaded;
+	ASSERT_TRUE ( tLoaded.LoadRtTrx ( AsBlob(tPayload.m_dData), 0x10C, &tPayload.m_tSchema ) ) << TlsMsg::szError();
+	EXPECT_EQ ( tLoaded.m_uAccumDocs, 1u );
+	EXPECT_EQ ( tLoaded.m_iAccumBytes, 17 );
+	ASSERT_EQ ( tLoaded.m_dAccum.GetLength(), 1 );
+	ASSERT_EQ ( tLoaded.m_dAccumRows.GetLength(), tPayload.m_tSchema.GetRowSize() );
+	const CSphColumnInfo * pRowValue = tPayload.m_tSchema.GetAttr ( "row_value" );
+	ASSERT_NE ( pRowValue, nullptr );
+	EXPECT_EQ ( sphGetRowAttr ( tLoaded.m_dAccumRows.Begin(), pRowValue->m_tLocator ), 11u );
+	ASSERT_EQ ( tLoaded.m_dNorms.GetLength(), 1 );
+	EXPECT_EQ ( tLoaded.m_dNorms[0], 13u );
+	EXPECT_FALSE ( tLoaded.m_dBlobs.IsEmpty() );
+	ASSERT_EQ ( tLoaded.m_dPerDocHitsCount.GetLength(), 1 );
+	EXPECT_EQ ( tLoaded.m_dPerDocHitsCount[0], 1u );
+	ASSERT_EQ ( tLoaded.m_dAccumKlist.GetLength(), 1 );
+	EXPECT_EQ ( tLoaded.m_dAccumKlist[0], 47u );
+}
+
 TEST ( FastCount, Aggregate64 )
 {
 	CSphSchema tSchema;

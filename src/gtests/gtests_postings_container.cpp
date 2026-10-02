@@ -13,6 +13,7 @@
 #include "postings_container_reader.h"
 #include "postings_container_writer.h"
 #include "norm_store.h"
+#include "rt_field_norms.h"
 #include "threadutils.h"
 
 #include <algorithm>
@@ -20,6 +21,7 @@
 #include <cstdio>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -713,6 +715,126 @@ TEST ( NormStore, StagedBuilderSupportsAttributeOnlyIndexes )
 	EXPECT_EQ ( tStore.Rows(), 2u );
 	EXPECT_EQ ( tStore.Fields(), 0u );
 	EXPECT_EQ ( tStore.TotalCacheBytes(), 2u );
+}
+
+TEST ( RtFieldNorms, MapsMixedIndexedAndStoredFieldsAndExpandsLegacyRows )
+{
+	CSphSchema tSchema;
+	auto fnAddField = [&] ( const char * szName, DWORD uFlags )
+	{
+		CSphColumnInfo tField ( szName );
+		tField.m_uFieldFlags = uFlags;
+		tSchema.AddField ( tField );
+	};
+	fnAddField ( "stored0", CSphColumnInfo::FIELD_STORED );
+	fnAddField ( "indexed0", CSphColumnInfo::FIELD_INDEXED );
+	fnAddField ( "both", CSphColumnInfo::FIELD_INDEXED | CSphColumnInfo::FIELD_STORED );
+	fnAddField ( "stored1", CSphColumnInfo::FIELD_STORED );
+
+	RtFieldNorms_c tNorms ( tSchema );
+	EXPECT_EQ ( tNorms.Fields(), 4 );
+	EXPECT_EQ ( tNorms.DenseFields(), 2 );
+	EXPECT_EQ ( tNorms.DenseIndex(0), -1 );
+	EXPECT_EQ ( tNorms.DenseIndex(1), 0 );
+	EXPECT_EQ ( tNorms.DenseIndex(2), 1 );
+	EXPECT_EQ ( tNorms.DenseIndex(3), -1 );
+	EXPECT_EQ ( tNorms.SchemaField(0), 1 );
+	EXPECT_EQ ( tNorms.SchemaField(1), 2 );
+
+	const DWORD dSchemaRow[] = { 0, 17, 29, 0 };
+	DWORD dDenseRow[] = { 0, 0 };
+	tNorms.Compact ( dSchemaRow, dDenseRow );
+	EXPECT_EQ ( dDenseRow[0], 17u );
+	EXPECT_EQ ( dDenseRow[1], 29u );
+	EXPECT_EQ ( tNorms.Get(dDenseRow,0), 0u );
+	EXPECT_EQ ( tNorms.Get(dDenseRow,1), 17u );
+	EXPECT_EQ ( tNorms.Get(dDenseRow,2), 29u );
+	EXPECT_EQ ( tNorms.Get(dDenseRow,3), 0u );
+
+	DWORD dExpanded[] = { 99, 99, 99, 99 };
+	tNorms.Expand ( dDenseRow, dExpanded );
+	EXPECT_EQ ( std::vector<DWORD>(dExpanded,dExpanded+4), ( std::vector<DWORD>{ 0, 17, 29, 0 } ) );
+}
+
+TEST ( RtFieldNorms, SupportsZeroIndexedFieldsWithoutRowPointers )
+{
+	CSphSchema tSchema;
+	CSphColumnInfo tStored ( "stored" );
+	tStored.m_uFieldFlags = CSphColumnInfo::FIELD_STORED;
+	tSchema.AddField ( tStored );
+
+	RtFieldNorms_c tNorms ( tSchema );
+	EXPECT_EQ ( tNorms.Fields(), 1 );
+	EXPECT_EQ ( tNorms.DenseFields(), 0 );
+	EXPECT_EQ ( tNorms.DenseIndex(0), -1 );
+	EXPECT_EQ ( tNorms.SchemaField(0), -1 );
+	EXPECT_EQ ( tNorms.Get(nullptr,0), 0u );
+	DWORD uExpanded = 99;
+	tNorms.Compact ( &uExpanded, nullptr );
+	tNorms.Expand ( nullptr, &uExpanded );
+	EXPECT_EQ ( uExpanded, 0u );
+}
+
+TEST ( RtFieldNorms, SchemaWideCompatibilityWriterBoundsAreAllocationFree )
+{
+	CSphString sError;
+	EXPECT_TRUE ( ValidateRtSchemaWideNorms ( 6, 3, 4, 2, sError ) ) << sError.cstr();
+	EXPECT_FALSE ( ValidateRtSchemaWideNorms ( 5, 3, 4, 2, sError ) );
+	EXPECT_NE ( strstr ( sError.cstr(), "dense norms count mismatch" ), nullptr );
+	EXPECT_FALSE ( ValidateRtSchemaWideNorms ( 0, std::numeric_limits<DWORD>::max(), 2, 0, sError ) );
+	EXPECT_NE ( strstr ( sError.cstr(), "count overflow" ), nullptr );
+	const DWORD uReaderLimitRows = DWORD(std::numeric_limits<int>::max()/sizeof(DWORD))+1;
+	EXPECT_FALSE ( ValidateRtSchemaWideNorms ( 0, uReaderLimitRows, 1, 0, sError ) );
+	EXPECT_NE ( strstr ( sError.cstr(), "reader limit" ), nullptr );
+}
+
+TEST ( NormStore, DenseMixedFieldsExpandToByteIdenticalSchemaWideSpn )
+{
+	CSphSchema tSchema;
+	for ( const auto & tField : std::array<std::pair<const char *,DWORD>,4> {{
+		{ "stored0", CSphColumnInfo::FIELD_STORED },
+		{ "indexed0", CSphColumnInfo::FIELD_INDEXED },
+		{ "stored1", CSphColumnInfo::FIELD_STORED },
+		{ "indexed1", CSphColumnInfo::FIELD_INDEXED | CSphColumnInfo::FIELD_STORED }
+	}} )
+	{
+		CSphColumnInfo tCol ( tField.first );
+		tCol.m_uFieldFlags = tField.second;
+		tSchema.AddField ( tCol );
+	}
+	RtFieldNorms_c tNorms ( tSchema );
+	const std::array<std::array<DWORD,2>,3> dDense {{ { 3, 7 }, { 11, 13 }, { 17, 19 } }};
+
+	std::string sError;
+	e1::norms::StagedBuilder tSchemaWide ( 4 );
+	for ( const auto & dDenseRow : dDense )
+	{
+		DWORD dExpanded[4];
+		tNorms.Expand ( dDenseRow.data(), dExpanded );
+		ASSERT_TRUE ( tSchemaWide.AddRow(dExpanded,4,sError) ) << sError;
+	}
+	const std::string sSuffix = std::to_string(GetOsProcessId())+".tmp";
+	const std::string sExpectedPath = "__schema_norm_store_"+sSuffix;
+	const std::string sDensePath = "__dense_norm_store_"+sSuffix;
+	ASSERT_TRUE ( tSchemaWide.Finish(sExpectedPath.c_str(),sError) ) << sError;
+
+	e1::norms::DirectBuilder tDirect ( 4 );
+	auto fnValues = [&] ( uint32_t uSchemaField, const auto & fnValue )
+	{
+		for ( const auto & dDenseRow : dDense )
+			if ( !fnValue(tNorms.Get(dDenseRow.data(),uSchemaField)) )
+				return false;
+		return true;
+	};
+	ASSERT_TRUE ( tDirect.Finish(sDensePath.c_str(),dDense.size(),fnValues,sError) ) << sError;
+
+	std::ifstream tExpectedIn ( sExpectedPath, std::ios::binary );
+	std::ifstream tDenseIn ( sDensePath, std::ios::binary );
+	std::vector<uint8_t> dExpected ( (std::istreambuf_iterator<char>(tExpectedIn)), std::istreambuf_iterator<char>() );
+	std::vector<uint8_t> dActual ( (std::istreambuf_iterator<char>(tDenseIn)), std::istreambuf_iterator<char>() );
+	std::remove ( sExpectedPath.c_str() );
+	std::remove ( sDensePath.c_str() );
+	EXPECT_EQ ( dActual, dExpected );
 }
 
 } // namespace

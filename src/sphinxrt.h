@@ -241,6 +241,7 @@ public:
 
 	// generation typically changes on Reconfigure
 	virtual int GetAlterGeneration() const { return 0; }
+	virtual DictFormat_e GetDictFormat() const { return DictFormat_e::CRC; }
 
 	/// do something const with disk chunk (query settings, status, etc.)
 	/// hides internal disk chunks storage

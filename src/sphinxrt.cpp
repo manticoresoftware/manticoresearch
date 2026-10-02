@@ -14,6 +14,7 @@
 #include "fastcount.h"
 #include "sphinxrt.h"
 #include "norm_store.h"
+#include "rt_field_norms.h"
 #include "postings_container_writer.h"
 #include "sphinxpq.h"
 #include "sphinxsearch.h"
@@ -78,6 +79,68 @@
 #endif
 
 using namespace Threads;
+
+RtFieldNorms_c::RtFieldNorms_c ( const CSphSchema & tSchema )
+{
+	Reset ( tSchema );
+}
+
+void RtFieldNorms_c::Reset ( const CSphSchema & tSchema )
+{
+	m_dSchemaToDense.Resize ( tSchema.GetFieldsCount() );
+	m_dSchemaToDense.Fill ( -1 );
+	m_dDenseToSchema.Resize ( 0 );
+	for ( int iField=0; iField<tSchema.GetFieldsCount(); ++iField )
+		if ( tSchema.GetField(iField).m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED )
+		{
+			m_dSchemaToDense[iField] = m_dDenseToSchema.GetLength();
+			m_dDenseToSchema.Add ( iField );
+		}
+}
+
+int RtFieldNorms_c::Fields() const
+{
+	return m_dSchemaToDense.GetLength();
+}
+
+int RtFieldNorms_c::DenseFields() const
+{
+	return m_dDenseToSchema.GetLength();
+}
+
+int RtFieldNorms_c::DenseIndex ( int iSchemaField ) const
+{
+	return iSchemaField>=0 && iSchemaField<Fields() ? m_dSchemaToDense[iSchemaField] : -1;
+}
+
+int RtFieldNorms_c::SchemaField ( int iDenseField ) const
+{
+	return iDenseField>=0 && iDenseField<DenseFields() ? m_dDenseToSchema[iDenseField] : -1;
+}
+
+DWORD RtFieldNorms_c::Get ( const DWORD * pDenseRow, int iSchemaField ) const
+{
+	const int iDense = DenseIndex ( iSchemaField );
+	return iDense>=0 && pDenseRow ? pDenseRow[iDense] : 0;
+}
+
+void RtFieldNorms_c::Compact ( const DWORD * pSchemaRow, DWORD * pDenseRow ) const
+{
+	if ( !pDenseRow )
+		return;
+	assert ( pSchemaRow || !DenseFields() );
+	for ( int iDense=0; iDense<DenseFields(); ++iDense )
+		pDenseRow[iDense] = pSchemaRow[m_dDenseToSchema[iDense]];
+}
+
+void RtFieldNorms_c::Expand ( const DWORD * pDenseRow, DWORD * pSchemaRow ) const
+{
+	if ( !pSchemaRow )
+		return;
+	assert ( pDenseRow || !DenseFields() );
+	for ( int iField=0; iField<Fields(); ++iField )
+		pSchemaRow[iField] = Get ( pDenseRow, iField );
+}
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1729,7 +1792,7 @@ public:
 	bool				RtQwordSetupSegment ( RtQword_t* pQword, const RtSegment_t* pCurSeg, bool bSetup ) const;
 
 	bool				IsWordDict () const { return GetDictFormat()!=DictFormat_e::CRC; }
-	DictFormat_e		GetDictFormat () const { assert ( m_pDict ); return m_pDict->GetSettings().GetDictFormat(); }
+	DictFormat_e		GetDictFormat () const final { assert ( m_pDict ); return m_pDict->GetSettings().GetDictFormat(); }
 	int					GetWordCheckoint() const { return m_iWordsCheckpoint; }
 	int					GetMaxCodepointLength() const { return m_iMaxCodepointLength; }
 
@@ -3602,18 +3665,19 @@ RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegmen
 
 	assert ( tNextRowID<=INT_MAX );
 	pSeg->m_uRows = tNextRowID;
-	const int iFields = m_tSchema.GetFieldsCount();
-	pSeg->m_dNorms.Resize ( int64_t(tNextRowID)*iFields );
-	auto fnCopyNorms = [iFields,pSeg] ( const RtSegment_t * pSrc, const CSphFixedVector<RowID_t> & dRowMap )
+	RtFieldNorms_c tNorms ( m_tSchema );
+	const int iNormFields = tNorms.DenseFields();
+	pSeg->m_dNorms.Resize ( int64_t(tNextRowID)*iNormFields );
+	auto fnCopyNorms = [iNormFields,pSeg] ( const RtSegment_t * pSrc, const CSphFixedVector<RowID_t> & dRowMap )
 	{
-		assert ( pSrc->m_dNorms.GetLength64()==int64_t(pSrc->m_uRows)*iFields );
-		if ( !iFields )
+		assert ( pSrc->m_dNorms.GetLength64()==int64_t(pSrc->m_uRows)*iNormFields );
+		if ( !iNormFields )
 			return;
 		for ( RowID_t tOldRow=0; tOldRow<pSrc->m_uRows; ++tOldRow )
 		{
 			const RowID_t tNewRow = dRowMap[tOldRow];
 			if ( tNewRow!=INVALID_ROWID )
-				memcpy ( &pSeg->m_dNorms[int64_t(tNewRow)*iFields], &pSrc->m_dNorms[int64_t(tOldRow)*iFields], iFields*sizeof(DWORD) );
+				memcpy ( &pSeg->m_dNorms[int64_t(tNewRow)*iNormFields], &pSrc->m_dNorms[int64_t(tOldRow)*iNormFields], iNormFields*sizeof(DWORD) );
 		}
 	};
 	fnCopyNorms ( pA, dRowMapA );
@@ -4614,6 +4678,8 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	CSphFixedVector<CSphRowitem> dNewRow { iStride };
 	CSphRowitem * pNewRow = dNewRow.Begin();
 	const int iFields = m_tSchema.GetFieldsCount();
+	RtFieldNorms_c tNorms ( m_tSchema );
+	const int iNormFields = tNorms.DenseFields();
 	e1::norms::DirectBuilder tNormBuilder ( iFields );
 	std::string sNormError;
 	ARRAY_FOREACH ( i, tCtx.m_tRamSegments )
@@ -4627,7 +4693,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 
 		for ( auto tRowID : RtLiveRows_c(tSeg) )
 		{
-			assert ( tSeg.m_dNorms.GetLength64()==int64_t(tSeg.m_uRows)*iFields );
+			assert ( tSeg.m_dNorms.GetLength64()==int64_t(tSeg.m_uRows)*iNormFields );
 			const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID*iStride;
 			tMinMaxBuilder.Collect(pRow);
 			if ( pBlobLocatorAttr )
@@ -4768,10 +4834,13 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 		{
 			const auto & tSeg = *tCtx.m_tRamSegments[i];
 			SccRL_t rLock ( tSeg.m_tLock );
-			assert ( tSeg.m_dNorms.GetLength64()==int64_t(tSeg.m_uRows)*iFields );
+			assert ( tSeg.m_dNorms.GetLength64()==int64_t(tSeg.m_uRows)*iNormFields );
 			for ( RowID_t tRowID=0; tRowID<tSeg.m_uRows; ++tRowID )
-				if ( tCtx.m_dRowMaps[i][tRowID]!=INVALID_ROWID && !fnValue(tSeg.m_dNorms[int64_t(tRowID)*iFields+uField]) )
+			{
+				const DWORD * pDenseRow = iNormFields ? tSeg.m_dNorms.Begin()+int64_t(tRowID)*iNormFields : nullptr;
+				if ( tCtx.m_dRowMaps[i][tRowID]!=INVALID_ROWID && !fnValue(tNorms.Get(pDenseRow,uField)) )
 					return false;
+			}
 		}
 		return true;
 	};
@@ -6282,6 +6351,55 @@ static void SaveVector ( CSphWriter & tWriter, const VecTraits_T < T > & tVector
 		tWriter.PutBytes ( tVector.Begin(), tVector.GetLengthBytes() );
 }
 
+bool ValidateRtSchemaWideNorms ( int64_t iDenseCount, DWORD uRows, int iSchemaFields, int iDenseFields, CSphString & sError )
+{
+	if ( iSchemaFields<0 || iDenseFields<0 )
+	{
+		sError.SetSprintf ( "invalid RT norms field counts: schema=%d, dense=%d", iSchemaFields, iDenseFields );
+		return false;
+	}
+
+	const uint64_t uSchemaCount = uint64_t(uRows)*uint64_t(iSchemaFields);
+	if ( uSchemaCount>std::numeric_limits<DWORD>::max() )
+	{
+		sError.SetSprintf ( "RT schema norms count overflow: rows=%u, fields=%d", uRows, iSchemaFields );
+		return false;
+	}
+	if ( uSchemaCount>uint64_t(std::numeric_limits<int>::max())/sizeof(DWORD) )
+	{
+		sError.SetSprintf ( "RT schema norms size exceeds reader limit: count=" UINT64_FMT, uSchemaCount );
+		return false;
+	}
+
+	const uint64_t uDenseCount = uint64_t(uRows)*uint64_t(iDenseFields);
+	if ( iDenseCount<0 || uint64_t(iDenseCount)!=uDenseCount )
+	{
+		sError.SetSprintf ( "RT dense norms count mismatch: got " INT64_FMT ", expected " UINT64_FMT, iDenseCount, uDenseCount );
+		return false;
+	}
+	if ( uDenseCount>uint64_t(std::numeric_limits<int>::max())/sizeof(DWORD) )
+	{
+		sError.SetSprintf ( "RT dense norms size exceeds project limit: count=" UINT64_FMT, uDenseCount );
+		return false;
+	}
+	return true;
+}
+
+
+static void SaveNormsSchemaWide ( CSphWriter & tWriter, const CSphTightVector<DWORD> & dNorms, DWORD uRows, const CSphSchema & tSchema )
+{
+	RtFieldNorms_c tNorms ( tSchema );
+	assert ( dNorms.GetLength64()==int64_t(uRows)*tNorms.DenseFields() );
+	tWriter.PutDword ( int64_t(uRows)*tNorms.Fields() );
+	CSphFixedVector<DWORD> dSchemaRow ( tNorms.Fields() );
+	for ( DWORD uRow=0; uRow<uRows && tNorms.Fields(); ++uRow )
+	{
+		const DWORD * pDenseRow = tNorms.DenseFields() ? dNorms.Begin()+int64_t(uRow)*tNorms.DenseFields() : nullptr;
+		tNorms.Expand ( pDenseRow, dSchemaRow.Begin() );
+		tWriter.PutBytes ( dSchemaRow.Begin(), dSchemaRow.GetLengthBytes() );
+	}
+}
+
 
 template < typename T, typename P >
 static bool LoadVector ( CSphReader & tReader, CSphVector < T, P > & tVector,
@@ -6322,7 +6440,7 @@ void RtIndex_c::SaveRamSegment ( const RtSegment_t* pSeg, CSphWriter& wrChunk ) 
 	SaveVector ( wrChunk, pSeg->m_dDocs );
 	SaveVector ( wrChunk, pSeg->m_dHits );
 	SaveVector ( wrChunk, pSeg->m_dRows );
-	SaveVector ( wrChunk, pSeg->m_dNorms );
+	SaveNormsSchemaWide ( wrChunk, pSeg->m_dNorms, pSeg->m_uRows, m_tSchema );
 	pSeg->m_tDeadRowMap.Save ( wrChunk );
 	SaveVector ( wrChunk, pSeg->m_dBlobs );
 
@@ -6355,12 +6473,20 @@ bool RtIndex_c::SaveRamChunk ()
 	CSphString sChunk = GetFilename ( "ram" );
 	CSphString sNewChunk = GetFilename ( "ram.new" );
 
+	auto pSegments = m_tRtChunks.RamSegs();
+	auto& dSegments = *pSegments;
+	RtFieldNorms_c tNorms ( m_tSchema );
+	for ( const RtSegment_t * pSeg : dSegments )
+	{
+		SccRL_t rLock ( pSeg->m_tLock );
+		if ( !ValidateRtSchemaWideNorms ( pSeg->m_dNorms.GetLength64(), pSeg->m_uRows, tNorms.Fields(), tNorms.DenseFields(), m_sLastError ) )
+			return false;
+	}
+
 	CSphWriterNonThrottled wrChunk;
 	if ( !wrChunk.OpenFile ( sNewChunk, m_sLastError ) )
 		return false;
 
-	auto pSegments = m_tRtChunks.RamSegs();
-	auto& dSegments = *pSegments;
 	wrChunk.PutDword ( 0 );
 	wrChunk.PutDword ( dSegments.GetLength() );
 
@@ -6462,16 +6588,26 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup
 
 		if ( uVersion>=25 && !LoadVector ( rdChunk, pSeg->m_dNorms, iFileSize, "ram-norms", m_sLastError ) )
 			return false;
-		const int64_t iExpectedNorms = int64_t(uRows)*m_tSchema.GetFieldsCount();
+		RtFieldNorms_c tNorms ( m_tSchema );
+		const int64_t iSchemaNorms = int64_t(uRows)*tNorms.Fields();
 		if ( uVersion<25 )
 		{
-			pSeg->m_dNorms.Resize ( iExpectedNorms );
+			pSeg->m_dNorms.Resize ( int64_t(uRows)*tNorms.DenseFields() );
 			pSeg->m_dNorms.ZeroVec(); // legacy RAM chunks did not persist exact lengths
 		}
-		else if ( pSeg->m_dNorms.GetLength64()!=iExpectedNorms )
+		else if ( pSeg->m_dNorms.GetLength64()!=iSchemaNorms )
 		{
-			m_sLastError.SetSprintf ( "ram-norms length mismatch: expected %" PRIi64 ", got %" PRIi64, iExpectedNorms, pSeg->m_dNorms.GetLength64() );
+			m_sLastError.SetSprintf ( "ram-norms length mismatch: expected %" PRIi64 ", got %" PRIi64, iSchemaNorms, pSeg->m_dNorms.GetLength64() );
 			return false;
+		}
+		else
+		{
+			CSphTightVector<DWORD> dDense;
+			dDense.Resize ( int64_t(uRows)*tNorms.DenseFields() );
+			if ( tNorms.DenseFields() )
+				for ( DWORD uRow=0; uRow<uRows; ++uRow )
+					tNorms.Compact ( pSeg->m_dNorms.Begin()+int64_t(uRow)*tNorms.Fields(), dDense.Begin()+int64_t(uRow)*tNorms.DenseFields() );
+			pSeg->m_dNorms.SwapData ( dDense );
 		}
 
 		pSeg->m_tDeadRowMap.Load ( uRows, rdChunk, m_sLastError );
@@ -6738,7 +6874,7 @@ void RtIndex_c::DebugCheckRamSegment ( const RtSegment_t & tSegment, int iSegmen
 		return;
 	}
 
-	const int64_t iExpectedNorms = int64_t(tSegment.m_uRows)*m_tSchema.GetFieldsCount();
+	const int64_t iExpectedNorms = int64_t(tSegment.m_uRows)*RtFieldNorms_c(m_tSchema).DenseFields();
 	if ( tSegment.m_dNorms.GetLength64()!=iExpectedNorms )
 	{
 		tReporter.Fail ( "invalid RT norms length (segment=%d, expected=%" PRIi64 ", got=%" PRIi64 ")", iSegment, iExpectedNorms, tSegment.m_dNorms.GetLength64() );
@@ -7633,23 +7769,25 @@ private:
 class RtFieldNormReader_c final : public FieldNormReader_i
 {
 public:
-	void Set ( const RtSegment_t * pSegment, uint32_t uFields ) { m_pSegment = pSegment; m_uFields = uFields; }
+	void Set ( const RtSegment_t * pSegment, const CSphSchema & tSchema ) { m_pSegment = pSegment; m_tNorms.Reset ( tSchema ); }
 	uint32_t Rows() const override { return m_pSegment ? m_pSegment->m_uRows : 0; }
-	uint32_t Fields() const override { return m_uFields; }
+	uint32_t Fields() const override { return m_tNorms.Fields(); }
 	uint64_t Sum ( uint32_t uField ) const override
 	{
-		if ( !m_pSegment || uField>=m_uFields )
+		const int iDense = m_tNorms.DenseIndex ( uField );
+		if ( !m_pSegment || iDense<0 )
 			return 0;
 		uint64_t uSum = 0;
 		for ( RowID_t tRowID=0; tRowID<m_pSegment->m_uRows; ++tRowID )
-			uSum += m_pSegment->m_dNorms[int64_t(tRowID)*m_uFields+uField];
+			uSum += m_pSegment->m_dNorms[int64_t(tRowID)*m_tNorms.DenseFields()+iDense];
 		return uSum;
 	}
 	bool Get ( uint32_t uField, uint32_t uRow, uint32_t & uValue ) const override
 	{
-		if ( !m_pSegment || uField>=m_uFields || uRow>=m_pSegment->m_uRows )
+		if ( !m_pSegment || uField>=uint32_t(m_tNorms.Fields()) || uRow>=m_pSegment->m_uRows )
 			return false;
-		uValue = m_pSegment->m_dNorms[int64_t(uRow)*m_uFields+uField];
+		const DWORD * pDenseRow = m_tNorms.DenseFields() ? m_pSegment->m_dNorms.Begin()+int64_t(uRow)*m_tNorms.DenseFields() : nullptr;
+		uValue = m_tNorms.Get ( pDenseRow, uField );
 		return true;
 	}
 	bool GatherTotal ( const uint32_t * pRows, uint32_t uCount, uint32_t * pOut ) const override
@@ -7661,8 +7799,8 @@ public:
 			if ( pRows[i]>=m_pSegment->m_uRows )
 				return false;
 			uint32_t uTotal = 0;
-			const DWORD * pNorms = m_uFields ? &m_pSegment->m_dNorms[int64_t(pRows[i])*m_uFields] : nullptr;
-			for ( uint32_t iField=0; iField<m_uFields; ++iField )
+			const DWORD * pNorms = m_tNorms.DenseFields() ? m_pSegment->m_dNorms.Begin()+int64_t(pRows[i])*m_tNorms.DenseFields() : nullptr;
+			for ( int iField=0; iField<m_tNorms.DenseFields(); ++iField )
 				uTotal += pNorms[iField];
 			pOut[i] = uTotal;
 		}
@@ -7671,7 +7809,7 @@ public:
 
 private:
 	const RtSegment_t * m_pSegment = nullptr;
-	uint32_t m_uFields = 0;
+	RtFieldNorms_c m_tNorms;
 };
 
 
@@ -7709,7 +7847,7 @@ void RtQwordSetup_t::SetSegment ( int iSegment )
 	if ( iSegment>=dRamSegs.GetLength() || !m_pIndex )
 		return;
 
-	m_tNormReader.Set ( dRamSegs[iSegment], m_pIndex->GetMatchSchema().GetFieldsCount() );
+	m_tNormReader.Set ( dRamSegs[iSegment], m_pIndex->GetMatchSchema() );
 	m_pFieldNorms = &m_tNormReader;
 }
 
@@ -10070,6 +10208,27 @@ void RtIndex_c::AddRemoveRowwiseAttr ( RtGuard_t & tGuard, bool bAdd, const CSph
 	}
 }
 
+static void RemapFieldNorms ( RtSegment_t & tSegment, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema )
+{
+	RtFieldNorms_c tOldNorms ( tOldSchema );
+	RtFieldNorms_c tNewNorms ( tNewSchema );
+	assert ( tSegment.m_dNorms.GetLength64()==int64_t(tSegment.m_uRows)*tOldNorms.DenseFields() );
+	CSphTightVector<DWORD> dNewNorms;
+	dNewNorms.Resize ( int64_t(tSegment.m_uRows)*tNewNorms.DenseFields() );
+	dNewNorms.ZeroVec();
+	if ( tNewNorms.DenseFields() )
+		for ( RowID_t tRowID=0; tRowID<tSegment.m_uRows; ++tRowID )
+			for ( int iNewDense=0; iNewDense<tNewNorms.DenseFields(); ++iNewDense )
+			{
+				const int iNewField = tNewNorms.SchemaField ( iNewDense );
+				const int iOldField = tOldSchema.GetFieldIndex ( tNewSchema.GetField(iNewField).m_sName.cstr() );
+				const int iOldDense = tOldNorms.DenseIndex ( iOldField );
+				if ( iOldDense>=0 )
+					dNewNorms[int64_t(tRowID)*tNewNorms.DenseFields()+iNewDense] = tSegment.m_dNorms[int64_t(tRowID)*tOldNorms.DenseFields()+iOldDense];
+			}
+	tSegment.m_dNorms.SwapData ( dNewNorms );
+}
+
 // fixme! Need fine-grain locking, not const_cast!
 void RtIndex_c::AddFieldToRamchunk ( const CSphString & sFieldName, DWORD uFieldFlags, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema )
 {
@@ -10077,14 +10236,7 @@ void RtIndex_c::AddFieldToRamchunk ( const CSphString & sFieldName, DWORD uField
 	for ( auto & pConstSeg : *pSegs )
 	{
 		auto * pSeg = const_cast<RtSegment_t*> ( pConstSeg.Ptr() );
-		CSphTightVector<DWORD> dNewNorms;
-		dNewNorms.Resize ( int64_t(pSeg->m_uRows)*tNewSchema.GetFieldsCount() );
-		dNewNorms.ZeroVec();
-		const int iOldFields = tOldSchema.GetFieldsCount();
-		if ( iOldFields )
-			for ( RowID_t tRowID=0; tRowID<pSeg->m_uRows; ++tRowID )
-				memcpy ( &dNewNorms[int64_t(tRowID)*tNewSchema.GetFieldsCount()], &pSeg->m_dNorms[int64_t(tRowID)*iOldFields], iOldFields*sizeof(DWORD) );
-		pSeg->m_dNorms.SwapData ( dNewNorms );
+		RemapFieldNorms ( *pSeg, tOldSchema, tNewSchema );
 		pSeg->UpdateUsedRam();
 	}
 
@@ -10156,16 +10308,7 @@ void RtIndex_c::RemoveFieldFromRamchunk ( const CSphString & sFieldName, const C
 		auto* pSeg = const_cast<RtSegment_t*> ( pConstSeg.Ptr() );
 		assert ( pSeg );
 		DeleteFieldFromDict ( pSeg, iFieldId );
-		CSphTightVector<DWORD> dNewNorms;
-		dNewNorms.Resize ( int64_t(pSeg->m_uRows)*tNewSchema.GetFieldsCount() );
-		for ( RowID_t tRowID=0; tRowID<pSeg->m_uRows; ++tRowID )
-		{
-			int iDstField = 0;
-			for ( int iSrcField=0; iSrcField<tOldSchema.GetFieldsCount(); ++iSrcField )
-				if ( iSrcField!=iFieldId )
-					dNewNorms[int64_t(tRowID)*tNewSchema.GetFieldsCount()+iDstField++] = pSeg->m_dNorms[int64_t(tRowID)*tOldSchema.GetFieldsCount()+iSrcField];
-		}
-		pSeg->m_dNorms.SwapData ( dNewNorms );
+		RemapFieldNorms ( *pSeg, tOldSchema, tNewSchema );
 		pSeg->UpdateUsedRam();
 	}
 
@@ -11172,10 +11315,30 @@ static int64_t NumAliveDocs ( const CSphIndex& dChunk )
 	return dChunk.GetStats().m_iTotalDocuments - tStatus.m_iDead;
 }
 
+static void SaveBinlogNormsSchemaWide ( Writer_i & tWriter, const CSphTightVector<DWORD> & dNorms, DWORD uRows, const CSphSchema & tSchema )
+{
+	RtFieldNorms_c tNorms ( tSchema );
+	assert ( dNorms.GetLength64()==int64_t(uRows)*tNorms.DenseFields() );
+	tWriter.ZipOffset ( int64_t(uRows)*tNorms.Fields() );
+	CSphFixedVector<DWORD> dSchemaRow ( tNorms.Fields() );
+	for ( DWORD uRow=0; uRow<uRows && tNorms.Fields(); ++uRow )
+	{
+		const DWORD * pDenseRow = tNorms.DenseFields() ? dNorms.Begin()+int64_t(uRow)*tNorms.DenseFields() : nullptr;
+		tNorms.Expand ( pDenseRow, dSchemaRow.Begin() );
+		tWriter.PutBytes ( dSchemaRow.Begin(), dSchemaRow.GetLengthBytes() );
+	}
+}
+
 bool RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & dKlist, int64_t iAddTotalBytes, CSphString & sError ) REQUIRES ( pSeg->m_tLock )
 {
 //	Tracer::AsyncOp tTracer ( "rt", "RtIndex_c::BinlogCommit" );
-	return Binlog::Commit ( &m_iTID, GetName(), sError, [pSeg,&dKlist,iAddTotalBytes,bKeywordDict=IsWordDict()] (Writer_i & tWriter) REQUIRES ( pSeg->m_tLock )
+	if ( pSeg )
+	{
+		RtFieldNorms_c tNorms ( m_tSchema );
+		if ( !ValidateRtSchemaWideNorms ( pSeg->m_dNorms.GetLength64(), pSeg->m_uRows, tNorms.Fields(), tNorms.DenseFields(), sError ) )
+			return false;
+	}
+	return Binlog::Commit ( &m_iTID, GetName(), sError, [pSeg,&dKlist,iAddTotalBytes,bKeywordDict=IsWordDict(),&tSchema=m_tSchema] (Writer_i & tWriter) REQUIRES ( pSeg->m_tLock )
 	{
 		tWriter.PutByte ( Binlog::COMMIT );
 		if ( !pSeg || !pSeg->m_uRows )
@@ -11208,7 +11371,7 @@ bool RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & 
 		Binlog::SaveVector ( tWriter, pSeg->m_dDocs );
 		Binlog::SaveVector ( tWriter, pSeg->m_dHits );
 		Binlog::SaveVector ( tWriter, pSeg->m_dRows );
-		Binlog::SaveVector ( tWriter, pSeg->m_dNorms );
+		SaveBinlogNormsSchemaWide ( tWriter, pSeg->m_dNorms, pSeg->m_uRows, tSchema );
 		Binlog::SaveVector ( tWriter, pSeg->m_dBlobs );
 		Binlog::SaveVector ( tWriter, pSeg->m_dKeywordCheckpoints );
 
@@ -11259,12 +11422,19 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader & tReader, CSphStr
 		if ( !Binlog::LoadVector ( tReader, pSeg->m_dHits ) ) return Warn ( sError, tReader );
 		if ( !Binlog::LoadVector ( tReader, pSeg->m_dRows )  ) return Warn ( sError, tReader );
 		if ( !Binlog::LoadVector ( tReader, pSeg->m_dNorms )  ) return Warn ( sError, tReader );
-		const int64_t iExpectedNorms = int64_t(uRows)*m_tSchema.GetFieldsCount();
-		if ( pSeg->m_dNorms.GetLength64()!=iExpectedNorms )
+		RtFieldNorms_c tNorms ( m_tSchema );
+		const int64_t iSchemaNorms = int64_t(uRows)*tNorms.Fields();
+		if ( pSeg->m_dNorms.GetLength64()!=iSchemaNorms )
 		{
-			sError.SetSprintf ( "binlog norms length mismatch: expected %" PRIi64 ", got %" PRIi64, iExpectedNorms, pSeg->m_dNorms.GetLength64() );
+			sError.SetSprintf ( "binlog norms length mismatch: expected %" PRIi64 ", got %" PRIi64, iSchemaNorms, pSeg->m_dNorms.GetLength64() );
 			return {};
 		}
+		CSphTightVector<DWORD> dDense;
+		dDense.Resize ( int64_t(uRows)*tNorms.DenseFields() );
+		if ( tNorms.DenseFields() )
+			for ( DWORD uRow=0; uRow<uRows; ++uRow )
+				tNorms.Compact ( pSeg->m_dNorms.Begin()+int64_t(uRow)*tNorms.Fields(), dDense.Begin()+int64_t(uRow)*tNorms.DenseFields() );
+		pSeg->m_dNorms.SwapData ( dDense );
 		if ( !Binlog::LoadVector ( tReader, pSeg->m_dBlobs )  ) return Warn ( sError, tReader );
 		if ( !Binlog::LoadVector ( tReader, pSeg->m_dKeywordCheckpoints ) ) return Warn ( sError, tReader );
 

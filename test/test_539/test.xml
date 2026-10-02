@@ -107,6 +107,21 @@ FLUSH RAMCHUNK e1_rt;
 INSERT INTO e1_ties (id,body) VALUES (30,'tie'),(20,'tie'),(10,'tie');
 FLUSH RAMCHUNK e1_ties;
 
+<!-- Dense RT norms: one indexed lane among three nonempty stored-only fields. -->
+DROP TABLE IF EXISTS e1_dense_rt;
+CREATE TABLE e1_dense_rt (stored0 TEXT STORED, body TEXT INDEXED, stored1 TEXT STORED, stored2 TEXT STORED, gid INT);
+INSERT INTO e1_dense_rt (id,stored0,body,stored1,stored2,gid) VALUES (301,'s0-a','alpha alpha beta','s1-a','s2-a',1),(302,'s0-b','alpha','s1-b','s2-b',1);
+INSERT INTO e1_dense_rt (id,stored0,body,stored1,stored2,gid) VALUES (303,'s0-c','beta alpha','s1-c','s2-c',2),(304,'s0-d','gamma','s1-d','s2-d',2);
+INSERT INTO e1_dense_rt (id,stored0,body,stored1,stored2,gid) VALUES (305,'s0-e','alpha alpha alpha','s1-e','s2-e',3),(306,'s0-f','beta','s1-f','s2-f',3);
+SHOW TABLE e1_dense_rt STATUS LIKE 'ram_chunk_segments_count';
+DELETE FROM e1_dense_rt WHERE id IN (302,304);
+SELECT id,weight() AS w FROM e1_dense_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_dense_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)+0');
+FLUSH RAMCHUNK e1_dense_rt;
+SELECT id,weight() AS w FROM e1_dense_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+INSERT INTO e1_dense_rt (id,stored0,body,stored1,stored2,gid) VALUES (307,'s0-g','alpha beta alpha','s1-g','s2-g',4);
+SELECT id,weight() AS w FROM e1_dense_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+
 <!-- Exercise the production RT direct-norm writer across multiple RAM segments
      and a compacted row map with deleted rows at segment boundaries. -->
 INSERT INTO e1_direct_rt (id,title,body,gid) VALUES
@@ -211,6 +226,15 @@ SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') AND gid=2 LIMIT 1,1; SHO
 SELECT id,weight() AS w FROM e1_direct_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
 SELECT id,weight() AS w FROM e1_direct_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)+0');
 SELECT id,gid FROM e1_attrs_only ORDER BY id ASC;
+SELECT id,weight() AS w FROM e1_dense_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+ALTER TABLE e1_dense_rt ADD COLUMN stored3 TEXT STORED;
+ALTER TABLE e1_dense_rt DROP COLUMN stored0;
+SELECT id,weight() AS w FROM e1_dense_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+ALTER TABLE e1_dense_rt ADD COLUMN extra TEXT INDEXED;
+INSERT INTO e1_dense_rt (id,body,stored1,stored2,stored3,extra,gid) VALUES (308,'alpha','s1-h','s2-h','s3-h','alpha alpha',5);
+SELECT id,weight() AS w FROM e1_dense_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+ALTER TABLE e1_dense_rt DROP COLUMN extra;
+SELECT id,weight() AS w FROM e1_dense_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
 DELETE FROM e1_rt WHERE id=3;
 REPLACE INTO e1_rt (id,title,body,gid) VALUES (2,'beta','alpha alpha alpha',4);
 UPDATE e1_rt SET gid=5 WHERE id=4;
@@ -228,6 +252,8 @@ SELECT id,gid,weight() AS w FROM e1_rt WHERE MATCH('alpha') AND gid=5; SHOW META
 SELECT COUNT(*) FROM e1_rt;
 SELECT id,weight() AS w FROM e1_direct_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
 SELECT id,gid FROM e1_attrs_only ORDER BY id ASC;
+SELECT id,weight() AS w FROM e1_dense_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,stored1,stored2,stored3 FROM e1_dense_rt WHERE id IN (301,308) ORDER BY id ASC;
 </sphinxql>
 </queries>
 

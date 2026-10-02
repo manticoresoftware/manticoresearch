@@ -4373,8 +4373,19 @@ RtActionResult_e RtIndex_c::ForceDiskChunkResult()
 {
 	MEMORY ( MEM_INDEX_RT );
 
+	const bool bE1FlushTrace = getenv("MANTICORE_E1_FLUSH_TRACE");
+	const uint64_t tmTotal = bE1FlushTrace ? MonoMicroTimer() : 0;
+	uint64_t tmSerialWait = bE1FlushTrace ? MonoMicroTimer() : 0;
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
-	return SaveDiskChunk ( true );
+	if ( bE1FlushTrace )
+		tmSerialWait = MonoMicroTimer()-tmSerialWait;
+	const uint64_t tmSaveCall = bE1FlushTrace ? MonoMicroTimer() : 0;
+	const RtActionResult_e eResult = SaveDiskChunk ( true );
+	if ( bE1FlushTrace )
+		fprintf ( stderr, "E1_FLUSH_TRACE event=rt_force_flush table=%s serial_wait_us=%llu save_call_us=%llu total_us=%llu result=%d\n",
+			GetName(), (unsigned long long)tmSerialWait, (unsigned long long)(MonoMicroTimer()-tmSaveCall),
+			(unsigned long long)(MonoMicroTimer()-tmTotal), int(eResult) );
+	return eResult;
 }
 
 // could be called from naked context (i.e. without coroutine)

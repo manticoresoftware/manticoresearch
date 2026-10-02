@@ -11,6 +11,8 @@
 //
 
 #include "searchnode.h"
+#include "fastcount.h"
+#include "querycontext.h"
 #include "sphinxquery/sphinxquery.h"
 #include "sphinxint.h"
 #include "sphinxqcache.h"
@@ -18,6 +20,7 @@
 #include "coroutine.h"
 #include "secondaryindex.h"
 #include "client_task_info.h"
+#include "exact_bm25a_utils.h"
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -43,6 +46,33 @@ int g_iPredictorCostMatch	= 64;
 #define SPH_BM25_K1				1.2f
 
 static const float COST_SCALE = 1.0f/1000000.0f;
+
+static int E1SchemaFieldCount ( const ISphQwordSetup & tSetup )
+{
+	if ( !tSetup.m_pIndex )
+		return 0;
+	const auto & tSchema = tSetup.m_pIndex->GetMatchSchema();
+	int iIndexed = 0;
+	for ( int i=0; i<tSchema.GetFieldsCount(); ++i )
+		iIndexed += ( tSchema.GetField(i).m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED )!=0;
+	return iIndexed;
+}
+
+static bool E1FieldScopeCoversSchema ( const XQLimitSpec_t & tSpec, const ISphQwordSetup & tSetup )
+{
+	const int iFieldCount = E1SchemaFieldCount ( tSetup );
+	if ( iFieldCount<=0 )
+		return false;
+	if ( !tSpec.m_bFieldSpec )
+		return true;
+	FieldMask_t tExpected;
+	tExpected.UnsetAll();
+	const auto & tSchema = tSetup.m_pIndex->GetMatchSchema();
+	for ( int i=0; i<tSchema.GetFieldsCount(); ++i )
+		if ( tSchema.GetField(i).m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED )
+			tExpected.Set(i);
+	return E1MaskMatchesExpected ( tSpec.m_dFieldMask, tExpected );
+}
 
 static volatile bool g_bInterruptNow = false;
 
@@ -136,6 +166,45 @@ static FORCE_INLINE bool WarmupDocs ( const ExtDoc_t * & pDocL, const ExtDoc_t *
 
 	pDocL = pLeft->GetDocsChunk();
 	return HasDocs(pDocL);
+}
+
+
+static FORCE_INLINE bool E1FilterValue ( const E1RankFilter_t & tFilter, SphAttr_t iValue )
+{
+	if ( tFilter.m_eType==SPH_FILTER_VALUES )
+		return iValue==tFilter.m_iValue;
+	if ( tFilter.m_bOpenLeft )
+		return tFilter.m_bHasEqualMax ? iValue<=tFilter.m_iMaxValue : iValue<tFilter.m_iMaxValue;
+	if ( tFilter.m_bOpenRight )
+		return tFilter.m_bHasEqualMin ? iValue>=tFilter.m_iMinValue : iValue>tFilter.m_iMinValue;
+	const bool bMin = tFilter.m_bHasEqualMin ? iValue>=tFilter.m_iMinValue : iValue>tFilter.m_iMinValue;
+	const bool bMax = tFilter.m_bHasEqualMax ? iValue<=tFilter.m_iMaxValue : iValue<tFilter.m_iMaxValue;
+	return bMin && bMax;
+}
+
+
+static uint64_t E1ApplyFilterMask ( const E1RankFilter_t & tFilter, uint32_t uWindow, uint64_t * pMask, uint64_t & uExamined )
+{
+	uint64_t uPassed = 0;
+	for ( uint32_t uWord=0; uWord<64; ++uWord )
+	{
+		uint64_t uBits = pMask[uWord];
+		uint64_t uKeep = 0;
+		while ( uBits )
+		{
+			const uint32_t uBit = uint32_t(__builtin_ctzll(uBits));
+			uBits &= uBits-1;
+			const uint64_t uRow = uint64_t(uWindow)*4096 + uint64_t(uWord)*64 + uBit;
+			++uExamined;
+			if ( uRow<tFilter.m_uRows && E1FilterValue ( tFilter, sphGetRowAttr ( tFilter.m_pAttrs+uRow*tFilter.m_iStride, tFilter.m_tLocator ) ) )
+			{
+				uKeep |= uint64_t(1)<<uBit;
+				++uPassed;
+			}
+		}
+		pMask[uWord] = uKeep;
+	}
+	return uPassed;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -233,14 +302,46 @@ template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
 class ExtTerm_T : public ExtNode_c, ISphNoncopyable
 {
 public:
-						ExtTerm_T ( ISphQword * pQword, const FieldMask_t & dFields, const ISphQwordSetup & tSetup, bool bNotWeighted ) { Init ( pQword, dFields, tSetup, bNotWeighted ); }
+						ExtTerm_T ( ISphQword * pQword, const FieldMask_t & dFields, const ISphQwordSetup & tSetup, bool bNotWeighted, bool bFullSchemaScope=false ) { Init ( pQword, dFields, tSetup, bNotWeighted, bFullSchemaScope ); }
 						ExtTerm_T ( ISphQword * pQword, const ISphQwordSetup & tSetup );
 						ExtTerm_T() { m_dQueriedFields.UnsetAll(); }
-						~ExtTerm_T () override { SafeDelete ( m_pQword ); }
+						~ExtTerm_T () override
+	{
+		if ( m_bE1Ranked && getenv("MANTICORE_E1_RANK_TRACE") )
+		{
+			fprintf ( stderr, "E1_RANKED rowid_docid_order=%d bound_entries_read=%llu nonempty_buckets=%llu selected_blocks=%llu skipped_blocks=%llu skipped_docs=%llu scored_docs=%llu metadata_groups_decoded=%llu threshold_at_scored=%llu topk_updates=%llu\n",
+				int(m_bE1RowidDocidOrder),
+				(unsigned long long)m_uRankBoundEntries, (unsigned long long)m_uRankBuckets,
+				(unsigned long long)m_uRankSelectedBlocks, (unsigned long long)m_uRankSkippedBlocks,
+				(unsigned long long)m_uRankSkippedDocsTotal, (unsigned long long)m_uRankScored,
+				(unsigned long long)m_uRankDecodedGroups, (unsigned long long)m_uRankThresholdAtScored,
+				(unsigned long long)m_uRankTopKUpdates );
+			if ( m_tE1Filter.m_bEnabled )
+				fprintf ( stderr, "E1_FILTER_TERM masks_built=%llu rows_examined=%llu candidates_before=%llu candidates_after=%llu exact_total=%llu eligibility_bytes=%llu eligibility_build_us=%lld ineligible_before_tf=%llu eligible_rows_scored=%llu generic_filter_bypass=1 persisted_best_first=1\n",
+					(unsigned long long)m_uE1FilterMasksBuilt, (unsigned long long)m_uE1FilterRowsExamined,
+					(unsigned long long)m_uE1FilterCandidatesBefore, (unsigned long long)m_uE1FilterCandidatesAfter,
+					(unsigned long long)m_uE1EligibleTotal, (unsigned long long)m_dE1Eligibility.GetLength()*sizeof(uint64_t),
+					(long long)m_iE1EligibilityBuildUS, (unsigned long long)m_uE1IneligibleBeforeTF,
+					(unsigned long long)m_uRankScored );
+			if ( m_bE1ScopedTerm )
+				fprintf ( stderr, "E1_SCOPED_TERM requested_field=%d exact_total=%llu bitmap_bytes=%llu tf_bytes=%llu membership_checks=%llu aggregate_tf_available=%llu field_tf_metadata_hits=%llu field_local_tf_decodes=%llu hitlist_seeks=%llu positions_decoded=%llu hit_bytes=0 hit_bytes_measurable=0 metadata_groups_membership=%llu metadata_groups_ranked=%llu selected_blocks=%llu skipped_blocks=%llu candidates_scored=%llu eligibility_build_us=%lld ineligible_before_tf=%llu aggregate_bound_safe=1 persisted_best_first=1\n",
+					m_iE1ScopedField, (unsigned long long)m_uE1ScopedTotal,
+					(unsigned long long)m_dE1ScopedEligibility.GetLength()*sizeof(uint64_t),
+					(unsigned long long)m_dE1ScopedTF.GetLength()*sizeof(uint32_t),
+					(unsigned long long)m_uE1ScopedMembershipChecks, (unsigned long long)m_uE1ScopedAggregateTF,
+					(unsigned long long)m_uE1ScopedFieldTFMetadataHits, (unsigned long long)m_uE1ScopedFieldTFDecodes, (unsigned long long)m_uE1ScopedHitlistSeeks,
+					(unsigned long long)m_uE1ScopedPositionsDecoded, (unsigned long long)m_uE1ScopedMetadataGroups,
+					(unsigned long long)m_uRankDecodedGroups, (unsigned long long)m_uRankSelectedBlocks,
+					(unsigned long long)m_uRankSkippedBlocks, (unsigned long long)m_uRankScored,
+					(long long)m_iE1EligibilityBuildUS, (unsigned long long)m_uE1IneligibleBeforeTF );
+		}
+		SafeDelete ( m_pQword );
+	}
 
-	void				Init ( ISphQword * pQword, const FieldMask_t & dFields, const ISphQwordSetup & tSetup, bool bNotWeighted );
+	void				Init ( ISphQword * pQword, const FieldMask_t & dFields, const ISphQwordSetup & tSetup, bool bNotWeighted, bool bFullSchemaScope=false );
 	void				Reset ( const ISphQwordSetup & tSetup ) override;
 	const ExtDoc_t *	GetDocsChunk() override;
+
 	void				CollectHits ( const ExtDoc_t * pMatched ) override;
 
 	int					GetQwords ( ExtQwordsHash_t & hQwords ) override;
@@ -254,10 +355,66 @@ public:
 	void				SetCollectHits() override { m_bCollectHits = true; }
 	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override { return { float(m_pQword->m_iDocs)*COST_SCALE*60.0f, m_pQword->m_iDocs, 1 }; }
 	void				SetRowidBoundaries ( const RowIdBoundaries_t & tBoundaries ) override;
+	bool				EnableE1Ranked() override
+	{
+		if ( getenv("MANTICORE_E1_RANK_TRACE") )
+			fprintf ( stderr, "E1_FIELD_SCOPE path=term schema_fields=%d full_schema=%d requested_mask0=%u\n", m_iE1SchemaFields, int(m_bE1FullSchemaScope), unsigned(m_dQueriedFields.GetMask32()) );
+		m_iE1ScopedField = E1ScopedSingleField ( m_iE1SchemaFields, m_bE1FullSchemaScope, m_dQueriedFields.GetMask32() );
+		m_bE1ScopedTerm = !ROWID_LIMITS && !m_tE1Filter.m_bEnabled && m_iE1ScopedField>=0
+			&& !getenv("MANTICORE_E1_FORCE_GENERIC_SCOPED") && BuildE1ScopedEligibility();
+		m_bE1Ranked = !ROWID_LIMITS && ( ( m_bE1FullSchemaScope && ( m_tE1Filter.m_bEnabled ? m_pQword->E1DirectOrSupported() : m_pQword->HasE1RankedBounds() ) ) || m_bE1ScopedTerm );
+		if ( m_bE1Ranked && m_tE1Filter.m_bEnabled )
+		{
+			m_bE1Ranked = m_pQword->GetE1DirectLastWindow ( m_uE1FilterLastWindow );
+			m_dE1FilterMask.Resize(64);
+			m_dE1Eligibility.Resize ( (m_tE1Filter.m_uRows+63)/64 );
+			m_dE1Eligibility.Fill(0);
+			const int64_t iStarted = sphMicroTimer();
+			uint64_t uIgnoredBoundReads = 0;
+			for ( uint32_t uWindow=0; m_bE1Ranked && uWindow<=m_uE1FilterLastWindow; ++uWindow )
+			{
+				m_dE1FilterMask.Fill(0);
+				uint32_t uCardinality = 0, uMaxTF = 0;
+				if ( !m_pQword->GetE1DirectWindow ( uWindow, m_dE1FilterMask.Begin(), nullptr, uCardinality, uMaxTF, uIgnoredBoundReads ) )
+					continue;
+				++m_uE1FilterMasksBuilt;
+				m_uE1FilterCandidatesBefore += uCardinality;
+				const uint64_t uPassed = E1ApplyFilterMask ( m_tE1Filter, uWindow, m_dE1FilterMask.Begin(), m_uE1FilterRowsExamined );
+				m_uE1FilterCandidatesAfter += uPassed;
+				m_uE1EligibleTotal += uPassed;
+				const uint64_t uWordBase = uint64_t(uWindow)*64;
+				for ( uint32_t uWord=0; uWord<64 && uWordBase+uWord<uint64_t(m_dE1Eligibility.GetLength()); ++uWord )
+					m_dE1Eligibility[int(uWordBase+uWord)] = m_dE1FilterMask[uWord];
+			}
+			m_iE1EligibilityBuildUS = sphMicroTimer()-iStarted;
+		}
+		if ( m_bE1Ranked ) m_uRankTotalDocs=m_pQword->m_iDocs;
+		return m_bE1Ranked;
+	}
+	bool				EnableE1BestFirst() override { return m_bE1Ranked; }
+	void				SetRankThreshold ( int iWeight, RowID_t tWorstRow ) override { tWorstRow = m_bE1RowidDocidOrder ? tWorstRow : INVALID_ROWID; if ( iWeight!=m_iRankThreshold || tWorstRow!=m_tRankWorstRow ) { if ( !m_iRankThreshold ) m_uRankThresholdAtScored=m_uRankScored; ++m_uRankTopKUpdates; m_iRankThreshold=iWeight; m_tRankWorstRow=tWorstRow; } }
+	uint64_t			TakeRankSkippedDocs() override
+	{
+		if ( m_tE1Filter.m_bEnabled || m_bE1ScopedTerm )
+		{
+			if ( !m_bE1RankFinished || m_bE1EligibleTotalReported )
+				return 0;
+			m_bE1EligibleTotalReported = true;
+			const uint64_t uExactTotal = m_bE1ScopedTerm ? m_uE1ScopedTotal : m_uE1EligibleTotal;
+			const uint64_t uRes = uExactTotal>m_uRankScored ? uExactTotal-m_uRankScored : 0;
+			m_uRankSkippedDocsTotal += uRes;
+			m_uRankSkippedDocs = 0;
+			return uRes;
+		}
+		uint64_t uRes=m_uRankSkippedDocs; m_uRankSkippedDocsTotal+=uRes; m_uRankSkippedDocs=0; return uRes;
+	}
 
 	void				DebugDump ( int iLevel ) override;
 
 protected:
+	bool				BuildE1ScopedEligibility();
+	uint32_t			CountE1FieldTF ( uint64_t uRef );
+
 	struct StoredHit_t
 	{
 		SphOffset_t	m_tHitlistOffset;
@@ -271,7 +428,50 @@ protected:
 	CSphString *		m_pWarning = nullptr;
 	bool				m_bNotWeighted = true;
 	CSphQueryStats *	m_pStats = nullptr;
-	bool				m_bCollectHits = false;
+	bool					m_bCollectHits = false;
+	bool					m_bE1Ranked = false;
+	bool					m_bE1RowidDocidOrder = false;
+	bool					m_bE1FullSchemaScope = false;
+	bool				m_bE1ScopedTerm = false;
+	int					m_iE1ScopedField = -1;
+	int					m_iE1SchemaFields = 0;
+	int					m_iRankThreshold = 0;
+	RowID_t			m_tRankWorstRow = INVALID_ROWID;
+	uint64_t			m_uRankBoundEntries = 0;
+	uint64_t			m_uRankBuckets = 0;
+	uint64_t			m_uRankSelectedBlocks = 0;
+	uint64_t			m_uRankSkippedBlocks = 0;
+	uint64_t			m_uRankSkippedDocs = 0;
+	uint64_t			m_uRankSkippedDocsTotal = 0;
+	uint64_t			m_uRankTotalDocs = 0;
+	uint64_t			m_uRankDecodedGroups = 0;
+	uint64_t			m_uRankScored = 0;
+	uint64_t			m_uRankThresholdAtScored = 0;
+	uint64_t			m_uRankTopKUpdates = 0;
+	E1RankFilter_t		m_tE1Filter;
+	uint32_t			m_uE1FilterLastWindow = UINT32_MAX;
+	CSphVector<uint64_t>	m_dE1FilterMask;
+	CSphVector<uint64_t>	m_dE1Eligibility;
+	CSphVector<uint64_t>	m_dE1ScopedEligibility;
+	CSphVector<uint32_t>	m_dE1ScopedTF;
+	CSphVector<uint64_t>	m_dE1ScopedWindowMask;
+	uint64_t			m_uE1ScopedTotal = 0;
+	uint64_t			m_uE1ScopedMembershipChecks = 0;
+	uint64_t			m_uE1ScopedAggregateTF = 0;
+	uint64_t			m_uE1ScopedFieldTFDecodes = 0;
+	uint64_t			m_uE1ScopedFieldTFMetadataHits = 0;
+	uint64_t			m_uE1ScopedHitlistSeeks = 0;
+	uint64_t			m_uE1ScopedPositionsDecoded = 0;
+	uint64_t			m_uE1ScopedMetadataGroups = 0;
+	uint64_t			m_uE1FilterMasksBuilt = 0;
+	uint64_t			m_uE1FilterRowsExamined = 0;
+	uint64_t			m_uE1FilterCandidatesBefore = 0;
+	uint64_t			m_uE1FilterCandidatesAfter = 0;
+	uint64_t			m_uE1EligibleTotal = 0;
+	uint64_t			m_uE1IneligibleBeforeTF = 0;
+	int64_t			m_iE1EligibilityBuildUS = 0;
+	bool				m_bE1RankFinished = false;
+	bool				m_bE1EligibleTotalReported = false;
 	RowIdBoundaries_t	m_tBoundaries;
 
 	CSphVector<StoredHit_t> m_dStoredHits;
@@ -467,7 +667,7 @@ template <bool USE_BM25, bool TEST_FIELDS, bool ROWID_LIMITS>
 class ExtMultiAnd_T : public ExtNode_c
 {
 public:
-						ExtMultiAnd_T ( const VecTraits_T<XQNode_t*> & dXQNodes, const ISphQwordSetup & tSetup );
+						ExtMultiAnd_T ( const VecTraits_T<XQNode_t*> & dXQNodes, const ISphQwordSetup & tSetup, bool bE1Or=false );
 						~ExtMultiAnd_T() override;
 
 	const ExtDoc_t *	GetDocsChunk() override;
@@ -484,6 +684,10 @@ public:
 	void				DebugDump ( int iLevel ) override;
 	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override;
 	void				SetRowidBoundaries ( const RowIdBoundaries_t & tBoundaries ) override { m_tBoundaries = tBoundaries; }
+	bool				EnableE1Ranked() override;
+	bool				EnableE1BestFirst() override { m_bE1BestFirst = m_bE1Or && ( m_dNodes.GetLength()==2 || m_dNodes.GetLength()==4 ); m_bE1BatchedOr2 = m_bE1Or && m_dNodes.GetLength()==2; return m_bE1BestFirst || m_bE1DirectAnd; }
+	void				SetRankThreshold ( int iWeight, RowID_t tWorstRow ) override { m_iE1RankThreshold = iWeight; m_tE1WorstTiedRow = m_bE1RowidDocidOrder ? tWorstRow : INVALID_ROWID; m_iE1FinalThreshold = iWeight; }
+	uint64_t			TakeRankSkippedDocs() override { auto u=m_uE1SkippedMatches; m_uE1SkippedMatches=0; return u; }
 
 private:
 	struct NodeInfo_t
@@ -496,6 +700,7 @@ private:
 		WORD			m_uNodepos {0};
 		int				m_iAtomPos {0};
 		FieldMask_t		m_dQueriedFields;
+		bool			m_bE1FullSchemaScope {false};
 		bool			m_bHasWideFields {false};
 		bool			m_bNotWeighted {true};
 
@@ -557,6 +762,12 @@ private:
 	FORCE_INLINE bool	FitsFields ( const NodeInfo_t & tNode ) const;
 	FORCE_INLINE DWORD	GetDocFieldsMask() const;
 	FORCE_INLINE float	GetTFIDF() const;
+	bool				FillE1Window();
+	bool				FillE1DirectAndWindow();
+	bool				FillE1OrWindow();
+	bool				PrepareE1OrWindows();
+	bool				BuildE1ScopedAndTerm ( int iNode, uint32_t uLastWindow );
+	uint32_t			CountE1ScopedAndFieldTF ( int iNode, uint64_t uRef );
 	int					GetQword ( NodeInfo_t & tNode, ExtQwordsHash_t & hQwords );
 	FORCE_INLINE void	PushNextHit ( int iNode );
 	FORCE_INLINE void	MergeHitsN ( const StoredMultiHit_t & tStoredHit );
@@ -570,6 +781,102 @@ private:
 	FORCE_INLINE void	AddHit ( RowID_t tRowID, HitInfo_t & tHit, int iNode );
 
 	static bool			IsHitLess ( const HitInfo_t & tLeft, const HitInfo_t & tRight ) { return tLeft.m_uHitpos<tRight.m_uHitpos || ( tLeft.m_uHitpos==tRight.m_uHitpos && tLeft.m_uQueryPos<=tRight.m_uQueryPos ); }
+
+	static constexpr uint32_t E1_AND_WINDOW_ROWS = 4096;
+	bool				m_bE1Ranked = false;
+	bool				m_bE1RowidDocidOrder = false;
+	bool				m_bE1Or = false;
+	int					m_iE1SchemaFields = 0;
+	bool				m_bE1DirectAnd = false;
+	bool				m_bE1ScopedAnd2 = false;
+	bool				m_bE1MixedFieldAnd2 = false;
+	int					m_iE1ScopedAndField = -1;
+	int					m_dE1ScopedAndFields[2] { -1, -1 };
+	bool				m_bE1ScopedOr2 = false;
+	bool				m_bE1MixedFieldOr2 = false;
+	bool				m_bE1StagedAnd4 = false;
+	bool				m_bE1FusedAnd4 = false;
+	uint32_t			m_uE1Window = UINT32_MAX;
+	uint32_t			m_uE1LastWindow = UINT32_MAX;
+	CSphVector<int>		m_dE1Canonical;
+	CSphVector<ExtDoc_t>	m_dE1Pending;
+	int					m_iE1PendingPos = 0;
+	int					m_iE1RankThreshold = 0;
+	RowID_t			m_tE1WorstTiedRow = INVALID_ROWID;
+	int					m_iE1FinalThreshold = 0;
+	uint64_t			m_uE1WindowsTotal = 0;
+	uint64_t			m_uE1WindowsPruned = 0;
+	uint64_t			m_uE1WindowsScored = 0;
+	uint64_t			m_uE1BooleanMatches = 0;
+	uint64_t			m_uE1TFProbes = 0;
+	uint64_t			m_uE1MetadataGroups = 0;
+	uint64_t			m_uE1SkippedMatches = 0;
+	uint64_t			m_uE1CandidatesGenerated = 0;
+	uint64_t			m_uE1CandidatesScored = 0;
+	uint64_t			m_uE1EssentialRepartitions = 0;
+	uint64_t			m_uE1EssentialTerms = 0;
+	uint64_t			m_uE1NonessentialProbes = 0;
+	uint64_t			m_uE1NonessentialHits = 0;
+	uint64_t			m_uE1BitmapOps = 0;
+	uint64_t			m_uE1SparseSeeks = 0;
+	uint64_t			m_uE1ContainerOps = 0;
+	uint64_t			m_uE1BoundReads = 0;
+	uint64_t			m_uE1RandomTFProbes = 0;
+	uint64_t			m_uE1BatchTFRowsRequested = 0;
+	uint64_t			m_uE1BatchTFRowsWritten = 0;
+	uint64_t			m_uE1BatchMetadataGroups = 0;
+	uint64_t			m_uE1CandidateMaskRows = 0;
+	uint64_t			m_uE1CandidateBoundRejects = 0;
+	uint64_t			m_uE1TieBoundRejects = 0;
+	uint64_t			m_uE1CandidateWordsExamined = 0;
+	uint64_t			m_uE1BoundClassesRejected = 0;
+	uint64_t			m_uE1WholeWordsRejected = 0;
+	uint64_t			m_uE1ScalarCandidateInspections = 0;
+	uint64_t			m_uE1IntersectionWindows = 0;
+	uint64_t			m_uE1IntersectionMaskOps = 0;
+	struct E1OrWindowDesc_t { uint32_t m_uWindow; int m_iUpperWeight; uint32_t m_uUnion; };
+	CSphVector<E1OrWindowDesc_t>	m_dE1OrWindows;
+	int					m_iE1OrWindowPos = 0;
+	bool				m_bE1BestFirst = false;
+	bool				m_bE1BatchedOr2 = false;
+	uint64_t			m_uE1BestFirstVisited = 0;
+	uint64_t			m_uE1BestFirstSkipped = 0;
+	uint64_t			m_uE1ExactUnionTotal = 0;
+	E1RankFilter_t		m_tE1Filter;
+	uint64_t			m_uE1FilterMasksBuilt = 0;
+	uint64_t			m_uE1FilterRowsExamined = 0;
+	uint64_t			m_uE1FilterCandidatesBefore = 0;
+	uint64_t			m_uE1FilterCandidatesAfter = 0;
+	int					m_dE1TFProbeOrder[4] {};
+	int					m_dE1DirectOrder[4] {};
+	CSphVector<uint64_t>	m_dE1AndMasks;
+	CSphVector<E1DirectBoundWord_t>	m_dE1AndBoundWords;
+	CSphVector<uint32_t>	m_dE1StagedExactTF;
+	CSphVector<uint64_t>	m_dE1ScopedAndEligibility[2];
+	CSphVector<uint32_t>	m_dE1ScopedAndTF[2];
+	uint64_t			m_uE1ScopedAndExactTotal = 0;
+	uint64_t			m_uE1ScopedOrOverlap = 0;
+	uint64_t			m_uE1ScopedAndMembershipChecks = 0;
+	uint64_t			m_uE1ScopedAndAggregateTF = 0;
+	uint64_t			m_uE1ScopedAndFieldTFDecodes = 0;
+	uint64_t			m_uE1ScopedAndHitlistSeeks = 0;
+	uint64_t			m_uE1ScopedAndPositionsDecoded = 0;
+	uint64_t			m_uE1ScopedAndMembershipGroups = 0;
+	uint64_t			m_uE1ScopedAndTFRows = 0;
+	int64_t			m_iE1ScopedAndBuildUS = 0;
+	uint64_t			m_uE1MissingWindowShortCircuits = 0;
+	uint64_t			m_uE1MasksFetched = 0;
+	uint64_t			m_uE1FusedWords = 0;
+	uint64_t			m_uE1IntersectionNonemptyWords = 0;
+	uint64_t			m_uE1ClassCombinations = 0;
+	uint64_t			m_uE1CoarseRejects = 0;
+	uint64_t			m_uE1CoarseSurvivors = 0;
+	uint64_t			m_uE1Stage0Input = 0;
+	uint64_t			m_dE1StageRejects[4] {};
+	uint64_t			m_dE1StageSurvivors[4] {};
+	uint64_t			m_dE1StageBatchRequested[4] {};
+	uint64_t			m_dE1StageBatchWritten[4] {};
+	uint64_t			m_dE1StageMetadataGroups[4] {};
 };
 
 
@@ -988,6 +1295,387 @@ static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordS
 	return pWord;
 }
 
+namespace
+{
+struct CountTerm_t
+{
+	const XQKeyword_t * m_pWord;
+	FieldMask_t m_tFields;
+};
+
+bool CollectCountTerms ( const XQNode_t * pNode, XQOperator_e eOp, CSphVector<CountTerm_t> & dTerms )
+{
+	if ( !pNode || pNode->m_iOpArg || pNode->m_bVirtuallyPlain || pNode->m_bNotWeighted
+		|| pNode->m_dSpec.m_iFieldMaxPos || pNode->m_dSpec.m_bZoneSpan || !pNode->m_dSpec.m_dZones.IsEmpty() )
+		return false;
+	bool bLeaf = pNode->dChildren().IsEmpty() && pNode->dWords().GetLength()==1;
+	if ( pNode->GetOp()!=SPH_QUERY_AND && pNode->GetOp()!=SPH_QUERY_OR )
+		return false;
+	if ( !bLeaf && pNode->GetOp()!=eOp )
+		return false;
+	for ( const auto & tWord : pNode->dWords() )
+	{
+		if ( tWord.m_sWord.IsEmpty() || tWord.m_bFieldStart || tWord.m_bFieldEnd || tWord.m_bExpanded
+			|| tWord.m_bExcluded || tWord.m_pPayload || tWord.m_bRegex || tWord.m_iBlendedGroup>=0 )
+			return false;
+		dTerms.Add ( { &tWord, pNode->m_dSpec.m_dFieldMask } );
+	}
+	for ( auto pChild : pNode->dChildren() )
+		if ( !CollectCountTerms ( pChild, eOp, dTerms ) )
+			return false;
+	return true;
+}
+}
+
+bool CanUseFastFullTextCount ( const CSphQuery & tQuery, const XQNode_t * pRoot, const VecTraits_T<ISphMatchSorter*> & dSorters )
+{
+	if ( tQuery.m_dItems.GetLength()!=1 || tQuery.m_dItems[0].m_sExpr!="count(*)"
+		|| !tQuery.m_sGroupBy.IsEmpty() || !tQuery.m_sGroupDistinct.IsEmpty() || !tQuery.m_tHaving.m_sAttrName.IsEmpty()
+		|| tQuery.m_sQuery.IsEmpty() || tQuery.HasKnn() || tQuery.m_bHybridSearch || tQuery.m_eJoinType!=JoinType_e::NONE
+		|| tQuery.m_bFacet || tQuery.IsInternalQuery() || tQuery.m_bHasOuter || tQuery.m_bExplicitOrderBy
+		|| tQuery.m_bZSlist || tQuery.m_iCutoff>0 || !tQuery.m_dFilterTree.IsEmpty()
+		|| !tQuery.m_sQueryTokenFilterLib.IsEmpty() || !tQuery.m_dIndexHints.IsEmpty() )
+		return false;
+	// A pseudo-shard's internal rowid range is not an attribute predicate.
+	for ( const auto & tFilter : tQuery.m_dFilters )
+		if ( tFilter.m_sAttrName!="@rowid" || tFilter.m_eType!=SPH_FILTER_RANGE || tFilter.m_bExclude )
+			return false;
+	// Keep syntactically unsupported constructs on the legacy path even if
+	// query simplification happens to reduce them to one supported atom.
+	if ( strpbrk ( tQuery.m_sQuery.cstr(), "\"~!/*?^$<>=-\\" ) )
+		return false;
+	if ( dSorters.GetLength()!=1 || dSorters.any_of ( []( auto p ) { return !p->IsGroupby() || p->IsPrecalc() || !p->GetSchema()->GetAttr("@count"); } ) )
+		return false;
+	CSphVector<CountTerm_t> dTerms;
+	return pRoot && CollectCountTerms ( pRoot, pRoot->GetOp(), dTerms ) && !dTerms.IsEmpty();
+}
+
+bool IsFullTextCountMetadataTerm ( const XQNode_t * pRoot, const ISphSchema & tSchema )
+{
+	// Wide hitless terms can decline the count executor after qword setup.
+	// Keep those on the existing scheduling path rather than guessing here.
+	if ( !pRoot || !pRoot->dChildren().IsEmpty() || pRoot->dWords().GetLength()!=1 || tSchema.GetFieldsCount()>32 )
+		return false;
+	CSphVector<CountTerm_t> dTerms;
+	if ( !CollectCountTerms ( pRoot, pRoot->GetOp(), dTerms ) || dTerms.GetLength()!=1 )
+		return false;
+	for ( int i=0; i<tSchema.GetFieldsCount(); ++i )
+		if ( ( tSchema.GetField(i).m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED ) && !dTerms[0].m_tFields.Test(i) )
+			return false;
+	return true;
+}
+
+// Separate instantiations keep OR scratch and codegen off scalar AND/TERM.
+template<bool UNION, bool DIRECT=false>
+#if _MSC_VER
+__declspec(noinline)
+#else
+__attribute__((noinline))
+#endif
+static bool CountFullTextDocsImpl ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup, const FullTextCountContext_t & tCtx, uint64_t & uCount )
+{
+	CSphVector<CountTerm_t> dTerms;
+	if ( !pRoot || !CollectCountTerms ( pRoot, pRoot->GetOp(), dTerms ) || dTerms.IsEmpty() )
+		return false;
+	CSphScopedProfile tProfile ( tSetup.m_pCtx ? tSetup.m_pCtx->m_pProfile : nullptr, SPH_QSTATE_FAST_COUNT );
+	bool bInterrupted = false;
+	auto Checkpoint = [&]
+	{
+		if ( Threads::Coro::RuntimeExceeded() ) Threads::Coro::RescheduleAndKeepCrashQuery();
+		bInterrupted = g_bInterruptNow || session::GetKilled() || sph::TimeExceeded ( tSetup.m_iMaxTimer );
+		if ( bInterrupted && tSetup.m_pWarning ) *tSetup.m_pWarning = "query timed out or was interrupted";
+		return bInterrupted;
+	};
+	uCount = 0;
+	if ( Checkpoint() ) return true;
+	std::vector<std::unique_ptr<ISphQword>> dWords;
+	for ( const auto & tTerm : dTerms )
+		dWords.emplace_back ( CreateQueryWord ( *tTerm.m_pWord, tSetup ) );
+	if ( tSetup.m_bHasWideFields )
+		for ( const auto & pWord : dWords )
+			if ( !pWord->m_bHasHitlist ) return false;
+	uCount = 0;
+	if ( dWords.size()==1 && tCtx.m_bStatsExact )
+	{
+		bool bAllFields = true;
+		const auto & tSchema = tSetup.m_pIndex->GetMatchSchema();
+		for ( int i=0; i<tSchema.GetFieldsCount(); ++i )
+			if ( tSchema.GetField(i).m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED )
+				bAllFields &= dTerms[0].m_tFields.Test(i);
+		if ( bAllFields )
+		{
+			uCount = uint64_t(uint32_t(dWords[0]->m_iDocs));
+			return true;
+		}
+	}
+	std::vector<RowID_t> dRows ( dWords.size(), INVALID_ROWID );
+	uint64_t uSteps = 0;
+	auto Advance = [&] ( int i, RowID_t tTarget )
+	{
+		auto & tWord = *dWords[i];
+		if ( bInterrupted || !tWord.m_iDocs ) return dRows[i] = INVALID_ROWID;
+		if ( tTarget && (dRows[i]==INVALID_ROWID || tTarget>dRows[i]+1) ) tWord.HintRowID ( tTarget );
+		while ( true )
+		{
+			if ( !(++uSteps & 4095) && Checkpoint() )
+				return dRows[i] = INVALID_ROWID;
+			RowID_t tRow = tWord.GetNextDoc().m_tRowID;
+			if ( tRow==INVALID_ROWID || tRow>tCtx.m_tMaxRowID ) return dRows[i] = INVALID_ROWID;
+			if ( tRow<tTarget || (tCtx.m_fnAlive && !tCtx.m_fnAlive(tRow)) ) continue;
+			if ( tSetup.m_bHasWideFields ) tWord.CollectHitMask();
+			for ( int j=0; j<FieldMask_t::SIZE; ++j )
+				if ( tWord.m_dQwordFields[j] & dTerms[i].m_tFields[j] ) return dRows[i] = tRow;
+		}
+	};
+	if ( UNION && pRoot->GetOp()==SPH_QUERY_OR )
+	{
+		struct CountBatch_t
+		{
+			RowID_t m_dRows[128];
+			int m_iNext = 0;
+			int m_iSize = 0;
+			// AND's skip-driven alignment can make read-ahead decode unused rows.
+			// Restrict batching to the sequential union traversal.
+			bool m_bEnabled = true;
+			bool m_bEOF = false;
+		};
+		std::vector<CountBatch_t> dBatches ( dWords.size() );
+		const auto & tSchema = tSetup.m_pIndex->GetMatchSchema();
+		for ( int i=0; i<(int)dWords.size(); ++i )
+		{
+			for ( int j=0; j<tSchema.GetFieldsCount(); ++j )
+				if ( ( tSchema.GetField(j).m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED ) && !dTerms[i].m_tFields.Test(j) )
+					dBatches[i].m_bEnabled = false;
+		}
+		uint64_t uDecodeWork = 0;
+		auto AdvanceUnion = [&] ( int i, RowID_t tTarget )
+		{
+			auto & tWord = *dWords[i];
+			if ( bInterrupted || !tWord.m_iDocs ) return dRows[i] = INVALID_ROWID;
+			auto & tBatch = dBatches[i];
+			if ( tBatch.m_bEnabled )
+			{
+				// The qword is at the END of the buffered batch. Hint only after
+				// its unread rows cannot satisfy the target; never rewind it.
+				if ( tBatch.m_iSize && tTarget>tBatch.m_dRows[tBatch.m_iSize-1] )
+					tBatch.m_iNext = tBatch.m_iSize;
+				while ( true )
+				{
+					if ( tBatch.m_iNext==tBatch.m_iSize )
+					{
+						if ( tBatch.m_bEOF ) return dRows[i] = INVALID_ROWID;
+						// Charge capacity BEFORE decoding, including short/empty
+						// batches. Bound decode work independently of merge work.
+						// Checking every 128 rows amplifies 1ms early-expiry yields;
+						// use the scalar executor's 4096-posting budget instead.
+						uDecodeWork += 128;
+						if ( uDecodeWork>=4096 )
+						{
+							uDecodeWork = 0;
+							if ( Checkpoint() ) return dRows[i] = INVALID_ROWID;
+						}
+						if ( tTarget ) tWord.HintRowID ( tTarget );
+						tBatch.m_iSize = tWord.GetCountDocs ( tBatch.m_dRows, 128 );
+						tBatch.m_iNext = 0;
+						if ( tBatch.m_iSize<0 ) { tBatch.m_bEnabled = false; break; }
+						tBatch.m_bEOF = tBatch.m_iSize<128;
+						if ( !tBatch.m_iSize ) return dRows[i] = INVALID_ROWID;
+					}
+					RowID_t tRow = tBatch.m_dRows[tBatch.m_iNext++];
+					if ( tRow>tCtx.m_tMaxRowID ) return dRows[i] = INVALID_ROWID;
+					if ( tRow>=tTarget && ( !tCtx.m_fnAlive || tCtx.m_fnAlive(tRow) ) ) return dRows[i] = tRow;
+				}
+			}
+			return Advance ( i, tTarget );
+		};
+		for ( int i=0; i<(int)dWords.size() && !bInterrupted; ++i )
+		{
+			if ( !(i & 4095) && Checkpoint() ) break;
+			AdvanceUnion ( i, tCtx.m_tMinRowID );
+		}
+		if ( !bInterrupted ) Checkpoint(); // Includes all-empty/EOF initialization.
+		// Bounded scratch, independent of segment size. Sparse windows collect
+		// at most 32 rows before promotion: do not pay 64 word clears/counts
+		// for a handful of widely separated postings. The gate uses actual
+		// accepted rows, not global dictionary density (which ignores gaps,
+		// field masks, deletions and the current pseudo-shard).
+		uint64_t dMask[64] = {};
+		RowID_t dSparse[32];
+		size_t uMergeWork = 0;
+		auto MergeCheckpoint = [&]
+		{
+			if ( ++uMergeWork<4096 ) return false;
+			uMergeWork = 0;
+			return Checkpoint();
+		};
+		RowID_t tNext = INVALID_ROWID;
+		for ( auto tRow : dRows )
+		{
+			if ( MergeCheckpoint() ) break;
+			tNext = Min ( tNext, tRow );
+		}
+		while ( !bInterrupted && tNext!=INVALID_ROWID )
+		{
+			const RowID_t tBase = tNext & ~RowID_t(4095);
+			// Widen before adding: the last rowid window borders INVALID_ROWID.
+			const uint64_t uEnd = uint64_t(tBase)+4096;
+			tNext = INVALID_ROWID;
+			int iSparse = 0;
+			bool bDense = false;
+			for ( int i=0; i<(int)dRows.size() && !bInterrupted; ++i )
+			{
+				if ( MergeCheckpoint() ) break;
+				while ( dRows[i]!=INVALID_ROWID && uint64_t(dRows[i])<uEnd )
+				{
+					if ( MergeCheckpoint() ) break;
+					const RowID_t tOffset = dRows[i]-tBase;
+					if ( !bDense && iSparse==32 )
+					{
+						for ( auto tSparse : dSparse ) dMask[tSparse>>6] |= uint64_t(1)<<(tSparse&63);
+						bDense = true;
+					}
+					if ( bDense ) dMask[tOffset>>6] |= uint64_t(1)<<(tOffset&63);
+					else dSparse[iSparse++] = tOffset;
+					if constexpr ( DIRECT )
+					{
+						RowID_t tLast = dRows[i];
+						auto & tBatch = dBatches[i];
+						// The last buffered/pending row was admitted above. Only now is
+						// the cursor at a clean boundary with no lookahead to lose/replay.
+						if ( tBatch.m_bEnabled && !tBatch.m_bEOF && tBatch.m_iNext==tBatch.m_iSize )
+							while ( !bInterrupted )
+							{
+								// Independent precharges, including declined/EOF attempts.
+								uDecodeWork += 128;
+								if ( uDecodeWork>=4096 )
+								{
+									uDecodeWork = 0;
+									if ( Checkpoint() ) break;
+								}
+								uMergeWork += 128+32;
+								if ( uMergeWork>=4096 )
+								{
+									uMergeWork = 0;
+									if ( Checkpoint() ) break;
+								}
+								if ( !tCtx.m_fnE1Window ( *dWords[i], tBase, dMask, tLast ) ) break;
+								if ( !bDense )
+								{
+									for ( int j=0; j<iSparse; ++j ) dMask[dSparse[j]>>6] |= uint64_t(1)<<(dSparse[j]&63);
+									bDense = true;
+								}
+							}
+						if ( bInterrupted ) break;
+						AdvanceUnion ( i, tLast+1 );
+					} else
+						AdvanceUnion ( i, dRows[i]+1 );
+				}
+				// One minimum reduction per WINDOW, never per union result.
+				tNext = Min ( tNext, dRows[i] );
+			}
+			// Count even an interrupted partial window: only verified live,
+			// in-range rows entered scratch. Fixed-size work remains bounded.
+			if ( bDense )
+			{
+				for ( auto & uWord : dMask )
+				{
+					uCount += sphBitCount ( uWord );
+					uWord = 0;
+				}
+			} else
+			{
+				std::sort ( dSparse, dSparse+iSparse );
+				uCount += std::unique ( dSparse, dSparse+iSparse )-dSparse;
+			}
+			// Include sparse sorting/promotion/popcount and EOF in the bound.
+			// This is at most 32 rows or 64 words, regardless of fanout.
+			if ( !bInterrupted && Checkpoint() ) break;
+		}
+	} else
+	{
+		for ( int i=0; i<(int)dWords.size(); ++i ) Advance ( i, tCtx.m_tMinRowID );
+		int iLead = 0;
+		for ( int i=1; i<(int)dWords.size(); ++i ) if ( dWords[i]->m_iDocs<dWords[iLead]->m_iDocs ) iLead=i;
+		while ( dRows[iLead]!=INVALID_ROWID )
+		{
+			RowID_t tRow = dRows[iLead];
+			bool bMatch = true;
+			for ( int i=0; i<(int)dWords.size(); ++i )
+			{
+				if ( dRows[i]<tRow ) Advance ( i, tRow );
+				if ( dRows[i]>tRow )
+				{
+					if ( dRows[i]==INVALID_ROWID ) dRows[iLead]=INVALID_ROWID;
+					else Advance ( iLead, dRows[i] );
+					bMatch = false;
+					break;
+				}
+			}
+			if ( bMatch ) { ++uCount; Advance ( iLead, tRow+1 ); }
+		}
+	}
+	if ( bInterrupted && tSetup.m_pWarning ) *tSetup.m_pWarning = "query timed out or was interrupted";
+	return true;
+}
+
+static bool CountPrimaryContainers(const XQNode_t *pRoot,const ISphQwordSetup &tSetup,const FullTextCountContext_t &tCtx,uint64_t &uCount)
+{
+ CSphVector<CountTerm_t> terms;
+ if(!pRoot || !tCtx.m_bStatsExact || tCtx.m_tMinRowID || !CollectCountTerms(pRoot,pRoot->GetOp(),terms) || terms.GetLength()<2 || terms.GetLength()>32)return false;
+ bool isAnd=pRoot->GetOp()==SPH_QUERY_AND;
+ const auto &schema=tSetup.m_pIndex->GetMatchSchema();
+ for(const auto &t:terms)for(int i=0;i<schema.GetFieldsCount();++i)if((schema.GetField(i).m_uFieldFlags&CSphColumnInfo::FIELD_INDEXED)&&!t.m_tFields.Test(i))return false;
+ std::vector<e1::TermView> frequent;
+ std::vector<std::unique_ptr<ISphQword>> rare;
+ bool present=false;
+ for(const auto &t:terms){
+  std::unique_ptr<ISphQword> word(CreateQueryWord(*t.m_pWord,tSetup));
+  if(word->m_iDocs<0)return false;
+  if(!word->m_iDocs){frequent.push_back({});continue;}
+  auto v=tCtx.m_fnPrimaryView(*word);
+  if(!v.term || v.DF()!=uint32_t(word->m_iDocs))return false;
+  if(!v.Frequent()){if(isAnd)return false;rare.push_back(std::move(word));}
+  else {frequent.push_back(v);present=true;}
+ }
+ if(!present)return false;
+ CSphScopedProfile profile(tSetup.m_pCtx?tSetup.m_pCtx->m_pProfile:nullptr,SPH_QSTATE_FAST_COUNT);
+ *tCtx.m_pPrimaryUsed=true;
+ auto check=[&]{if(Threads::Coro::RuntimeExceeded())Threads::Coro::RescheduleAndKeepCrashQuery();bool stop=g_bInterruptNow||session::GetKilled()||sph::TimeExceeded(tSetup.m_iMaxTimer);if(stop&&tSetup.m_pWarning)*tSetup.m_pWarning="query timed out or was interrupted";return stop;};
+ uCount=e1::Count(frequent,isAnd,rare.size(),[&](size_t i){return rare[i]->GetNextDoc().m_tRowID;},check);
+ return true;
+}
+
+bool CountFullTextDocs ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup, const FullTextCountContext_t & tCtx, uint64_t & uCount )
+{
+	if(tCtx.m_fnPrimaryView && CountPrimaryContainers(pRoot,tSetup,tCtx,uCount))return true;
+	if ( pRoot && pRoot->GetOp()==SPH_QUERY_OR )
+	{
+		if ( tCtx.m_fnE1Window )
+			return CountFullTextDocsImpl<true, true> ( pRoot, tSetup, tCtx, uCount );
+		return CountFullTextDocsImpl<true, false> ( pRoot, tSetup, tCtx, uCount );
+	}
+	return CountFullTextDocsImpl<false> ( pRoot, tSetup, tCtx, uCount );
+}
+
+void PushFullTextCount ( uint64_t uCount, const VecTraits_T<ISphMatchSorter*> & dSorters, const CSphRowitem * pStatic, int iTag )
+{
+	// One aggregate row per worker, not one match per posting. Implicit group
+	// sorters already merge 64-bit @count through PushGrouped()/MoveTo().
+	if ( !uCount ) return;
+	for ( auto pSorter : dSorters )
+	{
+		const auto & tSchema = *pSorter->GetSchema();
+		CSphMatch tMatch;
+		tMatch.Reset ( tSchema.GetDynamicSize() );
+		tMatch.m_tRowID = 0;
+		tMatch.m_pStatic = pStatic;
+		tMatch.m_iTag = iTag;
+		tMatch.SetAttr ( tSchema.GetAttr("@count")->m_tLocator, uCount );
+		tMatch.SetAttr ( tSchema.GetAttr("@groupby")->m_tLocator, 1 );
+		pSorter->PushGrouped ( tMatch, true );
+	}
+}
+
 struct AtomPosQWord_fn
 {
 	bool operator () ( ISphQword * ) const { return true; }
@@ -1148,6 +1836,249 @@ static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwor
 	return pResult;
 }
 
+// Dedicated E1/5 exact phrase executor. It intersects primary containers and
+// verifies positional existence before exposing an exact-TF document to BM25A.
+class ExtE1Phrase_c final : public ExtNode_c
+{
+public:
+	struct Input_t { const XQKeyword_t * m_pWord; FieldMask_t m_dFields; bool m_bPhrase; };
+	ExtE1Phrase_c ( const CSphVector<Input_t> & dInput, int iField, const ISphQwordSetup & tSetup )
+		: ExtNode_c ( tSetup.m_iMaxTimer ), m_iField ( iField ), m_pStats ( tSetup.m_pStats )
+	{
+		m_dNodes.Resize ( dInput.GetLength() );
+		for ( int i=0; i<dInput.GetLength(); ++i )
+		{
+			m_dNodes[i].m_pQword = CreateQueryWord ( *dInput[i].m_pWord, tSetup );
+			m_dNodes[i].m_iAtomPos = m_dNodes[i].m_pQword->m_iAtomPos;
+			m_dNodes[i].m_bPhrase = dInput[i].m_bPhrase;
+		}
+		m_dCurrentMeta.Resize ( dInput.GetLength() );
+	}
+	~ExtE1Phrase_c() override
+	{
+		if ( m_bEnabled && getenv("MANTICORE_E1_RANK_TRACE") )
+			fprintf ( stderr, "E1_DIRECT_PHRASE terms=%d direct_candidates=%llu positional_docs_verified=%llu exact_phrase_matches=%llu phrase_occurrences_full=%llu hitlist_seeks=%llu decoded_positions_term0=%llu decoded_positions_term1=%llu existence_only_docs=%llu full_count_docs=%llu decoded_positions_existence_term0=%llu decoded_positions_existence_term1=%llu decoded_positions_full_term0=%llu decoded_positions_full_term1=%llu selected_meta_rows=%llu selected_meta_groups=%llu bound_lookup_hits=%llu bound_lookup_fallbacks=%llu dl_reads=%llu scored_rows=%llu pre_bound_rejects=%llu post_count_bound_rejects=%llu generic_hits_bypassed=%llu folded_hits_bypassed=%llu windows=%llu\n",
+				m_dNodes.GetLength(), (unsigned long long)m_uDirectCandidates,
+				(unsigned long long)m_uPositionalDocsVerified, (unsigned long long)m_uExactPhraseMatches,
+				(unsigned long long)m_uPhraseOccurrences,
+				(unsigned long long)m_uHitlistSeeks, (unsigned long long)m_dDecodedPositions[0],
+				(unsigned long long)m_dDecodedPositions[1], (unsigned long long)m_uExistenceOnlyDocs,
+				(unsigned long long)m_uFullCountDocs, (unsigned long long)m_dDecodedPositionsByMode[0][0],
+				(unsigned long long)m_dDecodedPositionsByMode[0][1], (unsigned long long)m_dDecodedPositionsByMode[1][0],
+				(unsigned long long)m_dDecodedPositionsByMode[1][1],
+				(unsigned long long)m_uSelectedMetaRows, (unsigned long long)m_uSelectedMetaGroups,
+				(unsigned long long)m_uBoundLookupHits, (unsigned long long)m_uBoundLookupFallbacks,
+				(unsigned long long)(m_uExactPhraseMatches-m_uEarlyBoundRejects-m_uPostCountBoundRejects), (unsigned long long)(m_uExactPhraseMatches-m_uEarlyBoundRejects-m_uPostCountBoundRejects),
+				(unsigned long long)m_uEarlyBoundRejects, (unsigned long long)m_uPostCountBoundRejects,
+				(unsigned long long)m_uExactPhraseMatches, (unsigned long long)m_uExactPhraseMatches,
+				(unsigned long long)m_uWindows );
+		for ( auto & tNode : m_dNodes ) SafeDelete ( tNode.m_pQword );
+	}
+	bool EnableE1Ranked() override
+	{
+		if ( m_bEnabled ) return true;
+		if ( m_dNodes.GetLength()<2 || m_dNodes.GetLength()>3 ) return false;
+		uint32_t uLast = UINT32_MAX;
+		for ( int i=0; i<m_dNodes.GetLength(); ++i )
+		{
+			Node_t & tNode=m_dNodes[i];
+			if ( !tNode.m_pQword->E1DirectOrSupported() ) return false;
+			uint32_t uTermLast=0; if ( !tNode.m_pQword->GetE1DirectLastWindow(uTermLast) ) return false;
+			uLast = uLast==UINT32_MAX ? uTermLast : Min(uLast,uTermLast);
+			if ( tNode.m_bPhrase ) { if(m_iPhrase[0]<0)m_iPhrase[0]=i;else if(m_iPhrase[1]<0)m_iPhrase[1]=i;else return false; }
+			for ( int j=0; j<i; ++j ) if ( tNode.m_pQword->m_sWord==m_dNodes[j].m_pQword->m_sWord ) return false;
+		}
+		if ( m_iPhrase[1]<0 ) return false;
+		if ( m_dNodes[m_iPhrase[0]].m_iAtomPos>m_dNodes[m_iPhrase[1]].m_iAtomPos ) Swap(m_iPhrase[0],m_iPhrase[1]);
+		m_iPhraseDelta=m_dNodes[m_iPhrase[1]].m_iAtomPos-m_dNodes[m_iPhrase[0]].m_iAtomPos; if(m_iPhraseDelta<=0)return false;
+		m_dCanonical.Resize(m_dNodes.GetLength()); for(int i=0;i<m_dNodes.GetLength();++i)m_dCanonical[i]=i;
+		std::sort(m_dCanonical.Begin(),m_dCanonical.End(),[this](int a,int b){return m_dNodes[a].m_iAtomPos<m_dNodes[b].m_iAtomPos;});
+		for(int i=0;i<m_dCanonical.GetLength();++i)if(m_dNodes[m_dCanonical[i]].m_iAtomPos!=i+1)return false;
+		m_uLastWindow=uLast; m_bEnabled=true; return true;
+	}
+	bool EnableE1BestFirst() override { return m_bEnabled; }
+	void SetRankThreshold ( int iWeight, RowID_t tWorstRow ) override { m_iRankThreshold=iWeight; m_tWorstTiedRow=tWorstRow; }
+	uint64_t TakeRankSkippedDocs() override { const uint64_t uSkipped=m_uSkippedMatches; m_uSkippedMatches=0; return uSkipped; }
+	const ExtDoc_t * GetDocsChunk() override
+	{
+		while(m_iPending>=m_dPending.GetLength()){if(!FillWindow())return nullptr;if(m_dPending.IsEmpty())continue;}
+		int n=0;while(n<MAX_BLOCK_DOCS-1&&m_iPending<m_dPending.GetLength())m_dDocs[n++]=m_dPending[m_iPending++];
+		if(m_pStats)m_pStats->m_iFetchedDocs+=n;return ReturnDocsChunk(n,"e1-phrase");
+	}
+	void Reset ( const ISphQwordSetup & tSetup ) override
+	{
+		m_uWindow=0;m_iPending=0;m_dPending.Resize(0);SetMaxTimeout(tSetup.m_iMaxTimer);
+		for(auto & n:m_dNodes){n.m_pQword->Reset();tSetup.QwordSetup(n.m_pQword);}
+	}
+	void HintRowID(RowID_t) override {}
+	bool GotHitless() override { return false; }
+	int GetDocsCount() const override { int n=INT_MAX;for(const auto & x:m_dNodes)n=Min(n,x.m_pQword->m_iDocs);return n; }
+	uint64_t GetWordID() const override
+	{
+		CSphVector<uint64_t> d(m_dNodes.GetLength());for(int i=0;i<m_dNodes.GetLength();++i)d[i]=m_dNodes[i].m_pQword->m_uWordID?m_dNodes[i].m_pQword->m_uWordID:sphFNV64(m_dNodes[i].m_pQword->m_sDictWord.cstr());return sphFNV64(d.Begin(),d.GetLengthBytes());
+	}
+	NodeEstimate_t Estimate(int64_t) const override { return {float(GetDocsCount())*COST_SCALE*60.0f,GetDocsCount(),m_dNodes.GetLength()}; }
+	void SetRowidBoundaries(const RowIdBoundaries_t &) override {}
+	void SetCollectHits() override {}
+	void DebugDump(int iLevel) override { DebugIndent(iLevel);printf("ExtE1Phrase\n"); }
+	int GetQwords(ExtQwordsHash_t & h) override
+	{
+		int mx=-1;for(auto & n:m_dNodes){n.m_fIDF=0.0f;ExtQword_t * p=h(n.m_pQword->m_sWord);if(p&&!p->m_bExcluded)p->m_iQueryPos=Min(p->m_iQueryPos,n.m_iAtomPos);if(!p){n.m_fIDF=-1.0f;ExtQword_t q;q.m_sWord=n.m_pQword->m_sWord;q.m_sDictWord=n.m_pQword->m_sDictWord;q.m_iDocs=n.m_pQword->m_iDocs;q.m_iHits=n.m_pQword->m_iHits;q.m_iQueryPos=n.m_iAtomPos;q.m_fIDF=-1.0f;q.m_fBoost=n.m_pQword->m_fBoost;q.m_bExpanded=n.m_pQword->m_bExpanded;q.m_bExcluded=n.m_pQword->m_bExcluded;h.Add(q,n.m_pQword->m_sWord);}mx=Max(mx,n.m_iAtomPos);}return mx;
+	}
+	void SetQwordsIDF(const ExtQwordsHash_t & h) override
+	{
+		float dIDF[3] {}; int dCanonical[3] {}; bool dPhrase[3] {};
+		for ( int i=0; i<m_dNodes.GetLength(); ++i )
+		{
+			m_dNodes[i].m_fIDF=h[m_dNodes[i].m_pQword->m_sWord].m_fIDF;
+			dIDF[i]=m_dNodes[i].m_fIDF; dPhrase[i]=m_dNodes[i].m_bPhrase; dCanonical[i]=m_dCanonical[i];
+		}
+		m_tBoundLookup.Build(dIDF,dCanonical,dPhrase,m_dNodes.GetLength());
+	}
+	void GetTerms(const ExtQwordsHash_t & h,CSphVector<TermPos_t> & d) const override
+	{
+		for(const auto & n:m_dNodes){const ExtQword_t & q=h[n.m_pQword->m_sWord];TermPos_t & t=d.Add();t.m_uAtomPos=(WORD)n.m_iAtomPos;t.m_uQueryPos=(WORD)q.m_iQueryPos;}
+	}
+private:
+	void CollectHits ( const ExtDoc_t * ) override { m_dHits.Resize(0); }
+	static constexpr uint32_t E1_ROWS=4096;
+	struct Node_t { ISphQword * m_pQword=nullptr;int m_iAtomPos=0;float m_fIDF=0.0f;bool m_bPhrase=false; };
+	enum class PhraseVerifyMode_e { EXISTENCE_ONLY, FULL_COUNT };
+	uint32_t VerifyPhraseOccurrences ( PhraseVerifyMode_e eMode )
+	{
+		++m_uPositionalDocsVerified;
+		const int iMode = eMode==PhraseVerifyMode_e::EXISTENCE_ONLY ? 0 : 1;
+		if ( eMode==PhraseVerifyMode_e::EXISTENCE_ONLY ) ++m_uExistenceOnlyDocs; else ++m_uFullCountDocs;
+		const int iFirst = m_iPhrase[0];
+		const int iSecond = m_iPhrase[1];
+		ISphQword * pFirst = m_dNodes[iFirst].m_pQword;
+		ISphQword * pSecond = m_dNodes[iSecond].m_pQword;
+		pFirst->SeekHitlist ( m_dCurrentMeta[iFirst].m_uRef );
+		pSecond->SeekHitlist ( m_dCurrentMeta[iSecond].m_uRef );
+		m_uHitlistSeeks += 2;
+
+		// The generic phrase node emits one folded span hit for every non-overlapping
+		// occurrence. The expression ranker expands each span to both query positions,
+		// so BM25A sees phrase-occurrence frequency for both phrase qwords, not their
+		// primary-posting TF. Reproduce that stream semantically without materializing
+		// folded hits. Advancing both cursors after a match mirrors FSMphrase_c::ResetFSM.
+		Hitpos_t uFirst = pFirst->GetNextHit();
+		Hitpos_t uSecond = pSecond->GetNextHit();
+		auto CountDecoded = [this,iMode] ( int iTerm ) { ++m_dDecodedPositions[iTerm]; ++m_dDecodedPositionsByMode[iMode][iTerm]; };
+		if ( uFirst!=EMPTY_HIT ) CountDecoded(0);
+		if ( uSecond!=EMPTY_HIT ) CountDecoded(1);
+		uint32_t uOccurrences = 0;
+		while ( uFirst!=EMPTY_HIT && uSecond!=EMPTY_HIT )
+		{
+			if ( HITMAN::GetField(uFirst)!=m_iField )
+			{
+				uFirst = pFirst->GetNextHit();
+				if ( uFirst!=EMPTY_HIT ) CountDecoded(0);
+				continue;
+			}
+			if ( HITMAN::GetField(uSecond)!=m_iField )
+			{
+				uSecond = pSecond->GetNextHit();
+				if ( uSecond!=EMPTY_HIT ) CountDecoded(1);
+				continue;
+			}
+
+			const DWORD uFirstPos = HITMAN::GetPosWithField ( uFirst );
+			const DWORD uSecondPos = HITMAN::GetPosWithField ( uSecond );
+			const DWORD uWanted = uFirstPos + DWORD(m_iPhraseDelta);
+			if ( uSecondPos<uWanted )
+			{
+				uSecond = pSecond->GetNextHit();
+				if ( uSecond!=EMPTY_HIT ) CountDecoded(1);
+				continue;
+			}
+			if ( uSecondPos>uWanted )
+			{
+				uFirst = pFirst->GetNextHit();
+				if ( uFirst!=EMPTY_HIT ) CountDecoded(0);
+				continue;
+			}
+
+			++uOccurrences;
+			if ( eMode==PhraseVerifyMode_e::EXISTENCE_ONLY )
+				return uOccurrences;
+			uFirst = pFirst->GetNextHit();
+			uSecond = pSecond->GetNextHit();
+			if ( uFirst!=EMPTY_HIT ) CountDecoded(0);
+			if ( uSecond!=EMPTY_HIT ) CountDecoded(1);
+		}
+		m_uPhraseOccurrences += uOccurrences;
+		return uOccurrences;
+	}
+	bool PreOccurrenceScoreCanImprove ( RowID_t tRowID )
+	{
+		if ( m_iRankThreshold<=0 )
+			return true;
+		const uint32_t uOccurrenceUpper = Min(m_dCurrentMeta[m_iPhrase[0]].m_uTF,m_dCurrentMeta[m_iPhrase[1]].m_uTF);
+		return ScoreCanImprove ( uOccurrenceUpper, tRowID );
+	}
+	bool ScoreCanImprove ( uint32_t uOccurrences, RowID_t tRowID )
+	{
+		uint32_t uMandatory = 0;
+		for ( int i=0; i<m_dNodes.GetLength(); ++i )
+			if ( !m_dNodes[i].m_bPhrase ) { uMandatory=m_dCurrentMeta[i].m_uTF; break; }
+		bool bHit = false;
+		const int iUpperWeight = m_tBoundLookup.Weight(uOccurrences,uMandatory,bHit);
+		if ( bHit ) ++m_uBoundLookupHits; else ++m_uBoundLookupFallbacks;
+		return !E1TieAwareBoundReject ( iUpperWeight, uint64_t(tRowID), m_iRankThreshold, uint64_t(m_tWorstTiedRow) );
+	}
+	bool FillWindow()
+	{
+		m_dPending.Resize(0);m_iPending=0;
+		while(m_uWindow<=m_uLastWindow)
+		{
+			uint32_t win=m_uWindow++;++m_uWindows;std::array<uint64_t,64> both;both.fill(~uint64_t(0));bool all=true;
+			for(auto & n:m_dNodes){std::array<uint64_t,64> bits{};uint32_t card=0,maxTF=0;uint64_t reads=0;if(!n.m_pQword->GetE1DirectWindow(win,bits.data(),nullptr,card,maxTF,reads)){all=false;break;}for(int w=0;w<64;++w)both[w]&=bits[w];}
+			if(!all)continue;uint64_t candidates=0;for(uint64_t x:both)candidates+=__builtin_popcountll(x);if(!candidates)continue;m_uDirectCandidates+=candidates;
+			for(int i=0;i<m_dNodes.GetLength();++i){uint64_t requested=0;if(!m_dNodes[i].m_pQword->BeginE1SelectedMeta(win,both.data(),requested)||requested!=candidates)return false;}
+			for(uint64_t iCandidate=0;iCandidate<candidates;++iCandidate)
+			{
+				uint32_t local=UINT32_MAX;
+				for(int i=0;i<m_dNodes.GetLength();++i){uint64_t decoded=0;if(!m_dNodes[i].m_pQword->NextE1SelectedMeta(m_dCurrentMeta[i],decoded))return false;m_uSelectedMetaGroups+=decoded;++m_uSelectedMetaRows;if(i==0)local=m_dCurrentMeta[i].m_uLocal;else if(local!=m_dCurrentMeta[i].m_uLocal)return false;}
+				bool field=true;for(int i=0;i<m_dNodes.GetLength();++i)if(!(m_dCurrentMeta[i].m_uMask&(uint32_t(1)<<m_iField))){field=false;break;}if(!field)continue;const RowID_t row=RowID_t(win*E1_ROWS+local);const bool bEarlyCanImprove=PreOccurrenceScoreCanImprove(row);const uint32_t occurrences=VerifyPhraseOccurrences(bEarlyCanImprove ? PhraseVerifyMode_e::FULL_COUNT : PhraseVerifyMode_e::EXISTENCE_ONLY);if(!occurrences)continue;++m_uExactPhraseMatches;if(!bEarlyCanImprove){++m_uSkippedMatches;++m_uEarlyBoundRejects;continue;}if(!ScoreCanImprove(occurrences,row)){++m_uSkippedMatches;++m_uPostCountBoundRejects;continue;}
+				ExtDoc_t & doc=m_dPending.Add();doc.m_tRowID=row;doc.m_uDocFields=uint32_t(1)<<m_iField;doc.m_fTFIDF=0.0f;doc.m_uExactTF=0;doc.m_uExactTerms=BYTE(m_dNodes.GetLength());doc.m_bExactOr=0;for(int c=0;c<m_dCanonical.GetLength();++c){const int node=m_dCanonical[c];doc.m_dExactTF[c]=m_dNodes[node].m_bPhrase?occurrences:m_dCurrentMeta[node].m_uTF;}
+			}
+			return true;
+		}
+		return false;
+	}
+	CSphVector<Node_t> m_dNodes;CSphVector<int> m_dCanonical;CSphVector<ExtDoc_t> m_dPending;CSphVector<E1SelectedMeta_t> m_dCurrentMeta;E1PhraseBoundLookup_c m_tBoundLookup;
+	int m_iField=0,m_iPhrase[2]{-1,-1},m_iPhraseDelta=0,m_iPending=0,m_iRankThreshold=0;uint32_t m_uWindow=0,m_uLastWindow=UINT32_MAX;RowID_t m_tWorstTiedRow=INVALID_ROWID;bool m_bEnabled=false;CSphQueryStats * m_pStats=nullptr;
+	uint64_t m_uDirectCandidates=0,m_uPositionalDocsVerified=0,m_uExactPhraseMatches=0,m_uPhraseOccurrences=0,m_uHitlistSeeks=0,m_dDecodedPositions[2]{},m_dDecodedPositionsByMode[2][2]{},m_uExistenceOnlyDocs=0,m_uFullCountDocs=0,m_uSelectedMetaRows=0,m_uSelectedMetaGroups=0,m_uBoundLookupHits=0,m_uBoundLookupFallbacks=0,m_uWindows=0,m_uSkippedMatches=0,m_uEarlyBoundRejects=0,m_uPostCountBoundRejects=0;
+};
+
+static bool E1OneExplicitField(const XQNode_t * pNode,int & field)
+{
+	if(!pNode->m_dSpec.m_bFieldSpec)return false;const FieldMask_t & f=pNode->m_dSpec.m_dFieldMask;for(int i=1;i<FieldMask_t::SIZE;++i)if(f[i])return false;uint32_t mask=f.GetMask32();if(!mask||(mask&(mask-1)))return false;field=__builtin_ctz(mask);return true;
+}
+
+static bool E1ExactTwoTermPhrase ( const XQNode_t * pNode )
+{
+	if ( pNode->GetOp()!=SPH_QUERY_PHRASE || pNode->dWords().GetLength()!=0 || pNode->dChildren().GetLength()!=2 ) return false;
+	for ( const XQNode_t * pChild : pNode->dChildren() )
+		if ( pChild->dWords().GetLength()!=1 || !pChild->dChildren().IsEmpty() ) return false;
+	return true;
+}
+
+static ExtNode_i * TryCreateE1Phrase(const XQNode_t * pNode,const ISphQwordSetup & setup,const RowIdBoundaries_t * bounds)
+{
+	if(!setup.m_bE1RankedRequested||setup.m_tE1RankFilter.m_bEnabled||bounds)return nullptr;const XQNode_t * phrase=nullptr,*extra=nullptr;
+	if(E1ExactTwoTermPhrase(pNode))phrase=pNode;
+	else if(pNode->GetOp()==SPH_QUERY_AND&&pNode->dWords().IsEmpty()&&pNode->dChildren().GetLength()==2){for(const XQNode_t * c:pNode->dChildren())if(E1ExactTwoTermPhrase(c))phrase=c;else if(c->dWords().GetLength()==1&&c->dChildren().IsEmpty())extra=c;else return nullptr;if(!phrase||!extra)return nullptr;}else return nullptr;
+	int field=-1,other=-1;if(!E1OneExplicitField(phrase,field)||!E1FieldScopeCoversSchema(phrase->m_dSpec,setup))return nullptr;CSphVector<ExtE1Phrase_c::Input_t> input;
+	for(const XQNode_t * child:phrase->dChildren()){if(!E1OneExplicitField(child,other)||other!=field||!E1FieldScopeCoversSchema(child->m_dSpec,setup))return nullptr;const XQKeyword_t & word=child->dWord(0);if(word.m_bExpanded||word.m_bFieldStart||word.m_bFieldEnd||word.m_pPayload)return nullptr;for(const auto & prior:input)if(prior.m_pWord->m_sWord==word.m_sWord)return nullptr;auto & x=input.Add();x={&word,child->m_dSpec.m_dFieldMask,true};}
+	if(extra){if(!E1OneExplicitField(extra,other)||other!=field||!E1FieldScopeCoversSchema(extra->m_dSpec,setup))return nullptr;const XQKeyword_t & word=extra->dWord(0);if(word.m_bExpanded||word.m_bFieldStart||word.m_bFieldEnd||word.m_pPayload)return nullptr;for(const auto & prior:input)if(prior.m_pWord->m_sWord==word.m_sWord)return nullptr;auto & x=input.Add();x={&word,extra->m_dSpec.m_dFieldMask,false};}
+	auto pDirect = std::make_unique<ExtE1Phrase_c> ( input, field, setup );
+	if ( !pDirect->EnableE1Ranked() )
+		return nullptr;
+	return pDirect.release();
+}
+
 static ExtNode_i * CreateOrderNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25, const RowIdBoundaries_t * pBoundaries )
 {
 	if ( pNode->dChildren().GetLength()<2 )
@@ -1226,19 +2157,19 @@ static ExtNode_i * CreateHitlessNode ( ISphQword * pQword, const FieldMask_t & t
 }
 
 
-static ExtNode_i * CreateTermNode ( ISphQword * pQword, const FieldMask_t & tFieldMask, const ISphQwordSetup & tSetup, bool bNotWeighted, bool bUseBM25, bool bRowidLimits )
+static ExtNode_i * CreateTermNode ( ISphQword * pQword, const FieldMask_t & tFieldMask, const ISphQwordSetup & tSetup, bool bNotWeighted, bool bUseBM25, bool bRowidLimits, bool bFullSchemaScope )
 {
 	int iSwitch = 4*(bUseBM25?1:0) + 2*(bRowidLimits?1:0) + (tSetup.m_pStats?1:0);
 	switch ( iSwitch )
 	{
-	case 0:	return new ExtTerm_T<false, false, false>	( pQword, tFieldMask, tSetup, bNotWeighted );
-	case 1:	return new ExtTerm_T<false, false, true>	( pQword, tFieldMask, tSetup, bNotWeighted );
-	case 2:	return new ExtTerm_T<false, true,  false>	( pQword, tFieldMask, tSetup, bNotWeighted );
-	case 3:	return new ExtTerm_T<false, true,  true>	( pQword, tFieldMask, tSetup, bNotWeighted );
-	case 4:	return new ExtTerm_T<true,  false, false>	( pQword, tFieldMask, tSetup, bNotWeighted );
-	case 5:	return new ExtTerm_T<true,  false, true>	( pQword, tFieldMask, tSetup, bNotWeighted );
-	case 6:	return new ExtTerm_T<true,  true,  false>	( pQword, tFieldMask, tSetup, bNotWeighted );
-	case 7:	return new ExtTerm_T<true,  true,  true>	( pQword, tFieldMask, tSetup, bNotWeighted );
+	case 0:	return new ExtTerm_T<false, false, false>	( pQword, tFieldMask, tSetup, bNotWeighted, bFullSchemaScope );
+	case 1:	return new ExtTerm_T<false, false, true>	( pQword, tFieldMask, tSetup, bNotWeighted, bFullSchemaScope );
+	case 2:	return new ExtTerm_T<false, true,  false>	( pQword, tFieldMask, tSetup, bNotWeighted, bFullSchemaScope );
+	case 3:	return new ExtTerm_T<false, true,  true>	( pQword, tFieldMask, tSetup, bNotWeighted, bFullSchemaScope );
+	case 4:	return new ExtTerm_T<true,  false, false>	( pQword, tFieldMask, tSetup, bNotWeighted, bFullSchemaScope );
+	case 5:	return new ExtTerm_T<true,  false, true>	( pQword, tFieldMask, tSetup, bNotWeighted, bFullSchemaScope );
+	case 6:	return new ExtTerm_T<true,  true,  false>	( pQword, tFieldMask, tSetup, bNotWeighted, bFullSchemaScope );
+	case 7:	return new ExtTerm_T<true,  true,  true>	( pQword, tFieldMask, tSetup, bNotWeighted, bFullSchemaScope );
 	default:
 		assert ( 0 && "Internal error" );
 		return nullptr;
@@ -1270,7 +2201,7 @@ static ExtNode_i * CreateMultiAndNode ( const VecTraits_T<XQNode_t*> & dXQNodes,
 {
 	bool bNeedFieldSpec = false;
 	for ( const auto & i : dXQNodes )
-		bNeedFieldSpec |= !i->m_dSpec.m_dFieldMask.TestAll(true);
+		bNeedFieldSpec |= !E1FieldScopeCoversSchema ( i->m_dSpec, tSetup );
 
 	int iSwitch = 4*(bUseBM25?1:0) + 2*(bNeedFieldSpec?1:0) + (bRowidLimits?1:0);
 	switch ( iSwitch )
@@ -1287,6 +2218,23 @@ static ExtNode_i * CreateMultiAndNode ( const VecTraits_T<XQNode_t*> & dXQNodes,
 		assert ( 0 && "Internal error" );
 		return nullptr;
 	}
+}
+
+
+static ExtNode_i * CreateMultiOrNode ( const VecTraits_T<XQNode_t*> & dXQNodes, const ISphQwordSetup & tSetup, bool bUseBM25 )
+{
+	// This node has AND behavior outside its direct E1 implementation. Do not
+	// install it merely because the parsed shape is eligible: a sparse child has
+	// no direct container representation and must keep the generic ExtOr tree.
+	const bool bNeedFieldSpec = dXQNodes.any_of ( [&tSetup] ( const XQNode_t * pNode ) { return !E1FieldScopeCoversSchema ( pNode->m_dSpec, tSetup ); } );
+	std::unique_ptr<ExtNode_i> pDirect;
+	if ( bUseBM25 )
+		pDirect.reset ( bNeedFieldSpec ? static_cast<ExtNode_i*>(new ExtMultiAnd_T<true, true, false> ( dXQNodes, tSetup, true )) : static_cast<ExtNode_i*>(new ExtMultiAnd_T<true, false, false> ( dXQNodes, tSetup, true )) );
+	else
+		pDirect.reset ( bNeedFieldSpec ? static_cast<ExtNode_i*>(new ExtMultiAnd_T<false, true, false> ( dXQNodes, tSetup, true )) : static_cast<ExtNode_i*>(new ExtMultiAnd_T<false, false, false> ( dXQNodes, tSetup, true )) );
+	if ( !pDirect->EnableE1Ranked() )
+		return nullptr;
+	return pDirect.release();
 }
 
 
@@ -1315,7 +2263,7 @@ ExtNode_i * ExtNode_i::Create ( ISphQword * pQword, const XQNode_t * pNode, cons
 		case TERM_POS_FIELD_END:		return CreateTermposNode<TERM_POS_FIELD_END> ( pQword, pNode, tSetup, bUseBM25, bRowidLimits );
 		case TERM_POS_FIELD_LIMIT:		return CreateTermposNode<TERM_POS_FIELD_LIMIT> ( pQword, pNode, tSetup, bUseBM25, bRowidLimits );
 		case TERM_POS_ZONES:			return CreateTermposNode<TERM_POS_ZONES> ( pQword, pNode, tSetup, bUseBM25, bRowidLimits );
-		default:						return CreateTermNode ( pQword, pNode->m_dSpec.m_dFieldMask, tSetup, pNode->m_bNotWeighted, bUseBM25, bRowidLimits );
+		default:						return CreateTermNode ( pQword, pNode->m_dSpec.m_dFieldMask, tSetup, pNode->m_bNotWeighted, bUseBM25, bRowidLimits, E1FieldScopeCoversSchema ( pNode->m_dSpec, tSetup ) );
 	}
 }
 
@@ -1846,6 +2794,11 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 	if ( pNode->IsEmpty() && pNode->GetOp()!=SPH_QUERY_SCAN )
 		return nullptr;
 
+	// Install the dedicated positional physical plan before generic phrase/AND
+	// construction. Unsupported shapes return nullptr and keep the exact fallback.
+	if ( ExtNode_i * pE1Phrase = TryCreateE1Phrase ( pNode, tSetup, pBoundaries ) )
+		return pE1Phrase;
+
 	bool bRowidLimits = !!pBoundaries;
 
 	if ( pNode->GetOp()==SPH_QUERY_SCAN )
@@ -1939,6 +2892,27 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 	{
 		int iChildren = pNode->dChildren().GetLength ();
 		assert ( iChildren>0 );
+
+		// Dedicated physical flat OR; never install it for a query that can need
+		// generic hit/factor finalization.
+		bool bE1OrTerms = tSetup.m_bE1RankedRequested && pNode->GetOp()==SPH_QUERY_OR && ( iChildren==2 || iChildren==4 );
+		for ( int i=0; i<iChildren && bE1OrTerms; ++i )
+		{
+			const XQNode_t * pChild = pNode->dChildren()[i];
+			bE1OrTerms = pChild->dWords().GetLength()==1 && pChild->dChildren().IsEmpty()
+				&& !pChild->dWord(0).m_bFieldStart && !pChild->dWord(0).m_bFieldEnd && !pChild->dWord(0).m_pPayload
+				&& !pChild->m_dSpec.m_iFieldMaxPos && pChild->m_dSpec.m_dZones.IsEmpty();
+			if ( !bE1OrTerms || E1FieldScopeCoversSchema ( pChild->m_dSpec, tSetup ) )
+				continue;
+			const int iField = E1ScopedSingleField ( E1SchemaFieldCount(tSetup), false, pChild->m_dSpec.m_dFieldMask.GetMask32() );
+			if ( iChildren!=2 || iField<0 )
+				bE1OrTerms = false;
+		}
+		if ( bE1OrTerms )
+		{
+			if ( ExtNode_i * pDirectOr = CreateMultiOrNode ( pNode->dChildren(), tSetup, bUseBM25 ) )
+				return pDirectOr;
+		}
 
 		// special case, operator BEFORE
 		if ( pNode->GetOp ()==SPH_QUERY_BEFORE )
@@ -2061,11 +3035,15 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 //////////////////////////////////////////////////////////////////////////
 
 template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
-inline void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::Init ( ISphQword * pQword, const FieldMask_t & tFields, const ISphQwordSetup & tSetup, bool bNotWeighted )
+inline void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::Init ( ISphQword * pQword, const FieldMask_t & tFields, const ISphQwordSetup & tSetup, bool bNotWeighted, bool bFullSchemaScope )
 {
 	m_pQword = pQword;
 	m_pWarning = tSetup.m_pWarning;
 	m_bNotWeighted = bNotWeighted;
+	m_tE1Filter = tSetup.m_tE1RankFilter;
+	m_bE1RowidDocidOrder = tSetup.m_bE1RowidDocidOrder;
+	m_bE1FullSchemaScope = bFullSchemaScope;
+	m_iE1SchemaFields = E1SchemaFieldCount ( tSetup );
 	m_iAtomPos = pQword->m_iAtomPos;
 	m_dQueriedFields = tFields;
 	m_bHasWideFields = false;
@@ -2085,7 +3063,10 @@ template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
 ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::ExtTerm_T ( ISphQword * pQword, const ISphQwordSetup & tSetup )
 	: m_pQword ( pQword )
 	, m_pWarning ( tSetup.m_pWarning )
+	, m_tE1Filter ( tSetup.m_tE1RankFilter )
 {
+	m_bE1FullSchemaScope = E1SchemaFieldCount(tSetup)>0;
+	m_iE1SchemaFields = E1SchemaFieldCount ( tSetup );
 	m_iAtomPos = pQword->m_iAtomPos;
 	m_dQueriedFields.SetAll();
 	m_bHasWideFields = tSetup.m_bHasWideFields;
@@ -2096,6 +3077,82 @@ ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::ExtTerm_T ( ISphQword * pQword, const IS
 		m_pStats = tSetup.m_pStats;
 	}
 }
+
+template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
+uint32_t ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::CountE1FieldTF ( uint64_t uRef )
+{
+	m_pQword->SeekHitlist ( uRef );
+	++m_uE1ScopedHitlistSeeks;
+	uint32_t uTF = 0;
+	for ( Hitpos_t uHit=m_pQword->GetNextHit(); uHit!=EMPTY_HIT; uHit=m_pQword->GetNextHit() )
+	{
+		++m_uE1ScopedPositionsDecoded;
+		if ( int(HITMAN::GetField(uHit))==m_iE1ScopedField )
+			++uTF;
+	}
+	return uTF;
+}
+
+
+template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
+bool ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::BuildE1ScopedEligibility()
+{
+	uint32_t uLastWindow = 0;
+	if ( !m_pQword->E1DirectOrSupported() || !m_pQword->GetE1DirectLastWindow(uLastWindow) )
+		return false;
+	const uint64_t uRows = (uint64_t(uLastWindow)+1)*4096;
+	const uint64_t uBitmapWords = (uRows+63)/64;
+	const uint64_t uScratchBytes = uRows*sizeof(uint32_t)+uBitmapWords*sizeof(uint64_t);
+	if ( uRows>INT_MAX || uBitmapWords>INT_MAX || uScratchBytes>64*1024*1024 )
+		return false;
+
+	m_dE1ScopedTF.Resize ( int(uRows) );
+	// Eligibility is the initialization bitmap: every set bit gets its exact TF
+	// below, and ranked lookup reads TF only after testing that bit. Avoid
+	// clearing the entire row-space array for sparse field scopes.
+	m_dE1ScopedEligibility.Resize ( int(uBitmapWords) );
+	m_dE1ScopedEligibility.Fill ( 0 );
+	m_dE1ScopedWindowMask.Resize ( 64 );
+	const uint32_t uRequestedMask = uint32_t(1)<<m_iE1ScopedField;
+	const int64_t iStarted = sphMicroTimer();
+	uint64_t uIgnoredBoundReads = 0;
+	for ( uint32_t uWindow=0; uWindow<=uLastWindow; ++uWindow )
+	{
+		m_dE1ScopedWindowMask.Fill ( 0 );
+		uint32_t uCardinality = 0, uMaxTF = 0;
+		if ( !m_pQword->GetE1DirectWindow ( uWindow, m_dE1ScopedWindowMask.Begin(), nullptr, uCardinality, uMaxTF, uIgnoredBoundReads ) )
+			continue;
+		m_uE1ScopedMembershipChecks += uCardinality;
+		uint64_t uRequested = 0;
+		if ( !m_pQword->BeginE1SelectedMeta ( uWindow, m_dE1ScopedWindowMask.Begin(), uRequested ) )
+			return false;
+		E1SelectedMeta_t tMeta;
+		while ( m_pQword->NextE1SelectedMeta ( tMeta, m_uE1ScopedMetadataGroups, m_iE1ScopedField ) )
+		{
+			m_uE1ScopedAggregateTF += tMeta.m_uTF;
+			if ( !(tMeta.m_uMask&uRequestedMask) )
+				continue;
+			uint32_t uDecodedTF = tMeta.m_uScopedTF;
+			if ( tMeta.m_uMask!=uRequestedMask && uDecodedTF )
+				++m_uE1ScopedFieldTFMetadataHits;
+			else if ( tMeta.m_uMask!=uRequestedMask )
+			{
+				++m_uE1ScopedFieldTFDecodes;
+				uDecodedTF = CountE1FieldTF ( tMeta.m_uRef );
+			}
+			const uint32_t uTF = E1ScopedExactTF ( tMeta.m_uTF, tMeta.m_uMask, m_iE1ScopedField, uDecodedTF );
+			if ( !uTF || !E1ScopedAggregateBoundSafe(uTF,tMeta.m_uTF) )
+				continue;
+			const uint32_t uRow = uWindow*4096+tMeta.m_uLocal;
+			m_dE1ScopedTF[uRow] = uTF;
+			m_dE1ScopedEligibility[uRow/64] |= uint64_t(1)<<(uRow%64);
+			++m_uE1ScopedTotal;
+		}
+	}
+	m_iE1EligibilityBuildUS = sphMicroTimer()-iStarted;
+	return true;
+}
+
 
 template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
 void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::Reset ( const ISphQwordSetup & tSetup )
@@ -2141,6 +3198,8 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 
 	StoredHit_t * pStoredHit = nullptr;
 	StoredHit_t * pFirstHit = nullptr;
+	if ( m_bE1Ranked )
+		m_dStoredHits.Resize(0); // each arbitrary bound-priority batch is normalized independently
 	if ( m_bCollectHits )
 	{
 		int iLength = m_dStoredHits.GetLength();
@@ -2150,9 +3209,74 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 	}
 
 	int iDoc = 0;
-	while ( iDoc<MAX_BLOCK_DOCS-1 )
+	uint32_t uMinTF = 0;
+	uint32_t uEqualBoundTF = 0;
+	if ( m_bE1Ranked && m_iRankThreshold>0 && m_fIDF>0.0f )
 	{
-		const CSphMatch & tMatch = m_pQword->GetNextDoc();
+		// dl>=0, therefore k1*(1-b+b*dl/256)>=0.3 for the
+		// supported k1=1.2,b=.75 expression.  This duplicates the ranker's
+		// float operations at dl=0, a true upper bound; integer conversion is
+		// the same truncation used by RankerState_Expr_fn::Finalize().
+		while ( uMinTF<0x00ffffffU )
+		{
+			++uMinTF;
+			float fUpper = 1000.0f * ( 0.5f + float(uMinTF)/(float(uMinTF)+0.3f)*m_fIDF );
+			if ( (int)fUpper>=m_iRankThreshold )
+			{
+				if ( (int)fUpper==m_iRankThreshold )
+					uEqualBoundTF = uMinTF;
+				break;
+			}
+		}
+		if ( uEqualBoundTF )
+		{
+			const int iSaturatedUpper = (int)(1000.0f*(0.5f+m_fIDF));
+			if ( iSaturatedUpper==m_iRankThreshold )
+				uEqualBoundTF = UINT32_MAX;
+			else
+				while ( uEqualBoundTF<254 )
+				{
+					const uint32_t uNext = uEqualBoundTF+1;
+					const float fUpper = 1000.0f * ( 0.5f + float(uNext)/(float(uNext)+0.3f)*m_fIDF );
+					if ( (int)fUpper!=m_iRankThreshold )
+						break;
+					uEqualBoundTF = uNext;
+				}
+		}
+	}
+	else if ( m_bE1Ranked && m_iRankThreshold==500 && m_fIDF<=0.0f )
+		uEqualBoundTF = UINT32_MAX;
+	// The first native-sized ranker chunk is already drawn from highest-bound blocks;
+	// later chunks continue by bound priority using the exact live top-K threshold.
+	const int iRankBatchLimit = MAX_BLOCK_DOCS-1;
+	while ( iDoc<iRankBatchLimit )
+	{
+		CSphMatch tRankedMatch;
+		const CSphMatch * pMatch = nullptr;
+		RowID_t tRankedRow = INVALID_ROWID;
+		uint32_t uRankedTF = 0;
+		if ( m_bE1Ranked )
+		{
+			const bool bScopedEligibility = m_bE1ScopedTerm;
+			const bool bFilterEligibility = m_tE1Filter.m_bEnabled;
+			const uint64_t * pEligibility = bScopedEligibility ? m_dE1ScopedEligibility.Begin() : ( bFilterEligibility ? m_dE1Eligibility.Begin() : nullptr );
+			const uint32_t uEligibilityWords = bScopedEligibility ? uint32_t(m_dE1ScopedEligibility.GetLength()) : ( bFilterEligibility ? uint32_t(m_dE1Eligibility.GetLength()) : 0 );
+			uint64_t * pIneligibleBeforeTF = (bScopedEligibility || bFilterEligibility) ? &m_uE1IneligibleBeforeTF : nullptr;
+			const uint32_t uKnownMask = bScopedEligibility ? uint32_t(1)<<m_iE1ScopedField : 0;
+			if ( !m_pQword->GetE1RankedDoc ( uMinTF, tRankedRow, uRankedTF, m_uRankBoundEntries, m_uRankBuckets, m_uRankSelectedBlocks, m_uRankSkippedBlocks, m_uRankSkippedDocs, m_uRankDecodedGroups, pEligibility, uEligibilityWords, pIneligibleBeforeTF, uEqualBoundTF, m_tRankWorstRow, uKnownMask ) )
+			{
+				m_bE1RankFinished = true;
+				m_pQword->m_iDocs = 0;
+				break;
+			}
+			if ( bScopedEligibility )
+				uRankedTF = m_dE1ScopedTF[tRankedRow];
+			tRankedMatch.m_tRowID = tRankedRow;
+			++m_uRankScored;
+			pMatch = &tRankedMatch;
+		} else
+			pMatch = &m_pQword->GetNextDoc();
+		const CSphMatch & tMatch = *pMatch;
 		if constexpr ( ROWID_LIMITS )
 		{
 			if ( tMatch.m_tRowID<m_tBoundaries.m_tMinRowID )
@@ -2190,6 +3314,7 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 		ExtDoc_t & tDoc = m_dDocs[iDoc++];
 		tDoc.m_tRowID = tMatch.m_tRowID;
 		tDoc.m_uDocFields = m_pQword->m_dQwordFields.GetMask32() & m_dQueriedFields.GetMask32(); // OPTIMIZE: only needed for phrase node
+		tDoc.m_uExactTF = m_bE1Ranked ? uRankedTF : 0;
 
 		if_const ( USE_BM25 )
 			tDoc.m_fTFIDF = float(m_pQword->m_uMatchHits) / float(m_pQword->m_uMatchHits+SPH_BM25_K1) * m_fIDF;
@@ -2204,8 +3329,17 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 		}
 	}
 
+	// SortRankedBatch: the cursor is bound-priority, while the existing hit/ranker
+	// contract is row-monotone. Normalize each decoded batch before exposing it.
+	if ( m_bE1Ranked && iDoc>1 )
+		std::sort ( m_dDocs, m_dDocs+iDoc, [] ( const ExtDoc_t & a, const ExtDoc_t & b ) { return a.m_tRowID<b.m_tRowID; } );
+
 	if ( m_bCollectHits )
+	{
 		m_dStoredHits.Resize ( pStoredHit-pFirstHit );
+		if ( m_bE1Ranked && m_dStoredHits.GetLength()>1 )
+			std::sort ( m_dStoredHits.Begin(), m_dStoredHits.End(), [] ( const StoredHit_t & a, const StoredHit_t & b ) { return a.m_tRowID<b.m_tRowID; } );
+	}
 
 	if constexpr ( STATS )
 	{
@@ -3054,10 +4188,14 @@ ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::HitWithQpos_t::HitWithQpos_t (
 {}
 
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::ExtMultiAnd_T ( const VecTraits_T<XQNode_t*> & dXQNodes, const ISphQwordSetup & tSetup )
+ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::ExtMultiAnd_T ( const VecTraits_T<XQNode_t*> & dXQNodes, const ISphQwordSetup & tSetup, bool bE1Or )
 	: ExtNode_c { tSetup.m_iMaxTimer }
 	, m_dWordIds ( dXQNodes.GetLength() )
 	, m_tQueue ( dXQNodes.GetLength() )
+	, m_bE1RowidDocidOrder ( tSetup.m_bE1RowidDocidOrder )
+	, m_bE1Or ( bE1Or )
+	, m_iE1SchemaFields ( E1SchemaFieldCount(tSetup) )
+	, m_tE1Filter ( tSetup.m_tE1RankFilter )
 {
 	m_dNodes.Resize ( dXQNodes.GetLength() );
 	ARRAY_FOREACH ( i, m_dNodes )
@@ -3071,6 +4209,7 @@ ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::ExtMultiAnd_T ( const VecTrait
 		tNode.m_uNodepos = (WORD)i;
 		tNode.m_bNotWeighted = tXQNode.m_bNotWeighted;
 		tNode.m_dQueriedFields = tXQNode.m_dSpec.m_dFieldMask;
+		tNode.m_bE1FullSchemaScope = E1FieldScopeCoversSchema ( tXQNode.m_dSpec, tSetup );
 		tNode.UpdateWideFieldFlag(tSetup);
 	}
 
@@ -3085,8 +4224,1078 @@ ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::ExtMultiAnd_T ( const VecTrait
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
 ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::~ExtMultiAnd_T()
 {
+	if ( m_bE1Ranked && getenv("MANTICORE_E1_RANK_TRACE") )
+		fprintf ( stderr, "%s terms=%d windows_total=%llu windows_pruned=%llu windows_scored=%llu boolean_matches=%llu intersection_windows=%llu intersection_mask_ops=%llu descriptors=%d best_first_windows_visited=%llu best_first_windows_skipped=%llu exact_union_total=%llu candidates_generated=%llu candidate_mask_rows=%llu surviving_mask_rows=%llu candidate_bound_rejects=%llu tie_bound_rejects=%llu candidate_words_examined=%llu bound_classes_rejected=%llu whole_words_rejected=%llu scalar_candidate_inspections=%llu candidates_scored=%llu essential_repartitions=%llu average_essential_terms=%.3f nonessential_probes=%llu nonessential_hits=%llu bitmap_ops=%llu sparse_seeks=%llu container_mask_ops=%llu bound_reads=%llu random_tf_probes=%llu batch_tf_rows_requested=%llu batch_tf_rows_written=%llu batch_metadata_groups_decoded=%llu tf_probes=%llu metadata_groups_decoded=%llu final_threshold=%d hitlist_seeks=0 decoded_positions=0 general_factor_finalizations=0\n",
+			m_bE1Or ? "E1_MULTI_OR" : "E1_MULTI_AND",
+			m_dNodes.GetLength(),
+			(unsigned long long)m_uE1WindowsTotal, (unsigned long long)m_uE1WindowsPruned,
+			(unsigned long long)m_uE1WindowsScored, (unsigned long long)m_uE1BooleanMatches,
+			(unsigned long long)m_uE1IntersectionWindows, (unsigned long long)m_uE1IntersectionMaskOps,
+			m_dE1OrWindows.GetLength(), (unsigned long long)m_uE1BestFirstVisited,
+			(unsigned long long)m_uE1BestFirstSkipped, (unsigned long long)m_uE1ExactUnionTotal,
+			(unsigned long long)m_uE1CandidatesGenerated, (unsigned long long)m_uE1CandidateMaskRows,
+			(unsigned long long)m_uE1CandidateMaskRows,
+			(unsigned long long)m_uE1CandidateBoundRejects, (unsigned long long)m_uE1TieBoundRejects,
+			(unsigned long long)m_uE1CandidateWordsExamined, (unsigned long long)m_uE1BoundClassesRejected,
+			(unsigned long long)m_uE1WholeWordsRejected, (unsigned long long)m_uE1ScalarCandidateInspections,
+			(unsigned long long)m_uE1CandidatesScored,
+			(unsigned long long)m_uE1EssentialRepartitions,
+			m_uE1EssentialRepartitions ? double(m_uE1EssentialTerms)/double(m_uE1EssentialRepartitions) : 0.0,
+			(unsigned long long)m_uE1NonessentialProbes, (unsigned long long)m_uE1NonessentialHits,
+			(unsigned long long)m_uE1BitmapOps, (unsigned long long)m_uE1SparseSeeks,
+			(unsigned long long)m_uE1ContainerOps, (unsigned long long)m_uE1BoundReads,
+			(unsigned long long)m_uE1RandomTFProbes,
+			(unsigned long long)m_uE1BatchTFRowsRequested, (unsigned long long)m_uE1BatchTFRowsWritten,
+			(unsigned long long)m_uE1BatchMetadataGroups,
+			(unsigned long long)m_uE1TFProbes, (unsigned long long)m_uE1MetadataGroups,
+			m_iE1FinalThreshold );
+	if ( m_bE1Ranked && m_tE1Filter.m_bEnabled && getenv("MANTICORE_E1_RANK_TRACE") )
+		fprintf ( stderr, "E1_FILTER_OR masks_built=%llu rows_examined=%llu candidates_before=%llu candidates_after=%llu tf_rows_requested=%llu dl_rows=%llu scored_rows=%llu generic_filter_bypass=1\n",
+			(unsigned long long)m_uE1FilterMasksBuilt, (unsigned long long)m_uE1FilterRowsExamined,
+			(unsigned long long)m_uE1FilterCandidatesBefore, (unsigned long long)m_uE1FilterCandidatesAfter,
+			(unsigned long long)m_uE1BatchTFRowsRequested, (unsigned long long)m_uE1CandidatesScored,
+			(unsigned long long)m_uE1CandidatesScored );
+	if ( m_bE1Ranked && m_bE1FusedAnd4 && getenv("MANTICORE_E1_RANK_TRACE") )
+		fprintf ( stderr, "E1_AND4_FUSED missing_window_short_circuits=%llu masks_fetched=%llu fused_words=%llu intersection_nonempty_words=%llu class_combinations=%llu coarse_rejects=%llu coarse_survivors=%llu bound_reads=%llu intersection_mask_ops=%llu\n",
+			(unsigned long long)m_uE1MissingWindowShortCircuits, (unsigned long long)m_uE1MasksFetched,
+			(unsigned long long)m_uE1FusedWords, (unsigned long long)m_uE1IntersectionNonemptyWords,
+			(unsigned long long)m_uE1ClassCombinations, (unsigned long long)m_uE1CoarseRejects,
+			(unsigned long long)m_uE1CoarseSurvivors, (unsigned long long)m_uE1BoundReads,
+			(unsigned long long)m_uE1IntersectionMaskOps );
+	if ( m_bE1Ranked && m_bE1StagedAnd4 && getenv("MANTICORE_E1_RANK_TRACE") )
+		fprintf ( stderr, "E1_AND4_STAGED stage0_input=%llu tf_probe_order=%d,%d,%d,%d stage1_rejects=%llu stage1_survivors=%llu stage1_batch_requested=%llu stage1_batch_written=%llu stage1_metadata_groups=%llu stage2_rejects=%llu stage2_survivors=%llu stage2_batch_requested=%llu stage2_batch_written=%llu stage2_metadata_groups=%llu stage3_rejects=%llu stage3_survivors=%llu stage3_batch_requested=%llu stage3_batch_written=%llu stage3_metadata_groups=%llu stage4_rejects=%llu stage4_survivors=%llu stage4_batch_requested=%llu stage4_batch_written=%llu stage4_metadata_groups=%llu final_all_term_survivors=%llu random_tf_probes=%llu\n",
+			(unsigned long long)m_uE1Stage0Input,
+			m_dNodes[m_dE1TFProbeOrder[0]].m_iAtomPos, m_dNodes[m_dE1TFProbeOrder[1]].m_iAtomPos,
+			m_dNodes[m_dE1TFProbeOrder[2]].m_iAtomPos, m_dNodes[m_dE1TFProbeOrder[3]].m_iAtomPos,
+			(unsigned long long)m_dE1StageRejects[0], (unsigned long long)m_dE1StageSurvivors[0], (unsigned long long)m_dE1StageBatchRequested[0], (unsigned long long)m_dE1StageBatchWritten[0], (unsigned long long)m_dE1StageMetadataGroups[0],
+			(unsigned long long)m_dE1StageRejects[1], (unsigned long long)m_dE1StageSurvivors[1], (unsigned long long)m_dE1StageBatchRequested[1], (unsigned long long)m_dE1StageBatchWritten[1], (unsigned long long)m_dE1StageMetadataGroups[1],
+			(unsigned long long)m_dE1StageRejects[2], (unsigned long long)m_dE1StageSurvivors[2], (unsigned long long)m_dE1StageBatchRequested[2], (unsigned long long)m_dE1StageBatchWritten[2], (unsigned long long)m_dE1StageMetadataGroups[2],
+			(unsigned long long)m_dE1StageRejects[3], (unsigned long long)m_dE1StageSurvivors[3], (unsigned long long)m_dE1StageBatchRequested[3], (unsigned long long)m_dE1StageBatchWritten[3], (unsigned long long)m_dE1StageMetadataGroups[3],
+			(unsigned long long)m_dE1StageSurvivors[3], (unsigned long long)m_uE1RandomTFProbes );
+	if ( m_bE1Ranked && m_bE1ScopedAnd2 && !m_bE1MixedFieldAnd2 && getenv("MANTICORE_E1_RANK_TRACE") )
+		fprintf ( stderr, "E1_SCOPED_AND2 requested_field=%d exact_total=%llu bitmap_bytes=%llu tf_bytes=%llu scratch_bytes=%llu membership_checks=%llu aggregate_tf_available=%llu field_local_tf_decodes=%llu hitlist_seeks=%llu positions_decoded=%llu metadata_groups_membership=%llu intersection_windows=%llu intersection_mask_ops=%llu bound_reads=%llu bound_survivors=%llu tf_rows=%llu scored_rows=%llu final_threshold=%d build_us=%lld aggregate_bound_safe=1\n",
+			m_iE1ScopedAndField, (unsigned long long)m_uE1ScopedAndExactTotal,
+			(unsigned long long)(m_dE1ScopedAndEligibility[0].GetLength()+m_dE1ScopedAndEligibility[1].GetLength())*sizeof(uint64_t),
+			(unsigned long long)(m_dE1ScopedAndTF[0].GetLength()+m_dE1ScopedAndTF[1].GetLength())*sizeof(DWORD),
+			(unsigned long long)((m_dE1ScopedAndEligibility[0].GetLength()+m_dE1ScopedAndEligibility[1].GetLength())*sizeof(uint64_t)+(m_dE1ScopedAndTF[0].GetLength()+m_dE1ScopedAndTF[1].GetLength())*sizeof(DWORD)),
+			(unsigned long long)m_uE1ScopedAndMembershipChecks, (unsigned long long)m_uE1ScopedAndAggregateTF,
+			(unsigned long long)m_uE1ScopedAndFieldTFDecodes, (unsigned long long)m_uE1ScopedAndHitlistSeeks,
+			(unsigned long long)m_uE1ScopedAndPositionsDecoded, (unsigned long long)m_uE1ScopedAndMembershipGroups,
+			(unsigned long long)m_uE1IntersectionWindows, (unsigned long long)m_uE1IntersectionMaskOps,
+			(unsigned long long)m_uE1BoundReads, (unsigned long long)m_uE1CandidateMaskRows,
+			(unsigned long long)m_uE1ScopedAndTFRows, (unsigned long long)m_uE1CandidatesScored,
+			m_iE1FinalThreshold, (long long)m_iE1ScopedAndBuildUS );
+	if ( m_bE1Ranked && m_bE1MixedFieldAnd2 && getenv("MANTICORE_E1_RANK_TRACE") )
+		fprintf ( stderr, "E1_MIXED_FIELD_AND2 field_masks=%u,%u requested_fields=%d,%d exact_intersection=%llu bitmap_bytes=%llu tf_bytes=%llu scratch_bytes=%llu membership_checks=%llu aggregate_tf_available=%llu field_local_tf_decodes=%llu hitlist_seeks=%llu positions_decoded=%llu metadata_groups_membership=%llu intersection_windows=%llu intersection_mask_ops=%llu bound_reads=%llu bound_survivors=%llu tf_rows=%llu scored_rows=%llu K_dynamic=1 final_threshold=%d build_us=%lld aggregate_bound_safe=1\n",
+			unsigned(m_dNodes[0].m_dQueriedFields.GetMask32()), unsigned(m_dNodes[1].m_dQueriedFields.GetMask32()),
+			m_dE1ScopedAndFields[0], m_dE1ScopedAndFields[1], (unsigned long long)m_uE1ScopedAndExactTotal,
+			(unsigned long long)(m_dE1ScopedAndEligibility[0].GetLength()+m_dE1ScopedAndEligibility[1].GetLength())*sizeof(uint64_t),
+			(unsigned long long)(m_dE1ScopedAndTF[0].GetLength()+m_dE1ScopedAndTF[1].GetLength())*sizeof(DWORD),
+			(unsigned long long)((m_dE1ScopedAndEligibility[0].GetLength()+m_dE1ScopedAndEligibility[1].GetLength())*sizeof(uint64_t)+(m_dE1ScopedAndTF[0].GetLength()+m_dE1ScopedAndTF[1].GetLength())*sizeof(DWORD)),
+			(unsigned long long)m_uE1ScopedAndMembershipChecks, (unsigned long long)m_uE1ScopedAndAggregateTF,
+			(unsigned long long)m_uE1ScopedAndFieldTFDecodes, (unsigned long long)m_uE1ScopedAndHitlistSeeks,
+			(unsigned long long)m_uE1ScopedAndPositionsDecoded, (unsigned long long)m_uE1ScopedAndMembershipGroups,
+			(unsigned long long)m_uE1IntersectionWindows, (unsigned long long)m_uE1IntersectionMaskOps,
+			(unsigned long long)m_uE1BoundReads, (unsigned long long)m_uE1CandidateMaskRows,
+			(unsigned long long)m_uE1ScopedAndTFRows, (unsigned long long)m_uE1CandidatesScored,
+			m_iE1FinalThreshold, (long long)m_iE1ScopedAndBuildUS );
+	if ( m_bE1Ranked && m_bE1ScopedOr2 && !m_bE1MixedFieldOr2 && getenv("MANTICORE_E1_RANK_TRACE") )
+		fprintf ( stderr, "E1_SCOPED_OR2 requested_field=%d exact_union=%llu overlap=%llu bitmap_bytes=%llu tf_bytes=%llu scratch_bytes=%llu membership_checks=%llu aggregate_tf_available=%llu field_local_tf_decodes=%llu hitlist_seeks=%llu positions_decoded=%llu metadata_groups_membership=%llu mask_words=%llu bound_rejects=%llu tf_rows=%llu scored_rows=%llu final_threshold=%d build_us=%lld aggregate_bound_safe=1\n",
+			m_iE1ScopedAndField, (unsigned long long)m_uE1ScopedAndExactTotal,
+			(unsigned long long)m_uE1ScopedOrOverlap,
+			(unsigned long long)(m_dE1ScopedAndEligibility[0].GetLength()+m_dE1ScopedAndEligibility[1].GetLength())*sizeof(uint64_t),
+			(unsigned long long)(m_dE1ScopedAndTF[0].GetLength()+m_dE1ScopedAndTF[1].GetLength())*sizeof(DWORD),
+			(unsigned long long)((m_dE1ScopedAndEligibility[0].GetLength()+m_dE1ScopedAndEligibility[1].GetLength())*sizeof(uint64_t)+(m_dE1ScopedAndTF[0].GetLength()+m_dE1ScopedAndTF[1].GetLength())*sizeof(DWORD)),
+			(unsigned long long)m_uE1ScopedAndMembershipChecks, (unsigned long long)m_uE1ScopedAndAggregateTF,
+			(unsigned long long)m_uE1ScopedAndFieldTFDecodes, (unsigned long long)m_uE1ScopedAndHitlistSeeks,
+			(unsigned long long)m_uE1ScopedAndPositionsDecoded, (unsigned long long)m_uE1ScopedAndMembershipGroups,
+			(unsigned long long)m_uE1CandidateWordsExamined, (unsigned long long)m_uE1CandidateBoundRejects,
+			(unsigned long long)m_uE1ScopedAndTFRows, (unsigned long long)m_uE1CandidatesScored,
+			m_iE1FinalThreshold, (long long)m_iE1ScopedAndBuildUS );
+	if ( m_bE1Ranked && m_bE1MixedFieldOr2 && getenv("MANTICORE_E1_RANK_TRACE") )
+		fprintf ( stderr, "E1_MIXED_FIELD_OR2 field_masks=%u,%u requested_fields=%d,%d exact_union=%llu overlap=%llu bitmap_bytes=%llu tf_bytes=%llu scratch_bytes=%llu membership_checks=%llu aggregate_tf_available=%llu field_local_tf_decodes=%llu hitlist_seeks=%llu positions_decoded=%llu metadata_groups_membership=%llu mask_words=%llu bound_rejects=%llu tf_rows=%llu scored_rows=%llu K_dynamic=1 final_threshold=%d build_us=%lld aggregate_bound_safe=1\n",
+			unsigned(m_dNodes[0].m_dQueriedFields.GetMask32()), unsigned(m_dNodes[1].m_dQueriedFields.GetMask32()),
+			m_dE1ScopedAndFields[0], m_dE1ScopedAndFields[1], (unsigned long long)m_uE1ScopedAndExactTotal,
+			(unsigned long long)m_uE1ScopedOrOverlap,
+			(unsigned long long)(m_dE1ScopedAndEligibility[0].GetLength()+m_dE1ScopedAndEligibility[1].GetLength())*sizeof(uint64_t),
+			(unsigned long long)(m_dE1ScopedAndTF[0].GetLength()+m_dE1ScopedAndTF[1].GetLength())*sizeof(DWORD),
+			(unsigned long long)((m_dE1ScopedAndEligibility[0].GetLength()+m_dE1ScopedAndEligibility[1].GetLength())*sizeof(uint64_t)+(m_dE1ScopedAndTF[0].GetLength()+m_dE1ScopedAndTF[1].GetLength())*sizeof(DWORD)),
+			(unsigned long long)m_uE1ScopedAndMembershipChecks, (unsigned long long)m_uE1ScopedAndAggregateTF,
+			(unsigned long long)m_uE1ScopedAndFieldTFDecodes, (unsigned long long)m_uE1ScopedAndHitlistSeeks,
+			(unsigned long long)m_uE1ScopedAndPositionsDecoded, (unsigned long long)m_uE1ScopedAndMembershipGroups,
+			(unsigned long long)m_uE1CandidateWordsExamined, (unsigned long long)m_uE1CandidateBoundRejects,
+			(unsigned long long)m_uE1ScopedAndTFRows, (unsigned long long)m_uE1CandidatesScored,
+			m_iE1FinalThreshold, (long long)m_iE1ScopedAndBuildUS );
 	for ( auto & i : m_dNodes )
 		SafeDelete ( i.m_pQword );
+}
+
+
+template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
+bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::EnableE1Ranked()
+{
+	if constexpr ( ROWID_LIMITS )
+		return false;
+	// OR admission probes this method while constructing the physical node and
+	// the ranker enables it again later. Scoped preparation is query-owned and
+	// must run exactly once.
+	if ( m_bE1Ranked )
+		return true;
+	if ( getenv("MANTICORE_E1_RANK_TRACE") )
+	{
+		const bool bFullSchema = m_dNodes.all_of ( [] ( const NodeInfo_t & tNode ) { return tNode.m_bE1FullSchemaScope; } );
+		fprintf ( stderr, "E1_FIELD_SCOPE path=%s schema_fields=%d full_schema=%d terms=%d\n", m_bE1Or ? "or" : "and", m_iE1SchemaFields, int(bFullSchema), m_dNodes.GetLength() );
+	}
+	if ( m_tE1Filter.m_bEnabled && ( !m_bE1Or || m_dNodes.GetLength()!=2 ) )
+		return false;
+	if ( !( m_dNodes.GetLength()==2 || m_dNodes.GetLength()==4 ) )
+		return false;
+	if ( m_bE1Or && !( m_bE1Or && ( m_dNodes.GetLength()==2 || m_dNodes.GetLength()==4 ) ) )
+		return false;
+	const int iScoped0 = m_dNodes.GetLength()==2 ? E1ScopedSingleField ( m_iE1SchemaFields, m_dNodes[0].m_bE1FullSchemaScope, m_dNodes[0].m_dQueriedFields.GetMask32() ) : -1;
+	const int iScoped1 = m_dNodes.GetLength()==2 ? E1ScopedSingleField ( m_iE1SchemaFields, m_dNodes[1].m_bE1FullSchemaScope, m_dNodes[1].m_dQueriedFields.GetMask32() ) : -1;
+	const int iScopedAndField = m_dNodes.GetLength()==2 ? ( m_bE1Or ? E1ScopedOr2Field : E1ScopedAnd2Field ) ( m_iE1SchemaFields, m_dNodes[0].m_bE1FullSchemaScope, m_dNodes[0].m_dQueriedFields.GetMask32(), m_dNodes[1].m_bE1FullSchemaScope, m_dNodes[1].m_dQueriedFields.GetMask32() ) : -1;
+	int iMixed0 = -1, iMixed1 = -1;
+	const bool bMixedAnd2 = !m_bE1Or && m_dNodes.GetLength()==2 && E1MixedScopedAnd2Fields ( m_iE1SchemaFields,
+		m_dNodes[0].m_bE1FullSchemaScope, m_dNodes[0].m_dQueriedFields.GetMask32(),
+		m_dNodes[1].m_bE1FullSchemaScope, m_dNodes[1].m_dQueriedFields.GetMask32(), iMixed0, iMixed1 );
+	const bool bMixedOr2 = m_bE1Or && m_dNodes.GetLength()==2 && E1MixedScopedOr2Fields ( m_iE1SchemaFields,
+		m_dNodes[0].m_bE1FullSchemaScope, m_dNodes[0].m_dQueriedFields.GetMask32(),
+		m_dNodes[1].m_bE1FullSchemaScope, m_dNodes[1].m_dQueriedFields.GetMask32(), iMixed0, iMixed1 );
+	const bool bForceAllScoped = getenv("MANTICORE_E1_FORCE_GENERIC_SCOPED");
+	m_bE1MixedFieldAnd2 = bMixedAnd2 && !m_tE1Filter.m_bEnabled && !bForceAllScoped && !getenv("MANTICORE_E1_FORCE_GENERIC_MIXED_AND2");
+	m_bE1MixedFieldOr2 = bMixedOr2 && !m_tE1Filter.m_bEnabled && !bForceAllScoped && !getenv("MANTICORE_E1_FORCE_GENERIC_MIXED_OR2");
+	m_bE1ScopedAnd2 = !m_bE1Or && !m_tE1Filter.m_bEnabled && m_dNodes.GetLength()==2 && !bForceAllScoped
+		&& ( iScopedAndField>=0 || m_bE1MixedFieldAnd2 );
+	m_bE1ScopedOr2 = m_bE1Or && !m_tE1Filter.m_bEnabled && m_dNodes.GetLength()==2 && !bForceAllScoped
+		&& ( iScopedAndField>=0 || m_bE1MixedFieldOr2 );
+	m_iE1ScopedAndField = ( m_bE1ScopedAnd2 || m_bE1ScopedOr2 ) ? iScopedAndField : -1;
+	m_dE1ScopedAndFields[0] = ( m_bE1MixedFieldAnd2 || m_bE1MixedFieldOr2 ) ? iMixed0 : m_iE1ScopedAndField;
+	m_dE1ScopedAndFields[1] = ( m_bE1MixedFieldAnd2 || m_bE1MixedFieldOr2 ) ? iMixed1 : m_iE1ScopedAndField;
+	if ( !m_bE1ScopedAnd2 && !m_bE1Or && m_dNodes.GetLength()==2 && getenv("MANTICORE_E1_RANK_TRACE")
+		&& !m_dNodes.all_of ( [] ( const NodeInfo_t & tNode ) { return tNode.m_bE1FullSchemaScope; } ) )
+		fprintf ( stderr, "%s reason=%s masks=%u,%u scoped_fields=%d,%d\n",
+			bMixedAnd2 ? "E1_MIXED_FIELD_AND2_FALLBACK" : "E1_SCOPED_AND2_FALLBACK",
+			bMixedAnd2 && getenv("MANTICORE_E1_FORCE_GENERIC_MIXED_AND2") ? "forced_generic" : "ineligible",
+			unsigned(m_dNodes[0].m_dQueriedFields.GetMask32()), unsigned(m_dNodes[1].m_dQueriedFields.GetMask32()), iScoped0, iScoped1 );
+	if ( !m_bE1ScopedOr2 && m_bE1Or && m_dNodes.GetLength()==2 && getenv("MANTICORE_E1_RANK_TRACE")
+		&& !m_dNodes.all_of ( [] ( const NodeInfo_t & tNode ) { return tNode.m_bE1FullSchemaScope; } ) )
+		fprintf ( stderr, "%s reason=%s masks=%u,%u scoped_fields=%d,%d\n",
+			bMixedOr2 ? "E1_MIXED_FIELD_OR2_FALLBACK" : "E1_SCOPED_OR2_FALLBACK",
+			bMixedOr2 && getenv("MANTICORE_E1_FORCE_GENERIC_MIXED_OR2") ? "forced_generic" : "ineligible",
+			unsigned(m_dNodes[0].m_dQueriedFields.GetMask32()), unsigned(m_dNodes[1].m_dQueriedFields.GetMask32()), iScoped0, iScoped1 );
+	uint32_t uDirectAndLast = UINT32_MAX;
+	for ( const auto & tNode : m_dNodes )
+	{
+		if ( !tNode.m_bE1FullSchemaScope && !m_bE1ScopedAnd2 && !m_bE1ScopedOr2 )
+			return false;
+		if ( !tNode.m_pQword->E1DirectOrSupported() )
+		{
+			if ( m_bE1Or && !tNode.m_pQword->m_iDocs )
+				continue;
+			return false;
+		}
+		uint32_t uLast = 0;
+		if ( !tNode.m_pQword->GetE1DirectLastWindow(uLast) )
+		{
+			if ( m_bE1Or && !tNode.m_pQword->m_iDocs )
+				continue;
+			return false;
+		}
+		if ( m_bE1Or )
+		{
+			m_uE1LastWindow = m_uE1LastWindow==UINT32_MAX ? uLast : Max ( m_uE1LastWindow, uLast );
+		}
+		else
+			uDirectAndLast = uDirectAndLast==UINT32_MAX ? uLast : Min ( uDirectAndLast, uLast );
+	}
+	if ( m_bE1Or && m_uE1LastWindow==UINT32_MAX )
+		return false;
+	m_dE1Canonical.Resize ( m_dNodes.GetLength() );
+	for ( int i=0; i<m_dNodes.GetLength(); ++i )
+		m_dE1Canonical[i] = i;
+	std::sort ( m_dE1Canonical.Begin(), m_dE1Canonical.End(), [this] ( int a, int b ) { return m_dNodes[a].m_iAtomPos<m_dNodes[b].m_iAtomPos; } );
+	for ( int i=0; i<m_dE1Canonical.GetLength(); ++i )
+		if ( m_dNodes[m_dE1Canonical[i]].m_iAtomPos!=i+1 )
+			return false;
+	m_bE1Ranked = true;
+	m_bE1DirectAnd = !m_bE1Or;
+	m_bE1StagedAnd4 = m_bE1DirectAnd && m_dNodes.GetLength()==4;
+	m_bE1FusedAnd4 = m_bE1StagedAnd4;
+	if ( m_bE1DirectAnd )
+		m_uE1LastWindow = uDirectAndLast;
+	if ( m_bE1ScopedAnd2 || m_bE1ScopedOr2 )
+	{
+		const uint64_t uRows = (uint64_t(m_uE1LastWindow)+1)*E1_AND_WINDOW_ROWS;
+		const uint64_t uWords = (uRows+63)/64;
+		const uint64_t uScratch = 2*(uRows*sizeof(DWORD)+uWords*sizeof(uint64_t));
+		if ( uRows>INT_MAX || uWords>INT_MAX || uScratch>64*1024*1024 )
+			return false;
+		const int64_t iStarted = sphMicroTimer();
+		if ( !BuildE1ScopedAndTerm ( 0, m_uE1LastWindow ) || !BuildE1ScopedAndTerm ( 1, m_uE1LastWindow ) )
+			return false;
+		for ( int i=0; i<m_dE1ScopedAndEligibility[0].GetLength(); ++i )
+		{
+			const uint64_t uLeft = m_dE1ScopedAndEligibility[0][i];
+			const uint64_t uRight = m_dE1ScopedAndEligibility[1][i];
+			m_uE1ScopedOrOverlap += uint64_t(__builtin_popcountll(uLeft&uRight));
+			m_uE1ScopedAndExactTotal += uint64_t(__builtin_popcountll(m_bE1ScopedOr2 ? (uLeft|uRight) : (uLeft&uRight)));
+		}
+		m_iE1ScopedAndBuildUS = sphMicroTimer()-iStarted;
+	}
+	if ( m_bE1StagedAnd4 )
+	{
+		for ( int i=0; i<4; ++i )
+		{
+			m_dE1TFProbeOrder[i] = i;
+			m_dE1DirectOrder[i] = i;
+		}
+		// Positive IDF estimates useful tightening; document frequency estimates
+		// metadata-decode cost. Probe the best tightening/cost ratio first.
+		std::sort ( m_dE1TFProbeOrder, m_dE1TFProbeOrder+4, [this] ( int a, int b ) {
+			const double fA = double(Max(0.0f,m_dNodes[a].m_fIDF))/double(m_dNodes[a].m_pQword->m_iDocs+1);
+			const double fB = double(Max(0.0f,m_dNodes[b].m_fIDF))/double(m_dNodes[b].m_pQword->m_iDocs+1);
+			return fA>fB || ( fA==fB && m_dNodes[a].m_pQword->m_iDocs<m_dNodes[b].m_pQword->m_iDocs );
+		} );
+		std::sort ( m_dE1DirectOrder, m_dE1DirectOrder+4, [this] ( int a, int b ) {
+			return m_dNodes[a].m_pQword->m_iDocs<m_dNodes[b].m_pQword->m_iDocs;
+		} );
+		m_dE1AndMasks.Resize ( 4*64 );
+		m_dE1AndBoundWords.Resize ( 4*64 );
+		m_dE1StagedExactTF.Resize ( 4*E1_AND_WINDOW_ROWS );
+	}
+	m_bCollectHits = false;
+	return true;
+}
+
+
+template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
+uint32_t ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CountE1ScopedAndFieldTF ( int iNode, uint64_t uRef )
+{
+	auto * pQword = m_dNodes[iNode].m_pQword;
+	pQword->SeekHitlist ( uRef );
+	++m_uE1ScopedAndHitlistSeeks;
+	uint32_t uTF = 0;
+	for ( Hitpos_t uHit=pQword->GetNextHit(); uHit!=EMPTY_HIT; uHit=pQword->GetNextHit() )
+	{
+		++m_uE1ScopedAndPositionsDecoded;
+		if ( int(HITMAN::GetField(uHit))==m_dE1ScopedAndFields[iNode] )
+			++uTF;
+	}
+	return uTF;
+}
+
+
+template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
+bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::BuildE1ScopedAndTerm ( int iNode, uint32_t uLastWindow )
+{
+	const uint64_t uRows = (uint64_t(uLastWindow)+1)*E1_AND_WINDOW_ROWS;
+	const uint64_t uWords = (uRows+63)/64;
+	auto & dEligibility = m_dE1ScopedAndEligibility[iNode];
+	auto & dTF = m_dE1ScopedAndTF[iNode];
+	dEligibility.Resize ( int(uWords) );
+	dEligibility.Fill ( 0 );
+	dTF.Resize ( int(uRows) );
+	dTF.Fill ( 0 );
+	CSphVector<uint64_t> dWindow;
+	dWindow.Resize(64);
+	const uint32_t uRequestedMask = uint32_t(1)<<m_dE1ScopedAndFields[iNode];
+	uint64_t uIgnoredBoundReads = 0;
+	auto * pQword = m_dNodes[iNode].m_pQword;
+	for ( uint32_t uWindow=0; uWindow<=uLastWindow; ++uWindow )
+	{
+		dWindow.Fill(0);
+		uint32_t uCardinality = 0, uMaxTF = 0;
+		if ( !pQword->GetE1DirectWindow ( uWindow, dWindow.Begin(), nullptr, uCardinality, uMaxTF, uIgnoredBoundReads ) )
+			continue;
+		m_uE1ScopedAndMembershipChecks += uCardinality;
+		uint64_t uRequested = 0;
+		if ( !pQword->BeginE1SelectedMeta ( uWindow, dWindow.Begin(), uRequested ) )
+			return false;
+		E1SelectedMeta_t tMeta;
+		while ( pQword->NextE1SelectedMeta ( tMeta, m_uE1ScopedAndMembershipGroups, m_dE1ScopedAndFields[iNode] ) )
+		{
+			m_uE1ScopedAndAggregateTF += tMeta.m_uTF;
+			if ( !(tMeta.m_uMask&uRequestedMask) )
+				continue;
+			uint32_t uDecodedTF = tMeta.m_uScopedTF;
+			if ( tMeta.m_uMask!=uRequestedMask && !uDecodedTF )
+			{
+				++m_uE1ScopedAndFieldTFDecodes;
+				uDecodedTF = CountE1ScopedAndFieldTF ( iNode, tMeta.m_uRef );
+			}
+			const uint32_t uTF = E1ScopedExactTF ( tMeta.m_uTF, tMeta.m_uMask, m_dE1ScopedAndFields[iNode], uDecodedTF );
+			if ( !uTF || !E1ScopedAggregateBoundSafe(uTF,tMeta.m_uTF) )
+				continue;
+			const uint32_t uRow = uWindow*E1_AND_WINDOW_ROWS+tMeta.m_uLocal;
+			dTF[uRow] = uTF;
+			dEligibility[uRow/64] |= uint64_t(1)<<(uRow%64);
+		}
+	}
+	return true;
+}
+
+
+template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
+bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::PrepareE1OrWindows()
+{
+	if ( !m_bE1BestFirst )
+		return true;
+	std::array<std::array<uint64_t,64>,4> dTermBits {};
+	for ( uint32_t uWindow=0; uWindow<=m_uE1LastWindow; ++uWindow )
+	{
+		std::array<uint64_t,64> dUnion {};
+		float fUpperSum = 0.0f;
+		for ( int i=0; i<m_dNodes.GetLength(); ++i )
+		{
+			uint32_t uCardinality = 0, uMaxTF = 0;
+			if ( !m_dNodes[i].m_pQword->GetE1DirectWindow ( uWindow, dTermBits[i].data(), nullptr, uCardinality, uMaxTF, m_uE1BoundReads ) )
+				continue;
+			++m_uE1ContainerOps;
+			for ( int w=0; w<64; ++w ) dUnion[w] |= dTermBits[i][w];
+			const float fIDF = Max ( 0.0f, m_dNodes[i].m_fIDF );
+			if ( uMaxTF==UINT32_MAX ) fUpperSum += fIDF;
+			else if ( uMaxTF ) { const float fTF=float(uMaxTF); fUpperSum += fTF/(fTF+0.3f)*fIDF; }
+		}
+		uint32_t uUnion = 0;
+		for ( uint64_t uWord : dUnion ) uUnion += uint32_t(__builtin_popcountll(uWord));
+		if ( !uUnion ) continue;
+		E1OrWindowDesc_t & tDesc = m_dE1OrWindows.Add();
+		tDesc = { uWindow, int(ceilf(1000.0f*(fUpperSum+0.5f)))+1, uUnion };
+		++m_uE1WindowsTotal;
+		m_uE1BooleanMatches += uUnion;
+		m_uE1ExactUnionTotal += uUnion;
+	}
+	std::sort ( m_dE1OrWindows.Begin(), m_dE1OrWindows.End(), [] ( const E1OrWindowDesc_t & a, const E1OrWindowDesc_t & b ) {
+		return a.m_iUpperWeight>b.m_iUpperWeight || ( a.m_iUpperWeight==b.m_iUpperWeight && a.m_uWindow<b.m_uWindow );
+	} );
+	return !m_dE1OrWindows.IsEmpty();
+}
+
+
+static uint64_t AdmitE1Or2BoundMasks ( uint64_t uCandidates, const uint64_t dTermBits[2], const uint64_t dClassMasks[2][2], const uint8_t dClassBounds[2][2], const uint32_t dClassCounts[2], const float dIDF[2], const int dCanonical[2], uint64_t uFirstRow, int iThreshold, uint64_t uWorstTiedRow, uint64_t & uRejectedRows, uint64_t & uTieRejectedRows, uint64_t & uRejectedClasses )
+{
+	uint64_t uAdmitted = 0;
+	for ( uint32_t iClass0=0; iClass0<=dClassCounts[0]; ++iClass0 )
+		for ( uint32_t iClass1=0; iClass1<=dClassCounts[1]; ++iClass1 )
+		{
+			const uint64_t uMask0 = iClass0<dClassCounts[0] ? dClassMasks[0][iClass0] : ~dTermBits[0];
+			const uint64_t uMask1 = iClass1<dClassCounts[1] ? dClassMasks[1][iClass1] : ~dTermBits[1];
+			const uint64_t uRows = uCandidates & uMask0 & uMask1;
+			if ( !uRows )
+				continue;
+
+			const uint8_t dBounds[2] = { iClass0<dClassCounts[0] ? dClassBounds[0][iClass0] : uint8_t(0), iClass1<dClassCounts[1] ? dClassBounds[1][iClass1] : uint8_t(0) };
+			float fUpper = 0.0f;
+			for ( int iCanonical=0; iCanonical<2; ++iCanonical )
+			{
+				const int iNode = dCanonical[iCanonical];
+				const float fTerm = dBounds[iNode]==255 ? E1SafeUpperSaturatedTerm(dIDF[iNode]) : E1SafeUpperTerm(dBounds[iNode],dIDF[iNode]);
+				fUpper = E1SafeUpperAdd ( fUpper, fTerm );
+			}
+			const int iUpperWeight = E1SafeUpperWeight ( fUpper );
+			if ( iThreshold<=0 || iUpperWeight>iThreshold )
+			{
+				uAdmitted |= uRows;
+				continue;
+			}
+			if ( iUpperWeight<iThreshold || uWorstTiedRow<=uFirstRow )
+			{
+				const uint64_t uCount = uint64_t(__builtin_popcountll(uRows));
+				uRejectedRows += uCount;
+				uTieRejectedRows += iUpperWeight==iThreshold ? uCount : 0;
+				++uRejectedClasses;
+				continue;
+			}
+			const uint32_t uWinningRows = uint32_t ( Min ( uint64_t(64), uWorstTiedRow-uFirstRow ) );
+			const uint64_t uWinningMask = uWinningRows==64 ? ~uint64_t(0) : ( uint64_t(1)<<uWinningRows )-1;
+			const uint64_t uWinning = uRows & uWinningMask;
+			const uint64_t uRejected = uRows & ~uWinningMask;
+			uAdmitted |= uWinning;
+			const uint64_t uRejectedCount = uint64_t(__builtin_popcountll(uRejected));
+			uRejectedRows += uRejectedCount;
+			uTieRejectedRows += uRejectedCount;
+			if ( !uWinning )
+				++uRejectedClasses;
+		}
+	return uAdmitted;
+}
+
+
+template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
+bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1OrWindow()
+{
+	m_dE1Pending.Resize(0);
+	m_iE1PendingPos = 0;
+	if ( m_bFirstChunk )
+	{
+		if ( !m_iNodesSet || m_uE1LastWindow==UINT32_MAX )
+			return false;
+		m_uE1Window = 0;
+		m_bFirstChunk = false;
+		if ( !PrepareE1OrWindows() )
+			return false;
+	}
+
+	while ( m_bE1BestFirst ? m_iE1OrWindowPos<m_dE1OrWindows.GetLength() : m_uE1Window<=m_uE1LastWindow )
+	{
+		const E1OrWindowDesc_t * pDesc = m_bE1BestFirst ? &m_dE1OrWindows[m_iE1OrWindowPos++] : nullptr;
+		const uint32_t uWindow = pDesc ? pDesc->m_uWindow : m_uE1Window++;
+		if ( pDesc )
+		{
+			if ( m_iE1RankThreshold>0 && pDesc->m_iUpperWeight < m_iE1RankThreshold )
+			{
+				const int iSkipped = m_dE1OrWindows.GetLength()-m_iE1OrWindowPos+1;
+				m_uE1BestFirstSkipped += iSkipped;
+				m_uE1WindowsPruned += iSkipped;
+				for ( int i=m_iE1OrWindowPos-1; i<m_dE1OrWindows.GetLength(); ++i )
+					m_uE1SkippedMatches += m_dE1OrWindows[i].m_uUnion;
+				m_iE1OrWindowPos = m_dE1OrWindows.GetLength();
+				return true;
+			}
+			++m_uE1BestFirstVisited;
+		}
+		std::array<std::array<uint64_t,64>,4> dTermBits {};
+		std::array<std::array<uint8_t,E1_AND_WINDOW_ROWS>,4> dOrdinalBounds;
+		if ( !m_bE1BatchedOr2 )
+			for ( auto & dBounds : dOrdinalBounds )
+				dBounds.fill(0);
+		std::array<uint64_t,64> dUnion {}, dCandidates {};
+		std::array<uint32_t,4> dMaxTF {}, dCount {};
+		for ( int i=0; i<m_dNodes.GetLength(); ++i )
+		{
+			uint32_t uCardinality = 0, uMaxTF = 0;
+			if ( !m_dNodes[i].m_pQword->GetE1DirectWindow ( uWindow, dTermBits[i].data(), m_bE1BatchedOr2 ? nullptr : dOrdinalBounds[i].data(), uCardinality, uMaxTF, m_uE1BoundReads ) )
+				continue;
+			if ( m_bE1ScopedOr2 )
+			{
+				const uint64_t uWordBase = uint64_t(uWindow)*64;
+				uCardinality = 0;
+				for ( int w=0; w<64; ++w )
+				{
+					dTermBits[i][w] = m_dE1ScopedAndEligibility[i][int(uWordBase+w)];
+					uCardinality += uint32_t(__builtin_popcountll(dTermBits[i][w]));
+				}
+			}
+			++m_uE1ContainerOps;
+			dCount[i] = uCardinality;
+			dMaxTF[i] = uMaxTF;
+			for ( int w=0; w<64; ++w )
+				dUnion[w] |= dTermBits[i][w];
+		}
+
+		uint64_t uUnion = 0;
+		for ( uint64_t uWord : dUnion )
+			uUnion += uint64_t(__builtin_popcountll(uWord));
+		if ( !uUnion )
+			continue;
+		if ( m_tE1Filter.m_bEnabled )
+		{
+			m_uE1FilterCandidatesBefore += uUnion;
+			++m_uE1FilterMasksBuilt;
+			uUnion = E1ApplyFilterMask ( m_tE1Filter, uWindow, dUnion.data(), m_uE1FilterRowsExamined );
+			m_uE1FilterCandidatesAfter += uUnion;
+			if ( !uUnion )
+				continue;
+		}
+		if ( !m_bE1BestFirst )
+		{
+			++m_uE1WindowsTotal;
+			m_uE1BooleanMatches += uUnion;
+			m_uE1ExactUnionTotal += uUnion;
+		}
+
+		std::array<float,4> dUpper {};
+		float fUpperSum = 0.0f;
+		for ( int i=0; i<m_dNodes.GetLength(); ++i )
+		{
+			const float fPositiveIDF = Max ( 0.0f, m_dNodes[i].m_fIDF );
+			if ( dMaxTF[i]==UINT32_MAX )
+				dUpper[i] = E1SafeUpperSaturatedTerm ( fPositiveIDF );
+			else
+				dUpper[i] = E1SafeUpperTerm ( dMaxTF[i], fPositiveIDF );
+			fUpperSum = E1SafeUpperAdd ( fUpperSum, dUpper[i] );
+		}
+		const int iUpperWeight = E1SafeUpperWeight ( fUpperSum );
+		if ( m_iE1RankThreshold>0 && iUpperWeight < m_iE1RankThreshold )
+		{
+			++m_uE1WindowsPruned;
+			m_uE1SkippedMatches += uUnion;
+			return true;
+		}
+		++m_uE1WindowsScored;
+
+		std::array<int,4> dOrder {};
+		for ( int i=0; i<m_dNodes.GetLength(); ++i ) dOrder[i]=i;
+		std::sort ( dOrder.begin(), dOrder.begin()+m_dNodes.GetLength(), [&] ( int a, int b ) {
+			return dUpper[a]/float(dCount[a]+1) < dUpper[b]/float(dCount[b]+1);
+		} );
+		std::array<bool,4> dEssential {};
+		for ( int i=0; i<m_dNodes.GetLength(); ++i ) dEssential[i]=true;
+		float fNonessential = 0.0f;
+		int iNonessential = 0;
+		if ( m_iE1RankThreshold>0 )
+			for ( int i=0; i<m_dNodes.GetLength()-1; ++i )
+			{
+				const int iNode = dOrder[i];
+				const float fNext = E1SafeUpperAdd ( fNonessential, dUpper[iNode] );
+				if ( E1SafeUpperWeight(fNext) >= m_iE1RankThreshold )
+					break;
+				dEssential[iNode]=false;
+				fNonessential=fNext;
+				++iNonessential;
+			}
+		++m_uE1EssentialRepartitions;
+		m_uE1EssentialTerms += m_dNodes.GetLength()-iNonessential;
+		for ( int i=0; i<m_dNodes.GetLength(); ++i )
+			if ( dEssential[i] )
+				for ( int w=0; w<64; ++w ) { dCandidates[w] |= dTermBits[i][w]; ++m_uE1BitmapOps; }
+		if ( m_tE1Filter.m_bEnabled )
+			for ( int w=0; w<64; ++w ) dCandidates[w] &= dUnion[w];
+
+		std::array<uint64_t,64> dAdmitted {};
+		if ( m_bE1BatchedOr2 )
+		{
+			const float dIDF[2] = { Max ( 0.0f, m_dNodes[0].m_fIDF ), Max ( 0.0f, m_dNodes[1].m_fIDF ) };
+			const int dCanonical[2] = { m_dE1Canonical[0], m_dE1Canonical[1] };
+			for ( int w=0; w<64; ++w )
+			{
+				const uint64_t uCandidates = dCandidates[w];
+				if ( !uCandidates )
+					continue;
+				++m_uE1CandidateWordsExamined;
+				const uint64_t uCandidateCount = uint64_t(__builtin_popcountll(uCandidates));
+				m_uE1CandidatesGenerated += uCandidateCount;
+				uint64_t dClassMasks[2][2] {};
+				uint8_t dClassBounds[2][2] {};
+				uint32_t dClassCounts[2] {};
+				for ( int iNode=0; iNode<2; ++iNode )
+				{
+					if ( dCount[iNode] && !m_dNodes[iNode].m_pQword->GetE1DirectBoundWord ( uWindow, uint32_t(w), dClassMasks[iNode], dClassBounds[iNode], dClassCounts[iNode] ) )
+						return false;
+					if ( !dEssential[iNode] )
+					{
+						m_uE1NonessentialProbes += uCandidateCount;
+						m_uE1NonessentialHits += uint64_t(__builtin_popcountll(uCandidates & dTermBits[iNode][w]));
+					}
+				}
+				const uint64_t dWordTermBits[2] = { dTermBits[0][w], dTermBits[1][w] };
+				dAdmitted[w] = AdmitE1Or2BoundMasks ( uCandidates, dWordTermBits, dClassMasks, dClassBounds, dClassCounts, dIDF, dCanonical, uint64_t(uWindow)*E1_AND_WINDOW_ROWS+uint64_t(w)*64, m_iE1RankThreshold, uint64_t(m_tE1WorstTiedRow), m_uE1CandidateBoundRejects, m_uE1TieBoundRejects, m_uE1BoundClassesRejected );
+				const uint64_t uAdmitted = uint64_t(__builtin_popcountll(dAdmitted[w]));
+				m_uE1CandidateMaskRows += uAdmitted;
+				if ( !uAdmitted )
+					++m_uE1WholeWordsRejected;
+			}
+		}
+		else
+			for ( int w=0; w<64; ++w )
+			{
+				uint64_t uBits = dCandidates[w];
+				while ( uBits )
+				{
+					const uint32_t uBit = uint32_t(__builtin_ctzll(uBits));
+					uBits &= uBits-1;
+					const uint32_t uLocal = uint32_t(w)*64+uBit;
+					const RowID_t tRowID = RowID_t(uWindow*E1_AND_WINDOW_ROWS+uLocal);
+					++m_uE1CandidatesGenerated;
+
+					float fCandidateBound = 0.0f;
+					for ( int iCanonical=0; iCanonical<m_dE1Canonical.GetLength(); ++iCanonical )
+					{
+						const int iNode = m_dE1Canonical[iCanonical];
+						if ( !dEssential[iNode] )
+							++m_uE1NonessentialProbes;
+						const uint8_t uBound = dOrdinalBounds[iNode][uLocal];
+						if ( !uBound )
+							continue;
+						if ( !dEssential[iNode] )
+							++m_uE1NonessentialHits;
+						const float fIDF = Max ( 0.0f, m_dNodes[iNode].m_fIDF );
+						const float fTerm = uBound==255 ? E1SafeUpperSaturatedTerm(fIDF) : E1SafeUpperTerm(uBound,fIDF);
+						fCandidateBound = E1SafeUpperAdd ( fCandidateBound, fTerm );
+					}
+					const int iBoundWeight = E1SafeUpperWeight ( fCandidateBound );
+					if ( E1TieAwareBoundReject ( iBoundWeight, uint64_t(tRowID), m_iE1RankThreshold, uint64_t(m_tE1WorstTiedRow) ) )
+					{
+						++m_uE1CandidateBoundRejects;
+						if ( iBoundWeight==m_iE1RankThreshold )
+							++m_uE1TieBoundRejects;
+						continue;
+					}
+					dAdmitted[w] |= uint64_t(1)<<uBit;
+					++m_uE1CandidateMaskRows;
+				}
+			}
+
+		std::array<std::array<uint32_t,E1_AND_WINDOW_ROWS>,4> dExactTF {};
+		if ( m_bE1BatchedOr2 )
+			for ( int iNode=0; iNode<m_dNodes.GetLength(); ++iNode )
+			{
+				std::array<uint64_t,64> dSelected {};
+				bool bAny = false;
+				for ( int w=0; w<64; ++w )
+				{
+					dSelected[w] = dAdmitted[w] & dTermBits[iNode][w];
+					bAny |= dSelected[w]!=0;
+				}
+				if ( !bAny )
+					continue;
+				if ( m_bE1ScopedOr2 )
+				{
+					for ( int w=0; w<64; ++w )
+					{
+						uint64_t uBits = dSelected[w];
+						while ( uBits )
+						{
+							const uint32_t uBit = uint32_t(__builtin_ctzll(uBits));
+							uBits &= uBits-1;
+							const uint32_t uLocal = uint32_t(w)*64+uBit;
+							dExactTF[iNode][uLocal] = m_dE1ScopedAndTF[iNode][uWindow*E1_AND_WINDOW_ROWS+uLocal];
+							++m_uE1ScopedAndTFRows;
+						}
+					}
+					continue;
+				}
+				uint64_t uRequested = 0, uWritten = 0, uDecoded = 0;
+				if ( !m_dNodes[iNode].m_pQword->ExtractE1DirectTFBatch ( uWindow, dSelected.data(), dExactTF[iNode].data(), uRequested, uWritten, uDecoded ) || uRequested!=uWritten )
+					return false;
+				m_uE1BatchTFRowsRequested += uRequested;
+				m_uE1BatchTFRowsWritten += uWritten;
+				m_uE1BatchMetadataGroups += uDecoded;
+				m_uE1MetadataGroups += uDecoded;
+				m_uE1TFProbes += uWritten;
+			}
+		else
+			for ( int w=0; w<64; ++w )
+			{
+				uint64_t uBits = dAdmitted[w];
+				while ( uBits )
+				{
+					const uint32_t uBit = uint32_t(__builtin_ctzll(uBits));
+					uBits &= uBits-1;
+					const uint32_t uLocal = uint32_t(w)*64+uBit;
+					const RowID_t tRowID = RowID_t(uWindow*E1_AND_WINDOW_ROWS+uLocal);
+					for ( int iNode=0; iNode<m_dNodes.GetLength(); ++iNode )
+					{
+						if ( !dOrdinalBounds[iNode][uLocal] )
+							continue;
+						if ( dOrdinalBounds[iNode][uLocal]==1 )
+							dExactTF[iNode][uLocal] = 1;
+						else if ( !m_dNodes[iNode].m_pQword->ProbeE1DirectTF(tRowID, dExactTF[iNode][uLocal]) )
+							return false;
+						else
+							++m_uE1RandomTFProbes;
+						++m_uE1TFProbes;
+					}
+				}
+			}
+
+		for ( int w=0; w<64; ++w )
+		{
+			uint64_t uBits = dAdmitted[w];
+			while ( uBits )
+			{
+				const uint32_t uBit = uint32_t(__builtin_ctzll(uBits));
+				uBits &= uBits-1;
+				const uint32_t uLocal = uint32_t(w)*64+uBit;
+				const RowID_t tRowID = RowID_t(uWindow*E1_AND_WINDOW_ROWS+uLocal);
+				m_uE1ScalarCandidateInspections += m_bE1BatchedOr2;
+				uint32_t dCanonicalTF[4] = {};
+				float fCandidateUpper = 0.0f;
+				for ( int iCanonical=0; iCanonical<m_dE1Canonical.GetLength(); ++iCanonical )
+				{
+					const int iNode = m_dE1Canonical[iCanonical];
+					dCanonicalTF[iCanonical] = dExactTF[iNode][uLocal];
+					fCandidateUpper = E1SafeUpperAdd ( fCandidateUpper, E1SafeUpperTerm ( dCanonicalTF[iCanonical], Max ( 0.0f, m_dNodes[iNode].m_fIDF ) ) );
+				}
+				const int iCandidateUpper = E1SafeUpperWeight ( fCandidateUpper );
+				if ( E1TieAwareBoundReject ( iCandidateUpper, uint64_t(tRowID), m_iE1RankThreshold, uint64_t(m_tE1WorstTiedRow) ) )
+				{
+					++m_uE1CandidateBoundRejects;
+					if ( iCandidateUpper==m_iE1RankThreshold )
+						++m_uE1TieBoundRejects;
+					continue;
+				}
+				ExtDoc_t & tDoc = m_dE1Pending.Add();
+				tDoc.m_tRowID = tRowID;
+				tDoc.m_uDocFields = UINT32_MAX;
+				tDoc.m_fTFIDF = 0.0f;
+				tDoc.m_uExactTF = 0;
+				tDoc.m_uExactTerms = BYTE(m_dNodes.GetLength());
+				tDoc.m_bExactOr = 1;
+				for ( int i=0; i<m_dNodes.GetLength(); ++i ) tDoc.m_dExactTF[i]=dCanonicalTF[i];
+				++m_uE1CandidatesScored;
+			}
+		}
+		for ( auto & tNode : m_dNodes )
+			m_uE1MetadataGroups += tNode.m_pQword->TakeE1MetadataGroupsDecoded();
+		m_uE1SkippedMatches += uUnion-m_dE1Pending.GetLength();
+		return true;
+	}
+	return false;
+}
+
+
+template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
+bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1DirectAndWindow()
+{
+	m_dE1Pending.Resize(0);
+	m_iE1PendingPos = 0;
+	if ( m_bFirstChunk )
+	{
+		m_uE1Window = 0;
+		m_bFirstChunk = false;
+	}
+
+	while ( m_uE1Window<=m_uE1LastWindow )
+	{
+		const uint32_t uWindow = m_uE1Window++;
+		std::array<uint64_t,64> dIntersection {};
+		std::array<uint64_t,64> dStageSurvivors {};
+		float dIDF[4] {};
+		int dCanonical[4] {};
+		for ( int i=0; i<m_dNodes.GetLength(); ++i )
+		{
+			dIDF[i] = Max ( 0.0f, m_dNodes[i].m_fIDF );
+			dCanonical[i] = m_dE1Canonical[i];
+		}
+		bool bAllTerms = true;
+		uint64_t uIntersection = 0;
+		if ( m_bE1FusedAnd4 )
+		{
+			uint32_t dCardinality[4] {};
+			for ( int iFetch=0; iFetch<4; ++iFetch )
+			{
+				const int iNode = m_dE1DirectOrder[iFetch];
+				if ( !m_dNodes[iNode].m_pQword->GetE1DirectWindowClasses ( uWindow, m_dE1AndMasks.Begin()+iNode*64, m_dE1AndBoundWords.Begin()+iNode*64, dCardinality[iNode], m_uE1BoundReads ) )
+				{
+					bAllTerms = false;
+					++m_uE1MissingWindowShortCircuits;
+					break;
+				}
+				++m_uE1MasksFetched;
+				++m_uE1ContainerOps;
+			}
+			++m_uE1IntersectionWindows;
+			if ( !bAllTerms )
+				continue;
+			int dOrder[4] { 0,1,2,3 };
+			std::sort ( dOrder, dOrder+4, [&dCardinality] ( int a, int b ) { return dCardinality[a]<dCardinality[b]; } );
+			for ( int w=0; w<64; ++w )
+			{
+				++m_uE1FusedWords;
+				uint64_t uCandidates = m_dE1AndMasks[dOrder[0]*64+w];
+				for ( int i=1; i<4 && uCandidates; ++i )
+				{
+					uCandidates &= m_dE1AndMasks[dOrder[i]*64+w];
+					++m_uE1IntersectionMaskOps;
+				}
+				dIntersection[w] = uCandidates;
+				if ( !uCandidates )
+					continue;
+				++m_uE1IntersectionNonemptyWords;
+				++m_uE1CandidateWordsExamined;
+				const uint64_t uCandidateCount = uint64_t(__builtin_popcountll(uCandidates));
+				uIntersection += uCandidateCount;
+				m_uE1CandidatesGenerated += uCandidateCount;
+				if ( m_iE1RankThreshold<=0 )
+					dStageSurvivors[w] = uCandidates;
+				else
+				{
+					uint64_t dClassMasks[4][2] {};
+					uint8_t dClassBounds[4][2] {};
+					uint32_t dClassCounts[4] {};
+					for ( int iNode=0; iNode<4; ++iNode )
+					{
+						const auto & tWord = m_dE1AndBoundWords[iNode*64+w];
+						dClassMasks[iNode][0] = tWord.m_dMasks[0];
+						dClassMasks[iNode][1] = tWord.m_dMasks[1];
+						dClassBounds[iNode][0] = tWord.m_dBounds[0];
+						dClassBounds[iNode][1] = tWord.m_dBounds[1];
+						dClassCounts[iNode] = tWord.m_uClasses;
+					}
+					dStageSurvivors[w] = E1AdmitAndBoundMasks ( uCandidates, dClassMasks, dClassBounds, dClassCounts, dIDF, dCanonical, 4, uint64_t(uWindow)*E1_AND_WINDOW_ROWS+uint64_t(w)*64, m_iE1RankThreshold, uint64_t(m_tE1WorstTiedRow), m_uE1CandidateBoundRejects, m_uE1TieBoundRejects, m_uE1BoundClassesRejected, &m_uE1ClassCombinations );
+				}
+				const uint64_t uSurvivors = uint64_t(__builtin_popcountll(dStageSurvivors[w]));
+				m_uE1CoarseRejects += uCandidateCount-uSurvivors;
+				m_uE1CoarseSurvivors += uSurvivors;
+				m_uE1CandidateMaskRows += uSurvivors;
+				if ( !uSurvivors )
+					++m_uE1WholeWordsRejected;
+			}
+		}
+		else
+		{
+			std::array<std::array<uint64_t,64>,4> dTermBits {};
+			dIntersection.fill ( ~uint64_t(0) );
+			for ( int i=0; i<m_dNodes.GetLength(); ++i )
+			{
+				uint32_t uCardinality = 0, uMaxTF = 0;
+				if ( !m_dNodes[i].m_pQword->GetE1DirectWindow ( uWindow, dTermBits[i].data(), nullptr, uCardinality, uMaxTF, m_uE1BoundReads ) )
+				{
+					bAllTerms = false;
+					break;
+				}
+				if ( m_bE1ScopedAnd2 )
+				{
+					const uint64_t uWordBase = uint64_t(uWindow)*64;
+					uCardinality = 0;
+					for ( int w=0; w<64; ++w )
+					{
+						dTermBits[i][w] = m_dE1ScopedAndEligibility[i][int(uWordBase+w)];
+						uCardinality += uint32_t(__builtin_popcountll(dTermBits[i][w]));
+					}
+				}
+				++m_uE1ContainerOps;
+				for ( int w=0; w<64; ++w )
+				{
+					dIntersection[w] &= dTermBits[i][w];
+					++m_uE1IntersectionMaskOps;
+				}
+			}
+			++m_uE1IntersectionWindows;
+			if ( !bAllTerms )
+				continue;
+			for ( uint64_t uWord : dIntersection )
+				uIntersection += uint64_t(__builtin_popcountll(uWord));
+			for ( int w=0; w<64; ++w )
+			{
+				const uint64_t uCandidates = dIntersection[w];
+				if ( !uCandidates )
+					continue;
+				++m_uE1CandidateWordsExamined;
+				m_uE1CandidatesGenerated += uint64_t(__builtin_popcountll(uCandidates));
+				uint64_t dClassMasks[4][2] {};
+				uint8_t dClassBounds[4][2] {};
+				uint32_t dClassCounts[4] {};
+				for ( int iNode=0; iNode<m_dNodes.GetLength(); ++iNode )
+					if ( !m_dNodes[iNode].m_pQword->GetE1DirectBoundWord ( uWindow, uint32_t(w), dClassMasks[iNode], dClassBounds[iNode], dClassCounts[iNode] ) )
+						return false;
+				dStageSurvivors[w] = E1AdmitAndBoundMasks ( uCandidates, dClassMasks, dClassBounds, dClassCounts, dIDF, dCanonical, m_dNodes.GetLength(), uint64_t(uWindow)*E1_AND_WINDOW_ROWS+uint64_t(w)*64, m_iE1RankThreshold, uint64_t(m_tE1WorstTiedRow), m_uE1CandidateBoundRejects, m_uE1TieBoundRejects, m_uE1BoundClassesRejected );
+				const uint64_t uSurvivors = uint64_t(__builtin_popcountll(dStageSurvivors[w]));
+				m_uE1CandidateMaskRows += uSurvivors;
+				if ( !uSurvivors )
+					++m_uE1WholeWordsRejected;
+			}
+		}
+		if ( !uIntersection )
+			continue;
+		++m_uE1WindowsTotal;
+		m_uE1BooleanMatches += uIntersection;
+
+		if ( m_bE1StagedAnd4 )
+		{
+			uint64_t uStage0 = 0;
+			for ( uint64_t uWord : dStageSurvivors ) uStage0 += uint64_t(__builtin_popcountll(uWord));
+			m_uE1Stage0Input += uStage0;
+			uint32_t uExactMask = 0;
+			for ( uint32_t uStage=0; uStage<4; ++uStage )
+			{
+				const int iNode = m_dE1TFProbeOrder[uStage];
+				uint64_t uRequested = 0, uWritten = 0, uDecoded = 0;
+				uint32_t * pExact = m_dE1StagedExactTF.Begin()+iNode*E1_AND_WINDOW_ROWS;
+				if ( !m_dNodes[iNode].m_pQword->ExtractE1DirectTFBatch ( uWindow, dStageSurvivors.data(), pExact, uRequested, uWritten, uDecoded, uStage ) || uRequested!=uWritten )
+					return false;
+				m_dE1StageBatchRequested[uStage] += uRequested;
+				m_dE1StageBatchWritten[uStage] += uWritten;
+				m_dE1StageMetadataGroups[uStage] += uDecoded;
+				m_uE1BatchTFRowsRequested += uRequested;
+				m_uE1BatchTFRowsWritten += uWritten;
+				m_uE1BatchMetadataGroups += uDecoded;
+				m_uE1MetadataGroups += uDecoded;
+				m_uE1TFProbes += uWritten;
+				uExactMask |= uint32_t(1)<<iNode;
+				uint64_t uRejected = 0, uSurvivors = 0;
+				for ( int w=0; w<64; ++w )
+				{
+					uint64_t uBits = dStageSurvivors[w];
+					while ( uBits )
+					{
+						const uint32_t uBit = uint32_t(__builtin_ctzll(uBits));
+						uBits &= uBits-1;
+						const uint32_t uLocal = uint32_t(w)*64+uBit;
+						uint32_t dTF[4];
+						uint8_t dBounds[4];
+						for ( int i=0; i<4; ++i )
+						{
+							dTF[i] = m_dE1StagedExactTF[i*E1_AND_WINDOW_ROWS+uLocal];
+							dBounds[i] = E1DirectBoundForBit ( m_dE1AndBoundWords[i*64+w], uBit );
+						}
+						const RowID_t tRowID = RowID_t(uWindow*E1_AND_WINDOW_ROWS+uLocal);
+						const int iUpper = E1PartialUpperWeight ( dTF, uExactMask, dBounds, dIDF, dCanonical, 4 );
+						if ( E1TieAwareBoundReject ( iUpper, uint64_t(tRowID), m_iE1RankThreshold, uint64_t(m_tE1WorstTiedRow) ) )
+						{
+							dStageSurvivors[w] &= ~( uint64_t(1)<<uBit );
+							++uRejected;
+							++m_uE1CandidateBoundRejects;
+							if ( iUpper==m_iE1RankThreshold ) ++m_uE1TieBoundRejects;
+						}
+						else
+							++uSurvivors;
+					}
+				}
+				m_dE1StageRejects[uStage] += uRejected;
+				m_dE1StageSurvivors[uStage] += uSurvivors;
+			}
+
+			for ( int w=0; w<64; ++w )
+			{
+				uint64_t uBits = dStageSurvivors[w];
+				while ( uBits )
+				{
+					const uint32_t uBit = uint32_t(__builtin_ctzll(uBits));
+					uBits &= uBits-1;
+					const uint32_t uLocal = uint32_t(w)*64+uBit;
+					ExtDoc_t & tDoc = m_dE1Pending.Add();
+					tDoc.m_tRowID = RowID_t(uWindow*E1_AND_WINDOW_ROWS+uLocal);
+					tDoc.m_uDocFields = UINT32_MAX;
+					tDoc.m_fTFIDF = 0.0f;
+					tDoc.m_uExactTF = 0;
+					tDoc.m_uExactTerms = 4;
+					tDoc.m_bExactOr = 0;
+					for ( int iCanonical=0; iCanonical<4; ++iCanonical )
+						tDoc.m_dExactTF[iCanonical] = m_dE1StagedExactTF[m_dE1Canonical[iCanonical]*E1_AND_WINDOW_ROWS+uLocal];
+					++m_uE1ScalarCandidateInspections;
+					++m_uE1CandidatesScored;
+				}
+			}
+		}
+		else
+		{
+			std::array<std::array<uint32_t,E1_AND_WINDOW_ROWS>,4> dExactTF {};
+			for ( int iNode=0; iNode<m_dNodes.GetLength(); ++iNode )
+			{
+				if ( m_bE1ScopedAnd2 )
+				{
+					for ( int w=0; w<64; ++w )
+					{
+						uint64_t uBits = dStageSurvivors[w];
+						while ( uBits )
+						{
+							const uint32_t uBit = uint32_t(__builtin_ctzll(uBits));
+							uBits &= uBits-1;
+							const uint32_t uLocal = uint32_t(w)*64+uBit;
+							dExactTF[iNode][uLocal] = m_dE1ScopedAndTF[iNode][uWindow*E1_AND_WINDOW_ROWS+uLocal];
+							++m_uE1ScopedAndTFRows;
+						}
+					}
+					continue;
+				}
+				uint64_t uRequested = 0, uWritten = 0, uDecoded = 0;
+				if ( !m_dNodes[iNode].m_pQword->ExtractE1DirectTFBatch ( uWindow, dStageSurvivors.data(), dExactTF[iNode].data(), uRequested, uWritten, uDecoded ) || uRequested!=uWritten )
+					return false;
+				m_uE1BatchTFRowsRequested += uRequested;
+				m_uE1BatchTFRowsWritten += uWritten;
+				m_uE1BatchMetadataGroups += uDecoded;
+				m_uE1MetadataGroups += uDecoded;
+				m_uE1TFProbes += uWritten;
+			}
+
+			for ( int w=0; w<64; ++w )
+			{
+				uint64_t uBits = dStageSurvivors[w];
+				while ( uBits )
+				{
+					const uint32_t uBit = uint32_t(__builtin_ctzll(uBits));
+					uBits &= uBits-1;
+					const uint32_t uLocal = uint32_t(w)*64+uBit;
+					ExtDoc_t & tDoc = m_dE1Pending.Add();
+					tDoc.m_tRowID = RowID_t(uWindow*E1_AND_WINDOW_ROWS+uLocal);
+					tDoc.m_uDocFields = UINT32_MAX;
+					tDoc.m_fTFIDF = 0.0f;
+					tDoc.m_uExactTF = 0;
+					tDoc.m_uExactTerms = BYTE(m_dNodes.GetLength());
+					tDoc.m_bExactOr = 0;
+					for ( int iCanonical=0; iCanonical<m_dE1Canonical.GetLength(); ++iCanonical )
+						tDoc.m_dExactTF[iCanonical] = dExactTF[m_dE1Canonical[iCanonical]][uLocal];
+					++m_uE1ScalarCandidateInspections;
+					++m_uE1CandidatesScored;
+				}
+			}
+		}
+		m_uE1SkippedMatches += uIntersection-m_dE1Pending.GetLength();
+		if ( m_dE1Pending.IsEmpty() )
+			++m_uE1WindowsPruned;
+		else
+			++m_uE1WindowsScored;
+		return true;
+	}
+	return false;
+}
+
+
+template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
+bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1Window()
+{
+	m_dE1Pending.Resize(0);
+	m_iE1PendingPos = 0;
+	if ( m_bFirstChunk )
+	{
+		if ( m_iNodesSet!=m_dNodes.GetLength() || !m_dNodes[0].m_pQword->m_iDocs )
+			return false;
+		Advance(0);
+		m_bFirstChunk = false;
+	}
+	if ( m_dNodes[0].m_tRowID==INVALID_ROWID || !AdvanceQwords() )
+	{
+		m_dNodes[0].m_tRowID = INVALID_ROWID;
+		return false;
+	}
+
+	m_uE1Window = uint32_t(m_dNodes[0].m_tRowID) / E1_AND_WINDOW_ROWS;
+	DWORD dMaxTF[4] = {};
+	for (;;)
+	{
+		if ( m_dNodes[0].m_tRowID==INVALID_ROWID || uint32_t(m_dNodes[0].m_tRowID)/E1_AND_WINDOW_ROWS!=m_uE1Window )
+			break;
+		ExtDoc_t & tDoc = m_dE1Pending.Add();
+		tDoc.m_tRowID = m_dNodes[0].m_tRowID;
+		tDoc.m_uDocFields = GetDocFieldsMask();
+		tDoc.m_fTFIDF = 0.0f;
+		tDoc.m_uExactTF = 0;
+		tDoc.m_uExactTerms = BYTE(m_dNodes.GetLength());
+		for ( int iCanonical=0; iCanonical<m_dE1Canonical.GetLength(); ++iCanonical )
+		{
+			const DWORD uTF = m_dNodes[m_dE1Canonical[iCanonical]].m_pQword->m_uMatchHits;
+			tDoc.m_dExactTF[iCanonical] = uTF;
+			dMaxTF[iCanonical] = Max ( dMaxTF[iCanonical], uTF );
+			++m_uE1TFProbes;
+		}
+		++m_uE1BooleanMatches;
+		Advance(0);
+		if ( m_dNodes[0].m_tRowID==INVALID_ROWID || !AdvanceQwords() )
+		{
+			m_dNodes[0].m_tRowID = INVALID_ROWID;
+			break;
+		}
+	}
+	for ( auto & tNode : m_dNodes )
+		m_uE1MetadataGroups += tNode.m_pQword->TakeE1MetadataGroupsDecoded();
+	if ( m_dE1Pending.IsEmpty() )
+		return false;
+
+	++m_uE1WindowsTotal;
+	float fUpperSum = 0.0f;
+	for ( int iCanonical=0; iCanonical<m_dE1Canonical.GetLength(); ++iCanonical )
+	{
+		const auto & tNode = m_dNodes[m_dE1Canonical[iCanonical]];
+		const float fPositiveIDF = Max ( 0.0f, tNode.m_fIDF );
+		const float fTF = float(dMaxTF[iCanonical]);
+		fUpperSum += fTF/(fTF+0.3f)*fPositiveIDF;
+	}
+	// Exact TF maxima are query-local to this 4096-row range.  ceil plus one
+	// keeps the bound conservative across float evaluation and integer truncation;
+	// equality is retained by the strict comparison.
+	const int iUpperWeight = int(ceilf(1000.0f*(fUpperSum+0.5f)))+1;
+	if ( m_iE1RankThreshold>0 && iUpperWeight < m_iE1RankThreshold )
+	{
+		++m_uE1WindowsPruned;
+		m_uE1SkippedMatches += m_dE1Pending.GetLength();
+		m_dE1Pending.Resize(0);
+		return true;
+	}
+	++m_uE1WindowsScored;
+	return true;
 }
 
 
@@ -3217,6 +5426,25 @@ const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetDocsChunk(
 			return nullptr;
 		}
 		Threads::Coro::RescheduleAndKeepCrashQuery();
+	}
+
+	if ( m_bE1Ranked )
+	{
+		while ( m_iE1PendingPos>=m_dE1Pending.GetLength() )
+		{
+			if ( !( m_bE1Or ? FillE1OrWindow() : ( m_bE1DirectAnd ? FillE1DirectAndWindow() : FillE1Window() ) ) )
+				return nullptr;
+			// A safely pruned window has no rows to expose, but its Boolean
+			// cardinality is returned through TakeRankSkippedDocs().
+			if ( m_dE1Pending.IsEmpty() )
+				continue;
+		}
+		int iDoc = 0;
+		while ( iDoc<MAX_BLOCK_DOCS-1 && m_iE1PendingPos<m_dE1Pending.GetLength() )
+			m_dDocs[iDoc++] = m_dE1Pending[m_iE1PendingPos++];
+		if ( m_pStats )
+			m_pStats->m_iFetchedDocs += iDoc;
+		return ReturnDocsChunk ( iDoc, m_bE1Or ? "e1-multior" : "e1-multiand" );
 	}
 
 	if ( m_bFirstChunk )
@@ -3513,6 +5741,9 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::Reset ( const ISphQwordSe
 {
 	m_bFirstChunk = true;
 	m_iNodesSet = 0;
+	m_uE1Window = UINT32_MAX;
+	m_dE1Pending.Resize(0);
+	m_iE1PendingPos = 0;
 	SetMaxTimeout ( tSetup.m_iMaxTimer );
 	for ( auto & i : m_dNodes )
 	{
@@ -4631,8 +6862,8 @@ inline bool FSMmultinear_c::HitFSM ( const ExtHit_t * pHit, CSphVector<ExtHit_t>
 				ARRAY_FOREACH ( i, m_dNpos )
 				{
 					int iQposDelta = ( m_dNpos[i] - iNpos0 ) + tTarget.m_uQuerypos;
-					assert ( iQposDelta<(int)sizeof(tTarget.m_uQposMask)*8 );
-					tTarget.m_uQposMask |= ( 1 << iQposDelta );
+					if ( iQposDelta<(int)sizeof(tTarget.m_uQposMask)*8 )
+						tTarget.m_uQposMask |= ( 1u << iQposDelta );
 				}
 			}
 		}

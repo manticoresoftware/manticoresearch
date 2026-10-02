@@ -83,6 +83,9 @@ target_link_libraries ( lmanticore PUBLIC indexcheck )
 
 target_link_libraries ( lmanticore PUBLIC lextra indexcheck conversion manticore_std stripper tokenizer
 		schema dict sphinxquery sourcedoc lmanticore_coro )
+if (WITH_ZLIB)
+	target_link_libraries ( lmanticore PUBLIC ZLIB::ZLIB )
+endif ()
 
 if (WITH_ICU OR WITH_JIEBA)
 	add_library ( lcjk cjkpreprocessor.cpp )

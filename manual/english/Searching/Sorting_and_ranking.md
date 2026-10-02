@@ -1051,14 +1051,15 @@ Manticore ships with several built-in rankers suited for different purposes. Man
 
 The currently implemented rankers are:
 
-* `proximity_bm25`, the default ranking mode that uses and combines both phrase proximity and BM25 ranking.
+* `bm25a`, the default ranking mode. It uses the fixed formula `1000*bm25a(1.2,0.75,256)`. Use `OPTION ranker=proximity_bm25` or a table-level `ranker='proximity_bm25'` setting when phrase proximity must remain part of the score.
+* `proximity_bm25`, a ranking mode that uses and combines both phrase proximity and BM25 ranking.
 * `bm25`, a statistical ranking mode that uses BM25 ranking only (similar to most other full-text engines). This mode is faster but may result in worse quality for queries containing more than one keyword.
 * `none`, a no-ranking mode. This mode is obviously the fastest. A weight of 1 is assigned to all matches. This is sometimes called boolean searching, which just matches the documents but does not rank them.
 * `wordcount`, ranking by the keyword occurrences count. This ranker computes the per-field keyword occurrence counts, then multiplies them by field weights, and sums the resulting values.
 * `proximity` returns the raw phrase proximity value as a result. This mode is internally used to emulate `SPH_MATCH_ALL` queries.
 * `matchany` returns rank as it was computed in `SPH_MATCH_ANY` mode earlier and is internally used to emulate `SPH_MATCH_ANY` queries.
 * `fieldmask` returns a 32-bit mask with the N-th bit corresponding to the N-th full-text field, numbering from 0. The bit will only be set when the respective field has any keyword occurrences satisfying the query.
-* `sph04` is generally based on the default 'proximity_bm25' ranker, but additionally boosts matches when they occur at the very beginning or the very end of a text field. Thus, if a field equals the exact query, `sph04` should rank it higher than a field that contains the exact query but is not equal to it. (For instance, when the query is "Hyde Park", a document titled "Hyde Park" should be ranked higher than one titled "Hyde Park, London" or "The Hyde Park Cafe".)
+* `sph04` is generally based on the `proximity_bm25` ranker, but additionally boosts matches when they occur at the very beginning or the very end of a text field. Thus, if a field equals the exact query, `sph04` should rank it higher than a field that contains the exact query but is not equal to it. (For instance, when the query is "Hyde Park", it should rank higher than one titled "Hyde Park, London" or "The Hyde Park Cafe".)
 * `expr` allows you to specify the ranking formula at runtime. It exposes several internal text factors and lets you define how the final weight should be computed from those factors. You can find more details about its syntax and a reference of available factors in a [subsection below](../Searching/Sorting_and_ranking.md#Quick-summary-of-the-ranking-factors).
 
 The ranker name is case-insensitive. Example:
@@ -1165,7 +1166,8 @@ A **field aggregation function** is a single-argument function that accepts an e
 
 Most other rankers can actually be emulated using the expression-based ranker. You just need to provide an appropriate expression. While this emulation will likely be slower than using the built-in, compiled ranker, it may still be interesting if you want to fine-tune your ranking formula starting with one of the existing ones. Additionally, the formulas describe the ranker details in a clear, readable manner.
 
-* proximity_bm25 (default ranker) = `sum(lcs*user_weight)*1000+bm25`
+* bm25a (default ranker) = `1000*bm25a(1.2,0.75,256)`
+* proximity_bm25 = `sum(lcs*user_weight)*1000+bm25`
 * bm25 = `sum(user_weight)*1000+bm25`
 * none = `1`
 * wordcount = `sum(hit_count*user_weight)`

@@ -42,7 +42,7 @@ meta_after=$(sha256sum "$root/data/binlog.meta" | awk '{print $1}')
 log_after=$(sha256sum "$root/data/binlog.0000" | awk '{print $1}')
 cat "$root/start.out" "$root/searchd.log" 2>/dev/null > "$root/combined.log"
 
-if grep -Fq 'is v.15, binary is v.16; recovery requires previous binary version' "$root/combined.log"; then
+if grep -Fq 'is v.15, binary is v.17; recovery requires previous binary version' "$root/combined.log"; then
   foreign_version_diagnostic=yes
 else
   foreign_version_diagnostic=no

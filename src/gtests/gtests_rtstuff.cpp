@@ -16,6 +16,7 @@
 #include "attribute.h"
 #include "sphinxrt.h"
 #include "sphinxsort.h"
+#include "fastcount.h"
 #include "searchdaemon.h"
 #include "binlog.h"
 #include "accumulator.h"
@@ -27,6 +28,31 @@
 
 
 //////////////////////////////////////////////////////////////////////////
+TEST ( FastCount, Aggregate64 )
+{
+	CSphSchema tSchema;
+	tSchema.AddAttr ( CSphColumnInfo ( "id", SPH_ATTR_BIGINT ), false );
+	CSphQuery tQuery;
+	tQuery.m_sQuery = "foo";
+	auto & tItem = tQuery.m_dItems.Add();
+	tItem.m_sExpr = "count(*)";
+	tItem.m_sAlias = "n";
+	SphQueueSettings_t tSettings ( tSchema );
+	SphQueueRes_t tRes;
+	CSphString sError;
+	std::unique_ptr<ISphMatchSorter> pSorter ( sphCreateQueue ( tSettings, tQuery, sError, tRes ) );
+	ASSERT_TRUE ( pSorter ) << sError.cstr();
+	ASSERT_TRUE ( pSorter->IsGroupby() );
+	auto p = pSorter.get();
+	DWORD dStatic[2] = {};
+	const uint64_t uLarge = (uint64_t(1)<<32)+17;
+	PushFullTextCount ( uLarge, { &p, 1 }, dStatic );
+	PushFullTextCount ( uLarge, { &p, 1 }, dStatic );
+	CSphMatch tMatch;
+	ASSERT_EQ ( pSorter->Flatten ( &tMatch ), 1 );
+	EXPECT_EQ ( tMatch.GetAttr ( pSorter->GetSchema()->GetAttr("@count")->m_tLocator ), 2*uLarge );
+}
+
 static void DeleteIndexFiles ( const char * sIndex )
 {
 	if ( !sIndex )
@@ -412,6 +438,8 @@ TEST_F ( RT, WeightBoundary )
 	ASSERT_EQ ( pSrc->GetStats ().m_iTotalDocuments, 1) << "docs committed";
 
 	CSphQuery tQuery;
+	tQuery.m_eRanker = SPH_RANK_PROXIMITY_BM25;
+	tQuery.m_bExplicitRanker = true;
 	AggrResult_t tResult;
 	CSphQueryResult tQueryResult;
 	tQueryResult.m_pMeta = &tResult;
@@ -520,6 +548,7 @@ TEST_F ( RT, RankerFactors )
 	tFactor.m_sAlias = "pf";
 	tQuery.m_sRankerExpr = "1";
 	tQuery.m_eRanker = SPH_RANK_EXPR;
+	tQuery.m_bExplicitRanker = true;
 	tQuery.m_eMode = SPH_MATCH_EXTENDED2;
 	tQuery.m_eSort = SPH_SORT_EXTENDED;
 	tQuery.m_sSortBy = "@weight desc";

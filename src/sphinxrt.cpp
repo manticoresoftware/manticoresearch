@@ -11,7 +11,10 @@
 //
 
 #include "sphinxint.h"
+#include "fastcount.h"
 #include "sphinxrt.h"
+#include "norm_store.h"
+#include "postings_container_writer.h"
 #include "sphinxpq.h"
 #include "sphinxsearch.h"
 #include "sphinxsort.h"
@@ -510,6 +513,7 @@ void RtSegment_t::UpdateUsedRam() const NO_THREAD_SAFETY_ANALYSIS
 	iUsedRam += m_dBlobs.AllocatedBytes();
 	iUsedRam += m_dKeywordCheckpoints.AllocatedBytes();
 	iUsedRam += m_dRows.AllocatedBytes();
+	iUsedRam += m_dNorms.AllocatedBytes();
 	iUsedRam += m_dInfixFilterCP.AllocatedBytes();
 	iUsedRam += m_tDocIDtoRowID.GetLengthBytes();
 	iUsedRam += m_tUuidDocID.GetLengthBytes();
@@ -1620,7 +1624,7 @@ public:
 						~RtIndex_c () final;
 
 	bool				AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
-	virtual bool		AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, const DocstoreBuilder_i::Doc_t * pStoredDoc, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt );
+	virtual bool		AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, const DocstoreBuilder_i::Doc_t * pStoredDoc, const DWORD * pExactFieldLengths, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt );
 	bool				DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString & sError, RtAccum_t * pAccExt ) final;
 	bool				Commit ( int * pDeleted, RtAccum_t * pAccExt, CSphString* pError = nullptr ) final;
 	bool				PreCommit ( RtAccum_t * pAccExt, CSphString & sError ) final;
@@ -1762,7 +1766,8 @@ private:
 	// v22: keywords_v2 dictionary layout versioning.
 	// v23: UUID primary ID linked-schema semantics.
 	// v24: float_vector_array attribute type
-	static constexpr DWORD		META_VERSION		= 24; // next should be 25
+	// v25: exact full-text field norms in persisted RAM segments
+	static constexpr DWORD		META_VERSION		= 25; // next should be 26
 	// Since v20, RT meta is JSON. indextool.cpp's separate v18 constant only handles legacy binary meta.
 
 	int							m_iStride;
@@ -1857,7 +1862,7 @@ private:
 	bool						SaveRamChunk ();
 
 	bool						WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sError ) const;
-	bool						WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, CSphString & sError ) const;
+	bool						WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, e1::Writer & tPrimary, CSphString & sError ) const;
 	void						WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, SaveDiskDataTimings_t * pTimings = nullptr ) const;
 	static bool					WriteDeadRowMap ( SaveDiskDataContext_t & tCtx, CSphString & sError );
 	bool						StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i & tBuilder, const VecTraits_T<PlainOrColumnar_t> & dAttrsForKNN, int iStride, CSphString & sError ) const;
@@ -2672,6 +2677,7 @@ bool RtIndex_c::AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphS
 		return false;
 
 	tSrc.Setup ( m_tSettings, nullptr );
+	tSrc.EnableExactFieldLengths();
 	tSrc.SetTokenizer ( std::move ( tTokenizer ) );
 	tSrc.SetDict ( pAcc->m_pDict );
 	// OPTIMIZE? do not clone filters on each INSERT
@@ -2702,7 +2708,7 @@ bool RtIndex_c::AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphS
 	DocstoreBuilder_i::Doc_t tStoredDoc;
 	DocstoreBuilder_i::Doc_t * pStoredDoc = FetchDocFields ( tStoredDoc, tDoc, tSrc, dTmpAttrStorage );
 	tDoc.m_iTotalBytes = tSrc.GetStats().m_iTotalBytes;
-	if ( !AddDocument ( pHits, tDoc, bReplace, pStoredDoc, sError, sWarning, pAcc ) )
+	if ( !AddDocument ( pHits, tDoc, bReplace, pStoredDoc, tSrc.GetExactFieldLengths(), sError, sWarning, pAcc ) )
 		return false;
 
 	tUuidLease.Adopt ( *pAcc );
@@ -2751,14 +2757,14 @@ bool RtIndex_c::BindAccum ( RtAccum_t * pAccExt, CSphString * pError )
 }
 
 
-bool RtIndex_c::AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, const DocstoreBuilder_i::Doc_t * pStoredDoc, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt )
+bool RtIndex_c::AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, const DocstoreBuilder_i::Doc_t * pStoredDoc, const DWORD * pExactFieldLengths, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt )
 {
 	assert ( RTChangesAllowed () );
 
 	auto * pAcc = (RtAccum_t *)pAccExt;
 
 	if ( pAcc )
-		pAcc->AddDocument ( pHits, tDoc, bReplace, m_tSchema.GetRowSize(), pStoredDoc );
+		pAcc->AddDocument ( pHits, tDoc, bReplace, m_tSchema.GetRowSize(), pStoredDoc, pExactFieldLengths );
 
 	return !!pAcc;
 }
@@ -3087,6 +3093,7 @@ RtSegment_t * CreateSegment ( RtAccum_t* pAcc, int iWordsCheckpoint, ESphHitless
 		FixupSegmentCheckpoints ( pSeg );
 
 	pSeg->m_dRows.SwapData ( pAcc->m_dAccumRows );
+	pSeg->m_dNorms.SwapData ( pAcc->m_dNorms );
 	pSeg->m_dBlobs.SwapData ( pAcc->m_dBlobs) ;
 	std::swap ( pSeg->m_pDocstore, pAcc->m_pDocstore );
 
@@ -3171,10 +3178,19 @@ static void CopyWordWithoutField ( CSphTightVector<BYTE> * pOutHits, RtDocWriter
 		if ( tInDocs->m_uHits!=1 )
 		{
 			RtHitReader_c tInHits ( tSrc, *tInDocs );
-			RtHitWriter_c tOutHits ( *pOutHits );
-			tOutDoc.m_uHit = tOutHits.WriterPos();
+			CSphVector<Hitpos_t> dOutHits;
 			while ( tInHits.UnzipHit() )
-				ProcessField ( tOutDoc, *tInHits, iKillField, [&tOutHits] ( Hitpos_t x ) { tOutHits << x; } );
+				ProcessField ( tOutDoc, *tInHits, iKillField, [&dOutHits] ( Hitpos_t x ) { dOutHits.Add ( x ); } );
+
+			if ( dOutHits.GetLength()==1 )
+				tOutDoc.m_uHit = dOutHits[0];
+			else if ( dOutHits.GetLength()>1 )
+			{
+				RtHitWriter_c tOutHits ( *pOutHits );
+				tOutDoc.m_uHit = tOutHits.WriterPos();
+				for ( Hitpos_t uHit : dOutHits )
+					tOutHits << uHit;
+			}
 		} else
 			ProcessField ( tOutDoc, tOutDoc.m_uHit, iKillField, [&tOutDoc] ( Hitpos_t x ) { tOutDoc.m_uHit = x; } );
 
@@ -3586,6 +3602,22 @@ RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegmen
 
 	assert ( tNextRowID<=INT_MAX );
 	pSeg->m_uRows = tNextRowID;
+	const int iFields = m_tSchema.GetFieldsCount();
+	pSeg->m_dNorms.Resize ( int64_t(tNextRowID)*iFields );
+	auto fnCopyNorms = [iFields,pSeg] ( const RtSegment_t * pSrc, const CSphFixedVector<RowID_t> & dRowMap )
+	{
+		assert ( pSrc->m_dNorms.GetLength64()==int64_t(pSrc->m_uRows)*iFields );
+		if ( !iFields )
+			return;
+		for ( RowID_t tOldRow=0; tOldRow<pSrc->m_uRows; ++tOldRow )
+		{
+			const RowID_t tNewRow = dRowMap[tOldRow];
+			if ( tNewRow!=INVALID_ROWID )
+				memcpy ( &pSeg->m_dNorms[int64_t(tNewRow)*iFields], &pSrc->m_dNorms[int64_t(tOldRow)*iFields], iFields*sizeof(DWORD) );
+		}
+	};
+	fnCopyNorms ( pA, dRowMapA );
+	fnCopyNorms ( pB, dRowMapB );
 	pSeg->m_tAliveRows.store ( pSeg->m_uRows, std::memory_order_relaxed );
 	pSeg->m_tDeadRowMap.Reset ( pSeg->m_uRows );
 	pSeg->m_pColumnar = CreateColumnarRT ( m_tSchema, pColumnarBuilder.get() );
@@ -4470,6 +4502,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	auto sSPB	= tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPB );
 	auto sSPT	= tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPT );
 	auto sSPHI	= tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPHI );
+	auto sSPN	= tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPN );
 	auto sSPDS	= tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPDS );
 	auto sSPC	= tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPC );
 	auto sSIdx	= tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPIDX );
@@ -4569,6 +4602,9 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	auto iStrideBytes = sizeof ( CSphRowitem ) * iStride;
 	CSphFixedVector<CSphRowitem> dNewRow { iStride };
 	CSphRowitem * pNewRow = dNewRow.Begin();
+	const int iFields = m_tSchema.GetFieldsCount();
+	e1::norms::StagedBuilder tNormBuilder ( iFields );
+	std::string sNormError;
 	ARRAY_FOREACH ( i, tCtx.m_tRamSegments )
 	{
 		const auto & tSeg = *tCtx.m_tRamSegments[i];
@@ -4580,6 +4616,13 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 
 		for ( auto tRowID : RtLiveRows_c(tSeg) )
 		{
+			assert ( tSeg.m_dNorms.GetLength64()==int64_t(tSeg.m_uRows)*iFields );
+			const DWORD * pNorms = iFields ? &tSeg.m_dNorms[int64_t(tRowID)*iFields] : nullptr;
+			if ( !tNormBuilder.AddRow ( pNorms, iFields, sNormError ) )
+			{
+				sError = sNormError.c_str();
+				return false;
+			}
 			const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID*iStride;
 			tMinMaxBuilder.Collect(pRow);
 			if ( pBlobLocatorAttr )
@@ -4714,6 +4757,12 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	if ( pJsonSIBuilder && !pJsonSIBuilder->Done(sError) )
 		return false;
 
+	if ( !tNormBuilder.Finish ( sSPN.cstr(), sNormError ) )
+	{
+		sError = sNormError.c_str();
+		return false;
+	}
+
 	return true;
 }
 
@@ -4785,22 +4834,21 @@ bool RtIndex_c::StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i 
 }
 
 
-bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, CSphString & sError ) const
+bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, e1::Writer & tPrimary, CSphString & sError ) const
 {
-	CSphWriterNonThrottled tWriterHits, tWriterDocs, tWriterSkips;
+	CSphWriterNonThrottled tWriterHits;
 
 	if ( !tWriterHits.OpenFile ( tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPP ), sError ) )
 		return false;
 
-	if ( !tWriterDocs.OpenFile ( tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPD ), sError ) )
+	std::string sWriterError;
+	if ( !tPrimary.Open ( tCtx.m_tFilebase.GetFilename(SPH_EXT_SPD).cstr(), sWriterError ) )
+	{
+		sError = sWriterError.c_str();
 		return false;
-
-	if ( !tWriterSkips.OpenFile ( tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPE ), sError ) )
-		return false;
+	}
 
 	tWriterHits.PutByte(1);
-	tWriterDocs.PutByte(1);
-	tWriterSkips.PutByte(1);
 
 	int iSegments = tCtx.m_tRamSegments.GetLength();
 
@@ -4818,7 +4866,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 	CSphKeywordDeltaWriter tLastWord;
 	CSphKeywordDeltaWriterV2 tLastWordV2;
 	SphWordID_t uLastWordID = 0;
-	CSphVector<SkiplistEntry_t> dSkiplist;
+
 	const DictFormat_e eDictFormat = GetDictFormat();
 	const bool bKeywordsV2 = m_pDict->GetSettings().IsKeywordsV2();
 	const bool bWordDict = IsWordDict();
@@ -4830,6 +4878,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 	int iSkiplistBlockSize = m_tSettings.m_iSkiplistBlockSize;
 	assert ( iSkiplistBlockSize>0 );
 
+	std::vector<e1::Posting> dPostings;
 	while (true)
 	{
 		// find keyword with min id
@@ -4841,13 +4890,10 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 		if ( !pWord )
 			break;
 
-		SphOffset_t uDocpos = tWriterDocs.GetPos();
-		SphOffset_t uLastHitpos = 0;
-		RowID_t tLastRowID = INVALID_ROWID;
-		RowID_t tSkiplistRowID = INVALID_ROWID;
+		const SphOffset_t uDocpos = iWords+1;
 		int iDocs = 0;
 		int iHits = 0;
-		dSkiplist.Resize(0);
+		dPostings.clear();
 
 		// loop all segments that have this keyword
 		CSphBitvec tSegsWithWord ( iSegments );
@@ -4867,30 +4913,14 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 				if ( tRowID==INVALID_ROWID )
 					continue;
 
-				// build skiplist, aka save decoder state as needed
-				if ( ( iDocs & ( iSkiplistBlockSize-1 ) )==0 )
-				{
-					SkiplistEntry_t & t = dSkiplist.Add();
-					t.m_tBaseRowIDPlus1 = tSkiplistRowID+1;
-					t.m_iOffset = tWriterDocs.GetPos();
-					t.m_iBaseHitlistPos = uLastHitpos;
-				}
-
 				++iDocs;
 				iHits += pDoc->m_uHits;
-				tSkiplistRowID = tRowID;
-
-				tWriterDocs.ZipOffset ( tRowID - std::exchange ( tLastRowID, tRowID ) );
-				tWriterDocs.ZipInt ( pDoc->m_uHits );
+				uint64_t uRef = tWriterHits.GetPos();
+				uint32_t uFirstFieldTF = 0;
+				const bool bNeedFirstFieldTF = __builtin_popcount(pDoc->m_uDocFields)==2;
+				const int iFirstField = bNeedFirstFieldTF ? __builtin_ctz(pDoc->m_uDocFields) : -1;
 				if ( pDoc->m_uHits==1 && pWord->m_bHasHitlist )
-				{
-					tWriterDocs.ZipInt ( pDoc->m_uHit & 0x7FFFFFUL );
-					tWriterDocs.ZipInt ( pDoc->m_uHit >> 23 );
-				} else
-				{
-					tWriterDocs.ZipInt ( pDoc->m_uDocFields );
-					tWriterDocs.ZipOffset ( tWriterHits.GetPos() - std::exchange ( uLastHitpos, tWriterHits.GetPos() ) );
-				}
+					uRef = (uint64_t(1)<<63) | pDoc->m_uHit;
 
 				// loop hits from current segment
 				if ( pDoc->m_uHits>1 )
@@ -4898,29 +4928,27 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 					DWORD uLastHit = 0;
 					RtHitReader_c tInHits ( *tCtx.m_tRamSegments[iSegment], *pDoc );
 					while ( DWORD uValue = tInHits.UnzipHit() )
+					{
+						if ( bNeedFirstFieldTF && HITMAN::GetField(uValue)==iFirstField )
+							++uFirstFieldTF;
 						tWriterHits.ZipInt ( uValue - std::exchange ( uLastHit, uValue ) );
+					}
 					tWriterHits.ZipInt(0);
 				}
+				if ( !bNeedFirstFieldTF || !uFirstFieldTF || uFirstFieldTF>=pDoc->m_uHits )
+					uFirstFieldTF = 0;
+				dPostings.push_back ( { tRowID, pDoc->m_uHits, pDoc->m_uDocFields, uRef, uFirstFieldTF } );
 			}
 		}
 
-		// write skiplist
-		int64_t iSkiplistOff = tWriterSkips.GetPos();
-		for ( int i=1; i<dSkiplist.GetLength(); ++i )
-		{
-			const SkiplistEntry_t & tPrev = dSkiplist[i-1];
-			const SkiplistEntry_t & tCur = dSkiplist[i];
-			assert ( tCur.m_tBaseRowIDPlus1 - tPrev.m_tBaseRowIDPlus1>=(DWORD)iSkiplistBlockSize );
-			assert ( tCur.m_iOffset - tPrev.m_iOffset>=4*iSkiplistBlockSize );
-			tWriterSkips.ZipInt ( tCur.m_tBaseRowIDPlus1 - tPrev.m_tBaseRowIDPlus1 - iSkiplistBlockSize );
-			tWriterSkips.ZipOffset ( tCur.m_iOffset - tPrev.m_iOffset - 4*iSkiplistBlockSize );
-			tWriterSkips.ZipOffset ( tCur.m_iBaseHitlistPos - tPrev.m_iBaseHitlistPos );
-		}
-
 		// write dict entry if necessary
-		if ( tWriterDocs.GetPos()!=uDocpos )
+		if ( !dPostings.empty() )
 		{
-			tWriterDocs.ZipInt ( 0 ); // docs over
+			if ( !tPrimary.FinishTerm ( uDocpos, dPostings, iHits, pWord->m_bHasHitlist, sWriterError ) )
+			{
+				sError = sWriterError.c_str();
+				return false;
+			}
 
 			if ( ( iWords%SPH_WORDLIST_CHECKPOINT )==0 )
 			{
@@ -4975,7 +5003,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 
 			if ( bWordDict )
 			{
-				BYTE uHint = sphDoclistHintPack ( iDocs, tWriterDocs.GetPos()-tCtx.m_tLastDocPos );
+				BYTE uHint = sphDoclistHintPack ( iDocs, SphOffset_t(iDocs)*5 );
 				if ( uHint )
 					tWriterDict.PutByte ( uHint );
 
@@ -4995,7 +5023,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 
 			// emit skiplist pointer
 			if ( iDocs>iSkiplistBlockSize )
-				tWriterDict.ZipOffset ( iSkiplistOff );
+				tWriterDict.ZipOffset ( uDocpos );
 
 			tCtx.m_tLastDocPos = uDocpos;
 		}
@@ -5006,10 +5034,8 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 				dWords[i] = dWordReaders[i].UnzipWord();
 	}
 
-	tCtx.m_tDocsOffset = tWriterDocs.GetPos();
+	tCtx.m_tDocsOffset = iWords+1;
 	tWriterHits.CloseFile();
-	tWriterDocs.CloseFile();
-	tWriterSkips.CloseFile();
 	return true;
 }
 
@@ -5172,7 +5198,8 @@ bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 	tWriterDict.PutByte ( 1 );
 
 	tmStart = sphMicroTimer();
-	if ( !WriteDocs ( tCtx, tWriterDict, sError ) )
+	e1::Writer tPrimary;
+	if ( !WriteDocs ( tCtx, tWriterDict, tPrimary, sError ) )
 		return false;
 	if ( pTimings )
 		pTimings->m_tmDocs = sphMicroTimer() - tmStart;
@@ -5188,6 +5215,12 @@ bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 	tWriterDict.CloseFile();
 	if ( tWriterDict.IsError() )
 		return false;
+	std::string sWriterError;
+	if ( !tPrimary.Finalize ( sSPI.cstr(), IndexFileBase_c{szFilename}.GetFilename(SPH_EXT_SPP).cstr(), sWriterError ) )
+	{
+		sError = sWriterError.c_str();
+		return false;
+	}
 
 	tmStart = sphMicroTimer();
 	if ( !SaveDiskHeader ( tCtx, tStats, sError ) )
@@ -5625,6 +5658,7 @@ std::unique_ptr<CSphIndex> RtIndex_c::PreallocDiskChunk ( const CSphString& sChu
 		sError.SetSprintf ( "disk chunk %s: prealloc failed: %s", sChunk.cstr(), pDiskChunk->GetLastError().cstr() );
 		pDiskChunk = nullptr;
 	}
+
 
 	return pDiskChunk;
 }
@@ -6247,6 +6281,7 @@ void RtIndex_c::SaveRamSegment ( const RtSegment_t* pSeg, CSphWriter& wrChunk ) 
 	SaveVector ( wrChunk, pSeg->m_dDocs );
 	SaveVector ( wrChunk, pSeg->m_dHits );
 	SaveVector ( wrChunk, pSeg->m_dRows );
+	SaveVector ( wrChunk, pSeg->m_dNorms );
 	pSeg->m_tDeadRowMap.Save ( wrChunk );
 	SaveVector ( wrChunk, pSeg->m_dBlobs );
 
@@ -6383,6 +6418,20 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup
 
 		if ( !LoadVector ( rdChunk, pSeg->m_dRows, iFileSize, "ram-attributes", m_sLastError ) )
 			return false;
+
+		if ( uVersion>=25 && !LoadVector ( rdChunk, pSeg->m_dNorms, iFileSize, "ram-norms", m_sLastError ) )
+			return false;
+		const int64_t iExpectedNorms = int64_t(uRows)*m_tSchema.GetFieldsCount();
+		if ( uVersion<25 )
+		{
+			pSeg->m_dNorms.Resize ( iExpectedNorms );
+			pSeg->m_dNorms.ZeroVec(); // legacy RAM chunks did not persist exact lengths
+		}
+		else if ( pSeg->m_dNorms.GetLength64()!=iExpectedNorms )
+		{
+			m_sLastError.SetSprintf ( "ram-norms length mismatch: expected %" PRIi64 ", got %" PRIi64, iExpectedNorms, pSeg->m_dNorms.GetLength64() );
+			return false;
+		}
 
 		pSeg->m_tDeadRowMap.Load ( uRows, rdChunk, m_sLastError );
 
@@ -6645,6 +6694,13 @@ void RtIndex_c::DebugCheckRamSegment ( const RtSegment_t & tSegment, int iSegmen
 	if ( !tSegment.m_uRows )
 	{
 		tReporter.Fail ( "empty RT segment (segment=%d)", iSegment );
+		return;
+	}
+
+	const int64_t iExpectedNorms = int64_t(tSegment.m_uRows)*m_tSchema.GetFieldsCount();
+	if ( tSegment.m_dNorms.GetLength64()!=iExpectedNorms )
+	{
+		tReporter.Fail ( "invalid RT norms length (segment=%d, expected=%" PRIi64 ", got=%" PRIi64 ")", iSegment, iExpectedNorms, tSegment.m_dNorms.GetLength64() );
 		return;
 	}
 
@@ -7533,18 +7589,65 @@ private:
 
 //////////////////////////////////////////////////////////////////////////
 
+class RtFieldNormReader_c final : public FieldNormReader_i
+{
+public:
+	void Set ( const RtSegment_t * pSegment, uint32_t uFields ) { m_pSegment = pSegment; m_uFields = uFields; }
+	uint32_t Rows() const override { return m_pSegment ? m_pSegment->m_uRows : 0; }
+	uint32_t Fields() const override { return m_uFields; }
+	uint64_t Sum ( uint32_t uField ) const override
+	{
+		if ( !m_pSegment || uField>=m_uFields )
+			return 0;
+		uint64_t uSum = 0;
+		for ( RowID_t tRowID=0; tRowID<m_pSegment->m_uRows; ++tRowID )
+			uSum += m_pSegment->m_dNorms[int64_t(tRowID)*m_uFields+uField];
+		return uSum;
+	}
+	bool Get ( uint32_t uField, uint32_t uRow, uint32_t & uValue ) const override
+	{
+		if ( !m_pSegment || uField>=m_uFields || uRow>=m_pSegment->m_uRows )
+			return false;
+		uValue = m_pSegment->m_dNorms[int64_t(uRow)*m_uFields+uField];
+		return true;
+	}
+	bool GatherTotal ( const uint32_t * pRows, uint32_t uCount, uint32_t * pOut ) const override
+	{
+		if ( !m_pSegment || !pRows || !pOut )
+			return false;
+		for ( uint32_t i=0; i<uCount; ++i )
+		{
+			if ( pRows[i]>=m_pSegment->m_uRows )
+				return false;
+			uint32_t uTotal = 0;
+			const DWORD * pNorms = m_uFields ? &m_pSegment->m_dNorms[int64_t(pRows[i])*m_uFields] : nullptr;
+			for ( uint32_t iField=0; iField<m_uFields; ++iField )
+				uTotal += pNorms[iField];
+			pOut[i] = uTotal;
+		}
+		return true;
+	}
+
+private:
+	const RtSegment_t * m_pSegment = nullptr;
+	uint32_t m_uFields = 0;
+};
+
+
 class RtQwordSetup_t final : public ISphQwordSetup
 {
 public:
 	explicit RtQwordSetup_t ( const RtGuard_t& tGuard );
 	ISphQword *	QwordSpawn ( const XQKeyword_t & ) const final;
 	bool		QwordSetup ( ISphQword * pQword ) const final;
-	void				SetSegment ( int iSegment ) { m_iSeg = iSegment; }
+	void				SetSegment ( int iSegment );
+	const RtGuard_t & GetGuard() const { return m_tGuard; }
 	ISphQword *			ScanSpawn ( int iAtomPos ) const final;
 
 private:
 	const RtGuard_t&	m_tGuard;
 	int					m_iSeg;
+	RtFieldNormReader_c m_tNormReader;
 };
 
 
@@ -7552,6 +7655,22 @@ RtQwordSetup_t::RtQwordSetup_t ( const RtGuard_t& tGuard )
 	: m_tGuard ( tGuard )
 	, m_iSeg ( -1 )
 { }
+
+
+void RtQwordSetup_t::SetSegment ( int iSegment )
+{
+	m_iSeg = iSegment;
+	m_pFieldNorms = nullptr;
+	if ( iSegment<0 )
+		return;
+
+	const auto & dRamSegs = m_tGuard.m_dRamSegs;
+	if ( iSegment>=dRamSegs.GetLength() || !m_pIndex )
+		return;
+
+	m_tNormReader.Set ( dRamSegs[iSegment], m_pIndex->GetMatchSchema().GetFieldsCount() );
+	m_pFieldNorms = &m_tNormReader;
+}
 
 
 ISphQword * RtQwordSetup_t::QwordSpawn ( const XQKeyword_t & tWord ) const
@@ -8920,6 +9039,75 @@ static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema &
 
 	return Threads::Coro::ContinueBool ( iStackNeed, [&] {
 
+	if ( tParsed.m_bFastCountEligible && tQuery.m_dFilters.IsEmpty() && CanUseFastFullTextCount ( tQuery, tParsed.m_pRoot, dSorters ) && !tCtx.GetPackedFactor() )
+	{
+		const int iSegments = dRamChunks.GetLength();
+		std::vector<uint64_t> dCounts ( iSegments );
+		CSphVector<QueryProfile_c> dProfiles ( iSegments );
+		CSphVector<CSphString> dWarnings ( iSegments );
+		std::atomic<bool> bInterrupted { false };
+		std::atomic<bool> bUnsupported { false };
+		auto tDispatch = GetEffectiveBaseDispatcherTemplate();
+		Dispatcher::Unify ( tDispatch, tQuery.m_tMainDispatcher );
+		auto pDispatcher = Dispatcher::Make ( iSegments, tArgs.m_iThreads, tDispatch, false );
+		Coro::ExecuteN ( pDispatcher->GetConcurrency(), [&]
+		{
+			auto pSource = pDispatcher->MakeSource();
+			RtQwordSetup_t tLocalSetup ( tTermSetup.GetGuard() );
+			tLocalSetup.SetDict ( GetStatelessDict ( tTermSetup.Dict() ) );
+			tLocalSetup.m_pIndex = tTermSetup.m_pIndex;
+			tLocalSetup.m_iMaxTimer = tTermSetup.m_iMaxTimer;
+			tLocalSetup.m_bHasWideFields = tTermSetup.m_bHasWideFields;
+			CSphQueryContext tLocalCtx ( tQuery, tQuerySettings );
+			tLocalSetup.m_pCtx = &tLocalCtx;
+			Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
+			int iSeg = -1;
+			while ( !bInterrupted.load(std::memory_order_relaxed) && !bUnsupported.load(std::memory_order_relaxed) && pSource->FetchTask ( iSeg ) )
+			{
+				const RtSegment_t * pSeg = dRamChunks[iSeg];
+				SccRL_t rLock ( pSeg->m_tLock );
+				tLocalSetup.SetSegment ( iSeg );
+				tLocalSetup.m_pWarning = &dWarnings[iSeg];
+				tLocalCtx.m_pProfile = pProfiler ? &dProfiles[iSeg] : nullptr;
+				FullTextCountContext_t tCountCtx;
+				tCountCtx.m_bStatsExact = pSeg->m_tAliveRows.load(std::memory_order_relaxed)==pSeg->m_uRows;
+				tCountCtx.m_fnAlive = [pSeg] ( RowID_t tRow ) { return !pSeg->m_tDeadRowMap.IsSet(tRow); };
+				if ( !CountFullTextDocs ( tParsed.m_pRoot, tLocalSetup, tCountCtx, dCounts[iSeg] ) )
+					bUnsupported.store ( true, std::memory_order_relaxed );
+				if ( !dWarnings[iSeg].IsEmpty() ) bInterrupted.store ( true, std::memory_order_relaxed );
+				iSeg = -1;
+			}
+		});
+		// Commit RAM counts only if every executor accepted the query. Workers
+		// used private setups/qwords and the same pinned guard; the original
+		// tTermSetup is untouched for legacy fallback. Disk work is not repeated.
+		if ( !bUnsupported.load(std::memory_order_relaxed) )
+		{
+			uint64_t uTotal = 0;
+			for ( int iSeg=0; iSeg<iSegments; ++iSeg )
+			{
+				uTotal += dCounts[iSeg];
+				if ( pProfiler ) pProfiler->AddMetric ( dProfiles[iSeg] );
+				if ( !dWarnings[iSeg].IsEmpty() )
+				{
+					tMeta.m_sWarning = dWarnings[iSeg];
+					tMeta.m_bTotalMatchesApprox = true;
+				}
+			}
+			RecordFullTextCount ( tMeta );
+			if ( uTotal ) PushFullTextCount ( uTotal, dSorters, dRamChunks[0]->GetDocinfoByRowID(0), 1 );
+			return true;
+		}
+		// An interruption racing a decline must not restart a legacy scan or
+		// publish tentative RAM counts as exact (existing disk counts survive).
+		if ( bInterrupted.load(std::memory_order_relaxed) )
+		{
+			tMeta.m_sWarning = "query timed out or was interrupted";
+			tMeta.m_bTotalMatchesApprox = true;
+			return true;
+		}
+	}
+
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
 	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tParsed, tQuery, tQuerySettings, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
@@ -9276,6 +9464,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 			iStackNeed = 0;
 		} else
 		{
+			tParsed.m_bFastCountEligible = CanUseFastFullTextCount ( tQueryToRun, tParsed.m_pRoot, dSorters );
 			const bool bCanExpandRamWildcards = IsStarDict ( bWordDict );
 			iStackNeed = PrepareFTSearch ( this, bCanExpandRamWildcards, bWordDict, m_tMutableSettings.m_iExpandKeywords, m_iExpansionLimit, m_tSettings, tQueryToRun,(cRefCountedRefPtrGeneric_t) tGuard.m_tSegmentsAndChunks.m_pSegs, pDict, tMeta, pProfiler, &tPayloads, tParsed );
 		}
@@ -9313,6 +9502,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	{
 		CSphMultiQueryArgs tFTArgs ( tArgs.m_iIndexWeight );
 		tFTArgs.m_bFinalizeSorters = tArgs.m_bFinalizeSorters;
+		tFTArgs.m_iThreads = tArgs.m_iThreads;
 		tMeta.m_bBigram = ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE );
 
 		bResult = DoFullTextSearch ( tGuard.m_dRamSegs, tMaxSorterSchema, tQueryToRun, tQuerySettings, tFTArgs, iMatchPoolSize, iStackNeed, tTermSetup, pProfiler, tCtx, dSorters, tParsed, tMeta, dSorters.GetLength()==1 ? dSorters[0] : nullptr );
@@ -9842,6 +10032,21 @@ void RtIndex_c::AddRemoveRowwiseAttr ( RtGuard_t & tGuard, bool bAdd, const CSph
 // fixme! Need fine-grain locking, not const_cast!
 void RtIndex_c::AddFieldToRamchunk ( const CSphString & sFieldName, DWORD uFieldFlags, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema )
 {
+	auto pSegs = m_tRtChunks.RamSegs();
+	for ( auto & pConstSeg : *pSegs )
+	{
+		auto * pSeg = const_cast<RtSegment_t*> ( pConstSeg.Ptr() );
+		CSphTightVector<DWORD> dNewNorms;
+		dNewNorms.Resize ( int64_t(pSeg->m_uRows)*tNewSchema.GetFieldsCount() );
+		dNewNorms.ZeroVec();
+		const int iOldFields = tOldSchema.GetFieldsCount();
+		if ( iOldFields )
+			for ( RowID_t tRowID=0; tRowID<pSeg->m_uRows; ++tRowID )
+				memcpy ( &dNewNorms[int64_t(tRowID)*tNewSchema.GetFieldsCount()], &pSeg->m_dNorms[int64_t(tRowID)*iOldFields], iOldFields*sizeof(DWORD) );
+		pSeg->m_dNorms.SwapData ( dNewNorms );
+		pSeg->UpdateUsedRam();
+	}
+
 	if ( !(uFieldFlags & CSphColumnInfo::FIELD_STORED) )
 		return;
 
@@ -9910,6 +10115,17 @@ void RtIndex_c::RemoveFieldFromRamchunk ( const CSphString & sFieldName, const C
 		auto* pSeg = const_cast<RtSegment_t*> ( pConstSeg.Ptr() );
 		assert ( pSeg );
 		DeleteFieldFromDict ( pSeg, iFieldId );
+		CSphTightVector<DWORD> dNewNorms;
+		dNewNorms.Resize ( int64_t(pSeg->m_uRows)*tNewSchema.GetFieldsCount() );
+		for ( RowID_t tRowID=0; tRowID<pSeg->m_uRows; ++tRowID )
+		{
+			int iDstField = 0;
+			for ( int iSrcField=0; iSrcField<tOldSchema.GetFieldsCount(); ++iSrcField )
+				if ( iSrcField!=iFieldId )
+					dNewNorms[int64_t(tRowID)*tNewSchema.GetFieldsCount()+iDstField++] = pSeg->m_dNorms[int64_t(tRowID)*tOldSchema.GetFieldsCount()+iSrcField];
+		}
+		pSeg->m_dNorms.SwapData ( dNewNorms );
+		pSeg->UpdateUsedRam();
 	}
 
 	AddRemoveFromRamDocstore ( tOldSchema, tNewSchema );
@@ -10951,6 +11167,7 @@ bool RtIndex_c::BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & 
 		Binlog::SaveVector ( tWriter, pSeg->m_dDocs );
 		Binlog::SaveVector ( tWriter, pSeg->m_dHits );
 		Binlog::SaveVector ( tWriter, pSeg->m_dRows );
+		Binlog::SaveVector ( tWriter, pSeg->m_dNorms );
 		Binlog::SaveVector ( tWriter, pSeg->m_dBlobs );
 		Binlog::SaveVector ( tWriter, pSeg->m_dKeywordCheckpoints );
 
@@ -11000,6 +11217,13 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader & tReader, CSphStr
 		if ( !Binlog::LoadVector ( tReader, pSeg->m_dDocs ) ) return Warn ( sError, tReader );
 		if ( !Binlog::LoadVector ( tReader, pSeg->m_dHits ) ) return Warn ( sError, tReader );
 		if ( !Binlog::LoadVector ( tReader, pSeg->m_dRows )  ) return Warn ( sError, tReader );
+		if ( !Binlog::LoadVector ( tReader, pSeg->m_dNorms )  ) return Warn ( sError, tReader );
+		const int64_t iExpectedNorms = int64_t(uRows)*m_tSchema.GetFieldsCount();
+		if ( pSeg->m_dNorms.GetLength64()!=iExpectedNorms )
+		{
+			sError.SetSprintf ( "binlog norms length mismatch: expected %" PRIi64 ", got %" PRIi64, iExpectedNorms, pSeg->m_dNorms.GetLength64() );
+			return {};
+		}
 		if ( !Binlog::LoadVector ( tReader, pSeg->m_dBlobs )  ) return Warn ( sError, tReader );
 		if ( !Binlog::LoadVector ( tReader, pSeg->m_dKeywordCheckpoints ) ) return Warn ( sError, tReader );
 

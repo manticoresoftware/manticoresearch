@@ -127,6 +127,7 @@ public:
 	int64_t 						m_iAccumBytes = 0;
 	CSphTightVector<CSphWordHit>	m_dAccum;
 	CSphTightVector<CSphRowitem>	m_dAccumRows;
+	CSphTightVector<DWORD>			m_dNorms;
 	CSphVector<DocID_t>				m_dAccumKlist;
 	CSphTightVector<BYTE>			m_dBlobs;
 	CSphVector<DWORD>				m_dPerDocHitsCount;
@@ -148,7 +149,7 @@ public:
 	void			Cleanup();
 	void			CleanReplicated();
 
-	void			AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t * pStoredDoc );
+	void			AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t * pStoredDoc, const DWORD * pExactFieldLengths=nullptr );
 	void			CleanupDuplicates ( int iRowSize );
 	void			ForEachUuidDocid ( const std::function<void ( ByteBlob_t )> & fnVisitor ) const;
 	void			GrabLastWarning ( CSphString & sWarning );

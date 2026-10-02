@@ -22,6 +22,7 @@
 #include "secondarylib.h"
 #include "indexsettings.h"
 #include "indexfiles.h"
+#include "postings_container_codecs.h"
 #include "roaring/roaring64map.hh"
 
 #include "killlist.h"
@@ -545,6 +546,7 @@ private:
 	bool					m_bHasBlobs = false;
 	bool					m_bHasDocstore = false;
 	bool					m_bIsEmpty = false;
+	bool					m_bPostingsContainer = false;
 	DWORD					m_uVersion = 0;
 	int64_t					m_iNumRows = 0;
 	int64_t					m_iDocinfoIndex = 0;
@@ -695,6 +697,21 @@ bool DiskIndexChecker_c::Impl_c::ReadHeader ( const CSphString& sHeader )
 
 	// version
 	m_uVersion = (DWORD)Int ( tBson.ChildByName ( "index_format_version" ) );
+	m_bPostingsContainer = m_uVersion==e1::VERSION || m_uVersion==e1::VERSION5 || m_uVersion==e1::VERSION4;
+	if ( m_bPostingsContainer )
+	{
+		auto tCapability = tBson.ChildByName ( "e1_postings" );
+		auto tBase = tBson.ChildByName ( "e1_base_version" );
+		auto tNormCapability = tBson.ChildByName ( "e1_norms" );
+		int iExpected = m_uVersion==e1::VERSION ? 6 : m_uVersion==e1::VERSION5 ? 5 : 4;
+		const bool bNormCapabilityValid = m_uVersion!=e1::VERSION || ( IsInt(tNormCapability) && Int(tNormCapability)==1 );
+		if ( !IsInt(tCapability) || !IsInt(tBase) || Int(tCapability)!=iExpected || Int(tBase)!=INDEX_FORMAT_VERSION || !bNormCapabilityValid )
+		{
+			m_sError = "postings container capability/base version mismatch";
+			return false;
+		}
+		m_uVersion = INDEX_FORMAT_VERSION;
+	}
 	if ( m_uVersion <= 1 || m_uVersion > INDEX_FORMAT_VERSION )
 	{
 		m_sError.SetSprintf ( "%s is v.%u, binary is v.%u", szHeader, m_uVersion, INDEX_FORMAT_VERSION );
@@ -755,7 +772,7 @@ bool DiskIndexChecker_c::Impl_c::OpenFiles ()
 	if ( !m_pHitsReader )
 		return m_tReporter.Fail ( "unable to open hitlist: %s", m_sError.cstr() );
 
-	if ( !m_tSkipsReader.Open ( GetFilename(SPH_EXT_SPE), m_sError ) )
+	if ( !m_bPostingsContainer && !m_tSkipsReader.Open ( GetFilename(SPH_EXT_SPE), m_sError ) )
 		return m_tReporter.Fail ( "unable to open skiplist: %s", m_sError.cstr () );
 
 	if ( !m_tDeadRowReader.Open ( GetFilename(SPH_EXT_SPM).cstr(), m_sError ) )
@@ -927,8 +944,11 @@ void DiskIndexChecker_c::Impl_c::Check()
 	if ( m_tReporter.GetExtractDocs() )
 		return ExtractDocs();
 	CheckSchema();
-	CheckDictionary();
-	CheckDocs();
+	if ( !m_bPostingsContainer )
+	{
+		CheckDictionary();
+		CheckDocs();
+	}
 	CheckAttributes();
 	CheckBlockIndex();
 	CheckColumnar();

@@ -965,8 +965,16 @@ void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t 
 	// human-readable sugar
 	sJson.NamedString ( "meta_created_time_utc", sphCurrentUtcTime() );
 
-	// version
-	sJson.NamedVal ( "index_format_version", tBuildHeader.m_uFormatVersion ? tBuildHeader.m_uFormatVersion : INDEX_FORMAT_VERSION );
+	// version and required primary-postings capability
+	const DWORD uFormatVersion = tBuildHeader.m_uFormatVersion ? tBuildHeader.m_uFormatVersion : e1::VERSION;
+	sJson.NamedVal ( "index_format_version", uFormatVersion );
+	if ( uFormatVersion==e1::VERSION || uFormatVersion==e1::VERSION5 || uFormatVersion==e1::VERSION4 )
+	{
+		sJson.NamedVal ( "e1_postings", uFormatVersion==e1::VERSION ? 6 : uFormatVersion==e1::VERSION5 ? 5 : 4 );
+		sJson.NamedVal ( "e1_base_version", 74 );
+		if ( uFormatVersion==e1::VERSION )
+			sJson.NamedVal ( "e1_norms", 1 );
+	}
 
 	// index stats - json (put here to be similar with .meta)
 	sJson.NamedValNonDefault ( "total_documents", tBuildHeader.m_iTotalDocuments );

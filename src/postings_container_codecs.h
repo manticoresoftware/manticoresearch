@@ -8,7 +8,6 @@
 #include <array>
 #include <mutex>
 #include <unordered_set>
-#include <utility>
 #if !defined(_WIN32)
 #include <sys/stat.h>
 #endif
@@ -34,33 +33,6 @@ inline bool AddTrustedFileIdentity ( std::string & sKey, const std::string & sFi
  return true;
 #else
  (void)sKey; (void)sFilename; return false;
-#endif
-}
-// The generation header is published after all immutable components are
-// fsynced. A later component write advances mtime or ctime and invalidates
-// this cheap reopen proof; maintenance checks still perform full validation.
-inline bool PublishedGenerationUnchanged ( const std::string & sHeader, const std::string & sPostings, const std::string & sDict, const std::string & sHits, const std::string & sNorms )
-{
-#if !defined(_WIN32)
- auto fnTime=[] ( const struct stat & tStat, bool bChange ) {
-#if defined(__APPLE__)
-  const auto & tTime = bChange ? tStat.st_ctimespec : tStat.st_mtimespec;
-#else
-  const auto & tTime = bChange ? tStat.st_ctim : tStat.st_mtim;
-#endif
-  return std::pair<int64_t,int64_t> { tTime.tv_sec, tTime.tv_nsec };
- };
- struct stat tHeader {};
- if ( stat(sHeader.c_str(),&tHeader) || !S_ISREG(tHeader.st_mode) ) return false;
- const auto tHeaderMTime=fnTime(tHeader,false), tHeaderCTime=fnTime(tHeader,true);
- for ( const std::string * pFile : { &sPostings, &sDict, &sHits, &sNorms } )
- {
-  struct stat tFile {};
-  if ( stat(pFile->c_str(),&tFile) || !S_ISREG(tFile.st_mode) || fnTime(tFile,false)>tHeaderMTime || fnTime(tFile,true)>tHeaderCTime ) return false;
- }
- return true;
-#else
- (void)sHeader; (void)sPostings; (void)sDict; (void)sHits; (void)sNorms; return false;
 #endif
 }
 inline std::string TrustedGenerationKey ( const std::string & sPostings, const std::string & sDict, const std::string & sHits, uint64_t uSize, uint32_t uPayload, uint32_t uDict, uint32_t uHits )

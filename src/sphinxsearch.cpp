@@ -2312,6 +2312,8 @@ public:
 	int					FinalizeE1FixedBM25A ( const CSphMatch & tMatch, const ExtDoc_t & tDoc, const uint32_t * pDocLength=nullptr );
 	bool				GatherDocLengths ( const ExtDoc_t * pDocs, int iDocs, uint32_t * pDocLengths, uint32_t * pRowIDs ) const;
 	bool				IsTermSkipped ( int iTerm );
+	bool				m_bFixedBM25A = false;
+	uint64_t			m_uFixedBM25AScored = 0;
 
 public:
 	/// setup per-keyword data needed to compute the factors
@@ -2582,6 +2584,7 @@ protected:
 
 	void			UpdateMinGaps ( const ExtHit_t * pHlist );
 	void			UpdateFreq ( WORD uQpos, DWORD uField );
+	void			UpdateFixedBM25A ( const ExtHit_t * pHlist );
 
 private:
 	bool			ExtraDataImpl ( ExtraData_e eType, void ** ppResult ) override;
@@ -3666,6 +3669,12 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, 
 template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
 void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHit_t * pHlist )
 {
+	if ( m_bFixedBM25A )
+	{
+		UpdateFixedBM25A ( pHlist );
+		return;
+	}
+
 	const DWORD uField = HITMAN::GetField ( pHlist->m_uHitpos );
 	const int iPos = HITMAN::GetPos ( pHlist->m_uHitpos );
 	const DWORD uPosWithField = HITMAN::GetPosWithField ( pHlist->m_uHitpos );
@@ -3998,6 +4007,48 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 
 
 template < bool PF, bool HANDLE_DUPES >
+void RankerState_Expr_fn<PF, HANDLE_DUPES>::UpdateFixedBM25A ( const ExtHit_t * pHlist )
+{
+	WORD uQpos = pHlist->m_uQuerypos;
+	bool bUniq = m_tKeywords.BitGet ( uQpos );
+	if_const ( HANDLE_DUPES && bUniq )
+	{
+		uQpos = m_dTermDupes[uQpos];
+		bUniq = m_dTermsHit[uQpos]!=pHlist->m_uHitpos && m_dTermsHit[0]!=pHlist->m_uHitpos;
+		m_dTermsHit[uQpos] = pHlist->m_uHitpos;
+		m_dTermsHit[0] = pHlist->m_uHitpos;
+	}
+	if ( bUniq )
+		++m_dTF[uQpos];
+
+	if ( pHlist->m_uSpanlen<=1 )
+		return;
+
+	WORD uQposSpanned = pHlist->m_uQuerypos+1;
+	constexpr WORD U_QPOS_MASK_BITS = sizeof(pHlist->m_uQposMask)*8;
+	DWORD uQposMask = uQposSpanned<U_QPOS_MASK_BITS ? ( pHlist->m_uQposMask>>uQposSpanned ) : 0;
+	while ( uQposMask )
+	{
+		WORD uQposFixed = uQposSpanned;
+		if ( uQposMask&1 )
+		{
+			bool bUniqSpanned = uQposFixed<m_tKeywords.GetSize() && m_tKeywords.BitGet ( uQposFixed );
+			if_const ( HANDLE_DUPES && bUniqSpanned )
+			{
+				uQposFixed = m_dTermDupes[uQposFixed];
+				bUniqSpanned = m_dTermsHit[uQposFixed]!=pHlist->m_uHitpos;
+				m_dTermsHit[uQposFixed] = pHlist->m_uHitpos;
+			}
+			if ( bUniqSpanned )
+				++m_dTF[uQposFixed];
+		}
+		++uQposSpanned;
+		uQposMask >>= 1;
+	}
+}
+
+
+template < bool PF, bool HANDLE_DUPES >
 void RankerState_Expr_fn<PF, HANDLE_DUPES>::UpdateFreq ( WORD uQpos, DWORD uField )
 {
 	float fIDF = m_dIDF [ uQpos ];
@@ -4272,7 +4323,8 @@ int RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Finalize ( const CSph
 
 	// finishing touches
 	FinalizeDocFactors ( tMatch );
-	UpdateATC ( true );
+	if ( !m_bFixedBM25A )
+		UpdateATC ( true );
 
 	if_const ( NEED_PACKEDFACTORS )
 	{
@@ -4283,9 +4335,11 @@ int RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Finalize ( const CSph
 	}
 
 	// compute expression
-	int iRes = ( m_eExprType==SPH_ATTR_INTEGER )
-		? m_pExpr->IntEval ( tMatch )
-		: (int)m_pExpr->Eval ( tMatch );
+	if ( m_bFixedBM25A )
+		++m_uFixedBM25AScored;
+	int iRes = m_bFixedBM25A
+		? (int)( 1000.0f*m_fDocBM25A )
+		: ( m_eExprType==SPH_ATTR_INTEGER ? m_pExpr->IntEval(tMatch) : (int)m_pExpr->Eval(tMatch) );
 
 	if_const ( HANDLE_DUPES )
 	{
@@ -4468,13 +4522,14 @@ class ExtRanker_Expr_T : public ExtRanker_State_T< RankerState_Expr_fn<NEED_PACK
 	using BASE = ExtRanker_State_T< RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>, true >;
 
 public:
-	ExtRanker_Expr_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const char * sExpr, const CSphSchema & tSchema, const RankerSettings_t & tSettings )
+	ExtRanker_Expr_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const char * sExpr, const CSphSchema & tSchema, const RankerSettings_t & tSettings, bool bFixedBM25A=false )
 		: ExtRanker_State_T< RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>, true > ( tXQ, tSetup, tSettings )
 	{
 		// tricky bit, we stash the pointer to expr here, but it will be parsed
 		// somewhat later during InitState() call, when IDFs etc are computed
 		this->m_tState.m_sExpr = sExpr;
 		this->m_tState.m_pSchema = &tSchema;
+		this->m_tState.m_bFixedBM25A = bFixedBM25A;
 		this->m_tState.m_pFieldNorms = tSetup.m_pFieldNorms;
 		m_iE1DynamicRowitems = tSetup.m_iDynamicRowitems;
 		const CSphColumnInfo * pDocid = tSchema.GetAttr ( sphGetDocidName() );
@@ -4492,6 +4547,8 @@ public:
 
 	~ExtRanker_Expr_T () override
 	{
+		if ( this->m_tState.m_bFixedBM25A && !m_bE1FixedBM25A && this->m_tState.m_uFixedBM25AScored && getenv("MANTICORE_E1_RANK_TRACE") )
+			fprintf ( stderr, "E1_FIXED_BM25A_GENERIC_FALLBACK candidates_scored=%llu\n", (unsigned long long)this->m_tState.m_uFixedBM25AScored );
 		if ( m_bE1FixedBM25A && getenv("MANTICORE_E1_RANK_TRACE") )
 			fprintf ( stderr, "%s own_heap=%d configured_k=%d heap_capacity=%d heap_final_count=%d candidates_scored=%llu doc_length_fetches=%llu norm_gather_batches=%llu norm_gather_values=%llu exact_divisions=%llu heap_inserts=%llu heap_replacements=%llu heap_rejections=%llu threshold_updates=%llu heap_final_threshold=%d heap_final_worst_rowid=%u hitlist_seeks=0 decoded_positions=0 general_factor_finalizations=0 general_factor_finalizations_bypassed=%llu\n",
 				m_bE1MultiOr ? "E1_MULTI_OR_BM25A" : ( m_bE1MultiAnd ? "E1_MULTI_AND_BM25A" : "E1_DIRECT_BM25A" ),
@@ -4982,17 +5039,18 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 				// FIXME!!! move QposMask initialization past Init
 				tTermSetup.m_bSetQposMask = true;
 				bool bNeedFactors = !!( tCtx.GetPackedFactor() & SPH_FACTOR_ENABLE );
+				const bool bFixedBM25A = E1FixedBM25AGenericFallback ( tQuerySettings.m_eRanker==SPH_RANK_BM25A, bNeedFactors );
 				const char * szRankerExpr = tQuerySettings.m_eRanker==SPH_RANK_BM25A
 					? "1000*bm25a(1.2,0.75,256)"
 					: tQuerySettings.m_sRankerExpr.cstr();
 				if ( bNeedFactors && bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <true, true>> ( tXQ, tTermSetup, szRankerExpr, pIndex->GetMatchSchema(), tRankerSettings );
+					pRanker = std::make_unique < ExtRanker_Expr_T <true, true>> ( tXQ, tTermSetup, szRankerExpr, pIndex->GetMatchSchema(), tRankerSettings, bFixedBM25A );
 				else if ( bNeedFactors && !bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <true, false>> ( tXQ, tTermSetup, szRankerExpr, pIndex->GetMatchSchema(), tRankerSettings );
+					pRanker = std::make_unique < ExtRanker_Expr_T <true, false>> ( tXQ, tTermSetup, szRankerExpr, pIndex->GetMatchSchema(), tRankerSettings, bFixedBM25A );
 				else if ( !bNeedFactors && bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <false, true>> ( tXQ, tTermSetup, szRankerExpr, pIndex->GetMatchSchema(), tRankerSettings );
+					pRanker = std::make_unique < ExtRanker_Expr_T <false, true>> ( tXQ, tTermSetup, szRankerExpr, pIndex->GetMatchSchema(), tRankerSettings, bFixedBM25A );
 				else if ( !bNeedFactors && !bGotDupes )
-					pRanker = std::make_unique < ExtRanker_Expr_T <false, false>> ( tXQ, tTermSetup, szRankerExpr, pIndex->GetMatchSchema(), tRankerSettings );
+					pRanker = std::make_unique < ExtRanker_Expr_T <false, false>> ( tXQ, tTermSetup, szRankerExpr, pIndex->GetMatchSchema(), tRankerSettings, bFixedBM25A );
 			}
 			break;
 

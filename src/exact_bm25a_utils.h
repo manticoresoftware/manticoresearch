@@ -25,6 +25,11 @@ inline bool E1ExactRankerAdmission ( bool bNamedBM25A, bool bExpressionRanker, c
 	return bNamedBM25A || ( bExpressionRanker && E1NormalizeTokenSequence(sExpression)=="1000*bm25a(1.2,0.75,256)" );
 }
 
+inline bool E1FixedBM25AGenericFallback ( bool bNamedBM25A, bool bNeedPackedFactors )
+{
+	return bNamedBM25A && !bNeedPackedFactors;
+}
+
 // Keep the query-owned exact heap bounded. Cover practical deep pages whose
 // LIMIT+OFFSET slightly exceeds max_matches=2000 while larger pages retain
 // generic sorting.

@@ -151,6 +151,27 @@ SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha') AND gid=2 ORDER BY w 
 SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha') AND gid=2 LIMIT 1; SHOW META LIKE 'total_found';
 SELECT COUNT(*) FROM e1_plain WHERE MATCH('alpha') AND gid=2;
 
+<!-- Unsupported exact-path shapes still use the fixed named BM25A scorer.
+     The canonical expression is the generic control; ordered ids, integer
+     weights, and total_found must remain identical. -->
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('(alpha NEAR/2 beta)') ORDER BY w DESC,id ASC OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('(alpha NEAR/2 beta)') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha MAYBE beta') ORDER BY w DESC,id ASC OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha MAYBE beta') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('@title "alpha beta"') ORDER BY w DESC,id ASC OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('@title "alpha beta"') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
+<!-- Sort and grouping independently reject E1 exact admission. -->
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha') ORDER BY id DESC OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha') ORDER BY id DESC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
+SELECT gid,MAX(weight()) AS w,COUNT(*) AS n FROM e1_plain WHERE MATCH('alpha') GROUP BY gid ORDER BY gid ASC OPTION ranker=bm25a;
+SELECT gid,MAX(weight()) AS w,COUNT(*) AS n FROM e1_plain WHERE MATCH('alpha') GROUP BY gid ORDER BY gid ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)');
+
+<!-- Duplicate query terms exercise HANDLE_DUPES in the generic fallback. -->
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('"alpha alpha" MAYBE beta') ORDER BY id DESC OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('"alpha alpha" MAYBE beta') ORDER BY id DESC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('(alpha | alpha) MAYBE (beta | alpha)') ORDER BY id DESC OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('(alpha | alpha) MAYBE (beta | alpha)') ORDER BY id DESC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
+
 <!-- internal norms must match explicit field-length attributes -->
 SELECT id,weight() AS w FROM norms_plain WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
 SELECT id,weight() AS w FROM norms_plain WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)');

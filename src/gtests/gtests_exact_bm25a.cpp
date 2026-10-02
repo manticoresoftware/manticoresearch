@@ -54,6 +54,14 @@ TEST ( ExactBM25A, RankerAdmissionIsStrict )
 	EXPECT_FALSE ( E1ExactRankerAdmission(false,false,"1000*bm25a(1.2,0.75,256)") );
 }
 
+TEST ( ExactBM25A, GenericFallbackSpecializesOnlyNamedBM25AWithoutPackedFactors )
+{
+	EXPECT_TRUE ( E1FixedBM25AGenericFallback(true,false) );
+	EXPECT_FALSE ( E1FixedBM25AGenericFallback(true,true) );
+	EXPECT_FALSE ( E1FixedBM25AGenericFallback(false,false) );
+	EXPECT_FALSE ( E1FixedBM25AGenericFallback(false,true) );
+}
+
 TEST ( ExactBM25A, DefaultContractUsesBM25AAndImplicitRelevanceSort )
 {
 	// Keep the historical wire value stable and resolve it only for implicit

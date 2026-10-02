@@ -347,6 +347,12 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 ## 高亮选项
 
+#### knn_chunk
+
+在 SQL 中设置 `knn_chunk=1`，或在 JSON 中设置 `"knn_chunk": true`，可将高亮限制在命中的自动生成 KNN 分块的源字节范围内。此功能需要显式启用；普通高亮行为不变。该选项要求恰好有一个 KNN 子句，其向量恰好使用一个显式的全文 `FROM` 字段，并且必须显式请求同一个单一字段（例如 `HIGHLIGHT({knn_chunk=1},'body')` 或 `"highlight":{"knn_chunk":true,"fields":["body"]}`）。不支持 SQL 表达式形式，例如 `HIGHLIGHT({knn_chunk=1},body)`；也不支持空字段/全部字段请求、多个字段、多个 KNN 子句，以及字符串属性作为嵌入来源。`knn_chunk` 是 `HIGHLIGHT()` 选项，`SNIPPET()` 不接受该选项。
+
+分块内的字面全文查询匹配会使用常规高亮标签。仅语义的 KNN 查询会返回分块本身，不会添加人为标签。如果某条结果缺少分块来源信息，高亮会回退到普通的完整字段行为。
+
 <!-- example highlighting options -->
 
 有若干可选高亮选项可用于微调片段生成，这些选项在 SQL、HTTP 和 PHP 客户端中通用。

@@ -908,10 +908,10 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bo
 		if ( m_pIndex->GetSettings().m_bIndexFieldLens )
 			pStoredDoc = StoreFieldLengths ( pRow, m_pColumnarBuilder, dFieldLengths, tSchema, dUpdatedStoredDoc, pStoredDoc );
 	}
-	RtFieldNorms_c tNorms ( tSchema );
 	const DWORD * pSchemaNorms = pExactFieldLengths ? pExactFieldLengths : dFieldLengths.Begin();
-	for ( int iDense=0; iDense<tNorms.DenseFields(); ++iDense )
-		m_dNorms.Add ( pSchemaNorms[tNorms.SchemaField(iDense)] );
+	for ( int iField=0; iField<tSchema.GetFieldsCount(); ++iField )
+		if ( tSchema.GetField(iField).m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED )
+			m_dNorms.Add ( pSchemaNorms[iField] );
 
 	// make sure to get real count without duplicated hits
 	m_dPerDocHitsCount.Add ( iHits );

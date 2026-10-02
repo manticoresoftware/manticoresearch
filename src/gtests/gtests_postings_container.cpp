@@ -572,7 +572,7 @@ TEST ( NormStore, StagedBuilderMatchesInMemoryBuilderAndSupportsUpdates )
 {
 	std::string sError;
 	e1::norms::Builder tMemory ( 3, 4 );
-	e1::norms::StagedBuilder tStaged ( 3, 4 );
+	e1::norms::StagedBuilder tStaged ( 3, 4, true );
 	for ( uint32_t i=0; i<11; ++i )
 	{
 		const std::array<uint32_t,3> dRow { i, i==3 ? 256u : i+20, i==7 ? 65536u : i+200 };
@@ -588,6 +588,27 @@ TEST ( NormStore, StagedBuilderMatchesInMemoryBuilderAndSupportsUpdates )
 	ASSERT_TRUE ( tMemory.Build(dExpected,sError) ) << sError;
 	const std::string sPath = "__norm_store_"+std::to_string(GetOsProcessId())+".tmp";
 	ASSERT_TRUE ( tStaged.Finish(sPath.c_str(),sError) ) << sError;
+	std::ifstream tIn ( sPath, std::ios::binary );
+	std::vector<uint8_t> dActual ( (std::istreambuf_iterator<char>(tIn)), std::istreambuf_iterator<char>() );
+	std::remove ( sPath.c_str() );
+	EXPECT_EQ ( dActual, dExpected );
+}
+
+TEST ( NormStore, PackedStagedBuilderMatchesInMemoryBuilder )
+{
+	std::string sError;
+	e1::norms::Builder tMemory ( 3, 4 );
+	e1::norms::StagedBuilder tPacked ( 3, 4 );
+	for ( uint32_t i=0; i<11; ++i )
+	{
+		const std::array<uint32_t,3> dRow { i, i==3 ? 256u : i+20, i==7 ? 65536u : i+200 };
+		ASSERT_TRUE ( tMemory.AddRow(dRow.data(),dRow.size(),sError) ) << sError;
+		ASSERT_TRUE ( tPacked.AddRow(dRow.data(),dRow.size(),sError) ) << sError;
+	}
+	std::vector<uint8_t> dExpected;
+	ASSERT_TRUE ( tMemory.Build(dExpected,sError) ) << sError;
+	const std::string sPath = "__packed_norm_store_"+std::to_string(GetOsProcessId())+".tmp";
+	ASSERT_TRUE ( tPacked.Finish(sPath.c_str(),sError) ) << sError;
 	std::ifstream tIn ( sPath, std::ios::binary );
 	std::vector<uint8_t> dActual ( (std::istreambuf_iterator<char>(tIn)), std::istreambuf_iterator<char>() );
 	std::remove ( sPath.c_str() );

@@ -160,14 +160,16 @@ private:
 class StagedBuilder
 {
 public:
-	explicit StagedBuilder ( uint32_t uFields, uint32_t uGroupRows=DEFAULT_GROUP_ROWS )
+	explicit StagedBuilder ( uint32_t uFields, uint32_t uGroupRows=DEFAULT_GROUP_ROWS, bool bMutable=false )
 		: m_uFields ( uFields )
 		, m_uGroupRows ( uGroupRows )
+		, m_bMutable ( bMutable )
 	{
 		if ( !m_uGroupRows )
 			return;
 		m_dFields.resize ( m_uFields, nullptr );
 		m_dStaging.resize ( m_uFields );
+		m_dGroupMeta.resize ( m_uFields );
 		for ( FILE * & pFile : m_dFields )
 			if ( !( pFile=tmpfile() ) )
 				return;
@@ -211,6 +213,8 @@ public:
 			m_dStaging[uField][uRow-uBufferedFirst] = uValue;
 			return true;
 		}
+		if ( !m_bMutable )
+			return Fail ( sError, "staged row is immutable" );
 		FILE * pFile = m_dFields[uField];
 		if ( !Seek(pFile,uint64_t(uRow)*sizeof(uint32_t)) || fwrite(&uValue,sizeof(uValue),1,pFile)!=1 || !Seek(pFile,uint64_t(uBufferedFirst)*sizeof(uint32_t)) )
 			return Fail ( sError, "staging update failed" );
@@ -223,6 +227,8 @@ public:
 			return Fail ( sError, "invalid staged builder" );
 		if ( !FlushStaging(sError) )
 			return false;
+		if ( !m_bMutable )
+			return FinishPacked ( szOutput, sError );
 		for ( FILE * pFile : m_dFields )
 			if ( fflush(pFile) )
 				return Fail ( sError, "staging flush failed" );
@@ -345,6 +351,79 @@ public:
 	}
 
 private:
+	struct GroupMeta_t
+	{
+		uint64_t m_uSum = 0;
+		uint32_t m_uCount = 0;
+		uint32_t m_uMax = 0;
+		uint32_t m_uNonzero = 0;
+		uint8_t m_uWidth = 0;
+	};
+
+	bool FinishPacked ( const char * szOutput, std::string & sError )
+	{
+		for ( FILE * pFile : m_dFields )
+			if ( fflush(pFile) || !Seek(pFile,0) )
+				return Fail ( sError, "packed staging flush failed" );
+		const uint32_t uGroups = m_uRows ? ( m_uRows+m_uGroupRows-1 )/m_uGroupRows : 0;
+		const uint64_t uDirectory = HEADER_SIZE+uint64_t(m_uFields)*FIELD_ENTRY_SIZE;
+		const uint64_t uPayload = uDirectory+uint64_t(m_uFields)*uGroups*GROUP_ENTRY_SIZE;
+		uint64_t uOffset = uPayload;
+		std::vector<uint8_t> dFieldEntries ( size_t(m_uFields)*FIELD_ENTRY_SIZE, 0 );
+		std::vector<uint8_t> dGroupEntries ( size_t(m_uFields)*uGroups*GROUP_ENTRY_SIZE, 0 );
+		for ( uint32_t iField=0; iField<m_uFields; ++iField )
+		{
+			if ( m_dGroupMeta[iField].size()!=uGroups )
+				return Fail ( sError, "packed staging group mismatch" );
+			uint64_t uFieldSum = 0;
+			uint32_t uFieldNonzero = 0;
+			for ( uint32_t iGroup=0; iGroup<uGroups; ++iGroup )
+			{
+				const GroupMeta_t & tMeta = m_dGroupMeta[iField][iGroup];
+				const size_t uEntry = ( size_t(iField)*uGroups+iGroup )*GROUP_ENTRY_SIZE;
+				Put64 ( dGroupEntries, uEntry, uOffset );
+				Put64 ( dGroupEntries, uEntry+8, tMeta.m_uSum );
+				Put32 ( dGroupEntries, uEntry+16, tMeta.m_uCount );
+				Put32 ( dGroupEntries, uEntry+20, tMeta.m_uMax );
+				Put32 ( dGroupEntries, uEntry+24, tMeta.m_uNonzero );
+				dGroupEntries[uEntry+28] = tMeta.m_uWidth;
+				uOffset += uint64_t(tMeta.m_uCount)*tMeta.m_uWidth;
+				uFieldSum += tMeta.m_uSum;
+				uFieldNonzero += tMeta.m_uNonzero;
+			}
+			const size_t uFieldEntry = size_t(iField)*FIELD_ENTRY_SIZE;
+			Put64 ( dFieldEntries, uFieldEntry, uFieldSum );
+			Put32 ( dFieldEntries, uFieldEntry+8, uFieldNonzero );
+		}
+
+		FILE * pOutput = fopen ( szOutput, "wb" );
+		if ( !pOutput )
+			return FailSystem ( sError, "unable to open output", szOutput, errno );
+		std::vector<uint8_t> dHeader ( HEADER_SIZE, 0 );
+		memcpy ( dHeader.data(), "E1NORM01", 8 );
+		Put32 ( dHeader, 8, VERSION ); Put32 ( dHeader, 12, HEADER_SIZE );
+		Put32 ( dHeader, 16, m_uRows ); Put32 ( dHeader, 20, m_uFields );
+		Put32 ( dHeader, 24, m_uGroupRows ); Put32 ( dHeader, 28, uGroups );
+		Put64 ( dHeader, 32, uDirectory ); Put64 ( dHeader, 40, uPayload ); Put64 ( dHeader, 48, uOffset );
+		uint32_t uCRC = ~0u;
+		bool bOK = Write ( pOutput, dHeader.data(), dHeader.size(), nullptr )
+			&& Write ( pOutput, dFieldEntries.data(), dFieldEntries.size(), &uCRC )
+			&& Write ( pOutput, dGroupEntries.data(), dGroupEntries.size(), &uCRC );
+		std::vector<uint8_t> dCopy ( 64*1024 );
+		for ( uint32_t iField=0; bOK && iField<m_uFields; ++iField )
+			while ( bOK )
+			{
+				const size_t uRead = fread ( dCopy.data(), 1, dCopy.size(), m_dFields[iField] );
+				if ( uRead ) bOK = Write ( pOutput, dCopy.data(), uRead, &uCRC );
+				if ( uRead<dCopy.size() ) { bOK = bOK && feof(m_dFields[iField]); break; }
+			}
+		Put32 ( dHeader, 56, ~uCRC );
+		bOK = bOK && fflush(pOutput)==0 && Seek(pOutput,0) && Write(pOutput,dHeader.data(),dHeader.size(),nullptr) && fflush(pOutput)==0;
+		bOK = fclose(pOutput)==0 && bOK;
+		if ( !bOK ) { std::remove(szOutput); return Fail(sError,"output write failed"); }
+		return true;
+	}
+
 	bool FlushStaging ( std::string & sError )
 	{
 		if ( !m_uFields || m_dStaging[0].empty() )
@@ -352,8 +431,32 @@ private:
 		const size_t uRows = m_dStaging[0].size();
 		for ( uint32_t i=0; i<m_uFields; ++i )
 		{
-			if ( m_dStaging[i].size()!=uRows || fwrite(m_dStaging[i].data(),sizeof(uint32_t),uRows,m_dFields[i])!=uRows )
-				return Fail ( sError, "staging write failed" );
+			if ( m_dStaging[i].size()!=uRows )
+				return Fail ( sError, "staging row mismatch" );
+			if ( m_bMutable )
+			{
+				if ( fwrite(m_dStaging[i].data(),sizeof(uint32_t),uRows,m_dFields[i])!=uRows )
+					return Fail ( sError, "staging write failed" );
+			}
+			else
+			{
+				GroupMeta_t tMeta;
+				tMeta.m_uCount = uint32_t(uRows);
+				for ( uint32_t uValue : m_dStaging[i] )
+				{
+					tMeta.m_uSum += uValue;
+					tMeta.m_uMax = std::max ( tMeta.m_uMax, uValue );
+					tMeta.m_uNonzero += uValue!=0;
+				}
+				tMeta.m_uWidth = uint8_t(WidthFor(tMeta.m_uMax));
+				m_dPackedScratch.resize ( uRows*tMeta.m_uWidth );
+				for ( size_t uRow=0; uRow<uRows; ++uRow )
+					for ( unsigned uByte=0; uByte<tMeta.m_uWidth; ++uByte )
+						m_dPackedScratch[uRow*tMeta.m_uWidth+uByte] = uint8_t(m_dStaging[i][uRow]>>(8*uByte));
+				if ( fwrite(m_dPackedScratch.data(),1,m_dPackedScratch.size(),m_dFields[i])!=m_dPackedScratch.size() )
+					return Fail ( sError, "packed staging write failed" );
+				m_dGroupMeta[i].push_back ( tMeta );
+			}
 			m_dStaging[i].clear();
 		}
 		return true;
@@ -387,8 +490,11 @@ private:
 	uint32_t m_uGroupRows = 0;
 	uint32_t m_uRows = 0;
 	bool m_bValid = false;
+	bool m_bMutable = false;
 	std::vector<FILE *> m_dFields;
 	std::vector<std::vector<uint32_t>> m_dStaging;
+	std::vector<std::vector<GroupMeta_t>> m_dGroupMeta;
+	std::vector<uint8_t> m_dPackedScratch;
 };
 
 class Store final : public FieldNormReader_i

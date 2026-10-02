@@ -6217,7 +6217,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	}
 
 	int iFieldLens = m_tSchema.GetAttrId_FirstFieldLen();
-	e1::norms::StagedBuilder tNormBuilder ( m_tSchema.GetFieldsCount() );
+	e1::norms::StagedBuilder tNormBuilder ( m_tSchema.GetFieldsCount(), e1::norms::DEFAULT_GROUP_ROWS, true );
 	std::string sNormError;
 
 	const CSphColumnInfo * pBlobLocatorAttr = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
@@ -11181,6 +11181,8 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 	if ( !PreallocSecondaryIndex() ) return false;
 	if ( m_bE1 )
 	{
+		const bool bE1StartupTrace = getenv("MANTICORE_E1_STARTUP_TRACE");
+		int64_t tmE1Startup = bE1StartupTrace ? sphMicroTimer() : 0;
 		const bool bNormsRequired = m_uE1Version==e1::VERSION;
 		if ( bNormsRequired && !sphIsReadable(GetFilename(SPH_EXT_SPN),&m_sLastError) )
 			return false;
@@ -11194,6 +11196,11 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 				m_sLastError = sNormError.empty() ? "norms: schema mismatch" : sNormError.c_str();
 				return false;
 			}
+			if ( bE1StartupTrace )
+			{
+				fprintf ( stderr, "E1_STARTUP norms_us=%lld rows=%d fields=%d\n", (long long)(sphMicroTimer()-tmE1Startup), m_iDocinfo, m_tSchema.GetFieldsCount() );
+				tmE1Startup = sphMicroTimer();
+			}
 		}
 		CSphMappedBuffer<BYTE> dict, hits;
 		if ( !m_tE1Data.Setup(GetFilename(SPH_EXT_SPD),m_sLastError,false)
@@ -11202,9 +11209,15 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 		std::string error;
 		const BYTE * pE1Header = m_tE1Data.GetReadPtr();
 		const bool bTrustedGeneration = m_tE1Data.GetLengthBytes()>=44 && e1::ConsumeTrustedGeneration ( GetFilename(SPH_EXT_SPD).cstr(), GetFilename(SPH_EXT_SPI).cstr(), GetFilename(SPH_EXT_SPP).cstr(), e1::U64(pE1Header+16), e1::U32(pE1Header+32), e1::U32(pE1Header+36), e1::U32(pE1Header+40) );
+		const bool bFastValidation = bTrustedGeneration || !m_bDebugCheck;
 		if ( !m_tE1Store.Open(m_tE1Data.GetReadPtr(),m_tE1Data.GetLengthBytes(),m_iDocinfo,
-			dict.GetReadPtr(),dict.GetLengthBytes(),hits.GetReadPtr(),hits.GetLengthBytes(),error,bTrustedGeneration) )
+			dict.GetReadPtr(),dict.GetLengthBytes(),hits.GetReadPtr(),hits.GetLengthBytes(),error,bFastValidation) )
 		{ m_sLastError = error.c_str(); return false; }
+		if ( bE1StartupTrace )
+		{
+			fprintf ( stderr, "E1_STARTUP postings_us=%lld fast_validation=%d bytes=%lld\n", (long long)(sphMicroTimer()-tmE1Startup), int(bFastValidation), (long long)m_tE1Data.GetLengthBytes() );
+			tmE1Startup = sphMicroTimer();
+		}
 		auto fnValidateDictionary = [this] ( auto & tReader )
 		{
 			uint64_t uTerms = 0;
@@ -11235,8 +11248,11 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 			if ( m_sLastError.IsEmpty() ) m_sLastError="E1: dictionary/primary term binding mismatch";
 			return false;
 		}
-		// Deep validation must touch every primary-postings page, but serving is
-		// demand-paged. Do not retain the validation scan in daemon RSS.
+		if ( bE1StartupTrace )
+			fprintf ( stderr, "E1_STARTUP dictionary_us=%lld\n", (long long)(sphMicroTimer()-tmE1Startup) );
+		// Explicit index checking validates every primary-postings page; normal
+		// startup validates the immutable catalog. Keep serving demand-paged in
+		// either case.
 		m_tE1Data.DiscardPages();
 	}
 

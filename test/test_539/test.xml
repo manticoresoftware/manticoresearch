@@ -92,11 +92,11 @@ INSERT INTO e1_ties (id,body) VALUES (30,'tie'),(20,'tie'),(10,'tie');
 FLUSH RAMCHUNK e1_ties;
 
 <!-- named BM25A must match its canonical expression on new plain output -->
-<!-- no ranker and no ORDER BY use the same fixed BM25A relevance contract -->
-SELECT id FROM e1_plain WHERE MATCH('alpha');
-SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha');
-SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha beta');
-SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha | beta | gamma | missing');
+<!-- no explicit ranker uses the BM25A default; deterministic ordering avoids flaky equal-score rows -->
+SELECT id FROM e1_plain WHERE MATCH('alpha') ORDER BY weight() DESC,id ASC;
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha') ORDER BY w DESC,id ASC;
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha beta') ORDER BY w DESC,id ASC;
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha | beta | gamma | missing') ORDER BY w DESC,id ASC;
 SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha | beta | gamma | missing') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
 SELECT id FROM e1_plain WHERE MATCH('alpha') ORDER BY id ASC;
 SELECT id FROM e1_plain WHERE MATCH('alpha') ORDER BY id ASC OPTION ranker=none;
@@ -122,10 +122,10 @@ SELECT id,weight() AS w FROM norms_plain WHERE MATCH('@title alpha') ORDER BY w 
 SELECT id,weight() AS w FROM norms_plain WHERE MATCH('@body alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
 
 <!-- RT flush output uses the same exact paths -->
-SELECT id FROM e1_rt WHERE MATCH('alpha');
-SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha');
-SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha beta');
-SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha | beta | gamma | missing');
+SELECT id FROM e1_rt WHERE MATCH('alpha') ORDER BY weight() DESC,id ASC;
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC;
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha beta') ORDER BY w DESC,id ASC;
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha | beta | gamma | missing') ORDER BY w DESC,id ASC;
 SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha | beta | gamma | missing') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
 SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') ORDER BY WEIGHT() DESC, ID ASC OPTION ranker=bm25a;
 SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;

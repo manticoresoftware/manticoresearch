@@ -833,11 +833,7 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bo
 	}
 
 	CSphVector<DWORD> dFieldLengths;
-	DWORD * pFieldLengths = SetupFieldLengths ( tSchema, dFieldLengths );
-	// Sources normally provide exact tokenizer lengths. Do not recompute the
-	// same values while walking every hit only to overwrite them below.
-	if ( pExactFieldLengths )
-		pFieldLengths = nullptr;
+	DWORD * pFieldLengths = pExactFieldLengths ? nullptr : SetupFieldLengths ( tSchema, dFieldLengths );
 
 	// accumulate hits
 	int iHits = 0;
@@ -891,13 +887,22 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bo
 		if ( pFieldLengths && uFieldLastCount )
 			pFieldLengths [ HITMAN::GetField(uFieldLastHit) ] += uFieldLastCount;
 	}
-	if ( pExactFieldLengths )
-		memcpy ( dFieldLengths.Begin(), pExactFieldLengths, dFieldLengths.GetLengthBytes() );
-
 	DocstoreBuilder_i::Doc_t dUpdatedStoredDoc;
-	if ( m_pIndex->GetSettings().m_bIndexFieldLens )
-		pStoredDoc = StoreFieldLengths ( pRow, m_pColumnarBuilder, dFieldLengths, tSchema, dUpdatedStoredDoc, pStoredDoc );
-	m_dNorms.Append ( dFieldLengths );
+	if ( pExactFieldLengths )
+	{
+		const int iFields = tSchema.GetFieldsCount();
+		if ( m_pIndex->GetSettings().m_bIndexFieldLens )
+		{
+			dFieldLengths.Append ( pExactFieldLengths, iFields );
+			pStoredDoc = StoreFieldLengths ( pRow, m_pColumnarBuilder, dFieldLengths, tSchema, dUpdatedStoredDoc, pStoredDoc );
+		}
+		m_dNorms.Append ( pExactFieldLengths, iFields );
+	} else
+	{
+		if ( m_pIndex->GetSettings().m_bIndexFieldLens )
+			pStoredDoc = StoreFieldLengths ( pRow, m_pColumnarBuilder, dFieldLengths, tSchema, dUpdatedStoredDoc, pStoredDoc );
+		m_dNorms.Append ( dFieldLengths );
+	}
 
 	// make sure to get real count without duplicated hits
 	m_dPerDocHitsCount.Add ( iHits );

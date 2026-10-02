@@ -3919,6 +3919,7 @@ static bool ParseSnippetOptsSphinx ( const JsonObj_c & tSnip, SnippetQuerySettin
 
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bPackFields, "pack_fields", sError, true ) )			return false;
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bLimitsPerField, "limits_per_field", sError, true ) )return false;
+	if ( !tSnip.FetchBoolItem ( tOpt.m_bKNNChunk, "knn_chunk", sError, true ) )			return false;
 
 	JsonObj_c tBoundary = tSnip.GetStrItem ( "passage_boundary", "snippet_boundary", sError );
 	if ( tBoundary )

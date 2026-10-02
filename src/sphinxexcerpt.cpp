@@ -107,6 +107,7 @@ CSphString SnippetQuerySettings_t::AsString() const
 	if ( m_ePassageSPZ!=tDefault.m_ePassageSPZ )			tOut.Appendf ( "snippet_boundary='%s'",	PassageBoundarySz(m_ePassageSPZ) );
 	if ( m_bPackFields!=tDefault.m_bPackFields )			tOut.Appendf ( "pack_fields=%d",		m_bPackFields ? 1 : 0 );
 	if ( m_bLimitsPerField!=tDefault.m_bLimitsPerField )	tOut.Appendf ( "limits_per_field=%d",	m_bLimitsPerField ? 1 : 0 );
+	if ( m_bKNNChunk!=tDefault.m_bKNNChunk )				tOut.Appendf ( "knn_chunk=%d",			m_bKNNChunk ? 1 : 0 );
 
 	for ( const auto& tPerFieldLimit: m_hPerFieldLimits )
 	{

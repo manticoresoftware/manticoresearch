@@ -4261,10 +4261,11 @@ class ExprParser_t
 	friend void				yyerror ( ExprParser_t * pParser, const char * sMessage );
 
 public:
-	ExprParser_t ( ISphExprHook * pHook, QueryProfile_c * pProfiler, ESphCollation eCollation )
+	ExprParser_t ( ISphExprHook * pHook, QueryProfile_c * pProfiler, ESphCollation eCollation, bool bKNNChunkHighlightDeferred )
 		: m_pHook ( pHook )
 		, m_pProfiler ( pProfiler )
 		, m_eCollation ( eCollation )
+		, m_bKNNChunkHighlightDeferred ( bKNNChunkHighlightDeferred )
 	{
 		m_dGatherStack.Reserve ( 64 );
 	}
@@ -4341,6 +4342,7 @@ public:
 	ESphCollation			m_eCollation;
 	DWORD					m_uStoredField = CSphColumnInfo::FIELD_NONE;
 	bool					m_bNeedDocIds = false;
+	bool					m_bKNNChunkHighlightDeferred = false;
 
 private:
 	bool					CheckGeodist ( YYSTYPE * lvalp );
@@ -7399,8 +7401,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 			}
 
 		case TOK_UDF:			return CreateUdfNode ( tNode.m_iFunc, pLeft );
-		case TOK_HOOK_IDENT:	return m_pHook->CreateNode ( tNode.m_iFunc, nullptr, nullptr, nullptr, nullptr, m_sCreateError );
-		case TOK_HOOK_FUNC:		return m_pHook->CreateNode ( tNode.m_iFunc, pLeft, m_pSchema, &m_eEvalStage, &m_bNeedDocIds, m_sCreateError );
+		case TOK_HOOK_IDENT:	return m_pHook->CreateNode ( tNode.m_iFunc, nullptr, nullptr, nullptr, nullptr, m_bKNNChunkHighlightDeferred, m_sCreateError );
+		case TOK_HOOK_FUNC:		return m_pHook->CreateNode ( tNode.m_iFunc, pLeft, m_pSchema, &m_eEvalStage, &m_bNeedDocIds, m_bKNNChunkHighlightDeferred, m_sCreateError );
 
 		case TOK_MAP_ARG:
 			// tricky bit
@@ -11106,7 +11108,7 @@ ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, CSphS
 	szExpr = sNormalized.c_str();
 
 	// parse into opcodes
-	ExprParser_t tParser ( tArgs.m_pHook, tArgs.m_pProfiler, tArgs.m_eCollation );
+	ExprParser_t tParser ( tArgs.m_pHook, tArgs.m_pProfiler, tArgs.m_eCollation, tArgs.m_bKNNChunkHighlightDeferred );
 	ISphExpr * pRes = tParser.Parse ( szExpr, tSchema, tArgs.m_pJoinIdx, tArgs.m_pJoinIdxLeft, tArgs.m_pAttrType, tArgs.m_pUsesWeight, sError );
 	if ( tArgs.m_pZonespanlist )
 		*tArgs.m_pZonespanlist = tParser.m_bHasZonespanlist;

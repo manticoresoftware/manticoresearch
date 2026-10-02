@@ -77,6 +77,7 @@ struct SnippetQuerySettings_t : public SnippetLimits_t
 	ESphSpz			m_ePassageSPZ = SPH_SPZ_NONE;
 	bool			m_bJsonQuery = false;
 	bool			m_bPackFields = false;	///< whether to pack field results as data or as string
+	bool			m_bKNNChunk = false;	///< whether to restrict highlighting to the winning KNN chunk
 
 	void			Setup();
 	CSphString		AsString() const;

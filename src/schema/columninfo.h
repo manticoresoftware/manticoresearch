@@ -81,6 +81,7 @@ struct CSphColumnInfo
 	knn::ModelSettings_t m_tKNNModel;					///< knn model settings
 	CSphString		m_sKNNFrom;							///< fields/attrs used by the model
 	knn::ChunkSettings_t m_tKNNChunk;					///< how the model splits a document into vectors
+	int				m_iKNNChunkQueryCount = 0;			///< KNN clauses associated with synthetic chunk provenance
 
 	float			m_fTdigestCompression = 200.0f;		///< tdigest compression for extended aggs
 	AggrSettings_t	m_tAggrSettings;					///< full settings payload for extended aggs

@@ -601,6 +601,7 @@ struct CSphQuery
 	CSphVector<KnnSearchSettings_t> m_dKnnSettings;
 	HybridSearchSettings_t m_tHybridSettings;
 	bool			m_bHybridSearch = false;			///< true when fusion_method is set AND both text+KNN are present
+	int				m_iKNNChunkQueryCount = 0;		///< original KNN count retained by internal hybrid branches
 
 	JiebaMode_e		m_eJiebaMode = JiebaMode_e::NONE;	///< separate optional jieba mode for searches
 

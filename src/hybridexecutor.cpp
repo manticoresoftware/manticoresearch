@@ -145,6 +145,14 @@ static void CollectDependentExprs ( const ISphSchema * pSchema, const char * szA
 }
 
 
+static void CollectKNNChunkBoundaryExpr ( const ISphSchema * pSchema, const char * szAttrName, CSphVector<ExprEval_t> & dExprs )
+{
+	const CSphColumnInfo * pAttr = pSchema->GetAttr(szAttrName);
+	if ( pAttr && pAttr->m_pExpr && pAttr->m_eAttrType==SPH_ATTR_BIGINT && pAttr->m_eStage==SPH_EVAL_PRESORT )
+		dExprs.Add ( { pAttr->m_tLocator, pAttr->m_eAttrType, pAttr->m_pExpr } );
+}
+
+
 static bool IsWeightDependentAttr ( const CSphColumnInfo & tAttr, const ISphSchema & tSchema, bool bPerHitOnly = false )
 {
 	StrVec_t dDeps;
@@ -418,6 +426,7 @@ void HybridExecutor_c::SetupKnnQueries ( const CSphQuery & tQuery )
 	{
 		m_dKnnQueries.Add ( tQuery );
 		auto & tKnnQuery = m_dKnnQueries.Last();
+		tKnnQuery.m_iKNNChunkQueryCount = tQuery.m_dKnnSettings.GetLength();
 		tKnnQuery.m_sQuery = "";
 		tKnnQuery.m_sRawQuery = "";
 		tKnnQuery.m_bHybridSearch = false;
@@ -482,6 +491,7 @@ bool HybridExecutor_c::SetupWeightFilters ( const ISphSchema & tSchema )
 
 void HybridExecutor_c::SetupTextQuery ( const CSphQuery & tQuery )
 {
+	m_tTextQuery.m_iKNNChunkQueryCount = tQuery.m_dKnnSettings.GetLength();
 	m_tTextQuery.m_dKnnSettings.Reset();
 	m_tTextQuery.m_bHybridSearch = false;
 	m_tTextQuery.m_eSort = SPH_SORT_EXTENDED;
@@ -782,6 +792,11 @@ void HybridExecutor_c::PushFusedMatches ( ISphMatchSorter * pSorter, const CSphV
 	CSphVector<ExprEval_t> dExprs;
 	CollectDependentExprs ( pDstSchema, GetHybridScoreAttrName(), dExprs );
 	CollectDependentExprs ( pDstSchema, GetKnnDistAttrName(), dExprs );
+	// A winning KNN source can replace the chunk slot after attributes were copied.
+	// Recompute only the scalar boundary expressions that consume that slot. In
+	// particular, post-limit string expressions such as HIGHLIGHT must stay lazy.
+	CollectKNNChunkBoundaryExpr ( pDstSchema, GetKnnChunkStartAttrName(), dExprs );
+	CollectKNNChunkBoundaryExpr ( pDstSchema, GetKnnChunkEndAttrName(), dExprs );
 
 	for ( auto & tEntry : dFused )
 		PushSingleFusedMatch ( tEntry, pSorter, iDynSize, dRemaps, tScoreLoc, pDstKnnDist, dKnnDistAttrs, dExprs );

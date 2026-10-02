@@ -328,6 +328,10 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		}
 	}
 
+	// Hybrid subqueries have already been split before they are sent to an
+	// agent. Preserve the original KNN context needed by deferred expressions.
+	tOut.SendInt ( q.m_iKNNChunkQueryCount );
+
 	tOut.SendInt ( (int)q.m_eJiebaMode );
 
 	tOut.SendString ( q.m_tScrollSettings.m_sSortBy.cstr() );
@@ -1379,6 +1383,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		}
 	}
 
+	if ( uMasterVer>=VER_COMMAND_SEARCH_MASTER_KNN_CHUNK_QUERY_COUNT )
+		tQuery.m_iKNNChunkQueryCount = tReq.GetInt();
+
 	if ( uMasterVer>=23 )
 		tQuery.m_eJiebaMode = (JiebaMode_e)tReq.GetInt();
 
@@ -1610,9 +1617,9 @@ static void SendFloatVec ( ISphOutputBuffer & tOut, const BYTE * pData )
 		tOut.SendFloat ( *pValues++ );
 }
 
-static bool CanSendVecArray ( int iVer, WORD uMasterVer, bool bAgentMode )
+bool CanSendFloatVectorArray ( int iVer, WORD uMasterVer, bool bAgentMode )
 {
-	return bAgentMode ? ( uMasterVer>=VER_COMMAND_SEARCH_MASTER ) : ( iVer>=0x128 );
+	return bAgentMode ? ( uMasterVer>=VER_COMMAND_SEARCH_MASTER_FLOAT_VECTOR_ARRAY ) : ( iVer>=0x128 );
 }
 
 
@@ -1633,7 +1640,7 @@ static ESphAttr FixupAttrForNetwork ( const CSphColumnInfo & tCol, const CSphSch
 		return SPH_ATTR_FLOAT_VECTOR;
 
 	case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
-		return CanSendVecArray ( iVer, uMasterVer, bAgentMode ) ? SPH_ATTR_FLOAT_VECTOR_ARRAY : SPH_ATTR_STRING;
+		return CanSendFloatVectorArray ( iVer, uMasterVer, bAgentMode ) ? SPH_ATTR_FLOAT_VECTOR_ARRAY : SPH_ATTR_STRING;
 
 	case SPH_ATTR_STRINGPTR:
 	{
@@ -1705,7 +1712,7 @@ static void SendAttribute ( ISphOutputBuffer & tOut, const CSphMatch & tMatch, c
 		break;
 
 	case SPH_ATTR_FLOAT_VECTOR_ARRAY_PTR:
-		SendFloatVecArray ( tOut, (const BYTE*)tMatch.GetAttr(tLoc), CanSendVecArray ( iVer, uMasterVer, bAgentMode ) );
+		SendFloatVecArray ( tOut, (const BYTE*)tMatch.GetAttr(tLoc), CanSendFloatVectorArray ( iVer, uMasterVer, bAgentMode ) );
 		break;
 
 	case SPH_ATTR_JSON_PTR:

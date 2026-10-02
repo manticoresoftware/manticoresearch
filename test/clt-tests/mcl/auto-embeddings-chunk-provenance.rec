@@ -1,0 +1,125 @@
+––– comment –––
+Chunk provenance is aligned with UTF-8 source bytes and survives RAM/disk/optimize.
+––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Create an auto-chunked table and insert multilingual source text.
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS chunk_provenance; CREATE TABLE chunk_provenance (body TEXT, chunks FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body' CHUNK_STRATEGY='fixed' MAX_TOKENS='8' OVERLAP_TOKENS='2'); INSERT INTO chunk_provenance(id,body) VALUES(1,'Привет мир. alpha beta gamma delta epsilon zeta eta theta. 你好世界。 omega target phrase.')" && echo MAIN_SETUP_OK
+––– output –––
+MAIN_SETUP_OK
+––– comment –––
+Opt-in highlighting returns the exact winning chunk, while literal full-text matches retain normal tags.
+––– input –––
+TEXT='Привет мир. alpha beta gamma delta epsilon zeta eta theta. 你好世界。 omega target phrase.'; ROW=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM chunk_provenance WHERE KNN(chunks,1,'target phrase',{rescore=1}) LIMIT 1") || exit 1; HIGHLIGHTED=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT HIGHLIGHT({knn_chunk=1},'body') FROM chunk_provenance WHERE KNN(chunks,1,'target phrase',{rescore=1}) LIMIT 1") || exit 1; python3 test/clt-tests/mcl/check-chunk-provenance.py highlight "$TEXT" "$ROW" "$HIGHLIGHTED" plain || exit 1; HIGHLIGHTED=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT HIGHLIGHT({knn_chunk=1},'body') FROM chunk_provenance WHERE MATCH('target phrase') AND KNN(chunks,1,'target phrase',{rescore=1}) LIMIT 1") || exit 1; python3 test/clt-tests/mcl/check-chunk-provenance.py highlight "$TEXT" "$ROW" "$HIGHLIGHTED" tagged
+––– output –––
+CHUNK_HIGHLIGHT_OK
+CHUNK_HIGHLIGHT_OK
+––– comment –––
+A two-row group selects a deterministic representative and preserves that row's exact chunk.
+––– input –––
+TEXT='alpha beta gamma delta epsilon zeta eta theta target phrase first tail'; mysql -h0 -P9306 -e "DROP TABLE IF EXISTS grouped_provenance; CREATE TABLE grouped_provenance (body TEXT, gid INT, chunks FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body' CHUNK_STRATEGY='fixed' MAX_TOKENS='8'); INSERT INTO grouped_provenance(id,body,gid) VALUES(10,'alpha beta gamma delta epsilon zeta eta theta target phrase first tail',7),(20,'one two three four five six seven eight nine ten target phrase second tail',7)" || exit 1; mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,COUNT(*),knn_chunk_index(),knn_chunk_start(),knn_chunk_end(),HIGHLIGHT({knn_chunk=1},'body') FROM grouped_provenance WHERE KNN(chunks,2,'target phrase',{rescore=1}) GROUP BY gid WITHIN GROUP ORDER BY id ASC LIMIT 1" > /tmp/grouped-provenance.tsv || exit 1; python3 test/clt-tests/mcl/check-chunk-provenance.py grouped-highlight 10 "$TEXT" < /tmp/grouped-provenance.tsv
+––– output –––
+GROUPED_CHUNK_HIGHLIGHT_OK
+––– comment –––
+JSON exposes the same opt-in behavior.
+––– input –––
+TEXT='Привет мир. alpha beta gamma delta epsilon zeta eta theta. 你好世界。 omega target phrase.'; curl -sS -X POST http://127.0.0.1:9308/search -H 'Content-Type: application/json' -d '{"index":"chunk_provenance","knn":{"field":"chunks","query":"target phrase","k":1},"highlight":{"knn_chunk":true,"fields":["body"]},"limit":1}' > /tmp/chunk-json-highlight.json || exit 1; python3 test/clt-tests/mcl/check-chunk-provenance.py json-highlight "$TEXT" < /tmp/chunk-json-highlight.json
+––– output –––
+CHUNK_JSON_HIGHLIGHT_OK
+––– comment –––
+Hybrid literal matches use normal tags inside the winning chunk.
+––– input –––
+TEXT='Привет мир. alpha beta gamma delta epsilon zeta eta theta. 你好世界。 omega target phrase.'; curl -sS -X POST http://127.0.0.1:9308/search -H 'Content-Type: application/json' -d '{"index":"chunk_provenance","_source":{"excludes":["*"]},"knn":{"field":"chunks","query":"target phrase","k":1},"query":{"match":{"body":"target phrase"}},"options":{"fusion_method":"rrf"},"highlight":{"knn_chunk":true,"fields":["body"]},"limit":1}' > /tmp/chunk-json-hybrid-highlight.json || exit 1; python3 test/clt-tests/mcl/check-chunk-provenance.py json-highlight "$TEXT" tagged < /tmp/chunk-json-hybrid-highlight.json
+––– output –––
+CHUNK_JSON_HIGHLIGHT_OK
+––– comment –––
+Opt-in requires the single explicit full-text embedding source field and the stored-field-list form.
+––– input –––
+ERR=$(mysql -h0 -P9306 -e "SELECT HIGHLIGHT({knn_chunk=1},'wrong') FROM chunk_provenance WHERE KNN(chunks,1,'target phrase')" 2>&1) && exit 1; case "$ERR" in *'KNN chunk highlighting requires exactly one explicit full-text field'*) ;; *) exit 1;; esac; ERR=$(mysql -h0 -P9306 -e "SELECT HIGHLIGHT({knn_chunk=1},body) FROM chunk_provenance WHERE KNN(chunks,1,'target phrase')" 2>&1) && exit 1; case "$ERR" in *'KNN chunk highlighting requires a quoted explicit stored-field list'*) ;; *) exit 1;; esac; echo CHUNK_HIGHLIGHT_VALIDATION_OK
+––– output –––
+CHUNK_HIGHLIGHT_VALIDATION_OK
+––– comment –––
+User-facing SQL and JSON highlighting reject the opt-in without a KNN query, while SNIPPET never accepts it.
+––– input –––
+ERR=$(mysql -h0 -P9306 -e "SELECT HIGHLIGHT({knn_chunk=1},'body') FROM chunk_provenance" 2>&1) && exit 1; case "$ERR" in *'KNN chunk highlighting requires a KNN query'*) ;; *) exit 1;; esac; curl -sS -X POST http://127.0.0.1:9308/search -H 'Content-Type: application/json' -d '{"index":"chunk_provenance","highlight":{"knn_chunk":true,"fields":["body"]},"limit":1}' > /tmp/chunk-json-error.json || exit 1; python3 test/clt-tests/mcl/check-chunk-provenance.py json-error 'KNN chunk highlighting requires a KNN query' < /tmp/chunk-json-error.json || exit 1; ERR=$(mysql -h0 -P9306 -e "SELECT SNIPPET(body,'target phrase','knn_chunk=1') FROM chunk_provenance" 2>&1) && exit 1; case "$ERR" in *'Unknown option: knn_chunk'*) ;; *) exit 1;; esac; echo CHUNK_HIGHLIGHT_QUERY_VALIDATION_OK
+––– output –––
+CHUNK_HIGHLIGHT_QUERY_VALIDATION_OK
+––– comment –––
+Ambiguous all/multiple sources and string-attribute sources remain searchable but reject the opt-in.
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE highlight_all_source (body TEXT, source_attr STRING, chunks FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='' CHUNK_STRATEGY='fixed' MAX_TOKENS='8'); INSERT INTO highlight_all_source(id,body,source_attr) VALUES(1,'target phrase','other'); CREATE TABLE highlight_multi_source (body1 TEXT, body2 TEXT, chunks FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body1,body2' CHUNK_STRATEGY='fixed' MAX_TOKENS='8'); INSERT INTO highlight_multi_source(id,body1,body2) VALUES(1,'target phrase','other'); CREATE TABLE highlight_attr_source (body TEXT STORED, source_attr STRING, chunks FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='source_attr' CHUNK_STRATEGY='fixed' MAX_TOKENS='8'); INSERT INTO highlight_attr_source(id,body,source_attr) VALUES(1,'stored body','target phrase')" && ok=1; for table in highlight_all_source highlight_multi_source highlight_attr_source; do test "$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id FROM $table WHERE KNN(chunks,1,'target phrase')")" = 1 || ok=0; done; test "$ok" -eq 1 && ( ERR=$(mysql -h0 -P9306 -e "SELECT HIGHLIGHT({knn_chunk=1},'body') FROM highlight_all_source WHERE KNN(chunks,1,'target phrase')" 2>&1); test $? -ne 0; case "$ERR" in *'one explicit full-text FROM field'*) true;; *) false;; esac ) && ( ERR=$(mysql -h0 -P9306 -e "SELECT HIGHLIGHT({knn_chunk=1},'body1') FROM highlight_multi_source WHERE KNN(chunks,1,'target phrase')" 2>&1); test $? -ne 0; case "$ERR" in *'one explicit full-text FROM field'*) true;; *) false;; esac ) && ( ERR=$(mysql -h0 -P9306 -e "SELECT HIGHLIGHT({knn_chunk=1},'body') FROM highlight_attr_source WHERE KNN(chunks,1,'target phrase')" 2>&1); test $? -ne 0; case "$ERR" in *'KNN chunk highlighting does not support string-attribute FROM sources'*) true;; *) false;; esac ) && echo CHUNK_HIGHLIGHT_SOURCE_VALIDATION_OK
+––– output –––
+CHUNK_HIGHLIGHT_SOURCE_VALIDATION_OK
+––– comment –––
+Multiple KNN clauses remain successful without highlighting but reject chunk highlighting rather than mixing provenance.
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE highlight_two_vectors (body1 TEXT STORED, body2 TEXT STORED, v1 FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body1' CHUNK_STRATEGY='fixed' MAX_TOKENS='8', v2 FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body2' CHUNK_STRATEGY='fixed' MAX_TOKENS='8'); INSERT INTO highlight_two_vectors(id,body1,body2) VALUES(1,'first source target phrase','second source target phrase')" || exit 1; REQUEST='{"index":"highlight_two_vectors","knn":[{"field":"v1","query":"first source","k":1},{"field":"v2","query":"second source","k":1}],"options":{"fusion_method":"rrf"},"limit":1}'; curl -sS -X POST http://127.0.0.1:9308/search -H 'Content-Type: application/json' -d "$REQUEST" > /tmp/chunk-json-success.json || exit 1; python3 test/clt-tests/mcl/check-chunk-provenance.py json-success 1 < /tmp/chunk-json-success.json || exit 1; REQUEST='{"index":"highlight_two_vectors","knn":[{"field":"v1","query":"first source","k":1},{"field":"v2","query":"second source","k":1}],"options":{"fusion_method":"rrf"},"highlight":{"knn_chunk":true,"fields":["body1"]},"limit":1}'; curl -sS -X POST http://127.0.0.1:9308/search -H 'Content-Type: application/json' -d "$REQUEST" > /tmp/chunk-json-multi-error.json || exit 1; python3 test/clt-tests/mcl/check-chunk-provenance.py json-error 'KNN chunk highlighting does not support multiple KNN clauses' < /tmp/chunk-json-multi-error.json && echo CHUNK_HIGHLIGHT_MULTI_KNN_VALIDATION_OK
+––– output –––
+CHUNK_JSON_SUCCESS_OK
+CHUNK_HIGHLIGHT_MULTI_KNN_VALIDATION_OK
+––– comment –––
+Validate that the RAM result points to a valid UTF-8 byte range containing the query phrase.
+––– input –––
+TEXT='Привет мир. alpha beta gamma delta epsilon zeta eta theta. 你好世界。 omega target phrase.'; ROW=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM chunk_provenance WHERE KNN(chunks,1,'target phrase',{rescore=1}) LIMIT 1") || exit 1; printf '%s\n' "$ROW" > /tmp/chunk-provenance-expected || exit 1; python3 test/clt-tests/mcl/check-chunk-provenance.py range "$TEXT" "$ROW"
+––– output –––
+CHUNK_RANGE_OK
+––– comment –––
+Flush the RAM chunk and require exactly the same provenance tuple.
+––– input –––
+mysql -h0 -P9306 -e 'FLUSH RAMCHUNK chunk_provenance' && ROW=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM chunk_provenance WHERE KNN(chunks,1,'target phrase',{rescore=1}) LIMIT 1") || exit 1; test "$ROW" = "$(cat /tmp/chunk-provenance-expected)" && echo CHUNK_DISK_OK
+––– output –––
+CHUNK_DISK_OK
+––– comment –––
+Create a second disk chunk, merge both chunks, and require unchanged provenance.
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO chunk_provenance(id,body) VALUES(2,'unrelated text for a second disk chunk'); FLUSH RAMCHUNK chunk_provenance; OPTIMIZE TABLE chunk_provenance OPTION sync=1,cutoff=1" && ROW=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM chunk_provenance WHERE KNN(chunks,1,'target phrase',{rescore=1}) LIMIT 1") || exit 1; test "$ROW" = "$(cat /tmp/chunk-provenance-expected)" && echo CHUNK_OPTIMIZE_OK
+––– output –––
+CHUNK_OPTIMIZE_OK
+––– comment –––
+Fullscan must select the same row-local vector slot as ANN plus exact rescore.
+––– input –––
+ROW=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM chunk_provenance WHERE KNN(chunks,1,'target phrase',{fullscan=1,rescore=0}) LIMIT 1") || exit 1; test "$ROW" = "$(cat /tmp/chunk-provenance-expected)" && echo CHUNK_FULLSCAN_OK
+––– output –––
+CHUNK_FULLSCAN_OK
+––– comment –––
+HTTP KNN must expose the same tuple in _knn_chunk.
+––– input –––
+curl -sS -X POST http://127.0.0.1:9308/search -H 'Content-Type: application/json' -d '{"index":"chunk_provenance","knn":{"field":"chunks","query":"target phrase","k":1},"limit":1}' > /tmp/chunk-http.json || exit 1; python3 test/clt-tests/mcl/check-chunk-provenance.py http "$(cat /tmp/chunk-provenance-expected)" < /tmp/chunk-http.json
+––– output –––
+CHUNK_HTTP_OK
+––– comment –––
+Hybrid RRF search must preserve a valid KNN chunk tuple.
+––– input –––
+TEXT='Привет мир. alpha beta gamma delta epsilon zeta eta theta. 你好世界。 omega target phrase.'; curl -sS -X POST http://127.0.0.1:9308/search -H 'Content-Type: application/json' -d '{"index":"chunk_provenance","knn":{"field":"chunks","query":"target phrase","k":1},"query":{"match":{"body":"target phrase"}},"options":{"fusion_method":"rrf"},"limit":1}' > /tmp/chunk-hybrid.json || exit 1; python3 test/clt-tests/mcl/check-chunk-provenance.py hybrid "$TEXT" < /tmp/chunk-hybrid.json
+––– output –––
+CHUNK_HYBRID_OK
+––– comment –––
+Manual vector arrays have no source provenance.
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE manual_provenance (v FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' KNN_DIMS='2' HNSW_SIMILARITY='l2'); INSERT INTO manual_provenance(id,v) VALUES(1,[[1,0],[0,1]])" && mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM manual_provenance WHERE KNN(v,1,(1,0))" > /tmp/manual-provenance.tsv || exit 1; python3 test/clt-tests/mcl/check-chunk-provenance.py format-tuples 3 < /tmp/manual-provenance.tsv
+––– output –––
+-1 -1 -1
+––– comment –––
+Scalar truncate and mean embeddings remain searchable but have no single truthful source span.
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE scalar_truncate_provenance (body TEXT, v FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body'); INSERT INTO scalar_truncate_provenance(id,body) VALUES(1,'alpha target phrase omega'); CREATE TABLE scalar_mean_provenance (body TEXT, v FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body' CHUNK_STRATEGY='mean' MAX_TOKENS='8'); INSERT INTO scalar_mean_provenance(id,body) VALUES(1,'alpha beta gamma delta epsilon zeta eta theta target phrase omega')" && mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM scalar_truncate_provenance WHERE KNN(v,1,'target phrase') LIMIT 1; SELECT id,knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM scalar_mean_provenance WHERE KNN(v,1,'target phrase') LIMIT 1" > /tmp/scalar-provenance.tsv || exit 1; python3 test/clt-tests/mcl/check-chunk-provenance.py format-tuples 4 < /tmp/scalar-provenance.tsv
+––– output –––
+1 -1 -1 -1
+1 -1 -1 -1
+––– comment –––
+Dropping an auto-chunked vector also removes its hidden span sidecar without affecting another vector.
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE drop_provenance (body1 TEXT, body2 TEXT, v1 FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body1' CHUNK_STRATEGY='fixed' MAX_TOKENS='8', v2 FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body2' CHUNK_STRATEGY='fixed' MAX_TOKENS='8'); INSERT INTO drop_provenance(id,body1,body2) VALUES(1,'first source text','second source target phrase'); ALTER TABLE drop_provenance DROP COLUMN v1; INSERT INTO drop_provenance(id,body1,body2) VALUES(2,'unused','another target phrase')" && mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM drop_provenance WHERE KNN(v2,1,'target phrase') LIMIT 1" > /tmp/drop-provenance.tsv || exit 1; python3 test/clt-tests/mcl/check-chunk-provenance.py valid-tuple DROP_SURVIVING_VECTOR_OK < /tmp/drop-provenance.tsv || exit 1; ERR=$(mysql -h0 -P9306 -e 'ALTER TABLE drop_provenance DROP COLUMN knn_chunk_spans_v1_v1' 2>&1) && exit 1; case "$ERR" in *'does not exist'*) ;; *) exit 1;; esac; echo DROP_SIDECAR_OK
+––– output –––
+DROP_SURVIVING_VECTOR_OK
+DROP_SIDECAR_OK
+––– comment –––
+Restart the daemon and require the persisted tuple to remain unchanged.
+––– input –––
+searchd --stopwait > /dev/null; rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd $SEARCHD_FLAGS > /dev/null; for i in $(seq 1 150); do mysql -h0 -P9306 -e 'select 1' >/dev/null 2>&1 && { echo 'Manticore restarted!'; break; }; sleep .2; done
+––– output –––
+Manticore restarted!
+––– input –––
+ROW=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM chunk_provenance WHERE KNN(chunks,1,'target phrase',{rescore=1}) LIMIT 1") || exit 1; test "$ROW" = "$(cat /tmp/chunk-provenance-expected)" && echo CHUNK_PROVENANCE_RESTART_OK
+––– output –––
+CHUNK_PROVENANCE_RESTART_OK

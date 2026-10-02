@@ -17,6 +17,9 @@
 #include "sphinxint.h"
 #include "attribute.h"
 #include "docstore.h"
+#include "columnarmisc.h"
+#include "embeddingutils.h"
+#include "knnmisc.h"
 
 
 enum HookType_e
@@ -24,7 +27,6 @@ enum HookType_e
 	HOOK_SNIPPET,
 	HOOK_HIGHLIGHT
 };
-
 
 static int StringBinary2Number ( const char * sStr, int iLen )
 {
@@ -53,7 +55,7 @@ static bool ParseSnippetLimit ( const CSphString & sName, int iVal, SnippetLimit
 }
 
 
-static bool ParseSnippetOption ( const CSphNamedVariant & tVariant, SnippetQuerySettings_t & tOpt, CSphString & sError )
+static bool ParseSnippetOption ( const CSphNamedVariant & tVariant, SnippetQuerySettings_t & tOpt, CSphString & sError, bool bHighlight )
 {
 	CSphString sName = tVariant.m_sKey;
 	sName.ToLower();
@@ -108,6 +110,7 @@ static bool ParseSnippetOption ( const CSphNamedVariant & tVariant, SnippetQuery
 	else if ( sName=="json_query" )			tOpt.m_bJsonQuery = bVal;
 	else if ( sName=="pack_fields" )		tOpt.m_bPackFields = bVal;
 	else if ( sName=="limits_per_field" )	tOpt.m_bLimitsPerField = bVal;
+	else if ( sName=="knn_chunk" && bHighlight ) tOpt.m_bKNNChunk = bVal;
 	else if ( sName=="exact_phrase" )
 	{
 		sError.SetSprintf ( "exact_phrase option is deprecated" );
@@ -390,7 +393,7 @@ Expr_Snippet_c::Expr_Snippet_c ( ISphExpr * pArglist, const CSphIndex * pIndex, 
 		tVariant.m_sKey = szOption;
 		tVariant.m_sValue.SetBinary ( sValue, iStrValLen );
 		tVariant.m_iValue = StringBinary2Number ( sValue, iStrValLen );
-		if ( !ParseSnippetOption ( tVariant, m_tSnippetQuery, sError ) )
+		if ( !ParseSnippetOption ( tVariant, m_tSnippetQuery, sError, false ) )
 			return;
 	}
 
@@ -457,10 +460,11 @@ ISphExpr * Expr_Snippet_c::Clone () const
 class Expr_Highlight_c final : public Expr_HighlightTraits_c
 {
 public:
-				Expr_Highlight_c ( ISphExpr * pArglist, const CSphIndex * pIndex, const ISphSchema * pRsetSchema, QueryProfile_c * pProfiler, QueryType_e eQueryType, CSphString & sError );
+				Expr_Highlight_c ( ISphExpr * pArglist, const CSphIndex * pIndex, const ISphSchema * pRsetSchema, QueryProfile_c * pProfiler, QueryType_e eQueryType, bool bDeferredKNNChunk, CSphString & sError );
 
 	int			StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final;
-	void		Command ( ESphExprCommand eCmd, void * pArg ) final;
+	void			Command ( ESphExprCommand eCmd, void * pArg ) final;
+	void			FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) final;
 	ISphExpr *	Clone() const final;
 	uint64_t	GetHash ( const ISphSchema & tSchema, uint64_t uPrevHash, bool & bDisable ) override;
 
@@ -468,6 +472,11 @@ private:
 	DocstoreSession_c::InfoDocID_t	m_tSession;
 	CSphVector<int>					m_dFieldsToFetch;
 	bool							m_bFetchAllFields = false;
+	bool							m_bKNNChunk = false;
+	int								m_iKNNChunkField = -1;
+	CSphAttrLocator					m_tKNNChunkIndexLoc;
+	CSphAttrLocator					m_tKNNChunkStartLoc;
+	CSphAttrLocator					m_tKNNChunkEndLoc;
 
 				Expr_Highlight_c ( const Expr_Highlight_c & rhs );
 
@@ -477,10 +486,12 @@ private:
 	bool		ParseOptions ( const VecTraits_T<CSphNamedVariant> & dMap, CSphString & sError );
 	bool		MarkRequestedFields ( CSphString & sError );
 	void		MarkAllFields();
+	bool		SetupKNNChunk ( const ISphSchema * pRsetSchema, bool bExplicitFields, bool bDeferred, CSphString & sError );
+	bool		RestrictToKNNChunk ( CSphVector<FieldSource_t> & dFields, const CSphMatch & tMatch ) const;
 };
 
 
-Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, const CSphIndex * pIndex, const ISphSchema * pRsetSchema, QueryProfile_c * pProfiler, QueryType_e eQueryType, CSphString & sError )
+Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, const CSphIndex * pIndex, const ISphSchema * pRsetSchema, QueryProfile_c * pProfiler, QueryType_e eQueryType, bool bDeferredKNNChunk, CSphString & sError )
 	: Expr_HighlightTraits_c ( pIndex, pProfiler, ( pArglist && pArglist->IsArglist() && pArglist->GetNumArgs()==3 ) ? pArglist->GetArg(2) : nullptr )
 {
 	assert ( m_pIndex );
@@ -520,6 +531,9 @@ Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, const CSphIndex * pInd
 	}
 	else
 		MarkAllFields();
+
+	if ( m_tSnippetQuery.m_bKNNChunk && !SetupKNNChunk ( pRsetSchema, iNumArgs>=2, bDeferredKNNChunk, sError ) )
+		return;
 
 	m_tSnippetQuery.m_bJsonQuery = eQueryType==QUERY_JSON;
 	m_tSnippetQuery.Setup();
@@ -563,6 +577,20 @@ int	Expr_Highlight_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr
 			return 0;
 
 		dAllFields = RearrangeFetchedFields ( tFetchedDoc );
+		bool bHaveKNNChunk = m_bKNNChunk && RestrictToKNNChunk ( dAllFields, tMatch );
+		if ( bHaveKNNChunk && GetQuery().IsEmpty() )
+		{
+			SnippetResult_t tRes;
+			tRes.m_dFields.Resize ( dAllFields.GetLength() );
+			for ( int i = 0; i < dAllFields.GetLength(); ++i )
+				tRes.m_dFields[i].m_sName = dAllFields[i].m_sName;
+			PassageResult_t & tPassage = tRes.m_dFields[m_iKNNChunkField].m_dPassages.Add();
+			tPassage.m_dText.Append ( dAllFields[m_iKNNChunkField].m_dData );
+			CSphVector<BYTE> dPacked = m_pSnippetBuilder->PackResult ( tRes, m_dRequestedFieldIds );
+			int iResultLength = dPacked.GetLength();
+			*ppStr = dPacked.LeakData();
+			return iResultLength;
+		}
 		pSource = CreateHighlightSource ( dAllFields );
 	}
 
@@ -580,6 +608,14 @@ int	Expr_Highlight_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr
 void Expr_Highlight_c::Command ( ESphExprCommand eCmd, void * pArg )
 {
 	Expr_HighlightTraits_c::Command ( eCmd, pArg );
+
+	if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS && m_bKNNChunk )
+	{
+		auto * pCols = static_cast<StrVec_t*>(pArg);
+		pCols->Add ( GetKnnChunkIndexAttrName() );
+		pCols->Add ( GetKnnChunkStartAttrName() );
+		pCols->Add ( GetKnnChunkEndAttrName() );
+	}
 
 	if ( eCmd==SPH_EXPR_SET_DOCSTORE_DOCID )
 	{
@@ -605,7 +641,28 @@ ISphExpr * Expr_Highlight_c::Clone () const
 
 Expr_Highlight_c::Expr_Highlight_c ( const Expr_Highlight_c& rhs )
 	: Expr_HighlightTraits_c ( rhs )
+	, m_bKNNChunk ( rhs.m_bKNNChunk )
+	, m_iKNNChunkField ( rhs.m_iKNNChunkField )
+	, m_tKNNChunkIndexLoc ( rhs.m_tKNNChunkIndexLoc )
+	, m_tKNNChunkStartLoc ( rhs.m_tKNNChunkStartLoc )
+	, m_tKNNChunkEndLoc ( rhs.m_tKNNChunkEndLoc )
 {}
+
+
+void Expr_Highlight_c::FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+{
+	Expr_HighlightTraits_c::FixupLocator ( pOldSchema, pNewSchema );
+	if ( !m_bKNNChunk )
+		return;
+
+	const CSphColumnInfo * pChunkIndex = pNewSchema->GetAttr ( GetKnnChunkIndexAttrName() );
+	const CSphColumnInfo * pChunkStart = pNewSchema->GetAttr ( GetKnnChunkStartAttrName() );
+	const CSphColumnInfo * pChunkEnd = pNewSchema->GetAttr ( GetKnnChunkEndAttrName() );
+	assert ( pChunkIndex && pChunkStart && pChunkEnd );
+	m_tKNNChunkIndexLoc = pChunkIndex->m_tLocator;
+	m_tKNNChunkStartLoc = pChunkStart->m_tLocator;
+	m_tKNNChunkEndLoc = pChunkEnd->m_tLocator;
+}
 
 
 bool Expr_Highlight_c::FetchFieldsFromDocstore ( DocstoreDoc_t & tFetchedDoc, DocID_t & tDocID ) const
@@ -734,11 +791,96 @@ bool Expr_Highlight_c::MarkRequestedFields ( CSphString & sError )
 }
 
 
+bool Expr_Highlight_c::SetupKNNChunk ( const ISphSchema * pRsetSchema, bool bExplicitFields, bool bDeferred, CSphString & sError )
+{
+	if ( m_pText )
+	{
+		sError = "KNN chunk highlighting requires a quoted explicit stored-field list";
+		return false;
+	}
+
+	if ( !bExplicitFields || m_bFetchAllFields || m_dRequestedFieldIds.GetLength()!=1 )
+	{
+		sError = "KNN chunk highlighting requires exactly one explicit full-text field";
+		return false;
+	}
+
+	const CSphColumnInfo * pChunkIndex = pRsetSchema->GetAttr ( GetKnnChunkIndexAttrName() );
+	const CSphColumnInfo * pChunkStart = pRsetSchema->GetAttr ( GetKnnChunkStartAttrName() );
+	const CSphColumnInfo * pChunkEnd = pRsetSchema->GetAttr ( GetKnnChunkEndAttrName() );
+	const bool bHaveProvenanceCols = pChunkIndex && pChunkStart && pChunkEnd;
+	if ( !bHaveProvenanceCols )
+	{
+		if ( bDeferred )
+			return true;
+		sError = "KNN chunk highlighting requires a KNN query";
+		return false;
+	}
+
+	if ( pChunkIndex->m_iKNNChunkQueryCount!=1 )
+	{
+		sError = "KNN chunk highlighting does not support multiple KNN clauses";
+		return false;
+	}
+
+	const CSphString & sFrom = pChunkIndex->m_sKNNFrom;
+	if ( sFrom.IsEmpty() )
+	{
+		sError = "KNN chunk highlighting requires one explicit full-text FROM field";
+		return false;
+	}
+
+	CSphVector<std::pair<int,bool>> dFrom;
+	if ( !ParseEmbeddingSources ( dFrom, sFrom, m_pIndex->GetMatchSchema(), sError ) )
+		return false;
+	if ( dFrom.GetLength()!=1 )
+	{
+		sError = "KNN chunk highlighting requires one explicit full-text FROM field";
+		return false;
+	}
+	if ( !dFrom[0].second )
+	{
+		sError = "KNN chunk highlighting does not support string-attribute FROM sources";
+		return false;
+	}
+
+	m_iKNNChunkField = dFrom[0].first;
+	if ( m_dRequestedFieldIds[0]!=m_iKNNChunkField )
+	{
+		sError.SetSprintf ( "KNN chunk highlighting field must be '%s'", m_pIndex->GetMatchSchema().GetFieldName(m_iKNNChunkField) );
+		return false;
+	}
+
+	m_bKNNChunk = true;
+	m_tKNNChunkIndexLoc = pChunkIndex->m_tLocator;
+	m_tKNNChunkStartLoc = pChunkStart->m_tLocator;
+	m_tKNNChunkEndLoc = pChunkEnd->m_tLocator;
+	return true;
+}
+
+
+bool Expr_Highlight_c::RestrictToKNNChunk ( CSphVector<FieldSource_t> & dFields, const CSphMatch & tMatch ) const
+{
+	int64_t iChunk = (int64_t)tMatch.GetAttr(m_tKNNChunkIndexLoc);
+	int64_t iStart = (int64_t)tMatch.GetAttr(m_tKNNChunkStartLoc);
+	int64_t iEnd = (int64_t)tMatch.GetAttr(m_tKNNChunkEndLoc);
+	if ( iChunk<0 || iStart<0 || iEnd<=iStart || m_iKNNChunkField<0 || m_iKNNChunkField>=dFields.GetLength() )
+		return false;
+
+	auto & dText = dFields[m_iKNNChunkField].m_dData;
+	if ( iEnd>dText.GetLength() )
+		return false;
+
+	dText = { dText.Begin()+iStart, (int)(iEnd-iStart) };
+	return true;
+}
+
+
 bool Expr_Highlight_c::ParseOptions ( const VecTraits_T<CSphNamedVariant> & dMap, CSphString & sError )
 {
 	for ( const auto & i : dMap )
 	{
-		if ( !ParseSnippetOption ( i, m_tSnippetQuery, sError ) )
+		if ( !ParseSnippetOption ( i, m_tSnippetQuery, sError, true ) )
 			return false;
 	}
 
@@ -760,7 +902,7 @@ int ExprHook_c::IsKnownFunc ( const char * sFunc ) const
 }
 
 
-ISphExpr * ExprHook_c::CreateNode ( int iID, ISphExpr * pLeft, const ISphSchema * pRsetSchema, ESphEvalStage * pEvalStage, bool * pNeedDocIds, CSphString & sError )
+ISphExpr * ExprHook_c::CreateNode ( int iID, ISphExpr * pLeft, const ISphSchema * pRsetSchema, ESphEvalStage * pEvalStage, bool * pNeedDocIds, bool bKNNChunkHighlightDeferred, CSphString & sError )
 {
 	if ( pEvalStage )
 		*pEvalStage = SPH_EVAL_POSTLIMIT;
@@ -777,7 +919,7 @@ ISphExpr * ExprHook_c::CreateNode ( int iID, ISphExpr * pLeft, const ISphSchema 
 		break;
 
 	case HOOK_HIGHLIGHT:
-		pRes = new Expr_Highlight_c ( pLeft, m_pIndex, pRsetSchema, m_pProfiler, m_eQueryType, sError );
+		pRes = new Expr_Highlight_c ( pLeft, m_pIndex, pRsetSchema, m_pProfiler, m_eQueryType, bKNNChunkHighlightDeferred, sError );
 		break;
 
 	default:

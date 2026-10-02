@@ -3198,7 +3198,7 @@ public:
 		return -1;
 	}
 
-	ISphExpr * CreateNode ( int iID, ISphExpr * _pLeft, const ISphSchema *, ESphEvalStage *, bool *, CSphString & ) override
+	ISphExpr * CreateNode ( int iID, ISphExpr * _pLeft, const ISphSchema *, ESphEvalStage *, bool *, bool, CSphString & ) override
 	{
 		SafeAddRef ( _pLeft );
 		CSphRefcountedPtr<ISphExpr> pLeft ( _pLeft );
@@ -3461,7 +3461,7 @@ public:
 		: ExprRankerHook_T<false, false> ( nullptr )
 	{}
 
-	ISphExpr * CreateNode ( int, ISphExpr *, const ISphSchema *, ESphEvalStage *, bool *, CSphString & ) override final
+	ISphExpr * CreateNode ( int, ISphExpr *, const ISphSchema *, ESphEvalStage *, bool *, bool, CSphString & ) override final
 	{
 		return new Expr_GetIntConst_Rank_c ( 0 );
 	}

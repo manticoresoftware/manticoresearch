@@ -317,6 +317,7 @@ private:
 	bool	AddExpressionsForUpdates();
 	bool	MaybeAddGroupbyMagic ( bool bGotDistinct );
 	bool	AddKNNDistColumn();
+	bool	AddKNNChunkColumns();
 	bool	AddKNNRescoreColumn();
 	bool	CanRescoreKNN() const;
 	bool	AddHybridScoreColumn();
@@ -1253,6 +1254,7 @@ bool QueueCreator_c::ParseResolvedQueryItem ( const CSphQueryItem & tItem )
 	tExprParseArgs.m_pEvalStage = &tExprCol.m_eStage;
 	tExprParseArgs.m_pStoredField = &tExprCol.m_uFieldFlags;
 	tExprParseArgs.m_pNeedDocIds = &bExprsNeedDocids;
+	tExprParseArgs.m_bKNNChunkHighlightDeferred = m_tQuery.m_iKNNChunkQueryCount>0 && !m_tQuery.HasKnn();
 
 	// tricky bit
 	// GROUP_CONCAT() adds an implicit TO_STRING() conversion on top of its argument
@@ -1744,6 +1746,11 @@ bool QueueCreator_c::MaybeAddGroupbyMagic ( bool bGotDistinct )
 
 bool QueueCreator_c::AddKNNDistColumn()
 {
+	// Merge queues receive already-computed agent values. Adding a fresh
+	// sorter-only placeholder here changes the match layout without a producer.
+	if ( !m_tSettings.m_bComputeItems )
+		return true;
+
 	if ( m_tQuery.m_bHybridSearch )
 	{
 		// for hybrid search, add a plain knn_dist column that the hybrid executor will populate;
@@ -1796,6 +1803,88 @@ bool QueueCreator_c::AddKNNDistColumn()
 }
 
 
+bool QueueCreator_c::AddKNNChunkColumns()
+{
+	if ( !m_tQuery.HasKnn() )
+		return true;
+	const int iKNNCount = m_tQuery.m_iKNNChunkQueryCount ? m_tQuery.m_iKNNChunkQueryCount : m_tQuery.m_dKnnSettings.GetLength();
+
+	// Merge queues receive provenance values computed by the agents. Do not
+	// shadow them with coordinator-side expressions that cannot access shard
+	// blob storage.
+	if ( !m_tSettings.m_bComputeItems )
+		return true;
+
+	const bool bHaveSlot = m_pSorterSchema->GetAttrIndex ( GetKnnChunkIndexAttrName() )>=0;
+	const bool bHaveStart = m_pSorterSchema->GetAttrIndex ( GetKnnChunkStartAttrName() )>=0;
+	const bool bHaveEnd = m_pSorterSchema->GetAttrIndex ( GetKnnChunkEndAttrName() )>=0;
+	if ( bHaveSlot || bHaveStart || bHaveEnd )
+	{
+		if ( bHaveSlot && bHaveStart && bHaveEnd )
+			return true;
+		m_sError = "incomplete KNN chunk provenance result schema";
+		return false;
+	}
+
+	if ( m_tQuery.m_bHybridSearch )
+	{
+		const CSphString & sAttr = m_tQuery.SingleKnnSettings().m_sAttr;
+		const CSphColumnInfo * pVector = m_pSorterSchema->GetAttr ( sAttr.cstr() );
+		for ( const char * szName : { GetKnnChunkIndexAttrName(), GetKnnChunkStartAttrName(), GetKnnChunkEndAttrName() } )
+			if ( m_pSorterSchema->GetAttrIndex(szName)<0 )
+			{
+				CSphColumnInfo tCol ( szName, SPH_ATTR_BIGINT );
+				tCol.m_eStage = SPH_EVAL_SORTER;
+				if ( !strcmp ( szName, GetKnnChunkIndexAttrName() ) )
+				{
+					tCol.m_iKNNChunkQueryCount = iKNNCount;
+					if ( pVector )
+						tCol.m_sKNNFrom = pVector->m_sKNNFrom;
+				}
+				m_pSorterSchema->AddAttr ( tCol, true );
+				m_hQueryColumns.Add(szName);
+			}
+		return true;
+	}
+
+	const auto & tKNN = m_tQuery.SingleKnnSettings();
+	const CSphColumnInfo * pVector = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
+	const bool bCanHaveProvenance = pVector && pVector->m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY;
+	const CSphColumnInfo * pSpans = bCanHaveProvenance ? m_pSorterSchema->GetAttr ( GetKnnChunkSpansAttrName(tKNN.m_sAttr).cstr() ) : nullptr;
+	auto fnUnavailable = [&] () -> ISphExpr * { ExprParseArgs_t tArgs; return sphExprParse ( "-1", *m_pSorterSchema, m_sError, tArgs ); };
+	CSphColumnInfo tSlot ( GetKnnChunkIndexAttrName(), SPH_ATTR_BIGINT );
+	tSlot.m_eStage = SPH_EVAL_PRESORT;
+	tSlot.m_sKNNFrom = pVector->m_sKNNFrom;
+	tSlot.m_iKNNChunkQueryCount = iKNNCount;
+	tSlot.m_pExpr = pSpans ? CreateExpr_KNNChunkIndex ( tKNN.m_dVec, *pVector, *pSpans ) : fnUnavailable();
+	if ( !tSlot.m_pExpr ) return false;
+	m_pSorterSchema->AddAttr ( tSlot, true );
+	m_hQueryColumns.Add(tSlot.m_sName);
+	const CSphColumnInfo * pSlot = m_pSorterSchema->GetAttr ( GetKnnChunkIndexAttrName() );
+	assert(pSlot);
+	if ( pSpans )
+	{
+		const CSphColumnInfo * pDist = m_pSorterSchema->GetAttr ( GetKnnDistAttrName() );
+		if ( !pDist || !pDist->m_pExpr || !BindKNNChunkSlotExpressions ( pDist->m_pExpr, pSlot->m_pExpr, pSlot->m_tLocator ) )
+		{
+			m_sError = "unable to bind KNN chunk provenance expressions";
+			return false;
+		}
+	}
+
+	for ( bool bEnd : { false, true } )
+	{
+		CSphColumnInfo tBoundary ( bEnd ? GetKnnChunkEndAttrName() : GetKnnChunkStartAttrName(), SPH_ATTR_BIGINT );
+		tBoundary.m_eStage = SPH_EVAL_PRESORT;
+		tBoundary.m_pExpr = pSpans ? CreateExpr_KNNChunkBoundary ( *pSpans, pSlot->m_tLocator, bEnd ) : fnUnavailable();
+		if ( !tBoundary.m_pExpr ) return false;
+		m_pSorterSchema->AddAttr ( tBoundary, true );
+		m_hQueryColumns.Add(tBoundary.m_sName);
+	}
+	return true;
+}
+
+
 // Whether an exact KNN rescore can run against this sorter schema.
 // Rescore recomputes exact distances from the stored vectors, which needs the
 // attribute's own KNN index settings (m_tKNN). On a distributed/sharded head the
@@ -1827,14 +1916,16 @@ bool QueueCreator_c::AddKNNRescoreColumn()
 		return true;
 
 	const auto & tKNN = m_tQuery.SingleKnnSettings();
+	const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
+	assert(pAttr);
+	const bool bNeedChunkSlot = m_pSorterSchema->GetAttr ( GetKnnChunkSpansAttrName(tKNN.m_sAttr).cstr() );
 	CSphColumnInfo tKNNDistRescored ( GetKnnDistRescoreAttrName(), SPH_ATTR_FLOAT );
-	// Small requests use the original final-stage expression and therefore need no collector pass.
-	if ( UseBatchedKNNRescore(tKNN) )
+	// Small requests use the original final-stage expression unless exact rescore
+	// must also update auto-chunk provenance.
+	if ( UseBatchedKNNRescore ( tKNN, bNeedChunkSlot ) )
 		tKNNDistRescored.m_eStage = SPH_EVAL_SORTER;
 	else
 	{
-		const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
-		assert(pAttr);
 		tKNNDistRescored.m_eStage = SPH_EVAL_FINAL;
 		tKNNDistRescored.m_pExpr = CreateExpr_KNNDistRescore ( tKNN.m_dVec, *pAttr );
 	}
@@ -1848,7 +1939,9 @@ bool QueueCreator_c::AddKNNRescoreColumn()
 
 bool QueueCreator_c::AddHybridScoreColumn()
 {
-	if ( !m_tQuery.m_bHybridSearch )
+	// The hybrid executor populates this placeholder only on an executing node.
+	// A merge queue must consume the materialized score returned by its agents.
+	if ( !m_tSettings.m_bComputeItems || !m_tQuery.m_bHybridSearch )
 		return true;
 
 	CSphColumnInfo tHybridScore ( GetHybridScoreAttrName(), SPH_ATTR_FLOAT );
@@ -2899,6 +2992,7 @@ bool QueueCreator_c::SetupComputeQueue ()
 		&& AddJoinFilterAttrs()
 		&& MaybeAddGeodistColumn ()
 		&& AddKNNDistColumn()
+		&& AddKNNChunkColumns()
 		&& AddHybridScoreColumn()
 		&& MaybeAddExprColumn ()
 		&& MaybeAddExpressionsFromSelectList ()

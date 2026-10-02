@@ -347,6 +347,12 @@ Highlighting is performed during the so-called `post limit` stage, which means t
 
 ## Highlighting options
 
+#### knn_chunk
+
+Set `knn_chunk=1` in SQL or `"knn_chunk": true` in JSON to restrict highlighting to the source byte range of the winning auto-generated KNN chunk. This is opt-in; ordinary highlighting is unchanged. The option requires exactly one KNN clause whose vector uses exactly one explicit full-text `FROM` field, and that same single field must be requested explicitly (for example, `HIGHLIGHT({knn_chunk=1},'body')` or `"highlight":{"knn_chunk":true,"fields":["body"]}`). SQL expression forms such as `HIGHLIGHT({knn_chunk=1},body)`, empty/all-field requests, multiple fields, multiple KNN clauses, and string-attribute embedding sources are not supported. `knn_chunk` is a `HIGHLIGHT()` option and is not accepted by `SNIPPET()`.
+
+Literal full-text query matches inside the chunk use the normal highlight tags. A semantic-only KNN query returns the chunk without adding artificial tags. If chunk provenance is unavailable for a result, highlighting falls back to the ordinary full-field behavior.
+
 <!-- example highlighting options -->
 
 There are several optional highlighting options that can be used to fine-tune snippet generation, which are common to SQL, HTTP, and PHP clients.

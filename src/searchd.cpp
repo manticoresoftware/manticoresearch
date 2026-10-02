@@ -1040,7 +1040,7 @@ void sphGetAttrsToSend ( const ISphSchema & tSchema, bool bAgentMode, bool bNeed
 	tAttrs.Init ( iCount );
 
 	for ( int i = 0; i < iCount; ++i )
-		if ( !sphIsInternalAttr ( tSchema.GetAttr(i) )
+		if ( ( !sphIsInternalAttr ( tSchema.GetAttr(i) ) || ( bAgentMode && IsKnnChunkResultAttr ( tSchema.GetAttr(i).m_sName ) ) )
 			&& ( bAgentMode || !IsSortStringInternal ( tSchema.GetAttr(i).m_sName ) ) )
 			tAttrs.BitSet(i);
 
@@ -4485,6 +4485,12 @@ bool CreateAttrMaps ( CSphVector<int> & dAttrSchema, CSphVector<int> & dFieldSch
 			return false;
 		}
 
+		if ( sphIsInternalAttr(dCheck[i]) )
+		{
+			tOut.Error ( "unknown column: '%s'", dCheck[i].cstr() );
+			return false;
+		}
+
 		// OPTIMIZE! GetFieldIndex use linear searching. M.b. hash instead?
 		if ( tSchema.GetAttrIndex ( dCheck[i].cstr() )==-1 && tSchema.GetFieldIndex ( dCheck[i].cstr() )==-1 )
 		{
@@ -7070,6 +7076,27 @@ static bool CheckCreateTable ( const CSphString & sIndex, const CreateTableSetti
 
 static Threads::Coro::Mutex_c g_tCreateTableMutex;
 
+static void AddKNNChunkSpanAttrs ( CreateTableSettings_t & tSettings )
+{
+	const int iOriginalAttrs = tSettings.m_dAttrs.GetLength();
+	for ( int i=0; i<iOriginalAttrs; ++i )
+	{
+		const CreateTableAttr_t & tVector = tSettings.m_dAttrs[i];
+		if ( tVector.m_tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR_ARRAY || !tVector.m_bKNN || tVector.m_tKNNModel.m_sModelName.empty() || !knn::IsMultiVectorStrategy(tVector.m_tKNNChunk.m_eStrategy) )
+			continue;
+
+		CSphString sSpans = GetKnnChunkSpansAttrName(tVector.m_tAttr.m_sName);
+		bool bExists = false;
+		for ( const auto & tAttr : tSettings.m_dAttrs ) bExists |= tAttr.m_tAttr.m_sName==sSpans;
+		if ( bExists ) continue;
+		CreateTableAttr_t & tSpans = tSettings.m_dAttrs.Add();
+		tSpans.m_tAttr.m_sName = sSpans;
+		tSpans.m_tAttr.m_eAttrType = SPH_ATTR_STRING;
+		tSpans.m_tAttr.m_eEngine = AttrEngine_e::ROWWISE;
+	}
+}
+
+
 static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	SearchFailuresLog_c dErrors;
@@ -7094,13 +7121,16 @@ static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 		tOut.Error ( sError.cstr() );
 		return;
 	}
-
 	if ( !CheckCreateTable ( tStmt.m_sIndex, tExpandedSettings, sError ) )
 	{
 		sError.SetSprintf ( "table '%s': CREATE TABLE failed: %s", tStmt.m_sIndex.cstr(), sError.cstr() );
 		tOut.Error ( sError.cstr() );
 		return;
 	}
+
+	// Add engine-owned internal attributes only after validating the user schema;
+	// CheckAttrs deliberately rejects all such names in user input.
+	AddKNNChunkSpanAttrs(tExpandedSettings);
 
 	StrVec_t dWarnings;
 	bool bCreatedOk = CreateNewIndexConfigless ( tStmt.m_sIndex, tExpandedSettings, dWarnings, sError );
@@ -11831,9 +11861,20 @@ static void RemoveAttrFromIndex ( const SqlStmt_t& tStmt, CSphIndex* pIdx, CSphS
 
 	if ( pAttr )
 	{
+		const ESphAttr eAttrType = pAttr->m_eAttrType;
+		CSphString sChunkSpans = GetKnnChunkSpansAttrName(sAttrToRemove);
+		if ( const CSphColumnInfo * pChunkSpans = pIdx->GetMatchSchema().GetAttr ( sChunkSpans.cstr() ) )
+		{
+			AttrAddRemoveCtx_t tSpansCtx;
+			tSpansCtx.m_sName = sChunkSpans;
+			tSpansCtx.m_eType = pChunkSpans->m_eAttrType;
+			if ( !pIdx->AddRemoveAttribute ( false, tSpansCtx, sError ) )
+				return;
+		}
+
 		AttrAddRemoveCtx_t tCtx;
 		tCtx.m_sName = sAttrToRemove;
-		tCtx.m_eType = pAttr->m_eAttrType;
+		tCtx.m_eType = eAttrType;
 		pIdx->AddRemoveAttribute ( false, tCtx, sError );
 	}
 

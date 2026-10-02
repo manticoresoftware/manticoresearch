@@ -15,11 +15,23 @@
 #include "sphinxint.h"
 #include "searchdaemon.h"
 #include "searchdha.h"
+#include "daemon/api_search.h"
 #include "searchdssl.h"
 #include "searchdreplication.h"
 #include "searchdddl.h"
 #include "replication/wsrep_cxx.h"
 #include "replication/cluster_binlog.h"
+
+
+TEST ( protocol, FloatVectorArrayMasterCompatibility )
+{
+	EXPECT_FALSE ( CanSendFloatVectorArray ( 0, 34, true ) );
+	EXPECT_TRUE ( CanSendFloatVectorArray ( 0, 35, true ) );
+	EXPECT_TRUE ( CanSendFloatVectorArray ( 0, VER_COMMAND_SEARCH_MASTER, true ) );
+
+	EXPECT_FALSE ( CanSendFloatVectorArray ( 0x127, 0, false ) );
+	EXPECT_TRUE ( CanSendFloatVectorArray ( 0x128, 0, false ) );
+}
 
 
 // QueryStatElement_t uses default ctr with inline initializer;

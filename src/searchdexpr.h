@@ -26,7 +26,7 @@ class ExprHook_c : public ISphExprHook
 public:
 	int			IsKnownIdent ( const char * ) const final	{ return -1; }
 	int			IsKnownFunc ( const char * sFunc ) const final;
-	ISphExpr *	CreateNode ( int iID, ISphExpr * pLeft, const ISphSchema * pRsetSchema, ESphEvalStage * pEvalStage, bool * pNeedDocIds, CSphString & sError ) final;
+	ISphExpr *	CreateNode ( int iID, ISphExpr * pLeft, const ISphSchema * pRsetSchema, ESphEvalStage * pEvalStage, bool * pNeedDocIds, bool bKNNChunkHighlightDeferred, CSphString & sError ) final;
 	ESphAttr	GetIdentType ( int ) const final;
 	ESphAttr	GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool, CSphString & sError ) const final;
 	void		CheckEnter ( int ) final {}
@@ -35,7 +35,6 @@ public:
 	void		SetIndex ( const CSphIndex * pIndex ) { m_pIndex = pIndex; }
 	void		SetProfiler ( QueryProfile_c * pProfiler ) { m_pProfiler = pProfiler; }
 	void		SetQueryType ( QueryType_e eType ) { m_eQueryType = eType; }
-
 private:
 	const CSphIndex *			m_pIndex = nullptr; /// BLOODY HACK
 	QueryProfile_c *	m_pProfiler = nullptr;

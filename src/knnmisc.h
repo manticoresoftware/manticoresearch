@@ -58,11 +58,21 @@ private:
 bool							IsKnnDist ( const CSphString & sExpr );
 const char *					GetKnnDistAttrName();
 const char *					GetKnnDistRescoreAttrName();
+const char *					GetKnnChunkIndexAttrName();
+const char *					GetKnnChunkStartAttrName();
+const char *					GetKnnChunkEndAttrName();
+bool							IsKnnChunkResultAttr ( const CSphString & sAttr );
+CSphString						GetKnnChunkSpansAttrName ( const CSphString & sVectorAttr );
+bool							IsKnnChunkSpansAttr ( const CSphString & sAttr );
+CSphString						GetKnnAttrFromChunkSpansAttr ( const CSphString & sAttr );
 void							SetupKNNLimit ( CSphQuery & tQuery );
 
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
 ISphExpr *						CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
-bool							UseBatchedKNNRescore ( const KnnSearchSettings_t & tSettings );
+ISphExpr *						CreateExpr_KNNChunkIndex ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr, const CSphColumnInfo & tSpansAttr );
+ISphExpr *						CreateExpr_KNNChunkBoundary ( const CSphColumnInfo & tSpansAttr, const CSphAttrLocator & tSlotLoc, bool bEnd );
+bool							BindKNNChunkSlotExpressions ( ISphExpr * pDist, ISphExpr * pChunkIndex, const CSphAttrLocator & tSlotLoc );
+bool							UseBatchedKNNRescore ( const KnnSearchSettings_t & tSettings, bool bNeedChunkSlot );
 void							NormalizeVec ( VecTraits_T<float> & dData );
 
 void							AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr );

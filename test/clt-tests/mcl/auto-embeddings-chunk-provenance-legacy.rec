@@ -1,0 +1,66 @@
+––– comment –––
+A pre-feature table schema without the hidden span sidecar stays searchable and non-migrating.
+––– comment –––
+Start a separate daemon with a sidecar-less static RT schema.
+––– input –––
+if [ -f /tmp/chunk-provenance-legacy/manticore.conf ]; then searchd --stopwait --config /tmp/chunk-provenance-legacy/manticore.conf >/dev/null 2>&1 || true; fi; rm -rf /tmp/chunk-provenance-legacy; mkdir -p /tmp/chunk-provenance-legacy/table /tmp/chunk-provenance-legacy/binlog; cat > /tmp/chunk-provenance-legacy/manticore.conf <<'EOF'
+index legacy_provenance {
+  type = rt
+  path = /tmp/chunk-provenance-legacy/table/legacy_provenance
+  rt_field = body
+  rt_attr_float_vector_array = chunks
+  knn = {"attrs":[{"name":"chunks","type":"hnsw","hnsw_similarity":"cosine","model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"body","chunk_strategy":"fixed","max_tokens":8,"overlap_tokens":2}]}
+}
+searchd {
+  listen = 9306:mysql41
+  listen = 9308:http
+  log = /tmp/chunk-provenance-legacy/searchd.log
+  query_log = /tmp/chunk-provenance-legacy/query.log
+  pid_file = /tmp/chunk-provenance-legacy/searchd.pid
+  binlog_path = /tmp/chunk-provenance-legacy/binlog
+}
+EOF
+stdbuf -oL searchd --config /tmp/chunk-provenance-legacy/manticore.conf >/dev/null; for i in $(seq 1 150); do mysql -h0 -P9306 -e 'select 1' >/dev/null 2>&1 && { echo LEGACY_STARTED; break; }; sleep .2; done
+––– output –––
+LEGACY_STARTED
+––– comment –––
+A row inserted into the sidecar-less schema remains searchable and reports unavailable provenance.
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO legacy_provenance(id,body) VALUES(1,'legacy alpha target phrase omega')" && mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM legacy_provenance WHERE KNN(chunks,10,'target phrase',{rescore=1}) ORDER BY id" > /tmp/legacy-provenance.tsv || exit 1; python3 test/clt-tests/mcl/check-chunk-provenance.py format-tuples 4 < /tmp/legacy-provenance.tsv
+––– output –––
+1 -1 -1 -1
+––– comment –––
+Opt-in highlighting falls back to ordinary highlighting when the row has no provenance tuple.
+––– input –––
+mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT HIGHLIGHT({knn_chunk=1},'body','target phrase') FROM legacy_provenance WHERE KNN(chunks,10,'target phrase',{rescore=1}) LIMIT 1"
+––– output –––
+legacy alpha <b>target phrase</b> omega
+––– comment –––
+Flushing does not synthesize the hidden span sidecar.
+––– input –––
+mysql -h0 -P9306 -e 'FLUSH RAMCHUNK legacy_provenance'; ERR=$(mysql -h0 -P9306 -e 'ALTER TABLE legacy_provenance DROP COLUMN knn_chunk_spans_v1_chunks' 2>&1) && exit 1; case "$ERR" in *'does not exist'*) ;; *) exit 1;; esac; echo LEGACY_BEFORE_RESTART_OK
+––– output –––
+LEGACY_BEFORE_RESTART_OK
+––– comment –––
+Restart with the same persisted sidecar-less table.
+––– input –––
+searchd --stopwait --config /tmp/chunk-provenance-legacy/manticore.conf >/dev/null; rm -f /tmp/chunk-provenance-legacy/searchd.log; stdbuf -oL searchd --config /tmp/chunk-provenance-legacy/manticore.conf >/dev/null; for i in $(seq 1 150); do mysql -h0 -P9306 -e 'select 1' >/dev/null 2>&1 && { echo LEGACY_RESTARTED; break; }; sleep .2; done
+––– output –––
+LEGACY_RESTARTED
+––– comment –––
+Rows inserted after restart also remain provenance-free through flush and optimize.
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO legacy_provenance(id,body) VALUES(2,'new row target phrase after upgrade'); FLUSH RAMCHUNK legacy_provenance; OPTIMIZE TABLE legacy_provenance OPTION sync=1,cutoff=1" && mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,knn_chunk_index(),knn_chunk_start(),knn_chunk_end() FROM legacy_provenance WHERE KNN(chunks,10,'target phrase',{rescore=1}) ORDER BY id" > /tmp/legacy-provenance.tsv || exit 1; python3 test/clt-tests/mcl/check-chunk-provenance.py format-tuples 4 < /tmp/legacy-provenance.tsv
+––– output –––
+1 -1 -1 -1
+2 -1 -1 -1
+––– comment –––
+HTTP omits `_knn_chunk` because the sidecar-less schema has no source provenance.
+––– input –––
+curl -sS -X POST http://127.0.0.1:9308/search -H 'Content-Type: application/json' -d '{"index":"legacy_provenance","knn":{"field":"chunks","query":"target phrase","k":2},"limit":2}' > /tmp/legacy-provenance.json || exit 1; python3 test/clt-tests/mcl/check-chunk-provenance.py json-no-provenance 1 2 < /tmp/legacy-provenance.json
+––– output –––
+LEGACY_HTTP_OK
+––– input –––
+searchd --stopwait --config /tmp/chunk-provenance-legacy/manticore.conf >/dev/null; echo LEGACY_STOPPED
+––– output –––
+LEGACY_STOPPED

@@ -708,6 +708,13 @@ Important points:
 * **`MAX_CHUNKS` discards text.** On overflow the remainder is merged into the last kept chunk, which then exceeds `MAX_TOKENS` and is truncated to the model's input window when embedded. Nothing is left as a visible gap, but the tail is gone.
 * **Local and remote models chunk differently.** Local models split on the model's real tokens. Remote API models (OpenAI, Voyage, Jina) have no local tokenizer and use a conservative byte estimate instead, so the same text and settings will produce a different number of chunks than a local model would.
 
+For an auto-chunked match, `knn_chunk_index()`, `knn_chunk_start()`, and `knn_chunk_end()` return the zero-based winning chunk and its half-open UTF-8 byte range in the exact text passed to the chunker. They return `-1` for manually supplied arrays and non-chunked vectors. In HTTP search responses, `_knn_chunk` is included only when that provenance is available; it is omitted instead of returning a `-1` object. Tables created before chunk provenance support have no provenance storage: they remain searchable, but all three SQL functions return `-1` for every row, including rows inserted after upgrading. To enable provenance, create a new table and reindex or copy the source text into it. Exact rescoring updates the distance and chunk together; ties select the lowest chunk index.
+
+```sql
+SELECT id, knn_dist(), knn_chunk_index(), knn_chunk_start(), knn_chunk_end()
+FROM articles WHERE knn(chunks, 5, 'certificate rotation');
+```
+
 `ALTER TABLE ... ADD COLUMN` with a model-backed `float_vector_array`, and `ALTER TABLE ... REBUILD EMBEDDINGS` on one, are not supported yet; existing rows can not be backfilled, so the column would stay empty. Declare such a column when creating the table. Both work normally for a `float_vector` column, including with `mean`.
 
 <!-- example chunking -->

@@ -4261,10 +4261,11 @@ class ExprParser_t
 	friend void				yyerror ( ExprParser_t * pParser, const char * sMessage );
 
 public:
-	ExprParser_t ( ISphExprHook * pHook, QueryProfile_c * pProfiler, ESphCollation eCollation )
+	ExprParser_t ( ISphExprHook * pHook, QueryProfile_c * pProfiler, ESphCollation eCollation, bool bKNNChunkHighlightDeferred )
 		: m_pHook ( pHook )
 		, m_pProfiler ( pProfiler )
 		, m_eCollation ( eCollation )
+		, m_bKNNChunkHighlightDeferred ( bKNNChunkHighlightDeferred )
 	{
 		m_dGatherStack.Reserve ( 64 );
 	}
@@ -4341,6 +4342,7 @@ public:
 	ESphCollation			m_eCollation;
 	DWORD					m_uStoredField = CSphColumnInfo::FIELD_NONE;
 	bool					m_bNeedDocIds = false;
+	bool					m_bKNNChunkHighlightDeferred = false;
 
 private:
 	bool					CheckGeodist ( YYSTYPE * lvalp );
@@ -7399,8 +7401,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 			}
 
 		case TOK_UDF:			return CreateUdfNode ( tNode.m_iFunc, pLeft );
-		case TOK_HOOK_IDENT:	return m_pHook->CreateNode ( tNode.m_iFunc, nullptr, nullptr, nullptr, nullptr, m_sCreateError );
-		case TOK_HOOK_FUNC:		return m_pHook->CreateNode ( tNode.m_iFunc, pLeft, m_pSchema, &m_eEvalStage, &m_bNeedDocIds, m_sCreateError );
+		case TOK_HOOK_IDENT:	return m_pHook->CreateNode ( tNode.m_iFunc, nullptr, nullptr, nullptr, nullptr, m_bKNNChunkHighlightDeferred, m_sCreateError );
+		case TOK_HOOK_FUNC:		return m_pHook->CreateNode ( tNode.m_iFunc, pLeft, m_pSchema, &m_eEvalStage, &m_bNeedDocIds, m_bKNNChunkHighlightDeferred, m_sCreateError );
 
 		case TOK_MAP_ARG:
 			// tricky bit
@@ -11064,8 +11066,49 @@ JoinArgs_t::JoinArgs_t ( const ISphSchema & tJoinedSchema, const CSphString & sI
 /// parser entry point
 ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, CSphString & sError, ExprParseArgs_t & tArgs )
 {
+	// Provenance values are materialized dynamic scalar attributes. Normalize the
+	// public zero-argument aliases before the generic expression lexer, just like
+	// sortsetup normalizes knn_dist(). This also permits arithmetic around them.
+	std::string sNormalized = szExpr;
+	auto fnReplaceNoCase = [&sNormalized] ( const char * szAlias, const char * szAttr )
+	{
+		const size_t iAliasLen = strlen(szAlias);
+		char cQuote = 0;
+		for ( size_t i=0; i<sNormalized.size(); )
+		{
+			const char c = sNormalized[i];
+			if ( cQuote )
+			{
+				if ( c=='\\' && i+1<sNormalized.size() ) { i += 2; continue; }
+				if ( c==cQuote )
+				{
+					if ( i+1<sNormalized.size() && sNormalized[i+1]==cQuote ) { i += 2; continue; }
+					cQuote = 0;
+				}
+				i++;
+				continue;
+			}
+
+			if ( c=='\'' || c=='"' || c=='`' ) { cQuote = c; i++; continue; }
+			const bool bLeftBoundary = !i || !( sphIsAlpha ( sNormalized[i-1] ) || sphIsDigital ( sNormalized[i-1] ) || sNormalized[i-1]=='_' || sNormalized[i-1]=='@' );
+			const size_t iAfter = i+iAliasLen;
+			const bool bRightBoundary = iAfter>=sNormalized.size() || !( sphIsAlpha ( sNormalized[iAfter] ) || sphIsDigital ( sNormalized[iAfter] ) || sNormalized[iAfter]=='_' );
+			if ( bLeftBoundary && bRightBoundary && iAfter<=sNormalized.size() && !strncasecmp ( sNormalized.c_str()+i, szAlias, iAliasLen ) )
+			{
+				sNormalized.replace ( i, iAliasLen, szAttr );
+				i += strlen(szAttr);
+			}
+			else
+				i++;
+		}
+	};
+	fnReplaceNoCase ( "knn_chunk_index()", GetKnnChunkIndexAttrName() );
+	fnReplaceNoCase ( "knn_chunk_start()", GetKnnChunkStartAttrName() );
+	fnReplaceNoCase ( "knn_chunk_end()", GetKnnChunkEndAttrName() );
+	szExpr = sNormalized.c_str();
+
 	// parse into opcodes
-	ExprParser_t tParser ( tArgs.m_pHook, tArgs.m_pProfiler, tArgs.m_eCollation );
+	ExprParser_t tParser ( tArgs.m_pHook, tArgs.m_pProfiler, tArgs.m_eCollation, tArgs.m_bKNNChunkHighlightDeferred );
 	ISphExpr * pRes = tParser.Parse ( szExpr, tSchema, tArgs.m_pJoinIdx, tArgs.m_pJoinIdxLeft, tArgs.m_pAttrType, tArgs.m_pUsesWeight, sError );
 	if ( tArgs.m_pZonespanlist )
 		*tArgs.m_pZonespanlist = tParser.m_bHasZonespanlist;

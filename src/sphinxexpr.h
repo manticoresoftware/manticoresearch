@@ -90,6 +90,7 @@ enum ESphExprCommand
 	SPH_EXPR_SET_QUERY,
 	SPH_EXPR_SET_EXTRA_DATA,
 	SPH_EXPR_SET_KNN_VEC,
+	SPH_EXPR_BIND_KNN_CHUNK_SLOT,
 	SPH_EXPR_GET_DEPENDENT_COLS,	///< used to determine proper evaluating stage
 	SPH_EXPR_GET_GEODIST_SETTINGS,
 	SPH_EXPR_GET_POLY2D_BBOX,
@@ -261,7 +262,7 @@ struct ISphExprHook
 	/// create node by OID
 	/// pEvalStage is an optional out-parameter
 	/// hook may fill it, but that is *not* required
-	virtual ISphExpr * CreateNode ( int iID, ISphExpr * pLeft, const ISphSchema * pRsetSchema, ESphEvalStage * pEvalStage, bool * pNeedDocIds, CSphString & sError ) = 0;
+	virtual ISphExpr * CreateNode ( int iID, ISphExpr * pLeft, const ISphSchema * pRsetSchema, ESphEvalStage * pEvalStage, bool * pNeedDocIds, bool bKNNChunkHighlightDeferred, CSphString & sError ) = 0;
 
 	/// get identifier return type by OID
 	virtual ESphAttr GetIdentType ( int iID ) const = 0;
@@ -356,6 +357,7 @@ struct ExprParseArgs_t
 	bool *				m_pNeedDocIds = nullptr;
 	const CSphString *	m_pJoinIdx = nullptr;
 	const CSphString *	m_pJoinIdxLeft = nullptr;
+	bool				m_bKNNChunkHighlightDeferred = false;
 };
 
 struct JoinArgs_t

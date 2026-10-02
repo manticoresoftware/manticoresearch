@@ -534,9 +534,16 @@ void KNNVecDistCalc_c::RescoreColumnarPrefetch ( VecTraits_T<CSphMatch*> & dMatc
 	};
 
 	std::vector<Vec_t> dVecs ( iCount );
-	std::vector<std::unique_ptr<columnar::Iterator_i>> dIterators;	// alive to the end: pass 3 fetches rows of non-mapped stores
 	CSphVector<MemRange_t> dRanges;
 	dRanges.Reserve(iCount);
+
+	// An iterator carries a lot of state (five block decoders, each with a codec and buffers), so how many are alive
+	// at once matters on a hot query. A file-mapped store hands out pointers into the mapping, valid without the
+	// iterator (RescoreColumnar relies on the same), so its iterator goes as soon as the next chunk starts: one small
+	// set of objects is recycled for every chunk and stays in the CPU cache. Only iterators of stores without stable
+	// pointers are kept, because pass 3 has to fetch through them.
+	std::unique_ptr<columnar::Iterator_i> pStableIterator;
+	std::vector<std::unique_ptr<columnar::Iterator_i>> dIterators;
 
 	// pass 1: resolve
 	columnar::Columnar_i * pCurColumnar = nullptr;
@@ -544,7 +551,7 @@ void KNNVecDistCalc_c::RescoreColumnarPrefetch ( VecTraits_T<CSphMatch*> & dMatc
 	int iCurTag = 0;
 	bool bTagInitialized = false;
 	bool bIteratorInitialized = false;
-	int iCurIterator = -1;
+	int iCurIterator = -1;		// index in dIterators, for a store without stable pointers
 	bool bCurStable = false;	// does the current store's Get() return pointers stable across later Get() calls?
 
 	for ( int i = 0; i < iCount; i++ )
@@ -561,6 +568,7 @@ void KNNVecDistCalc_c::RescoreColumnarPrefetch ( VecTraits_T<CSphMatch*> & dMatc
 		{
 			pCurColumnar = pColumnar;
 			bIteratorInitialized = true;
+			pStableIterator.reset();	// before creating the next one, so that its parts are reused for it
 			iCurIterator = -1;
 			bCurStable = false;
 
@@ -571,22 +579,27 @@ void KNNVecDistCalc_c::RescoreColumnarPrefetch ( VecTraits_T<CSphMatch*> & dMatc
 				auto pIterator = CreateColumnarIterator ( pColumnar, m_tAttr.m_sName.cstr(), sError, tHints );
 				if ( pIterator )
 				{
-					dIterators.push_back ( std::move(pIterator) );
-					iCurIterator = (int)dIterators.size()-1;
-
 					columnar::AttrInfo_t tInfo;
 					if ( pColumnar->GetAttrInfo ( m_tAttr.m_sName.cstr(), tInfo ) )
 						bCurStable = tInfo.m_bStablePtr;
+
+					if ( bCurStable )
+						pStableIterator = std::move(pIterator);
+					else
+					{
+						dIterators.push_back ( std::move(pIterator) );
+						iCurIterator = (int)dIterators.size()-1;
+					}
 				}
 			}
 		}
 
 		Vec_t & tVec = dVecs[i];
 		tVec.m_iIterator = iCurIterator;
-		if ( iCurIterator<0 || !bCurStable )
+		if ( !pStableIterator )
 			continue;
 
-		tVec.m_iLen = dIterators[iCurIterator]->Get ( pMatch->m_tRowID, tVec.m_pData );
+		tVec.m_iLen = pStableIterator->Get ( pMatch->m_tRowID, tVec.m_pData );
 		tVec.m_bResolved = true;
 		if ( tVec.m_pData && tVec.m_iLen>0 )
 		{

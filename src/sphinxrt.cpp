@@ -4603,7 +4603,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	CSphFixedVector<CSphRowitem> dNewRow { iStride };
 	CSphRowitem * pNewRow = dNewRow.Begin();
 	const int iFields = m_tSchema.GetFieldsCount();
-	e1::norms::StagedBuilder tNormBuilder ( iFields );
+	e1::norms::DirectBuilder tNormBuilder ( iFields );
 	std::string sNormError;
 	ARRAY_FOREACH ( i, tCtx.m_tRamSegments )
 	{
@@ -4617,12 +4617,6 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 		for ( auto tRowID : RtLiveRows_c(tSeg) )
 		{
 			assert ( tSeg.m_dNorms.GetLength64()==int64_t(tSeg.m_uRows)*iFields );
-			const DWORD * pNorms = iFields ? &tSeg.m_dNorms[int64_t(tRowID)*iFields] : nullptr;
-			if ( !tNormBuilder.AddRow ( pNorms, iFields, sNormError ) )
-			{
-				sError = sNormError.c_str();
-				return false;
-			}
 			const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID*iStride;
 			tMinMaxBuilder.Collect(pRow);
 			if ( pBlobLocatorAttr )
@@ -4757,7 +4751,20 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	if ( pJsonSIBuilder && !pJsonSIBuilder->Done(sError) )
 		return false;
 
-	if ( !tNormBuilder.Finish ( sSPN.cstr(), sNormError ) )
+	auto fnNormValues = [&] ( uint32_t uField, const auto & fnValue )
+	{
+		ARRAY_FOREACH ( i, tCtx.m_tRamSegments )
+		{
+			const auto & tSeg = *tCtx.m_tRamSegments[i];
+			SccRL_t rLock ( tSeg.m_tLock );
+			assert ( tSeg.m_dNorms.GetLength64()==int64_t(tSeg.m_uRows)*iFields );
+			for ( RowID_t tRowID=0; tRowID<tSeg.m_uRows; ++tRowID )
+				if ( tCtx.m_dRowMaps[i][tRowID]!=INVALID_ROWID && !fnValue(tSeg.m_dNorms[int64_t(tRowID)*iFields+uField]) )
+					return false;
+		}
+		return true;
+	};
+	if ( !tNormBuilder.Finish ( sSPN.cstr(), uint32_t(tNextRowID), fnNormValues, sNormError ) )
 	{
 		sError = sNormError.c_str();
 		return false;

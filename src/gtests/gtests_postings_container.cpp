@@ -616,6 +616,58 @@ TEST ( NormStore, PackedStagedBuilderMatchesInMemoryBuilder )
 	EXPECT_EQ ( dActual, dExpected );
 }
 
+TEST ( NormStore, DirectBuilderMatchesStagedBuilderAtGroupBoundaries )
+{
+	struct SourceRow_t
+	{
+		std::array<uint32_t,3> m_dValues {};
+		bool m_bLive = false;
+	};
+
+	for ( uint32_t uRows : { 0u, 1u, 4095u, 4096u, 4097u } )
+	{
+		std::array<std::vector<SourceRow_t>,3> dSegments;
+		for ( uint32_t uRow=0; uRow<uRows; ++uRow )
+		{
+			auto & dSegment = dSegments[std::min ( 2u, uint32_t(uint64_t(uRow)*3/std::max(1u,uRows)) )];
+			if ( !(uRow%997) )
+				dSegment.push_back ( { { UINT32_MAX, UINT32_MAX, UINT32_MAX }, false } );
+			dSegment.push_back ( { { (uRow*17)%251, 256+(uRow%60000), 65536+uRow }, true } );
+		}
+
+		std::string sError;
+		e1::norms::StagedBuilder tStaged ( 3 );
+		for ( const auto & dSegment : dSegments )
+			for ( const auto & tRow : dSegment )
+				if ( tRow.m_bLive )
+					ASSERT_TRUE ( tStaged.AddRow(tRow.m_dValues.data(),tRow.m_dValues.size(),sError) ) << sError;
+
+		const std::string sSuffix = std::to_string(GetOsProcessId())+"_"+std::to_string(uRows)+".tmp";
+		const std::string sStagedPath = "__staged_norm_store_"+sSuffix;
+		const std::string sDirectPath = "__direct_norm_store_"+sSuffix;
+		ASSERT_TRUE ( tStaged.Finish(sStagedPath.c_str(),sError) ) << sError;
+
+		e1::norms::DirectBuilder tDirect ( 3 );
+		auto fnValues = [&] ( uint32_t uField, const auto & fnValue )
+		{
+			for ( const auto & dSegment : dSegments )
+				for ( const auto & tRow : dSegment )
+					if ( tRow.m_bLive && !fnValue(tRow.m_dValues[uField]) )
+						return false;
+			return true;
+		};
+		ASSERT_TRUE ( tDirect.Finish(sDirectPath.c_str(),uRows,fnValues,sError) ) << sError;
+
+		std::ifstream tStagedIn ( sStagedPath, std::ios::binary );
+		std::ifstream tDirectIn ( sDirectPath, std::ios::binary );
+		std::vector<uint8_t> dStaged ( (std::istreambuf_iterator<char>(tStagedIn)), std::istreambuf_iterator<char>() );
+		std::vector<uint8_t> dDirect ( (std::istreambuf_iterator<char>(tDirectIn)), std::istreambuf_iterator<char>() );
+		std::remove ( sStagedPath.c_str() );
+		std::remove ( sDirectPath.c_str() );
+		EXPECT_EQ ( dDirect, dStaged ) << "rows=" << uRows;
+	}
+}
+
 TEST ( NormStore, StagedBuilderReportsOutputPathAndSystemError )
 {
 	std::string sError;
@@ -624,6 +676,12 @@ TEST ( NormStore, StagedBuilderReportsOutputPathAndSystemError )
 	ASSERT_TRUE ( tStaged.AddRow(&uValue,1,sError) ) << sError;
 	const char * szPath = "__missing_norm_store_dir__/products.spn";
 	EXPECT_FALSE ( tStaged.Finish(szPath,sError) );
+	EXPECT_NE ( sError.find(szPath), std::string::npos ) << sError;
+	EXPECT_NE ( sError.find(": "), std::string::npos ) << sError;
+
+	e1::norms::DirectBuilder tDirect ( 1, 4 );
+	auto fnValues = [&] ( uint32_t, const auto & fnValue ) { return fnValue(uValue); };
+	EXPECT_FALSE ( tDirect.Finish(szPath,1,fnValues,sError) );
 	EXPECT_NE ( sError.find(szPath), std::string::npos ) << sError;
 	EXPECT_NE ( sError.find(": "), std::string::npos ) << sError;
 }
@@ -641,6 +699,14 @@ TEST ( NormStore, StagedBuilderSupportsAttributeOnlyIndexes )
 	std::ifstream tIn ( sPath, std::ios::binary );
 	std::vector<uint8_t> dData ( (std::istreambuf_iterator<char>(tIn)), std::istreambuf_iterator<char>() );
 	std::remove ( sPath.c_str() );
+	e1::norms::DirectBuilder tDirect ( 0, 4 );
+	const std::string sDirectPath = "__empty_direct_norm_store_"+std::to_string(GetOsProcessId())+".tmp";
+	auto fnValues = [] ( uint32_t, const auto & ) { return false; };
+	ASSERT_TRUE ( tDirect.Finish(sDirectPath.c_str(),2,fnValues,sError) ) << sError;
+	std::ifstream tDirectIn ( sDirectPath, std::ios::binary );
+	std::vector<uint8_t> dDirectData ( (std::istreambuf_iterator<char>(tDirectIn)), std::istreambuf_iterator<char>() );
+	std::remove ( sDirectPath.c_str() );
+	EXPECT_EQ ( dDirectData, dData );
 
 	e1::norms::Store tStore;
 	ASSERT_TRUE ( tStore.Open(dData.data(),dData.size(),sError) ) << sError;

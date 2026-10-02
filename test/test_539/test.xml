@@ -50,6 +50,22 @@ index e1_ties
 	path = <data_path/>/e1_ties
 	rt_field = body
 }
+
+index e1_direct_rt
+{
+	type = rt
+	path = <data_path/>/e1_direct_rt
+	rt_field = title
+	rt_field = body
+	rt_attr_uint = gid
+}
+
+index e1_attrs_only
+{
+	type = rt
+	path = <data_path/>/e1_attrs_only
+	rt_attr_uint = gid
+}
 </config>
 
 <db_create>
@@ -90,6 +106,28 @@ INSERT INTO e1_rt (id,title,body,gid) VALUES
 FLUSH RAMCHUNK e1_rt;
 INSERT INTO e1_ties (id,body) VALUES (30,'tie'),(20,'tie'),(10,'tie');
 FLUSH RAMCHUNK e1_ties;
+
+<!-- Exercise the production RT direct-norm writer across multiple RAM segments
+     and a compacted row map with deleted rows at segment boundaries. -->
+INSERT INTO e1_direct_rt (id,title,body,gid) VALUES
+(101,'alpha','beta',1),(102,'alpha alpha','gamma',1),(103,'beta','alpha',1);
+INSERT INTO e1_direct_rt (id,title,body,gid) VALUES
+(104,'gamma alpha','beta',2),(105,'alpha','alpha beta',2),(106,'beta alpha','gamma',2);
+INSERT INTO e1_direct_rt (id,title,body,gid) VALUES
+(107,'alpha beta','alpha',3),(108,'gamma','alpha alpha',3),(109,'alpha','gamma',3);
+SHOW TABLE e1_direct_rt STATUS LIKE 'ram_chunk_segments_count';
+DELETE FROM e1_direct_rt WHERE id IN (101,105,109);
+SELECT id,weight() AS w FROM e1_direct_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_direct_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)+0');
+FLUSH RAMCHUNK e1_direct_rt;
+SELECT id,weight() AS w FROM e1_direct_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_direct_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)+0');
+
+<!-- Zero-field production flush must emit a valid empty norm store. -->
+INSERT INTO e1_attrs_only (id,gid) VALUES (201,1),(202,2),(203,3);
+DELETE FROM e1_attrs_only WHERE id=202;
+FLUSH RAMCHUNK e1_attrs_only;
+SELECT id,gid FROM e1_attrs_only ORDER BY id ASC;
 
 <!-- named BM25A must match its canonical expression on new plain output -->
 <!-- no explicit ranker uses the BM25A default; deterministic ordering avoids flaky equal-score rows -->
@@ -149,6 +187,9 @@ SELECT id,weight() AS w FROM e1_ties WHERE MATCH('tie') ORDER BY weight() DESC,i
 <sphinxql>
 SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
 SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') AND gid=2 LIMIT 1,1; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_direct_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_direct_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)+0');
+SELECT id,gid FROM e1_attrs_only ORDER BY id ASC;
 DELETE FROM e1_rt WHERE id=3;
 REPLACE INTO e1_rt (id,title,body,gid) VALUES (2,'beta','alpha alpha alpha',4);
 UPDATE e1_rt SET gid=5 WHERE id=4;
@@ -164,6 +205,8 @@ SELECT id,gid,weight() AS w FROM e1_rt WHERE MATCH('alpha') ORDER BY w DESC,id A
 SELECT id,gid,weight() AS w FROM e1_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
 SELECT id,gid,weight() AS w FROM e1_rt WHERE MATCH('alpha') AND gid=5; SHOW META LIKE 'total_found';
 SELECT COUNT(*) FROM e1_rt;
+SELECT id,weight() AS w FROM e1_direct_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,gid FROM e1_attrs_only ORDER BY id ASC;
 </sphinxql>
 </queries>
 

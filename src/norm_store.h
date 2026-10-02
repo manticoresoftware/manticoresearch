@@ -155,6 +155,172 @@ private:
 	std::vector<std::vector<uint32_t>> m_dFields;
 };
 
+// Bounded-memory direct writer for stable, repeatable row sources. It scans each
+// field once for metadata and once for payload, and never stages field data.
+class DirectBuilder
+{
+public:
+	explicit DirectBuilder ( uint32_t uFields, uint32_t uGroupRows=DEFAULT_GROUP_ROWS )
+		: m_uFields ( uFields )
+		, m_uGroupRows ( uGroupRows )
+	{}
+
+	template<typename FOR_EACH_VALUE>
+	bool Finish ( const char * szOutput, uint32_t uRows, FOR_EACH_VALUE && fnForEachValue, std::string & sError ) const
+	{
+		if ( !szOutput || !*szOutput || !m_uGroupRows )
+			return Fail ( sError, "invalid direct builder" );
+		const uint32_t uGroups = uRows ? ( uRows+m_uGroupRows-1 )/m_uGroupRows : 0;
+		const uint64_t uDirectory = HEADER_SIZE+uint64_t(m_uFields)*FIELD_ENTRY_SIZE;
+		const uint64_t uPayload = uDirectory+uint64_t(m_uFields)*uGroups*GROUP_ENTRY_SIZE;
+		const uint64_t uMetaCount = uint64_t(m_uFields)*uGroups;
+		if ( uMetaCount>std::numeric_limits<size_t>::max()/sizeof(GroupMeta_t) || uPayload>std::numeric_limits<size_t>::max() )
+			return Fail ( sError, "direct directory too large" );
+
+		std::vector<GroupMeta_t> dMeta ( static_cast<size_t>(uMetaCount) );
+		std::vector<uint8_t> dFieldEntries ( size_t(m_uFields)*FIELD_ENTRY_SIZE, 0 );
+		for ( uint32_t iField=0; iField<m_uFields; ++iField )
+		{
+			uint32_t uSeen = 0;
+			uint64_t uFieldSum = 0;
+			uint32_t uFieldNonzero = 0;
+			auto fnValue = [&] ( uint32_t uValue )
+			{
+				if ( uSeen>=uRows )
+					return false;
+				GroupMeta_t & tMeta = dMeta[size_t(iField)*uGroups+uSeen/m_uGroupRows];
+				++tMeta.m_uCount;
+				tMeta.m_uSum += uValue;
+				tMeta.m_uMax = std::max ( tMeta.m_uMax, uValue );
+				tMeta.m_uNonzero += uValue!=0;
+				++uSeen;
+				return true;
+			};
+			if ( !fnForEachValue(iField,fnValue) || uSeen!=uRows )
+				return Fail ( sError, "direct row scan failed" );
+			for ( uint32_t iGroup=0; iGroup<uGroups; ++iGroup )
+			{
+				GroupMeta_t & tMeta = dMeta[size_t(iField)*uGroups+iGroup];
+				tMeta.m_uWidth = uint8_t(WidthFor(tMeta.m_uMax));
+				uFieldSum += tMeta.m_uSum;
+				uFieldNonzero += tMeta.m_uNonzero;
+			}
+			const size_t uFieldEntry = size_t(iField)*FIELD_ENTRY_SIZE;
+			Put64 ( dFieldEntries, uFieldEntry, uFieldSum );
+			Put32 ( dFieldEntries, uFieldEntry+8, uFieldNonzero );
+		}
+
+		uint64_t uOffset = uPayload;
+		std::vector<uint8_t> dGroupEntries ( size_t(uMetaCount)*GROUP_ENTRY_SIZE, 0 );
+		for ( size_t i=0; i<dMeta.size(); ++i )
+		{
+			const GroupMeta_t & tMeta = dMeta[i];
+			const size_t uEntry = i*GROUP_ENTRY_SIZE;
+			Put64 ( dGroupEntries, uEntry, uOffset );
+			Put64 ( dGroupEntries, uEntry+8, tMeta.m_uSum );
+			Put32 ( dGroupEntries, uEntry+16, tMeta.m_uCount );
+			Put32 ( dGroupEntries, uEntry+20, tMeta.m_uMax );
+			Put32 ( dGroupEntries, uEntry+24, tMeta.m_uNonzero );
+			dGroupEntries[uEntry+28] = tMeta.m_uWidth;
+			uOffset += uint64_t(tMeta.m_uCount)*tMeta.m_uWidth;
+		}
+
+		FILE * pOutput = fopen ( szOutput, "wb" );
+		if ( !pOutput )
+			return FailSystem ( sError, "unable to open output", szOutput, errno );
+		std::vector<uint8_t> dHeader ( HEADER_SIZE, 0 );
+		memcpy ( dHeader.data(), "E1NORM01", 8 );
+		Put32 ( dHeader, 8, VERSION ); Put32 ( dHeader, 12, HEADER_SIZE );
+		Put32 ( dHeader, 16, uRows ); Put32 ( dHeader, 20, m_uFields );
+		Put32 ( dHeader, 24, m_uGroupRows ); Put32 ( dHeader, 28, uGroups );
+		Put64 ( dHeader, 32, uDirectory ); Put64 ( dHeader, 40, uPayload ); Put64 ( dHeader, 48, uOffset );
+		uint32_t uCRC = ~0u;
+		bool bOK = Write ( pOutput, dHeader.data(), dHeader.size(), nullptr )
+			&& Write ( pOutput, dFieldEntries.data(), dFieldEntries.size(), &uCRC )
+			&& Write ( pOutput, dGroupEntries.data(), dGroupEntries.size(), &uCRC );
+		std::vector<uint8_t> dPacked ( size_t(m_uGroupRows)*sizeof(uint32_t) );
+		bool bScanOK = true;
+		for ( uint32_t iField=0; bOK && iField<m_uFields; ++iField )
+		{
+			uint32_t uSeen = 0;
+			GroupMeta_t tActual;
+			auto fnValue = [&] ( uint32_t uValue )
+			{
+				if ( uSeen>=uRows )
+					return false;
+				const GroupMeta_t & tMeta = dMeta[size_t(iField)*uGroups+uSeen/m_uGroupRows];
+				const uint32_t uInGroup = uSeen%m_uGroupRows;
+				++tActual.m_uCount;
+				tActual.m_uSum += uValue;
+				tActual.m_uMax = std::max ( tActual.m_uMax, uValue );
+				tActual.m_uNonzero += uValue!=0;
+				for ( unsigned uByte=0; uByte<tMeta.m_uWidth; ++uByte )
+					dPacked[size_t(uInGroup)*tMeta.m_uWidth+uByte] = uint8_t(uValue>>(8*uByte));
+				++uSeen;
+				if ( uInGroup+1==tMeta.m_uCount )
+				{
+					if ( tActual.m_uCount!=tMeta.m_uCount || tActual.m_uSum!=tMeta.m_uSum || tActual.m_uMax!=tMeta.m_uMax || tActual.m_uNonzero!=tMeta.m_uNonzero )
+						return false;
+					bOK = Write ( pOutput, dPacked.data(), size_t(tMeta.m_uCount)*tMeta.m_uWidth, &uCRC );
+					tActual = GroupMeta_t();
+				}
+				return bOK;
+			};
+			const bool bEnumerated = fnForEachValue(iField,fnValue);
+			if ( !bOK )
+				break;
+			bScanOK = bEnumerated && uSeen==uRows;
+			if ( !bScanOK )
+				break;
+		}
+		Put32 ( dHeader, 56, ~uCRC );
+		bOK = bOK && bScanOK && fflush(pOutput)==0 && Seek(pOutput,0) && Write(pOutput,dHeader.data(),dHeader.size(),nullptr) && fflush(pOutput)==0;
+		bOK = fclose(pOutput)==0 && bOK;
+		if ( !bOK )
+		{
+			std::remove ( szOutput );
+			return Fail ( sError, bScanOK ? "output write failed" : "direct row scan failed" );
+		}
+		return true;
+	}
+
+private:
+	struct GroupMeta_t
+	{
+		uint64_t m_uSum = 0;
+		uint32_t m_uCount = 0;
+		uint32_t m_uMax = 0;
+		uint32_t m_uNonzero = 0;
+		uint8_t m_uWidth = 0;
+	};
+
+	static bool Fail ( std::string & sError, const char * szError ) { sError = std::string("norms: ")+szError; return false; }
+	static bool FailSystem ( std::string & sError, const char * szAction, const char * szPath, int iError )
+	{
+		sError = std::string("norms: ")+szAction+" '"+szPath+"': "+std::strerror(iError);
+		return false;
+	}
+	static bool Seek ( FILE * pFile, uint64_t uOffset )
+	{
+#if defined(_WIN32)
+		return _fseeki64 ( pFile, static_cast<__int64>(uOffset), SEEK_SET )==0;
+#else
+		return fseeko ( pFile, static_cast<off_t>(uOffset), SEEK_SET )==0;
+#endif
+	}
+	static bool Write ( FILE * pFile, const void * pData, size_t uSize, uint32_t * pCRC )
+	{
+		if ( uSize && fwrite(pData,1,uSize,pFile)!=uSize )
+			return false;
+		if ( pCRC )
+			*pCRC = e1::CRCUpdate ( *pCRC, static_cast<const uint8_t *>(pData), uSize );
+		return true;
+	}
+
+	uint32_t m_uFields = 0;
+	uint32_t m_uGroupRows = 0;
+};
+
 // Bounded-memory writer used by production indexing. Values are staged in one
 // anonymous file per field, then transcoded group-by-group into the final store.
 class StagedBuilder

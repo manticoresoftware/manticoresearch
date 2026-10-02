@@ -5421,8 +5421,11 @@ int64_t RtIndex_c::GetMemCount ( PRED&& fnPred ) const
 // i.e. create new disk chunk from ram segments
 RtActionResult_e RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
+	const bool bE1FlushTrace = getenv("MANTICORE_E1_FLUSH_TRACE");
+	uint64_t tmStage = bE1FlushTrace ? MonoMicroTimer() : 0;
 	if ( !m_tSaving.WaitEnabledOrShutdown() )
 		return RtActionResult_e::OK;
+	const uint64_t tmSavingEnabled = bE1FlushTrace ? MonoMicroTimer()-tmStage : 0;
 
 	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 
@@ -5443,8 +5446,10 @@ RtActionResult_e RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUI
 	// if forced - wait all segments. Otherwise, can continue with subset of currently available segments
 	// note that segments may be locked by currently executing MergeSegments or SaveDiskChunk. If so, we wait them finished and continue.
 	// that will cause another disk chunk written right after just finished, since op is forced it is ok.
+	tmStage = bE1FlushTrace ? MonoMicroTimer() : 0;
 	if ( bForced )
 		WaitRAMSegmentsUnlocked ( true ); // true means to wait 1, not 0 active saves (as we already increased the counter)
+	const uint64_t tmRamUnlock = bE1FlushTrace ? MonoMicroTimer()-tmStage : 0;
 
 	// collect all non-occupied non-empty segments and lock them
 	int64_t iNotMyOpRAM {0};
@@ -5493,7 +5498,6 @@ RtActionResult_e RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUI
 	SaveDiskDataTimings_t tTimings;
 	uint64_t tmWriteTotal = 0;
 	uint64_t tmReopenTotal = 0;
-	const bool bE1FlushTrace = getenv("MANTICORE_E1_FLUSH_TRACE");
 	while ( true )
 	{
 		// as separate subtask we 1-st flush segments to disk, and then load just flushed segment
@@ -5544,8 +5548,14 @@ RtActionResult_e RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUI
 	// That is about binlog consistency: if we save trx 1-1000 and at the same time 1000-1010, last might finish faster, but it can't be committed immediately,
 	// as last highest trx will be 1010, and nobody knows, that actually 1-1000 are not yet safe.
 	BEGIN_SCHED ( "rt", "SaveDiskChunk-wait" ); // iSaveOp as id
+	tmStage = bE1FlushTrace ? MonoMicroTimer() : 0;
 	m_tSaveTIDS.WaitVoid ( [this, iTID] { return m_tSaveTIDS.GetValueRef().First() == iTID; } );
+	const uint64_t tmPublishWait = bE1FlushTrace ? MonoMicroTimer()-tmStage : 0;
 	END_SCHED( "rt" );
+	if ( bE1FlushTrace )
+		fprintf ( stderr, "E1_FLUSH_TRACE event=rt_flush_waits table=%s chunk=%d saving_enabled_us=%llu ram_unlock_us=%llu publish_wait_us=%llu forced=%d\n",
+			GetName(), iChunkID, (unsigned long long)tmSavingEnabled, (unsigned long long)tmRamUnlock,
+			(unsigned long long)tmPublishWait, int(bForced) );
 
 	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 

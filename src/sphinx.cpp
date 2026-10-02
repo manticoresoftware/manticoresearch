@@ -11201,6 +11201,9 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 				fprintf ( stderr, "E1_STARTUP norms_us=%lld rows=%d fields=%d\n", (long long)(sphMicroTimer()-tmE1Startup), m_iDocinfo, m_tSchema.GetFieldsCount() );
 				tmE1Startup = sphMicroTimer();
 			}
+			// Open has validated every page and built the compact total-length
+			// cache. Keep field norms demand-paged until a query needs them.
+			m_tNormData.DiscardPages();
 		}
 		CSphMappedBuffer<BYTE> dict, hits;
 		if ( !m_tE1Data.Setup(GetFilename(SPH_EXT_SPD),m_sLastError,false)

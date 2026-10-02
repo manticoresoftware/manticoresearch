@@ -60,9 +60,25 @@ const char *					GetKnnDistAttrName();
 const char *					GetKnnDistRescoreAttrName();
 void							SetupKNNLimit ( CSphQuery & tQuery );
 
+// searchd config 'knn_rescore_random_access' (undocumented): read rescored vectors of columnar tables through a
+// mapping advised for random access, so a cold page fault reads one page instead of the kernel's read-around window
+void							SetKNNRescoreRandomAccess ( bool bEnable );
+bool							KNNRescoreRandomAccess();
+
+// searchd config 'knn_rescore_prefetch' (undocumented): before rescoring candidates of a columnar table, ask the OS to
+// read all their vectors at once. 0 = off; 1 = with a single process_madvise call, nothing if the kernel refuses it;
+// 2 = same, but fall back to one madvise call per vector when the single call is unavailable;
+// 3 = as 2, behind a residency gate: a few candidates are probed first and the prefetch is skipped when they are in memory;
+// 4 = as 3, with a sticky gate: a missing vector switches probing off for a streak of rescores that always prefetch,
+// and the prefetch is skipped only after several clean probes in a row
+void							SetKNNRescorePrefetch ( int iMode );
+int								KNNRescorePrefetch();
+
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
-ISphExpr *						CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
-bool							UseBatchedKNNRescore ( const KnnSearchSettings_t & tSettings );
+// exact-distance rescore evaluated per chunk at the final stage; tKnnDistLoc is copied for rows that are exact already
+ISphExpr *						CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr, const CSphAttrLocator & tKnnDistLoc );
+// whether the rescore should run once on the merged candidates (collector) instead of per chunk at the final stage
+bool							UseKNNRescoreCollector ( const KnnSearchSettings_t & tSettings, int iDiskChunks, bool bColumnarAttr );
 void							NormalizeVec ( VecTraits_T<float> & dData );
 
 void							AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr );
@@ -93,7 +109,8 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 RowIteratorsWithEstimates_t		CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, bool & bError, CSphString & sError );
 std::unique_ptr<knn::KNNFilter_i> CreateKNNPrefilter ( const CSphQueryContext & tCtx, const CSphRowitem * pAttrPool, int iStride, int iDynamicSize, int64_t iFilterCount );
 
-ISphMatchSorter *				CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings, ESphSortFunc eMatchFunc );
+// bCollector: see UseKNNRescoreCollector. iResultWindow is limit+offset: rows the client can see are always rescored, even beyond k*oversampling
+ISphMatchSorter *				CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings, ESphSortFunc eMatchFunc, bool bCollector, int64_t iResultWindow );
 
 const char *					GetAPITimeoutErrorMsg();
 bool							ValidateEmbeddingsAPITimeout ( const CSphString & sValue, int & iTimeout, CSphString & sError );

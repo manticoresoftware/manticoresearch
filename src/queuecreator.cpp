@@ -1827,16 +1827,18 @@ bool QueueCreator_c::AddKNNRescoreColumn()
 		return true;
 
 	const auto & tKNN = m_tQuery.SingleKnnSettings();
+	const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
+	assert(pAttr);
 	CSphColumnInfo tKNNDistRescored ( GetKnnDistRescoreAttrName(), SPH_ATTR_FLOAT );
-	// Small requests use the original final-stage expression and therefore need no collector pass.
-	if ( UseBatchedKNNRescore(tKNN) )
-		tKNNDistRescored.m_eStage = SPH_EVAL_SORTER;
+	if ( UseKNNRescoreCollector ( tKNN, m_tSettings.m_iDiskChunks, pAttr->IsColumnar() ) )
+		tKNNDistRescored.m_eStage = SPH_EVAL_SORTER;	// filled by the rescore sorter once the candidates of all chunks are merged
 	else
 	{
-		const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
-		assert(pAttr);
+		// single disk chunk and a small candidate set: the final-stage expression rescores in place, no extra pass
+		const auto * pDist = m_pSorterSchema->GetAttr ( GetKnnDistAttrName() );
+		assert(pDist);
 		tKNNDistRescored.m_eStage = SPH_EVAL_FINAL;
-		tKNNDistRescored.m_pExpr = CreateExpr_KNNDistRescore ( tKNN.m_dVec, *pAttr );
+		tKNNDistRescored.m_pExpr = CreateExpr_KNNDistRescore ( tKNN.m_dVec, *pAttr, pDist->m_tLocator );
 	}
 
 	m_pSorterSchema->AddAttr ( tKNNDistRescored, true );
@@ -2884,7 +2886,12 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	// wrapper would look up a missing @knn_dist_rescore attr and crash on flatten.
 	if ( CanRescoreKNN() )
 	{
-		pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.SingleKnnSettings(), m_eMatchFunc );
+		// rows the client can see must carry the exact distance even when the window is wider than k*oversampling
+		int64_t iWindow = m_tQuery.m_iLimit<0 ? iMaxMatches : int64_t ( m_tQuery.m_iLimit ) + m_tQuery.m_iOffset;
+		const auto & tKNN = m_tQuery.SingleKnnSettings();
+		const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
+		bool bCollector = UseKNNRescoreCollector ( tKNN, m_tSettings.m_iDiskChunks, pAttr && pAttr->IsColumnar() );
+		pSorter = CreateKNNRescoreSorter ( pSorter, tKNN, m_eMatchFunc, bCollector, iWindow );
 		if ( !pSorter )
 			return nullptr;
 	}

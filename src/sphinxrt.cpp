@@ -1659,6 +1659,7 @@ public:
 	int64_t				GetCountDistinct ( const CSphString & sAttr, CSphString & sModifiedAttr ) const override;
 	int64_t				GetCountFilter ( const CSphFilterSettings & tFilter, CSphString & sModifiedAttr ) const override;
 	int64_t				GetCount() const override;
+	int					GetDiskChunksCount() const override;
 	std::pair<int64_t,int> GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const override;
 
 	// helpers
@@ -9212,6 +9213,10 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 
 	SorterSchemaTransform_c tSSTransform ( dDiskChunks.GetLength(), tArgs.m_bFinalizeSorters );
 
+	// RAM segments are tagged 1..N and carry exact knn_dist values (no HNSW there), so the KNN rescore must not redo them
+	for ( auto * pSorter : dSorters )
+		pSorter->SetKNNExactTagMax ( tGuard.m_dRamSegs.GetLength() );
+
 	if ( !dDiskChunks.IsEmpty() )
 	{
 		if ( !QueryDiskChunks ( tQueryToRun, tMeta, tArgs, tGuard, dSorters, pProfiler, bGotLocalDF, pLocalDocs, iTotalDocs, GetName(), tSSTransform, tmMaxTimer ) )
@@ -10694,6 +10699,12 @@ int64_t RtIndex_c::GetCountFilter ( const CSphFilterSettings & tFilter, CSphStri
 	}
 
 	return iSumCount;
+}
+
+
+int RtIndex_c::GetDiskChunksCount() const
+{
+	return Max ( 1, m_tRtChunks.GetDiskChunksCount() );
 }
 
 

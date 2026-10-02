@@ -29,35 +29,47 @@ struct TermView {
  Block At(uint32_t i)const{return {data,term+24+uint64_t(i)*24};}
 };
 class Store {
- const uint8_t *m_p=nullptr,*m_dir=nullptr;uint64_t m_n=0;uint32_t m_version=0;
+ const uint8_t *m_p=nullptr,*m_dir=nullptr;uint64_t m_n=0;uint32_t m_version=0,m_entrySize=0;
 public:
  const uint8_t *Data()const{return m_p;}
- const uint8_t *Find(uint64_t key)const{uint64_t lo=0,hi=m_n;while(lo<hi){auto mid=lo+(hi-lo)/2;if(U64(m_dir+mid*32)<key)lo=mid+1;else hi=mid;}return lo<m_n&&U64(m_dir+lo*32)==key?m_dir+lo*32:nullptr;}
- TermView View(uint64_t key)const{auto d=Find(key);return {m_p,d?m_p+U64(d+8):nullptr,m_version};}
+ const uint8_t *Find(uint64_t key)const{
+  if(!key||key>m_n)return nullptr;
+  if(m_entrySize==16)return m_dir+(key-1)*16;
+  uint64_t lo=0,hi=m_n;while(lo<hi){auto mid=lo+(hi-lo)/2;if(U64(m_dir+mid*32)<key)lo=mid+1;else hi=mid;}return lo<m_n&&U64(m_dir+lo*32)==key?m_dir+lo*32:nullptr;
+ }
+ TermView View(uint64_t key)const{auto d=Find(key);return {m_p,d?m_p+U64(d+(m_entrySize==16?0:8)):nullptr,m_version};}
+ bool Stats(uint64_t key,uint32_t&docs,bool&hasHits,uint64_t&hits)const{
+  auto d=Find(key);if(!d)return false;
+  if(m_entrySize==16){auto h=m_p+U64(d);docs=U32(h);hasHits=(U32(h+12)&2)!=0;hits=U64(d+8);}
+  else{docs=U32(d+16);hasHits=U32(d+20)!=0;hits=U64(d+24);}
+  return true;
+ }
  bool Open(const uint8_t*p,uint64_t size,uint32_t rows,const uint8_t*dict,uint64_t dictSize,const uint8_t*hits,uint64_t hitSize,std::string&error,bool trusted=false){
-  m_p=nullptr;m_dir=nullptr;m_n=0;m_version=0;auto fail=[&](const char*s){error=std::string("E1: ")+s;return false;};
+  m_p=nullptr;m_dir=nullptr;m_n=0;m_version=0;m_entrySize=0;auto fail=[&](const char*s){error=std::string("E1: ")+s;return false;};
   bool v4=size>=48&&!memcmp(p,"E1POST04",8)&&U32(p+8)==4;
   bool v5=size>=48&&!memcmp(p,"E1POST05",8)&&U32(p+8)==5;
   bool v6=size>=48&&!memcmp(p,"E1POST06",8)&&U32(p+8)==6;
   if((!v4&&!v5&&!v6)||U64(p+16)!=size)return fail("format/length");
   uint32_t version=v6?6:v5?5:4;
   uint32_t header=U32(p+12),flags=U32(p+44);uint64_t nt=U64(p+24),directory=0,end=0,payloadEnd=size;
-  if(header==48&&flags==0){directory=48;if(nt>(size-48)/32)return fail("directory overflow");end=48+nt*32;}
-  else if(header==56&&flags==1){if(size<56)return fail("streamed header");directory=U64(p+48);if(directory<56||directory>size||nt>(size-directory)/32||directory+nt*32!=size)return fail("streamed directory");end=56;payloadEnd=directory;}
+  if(header==48&&flags==0){m_entrySize=32;directory=48;if(nt>(size-48)/32)return fail("directory overflow");end=48+nt*32;}
+  else if(header==56&&flags==1){m_entrySize=16;if(size<56)return fail("streamed header");directory=U64(p+48);if(directory<56||directory>size||nt>(size-directory)/16||directory+nt*16!=size)return fail("streamed directory");end=56;payloadEnd=directory;}
   else return fail("layout/version");
   if(!trusted&&(CRC(p+header,size-header)!=U32(p+32)||CRC(dict,dictSize)!=U32(p+36)||CRC(hits,hitSize)!=U32(p+40)))return fail("checksums");
   auto dir=p+directory;uint64_t prevKey=0;
   if(trusted){
    uint64_t prevOff=header;
-   for(uint64_t t=0;t<nt;++t){auto d=dir+t*32;uint64_t key=U64(d),off=U64(d+8);uint32_t df=U32(d+16),has=U32(d+20);if(!key||key<=prevKey||off<prevOff||off>=payloadEnd||payloadEnd-off<24||!df||df>rows||has>1)return fail("trusted term catalog");prevKey=key;prevOff=off;}
+   for(uint64_t t=0;t<nt;++t){auto d=dir+t*m_entrySize;uint64_t key=m_entrySize==16?t+1:U64(d),off=U64(d+(m_entrySize==16?0:8));auto h=p+off;uint32_t df=off<=payloadEnd&&payloadEnd-off>=24?U32(h):0,has=off<=payloadEnd&&payloadEnd-off>=24?((U32(h+12)>>1)&1):2;if(!key||key<=prevKey||off<prevOff||off>=payloadEnd||payloadEnd-off<24||!df||df>rows||has>1)return fail("trusted term catalog");prevKey=key;prevOff=off;}
    m_p=p;m_dir=dir;m_n=nt;m_version=version;return true;
   }
   for(uint64_t t=0;t<nt;++t){
-   auto d=dir+t*32;auto key=U64(d),off=U64(d+8);auto df=U32(d+16),has=U32(d+20);
-   if(!key||key<=prevKey||off!=end||off>payloadEnd||payloadEnd-off<24||!df||df>rows||has>1)return fail("term catalog");prevKey=key;
-   auto h=p+off;auto nb=U32(h+4),nm=U32(h+8),type=U32(h+12);auto mo=U64(h+16);
+   auto d=dir+t*m_entrySize;auto key=m_entrySize==16?t+1:U64(d),off=U64(d+(m_entrySize==16?0:8));
+   if(!key||key<=prevKey||off!=end||off>payloadEnd||payloadEnd-off<24)return fail("term catalog");prevKey=key;
+   auto h=p+off;auto df=m_entrySize==16?U32(h):U32(d+16),has=m_entrySize==16?((U32(h+12)>>1)&1):U32(d+20);auto hitsTotal=m_entrySize==16?U64(d+8):U64(d+24);
+   if(!df||df>rows||has>1)return fail("term catalog");
+   auto nb=U32(h+4),nm=U32(h+8),type=U32(h+12);auto mo=U64(h+16);
    auto frequent=type&1u,fieldWidth=(type>>8)&63u;
-   if(U32(h)!=df||frequent!=(df>=4096?1u:0u)||(type&~0x00003f01u)||(version<6&&fieldWidth)||fieldWidth>32||nm!=(uint64_t(df)+127)/128)return fail("term type/DF");
+   if(U32(h)!=df||frequent!=(df>=4096?1u:0u)||(type&~0x00003f03u)||(version<6&&fieldWidth)||fieldWidth>32||nm!=(uint64_t(df)+127)/128)return fail("term type/DF");
    uint64_t desc=24;
    if(!nb||nb>df||nb>(size-off-24)/desc||(!frequent&&nb!=nm))return fail("row directory bounds");
    end=off+24+uint64_t(nb)*desc;uint32_t ordinal=0,prevRow=0,prevId=0;
@@ -89,7 +101,7 @@ public:
       else{if(!ref||ref>=hitSize)return fail("hit reference");uint64_t o=ref,v=0,raw=0;for(uint32_t j=0;j<tf;++j){if(!Var(hits,hitSize,o,v)||!v||v>UINT32_MAX-raw)return fail("position delta");raw+=v;}if(!Var(hits,hitSize,o,v)||v)return fail("hit length");}}
      else if(ref>>63)return fail("hitless inline");
     }end=po+bytes;
-   }if(sum!=U64(d+24))return fail("hit sum");
+   }if(sum!=hitsTotal)return fail("hit sum");
    if(version>=5){if(expected.size()>payloadEnd-end)return fail("bounds tail");for(size_t i=0;i<expected.size();++i)if(p[end+i]!=expected[i])return fail("unsafe maxTF bound");end+=expected.size();}
    if(version>=6&&fieldWidth){
     const uint64_t fieldBytes=(uint64_t(df)*fieldWidth+7)/8;if(fieldBytes>payloadEnd-end)return fail("field TF bounds");

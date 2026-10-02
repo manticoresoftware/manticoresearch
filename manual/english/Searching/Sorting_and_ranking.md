@@ -1051,7 +1051,7 @@ Manticore ships with several built-in rankers suited for different purposes. Man
 
 The currently implemented rankers are:
 
-* `bm25a`, the default ranking mode. It uses the fixed formula `1000*bm25a(1.2,0.75,256)`. Queries without an explicit `ORDER BY` use `weight() DESC, id ASC`.
+* `bm25a`, the default ranking mode. It uses the fixed formula `1000*bm25a(1.2,0.75,256)`. Use `OPTION ranker=proximity_bm25` or a table-level `ranker='proximity_bm25'` setting when phrase proximity must remain part of the score.
 * `proximity_bm25`, a ranking mode that uses and combines both phrase proximity and BM25 ranking.
 * `bm25`, a statistical ranking mode that uses BM25 ranking only (similar to most other full-text engines). This mode is faster but may result in worse quality for queries containing more than one keyword.
 * `none`, a no-ranking mode. This mode is obviously the fastest. A weight of 1 is assigned to all matches. This is sometimes called boolean searching, which just matches the documents but does not rank them.

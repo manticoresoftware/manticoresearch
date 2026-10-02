@@ -2322,12 +2322,20 @@ QueryExecutionSettings_t BuildQueryExecutionSettings ( const CSphQuery & tQuery,
 	if ( !tQuery.m_bExplicitBooleanMode && tSettings.IsSet ( MutableName_e::BOOLEAN_MODE ) )
 		tEffectiveSettings.m_bDefaultBoolOr = tSettings.m_tQueryExecutionSettings.m_bDefaultBoolOr;
 
-	if ( !tQuery.m_bExplicitRanker && tSettings.IsSet ( MutableName_e::RANKER ) && !tSettings.m_sRanker.IsEmpty() )
+	const bool bTableRanker = !tQuery.m_bExplicitRanker && tSettings.IsSet ( MutableName_e::RANKER ) && !tSettings.m_sRanker.IsEmpty();
+	if ( bTableRanker )
 	{
 		tEffectiveSettings.m_eRanker = tSettings.m_tQueryExecutionSettings.m_eRanker;
 		tEffectiveSettings.m_sRankerExpr = tSettings.m_tQueryExecutionSettings.m_sRankerExpr;
 		tEffectiveSettings.m_sUDRanker = tSettings.m_tQueryExecutionSettings.m_sUDRanker;
 		tEffectiveSettings.m_sUDRankerOpts = tSettings.m_tQueryExecutionSettings.m_sUDRankerOpts;
+	}
+	else if ( !tQuery.m_bExplicitRanker && tEffectiveSettings.m_eRanker==SPH_RANK_DEFAULT )
+	{
+		// SPH_RANK_DEFAULT is also the historical binary API value for
+		// proximity_bm25. Keep that wire value stable and change only the
+		// execution-time meaning of an implicit ranker.
+		tEffectiveSettings.m_eRanker = SPH_RANK_BM25A;
 	}
 
 	if ( !tQuery.m_bExplicitRanker && HasImplicitRankerDataReference ( tQuery ) )
@@ -8314,6 +8322,7 @@ bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHe
 			sError = sStoreError.c_str();
 			return false;
 		}
+		m_tE1Data.DiscardPages();
 	}
 	if ( !SpawnReaders() )						return false;
 
@@ -11201,8 +11210,11 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 			uint64_t uTerms = 0;
 			while ( tReader.Read() )
 			{
-				auto pEntry = m_tE1Store.Find ( tReader.m_iDoclistOffset );
-				if ( !pEntry || e1::U32(pEntry+16)!=uint32_t(tReader.m_iDocs) || e1::U32(pEntry+20)!=uint32_t(tReader.m_bHasHitlist) || e1::U64(pEntry+24)!=uint64_t(tReader.m_iHits) )
+				uint32_t uDocs = 0;
+				uint64_t uHits = 0;
+				bool bHasHitlist = false;
+				if ( !m_tE1Store.Stats(tReader.m_iDoclistOffset,uDocs,bHasHitlist,uHits)
+					|| uDocs!=uint32_t(tReader.m_iDocs) || bHasHitlist!=bool(tReader.m_bHasHitlist) || uHits!=uint64_t(tReader.m_iHits) )
 					return false;
 				++uTerms;
 			}
@@ -11223,6 +11235,9 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 			if ( m_sLastError.IsEmpty() ) m_sLastError="E1: dictionary/primary term binding mismatch";
 			return false;
 		}
+		// Deep validation must touch every primary-postings page, but serving is
+		// demand-paged. Do not retain the validation scan in daemon RSS.
+		m_tE1Data.DiscardPages();
 	}
 
 	// almost done
@@ -13064,7 +13079,13 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 			}
 	}
 	const bool bIdKey = bParsedExactSort && tExactSortState.m_dAttrs[1]>=0 && tMaxSorterSchema.GetAttr ( tExactSortState.m_dAttrs[1] ).m_sName=="id";
-	bool bExactSort = eExactSortFunc==FUNC_GENERIC2 && tExactSortState.m_uAttrDesc==1 && bWeightKey && bIdKey;
+	const bool bExplicitIdTieSort = eExactSortFunc==FUNC_GENERIC2 && tExactSortState.m_uAttrDesc==1 && bWeightKey && bIdKey;
+	// Generic one-key relevance sorting resolves equal weights by rowid. Admit
+	// only the implicit form and tell the exact heap that rowid is the tie key;
+	// explicit one-key ORDER BY remains on the generic path.
+	const bool bImplicitRelevanceSort = !tQuery.m_bExplicitOrderBy && eExactSortFunc==FUNC_GENERIC1
+		&& tExactSortState.m_uAttrDesc==1 && bWeightKey;
+	const bool bExactSort = bExplicitIdTieSort || bImplicitRelevanceSort;
 	bool bE1FilterSupported = tQuery.m_dFilters.IsEmpty();
 	if ( !bE1FilterSupported && tQuery.m_dFilters.GetLength()==1 && tQuery.m_dFilterTree.IsEmpty() && m_iDocinfo<=UINT32_MAX )
 	{
@@ -13103,7 +13124,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 		fprintf ( stderr, "E1_RANK_ADMISSION format=%d dead=%d filter=%d sorters=%d grouped=%d topk=%d ranker=%d sort=%d requested=%d\n",
 			int(m_bE1), int(m_tDeadRowMap.HasDead()), int(bE1FilterSupported), dSorters.GetLength(), int(dSorters.GetLength()==1 && dSorters[0]->IsGroupby()),
 			int(E1RankedTopKFromPage(tQuery.m_iOffset,tQuery.m_iLimit)), int(E1ExactRankerAdmission(tQuerySettings.m_eRanker==SPH_RANK_BM25A,tQuerySettings.m_eRanker==SPH_RANK_EXPR,tQuerySettings.m_sRankerExpr.cstr())), int(bExactSort), int(tTermSetup.m_bE1RankedRequested) );
-	tTermSetup.m_bE1RowidDocidOrder = m_bE1RowidDocidOrder;
+	tTermSetup.m_bE1RowidDocidOrder = bImplicitRelevanceSort || m_bE1RowidDocidOrder;
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats

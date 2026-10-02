@@ -167,9 +167,12 @@ public:
 		if ( !m_uGroupRows )
 			return;
 		m_dFields.resize ( m_uFields, nullptr );
+		m_dStaging.resize ( m_uFields );
 		for ( FILE * & pFile : m_dFields )
 			if ( !( pFile=tmpfile() ) )
 				return;
+		for ( auto & dField : m_dStaging )
+			dField.reserve ( m_uGroupRows );
 		m_bValid = true;
 	}
 
@@ -190,12 +193,10 @@ public:
 		if ( !m_bValid || ( m_uFields && !pValues ) || uFields!=m_uFields || m_uRows==std::numeric_limits<uint32_t>::max() )
 			return Fail ( sError, "invalid staged row" );
 		for ( uint32_t i=0; i<m_uFields; ++i )
-		{
-			const uint32_t uValue = uint32_t ( pValues[i] );
-			if ( fwrite ( &uValue, sizeof(uValue), 1, m_dFields[i] )!=1 )
-				return Fail ( sError, "staging write failed" );
-		}
+			m_dStaging[i].push_back ( uint32_t(pValues[i]) );
 		++m_uRows;
+		if ( m_uFields && m_dStaging[0].size()==m_uGroupRows && !FlushStaging(sError) )
+			return false;
 		return true;
 	}
 
@@ -203,8 +204,15 @@ public:
 	{
 		if ( !m_bValid || uField>=m_uFields || uRow>=m_uRows )
 			return Fail ( sError, "invalid staged row update" );
+		const uint32_t uBuffered = m_uFields ? uint32_t(m_dStaging[0].size()) : 0;
+		const uint32_t uBufferedFirst = m_uRows-uBuffered;
+		if ( uRow>=uBufferedFirst )
+		{
+			m_dStaging[uField][uRow-uBufferedFirst] = uValue;
+			return true;
+		}
 		FILE * pFile = m_dFields[uField];
-		if ( !Seek(pFile,uint64_t(uRow)*sizeof(uint32_t)) || fwrite(&uValue,sizeof(uValue),1,pFile)!=1 || !Seek(pFile,uint64_t(m_uRows)*sizeof(uint32_t)) )
+		if ( !Seek(pFile,uint64_t(uRow)*sizeof(uint32_t)) || fwrite(&uValue,sizeof(uValue),1,pFile)!=1 || !Seek(pFile,uint64_t(uBufferedFirst)*sizeof(uint32_t)) )
 			return Fail ( sError, "staging update failed" );
 		return true;
 	}
@@ -213,6 +221,8 @@ public:
 	{
 		if ( !m_bValid || !szOutput || !*szOutput )
 			return Fail ( sError, "invalid staged builder" );
+		if ( !FlushStaging(sError) )
+			return false;
 		for ( FILE * pFile : m_dFields )
 			if ( fflush(pFile) )
 				return Fail ( sError, "staging flush failed" );
@@ -335,6 +345,20 @@ public:
 	}
 
 private:
+	bool FlushStaging ( std::string & sError )
+	{
+		if ( !m_uFields || m_dStaging[0].empty() )
+			return true;
+		const size_t uRows = m_dStaging[0].size();
+		for ( uint32_t i=0; i<m_uFields; ++i )
+		{
+			if ( m_dStaging[i].size()!=uRows || fwrite(m_dStaging[i].data(),sizeof(uint32_t),uRows,m_dFields[i])!=uRows )
+				return Fail ( sError, "staging write failed" );
+			m_dStaging[i].clear();
+		}
+		return true;
+	}
+
 	static bool Fail ( std::string & sError, const char * szError ) { sError = std::string("norms: ")+szError; return false; }
 	static bool FailSystem ( std::string & sError, const char * szAction, const char * szPath, int iError )
 	{
@@ -364,6 +388,7 @@ private:
 	uint32_t m_uRows = 0;
 	bool m_bValid = false;
 	std::vector<FILE *> m_dFields;
+	std::vector<std::vector<uint32_t>> m_dStaging;
 };
 
 class Store final : public FieldNormReader_i

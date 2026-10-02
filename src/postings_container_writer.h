@@ -86,9 +86,9 @@ public:
 	{
 		if ( !WaitPending ( sError ) )
 			return false;
-		if ( !uKey || dPostings.empty() || ( !m_dEntries.empty() && uKey<=m_dEntries.back().m_uKey ) )
+		if ( uKey!=m_dEntries.size()+1 || dPostings.empty() )
 		{
-			sError = "invalid stable term key/postings";
+			sError = "non-contiguous stable term key or empty postings";
 			return false;
 		}
 
@@ -126,10 +126,7 @@ public:
 		const uint64_t uDirectory = Tell();
 		for ( const Entry & tEntry : m_dEntries )
 		{
-			Put ( tEntry.m_uKey, 8 );
 			Put ( tEntry.m_uOffset, 8 );
-			Put ( tEntry.m_uDocs, 4 );
-			Put ( tEntry.m_uHasHits, 4 );
 			Put ( tEntry.m_uHits, 8 );
 		}
 		const uint64_t uSize = Tell();
@@ -456,7 +453,7 @@ private:
 		Put ( uDocs, 4 );
 		Put ( uRowBlocks, 4 );
 		Put ( uMetaBlocks, 4 );
-		Put ( ( bFrequent ? 1u : 0u ) | ( uFirstFieldTFWidth<<8 ), 4 );
+		Put ( ( bFrequent ? 1u : 0u ) | ( tEntry.m_uHasHits ? 2u : 0u ) | ( uFirstFieldTFWidth<<8 ), 4 );
 		Put ( 0, 8 );
 		const uint64_t uDescriptors = Tell();
 		PutZeroes ( uint64_t(uRowBlocks)*24 );

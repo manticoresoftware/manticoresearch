@@ -528,6 +528,22 @@ select id, weight() as w from test7_good where match('alpha') order by id asc;
 drop table test7_good;
 </sphinxql>
 
+<sphinxql>
+<!-- BM25A is the implicit ranker; explicit query and table rankers retain precedence -->
+create table test8_default ( body text );
+create table test8_proximity ( body text ) ranker='proximity_bm25';
+insert into test8_default values (1, 'alpha'), (2, 'alpha alpha alpha beta beta');
+insert into test8_proximity values (1, 'alpha'), (2, 'alpha alpha alpha beta beta');
+
+select id, weight() as w from test8_default where match('alpha') order by w desc, id asc;
+select id, weight() as w from test8_default where match('alpha') order by w desc, id asc option ranker=bm25a;
+select id, weight() as w from test8_default where match('alpha') order by w desc, id asc option ranker=proximity_bm25;
+select id, weight() as w from test8_proximity where match('alpha') order by w desc, id asc;
+select id, weight() as w from test8_proximity where match('alpha') order by w desc, id asc option ranker=bm25a;
+
+drop table test8_default;
+drop table test8_proximity;
+</sphinxql>
 
 </queries>
 

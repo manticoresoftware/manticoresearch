@@ -268,6 +268,33 @@ TEST ( PostingsContainer, CodecsSeekBulkAndMalformedInput )
 	}
 }
 
+TEST_F ( PostingsContainerTest, StreamedDirectoryUsesImplicitContiguousKeys )
+{
+	{ std::ofstream(m_sBase+".spi",std::ios::binary).write("dict",4); }
+	{ std::ofstream(m_sBase+".spp",std::ios::binary).put('\1'); }
+	const std::vector<e1::Posting> dFirst { { 1,1,1,0 } };
+	const std::vector<e1::Posting> dSecond { { 2,2,1,0 } };
+	std::string sError;
+	e1::Writer tWriter;
+	ASSERT_TRUE ( tWriter.Open(m_sBase+".spd",sError) ) << sError;
+	ASSERT_TRUE ( tWriter.FinishTerm(1,dFirst,1,false,sError) ) << sError;
+	EXPECT_FALSE ( tWriter.FinishTerm(3,dSecond,2,false,sError) );
+	ASSERT_TRUE ( tWriter.FinishTerm(2,dSecond,2,false,sError) ) << sError;
+	ASSERT_TRUE ( tWriter.Finalize(m_sBase+".spi",m_sBase+".spp",sError) ) << sError;
+
+	auto dRaw=ReadFile(m_sBase+".spd"), dDict=ReadFile(m_sBase+".spi"), dHits=ReadFile(m_sBase+".spp");
+	ASSERT_GE ( dRaw.size(), 88u );
+	const uint64_t uDirectory = e1::U64 ( dRaw.data()+48 );
+	EXPECT_EQ ( dRaw.size()-uDirectory, 32u );
+	e1::Store tStore;
+	ASSERT_TRUE ( tStore.Open(dRaw.data(),dRaw.size(),4,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError) ) << sError;
+	EXPECT_NE ( tStore.Find(1), nullptr );
+	EXPECT_NE ( tStore.Find(2), nullptr );
+	EXPECT_EQ ( tStore.Find(3), nullptr );
+	EXPECT_EQ ( tStore.View(1).DF(), 1u );
+	EXPECT_EQ ( tStore.View(2).DF(), 1u );
+}
+
 TEST_F ( PostingsContainerTest, WriterReaderMetadataAndDirectWindows )
 {
 	std::vector<e1::Posting> dPostings;
@@ -554,6 +581,8 @@ TEST ( NormStore, StagedBuilderMatchesInMemoryBuilderAndSupportsUpdates )
 	}
 	ASSERT_TRUE ( tMemory.Set(2,1,70000,sError) ) << sError;
 	ASSERT_TRUE ( tStaged.Set(2,1,70000,sError) ) << sError;
+	ASSERT_TRUE ( tMemory.Set(10,2,90000,sError) ) << sError;
+	ASSERT_TRUE ( tStaged.Set(10,2,90000,sError) ) << sError;
 
 	std::vector<uint8_t> dExpected;
 	ASSERT_TRUE ( tMemory.Build(dExpected,sError) ) << sError;

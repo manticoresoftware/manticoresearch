@@ -331,6 +331,12 @@ public:
 		this->Set ( NULL, 0 );
 	}
 
+	void DiscardPages()
+	{
+		if ( this->GetWritePtr() && this->GetLengthBytes() )
+			mmadvise ( this->GetWritePtr(), this->GetLengthBytes(), Advise_e::DONTNEED );
+	}
+
 	bool Resize ( uint64_t uNewSize, CSphString & sWarning, CSphString & sError )
 	{
 		if ( !this->GetReadPtr() )

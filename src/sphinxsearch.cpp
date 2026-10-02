@@ -4481,6 +4481,7 @@ public:
 		assert ( pDocid );
 		m_tE1DocidLocator = pDocid->m_tLocator;
 		m_bE1HeapHasRowwiseDocid = !pDocid->IsColumnar();
+		m_bE1TieByRowid = tSetup.m_bE1RowidDocidOrder;
 	}
 
 	void Reset ( const ISphQwordSetup & tSetup ) final
@@ -4507,10 +4508,10 @@ public:
 	{
 		m_bE1FixedBM25A = BASE::EnableE1Ranked();
 		const int iTopK = E1RankedTopKCapacity ( this->m_iConfiguredE1TopK );
-		// The private heap compares equal weights by docid directly in the match
-		// row. Columnar docids are fetched later by the sorter and have no valid
-		// rowwise locator here, so leave top-K selection to the generic sorter.
-		m_bE1OwnHeap = m_bE1FixedBM25A && m_bE1HeapHasRowwiseDocid && iTopK && this->m_pRoot->EnableE1BestFirst();
+		// Explicit id ordering needs a rowwise docid. Implicit relevance ordering
+		// uses the generic sorter's rowid tie-breaker and needs no docid attribute.
+		m_bE1OwnHeap = m_bE1FixedBM25A && ( m_bE1TieByRowid || m_bE1HeapHasRowwiseDocid )
+			&& iTopK && this->m_pRoot->EnableE1BestFirst();
 		if ( m_bE1OwnHeap )
 		{
 			m_dE1TopKMatches = std::make_unique<CSphMatch[]>(iTopK);
@@ -4629,10 +4630,15 @@ private:
 	void BuildE1Heap ()
 	{
 		SwitchProfile ( this->m_pCtx->m_pProfile, SPH_QSTATE_RANK );
+		auto fnTieKey = [this] ( const CSphMatch & tMatch ) -> uint64_t {
+			return m_bE1TieByRowid ? uint64_t(tMatch.m_tRowID) : uint64_t(tMatch.GetAttr(m_tE1DocidLocator));
+		};
 		auto fnBetter = [this] ( int a, int b ) {
 			const CSphMatch & x = m_dE1TopKMatches[a];
 			const CSphMatch & y = m_dE1TopKMatches[b];
-			return x.m_iWeight>y.m_iWeight || ( x.m_iWeight==y.m_iWeight && x.GetAttr(m_tE1DocidLocator)<y.GetAttr(m_tE1DocidLocator) );
+			const uint64_t uX = m_bE1TieByRowid ? uint64_t(x.m_tRowID) : uint64_t(x.GetAttr(m_tE1DocidLocator));
+			const uint64_t uY = m_bE1TieByRowid ? uint64_t(y.m_tRowID) : uint64_t(y.GetAttr(m_tE1DocidLocator));
+			return x.m_iWeight>y.m_iWeight || ( x.m_iWeight==y.m_iWeight && uX<uY );
 		};
 		const ExtDoc_t * pDoc = this->m_pDoclist;
 		while ( true )
@@ -4670,7 +4676,7 @@ private:
 					++m_uE1HeapThresholdUpdates;
 				}
 			}
-			else if ( tCandidate.m_iWeight>m_dE1TopKMatches[m_dE1TopKHeap[0]].m_iWeight || ( tCandidate.m_iWeight==m_dE1TopKMatches[m_dE1TopKHeap[0]].m_iWeight && tCandidate.GetAttr(m_tE1DocidLocator)<m_dE1TopKMatches[m_dE1TopKHeap[0]].GetAttr(m_tE1DocidLocator) ) )
+			else if ( tCandidate.m_iWeight>m_dE1TopKMatches[m_dE1TopKHeap[0]].m_iWeight || ( tCandidate.m_iWeight==m_dE1TopKMatches[m_dE1TopKHeap[0]].m_iWeight && fnTieKey(tCandidate)<fnTieKey(m_dE1TopKMatches[m_dE1TopKHeap[0]]) ) )
 			{
 				const int iSlot = m_dE1TopKHeap[0];
 				m_dE1TopKMatches[iSlot].Combine ( tCandidate, m_iE1DynamicRowitems );
@@ -4709,6 +4715,7 @@ private:
 	bool m_bE1MultiOr = false;
 	bool m_bE1OwnHeap = false;
 	bool m_bE1HeapHasRowwiseDocid = false;
+	bool m_bE1TieByRowid = false;
 	bool m_bE1HeapBuilt = false;
 	bool m_bE1HeapReturned = false;
 	std::unique_ptr<CSphMatch[]> m_dE1TopKMatches;

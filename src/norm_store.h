@@ -499,8 +499,9 @@ private:
 
 class Store final : public FieldNormReader_i
 {
+struct TotalGroup_t { uint64_t m_uOffset = 0; uint8_t m_uWidth = 0; };
 public:
-	bool Open ( const uint8_t * pData, uint64_t uSize, std::string & sError )
+	bool Open ( const uint8_t * pData, uint64_t uSize, std::string & sError, bool bFastValidation=false )
 	{
 		Reset();
 		auto fnFail = [&] ( const char * szError ) { sError = std::string("norms: ")+szError; return false; };
@@ -516,7 +517,7 @@ public:
 			return fnFail ( "invalid dimensions" );
 		if ( uDirectory!=HEADER_SIZE+uint64_t(uFields)*FIELD_ENTRY_SIZE || uPayload!=uDirectory+uint64_t(uFields)*uGroups*GROUP_ENTRY_SIZE || uPayload>uSize )
 			return fnFail ( "invalid directory" );
-		if ( e1::CRC(pData+HEADER_SIZE,uSize-HEADER_SIZE)!=e1::U32(pData+56) )
+		if ( !bFastValidation && e1::CRC(pData+HEADER_SIZE,uSize-HEADER_SIZE)!=e1::U32(pData+56) )
 			return fnFail ( "checksum mismatch" );
 		uint64_t uExpectedOffset = uPayload;
 		for ( uint32_t iField=0; iField<uFields; ++iField )
@@ -538,19 +539,22 @@ public:
 					return fnFail ( "invalid group" );
 				if ( uint64_t(uCount)*uWidth>uSize-uExpectedOffset )
 					return fnFail ( "truncated payload" );
-				uint64_t uDecodedSum = 0;
-				uint32_t uDecodedMax = 0;
-				uint32_t uDecodedNonzero = 0;
-				for ( uint32_t i=0; i<uCount; ++i )
+				if ( !bFastValidation )
 				{
-					const uint8_t * pValue = pData+uOffset+uint64_t(i)*uWidth;
-					const uint32_t uValue = uWidth==1 ? pValue[0] : uWidth==2 ? uint32_t(pValue[0])|(uint32_t(pValue[1])<<8) : e1::U32(pValue);
-					uDecodedSum += uValue;
-					uDecodedMax = std::max ( uDecodedMax, uValue );
-					uDecodedNonzero += uValue!=0;
+					uint64_t uDecodedSum = 0;
+					uint32_t uDecodedMax = 0;
+					uint32_t uDecodedNonzero = 0;
+					for ( uint32_t i=0; i<uCount; ++i )
+					{
+						const uint8_t * pValue = pData+uOffset+uint64_t(i)*uWidth;
+						const uint32_t uValue = uWidth==1 ? pValue[0] : uWidth==2 ? uint32_t(pValue[0])|(uint32_t(pValue[1])<<8) : e1::U32(pValue);
+						uDecodedSum += uValue;
+						uDecodedMax = std::max ( uDecodedMax, uValue );
+						uDecodedNonzero += uValue!=0;
+					}
+					if ( uDecodedSum!=uSum || uDecodedMax!=uMax || uDecodedNonzero!=uNonzero )
+						return fnFail ( "group metadata mismatch" );
 				}
-				if ( uDecodedSum!=uSum || uDecodedMax!=uMax || uDecodedNonzero!=uNonzero )
-					return fnFail ( "group metadata mismatch" );
 				uExpectedOffset += uint64_t(uCount)*uWidth;
 				uFieldSum += uSum;
 				uFieldNonzero += uNonzero;
@@ -612,85 +616,73 @@ public:
 
 	bool GatherTotal ( const uint32_t * pRows, uint32_t uCount, uint32_t * pOut ) const override
 	{
-		if ( !pRows || !pOut || !m_uTotalWidth )
+		if ( !pRows || !pOut || m_dTotalGroups.size()!=m_uGroups )
 			return false;
-		if ( m_uTotalWidth==1 )
+		for ( uint32_t i=0; i<uCount; ++i )
 		{
-			for ( uint32_t i=0; i<uCount; ++i )
-			{
-				if ( pRows[i]>=m_uRows )
-					return false;
-				pOut[i] = m_dTotal8[pRows[i]];
-			}
-		} else if ( m_uTotalWidth==2 )
-		{
-			for ( uint32_t i=0; i<uCount; ++i )
-			{
-				if ( pRows[i]>=m_uRows )
-					return false;
-				pOut[i] = m_dTotal16[pRows[i]];
-			}
-		} else
-		{
-			for ( uint32_t i=0; i<uCount; ++i )
-			{
-				if ( pRows[i]>=m_uRows )
-					return false;
-				pOut[i] = m_dTotal32[pRows[i]];
-			}
+			if ( pRows[i]>=m_uRows )
+				return false;
+			const uint32_t uGroup = pRows[i]/m_uGroupRows;
+			const TotalGroup_t & tGroup = m_dTotalGroups[uGroup];
+			const uint8_t * pValue = m_dTotal.data()+tGroup.m_uOffset+uint64_t(pRows[i]%m_uGroupRows)*tGroup.m_uWidth;
+			pOut[i] = tGroup.m_uWidth==1 ? pValue[0] : tGroup.m_uWidth==2 ? uint32_t(pValue[0])|(uint32_t(pValue[1])<<8) : e1::U32(pValue);
 		}
 		return true;
 	}
-	uint64_t TotalCacheBytes() const { return uint64_t(m_uRows)*m_uTotalWidth; }
+	uint64_t TotalCacheBytes() const { return m_dTotal.size(); }
 
 private:
 	void BuildTotalCache()
 	{
-		uint32_t uMax = 0;
-		for ( uint32_t uRow=0; uRow<m_uRows; ++uRow )
+		m_dTotalGroups.resize ( m_uGroups );
+		std::vector<uint32_t> dTotals ( m_uGroupRows );
+		for ( uint32_t uGroup=0; uGroup<m_uGroups; ++uGroup )
 		{
-			uint64_t uTotal = 0;
-			for ( uint32_t iField=0; iField<m_uFields; ++iField )
+			const uint32_t uFirst = uGroup*m_uGroupRows;
+			const uint32_t uCount = std::min ( m_uGroupRows, m_uRows-uFirst );
+			std::fill_n ( dTotals.begin(), uCount, 0u );
+			uint32_t uMax = 0;
+			for ( uint32_t uRow=0; uRow<uCount; ++uRow )
 			{
-				uint32_t uValue = 0;
-				Get ( iField, uRow, uValue );
-				uTotal += uValue;
+				uint64_t uTotal = 0;
+				for ( uint32_t iField=0; iField<m_uFields; ++iField )
+				{
+					uint32_t uValue = 0;
+					Get ( iField, uFirst+uRow, uValue );
+					uTotal += uValue;
+				}
+				if ( uTotal>UINT32_MAX )
+				{
+					m_dTotal.clear(); m_dTotalGroups.clear();
+					return;
+				}
+				dTotals[uRow] = uint32_t(uTotal);
+				uMax = std::max ( uMax, dTotals[uRow] );
 			}
-			if ( uTotal>UINT32_MAX )
-				return;
-			uMax = std::max ( uMax, uint32_t(uTotal) );
-		}
-		m_uTotalWidth = WidthFor ( uMax );
-		if ( m_uTotalWidth==1 ) m_dTotal8.resize ( m_uRows );
-		else if ( m_uTotalWidth==2 ) m_dTotal16.resize ( m_uRows );
-		else m_dTotal32.resize ( m_uRows );
-		for ( uint32_t uRow=0; uRow<m_uRows; ++uRow )
-		{
-			uint32_t uTotal = 0;
-			for ( uint32_t iField=0; iField<m_uFields; ++iField )
+			TotalGroup_t & tGroup = m_dTotalGroups[uGroup];
+			tGroup.m_uOffset = m_dTotal.size();
+			tGroup.m_uWidth = uint8_t(WidthFor(uMax));
+			const size_t uOldSize = m_dTotal.size();
+			m_dTotal.resize ( uOldSize+uint64_t(uCount)*tGroup.m_uWidth );
+			for ( uint32_t uRow=0; uRow<uCount; ++uRow )
 			{
-				uint32_t uValue = 0;
-				Get ( iField, uRow, uValue );
-				uTotal += uValue;
+				uint8_t * pValue = m_dTotal.data()+uOldSize+uint64_t(uRow)*tGroup.m_uWidth;
+				for ( unsigned uByte=0; uByte<tGroup.m_uWidth; ++uByte )
+					pValue[uByte] = uint8_t(dTotals[uRow]>>(8*uByte));
 			}
-			if ( m_uTotalWidth==1 ) m_dTotal8[uRow] = uint8_t(uTotal);
-			else if ( m_uTotalWidth==2 ) m_dTotal16[uRow] = uint16_t(uTotal);
-			else m_dTotal32[uRow] = uTotal;
 		}
 	}
 	const uint8_t * Entry ( uint32_t uField, uint32_t uGroup ) const { return m_pData+m_uDirectory+( uint64_t(uField)*m_uGroups+uGroup )*GROUP_ENTRY_SIZE; }
-	void Reset() { m_pData=nullptr; m_uRows=m_uFields=m_uGroupRows=m_uGroups=m_uTotalWidth=0; m_uDirectory=0; m_dTotal8.clear(); m_dTotal16.clear(); m_dTotal32.clear(); }
+	void Reset() { m_pData=nullptr; m_uRows=m_uFields=m_uGroupRows=m_uGroups=0; m_uDirectory=0; m_dTotal.clear(); m_dTotalGroups.clear(); }
 
 	const uint8_t * m_pData = nullptr;
 	uint32_t m_uRows = 0;
 	uint32_t m_uFields = 0;
 	uint32_t m_uGroupRows = 0;
 	uint32_t m_uGroups = 0;
-	uint32_t m_uTotalWidth = 0;
 	uint64_t m_uDirectory = 0;
-	std::vector<uint8_t> m_dTotal8;
-	std::vector<uint16_t> m_dTotal16;
-	std::vector<uint32_t> m_dTotal32;
+	std::vector<uint8_t> m_dTotal;
+	std::vector<TotalGroup_t> m_dTotalGroups;
 };
 
 } // namespace e1::norms

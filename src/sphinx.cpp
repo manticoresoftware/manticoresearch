@@ -11184,6 +11184,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 		const bool bE1StartupTrace = getenv("MANTICORE_E1_STARTUP_TRACE");
 		int64_t tmE1Startup = bE1StartupTrace ? sphMicroTimer() : 0;
 		const bool bNormsRequired = m_uE1Version==e1::VERSION;
+		const bool bPublishedGeneration = bNormsRequired && !m_bDebugCheck && e1::PublishedGenerationUnchanged ( GetFilename(SPH_EXT_SPH).cstr(), GetFilename(SPH_EXT_SPD).cstr(), GetFilename(SPH_EXT_SPI).cstr(), GetFilename(SPH_EXT_SPP).cstr(), GetFilename(SPH_EXT_SPN).cstr() );
 		if ( bNormsRequired && !sphIsReadable(GetFilename(SPH_EXT_SPN),&m_sLastError) )
 			return false;
 		if ( bNormsRequired || sphIsReadable(GetFilename(SPH_EXT_SPN)) )
@@ -11191,7 +11192,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 			if ( !m_tNormData.Setup(GetFilename(SPH_EXT_SPN),m_sLastError,false) )
 				return false;
 			std::string sNormError;
-			if ( !m_tNormStore.Open(m_tNormData.GetReadPtr(),m_tNormData.GetLengthBytes(),sNormError) || m_tNormStore.Rows()!=uint32_t(m_iDocinfo) || m_tNormStore.Fields()!=uint32_t(m_tSchema.GetFieldsCount()) )
+			if ( !m_tNormStore.Open(m_tNormData.GetReadPtr(),m_tNormData.GetLengthBytes(),sNormError,bPublishedGeneration) || m_tNormStore.Rows()!=uint32_t(m_iDocinfo) || m_tNormStore.Fields()!=uint32_t(m_tSchema.GetFieldsCount()) )
 			{
 				m_sLastError = sNormError.empty() ? "norms: schema mismatch" : sNormError.c_str();
 				return false;
@@ -11209,7 +11210,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 		std::string error;
 		const BYTE * pE1Header = m_tE1Data.GetReadPtr();
 		const bool bTrustedGeneration = m_tE1Data.GetLengthBytes()>=44 && e1::ConsumeTrustedGeneration ( GetFilename(SPH_EXT_SPD).cstr(), GetFilename(SPH_EXT_SPI).cstr(), GetFilename(SPH_EXT_SPP).cstr(), e1::U64(pE1Header+16), e1::U32(pE1Header+32), e1::U32(pE1Header+36), e1::U32(pE1Header+40) );
-		const bool bFastValidation = bTrustedGeneration || !m_bDebugCheck;
+		const bool bFastValidation = bTrustedGeneration || bPublishedGeneration;
 		if ( !m_tE1Store.Open(m_tE1Data.GetReadPtr(),m_tE1Data.GetLengthBytes(),m_iDocinfo,
 			dict.GetReadPtr(),dict.GetLengthBytes(),hits.GetReadPtr(),hits.GetLengthBytes(),error,bFastValidation) )
 		{ m_sLastError = error.c_str(); return false; }
@@ -11233,12 +11234,12 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 			}
 			return uTerms==e1::U64(m_tE1Data.GetReadPtr()+24);
 		};
-		bool bDictionaryValid = false;
-		if ( m_pDict->GetSettings().IsWordDict() )
+		bool bDictionaryValid = bFastValidation;
+		if ( !bFastValidation && m_pDict->GetSettings().IsWordDict() )
 		{
 			CSphDictReader<true> tReader ( m_tSettings.m_iSkiplistBlockSize, m_pDict->GetSettings().GetDictFormat() );
 			bDictionaryValid = tReader.Setup ( GetFilename(SPH_EXT_SPI), m_tWordlist.m_iDictCheckpointsOffset, m_tSettings.m_eHitless, m_sLastError ) && fnValidateDictionary(tReader);
-		} else
+		} else if ( !bFastValidation )
 		{
 			CSphDictReader<false> tReader ( m_tSettings.m_iSkiplistBlockSize, m_pDict->GetSettings().GetDictFormat() );
 			bDictionaryValid = tReader.Setup ( GetFilename(SPH_EXT_SPI), m_tWordlist.m_iDictCheckpointsOffset, m_tSettings.m_eHitless, m_sLastError ) && fnValidateDictionary(tReader);

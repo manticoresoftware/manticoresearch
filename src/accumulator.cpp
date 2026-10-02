@@ -834,6 +834,10 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bo
 
 	CSphVector<DWORD> dFieldLengths;
 	DWORD * pFieldLengths = SetupFieldLengths ( tSchema, dFieldLengths );
+	// Sources normally provide exact tokenizer lengths. Do not recompute the
+	// same values while walking every hit only to overwrite them below.
+	if ( pExactFieldLengths )
+		pFieldLengths = nullptr;
 
 	// accumulate hits
 	int iHits = 0;

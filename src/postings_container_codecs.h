@@ -8,6 +8,7 @@
 #include <array>
 #include <mutex>
 #include <unordered_set>
+#include <utility>
 #if !defined(_WIN32)
 #include <sys/stat.h>
 #endif
@@ -33,6 +34,33 @@ inline bool AddTrustedFileIdentity ( std::string & sKey, const std::string & sFi
  return true;
 #else
  (void)sKey; (void)sFilename; return false;
+#endif
+}
+// The generation header is published after all immutable components are
+// fsynced. A later component write advances mtime or ctime and invalidates
+// this cheap reopen proof; maintenance checks still perform full validation.
+inline bool PublishedGenerationUnchanged ( const std::string & sHeader, const std::string & sPostings, const std::string & sDict, const std::string & sHits, const std::string & sNorms )
+{
+#if !defined(_WIN32)
+ auto fnTime=[] ( const struct stat & tStat, bool bChange ) {
+#if defined(__APPLE__)
+  const auto & tTime = bChange ? tStat.st_ctimespec : tStat.st_mtimespec;
+#else
+  const auto & tTime = bChange ? tStat.st_ctim : tStat.st_mtim;
+#endif
+  return std::pair<int64_t,int64_t> { tTime.tv_sec, tTime.tv_nsec };
+ };
+ struct stat tHeader {};
+ if ( stat(sHeader.c_str(),&tHeader) || !S_ISREG(tHeader.st_mode) ) return false;
+ const auto tHeaderMTime=fnTime(tHeader,false), tHeaderCTime=fnTime(tHeader,true);
+ for ( const std::string * pFile : { &sPostings, &sDict, &sHits, &sNorms } )
+ {
+  struct stat tFile {};
+  if ( stat(pFile->c_str(),&tFile) || !S_ISREG(tFile.st_mode) || fnTime(tFile,false)>tHeaderMTime || fnTime(tFile,true)>tHeaderCTime ) return false;
+ }
+ return true;
+#else
+ (void)sHeader; (void)sPostings; (void)sDict; (void)sHits; (void)sNorms; return false;
 #endif
 }
 inline std::string TrustedGenerationKey ( const std::string & sPostings, const std::string & sDict, const std::string & sHits, uint64_t uSize, uint32_t uPayload, uint32_t uDict, uint32_t uHits )
@@ -65,9 +93,25 @@ inline const std::array<uint32_t,256> & CRCTable() {
  }();
  return dTable;
 }
+inline const std::array<std::array<uint32_t,256>,8> & CRCSliceTables() {
+ static const auto dTables=[] {
+  std::array<std::array<uint32_t,256>,8> dResult{};
+  dResult[0]=CRCTable();
+  for(unsigned iSlice=1;iSlice<8;++iSlice)
+   for(unsigned i=0;i<256;++i) { const uint32_t c=dResult[iSlice-1][i]; dResult[iSlice][i]=(c>>8)^dResult[0][c&255u]; }
+  return dResult;
+ }();
+ return dTables;
+}
 inline uint32_t CRCUpdate(uint32_t c,const uint8_t *p,size_t n) {
- const auto &dTable=CRCTable();
- for(size_t i=0;i<n;++i)c=dTable[(c^p[i])&255u]^(c>>8);
+ const auto &dTables=CRCSliceTables();
+ while(n>=8) {
+  c^=U32(p);
+  c=dTables[7][c&255u]^dTables[6][(c>>8)&255u]^dTables[5][(c>>16)&255u]^dTables[4][c>>24]
+   ^dTables[3][p[4]]^dTables[2][p[5]]^dTables[1][p[6]]^dTables[0][p[7]];
+  p+=8; n-=8;
+ }
+ while(n--) c=dTables[0][(c^*p++)&255u]^(c>>8);
  return c;
 }
 inline uint32_t CRC(const uint8_t *p,size_t n) { return ~CRCUpdate(~0u,p,n); }

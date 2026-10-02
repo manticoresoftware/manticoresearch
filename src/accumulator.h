@@ -199,6 +199,7 @@ private:
 	std::unique_ptr<DocstoreRT_i>		m_pDocstore;
 	std::unique_ptr<ColumnarBuilderRT_i> m_pColumnarBuilder;
 	std::unique_ptr<EmbeddingsSrc_c>	m_pEmbeddingsSrc;
+	CSphVector<DWORD>					m_dFieldLengthsScratch;
 	RowID_t								m_tNextRowID = 0;
 	CSphFixedVector<BYTE>				m_dPackedKeywords { 0 };
 	uint64_t							m_uSchemaHash = 0;

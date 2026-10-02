@@ -675,15 +675,7 @@ void RtAccum_t::FetchEmbeddingsSrc ( InsertDocData_c & tDoc, const CSphVector<At
 }
 
 
-static DWORD * SetupFieldLengths ( const CSphSchema & tSchema, CSphVector<DWORD> & dFieldLengths )
-{
-	dFieldLengths.Resize ( tSchema.GetFieldsCount() );
-	dFieldLengths.ZeroVec();
-	return dFieldLengths.Begin();
-}
-
-
-static const DocstoreBuilder_i::Doc_t * StoreFieldLengths ( CSphRowitem * pRow, std::unique_ptr<ColumnarBuilderRT_i> & pColumnarBuilder, const CSphVector<DWORD> & dFieldLengths, const CSphSchema & tSchema, DocstoreBuilder_i::Doc_t & dUpdatedStoredDoc, const DocstoreBuilder_i::Doc_t * pStoredDoc )
+static const DocstoreBuilder_i::Doc_t * StoreFieldLengths ( CSphRowitem * pRow, std::unique_ptr<ColumnarBuilderRT_i> & pColumnarBuilder, const DWORD * pFieldLengths, const CSphSchema & tSchema, DocstoreBuilder_i::Doc_t & dUpdatedStoredDoc, const DocstoreBuilder_i::Doc_t * pStoredDoc )
 {
 	const DocstoreBuilder_i::Doc_t * pUpdatedStoredDoc = pStoredDoc;
 
@@ -703,7 +695,7 @@ static const DocstoreBuilder_i::Doc_t * StoreFieldLengths ( CSphRowitem * pRow, 
 		if ( i>=iFirstFieldLen && i<=tSchema.GetAttrId_LastFieldLen() )
 		{
 			assert ( tAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT );
-			DWORD & uData = dFieldLengths[i-iFirstFieldLen];
+			const DWORD & uData = pFieldLengths[i-iFirstFieldLen];
 			if ( tAttr.IsColumnar() )
 				pColumnarBuilder->SetAttr ( iColumnar, uData );
 			else
@@ -838,8 +830,13 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bo
 		sphSetRowAttr ( pRow, pBlobLoc->m_tLocator, m_pBlobWriter->Flush().first );
 	}
 
-	CSphVector<DWORD> dFieldLengths;
-	DWORD * pFieldLengths = pExactFieldLengths ? nullptr : SetupFieldLengths ( tSchema, dFieldLengths );
+	DWORD * pFieldLengths = nullptr;
+	if ( !pExactFieldLengths )
+	{
+		m_dFieldLengthsScratch.Resize ( tSchema.GetFieldsCount() );
+		m_dFieldLengthsScratch.ZeroVec();
+		pFieldLengths = m_dFieldLengthsScratch.Begin();
+	}
 
 	// accumulate hits
 	int iHits = 0;
@@ -896,19 +893,15 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bo
 	DocstoreBuilder_i::Doc_t dUpdatedStoredDoc;
 	if ( pExactFieldLengths )
 	{
-		const int iFields = tSchema.GetFieldsCount();
 		if ( m_pIndex->GetSettings().m_bIndexFieldLens )
-		{
-			dFieldLengths.Append ( pExactFieldLengths, iFields );
-			pStoredDoc = StoreFieldLengths ( pRow, m_pColumnarBuilder, dFieldLengths, tSchema, dUpdatedStoredDoc, pStoredDoc );
-		}
+			pStoredDoc = StoreFieldLengths ( pRow, m_pColumnarBuilder, pExactFieldLengths, tSchema, dUpdatedStoredDoc, pStoredDoc );
 	}
 	else
 	{
 		if ( m_pIndex->GetSettings().m_bIndexFieldLens )
-			pStoredDoc = StoreFieldLengths ( pRow, m_pColumnarBuilder, dFieldLengths, tSchema, dUpdatedStoredDoc, pStoredDoc );
+			pStoredDoc = StoreFieldLengths ( pRow, m_pColumnarBuilder, m_dFieldLengthsScratch.Begin(), tSchema, dUpdatedStoredDoc, pStoredDoc );
 	}
-	const DWORD * pSchemaNorms = pExactFieldLengths ? pExactFieldLengths : dFieldLengths.Begin();
+	const DWORD * pSchemaNorms = pExactFieldLengths ? pExactFieldLengths : m_dFieldLengthsScratch.Begin();
 	for ( int iField=0; iField<tSchema.GetFieldsCount(); ++iField )
 		if ( tSchema.GetField(iField).m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED )
 			m_dNorms.Add ( pSchemaNorms[iField] );

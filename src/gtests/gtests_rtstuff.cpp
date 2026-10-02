@@ -319,6 +319,114 @@ TEST ( RtTrx, SchemaLessSaveRoundTripsEmptyNorms )
 	EXPECT_TRUE ( tLoaded.m_dNorms.IsEmpty() );
 }
 
+TEST ( RtAccum, ReusesFallbackFieldLengthsWithoutDocumentBleed )
+{
+	CSphSchema tSchema;
+	CSphColumnInfo tTitle ( "title" );
+	tTitle.m_uFieldFlags = CSphColumnInfo::FIELD_INDEXED | CSphColumnInfo::FIELD_STORED;
+	tSchema.AddField ( tTitle );
+	CSphColumnInfo tStoredOnly ( "stored_only" );
+	tStoredOnly.m_uFieldFlags = CSphColumnInfo::FIELD_STORED;
+	tSchema.AddField ( tStoredOnly );
+	CSphColumnInfo tBody ( "body" );
+	tBody.m_uFieldFlags = CSphColumnInfo::FIELD_INDEXED;
+	tSchema.AddField ( tBody );
+	tSchema.AddAttr ( CSphColumnInfo ( sphGetDocidName(), SPH_ATTR_BIGINT ), true );
+	auto pIndex = sphCreateIndexRT ( "rt_field_length_scratch", "rt_field_length_scratch", tSchema, 1024*1024 );
+	ASSERT_TRUE ( pIndex );
+
+	RtAccum_t tAccum;
+	tAccum.SetIndex ( pIndex.get() );
+	auto fnAdd = [&] ( DocID_t tID, std::initializer_list<std::tuple<int,int,SphWordID_t>> dPositions, const DWORD * pExactFieldLengths=nullptr )
+	{
+		InsertDocData_c tDoc ( pIndex->GetMatchSchema() );
+		tDoc.SetID ( tID );
+		ISphHits dHits;
+		RowID_t tRowID = tAccum.GenerateRowID();
+		for ( const auto & [ iField, iPos, uWordID ] : dPositions )
+		{
+			CSphWordHit & tHit = dHits.Add();
+			tHit.m_tRowID = tRowID;
+			tHit.m_uWordID = uWordID;
+			tHit.m_uWordPos = HITMAN::Create ( iField, iPos, false );
+		}
+		tAccum.AddDocument ( dHits.IsEmpty() ? nullptr : &dHits, tDoc, false, pIndex->GetMatchSchema().GetRowSize(), nullptr, pExactFieldLengths );
+	};
+
+	fnAdd ( 1, { {0,1,1}, {0,1,1}, {0,1,2}, {0,3,3}, {2,1,4} } );
+	fnAdd ( 2, { {2,1,5}, {2,1,6}, {2,2,7} } );
+	const DWORD dExact[] = { 7, 101, 11 };
+	fnAdd ( 3, {}, dExact );
+
+	ASSERT_EQ ( tAccum.m_dNorms.GetLength(), 6 );
+	const DWORD dExpected[] = { 2, 1, 0, 2, 7, 11 };
+	for ( int i = 0; i < tAccum.m_dNorms.GetLength(); ++i )
+		EXPECT_EQ ( tAccum.m_dNorms[i], dExpected[i] ) << "norm " << i;
+	ASSERT_EQ ( tAccum.m_dPerDocHitsCount.GetLength(), 3 );
+	EXPECT_EQ ( tAccum.m_dPerDocHitsCount[0], 4u ); // one exact duplicate removed
+	EXPECT_EQ ( tAccum.m_dPerDocHitsCount[1], 3u );
+	EXPECT_EQ ( tAccum.m_dPerDocHitsCount[2], 0u );
+
+	// A new transaction must reuse capacity but not the previous document values.
+	tAccum.Cleanup();
+	tAccum.SetIndex ( pIndex.get() );
+	fnAdd ( 4, {} );
+	ASSERT_EQ ( tAccum.m_dNorms.GetLength(), 2 );
+	EXPECT_EQ ( tAccum.m_dNorms[0], 0u );
+	EXPECT_EQ ( tAccum.m_dNorms[1], 0u );
+}
+
+TEST ( RtAccum, ResizesFallbackFieldLengthsAfterSchemaChangeAndHandlesNoFields )
+{
+	CSphSchema tWideSchema;
+	for ( int i = 0; i < 4; ++i )
+	{
+		CSphColumnInfo tField;
+		tField.m_sName.SetSprintf ( "field%d", i );
+		tField.m_uFieldFlags = CSphColumnInfo::FIELD_INDEXED;
+		tWideSchema.AddField ( tField );
+	}
+	tWideSchema.AddAttr ( CSphColumnInfo ( sphGetDocidName(), SPH_ATTR_BIGINT ), true );
+	auto pWideIndex = sphCreateIndexRT ( "rt_field_length_wide", "rt_field_length_wide", tWideSchema, 1024*1024 );
+	ASSERT_TRUE ( pWideIndex );
+
+	RtAccum_t tAccum;
+	tAccum.SetIndex ( pWideIndex.get() );
+	InsertDocData_c tWideDoc ( pWideIndex->GetMatchSchema() );
+	tWideDoc.SetID ( 1 );
+	ISphHits dWideHits;
+	dWideHits.Add() = { 1, 1, HITMAN::Create ( 3, 5, false ) };
+	tAccum.AddDocument ( &dWideHits, tWideDoc, false, pWideIndex->GetMatchSchema().GetRowSize(), nullptr );
+
+	tAccum.Cleanup();
+	CSphSchema tNarrowSchema;
+	CSphColumnInfo tField ( "only" );
+	tField.m_uFieldFlags = CSphColumnInfo::FIELD_INDEXED;
+	tNarrowSchema.AddField ( tField );
+	tNarrowSchema.AddAttr ( CSphColumnInfo ( sphGetDocidName(), SPH_ATTR_BIGINT ), true );
+	auto pNarrowIndex = sphCreateIndexRT ( "rt_field_length_narrow", "rt_field_length_narrow", tNarrowSchema, 1024*1024 );
+	ASSERT_TRUE ( pNarrowIndex );
+	tAccum.SetIndex ( pNarrowIndex.get() );
+	InsertDocData_c tNarrowDoc ( pNarrowIndex->GetMatchSchema() );
+	tNarrowDoc.SetID ( 2 );
+	ISphHits dNarrowHits;
+	dNarrowHits.Add() = { 1, 1, HITMAN::Create ( 0, 1, false ) };
+	tAccum.AddDocument ( &dNarrowHits, tNarrowDoc, false, pNarrowIndex->GetMatchSchema().GetRowSize(), nullptr );
+	ASSERT_EQ ( tAccum.m_dNorms.GetLength(), 1 );
+	EXPECT_EQ ( tAccum.m_dNorms[0], 1u );
+
+	tAccum.Cleanup();
+	CSphSchema tNoFieldsSchema;
+	tNoFieldsSchema.AddAttr ( CSphColumnInfo ( sphGetDocidName(), SPH_ATTR_BIGINT ), true );
+	auto pNoFieldsIndex = sphCreateIndexRT ( "rt_field_length_none", "rt_field_length_none", tNoFieldsSchema, 1024*1024 );
+	ASSERT_TRUE ( pNoFieldsIndex );
+	tAccum.SetIndex ( pNoFieldsIndex.get() );
+	InsertDocData_c tNoFieldsDoc ( pNoFieldsIndex->GetMatchSchema() );
+	tNoFieldsDoc.SetID ( 3 );
+	tAccum.AddDocument ( nullptr, tNoFieldsDoc, false, pNoFieldsIndex->GetMatchSchema().GetRowSize(), nullptr );
+	EXPECT_TRUE ( tAccum.m_dNorms.IsEmpty() );
+}
+
 TEST ( RtTrx, RejectsUnexpectedStoragesWithoutSchema )
 {
 	RtTrxPayload_t tPayload = MakeRtTrxPayload ( 0, 0 );

@@ -101,13 +101,14 @@ public:
 class RowidIterator_i;
 std::unique_ptr<ExtNode_i> CreatePseudoFTNode ( ExtNode_i * pNode, RowidIterator_i * pIterator );
 
-// Test seam for exercising oversized scoped E1 admission without allocating
-// corresponding multi-million-row scratch buffers. It is process-wide because
-// query workers can migrate across threads, and inert unless enabled by a test.
+#if defined(MANTICORE_TEST)
+// Test-only seam for exercising oversized scoped E1 admission without allocating
+// corresponding multi-million-row scratch buffers.
 void SetE1TestLastWindow ( uint32_t uLastWindow );
 void ResetE1TestLastWindow ();
 uint64_t GetE1TestScratchDeclines ();
 uint64_t GetE1TestDirectExecutorCalls ();
+#endif
 
 class NodeCacheContainer_c;
 

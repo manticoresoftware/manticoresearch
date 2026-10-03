@@ -28,8 +28,9 @@ set ( GTESTS_SRC
 		gtests_wsrep.cpp
 		gtests_uklemmatizer.cpp )
 
-add_executable ( gmanticoretest ${GTESTS_SRC} )
+add_executable ( gmanticoretest ${GTESTS_SRC} ../searchnode.cpp )
 target_include_directories ( gmanticoretest PRIVATE "${MANTICORE_SOURCE_DIR}/src" )
+target_compile_definitions ( gmanticoretest PRIVATE MANTICORE_TEST=1 )
 target_link_libraries ( gmanticoretest PRIVATE
 		GTest::gmock_main
 		lmanticore

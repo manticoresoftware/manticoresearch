@@ -76,10 +76,11 @@ static bool E1FieldScopeCoversSchema ( const XQLimitSpec_t & tSpec, const ISphQw
 
 static volatile bool g_bInterruptNow = false;
 
-static std::atomic<bool> g_bE1TestLastWindow { false };
-static std::atomic<uint32_t> g_uE1TestLastWindow { 0 };
-static std::atomic<uint64_t> g_uE1TestScratchDeclines { 0 };
-static std::atomic<uint64_t> g_uE1TestDirectExecutorCalls { 0 };
+#if defined(MANTICORE_TEST)
+static bool g_bE1TestLastWindow = false;
+static uint32_t g_uE1TestLastWindow = 0;
+static uint64_t g_uE1TestScratchDeclines = 0;
+static uint64_t g_uE1TestDirectExecutorCalls = 0;
 
 void SetE1TestLastWindow ( uint32_t uLastWindow )
 {
@@ -104,6 +105,7 @@ uint64_t GetE1TestScratchDeclines ()
 {
 	return g_uE1TestScratchDeclines;
 }
+#endif
 
 
 static void PrintDocsChunk ( int QDEBUGARG(iCount), int QDEBUGARG(iAtomPos), const ExtDoc_t * QDEBUGARG(pDocs), const char * QDEBUGARG(sNode), void * QDEBUGARG(pNode), const char * sTerm=nullptr )
@@ -4431,8 +4433,10 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::EnableE1Ranked()
 				continue;
 			return false;
 		}
+#if defined(MANTICORE_TEST)
 		if ( g_bE1TestLastWindow )
 			uLast = g_uE1TestLastWindow;
+#endif
 		if ( m_bE1Or )
 		{
 			m_uE1LastWindow = m_uE1LastWindow==UINT32_MAX ? uLast : Max ( m_uE1LastWindow, uLast );
@@ -4458,8 +4462,10 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::EnableE1Ranked()
 	{
 		if ( !E1ScopedScratchAllowed(m_uE1LastWindow) )
 		{
+#if defined(MANTICORE_TEST)
 			if ( g_bE1TestLastWindow )
 				++g_uE1TestScratchDeclines;
+#endif
 			if ( getenv("MANTICORE_E1_RANK_TRACE") )
 				fprintf ( stderr, "%s reason=scratch_limit last_window=%u limit_bytes=%llu\n",
 					m_bE1ScopedOr2 ? "E1_SCOPED_OR2_FALLBACK" : "E1_SCOPED_AND2_FALLBACK",
@@ -4664,8 +4670,10 @@ static uint64_t AdmitE1Or2BoundMasks ( uint64_t uCandidates, const uint64_t dTer
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
 bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1OrWindow()
 {
+#if defined(MANTICORE_TEST)
 	if ( g_bE1TestLastWindow )
 		++g_uE1TestDirectExecutorCalls;
+#endif
 	m_dE1Pending.Resize(0);
 	m_iE1PendingPos = 0;
 	if ( m_bFirstChunk )
@@ -4980,8 +4988,10 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1OrWindow()
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
 bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1DirectAndWindow()
 {
+#if defined(MANTICORE_TEST)
 	if ( g_bE1TestLastWindow )
 		++g_uE1TestDirectExecutorCalls;
+#endif
 	m_dE1Pending.Resize(0);
 	m_iE1PendingPos = 0;
 	if ( m_bFirstChunk )
@@ -5270,8 +5280,10 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1DirectAndWindow()
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
 bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1Window()
 {
+#if defined(MANTICORE_TEST)
 	if ( g_bE1TestLastWindow )
 		++g_uE1TestDirectExecutorCalls;
+#endif
 	m_dE1Pending.Resize(0);
 	m_iE1PendingPos = 0;
 	if ( m_bFirstChunk )

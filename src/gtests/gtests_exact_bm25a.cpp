@@ -140,6 +140,15 @@ TEST ( ExactBM25A, DynamicTopKCoversDeepPage )
 	EXPECT_EQ ( E1RankedTopKFromPage ( 0, 0 ), 0 );
 }
 
+TEST ( ExactBM25A, ScopedScratchAdmissionBoundary )
+{
+	// 1,985 windows consume 67,077,120 bytes and remain below 64 MiB;
+	// the next window must fail closed before direct execution is committed.
+	EXPECT_TRUE ( E1ScopedScratchAllowed(1984) );
+	EXPECT_FALSE ( E1ScopedScratchAllowed(1985) );
+	EXPECT_FALSE ( E1ScopedScratchAllowed(std::numeric_limits<uint32_t>::max()) );
+}
+
 TEST ( ExactBM25A, AndBoundMasksRemainInsideCandidateSet )
 {
 	uint64_t dMasks[4][2] {};

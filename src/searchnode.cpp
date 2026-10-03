@@ -4418,7 +4418,6 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::EnableE1Ranked()
 	for ( int i=0; i<m_dE1Canonical.GetLength(); ++i )
 		if ( m_dNodes[m_dE1Canonical[i]].m_iAtomPos!=i+1 )
 			return false;
-	m_bE1Ranked = true;
 	m_bE1DirectAnd = !m_bE1Or;
 	m_bE1StagedAnd4 = m_bE1DirectAnd && m_dNodes.GetLength()==4;
 	m_bE1FusedAnd4 = m_bE1StagedAnd4;
@@ -4426,11 +4425,14 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::EnableE1Ranked()
 		m_uE1LastWindow = uDirectAndLast;
 	if ( m_bE1ScopedAnd2 || m_bE1ScopedOr2 )
 	{
-		const uint64_t uRows = (uint64_t(m_uE1LastWindow)+1)*E1_AND_WINDOW_ROWS;
-		const uint64_t uWords = (uRows+63)/64;
-		const uint64_t uScratch = 2*(uRows*sizeof(DWORD)+uWords*sizeof(uint64_t));
-		if ( uRows>INT_MAX || uWords>INT_MAX || uScratch>64*1024*1024 )
+		if ( !E1ScopedScratchAllowed(m_uE1LastWindow) )
+		{
+			if ( getenv("MANTICORE_E1_RANK_TRACE") )
+				fprintf ( stderr, "%s reason=scratch_limit last_window=%u limit_bytes=%llu\n",
+					m_bE1ScopedOr2 ? "E1_SCOPED_OR2_FALLBACK" : "E1_SCOPED_AND2_FALLBACK",
+					m_uE1LastWindow, (unsigned long long)E1_SCOPED_SCRATCH_LIMIT );
 			return false;
+		}
 		const int64_t iStarted = sphMicroTimer();
 		if ( !BuildE1ScopedAndTerm ( 0, m_uE1LastWindow ) || !BuildE1ScopedAndTerm ( 1, m_uE1LastWindow ) )
 			return false;
@@ -4464,6 +4466,10 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::EnableE1Ranked()
 		m_dE1AndBoundWords.Resize ( 4*64 );
 		m_dE1StagedExactTF.Resize ( 4*E1_AND_WINDOW_ROWS );
 	}
+	// Commit direct execution only after every fallible admission/preparation step.
+	// Otherwise an oversized scoped scratch request can return false while
+	// GetDocsChunk() still observes a half-initialized direct executor.
+	m_bE1Ranked = true;
 	m_bCollectHits = false;
 	return true;
 }

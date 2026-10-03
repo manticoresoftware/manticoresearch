@@ -66,6 +66,17 @@ inline bool E1ExplicitMaskCoversSchema ( const MASK & tMask, int iFieldCount )
 	return true;
 }
 
+inline constexpr uint64_t E1_SCOPED_SCRATCH_LIMIT = 64ULL*1024*1024;
+inline constexpr uint64_t E1_DIRECT_WINDOW_ROWS = 4096;
+
+inline bool E1ScopedScratchAllowed ( uint32_t uLastWindow )
+{
+	const uint64_t uRows = ( uint64_t(uLastWindow)+1 )*E1_DIRECT_WINDOW_ROWS;
+	const uint64_t uWords = ( uRows+63 )/64;
+	const uint64_t uScratch = 2*( uRows*sizeof(uint32_t)+uWords*sizeof(uint64_t) );
+	return uRows<=uint64_t(std::numeric_limits<int>::max()) && uWords<=uint64_t(std::numeric_limits<int>::max()) && uScratch<=E1_SCOPED_SCRATCH_LIMIT;
+}
+
 inline int E1ScopedSingleField ( int iSchemaFields, bool bFullSchemaScope, uint32_t uMask )
 {
 	if ( bFullSchemaScope || iSchemaFields<2 || !uMask || (uMask&(uMask-1)) )

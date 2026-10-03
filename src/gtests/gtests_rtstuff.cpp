@@ -24,6 +24,7 @@
 #include "sphinxquery/xqparser.h"
 #include "indexfiles.h"
 #include "memio.h"
+#include "searchnode.h"
 
 #include <gmock/gmock.h>
 
@@ -1025,6 +1026,158 @@ protected:
 
 	CSphDictSettings tDictSettings;
 };
+
+TEST_F ( RT, ScopedAnd2ScratchDeclineFallsBackToCanonicalBM25A )
+{
+	using Result_t = std::pair<int64_t,int>;
+	struct QueryResult_t
+	{
+		std::vector<Result_t> m_dRows;
+		int64_t m_iTotal = 0;
+	};
+	struct TestSeamGuard_t
+	{
+		~TestSeamGuard_t() { ResetE1TestLastWindow(); }
+	} tGuard;
+
+	Threads::CallCoroutine ( [&] {
+		tCol.m_sName = "id";
+		tCol.m_eAttrType = SPH_ATTR_BIGINT;
+		tSrcSchema.AddAttr ( tCol, true );
+		CSphSchema tSchema;
+		for ( int i=0; i<tSrcSchema.GetFieldsCount(); ++i )
+			tSchema.AddField ( tSrcSchema.GetField(i) );
+		for ( int i=0; i<tSrcSchema.GetAttrsCount(); ++i )
+			tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
+
+		auto pDict = sphCreateDictionaryCRC ( tDictSettings, nullptr, pTok, "scoped-and2", false, 32, nullptr, sError );
+		ASSERT_TRUE ( pDict );
+		auto pIndex = sphCreateIndexRT ( "scoped_and2_scratch", RT_INDEX_FILE_NAME, tSchema, 128*1024 );
+		pIndex->SetTokenizer ( pTok );
+		pIndex->SetDictionary ( pDict );
+		pIndex->PostSetup();
+		StrVec_t dWarnings;
+		ASSERT_TRUE ( pIndex->Prealloc ( false, nullptr, dWarnings ) );
+
+		constexpr int DOCS = 4096;
+		std::vector<std::string> dText;
+		dText.reserve ( DOCS*2 );
+		for ( int i=0; i<DOCS; ++i )
+		{
+			dText.emplace_back ( "title" );
+			switch ( i%4 )
+			{
+			case 0: dText.emplace_back ( "error failed" ); break;
+			case 1: dText.emplace_back ( "error error failed" ); break;
+			case 2: dText.emplace_back ( "error failed failed" ); break;
+			default: dText.emplace_back ( "error error failed failed" ); break;
+			}
+		}
+		std::vector<BYTE*> dFields;
+		dFields.reserve ( dText.size() );
+		for ( auto & sText : dText )
+			dFields.push_back ( (BYTE*)sText.data() );
+		auto pSrc = new MockTestDoc_c ( tSrcSchema, dFields.data(), DOCS, 2 );
+		EXPECT_CALL ( *pSrc, Connect ( testing::_ ) ).WillOnce ( testing::Return(true) );
+		EXPECT_CALL ( *pSrc, GetFieldLengths () ).Times ( DOCS ).WillRepeatedly ( testing::Return(pSrc->m_dFieldLengths.Begin()) );
+		EXPECT_CALL ( *pSrc, Disconnect () );
+		pSrc->SetTokenizer ( pIndex->GetTokenizer()->Clone(SPH_CLONE_INDEX) );
+		pSrc->SetDict ( pIndex->GetDictionary()->Clone() );
+		pSrc->Setup ( CSphSourceSettings(), nullptr );
+		ASSERT_TRUE ( pSrc->Connect(sError) );
+		ASSERT_TRUE ( pSrc->IterateStart(sError) );
+		ASSERT_TRUE ( pSrc->UpdateSchema(&tSrcSchema,sError) );
+
+		InsertDocData_c tDoc ( pIndex->GetMatchSchema() );
+		RtAccum_t tAcc;
+		CSphString sFilter;
+		const int iDynamic = pIndex->GetMatchSchema().GetRowSize();
+		bool bEOF = false;
+		while ( true )
+		{
+			ASSERT_TRUE ( pSrc->IterateDocument(bEOF,sError) );
+			if ( bEOF )
+				break;
+			tDoc.m_dFields = pSrc->GetFields();
+			tDoc.m_tDoc.Combine ( pSrc->m_tDocInfo, iDynamic );
+			ASSERT_TRUE ( pIndex->AddDocument(tDoc,false,sFilter,sError,sWarning,&tAcc) );
+		}
+		ASSERT_TRUE ( pIndex->Commit(nullptr,&tAcc,&sError) );
+		pSrc->Disconnect();
+		SafeDelete ( pSrc );
+		ASSERT_TRUE ( pIndex->ForceDiskChunk() );
+
+		auto fnQuery = [&] ( const char * szQuery, bool bGeneric, int iOffset, int iLimit )
+		{
+			QueryResult_t tOut;
+			CSphQuery tQuery;
+			SetQueryDefaultsExt2 ( tQuery );
+			tQuery.m_sQuery = szQuery;
+			tQuery.m_bExplicitRanker = true;
+			tQuery.m_eRanker = bGeneric ? SPH_RANK_EXPR : SPH_RANK_BM25A;
+			if ( bGeneric )
+				tQuery.m_sRankerExpr = "1000*bm25a(1.2,0.75,256)";
+			tQuery.m_iOffset = iOffset;
+			tQuery.m_iLimit = iLimit;
+			auto pParser = sphCreatePlainQueryParser();
+			tQuery.m_pQueryParser = pParser.get();
+			AggrResult_t tResult;
+			CSphQueryResult tQueryResult;
+			tQueryResult.m_pMeta = &tResult;
+			CSphMultiQueryArgs tArgs ( 1 );
+			SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema() );
+			tQueueSettings.m_iMaxMatches = iOffset+iLimit;
+			SphQueueRes_t tRes;
+			ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, tResult.m_sError, tRes );
+			EXPECT_TRUE ( pSorter );
+			if ( !pSorter )
+				return tOut;
+			EXPECT_TRUE ( pIndex->MultiQuery(tQueryResult,tQuery,{&pSorter,1},tArgs) ) << tResult.m_sError.cstr();
+			tOut.m_iTotal = pSorter->GetTotalCount();
+			auto & tOne = tResult.m_dResults.Add();
+			tOne.FillFromSorter ( pSorter );
+			const CSphColumnInfo * pID = tOne.m_tSchema.GetAttr ( sphGetDocidName() );
+			EXPECT_TRUE ( pID );
+			if ( pID )
+				for ( const auto & tMatch : tOne.m_dMatches )
+					tOut.m_dRows.emplace_back ( tMatch.GetAttr(pID->m_tLocator), tMatch.m_iWeight );
+			SafeDelete ( pSorter );
+			if ( iOffset>0 && iOffset<=int(tOut.m_dRows.size()) )
+				tOut.m_dRows.erase ( tOut.m_dRows.begin(), tOut.m_dRows.begin()+iOffset );
+			return tOut;
+		};
+
+		constexpr uint32_t OVERSIZED_LAST_WINDOW = 1985;
+		ASSERT_FALSE ( E1ScopedScratchAllowed(OVERSIZED_LAST_WINDOW) );
+		SetE1TestLastWindow ( OVERSIZED_LAST_WINDOW );
+		const auto tNamed = fnQuery ( "@content error failed", false, 0, 20 );
+		const auto tGeneric = fnQuery ( "@content error failed", true, 0, 20 );
+		const auto tParenNamed = fnQuery ( "@content (error failed)", false, 0, 20 );
+		const auto tParenGeneric = fnQuery ( "@content (error failed)", true, 0, 20 );
+		const auto tPage = fnQuery ( "@content error failed", false, 1, 2 );
+		const auto tGenericPage = fnQuery ( "@content error failed", true, 1, 2 );
+
+		EXPECT_EQ ( GetE1TestScratchDeclines(), 6u );
+		EXPECT_EQ ( GetE1TestDirectExecutorCalls(), 0u );
+		EXPECT_EQ ( tNamed.m_dRows, tGeneric.m_dRows );
+		EXPECT_EQ ( tNamed.m_iTotal, tGeneric.m_iTotal );
+		EXPECT_EQ ( tParenNamed.m_dRows, tParenGeneric.m_dRows );
+		EXPECT_EQ ( tParenNamed.m_iTotal, tParenGeneric.m_iTotal );
+		EXPECT_EQ ( tNamed.m_dRows, tParenNamed.m_dRows );
+		EXPECT_EQ ( tNamed.m_iTotal, tParenNamed.m_iTotal );
+		EXPECT_EQ ( tPage.m_dRows, tGenericPage.m_dRows );
+		EXPECT_EQ ( tPage.m_iTotal, tGenericPage.m_iTotal );
+		EXPECT_EQ ( tNamed.m_iTotal, DOCS );
+		ASSERT_EQ ( tNamed.m_dRows.size(), 20u );
+		std::vector<Result_t> dExpected;
+		for ( int64_t iID=1; iID<=77; iID+=4 )
+			dExpected.emplace_back ( iID, 118 );
+		EXPECT_EQ ( tNamed.m_dRows, dExpected );
+		ASSERT_EQ ( tPage.m_dRows.size(), 2u );
+		EXPECT_EQ ( tPage.m_dRows[0], tNamed.m_dRows[1] );
+		EXPECT_EQ ( tPage.m_dRows[1], tNamed.m_dRows[2] );
+	} );
+}
 
 TEST_F ( RT, AttachReportsMetadataFailure )
 {

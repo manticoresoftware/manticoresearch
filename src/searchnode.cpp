@@ -427,7 +427,7 @@ public:
 		if ( getenv("MANTICORE_E1_RANK_TRACE") )
 			fprintf ( stderr, "E1_FIELD_SCOPE path=term schema_fields=%d full_schema=%d requested_mask0=%u\n", m_iE1SchemaFields, int(m_bE1FullSchemaScope), unsigned(m_dQueriedFields.GetMask32()) );
 		if ( m_eE1BoundKind==E1RankedBoundKind_e::BM25A_RATIO
-			&& ( !m_bE1FullSchemaScope || m_tE1Filter.m_bEnabled || m_fIDF<=0.0f ) )
+			&& ( !m_bE1FullSchemaScope || m_fIDF<=0.0f ) )
 		{
 #if defined(MANTICORE_TEST)
 			g_tE1TestRankStats.m_eBoundKind = m_eE1BoundKind;
@@ -435,13 +435,13 @@ public:
 #endif
 			if ( getenv("MANTICORE_E1_RANK_TRACE") )
 				fprintf ( stderr, "E1_V7_FALLBACK reason=%s bound_kind=bm25a_ratio\n",
-					!m_bE1FullSchemaScope ? "field_scope" : m_tE1Filter.m_bEnabled ? "filter" : "nonpositive_idf" );
+					!m_bE1FullSchemaScope ? "field_scope" : "nonpositive_idf" );
 			return false;
 		}
 		m_iE1ScopedField = E1ScopedSingleField ( m_iE1SchemaFields, m_bE1FullSchemaScope, m_dQueriedFields.GetMask32() );
 		m_bE1ScopedTerm = !ROWID_LIMITS && !m_tE1Filter.m_bEnabled && m_iE1ScopedField>=0
 			&& !getenv("MANTICORE_E1_FORCE_GENERIC_SCOPED") && BuildE1ScopedEligibility();
-		m_bE1Ranked = !ROWID_LIMITS && ( ( m_bE1FullSchemaScope && ( m_tE1Filter.m_bEnabled ? m_pQword->E1DirectOrSupported() : m_eE1BoundKind!=E1RankedBoundKind_e::NONE ) ) || m_bE1ScopedTerm );
+		m_bE1Ranked = !ROWID_LIMITS && ( ( m_bE1FullSchemaScope && ( m_tE1Filter.m_bEnabled ? ( m_pQword->E1DirectOrSupported() || m_eE1BoundKind==E1RankedBoundKind_e::BM25A_RATIO ) : m_eE1BoundKind!=E1RankedBoundKind_e::NONE ) ) || m_bE1ScopedTerm );
 		if ( m_bE1Ranked && m_tE1Filter.m_bEnabled )
 		{
 			m_bE1Ranked = m_pQword->GetE1DirectLastWindow ( m_uE1FilterLastWindow );
@@ -468,6 +468,10 @@ public:
 			m_iE1EligibilityBuildUS = sphMicroTimer()-iStarted;
 		}
 		if ( m_bE1Ranked ) m_uRankTotalDocs=m_pQword->m_iDocs;
+#if defined(MANTICORE_TEST)
+		if ( m_bE1Ranked && m_tE1Filter.m_bEnabled )
+			++g_tE1TestRankStats.m_uDirectFilter;
+#endif
 		return m_bE1Ranked;
 	}
 	bool				EnableE1BestFirst() override { return m_bE1Ranked; }
@@ -919,6 +923,7 @@ private:
 	int					m_iE1OrWindowPos = 0;
 	bool				m_bE1BestFirst = false;
 	bool				m_bE1BatchedOr2 = false;
+	bool				m_bE1UnboundedCompat = false;
 	uint64_t			m_uE1BestFirstVisited = 0;
 	uint64_t			m_uE1BestFirstSkipped = 0;
 	uint64_t			m_uE1ExactUnionTotal = 0;
@@ -1957,12 +1962,15 @@ public:
 	bool EnableE1Ranked() override
 	{
 		if ( m_bEnabled ) return true;
+#if defined(MANTICORE_TEST)
+		if ( g_bE1TestForceGenericRanked ) { ++g_tE1TestRankStats.m_uFallbacks; return false; }
+#endif
 		if ( m_dNodes.GetLength()<2 || m_dNodes.GetLength()>3 ) return false;
 		uint32_t uLast = UINT32_MAX;
 		for ( int i=0; i<m_dNodes.GetLength(); ++i )
 		{
 			Node_t & tNode=m_dNodes[i];
-			if ( !tNode.m_pQword->E1DirectOrSupported() ) return false;
+			if ( !tNode.m_pQword->E1DirectContainerSupported() ) return false;
 			uint32_t uTermLast=0; if ( !tNode.m_pQword->GetE1DirectLastWindow(uTermLast) ) return false;
 			uLast = uLast==UINT32_MAX ? uTermLast : Min(uLast,uTermLast);
 			if ( tNode.m_bPhrase ) { if(m_iPhrase[0]<0)m_iPhrase[0]=i;else if(m_iPhrase[1]<0)m_iPhrase[1]=i;else return false; }
@@ -1974,7 +1982,11 @@ public:
 		m_dCanonical.Resize(m_dNodes.GetLength()); for(int i=0;i<m_dNodes.GetLength();++i)m_dCanonical[i]=i;
 		std::sort(m_dCanonical.Begin(),m_dCanonical.End(),[this](int a,int b){return m_dNodes[a].m_iAtomPos<m_dNodes[b].m_iAtomPos;});
 		for(int i=0;i<m_dCanonical.GetLength();++i)if(m_dNodes[m_dCanonical[i]].m_iAtomPos!=i+1)return false;
-		m_uLastWindow=uLast; m_bEnabled=true; return true;
+		m_uLastWindow=uLast; m_bEnabled=true;
+#if defined(MANTICORE_TEST)
+		++g_tE1TestRankStats.m_uDirectPhrase;
+#endif
+		return true;
 	}
 	bool EnableE1BestFirst() override { return m_bEnabled; }
 	void SetRankThreshold ( int iWeight, RowID_t tWorstRow ) override { m_iRankThreshold=iWeight; m_tWorstTiedRow=tWorstRow; }
@@ -2139,7 +2151,12 @@ static bool E1OneExplicitField(const XQNode_t * pNode,int & field)
 
 static bool E1ExactTwoTermPhrase ( const XQNode_t * pNode )
 {
-	if ( pNode->GetOp()!=SPH_QUERY_PHRASE || pNode->dWords().GetLength()!=0 || pNode->dChildren().GetLength()!=2 ) return false;
+	if ( pNode->GetOp()!=SPH_QUERY_PHRASE )
+		return false;
+	if ( pNode->dWords().GetLength()==2 && pNode->dChildren().IsEmpty() )
+		return true;
+	if ( !pNode->dWords().IsEmpty() || pNode->dChildren().GetLength()!=2 )
+		return false;
 	for ( const XQNode_t * pChild : pNode->dChildren() )
 		if ( pChild->dWords().GetLength()!=1 || !pChild->dChildren().IsEmpty() ) return false;
 	return true;
@@ -2151,7 +2168,19 @@ static ExtNode_i * TryCreateE1Phrase(const XQNode_t * pNode,const ISphQwordSetup
 	if(E1ExactTwoTermPhrase(pNode))phrase=pNode;
 	else if(pNode->GetOp()==SPH_QUERY_AND&&pNode->dWords().IsEmpty()&&pNode->dChildren().GetLength()==2){for(const XQNode_t * c:pNode->dChildren())if(E1ExactTwoTermPhrase(c))phrase=c;else if(c->dWords().GetLength()==1&&c->dChildren().IsEmpty())extra=c;else return nullptr;if(!phrase||!extra)return nullptr;}else return nullptr;
 	int field=-1,other=-1;if(!E1OneExplicitField(phrase,field)||!E1FieldScopeCoversSchema(phrase->m_dSpec,setup))return nullptr;CSphVector<ExtE1Phrase_c::Input_t> input;
-	for(const XQNode_t * child:phrase->dChildren()){if(!E1OneExplicitField(child,other)||other!=field||!E1FieldScopeCoversSchema(child->m_dSpec,setup))return nullptr;const XQKeyword_t & word=child->dWord(0);if(word.m_bExpanded||word.m_bFieldStart||word.m_bFieldEnd||word.m_pPayload)return nullptr;for(const auto & prior:input)if(prior.m_pWord->m_sWord==word.m_sWord)return nullptr;auto & x=input.Add();x={&word,child->m_dSpec.m_dFieldMask,true};}
+	auto fnAddPhraseWord = [&] ( const XQKeyword_t & word, const FieldMask_t & dFields )
+	{
+		if(word.m_bExpanded||word.m_bFieldStart||word.m_bFieldEnd||word.m_pPayload)return false;
+		for(const auto & prior:input)if(prior.m_pWord->m_sWord==word.m_sWord)return false;
+		auto & x=input.Add();x={&word,dFields,true};return true;
+	};
+	if ( phrase->dWords().GetLength()==2 )
+	{
+		for ( const XQKeyword_t & word : phrase->dWords() )
+			if ( !fnAddPhraseWord(word,phrase->m_dSpec.m_dFieldMask) ) return nullptr;
+	}
+	else
+		for(const XQNode_t * child:phrase->dChildren()){if(!E1OneExplicitField(child,other)||other!=field||!E1FieldScopeCoversSchema(child->m_dSpec,setup))return nullptr;if(!fnAddPhraseWord(child->dWord(0),child->m_dSpec.m_dFieldMask))return nullptr;}
 	if(extra){if(!E1OneExplicitField(extra,other)||other!=field||!E1FieldScopeCoversSchema(extra->m_dSpec,setup))return nullptr;const XQKeyword_t & word=extra->dWord(0);if(word.m_bExpanded||word.m_bFieldStart||word.m_bFieldEnd||word.m_pPayload)return nullptr;for(const auto & prior:input)if(prior.m_pWord->m_sWord==word.m_sWord)return nullptr;auto & x=input.Add();x={&word,extra->m_dSpec.m_dFieldMask,false};}
 	auto pDirect = std::make_unique<ExtE1Phrase_c> ( input, field, setup );
 	if ( !pDirect->EnableE1Ranked() )
@@ -4423,6 +4452,9 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::EnableE1Ranked()
 	// must run exactly once.
 	if ( m_bE1Ranked )
 		return true;
+#if defined(MANTICORE_TEST)
+	if ( g_bE1TestForceGenericRanked ) { ++g_tE1TestRankStats.m_uFallbacks; return false; }
+#endif
 	if ( getenv("MANTICORE_E1_RANK_TRACE") )
 	{
 		const bool bFullSchema = m_dNodes.all_of ( [] ( const NodeInfo_t & tNode ) { return tNode.m_bE1FullSchemaScope; } );
@@ -4546,12 +4578,12 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::EnableE1Ranked()
 		}
 		m_iE1ScopedAndBuildUS = sphMicroTimer()-iStarted;
 	}
-	if ( bHasRatioBounds )
-	{
-		if ( getenv("MANTICORE_E1_RANK_TRACE") )
-			fprintf ( stderr, "E1_V7_FALLBACK reason=unsupported_operator bound_kind=bm25a_ratio\n" );
+	// V7 stores BM25A ratio bounds, not max-TF. Keep the direct container and
+	// exact-TF paths, but disable every max-TF pruning decision. Ratio bytes
+	// must never be reinterpreted as term frequency.
+	m_bE1UnboundedCompat = bHasRatioBounds;
+	if ( m_bE1UnboundedCompat && m_dNodes.GetLength()!=2 )
 		return false;
-	}
 	if ( m_bE1StagedAnd4 )
 	{
 		for ( int i=0; i<4; ++i )
@@ -4578,6 +4610,9 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::EnableE1Ranked()
 	// GetDocsChunk() still observes a half-initialized direct executor.
 	m_bE1Ranked = true;
 	m_bCollectHits = false;
+#if defined(MANTICORE_TEST)
+	if ( m_bE1Or ) ++g_tE1TestRankStats.m_uDirectOr; else ++g_tE1TestRankStats.m_uDirectAnd;
+#endif
 	return true;
 }
 
@@ -4871,7 +4906,17 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1OrWindow()
 			for ( int w=0; w<64; ++w ) dCandidates[w] &= dUnion[w];
 
 		std::array<uint64_t,64> dAdmitted {};
-		if ( m_bE1BatchedOr2 )
+		if ( m_bE1UnboundedCompat )
+		{
+			for ( int w=0; w<64; ++w )
+			{
+				dAdmitted[w] = dCandidates[w];
+				const uint64_t uAdmitted = uint64_t(__builtin_popcountll(dAdmitted[w]));
+				m_uE1CandidatesGenerated += uAdmitted;
+				m_uE1CandidateMaskRows += uAdmitted;
+			}
+		}
+		else if ( m_bE1BatchedOr2 )
 		{
 			const float dIDF[2] = { Max ( 0.0f, m_dNodes[0].m_fIDF ), Max ( 0.0f, m_dNodes[1].m_fIDF ) };
 			const int dCanonical[2] = { m_dE1Canonical[0], m_dE1Canonical[1] };
@@ -5189,10 +5234,15 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1DirectAndWindow()
 				uint64_t dClassMasks[4][2] {};
 				uint8_t dClassBounds[4][2] {};
 				uint32_t dClassCounts[4] {};
-				for ( int iNode=0; iNode<m_dNodes.GetLength(); ++iNode )
-					if ( !m_dNodes[iNode].m_pQword->GetE1DirectBoundWord ( uWindow, uint32_t(w), dClassMasks[iNode], dClassBounds[iNode], dClassCounts[iNode] ) )
-						return false;
-				dStageSurvivors[w] = E1AdmitAndBoundMasks ( uCandidates, dClassMasks, dClassBounds, dClassCounts, dIDF, dCanonical, m_dNodes.GetLength(), uint64_t(uWindow)*E1_AND_WINDOW_ROWS+uint64_t(w)*64, m_iE1RankThreshold, uint64_t(m_tE1WorstTiedRow), m_uE1CandidateBoundRejects, m_uE1TieBoundRejects, m_uE1BoundClassesRejected );
+				if ( m_bE1UnboundedCompat )
+					dStageSurvivors[w] = uCandidates;
+				else
+				{
+					for ( int iNode=0; iNode<m_dNodes.GetLength(); ++iNode )
+						if ( !m_dNodes[iNode].m_pQword->GetE1DirectBoundWord ( uWindow, uint32_t(w), dClassMasks[iNode], dClassBounds[iNode], dClassCounts[iNode] ) )
+							return false;
+					dStageSurvivors[w] = E1AdmitAndBoundMasks ( uCandidates, dClassMasks, dClassBounds, dClassCounts, dIDF, dCanonical, m_dNodes.GetLength(), uint64_t(uWindow)*E1_AND_WINDOW_ROWS+uint64_t(w)*64, m_iE1RankThreshold, uint64_t(m_tE1WorstTiedRow), m_uE1CandidateBoundRejects, m_uE1TieBoundRejects, m_uE1BoundClassesRejected );
+				}
 				const uint64_t uSurvivors = uint64_t(__builtin_popcountll(dStageSurvivors[w]));
 				m_uE1CandidateMaskRows += uSurvivors;
 				if ( !uSurvivors )

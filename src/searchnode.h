@@ -113,6 +113,10 @@ struct E1TestRankStats_t
 	uint64_t m_uSkippedDocs = 0;
 	uint64_t m_uScoredDocs = 0;
 	uint64_t m_uFallbacks = 0;
+	uint64_t m_uDirectAnd = 0;
+	uint64_t m_uDirectOr = 0;
+	uint64_t m_uDirectPhrase = 0;
+	uint64_t m_uDirectFilter = 0;
 };
 void SetE1TestLastWindow ( uint32_t uLastWindow );
 void ResetE1TestLastWindow ();

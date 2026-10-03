@@ -1263,7 +1263,7 @@ TEST_F ( RT, E1Post07RatioBoundsDriveExactCanonicalBM25A )
 		SafeDelete ( pSrc );
 		ASSERT_TRUE ( pIndex->ForceDiskChunk() );
 
-		auto fnQuery = [&] ( const char * szQuery, bool bForceGeneric, int iOffset, int iLimit, const char * szExpr=nullptr, const char * szSort=nullptr, int iNamedFieldWeight=0, int iPositionalFieldWeight=0 )
+		auto fnQuery = [&] ( const char * szQuery, bool bForceGeneric, int iOffset, int iLimit, const char * szExpr=nullptr, const char * szSort=nullptr, int iNamedFieldWeight=0, int iPositionalFieldWeight=0, bool bFilter=false )
 		{
 			SetE1TestForceGenericRanked ( bForceGeneric );
 			ResetE1TestRankStats();
@@ -1285,6 +1285,14 @@ TEST_F ( RT, E1Post07RatioBoundsDriveExactCanonicalBM25A )
 				tQuery.m_dFieldWeights.Add ( { CSphString("content"), iNamedFieldWeight } );
 			if ( iPositionalFieldWeight )
 				tQuery.m_dWeights.Add ( DWORD(iPositionalFieldWeight) );
+			if ( bFilter )
+			{
+				auto & tFilter = tQuery.m_dFilters.Add();
+				tFilter.m_eType = SPH_FILTER_RANGE;
+				tFilter.m_sAttrName = sphGetDocidName();
+				tFilter.m_iMinValue = DOCS/2+1;
+				tFilter.m_iMaxValue = DOCS;
+			}
 			tQuery.m_iOffset = iOffset;
 			tQuery.m_iLimit = iLimit;
 			auto pParser = sphCreatePlainQueryParser();
@@ -1339,6 +1347,31 @@ TEST_F ( RT, E1Post07RatioBoundsDriveExactCanonicalBM25A )
 		const auto tPublicIDTieGeneric = fnQuery ( "hot", true, 0, 10, nullptr, "@weight desc, id asc" );
 		EXPECT_EQ ( tPublicIDTie.m_dRows, tPublicIDTieGeneric.m_dRows );
 		EXPECT_EQ ( tPublicIDTie.m_iTotal, tPublicIDTieGeneric.m_iTotal );
+
+		// E1POST07 ratio bytes are not max-TF. Compound compatibility keeps the
+		// v5/v6 direct container and exact-TF lanes while disabling bound pruning.
+		const auto tAnd = fnQuery ( "hot title", false, 0, 10 );
+		const E1TestRankStats_t tAndStats = GetE1TestRankStats();
+		const auto tAndGeneric = fnQuery ( "hot title", true, 0, 10 );
+		EXPECT_EQ ( tAnd.m_dRows, tAndGeneric.m_dRows );
+		EXPECT_EQ ( tAnd.m_iTotal, tAndGeneric.m_iTotal );
+		EXPECT_EQ ( tAnd.m_iTotal, MATCHES );
+		EXPECT_GT ( tAndStats.m_uDirectAnd, 0u );
+
+		const auto tOr = fnQuery ( "hot | title", false, 0, 10 );
+		const E1TestRankStats_t tOrStats = GetE1TestRankStats();
+		const auto tOrGeneric = fnQuery ( "hot | title", true, 0, 10 );
+		EXPECT_EQ ( tOr.m_dRows, tOrGeneric.m_dRows );
+		EXPECT_EQ ( tOr.m_iTotal, tOrGeneric.m_iTotal );
+		EXPECT_EQ ( tOr.m_iTotal, DOCS );
+		EXPECT_GT ( tOrStats.m_uDirectOr, 0u );
+
+		const auto tFilter = fnQuery ( "hot", false, 0, 10, nullptr, nullptr, 0, 0, true );
+		const E1TestRankStats_t tFilterStats = GetE1TestRankStats();
+		const auto tFilterGeneric = fnQuery ( "hot", true, 0, 10, nullptr, nullptr, 0, 0, true );
+		EXPECT_EQ ( tFilter.m_dRows, tFilterGeneric.m_dRows );
+		EXPECT_EQ ( tFilter.m_iTotal, tFilterGeneric.m_iTotal );
+		EXPECT_GT ( tFilterStats.m_uDirectFilter, 0u );
 
 		// A true field subset on the two-field schema must fail closed.
 		const auto tScoped = fnQuery ( "@content hot", false, 0, 10 );

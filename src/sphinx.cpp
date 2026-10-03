@@ -468,8 +468,10 @@ public:
 	}
 
 	bool HasE1RankedBounds () const override { return m_tE1.HasRankedBounds(); }
+	E1RankedBoundKind_e GetE1RankedBoundKind () const override { return m_tE1.BoundKind(); }
 	uint64_t TakeE1MetadataGroupsDecoded () override { return m_tE1.TakeMetadataGroupsDecoded(); }
 	bool E1DirectOrSupported () const override { return m_tE1.DirectOrSupported(); }
+	bool E1DirectContainerSupported () const override { return m_tE1.DirectContainerSupported(); }
 	bool GetE1DirectLastWindow ( uint32_t & uWindow ) const override { return m_tE1.DirectLastWindow(uWindow); }
 	bool GetE1DirectWindow ( uint32_t uWindow, uint64_t * pMask, uint8_t * pBounds, uint32_t & uCardinality, uint32_t & uMaxTF, uint64_t & uBoundReads ) override
 	{
@@ -495,14 +497,14 @@ public:
 	bool NextE1SelectedMeta ( E1SelectedMeta_t & tMeta, uint64_t & uDecoded, uint32_t uScopedField=UINT32_MAX ) override { return m_tE1.NextSelectedMeta(tMeta,uDecoded,uScopedField); }
 	bool ExactE1FieldTF ( uint32_t uOrdinal, uint32_t uField, uint32_t uMask, uint32_t uAggregateTF, uint32_t & uTF ) const override { return m_tE1.ExactFieldTF(uOrdinal,uField,uMask,uAggregateTF,uTF); }
 	bool ProbeE1DirectTF ( RowID_t tRowID, uint32_t & uTF ) override { return m_tE1.ProbeTF ( uint32_t(tRowID), uTF ); }
-	bool GetE1RankedDoc ( uint32_t uMinTF, RowID_t & tRowID, uint32_t & uTF, uint64_t & uBoundEntries, uint64_t & uBuckets, uint64_t & uSelectedBlocks, uint64_t & uSkippedBlocks, uint64_t & uSkippedDocs, uint64_t & uDecodedGroups, const uint64_t * pEligibility=nullptr, uint32_t uEligibilityWords=0, uint64_t * pIneligibleBeforeTF=nullptr, uint32_t uEqualBoundTF=0, RowID_t tWorstRow=INVALID_ROWID, uint32_t uKnownMask=0 ) override
+	bool GetE1RankedDoc ( uint32_t uMinTF, RowID_t & tRowID, uint32_t & uTF, uint64_t & uBoundEntries, uint64_t & uBuckets, uint64_t & uSelectedBlocks, uint64_t & uSkippedBlocks, uint64_t & uSkippedDocs, uint64_t & uDecodedGroups, const uint64_t * pEligibility=nullptr, uint32_t uEligibilityWords=0, uint64_t * pIneligibleBeforeTF=nullptr, uint32_t uEqualBoundTF=0, RowID_t tWorstRow=INVALID_ROWID, uint32_t uKnownMask=0, float fRatioIDF=0.0f, int iThreshold=0 ) override
 	{
 		if ( !m_tE1.Active() )
 			return false;
 		uint32_t uRowID = uint32_t ( tRowID );
 		uint32_t uMask = 0;
 		uint64_t uRef = 0;
-		if ( !m_tE1.NextRanked ( uRowID, uTF, uMask, uRef, uMinTF, uBoundEntries, uBuckets, uSelectedBlocks, uSkippedBlocks, uSkippedDocs, uDecodedGroups, pEligibility, uEligibilityWords, pIneligibleBeforeTF, uEqualBoundTF, uint32_t(tWorstRow), uKnownMask ) )
+		if ( !m_tE1.NextRanked ( uRowID, uTF, uMask, uRef, uMinTF, uBoundEntries, uBuckets, uSelectedBlocks, uSkippedBlocks, uSkippedDocs, uDecodedGroups, pEligibility, uEligibilityWords, pIneligibleBeforeTF, uEqualBoundTF, uint32_t(tWorstRow), uKnownMask, fRatioIDF, iThreshold ) )
 			return false;
 		tRowID = RowID_t ( uRowID );
 		m_tDoc.m_tRowID = tRowID;
@@ -3966,6 +3968,7 @@ public:
 	CSphHitBuilder ( const CSphIndexSettings & tSettings, const CSphVector<SphWordID_t> & dHitless, bool bMerging, int iBufSize, DictRefPtr_c pDict, CSphString * sError, StrVec_t * pCreatedFiles );
 
 	bool	CreateIndexFiles ( const CSphString& sDocName, const CSphString& sHitName, const CSphString& sSkipName, bool bInplace, int iWriteBuffer, CSphAutofile & tHit, SphOffset_t * pSharedOffset=nullptr );
+	void	BindTotalDL ( const uint32_t * pTotalDL, uint32_t uRows, bool bAuthoritative ) { m_tE1Writer.BindTotalDL(pTotalDL,uRows,bAuthoritative); }
 	void	HitReset ();
 
 	void	cidxHit ( AggregateHit_t * pHit );
@@ -4577,7 +4580,7 @@ bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & 
 	{
 		wrHeaderJson.PutString ( (Str_t)sJson );
 		wrHeaderJson.CloseFile();
-		if ( tBuildHeader.m_uFormatVersion==e1::VERSION || tBuildHeader.m_uFormatVersion==e1::VERSION5 || tBuildHeader.m_uFormatVersion==e1::VERSION4 )
+		if ( tBuildHeader.m_uFormatVersion==e1::VERSION || tBuildHeader.m_uFormatVersion==e1::VERSION6 || tBuildHeader.m_uFormatVersion==e1::VERSION5 || tBuildHeader.m_uFormatVersion==e1::VERSION4 )
 		{
 #if defined(_WIN32)
 			// The writer is already closed above. Windows durability is handled by
@@ -6130,7 +6133,7 @@ bool sphIsE1Snapshot ( const CSphString & sBase )
 		return false;
 	bson::Bson_c tJson(dHeader);
 	auto uVersion = bson::Int(tJson.ChildByName("index_format_version"));
-	return uVersion==e1::VERSION || uVersion==e1::VERSION5 || uVersion==e1::VERSION4
+	return uVersion==e1::VERSION || uVersion==e1::VERSION6 || uVersion==e1::VERSION5 || uVersion==e1::VERSION4
 		|| tJson.ChildByName("e1_postings").second!=JSON_EOF || tJson.ChildByName("e1_base_version").second!=JSON_EOF || tJson.ChildByName("e1_norms").second!=JSON_EOF;
 }
 
@@ -6781,6 +6784,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	//////////////////////////////
 
 	tHitBuilder.CreateIndexFiles ( GetFilename ( SPH_EXT_SPD ), GetFilename ( SPH_EXT_SPP ), GetFilename ( SPH_EXT_SPE ), m_bInplaceSettings, iWriteBuffer, fdHits, &iSharedOffset );
+	tHitBuilder.BindTotalDL ( tNormBuilder.TotalDLData(), tNormBuilder.Rows(), tNormBuilder.HasAuthoritativeTotalDL() );
 
 	// dict files
 	CSphAutofile fdTmpDict ( GetFilename ( "tmp8" ), SPH_O_NEW, m_sLastError, true );
@@ -7761,6 +7765,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	// however, if interrupt is requested after that stage - we need list of the files
 	// to gracefully unlink them.
 	StrVec_t dDeleteOnInterrupt;
+	std::vector<uint32_t> dMergedTotalDL;
 	// unlink prepared attribute files on exit, if any
 	AT_SCOPE_EXIT ( [&dDeleteOnInterrupt]
 	{
@@ -7771,10 +7776,12 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		const int iFields = tDstSchema.GetFieldsCount();
 		e1::norms::StagedBuilder tNormBuilder ( iFields );
 		std::vector<uint32_t> dNorms ( iFields );
+		bool bNormsAuthoritative = true;
 		std::string sNormError;
 		auto fnAppend = [&] ( const CSphIndex_VLN * pIndex, const CSphFixedVector<RowID_t> & dRowMap )
 		{
 			const bool bHasNorms = pIndex->m_tNormStore.Rows()==uint32_t(pIndex->m_iDocinfo) && pIndex->m_tNormStore.Fields()==uint32_t(iFields);
+			bNormsAuthoritative = bNormsAuthoritative && bHasNorms;
 			for ( RowID_t tRowID=0; tRowID<dRowMap.GetULength(); ++tRowID )
 			{
 				if ( dRowMap[tRowID]==INVALID_ROWID )
@@ -7799,6 +7806,8 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 			sError = sNormError.c_str();
 			return false;
 		}
+		if ( bNormsAuthoritative && tNormBuilder.HasAuthoritativeTotalDL() )
+			dMergedTotalDL.assign ( tNormBuilder.TotalDLData(), tNormBuilder.TotalDLData()+tNormBuilder.Rows() );
 		CSphString sNormFile = pDstIndex->GetTmpFilename ( SPH_EXT_SPN );
 		dDeleteOnInterrupt.Add ( sNormFile );
 		if ( !tNormBuilder.Finish ( sNormFile.cstr(), sNormError ) )
@@ -7840,6 +7849,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 	CSphVector<SphWordID_t> dDummy;
 	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, g_tMergeSettings.m_iBufferDict, pDict, &sError, &dDeleteOnInterrupt );
+	tHitBuilder.BindTotalDL ( dMergedTotalDL.data(), uint32_t(dMergedTotalDL.size()), dMergedTotalDL.size()==size_t(iTotalDocs) );
 
 	int iInfixCodepointBytes = 0;
 	if ( pSettings->m_tSettings.m_iMinInfixLen > 0 && pDict->GetSettings().IsWordDict() )
@@ -7980,6 +7990,7 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 	BuildHeader_t tBuildHeader ( pDstIndex->m_tStats );
 
 	StrVec_t dDeleteOnInterrupt;
+	std::vector<uint32_t> dMergedTotalDL;
 	AT_SCOPE_EXIT ( [&dDeleteOnInterrupt]
 	{
 		DeleteTmpFilesWithPrefix ( dDeleteOnInterrupt );
@@ -7989,11 +8000,13 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 		const int iFields = tBaseSchema.GetFieldsCount();
 		e1::norms::StagedBuilder tNormBuilder ( iFields );
 		std::vector<uint32_t> dNorms ( iFields );
+		bool bNormsAuthoritative = true;
 		std::string sNormError;
 		for ( int i=0; i<iIndexes; ++i )
 		{
 			const CSphIndex_VLN * pIndex = dIndexes[i];
 			const bool bHasNorms = pIndex->m_tNormStore.Rows()==uint32_t(pIndex->m_iDocinfo) && pIndex->m_tNormStore.Fields()==uint32_t(iFields);
+			bNormsAuthoritative = bNormsAuthoritative && bHasNorms;
 			for ( RowID_t tRowID=0; tRowID<dRowMaps[i].GetULength(); ++tRowID )
 			{
 				if ( dRowMaps[i][tRowID]==INVALID_ROWID )
@@ -8014,6 +8027,8 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 				}
 			}
 		}
+		if ( bNormsAuthoritative && tNormBuilder.HasAuthoritativeTotalDL() )
+			dMergedTotalDL.assign ( tNormBuilder.TotalDLData(), tNormBuilder.TotalDLData()+tNormBuilder.Rows() );
 
 		CSphString sNormFile = pDstIndex->GetTmpFilename ( SPH_EXT_SPN );
 		dDeleteOnInterrupt.Add ( sNormFile );
@@ -8054,6 +8069,7 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 
 	CSphVector<SphWordID_t> dDummy;
 	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, g_tMergeSettings.m_iBufferDict, pDict, &sError, &dDeleteOnInterrupt );
+	tHitBuilder.BindTotalDL ( dMergedTotalDL.data(), uint32_t(dMergedTotalDL.size()), dMergedTotalDL.size()==size_t(iTotalDocs) );
 
 	int iInfixCodepointBytes = 0;
 	if ( pSettings->m_tSettings.m_iMinInfixLen > 0 && pDict->GetSettings().IsWordDict() )
@@ -8317,7 +8333,7 @@ bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHe
 
 		std::string sStoreError;
 		if ( !m_tE1Store.Open ( m_tE1Data.GetReadPtr(), m_tE1Data.GetLengthBytes(), m_iDocinfo,
-			tDict.GetReadPtr(), tDict.GetLengthBytes(), tHits.GetReadPtr(), tHits.GetLengthBytes(), sStoreError ) )
+			tDict.GetReadPtr(), tDict.GetLengthBytes(), tHits.GetReadPtr(), tHits.GetLengthBytes(), sStoreError, false, nullptr, tBuildHeader.m_uFormatVersion==e1::VERSION ? &m_tNormStore : nullptr ) )
 		{
 			sError = sStoreError.c_str();
 			return false;
@@ -8510,6 +8526,10 @@ bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldNa
 	BuildHeader_t tBuildHeader;
 	WriteHeader_t tWriteHeader;
 	PrepareHeaders ( tBuildHeader, tWriteHeader );
+	// Dropping a field rewrites E1 postings through the current writer.  Publish
+	// the matching outer capability instead of preserving a legacy v4-v6 header.
+	if ( m_bE1 && !bAddField )
+		tBuildHeader.m_uFormatVersion = e1::VERSION;
 
 	if ( !bAddField && !DeleteFieldFromDict ( iRemoveIdx, tBuildHeader, sError ) )
 		return false;
@@ -10395,15 +10415,15 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 		return LOAD_E::GeneralError_e;
 	}
 	m_uVersion = DWORD(Int(tVersion));
-	m_bE1 = m_uVersion==e1::VERSION || m_uVersion==e1::VERSION5 || m_uVersion==e1::VERSION4;
+	m_bE1 = m_uVersion==e1::VERSION || m_uVersion==e1::VERSION6 || m_uVersion==e1::VERSION5 || m_uVersion==e1::VERSION4;
 	if ( m_bE1 )
 	{
 		m_uE1Version = m_uVersion;
 		auto tCapability = tBson.ChildByName("e1_postings");
 		auto tBase = tBson.ChildByName("e1_base_version");
-		int iExpected = m_uVersion==e1::VERSION ? 6 : m_uVersion==e1::VERSION5 ? 5 : 4;
+		int iExpected = m_uVersion==e1::VERSION ? 7 : m_uVersion==e1::VERSION6 ? 6 : m_uVersion==e1::VERSION5 ? 5 : 4;
 		auto tNormCapability = tBson.ChildByName("e1_norms");
-		const bool bNormCapabilityValid = m_uVersion!=e1::VERSION || ( IsInt(tNormCapability) && Int(tNormCapability)==1 );
+		const bool bNormCapabilityValid = (m_uVersion!=e1::VERSION && m_uVersion!=e1::VERSION6) || ( IsInt(tNormCapability) && Int(tNormCapability)==1 );
 		if ( !IsInt(tCapability) || !IsInt(tBase) || Int(tCapability)!=iExpected || Int(tBase)!=74 || !bNormCapabilityValid )
 		{
 			m_sLastError = "E1: unknown required capability/base version";
@@ -11184,7 +11204,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 		const bool bE1StartupTrace = getenv("MANTICORE_E1_STARTUP_TRACE");
 		const bool bE1FlushTrace = getenv("MANTICORE_E1_FLUSH_TRACE");
 		int64_t tmE1Startup = bE1StartupTrace ? sphMicroTimer() : 0;
-		const bool bNormsRequired = m_uE1Version==e1::VERSION;
+		const bool bNormsRequired = m_uE1Version==e1::VERSION || m_uE1Version==e1::VERSION6;
 		if ( bNormsRequired && !sphIsReadable(GetFilename(SPH_EXT_SPN),&m_sLastError) )
 			return false;
 		if ( bNormsRequired || sphIsReadable(GetFilename(SPH_EXT_SPN)) )
@@ -11230,7 +11250,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 		const bool bFastValidation = bTrustedGeneration;
 		e1::OpenTimings_t tPostingsTimings;
 		if ( !m_tE1Store.Open(m_tE1Data.GetReadPtr(),m_tE1Data.GetLengthBytes(),m_iDocinfo,
-			dict.GetReadPtr(),dict.GetLengthBytes(),hits.GetReadPtr(),hits.GetLengthBytes(),error,bFastValidation,bE1FlushTrace ? &tPostingsTimings : nullptr) )
+			dict.GetReadPtr(),dict.GetLengthBytes(),hits.GetReadPtr(),hits.GetLengthBytes(),error,bFastValidation,bE1FlushTrace ? &tPostingsTimings : nullptr,m_uE1Version==e1::VERSION ? &m_tNormStore : nullptr) )
 		{ m_sLastError = error.c_str(); return false; }
 		if ( bE1StartupTrace )
 		{
@@ -13156,16 +13176,22 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 			tTermSetup.m_tE1RankFilter.m_bOpenRight = tFilter.m_bOpenRight;
 		}
 	}
+	bool bDefaultFieldWeights = true;
+	for ( DWORD uWeight : tQuery.m_dWeights )
+		bDefaultFieldWeights &= uWeight==1;
+	for ( const auto & tWeight : tQuery.m_dFieldWeights )
+		bDefaultFieldWeights &= tWeight.second==1;
 	tTermSetup.m_bE1RankedRequested = m_bE1
 		&& !m_tDeadRowMap.HasDead() && bE1FilterSupported
+		&& bDefaultFieldWeights
 		&& dSorters.GetLength()==1 && !dSorters[0]->IsGroupby()
 		&& E1RankedTopKFromPage ( tQuery.m_iOffset, tQuery.m_iLimit )
 		&& E1ExactRankerAdmission ( tQuerySettings.m_eRanker==SPH_RANK_BM25A,
 			tQuerySettings.m_eRanker==SPH_RANK_EXPR, tQuerySettings.m_sRankerExpr.cstr() )
 		&& bExactSort;
 	if ( getenv("MANTICORE_E1_RANK_TRACE") )
-		fprintf ( stderr, "E1_RANK_ADMISSION format=%d dead=%d filter=%d sorters=%d grouped=%d topk=%d ranker=%d sort=%d requested=%d\n",
-			int(m_bE1), int(m_tDeadRowMap.HasDead()), int(bE1FilterSupported), dSorters.GetLength(), int(dSorters.GetLength()==1 && dSorters[0]->IsGroupby()),
+		fprintf ( stderr, "E1_RANK_ADMISSION format=%d dead=%d filter=%d field_weights=%d sorters=%d grouped=%d topk=%d ranker=%d sort=%d requested=%d\n",
+			int(m_bE1), int(m_tDeadRowMap.HasDead()), int(bE1FilterSupported), int(bDefaultFieldWeights), dSorters.GetLength(), int(dSorters.GetLength()==1 && dSorters[0]->IsGroupby()),
 			int(E1RankedTopKFromPage(tQuery.m_iOffset,tQuery.m_iLimit)), int(E1ExactRankerAdmission(tQuerySettings.m_eRanker==SPH_RANK_BM25A,tQuerySettings.m_eRanker==SPH_RANK_EXPR,tQuerySettings.m_sRankerExpr.cstr())), int(bExactSort), int(tTermSetup.m_bE1RankedRequested) );
 	tTermSetup.m_bE1RowidDocidOrder = bImplicitRelevanceSort || m_bE1RowidDocidOrder;
 

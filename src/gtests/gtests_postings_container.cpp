@@ -139,6 +139,25 @@ ByteVec_t ReadFile ( const std::string & sPath )
 	return { std::istreambuf_iterator<char>(tFile), {} };
 }
 
+void ConvertSingleTermV7ToV6 ( ByteVec_t & dData, const std::vector<e1::Posting> & dPostings )
+{
+	const auto * pTerm = dData.data()+56;
+	const uint32_t uMetadataCount = e1::U32 ( pTerm+8 );
+	const uint64_t uMetadataOffset = e1::U64 ( pTerm+16 );
+	const auto * pGroup = dData.data()+uMetadataOffset+uint64_t(uMetadataCount-1)*16;
+	const size_t uBoundsOffset = e1::U64(pGroup)+e1::Meta4Bytes(e1::U32(pGroup+8),e1::U32(pGroup+12));
+	for ( size_t uBlock=0; uBlock<(dPostings.size()+63)/64; ++uBlock )
+	{
+		uint32_t uMaxTF = 0;
+		for ( size_t i=uBlock*64; i<std::min(dPostings.size(),(uBlock+1)*64); ++i )
+			uMaxTF = std::max ( uMaxTF, dPostings[i].m_uTF );
+		dData[uBoundsOffset+uBlock] = uint8_t ( std::min(uMaxTF,255u) );
+	}
+	memcpy ( dData.data(), "E1POST06", 8 );
+	PutValue ( dData, 8, 6, 4 );
+	UpdateChecksum ( dData );
+}
+
 class PostingsContainerTest : public ::testing::Test
 {
 protected:
@@ -306,6 +325,7 @@ TEST_F ( PostingsContainerTest, WriterReaderMetadataAndDirectWindows )
 	WriteContainer ( dPostings );
 
 	auto dRaw=ReadFile(m_sBase+".spd"), dDict=ReadFile(m_sBase+".spi"), dHits=ReadFile(m_sBase+".spp");
+	ConvertSingleTermV7ToV6 ( dRaw, dPostings );
 	std::string sError;
 	e1::Store tStore;
 	ASSERT_TRUE ( tStore.Open(dRaw.data(),dRaw.size(),8192,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError) ) << sError;
@@ -457,6 +477,7 @@ TEST_F ( PostingsContainerTest, RankedBoundsAndPersistedVersions )
 		dPostings.push_back ( { i, i==70 ? 300u : (i==128 ? 2u : 1u), 1, 0 } );
 	WriteContainer ( dPostings );
 	auto dRaw=ReadFile(m_sBase+".spd"), dDict=ReadFile(m_sBase+".spi"), dHits=ReadFile(m_sBase+".spp");
+	ConvertSingleTermV7ToV6 ( dRaw, dPostings );
 	std::string sError;
 	e1::Store tStore;
 	ASSERT_TRUE ( tStore.Open(dRaw.data(),dRaw.size(),129,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError) ) << sError;
@@ -504,6 +525,71 @@ TEST_F ( PostingsContainerTest, RankedBoundsAndPersistedVersions )
 		EXPECT_EQ ( uTF, dPostings[i].m_uTF );
 	}
 	EXPECT_FALSE ( tCursor.Next(uRow) );
+}
+
+TEST_F ( PostingsContainerTest, V7WriterPersistsExactSafeRatioBoundsByOrdinal )
+{
+	std::vector<e1::Posting> dPostings;
+	std::vector<uint32_t> dTotalDL ( 130 );
+	for ( uint32_t i=0; i<130; ++i )
+	{
+		dTotalDL[i] = i==70 ? 11554u : 20u+i;
+		dPostings.push_back ( { i, i==70 ? 89u : 1u+(i%11), 1, 0 } );
+	}
+	{ std::ofstream(m_sBase+".spi",std::ios::binary).write("dict",4); }
+	{ std::ofstream(m_sBase+".spp",std::ios::binary).put('\1'); }
+	std::string sError;
+	e1::Writer tWriter;
+	ASSERT_TRUE ( tWriter.Open(m_sBase+".spd",sError) ) << sError;
+	tWriter.BindTotalDL ( dTotalDL.data(), uint32_t(dTotalDL.size()), true );
+	uint64_t uHits = 0;
+	for ( const auto & tPosting : dPostings ) uHits += tPosting.m_uTF;
+	ASSERT_TRUE ( tWriter.FinishTerm(1,dPostings,uHits,false,sError) ) << sError;
+	ASSERT_TRUE ( tWriter.Finalize(m_sBase+".spi",m_sBase+".spp",sError) ) << sError;
+
+	auto dRaw=ReadFile(m_sBase+".spd"), dDict=ReadFile(m_sBase+".spi"), dHits=ReadFile(m_sBase+".spp");
+	ASSERT_GE ( dRaw.size(), 56u );
+	EXPECT_EQ ( std::string(reinterpret_cast<const char *>(dRaw.data()),8), "E1POST07" );
+	EXPECT_EQ ( e1::U32(dRaw.data()+8), 7u );
+	e1::Store tStore;
+	// Ordinal-byte round trip is independent from deep norm validation, covered below.
+	ASSERT_TRUE ( tStore.Open(dRaw.data(),dRaw.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,true) ) << sError;
+	e1::Cursor tCursor;
+	tCursor.Bind ( tStore, 1 );
+	ASSERT_TRUE ( tCursor.HasBM25ARatioBounds() );
+	for ( uint32_t uBlock=0; uBlock<3; ++uBlock )
+	{
+		uint8_t uActual = 0;
+		ASSERT_TRUE ( tCursor.BM25ARatioBound(uBlock,uActual) );
+		uint8_t uExpected = 0;
+		const uint32_t uEnd = std::min<uint32_t> ( (uBlock+1)*64, dTotalDL.size() );
+		for ( uint32_t i=uBlock*64; i<uEnd; ++i )
+			uExpected = std::max ( uExpected, E1EncodeBM25A12_075_256(i==70 ? 89u : 1u+(i%11),dTotalDL[i]) );
+		EXPECT_EQ ( uActual, uExpected );
+	}
+
+	// Deep reopen validates every finite code against the authoritative norms.
+	e1::norms::Builder tNormBuilder ( 1 );
+	for ( uint32_t uDL : dTotalDL )
+		ASSERT_TRUE ( tNormBuilder.AddRow(&uDL,1,sError) ) << sError;
+	std::vector<uint8_t> dNormBytes;
+	ASSERT_TRUE ( tNormBuilder.Build(dNormBytes,sError) ) << sError;
+	e1::norms::Store tNormStore;
+	ASSERT_TRUE ( tNormStore.Open(dNormBytes.data(),dNormBytes.size(),sError) ) << sError;
+	e1::Store tDeepStore;
+	ASSERT_TRUE ( tDeepStore.Open(dRaw.data(),dRaw.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,false,nullptr,&tNormStore) ) << sError;
+
+	auto dUnderestimate = dRaw;
+	const auto * pTerm = dUnderestimate.data()+56;
+	const uint32_t uMetaCount = e1::U32(pTerm+8);
+	const auto * pLastMeta = dUnderestimate.data()+e1::U64(pTerm+16)+uint64_t(uMetaCount-1)*16;
+	const size_t uBoundsOffset = e1::U64(pLastMeta)+e1::Meta4Bytes(e1::U32(pLastMeta+8),e1::U32(pLastMeta+12));
+	ASSERT_GT ( dUnderestimate[uBoundsOffset], 0u );
+	--dUnderestimate[uBoundsOffset];
+	UpdateChecksum ( dUnderestimate );
+	e1::Store tRejected;
+	EXPECT_FALSE ( tRejected.Open(dUnderestimate.data(),dUnderestimate.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,false,nullptr,&tNormStore) );
+	EXPECT_NE ( sError.find("unsafe BM25A ratio bound"), std::string::npos );
 }
 
 TEST ( NormStore, ExactWidthsRangesGatherAndTotals )
@@ -586,6 +672,11 @@ TEST ( NormStore, StagedBuilderMatchesInMemoryBuilderAndSupportsUpdates )
 	ASSERT_TRUE ( tStaged.Set(2,1,70000,sError) ) << sError;
 	ASSERT_TRUE ( tMemory.Set(10,2,90000,sError) ) << sError;
 	ASSERT_TRUE ( tStaged.Set(10,2,90000,sError) ) << sError;
+	ASSERT_TRUE ( tStaged.HasAuthoritativeTotalDL() );
+	ASSERT_EQ ( tStaged.Rows(), 11u );
+	ASSERT_NE ( tStaged.TotalDLData(), nullptr );
+	EXPECT_EQ ( tStaged.TotalDLData()[2], 70204u );
+	EXPECT_EQ ( tStaged.TotalDLData()[10], 90040u );
 
 	std::vector<uint8_t> dExpected;
 	ASSERT_TRUE ( tMemory.Build(dExpected,sError) ) << sError;

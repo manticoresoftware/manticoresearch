@@ -81,6 +81,23 @@ static bool g_bE1TestLastWindow = false;
 static uint32_t g_uE1TestLastWindow = 0;
 static uint64_t g_uE1TestScratchDeclines = 0;
 static uint64_t g_uE1TestDirectExecutorCalls = 0;
+static bool g_bE1TestForceGenericRanked = false;
+static E1TestRankStats_t g_tE1TestRankStats;
+
+void SetE1TestForceGenericRanked ( bool bForce )
+{
+	g_bE1TestForceGenericRanked = bForce;
+}
+
+void ResetE1TestRankStats ()
+{
+	g_tE1TestRankStats = E1TestRankStats_t{};
+}
+
+E1TestRankStats_t GetE1TestRankStats ()
+{
+	return g_tE1TestRankStats;
+}
 
 void SetE1TestLastWindow ( uint32_t uLastWindow )
 {
@@ -340,8 +357,8 @@ public:
 	{
 		if ( m_bE1Ranked && getenv("MANTICORE_E1_RANK_TRACE") )
 		{
-			fprintf ( stderr, "E1_RANKED rowid_docid_order=%d bound_entries_read=%llu nonempty_buckets=%llu selected_blocks=%llu skipped_blocks=%llu skipped_docs=%llu scored_docs=%llu metadata_groups_decoded=%llu threshold_at_scored=%llu topk_updates=%llu\n",
-				int(m_bE1RowidDocidOrder),
+			fprintf ( stderr, "E1_RANKED bound_kind=%s rowid_docid_order=%d bound_entries_read=%llu nonempty_buckets=%llu selected_blocks=%llu skipped_blocks=%llu skipped_docs=%llu scored_docs=%llu metadata_groups_decoded=%llu threshold_at_scored=%llu topk_updates=%llu\n",
+				E1RankedBoundKindName(m_eE1BoundKind), int(m_bE1RowidDocidOrder),
 				(unsigned long long)m_uRankBoundEntries, (unsigned long long)m_uRankBuckets,
 				(unsigned long long)m_uRankSelectedBlocks, (unsigned long long)m_uRankSkippedBlocks,
 				(unsigned long long)m_uRankSkippedDocsTotal, (unsigned long long)m_uRankScored,
@@ -366,6 +383,16 @@ public:
 					(unsigned long long)m_uRankSkippedBlocks, (unsigned long long)m_uRankScored,
 					(long long)m_iE1EligibilityBuildUS, (unsigned long long)m_uE1IneligibleBeforeTF );
 		}
+#if defined(MANTICORE_TEST)
+		if ( m_bE1Ranked && m_eE1BoundKind==E1RankedBoundKind_e::BM25A_RATIO )
+		{
+			g_tE1TestRankStats.m_eBoundKind = m_eE1BoundKind;
+			g_tE1TestRankStats.m_uSelectedBlocks += m_uRankSelectedBlocks;
+			g_tE1TestRankStats.m_uSkippedBlocks += m_uRankSkippedBlocks;
+			g_tE1TestRankStats.m_uSkippedDocs += m_uRankSkippedDocsTotal;
+			g_tE1TestRankStats.m_uScoredDocs += m_uRankScored;
+		}
+#endif
 		SafeDelete ( m_pQword );
 	}
 
@@ -388,12 +415,33 @@ public:
 	void				SetRowidBoundaries ( const RowIdBoundaries_t & tBoundaries ) override;
 	bool				EnableE1Ranked() override
 	{
+		m_eE1BoundKind = m_pQword->GetE1RankedBoundKind();
+#if defined(MANTICORE_TEST)
+		if ( g_bE1TestForceGenericRanked )
+		{
+			g_tE1TestRankStats.m_eBoundKind = m_eE1BoundKind;
+			++g_tE1TestRankStats.m_uFallbacks;
+			return false;
+		}
+#endif
 		if ( getenv("MANTICORE_E1_RANK_TRACE") )
 			fprintf ( stderr, "E1_FIELD_SCOPE path=term schema_fields=%d full_schema=%d requested_mask0=%u\n", m_iE1SchemaFields, int(m_bE1FullSchemaScope), unsigned(m_dQueriedFields.GetMask32()) );
+		if ( m_eE1BoundKind==E1RankedBoundKind_e::BM25A_RATIO
+			&& ( !m_bE1FullSchemaScope || m_tE1Filter.m_bEnabled || m_fIDF<=0.0f ) )
+		{
+#if defined(MANTICORE_TEST)
+			g_tE1TestRankStats.m_eBoundKind = m_eE1BoundKind;
+			++g_tE1TestRankStats.m_uFallbacks;
+#endif
+			if ( getenv("MANTICORE_E1_RANK_TRACE") )
+				fprintf ( stderr, "E1_V7_FALLBACK reason=%s bound_kind=bm25a_ratio\n",
+					!m_bE1FullSchemaScope ? "field_scope" : m_tE1Filter.m_bEnabled ? "filter" : "nonpositive_idf" );
+			return false;
+		}
 		m_iE1ScopedField = E1ScopedSingleField ( m_iE1SchemaFields, m_bE1FullSchemaScope, m_dQueriedFields.GetMask32() );
 		m_bE1ScopedTerm = !ROWID_LIMITS && !m_tE1Filter.m_bEnabled && m_iE1ScopedField>=0
 			&& !getenv("MANTICORE_E1_FORCE_GENERIC_SCOPED") && BuildE1ScopedEligibility();
-		m_bE1Ranked = !ROWID_LIMITS && ( ( m_bE1FullSchemaScope && ( m_tE1Filter.m_bEnabled ? m_pQword->E1DirectOrSupported() : m_pQword->HasE1RankedBounds() ) ) || m_bE1ScopedTerm );
+		m_bE1Ranked = !ROWID_LIMITS && ( ( m_bE1FullSchemaScope && ( m_tE1Filter.m_bEnabled ? m_pQword->E1DirectOrSupported() : m_eE1BoundKind!=E1RankedBoundKind_e::NONE ) ) || m_bE1ScopedTerm );
 		if ( m_bE1Ranked && m_tE1Filter.m_bEnabled )
 		{
 			m_bE1Ranked = m_pQword->GetE1DirectLastWindow ( m_uE1FilterLastWindow );
@@ -463,6 +511,7 @@ protected:
 	bool					m_bE1Ranked = false;
 	bool					m_bE1RowidDocidOrder = false;
 	bool					m_bE1FullSchemaScope = false;
+	E1RankedBoundKind_e	m_eE1BoundKind = E1RankedBoundKind_e::NONE;
 	bool				m_bE1ScopedTerm = false;
 	int					m_iE1ScopedField = -1;
 	int					m_iE1SchemaFields = 0;
@@ -3242,7 +3291,7 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 	int iDoc = 0;
 	uint32_t uMinTF = 0;
 	uint32_t uEqualBoundTF = 0;
-	if ( m_bE1Ranked && m_iRankThreshold>0 && m_fIDF>0.0f )
+	if ( m_bE1Ranked && m_eE1BoundKind==E1RankedBoundKind_e::MAX_TF && m_iRankThreshold>0 && m_fIDF>0.0f )
 	{
 		// dl>=0, therefore k1*(1-b+b*dl/256)>=0.3 for the
 		// supported k1=1.2,b=.75 expression.  This duplicates the ranker's
@@ -3275,7 +3324,7 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 				}
 		}
 	}
-	else if ( m_bE1Ranked && m_iRankThreshold==500 && m_fIDF<=0.0f )
+	else if ( m_bE1Ranked && m_eE1BoundKind==E1RankedBoundKind_e::MAX_TF && m_iRankThreshold==500 && m_fIDF<=0.0f )
 		uEqualBoundTF = UINT32_MAX;
 	// The first native-sized ranker chunk is already drawn from highest-bound blocks;
 	// later chunks continue by bound priority using the exact live top-K threshold.
@@ -3294,7 +3343,9 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 			const uint32_t uEligibilityWords = bScopedEligibility ? uint32_t(m_dE1ScopedEligibility.GetLength()) : ( bFilterEligibility ? uint32_t(m_dE1Eligibility.GetLength()) : 0 );
 			uint64_t * pIneligibleBeforeTF = (bScopedEligibility || bFilterEligibility) ? &m_uE1IneligibleBeforeTF : nullptr;
 			const uint32_t uKnownMask = bScopedEligibility ? uint32_t(1)<<m_iE1ScopedField : 0;
-			if ( !m_pQword->GetE1RankedDoc ( uMinTF, tRankedRow, uRankedTF, m_uRankBoundEntries, m_uRankBuckets, m_uRankSelectedBlocks, m_uRankSkippedBlocks, m_uRankSkippedDocs, m_uRankDecodedGroups, pEligibility, uEligibilityWords, pIneligibleBeforeTF, uEqualBoundTF, m_tRankWorstRow, uKnownMask ) )
+			if ( !m_pQword->GetE1RankedDoc ( uMinTF, tRankedRow, uRankedTF, m_uRankBoundEntries, m_uRankBuckets, m_uRankSelectedBlocks, m_uRankSkippedBlocks, m_uRankSkippedDocs, m_uRankDecodedGroups, pEligibility, uEligibilityWords, pIneligibleBeforeTF, uEqualBoundTF, m_tRankWorstRow, uKnownMask,
+				m_eE1BoundKind==E1RankedBoundKind_e::BM25A_RATIO ? m_fIDF : 0.0f,
+				m_eE1BoundKind==E1RankedBoundKind_e::BM25A_RATIO ? m_iRankThreshold : 0 ) )
 			{
 				m_bE1RankFinished = true;
 				m_pQword->m_iDocs = 0;
@@ -4416,16 +4467,18 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::EnableE1Ranked()
 			bMixedOr2 && getenv("MANTICORE_E1_FORCE_GENERIC_MIXED_OR2") ? "forced_generic" : "ineligible",
 			unsigned(m_dNodes[0].m_dQueriedFields.GetMask32()), unsigned(m_dNodes[1].m_dQueriedFields.GetMask32()), iScoped0, iScoped1 );
 	uint32_t uDirectAndLast = UINT32_MAX;
+	bool bHasRatioBounds = false;
 	for ( const auto & tNode : m_dNodes )
 	{
 		if ( !tNode.m_bE1FullSchemaScope && !m_bE1ScopedAnd2 && !m_bE1ScopedOr2 )
 			return false;
-		if ( !tNode.m_pQword->E1DirectOrSupported() )
+		if ( !tNode.m_pQword->E1DirectContainerSupported() )
 		{
 			if ( m_bE1Or && !tNode.m_pQword->m_iDocs )
 				continue;
 			return false;
 		}
+		bHasRatioBounds |= tNode.m_pQword->GetE1RankedBoundKind()==E1RankedBoundKind_e::BM25A_RATIO;
 		uint32_t uLast = 0;
 		if ( !tNode.m_pQword->GetE1DirectLastWindow(uLast) )
 		{
@@ -4472,6 +4525,15 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::EnableE1Ranked()
 					m_uE1LastWindow, (unsigned long long)E1_SCOPED_SCRATCH_LIMIT );
 			return false;
 		}
+		// V7 ratio bounds are admitted only by the full-schema single-term
+		// executor. Preserve the scoped scratch-decline gate above, then fail
+		// closed before allocating or building any scoped direct state.
+		if ( bHasRatioBounds )
+		{
+			if ( getenv("MANTICORE_E1_RANK_TRACE") )
+				fprintf ( stderr, "E1_V7_FALLBACK reason=field_scope bound_kind=bm25a_ratio\n" );
+			return false;
+		}
 		const int64_t iStarted = sphMicroTimer();
 		if ( !BuildE1ScopedAndTerm ( 0, m_uE1LastWindow ) || !BuildE1ScopedAndTerm ( 1, m_uE1LastWindow ) )
 			return false;
@@ -4483,6 +4545,12 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::EnableE1Ranked()
 			m_uE1ScopedAndExactTotal += uint64_t(__builtin_popcountll(m_bE1ScopedOr2 ? (uLeft|uRight) : (uLeft&uRight)));
 		}
 		m_iE1ScopedAndBuildUS = sphMicroTimer()-iStarted;
+	}
+	if ( bHasRatioBounds )
+	{
+		if ( getenv("MANTICORE_E1_RANK_TRACE") )
+			fprintf ( stderr, "E1_V7_FALLBACK reason=unsupported_operator bound_kind=bm25a_ratio\n" );
+		return false;
 	}
 	if ( m_bE1StagedAnd4 )
 	{

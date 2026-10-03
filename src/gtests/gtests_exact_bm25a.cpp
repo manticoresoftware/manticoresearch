@@ -54,6 +54,44 @@ TEST ( ExactBM25A, RankerAdmissionIsStrict )
 	EXPECT_FALSE ( E1ExactRankerAdmission(false,false,"1000*bm25a(1.2,0.75,256)") );
 }
 
+TEST ( ExactBM25A, IntegerRatioBoundEncoderContract )
+{
+	EXPECT_EQ ( E1EncodeBM25A12_075_256(0,0), 0u );
+	EXPECT_EQ ( E1EncodeBM25A12_075_256((1u<<24)+1,1), 255u );
+	EXPECT_EQ ( E1EncodeBM25A12_075_256(1,(1u<<24)+1), 255u );
+	EXPECT_EQ ( E1EncodeBM25A12_075_256(1,1,false), 255u );
+	EXPECT_TRUE ( std::isinf(E1DecodeBM25A12_075_256(255)) );
+
+	for ( uint32_t uTF=1; uTF<=512; ++uTF )
+		for ( uint32_t uDL=0; uDL<=8192; ++uDL )
+		{
+			const uint8_t uCode = E1EncodeBM25A12_075_256 ( uTF, uDL );
+			ASSERT_LT ( uCode, 255u );
+			const float fTF = float(uTF);
+			const float fDL = float(uDL);
+			const float fActual = fTF / ( fTF + 1.2f*( 0.25f + 0.75f*fDL/256.0f ) );
+			ASSERT_GE ( E1DecodeBM25A12_075_256(uCode), fActual ) << "tf=" << uTF << " dl=" << uDL;
+		}
+
+	const uint8_t uCounterexample = E1EncodeBM25A12_075_256 ( 89, 11554 );
+	EXPECT_GE ( E1DecodeBM25A12_075_256(uCounterexample),
+		89.0f/(89.0f+1.2f*(0.25f+0.75f*11554.0f/256.0f)) );
+}
+
+TEST ( ExactBM25A, RatioBoundWeightIsStrictAndSaturationAdmits )
+{
+	EXPECT_STREQ ( E1RankedBoundKindName(E1RankedBoundKind_e::MAX_TF), "max_tf" );
+	EXPECT_STREQ ( E1RankedBoundKindName(E1RankedBoundKind_e::BM25A_RATIO), "bm25a_ratio" );
+	const float fIDF = 0.75f;
+	const uint8_t uCode = E1EncodeBM25A12_075_256 ( 7, 300 );
+	const int iUpper = E1SafeUpperRatioWeight ( uCode, fIDF );
+	EXPECT_FALSE ( E1RatioBoundReject(uCode,fIDF,iUpper) );
+	EXPECT_TRUE ( E1RatioBoundReject(uCode,fIDF,iUpper+1) );
+	EXPECT_FALSE ( E1RatioBoundReject(255,fIDF,std::numeric_limits<int>::max()) );
+	EXPECT_FALSE ( E1RatioBoundReject(uCode,0.0f,iUpper+1) );
+	EXPECT_FALSE ( E1RatioBoundReject(uCode,-0.5f,iUpper+1) );
+}
+
 TEST ( ExactBM25A, GenericFallbackSpecializesOnlyNamedBM25AWithoutPackedFactors )
 {
 	EXPECT_TRUE ( E1FixedBM25AGenericFallback(true,false) );

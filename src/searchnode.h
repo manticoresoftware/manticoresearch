@@ -13,6 +13,7 @@
 #define _searchnode_
 
 #include "sphinxquery/sphinxquery.h"
+#include "exact_bm25a_utils.h"
 
 
 enum
@@ -104,10 +105,22 @@ std::unique_ptr<ExtNode_i> CreatePseudoFTNode ( ExtNode_i * pNode, RowidIterator
 #if defined(MANTICORE_TEST)
 // Test-only seam for exercising oversized scoped E1 admission without allocating
 // corresponding multi-million-row scratch buffers.
+struct E1TestRankStats_t
+{
+	E1RankedBoundKind_e m_eBoundKind = E1RankedBoundKind_e::NONE;
+	uint64_t m_uSelectedBlocks = 0;
+	uint64_t m_uSkippedBlocks = 0;
+	uint64_t m_uSkippedDocs = 0;
+	uint64_t m_uScoredDocs = 0;
+	uint64_t m_uFallbacks = 0;
+};
 void SetE1TestLastWindow ( uint32_t uLastWindow );
 void ResetE1TestLastWindow ();
 uint64_t GetE1TestScratchDeclines ();
 uint64_t GetE1TestDirectExecutorCalls ();
+void SetE1TestForceGenericRanked ( bool bForce );
+void ResetE1TestRankStats ();
+E1TestRankStats_t GetE1TestRankStats ();
 #endif
 
 class NodeCacheContainer_c;

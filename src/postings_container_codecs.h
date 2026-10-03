@@ -12,7 +12,8 @@
 #include <sys/stat.h>
 #endif
 namespace e1 {
-constexpr uint32_t VERSION = 0x45310006;
+constexpr uint32_t VERSION = 0x45310007;
+constexpr uint32_t VERSION6 = 0x45310006;
 constexpr uint32_t VERSION5 = 0x45310005;
 constexpr uint32_t VERSION4 = 0x45310004;
 inline std::mutex & TrustedGenerationsMutex() { static std::mutex tMutex; return tMutex; }

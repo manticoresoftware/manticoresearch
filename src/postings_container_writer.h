@@ -2,6 +2,7 @@
 #pragma once
 
 #include "postings_container_codecs.h"
+#include "exact_bm25a_utils.h"
 #include <algorithm>
 
 
@@ -58,6 +59,12 @@ class Writer
 	};
 public:
 	~Writer() { StopWorker(); }
+	void BindTotalDL ( const uint32_t * pTotalDL, uint32_t uRows, bool bAuthoritative=true )
+	{
+		m_pTotalDL = pTotalDL;
+		m_uTotalDLRows = uRows;
+		m_bTotalDLAuthoritative = bAuthoritative;
+	}
 
 	bool Open ( const std::string & sFilename, std::string & sError )
 	{
@@ -148,8 +155,8 @@ public:
 
 		m_tOut.seekp ( 0 );
 		FaultPoint ( "before_primary_header" );
-		PutRaw ( "E1POST06", 8 );
-		Put ( 6, 4 );
+		PutRaw ( "E1POST07", 8 );
+		Put ( 7, 4 );
 		Put ( 56, 4 );
 		Put ( uSize, 8 );
 		Put ( m_dEntries.size(), 8 );
@@ -437,7 +444,9 @@ private:
 		{
 			const Posting & tPosting = dPostings[i];
 			uMaxFirstFieldTF = std::max ( uMaxFirstFieldTF, tPosting.m_uFirstFieldTF );
-			m_dRankBounds[i/64] = std::max<uint8_t> ( m_dRankBounds[i/64], std::min(tPosting.m_uTF,255u) );
+			const bool bKnownDL = m_bTotalDLAuthoritative && m_pTotalDL && tPosting.m_uRow<m_uTotalDLRows;
+			const uint32_t uDL = bKnownDL ? m_pTotalDL[tPosting.m_uRow] : 0;
+			m_dRankBounds[i/64] = std::max<uint8_t> ( m_dRankBounds[i/64], E1EncodeBM25A12_075_256(tPosting.m_uTF,uDL,bKnownDL) );
 			if ( bFrequent )
 			{
 				const uint32_t uContainer = tPosting.m_uRow/4096;
@@ -609,7 +618,7 @@ private:
 			Put ( uPayload, 8 ); Put ( uFlags, 4 ); Put ( uCount, 4 );
 			Seek ( uResume );
 		}
-		// E1/5 primary ranked hints: one safe max-TF byte per 64 postings.
+		// E1/7 primary ranked hints: one exact-safe BM25A ratio byte per 64 postings.
 		// 255 is an escape meaning "unbounded", never the literal upper bound.
 		PutBytes ( m_dRankBounds );
 		if ( uFirstFieldTFWidth )
@@ -709,6 +718,9 @@ private:
 	uint64_t m_uTermPos = 0;
 	uint64_t m_uFilePos = 0;
 	uint32_t m_uPayloadCRCState = ~0u;
+	const uint32_t * m_pTotalDL = nullptr;
+	uint32_t m_uTotalDLRows = 0;
+	bool m_bTotalDLAuthoritative = false;
 };
 
 } // namespace e1

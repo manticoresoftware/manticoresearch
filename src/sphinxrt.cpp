@@ -4551,6 +4551,7 @@ struct SaveDiskDataContext_t : public BuildHeader_t
 	CSphVector<Checkpoint_t>		m_dCheckpoints;
 	CSphVector<BYTE>				m_dKeywordCheckpoints;
 	CSphVector<CSphVector<RowID_t>>	m_dRowMaps;
+	std::vector<uint32_t>			m_dTotalDL;
 	IndexFileBase_c					m_tFilebase;
 	const ConstRtSegmentSlice_t&	m_tRamSegments;
 
@@ -4750,6 +4751,11 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			if ( pKNNBuilder )
 				BuildTrainKNN ( tRowID, tNextRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder );
 
+			const DWORD * pDenseNorms = iNormFields ? tSeg.m_dNorms.Begin()+int64_t(tRowID)*iNormFields : nullptr;
+			uint64_t uTotalDL = 0;
+			for ( int iField=0; iField<iFields; ++iField )
+				uTotalDL += tNorms.Get ( pDenseNorms, iField );
+			tCtx.m_dTotalDL.push_back ( uTotalDL>UINT32_MAX ? UINT32_MAX : uint32_t(uTotalDL) );
 			tCtx.m_dRowMaps[i][tRowID] = tNextRowID++;
 		}
 	}
@@ -5286,6 +5292,7 @@ bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 
 	tmStart = sphMicroTimer();
 	e1::Writer tPrimary;
+	tPrimary.BindTotalDL ( tCtx.m_dTotalDL.data(), uint32_t(tCtx.m_dTotalDL.size()), tCtx.m_dTotalDL.size()==size_t(tCtx.m_iDocinfo) );
 	if ( !WriteDocs ( tCtx, tWriterDict, tPrimary, sError ) )
 		return false;
 	if ( pTimings )

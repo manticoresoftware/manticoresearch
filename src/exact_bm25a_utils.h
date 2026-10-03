@@ -9,6 +9,23 @@
 #include <string_view>
 #include <vector>
 
+enum class E1RankedBoundKind_e : uint8_t
+{
+	NONE,
+	MAX_TF,
+	BM25A_RATIO
+};
+
+inline const char * E1RankedBoundKindName ( E1RankedBoundKind_e eKind ) noexcept
+{
+	switch ( eKind )
+	{
+	case E1RankedBoundKind_e::MAX_TF: return "max_tf";
+	case E1RankedBoundKind_e::BM25A_RATIO: return "bm25a_ratio";
+	default: return "none";
+	}
+}
+
 inline std::string E1NormalizeTokenSequence ( const char * sText )
 {
 	std::string sNormalized;
@@ -203,6 +220,38 @@ inline float E1RoundUp ( float fValue )
 	return std::nextafter ( fValue, std::numeric_limits<float>::infinity() );
 }
 
+inline uint8_t E1EncodeBM25A12_075_256 ( uint32_t uTF, uint32_t uDL, bool bAuthoritative=true ) noexcept
+{
+	static constexpr uint64_t EXACT_FLOAT_LIMIT = uint64_t(1)<<24;
+	if ( !uTF )
+		return 0;
+	if ( !bAuthoritative || uTF>EXACT_FLOAT_LIMIT || uDL>EXACT_FLOAT_LIMIT )
+		return 255;
+	const uint64_t uN = 2560ULL*uTF;
+	const uint64_t uD = uN+768ULL+9ULL*uDL;
+	const uint64_t uX = 254ULL*uN;
+	uint64_t uCode = uX/uD + ( uX%uD!=0 );
+	const uint64_t uGap = uCode*uD-uX;
+	if ( uGap*EXACT_FLOAT_LIMIT < 7ULL*uX )
+		++uCode;
+	return uint8_t ( std::min<uint64_t>(uCode,254) );
+}
+
+inline float E1DecodeBM25A12_075_256 ( uint8_t uCode ) noexcept
+{
+	return uCode==255 ? std::numeric_limits<float>::infinity()
+		: std::nextafter ( float(uCode)/254.0f, std::numeric_limits<float>::infinity() );
+}
+
+inline float E1SafeUpperRatioTerm ( uint8_t uCode, float fIDF )
+{
+	if ( !uCode || fIDF<=0.0f )
+		return 0.0f;
+	if ( uCode==255 )
+		return E1RoundUp(fIDF);
+	return E1RoundUp ( E1DecodeBM25A12_075_256(uCode)*fIDF );
+}
+
 inline float E1SafeUpperTerm ( uint32_t uTF, float fIDF )
 {
 	if ( !uTF || fIDF<=0.0f )
@@ -227,6 +276,19 @@ inline int E1SafeUpperWeight ( float fUpperSum )
 	const float fShifted = E1RoundUp ( fUpperSum+0.5f );
 	const float fScaled = E1RoundUp ( 1000.0f*fShifted );
 	return fScaled>=float(std::numeric_limits<int>::max()) ? std::numeric_limits<int>::max() : int(fScaled);
+}
+
+inline int E1SafeUpperRatioWeight ( uint8_t uCode, float fIDF )
+{
+	return E1SafeUpperWeight ( E1SafeUpperRatioTerm(uCode,fIDF) );
+}
+
+inline bool E1RatioBoundReject ( uint8_t uCode, float fIDF, int iThreshold )
+{
+	// Saturation is an explicit fail-open escape. Non-positive IDF is outside
+	// the persisted-ratio admission contract and must never prune.
+	return uCode!=255 && fIDF>0.0f && iThreshold>0
+		&& E1SafeUpperRatioWeight(uCode,fIDF)<iThreshold;
 }
 
 inline bool E1TieAwareBoundReject ( int iUpperWeight, uint64_t uCandidateRow, int iThreshold, uint64_t uWorstTiedRow )

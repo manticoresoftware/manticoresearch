@@ -369,8 +369,13 @@ public:
 		static_assert ( sizeof(VALUE)==sizeof(uint32_t), "norm values must be 32-bit" );
 		if ( !m_bValid || ( m_uFields && !pValues ) || uFields!=m_uFields || m_uRows==std::numeric_limits<uint32_t>::max() )
 			return Fail ( sError, "invalid staged row" );
+		uint64_t uTotal = 0;
 		for ( uint32_t i=0; i<m_uFields; ++i )
+		{
 			m_dStaging[i].push_back ( uint32_t(pValues[i]) );
+			uTotal += uint32_t(pValues[i]);
+		}
+		m_dTotalDL.push_back ( uTotal>std::numeric_limits<uint32_t>::max() ? std::numeric_limits<uint32_t>::max() : uint32_t(uTotal) );
 		++m_uRows;
 		if ( m_uFields && m_dStaging[0].size()==m_uGroupRows && !FlushStaging(sError) )
 			return false;
@@ -385,16 +390,24 @@ public:
 		const uint32_t uBufferedFirst = m_uRows-uBuffered;
 		if ( uRow>=uBufferedFirst )
 		{
+			const uint32_t uOld = m_dStaging[uField][uRow-uBufferedFirst];
 			m_dStaging[uField][uRow-uBufferedFirst] = uValue;
+			UpdateTotal ( uRow, uOld, uValue );
 			return true;
 		}
 		if ( !m_bMutable )
 			return Fail ( sError, "staged row is immutable" );
 		FILE * pFile = m_dFields[uField];
-		if ( !Seek(pFile,uint64_t(uRow)*sizeof(uint32_t)) || fwrite(&uValue,sizeof(uValue),1,pFile)!=1 || !Seek(pFile,uint64_t(uBufferedFirst)*sizeof(uint32_t)) )
+		uint32_t uOld = 0;
+		if ( !Seek(pFile,uint64_t(uRow)*sizeof(uint32_t)) || fread(&uOld,sizeof(uOld),1,pFile)!=1 || !Seek(pFile,uint64_t(uRow)*sizeof(uint32_t)) || fwrite(&uValue,sizeof(uValue),1,pFile)!=1 || !Seek(pFile,uint64_t(uBufferedFirst)*sizeof(uint32_t)) )
 			return Fail ( sError, "staging update failed" );
+		UpdateTotal ( uRow, uOld, uValue );
 		return true;
 	}
+
+	const uint32_t * TotalDLData() const { return m_dTotalDL.empty() ? nullptr : m_dTotalDL.data(); }
+	uint32_t Rows() const { return m_uRows; }
+	bool HasAuthoritativeTotalDL() const { return m_bValid && m_dTotalDL.size()==m_uRows; }
 
 	bool Finish ( const char * szOutput, std::string & sError )
 	{
@@ -661,6 +674,20 @@ private:
 		return true;
 	}
 
+	void UpdateTotal ( uint32_t uRow, uint32_t uOld, uint32_t uValue )
+	{
+		uint32_t & uTotal = m_dTotalDL[uRow];
+		if ( uTotal==std::numeric_limits<uint32_t>::max() )
+			return;
+		if ( uValue>=uOld )
+		{
+			const uint64_t uUpdated = uint64_t(uTotal)+uValue-uOld;
+			uTotal = uUpdated>std::numeric_limits<uint32_t>::max() ? std::numeric_limits<uint32_t>::max() : uint32_t(uUpdated);
+		}
+		else
+			uTotal -= uOld-uValue;
+	}
+
 	uint32_t m_uFields = 0;
 	uint32_t m_uGroupRows = 0;
 	uint32_t m_uRows = 0;
@@ -670,6 +697,7 @@ private:
 	std::vector<std::vector<uint32_t>> m_dStaging;
 	std::vector<std::vector<GroupMeta_t>> m_dGroupMeta;
 	std::vector<uint8_t> m_dPackedScratch;
+	std::vector<uint32_t> m_dTotalDL;
 };
 
 class Store final : public FieldNormReader_i

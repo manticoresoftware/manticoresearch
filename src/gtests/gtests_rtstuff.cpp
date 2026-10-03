@@ -844,13 +844,14 @@ void TestRTInit ()
 class MockTestDoc_c : public CSphSource
 {
 public:
-	explicit MockTestDoc_c ( const CSphSchema &tSchema, BYTE ** ppDocs, int iDocs, int iFields )
+	explicit MockTestDoc_c ( const CSphSchema &tSchema, BYTE ** ppDocs, int iDocs, int iFields, const std::vector<DocID_t> * pIDs=nullptr )
 		: CSphSource ( "test_doc" )
 	{
 		m_tSchema = tSchema;
 		m_ppDocs = ppDocs;
 		m_iDocCount = iDocs;
 		m_iFields = iFields;
+		m_pIDs = pIDs;
 		m_dFieldLengths.Resize ( m_iFields );
 		m_dFields.Reserve ( iFields );
 	}
@@ -873,7 +874,7 @@ public:
 
 		const CSphColumnInfo * pId = m_tSchema.GetAttr ( sphGetDocidName() );
 		assert ( pId );
-		m_tDocInfo.SetAttr( pId->m_tLocator, iDoc+1 );
+		m_tDocInfo.SetAttr( pId->m_tLocator, m_pIDs ? (*m_pIDs)[iDoc] : DocID_t(iDoc+1) );
 
 		return m_ppDocs + iDoc * m_iFields;
 	}
@@ -911,6 +912,7 @@ public:
 	int m_iDocCount;
 	int m_iFields;
 	BYTE ** m_ppDocs;
+	const std::vector<DocID_t> * m_pIDs = nullptr;
 	CSphVector<VecTraits_T<const char> > m_dFields;
 	CSphVector<int> m_dFieldLengths;
 };
@@ -1176,6 +1178,216 @@ TEST_F ( RT, ScopedAnd2ScratchDeclineFallsBackToCanonicalBM25A )
 		ASSERT_EQ ( tPage.m_dRows.size(), 2u );
 		EXPECT_EQ ( tPage.m_dRows[0], tNamed.m_dRows[1] );
 		EXPECT_EQ ( tPage.m_dRows[1], tNamed.m_dRows[2] );
+	} );
+}
+
+TEST_F ( RT, E1Post07RatioBoundsDriveExactCanonicalBM25A )
+{
+	using Result_t = std::pair<int64_t,int>;
+	struct QueryResult_t
+	{
+		std::vector<Result_t> m_dRows;
+		int64_t m_iTotal = 0;
+	};
+	struct TestSeamGuard_t
+	{
+		~TestSeamGuard_t() { SetE1TestForceGenericRanked(false); ResetE1TestRankStats(); }
+	} tGuard;
+
+	Threads::CallCoroutine ( [&] {
+		tCol.m_sName = "id";
+		tCol.m_eAttrType = SPH_ATTR_BIGINT;
+		tSrcSchema.AddAttr ( tCol, true );
+		CSphSchema tSchema;
+		for ( int i=0; i<tSrcSchema.GetFieldsCount(); ++i )
+			tSchema.AddField ( tSrcSchema.GetField(i) );
+		for ( int i=0; i<tSrcSchema.GetAttrsCount(); ++i )
+			tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
+
+		auto pDict = sphCreateDictionaryCRC ( tDictSettings, nullptr, pTok, "e1post07-ratio", false, 32, nullptr, sError );
+		ASSERT_TRUE ( pDict );
+		auto pIndex = sphCreateIndexRT ( "e1post07_ratio", RT_INDEX_FILE_NAME, tSchema, 128*1024 );
+		pIndex->SetTokenizer ( pTok );
+		pIndex->SetDictionary ( pDict );
+		pIndex->PostSetup();
+		StrVec_t dWarnings;
+		ASSERT_TRUE ( pIndex->Prealloc ( false, nullptr, dWarnings ) );
+
+		std::string sHigh, sLow = "hot", sAbsent = "cold";
+		for ( int i=0; i<20; ++i )
+			sHigh += i ? " hot" : "hot";
+		for ( int i=0; i<100; ++i )
+			sLow += " filler";
+		constexpr int DOCS = 10000;
+		constexpr int MATCHES = 4101; // 64 full posting blocks plus a five-row tail
+		std::vector<std::string> dText;
+		std::vector<DocID_t> dIDs;
+		dText.reserve ( DOCS*2 );
+		dIDs.reserve ( DOCS );
+		for ( int i=0; i<DOCS; ++i )
+		{
+			dText.emplace_back ( "title" );
+			dText.emplace_back ( i<128 ? sHigh : i<MATCHES ? sLow : sAbsent );
+			dIDs.push_back ( DocID_t(DOCS-i) );
+		}
+		std::vector<BYTE*> dFields;
+		dFields.reserve ( dText.size() );
+		for ( auto & sText : dText )
+			dFields.push_back ( (BYTE*)sText.data() );
+		auto pSrc = new MockTestDoc_c ( tSrcSchema, dFields.data(), DOCS, 2, &dIDs );
+		EXPECT_CALL ( *pSrc, Connect ( testing::_ ) ).WillOnce ( testing::Return(true) );
+		EXPECT_CALL ( *pSrc, GetFieldLengths () ).Times ( DOCS ).WillRepeatedly ( testing::Return(pSrc->m_dFieldLengths.Begin()) );
+		EXPECT_CALL ( *pSrc, Disconnect () );
+		pSrc->SetTokenizer ( pIndex->GetTokenizer()->Clone(SPH_CLONE_INDEX) );
+		pSrc->SetDict ( pIndex->GetDictionary()->Clone() );
+		pSrc->Setup ( CSphSourceSettings(), nullptr );
+		ASSERT_TRUE ( pSrc->Connect(sError) );
+		ASSERT_TRUE ( pSrc->IterateStart(sError) );
+		ASSERT_TRUE ( pSrc->UpdateSchema(&tSrcSchema,sError) );
+		InsertDocData_c tDoc ( pIndex->GetMatchSchema() );
+		RtAccum_t tAcc;
+		CSphString sFilter;
+		const int iDynamic = pIndex->GetMatchSchema().GetRowSize();
+		bool bEOF = false;
+		while ( true )
+		{
+			ASSERT_TRUE ( pSrc->IterateDocument(bEOF,sError) );
+			if ( bEOF )
+				break;
+			tDoc.m_dFields = pSrc->GetFields();
+			tDoc.m_tDoc.Combine ( pSrc->m_tDocInfo, iDynamic );
+			ASSERT_TRUE ( pIndex->AddDocument(tDoc,false,sFilter,sError,sWarning,&tAcc) );
+		}
+		ASSERT_TRUE ( pIndex->Commit(nullptr,&tAcc,&sError) );
+		pSrc->Disconnect();
+		SafeDelete ( pSrc );
+		ASSERT_TRUE ( pIndex->ForceDiskChunk() );
+
+		auto fnQuery = [&] ( const char * szQuery, bool bForceGeneric, int iOffset, int iLimit, const char * szExpr=nullptr, const char * szSort=nullptr, int iNamedFieldWeight=0, int iPositionalFieldWeight=0 )
+		{
+			SetE1TestForceGenericRanked ( bForceGeneric );
+			ResetE1TestRankStats();
+			QueryResult_t tOut;
+			CSphQuery tQuery;
+			SetQueryDefaultsExt2 ( tQuery );
+			tQuery.m_sQuery = szQuery;
+			tQuery.m_bExplicitRanker = true;
+			tQuery.m_eRanker = szExpr ? SPH_RANK_EXPR : SPH_RANK_BM25A;
+			if ( szExpr )
+				tQuery.m_sRankerExpr = szExpr;
+			if ( szSort )
+			{
+				tQuery.m_bExplicitOrderBy = true;
+				tQuery.m_sSortBy = szSort;
+				tQuery.m_sOrderBy = szSort;
+			}
+			if ( iNamedFieldWeight )
+				tQuery.m_dFieldWeights.Add ( { CSphString("content"), iNamedFieldWeight } );
+			if ( iPositionalFieldWeight )
+				tQuery.m_dWeights.Add ( DWORD(iPositionalFieldWeight) );
+			tQuery.m_iOffset = iOffset;
+			tQuery.m_iLimit = iLimit;
+			auto pParser = sphCreatePlainQueryParser();
+			tQuery.m_pQueryParser = pParser.get();
+			AggrResult_t tResult;
+			CSphQueryResult tQueryResult;
+			tQueryResult.m_pMeta = &tResult;
+			CSphMultiQueryArgs tArgs ( 1 );
+			SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema() );
+			tQueueSettings.m_iMaxMatches = iOffset+iLimit;
+			SphQueueRes_t tRes;
+			ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, tResult.m_sError, tRes );
+			EXPECT_TRUE ( pSorter );
+			if ( !pSorter )
+				return tOut;
+			EXPECT_TRUE ( pIndex->MultiQuery(tQueryResult,tQuery,{&pSorter,1},tArgs) ) << tResult.m_sError.cstr();
+			tOut.m_iTotal = pSorter->GetTotalCount();
+			auto & tOne = tResult.m_dResults.Add();
+			tOne.FillFromSorter ( pSorter );
+			const CSphColumnInfo * pID = tOne.m_tSchema.GetAttr ( sphGetDocidName() );
+			EXPECT_TRUE ( pID );
+			if ( pID )
+				for ( const auto & tMatch : tOne.m_dMatches )
+					tOut.m_dRows.emplace_back ( tMatch.GetAttr(pID->m_tLocator), tMatch.m_iWeight );
+			SafeDelete ( pSorter );
+			if ( iOffset>0 && iOffset<=int(tOut.m_dRows.size()) )
+				tOut.m_dRows.erase ( tOut.m_dRows.begin(), tOut.m_dRows.begin()+iOffset );
+			return tOut;
+		};
+
+		const auto tDirect = fnQuery ( "hot", false, 0, 10 );
+		const E1TestRankStats_t tDirectStats = GetE1TestRankStats();
+		const auto tGeneric = fnQuery ( "hot", true, 0, 10 );
+		const E1TestRankStats_t tGenericStats = GetE1TestRankStats();
+		EXPECT_EQ ( tDirect.m_dRows, tGeneric.m_dRows );
+		EXPECT_EQ ( tDirect.m_iTotal, tGeneric.m_iTotal );
+		EXPECT_EQ ( tDirect.m_iTotal, MATCHES );
+		EXPECT_EQ ( tDirectStats.m_eBoundKind, E1RankedBoundKind_e::BM25A_RATIO );
+		EXPECT_GT ( tDirectStats.m_uSelectedBlocks, 0u );
+		EXPECT_GT ( tDirectStats.m_uSkippedBlocks, 0u );
+		EXPECT_GT ( tDirectStats.m_uSkippedDocs, 0u );
+		EXPECT_LT ( tDirectStats.m_uScoredDocs, uint64_t(MATCHES) );
+		EXPECT_GT ( tGenericStats.m_uFallbacks, 0u );
+		EXPECT_EQ ( tGenericStats.m_uSelectedBlocks, 0u );
+
+		const auto tPage = fnQuery ( "hot", false, 3, 7 );
+		const auto tGenericPage = fnQuery ( "hot", true, 3, 7 );
+		EXPECT_EQ ( tPage.m_dRows, tGenericPage.m_dRows );
+		EXPECT_EQ ( tPage.m_iTotal, tGenericPage.m_iTotal );
+
+		const auto tPublicIDTie = fnQuery ( "hot", false, 0, 10, nullptr, "@weight desc, id asc" );
+		const auto tPublicIDTieGeneric = fnQuery ( "hot", true, 0, 10, nullptr, "@weight desc, id asc" );
+		EXPECT_EQ ( tPublicIDTie.m_dRows, tPublicIDTieGeneric.m_dRows );
+		EXPECT_EQ ( tPublicIDTie.m_iTotal, tPublicIDTieGeneric.m_iTotal );
+
+		// A true field subset on the two-field schema must fail closed.
+		const auto tScoped = fnQuery ( "@content hot", false, 0, 10 );
+		const E1TestRankStats_t tScopedStats = GetE1TestRankStats();
+		const auto tScopedGeneric = fnQuery ( "@content hot", true, 0, 10 );
+		EXPECT_EQ ( tScoped.m_dRows, tScopedGeneric.m_dRows );
+		EXPECT_EQ ( tScoped.m_iTotal, tScopedGeneric.m_iTotal );
+		EXPECT_EQ ( tScopedStats.m_uSelectedBlocks, 0u );
+		EXPECT_GT ( tScopedStats.m_uFallbacks, 0u );
+
+		// Canonical-expression spelling is supported; coefficient and sort near
+		// misses remain exact generic execution.
+		const auto tExpr = fnQuery ( "hot", false, 0, 10, "1000*bm25a(1.2,0.75,256)" );
+		EXPECT_EQ ( tExpr.m_dRows, tGeneric.m_dRows );
+		EXPECT_EQ ( tExpr.m_iTotal, tGeneric.m_iTotal );
+		const auto tAlt = fnQuery ( "hot", false, 0, 10, "1000*bm25a(1.3,0.75,256)" );
+		const E1TestRankStats_t tAltStats = GetE1TestRankStats();
+		EXPECT_EQ ( tAltStats.m_uSelectedBlocks, 0u );
+		EXPECT_EQ ( tAlt.m_iTotal, MATCHES );
+		const auto tAltSort = fnQuery ( "hot", false, 0, 10, nullptr, "id asc" );
+		const E1TestRankStats_t tSortStats = GetE1TestRankStats();
+		EXPECT_EQ ( tSortStats.m_uSelectedBlocks, 0u );
+		EXPECT_EQ ( tAltSort.m_iTotal, MATCHES );
+
+		const auto tNamedWeight = fnQuery ( "hot", false, 0, 10, nullptr, nullptr, 2 );
+		const E1TestRankStats_t tNamedWeightStats = GetE1TestRankStats();
+		const auto tNamedWeightGeneric = fnQuery ( "hot", true, 0, 10, nullptr, nullptr, 2 );
+		EXPECT_EQ ( tNamedWeight.m_dRows, tNamedWeightGeneric.m_dRows );
+		EXPECT_EQ ( tNamedWeight.m_iTotal, tNamedWeightGeneric.m_iTotal );
+		EXPECT_EQ ( tNamedWeightStats.m_uSelectedBlocks, 0u );
+
+		const auto tPositionalWeight = fnQuery ( "hot", false, 0, 10, nullptr, nullptr, 0, 2 );
+		const E1TestRankStats_t tPositionalWeightStats = GetE1TestRankStats();
+		const auto tPositionalWeightGeneric = fnQuery ( "hot", true, 0, 10, nullptr, nullptr, 0, 2 );
+		EXPECT_EQ ( tPositionalWeight.m_dRows, tPositionalWeightGeneric.m_dRows );
+		EXPECT_EQ ( tPositionalWeight.m_iTotal, tPositionalWeightGeneric.m_iTotal );
+		EXPECT_EQ ( tPositionalWeightStats.m_uSelectedBlocks, 0u );
+
+		CSphVector<DocID_t> dDelete;
+		dDelete.Add ( dIDs[100] );
+		RtAccum_t tDeleteAcc;
+		ASSERT_TRUE ( pIndex->DeleteDocument(dDelete,sError,&tDeleteAcc) );
+		ASSERT_TRUE ( pIndex->Commit(nullptr,&tDeleteAcc,&sError) );
+		const auto tDeleted = fnQuery ( "hot", false, 0, 10 );
+		const E1TestRankStats_t tDeletedStats = GetE1TestRankStats();
+		const auto tDeletedGeneric = fnQuery ( "hot", true, 0, 10 );
+		EXPECT_EQ ( tDeleted.m_dRows, tDeletedGeneric.m_dRows );
+		EXPECT_EQ ( tDeleted.m_iTotal, MATCHES-1 );
+		EXPECT_EQ ( tDeletedStats.m_uSelectedBlocks, 0u );
 	} );
 }
 

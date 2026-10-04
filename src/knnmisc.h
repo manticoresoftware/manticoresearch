@@ -62,7 +62,7 @@ void							SetupKNNLimit ( CSphQuery & tQuery );
 
 // searchd config 'knn_rescore_prefetch' (undocumented, 0 or 1): before rescoring candidates of a columnar table, ask the
 // OS to read all their vectors at once, so that the reads overlap instead of being served one page fault at a time.
-// A residency gate skips it while the vectors are in memory already (see ShouldPrefetchSticky in knnmisc.cpp).
+// A residency gate skips it while the vectors are in memory already (see AreVectorsResident in knnmisc.cpp).
 void							SetKNNRescorePrefetch ( bool bEnable );
 bool							KNNRescorePrefetch();
 

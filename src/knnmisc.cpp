@@ -385,13 +385,17 @@ void KNNVecDistCalc_c::RescoreBatch ( VecTraits_T<CSphMatch*> & dMatches, const 
 }
 
 
-static const int KNN_PREFETCH_PROBES = 4;
+static const int KNN_PREFETCH_PROBES = 8;
 
-// Ask the OS about a few of the vectors, spread evenly over the whole (chunk, row)-sorted set: are they in memory?
-// All present: the set is most likely cached and prefetching it would only cost time. Any missing: prefetch them all.
-// With a fraction p of the vectors cached the answer is "present" with probability p^4, so a cold table practically
-// always prefetches, a fully cached one never does, and a mistake either way only costs that one query some time.
-// The ranges are the addresses the rescore has already resolved, so a probe costs one mincore() call and nothing else.
+// Residency gate: the prefetch pays off only while the vectors are not in memory, and costs a system call per vector
+// once they are. So ask the OS about a few of them, spread evenly over the whole (chunk, row)-sorted set. All present:
+// the set is most likely cached, skip the prefetch. Any missing: prefetch them all.
+// The two mistakes are not equal. An unneeded prefetch costs a fraction of a millisecond; a wrongly skipped one costs
+// a serial disk read per missing vector. Hence the fairly large sample: with a fraction p of the vectors cached the
+// prefetch is skipped with probability p^8, so a cold table practically always prefetches, a fully cached one never
+// does, and a half-warm one skips once in several hundred queries.
+// The gate keeps no state: every query decides for its own vectors, so there is nothing to key by table, attribute
+// or chunk. The ranges are the addresses the rescore has already resolved, so a probe is one mincore() call.
 static bool AreVectorsResident ( const VecTraits_T<MemRange_t> & dRanges )
 {
 	const int iCount = dRanges.GetLength();
@@ -407,59 +411,12 @@ static bool AreVectorsResident ( const VecTraits_T<MemRange_t> & dRanges )
 }
 
 
-static const int KNN_PREFETCH_COLD_STREAK = 64;	// rescores that prefetch without probing after a probe found a vector missing
-static const int KNN_PREFETCH_CLEAN_PROBES = 3;	// clean probes in a row it takes before the prefetch starts being skipped
-
-// The two mistakes of a residency probe are not equal: an unneeded prefetch costs a fraction of a millisecond, while
-// a wrongly skipped one costs a serial disk read per missing vector. A per-query probe also wastes its own work on
-// every query that ends up prefetching. So the gate keeps state:
-//  - cold: a probe found a vector missing. The next KNN_PREFETCH_COLD_STREAK rescores prefetch with no probing at all.
-//  - re-check: when the streak ends, rescores probe again, and still prefetch. A miss starts another streak.
-//  - hot: only after KNN_PREFETCH_CLEAN_PROBES clean probes in a row is the prefetch skipped, and from then on every
-//    rescore probes; a single miss drops back to cold.
-// The state is one for the whole daemon (not per table), which is good enough for the experiment: a cold table keeps
-// a hot one prefetching. Races on it are benign, it is a heuristic; at worst a streak runs a little long or short.
-static std::atomic<int> g_iKNNPrefetchColdLeft { 0 };
-static std::atomic<int> g_iKNNPrefetchCleanProbes { 0 };
-
-static bool ShouldPrefetchSticky ( const VecTraits_T<MemRange_t> & dRanges )
-{
-	int iColdLeft = g_iKNNPrefetchColdLeft.load ( std::memory_order_relaxed );
-	if ( iColdLeft>0 )
-	{
-		g_iKNNPrefetchColdLeft.store ( iColdLeft-1, std::memory_order_relaxed );
-		return true;
-	}
-
-	if ( !AreVectorsResident(dRanges) )
-	{
-		g_iKNNPrefetchCleanProbes.store ( 0, std::memory_order_relaxed );
-		g_iKNNPrefetchColdLeft.store ( KNN_PREFETCH_COLD_STREAK, std::memory_order_relaxed );
-		return true;
-	}
-
-	int iClean = g_iKNNPrefetchCleanProbes.load ( std::memory_order_relaxed );
-	if ( iClean<KNN_PREFETCH_CLEAN_PROBES )
-	{
-		// not convinced yet: one clean sample right after a cold streak says little
-		g_iKNNPrefetchCleanProbes.store ( iClean+1, std::memory_order_relaxed );
-		return true;
-	}
-
-	return false;
-}
-
-
 // Hand the OS all these vectors at once, before the distance loop touches any of them. The reads are all submitted
 // up front, so they overlap instead of being served one page fault at a time, only the pages the vectors occupy are
 // read, and a vector that straddles a page boundary is fetched by one request.
 static void PrefetchVectors ( const VecTraits_T<MemRange_t> & dRanges )
 {
-	if ( dRanges.IsEmpty() )
-		return;
-
-	// residency gate: the prefetch pays off only while the vectors are not in memory, and costs time once they are
-	if ( !ShouldPrefetchSticky(dRanges) )
+	if ( dRanges.IsEmpty() || AreVectorsResident(dRanges) )
 		return;
 
 	mmprefetch ( dRanges.Begin(), dRanges.GetLength() );

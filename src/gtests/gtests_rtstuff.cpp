@@ -1228,7 +1228,10 @@ TEST_F ( RT, E1Post07RatioBoundsDriveExactCanonicalBM25A )
 		{
 			dText.emplace_back ( "title" );
 			dText.emplace_back ( i<128 ? sHigh : i<MATCHES ? sLow : sAbsent );
-			dIDs.push_back ( DocID_t(DOCS-i) );
+			// Reverse IDs inside both tied high-score blocks. The first block owns
+			// IDs 1..64, so the second (65..128) can genuinely be rejected at
+			// equality without relying on rowid/public-ID order equivalence.
+			dIDs.push_back ( DocID_t(i<64 ? 64-i : i<128 ? 192-i : DOCS+20000-i) );
 		}
 		std::vector<BYTE*> dFields;
 		dFields.reserve ( dText.size() );
@@ -1335,6 +1338,9 @@ TEST_F ( RT, E1Post07RatioBoundsDriveExactCanonicalBM25A )
 		EXPECT_GT ( tDirectStats.m_uSkippedBlocks, 0u );
 		EXPECT_GT ( tDirectStats.m_uSkippedDocs, 0u );
 		EXPECT_LT ( tDirectStats.m_uScoredDocs, uint64_t(MATCHES) );
+		EXPECT_TRUE ( tDirectStats.m_bValidatedPublicID );
+		EXPECT_EQ ( tDirectStats.m_uEqualitySkippedBlocks, 0u ); // implicit rowid tie
+		EXPECT_GT ( tDirectStats.m_uStrictScoreSkippedBlocks, 0u );
 		EXPECT_GT ( tGenericStats.m_uFallbacks, 0u );
 		EXPECT_EQ ( tGenericStats.m_uSelectedBlocks, 0u );
 
@@ -1344,9 +1350,39 @@ TEST_F ( RT, E1Post07RatioBoundsDriveExactCanonicalBM25A )
 		EXPECT_EQ ( tPage.m_iTotal, tGenericPage.m_iTotal );
 
 		const auto tPublicIDTie = fnQuery ( "hot", false, 0, 10, nullptr, "@weight desc, id asc" );
+		const E1TestRankStats_t tPublicIDTieStats = GetE1TestRankStats();
 		const auto tPublicIDTieGeneric = fnQuery ( "hot", true, 0, 10, nullptr, "@weight desc, id asc" );
 		EXPECT_EQ ( tPublicIDTie.m_dRows, tPublicIDTieGeneric.m_dRows );
 		EXPECT_EQ ( tPublicIDTie.m_iTotal, tPublicIDTieGeneric.m_iTotal );
+		ASSERT_EQ ( tPublicIDTie.m_dRows.size(), 10u );
+		for ( int i=0; i<10; ++i )
+		{
+			EXPECT_EQ ( tPublicIDTie.m_dRows[i].first, i+1 );
+			EXPECT_EQ ( tPublicIDTie.m_dRows[i].second, tPublicIDTie.m_dRows[0].second );
+		}
+		EXPECT_TRUE ( tPublicIDTieStats.m_bValidatedPublicID );
+		EXPECT_GT ( tPublicIDTieStats.m_uEqualitySkippedBlocks, 0u );
+		EXPECT_GT ( tPublicIDTieStats.m_uStrictScoreSkippedBlocks, 0u );
+		EXPECT_EQ ( tPublicIDTieStats.m_iConfiguredK, 10 );
+		EXPECT_EQ ( tPublicIDTieStats.m_iHeapWorstWeight, tPublicIDTie.m_dRows.back().second );
+		EXPECT_EQ ( tPublicIDTieStats.m_uHeapWorstPublicID, 10u );
+
+		const auto tPublicIDPage = fnQuery ( "hot", false, 3, 7, nullptr, "@weight desc, id asc" );
+		const E1TestRankStats_t tPublicIDPageStats = GetE1TestRankStats();
+		const auto tPublicIDPageGeneric = fnQuery ( "hot", true, 3, 7, nullptr, "@weight desc, id asc" );
+		EXPECT_EQ ( tPublicIDPage.m_dRows, tPublicIDPageGeneric.m_dRows );
+		EXPECT_EQ ( tPublicIDPage.m_iTotal, tPublicIDPageGeneric.m_iTotal );
+		ASSERT_EQ ( tPublicIDPage.m_dRows.size(), 7u );
+		for ( int i=0; i<7; ++i )
+		{
+			EXPECT_EQ ( tPublicIDPage.m_dRows[i].first, i+4 );
+			EXPECT_EQ ( tPublicIDPage.m_dRows[i].second, tPublicIDTie.m_dRows[0].second );
+		}
+		EXPECT_GT ( tPublicIDPageStats.m_uEqualitySkippedBlocks, 0u );
+		EXPECT_GT ( tPublicIDPageStats.m_uStrictScoreSkippedBlocks, 0u );
+		EXPECT_EQ ( tPublicIDPageStats.m_iConfiguredK, 10 ); // offset + limit
+		EXPECT_EQ ( tPublicIDPageStats.m_iHeapWorstWeight, tPublicIDTie.m_dRows.back().second );
+		EXPECT_EQ ( tPublicIDPageStats.m_uHeapWorstPublicID, 10u );
 
 		// E1POST07 ratio bytes are not max-TF. Compound compatibility keeps the
 		// v5/v6 direct container and exact-TF lanes while disabling bound pruning.

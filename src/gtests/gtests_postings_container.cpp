@@ -30,6 +30,21 @@ namespace
 
 using ByteVec_t = std::vector<uint8_t>;
 
+class VectorPublicIDReader_c final : public e1::PublicIDReader_i
+{
+public:
+	explicit VectorPublicIDReader_c ( const std::vector<uint64_t> & dIDs ) : m_dIDs ( dIDs ) {}
+	uint32_t Rows() const override { return uint32_t(m_dIDs.size()); }
+	bool Get ( uint32_t uRow, uint64_t & uValue ) const override
+	{
+		if ( uRow>=m_dIDs.size() ) return false;
+		uValue = m_dIDs[uRow];
+		return true;
+	}
+private:
+	const std::vector<uint64_t> & m_dIDs;
+};
+
 void PutValue ( ByteVec_t & dData, size_t uOffset, uint64_t uValue, unsigned uBytes )
 {
 	for ( unsigned i=0; i<uBytes; ++i )
@@ -164,6 +179,21 @@ void ConvertSingleTermV7ToV6 ( ByteVec_t & dData, const std::vector<e1::Posting>
 	UpdateChecksum ( dData );
 }
 
+void ConvertSingleTermV9ToV7 ( ByteVec_t & dData, size_t uDocs )
+{
+	const auto * pTerm = dData.data()+56;
+	const uint32_t uMetadataCount = e1::U32 ( pTerm+8 );
+	const uint64_t uMetadataOffset = e1::U64 ( pTerm+16 );
+	const auto * pGroup = dData.data()+uMetadataOffset+uint64_t(uMetadataCount-1)*16;
+	const size_t uBoundsOffset = e1::U64(pGroup)+e1::Meta4Bytes(e1::U32(pGroup+8),e1::U32(pGroup+12));
+	const size_t uBlocks = (uDocs+63)/64;
+	dData.erase ( dData.begin()+uBoundsOffset+uBlocks, dData.begin()+uBoundsOffset+uBlocks+uBlocks*8 );
+	PutValue ( dData, 48, e1::U64(dData.data()+48)-uBlocks*8, 8 );
+	memcpy ( dData.data(), "E1POST07", 8 );
+	PutValue ( dData, 8, 7, 4 );
+	UpdateChecksum ( dData );
+}
+
 class PostingsContainerTest : public ::testing::Test
 {
 protected:
@@ -226,6 +256,77 @@ TEST_F ( PostingsContainerTest, TrustedGenerationIsOneShotAndRejectsModifiedComp
 	e1::MarkTrustedGeneration ( sPostings, sDict, sHits, 8, 1, 2, 3 );
 	{ std::ofstream(sDict,std::ios::binary|std::ios::app).put('!'); }
 	EXPECT_FALSE ( e1::ConsumeTrustedGeneration(sPostings,sDict,sHits,8,1,2,3) );
+}
+
+TEST_F ( PostingsContainerTest, TrustedV9PublicIDProofIsContentBoundAndOneShot )
+{
+	std::vector<uint64_t> dPublicIDs { 400, 300, 200, 100 };
+	std::vector<e1::Posting> dPostings;
+	for ( uint32_t uRow=0; uRow<dPublicIDs.size(); ++uRow )
+		dPostings.emplace_back ( uRow, 1, 1, 0, 0, dPublicIDs[uRow] );
+	const std::string sPostings = m_sBase+".spd";
+	const std::string sDict = m_sBase+".spi";
+	const std::string sHits = m_sBase+".spp";
+	auto fnWrite = [&] ()
+	{
+		{ std::ofstream(sDict,std::ios::binary).write("dict",4); }
+		{ std::ofstream(sHits,std::ios::binary).put('\1'); }
+		std::string sError;
+		e1::Writer tWriter;
+		EXPECT_TRUE ( tWriter.Open(sPostings,sError) ) << sError;
+		tWriter.BindPublicIDs ( dPublicIDs.data(), uint32_t(dPublicIDs.size()), true );
+		EXPECT_TRUE ( tWriter.FinishTerm(1,static_cast<const std::vector<e1::Posting> &>(dPostings),dPostings.size(),false,sError) ) << sError;
+		EXPECT_TRUE ( tWriter.Finalize(sDict,sHits,sError) ) << sError;
+	};
+	auto fnConsume = [&] ( const std::vector<uint64_t> & dIDs )
+	{
+		auto dRaw = ReadFile(sPostings);
+		e1::PublicIDDigest_t dDigest {};
+		const bool bDigest = e1::PublicIDContentDigest ( uint32_t(dIDs.size()), [&dIDs] ( uint32_t uRow, uint64_t & uValue ) { uValue=dIDs[uRow]; return true; }, dDigest );
+		EXPECT_TRUE ( bDigest );
+		return e1::ConsumeTrustedGeneration ( sPostings, sDict, sHits, e1::U64(dRaw.data()+16), e1::U32(dRaw.data()+32), e1::U32(dRaw.data()+36), e1::U32(dRaw.data()+40), uint32_t(dIDs.size()), &dDigest );
+	};
+
+	fnWrite();
+	auto tProof = fnConsume(dPublicIDs);
+#if !defined(_WIN32)
+	ASSERT_TRUE ( tProof.m_bGeneration );
+	ASSERT_TRUE ( tProof.m_bPublicIDs );
+#else
+	ASSERT_FALSE ( tProof.m_bGeneration );
+#endif
+	auto dRaw=ReadFile(sPostings), dDict=ReadFile(sDict), dHits=ReadFile(sHits);
+	VectorPublicIDReader_c tPublicIDs ( dPublicIDs );
+	std::string sError;
+	e1::Store tStore;
+	e1::OpenValidationPath_e ePath = e1::OpenValidationPath_e::NONE;
+	ASSERT_TRUE ( tStore.Open(dRaw.data(),dRaw.size(),uint32_t(dPublicIDs.size()),dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,tProof.m_bGeneration,nullptr,nullptr,&tPublicIDs,&ePath,tProof.m_bPublicIDs) ) << sError;
+#if !defined(_WIN32)
+	EXPECT_EQ ( ePath, e1::OpenValidationPath_e::TRUSTED_FAST );
+	EXPECT_TRUE ( tStore.PublicIDMinValidated() );
+#endif
+	EXPECT_FALSE ( fnConsume(dPublicIDs).m_bGeneration );
+
+	fnWrite();
+	auto dWrongIDs = dPublicIDs;
+	dWrongIDs[0] = 1;
+	auto tWrongProof = fnConsume(dWrongIDs);
+#if !defined(_WIN32)
+	ASSERT_TRUE ( tWrongProof.m_bGeneration );
+	EXPECT_FALSE ( tWrongProof.m_bPublicIDs );
+#endif
+	VectorPublicIDReader_c tWrongIDs ( dWrongIDs );
+	e1::Store tWrongStore;
+	EXPECT_FALSE ( tWrongStore.Open(dRaw.data(),dRaw.size(),uint32_t(dWrongIDs.size()),dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,tWrongProof.m_bGeneration,nullptr,nullptr,&tWrongIDs,&ePath,tWrongProof.m_bPublicIDs) );
+	EXPECT_NE ( sError.find("unsafe public ID minimum"), std::string::npos );
+	EXPECT_FALSE ( fnConsume(dPublicIDs).m_bGeneration );
+
+	fnWrite();
+	dRaw=ReadFile(sPostings);
+	{ std::ofstream(sPostings,std::ios::binary|std::ios::app).put('!'); }
+	e1::PublicIDDigest_t dDigest {};
+	ASSERT_TRUE ( e1::PublicIDContentDigest ( uint32_t(dPublicIDs.size()), [&dPublicIDs] ( uint32_t uRow, uint64_t & uValue ) { uValue=dPublicIDs[uRow]; return true; }, dDigest ) );
+	EXPECT_FALSE ( e1::ConsumeTrustedGeneration(sPostings,sDict,sHits,e1::U64(dRaw.data()+16),e1::U32(dRaw.data()+32),e1::U32(dRaw.data()+36),e1::U32(dRaw.data()+40),uint32_t(dPublicIDs.size()),&dDigest).m_bGeneration );
 }
 
 TEST ( PostingsContainer, CodecsSeekBulkAndMalformedInput )
@@ -557,9 +658,16 @@ TEST_F ( PostingsContainerTest, V9WriterPersistsExactSafeRatioBoundsByOrdinal )
 	ASSERT_GE ( dRaw.size(), 56u );
 	EXPECT_EQ ( std::string(reinterpret_cast<const char *>(dRaw.data()),8), "E1POST09" );
 	EXPECT_EQ ( e1::U32(dRaw.data()+8), 9u );
+	e1::norms::Builder tNormBuilder ( 1 );
+	for ( uint32_t uDL : dTotalDL )
+		ASSERT_TRUE ( tNormBuilder.AddRow(&uDL,1,sError) ) << sError;
+	std::vector<uint8_t> dNormBytes;
+	ASSERT_TRUE ( tNormBuilder.Build(dNormBytes,sError) ) << sError;
+	e1::norms::Store tNormStore;
+	ASSERT_TRUE ( tNormStore.Open(dNormBytes.data(),dNormBytes.size(),sError) ) << sError;
 	e1::Store tStore;
-	// Ordinal-byte round trip is independent from deep norm validation, covered below.
-	ASSERT_TRUE ( tStore.Open(dRaw.data(),dRaw.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,true) ) << sError;
+	// V9 without an exact public-ID proof falls back to deep validation.
+	ASSERT_TRUE ( tStore.Open(dRaw.data(),dRaw.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,true,nullptr,&tNormStore) ) << sError;
 	e1::Cursor tCursor;
 	tCursor.Bind ( tStore, 1 );
 	ASSERT_TRUE ( tCursor.HasBM25ARatioBounds() );
@@ -575,15 +683,17 @@ TEST_F ( PostingsContainerTest, V9WriterPersistsExactSafeRatioBoundsByOrdinal )
 	}
 
 	// Deep reopen validates every finite code against the authoritative norms.
-	e1::norms::Builder tNormBuilder ( 1 );
-	for ( uint32_t uDL : dTotalDL )
-		ASSERT_TRUE ( tNormBuilder.AddRow(&uDL,1,sError) ) << sError;
-	std::vector<uint8_t> dNormBytes;
-	ASSERT_TRUE ( tNormBuilder.Build(dNormBytes,sError) ) << sError;
-	e1::norms::Store tNormStore;
-	ASSERT_TRUE ( tNormStore.Open(dNormBytes.data(),dNormBytes.size(),sError) ) << sError;
 	e1::Store tDeepStore;
 	ASSERT_TRUE ( tDeepStore.Open(dRaw.data(),dRaw.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,false,nullptr,&tNormStore) ) << sError;
+	auto dV7 = dRaw;
+	ConvertSingleTermV9ToV7 ( dV7, dTotalDL.size() );
+	ASSERT_EQ ( e1::U64(dV7.data()+48)+16, dV7.size() );
+	e1::Store tV7Store;
+	ASSERT_TRUE ( tV7Store.Open(dV7.data(),dV7.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,false,nullptr,&tNormStore) ) << sError;
+	e1::Cursor tV7Cursor;
+	tV7Cursor.Bind ( tV7Store, 1 );
+	EXPECT_TRUE ( tV7Cursor.HasBM25ARatioBounds() );
+	EXPECT_FALSE ( tV7Cursor.HasPublicIdMinBounds() );
 
 	auto dUnderestimate = dRaw;
 	const auto * pTerm = dUnderestimate.data()+56;
@@ -602,8 +712,12 @@ TEST_F ( PostingsContainerTest, V9PersistsConservativePublicIdMinimumPerOrdinalB
 {
 	std::vector<e1::Posting> dPostings;
 	std::vector<uint32_t> dTotalDL ( 130, 32 );
+	std::vector<uint64_t> dPublicIDs;
 	for ( uint32_t i=0; i<130; ++i )
+	{
 		dPostings.push_back ( { i, 1, 1, 0, 0, 10000u-i*13u } );
+		dPublicIDs.push_back ( dPostings.back().m_uPublicID );
+	}
 	{ std::ofstream(m_sBase+".spi",std::ios::binary).write("dict",4); }
 	{ std::ofstream(m_sBase+".spp",std::ios::binary).put('\1'); }
 	std::string sError;
@@ -624,10 +738,50 @@ TEST_F ( PostingsContainerTest, V9PersistsConservativePublicIdMinimumPerOrdinalB
 	ASSERT_GE ( dRaw.size(), 56u );
 	EXPECT_EQ ( std::string(reinterpret_cast<const char *>(dRaw.data()),8), "E1POST09" );
 	EXPECT_EQ ( e1::U32(dRaw.data()+8), 9u );
+	e1::norms::Builder tNormBuilder ( 1 );
+	for ( uint32_t uDL : dTotalDL ) ASSERT_TRUE ( tNormBuilder.AddRow(&uDL,1,sError) ) << sError;
+	std::vector<uint8_t> dNormBytes;
+	ASSERT_TRUE ( tNormBuilder.Build(dNormBytes,sError) ) << sError;
+	e1::norms::Store tNormStore;
+	ASSERT_TRUE ( tNormStore.Open(dNormBytes.data(),dNormBytes.size(),sError) ) << sError;
 	e1::Store tStore;
-	ASSERT_TRUE ( tStore.Open(dRaw.data(),dRaw.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,true) ) << sError;
+	e1::OpenValidationPath_e eValidationPath = e1::OpenValidationPath_e::NONE;
+	ASSERT_TRUE ( tStore.Open(dRaw.data(),dRaw.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,true,nullptr,&tNormStore,nullptr,&eValidationPath) ) << sError;
+	EXPECT_EQ ( eValidationPath, e1::OpenValidationPath_e::DEEP );
 	e1::Cursor tCursor;
 	tCursor.Bind ( tStore, 1 );
+	// A checksum or trusted-generation token is not a validation proof.
+	EXPECT_FALSE ( tCursor.HasPublicIdMinBounds() );
+
+	VectorPublicIDReader_c tPublicIDs ( dPublicIDs );
+	// A trusted generation token only skips checksums when V9 also has a
+	// complete authoritative binding and its exact content proof. Missing or
+	// mismatched proof falls back to deep and must reject every corrupt input.
+	auto dBadPostings = dRaw;
+	dBadPostings.back() ^= 1;
+	e1::Store tBadPostingsStore;
+	EXPECT_FALSE ( tBadPostingsStore.Open(dBadPostings.data(),dBadPostings.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,true,nullptr,&tNormStore,nullptr,&eValidationPath) );
+	EXPECT_EQ ( eValidationPath, e1::OpenValidationPath_e::DEEP );
+	EXPECT_NE ( sError.find("checksums"), std::string::npos );
+
+	auto dBadDict = dDict;
+	dBadDict[0] ^= 1;
+	e1::Store tBadDictStore;
+	EXPECT_FALSE ( tBadDictStore.Open(dRaw.data(),dRaw.size(),130,dBadDict.data(),dBadDict.size(),dHits.data(),dHits.size(),sError,true,nullptr,&tNormStore,&tPublicIDs,&eValidationPath,false) );
+	EXPECT_EQ ( eValidationPath, e1::OpenValidationPath_e::DEEP );
+	EXPECT_NE ( sError.find("checksums"), std::string::npos );
+
+	auto dBadHits = dHits;
+	dBadHits[0] ^= 1;
+	e1::Store tBadHitsStore;
+	EXPECT_FALSE ( tBadHitsStore.Open(dRaw.data(),dRaw.size(),130,dDict.data(),dDict.size(),dBadHits.data(),dBadHits.size(),sError,true,nullptr,&tNormStore,nullptr,&eValidationPath) );
+	EXPECT_EQ ( eValidationPath, e1::OpenValidationPath_e::DEEP );
+	EXPECT_NE ( sError.find("checksums"), std::string::npos );
+
+	e1::Store tValidatedStore;
+	ASSERT_TRUE ( tValidatedStore.Open(dRaw.data(),dRaw.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,true,nullptr,&tNormStore,&tPublicIDs,&eValidationPath) ) << sError;
+	EXPECT_EQ ( eValidationPath, e1::OpenValidationPath_e::DEEP );
+	tCursor.Bind ( tValidatedStore, 1 );
 	ASSERT_TRUE ( tCursor.HasPublicIdMinBounds() );
 	for ( uint32_t uBlock=0; uBlock<3; ++uBlock )
 	{
@@ -635,17 +789,99 @@ TEST_F ( PostingsContainerTest, V9PersistsConservativePublicIdMinimumPerOrdinalB
 		ASSERT_TRUE ( tCursor.PublicIdMinBound(uBlock,uActual) );
 		EXPECT_EQ ( uActual, dExpectedMin[uBlock] );
 	}
+	// A short authoritative binding is not a proof and must leave equality
+	// pruning unavailable while retaining the safe score-bound path.
+	std::vector<uint64_t> dShortIDs ( dPublicIDs.begin(), dPublicIDs.end()-1 );
+	VectorPublicIDReader_c tShortIDs ( dShortIDs );
+	e1::Store tShortStore;
+	ASSERT_TRUE ( tShortStore.Open(dRaw.data(),dRaw.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,true,nullptr,&tNormStore,&tShortIDs,&eValidationPath) ) << sError;
+	EXPECT_EQ ( eValidationPath, e1::OpenValidationPath_e::DEEP );
+	e1::Cursor tShortCursor;
+	tShortCursor.Bind ( tShortStore, 1 );
+	EXPECT_TRUE ( tShortCursor.HasBM25ARatioBounds() );
+	EXPECT_FALSE ( tShortCursor.HasPublicIdMinBounds() );
 
-	// Equality is strict on id: min==worst cannot beat ORDER BY weight DESC,id ASC.
+	// The generic comparator is strict on id: min<worst admits, while
+	// min==worst cannot beat ORDER BY weight DESC,id ASC.
 	uint8_t uCode = 0;
 	ASSERT_TRUE ( tCursor.BM25ARatioBound(0,uCode) );
 	const float fIDF = 0.1f;
 	const int iThreshold = E1SafeUpperRatioWeight ( uCode, fIDF );
 	uint32_t uRow=0,uTF=0,uMask=0;
 	uint64_t uRef=0,uEntries=0,uBuckets=0,uSelected=0,uSkipped=0,uSkippedDocs=0,uDecoded=0,uEqualitySkipped=0;
+	EXPECT_TRUE ( tCursor.NextRanked(uRow,uTF,uMask,uRef,0,uEntries,uBuckets,uSelected,uSkipped,uSkippedDocs,uDecoded,nullptr,0,nullptr,0,dExpectedMin[0]+1,0,fIDF,iThreshold,&uEqualitySkipped) );
+	EXPECT_EQ ( uRow, 0u );
+	tCursor.Reset();
+	uEntries=uBuckets=uSelected=uSkipped=uSkippedDocs=uDecoded=uEqualitySkipped=0;
 	EXPECT_FALSE ( tCursor.NextRanked(uRow,uTF,uMask,uRef,0,uEntries,uBuckets,uSelected,uSkipped,uSkippedDocs,uDecoded,nullptr,0,nullptr,0,dExpectedMin[2],0,fIDF,iThreshold,&uEqualitySkipped) );
 	EXPECT_EQ ( uEqualitySkipped, 3u );
 	EXPECT_EQ ( uSkippedDocs, 130u );
+
+	// A row/public-ID binding mutation must fail even with intact container
+	// checksums; otherwise a valid minimum could be applied to the wrong rows.
+	auto dWrongRows = dPublicIDs;
+	dWrongRows[0] = 1;
+	VectorPublicIDReader_c tWrongRows ( dWrongRows );
+	e1::Store tWrongRowStore;
+	EXPECT_FALSE ( tWrongRowStore.Open(dRaw.data(),dRaw.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,true,nullptr,&tNormStore,&tWrongRows) );
+	EXPECT_NE ( sError.find("unsafe public ID minimum"), std::string::npos );
+
+	// Checksum-valid inflation is unsafe metadata, not a benchmarkable mode.
+	auto dInflated = dRaw;
+	const auto * pTerm = dInflated.data()+56;
+	const uint32_t uMetaCount = e1::U32(pTerm+8);
+	const auto * pLastMeta = dInflated.data()+e1::U64(pTerm+16)+uint64_t(uMetaCount-1)*16;
+	const size_t uBoundsOffset = e1::U64(pLastMeta)+e1::Meta4Bytes(e1::U32(pLastMeta+8),e1::U32(pLastMeta+12));
+	const size_t uMinIDsOffset = uBoundsOffset+dExpectedMin.size();
+	PutValue ( dInflated, uMinIDsOffset, dExpectedMin[0]+1, 8 );
+	UpdateChecksum ( dInflated );
+	e1::Store tInflatedStore;
+	EXPECT_FALSE ( tInflatedStore.Open(dInflated.data(),dInflated.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,false,nullptr,&tNormStore,&tPublicIDs) );
+	EXPECT_NE ( sError.find("unsafe public ID minimum"), std::string::npos );
+
+	// Reopening the same Store must recompute capability from this open's
+	// bindings. Neither a successful prior proof nor a failed changed binding
+	// may leave equality pruning enabled.
+	ASSERT_TRUE ( tValidatedStore.PublicIDMinValidated() );
+	ASSERT_TRUE ( tValidatedStore.Open(dRaw.data(),dRaw.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,true,nullptr,&tNormStore) ) << sError;
+	EXPECT_FALSE ( tValidatedStore.PublicIDMinValidated() );
+	e1::Cursor tReopenedCursor;
+	tReopenedCursor.Bind ( tValidatedStore, 1 );
+	EXPECT_FALSE ( tReopenedCursor.HasPublicIdMinBounds() );
+	EXPECT_FALSE ( tValidatedStore.Open(dRaw.data(),dRaw.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,true,nullptr,&tNormStore,&tWrongRows) );
+	EXPECT_FALSE ( tValidatedStore.PublicIDMinValidated() );
+}
+
+TEST_F ( PostingsContainerTest, V9DuplicatePublicIDsValidateConservatively )
+{
+	std::vector<e1::Posting> dPostings;
+	std::vector<uint32_t> dTotalDL ( 65, 8 );
+	std::vector<uint64_t> dPublicIDs;
+	for ( uint32_t i=0; i<65; ++i ) dPublicIDs.push_back ( i/2 ); // monotonic with duplicates
+	for ( uint32_t i=0; i<65; ++i ) dPostings.push_back ( { i, 1, 1, 0, 0, dPublicIDs[i] } );
+	{ std::ofstream(m_sBase+".spi",std::ios::binary).write("dict",4); }
+	{ std::ofstream(m_sBase+".spp",std::ios::binary).put('\1'); }
+	std::string sError;
+	e1::Writer tWriter;
+	ASSERT_TRUE ( tWriter.Open(m_sBase+".spd",sError) ) << sError;
+	tWriter.BindTotalDL ( dTotalDL.data(), uint32_t(dTotalDL.size()), true );
+	ASSERT_TRUE ( tWriter.FinishTerm(1,dPostings,dPostings.size(),false,sError) ) << sError;
+	ASSERT_TRUE ( tWriter.Finalize(m_sBase+".spi",m_sBase+".spp",sError) ) << sError;
+	auto dRaw=ReadFile(m_sBase+".spd"), dDict=ReadFile(m_sBase+".spi"), dHits=ReadFile(m_sBase+".spp");
+	e1::norms::Builder tNormBuilder ( 1 );
+	for ( uint32_t uDL : dTotalDL ) ASSERT_TRUE ( tNormBuilder.AddRow(&uDL,1,sError) ) << sError;
+	std::vector<uint8_t> dNormBytes;
+	ASSERT_TRUE ( tNormBuilder.Build(dNormBytes,sError) ) << sError;
+	e1::norms::Store tNormStore;
+	ASSERT_TRUE ( tNormStore.Open(dNormBytes.data(),dNormBytes.size(),sError) ) << sError;
+	VectorPublicIDReader_c tPublicIDs ( dPublicIDs );
+	e1::Store tStore;
+	ASSERT_TRUE ( tStore.Open(dRaw.data(),dRaw.size(),65,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,false,nullptr,&tNormStore,&tPublicIDs) ) << sError;
+	e1::Cursor tCursor;
+	tCursor.Bind ( tStore, 1 );
+	uint64_t uMin = 0;
+	ASSERT_TRUE ( tCursor.PublicIdMinBound(0,uMin) );
+	EXPECT_EQ ( uMin, 0u );
 }
 
 TEST ( NormStore, ExactWidthsRangesGatherAndTotals )

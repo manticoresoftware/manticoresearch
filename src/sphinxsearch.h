@@ -106,6 +106,7 @@ public:
 	// Exact E1 single-term ranked cursor. Unsupported readers return false
 	// without consuming input; uMinTF is a safe monotone lower cutoff.
 	virtual bool HasE1RankedBounds () const { return false; }
+	virtual bool HasE1PublicIdMinBounds () const { return false; }
 	virtual E1RankedBoundKind_e GetE1RankedBoundKind () const { return E1RankedBoundKind_e::NONE; }
 	virtual bool GetE1RankedDoc ( uint32_t uMinTF, RowID_t & tRowID, uint32_t & uTF, uint64_t & uBoundEntries, uint64_t & uBuckets, uint64_t & uSelectedBlocks, uint64_t & uSkippedBlocks, uint64_t & uSkippedDocs, uint64_t & uDecodedGroups, const uint64_t * pEligibility=nullptr, uint32_t uEligibilityWords=0, uint64_t * pIneligibleBeforeTF=nullptr, uint32_t uEqualBoundTF=0, uint64_t uWorstTieKey=UINT64_MAX, uint32_t uKnownMask=0, float fRatioIDF=0.0f, int iThreshold=0, uint64_t * pEqualitySkipped=nullptr ) { return false; }
 	virtual uint64_t TakeE1MetadataGroupsDecoded () { return 0; }
@@ -175,7 +176,7 @@ public:
 	mutable KeywordBuf_t	m_tKeywordBuf;
 	bool					m_bHasWideFields { false };
 	bool					m_bE1RankedRequested { false }; ///< construct narrow dedicated ranked physical plans
-	bool					m_bE1RowidDocidOrder { false }; ///< internal row order is proven to match user-visible id order
+	bool					m_bE1RowidDocidOrder { false }; ///< active exact-ranker tie key is the internal rowid
 	E1RankFilter_t		m_tE1RankFilter;
 
 	virtual ~ISphQwordSetup () {}

@@ -9,6 +9,16 @@
 #include <vector>
 namespace e1 {
 struct OpenTimings_t { uint64_t header=0,crc=0,structural=0; };
+enum class OpenValidationPath_e { NONE, TRUSTED_FAST, DEEP };
+// Equality pruning is fail-closed. V9 public-ID minima become visible to
+// cursors only after deep open checks this authoritative rowwise accessor,
+// or a trusted-fast open carries its separately content-bound proof.
+class PublicIDReader_i {
+public:
+ virtual ~PublicIDReader_i()=default;
+ virtual uint32_t Rows()const=0;
+ virtual bool Get(uint32_t row,uint64_t&value)const=0;
+};
 inline uint16_t U16(const uint8_t*p){return p[0]|uint16_t(p[1])<<8;}
 // Frequent descriptor: window, ordinal base, card:u16, type:u16, bytes, offset.
 struct Block {
@@ -32,7 +42,7 @@ struct TermView {
  Block At(uint32_t i)const{return {data,term+24+uint64_t(i)*24};}
 };
 class Store {
- const uint8_t *m_p=nullptr,*m_dir=nullptr;uint64_t m_n=0;uint32_t m_version=0,m_entrySize=0;
+ const uint8_t *m_p=nullptr,*m_dir=nullptr;uint64_t m_n=0;uint32_t m_version=0,m_entrySize=0;bool m_publicIDMinValidated=false;
 public:
  const uint8_t *Data()const{return m_p;}
  const uint8_t *Find(uint64_t key)const{
@@ -47,8 +57,9 @@ public:
   else{docs=U32(d+16);hasHits=U32(d+20)!=0;hits=U64(d+24);}
   return true;
  }
- bool Open(const uint8_t*p,uint64_t size,uint32_t rows,const uint8_t*dict,uint64_t dictSize,const uint8_t*hits,uint64_t hitSize,std::string&error,bool trusted=false,OpenTimings_t*timings=nullptr,const FieldNormReader_i*pNorms=nullptr){
-  m_p=nullptr;m_dir=nullptr;m_n=0;m_version=0;m_entrySize=0;uint64_t stage=timings?MonoMicroTimer():0;auto fail=[&](const char*s){error=std::string("E1: ")+s;return false;};
+ bool PublicIDMinValidated()const{return m_publicIDMinValidated;}
+ bool Open(const uint8_t*p,uint64_t size,uint32_t rows,const uint8_t*dict,uint64_t dictSize,const uint8_t*hits,uint64_t hitSize,std::string&error,bool trusted=false,OpenTimings_t*timings=nullptr,const FieldNormReader_i*pNorms=nullptr,const PublicIDReader_i*pPublicIDs=nullptr,OpenValidationPath_e*pValidationPath=nullptr,bool trustedPublicIDProof=false){
+  m_p=nullptr;m_dir=nullptr;m_n=0;m_version=0;m_entrySize=0;m_publicIDMinValidated=false;if(pValidationPath)*pValidationPath=OpenValidationPath_e::NONE;uint64_t stage=timings?MonoMicroTimer():0;auto fail=[&](const char*s){error=std::string("E1: ")+s;return false;};
   bool v4=size>=48&&!memcmp(p,"E1POST04",8)&&U32(p+8)==4;
   bool v5=size>=48&&!memcmp(p,"E1POST05",8)&&U32(p+8)==5;
   bool v6=size>=48&&!memcmp(p,"E1POST06",8)&&U32(p+8)==6;
@@ -60,13 +71,17 @@ public:
   if(header==48&&flags==0){m_entrySize=32;directory=48;if(nt>(size-48)/32)return fail("directory overflow");end=48+nt*32;}
   else if(header==56&&flags==1){m_entrySize=16;if(size<56)return fail("streamed header");directory=U64(p+48);if(directory<56||directory>size||nt>(size-directory)/16||directory+nt*16!=size)return fail("streamed directory");end=56;payloadEnd=directory;}
   else return fail("layout/version");
+  const bool hasPublicIDBinding=v9&&pPublicIDs;
+  const bool validatePublicIDs=hasPublicIDBinding&&pPublicIDs->Rows()==rows;
+  const bool useTrustedFast=trusted&&(!v9||(validatePublicIDs&&trustedPublicIDProof));
+  if(pValidationPath)*pValidationPath=useTrustedFast?OpenValidationPath_e::TRUSTED_FAST:OpenValidationPath_e::DEEP;
   if(timings){timings->header=MonoMicroTimer()-stage;stage=MonoMicroTimer();}
-  if(!trusted){bool valid=CRC(p+header,size-header)==U32(p+32)&&CRC(dict,dictSize)==U32(p+36)&&CRC(hits,hitSize)==U32(p+40);if(timings){timings->crc=MonoMicroTimer()-stage;stage=MonoMicroTimer();}if(!valid)return fail("checksums");}
+  if(!useTrustedFast){bool valid=CRC(p+header,size-header)==U32(p+32)&&CRC(dict,dictSize)==U32(p+36)&&CRC(hits,hitSize)==U32(p+40);if(timings){timings->crc=MonoMicroTimer()-stage;stage=MonoMicroTimer();}if(!valid)return fail("checksums");}
   auto dir=p+directory;uint64_t prevKey=0;
-  if(trusted){
+  if(useTrustedFast){
    uint64_t prevOff=header;
    for(uint64_t t=0;t<nt;++t){auto d=dir+t*m_entrySize;uint64_t key=m_entrySize==16?t+1:U64(d),off=U64(d+(m_entrySize==16?0:8));auto h=p+off;uint32_t df=off<=payloadEnd&&payloadEnd-off>=24?U32(h):0,has=off<=payloadEnd&&payloadEnd-off>=24?((U32(h+12)>>1)&1):2;if(!key||key<=prevKey||off<prevOff||off>=payloadEnd||payloadEnd-off<24||!df||df>rows||has>1)return fail("trusted term catalog");prevKey=key;prevOff=off;}
-   m_p=p;m_dir=dir;m_n=nt;m_version=version;if(timings)timings->structural=MonoMicroTimer()-stage;return true;
+   m_p=p;m_dir=dir;m_n=nt;m_version=version;m_publicIDMinValidated=v9&&validatePublicIDs&&trustedPublicIDProof;if(timings)timings->structural=MonoMicroTimer()-stage;return true;
   }
   for(uint64_t t=0;t<nt;++t){
    auto d=dir+t*m_entrySize;auto key=m_entrySize==16?t+1:U64(d),off=U64(d+(m_entrySize==16?0:8));
@@ -109,7 +124,7 @@ public:
     }end=po+bytes;
    }if(sum!=hitsTotal)return fail("hit sum");
    if(version>=5){if(expected.size()>payloadEnd-end)return fail("bounds tail");if(version<7){for(size_t i=0;i<expected.size();++i)if(p[end+i]!=expected[i])return fail("unsafe maxTF bound");}else for(size_t block=0;block<expected.size();++block){const uint8_t stored=p[end+block];if(stored==255)continue;if(!pNorms||pNorms->Rows()!=rows)return fail("finite BM25A bound without authoritative norms");const uint32_t first=uint32_t(block*64),count=std::min(64u,df-first);uint32_t dl[64];if(!pNorms->GatherTotal(termRows.data()+first,count,dl))return fail("BM25A norm lookup");uint8_t need=0;for(uint32_t i=0;i<count;++i)need=std::max(need,E1EncodeBM25A12_075_256(termTF[first+i],dl[i]));if(stored<need)return fail("unsafe BM25A ratio bound");}end+=expected.size();}
-   if(version==9){const uint64_t minIdBytes=uint64_t(expected.size())*8;if(minIdBytes>payloadEnd-end)return fail("public ID bounds tail");end+=minIdBytes;}
+   if(version==9){const uint64_t minIdBytes=uint64_t(expected.size())*8;if(minIdBytes>payloadEnd-end)return fail("public ID bounds tail");if(validatePublicIDs){for(size_t block=0;block<expected.size();++block){const uint32_t first=uint32_t(block*64),count=std::min(64u,df-first);uint64_t actual=UINT64_MAX;for(uint32_t i=0;i<count;++i){uint64_t id=0;if(!pPublicIDs->Get(termRows[first+i],id))return fail("authoritative public ID lookup");actual=std::min(actual,id);}if(U64(p+end+block*8)>actual)return fail("unsafe public ID minimum");}}end+=minIdBytes;}
    if(version>=6&&fieldWidth){
     const uint64_t fieldBytes=(uint64_t(df)*fieldWidth+7)/8;if(fieldBytes>payloadEnd-end)return fail("field TF bounds");
     const uint8_t* fieldTF=p+end;
@@ -122,7 +137,7 @@ public:
     end+=fieldBytes;
    }
   }
-  if(end!=payloadEnd)return fail("trailing bytes");m_p=p;m_dir=dir;m_n=nt;m_version=version;if(timings)timings->structural=MonoMicroTimer()-stage;return true;
+  if(end!=payloadEnd)return fail("trailing bytes");m_p=p;m_dir=dir;m_n=nt;m_version=version;m_publicIDMinValidated=validatePublicIDs;if(timings)timings->structural=MonoMicroTimer()-stage;return true;
  }
 };
 class Cursor {
@@ -152,7 +167,7 @@ class Cursor {
 public:
  bool Active()const{return m_p;} void Reset(){m_next=0;m_cached=UINT32_MAX;m_meta=UINT32_MAX;for(auto&m:m_dBatchStage)m=UINT32_MAX;m_block=0;m_lastOrdinal=UINT32_MAX;m_bitmapBlock=UINT32_MAX;m_bitmapWord=0;m_bitmapEndOrdinal=0;m_bitmapWindow=0;m_bitmapRemaining=0;m_bitmapPayload=nullptr;m_dRankOrder.clear();m_uRankPos=0;m_uRankInBlock=0;m_bRankOrderReady=false;m_uMetaDecoded=0;m_uDirectWindow=UINT32_MAX;m_uDirectBlock=UINT32_MAX;m_uHintPrefixBlock=UINT32_MAX;m_dHintPrefix.fill(0);m_dDirectMask.fill(0);m_dDirectPrefix.fill(0);m_pSelectedMeta=nullptr;m_uSelectedWord=0;m_uSelectedOrdinal=0;m_uSelectedMembers=0;}
  uint64_t TakeMetadataGroupsDecoded(){auto u=m_uMetaDecoded;m_uMetaDecoded=0;return u;}
- void Bind(const Store&s,uint64_t key){auto v=s.View(key);m_p=v.term?v.data:nullptr;m_term=v.term;m_df=v.DF();m_version=v.version;m_bounds=nullptr;m_minPublicIDs=nullptr;m_firstFieldTF=nullptr;m_firstFieldTFWidth=0;if(m_term&&m_version>=5){auto nm=U32(m_term+8);auto mo=U64(m_term+16);if(nm){auto g=m_p+mo+uint64_t(nm-1)*16;m_bounds=m_p+U64(g)+Meta4Bytes(U32(g+8),U32(g+12));const uint64_t blocks=(uint64_t(m_df)+63)/64;if(m_version==9)m_minPublicIDs=m_bounds+blocks;if(m_version>=6&&(m_firstFieldTFWidth=v.FirstFieldTFWidth()))m_firstFieldTF=m_bounds+blocks+(m_version==9?blocks*8:0);}}Reset();}
+ void Bind(const Store&s,uint64_t key){auto v=s.View(key);m_p=v.term?v.data:nullptr;m_term=v.term;m_df=v.DF();m_version=v.version;m_bounds=nullptr;m_minPublicIDs=nullptr;m_firstFieldTF=nullptr;m_firstFieldTFWidth=0;if(m_term&&m_version>=5){auto nm=U32(m_term+8);auto mo=U64(m_term+16);if(nm){auto g=m_p+mo+uint64_t(nm-1)*16;m_bounds=m_p+U64(g)+Meta4Bytes(U32(g+8),U32(g+12));const uint64_t blocks=(uint64_t(m_df)+63)/64;if(m_version==9&&s.PublicIDMinValidated())m_minPublicIDs=m_bounds+blocks;if(m_version>=6&&(m_firstFieldTFWidth=v.FirstFieldTFWidth()))m_firstFieldTF=m_bounds+blocks+(m_version==9?blocks*8:0);}}Reset();}
  TermView View()const{return {m_p,m_term,m_version};}
  E1RankedBoundKind_e BoundKind()const{return !m_bounds?E1RankedBoundKind_e::NONE:m_version>=5&&m_version<=6?E1RankedBoundKind_e::MAX_TF:(m_version==7||m_version==9)?E1RankedBoundKind_e::BM25A_RATIO:E1RankedBoundKind_e::NONE;}
  bool HasRankedBounds()const{return BoundKind()==E1RankedBoundKind_e::MAX_TF;}

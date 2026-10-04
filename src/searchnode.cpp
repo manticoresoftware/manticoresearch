@@ -99,6 +99,25 @@ E1TestRankStats_t GetE1TestRankStats ()
 	return g_tE1TestRankStats;
 }
 
+void RecordE1TestHeapStats ( int iWorstWeight, uint64_t uWorstPublicID, int iConfiguredK )
+{
+	g_tE1TestRankStats.m_iHeapWorstWeight = iWorstWeight;
+	g_tE1TestRankStats.m_uHeapWorstPublicID = uWorstPublicID;
+	g_tE1TestRankStats.m_iConfiguredK = iConfiguredK;
+}
+
+void RecordE1TestConfiguredK ( int iConfiguredK )
+{
+	if ( iConfiguredK>0 )
+		g_tE1TestRankStats.m_iConfiguredK = iConfiguredK;
+}
+
+void RecordE1TestHeapWorst ( int iWorstWeight, uint64_t uWorstPublicID )
+{
+	g_tE1TestRankStats.m_iHeapWorstWeight = iWorstWeight;
+	g_tE1TestRankStats.m_uHeapWorstPublicID = uWorstPublicID;
+}
+
 void SetE1TestLastWindow ( uint32_t uLastWindow )
 {
 	g_bE1TestLastWindow = true;
@@ -357,11 +376,11 @@ public:
 	{
 		if ( m_bE1Ranked && getenv("MANTICORE_E1_RANK_TRACE") )
 		{
-			fprintf ( stderr, "E1_RANKED bound_kind=%s rowid_docid_order=%d tie_public_id_capability=%d bound_entries_read=%llu nonempty_buckets=%llu selected_blocks=%llu skipped_blocks=%llu equality_skipped_blocks=%llu skipped_docs=%llu scored_docs=%llu metadata_groups_decoded=%llu threshold_at_scored=%llu topk_updates=%llu heap_worst_weight=%d heap_worst_id=%llu\n",
+			fprintf ( stderr, "E1_RANKED bound_kind=%s rowid_docid_order=%d validated_public_id_capability=%d bound_entries_read=%llu nonempty_buckets=%llu selected_blocks=%llu strict_score_skipped_blocks=%llu equality_skipped_blocks=%llu skipped_blocks=%llu skipped_docs=%llu scored_docs=%llu metadata_groups_decoded=%llu threshold_at_scored=%llu topk_updates=%llu heap_worst_weight=%d heap_worst_id=%llu\n",
 				E1RankedBoundKindName(m_eE1BoundKind), int(m_bE1RowidDocidOrder),
-				int(m_eE1BoundKind==E1RankedBoundKind_e::BM25A_RATIO),
+				int(m_pQword->HasE1PublicIdMinBounds()),
 				(unsigned long long)m_uRankBoundEntries, (unsigned long long)m_uRankBuckets,
-				(unsigned long long)m_uRankSelectedBlocks, (unsigned long long)m_uRankSkippedBlocks, (unsigned long long)m_uRankEqualitySkippedBlocks,
+				(unsigned long long)m_uRankSelectedBlocks, (unsigned long long)(m_uRankSkippedBlocks-m_uRankEqualitySkippedBlocks), (unsigned long long)m_uRankEqualitySkippedBlocks, (unsigned long long)m_uRankSkippedBlocks,
 				(unsigned long long)m_uRankSkippedDocsTotal, (unsigned long long)m_uRankScored,
 				(unsigned long long)m_uRankDecodedGroups, (unsigned long long)m_uRankThresholdAtScored,
 				(unsigned long long)m_uRankTopKUpdates, m_iRankThreshold, (unsigned long long)m_uRankWorstTieKey );
@@ -390,8 +409,11 @@ public:
 			g_tE1TestRankStats.m_eBoundKind = m_eE1BoundKind;
 			g_tE1TestRankStats.m_uSelectedBlocks += m_uRankSelectedBlocks;
 			g_tE1TestRankStats.m_uSkippedBlocks += m_uRankSkippedBlocks;
+			g_tE1TestRankStats.m_uStrictScoreSkippedBlocks += m_uRankSkippedBlocks-m_uRankEqualitySkippedBlocks;
+			g_tE1TestRankStats.m_uEqualitySkippedBlocks += m_uRankEqualitySkippedBlocks;
 			g_tE1TestRankStats.m_uSkippedDocs += m_uRankSkippedDocsTotal;
 			g_tE1TestRankStats.m_uScoredDocs += m_uRankScored;
+			g_tE1TestRankStats.m_bValidatedPublicID |= m_pQword->HasE1PublicIdMinBounds();
 		}
 #endif
 		SafeDelete ( m_pQword );
@@ -476,7 +498,33 @@ public:
 		return m_bE1Ranked;
 	}
 	bool				EnableE1BestFirst() override { return m_bE1Ranked; }
-	void				SetRankThreshold ( int iWeight, uint64_t uWorstTieKey ) override { if ( m_eE1BoundKind!=E1RankedBoundKind_e::BM25A_RATIO ) uWorstTieKey = m_bE1RowidDocidOrder ? uWorstTieKey : UINT64_MAX; if ( iWeight!=m_iRankThreshold || uWorstTieKey!=m_uRankWorstTieKey ) { if ( !m_iRankThreshold ) m_uRankThresholdAtScored=m_uRankScored; ++m_uRankTopKUpdates; m_iRankThreshold=iWeight; m_uRankWorstTieKey=uWorstTieKey; } }
+	void				SetRankThreshold ( int iWeight, uint64_t uWorstTieKey ) override
+	{
+		if ( m_eE1BoundKind!=E1RankedBoundKind_e::BM25A_RATIO )
+			uWorstTieKey = m_bE1RowidDocidOrder ? uWorstTieKey : UINT64_MAX;
+		if ( iWeight!=m_iRankThreshold || uWorstTieKey!=m_uRankWorstTieKey )
+		{
+			if ( !m_iRankThreshold )
+				m_uRankThresholdAtScored=m_uRankScored;
+			++m_uRankTopKUpdates;
+			m_iRankThreshold=iWeight;
+			m_uRankWorstTieKey=uWorstTieKey;
+#if defined(MANTICORE_TEST)
+			// The generic sorter also publishes a weight-only threshold using
+			// INVALID_ROWID; do not let it erase the exact heap's public-ID key.
+			if ( uWorstTieKey!=uint64_t(INVALID_ROWID) )
+				RecordE1TestHeapWorst ( iWeight, uWorstTieKey );
+#endif
+		}
+	}
+	void				ConfigureE1TopK ( int iTopK ) override
+	{
+#if defined(MANTICORE_TEST)
+		RecordE1TestConfiguredK ( iTopK );
+#else
+		(void)iTopK;
+#endif
+	}
 	uint64_t			TakeRankSkippedDocs() override
 	{
 		if ( m_tE1Filter.m_bEnabled || m_bE1ScopedTerm )

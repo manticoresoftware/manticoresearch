@@ -468,6 +468,7 @@ public:
 	}
 
 	bool HasE1RankedBounds () const override { return m_tE1.HasRankedBounds(); }
+	bool HasE1PublicIdMinBounds () const override { return m_tE1.HasPublicIdMinBounds(); }
 	E1RankedBoundKind_e GetE1RankedBoundKind () const override { return m_tE1.BoundKind(); }
 	uint64_t TakeE1MetadataGroupsDecoded () override { return m_tE1.TakeMetadataGroupsDecoded(); }
 	bool E1DirectOrSupported () const override { return m_tE1.DirectOrSupported(); }
@@ -1570,7 +1571,6 @@ private:
 	CSphMappedBuffer<BYTE>		m_tDocidLookup;		///< speeds up docid-rowid lookups + used for applying killlist on startup
 	LookupReader_c				m_tLookupReader;	///< used by getrowidbydocid
 	UuidLookupReader_c			m_tUuidLookupReader;
-	bool						m_bE1RowidDocidOrder { false };
 
 	std::unique_ptr<Docstore_i>	m_pDocstore;
 	std::unique_ptr<columnar::Columnar_i> m_pColumnar;
@@ -10887,28 +10887,6 @@ bool CSphIndex_VLN::PreallocAttributes()
 	if ( !CheckDocsCount ( m_iDocinfo, m_sLastError ) )
 		return false;
 
-	// Equality pruning may use rowid only when it is a proved proxy for the
-	// user-visible id tie key. Check this once at E1 chunk open time.
-	m_bE1RowidDocidOrder = false;
-	const CSphColumnInfo * pDocid = m_tSchema.GetAttr ( sphGetDocidName() );
-	if ( m_bE1 && pDocid && !pDocid->IsColumnar() && !pDocid->m_tLocator.m_bDynamic )
-	{
-		m_bE1RowidDocidOrder = true;
-		const DWORD * pAttrs = m_tAttr.GetReadPtr();
-		const int iStride = m_tSchema.GetRowSize();
-		DocID_t tPrevious = 0;
-		for ( RowID_t tRow=0; tRow<RowID_t(m_iDocinfo); ++tRow )
-		{
-			const DocID_t tCurrent = sphGetRowAttr ( pAttrs+int64_t(tRow)*iStride, pDocid->m_tLocator );
-			if ( tRow && tCurrent<=tPrevious )
-			{
-				m_bE1RowidDocidOrder = false;
-				break;
-			}
-			tPrevious = tCurrent;
-		}
-	}
-
 	m_pDocinfoIndex = m_tAttr.GetWritePtr() + m_iMinMaxIndex;
 
 	if ( m_tSchema.GetAttr ( sphGetBlobLocatorName() ) )
@@ -11257,16 +11235,46 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 		if ( bE1FlushTrace )
 			tmPostingsMap = MonoMicroTimer()-tmPostingsMap;
 		std::string error;
+		class RowwisePublicIDReader_c final : public e1::PublicIDReader_i
+		{
+		public:
+			RowwisePublicIDReader_c ( const CSphRowitem * pAttrs, int iStride, const CSphAttrLocator & tLocator, uint32_t uRows )
+				: m_pAttrs ( pAttrs ), m_iStride ( iStride ), m_tLocator ( tLocator ), m_uRows ( uRows ) {}
+			uint32_t Rows() const override { return m_uRows; }
+			bool Get ( uint32_t uRow, uint64_t & uValue ) const override
+			{
+				if ( uRow>=m_uRows ) return false;
+				uValue = uint64_t ( sphGetRowAttr ( m_pAttrs+int64_t(uRow)*m_iStride, m_tLocator ) );
+				return true;
+			}
+		private:
+			const CSphRowitem * m_pAttrs;
+			int m_iStride;
+			CSphAttrLocator m_tLocator;
+			uint32_t m_uRows;
+		};
+		const CSphColumnInfo * pE1Docid = m_tSchema.GetAttr ( sphGetDocidName() );
+		std::unique_ptr<RowwisePublicIDReader_c> pPublicIDs;
+		if ( pE1Docid && !pE1Docid->IsColumnar() && !pE1Docid->m_tLocator.m_bDynamic && GetRawAttrs() && m_iDocinfo<=UINT32_MAX )
+			pPublicIDs = std::make_unique<RowwisePublicIDReader_c> ( GetRawAttrs(), m_tSchema.GetRowSize(), pE1Docid->m_tLocator, uint32_t(m_iDocinfo) );
 		const BYTE * pE1Header = m_tE1Data.GetReadPtr();
-		const bool bTrustedGeneration = m_tE1Data.GetLengthBytes()>=44 && e1::ConsumeTrustedGeneration ( GetFilename(SPH_EXT_SPD).cstr(), GetFilename(SPH_EXT_SPI).cstr(), GetFilename(SPH_EXT_SPP).cstr(), e1::U64(pE1Header+16), e1::U32(pE1Header+32), e1::U32(pE1Header+36), e1::U32(pE1Header+40) );
-		const bool bFastValidation = bTrustedGeneration;
+		e1::PublicIDDigest_t dPublicIDIdentity {};
+		const bool bHavePublicIDIdentity = m_uE1Version==e1::VERSION && pPublicIDs && e1::PublicIDContentDigest ( pPublicIDs->Rows(), [&pPublicIDs] ( uint32_t uRow, uint64_t & uValue ) { return pPublicIDs->Get(uRow,uValue); }, dPublicIDIdentity );
+		e1::TrustedGenerationProof_t tTrustedGeneration;
+		if ( m_tE1Data.GetLengthBytes()>=44 )
+			tTrustedGeneration = e1::ConsumeTrustedGeneration ( GetFilename(SPH_EXT_SPD).cstr(), GetFilename(SPH_EXT_SPI).cstr(), GetFilename(SPH_EXT_SPP).cstr(), e1::U64(pE1Header+16), e1::U32(pE1Header+32), e1::U32(pE1Header+36), e1::U32(pE1Header+40),
+				bHavePublicIDIdentity ? pPublicIDs->Rows() : 0, bHavePublicIDIdentity ? &dPublicIDIdentity : nullptr );
+		const bool bTrustedGeneration = tTrustedGeneration.m_bGeneration;
 		e1::OpenTimings_t tPostingsTimings;
+		e1::OpenValidationPath_e eValidationPath = e1::OpenValidationPath_e::NONE;
 		if ( !m_tE1Store.Open(m_tE1Data.GetReadPtr(),m_tE1Data.GetLengthBytes(),m_iDocinfo,
-			dict.GetReadPtr(),dict.GetLengthBytes(),hits.GetReadPtr(),hits.GetLengthBytes(),error,bFastValidation,bE1FlushTrace ? &tPostingsTimings : nullptr,(m_uE1Version==e1::VERSION || m_uE1Version==e1::VERSION7) ? &m_tNormStore : nullptr) )
+			dict.GetReadPtr(),dict.GetLengthBytes(),hits.GetReadPtr(),hits.GetLengthBytes(),error,bTrustedGeneration,bE1FlushTrace ? &tPostingsTimings : nullptr,(m_uE1Version==e1::VERSION || m_uE1Version==e1::VERSION7) ? &m_tNormStore : nullptr,pPublicIDs.get(),&eValidationPath,tTrustedGeneration.m_bPublicIDs) )
 		{ m_sLastError = error.c_str(); return false; }
+		const bool bFastValidation = eValidationPath==e1::OpenValidationPath_e::TRUSTED_FAST;
+		const bool bDeepValidation = eValidationPath==e1::OpenValidationPath_e::DEEP;
 		if ( bE1StartupTrace )
 		{
-			fprintf ( stderr, "E1_STARTUP postings_us=%lld fast_validation=%d bytes=%lld\n", (long long)(sphMicroTimer()-tmE1Startup), int(bFastValidation), (long long)m_tE1Data.GetLengthBytes() );
+			fprintf ( stderr, "E1_STARTUP postings_us=%lld fast_validation=%d deep_validation=%d bytes=%lld\n", (long long)(sphMicroTimer()-tmE1Startup), int(bFastValidation), int(bDeepValidation), (long long)m_tE1Data.GetLengthBytes() );
 			tmE1Startup = sphMicroTimer();
 		}
 		auto fnValidateDictionary = [this] ( auto & tReader )
@@ -11306,12 +11314,13 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 			fprintf ( stderr, "E1_FLUSH_TRACE event=postings_open name=%s map_us=%llu header_us=%llu crc_us=%llu structural_validation_us=%llu dictionary_binding_us=%llu total_us=%llu trusted_generation=%d fast_validation=%d deep_validation=%d bytes=%lld\n",
 				GetName(), (unsigned long long)tmPostingsMap, (unsigned long long)tPostingsTimings.header, (unsigned long long)tPostingsTimings.crc,
 				(unsigned long long)tPostingsTimings.structural, (unsigned long long)tmDictionary, (unsigned long long)(MonoMicroTimer()-tmPostingsTotal),
-				int(bTrustedGeneration), int(bFastValidation), int(!bFastValidation), (long long)m_tE1Data.GetLengthBytes() );
+				int(bTrustedGeneration), int(bFastValidation), int(bDeepValidation), (long long)m_tE1Data.GetLengthBytes() );
 		}
 		if ( bE1StartupTrace )
 			fprintf ( stderr, "E1_STARTUP dictionary_us=%lld\n", (long long)(sphMicroTimer()-tmE1Startup) );
 		// Only an immediately reopened, process-owned generation may skip the
-		// deep scan. Restarts and maintenance checks validate every page.
+		// deep scan. V9 public-ID minima additionally require the one-shot proof
+		// to match the exact authoritative rowwise ID content used by the writer.
 		m_tE1Data.DiscardPages();
 	}
 
@@ -13154,7 +13163,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 			}
 	}
 	const bool bIdKey = bParsedExactSort && tExactSortState.m_dAttrs[1]>=0 && tMaxSorterSchema.GetAttr ( tExactSortState.m_dAttrs[1] ).m_sName=="id";
-	const bool bExplicitIdTieSort = eExactSortFunc==FUNC_GENERIC2 && tExactSortState.m_uAttrDesc==1 && bWeightKey && bIdKey;
+	const CSphColumnInfo * pE1Docid = m_tSchema.GetAttr ( sphGetDocidName() );
+	const bool bValidatedPublicID = pE1Docid && !pE1Docid->IsColumnar() && !pE1Docid->m_tLocator.m_bDynamic && m_tE1Store.PublicIDMinValidated();
+	const bool bExplicitIdTieSort = eExactSortFunc==FUNC_GENERIC2 && tExactSortState.m_uAttrDesc==1 && bWeightKey && bIdKey && bValidatedPublicID;
 	// Generic one-key relevance sorting resolves equal weights by rowid. Admit
 	// only the implicit form and tell the exact heap that rowid is the tie key;
 	// explicit one-key ORDER BY remains on the generic path.
@@ -13201,11 +13212,18 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 		&& E1ExactRankerAdmission ( tQuerySettings.m_eRanker==SPH_RANK_BM25A,
 			tQuerySettings.m_eRanker==SPH_RANK_EXPR, tQuerySettings.m_sRankerExpr.cstr() )
 		&& bExactSort;
+#if defined(MANTICORE_TEST)
+	if ( tTermSetup.m_bE1RankedRequested )
+		RecordE1TestConfiguredK ( E1RankedTopKFromPage ( tQuery.m_iOffset, tQuery.m_iLimit ) );
+#endif
 	if ( getenv("MANTICORE_E1_RANK_TRACE") )
 		fprintf ( stderr, "E1_RANK_ADMISSION format=%d dead=%d filter=%d field_weights=%d sorters=%d grouped=%d topk=%d ranker=%d sort=%d requested=%d\n",
 			int(m_bE1), int(m_tDeadRowMap.HasDead()), int(bE1FilterSupported), int(bDefaultFieldWeights), dSorters.GetLength(), int(dSorters.GetLength()==1 && dSorters[0]->IsGroupby()),
 			int(E1RankedTopKFromPage(tQuery.m_iOffset,tQuery.m_iLimit)), int(E1ExactRankerAdmission(tQuerySettings.m_eRanker==SPH_RANK_BM25A,tQuerySettings.m_eRanker==SPH_RANK_EXPR,tQuerySettings.m_sRankerExpr.cstr())), int(bExactSort), int(tTermSetup.m_bE1RankedRequested) );
-	tTermSetup.m_bE1RowidDocidOrder = bImplicitRelevanceSort || m_bE1RowidDocidOrder;
+	// This flag describes the active tie key, not physical docid monotonicity.
+	// Explicit id sorting always uses validated public-ID minima; implicit
+	// relevance sorting keeps the independently gated rowid equality path.
+	tTermSetup.m_bE1RowidDocidOrder = bImplicitRelevanceSort;
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats

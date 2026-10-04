@@ -156,7 +156,13 @@ public:
 
 	NodeEstimate_t				Estimate ( int64_t iTotalDocs ) const override;
 	bool						EnableE1Ranked() override { bool b=m_pRoot && m_pRoot->EnableE1Ranked(); m_bE1FilterPushed=b && m_tE1RankFilter.m_bEnabled; if ( b ) DisableCaching(); return b; }
-	virtual void				ConfigureE1TopK ( int iTopK ) { m_iConfiguredE1TopK = iTopK; }
+	virtual void				ConfigureE1TopK ( int iTopK ) { m_iConfiguredE1TopK = iTopK;
+		if ( m_pRoot )
+			m_pRoot->ConfigureE1TopK ( iTopK );
+#if defined(MANTICORE_TEST)
+		RecordE1TestConfiguredK ( iTopK );
+#endif
+	}
 	void						SetRankThreshold ( int iWeight ) override { if ( m_pRoot ) m_pRoot->SetRankThreshold ( iWeight, INVALID_ROWID ); }
 	uint64_t					TakeRankSkippedDocs() override { return m_pRoot ? m_pRoot->TakeRankSkippedDocs() : 0; }
 
@@ -4547,6 +4553,10 @@ public:
 
 	~ExtRanker_Expr_T () override
 	{
+#if defined(MANTICORE_TEST)
+		if ( m_bE1OwnHeap )
+			RecordE1TestHeapStats ( m_iE1HeapFinalThreshold, m_uE1HeapFinalWorstTieKey, this->m_iConfiguredE1TopK );
+#endif
 		if ( this->m_tState.m_bFixedBM25A && !m_bE1FixedBM25A && this->m_tState.m_uFixedBM25AScored && getenv("MANTICORE_E1_RANK_TRACE") )
 			fprintf ( stderr, "E1_FIXED_BM25A_GENERIC_FALLBACK candidates_scored=%llu\n", (unsigned long long)this->m_tState.m_uFixedBM25AScored );
 		if ( m_bE1FixedBM25A && getenv("MANTICORE_E1_RANK_TRACE") )
@@ -4768,6 +4778,9 @@ private:
 		m_uE1HeapDiscardedPending = m_uDirectScores-m_iE1TopKHeapCount;
 		std::sort ( m_dE1TopKHeap.get(), m_dE1TopKHeap.get()+m_iE1TopKHeapCount, [this] ( int a, int b ) { return m_dE1TopKMatches[a].m_tRowID<m_dE1TopKMatches[b].m_tRowID; } );
 		m_bE1HeapBuilt = true;
+#if defined(MANTICORE_TEST)
+		RecordE1TestHeapStats ( m_iE1HeapFinalThreshold, m_uE1HeapFinalWorstTieKey, this->m_iConfiguredE1TopK );
+#endif
 	}
 
 	bool m_bE1FixedBM25A = false;
@@ -5190,6 +5203,9 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 
 	pRanker->m_iMaxQpos = iMaxQpos;
 	pRanker->ConfigureE1TopK ( E1RankedTopKFromPage ( tQuery.m_iOffset, tQuery.m_iLimit ) );
+#if defined(MANTICORE_TEST)
+	RecordE1TestConfiguredK ( E1RankedTopKFromPage ( tQuery.m_iOffset, tQuery.m_iLimit ) );
+#endif
 	pRanker->SetQwordsIDF ( hQwords );
 	if ( bGotDupes )
 		pRanker->SetTermDupes ( hQwords, iMaxQpos );

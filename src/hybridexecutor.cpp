@@ -272,7 +272,6 @@ static SphQueueSettings_t CreateHybridSubQueryQueueSettings ( const SphQueueSett
 	tDst.m_fnGetCount = tSrc.m_fnGetCount;
 	tDst.m_bEnableFastDistinct = tSrc.m_bEnableFastDistinct;
 	tDst.m_bForceSingleThread = tSrc.m_bForceSingleThread;
-	tDst.m_iDiskChunks = tSrc.m_iDiskChunks;
 	tDst.m_dCreateSchema = tSrc.m_dCreateSchema;
 	if ( tSrc.m_pJoinArgs )
 		tDst.m_pJoinArgs = std::make_unique<JoinArgs_t> ( tSrc.m_pJoinArgs->m_tJoinedSchema, tSrc.m_pJoinArgs->m_sIndex1, tSrc.m_pJoinArgs->m_sIndex2 );

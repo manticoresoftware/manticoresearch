@@ -1659,7 +1659,6 @@ public:
 	int64_t				GetCountDistinct ( const CSphString & sAttr, CSphString & sModifiedAttr ) const override;
 	int64_t				GetCountFilter ( const CSphFilterSettings & tFilter, CSphString & sModifiedAttr ) const override;
 	int64_t				GetCount() const override;
-	int					GetDiskChunksCount() const override;
 	std::pair<int64_t,int> GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const override;
 
 	// helpers
@@ -10699,12 +10698,6 @@ int64_t RtIndex_c::GetCountFilter ( const CSphFilterSettings & tFilter, CSphStri
 	}
 
 	return iSumCount;
-}
-
-
-int RtIndex_c::GetDiskChunksCount() const
-{
-	return Max ( 1, m_tRtChunks.GetDiskChunksCount() );
 }
 
 

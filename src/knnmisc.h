@@ -66,15 +66,7 @@ void							SetupKNNLimit ( CSphQuery & tQuery );
 void							SetKNNRescorePrefetch ( bool bEnable );
 bool							KNNRescorePrefetch();
 
-// searchd config 'knn_rescore_batch_threshold' (undocumented, experimental; default 256): the number of rescore candidates
-// from which the collector and the batched distance kernel are used; 1 = always
-void							SetKNNRescoreBatchThreshold ( int iThreshold );
-
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
-// exact-distance rescore evaluated per chunk at the final stage; tKnnDistLoc is copied for rows that are exact already
-ISphExpr *						CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr, const CSphAttrLocator & tKnnDistLoc );
-// whether the rescore should run once on the merged candidates (collector) instead of per chunk at the final stage
-bool							UseKNNRescoreCollector ( const KnnSearchSettings_t & tSettings, int iDiskChunks, bool bColumnarAttr );
 void							NormalizeVec ( VecTraits_T<float> & dData );
 
 void							AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr );
@@ -105,8 +97,8 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 RowIteratorsWithEstimates_t		CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, bool & bError, CSphString & sError );
 std::unique_ptr<knn::KNNFilter_i> CreateKNNPrefilter ( const CSphQueryContext & tCtx, const CSphRowitem * pAttrPool, int iStride, int iDynamicSize, int64_t iFilterCount );
 
-// bCollector: see UseKNNRescoreCollector. iResultWindow is limit+offset: rows the client can see are always rescored, even beyond k*oversampling
-ISphMatchSorter *				CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings, ESphSortFunc eMatchFunc, bool bCollector, int64_t iResultWindow );
+// iResultWindow is limit+offset: rows the client can see are always rescored, even beyond k*oversampling
+ISphMatchSorter *				CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings, ESphSortFunc eMatchFunc, int64_t iResultWindow );
 
 const char *					GetAPITimeoutErrorMsg();
 bool							ValidateEmbeddingsAPITimeout ( const CSphString & sValue, int & iTimeout, CSphString & sError );

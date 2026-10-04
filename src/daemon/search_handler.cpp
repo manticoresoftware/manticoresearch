@@ -350,7 +350,6 @@ SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex
 	tQS.m_fnGetCountDistinct	= [pIndex]( const CSphString & sAttr, CSphString & sModifiedAttr ){ return pIndex->GetCountDistinct ( sAttr, sModifiedAttr ); };
 	tQS.m_fnGetCountFilter		= [pIndex]( const CSphFilterSettings & tFilter, CSphString & sModifiedAttr ){ return pIndex->GetCountFilter ( tFilter, sModifiedAttr ); };
 	tQS.m_fnGetCount			= [pIndex](){ return pIndex->GetCount(); };
-	tQS.m_iDiskChunks			= pIndex->GetDiskChunksCount();
 	tQS.m_bEnableFastDistinct = m_dLocal.GetLength()<=1;
 	tQS.m_bForceSingleThread = bForceSingleThread;
 	tQS.m_dCreateSchema = GetDefaultSchema ( pIndex );

@@ -206,44 +206,17 @@ std::unique_ptr<knn::KNNFilter_i> CreateKNNPrefilter ( const CSphQueryContext & 
 
 static const int KNN_RESCORE_BATCH_SIZE = 256;
 
-// 0: off, 1: single call only, 2: single call, else one call per vector,
-// 3: as 2, but each rescore probes a few vectors and skips the prefetch when they are in memory,
-// 4: as 3, with a sticky gate (see ShouldPrefetchSticky)
-static int g_iKNNRescorePrefetch = 0;
+static bool g_bKNNRescorePrefetch = false;
 
-void SetKNNRescorePrefetch ( int iMode )
+void SetKNNRescorePrefetch ( bool bEnable )
 {
-	g_iKNNRescorePrefetch = Max ( 0, Min ( iMode, 4 ) );
+	g_bKNNRescorePrefetch = bEnable;
 }
 
 
-int KNNRescorePrefetch()
+bool KNNRescorePrefetch()
 {
-	return g_iKNNRescorePrefetch;
-}
-
-
-// say once which mechanism the prefetch ended up with; it decides how a benchmark should be read
-static void ReportKNNRescorePrefetch ( PrefetchResult_e eRes )
-{
-	static std::atomic<int> iReported { -1 };
-	if ( iReported.exchange ( (int)eRes, std::memory_order_relaxed )==(int)eRes )
-		return;
-
-	switch ( eRes )
-	{
-	case PrefetchResult_e::SINGLE_CALL:
-		sphInfo ( "knn_rescore_prefetch: vectors are prefetched with one process_madvise call per rescore" );
-		break;
-
-	case PrefetchResult_e::PER_RANGE:
-		sphWarning ( "knn_rescore_prefetch: process_madvise is unavailable (errno %d); using one madvise call per vector", mmprefetch_single_call_errno() );
-		break;
-
-	default:
-		sphWarning ( "knn_rescore_prefetch: process_madvise is unavailable (errno %d), vectors are NOT prefetched; set knn_rescore_prefetch=2 to allow one madvise call per vector", mmprefetch_single_call_errno() );
-		break;
-	}
+	return g_bKNNRescorePrefetch;
 }
 
 
@@ -392,7 +365,7 @@ void KNNVecDistCalc_c::RescoreBatch ( VecTraits_T<CSphMatch*> & dMatches, const 
 	} ) );
 
 	// with the prefetch on, a columnar rescore resolves all addresses first, prefetches, then computes; both kernels live there
-	if ( m_tAttr.IsColumnar() && KNNRescorePrefetch()>0 )
+	if ( m_tAttr.IsColumnar() && KNNRescorePrefetch() )
 	{
 		RescoreColumnarPrefetch ( dMatches, tOutLoc, fnColumnar );
 		return;
@@ -485,16 +458,11 @@ static void PrefetchVectors ( const VecTraits_T<MemRange_t> & dRanges )
 	if ( dRanges.IsEmpty() )
 		return;
 
-	const int iMode = KNNRescorePrefetch();
-
 	// residency gate: the prefetch pays off only while the vectors are not in memory, and costs time once they are
-	if ( iMode==3 && AreVectorsResident(dRanges) )
+	if ( !ShouldPrefetchSticky(dRanges) )
 		return;
 
-	if ( iMode>=4 && !ShouldPrefetchSticky(dRanges) )
-		return;
-
-	ReportKNNRescorePrefetch ( mmprefetch ( dRanges.Begin(), dRanges.GetLength(), iMode>=2 ) );
+	mmprefetch ( dRanges.Begin(), dRanges.GetLength() );
 }
 
 
@@ -1045,7 +1013,7 @@ ISphExpr * CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const 
 // The prefetch (knn_rescore_prefetch) needs all candidates in hand before any is read, which only the collector has.
 bool UseKNNRescoreCollector ( const KnnSearchSettings_t & tSettings, int iDiskChunks, bool bColumnarAttr )
 {
-	return tSettings.GetRequestedDocs()>=KNN_RESCORE_BATCH_SIZE || iDiskChunks>1 || ( bColumnarAttr && KNNRescorePrefetch()>0 );
+	return tSettings.GetRequestedDocs()>=KNN_RESCORE_BATCH_SIZE || iDiskChunks>1 || ( bColumnarAttr && KNNRescorePrefetch() );
 }
 
 

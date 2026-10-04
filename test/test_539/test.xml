@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>postings container v6 exact BM25A plain and RT lifecycle</name>
+<name>postings container current-format exact BM25A plain and RT lifecycle</name>
 
 <config>
 indexer
@@ -66,6 +66,20 @@ index e1_attrs_only
 	path = <data_path/>/e1_attrs_only
 	rt_attr_uint = gid
 }
+
+index e1_merge2
+{
+	type = rt
+	path = <data_path/>/e1_merge2
+	rt_field = body
+}
+
+index e1_merge_n
+{
+	type = rt
+	path = <data_path/>/e1_merge_n
+	rt_field = body
+}
 </config>
 
 <db_create>
@@ -106,6 +120,31 @@ INSERT INTO e1_rt (id,title,body,gid) VALUES
 FLUSH RAMCHUNK e1_rt;
 INSERT INTO e1_ties (id,body) VALUES (30,'tie'),(20,'tie'),(10,'tie');
 FLUSH RAMCHUNK e1_ties;
+
+<!-- Stable explicit, nonmonotonic public IDs exercise authoritative binding
+     through two-way and progressive N-way RT merges. Every score ties, so
+     the explicit public-ID comparator, total, and offset pages are exact. -->
+INSERT INTO e1_merge2 (id,body) VALUES (900,'tie'),(100,'tie'),(700,'tie'),(300,'tie'),(500,'tie'),(1100,'tie');
+FLUSH RAMCHUNK e1_merge2;
+INSERT INTO e1_merge2 (id,body) VALUES (200,'tie'),(1000,'tie'),(400,'tie'),(800,'tie'),(600,'tie'),(1200,'tie');
+FLUSH RAMCHUNK e1_merge2;
+SELECT id,weight() AS w FROM e1_merge2 WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 4,5 OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_merge2 WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 4,5 OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
+OPTIMIZE TABLE e1_merge2 OPTION sync=1,cutoff=1;
+SELECT id,weight() AS w FROM e1_merge2 WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 4,5 OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_merge2 WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 4,5 OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
+
+INSERT INTO e1_merge_n (id,body) VALUES (90,'tie'),(10,'tie'),(70,'tie'),(30,'tie'),(50,'tie'),(110,'tie');
+FLUSH RAMCHUNK e1_merge_n;
+INSERT INTO e1_merge_n (id,body) VALUES (20,'tie'),(100,'tie'),(40,'tie'),(80,'tie'),(60,'tie'),(120,'tie');
+FLUSH RAMCHUNK e1_merge_n;
+INSERT INTO e1_merge_n (id,body) VALUES (180,'tie'),(130,'tie'),(170,'tie'),(140,'tie'),(160,'tie'),(150,'tie');
+FLUSH RAMCHUNK e1_merge_n;
+SELECT id,weight() AS w FROM e1_merge_n WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 3,9 OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_merge_n WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 3,9 OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
+OPTIMIZE TABLE e1_merge_n OPTION sync=1,cutoff=1;
+SELECT id,weight() AS w FROM e1_merge_n WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 3,9 OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_merge_n WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 3,9 OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
 
 <!-- Dense RT norms: one indexed lane among three nonempty stored-only fields. -->
 DROP TABLE IF EXISTS e1_dense_rt;
@@ -213,7 +252,8 @@ SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') AND gid=2 ORDER BY w DES
 SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') AND gid=2 LIMIT 1,1; SHOW META LIKE 'total_found';
 SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') AND gid=99; SHOW META LIKE 'total_found';
 SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') AND gid&gt;=1 LIMIT 2; SHOW META LIKE 'total_found';
-<!-- implicit relevance uses the public id as the deterministic equal-weight tie key -->
+<!-- Ordinary implicit relevance keeps internal RowID tie order. This checks one
+     physical layout only; cross-layout public-ID equality is intentionally not required. -->
 SELECT id,weight() AS w FROM e1_ties WHERE MATCH('tie');
 SELECT id,weight() AS w FROM e1_ties WHERE MATCH('tie') ORDER BY weight() DESC,id ASC OPTION ranker=bm25a;
 </sphinxql>
@@ -226,6 +266,8 @@ SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') AND gid=2 LIMIT 1,1; SHO
 SELECT id,weight() AS w FROM e1_direct_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
 SELECT id,weight() AS w FROM e1_direct_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)+0');
 SELECT id,gid FROM e1_attrs_only ORDER BY id ASC;
+SELECT id,weight() AS w FROM e1_merge2 WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 4,5 OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_merge_n WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 3,9 OPTION ranker=bm25a; SHOW META LIKE 'total_found';
 SELECT id,weight() AS w FROM e1_dense_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
 ALTER TABLE e1_dense_rt ADD COLUMN stored3 TEXT STORED;
 ALTER TABLE e1_dense_rt DROP COLUMN stored0;

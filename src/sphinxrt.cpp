@@ -5295,8 +5295,12 @@ bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 	tmStart = sphMicroTimer();
 	e1::Writer tPrimary;
 	tPrimary.BindTotalDL ( tCtx.m_dTotalDL.data(), uint32_t(tCtx.m_dTotalDL.size()), tCtx.m_dTotalDL.size()==size_t(tCtx.m_iDocinfo) );
-	const bool bRowwisePublicID = !m_tSchema.GetAttr(0).IsColumnar();
-	tPrimary.BindPublicIDs ( tCtx.m_dPublicIDs.data(), uint32_t(tCtx.m_dPublicIDs.size()), bRowwisePublicID && tCtx.m_dPublicIDs.size()==size_t(tCtx.m_iDocinfo) );
+	const CSphColumnInfo * pPublicID = m_tSchema.GetAttrsCount() ? &m_tSchema.GetAttr(0) : nullptr;
+	const bool bPublicIDAuthoritative = pPublicID && pPublicID->m_sName==sphGetDocidName()
+		&& pPublicID->m_eAttrType==SPH_ATTR_BIGINT && !pPublicID->IsUuidLinkedDocid()
+		&& tCtx.m_dPublicIDs.size()==size_t(tCtx.m_iDocinfo);
+	if ( bPublicIDAuthoritative )
+		tPrimary.BindPublicIDs ( tCtx.m_dPublicIDs.data(), uint32_t(tCtx.m_dPublicIDs.size()), true );
 	if ( !WriteDocs ( tCtx, tWriterDict, tPrimary, sError ) )
 		return false;
 	if ( pTimings )

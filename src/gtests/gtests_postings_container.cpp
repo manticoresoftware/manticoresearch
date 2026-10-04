@@ -671,6 +671,7 @@ TEST_F ( PostingsContainerTest, V9WriterPersistsExactSafeRatioBoundsByOrdinal )
 	e1::Cursor tCursor;
 	tCursor.Bind ( tStore, 1 );
 	ASSERT_TRUE ( tCursor.HasBM25ARatioBounds() );
+	EXPECT_FALSE ( tCursor.HasPublicIdMinBounds() );
 	for ( uint32_t uBlock=0; uBlock<3; ++uBlock )
 	{
 		uint8_t uActual = 0;

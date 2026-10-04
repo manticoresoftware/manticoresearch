@@ -6272,6 +6272,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	int nDocidLookup = 0;
 	int nDocidLookupBlocks = 0;
 	CSphFixedVector<DocidRowidPair_t> dDocidLookup ( nDocidLookupsPerBlock );
+	const CSphColumnInfo * pE1DocID = m_tSchema.GetAttrsCount() ? &m_tSchema.GetAttr(0) : nullptr;
+	const bool bE1PublicID = pE1DocID && pE1DocID->m_sName==sphGetDocidName() && pE1DocID->m_eAttrType==SPH_ATTR_BIGINT && !pE1DocID->IsUuidLinkedDocid();
+	std::vector<uint64_t> dE1PublicIDs;
 
 	// fallback blob source (for mva)
 	KeepAttrs_c tPrevAttrs ( tQueryMvaContainer );
@@ -6372,6 +6375,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 			pSource->m_tDocInfo.m_tRowID = tRowID++;
 			DocID_t tDocID = pSource->GetAttr(0);
+			if ( bE1PublicID )
+				dE1PublicIDs.push_back ( uint64_t(tDocID) );
 
 			pSource->RowIDAssigned ( tDocID, tRowID-1 );
 			bool bKeepRow = ( bGotPrevIndex && tPrevAttrs.Keep ( tDocID ) );
@@ -6786,17 +6791,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	tHitBuilder.CreateIndexFiles ( GetFilename ( SPH_EXT_SPD ), GetFilename ( SPH_EXT_SPP ), GetFilename ( SPH_EXT_SPE ), m_bInplaceSettings, iWriteBuffer, fdHits, &iSharedOffset );
 	tHitBuilder.BindTotalDL ( tNormBuilder.TotalDLData(), tNormBuilder.Rows(), tNormBuilder.HasAuthoritativeTotalDL() );
-	std::vector<uint64_t> dE1PublicIDs;
-	const CSphColumnInfo * pE1DocID = m_tSchema.GetAttr ( sphGetDocidName() );
-	if ( pE1DocID && !pE1DocID->IsColumnar() )
-	{
-		dE1PublicIDs.resize ( size_t(m_tStats.m_iTotalDocuments) );
-		const CSphRowitem * pAttrs = m_tAttr.GetWritePtr();
-		const int iStride = m_tSchema.GetRowSize();
-		for ( size_t i=0; i<dE1PublicIDs.size(); ++i )
-			dE1PublicIDs[i] = uint64_t ( sphGetRowAttr ( pAttrs+int64_t(i)*iStride, pE1DocID->m_tLocator ) );
+	if ( bE1PublicID && dE1PublicIDs.size()==size_t(m_tStats.m_iTotalDocuments) )
 		tHitBuilder.BindPublicIDs ( dE1PublicIDs.data(), uint32_t(dE1PublicIDs.size()), true );
-	}
 
 	// dict files
 	CSphAutofile fdTmpDict ( GetFilename ( "tmp8" ), SPH_O_NEW, m_sLastError, true );
@@ -7778,6 +7774,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	// to gracefully unlink them.
 	StrVec_t dDeleteOnInterrupt;
 	std::vector<uint32_t> dMergedTotalDL;
+	std::vector<uint64_t> dMergedPublicIDs;
 	// unlink prepared attribute files on exit, if any
 	AT_SCOPE_EXIT ( [&dDeleteOnInterrupt]
 	{
@@ -7831,7 +7828,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 	// merging attributes
 	{
-		AttrMerger_c tAttrMerger { tMonitor, sError, iTotalDocs, g_tMergeSettings, dDeleteOnInterrupt };
+		AttrMerger_c tAttrMerger { tMonitor, sError, iTotalDocs, g_tMergeSettings, dDeleteOnInterrupt, &dMergedPublicIDs };
 		if ( !tAttrMerger.Prepare ( pSrcIndex, pDstIndex ) )
 			return false;
 
@@ -7862,6 +7859,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	CSphVector<SphWordID_t> dDummy;
 	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, g_tMergeSettings.m_iBufferDict, pDict, &sError, &dDeleteOnInterrupt );
 	tHitBuilder.BindTotalDL ( dMergedTotalDL.data(), uint32_t(dMergedTotalDL.size()), dMergedTotalDL.size()==size_t(iTotalDocs) );
+	tHitBuilder.BindPublicIDs ( dMergedPublicIDs.data(), uint32_t(dMergedPublicIDs.size()), dMergedPublicIDs.size()==size_t(iTotalDocs) );
 
 	int iInfixCodepointBytes = 0;
 	if ( pSettings->m_tSettings.m_iMinInfixLen > 0 && pDict->GetSettings().IsWordDict() )
@@ -8003,6 +8001,7 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 
 	StrVec_t dDeleteOnInterrupt;
 	std::vector<uint32_t> dMergedTotalDL;
+	std::vector<uint64_t> dMergedPublicIDs;
 	AT_SCOPE_EXIT ( [&dDeleteOnInterrupt]
 	{
 		DeleteTmpFilesWithPrefix ( dDeleteOnInterrupt );
@@ -8053,7 +8052,7 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 
 	{
 		int64_t tmAttrsStart = sphMicroTimer();
-		AttrMerger_c tAttrMerger { tMonitor, sError, iTotalDocs, g_tMergeSettings, dDeleteOnInterrupt };
+		AttrMerger_c tAttrMerger { tMonitor, sError, iTotalDocs, g_tMergeSettings, dDeleteOnInterrupt, &dMergedPublicIDs };
 		if ( !tAttrMerger.Prepare ( pBaseIndex, pDstIndex ) )
 			return false;
 
@@ -8082,6 +8081,7 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 	CSphVector<SphWordID_t> dDummy;
 	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, g_tMergeSettings.m_iBufferDict, pDict, &sError, &dDeleteOnInterrupt );
 	tHitBuilder.BindTotalDL ( dMergedTotalDL.data(), uint32_t(dMergedTotalDL.size()), dMergedTotalDL.size()==size_t(iTotalDocs) );
+	tHitBuilder.BindPublicIDs ( dMergedPublicIDs.data(), uint32_t(dMergedPublicIDs.size()), dMergedPublicIDs.size()==size_t(iTotalDocs) );
 
 	int iInfixCodepointBytes = 0;
 	if ( pSettings->m_tSettings.m_iMinInfixLen > 0 && pDict->GetSettings().IsWordDict() )
@@ -11255,7 +11255,8 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 		};
 		const CSphColumnInfo * pE1Docid = m_tSchema.GetAttr ( sphGetDocidName() );
 		std::unique_ptr<RowwisePublicIDReader_c> pPublicIDs;
-		if ( pE1Docid && !pE1Docid->IsColumnar() && !pE1Docid->m_tLocator.m_bDynamic && GetRawAttrs() && m_iDocinfo<=UINT32_MAX )
+		if ( pE1Docid && pE1Docid->m_eAttrType==SPH_ATTR_BIGINT && !pE1Docid->IsUuidLinkedDocid()
+			&& !pE1Docid->IsColumnar() && !pE1Docid->m_tLocator.m_bDynamic && GetRawAttrs() && m_iDocinfo<=UINT32_MAX )
 			pPublicIDs = std::make_unique<RowwisePublicIDReader_c> ( GetRawAttrs(), m_tSchema.GetRowSize(), pE1Docid->m_tLocator, uint32_t(m_iDocinfo) );
 		const BYTE * pE1Header = m_tE1Data.GetReadPtr();
 		e1::PublicIDDigest_t dPublicIDIdentity {};

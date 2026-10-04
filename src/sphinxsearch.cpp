@@ -4550,14 +4550,14 @@ public:
 		if ( this->m_tState.m_bFixedBM25A && !m_bE1FixedBM25A && this->m_tState.m_uFixedBM25AScored && getenv("MANTICORE_E1_RANK_TRACE") )
 			fprintf ( stderr, "E1_FIXED_BM25A_GENERIC_FALLBACK candidates_scored=%llu\n", (unsigned long long)this->m_tState.m_uFixedBM25AScored );
 		if ( m_bE1FixedBM25A && getenv("MANTICORE_E1_RANK_TRACE") )
-			fprintf ( stderr, "%s own_heap=%d configured_k=%d heap_capacity=%d heap_final_count=%d candidates_scored=%llu doc_length_fetches=%llu norm_gather_batches=%llu norm_gather_values=%llu exact_divisions=%llu heap_inserts=%llu heap_replacements=%llu heap_rejections=%llu threshold_updates=%llu heap_final_threshold=%d heap_final_worst_rowid=%u hitlist_seeks=0 decoded_positions=0 general_factor_finalizations=0 general_factor_finalizations_bypassed=%llu\n",
+			fprintf ( stderr, "%s own_heap=%d configured_k=%d heap_capacity=%d heap_final_count=%d candidates_scored=%llu doc_length_fetches=%llu norm_gather_batches=%llu norm_gather_values=%llu exact_divisions=%llu heap_inserts=%llu heap_replacements=%llu heap_rejections=%llu threshold_updates=%llu heap_final_threshold=%d heap_final_worst_id=%llu hitlist_seeks=0 decoded_positions=0 general_factor_finalizations=0 general_factor_finalizations_bypassed=%llu\n",
 				m_bE1MultiOr ? "E1_MULTI_OR_BM25A" : ( m_bE1MultiAnd ? "E1_MULTI_AND_BM25A" : "E1_DIRECT_BM25A" ),
 				int(m_bE1OwnHeap), this->m_iConfiguredE1TopK, m_iE1HeapCapacity, m_iE1TopKHeapCount,
 				(unsigned long long)m_uDirectScores, (unsigned long long)m_uDirectDLFetches,
 				(unsigned long long)m_uE1NormGatherBatches, (unsigned long long)m_uE1NormGatherValues,
 				(unsigned long long)m_uDirectDivisions, (unsigned long long)m_uE1HeapInserts,
 				(unsigned long long)m_uE1HeapReplacements, (unsigned long long)m_uE1HeapRejections,
-				(unsigned long long)m_uE1HeapThresholdUpdates, m_iE1HeapFinalThreshold, unsigned(m_tE1HeapFinalWorstRow),
+				(unsigned long long)m_uE1HeapThresholdUpdates, m_iE1HeapFinalThreshold, (unsigned long long)m_uE1HeapFinalWorstTieKey,
 				(unsigned long long)m_uDirectScores );
 	}
 
@@ -4728,8 +4728,11 @@ private:
 				if ( m_iE1TopKHeapCount==this->m_iConfiguredE1TopK )
 				{
 					m_iE1HeapFinalThreshold = m_dE1TopKMatches[m_dE1TopKHeap[0]].m_iWeight;
-					m_tE1HeapFinalWorstRow = m_dE1TopKMatches[m_dE1TopKHeap[0]].m_tRowID;
-					this->m_pRoot->SetRankThreshold ( m_iE1HeapFinalThreshold, m_tE1HeapFinalWorstRow );
+					// V9 bounds contain public IDs, never internal row IDs.  A
+					// row-id heap may exploit order equivalence for sorting, but its
+					// numeric threshold is not comparable to the persisted values.
+					m_uE1HeapFinalWorstTieKey = m_bE1TieByRowid ? UINT64_MAX : fnTieKey(m_dE1TopKMatches[m_dE1TopKHeap[0]]);
+					this->m_pRoot->SetRankThreshold ( m_iE1HeapFinalThreshold, m_uE1HeapFinalWorstTieKey );
 					++m_uE1HeapThresholdUpdates;
 				}
 			}
@@ -4752,8 +4755,8 @@ private:
 				}
 				++m_uE1HeapReplacements;
 				m_iE1HeapFinalThreshold = m_dE1TopKMatches[m_dE1TopKHeap[0]].m_iWeight;
-				m_tE1HeapFinalWorstRow = m_dE1TopKMatches[m_dE1TopKHeap[0]].m_tRowID;
-				this->m_pRoot->SetRankThreshold ( m_iE1HeapFinalThreshold, m_tE1HeapFinalWorstRow );
+				m_uE1HeapFinalWorstTieKey = m_bE1TieByRowid ? UINT64_MAX : fnTieKey(m_dE1TopKMatches[m_dE1TopKHeap[0]]);
+				this->m_pRoot->SetRankThreshold ( m_iE1HeapFinalThreshold, m_uE1HeapFinalWorstTieKey );
 				++m_uE1HeapThresholdUpdates;
 			}
 			else
@@ -4788,7 +4791,7 @@ private:
 	uint64_t m_uE1HeapThresholdUpdates = 0;
 	uint64_t m_uE1HeapDiscardedPending = 0;
 	int m_iE1HeapFinalThreshold = 0;
-	RowID_t m_tE1HeapFinalWorstRow = INVALID_ROWID;
+	uint64_t m_uE1HeapFinalWorstTieKey = UINT64_MAX;
 	uint64_t m_uDirectScores = 0;
 	uint64_t m_uDirectDLFetches = 0;
 	uint64_t m_uDirectDivisions = 0;

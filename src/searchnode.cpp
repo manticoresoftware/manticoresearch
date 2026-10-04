@@ -357,13 +357,14 @@ public:
 	{
 		if ( m_bE1Ranked && getenv("MANTICORE_E1_RANK_TRACE") )
 		{
-			fprintf ( stderr, "E1_RANKED bound_kind=%s rowid_docid_order=%d bound_entries_read=%llu nonempty_buckets=%llu selected_blocks=%llu skipped_blocks=%llu skipped_docs=%llu scored_docs=%llu metadata_groups_decoded=%llu threshold_at_scored=%llu topk_updates=%llu\n",
+			fprintf ( stderr, "E1_RANKED bound_kind=%s rowid_docid_order=%d tie_public_id_capability=%d bound_entries_read=%llu nonempty_buckets=%llu selected_blocks=%llu skipped_blocks=%llu equality_skipped_blocks=%llu skipped_docs=%llu scored_docs=%llu metadata_groups_decoded=%llu threshold_at_scored=%llu topk_updates=%llu heap_worst_weight=%d heap_worst_id=%llu\n",
 				E1RankedBoundKindName(m_eE1BoundKind), int(m_bE1RowidDocidOrder),
+				int(m_eE1BoundKind==E1RankedBoundKind_e::BM25A_RATIO),
 				(unsigned long long)m_uRankBoundEntries, (unsigned long long)m_uRankBuckets,
-				(unsigned long long)m_uRankSelectedBlocks, (unsigned long long)m_uRankSkippedBlocks,
+				(unsigned long long)m_uRankSelectedBlocks, (unsigned long long)m_uRankSkippedBlocks, (unsigned long long)m_uRankEqualitySkippedBlocks,
 				(unsigned long long)m_uRankSkippedDocsTotal, (unsigned long long)m_uRankScored,
 				(unsigned long long)m_uRankDecodedGroups, (unsigned long long)m_uRankThresholdAtScored,
-				(unsigned long long)m_uRankTopKUpdates );
+				(unsigned long long)m_uRankTopKUpdates, m_iRankThreshold, (unsigned long long)m_uRankWorstTieKey );
 			if ( m_tE1Filter.m_bEnabled )
 				fprintf ( stderr, "E1_FILTER_TERM masks_built=%llu rows_examined=%llu candidates_before=%llu candidates_after=%llu exact_total=%llu eligibility_bytes=%llu eligibility_build_us=%lld ineligible_before_tf=%llu eligible_rows_scored=%llu generic_filter_bypass=1 persisted_best_first=1\n",
 					(unsigned long long)m_uE1FilterMasksBuilt, (unsigned long long)m_uE1FilterRowsExamined,
@@ -475,7 +476,7 @@ public:
 		return m_bE1Ranked;
 	}
 	bool				EnableE1BestFirst() override { return m_bE1Ranked; }
-	void				SetRankThreshold ( int iWeight, RowID_t tWorstRow ) override { tWorstRow = m_bE1RowidDocidOrder ? tWorstRow : INVALID_ROWID; if ( iWeight!=m_iRankThreshold || tWorstRow!=m_tRankWorstRow ) { if ( !m_iRankThreshold ) m_uRankThresholdAtScored=m_uRankScored; ++m_uRankTopKUpdates; m_iRankThreshold=iWeight; m_tRankWorstRow=tWorstRow; } }
+	void				SetRankThreshold ( int iWeight, uint64_t uWorstTieKey ) override { if ( m_eE1BoundKind!=E1RankedBoundKind_e::BM25A_RATIO ) uWorstTieKey = m_bE1RowidDocidOrder ? uWorstTieKey : UINT64_MAX; if ( iWeight!=m_iRankThreshold || uWorstTieKey!=m_uRankWorstTieKey ) { if ( !m_iRankThreshold ) m_uRankThresholdAtScored=m_uRankScored; ++m_uRankTopKUpdates; m_iRankThreshold=iWeight; m_uRankWorstTieKey=uWorstTieKey; } }
 	uint64_t			TakeRankSkippedDocs() override
 	{
 		if ( m_tE1Filter.m_bEnabled || m_bE1ScopedTerm )
@@ -520,11 +521,12 @@ protected:
 	int					m_iE1ScopedField = -1;
 	int					m_iE1SchemaFields = 0;
 	int					m_iRankThreshold = 0;
-	RowID_t			m_tRankWorstRow = INVALID_ROWID;
+	uint64_t			m_uRankWorstTieKey = UINT64_MAX;
 	uint64_t			m_uRankBoundEntries = 0;
 	uint64_t			m_uRankBuckets = 0;
 	uint64_t			m_uRankSelectedBlocks = 0;
 	uint64_t			m_uRankSkippedBlocks = 0;
+	uint64_t			m_uRankEqualitySkippedBlocks = 0;
 	uint64_t			m_uRankSkippedDocs = 0;
 	uint64_t			m_uRankSkippedDocsTotal = 0;
 	uint64_t			m_uRankTotalDocs = 0;
@@ -770,7 +772,7 @@ public:
 	void				SetRowidBoundaries ( const RowIdBoundaries_t & tBoundaries ) override { m_tBoundaries = tBoundaries; }
 	bool				EnableE1Ranked() override;
 	bool				EnableE1BestFirst() override { m_bE1BestFirst = m_bE1Or && ( m_dNodes.GetLength()==2 || m_dNodes.GetLength()==4 ); m_bE1BatchedOr2 = m_bE1Or && m_dNodes.GetLength()==2; return m_bE1BestFirst || m_bE1DirectAnd; }
-	void				SetRankThreshold ( int iWeight, RowID_t tWorstRow ) override { m_iE1RankThreshold = iWeight; m_tE1WorstTiedRow = m_bE1RowidDocidOrder ? tWorstRow : INVALID_ROWID; m_iE1FinalThreshold = iWeight; }
+	void				SetRankThreshold ( int iWeight, uint64_t uWorstTieKey ) override { m_iE1RankThreshold = iWeight; m_tE1WorstTiedRow = m_bE1RowidDocidOrder && uWorstTieKey<=UINT32_MAX ? RowID_t(uWorstTieKey) : INVALID_ROWID; m_iE1FinalThreshold = iWeight; }
 	uint64_t			TakeRankSkippedDocs() override { auto u=m_uE1SkippedMatches; m_uE1SkippedMatches=0; return u; }
 
 private:
@@ -1989,7 +1991,7 @@ public:
 		return true;
 	}
 	bool EnableE1BestFirst() override { return m_bEnabled; }
-	void SetRankThreshold ( int iWeight, RowID_t tWorstRow ) override { m_iRankThreshold=iWeight; m_tWorstTiedRow=tWorstRow; }
+	void SetRankThreshold ( int iWeight, uint64_t uWorstTieKey ) override { m_iRankThreshold=iWeight; m_tWorstTiedRow=uWorstTieKey<=UINT32_MAX?RowID_t(uWorstTieKey):INVALID_ROWID; }
 	uint64_t TakeRankSkippedDocs() override { const uint64_t uSkipped=m_uSkippedMatches; m_uSkippedMatches=0; return uSkipped; }
 	const ExtDoc_t * GetDocsChunk() override
 	{
@@ -3372,9 +3374,9 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 			const uint32_t uEligibilityWords = bScopedEligibility ? uint32_t(m_dE1ScopedEligibility.GetLength()) : ( bFilterEligibility ? uint32_t(m_dE1Eligibility.GetLength()) : 0 );
 			uint64_t * pIneligibleBeforeTF = (bScopedEligibility || bFilterEligibility) ? &m_uE1IneligibleBeforeTF : nullptr;
 			const uint32_t uKnownMask = bScopedEligibility ? uint32_t(1)<<m_iE1ScopedField : 0;
-			if ( !m_pQword->GetE1RankedDoc ( uMinTF, tRankedRow, uRankedTF, m_uRankBoundEntries, m_uRankBuckets, m_uRankSelectedBlocks, m_uRankSkippedBlocks, m_uRankSkippedDocs, m_uRankDecodedGroups, pEligibility, uEligibilityWords, pIneligibleBeforeTF, uEqualBoundTF, m_tRankWorstRow, uKnownMask,
+			if ( !m_pQword->GetE1RankedDoc ( uMinTF, tRankedRow, uRankedTF, m_uRankBoundEntries, m_uRankBuckets, m_uRankSelectedBlocks, m_uRankSkippedBlocks, m_uRankSkippedDocs, m_uRankDecodedGroups, pEligibility, uEligibilityWords, pIneligibleBeforeTF, uEqualBoundTF, m_uRankWorstTieKey, uKnownMask,
 				m_eE1BoundKind==E1RankedBoundKind_e::BM25A_RATIO ? m_fIDF : 0.0f,
-				m_eE1BoundKind==E1RankedBoundKind_e::BM25A_RATIO ? m_iRankThreshold : 0 ) )
+				m_eE1BoundKind==E1RankedBoundKind_e::BM25A_RATIO ? m_iRankThreshold : 0, &m_uRankEqualitySkippedBlocks ) )
 			{
 				m_bE1RankFinished = true;
 				m_pQword->m_iDocs = 0;

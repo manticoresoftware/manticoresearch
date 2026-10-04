@@ -146,13 +146,19 @@ void ConvertSingleTermV7ToV6 ( ByteVec_t & dData, const std::vector<e1::Posting>
 	const uint64_t uMetadataOffset = e1::U64 ( pTerm+16 );
 	const auto * pGroup = dData.data()+uMetadataOffset+uint64_t(uMetadataCount-1)*16;
 	const size_t uBoundsOffset = e1::U64(pGroup)+e1::Meta4Bytes(e1::U32(pGroup+8),e1::U32(pGroup+12));
-	for ( size_t uBlock=0; uBlock<(dPostings.size()+63)/64; ++uBlock )
+	const size_t uBlocks = (dPostings.size()+63)/64;
+	for ( size_t uBlock=0; uBlock<uBlocks; ++uBlock )
 	{
 		uint32_t uMaxTF = 0;
 		for ( size_t i=uBlock*64; i<std::min(dPostings.size(),(uBlock+1)*64); ++i )
 			uMaxTF = std::max ( uMaxTF, dPostings[i].m_uTF );
 		dData[uBoundsOffset+uBlock] = uint8_t ( std::min(uMaxTF,255u) );
 	}
+	// V9 stores one uint64 minimum public ID after every ordinal-64 bound.
+	// Strip that extension before presenting the payload as V6.
+	const size_t uMinIDsOffset = uBoundsOffset+uBlocks;
+	dData.erase ( dData.begin()+uMinIDsOffset, dData.begin()+uMinIDsOffset+uBlocks*8 );
+	PutValue ( dData, 48, e1::U64(dData.data()+48)-uBlocks*8, 8 );
 	memcpy ( dData.data(), "E1POST06", 8 );
 	PutValue ( dData, 8, 6, 4 );
 	UpdateChecksum ( dData );
@@ -527,7 +533,7 @@ TEST_F ( PostingsContainerTest, RankedBoundsAndPersistedVersions )
 	EXPECT_FALSE ( tCursor.Next(uRow) );
 }
 
-TEST_F ( PostingsContainerTest, V7WriterPersistsExactSafeRatioBoundsByOrdinal )
+TEST_F ( PostingsContainerTest, V9WriterPersistsExactSafeRatioBoundsByOrdinal )
 {
 	std::vector<e1::Posting> dPostings;
 	std::vector<uint32_t> dTotalDL ( 130 );
@@ -549,8 +555,8 @@ TEST_F ( PostingsContainerTest, V7WriterPersistsExactSafeRatioBoundsByOrdinal )
 
 	auto dRaw=ReadFile(m_sBase+".spd"), dDict=ReadFile(m_sBase+".spi"), dHits=ReadFile(m_sBase+".spp");
 	ASSERT_GE ( dRaw.size(), 56u );
-	EXPECT_EQ ( std::string(reinterpret_cast<const char *>(dRaw.data()),8), "E1POST07" );
-	EXPECT_EQ ( e1::U32(dRaw.data()+8), 7u );
+	EXPECT_EQ ( std::string(reinterpret_cast<const char *>(dRaw.data()),8), "E1POST09" );
+	EXPECT_EQ ( e1::U32(dRaw.data()+8), 9u );
 	e1::Store tStore;
 	// Ordinal-byte round trip is independent from deep norm validation, covered below.
 	ASSERT_TRUE ( tStore.Open(dRaw.data(),dRaw.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,true) ) << sError;
@@ -590,6 +596,56 @@ TEST_F ( PostingsContainerTest, V7WriterPersistsExactSafeRatioBoundsByOrdinal )
 	e1::Store tRejected;
 	EXPECT_FALSE ( tRejected.Open(dUnderestimate.data(),dUnderestimate.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,false,nullptr,&tNormStore) );
 	EXPECT_NE ( sError.find("unsafe BM25A ratio bound"), std::string::npos );
+}
+
+TEST_F ( PostingsContainerTest, V9PersistsConservativePublicIdMinimumPerOrdinalBlock )
+{
+	std::vector<e1::Posting> dPostings;
+	std::vector<uint32_t> dTotalDL ( 130, 32 );
+	for ( uint32_t i=0; i<130; ++i )
+		dPostings.push_back ( { i, 1, 1, 0, 0, 10000u-i*13u } );
+	{ std::ofstream(m_sBase+".spi",std::ios::binary).write("dict",4); }
+	{ std::ofstream(m_sBase+".spp",std::ios::binary).put('\1'); }
+	std::string sError;
+	e1::Writer tWriter;
+	ASSERT_TRUE ( tWriter.Open(m_sBase+".spd",sError) ) << sError;
+	tWriter.BindTotalDL ( dTotalDL.data(), uint32_t(dTotalDL.size()), true );
+	uint64_t uHits = 0;
+	std::array<uint64_t,3> dExpectedMin { UINT64_MAX, UINT64_MAX, UINT64_MAX };
+	for ( uint32_t i=0; i<dPostings.size(); ++i )
+	{
+		uHits += dPostings[i].m_uTF;
+		dExpectedMin[i/64] = std::min ( dExpectedMin[i/64], dPostings[i].m_uPublicID );
+	}
+	ASSERT_TRUE ( tWriter.FinishTerm(1,dPostings,uHits,false,sError) ) << sError;
+	ASSERT_TRUE ( tWriter.Finalize(m_sBase+".spi",m_sBase+".spp",sError) ) << sError;
+
+	auto dRaw=ReadFile(m_sBase+".spd"), dDict=ReadFile(m_sBase+".spi"), dHits=ReadFile(m_sBase+".spp");
+	ASSERT_GE ( dRaw.size(), 56u );
+	EXPECT_EQ ( std::string(reinterpret_cast<const char *>(dRaw.data()),8), "E1POST09" );
+	EXPECT_EQ ( e1::U32(dRaw.data()+8), 9u );
+	e1::Store tStore;
+	ASSERT_TRUE ( tStore.Open(dRaw.data(),dRaw.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,true) ) << sError;
+	e1::Cursor tCursor;
+	tCursor.Bind ( tStore, 1 );
+	ASSERT_TRUE ( tCursor.HasPublicIdMinBounds() );
+	for ( uint32_t uBlock=0; uBlock<3; ++uBlock )
+	{
+		uint64_t uActual = 0;
+		ASSERT_TRUE ( tCursor.PublicIdMinBound(uBlock,uActual) );
+		EXPECT_EQ ( uActual, dExpectedMin[uBlock] );
+	}
+
+	// Equality is strict on id: min==worst cannot beat ORDER BY weight DESC,id ASC.
+	uint8_t uCode = 0;
+	ASSERT_TRUE ( tCursor.BM25ARatioBound(0,uCode) );
+	const float fIDF = 0.1f;
+	const int iThreshold = E1SafeUpperRatioWeight ( uCode, fIDF );
+	uint32_t uRow=0,uTF=0,uMask=0;
+	uint64_t uRef=0,uEntries=0,uBuckets=0,uSelected=0,uSkipped=0,uSkippedDocs=0,uDecoded=0,uEqualitySkipped=0;
+	EXPECT_FALSE ( tCursor.NextRanked(uRow,uTF,uMask,uRef,0,uEntries,uBuckets,uSelected,uSkipped,uSkippedDocs,uDecoded,nullptr,0,nullptr,0,dExpectedMin[2],0,fIDF,iThreshold,&uEqualitySkipped) );
+	EXPECT_EQ ( uEqualitySkipped, 3u );
+	EXPECT_EQ ( uSkippedDocs, 130u );
 }
 
 TEST ( NormStore, ExactWidthsRangesGatherAndTotals )

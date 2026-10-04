@@ -497,14 +497,14 @@ public:
 	bool NextE1SelectedMeta ( E1SelectedMeta_t & tMeta, uint64_t & uDecoded, uint32_t uScopedField=UINT32_MAX ) override { return m_tE1.NextSelectedMeta(tMeta,uDecoded,uScopedField); }
 	bool ExactE1FieldTF ( uint32_t uOrdinal, uint32_t uField, uint32_t uMask, uint32_t uAggregateTF, uint32_t & uTF ) const override { return m_tE1.ExactFieldTF(uOrdinal,uField,uMask,uAggregateTF,uTF); }
 	bool ProbeE1DirectTF ( RowID_t tRowID, uint32_t & uTF ) override { return m_tE1.ProbeTF ( uint32_t(tRowID), uTF ); }
-	bool GetE1RankedDoc ( uint32_t uMinTF, RowID_t & tRowID, uint32_t & uTF, uint64_t & uBoundEntries, uint64_t & uBuckets, uint64_t & uSelectedBlocks, uint64_t & uSkippedBlocks, uint64_t & uSkippedDocs, uint64_t & uDecodedGroups, const uint64_t * pEligibility=nullptr, uint32_t uEligibilityWords=0, uint64_t * pIneligibleBeforeTF=nullptr, uint32_t uEqualBoundTF=0, RowID_t tWorstRow=INVALID_ROWID, uint32_t uKnownMask=0, float fRatioIDF=0.0f, int iThreshold=0 ) override
+	bool GetE1RankedDoc ( uint32_t uMinTF, RowID_t & tRowID, uint32_t & uTF, uint64_t & uBoundEntries, uint64_t & uBuckets, uint64_t & uSelectedBlocks, uint64_t & uSkippedBlocks, uint64_t & uSkippedDocs, uint64_t & uDecodedGroups, const uint64_t * pEligibility=nullptr, uint32_t uEligibilityWords=0, uint64_t * pIneligibleBeforeTF=nullptr, uint32_t uEqualBoundTF=0, uint64_t uWorstTieKey=UINT64_MAX, uint32_t uKnownMask=0, float fRatioIDF=0.0f, int iThreshold=0, uint64_t * pEqualitySkipped=nullptr ) override
 	{
 		if ( !m_tE1.Active() )
 			return false;
 		uint32_t uRowID = uint32_t ( tRowID );
 		uint32_t uMask = 0;
 		uint64_t uRef = 0;
-		if ( !m_tE1.NextRanked ( uRowID, uTF, uMask, uRef, uMinTF, uBoundEntries, uBuckets, uSelectedBlocks, uSkippedBlocks, uSkippedDocs, uDecodedGroups, pEligibility, uEligibilityWords, pIneligibleBeforeTF, uEqualBoundTF, uint32_t(tWorstRow), uKnownMask, fRatioIDF, iThreshold ) )
+		if ( !m_tE1.NextRanked ( uRowID, uTF, uMask, uRef, uMinTF, uBoundEntries, uBuckets, uSelectedBlocks, uSkippedBlocks, uSkippedDocs, uDecodedGroups, pEligibility, uEligibilityWords, pIneligibleBeforeTF, uEqualBoundTF, uWorstTieKey, uKnownMask, fRatioIDF, iThreshold, pEqualitySkipped ) )
 			return false;
 		tRowID = RowID_t ( uRowID );
 		m_tDoc.m_tRowID = tRowID;
@@ -3969,6 +3969,7 @@ public:
 
 	bool	CreateIndexFiles ( const CSphString& sDocName, const CSphString& sHitName, const CSphString& sSkipName, bool bInplace, int iWriteBuffer, CSphAutofile & tHit, SphOffset_t * pSharedOffset=nullptr );
 	void	BindTotalDL ( const uint32_t * pTotalDL, uint32_t uRows, bool bAuthoritative ) { m_tE1Writer.BindTotalDL(pTotalDL,uRows,bAuthoritative); }
+	void	BindPublicIDs ( const uint64_t * pPublicIDs, uint32_t uRows, bool bAuthoritative ) { m_tE1Writer.BindPublicIDs(pPublicIDs,uRows,bAuthoritative); }
 	void	HitReset ();
 
 	void	cidxHit ( AggregateHit_t * pHit );
@@ -4580,7 +4581,7 @@ bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & 
 	{
 		wrHeaderJson.PutString ( (Str_t)sJson );
 		wrHeaderJson.CloseFile();
-		if ( tBuildHeader.m_uFormatVersion==e1::VERSION || tBuildHeader.m_uFormatVersion==e1::VERSION6 || tBuildHeader.m_uFormatVersion==e1::VERSION5 || tBuildHeader.m_uFormatVersion==e1::VERSION4 )
+		if ( tBuildHeader.m_uFormatVersion==e1::VERSION || tBuildHeader.m_uFormatVersion==e1::VERSION7 || tBuildHeader.m_uFormatVersion==e1::VERSION6 || tBuildHeader.m_uFormatVersion==e1::VERSION5 || tBuildHeader.m_uFormatVersion==e1::VERSION4 )
 		{
 #if defined(_WIN32)
 			// The writer is already closed above. Windows durability is handled by
@@ -6133,7 +6134,7 @@ bool sphIsE1Snapshot ( const CSphString & sBase )
 		return false;
 	bson::Bson_c tJson(dHeader);
 	auto uVersion = bson::Int(tJson.ChildByName("index_format_version"));
-	return uVersion==e1::VERSION || uVersion==e1::VERSION6 || uVersion==e1::VERSION5 || uVersion==e1::VERSION4
+	return uVersion==e1::VERSION || uVersion==e1::VERSION7 || uVersion==e1::VERSION6 || uVersion==e1::VERSION5 || uVersion==e1::VERSION4
 		|| tJson.ChildByName("e1_postings").second!=JSON_EOF || tJson.ChildByName("e1_base_version").second!=JSON_EOF || tJson.ChildByName("e1_norms").second!=JSON_EOF;
 }
 
@@ -6785,6 +6786,17 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	tHitBuilder.CreateIndexFiles ( GetFilename ( SPH_EXT_SPD ), GetFilename ( SPH_EXT_SPP ), GetFilename ( SPH_EXT_SPE ), m_bInplaceSettings, iWriteBuffer, fdHits, &iSharedOffset );
 	tHitBuilder.BindTotalDL ( tNormBuilder.TotalDLData(), tNormBuilder.Rows(), tNormBuilder.HasAuthoritativeTotalDL() );
+	std::vector<uint64_t> dE1PublicIDs;
+	const CSphColumnInfo * pE1DocID = m_tSchema.GetAttr ( sphGetDocidName() );
+	if ( pE1DocID && !pE1DocID->IsColumnar() )
+	{
+		dE1PublicIDs.resize ( size_t(m_tStats.m_iTotalDocuments) );
+		const CSphRowitem * pAttrs = m_tAttr.GetWritePtr();
+		const int iStride = m_tSchema.GetRowSize();
+		for ( size_t i=0; i<dE1PublicIDs.size(); ++i )
+			dE1PublicIDs[i] = uint64_t ( sphGetRowAttr ( pAttrs+int64_t(i)*iStride, pE1DocID->m_tLocator ) );
+		tHitBuilder.BindPublicIDs ( dE1PublicIDs.data(), uint32_t(dE1PublicIDs.size()), true );
+	}
 
 	// dict files
 	CSphAutofile fdTmpDict ( GetFilename ( "tmp8" ), SPH_O_NEW, m_sLastError, true );
@@ -8333,7 +8345,7 @@ bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHe
 
 		std::string sStoreError;
 		if ( !m_tE1Store.Open ( m_tE1Data.GetReadPtr(), m_tE1Data.GetLengthBytes(), m_iDocinfo,
-			tDict.GetReadPtr(), tDict.GetLengthBytes(), tHits.GetReadPtr(), tHits.GetLengthBytes(), sStoreError, false, nullptr, tBuildHeader.m_uFormatVersion==e1::VERSION ? &m_tNormStore : nullptr ) )
+			tDict.GetReadPtr(), tDict.GetLengthBytes(), tHits.GetReadPtr(), tHits.GetLengthBytes(), sStoreError, false, nullptr, (tBuildHeader.m_uFormatVersion==e1::VERSION || tBuildHeader.m_uFormatVersion==e1::VERSION7) ? &m_tNormStore : nullptr ) )
 		{
 			sError = sStoreError.c_str();
 			return false;
@@ -10415,15 +10427,15 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 		return LOAD_E::GeneralError_e;
 	}
 	m_uVersion = DWORD(Int(tVersion));
-	m_bE1 = m_uVersion==e1::VERSION || m_uVersion==e1::VERSION6 || m_uVersion==e1::VERSION5 || m_uVersion==e1::VERSION4;
+	m_bE1 = m_uVersion==e1::VERSION || m_uVersion==e1::VERSION7 || m_uVersion==e1::VERSION6 || m_uVersion==e1::VERSION5 || m_uVersion==e1::VERSION4;
 	if ( m_bE1 )
 	{
 		m_uE1Version = m_uVersion;
 		auto tCapability = tBson.ChildByName("e1_postings");
 		auto tBase = tBson.ChildByName("e1_base_version");
-		int iExpected = m_uVersion==e1::VERSION ? 7 : m_uVersion==e1::VERSION6 ? 6 : m_uVersion==e1::VERSION5 ? 5 : 4;
+		int iExpected = m_uVersion==e1::VERSION ? 9 : m_uVersion==e1::VERSION7 ? 7 : m_uVersion==e1::VERSION6 ? 6 : m_uVersion==e1::VERSION5 ? 5 : 4;
 		auto tNormCapability = tBson.ChildByName("e1_norms");
-		const bool bNormCapabilityValid = (m_uVersion!=e1::VERSION && m_uVersion!=e1::VERSION6) || ( IsInt(tNormCapability) && Int(tNormCapability)==1 );
+		const bool bNormCapabilityValid = (m_uVersion!=e1::VERSION && m_uVersion!=e1::VERSION7 && m_uVersion!=e1::VERSION6) || ( IsInt(tNormCapability) && Int(tNormCapability)==1 );
 		if ( !IsInt(tCapability) || !IsInt(tBase) || Int(tCapability)!=iExpected || Int(tBase)!=74 || !bNormCapabilityValid )
 		{
 			m_sLastError = "E1: unknown required capability/base version";
@@ -11204,7 +11216,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 		const bool bE1StartupTrace = getenv("MANTICORE_E1_STARTUP_TRACE");
 		const bool bE1FlushTrace = getenv("MANTICORE_E1_FLUSH_TRACE");
 		int64_t tmE1Startup = bE1StartupTrace ? sphMicroTimer() : 0;
-		const bool bNormsRequired = m_uE1Version==e1::VERSION || m_uE1Version==e1::VERSION6;
+		const bool bNormsRequired = m_uE1Version==e1::VERSION || m_uE1Version==e1::VERSION7 || m_uE1Version==e1::VERSION6;
 		if ( bNormsRequired && !sphIsReadable(GetFilename(SPH_EXT_SPN),&m_sLastError) )
 			return false;
 		if ( bNormsRequired || sphIsReadable(GetFilename(SPH_EXT_SPN)) )
@@ -11250,7 +11262,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 		const bool bFastValidation = bTrustedGeneration;
 		e1::OpenTimings_t tPostingsTimings;
 		if ( !m_tE1Store.Open(m_tE1Data.GetReadPtr(),m_tE1Data.GetLengthBytes(),m_iDocinfo,
-			dict.GetReadPtr(),dict.GetLengthBytes(),hits.GetReadPtr(),hits.GetLengthBytes(),error,bFastValidation,bE1FlushTrace ? &tPostingsTimings : nullptr,m_uE1Version==e1::VERSION ? &m_tNormStore : nullptr) )
+			dict.GetReadPtr(),dict.GetLengthBytes(),hits.GetReadPtr(),hits.GetLengthBytes(),error,bFastValidation,bE1FlushTrace ? &tPostingsTimings : nullptr,(m_uE1Version==e1::VERSION || m_uE1Version==e1::VERSION7) ? &m_tNormStore : nullptr) )
 		{ m_sLastError = error.c_str(); return false; }
 		if ( bE1StartupTrace )
 		{

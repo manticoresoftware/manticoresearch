@@ -53,8 +53,9 @@ public:
   bool v5=size>=48&&!memcmp(p,"E1POST05",8)&&U32(p+8)==5;
   bool v6=size>=48&&!memcmp(p,"E1POST06",8)&&U32(p+8)==6;
   bool v7=size>=48&&!memcmp(p,"E1POST07",8)&&U32(p+8)==7;
-  if((!v4&&!v5&&!v6&&!v7)||U64(p+16)!=size)return fail("format/length");
-  uint32_t version=v7?7:v6?6:v5?5:4;
+  bool v9=size>=48&&!memcmp(p,"E1POST09",8)&&U32(p+8)==9;
+  if((!v4&&!v5&&!v6&&!v7&&!v9)||U64(p+16)!=size)return fail("format/length");
+  uint32_t version=v9?9:v7?7:v6?6:v5?5:4;
   uint32_t header=U32(p+12),flags=U32(p+44);uint64_t nt=U64(p+24),directory=0,end=0,payloadEnd=size;
   if(header==48&&flags==0){m_entrySize=32;directory=48;if(nt>(size-48)/32)return fail("directory overflow");end=48+nt*32;}
   else if(header==56&&flags==1){m_entrySize=16;if(size<56)return fail("streamed header");directory=U64(p+48);if(directory<56||directory>size||nt>(size-directory)/16||directory+nt*16!=size)return fail("streamed directory");end=56;payloadEnd=directory;}
@@ -77,7 +78,7 @@ public:
    if(U32(h)!=df||frequent!=(df>=4096?1u:0u)||(type&~0x00003f03u)||(version<6&&fieldWidth)||fieldWidth>32||nm!=(uint64_t(df)+127)/128)return fail("term type/DF");
    uint64_t desc=24;
    if(!nb||nb>df||nb>(size-off-24)/desc||(!frequent&&nb!=nm))return fail("row directory bounds");
-   end=off+24+uint64_t(nb)*desc;uint32_t ordinal=0,prevRow=0,prevId=0;std::vector<uint32_t> termRows(version==7?df:0);
+   end=off+24+uint64_t(nb)*desc;uint32_t ordinal=0,prevRow=0,prevId=0;std::vector<uint32_t> termRows(version>=7?df:0);
    for(uint32_t b=0;b<nb;++b){
     if(frequent){
      Block block{p,h+24+uint64_t(b)*24};auto id=block.id(),card=block.card(),bytes=block.bytes(),codec=block.type();auto po=U64(block.d+16);
@@ -87,27 +88,28 @@ public:
      if(codec==0){for(uint32_t i=0;i<card;++i){auto x=U16(q+i*2);if(x>=valid||(i&&x<=previous))return fail("array order");previous=x;}count=card;}
      else if(codec==1){for(unsigned w=0;w<64;++w){auto v=U64(q+w*8);count+=__builtin_popcountll(v);if(w*64>=valid){if(v)return fail("bitmap row bounds");}else if(valid-w*64<64&&v>>(valid-w*64))return fail("bitmap tail");}}
      else {for(unsigned i=0;i<bytes;i+=4){auto lo=U16(q+i),hi=U16(q+i+2);if(lo>hi||hi>=valid||(i&&lo<=previous+1))return fail("run order");count+=hi-lo+1;previous=hi;}}
-     if(count!=card)return fail("container cardinality");if(version==7){uint32_t at=ordinal;for(uint32_t w=0;w<64;++w){uint64_t bits=0;if(codec==1)bits=U64(q+w*8);else{std::array<uint64_t,64> mask{};Mask(block,mask);bits=mask[w];}while(bits){uint32_t bit=uint32_t(__builtin_ctzll(bits));bits&=bits-1;termRows[at++]=id*4096+w*64+bit;}}if(at!=ordinal+card)return fail("container row materialization");}ordinal+=card;prevId=id;end=po+bytes;
+     if(count!=card)return fail("container cardinality");if(version>=7){uint32_t at=ordinal;for(uint32_t w=0;w<64;++w){uint64_t bits=0;if(codec==1)bits=U64(q+w*8);else{std::array<uint64_t,64> mask{};Mask(block,mask);bits=mask[w];}while(bits){uint32_t bit=uint32_t(__builtin_ctzll(bits));bits&=bits-1;termRows[at++]=id*4096+w*64+bit;}}if(at!=ordinal+card)return fail("container row materialization");}ordinal+=card;prevId=id;end=po+bytes;
     }else{
      auto g=h+24+uint64_t(b)*24;auto first=U32(g),last=U32(g+4),n=U32(g+8),f=U32(g+12),codec=f&15,width=(f>>16)&63;auto po=U64(g+16);auto span=uint64_t(last)-first+1;
      if(n!=std::min(128u,df-b*128)||first>last||last>=rows||(b&&first<=prevRow)||codec<1||codec>4||(f&~0x003f000fu)||(codec==3?(!width||width>32):width!=0)||(codec==4&&span>1024))return fail("rare descriptor");
      uint64_t bytes=codec==1?0:codec==2?uint64_t(n-1)*4:codec==3?(uint64_t(n-1)*width+7)/8:(span+7)/8;
-     if(po!=end||po>size||bytes>size-po)return fail("rare bounds");uint32_t tmp[128];if(!DecodeRows(p+po,first,last,n,f,true,tmp))return fail("rare row codec");if(version==7)std::copy_n(tmp,n,termRows.data()+ordinal);prevRow=last;ordinal+=n;end=po+bytes;
+     if(po!=end||po>size||bytes>size-po)return fail("rare bounds");uint32_t tmp[128];if(!DecodeRows(p+po,first,last,n,f,true,tmp))return fail("rare row codec");if(version>=7)std::copy_n(tmp,n,termRows.data()+ordinal);prevRow=last;ordinal+=n;end=po+bytes;
     }
    }
    if(ordinal!=df||mo!=end||mo>size||uint64_t(nm)*16>size-mo)return fail("ordinal/metadata directory");
-   end=mo+uint64_t(nm)*16;uint64_t sum=0;std::vector<uint8_t> expected((uint64_t(df)+63)/64,0);std::vector<uint32_t> termTF(version==7?df:0);
+   end=mo+uint64_t(nm)*16;uint64_t sum=0;std::vector<uint8_t> expected((uint64_t(df)+63)/64,0);std::vector<uint32_t> termTF(version>=7?df:0);
    for(uint32_t b=0;b<nm;++b){auto g=p+mo+uint64_t(b)*16;auto po=U64(g);auto f=U32(g+8),n=U32(g+12);
     auto tm=(f>>4)&3,mm=(f>>6)&3,tw=(f>>9)&63,mw=(f>>23)&63;bool split=f&(1u<<29);
     if(n!=std::min(128u,df-b*128)||(f&~0x3fff7ef0u)||tm==3||(((f>>22)&1)!=has)||(tm==2?(!tw||tw>32):tw)||(mm==2?(mw>32):mw)||(split&&!has))return fail("metadata flags");
     auto bytes=Meta4Bytes(f,n);if(po!=end||po>size||bytes>size-po)return fail("metadata bounds");
-    for(uint32_t i=0;i<n;++i){uint32_t tf,mask;uint64_t ref;if(!Metadata4(p+po,f,n,i,tf,mask,ref))return fail("reference overflow");if(!tf)return fail("zero TF");sum+=tf;auto oi=uint64_t(b)*128+i,bi=oi/64;if(version==7)termTF[oi]=tf;else expected[bi]=std::max(expected[bi],uint8_t(std::min(tf,255u)));
+    for(uint32_t i=0;i<n;++i){uint32_t tf,mask;uint64_t ref;if(!Metadata4(p+po,f,n,i,tf,mask,ref))return fail("reference overflow");if(!tf)return fail("zero TF");sum+=tf;auto oi=uint64_t(b)*128+i,bi=oi/64;if(version>=7)termTF[oi]=tf;else expected[bi]=std::max(expected[bi],uint8_t(std::min(tf,255u)));
      if(has){if(ref>>63){if(tf!=1||(ref&0x7fffffff00000000ULL)||!uint32_t(ref))return fail("inline hit");}
       else{if(!ref||ref>=hitSize)return fail("hit reference");uint64_t o=ref,v=0,raw=0;for(uint32_t j=0;j<tf;++j){if(!Var(hits,hitSize,o,v)||!v||v>UINT32_MAX-raw)return fail("position delta");raw+=v;}if(!Var(hits,hitSize,o,v)||v)return fail("hit length");}}
      else if(ref>>63)return fail("hitless inline");
     }end=po+bytes;
    }if(sum!=hitsTotal)return fail("hit sum");
    if(version>=5){if(expected.size()>payloadEnd-end)return fail("bounds tail");if(version<7){for(size_t i=0;i<expected.size();++i)if(p[end+i]!=expected[i])return fail("unsafe maxTF bound");}else for(size_t block=0;block<expected.size();++block){const uint8_t stored=p[end+block];if(stored==255)continue;if(!pNorms||pNorms->Rows()!=rows)return fail("finite BM25A bound without authoritative norms");const uint32_t first=uint32_t(block*64),count=std::min(64u,df-first);uint32_t dl[64];if(!pNorms->GatherTotal(termRows.data()+first,count,dl))return fail("BM25A norm lookup");uint8_t need=0;for(uint32_t i=0;i<count;++i)need=std::max(need,E1EncodeBM25A12_075_256(termTF[first+i],dl[i]));if(stored<need)return fail("unsafe BM25A ratio bound");}end+=expected.size();}
+   if(version==9){const uint64_t minIdBytes=uint64_t(expected.size())*8;if(minIdBytes>payloadEnd-end)return fail("public ID bounds tail");end+=minIdBytes;}
    if(version>=6&&fieldWidth){
     const uint64_t fieldBytes=(uint64_t(df)*fieldWidth+7)/8;if(fieldBytes>payloadEnd-end)return fail("field TF bounds");
     const uint8_t* fieldTF=p+end;
@@ -125,7 +127,7 @@ public:
 };
 class Cursor {
  const uint8_t*m_p=nullptr,*m_term=nullptr;uint32_t m_df=0,m_next=0,m_cached=UINT32_MAX,m_rows[128];
- const uint8_t*m_bounds=nullptr,*m_firstFieldTF=nullptr;uint32_t m_firstFieldTFWidth=0,m_version=0;
+ const uint8_t*m_bounds=nullptr,*m_minPublicIDs=nullptr,*m_firstFieldTF=nullptr;uint32_t m_firstFieldTFWidth=0,m_version=0;
  uint32_t m_block=0,m_lastOrdinal=UINT32_MAX,m_lastRow=0,m_bitmapBlock=UINT32_MAX,m_bitmapWord=0,m_bitmapEndOrdinal=0,m_bitmapWindow=0;uint64_t m_bitmapRemaining=0;const uint8_t*m_bitmapPayload=nullptr;
  uint32_t m_meta=UINT32_MAX,m_tf[128],m_mask[128];uint64_t m_ref[128];
  uint64_t m_uMetaDecoded=0;
@@ -150,11 +152,13 @@ class Cursor {
 public:
  bool Active()const{return m_p;} void Reset(){m_next=0;m_cached=UINT32_MAX;m_meta=UINT32_MAX;for(auto&m:m_dBatchStage)m=UINT32_MAX;m_block=0;m_lastOrdinal=UINT32_MAX;m_bitmapBlock=UINT32_MAX;m_bitmapWord=0;m_bitmapEndOrdinal=0;m_bitmapWindow=0;m_bitmapRemaining=0;m_bitmapPayload=nullptr;m_dRankOrder.clear();m_uRankPos=0;m_uRankInBlock=0;m_bRankOrderReady=false;m_uMetaDecoded=0;m_uDirectWindow=UINT32_MAX;m_uDirectBlock=UINT32_MAX;m_uHintPrefixBlock=UINT32_MAX;m_dHintPrefix.fill(0);m_dDirectMask.fill(0);m_dDirectPrefix.fill(0);m_pSelectedMeta=nullptr;m_uSelectedWord=0;m_uSelectedOrdinal=0;m_uSelectedMembers=0;}
  uint64_t TakeMetadataGroupsDecoded(){auto u=m_uMetaDecoded;m_uMetaDecoded=0;return u;}
- void Bind(const Store&s,uint64_t key){auto v=s.View(key);m_p=v.term?v.data:nullptr;m_term=v.term;m_df=v.DF();m_version=v.version;m_bounds=nullptr;m_firstFieldTF=nullptr;m_firstFieldTFWidth=0;if(m_term&&m_version>=5){auto nm=U32(m_term+8);auto mo=U64(m_term+16);if(nm){auto g=m_p+mo+uint64_t(nm-1)*16;m_bounds=m_p+U64(g)+Meta4Bytes(U32(g+8),U32(g+12));if(m_version>=6&&(m_firstFieldTFWidth=v.FirstFieldTFWidth()))m_firstFieldTF=m_bounds+(uint64_t(m_df)+63)/64;}}Reset();}
+ void Bind(const Store&s,uint64_t key){auto v=s.View(key);m_p=v.term?v.data:nullptr;m_term=v.term;m_df=v.DF();m_version=v.version;m_bounds=nullptr;m_minPublicIDs=nullptr;m_firstFieldTF=nullptr;m_firstFieldTFWidth=0;if(m_term&&m_version>=5){auto nm=U32(m_term+8);auto mo=U64(m_term+16);if(nm){auto g=m_p+mo+uint64_t(nm-1)*16;m_bounds=m_p+U64(g)+Meta4Bytes(U32(g+8),U32(g+12));const uint64_t blocks=(uint64_t(m_df)+63)/64;if(m_version==9)m_minPublicIDs=m_bounds+blocks;if(m_version>=6&&(m_firstFieldTFWidth=v.FirstFieldTFWidth()))m_firstFieldTF=m_bounds+blocks+(m_version==9?blocks*8:0);}}Reset();}
  TermView View()const{return {m_p,m_term,m_version};}
- E1RankedBoundKind_e BoundKind()const{return !m_bounds?E1RankedBoundKind_e::NONE:m_version>=5&&m_version<=6?E1RankedBoundKind_e::MAX_TF:m_version==7?E1RankedBoundKind_e::BM25A_RATIO:E1RankedBoundKind_e::NONE;}
+ E1RankedBoundKind_e BoundKind()const{return !m_bounds?E1RankedBoundKind_e::NONE:m_version>=5&&m_version<=6?E1RankedBoundKind_e::MAX_TF:(m_version==7||m_version==9)?E1RankedBoundKind_e::BM25A_RATIO:E1RankedBoundKind_e::NONE;}
  bool HasRankedBounds()const{return BoundKind()==E1RankedBoundKind_e::MAX_TF;}
- bool HasBM25ARatioBounds()const{return m_bounds&&m_version==7;}
+ bool HasBM25ARatioBounds()const{return m_bounds&&(m_version==7||m_version==9);}
+ bool HasPublicIdMinBounds()const{return m_minPublicIDs&&m_version==9;}
+ bool PublicIdMinBound(uint32_t block,uint64_t&value)const{if(!HasPublicIdMinBounds()||block>=(m_df+63)/64)return false;value=U64(m_minPublicIDs+uint64_t(block)*8);return true;}
  bool BM25ARatioBound(uint32_t block,uint8_t&code)const{if(!HasBM25ARatioBounds()||block>=(m_df+63)/64)return false;code=m_bounds[block];return true;}
  bool ExactFieldTF(uint32_t ordinal,uint32_t field,uint32_t mask,uint32_t aggregate,uint32_t&tf)const{
   if(ordinal>=m_df||field>=32||!(mask&(uint32_t(1)<<field)))return false;
@@ -258,14 +262,20 @@ public:
   m_lastOrdinal=ordinal;m_lastRow=b.id()*4096+x;return m_lastRow;
  }
  bool Next(uint32_t&row,uint32_t*tf=nullptr,uint32_t*mask=nullptr,uint64_t*ref=nullptr){if(m_next>=m_df){row=UINT32_MAX;return false;}auto o=m_next++;row=Row(o);if(tf){auto group=o/128;if(m_meta!=group){auto g=m_p+U64(m_term+16)+uint64_t(group)*16;auto n=U32(g+12);Metadata4Block(m_p+U64(g),U32(g+8),n,m_tf,m_mask,m_ref);m_meta=group;++m_uMetaDecoded;}*tf=m_tf[o%128];*mask=m_mask[o%128];*ref=m_ref[o%128];}return true;}
- bool NextRanked(uint32_t&row,uint32_t&tf,uint32_t&mask,uint64_t&ref,uint32_t uMinTF,uint64_t&entries,uint64_t&buckets,uint64_t&selected,uint64_t&skipped,uint64_t&skippedDocs,uint64_t&decoded,const uint64_t*pEligibility=nullptr,uint32_t uEligibilityWords=0,uint64_t*pIneligibleBeforeTF=nullptr,uint32_t uEqualBoundTF=0,uint32_t uWorstRow=UINT32_MAX,uint32_t uKnownMask=0,float fRatioIDF=0.0f,int iThreshold=0){
+ bool NextRanked(uint32_t&row,uint32_t&tf,uint32_t&mask,uint64_t&ref,uint32_t uMinTF,uint64_t&entries,uint64_t&buckets,uint64_t&selected,uint64_t&skipped,uint64_t&skippedDocs,uint64_t&decoded,const uint64_t*pEligibility=nullptr,uint32_t uEligibilityWords=0,uint64_t*pIneligibleBeforeTF=nullptr,uint32_t uEqualBoundTF=0,uint64_t uWorstTieKey=UINT64_MAX,uint32_t uKnownMask=0,float fRatioIDF=0.0f,int iThreshold=0,uint64_t*equalitySkipped=nullptr){
   PrepareRankedOrder(entries,buckets);
   while(m_uRankPos<m_dRankOrder.size()){
    const uint32_t block=m_dRankOrder[m_uRankPos],begin=block*64,n=std::min(64u,m_df-begin);
    if(!m_uRankInBlock){
     const uint8_t uCode=m_bounds[block];const uint32_t uUpper=uCode==255?UINT32_MAX:uCode;
     const bool bRatio=BoundKind()==E1RankedBoundKind_e::BM25A_RATIO;
-    const bool tieReject=!bRatio&&uEqualBoundTF&&uWorstRow!=UINT32_MAX&&(uEqualBoundTF==UINT32_MAX||uUpper<=uEqualBoundTF)&&Row(begin)>=uWorstRow;
+    const int upperWeight=bRatio?E1SafeUpperRatioWeight(uCode,fRatioIDF):0;
+    const uint64_t minPublicID=m_minPublicIDs?U64(m_minPublicIDs+uint64_t(block)*8):UINT64_MAX;
+    const bool ratioTieReject=bRatio&&uCode!=255&&iThreshold>0&&upperWeight==iThreshold&&uWorstTieKey!=UINT64_MAX&&minPublicID!=UINT64_MAX&&minPublicID>=uWorstTieKey;
+    const bool tieReject=!bRatio&&uEqualBoundTF&&uWorstTieKey<=UINT32_MAX&&(uEqualBoundTF==UINT32_MAX||uUpper<=uEqualBoundTF)&&Row(begin)>=uWorstTieKey;
+    if(ratioTieReject){
+     if(equalitySkipped)++*equalitySkipped;++skipped;skippedDocs+=n;++m_uRankPos;m_uRankInBlock=0;continue;
+    }
     if((bRatio?E1RatioBoundReject(uCode,fRatioIDF,iThreshold):(uMinTF&&uUpper<uMinTF))||tieReject){
      skipped+=m_dRankOrder.size()-m_uRankPos;
      for(uint32_t i=m_uRankPos;i<m_dRankOrder.size();++i)skippedDocs+=std::min(64u,m_df-m_dRankOrder[i]*64);

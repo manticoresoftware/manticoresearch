@@ -33,8 +33,8 @@ namespace e1 {
 struct Posting
 {
 	Posting() = default;
-	Posting ( uint32_t uRow, uint32_t uTF, uint32_t uMask, uint64_t uRef, uint32_t uFirstFieldTF=0 )
-		: m_uRow ( uRow ), m_uTF ( uTF ), m_uMask ( uMask ), m_uFirstFieldTF ( uFirstFieldTF ), m_uRef ( uRef ) {}
+	Posting ( uint32_t uRow, uint32_t uTF, uint32_t uMask, uint64_t uRef, uint32_t uFirstFieldTF=0, uint64_t uPublicID=UINT64_MAX )
+		: m_uRow ( uRow ), m_uTF ( uTF ), m_uMask ( uMask ), m_uFirstFieldTF ( uFirstFieldTF ), m_uRef ( uRef ), m_uPublicID ( uPublicID ) {}
 
 	uint32_t m_uRow = 0;
 	uint32_t m_uTF = 0;
@@ -43,9 +43,10 @@ struct Posting
 	// Zero means unavailable; one-field TF is already m_uTF.
 	uint32_t m_uFirstFieldTF = 0;
 	uint64_t m_uRef = 0;
+	uint64_t m_uPublicID = UINT64_MAX; // invalid disables equality pruning
 };
 
-static_assert ( sizeof(Posting)==24 );
+static_assert ( sizeof(Posting)==32 );
 
 class Writer
 {
@@ -64,6 +65,12 @@ public:
 		m_pTotalDL = pTotalDL;
 		m_uTotalDLRows = uRows;
 		m_bTotalDLAuthoritative = bAuthoritative;
+	}
+	void BindPublicIDs ( const uint64_t * pPublicIDs, uint32_t uRows, bool bAuthoritative=true )
+	{
+		m_pPublicIDs = pPublicIDs;
+		m_uPublicIDRows = uRows;
+		m_bPublicIDsAuthoritative = bAuthoritative;
 	}
 
 	bool Open ( const std::string & sFilename, std::string & sError )
@@ -155,8 +162,8 @@ public:
 
 		m_tOut.seekp ( 0 );
 		FaultPoint ( "before_primary_header" );
-		PutRaw ( "E1POST07", 8 );
-		Put ( 7, 4 );
+		PutRaw ( "E1POST09", 8 );
+		Put ( 9, 4 );
 		Put ( 56, 4 );
 		Put ( uSize, 8 );
 		Put ( m_dEntries.size(), 8 );
@@ -440,6 +447,7 @@ private:
 		if ( bFrequent )
 			uRowBlocks = 0;
 		m_dRankBounds.assign ( (uDocs+63)/64, 0 );
+		m_dRankMinPublicIDs.assign ( (uDocs+63)/64, UINT64_MAX );
 		for ( uint32_t i=0; i<uDocs; ++i )
 		{
 			const Posting & tPosting = dPostings[i];
@@ -447,6 +455,10 @@ private:
 			const bool bKnownDL = m_bTotalDLAuthoritative && m_pTotalDL && tPosting.m_uRow<m_uTotalDLRows;
 			const uint32_t uDL = bKnownDL ? m_pTotalDL[tPosting.m_uRow] : 0;
 			m_dRankBounds[i/64] = std::max<uint8_t> ( m_dRankBounds[i/64], E1EncodeBM25A12_075_256(tPosting.m_uTF,uDL,bKnownDL) );
+			const uint64_t uPublicID = m_bPublicIDsAuthoritative
+				? ( m_pPublicIDs && tPosting.m_uRow<m_uPublicIDRows ? m_pPublicIDs[tPosting.m_uRow] : UINT64_MAX )
+				: tPosting.m_uPublicID;
+			m_dRankMinPublicIDs[i/64] = std::min ( m_dRankMinPublicIDs[i/64], uPublicID );
 			if ( bFrequent )
 			{
 				const uint32_t uContainer = tPosting.m_uRow/4096;
@@ -618,9 +630,12 @@ private:
 			Put ( uPayload, 8 ); Put ( uFlags, 4 ); Put ( uCount, 4 );
 			Seek ( uResume );
 		}
-		// E1/7 primary ranked hints: one exact-safe BM25A ratio byte per 64 postings.
+		// E1/9 primary ranked hints: v7 ratio byte plus a conservative exact
+		// minimum public ID per ordinal-64 block. UINT64_MAX disables tie pruning.
 		// 255 is an escape meaning "unbounded", never the literal upper bound.
 		PutBytes ( m_dRankBounds );
+		for ( uint64_t uMinPublicID : m_dRankMinPublicIDs )
+			Put ( uMinPublicID, 8 );
 		if ( uFirstFieldTFWidth )
 			PutPacked ( uFirstFieldTFWidth, uDocs, [&] ( unsigned i ) { return dPostings[i].m_uFirstFieldTF; } );
 
@@ -711,6 +726,7 @@ private:
 	bool m_bWorkerStop = false;
 	std::vector<uint8_t> m_dTermBuffer;
 	std::vector<uint8_t> m_dRankBounds;
+	std::vector<uint64_t> m_dRankMinPublicIDs;
 	std::vector<uint8_t> m_dRowPayload;
 	std::vector<uint16_t> m_dRuns;
 	std::vector<uint8_t> * m_pTermBuffer = nullptr;
@@ -721,6 +737,9 @@ private:
 	const uint32_t * m_pTotalDL = nullptr;
 	uint32_t m_uTotalDLRows = 0;
 	bool m_bTotalDLAuthoritative = false;
+	const uint64_t * m_pPublicIDs = nullptr;
+	uint32_t m_uPublicIDRows = 0;
+	bool m_bPublicIDsAuthoritative = false;
 };
 
 } // namespace e1

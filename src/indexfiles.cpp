@@ -108,7 +108,7 @@ bool IndexFiles_c::IsE1Primary ( const CSphString & sSuffix, const CSphString & 
 		return false;
 	char dMagic[8] = {};
 	tReader.GetBytes ( dMagic, sizeof(dMagic) );
-	return !tReader.GetErrorFlag() && ( !memcmp ( dMagic, "E1POST04", sizeof(dMagic) ) || !memcmp ( dMagic, "E1POST05", sizeof(dMagic) ) || !memcmp ( dMagic, "E1POST06", sizeof(dMagic) ) || !memcmp ( dMagic, "E1POST07", sizeof(dMagic) ) );
+	return !tReader.GetErrorFlag() && ( !memcmp ( dMagic, "E1POST04", sizeof(dMagic) ) || !memcmp ( dMagic, "E1POST05", sizeof(dMagic) ) || !memcmp ( dMagic, "E1POST06", sizeof(dMagic) ) || !memcmp ( dMagic, "E1POST07", sizeof(dMagic) ) || !memcmp ( dMagic, "E1POST09", sizeof(dMagic) ) );
 }
 
 bool IndexFiles_c::HasAllFiles ( const char * sType )

@@ -697,14 +697,14 @@ bool DiskIndexChecker_c::Impl_c::ReadHeader ( const CSphString& sHeader )
 
 	// version
 	m_uVersion = (DWORD)Int ( tBson.ChildByName ( "index_format_version" ) );
-	m_bPostingsContainer = m_uVersion==e1::VERSION || m_uVersion==e1::VERSION6 || m_uVersion==e1::VERSION5 || m_uVersion==e1::VERSION4;
+	m_bPostingsContainer = m_uVersion==e1::VERSION || m_uVersion==e1::VERSION7 || m_uVersion==e1::VERSION6 || m_uVersion==e1::VERSION5 || m_uVersion==e1::VERSION4;
 	if ( m_bPostingsContainer )
 	{
 		auto tCapability = tBson.ChildByName ( "e1_postings" );
 		auto tBase = tBson.ChildByName ( "e1_base_version" );
 		auto tNormCapability = tBson.ChildByName ( "e1_norms" );
-		int iExpected = m_uVersion==e1::VERSION ? 7 : m_uVersion==e1::VERSION6 ? 6 : m_uVersion==e1::VERSION5 ? 5 : 4;
-		const bool bNormCapabilityValid = (m_uVersion!=e1::VERSION && m_uVersion!=e1::VERSION6) || ( IsInt(tNormCapability) && Int(tNormCapability)==1 );
+		int iExpected = m_uVersion==e1::VERSION ? 9 : m_uVersion==e1::VERSION7 ? 7 : m_uVersion==e1::VERSION6 ? 6 : m_uVersion==e1::VERSION5 ? 5 : 4;
+		const bool bNormCapabilityValid = (m_uVersion!=e1::VERSION && m_uVersion!=e1::VERSION7 && m_uVersion!=e1::VERSION6) || ( IsInt(tNormCapability) && Int(tNormCapability)==1 );
 		if ( !IsInt(tCapability) || !IsInt(tBase) || Int(tCapability)!=iExpected || Int(tBase)!=INDEX_FORMAT_VERSION || !bNormCapabilityValid )
 		{
 			m_sError = "postings container capability/base version mismatch";

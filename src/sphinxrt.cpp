@@ -4552,6 +4552,7 @@ struct SaveDiskDataContext_t : public BuildHeader_t
 	CSphVector<BYTE>				m_dKeywordCheckpoints;
 	CSphVector<CSphVector<RowID_t>>	m_dRowMaps;
 	std::vector<uint32_t>			m_dTotalDL;
+	std::vector<uint64_t>			m_dPublicIDs;
 	IndexFileBase_c					m_tFilebase;
 	const ConstRtSegmentSlice_t&	m_tRamSegments;
 
@@ -4742,6 +4743,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			}
 
 			dRawLookup[tNextRowID] = { tDocID, tNextRowID };
+			tCtx.m_dPublicIDs.push_back ( uint64_t(tDocID) );
 			if ( pDocstoreBuilder )
 			{
 				assert ( tSeg.m_pDocstore );
@@ -5293,6 +5295,8 @@ bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 	tmStart = sphMicroTimer();
 	e1::Writer tPrimary;
 	tPrimary.BindTotalDL ( tCtx.m_dTotalDL.data(), uint32_t(tCtx.m_dTotalDL.size()), tCtx.m_dTotalDL.size()==size_t(tCtx.m_iDocinfo) );
+	const bool bRowwisePublicID = !m_tSchema.GetAttr(0).IsColumnar();
+	tPrimary.BindPublicIDs ( tCtx.m_dPublicIDs.data(), uint32_t(tCtx.m_dPublicIDs.size()), bRowwisePublicID && tCtx.m_dPublicIDs.size()==size_t(tCtx.m_iDocinfo) );
 	if ( !WriteDocs ( tCtx, tWriterDict, tPrimary, sError ) )
 		return false;
 	if ( pTimings )

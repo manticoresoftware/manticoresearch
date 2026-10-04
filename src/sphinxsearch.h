@@ -107,7 +107,7 @@ public:
 	// without consuming input; uMinTF is a safe monotone lower cutoff.
 	virtual bool HasE1RankedBounds () const { return false; }
 	virtual E1RankedBoundKind_e GetE1RankedBoundKind () const { return E1RankedBoundKind_e::NONE; }
-	virtual bool GetE1RankedDoc ( uint32_t uMinTF, RowID_t & tRowID, uint32_t & uTF, uint64_t & uBoundEntries, uint64_t & uBuckets, uint64_t & uSelectedBlocks, uint64_t & uSkippedBlocks, uint64_t & uSkippedDocs, uint64_t & uDecodedGroups, const uint64_t * pEligibility=nullptr, uint32_t uEligibilityWords=0, uint64_t * pIneligibleBeforeTF=nullptr, uint32_t uEqualBoundTF=0, RowID_t tWorstRow=INVALID_ROWID, uint32_t uKnownMask=0, float fRatioIDF=0.0f, int iThreshold=0 ) { return false; }
+	virtual bool GetE1RankedDoc ( uint32_t uMinTF, RowID_t & tRowID, uint32_t & uTF, uint64_t & uBoundEntries, uint64_t & uBuckets, uint64_t & uSelectedBlocks, uint64_t & uSkippedBlocks, uint64_t & uSkippedDocs, uint64_t & uDecodedGroups, const uint64_t * pEligibility=nullptr, uint32_t uEligibilityWords=0, uint64_t * pIneligibleBeforeTF=nullptr, uint32_t uEqualBoundTF=0, uint64_t uWorstTieKey=UINT64_MAX, uint32_t uKnownMask=0, float fRatioIDF=0.0f, int iThreshold=0, uint64_t * pEqualitySkipped=nullptr ) { return false; }
 	virtual uint64_t TakeE1MetadataGroupsDecoded () { return 0; }
 	// Exact flat-OR fast lane over frequent E1/5 primary containers. The
 	// ordinal bounds are conservative persisted maxTF bytes (255=unbounded).

@@ -206,20 +206,6 @@ std::unique_ptr<knn::KNNFilter_i> CreateKNNPrefilter ( const CSphQueryContext & 
 
 static const int KNN_RESCORE_BATCH_SIZE = 256;
 
-static bool g_bKNNRescoreRandomAccess = true;
-
-void SetKNNRescoreRandomAccess ( bool bEnable )
-{
-	g_bKNNRescoreRandomAccess = bEnable;
-}
-
-
-bool KNNRescoreRandomAccess()
-{
-	return g_bKNNRescoreRandomAccess;
-}
-
-
 // 0: off, 1: single call only, 2: single call, else one call per vector,
 // 3: as 2, but each rescore probes a few vectors and skips the prefetch when they are in memory,
 // 4: as 3, with a sticky gate (see ShouldPrefetchSticky)
@@ -575,7 +561,7 @@ void KNNVecDistCalc_c::RescoreColumnarPrefetch ( VecTraits_T<CSphMatch*> & dMatc
 			if ( pColumnar )
 			{
 				std::string sError; // FIXME! report errors
-				columnar::IteratorHints_t tHints { .m_bNeedStringHashes = false, .m_bBuffered = bLargeSet, .m_bRandomAccess = KNNRescoreRandomAccess() };
+				columnar::IteratorHints_t tHints { .m_bNeedStringHashes = false, .m_bBuffered = bLargeSet };
 				auto pIterator = CreateColumnarIterator ( pColumnar, m_tAttr.m_sName.cstr(), sError, tHints );
 				if ( pIterator )
 				{
@@ -682,7 +668,7 @@ void KNNVecDistCalc_c::RescoreScalar ( VecTraits_T<CSphMatch*> & dMatches, const
 				if ( pColumnar )
 				{
 					std::string sError; // FIXME! report errors
-					columnar::IteratorHints_t tHints { .m_bNeedStringHashes = false, .m_bBuffered = false, .m_bRandomAccess = KNNRescoreRandomAccess() };
+					columnar::IteratorHints_t tHints { .m_bNeedStringHashes = false, .m_bBuffered = false };
 					pIterator = CreateColumnarIterator ( pColumnar, m_tAttr.m_sName.cstr(), sError, tHints );
 				}
 			}
@@ -756,7 +742,7 @@ void KNNVecDistCalc_c::RescoreColumnar ( VecTraits_T<CSphMatch*> & dMatches, con
 			if ( pColumnar )
 			{
 				std::string sError; // FIXME! report errors
-				columnar::IteratorHints_t tHints { .m_bNeedStringHashes = false, .m_bBuffered = true, .m_bRandomAccess = KNNRescoreRandomAccess() };
+				columnar::IteratorHints_t tHints { .m_bNeedStringHashes = false, .m_bBuffered = true };
 				pIterator = CreateColumnarIterator ( pColumnar, m_tAttr.m_sName.cstr(), sError, tHints );
 
 				columnar::AttrInfo_t tInfo;

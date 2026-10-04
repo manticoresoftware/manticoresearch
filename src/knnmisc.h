@@ -60,11 +60,6 @@ const char *					GetKnnDistAttrName();
 const char *					GetKnnDistRescoreAttrName();
 void							SetupKNNLimit ( CSphQuery & tQuery );
 
-// searchd config 'knn_rescore_random_access' (undocumented): read rescored vectors of columnar tables through a
-// mapping advised for random access, so a cold page fault reads one page instead of the kernel's read-around window
-void							SetKNNRescoreRandomAccess ( bool bEnable );
-bool							KNNRescoreRandomAccess();
-
 // searchd config 'knn_rescore_prefetch' (undocumented): before rescoring candidates of a columnar table, ask the OS to
 // read all their vectors at once. 0 = off; 1 = with a single process_madvise call, nothing if the kernel refuses it;
 // 2 = same, but fall back to one madvise call per vector when the single call is unavailable;

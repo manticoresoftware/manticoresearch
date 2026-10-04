@@ -204,9 +204,20 @@ std::unique_ptr<knn::KNNFilter_i> CreateKNNPrefilter ( const CSphQueryContext & 
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static const int KNN_RESCORE_BATCH_SIZE = 256;
+static const int KNN_RESCORE_BATCH_SIZE = 256;	// vectors per batched distance call
 
-static bool g_bKNNRescorePrefetch = false;
+// Candidate count from which a rescore is treated as "large": it goes through the collector and the batched distance
+// kernel. Below it, distances are calculated one by one, and a row-wise single-chunk table rescores in place with no
+// collector at all. Experimental knob (knn_rescore_batch_threshold): 1 = collector + batched kernel for every size.
+static int g_iKNNRescoreBatchThreshold = KNN_RESCORE_BATCH_SIZE;
+
+void SetKNNRescoreBatchThreshold ( int iThreshold )
+{
+	g_iKNNRescoreBatchThreshold = Max ( 1, iThreshold );
+}
+
+
+static bool g_bKNNRescorePrefetch = true;
 
 void SetKNNRescorePrefetch ( bool bEnable )
 {
@@ -372,7 +383,7 @@ void KNNVecDistCalc_c::RescoreBatch ( VecTraits_T<CSphMatch*> & dMatches, const 
 	}
 
 	// small candidate sets don't repay the pointer batching setup; calculate their distances one by one
-	if ( iCount<KNN_RESCORE_BATCH_SIZE )
+	if ( iCount<g_iKNNRescoreBatchThreshold )
 	{
 		RescoreScalar ( dMatches, tOutLoc, fnBlobPool, fnColumnar );
 		return;
@@ -433,7 +444,7 @@ void KNNVecDistCalc_c::RescoreColumnarPrefetch ( VecTraits_T<CSphMatch*> & dMatc
 {
 	const int iCount = dMatches.GetLength();
 	const int iVecBytes = m_tAttr.m_tKNN.m_iDims*(int)sizeof(float);
-	const bool bLargeSet = iCount>=KNN_RESCORE_BATCH_SIZE;	// same split as between RescoreScalar and RescoreColumnar
+	const bool bLargeSet = iCount>=g_iKNNRescoreBatchThreshold;	// same split as between RescoreScalar and RescoreColumnar
 	const bool bBatched = bLargeSet && !m_bMulti;			// FIXME: make float_vector_array batched too
 
 	struct Vec_t
@@ -970,7 +981,7 @@ ISphExpr * CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const 
 // The prefetch (knn_rescore_prefetch) needs all candidates in hand before any is read, which only the collector has.
 bool UseKNNRescoreCollector ( const KnnSearchSettings_t & tSettings, int iDiskChunks, bool bColumnarAttr )
 {
-	return tSettings.GetRequestedDocs()>=KNN_RESCORE_BATCH_SIZE || iDiskChunks>1 || ( bColumnarAttr && KNNRescorePrefetch() );
+	return tSettings.GetRequestedDocs()>=g_iKNNRescoreBatchThreshold || iDiskChunks>1 || ( bColumnarAttr && KNNRescorePrefetch() );
 }
 
 

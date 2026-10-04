@@ -15811,7 +15811,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 	g_iParallelChunkMerges = Max ( 1, hSearchd.GetInt ( "parallel_chunk_merges", iDefaultParallelMerges ) );
 	g_iMergeChunksPerJob = Max ( 2, hSearchd.GetInt ( "merge_chunks_per_job", 2 ) );
 	g_iKNNParallelBuild = Max ( 1, hSearchd.GetInt ( "knn_parallel_build", GetDefaultKNNParallelBuild(iThreads) ) );
-	SetKNNRescorePrefetch ( hSearchd.GetInt ( "knn_rescore_prefetch", 0 )!=0 );
+	SetKNNRescorePrefetch ( hSearchd.GetInt ( "knn_rescore_prefetch", 1 )!=0 );
+	SetKNNRescoreBatchThreshold ( hSearchd.GetInt ( "knn_rescore_batch_threshold", 256 ) );
 	g_iEmbeddingsThreads = Max ( 0, hSearchd.GetInt ( "embeddings_threads", 4 ) );
 	g_iThdQueueMax = hSearchd.GetInt ( "jobs_queue_size", g_iThdQueueMax );
 

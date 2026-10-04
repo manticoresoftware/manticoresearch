@@ -60,11 +60,15 @@ const char *					GetKnnDistAttrName();
 const char *					GetKnnDistRescoreAttrName();
 void							SetupKNNLimit ( CSphQuery & tQuery );
 
-// searchd config 'knn_rescore_prefetch' (undocumented, 0 or 1): before rescoring candidates of a columnar table, ask the
+// searchd config 'knn_rescore_prefetch' (0 or 1, on by default): before rescoring candidates of a columnar table, ask the
 // OS to read all their vectors at once, so that the reads overlap instead of being served one page fault at a time.
 // A residency gate skips it while the vectors are in memory already (see AreVectorsResident in knnmisc.cpp).
 void							SetKNNRescorePrefetch ( bool bEnable );
 bool							KNNRescorePrefetch();
+
+// searchd config 'knn_rescore_batch_threshold' (undocumented, experimental; default 256): the number of rescore candidates
+// from which the collector and the batched distance kernel are used; 1 = always
+void							SetKNNRescoreBatchThreshold ( int iThreshold );
 
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
 // exact-distance rescore evaluated per chunk at the final stage; tKnnDistLoc is copied for rows that are exact already

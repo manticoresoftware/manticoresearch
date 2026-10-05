@@ -291,6 +291,32 @@ knn_parallel_build = 4
 
 <!-- end -->
 
+### knn_rescore_prefetch
+
+<!-- example conf knn_rescore_prefetch -->
+This setting controls whether Manticore asks the operating system to read the full-precision vectors of all KNN candidates at once before [rescoring](../Searching/KNN.md) them. It applies to vector attributes kept in [columnar storage](../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) and read with memory mapping, which is the default [access mode](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) for columnar attributes (`access_columnar_attrs = mmap`).
+
+Without the prefetch, a candidate vector that is not in memory is read from disk only when the distance calculation reaches it. The vectors are read one after another, and each read also brings in neighboring data the query does not need. With the prefetch, the reads for all candidates are requested together before any distance is calculated, so they run in parallel, and only the data that holds the candidates' vectors is read. This makes KNN queries several times faster whenever vectors have to come from disk: after a restart, and on tables whose vectors do not fit into the available memory.
+
+Before prefetching, Manticore checks whether a sample of the candidates' vectors is already in memory. If it is, the prefetch is skipped, so queries on data that is fully cached run at the same speed with the setting on or off. The setting does not change search results.
+
+Limitations:
+* It has no effect on vector attributes in row-wise storage and on columnar attributes with `access_columnar_attrs = file`.
+* It has no effect on Windows.
+* On Linux, the check for cached vectors relies on the operating system reporting which parts of a file are in memory, and the system only reports that for files the `searchd` user owns or is allowed to write to. If table files belong to another user and are read-only for `searchd` (for example, plain tables built by `indexer` running under a different account), the vectors are always reported as cached and the prefetch never runs.
+
+Enabled by default. Set to `0` to disable.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Disable -->
+```ini
+knn_rescore_prefetch = 0
+```
+
+<!-- end -->
+
 ### embeddings_threads
 
 <!-- example conf embeddings_threads -->

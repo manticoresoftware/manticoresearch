@@ -9212,6 +9212,10 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 
 	SorterSchemaTransform_c tSSTransform ( dDiskChunks.GetLength(), tArgs.m_bFinalizeSorters );
 
+	// RAM segments are tagged 1..N and carry exact knn_dist values (no HNSW there), so the KNN rescore must not redo them
+	for ( auto * pSorter : dSorters )
+		pSorter->SetKNNExactTagMax ( tGuard.m_dRamSegs.GetLength() );
+
 	if ( !dDiskChunks.IsEmpty() )
 	{
 		if ( !QueryDiskChunks ( tQueryToRun, tMeta, tArgs, tGuard, dSorters, pProfiler, bGotLocalDF, pLocalDocs, iTotalDocs, GetName(), tSSTransform, tmMaxTimer ) )

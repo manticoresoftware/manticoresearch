@@ -119,6 +119,10 @@ public:
 	/// param fnBlobPoolFromMatch provides pool pointer from currently processed match pointer.
 	virtual void		TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch, bool bFinalizeSorters ) = 0;
 
+	/// matches tagged 1..iMaxTag already carry an exact knn_dist (RT RAM segments have no HNSW index and are scanned with
+	/// full-precision distances), so the KNN rescore copies it instead of recomputing; wrappers forward, others ignore
+	virtual void		SetKNNExactTagMax ( int iMaxTag ) {}
+
 	virtual void		SetRandom ( bool bRandom ) = 0;
 	virtual bool		IsRandom() const = 0;
 

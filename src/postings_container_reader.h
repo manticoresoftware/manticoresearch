@@ -38,6 +38,7 @@ struct TermView {
  const uint8_t *data=nullptr,*term=nullptr;
  uint32_t version=0;
  uint32_t DF()const{return term?U32(term):0;} bool Frequent()const{return term&&(U32(term+12)&1)==1;}
+ bool HasHitlist()const{return term&&(U32(term+12)&2)!=0;}
  uint32_t FirstFieldTFWidth()const{return term?(U32(term+12)>>8)&63:0;}
  uint32_t Blocks()const{return Frequent()?U32(term+4):0;}
  Block At(uint32_t i)const{return {data,term+24+uint64_t(i)*24};}

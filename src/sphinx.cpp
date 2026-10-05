@@ -740,7 +740,7 @@ private:
 		if ( m_pE1 )
 		{
 			this->m_tE1.Bind(*m_pE1,uDocOff);
-			this->m_bHasHitlist=e1::U32(m_pE1->Find(uDocOff)+20)!=0;
+			this->m_bHasHitlist=this->m_tE1.View().HasHitlist();
 		}
 		else this->m_rdDoclist->SeekTo ( uDocOff, iHint );
 	}

@@ -401,13 +401,13 @@ TEST_F ( PostingsContainerTest, StreamedDirectoryUsesImplicitContiguousKeys )
 	{ std::ofstream(m_sBase+".spi",std::ios::binary).write("dict",4); }
 	{ std::ofstream(m_sBase+".spp",std::ios::binary).put('\1'); }
 	const std::vector<e1::Posting> dFirst { { 1,1,1,0 } };
-	const std::vector<e1::Posting> dSecond { { 2,2,1,0 } };
+	const std::vector<e1::Posting> dSecond { { 2,1,1,( uint64_t(1)<<63 ) | 1 } };
 	std::string sError;
 	e1::Writer tWriter;
 	ASSERT_TRUE ( tWriter.Open(m_sBase+".spd",sError) ) << sError;
 	ASSERT_TRUE ( tWriter.FinishTerm(1,dFirst,1,false,sError) ) << sError;
-	EXPECT_FALSE ( tWriter.FinishTerm(3,dSecond,2,false,sError) );
-	ASSERT_TRUE ( tWriter.FinishTerm(2,dSecond,2,false,sError) ) << sError;
+	EXPECT_FALSE ( tWriter.FinishTerm(3,dSecond,1,true,sError) );
+	ASSERT_TRUE ( tWriter.FinishTerm(2,dSecond,1,true,sError) ) << sError;
 	ASSERT_TRUE ( tWriter.Finalize(m_sBase+".spi",m_sBase+".spp",sError) ) << sError;
 
 	auto dRaw=ReadFile(m_sBase+".spd"), dDict=ReadFile(m_sBase+".spi"), dHits=ReadFile(m_sBase+".spp");
@@ -421,6 +421,8 @@ TEST_F ( PostingsContainerTest, StreamedDirectoryUsesImplicitContiguousKeys )
 	EXPECT_EQ ( tStore.Find(3), nullptr );
 	EXPECT_EQ ( tStore.View(1).DF(), 1u );
 	EXPECT_EQ ( tStore.View(2).DF(), 1u );
+	EXPECT_FALSE ( tStore.View(1).HasHitlist() );
+	EXPECT_TRUE ( tStore.View(2).HasHitlist() );
 }
 
 TEST_F ( PostingsContainerTest, DISABLED_ExperimentalMaxTFWriterReaderMetadataAndDirectWindows )

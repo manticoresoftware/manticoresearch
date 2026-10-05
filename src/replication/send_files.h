@@ -30,6 +30,24 @@ struct FileChunks_t
 	[[nodiscard]] int64_t GetChunkFileOffset ( int iChunk ) const noexcept;
 };
 
+struct FileSyncLayout_t
+{
+	int64_t m_iFileSize = 0;
+	int64_t m_iPreferredChunkBytes = 0;
+	int64_t m_iChunkBytes = 0;
+	int64_t m_iHashStartItem = 0;
+};
+
+// Returns the hash capacity after accounting for serialized file-layout arrays.
+[[nodiscard]] int64_t GetFileSyncMaxHashes ( const VecTraits_T<CSphString> & dBaseNames, int iFiles, CSphString & sError );
+
+// Includes one full-file hash per file and all per-chunk hashes.
+[[nodiscard]] int64_t CountFileSyncHashes ( const VecTraits_T<FileSyncLayout_t> & dFiles, int64_t iChunkFloor = 0 ) noexcept;
+
+// Keeps preferred chunks when they fit, otherwise raises a common chunk floor.
+bool AdjustFileSyncLayout ( CSphVector<FileSyncLayout_t> & dFiles, int64_t iMaxHashes, int64_t iMaxChunkBytes,
+	int64_t & iHashes, int64_t & iChunkFloor, CSphString & sError );
+
 struct MergeState_t
 {
 	CSphBitvec m_dMergeMask;

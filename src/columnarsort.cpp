@@ -319,7 +319,6 @@ public:
 	VecTraits_T<RowTagged_t>	GetJustPopped() const override						{ assert (0 && "Not supported" ); return {}; }
 
 	void		SetMerge ( bool bMerge ) override							{}
-	void		SetKNNExactTagMax ( int iMaxTag ) override					{ if ( m_pSorter ) m_pSorter->SetKNNExactTagMax(iMaxTag); }
 
 private:
 	struct IteratorWithLocator_t

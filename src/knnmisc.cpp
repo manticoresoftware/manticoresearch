@@ -588,7 +588,7 @@ public:
 	int64_t		Int64Eval ( const CSphMatch & tMatch ) const override	{ return (int64_t)Eval(tMatch); }
 	void		FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override { m_tCalc.FixupLocator ( pOldSchema, pNewSchema ); }
 	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;
-	ISphExpr *	Clone() const override									{ return new Expr_KNNDist_c ( m_tCalc.GetAnchor(), m_tCalc.GetAttr() ); }
+	ISphExpr *	Clone() const override;
 	void		Command ( ESphExprCommand eCmd, void * pArg ) override;
 
 	void		SetData ( const util::Span_T<const knn::DocDist_t> & dData );
@@ -600,7 +600,16 @@ protected:
 private:
 	util::Span_T<const  knn::DocDist_t>	m_dData;
 	mutable const knn::DocDist_t *		m_pStart = nullptr;
+	int									m_iExactTagMax = 0;		// matches tagged 1..N got their distance from an exact scan (RT RAM segments)
 };
+
+
+ISphExpr * Expr_KNNDist_c::Clone() const
+{
+	auto pClone = new Expr_KNNDist_c ( m_tCalc.GetAnchor(), m_tCalc.GetAttr() );
+	pClone->m_iExactTagMax = m_iExactTagMax;
+	return pClone;
+}
 
 
 float Expr_KNNDist_c::Eval ( const CSphMatch & tMatch ) const
@@ -634,6 +643,14 @@ void Expr_KNNDist_c::Command ( ESphExprCommand eCmd, void * pArg )
 
 	case SPH_EXPR_SET_KNN_VEC:
 		m_tCalc.SetAnchor ( *(const CSphVector<float>*)pArg );
+		break;
+
+	case SPH_EXPR_SET_KNN_EXACT_TAG_MAX:
+		m_iExactTagMax = *(const int*)pArg;
+		break;
+
+	case SPH_EXPR_GET_KNN_EXACT_TAG_MAX:
+		*(int*)pArg = m_iExactTagMax;
 		break;
 
 	default:
@@ -1451,13 +1468,11 @@ public:
 	VecTraits_T<RowTagged_t>	GetJustPopped() const override				{ return m_pSorter->GetJustPopped(); }
 
 	void	SetMerge ( bool bMerge ) override								{ m_pSorter->SetMerge(bMerge); }
-	void	SetKNNExactTagMax ( int iMaxTag ) override;
 
 private:
 	std::unique_ptr<ISphMatchSorter> m_pSorter;
 	CSphRefcountedPtr<ISphMatchComparator> m_pComp;
 	int64_t							m_iRescoreLimit = 0;	// max ( k*oversampling, limit+offset )
-	int								m_iExactTagMax = 0;		// matches tagged 1..N carry an exact knn_dist already (RT RAM segments)
 	bool							m_bRescored = false;
 
 	const CSphAttrLocator *			GetRescoreLocator() const;
@@ -1471,22 +1486,18 @@ RescoreSorter_c::RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<
 {}
 
 
-void RescoreSorter_c::SetKNNExactTagMax ( int iMaxTag )
+// rows of RT RAM segments (tags 1..N) never went through HNSW, so their knn_dist is exact already:
+// copy it into the rescore column and take them out of the set to rescore (they don't consume the budget either).
+// the RT table tells N to the knn_dist() expression; ask it
+static void TakeExactRows ( CSphVector<CSphMatch*> & dMatches, const ISphSchema & tSchema, const CSphAttrLocator & tRescoreLoc )
 {
-	m_iExactTagMax = iMaxTag;
-	m_pSorter->SetKNNExactTagMax(iMaxTag);
-}
-
-
-// rows of RT RAM segments (tags 1..iExactTagMax) never went through HNSW, so their knn_dist is exact already:
-// copy it into the rescore column and take them out of the set to rescore (they don't consume the budget either)
-static void TakeExactRows ( CSphVector<CSphMatch*> & dMatches, const ISphSchema & tSchema, const CSphAttrLocator & tRescoreLoc, int iExactTagMax )
-{
-	if ( iExactTagMax<=0 )
+	const CSphColumnInfo * pDist = tSchema.GetAttr ( GetKnnDistAttrName() );
+	if ( !pDist || !pDist->m_pExpr )
 		return;
 
-	const CSphColumnInfo * pDist = tSchema.GetAttr ( GetKnnDistAttrName() );
-	if ( !pDist )
+	int iExactTagMax = 0;
+	pDist->m_pExpr->Command ( SPH_EXPR_GET_KNN_EXACT_TAG_MAX, &iExactTagMax );
+	if ( iExactTagMax<=0 )
 		return;
 
 	const CSphAttrLocator & tDistLoc = pDist->m_tLocator;
@@ -1558,7 +1569,7 @@ int RescoreSorter_c::Flatten ( CSphMatch * pTo )
 			ARRAY_FOREACH ( i, dMatches )
 				dPtrs[i] = &dMatches[i];
 
-			TakeExactRows ( dPtrs, *m_pSorter->GetSchema(), pKNNDistRescore->m_tLocator, m_iExactTagMax );
+			TakeExactRows ( dPtrs, *m_pSorter->GetSchema(), pKNNDistRescore->m_tLocator );
 			KeepClosestForRescore ( dPtrs, *m_pSorter->GetSchema(), pKNNDistRescore->m_tLocator, m_iRescoreLimit );
 			pCalc->RescoreBatchLocal ( dPtrs, pKNNDistRescore->m_tLocator );
 		}
@@ -1602,7 +1613,7 @@ void RescoreSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn f
 			MatchPtrCollector_c tCollector;
 			tCollector.m_dMatches.Reserve ( m_pSorter->GetLength() );
 			m_pSorter->Finalize ( tCollector, false, false );
-			TakeExactRows ( tCollector.m_dMatches, *m_pSorter->GetSchema(), *pRescoreLoc, m_iExactTagMax );
+			TakeExactRows ( tCollector.m_dMatches, *m_pSorter->GetSchema(), *pRescoreLoc );
 			KeepClosestForRescore ( tCollector.m_dMatches, *m_pSorter->GetSchema(), *pRescoreLoc, m_iRescoreLimit );
 			pCalc->RescoreBatch ( tCollector.m_dMatches, *pRescoreLoc, fnBlobPoolFromMatch, fnGetColumnarFromMatch );
 		}
@@ -1617,7 +1628,6 @@ ISphMatchSorter * RescoreSorter_c::Clone() const
 {
 	auto pClone = new RescoreSorter_c ( m_pSorter->Clone(), m_pComp, m_iRescoreLimit );
 	CloneTo(pClone);
-	pClone->m_iExactTagMax = m_iExactTagMax;
 	return pClone;
 }
 

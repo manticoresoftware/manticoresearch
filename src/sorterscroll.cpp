@@ -59,7 +59,6 @@ public:
 	VecTraits_T<RowTagged_t>	GetJustPopped() const override				{ return m_pSorter->GetJustPopped(); }
 
 	void	SetMerge ( bool bMerge ) override								{ m_pSorter->SetMerge(bMerge); }
-	void	SetKNNExactTagMax ( int iMaxTag ) override						{ m_pSorter->SetKNNExactTagMax(iMaxTag); }
 
 private:
 	std::unique_ptr<ISphMatchSorter> m_pSorter;

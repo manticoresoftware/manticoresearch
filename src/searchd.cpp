@@ -3147,6 +3147,10 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 	dStatus.MatchTupletf ( "total", "%d", tMeta.m_iMatches );
 	dStatus.MatchTupletf ( "total_found", "%l", tMeta.m_iTotalMatches );
 	dStatus.MatchTupletf ( "total_relation", "%s", tMeta.m_bTotalMatchesApprox ? "gte" : "eq" );
+	if ( tMeta.m_iAutoRankless )
+		dStatus.MatchTupletf ( "auto_rankless", "%d", tMeta.m_iAutoRankless );
+	if ( tMeta.m_iAutoIdTopK )
+		dStatus.MatchTupletf ( "auto_id_topk", "%d", tMeta.m_iAutoIdTopK );
 
 	dStatus.MatchTupletf ( "time", "%.3F", tMeta.GetQueryTimeMs() );
 

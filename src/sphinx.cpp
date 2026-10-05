@@ -2338,6 +2338,7 @@ QueryExecutionSettings_t BuildQueryExecutionSettings ( const CSphQuery & tQuery,
 		// proximity_bm25. Keep that wire value stable and change only the
 		// execution-time meaning of an implicit ranker.
 		tEffectiveSettings.m_eRanker = SPH_RANK_BM25A;
+		tEffectiveSettings.m_bImplicitDefaultRanker = true;
 	}
 
 	if ( !tQuery.m_bExplicitRanker && HasImplicitRankerDataReference ( tQuery ) )
@@ -2349,6 +2350,7 @@ QueryExecutionSettings_t BuildQueryExecutionSettings ( const CSphQuery & tQuery,
 		tEffectiveSettings.m_sRankerExpr = "";
 		tEffectiveSettings.m_sUDRanker = "";
 		tEffectiveSettings.m_sUDRankerOpts = "";
+		tEffectiveSettings.m_bImplicitDefaultRanker = false;
 	}
 
 	return tEffectiveSettings;
@@ -12567,6 +12569,8 @@ static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResu
 				tThMeta.m_sWarning = tChunkMeta.m_sWarning;
 
 			tThMeta.m_bTotalMatchesApprox |= tChunkMeta.m_bTotalMatchesApprox;
+			tThMeta.m_iAutoRankless += tChunkMeta.m_iAutoRankless;
+			tThMeta.m_iAutoIdTopK += tChunkMeta.m_iAutoIdTopK;
 			tThMeta.m_tIteratorStats.Merge ( tChunkMeta.m_tIteratorStats );
 
 			if ( CheckInterrupt() && !tChunkMeta.m_sError.IsEmpty() )
@@ -12998,6 +13002,66 @@ bool CSphIndex_VLN::CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dF
 }
 
 
+static bool HasFieldScope ( const XQNode_t * pNode )
+{
+	if ( !pNode )
+		return false;
+	if ( pNode->m_dSpec.m_bFieldSpec && !pNode->m_dSpec.m_dFieldMask.TestAll ( true ) )
+		return true;
+	return pNode->dChildren().any_of ( [] ( const XQNode_t * pChild ) { return HasFieldScope ( pChild ); } );
+}
+
+static bool CanAutoUseRankless ( const CSphQuery & tQuery, const QueryExecutionSettings_t & tSettings,
+	const XQQuery_t & tParsed, const ISphSchema & tSorterSchema, const CSphSchema & tIndexSchema,
+	const VecTraits_T<ISphMatchSorter *> & dSorters, DWORD uPackedFactorFlags )
+{
+	auto Reject = [] ( const char * sReason )
+	{
+		if ( getenv ( "MANTICORE_E1_RANK_TRACE" ) )
+			fprintf ( stderr, "AUTO_RANKLESS_REJECT reason=%s\n", sReason );
+		return false;
+	};
+
+	if ( !tQuery.m_bAutoRanklessCandidate || tQuery.m_eQueryType!=QUERY_SQL || tQuery.m_bAgent
+		|| !tSettings.m_bImplicitDefaultRanker || tSettings.m_eRanker!=SPH_RANK_BM25A || tQuery.m_bExplicitRanker
+		|| uPackedFactorFlags || HasFieldScope ( tParsed.m_pRoot ) || !tParsed.m_bSingleWord )
+		return Reject ( "query" );
+
+	if ( tQuery.m_dItems.GetLength()!=1 || tQuery.m_dItems[0].m_sExpr!="id"
+		|| ( !tQuery.m_dItems[0].m_sAlias.IsEmpty() && tQuery.m_dItems[0].m_sAlias!="id" )
+		|| !tQuery.m_dRefItems.IsEmpty() )
+		return Reject ( "select" );
+
+	if ( !tQuery.m_bExplicitOrderBy || tQuery.m_dOrderByItems.GetLength()!=1
+		|| !tQuery.m_sGroupBy.IsEmpty() || !tQuery.m_sFacetBy.IsEmpty() || tQuery.m_bFacet || tQuery.m_bFacetHead
+		|| tQuery.IsInternalQuery() || !tQuery.m_tHaving.m_sAttrName.IsEmpty() || tQuery.m_bHasOuter
+		|| tQuery.m_eJoinType!=JoinType_e::NONE || !tQuery.m_sJoinIdx.IsEmpty() || tQuery.HasKnn()
+		|| tQuery.m_bHybridSearch || !tQuery.m_tScrollSettings.m_dAttrs.IsEmpty()
+		|| dSorters.GetLength()!=1 || dSorters[0]->IsGroupby() )
+		return Reject ( "shape" );
+
+	if ( !tQuery.m_dFilterTree.IsEmpty()
+		|| tQuery.m_dFilters.any_of ( [] ( const CSphFilterSettings & tFilter ) { return tFilter.m_sAttrName!="@rowid"; } ) )
+		return Reject ( "filter" );
+
+	CSphMatchComparatorState tSortState;
+	CSphVector<ExtraSortExpr_t> dExtraExprs;
+	ESphSortFunc eSortFunc = FUNC_GENERIC1;
+	CSphString sSortError;
+	if ( tQuery.m_eSort!=SPH_SORT_EXTENDED
+		|| sphParseSortClause ( tQuery, tQuery.m_sSortBy.cstr(), tSorterSchema, eSortFunc, tSortState, dExtraExprs, nullptr, sSortError )!=SORT_CLAUSE_OK
+		|| eSortFunc!=FUNC_GENERIC1 || tSortState.m_uAttrDesc!=0 || tSortState.m_dAttrs[0]<0
+		|| tSorterSchema.GetAttr ( tSortState.m_dAttrs[0] ).m_sName!="id" )
+		return Reject ( "sort" );
+
+	const CSphColumnInfo * pDocid = tIndexSchema.GetAttr ( sphGetDocidName() );
+	if ( !pDocid || pDocid->m_eAttrType!=SPH_ATTR_BIGINT || pDocid->IsColumnar() || pDocid->IsUuidLinkedDocid() )
+		return Reject ( "docid" );
+	if ( getenv ( "MANTICORE_E1_RANK_TRACE" ) )
+		fprintf ( stderr, "AUTO_RANKLESS_ACCEPT\n" );
+	return true;
+}
+
 static void SetupRowIdBoundaries ( const CSphVector<CSphFilterSettings> & dFilters, RowID_t uTotalDocs, ISphRanker & tRanker )
 {
 	const CSphFilterSettings * pRowIdFilter = nullptr;
@@ -13060,6 +13124,16 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 
 	assert ( pMaxSorterSchema );
 	const ISphSchema & tMaxSorterSchema = *pMaxSorterSchema;
+	QueryExecutionSettings_t tRankerSettings = tQuerySettings;
+	if ( m_bE1 && CanAutoUseRankless ( tQuery, tQuerySettings, tXQ, tMaxSorterSchema, m_tSchema, dSorters, tArgs.m_uPackedFactorFlags ) )
+	{
+		tRankerSettings.m_eRanker = SPH_RANK_NONE;
+		const int iTopK = E1RankedTopKFromPage ( tQuery.m_iOffset, tQuery.m_iLimit );
+		tRankerSettings.m_bAutoIdTopK = iTopK>0 && iTopK<=MAX_BLOCK_DOCS;
+		++tMeta.m_iAutoRankless;
+		if ( tRankerSettings.m_bAutoIdTopK )
+			++tMeta.m_iAutoIdTopK;
+	}
 
 	// set blob pool for string on_sort expression fix up
 	tCtx.SetBlobPool ( m_tBlobAttrs.GetReadPtr() );
@@ -13228,7 +13302,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tXQ, tQuery, tQuerySettings, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
+	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tXQ, tQuery, tRankerSettings, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
 	if ( !pRanker )
 		return false;
 

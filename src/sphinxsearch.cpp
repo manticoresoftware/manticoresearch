@@ -281,12 +281,52 @@ class ExtRanker_None_c : public ExtRanker_T<false>
 	using BASE = ExtRanker_T<false>;
 
 public:
-	ExtRanker_None_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings )
+	ExtRanker_None_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings,
+		const ISphSchema & tSorterSchema, bool bPublicIdTopK, int iTopK )
 		: ExtRanker_T<false> ( tXQ, tSetup, { tSettings.m_bRowidLimits, tSettings.m_bSkipQCache, false, tSettings.m_tBoundaries } )
-	{}
+		, m_bPublicIdTopK ( bPublicIdTopK && iTopK>0 && iTopK<=MAX_BLOCK_DOCS )
+		, m_iTopK ( iTopK )
+		, m_iDynamicRowitems ( tSetup.m_iDynamicRowitems )
+	{
+		const CSphColumnInfo * pDocid = tSorterSchema.GetAttr ( sphGetDocidName() );
+		if ( !pDocid )
+			m_bPublicIdTopK = false;
+		else
+			m_tDocidLocator = pDocid->m_tLocator;
+	}
+
+	~ExtRanker_None_c() override
+	{
+		if ( m_bPublicIdTopK && getenv("MANTICORE_E1_RANK_TRACE") )
+			fprintf ( stderr, "AUTO_ID_TOPK matched=%llu retained=%d sorter_bypassed=%llu configured_k=%d\n",
+				(unsigned long long)m_uMatched, m_iHeapCount,
+				(unsigned long long)(m_uMatched-m_iHeapCount), m_iTopK );
+	}
 
 	int		GetMatches () override;
+	uint64_t TakeRankSkippedDocs () override
+	{
+		uint64_t uSkipped = BASE::TakeRankSkippedDocs();
+		if ( m_uDiscardedPending )
+		{
+			uSkipped += m_uDiscardedPending;
+			m_uDiscardedPending = 0;
+		}
+		return uSkipped;
+	}
 	float	CalcRankCost ( int64_t iDocs ) const override { return float(iDocs)*BASE::COST_SCALE*13.0f; }
+
+private:
+	int GetPublicIdTopKMatches ();
+	bool m_bPublicIdTopK = false;
+	bool m_bHeapBuilt = false;
+	int m_iTopK = 0;
+	int m_iHeapCount = 0;
+	int m_iDynamicRowitems = 0;
+	CSphAttrLocator m_tDocidLocator;
+	int m_dHeap[MAX_BLOCK_DOCS];
+	uint64_t m_uMatched = 0;
+	uint64_t m_uDiscardedPending = 0;
 };
 
 
@@ -1283,6 +1323,9 @@ int ExtRanker_WeightSum_c<USE_BM25>::GetMatches ()
 
 int ExtRanker_None_c::GetMatches ()
 {
+	if ( m_bPublicIdTopK )
+		return GetPublicIdTopKMatches();
+
 	if ( !m_pRoot )
 		return 0;
 
@@ -1305,6 +1348,52 @@ int ExtRanker_None_c::GetMatches ()
 
 	m_pDoclist = pDoc;
 	return iMatches;
+}
+
+
+int ExtRanker_None_c::GetPublicIdTopKMatches ()
+{
+	if ( m_bHeapBuilt || !m_pRoot )
+		return 0;
+
+	SwitchProfile ( m_pCtx->m_pProfile, SPH_QSTATE_RANK );
+	auto fnId = [this] ( int iSlot ) { return uint64_t ( m_dMatches[iSlot].GetAttr(m_tDocidLocator) ); };
+	auto fnSmaller = [&fnId] ( int a, int b ) { return fnId(a)<fnId(b); };
+	const ExtDoc_t * pDoc = m_pDoclist;
+	while ( true )
+	{
+		if ( !pDoc || pDoc->m_tRowID==INVALID_ROWID )
+			pDoc = GetFilteredDocs();
+		if ( !pDoc )
+			break;
+
+		while ( pDoc->m_tRowID!=INVALID_ROWID )
+		{
+			CSphMatch & tCandidate = m_dMyMatches[pDoc-m_dMyDocs];
+			tCandidate.m_iWeight = 1;
+			++m_uMatched;
+			if ( m_iHeapCount<m_iTopK )
+			{
+				const int iSlot = m_iHeapCount;
+				m_dMatches[iSlot].Combine ( tCandidate, m_iDynamicRowitems );
+				m_dHeap[m_iHeapCount++] = iSlot;
+				std::push_heap ( m_dHeap, m_dHeap+m_iHeapCount, fnSmaller );
+			}
+			else if ( uint64_t(tCandidate.GetAttr(m_tDocidLocator))<fnId(m_dHeap[0]) )
+			{
+				std::pop_heap ( m_dHeap, m_dHeap+m_iHeapCount, fnSmaller );
+				m_dMatches[m_dHeap[m_iHeapCount-1]].Combine ( tCandidate, m_iDynamicRowitems );
+				std::push_heap ( m_dHeap, m_dHeap+m_iHeapCount, fnSmaller );
+			}
+			++pDoc;
+		}
+	}
+
+	m_pDoclist = pDoc;
+	m_uDiscardedPending = m_uMatched-m_iHeapCount;
+	m_bHeapBuilt = true;
+	UpdateQcache ( m_iHeapCount );
+	return m_iHeapCount;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -4980,7 +5069,9 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 	bool bGotDupes = HasQwordDupes ( tXQ.m_pRoot );
 
 	RankerSettings_t tRankerSettings;
-	tRankerSettings.m_bSkipQCache = tCtx.m_bSkipQCache;
+	// The public-ID top-K ranker retains only K rows and accounts the rest as
+	// skipped docs.  That representation is deliberately not query-cacheable.
+	tRankerSettings.m_bSkipQCache = tCtx.m_bSkipQCache || tQuerySettings.m_bAutoIdTopK;
 
 	// can we serve this from cache?
 	QcacheEntryRefPtr_t pCached;
@@ -5015,7 +5106,8 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 			break;
 
 		case SPH_RANK_NONE:
-			pRanker = std::make_unique < ExtRanker_None_c> ( tXQ, tTermSetup, tRankerSettings );
+			pRanker = std::make_unique < ExtRanker_None_c> ( tXQ, tTermSetup, tRankerSettings, tSorterSchema,
+				tQuerySettings.m_bAutoIdTopK, E1RankedTopKFromPage ( tQuery.m_iOffset, tQuery.m_iLimit ) );
 			break;
 
 		case SPH_RANK_WORDCOUNT:

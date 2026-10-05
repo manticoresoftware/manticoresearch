@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>automatic score-independent ranker RT numeric and UUID admission</name>
+<requires>
+	<force-rt/>
+</requires>
+<skip_indexer/>
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+<queries>
+<sphinxql>
+CREATE TABLE score_independent_rt (body text, gid int);
+/* Two disk chunks and one RAM chunk, each with interleaved public IDs and more than K=9 matches. */
+INSERT INTO score_independent_rt (id,body,gid) VALUES (3000,'alpha',1),(2700,'alpha',1),(2400,'alpha',1),(2100,'alpha',1),(1800,'alpha',1),(1500,'alpha',1),(1200,'alpha',1),(900,'alpha',1),(600,'alpha',1),(300,'alpha',1);
+FLUSH RAMCHUNK score_independent_rt;
+INSERT INTO score_independent_rt (id,body,gid) VALUES (2900,'alpha',2),(2600,'alpha',2),(2300,'alpha',2),(2000,'alpha',2),(1700,'alpha',2),(1400,'alpha',2),(1100,'alpha',2),(800,'alpha',2),(500,'alpha',2),(200,'alpha',2);
+FLUSH RAMCHUNK score_independent_rt;
+INSERT INTO score_independent_rt (id,body,gid) VALUES (2800,'alpha',3),(2500,'alpha',3),(2200,'alpha',3),(1900,'alpha',3),(1600,'alpha',3),(1300,'alpha',3),(1000,'alpha',3),(700,'alpha',3),(400,'alpha',3),(100,'alpha',3);
+SELECT id FROM score_independent_rt WHERE MATCH('alpha') ORDER BY id ASC LIMIT 4,5;
+SHOW META LIKE 'total_found';
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+CREATE TABLE score_independent_uuid (id uuid, body text);
+INSERT INTO score_independent_uuid (id,body) VALUES ('550e8400-e29b-41d4-a716-446655441900','alpha'),('550e8400-e29b-41d4-a716-446655441100','alpha');
+SELECT id FROM score_independent_uuid WHERE MATCH('alpha') ORDER BY id ASC LIMIT 2;
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+DROP TABLE score_independent_uuid;
+DROP TABLE score_independent_rt;
+</sphinxql>
+</queries>
+</test>

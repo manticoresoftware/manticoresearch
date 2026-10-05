@@ -8874,6 +8874,8 @@ static bool QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 				tThMeta.m_sWarning = tChunkMeta.m_sWarning;
 
 			tThMeta.m_bTotalMatchesApprox |= tChunkMeta.m_bTotalMatchesApprox;
+			tThMeta.m_iAutoRankless += tChunkMeta.m_iAutoRankless;
+			tThMeta.m_iAutoIdTopK += tChunkMeta.m_iAutoIdTopK;
 			tThMeta.m_tIteratorStats.Merge ( tChunkMeta.m_tIteratorStats );
 
 			if ( CheckInterrupt() && !tChunkMeta.m_sError.IsEmpty() )

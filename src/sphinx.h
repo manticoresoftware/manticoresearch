@@ -694,6 +694,7 @@ struct CSphQuery
 	CSphVector<CSphQueryItem>	m_dRefItems;	///< select-list prior replacing by facet
 	ESphCollation				m_eCollation = SPH_COLLATION_DEFAULT;	///< ORDER BY collation
 	bool						m_bAgent = false;	///< agent mode (may need extra cols on output)
+	bool						m_bAutoRanklessCandidate = false; ///< internal: resolved to one direct local table
 
 	CSphString		m_sQueryTokenFilterLib;		///< token filter library name
 	CSphString		m_sQueryTokenFilterName;	///< token filter name
@@ -738,6 +739,8 @@ struct QueryExecutionSettings_t
 	CSphString		m_sUDRanker;
 	CSphString		m_sUDRankerOpts;
 	bool			m_bDefaultBoolOr = false;
+	bool			m_bImplicitDefaultRanker = false;
+	bool			m_bAutoIdTopK = false;
 
 	QueryExecutionSettings_t() = default;
 	explicit QueryExecutionSettings_t ( const CSphQuery & tQuery )
@@ -854,6 +857,8 @@ public:
 	CSphString				m_sScroll;				///< data to continue scroll
 
 	IteratorStats_t			m_tIteratorStats;		///< iterators used while calculating the query
+	int						m_iAutoRankless = 0;	///< local searches that used automatic score-independent ranking
+	int						m_iAutoIdTopK = 0;	///< local searches that retained only the smallest public IDs in the ranker
 	bool					m_bBigram = false;		///< whatever to remove bigram symbol on adding word to stat
 	ExpansionStats_t		m_tExpansionStats;		///< full text query statistics for expanded and merged terms
 

@@ -496,6 +496,8 @@ struct LocalSearchRef_t
 			tResult.m_iCpuTime += tChild.m_iCpuTime;
 			tResult.m_iTotalMatches += tChild.m_iTotalMatches;
 			tResult.m_bTotalMatchesApprox |= tChild.m_bTotalMatchesApprox;
+			tResult.m_iAutoRankless += tChild.m_iAutoRankless;
+			tResult.m_iAutoIdTopK += tChild.m_iAutoIdTopK;
 			tResult.m_iSuccesses += tChild.m_iSuccesses;
 			tResult.m_tIOStats.Add ( tChild.m_tIOStats );
 
@@ -959,6 +961,8 @@ bool SearchHandler_c::SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, 
 		tNRes.m_iMultiplier = iNumQueries;
 		tNRes.m_iCpuTime += tMqMeta.m_iCpuTime / iNumQueries;
 		tNRes.m_bTotalMatchesApprox |= tMqMeta.m_bTotalMatchesApprox;
+		tNRes.m_iAutoRankless += tMqMeta.m_iAutoRankless;
+		tNRes.m_iAutoIdTopK += tMqMeta.m_iAutoIdTopK;
 
 		iCpuTime /= iNumQueries;
 	}
@@ -2148,6 +2152,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 	// at this point m_dLocal contains list of valid local indexes (i.e., existing ones),
 	// and these indexes are also rlocked and available by calling m_dAcquired.Get()
+	const bool bOneDirectLocal = dRemotes.IsEmpty() && m_dLocal.GetLength()==1 && m_dLocal[0].m_sParentIndex.IsEmpty();
+	for ( CSphQuery & tQuery : m_dNQueries )
+		tQuery.m_bAutoRanklessCandidate = bOneDirectLocal;
 
 	// sanity check
 	if ( dRemotes.IsEmpty() && m_dLocal.IsEmpty() )

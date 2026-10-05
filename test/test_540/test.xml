@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>automatic score-independent ranker for public id ascending queries</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source score_independent_source
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT id, body, gid FROM score_independent_docs ORDER BY insertion_order
+	sql_attr_uint = gid
+}
+
+index score_independent_plain
+{
+	source = score_independent_source
+	path = <data_path/>/score_independent_plain
+}
+
+index score_independent_configured : score_independent_plain
+{
+	path = <data_path/>/score_independent_configured
+	ranker = none
+}
+
+index score_independent_dist
+{
+	type = distributed
+	local = score_independent_plain
+}
+</config>
+
+<db_create>
+CREATE TABLE score_independent_docs
+(
+	id BIGINT NOT NULL,
+	body VARCHAR(255) NOT NULL,
+	gid INT NOT NULL,
+	insertion_order INT NOT NULL
+);
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS score_independent_docs;</db_drop>
+
+<db_insert>
+INSERT INTO score_independent_docs VALUES
+(900,  'alpha alpha', 1, 1),
+(100,  'alpha',       1, 2),
+(700,  'alpha beta',  2, 3),
+(300,  'alpha',       2, 4),
+(1100, 'alpha alpha', 3, 5),
+(500,  'alpha',       3, 6),
+(200,  'alpha beta',  4, 7),
+(1000, 'alpha',       4, 8),
+(400,  'alpha alpha', 5, 9),
+(800,  'alpha',       5, 10),
+(600,  'alpha beta',  6, 11),
+(1200, 'alpha',       6, 12),
+(4000, 'alpha',       7, 13),
+(3900, 'alpha',       7, 14),
+(3800, 'alpha',       8, 15),
+(3700, 'alpha',       8, 16),
+(3600, 'alpha',       9, 17),
+(3500, 'alpha',       9, 18),
+(3400, 'alpha',      10, 19),
+(3300, 'alpha',      10, 20),
+(3200, 'alpha',      11, 21),
+(3100, 'alpha',      11, 22),
+(3000, 'alpha',      12, 23),
+(2900, 'alpha',      12, 24),
+(2800, 'alpha',      13, 25),
+(2700, 'alpha',      13, 26),
+(2600, 'alpha',      14, 27),
+(2500, 'alpha',      14, 28),
+(2400, 'alpha',      15, 29),
+(2300, 'alpha',      15, 30),
+(2200, 'alpha',      16, 31),
+(2100, 'alpha',      16, 32),
+(2000, 'alpha',      17, 33),
+(1900, 'alpha',      17, 34),
+(1800, 'alpha',      18, 35),
+(1700, 'alpha',      18, 36),
+(1600, 'alpha',      19, 37),
+(1500, 'alpha',      19, 38),
+(1400, 'alpha',      20, 39),
+(1300, 'alpha',      20, 40);
+</db_insert>
+
+<queries>
+<sphinxql>
+/* Exact public numeric IDs, not physical row IDs. */
+SELECT id FROM score_independent_plain WHERE MATCH('alpha') ORDER BY id ASC LIMIT 5;
+SHOW META LIKE 'total_found';
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT id FROM score_independent_plain WHERE MATCH('alpha') ORDER BY id ASC LIMIT 4,5;
+SHOW META LIKE 'total_found';
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT id FROM score_independent_plain WHERE MATCH('alpha') ORDER BY id ASC LIMIT 32;
+SHOW META LIKE 'total_found';
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT id FROM score_independent_plain WHERE MATCH('alpha') ORDER BY id ASC LIMIT 33;
+SHOW META LIKE 'total_found';
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT id FROM score_independent_configured WHERE MATCH('alpha') ORDER BY id ASC LIMIT 5;
+SHOW META LIKE 'total_found';
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+
+/* The truncated top-K representation must neither consume nor populate qcache. */
+SET GLOBAL qcache_max_bytes=16777216;
+SET GLOBAL qcache_thresh_msec=0;
+SELECT id,weight() FROM score_independent_plain WHERE MATCH('alpha') ORDER BY weight() DESC LIMIT 5;
+SELECT id FROM score_independent_plain WHERE MATCH('alpha') ORDER BY id ASC LIMIT 5;
+SHOW META LIKE 'total_found';
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT id FROM score_independent_plain WHERE MATCH('alpha') ORDER BY id ASC LIMIT 5;
+SHOW META LIKE 'total_found';
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT id,weight() FROM score_independent_plain WHERE MATCH('alpha') ORDER BY weight() DESC LIMIT 5;
+SET GLOBAL qcache_max_bytes=0;
+
+/* Every shape below must retain its established ranker and omit the marker. */
+SELECT id FROM score_independent_plain WHERE MATCH('alpha') LIMIT 2;
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT id FROM score_independent_plain WHERE MATCH('alpha') ORDER BY weight() DESC LIMIT 2;
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT id,weight() FROM score_independent_plain WHERE MATCH('alpha') ORDER BY id ASC LIMIT 2;
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT id,weight()+1 AS scored FROM score_independent_plain WHERE MATCH('alpha') ORDER BY id ASC LIMIT 2;
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT id FROM score_independent_plain WHERE MATCH('alpha') HAVING weight()&gt;0 ORDER BY id ASC LIMIT 2;
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT id FROM score_independent_plain WHERE MATCH('alpha') AND gid=1 ORDER BY id ASC LIMIT 2;
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT id FROM score_independent_plain WHERE MATCH('alpha') ORDER BY id ASC LIMIT 2 OPTION ranker=none;
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT id FROM score_independent_plain WHERE MATCH('alpha') ORDER BY id ASC LIMIT 2 OPTION ranker=bm25a;
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT id FROM score_independent_plain WHERE MATCH('@body alpha') ORDER BY id ASC LIMIT 2;
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT gid,COUNT(*) FROM score_independent_plain WHERE MATCH('alpha') GROUP BY gid ORDER BY gid ASC LIMIT 2;
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT id FROM score_independent_plain WHERE MATCH('alpha') ORDER BY gid ASC LIMIT 2;
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT id FROM score_independent_plain WHERE MATCH('alpha') ORDER BY id ASC,gid ASC LIMIT 2;
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT id FROM score_independent_plain WHERE MATCH('alpha') ORDER BY id DESC LIMIT 2;
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT id FROM score_independent_dist WHERE MATCH('alpha') ORDER BY id ASC LIMIT 2;
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+</sphinxql>
+</queries>
+
+</test>

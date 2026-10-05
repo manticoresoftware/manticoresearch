@@ -1,4 +1,4 @@
-// Immutable postings container reader for on-disk versions 4 through 6.
+// Immutable postings container reader for the current E1POST10 format.
 // It uses mapped catalogs and payloads and does not own a term map.
 #pragma once
 #include "postings_container_codecs.h"
@@ -20,6 +20,7 @@ public:
  virtual bool Get(uint32_t row,uint64_t&value)const=0;
 };
 inline uint16_t U16(const uint8_t*p){return p[0]|uint16_t(p[1])<<8;}
+inline bool VarLE(const uint8_t*p,uint64_t size,uint64_t&off,uint32_t&v){v=0;for(uint32_t shift=0;shift<35&&off<size;shift+=7){const uint8_t b=p[off++];v|=uint32_t(b&127)<<shift;if(!(b&128))return true;}return false;}
 // Frequent descriptor: window, ordinal base, card:u16, type:u16, bytes, offset.
 struct Block {
  const uint8_t *data=nullptr,*d=nullptr;
@@ -60,20 +61,16 @@ public:
  bool PublicIDMinValidated()const{return m_publicIDMinValidated;}
  bool Open(const uint8_t*p,uint64_t size,uint32_t rows,const uint8_t*dict,uint64_t dictSize,const uint8_t*hits,uint64_t hitSize,std::string&error,bool trusted=false,OpenTimings_t*timings=nullptr,const FieldNormReader_i*pNorms=nullptr,const PublicIDReader_i*pPublicIDs=nullptr,OpenValidationPath_e*pValidationPath=nullptr,bool trustedPublicIDProof=false){
   m_p=nullptr;m_dir=nullptr;m_n=0;m_version=0;m_entrySize=0;m_publicIDMinValidated=false;if(pValidationPath)*pValidationPath=OpenValidationPath_e::NONE;uint64_t stage=timings?MonoMicroTimer():0;auto fail=[&](const char*s){error=std::string("E1: ")+s;return false;};
-  bool v4=size>=48&&!memcmp(p,"E1POST04",8)&&U32(p+8)==4;
-  bool v5=size>=48&&!memcmp(p,"E1POST05",8)&&U32(p+8)==5;
-  bool v6=size>=48&&!memcmp(p,"E1POST06",8)&&U32(p+8)==6;
-  bool v7=size>=48&&!memcmp(p,"E1POST07",8)&&U32(p+8)==7;
-  bool v9=size>=48&&!memcmp(p,"E1POST09",8)&&U32(p+8)==9;
-  if((!v4&&!v5&&!v6&&!v7&&!v9)||U64(p+16)!=size)return fail("format/length");
-  uint32_t version=v9?9:v7?7:v6?6:v5?5:4;
+  bool v10=size>=48&&!memcmp(p,"E1POST10",8)&&U32(p+8)==10;
+  if(!v10||U64(p+16)!=size)return fail("format/length");
+  constexpr uint32_t version=10;
   uint32_t header=U32(p+12),flags=U32(p+44);uint64_t nt=U64(p+24),directory=0,end=0,payloadEnd=size;
   if(header==48&&flags==0){m_entrySize=32;directory=48;if(nt>(size-48)/32)return fail("directory overflow");end=48+nt*32;}
   else if(header==56&&flags==1){m_entrySize=16;if(size<56)return fail("streamed header");directory=U64(p+48);if(directory<56||directory>size||nt>(size-directory)/16||directory+nt*16!=size)return fail("streamed directory");end=56;payloadEnd=directory;}
   else return fail("layout/version");
-  const bool hasPublicIDBinding=v9&&pPublicIDs;
+  const bool hasPublicIDBinding=v10&&pPublicIDs;
   const bool validatePublicIDs=hasPublicIDBinding&&pPublicIDs->Rows()==rows;
-  const bool useTrustedFast=trusted&&(!v9||(validatePublicIDs&&trustedPublicIDProof));
+  const bool useTrustedFast=trusted&&!v10;
   if(pValidationPath)*pValidationPath=useTrustedFast?OpenValidationPath_e::TRUSTED_FAST:OpenValidationPath_e::DEEP;
   if(timings){timings->header=MonoMicroTimer()-stage;stage=MonoMicroTimer();}
   if(!useTrustedFast){bool valid=CRC(p+header,size-header)==U32(p+32)&&CRC(dict,dictSize)==U32(p+36)&&CRC(hits,hitSize)==U32(p+40);if(timings){timings->crc=MonoMicroTimer()-stage;stage=MonoMicroTimer();}if(!valid)return fail("checksums");}
@@ -81,7 +78,7 @@ public:
   if(useTrustedFast){
    uint64_t prevOff=header;
    for(uint64_t t=0;t<nt;++t){auto d=dir+t*m_entrySize;uint64_t key=m_entrySize==16?t+1:U64(d),off=U64(d+(m_entrySize==16?0:8));auto h=p+off;uint32_t df=off<=payloadEnd&&payloadEnd-off>=24?U32(h):0,has=off<=payloadEnd&&payloadEnd-off>=24?((U32(h+12)>>1)&1):2;if(!key||key<=prevKey||off<prevOff||off>=payloadEnd||payloadEnd-off<24||!df||df>rows||has>1)return fail("trusted term catalog");prevKey=key;prevOff=off;}
-   m_p=p;m_dir=dir;m_n=nt;m_version=version;m_publicIDMinValidated=v9&&validatePublicIDs&&trustedPublicIDProof;if(timings)timings->structural=MonoMicroTimer()-stage;return true;
+   m_p=p;m_dir=dir;m_n=nt;m_version=version;m_publicIDMinValidated=false;if(timings)timings->structural=MonoMicroTimer()-stage;return true;
   }
   for(uint64_t t=0;t<nt;++t){
    auto d=dir+t*m_entrySize;auto key=m_entrySize==16?t+1:U64(d),off=U64(d+(m_entrySize==16?0:8));
@@ -89,8 +86,8 @@ public:
    auto h=p+off;auto df=m_entrySize==16?U32(h):U32(d+16),has=m_entrySize==16?((U32(h+12)>>1)&1):U32(d+20);auto hitsTotal=m_entrySize==16?U64(d+8):U64(d+24);
    if(!df||df>rows||has>1)return fail("term catalog");
    auto nb=U32(h+4),nm=U32(h+8),type=U32(h+12);auto mo=U64(h+16);
-   auto frequent=type&1u,fieldWidth=(type>>8)&63u;
-   if(U32(h)!=df||frequent!=(df>=4096?1u:0u)||(type&~0x00003f03u)||(version<6&&fieldWidth)||fieldWidth>32||nm!=(uint64_t(df)+127)/128)return fail("term type/DF");
+   auto frequent=type&1u,fieldWidth=(type>>8)&63u; const bool hasProjection=version==10&&(type&(1u<<14));
+   if(U32(h)!=df||frequent!=(df>=4096?1u:0u)||(type&~0x00007f03u)||(version<6&&fieldWidth)||(version<10&&(type&(1u<<14)))||fieldWidth>32||nm!=(uint64_t(df)+127)/128)return fail("term type/DF");
    uint64_t desc=24;
    if(!nb||nb>df||nb>(size-off-24)/desc||(!frequent&&nb!=nm))return fail("row directory bounds");
    end=off+24+uint64_t(nb)*desc;uint32_t ordinal=0,prevRow=0,prevId=0;std::vector<uint32_t> termRows(version>=7?df:0);
@@ -112,22 +109,23 @@ public:
     }
    }
    if(ordinal!=df||mo!=end||mo>size||uint64_t(nm)*16>size-mo)return fail("ordinal/metadata directory");
-   end=mo+uint64_t(nm)*16;uint64_t sum=0;std::vector<uint8_t> expected((uint64_t(df)+63)/64,0);std::vector<uint32_t> termTF(version>=7?df:0);
+	   end=mo+uint64_t(nm)*16;uint64_t sum=0;std::vector<uint8_t> expected((uint64_t(df)+63)/64,0);std::vector<uint32_t> termTF(version>=7?df:0),termMask(version==10?df:0);
    for(uint32_t b=0;b<nm;++b){auto g=p+mo+uint64_t(b)*16;auto po=U64(g);auto f=U32(g+8),n=U32(g+12);
     auto tm=(f>>4)&3,mm=(f>>6)&3,tw=(f>>9)&63,mw=(f>>23)&63;bool split=f&(1u<<29);
     if(n!=std::min(128u,df-b*128)||(f&~0x3fff7ef0u)||tm==3||(((f>>22)&1)!=has)||(tm==2?(!tw||tw>32):tw)||(mm==2?(mw>32):mw)||(split&&!has))return fail("metadata flags");
     auto bytes=Meta4Bytes(f,n);if(po!=end||po>size||bytes>size-po)return fail("metadata bounds");
-    for(uint32_t i=0;i<n;++i){uint32_t tf,mask;uint64_t ref;if(!Metadata4(p+po,f,n,i,tf,mask,ref))return fail("reference overflow");if(!tf)return fail("zero TF");sum+=tf;auto oi=uint64_t(b)*128+i,bi=oi/64;if(version>=7)termTF[oi]=tf;else expected[bi]=std::max(expected[bi],uint8_t(std::min(tf,255u)));
+	    for(uint32_t i=0;i<n;++i){uint32_t tf,mask;uint64_t ref;if(!Metadata4(p+po,f,n,i,tf,mask,ref))return fail("reference overflow");if(!tf)return fail("zero TF");sum+=tf;auto oi=uint64_t(b)*128+i,bi=oi/64;if(version>=7)termTF[oi]=tf;else expected[bi]=std::max(expected[bi],uint8_t(std::min(tf,255u)));if(version==10)termMask[oi]=mask;
      if(has){if(ref>>63){if(tf!=1||(ref&0x7fffffff00000000ULL)||!uint32_t(ref))return fail("inline hit");}
       else{if(!ref||ref>=hitSize)return fail("hit reference");uint64_t o=ref,v=0,raw=0;for(uint32_t j=0;j<tf;++j){if(!Var(hits,hitSize,o,v)||!v||v>UINT32_MAX-raw)return fail("position delta");raw+=v;}if(!Var(hits,hitSize,o,v)||v)return fail("hit length");}}
      else if(ref>>63)return fail("hitless inline");
     }end=po+bytes;
    }if(sum!=hitsTotal)return fail("hit sum");
    if(version>=5){if(expected.size()>payloadEnd-end)return fail("bounds tail");if(version<7){for(size_t i=0;i<expected.size();++i)if(p[end+i]!=expected[i])return fail("unsafe maxTF bound");}else for(size_t block=0;block<expected.size();++block){const uint8_t stored=p[end+block];if(stored==255)continue;if(!pNorms||pNorms->Rows()!=rows)return fail("finite BM25A bound without authoritative norms");const uint32_t first=uint32_t(block*64),count=std::min(64u,df-first);uint32_t dl[64];if(!pNorms->GatherTotal(termRows.data()+first,count,dl))return fail("BM25A norm lookup");uint8_t need=0;for(uint32_t i=0;i<count;++i)need=std::max(need,E1EncodeBM25A12_075_256(termTF[first+i],dl[i]));if(stored<need)return fail("unsafe BM25A ratio bound");}end+=expected.size();}
-   if(version==9){const uint64_t minIdBytes=uint64_t(expected.size())*8;if(minIdBytes>payloadEnd-end)return fail("public ID bounds tail");if(validatePublicIDs){for(size_t block=0;block<expected.size();++block){const uint32_t first=uint32_t(block*64),count=std::min(64u,df-first);uint64_t actual=UINT64_MAX;for(uint32_t i=0;i<count;++i){uint64_t id=0;if(!pPublicIDs->Get(termRows[first+i],id))return fail("authoritative public ID lookup");actual=std::min(actual,id);}if(U64(p+end+block*8)>actual)return fail("unsafe public ID minimum");}}end+=minIdBytes;}
-   if(version>=6&&fieldWidth){
-    const uint64_t fieldBytes=(uint64_t(df)*fieldWidth+7)/8;if(fieldBytes>payloadEnd-end)return fail("field TF bounds");
-    const uint8_t* fieldTF=p+end;
+   if(version==10){const uint64_t minIdBytes=uint64_t(expected.size())*8;if(minIdBytes>payloadEnd-end)return fail("public ID bounds tail");if(validatePublicIDs){for(size_t block=0;block<expected.size();++block){const uint32_t first=uint32_t(block*64),count=std::min(64u,df-first);uint64_t actual=UINT64_MAX;for(uint32_t i=0;i<count;++i){uint64_t id=0;if(!pPublicIDs->Get(termRows[first+i],id))return fail("authoritative public ID lookup");actual=std::min(actual,id);}if(U64(p+end+block*8)>actual)return fail("unsafe public ID minimum");}}end+=minIdBytes;}
+	   const uint8_t* fieldTF=nullptr;
+	   if(version>=6&&fieldWidth){
+	    const uint64_t fieldBytes=(uint64_t(df)*fieldWidth+7)/8;if(fieldBytes>payloadEnd-end)return fail("field TF bounds");
+	    fieldTF=p+end;
     for(uint32_t o=0;o<df;++o){
      const uint32_t group=o/128,slot=o%128;auto g=p+mo+uint64_t(group)*16;uint32_t tf,mask;uint64_t ref;
      if(!Metadata4(p+U64(g),U32(g+8),U32(g+12),slot,tf,mask,ref))return fail("field TF metadata");
@@ -136,6 +134,39 @@ public:
     }
     end+=fieldBytes;
    }
+   if(version==10&&hasProjection){
+    if(!pNorms||pNorms->Rows()!=rows||end>payloadEnd||payloadEnd-end<4)return fail("field projection norms/header");
+    const uint32_t projections=U32(p+end);const uint64_t projectionDir=end+4;
+    if(!projections||projections>pNorms->Fields()||uint64_t(projections)*24>payloadEnd-projectionDir)return fail("field projection directory");
+    uint32_t previousField=UINT32_MAX,claimedFields=0;
+    for(uint32_t pi=0;pi<projections;++pi){
+     const uint8_t* pd=p+projectionDir+uint64_t(pi)*24;const uint32_t field=U32(pd),count=U32(pd+4),blocks=U32(pd+8),blockSize=U32(pd+12);
+     if(field>=pNorms->Fields()||field>=32||(pi&&field<=previousField)||!count||count>df||blockSize!=64||blocks!=(count+63)/64)return fail("field projection identity");
+     previousField=field;claimedFields|=uint32_t(1)<<field;
+    }
+    std::array<std::vector<uint32_t>,32> expectedProjectionOrdinals;
+    for(uint32_t ordinal=0;ordinal<df;++ordinal){
+     uint32_t fields=termMask[ordinal]&claimedFields;
+     while(fields){const uint32_t field=uint32_t(__builtin_ctz(fields));fields&=fields-1;const uint32_t first=fieldTF?uint32_t(PackedBounded(fieldTF,fieldWidth,ordinal,df)):0;uint32_t authoritative=0;if(!ExactLocalFieldTF(termMask[ordinal],termTF[ordinal],first,field,authoritative))return fail("field projection unsupported mask");expectedProjectionOrdinals[field].push_back(ordinal);}
+    }
+    uint64_t projectionEnd=projectionDir+uint64_t(projections)*24;
+    for(uint32_t pi=0;pi<projections;++pi){
+     const uint8_t* pd=p+projectionDir+uint64_t(pi)*24;const uint32_t field=U32(pd),count=U32(pd+4),blocks=U32(pd+8);const uint64_t po=U64(pd+16);
+     if(po!=projectionEnd||po>payloadEnd||uint64_t(blocks)*16>payloadEnd-po)return fail("field projection identity");
+     const auto& expectedOrdinals=expectedProjectionOrdinals[field];const uint8_t* base=p+po;uint64_t dataEnd=uint64_t(blocks)*16;uint32_t seen=0,previousRow=0,aggregateOrdinal=0,expectedAt=0;
+     for(uint32_t bi=0;bi<blocks;++bi){
+      const uint8_t* bd=base+uint64_t(bi)*16;const uint32_t dataOff=U32(bd),rowBytes=U32(bd+4),tfBytes=U32(bd+8),n=bd[12];const uint8_t bound=bd[13];
+      if(bd[14]||bd[15]||n!=std::min(64u,count-seen)||dataOff!=dataEnd||uint64_t(rowBytes)+tfBytes>payloadEnd-(po+dataOff))return fail("field projection block");
+      uint64_t rp=po+dataOff,rend=rp+rowBytes,tp=rend,tend=tp+tfBytes;uint32_t blockRows[64],blockTF[64];
+      for(uint32_t i=0;i<n;++i){uint32_t delta=0;if(!VarLE(p,payloadEnd,rp,delta))return fail("field projection row varint");const uint64_t row=i?uint64_t(blockRows[i-1])+delta:delta;if(row>=rows||(seen+i&&row<=previousRow)||row>UINT32_MAX)return fail("field projection row order");blockRows[i]=uint32_t(row);previousRow=uint32_t(row);}
+      if(rp!=rend)return fail("field projection row tail");uint8_t need=0;
+      for(uint32_t i=0;i<n;++i){uint32_t tf=0;if(!VarLE(p,payloadEnd,tp,tf)||!tf)return fail("field projection TF");blockTF[i]=tf;while(aggregateOrdinal<df&&termRows[aggregateOrdinal]<blockRows[i])++aggregateOrdinal;if(aggregateOrdinal==df||termRows[aggregateOrdinal]!=blockRows[i])return fail("field projection non-member row");const uint32_t mask=termMask[aggregateOrdinal];if(!(mask&(uint32_t(1)<<field)))return fail("field projection field membership");if(expectedAt>=expectedOrdinals.size()||expectedOrdinals[expectedAt]!=aggregateOrdinal)return fail("field projection incomplete");const uint32_t first=fieldTF?uint32_t(PackedBounded(fieldTF,fieldWidth,aggregateOrdinal,df)):0;uint32_t authoritative=0;if(!ExactLocalFieldTF(mask,termTF[aggregateOrdinal],first,field,authoritative))return fail("field projection unsupported mask");if(tf!=authoritative)return fail("field projection local TF");uint32_t dl=0;if(!pNorms->GatherTotal(blockRows+i,1,&dl))return fail("field projection norm lookup");need=std::max(need,E1EncodeBM25A12_075_256(blockTF[i],dl));++aggregateOrdinal;++expectedAt;}
+      if(tp!=tend||bound<need)return fail("unsafe field projection bound");dataEnd+=uint64_t(rowBytes)+tfBytes;seen+=n;
+     }
+     if(seen!=count)return fail("field projection cardinality");if(expectedAt!=expectedOrdinals.size())return fail("field projection incomplete");projectionEnd=po+dataEnd;
+    }
+    end=projectionEnd;
+   }
   }
   if(end!=payloadEnd)return fail("trailing bytes");m_p=p;m_dir=dir;m_n=nt;m_version=version;m_publicIDMinValidated=validatePublicIDs;if(timings)timings->structural=MonoMicroTimer()-stage;return true;
  }
@@ -143,6 +174,7 @@ public:
 class Cursor {
  const uint8_t*m_p=nullptr,*m_term=nullptr;uint32_t m_df=0,m_next=0,m_cached=UINT32_MAX,m_rows[128];
  const uint8_t*m_bounds=nullptr,*m_minPublicIDs=nullptr,*m_firstFieldTF=nullptr;uint32_t m_firstFieldTFWidth=0,m_version=0;
+ const uint8_t*m_projectionDir=nullptr,*m_projectionPayload=nullptr;uint32_t m_projectionCount=0,m_projectionRows=0,m_projectionBlocks=0,m_projectionRankPos=0,m_projectionInBlock=0,m_projectionDecodedBlock=UINT32_MAX,m_projectionDecodedCount=0;bool m_projectionCountersReady=false;uint32_t m_projectionDecodedRows[64]{},m_projectionDecodedTF[64]{};std::vector<uint32_t> m_projectionRankOrder;
  uint32_t m_block=0,m_lastOrdinal=UINT32_MAX,m_lastRow=0,m_bitmapBlock=UINT32_MAX,m_bitmapWord=0,m_bitmapEndOrdinal=0,m_bitmapWindow=0;uint64_t m_bitmapRemaining=0;const uint8_t*m_bitmapPayload=nullptr;
  uint32_t m_meta=UINT32_MAX,m_tf[128],m_mask[128];uint64_t m_ref[128];
  uint64_t m_uMetaDecoded=0;
@@ -165,24 +197,37 @@ class Cursor {
   for(uint32_t i=0;i<n;++i)m_dRankOrder[next[m_bounds[i]]++]=i;
  }
 public:
- bool Active()const{return m_p;} void Reset(){m_next=0;m_cached=UINT32_MAX;m_meta=UINT32_MAX;for(auto&m:m_dBatchStage)m=UINT32_MAX;m_block=0;m_lastOrdinal=UINT32_MAX;m_bitmapBlock=UINT32_MAX;m_bitmapWord=0;m_bitmapEndOrdinal=0;m_bitmapWindow=0;m_bitmapRemaining=0;m_bitmapPayload=nullptr;m_dRankOrder.clear();m_uRankPos=0;m_uRankInBlock=0;m_bRankOrderReady=false;m_uMetaDecoded=0;m_uDirectWindow=UINT32_MAX;m_uDirectBlock=UINT32_MAX;m_uHintPrefixBlock=UINT32_MAX;m_dHintPrefix.fill(0);m_dDirectMask.fill(0);m_dDirectPrefix.fill(0);m_pSelectedMeta=nullptr;m_uSelectedWord=0;m_uSelectedOrdinal=0;m_uSelectedMembers=0;}
+ bool Active()const{return m_p;} void Reset(){m_next=0;m_cached=UINT32_MAX;m_meta=UINT32_MAX;for(auto&m:m_dBatchStage)m=UINT32_MAX;m_block=0;m_lastOrdinal=UINT32_MAX;m_bitmapBlock=UINT32_MAX;m_bitmapWord=0;m_bitmapEndOrdinal=0;m_bitmapWindow=0;m_bitmapRemaining=0;m_bitmapPayload=nullptr;m_dRankOrder.clear();m_uRankPos=0;m_uRankInBlock=0;m_bRankOrderReady=false;m_uMetaDecoded=0;m_uDirectWindow=UINT32_MAX;m_uDirectBlock=UINT32_MAX;m_uHintPrefixBlock=UINT32_MAX;m_dHintPrefix.fill(0);m_dDirectMask.fill(0);m_dDirectPrefix.fill(0);m_pSelectedMeta=nullptr;m_uSelectedWord=0;m_uSelectedOrdinal=0;m_uSelectedMembers=0;m_projectionPayload=nullptr;m_projectionRows=m_projectionBlocks=m_projectionRankPos=m_projectionInBlock=m_projectionDecodedCount=0;m_projectionDecodedBlock=UINT32_MAX;m_projectionCountersReady=false;m_projectionRankOrder.clear();}
  uint64_t TakeMetadataGroupsDecoded(){auto u=m_uMetaDecoded;m_uMetaDecoded=0;return u;}
- void Bind(const Store&s,uint64_t key){auto v=s.View(key);m_p=v.term?v.data:nullptr;m_term=v.term;m_df=v.DF();m_version=v.version;m_bounds=nullptr;m_minPublicIDs=nullptr;m_firstFieldTF=nullptr;m_firstFieldTFWidth=0;if(m_term&&m_version>=5){auto nm=U32(m_term+8);auto mo=U64(m_term+16);if(nm){auto g=m_p+mo+uint64_t(nm-1)*16;m_bounds=m_p+U64(g)+Meta4Bytes(U32(g+8),U32(g+12));const uint64_t blocks=(uint64_t(m_df)+63)/64;if(m_version==9&&s.PublicIDMinValidated())m_minPublicIDs=m_bounds+blocks;if(m_version>=6&&(m_firstFieldTFWidth=v.FirstFieldTFWidth()))m_firstFieldTF=m_bounds+blocks+(m_version==9?blocks*8:0);}}Reset();}
+ void Bind(const Store&s,uint64_t key){
+  auto v=s.View(key);m_p=v.term?v.data:nullptr;m_term=v.term;m_df=v.DF();m_version=v.version;Reset();m_bounds=nullptr;m_minPublicIDs=nullptr;m_firstFieldTF=nullptr;m_firstFieldTFWidth=0;m_projectionDir=nullptr;m_projectionCount=0;
+  if(m_term&&m_version>=5){auto nm=U32(m_term+8);auto mo=U64(m_term+16);if(nm){auto g=m_p+mo+uint64_t(nm-1)*16;m_bounds=m_p+U64(g)+Meta4Bytes(U32(g+8),U32(g+12));const uint64_t blocks=(uint64_t(m_df)+63)/64;if(m_version>=9&&s.PublicIDMinValidated())m_minPublicIDs=m_bounds+blocks;if(m_version>=6&&(m_firstFieldTFWidth=v.FirstFieldTFWidth()))m_firstFieldTF=m_bounds+blocks+(m_version>=9?blocks*8:0);if(m_version==10&&(U32(m_term+12)&(1u<<14))){const uint64_t fieldBytes=(uint64_t(m_df)*m_firstFieldTFWidth+7)/8;const uint8_t* tail=m_bounds+blocks+blocks*8+fieldBytes;m_projectionCount=U32(tail);m_projectionDir=tail+4;}}}
+ }
  TermView View()const{return {m_p,m_term,m_version};}
- E1RankedBoundKind_e BoundKind()const{return !m_bounds?E1RankedBoundKind_e::NONE:m_version>=5&&m_version<=6?E1RankedBoundKind_e::MAX_TF:(m_version==7||m_version==9)?E1RankedBoundKind_e::BM25A_RATIO:E1RankedBoundKind_e::NONE;}
+ E1RankedBoundKind_e BoundKind()const{return !m_bounds?E1RankedBoundKind_e::NONE:m_version>=5&&m_version<=6?E1RankedBoundKind_e::MAX_TF:(m_version==7||m_version==9||m_version==10)?E1RankedBoundKind_e::BM25A_RATIO:E1RankedBoundKind_e::NONE;}
  bool HasRankedBounds()const{return BoundKind()==E1RankedBoundKind_e::MAX_TF;}
- bool HasBM25ARatioBounds()const{return m_bounds&&(m_version==7||m_version==9);}
- bool HasPublicIdMinBounds()const{return m_minPublicIDs&&m_version==9;}
+ bool HasBM25ARatioBounds()const{return m_bounds&&(m_version==7||m_version==9||m_version==10);}
+ bool HasPublicIdMinBounds()const{return m_minPublicIDs&&m_version>=9;}
  bool PublicIdMinBound(uint32_t block,uint64_t&value)const{if(!HasPublicIdMinBounds()||block>=(m_df+63)/64)return false;value=U64(m_minPublicIDs+uint64_t(block)*8);return true;}
  bool BM25ARatioBound(uint32_t block,uint8_t&code)const{if(!HasBM25ARatioBounds()||block>=(m_df+63)/64)return false;code=m_bounds[block];return true;}
- bool ExactFieldTF(uint32_t ordinal,uint32_t field,uint32_t mask,uint32_t aggregate,uint32_t&tf)const{
-  if(ordinal>=m_df||field>=32||!(mask&(uint32_t(1)<<field)))return false;
-  const uint32_t fields=uint32_t(__builtin_popcount(mask));
-  if(fields==1){tf=aggregate;return true;}
-  if(fields!=2||!m_firstFieldTF||!m_firstFieldTFWidth)return false;
-  const uint32_t first=uint32_t(PackedBounded(m_firstFieldTF,m_firstFieldTFWidth,ordinal,m_df));
-  if(!first||first>=aggregate)return false;
-  tf=field==uint32_t(__builtin_ctz(mask))?first:aggregate-first;return tf!=0;
+ bool SelectFieldProjection(uint32_t field){
+  m_projectionPayload=nullptr;m_projectionRows=m_projectionBlocks=m_projectionRankPos=m_projectionInBlock=m_projectionDecodedCount=0;m_projectionDecodedBlock=UINT32_MAX;m_projectionCountersReady=false;m_projectionRankOrder.clear();
+  for(uint32_t i=0;i<m_projectionCount;++i){const uint8_t*d=m_projectionDir+uint64_t(i)*24;if(U32(d)!=field)continue;m_projectionRows=U32(d+4);m_projectionBlocks=U32(d+8);m_projectionPayload=m_p+U64(d+16);std::array<uint32_t,256> counts{},offsets{},next{};for(uint32_t b=0;b<m_projectionBlocks;++b)++counts[*(m_projectionPayload+uint64_t(b)*16+13)];uint32_t at=0;for(int c=255;c>=0;--c){offsets[c]=at;at+=counts[c];}next=offsets;m_projectionRankOrder.resize(m_projectionBlocks);for(uint32_t b=0;b<m_projectionBlocks;++b){const uint8_t code=m_projectionPayload[uint64_t(b)*16+13];m_projectionRankOrder[next[code]++]=b;}return true;}return false;
+ }
+ uint32_t FieldProjectionRows()const{return m_projectionRows;} uint32_t FieldProjectionBlocks()const{return m_projectionBlocks;}
+ bool NextFieldProjectionRanked(uint32_t&row,uint32_t&tf,float idf,int threshold,uint64_t&entries,uint64_t&buckets,uint64_t&selected,uint64_t&skipped,uint64_t&skippedDocs){
+  if(!m_projectionPayload)return false;if(!m_projectionCountersReady){m_projectionCountersReady=true;entries+=m_projectionBlocks;std::array<bool,256> seen{};for(uint32_t b=0;b<m_projectionBlocks;++b)seen[*(m_projectionPayload+uint64_t(b)*16+13)]=true;for(bool x:seen)buckets+=x;}
+  while(m_projectionRankPos<m_projectionRankOrder.size()){
+   const uint32_t block=m_projectionRankOrder[m_projectionRankPos];const uint8_t*bd=m_projectionPayload+uint64_t(block)*16;const uint32_t n=bd[12];
+   if(!m_projectionInBlock){const uint8_t bound=bd[13];if(E1RatioBoundReject(bound,idf,threshold)){skipped+=m_projectionRankOrder.size()-m_projectionRankPos;for(uint32_t i=m_projectionRankPos;i<m_projectionRankOrder.size();++i)skippedDocs+=m_projectionPayload[uint64_t(m_projectionRankOrder[i])*16+12];m_projectionRankPos=uint32_t(m_projectionRankOrder.size());return false;}++selected;}
+   if(m_projectionDecodedBlock!=block){const uint8_t*rp=m_projectionPayload+U32(bd);const uint8_t*rend=rp+U32(bd+4);const uint8_t*tp=rend;const uint8_t*tend=tp+U32(bd+8);auto get=[](const uint8_t*&p,const uint8_t*e,uint32_t&v){v=0;for(uint32_t s=0;s<35&&p<e;s+=7){uint8_t c=*p++;v|=uint32_t(c&127)<<s;if(!(c&128))return true;}return false;};uint32_t previous=0;for(uint32_t i=0;i<n;++i){uint32_t delta=0;if(!get(rp,rend,delta))return false;m_projectionDecodedRows[i]=i?previous+delta:delta;previous=m_projectionDecodedRows[i];}for(uint32_t i=0;i<n;++i)if(!get(tp,tend,m_projectionDecodedTF[i]))return false;m_projectionDecodedBlock=block;m_projectionDecodedCount=n;}
+   const uint32_t i=m_projectionInBlock++;row=m_projectionDecodedRows[i];tf=m_projectionDecodedTF[i];if(m_projectionInBlock==n){++m_projectionRankPos;m_projectionInBlock=0;}return true;
+  }return false;
+ }
+	 bool ExactFieldTF(uint32_t ordinal,uint32_t field,uint32_t mask,uint32_t aggregate,uint32_t&tf)const{
+	  if(ordinal>=m_df)return false;
+	  const uint32_t first=m_firstFieldTF&&m_firstFieldTFWidth?uint32_t(PackedBounded(m_firstFieldTF,m_firstFieldTFWidth,ordinal,m_df)):0;
+	  return ExactLocalFieldTF(mask,aggregate,first,field,tf);
  }
  bool DirectContainerSupported()const{return BoundKind()!=E1RankedBoundKind_e::NONE&&View().Frequent();}
  bool DirectOrSupported()const{return HasRankedBounds()&&View().Frequent();}

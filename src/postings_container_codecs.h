@@ -13,11 +13,8 @@
 #include <sys/stat.h>
 #endif
 namespace e1 {
-constexpr uint32_t VERSION = 0x45310009;
-constexpr uint32_t VERSION7 = 0x45310007;
-constexpr uint32_t VERSION6 = 0x45310006;
-constexpr uint32_t VERSION5 = 0x45310005;
-constexpr uint32_t VERSION4 = 0x45310004;
+constexpr uint32_t VERSION10 = 0x4531000a;
+constexpr uint32_t VERSION = VERSION10;
 inline std::mutex & TrustedGenerationsMutex() { static std::mutex tMutex; return tMutex; }
 using PublicIDDigest_t = HASH20_t;
 struct TrustedGeneration_t { uint32_t m_uPublicIDRows = 0; PublicIDDigest_t m_dPublicIDs {}; bool m_bHasPublicIDs = false; };
@@ -98,6 +95,14 @@ inline TrustedGenerationProof_t ConsumeTrustedGeneration ( const std::string & s
 }
 inline uint32_t U32(const uint8_t *p) { return uint32_t(p[0]) | uint32_t(p[1])<<8 | uint32_t(p[2])<<16 | uint32_t(p[3])<<24; }
 inline uint64_t U64(const uint8_t *p) { return U32(p) | uint64_t(U32(p+4))<<32; }
+inline bool ExactLocalFieldTF(uint32_t mask,uint32_t aggregate,uint32_t firstFieldTF,uint32_t field,uint32_t&localTF) {
+ if(field>=32||!(mask&(uint32_t(1)<<field))||!aggregate)return false;
+ const uint32_t fields=uint32_t(__builtin_popcount(mask));
+ if(fields==1){localTF=aggregate;return true;}
+ if(fields!=2||!firstFieldTF||firstFieldTF>=aggregate)return false;
+ localTF=field==uint32_t(__builtin_ctz(mask))?firstFieldTF:aggregate-firstFieldTF;
+ return localTF!=0;
+}
 inline const std::array<uint32_t,256> & CRCTable() {
  static const auto dTable=[] {
   std::array<uint32_t,256> dResult{};

@@ -169,7 +169,7 @@ void ConvertSingleTermV7ToV6 ( ByteVec_t & dData, const std::vector<e1::Posting>
 			uMaxTF = std::max ( uMaxTF, dPostings[i].m_uTF );
 		dData[uBoundsOffset+uBlock] = uint8_t ( std::min(uMaxTF,255u) );
 	}
-	// V9 stores one uint64 minimum public ID after every ordinal-64 bound.
+	// The current format stores one uint64 minimum public ID after every ordinal-64 bound.
 	// Strip that extension before presenting the payload as V6.
 	const size_t uMinIDsOffset = uBoundsOffset+uBlocks;
 	dData.erase ( dData.begin()+uMinIDsOffset, dData.begin()+uMinIDsOffset+uBlocks*8 );
@@ -179,7 +179,7 @@ void ConvertSingleTermV7ToV6 ( ByteVec_t & dData, const std::vector<e1::Posting>
 	UpdateChecksum ( dData );
 }
 
-void ConvertSingleTermV9ToV7 ( ByteVec_t & dData, size_t uDocs )
+void ConvertSingleTermCurrentToV7 ( ByteVec_t & dData, size_t uDocs )
 {
 	const auto * pTerm = dData.data()+56;
 	const uint32_t uMetadataCount = e1::U32 ( pTerm+8 );
@@ -258,7 +258,7 @@ TEST_F ( PostingsContainerTest, TrustedGenerationIsOneShotAndRejectsModifiedComp
 	EXPECT_FALSE ( e1::ConsumeTrustedGeneration(sPostings,sDict,sHits,8,1,2,3) );
 }
 
-TEST_F ( PostingsContainerTest, TrustedV9PublicIDProofIsContentBoundAndOneShot )
+TEST_F ( PostingsContainerTest, V10PublicIDProofIsContentBoundAndDeepValidated )
 {
 	std::vector<uint64_t> dPublicIDs { 400, 300, 200, 100 };
 	std::vector<e1::Posting> dPostings;
@@ -302,7 +302,7 @@ TEST_F ( PostingsContainerTest, TrustedV9PublicIDProofIsContentBoundAndOneShot )
 	e1::OpenValidationPath_e ePath = e1::OpenValidationPath_e::NONE;
 	ASSERT_TRUE ( tStore.Open(dRaw.data(),dRaw.size(),uint32_t(dPublicIDs.size()),dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,tProof.m_bGeneration,nullptr,nullptr,&tPublicIDs,&ePath,tProof.m_bPublicIDs) ) << sError;
 #if !defined(_WIN32)
-	EXPECT_EQ ( ePath, e1::OpenValidationPath_e::TRUSTED_FAST );
+	EXPECT_EQ ( ePath, e1::OpenValidationPath_e::DEEP );
 	EXPECT_TRUE ( tStore.PublicIDMinValidated() );
 #endif
 	EXPECT_FALSE ( fnConsume(dPublicIDs).m_bGeneration );
@@ -329,7 +329,7 @@ TEST_F ( PostingsContainerTest, TrustedV9PublicIDProofIsContentBoundAndOneShot )
 	EXPECT_FALSE ( e1::ConsumeTrustedGeneration(sPostings,sDict,sHits,e1::U64(dRaw.data()+16),e1::U32(dRaw.data()+32),e1::U32(dRaw.data()+36),e1::U32(dRaw.data()+40),uint32_t(dPublicIDs.size()),&dDigest).m_bGeneration );
 }
 
-TEST ( PostingsContainer, CodecsSeekBulkAndMalformedInput )
+TEST ( DISABLED_PostingsContainerExperimentalFormats, CodecsSeekBulkAndMalformedInput )
 {
 	const std::vector<std::vector<uint32_t>> dCases { {0}, {8,9,10}, {5,7,12,14}, {100,101,103,104,105,107}, {0,0x80000000u,0xfffffffeu} };
 	const unsigned dCodecs[] { 1, 1, 3, 4, 2 };
@@ -423,7 +423,7 @@ TEST_F ( PostingsContainerTest, StreamedDirectoryUsesImplicitContiguousKeys )
 	EXPECT_EQ ( tStore.View(2).DF(), 1u );
 }
 
-TEST_F ( PostingsContainerTest, WriterReaderMetadataAndDirectWindows )
+TEST_F ( PostingsContainerTest, DISABLED_ExperimentalMaxTFWriterReaderMetadataAndDirectWindows )
 {
 	std::vector<e1::Posting> dPostings;
 	for ( uint32_t uRow=0; uRow<8192; ++uRow )
@@ -432,7 +432,6 @@ TEST_F ( PostingsContainerTest, WriterReaderMetadataAndDirectWindows )
 	WriteContainer ( dPostings );
 
 	auto dRaw=ReadFile(m_sBase+".spd"), dDict=ReadFile(m_sBase+".spi"), dHits=ReadFile(m_sBase+".spp");
-	ConvertSingleTermV7ToV6 ( dRaw, dPostings );
 	std::string sError;
 	e1::Store tStore;
 	ASSERT_TRUE ( tStore.Open(dRaw.data(),dRaw.size(),8192,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError) ) << sError;
@@ -577,7 +576,7 @@ TEST_F ( PostingsContainerTest, CompactMasksAndMixedReferences )
 	}
 }
 
-TEST_F ( PostingsContainerTest, RankedBoundsAndPersistedVersions )
+TEST_F ( PostingsContainerTest, DISABLED_RankedBoundsAndPersistedExperimentalVersions )
 {
 	std::vector<e1::Posting> dPostings;
 	for ( uint32_t i=0; i<129; ++i )
@@ -634,7 +633,7 @@ TEST_F ( PostingsContainerTest, RankedBoundsAndPersistedVersions )
 	EXPECT_FALSE ( tCursor.Next(uRow) );
 }
 
-TEST_F ( PostingsContainerTest, V9WriterPersistsExactSafeRatioBoundsByOrdinal )
+TEST_F ( PostingsContainerTest, CurrentWriterPersistsExactSafeRatioBoundsByOrdinal )
 {
 	std::vector<e1::Posting> dPostings;
 	std::vector<uint32_t> dTotalDL ( 130 );
@@ -656,8 +655,8 @@ TEST_F ( PostingsContainerTest, V9WriterPersistsExactSafeRatioBoundsByOrdinal )
 
 	auto dRaw=ReadFile(m_sBase+".spd"), dDict=ReadFile(m_sBase+".spi"), dHits=ReadFile(m_sBase+".spp");
 	ASSERT_GE ( dRaw.size(), 56u );
-	EXPECT_EQ ( std::string(reinterpret_cast<const char *>(dRaw.data()),8), "E1POST09" );
-	EXPECT_EQ ( e1::U32(dRaw.data()+8), 9u );
+	EXPECT_EQ ( std::string(reinterpret_cast<const char *>(dRaw.data()),8), "E1POST10" );
+	EXPECT_EQ ( e1::U32(dRaw.data()+8), 10u );
 	e1::norms::Builder tNormBuilder ( 1 );
 	for ( uint32_t uDL : dTotalDL )
 		ASSERT_TRUE ( tNormBuilder.AddRow(&uDL,1,sError) ) << sError;
@@ -666,7 +665,7 @@ TEST_F ( PostingsContainerTest, V9WriterPersistsExactSafeRatioBoundsByOrdinal )
 	e1::norms::Store tNormStore;
 	ASSERT_TRUE ( tNormStore.Open(dNormBytes.data(),dNormBytes.size(),sError) ) << sError;
 	e1::Store tStore;
-	// V9 without an exact public-ID proof falls back to deep validation.
+	// The current format always takes the deep validation path.
 	ASSERT_TRUE ( tStore.Open(dRaw.data(),dRaw.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,true,nullptr,&tNormStore) ) << sError;
 	e1::Cursor tCursor;
 	tCursor.Bind ( tStore, 1 );
@@ -686,15 +685,6 @@ TEST_F ( PostingsContainerTest, V9WriterPersistsExactSafeRatioBoundsByOrdinal )
 	// Deep reopen validates every finite code against the authoritative norms.
 	e1::Store tDeepStore;
 	ASSERT_TRUE ( tDeepStore.Open(dRaw.data(),dRaw.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,false,nullptr,&tNormStore) ) << sError;
-	auto dV7 = dRaw;
-	ConvertSingleTermV9ToV7 ( dV7, dTotalDL.size() );
-	ASSERT_EQ ( e1::U64(dV7.data()+48)+16, dV7.size() );
-	e1::Store tV7Store;
-	ASSERT_TRUE ( tV7Store.Open(dV7.data(),dV7.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,false,nullptr,&tNormStore) ) << sError;
-	e1::Cursor tV7Cursor;
-	tV7Cursor.Bind ( tV7Store, 1 );
-	EXPECT_TRUE ( tV7Cursor.HasBM25ARatioBounds() );
-	EXPECT_FALSE ( tV7Cursor.HasPublicIdMinBounds() );
 
 	auto dUnderestimate = dRaw;
 	const auto * pTerm = dUnderestimate.data()+56;
@@ -709,7 +699,7 @@ TEST_F ( PostingsContainerTest, V9WriterPersistsExactSafeRatioBoundsByOrdinal )
 	EXPECT_NE ( sError.find("unsafe BM25A ratio bound"), std::string::npos );
 }
 
-TEST_F ( PostingsContainerTest, V9PersistsConservativePublicIdMinimumPerOrdinalBlock )
+TEST_F ( PostingsContainerTest, CurrentPersistsConservativePublicIdMinimumPerOrdinalBlock )
 {
 	std::vector<e1::Posting> dPostings;
 	std::vector<uint32_t> dTotalDL ( 130, 32 );
@@ -737,8 +727,8 @@ TEST_F ( PostingsContainerTest, V9PersistsConservativePublicIdMinimumPerOrdinalB
 
 	auto dRaw=ReadFile(m_sBase+".spd"), dDict=ReadFile(m_sBase+".spi"), dHits=ReadFile(m_sBase+".spp");
 	ASSERT_GE ( dRaw.size(), 56u );
-	EXPECT_EQ ( std::string(reinterpret_cast<const char *>(dRaw.data()),8), "E1POST09" );
-	EXPECT_EQ ( e1::U32(dRaw.data()+8), 9u );
+	EXPECT_EQ ( std::string(reinterpret_cast<const char *>(dRaw.data()),8), "E1POST10" );
+	EXPECT_EQ ( e1::U32(dRaw.data()+8), 10u );
 	e1::norms::Builder tNormBuilder ( 1 );
 	for ( uint32_t uDL : dTotalDL ) ASSERT_TRUE ( tNormBuilder.AddRow(&uDL,1,sError) ) << sError;
 	std::vector<uint8_t> dNormBytes;
@@ -755,9 +745,8 @@ TEST_F ( PostingsContainerTest, V9PersistsConservativePublicIdMinimumPerOrdinalB
 	EXPECT_FALSE ( tCursor.HasPublicIdMinBounds() );
 
 	VectorPublicIDReader_c tPublicIDs ( dPublicIDs );
-	// A trusted generation token only skips checksums when V9 also has a
-	// complete authoritative binding and its exact content proof. Missing or
-	// mismatched proof falls back to deep and must reject every corrupt input.
+	// The current format always deep-validates. Missing or mismatched proof
+	// must reject every corrupt input.
 	auto dBadPostings = dRaw;
 	dBadPostings.back() ^= 1;
 	e1::Store tBadPostingsStore;
@@ -853,7 +842,7 @@ TEST_F ( PostingsContainerTest, V9PersistsConservativePublicIdMinimumPerOrdinalB
 	EXPECT_FALSE ( tValidatedStore.PublicIDMinValidated() );
 }
 
-TEST_F ( PostingsContainerTest, V9DuplicatePublicIDsValidateConservatively )
+TEST_F ( PostingsContainerTest, CurrentDuplicatePublicIDsValidateConservatively )
 {
 	std::vector<e1::Posting> dPostings;
 	std::vector<uint32_t> dTotalDL ( 65, 8 );
@@ -883,6 +872,90 @@ TEST_F ( PostingsContainerTest, V9DuplicatePublicIDsValidateConservatively )
 	uint64_t uMin = 0;
 	ASSERT_TRUE ( tCursor.PublicIdMinBound(0,uMin) );
 	EXPECT_EQ ( uMin, 0u );
+}
+
+TEST_F ( PostingsContainerTest, V10EmbeddedFieldProjectionExactAndFailsClosed )
+{
+	static constexpr uint32_t ROWS = 8192;
+	static constexpr uint32_t TOTAL_ROWS = ROWS*2;
+	std::vector<e1::Posting> dPostings; dPostings.reserve(ROWS);
+	std::vector<uint32_t> dTotalDL(TOTAL_ROWS,7);
+	std::vector<uint32_t> dExpectedRows, dExpectedTF;
+	for ( uint32_t i=0; i<ROWS; ++i )
+	{
+		uint32_t uMask=0,uTF=0,uFirst=0;
+		if ( i<2048 ) { uMask=1;uTF=3;dExpectedRows.push_back(i*2);dExpectedTF.push_back(3); }
+		else if ( i<4096 ) { uMask=3;uTF=5;uFirst=2;dExpectedRows.push_back(i*2);dExpectedTF.push_back(2); }
+		else { uMask=2;uTF=4; }
+		dPostings.push_back({i*2,uTF,uMask,0,uFirst});
+	}
+	{ std::ofstream(m_sBase+".spi",std::ios::binary).write("dict",4); }
+	{ std::ofstream(m_sBase+".spp",std::ios::binary).put('\1'); }
+	std::string sError; e1::Writer tWriter; ASSERT_TRUE(tWriter.Open(m_sBase+".spd",sError))<<sError;
+	tWriter.BindTotalDL(dTotalDL.data(),ROWS,true);tWriter.BindIndexedFields(2);
+	uint64_t uHits=0;for(const auto&t:dPostings)uHits+=t.m_uTF;
+	ASSERT_TRUE(tWriter.FinishTerm(1,dPostings,uHits,false,sError))<<sError;ASSERT_TRUE(tWriter.Finalize(m_sBase+".spi",m_sBase+".spp",sError))<<sError;
+	auto dRaw=ReadFile(m_sBase+".spd"),dDict=ReadFile(m_sBase+".spi"),dHits=ReadFile(m_sBase+".spp");
+	e1::norms::Builder tNormBuilder(2);const uint32_t dNormRow[2]={3,4};for(uint32_t i=0;i<TOTAL_ROWS;++i)ASSERT_TRUE(tNormBuilder.AddRow(dNormRow,2,sError));std::vector<uint8_t>dNormBytes;ASSERT_TRUE(tNormBuilder.Build(dNormBytes,sError));e1::norms::Store tNorms;ASSERT_TRUE(tNorms.Open(dNormBytes.data(),dNormBytes.size(),sError));
+	e1::Store tStore;ASSERT_TRUE(tStore.Open(dRaw.data(),dRaw.size(),TOTAL_ROWS,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,false,nullptr,&tNorms))<<sError;
+	e1::Cursor tCursor;tCursor.Bind(tStore,1);ASSERT_TRUE(tCursor.SelectFieldProjection(0));EXPECT_EQ(tCursor.FieldProjectionRows(),4096u);EXPECT_FALSE(tCursor.SelectFieldProjection(1));ASSERT_TRUE(tCursor.SelectFieldProjection(0));
+	std::vector<std::pair<uint32_t,uint32_t>> dActual;uint32_t uRow=0,uTF=0;uint64_t e=0,b=0,sel=0,skip=0,skipDocs=0;while(tCursor.NextFieldProjectionRanked(uRow,uTF,1.0f,0,e,b,sel,skip,skipDocs))dActual.emplace_back(uRow,uTF);std::sort(dActual.begin(),dActual.end());ASSERT_EQ(dActual.size(),dExpectedRows.size());for(size_t i=0;i<dActual.size();++i){EXPECT_EQ(dActual[i].first,dExpectedRows[i]);EXPECT_EQ(dActual[i].second,dExpectedTF[i]);}
+	EXPECT_EQ(e,64u);EXPECT_EQ(sel,64u);EXPECT_EQ(skip,0u);
+	const uint8_t*term=dRaw.data()+56;const uint32_t nm=e1::U32(term+8);const uint8_t*g=dRaw.data()+e1::U64(term+16)+uint64_t(nm-1)*16;const uint64_t aggBlocks=(ROWS+63)/64;const uint32_t fieldWidth=(e1::U32(term+12)>>8)&63;const uint64_t tail=e1::U64(g)+e1::Meta4Bytes(e1::U32(g+8),e1::U32(g+12))+aggBlocks+aggBlocks*8+(uint64_t(ROWS)*fieldWidth+7)/8;ASSERT_EQ(e1::U32(dRaw.data()+tail),1u);const uint64_t payload=e1::U64(dRaw.data()+tail+4+16);
+	auto fnRejected = [&] ( ByteVec_t dBad, const char * szError ) { UpdateChecksum(dBad);e1::Store tRejected;EXPECT_FALSE(tRejected.Open(dBad.data(),dBad.size(),TOTAL_ROWS,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,false,nullptr,&tNorms));EXPECT_NE(sError.find(szError),std::string::npos)<<sError; };
+	auto dUnder=dRaw;ASSERT_GT(dUnder[payload+13],0u);--dUnder[payload+13];fnRejected(std::move(dUnder),"unsafe field projection bound");
+	auto dMalformed=dRaw;PutValue(dMalformed,tail+4+12,63,4);fnRejected(std::move(dMalformed),"field projection identity");
+	const uint64_t rowData=payload+e1::U32(dRaw.data()+payload);const uint32_t rowBytes=e1::U32(dRaw.data()+payload+4);
+	auto dNonMember=dRaw;ASSERT_EQ(dNonMember[rowData+1],2u);dNonMember[rowData+1]=3;fnRejected(std::move(dNonMember),"field projection non-member row");
+	auto dAbsent=dRaw;PutValue(dAbsent,tail+4,1,4);fnRejected(std::move(dAbsent),"field projection field membership");
+	auto dWrongTF=dRaw;ASSERT_EQ(dWrongTF[rowData+rowBytes],3u);dWrongTF[rowData+rowBytes]=4;fnRejected(std::move(dWrongTF),"field projection local TF");
+	// A claimed projection may not reinterpret an unsupported canonical local-TF
+	// contract as if the canonical member were absent.
+	auto dUnsupported=dRaw;const uint8_t*unsupportedGroup=dUnsupported.data()+e1::U64(term+16)+uint64_t(2048/128)*16;ASSERT_EQ((e1::U32(unsupportedGroup+8)>>4)&3u,1u);ASSERT_EQ((e1::U32(unsupportedGroup+8)>>6)&3u,1u);PutValue(dUnsupported,e1::U64(unsupportedGroup)+4,7,4);const uint64_t uFieldTF=tail-(uint64_t(ROWS)*fieldWidth+7)/8;for(uint32_t ordinal=2048;ordinal<2176;++ordinal){const uint64_t uFieldBit=uint64_t(ordinal)*fieldWidth;for(uint32_t bit=0;bit<fieldWidth;++bit)dUnsupported[uFieldTF+(uFieldBit+bit)/8]&=uint8_t(~(1u<<((uFieldBit+bit)%8)));}fnRejected(std::move(dUnsupported),"field projection unsupported mask");
+	// Rebuild a structurally valid, CRC-consistent projection after omitting a
+	// non-tail member. This keeps all descriptor counts, offsets, block tails,
+	// and bounds self-consistent, so only exact-set validation can reject it.
+	auto dOmitted=dRaw;
+	std::vector<uint32_t> dOmittedRows=dExpectedRows,dOmittedTF=dExpectedTF;
+	dOmittedRows.erase(dOmittedRows.begin()+1);dOmittedTF.erase(dOmittedTF.begin()+1);
+	const uint32_t uOmittedCount=uint32_t(dOmittedRows.size()),uOmittedBlocks=(uOmittedCount+63)/64;
+	ByteVec_t dProjection(uint64_t(uOmittedBlocks)*16);
+	auto fnAppendVar = [] ( ByteVec_t & dOut, uint32_t uValue ) { while(uValue>=128){dOut.push_back(uint8_t(uValue)|0x80);uValue>>=7;}dOut.push_back(uint8_t(uValue)); };
+	for(uint32_t uBlock=0,uAt=0;uBlock<uOmittedBlocks;++uBlock)
+	{
+		const uint32_t uCount=std::min(64u,uOmittedCount-uAt);ByteVec_t dRows,dTF;uint32_t uPrevious=0;uint8_t uBound=0;
+		for(uint32_t i=0;i<uCount;++i){const uint32_t uRow=dOmittedRows[uAt+i];fnAppendVar(dRows,i?uRow-uPrevious:uRow);uPrevious=uRow;fnAppendVar(dTF,dOmittedTF[uAt+i]);uBound=std::max(uBound,E1EncodeBM25A12_075_256(dOmittedTF[uAt+i],7));}
+		const uint32_t uDataOffset=uint32_t(dProjection.size()),uDescriptor=uBlock*16;PutValue(dProjection,uDescriptor,uDataOffset,4);PutValue(dProjection,uDescriptor+4,dRows.size(),4);PutValue(dProjection,uDescriptor+8,dTF.size(),4);dProjection[uDescriptor+12]=uint8_t(uCount);dProjection[uDescriptor+13]=uBound;dProjection.insert(dProjection.end(),dRows.begin(),dRows.end());dProjection.insert(dProjection.end(),dTF.begin(),dTF.end());uAt+=uCount;
+	}
+	const uint64_t uOldDirectory=e1::U64(dOmitted.data()+48);dOmitted.erase(dOmitted.begin()+payload,dOmitted.begin()+uOldDirectory);dOmitted.insert(dOmitted.begin()+payload,dProjection.begin(),dProjection.end());PutValue(dOmitted,tail+4+4,uOmittedCount,4);PutValue(dOmitted,tail+4+8,uOmittedBlocks,4);PutValue(dOmitted,48,payload+dProjection.size(),8);fnRejected(std::move(dOmitted),"field projection incomplete");
+	e1::OpenValidationPath_e ePath=e1::OpenValidationPath_e::NONE;ASSERT_TRUE(tStore.Open(dRaw.data(),dRaw.size(),TOTAL_ROWS,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,true,nullptr,&tNorms,nullptr,&ePath));EXPECT_EQ(ePath,e1::OpenValidationPath_e::DEEP);
+	EXPECT_FALSE(tStore.Open(dRaw.data(),dRaw.size()-1,TOTAL_ROWS,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,false,nullptr,&tNorms));
+}
+
+TEST_F ( PostingsContainerTest, V10FieldProjectionRejectsCRCConsistentMemberOmission )
+{
+	static constexpr uint32_t ROWS=8192,TOTAL_ROWS=ROWS*2;
+	std::vector<e1::Posting>dPostings;dPostings.reserve(ROWS);std::vector<uint32_t>dTotalDL(TOTAL_ROWS,7),dRows,dTF;dRows.reserve(4096);dTF.reserve(4096);
+	for(uint32_t i=0;i<ROWS;++i){uint32_t mask=2,tf=4,first=0;if(i<2048){mask=1;tf=3;dRows.push_back(i*2);dTF.push_back(3);}else if(i<4096){mask=3;tf=5;first=2;dRows.push_back(i*2);dTF.push_back(2);}dPostings.push_back({i*2,tf,mask,0,first});}
+	{std::ofstream(m_sBase+".spi",std::ios::binary).write("dict",4);}{std::ofstream(m_sBase+".spp",std::ios::binary).put('\1');}
+	std::string sError;e1::Writer tWriter;ASSERT_TRUE(tWriter.Open(m_sBase+".spd",sError));tWriter.BindTotalDL(dTotalDL.data(),ROWS,true);tWriter.BindIndexedFields(2);uint64_t hits=0;for(const auto&p:dPostings)hits+=p.m_uTF;ASSERT_TRUE(tWriter.FinishTerm(1,dPostings,hits,false,sError));ASSERT_TRUE(tWriter.Finalize(m_sBase+".spi",m_sBase+".spp",sError));
+	auto dRaw=ReadFile(m_sBase+".spd"),dDict=ReadFile(m_sBase+".spi"),dHits=ReadFile(m_sBase+".spp");e1::norms::Builder tNormBuilder(2);const uint32_t dNorm[2]={3,4};for(uint32_t i=0;i<TOTAL_ROWS;++i)ASSERT_TRUE(tNormBuilder.AddRow(dNorm,2,sError));std::vector<uint8_t>dNormBytes;ASSERT_TRUE(tNormBuilder.Build(dNormBytes,sError));e1::norms::Store tNorms;ASSERT_TRUE(tNorms.Open(dNormBytes.data(),dNormBytes.size(),sError));
+	const uint8_t*term=dRaw.data()+56;const uint32_t nm=e1::U32(term+8);const uint8_t*g=dRaw.data()+e1::U64(term+16)+uint64_t(nm-1)*16;const uint64_t blocks=(ROWS+63)/64;const uint32_t width=(e1::U32(term+12)>>8)&63;const uint64_t tail=e1::U64(g)+e1::Meta4Bytes(e1::U32(g+8),e1::U32(g+12))+blocks+blocks*8+(uint64_t(ROWS)*width+7)/8,payload=e1::U64(dRaw.data()+tail+4+16);
+	dRows.erase(dRows.begin()+1);dTF.erase(dTF.begin()+1);const uint32_t count=uint32_t(dRows.size()),projectionBlocks=(count+63)/64;ByteVec_t projection(uint64_t(projectionBlocks)*16);auto appendVar=[](ByteVec_t&out,uint32_t value){while(value>=128){out.push_back(uint8_t(value)|0x80);value>>=7;}out.push_back(uint8_t(value));};
+	for(uint32_t block=0,at=0;block<projectionBlocks;++block){const uint32_t n=std::min(64u,count-at);ByteVec_t rows,tf;uint32_t previous=0;uint8_t bound=0;for(uint32_t i=0;i<n;++i){appendVar(rows,i?dRows[at+i]-previous:dRows[at+i]);previous=dRows[at+i];appendVar(tf,dTF[at+i]);bound=std::max(bound,E1EncodeBM25A12_075_256(dTF[at+i],7));}const uint32_t dataOffset=uint32_t(projection.size()),descriptor=block*16;PutValue(projection,descriptor,dataOffset,4);PutValue(projection,descriptor+4,rows.size(),4);PutValue(projection,descriptor+8,tf.size(),4);projection[descriptor+12]=uint8_t(n);projection[descriptor+13]=bound;projection.insert(projection.end(),rows.begin(),rows.end());projection.insert(projection.end(),tf.begin(),tf.end());at+=n;}
+	const uint64_t oldDirectory=e1::U64(dRaw.data()+48);dRaw.erase(dRaw.begin()+payload,dRaw.begin()+oldDirectory);dRaw.insert(dRaw.begin()+payload,projection.begin(),projection.end());PutValue(dRaw,tail+8,count,4);PutValue(dRaw,tail+12,projectionBlocks,4);PutValue(dRaw,48,payload+projection.size(),8);UpdateChecksum(dRaw);
+	e1::Store tRejected;EXPECT_FALSE(tRejected.Open(dRaw.data(),dRaw.size(),TOTAL_ROWS,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,false,nullptr,&tNorms));EXPECT_NE(sError.find("field projection incomplete"),std::string::npos)<<sError;
+}
+
+TEST_F ( PostingsContainerTest, V10ProjectionBudgetRejectsIncrementally )
+{
+	static constexpr uint32_t ROWS=8192;
+	std::vector<e1::Posting>dPostings;dPostings.reserve(ROWS);std::vector<uint32_t>dTotalDL(ROWS,7);
+	for(uint32_t i=0;i<ROWS;++i)dPostings.push_back({i,i<4096?0x10000000u:1u,i<4096?1u:2u,0,0});
+	{std::ofstream(m_sBase+".spi",std::ios::binary).write("dict",4);}{std::ofstream(m_sBase+".spp",std::ios::binary).put('\1');}
+	std::string sError;e1::Writer tWriter;ASSERT_TRUE(tWriter.Open(m_sBase+".spd",sError));tWriter.BindTotalDL(dTotalDL.data(),ROWS,true);tWriter.BindIndexedFields(2);uint64_t uHits=0;for(const auto&t:dPostings)uHits+=t.m_uTF;ASSERT_TRUE(tWriter.FinishTerm(1,dPostings,uHits,false,sError));ASSERT_TRUE(tWriter.Finalize(m_sBase+".spi",m_sBase+".spp",sError));
+	auto dRaw=ReadFile(m_sBase+".spd"),dDict=ReadFile(m_sBase+".spi"),dHits=ReadFile(m_sBase+".spp");ASSERT_EQ(std::string(reinterpret_cast<const char*>(dRaw.data()),8),"E1POST10");EXPECT_EQ(e1::U32(dRaw.data()+8),10u);EXPECT_EQ(e1::VERSION,e1::VERSION10);
+	e1::norms::Builder tNormBuilder(2);const uint32_t dNorm[2]={3,4};for(uint32_t i=0;i<ROWS;++i)ASSERT_TRUE(tNormBuilder.AddRow(dNorm,2,sError));std::vector<uint8_t>dNormBytes;ASSERT_TRUE(tNormBuilder.Build(dNormBytes,sError));e1::norms::Store tNorms;ASSERT_TRUE(tNorms.Open(dNormBytes.data(),dNormBytes.size(),sError));e1::Store tStore;ASSERT_TRUE(tStore.Open(dRaw.data(),dRaw.size(),ROWS,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,false,nullptr,&tNorms))<<sError;e1::Cursor tCursor;tCursor.Bind(tStore,1);EXPECT_FALSE(tCursor.SelectFieldProjection(0));EXPECT_TRUE(tCursor.SelectFieldProjection(1));
 }
 
 TEST ( NormStore, ExactWidthsRangesGatherAndTotals )

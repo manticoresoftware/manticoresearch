@@ -968,12 +968,11 @@ void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t 
 	// version and required primary-postings capability
 	const DWORD uFormatVersion = tBuildHeader.m_uFormatVersion ? tBuildHeader.m_uFormatVersion : e1::VERSION;
 	sJson.NamedVal ( "index_format_version", uFormatVersion );
-	if ( uFormatVersion==e1::VERSION || uFormatVersion==e1::VERSION7 || uFormatVersion==e1::VERSION6 || uFormatVersion==e1::VERSION5 || uFormatVersion==e1::VERSION4 )
+	if ( uFormatVersion==e1::VERSION )
 	{
-		sJson.NamedVal ( "e1_postings", uFormatVersion==e1::VERSION ? 9 : uFormatVersion==e1::VERSION7 ? 7 : uFormatVersion==e1::VERSION6 ? 6 : uFormatVersion==e1::VERSION5 ? 5 : 4 );
+		sJson.NamedVal ( "e1_postings", 10 );
 		sJson.NamedVal ( "e1_base_version", 74 );
-		if ( uFormatVersion==e1::VERSION || uFormatVersion==e1::VERSION7 || uFormatVersion==e1::VERSION6 )
-			sJson.NamedVal ( "e1_norms", 1 );
+		sJson.NamedVal ( "e1_norms", 1 );
 	}
 
 	// index stats - json (put here to be similar with .meta)

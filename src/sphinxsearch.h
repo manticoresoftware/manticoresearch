@@ -124,6 +124,10 @@ public:
 	virtual bool NextE1SelectedMeta ( E1SelectedMeta_t &, uint64_t &, uint32_t=UINT32_MAX ) { return false; }
 	virtual bool ExactE1FieldTF ( uint32_t, uint32_t, uint32_t, uint32_t, uint32_t & ) const { return false; }
 	virtual bool ProbeE1DirectTF ( RowID_t, uint32_t & ) { return false; }
+	virtual bool SelectE1FieldProjection ( uint32_t ) { return false; }
+	virtual uint32_t GetE1FieldProjectionRows () const { return 0; }
+	virtual uint32_t GetE1FieldProjectionBlocks () const { return 0; }
+	virtual bool GetE1FieldProjectionRankedDoc ( RowID_t &, uint32_t &, float, int, uint64_t &, uint64_t &, uint64_t &, uint64_t &, uint64_t & ) { return false; }
 	virtual void				SeekHitlist ( SphOffset_t uOff ) = 0;
 	virtual Hitpos_t			GetNextHit () = 0;
 	virtual void				CollectHitMask ();

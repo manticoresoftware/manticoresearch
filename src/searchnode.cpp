@@ -392,6 +392,7 @@ public:
 					(long long)m_iE1EligibilityBuildUS, (unsigned long long)m_uE1IneligibleBeforeTF,
 					(unsigned long long)m_uRankScored );
 			if ( m_bE1ScopedTerm )
+			{
 				fprintf ( stderr, "E1_SCOPED_TERM requested_field=%d exact_total=%llu bitmap_bytes=%llu tf_bytes=%llu membership_checks=%llu aggregate_tf_available=%llu field_tf_metadata_hits=%llu field_local_tf_decodes=%llu hitlist_seeks=%llu positions_decoded=%llu hit_bytes=0 hit_bytes_measurable=0 metadata_groups_membership=%llu metadata_groups_ranked=%llu selected_blocks=%llu skipped_blocks=%llu candidates_scored=%llu eligibility_build_us=%lld ineligible_before_tf=%llu aggregate_bound_safe=1 persisted_best_first=1\n",
 					m_iE1ScopedField, (unsigned long long)m_uE1ScopedTotal,
 					(unsigned long long)m_dE1ScopedEligibility.GetLength()*sizeof(uint64_t),
@@ -402,6 +403,12 @@ public:
 					(unsigned long long)m_uRankDecodedGroups, (unsigned long long)m_uRankSelectedBlocks,
 					(unsigned long long)m_uRankSkippedBlocks, (unsigned long long)m_uRankScored,
 					(long long)m_iE1EligibilityBuildUS, (unsigned long long)m_uE1IneligibleBeforeTF );
+				if ( m_bE1Projection )
+					fprintf ( stderr, "E1_FIELD_PROJECTION embedded=1 direct=1 aggregate_membership_scan=0 entries=%llu blocks=%llu selected_blocks=%llu skipped_blocks=%llu skipped_entries=%llu rows_scored=%llu tf_decodes=0 block_size=64\n",
+						(unsigned long long)m_uE1ScopedTotal, (unsigned long long)m_pQword->GetE1FieldProjectionBlocks(),
+						(unsigned long long)m_uRankSelectedBlocks, (unsigned long long)m_uRankSkippedBlocks, (unsigned long long)m_uRankSkippedDocsTotal,
+						(unsigned long long)m_uRankScored );
+			}
 		}
 #if defined(MANTICORE_TEST)
 		if ( m_bE1Ranked && m_eE1BoundKind==E1RankedBoundKind_e::BM25A_RATIO )
@@ -449,8 +456,9 @@ public:
 #endif
 		if ( getenv("MANTICORE_E1_RANK_TRACE") )
 			fprintf ( stderr, "E1_FIELD_SCOPE path=term schema_fields=%d full_schema=%d requested_mask0=%u\n", m_iE1SchemaFields, int(m_bE1FullSchemaScope), unsigned(m_dQueriedFields.GetMask32()) );
+		m_iE1ScopedField = E1ScopedSingleField ( m_iE1SchemaFields, m_bE1FullSchemaScope, m_dQueriedFields.GetMask32() );
 		if ( m_eE1BoundKind==E1RankedBoundKind_e::BM25A_RATIO
-			&& ( !m_bE1FullSchemaScope || m_fIDF<=0.0f ) )
+			&& ( ( !m_bE1FullSchemaScope && m_iE1ScopedField<0 ) || m_fIDF<=0.0f ) )
 		{
 #if defined(MANTICORE_TEST)
 			g_tE1TestRankStats.m_eBoundKind = m_eE1BoundKind;
@@ -461,9 +469,8 @@ public:
 					!m_bE1FullSchemaScope ? "field_scope" : "nonpositive_idf" );
 			return false;
 		}
-		m_iE1ScopedField = E1ScopedSingleField ( m_iE1SchemaFields, m_bE1FullSchemaScope, m_dQueriedFields.GetMask32() );
 		m_bE1ScopedTerm = !ROWID_LIMITS && !m_tE1Filter.m_bEnabled && m_iE1ScopedField>=0
-			&& !getenv("MANTICORE_E1_FORCE_GENERIC_SCOPED") && BuildE1ScopedEligibility();
+			&& BuildE1ScopedEligibility();
 		m_bE1Ranked = !ROWID_LIMITS && ( ( m_bE1FullSchemaScope && ( m_tE1Filter.m_bEnabled ? ( m_pQword->E1DirectOrSupported() || m_eE1BoundKind==E1RankedBoundKind_e::BM25A_RATIO ) : m_eE1BoundKind!=E1RankedBoundKind_e::NONE ) ) || m_bE1ScopedTerm );
 		if ( m_bE1Ranked && m_tE1Filter.m_bEnabled )
 		{
@@ -545,7 +552,7 @@ public:
 
 protected:
 	bool				BuildE1ScopedEligibility();
-	uint32_t			CountE1FieldTF ( uint64_t uRef );
+	bool				NextE1ScopedProjection ( RowID_t & tRowID, uint32_t & uTF );
 
 	struct StoredHit_t
 	{
@@ -568,6 +575,7 @@ protected:
 	bool				m_bE1ScopedTerm = false;
 	int					m_iE1ScopedField = -1;
 	int					m_iE1SchemaFields = 0;
+	bool				m_bE1Projection = false;
 	int					m_iRankThreshold = 0;
 	uint64_t			m_uRankWorstTieKey = UINT64_MAX;
 	uint64_t			m_uRankBoundEntries = 0;
@@ -3238,78 +3246,23 @@ ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::ExtTerm_T ( ISphQword * pQword, const IS
 }
 
 template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
-uint32_t ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::CountE1FieldTF ( uint64_t uRef )
+bool ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::BuildE1ScopedEligibility()
 {
-	m_pQword->SeekHitlist ( uRef );
-	++m_uE1ScopedHitlistSeeks;
-	uint32_t uTF = 0;
-	for ( Hitpos_t uHit=m_pQword->GetNextHit(); uHit!=EMPTY_HIT; uHit=m_pQword->GetNextHit() )
-	{
-		++m_uE1ScopedPositionsDecoded;
-		if ( int(HITMAN::GetField(uHit))==m_iE1ScopedField )
-			++uTF;
-	}
-	return uTF;
+	const int64_t iStarted = sphMicroTimer();
+	m_bE1Projection = m_pQword->SelectE1FieldProjection ( uint32_t(m_iE1ScopedField) );
+	if ( !m_bE1Projection )
+		return false;
+	m_uE1ScopedTotal = m_pQword->GetE1FieldProjectionRows();
+	m_iE1EligibilityBuildUS = sphMicroTimer()-iStarted;
+	return m_uE1ScopedTotal!=0;
 }
 
 
 template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
-bool ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::BuildE1ScopedEligibility()
+bool ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::NextE1ScopedProjection ( RowID_t & tRowID, uint32_t & uTF )
 {
-	uint32_t uLastWindow = 0;
-	if ( !m_pQword->E1DirectOrSupported() || !m_pQword->GetE1DirectLastWindow(uLastWindow) )
-		return false;
-	const uint64_t uRows = (uint64_t(uLastWindow)+1)*4096;
-	const uint64_t uBitmapWords = (uRows+63)/64;
-	const uint64_t uScratchBytes = uRows*sizeof(uint32_t)+uBitmapWords*sizeof(uint64_t);
-	if ( uRows>INT_MAX || uBitmapWords>INT_MAX || uScratchBytes>64*1024*1024 )
-		return false;
-
-	m_dE1ScopedTF.Resize ( int(uRows) );
-	// Eligibility is the initialization bitmap: every set bit gets its exact TF
-	// below, and ranked lookup reads TF only after testing that bit. Avoid
-	// clearing the entire row-space array for sparse field scopes.
-	m_dE1ScopedEligibility.Resize ( int(uBitmapWords) );
-	m_dE1ScopedEligibility.Fill ( 0 );
-	m_dE1ScopedWindowMask.Resize ( 64 );
-	const uint32_t uRequestedMask = uint32_t(1)<<m_iE1ScopedField;
-	const int64_t iStarted = sphMicroTimer();
-	uint64_t uIgnoredBoundReads = 0;
-	for ( uint32_t uWindow=0; uWindow<=uLastWindow; ++uWindow )
-	{
-		m_dE1ScopedWindowMask.Fill ( 0 );
-		uint32_t uCardinality = 0, uMaxTF = 0;
-		if ( !m_pQword->GetE1DirectWindow ( uWindow, m_dE1ScopedWindowMask.Begin(), nullptr, uCardinality, uMaxTF, uIgnoredBoundReads ) )
-			continue;
-		m_uE1ScopedMembershipChecks += uCardinality;
-		uint64_t uRequested = 0;
-		if ( !m_pQword->BeginE1SelectedMeta ( uWindow, m_dE1ScopedWindowMask.Begin(), uRequested ) )
-			return false;
-		E1SelectedMeta_t tMeta;
-		while ( m_pQword->NextE1SelectedMeta ( tMeta, m_uE1ScopedMetadataGroups, m_iE1ScopedField ) )
-		{
-			m_uE1ScopedAggregateTF += tMeta.m_uTF;
-			if ( !(tMeta.m_uMask&uRequestedMask) )
-				continue;
-			uint32_t uDecodedTF = tMeta.m_uScopedTF;
-			if ( tMeta.m_uMask!=uRequestedMask && uDecodedTF )
-				++m_uE1ScopedFieldTFMetadataHits;
-			else if ( tMeta.m_uMask!=uRequestedMask )
-			{
-				++m_uE1ScopedFieldTFDecodes;
-				uDecodedTF = CountE1FieldTF ( tMeta.m_uRef );
-			}
-			const uint32_t uTF = E1ScopedExactTF ( tMeta.m_uTF, tMeta.m_uMask, m_iE1ScopedField, uDecodedTF );
-			if ( !uTF || !E1ScopedAggregateBoundSafe(uTF,tMeta.m_uTF) )
-				continue;
-			const uint32_t uRow = uWindow*4096+tMeta.m_uLocal;
-			m_dE1ScopedTF[uRow] = uTF;
-			m_dE1ScopedEligibility[uRow/64] |= uint64_t(1)<<(uRow%64);
-			++m_uE1ScopedTotal;
-		}
-	}
-	m_iE1EligibilityBuildUS = sphMicroTimer()-iStarted;
-	return true;
+	return m_pQword->GetE1FieldProjectionRankedDoc ( tRowID, uTF, m_fIDF, m_iRankThreshold,
+		m_uRankBoundEntries, m_uRankBuckets, m_uRankSelectedBlocks, m_uRankSkippedBlocks, m_uRankSkippedDocs );
 }
 
 
@@ -3416,15 +3369,17 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 		uint32_t uRankedTF = 0;
 		if ( m_bE1Ranked )
 		{
-			const bool bScopedEligibility = m_bE1ScopedTerm;
+			const bool bScopedEligibility = m_bE1ScopedTerm && !m_bE1Projection;
 			const bool bFilterEligibility = m_tE1Filter.m_bEnabled;
 			const uint64_t * pEligibility = bScopedEligibility ? m_dE1ScopedEligibility.Begin() : ( bFilterEligibility ? m_dE1Eligibility.Begin() : nullptr );
 			const uint32_t uEligibilityWords = bScopedEligibility ? uint32_t(m_dE1ScopedEligibility.GetLength()) : ( bFilterEligibility ? uint32_t(m_dE1Eligibility.GetLength()) : 0 );
 			uint64_t * pIneligibleBeforeTF = (bScopedEligibility || bFilterEligibility) ? &m_uE1IneligibleBeforeTF : nullptr;
 			const uint32_t uKnownMask = bScopedEligibility ? uint32_t(1)<<m_iE1ScopedField : 0;
-			if ( !m_pQword->GetE1RankedDoc ( uMinTF, tRankedRow, uRankedTF, m_uRankBoundEntries, m_uRankBuckets, m_uRankSelectedBlocks, m_uRankSkippedBlocks, m_uRankSkippedDocs, m_uRankDecodedGroups, pEligibility, uEligibilityWords, pIneligibleBeforeTF, uEqualBoundTF, m_uRankWorstTieKey, uKnownMask,
-				m_eE1BoundKind==E1RankedBoundKind_e::BM25A_RATIO ? m_fIDF : 0.0f,
-				m_eE1BoundKind==E1RankedBoundKind_e::BM25A_RATIO ? m_iRankThreshold : 0, &m_uRankEqualitySkippedBlocks ) )
+			const bool bGotRanked = m_bE1Projection ? NextE1ScopedProjection(tRankedRow,uRankedTF)
+				: m_pQword->GetE1RankedDoc ( uMinTF, tRankedRow, uRankedTF, m_uRankBoundEntries, m_uRankBuckets, m_uRankSelectedBlocks, m_uRankSkippedBlocks, m_uRankSkippedDocs, m_uRankDecodedGroups, pEligibility, uEligibilityWords, pIneligibleBeforeTF, uEqualBoundTF, m_uRankWorstTieKey, uKnownMask,
+					m_eE1BoundKind==E1RankedBoundKind_e::BM25A_RATIO ? m_fIDF : 0.0f,
+					m_eE1BoundKind==E1RankedBoundKind_e::BM25A_RATIO ? m_iRankThreshold : 0, &m_uRankEqualitySkippedBlocks );
+			if ( !bGotRanked )
 			{
 				m_bE1RankFinished = true;
 				m_pQword->m_iDocs = 0;
@@ -3456,7 +3411,11 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 			break;
 		}
 
-		if ( !m_bHasWideFields )
+		if ( m_bE1Projection )
+		{
+			// Projection identity already proves the one requested field.
+		}
+		else if ( !m_bHasWideFields )
 		{
 			// fields 0-31 can be quickly checked right here, right now
 			if (!( m_pQword->m_dQwordFields.GetMask32() & m_dQueriedFields.GetMask32() ))
@@ -3474,7 +3433,7 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 
 		ExtDoc_t & tDoc = m_dDocs[iDoc++];
 		tDoc.m_tRowID = tMatch.m_tRowID;
-		tDoc.m_uDocFields = m_pQword->m_dQwordFields.GetMask32() & m_dQueriedFields.GetMask32(); // OPTIMIZE: only needed for phrase node
+		tDoc.m_uDocFields = m_bE1Projection ? (uint32_t(1)<<m_iE1ScopedField) : ( m_pQword->m_dQwordFields.GetMask32() & m_dQueriedFields.GetMask32() ); // OPTIMIZE: only needed for phrase node
 		tDoc.m_uExactTF = m_bE1Ranked ? uRankedTF : 0;
 
 		if_const ( USE_BM25 )
@@ -4526,12 +4485,11 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::EnableE1Ranked()
 	const bool bMixedOr2 = m_bE1Or && m_dNodes.GetLength()==2 && E1MixedScopedOr2Fields ( m_iE1SchemaFields,
 		m_dNodes[0].m_bE1FullSchemaScope, m_dNodes[0].m_dQueriedFields.GetMask32(),
 		m_dNodes[1].m_bE1FullSchemaScope, m_dNodes[1].m_dQueriedFields.GetMask32(), iMixed0, iMixed1 );
-	const bool bForceAllScoped = getenv("MANTICORE_E1_FORCE_GENERIC_SCOPED");
-	m_bE1MixedFieldAnd2 = bMixedAnd2 && !m_tE1Filter.m_bEnabled && !bForceAllScoped && !getenv("MANTICORE_E1_FORCE_GENERIC_MIXED_AND2");
-	m_bE1MixedFieldOr2 = bMixedOr2 && !m_tE1Filter.m_bEnabled && !bForceAllScoped && !getenv("MANTICORE_E1_FORCE_GENERIC_MIXED_OR2");
-	m_bE1ScopedAnd2 = !m_bE1Or && !m_tE1Filter.m_bEnabled && m_dNodes.GetLength()==2 && !bForceAllScoped
+	m_bE1MixedFieldAnd2 = bMixedAnd2 && !m_tE1Filter.m_bEnabled;
+	m_bE1MixedFieldOr2 = bMixedOr2 && !m_tE1Filter.m_bEnabled;
+	m_bE1ScopedAnd2 = !m_bE1Or && !m_tE1Filter.m_bEnabled && m_dNodes.GetLength()==2
 		&& ( iScopedAndField>=0 || m_bE1MixedFieldAnd2 );
-	m_bE1ScopedOr2 = m_bE1Or && !m_tE1Filter.m_bEnabled && m_dNodes.GetLength()==2 && !bForceAllScoped
+	m_bE1ScopedOr2 = m_bE1Or && !m_tE1Filter.m_bEnabled && m_dNodes.GetLength()==2
 		&& ( iScopedAndField>=0 || m_bE1MixedFieldOr2 );
 	m_iE1ScopedAndField = ( m_bE1ScopedAnd2 || m_bE1ScopedOr2 ) ? iScopedAndField : -1;
 	m_dE1ScopedAndFields[0] = ( m_bE1MixedFieldAnd2 || m_bE1MixedFieldOr2 ) ? iMixed0 : m_iE1ScopedAndField;

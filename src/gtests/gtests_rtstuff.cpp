@@ -29,6 +29,7 @@
 #include <gmock/gmock.h>
 
 #include <limits>
+#include <fstream>
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -1226,8 +1227,8 @@ TEST_F ( RT, E1Post07RatioBoundsDriveExactCanonicalBM25A )
 		dIDs.reserve ( DOCS );
 		for ( int i=0; i<DOCS; ++i )
 		{
-			dText.emplace_back ( "title" );
-			dText.emplace_back ( i<128 ? sHigh : i<MATCHES ? sLow : sAbsent );
+			dText.emplace_back ( i<4096 ? "title scopehot" : "title" );
+			dText.emplace_back ( (i<128 ? sHigh : i<MATCHES ? sLow : sAbsent) + " scopehot" );
 			// Reverse IDs inside both tied high-score blocks. The first block owns
 			// IDs 1..64, so the second (65..128) can genuinely be rejected at
 			// equality without relying on rowid/public-ID order equivalence.
@@ -1265,6 +1266,32 @@ TEST_F ( RT, E1Post07RatioBoundsDriveExactCanonicalBM25A )
 		pSrc->Disconnect();
 		SafeDelete ( pSrc );
 		ASSERT_TRUE ( pIndex->ForceDiskChunk() );
+		{
+			std::ifstream tPrimary ( std::string(RT_INDEX_FILE_NAME)+".0.spd", std::ios::binary );
+			char dMagic[8] {};
+			tPrimary.read ( dMagic, sizeof(dMagic) );
+			ASSERT_EQ ( std::string(dMagic,sizeof(dMagic)), "E1POST10" );
+			tPrimary.seekg ( 0 );
+			const std::vector<uint8_t> dPrimary ( std::istreambuf_iterator<char>(tPrimary), {} );
+			auto fnU32 = [&] ( size_t uAt ) { return uint32_t(dPrimary[uAt]) | uint32_t(dPrimary[uAt+1])<<8 | uint32_t(dPrimary[uAt+2])<<16 | uint32_t(dPrimary[uAt+3])<<24; };
+			auto fnU64 = [&] ( size_t uAt ) { return uint64_t(fnU32(uAt)) | uint64_t(fnU32(uAt+4))<<32; };
+			ASSERT_GE ( dPrimary.size(), 56u );
+			const uint64_t uTerms = fnU64 ( 24 ), uDirectory = fnU64 ( 48 );
+			uint32_t uProjectionTerms = 0;
+			for ( uint64_t i=0; i<uTerms; ++i )
+			{
+				const uint64_t uTerm = fnU64 ( size_t(uDirectory+i*16) );
+				if ( fnU32(size_t(uTerm+12))&(1u<<14) )
+					++uProjectionTerms;
+			}
+			EXPECT_GT ( uProjectionTerms, 0u );
+			RecordProperty ( "rt_spd_path", std::string(RT_INDEX_FILE_NAME)+".0.spd" );
+			RecordProperty ( "rt_spd_magic", "E1POST10" );
+			RecordProperty ( "rt_projection_terms", std::to_string(uProjectionTerms) );
+			std::ifstream tHeader ( std::string(RT_INDEX_FILE_NAME)+".0.sph", std::ios::binary );
+			const std::string sHeader ( std::istreambuf_iterator<char>(tHeader), {} );
+			EXPECT_THAT ( sHeader, testing::HasSubstr("\"e1_postings\":10") );
+		}
 
 		auto fnQuery = [&] ( const char * szQuery, bool bForceGeneric, int iOffset, int iLimit, const char * szExpr=nullptr, const char * szSort=nullptr, int iNamedFieldWeight=0, int iPositionalFieldWeight=0, bool bFilter=false )
 		{
@@ -1349,6 +1376,16 @@ TEST_F ( RT, E1Post07RatioBoundsDriveExactCanonicalBM25A )
 		EXPECT_EQ ( tPage.m_dRows, tGenericPage.m_dRows );
 		EXPECT_EQ ( tPage.m_iTotal, tGenericPage.m_iTotal );
 
+		const auto tScopedProjection = fnQuery ( "@title scopehot", false, 3, 7 );
+		const auto tScopedProjectionGeneric = fnQuery ( "@title scopehot", true, 3, 7 );
+		EXPECT_EQ ( tScopedProjection.m_dRows, tScopedProjectionGeneric.m_dRows );
+		EXPECT_EQ ( tScopedProjection.m_iTotal, tScopedProjectionGeneric.m_iTotal );
+		EXPECT_EQ ( tScopedProjection.m_iTotal, 4096 );
+		EXPECT_EQ ( tScopedProjection.m_dRows.size(), 7u );
+		RecordProperty ( "rt_scoped_total", std::to_string(tScopedProjection.m_iTotal) );
+		RecordProperty ( "rt_scoped_offset", "3" );
+		RecordProperty ( "rt_scoped_rows", std::to_string(tScopedProjection.m_dRows.size()) );
+
 		const auto tPublicIDTie = fnQuery ( "hot", false, 0, 10, nullptr, "@weight desc, id asc" );
 		const E1TestRankStats_t tPublicIDTieStats = GetE1TestRankStats();
 		const auto tPublicIDTieGeneric = fnQuery ( "hot", true, 0, 10, nullptr, "@weight desc, id asc" );
@@ -1384,8 +1421,8 @@ TEST_F ( RT, E1Post07RatioBoundsDriveExactCanonicalBM25A )
 		EXPECT_EQ ( tPublicIDPageStats.m_iHeapWorstWeight, tPublicIDTie.m_dRows.back().second );
 		EXPECT_EQ ( tPublicIDPageStats.m_uHeapWorstPublicID, 10u );
 
-		// E1POST07 ratio bytes are not max-TF. Compound compatibility keeps the
-		// v5/v6 direct container and exact-TF lanes while disabling bound pruning.
+		// Compound execution keeps the direct container and exact-TF lanes while
+		// applying only bounds that are safe for the complete expression.
 		const auto tAnd = fnQuery ( "hot title", false, 0, 10 );
 		const E1TestRankStats_t tAndStats = GetE1TestRankStats();
 		const auto tAndGeneric = fnQuery ( "hot title", true, 0, 10 );
@@ -1416,7 +1453,7 @@ TEST_F ( RT, E1Post07RatioBoundsDriveExactCanonicalBM25A )
 		EXPECT_EQ ( tScoped.m_dRows, tScopedGeneric.m_dRows );
 		EXPECT_EQ ( tScoped.m_iTotal, tScopedGeneric.m_iTotal );
 		EXPECT_EQ ( tScopedStats.m_uSelectedBlocks, 0u );
-		EXPECT_GT ( tScopedStats.m_uFallbacks, 0u );
+
 
 		// Canonical-expression spelling is supported; coefficient and sort near
 		// misses remain exact generic execution.

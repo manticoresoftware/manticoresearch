@@ -5295,6 +5295,7 @@ bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 	tmStart = sphMicroTimer();
 	e1::Writer tPrimary;
 	tPrimary.BindTotalDL ( tCtx.m_dTotalDL.data(), uint32_t(tCtx.m_dTotalDL.size()), tCtx.m_dTotalDL.size()==size_t(tCtx.m_iDocinfo) );
+	tPrimary.BindIndexedFields ( uint32_t(m_tSchema.GetFieldsCount()) );
 	const CSphColumnInfo * pPublicID = m_tSchema.GetAttrsCount() ? &m_tSchema.GetAttr(0) : nullptr;
 	const bool bPublicIDAuthoritative = pPublicID && pPublicID->m_sName==sphGetDocidName()
 		&& pPublicID->m_eAttrType==SPH_ATTR_BIGINT && !pPublicID->IsUuidLinkedDocid()
@@ -10357,9 +10358,18 @@ bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD
 		return false;
 	}
 
-	m_tSchema = tNewSchema;
-
 	auto tGuard = RtGuard();
+	if ( !bAdd )
+	{
+		for ( const auto & pChunk : tGuard.m_dDiskChunks )
+			if ( !sphIsE1Snapshot(pChunk->CastIdx().GetFilebase()) )
+			{
+				sError = "dropping an indexed field requires current-format disk chunks; OPTIMIZE the RT table first";
+				return false;
+			}
+	}
+
+	m_tSchema = tNewSchema;
 
 	// modify the in-memory data of disk chunks
 	// fixme: we can't rollback in-memory changes, so we just show errors here for now

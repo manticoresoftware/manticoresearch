@@ -66,6 +66,7 @@ public:
 		m_uTotalDLRows = uRows;
 		m_bTotalDLAuthoritative = bAuthoritative;
 	}
+	void BindIndexedFields ( uint32_t uFields ) { m_uIndexedFields = uFields; }
 	void BindPublicIDs ( const uint64_t * pPublicIDs, uint32_t uRows, bool bAuthoritative=true )
 	{
 		m_pPublicIDs = pPublicIDs;
@@ -162,8 +163,8 @@ public:
 
 		m_tOut.seekp ( 0 );
 		FaultPoint ( "before_primary_header" );
-		PutRaw ( "E1POST09", 8 );
-		Put ( 9, 4 );
+		PutRaw ( "E1POST10", 8 );
+		Put ( 10, 4 );
 		Put ( 56, 4 );
 		Put ( uSize, 8 );
 		Put ( m_dEntries.size(), 8 );
@@ -376,6 +377,120 @@ private:
 		return iWidth;
 	}
 
+	static void PutVarint ( std::vector<uint8_t> & dOut, uint32_t uValue )
+	{
+		while ( uValue>=128 ) { dOut.push_back ( uint8_t(uValue)|0x80 ); uValue>>=7; }
+		dOut.push_back ( uint8_t(uValue) );
+	}
+
+	struct FieldProjection_t
+	{
+		uint32_t m_uField = 0, m_uCount = 0, m_uBlocks = 0;
+		std::vector<uint8_t> m_dPayload;
+	};
+	static constexpr uint32_t FIELD_PROJECTION_MIN_DF = 4096;
+	static constexpr uint64_t FIELD_PROJECTION_MAX_BYTES = 16ULL*1024*1024;
+
+	static uint64_t FieldProjectionBudget ( size_t iAggregateDF )
+	{
+		return std::min<uint64_t> ( FIELD_PROJECTION_MAX_BYTES, iAggregateDF>UINT64_MAX/2 ? UINT64_MAX : uint64_t(iAggregateDF)*2 );
+	}
+
+	void BuildFieldProjections ( const std::vector<Posting> & dPostings, std::vector<FieldProjection_t> & dOut )
+	{
+		// Each candidate is charged the shared 4-byte projection-count word,
+		// its 24-byte directory descriptor, all 16-byte block descriptors, and
+		// encoded data. Charging the shared word to every candidate is deliberately
+		// conservative and keeps acceptance independent of other fields.
+		if ( m_uIndexedFields<2 || dPostings.size()<FIELD_PROJECTION_MIN_DF || !m_bTotalDLAuthoritative || !m_pTotalDL )
+			return;
+		const uint64_t uBudget = FieldProjectionBudget ( dPostings.size() );
+		for ( uint32_t uField=0; uField<std::min(m_uIndexedFields,32u); ++uField )
+		{
+			uint64_t uCount = 0;
+			bool bExact = true;
+			for ( const Posting & tPosting : dPostings )
+			{
+				if ( !(tPosting.m_uMask&(uint32_t(1)<<uField)) )
+					continue;
+				uint32_t uLocalTF = 0;
+				if ( !ExactLocalFieldTF(tPosting.m_uMask,tPosting.m_uTF,tPosting.m_uFirstFieldTF,uField,uLocalTF) || tPosting.m_uRow>=m_uTotalDLRows )
+				{
+					bExact = false;
+					break;
+				}
+				++uCount;
+			}
+			if ( !bExact || uCount<FIELD_PROJECTION_MIN_DF || uCount>uint64_t(dPostings.size())/2 || uCount>UINT32_MAX )
+				continue;
+
+			const uint64_t uBlocks = (uCount+63)/64;
+			if ( uBlocks>UINT32_MAX || uBlocks>(UINT64_MAX-28)/16 )
+				continue;
+			const uint64_t uDescriptorBytes = uBlocks*16;
+			const uint64_t uFixedBytes = 4+24+uDescriptorBytes;
+			if ( uFixedBytes>uBudget || uDescriptorBytes>SIZE_MAX )
+				continue;
+
+			FieldProjection_t tProjection;
+			tProjection.m_uField = uField;
+			tProjection.m_uCount = uint32_t(uCount);
+			tProjection.m_uBlocks = uint32_t(uBlocks);
+			tProjection.m_dPayload.resize ( size_t(uDescriptorBytes) );
+			size_t iPosting = 0;
+			uint32_t uProjected = 0;
+			bool bWithinBudget = true;
+			for ( uint32_t uBlock=0; uBlock<tProjection.m_uBlocks && bWithinBudget; ++uBlock )
+			{
+				const uint32_t uBlockCount = std::min ( 64u, tProjection.m_uCount-uProjected );
+				std::vector<uint8_t> dRows, dTF;
+				dRows.reserve ( 64*5 );
+				dTF.reserve ( 64*5 );
+				uint32_t uPrevious = 0, uInBlock = 0;
+				uint8_t uBound = 0;
+				while ( iPosting<dPostings.size() && uInBlock<uBlockCount )
+				{
+					const Posting & tPosting = dPostings[iPosting++];
+					if ( !(tPosting.m_uMask&(uint32_t(1)<<uField)) )
+						continue;
+					uint32_t uLocalTF = 0;
+					if ( !ExactLocalFieldTF(tPosting.m_uMask,tPosting.m_uTF,tPosting.m_uFirstFieldTF,uField,uLocalTF) )
+					{
+						bWithinBudget = false;
+						break;
+					}
+					PutVarint ( dRows, uInBlock ? tPosting.m_uRow-uPrevious : tPosting.m_uRow );
+					uPrevious = tPosting.m_uRow;
+					PutVarint ( dTF, uLocalTF );
+					uBound = std::max ( uBound, E1EncodeBM25A12_075_256(uLocalTF,m_pTotalDL[tPosting.m_uRow],true) );
+					++uInBlock;
+					const uint64_t uEncodedBefore = uint64_t(tProjection.m_dPayload.size())-uDescriptorBytes;
+					const uint64_t uBlockBytes = uint64_t(dRows.size())+uint64_t(dTF.size());
+					if ( uEncodedBefore>uBudget-uFixedBytes || uBlockBytes>uBudget-uFixedBytes-uEncodedBefore )
+						bWithinBudget = false;
+				}
+				if ( !bWithinBudget || uInBlock!=uBlockCount || tProjection.m_dPayload.size()>UINT32_MAX || dRows.size()>UINT32_MAX || dTF.size()>UINT32_MAX )
+				{
+					bWithinBudget = false;
+					break;
+				}
+				const uint32_t uDataOffset = uint32_t(tProjection.m_dPayload.size());
+				const size_t uDesc = uint64_t(uBlock)*16;
+				auto fnStore32 = [&] ( size_t uAt, uint32_t uValue ) { for ( unsigned i=0; i<4; ++i ) tProjection.m_dPayload[uAt+i]=uint8_t(uValue>>(i*8)); };
+				fnStore32 ( uDesc, uDataOffset );
+				fnStore32 ( uDesc+4, uint32_t(dRows.size()) );
+				fnStore32 ( uDesc+8, uint32_t(dTF.size()) );
+				tProjection.m_dPayload[uDesc+12] = uint8_t(uInBlock);
+				tProjection.m_dPayload[uDesc+13] = uBound;
+				tProjection.m_dPayload.insert ( tProjection.m_dPayload.end(), dRows.begin(), dRows.end() );
+				tProjection.m_dPayload.insert ( tProjection.m_dPayload.end(), dTF.begin(), dTF.end() );
+				uProjected += uInBlock;
+			}
+			if ( bWithinBudget && uProjected==tProjection.m_uCount )
+				dOut.push_back ( std::move(tProjection) );
+		}
+	}
+
 	template<typename VALUE>
 	void PutPacked ( unsigned iWidth, uint32_t uCount, VALUE fnValue )
 	{
@@ -474,11 +589,13 @@ private:
 			}
 		}
 		const unsigned uFirstFieldTFWidth = Width ( uMaxFirstFieldTF );
+		std::vector<FieldProjection_t> dFieldProjections;
+		BuildFieldProjections ( dPostings, dFieldProjections );
 
 		Put ( uDocs, 4 );
 		Put ( uRowBlocks, 4 );
 		Put ( uMetaBlocks, 4 );
-		Put ( ( bFrequent ? 1u : 0u ) | ( tEntry.m_uHasHits ? 2u : 0u ) | ( uFirstFieldTFWidth<<8 ), 4 );
+		Put ( ( bFrequent ? 1u : 0u ) | ( tEntry.m_uHasHits ? 2u : 0u ) | ( uFirstFieldTFWidth<<8 ) | ( dFieldProjections.empty() ? 0u : (1u<<14) ), 4 );
 		Put ( 0, 8 );
 		const uint64_t uDescriptors = Tell();
 		PutZeroes ( uint64_t(uRowBlocks)*24 );
@@ -642,6 +759,16 @@ private:
 			Put ( uMinPublicID, 8 );
 		if ( uFirstFieldTFWidth )
 			PutPacked ( uFirstFieldTFWidth, uDocs, [&] ( unsigned i ) { return dPostings[i].m_uFirstFieldTF; } );
+		if ( !dFieldProjections.empty() )
+		{
+			Put ( dFieldProjections.size(), 4 );
+			const uint64_t uDirectory=Tell(); PutZeroes(dFieldProjections.size()*24);
+			for ( uint32_t i=0; i<dFieldProjections.size(); ++i )
+			{
+				const auto & tProjection=dFieldProjections[i]; const uint64_t uPayload=Tell(); PutBytes(tProjection.m_dPayload); const uint64_t uResume=Tell();
+				Seek(uDirectory+uint64_t(i)*24); Put(tProjection.m_uField,4); Put(tProjection.m_uCount,4); Put(tProjection.m_uBlocks,4); Put(64,4); Put(uPayload,8); Seek(uResume);
+			}
+		}
 
 		return Check ( sError, "encode term" );
 	}
@@ -744,6 +871,7 @@ private:
 	const uint64_t * m_pPublicIDs = nullptr;
 	uint32_t m_uPublicIDRows = 0;
 	bool m_bPublicIDsAuthoritative = false;
+	uint32_t m_uIndexedFields = 0;
 };
 
 } // namespace e1

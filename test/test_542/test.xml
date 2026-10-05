@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>rankless grouped count with pseudo-sharded plain index</name>
+<requires>
+	<non-columnar/>
+</requires>
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+searchd
+{
+	<searchd_settings/>
+	pseudo_sharding = 1
+}
+source grouped_rankless_source
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT id, body, gid FROM grouped_rankless_docs ORDER BY insertion_order
+	sql_attr_uint = gid
+}
+index grouped_rankless_plain
+{
+	source = grouped_rankless_source
+	path = <data_path/>/grouped_rankless_plain
+}
+</config>
+<db_create>
+CREATE TABLE grouped_rankless_docs
+(
+	id BIGINT NOT NULL,
+	body VARCHAR(255) NOT NULL,
+	gid INT NOT NULL,
+	insertion_order INT NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS grouped_rankless_docs;</db_drop>
+<db_insert>
+INSERT INTO grouped_rankless_docs VALUES
+(90,'alpha',7,1),(10,'alpha',2,2),(80,'alpha',7,3),(20,'alpha',9,4),
+(70,'alpha',2,5),(30,'alpha',7,6),(60,'alpha',1,7),(40,'alpha',7,8),
+(50,'alpha',2,9),(100,'alpha',7,10),(110,'alpha',9,11),(120,'alpha',7,12);
+</db_insert>
+<queries>
+<sphinxql>
+SELECT gid,COUNT(*) n FROM grouped_rankless_plain WHERE MATCH('alpha') GROUP BY gid ORDER BY n DESC,gid ASC LIMIT 1,2 OPTION threads=2;
+SHOW META LIKE 'total_found';
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_group_rankless';
+</sphinxql>
+</queries>
+</test>

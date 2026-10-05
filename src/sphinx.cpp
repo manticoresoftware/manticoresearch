@@ -12571,6 +12571,7 @@ static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResu
 			tThMeta.m_bTotalMatchesApprox |= tChunkMeta.m_bTotalMatchesApprox;
 			tThMeta.m_iAutoRankless += tChunkMeta.m_iAutoRankless;
 			tThMeta.m_iAutoIdTopK += tChunkMeta.m_iAutoIdTopK;
+			tThMeta.m_iAutoGroupRankless += tChunkMeta.m_iAutoGroupRankless;
 			tThMeta.m_tIteratorStats.Merge ( tChunkMeta.m_tIteratorStats );
 
 			if ( CheckInterrupt() && !tChunkMeta.m_sError.IsEmpty() )
@@ -13062,6 +13063,80 @@ static bool CanAutoUseRankless ( const CSphQuery & tQuery, const QueryExecutionS
 	return true;
 }
 
+static bool CanAutoUseGroupRankless ( const CSphQuery & tQuery, const QueryExecutionSettings_t & tSettings,
+	const XQQuery_t & tParsed, const ISphSchema & tSorterSchema, const CSphSchema & tIndexSchema,
+	const VecTraits_T<ISphMatchSorter *> & dSorters, DWORD uPackedFactorFlags )
+{
+	auto Reject = [] ( const char * sReason )
+	{
+		if ( getenv ( "MANTICORE_E1_RANK_TRACE" ) )
+			fprintf ( stderr, "AUTO_GROUP_RANKLESS_REJECT reason=%s\n", sReason );
+		return false;
+	};
+
+	if ( !tQuery.m_bAutoRanklessCandidate || tQuery.m_eQueryType!=QUERY_SQL || tQuery.m_bAgent
+		|| !tSettings.m_bImplicitDefaultRanker || tSettings.m_eRanker!=SPH_RANK_BM25A || tQuery.m_bExplicitRanker
+		|| uPackedFactorFlags || HasFieldScope ( tParsed.m_pRoot ) || !tParsed.m_bSingleWord )
+		return Reject ( "query" );
+
+	if ( tQuery.m_sGroupBy.IsEmpty() || tQuery.m_eGroupFunc!=SPH_GROUPBY_ATTR || !tQuery.m_sGroupDistinct.IsEmpty()
+		|| tQuery.m_iGroupbyLimit!=1 || tQuery.m_dItems.GetLength()!=2 || !tQuery.m_dRefItems.IsEmpty() )
+		return Reject ( "group" );
+
+	const CSphQueryItem * pGroupItem = nullptr;
+	const CSphQueryItem * pCountItem = nullptr;
+	for ( const CSphQueryItem & tItem : tQuery.m_dItems )
+	{
+		if ( tItem.m_eAggrFunc!=SPH_AGGR_NONE )
+			return Reject ( "aggregate" );
+		if ( tItem.m_sExpr==tQuery.m_sGroupBy )
+			pGroupItem = &tItem;
+		else if ( tItem.m_sExpr=="count(*)" )
+			pCountItem = &tItem;
+		else
+			return Reject ( "select" );
+	}
+	if ( !pGroupItem || !pCountItem )
+		return Reject ( "select" );
+
+	if ( !tQuery.m_bExplicitOrderBy || tQuery.m_dOrderByItems.GetLength()!=2
+		|| !tQuery.m_sFacetBy.IsEmpty() || tQuery.m_bFacet || tQuery.m_bFacetHead || tQuery.IsInternalQuery()
+		|| !tQuery.m_tHaving.m_sAttrName.IsEmpty() || tQuery.m_bHasOuter || tQuery.m_eJoinType!=JoinType_e::NONE
+		|| !tQuery.m_sJoinIdx.IsEmpty() || tQuery.HasKnn() || tQuery.m_bHybridSearch
+		|| !tQuery.m_tScrollSettings.m_dAttrs.IsEmpty() || dSorters.GetLength()!=1 || !dSorters[0]->IsGroupby() )
+		return Reject ( "shape" );
+
+	if ( !tQuery.m_dFilterTree.IsEmpty()
+		|| tQuery.m_dFilters.any_of ( [] ( const CSphFilterSettings & tFilter ) { return tFilter.m_sAttrName!="@rowid"; } ) )
+		return Reject ( "filter" );
+
+	const CSphColumnInfo * pGroupAttr = tIndexSchema.GetAttr ( tQuery.m_sGroupBy.cstr() );
+	if ( !pGroupAttr || pGroupAttr->IsColumnar() || pGroupAttr->m_tLocator.m_bDynamic
+		|| ( pGroupAttr->m_eAttrType!=SPH_ATTR_INTEGER && pGroupAttr->m_eAttrType!=SPH_ATTR_BIGINT ) )
+		return Reject ( "group_storage" );
+
+	CSphMatchComparatorState tSortState;
+	CSphVector<ExtraSortExpr_t> dExtraExprs;
+	ESphSortFunc eSortFunc = FUNC_GENERIC1;
+	CSphString sSortError;
+	if ( sphParseSortClause ( tQuery, tQuery.m_sGroupSortBy.cstr(), tSorterSchema, eSortFunc, tSortState, dExtraExprs, nullptr, sSortError )!=SORT_CLAUSE_OK
+		|| eSortFunc!=FUNC_GENERIC2 || tSortState.m_uAttrDesc!=1 || tSortState.m_dAttrs[0]<0 || tSortState.m_dAttrs[1]<0 )
+		return Reject ( "sort" );
+	const CSphColumnInfo & tCountSortAttr = tSorterSchema.GetAttr ( tSortState.m_dAttrs[0] );
+	const CSphColumnInfo & tGroupSortAttr = tSorterSchema.GetAttr ( tSortState.m_dAttrs[1] );
+	if ( tCountSortAttr.m_sName!="@count" || tGroupSortAttr.m_sName!=tQuery.m_sGroupBy )
+		return Reject ( "sort" );
+
+	const CSphString & sCountName = pCountItem->m_sAlias.IsEmpty() ? pCountItem->m_sExpr : pCountItem->m_sAlias;
+	const CSphString & sGroupName = pGroupItem->m_sAlias.IsEmpty() ? pGroupItem->m_sExpr : pGroupItem->m_sAlias;
+	if ( tQuery.m_dOrderByItems[0]!=sCountName || tQuery.m_dOrderByItems[1]!=sGroupName )
+		return Reject ( "sort" );
+
+	if ( getenv ( "MANTICORE_E1_RANK_TRACE" ) )
+		fprintf ( stderr, "AUTO_GROUP_RANKLESS_ACCEPT\n" );
+	return true;
+}
+
 static void SetupRowIdBoundaries ( const CSphVector<CSphFilterSettings> & dFilters, RowID_t uTotalDocs, ISphRanker & tRanker )
 {
 	const CSphFilterSettings * pRowIdFilter = nullptr;
@@ -13125,12 +13200,15 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 	assert ( pMaxSorterSchema );
 	const ISphSchema & tMaxSorterSchema = *pMaxSorterSchema;
 	QueryExecutionSettings_t tRankerSettings = tQuerySettings;
-	if ( m_bE1 && CanAutoUseRankless ( tQuery, tQuerySettings, tXQ, tMaxSorterSchema, m_tSchema, dSorters, tArgs.m_uPackedFactorFlags ) )
+	const bool bAutoGroupRankless = m_bE1 && CanAutoUseGroupRankless ( tQuery, tQuerySettings, tXQ, tMaxSorterSchema, m_tSchema, dSorters, tArgs.m_uPackedFactorFlags );
+	if ( bAutoGroupRankless || ( m_bE1 && CanAutoUseRankless ( tQuery, tQuerySettings, tXQ, tMaxSorterSchema, m_tSchema, dSorters, tArgs.m_uPackedFactorFlags ) ) )
 	{
 		tRankerSettings.m_eRanker = SPH_RANK_NONE;
-		const int iTopK = E1RankedTopKFromPage ( tQuery.m_iOffset, tQuery.m_iLimit );
-		tRankerSettings.m_bAutoIdTopK = iTopK>0 && iTopK<=MAX_BLOCK_DOCS;
+		const int iTopK = bAutoGroupRankless ? 0 : E1RankedTopKFromPage ( tQuery.m_iOffset, tQuery.m_iLimit );
+		tRankerSettings.m_bAutoIdTopK = !bAutoGroupRankless && iTopK>0 && iTopK<=MAX_BLOCK_DOCS;
 		++tMeta.m_iAutoRankless;
+		if ( bAutoGroupRankless )
+			++tMeta.m_iAutoGroupRankless;
 		if ( tRankerSettings.m_bAutoIdTopK )
 			++tMeta.m_iAutoIdTopK;
 	}

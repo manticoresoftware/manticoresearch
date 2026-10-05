@@ -859,6 +859,7 @@ public:
 	IteratorStats_t			m_tIteratorStats;		///< iterators used while calculating the query
 	int						m_iAutoRankless = 0;	///< local searches that used automatic score-independent ranking
 	int						m_iAutoIdTopK = 0;	///< local searches that retained only the smallest public IDs in the ranker
+	int						m_iAutoGroupRankless = 0; ///< local grouped COUNT searches that used membership-only ranking
 	bool					m_bBigram = false;		///< whatever to remove bigram symbol on adding word to stat
 	ExpansionStats_t		m_tExpansionStats;		///< full text query statistics for expanded and merged terms
 

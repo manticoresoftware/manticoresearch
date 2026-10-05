@@ -3151,6 +3151,8 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 		dStatus.MatchTupletf ( "auto_rankless", "%d", tMeta.m_iAutoRankless );
 	if ( tMeta.m_iAutoIdTopK )
 		dStatus.MatchTupletf ( "auto_id_topk", "%d", tMeta.m_iAutoIdTopK );
+	if ( tMeta.m_iAutoGroupRankless )
+		dStatus.MatchTupletf ( "auto_group_rankless", "%d", tMeta.m_iAutoGroupRankless );
 
 	dStatus.MatchTupletf ( "time", "%.3F", tMeta.GetQueryTimeMs() );
 

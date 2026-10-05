@@ -498,6 +498,7 @@ struct LocalSearchRef_t
 			tResult.m_bTotalMatchesApprox |= tChild.m_bTotalMatchesApprox;
 			tResult.m_iAutoRankless += tChild.m_iAutoRankless;
 			tResult.m_iAutoIdTopK += tChild.m_iAutoIdTopK;
+			tResult.m_iAutoGroupRankless += tChild.m_iAutoGroupRankless;
 			tResult.m_iSuccesses += tChild.m_iSuccesses;
 			tResult.m_tIOStats.Add ( tChild.m_tIOStats );
 
@@ -963,6 +964,7 @@ bool SearchHandler_c::SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, 
 		tNRes.m_bTotalMatchesApprox |= tMqMeta.m_bTotalMatchesApprox;
 		tNRes.m_iAutoRankless += tMqMeta.m_iAutoRankless;
 		tNRes.m_iAutoIdTopK += tMqMeta.m_iAutoIdTopK;
+		tNRes.m_iAutoGroupRankless += tMqMeta.m_iAutoGroupRankless;
 
 		iCpuTime /= iNumQueries;
 	}

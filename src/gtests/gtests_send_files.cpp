@@ -1,177 +1,117 @@
 //
 // Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2001-2016, Andrew Aksyonoff
+// Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License. You should have
+// received a copy of the GPL license along with this program; if you
+// did not, you can find it at http://www.gnu.org
 //
 
 #include <gtest/gtest.h>
-
 #include "replication/send_files.h"
 
-#include <cstring>
-#include <limits>
-
-namespace
+TEST ( SstHashLayout, PreferredLayoutFits )
 {
-FileSyncLayout_t Layout ( int64_t iFileSize, int64_t iPreferredChunk )
-{
-	FileSyncLayout_t tResult;
-	tResult.m_iFileSize = iFileSize;
-	tResult.m_iPreferredChunkBytes = iPreferredChunk;
-	return tResult;
-}
-
-void CheckContiguous ( const CSphVector<FileSyncLayout_t> & dFiles, int64_t iHashes )
-{
-	int64_t iNext = dFiles.GetLength();
-	for ( const FileSyncLayout_t & tFile : dFiles )
+	for ( int64_t iMaxHashes : { 9, 10 } )
 	{
-		EXPECT_EQ ( tFile.m_iHashStartItem, iNext );
-		if ( tFile.m_iFileSize )
-			iNext += 1 + ( tFile.m_iFileSize - 1 ) / tFile.m_iChunkBytes;
+		SCOPED_TRACE ( iMaxHashes );
+		CSphFixedVector<FileChunks_t> dFiles { 3 };
+		dFiles[0] = { 0, 0, 1 };
+		dFiles[1] = { 7, 0, 7 };
+		dFiles[2] = { 10000, 0, 2048 };
+		FileSyncLayout_t tLayout { dFiles };
+		tLayout.m_iMaxHashes = iMaxHashes;
+		tLayout.m_iBufferSize = 8192;
+
+		ASSERT_TRUE ( AdjustFileSyncLayout ( tLayout ) ) << tLayout.m_sError.cstr();
+		EXPECT_EQ ( tLayout.m_iHashes, 9 );
+		EXPECT_EQ ( tLayout.m_iMaxChunkBytes, 2048 );
+		EXPECT_EQ ( dFiles[0].m_iChunkBytes, 1 );
+		EXPECT_EQ ( dFiles[1].m_iChunkBytes, 7 );
+		EXPECT_EQ ( dFiles[2].m_iChunkBytes, 2048 );
+		EXPECT_EQ ( dFiles[0].m_iHashStartItem, 3 );
+		EXPECT_EQ ( dFiles[1].m_iHashStartItem, 3 );
+		EXPECT_EQ ( dFiles[2].m_iHashStartItem, 4 );
 	}
-	EXPECT_EQ ( iNext, iHashes );
-}
 }
 
 
-TEST ( SstHashLayout, KeepsNaturalLayoutBelowBudget )
+TEST ( SstHashLayout, MinimumFloorRetainsFittingCount )
 {
-	CSphVector<FileSyncLayout_t> dFiles;
-	dFiles.Add ( Layout ( 10000, 2048 ) );
-	dFiles.Add ( Layout ( 100, 100 ) );
+	CSphFixedVector<FileChunks_t> dFiles { 1 };
+	dFiles[0] = { 10000, 0, 2048 };
+	FileSyncLayout_t tLayout { dFiles };
+	tLayout.m_iMaxHashes = 4;
+	tLayout.m_iBufferSize = 8192;
 
-	const int64_t iBefore = CountFileSyncHashes ( dFiles );
-	int64_t iHashes = 0;
-	int64_t iFloor = -1;
-	CSphString sError;
-	ASSERT_TRUE ( AdjustFileSyncLayout ( dFiles, iBefore, 8192, iHashes, iFloor, sError ) ) << sError.cstr();
-	EXPECT_EQ ( iHashes, iBefore );
-	EXPECT_EQ ( iFloor, 0 );
+	// 3334 fits; the final probe at 3333 needs one more hash.
+	ASSERT_TRUE ( AdjustFileSyncLayout ( tLayout ) ) << tLayout.m_sError.cstr();
+	EXPECT_EQ ( dFiles[0].m_iChunkBytes, 3334 );
+	EXPECT_EQ ( dFiles[0].m_iHashStartItem, 1 );
+	EXPECT_EQ ( tLayout.m_iHashes, 4 );
+	EXPECT_EQ ( tLayout.m_iMaxChunkBytes, 3334 );
+}
+
+
+TEST ( SstHashLayout, OnlyMaximumFloorFits )
+{
+	CSphFixedVector<FileChunks_t> dFiles { 1 };
+	dFiles[0] = { 8192, 0, 2048 };
+	FileSyncLayout_t tLayout { dFiles };
+	tLayout.m_iMaxHashes = 3;
+	tLayout.m_iBufferSize = 4096;
+
+	ASSERT_TRUE ( AdjustFileSyncLayout ( tLayout ) ) << tLayout.m_sError.cstr();
+	EXPECT_EQ ( dFiles[0].m_iChunkBytes, 4096 );
+	EXPECT_EQ ( dFiles[0].m_iHashStartItem, 1 );
+	EXPECT_EQ ( tLayout.m_iHashes, 3 );
+	EXPECT_EQ ( tLayout.m_iMaxChunkBytes, 4096 );
+}
+
+
+TEST ( SstHashLayout, ImpossibleLayoutPreservesRecords )
+{
+	CSphFixedVector<FileChunks_t> dFiles { 2 };
+	dFiles[0] = { 8192, 42, 2048 };
+	dFiles[1] = { 7, 43, 7 };
+	FileSyncLayout_t tLayout { dFiles };
+	tLayout.m_iMaxHashes = 4;
+	tLayout.m_iBufferSize = 4096;
+
+	ASSERT_FALSE ( AdjustFileSyncLayout ( tLayout ) );
+	EXPECT_STREQ ( tLayout.m_sError.cstr(), "SST metadata is too large: FILE_RESERVE requires at least 5 hashes and exceeds the safe hash budget of 4 hashes for the 128 MiB cluster packet limit" );
+	EXPECT_EQ ( dFiles[0].m_iFileSize, 8192 );
 	EXPECT_EQ ( dFiles[0].m_iChunkBytes, 2048 );
-	EXPECT_EQ ( dFiles[1].m_iChunkBytes, 100 );
-	CheckContiguous ( dFiles, iHashes );
+	EXPECT_EQ ( dFiles[0].m_iHashStartItem, 42 );
+	EXPECT_EQ ( dFiles[1].m_iFileSize, 7 );
+	EXPECT_EQ ( dFiles[1].m_iChunkBytes, 7 );
+	EXPECT_EQ ( dFiles[1].m_iHashStartItem, 43 );
+	EXPECT_EQ ( tLayout.m_iHashes, 0 );
+	EXPECT_EQ ( tLayout.m_iMaxChunkBytes, 0 );
 }
 
 
-TEST ( SstHashLayout, AdjustsOneHashAboveBudget )
+TEST ( SstHashLayout, OneHashOverBudgetKeepsMixedOffsets )
 {
-	CSphVector<FileSyncLayout_t> dFiles;
-	dFiles.Add ( Layout ( 10000, 2000 ) );
-	dFiles.Add ( Layout ( 10000, 2000 ) );
-	ASSERT_EQ ( CountFileSyncHashes ( dFiles ), 12 );
+	CSphFixedVector<FileChunks_t> dFiles { 3 };
+	dFiles[0] = { 0, 0, 1 };
+	dFiles[1] = { 7, 0, 7 };
+	dFiles[2] = { 10000, 0, 2048 };
+	FileSyncLayout_t tLayout { dFiles };
+	tLayout.m_iMaxHashes = 8;
+	tLayout.m_iBufferSize = 8192;
 
-	int64_t iHashes = 0;
-	int64_t iFloor = 0;
-	CSphString sError;
-	ASSERT_TRUE ( AdjustFileSyncLayout ( dFiles, 11, 10000, iHashes, iFloor, sError ) ) << sError.cstr();
-	EXPECT_LE ( iHashes, 11 );
-	EXPECT_GT ( iFloor, 2000 );
-	for ( const FileSyncLayout_t & tFile : dFiles )
-	{
-		EXPECT_GE ( tFile.m_iChunkBytes, tFile.m_iPreferredChunkBytes );
-		EXPECT_LE ( tFile.m_iChunkBytes, 10000 );
-		EXPECT_LE ( tFile.m_iChunkBytes, tFile.m_iFileSize );
-	}
-	CheckContiguous ( dFiles, iHashes );
-}
-
-
-TEST ( SstHashLayout, HandlesMixedTinyEmptyAndHugeFiles )
-{
-	CSphVector<FileSyncLayout_t> dFiles;
-	dFiles.Add ( Layout ( 0, 1 ) );
-	dFiles.Add ( Layout ( 7, 7 ) );
-	dFiles.Add ( Layout ( 1000000, 2048 ) );
-
-	int64_t iHashes = 0;
-	int64_t iFloor = 0;
-	CSphString sError;
-	ASSERT_TRUE ( AdjustFileSyncLayout ( dFiles, 20, 100000, iHashes, iFloor, sError ) ) << sError.cstr();
+	// Preferred layout needs nine hashes; only the large file needs adjustment.
+	ASSERT_TRUE ( AdjustFileSyncLayout ( tLayout ) ) << tLayout.m_sError.cstr();
+	EXPECT_EQ ( tLayout.m_iHashes, 8 );
+	EXPECT_EQ ( tLayout.m_iMaxChunkBytes, 2500 );
 	EXPECT_EQ ( dFiles[0].m_iChunkBytes, 1 );
 	EXPECT_EQ ( dFiles[1].m_iChunkBytes, 7 );
-	EXPECT_GT ( dFiles[2].m_iChunkBytes, 2048 );
-	EXPECT_LE ( iHashes, 20 );
-	CheckContiguous ( dFiles, iHashes );
-}
-
-
-TEST ( SstHashLayout, RejectsImpossibleLayout )
-{
-	CSphVector<FileSyncLayout_t> dFiles;
-	dFiles.Add ( Layout ( 10000, 1000 ) );
-	dFiles.Add ( Layout ( 10000, 1000 ) );
-
-	int64_t iHashes = 0;
-	int64_t iFloor = 0;
-	CSphString sError;
-	EXPECT_FALSE ( AdjustFileSyncLayout ( dFiles, 3, 10000, iHashes, iFloor, sError ) );
-	EXPECT_NE ( strstr ( sError.cstr(), "requires at least 4 hashes" ), nullptr ) << sError.cstr();
-}
-
-
-TEST ( SstHashLayout, CountsInt64BoundaryWithoutOverflow )
-{
-	CSphVector<FileSyncLayout_t> dFiles;
-	dFiles.Add ( Layout ( std::numeric_limits<int64_t>::max(), 1 ) );
-	EXPECT_EQ ( CountFileSyncHashes ( dFiles ), std::numeric_limits<int64_t>::max() );
-
-	int64_t iHashes = 0;
-	int64_t iFloor = 0;
-	CSphString sError;
-	EXPECT_FALSE ( AdjustFileSyncLayout ( dFiles, 100, 1024, iHashes, iFloor, sError ) );
-}
-
-
-TEST ( SstHashLayout, ManySmallFilesIncludeFullFileHashes )
-{
-	CSphVector<FileSyncLayout_t> dFiles;
-	for ( int i = 0; i < 1000; ++i )
-		dFiles.Add ( Layout ( 1, 1 ) );
-	EXPECT_EQ ( CountFileSyncHashes ( dFiles ), 2000 );
-
-	int64_t iHashes = 0;
-	int64_t iFloor = 0;
-	CSphString sError;
-	EXPECT_FALSE ( AdjustFileSyncLayout ( dFiles, 1999, 1024, iHashes, iFloor, sError ) );
-}
-
-
-TEST ( SstHashLayout, FileReserveBudgetAccountsForNamesAndChunks )
-{
-	FixedStrVec_t dNames ( 2 );
-	dNames[0] = "a";
-	dNames[1] = "longer-file-name";
-	CSphString sError;
-	const int64_t iMaxHashes = GetFileSyncMaxHashes ( dNames, dNames.GetLength(), sError );
-	const int64_t iBudget = 96LL * 1024 * 1024;
-	const int64_t iNonHashBytes = 3 * sizeof ( int ) + 2 * sizeof ( FileChunks_t )
-		+ sizeof ( int ) + dNames[0].Length() + sizeof ( int ) + dNames[1].Length();
-	EXPECT_EQ ( iMaxHashes, ( iBudget - iNonHashBytes ) / 20 );
-}
-
-
-TEST ( SstHashLayout, CustomerScaleSyntheticLayoutFitsBudget )
-{
-	CSphVector<FileSyncLayout_t> dFiles;
-	constexpr int iFiles = 1707;
-	constexpr int64_t iChunksPerFile = 4440;
-	for ( int i = 0; i < iFiles; ++i )
-		dFiles.Add ( Layout ( iChunksPerFile * 2048, 2048 ) );
-
-	const int64_t iBefore = CountFileSyncHashes ( dFiles );
-	EXPECT_EQ ( iBefore, int64_t ( iFiles ) * ( iChunksPerFile + 1 ) );
-	FixedStrVec_t dNames ( iFiles );
-	for ( CSphString & sName : dNames )
-		sName = "rtindexalphanumericcn_6.0.spd";
-	CSphString sError;
-	const int64_t iMaxHashes = GetFileSyncMaxHashes ( dNames, iFiles, sError );
-	ASSERT_GT ( iMaxHashes, 0 ) << sError.cstr();
-	ASSERT_GT ( iBefore, iMaxHashes );
-
-	int64_t iHashes = 0;
-	int64_t iFloor = 0;
-	ASSERT_TRUE ( AdjustFileSyncLayout ( dFiles, iMaxHashes, 96LL * 1024 * 1024, iHashes, iFloor, sError ) ) << sError.cstr();
-	EXPECT_LE ( iHashes, iMaxHashes );
-	EXPECT_GT ( iFloor, 2048 );
-	CheckContiguous ( dFiles, iHashes );
+	EXPECT_EQ ( dFiles[2].m_iChunkBytes, 2500 );
+	EXPECT_EQ ( dFiles[0].m_iHashStartItem, 3 );
+	EXPECT_EQ ( dFiles[1].m_iHashStartItem, 3 );
+	EXPECT_EQ ( dFiles[2].m_iHashStartItem, 4 );
 }

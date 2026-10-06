@@ -30,24 +30,6 @@ struct FileChunks_t
 	[[nodiscard]] int64_t GetChunkFileOffset ( int iChunk ) const noexcept;
 };
 
-struct FileSyncLayout_t
-{
-	int64_t m_iFileSize = 0;
-	int64_t m_iPreferredChunkBytes = 0;
-	int64_t m_iChunkBytes = 0;
-	int64_t m_iHashStartItem = 0;
-};
-
-// Returns the hash capacity after accounting for serialized file-layout arrays.
-[[nodiscard]] int64_t GetFileSyncMaxHashes ( const VecTraits_T<CSphString> & dBaseNames, int iFiles, CSphString & sError );
-
-// Includes one full-file hash per file and all per-chunk hashes.
-[[nodiscard]] int64_t CountFileSyncHashes ( const VecTraits_T<FileSyncLayout_t> & dFiles, int64_t iChunkFloor = 0 ) noexcept;
-
-// Keeps preferred chunks when they fit, otherwise raises a common chunk floor.
-bool AdjustFileSyncLayout ( CSphVector<FileSyncLayout_t> & dFiles, int64_t iMaxHashes, int64_t iMaxChunkBytes,
-	int64_t & iHashes, int64_t & iChunkFloor, CSphString & sError );
-
 struct MergeState_t
 {
 	CSphBitvec m_dMergeMask;
@@ -89,3 +71,21 @@ private:
 bool VerifyFileHash ( int iFile, const CSphString& sName, const SyncSrc_t& tSrc, CSphBitvec& tDst, CSphVector<BYTE>& dBuf, CSphString& sError );
 bool SyncSigVerify ( const CSphString& sFile, const HASH20_t& dHash );
 bool SyncSigVerify ( const VecTraits_T<CSphString>& dFiles, const VecTraits_T<HASH20_t>& dHashes );
+
+
+// SST layout calculation, exposed for focused unit tests.
+struct FileSyncLayout_t
+{
+	// Preferred chunks on entry; finalized in place on success.
+	VecTraits_T<FileChunks_t> & m_dChunks;
+	int64_t m_iMaxHashes = 0;
+	int64_t m_iBufferSize = 0;
+
+	// Filled on success.
+	int64_t m_iHashes = 0;
+	int m_iMaxChunkBytes = 0;
+
+	CSphString m_sError {}; // set on failure
+};
+
+bool AdjustFileSyncLayout ( FileSyncLayout_t & tLayout );

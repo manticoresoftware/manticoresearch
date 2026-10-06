@@ -13,9 +13,7 @@
 #include "send_files.h"
 
 #include "searchdha.h"
-#include "searchdaemon.h"
 
-#include <limits>
 #include <optional>
 
 // count of chunks for file size
@@ -66,16 +64,17 @@ HASH20_t& SyncSrc_t::GetChunkHash ( int iFile, int iChunk ) const noexcept
 // rsync uses sqrt ( iSize ) but that make too small buffers
 constexpr int iBlockMin = 2048;
 
-static int64_t GetLayoutChunkBytes ( const FileSyncLayout_t & tFile, int64_t iChunkFloor ) noexcept
+static int64_t GetLayoutChunkBytes ( const FileChunks_t & tFile, int64_t iChunkFloor ) noexcept
 {
 	if ( !tFile.m_iFileSize )
 		return 1;
 
-	return Min ( tFile.m_iFileSize, Max ( tFile.m_iPreferredChunkBytes, iChunkFloor ) );
+	return Min ( tFile.m_iFileSize, Max ( int64_t ( tFile.m_iChunkBytes ), iChunkFloor ) );
 }
 
 
-int64_t GetFileSyncMaxHashes ( const VecTraits_T<CSphString> & dBaseNames, int iFiles, CSphString & sError )
+// Returns the hash capacity after accounting for serialized file-layout arrays.
+static int64_t GetFileSyncMaxHashes ( const VecTraits_T<CSphString> & dBaseNames, int iFiles, CSphString & sError )
 {
 	constexpr int64_t iFileReserveArraysBudget = int64_t ( SPH_MAX_PACKET_SIZE ) * 3 / 4;
 	int64_t iNonHashArrayBytes = 3 * sizeof ( int ) + int64_t ( iFiles ) * sizeof ( FileChunks_t );
@@ -93,82 +92,95 @@ int64_t GetFileSyncMaxHashes ( const VecTraits_T<CSphString> & dBaseNames, int i
 }
 
 
-int64_t CountFileSyncHashes ( const VecTraits_T<FileSyncLayout_t> & dFiles, int64_t iChunkFloor ) noexcept
+// Includes one full-file hash per file and all per-chunk hashes.
+static int64_t CountFileSyncHashes ( const VecTraits_T<FileChunks_t> & dFiles, int64_t iChunkFloor = 0 ) noexcept
 {
 	int64_t iHashes = dFiles.GetLength();
-	for ( const FileSyncLayout_t & tFile : dFiles )
+	for ( const FileChunks_t & tFile : dFiles )
 	{
-		if ( tFile.m_iFileSize<0 || tFile.m_iPreferredChunkBytes<=0 )
-			return std::numeric_limits<int64_t>::max();
+		if ( tFile.m_iFileSize<0 || tFile.m_iChunkBytes<=0 )
+			return INT64_MAX;
 
 		if ( !tFile.m_iFileSize )
 			continue;
 
 		const int64_t iChunkBytes = GetLayoutChunkBytes ( tFile, iChunkFloor );
 		if ( iChunkBytes<=0 )
-			return std::numeric_limits<int64_t>::max();
+			return INT64_MAX;
 
 		const int64_t iChunks = 1 + ( tFile.m_iFileSize - 1 ) / iChunkBytes;
-		if ( iHashes > std::numeric_limits<int64_t>::max() - iChunks )
-			return std::numeric_limits<int64_t>::max();
+		if ( iHashes > INT64_MAX - iChunks )
+			return INT64_MAX;
 		iHashes += iChunks;
 	}
 	return iHashes;
 }
 
 
-bool AdjustFileSyncLayout ( CSphVector<FileSyncLayout_t> & dFiles, int64_t iMaxHashes, int64_t iMaxChunkBytes,
-	int64_t & iHashes, int64_t & iChunkFloor, CSphString & sError )
+// Keeps preferred chunk sizes intact until the common chunk floor is chosen.
+bool AdjustFileSyncLayout ( FileSyncLayout_t & tLayout )
 {
-	iChunkFloor = 0;
-	iHashes = CountFileSyncHashes ( dFiles );
-	if ( iMaxHashes<=0 || iMaxChunkBytes<=0 || iHashes==std::numeric_limits<int64_t>::max() )
+	int64_t iChunkFloor = 0;
+	int64_t iHashes = CountFileSyncHashes ( tLayout.m_dChunks );
+	const int64_t iPreferredHashes = iHashes;
+	if ( tLayout.m_iMaxHashes<=0 || tLayout.m_iBufferSize<=0 || iHashes==INT64_MAX )
 	{
-		sError = "invalid SST file hash layout";
+		tLayout.m_sError = "invalid SST file hash layout";
 		return false;
 	}
-	for ( const FileSyncLayout_t & tFile : dFiles )
-		if ( tFile.m_iPreferredChunkBytes > iMaxChunkBytes )
-		{
-			sError = "invalid SST file hash layout: preferred chunk exceeds the send buffer";
-			return false;
-		}
-
-	if ( iHashes > iMaxHashes )
+	if ( iHashes > tLayout.m_iMaxHashes )
 	{
-		const int64_t iMinHashes = CountFileSyncHashes ( dFiles, iMaxChunkBytes );
-		if ( iMinHashes > iMaxHashes )
-		{
-			sError.SetSprintf ( "SST metadata is too large: FILE_RESERVE requires at least " INT64_FMT
-				" hashes and exceeds the safe hash budget of " INT64_FMT " hashes for the 128 MiB cluster packet limit",
-				iMinHashes, iMaxHashes );
-			return false;
-		}
-
+		int64_t iLastHashes = iHashes;
 		int64_t iLeft = 1;
-		int64_t iRight = iMaxChunkBytes;
-		while ( iLeft < iRight )
+		int64_t iRight = tLayout.m_iBufferSize;
+		while ( iLeft <= iRight )
 		{
 			const int64_t iMiddle = iLeft + ( iRight - iLeft ) / 2;
-			if ( CountFileSyncHashes ( dFiles, iMiddle ) <= iMaxHashes )
-				iRight = iMiddle;
-			else
+			const int64_t iCandidateHashes = CountFileSyncHashes ( tLayout.m_dChunks, iMiddle );
+			iLastHashes = iCandidateHashes;
+			if ( iCandidateHashes <= tLayout.m_iMaxHashes )
+			{
+				iChunkFloor = iMiddle;
+				iHashes = iCandidateHashes;
+				iRight = iMiddle - 1;
+			}
+			else if ( iMiddle < iRight )
 				iLeft = iMiddle + 1;
+			else
+				break; // Last remaining candidate failed; avoid advancing past the upper limit.
 		}
-		iChunkFloor = iLeft;
-		iHashes = CountFileSyncHashes ( dFiles, iChunkFloor );
+		if ( !iChunkFloor )
+		{
+			// With no fitting candidate, the last probe was at the buffer limit.
+			tLayout.m_sError.SetSprintf ( "SST metadata is too large: FILE_RESERVE requires at least " INT64_FMT
+				" hashes and exceeds the safe hash budget of " INT64_FMT " hashes for the 128 MiB cluster packet limit",
+				iLastHashes, tLayout.m_iMaxHashes );
+			return false;
+		}
 	}
 
-	int64_t iHashStart = dFiles.GetLength();
-	for ( FileSyncLayout_t & tFile : dFiles )
+	if ( iChunkFloor )
+		sphLogDebugRpl ( "SST hash metadata too large, increasing chunk size: files=%d, hashes=" INT64_FMT
+			" -> " INT64_FMT ", chunk_floor=" INT64_FMT, tLayout.m_dChunks.GetLength(), iPreferredHashes, iHashes, iChunkFloor );
+
+	assert ( iHashes<=INT_MAX );
+	int iReadChunkBytes = 0;
+	int64_t iHashStart = tLayout.m_dChunks.GetLength();
+	for ( FileChunks_t & tFile : tLayout.m_dChunks )
 	{
-		tFile.m_iChunkBytes = GetLayoutChunkBytes ( tFile, iChunkFloor );
-		tFile.m_iHashStartItem = iHashStart;
+		const int64_t iChunkBytes = GetLayoutChunkBytes ( tFile, iChunkFloor );
+		assert ( iChunkBytes>0 && iChunkBytes<INT_MAX );
+		assert ( iHashStart<=INT_MAX );
+		tFile.m_iChunkBytes = (int)iChunkBytes;
+		tFile.m_iHashStartItem = (int)iHashStart;
 		if ( tFile.m_iFileSize )
-			iHashStart += 1 + ( tFile.m_iFileSize - 1 ) / tFile.m_iChunkBytes;
+			iHashStart += 1 + ( tFile.m_iFileSize - 1 ) / iChunkBytes;
+		iReadChunkBytes = Max ( tFile.m_iChunkBytes, iReadChunkBytes );
 	}
 
 	assert ( iHashStart==iHashes );
+	tLayout.m_iHashes = iHashes;
+	tLayout.m_iMaxChunkBytes = iReadChunkBytes;
 	return true;
 }
 
@@ -180,10 +192,7 @@ std::optional<int> SyncSrc_t::InitSyncSrc ()
 	m_dBaseNames.Reset ( iFiles );
 	m_dChunks.Reset ( iFiles );
 
-	int iMaxChunkBytes = 0;
 	m_iBufferSize = (int64_t)g_iMaxPacketSize * 3 / 4;
-	CSphVector<FileSyncLayout_t> dLayout;
-	dLayout.Resize ( iFiles );
 
 	for ( int i = 0; i < iFiles; ++i )
 	{
@@ -200,46 +209,30 @@ std::optional<int> SyncSrc_t::InitSyncSrc ()
 		int64_t iChunkBytes = iFileSize
 			? Min ( Min ( Max ( iBlockMin, int64_t ( sqrt ( iFileSize ) ) ), iFileSize ), m_iBufferSize )
 			: 1;
+		if ( iChunkBytes > m_iBufferSize )
+		{
+			TlsMsg::Err ( "invalid SST file hash layout: preferred chunk exceeds the send buffer" );
+			return std::nullopt;
+		}
 		assert ( iChunkBytes>0 && iChunkBytes<INT_MAX );
 
-		FileSyncLayout_t & tLayout = dLayout[i];
-		tLayout.m_iFileSize = iFileSize;
-		tLayout.m_iPreferredChunkBytes = iChunkBytes;
-	}
-
-	CSphString sLayoutError;
-	const int64_t iMaxHashes = GetFileSyncMaxHashes ( m_dBaseNames, iFiles, sLayoutError );
-	if ( iMaxHashes<0 )
-	{
-		TlsMsg::Err ( sLayoutError );
-		return std::nullopt;
-	}
-	const int64_t iOriginalHashes = CountFileSyncHashes ( dLayout );
-	int64_t iHashes = 0;
-	int64_t iChunkFloor = 0;
-	if ( !AdjustFileSyncLayout ( dLayout, iMaxHashes, m_iBufferSize, iHashes, iChunkFloor, sLayoutError ) )
-	{
-		TlsMsg::Err ( sLayoutError );
-		return std::nullopt;
-	}
-
-	if ( iChunkFloor )
-		sphLogDebugRpl ( "SST hash metadata too large, increasing chunk size: files=%d, hashes=" INT64_FMT
-			" -> " INT64_FMT ", chunk_floor=" INT64_FMT, iFiles, iOriginalHashes, iHashes, iChunkFloor );
-
-	assert ( iHashes<=INT_MAX );
-	for ( int i = 0; i < iFiles; ++i )
-	{
-		const FileSyncLayout_t & tLayout = dLayout[i];
 		FileChunks_t & tChunk = m_dChunks[i];
-		tChunk.m_iFileSize = tLayout.m_iFileSize;
-		tChunk.m_iChunkBytes = (int)tLayout.m_iChunkBytes;
-		tChunk.m_iHashStartItem = (int)tLayout.m_iHashStartItem;
-		iMaxChunkBytes = Max ( tChunk.m_iChunkBytes, iMaxChunkBytes );
+		tChunk.m_iFileSize = iFileSize;
+		tChunk.m_iChunkBytes = (int)iChunkBytes;
 	}
-	m_dHashes.Reset ( (int)iHashes );
+
+	FileSyncLayout_t tLayout { m_dChunks };
+	tLayout.m_iBufferSize = m_iBufferSize;
+	tLayout.m_iMaxHashes = GetFileSyncMaxHashes ( m_dBaseNames, iFiles, tLayout.m_sError );
+	if ( tLayout.m_iMaxHashes<0 || !AdjustFileSyncLayout ( tLayout ) )
+	{
+		TlsMsg::Err ( tLayout.m_sError );
+		return std::nullopt;
+	}
+
+	m_dHashes.Reset ( (int)tLayout.m_iHashes );
 	m_dHashes.Fill ( {} );
-	return iMaxChunkBytes;
+	return tLayout.m_iMaxChunkBytes;
 }
 
 bool VerifyFileHash ( int iFile, const CSphString& sName, const SyncSrc_t& tSrc, CSphBitvec& tDst, CSphVector<BYTE>& dBuf, CSphString& sError )

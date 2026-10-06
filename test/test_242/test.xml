@@ -2,7 +2,7 @@
 <test>
 <name>wildcard</name>
 
-<requires><mode-specific-model/></requires>
+<requires><mode-specific-model/><no_pseudo_sharding/></requires>
 
 <config>
 indexer

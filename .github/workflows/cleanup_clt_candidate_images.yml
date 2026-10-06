@@ -4,6 +4,16 @@ on:
   schedule:
     - cron: '00 03 * * *'
   workflow_dispatch:
+  push:
+    branches: [ main, manticore-* ]
+    paths:
+      - '.github/workflows/cleanup_clt_candidate_images.yml'
+      - 'dist/cleanup_old_test_kit_candidates.sh'
+  pull_request:
+    branches: [ main, manticore-* ]
+    paths:
+      - '.github/workflows/cleanup_clt_candidate_images.yml'
+      - 'dist/cleanup_old_test_kit_candidates.sh'
 
 permissions:
   contents: read
@@ -17,6 +27,8 @@ jobs:
       - uses: actions/checkout@v5
       - name: Delete expired temporary CLT candidate images
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Candidate images are published with GHCR_PASSWORD when configured. Use
+          # the same credential to access the organization package versions.
+          GH_TOKEN: ${{ secrets.GHCR_PASSWORD || github.token }}
           REPO_OWNER: ${{ github.repository_owner }}
         run: bash ./dist/cleanup_old_test_kit_candidates.sh

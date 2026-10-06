@@ -632,6 +632,59 @@ TEST ( RtTrx, RejectsBlobLocatorsNestedEndsAndInvalidHitFields )
 	fnRejects ( std::move(dStoredOnlyField) );
 }
 
+TEST ( RtTrx, ValidatesReferencedAndSkippedBlobRecords )
+{
+	CSphSchema tSchema;
+	tSchema.AddAttr ( CSphColumnInfo ( sphGetBlobLocatorName(), SPH_ATTR_BIGINT ), true );
+	tSchema.AddAttr ( CSphColumnInfo ( "first", SPH_ATTR_STRING ), true );
+	tSchema.AddAttr ( CSphColumnInfo ( "second", SPH_ATTR_STRING ), true );
+	const CSphColumnInfo * pBlobLocator = tSchema.GetAttr ( sphGetBlobLocatorName() );
+	ASSERT_NE ( pBlobLocator, nullptr );
+
+	auto fnRows = [&] ( std::initializer_list<uint64_t> dOffsets )
+	{
+		CSphVector<CSphRowitem> dRows;
+		dRows.Resize ( tSchema.GetRowSize()*dOffsets.size() );
+		int iRow = 0;
+		for ( uint64_t uOffset : dOffsets )
+		{
+			CSphRowitem * pRow = dRows.Begin()+iRow*tSchema.GetRowSize();
+			memset ( pRow, 0, tSchema.GetRowSize()*sizeof(CSphRowitem) );
+			sphSetRowAttr ( pRow, pBlobLocator->m_tLocator, uOffset );
+			++iRow;
+		}
+		return dRows;
+	};
+	auto fnValidate = [&] ( std::initializer_list<uint64_t> dOffsets, std::initializer_list<BYTE> dBlobBytes )
+	{
+		CSphVector<CSphRowitem> dRows = fnRows ( dOffsets );
+		CSphVector<BYTE> dBlobs;
+		for ( BYTE uByte : dBlobBytes )
+			dBlobs.Add ( uByte );
+		TlsMsg::ResetErr();
+		return ValidateRtBlobRows ( reinterpret_cast<const BYTE *>(dRows.Begin()), DWORD(dOffsets.size()), dBlobs.Begin(), dBlobs.GetLength(), tSchema );
+	};
+
+	// Each record is kind, two cumulative attribute ends, then payload.
+	EXPECT_TRUE ( fnValidate ( { 0 }, { 0, 1, 2, 'a', 'b' } ) ) << TlsMsg::szError(); // exact pool end
+	EXPECT_TRUE ( fnValidate ( { 5 }, { 0, 1, 2, 'a', 'b', 0, 1, 2, 'c', 'd' } ) ) << TlsMsg::szError(); // leading gap
+	EXPECT_TRUE ( fnValidate ( { 0 }, { 0, 1, 2, 'a', 'b', 0, 1, 2, 'c', 'd' } ) ) << TlsMsg::szError(); // trailing gap
+	EXPECT_TRUE ( fnValidate ( { 0 }, { 0, 0, 0 } ) ) << TlsMsg::szError(); // zero-length attributes
+	EXPECT_TRUE ( fnValidate ( { 7 }, { 1, 1, 0, 2, 0, 'a', 'b', 0, 1, 2, 'c', 'd' } ) ) << TlsMsg::szError(); // width-2 skipped record
+	EXPECT_TRUE ( fnValidate ( { 11 }, { 2, 1, 0, 0, 0, 2, 0, 0, 0, 'a', 'b', 0, 1, 2, 'c', 'd' } ) ) << TlsMsg::szError(); // width-4 skipped record
+
+	EXPECT_FALSE ( fnValidate ( { 1 }, { 0, 1, 2, 'a', 'b' } ) ); // locator inside a record
+	EXPECT_FALSE ( fnValidate ( { 1 }, { 3, 0, 1, 2, 'a', 'b' } ) ); // malformed skipped record
+	EXPECT_FALSE ( fnValidate ( { 2 }, { 1, 0, 0 } ) ); // truncated width-2 skipped header
+	EXPECT_FALSE ( fnValidate ( { 5 }, { 0, 2, 1, 'a', 'b', 0, 1, 2, 'c', 'd' } ) ); // decreasing ends in skipped record
+	EXPECT_FALSE ( fnValidate ( { 4 }, { 0, 1, 10, 'a', 0, 1, 2, 'b', 'c' } ) ); // truncated skipped payload
+	EXPECT_FALSE ( fnValidate ( { 7 }, { 1, 1, 0, 255, 255, 'a', 'b', 0, 1, 2, 'c', 'd' } ) ); // oversized width-2 skipped payload
+	EXPECT_FALSE ( fnValidate ( { 11 }, { 2, 1, 0, 0, 0, 255, 255, 255, 255, 'a', 'b', 0, 1, 2, 'c', 'd' } ) ); // oversized width-4 skipped payload
+	EXPECT_FALSE ( fnValidate ( { 5, 5 }, { 0, 1, 2, 'a', 'b', 0, 1, 2, 'c', 'd' } ) );
+	EXPECT_FALSE ( fnValidate ( { 5, 0 }, { 0, 1, 2, 'a', 'b', 0, 1, 2, 'c', 'd' } ) );
+	EXPECT_FALSE ( fnValidate ( { 5 }, { 0, 1, 2, 'a', 'b' } ) ); // locator at pool end
+}
+
 TEST ( RtTrx, ReplicationValidationIdentityRejectsReplacementSchemaAndAlterChanges )
 {
 	RtAccum_t tAccum;

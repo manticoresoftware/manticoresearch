@@ -4,6 +4,7 @@
 <name>merge vs empty index</name>
 <requires>
 <non-rt/>
+<mode-specific-model/>
 </requires>
 <skip_db/>
 <config>

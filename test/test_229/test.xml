@@ -2,6 +2,7 @@
 <test>
 
 <name>query cache</name>
+<requires><mode-specific-model/></requires>
 
 <skip_indexer/>
 <config>

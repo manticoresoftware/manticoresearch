@@ -2,6 +2,7 @@
 <test>
 
 <name>ignore_chars vs specials</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>select expressions, functions, operators</name> <!-- all the misc tests -->
-<requires><sphinxql_keep_null/></requires>
+<requires><sphinxql_keep_null/><mode-specific-model/></requires>
 
 <config>
 indexer

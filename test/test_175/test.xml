@@ -5,6 +5,7 @@
 <requires>
 	<heavy/>
 	<non-rt/>
+	<mode-specific-model/>
 </requires>
 
 <config>

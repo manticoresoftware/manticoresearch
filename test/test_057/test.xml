@@ -5,6 +5,7 @@
 <skip_indexer/>
 <requires>
 	<force-rt/>
+	<mode-specific-model/>
 </requires>
 
 <!-- fixme! non-windows requirement is ad-hoc, need to investigate why results are different on win and fix it -->

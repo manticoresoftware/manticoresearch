@@ -2,6 +2,7 @@
 
 <test>
 <name>deadlock on threaded exit</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

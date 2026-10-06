@@ -1,5 +1,6 @@
 <test>
 <name>string attributes vs buffer ovverun</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

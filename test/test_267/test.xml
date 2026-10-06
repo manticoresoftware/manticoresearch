@@ -6,6 +6,7 @@
 <requires>
 	<force-rt/>
 	<http/>
+	<mode-specific-model/>
 </requires>
 
 <skip_indexer/>

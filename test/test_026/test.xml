@@ -4,6 +4,7 @@
 <name>merge vs basic main/delta</name>
 <requires>
 <non-rt/>
+<mode-specific-model/>
 </requires>
 
 <config>

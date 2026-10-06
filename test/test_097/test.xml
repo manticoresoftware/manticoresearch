@@ -2,6 +2,7 @@
 <test>
 
 <name>cutoff</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

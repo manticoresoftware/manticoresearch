@@ -2,6 +2,7 @@
 <test>
 
 <name>utc time grouping</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

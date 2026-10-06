@@ -4,6 +4,7 @@
 <name>merge vs killlists</name>
 <requires>
 <non-rt/>
+<mode-specific-model/>
 </requires>
 
 <config>

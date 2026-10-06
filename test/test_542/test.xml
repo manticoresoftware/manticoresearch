@@ -3,6 +3,7 @@
 <name>rankless grouped count with pseudo-sharded plain index</name>
 <requires>
 	<non-columnar/>
+	<mode-specific-model/>
 </requires>
 <config>
 indexer

@@ -2,6 +2,7 @@
 <test>
 
 <name>dict=keywords vs crc collisions</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

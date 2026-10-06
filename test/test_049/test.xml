@@ -1,7 +1,7 @@
 <test>
 <name>multi-index queries vs index weights</name>
 
-<requires> <variant_match /> </requires>
+<requires> <variant_match /> <mode-specific-model/></requires>
 
 <config>
 indexer

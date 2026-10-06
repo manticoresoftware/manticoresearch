@@ -804,6 +804,9 @@ class SphinxClient
 		assert ( is_string($rankexpr) );
 		$this->_ranker = $ranker;
 		$this->_rankexpr = $rankexpr;
+		// Distinguish an explicit SPH_RANK_PROXIMITY_BM25 (wire value 0)
+		// from the implicit default, whose execution-time meaning can differ.
+		$this->_query_flags = sphSetBit ( $this->_query_flags, 15, true );
 	}
 
 	/// set matches sorting mode
@@ -1084,7 +1087,9 @@ class SphinxClient
 
 	function ResetQueryFlag ()
 	{
+		$explicit_ranker = ( $this->_query_flags & ( 1<<15 ) ) != 0;
 		$this->_query_flags = sphSetBit ( 0, 6, true ); // default idf=tfidf_normalized
+		$this->_query_flags = sphSetBit ( $this->_query_flags, 15, $explicit_ranker );
 		$this->_predictedtime = 0;
 	}
 

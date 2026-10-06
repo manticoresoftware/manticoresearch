@@ -63,7 +63,7 @@ module Sphinx
     # Current client-side command implementation versions
     
     # search command version
-    VER_COMMAND_SEARCH   = 0x119
+    VER_COMMAND_SEARCH   = 0x11b
     # excerpt command version
     VER_COMMAND_EXCERPT  = 0x102
     # update command version
@@ -206,6 +206,7 @@ module Sphinx
       @indexweights  = []                      # per-index weights
       @ranker        = SPH_RANK_PROXIMITY_BM25 # ranking mode (default is SPH_RANK_PROXIMITY_BM25)
       @rankexpr	     = ''                      # ranker expression for SPH_RANK_EXPR
+      @query_flags   = 1 << 6                   # normalized TF-IDF by default
       @maxquerytime  = 0                       # max query time, milliseconds (default is 0, do not limit) 
       @fieldweights  = {}                      # per-field-name weights
       @overrides     = []                      # per-query attribute values overrides
@@ -290,6 +291,12 @@ module Sphinx
 
       @ranker = ranker
       @rankexpr = rankexpr
+      @query_flags |= 1 << 15
+    end
+
+    # Restore query flags without losing whether SetRankingMode was called.
+    def ResetQueryFlag
+      @query_flags = (1 << 6) | (@query_flags & (1 << 15))
     end
     
     # Set matches sorting mode.
@@ -585,6 +592,7 @@ module Sphinx
   
       # mode and limits
       request = Request.new
+      request.put_int @query_flags
       request.put_int @offset, @limit, @mode, @ranker
       # process the 'expr' ranker
       if @ranker == SPH_RANK_EXPR

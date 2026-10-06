@@ -4,7 +4,7 @@ class SphinxSpecError < StandardError; end
 
 module SphinxFixtureHelper
   def sphinx_fixture(name)
-    `php #{File.dirname(__FILE__)}/fixtures/#{name}.php`
+    `php #{File.dirname(__FILE__)}/fixtures/#{name}.php`.b
   end
 end
 
@@ -47,7 +47,7 @@ describe 'The Connect method of Sphinx::Client' do
   it 'should raise exception on connection error' do
     TCPSocket.should_receive(:new).with('localhost', 9312).and_raise(Errno::EBADF)
     lambda { @sphinx.send(:Connect) }.should raise_error(Sphinx::SphinxConnectError)
-    @sphinx.GetLastError.should == 'connection to localhost:9312 failed'
+    @sphinx.GetLastError.should == 'connection to localhost:9312 failed (error=Bad file descriptor)'
   end
 
   it 'should use custom host and port' do
@@ -184,6 +184,22 @@ describe 'The Query method of Sphinx::Client' do
         @sphinx.SetRankingMode(Sphinx::Client.const_get("SPH_RANK_#{rank.to_s.upcase}"))
         @sphinx.Query('query') rescue nil?
       end
+    end
+
+    it 'should preserve explicit ranker intent when query flags are reset' do
+      expected = sphinx_fixture('ranking_proximity_bm25_reset')
+      @sock.should_receive(:send).with(expected, 0)
+      @sphinx.SetRankingMode(Sphinx::Client::SPH_RANK_PROXIMITY_BM25)
+      @sphinx.ResetQueryFlag
+      @sphinx.Query('query') rescue nil?
+    end
+
+    it 'should preserve an explicit nonzero ranker when query flags are reset' do
+      expected = sphinx_fixture('ranking_bm25_reset')
+      @sock.should_receive(:send).with(expected, 0)
+      @sphinx.SetRankingMode(Sphinx::Client::SPH_RANK_BM25)
+      @sphinx.ResetQueryFlag
+      @sphinx.Query('query') rescue nil?
     end
   end
 

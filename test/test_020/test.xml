@@ -3,7 +3,7 @@
 
 <name>groupby</name>
 
-<requires> <variant_match /> </requires>  
+<requires> <variant_match /> <mode-specific-model/></requires>
 
 <config>
 indexer

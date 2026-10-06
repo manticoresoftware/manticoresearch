@@ -1,5 +1,6 @@
 <test>
 <name>idf=plain vs distributed</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

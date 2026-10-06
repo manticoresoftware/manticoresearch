@@ -2,6 +2,7 @@
 <test>
 
 <name>multi-index queries</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

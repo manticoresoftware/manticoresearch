@@ -1582,7 +1582,7 @@ static bool ReadBlobLength ( const BYTE * pRow, size_t iRemaining, int iAttr, T 
 }
 
 
-static bool ValidateBlobRows ( const BYTE * pRows, DWORD uRows, const BYTE * pBlobs, DWORD uBlobs, const CSphSchema & tSchema )
+bool ValidateRtBlobRows ( const BYTE * pRows, DWORD uRows, const BYTE * pBlobs, DWORD uBlobs, const CSphSchema & tSchema )
 {
 	int iBlobAttrs = 0;
 	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
@@ -1597,22 +1597,48 @@ static bool ValidateBlobRows ( const BYTE * pRows, DWORD uRows, const BYTE * pBl
 		return !uBlobs || TlsMsg::Err ( "replication RT transaction has blob bytes without documents" );
 
 	CSphFixedVector<CSphRowitem> dRow ( tSchema.GetRowSize() );
-	uint64_t uExpectedOffset = 0;
-	for ( DWORD uRow=0; uRow<uRows; ++uRow )
+	auto fnRowOffset = [&] ( DWORD uRow )
 	{
 		memcpy ( dRow.Begin(), pRows+uint64_t(uRow)*tSchema.GetRowSize()*sizeof(CSphRowitem), dRow.GetLengthBytes() );
-		const uint64_t uOffset = sphGetRowAttr ( dRow.Begin(), pBlobLocator->m_tLocator );
-		if ( uOffset!=uExpectedOffset || uOffset>=uBlobs )
-			return TlsMsg::Err ( "replication RT transaction row %u has invalid blob locator " UINT64_FMT " (expected " UINT64_FMT ", pool %u)", uRow, uOffset, uExpectedOffset, uBlobs );
-		const BYTE * pBlobRow = pBlobs+uOffset;
-		const size_t iRemaining = uBlobs-size_t(uOffset);
+		return uint64_t ( sphGetRowAttr ( dRow.Begin(), pBlobLocator->m_tLocator ) );
+	};
+	uint64_t uPreviousOffset = UINT64_MAX;
+	for ( DWORD uRow=0; uRow<uRows; ++uRow )
+	{
+		const uint64_t uOffset = fnRowOffset ( uRow );
+		if ( uOffset>=uBlobs )
+			return TlsMsg::Err ( "replication RT transaction row %u has invalid blob locator " UINT64_FMT " (pool %u)", uRow, uOffset, uBlobs );
+		if ( uPreviousOffset!=UINT64_MAX && uOffset<=uPreviousOffset )
+			return TlsMsg::Err ( "replication RT transaction row %u has non-increasing blob locator " UINT64_FMT, uRow, uOffset );
+		uPreviousOffset = uOffset;
+	}
+
+	// Duplicate document IDs are removed from the row array before a replicated
+	// transaction is serialized, but their blob records can remain in the pool.
+	// Validate every pool record and require each surviving row locator to point
+	// at a real record boundary. Requiring a packed one-record-per-row pool
+	// rejects valid duplicate-removal transactions.
+	DWORD uReferencedRow = 0;
+	uint64_t uPoolOffset = 0;
+	while ( uPoolOffset<uBlobs )
+	{
+		if ( uReferencedRow<uRows )
+		{
+			const uint64_t uReferencedOffset = fnRowOffset ( uReferencedRow );
+			if ( uPoolOffset==uReferencedOffset )
+				++uReferencedRow;
+			else if ( uPoolOffset>uReferencedOffset )
+				return TlsMsg::Err ( "replication RT transaction row %u blob locator " UINT64_FMT " is not a record boundary", uReferencedRow, uReferencedOffset );
+		}
+		const BYTE * pBlobRow = pBlobs+uPoolOffset;
+		const size_t iRemaining = uBlobs-size_t(uPoolOffset);
 		const BYTE uKind = pBlobRow[0];
 		const size_t iWidth = uKind==0 ? 1 : ( uKind==1 ? 2 : ( uKind==2 ? 4 : 0 ) );
 		if ( !iWidth )
-			return TlsMsg::Err ( "replication RT transaction row %u has invalid blob-row length format %u", uRow, uKind );
+			return TlsMsg::Err ( "replication RT transaction blob record at " UINT64_FMT " has invalid length format %u", uPoolOffset, uKind );
 		const size_t iHeader = 1+size_t(iBlobAttrs)*iWidth;
 		if ( iHeader>iRemaining )
-			return TlsMsg::Err ( "replication RT transaction row %u blob header overruns pool", uRow );
+			return TlsMsg::Err ( "replication RT transaction blob record at " UINT64_FMT " has a header that overruns the pool", uPoolOffset );
 
 		uint64_t uPrevious = 0;
 		for ( int iAttr=0; iAttr<iBlobAttrs; ++iAttr )
@@ -1622,15 +1648,15 @@ static bool ValidateBlobRows ( const BYTE * pRows, DWORD uRows, const BYTE * pBl
 			else if ( iWidth==2 ) { WORD u=0; ReadBlobLength ( pBlobRow, iRemaining, iAttr, u ); uEnd=u; }
 			else { DWORD u=0; ReadBlobLength ( pBlobRow, iRemaining, iAttr, u ); uEnd=u; }
 			if ( uEnd<uPrevious || uEnd>iRemaining-iHeader )
-				return TlsMsg::Err ( "replication RT transaction row %u blob attribute %d has invalid end offset " UINT64_FMT, uRow, iAttr, uEnd );
+				return TlsMsg::Err ( "replication RT transaction blob record at " UINT64_FMT " attribute %d has invalid end offset " UINT64_FMT, uPoolOffset, iAttr, uEnd );
 			uPrevious = uEnd;
 		}
-		uExpectedOffset += iHeader+uPrevious;
-		if ( uExpectedOffset>uBlobs )
-			return TlsMsg::Err ( "replication RT transaction row %u blob record overruns pool", uRow );
+		uPoolOffset += iHeader+uPrevious;
 	}
-	if ( uExpectedOffset!=uBlobs )
-		return TlsMsg::Err ( "replication RT transaction blob pool has trailing bytes: validated " UINT64_FMT " of %u", uExpectedOffset, uBlobs );
+	if ( uPoolOffset!=uBlobs )
+		return TlsMsg::Err ( "replication RT transaction blob record overruns pool: validated " UINT64_FMT " of %u", uPoolOffset, uBlobs );
+	if ( uReferencedRow!=uRows )
+		return TlsMsg::Err ( "replication RT transaction row %u blob locator " UINT64_FMT " is not a record boundary", uReferencedRow, fnRowOffset(uReferencedRow) );
 	return true;
 }
 
@@ -1705,7 +1731,7 @@ static bool PreflightRtTrx ( ByteBlob_t tTrx, DWORD uVer, const CSphSchema * pSc
 	const BYTE * pPacked = nullptr;
 	if ( !tReader.ReadArray ( sizeof(BYTE), "blobs", &uBlobs, &pBlobs ) || !tReader.ReadArray ( sizeof(DWORD), "per-document hit counts", &uPerDoc, &pPerDoc ) || !tReader.ReadArray ( sizeof(BYTE), "packed keywords", &uPacked, &pPacked ) )
 		return false;
-	if ( pSchema && !ValidateBlobRows ( pRows, uRows, pBlobs, uBlobs, *pSchema ) )
+	if ( pSchema && !ValidateRtBlobRows ( pRows, uRows, pBlobs, uBlobs, *pSchema ) )
 		return false;
 	for ( DWORD i=0; i<uHits; ++i )
 	{

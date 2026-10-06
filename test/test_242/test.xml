@@ -2,6 +2,8 @@
 <test>
 <name>wildcard</name>
 
+<requires><mode-specific-model/></requires>
+
 <config>
 indexer
 {

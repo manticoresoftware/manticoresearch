@@ -6,6 +6,7 @@
 <requires>
 <non-windows/>
 <non-rt/>
+<mode-specific-model/>
 </requires>
 
 <config>

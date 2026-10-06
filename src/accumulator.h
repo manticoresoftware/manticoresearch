@@ -117,6 +117,8 @@ class RtIndex_i;
 class ColumnarBuilderRT_i;
 class TableEmbeddings_c;
 
+bool ValidateRtBlobRows ( const BYTE * pRows, DWORD uRows, const BYTE * pBlobs, DWORD uBlobs, const CSphSchema & tSchema );
+
 /// indexing accumulator
 class RtAccum_t
 {

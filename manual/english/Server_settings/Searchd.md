@@ -260,7 +260,7 @@ merge_chunks_per_job = 4
 
 <!-- example conf knn_parallel_build -->
 This setting controls how many worker threads are used to build the HNSW graph during HNSW-heavy operations on tables that contain a `float_vector` attribute with a KNN index. Several paths use this knob:
-* The **chunk-save store pass**: when a RAM chunk is flushed to disk, workers split the chunk's RAM segments between them and add vectors to the destination HNSW graph in parallel.
+* The **chunk-save store pass**: when a RAM chunk is flushed to disk (by an automatic flush or `FLUSH RAMCHUNK`), the rows of all RAM segments are split into fixed-size ranges that workers take in turn and add to the destination HNSW graph in parallel. The parallelism does not depend on how many RAM segments the chunk has or how uneven their sizes are.
 * The **chunk-merge store pass**: `OPTIMIZE TABLE` and auto-optimize merges build the destination chunk's HNSW graph in parallel, splitting the alive-row range from all input chunks across workers.
 * The **ALTER KNN rebuild**: `ALTER TABLE ... ADD COLUMN`/`DROP COLUMN` on a `float_vector` attribute, and `ALTER TABLE ... REBUILD KNN`, rebuild the HNSW graph in parallel for disk chunks.
 

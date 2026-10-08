@@ -9102,8 +9102,8 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 
 // A knn query must not match documents that hold no vector: their distance is FLT_MAX, so they are near nothing.
 // When an hnsw iterator runs it never offers them in the first place, but a brute-force scan sees every row, so the guard has to be added explicitly.
-// Whether an iterator ran is only known after SpawnIterators, hence the late injection
-static bool AddLateKNNDistFilter ( const CSphQuery & tQuery, bool bKNNIteratorCreated, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta, const CSphVector<const ISphSchema *> & dSorterSchemas, const ISphSchema & tIndexSchema, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphVector<CSphFilterSettings> & dLateFilters, CSphVector<FilterTreeItem_t> & dLateFilterTree )
+// Whether an iterator ran is only known after SpawnIterators, hence the late injection.
+static bool AddLateKNNDistFilter ( const CSphQuery & tQuery, bool bKNNIteratorCreated, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta )
 {
 	if ( !tQuery.HasKnn() || bKNNIteratorCreated )
 		return true;
@@ -9116,29 +9116,10 @@ static bool AddLateKNNDistFilter ( const CSphQuery & tQuery, bool bKNNIteratorCr
 	if ( !CanAddKNNDistFilter ( *tFlx.m_pMatchSchema ) )
 		return true;
 
-	// copy whatever is live now
-	dLateFilters.Resize(0);
-	for ( const auto & tFilter : *tFlx.m_pFilters )
-		dLateFilters.Add ( tFilter );
-
-	dLateFilterTree.Resize(0);
-	if ( tFlx.m_pFilterTree )
-		for ( const auto & tItem : *tFlx.m_pFilterTree )
-			dLateFilterTree.Add ( tItem );
-
-	// clone first, swap after: tFlx.m_pMatchSchema may point into pModifiedMatchSchema
-	std::unique_ptr<ISphSchema> pNewSchema = BuildKNNDistFilter ( *tFlx.m_pMatchSchema, dLateFilters, dLateFilterTree );
-
-	pModifiedMatchSchema = std::move(pNewSchema);
-	tFlx.m_pMatchSchema	= pModifiedMatchSchema.get();
-	tFlx.m_pFilters		= &dLateFilters;
-	tFlx.m_pFilterTree	= dLateFilterTree.GetLength() ? &dLateFilterTree : nullptr;
-
-	// the stage only dropped to prefilter just now, so the calc lists have to be rebuilt from it.
+	// rebuild the filter chain from whatever settings are live now; sphCreateFilters joins the guard onto it.
+	// no eval stage changed, so the calc lists stay valid
+	tFlx.m_bAddKNNDistFilter = true;
 	tCtx.ResetFilters();
-	if ( !tCtx.SetupCalc ( tMeta, *tFlx.m_pMatchSchema, tIndexSchema, tFlx.m_pBlobPool, tFlx.m_pColumnar, dSorterSchemas ) )
-		return false;
-
 	return tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
 }
 
@@ -9417,8 +9398,6 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 	// try to spawn an iterator from a secondary index
 	CSphVector<CSphFilterSettings> dFiltersAfterIterator; // holds filter settings if they were modified. filters hold pointers to those settings
-	CSphVector<CSphFilterSettings> dLateFilters;	// same, for the late knn_dist guard
-	CSphVector<FilterTreeItem_t> dLateFilterTree;
 	std::unique_ptr<RowidIterator_i> pIterator;
 	bool bKNNIteratorCreated = false;
 	if ( bAllPrecalc )
@@ -9430,7 +9409,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 		if ( tSpawned.second )
 			return false;
 
-		if ( !AddLateKNNDistFilter ( tQuery, bKNNIteratorCreated, tCtx, tFlx, tMeta, dSorterSchemas, m_tSchema, pModifiedMatchSchema, dLateFilters, dLateFilterTree ) )
+		if ( !AddLateKNNDistFilter ( tQuery, bKNNIteratorCreated, tCtx, tFlx, tMeta ) )
 			return false;
 	}
 
@@ -12560,8 +12539,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 		tMeta.m_tIteratorStats.m_iTotal = 1;
 
 	CSphVector<CSphFilterSettings> dFiltersAfterIterator; // holds filter settings if they were modified. filters hold pointers to those settings
-	CSphVector<CSphFilterSettings> dLateFilters;	// same, for the late knn_dist guard
-	CSphVector<FilterTreeItem_t> dLateFilterTree;
 
 	// skip SI create if cache ranker used
 	bool bIsCacheRanker = pRanker->IsCache();
@@ -12584,7 +12561,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 		}
 	}
 
-	if ( !AddLateKNNDistFilter ( tQuery, bKNNIteratorCreated, tCtx, tFlx, tMeta, dSorterSchemas, m_tSchema, pModifiedMatchSchema, dLateFilters, dLateFilterTree ) )
+	if ( !AddLateKNNDistFilter ( tQuery, bKNNIteratorCreated, tCtx, tFlx, tMeta ) )
 		return false;
 
 	//////////////////////////////////////

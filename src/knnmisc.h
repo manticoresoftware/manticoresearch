@@ -64,6 +64,7 @@ void							SetKNNRescorePrefetch ( bool bEnable );
 bool							KNNRescorePrefetch();
 
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
+ISphExpr *						CreateExpr_KNNHasVec ( ISphExpr * pKNNDistExpr );
 void							NormalizeVec ( VecTraits_T<float> & dData );
 
 void							AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr );

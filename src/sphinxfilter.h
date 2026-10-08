@@ -88,7 +88,7 @@ struct CreateFilterContext_t
 	CSphString					m_sJoinIdx;
 	CSphString					m_sJoinIdxLeft;	///< left table name in JOIN (for resolving table.attr in expressions)
 	JoinType_e					m_eJoinType = JoinType_e::NONE;
-	bool						m_bAddKNNDistFilter = false;
+	bool						m_bAddKNNDistFilter = false;	///< join the knn guard onto the chain: docs without a vector must not match a knn query
 };
 
 std::unique_ptr<ISphFilter> sphCreateFilter ( const CSphFilterSettings &tSettings, const CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning);
@@ -112,7 +112,6 @@ bool HasKNNDistFilter ( const CSphQuery & tQuery );
 // true when @knn_dist exists and is a real computed distance
 bool CanAddKNNDistFilter ( const ISphSchema & tSchema );
 
-std::unique_ptr<ISphSchema> BuildKNNDistFilter ( const ISphSchema & tSrcSchema, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree );
 
 void SetFilterStackItemSize ( std::pair<int,int> );
 int GetFilterStackItemSize();

@@ -104,8 +104,7 @@ class RowidIterator_i;
 std::unique_ptr<ExtNode_i> CreatePseudoFTNode ( ExtNode_i * pNode, RowidIterator_i * pIterator );
 
 #if defined(MANTICORE_TEST)
-// Test-only seam for exercising oversized scoped E1 admission without allocating
-// corresponding multi-million-row scratch buffers.
+// Test-only statistics for verifying retained E1 ranked paths and generic fallback.
 struct E1TestRankStats_t
 {
 	E1RankedBoundKind_e m_eBoundKind = E1RankedBoundKind_e::NONE;

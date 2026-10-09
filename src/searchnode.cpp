@@ -906,7 +906,6 @@ private:
 	uint64_t			m_uE1CandidateBoundRejects = 0;
 	uint64_t			m_uE1TieBoundRejects = 0;
 	uint64_t			m_uE1CandidateWordsExamined = 0;
-	uint64_t			m_uE1WholeWordsRejected = 0;
 	uint64_t			m_uE1ScalarCandidateInspections = 0;
 	uint64_t			m_uE1IntersectionWindows = 0;
 	uint64_t			m_uE1IntersectionMaskOps = 0;
@@ -4186,7 +4185,7 @@ template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
 ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::~ExtMultiAnd_T()
 {
 	if ( m_bE1Ranked && getenv("MANTICORE_E1_RANK_TRACE") )
-		fprintf ( stderr, "%s terms=%d windows_total=%llu windows_pruned=%llu windows_scored=%llu boolean_matches=%llu intersection_windows=%llu intersection_mask_ops=%llu descriptors=%d best_first_windows_visited=%llu best_first_windows_skipped=%llu exact_union_total=%llu candidates_generated=%llu candidate_mask_rows=%llu surviving_mask_rows=%llu candidate_bound_rejects=%llu tie_bound_rejects=%llu candidate_words_examined=%llu whole_words_rejected=%llu scalar_candidate_inspections=%llu candidates_scored=%llu essential_repartitions=%llu average_essential_terms=%.3f bitmap_ops=%llu container_mask_ops=%llu batch_tf_rows_requested=%llu batch_tf_rows_written=%llu batch_metadata_groups_decoded=%llu tf_probes=%llu metadata_groups_decoded=%llu final_threshold=%d hitlist_seeks=0 decoded_positions=0 general_factor_finalizations=0\n",
+		fprintf ( stderr, "%s terms=%d windows_total=%llu windows_pruned=%llu windows_scored=%llu boolean_matches=%llu intersection_windows=%llu intersection_mask_ops=%llu descriptors=%d best_first_windows_visited=%llu best_first_windows_skipped=%llu exact_union_total=%llu candidates_generated=%llu candidate_mask_rows=%llu surviving_mask_rows=%llu candidate_bound_rejects=%llu tie_bound_rejects=%llu candidate_words_examined=%llu scalar_candidate_inspections=%llu candidates_scored=%llu essential_repartitions=%llu average_essential_terms=%.3f bitmap_ops=%llu container_mask_ops=%llu batch_tf_rows_requested=%llu batch_tf_rows_written=%llu batch_metadata_groups_decoded=%llu tf_probes=%llu metadata_groups_decoded=%llu final_threshold=%d hitlist_seeks=0 decoded_positions=0 general_factor_finalizations=0\n",
 			m_bE1Or ? "E1_MULTI_OR" : "E1_MULTI_AND",
 			m_dNodes.GetLength(),
 			(unsigned long long)m_uE1WindowsTotal, (unsigned long long)m_uE1WindowsPruned,
@@ -4197,8 +4196,7 @@ ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::~ExtMultiAnd_T()
 			(unsigned long long)m_uE1CandidatesGenerated, (unsigned long long)m_uE1CandidateMaskRows,
 			(unsigned long long)m_uE1CandidateMaskRows,
 			(unsigned long long)m_uE1CandidateBoundRejects, (unsigned long long)m_uE1TieBoundRejects,
-			(unsigned long long)m_uE1CandidateWordsExamined, (unsigned long long)m_uE1WholeWordsRejected,
-			(unsigned long long)m_uE1ScalarCandidateInspections,
+			(unsigned long long)m_uE1CandidateWordsExamined, (unsigned long long)m_uE1ScalarCandidateInspections,
 			(unsigned long long)m_uE1CandidatesScored,
 			(unsigned long long)m_uE1EssentialRepartitions,
 			m_uE1EssentialRepartitions ? double(m_uE1EssentialTerms)/double(m_uE1EssentialRepartitions) : 0.0,
@@ -4512,45 +4510,41 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1DirectAndWindow()
 	while ( m_uE1Window<=m_uE1LastWindow )
 	{
 		const uint32_t uWindow = m_uE1Window++;
-		std::array<uint64_t,64> dIntersection {};
-		std::array<uint64_t,64> dStageSurvivors {};
+		std::array<uint64_t,64> dIntersectionMask {};
 		bool bAllTerms = true;
 		uint64_t uIntersection = 0;
-			std::array<std::array<uint64_t,64>,2> dTermBits {};
-			dIntersection.fill ( ~uint64_t(0) );
-			for ( int i=0; i<m_dNodes.GetLength(); ++i )
+		std::array<std::array<uint64_t,64>,2> dTermBits {};
+		dIntersectionMask.fill ( ~uint64_t(0) );
+		for ( int i=0; i<m_dNodes.GetLength(); ++i )
+		{
+			uint32_t uCardinality = 0;
+			if ( !m_dNodes[i].m_pQword->GetE1DirectWindow ( uWindow, dTermBits[i].data(), uCardinality ) )
 			{
-				uint32_t uCardinality = 0;
-				if ( !m_dNodes[i].m_pQword->GetE1DirectWindow ( uWindow, dTermBits[i].data(), uCardinality ) )
-				{
-					bAllTerms = false;
-					break;
-				}
-				++m_uE1ContainerOps;
-				for ( int w=0; w<64; ++w )
-				{
-					dIntersection[w] &= dTermBits[i][w];
-					++m_uE1IntersectionMaskOps;
-				}
+				bAllTerms = false;
+				break;
 			}
-			++m_uE1IntersectionWindows;
-			if ( !bAllTerms )
-				continue;
-			for ( uint64_t uWord : dIntersection )
-				uIntersection += uint64_t(__builtin_popcountll(uWord));
+			++m_uE1ContainerOps;
 			for ( int w=0; w<64; ++w )
 			{
-				const uint64_t uCandidates = dIntersection[w];
-				if ( !uCandidates )
-					continue;
-				++m_uE1CandidateWordsExamined;
-				m_uE1CandidatesGenerated += uint64_t(__builtin_popcountll(uCandidates));
-				dStageSurvivors[w] = uCandidates;
-				const uint64_t uSurvivors = uint64_t(__builtin_popcountll(dStageSurvivors[w]));
-				m_uE1CandidateMaskRows += uSurvivors;
-				if ( !uSurvivors )
-					++m_uE1WholeWordsRejected;
+				dIntersectionMask[w] &= dTermBits[i][w];
+				++m_uE1IntersectionMaskOps;
 			}
+		}
+		++m_uE1IntersectionWindows;
+		if ( !bAllTerms )
+			continue;
+		for ( uint64_t uWord : dIntersectionMask )
+			uIntersection += uint64_t(__builtin_popcountll(uWord));
+		for ( int w=0; w<64; ++w )
+		{
+			const uint64_t uCandidates = dIntersectionMask[w];
+			if ( !uCandidates )
+				continue;
+			++m_uE1CandidateWordsExamined;
+			const uint64_t uCandidatesInWord = uint64_t(__builtin_popcountll(uCandidates));
+			m_uE1CandidatesGenerated += uCandidatesInWord;
+			m_uE1CandidateMaskRows += uCandidatesInWord;
+		}
 		if ( !uIntersection )
 			continue;
 		++m_uE1WindowsTotal;
@@ -4560,7 +4554,7 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1DirectAndWindow()
 			for ( int iNode=0; iNode<m_dNodes.GetLength(); ++iNode )
 			{
 				uint64_t uRequested = 0, uWritten = 0, uDecoded = 0;
-				if ( !m_dNodes[iNode].m_pQword->ExtractE1DirectTFBatch ( uWindow, dStageSurvivors.data(), dExactTF[iNode].data(), uRequested, uWritten, uDecoded ) || uRequested!=uWritten )
+				if ( !m_dNodes[iNode].m_pQword->ExtractE1DirectTFBatch ( uWindow, dIntersectionMask.data(), dExactTF[iNode].data(), uRequested, uWritten, uDecoded ) || uRequested!=uWritten )
 					return false;
 				m_uE1BatchTFRowsRequested += uRequested;
 				m_uE1BatchTFRowsWritten += uWritten;
@@ -4571,7 +4565,7 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1DirectAndWindow()
 
 			for ( int w=0; w<64; ++w )
 			{
-				uint64_t uBits = dStageSurvivors[w];
+				uint64_t uBits = dIntersectionMask[w];
 				while ( uBits )
 				{
 					const uint32_t uBit = uint32_t(__builtin_ctzll(uBits));

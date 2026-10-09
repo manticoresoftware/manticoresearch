@@ -106,7 +106,6 @@ inline int E1RankedTopKFromPage ( int iOffset, int iLimit )
 struct E1SelectedMeta_t
 {
 	uint32_t m_uLocal = 0;
-	uint32_t m_uOrdinal = 0;
 	uint32_t m_uTF = 0;
 	uint32_t m_uMask = 0;
 	uint64_t m_uRef = 0;

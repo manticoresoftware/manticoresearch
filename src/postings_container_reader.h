@@ -165,7 +165,7 @@ public:
 };
 class Cursor {
  const uint8_t*m_p=nullptr,*m_term=nullptr;uint32_t m_df=0,m_next=0,m_cached=UINT32_MAX,m_rows[128];
- const uint8_t*m_bounds=nullptr,*m_minPublicIDs=nullptr,*m_firstFieldTF=nullptr;uint32_t m_firstFieldTFWidth=0;
+ const uint8_t*m_bounds=nullptr,*m_minPublicIDs=nullptr;
  const uint8_t*m_projectionDir=nullptr,*m_projectionPayload=nullptr;uint32_t m_projectionCount=0,m_projectionRows=0,m_projectionBlocks=0,m_projectionRankPos=0,m_projectionInBlock=0,m_projectionDecodedBlock=UINT32_MAX,m_projectionDecodedCount=0;bool m_projectionCountersReady=false;uint32_t m_projectionDecodedRows[64]{},m_projectionDecodedTF[64]{};std::vector<uint32_t> m_projectionRankOrder;
  uint32_t m_block=0,m_lastOrdinal=UINT32_MAX,m_lastRow=0,m_bitmapBlock=UINT32_MAX,m_bitmapWord=0,m_bitmapEndOrdinal=0,m_bitmapWindow=0;uint64_t m_bitmapRemaining=0;const uint8_t*m_bitmapPayload=nullptr;
  uint32_t m_meta=UINT32_MAX,m_tf[128],m_mask[128];uint64_t m_ref[128];
@@ -191,8 +191,8 @@ public:
  bool Active()const{return m_p;} void Reset(){m_next=0;m_cached=UINT32_MAX;m_meta=m_uBatchGroup=UINT32_MAX;m_block=0;m_lastOrdinal=UINT32_MAX;m_bitmapBlock=UINT32_MAX;m_bitmapWord=0;m_bitmapEndOrdinal=0;m_bitmapWindow=0;m_bitmapRemaining=0;m_bitmapPayload=nullptr;m_dRankOrder.clear();m_uRankPos=0;m_uRankInBlock=0;m_bRankOrderReady=false;m_uMetaDecoded=0;m_uDirectWindow=UINT32_MAX;m_uDirectBlock=UINT32_MAX;m_uHintPrefixBlock=UINT32_MAX;m_dHintPrefix.fill(0);m_dDirectMask.fill(0);m_pSelectedMeta=nullptr;m_uSelectedWord=0;m_uSelectedOrdinal=0;m_uSelectedMembers=0;m_projectionPayload=nullptr;m_projectionRows=m_projectionBlocks=m_projectionRankPos=m_projectionInBlock=m_projectionDecodedCount=0;m_projectionDecodedBlock=UINT32_MAX;m_projectionCountersReady=false;m_projectionRankOrder.clear();}
  uint64_t TakeMetadataGroupsDecoded(){auto u=m_uMetaDecoded;m_uMetaDecoded=0;return u;}
  void Bind(const Store&s,uint64_t key){
-  auto v=s.View(key);m_p=v.term?v.data:nullptr;m_term=v.term;m_df=v.DF();Reset();m_bounds=nullptr;m_minPublicIDs=nullptr;m_firstFieldTF=nullptr;m_firstFieldTFWidth=0;m_projectionDir=nullptr;m_projectionCount=0;
-  if(m_term){auto nm=U32(m_term+8);auto mo=U64(m_term+16);if(nm){auto g=m_p+mo+uint64_t(nm-1)*16;m_bounds=m_p+U64(g)+Meta4Bytes(U32(g+8),U32(g+12));const uint64_t blocks=(uint64_t(m_df)+63)/64;if(s.PublicIDMinValidated())m_minPublicIDs=m_bounds+blocks;if((m_firstFieldTFWidth=v.FirstFieldTFWidth()))m_firstFieldTF=m_bounds+blocks+blocks*8;if(U32(m_term+12)&(1u<<14)){const uint64_t fieldBytes=(uint64_t(m_df)*m_firstFieldTFWidth+7)/8;const uint8_t* tail=m_bounds+blocks+blocks*8+fieldBytes;m_projectionCount=U32(tail);m_projectionDir=tail+4;}}}
+  auto v=s.View(key);m_p=v.term?v.data:nullptr;m_term=v.term;m_df=v.DF();Reset();m_bounds=nullptr;m_minPublicIDs=nullptr;m_projectionDir=nullptr;m_projectionCount=0;
+  if(m_term){auto nm=U32(m_term+8);auto mo=U64(m_term+16);if(nm){auto g=m_p+mo+uint64_t(nm-1)*16;m_bounds=m_p+U64(g)+Meta4Bytes(U32(g+8),U32(g+12));const uint64_t blocks=(uint64_t(m_df)+63)/64;if(s.PublicIDMinValidated())m_minPublicIDs=m_bounds+blocks;if(U32(m_term+12)&(1u<<14)){const uint32_t firstFieldTFWidth=v.FirstFieldTFWidth();const uint64_t fieldBytes=(uint64_t(m_df)*firstFieldTFWidth+7)/8;const uint8_t* tail=m_bounds+blocks+blocks*8+fieldBytes;m_projectionCount=U32(tail);m_projectionDir=tail+4;}}}
  }
  TermView View()const{return {m_p,m_term};}
  E1RankedBoundKind_e BoundKind()const{return m_bounds?E1RankedBoundKind_e::BM25A_RATIO:E1RankedBoundKind_e::NONE;}
@@ -244,7 +244,7 @@ public:
   while(m_uSelectedWord<64){
    while(m_uSelectedMembers){const uint32_t bit=uint32_t(__builtin_ctzll(m_uSelectedMembers));m_uSelectedMembers&=m_uSelectedMembers-1;const uint32_t ordinal=m_uSelectedOrdinal++;if(!(m_pSelectedMeta[m_uSelectedWord]&(uint64_t(1)<<bit)))continue;
     const uint32_t group=ordinal/128;if(m_meta!=group){auto g=m_p+U64(m_term+16)+uint64_t(group)*16;auto n=U32(g+12);Metadata4Block(m_p+U64(g),U32(g+8),n,m_tf,m_mask,m_ref);m_meta=group;++decoded;}
-    const uint32_t slot=ordinal%128;out={m_uSelectedWord*64+bit,ordinal,m_tf[slot],m_mask[slot],m_ref[slot]};
+    const uint32_t slot=ordinal%128;out={m_uSelectedWord*64+bit,m_tf[slot],m_mask[slot],m_ref[slot]};
     return true;}
    if(++m_uSelectedWord<64)m_uSelectedMembers=m_dDirectMask[m_uSelectedWord];
   }

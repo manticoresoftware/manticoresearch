@@ -782,6 +782,43 @@ TEST ( NormStore, MaxGroupRowsUsesOneGroupWithoutOverflow )
 	EXPECT_EQ ( dActual, dExpected );
 }
 
+TEST ( NormStore, ZeroFieldsMaxRowsDoesNotMaterializeGroups )
+{
+	// Running this input against the old implementation is unsafe: it attempts
+	// to allocate and populate UINT32_MAX total-cache groups.
+	const std::array<uint8_t,64> dData {{
+		'E', '1', 'N', 'O', 'R', 'M', '0', '1',
+		0x01, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00,
+		0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00,
+		0x01, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff,
+		0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	}};
+	std::string sError;
+	e1::norms::Store tStore;
+	ASSERT_TRUE ( tStore.Open(dData.data(),dData.size(),sError) ) << sError;
+	EXPECT_EQ ( tStore.Rows(), UINT32_MAX );
+	EXPECT_EQ ( tStore.Fields(), 0u );
+	EXPECT_EQ ( tStore.TotalCacheBytes(), 0u );
+
+	const std::array<uint32_t,3> dRows {{ 0, 123456789, UINT32_MAX-1 }};
+	std::array<uint32_t,3> dTotals {{ 7, 8, 9 }};
+	ASSERT_TRUE ( tStore.GatherTotal(dRows.data(),dRows.size(),dTotals.data()) );
+	EXPECT_EQ ( dTotals, (std::array<uint32_t,3>{{ 0, 0, 0 }}) );
+
+	const std::array<uint32_t,2> dOutOfRange {{ 0, UINT32_MAX }};
+	dTotals = {{ 7, 8, 9 }};
+	EXPECT_FALSE ( tStore.GatherTotal(dOutOfRange.data(),dOutOfRange.size(),dTotals.data()) );
+	EXPECT_EQ ( dTotals, (std::array<uint32_t,3>{{ 0, 8, 9 }}) );
+	EXPECT_FALSE ( tStore.GatherTotal(nullptr,1,dTotals.data()) );
+	EXPECT_FALSE ( tStore.GatherTotal(dRows.data(),1,nullptr) );
+	uint32_t uValue = 123;
+	EXPECT_FALSE ( tStore.Get(0,0,uValue) );
+	EXPECT_EQ ( uValue, 123u );
+}
+
 TEST ( NormStore, RejectsCorruptionAndTruncation )
 {
 	NormStoreBuilder tBuilder ( 1, 4 );
@@ -952,7 +989,7 @@ TEST ( NormStore, StagedBuilderSupportsAttributeOnlyIndexes )
 	ASSERT_TRUE ( tStore.Open(dData.data(),dData.size(),sError) ) << sError;
 	EXPECT_EQ ( tStore.Rows(), 2u );
 	EXPECT_EQ ( tStore.Fields(), 0u );
-	EXPECT_EQ ( tStore.TotalCacheBytes(), 2u );
+	EXPECT_EQ ( tStore.TotalCacheBytes(), 0u );
 }
 
 TEST ( RtFieldNorms, MapsMixedIndexedAndStoredFieldsAndExpandsLegacyRows )

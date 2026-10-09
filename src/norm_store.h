@@ -725,7 +725,19 @@ public:
 
 	bool GatherTotal ( const uint32_t * pRows, uint32_t uCount, uint32_t * pOut ) const override
 	{
-		if ( !pRows || !pOut || m_dTotalGroups.size()!=m_uGroups )
+		if ( !pRows || !pOut )
+			return false;
+		if ( !m_uFields )
+		{
+			for ( uint32_t i=0; i<uCount; ++i )
+			{
+				if ( pRows[i]>=m_uRows )
+					return false;
+				pOut[i] = 0;
+			}
+			return true;
+		}
+		if ( m_dTotalGroups.size()!=m_uGroups )
 			return false;
 		for ( uint32_t i=0; i<uCount; ++i )
 		{
@@ -743,6 +755,8 @@ public:
 private:
 	void BuildTotalCache()
 	{
+		if ( !m_uFields )
+			return;
 		m_dTotalGroups.resize ( m_uGroups );
 		std::vector<uint32_t> dTotals ( std::min(m_uGroupRows,m_uRows) );
 		for ( uint32_t uGroup=0; uGroup<m_uGroups; ++uGroup )

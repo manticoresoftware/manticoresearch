@@ -662,6 +662,11 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 	}
 
 	int iGroupBy = GetGroupbyAttrIndex();
+	// A merge sorter consumes pre-grouped matches whose @groupby key is already computed.
+	// The source MVA may have been dropped from their schema to save memory.
+	if ( iGroupBy<0 && m_tSettings.m_bGrouped && m_tQuery.m_eGroupFunc==SPH_GROUPBY_ATTR )
+		iGroupBy = tSchema.GetAttrIndex ( "@groupby" );
+
 	bool bJoined = iGroupBy>=0 && m_pSorterSchema->GetAttr(iGroupBy).IsJoined();
 	if ( ( iGroupBy<0 || bJoined ) && sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr(), m_tQuery.m_sJoinIdx.cstr(), &sJsonColumn ) )
 	{

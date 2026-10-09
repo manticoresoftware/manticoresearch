@@ -170,12 +170,11 @@ class Cursor {
  uint32_t m_block=0,m_lastOrdinal=UINT32_MAX,m_lastRow=0,m_bitmapBlock=UINT32_MAX,m_bitmapWord=0,m_bitmapEndOrdinal=0,m_bitmapWindow=0;uint64_t m_bitmapRemaining=0;const uint8_t*m_bitmapPayload=nullptr;
  uint32_t m_meta=UINT32_MAX,m_tf[128],m_mask[128];uint64_t m_ref[128];
  uint64_t m_uMetaDecoded=0;
- uint32_t m_dBatchStage[4] { UINT32_MAX,UINT32_MAX,UINT32_MAX,UINT32_MAX },m_dBatchTF[128];
+ uint32_t m_uBatchGroup=UINT32_MAX,m_dBatchTF[128];
  uint32_t m_uDirectWindow=UINT32_MAX,m_uDirectBlock=UINT32_MAX;
  uint32_t m_uHintPrefixBlock=UINT32_MAX;
  std::array<uint16_t,65> m_dHintPrefix{};
  std::array<uint64_t,64> m_dDirectMask{};
- std::array<uint16_t,65> m_dDirectPrefix{};
  const uint64_t *m_pSelectedMeta=nullptr;uint32_t m_uSelectedWord=0,m_uSelectedOrdinal=0;uint64_t m_uSelectedMembers=0;
  std::vector<uint32_t> m_dRankOrder;
  uint32_t m_uRankPos=0,m_uRankInBlock=0;
@@ -189,7 +188,7 @@ class Cursor {
   for(uint32_t i=0;i<n;++i)m_dRankOrder[next[m_bounds[i]]++]=i;
  }
 public:
- bool Active()const{return m_p;} void Reset(){m_next=0;m_cached=UINT32_MAX;m_meta=UINT32_MAX;for(auto&m:m_dBatchStage)m=UINT32_MAX;m_block=0;m_lastOrdinal=UINT32_MAX;m_bitmapBlock=UINT32_MAX;m_bitmapWord=0;m_bitmapEndOrdinal=0;m_bitmapWindow=0;m_bitmapRemaining=0;m_bitmapPayload=nullptr;m_dRankOrder.clear();m_uRankPos=0;m_uRankInBlock=0;m_bRankOrderReady=false;m_uMetaDecoded=0;m_uDirectWindow=UINT32_MAX;m_uDirectBlock=UINT32_MAX;m_uHintPrefixBlock=UINT32_MAX;m_dHintPrefix.fill(0);m_dDirectMask.fill(0);m_dDirectPrefix.fill(0);m_pSelectedMeta=nullptr;m_uSelectedWord=0;m_uSelectedOrdinal=0;m_uSelectedMembers=0;m_projectionPayload=nullptr;m_projectionRows=m_projectionBlocks=m_projectionRankPos=m_projectionInBlock=m_projectionDecodedCount=0;m_projectionDecodedBlock=UINT32_MAX;m_projectionCountersReady=false;m_projectionRankOrder.clear();}
+ bool Active()const{return m_p;} void Reset(){m_next=0;m_cached=UINT32_MAX;m_meta=m_uBatchGroup=UINT32_MAX;m_block=0;m_lastOrdinal=UINT32_MAX;m_bitmapBlock=UINT32_MAX;m_bitmapWord=0;m_bitmapEndOrdinal=0;m_bitmapWindow=0;m_bitmapRemaining=0;m_bitmapPayload=nullptr;m_dRankOrder.clear();m_uRankPos=0;m_uRankInBlock=0;m_bRankOrderReady=false;m_uMetaDecoded=0;m_uDirectWindow=UINT32_MAX;m_uDirectBlock=UINT32_MAX;m_uHintPrefixBlock=UINT32_MAX;m_dHintPrefix.fill(0);m_dDirectMask.fill(0);m_pSelectedMeta=nullptr;m_uSelectedWord=0;m_uSelectedOrdinal=0;m_uSelectedMembers=0;m_projectionPayload=nullptr;m_projectionRows=m_projectionBlocks=m_projectionRankPos=m_projectionInBlock=m_projectionDecodedCount=0;m_projectionDecodedBlock=UINT32_MAX;m_projectionCountersReady=false;m_projectionRankOrder.clear();}
  uint64_t TakeMetadataGroupsDecoded(){auto u=m_uMetaDecoded;m_uMetaDecoded=0;return u;}
  void Bind(const Store&s,uint64_t key){
   auto v=s.View(key);m_p=v.term?v.data:nullptr;m_term=v.term;m_df=v.DF();Reset();m_bounds=nullptr;m_minPublicIDs=nullptr;m_firstFieldTF=nullptr;m_firstFieldTFWidth=0;m_projectionDir=nullptr;m_projectionCount=0;
@@ -215,63 +214,37 @@ public:
    const uint32_t i=m_projectionInBlock++;row=m_projectionDecodedRows[i];tf=m_projectionDecodedTF[i];if(m_projectionInBlock==n){++m_projectionRankPos;m_projectionInBlock=0;}return true;
   }return false;
  }
-	 bool ExactFieldTF(uint32_t ordinal,uint32_t field,uint32_t mask,uint32_t aggregate,uint32_t&tf)const{
-	  if(ordinal>=m_df)return false;
-	  const uint32_t first=m_firstFieldTF&&m_firstFieldTFWidth?uint32_t(PackedBounded(m_firstFieldTF,m_firstFieldTFWidth,ordinal,m_df)):0;
-	  return ExactLocalFieldTF(mask,aggregate,first,field,tf);
- }
  bool DirectContainerSupported()const{return BoundKind()!=E1RankedBoundKind_e::NONE&&View().Frequent();}
  bool DirectLastWindow(uint32_t&window)const{auto v=View();if(!DirectContainerSupported()||!v.Blocks())return false;window=v.At(v.Blocks()-1).id();return true;}
  bool DirectWindow(uint32_t window,uint64_t*outMask,uint32_t&card){
   card=0;if(!DirectContainerSupported())return false;auto v=View();uint32_t lo=0,hi=v.Blocks();while(lo<hi){auto mid=lo+(hi-lo)/2;if(v.At(mid).id()<window)lo=mid+1;else hi=mid;}if(lo==v.Blocks()||v.At(lo).id()!=window)return false;
   auto b=v.At(lo);Mask(b,m_dDirectMask);if(outMask)for(unsigned w=0;w<64;++w)outMask[w]=m_dDirectMask[w];card=b.card();
-  m_dDirectPrefix[0]=0;for(unsigned w=0;w<64;++w)m_dDirectPrefix[w+1]=uint16_t(m_dDirectPrefix[w]+__builtin_popcountll(m_dDirectMask[w]));m_uDirectWindow=window;m_uDirectBlock=lo;return true;
+  m_uDirectWindow=window;m_uDirectBlock=lo;return true;
  }
- bool ProbeTF(uint32_t row,uint32_t&tf){
-  if(!DirectContainerSupported())return false;const uint32_t window=row/4096,local=row%4096;if(m_uDirectWindow!=window){uint32_t card=0;if(!DirectWindow(window,m_dDirectMask.data(),card))return false;}
-  const uint32_t word=local/64,bit=local%64;if(!(m_dDirectMask[word]&(uint64_t(1)<<bit)))return false;
-  auto b=View().At(m_uDirectBlock);const uint32_t ordinal=b.ordinal()+m_dDirectPrefix[word]+__builtin_popcountll(m_dDirectMask[word]&((bit==0)?0:(uint64_t(1)<<bit)-1));const uint32_t group=ordinal/128;
-  if(m_meta!=group){auto g=m_p+U64(m_term+16)+uint64_t(group)*16;auto n=U32(g+12);Metadata4Block(m_p+U64(g),U32(g+8),n,m_tf,m_mask,m_ref);m_meta=group;++m_uMetaDecoded;}tf=m_tf[ordinal%128];return true;
- }
- bool ExtractWindowTFBatch(uint32_t window,const uint64_t*selected,uint32_t*outTF,uint64_t&requested,uint64_t&written,uint64_t&decoded,uint32_t stage=0){
-  if(!DirectContainerSupported()||!selected||!outTF||stage>=4)return false;
+ bool ExtractWindowTFBatch(uint32_t window,const uint64_t*selected,uint32_t*outTF,uint64_t&requested,uint64_t&written,uint64_t&decoded){
+  if(!DirectContainerSupported()||!selected||!outTF)return false;
   for(unsigned w=0;w<64;++w)requested+=__builtin_popcountll(selected[w]);
   if(m_uDirectWindow!=window){uint32_t card=0;if(!DirectWindow(window,m_dDirectMask.data(),card))return false;}
   auto b=View().At(m_uDirectBlock);uint32_t ordinal=b.ordinal();
   for(unsigned w=0;w<64;++w){uint64_t members=m_dDirectMask[w];while(members){const uint32_t bit=uint32_t(__builtin_ctzll(members));members&=members-1;const uint32_t local=w*64+bit;if(selected[w]&(uint64_t(1)<<bit)){
-    const uint32_t group=ordinal/128;if(m_dBatchStage[stage]!=group){auto g=m_p+U64(m_term+16)+uint64_t(group)*16;auto n=U32(g+12);uint32_t masks[128];uint64_t refs[128];Metadata4Block(m_p+U64(g),U32(g+8),n,m_dBatchTF,masks,refs);m_dBatchStage[stage]=group;++decoded;}
+    const uint32_t group=ordinal/128;if(m_uBatchGroup!=group){auto g=m_p+U64(m_term+16)+uint64_t(group)*16;auto n=U32(g+12);uint32_t masks[128];uint64_t refs[128];Metadata4Block(m_p+U64(g),U32(g+8),n,m_dBatchTF,masks,refs);m_uBatchGroup=group;++decoded;}
     outTF[local]=m_dBatchTF[ordinal%128];++written;
    }++ordinal;}}
   return true;
  }
- bool ExtractWindowMetaBatch(uint32_t window,const uint64_t*selected,uint32_t*outTF,uint32_t*outMask,uint64_t*outRef,uint64_t&requested,uint64_t&written,uint64_t&decoded){
-   if(!DirectContainerSupported()||!selected||!outTF||!outMask||!outRef)return false;
-   for(unsigned w=0;w<64;++w)requested+=__builtin_popcountll(selected[w]);
-   if(m_uDirectWindow!=window){uint32_t card=0;if(!DirectWindow(window,m_dDirectMask.data(),card))return false;}
-   auto b=View().At(m_uDirectBlock);uint32_t ordinal=b.ordinal();uint32_t cached=UINT32_MAX,tf[128],mask[128];uint64_t ref[128];
-   for(unsigned w=0;w<64;++w){uint64_t members=m_dDirectMask[w];while(members){const uint32_t bit=uint32_t(__builtin_ctzll(members));members&=members-1;const uint32_t local=w*64+bit;if(selected[w]&(uint64_t(1)<<bit)){
-     const uint32_t group=ordinal/128;if(cached!=group){auto g=m_p+U64(m_term+16)+uint64_t(group)*16;auto n=U32(g+12);Metadata4Block(m_p+U64(g),U32(g+8),n,tf,mask,ref);cached=group;++decoded;}
-     outTF[local]=tf[ordinal%128];outMask[local]=mask[ordinal%128];outRef[local]=ref[ordinal%128];++written;
-    }++ordinal;}}
-   return true;
-  }
+
  bool BeginSelectedMeta(uint32_t window,const uint64_t*selected,uint64_t&requested){
   if(!DirectContainerSupported()||!selected)return false;
   if(m_uDirectWindow!=window){uint32_t card=0;if(!DirectWindow(window,m_dDirectMask.data(),card))return false;}
   requested=0;for(unsigned w=0;w<64;++w)requested+=__builtin_popcountll(selected[w]);
   m_pSelectedMeta=selected;m_uSelectedWord=0;m_uSelectedOrdinal=View().At(m_uDirectBlock).ordinal();m_uSelectedMembers=m_dDirectMask[0];return true;
  }
- bool NextSelectedMeta(E1SelectedMeta_t&out,uint64_t&decoded,uint32_t scopedField=UINT32_MAX){
+ bool NextSelectedMeta(E1SelectedMeta_t&out,uint64_t&decoded){
   if(!m_pSelectedMeta)return false;
   while(m_uSelectedWord<64){
    while(m_uSelectedMembers){const uint32_t bit=uint32_t(__builtin_ctzll(m_uSelectedMembers));m_uSelectedMembers&=m_uSelectedMembers-1;const uint32_t ordinal=m_uSelectedOrdinal++;if(!(m_pSelectedMeta[m_uSelectedWord]&(uint64_t(1)<<bit)))continue;
     const uint32_t group=ordinal/128;if(m_meta!=group){auto g=m_p+U64(m_term+16)+uint64_t(group)*16;auto n=U32(g+12);Metadata4Block(m_p+U64(g),U32(g+8),n,m_tf,m_mask,m_ref);m_meta=group;++decoded;}
-    const uint32_t slot=ordinal%128;out={m_uSelectedWord*64+bit,ordinal,m_tf[slot],m_mask[slot],0,m_ref[slot]};
-    if(scopedField<32&&(out.m_uMask&(uint32_t(1)<<scopedField))){
-     const uint32_t fields=uint32_t(__builtin_popcount(out.m_uMask));
-     if(fields==1)out.m_uScopedTF=out.m_uTF;
-     else if(fields==2&&m_firstFieldTF&&m_firstFieldTFWidth){const uint32_t first=uint32_t(PackedBounded(m_firstFieldTF,m_firstFieldTFWidth,ordinal,m_df));if(first&&first<out.m_uTF)out.m_uScopedTF=scopedField==uint32_t(__builtin_ctz(out.m_uMask))?first:out.m_uTF-first;}
-    }
+    const uint32_t slot=ordinal%128;out={m_uSelectedWord*64+bit,ordinal,m_tf[slot],m_mask[slot],m_ref[slot]};
     return true;}
    if(++m_uSelectedWord<64)m_uSelectedMembers=m_dDirectMask[m_uSelectedWord];
   }
@@ -293,7 +266,7 @@ public:
   m_lastOrdinal=ordinal;m_lastRow=b.id()*4096+x;return m_lastRow;
  }
  bool Next(uint32_t&row,uint32_t*tf=nullptr,uint32_t*mask=nullptr,uint64_t*ref=nullptr){if(m_next>=m_df){row=UINT32_MAX;return false;}auto o=m_next++;row=Row(o);if(tf){auto group=o/128;if(m_meta!=group){auto g=m_p+U64(m_term+16)+uint64_t(group)*16;auto n=U32(g+12);Metadata4Block(m_p+U64(g),U32(g+8),n,m_tf,m_mask,m_ref);m_meta=group;++m_uMetaDecoded;}*tf=m_tf[o%128];*mask=m_mask[o%128];*ref=m_ref[o%128];}return true;}
- bool NextRanked(uint32_t&row,uint32_t&tf,uint32_t&mask,uint64_t&ref,uint64_t&entries,uint64_t&buckets,uint64_t&selected,uint64_t&skipped,uint64_t&skippedDocs,uint64_t&decoded,const uint64_t*pEligibility=nullptr,uint32_t uEligibilityWords=0,uint64_t*pIneligibleBeforeTF=nullptr,uint64_t uWorstTieKey=UINT64_MAX,uint32_t uKnownMask=0,float fRatioIDF=0.0f,int iThreshold=0,uint64_t*equalitySkipped=nullptr){
+ bool NextRanked(uint32_t&row,uint32_t&tf,uint32_t&mask,uint64_t&ref,uint64_t&entries,uint64_t&buckets,uint64_t&selected,uint64_t&skipped,uint64_t&skippedDocs,uint64_t&decoded,const uint64_t*pEligibility=nullptr,uint32_t uEligibilityWords=0,uint64_t*pIneligibleBeforeTF=nullptr,uint64_t uWorstTieKey=UINT64_MAX,float fRatioIDF=0.0f,int iThreshold=0,uint64_t*equalitySkipped=nullptr){
   PrepareRankedOrder(entries,buckets);
   while(m_uRankPos<m_dRankOrder.size()){
    const uint32_t block=m_dRankOrder[m_uRankPos],begin=block*64,n=std::min(64u,m_df-begin);
@@ -316,7 +289,6 @@ public:
    if(m_uRankInBlock==n){++m_uRankPos;m_uRankInBlock=0;}
    row=Row(o);
    if(pEligibility&&(row/64>=uEligibilityWords||!(pEligibility[row/64]&(uint64_t(1)<<(row%64))))){if(pIneligibleBeforeTF)++*pIneligibleBeforeTF;continue;}
-   if(uKnownMask){tf=0;mask=uKnownMask;ref=0;return true;}
    const auto group=o/128;
    if(m_meta!=group){auto g=m_p+U64(m_term+16)+uint64_t(group)*16;auto count=U32(g+12);Metadata4Block(m_p+U64(g),U32(g+8),count,m_tf,m_mask,m_ref);m_meta=group;++decoded;}
    tf=m_tf[o%128];mask=m_mask[o%128];ref=m_ref[o%128];return true;

@@ -566,7 +566,7 @@ struct ExtDoc_t
 	DWORD			m_uDocFields;
 	float			m_fTFIDF;
 	DWORD			m_uExactTF = 0;	///< exact E1 term frequency for narrowly gated direct rankers
-	DWORD			m_dExactTF[4] = {};	///< canonical query-order TFs for exact E1 AND2/AND4
+	DWORD			m_dExactTF[4] = {};	///< canonical query-order TFs for exact E1 multi-term and phrase rankers
 	BYTE			m_uExactTerms = 0;
 	BYTE			m_bExactOr = 0;
 };

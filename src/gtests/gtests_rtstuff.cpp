@@ -1083,7 +1083,7 @@ protected:
 	CSphDictSettings tDictSettings;
 };
 
-TEST_F ( RT, ScopedAnd2ScratchDeclineFallsBackToCanonicalBM25A )
+TEST_F ( RT, ScopedAnd2FallsBackToCanonicalBM25A )
 {
 	using Result_t = std::pair<int64_t,int>;
 	struct QueryResult_t
@@ -1091,11 +1091,6 @@ TEST_F ( RT, ScopedAnd2ScratchDeclineFallsBackToCanonicalBM25A )
 		std::vector<Result_t> m_dRows;
 		int64_t m_iTotal = 0;
 	};
-	struct TestSeamGuard_t
-	{
-		~TestSeamGuard_t() { ResetE1TestLastWindow(); }
-	} tGuard;
-
 	Threads::CallCoroutine ( [&] {
 		tCol.m_sName = "id";
 		tCol.m_eAttrType = SPH_ATTR_BIGINT;
@@ -1106,9 +1101,9 @@ TEST_F ( RT, ScopedAnd2ScratchDeclineFallsBackToCanonicalBM25A )
 		for ( int i=0; i<tSrcSchema.GetAttrsCount(); ++i )
 			tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
 
-		auto pDict = sphCreateDictionaryCRC ( tDictSettings, nullptr, pTok, "scoped-and2", false, 32, nullptr, sError );
+		auto pDict = sphCreateDictionaryCRC ( tDictSettings, nullptr, pTok, "scoped-and2-fallback", false, 32, nullptr, sError );
 		ASSERT_TRUE ( pDict );
-		auto pIndex = sphCreateIndexRT ( "scoped_and2_scratch", RT_INDEX_FILE_NAME, tSchema, 128*1024 );
+		auto pIndex = sphCreateIndexRT ( "scoped_and2_fallback", RT_INDEX_FILE_NAME, tSchema, 128*1024 );
 		pIndex->SetTokenizer ( pTok );
 		pIndex->SetDictionary ( pDict );
 		pIndex->PostSetup();
@@ -1203,9 +1198,6 @@ TEST_F ( RT, ScopedAnd2ScratchDeclineFallsBackToCanonicalBM25A )
 			return tOut;
 		};
 
-		constexpr uint32_t OVERSIZED_LAST_WINDOW = 1985;
-		ASSERT_FALSE ( E1ScopedScratchAllowed(OVERSIZED_LAST_WINDOW) );
-		SetE1TestLastWindow ( OVERSIZED_LAST_WINDOW );
 		const auto tNamed = fnQuery ( "@content error failed", false, 0, 20 );
 		const auto tGeneric = fnQuery ( "@content error failed", true, 0, 20 );
 		const auto tParenNamed = fnQuery ( "@content (error failed)", false, 0, 20 );
@@ -1213,8 +1205,6 @@ TEST_F ( RT, ScopedAnd2ScratchDeclineFallsBackToCanonicalBM25A )
 		const auto tPage = fnQuery ( "@content error failed", false, 1, 2 );
 		const auto tGenericPage = fnQuery ( "@content error failed", true, 1, 2 );
 
-		EXPECT_EQ ( GetE1TestScratchDeclines(), 6u );
-		EXPECT_EQ ( GetE1TestDirectExecutorCalls(), 0u );
 		EXPECT_EQ ( tNamed.m_dRows, tGeneric.m_dRows );
 		EXPECT_EQ ( tNamed.m_iTotal, tGeneric.m_iTotal );
 		EXPECT_EQ ( tParenNamed.m_dRows, tParenGeneric.m_dRows );
@@ -1491,6 +1481,21 @@ TEST_F ( RT, E1Post07RatioBoundsDriveExactCanonicalBM25A )
 		EXPECT_EQ ( tOr.m_iTotal, tOrGeneric.m_iTotal );
 		EXPECT_EQ ( tOr.m_iTotal, DOCS );
 		EXPECT_GT ( tOrStats.m_uDirectOr, 0u );
+
+		// Four-term Boolean plans stay on the canonical generic executor.
+		const auto tAnd4 = fnQuery ( "hot title scopehot filler", false, 0, 10 );
+		const E1TestRankStats_t tAnd4Stats = GetE1TestRankStats();
+		const auto tAnd4Generic = fnQuery ( "hot title scopehot filler", true, 0, 10 );
+		EXPECT_EQ ( tAnd4.m_dRows, tAnd4Generic.m_dRows );
+		EXPECT_EQ ( tAnd4.m_iTotal, tAnd4Generic.m_iTotal );
+		EXPECT_EQ ( tAnd4Stats.m_uDirectAnd, 0u );
+
+		const auto tOr4 = fnQuery ( "hot | title | scopehot | filler", false, 0, 10 );
+		const E1TestRankStats_t tOr4Stats = GetE1TestRankStats();
+		const auto tOr4Generic = fnQuery ( "hot | title | scopehot | filler", true, 0, 10 );
+		EXPECT_EQ ( tOr4.m_dRows, tOr4Generic.m_dRows );
+		EXPECT_EQ ( tOr4.m_iTotal, tOr4Generic.m_iTotal );
+		EXPECT_EQ ( tOr4Stats.m_uDirectOr, 0u );
 
 		const auto tFilter = fnQuery ( "hot", false, 0, 10, nullptr, nullptr, 0, 0, true );
 		const E1TestRankStats_t tFilterStats = GetE1TestRankStats();

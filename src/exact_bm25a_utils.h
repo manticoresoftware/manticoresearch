@@ -81,17 +81,6 @@ inline bool E1ExplicitMaskCoversSchema ( const MASK & tMask, int iFieldCount )
 	return true;
 }
 
-inline constexpr uint64_t E1_SCOPED_SCRATCH_LIMIT = 64ULL*1024*1024;
-inline constexpr uint64_t E1_DIRECT_WINDOW_ROWS = 4096;
-
-inline bool E1ScopedScratchAllowed ( uint32_t uLastWindow )
-{
-	const uint64_t uRows = ( uint64_t(uLastWindow)+1 )*E1_DIRECT_WINDOW_ROWS;
-	const uint64_t uWords = ( uRows+63 )/64;
-	const uint64_t uScratch = 2*( uRows*sizeof(uint32_t)+uWords*sizeof(uint64_t) );
-	return uRows<=uint64_t(std::numeric_limits<int>::max()) && uWords<=uint64_t(std::numeric_limits<int>::max()) && uScratch<=E1_SCOPED_SCRATCH_LIMIT;
-}
-
 inline int E1ScopedSingleField ( int iSchemaFields, bool bFullSchemaScope, uint32_t uMask )
 {
 	if ( bFullSchemaScope || iSchemaFields<2 || !uMask || (uMask&(uMask-1)) )
@@ -100,49 +89,6 @@ inline int E1ScopedSingleField ( int iSchemaFields, bool bFullSchemaScope, uint3
 	return iField<iSchemaFields ? iField : -1;
 }
 
-inline int E1SameScopedField2 ( int iSchemaFields, bool bLeftFullSchema, uint32_t uLeftMask, bool bRightFullSchema, uint32_t uRightMask )
-{
-	const int iLeft = E1ScopedSingleField ( iSchemaFields, bLeftFullSchema, uLeftMask );
-	const int iRight = E1ScopedSingleField ( iSchemaFields, bRightFullSchema, uRightMask );
-	return iLeft>=0 && iLeft==iRight ? iLeft : -1;
-}
-
-inline int E1ScopedAnd2Field ( int iSchemaFields, bool bLeftFullSchema, uint32_t uLeftMask, bool bRightFullSchema, uint32_t uRightMask )
-{
-	return E1SameScopedField2 ( iSchemaFields, bLeftFullSchema, uLeftMask, bRightFullSchema, uRightMask );
-}
-
-inline bool E1MixedScopedAnd2Fields ( int iSchemaFields, bool bLeftFullSchema, uint32_t uLeftMask, bool bRightFullSchema, uint32_t uRightMask, int & iLeftField, int & iRightField )
-{
-	iLeftField = E1ScopedSingleField ( iSchemaFields, bLeftFullSchema, uLeftMask );
-	iRightField = E1ScopedSingleField ( iSchemaFields, bRightFullSchema, uRightMask );
-	return iLeftField>=0 && iRightField>=0 && iLeftField!=iRightField;
-}
-
-inline int E1ScopedOr2Field ( int iSchemaFields, bool bLeftFullSchema, uint32_t uLeftMask, bool bRightFullSchema, uint32_t uRightMask )
-{
-	return E1SameScopedField2 ( iSchemaFields, bLeftFullSchema, uLeftMask, bRightFullSchema, uRightMask );
-}
-
-inline bool E1MixedScopedOr2Fields ( int iSchemaFields, bool bLeftFullSchema, uint32_t uLeftMask, bool bRightFullSchema, uint32_t uRightMask, int & iLeftField, int & iRightField )
-{
-	iLeftField = E1ScopedSingleField ( iSchemaFields, bLeftFullSchema, uLeftMask );
-	iRightField = E1ScopedSingleField ( iSchemaFields, bRightFullSchema, uRightMask );
-	return iLeftField>=0 && iRightField>=0 && iLeftField!=iRightField;
-}
-
-inline uint32_t E1ScopedExactTF ( uint32_t uAggregateTF, uint32_t uMask, int iField, uint32_t uDecodedTF )
-{
-	const uint32_t uFieldMask = uint32_t(1)<<iField;
-	if ( !(uMask&uFieldMask) )
-		return 0;
-	return uMask==uFieldMask ? uAggregateTF : uDecodedTF;
-}
-
-inline bool E1ScopedAggregateBoundSafe ( uint32_t uScopedTF, uint32_t uAggregateTF )
-{
-	return uScopedTF<=uAggregateTF;
-}
 
 inline int E1RankedTopKCapacity ( int iTopK )
 {
@@ -163,7 +109,6 @@ struct E1SelectedMeta_t
 	uint32_t m_uOrdinal = 0;
 	uint32_t m_uTF = 0;
 	uint32_t m_uMask = 0;
-	uint32_t m_uScopedTF = 0;
 	uint64_t m_uRef = 0;
 };
 

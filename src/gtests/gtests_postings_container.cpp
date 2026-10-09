@@ -228,26 +228,6 @@ TEST_F ( PostingsContainerTest, StreamedDirectoryUsesImplicitContiguousKeys )
 	EXPECT_TRUE ( tStore.View(2).HasHitlist() );
 }
 
-TEST_F ( PostingsContainerTest, FieldTermFrequencies )
-{
-	const std::vector<e1::Posting> dPostings {
-		{ 1,3,1u,0,0 }, { 2,7,3u,0,2 }, { 3,9,6u,0,4 }, { 4,5,7u,0,0 }
-	};
-	WriteContainer ( dPostings );
-	auto dRaw=ReadFile(m_sBase+".spd"), dDict=ReadFile(m_sBase+".spi"), dHits=ReadFile(m_sBase+".spp");
-	std::string sError;
-	e1::Store tStore;
-	ASSERT_TRUE ( tStore.Open(dRaw.data(),dRaw.size(),16,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError) ) << sError;
-	e1::Cursor tCursor;
-	tCursor.Bind ( tStore, 1 );
-	uint32_t uTF = 0;
-	EXPECT_TRUE ( tCursor.ExactFieldTF(0,0,1u,3,uTF) ); EXPECT_EQ ( uTF, 3u );
-	EXPECT_TRUE ( tCursor.ExactFieldTF(1,0,3u,7,uTF) ); EXPECT_EQ ( uTF, 2u );
-	EXPECT_TRUE ( tCursor.ExactFieldTF(1,1,3u,7,uTF) ); EXPECT_EQ ( uTF, 5u );
-	EXPECT_TRUE ( tCursor.ExactFieldTF(2,1,6u,9,uTF) ); EXPECT_EQ ( uTF, 4u );
-	EXPECT_TRUE ( tCursor.ExactFieldTF(2,2,6u,9,uTF) ); EXPECT_EQ ( uTF, 5u );
-	EXPECT_FALSE ( tCursor.ExactFieldTF(3,0,7u,5,uTF) );
-}
 
 TEST_F ( PostingsContainerTest, CompactMasksAndMixedReferences )
 {
@@ -488,11 +468,11 @@ TEST_F ( PostingsContainerTest, CurrentPersistsConservativePublicIdMinimumPerOrd
 	const int iThreshold = E1SafeUpperRatioWeight ( uCode, fIDF );
 	uint32_t uRow=0,uTF=0,uMask=0;
 	uint64_t uRef=0,uEntries=0,uBuckets=0,uSelected=0,uSkipped=0,uSkippedDocs=0,uDecoded=0,uEqualitySkipped=0;
-	EXPECT_TRUE ( tCursor.NextRanked(uRow,uTF,uMask,uRef,uEntries,uBuckets,uSelected,uSkipped,uSkippedDocs,uDecoded,nullptr,0,nullptr,dExpectedMin[0]+1,0,fIDF,iThreshold,&uEqualitySkipped) );
+	EXPECT_TRUE ( tCursor.NextRanked(uRow,uTF,uMask,uRef,uEntries,uBuckets,uSelected,uSkipped,uSkippedDocs,uDecoded,nullptr,0,nullptr,dExpectedMin[0]+1,fIDF,iThreshold,&uEqualitySkipped) );
 	EXPECT_EQ ( uRow, 0u );
 	tCursor.Reset();
 	uEntries=uBuckets=uSelected=uSkipped=uSkippedDocs=uDecoded=uEqualitySkipped=0;
-	EXPECT_FALSE ( tCursor.NextRanked(uRow,uTF,uMask,uRef,uEntries,uBuckets,uSelected,uSkipped,uSkippedDocs,uDecoded,nullptr,0,nullptr,dExpectedMin[2],0,fIDF,iThreshold,&uEqualitySkipped) );
+	EXPECT_FALSE ( tCursor.NextRanked(uRow,uTF,uMask,uRef,uEntries,uBuckets,uSelected,uSkipped,uSkippedDocs,uDecoded,nullptr,0,nullptr,dExpectedMin[2],fIDF,iThreshold,&uEqualitySkipped) );
 	EXPECT_EQ ( uEqualitySkipped, 3u );
 	EXPECT_EQ ( uSkippedDocs, 130u );
 

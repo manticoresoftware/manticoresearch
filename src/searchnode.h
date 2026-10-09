@@ -125,10 +125,6 @@ struct E1TestRankStats_t
 	uint64_t m_uDirectPhrase = 0;
 	uint64_t m_uDirectFilter = 0;
 };
-void SetE1TestLastWindow ( uint32_t uLastWindow );
-void ResetE1TestLastWindow ();
-uint64_t GetE1TestScratchDeclines ();
-uint64_t GetE1TestDirectExecutorCalls ();
 void SetE1TestForceGenericRanked ( bool bForce );
 void ResetE1TestRankStats ();
 E1TestRankStats_t GetE1TestRankStats ();

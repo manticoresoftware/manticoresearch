@@ -476,18 +476,12 @@ public:
 	{
 		return m_tE1.DirectWindow ( uWindow, pMask, uCardinality );
 	}
-	bool ExtractE1DirectTFBatch ( uint32_t uWindow, const uint64_t * pSelected, uint32_t * pTF, uint64_t & uRequested, uint64_t & uWritten, uint64_t & uDecoded, uint32_t uStage=0 ) override
+	bool ExtractE1DirectTFBatch ( uint32_t uWindow, const uint64_t * pSelected, uint32_t * pTF, uint64_t & uRequested, uint64_t & uWritten, uint64_t & uDecoded ) override
 	{
-		return m_tE1.ExtractWindowTFBatch ( uWindow, pSelected, pTF, uRequested, uWritten, uDecoded, uStage );
-	}
-	bool ExtractE1DirectMetaBatch ( uint32_t uWindow, const uint64_t * pSelected, uint32_t * pTF, uint32_t * pMask, uint64_t * pRef, uint64_t & uRequested, uint64_t & uWritten, uint64_t & uDecoded ) override
-	{
-		return m_tE1.ExtractWindowMetaBatch ( uWindow, pSelected, pTF, pMask, pRef, uRequested, uWritten, uDecoded );
+		return m_tE1.ExtractWindowTFBatch ( uWindow, pSelected, pTF, uRequested, uWritten, uDecoded );
 	}
 	bool BeginE1SelectedMeta ( uint32_t uWindow, const uint64_t * pSelected, uint64_t & uRequested ) override { return m_tE1.BeginSelectedMeta(uWindow,pSelected,uRequested); }
-	bool NextE1SelectedMeta ( E1SelectedMeta_t & tMeta, uint64_t & uDecoded, uint32_t uScopedField=UINT32_MAX ) override { return m_tE1.NextSelectedMeta(tMeta,uDecoded,uScopedField); }
-	bool ExactE1FieldTF ( uint32_t uOrdinal, uint32_t uField, uint32_t uMask, uint32_t uAggregateTF, uint32_t & uTF ) const override { return m_tE1.ExactFieldTF(uOrdinal,uField,uMask,uAggregateTF,uTF); }
-	bool ProbeE1DirectTF ( RowID_t tRowID, uint32_t & uTF ) override { return m_tE1.ProbeTF ( uint32_t(tRowID), uTF ); }
+	bool NextE1SelectedMeta ( E1SelectedMeta_t & tMeta, uint64_t & uDecoded ) override { return m_tE1.NextSelectedMeta(tMeta,uDecoded); }
 	bool SelectE1FieldProjection ( uint32_t uField ) override { return m_tE1.SelectFieldProjection(uField); }
 	uint32_t GetE1FieldProjectionRows () const override { return m_tE1.FieldProjectionRows(); }
 	uint32_t GetE1FieldProjectionBlocks () const override { return m_tE1.FieldProjectionBlocks(); }
@@ -495,14 +489,14 @@ public:
 	{
 		uint32_t uRow=0; if ( !m_tE1.NextFieldProjectionRanked(uRow,uTF,fIDF,iThreshold,uEntries,uBuckets,uSelected,uSkipped,uSkippedDocs) ) return false; tRowID=RowID_t(uRow); return true;
 	}
-	bool GetE1RankedDoc ( RowID_t & tRowID, uint32_t & uTF, uint64_t & uBoundEntries, uint64_t & uBuckets, uint64_t & uSelectedBlocks, uint64_t & uSkippedBlocks, uint64_t & uSkippedDocs, uint64_t & uDecodedGroups, const uint64_t * pEligibility=nullptr, uint32_t uEligibilityWords=0, uint64_t * pIneligibleBeforeTF=nullptr, uint64_t uWorstTieKey=UINT64_MAX, uint32_t uKnownMask=0, float fRatioIDF=0.0f, int iThreshold=0, uint64_t * pEqualitySkipped=nullptr ) override
+	bool GetE1RankedDoc ( RowID_t & tRowID, uint32_t & uTF, uint64_t & uBoundEntries, uint64_t & uBuckets, uint64_t & uSelectedBlocks, uint64_t & uSkippedBlocks, uint64_t & uSkippedDocs, uint64_t & uDecodedGroups, const uint64_t * pEligibility=nullptr, uint32_t uEligibilityWords=0, uint64_t * pIneligibleBeforeTF=nullptr, uint64_t uWorstTieKey=UINT64_MAX, float fRatioIDF=0.0f, int iThreshold=0, uint64_t * pEqualitySkipped=nullptr ) override
 	{
 		if ( !m_tE1.Active() )
 			return false;
 		uint32_t uRowID = uint32_t ( tRowID );
 		uint32_t uMask = 0;
 		uint64_t uRef = 0;
-		if ( !m_tE1.NextRanked ( uRowID, uTF, uMask, uRef, uBoundEntries, uBuckets, uSelectedBlocks, uSkippedBlocks, uSkippedDocs, uDecodedGroups, pEligibility, uEligibilityWords, pIneligibleBeforeTF, uWorstTieKey, uKnownMask, fRatioIDF, iThreshold, pEqualitySkipped ) )
+		if ( !m_tE1.NextRanked ( uRowID, uTF, uMask, uRef, uBoundEntries, uBuckets, uSelectedBlocks, uSkippedBlocks, uSkippedDocs, uDecodedGroups, pEligibility, uEligibilityWords, pIneligibleBeforeTF, uWorstTieKey, fRatioIDF, iThreshold, pEqualitySkipped ) )
 			return false;
 		tRowID = RowID_t ( uRowID );
 		m_tDoc.m_tRowID = tRowID;

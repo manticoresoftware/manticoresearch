@@ -9,10 +9,9 @@
 #include <vector>
 namespace e1 {
 struct OpenTimings_t { uint64_t header=0,crc=0,structural=0; };
-enum class OpenValidationPath_e { NONE, TRUSTED_FAST, DEEP };
-// Equality pruning is fail-closed. V9 public-ID minima become visible to
-// cursors only after deep open checks this authoritative rowwise accessor,
-// or a trusted-fast open carries its separately content-bound proof.
+enum class OpenValidationPath_e { NONE, DEEP };
+// Equality pruning is fail-closed. Public-ID minima become visible to cursors
+// only after deep open checks this authoritative rowwise accessor.
 class PublicIDReader_i {
 public:
  virtual ~PublicIDReader_i()=default;
@@ -59,7 +58,7 @@ public:
   return true;
  }
  bool PublicIDMinValidated()const{return m_publicIDMinValidated;}
- bool Open(const uint8_t*p,uint64_t size,uint32_t rows,const uint8_t*dict,uint64_t dictSize,const uint8_t*hits,uint64_t hitSize,std::string&error,bool trusted=false,OpenTimings_t*timings=nullptr,const FieldNormReader_i*pNorms=nullptr,const PublicIDReader_i*pPublicIDs=nullptr,OpenValidationPath_e*pValidationPath=nullptr,bool trustedPublicIDProof=false){
+ bool Open(const uint8_t*p,uint64_t size,uint32_t rows,const uint8_t*dict,uint64_t dictSize,const uint8_t*hits,uint64_t hitSize,std::string&error,OpenTimings_t*timings=nullptr,const FieldNormReader_i*pNorms=nullptr,const PublicIDReader_i*pPublicIDs=nullptr,OpenValidationPath_e*pValidationPath=nullptr){
   m_p=nullptr;m_dir=nullptr;m_n=0;m_entrySize=0;m_publicIDMinValidated=false;if(pValidationPath)*pValidationPath=OpenValidationPath_e::NONE;uint64_t stage=timings?MonoMicroTimer():0;auto fail=[&](const char*s){error=std::string("E1: ")+s;return false;};
   if(size<48||memcmp(p,"E1POST10",8)||U32(p+8)!=10||U64(p+16)!=size)return fail("format/length");
   uint32_t header=U32(p+12),flags=U32(p+44);uint64_t nt=U64(p+24),directory=0,end=0,payloadEnd=size;

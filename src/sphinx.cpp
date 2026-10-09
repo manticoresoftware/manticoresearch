@@ -8336,7 +8336,7 @@ bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHe
 
 		std::string sStoreError;
 		if ( !m_tE1Store.Open ( m_tE1Data.GetReadPtr(), m_tE1Data.GetLengthBytes(), m_iDocinfo,
-			tDict.GetReadPtr(), tDict.GetLengthBytes(), tHits.GetReadPtr(), tHits.GetLengthBytes(), sStoreError, false, nullptr, tBuildHeader.m_uFormatVersion==e1::VERSION ? &m_tNormStore : nullptr ) )
+			tDict.GetReadPtr(), tDict.GetLengthBytes(), tHits.GetReadPtr(), tHits.GetLengthBytes(), sStoreError, nullptr, tBuildHeader.m_uFormatVersion==e1::VERSION ? &m_tNormStore : nullptr ) )
 		{
 			sError = sStoreError.c_str();
 			return false;
@@ -11258,24 +11258,15 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 		if ( pE1Docid && pE1Docid->m_eAttrType==SPH_ATTR_BIGINT && !pE1Docid->IsUuidLinkedDocid()
 			&& !pE1Docid->IsColumnar() && !pE1Docid->m_tLocator.m_bDynamic && GetRawAttrs() && m_iDocinfo<=UINT32_MAX )
 			pPublicIDs = std::make_unique<RowwisePublicIDReader_c> ( GetRawAttrs(), m_tSchema.GetRowSize(), pE1Docid->m_tLocator, uint32_t(m_iDocinfo) );
-		const BYTE * pE1Header = m_tE1Data.GetReadPtr();
-		e1::PublicIDDigest_t dPublicIDIdentity {};
-		const bool bHavePublicIDIdentity = m_uE1Version==e1::VERSION && pPublicIDs && e1::PublicIDContentDigest ( pPublicIDs->Rows(), [&pPublicIDs] ( uint32_t uRow, uint64_t & uValue ) { return pPublicIDs->Get(uRow,uValue); }, dPublicIDIdentity );
-		e1::TrustedGenerationProof_t tTrustedGeneration;
-		if ( m_tE1Data.GetLengthBytes()>=44 )
-			tTrustedGeneration = e1::ConsumeTrustedGeneration ( GetFilename(SPH_EXT_SPD).cstr(), GetFilename(SPH_EXT_SPI).cstr(), GetFilename(SPH_EXT_SPP).cstr(), e1::U64(pE1Header+16), e1::U32(pE1Header+32), e1::U32(pE1Header+36), e1::U32(pE1Header+40),
-				bHavePublicIDIdentity ? pPublicIDs->Rows() : 0, bHavePublicIDIdentity ? &dPublicIDIdentity : nullptr );
-		const bool bTrustedGeneration = tTrustedGeneration.m_bGeneration;
 		e1::OpenTimings_t tPostingsTimings;
 		e1::OpenValidationPath_e eValidationPath = e1::OpenValidationPath_e::NONE;
 		if ( !m_tE1Store.Open(m_tE1Data.GetReadPtr(),m_tE1Data.GetLengthBytes(),m_iDocinfo,
-			dict.GetReadPtr(),dict.GetLengthBytes(),hits.GetReadPtr(),hits.GetLengthBytes(),error,bTrustedGeneration,bE1FlushTrace ? &tPostingsTimings : nullptr,m_uE1Version==e1::VERSION ? &m_tNormStore : nullptr,pPublicIDs.get(),&eValidationPath,tTrustedGeneration.m_bPublicIDs) )
+			dict.GetReadPtr(),dict.GetLengthBytes(),hits.GetReadPtr(),hits.GetLengthBytes(),error,bE1FlushTrace ? &tPostingsTimings : nullptr,m_uE1Version==e1::VERSION ? &m_tNormStore : nullptr,pPublicIDs.get(),&eValidationPath) )
 		{ m_sLastError = error.c_str(); return false; }
-		const bool bFastValidation = eValidationPath==e1::OpenValidationPath_e::TRUSTED_FAST;
 		const bool bDeepValidation = eValidationPath==e1::OpenValidationPath_e::DEEP;
 		if ( bE1StartupTrace )
 		{
-			fprintf ( stderr, "E1_STARTUP postings_us=%lld fast_validation=%d deep_validation=%d bytes=%lld\n", (long long)(sphMicroTimer()-tmE1Startup), int(bFastValidation), int(bDeepValidation), (long long)m_tE1Data.GetLengthBytes() );
+			fprintf ( stderr, "E1_STARTUP postings_us=%lld deep_validation=%d bytes=%lld\n", (long long)(sphMicroTimer()-tmE1Startup), int(bDeepValidation), (long long)m_tE1Data.GetLengthBytes() );
 			tmE1Startup = sphMicroTimer();
 		}
 		auto fnValidateDictionary = [this] ( auto & tReader )
@@ -11294,12 +11285,12 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 			return uTerms==e1::U64(m_tE1Data.GetReadPtr()+24);
 		};
 		uint64_t tmDictionary = bE1FlushTrace ? MonoMicroTimer() : 0;
-		bool bDictionaryValid = bFastValidation;
-		if ( !bFastValidation && m_pDict->GetSettings().IsWordDict() )
+		bool bDictionaryValid = false;
+		if ( m_pDict->GetSettings().IsWordDict() )
 		{
 			CSphDictReader<true> tReader ( m_tSettings.m_iSkiplistBlockSize, m_pDict->GetSettings().GetDictFormat() );
 			bDictionaryValid = tReader.Setup ( GetFilename(SPH_EXT_SPI), m_tWordlist.m_iDictCheckpointsOffset, m_tSettings.m_eHitless, m_sLastError ) && fnValidateDictionary(tReader);
-		} else if ( !bFastValidation )
+		} else
 		{
 			CSphDictReader<false> tReader ( m_tSettings.m_iSkiplistBlockSize, m_pDict->GetSettings().GetDictFormat() );
 			bDictionaryValid = tReader.Setup ( GetFilename(SPH_EXT_SPI), m_tWordlist.m_iDictCheckpointsOffset, m_tSettings.m_eHitless, m_sLastError ) && fnValidateDictionary(tReader);
@@ -11312,16 +11303,13 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 		if ( bE1FlushTrace )
 		{
 			tmDictionary = MonoMicroTimer()-tmDictionary;
-			fprintf ( stderr, "E1_FLUSH_TRACE event=postings_open name=%s map_us=%llu header_us=%llu crc_us=%llu structural_validation_us=%llu dictionary_binding_us=%llu total_us=%llu trusted_generation=%d fast_validation=%d deep_validation=%d bytes=%lld\n",
+			fprintf ( stderr, "E1_FLUSH_TRACE event=postings_open name=%s map_us=%llu header_us=%llu crc_us=%llu structural_validation_us=%llu dictionary_binding_us=%llu total_us=%llu deep_validation=%d bytes=%lld\n",
 				GetName(), (unsigned long long)tmPostingsMap, (unsigned long long)tPostingsTimings.header, (unsigned long long)tPostingsTimings.crc,
 				(unsigned long long)tPostingsTimings.structural, (unsigned long long)tmDictionary, (unsigned long long)(MonoMicroTimer()-tmPostingsTotal),
-				int(bTrustedGeneration), int(bFastValidation), int(bDeepValidation), (long long)m_tE1Data.GetLengthBytes() );
+				int(bDeepValidation), (long long)m_tE1Data.GetLengthBytes() );
 		}
 		if ( bE1StartupTrace )
 			fprintf ( stderr, "E1_STARTUP dictionary_us=%lld\n", (long long)(sphMicroTimer()-tmE1Startup) );
-		// Only an immediately reopened, process-owned generation may skip the
-		// deep scan. V9 public-ID minima additionally require the one-shot proof
-		// to match the exact authoritative rowwise ID content used by the writer.
 		m_tE1Data.DiscardPages();
 	}
 

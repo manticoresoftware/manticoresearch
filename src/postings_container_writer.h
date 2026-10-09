@@ -180,11 +180,6 @@ public:
 		if ( !SyncFile ( m_sFilename, sError ) )
 			return false;
 		FaultPoint ( "after_primary_fsync" );
-		PublicIDDigest_t dPublicIDs {};
-		const bool bPublicIDProof = m_bPublicIDsAuthoritative && m_pPublicIDs
-			&& PublicIDContentDigest ( m_uPublicIDRows, [this] ( uint32_t uRow, uint64_t & uValue ) { uValue=m_pPublicIDs[uRow]; return true; }, dPublicIDs );
-		MarkTrustedGeneration ( m_sFilename, sDict, sHits, uSize, uPayloadCRC, uDictCRC, uHitsCRC,
-			m_uPublicIDRows, bPublicIDProof ? &dPublicIDs : nullptr );
 		return true;
 	}
 

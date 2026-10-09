@@ -6,93 +6,9 @@
 #include <string>
 #include <algorithm>
 #include <array>
-#include <mutex>
-#include <unordered_map>
-#include "digest_sha1.h"
-#if !defined(_WIN32)
-#include <sys/stat.h>
-#endif
 namespace e1 {
 constexpr uint32_t VERSION10 = 0x4531000a;
 constexpr uint32_t VERSION = VERSION10;
-inline std::mutex & TrustedGenerationsMutex() { static std::mutex tMutex; return tMutex; }
-using PublicIDDigest_t = HASH20_t;
-struct TrustedGeneration_t { uint32_t m_uPublicIDRows = 0; PublicIDDigest_t m_dPublicIDs {}; bool m_bHasPublicIDs = false; };
-struct TrustedGenerationProof_t { bool m_bGeneration = false; bool m_bPublicIDs = false; };
-inline std::unordered_multimap<std::string,TrustedGeneration_t> & TrustedGenerations() { static std::unordered_multimap<std::string,TrustedGeneration_t> dKeys; return dKeys; }
-template<typename GET>
-inline bool PublicIDContentDigest ( uint32_t uRows, GET fnGet, PublicIDDigest_t & dDigest )
-{
- SHA1_c tHash;
- tHash.Init();
- static const uint8_t dDomain[] = { 'E','1','P','U','B','L','I','C','I','D',1 };
- tHash.Update ( dDomain, int(sizeof(dDomain)) );
- uint8_t dValues[4096] {};
- for ( unsigned i=0; i<4; ++i ) dValues[i]=uint8_t(uRows>>(i*8));
- unsigned uBytes = 4;
- for ( uint32_t uRow=0; uRow<uRows; ++uRow )
- {
-  uint64_t uValue = 0;
-  if ( !fnGet(uRow,uValue) ) return false;
-  if ( uBytes+8>sizeof(dValues) ) { tHash.Update ( dValues, int(uBytes) ); uBytes=0; }
-  for ( unsigned i=0; i<8; ++i ) dValues[uBytes+i]=uint8_t(uValue>>(i*8));
-  uBytes += 8;
- }
- if ( uBytes ) tHash.Update ( dValues, int(uBytes) );
- tHash.Final ( dDigest );
- return true;
-}
-inline bool AddTrustedFileIdentity ( std::string & sKey, const std::string & sFilename )
-{
-#if !defined(_WIN32)
- struct stat tStat {};
- if ( stat ( sFilename.c_str(), &tStat ) || !S_ISREG(tStat.st_mode) ) return false;
-#if defined(__APPLE__)
- const auto & tMTime = tStat.st_mtimespec;
-#else
- const auto & tMTime = tStat.st_mtim;
-#endif
- sKey += ":" + std::to_string(uint64_t(tStat.st_dev)) + ":" + std::to_string(uint64_t(tStat.st_ino))
-  + ":" + std::to_string(uint64_t(tStat.st_size)) + ":" + std::to_string(int64_t(tMTime.tv_sec))
-  + ":" + std::to_string(int64_t(tMTime.tv_nsec));
- return true;
-#else
- (void)sKey; (void)sFilename; return false;
-#endif
-}
-inline std::string TrustedGenerationKey ( const std::string & sPostings, const std::string & sDict, const std::string & sHits, uint64_t uSize, uint32_t uPayload, uint32_t uDict, uint32_t uHits )
-{
- std::string sKey = std::to_string(uSize)+":"+std::to_string(uPayload)+":"+std::to_string(uDict)+":"+std::to_string(uHits);
- return AddTrustedFileIdentity(sKey,sPostings) && AddTrustedFileIdentity(sKey,sDict) && AddTrustedFileIdentity(sKey,sHits) ? sKey : std::string();
-}
-inline void MarkTrustedGeneration ( const std::string & sPostings, const std::string & sDict, const std::string & sHits, uint64_t uSize, uint32_t uPayload, uint32_t uDict, uint32_t uHits, uint32_t uPublicIDRows=0, const PublicIDDigest_t * pPublicIDs=nullptr )
-{
- auto sKey = TrustedGenerationKey ( sPostings, sDict, sHits, uSize, uPayload, uDict, uHits );
- if ( sKey.empty() ) return;
- TrustedGeneration_t tGeneration;
- if ( pPublicIDs ) { tGeneration.m_uPublicIDRows=uPublicIDRows; tGeneration.m_dPublicIDs=*pPublicIDs; tGeneration.m_bHasPublicIDs=true; }
- std::lock_guard<std::mutex> tLock ( TrustedGenerationsMutex() ); TrustedGenerations().emplace ( std::move(sKey), std::move(tGeneration) );
-}
-inline bool ConsumeTrustedGeneration ( const std::string & sPostings, const std::string & sDict, const std::string & sHits, uint64_t uSize, uint32_t uPayload, uint32_t uDict, uint32_t uHits )
-{
- auto sKey = TrustedGenerationKey ( sPostings, sDict, sHits, uSize, uPayload, uDict, uHits );
- if ( sKey.empty() ) return false;
- std::lock_guard<std::mutex> tLock ( TrustedGenerationsMutex() );
- auto & dGenerations = TrustedGenerations(); auto iGeneration = dGenerations.find(sKey);
- if ( iGeneration==dGenerations.end() ) return false;
- dGenerations.erase(iGeneration); return true;
-}
-inline TrustedGenerationProof_t ConsumeTrustedGeneration ( const std::string & sPostings, const std::string & sDict, const std::string & sHits, uint64_t uSize, uint32_t uPayload, uint32_t uDict, uint32_t uHits, uint32_t uPublicIDRows, const PublicIDDigest_t * pPublicIDs )
-{
- auto sKey = TrustedGenerationKey ( sPostings, sDict, sHits, uSize, uPayload, uDict, uHits );
- if ( sKey.empty() ) return {};
- std::lock_guard<std::mutex> tLock ( TrustedGenerationsMutex() );
- auto & dGenerations = TrustedGenerations(); auto iGeneration = dGenerations.find(sKey);
- if ( iGeneration==dGenerations.end() ) return {};
- TrustedGenerationProof_t tResult { true, pPublicIDs && iGeneration->second.m_bHasPublicIDs && iGeneration->second.m_uPublicIDRows==uPublicIDRows && iGeneration->second.m_dPublicIDs==*pPublicIDs };
- dGenerations.erase(iGeneration);
- return tResult;
-}
 inline uint32_t U32(const uint8_t *p) { return uint32_t(p[0]) | uint32_t(p[1])<<8 | uint32_t(p[2])<<16 | uint32_t(p[3])<<24; }
 inline uint64_t U64(const uint8_t *p) { return U32(p) | uint64_t(U32(p+4))<<32; }
 inline bool ExactLocalFieldTF(uint32_t mask,uint32_t aggregate,uint32_t firstFieldTF,uint32_t field,uint32_t&localTF) {

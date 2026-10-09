@@ -51,34 +51,6 @@ void PutValue ( ByteVec_t & dData, size_t uOffset, uint64_t uValue, unsigned uBy
 		dData[uOffset+i] = uint8_t ( uValue >> ( 8*i ) );
 }
 
-void AppendValue ( ByteVec_t & dData, uint64_t uValue, unsigned uBytes )
-{
-	const size_t uOffset = dData.size();
-	dData.resize ( uOffset+uBytes );
-	PutValue ( dData, uOffset, uValue, uBytes );
-}
-
-unsigned BitWidth ( uint64_t uValue )
-{
-	unsigned uWidth = 0;
-	while ( uValue )
-	{
-		++uWidth;
-		uValue >>= 1;
-	}
-	return uWidth;
-}
-
-void AppendPacked ( ByteVec_t & dData, unsigned uWidth, const std::vector<uint64_t> & dValues )
-{
-	const size_t uOffset = dData.size();
-	dData.resize ( uOffset+( uint64_t(dValues.size())*uWidth+7 )/8 );
-	for ( size_t i=0; i<dValues.size(); ++i )
-		for ( unsigned j=0; j<uWidth; ++j )
-			if ( ( dValues[i] >> j ) & 1 )
-				dData[uOffset+(i*uWidth+j)/8] |= uint8_t ( 1u << ( (i*uWidth+j)%8 ) );
-}
-
 void UpdateChecksum ( ByteVec_t & dData )
 {
 	PutValue ( dData, 16, dData.size(), 8 );
@@ -86,112 +58,10 @@ void UpdateChecksum ( ByteVec_t & dData )
 	PutValue ( dData, 32, e1::CRC(dData.data()+uHeaderSize,dData.size()-uHeaderSize), 4 );
 }
 
-ByteVec_t MakeContainer ( const std::vector<uint32_t> & dRows, unsigned uCodec, unsigned uWidth=0 )
-{
-	ByteVec_t dData ( 128 );
-	memcpy ( dData.data(), "E1POST06", 8 );
-	PutValue ( dData, 8, 6, 4 );
-	PutValue ( dData, 12, 48, 4 );
-	PutValue ( dData, 24, 1, 8 );
-	PutValue ( dData, 48, 1, 8 );
-	PutValue ( dData, 56, 80, 8 );
-	PutValue ( dData, 64, dRows.size(), 4 );
-	PutValue ( dData, 68, 1, 4 );
-	PutValue ( dData, 72, dRows.size(), 8 );
-	PutValue ( dData, 80, dRows.size(), 4 );
-	PutValue ( dData, 84, 1, 4 );
-	PutValue ( dData, 88, 1, 4 );
-	PutValue ( dData, 104, dRows.front(), 4 );
-	PutValue ( dData, 108, dRows.back(), 4 );
-	PutValue ( dData, 112, dRows.size(), 4 );
-	PutValue ( dData, 116, uCodec | (uWidth<<16), 4 );
-	PutValue ( dData, 120, dData.size(), 8 );
-
-	if ( uCodec==2 )
-		for ( size_t i=1; i<dRows.size(); ++i )
-			AppendValue ( dData, dRows[i], 4 );
-	else if ( uCodec==3 )
-	{
-		const size_t uOffset = dData.size();
-		dData.resize ( uOffset+( (dRows.size()-1)*uWidth+7 )/8 );
-		for ( size_t i=1; i<dRows.size(); ++i )
-		{
-			const uint32_t uGap = dRows[i]-dRows[i-1];
-			for ( unsigned j=0; j<uWidth; ++j )
-				if ( (uGap>>j)&1 )
-					dData[uOffset+( (i-1)*uWidth+j )/8] |= uint8_t ( 1u << ( ((i-1)*uWidth+j)%8 ) );
-		}
-	}
-	else if ( uCodec==4 )
-	{
-		const size_t uOffset = dData.size();
-		dData.resize ( uOffset+( uint64_t(dRows.back())-dRows.front()+8 )/8 );
-		for ( uint32_t uRow : dRows )
-			dData[uOffset+(uRow-dRows.front())/8] |= uint8_t ( 1u << ( (uRow-dRows.front())%8 ) );
-	}
-
-	PutValue ( dData, 96, dData.size(), 8 );
-	const size_t uMetadata = dData.size();
-	dData.resize ( uMetadata+16 );
-	PutValue ( dData, uMetadata, dData.size(), 8 );
-	const unsigned uRowWidth = BitWidth ( dRows.size()-1 );
-	PutValue ( dData, uMetadata+8, (uRowWidth<<16) | (1u<<22), 4 );
-	PutValue ( dData, uMetadata+12, dRows.size(), 4 );
-	AppendValue ( dData, 0x800001u, 8 );
-	std::vector<uint64_t> dOrdinals;
-	for ( size_t i=0; i<dRows.size(); ++i )
-		dOrdinals.push_back ( i );
-	AppendPacked ( dData, uRowWidth, dOrdinals );
-	for ( size_t i=0; i<(dRows.size()+63)/64; ++i )
-		AppendValue ( dData, 1, 1 );
-	UpdateChecksum ( dData );
-	return dData;
-}
-
 ByteVec_t ReadFile ( const std::string & sPath )
 {
 	std::ifstream tFile ( sPath, std::ios::binary );
 	return { std::istreambuf_iterator<char>(tFile), {} };
-}
-
-void ConvertSingleTermV7ToV6 ( ByteVec_t & dData, const std::vector<e1::Posting> & dPostings )
-{
-	const auto * pTerm = dData.data()+56;
-	const uint32_t uMetadataCount = e1::U32 ( pTerm+8 );
-	const uint64_t uMetadataOffset = e1::U64 ( pTerm+16 );
-	const auto * pGroup = dData.data()+uMetadataOffset+uint64_t(uMetadataCount-1)*16;
-	const size_t uBoundsOffset = e1::U64(pGroup)+e1::Meta4Bytes(e1::U32(pGroup+8),e1::U32(pGroup+12));
-	const size_t uBlocks = (dPostings.size()+63)/64;
-	for ( size_t uBlock=0; uBlock<uBlocks; ++uBlock )
-	{
-		uint32_t uMaxTF = 0;
-		for ( size_t i=uBlock*64; i<std::min(dPostings.size(),(uBlock+1)*64); ++i )
-			uMaxTF = std::max ( uMaxTF, dPostings[i].m_uTF );
-		dData[uBoundsOffset+uBlock] = uint8_t ( std::min(uMaxTF,255u) );
-	}
-	// The current format stores one uint64 minimum public ID after every ordinal-64 bound.
-	// Strip that extension before presenting the payload as V6.
-	const size_t uMinIDsOffset = uBoundsOffset+uBlocks;
-	dData.erase ( dData.begin()+uMinIDsOffset, dData.begin()+uMinIDsOffset+uBlocks*8 );
-	PutValue ( dData, 48, e1::U64(dData.data()+48)-uBlocks*8, 8 );
-	memcpy ( dData.data(), "E1POST06", 8 );
-	PutValue ( dData, 8, 6, 4 );
-	UpdateChecksum ( dData );
-}
-
-void ConvertSingleTermCurrentToV7 ( ByteVec_t & dData, size_t uDocs )
-{
-	const auto * pTerm = dData.data()+56;
-	const uint32_t uMetadataCount = e1::U32 ( pTerm+8 );
-	const uint64_t uMetadataOffset = e1::U64 ( pTerm+16 );
-	const auto * pGroup = dData.data()+uMetadataOffset+uint64_t(uMetadataCount-1)*16;
-	const size_t uBoundsOffset = e1::U64(pGroup)+e1::Meta4Bytes(e1::U32(pGroup+8),e1::U32(pGroup+12));
-	const size_t uBlocks = (uDocs+63)/64;
-	dData.erase ( dData.begin()+uBoundsOffset+uBlocks, dData.begin()+uBoundsOffset+uBlocks+uBlocks*8 );
-	PutValue ( dData, 48, e1::U64(dData.data()+48)-uBlocks*8, 8 );
-	memcpy ( dData.data(), "E1POST07", 8 );
-	PutValue ( dData, 8, 7, 4 );
-	UpdateChecksum ( dData );
 }
 
 class PostingsContainerTest : public ::testing::Test
@@ -329,73 +199,6 @@ TEST_F ( PostingsContainerTest, V10PublicIDProofIsContentBoundAndDeepValidated )
 	EXPECT_FALSE ( e1::ConsumeTrustedGeneration(sPostings,sDict,sHits,e1::U64(dRaw.data()+16),e1::U32(dRaw.data()+32),e1::U32(dRaw.data()+36),e1::U32(dRaw.data()+40),uint32_t(dPublicIDs.size()),&dDigest).m_bGeneration );
 }
 
-TEST ( DISABLED_PostingsContainerExperimentalFormats, CodecsSeekBulkAndMalformedInput )
-{
-	const std::vector<std::vector<uint32_t>> dCases { {0}, {8,9,10}, {5,7,12,14}, {100,101,103,104,105,107}, {0,0x80000000u,0xfffffffeu} };
-	const unsigned dCodecs[] { 1, 1, 3, 4, 2 };
-
-	for ( size_t iCase=0; iCase<dCases.size(); ++iCase )
-	{
-		const auto & dRows = dCases[iCase];
-		auto dData = MakeContainer ( dRows, dCodecs[iCase], iCase==2 ? 3 : 0 );
-		std::string sError;
-		e1::Store tStore;
-		ASSERT_TRUE ( tStore.Open(dData.data(),dData.size(),UINT32_MAX,nullptr,0,nullptr,0,sError) ) << sError;
-		e1::Cursor tCursor;
-		tCursor.Bind ( tStore, 1 );
-		for ( size_t i=0; i<dRows.size(); ++i )
-		{
-			uint32_t uRow=0,uTF=0,uMask=0;
-			uint64_t uRef=0;
-			ASSERT_TRUE ( tCursor.Next(uRow,&uTF,&uMask,&uRef) );
-			EXPECT_EQ ( uRow, dRows[i] );
-			EXPECT_EQ ( uTF, 1u );
-			EXPECT_EQ ( uMask, 1u );
-			EXPECT_EQ ( uRef, (uint64_t(1)<<63) | uint64_t(0x800001u+i) );
-		}
-		uint32_t uRow = 0;
-		EXPECT_FALSE ( tCursor.Next(uRow) );
-		EXPECT_EQ ( uRow, UINT32_MAX );
-
-		for ( uint32_t uTarget : dRows )
-		{
-			tCursor.Reset();
-			tCursor.Hint ( uTarget );
-			ASSERT_TRUE ( tCursor.Next(uRow) );
-			EXPECT_EQ ( uRow, uTarget );
-		}
-
-		for ( unsigned uCapacity : { 1u,2u,127u,128u,129u } )
-		{
-			tCursor.Reset();
-			std::vector<uint32_t> dActual;
-			uint32_t dBuffer[129];
-			for ( ;; )
-			{
-				const unsigned uRead = tCursor.NextRows ( dBuffer, uCapacity, uRow );
-				dActual.insert ( dActual.end(), dBuffer, dBuffer+uRead );
-				if ( uRead<uCapacity )
-					break;
-			}
-			EXPECT_EQ ( dActual, dRows );
-			EXPECT_EQ ( uRow, UINT32_MAX );
-		}
-
-		auto fnRejected = [&] ( auto fnCorrupt )
-		{
-			auto dBad = dData;
-			fnCorrupt ( dBad );
-			UpdateChecksum ( dBad );
-			e1::Store tBad;
-			return !tBad.Open ( dBad.data(), dBad.size(), UINT32_MAX, nullptr, 0, nullptr, 0, sError );
-		};
-		EXPECT_TRUE ( fnRejected ( [] ( ByteVec_t & dBad ) { PutValue ( dBad, 116, e1::U32(dBad.data()+116) | 0x80000000u, 4 ); } ) );
-		EXPECT_TRUE ( fnRejected ( [] ( ByteVec_t & dBad ) { PutValue ( dBad, 96, UINT64_MAX, 8 ); } ) );
-		EXPECT_TRUE ( fnRejected ( [] ( ByteVec_t & dBad ) { PutValue ( dBad, 108, UINT32_MAX, 4 ); } ) );
-		EXPECT_TRUE ( fnRejected ( [] ( ByteVec_t & dBad ) { PutValue ( dBad, 72, 999, 8 ); } ) );
-	}
-}
-
 TEST_F ( PostingsContainerTest, StreamedDirectoryUsesImplicitContiguousKeys )
 {
 	{ std::ofstream(m_sBase+".spi",std::ios::binary).write("dict",4); }
@@ -423,76 +226,6 @@ TEST_F ( PostingsContainerTest, StreamedDirectoryUsesImplicitContiguousKeys )
 	EXPECT_EQ ( tStore.View(2).DF(), 1u );
 	EXPECT_FALSE ( tStore.View(1).HasHitlist() );
 	EXPECT_TRUE ( tStore.View(2).HasHitlist() );
-}
-
-TEST_F ( PostingsContainerTest, DISABLED_ExperimentalMaxTFWriterReaderMetadataAndDirectWindows )
-{
-	std::vector<e1::Posting> dPostings;
-	for ( uint32_t uRow=0; uRow<8192; ++uRow )
-		if ( uRow%3!=1 )
-			dPostings.push_back ( { uRow, uRow==4098 ? 300u : 1u+(uRow%7), 1, 0 } );
-	WriteContainer ( dPostings );
-
-	auto dRaw=ReadFile(m_sBase+".spd"), dDict=ReadFile(m_sBase+".spi"), dHits=ReadFile(m_sBase+".spp");
-	std::string sError;
-	e1::Store tStore;
-	ASSERT_TRUE ( tStore.Open(dRaw.data(),dRaw.size(),8192,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError) ) << sError;
-	e1::Cursor tCursor;
-	tCursor.Bind ( tStore, 1 );
-	ASSERT_TRUE ( tCursor.DirectOrSupported() );
-	uint32_t uLastWindow = UINT32_MAX;
-	ASSERT_TRUE ( tCursor.DirectLastWindow(uLastWindow) );
-	EXPECT_EQ ( uLastWindow, 1u );
-
-	for ( uint32_t uWindow=0; uWindow<=uLastWindow; ++uWindow )
-	{
-		std::array<uint64_t,64> dMask {};
-		std::array<uint8_t,4096> dBounds {};
-		uint32_t uCardinality=0,uMaxTF=0;
-		uint64_t uBoundReads=0;
-		ASSERT_TRUE ( tCursor.DirectWindow(uWindow,dMask.data(),dBounds.data(),uCardinality,uMaxTF,uBoundReads) );
-		uint32_t uExpectedCardinality = 0;
-		for ( uint32_t uOffset=0; uOffset<4096; ++uOffset )
-		{
-			const uint32_t uRow = uWindow*4096+uOffset;
-			const bool bExpected = uRow%3!=1;
-			EXPECT_EQ ( bool(dMask[uOffset/64] & (uint64_t(1)<<(uOffset%64))), bExpected );
-			if ( bExpected )
-			{
-				++uExpectedCardinality;
-				const uint32_t uTF = uRow==4098 ? 300u : 1u+(uRow%7);
-				EXPECT_TRUE ( dBounds[uOffset]==255 || dBounds[uOffset]>=uTF );
-			}
-		}
-		EXPECT_EQ ( uCardinality, uExpectedCardinality );
-		EXPECT_GT ( uBoundReads, 0u );
-	}
-
-	uint32_t uTF = 0;
-	EXPECT_TRUE ( tCursor.ProbeTF(4098,uTF) );
-	EXPECT_EQ ( uTF, 300u );
-	EXPECT_FALSE ( tCursor.ProbeTF(4096,uTF) );
-	EXPECT_TRUE ( tCursor.ProbeTF(4101,uTF) );
-	EXPECT_EQ ( uTF, 1u+(4101u%7) );
-
-	tCursor.Bind ( tStore, 1 );
-	size_t iExpected = 0;
-	for ( uint32_t uTarget=0; uTarget<8192; uTarget+=17 )
-	{
-		while ( iExpected<dPostings.size() && dPostings[iExpected].m_uRow<uTarget )
-			++iExpected;
-		tCursor.Hint ( uTarget );
-		if ( iExpected==dPostings.size() )
-		{
-			uint32_t uRow = 0;
-			EXPECT_FALSE ( tCursor.Next(uRow) );
-			break;
-		}
-		uint32_t uRow = UINT32_MAX;
-		ASSERT_TRUE ( tCursor.Next(uRow) );
-		EXPECT_EQ ( uRow, dPostings[iExpected].m_uRow );
-		++iExpected;
-	}
 }
 
 TEST_F ( PostingsContainerTest, FieldTermFrequencies )
@@ -578,63 +311,6 @@ TEST_F ( PostingsContainerTest, CompactMasksAndMixedReferences )
 	}
 }
 
-TEST_F ( PostingsContainerTest, DISABLED_RankedBoundsAndPersistedExperimentalVersions )
-{
-	std::vector<e1::Posting> dPostings;
-	for ( uint32_t i=0; i<129; ++i )
-		dPostings.push_back ( { i, i==70 ? 300u : (i==128 ? 2u : 1u), 1, 0 } );
-	WriteContainer ( dPostings );
-	auto dRaw=ReadFile(m_sBase+".spd"), dDict=ReadFile(m_sBase+".spi"), dHits=ReadFile(m_sBase+".spp");
-	ConvertSingleTermV7ToV6 ( dRaw, dPostings );
-	std::string sError;
-	e1::Store tStore;
-	ASSERT_TRUE ( tStore.Open(dRaw.data(),dRaw.size(),129,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError) ) << sError;
-	e1::Cursor tCursor;
-	tCursor.Bind ( tStore, 1 );
-	EXPECT_TRUE ( tCursor.HasRankedBounds() );
-
-	uint32_t uRow=0,uTF=0,uMask=0;
-	uint64_t uRef=0,uEntries=0,uBuckets=0,uSelected=0,uSkipped=0,uSkippedDocs=0,uDecoded=0;
-	ASSERT_TRUE ( tCursor.NextRanked(uRow,uTF,uMask,uRef,3,uEntries,uBuckets,uSelected,uSkipped,uSkippedDocs,uDecoded) );
-	EXPECT_EQ ( uRow, 64u );
-	while ( tCursor.NextRanked(uRow,uTF,uMask,uRef,3,uEntries,uBuckets,uSelected,uSkipped,uSkippedDocs,uDecoded) ) {}
-	EXPECT_EQ ( uSkippedDocs, 65u );
-	EXPECT_EQ ( uSkipped, 2u );
-	EXPECT_EQ ( uDecoded, 1u );
-
-	auto dV5 = dRaw;
-	memcpy ( dV5.data(), "E1POST05", 8 );
-	PutValue ( dV5, 8, 5, 4 );
-	UpdateChecksum ( dV5 );
-	ASSERT_TRUE ( tStore.Open(dV5.data(),dV5.size(),129,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError) ) << sError;
-	tCursor.Bind ( tStore, 1 );
-	EXPECT_TRUE ( tCursor.HasRankedBounds() );
-
-	const uint64_t uDirectory = e1::U64 ( dRaw.data()+48 );
-	const auto * pTerm = dRaw.data()+56;
-	const uint32_t uMetadataCount = e1::U32 ( pTerm+8 );
-	const uint64_t uMetadataOffset = e1::U64 ( pTerm+16 );
-	const auto * pGroup = dRaw.data()+uMetadataOffset+uint64_t(uMetadataCount-1)*16;
-	const size_t uBoundsOffset = e1::U64(pGroup)+e1::Meta4Bytes(e1::U32(pGroup+8),e1::U32(pGroup+12));
-	const size_t uBoundsLength = (dPostings.size()+63)/64;
-	auto dV4 = dRaw;
-	dV4.erase ( dV4.begin()+uBoundsOffset, dV4.begin()+uBoundsOffset+uBoundsLength );
-	memcpy ( dV4.data(), "E1POST04", 8 );
-	PutValue ( dV4, 8, 4, 4 );
-	PutValue ( dV4, 48, uDirectory-uBoundsLength, 8 );
-	UpdateChecksum ( dV4 );
-	ASSERT_TRUE ( tStore.Open(dV4.data(),dV4.size(),129,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError) ) << sError;
-	tCursor.Bind ( tStore, 1 );
-	EXPECT_FALSE ( tCursor.HasRankedBounds() );
-	for ( uint32_t i=0; i<dPostings.size(); ++i )
-	{
-		ASSERT_TRUE ( tCursor.Next(uRow,&uTF,&uMask,&uRef) );
-		EXPECT_EQ ( uRow, i );
-		EXPECT_EQ ( uTF, dPostings[i].m_uTF );
-	}
-	EXPECT_FALSE ( tCursor.Next(uRow) );
-}
-
 TEST_F ( PostingsContainerTest, CurrentWriterPersistsExactSafeRatioBoundsByOrdinal )
 {
 	std::vector<e1::Posting> dPostings;
@@ -687,6 +363,17 @@ TEST_F ( PostingsContainerTest, CurrentWriterPersistsExactSafeRatioBoundsByOrdin
 	// Deep reopen validates every finite code against the authoritative norms.
 	e1::Store tDeepStore;
 	ASSERT_TRUE ( tDeepStore.Open(dRaw.data(),dRaw.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,false,nullptr,&tNormStore) ) << sError;
+
+	for ( uint32_t uObsoleteVersion : { 6u, 7u, 9u } )
+	{
+		auto dObsolete = dRaw;
+		const std::string sMagic = "E1POST0"+std::to_string(uObsoleteVersion);
+		memcpy ( dObsolete.data(), sMagic.data(), 8 );
+		PutValue ( dObsolete, 8, uObsoleteVersion, 4 );
+		e1::Store tObsolete;
+		EXPECT_FALSE ( tObsolete.Open(dObsolete.data(),dObsolete.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,false,nullptr,&tNormStore) );
+		EXPECT_NE ( sError.find("format/length"), std::string::npos );
+	}
 
 	auto dUnderestimate = dRaw;
 	const auto * pTerm = dUnderestimate.data()+56;
@@ -801,11 +488,11 @@ TEST_F ( PostingsContainerTest, CurrentPersistsConservativePublicIdMinimumPerOrd
 	const int iThreshold = E1SafeUpperRatioWeight ( uCode, fIDF );
 	uint32_t uRow=0,uTF=0,uMask=0;
 	uint64_t uRef=0,uEntries=0,uBuckets=0,uSelected=0,uSkipped=0,uSkippedDocs=0,uDecoded=0,uEqualitySkipped=0;
-	EXPECT_TRUE ( tCursor.NextRanked(uRow,uTF,uMask,uRef,0,uEntries,uBuckets,uSelected,uSkipped,uSkippedDocs,uDecoded,nullptr,0,nullptr,0,dExpectedMin[0]+1,0,fIDF,iThreshold,&uEqualitySkipped) );
+	EXPECT_TRUE ( tCursor.NextRanked(uRow,uTF,uMask,uRef,uEntries,uBuckets,uSelected,uSkipped,uSkippedDocs,uDecoded,nullptr,0,nullptr,dExpectedMin[0]+1,0,fIDF,iThreshold,&uEqualitySkipped) );
 	EXPECT_EQ ( uRow, 0u );
 	tCursor.Reset();
 	uEntries=uBuckets=uSelected=uSkipped=uSkippedDocs=uDecoded=uEqualitySkipped=0;
-	EXPECT_FALSE ( tCursor.NextRanked(uRow,uTF,uMask,uRef,0,uEntries,uBuckets,uSelected,uSkipped,uSkippedDocs,uDecoded,nullptr,0,nullptr,0,dExpectedMin[2],0,fIDF,iThreshold,&uEqualitySkipped) );
+	EXPECT_FALSE ( tCursor.NextRanked(uRow,uTF,uMask,uRef,uEntries,uBuckets,uSelected,uSkipped,uSkippedDocs,uDecoded,nullptr,0,nullptr,dExpectedMin[2],0,fIDF,iThreshold,&uEqualitySkipped) );
 	EXPECT_EQ ( uEqualitySkipped, 3u );
 	EXPECT_EQ ( uSkippedDocs, 130u );
 

@@ -467,24 +467,14 @@ public:
 		return iRows;
 	}
 
-	bool HasE1RankedBounds () const override { return m_tE1.HasRankedBounds(); }
 	bool HasE1PublicIdMinBounds () const override { return m_tE1.HasPublicIdMinBounds(); }
 	E1RankedBoundKind_e GetE1RankedBoundKind () const override { return m_tE1.BoundKind(); }
 	uint64_t TakeE1MetadataGroupsDecoded () override { return m_tE1.TakeMetadataGroupsDecoded(); }
-	bool E1DirectOrSupported () const override { return m_tE1.DirectOrSupported(); }
 	bool E1DirectContainerSupported () const override { return m_tE1.DirectContainerSupported(); }
 	bool GetE1DirectLastWindow ( uint32_t & uWindow ) const override { return m_tE1.DirectLastWindow(uWindow); }
-	bool GetE1DirectWindow ( uint32_t uWindow, uint64_t * pMask, uint8_t * pBounds, uint32_t & uCardinality, uint32_t & uMaxTF, uint64_t & uBoundReads ) override
+	bool GetE1DirectWindow ( uint32_t uWindow, uint64_t * pMask, uint32_t & uCardinality ) override
 	{
-		return m_tE1.DirectWindow ( uWindow, pMask, pBounds, uCardinality, uMaxTF, uBoundReads );
-	}
-	bool GetE1DirectBoundWord ( uint32_t uWindow, uint32_t uWord, uint64_t * pMasks, uint8_t * pBounds, uint32_t & uClasses ) override
-	{
-		return m_tE1.DirectBoundWord ( uWindow, uWord, pMasks, pBounds, uClasses );
-	}
-	bool GetE1DirectWindowClasses ( uint32_t uWindow, uint64_t * pMask, E1DirectBoundWord_t * pWords, uint32_t & uCardinality, uint64_t & uBoundReads ) override
-	{
-		return m_tE1.DirectWindowClasses ( uWindow, pMask, pWords, uCardinality, uBoundReads );
+		return m_tE1.DirectWindow ( uWindow, pMask, uCardinality );
 	}
 	bool ExtractE1DirectTFBatch ( uint32_t uWindow, const uint64_t * pSelected, uint32_t * pTF, uint64_t & uRequested, uint64_t & uWritten, uint64_t & uDecoded, uint32_t uStage=0 ) override
 	{
@@ -505,14 +495,14 @@ public:
 	{
 		uint32_t uRow=0; if ( !m_tE1.NextFieldProjectionRanked(uRow,uTF,fIDF,iThreshold,uEntries,uBuckets,uSelected,uSkipped,uSkippedDocs) ) return false; tRowID=RowID_t(uRow); return true;
 	}
-	bool GetE1RankedDoc ( uint32_t uMinTF, RowID_t & tRowID, uint32_t & uTF, uint64_t & uBoundEntries, uint64_t & uBuckets, uint64_t & uSelectedBlocks, uint64_t & uSkippedBlocks, uint64_t & uSkippedDocs, uint64_t & uDecodedGroups, const uint64_t * pEligibility=nullptr, uint32_t uEligibilityWords=0, uint64_t * pIneligibleBeforeTF=nullptr, uint32_t uEqualBoundTF=0, uint64_t uWorstTieKey=UINT64_MAX, uint32_t uKnownMask=0, float fRatioIDF=0.0f, int iThreshold=0, uint64_t * pEqualitySkipped=nullptr ) override
+	bool GetE1RankedDoc ( RowID_t & tRowID, uint32_t & uTF, uint64_t & uBoundEntries, uint64_t & uBuckets, uint64_t & uSelectedBlocks, uint64_t & uSkippedBlocks, uint64_t & uSkippedDocs, uint64_t & uDecodedGroups, const uint64_t * pEligibility=nullptr, uint32_t uEligibilityWords=0, uint64_t * pIneligibleBeforeTF=nullptr, uint64_t uWorstTieKey=UINT64_MAX, uint32_t uKnownMask=0, float fRatioIDF=0.0f, int iThreshold=0, uint64_t * pEqualitySkipped=nullptr ) override
 	{
 		if ( !m_tE1.Active() )
 			return false;
 		uint32_t uRowID = uint32_t ( tRowID );
 		uint32_t uMask = 0;
 		uint64_t uRef = 0;
-		if ( !m_tE1.NextRanked ( uRowID, uTF, uMask, uRef, uMinTF, uBoundEntries, uBuckets, uSelectedBlocks, uSkippedBlocks, uSkippedDocs, uDecodedGroups, pEligibility, uEligibilityWords, pIneligibleBeforeTF, uEqualBoundTF, uWorstTieKey, uKnownMask, fRatioIDF, iThreshold, pEqualitySkipped ) )
+		if ( !m_tE1.NextRanked ( uRowID, uTF, uMask, uRef, uBoundEntries, uBuckets, uSelectedBlocks, uSkippedBlocks, uSkippedDocs, uDecodedGroups, pEligibility, uEligibilityWords, pIneligibleBeforeTF, uWorstTieKey, uKnownMask, fRatioIDF, iThreshold, pEqualitySkipped ) )
 			return false;
 		tRowID = RowID_t ( uRowID );
 		m_tDoc.m_tRowID = tRowID;

@@ -104,20 +104,15 @@ public:
 	// -1 means unsupported without consuming anything. Do not mix with hit access.
 	virtual int GetCountDocs ( RowID_t * pRows, int iMax ) { return -1; }
 	// Exact E1 single-term ranked cursor. Unsupported readers return false
-	// without consuming input; uMinTF is a safe monotone lower cutoff.
-	virtual bool HasE1RankedBounds () const { return false; }
+	// without consuming input.
 	virtual bool HasE1PublicIdMinBounds () const { return false; }
 	virtual E1RankedBoundKind_e GetE1RankedBoundKind () const { return E1RankedBoundKind_e::NONE; }
-	virtual bool GetE1RankedDoc ( uint32_t uMinTF, RowID_t & tRowID, uint32_t & uTF, uint64_t & uBoundEntries, uint64_t & uBuckets, uint64_t & uSelectedBlocks, uint64_t & uSkippedBlocks, uint64_t & uSkippedDocs, uint64_t & uDecodedGroups, const uint64_t * pEligibility=nullptr, uint32_t uEligibilityWords=0, uint64_t * pIneligibleBeforeTF=nullptr, uint32_t uEqualBoundTF=0, uint64_t uWorstTieKey=UINT64_MAX, uint32_t uKnownMask=0, float fRatioIDF=0.0f, int iThreshold=0, uint64_t * pEqualitySkipped=nullptr ) { return false; }
+	virtual bool GetE1RankedDoc ( RowID_t & tRowID, uint32_t & uTF, uint64_t & uBoundEntries, uint64_t & uBuckets, uint64_t & uSelectedBlocks, uint64_t & uSkippedBlocks, uint64_t & uSkippedDocs, uint64_t & uDecodedGroups, const uint64_t * pEligibility=nullptr, uint32_t uEligibilityWords=0, uint64_t * pIneligibleBeforeTF=nullptr, uint64_t uWorstTieKey=UINT64_MAX, uint32_t uKnownMask=0, float fRatioIDF=0.0f, int iThreshold=0, uint64_t * pEqualitySkipped=nullptr ) { return false; }
 	virtual uint64_t TakeE1MetadataGroupsDecoded () { return 0; }
-	// Exact flat-OR fast lane over frequent E1/5 primary containers. The
-	// ordinal bounds are conservative persisted maxTF bytes (255=unbounded).
-	virtual bool E1DirectOrSupported () const { return false; }
+	// Exact direct fast lane over frequent current-format primary containers.
 	virtual bool E1DirectContainerSupported () const { return false; }
 	virtual bool GetE1DirectLastWindow ( uint32_t & ) const { return false; }
-	virtual bool GetE1DirectWindow ( uint32_t, uint64_t *, uint8_t *, uint32_t &, uint32_t &, uint64_t & ) { return false; }
-	virtual bool GetE1DirectBoundWord ( uint32_t, uint32_t, uint64_t *, uint8_t *, uint32_t & ) { return false; }
-	virtual bool GetE1DirectWindowClasses ( uint32_t, uint64_t *, E1DirectBoundWord_t *, uint32_t &, uint64_t & ) { return false; }
+	virtual bool GetE1DirectWindow ( uint32_t, uint64_t *, uint32_t & ) { return false; }
 	virtual bool ExtractE1DirectTFBatch ( uint32_t, const uint64_t *, uint32_t *, uint64_t &, uint64_t &, uint64_t &, uint32_t=0 ) { return false; }
 	virtual bool ExtractE1DirectMetaBatch ( uint32_t, const uint64_t *, uint32_t *, uint32_t *, uint64_t *, uint64_t &, uint64_t &, uint64_t & ) { return false; }
 	virtual bool BeginE1SelectedMeta ( uint32_t, const uint64_t *, uint64_t & ) { return false; }

@@ -80,7 +80,6 @@ TEST ( ExactBM25A, IntegerRatioBoundEncoderContract )
 
 TEST ( ExactBM25A, RatioBoundWeightIsStrictAndSaturationAdmits )
 {
-	EXPECT_STREQ ( E1RankedBoundKindName(E1RankedBoundKind_e::MAX_TF), "max_tf" );
 	EXPECT_STREQ ( E1RankedBoundKindName(E1RankedBoundKind_e::BM25A_RATIO), "bm25a_ratio" );
 	const float fIDF = 0.75f;
 	const uint8_t uCode = E1EncodeBM25A12_075_256 ( 7, 300 );
@@ -185,24 +184,6 @@ TEST ( ExactBM25A, ScopedScratchAdmissionBoundary )
 	EXPECT_TRUE ( E1ScopedScratchAllowed(1984) );
 	EXPECT_FALSE ( E1ScopedScratchAllowed(1985) );
 	EXPECT_FALSE ( E1ScopedScratchAllowed(std::numeric_limits<uint32_t>::max()) );
-}
-
-TEST ( ExactBM25A, AndBoundMasksRemainInsideCandidateSet )
-{
-	uint64_t dMasks[4][2] {};
-	uint8_t dBounds[4][2] {};
-	uint32_t dCounts[4] { 2,2,1,1 };
-	float dIDF[4] { 0.2f,0.3f,0.4f,-1.0f };
-	int dCanonical[4] { 0,1,2,3 };
-	dMasks[0][0]=0x0f; dMasks[0][1]=0xf0; dBounds[0][0]=1; dBounds[0][1]=2;
-	dMasks[1][0]=0x33; dMasks[1][1]=0xcc; dBounds[1][0]=1; dBounds[1][1]=255;
-	dMasks[2][0]=0xff; dBounds[2][0]=3;
-	dMasks[3][0]=0xff; dBounds[3][0]=1;
-	uint64_t uRejected=0,uTies=0,uClasses=0;
-	const uint64_t uAdmitted = E1AdmitAndBoundMasks ( 0xff, dMasks, dBounds, dCounts, dIDF, dCanonical, 4, 0, 5000, UINT64_MAX, uRejected, uTies, uClasses );
-	EXPECT_EQ ( uAdmitted & ~0xffULL, 0u );
-	EXPECT_EQ ( uRejected+uint64_t(__builtin_popcountll(uAdmitted)), 8u );
-	EXPECT_GT ( uClasses, 0u );
 }
 
 TEST ( ExactBM25A, PartialUpperBoundIsConservative )

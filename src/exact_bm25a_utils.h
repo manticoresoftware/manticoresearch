@@ -12,7 +12,6 @@
 enum class E1RankedBoundKind_e : uint8_t
 {
 	NONE,
-	MAX_TF,
 	BM25A_RATIO
 };
 
@@ -20,7 +19,6 @@ inline const char * E1RankedBoundKindName ( E1RankedBoundKind_e eKind ) noexcept
 {
 	switch ( eKind )
 	{
-	case E1RankedBoundKind_e::MAX_TF: return "max_tf";
 	case E1RankedBoundKind_e::BM25A_RATIO: return "bm25a_ratio";
 	default: return "none";
 	}
@@ -169,51 +167,6 @@ struct E1SelectedMeta_t
 	uint64_t m_uRef = 0;
 };
 
-// Compact reconstruction of persisted ordinal-64 bound runs for one direct
-// 64-row word. Two runs suffice because a word contains at most 64 postings.
-struct E1DirectBoundWord_t
-{
-	uint64_t m_dMasks[2] {};
-	uint8_t m_dBounds[2] {};
-	uint8_t m_uClasses = 0;
-};
-
-inline void E1BuildDirectBoundWord ( uint64_t uMembers, uint32_t uOrdinal, const uint8_t * pOrdinalBounds, E1DirectBoundWord_t & tWord )
-{
-	tWord = {};
-	if ( !uMembers )
-		return;
-	const uint32_t uCount = uint32_t(__builtin_popcountll(uMembers));
-	const uint32_t uFirst = std::min ( uCount, 64u-(uOrdinal&63) );
-	tWord.m_dBounds[0] = pOrdinalBounds[0];
-	if ( uFirst==uCount )
-	{
-		tWord.m_dMasks[0] = uMembers;
-		tWord.m_uClasses = 1;
-		return;
-	}
-	uint32_t uLo = 0, uHi = 64;
-	while ( uLo<uHi )
-	{
-		const uint32_t uMid = (uLo+uHi)/2;
-		const uint64_t uPrefix = uMid==64 ? ~uint64_t(0) : (uint64_t(1)<<uMid)-1;
-		if ( uint32_t(__builtin_popcountll(uMembers&uPrefix))<uFirst )
-			uLo = uMid+1;
-		else
-			uHi = uMid;
-	}
-	const uint64_t uPrefix = uLo==64 ? ~uint64_t(0) : (uint64_t(1)<<uLo)-1;
-	tWord.m_dMasks[0] = uMembers&uPrefix;
-	tWord.m_dMasks[1] = uMembers&~uPrefix;
-	tWord.m_dBounds[1] = pOrdinalBounds[1];
-	tWord.m_uClasses = 2;
-}
-
-inline uint8_t E1DirectBoundForBit ( const E1DirectBoundWord_t & tWord, uint32_t uBit )
-{
-	const uint64_t uMask = uint64_t(1)<<uBit;
-	return tWord.m_dMasks[0]&uMask ? tWord.m_dBounds[0] : tWord.m_dBounds[1];
-}
 
 inline float E1RoundUp ( float fValue )
 {
@@ -373,76 +326,4 @@ inline bool E1AdmitAfterExactTF ( int iExactNode, uint32_t uExactTF, const uint8
 	uint32_t dExactTF[4] {};
 	dExactTF[iExactNode] = uExactTF;
 	return !E1TieAwareBoundReject ( E1PartialUpperWeight ( dExactTF, uint32_t(1)<<iExactNode, dBounds, dIDF, dCanonical, iTerms ), uCandidateRow, iThreshold, uWorstTiedRow );
-}
-
-// A direct AND word has at most two compact ordinal-64 bound runs per term.
-// Refine the candidate mask one term at a time so AND4 stays bounded at 2^4
-// small classes instead of building an unbounded Cartesian data structure.
-static constexpr uint32_t E1_AND_MAX_BOUND_CLASSES = 16;
-
-struct E1AndBoundClass_t
-{
-	uint64_t m_uMask = 0;
-	float m_fUpper = 0.0f;
-};
-
-inline uint64_t E1AdmitAndBoundMasks ( uint64_t uCandidates, const uint64_t dTermClassMasks[4][2], const uint8_t dTermClassBounds[4][2], const uint32_t dTermClassCounts[4], const float dIDF[4], const int dCanonical[4], int iTerms, uint64_t uFirstRow, int iThreshold, uint64_t uWorstTiedRow, uint64_t & uRejectedRows, uint64_t & uTieRejectedRows, uint64_t & uRejectedClasses, uint64_t * pClassCombinations=nullptr )
-{
-	E1AndBoundClass_t dCurrent[E1_AND_MAX_BOUND_CLASSES], dNext[E1_AND_MAX_BOUND_CLASSES];
-	uint32_t uCurrent = 1;
-	dCurrent[0].m_uMask = uCandidates;
-	for ( int iCanonical=0; iCanonical<iTerms; ++iCanonical )
-	{
-		const int iNode = dCanonical[iCanonical];
-		uint32_t uNext = 0;
-		for ( uint32_t iClass=0; iClass<uCurrent; ++iClass )
-			for ( uint32_t iTermClass=0; iTermClass<dTermClassCounts[iNode]; ++iTermClass )
-			{
-				const uint64_t uRows = dCurrent[iClass].m_uMask & dTermClassMasks[iNode][iTermClass];
-				if ( !uRows )
-					continue;
-				if ( pClassCombinations )
-					++*pClassCombinations;
-				if ( uNext>=E1_AND_MAX_BOUND_CLASSES )
-					return uCandidates; // fail open; never prune from an incomplete refinement
-				const uint8_t uBound = dTermClassBounds[iNode][iTermClass];
-				const float fTerm = uBound==255 ? E1SafeUpperSaturatedTerm(dIDF[iNode]) : E1SafeUpperTerm(uBound,dIDF[iNode]);
-				dNext[uNext++] = { uRows, E1SafeUpperAdd ( dCurrent[iClass].m_fUpper, fTerm ) };
-			}
-		if ( !uNext )
-			return uCandidates; // malformed/missing coverage: conservative admission
-		for ( uint32_t i=0; i<uNext; ++i )
-			dCurrent[i] = dNext[i];
-		uCurrent = uNext;
-	}
-
-	uint64_t uAdmitted = 0;
-	for ( uint32_t iClass=0; iClass<uCurrent; ++iClass )
-	{
-		const uint64_t uRows = dCurrent[iClass].m_uMask;
-		const int iUpperWeight = E1SafeUpperWeight ( dCurrent[iClass].m_fUpper );
-		if ( iThreshold<=0 || iUpperWeight>iThreshold )
-		{
-			uAdmitted |= uRows;
-			continue;
-		}
-		if ( iUpperWeight<iThreshold || uWorstTiedRow<=uFirstRow )
-		{
-			const uint64_t uCount = uint64_t(__builtin_popcountll(uRows));
-			uRejectedRows += uCount;
-			uTieRejectedRows += iUpperWeight==iThreshold ? uCount : 0;
-			++uRejectedClasses;
-			continue;
-		}
-		const uint32_t uWinningRows = uint32_t ( uWorstTiedRow-uFirstRow>=64 ? 64 : uWorstTiedRow-uFirstRow );
-		const uint64_t uWinningMask = uWinningRows==64 ? ~uint64_t(0) : ( uint64_t(1)<<uWinningRows )-1;
-		const uint64_t uWinning = uRows & uWinningMask;
-		const uint64_t uRejected = uRows & ~uWinningMask;
-		uAdmitted |= uWinning;
-		uRejectedRows += uint64_t(__builtin_popcountll(uRejected));
-		uTieRejectedRows += uint64_t(__builtin_popcountll(uRejected));
-		if ( !uWinning )
-			++uRejectedClasses;
-	}
-	return uAdmitted;
 }

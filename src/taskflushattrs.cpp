@@ -34,12 +34,14 @@ enum class Saved_e {
 
 static Saved_e CheckSaveIndexes ()
 {
+	auto pDesc = PublishSystemInfo ( "SAVE tables" );
 	CSphString sError;
 	auto eSaveState = Saved_e::ALL;
 	bool bDirty = false;
 	ServedSnap_t hLocals = g_pLocalIndexes->GetHash();
 	for ( auto& tIt : *hLocals )
 	{
+		pDesc->m_dCrashIndex = FromStr ( tIt.first );
 		assert ( tIt.second );
 		RIdx_c pIdx { tIt.second };
 		if ( pIdx->GetAttributeStatus() )
@@ -54,6 +56,7 @@ static Saved_e CheckSaveIndexes ()
 		sd::extend30s();
 	}
 
+	pDesc->m_dCrashIndex = {};
 	if ( !bDirty )
 		return Saved_e::NOTHING;
 
@@ -75,7 +78,6 @@ void SaveIndexesMT ()
 {
 	sphLogDebug ( "attrflush: doing the check" );
 
-	auto pDesc = PublishSystemInfo ( "SAVE tables" );
 	if ( CheckSaveIndexes ()==Saved_e::NOTHING )
 		sphLogDebug ( "attrflush: no dirty tables found" );
 

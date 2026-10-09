@@ -172,6 +172,9 @@ struct MiniTaskInfo_t : public TaskInfo_t
 	int64_t m_tmLastJobStartTimeUS = -1;
 	int64_t m_tmLastJobDoneTimeUS = -1;
 	const char *	m_szCommand = nullptr; // is always mt-safe since always set static const
+	// Crash handler reads these without allocations; the referenced strings must outlive the task.
+	Str_t m_dCrashTask { nullptr, 0 };
+	Str_t m_dCrashIndex { nullptr, 0 };
 	hazard::ScopedPtr_t<const CSphString *> m_pHazardDescription;
 	int				m_iDescriptionLen = 0;	// len of string in m_pHazardDescription
 };

@@ -312,6 +312,7 @@ MiniTaskInfo_t * MakeSystemInfo ( const char * sDescription )
 {
 	auto pInfo = new MiniTaskInfo_t;
 	pInfo->m_szCommand = "SYSTEM";
+	pInfo->m_dCrashTask = { sDescription, (int)strlen ( sDescription ) };
 	pInfo->m_tmLastJobStartTimeUS = sphMicroTimer();
 	SetMiniDescription( pInfo, "SYSTEM %s", sDescription );
 	return pInfo;

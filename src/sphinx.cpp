@@ -11213,7 +11213,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 				return false;
 			}
 			if ( bE1FlushTrace )
-				fprintf ( stderr, "E1_FLUSH_TRACE event=norms_open name=%s map_us=%llu header_us=%llu crc_us=%llu payload_validation_us=%llu total_cache_us=%llu total_us=%llu fast_validation=0 deep_validation=1 rows=%lld fields=%d\n",
+				fprintf ( stderr, "E1_FLUSH_TRACE event=norms_open name=%s map_us=%llu header_us=%llu crc_us=%llu payload_validation_us=%llu total_cache_us=%llu total_us=%llu deep_validation=1 rows=%lld fields=%d\n",
 					GetName(), (unsigned long long)tmNormMap, (unsigned long long)tNormTimings.m_tmHeader, (unsigned long long)tNormTimings.m_tmCRC,
 					(unsigned long long)tNormTimings.m_tmPayloadValidation, (unsigned long long)tNormTimings.m_tmTotalCache,
 					(unsigned long long)(MonoMicroTimer()-tmNormTotal), (long long)m_iDocinfo, m_tSchema.GetFieldsCount() );

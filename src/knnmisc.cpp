@@ -1411,23 +1411,32 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 }
 
 
-RowIteratorsWithEstimates_t CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, bool & bError, CSphString & sError )
+bool ShouldBypassKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const knn::KNNFilter_i * pFilter )
 {
 	if ( !tQuery.HasKnn() )
-		return {};
+		return false;
 
 	const auto & tKNN = tQuery.SingleKnnSettings();
 	if ( tKNN.m_bFullscan )
+		return true;
+
+	// CreateKNNIterator produces nothing for it either, so the chunk is scanned
+	if ( tKNN.m_sAttr.IsEmpty() )
+		return true;
+
+	// skip HNSW if brute-force over filtered rows is cheaper than HNSW traversal
+	// use plain K (not oversampled) since brute-force computes exact distances.
+	// a missing pKNN is left to CreateKNNIterator, which reports it as an error
+	return pKNN && pFilter && pKNN->ShouldUseFullscan ( tKNN.m_sAttr.cstr(), tKNN.m_iK, tKNN.m_iEf, pFilter->GetFilterCount() );
+}
+
+
+RowIteratorsWithEstimates_t CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, bool bBypass, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, bool & bError, CSphString & sError )
+{
+	if ( !tQuery.HasKnn() || bBypass )
 		return {};
 
-	if ( !tKNN.m_sAttr.IsEmpty() )
-	{
-		// skip HNSW if brute-force over filtered rows is cheaper than HNSW traversal
-		// use plain K (not oversampled) since brute-force computes exact distances
-		if ( pKNN && pFilter && pKNN->ShouldUseFullscan ( tKNN.m_sAttr.cstr(), tKNN.m_iK, tKNN.m_iEf, pFilter->GetFilterCount() ) )
-			return {};
-	}
-
+	const auto & tKNN = tQuery.SingleKnnSettings();
 	auto tRes = CreateKNNIterator ( pKNN, tQuery, tIndexSchema, tSorterSchema, pFilter, ePolicy, pProfile, sError );
 	if ( tRes.second )
 	{

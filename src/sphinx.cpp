@@ -1513,7 +1513,7 @@ private:
 
 	template<typename RUN>
 	bool						SplitQuery ( RUN && tRun, CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
-	bool						ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const;
+	bool						ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker, bool bPlanForKNNIterator ) const;
 	std::pair<RowidIterator_i *, bool> SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, const CSphVector<const ISphSchema *> & dSorterSchemas, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker, bool & bKNNIteratorCreated ) const;
 	bool						SelectIteratorsFT ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tSorterSchema, ISphRanker * pRanker, CSphVector<SecondaryIndexInfo_t> & dSIInfo, int iCutoff, int iThreads, StrVec_t & dWarnings ) const;
 
@@ -9055,17 +9055,12 @@ static bool RecreateFallbackFilters ( const CSphVector<CSphFilterSettings> & dFi
 }
 
 
-bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const
+bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker, bool bPlanForKNNIterator ) const
 {
-	(void)tCtx;
-	(void)tFlx;
-	(void)dModifiedFilters;
-
 	StrVec_t dWarnings;
-	bool bKNN = tQuery.HasKnn();
 	float fBestCost = FLT_MAX;
 
-	if ( bKNN )
+	if ( bPlanForKNNIterator )
 	{
 		SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, dFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_tSI, iCutoff, m_iDocinfo, 1 );
 		tSelectIteratorCtx.m_bFromIterator = true;
@@ -9147,14 +9142,19 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	{
 		if ( !RecreateFallbackFilters ( dFilters, dJsonSITransforms, false, tCtx, tFlx, tMeta, dSorterSchemas, pModifiedMatchSchema, dModifiedFilters ) )
 			return { nullptr, true };
+
 		return { nullptr, false };
 	}
 
+	// decided before the iterators are planned: a bypassed graph means the chunk is scanned, and then secondary indexes over the filters are what keeps the scan small
+	bool bKNNBypassed = ShouldBypassKNNIterator ( m_pKNN.get(), tQuery, pKNNFilterWrapper.get() );
+
 	CSphVector<SecondaryIndexInfo_t> dSIInfo;
-	if ( !ChooseIterators ( dSIInfo, tQuery, dFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, iThreads, dModifiedFilters, pRanker ) )
+	if ( !ChooseIterators ( dSIInfo, tQuery, dFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, iThreads, dModifiedFilters, pRanker, tQuery.HasKnn() && !bKNNBypassed ) )
 	{
 		if ( !RecreateFallbackFilters ( dFilters, dJsonSITransforms, true, tCtx, tFlx, tMeta, dSorterSchemas, pModifiedMatchSchema, dModifiedFilters ) )
 			return { nullptr, true };
+
 		return { nullptr, false };
 	}
 
@@ -9162,9 +9162,9 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 
 	int iRemovedOptional = CalcRemovedOptionalFilters ( dFilters, dSIInfo );
 
-	// knn iterators (may be skipped when brute-force over filtered rows is cheaper than HNSW)
+	// knn iterators (none when the graph is bypassed)
 	bool bError = false;
-	dKNNIterators = CreateKNNIterators ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.HasKnn() ? tQuery.SingleKnnSettings().m_eTerminationPolicy : knn::HNSWTerminationPolicy_e::QUANTILE, tMeta.m_pProfile, bError, tMeta.m_sError );
+	dKNNIterators = CreateKNNIterators ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), bKNNBypassed, tQuery.HasKnn() ? tQuery.SingleKnnSettings().m_eTerminationPolicy : knn::HNSWTerminationPolicy_e::QUANTILE, tMeta.m_pProfile, bError, tMeta.m_sError );
 	if ( bError )
 		return { nullptr, true };
 

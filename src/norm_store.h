@@ -63,7 +63,7 @@ public:
 	{
 		if ( !szOutput || !*szOutput || !m_uGroupRows )
 			return Fail ( sError, "invalid direct builder" );
-		const uint32_t uGroups = uRows ? ( uRows+m_uGroupRows-1 )/m_uGroupRows : 0;
+		const uint32_t uGroups = uRows ? 1+( uRows-1 )/m_uGroupRows : 0;
 		const uint64_t uDirectory = HEADER_SIZE+uint64_t(m_uFields)*FIELD_ENTRY_SIZE;
 		const uint64_t uPayload = uDirectory+uint64_t(m_uFields)*uGroups*GROUP_ENTRY_SIZE;
 		const uint64_t uMetaCount = uint64_t(m_uFields)*uGroups;
@@ -131,7 +131,7 @@ public:
 		bool bOK = Write ( pOutput, dHeader.data(), dHeader.size(), nullptr )
 			&& Write ( pOutput, dFieldEntries.data(), dFieldEntries.size(), &uCRC )
 			&& Write ( pOutput, dGroupEntries.data(), dGroupEntries.size(), &uCRC );
-		std::vector<uint8_t> dPacked ( size_t(m_uGroupRows)*sizeof(uint32_t) );
+		std::vector<uint8_t> dPacked ( size_t(std::min(m_uGroupRows,uRows))*sizeof(uint32_t) );
 		bool bScanOK = true;
 		for ( uint32_t iField=0; bOK && iField<m_uFields; ++iField )
 		{
@@ -308,7 +308,7 @@ public:
 		FILE * pMetadata = tmpfile();
 		if ( !pMetadata )
 			return Fail ( sError, "metadata staging failed" );
-		const uint32_t uGroups = m_uRows ? ( m_uRows+m_uGroupRows-1 )/m_uGroupRows : 0;
+		const uint32_t uGroups = m_uRows ? 1+( m_uRows-1 )/m_uGroupRows : 0;
 		const uint64_t uDirectory = HEADER_SIZE+uint64_t(m_uFields)*FIELD_ENTRY_SIZE;
 		uint64_t uOffset = uDirectory+uint64_t(m_uFields)*uGroups*GROUP_ENTRY_SIZE;
 		std::vector<uint8_t> dFieldEntries ( size_t(m_uFields)*FIELD_ENTRY_SIZE, 0 );
@@ -437,7 +437,7 @@ private:
 		for ( FILE * pFile : m_dFields )
 			if ( fflush(pFile) || !Seek(pFile,0) )
 				return Fail ( sError, "packed staging flush failed" );
-		const uint32_t uGroups = m_uRows ? ( m_uRows+m_uGroupRows-1 )/m_uGroupRows : 0;
+		const uint32_t uGroups = m_uRows ? 1+( m_uRows-1 )/m_uGroupRows : 0;
 		const uint64_t uDirectory = HEADER_SIZE+uint64_t(m_uFields)*FIELD_ENTRY_SIZE;
 		const uint64_t uPayload = uDirectory+uint64_t(m_uFields)*uGroups*GROUP_ENTRY_SIZE;
 		uint64_t uOffset = uPayload;
@@ -601,7 +601,7 @@ public:
 		const uint32_t uGroups = e1::U32(pData+28);
 		const uint64_t uDirectory = e1::U64(pData+32);
 		const uint64_t uPayload = e1::U64(pData+40);
-		if ( !uGroupRows || e1::U64(pData+48)!=uSize || uGroups!=( uRows ? (uRows+uGroupRows-1)/uGroupRows : 0 ) )
+		if ( !uGroupRows || e1::U64(pData+48)!=uSize || uGroups!=( uRows ? 1+(uRows-1)/uGroupRows : 0 ) )
 			return fnFail ( "invalid dimensions" );
 		if ( uDirectory!=HEADER_SIZE+uint64_t(uFields)*FIELD_ENTRY_SIZE || uPayload!=uDirectory+uint64_t(uFields)*uGroups*GROUP_ENTRY_SIZE || uPayload>uSize )
 			return fnFail ( "invalid directory" );
@@ -744,7 +744,7 @@ private:
 	void BuildTotalCache()
 	{
 		m_dTotalGroups.resize ( m_uGroups );
-		std::vector<uint32_t> dTotals ( m_uGroupRows );
+		std::vector<uint32_t> dTotals ( std::min(m_uGroupRows,m_uRows) );
 		for ( uint32_t uGroup=0; uGroup<m_uGroups; ++uGroup )
 		{
 			const uint32_t uFirst = uGroup*m_uGroupRows;

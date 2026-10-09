@@ -74,7 +74,7 @@ public:
 		constexpr uint32_t HEADER_SIZE = 64;
 		constexpr uint32_t FIELD_ENTRY_SIZE = 16;
 		constexpr uint32_t GROUP_ENTRY_SIZE = 32;
-		const uint32_t uGroups = m_uRows ? ( m_uRows+m_uGroupRows-1 )/m_uGroupRows : 0;
+		const uint32_t uGroups = m_uRows ? 1+( m_uRows-1 )/m_uGroupRows : 0;
 		const uint64_t uDirectory = HEADER_SIZE+uint64_t(m_uFields)*FIELD_ENTRY_SIZE;
 		const uint64_t uPayload = uDirectory+uint64_t(m_uFields)*uGroups*GROUP_ENTRY_SIZE;
 		if ( uPayload>std::numeric_limits<size_t>::max() )
@@ -738,6 +738,48 @@ TEST ( NormStore, ExactWidthsRangesGatherAndTotals )
 	for ( uint32_t i=0; i<128; ++i ) EXPECT_EQ ( dValues[i], dRows[i][0]+dRows[i][1]+dRows[i][2] );
 	ASSERT_TRUE ( tStore.ReadRange(2,1,7,dValues.data()) );
 	for ( uint32_t i=0; i<7; ++i ) EXPECT_EQ ( dValues[i], dRows[i+1][2] );
+}
+
+TEST ( NormStore, MaxGroupRowsUsesOneGroupWithoutOverflow )
+{
+	std::string sError;
+	NormStoreBuilder tBuilder ( 1, std::numeric_limits<uint32_t>::max() );
+	for ( uint32_t uValue : { 7u, 9u } )
+		ASSERT_TRUE ( tBuilder.AddRow(&uValue,1,sError) ) << sError;
+	ByteVec_t dExpected;
+	ASSERT_TRUE ( tBuilder.Build(dExpected,sError) ) << sError;
+
+	const std::array<uint8_t,16> dGoldenDimensions {{
+		0x02, 0x00, 0x00, 0x00, // rows
+		0x01, 0x00, 0x00, 0x00, // fields
+		0xff, 0xff, 0xff, 0xff, // rows per group
+		0x01, 0x00, 0x00, 0x00  // groups
+	}};
+	EXPECT_TRUE ( std::equal(dGoldenDimensions.begin(),dGoldenDimensions.end(),dExpected.begin()+16) );
+	ASSERT_EQ ( e1::U32(dExpected.data()+28), 1u );
+	const uint64_t uGroupEntry = e1::U64 ( dExpected.data()+32 );
+	EXPECT_EQ ( e1::U64(dExpected.data()+uGroupEntry+8), 16u );
+	EXPECT_EQ ( e1::U32(dExpected.data()+uGroupEntry+16), 2u );
+	EXPECT_EQ ( e1::U32(dExpected.data()+uGroupEntry+20), 9u );
+	EXPECT_EQ ( e1::U32(dExpected.data()+uGroupEntry+24), 2u );
+	EXPECT_EQ ( dExpected[uGroupEntry+28], 1u );
+
+	e1::norms::Store tStore;
+	ASSERT_TRUE ( tStore.Open(dExpected.data(),dExpected.size(),sError) ) << sError;
+	uint32_t uValue = 0;
+	ASSERT_TRUE ( tStore.Get(0,0,uValue) );
+	EXPECT_EQ ( uValue, 7u );
+	ASSERT_TRUE ( tStore.Get(0,1,uValue) );
+	EXPECT_EQ ( uValue, 9u );
+
+	const std::string sPath = "__max_group_rows_norm_store_"+std::to_string(GetOsProcessId())+".tmp";
+	e1::norms::DirectBuilder tDirect ( 1, std::numeric_limits<uint32_t>::max() );
+	auto fnValues = [] ( uint32_t, const auto & fnValue ) { return fnValue(7) && fnValue(9); };
+	ASSERT_TRUE ( tDirect.Finish(sPath.c_str(),2,fnValues,sError) ) << sError;
+	std::ifstream tIn ( sPath, std::ios::binary );
+	ByteVec_t dActual ( (std::istreambuf_iterator<char>(tIn)), std::istreambuf_iterator<char>() );
+	std::remove ( sPath.c_str() );
+	EXPECT_EQ ( dActual, dExpected );
 }
 
 TEST ( NormStore, RejectsCorruptionAndTruncation )

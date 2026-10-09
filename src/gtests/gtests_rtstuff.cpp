@@ -1091,6 +1091,10 @@ TEST_F ( RT, ScopedAnd2FallsBackToCanonicalBM25A )
 		std::vector<Result_t> m_dRows;
 		int64_t m_iTotal = 0;
 	};
+	struct TestSeamGuard_t
+	{
+		~TestSeamGuard_t() { SetE1TestForceGenericRanked(false); ResetE1TestRankStats(); }
+	} tGuard;
 	Threads::CallCoroutine ( [&] {
 		tCol.m_sName = "id";
 		tCol.m_eAttrType = SPH_ATTR_BIGINT;
@@ -1158,16 +1162,15 @@ TEST_F ( RT, ScopedAnd2FallsBackToCanonicalBM25A )
 		SafeDelete ( pSrc );
 		ASSERT_TRUE ( pIndex->ForceDiskChunk() );
 
-		auto fnQuery = [&] ( const char * szQuery, bool bGeneric, int iOffset, int iLimit )
+		auto fnQuery = [&] ( const char * szQuery, bool bForceGeneric, int iOffset, int iLimit )
 		{
+			SetE1TestForceGenericRanked ( bForceGeneric );
 			QueryResult_t tOut;
 			CSphQuery tQuery;
 			SetQueryDefaultsExt2 ( tQuery );
 			tQuery.m_sQuery = szQuery;
 			tQuery.m_bExplicitRanker = true;
-			tQuery.m_eRanker = bGeneric ? SPH_RANK_EXPR : SPH_RANK_BM25A;
-			if ( bGeneric )
-				tQuery.m_sRankerExpr = "1000*bm25a(1.2,0.75,256)";
+			tQuery.m_eRanker = SPH_RANK_BM25A;
 			tQuery.m_iOffset = iOffset;
 			tQuery.m_iLimit = iLimit;
 			auto pParser = sphCreatePlainQueryParser();
@@ -1198,21 +1201,48 @@ TEST_F ( RT, ScopedAnd2FallsBackToCanonicalBM25A )
 			return tOut;
 		};
 
+		ResetE1TestRankStats();
 		const auto tNamed = fnQuery ( "@content error failed", false, 0, 20 );
+		const E1TestRankStats_t tNamedStats = GetE1TestRankStats();
 		const auto tGeneric = fnQuery ( "@content error failed", true, 0, 20 );
+		ResetE1TestRankStats();
 		const auto tParenNamed = fnQuery ( "@content (error failed)", false, 0, 20 );
+		const E1TestRankStats_t tParenNamedStats = GetE1TestRankStats();
 		const auto tParenGeneric = fnQuery ( "@content (error failed)", true, 0, 20 );
+		ResetE1TestRankStats();
 		const auto tPage = fnQuery ( "@content error failed", false, 1, 2 );
+		const E1TestRankStats_t tPageStats = GetE1TestRankStats();
 		const auto tGenericPage = fnQuery ( "@content error failed", true, 1, 2 );
+		ResetE1TestRankStats();
+		const auto tSameFieldOr = fnQuery ( "@content (error | failed)", false, 0, 20 );
+		const E1TestRankStats_t tSameFieldOrStats = GetE1TestRankStats();
+		const auto tSameFieldOrGeneric = fnQuery ( "@content (error | failed)", true, 0, 20 );
+		ResetE1TestRankStats();
+		const auto tMixedFieldOr = fnQuery ( "@content error | @title title", false, 1, 2 );
+		const E1TestRankStats_t tMixedFieldOrStats = GetE1TestRankStats();
+		const auto tMixedFieldOrGeneric = fnQuery ( "@content error | @title title", true, 1, 2 );
 
 		EXPECT_EQ ( tNamed.m_dRows, tGeneric.m_dRows );
 		EXPECT_EQ ( tNamed.m_iTotal, tGeneric.m_iTotal );
+		EXPECT_EQ ( tNamedStats.m_uDirectAnd, 0u );
 		EXPECT_EQ ( tParenNamed.m_dRows, tParenGeneric.m_dRows );
 		EXPECT_EQ ( tParenNamed.m_iTotal, tParenGeneric.m_iTotal );
+		EXPECT_EQ ( tParenNamedStats.m_uDirectAnd, 0u );
 		EXPECT_EQ ( tNamed.m_dRows, tParenNamed.m_dRows );
 		EXPECT_EQ ( tNamed.m_iTotal, tParenNamed.m_iTotal );
 		EXPECT_EQ ( tPage.m_dRows, tGenericPage.m_dRows );
 		EXPECT_EQ ( tPage.m_iTotal, tGenericPage.m_iTotal );
+		EXPECT_EQ ( tPageStats.m_uDirectAnd, 0u );
+		EXPECT_EQ ( tSameFieldOr.m_dRows, tSameFieldOrGeneric.m_dRows );
+		EXPECT_EQ ( tSameFieldOr.m_iTotal, tSameFieldOrGeneric.m_iTotal );
+		EXPECT_EQ ( tSameFieldOr.m_iTotal, DOCS );
+		EXPECT_EQ ( tSameFieldOr.m_dRows.size(), 20u );
+		EXPECT_EQ ( tSameFieldOrStats.m_uDirectOr, 0u );
+		EXPECT_EQ ( tMixedFieldOr.m_dRows, tMixedFieldOrGeneric.m_dRows );
+		EXPECT_EQ ( tMixedFieldOr.m_iTotal, tMixedFieldOrGeneric.m_iTotal );
+		EXPECT_EQ ( tMixedFieldOr.m_iTotal, DOCS );
+		EXPECT_EQ ( tMixedFieldOr.m_dRows.size(), 2u );
+		EXPECT_EQ ( tMixedFieldOrStats.m_uDirectOr, 0u );
 		EXPECT_EQ ( tNamed.m_iTotal, DOCS );
 		ASSERT_EQ ( tNamed.m_dRows.size(), 20u );
 		std::vector<Result_t> dExpected;

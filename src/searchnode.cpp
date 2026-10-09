@@ -779,7 +779,7 @@ public:
 	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override;
 	void				SetRowidBoundaries ( const RowIdBoundaries_t & tBoundaries ) override { m_tBoundaries = tBoundaries; }
 	bool				EnableE1Ranked() override;
-	bool				EnableE1BestFirst() override { return m_bE1Or || m_bE1DirectAnd; }
+	bool				EnableE1BestFirst() override { return m_bE1Ranked; }
 	void				SetRankThreshold ( int iWeight, uint64_t uWorstTieKey ) override { m_iE1RankThreshold = iWeight; m_tE1WorstTiedRow = m_bE1RowidDocidOrder && uWorstTieKey<=UINT32_MAX ? RowID_t(uWorstTieKey) : INVALID_ROWID; m_iE1FinalThreshold = iWeight; }
 	uint64_t			TakeRankSkippedDocs() override { auto u=m_uE1SkippedMatches; m_uE1SkippedMatches=0; return u; }
 
@@ -877,7 +877,6 @@ private:
 	bool				m_bE1Ranked = false;
 	bool				m_bE1RowidDocidOrder = false;
 	bool				m_bE1Or = false;
-	bool				m_bE1DirectAnd = false;
 	uint32_t			m_uE1Window = UINT32_MAX;
 	uint32_t			m_uE1LastWindow = UINT32_MAX;
 	CSphVector<int>		m_dE1Canonical;
@@ -4271,8 +4270,7 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::EnableE1Ranked()
 		std::swap ( m_dE1Canonical[0], m_dE1Canonical[1] );
 	if ( m_dNodes[m_dE1Canonical[0]].m_iAtomPos!=1 || m_dNodes[m_dE1Canonical[1]].m_iAtomPos!=2 )
 		return false;
-	m_bE1DirectAnd = !m_bE1Or;
-	if ( m_bE1DirectAnd )
+	if ( !m_bE1Or )
 		m_uE1LastWindow = uDirectAndLast;
 
 	m_bE1Ranked = true;

@@ -166,7 +166,7 @@ public:
 class Cursor {
  const uint8_t*m_p=nullptr,*m_term=nullptr;uint32_t m_df=0,m_next=0,m_cached=UINT32_MAX,m_rows[128];
  const uint8_t*m_bounds=nullptr,*m_minPublicIDs=nullptr;
- const uint8_t*m_projectionDir=nullptr,*m_projectionPayload=nullptr;uint32_t m_projectionCount=0,m_projectionRows=0,m_projectionBlocks=0,m_projectionRankPos=0,m_projectionInBlock=0,m_projectionDecodedBlock=UINT32_MAX,m_projectionDecodedCount=0;bool m_projectionCountersReady=false;uint32_t m_projectionDecodedRows[64]{},m_projectionDecodedTF[64]{};std::vector<uint32_t> m_projectionRankOrder;
+ const uint8_t*m_projectionDir=nullptr,*m_projectionPayload=nullptr;uint32_t m_projectionCount=0,m_projectionRows=0,m_projectionBlocks=0,m_projectionRankPos=0,m_projectionInBlock=0,m_projectionDecodedBlock=UINT32_MAX;bool m_projectionCountersReady=false;uint32_t m_projectionDecodedRows[64]{},m_projectionDecodedTF[64]{};std::vector<uint32_t> m_projectionRankOrder;
  uint32_t m_block=0,m_lastOrdinal=UINT32_MAX,m_lastRow=0,m_bitmapBlock=UINT32_MAX,m_bitmapWord=0,m_bitmapEndOrdinal=0,m_bitmapWindow=0;uint64_t m_bitmapRemaining=0;const uint8_t*m_bitmapPayload=nullptr;
  uint32_t m_meta=UINT32_MAX,m_tf[128],m_mask[128];uint64_t m_ref[128];
  uint64_t m_uMetaDecoded=0;
@@ -188,7 +188,7 @@ class Cursor {
   for(uint32_t i=0;i<n;++i)m_dRankOrder[next[m_bounds[i]]++]=i;
  }
 public:
- bool Active()const{return m_p;} void Reset(){m_next=0;m_cached=UINT32_MAX;m_meta=m_uBatchGroup=UINT32_MAX;m_block=0;m_lastOrdinal=UINT32_MAX;m_bitmapBlock=UINT32_MAX;m_bitmapWord=0;m_bitmapEndOrdinal=0;m_bitmapWindow=0;m_bitmapRemaining=0;m_bitmapPayload=nullptr;m_dRankOrder.clear();m_uRankPos=0;m_uRankInBlock=0;m_bRankOrderReady=false;m_uMetaDecoded=0;m_uDirectWindow=UINT32_MAX;m_uDirectBlock=UINT32_MAX;m_uHintPrefixBlock=UINT32_MAX;m_dHintPrefix.fill(0);m_dDirectMask.fill(0);m_pSelectedMeta=nullptr;m_uSelectedWord=0;m_uSelectedOrdinal=0;m_uSelectedMembers=0;m_projectionPayload=nullptr;m_projectionRows=m_projectionBlocks=m_projectionRankPos=m_projectionInBlock=m_projectionDecodedCount=0;m_projectionDecodedBlock=UINT32_MAX;m_projectionCountersReady=false;m_projectionRankOrder.clear();}
+ bool Active()const{return m_p;} void Reset(){m_next=0;m_cached=UINT32_MAX;m_meta=m_uBatchGroup=UINT32_MAX;m_block=0;m_lastOrdinal=UINT32_MAX;m_bitmapBlock=UINT32_MAX;m_bitmapWord=0;m_bitmapEndOrdinal=0;m_bitmapWindow=0;m_bitmapRemaining=0;m_bitmapPayload=nullptr;m_dRankOrder.clear();m_uRankPos=0;m_uRankInBlock=0;m_bRankOrderReady=false;m_uMetaDecoded=0;m_uDirectWindow=UINT32_MAX;m_uDirectBlock=UINT32_MAX;m_uHintPrefixBlock=UINT32_MAX;m_dHintPrefix.fill(0);m_dDirectMask.fill(0);m_pSelectedMeta=nullptr;m_uSelectedWord=0;m_uSelectedOrdinal=0;m_uSelectedMembers=0;m_projectionPayload=nullptr;m_projectionRows=m_projectionBlocks=m_projectionRankPos=m_projectionInBlock=0;m_projectionDecodedBlock=UINT32_MAX;m_projectionCountersReady=false;m_projectionRankOrder.clear();}
  uint64_t TakeMetadataGroupsDecoded(){auto u=m_uMetaDecoded;m_uMetaDecoded=0;return u;}
  void Bind(const Store&s,uint64_t key){
   auto v=s.View(key);m_p=v.term?v.data:nullptr;m_term=v.term;m_df=v.DF();Reset();m_bounds=nullptr;m_minPublicIDs=nullptr;m_projectionDir=nullptr;m_projectionCount=0;
@@ -201,7 +201,7 @@ public:
  bool PublicIdMinBound(uint32_t block,uint64_t&value)const{if(!HasPublicIdMinBounds()||block>=(m_df+63)/64)return false;value=U64(m_minPublicIDs+uint64_t(block)*8);return true;}
  bool BM25ARatioBound(uint32_t block,uint8_t&code)const{if(!HasBM25ARatioBounds()||block>=(m_df+63)/64)return false;code=m_bounds[block];return true;}
  bool SelectFieldProjection(uint32_t field){
-  m_projectionPayload=nullptr;m_projectionRows=m_projectionBlocks=m_projectionRankPos=m_projectionInBlock=m_projectionDecodedCount=0;m_projectionDecodedBlock=UINT32_MAX;m_projectionCountersReady=false;m_projectionRankOrder.clear();
+  m_projectionPayload=nullptr;m_projectionRows=m_projectionBlocks=m_projectionRankPos=m_projectionInBlock=0;m_projectionDecodedBlock=UINT32_MAX;m_projectionCountersReady=false;m_projectionRankOrder.clear();
   for(uint32_t i=0;i<m_projectionCount;++i){const uint8_t*d=m_projectionDir+uint64_t(i)*24;if(U32(d)!=field)continue;m_projectionRows=U32(d+4);m_projectionBlocks=U32(d+8);m_projectionPayload=m_p+U64(d+16);std::array<uint32_t,256> counts{},offsets{},next{};for(uint32_t b=0;b<m_projectionBlocks;++b)++counts[*(m_projectionPayload+uint64_t(b)*16+13)];uint32_t at=0;for(int c=255;c>=0;--c){offsets[c]=at;at+=counts[c];}next=offsets;m_projectionRankOrder.resize(m_projectionBlocks);for(uint32_t b=0;b<m_projectionBlocks;++b){const uint8_t code=m_projectionPayload[uint64_t(b)*16+13];m_projectionRankOrder[next[code]++]=b;}return true;}return false;
  }
  uint32_t FieldProjectionRows()const{return m_projectionRows;} uint32_t FieldProjectionBlocks()const{return m_projectionBlocks;}
@@ -210,7 +210,7 @@ public:
   while(m_projectionRankPos<m_projectionRankOrder.size()){
    const uint32_t block=m_projectionRankOrder[m_projectionRankPos];const uint8_t*bd=m_projectionPayload+uint64_t(block)*16;const uint32_t n=bd[12];
    if(!m_projectionInBlock){const uint8_t bound=bd[13];if(E1RatioBoundReject(bound,idf,threshold)){skipped+=m_projectionRankOrder.size()-m_projectionRankPos;for(uint32_t i=m_projectionRankPos;i<m_projectionRankOrder.size();++i)skippedDocs+=m_projectionPayload[uint64_t(m_projectionRankOrder[i])*16+12];m_projectionRankPos=uint32_t(m_projectionRankOrder.size());return false;}++selected;}
-   if(m_projectionDecodedBlock!=block){const uint8_t*rp=m_projectionPayload+U32(bd);const uint8_t*rend=rp+U32(bd+4);const uint8_t*tp=rend;const uint8_t*tend=tp+U32(bd+8);auto get=[](const uint8_t*&p,const uint8_t*e,uint32_t&v){v=0;for(uint32_t s=0;s<35&&p<e;s+=7){uint8_t c=*p++;v|=uint32_t(c&127)<<s;if(!(c&128))return true;}return false;};uint32_t previous=0;for(uint32_t i=0;i<n;++i){uint32_t delta=0;if(!get(rp,rend,delta))return false;m_projectionDecodedRows[i]=i?previous+delta:delta;previous=m_projectionDecodedRows[i];}for(uint32_t i=0;i<n;++i)if(!get(tp,tend,m_projectionDecodedTF[i]))return false;m_projectionDecodedBlock=block;m_projectionDecodedCount=n;}
+   if(m_projectionDecodedBlock!=block){const uint8_t*rp=m_projectionPayload+U32(bd);const uint8_t*rend=rp+U32(bd+4);const uint8_t*tp=rend;const uint8_t*tend=tp+U32(bd+8);auto get=[](const uint8_t*&p,const uint8_t*e,uint32_t&v){v=0;for(uint32_t s=0;s<35&&p<e;s+=7){uint8_t c=*p++;v|=uint32_t(c&127)<<s;if(!(c&128))return true;}return false;};uint32_t previous=0;for(uint32_t i=0;i<n;++i){uint32_t delta=0;if(!get(rp,rend,delta))return false;m_projectionDecodedRows[i]=i?previous+delta:delta;previous=m_projectionDecodedRows[i];}for(uint32_t i=0;i<n;++i)if(!get(tp,tend,m_projectionDecodedTF[i]))return false;m_projectionDecodedBlock=block;}
    const uint32_t i=m_projectionInBlock++;row=m_projectionDecodedRows[i];tf=m_projectionDecodedTF[i];if(m_projectionInBlock==n){++m_projectionRankPos;m_projectionInBlock=0;}return true;
   }return false;
  }

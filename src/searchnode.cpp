@@ -780,7 +780,7 @@ public:
 	void				SetRowidBoundaries ( const RowIdBoundaries_t & tBoundaries ) override { m_tBoundaries = tBoundaries; }
 	bool				EnableE1Ranked() override;
 	bool				EnableE1BestFirst() override { return m_bE1Ranked; }
-	void				SetRankThreshold ( int iWeight, uint64_t uWorstTieKey ) override { m_iE1RankThreshold = iWeight; m_tE1WorstTiedRow = m_bE1RowidDocidOrder && uWorstTieKey<=UINT32_MAX ? RowID_t(uWorstTieKey) : INVALID_ROWID; m_iE1FinalThreshold = iWeight; }
+	void				SetRankThreshold ( int iWeight, uint64_t uWorstTieKey ) override { m_iE1RankThreshold = iWeight; m_tE1WorstTiedRow = m_bE1RowidDocidOrder && uWorstTieKey<=UINT32_MAX ? RowID_t(uWorstTieKey) : INVALID_ROWID; }
 	uint64_t			TakeRankSkippedDocs() override { auto u=m_uE1SkippedMatches; m_uE1SkippedMatches=0; return u; }
 
 private:
@@ -884,13 +884,10 @@ private:
 	int					m_iE1PendingPos = 0;
 	int					m_iE1RankThreshold = 0;
 	RowID_t			m_tE1WorstTiedRow = INVALID_ROWID;
-	int					m_iE1FinalThreshold = 0;
 	uint64_t			m_uE1WindowsTotal = 0;
 	uint64_t			m_uE1WindowsPruned = 0;
 	uint64_t			m_uE1WindowsScored = 0;
 	uint64_t			m_uE1BooleanMatches = 0;
-	uint64_t			m_uE1TFProbes = 0;
-	uint64_t			m_uE1MetadataGroups = 0;
 	uint64_t			m_uE1SkippedMatches = 0;
 	uint64_t			m_uE1CandidatesGenerated = 0;
 	uint64_t			m_uE1CandidatesScored = 0;
@@ -901,11 +898,9 @@ private:
 	uint64_t			m_uE1BatchTFRowsRequested = 0;
 	uint64_t			m_uE1BatchTFRowsWritten = 0;
 	uint64_t			m_uE1BatchMetadataGroups = 0;
-	uint64_t			m_uE1CandidateMaskRows = 0;
 	uint64_t			m_uE1CandidateBoundRejects = 0;
 	uint64_t			m_uE1TieBoundRejects = 0;
 	uint64_t			m_uE1CandidateWordsExamined = 0;
-	uint64_t			m_uE1ScalarCandidateInspections = 0;
 	uint64_t			m_uE1IntersectionWindows = 0;
 	uint64_t			m_uE1IntersectionMaskOps = 0;
 	struct E1OrWindowDesc_t { uint32_t m_uWindow; int m_iUpperWeight; uint32_t m_uUnion; };
@@ -913,7 +908,6 @@ private:
 	int					m_iE1OrWindowPos = 0;
 	uint64_t			m_uE1BestFirstVisited = 0;
 	uint64_t			m_uE1BestFirstSkipped = 0;
-	uint64_t			m_uE1ExactUnionTotal = 0;
 	E1RankFilter_t		m_tE1Filter;
 	uint64_t			m_uE1FilterMasksBuilt = 0;
 	uint64_t			m_uE1FilterRowsExamined = 0;
@@ -4184,26 +4178,22 @@ template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
 ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::~ExtMultiAnd_T()
 {
 	if ( m_bE1Ranked && getenv("MANTICORE_E1_RANK_TRACE") )
-		fprintf ( stderr, "%s terms=%d windows_total=%llu windows_pruned=%llu windows_scored=%llu boolean_matches=%llu intersection_windows=%llu intersection_mask_ops=%llu descriptors=%d best_first_windows_visited=%llu best_first_windows_skipped=%llu exact_union_total=%llu candidates_generated=%llu candidate_mask_rows=%llu surviving_mask_rows=%llu candidate_bound_rejects=%llu tie_bound_rejects=%llu candidate_words_examined=%llu scalar_candidate_inspections=%llu candidates_scored=%llu essential_repartitions=%llu average_essential_terms=%.3f bitmap_ops=%llu container_mask_ops=%llu batch_tf_rows_requested=%llu batch_tf_rows_written=%llu batch_metadata_groups_decoded=%llu tf_probes=%llu metadata_groups_decoded=%llu final_threshold=%d hitlist_seeks=0 decoded_positions=0 general_factor_finalizations=0\n",
+		fprintf ( stderr, "%s terms=%d windows_total=%llu windows_pruned=%llu windows_scored=%llu boolean_matches=%llu intersection_windows=%llu intersection_mask_ops=%llu descriptors=%d best_first_windows_visited=%llu best_first_windows_skipped=%llu candidates_generated=%llu candidate_bound_rejects=%llu tie_bound_rejects=%llu candidate_words_examined=%llu candidates_scored=%llu essential_repartitions=%llu average_essential_terms=%.3f bitmap_ops=%llu container_mask_ops=%llu batch_tf_rows_requested=%llu batch_tf_rows_written=%llu batch_metadata_groups_decoded=%llu hitlist_seeks=0 decoded_positions=0 general_factor_finalizations=0\n",
 			m_bE1Or ? "E1_MULTI_OR" : "E1_MULTI_AND",
 			m_dNodes.GetLength(),
 			(unsigned long long)m_uE1WindowsTotal, (unsigned long long)m_uE1WindowsPruned,
 			(unsigned long long)m_uE1WindowsScored, (unsigned long long)m_uE1BooleanMatches,
 			(unsigned long long)m_uE1IntersectionWindows, (unsigned long long)m_uE1IntersectionMaskOps,
 			m_dE1OrWindows.GetLength(), (unsigned long long)m_uE1BestFirstVisited,
-			(unsigned long long)m_uE1BestFirstSkipped, (unsigned long long)m_uE1ExactUnionTotal,
-			(unsigned long long)m_uE1CandidatesGenerated, (unsigned long long)m_uE1CandidateMaskRows,
-			(unsigned long long)m_uE1CandidateMaskRows,
+			(unsigned long long)m_uE1BestFirstSkipped,
+			(unsigned long long)m_uE1CandidatesGenerated,
 			(unsigned long long)m_uE1CandidateBoundRejects, (unsigned long long)m_uE1TieBoundRejects,
-			(unsigned long long)m_uE1CandidateWordsExamined, (unsigned long long)m_uE1ScalarCandidateInspections,
-			(unsigned long long)m_uE1CandidatesScored,
+			(unsigned long long)m_uE1CandidateWordsExamined, (unsigned long long)m_uE1CandidatesScored,
 			(unsigned long long)m_uE1EssentialRepartitions,
 			m_uE1EssentialRepartitions ? double(m_uE1EssentialTerms)/double(m_uE1EssentialRepartitions) : 0.0,
 			(unsigned long long)m_uE1BitmapOps, (unsigned long long)m_uE1ContainerOps,
 			(unsigned long long)m_uE1BatchTFRowsRequested, (unsigned long long)m_uE1BatchTFRowsWritten,
-			(unsigned long long)m_uE1BatchMetadataGroups,
-			(unsigned long long)m_uE1TFProbes, (unsigned long long)m_uE1MetadataGroups,
-			m_iE1FinalThreshold );
+			(unsigned long long)m_uE1BatchMetadataGroups );
 	if ( m_bE1Ranked && m_tE1Filter.m_bEnabled && getenv("MANTICORE_E1_RANK_TRACE") )
 		fprintf ( stderr, "E1_FILTER_OR masks_built=%llu rows_examined=%llu candidates_before=%llu candidates_after=%llu tf_rows_requested=%llu dl_rows=%llu scored_rows=%llu generic_filter_bypass=1\n",
 			(unsigned long long)m_uE1FilterMasksBuilt, (unsigned long long)m_uE1FilterRowsExamined,
@@ -4305,7 +4295,6 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::PrepareE1OrWindows()
 		tDesc = { uWindow, int(ceilf(1000.0f*(fUpperSum+0.5f)))+1, uUnion };
 		++m_uE1WindowsTotal;
 		m_uE1BooleanMatches += uUnion;
-		m_uE1ExactUnionTotal += uUnion;
 	}
 	std::sort ( m_dE1OrWindows.Begin(), m_dE1OrWindows.End(), [] ( const E1OrWindowDesc_t & a, const E1OrWindowDesc_t & b ) {
 		return a.m_iUpperWeight>b.m_iUpperWeight || ( a.m_iUpperWeight==b.m_iUpperWeight && a.m_uWindow<b.m_uWindow );
@@ -4323,7 +4312,6 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1OrWindow()
 	{
 		if ( !m_iNodesSet || m_uE1LastWindow==UINT32_MAX )
 			return false;
-		m_uE1Window = 0;
 		m_bFirstChunk = false;
 		if ( !PrepareE1OrWindows() )
 			return false;
@@ -4423,7 +4411,6 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1OrWindow()
 			dAdmitted[w] = dCandidates[w];
 			const uint64_t uAdmitted = uint64_t(__builtin_popcountll(dAdmitted[w]));
 			m_uE1CandidatesGenerated += uAdmitted;
-			m_uE1CandidateMaskRows += uAdmitted;
 		}
 
 		std::array<std::array<uint32_t,E1_AND_WINDOW_ROWS>,2> dExactTF {};
@@ -4444,8 +4431,6 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1OrWindow()
 				m_uE1BatchTFRowsRequested += uRequested;
 				m_uE1BatchTFRowsWritten += uWritten;
 				m_uE1BatchMetadataGroups += uDecoded;
-				m_uE1MetadataGroups += uDecoded;
-				m_uE1TFProbes += uWritten;
 			}
 
 		for ( int w=0; w<64; ++w )
@@ -4457,7 +4442,6 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1OrWindow()
 				uBits &= uBits-1;
 				const uint32_t uLocal = uint32_t(w)*64+uBit;
 				const RowID_t tRowID = RowID_t(uWindow*E1_AND_WINDOW_ROWS+uLocal);
-				++m_uE1ScalarCandidateInspections;
 				uint32_t dCanonicalTF[2] = {};
 				float fCandidateUpper = 0.0f;
 				for ( int iCanonical=0; iCanonical<m_dE1Canonical.GetLength(); ++iCanonical )
@@ -4485,8 +4469,6 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1OrWindow()
 				++m_uE1CandidatesScored;
 			}
 		}
-		for ( auto & tNode : m_dNodes )
-			m_uE1MetadataGroups += tNode.m_pQword->TakeE1MetadataGroupsDecoded();
 		m_uE1SkippedMatches += uUnion-m_dE1Pending.GetLength();
 		return true;
 	}
@@ -4541,7 +4523,6 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1DirectAndWindow()
 			++m_uE1CandidateWordsExamined;
 			const uint64_t uCandidatesInWord = uint64_t(__builtin_popcountll(uCandidates));
 			m_uE1CandidatesGenerated += uCandidatesInWord;
-			m_uE1CandidateMaskRows += uCandidatesInWord;
 		}
 		if ( !uIntersection )
 			continue;
@@ -4557,8 +4538,6 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1DirectAndWindow()
 				m_uE1BatchTFRowsRequested += uRequested;
 				m_uE1BatchTFRowsWritten += uWritten;
 				m_uE1BatchMetadataGroups += uDecoded;
-				m_uE1MetadataGroups += uDecoded;
-				m_uE1TFProbes += uWritten;
 			}
 
 			for ( int w=0; w<64; ++w )
@@ -4578,15 +4557,10 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::FillE1DirectAndWindow()
 					tDoc.m_bExactOr = 0;
 					for ( int iCanonical=0; iCanonical<m_dE1Canonical.GetLength(); ++iCanonical )
 						tDoc.m_dExactTF[iCanonical] = dExactTF[m_dE1Canonical[iCanonical]][uLocal];
-					++m_uE1ScalarCandidateInspections;
 					++m_uE1CandidatesScored;
 				}
 			}
-		m_uE1SkippedMatches += uIntersection-m_dE1Pending.GetLength();
-		if ( m_dE1Pending.IsEmpty() )
-			++m_uE1WindowsPruned;
-		else
-			++m_uE1WindowsScored;
+		++m_uE1WindowsScored;
 		return true;
 	}
 	return false;

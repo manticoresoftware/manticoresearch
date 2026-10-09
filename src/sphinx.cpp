@@ -469,7 +469,6 @@ public:
 
 	bool HasE1PublicIdMinBounds () const override { return m_tE1.HasPublicIdMinBounds(); }
 	E1RankedBoundKind_e GetE1RankedBoundKind () const override { return m_tE1.BoundKind(); }
-	uint64_t TakeE1MetadataGroupsDecoded () override { return m_tE1.TakeMetadataGroupsDecoded(); }
 	bool E1DirectContainerSupported () const override { return m_tE1.DirectContainerSupported(); }
 	bool GetE1DirectLastWindow ( uint32_t & uWindow ) const override { return m_tE1.DirectLastWindow(uWindow); }
 	bool GetE1DirectWindow ( uint32_t uWindow, uint64_t * pMask, uint32_t & uCardinality ) override

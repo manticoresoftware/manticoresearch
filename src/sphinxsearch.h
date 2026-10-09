@@ -108,7 +108,6 @@ public:
 	virtual bool HasE1PublicIdMinBounds () const { return false; }
 	virtual E1RankedBoundKind_e GetE1RankedBoundKind () const { return E1RankedBoundKind_e::NONE; }
 	virtual bool GetE1RankedDoc ( RowID_t & tRowID, uint32_t & uTF, uint64_t & uBoundEntries, uint64_t & uBuckets, uint64_t & uSelectedBlocks, uint64_t & uSkippedBlocks, uint64_t & uSkippedDocs, uint64_t & uDecodedGroups, const uint64_t * pEligibility=nullptr, uint32_t uEligibilityWords=0, uint64_t * pIneligibleBeforeTF=nullptr, uint64_t uWorstTieKey=UINT64_MAX, float fRatioIDF=0.0f, int iThreshold=0, uint64_t * pEqualitySkipped=nullptr ) { return false; }
-	virtual uint64_t TakeE1MetadataGroupsDecoded () { return 0; }
 	// Exact direct fast lane over frequent current-format primary containers.
 	virtual bool E1DirectContainerSupported () const { return false; }
 	virtual bool GetE1DirectLastWindow ( uint32_t & ) const { return false; }

@@ -1,0 +1,47 @@
+Regression #4989: GROUP BY on an MVA must work when merging pre-grouped results from several tables, without retaining the original source MVA (#4920).
+
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE a (m multi, product int); CREATE TABLE b (m multi, product int); INSERT INTO a (id, m, product) VALUES (1, (1,2), 10); INSERT INTO b (id, m, product) VALUES (2, (1,3), 20)" && echo initialized
+––– output –––
+initialized
+––– comment –––
+Single-table MVA grouping still works; the source MVA may be omitted from the output schema.
+––– input –––
+mysql -h0 -P9306 -N -B -e "SELECT GROUPBY() AS bucket, COUNT(*) AS cnt FROM a GROUP BY m ORDER BY bucket ASC" | grep -v '^+' | sed 's/^| *//; s/ *| */\t/g; s/\t$//' > /tmp/4989-single.tsv && diff -u <(printf '1\t1\n2\t1\n') /tmp/4989-single.tsv && echo single_ok
+––– output –––
+single_ok
+––– comment –––
+Two local tables require a second-stage grouped merge, where the source MVA is not present.
+––– input –––
+mysql -h0 -P9306 -N -B -e "SELECT GROUPBY() AS bucket, COUNT(*) AS cnt FROM a, b GROUP BY m ORDER BY bucket ASC" | grep -v '^+' | sed 's/^| *//; s/ *| */\t/g; s/\t$//' > /tmp/4989-merged.tsv && diff -u <(printf '1\t2\n2\t1\n3\t1\n') /tmp/4989-merged.tsv && echo merge_ok
+––– output –––
+merge_ok
+––– comment –––
+HAVING on the group alias must still use the already-computed group key.
+––– input –––
+mysql -h0 -P9306 -N -B -e "SELECT GROUPBY() AS bucket, COUNT(*) AS cnt FROM a, b GROUP BY m HAVING bucket IN (1,3) ORDER BY bucket ASC" | grep -v '^+' | sed 's/^| *//; s/ *| */\t/g; s/\t$//' > /tmp/4989-having.tsv && diff -u <(printf '1\t2\n3\t1\n') /tmp/4989-having.tsv && echo having_ok
+––– output –––
+having_ok
+––– comment –––
+COUNT(DISTINCT) must combine aggregates from both source tables.
+––– input –––
+mysql -h0 -P9306 -N -B -e "SELECT GROUPBY() AS bucket, COUNT(DISTINCT product) AS cnt FROM a, b GROUP BY m ORDER BY bucket ASC" | grep -v '^+' | sed 's/^| *//; s/ *| */\t/g; s/\t$//' > /tmp/4989-distinct.tsv && diff -u <(printf '1\t2\n2\t1\n3\t1\n') /tmp/4989-distinct.tsv && echo distinct_ok
+––– output –––
+distinct_ok
+––– comment –––
+Also cover 64-bit MVA grouping keys.
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE a64 (m multi64); CREATE TABLE b64 (m multi64); INSERT INTO a64 (id, m) VALUES (1, (5000000000,6000000000)); INSERT INTO b64 (id, m) VALUES (2, (5000000000,7000000000))" && echo initialized64
+––– output –––
+initialized64
+––– input –––
+mysql -h0 -P9306 -N -B -e "SELECT GROUPBY() AS bucket, COUNT(*) AS cnt FROM a64, b64 GROUP BY m ORDER BY bucket ASC" | grep -v '^+' | sed 's/^| *//; s/ *| */\t/g; s/\t$//' > /tmp/4989-multi64.tsv && diff -u <(printf '5000000000\t2\n6000000000\t1\n7000000000\t1\n') /tmp/4989-multi64.tsv && echo multi64_ok
+––– output –––
+multi64_ok
+––– comment –––
+The fallback must not silence a genuinely unknown attribute on a normal, non-merge query.
+––– input –––
+if mysql -h0 -P9306 -N -B -e "SELECT COUNT(*) FROM a GROUP BY missing_attribute" > /tmp/4989-error.txt 2>&1; then echo unexpectedly_accepted; elif grep -q "group-by attribute 'missing_attribute' not found" /tmp/4989-error.txt; then echo unknown_rejected; else echo wrong_error; fi
+––– output –––
+unknown_rejected

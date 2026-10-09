@@ -13,8 +13,11 @@ struct OpenTimings_t
 {
 	uint64_t header = 0, crc = 0, structural = 0;
 };
-enum class OpenValidationPath_e { NONE,
-	DEEP };
+enum class OpenValidationPath_e
+{
+	NONE,
+	DEEP
+};
 // Equality pruning is fail-closed. Public-ID minima become visible to cursors
 // only after deep open checks this authoritative rowwise accessor.
 class PublicIDReader_i
@@ -137,8 +140,9 @@ public:
 		return true;
 	}
 	bool PublicIDMinValidated() const { return m_publicIDMinValidated; }
-	bool Open ( const uint8_t* p, uint64_t size, uint32_t rows, const uint8_t* dict, uint64_t dictSize, const uint8_t* hits, uint64_t hitSize,
-		std::string& error, OpenTimings_t* timings = nullptr, const FieldNormReader_i* pNorms = nullptr, const PublicIDReader_i* pPublicIDs = nullptr,
+	bool Open ( const uint8_t* p, uint64_t size, uint32_t rows, const uint8_t* dict, uint64_t dictSize,
+		const uint8_t* hits, uint64_t hitSize, std::string& error, OpenTimings_t* timings = nullptr,
+		const FieldNormReader_i* pNorms = nullptr, const PublicIDReader_i* pPublicIDs = nullptr,
 		OpenValidationPath_e* pValidationPath = nullptr )
 	{
 		m_p = nullptr;
@@ -149,7 +153,11 @@ public:
 		if ( pValidationPath )
 			*pValidationPath = OpenValidationPath_e::NONE;
 		uint64_t stage = timings ? MonoMicroTimer() : 0;
-		auto fail = [&] ( const char* s ) {error=std::string("E1: ")+s;return false; };
+		auto fail = [&] ( const char* s )
+		{
+			error = std::string ( "E1: " ) + s;
+			return false;
+		};
 		if ( size < 48 || memcmp ( p, "E1POST10", 8 ) || U32 ( p + 8 ) != 10 || U64 ( p + 16 ) != size )
 			return fail ( "format/length" );
 		uint32_t header = U32 ( p + 12 ), flags = U32 ( p + 44 );
@@ -179,7 +187,9 @@ public:
 			timings->header = MonoMicroTimer() - stage;
 			stage = MonoMicroTimer();
 		}
-		bool valid = CRC ( p + header, size - header ) == U32 ( p + 32 ) && CRC ( dict, dictSize ) == U32 ( p + 36 ) && CRC ( hits, hitSize ) == U32 ( p + 40 );
+		bool valid = CRC ( p + header, size - header ) == U32 ( p + 32 )
+			&& CRC ( dict, dictSize ) == U32 ( p + 36 )
+			&& CRC ( hits, hitSize ) == U32 ( p + 40 );
 		if ( timings ) {
 			timings->crc = MonoMicroTimer() - stage;
 			stage = MonoMicroTimer();
@@ -195,7 +205,8 @@ public:
 				return fail ( "term catalog" );
 			prevKey = key;
 			auto h = p + off;
-			auto df = m_entrySize == 16 ? U32 ( h ) : U32 ( d + 16 ), has = m_entrySize == 16 ? ( ( U32 ( h + 12 ) >> 1 ) & 1 ) : U32 ( d + 20 );
+			auto df = m_entrySize == 16 ? U32 ( h ) : U32 ( d + 16 ),
+				has = m_entrySize == 16 ? ( ( U32 ( h + 12 ) >> 1 ) & 1 ) : U32 ( d + 20 );
 			auto hitsTotal = m_entrySize == 16 ? U64 ( d + 8 ) : U64 ( d + 24 );
 			if ( !df || df > rows || has > 1 )
 				return fail ( "term catalog" );
@@ -203,7 +214,8 @@ public:
 			auto mo = U64 ( h + 16 );
 			auto frequent = type & 1u, fieldWidth = ( type >> 8 ) & 63u;
 			const bool hasProjection = type & ( 1u << 14 );
-			if ( U32 ( h ) != df || frequent != ( df >= 4096 ? 1u : 0u ) || ( type & ~0x00007f03u ) || fieldWidth > 32 || nm != ( uint64_t ( df ) + 127 ) / 128 )
+			if ( U32 ( h ) != df || frequent != ( df >= 4096 ? 1u : 0u ) || ( type & ~0x00007f03u )
+				|| fieldWidth > 32 || nm != ( uint64_t ( df ) + 127 ) / 128 )
 				return fail ( "term type/DF" );
 			uint64_t desc = 24;
 			if ( !nb || nb > df || nb > ( size - off - 24 ) / desc || ( !frequent && nb != nm ) )
@@ -216,10 +228,12 @@ public:
 					Block block { p, h + 24 + uint64_t ( b ) * 24 };
 					auto id = block.id(), card = block.card(), bytes = block.bytes(), codec = block.type();
 					auto po = U64 ( block.d + 16 );
-					if ( block.ordinal() != ordinal || !card || card > 4096 || card > df - ordinal || id >= ( uint64_t ( rows ) + 4095 ) / 4096
+					if ( block.ordinal() != ordinal || !card || card > 4096 || card > df - ordinal
+						|| id >= ( uint64_t ( rows ) + 4095 ) / 4096
 						|| ( b && id <= prevId ) || codec > 2 || po != end || po > size || bytes > size - po )
 						return fail ( "container descriptor" );
-					if ( ( codec == 0 && bytes != card * 2 ) || ( codec == 1 && bytes != 512 ) || ( codec == 2 && ( !bytes || bytes % 4 || bytes > 512 ) ) )
+					if ( ( codec == 0 && bytes != card * 2 ) || ( codec == 1 && bytes != 512 )
+						|| ( codec == 2 && ( !bytes || bytes % 4 || bytes > 512 ) ) )
 						return fail ( "container length" );
 					auto q = p + po;
 					uint32_t count = 0, previous = 0, valid = std::min ( 4096u, rows - id * 4096 );
@@ -275,15 +289,22 @@ public:
 					end = po + bytes;
 				} else {
 					auto g = h + 24 + uint64_t ( b ) * 24;
-					auto first = U32 ( g ), last = U32 ( g + 4 ), n = U32 ( g + 8 ), f = U32 ( g + 12 ), codec = f & 15, width = ( f >> 16 ) & 63;
+					auto first = U32 ( g ), last = U32 ( g + 4 ), n = U32 ( g + 8 ), f = U32 ( g + 12 ),
+						codec = f & 15, width = ( f >> 16 ) & 63;
 					auto po = U64 ( g + 16 );
 					auto span = uint64_t ( last ) - first + 1;
-					if ( n != std::min ( 128u, df - b * 128 ) || first > last || last >= rows || ( b && first <= prevRow ) || codec < 1 || codec > 4
-						|| ( f & ~0x003f000fu ) || ( codec == 3 ? ( !width || width > 32 ) : width != 0 ) || ( codec == 4 && span > 1024 ) )
+					if ( n != std::min ( 128u, df - b * 128 ) || first > last || last >= rows
+						|| ( b && first <= prevRow ) || codec < 1 || codec > 4 || ( f & ~0x003f000fu )
+						|| ( codec == 3 ? ( !width || width > 32 ) : width != 0 )
+						|| ( codec == 4 && span > 1024 ) )
 						return fail ( "rare descriptor" );
-					uint64_t bytes = codec == 1 ? 0 : codec == 2 ? uint64_t ( n - 1 ) * 4
-												: codec == 3	 ? ( uint64_t ( n - 1 ) * width + 7 ) / 8
-																 : ( span + 7 ) / 8;
+					uint64_t bytes = codec == 1
+						? 0
+						: codec == 2
+							? uint64_t ( n - 1 ) * 4
+							: codec == 3
+								? ( uint64_t ( n - 1 ) * width + 7 ) / 8
+								: ( span + 7 ) / 8;
 					if ( po != end || po > size || bytes > size - po )
 						return fail ( "rare bounds" );
 					uint32_t tmp[128];
@@ -416,7 +437,8 @@ public:
 				for ( uint32_t pi = 0; pi < projections; ++pi ) {
 					const uint8_t* pd = p + projectionDir + uint64_t ( pi ) * 24;
 					const uint32_t field = U32 ( pd ), count = U32 ( pd + 4 ), blocks = U32 ( pd + 8 ), blockSize = U32 ( pd + 12 );
-					if ( field >= pNorms->Fields() || field >= 32 || ( pi && field <= previousField ) || !count || count > df || blockSize != 64 || blocks != ( count + 63 ) / 64 )
+					if ( field >= pNorms->Fields() || field >= 32 || ( pi && field <= previousField )
+						|| !count || count > df || blockSize != 64 || blocks != ( count + 63 ) / 64 )
 						return fail ( "field projection identity" );
 					previousField = field;
 					claimedFields |= uint32_t ( 1 ) << field;
@@ -449,7 +471,8 @@ public:
 						const uint8_t* bd = base + uint64_t ( bi ) * 16;
 						const uint32_t dataOff = U32 ( bd ), rowBytes = U32 ( bd + 4 ), tfBytes = U32 ( bd + 8 ), n = bd[12];
 						const uint8_t bound = bd[13];
-						if ( bd[14] || bd[15] || n != std::min ( 64u, count - seen ) || dataOff != dataEnd || uint64_t ( rowBytes ) + tfBytes > payloadEnd - ( po + dataOff ) )
+						if ( bd[14] || bd[15] || n != std::min ( 64u, count - seen ) || dataOff != dataEnd
+							|| uint64_t ( rowBytes ) + tfBytes > payloadEnd - ( po + dataOff ) )
 							return fail ( "field projection block" );
 						uint64_t rp = po + dataOff, rend = rp + rowBytes, tp = rend, tend = tp + tfBytes;
 						uint32_t blockRows[64], blockTF[64];
@@ -524,11 +547,13 @@ class Cursor
 	uint32_t m_df = 0, m_next = 0, m_cached = UINT32_MAX, m_rows[128];
 	const uint8_t *m_bounds = nullptr, *m_minPublicIDs = nullptr;
 	const uint8_t *m_projectionDir = nullptr, *m_projectionPayload = nullptr;
-	uint32_t m_projectionCount = 0, m_projectionRows = 0, m_projectionBlocks = 0, m_projectionRankPos = 0, m_projectionInBlock = 0, m_projectionDecodedBlock = UINT32_MAX;
+	uint32_t m_projectionCount = 0, m_projectionRows = 0, m_projectionBlocks = 0,
+		m_projectionRankPos = 0, m_projectionInBlock = 0, m_projectionDecodedBlock = UINT32_MAX;
 	bool m_projectionCountersReady = false;
 	uint32_t m_projectionDecodedRows[64] {}, m_projectionDecodedTF[64] {};
 	std::vector<uint32_t> m_projectionRankOrder;
-	uint32_t m_block = 0, m_lastOrdinal = UINT32_MAX, m_lastRow = 0, m_bitmapBlock = UINT32_MAX, m_bitmapWord = 0, m_bitmapEndOrdinal = 0, m_bitmapWindow = 0;
+	uint32_t m_block = 0, m_lastOrdinal = UINT32_MAX, m_lastRow = 0, m_bitmapBlock = UINT32_MAX,
+		m_bitmapWord = 0, m_bitmapEndOrdinal = 0, m_bitmapWindow = 0;
 	uint64_t m_bitmapRemaining = 0;
 	const uint8_t* m_bitmapPayload = nullptr;
 	uint32_t m_meta = UINT32_MAX, m_tf[128], m_mask[128];
@@ -634,7 +659,10 @@ public:
 		}
 	}
 	TermView View() const { return { m_p, m_term }; }
-	E1RankedBoundKind_e BoundKind() const { return m_bounds ? E1RankedBoundKind_e::BM25A_RATIO : E1RankedBoundKind_e::NONE; }
+	E1RankedBoundKind_e BoundKind() const
+	{
+		return m_bounds ? E1RankedBoundKind_e::BM25A_RATIO : E1RankedBoundKind_e::NONE;
+	}
 	bool HasBM25ARatioBounds() const { return m_bounds; }
 	bool HasPublicIdMinBounds() const { return m_minPublicIDs; }
 	bool PublicIdMinBound ( uint32_t block, uint64_t& value ) const
@@ -685,7 +713,9 @@ public:
 	}
 	uint32_t FieldProjectionRows() const { return m_projectionRows; }
 	uint32_t FieldProjectionBlocks() const { return m_projectionBlocks; }
-	bool NextFieldProjectionRanked ( uint32_t& row, uint32_t& tf, float idf, int threshold, uint64_t& entries, uint64_t& buckets, uint64_t& selected, uint64_t& skipped, uint64_t& skippedDocs )
+	bool NextFieldProjectionRanked ( uint32_t& row, uint32_t& tf, float idf, int threshold,
+		uint64_t& entries, uint64_t& buckets, uint64_t& selected, uint64_t& skipped,
+		uint64_t& skippedDocs )
 	{
 		if ( !m_projectionPayload )
 			return false;
@@ -718,7 +748,17 @@ public:
 				const uint8_t* rend = rp + U32 ( bd + 4 );
 				const uint8_t* tp = rend;
 				const uint8_t* tend = tp + U32 ( bd + 8 );
-				auto get = [] ( const uint8_t*& p, const uint8_t* e, uint32_t& v ) {v=0;for(uint32_t s=0;s<35&&p<e;s+=7){uint8_t c=*p++;v|=uint32_t(c&127)<<s;if(!(c&128))return true;}return false; };
+				auto get = [] ( const uint8_t*& p, const uint8_t* e, uint32_t& v )
+				{
+					v = 0;
+					for ( uint32_t s = 0; s < 35 && p < e; s += 7 ) {
+						uint8_t c = *p++;
+						v |= uint32_t ( c & 127 ) << s;
+						if ( !( c & 128 ) )
+							return true;
+					}
+					return false;
+				};
 				uint32_t previous = 0;
 				for ( uint32_t i = 0; i < n; ++i ) {
 					uint32_t delta = 0;
@@ -778,7 +818,8 @@ public:
 		m_uDirectBlock = lo;
 		return true;
 	}
-	bool ExtractWindowTFBatch ( uint32_t window, const uint64_t* selected, uint32_t* outTF, uint64_t& requested, uint64_t& written, uint64_t& decoded )
+	bool ExtractWindowTFBatch ( uint32_t window, const uint64_t* selected, uint32_t* outTF,
+		uint64_t& requested, uint64_t& written, uint64_t& decoded )
 	{
 		if ( !DirectContainerSupported() || !selected || !outTF )
 			return false;
@@ -877,7 +918,8 @@ public:
 		}
 		if ( m_lastOrdinal == ordinal )
 			return m_lastRow;
-		if ( m_lastOrdinal != UINT32_MAX && ordinal == m_lastOrdinal + 1 && ordinal < m_bitmapEndOrdinal && m_bitmapBlock == m_block ) {
+		if ( m_lastOrdinal != UINT32_MAX && ordinal == m_lastOrdinal + 1
+			&& ordinal < m_bitmapEndOrdinal && m_bitmapBlock == m_block ) {
 			uint32_t w = m_bitmapWord;
 			uint64_t bits = m_bitmapRemaining;
 			while ( !bits && ++w < 64 )
@@ -967,9 +1009,11 @@ public:
 		}
 		return true;
 	}
-	bool NextRanked ( uint32_t& row, uint32_t& tf, uint32_t& mask, uint64_t& ref, uint64_t& entries, uint64_t& buckets, uint64_t& selected,
-		uint64_t& skipped, uint64_t& skippedDocs, uint64_t& decoded, const uint64_t* pEligibility = nullptr, uint32_t uEligibilityWords = 0,
-		uint64_t* pIneligibleBeforeTF = nullptr, uint64_t uWorstTieKey = UINT64_MAX, float fRatioIDF = 0.0f, int iThreshold = 0,
+	bool NextRanked ( uint32_t& row, uint32_t& tf, uint32_t& mask, uint64_t& ref,
+		uint64_t& entries, uint64_t& buckets, uint64_t& selected, uint64_t& skipped,
+		uint64_t& skippedDocs, uint64_t& decoded, const uint64_t* pEligibility = nullptr,
+		uint32_t uEligibilityWords = 0, uint64_t* pIneligibleBeforeTF = nullptr,
+		uint64_t uWorstTieKey = UINT64_MAX, float fRatioIDF = 0.0f, int iThreshold = 0,
 		uint64_t* equalitySkipped = nullptr )
 	{
 		PrepareRankedOrder ( entries, buckets );
@@ -979,7 +1023,9 @@ public:
 				const uint8_t uCode = m_bounds[block];
 				const int upperWeight = E1SafeUpperRatioWeight ( uCode, fRatioIDF );
 				const uint64_t minPublicID = m_minPublicIDs ? U64 ( m_minPublicIDs + uint64_t ( block ) * 8 ) : UINT64_MAX;
-				const bool ratioTieReject = uCode != 255 && iThreshold > 0 && upperWeight == iThreshold && uWorstTieKey != UINT64_MAX && minPublicID != UINT64_MAX && minPublicID >= uWorstTieKey;
+				const bool ratioTieReject = uCode != 255 && iThreshold > 0 && upperWeight == iThreshold
+					&& uWorstTieKey != UINT64_MAX && minPublicID != UINT64_MAX
+					&& minPublicID >= uWorstTieKey;
 				if ( ratioTieReject ) {
 					if ( equalitySkipped )
 						++*equalitySkipped;
@@ -1005,7 +1051,8 @@ public:
 				m_uRankInBlock = 0;
 			}
 			row = Row ( o );
-			if ( pEligibility && ( row / 64 >= uEligibilityWords || !( pEligibility[row / 64] & ( uint64_t ( 1 ) << ( row % 64 ) ) ) ) ) {
+			if ( pEligibility && ( row / 64 >= uEligibilityWords
+				|| !( pEligibility[row / 64] & ( uint64_t ( 1 ) << ( row % 64 ) ) ) ) ) {
 				if ( pIneligibleBeforeTF )
 					++*pIneligibleBeforeTF;
 				continue;

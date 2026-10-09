@@ -185,9 +185,18 @@ jobs:
           name: cache_${{ inputs.cache_key }}
           path: cache
 
+      # Preserve file permissions and paths for downstream jobs.
+      - name: Package build artifacts
+        if: success()
+        run: |
+          shopt -s globstar
+          find ${{ inputs.artifact_list }} -type f -print0 | xargs -0 tar -cvf artifact.tar || true
+          ls -la artifact.tar
+
       - name: Upload build artifacts
         if: success()
-        uses: manticoresoftware/upload_artifact_with_retries@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.artifact_name.outputs.value }}
-          path: ${{ inputs.artifact_list }}
+          path: artifact.tar
+          if-no-files-found: error

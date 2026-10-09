@@ -230,6 +230,7 @@ public:
 	void		FixupLocator ( const ISphSchema * pOld, const ISphSchema * pNew )	{ sphFixupLocator ( m_tAttr.m_tLocator, pOld, pNew ); }
 
 	float		CalcDist ( const CSphMatch & tMatch ) const;
+	bool		HasVector ( const CSphMatch & tMatch ) const;
 	void		RescoreBatch ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool, const GetColumnarFromMatch_fn & fnColumnar );
 	void		RescoreBatchLocal ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc );
 
@@ -247,6 +248,7 @@ private:
 	void *								m_pDistFuncParam = nullptr;
 	bool								m_bMulti = false; // true when one row holds N vectors instead of one, so every distance is a min over them
 
+	ByteBlob_t	FetchVecData ( const CSphMatch & tMatch ) const;
 	float		CalcDistData ( ByteBlob_t tData ) const;
 	void		RescoreColumnar ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetColumnarFromMatch_fn & fnColumnar );
 	void		RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool );
@@ -317,7 +319,7 @@ float KNNVecDistCalc_c::MinDistOverSlots ( ByteBlob_t tBlob ) const
 }
 
 
-float KNNVecDistCalc_c::CalcDist ( const CSphMatch & tMatch ) const
+ByteBlob_t KNNVecDistCalc_c::FetchVecData ( const CSphMatch & tMatch ) const
 {
 	// this code path is used when no iterator is available, i.e. in ram chunk
 	ByteBlob_t tRes;
@@ -326,7 +328,29 @@ float KNNVecDistCalc_c::CalcDist ( const CSphMatch & tMatch ) const
 	else
 		tRes = tMatch.FetchAttrData ( m_tAttr.m_tLocator, m_pBlobPool );
 
-	return CalcDistData(tRes);
+	return tRes;
+}
+
+
+float KNNVecDistCalc_c::CalcDist ( const CSphMatch & tMatch ) const
+{
+	return CalcDistData ( FetchVecData(tMatch) );
+}
+
+
+bool KNNVecDistCalc_c::HasVector ( const CSphMatch & tMatch ) const
+{
+	ByteBlob_t tData = FetchVecData(tMatch);
+	if ( !tData.first )
+		return false;
+
+	if ( m_bMulti )
+	{
+		FloatVecArray_t tArray = ParseFloatVecArray(tData);
+		return tArray.m_iDims && tArray.m_iDims==m_tAttr.m_tKNN.m_iDims && tArray.m_dValues.GetLength()>0;
+	}
+
+	return int ( tData.second / sizeof(float) )==m_tAttr.m_tKNN.m_iDims;
 }
 
 
@@ -690,6 +714,60 @@ const char * GetKnnDistRescoreAttrName()
 ISphExpr * CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr )
 {
 	return new Expr_KNNDist_c ( dAnchor, tAttr );
+}
+
+/////////////////////////////////////////////////////////////////////
+
+class Expr_KNNHasVec_c : public ISphExpr
+{
+public:
+				Expr_KNNHasVec_c ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr ) : m_tCalc ( dAnchor, tAttr ) {}
+
+	float		Eval ( const CSphMatch & tMatch ) const override		{ return (float)IntEval(tMatch); }
+	int			IntEval ( const CSphMatch & tMatch ) const override		{ return m_tCalc.HasVector(tMatch) ? 1 : 0; }
+	int64_t		Int64Eval ( const CSphMatch & tMatch ) const override	{ return IntEval(tMatch); }
+	void		FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override { m_tCalc.FixupLocator ( pOldSchema, pNewSchema ); }
+	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;
+	ISphExpr *	Clone() const override									{ return new Expr_KNNHasVec_c ( m_tCalc.GetAnchor(), m_tCalc.GetAttr() ); }
+	void		Command ( ESphExprCommand eCmd, void * pArg ) override;
+
+private:
+	KNNVecDistCalc_c	m_tCalc;	// shares the attribute fetch logic with Expr_KNNDist_c
+};
+
+
+uint64_t Expr_KNNHasVec_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+{
+	EXPR_CLASS_NAME("Expr_KNNHasVec_c");
+	return CALC_DEP_HASHES();
+}
+
+
+void Expr_KNNHasVec_c::Command ( ESphExprCommand eCmd, void * pArg )
+{
+	switch ( eCmd )
+	{
+	case SPH_EXPR_SET_COLUMNAR:
+		m_tCalc.SetColumnar ( (columnar::Columnar_i*)pArg );
+		break;
+
+	case SPH_EXPR_SET_BLOB_POOL:
+		m_tCalc.SetBlobPool ( (const BYTE*)pArg );
+		break;
+
+	default:
+		break;
+	}
+}
+
+
+ISphExpr * CreateExpr_KNNHasVec ( ISphExpr * pKNNDistExpr )
+{
+	assert(pKNNDistExpr);
+
+	// a @knn_dist column that carries an expression always holds Expr_KNNDist_c
+	auto * pCalc = ((Expr_KNNDist_c*)pKNNDistExpr)->GetVecDistCalc();
+	return new Expr_KNNHasVec_c ( pCalc->GetAnchor(), pCalc->GetAttr() );
 }
 
 
@@ -1333,23 +1411,32 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 }
 
 
-RowIteratorsWithEstimates_t CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, bool & bError, CSphString & sError )
+bool ShouldBypassKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const knn::KNNFilter_i * pFilter )
 {
 	if ( !tQuery.HasKnn() )
-		return {};
+		return false;
 
 	const auto & tKNN = tQuery.SingleKnnSettings();
 	if ( tKNN.m_bFullscan )
+		return true;
+
+	// CreateKNNIterator produces nothing for it either, so the chunk is scanned
+	if ( tKNN.m_sAttr.IsEmpty() )
+		return true;
+
+	// skip HNSW if brute-force over filtered rows is cheaper than HNSW traversal
+	// use plain K (not oversampled) since brute-force computes exact distances.
+	// a missing pKNN is left to CreateKNNIterator, which reports it as an error
+	return pKNN && pFilter && pKNN->ShouldUseFullscan ( tKNN.m_sAttr.cstr(), tKNN.m_iK, tKNN.m_iEf, pFilter->GetFilterCount() );
+}
+
+
+RowIteratorsWithEstimates_t CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, bool bBypass, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, bool & bError, CSphString & sError )
+{
+	if ( !tQuery.HasKnn() || bBypass )
 		return {};
 
-	if ( !tKNN.m_sAttr.IsEmpty() )
-	{
-		// skip HNSW if brute-force over filtered rows is cheaper than HNSW traversal
-		// use plain K (not oversampled) since brute-force computes exact distances
-		if ( pKNN && pFilter && pKNN->ShouldUseFullscan ( tKNN.m_sAttr.cstr(), tKNN.m_iK, tKNN.m_iEf, pFilter->GetFilterCount() ) )
-			return {};
-	}
-
+	const auto & tKNN = tQuery.SingleKnnSettings();
 	auto tRes = CreateKNNIterator ( pKNN, tQuery, tIndexSchema, tSorterSchema, pFilter, ePolicy, pProfile, sError );
 	if ( tRes.second )
 	{

@@ -64,6 +64,7 @@ void							SetKNNRescorePrefetch ( bool bEnable );
 bool							KNNRescorePrefetch();
 
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
+ISphExpr *						CreateExpr_KNNHasVec ( ISphExpr * pKNNDistExpr );
 void							NormalizeVec ( VecTraits_T<float> & dData );
 
 void							AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr );
@@ -91,7 +92,8 @@ using KNNStoreWorkerFn_t = std::function<void ( int iWorkerIdx, int64_t iStart, 
 bool							RunParallelKNNStore ( int64_t iTotalUnits, CSphString & sError, KNNStoreWorkerFn_t fnWorker );
 
 std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, CSphString & sError );
-RowIteratorsWithEstimates_t		CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, bool & bError, CSphString & sError );
+bool							ShouldBypassKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const knn::KNNFilter_i * pFilter );
+RowIteratorsWithEstimates_t		CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, bool bBypass, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, bool & bError, CSphString & sError );
 std::unique_ptr<knn::KNNFilter_i> CreateKNNPrefilter ( const CSphQueryContext & tCtx, const CSphRowitem * pAttrPool, int iStride, int iDynamicSize, int64_t iFilterCount );
 
 // iResultWindow is limit+offset: rows the client can see are always rescored, even beyond k*oversampling

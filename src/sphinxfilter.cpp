@@ -1116,6 +1116,41 @@ public:
 };
 
 
+// The engine-injected knn guard: a doc without a vector must not match a knn query (its distance would be FLT_MAX).
+class Filter_KNNVecGuard_c final : public ExprFilter_c<ISphFilter>
+{
+public:
+	explicit Filter_KNNVecGuard_c ( ISphExpr * pExpr )
+		: ExprFilter_c<ISphFilter> ( pExpr )
+	{}
+
+	bool Eval ( const CSphMatch & tMatch ) const final
+	{
+		return m_pExpr->IntEval(tMatch)!=0;
+	}
+};
+
+
+static void AddKNNVecGuard ( CreateFilterContext_t & tCtx )
+{
+	if ( !tCtx.m_bAddKNNDistFilter )
+		return;
+
+	assert ( tCtx.m_pMatchSchema );
+	if ( !CanAddKNNDistFilter ( *tCtx.m_pMatchSchema ) )
+		return;
+
+	const CSphColumnInfo * pAttr = tCtx.m_pMatchSchema->GetAttr ( GetKnnDistAttrName() );
+	CSphRefcountedPtr<ISphExpr> pHasVec { CreateExpr_KNNHasVec ( pAttr->m_pExpr ) };
+	auto pGuard = std::make_unique<Filter_KNNVecGuard_c> ( pHasVec );
+	pGuard->SetBlobStorage ( tCtx.m_pBlobPool );
+	pGuard->SetColumnar ( tCtx.m_pColumnar );
+
+	// last in the chain: the cheaper user filters get to reject the row first
+	tCtx.m_pFilter = sphJoinFilters ( std::move ( tCtx.m_pFilter ), std::move ( pGuard ) );
+}
+
+
 template < bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX >
 class ExprFilterRange_c : public ExprFilter_c<IFilter_Range>
 {
@@ -1841,64 +1876,12 @@ static void TryToAddPoly2dFilters ( const CreateFilterContext_t & tCtx, const CS
 }
 
 
-std::unique_ptr<ISphSchema> BuildKNNDistFilter ( const ISphSchema & tSrcSchema, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree )
-{
-	std::unique_ptr<ISphSchema> pNewSchema { tSrcSchema.CloneMe() };
-	const auto * pKNNDistAttr = pNewSchema->GetAttr ( GetKnnDistAttrName() );
-	assert(pKNNDistAttr);
-
-	(const_cast<CSphColumnInfo*>(pKNNDistAttr))->m_eStage = Min ( pKNNDistAttr->m_eStage, SPH_EVAL_PREFILTER );
-
-	CSphFilterSettings tFilter;
-	tFilter.m_eType = SPH_FILTER_FLOATRANGE;
-	tFilter.m_sAttrName = pKNNDistAttr->m_sName;
-	tFilter.m_bHasEqualMin = true;
-	tFilter.m_bHasEqualMax = false;
-	tFilter.m_bOptional = false;
-	tFilter.m_fMinValue = -FLT_MAX;
-	tFilter.m_fMaxValue = FLT_MAX;
-	const int iFilter = dModified.GetLength();
-	dModified.Add(tFilter);
-
-	if ( !dModifiedTree.IsEmpty() )
-	{
-		const int iOldRoot = dModifiedTree.GetLength()-1;
-
-		FilterTreeItem_t & tLeaf = dModifiedTree.Add();
-		tLeaf.m_iFilterItem = iFilter;
-		const int iLeaf = dModifiedTree.GetLength()-1;
-
-		FilterTreeItem_t & tAnd = dModifiedTree.Add();
-		tAnd.m_iLeft = iOldRoot;
-		tAnd.m_iRight = iLeaf;
-		tAnd.m_bOr = false;
-	}
-
-	return pNewSchema;
-}
-
-
 bool CanAddKNNDistFilter ( const ISphSchema & tSchema )
 {
 	const CSphColumnInfo * pAttr = tSchema.GetAttr ( GetKnnDistAttrName() );
 
 	// no expression means the hybrid-search placeholder column
 	return pAttr && pAttr->m_pExpr;
-}
-
-
-static void AddKNNDistFilter ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, std::unique_ptr<ISphSchema> & pModifiedMatchSchema )
-{
-	if ( !tCtx.m_bAddKNNDistFilter )
-		return;
-
-	assert ( tCtx.m_pMatchSchema );
-	if ( !tCtx.m_pMatchSchema->GetAttr ( GetKnnDistAttrName() ) )
-		return;
-
-	// safe to assign over pModifiedMatchSchema here: this runs inside TransformFilters, before the
-	// caller repoints tFlx.m_pMatchSchema at it
-	pModifiedMatchSchema = BuildKNNDistFilter ( pModifiedMatchSchema ? *pModifiedMatchSchema : *tCtx.m_pMatchSchema, dModified, dModifiedTree );
 }
 
 
@@ -2152,7 +2135,6 @@ bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilte
 
 	RemoveJoinFilters ( tCtx, dModified, dModifiedTree );
 	TransformForJsonSI ( tCtx, dModified, pModifiedMatchSchema, dItems, pJsonSITransforms );
-	AddKNNDistFilter ( tCtx, dModified, dModifiedTree, pModifiedMatchSchema );
 
 	// FIXME: no further transformations if we have a filter tree
 	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() )
@@ -2673,7 +2655,7 @@ int GetStartFilterStackItemSize()
 	return g_iStartFilterStackSize;
 }
 
-bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphString & sWarning )
+static bool CreateFiltersFromSettings ( CreateFilterContext_t & tCtx, CSphString & sError, CSphString & sWarning )
 {
 	if ( !tCtx.m_pFilters || !tCtx.m_pFilters->GetLength() )
 		return true;
@@ -2777,6 +2759,16 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 	tCtx.m_pWeightFilter = ReorderAndCombine ( std::move ( dWeightFilters ) );
 
 	bFiltersOk = true;
+	return true;
+}
+
+
+bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphString & sWarning )
+{
+	if ( !CreateFiltersFromSettings ( tCtx, sError, sWarning ) )
+		return false;
+
+	AddKNNVecGuard(tCtx);
 	return true;
 }
 

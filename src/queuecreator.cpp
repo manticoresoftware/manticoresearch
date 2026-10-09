@@ -1786,7 +1786,9 @@ bool QueueCreator_c::AddKNNDistColumn()
 	}
 
 	CSphColumnInfo tKNNDist ( GetKnnDistAttrName(), SPH_ATTR_FLOAT );
-	tKNNDist.m_eStage = SPH_EVAL_PRESORT;
+	// a predicate on the distance (knn_dist()<x, or an alias of it) needs the value before the filters run;
+	// otherwise it is only needed for sorting, after the filters have rejected what they can
+	tKNNDist.m_eStage = HasKNNDistFilter(m_tQuery) ? SPH_EVAL_PREFILTER : SPH_EVAL_PRESORT;
 	tKNNDist.m_pExpr = CreateExpr_KNNDist ( tKNN.m_dVec, *pAttr );
 
 	m_pSorterSchema->AddAttr ( tKNNDist, true );

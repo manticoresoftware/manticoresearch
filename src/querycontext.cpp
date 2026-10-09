@@ -199,7 +199,8 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResultMeta & tMeta, const ISphSchema
 
 bool CSphQueryContext::CreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphString & sWarning )
 {
-	if ( !tCtx.m_pFilters || tCtx.m_pFilters->IsEmpty () )
+	bool bHaveFilters = tCtx.m_pFilters && !tCtx.m_pFilters->IsEmpty();
+	if ( !bHaveFilters && !tCtx.m_bAddKNNDistFilter )
 		return true;
 	if ( !sphCreateFilters ( tCtx, sError, sWarning ) )
 		return false;

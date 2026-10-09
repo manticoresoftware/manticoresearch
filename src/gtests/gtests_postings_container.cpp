@@ -30,6 +30,128 @@ namespace
 
 using ByteVec_t = std::vector<uint8_t>;
 
+// Independent byte-level oracle for the production norm-store writers.
+class NormStoreBuilder
+{
+public:
+	explicit NormStoreBuilder ( uint32_t uFields, uint32_t uGroupRows=4096 )
+		: m_uFields ( uFields )
+		, m_uGroupRows ( uGroupRows )
+		, m_dFields ( uFields )
+	{}
+
+	bool AddRow ( const uint32_t * pValues, uint32_t uFields, std::string & sError )
+	{
+		if ( !pValues || uFields!=m_uFields || !m_uFields || !m_uGroupRows )
+		{
+			sError = "norms: invalid row";
+			return false;
+		}
+		for ( uint32_t i=0; i<m_uFields; ++i )
+			m_dFields[i].push_back ( pValues[i] );
+		++m_uRows;
+		return true;
+	}
+
+	bool Set ( uint32_t uRow, uint32_t uField, uint32_t uValue, std::string & sError )
+	{
+		if ( uField>=m_uFields || uRow>=m_uRows )
+		{
+			sError = "norms: invalid row update";
+			return false;
+		}
+		m_dFields[uField][uRow] = uValue;
+		return true;
+	}
+
+	bool Build ( ByteVec_t & dOut, std::string & sError ) const
+	{
+		if ( !m_uFields || !m_uGroupRows )
+		{
+			sError = "norms: invalid dimensions";
+			return false;
+		}
+		constexpr uint32_t HEADER_SIZE = 64;
+		constexpr uint32_t FIELD_ENTRY_SIZE = 16;
+		constexpr uint32_t GROUP_ENTRY_SIZE = 32;
+		const uint32_t uGroups = m_uRows ? ( m_uRows+m_uGroupRows-1 )/m_uGroupRows : 0;
+		const uint64_t uDirectory = HEADER_SIZE+uint64_t(m_uFields)*FIELD_ENTRY_SIZE;
+		const uint64_t uPayload = uDirectory+uint64_t(m_uFields)*uGroups*GROUP_ENTRY_SIZE;
+		if ( uPayload>std::numeric_limits<size_t>::max() )
+		{
+			sError = "norms: directory too large";
+			return false;
+		}
+		dOut.assign ( size_t(uPayload), 0 );
+		memcpy ( dOut.data(), "E1NORM01", 8 );
+		Put ( dOut, 8, 1, 4 );
+		Put ( dOut, 12, HEADER_SIZE, 4 );
+		Put ( dOut, 16, m_uRows, 4 );
+		Put ( dOut, 20, m_uFields, 4 );
+		Put ( dOut, 24, m_uGroupRows, 4 );
+		Put ( dOut, 28, uGroups, 4 );
+		Put ( dOut, 32, uDirectory, 8 );
+		Put ( dOut, 40, uPayload, 8 );
+
+		for ( uint32_t iField=0; iField<m_uFields; ++iField )
+		{
+			uint64_t uFieldSum = 0;
+			uint32_t uFieldNonzero = 0;
+			for ( uint32_t uValue : m_dFields[iField] )
+			{
+				uFieldSum += uValue;
+				uFieldNonzero += uValue!=0;
+			}
+			const size_t uFieldEntry = HEADER_SIZE+size_t(iField)*FIELD_ENTRY_SIZE;
+			Put ( dOut, uFieldEntry, uFieldSum, 8 );
+			Put ( dOut, uFieldEntry+8, uFieldNonzero, 4 );
+
+			for ( uint32_t iGroup=0; iGroup<uGroups; ++iGroup )
+			{
+				const uint32_t uFirst = iGroup*m_uGroupRows;
+				const uint32_t uCount = std::min ( m_uGroupRows, m_uRows-uFirst );
+				uint64_t uSum = 0;
+				uint32_t uMax = 0;
+				uint32_t uNonzero = 0;
+				for ( uint32_t i=0; i<uCount; ++i )
+				{
+					const uint32_t uValue = m_dFields[iField][uFirst+i];
+					uSum += uValue;
+					uMax = std::max ( uMax, uValue );
+					uNonzero += uValue!=0;
+				}
+				const unsigned uWidth = uMax<=UINT8_MAX ? 1 : uMax<=UINT16_MAX ? 2 : 4;
+				const uint64_t uOffset = dOut.size();
+				const size_t uEntry = size_t(uDirectory)+( size_t(iField)*uGroups+iGroup )*GROUP_ENTRY_SIZE;
+				Put ( dOut, uEntry, uOffset, 8 );
+				Put ( dOut, uEntry+8, uSum, 8 );
+				Put ( dOut, uEntry+16, uCount, 4 );
+				Put ( dOut, uEntry+20, uMax, 4 );
+				Put ( dOut, uEntry+24, uNonzero, 4 );
+				dOut[uEntry+28] = uint8_t(uWidth);
+				dOut.resize ( dOut.size()+size_t(uCount)*uWidth );
+				for ( uint32_t i=0; i<uCount; ++i )
+					Put ( dOut, size_t(uOffset)+size_t(i)*uWidth, m_dFields[iField][uFirst+i], uWidth );
+			}
+		}
+		Put ( dOut, 48, dOut.size(), 8 );
+		Put ( dOut, 56, e1::CRC(dOut.data()+HEADER_SIZE,dOut.size()-HEADER_SIZE), 4 );
+		return true;
+	}
+
+private:
+	static void Put ( ByteVec_t & dData, size_t uOffset, uint64_t uValue, unsigned uBytes )
+	{
+		for ( unsigned i=0; i<uBytes; ++i )
+			dData[uOffset+i] = uint8_t ( uValue >> ( 8*i ) );
+	}
+
+	uint32_t m_uFields = 0;
+	uint32_t m_uGroupRows = 0;
+	uint32_t m_uRows = 0;
+	std::vector<std::vector<uint32_t>> m_dFields;
+};
+
 class VectorPublicIDReader_c final : public e1::PublicIDReader_i
 {
 public:
@@ -264,7 +386,7 @@ TEST_F ( PostingsContainerTest, CurrentWriterPersistsExactSafeRatioBoundsByOrdin
 	ASSERT_GE ( dRaw.size(), 56u );
 	EXPECT_EQ ( std::string(reinterpret_cast<const char *>(dRaw.data()),8), "E1POST10" );
 	EXPECT_EQ ( e1::U32(dRaw.data()+8), 10u );
-	e1::norms::Builder tNormBuilder ( 1 );
+	NormStoreBuilder tNormBuilder ( 1 );
 	for ( uint32_t uDL : dTotalDL )
 		ASSERT_TRUE ( tNormBuilder.AddRow(&uDL,1,sError) ) << sError;
 	std::vector<uint8_t> dNormBytes;
@@ -347,7 +469,7 @@ TEST_F ( PostingsContainerTest, CurrentPersistsConservativePublicIdMinimumPerOrd
 	ASSERT_GE ( dRaw.size(), 56u );
 	EXPECT_EQ ( std::string(reinterpret_cast<const char *>(dRaw.data()),8), "E1POST10" );
 	EXPECT_EQ ( e1::U32(dRaw.data()+8), 10u );
-	e1::norms::Builder tNormBuilder ( 1 );
+	NormStoreBuilder tNormBuilder ( 1 );
 	for ( uint32_t uDL : dTotalDL ) ASSERT_TRUE ( tNormBuilder.AddRow(&uDL,1,sError) ) << sError;
 	std::vector<uint8_t> dNormBytes;
 	ASSERT_TRUE ( tNormBuilder.Build(dNormBytes,sError) ) << sError;
@@ -475,7 +597,7 @@ TEST_F ( PostingsContainerTest, CurrentDuplicatePublicIDsValidateConservatively 
 	ASSERT_TRUE ( tWriter.FinishTerm(1,dPostings,dPostings.size(),false,sError) ) << sError;
 	ASSERT_TRUE ( tWriter.Finalize(m_sBase+".spi",m_sBase+".spp",sError) ) << sError;
 	auto dRaw=ReadFile(m_sBase+".spd"), dDict=ReadFile(m_sBase+".spi"), dHits=ReadFile(m_sBase+".spp");
-	e1::norms::Builder tNormBuilder ( 1 );
+	NormStoreBuilder tNormBuilder ( 1 );
 	for ( uint32_t uDL : dTotalDL ) ASSERT_TRUE ( tNormBuilder.AddRow(&uDL,1,sError) ) << sError;
 	std::vector<uint8_t> dNormBytes;
 	ASSERT_TRUE ( tNormBuilder.Build(dNormBytes,sError) ) << sError;
@@ -513,7 +635,7 @@ TEST_F ( PostingsContainerTest, V10EmbeddedFieldProjectionExactAndFailsClosed )
 	uint64_t uHits=0;for(const auto&t:dPostings)uHits+=t.m_uTF;
 	ASSERT_TRUE(tWriter.FinishTerm(1,dPostings,uHits,false,sError))<<sError;ASSERT_TRUE(tWriter.Finalize(m_sBase+".spi",m_sBase+".spp",sError))<<sError;
 	auto dRaw=ReadFile(m_sBase+".spd"),dDict=ReadFile(m_sBase+".spi"),dHits=ReadFile(m_sBase+".spp");
-	e1::norms::Builder tNormBuilder(2);const uint32_t dNormRow[2]={3,4};for(uint32_t i=0;i<TOTAL_ROWS;++i)ASSERT_TRUE(tNormBuilder.AddRow(dNormRow,2,sError));std::vector<uint8_t>dNormBytes;ASSERT_TRUE(tNormBuilder.Build(dNormBytes,sError));e1::norms::Store tNorms;ASSERT_TRUE(tNorms.Open(dNormBytes.data(),dNormBytes.size(),sError));
+	NormStoreBuilder tNormBuilder(2);const uint32_t dNormRow[2]={3,4};for(uint32_t i=0;i<TOTAL_ROWS;++i)ASSERT_TRUE(tNormBuilder.AddRow(dNormRow,2,sError));std::vector<uint8_t>dNormBytes;ASSERT_TRUE(tNormBuilder.Build(dNormBytes,sError));e1::norms::Store tNorms;ASSERT_TRUE(tNorms.Open(dNormBytes.data(),dNormBytes.size(),sError));
 	e1::Store tStore;ASSERT_TRUE(tStore.Open(dRaw.data(),dRaw.size(),TOTAL_ROWS,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,nullptr,&tNorms))<<sError;
 	e1::Cursor tCursor;tCursor.Bind(tStore,1);ASSERT_TRUE(tCursor.SelectFieldProjection(0));EXPECT_EQ(tCursor.FieldProjectionRows(),4096u);EXPECT_FALSE(tCursor.SelectFieldProjection(1));ASSERT_TRUE(tCursor.SelectFieldProjection(0));
 	std::vector<std::pair<uint32_t,uint32_t>> dActual;uint32_t uRow=0,uTF=0;uint64_t e=0,b=0,sel=0,skip=0,skipDocs=0;while(tCursor.NextFieldProjectionRanked(uRow,uTF,1.0f,0,e,b,sel,skip,skipDocs))dActual.emplace_back(uRow,uTF);std::sort(dActual.begin(),dActual.end());ASSERT_EQ(dActual.size(),dExpectedRows.size());for(size_t i=0;i<dActual.size();++i){EXPECT_EQ(dActual[i].first,dExpectedRows[i]);EXPECT_EQ(dActual[i].second,dExpectedTF[i]);}
@@ -556,7 +678,7 @@ TEST_F ( PostingsContainerTest, V10FieldProjectionRejectsCRCConsistentMemberOmis
 	for(uint32_t i=0;i<ROWS;++i){uint32_t mask=2,tf=4,first=0;if(i<2048){mask=1;tf=3;dRows.push_back(i*2);dTF.push_back(3);}else if(i<4096){mask=3;tf=5;first=2;dRows.push_back(i*2);dTF.push_back(2);}dPostings.push_back({i*2,tf,mask,0,first});}
 	{std::ofstream(m_sBase+".spi",std::ios::binary).write("dict",4);}{std::ofstream(m_sBase+".spp",std::ios::binary).put('\1');}
 	std::string sError;e1::Writer tWriter;ASSERT_TRUE(tWriter.Open(m_sBase+".spd",sError));tWriter.BindTotalDL(dTotalDL.data(),ROWS,true);tWriter.BindIndexedFields(2);uint64_t hits=0;for(const auto&p:dPostings)hits+=p.m_uTF;ASSERT_TRUE(tWriter.FinishTerm(1,dPostings,hits,false,sError));ASSERT_TRUE(tWriter.Finalize(m_sBase+".spi",m_sBase+".spp",sError));
-	auto dRaw=ReadFile(m_sBase+".spd"),dDict=ReadFile(m_sBase+".spi"),dHits=ReadFile(m_sBase+".spp");e1::norms::Builder tNormBuilder(2);const uint32_t dNorm[2]={3,4};for(uint32_t i=0;i<TOTAL_ROWS;++i)ASSERT_TRUE(tNormBuilder.AddRow(dNorm,2,sError));std::vector<uint8_t>dNormBytes;ASSERT_TRUE(tNormBuilder.Build(dNormBytes,sError));e1::norms::Store tNorms;ASSERT_TRUE(tNorms.Open(dNormBytes.data(),dNormBytes.size(),sError));
+	auto dRaw=ReadFile(m_sBase+".spd"),dDict=ReadFile(m_sBase+".spi"),dHits=ReadFile(m_sBase+".spp");NormStoreBuilder tNormBuilder(2);const uint32_t dNorm[2]={3,4};for(uint32_t i=0;i<TOTAL_ROWS;++i)ASSERT_TRUE(tNormBuilder.AddRow(dNorm,2,sError));std::vector<uint8_t>dNormBytes;ASSERT_TRUE(tNormBuilder.Build(dNormBytes,sError));e1::norms::Store tNorms;ASSERT_TRUE(tNorms.Open(dNormBytes.data(),dNormBytes.size(),sError));
 	const uint8_t*term=dRaw.data()+56;const uint32_t nm=e1::U32(term+8);const uint8_t*g=dRaw.data()+e1::U64(term+16)+uint64_t(nm-1)*16;const uint64_t blocks=(ROWS+63)/64;const uint32_t width=(e1::U32(term+12)>>8)&63;const uint64_t tail=e1::U64(g)+e1::Meta4Bytes(e1::U32(g+8),e1::U32(g+12))+blocks+blocks*8+(uint64_t(ROWS)*width+7)/8,payload=e1::U64(dRaw.data()+tail+4+16);
 	dRows.erase(dRows.begin()+1);dTF.erase(dTF.begin()+1);const uint32_t count=uint32_t(dRows.size()),projectionBlocks=(count+63)/64;ByteVec_t projection(uint64_t(projectionBlocks)*16);auto appendVar=[](ByteVec_t&out,uint32_t value){while(value>=128){out.push_back(uint8_t(value)|0x80);value>>=7;}out.push_back(uint8_t(value));};
 	for(uint32_t block=0,at=0;block<projectionBlocks;++block){const uint32_t n=std::min(64u,count-at);ByteVec_t rows,tf;uint32_t previous=0;uint8_t bound=0;for(uint32_t i=0;i<n;++i){appendVar(rows,i?dRows[at+i]-previous:dRows[at+i]);previous=dRows[at+i];appendVar(tf,dTF[at+i]);bound=std::max(bound,E1EncodeBM25A12_075_256(dTF[at+i],7));}const uint32_t dataOffset=uint32_t(projection.size()),descriptor=block*16;PutValue(projection,descriptor,dataOffset,4);PutValue(projection,descriptor+4,rows.size(),4);PutValue(projection,descriptor+8,tf.size(),4);projection[descriptor+12]=uint8_t(n);projection[descriptor+13]=bound;projection.insert(projection.end(),rows.begin(),rows.end());projection.insert(projection.end(),tf.begin(),tf.end());at+=n;}
@@ -572,12 +694,12 @@ TEST_F ( PostingsContainerTest, V10ProjectionBudgetRejectsIncrementally )
 	{std::ofstream(m_sBase+".spi",std::ios::binary).write("dict",4);}{std::ofstream(m_sBase+".spp",std::ios::binary).put('\1');}
 	std::string sError;e1::Writer tWriter;ASSERT_TRUE(tWriter.Open(m_sBase+".spd",sError));tWriter.BindTotalDL(dTotalDL.data(),ROWS,true);tWriter.BindIndexedFields(2);uint64_t uHits=0;for(const auto&t:dPostings)uHits+=t.m_uTF;ASSERT_TRUE(tWriter.FinishTerm(1,dPostings,uHits,false,sError));ASSERT_TRUE(tWriter.Finalize(m_sBase+".spi",m_sBase+".spp",sError));
 	auto dRaw=ReadFile(m_sBase+".spd"),dDict=ReadFile(m_sBase+".spi"),dHits=ReadFile(m_sBase+".spp");ASSERT_EQ(std::string(reinterpret_cast<const char*>(dRaw.data()),8),"E1POST10");EXPECT_EQ(e1::U32(dRaw.data()+8),10u);EXPECT_EQ(e1::VERSION,e1::VERSION10);
-	e1::norms::Builder tNormBuilder(2);const uint32_t dNorm[2]={3,4};for(uint32_t i=0;i<ROWS;++i)ASSERT_TRUE(tNormBuilder.AddRow(dNorm,2,sError));std::vector<uint8_t>dNormBytes;ASSERT_TRUE(tNormBuilder.Build(dNormBytes,sError));e1::norms::Store tNorms;ASSERT_TRUE(tNorms.Open(dNormBytes.data(),dNormBytes.size(),sError));e1::Store tStore;ASSERT_TRUE(tStore.Open(dRaw.data(),dRaw.size(),ROWS,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,nullptr,&tNorms))<<sError;e1::Cursor tCursor;tCursor.Bind(tStore,1);EXPECT_FALSE(tCursor.SelectFieldProjection(0));EXPECT_TRUE(tCursor.SelectFieldProjection(1));
+	NormStoreBuilder tNormBuilder(2);const uint32_t dNorm[2]={3,4};for(uint32_t i=0;i<ROWS;++i)ASSERT_TRUE(tNormBuilder.AddRow(dNorm,2,sError));std::vector<uint8_t>dNormBytes;ASSERT_TRUE(tNormBuilder.Build(dNormBytes,sError));e1::norms::Store tNorms;ASSERT_TRUE(tNorms.Open(dNormBytes.data(),dNormBytes.size(),sError));e1::Store tStore;ASSERT_TRUE(tStore.Open(dRaw.data(),dRaw.size(),ROWS,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,nullptr,&tNorms))<<sError;e1::Cursor tCursor;tCursor.Bind(tStore,1);EXPECT_FALSE(tCursor.SelectFieldProjection(0));EXPECT_TRUE(tCursor.SelectFieldProjection(1));
 }
 
 TEST ( NormStore, ExactWidthsRangesGatherAndTotals )
 {
-	e1::norms::Builder tBuilder ( 3, 4 );
+	NormStoreBuilder tBuilder ( 3, 4 );
 	std::string sError;
 	std::array<std::array<uint32_t,3>,128> dRows {};
 	for ( uint32_t i=0; i<dRows.size(); ++i )
@@ -620,7 +742,7 @@ TEST ( NormStore, ExactWidthsRangesGatherAndTotals )
 
 TEST ( NormStore, RejectsCorruptionAndTruncation )
 {
-	e1::norms::Builder tBuilder ( 1, 4 );
+	NormStoreBuilder tBuilder ( 1, 4 );
 	std::string sError;
 	for ( uint32_t uValue : { 1u, 255u, 256u, 65536u, 7u } )
 		ASSERT_TRUE ( tBuilder.AddRow(&uValue,1,sError) ) << sError;
@@ -643,7 +765,7 @@ TEST ( NormStore, RejectsCorruptionAndTruncation )
 TEST ( NormStore, StagedBuilderMatchesInMemoryBuilderAndSupportsUpdates )
 {
 	std::string sError;
-	e1::norms::Builder tMemory ( 3, 4 );
+	NormStoreBuilder tMemory ( 3, 4 );
 	e1::norms::StagedBuilder tStaged ( 3, 4, true );
 	for ( uint32_t i=0; i<11; ++i )
 	{
@@ -674,7 +796,7 @@ TEST ( NormStore, StagedBuilderMatchesInMemoryBuilderAndSupportsUpdates )
 TEST ( NormStore, PackedStagedBuilderMatchesInMemoryBuilder )
 {
 	std::string sError;
-	e1::norms::Builder tMemory ( 3, 4 );
+	NormStoreBuilder tMemory ( 3, 4 );
 	e1::norms::StagedBuilder tPacked ( 3, 4 );
 	for ( uint32_t i=0; i<11; ++i )
 	{

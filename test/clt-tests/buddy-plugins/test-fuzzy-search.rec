@@ -1308,6 +1308,35 @@ mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('abcdef') OPTION fuzzy=1;"
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('\$#@\!') OPTION fuzzy=1;"
 ––– output –––
+––– comment –––
+Fuzzy search handles apostrophes in MATCH values and still expands typos
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS fuzzy_apostrophe; CREATE TABLE fuzzy_apostrophe (title TEXT) min_infix_len='2'; INSERT INTO fuzzy_apostrophe VALUES (1, 'peter\\'s copper pipe'), (2, 'john\\'s steel valve');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM fuzzy_apostrophe WHERE MATCH('peter\\'s coppre pipe') OPTION fuzzy=1, layouts='';"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
++------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM fuzzy_apostrophe WHERE MATCH('peter\\'s coppre pipe') OPTION fuzzy=1, layouts='', quorum=0.5;"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
++------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM fuzzy_apostrophe WHERE MATCH('peter\\'s copper pipe') OPTION fuzzy=0;"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
++------+
 ––– input –––
 mysql -h0 -P9306 -e "DROP TABLE IF EXISTS idx1; CREATE TABLE idx1(value TEXT) min_infix_len='2';"; echo $?
 ––– output –––

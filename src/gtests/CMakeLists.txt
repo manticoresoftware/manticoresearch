@@ -19,6 +19,7 @@ set ( GTESTS_SRC
 		gtests_filter.cpp
 		gtests_searchdaemon.cpp
 		gtests_api_reply_stream.cpp
+		gtests_send_files.cpp
 		gtests_ssl.cpp
 		gtests_stringbuilder.cpp
 		gtests_strfmt.cpp

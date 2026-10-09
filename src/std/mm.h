@@ -39,3 +39,14 @@ int mmfree ( void* pMem, size_t uSize );
 void mmadvise ( void* pMem, size_t uSize, Advise_e = Advise_e::NODUMP );
 bool mmlock ( void* pMem, size_t uSize );
 bool mmunlock ( void* pMem, size_t uSize );
+
+struct MemRange_t
+{
+	const void *	m_pData = nullptr;
+	size_t			m_uLen = 0;
+};
+
+void mmprefetch ( const MemRange_t * pRanges, int iRanges );
+
+// whether every page of this range of a mapped file is in memory right now
+bool mmresident ( const void * pData, size_t uLen );

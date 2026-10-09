@@ -280,6 +280,8 @@ jobs:
           echo "skip_clt_reason=$reason" >> "$GITHUB_OUTPUT"
       - name: Calculate gating
         id: calc
+        env:
+          SKIP_CLT_REASON: ${{ steps.related_prs.outputs.skip_clt_reason }}
         run: |
           set -euo pipefail
           changes_detected=false
@@ -301,6 +303,9 @@ jobs:
 
           run_image_build="$changes_detected"
           run_clt="$changes_detected"
+          if [[ -n "$SKIP_CLT_REASON" ]]; then
+            run_clt=false
+          fi
           skip_clt_tag=false
           if git tag --points-at HEAD | grep -qx "skip_clt"; then
             skip_clt_tag=true

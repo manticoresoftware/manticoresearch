@@ -1786,7 +1786,9 @@ bool QueueCreator_c::AddKNNDistColumn()
 	}
 
 	CSphColumnInfo tKNNDist ( GetKnnDistAttrName(), SPH_ATTR_FLOAT );
-	tKNNDist.m_eStage = SPH_EVAL_PRESORT;
+	// a predicate on the distance (knn_dist()<x, or an alias of it) needs the value before the filters run;
+	// otherwise it is only needed for sorting, after the filters have rejected what they can
+	tKNNDist.m_eStage = HasKNNDistFilter(m_tQuery) ? SPH_EVAL_PREFILTER : SPH_EVAL_PRESORT;
 	tKNNDist.m_pExpr = CreateExpr_KNNDist ( tKNN.m_dVec, *pAttr );
 
 	m_pSorterSchema->AddAttr ( tKNNDist, true );
@@ -1826,18 +1828,10 @@ bool QueueCreator_c::AddKNNRescoreColumn()
 	if ( !CanRescoreKNN() )
 		return true;
 
-	const auto & tKNN = m_tQuery.SingleKnnSettings();
+	// Filled by the rescore sorter (see RescoreSorter_c) once the candidates of all chunks are merged,
+	// not by a per-chunk expression: the k*oversampling budget is counted per table, not per chunk.
 	CSphColumnInfo tKNNDistRescored ( GetKnnDistRescoreAttrName(), SPH_ATTR_FLOAT );
-	// Small requests use the original final-stage expression and therefore need no collector pass.
-	if ( UseBatchedKNNRescore(tKNN) )
-		tKNNDistRescored.m_eStage = SPH_EVAL_SORTER;
-	else
-	{
-		const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
-		assert(pAttr);
-		tKNNDistRescored.m_eStage = SPH_EVAL_FINAL;
-		tKNNDistRescored.m_pExpr = CreateExpr_KNNDistRescore ( tKNN.m_dVec, *pAttr );
-	}
+	tKNNDistRescored.m_eStage = SPH_EVAL_SORTER;
 
 	m_pSorterSchema->AddAttr ( tKNNDistRescored, true );
 	m_hQueryColumns.Add ( tKNNDistRescored.m_sName );
@@ -2884,7 +2878,9 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	// wrapper would look up a missing @knn_dist_rescore attr and crash on flatten.
 	if ( CanRescoreKNN() )
 	{
-		pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.SingleKnnSettings(), m_eMatchFunc );
+		// rows the client can see must carry the exact distance even when the window is wider than k*oversampling
+		int64_t iWindow = m_tQuery.m_iLimit<0 ? iMaxMatches : int64_t ( m_tQuery.m_iLimit ) + m_tQuery.m_iOffset;
+		pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.SingleKnnSettings(), m_eMatchFunc, iWindow );
 		if ( !pSorter )
 			return nullptr;
 	}

@@ -71,3 +71,21 @@ private:
 bool VerifyFileHash ( int iFile, const CSphString& sName, const SyncSrc_t& tSrc, CSphBitvec& tDst, CSphVector<BYTE>& dBuf, CSphString& sError );
 bool SyncSigVerify ( const CSphString& sFile, const HASH20_t& dHash );
 bool SyncSigVerify ( const VecTraits_T<CSphString>& dFiles, const VecTraits_T<HASH20_t>& dHashes );
+
+
+// SST layout calculation, exposed for focused unit tests.
+struct FileSyncLayout_t
+{
+	// Preferred chunks on entry; finalized in place on success.
+	VecTraits_T<FileChunks_t> & m_dChunks;
+	int64_t m_iMaxHashes = 0;
+	int64_t m_iBufferSize = 0;
+
+	// Filled on success.
+	int64_t m_iHashes = 0;
+	int m_iMaxChunkBytes = 0;
+
+	CSphString m_sError {}; // set on failure
+};
+
+bool AdjustFileSyncLayout ( FileSyncLayout_t & tLayout );

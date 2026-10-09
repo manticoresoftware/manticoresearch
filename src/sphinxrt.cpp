@@ -1928,7 +1928,7 @@ private:
 	bool						WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, e1::Writer & tPrimary, CSphString & sError ) const;
 	void						WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, SaveDiskDataTimings_t * pTimings = nullptr ) const;
 	static bool					WriteDeadRowMap ( SaveDiskDataContext_t & tCtx, CSphString & sError );
-	bool						StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i & tBuilder, const VecTraits_T<PlainOrColumnar_t> & dAttrsForKNN, int iStride, CSphString & sError ) const;
+	bool						StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i & tBuilder, const VecTraits_T<PlainOrColumnar_t> & dAttrsForKNN, int iStride, int64_t iTotalRows, CSphString & sError ) const;
 
 	void						GetPrefixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const final;
 	void						GetInfixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const final;
@@ -4762,7 +4762,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 		}
 	}
 
-	if ( pKNNBuilder && !StoreKNNParallel ( tCtx, *pKNNBuilder, dAttrsForKNN, iStride, sError ) )
+	if ( pKNNBuilder && !StoreKNNParallel ( tCtx, *pKNNBuilder, dAttrsForKNN, iStride, tNextRowID, sError ) )
 		return false;
 
 	// rows could be killed during index save and tNextRowID could be less than tCtx.m_iTotalDocuments \ initial count
@@ -4862,7 +4862,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 }
 
 
-bool RtIndex_c::StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i & tBuilder, const VecTraits_T<PlainOrColumnar_t> & dAttrsForKNN, int iStride, CSphString & sError ) const
+bool RtIndex_c::StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i & tBuilder, const VecTraits_T<PlainOrColumnar_t> & dAttrsForKNN, int iStride, int64_t iTotalRows, CSphString & sError ) const
 {
 	{
 		std::string sErrSTL;
@@ -4873,51 +4873,100 @@ bool RtIndex_c::StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i 
 		}
 	}
 
-	// per-segment HNSW store loop
+	// Split every RAM segment into fixed-size row ranges and dispatch those, not whole segments.
+	// After the merger has been running, segments are few and very uneven in size, so a per-segment
+	// split would leave most of the HNSW build on a single worker.
+	struct KNNStoreUnit_t
+	{
+		int		m_iSeg;
+		RowID_t	m_tRowStart;
+		RowID_t	m_tRowEnd;
+	};
+
+	static constexpr RowID_t ROWS_PER_UNIT = 1024;
+	CSphVector<KNNStoreUnit_t> dUnits;
+	ARRAY_FOREACH ( iSeg, tCtx.m_tRamSegments )
+	{
+		const RowID_t uRows = tCtx.m_tRamSegments[iSeg]->m_uRows;
+		for ( RowID_t tStart = 0; tStart<uRows; tStart += ROWS_PER_UNIT )
+			dUnits.Add ( KNNStoreUnit_t { iSeg, tStart, Min ( tStart+ROWS_PER_UNIT, uRows ) } );
+	}
+
+	if ( dUnits.IsEmpty() )
+		return true;
+
 	const int iNumSegs = tCtx.m_tRamSegments.GetLength();
-	const int iConcurrency = Max ( 1, Min ( KNNParallelBuild(), iNumSegs ) );
+	const int iConcurrency = Max ( 1, Min ( GetKNNBuildConcurrency ( iTotalRows ), dUnits.GetLength() ) );
 
 	RTSAVELOG << "parallel KNN build: concurrency=" << iConcurrency
 			  << " (knn_parallel_build=" << KNNParallelBuild()
-			  << " segments=" << iNumSegs << ")";
+			  << " segments=" << iNumSegs
+			  << " rows=" << iTotalRows
+			  << " units=" << dUnits.GetLength() << ")";
 
-	auto pDispatcher = Dispatcher::MakeTrivial ( iNumSegs, iConcurrency );
+	auto pDispatcher = Dispatcher::MakeTrivial ( dUnits.GetLength(), iConcurrency );
 	std::atomic<bool> bError { false };
-	CSphFixedVector<CSphString> dErrors(iNumSegs);
+	std::atomic<int> iWorkerSeq { 0 };
+	CSphFixedVector<CSphString> dErrors ( iConcurrency );
 
-	Coro::ExecuteN ( iConcurrency, [&]
+	auto fnRunWorkers = [&]
 	{
-		Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
-
-		auto pSource = pDispatcher->MakeSource();
-		knn::BuildContext_t tBuildCtx;
-		int iSeg = -1;
-		while ( !bError.load ( std::memory_order_relaxed ) && pSource->FetchTask(iSeg) )
+		Coro::ExecuteN ( iConcurrency, [&]
 		{
-			const auto & tSeg = *tCtx.m_tRamSegments[iSeg];
+			Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
 
-			SccRL_t rLock ( tSeg.m_tLock );
-			tSeg.m_bAttrsBusy.store ( true, std::memory_order_release );
-
-			auto dColumnarIterators = CreateAllColumnarIterators ( tSeg.m_pColumnar.get(), m_tSchema );
-
-			for ( auto tRowID : RtLiveRows_c(tSeg) )
+			const int iWorker = iWorkerSeq.fetch_add ( 1, std::memory_order_relaxed );
+			auto pSource = pDispatcher->MakeSource();
+			knn::BuildContext_t tBuildCtx;
+			CSphVector<ScopedTypedIterator_t> dColumnarIterators;
+			int iCurSeg = -1;
+			int iUnit = -1;
+			while ( !bError.load ( std::memory_order_relaxed ) && pSource->FetchTask(iUnit) )
 			{
-				RowID_t tRowOut = tCtx.m_dRowMaps[iSeg][tRowID];
-				assert ( tRowOut!=INVALID_ROWID );
+				const KNNStoreUnit_t & tUnit = dUnits[iUnit];
+				const auto & tSeg = *tCtx.m_tRamSegments[tUnit.m_iSeg];
+				const CSphVector<RowID_t> & dRowMap = tCtx.m_dRowMaps[tUnit.m_iSeg];
 
-				const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID * iStride;
-				if ( !BuildStoreKNN ( tRowID, tRowOut, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, tBuilder, tBuildCtx ) )
+				SccRL_t rLock ( tSeg.m_tLock );
+				tSeg.m_bAttrsBusy.store ( true, std::memory_order_release );
+
+				// units of the same segment usually come in a row; recreate the iterators only when the segment changes
+				if ( iCurSeg!=tUnit.m_iSeg )
 				{
-					RecordKNNBuildError ( dErrors[iSeg], tBuildCtx, "HNSW save: BuildStoreKNN failed for segment %d row %u (no detail)", iSeg, tRowID );
-					bError.store ( true, std::memory_order_relaxed );
-					break;
+					dColumnarIterators = CreateAllColumnarIterators ( tSeg.m_pColumnar.get(), m_tSchema );
+					iCurSeg = tUnit.m_iSeg;
 				}
-			}
 
-			iSeg = -1; // mark consumed so FetchTask advances
-		}
-	});
+				for ( RowID_t tRowID = tUnit.m_tRowStart; tRowID<tUnit.m_tRowEnd; tRowID++ )
+				{
+					// the row map was filled by the attribute pass: only rows that were alive then (and thus have attrs written) are in the new chunk
+					RowID_t tRowOut = dRowMap[tRowID];
+					if ( tRowOut==INVALID_ROWID )
+						continue;
+
+					const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID * iStride;
+					if ( !BuildStoreKNN ( tRowID, tRowOut, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, tBuilder, tBuildCtx ) )
+					{
+						RecordKNNBuildError ( dErrors[iWorker], tBuildCtx, "HNSW save: BuildStoreKNN failed for segment %d row %u (no detail)", tUnit.m_iSeg, tRowID );
+						bError.store ( true, std::memory_order_relaxed );
+						break;
+					}
+				}
+
+				iUnit = -1; // mark consumed so FetchTask advances
+			}
+		});
+	};
+
+	// A forced save (FLUSH RAMCHUNK) runs on the serial chunk-access strand, where the N coroutines spawned
+	// by ExecuteN would execute one after another. Move the parallel section to the multi-thread global pool
+	// for its duration, same as RunParallelKNNStore() does for merges. Segments stay locked by the save ticket.
+	if ( iConcurrency>1 && Threads::IsInsideCoroutine() )
+	{
+		ScopedScheduler_c tParallel { GlobalWorkPool() };
+		fnRunWorkers();
+	} else
+		fnRunWorkers();
 
 	if ( bError.load() )
 	{
@@ -9597,6 +9646,16 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	int64_t tmMaxTimer = dTimerGuard.Engage ( tQueryToRun.m_uMaxQueryMsec ); // max_query_time
 
 	SorterSchemaTransform_c tSSTransform ( dDiskChunks.GetLength(), tArgs.m_bFinalizeSorters );
+
+	// RAM segments are tagged 1..N and carry exact knn_dist values (no HNSW there), so the KNN rescore must not redo them.
+	// knn_dist() of each sorter keeps N for the rescore
+	int iExactTagMax = tGuard.m_dRamSegs.GetLength();
+	for ( auto * pSorter : dSorters )
+	{
+		const CSphColumnInfo * pKnnDist = pSorter->GetSchema()->GetAttr ( GetKnnDistAttrName() );
+		if ( pKnnDist && pKnnDist->m_pExpr )
+			pKnnDist->m_pExpr->Command ( SPH_EXPR_SET_KNN_EXACT_TAG_MAX, &iExactTagMax );
+	}
 
 	if ( !dDiskChunks.IsEmpty() )
 	{

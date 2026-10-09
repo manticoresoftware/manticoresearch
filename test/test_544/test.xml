@@ -1,0 +1,302 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>postings container current-format exact BM25A plain and RT lifecycle</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source e1_source
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT id, title, body, gid FROM e1_docs ORDER BY id
+	sql_attr_uint = gid
+}
+
+index e1_plain
+{
+	source = e1_source
+	path = <data_path/>/e1_plain
+	index_field_lengths = 1
+}
+
+index norms_plain
+{
+	source = e1_source
+	path = <data_path/>/norms_plain
+}
+
+index e1_rt
+{
+	type = rt
+	path = <data_path/>/e1_rt
+	rt_field = title
+	rt_field = body
+	rt_attr_uint = gid
+}
+
+index e1_ties
+{
+	type = rt
+	path = <data_path/>/e1_ties
+	rt_field = body
+}
+
+index e1_direct_rt
+{
+	type = rt
+	path = <data_path/>/e1_direct_rt
+	rt_field = title
+	rt_field = body
+	rt_attr_uint = gid
+}
+
+index e1_attrs_only
+{
+	type = rt
+	path = <data_path/>/e1_attrs_only
+	rt_attr_uint = gid
+}
+
+index e1_merge2
+{
+	type = rt
+	path = <data_path/>/e1_merge2
+	rt_field = body
+}
+
+index e1_merge_n
+{
+	type = rt
+	path = <data_path/>/e1_merge_n
+	rt_field = body
+}
+</config>
+
+<db_create>
+CREATE TABLE e1_docs
+(
+	id BIGINT NOT NULL,
+	title VARCHAR(255) NOT NULL,
+	body VARCHAR(255) NOT NULL,
+	gid INT NOT NULL
+);
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS e1_docs;</db_drop>
+
+<db_insert>
+INSERT INTO e1_docs VALUES
+(1, 'alpha alpha beta', 'gamma', 1),
+(2, 'alpha', 'alpha alpha gamma', 1),
+(3, 'beta gamma', 'alpha', 2),
+(4, 'alpha beta', 'beta alpha', 2),
+(5, 'gamma', 'beta', 3),
+(6, 'alpha alpha alpha', 'alpha beta gamma', 3);
+</db_insert>
+
+<queries>
+<sphinxql>
+INSERT INTO e1_rt (id,title,body,gid) VALUES
+(1,'alpha alpha beta','gamma',1),
+(2,'alpha','alpha alpha gamma',1),
+(3,'beta gamma','alpha',2);
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)+0');
+FLUSH RAMCHUNK e1_rt;
+INSERT INTO e1_rt (id,title,body,gid) VALUES
+(4,'alpha beta','beta alpha',2),
+(5,'gamma','beta',3),
+(6,'alpha alpha alpha','alpha beta gamma',3);
+FLUSH RAMCHUNK e1_rt;
+INSERT INTO e1_ties (id,body) VALUES (30,'tie'),(20,'tie'),(10,'tie');
+FLUSH RAMCHUNK e1_ties;
+
+<!-- Stable explicit, nonmonotonic public IDs exercise authoritative binding
+     through two-way and progressive N-way RT merges. Every score ties, so
+     the explicit public-ID comparator, total, and offset pages are exact. -->
+INSERT INTO e1_merge2 (id,body) VALUES (900,'tie'),(100,'tie'),(700,'tie'),(300,'tie'),(500,'tie'),(1100,'tie');
+FLUSH RAMCHUNK e1_merge2;
+INSERT INTO e1_merge2 (id,body) VALUES (200,'tie'),(1000,'tie'),(400,'tie'),(800,'tie'),(600,'tie'),(1200,'tie');
+FLUSH RAMCHUNK e1_merge2;
+SELECT id,weight() AS w FROM e1_merge2 WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 4,5 OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_merge2 WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 4,5 OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
+OPTIMIZE TABLE e1_merge2 OPTION sync=1,cutoff=1;
+SELECT id,weight() AS w FROM e1_merge2 WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 4,5 OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_merge2 WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 4,5 OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
+
+INSERT INTO e1_merge_n (id,body) VALUES (90,'tie'),(10,'tie'),(70,'tie'),(30,'tie'),(50,'tie'),(110,'tie');
+FLUSH RAMCHUNK e1_merge_n;
+INSERT INTO e1_merge_n (id,body) VALUES (20,'tie'),(100,'tie'),(40,'tie'),(80,'tie'),(60,'tie'),(120,'tie');
+FLUSH RAMCHUNK e1_merge_n;
+INSERT INTO e1_merge_n (id,body) VALUES (180,'tie'),(130,'tie'),(170,'tie'),(140,'tie'),(160,'tie'),(150,'tie');
+FLUSH RAMCHUNK e1_merge_n;
+SELECT id,weight() AS w FROM e1_merge_n WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 3,9 OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_merge_n WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 3,9 OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
+OPTIMIZE TABLE e1_merge_n OPTION sync=1,cutoff=1;
+SELECT id,weight() AS w FROM e1_merge_n WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 3,9 OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_merge_n WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 3,9 OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
+
+<!-- Dense RT norms: one indexed lane among three nonempty stored-only fields. -->
+DROP TABLE IF EXISTS e1_dense_rt;
+CREATE TABLE e1_dense_rt (stored0 TEXT STORED, body TEXT INDEXED, stored1 TEXT STORED, stored2 TEXT STORED, gid INT);
+INSERT INTO e1_dense_rt (id,stored0,body,stored1,stored2,gid) VALUES (301,'s0-a','alpha alpha beta','s1-a','s2-a',1),(302,'s0-b','alpha','s1-b','s2-b',1);
+INSERT INTO e1_dense_rt (id,stored0,body,stored1,stored2,gid) VALUES (303,'s0-c','beta alpha','s1-c','s2-c',2),(304,'s0-d','gamma','s1-d','s2-d',2);
+INSERT INTO e1_dense_rt (id,stored0,body,stored1,stored2,gid) VALUES (305,'s0-e','alpha alpha alpha','s1-e','s2-e',3),(306,'s0-f','beta','s1-f','s2-f',3);
+SHOW TABLE e1_dense_rt STATUS LIKE 'ram_chunk_segments_count';
+DELETE FROM e1_dense_rt WHERE id IN (302,304);
+SELECT id,weight() AS w FROM e1_dense_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_dense_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)+0');
+FLUSH RAMCHUNK e1_dense_rt;
+SELECT id,weight() AS w FROM e1_dense_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+INSERT INTO e1_dense_rt (id,stored0,body,stored1,stored2,gid) VALUES (307,'s0-g','alpha beta alpha','s1-g','s2-g',4);
+SELECT id,weight() AS w FROM e1_dense_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+
+<!-- Exercise the production RT direct-norm writer across multiple RAM segments
+     and a compacted row map with deleted rows at segment boundaries. -->
+INSERT INTO e1_direct_rt (id,title,body,gid) VALUES
+(101,'alpha','beta',1),(102,'alpha alpha','gamma',1),(103,'beta','alpha',1);
+INSERT INTO e1_direct_rt (id,title,body,gid) VALUES
+(104,'gamma alpha','beta',2),(105,'alpha','alpha beta',2),(106,'beta alpha','gamma',2);
+INSERT INTO e1_direct_rt (id,title,body,gid) VALUES
+(107,'alpha beta','alpha',3),(108,'gamma','alpha alpha',3),(109,'alpha','gamma',3);
+SHOW TABLE e1_direct_rt STATUS LIKE 'ram_chunk_segments_count';
+DELETE FROM e1_direct_rt WHERE id IN (101,105,109);
+SELECT id,weight() AS w FROM e1_direct_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_direct_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)+0');
+FLUSH RAMCHUNK e1_direct_rt;
+SELECT id,weight() AS w FROM e1_direct_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_direct_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)+0');
+
+<!-- Zero-field production flush must emit a valid empty norm store. -->
+INSERT INTO e1_attrs_only (id,gid) VALUES (201,1),(202,2),(203,3);
+DELETE FROM e1_attrs_only WHERE id=202;
+FLUSH RAMCHUNK e1_attrs_only;
+SELECT id,gid FROM e1_attrs_only ORDER BY id ASC;
+
+<!-- named BM25A must match its canonical expression on new plain output -->
+<!-- no explicit ranker uses the BM25A default; deterministic ordering avoids flaky equal-score rows -->
+SELECT id FROM e1_plain WHERE MATCH('alpha') ORDER BY weight() DESC,id ASC;
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha') ORDER BY w DESC,id ASC;
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha beta') ORDER BY w DESC,id ASC;
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha | beta | gamma | missing') ORDER BY w DESC,id ASC;
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha | beta | gamma | missing') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id FROM e1_plain WHERE MATCH('alpha') ORDER BY id ASC;
+SELECT id FROM e1_plain WHERE MATCH('alpha') ORDER BY id ASC OPTION ranker=none;
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha') ORDER BY id ASC;
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha') ORDER BY WEIGHT() DESC, ID ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)');
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('@title alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('@body alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha beta') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha | beta') ORDER BY w DESC,id ASC LIMIT 2,3 OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('"alpha beta"') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha') AND gid=2 ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha') AND gid=2 LIMIT 1; SHOW META LIKE 'total_found';
+SELECT COUNT(*) FROM e1_plain WHERE MATCH('alpha') AND gid=2;
+
+<!-- Unsupported exact-path shapes still use the fixed named BM25A scorer.
+     The canonical expression is the generic control; ordered ids, integer
+     weights, and total_found must remain identical. -->
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('(alpha NEAR/2 beta)') ORDER BY w DESC,id ASC OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('(alpha NEAR/2 beta)') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha MAYBE beta') ORDER BY w DESC,id ASC OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha MAYBE beta') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('@title "alpha beta"') ORDER BY w DESC,id ASC OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('@title "alpha beta"') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
+<!-- Sort and grouping independently reject E1 exact admission. -->
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha') ORDER BY id DESC OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('alpha') ORDER BY id DESC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
+SELECT gid,MAX(weight()) AS w,COUNT(*) AS n FROM e1_plain WHERE MATCH('alpha') GROUP BY gid ORDER BY gid ASC OPTION ranker=bm25a;
+SELECT gid,MAX(weight()) AS w,COUNT(*) AS n FROM e1_plain WHERE MATCH('alpha') GROUP BY gid ORDER BY gid ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)');
+
+<!-- Duplicate query terms exercise HANDLE_DUPES in the generic fallback. -->
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('"alpha alpha" MAYBE beta') ORDER BY id DESC OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('"alpha alpha" MAYBE beta') ORDER BY id DESC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('(alpha | alpha) MAYBE (beta | alpha)') ORDER BY id DESC OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_plain WHERE MATCH('(alpha | alpha) MAYBE (beta | alpha)') ORDER BY id DESC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)'); SHOW META LIKE 'total_found';
+
+<!-- internal norms must match explicit field-length attributes -->
+SELECT id,weight() AS w FROM norms_plain WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM norms_plain WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)');
+SELECT id,weight() AS w FROM norms_plain WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)+0');
+SELECT id,weight() AS w FROM norms_plain WHERE MATCH('alpha | beta') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM norms_plain WHERE MATCH('@title alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM norms_plain WHERE MATCH('@body alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+
+<!-- RT flush output uses the same exact paths -->
+SELECT id FROM e1_rt WHERE MATCH('alpha') ORDER BY weight() DESC,id ASC;
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC;
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha beta') ORDER BY w DESC,id ASC;
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha | beta | gamma | missing') ORDER BY w DESC,id ASC;
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha | beta | gamma | missing') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') ORDER BY WEIGHT() DESC, ID ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)');
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('@title alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('@body alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha beta') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha | beta') ORDER BY w DESC,id ASC LIMIT 2,3 OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('"alpha beta"') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') AND gid=2 ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') AND gid=2 LIMIT 1,1; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') AND gid=99; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') AND gid&gt;=1 LIMIT 2; SHOW META LIKE 'total_found';
+<!-- Ordinary implicit relevance keeps internal RowID tie order. This checks one
+     physical layout only; cross-layout public-ID equality is intentionally not required. -->
+SELECT id,weight() AS w FROM e1_ties WHERE MATCH('tie');
+SELECT id,weight() AS w FROM e1_ties WHERE MATCH('tie') ORDER BY weight() DESC,id ASC OPTION ranker=bm25a;
+</sphinxql>
+
+<sphinxql system="restart-daemon-no-warnings"/>
+
+<sphinxql>
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_rt WHERE MATCH('alpha') AND gid=2 LIMIT 1,1; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_direct_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,weight() AS w FROM e1_direct_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=expr('1000*bm25a(1.2,0.75,256)+0');
+SELECT id,gid FROM e1_attrs_only ORDER BY id ASC;
+SELECT id,weight() AS w FROM e1_merge2 WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 4,5 OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_merge_n WHERE MATCH('tie') ORDER BY w DESC,id ASC LIMIT 3,9 OPTION ranker=bm25a; SHOW META LIKE 'total_found';
+SELECT id,weight() AS w FROM e1_dense_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+ALTER TABLE e1_dense_rt ADD COLUMN stored3 TEXT STORED;
+ALTER TABLE e1_dense_rt DROP COLUMN stored0;
+SELECT id,weight() AS w FROM e1_dense_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+ALTER TABLE e1_dense_rt ADD COLUMN extra TEXT INDEXED;
+INSERT INTO e1_dense_rt (id,body,stored1,stored2,stored3,extra,gid) VALUES (308,'alpha','s1-h','s2-h','s3-h','alpha alpha',5);
+SELECT id,weight() AS w FROM e1_dense_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+ALTER TABLE e1_dense_rt DROP COLUMN extra;
+SELECT id,weight() AS w FROM e1_dense_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+DELETE FROM e1_rt WHERE id=3;
+REPLACE INTO e1_rt (id,title,body,gid) VALUES (2,'beta','alpha alpha alpha',4);
+UPDATE e1_rt SET gid=5 WHERE id=4;
+FLUSH RAMCHUNK e1_rt;
+OPTIMIZE TABLE e1_rt OPTION sync=1,cutoff=1;
+ALTER TABLE e1_rt ADD COLUMN extra TEXT;
+SELECT id,gid,weight() AS w FROM e1_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+</sphinxql>
+
+<sphinxql system="restart-daemon-no-warnings"/>
+
+<sphinxql>
+SELECT id,gid,weight() AS w FROM e1_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,gid,weight() AS w FROM e1_rt WHERE MATCH('alpha') AND gid=5; SHOW META LIKE 'total_found';
+SELECT COUNT(*) FROM e1_rt;
+SELECT id,weight() AS w FROM e1_direct_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,gid FROM e1_attrs_only ORDER BY id ASC;
+SELECT id,weight() AS w FROM e1_dense_rt WHERE MATCH('alpha') ORDER BY w DESC,id ASC OPTION ranker=bm25a;
+SELECT id,stored1,stored2,stored3 FROM e1_dense_rt WHERE id IN (301,308) ORDER BY id ASC;
+</sphinxql>
+</queries>
+
+</test>

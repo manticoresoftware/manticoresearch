@@ -46,9 +46,18 @@ bool mmunlock ( void* pMem, size_t uSize )
 	return VirtualUnlock ( pMem, uSize ) != 0;
 }
 
+void mmprefetch ( const MemRange_t *, int ) {}
+
+bool mmresident ( const void *, size_t )
+{
+	return false;
+}
+
 #else
 
 #include <sys/mman.h>
+#include <unistd.h>
+#include <algorithm>
 
 // couple of helpers
 int hwShare ( Share_e eAccess )
@@ -122,6 +131,81 @@ bool mmlock ( void* pMem, size_t uSize )
 bool mmunlock ( void* pMem, size_t uSize )
 {
 	return munlock ( pMem, uSize ) == 0;
+}
+
+
+void mmprefetch ( const MemRange_t * pRanges, int iRanges )
+{
+	if ( !pRanges || iRanges<=0 )
+		return;
+
+	static const size_t uPage = (size_t)sysconf ( _SC_PAGESIZE );
+	const size_t uMask = ~( uPage-1 );
+
+	// advice works on whole pages; a range that touches or overlaps its predecessor after rounding is merged into it,
+	// so neighbouring vectors cost one call
+	size_t uCurStart = 0;
+	size_t uCurEnd = 0;
+	bool bHaveRange = false;
+	for ( int i = 0; i < iRanges; i++ )
+	{
+		if ( !pRanges[i].m_pData || !pRanges[i].m_uLen )
+			continue;
+
+		size_t uStart = (size_t)pRanges[i].m_pData & uMask;
+		size_t uEnd = ( (size_t)pRanges[i].m_pData + pRanges[i].m_uLen + uPage - 1 ) & uMask;
+		if ( bHaveRange && uStart>=uCurStart && uStart<=uCurEnd )
+		{
+			uCurEnd = std::max ( uCurEnd, uEnd );
+			continue;
+		}
+
+		if ( bHaveRange )
+			madvise ( (void*)uCurStart, uCurEnd-uCurStart, MADV_WILLNEED );
+
+		uCurStart = uStart;
+		uCurEnd = uEnd;
+		bHaveRange = true;
+	}
+
+	if ( bHaveRange )
+		madvise ( (void*)uCurStart, uCurEnd-uCurStart, MADV_WILLNEED );
+}
+
+
+bool mmresident ( const void * pData, size_t uLen )
+{
+	if ( !pData || !uLen )
+		return false;
+
+	static const size_t uPage = (size_t)sysconf ( _SC_PAGESIZE );
+	const size_t uMask = ~( uPage-1 );
+	size_t uStart = (size_t)pData & uMask;
+	const size_t uEnd = ( (size_t)pData + uLen + uPage - 1 ) & uMask;
+
+#ifdef __linux__
+	using PageStatus_t = unsigned char;
+#else
+	using PageStatus_t = char;
+#endif
+
+	// one status byte per page; long ranges are walked in pieces so that the buffer can live on the stack
+	const size_t MAX_PAGES = 64;
+	PageStatus_t dStatus[MAX_PAGES];
+	while ( uStart<uEnd )
+	{
+		size_t uPages = std::min ( MAX_PAGES, ( uEnd-uStart )/uPage );
+		if ( mincore ( (void*)uStart, uPages*uPage, dStatus )!=0 )
+			return false;
+
+		for ( size_t i = 0; i < uPages; i++ )
+			if ( !( dStatus[i] & 1 ) )
+				return false;
+
+		uStart += uPages*uPage;
+	}
+
+	return true;
 }
 
 #endif // _WIN32

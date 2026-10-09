@@ -26,6 +26,7 @@
 #include "conversion.h"
 #include "sphinxrt.h"
 #include "coroutine.h"
+#include "std/mm.h"
 #include "client_task_info.h"
 
 
@@ -204,6 +205,19 @@ std::unique_ptr<knn::KNNFilter_i> CreateKNNPrefilter ( const CSphQueryContext & 
 
 static const int KNN_RESCORE_BATCH_SIZE = 256;
 
+static bool g_bKNNRescorePrefetch = true;
+
+void SetKNNRescorePrefetch ( bool bEnable )
+{
+	g_bKNNRescorePrefetch = bEnable;
+}
+
+
+bool KNNRescorePrefetch()
+{
+	return g_bKNNRescorePrefetch;
+}
+
 
 class KNNVecDistCalc_c
 {
@@ -216,6 +230,7 @@ public:
 	void		FixupLocator ( const ISphSchema * pOld, const ISphSchema * pNew )	{ sphFixupLocator ( m_tAttr.m_tLocator, pOld, pNew ); }
 
 	float		CalcDist ( const CSphMatch & tMatch ) const;
+	bool		HasVector ( const CSphMatch & tMatch ) const;
 	void		RescoreBatch ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool, const GetColumnarFromMatch_fn & fnColumnar );
 	void		RescoreBatchLocal ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc );
 
@@ -233,6 +248,7 @@ private:
 	void *								m_pDistFuncParam = nullptr;
 	bool								m_bMulti = false; // true when one row holds N vectors instead of one, so every distance is a min over them
 
+	ByteBlob_t	FetchVecData ( const CSphMatch & tMatch ) const;
 	float		CalcDistData ( ByteBlob_t tData ) const;
 	void		RescoreColumnar ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetColumnarFromMatch_fn & fnColumnar );
 	void		RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetBlobPoolFromMatch_fn & fnBlobPool );
@@ -303,7 +319,7 @@ float KNNVecDistCalc_c::MinDistOverSlots ( ByteBlob_t tBlob ) const
 }
 
 
-float KNNVecDistCalc_c::CalcDist ( const CSphMatch & tMatch ) const
+ByteBlob_t KNNVecDistCalc_c::FetchVecData ( const CSphMatch & tMatch ) const
 {
 	// this code path is used when no iterator is available, i.e. in ram chunk
 	ByteBlob_t tRes;
@@ -312,7 +328,29 @@ float KNNVecDistCalc_c::CalcDist ( const CSphMatch & tMatch ) const
 	else
 		tRes = tMatch.FetchAttrData ( m_tAttr.m_tLocator, m_pBlobPool );
 
-	return CalcDistData(tRes);
+	return tRes;
+}
+
+
+float KNNVecDistCalc_c::CalcDist ( const CSphMatch & tMatch ) const
+{
+	return CalcDistData ( FetchVecData(tMatch) );
+}
+
+
+bool KNNVecDistCalc_c::HasVector ( const CSphMatch & tMatch ) const
+{
+	ByteBlob_t tData = FetchVecData(tMatch);
+	if ( !tData.first )
+		return false;
+
+	if ( m_bMulti )
+	{
+		FloatVecArray_t tArray = ParseFloatVecArray(tData);
+		return tArray.m_iDims && tArray.m_iDims==m_tAttr.m_tKNN.m_iDims && tArray.m_dValues.GetLength()>0;
+	}
+
+	return int ( tData.second / sizeof(float) )==m_tAttr.m_tKNN.m_iDims;
 }
 
 
@@ -354,37 +392,68 @@ void KNNVecDistCalc_c::RescoreBatch ( VecTraits_T<CSphMatch*> & dMatches, const 
 }
 
 
+static const int KNN_PREFETCH_PROBES = 8;
+
+// Residency gate: the prefetch pays off only while the vectors are not in memory, and costs a system call per vector
+// once they are. So ask the OS about a few of them, spread evenly over the whole (chunk, row)-sorted set. All present:
+// the set is most likely cached, skip the prefetch. Any missing: prefetch them all.
+// The two mistakes are not equal. An unneeded prefetch costs a fraction of a millisecond; a wrongly skipped one costs
+// a serial disk read per missing vector. Hence the fairly large sample: with a fraction p of the vectors cached the
+// prefetch is skipped with probability p^8, so a cold table practically always prefetches, a fully cached one never
+// does, and a half-warm one skips once in several hundred queries.
+// The gate keeps no state: every query decides for its own vectors, so there is nothing to key by table, attribute
+// or chunk. The addresses are the ones the rescore has already resolved, so a probe is one mincore() call.
+static bool AreVectorsResident ( const VecTraits_T<const void*> & dVectors, size_t uVecBytes )
+{
+	const int iCount = dVectors.GetLength();
+	const int iProbes = Min ( iCount, KNN_PREFETCH_PROBES );
+	for ( int i = 0; i < iProbes; i++ )
+	{
+		int iIdx = iProbes>1 ? int ( (int64_t)i*( iCount-1 ) / ( iProbes-1 ) ) : 0;
+		if ( !mmresident ( dVectors[iIdx], uVecBytes ) )
+			return false;
+	}
+
+	return iProbes>0;
+}
+
+
+static void PrefetchVectors ( const VecTraits_T<const void*> & dVectors, size_t uVecBytes )
+{
+	if ( dVectors.IsEmpty() || AreVectorsResident ( dVectors, uVecBytes ) )
+		return;
+
+	CSphVector<MemRange_t> dRanges ( dVectors.GetLength() );
+	ARRAY_FOREACH ( i, dRanges )
+	{
+		dRanges[i].m_pData = dVectors[i];
+		dRanges[i].m_uLen = uVecBytes;
+	}
+
+	mmprefetch ( dRanges.Begin(), dRanges.GetLength() );
+}
+
+
 void KNNVecDistCalc_c::RescoreColumnar ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const GetColumnarFromMatch_fn & fnColumnar )
 {
 	const int iCount = dMatches.GetLength();
 	const int iVecBytes = m_tAttr.m_tKNN.m_iDims*(int)sizeof(float);
 
-	static const int CHUNK = KNN_RESCORE_BATCH_SIZE;
+	// only matters for stores read in file mode: a few scattered lookups are cheaper without a read buffer
+	const bool bBuffered = iCount>=KNN_RESCORE_BATCH_SIZE;
 
+	CSphVector<const void*> dVectors;
+	CSphVector<int> dVectorMatch;
+	dVectors.Reserve(iCount);
+	dVectorMatch.Reserve(iCount);
+
+	// pass 1: resolve
 	std::unique_ptr<columnar::Iterator_i> pIterator;
 	columnar::Columnar_i * pCurColumnar = nullptr;
 	columnar::Columnar_i * pColumnar = nullptr;
 	int iCurTag = 0;
 	bool bTagInitialized = false;
 	bool bIteratorInitialized = false;
-	bool bCurStable = false;	// does the current store's Get() return pointers stable across later Get() calls?
-
-	const void * dPtrs[CHUNK];
-	float dOut[CHUNK];
-	int iBatchStart = 0;
-	int iBatchCount = 0;
-
-	auto fnCompute = [&]()
-	{
-		if ( !iBatchCount )
-			return;
-
-		m_pDistCalc->CalcDistBatch ( m_dAnchor.Begin(), { dPtrs, (size_t)iBatchCount }, { dOut, (size_t)iBatchCount } );
-		for ( int i = 0; i < iBatchCount; i++ )
-			dMatches[iBatchStart+i]->SetAttrFloat ( tOutLoc, dOut[i] );
-
-		iBatchCount = 0;
-	};
 
 	for ( int i = 0; i < iCount; i++ )
 	{
@@ -400,18 +469,13 @@ void KNNVecDistCalc_c::RescoreColumnar ( VecTraits_T<CSphMatch*> & dMatches, con
 		{
 			pCurColumnar = pColumnar;
 			bIteratorInitialized = true;
-			pIterator.reset();
-			bCurStable = false;
+			pIterator.reset();	// before creating the next one, so that its parts are reused for it
 
 			if ( pColumnar )
 			{
 				std::string sError; // FIXME! report errors
-				columnar::IteratorHints_t tHints { .m_bNeedStringHashes = false, .m_bBuffered = true };
+				columnar::IteratorHints_t tHints { .m_bNeedStringHashes = false, .m_bBuffered = bBuffered };
 				pIterator = CreateColumnarIterator ( pColumnar, m_tAttr.m_sName.cstr(), sError, tHints );
-
-				columnar::AttrInfo_t tInfo;
-				if ( pColumnar->GetAttrInfo ( m_tAttr.m_sName.cstr(), tInfo ) )
-					bCurStable = tInfo.m_bStablePtr;
 			}
 		}
 
@@ -419,36 +483,32 @@ void KNNVecDistCalc_c::RescoreColumnar ( VecTraits_T<CSphMatch*> & dMatches, con
 		int iLen = pIterator ? pIterator->Get ( pMatch->m_tRowID, pData ) : 0;
 
 		// FIXME: make float_vector_array batched too
-		if ( m_bMulti )
+		if ( !m_bMulti && pData && iLen==iVecBytes && pIterator->IsLastValueStable() )
 		{
-			fnCompute();
-			pMatch->SetAttrFloat ( tOutLoc, MinDistOverSlots ( { pData, iLen } ) );
+			dVectors.Add(pData);
+			dVectorMatch.Add(i);
 			continue;
 		}
 
-		if ( iLen!=iVecBytes || !pData )
-		{
-			fnCompute();
-			pMatch->SetAttrFloat ( tOutLoc, FLT_MAX );
-			continue;
-		}
-
-		if ( bCurStable )
-		{
-			if ( !iBatchCount )
-				iBatchStart = i;
-			dPtrs[iBatchCount++] = pData;
-			if ( iBatchCount==CHUNK )
-				fnCompute();
-		}
-		else
-		{
-			fnCompute();
-			pMatch->SetAttrFloat ( tOutLoc, m_fnDistFunc ( pData, m_dAnchor.Begin(), (size_t)-1, (size_t)-1, m_pDistFuncParam ) );
-		}
+		pMatch->SetAttrFloat ( tOutLoc, CalcDistData ( { pData, iLen } ) );
 	}
 
-	fnCompute();
+	pIterator.reset();
+
+	// pass 2: prefetch
+	if ( KNNRescorePrefetch() )
+		PrefetchVectors ( dVectors, (size_t)iVecBytes );
+
+	// pass 3: distances
+	static const int CHUNK = KNN_RESCORE_BATCH_SIZE;
+	float dOut[CHUNK];
+	for ( int iStart = 0; iStart < dVectors.GetLength(); iStart += CHUNK )
+	{
+		int iBatch = Min ( CHUNK, dVectors.GetLength()-iStart );
+		m_pDistCalc->CalcDistBatch ( m_dAnchor.Begin(), { dVectors.Begin()+iStart, (size_t)iBatch }, { dOut, (size_t)iBatch } );
+		for ( int i = 0; i < iBatch; i++ )
+			dMatches[dVectorMatch[iStart+i]]->SetAttrFloat ( tOutLoc, dOut[i] );
+	}
 }
 
 
@@ -552,7 +612,7 @@ public:
 	int64_t		Int64Eval ( const CSphMatch & tMatch ) const override	{ return (int64_t)Eval(tMatch); }
 	void		FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override { m_tCalc.FixupLocator ( pOldSchema, pNewSchema ); }
 	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;
-	ISphExpr *	Clone() const override									{ return new Expr_KNNDist_c ( m_tCalc.GetAnchor(), m_tCalc.GetAttr() ); }
+	ISphExpr *	Clone() const override;
 	void		Command ( ESphExprCommand eCmd, void * pArg ) override;
 
 	void		SetData ( const util::Span_T<const knn::DocDist_t> & dData );
@@ -564,7 +624,16 @@ protected:
 private:
 	util::Span_T<const  knn::DocDist_t>	m_dData;
 	mutable const knn::DocDist_t *		m_pStart = nullptr;
+	int									m_iExactTagMax = 0;		// matches tagged 1..N got their distance from an exact scan (RT RAM segments)
 };
+
+
+ISphExpr * Expr_KNNDist_c::Clone() const
+{
+	auto pClone = new Expr_KNNDist_c ( m_tCalc.GetAnchor(), m_tCalc.GetAttr() );
+	pClone->m_iExactTagMax = m_iExactTagMax;
+	return pClone;
+}
 
 
 float Expr_KNNDist_c::Eval ( const CSphMatch & tMatch ) const
@@ -600,6 +669,14 @@ void Expr_KNNDist_c::Command ( ESphExprCommand eCmd, void * pArg )
 		m_tCalc.SetAnchor ( *(const CSphVector<float>*)pArg );
 		break;
 
+	case SPH_EXPR_SET_KNN_EXACT_TAG_MAX:
+		m_iExactTagMax = *(const int*)pArg;
+		break;
+
+	case SPH_EXPR_GET_KNN_EXACT_TAG_MAX:
+		*(int*)pArg = m_iExactTagMax;
+		break;
+
 	default:
 		break;
 	}
@@ -616,29 +693,6 @@ void Expr_KNNDist_c::SetData ( const util::Span_T<const knn::DocDist_t> & dData 
 uint64_t Expr_KNNDist_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
 {
 	EXPR_CLASS_NAME("Expr_KNNDist_c");
-	return CALC_DEP_HASHES();
-}
-
-class Expr_KNNDistRescore_c : public Expr_KNNDist_c
-{
-public:
-				Expr_KNNDistRescore_c ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr ) : Expr_KNNDist_c ( dAnchor, tAttr ) {}
-
-	float		Eval ( const CSphMatch & tMatch ) const final		{ return m_tCalc.CalcDist(tMatch); }
-	bool		IsColumnar ( bool * ) const final					{ return m_tCalc.GetAttr().IsColumnar(); }
-	bool		PrefersRowIdOrder() const final						{ return true; }
-
-protected:
-	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final;
-	ISphExpr *	Clone() const final								{ return new Expr_KNNDistRescore_c ( m_tCalc.GetAnchor(), m_tCalc.GetAttr() ); }
-};
-
-
-uint64_t Expr_KNNDistRescore_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
-{
-	EXPR_CLASS_NAME("Expr_KNNDistRescore_c");
-	const CSphColumnInfo & tAttr = m_tCalc.GetAttr();
-	CALC_STR_HASH ( tAttr.m_sName, tAttr.m_sName.Length() );
 	return CALC_DEP_HASHES();
 }
 
@@ -662,16 +716,58 @@ ISphExpr * CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphCol
 	return new Expr_KNNDist_c ( dAnchor, tAttr );
 }
 
+/////////////////////////////////////////////////////////////////////
 
-ISphExpr * CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr )
+class Expr_KNNHasVec_c : public ISphExpr
 {
-	return new Expr_KNNDistRescore_c ( dAnchor, tAttr );
+public:
+				Expr_KNNHasVec_c ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr ) : m_tCalc ( dAnchor, tAttr ) {}
+
+	float		Eval ( const CSphMatch & tMatch ) const override		{ return (float)IntEval(tMatch); }
+	int			IntEval ( const CSphMatch & tMatch ) const override		{ return m_tCalc.HasVector(tMatch) ? 1 : 0; }
+	int64_t		Int64Eval ( const CSphMatch & tMatch ) const override	{ return IntEval(tMatch); }
+	void		FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override { m_tCalc.FixupLocator ( pOldSchema, pNewSchema ); }
+	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;
+	ISphExpr *	Clone() const override									{ return new Expr_KNNHasVec_c ( m_tCalc.GetAnchor(), m_tCalc.GetAttr() ); }
+	void		Command ( ESphExprCommand eCmd, void * pArg ) override;
+
+private:
+	KNNVecDistCalc_c	m_tCalc;	// shares the attribute fetch logic with Expr_KNNDist_c
+};
+
+
+uint64_t Expr_KNNHasVec_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+{
+	EXPR_CLASS_NAME("Expr_KNNHasVec_c");
+	return CALC_DEP_HASHES();
 }
 
 
-bool UseBatchedKNNRescore ( const KnnSearchSettings_t & tSettings )
+void Expr_KNNHasVec_c::Command ( ESphExprCommand eCmd, void * pArg )
 {
-	return tSettings.GetRequestedDocs()>=KNN_RESCORE_BATCH_SIZE;
+	switch ( eCmd )
+	{
+	case SPH_EXPR_SET_COLUMNAR:
+		m_tCalc.SetColumnar ( (columnar::Columnar_i*)pArg );
+		break;
+
+	case SPH_EXPR_SET_BLOB_POOL:
+		m_tCalc.SetBlobPool ( (const BYTE*)pArg );
+		break;
+
+	default:
+		break;
+	}
+}
+
+
+ISphExpr * CreateExpr_KNNHasVec ( ISphExpr * pKNNDistExpr )
+{
+	assert(pKNNDistExpr);
+
+	// a @knn_dist column that carries an expression always holds Expr_KNNDist_c
+	auto * pCalc = ((Expr_KNNDist_c*)pKNNDistExpr)->GetVecDistCalc();
+	return new Expr_KNNHasVec_c ( pCalc->GetAnchor(), pCalc->GetAttr() );
 }
 
 
@@ -1315,23 +1411,32 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 }
 
 
-RowIteratorsWithEstimates_t CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, bool & bError, CSphString & sError )
+bool ShouldBypassKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const knn::KNNFilter_i * pFilter )
 {
 	if ( !tQuery.HasKnn() )
-		return {};
+		return false;
 
 	const auto & tKNN = tQuery.SingleKnnSettings();
 	if ( tKNN.m_bFullscan )
+		return true;
+
+	// CreateKNNIterator produces nothing for it either, so the chunk is scanned
+	if ( tKNN.m_sAttr.IsEmpty() )
+		return true;
+
+	// skip HNSW if brute-force over filtered rows is cheaper than HNSW traversal
+	// use plain K (not oversampled) since brute-force computes exact distances.
+	// a missing pKNN is left to CreateKNNIterator, which reports it as an error
+	return pKNN && pFilter && pKNN->ShouldUseFullscan ( tKNN.m_sAttr.cstr(), tKNN.m_iK, tKNN.m_iEf, pFilter->GetFilterCount() );
+}
+
+
+RowIteratorsWithEstimates_t CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, bool bBypass, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, bool & bError, CSphString & sError )
+{
+	if ( !tQuery.HasKnn() || bBypass )
 		return {};
 
-	if ( !tKNN.m_sAttr.IsEmpty() )
-	{
-		// skip HNSW if brute-force over filtered rows is cheaper than HNSW traversal
-		// use plain K (not oversampled) since brute-force computes exact distances
-		if ( pKNN && pFilter && pKNN->ShouldUseFullscan ( tKNN.m_sAttr.cstr(), tKNN.m_iK, tKNN.m_iEf, pFilter->GetFilterCount() ) )
-			return {};
-	}
-
+	const auto & tKNN = tQuery.SingleKnnSettings();
 	auto tRes = CreateKNNIterator ( pKNN, tQuery, tIndexSchema, tSorterSchema, pFilter, ePolicy, pProfile, sError );
 	if ( tRes.second )
 	{
@@ -1414,7 +1519,7 @@ static KNNVecDistCalc_c * GetKnnDistCalc ( const ISphSchema * pSchema )
 class RescoreSorter_c : public ISphMatchSorter
 {
 public:
-			RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, bool bBatchRescore );
+			RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, int64_t iRescoreLimit );
 
 	bool	Push ( const CSphMatch & tEntry ) final							{ return m_pSorter->Push(tEntry); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) override	{ for ( auto & i : dMatches ) m_pSorter->Push(i); }
@@ -1454,18 +1559,68 @@ public:
 private:
 	std::unique_ptr<ISphMatchSorter> m_pSorter;
 	CSphRefcountedPtr<ISphMatchComparator> m_pComp;
-	bool							m_bBatchRescore = false;
+	int64_t							m_iRescoreLimit = 0;	// max ( k*oversampling, limit+offset )
 	bool							m_bRescored = false;
 
 	const CSphAttrLocator *			GetRescoreLocator() const;
 };
 
 
-RescoreSorter_c::RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, bool bBatchRescore )
+RescoreSorter_c::RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, int64_t iRescoreLimit )
 	: m_pSorter ( pSorter )
 	, m_pComp ( std::move ( pComp ) )
-	, m_bBatchRescore ( bBatchRescore )
+	, m_iRescoreLimit ( iRescoreLimit )
 {}
+
+
+// rows of RT RAM segments (tags 1..N) never went through HNSW, so their knn_dist is exact already:
+// copy it into the rescore column and take them out of the set to rescore (they don't consume the budget either).
+// the RT table tells N to the knn_dist() expression; ask it
+static void TakeExactRows ( CSphVector<CSphMatch*> & dMatches, const ISphSchema & tSchema, const CSphAttrLocator & tRescoreLoc )
+{
+	const CSphColumnInfo * pDist = tSchema.GetAttr ( GetKnnDistAttrName() );
+	if ( !pDist || !pDist->m_pExpr )
+		return;
+
+	int iExactTagMax = 0;
+	pDist->m_pExpr->Command ( SPH_EXPR_GET_KNN_EXACT_TAG_MAX, &iExactTagMax );
+	if ( iExactTagMax<=0 )
+		return;
+
+	const CSphAttrLocator & tDistLoc = pDist->m_tLocator;
+	int iKept = 0;
+	for ( CSphMatch * pMatch : dMatches )
+	{
+		if ( pMatch->m_iTag>0 && pMatch->m_iTag<=iExactTagMax )
+			pMatch->SetAttrFloat ( tRescoreLoc, pMatch->GetAttrFloat(tDistLoc) );
+		else
+			dMatches[iKept++] = pMatch;
+	}
+
+	dMatches.Resize(iKept);
+}
+
+
+// Every chunk of a table adds its own k*oversampling HNSW candidates to the sorter, so after the merge it holds up to
+// chunks*k*oversampling rows. The exact rescore budget is k*oversampling per table: keep the closest rows by the
+// quantized distance and mark the rest so they sort behind every rescored row. Rows within the result window are
+// always rescored, which is why the caller passes max ( k*oversampling, limit+offset ).
+static void KeepClosestForRescore ( CSphVector<CSphMatch*> & dMatches, const ISphSchema & tSchema, const CSphAttrLocator & tRescoreLoc, int64_t iLimit )
+{
+	if ( iLimit<=0 || dMatches.GetLength()<=iLimit )
+		return;
+
+	const CSphColumnInfo * pDist = tSchema.GetAttr ( GetKnnDistAttrName() );
+	if ( !pDist )
+		return;
+
+	const CSphAttrLocator & tDistLoc = pDist->m_tLocator;
+	std::nth_element ( dMatches.Begin(), dMatches.Begin()+iLimit, dMatches.End(), [&tDistLoc] ( const CSphMatch * pA, const CSphMatch * pB ) { return pA->GetAttrFloat(tDistLoc) < pB->GetAttrFloat(tDistLoc); } );
+	for ( int64_t i = iLimit; i < dMatches.GetLength(); i++ )
+		dMatches[i]->SetAttrFloat ( tRescoreLoc, FLT_MAX );
+
+	dMatches.Resize ( (int)iLimit );
+}
 
 
 int RescoreSorter_c::Flatten ( CSphMatch * pTo )
@@ -1489,10 +1644,10 @@ int RescoreSorter_c::Flatten ( CSphMatch * pTo )
 	auto * pKNNDistRescore = m_pSorter->GetSchema()->GetAttr ( GetKnnDistRescoreAttrName() );
 	assert(pKNNDistRescore);
 
-	// Batched exact rescore normally happens in TransformPooled2StandalonePtrs (while per-match blob pools
+	// The exact rescore normally happens in TransformPooled2StandalonePtrs (while per-match blob pools
 	// are still valid). If that transform was skipped for this query, matches are still pooled under
 	// the original schema here, so rescore now with the single pool.
-	if ( m_bBatchRescore && !m_bRescored )
+	if ( !m_bRescored )
 	{
 		KNNVecDistCalc_c * pCalc = GetKnnDistCalc ( m_pSorter->GetSchema() );
 		if ( pCalc )
@@ -1501,6 +1656,8 @@ int RescoreSorter_c::Flatten ( CSphMatch * pTo )
 			ARRAY_FOREACH ( i, dMatches )
 				dPtrs[i] = &dMatches[i];
 
+			TakeExactRows ( dPtrs, *m_pSorter->GetSchema(), pKNNDistRescore->m_tLocator );
+			KeepClosestForRescore ( dPtrs, *m_pSorter->GetSchema(), pKNNDistRescore->m_tLocator, m_iRescoreLimit );
 			pCalc->RescoreBatchLocal ( dPtrs, pKNNDistRescore->m_tLocator );
 		}
 		m_bRescored = true;
@@ -1532,13 +1689,8 @@ const CSphAttrLocator * RescoreSorter_c::GetRescoreLocator() const
 
 void RescoreSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch, bool bFinalizeSorters )
 {
-	if ( !m_bBatchRescore )
-	{
-		m_pSorter->TransformPooled2StandalonePtrs ( std::move ( fnBlobPoolFromMatch ), std::move ( fnGetColumnarFromMatch ), bFinalizeSorters );
-		return;
-	}
-
-	// Rescore BEFORE the inner sorter rewrites pooled attrs to standalone
+	// Rescore BEFORE the inner sorter rewrites pooled attrs to standalone. For a table with several chunks this
+	// runs once, on the sorter holding the merged candidates of all chunks (the callbacks resolve a store per match).
 	if ( !m_bRescored )
 	{
 		const CSphAttrLocator * pRescoreLoc = GetRescoreLocator();
@@ -1548,6 +1700,8 @@ void RescoreSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn f
 			MatchPtrCollector_c tCollector;
 			tCollector.m_dMatches.Reserve ( m_pSorter->GetLength() );
 			m_pSorter->Finalize ( tCollector, false, false );
+			TakeExactRows ( tCollector.m_dMatches, *m_pSorter->GetSchema(), *pRescoreLoc );
+			KeepClosestForRescore ( tCollector.m_dMatches, *m_pSorter->GetSchema(), *pRescoreLoc, m_iRescoreLimit );
 			pCalc->RescoreBatch ( tCollector.m_dMatches, *pRescoreLoc, fnBlobPoolFromMatch, fnGetColumnarFromMatch );
 		}
 		m_bRescored = true;
@@ -1559,7 +1713,7 @@ void RescoreSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn f
 
 ISphMatchSorter * RescoreSorter_c::Clone() const
 {
-	auto pClone = new RescoreSorter_c ( m_pSorter->Clone(), m_pComp, m_bBatchRescore );
+	auto pClone = new RescoreSorter_c ( m_pSorter->Clone(), m_pComp, m_iRescoreLimit );
 	CloneTo(pClone);
 	return pClone;
 }
@@ -1573,7 +1727,7 @@ void RescoreSorter_c::CloneTo ( ISphMatchSorter * pTrg ) const
 }
 
 
-ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings, ESphSortFunc eMatchFunc )
+ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings, ESphSortFunc eMatchFunc, int64_t iResultWindow )
 {
 	if ( tSettings.m_sAttr.IsEmpty() || !tSettings.m_bRescore )
 		return pSorter;
@@ -1582,7 +1736,7 @@ ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnS
 	if ( !pComp )
 		return nullptr;
 
-	return new RescoreSorter_c ( pSorter, std::move ( pComp ), UseBatchedKNNRescore(tSettings) );
+	return new RescoreSorter_c ( pSorter, std::move ( pComp ), Max ( tSettings.GetRequestedDocs(), iResultWindow ) );
 }
 
 

@@ -178,9 +178,23 @@ bool ReceiverCtx_c::ApplyWriteset ( ByteBlob_t tData, bool bIsolated )
 			break;
 
 		case ReplCmd_e::RT_TRX:
-			m_tAcc.LoadRtTrx ( tReq, pCmd->m_uVersion );
+		{
+			auto pServed = GetServed ( pCmd->m_sIndex );
+			if ( !pServed || pServed->m_eType!=IndexType_e::RT )
+			{
+				sphWarning ( "unknown RT table '%s' for replication", pCmd->m_sIndex.cstr() );
+				return false;
+			}
+			RIdx_T<RtIndex_i*> pIndex ( pServed );
+			m_tAcc.CaptureReplicationValidation ( *pIndex );
+			if ( !m_tAcc.LoadRtTrx ( tReq, pCmd->m_uVersion, &pIndex->GetMatchSchema(), pIndex->GetDictFormat() ) )
+			{
+				sphWarning ( "%s", TlsMsg::szError() );
+				return false;
+			}
 			RPL_TNX << "rt trx, table '" << pCmd->m_sIndex.cstr() << "'";
 			break;
+		}
 
 		case ReplCmd_e::UPDATE_API:
 			pCmd->m_pUpdateAPI = new CSphAttrUpdate;
@@ -206,7 +220,11 @@ bool ReceiverCtx_c::ApplyWriteset ( ByteBlob_t tData, bool bIsolated )
 		case ReplCmd_e::AUTH_ADD:
 		case ReplCmd_e::AUTH_DELETE:
 			RPL_TNX << "auth " << ( pCmd->m_eCommand==ReplCmd_e::AUTH_DELETE ? "delete" : "replace" ) << ", table '" << pCmd->m_sIndex.cstr() << "'";
-			m_tAcc.LoadRtTrx ( tReq, pCmd->m_uVersion );
+			if ( !m_tAcc.LoadRtTrx ( tReq, pCmd->m_uVersion ) )
+			{
+				sphWarning ( "%s", TlsMsg::szError() );
+				return false;
+			}
 			break;
 
 		default:

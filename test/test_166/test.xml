@@ -2,6 +2,7 @@
 <test>
 
 <name>string attibutes vs agent groupings</name>
+<requires><mode-specific-model/></requires>
 
 <num_agents>3</num_agents>
 

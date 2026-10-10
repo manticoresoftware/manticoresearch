@@ -3,6 +3,7 @@
 <test>
 
 <name>snippets vs query highlighting</name>
+<requires><mode-specific-model/></requires>
 <skip_db/>
 <config>
 indexer

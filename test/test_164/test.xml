@@ -2,6 +2,7 @@
 <test>
 
 <name>blend_mode</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

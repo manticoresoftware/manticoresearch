@@ -6,6 +6,7 @@
 <requires>
 	<non-windows/>
 	<non-columnar/>
+	<mode-specific-model/>
 </requires>
 
 <config>

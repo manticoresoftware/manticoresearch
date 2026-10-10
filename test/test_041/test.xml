@@ -2,6 +2,7 @@
 <test>
 
 <name>index_exact_words</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

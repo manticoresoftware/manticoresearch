@@ -1005,7 +1005,7 @@ mysql -h0 -P9306 -e "DROP TABLE IF EXISTS tbl1; CREATE TABLE tbl1 (title TEXT) m
 mysql -h0 -P9306 -e "SELECT * FROM \`tbl1\` WHERE MATCH('abc') OPTION fuzzy = 1;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM tbl1, name WHERE MATCH('abc') OPTION fuzzy = 1;"
+mysql -h0 -P9306 -e "SELECT * FROM tbl1, name WHERE MATCH('abc') OPTION ranker=proximity_bm25, fuzzy = 1;"
 ––– output –––
 +--------+----------------+------+
 | id     | username       | s    |
@@ -1032,7 +1032,7 @@ mysql -h0 -P9306 -e "SELECT * FROM tbl1, name WHERE MATCH('abc') OPTION fuzzy = 
 |  70195 | LUBA ABDI      | a    |
 +--------+----------------+------+
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM \`tbl1\`, \`name\` WHERE MATCH('abc') OPTION fuzzy = 1;"
+mysql -h0 -P9306 -e "SELECT * FROM \`tbl1\`, \`name\` WHERE MATCH('abc') OPTION ranker=proximity_bm25, fuzzy = 1;"
 ––– output –––
 +--------+----------------+------+
 | id     | username       | s    |

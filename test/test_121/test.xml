@@ -2,6 +2,7 @@
 <test>
 
 <name>multiply stopwords source</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

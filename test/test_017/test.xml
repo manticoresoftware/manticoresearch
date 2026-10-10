@@ -2,6 +2,7 @@
 <test>
 
 <name>phrase matching vs stop words and short words</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

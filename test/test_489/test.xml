@@ -9,6 +9,7 @@
 <knn/>
 <http/>
 <force-rt/>
+<mode-specific-model/>
 </requires>
 
 <config>

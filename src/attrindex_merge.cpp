@@ -56,6 +56,7 @@ class AttrMerger_c::Impl_c
 	std::unique_ptr<SI::Builder_i>	m_pSIdxBuilder;
 
 	StrVec_t &								m_dCreatedFiles;
+	std::vector<uint64_t> *				m_pPublicIDs;
 
 	struct KNNInputRef_t
 	{
@@ -83,12 +84,13 @@ private:
 	}
 
 public:
-	Impl_c ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings, StrVec_t & dCreatedFiles )
+	Impl_c ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings, StrVec_t & dCreatedFiles, std::vector<uint64_t> * pPublicIDs )
 		: m_tMonitor ( tMonitor )
 		, m_sError ( sError )
 		, m_iTotalDocs ( iTotalDocs )
 		, m_tBufferSettings ( tSettings )
 		, m_dCreatedFiles ( dCreatedFiles )
+		, m_pPublicIDs ( pPublicIDs )
 	{}
 
 	bool Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex );
@@ -164,6 +166,14 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 
 	m_dDocidLookup.Reset ( m_iTotalDocs );
 	m_bUuidLinked = tDstSchema.GetAttr(0).IsUuidLinkedDocid();
+	const CSphColumnInfo & tDocID = tDstSchema.GetAttr(0);
+	if ( m_pPublicIDs && ( tDocID.m_sName!=sphGetDocidName() || tDocID.m_eAttrType!=SPH_ATTR_BIGINT || m_bUuidLinked ) )
+		m_pPublicIDs = nullptr;
+	if ( m_pPublicIDs )
+	{
+		m_pPublicIDs->clear();
+		m_pPublicIDs->reserve ( m_iTotalDocs );
+	}
 	m_dUuidLookup.Reset ( m_bUuidLinked ? m_iTotalDocs : 0 );
 	BuildCreateHistograms ( m_tHistograms, m_dAttrsForHistogram, tDstSchema );
 
@@ -276,6 +286,8 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 		// KNN is built in a separate pass
 
 		m_dDocidLookup[m_tResultRowID] = { tDocID, m_tResultRowID };
+		if ( m_pPublicIDs )
+			m_pPublicIDs->push_back ( uint64_t(tDocID) );
 		++m_tResultRowID;
 	}
 
@@ -587,8 +599,8 @@ bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, 
 }
 
 
-AttrMerger_c::AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings, StrVec_t & dCreatedFiles )
-	: m_pImpl { std::make_unique<Impl_c> ( tMonitor, sError, iTotalDocs, tSettings, dCreatedFiles ) }
+AttrMerger_c::AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings, StrVec_t & dCreatedFiles, std::vector<uint64_t> * pPublicIDs )
+	: m_pImpl { std::make_unique<Impl_c> ( tMonitor, sError, iTotalDocs, tSettings, dCreatedFiles, pPublicIDs ) }
 {}
 
 AttrMerger_c::~AttrMerger_c() = default;

@@ -15,6 +15,8 @@
 
 #include "sphinxquery/sphinxquery.h"
 #include "sphinxint.h"
+#include "exact_bm25a_utils.h"
+#include "field_norms.h"
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -98,6 +100,25 @@ public:
 	virtual RowID_t				AdvanceTo ( RowID_t tRowID );
 	virtual bool				HintRowID ( RowID_t ) { return false; }
 	virtual const CSphMatch &	GetNextDoc() = 0;
+	// Count-only, all indexed fields: consumes at most iMax rows; 0 means EOF,
+	// -1 means unsupported without consuming anything. Do not mix with hit access.
+	virtual int GetCountDocs ( RowID_t * pRows, int iMax ) { return -1; }
+	// Exact E1 single-term ranked cursor. Unsupported readers return false
+	// without consuming input.
+	virtual bool HasE1PublicIdMinBounds () const { return false; }
+	virtual E1RankedBoundKind_e GetE1RankedBoundKind () const { return E1RankedBoundKind_e::NONE; }
+	virtual bool GetE1RankedDoc ( RowID_t & tRowID, uint32_t & uTF, uint64_t & uBoundEntries, uint64_t & uBuckets, uint64_t & uSelectedBlocks, uint64_t & uSkippedBlocks, uint64_t & uSkippedDocs, uint64_t & uDecodedGroups, const uint64_t * pEligibility=nullptr, uint32_t uEligibilityWords=0, uint64_t * pIneligibleBeforeTF=nullptr, uint64_t uWorstTieKey=UINT64_MAX, float fRatioIDF=0.0f, int iThreshold=0, uint64_t * pEqualitySkipped=nullptr ) { return false; }
+	// Exact direct fast lane over frequent current-format primary containers.
+	virtual bool E1DirectContainerSupported () const { return false; }
+	virtual bool GetE1DirectLastWindow ( uint32_t & ) const { return false; }
+	virtual bool GetE1DirectWindow ( uint32_t, uint64_t *, uint32_t & ) { return false; }
+	virtual bool ExtractE1DirectTFBatch ( uint32_t, const uint64_t *, uint32_t *, uint64_t &, uint64_t &, uint64_t & ) { return false; }
+	virtual bool BeginE1SelectedMeta ( uint32_t, const uint64_t *, uint64_t & ) { return false; }
+	virtual bool NextE1SelectedMeta ( E1SelectedMeta_t &, uint64_t & ) { return false; }
+	virtual bool SelectE1FieldProjection ( uint32_t ) { return false; }
+	virtual uint32_t GetE1FieldProjectionRows () const { return 0; }
+	virtual uint32_t GetE1FieldProjectionBlocks () const { return 0; }
+	virtual bool GetE1FieldProjectionRankedDoc ( RowID_t &, uint32_t &, float, int, uint64_t &, uint64_t &, uint64_t &, uint64_t &, uint64_t & ) { return false; }
 	virtual void				SeekHitlist ( SphOffset_t uOff ) = 0;
 	virtual Hitpos_t			GetNextHit () = 0;
 	virtual void				CollectHitMask ();
@@ -113,10 +134,31 @@ public:
 class CSphQueryNodeCache;
 class ISphZoneCheck;
 struct CSphQueryStats;
+
+// Narrow, immutable filter description for the exact E1 ranked executors.
+// Only plain row-wise integer attributes are admitted by the index-level gate.
+struct E1RankFilter_t
+{
+	bool				m_bEnabled { false };
+	const CSphRowitem *	m_pAttrs { nullptr };
+	int					m_iStride { 0 };
+	uint32_t			m_uRows { 0 };
+	CSphAttrLocator		m_tLocator;
+	ESphFilter			m_eType { SPH_FILTER_VALUES };
+	SphAttr_t			m_iValue { 0 };
+	SphAttr_t			m_iMinValue { LLONG_MIN };
+	SphAttr_t			m_iMaxValue { LLONG_MAX };
+	bool				m_bHasEqualMin { true };
+	bool				m_bHasEqualMax { true };
+	bool				m_bOpenLeft { false };
+	bool				m_bOpenRight { false };
+};
+
 class ISphQwordSetup : ISphNoncopyable
 {
 public:
 	const CSphIndex *		m_pIndex		{nullptr};
+	const FieldNormReader_i *	m_pFieldNorms	{nullptr};
 	int						m_iDynamicRowitems {0};
 	int64_t					m_iMaxTimer		{0};
 	CSphString *			m_pWarning		{nullptr};
@@ -128,6 +170,9 @@ public:
 	DictRefPtr_c			m_pDict;
 	mutable KeywordBuf_t	m_tKeywordBuf;
 	bool					m_bHasWideFields { false };
+	bool					m_bE1RankedRequested { false }; ///< construct narrow dedicated ranked physical plans
+	bool					m_bE1RowidDocidOrder { false }; ///< active exact-ranker tie key is the internal rowid
+	E1RankFilter_t		m_tE1RankFilter;
 
 	virtual ~ISphQwordSetup () {}
 
@@ -154,7 +199,10 @@ public:
 	virtual bool				IsCache() const { return false; }
 	virtual void				FinalizeCache ( const ISphSchema & ) {}
 
-	virtual NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const = 0;
+	virtual NodeEstimate_t			Estimate ( int64_t iTotalDocs ) const = 0;
+	virtual bool					EnableE1Ranked () { return false; }
+	virtual void					SetRankThreshold ( int ) {}
+	virtual uint64_t				TakeRankSkippedDocs () { return 0; }
 };
 
 /// factory

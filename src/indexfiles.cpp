@@ -37,7 +37,8 @@ static IndexFileExt_t g_dIndexFilesExts[SPH_EXT_TOTAL] =
 	{ SPH_EXT_SETTINGS,	".settings", 1,	true,	false,	"table runtime settings" },
 	{ SPH_EXT_SPIDX,	".spidx",	62,	true,	true,	"secondary index" },
 	{ SPH_EXT_SPJIDX,	".spjidx",	66,	true,	true,	"secondary index for json attributes" },
-	{ SPH_EXT_SPKNN,	".spknn",	65,	true,	true,	"knn index" }
+	{ SPH_EXT_SPKNN,	".spknn",	65,	true,	true,	"knn index" },
+	{ SPH_EXT_SPN,	".spn",		1,	true,	true,	"full-text field norms" }
 };
 
 
@@ -99,11 +100,23 @@ CSphString IndexFiles_c::MakePath ( const char * szSuffix )
 	return MakePath ( szSuffix, GetFilebase() );
 }
 
+bool IndexFiles_c::IsE1Primary ( const CSphString & sSuffix, const CSphString & sBase )
+{
+	CSphString sError;
+	CSphAutoreader tReader;
+	if ( !tReader.Open ( FullPath ( sphGetExt(SPH_EXT_SPD), sSuffix, sBase ), sError ) )
+		return false;
+	char dMagic[8] = {};
+	tReader.GetBytes ( dMagic, sizeof(dMagic) );
+	return !tReader.GetErrorFlag() && !memcmp ( dMagic, "E1POST10", sizeof(dMagic) );
+}
+
 bool IndexFiles_c::HasAllFiles ( const char * sType )
 {
+	const bool bE1 = IsE1Primary ( sType );
 	for ( const auto & dExt : g_dIndexFilesExts )
 	{
-		if ( m_uVersion<dExt.m_uMinVer || dExt.m_bOptional )
+		if ( m_uVersion<dExt.m_uMinVer || dExt.m_bOptional || ( bE1 && dExt.m_eExt==SPH_EXT_SPE ) )
 			continue;
 
 		if ( !sphIsReadable ( FullPath ( dExt.m_szExt, sType ) ) )
@@ -114,8 +127,11 @@ bool IndexFiles_c::HasAllFiles ( const char * sType )
 
 void IndexFiles_c::Unlink ( const char * szType )
 {
+	const bool bE1 = IsE1Primary ( szType );
 	for ( const auto &dExt : g_dIndexFilesExts )
 	{
+		if ( bE1 && dExt.m_eExt==SPH_EXT_SPE )
+			continue;
 		auto sFile = FullPath ( dExt.m_szExt, szType );
 		if ( ::unlink ( sFile.cstr() ) && !dExt.m_bOptional )
 			sphWarning ( "unlink failed (file '%s', error '%s'", sFile.cstr (), strerrorm ( errno ) );
@@ -137,10 +153,11 @@ bool IndexFiles_c::TryRename ( const CSphString& sFrom, const CSphString& sTo ) 
 	m_bFatal = false;
 	bool bRenamed[SPH_EXT_TOTAL] = { false };
 	bool bAllOk = true;
+	const bool bE1 = IsE1Primary ( "", sFrom );
 	for ( int i = 0; i<SPH_EXT_TOTAL; i++ )
 	{
 		const auto & dExt = g_dIndexFilesExts[i];
-		if ( m_uVersion<dExt.m_uMinVer || !dExt.m_bCopy )
+		if ( m_uVersion<dExt.m_uMinVer || !dExt.m_bCopy || ( bE1 && dExt.m_eExt==SPH_EXT_SPE ) )
 			continue;
 
 		auto sFullFrom = FullPath ( dExt.m_szExt, "", sFrom );

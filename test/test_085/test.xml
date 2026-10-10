@@ -4,6 +4,7 @@
 <name>merge vs dupecounter</name>
 <requires>
 <non-rt/>
+<mode-specific-model/>
 </requires>
 
 <config>

@@ -3,6 +3,7 @@
 
 <requires>
 <non-rt/>
+<mode-specific-model/>
 </requires>
 
 <config>

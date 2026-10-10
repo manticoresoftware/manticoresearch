@@ -6,6 +6,7 @@
 <requires>
 <jieba/>
 <heavy/>
+<mode-specific-model/>
 </requires>
 
 <config>

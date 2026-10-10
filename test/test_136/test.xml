@@ -5,6 +5,7 @@
 
 <requires>
 	<non-columnar/>
+	<mode-specific-model/>
 </requires>
 
 <config>

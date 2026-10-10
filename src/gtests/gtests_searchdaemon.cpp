@@ -18,6 +18,8 @@
 #include "searchdssl.h"
 #include "searchdreplication.h"
 #include "searchdddl.h"
+#include "searchdsql.h"
+#include "sphinxjsonquery.h"
 #include "replication/wsrep_cxx.h"
 #include "replication/cluster_binlog.h"
 
@@ -141,6 +143,67 @@ static bool ParseDdlForTest ( const CSphString & sQuery, CSphString & sError )
 	dQuery[sQuery.Length()+1] = '\0';
 	CSphVector<SqlStmt_t> dStmt;
 	return ParseDdl ( { dQuery.Begin(), sQuery.Length() }, dStmt, sError );
+}
+
+
+static CSphQuery ParseSelectForTest ( const char * sQuery )
+{
+	static const bool bOptionsInitialized = [] { InitParserOption(); return true; }();
+	(void)bOptionsInitialized;
+	const int iLength = strlen ( sQuery );
+	CSphVector<char> dQuery ( iLength+2 );
+	memcpy ( dQuery.Begin(), sQuery, iLength );
+	dQuery[iLength] = '\0';
+	dQuery[iLength+1] = '\0';
+	CSphVector<SqlStmt_t> dStmt;
+	CSphString sError;
+	EXPECT_TRUE ( sphParseSqlQuery ( { dQuery.Begin(), iLength }, dStmt, sError, SPH_COLLATION_DEFAULT ) ) << sError.cstr();
+	EXPECT_EQ ( dStmt.GetLength(), 1 );
+	return dStmt.IsEmpty() ? CSphQuery() : std::move ( dStmt[0].m_tQuery );
+}
+
+
+TEST ( functions, ImplicitRelevanceOrderOnlyAppliesToOrdinaryFullTextResults )
+{
+	auto tScan = ParseSelectForTest ( "SELECT * FROM t" );
+	EXPECT_STREQ ( tScan.m_sSortBy.cstr(), "@weight desc" );
+
+	auto tMatch = ParseSelectForTest ( "SELECT * FROM t WHERE MATCH('word')" );
+	EXPECT_STREQ ( tMatch.m_sSortBy.cstr(), "@weight desc" );
+	EXPECT_STREQ ( tMatch.m_sOrderBy.cstr(), "@weight desc" );
+	EXPECT_FALSE ( tMatch.m_bExplicitOrderBy );
+	EXPECT_TRUE ( tMatch.m_tScrollSettings.m_bRequested );
+
+	auto tCount = ParseSelectForTest ( "SELECT COUNT(*) FROM t WHERE MATCH('word')" );
+	EXPECT_STREQ ( tCount.m_sSortBy.cstr(), "@weight desc" );
+
+	auto tExplicit = ParseSelectForTest ( "SELECT * FROM t WHERE MATCH('word') ORDER BY id DESC" );
+	EXPECT_STREQ ( tExplicit.m_sSortBy.cstr(), "id DESC" );
+	EXPECT_TRUE ( tExplicit.m_bExplicitOrderBy );
+}
+
+
+TEST ( functions, JsonImplicitRelevanceOrderOnlyAppliesToOrdinaryFullTextResults )
+{
+	const char * szMatch = R"({"index":"t","query":{"match":{"body":"word"}}})";
+	ParsedJsonQuery_t tMatch;
+	EXPECT_TRUE ( sphParseJsonQuery ( { szMatch, (int)strlen(szMatch) }, tMatch ) );
+	EXPECT_STREQ ( tMatch.m_tQuery.m_sSortBy.cstr(), "@weight desc" );
+
+	const char * szExplicit = R"({"index":"t","query":{"match":{"body":"word"}},"sort":[{"id":"desc"}]})";
+	ParsedJsonQuery_t tExplicit;
+	EXPECT_TRUE ( sphParseJsonQuery ( { szExplicit, (int)strlen(szExplicit) }, tExplicit ) );
+	EXPECT_STRNE ( tExplicit.m_tQuery.m_sSortBy.cstr(), "@weight desc" );
+
+	const char * szAggregate = R"({"index":"t","query":{"match":{"body":"word"}},"aggs":{"by_gid":{"terms":{"field":"gid"}}}})";
+	ParsedJsonQuery_t tAggregate;
+	EXPECT_TRUE ( sphParseJsonQuery ( { szAggregate, (int)strlen(szAggregate) }, tAggregate ) );
+	EXPECT_STREQ ( tAggregate.m_tQuery.m_sSortBy.cstr(), "@weight desc" );
+
+	const char * szFilterOnly = R"({"index":"t","query":{"bool":{"filter":[{"equals":{"gid":1}}]}}})";
+	ParsedJsonQuery_t tFilterOnly;
+	EXPECT_TRUE ( sphParseJsonQuery ( { szFilterOnly, (int)strlen(szFilterOnly) }, tFilterOnly ) );
+	EXPECT_STREQ ( tFilterOnly.m_tQuery.m_sSortBy.cstr(), "@weight desc" );
 }
 
 

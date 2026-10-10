@@ -8,6 +8,7 @@
 <requires>
 <http/>
 <knn/>
+<mode-specific-model/>
 </requires>
 
 <config>

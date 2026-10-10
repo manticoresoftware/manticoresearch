@@ -5,6 +5,7 @@
 
 <requires>
 <variant_match/>
+<mode-specific-model/>
 </requires>  
 
 <config>

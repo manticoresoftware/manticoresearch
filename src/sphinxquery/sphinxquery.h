@@ -361,6 +361,7 @@ struct XQQuery_t : ISphNoncopyable
 	bool					m_bEmpty = false;
 	// was node full-text (even folded into empty)
 	bool					m_bWasFullText = false;
+	bool m_bFastCountEligible = false; // original parsed tree was count-only safe, before simplification
 	bool					m_bNeedPhraseTransform = false;
 
 	/// dtor

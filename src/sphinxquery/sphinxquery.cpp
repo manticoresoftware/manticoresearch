@@ -56,6 +56,7 @@ XQQuery_t * CloneXQQuery ( const XQQuery_t & tQuery )
 	pQuery->m_bNeedSZlist = tQuery.m_bNeedSZlist;
 	pQuery->m_bSingleWord = tQuery.m_bSingleWord;
 	pQuery->m_bEmpty = tQuery.m_bEmpty;
+	pQuery->m_bFastCountEligible = tQuery.m_bFastCountEligible;
 	pQuery->m_pRoot = tQuery.m_pRoot ? tQuery.m_pRoot->Clone() : nullptr;
 	return pQuery;
 }

@@ -26,9 +26,9 @@ define ( "SEARCHD_COMMAND_UPDATE",	2 );
 define ( "SEARCHD_COMMAND_KEYWORDS",3 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x116 );
-define ( "VER_COMMAND_EXCERPT",		0x100 );
-define ( "VER_COMMAND_UPDATE",		0x102 );
+define ( "VER_COMMAND_SEARCH",		0x11B );
+define ( "VER_COMMAND_EXCERPT",		0x102 );
+define ( "VER_COMMAND_UPDATE",		0x103 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
 
 /// known searchd status codes
@@ -200,6 +200,7 @@ class SphinxClient
 	var $_anchor;		///< geographical anchor point
 	var $_indexweights;	///< per-index weights
 	var $_ranker;		///< ranking mode (default is SPH_RANK_PROXIMITY_BM25)
+	var $_query_flags;
 	var $_maxquerytime;	///< max query time, milliseconds (default is 0, do not limit)
 	var $_fieldweights;	///< per-field-name weights
 	var $_overrides;	///< per-query attribute values overrides
@@ -243,7 +244,8 @@ class SphinxClient
 		$this->_retrydelay	= 0;
 		$this->_anchor		= array ();
 		$this->_indexweights= array ();
-		$this->_ranker		= SPH_RANK_PROXIMITY_BM25;
+		$this->_ranker				= SPH_RANK_PROXIMITY_BM25;
+		$this->_query_flags		= 1<<6;
 		$this->_maxquerytime= 0;
 		$this->_fieldweights= array();
 		$this->_overrides 	= array();
@@ -449,6 +451,12 @@ class SphinxClient
 			|| $ranker==SPH_RANK_WORDCOUNT
 			|| $ranker==SPH_RANK_PROXIMITY );
 		$this->_ranker = $ranker;
+		$this->_query_flags |= 1<<15;
+	}
+
+	function ResetQueryFlag ()
+	{
+		$this->_query_flags = ( 1<<6 ) | ( $this->_query_flags & ( 1<<15 ) );
 	}
 
 	/// set matches sorting mode
@@ -690,7 +698,7 @@ class SphinxClient
 		$this->_MBPush ();
 
 		// build request
-		$req = pack ( "NNNNN", $this->_offset, $this->_limit, $this->_mode, $this->_ranker, $this->_sort ); // mode and limits
+		$req = pack ( "NNNNNN", $this->_query_flags, $this->_offset, $this->_limit, $this->_mode, $this->_ranker, $this->_sort ); // flags, mode and limits
 		$req .= pack ( "N", strlen($this->_sortby) ) . $this->_sortby;
 		$req .= pack ( "N", strlen($query) ) . $query; // query itself
 		$req .= pack ( "N", count($this->_weights) ); // weights
@@ -820,8 +828,8 @@ class SphinxClient
 
 		$nreqs = count($this->_reqs);
 		$req = join ( "", $this->_reqs );
-		$len = 4+strlen($req);
-		$req = pack ( "nnNN", SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, $len, $nreqs ) . $req; // add header
+		$len = 8+strlen($req);
+		$req = pack ( "nnNNN", SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, $len, 0, $nreqs ) . $req; // add header
 
 		fwrite ( $fp, $req, $len+8 );
 		if (!( $response = $this->_GetResponse ( $fp, VER_COMMAND_SEARCH ) ))
@@ -1023,7 +1031,11 @@ class SphinxClient
 		if ( !isset($opts["after_match"]) )			$opts["after_match"] = "</b>";
 		if ( !isset($opts["chunk_separator"]) )		$opts["chunk_separator"] = " ... ";
 		if ( !isset($opts["limit"]) )				$opts["limit"] = 256;
+		if ( !isset($opts["limit_passages"]) )		$opts["limit_passages"] = 0;
+		if ( !isset($opts["limit_words"]) )			$opts["limit_words"] = 0;
 		if ( !isset($opts["around"]) )				$opts["around"] = 5;
+		if ( !isset($opts["start_passage_id"]) )	$opts["start_passage_id"] = 1;
+		if ( !isset($opts["html_strip_mode"]) )		$opts["html_strip_mode"] = "index";
 		if ( !isset($opts["exact_phrase"]) )		$opts["exact_phrase"] = false;
 		if ( !isset($opts["single_passage"]) )		$opts["single_passage"] = false;
 		if ( !isset($opts["use_boundaries"]) )		$opts["use_boundaries"] = false;
@@ -1049,6 +1061,8 @@ class SphinxClient
 		$req .= pack ( "N", strlen($opts["chunk_separator"]) ) . $opts["chunk_separator"];
 		$req .= pack ( "N", (int)$opts["limit"] );
 		$req .= pack ( "N", (int)$opts["around"] );
+		$req .= pack ( "NNN", (int)$opts["limit_passages"], (int)$opts["limit_words"], (int)$opts["start_passage_id"] );
+		$req .= pack ( "N", strlen($opts["html_strip_mode"]) ) . $opts["html_strip_mode"];
 
 		// documents
 		$req .= pack ( "N", count($docs) );
@@ -1196,7 +1210,7 @@ class SphinxClient
 
 	/// batch update given attributes in given rows in given indexes
 	/// returns amount of updated documents (0 or more) on success, or -1 on failure
-	function UpdateAttributes ( $index, $attrs, $values, $mva=false )
+	function UpdateAttributes ( $index, $attrs, $values, $mva=false, $ignoreexistent=false )
 	{
 		// verify everything
 		assert ( is_string($index) );
@@ -1228,6 +1242,7 @@ class SphinxClient
 		$req = pack ( "N", strlen($index) ) . $index;
 
 		$req .= pack ( "N", count($attrs) );
+		$req .= pack ( "N", $ignoreexistent ? 1 : 0 );
 		foreach ( $attrs as $attr )
 		{
 			$req .= pack ( "N", strlen($attr) ) . $attr;

@@ -3,7 +3,7 @@
 
 <name>phrase boundaries</name>
 
-<requires><non-rt/></requires>
+<requires><non-rt/><mode-specific-model/></requires>
 
 <config>
 indexer

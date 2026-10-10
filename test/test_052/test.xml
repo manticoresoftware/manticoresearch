@@ -1,5 +1,6 @@
 <test>
 <name>before operator</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

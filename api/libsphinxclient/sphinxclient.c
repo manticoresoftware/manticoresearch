@@ -554,6 +554,7 @@ sphinx_bool sphinx_set_ranking_mode ( sphinx_client * client, int ranker, const 
 
 	client->ranker = ranker;
 	client->rankexpr = strchain ( client, rankexpr );
+	client->query_flags |= 1<<15;
 	return SPH_TRUE;
 }
 
@@ -919,7 +920,7 @@ void set_bit ( int * flags, int bit, sphinx_bool enable )
 	if ( enable )
 		*flags |= bit_mask;
 	else
-		*flags &= ( 0xff ^ bit_mask );
+		*flags &= ~bit_mask;
 }
 
 
@@ -981,7 +982,8 @@ sphinx_bool sphinx_set_query_flags ( sphinx_client * client, const char * flag_n
 
 void sphinx_reset_query_flags ( sphinx_client * client )
 {
-	client->query_flags = 1<<6;
+	int explicit_ranker = client->query_flags & ( 1<<15 );
+	client->query_flags = ( 1<<6 ) | explicit_ranker;
 	client->predicted_time = 0;
 }
 

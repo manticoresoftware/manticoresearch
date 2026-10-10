@@ -3,7 +3,7 @@
 <test>
 <name>https only</name>
 
-<requires><https/></requires>
+<requires><https/><mode-specific-model/></requires>
 
 <config>
 searchd

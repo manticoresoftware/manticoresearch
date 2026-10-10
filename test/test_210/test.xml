@@ -2,6 +2,7 @@
 <test>
 
 <name>stopwords_stem</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

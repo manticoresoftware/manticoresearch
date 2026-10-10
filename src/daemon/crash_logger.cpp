@@ -20,6 +20,7 @@
 #include "sphinxint.h"
 #include "threadutils.h"
 #include "client_task_info.h"
+#include "task_info.h"
 
 #include <sys/types.h>
 #include <ostream>
@@ -39,7 +40,9 @@ const char g_sCrashedBannerAPI[] = "\n--- crashed SphinxAPI request dump ---\n";
 const char g_sCrashedBannerMySQL[] = "\n--- crashed SphinxQL request dump ---\n";
 const char g_sCrashedBannerHTTP[] = "\n--- crashed HTTP request dump ---\n";
 const char g_sCrashedBannerBad[] = "\n--- crashed invalid query ---\n";
+const char g_sCrashedBannerSystem[] = "\n--- crashed system task dump ---\n";
 const char g_sCrashedBannerTail[] = "\n--- request dump end ---\n";
+const char g_sCrashedSystemTail[] = "\n--- system task dump end ---\n";
 const char g_sCrashedIndex[] = "--- local index:";
 const char g_sEndLine[] = "\n";
 #if _WIN32
@@ -245,10 +248,15 @@ LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc )
 	sphSeek ( iLogFile, 0, SEEK_END );
 	sphSafeInfoWrite ( iLogFile, g_sCrashInfo, g_iCrashInfoLen );
 
-	// log query
+	// log query or active system task
 	auto & tQuery = GlobalCrashQueryGetRef();
+	const auto * pSystem = (MiniTaskInfo_t*)myinfo::HazardGetNode ( [] ( TaskInfo_t * pInfo ) {
+		return pInfo->m_eType == MiniTaskInfo_t::Task()
+			&& IsFilled ( ((MiniTaskInfo_t*)pInfo)->m_dCrashTask );
+	} );
 
-	bool bValidQuery = IsFilled ( tQuery.m_dQuery );
+	// A background task must not dump stale query bytes left on the worker thread.
+	bool bValidQuery = !pSystem && IsFilled ( tQuery.m_dQuery );
 #if !_WIN32
 	if ( bValidQuery )
 	{
@@ -280,13 +288,17 @@ LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc )
 	else if ( tQuery.m_eType == QUERY_JSON )
 		dBanner = { g_sCrashedBannerHTTP, sizeof (g_sCrashedBannerHTTP) - 1 };
 
-	if ( !bValidQuery )
+	if ( pSystem )
+		dBanner = { g_sCrashedBannerSystem, sizeof (g_sCrashedBannerSystem) - 1 };
+	else if ( !bValidQuery )
 		dBanner = { g_sCrashedBannerBad, sizeof (g_sCrashedBannerBad) - 1 };
 
 	sphSafeInfoWrite ( iLogFile, dBanner.first, dBanner.second );
 
-	// query
-	if ( bValidQuery )
+	// query or system operation
+	if ( pSystem )
+		sphSafeInfoWrite ( iLogFile, pSystem->m_dCrashTask.first, pSystem->m_dCrashTask.second );
+	else if ( bValidQuery )
 	{
 		QueryCopyState_t tCopyState;
 		tCopyState.m_pDst = g_dCrashQueryBuff;
@@ -342,12 +354,16 @@ LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc )
 	}
 
 	// tail
-	sphSafeInfoWrite ( iLogFile, g_sCrashedBannerTail, sizeof(g_sCrashedBannerTail) - 1 );
+	if ( pSystem )
+		sphSafeInfoWrite ( iLogFile, g_sCrashedSystemTail, sizeof(g_sCrashedSystemTail) - 1 );
+	else
+		sphSafeInfoWrite ( iLogFile, g_sCrashedBannerTail, sizeof(g_sCrashedBannerTail) - 1 );
 
 	// index name
 	sphSafeInfoWrite ( iLogFile, g_sCrashedIndex, sizeof (g_sCrashedIndex) - 1 );
-	if ( IsFilled ( tQuery.m_dIndex ) )
-		sphSafeInfoWrite ( iLogFile, tQuery.m_dIndex.first, tQuery.m_dIndex.second );
+	const auto dIndex = pSystem ? pSystem->m_dCrashIndex : tQuery.m_dIndex;
+	if ( IsFilled ( dIndex ) )
+		sphSafeInfoWrite ( iLogFile, dIndex.first, dIndex.second );
 	sphSafeInfoWrite ( iLogFile, g_sEndLine, sizeof (g_sEndLine) - 1 );
 
 	sphSafeInfo ( iLogFile, g_sBannerVersion.cstr() );

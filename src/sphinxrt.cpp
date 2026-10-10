@@ -11672,6 +11672,8 @@ bool RtIndex_c::StartOptimize ( OptimizeTask_t tTask )
 	Threads::StartJob ( [tTask = std::move ( tTask ), this] () {
 		// want to track optimize only at work
 		auto pDesc = PublishSystemInfo ( "OPTIMIZE" );
+		const char * szName = GetName();
+		pDesc->m_dCrashIndex = { szName, (int)strlen ( szName ) };
 		Optimize ( std::move ( tTask ) );
 		StopRoutine();
 	} );

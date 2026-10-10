@@ -414,12 +414,7 @@ public:
 					return fail ( "field TF bounds" );
 				fieldTF = p + end;
 				for ( uint32_t o = 0; o < df; ++o ) {
-					const uint32_t group = o / 128, slot = o % 128;
-					auto g = p + mo + uint64_t ( group ) * 16;
-					uint32_t tf, mask;
-					uint64_t ref;
-					if ( !Metadata4 ( p + U64 ( g ), U32 ( g + 8 ), U32 ( g + 12 ), slot, tf, mask, ref ) )
-						return fail ( "field TF metadata" );
+					const uint32_t tf = termTF[o], mask = termMask[o];
 					const uint32_t first = uint32_t ( PackedBounded ( fieldTF, fieldWidth, o, df ) );
 					if ( first && ( __builtin_popcount ( mask ) != 2 || first >= tf ) )
 						return fail ( "field TF value" );

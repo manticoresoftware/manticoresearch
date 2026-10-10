@@ -70,6 +70,19 @@ index dd
 	agent			= <my_address/>:i2
 }
 
+index mva64_1
+{
+	type = rt
+	path = <data_path/>/mva64_1
+	rt_field = title
+	rt_attr_multi_64 = m
+}
+
+index mva64_2 : mva64_1
+{
+	path = <data_path/>/mva64_2
+}
+
 </config>
 
 <db_create>
@@ -114,6 +127,18 @@ select mva1, least(mva1), greatest(mva1) from i1;
 <!-- string groupby() -->
 select groupby() from i1 group by str1 order by str1 asc;
 select groupby() from i1 group by str1 order by str1 desc;
+<!-- regression #4989: merge projected MVA groups without retaining the source -->
+select groupby() g, count(*) c from i1 group by mva1 order by g asc;
+select groupby() g, count(*) c from i1,i2 group by mva1 order by g asc;
+select groupby() g, count(*) c from i1,i2 group by mva1 having g in (12,101) order by g asc;
+<!-- HAVING also requires a grouped merge for a single table -->
+select groupby() g, count(*) c from i1 group by mva2 having c > 1 order by g asc;
+select groupby() g, count(distinct id) c from i1,i2 group by mva1 order by g asc;
+<!-- 64-bit MVA keys must survive the same projected merge -->
+insert into mva64_1 (id,m) values (1,(5000000000,6000000000));
+insert into mva64_2 (id,m) values (2,(5000000000,7000000000));
+select groupby() g, count(*) c from mva64_1,mva64_2 group by m order by g asc;
+select count(*) from i1 group by missing_attribute;
 </sphinxql></queries>
 
 </test>

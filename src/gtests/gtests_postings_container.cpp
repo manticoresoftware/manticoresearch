@@ -376,6 +376,24 @@ TEST_F ( PostingsContainerTest, PublicIDBatchValidationModesAndCodecs )
 			ASSERT_FALSE(open(inflated,&binding));EXPECT_NE(error.find("unsafe public ID minimum"),std::string::npos);
 			auto conservative=raw;PutValue(conservative,minima,0,8);UpdateChecksum(conservative);
 			ASSERT_TRUE(open(conservative,&binding))<<error;EXPECT_TRUE(store.PublicIDMinValidated());
+			if ( codec==5 ) {
+				// Direct materialization must still reject malformed arrays/runs
+				// before writing rows, even when their CRC is internally consistent.
+				auto badArray=raw;
+				const auto arrayPayload=e1::U64(raw.data()+56+24+16);
+				PutValue(badArray,arrayPayload+2,e1::U16(raw.data()+arrayPayload),2);
+				UpdateChecksum(badArray);
+				ASSERT_FALSE(open(badArray,&binding));EXPECT_NE(error.find("array order"),std::string::npos);
+				EXPECT_FALSE(store.PublicIDMinValidated());
+				auto badRun=raw;
+				const auto runPayload=e1::U64(raw.data()+56+48+16);
+				PutValue(badRun,runPayload+2,4095,2); // valid rows, inflated cardinality
+				UpdateChecksum(badRun);
+				ASSERT_FALSE(open(badRun,&binding));EXPECT_NE(error.find("container cardinality"),std::string::npos);
+				EXPECT_FALSE(store.PublicIDMinValidated());
+				ASSERT_TRUE(open(raw,&binding))<<error;
+				EXPECT_TRUE(store.PublicIDMinValidated());
+			}
 		}
 	}
 }

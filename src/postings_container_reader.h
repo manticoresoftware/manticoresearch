@@ -289,20 +289,24 @@ public:
 					if ( count != card )
 						return fail ( "container cardinality" );
 					uint32_t at = ordinal;
-					std::array<uint64_t, 64> mask {};
-					if ( codec != 1 )
-						Mask ( block, mask );
-					for ( uint32_t w = 0; w < 64; ++w ) {
-						uint64_t bits = 0;
-						if ( codec == 1 )
-							bits = U64 ( q + w * 8 );
-						else {
-							bits = mask[w];
+					// Cardinality and ordering are validated above before any row writes.
+					if ( codec == 0 ) {
+						for ( uint32_t i = 0; i < card; ++i )
+							termRows[at++] = id * 4096 + U16 ( q + i * 2 );
+					} else if ( codec == 2 ) {
+						for ( uint32_t i = 0; i < bytes; i += 4 ) {
+							const uint32_t lo = U16 ( q + i ), hi = U16 ( q + i + 2 );
+							for ( uint32_t row = lo; row <= hi; ++row )
+								termRows[at++] = id * 4096 + row;
 						}
-						while ( bits ) {
-							uint32_t bit = uint32_t ( __builtin_ctzll ( bits ) );
-							bits &= bits - 1;
-							termRows[at++] = id * 4096 + w * 64 + bit;
+					} else {
+						for ( uint32_t w = 0; w < 64; ++w ) {
+							uint64_t bits = U64 ( q + w * 8 );
+							while ( bits ) {
+								uint32_t bit = uint32_t ( __builtin_ctzll ( bits ) );
+								bits &= bits - 1;
+								termRows[at++] = id * 4096 + w * 64 + bit;
+							}
 						}
 					}
 					if ( at != ordinal + card )

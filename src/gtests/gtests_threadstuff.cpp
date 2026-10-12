@@ -745,3 +745,66 @@ TEST ( Dispatcher, ParseCouple )
 			CheckTwo(sTmp.cstr(),x.iConc,x.iBatch,y.iConc,y.iBatch);
 		}
 }
+
+TEST ( CoroTimedWait, TimeoutRemovesWaiter )
+{
+	Threads::CallCoroutine ( [] {
+		sph::Spinlock_c tSpinlock;
+		Threads::Coro::WaitQueue_c tQueue;
+		sph::Spinlock_lock tLock { tSpinlock };
+		EXPECT_FALSE ( tQueue.SuspendAndWaitForMS ( tLock, Threads::Coro::Worker(), 20 ) );
+		EXPECT_TRUE ( tQueue.Empty() );
+	} );
+}
+
+// Short timed waits race with notifications sent about once per timer period, so timer callbacks fire while
+// waiters are resumed. Every wait ends once, and no callback may touch a waiter that has already returned.
+TEST ( CoroTimedWait, NotificationsRaceTimeouts )
+{
+	constexpr int iWaiters = 8;
+	constexpr int iWaits = 2000;
+	sph::Spinlock_c tSpinlock;
+	Threads::Coro::WaitQueue_c tQueue;
+	std::atomic<bool> bStop { false };
+	std::atomic<int> iSignalled { 0 };
+	std::atomic<int> iTimedOut { 0 };
+
+	SphThread_t tNotifier;
+	ASSERT_TRUE ( Threads::Create ( &tNotifier, [&] {
+		while ( !bStop.load ( std::memory_order_relaxed ) )
+		{
+			{
+				sph::Spinlock_lock tLock { tSpinlock };
+				tQueue.NotifyAll();
+			}
+			sphSleepMsec ( 1 );
+		}
+	} ) );
+
+	CSphFixedVector<SphThread_t> dWaiters ( iWaiters );
+	for ( auto & tThread : dWaiters )
+		ASSERT_TRUE ( Threads::Create ( &tThread, [&] {
+			Threads::CallCoroutine ( [&] {
+				for ( int i=0; i<iWaits; ++i )
+				{
+					sph::Spinlock_lock tLock { tSpinlock };
+					if ( tQueue.SuspendAndWaitForMS ( tLock, Threads::Coro::Worker(), 2 ) ) // fires ~1 ms after arming (timer granularity)
+						++iSignalled;
+					else
+						++iTimedOut;
+				}
+			} );
+		} ) );
+
+	for ( auto & tThread : dWaiters )
+		Threads::Join ( &tThread );
+	bStop = true;
+	Threads::Join ( &tNotifier );
+
+	RecordProperty ( "signalled", iSignalled.load() );
+	RecordProperty ( "timed_out", iTimedOut.load() );
+	EXPECT_EQ ( iSignalled+iTimedOut, iWaiters*iWaits );
+	EXPECT_GT ( iSignalled.load(), 0 ); // both outcomes must occur, otherwise nothing raced
+	EXPECT_GT ( iTimedOut.load(), 0 );
+	EXPECT_TRUE ( tQueue.Empty() );
+}

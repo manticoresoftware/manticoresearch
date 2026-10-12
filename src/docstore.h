@@ -128,7 +128,7 @@ void				ClearDocstoreCache();
 
 class DebugCheckError_i;
 class CSphAutoreader;
-bool				CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_i & tReporter, int64_t iRowsCount );
+bool				CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_i & tReporter, int64_t iRowsCount, CSphVector<std::pair<RowID_t,RowID_t>> * pBadRows = nullptr );
 
 #endif
 

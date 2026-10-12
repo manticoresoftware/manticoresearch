@@ -288,6 +288,107 @@ TEST_F ( PostingsContainerTest, V10PublicIDBindingIsDeepValidated )
 	EXPECT_NE ( sError.find("checksums"), std::string::npos );
 }
 
+TEST_F ( PostingsContainerTest, PublicIDBatchValidationModesAndCodecs )
+{
+	// Rare run, absolute, packed-gap and bitmap; frequent mixed containers.
+	for ( int codec : { 1, 2, 3, 4, 5 } )
+	for ( uint32_t count : { 63u, 64u, 65u, 127u, 128u, 129u } )
+	{
+		if ( codec==4 && count!=63 ) continue;
+		if ( codec==5 && count!=63 ) continue;
+		SCOPED_TRACE ( ::testing::Message() << "codec=" << codec << " count=" << count );
+		std::vector<uint32_t> rows;
+		if ( codec==5 )
+		{
+			for ( uint32_t i=0; i<63; ++i ) rows.push_back(i*2);
+			for ( uint32_t i=0; i<65; ++i ) rows.push_back(4096+i);
+			for ( uint32_t b=2; b<4; ++b )
+				for ( uint32_t i=0; i<1984; ++i ) rows.push_back(b*4096+i*2);
+		} else if ( codec==4 ) {
+			for ( uint32_t i=0; i<32; ++i ) rows.push_back(i*32);
+			rows.push_back(1023); // 128 bitmap bytes, same size as absolute payload
+		} else {
+			for ( uint32_t i=0; i<count; ++i ) rows.push_back(i*(codec==1 ? 1 : 2));
+		}
+		const uint32_t total = rows.back()+1;
+		std::vector<uint64_t> ids(total,UINT64_MAX);
+		std::vector<e1::Posting> postings;
+		for ( uint32_t i=0; i<rows.size(); ++i ) {
+			ids[rows[i]] = i==0 ? UINT64_MAX : 100000-i/2; // descending, duplicates, unsigned max
+			if ( i>64 && i+1==rows.size() ) ids[rows[i]]=0;
+			postings.push_back({rows[i],1,1,0,0,ids[rows[i]]});
+		}
+		WriteContainer(postings);
+		auto raw=ReadFile(m_sBase+".spd"), dict=ReadFile(m_sBase+".spi"), hits=ReadFile(m_sBase+".spp");
+		if ( codec==3 ) {
+			const auto nb=e1::U32(raw.data()+56+4);
+			for ( uint32_t b=0; b<nb; ++b ) {
+				const auto desc=56+24+b*24;
+				const auto n=e1::U32(raw.data()+desc+8);
+				if ( n==1 ) continue;
+				PutValue(raw,desc+12,3u|(32u<<16),4);
+				const auto po=e1::U64(raw.data()+desc+16);
+				for ( uint32_t i=1; i<n; ++i ) PutValue(raw,po+(i-1)*4,2,4);
+			}
+			UpdateChecksum(raw);
+		} else if ( codec==4 ) {
+			const auto po=e1::U64(raw.data()+56+24+16);
+			PutValue(raw,56+24+12,4,4);
+			std::fill_n(raw.data()+po,128,0);
+			for ( auto r : rows ) raw[po+r/8] |= uint8_t(1u<<(r%8));
+			UpdateChecksum(raw);
+		} else if ( codec==5 ) {
+			EXPECT_EQ(e1::U16(raw.data()+56+24+10),0u);
+			EXPECT_EQ(e1::U16(raw.data()+56+48+10),2u);
+			EXPECT_EQ(e1::U16(raw.data()+56+72+10),1u);
+		}
+		const auto nm=e1::U32(raw.data()+56+8);
+		const auto last=raw.data()+e1::U64(raw.data()+56+16)+(nm-1)*16;
+		const auto minima=e1::U64(last)+e1::Meta4Bytes(e1::U32(last+8),e1::U32(last+12))+(rows.size()+63)/64;
+		VectorPublicIDReader_c binding(ids);
+		std::vector<uint64_t> shortIDs(ids.begin(),ids.end()-1), wrongIDs(ids);
+		wrongIDs[rows[0]]=0;
+		VectorPublicIDReader_c shortBinding(shortIDs), wrongBinding(wrongIDs);
+		class Failing final : public e1::PublicIDReader_i {
+		public:
+			const std::vector<uint64_t>& ids; uint32_t fail;
+			Failing(const std::vector<uint64_t>& v,uint32_t f):ids(v),fail(f){}
+			uint32_t Rows()const override{return uint32_t(ids.size());}
+			bool Get(uint32_t r,uint64_t& v)const override {if(r>=ids.size()||r==fail)return false;v=ids[r];return true;}
+		} failing(ids,rows.back());
+		for ( auto mode : { e1::OpenValidationMode_e::DEEP, e1::OpenValidationMode_e::FAST_CRC } )
+		{
+			e1::Store store;std::string error;
+			auto open=[&](const ByteVec_t& bytes,const e1::PublicIDReader_i* p){return store.Open(bytes.data(),bytes.size(),total,dict.data(),dict.size(),hits.data(),hits.size(),error,nullptr,nullptr,p,nullptr,mode);};
+			ASSERT_TRUE(open(raw,&binding))<<error;
+			ASSERT_TRUE(store.PublicIDMinValidated());
+			e1::Cursor cursor;cursor.Bind(store,1);
+			for(uint32_t first=0;first<rows.size();first+=64){
+				uint64_t expected=UINT64_MAX,actual;
+				for(uint32_t i=first;i<std::min(uint32_t(rows.size()),first+64);++i)expected=std::min(expected,ids[rows[i]]);
+				ASSERT_TRUE(cursor.PublicIdMinBound(first/64,actual));EXPECT_EQ(actual,expected);
+			}
+			ASSERT_FALSE(open(raw,&wrongBinding));EXPECT_NE(error.find("unsafe public ID minimum"),std::string::npos);EXPECT_FALSE(store.PublicIDMinValidated());
+			ASSERT_TRUE(open(raw,&binding));ASSERT_TRUE(open(raw,nullptr));EXPECT_FALSE(store.PublicIDMinValidated());
+			ASSERT_TRUE(open(raw,&binding));ASSERT_TRUE(open(raw,&shortBinding));EXPECT_FALSE(store.PublicIDMinValidated());
+			ASSERT_TRUE(open(raw,&binding));ASSERT_FALSE(open(raw,&failing));EXPECT_NE(error.find("authoritative public ID lookup"),std::string::npos);EXPECT_FALSE(store.PublicIDMinValidated());
+			auto inflated=raw;PutValue(inflated,minima,e1::U64(raw.data()+minima)+1,8);UpdateChecksum(inflated);
+			ASSERT_FALSE(open(inflated,&binding));EXPECT_NE(error.find("unsafe public ID minimum"),std::string::npos);
+			auto conservative=raw;PutValue(conservative,minima,0,8);UpdateChecksum(conservative);
+			ASSERT_TRUE(open(conservative,&binding))<<error;EXPECT_TRUE(store.PublicIDMinValidated());
+		}
+	}
+}
+
+TEST ( PostingsContainer, PublicIDMinimumFallbackChecksAfterZero )
+{
+	std::vector<uint64_t> ids { 0, UINT64_MAX, UINT64_MAX };
+	VectorPublicIDReader_c binding(ids);
+	uint32_t bad[] { 0, 3 }, good[] { 1, 2 };uint64_t value;
+	EXPECT_FALSE(binding.Minimum(bad,2,value));
+	ASSERT_TRUE(binding.Minimum(good,2,value));EXPECT_EQ(value,UINT64_MAX);
+}
+
 TEST_F ( PostingsContainerTest, StreamedDirectoryUsesImplicitContiguousKeys )
 {
 	{ std::ofstream(m_sBase+".spi",std::ios::binary).write("dict",4); }

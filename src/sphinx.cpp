@@ -11225,6 +11225,28 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 				uValue = uint64_t ( sphGetRowAttr ( m_pAttrs+int64_t(uRow)*m_iStride, m_tLocator ) );
 				return true;
 			}
+			bool Minimum ( const uint32_t* pRows, uint32_t uCount, uint64_t& uValue ) const override
+			{
+				if ( m_tLocator.m_iBitCount!=2*ROWITEM_BITS )
+					return PublicIDReader_i::Minimum ( pRows, uCount, uValue );
+				const auto* pBase = m_pAttrs + ( m_tLocator.m_iBitOffset >> ROWITEM_SHIFT );
+				const int iStride = m_iStride;
+				const uint32_t uRows = m_uRows;
+				uValue = UINT64_MAX;
+				for ( uint32_t i = 0; i < uCount; ++i )
+				{
+					if ( pRows[i]>=uRows ) return false;
+					const auto* pRow = pBase + int64_t(pRows[i])*iStride;
+					uint64_t uID;
+#if USE_LITTLE_ENDIAN
+					memcpy ( &uID, pRow, sizeof(uID) );
+#else
+					uID = uint64_t(pRow[0]) + ( uint64_t(pRow[1]) << ROWITEM_BITS );
+#endif
+					uValue = std::min ( uValue, uID );
+				}
+				return true;
+			}
 		private:
 			const CSphRowitem * m_pAttrs;
 			int m_iStride;

@@ -26,13 +26,25 @@ enum class OpenValidationMode_e
 	DEEP
 };
 // Equality pruning is fail-closed. Public-ID minima become visible to cursors
-// only after deep open checks this authoritative rowwise accessor.
+// only after open checks this authoritative rowwise accessor.
 class PublicIDReader_i
 {
 public:
 	virtual ~PublicIDReader_i() = default;
 	virtual uint32_t Rows() const = 0;
 	virtual bool Get ( uint32_t row, uint64_t& value ) const = 0;
+	// Check every lookup, including those after a zero minimum.
+	virtual bool Minimum ( const uint32_t* rows, uint32_t count, uint64_t& value ) const
+	{
+		value = UINT64_MAX;
+		for ( uint32_t i = 0; i < count; ++i ) {
+			uint64_t id;
+			if ( !Get ( rows[i], id ) )
+				return false;
+			value = std::min ( value, id );
+		}
+		return true;
+	}
 };
 inline uint16_t U16 ( const uint8_t* p )
 {
@@ -405,13 +417,9 @@ public:
 				if ( validatePublicIDs ) {
 					for ( size_t block = 0; block < expected.size(); ++block ) {
 						const uint32_t first = uint32_t ( block * 64 ), count = std::min ( 64u, df - first );
-						uint64_t actual = UINT64_MAX;
-						for ( uint32_t i = 0; i < count; ++i ) {
-							uint64_t id = 0;
-							if ( !pPublicIDs->Get ( termRows[first + i], id ) )
-								return fail ( "authoritative public ID lookup" );
-							actual = std::min ( actual, id );
-						}
+						uint64_t actual;
+						if ( !pPublicIDs->Minimum ( termRows.data() + first, count, actual ) )
+							return fail ( "authoritative public ID lookup" );
 						if ( U64 ( p + end + block * 8 ) > actual )
 							return fail ( "unsafe public ID minimum" );
 					}

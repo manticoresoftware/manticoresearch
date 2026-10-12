@@ -791,7 +791,7 @@ protected:
 private:
 	bool			m_bActive = false;			///< the query has a KNN clause with chunk provenance for this field
 	int				m_iChunkField = -1;			///< the (single) full-text field the vectors were generated from
-	CSphString		m_sSpansDocstoreName;		///< docstore entry holding the row's chunk byte ranges
+	CSphString		m_sSpansDocstoreName;		///< the vector attribute whose DOCSTORE_KNN_CHUNK_SPANS entry holds the row's chunk byte ranges
 	int				m_iSpansFetchIdx = -1;		///< position of that entry among the fetched fields, -1 when the docstore lacks it
 	CSphAttrLocator	m_tSlotLoc;
 
@@ -863,7 +863,7 @@ bool Expr_KNNChunkHighlight_c::Setup ( const ISphSchema * pRsetSchema, bool bExp
 		return false;
 	}
 
-	m_sSpansDocstoreName = GetKnnChunkSpansDocstoreName ( pVector->m_sName );
+	m_sSpansDocstoreName = pVector->m_sName;
 	m_tSlotLoc = pSlot->m_tLocator;
 	m_bActive = true;
 	return true;
@@ -906,7 +906,7 @@ bool Expr_KNNChunkHighlight_c::MarkRequestedFields ( CSphString & sError )
 
 	// chunks created before the table got chunk provenance have no spans entry; they highlight the whole field
 	assert ( m_tSession.m_pDocstore );
-	int iSpansField = m_tSession.m_pDocstore->GetFieldId ( m_sSpansDocstoreName, DOCSTORE_ATTR );
+	int iSpansField = m_tSession.m_pDocstore->GetFieldId ( m_sSpansDocstoreName, DOCSTORE_KNN_CHUNK_SPANS );
 	if ( iSpansField==-1 )
 		return bResult;
 

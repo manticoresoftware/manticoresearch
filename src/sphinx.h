@@ -1272,17 +1272,17 @@ struct UpdateContext_t
 
 class DocstoreAddField_i;
 // the docstore layout of a table is a pure function of its schema: stored fields, then stored attributes,
-// then one hidden entry per vector attribute that keeps the source spans of its auto-generated chunks
+// then one DOCSTORE_KNN_CHUNK_SPANS entry per vector attribute whose chunks are generated from text.
+// Chunks written before that last group existed (RAM chunks of meta version<25) use bWithChunkSpans=false
 struct DocstoreFieldDesc_t
 {
 	CSphString			m_sName;
 	DocstoreDataType_e	m_eType;
 };
 
-CSphString	GetKnnChunkSpansDocstoreName ( const CSphString & sVectorAttr );
-void		CollectDocstoreFields ( const CSphSchema & tSchema, CSphVector<DocstoreFieldDesc_t> & dFields );
+void		CollectDocstoreFields ( const CSphSchema & tSchema, CSphVector<DocstoreFieldDesc_t> & dFields, bool bWithChunkSpans = true );
 int			GetNumKnnChunkSpansDocstoreFields ( const CSphSchema & tSchema );
-void		SetupDocstoreFields ( DocstoreAddField_i & tFields, const CSphSchema & tSchema );
+void		SetupDocstoreFields ( DocstoreAddField_i & tFields, const CSphSchema & tSchema, bool bWithChunkSpans = true );
 bool CheckStoredFields ( const CSphSchema & tSchema, const CSphIndexSettings & tSettings, CSphString & sError );
 
 class DiskIndexQwordTraits_c;

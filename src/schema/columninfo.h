@@ -50,8 +50,7 @@ struct CSphColumnInfo
 		ATTR_INDEXED_KNN		= 1 << 3,
 		ATTR_JOINED				= 1 << 4,
 		ATTR_INDEXED_SI			= 1 << 5,
-		ATTR_UUID_LINK			= 1 << 6,
-		ATTR_KNN_CHUNK_SPANS	= 1 << 7	///< docstore keeps the source byte span of every auto-generated chunk vector
+		ATTR_UUID_LINK			= 1 << 6
 	};
 
 	CSphString		m_sName;							///< column name
@@ -106,7 +105,7 @@ struct CSphColumnInfo
 	bool IsIndexedSI() const;
 	bool IsStored() const;
 	bool IsUuidLinkedDocid() const;
-	bool HasKnnChunkSpans() const;
+	bool HasKnnChunkSpans() const;	///< the docstore keeps the source byte span of every auto-generated chunk vector of this attribute
 };
 
 

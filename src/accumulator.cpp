@@ -471,7 +471,7 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 		// chunk spans live in the docstore; a table without one has no stored source text to point into anyway
 		if ( tAttr.HasKnnChunkSpans() && m_pDocstore )
 		{
-			dSpansRemap[i] = ((DocstoreBuilder_i*)m_pDocstore.get())->GetFieldId ( GetKnnChunkSpansDocstoreName ( tAttr.m_sName ), DOCSTORE_ATTR );
+			dSpansRemap[i] = ((DocstoreBuilder_i*)m_pDocstore.get())->GetFieldId ( tAttr.m_sName, DOCSTORE_KNN_CHUNK_SPANS );
 			bRebuildDocstore |= dSpansRemap[i]!=-1;
 		}
 	}

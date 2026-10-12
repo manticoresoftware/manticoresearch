@@ -5675,15 +5675,7 @@ bool CSphIndex_VLN::Build_SetupInplace ( SphOffset_t & iHitsGap, int iHitsMax, i
 }
 
 
-CSphString GetKnnChunkSpansDocstoreName ( const CSphString & sVectorAttr )
-{
-	CSphString sName;
-	sName.SetSprintf ( "@knn_chunk_spans_%s", sVectorAttr.cstr() );
-	return sName;
-}
-
-
-void CollectDocstoreFields ( const CSphSchema & tSchema, CSphVector<DocstoreFieldDesc_t> & dFields )
+void CollectDocstoreFields ( const CSphSchema & tSchema, CSphVector<DocstoreFieldDesc_t> & dFields, bool bWithChunkSpans )
 {
 	dFields.Resize(0);
 	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
@@ -5696,10 +5688,10 @@ void CollectDocstoreFields ( const CSphSchema & tSchema, CSphVector<DocstoreFiel
 
 	// chunk spans ride along in the docstore only when the table has one anyway (that is also the only case
 	// in which the source text can be highlighted); they never create a docstore on their own
-	if ( dFields.GetLength() )
+	if ( bWithChunkSpans && dFields.GetLength() )
 		for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 			if ( tSchema.GetAttr(i).HasKnnChunkSpans() )
-				dFields.Add ( { GetKnnChunkSpansDocstoreName ( tSchema.GetAttr(i).m_sName ), DOCSTORE_ATTR } );
+				dFields.Add ( { tSchema.GetAttr(i).m_sName, DOCSTORE_KNN_CHUNK_SPANS } );
 }
 
 
@@ -5726,10 +5718,10 @@ void AddEmptyKnnChunkSpansToDoc ( DocstoreBuilder_i::Doc_t & tDoc, const CSphSch
 }
 
 
-void SetupDocstoreFields ( DocstoreAddField_i & tFields, const CSphSchema & tSchema )
+void SetupDocstoreFields ( DocstoreAddField_i & tFields, const CSphSchema & tSchema, bool bWithChunkSpans )
 {
 	CSphVector<DocstoreFieldDesc_t> dFields;
-	CollectDocstoreFields ( tSchema, dFields );
+	CollectDocstoreFields ( tSchema, dFields, bWithChunkSpans );
 	for ( const auto & i : dFields )
 		tFields.AddField ( i.m_sName, i.m_eType );
 

@@ -98,7 +98,7 @@ bool CSphColumnInfo::IsUuidLinkedDocid() const
 
 bool CSphColumnInfo::HasKnnChunkSpans() const
 {
-	return !!(m_uAttrFlags & CSphColumnInfo::ATTR_KNN_CHUNK_SPANS);
+	return m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY && !m_tKNNModel.m_sModelName.empty() && knn::IsMultiVectorStrategy ( m_tKNNChunk.m_eStrategy );
 }
 
 

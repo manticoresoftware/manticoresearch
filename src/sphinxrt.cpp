@@ -1762,7 +1762,7 @@ private:
 	// v22: keywords_v2 dictionary layout versioning.
 	// v23: UUID primary ID linked-schema semantics.
 	// v24: float_vector_array attribute type
-	static constexpr DWORD		META_VERSION		= 24; // next should be 25
+	static constexpr DWORD		META_VERSION		= 25; // next should be 26
 	// Since v20, RT meta is JSON. indextool.cpp's separate v18 constant only handles legacy binary meta.
 
 	int							m_iStride;
@@ -6393,11 +6393,21 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup
 
 		if ( uVersion>=15 && ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() ) )
 		{
+			// the RAM docstore layout is not stored in the file; v25 appended the chunk spans entries to it,
+			// so an older chunk is read with the layout it was written with and then migrated
+			const bool bLegacyLayout = uVersion<25;
 			pSeg->m_pDocstore = CreateDocstoreRT();
-			SetupDocstoreFields ( *pSeg->m_pDocstore, m_tSchema );
+			SetupDocstoreFields ( *pSeg->m_pDocstore, m_tSchema, !bLegacyLayout );
 			assert ( pSeg->m_pDocstore );
 			if ( !pSeg->m_pDocstore->Load ( rdChunk ) )
 				return false;
+
+			if ( bLegacyLayout && GetNumKnnChunkSpansDocstoreFields(m_tSchema) )
+			{
+				auto pMigrated = CreateDocstoreRT();
+				Alter_AddRemoveFromDocstore ( *pMigrated, pSeg->m_pDocstore.get(), pSeg->m_uRows, m_tSchema );
+				pSeg->m_pDocstore = std::move(pMigrated);
+			}
 		}
 
 		if ( uVersion>=19 && rdChunk.GetByte() )

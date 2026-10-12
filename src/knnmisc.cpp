@@ -542,6 +542,32 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 		iBatchCount = 0;
 	};
 
+	// vectors of an on-disk chunk are mostly cold: submit their reads up front so the disk serves them in parallel,
+	// instead of one page fault at a time in the loop below. The range covers the blob row header plus one vector,
+	// which is exact when the vector is the row's first blob attribute and a lower bound otherwise.
+	if ( KNNRescorePrefetch() && !m_tAttr.m_tLocator.m_bDynamic )
+	{
+		const int iRowBytes = 1 + m_tAttr.m_tLocator.m_nBlobAttrs*(int)sizeof(DWORD) + iVecBytes;
+		CSphVector<const void*> dRows;
+		dRows.Reserve(iCount);
+		int iTag = 0;
+		const BYTE * pPool = nullptr;
+		for ( int i = 0; i < iCount; i++ )
+		{
+			const CSphMatch * pMatch = dMatches[i];
+			if ( !i || pMatch->m_iTag!=iTag )
+			{
+				iTag = pMatch->m_iTag;
+				pPool = fnBlobPool(pMatch);
+			}
+
+			if ( pPool && pMatch->m_pStatic )
+				dRows.Add ( sphGetBlobRow ( *pMatch, m_tAttr.m_tLocator, pPool ) );
+		}
+
+		PrefetchVectors ( dRows, (size_t)iRowBytes );
+	}
+
 	int iCurTag = 0;
 	bool bPoolInitialized = false;
 	const BYTE * pBlobPool = nullptr;

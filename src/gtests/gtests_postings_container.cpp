@@ -262,6 +262,24 @@ TEST_F ( PostingsContainerTest, V10PublicIDBindingIsDeepValidated )
 	EXPECT_EQ ( ePath, e1::OpenValidationPath_e::DEEP );
 	EXPECT_NE ( sError.find("unsafe public ID minimum"), std::string::npos );
 
+	e1::Store tFastStore;
+	ASSERT_FALSE ( tFastStore.Open(dRaw.data(),dRaw.size(),uint32_t(dWrongIDs.size()),dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,nullptr,nullptr,&tWrongIDs,&ePath,e1::OpenValidationMode_e::FAST_CRC) );
+	EXPECT_NE ( sError.find("unsafe public ID minimum"), std::string::npos );
+	EXPECT_EQ ( ePath, e1::OpenValidationPath_e::FAST_CRC );
+	EXPECT_FALSE ( tFastStore.PublicIDMinValidated() );
+	ASSERT_TRUE ( tFastStore.Open(dRaw.data(),dRaw.size(),uint32_t(dPublicIDs.size()),dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,nullptr,nullptr,&tPublicIDs,&ePath,e1::OpenValidationMode_e::FAST_CRC) ) << sError;
+	EXPECT_TRUE ( tFastStore.PublicIDMinValidated() );
+	EXPECT_EQ ( ePath, e1::OpenValidationPath_e::FAST_CRC );
+	for ( auto component : { 0, 1, 2 } )
+	{
+		auto primary=dRaw, dict=dDict, hits=dHits;
+		auto & bytes = component==0 ? primary : component==1 ? dict : hits;
+		bytes.back() ^= 1;
+		EXPECT_FALSE ( tFastStore.Open(primary.data(),primary.size(),uint32_t(dPublicIDs.size()),dict.data(),dict.size(),hits.data(),hits.size(),sError,nullptr,nullptr,&tPublicIDs,&ePath,e1::OpenValidationMode_e::FAST_CRC) );
+		EXPECT_FALSE ( tFastStore.PublicIDMinValidated() );
+		EXPECT_NE ( sError.find("checksums"), std::string::npos );
+	}
+
 	auto dCorrupt = dRaw;
 	dCorrupt.back() ^= 1;
 	e1::Store tCorruptStore;
@@ -437,6 +455,50 @@ TEST_F ( PostingsContainerTest, CurrentWriterPersistsExactSafeRatioBoundsByOrdin
 	e1::Store tRejected;
 	EXPECT_FALSE ( tRejected.Open(dUnderestimate.data(),dUnderestimate.size(),130,dDict.data(),dDict.size(),dHits.data(),dHits.size(),sError,nullptr,&tNormStore) );
 	EXPECT_NE ( sError.find("unsafe BM25A ratio bound"), std::string::npos );
+}
+
+TEST_F ( PostingsContainerTest, BlockRatioMaximumMatchesScalarAtLimits )
+{
+	constexpr uint32_t LIMIT = 1u<<24;
+	const uint32_t values[] = { 1, 2, 89, 768, 11554, LIMIT-1, LIMIT, LIMIT+1, UINT32_MAX };
+	{ std::ofstream(m_sBase+".spi",std::ios::binary).write("dict",4); }
+	{ std::ofstream(m_sBase+".spp",std::ios::binary).put('\1'); }
+	for ( int mode=0; mode<3; ++mode )
+	{
+		std::vector<e1::Posting> postings;
+		std::vector<uint32_t> lengths;
+		std::vector<uint8_t> expected;
+		uint64_t hits = 0;
+		for ( uint32_t block=0; block<81; ++block )
+		{
+			uint8_t maximum = 0;
+			for ( uint32_t j=0; j<64; ++j )
+			{
+				const uint32_t tf = values[block/9];
+				const uint32_t dl = j==0 ? 0 : values[block%9];
+				const uint32_t row = uint32_t(lengths.size());
+				postings.push_back ( { row, tf, 1, 0 } );
+				lengths.push_back(dl);
+				hits += tf;
+				maximum = std::max(maximum,E1EncodeBM25A12_075_256(tf,dl,mode==0));
+			}
+			expected.push_back(maximum);
+		}
+		std::string error;
+		e1::Writer writer;
+		ASSERT_TRUE(writer.Open(m_sBase+".spd",error)) << error;
+		writer.BindTotalDL(mode==2 ? nullptr : lengths.data(),uint32_t(lengths.size()),mode!=1);
+		ASSERT_TRUE(writer.FinishTerm(1,postings,hits,false,error)) << error;
+		ASSERT_TRUE(writer.Finalize(m_sBase+".spi",m_sBase+".spp",error)) << error;
+		const auto raw = ReadFile(m_sBase+".spd");
+		const auto *term = raw.data()+56;
+		const uint32_t blocks = e1::U32(term+8);
+		const auto *last = raw.data()+e1::U64(term+16)+uint64_t(blocks-1)*16;
+		const size_t offset = e1::U64(last)+e1::Meta4Bytes(e1::U32(last+8),e1::U32(last+12));
+		ASSERT_LE(offset+expected.size(),raw.size());
+		for ( size_t b=0; b<expected.size(); ++b )
+			EXPECT_EQ(raw[offset+b],expected[b]) << "mode=" << mode << " block=" << b;
+	}
 }
 
 TEST_F ( PostingsContainerTest, CurrentPersistsConservativePublicIdMinimumPerOrdinalBlock )

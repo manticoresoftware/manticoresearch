@@ -11238,8 +11238,9 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 			pPublicIDs = std::make_unique<RowwisePublicIDReader_c> ( GetRawAttrs(), m_tSchema.GetRowSize(), pE1Docid->m_tLocator, uint32_t(m_iDocinfo) );
 		e1::OpenTimings_t tPostingsTimings;
 		e1::OpenValidationPath_e eValidationPath = e1::OpenValidationPath_e::NONE;
+		const e1::OpenValidationMode_e eValidationMode = m_bDebugCheck ? e1::OpenValidationMode_e::DEEP : e1::OpenValidationMode_e::FAST_CRC;
 		if ( !m_tE1Store.Open(m_tE1Data.GetReadPtr(),m_tE1Data.GetLengthBytes(),m_iDocinfo,
-			dict.GetReadPtr(),dict.GetLengthBytes(),hits.GetReadPtr(),hits.GetLengthBytes(),error,bE1FlushTrace ? &tPostingsTimings : nullptr,m_uE1Version==e1::VERSION ? &m_tNormStore : nullptr,pPublicIDs.get(),&eValidationPath) )
+			dict.GetReadPtr(),dict.GetLengthBytes(),hits.GetReadPtr(),hits.GetLengthBytes(),error,bE1FlushTrace ? &tPostingsTimings : nullptr,m_uE1Version==e1::VERSION ? &m_tNormStore : nullptr,pPublicIDs.get(),&eValidationPath,eValidationMode) )
 		{ m_sLastError = error.c_str(); return false; }
 		const bool bDeepValidation = eValidationPath==e1::OpenValidationPath_e::DEEP;
 		if ( bE1StartupTrace )

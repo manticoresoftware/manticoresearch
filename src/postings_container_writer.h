@@ -93,6 +93,9 @@ public:
 			return false;
 		m_uFilePos = sizeof(dHeader);
 		m_uPayloadCRCState = ~0u;
+		m_bTrace = getenv ( "MANTICORE_E1_FLUSH_TRACE" );
+		m_uTraceScan = m_uTraceProjections = m_uTraceRows = m_uTraceMetadata = m_uTraceTail = 0;
+		m_uTraceWait = m_uTraceAppend = 0;
 		StartWorker();
 		return true;
 	}
@@ -130,8 +133,11 @@ public:
 
 	bool Finalize ( const std::string & sDict, const std::string & sHits, std::string & sError )
 	{
+		const uint64_t tmFinalize = m_bTrace ? MonoMicroTimer() : 0;
 		if ( !WaitPending ( sError ) )
 			return false;
+		const uint64_t tmFinalizeWait = m_bTrace ? MonoMicroTimer()-tmFinalize : 0;
+		uint64_t tmStage = m_bTrace ? MonoMicroTimer() : 0;
 		if ( !m_tOut )
 		{
 			sError = "E1 writer is not open";
@@ -148,6 +154,8 @@ public:
 		m_tOut.flush();
 		if ( !Check ( sError, "flush payload/directory" ) )
 			return false;
+		const uint64_t tmDirectory = m_bTrace ? MonoMicroTimer()-tmStage : 0;
+		tmStage = m_bTrace ? MonoMicroTimer() : 0;
 
 		const uint32_t uPayloadCRC = ~m_uPayloadCRCState;
 		uint32_t uDictCRC = 0, uHitsCRC = 0;
@@ -156,9 +164,13 @@ public:
 		if ( !SyncFile ( sDict, sError ) || !SyncFile ( sHits, sError ) )
 			return false;
 		FaultPoint ( "after_components_fsync" );
+		const uint64_t tmComponentSync = m_bTrace ? MonoMicroTimer()-tmStage : 0;
+		tmStage = m_bTrace ? MonoMicroTimer() : 0;
 		if ( !FileCRC ( sDict, 0, UINT64_MAX, uDictCRC, sError ) ||
 			 !FileCRC ( sHits, 0, UINT64_MAX, uHitsCRC, sError ) )
 			return false;
+		const uint64_t tmComponentCRC = m_bTrace ? MonoMicroTimer()-tmStage : 0;
+		tmStage = m_bTrace ? MonoMicroTimer() : 0;
 
 
 		m_tOut.seekp ( 0 );
@@ -180,6 +192,18 @@ public:
 		if ( !SyncFile ( m_sFilename, sError ) )
 			return false;
 		FaultPoint ( "after_primary_fsync" );
+		if ( m_bTrace )
+		{
+			fprintf ( stderr, "E1_FLUSH_TRACE event=writer_profile scan_us=%llu projections_us=%llu rows_us=%llu metadata_us=%llu tail_us=%llu terms=%llu payload_bytes=%llu\n",
+				(unsigned long long)m_uTraceScan, (unsigned long long)m_uTraceProjections, (unsigned long long)m_uTraceRows,
+				(unsigned long long)m_uTraceMetadata, (unsigned long long)m_uTraceTail,
+				(unsigned long long)m_dEntries.size(), (unsigned long long)uDirectory );
+			fprintf ( stderr, "E1_FLUSH_TRACE event=writer_pipeline wait_us=%llu append_us=%llu finalize_wait_us=%llu directory_us=%llu component_sync_us=%llu component_crc_us=%llu header_sync_us=%llu finalize_total_us=%llu\n",
+				(unsigned long long)m_uTraceWait, (unsigned long long)m_uTraceAppend,
+				(unsigned long long)tmFinalizeWait, (unsigned long long)tmDirectory,
+				(unsigned long long)tmComponentSync, (unsigned long long)tmComponentCRC,
+				(unsigned long long)(MonoMicroTimer()-tmStage), (unsigned long long)(MonoMicroTimer()-tmFinalize) );
+		}
 		return true;
 	}
 
@@ -233,8 +257,11 @@ private:
 				m_pTermBuffer = nullptr;
 				if ( bOk )
 				{
+					const uint64_t tmAppend = m_bTrace ? MonoMicroTimer() : 0;
 					PutRaw ( m_dTermBuffer.data(), m_dTermBuffer.size() );
 					bOk = Check ( sError, "append term" );
+					if ( m_bTrace )
+						m_uTraceAppend += MonoMicroTimer()-tmAppend;
 				}
 			} catch ( const std::exception & tException )
 			{
@@ -263,7 +290,10 @@ private:
 		std::unique_lock<std::mutex> tLock ( m_tWorkerMutex );
 		if ( !m_bWorkerPending )
 			return true;
+		const uint64_t tmWait = m_bTrace ? MonoMicroTimer() : 0;
 		m_tWorkerCV.wait ( tLock, [this] { return m_bWorkerDone; } );
+		if ( m_bTrace )
+			m_uTraceWait += MonoMicroTimer()-tmWait;
 		m_dWorkerPostings.swap ( m_dSparePostings );
 		m_dSparePostings.clear();
 		m_bWorkerDone = false;
@@ -552,6 +582,7 @@ private:
 
 	bool EncodeTerm ( const Entry & tEntry, const std::vector<Posting> & dPostings, std::string & sError )
 	{
+		uint64_t tmStage = m_bTrace ? MonoMicroTimer() : 0;
 		const uint32_t uDocs = tEntry.m_uDocs;
 		const uint32_t uMetaBlocks = ( uDocs+127 ) / 128;
 		const bool bFrequent = uDocs>=4096;
@@ -562,30 +593,59 @@ private:
 			uRowBlocks = 0;
 		m_dRankBounds.assign ( (uDocs+63)/64, 0 );
 		m_dRankMinPublicIDs.assign ( (uDocs+63)/64, UINT64_MAX );
-		for ( uint32_t i=0; i<uDocs; ++i )
+		for ( uint32_t uBlock=0; uBlock<m_dRankBounds.size(); ++uBlock )
 		{
-			const Posting & tPosting = dPostings[i];
-			uMaxFirstFieldTF = std::max ( uMaxFirstFieldTF, tPosting.m_uFirstFieldTF );
-			const bool bKnownDL = m_bTotalDLAuthoritative && m_pTotalDL && tPosting.m_uRow<m_uTotalDLRows;
-			const uint32_t uDL = bKnownDL ? m_pTotalDL[tPosting.m_uRow] : 0;
-			m_dRankBounds[i/64] = std::max<uint8_t> ( m_dRankBounds[i/64], E1EncodeBM25A12_075_256(tPosting.m_uTF,uDL,bKnownDL) );
-			const uint64_t uPublicID = m_bPublicIDsAuthoritative
-				? ( m_pPublicIDs && tPosting.m_uRow<m_uPublicIDRows ? m_pPublicIDs[tPosting.m_uRow] : UINT64_MAX )
-				: tPosting.m_uPublicID;
-			m_dRankMinPublicIDs[i/64] = std::min ( m_dRankMinPublicIDs[i/64], uPublicID );
-			if ( bFrequent )
+			const uint32_t uBegin = uBlock*64;
+			const uint32_t uEnd = std::min ( uBegin+64, uDocs );
+			uint32_t uBestTF = 0, uBestDL = 0;
+			bool bBounded = m_bTotalDLAuthoritative && m_pTotalDL;
+			for ( uint32_t i=uBegin; i<uEnd; ++i )
 			{
-				const uint32_t uContainer = tPosting.m_uRow/4096;
-				if ( uContainer!=uPreviousContainer )
+				const Posting & tPosting = dPostings[i];
+				uMaxFirstFieldTF = std::max ( uMaxFirstFieldTF, tPosting.m_uFirstFieldTF );
+				if ( bBounded && tPosting.m_uRow<m_uTotalDLRows && tPosting.m_uTF<=(uint32_t(1)<<24) )
 				{
-					++uRowBlocks;
-					uPreviousContainer = uContainer;
+					const uint32_t uDL = m_pTotalDL[tPosting.m_uRow];
+					if ( uDL>(uint32_t(1)<<24) )
+						bBounded = false;
+					else if ( !uBestTF || uint64_t(tPosting.m_uTF)*(768+9ULL*uBestDL)>uint64_t(uBestTF)*(768+9ULL*uDL) )
+					{
+						uBestTF = tPosting.m_uTF;
+						uBestDL = uDL;
+					}
+				} else
+					bBounded = false;
+				const uint64_t uPublicID = m_bPublicIDsAuthoritative
+					? ( m_pPublicIDs && tPosting.m_uRow<m_uPublicIDRows ? m_pPublicIDs[tPosting.m_uRow] : UINT64_MAX )
+					: tPosting.m_uPublicID;
+				m_dRankMinPublicIDs[uBlock] = std::min ( m_dRankMinPublicIDs[uBlock], uPublicID );
+				if ( bFrequent )
+				{
+					const uint32_t uContainer = tPosting.m_uRow/4096;
+					if ( uContainer!=uPreviousContainer )
+					{
+						++uRowBlocks;
+						uPreviousContainer = uContainer;
+					}
 				}
 			}
+			// The 2560*TF terms cancel when comparing TF/(2560*TF+768+9*DL).
+			// Encode only the exact maximum instead of dividing once per posting.
+			m_dRankBounds[uBlock] = bBounded ? E1EncodeBM25A12_075_256(uBestTF,uBestDL) : 255;
+		}
+		if ( m_bTrace )
+		{
+			m_uTraceScan += MonoMicroTimer()-tmStage;
+			tmStage = MonoMicroTimer();
 		}
 		const unsigned uFirstFieldTFWidth = Width ( uMaxFirstFieldTF );
 		std::vector<FieldProjection_t> dFieldProjections;
 		BuildFieldProjections ( dPostings, dFieldProjections );
+		if ( m_bTrace )
+		{
+			m_uTraceProjections += MonoMicroTimer()-tmStage;
+			tmStage = MonoMicroTimer();
+		}
 
 		Put ( uDocs, 4 );
 		Put ( uRowBlocks, 4 );
@@ -676,6 +736,11 @@ private:
 			Seek ( uResume );
 			uAt += uCount;
 		}
+		if ( m_bTrace )
+		{
+			m_uTraceRows += MonoMicroTimer()-tmStage;
+			tmStage = MonoMicroTimer();
+		}
 
 		const uint64_t uMetadata = Tell();
 		const uint64_t uResumeAfterRows = Tell();
@@ -746,6 +811,11 @@ private:
 			Put ( uPayload, 8 ); Put ( uFlags, 4 ); Put ( uCount, 4 );
 			Seek ( uResume );
 		}
+		if ( m_bTrace )
+		{
+			m_uTraceMetadata += MonoMicroTimer()-tmStage;
+			tmStage = MonoMicroTimer();
+		}
 		// E1/9 primary ranked hints: v7 ratio byte plus a conservative exact
 		// minimum public ID per ordinal-64 block. UINT64_MAX disables tie pruning.
 		// 255 is an escape meaning "unbounded", never the literal upper bound.
@@ -764,6 +834,8 @@ private:
 				Seek(uDirectory+uint64_t(i)*24); Put(tProjection.m_uField,4); Put(tProjection.m_uCount,4); Put(tProjection.m_uBlocks,4); Put(64,4); Put(uPayload,8); Seek(uResume);
 			}
 		}
+		if ( m_bTrace )
+			m_uTraceTail += MonoMicroTimer()-tmStage;
 
 		return Check ( sError, "encode term" );
 	}
@@ -860,6 +932,9 @@ private:
 	uint64_t m_uTermPos = 0;
 	uint64_t m_uFilePos = 0;
 	uint32_t m_uPayloadCRCState = ~0u;
+	bool m_bTrace = false;
+	uint64_t m_uTraceScan = 0, m_uTraceProjections = 0, m_uTraceRows = 0, m_uTraceMetadata = 0, m_uTraceTail = 0;
+	uint64_t m_uTraceWait = 0, m_uTraceAppend = 0;
 	const uint32_t * m_pTotalDL = nullptr;
 	uint32_t m_uTotalDLRows = 0;
 	bool m_bTotalDLAuthoritative = false;

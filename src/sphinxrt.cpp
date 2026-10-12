@@ -234,10 +234,24 @@ volatile int &ParallelChunkMergesLimit() noexcept
 	return iParallelChunkMerges;
 }
 
-volatile int &MergeChunksPerJob() noexcept
+std::atomic<int> &MergeChunksPerJob() noexcept
 {
-	static int iMergeChunksPerJob = 2;
+	static std::atomic<int> iMergeChunksPerJob { 2 };
 	return iMergeChunksPerJob;
+}
+
+std::atomic<bool> &MergeChunksPerJobExplicit() noexcept
+{
+	static std::atomic<bool> bMergeChunksPerJobExplicit { false };
+	return bMergeChunksPerJobExplicit;
+}
+
+int GetMergeChunksPerJob ( bool bExperimentalPostings ) noexcept
+{
+	if ( bExperimentalPostings && !MergeChunksPerJobExplicit().load ( std::memory_order_acquire ) )
+		return 6;
+
+	return Max ( 2, MergeChunksPerJob().load ( std::memory_order_relaxed ) );
 }
 
 volatile int &KNNParallelBuild() noexcept
@@ -4540,6 +4554,7 @@ struct SaveDiskDataTimings_t
 	int64_t m_tmDocs = 0;
 	int64_t m_tmInfix = 0;  // Time spent in infix builder SaveEntries
 	int64_t m_tmCheckpoints = 0;  // Time for checkpoint writing (excluding infix)
+	int64_t m_tmFinalize = 0;
 	int64_t m_tmHeader = 0;
 };
 
@@ -5368,11 +5383,14 @@ bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 	if ( tWriterDict.IsError() )
 		return false;
 	std::string sWriterError;
+	tmStart = sphMicroTimer();
 	if ( !tPrimary.Finalize ( sSPI.cstr(), IndexFileBase_c{szFilename}.GetFilename(SPH_EXT_SPP).cstr(), sWriterError ) )
 	{
 		sError = sWriterError.c_str();
 		return false;
 	}
+	if ( pTimings )
+		pTimings->m_tmFinalize = sphMicroTimer() - tmStart;
 
 	tmStart = sphMicroTimer();
 	if ( !SaveDiskHeader ( tCtx, tStats, sError ) )
@@ -5787,6 +5805,7 @@ RtActionResult_e RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUI
 			  << " docs=" << ( tTimings.m_tmDocs / 1000 ) << "ms"
 			  << " infix=" << ( tTimings.m_tmInfix / 1000 ) << "ms"
 			  << " checkpoints=" << ( tTimings.m_tmCheckpoints / 1000 ) << "ms"
+			  << " finalize=" << ( tTimings.m_tmFinalize / 1000 ) << "ms"
 			  << " header=" << ( tTimings.m_tmHeader / 1000 ) << "ms"
 			  << "]";
 	}
@@ -12229,7 +12248,10 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 	if ( !iCutoff )
 		iCutoff = GetCutOff ( m_tMutableSettings, m_tSchema.HasKNNAttrs() );
 
-	const int iMergeChunksPerJob = Max ( 2, MergeChunksPerJob() );
+	bool bExperimentalPostings = true;
+	for ( const auto & pChunk : *m_tRtChunks.DiskChunks() )
+		bExperimentalPostings &= pChunk->Cidx().IsExperimentalPostings();
+	const int iMergeChunksPerJob = GetMergeChunksPerJob ( bExperimentalPostings );
 	const char * szActionName = "progressive optimize";
 
 	bool bWork = true;

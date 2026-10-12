@@ -242,7 +242,7 @@ parallel_chunk_merges = 4
 
 较低的值可以让更多任务并行调度；较高的值会减少任务数量，但会增加每次合并的规模。
 
-默认值为 `2`。
+默认值为 `2`。如果未明确设置此选项，并且在 `OPTIMIZE` 开始时所有磁盘 chunk 都使用实验性 postings 格式，Manticore 会在单个任务中自动合并最多 6 个 chunk，以避免重复重建 postings 容器。
 
 这个值可以在运行时通过 `SET GLOBAL merge_chunks_per_job = N` 修改，并可通过 `SHOW VARIABLES` 查看。
 

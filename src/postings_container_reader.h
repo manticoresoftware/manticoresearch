@@ -16,6 +16,13 @@ struct OpenTimings_t
 enum class OpenValidationPath_e
 {
 	NONE,
+	FAST_CRC,
+	DEEP
+};
+
+enum class OpenValidationMode_e
+{
+	FAST_CRC,
 	DEEP
 };
 // Equality pruning is fail-closed. Public-ID minima become visible to cursors
@@ -143,7 +150,7 @@ public:
 	bool Open ( const uint8_t* p, uint64_t size, uint32_t rows, const uint8_t* dict, uint64_t dictSize,
 		const uint8_t* hits, uint64_t hitSize, std::string& error, OpenTimings_t* timings = nullptr,
 		const FieldNormReader_i* pNorms = nullptr, const PublicIDReader_i* pPublicIDs = nullptr,
-		OpenValidationPath_e* pValidationPath = nullptr )
+		OpenValidationPath_e* pValidationPath = nullptr, OpenValidationMode_e eValidationMode = OpenValidationMode_e::DEEP )
 	{
 		m_p = nullptr;
 		m_dir = nullptr;
@@ -182,7 +189,7 @@ public:
 		const bool hasPublicIDBinding = pPublicIDs;
 		const bool validatePublicIDs = hasPublicIDBinding && pPublicIDs->Rows() == rows;
 		if ( pValidationPath )
-			*pValidationPath = OpenValidationPath_e::DEEP;
+			*pValidationPath = eValidationMode==OpenValidationMode_e::DEEP ? OpenValidationPath_e::DEEP : OpenValidationPath_e::FAST_CRC;
 		if ( timings ) {
 			timings->header = MonoMicroTimer() - stage;
 			stage = MonoMicroTimer();
@@ -196,6 +203,9 @@ public:
 		}
 		if ( !valid )
 			return fail ( "checksums" );
+		// CRC mode still binds public-ID minima to authoritative attributes.
+		// Otherwise ordinary reopen silently disables equality pruning.
+		const bool bDeep = eValidationMode==OpenValidationMode_e::DEEP;
 		auto dir = p + directory;
 		uint64_t prevKey = 0;
 		for ( uint64_t t = 0; t < nt; ++t ) {
@@ -267,13 +277,14 @@ public:
 					if ( count != card )
 						return fail ( "container cardinality" );
 					uint32_t at = ordinal;
+					std::array<uint64_t, 64> mask {};
+					if ( codec != 1 )
+						Mask ( block, mask );
 					for ( uint32_t w = 0; w < 64; ++w ) {
 						uint64_t bits = 0;
 						if ( codec == 1 )
 							bits = U64 ( q + w * 8 );
 						else {
-							std::array<uint64_t, 64> mask {};
-							Mask ( block, mask );
 							bits = mask[w];
 						}
 						while ( bits ) {
@@ -321,7 +332,7 @@ public:
 			end = mo + uint64_t ( nm ) * 16;
 			uint64_t sum = 0;
 			std::vector<uint8_t> expected ( ( uint64_t ( df ) + 63 ) / 64, 0 );
-			std::vector<uint32_t> termTF ( df ), termMask ( df );
+			std::vector<uint32_t> termTF ( bDeep ? df : 0 ), termMask ( bDeep ? df : 0 );
 			for ( uint32_t b = 0; b < nm; ++b ) {
 				auto g = p + mo + uint64_t ( b ) * 16;
 				auto po = U64 ( g );
@@ -334,7 +345,7 @@ public:
 				auto bytes = Meta4Bytes ( f, n );
 				if ( po != end || po > size || bytes > size - po )
 					return fail ( "metadata bounds" );
-				for ( uint32_t i = 0; i < n; ++i ) {
+				for ( uint32_t i = 0; bDeep && i < n; ++i ) {
 					uint32_t tf, mask;
 					uint64_t ref;
 					if ( !Metadata4 ( p + po, f, n, i, tf, mask, ref ) )
@@ -366,11 +377,11 @@ public:
 				}
 				end = po + bytes;
 			}
-			if ( sum != hitsTotal )
+			if ( bDeep && sum != hitsTotal )
 				return fail ( "hit sum" );
 			if ( expected.size() > payloadEnd - end )
 				return fail ( "bounds tail" );
-			for ( size_t block = 0; block < expected.size(); ++block ) {
+			for ( size_t block = 0; bDeep && block < expected.size(); ++block ) {
 				const uint8_t stored = p[end + block];
 				if ( stored == 255 )
 					continue;
@@ -406,6 +417,14 @@ public:
 					}
 				}
 				end += minIdBytes;
+			}
+			if ( !bDeep )
+			{
+				const uint64_t next = t+1<nt ? U64(dir+(t+1)*m_entrySize+(m_entrySize==16 ? 0 : 8)) : payloadEnd;
+				if ( end>next || next>payloadEnd )
+					return fail ( "term tail" );
+				end = next;
+				continue;
 			}
 			const uint8_t* fieldTF = nullptr;
 			if ( fieldWidth ) {

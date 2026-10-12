@@ -34,6 +34,30 @@
 
 //////////////////////////////////////////////////////////////////////////
 
+TEST ( RtMergeSettings, ExperimentalPostingsUseWiderImplicitMergeFanIn )
+{
+	const int iSavedChunks = MergeChunksPerJob().load();
+	const bool bSavedExplicit = MergeChunksPerJobExplicit().load();
+
+	MergeChunksPerJob() = 2;
+	MergeChunksPerJobExplicit() = false;
+	EXPECT_EQ ( GetMergeChunksPerJob ( false ), 2 );
+	EXPECT_EQ ( GetMergeChunksPerJob ( true ), 6 );
+
+	MergeChunksPerJobExplicit() = true;
+	EXPECT_EQ ( GetMergeChunksPerJob ( false ), 2 );
+	EXPECT_EQ ( GetMergeChunksPerJob ( true ), 2 );
+
+	MergeChunksPerJob() = 9;
+	EXPECT_EQ ( GetMergeChunksPerJob ( false ), 9 );
+	EXPECT_EQ ( GetMergeChunksPerJob ( true ), 9 );
+
+	MergeChunksPerJob() = iSavedChunks;
+	MergeChunksPerJobExplicit() = bSavedExplicit;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 namespace
 {
 

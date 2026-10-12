@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <fstream>
 #include <mutex>
 #include <string>
@@ -81,6 +82,7 @@ public:
 		m_sFilename = sFilename;
 
 		m_dEntries.clear();
+		m_uSubmitted = 0;
 		m_tOut.close();
 		m_tOut.clear();
 		m_tOut.rdbuf()->pubsetbuf ( m_dFileBuffer.data(), m_dFileBuffer.size() );
@@ -102,25 +104,30 @@ public:
 
 	bool FinishTerm ( uint64_t uKey, std::vector<Posting> & dPostings, uint64_t uHits, bool bHasHits, std::string & sError )
 	{
-		if ( !WaitPending ( sError ) )
-			return false;
-		if ( uKey!=m_dEntries.size()+1 || dPostings.empty() )
+		if ( uKey!=m_uSubmitted+1 || dPostings.empty() || dPostings.size()>UINT32_MAX )
 		{
-			sError = "non-contiguous stable term key or empty postings";
+			sError = "non-contiguous stable term key or invalid postings count";
 			return false;
 		}
-
-		Entry tEntry { uKey, Tell(), uint32_t(dPostings.size()), bHasHits ? 1u : 0u, uHits };
-		m_dEntries.push_back ( tEntry );
-		dPostings.swap ( m_dSparePostings );
-		{
-			std::lock_guard<std::mutex> tLock ( m_tWorkerMutex );
-			m_dWorkerPostings.swap ( m_dSparePostings );
-			m_tWorkerEntry = tEntry;
-			m_bWorkerJob = true;
-			m_bWorkerPending = true;
-			m_bWorkerDone = false;
-		}
+		// Charge allocated bytes, not size. One oversized term may run alone;
+		// it never permits additional queued work beyond the byte budget.
+		const uint64_t bytes = uint64_t(dPostings.capacity())*sizeof(Posting)+sizeof(Job);
+		std::unique_lock<std::mutex> lock ( m_tWorkerMutex );
+		const uint64_t start = m_bTrace ? MonoMicroTimer() : 0;
+		m_tWorkerCV.wait ( lock, [this,bytes] {
+			return !m_bWorkerOk || !m_uOutstandingBytes || (bytes<=QUEUE_BYTES && m_uOutstandingBytes<=QUEUE_BYTES-bytes);
+		} );
+		if ( m_bTrace ) m_uTraceWait += MonoMicroTimer()-start;
+		if ( !m_bWorkerOk ) { sError=m_sWorkerError; return false; }
+		m_dJobs.emplace_back();
+		auto & job = m_dJobs.back();
+		job.entry = { uKey, 0, uint32_t(dPostings.size()), bHasHits ? 1u : 0u, uHits };
+		job.bytes = bytes;
+		job.postings.swap(dPostings);
+		dPostings.swap(m_dSparePostings);
+		m_uOutstandingBytes += bytes;
+		++m_uSubmitted;
+		lock.unlock();
 		m_tWorkerCV.notify_one();
 		return true;
 	}
@@ -234,41 +241,45 @@ private:
 	{
 		for ( ;; )
 		{
-			Entry tEntry;
+			Job job;
 			{
-				std::unique_lock<std::mutex> tLock ( m_tWorkerMutex );
-				m_tWorkerCV.wait ( tLock, [this] { return m_bWorkerJob || m_bWorkerStop; } );
-				if ( m_bWorkerStop )
-					return;
-				tEntry = m_tWorkerEntry;
-				m_bWorkerJob = false;
+				std::unique_lock<std::mutex> lock ( m_tWorkerMutex );
+				m_tWorkerCV.wait ( lock, [this] { return !m_dJobs.empty() || m_bWorkerStop; } );
+				if ( m_bWorkerStop ) return;
+				job = std::move(m_dJobs.front());
+				m_dJobs.pop_front();
 			}
+			Entry & tEntry = job.entry;
+			tEntry.m_uOffset = Tell();
 
 			bool bOk = false;
 			std::string sError;
 			try
 			{
 				m_dTermBuffer.clear();
-				m_dTermBuffer.reserve ( m_dWorkerPostings.size()*8ull );
+				m_dTermBuffer.reserve ( job.postings.size()*8ull );
 				m_pTermBuffer = &m_dTermBuffer;
 				m_uTermBase = tEntry.m_uOffset;
 				m_uTermPos = 0;
-				bOk = EncodeTerm ( tEntry, m_dWorkerPostings, sError );
+				bOk = EncodeTerm ( tEntry, job.postings, sError );
 				m_pTermBuffer = nullptr;
 				if ( bOk )
 				{
 					const uint64_t tmAppend = m_bTrace ? MonoMicroTimer() : 0;
 					PutRaw ( m_dTermBuffer.data(), m_dTermBuffer.size() );
 					bOk = Check ( sError, "append term" );
+					if ( bOk ) m_dEntries.push_back(tEntry);
 					if ( m_bTrace )
 						m_uTraceAppend += MonoMicroTimer()-tmAppend;
 				}
 			} catch ( const std::exception & tException )
 			{
+				bOk = false;
 				m_pTermBuffer = nullptr;
 				sError = std::string("asynchronous postings writer failed: ") + tException.what();
 			} catch ( ... )
 			{
+				bOk = false;
 				m_pTermBuffer = nullptr;
 				sError = "asynchronous postings writer failed";
 			}
@@ -277,7 +288,17 @@ private:
 				std::lock_guard<std::mutex> tLock ( m_tWorkerMutex );
 				m_bWorkerOk = bOk;
 				m_sWorkerError = std::move ( sError );
-				m_bWorkerDone = true;
+				if ( bOk )
+				{
+					m_uOutstandingBytes -= job.bytes;
+					job.postings.clear();
+					if ( job.bytes<=QUEUE_BYTES ) job.postings.swap(m_dSparePostings);
+				} else
+				{
+					m_dJobs.clear();
+					m_uOutstandingBytes = 0;
+				}
+
 			}
 			m_tWorkerCV.notify_all();
 		}
@@ -288,21 +309,10 @@ private:
 		if ( !m_tWorker.joinable() )
 			return true;
 		std::unique_lock<std::mutex> tLock ( m_tWorkerMutex );
-		if ( !m_bWorkerPending )
-			return true;
 		const uint64_t tmWait = m_bTrace ? MonoMicroTimer() : 0;
-		m_tWorkerCV.wait ( tLock, [this] { return m_bWorkerDone; } );
-		if ( m_bTrace )
-			m_uTraceWait += MonoMicroTimer()-tmWait;
-		m_dWorkerPostings.swap ( m_dSparePostings );
-		m_dSparePostings.clear();
-		m_bWorkerDone = false;
-		m_bWorkerPending = false;
-		if ( !m_bWorkerOk )
-		{
-			sError = std::move ( m_sWorkerError );
-			return false;
-		}
+		m_tWorkerCV.wait ( tLock, [this] { return !m_uOutstandingBytes; } );
+		if ( m_bTrace ) m_uTraceWait += MonoMicroTimer()-tmWait;
+		if ( !m_bWorkerOk ) { sError=m_sWorkerError; return false; }
 		return true;
 	}
 
@@ -911,16 +921,15 @@ private:
 	std::string m_sFilename;
 	std::vector<Entry> m_dEntries;
 	std::vector<Posting> m_dSparePostings;
-	std::vector<Posting> m_dWorkerPostings;
+	struct Job { Entry entry; std::vector<Posting> postings; uint64_t bytes = 0; };
+	static constexpr uint64_t QUEUE_BYTES = 64u<<20;
+	std::deque<Job> m_dJobs;
+	uint64_t m_uOutstandingBytes = 0, m_uSubmitted = 0;
 	std::thread m_tWorker;
 	std::mutex m_tWorkerMutex;
 	std::condition_variable m_tWorkerCV;
-	Entry m_tWorkerEntry;
 	std::string m_sWorkerError;
-	bool m_bWorkerJob = false;
-	bool m_bWorkerPending = false;
-	bool m_bWorkerDone = false;
-	bool m_bWorkerOk = false;
+	bool m_bWorkerOk = true;
 	bool m_bWorkerStop = false;
 	std::vector<uint8_t> m_dTermBuffer;
 	std::vector<uint8_t> m_dRankBounds;

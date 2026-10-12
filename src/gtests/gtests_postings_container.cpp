@@ -318,6 +318,59 @@ TEST_F ( PostingsContainerTest, StreamedDirectoryUsesImplicitContiguousKeys )
 }
 
 
+TEST_F ( PostingsContainerTest, QueuedWriterDrainsOversizedTermAndPreservesOrder )
+{
+	{ std::ofstream(m_sBase+".spi",std::ios::binary).write("dict",4); }
+	{ std::ofstream(m_sBase+".spp",std::ios::binary).put('\1'); }
+	std::string error;
+	e1::Writer writer;
+	ASSERT_TRUE(writer.Open(m_sBase+".spd",error)) << error;
+	std::vector<e1::Posting> postings;
+	// Capacity, rather than live size, must trigger oversized-term admission.
+	postings.reserve((64u<<20)/sizeof(e1::Posting)+1);
+	for ( uint32_t key=1; key<=1000; ++key )
+	{
+		postings.clear();
+		postings.emplace_back(key-1,1,1,0);
+		ASSERT_TRUE(writer.FinishTerm(key,postings,1,false,error)) << error;
+	}
+	ASSERT_TRUE(writer.Finalize(m_sBase+".spi",m_sBase+".spp",error)) << error;
+	const auto raw=ReadFile(m_sBase+".spd"), dict=ReadFile(m_sBase+".spi"), hits=ReadFile(m_sBase+".spp");
+	e1::Store store;
+	ASSERT_TRUE(store.Open(raw.data(),raw.size(),1000,dict.data(),dict.size(),hits.data(),hits.size(),error)) << error;
+	for ( uint32_t key=1; key<=1000; ++key )
+	{
+		const auto *entry=store.Find(key);
+		ASSERT_NE(entry,nullptr);
+		const auto *term=raw.data()+e1::U64(entry);
+		EXPECT_EQ(e1::U32(term),1u);
+		EXPECT_EQ(e1::U32(term+24),key-1);
+	}
+}
+
+#if defined(__linux__)
+TEST_F ( PostingsContainerTest, QueuedWriterPropagatesWorkerFailure )
+{
+	std::string error;
+	e1::Writer writer;
+	ASSERT_TRUE(writer.Open("/dev/full",error)) << error;
+	std::vector<e1::Posting> postings;
+	uint64_t hits=0;
+	for ( uint32_t row=0; row<1000000; ++row )
+	{
+		postings.emplace_back(row,row+1,1,0);
+		hits+=row+1;
+	}
+	ASSERT_TRUE(writer.FinishTerm(1,postings,hits,false,error));
+	EXPECT_FALSE(writer.Finalize(m_sBase+".spi",m_sBase+".spp",error));
+	EXPECT_NE(error.find("append term"),std::string::npos) << error;
+	postings.clear();
+	postings.emplace_back(0,1,1,0);
+	EXPECT_FALSE(writer.FinishTerm(2,postings,1,false,error));
+	EXPECT_NE(error.find("append term"),std::string::npos) << error;
+}
+#endif
+
 TEST_F ( PostingsContainerTest, CompactMasksAndMixedReferences )
 {
 	std::vector<e1::Posting> dPostings;

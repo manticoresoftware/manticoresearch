@@ -1968,3 +1968,59 @@ bool CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_i & tReporter, in
 	DocstoreChecker_c tChecker ( tReader, tReporter, iRowsCount );
 	return tChecker.Check();
 }
+
+//////////////////////////////////////////////////////////////////////////
+// docstore layout derived from the schema
+
+void CollectDocstoreFields ( const CSphSchema & tSchema, CSphVector<DocstoreFieldDesc_t> & dFields, bool bWithChunkSpans )
+{
+	dFields.Resize(0);
+	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
+		if ( tSchema.IsFieldStored(i) )
+			dFields.Add ( { tSchema.GetFieldName(i), DOCSTORE_TEXT } );
+
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+		if ( tSchema.IsAttrStored(i) )
+			dFields.Add ( { tSchema.GetAttr(i).m_sName, DOCSTORE_ATTR } );
+
+	// chunk spans ride along in the docstore only when the table has one anyway (that is also the only case
+	// in which the source text can be highlighted); they never create a docstore on their own
+	if ( bWithChunkSpans && dFields.GetLength() )
+		for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+			if ( tSchema.GetAttr(i).HasKnnChunkSpans() )
+				dFields.Add ( { tSchema.GetAttr(i).m_sName, DOCSTORE_KNN_CHUNK_SPANS } );
+}
+
+
+int GetNumKnnChunkSpansDocstoreFields ( const CSphSchema & tSchema )
+{
+	if ( !tSchema.HasStoredFields() && !tSchema.HasStoredAttrs() )
+		return 0;
+
+	int iCount = 0;
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+		if ( tSchema.GetAttr(i).HasKnnChunkSpans() )
+			iCount++;
+
+	return iCount;
+}
+
+
+// spans are filled in later, when the embeddings get generated; every other writer stores them empty
+void AddEmptyKnnChunkSpansToDoc ( DocstoreBuilder_i::Doc_t & tDoc, const CSphSchema & tSchema )
+{
+	int iCount = GetNumKnnChunkSpansDocstoreFields(tSchema);
+	for ( int i = 0; i < iCount; i++ )
+		tDoc.m_dFields.Add ( { nullptr, 0 } );
+}
+
+
+void SetupDocstoreFields ( DocstoreAddField_i & tFields, const CSphSchema & tSchema, bool bWithChunkSpans )
+{
+	CSphVector<DocstoreFieldDesc_t> dFields;
+	CollectDocstoreFields ( tSchema, dFields, bWithChunkSpans );
+	for ( const auto & i : dFields )
+		tFields.AddField ( i.m_sName, i.m_eType );
+
+	assert ( dFields.GetLength() );
+}

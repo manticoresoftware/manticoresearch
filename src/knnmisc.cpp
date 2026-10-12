@@ -206,6 +206,7 @@ std::unique_ptr<knn::KNNFilter_i> CreateKNNPrefilter ( const CSphQueryContext & 
 static const int KNN_RESCORE_BATCH_SIZE = 256;
 
 static bool g_bKNNRescorePrefetch = true;
+static bool g_bKNNRescorePrefetchRowwise = false;
 
 void SetKNNRescorePrefetch ( bool bEnable )
 {
@@ -216,6 +217,18 @@ void SetKNNRescorePrefetch ( bool bEnable )
 bool KNNRescorePrefetch()
 {
 	return g_bKNNRescorePrefetch;
+}
+
+
+void SetKNNRescorePrefetchRowwise ( bool bEnable )
+{
+	g_bKNNRescorePrefetchRowwise = bEnable;
+}
+
+
+bool KNNRescorePrefetchRowwise()
+{
+	return g_bKNNRescorePrefetchRowwise;
 }
 
 
@@ -524,6 +537,35 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 	// (once it's warm) prefetch the header, then resolve. CalcDistBatch prefetches the vector itself.
 	static const int PF_OFFSET = 16;
 	static const int PF_HEADER = 8;
+
+	// The vectors live in the blob pool, and where a vector sits inside its blob row is known only after reading the
+	// row header, which shares the (cold) page with the vector itself. So the prefetch is issued by row address, which
+	// the match row provides without touching the pool, and covers the header plus one vector. Rows whose other blob
+	// attributes precede the vector get the uncovered tail read on demand. Same residency gate as the columnar prefetch.
+	if ( KNNRescorePrefetchRowwise() )
+	{
+		const size_t uRowBytes = 1 + sizeof(DWORD)*m_tAttr.m_tLocator.m_nBlobAttrs + iVecBytes;
+		CSphVector<const void*> dRows;
+		dRows.Reserve(iCount);
+
+		int iPrefetchTag = 0;
+		bool bPrefetchPoolInitialized = false;
+		const BYTE * pPrefetchPool = nullptr;
+		for ( const CSphMatch * pMatch : dMatches )
+		{
+			if ( !bPrefetchPoolInitialized || pMatch->m_iTag!=iPrefetchTag )
+			{
+				iPrefetchTag = pMatch->m_iTag;
+				pPrefetchPool = fnBlobPool(pMatch);
+				bPrefetchPoolInitialized = true;
+			}
+
+			if ( pPrefetchPool )
+				dRows.Add ( sphGetBlobRow ( *pMatch, m_tAttr.m_tLocator, pPrefetchPool ) );
+		}
+
+		PrefetchVectors ( dRows, uRowBytes );
+	}
 
 	const void * dPtrs[CHUNK];
 	float dOut[CHUNK];

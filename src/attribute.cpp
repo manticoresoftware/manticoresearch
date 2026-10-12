@@ -678,6 +678,13 @@ void sphPrefetchBlobRow ( const CSphMatch & tMatch, const CSphAttrLocator & tLoc
 	PrefetchT0 ( pBlobPool + GetBlobRowOffset ( tMatch.m_pStatic, tLocator.m_iBlobRowOffset ) );
 }
 
+
+const BYTE * sphGetBlobRow ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool )
+{
+	assert ( pBlobPool && tLocator.IsBlobAttr() );
+	return pBlobPool + GetBlobRowOffset ( tMatch, tLocator );
+}
+
 const BYTE * sphGetBlobAttr ( const CSphRowitem * pDocinfo, const CSphAttrLocator & tLocator, const BYTE * pBlobPool, int & iLengthBytes )
 {
 	assert ( pBlobPool );
